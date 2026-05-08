@@ -1,0 +1,1689 @@
+// ================================================================
+// DEALER MODAL
+// ================================================================
+function showDealerM(eid) {
+  var d = eid ? ST.getOne('dealers', eid) : {};
+  var cfg = getConfig();
+  openM(eid ? '✏️ Dealer' : '➕ เพิ่ม Dealer', '' +
+    '<div class="form-section">🏢 ข้อมูลบริษัท</div>' +
+    '<div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fd_name" value="' + sanitize(d.name || '') + '"></div>' +
+    '<div class="fr"><div class="fg"><label>SIS Code</label><input type="text" id="fd_sis" value="' + (d.sisCode || '') + '"></div>' +
+    '<div class="fg"><label>DJI Code</label><input type="text" id="fd_dji" value="' + (d.djiCode || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Level *</label><select id="fd_level">' + optionsHTML(cfg.dealerLevels, d.level || 'B', '-- เลือก --') + '</select></div>' +
+    '<div class="fg"><label>โชว์ซีเรียล</label><select id="fd_serial"><option value="Y"' + ((d.showSerial || 'Y') === 'Y' ? ' selected' : '') + '>Y</option><option value="N"' + (d.showSerial === 'N' ? ' selected' : '') + '>N</option></select></div></div>' +
+    '<div class="fr"><div class="fg"><label>DJI Dealer</label><select id="fd_djid">' + optionsHTML(cfg.djiDealerTypes, d.djiDealer, '--') + '</select></div>' +
+    '<div class="fg"><label>Term</label><select id="fd_term">' + optionsHTML(cfg.creditTerms, d.creditTerm, '--') + '</select></div></div>' +
+    '<div class="fr"><div class="fg"><label>วงเงินเครดิต (฿)</label><input type="number" id="fd_credit" value="' + (d.creditLimit || '') + '"></div>' +
+    '<div class="fg"><label>เป้ายอดขาย (฿)</label><input type="number" id="fd_target" value="' + (d.targetRevenue || '') + '"></div></div>' +
+    '<div class="fg"><label>เงื่อนไขชำระเงิน</label><textarea id="fd_payment" rows="2">' + sanitize(d.paymentCondition || '') + '</textarea></div>' +
+    '<div class="form-section">👤 ผู้ติดต่อ</div>' +
+    '<div class="fg"><label>ผู้ติดต่อ</label><textarea id="fd_contact" rows="3">' + sanitize(d.contact || '') + '</textarea></div>' +
+    '<div class="fg"><label>รายละเอียดลูกค้า</label><textarea id="fd_detail" rows="2">' + sanitize(d.customerDetail || '') + '</textarea></div>' +
+    '<div class="fr"><div class="fg"><label>Shippto</label><input type="text" id="fd_ship" value="' + (d.shippto || 'NO') + '"></div>' +
+    '<div class="fg"><label>📍 Google Map</label><input type="url" id="fd_map" value="' + (d.googleMap || '') + '"></div></div>' +
+    '<div class="form-section">📋 Certification</div>' +
+    '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fd_appt">' + optionsHTML(cfg.appointmentOptions, d.appointmentLetter, '--') + '</select></div>' +
+    dpH('fd_apptdate', d.appointmentDate || '', 'วันแต่งตั้ง') + '</div>' +
+    '<div class="fr"><div class="fg"><label>DSEC</label><select id="fd_dsec"><option value="">--</option><option value="pass"' + (d.dsecStatus === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (d.dsecStatus === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (d.dsecStatus === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div>' +
+    '<div class="fg"><label>DSEC cert</label><input type="number" id="fd_dsec_n" value="' + (d.dsecCertCount || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>CRM</label><select id="fd_crm"><option value="">--</option><option value="yes"' + (d.crmStatus === 'yes' ? ' selected' : '') + '>ลงทะเบียนแล้ว</option><option value="no"' + (d.crmStatus === 'no' ? ' selected' : '') + '>ยังไม่ลง</option></select></div>' +
+    '<div class="fg"><label>FH2</label><select id="fd_fh2"><option value="">--</option><option value="pass"' + (d.fh2Status === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (d.fh2Status === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (d.fh2Status === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div></div>' +
+    '<div class="fr"><div class="fg"><label>FH2 cert</label><input type="number" id="fd_fh2_n" value="' + (d.fh2CertCount || '') + '"></div>' +
+    '<div class="fg"><label>Lark</label><select id="fd_lark"><option value="">--</option><option value="added"' + (d.larkStatus === 'added' ? ' selected' : '') + '>Add แล้ว</option><option value="no"' + (d.larkStatus === 'no' ? ' selected' : '') + '>ยังไม่ Add</option></select></div></div>' +
+    '<div class="fr"><div class="fg"><label>Demo Unit</label><input type="text" id="fd_demo" value="' + sanitize(d.demoUnit || '') + '"></div>' +
+    '<div class="fg"><label>กลุ่มลูกค้าหลัก</label><input type="text" id="fd_segment" value="' + sanitize(d.customerSegment || '') + '"></div></div>' +
+    '<div class="fg"><label>Dock Interest</label><select id="fd_dock"><option value="">--</option><option value="yes"' + (d.dockInterest === 'yes' ? ' selected' : '') + '>มี</option><option value="no"' + (d.dockInterest === 'no' ? ' selected' : '') + '>ไม่มี</option><option value="กำลังดู"' + (d.dockInterest === 'กำลังดู' ? ' selected' : '') + '>กำลังดู</option></select></div>' +
+    '<div class="fg"><label>Pipeline Stage</label><select id="fd_pipe">' + optionsHTML(cfg.pipelineStatuses, d.pipelineStage || 'prospect') + '</select></div>' +
+    '<div class="fg"><label>หมายเหตุ</label><textarea id="fd_notes" rows="2">' + sanitize(d.notes || '') + '</textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveDealer(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function saveDealer(eid) {
+  var data = {
+    name: document.getElementById('fd_name').value.trim(),
+    sisCode: document.getElementById('fd_sis').value.trim(),
+    djiCode: document.getElementById('fd_dji').value.trim(),
+    level: document.getElementById('fd_level').value,
+    showSerial: document.getElementById('fd_serial').value,
+    djiDealer: document.getElementById('fd_djid').value,
+    creditTerm: document.getElementById('fd_term').value,
+    creditLimit: document.getElementById('fd_credit').value,
+    targetRevenue: document.getElementById('fd_target').value,
+    paymentCondition: document.getElementById('fd_payment').value.trim(),
+    contact: document.getElementById('fd_contact').value.trim(),
+    customerDetail: document.getElementById('fd_detail').value.trim(),
+    shippto: document.getElementById('fd_ship').value.trim(),
+    googleMap: document.getElementById('fd_map').value.trim(),
+    appointmentLetter: document.getElementById('fd_appt').value,
+    appointmentDate: dpG('fd_apptdate'),
+    dsecStatus: document.getElementById('fd_dsec').value,
+    dsecCertCount: document.getElementById('fd_dsec_n').value,
+    crmStatus: document.getElementById('fd_crm').value,
+    fh2Status: document.getElementById('fd_fh2').value,
+    fh2CertCount: document.getElementById('fd_fh2_n').value,
+    larkStatus: document.getElementById('fd_lark').value,
+    demoUnit: document.getElementById('fd_demo').value.trim(),
+    customerSegment: document.getElementById('fd_segment').value.trim(),
+    dockInterest: document.getElementById('fd_dock').value,
+    pipelineStage: document.getElementById('fd_pipe').value,
+    notes: document.getElementById('fd_notes').value.trim()
+  };
+  if (!data.name) return alert('ใส่ชื่อบริษัท');
+  if (eid) { ST.update('dealers', eid, data); closeMForce(); go('dealerDetail', {dealerId: eid}); }
+  else { var c = ST.add('dealers', data); closeMForce(); go('dealerDetail', {dealerId: c.id}); }
+  toast('💾 บันทึกแล้ว');
+}
+
+// ================================================================
+// PIPELINE MODAL (Multi-Model)
+// ================================================================
+var pipeItemsTemp = [];
+var pipeItemMode = 'items';
+
+function showPipelineM(dealerId, eid) {
+  var p = eid ? ST.getOne('pipeline', eid) : {};
+  var cfg = getConfig();
+  
+  // Load existing items
+  if (eid && p.items && p.items.length > 0) {
+    pipeItemsTemp = JSON.parse(JSON.stringify(p.items));
+    pipeItemMode = 'items';
+  } else if (eid && p.model) {
+    pipeItemsTemp = [{model: p.model, qty: Number(p.modelQty) || 1, price: getModelPrice(p.model), total: Number(p.forecastAmount) || 0}];
+    pipeItemMode = 'lump';
+  } else {
+    pipeItemsTemp = [];
+    pipeItemMode = 'items';
+  }
+
+  openM(eid ? '✏️ Pipeline' : '➕ เพิ่ม Pipeline', '' +
+    dpH('fp_reg', p.registerDate || _td(), 'Register Date') +
+    '<div class="fg"><label>Project Name *</label><textarea id="fp_name" rows="2">' + sanitize(p.projectName || '') + '</textarea></div>' +
+    '<div class="fr"><div class="fg"><label>End User (TH)</label><input type="text" id="fp_eu_th" value="' + sanitize(p.endUserTH || '') + '"></div>' +
+    '<div class="fg"><label>End User (EN)</label><input type="text" id="fp_eu_en" value="' + sanitize(p.endUserEN || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Unit Type</label><select id="fp_unit">' + optionsHTML(cfg.unitTypes, p.unitType, '--') + '</select></div>' +
+    '<div class="fg"><label>Dealer *</label><select id="fp_dealer">' + dealerOptions(dealerId || p.dealerId) + '</select></div></div>' +
+    '<div class="fr"><div class="fg"><label>DJI Dealer</label><select id="fp_djid">' + optionsHTML(cfg.djiDealerTypes, p.djiDealer, '--') + '</select></div>' +
+    '<div class="fg"><label>Status</label><select id="fp_status">' + optionsHTML(cfg.pipelineStatuses, p.status || 'prospect') + '</select></div></div>' +
+
+    // ---- Model & Forecast Section ----
+    '<div class="form-section">📦 สินค้าและมูลค่า</div>' +
+    '<div style="display:flex;gap:4px;margin-bottom:8px">' +
+    '<button class="btn bsm ' + (pipeItemMode === 'items' ? 'bp' : 'bo') + '" onclick="switchPipeMode(\'items\')">📦 รายชิ้น</button>' +
+    '<button class="btn bsm ' + (pipeItemMode === 'lump' ? 'bp' : 'bo') + '" onclick="switchPipeMode(\'lump\')">💰 มูลค่ารวม</button>' +
+    '</div>' +
+
+    '<div id="pipeItemsSection">' + buildPipeItemsSection(p) + '</div>' +
+
+    // ---- Other Fields ----
+    '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="number" id="fp_real" value="' + (p.realAmount || '') + '"></div>' +
+    '<div class="fg"><label>TOR</label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
+    '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
+    '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
+    '<div class="fg"></div></div>' +
+    '<div class="form-section">🎯 Next Action</div>' +
+    '<div class="fr"><div class="fg"><label>ต้องทำอะไรต่อ</label><select id="fp_next"><option value="">-- ไม่ระบุ --</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div>' +
+    dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '</div>' +
+    '<div class="fg"><label>งานซ้ำ</label><div class="radio-g"><label><input type="radio" name="fp_rec" value="0"' + (!p.recurring ? ' checked' : '') + '><span>ไม่ใช่</span></label><label><input type="radio" name="fp_rec" value="1"' + (p.recurring ? ' checked' : '') + '><span>ใช่</span></label></div></div>' +
+    '<div class="fg"><label>Remark</label><textarea id="fp_remark" rows="2">' + sanitize(p.remark || '') + '</textarea></div>' +
+    '<button class="btn bp btn-full" onclick="savePipeline(\'' + (dealerId || '') + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function switchPipeMode(mode) {
+  pipeItemMode = mode;
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+  // Re-render mode buttons
+  var btns = el ? el.parentElement.querySelectorAll('.form-section + div .btn') : [];
+}
+
+function buildPipeItemsSection(p) {
+  var h = '';
+
+  if (pipeItemMode === 'items') {
+    // Quick Add Row
+    h += '<div class="pipe-qa-row">';
+    h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + modelOptionsNew('') + '</select>';
+    h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
+    h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
+    h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
+    h += '</div>';
+
+    // Items List
+    if (pipeItemsTemp.length > 0) {
+      h += '<div class="pipe-items-list">';
+      var totalAmt = 0;
+      var totalQty = 0;
+      for (var i = 0; i < pipeItemsTemp.length; i++) {
+        var it = pipeItemsTemp[i];
+        var itTotal = (Number(it.qty) || 1) * (Number(it.price) || 0);
+        if (it.total) itTotal = Number(it.total);
+        totalAmt += itTotal;
+        totalQty += (Number(it.qty) || 1);
+        h += '<div class="pipe-item-row">';
+        h += '<span class="pipe-row-num">' + (i + 1) + '</span>';
+        h += '<span class="pipe-item-name">' + sanitize(it.model || '-') + '</span>';
+        h += '<span class="pipe-item-qty">x' + (it.qty || 1) + '</span>';
+        h += '<span class="pipe-item-price">' + (it.price ? fmtMoney(it.price) : '-') + '</span>';
+        h += '<span class="pipe-item-total">' + fmtMoney(itTotal) + '</span>';
+        h += '<button class="btn-xs btn-red" onclick="pqaRemove(' + i + ')">✕</button>';
+        h += '</div>';
+      }
+      h += '<div class="pipe-item-summary">';
+      h += '<span>รวม ' + pipeItemsTemp.length + ' รายการ • ' + totalQty + ' ชิ้น</span>';
+      h += '<span style="font-weight:700">' + fmtMoneyStyled(totalAmt) + '</span>';
+      h += '</div>';
+      h += '</div>';
+
+      // Forecast Amount (auto or override)
+      h += '<div class="fg" style="margin-top:8px"><label>Forecast Amount (฿) <span style="font-size:.6rem;color:var(--text2)">— Auto จากรายการ หรือแก้ไขเอง</span></label>';
+      h += '<input type="number" id="fp_fc" value="' + (p.forecastAmount || totalAmt || '') + '" placeholder="' + totalAmt + '"></div>';
+    } else {
+      h += '<div style="text-align:center;padding:12px;color:var(--text2);font-size:12px;border:1px dashed var(--border);border-radius:8px;margin:8px 0">📦 ยังไม่มีสินค้า — เลือก Model แล้วกด ➕</div>';
+      h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
+    }
+
+  } else {
+    // Lump sum mode (เหมือนเดิม)
+    h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + modelOptionsNew(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
+    h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
+    h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
+  }
+
+  return h;
+}
+
+// Quick Add functions
+function pqaModelChanged() {
+  var modelName = document.getElementById('pqa_model').value;
+  var priceEl = document.getElementById('pqa_price');
+  if (priceEl && modelName) {
+    var price = getModelPrice(modelName);
+    if (price > 0) priceEl.value = price;
+  }
+}
+
+function pqaAdd() {
+  var modelEl = document.getElementById('pqa_model');
+  var qtyEl = document.getElementById('pqa_qty');
+  var priceEl = document.getElementById('pqa_price');
+  
+  var model = modelEl ? modelEl.value : '';
+  var qty = qtyEl ? (parseInt(qtyEl.value) || 1) : 1;
+  var price = priceEl ? (parseFloat(priceEl.value) || 0) : 0;
+  
+  if (!model) { toast('เลือก Model ก่อน'); return; }
+  
+  var total = qty * price;
+  pipeItemsTemp.push({model: model, qty: qty, price: price, total: total});
+  
+  // Refresh section
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+  
+  // Auto update forecast amount
+  updatePipeFcFromItems();
+  
+  // Reset inputs
+  if (modelEl) modelEl.value = '';
+  if (qtyEl) qtyEl.value = '1';
+  if (priceEl) priceEl.value = '';
+  
+  toast('➕ เพิ่ม ' + model + ' x' + qty);
+}
+
+function pqaRemove(idx) {
+  pipeItemsTemp.splice(idx, 1);
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+  updatePipeFcFromItems();
+}
+
+function updatePipeFcFromItems() {
+  var total = 0;
+  for (var i = 0; i < pipeItemsTemp.length; i++) {
+    var it = pipeItemsTemp[i];
+    total += (Number(it.qty) || 1) * (Number(it.price) || 0);
+  }
+  var fcEl = document.getElementById('fp_fc');
+  if (fcEl && total > 0) fcEl.value = total;
+}
+
+// ================================================================
+// SAVE PIPELINE (Multi-Model)
+// ================================================================
+function savePipeline(dealerId, eid) {
+  var data = {
+    registerDate: dpG('fp_reg'),
+    projectName: document.getElementById('fp_name').value.trim(),
+    endUserTH: document.getElementById('fp_eu_th').value.trim(),
+    endUserEN: document.getElementById('fp_eu_en').value.trim(),
+    unitType: document.getElementById('fp_unit').value,
+    dealerId: document.getElementById('fp_dealer').value || dealerId,
+    djiDealer: document.getElementById('fp_djid').value,
+    forecastAmount: parseFloat(document.getElementById('fp_fc') ? document.getElementById('fp_fc').value : 0) || 0,
+    realAmount: parseFloat(document.getElementById('fp_real') ? document.getElementById('fp_real').value : 0) || 0,
+    tor: document.getElementById('fp_tor').value,
+    biddingDate: dpG('fp_bid'),
+    shipmentDate: dpG('fp_ship'),
+    appointmentLetter: document.getElementById('fp_appt').value,
+    status: document.getElementById('fp_status').value,
+    nextAction: document.getElementById('fp_next').value,
+    followupDate: dpG('fp_fudate'),
+    recurring: document.querySelector('input[name="fp_rec"]:checked') ? document.querySelector('input[name="fp_rec"]:checked').value === '1' : false,
+    remark: document.getElementById('fp_remark').value.trim()
+  };
+
+  // Handle items based on mode
+  if (pipeItemMode === 'items' && pipeItemsTemp.length > 0) {
+    data.items = JSON.parse(JSON.stringify(pipeItemsTemp));
+    // Set primary model (first item) for backward compatibility
+    data.model = pipeItemsTemp[0].model;
+    // Total QTY
+    var totalQty = 0;
+    for (var i = 0; i < pipeItemsTemp.length; i++) {
+      totalQty += (Number(pipeItemsTemp[i].qty) || 1);
+    }
+    data.modelQty = totalQty;
+  } else if (pipeItemMode === 'lump') {
+    var lumpModel = document.getElementById('fp_model_lump');
+    var lumpQty = document.getElementById('fp_qty_lump');
+    data.model = lumpModel ? lumpModel.value : '';
+    data.modelQty = lumpQty ? (parseInt(lumpQty.value) || 1) : 1;
+    data.items = [];
+    if (data.model) {
+      data.items = [{
+        model: data.model,
+        qty: data.modelQty,
+        price: 0,
+        total: data.forecastAmount
+      }];
+    }
+  } else {
+    data.model = '';
+    data.modelQty = 0;
+    data.items = [];
+  }
+
+  if (!data.projectName) return alert('ใส่ Project Name');
+  if (!data.dealerId) return alert('เลือก Dealer');
+
+  if (eid) {
+    ST.update('pipeline', eid, data);
+    closeMForce();
+    go('pipeDetail', {pipeId: eid});
+  } else {
+    var p = ST.add('pipeline', data);
+    ST.add('pipeLog', {pipeId: p.id, type: 'note', content: 'ลงทะเบียนโครงการ', date: _nw()});
+    closeMForce();
+    go('pipeDetail', {pipeId: p.id});
+  }
+  toast('💾 บันทึกแล้ว');
+  pipeItemsTemp = [];
+}
+
+// Pipeline Log
+function showPipeLogM(pipeId) {
+  openM('➕ Update Pipeline', '' +
+    '<div class="fg"><label>ประเภท</label><select id="fpl_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
+    '<div class="fg"><label>รายละเอียด *</label><textarea id="fpl_c" rows="4"></textarea></div>' +
+    dpH('fpl_d', _td(), 'วันที่') +
+    '<button class="btn bp btn-full" onclick="savePipeLog(\'' + pipeId + '\')">💾 บันทึก</button>');
+}
+
+function savePipeLog(pipeId) {
+  var content = document.getElementById('fpl_c').value.trim();
+  if (!content) return alert('ใส่รายละเอียด');
+  ST.add('pipeLog', {pipeId: pipeId, type: document.getElementById('fpl_t').value, content: content, date: (dpG('fpl_d') || _td()) + 'T' + new Date().toTimeString().slice(0, 8)});
+  closeMForce(); toast('📝 บันทึกแล้ว'); render();
+}
+
+// Quick Update Modal (NEW)
+function showQuickUpdateM(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var cfg = getConfig();
+  openM('📝 Quick Update — ' + (p.projectName || '').substr(0, 30), '' +
+    '<div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
+    '<div class="fg"><label>อัพเดท *</label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
+    '<div class="fr"><div class="fg"><label>เปลี่ยน Status</label><select id="qu_st"><option value="">-- ไม่เปลี่ยน --</option>' + cfg.pipelineStatuses.map(function(s) { return '<option value="' + s.id + '"' + (p.status === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select></div>' +
+    '<div class="fg"><label>🎯 Next Action</label><select id="qu_na"><option value="">--</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div></div>' +
+    dpH('qu_fu', p.followupDate || '', 'Follow-up Date') +
+    '<button class="btn bp btn-full" onclick="saveQuickUpdate(\'' + pipeId + '\')">💾 บันทึก</button>');
+}
+
+function saveQuickUpdate(pipeId) {
+  var content = document.getElementById('qu_c').value.trim();
+  if (!content) return alert('ใส่อัพเดท');
+  var newStatus = document.getElementById('qu_st').value;
+  var nextAction = document.getElementById('qu_na').value;
+  var followupDate = dpG('qu_fu');
+  
+  // Add log
+  var logType = 'update';
+  if (newStatus && newStatus !== ST.getOne('pipeline', pipeId).status) {
+    logType = 'status_change';
+    content = getPipeName(newStatus) + ' — ' + content;
+  }
+  ST.add('pipeLog', {pipeId: pipeId, type: logType, content: content, date: _nw()});
+  
+  // Update pipeline
+  var updates = {};
+  if (newStatus) updates.status = newStatus;
+  if (nextAction !== undefined) updates.nextAction = nextAction;
+  if (followupDate !== undefined) updates.followupDate = followupDate;
+  if (Object.keys(updates).length) ST.update('pipeline', pipeId, updates);
+  
+  closeMForce(); toast('📝 อัพเดทแล้ว'); render();
+}
+
+// Win/Loss Modals
+function showWinReasonM(pipeId, newStatus) {
+  var cfg = getConfig();
+  var p = ST.getOne('pipeline', pipeId);
+  openM('✅ Win — สาเหตุที่ได้งาน', '' +
+    '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.winReasons.map(function(r) { return '<label><input type="checkbox" name="wr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
+    '<div class="fg"><label>หมายเหตุ</label><textarea id="wr_note" rows="2"></textarea></div>' +
+    '<div class="fg"><label>Real Amount (฿)</label><input type="number" id="wr_amt" value="' + (p ? p.forecastAmount || '' : '') + '"></div>' +
+    '<button class="btn bp btn-full" onclick="saveWinReason(\'' + pipeId + '\',\'' + newStatus + '\')">💾 บันทึก</button>');
+}
+
+function saveWinReason(pipeId, newStatus) {
+  var reasons = [];
+  var chks = document.querySelectorAll('input[name="wr"]:checked');
+  for (var i = 0; i < chks.length; i++) reasons.push(chks[i].value);
+  var note = document.getElementById('wr_note') ? document.getElementById('wr_note').value.trim() : '';
+  var amt = parseFloat(document.getElementById('wr_amt') ? document.getElementById('wr_amt').value : 0) || 0;
+  var updates = {status: newStatus, winReason: reasons.join(', '), winNote: note};
+  if (amt) updates.realAmount = amt;
+  ST.update('pipeline', pipeId, updates);
+  ST.add('pipeLog', {pipeId: pipeId, type: 'win', content: '✅ Win: ' + reasons.join(', ') + (note ? ' — ' + note : '') + (amt ? ' • Real: ' + fmtMoney(amt) : ''), date: _nw()});
+  closeMForce(); toast('✅ Win!'); render();
+}
+
+function showLossReasonM(pipeId) {
+  var cfg = getConfig();
+  openM('❌ Lost — สาเหตุที่ไม่ได้งาน', '' +
+    '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.lossReasons.map(function(r) { return '<label><input type="checkbox" name="lr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
+    '<div class="fg"><label>คู่แข่งที่ชนะ</label><input type="text" id="lr_comp"></div>' +
+    '<div class="fg"><label>ราคาคู่แข่ง (฿)</label><input type="number" id="lr_price"></div>' +
+    '<div class="fg"><label>บทเรียน</label><textarea id="lr_note" rows="2"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveLossReason(\'' + pipeId + '\')">💾 บันทึก</button>');
+}
+
+function saveLossReason(pipeId) {
+  var reasons = [];
+  var chks = document.querySelectorAll('input[name="lr"]:checked');
+  for (var i = 0; i < chks.length; i++) reasons.push(chks[i].value);
+  var comp = document.getElementById('lr_comp') ? document.getElementById('lr_comp').value.trim() : '';
+  var price = document.getElementById('lr_price') ? document.getElementById('lr_price').value : '';
+  var note = document.getElementById('lr_note') ? document.getElementById('lr_note').value.trim() : '';
+  ST.update('pipeline', pipeId, {status: 'lost', lossReason: reasons.join(', '), lossCompetitor: comp, lossCompetitorPrice: price, lossNote: note});
+  ST.add('pipeLog', {pipeId: pipeId, type: 'lost', content: '❌ Lost: ' + reasons.join(', ') + (comp ? ' — ชนะโดย: ' + comp : '') + (note ? ' — ' + note : ''), date: _nw()});
+  closeMForce(); toast('❌ บันทึก Lost'); render();
+}
+
+// ================================================================
+// VISIT MODAL (Fixed Topic Cards)
+// ================================================================
+var visitMode = 'full';
+
+function showVisitM(dealerId, eid) {
+  var v = eid ? ST.getOne('visits', eid) : {};
+  var cfg = getConfig();
+  var existDealer = dealerId || v.dealerId || '';
+  var dealer = existDealer ? ST.getOne('dealers', existDealer) : null;
+  var prevVisit = existDealer ? (ST.visitsByDealer(existDealer)[0] || null) : null;
+
+  // Quick Mode
+  if (visitMode === 'quick') {
+    openM('⚡ Quick Visit', '' +
+      '<div class="fg"><label>Dealer *</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div>' +
+      '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
+      '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
+      '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
+      '<div class="fg"><label>สรุป *</label><textarea id="fv_summary" rows="5">' + sanitize(v.summary || '') + '</textarea></div>' +
+      '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>' +
+      '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</span> <span class="vm-btn full" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</span></div>');
+    return;
+  }
+
+  // Standard / Full
+  var html = '' +
+    '<div class="visit-mode">' +
+    '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="visitMode=\'quick\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">⚡ Quick</div>' +
+    '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</div>' +
+    '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</div></div>' +
+    '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
+    '<div class="fg"><label>Dealer *</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div>' +
+    '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
+    '<div class="fg"><label>DJI Dealer</label><select id="fv_djid">' + optionsHTML(cfg.djiDealerTypes, v.djiDealer || (dealer ? dealer.djiDealer : '') || '', '--') + '</select></div></div>' +
+    '<div class="fg"><label>📍 Location</label><input type="url" id="fv_loc" value="' + (v.location || (dealer ? dealer.googleMap : '') || '') + '"></div>';
+
+  // Topics
+  var topicGroups = cfg.visitTopicGroups || [];
+  var topics = cfg.visitTopics || [];
+  var existData = v.topicData || [];
+
+  for (var g = 0; g < topicGroups.length; g++) {
+    var grp = topicGroups[g];
+    if (visitMode === 'standard' && !grp.alwaysAsk) continue;
+    html += '<div class="form-section">' + grp.name + '</div>';
+    var grpTopics = topics.filter(function(t) { return t.group === grp.id; });
+    for (var t = 0; t < grpTopics.length; t++) {
+      var topic = grpTopics[t];
+      var td = null;
+      for (var e = 0; e < existData.length; e++) { if (existData[e].topicId === topic.id) { td = existData[e]; break; } }
+      if (!td) td = {};
+      html += buildTopicCard(topic, td, v, dealer, prevVisit, t);
+    }
+  }
+
+  html += '<div class="form-section">📝 สรุปเพิ่มเติม</div>' +
+    '<div class="fg"><label>สรุปการคุย</label><textarea id="fv_summary" rows="3">' + sanitize(v.summary || '') + '</textarea></div>' +
+    '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
+    '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
+    '<div class="form-section">📦 Forecast QTY</div><div id="fv_fcs">';
+  var fcs = v.forecastNotes || [{month: '', amount: '', items: ''}];
+  for (var i = 0; i < fcs.length; i++) html += fcRow(i, fcs[i]);
+  html += '</div><button type="button" class="btn bsm bo" onclick="addFcRow()">➕ เพิ่มเดือน</button>';
+  html += '<div class="form-section">💡 Feedback</div><div id="fv_fbs">';
+  var fbs = v.feedbackItems || [''];
+  for (var i = 0; i < fbs.length; i++) html += fbRow(i, fbs[i]);
+  html += '</div><button type="button" class="btn bsm bo" onclick="addFbRow()">➕ เพิ่ม</button>';
+  html += '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button></div>';
+
+  openM(visitMode === 'full' ? '📋 Full Visit Report' : '📝 Standard Visit', html);
+}
+
+// ================================================================
+// TOPIC CARD BUILDER (FIXED)
+// ================================================================
+function buildTopicCard(topic, td, v, dealer, prevVisit, idx) {
+  var answered = td.answered || false;
+  var bodyId = 'tc_body_' + topic.id;
+  var bodyDisplay = answered ? 'display:block' : 'display:none';
+
+  return '<div class="topic-card' + (answered ? ' expanded done' : '') + '" id="tc_' + topic.id + '">' +
+    '<div class="topic-hd" onclick="toggleTopicCard(\'' + topic.id + '\')">' +
+    '<div class="num">' + (answered ? '✓' : (idx + 1)) + '</div>' +
+    '<div class="topic-title">' + topic.name + '</div>' +
+    '<div class="topic-status"><label style="font-size:.62rem" onclick="event.stopPropagation()"><input type="checkbox" id="tc_chk_' + topic.id + '"' + (answered ? ' checked' : '') + ' onchange="toggleTopicCheck(\'' + topic.id + '\')"> ถามแล้ว</label></div>' +
+    '</div>' +
+    '<div class="topic-body" id="' + bodyId + '" style="' + bodyDisplay + '">' +
+    '<div class="topic-prompt">💡 ' + topic.prompt + '</div>' +
+    buildTopicInput(topic, td, v, dealer, prevVisit) +
+    '</div></div>';
+}
+
+function buildTopicInput(topic, td, v, dealer, prevVisit) {
+  var id = topic.id;
+  var prevRev = v.revenue || (prevVisit ? prevVisit.revenue : '') || (dealer ? dealer.currentRevenue : '') || '';
+  var prevSeg = v.customerSegment || (prevVisit ? prevVisit.customerSegment : '') || (dealer ? dealer.customerSegment : '') || '';
+
+  switch (id) {
+    case 'sales_perf':
+      return '<div class="fr"><div class="fg"><label>ยอดขาย (฿)</label><input type="number" id="vt_revenue" value="' + prevRev + '">' + (prevRev ? '<div class="prev-data">ค่าล่าสุด: ' + fmtMoney(prevRev) + '</div>' : '') + '</div>' +
+        '<div class="fg"><label>เป้าที่คาด (฿)</label><input type="number" id="vt_expected" value="' + (v.expectedRevenue || '') + '"></div></div>' +
+        '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
+    case 'downstream':
+      return '<div class="fg"><label>กลุ่มลูกค้า</label><input type="text" id="vt_segment" value="' + sanitize(prevSeg) + '">' + (prevSeg ? '<div class="prev-data">ค่าล่าสุด: ' + sanitize(prevSeg) + '</div>' : '') + '</div>' +
+        '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
+    case 'dock_projects':
+      var prevDock = v.dockInterest || (dealer ? dealer.dockInterest : '') || '';
+      return '<div class="fg"><label>Interest</label><select id="vt_dock"><option value="">--</option><option value="มี"' + (prevDock === 'มี' ? ' selected' : '') + '>มี</option><option value="ไม่มี"' + (prevDock === 'ไม่มี' ? ' selected' : '') + '>ไม่มี</option><option value="กำลังดู"' + (prevDock === 'กำลังดู' ? ' selected' : '') + '>กำลังดู</option></select></div>' +
+        '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
+    case 'dsec': case 'fh2':
+      var prevSt = td.status || (dealer ? dealer[id + 'Status'] : '') || '';
+      var prevCnt = td.certCount || (dealer ? dealer[id + 'CertCount'] : '') || '';
+      return '<div class="fr"><div class="fg"><label>Status</label><select id="vt_' + id + '_st"><option value="">--</option><option value="pass"' + (prevSt === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (prevSt === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (prevSt === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div>' +
+        '<div class="fg"><label>จำนวน cert</label><input type="number" id="vt_' + id + '_n" value="' + prevCnt + '"></div></div>';
+    case 'crm':
+      var prevCrm = td.status || (dealer ? dealer.crmStatus : '') || '';
+      return '<div class="fg"><label>Status</label><select id="vt_' + id + '_st"><option value="">--</option><option value="yes"' + (prevCrm === 'yes' ? ' selected' : '') + '>ลงทะเบียนแล้ว</option><option value="no"' + (prevCrm === 'no' ? ' selected' : '') + '>ยังไม่ลง</option></select></div>';
+    case 'lark':
+      var prevLark = td.status || (dealer ? dealer.larkStatus : '') || '';
+      return '<div class="fg"><label>Status</label><select id="vt_' + id + '_st"><option value="">--</option><option value="added"' + (prevLark === 'added' ? ' selected' : '') + '>Add แล้ว</option><option value="no"' + (prevLark === 'no' ? ' selected' : '') + '>ยังไม่ Add</option></select></div>';
+    default:
+      return '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
+  }
+}
+
+// Topic Card Toggle (FIXED)
+function toggleTopicCard(topicId) {
+  var card = document.getElementById('tc_' + topicId);
+  var body = document.getElementById('tc_body_' + topicId);
+  if (!card || !body) return;
+  
+  if (body.style.display === 'block') {
+    body.style.display = 'none';
+    card.classList.remove('expanded');
+  } else {
+    body.style.display = 'block';
+    card.classList.add('expanded');
+  }
+}
+
+function toggleTopicCheck(topicId) {
+  var chk = document.getElementById('tc_chk_' + topicId);
+  var card = document.getElementById('tc_' + topicId);
+  var body = document.getElementById('tc_body_' + topicId);
+  if (!card || !chk) return;
+  
+  if (chk.checked) {
+    card.classList.add('done', 'expanded');
+    if (body) body.style.display = 'block';
+  } else {
+    card.classList.remove('done');
+  }
+}
+
+// Visit Dealer Changed
+function onVisitDealerChanged() {
+  var did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : '';
+  if (!did) return;
+  var d = ST.getOne('dealers', did);
+  if (!d) return;
+  var loc = document.getElementById('fv_loc');
+  if (loc && !loc.value && d.googleMap) loc.value = d.googleMap;
+  var djid = document.getElementById('fv_djid');
+  if (djid && d.djiDealer) djid.value = d.djiDealer;
+  var pipesDiv = document.getElementById('fv_pipes');
+  if (pipesDiv) pipesDiv.innerHTML = renderPipelineSelectEnhanced(did, []);
+}
+
+function renderPipelineSelectEnhanced(dealerId, existUpdates) {
+  if (!dealerId) return '<div style="font-size:.72rem;color:#64748b">เลือก Dealer ก่อน</div>';
+  var pipes = ST.pipelineByDealer(dealerId).filter(function(p) { return ['lost', 'delivered'].indexOf(p.status) === -1; });
+  if (!pipes.length) return '<div style="font-size:.72rem;color:#64748b">ไม่มี Pipeline active</div>';
+  var eu = existUpdates || [];
+  var cfg = getConfig();
+  var statusOrder = ['bidding','negotiation','quotation','tor_review','prospect','win','ordered','delivered','recurring'];
+pipes.sort(function(a, b) {
+  var ia = statusOrder.indexOf(a.status); if (ia === -1) ia = 99;
+  var ib = statusOrder.indexOf(b.status); if (ib === -1) ib = 99;
+  if (ia !== ib) return ia - ib;
+  return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
+});
+  var html = '';
+  for (var i = 0; i < pipes.length; i++) {
+    var p = pipes[i];
+    var existing = null;
+    for (var j = 0; j < eu.length; j++) { if (eu[j].pipeId === p.id) { existing = eu[j]; break; } }
+    var isSel = !!existing;
+    var amt = Number(p.forecastAmount) || 0;
+    
+    // Get items summary
+    var items = getPipeItems(p);
+    var modelText = items.map(function(it) { return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : ''); }).join(', ');
+    var totalQty = getPipeTotalQty(p);
+    
+    // Get last log
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var lastLogText = '';
+    if (lastLog) {
+      var logDate = lastLog.date ? lastLog.date.split('T')[0] : '';
+      lastLogText = (logDate ? fDShort(logDate) + ' ' : '') + (lastLog.content || '').substr(0, 40);
+    }
+
+    // Get pending actions
+    var pendingActions = getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === 'pending'; });
+
+    html += '<div class="pipe-select-item' + (isSel ? ' selected' : '') + '" id="psi_' + p.id + '">';
+    
+    // Header (clickable)
+    html += '<div class="pipe-select-header" onclick="togglePipeSelect(\'' + p.id + '\')">';
+    html += '<input type="checkbox" class="pipe_chk" value="' + p.id + '"' + (isSel ? ' checked' : '') + ' onclick="event.stopPropagation();togglePipeSelect(\'' + p.id + '\')" style="display:inline;width:auto;margin:0">';
+    html += '<span class="pipe-name">' + sanitize((p.projectName || '').substr(0, 35)) + '</span>';
+    html += pipeTag(p.status);
+    html += '<span class="pipe-amount">' + fmtMoneyStyled(amt) + '</span>';
+    html += '</div>';
+
+    // Project Info (always visible)
+    html += '<div class="pipe-select-info">';
+    html += '<div class="psi-row">📦 ' + sanitize(modelText || '-') + ' <span style="color:var(--text2)">(' + totalQty + ' ชิ้น)</span></div>';
+    if (p.biddingDate) html += '<div class="psi-row">📅 Bidding: ' + fDShort(p.biddingDate) + ' ' + dlB(p.biddingDate, false) + '</div>';
+    if (p.shipmentDate) html += '<div class="psi-row">🚚 Shipment: ' + fDShort(p.shipmentDate) + '</div>';
+    if (p.nextAction) html += '<div class="psi-row">🎯 Next: ' + sanitize((p.nextAction || '').substr(0, 30)) + '</div>';
+    if (lastLogText) html += '<div class="psi-row">📝 ล่าสุด: ' + sanitize(lastLogText) + '</div>';
+    if (pendingActions.length) {
+      html += '<div class="psi-row" style="color:#f59e0b">⏳ Action ค้าง: ' + pendingActions.length + ' รายการ</div>';
+    }
+    html += '<div class="psi-link" onclick="event.stopPropagation();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">🔗 ดูรายละเอียด →</div>';
+    html += '</div>';
+    
+    // Update Detail (show when selected)
+    html += '<div class="pipe-select-detail" id="psd_' + p.id + '"' + (isSel ? ' style="display:block"' : '') + '>';
+    html += '<div class="psi-update-header">✏️ Update โครงการนี้</div>';
+    html += '<div class="fr">';
+    html += '<div class="fg"><label style="font-size:.6rem">สถานะใหม่</label><select id="pu_st_' + p.id + '">' + optionsHTML(cfg.pipelineStatuses, existing ? existing.newStatus : p.status) + '</select></div>';
+    html += '<div class="fg"><label style="font-size:.6rem">หมายเหตุ / Update</label><input type="text" id="pu_note_' + p.id + '" value="' + sanitize(existing ? existing.note : '') + '" placeholder="เช่น ลูกค้าอนุมัติ Spec แล้ว..."></div>';
+    html += '</div>';
+    html += '<div style="font-size:.58rem;color:var(--text2);margin-top:2px">💡 ข้อมูลจะ sync ไปที่ Pipeline Log อัตโนมัติเมื่อ Save Visit</div>';
+    html += '</div>';
+    
+    html += '</div>';
+  }
+  return html;
+}
+
+function togglePipeSelect(pipeId) {
+  var item = document.getElementById('psi_' + pipeId);
+  var detail = document.getElementById('psd_' + pipeId);
+  var chk = item ? item.querySelector('.pipe_chk') : null;
+  if (!item || !detail || !chk) return;
+  if (item.classList.contains('selected')) {
+    item.classList.remove('selected'); detail.style.display = 'none'; chk.checked = false;
+  } else {
+    item.classList.add('selected'); detail.style.display = 'block'; chk.checked = true;
+  }
+}
+
+// Forecast & Feedback rows
+function fcRow(i, fn) {
+  return '<div class="fr" style="margin-bottom:4px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:6px"><input type="text" id="fc_m_' + i + '" value="' + sanitize(fn.month || '') + '" placeholder="เดือน"><input type="number" id="fc_a_' + i + '" value="' + (fn.amount || '') + '" placeholder="มูลค่า (฿)"><textarea id="fc_i_' + i + '" rows="2" style="margin-top:3px;grid-column:1/-1" placeholder="รายการสินค้า...">' + sanitize(fn.items || '') + '</textarea></div>';
+}
+function addFcRow() { var c = document.getElementById('fv_fcs'); if (c) c.insertAdjacentHTML('beforeend', fcRow(c.children.length, {})); }
+function fbRow(i, f) { return '<div style="margin-bottom:3px"><input type="text" id="fb_' + i + '" value="' + sanitize(f || '') + '" placeholder="Feedback ' + (i + 1) + '..."></div>'; }
+function addFbRow() { var c = document.getElementById('fv_fbs'); if (c) c.insertAdjacentHTML('beforeend', fbRow(c.children.length, '')); }
+
+// Save Visit Quick
+function saveVisitQuick(dealerId, eid) {
+  var did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
+  if (!did) return alert('เลือก Dealer');
+  var summary = document.getElementById('fv_summary') ? document.getElementById('fv_summary').value.trim() : '';
+  if (!summary) return alert('ใส่สรุป');
+  var cfg = getConfig();
+  var modeEl = document.querySelector('input[name="fv_mode"]:checked');
+  var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: []};
+  if (!data.date) return alert('ใส่วันที่');
+  if (eid) ST.update('visits', eid, data); else ST.add('visits', data);
+  closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
+}
+
+// Save Visit (Standard/Full)
+function saveVisit(dealerId, eid) {
+  var cfg = getConfig();
+  var did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
+  if (!did) return alert('เลือก Dealer');
+  if (!dpG('fv_date')) return alert('ใส่วันที่');
+
+  // Topic data
+  var topicData = [];
+  var topics = cfg.visitTopics || [];
+  for (var i = 0; i < topics.length; i++) {
+    var topic = topics[i];
+    var chk = document.getElementById('tc_chk_' + topic.id);
+    if (!chk) continue;
+    var td = {topicId: topic.id, answered: chk.checked};
+    if (chk.checked) {
+      var sumEl = document.getElementById('vt_' + topic.id);
+      if (sumEl) td.summary = sumEl.value.trim();
+      if (topic.id === 'dsec' || topic.id === 'fh2') { td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || ''; td.certCount = (document.getElementById('vt_' + topic.id + '_n') || {}).value || ''; }
+      if (topic.id === 'crm' || topic.id === 'lark') td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || '';
+    }
+    topicData.push(td);
+  }
+
+  // Pipeline updates
+  var pipelineUpdates = [];
+  var pipeChks = document.querySelectorAll('.pipe_chk:checked');
+  for (var i = 0; i < pipeChks.length; i++) {
+    var pid = pipeChks[i].value;
+    pipelineUpdates.push({pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || ''});
+  }
+
+  // Forecast
+  var forecastNotes = [];
+  var fcCnt = document.getElementById('fv_fcs') ? document.getElementById('fv_fcs').children.length : 0;
+  for (var i = 0; i < fcCnt; i++) {
+    var m = (document.getElementById('fc_m_' + i) || {}).value || '';
+    var a = (document.getElementById('fc_a_' + i) || {}).value || '';
+    var it = (document.getElementById('fc_i_' + i) || {}).value || '';
+    if (m.trim() || a || it.trim()) forecastNotes.push({month: m.trim(), amount: parseFloat(a) || 0, items: it.trim()});
+  }
+
+  // Feedback
+  var feedbackItems = [];
+  var fbCnt = document.getElementById('fv_fbs') ? document.getElementById('fv_fbs').children.length : 0;
+  for (var i = 0; i < fbCnt; i++) { var f = (document.getElementById('fb_' + i) || {}).value || ''; if (f.trim()) feedbackItems.push(f.trim()); }
+
+  var modeEl = document.querySelector('input[name="fv_mode"]:checked');
+  var data = {
+    date: dpG('fv_date'), time: (document.getElementById('fv_time') || {}).value || '',
+    dealerId: did, mode: modeEl ? modeEl.value : 'offline',
+    djiDealer: (document.getElementById('fv_djid') || {}).value || '',
+    location: (document.getElementById('fv_loc') || {}).value || '',
+    summary: (document.getElementById('fv_summary') || {}).value || '',
+    revenue: parseFloat((document.getElementById('vt_revenue') || {}).value) || 0,
+    expectedRevenue: parseFloat((document.getElementById('vt_expected') || {}).value) || 0,
+    customerSegment: (document.getElementById('vt_segment') || {}).value || '',
+    dockInterest: (document.getElementById('vt_dock') || {}).value || '',
+    topicData: topicData, pipelineUpdates: pipelineUpdates, forecastNotes: forecastNotes, feedbackItems: feedbackItems,
+    saleName: cfg.saleName, reportMode: visitMode
+  };
+
+  var visitObj;
+  if (eid) { ST.update('visits', eid, data); visitObj = ST.getOne('visits', eid); }
+  else { visitObj = ST.add('visits', data); }
+
+  // Auto-sync Dealer
+  var dealerUpdates = {};
+  if (data.revenue) dealerUpdates.currentRevenue = data.revenue;
+  if (data.customerSegment) dealerUpdates.customerSegment = data.customerSegment;
+  if (data.dockInterest) dealerUpdates.dockInterest = data.dockInterest;
+  topicData.forEach(function(td) {
+    if (td.answered) {
+      if (td.topicId === 'dsec' && td.status) { dealerUpdates.dsecStatus = td.status; dealerUpdates.dsecCertCount = td.certCount; dealerUpdates.dsecLastCheck = _td(); }
+      if (td.topicId === 'crm' && td.status) { dealerUpdates.crmStatus = td.status; dealerUpdates.crmLastCheck = _td(); }
+      if (td.topicId === 'fh2' && td.status) { dealerUpdates.fh2Status = td.status; dealerUpdates.fh2CertCount = td.certCount; dealerUpdates.fh2LastCheck = _td(); }
+      if (td.topicId === 'lark' && td.status) { dealerUpdates.larkStatus = td.status; dealerUpdates.larkLastCheck = _td(); }
+    }
+  });
+  if (Object.keys(dealerUpdates).length) ST.update('dealers', did, dealerUpdates);
+
+  // Auto-sync Pipeline
+  pipelineUpdates.forEach(function(pu) {
+    if (pu.pipeId) {
+      var oldPipe = ST.getOne('pipeline', pu.pipeId);
+      if (pu.newStatus && oldPipe && pu.newStatus !== oldPipe.status) ST.update('pipeline', pu.pipeId, {status: pu.newStatus});
+      ST.add('pipeLog', {pipeId: pu.pipeId, type: 'visit', content: '🤝 ' + fDShort(data.date) + ' Visit: ' + (pu.note || 'อัพเดตจาก Visit'), date: data.date + 'T00:00:00', visitId: visitObj.id});
+    }
+  });
+
+  // Save feedback
+  feedbackItems.forEach(function(f) { ST.add('feedback', {dealerId: did, text: f, date: data.date, source: 'visit'}); });
+
+  closeMForce(); toast('💾 บันทึก Visit แล้ว');
+  if (visitMode !== 'quick') {
+    setTimeout(function() { if (confirm('📧 สร้าง Draft Email?')) showVisitDraft(visitObj.id); }, 500);
+  }
+  go('visitDetail', {visitId: visitObj.id});
+}
+// ================================================================
+// FOLLOW-UP MODAL
+// ================================================================
+function showFollowupM(dealerId) {
+  openM('📞 Follow-up', '' +
+    dpH('ff_d', _td(), 'วันที่ *') +
+    '<div class="fg"><label>Dealer *</label><select id="ff_dlr">' + dealerOptions(dealerId) + '</select></div>' +
+    '<div class="fg"><label>ช่องทาง</label><div class="radio-g">' +
+    '<label><input type="radio" name="ff_m" value="line" checked><span>💬 LINE</span></label>' +
+    '<label><input type="radio" name="ff_m" value="call"><span>📞 โทร</span></label>' +
+    '<label><input type="radio" name="ff_m" value="email"><span>📧 Email</span></label>' +
+    '</div></div>' +
+    '<div class="fg"><label>สรุป *</label><textarea id="ff_s" rows="3"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveFollowup()">💾 บันทึก</button>');
+}
+
+function saveFollowup() {
+  var date = dpG('ff_d');
+  var dlr = document.getElementById('ff_dlr');
+  var summary = document.getElementById('ff_s');
+  var methodEl = document.querySelector('input[name="ff_m"]:checked');
+  
+  if (!date || !dlr || !dlr.value || !summary || !summary.value.trim()) return alert('กรอกให้ครบ');
+  
+  ST.add('followups', {
+    date: date,
+    dealerId: dlr.value,
+    method: methodEl ? methodEl.value : 'line',
+    summary: summary.value.trim()
+  });
+  closeMForce();
+  toast('📞 บันทึกแล้ว');
+  render();
+}
+
+// ================================================================
+// LINE SUPPORT LOG MODAL
+// ================================================================
+function showLineLogM(dealerId) {
+  var cfg = getConfig();
+  openM('💬 LINE Support', '' +
+    dpH('fl_d', _td(), 'วันที่') +
+    '<div class="fr">' +
+    '<div class="fg"><label>Dealer *</label><select id="fl_dlr">' + dealerOptions(dealerId) + '</select></div>' +
+    '<div class="fg"><label>ประเภท</label><select id="fl_t">' + optionsHTML(cfg.lineLogTypes, '', '--') + '</select></div>' +
+    '</div>' +
+    '<div class="fg"><label>เวลา</label><input type="time" id="fl_time"></div>' +
+    '<div class="fg"><label>สรุป *</label><textarea id="fl_s" rows="3"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveLineLog()">💾 บันทึก</button>');
+}
+
+function saveLineLog() {
+  var dlr = document.getElementById('fl_dlr');
+  var summary = document.getElementById('fl_s');
+  if (!dlr || !dlr.value || !summary || !summary.value.trim()) return alert('กรอกให้ครบ');
+  
+  ST.add('lineLog', {
+    date: dpG('fl_d') || _td(),
+    dealerId: dlr.value,
+    logType: document.getElementById('fl_t') ? document.getElementById('fl_t').value : '',
+    time: document.getElementById('fl_time') ? document.getElementById('fl_time').value : '',
+    summary: summary.value.trim()
+  });
+  closeMForce();
+  toast('💬 บันทึกแล้ว');
+  render();
+}
+
+// ================================================================
+// FEEDBACK MODAL
+// ================================================================
+function showFeedbackM(dealerId) {
+  openM('💡 Feedback', '' +
+    dpH('ffb_d', _td(), 'วันที่') +
+    '<div class="fg"><label>Feedback *</label><textarea id="ffb_t" rows="3"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveFeedbackM(\'' + dealerId + '\')">💾 บันทึก</button>');
+}
+
+function saveFeedbackM(dealerId) {
+  var text = document.getElementById('ffb_t');
+  if (!text || !text.value.trim()) return alert('ใส่ Feedback');
+  ST.add('feedback', {
+    dealerId: dealerId,
+    text: text.value.trim(),
+    date: dpG('ffb_d') || _td(),
+    source: 'manual'
+  });
+  closeMForce();
+  toast('💡 บันทึกแล้ว');
+  render();
+}
+
+// ================================================================
+// WAITING MODAL
+// ================================================================
+function showWaitM() {
+  openM('📭 รอคนอื่น', '' +
+    '<div class="fg"><label>เรื่อง *</label><input type="text" id="fw_t"></div>' +
+    '<div class="fg"><label>รอจากใคร</label><input type="text" id="fw_p"></div>' +
+    '<div class="fr">' + dpH('fw_s', _td(), 'วันที่ส่ง') + dpH('fw_d', '', 'กำหนดได้คำตอบ') + '</div>' +
+    '<div class="fg"><label>หมายเหตุ</label><textarea id="fw_n" rows="2"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveWaiting()">💾 บันทึก</button>');
+}
+
+function saveWaiting() {
+  var title = document.getElementById('fw_t');
+  if (!title || !title.value.trim()) return alert('ใส่เรื่อง');
+  ST.add('waiting', {
+    title: title.value.trim(),
+    person: document.getElementById('fw_p') ? document.getElementById('fw_p').value.trim() : '',
+    sentDate: dpG('fw_s'),
+    dueDate: dpG('fw_d'),
+    notes: document.getElementById('fw_n') ? document.getElementById('fw_n').value.trim() : '',
+    resolved: false
+  });
+  closeMForce();
+  toast('📭 เพิ่มแล้ว');
+  render();
+}
+
+// ================================================================
+// EMAIL MODAL
+// ================================================================
+function showEmailM() {
+  var cfg = getConfig();
+  openM('📧 Email', '' +
+    '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fe_s"></div>' +
+    '<div class="fg"><label>ประเภท</label><select id="fe_t">' + optionsHTML(cfg.emailTypes, '') + '</select></div>' +
+    '<div class="fg"><label>ผู้รับ</label><input type="text" id="fe_r" value="' + cfg.emailRecipients.visitPlan.join(', ') + '"></div>' +
+    '<div class="fg"><label>ส่งแล้ว?</label><div class="radio-g">' +
+    '<label><input type="radio" name="fe_sent" value="0" checked><span>ยังไม่ส่ง</span></label>' +
+    '<label><input type="radio" name="fe_sent" value="1"><span>ส่งแล้ว</span></label>' +
+    '</div></div>' +
+    '<button class="btn bp btn-full" onclick="saveEmail()">💾 บันทึก</button>');
+}
+
+function saveEmail() {
+  var subj = document.getElementById('fe_s');
+  if (!subj || !subj.value.trim()) return alert('ใส่หัวข้อ');
+  var sentEl = document.querySelector('input[name="fe_sent"]:checked');
+  var sent = sentEl ? sentEl.value === '1' : false;
+  ST.add('emails', {
+    subject: subj.value.trim(),
+    type: document.getElementById('fe_t') ? document.getElementById('fe_t').value : '',
+    recipients: document.getElementById('fe_r') ? document.getElementById('fe_r').value.trim() : '',
+    sent: sent,
+    sentDate: sent ? _nw() : null
+  });
+  closeMForce();
+  toast('📧 บันทึกแล้ว');
+  render();
+}
+
+function showTaskM(eid, prefillDealerId) {
+  var t = eid ? ST.getOne('tasks', eid) : {};
+  var cats = [];
+  var allTasks = ST.getAll('tasks');
+  for (var i = 0; i < allTasks.length; i++) {
+    if (allTasks[i].category && cats.indexOf(allTasks[i].category) === -1) cats.push(allTasks[i].category);
+  }
+  
+  var dealers = ST.getAll('dealers');
+  var selDealerId = prefillDealerId || t.dealerId || '';
+  
+  // Build dealer options
+  var dealerOpts = '<option value="">-- ไม่ระบุ --</option>';
+  for (var di = 0; di < dealers.length; di++) {
+    dealerOpts += '<option value="' + dealers[di].id + '"' + (selDealerId === dealers[di].id ? ' selected' : '') + '>' + sanitize(dealers[di].name || '') + '</option>';
+  }
+  
+  // Build pipeline options (will update via onchange)
+  var pipeOpts = '<option value="">-- ไม่ระบุ --</option>';
+  if (selDealerId) {
+    var pipes = ST.pipelineByDealer(selDealerId);
+    for (var pi = 0; pi < pipes.length; pi++) {
+      var pp = pipes[pi];
+      if (pp.status === 'lost' || pp.status === 'delivered') continue;
+      pipeOpts += '<option value="' + pp.id + '"' + (t.pipeId === pp.id ? ' selected' : '') + '>' + sanitize(pp.projectName || pp.name || '-') + '</option>';
+    }
+  }
+  
+  openM(eid ? '✏️ งาน' : '➕ งาน', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="ft_t" value="' + sanitize(t.title || '') + '"></div>' +
+    '<div class="fg"><label>รายละเอียด</label><textarea id="ft_d">' + sanitize(t.description || '') + '</textarea></div>' +
+    '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>🏪 Dealer</label><select id="ft_dealer" onchange="taskDealerChanged()">' + dealerOpts + '</select></div>' +
+    '<div class="fg"><label>📊 Pipeline Project</label><select id="ft_pipe">' + pipeOpts + '</select></div>' +
+    '</div>' +
+    '<div class="fr">' + dpH('ft_s', t.startDate || _td(), 'วันเริ่ม') + dpH('ft_e', t.dueDate || '', 'Deadline') + '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>สำคัญ</label><select id="ft_p">' +
+    '<option value="high"' + (t.priority === 'high' ? ' selected' : '') + '>🔴 มาก</option>' +
+    '<option value="medium"' + ((t.priority || 'medium') === 'medium' ? ' selected' : '') + '>🟡 กลาง</option>' +
+    '<option value="low"' + (t.priority === 'low' ? ' selected' : '') + '>🟢 ทั่วไป</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>หมวด</label><input type="text" id="ft_c" value="' + sanitize(t.category || '') + '" list="catL"><datalist id="catL">' + cats.map(function(c) { return '<option value="' + c + '">'; }).join('') + '</datalist></div>' +
+    '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>สถานะ</label><select id="ft_st">' +
+    '<option value="active"' + ((t.status || 'active') === 'active' ? ' selected' : '') + '>🔄 ทำ</option>' +
+    '<option value="completed"' + (t.status === 'completed' ? ' selected' : '') + '>✅ เสร็จ</option>' +
+    '<option value="on-hold"' + (t.status === 'on-hold' ? ' selected' : '') + '>⏸️ พัก</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>⚡ Flow</label><select id="ft_sq">' +
+    '<option value="0"' + (t.sequential ? '' : ' selected') + '>ปิด</option>' +
+    '<option value="1"' + (t.sequential ? ' selected' : '') + '>เปิด</option>' +
+    '</select></div>' +
+    '</div>' +
+    '<button class="btn bp btn-full" onclick="saveTask(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+// Update pipeline dropdown when dealer changes
+function taskDealerChanged() {
+  var dId = document.getElementById('ft_dealer').value;
+  var sel = document.getElementById('ft_pipe');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- ไม่ระบุ --</option>';
+  if (!dId) return;
+  var pipes = ST.pipelineByDealer(dId);
+  for (var i = 0; i < pipes.length; i++) {
+    var p = pipes[i];
+    if (p.status === 'lost' || p.status === 'delivered') continue;
+    var opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.projectName || p.name || '-';
+    sel.appendChild(opt);
+  }
+}
+
+function saveTask(eid) {
+  var title = document.getElementById('ft_t');
+  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  var data = {
+    title: title.value.trim(),
+    description: document.getElementById('ft_d') ? document.getElementById('ft_d').value.trim() : '',
+    startDate: dpG('ft_s'),
+    dueDate: dpG('ft_e'),
+    priority: document.getElementById('ft_p') ? document.getElementById('ft_p').value : 'medium',
+    category: document.getElementById('ft_c') ? document.getElementById('ft_c').value.trim() : '',
+    status: document.getElementById('ft_st') ? document.getElementById('ft_st').value : 'active',
+    sequential: document.getElementById('ft_sq') ? document.getElementById('ft_sq').value === '1' : false,
+    url: document.getElementById('ft_url') ? document.getElementById('ft_url').value.trim() : '',
+    dealerId: document.getElementById('ft_dealer') ? document.getElementById('ft_dealer').value : '',
+    pipeId: document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : ''
+  };
+  if (eid) {
+    ST.update('tasks', eid, data);
+    closeMForce();
+    go('taskDetail', {taskId: eid});
+  } else {
+    data.steps = [];
+    var t = ST.add('tasks', data);
+    closeMForce();
+    go('taskDetail', {taskId: t.id});
+  }
+  toast('💾 บันทึกแล้ว');
+}
+function delTask(id) {
+  if (!confirm('ลบงานนี้?')) return;
+  ST.delete('tasks', id);
+  ST.deleteWhere('taskLogs', function(l) { return l.tid === id; });
+  go('tasks');
+  toast('🗑️ ลบแล้ว');
+}
+
+// ================================================================
+// STEP MODAL
+// ================================================================
+function showStepM(tid) {
+  openM('➕ Step', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="fs_t"></div>' +
+    '<div class="fr">' + dpH('fs_s', _td(), 'วันที่ทำ') + dpH('fs_e', '', 'วันที่เสร็จ') + '</div>' +
+    '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="fs_url" placeholder="https://..."></div>' +
+    '<div class="fg"><label>หมายเหตุ</label><textarea id="fs_n" rows="2"></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveStep(\'' + tid + '\')">💾 บันทึก</button>');
+}
+
+function editStep(tid, idx) {
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps || !t.steps[idx]) return;
+  var s = t.steps[idx];
+  openM('✏️ Step', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="fs_t" value="' + sanitize(s.title) + '"></div>' +
+    '<div class="fr">' + dpH('fs_s', s.startDate || '', 'วันที่ทำ') + dpH('fs_e', s.dueDate || '', 'วันที่เสร็จ') + '</div>' +
+    '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="fs_url" value="' + sanitize(s.url || '') + '" placeholder="https://..."></div>' +
+    '<div class="fg"><label>หมายเหตุ</label><textarea id="fs_n" rows="2">' + sanitize(s.notes || '') + '</textarea></div>' +
+    '<button class="btn bp btn-full" onclick="updateStep(\'' + tid + '\',' + idx + ')">💾 บันทึก</button>');
+}
+
+function saveStep(tid) {
+  var t = ST.getOne('tasks', tid);
+  if (!t) return;
+  var title = document.getElementById('fs_t');
+  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  var s = {
+    id: gid(),
+    title: title.value.trim(),
+    startDate: dpG('fs_s'),
+    dueDate: dpG('fs_e'),
+    url: document.getElementById('fs_url') ? document.getElementById('fs_url').value.trim() : '',
+    notes: document.getElementById('fs_n') ? document.getElementById('fs_n').value.trim() : '',
+    done: false,
+    kanban: 'todo'
+  };
+  if (!t.steps) t.steps = [];
+  t.steps.push(s);
+  ST.update('tasks', tid, {steps: t.steps});
+  closeMForce();
+  toast('✅ เพิ่ม Step');
+  render();
+}
+
+function updateStep(tid, idx) {
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps || !t.steps[idx]) return;
+  var title = document.getElementById('fs_t');
+  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  t.steps[idx].title = title.value.trim();
+  t.steps[idx].startDate = dpG('fs_s');
+  t.steps[idx].dueDate = dpG('fs_e');
+  t.steps[idx].url = document.getElementById('fs_url') ? document.getElementById('fs_url').value.trim() : '';
+  t.steps[idx].notes = document.getElementById('fs_n') ? document.getElementById('fs_n').value.trim() : '';
+  ST.update('tasks', tid, {steps: t.steps});
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+// ================================================================
+// TASK LOG MODAL
+// ================================================================
+function showTaskLogM(tid) {
+  openM('➕ Log', '' +
+    '<div class="fg"><label>ประเภท</label><select id="ftl_t">' +
+    '<option value="progress">🟢 คืบหน้า</option>' +
+    '<option value="problem">🔴 ปัญหา</option>' +
+    '<option value="solution">🟡 แก้ไข</option>' +
+    '<option value="note">⚪ หมายเหตุ</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>รายละเอียด *</label><textarea id="ftl_c" rows="3"></textarea></div>' +
+    dpH('ftl_d', _td(), 'วันที่') +
+    '<button class="btn bp btn-full" onclick="saveTaskLog(\'' + tid + '\')">💾 บันทึก</button>');
+}
+
+function saveTaskLog(tid) {
+  var content = document.getElementById('ftl_c');
+  if (!content || !content.value.trim()) return alert('ใส่รายละเอียด');
+  ST.add('taskLogs', {
+    tid: tid,
+    type: document.getElementById('ftl_t') ? document.getElementById('ftl_t').value : 'note',
+    content: content.value.trim(),
+    date: (dpG('ftl_d') || _td()) + 'T' + new Date().toTimeString().slice(0, 8)
+  });
+  closeMForce();
+  toast('📝 บันทึกแล้ว');
+  render();
+}
+
+// ================================================================
+// MEETING MODAL
+// ================================================================
+function showMeetingM(eid) {
+  var m = eid ? ST.getOne('meetings', eid) : {};
+  openM(eid ? '✏️ ประชุม' : '➕ ประชุม', '' +
+    '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fm_t" value="' + sanitize(m.title || '') + '"></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>ประเภท</label><input type="text" id="fm_tp" value="' + sanitize(m.type || '') + '" list="mtL"><datalist id="mtL"><option value="ประชุม Team Sales Drone"><option value="ประชุมลูกค้า"><option value="อบรม"></datalist></div>' +
+    '<div class="fg"><label>สถานที่</label><input type="text" id="fm_loc" value="' + sanitize(m.location || '') + '"></div>' +
+    '</div>' +
+    '<div class="fr3">' + dpH('fm_d', m.date || _td(), 'วันที่ *') +
+    '<div class="fg"><label>เริ่ม</label><input type="time" id="fm_s" value="' + (m.time || '') + '"></div>' +
+    '<div class="fg"><label>จบ</label><input type="time" id="fm_e" value="' + (m.endTime || '') + '"></div>' +
+    '</div>' +
+    '<div class="fg"><label>ผู้เข้าร่วม</label><input type="text" id="fm_att" value="' + sanitize(m.attendees || '') + '"></div>' +
+    '<div class="fg"><label>วาระ</label><textarea id="fm_ag">' + sanitize(m.agenda || '') + '</textarea></div>' +
+    '<div class="fg"><label>บันทึก</label><textarea id="fm_n">' + sanitize(m.notes || '') + '</textarea></div>' +
+    '<div class="fg"><label>มติ</label><textarea id="fm_dec">' + sanitize(m.decisions || '') + '</textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveMeeting(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function saveMeeting(eid) {
+  var title = document.getElementById('fm_t');
+  var date = dpG('fm_d');
+  if (!title || !title.value.trim() || !date) return alert('ใส่หัวข้อ + วันที่');
+  var data = {
+    title: title.value.trim(),
+    type: document.getElementById('fm_tp') ? document.getElementById('fm_tp').value.trim() : '',
+    location: document.getElementById('fm_loc') ? document.getElementById('fm_loc').value.trim() : '',
+    date: date,
+    time: document.getElementById('fm_s') ? document.getElementById('fm_s').value : '',
+    endTime: document.getElementById('fm_e') ? document.getElementById('fm_e').value : '',
+    attendees: document.getElementById('fm_att') ? document.getElementById('fm_att').value.trim() : '',
+    agenda: document.getElementById('fm_ag') ? document.getElementById('fm_ag').value.trim() : '',
+    notes: document.getElementById('fm_n') ? document.getElementById('fm_n').value.trim() : '',
+    decisions: document.getElementById('fm_dec') ? document.getElementById('fm_dec').value.trim() : ''
+  };
+  if (eid) {
+    ST.update('meetings', eid, data);
+    closeMForce();
+    go('meetingDetail', {meetingId: eid});
+  } else {
+    data.actions = [];
+    var m = ST.add('meetings', data);
+    closeMForce();
+    go('meetingDetail', {meetingId: m.id});
+  }
+  toast('💾 บันทึกแล้ว');
+}
+
+function delMeeting(id) {
+  if (!confirm('ลบประชุมนี้?')) return;
+  ST.delete('meetings', id);
+  go('meetings');
+  toast('🗑️ ลบแล้ว');
+}
+
+// ================================================================
+// ACTION ITEMS (Meeting)
+// ================================================================
+function showActionM(mid) {
+  openM('➕ Action Item', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="fa_t"></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>ผู้รับผิดชอบ</label><input type="text" id="fa_a"></div>' +
+    dpH('fa_d', '', 'กำหนดเสร็จ') +
+    '</div>' +
+    '<button class="btn bp btn-full" onclick="saveAction(\'' + mid + '\')">💾 บันทึก</button>');
+}
+
+function saveAction(mid) {
+  var m = ST.getOne('meetings', mid);
+  if (!m) return;
+  var title = document.getElementById('fa_t');
+  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  var a = {
+    id: gid(),
+    title: title.value.trim(),
+    assignee: document.getElementById('fa_a') ? document.getElementById('fa_a').value.trim() : '',
+    dueDate: dpG('fa_d'),
+    done: false
+  };
+  if (!m.actions) m.actions = [];
+  m.actions.push(a);
+  ST.update('meetings', mid, {actions: m.actions});
+  closeMForce();
+  toast('📌 เพิ่มแล้ว');
+  render();
+}
+
+function togAction(mid, i) {
+  var m = ST.getOne('meetings', mid);
+  if (!m || !m.actions || !m.actions[i]) return;
+  m.actions[i].done = !m.actions[i].done;
+  ST.update('meetings', mid, {actions: m.actions});
+  render();
+}
+
+function delAction(mid, i) {
+  if (!confirm('ลบ?')) return;
+  var m = ST.getOne('meetings', mid);
+  if (!m || !m.actions) return;
+  m.actions.splice(i, 1);
+  ST.update('meetings', mid, {actions: m.actions});
+  render();
+}
+// ================================================================
+// ROUTINE MODAL
+// ================================================================
+function showRoutineM(eid) {
+  var r = eid ? ST.getOne('routines', eid) : {};
+  openM(eid ? '✏️ Routine' : '➕ Routine', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="fr_t" value="' + sanitize(r.title || '') + '"></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>เวลา</label><input type="time" id="fr_tm" value="' + (r.time || '') + '"></div>' +
+    '<div class="fg"><label>วัน</label><select id="fr_d">' +
+    '<option value="daily"' + ((r.days || 'daily') === 'daily' ? ' selected' : '') + '>ทุกวัน</option>' +
+    '<option value="mon-wed"' + (r.days === 'mon-wed' ? ' selected' : '') + '>จ.-พ.</option>' +
+    '<option value="mon-fri"' + (r.days === 'mon-fri' ? ' selected' : '') + '>จ.-ศ.</option>' +
+    '<option value="mon"' + (r.days === 'mon' ? ' selected' : '') + '>จันทร์</option>' +
+    '<option value="tue"' + (r.days === 'tue' ? ' selected' : '') + '>อังคาร</option>' +
+    '<option value="wed"' + (r.days === 'wed' ? ' selected' : '') + '>พุธ</option>' +
+    '<option value="thu"' + (r.days === 'thu' ? ' selected' : '') + '>พฤหัสบดี</option>' +
+    '<option value="fri"' + (r.days === 'fri' ? ' selected' : '') + '>ศุกร์</option>' +
+    '</select></div></div>' +
+    '<div class="fg"><label>หมวด</label><input type="text" id="fr_c" value="' + sanitize(r.category || '') + '" list="rcL">' +
+    '<datalist id="rcL"><option value="เช้า"><option value="เย็น"><option value="จ.-พ."><option value="พฤ."><option value="ศ."><option value="ติดตาม"></datalist></div>' +
+    '<button class="btn bp btn-full" onclick="saveRoutine(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function saveRoutine(eid) {
+  var title = document.getElementById('fr_t');
+  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  var data = {
+    title: title.value.trim(),
+    time: document.getElementById('fr_tm') ? document.getElementById('fr_tm').value : '',
+    days: document.getElementById('fr_d') ? document.getElementById('fr_d').value : 'daily',
+    category: document.getElementById('fr_c') ? document.getElementById('fr_c').value.trim() : ''
+  };
+  if (eid) ST.update('routines', eid, data);
+  else ST.add('routines', data);
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+// ================================================================
+// TEMPLATE MODAL
+// ================================================================
+function showTemplateM(eid) {
+  var tp = eid ? ST.getOne('templates', eid) : {steps: []};
+  var stepsText = '';
+  var steps = tp.steps || [];
+  for (var i = 0; i < steps.length; i++) {
+    stepsText += steps[i].title + '|' + (steps[i].offsetDays || 0) + '|' + (steps[i].durationDays || 0) + '\n';
+  }
+  
+  openM(eid ? '✏️ Template' : '➕ Template', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="ftp_n" value="' + sanitize(tp.name || '') + '"></div>' +
+    '<div class="fg"><label>⚡ Flow</label><select id="ftp_sq">' +
+    '<option value="0"' + (tp.sequential ? '' : ' selected') + '>ปิด</option>' +
+    '<option value="1"' + (tp.sequential ? ' selected' : '') + '>เปิด (ไล่ลำดับ)</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>Steps (ชื่อ|เริ่มหลังกี่วัน|จำนวนวัน)</label>' +
+    '<textarea id="ftp_s" rows="6" placeholder="กรอกข้อมูล|0|3&#10;ส่งเอกสาร|3|2">' + stepsText + '</textarea>' +
+    '<div class="hint">แต่ละบรรทัด = 1 Step</div></div>' +
+    '<button class="btn bp btn-full" onclick="saveTemplate(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function saveTemplate(eid) {
+  var name = document.getElementById('ftp_n');
+  if (!name || !name.value.trim()) return alert('ใส่ชื่อ');
+  var sq = document.getElementById('ftp_sq') ? document.getElementById('ftp_sq').value === '1' : false;
+  var stepsRaw = document.getElementById('ftp_s') ? document.getElementById('ftp_s').value.trim() : '';
+  var lines = stepsRaw.split('\n');
+  var steps = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var parts = line.split('|');
+    var title = parts[0] ? parts[0].trim() : '';
+    if (!title) continue;
+    steps.push({
+      title: title,
+      offsetDays: parseInt(parts[1]) || 0,
+      durationDays: parseInt(parts[2]) || 0
+    });
+  }
+  
+  if (eid) ST.update('templates', eid, {name: name.value.trim(), sequential: sq, steps: steps});
+  else ST.add('templates', {name: name.value.trim(), sequential: sq, steps: steps});
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function showTplDet(id) {
+  var tp = ST.getOne('templates', id);
+  if (!tp) return;
+  var stepsHtml = '';
+  var steps = tp.steps || [];
+  for (var i = 0; i < steps.length; i++) {
+    stepsHtml += '<div class="si"><div style="flex:1"><div class="stt">' + (i + 1) + '. ' + sanitize(steps[i].title) + '</div>' +
+      '<div class="sd">' + (steps[i].offsetDays ? '+' + steps[i].offsetDays + 'd' : 'start') + (steps[i].durationDays ? ' → ' + steps[i].durationDays + 'd' : '') + '</div></div></div>';
+  }
+  openM('📑 ' + tp.name, stepsHtml +
+    '<div class="bg" style="margin-top:8px">' +
+    '<button class="btn bp" onclick="closeMForce();useTpl(\'' + tp.id + '\')">🚀 ใช้</button>' +
+    '<button class="btn bo" onclick="closeMForce();showTemplateM(\'' + tp.id + '\')">✏️</button>' +
+    '<button class="btn bd" onclick="ST.delete(\'templates\',\'' + tp.id + '\');closeMForce();render()">🗑️</button></div>');
+}
+
+function useTpl(tid) {
+  var tp = ST.getOne('templates', tid);
+  if (!tp) return;
+  openM('🚀 ใช้ Template', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="ut_n" value="' + sanitize(tp.name) + '"></div>' +
+    dpH('ut_d', _td(), 'วันเริ่ม') +
+    '<button class="btn bp btn-full" onclick="applyTpl(\'' + tid + '\')">🚀 สร้างงาน</button>');
+}
+
+function applyTpl(tid) {
+  var tp = ST.getOne('templates', tid);
+  if (!tp) return;
+  var nameEl = document.getElementById('ut_n');
+  var nm = nameEl ? nameEl.value.trim() : '';
+  var sd = dpG('ut_d') || _td();
+  if (!nm) return alert('ใส่ชื่อ');
+  
+  var steps = [];
+  var tpSteps = tp.steps || [];
+  for (var i = 0; i < tpSteps.length; i++) {
+    steps.push({
+      id: gid(),
+      title: tpSteps[i].title,
+      startDate: addD(sd, tpSteps[i].offsetDays || 0),
+      dueDate: addD(sd, (tpSteps[i].offsetDays || 0) + (tpSteps[i].durationDays || 0)),
+      notes: '',
+      done: false,
+      kanban: 'todo'
+    });
+  }
+  
+  var last = steps.length ? steps[steps.length - 1].dueDate : sd;
+  var t = ST.add('tasks', {
+    title: nm,
+    description: 'จาก Template: ' + tp.name,
+    startDate: sd,
+    dueDate: last,
+    priority: 'medium',
+    category: 'Template',
+    status: 'active',
+    steps: steps,
+    sequential: !!tp.sequential
+  });
+  closeMForce();
+  toast('🚀 สร้างแล้ว');
+  go('taskDetail', {taskId: t.id});
+}
+
+// ================================================================
+// KNOWLEDGE BASE MODAL (Enhanced)
+// ================================================================
+function showNoteM(eid) {
+  var n = eid ? ST.getOne('notes', eid) : {};
+  var cfg = getConfig();
+  var cats = cfg.noteCategories || [];
+  var dealers = ST.getAll('dealers');
+  
+  // Status options
+  var statusOpts = '' +
+    '<option value="active"' + ((n.status || 'active') === 'active' ? ' selected' : '') + '>✅ ใช้งานอยู่</option>' +
+    '<option value="expired"' + (n.status === 'expired' ? ' selected' : '') + '>⏰ หมดอายุ</option>' +
+    '<option value="cancelled"' + (n.status === 'cancelled' ? ' selected' : '') + '>❌ ยกเลิกแล้ว</option>' +
+    '<option value="draft"' + (n.status === 'draft' ? ' selected' : '') + '>📝 Draft</option>';
+
+  openM(eid ? '✏️ แก้ไข Note' : '📚 เพิ่ม Note', '' +
+    '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fn_title" value="' + sanitize(n.title || '') + '"></div>' +
+    
+    '<div class="fr">' +
+    '<div class="fg"><label>หมวดหมู่</label><select id="fn_cat">' + optionsHTML(cats, n.category || '', '-- เลือก --') + '</select></div>' +
+    '<div class="fg"><label>สถานะ</label><select id="fn_status">' + statusOpts + '</select></div>' +
+    '</div>' +
+    
+    '<div class="fr">' +
+    dpH('fn_expire', n.expireDate || '', 'วันหมดอายุ (ถ้ามี)') +
+    dpH('fn_remind', n.remindDate || '', 'วันเตือน (ถ้ามี)') +
+    '</div>' +
+    
+    '<div class="fg"><label>Dealer (ไม่บังคับ)</label><select id="fn_dealer">' +
+    '<option value="">-- ไม่เกี่ยวกับ Dealer --</option>' +
+    dealers.map(function(d) {
+      return '<option value="' + d.id + '"' + (n.dealerId === d.id ? ' selected' : '') + '>' + d.name + '</option>';
+    }).join('') +
+    '</select></div>' +
+    
+    '<div class="fg"><label>เนื้อหา *</label>' +
+    '<textarea id="fn_content" rows="10" style="font-size:.78rem;line-height:1.5">' + sanitize(n.content || '') + '</textarea>' +
+    '<div class="hint">รองรับข้อความยาว พิมพ์ได้เต็มที่</div></div>' +
+    
+    '<div class="fg"><label>🔗 Links (บรรทัดละ 1 URL)</label>' +
+    '<textarea id="fn_links" rows="3" placeholder="https://example.com/doc1&#10;https://example.com/doc2">' + sanitize(n.links || '') + '</textarea></div>' +
+    
+    '<div class="fg"><label>🏷️ Tags (คั่นด้วย ,)</label>' +
+    '<input type="text" id="fn_tags" value="' + sanitize(n.tags || '') + '" placeholder="policy, pricing, dealer, important"></div>' +
+    
+    '<div class="fg"><label>📌 ปักหมุด</label><div class="radio-g">' +
+    '<label><input type="radio" name="fn_pin" value="0"' + (!n.pinned ? ' checked' : '') + '><span>ไม่</span></label>' +
+    '<label><input type="radio" name="fn_pin" value="1"' + (n.pinned ? ' checked' : '') + '><span>📌 ปักหมุด</span></label>' +
+    '</div></div>' +
+    
+    '<button class="btn bp btn-full" onclick="saveNote(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+function saveNote(eid) {
+  var title = document.getElementById('fn_title');
+  var content = document.getElementById('fn_content');
+  if (!title || !title.value.trim()) return alert('ใส่หัวข้อ');
+  if (!content || !content.value.trim()) return alert('ใส่เนื้อหา');
+  
+  var pinEl = document.querySelector('input[name="fn_pin"]:checked');
+  var data = {
+    title: title.value.trim(),
+    category: document.getElementById('fn_cat') ? document.getElementById('fn_cat').value : '',
+    status: document.getElementById('fn_status') ? document.getElementById('fn_status').value : 'active',
+    expireDate: dpG('fn_expire'),
+    remindDate: dpG('fn_remind'),
+    dealerId: document.getElementById('fn_dealer') ? document.getElementById('fn_dealer').value : '',
+    content: content.value.trim(),
+    links: document.getElementById('fn_links') ? document.getElementById('fn_links').value.trim() : '',
+    tags: document.getElementById('fn_tags') ? document.getElementById('fn_tags').value.trim() : '',
+    pinned: pinEl ? pinEl.value === '1' : false
+  };
+  
+  if (eid) {
+    ST.update('notes', eid, data);
+    closeMForce();
+    go('noteDetail', {noteId: eid});
+  } else {
+    var n = ST.add('notes', data);
+    closeMForce();
+    go('noteDetail', {noteId: n.id});
+  }
+  toast('💾 บันทึก Note แล้ว');
+}
+
+// ================================================================
+// IMPORT DEALER MODAL
+// ================================================================
+function showImportDealerM() {
+  openM('📥 Import Dealer', '' +
+    '<div class="fg"><label>วาง Tab-separated data จาก Excel</label>' +
+    '<div class="hint">Format: SIS Code ⟨Tab⟩ DJI Code ⟨Tab⟩ Company Name ⟨Tab⟩ Level ⟨Tab⟩ Contact ⟨Tab⟩ Google Map</div>' +
+    '<textarea id="imp_data" rows="8" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="importDealers()">📥 Import</button>');
+}
+
+function importDealers() {
+  var el = document.getElementById('imp_data');
+  var raw = el ? el.value.trim() : '';
+  if (!raw) return alert('วางข้อมูล');
+  var lines = raw.split('\n');
+  var count = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var cols = line.split('\t');
+    if (cols.length < 3) continue;
+    var name = cols[2] ? cols[2].trim() : '';
+    if (!name) continue;
+    // Check duplicate
+    var existing = ST.filter('dealers', function(d) { return d.name === name; });
+    if (existing.length) continue;
+    ST.add('dealers', {
+      sisCode: cols[0] ? cols[0].trim() : '',
+      djiCode: cols[1] ? cols[1].trim() : '',
+      name: name,
+      level: cols[3] ? cols[3].trim() : 'B',
+      showSerial: 'Y',
+      contact: cols[4] ? cols[4].trim() : '',
+      googleMap: cols[5] ? cols[5].trim() : ''
+    });
+    count++;
+  }
+  closeMForce();
+  toast('📥 Import ' + count + ' Dealer สำเร็จ!');
+  render();
+}
+
+// ================================================================
+// IMPORT PIPELINE MODAL
+// ================================================================
+function showImportPipelineM() {
+  openM('📥 Import Pipeline', '' +
+    '<div class="fg"><label>วิธีที่ 1: วาง JSON</label>' +
+    '<textarea id="imp_pipe_json" rows="6" placeholder="วาง JSON ข้อมูล Pipeline ที่นี่..."></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="importPipelineJSON()">📥 Import จาก JSON</button>' +
+    '<div style="margin:10px 0;text-align:center;color:#64748b;font-size:.72rem">— หรือ —</div>' +
+    '<div class="fg"><label>วิธีที่ 2: เลือกไฟล์ .json</label>' +
+    '<input type="file" id="imp_pipe_file" accept=".json" onchange="importPipelineFile(event)" style="font-size:.76rem"></div>' +
+    '<div style="margin-top:10px;font-size:.68rem;color:#64748b">' +
+    '💡 จับคู่ Dealer Name อัตโนมัติ<br>' +
+    '⚠️ ถ้าหาไม่เจอจะสร้าง Dealer ใหม่ให้</div>');
+}
+
+function importPipelineJSON() {
+  var el = document.getElementById('imp_pipe_json');
+  if (!el || !el.value.trim()) return alert('วาง JSON');
+  try {
+    var data = JSON.parse(el.value.trim());
+    var items = data.pipelines || data;
+    if (!Array.isArray(items)) items = [items];
+    var result = processPipelineImport(items);
+    closeMForce();
+    toast('📥 Import ' + result.success + '/' + result.total + ' โครงการ' + (result.skipped ? ' (ข้าม ' + result.skipped + ')' : ''));
+    render();
+  } catch (e) { alert('❌ JSON ไม่ถูกต้อง: ' + e.message); }
+}
+
+function importPipelineFile(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      var items = data.pipelines || data;
+      if (!Array.isArray(items)) items = [items];
+      var result = processPipelineImport(items);
+      closeMForce();
+      toast('📥 Import ' + result.success + '/' + result.total + ' โครงการ' + (result.skipped ? ' (ข้าม ' + result.skipped + ')' : ''));
+      render();
+    } catch (err) { alert('❌ ไฟล์ไม่ถูกต้อง: ' + err.message); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function processPipelineImport(items) {
+  var dealers = ST.getAll('dealers');
+  var success = 0, skipped = 0, total = items.length;
+  
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var dealerId = '';
+    var dealerName = item.dealerName || '';
+    
+    // Find dealer by name (exact or partial match)
+    for (var j = 0; j < dealers.length; j++) {
+      if (dealers[j].name && dealerName) {
+        var dn = dealers[j].name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        var sn = dealerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (dn.indexOf(sn) !== -1 || sn.indexOf(dn) !== -1) {
+          dealerId = dealers[j].id;
+          break;
+        }
+      }
+    }
+    
+    // Auto-create dealer if not found
+    if (!dealerId && dealerName) {
+      var newDealer = ST.add('dealers', {
+        name: dealerName,
+        level: 'B',
+        showSerial: 'Y',
+        djiDealer: item.djiDealer || ''
+      });
+      dealerId = newDealer.id;
+      dealers.push(newDealer);
+      console.log('✅ Auto-created Dealer: ' + dealerName);
+    }
+    
+    if (!dealerId) {
+      console.log('⚠️ Skip: No dealer for: ' + (item.projectName || '').substr(0, 40));
+      skipped++;
+      continue;
+    }
+    
+   // No duplicate check — import ทุกรายการ
+    
+    // Create pipeline
+    var pipeData = {
+      registerDate: item.registerDate || '',
+      projectName: item.projectName || '',
+      endUserTH: item.endUserTH || '',
+      endUserEN: item.endUserEN || '',
+      unitType: item.unitType || '',
+      dealerId: dealerId,
+      djiDealer: item.djiDealer || '',
+      model: item.model || '',
+      modelQty: parseInt(item.modelQty) || 1,
+      forecastAmount: parseFloat(item.forecastAmount) || 0,
+      realAmount: parseFloat(item.realAmount) || 0,
+      tor: item.tor || '',
+      biddingDate: item.biddingDate || '',
+      shipmentDate: item.shipmentDate || '',
+      remark: item.remark || '',
+      appointmentLetter: item.appointmentLetter || '',
+      status: item.status || 'prospect',
+      recurring: !!item.recurring,
+      nextAction: '',
+      followupDate: ''
+    };
+    
+    if (item.lossReason) pipeData.lossReason = item.lossReason;
+    if (item.lossCompetitor) pipeData.lossCompetitor = item.lossCompetitor;
+    if (item.winReason) pipeData.winReason = item.winReason;
+    
+    var pipe = ST.add('pipeline', pipeData);
+    
+    // Add updates as pipeline logs
+    var updates = item.updates || [];
+    for (var u = 0; u < updates.length; u++) {
+      if (updates[u] && updates[u].trim()) {
+        ST.add('pipeLog', {
+          pipeId: pipe.id,
+          type: 'update',
+          content: updates[u].trim(),
+          date: pipe.created || _nw()
+        });
+      }
+    }
+    success++;
+  }
+  
+  return {total: total, success: success, skipped: skipped};
+}
