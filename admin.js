@@ -283,6 +283,17 @@ function rAdmin(el) {
     '<button class="btn bs" onclick="admReqNotif()">🔔 เปิดการแจ้งเตือน</button>' +
     '<div style="margin-top:4px;font-size:.68rem;color:#64748b" id="adm_nf_status"></div></div>' +
 
+    // Cloud Sync
+    '<div class="card"><h2>☁️ Cloud Sync</h2>' +
+    '<div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">' +
+    (SYNC_ENABLED ? '✅ Connected: ' + (CURRENT_USER ? CURRENT_USER.displayName : '-') : '❌ Offline Mode') +
+    '</div>' +
+    '<div class="bg">' +
+    (SYNC_ENABLED ?
+      '<button class="btn bd" onclick="logoutUser()">👋 Logout</button>' :
+      '<button class="btn bp" onclick="loginWithGoogle()">🔑 Login Google</button>') +
+    '</div></div>' +
+
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
     '<div class="bg">' +

@@ -9,8 +9,34 @@
 <title>DJI Sales Assistant</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
 <link rel="stylesheet" href="style.css">
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
+<!-- Login Screen -->
+<div id="loginScreen" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;z-index:99999;display:flex;align-items:center;justify-content:center">
+  <div style="text-align:center;max-width:360px;padding:24px">
+    <div style="font-size:48px;margin-bottom:16px">🛠️</div>
+    <h1 style="font-size:24px;font-weight:800;color:#e0e6f0;margin-bottom:4px">DJI Sales Assistant</h1>
+    <p style="color:#8892b0;margin-bottom:24px">SIS Distribution (Thailand) PLC</p>
+    <button onclick="loginWithGoogle()" style="display:flex;align-items:center;gap:10px;margin:0 auto;padding:12px 24px;border-radius:12px;border:1px solid #334155;background:#1e293b;color:#e0e6f0;font-size:15px;cursor:pointer;transition:0.2s">
+      <img src="https://www.google.com/favicon.ico" width="20" height="20"> Login with Google
+    </button>
+    <div id="loginError" style="color:#ff5252;margin-top:12px;font-size:13px"></div>
+    <div style="margin-top:20px;font-size:12px;color:#475569">
+      <label><input type="checkbox" id="offlineMode" style="width:auto"> ใช้แบบ Offline (ไม่ sync)</label>
+    </div>
+    <button onclick="useOffline()" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1px solid #334155;background:transparent;color:#8892b0;font-size:12px;cursor:pointer">เข้าใช้แบบ Offline</button>
+  </div>
+</div>
 
 <!-- SIDEBAR -->
 <nav id="sidebar">
@@ -155,8 +181,22 @@
 </div>
 
 <!-- SCRIPTS -->
+<!-- Firebase Init -->
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+var auth = firebase.auth();
+</script>
 <script src="utils.js"></script>
 <script src="storage.js"></script>
+<script src="firebase-sync.js"></script>
 <script src="views-today.js"></script>
 <script src="views-dealer.js"></script>
 <script src="views-pipeline.js"></script>
