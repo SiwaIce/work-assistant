@@ -5,10 +5,43 @@ var SYNC_ENABLED = false;
 var CURRENT_USER = null;
 var SYNC_COLLECTIONS = [
   'dealers', 'pipeline', 'pipelog', 'visits', 'followups',
-  'tasks', 'tasklogs', 'meetings', 'feedback', 'lineLog',
-  'emails', 'qnotes', 'routines', 'templates', 'notes',
-  'waiting', 'pins', 'pipeActions', 'visitPlans', 'demo', 'quotes'
+  'tasks', 'tasklogs', 'feedback', 'emails', 'pins'
 ];
+
+// Key mapping: localStorage key (without v7_) → collection name
+var SYNC_KEY_MAP = {
+  'dealers': 'dealers',
+  'pipeline': 'pipeline',
+  'pipelog': 'pipelog',
+  'visits': 'visits',
+  'followups': 'followups',
+  'tasks': 'tasks',
+  'tasklogs': 'tasklogs',
+  'feedback': 'feedback',
+  'emails': 'emails',
+  'pins': 'pins',
+  'linelog': 'linelog',
+  'qn': 'qn',
+  'rt': 'rt',
+  'rc': 'rc',
+  'mc': 'mc',
+  'backup': 'backup',
+  'notes': 'notes',
+  'pipeActions': 'pipeActions',
+  'visitPlans': 'visitPlans',
+  'demo': 'demo',
+  'quotes': 'quotes',
+  'goals_v2': 'goals_v2',
+  'kpiConfig': 'kpiConfig',
+  'kpiEntries': 'kpiEntries',
+  'lineTmpl': 'lineTmpl',
+  'emailTmpl': 'emailTmpl',
+  'dailylog': 'dailylog',
+  'favorites': 'favorites',
+  'appearance': 'appearance'
+};
+
+var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
 
 // ================================================================
 // AUTH
@@ -136,12 +169,12 @@ function pullFromFirebase(collName, callback) {
 var activeListeners = [];
 
 function initFirebaseListeners() {
-  // Clean existing listeners
   activeListeners.forEach(function(unsub) { unsub(); });
   activeListeners = [];
 
-  SYNC_COLLECTIONS.forEach(function(collName) {
-    var lsKey = 'v7_' + collName;
+  ALL_SYNC_KEYS.forEach(function(key) {
+    var lsKey = 'v7_' + key;
+    var collName = SYNC_KEY_MAP[key];
     var ref = getCollectionRef(collName);
     if (!ref) return;
 
@@ -184,20 +217,22 @@ function initFirebaseListeners() {
 function migrateLocalToFirebase() {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
 
-  // Check if already migrated
   var migrated = localStorage.getItem('v7_migrated_' + CURRENT_USER.uid);
   if (migrated) return;
 
   toast('🔄 กำลัง sync ข้อมูลไป Cloud...');
 
-  SYNC_COLLECTIONS.forEach(function(collName) {
-    var lsKey = 'v7_' + collName;
+  ALL_SYNC_KEYS.forEach(function(key) {
+    var lsKey = 'v7_' + key;
     var data = localStorage.getItem(lsKey);
     if (!data) return;
     try {
       var parsed = JSON.parse(data);
+      var collName = SYNC_KEY_MAP[key];
       syncToFirebase(collName, parsed);
-    } catch(e) {}
+    } catch(e) {
+      console.warn('Migration error for ' + key, e);
+    }
   });
 
   // Config
