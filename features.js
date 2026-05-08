@@ -6674,6 +6674,9 @@ function getFavorites() {
 
 function saveFavorites(list) {
   localStorage.setItem('v7_favorites', JSON.stringify(list));
+  if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER) {
+    db.collection('users').doc(CURRENT_USER.uid).collection('favorites').doc('_data').set({value: list});
+  }
 }
 
 function renderFavorites() {

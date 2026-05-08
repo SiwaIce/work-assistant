@@ -289,3 +289,27 @@ ST.setObj = function(key, data) {
   }
   return result;
 };
+// ================================================================
+// AUTO SYNC — Override localStorage.setItem
+// ================================================================
+var _origSetItem = localStorage.setItem.bind(localStorage);
+
+localStorage.setItem = function(key, value) {
+  _origSetItem(key, value);
+  
+  // Auto sync to Firebase
+  if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key.indexOf('v7_') === 0) {
+    var shortKey = key.replace('v7_', '');
+    if (SYNC_KEY_MAP && SYNC_KEY_MAP[shortKey]) {
+      try {
+        var parsed = JSON.parse(value);
+        var collName = SYNC_KEY_MAP[shortKey];
+        if (Array.isArray(parsed)) {
+          syncToFirebase(collName, parsed);
+        } else {
+          db.collection('users').doc(CURRENT_USER.uid).collection(collName).doc('_data').set({value: parsed}).catch(function(e) {});
+        }
+      } catch(e) {}
+    }
+  }
+};
