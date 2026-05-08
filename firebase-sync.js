@@ -10,6 +10,7 @@ var SYNC_COLLECTIONS = [
 
 // Key mapping: localStorage key (without v7_) → collection name
 var SYNC_KEY_MAP = {
+    'actions': 'actions',
   'dealers': 'dealers',
   'pipeline': 'pipeline',
   'pipelog': 'pipelog',
