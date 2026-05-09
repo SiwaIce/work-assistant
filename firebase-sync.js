@@ -258,7 +258,43 @@ function migrateLocalToFirebase() {
       }
     };
     
+    // Override ST.delete for sync
+    var _origDelete = ST.delete.bind(ST);
+    
+    ST.delete = function(coll, id) {
+      _origDelete(coll, id);
+      
+      if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER) {
+        // Find the key for this collection
+        var key = ST._keys[coll];
+        if (!key) return;
+        var shortKey = key.replace('v7_', '');
+        
+        // Delete from Firebase
+        if (id) {
+          db.collection('users').doc(CURRENT_USER.uid).collection(shortKey).doc(id).delete().catch(function(e) {
+            console.warn('Delete sync error:', coll, id, e);
+          });
+        }
+        
+        // Also sync the updated array
+        try {
+          var items = JSON.parse(localStorage.getItem(key) || '[]');
+          var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
+          // Re-sync entire collection to be safe
+          if (Array.isArray(items)) {
+            items.forEach(function(item) {
+              if (item && item.id) {
+                ref.doc(item.id).set(item).catch(function(e) {});
+              }
+            });
+          }
+        } catch(e) {}
+      }
+    };
+    
     console.log('✅ ST._set override ready');
+    console.log('✅ ST.delete override ready');
   }, 100);
 })();
 
