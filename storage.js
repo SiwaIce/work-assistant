@@ -31,6 +31,12 @@ const ST = {
     timerState: 'v7_timer',
     timerLogs: 'v7_tlog',
     goals: 'v7_goals',
+    notes: 'v7_notes',
+    pipeActions: 'v7_pipeActions',
+    visitPlans: 'v7_visitPlans',
+    demo: 'v7_demo',
+    quotes: 'v7_quotes',
+    actions: 'v7_actions',
     config: 'v7_config',
     backupDate: 'v7_backup'
   },
