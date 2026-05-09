@@ -293,6 +293,7 @@ function rAdmin(el) {
       '<button class="btn bp" onclick="forceSyncAll()">🔄 Force Sync All</button>' +
       '<button class="btn bo" onclick="exportFullBackup()">📥 Export Full</button>' +
       '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>' +
+      '<button class="btn bo" onclick="location.reload(true)">🔄 Refresh</button>' +
       '<button class="btn bd" onclick="logoutUser()">👋 Logout</button>' :
       '<button class="btn bp" onclick="loginWithGoogle()">🔑 Login Google</button>' +
       '<button class="btn bo" onclick="exportFullBackup()">📥 Export Full</button>' +
