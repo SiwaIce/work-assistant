@@ -98,10 +98,14 @@
     <div class="tt" id="pgT">📌 วันนี้</div>
   </div>
   <div class="topbar-r">
-    <div class="strig" onclick="openQCmd()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
-    <button class="theme-btn" onclick="switchTheme()" title="สลับ Theme">🎨</button>
-    <div id="clock"></div>
-  </div>
+  <div class="strig" onclick="openQCmd()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
+  <button class="mode-toggle" onclick="toggleViewMode()" title="สลับ Desktop/Mobile">
+    <span id="modeIcon">📱</span>
+  </button>
+  <button class="theme-btn" onclick="switchTheme()" title="สลับ Theme">🎨</button>
+  <button class="refresh-btn" onclick="location.reload(true)" title="Refresh">🔄</button>
+  <div id="clock"></div>
+</div>
 </div>
 <div id="ct"></div>
 </div>
@@ -213,6 +217,14 @@ var auth = firebase.auth();
     </div>
     <div class="qcmd-results" id="qcmdResults"></div>
   </div>
+</div>
+<!-- Mobile Bottom Nav -->
+<div class="mb-bottom-nav" id="mbNav">
+  <div class="mb-nav-item" onclick="mbGo('today')"><span class="mb-nav-icon">📌</span><span class="mb-nav-label">วันนี้</span></div>
+  <div class="mb-nav-item" onclick="mbGo('dealers')"><span class="mb-nav-icon">🏪</span><span class="mb-nav-label">Dealer</span></div>
+  <div class="mb-nav-item" onclick="mbGo('mbHome')"><span class="mb-nav-icon">🏠</span><span class="mb-nav-label">Home</span></div>
+  <div class="mb-nav-item" onclick="mbGo('pipeline')"><span class="mb-nav-icon">📊</span><span class="mb-nav-label">Pipeline</span></div>
+  <div class="mb-nav-item" onclick="mbGo('tasks')"><span class="mb-nav-icon">📋</span><span class="mb-nav-label">Tasks</span></div>
 </div>
 </body>
 </html>
