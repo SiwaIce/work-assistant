@@ -288,10 +288,15 @@ function rAdmin(el) {
     '<div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">' +
     (SYNC_ENABLED ? '✅ Connected: ' + (CURRENT_USER ? CURRENT_USER.displayName : '-') : '❌ Offline Mode') +
     '</div>' +
-    '<div class="bg">' +
+    '<div class="bg" style="flex-wrap:wrap">' +
     (SYNC_ENABLED ?
+      '<button class="btn bp" onclick="forceSyncAll()">🔄 Force Sync All</button>' +
+      '<button class="btn bo" onclick="exportFullBackup()">📥 Export Full</button>' +
+      '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>' +
       '<button class="btn bd" onclick="logoutUser()">👋 Logout</button>' :
-      '<button class="btn bp" onclick="loginWithGoogle()">🔑 Login Google</button>') +
+      '<button class="btn bp" onclick="loginWithGoogle()">🔑 Login Google</button>' +
+      '<button class="btn bo" onclick="exportFullBackup()">📥 Export Full</button>' +
+      '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>') +
     '</div></div>' +
 
     // Danger Zone

@@ -6749,3 +6749,122 @@ var _origGo = typeof go === 'function' ? go : null;
 if (_origGo) {
   // Will be called after render
 }
+// ================================================================
+// FULL SYNC — Force push all localStorage to Firebase
+// ================================================================
+function forceSyncAll() {
+  if (!SYNC_ENABLED || !CURRENT_USER) {
+    toast('❌ ต้อง Login ก่อน');
+    return;
+  }
+
+  if (!confirm('⚠️ Sync ข้อมูลทั้งหมดไป Firebase?\nข้อมูลบน Cloud จะถูกเขียนทับ')) return;
+
+  toast('🔄 กำลัง Sync ทั้งหมด...');
+  var count = 0;
+
+  Object.keys(localStorage).forEach(function(key) {
+    if (key.indexOf('v7_') !== 0) return;
+    if (key === 'v7_config') return; // config sync แยก
+    if (key.indexOf('v7_migrated') === 0) return;
+    if (key === 'v7_sbCollapsed') return;
+    if (key === 'v7_theme') return;
+
+    var shortKey = key.replace('v7_', '');
+    var data = localStorage.getItem(key);
+    if (!data) return;
+
+    try {
+      var parsed = JSON.parse(data);
+      var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
+
+      if (Array.isArray(parsed)) {
+        parsed.forEach(function(item) {
+          if (item && item.id) {
+            ref.doc(item.id).set(item).catch(function(e) {
+              console.warn('Sync error:', shortKey, item.id, e);
+            });
+          }
+        });
+      } else {
+        ref.doc('_data').set({value: parsed}).catch(function(e) {
+          console.warn('Sync error:', shortKey, e);
+        });
+      }
+      count++;
+    } catch(e) {
+      console.warn('Parse error:', key, e);
+    }
+  });
+
+  // Config
+  var cfg = localStorage.getItem('v7_config');
+  if (cfg) {
+    try {
+      db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg));
+    } catch(e) {}
+  }
+
+  setTimeout(function() {
+    toast('✅ Sync เสร็จ! ' + count + ' collections');
+  }, 2000);
+}
+
+// ================================================================
+// FULL IMPORT — Import backup + sync to Firebase
+// ================================================================
+function importFullBackup() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function(e) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        var count = 0;
+        Object.keys(data).forEach(function(k) {
+          localStorage.setItem(k, JSON.stringify(data[k]));
+          count++;
+        });
+        toast('✅ Import สำเร็จ! ' + count + ' keys');
+
+        // Auto sync to Firebase
+        if (SYNC_ENABLED && CURRENT_USER) {
+          localStorage.removeItem('v7_migrated_' + CURRENT_USER.uid);
+          setTimeout(function() {
+            forceSyncAll();
+          }, 1000);
+        }
+
+        setTimeout(function() {
+          location.reload();
+        }, 3000);
+      } catch(err) {
+        toast('❌ Error: ' + err.message);
+      }
+    };
+    reader.readAsText(e.target.files[0]);
+  };
+  input.click();
+}
+
+// ================================================================
+// FULL EXPORT — Export all localStorage
+// ================================================================
+function exportFullBackup() {
+  var allData = {};
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.indexOf('v7_') === 0) {
+      try { allData[k] = JSON.parse(localStorage.getItem(k)); } catch(e) { allData[k] = localStorage.getItem(k); }
+    }
+  });
+  var blob = new Blob([JSON.stringify(allData, null, 2)], {type: 'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'full-backup-' + _td() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('📥 Export Full Backup แล้ว!');
+}
