@@ -7010,3 +7010,103 @@ function renderMbHome() {
   el.innerHTML = h;
   updateMbNav();
 }
+// ================================================================
+// PUSH NOTIFICATION
+// ================================================================
+function initNotifications() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    scheduleNotifications();
+  }
+}
+
+function requestNotifPermission() {
+  if (!('Notification' in window)) { toast('Browser ไม่รองรับ'); return; }
+  Notification.requestPermission().then(function(perm) {
+    if (perm === 'granted') {
+      toast('🔔 เปิดแจ้งเตือนแล้ว!');
+      scheduleNotifications();
+    }
+  });
+}
+
+function scheduleNotifications() {
+  // Check every 5 minutes
+  setInterval(checkAndNotify, 300000);
+  // Check once on load
+  setTimeout(checkAndNotify, 5000);
+}
+
+function checkAndNotify() {
+  if (Notification.permission !== 'granted') return;
+  var now = new Date();
+  var hour = now.getHours();
+  
+  // Only notify 8am - 8pm
+  if (hour < 8 || hour > 20) return;
+
+  // Check overdue pipeline actions
+  try {
+    var pending = getAllPendingPipeActions();
+    var overdue = pending.filter(function(p) { return p.urgency === 'overdue'; });
+    if (overdue.length > 0) {
+      var lastNotif = localStorage.getItem('v7_lastNotif_overdue');
+      var today = _td();
+      if (lastNotif !== today) {
+        showNotification('🔴 Pipeline Action เกินกำหนด', overdue.length + ' รายการต้องจัดการ\n' + overdue[0].action.text);
+        localStorage.setItem('v7_lastNotif_overdue', today);
+      }
+    }
+  } catch(e) {}
+
+  // Check tasks due today
+  try {
+    var tasks = ST.filter('tasks', function(t) { return t.status === 'active' && t.dueDate === _td(); });
+    if (tasks.length > 0) {
+      var lastNotif2 = localStorage.getItem('v7_lastNotif_tasks');
+      if (lastNotif2 !== _td()) {
+        showNotification('📋 งานวันนี้', tasks.length + ' งาน: ' + tasks[0].title);
+        localStorage.setItem('v7_lastNotif_tasks', _td());
+      }
+    }
+  } catch(e) {}
+
+  // Morning briefing (8-9am)
+  if (hour >= 8 && hour < 9) {
+    var lastBrief = localStorage.getItem('v7_lastNotif_morning');
+    if (lastBrief !== _td()) {
+      var pipeline = ST.getAll('pipeline');
+      var active = pipeline.filter(function(p) { return ['lost','delivered','on_hold'].indexOf(p.status) === -1; });
+      showNotification('☀️ Good Morning!', 'Pipeline: ' + active.length + ' active\nเปิด App ดูสรุปวันนี้');
+      localStorage.setItem('v7_lastNotif_morning', _td());
+    }
+  }
+
+  // Backup reminder (Friday 4-5pm)
+  if (now.getDay() === 5 && hour >= 16 && hour < 17) {
+    var lastBackup = localStorage.getItem('v7_lastNotif_backup');
+    if (lastBackup !== _td()) {
+      showNotification('💾 Backup Reminder', 'วันศุกร์ อย่าลืม Export Backup!');
+      localStorage.setItem('v7_lastNotif_backup', _td());
+    }
+  }
+}
+
+function showNotification(title, body) {
+  try {
+    var notif = new Notification(title, {
+      body: body,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🛠️</text></svg>',
+      badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🔔</text></svg>',
+      tag: title,
+      renotify: true
+    });
+    notif.onclick = function() {
+      window.focus();
+      notif.close();
+    };
+  } catch(e) {}
+}
+
+// Auto init
+setTimeout(initNotifications, 3000);
