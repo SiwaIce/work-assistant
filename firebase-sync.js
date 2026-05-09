@@ -249,67 +249,68 @@ function migrateLocalToFirebase() {
 }
 
 // ================================================================
-// OVERRIDE ST (Storage) functions to sync
+// Override ST.setObj for config sync
 // ================================================================
-var _origSTAdd = ST.add;
-var _origSTUpdate = ST.update;
-var _origSTDelete = ST.delete;
-var _origSTSetObj = ST.setObj;
+(function() {
+  var checkST2 = setInterval(function() {
+    if (typeof ST === 'undefined' || !ST.setObj) return;
+    clearInterval(checkST2);
+    
+    var _origSetObj = ST.setObj.bind(ST);
+    
+    ST.setObj = function(key, data) {
+      _origSetObj(key, data);
+      
+      if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key === 'config') {
+        db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(data).catch(function(e) {
+          console.warn('Config sync error:', e);
+        });
+      }
+    };
+    
+    console.log('✅ ST.setObj override ready');
+  }, 100);
+})();
 
-ST.add = function(coll, data) {
-  var result = _origSTAdd.call(ST, coll, data);
-  if (SYNC_ENABLED) {
-    var items = JSON.parse(localStorage.getItem('v7_' + coll) || '[]');
-    syncToFirebase(coll, items);
-  }
-  return result;
-};
-
-ST.update = function(coll, id, data) {
-  var result = _origSTUpdate.call(ST, coll, id, data);
-  if (SYNC_ENABLED) {
-    var items = JSON.parse(localStorage.getItem('v7_' + coll) || '[]');
-    syncToFirebase(coll, items);
-  }
-  return result;
-};
-
-ST.delete = function(coll, id) {
-  var result = _origSTDelete.call(ST, coll, id);
-  if (SYNC_ENABLED) {
-    syncDeleteFromFirebase(coll, id);
-  }
-  return result;
-};
-
-ST.setObj = function(key, data) {
-  var result = _origSTSetObj.call(ST, key, data);
-  if (SYNC_ENABLED && key === 'config') {
-    db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(data).catch(function(e) {});
-  }
-  return result;
-};
 // ================================================================
-// AUTO SYNC — Override localStorage.setItem
+// AUTO SYNC — Override ST._set directly
 // ================================================================
-var _origSetItem = localStorage.setItem.bind(localStorage);
-
-localStorage.setItem = function(key, value) {
-  _origSetItem(key, value);
-  
-  // Auto sync to Firebase
-  if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key.indexOf('v7_') === 0) {
-    var shortKey = key.replace('v7_', '');
-    if (SYNC_KEY_MAP && SYNC_KEY_MAP[shortKey]) {
-      try {
-        var parsed = JSON.parse(value);
-        var collName = SYNC_KEY_MAP[shortKey];
-        if (Array.isArray(parsed)) {
-          syncToFirebase(collName, parsed);
-        } else {
-          db.collection('users').doc(CURRENT_USER.uid).collection(collName).doc('_data').set({value: parsed}).catch(function(e) {});
+(function() {
+  // Wait for ST to be ready
+  var checkST = setInterval(function() {
+    if (typeof ST === 'undefined' || !ST._set) return;
+    clearInterval(checkST);
+    
+    var _origSet = ST._set.bind(ST);
+    
+    ST._set = function(key, data) {
+      // Call original
+      _origSet(key, data);
+      
+      // Auto sync to Firebase
+      if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key && key.indexOf('v7_') === 0) {
+        var shortKey = key.replace('v7_', '');
+        try {
+          var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
+          if (Array.isArray(data)) {
+            data.forEach(function(item) {
+              if (item && item.id) {
+                ref.doc(item.id).set(item).catch(function(e) {
+                  console.warn('Sync error:', shortKey, e);
+                });
+              }
+            });
+          } else {
+            ref.doc('_data').set({value: data}).catch(function(e) {
+              console.warn('Sync error:', shortKey, e);
+            });
+          }
+        } catch(e) {
+          console.warn('Sync error:', key, e);
         }
-      } catch(e) {}
-    }
-  }
-};
+      }
+    };
+    
+    console.log('✅ ST._set override ready');
+  }, 100);
+})();
