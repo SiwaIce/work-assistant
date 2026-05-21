@@ -528,3 +528,59 @@ function sanitize(str) {
 function safeText(str) {
   return sanitize(str).replace(/\n/g, '<br>');
 }
+// ================================================================
+// ICS EXPORT (Outlook / Google Calendar)
+// ================================================================
+function exportToICS(summary, description, startDate, endDate, location, url) {
+  function formatDate(dateStr, isAllDay) {
+    if (!dateStr) return '';
+    var d = parseThaiDate(dateStr);
+    if (!d) return '';
+    if (isAllDay) {
+      return d.toISOString().split('T')[0].replace(/-/g, '');
+    }
+    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  }
+  
+  var now = new Date();
+  var uid = Date.now() + '-' + Math.random().toString(36).substr(2, 8) + '@dji-sales';
+  
+  var icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//DJI Sales Assistant//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + formatDate(_td(), false),
+    'SUMMARY:' + (summary || '').replace(/[,;]/g, '').substr(0, 100),
+    'DESCRIPTION:' + (description || '').replace(/[,;]/g, '').substr(0, 500)
+  ];
+  
+  if (startDate) {
+    var isAllDay = startDate.length === 10 && !endDate;
+    icsLines.push('DTSTART:' + formatDate(startDate, isAllDay));
+    if (endDate) {
+      icsLines.push('DTEND:' + formatDate(endDate, isAllDay));
+    } else if (isAllDay) {
+      var nextDay = addD(startDate, 1);
+      icsLines.push('DTEND:' + formatDate(nextDay, true));
+    }
+  }
+  
+  if (location) icsLines.push('LOCATION:' + location.replace(/[,;]/g, '').substr(0, 100));
+  if (url) icsLines.push('URL:' + url);
+  
+  icsLines.push('END:VEVENT');
+  icsLines.push('END:VCALENDAR');
+  
+  var blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = (summary || 'event').replace(/[/\\?%*:|"<>]/g, '-') + '.ics';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  
+  toast('📅 สร้างไฟล์ .ics แล้ว! เปิดด้วย Outlook หรือ Google Calendar ได้');
+}
