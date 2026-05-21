@@ -287,10 +287,17 @@ function render() {
     exports: rExports,
     reminders: rRemind, insights: rInsights,
     admin: rAdmin,
-    tasks: rTasks, taskDetail: rTaskDet,
+    tasks: rUnifiedTasks, taskDetail: rTaskDet,
     smartFilter: rSmartFilter,
     knowledge: rKnowledge, noteDetail: rNoteDet
   };
+
+// เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)
+function goKanban() {
+  tasksView = 'kanban';
+  go('tasks');
+}
+
  var fn = R[S.view];
 if (fn) {
   fn(el);
