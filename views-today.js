@@ -1,4 +1,184 @@
 // ================================================================
+// RENDER PENDING ACTIONS TODAY (Pipeline Action Items)
+// ================================================================
+function renderPendingActionsToday() {
+  var pipeActions = [];
+  var saved = localStorage.getItem('v7_pipeActions');
+  if (saved) {
+    try { pipeActions = JSON.parse(saved); } catch(e) { pipeActions = []; }
+  }
+  
+  // ตรวจสอบว่า pipeActions เป็น array
+  if (!pipeActions || !Array.isArray(pipeActions)) {
+    pipeActions = [];
+  }
+  
+  var pending = [];
+  for (var i = 0; i < pipeActions.length; i++) {
+    if (pipeActions[i] && pipeActions[i].status === 'pending') {
+      pending.push(pipeActions[i]);
+    }
+  }
+  
+  if (!pending || pending.length === 0) return '';
+  
+  var allPipes = [];
+  var allDealers = [];
+  try {
+    allPipes = ST.getAll('pipeline');
+    allDealers = ST.getAll('dealers');
+  } catch(e) {
+    allPipes = [];
+    allDealers = [];
+  }
+  
+  var pipeMap = {};
+  for (var i = 0; i < allPipes.length; i++) {
+    if (allPipes[i]) pipeMap[allPipes[i].id] = allPipes[i];
+  }
+  
+  var dealerMap = {};
+  for (var i = 0; i < allDealers.length; i++) {
+    if (allDealers[i]) dealerMap[allDealers[i].id] = allDealers[i];
+  }
+  
+  var todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  
+  var overdue = [];
+  var todayItems = [];
+  var soon = [];
+  var normal = [];
+  
+  for (var i = 0; i < pending.length; i++) {
+    var a = pending[i];
+    if (!a) continue;
+    
+    var pipe = pipeMap[a.pipeId];
+    if (!pipe) continue;
+    if (pipe.status === 'lost' || pipe.status === 'delivered') continue;
+    
+    var dealer = dealerMap[pipe.dealerId];
+    
+    var daysLeft = 999;
+    if (a.dueDate) {
+      var parts = a.dueDate.split('/');
+      if (parts.length === 3) {
+        var dueDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        daysLeft = Math.ceil((dueDate - todayDate) / 86400000);
+      }
+    }
+    
+    var item = { action: a, pipe: pipe, dealer: dealer, daysLeft: daysLeft };
+    if (daysLeft < 0) overdue.push(item);
+    else if (daysLeft === 0) todayItems.push(item);
+    else if (daysLeft <= 3) soon.push(item);
+    else normal.push(item);
+  }
+  
+  var h = '<div class="card"><h2>⏳ Pipeline Action Items ';
+  if (overdue.length) h += '<span class="pa-count-badge pa-count-red">' + overdue.length + ' เลยกำหนด</span> ';
+  h += '<span class="pa-count-badge">' + pending.length + ' ทั้งหมด</span>';
+  h += '</h2>';
+  
+  if (overdue.length) {
+    h += '<div class="pa-group-title">🔴 เลยกำหนด</div>';
+    for (var i = 0; i < overdue.length; i++) {
+      var item = overdue[i];
+      h += '<div class="pa-today-item" onclick="go(\'pipeDetail\',{pipeId:\'' + item.pipe.id + '\'})" style="cursor:pointer">';
+      h += '<div class="pa-today-left">';
+      h += '<div class="pa-today-text">' + sanitize(item.action.text) + '</div>';
+      h += '<div class="pa-today-meta">📊 ' + sanitize(item.pipe.projectName || '-') + ' • ' + (item.dealer ? sanitize(item.dealer.name) : '-') + '</div>';
+      h += '</div>';
+      h += '<div class="pa-today-right">';
+      h += '<div class="pa-today-date">' + (item.action.dueDate || '-') + '</div>';
+      h += '<div class="pa-today-days" style="color:#ff5252">เกิน ' + Math.abs(item.daysLeft) + ' วัน</div>';
+      h += '</div>';
+      h += '<button class="btn-xs pa-btn-done" onclick="event.stopPropagation();quickMarkActionDone(\'' + item.action.id + '\')">✅</button>';
+      h += '</div>';
+    }
+  }
+  
+  if (todayItems.length) {
+    h += '<div class="pa-group-title">🟠 วันนี้</div>';
+    for (var i = 0; i < todayItems.length; i++) {
+      var item = todayItems[i];
+      h += '<div class="pa-today-item" onclick="go(\'pipeDetail\',{pipeId:\'' + item.pipe.id + '\'})" style="cursor:pointer">';
+      h += '<div class="pa-today-left">';
+      h += '<div class="pa-today-text">' + sanitize(item.action.text) + '</div>';
+      h += '<div class="pa-today-meta">📊 ' + sanitize(item.pipe.projectName || '-') + ' • ' + (item.dealer ? sanitize(item.dealer.name) : '-') + '</div>';
+      h += '</div>';
+      h += '<div class="pa-today-right">';
+      h += '<div class="pa-today-date">' + (item.action.dueDate || '-') + '</div>';
+      h += '<div class="pa-today-days" style="color:#ff9800">วันนี้!</div>';
+      h += '</div>';
+      h += '<button class="btn-xs pa-btn-done" onclick="event.stopPropagation();quickMarkActionDone(\'' + item.action.id + '\')">✅</button>';
+      h += '</div>';
+    }
+  }
+  
+  if (soon.length) {
+    h += '<div class="pa-group-title">🟡 ใกล้กำหนด (3 วัน)</div>';
+    for (var i = 0; i < soon.length; i++) {
+      var item = soon[i];
+      h += '<div class="pa-today-item" onclick="go(\'pipeDetail\',{pipeId:\'' + item.pipe.id + '\'})" style="cursor:pointer">';
+      h += '<div class="pa-today-left">';
+      h += '<div class="pa-today-text">' + sanitize(item.action.text) + '</div>';
+      h += '<div class="pa-today-meta">📊 ' + sanitize(item.pipe.projectName || '-') + ' • ' + (item.dealer ? sanitize(item.dealer.name) : '-') + '</div>';
+      h += '</div>';
+      h += '<div class="pa-today-right">';
+      h += '<div class="pa-today-date">' + (item.action.dueDate || '-') + '</div>';
+      h += '<div class="pa-today-days" style="color:#ffb74d">อีก ' + item.daysLeft + ' วัน</div>';
+      h += '</div>';
+      h += '<button class="btn-xs pa-btn-done" onclick="event.stopPropagation();quickMarkActionDone(\'' + item.action.id + '\')">✅</button>';
+      h += '</div>';
+    }
+  }
+  
+  h += '</div>';
+  return h;
+}
+// ================================================================
+// QUICK MARK ACTION DONE
+// ================================================================
+function quickMarkActionDone(actionId) {
+  var response = prompt('💬 ผลลัพธ์ / ตอบกลับ (ถ้ามี):');
+  
+  var pipeActions = [];
+  var saved = localStorage.getItem('v7_pipeActions');
+  if (saved) {
+    try { pipeActions = JSON.parse(saved); } catch(e) { pipeActions = []; }
+  }
+  
+  var pipeId = '';
+  var actionText = '';
+  
+  for (var i = 0; i < pipeActions.length; i++) {
+    if (pipeActions[i].id === actionId) {
+      pipeActions[i].status = 'done';
+      pipeActions[i].doneDate = _td();
+      if (response) pipeActions[i].response = response;
+      pipeId = pipeActions[i].pipeId;
+      actionText = pipeActions[i].text;
+      break;
+    }
+  }
+  
+  localStorage.setItem('v7_pipeActions', JSON.stringify(pipeActions));
+  
+  if (pipeId && typeof ST !== 'undefined' && ST.add) {
+    ST.add('pipeLog', {
+      pipeId: pipeId,
+      type: 'progress',
+      content: '✅ เสร็จ: ' + actionText + (response ? ' — ' + response : ''),
+      date: _nw()
+    });
+  }
+  
+  toast('✅ เสร็จแล้ว!');
+  render();
+}
+// ================================================================
 // TODAY — Command Center
 // ================================================================
 function rToday(el) {

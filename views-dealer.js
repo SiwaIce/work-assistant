@@ -1375,3 +1375,155 @@ function resetOnboarding(dealerId) {
   toast('🔄 Reset แล้ว');
   render();
 }
+// ================================================================
+// RENDER DEALER CONTACTS (แสดงรายชื่อผู้ติดต่อของ Dealer)
+// ================================================================
+function renderDealerContacts(d) {
+  var contacts = d.contacts || [];
+  
+  var h = '<div class="card"><h2>📞 ผู้ติดต่อ (' + contacts.length + ')';
+  h += '<span class="ml"><button class="btn bsm bp" onclick="showAddContactM(\'' + d.id + '\')">➕</button></span></h2>';
+  
+  if (!contacts.length) {
+    h += '<div class="empty"><p>ยังไม่มีผู้ติดต่อ — กด ➕ เพื่อเพิ่ม</p></div>';
+    h += '</div>';
+    return h;
+  }
+  
+  for (var i = 0; i < contacts.length; i++) {
+    var c = contacts[i];
+    h += '<div class="contact-card' + (c.primary ? ' contact-primary' : '') + '">';
+    h += '<div class="contact-header">';
+    h += '<div class="contact-name">' + (c.primary ? '⭐ ' : '') + sanitize(c.name) + '</div>';
+    if (c.role) h += '<div class="contact-role">' + sanitize(c.role) + '</div>';
+    h += '<button class="btn-xs" onclick="showEditContactM(\'' + d.id + '\',' + i + ')">✏️</button>';
+    h += '</div>';
+    
+    h += '<div class="contact-actions">';
+    if (c.phone) h += '<a href="tel:' + c.phone + '" class="contact-btn" onclick="event.stopPropagation()">📞 ' + sanitize(c.phone) + '</a>';
+    if (c.line) h += '<span class="contact-btn">💬 ' + sanitize(c.line) + '</span>';
+    if (c.email) h += '<a href="mailto:' + c.email + '" class="contact-btn" onclick="event.stopPropagation()">📧 ' + sanitize(c.email) + '</a>';
+    h += '</div>';
+    
+    if (c.note) h += '<div class="contact-note">' + sanitize(c.note) + '</div>';
+    h += '</div>';
+  }
+  
+  h += '</div>';
+  return h;
+}
+
+// ================================================================
+// SHOW ADD CONTACT MODAL
+// ================================================================
+function showAddContactM(dealerId) {
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>👤 ชื่อ *</label><input type="text" id="ct_name" class="fm-input" placeholder="เช่น คุณสมชาย"></div>';
+  h += '<div class="fm-group"><label>💼 ตำแหน่ง/บทบาท</label><input type="text" id="ct_role" class="fm-input" placeholder="เช่น MD, Purchase, Technical"></div>';
+  h += '<div class="fr">';
+  h += '<div class="fm-group"><label>📞 เบอร์โทร</label><input type="tel" id="ct_phone" class="fm-input" placeholder="081-xxx-xxxx"></div>';
+  h += '<div class="fm-group"><label>💬 LINE ID</label><input type="text" id="ct_line" class="fm-input" placeholder="LINE ID"></div>';
+  h += '</div>';
+  h += '<div class="fm-group"><label>📧 Email</label><input type="email" id="ct_email" class="fm-input" placeholder="email@company.com"></div>';
+  h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="ct_note" rows="2" class="fm-input" placeholder="เช่น ติดต่อเรื่อง Technical ได้ดี"></textarea></div>';
+  h += '<div class="fm-group"><label>⭐ ผู้ติดต่อหลัก</label><div class="radio-g"><label><input type="radio" name="ct_primary" value="1"><span>ใช่</span></label><label><input type="radio" name="ct_primary" value="0" checked><span>ไม่</span></label></div></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="saveContact(\'' + dealerId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  
+  openM('➕ เพิ่มผู้ติดต่อ', h);
+}
+
+// ================================================================
+// SAVE CONTACT
+// ================================================================
+function saveContact(dealerId) {
+  var name = (document.getElementById('ct_name').value || '').trim();
+  if (!name) { toast('กรุณาใส่ชื่อ'); return; }
+  
+  var contact = {
+    id: 'ct_' + Date.now(),
+    name: name,
+    role: (document.getElementById('ct_role').value || '').trim(),
+    phone: (document.getElementById('ct_phone').value || '').trim(),
+    line: (document.getElementById('ct_line').value || '').trim(),
+    email: (document.getElementById('ct_email').value || '').trim(),
+    note: (document.getElementById('ct_note').value || '').trim(),
+    primary: document.querySelector('input[name="ct_primary"]:checked') ? document.querySelector('input[name="ct_primary"]:checked').value === '1' : false
+  };
+  
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  if (!d.contacts) d.contacts = [];
+  d.contacts.push(contact);
+  ST.update('dealers', dealerId, {contacts: d.contacts});
+  toast('✅ เพิ่มผู้ติดต่อ: ' + name);
+  closeMForce();
+  render();
+}
+
+// ================================================================
+// SHOW EDIT CONTACT MODAL
+// ================================================================
+function showEditContactM(dealerId, ctIdx) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.contacts || !d.contacts[ctIdx]) return;
+  var c = d.contacts[ctIdx];
+  
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>👤 ชื่อ *</label><input type="text" id="ct_name" class="fm-input" value="' + sanitize(c.name || '') + '"></div>';
+  h += '<div class="fm-group"><label>💼 ตำแหน่ง/บทบาท</label><input type="text" id="ct_role" class="fm-input" value="' + sanitize(c.role || '') + '"></div>';
+  h += '<div class="fr">';
+  h += '<div class="fm-group"><label>📞 เบอร์โทร</label><input type="tel" id="ct_phone" class="fm-input" value="' + sanitize(c.phone || '') + '"></div>';
+  h += '<div class="fm-group"><label>💬 LINE ID</label><input type="text" id="ct_line" class="fm-input" value="' + sanitize(c.line || '') + '"></div>';
+  h += '</div>';
+  h += '<div class="fm-group"><label>📧 Email</label><input type="email" id="ct_email" class="fm-input" value="' + sanitize(c.email || '') + '"></div>';
+  h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="ct_note" rows="2" class="fm-input">' + sanitize(c.note || '') + '</textarea></div>';
+  h += '<div class="fm-group"><label>⭐ ผู้ติดต่อหลัก</label><div class="radio-g"><label><input type="radio" name="ct_primary" value="1"' + (c.primary ? ' checked' : '') + '><span>ใช่</span></label><label><input type="radio" name="ct_primary" value="0"' + (!c.primary ? ' checked' : '') + '><span>ไม่</span></label></div></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="updateContact(\'' + dealerId + '\',' + ctIdx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bd" onclick="deleteContact(\'' + dealerId + '\',' + ctIdx + ')">🗑️ ลบ</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  
+  openM('✏️ แก้ไขผู้ติดต่อ', h);
+}
+
+// ================================================================
+// UPDATE CONTACT
+// ================================================================
+function updateContact(dealerId, ctIdx) {
+  var name = (document.getElementById('ct_name').value || '').trim();
+  if (!name) { toast('กรุณาใส่ชื่อ'); return; }
+  
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.contacts || !d.contacts[ctIdx]) return;
+  
+  d.contacts[ctIdx].name = name;
+  d.contacts[ctIdx].role = (document.getElementById('ct_role').value || '').trim();
+  d.contacts[ctIdx].phone = (document.getElementById('ct_phone').value || '').trim();
+  d.contacts[ctIdx].line = (document.getElementById('ct_line').value || '').trim();
+  d.contacts[ctIdx].email = (document.getElementById('ct_email').value || '').trim();
+  d.contacts[ctIdx].note = (document.getElementById('ct_note').value || '').trim();
+  d.contacts[ctIdx].primary = document.querySelector('input[name="ct_primary"]:checked') ? document.querySelector('input[name="ct_primary"]:checked').value === '1' : false;
+  
+  ST.update('dealers', dealerId, {contacts: d.contacts});
+  toast('💾 บันทึกแล้ว');
+  closeMForce();
+  render();
+}
+
+// ================================================================
+// DELETE CONTACT
+// ================================================================
+function deleteContact(dealerId, ctIdx) {
+  if (!confirm('ลบผู้ติดต่อนี้?')) return;
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.contacts) return;
+  d.contacts.splice(ctIdx, 1);
+  ST.update('dealers', dealerId, {contacts: d.contacts});
+  toast('🗑️ ลบแล้ว');
+  closeMForce();
+  render();
+}

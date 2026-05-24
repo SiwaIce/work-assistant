@@ -1,4 +1,48 @@
 // ================================================================
+// PARSE THAI DATE (DD/MM/YYYY)
+// ================================================================
+function parseThaiDate(str) {
+  if (!str) return null;
+  var parts = str.split('/');
+  if (parts.length !== 3) return null;
+  var day = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10) - 1;
+  var year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  return new Date(year, month, day);
+}
+// ================================================================
+// TASK HELPER FUNCTIONS
+// ================================================================
+
+function getDaysLeft(dueDate) {
+  if (!dueDate) return null;
+  return dTo(dueDate);
+}
+
+function isOverdue(dueDate, status) {
+  if (status === 'completed') return false;
+  var days = getDaysLeft(dueDate);
+  return days !== null && days < 0;
+}
+
+function isDueSoon(dueDate, status) {
+  if (status === 'completed') return false;
+  var days = getDaysLeft(dueDate);
+  return days !== null && days >= 0 && days <= 2;
+}
+
+function formatDueDateStatus(dueDate, status) {
+  if (!dueDate) return '';
+  if (status === 'completed') return '<span class="badge-green">✅ เสร็จแล้ว</span>';
+  if (isOverdue(dueDate, status)) return '<span class="badge-red">🔴 เกินกำหนด</span>';
+  if (isDueSoon(dueDate, status)) {
+    var days = getDaysLeft(dueDate);
+    return '<span class="badge-yellow">🟡 เหลือ ' + days + ' วัน</span>';
+  }
+  return '';
+}
+// ================================================================
 // DATE CONSTANTS
 // ================================================================
 const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',

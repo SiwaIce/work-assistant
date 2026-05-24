@@ -1,99 +1,19 @@
 // ================================================================
-// PIPELINE DASHBOARD (NEW)
+// views-pipeline.js - PIPELINE MANAGEMENT
 // ================================================================
-function rPipeDashboard(el) {
-  document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
-  var dash = getPipelineDashboard();
-  var ps = getPipeSummary();
-  
-  var wrColor = dash.winRate >= 70 ? '#22c55e' : dash.winRate >= 50 ? '#f59e0b' : '#ef4444';
-  var wrBg = dash.winRate >= 70 ? '#14532d' : dash.winRate >= 50 ? '#78350f' : '#7f1d1d';
 
-  // Calculate ALL pipeline total (every status)
-  var allPipes = ST.getAll('pipeline');
-  var totalAllAmt = 0;
-  allPipes.forEach(function(p) { totalAllAmt += (Number(p.forecastAmount) || 0); });
-
-  el.innerHTML = '' +
-    '<div class="pipe-dash"><div class="pipe-dash-row">' +
-'<div class="pipe-dash-card"><div class="val c1">' + dash.total + '</div><div class="lbl">ทั้งหมด</div></div>' +
-'<div class="pipe-dash-card"><div class="val c2">' + fmtMoneyShort(dash.activeAmt) + '</div><div class="lbl">Active (' + dash.activeCount + ')</div></div>' +
-'<div class="pipe-dash-card"><div class="val c5">' + fmtMoneyShort(totalAllAmt) + '</div><div class="lbl">Total</div></div>' +
-'<div class="pipe-dash-card"><div class="val c2">' + fmtMoneyShort(dash.wonAmt) + '</div><div class="lbl">Won (' + dash.wonCount + ')</div></div>' +
-'<div class="pipe-dash-card"><div class="val c4">' + fmtMoneyShort(dash.lostAmt) + '</div><div class="lbl">Lost (' + dash.lostCount + ')</div></div>' +
-'</div>' +
-
-    '<div class="pipe-winrate">' +
-    '<div class="wr-circle" style="background:' + wrBg + ';color:' + wrColor + '">' + dash.winRate + '%</div>' +
-    '<div class="wr-detail">Win Rate<br>' + dash.wonCount + ' ชนะ / ' + dash.closedCount + ' ที่จบ<br>Won: ' + fmtMoney(dash.wonAmt) + ' ฿</div>' +
-    '</div>' +
-
-    '<div class="card"><h2>📊 ตาม Status</h2>' +
-    '<div class="pipe-sum">' + Object.entries(ps.summary).filter(function(e) { return e[1].count > 0; }).map(function(e) {
-      return '<div class="pipe-sum-card" onclick="pipeFlt=\'' + e[0] + '\';go(\'pipeline\')">' +
-        '<div class="stage" style="color:' + (e[1].color || '#94a3b8') + '">' + e[1].name + '</div>' +
-        '<div class="count">' + e[1].count + '</div>' +
-        '<div class="amount">' + fmtMoneyShort(e[1].amount) + '</div></div>';
-    }).join('') + '</div></div>' +
-
-    '<div class="card"><h2>🏪 Top Dealer</h2>' +
-    Object.entries(dash.byDealer).sort(function(a, b) { return b[1].amount - a[1].amount; }).slice(0, 5).map(function(e) {
-      var d = ST.getOne('dealers', e[0]);
-      if (!d) return '';
-      return '<div class="li" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' +
-        '<div class="lm"><div class="lt">' + sanitize(d.name) + ' ' + levelTag(d.level) + '</div>' +
-        '<div class="ls">' + e[1].count + ' โครงการ • Pipeline: ' + fmtMoneyShort(e[1].amount) + ' • Won: ' + fmtMoneyShort(e[1].won) + '</div></div></div>';
-    }).join('') + '</div>' +
-
-    (dash.biddingSoon.length ? '<div class="card"><h2>⏳ Bidding ใน 30 วัน (' + dash.biddingSoon.length + ')</h2>' +
-    dash.biddingSoon.map(function(p) {
-      var d = ST.getOne('dealers', p.dealerId);
-      var bd = dTo(p.biddingDate);
-      return '<div class="li ' + dlC(p.biddingDate, false) + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
-        '<div class="lm"><div class="lt">' + sanitize((p.projectName || '').substr(0, 40)) + ' ' + pipeTag(p.status) + '</div>' +
-        '<div class="ls">' + (d ? d.name : '') + ' • ' + fmtMoneyStyled(p.forecastAmount) + ' • Bid: ' + fDShort(p.biddingDate) + ' ' + dlB(p.biddingDate, false) + '</div>' +
-        (p.nextAction ? '<div class="next-action ' + (bd <= 7 ? 'soon' : '') + '">🎯 ' + sanitize(p.nextAction) + '</div>' : '') +
-        '</div></div>';
-    }).join('') + '</div>' : '') +
-
-    (dash.needUpdate.length ? '<div class="card"><h2>🔄 ต้องอัพเดต (' + dash.needUpdate.length + ')</h2>' +
-    dash.needUpdate.slice(0, 8).map(function(item) {
-      var p = item.pipe;
-      var d = ST.getOne('dealers', p.dealerId);
-      var ageClass = item.days > 30 ? 'very-old' : item.days > 14 ? 'old' : '';
-      return '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
-        '<div class="lm"><div class="lt">' + sanitize((p.projectName || '').substr(0, 35)) + ' <span class="pipe-age ' + ageClass + '">' + item.days + 'd</span></div>' +
-        '<div class="ls">' + (d ? d.name : '') + ' • ' + pipeTag(p.status) + ' • ' + fmtMoneyStyled(p.forecastAmount) + '</div></div>' +
-        '<button class="quick-update-btn" onclick="event.stopPropagation();showQuickUpdateM(\'' + p.id + '\')">📝 Update</button>' +
-        '</div>';
-    }).join('') + '</div>' : '') +
-
-    (dash.needAction.length ? '<div class="card"><h2>🎯 ต้องทำ Next Action (' + dash.needAction.length + ')</h2>' +
-    dash.needAction.map(function(p) {
-      var d = ST.getOne('dealers', p.dealerId);
-      var isOverdue = dTo(p.followupDate) < 0;
-      return '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
-        '<div class="lm"><div class="lt">' + sanitize((p.projectName || '').substr(0, 35)) + '</div>' +
-        '<div class="ls">' + (d ? d.name : '') + ' • ' + pipeTag(p.status) + ' • ' + fmtMoneyStyled(p.forecastAmount) + '</div>' +
-        '<div class="next-action ' + (isOverdue ? 'overdue' : 'soon') + '">🎯 ' + sanitize(p.nextAction || '') + ' • ' + fDShort(p.followupDate) + ' ' + dlB(p.followupDate, false) + '</div>' +
-        '</div></div>';
-    }).join('') + '</div>' : '') +
-
-    '<div class="bg" style="margin-top:8px">' +
-    '<button class="btn bp" onclick="go(\'pipeline\')">📊 ตาราง</button>' +
-    '<button class="btn bo" onclick="go(\'pipeBoard\')">📋 Board</button>' +
-    '<button class="btn bo" onclick="go(\'forecast\')">📦 Forecast</button>' +
-    '</div></div>';
-}
-
-// ================================================================
-// PIPELINE LIST (Enhanced)
-// ================================================================
+var pipeFlt = 'all';
 var pipeSearch = '';
 var pipeSort = 'date_desc';
 var pipeView = 'table';
 var pipeGroup = 'none';
+var pipeBoardDealer = 'all';
+var pipeBoardMode = 'active';
+var pipeBoardCollapsed = {};
 
+// ================================================================
+// PIPELINE LIST
+// ================================================================
 function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
   var cfg = getConfig();
@@ -119,18 +39,17 @@ function rPipeline(el) {
   
   var ps = getPipeSummary();
   
-  // Calculate ALL totals (every status)
- var totalAllForecast = 0;
-var activeAmt = 0;
-var wonAmt = 0;
-var lostAmt = 0;
-allPipes.forEach(function(p) {
-  var amt = Number(p.forecastAmount) || 0;
-  totalAllForecast += amt;
-  if (['lost','delivered'].indexOf(p.status) === -1) activeAmt += amt;
-  if (['win','ordered','delivered'].indexOf(p.status) !== -1) wonAmt += amt;
-  if (p.status === 'lost') lostAmt += amt;
-});
+  var totalAllForecast = 0;
+  var activeAmt = 0;
+  var wonAmt = 0;
+  var lostAmt = 0;
+  allPipes.forEach(function(p) {
+    var amt = Number(p.forecastAmount) || 0;
+    totalAllForecast += amt;
+    if (['lost','delivered'].indexOf(p.status) === -1) activeAmt += amt;
+    if (['win','ordered','delivered'].indexOf(p.status) !== -1) wonAmt += amt;
+    if (p.status === 'lost') lostAmt += amt;
+  });
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && ['prospect','tor_review','quotation','bidding','negotiation'].indexOf(p.status) !== -1; });
 
   el.innerHTML = '' +
@@ -191,9 +110,6 @@ allPipes.forEach(function(p) {
   }
 }
 
-// ================================================================
-// SORT PIPES
-// ================================================================
 function sortPipes(pipes, sortBy) {
   var sorted = pipes.slice();
   switch (sortBy) {
@@ -237,9 +153,6 @@ function sortPipes(pipes, sortBy) {
   return sorted;
 }
 
-// ================================================================
-// PIPE CARDS (Enhanced)
-// ================================================================
 function renderPipeCards(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
   
@@ -247,82 +160,61 @@ function renderPipeCards(pipes) {
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
     var d = ST.getOne('dealers', p.dealerId);
-    var isWon = ['win','ordered','delivered'].indexOf(p.status) !== -1;
-    var isLost = p.status === 'lost';
     var amt = Number(p.forecastAmount) || 0;
-    var isBig = amt >= 1500000;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
     
-    var regDate = p.registerDate || (p.created ? p.created.split('T')[0] : '');
-    var ageDays = regDate ? daysBetween(regDate, _td()) : 0;
-    var ageClass = ageDays > 180 ? 'very-old' : ageDays > 90 ? 'old' : '';
-    
-    var borderStyle = '';
-    if (amt >= 10000000) borderStyle = 'border-left:3px solid #ef4444;';
-    else if (amt >= 5000000) borderStyle = 'border-left:3px solid #f97316;';
-    else if (isBig) borderStyle = 'border-left:3px solid #f59e0b;';
-    
-    var nextHTML = '';
-    if (p.nextAction) {
-      var naClass = '';
-      if (p.followupDate) {
-        var fd = dTo(p.followupDate);
-        if (fd < 0) naClass = 'overdue';
-        else if (fd <= 3) naClass = 'soon';
-      }
-      nextHTML = '<div class="next-action ' + naClass + '">🎯 ' + sanitize((p.nextAction || '').substr(0, 25)) +
-        (p.followupDate ? ' ' + fDShort(p.followupDate) : '') + '</div>';
-    }
-    
-    html += '<div class="dealer-card ' + dlC(p.biddingDate, isWon || isLost) + '" ' +
-      'onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" ' +
-      'style="' + (isLost ? 'opacity:.4;' : '') + borderStyle + '">' +
-      '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>' +
-      '<h3 style="font-size:.78rem;margin:0">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3></div>' +
-      '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') +
-        ' <span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></div>' +
-      '<div class="tr">' + pipeTag(p.status) + (isBig ? ' <span class="tag tag-high">💰 Big</span>' : '') + '</div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.76rem;align-items:center">' +
-      fmtMoneyStyled(amt) +
-      '<button class="quick-update-btn" onclick="event.stopPropagation();showQuickUpdateM(\'' + p.id + '\')">📝 Update</button>' +
-      '</div>' +
-      '<div class="meta" style="margin-top:2px">' +
-      (p.model ? '📦 ' + sanitize((p.model || '').substr(0, 25)) : '') +
-      (p.biddingDate ? ' • Bid: ' + fDShort(p.biddingDate) + ' ' + dlB(p.biddingDate, isWon || isLost) : '') +
-      '</div>' +
-      nextHTML +
-      (lastLog ? '<div style="font-size:.6rem;color:#475569;margin-top:3px;border-top:1px solid #334155;padding-top:2px">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 35)) + '</div>' : '') +
-      '</div>';
+    html += '<div class="dealer-card" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
+    html += '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>';
+    html += '<h3 style="font-size:.78rem;margin:0">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3></div>';
+    html += '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') + '</div>';
+    html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.76rem;align-items:center">' + fmtMoneyStyled(amt) + '</div>';
+    html += '<div class="meta" style="margin-top:2px">' + (p.model ? '📦 ' + sanitize((p.model || '').substr(0, 25)) : '') + (p.biddingDate ? ' • Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
+    if (lastLog) html += '<div style="font-size:.6rem;color:#475569;margin-top:3px">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 35)) + '</div>';
+    html += '</div>';
   }
   html += '</div>';
   return html;
 }
 
-// ================================================================
-// PIPE TABLE (Enhanced)
-// ================================================================
 function renderPipeTable(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
   
-  var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead><tr>' +
-    '<th style="width:32px">#</th><th>Register</th><th>Project</th><th>End User</th><th>Dealer</th><th>Model</th>' +
-    '<th style="text-align:right">Forecast</th><th>TOR</th><th>Bidding</th>' +
-    '<th>Status</th><th>Next Action</th><th>Age</th><th>Update</th><th></th>' +
-    '</tr></thead><tbody>';
+  var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead>' +
+    '<th style="width:32px">#</th>' +
+    '<th>Register</th>' +
+    '<th>Project</th>' +
+    '<th>End User</th>' +
+    '<th>Dealer</th>' +
+    '<th>Model</th>' +
+    '<th style="text-align:right">Forecast</th>' +
+    '<th>TOR</th>' +
+    '<th>Bidding</th>' +
+    '<th>Status</th>' +
+    '<th>Next Action</th>' +
+    '<th>Age</th>' +
+    '<th>Update</th>' +
+    '<th></th>' +
+    '</thead><tbody>';
   
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
     var d = ST.getOne('dealers', p.dealerId);
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
-    var isWon = ['win','ordered','delivered'].indexOf(p.status) !== -1;
-    var isLost = p.status === 'lost';
     var amt = Number(p.forecastAmount) || 0;
+    var isWon = (p.status === 'win' || p.status === 'ordered' || p.status === 'delivered');
+    var isLost = (p.status === 'lost');
     
+    // Age calculation
     var regDate = p.registerDate || (p.created ? p.created.split('T')[0] : '');
     var ageDays = regDate ? daysBetween(regDate, _td()) : 0;
-    var ageClass = ageDays > 180 ? 'very-old' : ageDays > 90 ? 'old' : '';
+    var ageClass = ageDays > 180 ? 'very-old' : (ageDays > 90 ? 'old' : '');
     
-    var nextHTML = '';
+    // Model text (support multi-model)
+    var modelText = getPipeModelSummary(p);
+    
+    // Next Action HTML
+    var nextHtml = '';
     if (p.nextAction) {
       var naClass = '';
       if (p.followupDate) {
@@ -330,24 +222,24 @@ function renderPipeTable(pipes) {
         if (fd < 0) naClass = 'overdue';
         else if (fd <= 3) naClass = 'soon';
       }
-      nextHTML = '<div class="next-action ' + naClass + '">' + sanitize((p.nextAction || '').substr(0, 20)) +
+      nextHtml = '<div class="next-action ' + naClass + '">' + sanitize((p.nextAction || '').substr(0, 20)) +
         (p.followupDate ? ' ' + fDShort(p.followupDate) : '') + '</div>';
     }
     
-    html += '<tr class="' + (isWon ? 'pipe-win' : '') + (isLost ? 'pipe-lost' : '') + '" ' +
-      'onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
+    html += '<tr class="' + (isWon ? 'pipe-win' : '') + (isLost ? 'pipe-lost' : '') + '"' +
+      ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
       '<td class="pipe-row-num">' + (i + 1) + '</td>' +
-      '<td>' + fDShort(p.registerDate) + '</td>' +
-      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="' + sanitize(p.projectName) + '">' + sanitize((p.projectName || '').substr(0, 40)) + '</td>' +
-      '<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis">' + sanitize((p.endUserTH || '').substr(0, 20)) + '</td>' +
-      '<td>' + (d ? d.name : '-') + '</td>' +
-      '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis">' + sanitize((p.model || '').substr(0, 18)) + '</td>' +
-      '<td style="text-align:right">' + fmtMoneyStyled(amt) + '</td>' +
-      '<td>' + (p.tor || '') + '</td>' +
-      '<td>' + fDShort(p.biddingDate) + ' ' + dlB(p.biddingDate, isWon || isLost) + '</td>' +
-      '<td>' + pipeTag(p.status) + '</td>' +
-      '<td>' + nextHTML + '</td>' +
-      '<td><span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></td>' +
+      '<td style="white-space:nowrap">' + fDShort(p.registerDate) + '</td>' +
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + sanitize(p.projectName) + '">' + sanitize((p.projectName || '').substr(0, 45)) + '</td>' +
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">' + sanitize((p.endUserTH || '').substr(0, 25)) + '</td>' +
+      '<td style="white-space:nowrap">' + (d ? d.name : '-') + '</td>' +
+      '<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;font-size:.7rem">' + sanitize(modelText) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(amt) + '</td>' +
+      '<td style="white-space:nowrap">' + (p.tor || '-') + '</td>' +
+      '<td style="white-space:nowrap">' + (p.biddingDate ? fDShort(p.biddingDate) : '-') + ' ' + (p.biddingDate ? dlB(p.biddingDate, isWon || isLost) : '') + '</td>' +
+      '<td style="white-space:nowrap">' + pipeTag(p.status) + '</td>' +
+      '<td style="max-width:140px">' + nextHtml + '</td>' +
+      '<td style="white-space:nowrap"><span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></td>' +
       '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem">' +
         (lastLog ? fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) : '-') +
       '</td>' +
@@ -355,10 +247,9 @@ function renderPipeTable(pipes) {
       '</tr>';
   }
   
-  html += '</tbody></table></div>';
+  html += '</tbody></tr></div>';
   return html;
 }
-
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 function dlPipeCSV() {
@@ -380,485 +271,6 @@ function dlPipeCSV() {
     csv += '\n';
   });
   dlBlob(csv, 'pipeline-' + _td() + '.csv');
-}
-
-// ================================================================
-// PIPELINE KANBAN BOARD (Enhanced)
-// ================================================================
-var pipeBoardFilter = 'all';
-var pipeBoardDealer = 'all';
-
-function rPipeBoard(el) {
-  document.getElementById('pgT').textContent = '📋 Pipeline Board';
-  var cfg = getConfig();
-  var allPipes = ST.getAll('pipeline');
-  var dealers = ST.getAll('dealers');
-  
-  var pipes = allPipes;
-  if (pipeBoardDealer !== 'all') {
-    pipes = pipes.filter(function(p) { return p.dealerId === pipeBoardDealer; });
-  }
-  
-  var dealerIds = {};
-  allPipes.forEach(function(p) { if (p.dealerId) dealerIds[p.dealerId] = true; });
-  var pipelineDealers = dealers.filter(function(d) { return dealerIds[d.id]; });
-  
-  // Calculate ALL totals (every status)
-  var totalAll = 0;
-  allPipes.forEach(function(p) { totalAll += (Number(p.forecastAmount) || 0); });
- var totalFiltered = 0;
-var activeFiltered = 0;
-pipes.forEach(function(p) {
-  var amt = Number(p.forecastAmount) || 0;
-  totalFiltered += amt;
-  if (['lost','delivered'].indexOf(p.status) === -1) activeFiltered += amt;
-});
-
-  el.innerHTML = '' +
-    '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
-    '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +
-    '<div style="flex:1"></div>' +
-    '<select id="pipeBoardDlr" onchange="pipeBoardDealer=this.value;render()" style="min-width:130px;padding:4px 8px;font-size:.72rem">' +
-    '<option value="all"' + (pipeBoardDealer === 'all' ? ' selected' : '') + '>🏪 ทุก Dealer (' + allPipes.length + ')</option>' +
-    pipelineDealers.map(function(d) {
-      var cnt = allPipes.filter(function(p) { return p.dealerId === d.id; }).length;
-      return '<option value="' + d.id + '"' + (pipeBoardDealer === d.id ? ' selected' : '') + '>' + d.name + ' (' + cnt + ')</option>';
-    }).join('') +
-    '</select>' +
-    '</div>' +
-    
-   '<div style="text-align:center;margin-bottom:8px;font-size:.76rem;color:#94a3b8">' +
-    '📊 แสดง ' + pipes.length + '/' + allPipes.length + ' โครงการ • ' +
-    'Active: ' + fmtMoneyStyled(activeFiltered) + ' • ' +
-    'Total: ' + fmtMoneyStyled(totalFiltered) +
-    '</div>' +
-    
-    '<div class="pipe-kb">' + cfg.pipelineStatuses.map(function(st) {
-      var items = pipes.filter(function(p) { return p.status === st.id; });
-      var amt = 0;
-      items.forEach(function(p) { amt += (Number(p.forecastAmount) || 0); });
-      
-      items.sort(function(a, b) {
-        var ba = a.biddingDate || '9999';
-        var bb = b.biddingDate || '9999';
-        if (ba !== bb) return ba.localeCompare(bb);
-        return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
-      });
-      
-      return '<div class="pipe-kb-col" data-pipecol="' + st.id + '"' +
-        ' ondragover="event.preventDefault();this.classList.add(\'drag-over\')"' +
-        ' ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove(\'drag-over\')"' +
-        ' ondrop="event.preventDefault();this.classList.remove(\'drag-over\');pipeDrop(event,\'' + st.id + '\')">' +
-        '<div class="pipe-kb-hd" style="border-bottom-color:' + st.color + '">' +
-        st.name + ' <span class="pipe-kb-cnt">' + items.length + '</span></div>' +
-        '<div class="pipe-kb-body">' + items.map(function(p, idx) {
-          return '<div class="pipe-kb-card-num">' + (idx + 1) + '</div>' + pipeBoardCardHTML(p, st);
-        }).join('') + '</div>' +
-        '<div class="pipe-kb-sum">' + items.length + ' โครงการ • ' +
-        fmtMoneyStyled(amt) + '</div>' +
-        '</div>';
-    }).join('') + '</div>';
-}
-// ================================================================
-// PIPELINE BOARD (Enhanced v2)
-// ================================================================
-var pipeBoardDealer = 'all';
-var pipeBoardMode = 'active';
-var pipeBoardCollapsed = {};
-
-function rPipeBoard(el) {
-  document.getElementById('pgT').textContent = '📋 Pipeline Board';
-  var cfg = getConfig();
-  var allPipes = ST.getAll('pipeline');
-  var dealers = ST.getAll('dealers');
-  
-  var pipes = allPipes;
-  if (pipeBoardDealer !== 'all') {
-    pipes = pipes.filter(function(p) { return p.dealerId === pipeBoardDealer; });
-  }
-  
-  var dealerIds = {};
-  allPipes.forEach(function(p) { if (p.dealerId) dealerIds[p.dealerId] = true; });
-  var pipelineDealers = dealers.filter(function(d) { return dealerIds[d.id]; });
-  
-  var totalFiltered = 0;
-  var activeFiltered = 0;
-  pipes.forEach(function(p) {
-    var amt = Number(p.forecastAmount) || 0;
-    totalFiltered += amt;
-    if (['lost','delivered'].indexOf(p.status) === -1) activeFiltered += amt;
-  });
-
-  // Determine which statuses to show
-  var activeStatuses = ['prospect','tor_review','quotation','bidding','negotiation'];
-  var closedStatuses = ['win','ordered','delivered','on_hold','lost','recurring'];
-  
-  var visibleStatuses = cfg.pipelineStatuses.filter(function(st) {
-    // In active mode, show only active statuses
-    if (pipeBoardMode === 'active' && closedStatuses.indexOf(st.id) !== -1) return false;
-    // Hide empty columns (unless mode is 'all')
-    var items = pipes.filter(function(p) { return p.status === st.id; });
-    if (items.length === 0 && pipeBoardMode !== 'all') return false;
-    return true;
-  });
-
-  var h = '';
-  
-  // Toolbar
-  h += '<div class="pb2-toolbar">';
-  h += '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>';
-  
-  // Mode toggle
-  h += '<div class="pb2-mode">';
-  h += '<button class="btn bsm ' + (pipeBoardMode === 'active' ? 'bp' : 'bo') + '" onclick="pipeBoardMode=\'active\';render()">⚡ Active</button>';
-  h += '<button class="btn bsm ' + (pipeBoardMode === 'all' ? 'bp' : 'bo') + '" onclick="pipeBoardMode=\'all\';render()">📊 ทั้งหมด</button>';
-  h += '</div>';
-  
-  // Dealer filter
-  h += '<select id="pipeBoardDlr" onchange="pipeBoardDealer=this.value;render()" class="pb2-dealer-sel">';
-  h += '<option value="all"' + (pipeBoardDealer === 'all' ? ' selected' : '') + '>🏪 ทุก Dealer (' + allPipes.length + ')</option>';
-  pipelineDealers.forEach(function(d) {
-    var cnt = allPipes.filter(function(p) { return p.dealerId === d.id; }).length;
-    h += '<option value="' + d.id + '"' + (pipeBoardDealer === d.id ? ' selected' : '') + '>' + d.name + ' (' + cnt + ')</option>';
-  });
-  h += '</select>';
-  h += '</div>';
-  
-  // Stats
-  h += '<div class="pb2-stats">';
-  h += '📊 ' + pipes.length + ' โครงการ • ';
-  h += 'Active: ' + fmtMoneyStyled(activeFiltered) + ' • ';
-  h += 'Total: ' + fmtMoneyStyled(totalFiltered);
-  h += '</div>';
-
-  // Scroll buttons + Board
-  h += '<div class="pb2-scroll-wrap">';
-  h += '<button class="pb2-scroll-btn pb2-scroll-left" onclick="scrollBoard(-1)" title="เลื่อนซ้าย">◀</button>';
-  h += '<div class="pb2-board" id="pb2Board">';
-  
-  visibleStatuses.forEach(function(st) {
-    var items = pipes.filter(function(p) { return p.status === st.id; });
-    var amt = 0;
-    items.forEach(function(p) { amt += (Number(p.forecastAmount) || 0); });
-    
-    items.sort(function(a, b) {
-      var ba = a.biddingDate || '9999';
-      var bb = b.biddingDate || '9999';
-      if (ba !== bb) return ba.localeCompare(bb);
-      return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
-    });
-    
-    var isCollapsed = pipeBoardCollapsed[st.id] === true;
-    
-    if (isCollapsed) {
-      // Collapsed column
-      h += '<div class="pb2-col pb2-col-collapsed" onclick="toggleBoardCol(\'' + st.id + '\')"';
-      h += ' data-pipecol="' + st.id + '">';
-      h += '<div class="pb2-col-collapsed-inner" style="border-color:' + st.color + '">';
-      h += '<div class="pb2-col-collapsed-name">' + st.name + '</div>';
-      h += '<div class="pb2-col-collapsed-count">' + items.length + '</div>';
-      h += '<div class="pb2-col-collapsed-amt">' + fmtMoneyShort(amt) + '</div>';
-      h += '</div></div>';
-    } else {
-      // Expanded column
-      h += '<div class="pb2-col" data-pipecol="' + st.id + '"';
-      h += ' ondragover="event.preventDefault();this.classList.add(\'drag-over\')"';
-      h += ' ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove(\'drag-over\')"';
-      h += ' ondrop="event.preventDefault();this.classList.remove(\'drag-over\');pipeDrop(event,\'' + st.id + '\')">';
-      
-      // Header
-      h += '<div class="pb2-hd" style="border-bottom-color:' + st.color + '">';
-      h += '<div class="pb2-hd-left">';
-      h += '<span class="pb2-hd-dot" style="background:' + st.color + '"></span>';
-      h += '<span class="pb2-hd-name">' + st.name + '</span>';
-      h += '<span class="pb2-hd-cnt">' + items.length + '</span>';
-      h += '</div>';
-      h += '<button class="pb2-hd-collapse" onclick="event.stopPropagation();toggleBoardCol(\'' + st.id + '\')" title="พับ">◀</button>';
-      h += '</div>';
-      
-      // Cards
-      h += '<div class="pb2-body">';
-      if (items.length === 0) {
-        h += '<div class="pb2-empty">ว่าง</div>';
-      } else {
-        items.forEach(function(p, idx) {
-          h += pipeBoardCardV2(p, st, idx);
-        });
-      }
-      h += '</div>';
-      
-      // Footer
-      h += '<div class="pb2-foot">';
-      h += '<span>' + items.length + ' โครงการ</span>';
-      h += '<span>' + fmtMoneyStyled(amt) + '</span>';
-      h += '</div>';
-      
-      h += '</div>';
-    }
-  });
-  
-  h += '</div>';
-  h += '<button class="pb2-scroll-btn pb2-scroll-right" onclick="scrollBoard(1)" title="เลื่อนขวา">▶</button>';
-  h += '</div>';
-
-  // Legend
-  h += '<div class="pb2-legend">';
-  h += '<span>💡 ลากการ์ดย้าย Status • กดหัวคอลัมน์เพื่อพับ • เลื่อนซ้ายขวาด้วย ◀▶ หรือลากนิ้ว</span>';
-  h += '</div>';
-
-  el.innerHTML = h;
-  
-  // Init touch scroll
-  initBoardScroll();
-}
-
-function pipeBoardCardV2(p, st, idx) {
-  var d = ST.getOne('dealers', p.dealerId);
-  var lastLog = ST.pipeLogsByPipe(p.id)[0];
-  var isWon = ['win', 'ordered', 'delivered'].indexOf(p.status) !== -1;
-  var isLost = p.status === 'lost';
-  var amt = Number(p.forecastAmount) || 0;
-  
-  var bidHTML = '';
-  if (p.biddingDate && !isWon && !isLost) {
-    var bd = dTo(p.biddingDate);
-    if (bd < 0) {
-      bidHTML = '<div class="pb2-bid bid-past">Bid: ' + fDShort(p.biddingDate) + ' (เลย)</div>';
-    } else if (bd <= 7) {
-      bidHTML = '<div class="pb2-bid bid-urgent">🔴 Bid ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
-    } else if (bd <= 30) {
-      bidHTML = '<div class="pb2-bid bid-soon">🟡 Bid ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
-    }
-  }
-
-  var h = '<div class="pb2-card"';
-  h += ' draggable="true" data-pipeid="' + p.id + '"';
-  h += ' ondragstart="event.dataTransfer.setData(\'pipeid\',\'' + p.id + '\');this.classList.add(\'dragging\')"';
-  h += ' ondragend="this.classList.remove(\'dragging\')"';
-  h += ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})"';
-  h += ' style="' + (isLost ? 'opacity:.5;' : '') + '">';
-  
-  h += '<div class="pb2-card-head">';
-  h += '<span class="pb2-card-num">#' + (idx + 1) + '</span>';
-  h += '<span class="pb2-card-title">' + sanitize((p.projectName || '').substr(0, 30)) + '</span>';
-  h += '</div>';
-  
-  h += '<div class="pb2-card-dealer">' + (d ? d.name : '-') + '</div>';
-  
-  if (p.model) {
-    h += '<div class="pb2-card-model">📦 ' + sanitize((p.model || '').substr(0, 20)) + (p.modelQty > 1 ? ' x' + p.modelQty : '') + '</div>';
-  }
-  
-  h += '<div class="pb2-card-amt">' + fmtMoneyStyled(amt) + '</div>';
-  
-  h += bidHTML;
-  
-  if (p.nextAction) {
-    var naClass = '';
-    if (p.followupDate) {
-      var fd = dTo(p.followupDate);
-      if (fd < 0) naClass = ' na-overdue';
-      else if (fd <= 3) naClass = ' na-soon';
-    }
-    h += '<div class="pb2-card-na' + naClass + '">🎯 ' + sanitize((p.nextAction || '').substr(0, 20)) + '</div>';
-  }
-  
-  if (lastLog) {
-    h += '<div class="pb2-card-log">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) + '</div>';
-  }
-  
-  h += '</div>';
-  return h;
-}
-
-function toggleBoardCol(statusId) {
-  if (pipeBoardCollapsed[statusId]) {
-    delete pipeBoardCollapsed[statusId];
-  } else {
-    pipeBoardCollapsed[statusId] = true;
-  }
-  render();
-}
-
-function scrollBoard(dir) {
-  var board = document.getElementById('pb2Board');
-  if (!board) return;
-  var scrollAmt = 280;
-  board.scrollBy({ left: dir * scrollAmt, behavior: 'smooth' });
-}
-
-function initBoardScroll() {
-  var board = document.getElementById('pb2Board');
-  if (!board) return;
-  
-  var isDown = false;
-  var startX = 0;
-  var scrollLeft = 0;
-  
-  board.addEventListener('mousedown', function(e) {
-    if (e.target.closest('.pb2-card')) return;
-    isDown = true;
-    board.classList.add('pb2-grabbing');
-    startX = e.pageX - board.offsetLeft;
-    scrollLeft = board.scrollLeft;
-  });
-  
-  board.addEventListener('mouseleave', function() {
-    isDown = false;
-    board.classList.remove('pb2-grabbing');
-  });
-  
-  board.addEventListener('mouseup', function() {
-    isDown = false;
-    board.classList.remove('pb2-grabbing');
-  });
-  
-  board.addEventListener('mousemove', function(e) {
-    if (!isDown) return;
-    e.preventDefault();
-    var x = e.pageX - board.offsetLeft;
-    var walk = (x - startX) * 1.5;
-    board.scrollLeft = scrollLeft - walk;
-  });
-  
-  // Touch scroll
-  var touchStartX = 0;
-  var touchScrollLeft = 0;
-  
-  board.addEventListener('touchstart', function(e) {
-    touchStartX = e.touches[0].pageX;
-    touchScrollLeft = board.scrollLeft;
-  }, { passive: true });
-  
-  board.addEventListener('touchmove', function(e) {
-    var x = e.touches[0].pageX;
-    var walk = (touchStartX - x) * 1.2;
-    board.scrollLeft = touchScrollLeft + walk;
-  }, { passive: true });
-}
-function pipeBoardCardHTML(p, st) {
-  var d = ST.getOne('dealers', p.dealerId);
-  var lastLog = ST.pipeLogsByPipe(p.id)[0];
-  var isWon = ['win', 'ordered', 'delivered'].indexOf(p.status) !== -1;
-  var isLost = p.status === 'lost';
-  var amt = Number(p.forecastAmount) || 0;
-  
-  var bidHTML = '';
-  if (p.biddingDate && !isWon && !isLost) {
-    var bd = dTo(p.biddingDate);
-    if (bd < 0) {
-      bidHTML = '<div class="card-bidding bid-past">Bid: ' + fDShort(p.biddingDate) + ' (เลย)</div>';
-    } else if (bd <= 7) {
-      bidHTML = '<div class="card-bidding bid-urgent">🔴 Bid: ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
-    } else if (bd <= 30) {
-      bidHTML = '<div class="card-bidding bid-soon">🟡 Bid: ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
-    } else {
-      bidHTML = '<div style="font-size:.58rem;color:#64748b;margin-top:2px">Bid: ' + fDShort(p.biddingDate) + '</div>';
-    }
-  }
-  
-  var updateHTML = '';
-  if (lastLog) {
-    updateHTML = '<div class="card-update">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 35)) + '</div>';
-  }
-
-  return '<div class="pipe-kb-card"' +
-    ' draggable="true" data-pipeid="' + p.id + '"' +
-    ' ondragstart="event.dataTransfer.setData(\'pipeid\',\'' + p.id + '\');this.classList.add(\'dragging\')"' +
-    ' ondragend="this.classList.remove(\'dragging\')"' +
-    ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})"' +
-    ' style="' + (isLost ? 'opacity:.4;' : '') + '">' +
-    '<h4>' + sanitize((p.projectName || '').substr(0, 35)) + '</h4>' +
-    '<div class="meta">' + (d ? d.name : '-') + (p.unitType ? ' • ' + p.unitType : '') + '</div>' +
-    (p.model ? '<div class="card-model">📦 ' + sanitize((p.model || '').substr(0, 25)) + (p.modelQty > 1 ? ' x' + p.modelQty : '') + '</div>' : '') +
-    '<div class="amt">' + fmtMoneyStyled(amt) + '</div>' +
-    bidHTML +
-    (p.appointmentLetter === 'ออกแล้ว' ? '<div style="font-size:.56rem;color:#86efac;margin-top:1px">📄 แต่งตั้ง ✅</div>' : '') +
-    updateHTML +
-    '</div>';
-}
-
-function pipeDrop(e, newStatus) {
-  var pipeId = e.dataTransfer.getData('pipeid');
-  if (!pipeId) return;
-  var oldPipe = ST.getOne('pipeline', pipeId);
-  if (!oldPipe) return;
-  
-  if (['win','ordered'].indexOf(newStatus) !== -1 && ['win','ordered','delivered'].indexOf(oldPipe.status) === -1) {
-    showWinReasonM(pipeId, newStatus);
-    return;
-  }
-  if (newStatus === 'lost' && oldPipe.status !== 'lost') {
-    showLossReasonM(pipeId);
-    return;
-  }
-  
-  ST.update('pipeline', pipeId, {status: newStatus});
-  ST.add('pipeLog', {pipeId: pipeId, type: 'status_change', content: 'สถานะเปลี่ยนเป็น ' + getPipeName(newStatus), date: _nw()});
-  toast('📊 ย้ายเป็น ' + getPipeName(newStatus));
-  render();
-}
-
-function showWinReasonM(pipeId, newStatus) {
-  var cfg = getConfig();
-  var h = '<div class="fg"><label>สาเหตุ</label><div class="check-g">';
-  cfg.winReasons.forEach(function(r) {
-    h += '<label><input type="checkbox" name="wr" value="' + sanitize(r) + '"><span>' + sanitize(r) + '</span></label>';
-  });
-  h += '</div></div>';
-  h += '<div class="fg"><label>หมายเหตุ</label><textarea id="wr_note" rows="2"></textarea></div>';
-  h += '<div class="fg"><label>Real Amount (฿)</label><input type="number" id="wr_amt" value=""></div>';
-  h += '<button class="btn bp btn-full" onclick="saveWinReason(\'' + pipeId + '\',\'' + newStatus + '\')">💾 บันทึก</button>';
-  openM('✅ Win — สาเหตุที่ได้งาน', h);
-}
-
-function saveWinReason(pipeId, newStatus) {
-  var checks = document.querySelectorAll('input[name="wr"]:checked');
-  var reasons = [];
-  for (var i = 0; i < checks.length; i++) reasons.push(checks[i].value);
-  var note = (document.getElementById('wr_note') ? document.getElementById('wr_note').value : '').trim();
-  var amt = parseFloat(document.getElementById('wr_amt') ? document.getElementById('wr_amt').value : '') || 0;
-  
-  var updates = {status: newStatus, winReason: reasons.join(', '), winNote: note};
-  if (amt) updates.realAmount = amt;
-  
-  ST.update('pipeline', pipeId, updates);
-  ST.add('pipeLog', {pipeId: pipeId, type: 'win', content: '✅ Win: ' + reasons.join(', ') + (note ? ' — ' + note : ''), date: _nw()});
-  closeM();
-  toast('✅ Win!');
-  render();
-}
-
-function showLossReasonM(pipeId) {
-  var cfg = getConfig();
-  var h = '<div class="fg"><label>สาเหตุ</label><div class="check-g">';
-  cfg.lossReasons.forEach(function(r) {
-    h += '<label><input type="checkbox" name="lr" value="' + sanitize(r) + '"><span>' + sanitize(r) + '</span></label>';
-  });
-  h += '</div></div>';
-  h += '<div class="fg"><label>คู่แข่งที่ชนะ</label><input type="text" id="lr_comp"></div>';
-  h += '<div class="fg"><label>ราคาคู่แข่ง</label><input type="number" id="lr_price"></div>';
-  h += '<div class="fg"><label>บทเรียน</label><textarea id="lr_note" rows="2"></textarea></div>';
-  h += '<button class="btn bp btn-full" onclick="saveLossReason(\'' + pipeId + '\')">💾 บันทึก</button>';
-  openM('❌ Lost — สาเหตุที่ไม่ได้งาน', h);
-}
-
-function saveLossReason(pipeId) {
-  var checks = document.querySelectorAll('input[name="lr"]:checked');
-  var reasons = [];
-  for (var i = 0; i < checks.length; i++) reasons.push(checks[i].value);
-  var competitor = (document.getElementById('lr_comp') ? document.getElementById('lr_comp').value : '').trim();
-  var price = document.getElementById('lr_price') ? document.getElementById('lr_price').value : '';
-  var note = (document.getElementById('lr_note') ? document.getElementById('lr_note').value : '').trim();
-  
-  ST.update('pipeline', pipeId, {
-    status: 'lost', lossReason: reasons.join(', '),
-    lossCompetitor: competitor, lossCompetitorPrice: price, lossNote: note
-  });
-  ST.add('pipeLog', {pipeId: pipeId, type: 'lost', content: '❌ Lost: ' + reasons.join(', ') + (competitor ? ' — ชนะโดย: ' + competitor : '') + (note ? ' — ' + note : ''), date: _nw()});
-  closeM();
-  toast('❌ บันทึก Lost');
-  render();
 }
 
 // ================================================================
@@ -884,71 +296,42 @@ function rPipeDet(el) {
   html += '<button class="btn bsm bs" onclick="startTimer(\'pipeline\',\'' + p.id + '\',\'' + sanitize((p.projectName || '').substr(0, 18)) + '\')">⏱️</button>';
   html += '<button class="btn bsm ' + (isPinned ? 'bw' : 'bo') + '" onclick="ST.togglePin(\'pipeline\',\'' + p.id + '\',\'' + sanitize((p.projectName || '').substr(0, 20)) + '\',\'' + (d ? d.name : '') + '\');render()">📌</button>';
   html += '<button class="btn bsm bo" onclick="copyPipeRow(\'' + p.id + '\')">📋 Row</button>';
-  html += '<button class="btn bsm bo" onclick="showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">✏️</button>';
+  html += '<button class="btn bsm bp" onclick="showUnifiedPipelineUpdate(\'' + p.id + '\')">✏️ อัพเดท</button>';
+  html += '<button class="btn bsm bo" onclick="showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">📝 แก้ไขทั้งหมด</button>';
   html += '<button class="btn bsm bd" onclick="delPipe(\'' + p.id + '\')">🗑️</button>';
   html += '</span></h2>';
-
-  html += '<div class="fr"><div><label style="color:#64748b;font-size:.68rem">Project Name</label><div style="font-size:.84rem">' + sanitize(p.projectName || '-') + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">Status</label><div>' + pipeTag(p.status) + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">End User (EN)</label><div>' + sanitize(p.endUserEN || '-') + '</div></div></div>';
+  html += '<div class="fr"><div><label>Project Name</label><div>' + sanitize(p.projectName || '-') + '</div></div>';
+  html += '<div><label>Status</label><div>' + pipeTag(p.status) + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">Unit Type</label><div>' + (p.unitType || '-') + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">Dealer</label><div>' + (d ? d.name : '-') + ' ' + (d ? levelTag(d.level) : '') + '</div></div></div>';
+  html += '<div class="fr"><div><label>End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';
+  html += '<div><label>End User (EN)</label><div>' + sanitize(p.endUserEN || '-') + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">DJI Dealer</label><div>' + (p.djiDealer || '-') + '</div></div>';
-html += '<div><label style="color:#64748b;font-size:.68rem">Model</label><div>' + getPipeModelSummary(p) + '</div></div></div>';
-
-// Items list (if multi-model)
-var pItems = getPipeItems(p);
-if (pItems.length > 1) {
-  html += '<div style="margin-top:6px"><label style="color:#64748b;font-size:.68rem">📦 รายการสินค้า (' + pItems.length + ' รายการ)</label>';
-  html += '<div class="pipe-items-list" style="margin-top:4px">';
-  var itemsTotal = 0;
-  var itemsQty = 0;
-  for (var ii = 0; ii < pItems.length; ii++) {
-    var it = pItems[ii];
-    var itQty = Number(it.qty) || 1;
-    var itPrice = Number(it.price) || 0;
-    var itTotal = Number(it.total) || (itQty * itPrice);
-    itemsTotal += itTotal;
-    itemsQty += itQty;
-    html += '<div class="pipe-item-row">';
-    html += '<span class="pipe-row-num">' + (ii + 1) + '</span>';
-    html += '<span class="pipe-item-name">' + sanitize(it.model || '-') + '</span>';
-    html += '<span class="pipe-item-qty">x' + itQty + '</span>';
-    html += '<span class="pipe-item-price">' + (itPrice > 0 ? fmtMoney(itPrice) : '-') + '</span>';
-    html += '<span class="pipe-item-total">' + fmtMoneyStyled(itTotal) + '</span>';
-    html += '</div>';
-  }
-  html += '<div class="pipe-item-summary">';
-  html += '<span>รวม ' + pItems.length + ' รายการ • ' + itemsQty + ' ชิ้น</span>';
-  html += '<span>' + fmtMoneyStyled(itemsTotal) + '</span>';
-  html += '</div></div></div>';
-}
+  html += '<div class="fr"><div><label>Unit Type</label><div>' + (p.unitType || '-') + '</div></div>';
+  html += '<div><label>Dealer</label><div>' + (d ? d.name : '-') + ' ' + (d ? levelTag(d.level) : '') + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">Forecast Amount</label><div style="font-size:.94rem">' + fmtMoneyStyled(p.forecastAmount) + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">Real Amount</label><div style="font-size:.94rem;font-weight:700;color:#22c55e">' + (p.realAmount ? fmtMoney(p.realAmount) + ' ฿' : '-') + '</div></div></div>';
+  html += '<div class="fr"><div><label>DJI Dealer</label><div>' + (p.djiDealer || '-') + '</div></div>';
+  html += '<div><label>Model</label><div>' + getPipeModelSummary(p) + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">Register Date</label><div>' + fD(p.registerDate) + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">TOR</label><div>' + (p.tor || '-') + '</div></div></div>';
+  html += '<div class="fr"><div><label>Forecast Amount</label><div>' + fmtMoneyStyled(p.forecastAmount) + '</div></div>';
+  html += '<div><label>Real Amount</label><div>' + (p.realAmount ? fmtMoney(p.realAmount) + ' ฿' : '-') + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">Bidding Date</label><div>' + fD(p.biddingDate) + ' ' + dlB(p.biddingDate, isWon || isLost) + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">Shipment Date</label><div>' + fD(p.shipmentDate) + '</div></div></div>';
+  html += '<div class="fr"><div><label>Register Date</label><div>' + fD(p.registerDate) + '</div></div>';
+  html += '<div><label>TOR</label><div>' + (p.tor || '-') + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px"><div><label style="color:#64748b;font-size:.68rem">หนังสือแต่งตั้ง</label><div>' + (p.appointmentLetter || '-') + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">งานซ้ำ</label><div>' + (p.recurring ? '✅ ใช่' : 'ไม่ใช่') + '</div></div></div>';
+  html += '<div class="fr"><div><label>Bidding Date</label><div>' + fD(p.biddingDate) + ' ' + dlB(p.biddingDate, isWon || isLost) + '</div></div>';
+  html += '<div><label>Shipment Date</label><div>' + fD(p.shipmentDate) + '</div></div></div>';
   
-  html += '<div class="fr" style="margin-top:4px">';
-  html += '<div><label style="color:#64748b;font-size:.68rem">🎯 Next Action</label><div>' + (p.nextAction ? '<span class="next-action">' + sanitize(p.nextAction) + '</span>' : '<span style="color:#475569">ไม่ได้ตั้ง</span>') + '</div></div>';
-  html += '<div><label style="color:#64748b;font-size:.68rem">📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
+  html += '<div class="fr"><div><label>หนังสือแต่งตั้ง</label><div>' + (p.appointmentLetter || '-') + '</div></div>';
+  html += '<div><label>งานซ้ำ</label><div>' + (p.recurring ? '✅ ใช่' : 'ไม่ใช่') + '</div></div></div>';
   
-  if (p.remark) html += '<div style="margin-top:4px"><label style="color:#64748b;font-size:.68rem">Remark</label><div style="white-space:pre-wrap;font-size:.76rem">' + sanitize(p.remark) + '</div></div>';
+  html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + (p.nextAction ? '<span class="next-action">' + sanitize(p.nextAction) + '</span>' : '<span style="color:#475569">ไม่ได้ตั้ง</span>') + '</div></div>';
+  html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
   
-  if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div style="font-size:.72rem;color:#86efac;font-weight:600">✅ Win Reason:</div><div style="font-size:.76rem;color:#86efac">' + sanitize(p.winReason) + (p.winNote ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
+  if (p.remark) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
   
-  if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div style="font-size:.72rem;color:#fca5a5;font-weight:600">❌ Loss Reason:</div><div style="font-size:.76rem;color:#fca5a5">' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
+  if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
+  if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div>❌ Loss Reason:</div><div>' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
   
   html += '</div>';
 
@@ -964,16 +347,27 @@ if (pItems.length > 1) {
   }
   html += '</div></div>';
 
-  // Updates Timeline
+// Updates Timeline (พร้อมแก้ไขและลบ)
   html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml"><button class="btn bsm bp" onclick="showPipeLogM(\'' + p.id + '\')">➕ Update</button></span></h2>';
   if (logs.length) {
     html += '<div class="tl">';
     for (var li = 0; li < logs.length; li++) {
       var l = logs[li];
+      var isEditable = l.type !== 'win' && l.type !== 'lost';
+      
       html += '<div class="ti tl-' + (l.type || 'note') + '">';
       html += '<div style="display:flex;justify-content:space-between">';
       html += '<div class="td2">' + fDT(l.date) + '</div>';
-      html += '<button class="btn bsm bd" onclick="event.stopPropagation();ST.delete(\'pipeLog\',\'' + l.id + '\');render()" style="padding:1px 4px">✕</button>';
+      html += '<div style="display:flex;gap:4px">';
+      if (isEditable) {
+        // ปุ่มแก้ไข
+        html += '<button class="btn bsm bo" onclick="event.stopPropagation();editPipelineLog(\'' + l.id + '\', \'' + p.id + '\', \'' + sanitize(l.content || '').replace(/'/g, "\\'") + '\', \'' + (l.type || 'update') + '\', \'' + (l.date || '') + '\')" style="padding:1px 6px" title="แก้ไข">✏️</button>';
+        // ปุ่มลบ
+        html += '<button class="btn bsm bd" onclick="event.stopPropagation();deletePipelineLog(\'' + l.id + '\', \'' + p.id + '\')" style="padding:1px 4px" title="ลบ">🗑️</button>';
+      } else {
+        html += '<span style="font-size:10px;color:var(--text2);padding:2px 6px">🔒</span>';
+      }
+      html += '</div>';
       html += '</div>';
       html += '<div class="tt2">' + logL(l.type) + '</div>';
       html += '<div class="tc2">' + sanitize(l.content) + '</div>';
@@ -985,6 +379,13 @@ if (pItems.length > 1) {
     html += '<div class="empty"><p>ยังไม่มี Update — กด ➕ เพื่อบันทึก</p></div>';
   }
   html += '</div>';
+  
+  // Inline Comment
+  html += '<div class="card"><div class="inline-comment"><textarea id="quickPipeComment" rows="2" placeholder="พิมพ์ comment ด่วน... (เช่น โทรติดตามแล้ว, ได้รับเอกสารแล้ว)"></textarea>';
+  html += '<div class="inline-comment-actions" style="display:flex;gap:6px;margin-top:6px">';
+  html += '<button class="btn bsm bp" onclick="addQuickPipeComment(\'' + p.id + '\')">💬 เพิ่ม Comment</button>';
+  html += '<button class="btn bsm bs" onclick="addQuickPipeFollowup(\'' + p.id + '\')">📞 + นัดติดตาม</button>';
+  html += '</div></div></div>';
 
   el.innerHTML = html;
 }
@@ -993,7 +394,7 @@ function changePipeStatus(pipeId, newStatus) {
   var old = ST.getOne('pipeline', pipeId);
   if (!old || old.status === newStatus) return;
   
-  if (['win','ordered'].indexOf(newStatus) !== -1 && ['win','ordered','delivered'].indexOf(old.status) === -1) {
+  if (newStatus === 'win' || newStatus === 'ordered') {
     showWinReasonM(pipeId, newStatus); return;
   }
   if (newStatus === 'lost' && old.status !== 'lost') {
@@ -1023,4 +424,677 @@ function copyPipeRow(pipeId) {
     tsv += '\t' + fDShort(logs[i].date ? logs[i].date.split('T')[0] : '') + ' ' + (logs[i].content || '');
   }
   copyText(tsv, '📋 Copy Pipeline Row');
+}
+
+// ================================================================
+// PIPELINE BOARD
+// ================================================================
+function rPipeBoard(el) {
+  document.getElementById('pgT').textContent = '📋 Pipeline Board';
+  var cfg = getConfig();
+  var allPipes = ST.getAll('pipeline');
+  var dealers = ST.getAll('dealers');
+  
+  var pipes = allPipes;
+  if (pipeBoardDealer !== 'all') {
+    pipes = pipes.filter(function(p) { return p.dealerId === pipeBoardDealer; });
+  }
+  
+  var dealerIds = {};
+  allPipes.forEach(function(p) { if (p.dealerId) dealerIds[p.dealerId] = true; });
+  var pipelineDealers = dealers.filter(function(d) { return dealerIds[d.id]; });
+  
+  var totalFiltered = 0;
+  var activeFiltered = 0;
+  pipes.forEach(function(p) {
+    var amt = Number(p.forecastAmount) || 0;
+    totalFiltered += amt;
+    if (['lost','delivered'].indexOf(p.status) === -1) activeFiltered += amt;
+  });
+
+  var activeStatuses = ['prospect','tor_review','quotation','bidding','negotiation'];
+  var closedStatuses = ['win','ordered','delivered','on_hold','lost','recurring'];
+  
+  var visibleStatuses = cfg.pipelineStatuses.filter(function(st) {
+    if (pipeBoardMode === 'active' && closedStatuses.indexOf(st.id) !== -1) return false;
+    var items = pipes.filter(function(p) { return p.status === st.id; });
+    if (items.length === 0 && pipeBoardMode !== 'all') return false;
+    return true;
+  });
+
+  var h = '';
+  
+  h += '<div class="pb2-toolbar">';
+  h += '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>';
+  h += '<div class="pb2-mode"><button class="btn bsm ' + (pipeBoardMode === 'active' ? 'bp' : 'bo') + '" onclick="pipeBoardMode=\'active\';render()">⚡ Active</button>';
+  h += '<button class="btn bsm ' + (pipeBoardMode === 'all' ? 'bp' : 'bo') + '" onclick="pipeBoardMode=\'all\';render()">📊 ทั้งหมด</button></div>';
+  h += '<select id="pipeBoardDlr" onchange="pipeBoardDealer=this.value;render()" class="pb2-dealer-sel">';
+  h += '<option value="all"' + (pipeBoardDealer === 'all' ? ' selected' : '') + '>🏪 ทุก Dealer (' + allPipes.length + ')</option>';
+  pipelineDealers.forEach(function(d) {
+    var cnt = allPipes.filter(function(p) { return p.dealerId === d.id; }).length;
+    h += '<option value="' + d.id + '"' + (pipeBoardDealer === d.id ? ' selected' : '') + '>' + d.name + ' (' + cnt + ')</option>';
+  });
+  h += '</select></div>';
+  
+  h += '<div class="pb2-stats">📊 ' + pipes.length + ' โครงการ • Active: ' + fmtMoneyStyled(activeFiltered) + ' • Total: ' + fmtMoneyStyled(totalFiltered) + '</div>';
+
+  h += '<div class="pb2-scroll-wrap">';
+  h += '<button class="pb2-scroll-btn pb2-scroll-left" onclick="scrollBoard(-1)">◀</button>';
+  h += '<div class="pb2-board" id="pb2Board">';
+  
+  visibleStatuses.forEach(function(st) {
+    var items = pipes.filter(function(p) { return p.status === st.id; });
+    var amt = 0;
+    items.forEach(function(p) { amt += (Number(p.forecastAmount) || 0); });
+    
+    items.sort(function(a, b) {
+      var ba = a.biddingDate || '9999';
+      var bb = b.biddingDate || '9999';
+      if (ba !== bb) return ba.localeCompare(bb);
+      return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
+    });
+    
+    var isCollapsed = pipeBoardCollapsed[st.id] === true;
+    
+    if (isCollapsed) {
+      h += '<div class="pb2-col pb2-col-collapsed" onclick="toggleBoardCol(\'' + st.id + '\')">';
+      h += '<div class="pb2-col-collapsed-inner" style="border-color:' + st.color + '">';
+      h += '<div class="pb2-col-collapsed-name">' + st.name + '</div>';
+      h += '<div class="pb2-col-collapsed-count">' + items.length + '</div>';
+      h += '<div class="pb2-col-collapsed-amt">' + fmtMoneyShort(amt) + '</div></div></div>';
+    } else {
+      h += '<div class="pb2-col" data-pipecol="' + st.id + '">';
+      h += '<div class="pb2-hd" style="border-bottom-color:' + st.color + '">';
+      h += '<div class="pb2-hd-left"><span class="pb2-hd-dot" style="background:' + st.color + '"></span>';
+      h += '<span class="pb2-hd-name">' + st.name + '</span>';
+      h += '<span class="pb2-hd-cnt">' + items.length + '</span></div>';
+      h += '<button class="pb2-hd-collapse" onclick="event.stopPropagation();toggleBoardCol(\'' + st.id + '\')">◀</button></div>';
+      h += '<div class="pb2-body">';
+      if (items.length === 0) {
+        h += '<div class="pb2-empty">ว่าง</div>';
+      } else {
+        items.forEach(function(p, idx) {
+          h += pipeBoardCardV2(p, st, idx);
+        });
+      }
+      h += '</div>';
+      h += '<div class="pb2-foot"><span>' + items.length + ' โครงการ</span><span>' + fmtMoneyStyled(amt) + '</span></div></div>';
+    }
+  });
+  
+  h += '</div>';
+  h += '<button class="pb2-scroll-btn pb2-scroll-right" onclick="scrollBoard(1)">▶</button>';
+  h += '</div>';
+  h += '<div class="pb2-legend">💡 ลากการ์ดย้าย Status • กดหัวคอลัมน์เพื่อพับ • เลื่อนซ้ายขวาด้วย ◀▶ หรือลากนิ้ว</div>';
+
+  el.innerHTML = h;
+  initBoardScroll();
+}
+
+function pipeBoardCardV2(p, st, idx) {
+  var d = ST.getOne('dealers', p.dealerId);
+  var lastLog = ST.pipeLogsByPipe(p.id)[0];
+  var amt = Number(p.forecastAmount) || 0;
+  
+  var bidHTML = '';
+  if (p.biddingDate) {
+    var bd = dTo(p.biddingDate);
+    if (bd < 0) bidHTML = '<div class="pb2-bid bid-past">Bid: ' + fDShort(p.biddingDate) + ' (เลย)</div>';
+    else if (bd <= 7) bidHTML = '<div class="pb2-bid bid-urgent">🔴 Bid ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
+    else if (bd <= 30) bidHTML = '<div class="pb2-bid bid-soon">🟡 Bid ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
+  }
+
+  var h = '<div class="pb2-card" draggable="true" data-pipeid="' + p.id + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
+  h += '<div class="pb2-card-head"><span class="pb2-card-num">#' + (idx + 1) + '</span><span class="pb2-card-title">' + sanitize((p.projectName || '').substr(0, 30)) + '</span></div>';
+  h += '<div class="pb2-card-dealer">' + (d ? d.name : '-') + '</div>';
+  if (p.model) h += '<div class="pb2-card-model">📦 ' + sanitize((p.model || '').substr(0, 20)) + (p.modelQty > 1 ? ' x' + p.modelQty : '') + '</div>';
+  h += '<div class="pb2-card-amt">' + fmtMoneyStyled(amt) + '</div>';
+  h += bidHTML;
+  if (p.nextAction) {
+    var naClass = '';
+    if (p.followupDate) {
+      var fd = dTo(p.followupDate);
+      if (fd < 0) naClass = ' na-overdue';
+      else if (fd <= 3) naClass = ' na-soon';
+    }
+    h += '<div class="pb2-card-na' + naClass + '">🎯 ' + sanitize((p.nextAction || '').substr(0, 20)) + '</div>';
+  }
+  if (lastLog) h += '<div class="pb2-card-log">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) + '</div>';
+  h += '</div>';
+  return h;
+}
+
+function toggleBoardCol(statusId) {
+  if (pipeBoardCollapsed[statusId]) delete pipeBoardCollapsed[statusId];
+  else pipeBoardCollapsed[statusId] = true;
+  render();
+}
+
+function scrollBoard(dir) {
+  var board = document.getElementById('pb2Board');
+  if (!board) return;
+  board.scrollBy({ left: dir * 280, behavior: 'smooth' });
+}
+
+function initBoardScroll() {
+  var board = document.getElementById('pb2Board');
+  if (!board) return;
+  var isDown = false, startX = 0, scrollLeft = 0;
+  board.addEventListener('mousedown', function(e) {
+    if (e.target.closest('.pb2-card')) return;
+    isDown = true;
+    board.classList.add('pb2-grabbing');
+    startX = e.pageX - board.offsetLeft;
+    scrollLeft = board.scrollLeft;
+  });
+  board.addEventListener('mouseleave', function() { isDown = false; board.classList.remove('pb2-grabbing'); });
+  board.addEventListener('mouseup', function() { isDown = false; board.classList.remove('pb2-grabbing'); });
+  board.addEventListener('mousemove', function(e) {
+    if (!isDown) return;
+    e.preventDefault();
+    var x = e.pageX - board.offsetLeft;
+    var walk = (x - startX) * 1.5;
+    board.scrollLeft = scrollLeft - walk;
+  });
+}
+
+// ================================================================
+// HELPER FUNCTIONS
+// ================================================================
+function getPipeSummary() {
+  var cfg = getConfig();
+  var all = ST.getAll('pipeline');
+  var summary = {};
+  var totalPipeline = 0;
+  var totalWon = 0;
+  for (var i = 0; i < cfg.pipelineStatuses.length; i++) {
+    var s = cfg.pipelineStatuses[i];
+    var items = all.filter(function(p) { return p.status === s.id; });
+    var amount = items.reduce(function(a,p) { return a + (Number(p.forecastAmount)||0); }, 0);
+    summary[s.id] = {count: items.length, amount: amount, name: s.name, color: s.color};
+    if (['lost','on_hold'].indexOf(s.id) === -1) totalPipeline += amount;
+    if (['win','ordered','delivered'].indexOf(s.id) !== -1) totalWon += amount;
+  }
+  return {summary: summary, totalPipeline: totalPipeline, totalWon: totalWon, totalCount: all.length};
+}
+
+function getPipeName(statusId) {
+  var cfg = getConfig();
+  for (var i = 0; i < cfg.pipelineStatuses.length; i++) {
+    if (cfg.pipelineStatuses[i].id === statusId) return cfg.pipelineStatuses[i].name;
+  }
+  return statusId;
+}
+
+// ================================================================
+// INLINE PIPE COMMENT
+// ================================================================
+function addQuickPipeComment(pipeId) {
+  var text = document.getElementById('quickPipeComment')?.value.trim();
+  if (!text) { toast('กรุณาพิมพ์ comment'); return; }
+  ST.add('pipeLog', { pipeId: pipeId, type: 'note', content: text, date: _nw() });
+  document.getElementById('quickPipeComment').value = '';
+  toast('💬 เพิ่ม comment แล้ว');
+  render();
+}
+
+function addQuickPipeFollowup(pipeId) {
+  var note = prompt('📞 รายละเอียดการติดตาม:', '');
+  if (!note) return;
+  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
+  ST.add('pipeLog', { pipeId: pipeId, type: 'followup', content: note + (dueDate ? ' (นัดติดตาม ' + dueDate + ')' : ''), date: _nw() });
+  if (dueDate) ST.update('pipeline', pipeId, { followupDate: dueDate });
+  toast('📞 บันทึกนัดติดตามแล้ว');
+  render();
+}
+
+// ================================================================
+// PIPELINE DASHBOARD
+// ================================================================
+function rPipeDashboard(el) {
+  document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
+  var allPipes = ST.getAll('pipeline');
+  var activeCount = 0, activeAmt = 0, wonCount = 0, wonAmt = 0, lostCount = 0, lostAmt = 0;
+  for (var i = 0; i < allPipes.length; i++) {
+    var amt = Number(allPipes[i].forecastAmount) || 0;
+    if (allPipes[i].status === 'win' || allPipes[i].status === 'ordered' || allPipes[i].status === 'delivered') {
+      wonCount++; wonAmt += amt;
+    } else if (allPipes[i].status === 'lost') {
+      lostCount++; lostAmt += amt;
+    } else if (allPipes[i].status !== 'on_hold') {
+      activeCount++; activeAmt += amt;
+    }
+  }
+  var closedCount = wonCount + lostCount;
+  var winRate = closedCount > 0 ? Math.round(wonCount / closedCount * 100) : 0;
+  var wrColor = winRate >= 70 ? '#22c55e' : winRate >= 50 ? '#f59e0b' : '#ef4444';
+  
+  el.innerHTML = '<div class="card"><h2>📊 Pipeline Dashboard</h2>' +
+    '<div class="sr"><div class="sc"><div class="sn c1">' + allPipes.length + '</div><div class="sl">ทั้งหมด</div></div>' +
+    '<div class="sc"><div class="sn c2">' + activeCount + '</div><div class="sl">Active</div></div>' +
+    '<div class="sc"><div class="sn c2">' + fmtMoneyShort(activeAmt) + '</div><div class="sl">มูลค่า Active</div></div>' +
+    '<div class="sc"><div class="sn c2">' + wonCount + '</div><div class="sl">Won</div></div>' +
+    '<div class="sc"><div class="sn c4">' + lostCount + '</div><div class="sl">Lost</div></div>' +
+    '<div class="sc"><div class="sn" style="color:' + wrColor + '">' + winRate + '%</div><div class="sl">Win Rate</div></div></div>' +
+    '<div class="bg"><button class="btn bp" onclick="go(\'pipeline\')">📊 ดูทั้งหมด</button>' +
+    '<button class="btn bo" onclick="go(\'pipeBoard\')">📋 Board</button></div></div>';
+}
+// ================================================================
+// PIPELINE ACTION ITEMS
+// ================================================================
+function getPipeActions() {
+  var saved = localStorage.getItem('v7_pipeActions');
+  if (saved) {
+    try { return JSON.parse(saved); } catch(e) { return []; }
+  }
+  return [];
+}
+
+function savePipeActions(list) {
+  localStorage.setItem('v7_pipeActions', JSON.stringify(list));
+}
+
+function getPipeActionsByPipe(pipeId) {
+  var actions = getPipeActions();
+  return (actions || []).filter(function(a) {
+    return a.pipeId === pipeId && a.status !== 'dropped';
+  });
+}
+
+function autoUpdatePipeNextAction(pipeId) {
+  var actions = getPipeActionsByPipe(pipeId);
+  var pending = (actions || []).filter(function(a) { return a.status === 'pending'; });
+  if (!pending.length) return;
+  pending.sort(function(a, b) {
+    var da = ftParseDate(a.dueDate);
+    var db = ftParseDate(b.dueDate);
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
+  var nearest = pending[0];
+  var pipe = ST.getOne('pipeline', pipeId);
+  if (!pipe) return;
+  var updates = {};
+  if (nearest.text) updates.nextAction = nearest.text;
+  if (nearest.dueDate) updates.followupDate = nearest.dueDate;
+  ST.update('pipeline', pipeId, updates);
+}
+
+function markPipeActionDone(actionId) {
+  var response = prompt('💬 ผลลัพธ์ / ตอบกลับ (ถ้ามี):');
+  var actions = getPipeActions();
+  var pipeId = '';
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      actions[i].status = 'done';
+      actions[i].doneDate = _td();
+      if (response) actions[i].response = response;
+      pipeId = actions[i].pipeId;
+      ST.add('pipeLog', {
+        pipeId: pipeId,
+        type: 'progress',
+        content: '✅ เสร็จ: ' + actions[i].text + (response ? ' — ' + response : ''),
+        date: _nw()
+      });
+      break;
+    }
+  }
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+  toast('✅ เสร็จแล้ว!');
+  render();
+}
+
+function extendPipeAction(actionId) {
+  var newDate = prompt('📅 กำหนดใหม่ (DD/MM/YYYY):');
+  if (!newDate) return;
+  var actions = getPipeActions();
+  var pipeId = '';
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      var oldDate = actions[i].dueDate;
+      actions[i].dueDate = newDate;
+      pipeId = actions[i].pipeId;
+      ST.add('pipeLog', {
+        pipeId: pipeId,
+        type: 'followup',
+        content: '🔄 เลื่อนกำหนด: ' + actions[i].text + ' (' + oldDate + ' → ' + newDate + ')',
+        date: _nw()
+      });
+      break;
+    }
+  }
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+  toast('📅 เลื่อนกำหนดแล้ว');
+  render();
+}
+
+function dropPipeAction(actionId) {
+  if (!confirm('ยกเลิก Action Item นี้?')) return;
+  var actions = getPipeActions();
+  var pipeId = '';
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      actions[i].status = 'dropped';
+      pipeId = actions[i].pipeId;
+      break;
+    }
+  }
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+  toast('🗑️ ยกเลิกแล้ว');
+  render();
+}
+
+function buildPipeActionsHTML(pipeId) {
+  var actions = getPipeActionsByPipe(pipeId);
+  var pending = (actions || []).filter(function(a) { return a.status === 'pending'; });
+  var done = (actions || []).filter(function(a) { return a.status === 'done'; });
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  pending.sort(function(a, b) {
+    var da = ftParseDate(a.dueDate);
+    var db = ftParseDate(b.dueDate);
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
+
+  var h = '<div class="card"><h2>⏳ Action Items';
+  if (pending.length > 0) h += ' <span class="pa-count-badge">' + pending.length + ' ค้าง</span>';
+  h += ' <span class="ml"><button class="btn bsm bp" onclick="showAddPipeActionM(\'' + pipeId + '\')">➕</button></span></h2>';
+
+  if (!pending.length && !done.length) {
+    h += '<div class="empty"><p>ไม่มี Action Item — กด ➕ เพื่อเพิ่ม</p></div></div>';
+    return h;
+  }
+
+  if (pending.length) {
+    pending.forEach(function(a) {
+      var due = ftParseDate(a.dueDate);
+      var daysLeft = due ? Math.ceil((due - now) / 86400000) : 999;
+      var urgClass = 'pa-normal';
+      var urgLabel = '';
+      if (daysLeft < 0) {
+        urgClass = 'pa-overdue';
+        urgLabel = '<span class="pa-urg pa-urg-red">🔴 เกิน ' + Math.abs(daysLeft) + ' วัน</span>';
+      } else if (daysLeft === 0) {
+        urgClass = 'pa-overdue';
+        urgLabel = '<span class="pa-urg pa-urg-red">🔴 วันนี้!</span>';
+      } else if (daysLeft <= 2) {
+        urgClass = 'pa-urgent';
+        urgLabel = '<span class="pa-urg pa-urg-orange">🟠 อีก ' + daysLeft + ' วัน</span>';
+      } else if (daysLeft <= 5) {
+        urgClass = 'pa-soon';
+        urgLabel = '<span class="pa-urg pa-urg-yellow">🟡 อีก ' + daysLeft + ' วัน</span>';
+      } else {
+        urgLabel = '<span class="pa-urg pa-urg-green">🟢 อีก ' + daysLeft + ' วัน</span>';
+      }
+      h += '<div class="pa-item ' + urgClass + '">';
+      h += '<div class="pa-dot"></div>';
+      h += '<div class="pa-content">';
+      h += '<div class="pa-header"><span class="pa-text">' + sanitize(a.text) + '</span>' + (a.priority === 1 ? ' <span class="pa-priority">🔴 เร่งด่วน</span>' : '') + '</div>';
+      h += '<div class="pa-meta">📅 กำหนด: <strong>' + (a.dueDate || '-') + '</strong> ' + urgLabel + '</div>';
+      if (a.note) h += '<div class="pa-note">' + sanitize(a.note) + '</div>';
+      h += '<div class="pa-actions">';
+      h += '<button class="btn-xs pa-btn-done" onclick="markPipeActionDone(\'' + a.id + '\')">✅ เสร็จแล้ว</button>';
+      h += '<button class="btn-xs pa-btn-extend" onclick="extendPipeAction(\'' + a.id + '\')">📅 เลื่อนกำหนด</button>';
+      h += '<button class="btn-xs pa-btn-drop" onclick="dropPipeAction(\'' + a.id + '\')">✕</button>';
+      h += '</div></div></div>';
+    });
+  }
+
+  if (done.length) {
+    h += '<div class="pa-done-toggle" onclick="togglePaDone()">✅ เสร็จแล้ว (' + done.length + ') <span id="paDoneArrow">▶</span></div>';
+    h += '<div class="pa-done-list" id="paDoneList" style="display:none">';
+    done.sort(function(a, b) {
+      var da = ftParseDate(a.doneDate || a.createdDate);
+      var db = ftParseDate(b.doneDate || b.createdDate);
+      if (!da) return 1;
+      if (!db) return -1;
+      return db - da;
+    });
+    done.forEach(function(a) {
+      h += '<div class="pa-item pa-done">';
+      h += '<div class="pa-dot pa-dot-done"></div>';
+      h += '<div class="pa-content">';
+      h += '<div class="pa-text" style="text-decoration:line-through;opacity:0.6">' + sanitize(a.text) + '</div>';
+      h += '<div class="pa-meta" style="opacity:0.5">✅ ' + (a.doneDate || '-');
+      if (a.response) h += ' — ' + sanitize(a.response);
+      h += '</div></div></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function togglePaDone() {
+  var el = document.getElementById('paDoneList');
+  var arrow = document.getElementById('paDoneArrow');
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = '▶';
+  }
+}
+
+// ================================================================
+// PIPELINE MULTI-MODEL HELPERS
+// ================================================================
+function getPipeItems(p) {
+  if (p.items && p.items.length > 0) return p.items;
+  if (p.model) {
+    return [{
+      model: p.model,
+      qty: Number(p.modelQty) || 1,
+      price: getModelPrice(p.model),
+      total: Number(p.forecastAmount) || 0
+    }];
+  }
+  return [];
+}
+
+function getPipeTotalQty(p) {
+  var items = getPipeItems(p);
+  var total = 0;
+  for (var i = 0; i < items.length; i++) {
+    total += (Number(items[i].qty) || 1);
+  }
+  return total;
+}
+
+function getPipeModelSummary(p) {
+  if (!p) return '';
+  // ถ้ามี items (multi-model)
+  if (p.items && p.items.length > 0) {
+    return p.items.map(function(it) {
+      return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : '');
+    }).join(', ');
+  }
+  // แบบเดิม (single model)
+  return (p.model || '') + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+}
+
+// ================================================================
+// SHOW ADD PIPE ACTION MODAL
+// ================================================================
+function showAddPipeActionM(pipeId) {
+  var pipe = ST.getOne('pipeline', pipeId);
+  if (!pipe) return;
+  var h = '<div style="max-width:450px">';
+  h += '<div style="padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:12px">';
+  h += '<div style="font-weight:600">📊 ' + sanitize(pipe.projectName || pipe.name || '-') + '</div></div>';
+  h += '<div class="fm-group"><label>⚡ Quick Action</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอเอกสารจากลูกค้า\')">📄 รอเอกสาร</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอลูกค้าตอบ Quote\')">💰 รอตอบ Quote</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอ TOR\')">📋 รอ TOR</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'นัด Demo\')">🎯 นัด Demo</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ส่ง Spec เพิ่มเติม\')">🚁 ส่ง Spec</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ติดต่อ DJI\')">📞 ติดต่อ DJI</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'เตรียมเอกสาร Bidding\')">📊 เตรียม Bidding</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'Follow-up ลูกค้า\')">🔄 Follow-up</button>';
+  h += '</div></div>';
+  h += '<div class="fm-group"><label>📝 สิ่งที่ต้องทำ / ติดตาม</label><input type="text" id="paText" class="fm-input" placeholder="เช่น รอ TOR จากลูกค้า..."></div>';
+  h += '<div class="fm-group"><label>📅 กำหนดวัน</label><input type="text" id="paDueDate" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
+  h += '<div class="fm-group"><label>🔴 ความเร่งด่วน</label><select id="paPriority" class="fm-input"><option value="2">ปกติ</option><option value="1">🔴 เร่งด่วน</option></select></div>';
+  h += '<div class="fm-group"><label>📝 หมายเหตุ (ถ้ามี)</label><textarea id="paNote" rows="2" class="fm-input" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="savePipeAction(\'' + pipeId + '\')">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  openM('➕ Action Item', h);
+}
+
+function paQuickFill(text) {
+  var el = document.getElementById('paText');
+  if (el) el.value = text;
+}
+
+function savePipeAction(pipeId) {
+  var text = (document.getElementById('paText').value || '').trim();
+  var dueDate = (document.getElementById('paDueDate').value || '').trim();
+  var priority = parseInt(document.getElementById('paPriority').value) || 2;
+  var note = (document.getElementById('paNote').value || '').trim();
+  if (!text) { toast('กรุณาใส่สิ่งที่ต้องทำ'); return; }
+  var actions = getPipeActions();
+  actions.push({
+    id: 'pa_' + Date.now(),
+    pipeId: pipeId,
+    text: text,
+    dueDate: dueDate,
+    priority: priority,
+    note: note,
+    status: 'pending',
+    createdDate: _td(),
+    doneDate: '',
+    response: ''
+  });
+  savePipeActions(actions);
+  autoUpdatePipeNextAction(pipeId);
+  ST.add('pipeLog', {
+    pipeId: pipeId,
+    type: 'action',
+    content: '➕ Action Item: ' + text + (dueDate ? ' (กำหนด ' + dueDate + ')' : ''),
+    date: _nw()
+  });
+  toast('✅ เพิ่ม Action Item แล้ว');
+  closeMForce();
+  render();
+}
+function fmtMoneyStyled(amount) {
+  var v = parseFloat(amount) || 0;
+  var text = fmtMoney(v);
+  if (v >= 10000000) {
+    return '<span class="val-mega">' + text + ' ฿</span>';
+  } else if (v >= 1500000) {
+    return '<span class="val-big">' + text + ' ฿</span>';
+  }
+  return '<span class="val-normal">' + text + ' ฿</span>';
+}
+// ================================================================
+// EDIT PIPELINE LOG (INLINE MODAL)
+// ================================================================
+function editPipelineLog(logId, pipeId, currentText, currentType, currentDate) {
+  var logTypes = [
+    { value: 'update', label: '📝 อัพเดท' },
+    { value: 'progress', label: '🟢 คืบหน้า' },
+    { value: 'problem', label: '🔴 ปัญหา' },
+    { value: 'solution', label: '🟡 แก้ไข' },
+    { value: 'note', label: '⚪ หมายเหตุ' },
+    { value: 'followup', label: '📞 ติดตาม' }
+  ];
+  
+  var typeOptions = '';
+  for (var i = 0; i < logTypes.length; i++) {
+    typeOptions += '<option value="' + logTypes[i].value + '"' + (currentType === logTypes[i].value ? ' selected' : '') + '>' + logTypes[i].label + '</option>';
+  }
+  
+  openM('✏️ แก้ไข Log', `
+    <div class="fg">
+      <label>📊 ประเภท</label>
+      <select id="el_type" class="fm-input">${typeOptions}</select>
+    </div>
+    <div class="fg">
+      <label>📅 วันที่</label>
+      <input type="text" id="el_date" class="fm-input dp" value="${fD(currentDate)}">
+    </div>
+    <div class="fg">
+      <label>📝 รายละเอียด</label>
+      <textarea id="el_content" rows="4" class="fm-input">${sanitize(currentText)}</textarea>
+    </div>
+    <div class="fm-actions">
+      <button class="btn btn-blue" onclick="savePipelineLogEdit('${logId}', '${pipeId}')">💾 บันทึก</button>
+      <button class="btn bd" onclick="deletePipelineLog('${logId}', '${pipeId}')">🗑️ ลบ</button>
+      <button class="btn" onclick="closeM()">ยกเลิก</button>
+    </div>
+  `);
+}
+
+function savePipelineLogEdit(logId, pipeId) {
+  var newType = document.getElementById('el_type').value;
+  var newDate = dpG('el_date') || _td();
+  var newContent = document.getElementById('el_content').value.trim();
+  
+  if (!newContent) { toast('กรุณาใส่รายละเอียด'); return; }
+  
+  ST.update('pipeLog', logId, {
+    type: newType,
+    content: newContent,
+    date: newDate + 'T' + new Date().toTimeString().slice(0, 8)
+  });
+  
+  closeMForce();
+  toast('💾 แก้ไขแล้ว');
+  render();
+}
+
+function deletePipelineLog(logId, pipeId) {
+  if (!confirm('ลบ Log นี้?')) return;
+  ST.delete('pipeLog', logId);
+  closeMForce();
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
+// ================================================================
+// QUICK PIPE COMMENT & FOLLOWUP
+// ================================================================
+function addQuickPipeComment(pipeId) {
+  var text = document.getElementById('quickPipeComment')?.value.trim();
+  if (!text) { toast('กรุณาพิมพ์ comment'); return; }
+  
+  ST.add('pipeLog', {
+    pipeId: pipeId,
+    type: 'note',
+    content: text,
+    date: _nw()
+  });
+  
+  document.getElementById('quickPipeComment').value = '';
+  toast('💬 เพิ่ม comment แล้ว');
+  render();
+}
+
+function addQuickPipeFollowup(pipeId) {
+  var note = prompt('📞 รายละเอียดการติดตาม:', '');
+  if (!note) return;
+  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
+  
+  ST.add('pipeLog', {
+    pipeId: pipeId,
+    type: 'followup',
+    content: note + (dueDate ? ' (นัดติดตาม ' + dueDate + ')' : ''),
+    date: _nw()
+  });
+  
+  if (dueDate) {
+    ST.update('pipeline', pipeId, { followupDate: dueDate });
+  }
+  
+  toast('📞 บันทึกนัดติดตามแล้ว');
+  render();
 }

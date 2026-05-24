@@ -276,6 +276,7 @@ function render() {
     today: rToday, kpi: rKPI,
     report: rWeeklyReport, dashboard: rDashboard, health: rDataHealth,
     dealers: rDealers, dealerDetail: rDealerDet,pipeDash: rPipeDashboard,
+    contactLogs: rContactLogs,
     pipeline: rPipeline, pipeBoard: rPipeBoard, pipeDetail: rPipeDet,
     forecast: rForecast,
     visits: rVisits, visitDetail: rVisitDet,
@@ -364,6 +365,7 @@ function fabAct(type) {
   toggleFab();
   var dealerId = S.dealerId || '';
   if (type === 'visit') showVisitM(dealerId);
+  else if (type === 'contact') showUnifiedContactForm();
   else if (type === 'followup') showFollowupM(dealerId);
   else if (type === 'pipeline') showPipelineM(dealerId);
   else if (type === 'line') showLineLogM(dealerId);
@@ -828,11 +830,66 @@ setInterval(updClk, 1000); updClk();
 // ================================================================
 function checkNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  ST.filter('pipeline',function(p){return p.biddingDate&&dTo(p.biddingDate)===1&&['lost','delivered'].indexOf(p.status)===-1;}).forEach(function(p){new Notification('⏳ Bidding พรุ่งนี้!',{body:p.projectName,tag:'bid'+p.id});});
-  ST.filter('meetings',function(m){return dTo(m.date)===1;}).forEach(function(m){new Notification('📅 ประชุมพรุ่งนี้!',{body:m.title,tag:'mt'+m.id});});
-  ST.filter('tasks',function(t){return t.status==='active'&&t.dueDate&&dTo(t.dueDate)===1;}).forEach(function(t){new Notification('📋 Deadline พรุ่งนี้!',{body:t.title,tag:'tk'+t.id});});
-  ST.filter('pipeline',function(p){return p.followupDate&&dTo(p.followupDate)===0&&['lost','delivered'].indexOf(p.status)===-1;}).forEach(function(p){new Notification('🎯 Follow-up Pipeline วันนี้!',{body:p.projectName,tag:'pa'+p.id});});
+  
+  var today = _td();
+  var tomorrow = addD(today, 1);
+  
+  // Pipeline Bidding
+  ST.filter('pipeline', function(p) {
+    return p.biddingDate && dTo(p.biddingDate) === 1 && ['lost','delivered'].indexOf(p.status) === -1;
+  }).forEach(function(p) {
+    new Notification('⏳ Bidding พรุ่งนี้!', { body: p.projectName, tag: 'bid'+p.id });
+  });
+  
+  // Meetings
+  ST.filter('meetings', function(m) { return dTo(m.date) === 1; }).forEach(function(m) {
+    new Notification('📅 ประชุมพรุ่งนี้!', { body: m.title, tag: 'mt'+m.id });
+  });
+  
+  // TASKS - Due Date Today
+  ST.filter('tasks', function(t) {
+    return t.status === 'active' && t.dueDate === today && t.lastNotified !== today;
+  }).forEach(function(t) {
+    new Notification('📋 งานถึงกำหนดวันนี้!', { body: t.title, tag: 'due_'+t.id });
+    ST.update('tasks', t.id, { lastNotified: today });
+  });
+  
+  // TASKS - Due Date Tomorrow
+  ST.filter('tasks', function(t) {
+    return t.status === 'active' && t.dueDate === tomorrow;
+  }).forEach(function(t) {
+    new Notification('⏰ งานใกล้ถึงกำหนด', { body: t.title + ' จะถึงกำหนดพรุ่งนี้', tag: 'due_soon_'+t.id });
+  });
+  
+  // TASKS - Follow-up Date Today
+  ST.filter('tasks', function(t) {
+    return t.status === 'active' && t.followupDate === today && t.lastFollowupNotified !== today;
+  }).forEach(function(t) {
+    new Notification('📞 นัดติดตามวันนี้!', {
+      body: t.title + (t.followupNote ? ' - ' + t.followupNote : ''),
+      tag: 'fu_'+t.id
+    });
+    ST.update('tasks', t.id, { lastFollowupNotified: today });
+  });
+  
+  // TASKS - Follow-up Tomorrow (ถ้าเปิดเตือนล่วงหน้า)
+  ST.filter('tasks', function(t) {
+    return t.status === 'active' && t.followupNotifyDayBefore && t.followupDate === tomorrow;
+  }).forEach(function(t) {
+    new Notification('📞 นัดติดตามพรุ่งนี้', {
+      body: t.title + (t.followupNote ? ' - ' + t.followupNote : ''),
+      tag: 'fu_soon_'+t.id
+    });
+  });
+  
+  // Pipeline follow-up
+  ST.filter('pipeline', function(p) {
+    return p.followupDate && dTo(p.followupDate) === 0 && ['lost','delivered'].indexOf(p.status) === -1;
+  }).forEach(function(p) {
+    new Notification('🎯 Follow-up Pipeline วันนี้!', { body: p.projectName, tag: 'pa'+p.id });
+  });
 }
+
 // ================================================================
 // APPEARANCE SYSTEM
 // ================================================================

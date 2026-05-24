@@ -953,6 +953,367 @@ function saveEmail() {
   toast('📧 บันทึกแล้ว');
   render();
 }
+// ================================================================
+// UNIFIED CONTACT LOG (เชื่อมโยง Dealer/Pipeline/Task/Meeting)
+// ================================================================
+
+function saveLinkedContactLog(data) {
+  var log = {
+    id: 'cl_' + Date.now(),
+    date: data.date || _td(),
+    time: data.time || '',
+    channel: data.channel,
+    summary: data.summary,
+    createdAt: _nw()
+  };
+  
+  if (data.dealerId) { log.dealerId = data.dealerId; log.refType = 'dealer'; log.refId = data.dealerId; }
+  if (data.pipeId) { log.pipeId = data.pipeId; log.refType = 'pipeline'; log.refId = data.pipeId; }
+  if (data.taskId) { log.taskId = data.taskId; log.refType = 'task'; log.refId = data.taskId; }
+  if (data.meetingId) { log.meetingId = data.meetingId; log.refType = 'meeting'; log.refId = data.meetingId; }
+  
+  var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
+  logs.unshift(log);
+  localStorage.setItem('v7_contact_logs', JSON.stringify(logs));
+  
+  // บันทึกเพิ่มใน collections ที่เกี่ยวข้อง
+  if (data.pipeId) {
+    ST.add('pipeLog', {
+      pipeId: data.pipeId,
+      type: 'contact',
+      content: '📞 ' + data.channel + ': ' + data.summary,
+      date: _nw(),
+      contactId: log.id
+    });
+  }
+  
+  if (data.taskId) {
+    ST.add('taskLogs', {
+      tid: data.taskId,
+      type: 'contact',
+      content: '📞 ' + data.channel + ': ' + data.summary,
+      date: _nw()
+    });
+  }
+  
+  if (data.dealerId) {
+    ST.add('feedback', {
+      dealerId: data.dealerId,
+      text: data.summary,
+      date: data.date || _td(),
+      source: data.channel,
+      contactId: log.id
+    });
+  }
+  
+  return log;
+}
+
+function showUnifiedContactForm(refType, refId) {
+  var dealers = ST.getAll('dealers');
+  var prefillDealerId = '', prefillPipeId = '';
+  
+  if (refType === 'dealer') prefillDealerId = refId;
+  else if (refType === 'pipeline') { prefillPipeId = refId; var pipe = ST.getOne('pipeline', refId); if (pipe) prefillDealerId = pipe.dealerId; }
+  
+  var dealerOpts = '<option value="">-- เลือก --</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    dealerOpts += '<option value="' + dealers[i].id + '"' + (prefillDealerId === dealers[i].id ? ' selected' : '') + '>' + sanitize(dealers[i].name) + '</option>';
+  }
+  
+  var html = '<div style="max-width:500px">' +
+    '<div class="fr"><div class="fg"><label>📅 วันที่</label><input type="text" id="uc_date" class="dp" value="' + _td() + '"></div>' +
+    '<div class="fg"><label>⏰ เวลา</label><input type="time" id="uc_time" value="' + new Date().toTimeString().slice(0,5) + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>📞 ช่องทาง</label><select id="uc_channel">' +
+    '<option value="line">💬 LINE</option><option value="email">📧 Email</option><option value="phone">📞 โทรศัพท์</option>' +
+    '<option value="meeting">🤝 ประชุม</option></select></div>' +
+    '<div class="fg"><label>🏪 Dealer</label><select id="uc_dealer">' + dealerOpts + '</select></div></div>' +
+    '<div class="fr"><div class="fg"><label>📊 Pipeline</label><select id="uc_pipe"><option value="">-- ไม่ระบุ --</option>' +
+    (prefillPipeId ? '<option value="' + prefillPipeId + '" selected>กำลังเชื่อมโยง</option>' : '') + '</select></div>' +
+    '<div class="fg"><label>📋 Task</label><select id="uc_task"><option value="">-- ไม่ระบุ --</option></select></div></div>' +
+    '<div class="fg"><label>📝 รายละเอียด *</label><textarea id="uc_summary" rows="4" placeholder="สรุปการติดต่อ..."></textarea></div>' +
+    '<div class="fg"><label>🎯 ต้องทำอะไรต่อ</label><select id="uc_next_action">' +
+    '<option value="">-- ไม่ต้องทำ --</option><option value="task">📋 สร้างงานใหม่</option>' +
+    '<option value="followup">📞 ตั้งค่าเตือนติดตาม</option><option value="update_pipeline">📊 อัพเดท Pipeline</option></select></div>' +
+    '<div id="uc_task_detail" style="display:none"><div class="fg"><label>📋 ชื่องาน</label><input type="text" id="uc_task_title" placeholder="เช่น ส่งใบเสนอราคา..."></div>' +
+    dpH('uc_task_due', '', 'กำหนดเสร็จ') + '</div>' +
+    '<div id="uc_followup_detail" style="display:none">' + dpH('uc_followup_due', addD(_td(), 3), 'ติดตามอีกครั้งในวันที่') + '</div>' +
+    '<div id="uc_pipeline_detail" style="display:none"><div class="fg"><label>📝 อัพเดท</label><textarea id="uc_pipe_update" rows="2" placeholder="ความคืบหน้า..."></textarea></div>' +
+    '<div class="fg"><label>🔄 เปลี่ยนสถานะ</label><select id="uc_pipe_status"><option value="">-- ไม่เปลี่ยน --</option>' +
+    getConfig().pipelineStatuses.map(function(s) { return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('') +
+    '</select></div></div><div class="fm-actions"><button class="btn btn-blue" onclick="submitUnifiedContact()">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  
+  openM('📞 บันทึกการติดต่อ', html);
+  
+  document.getElementById('uc_dealer').onchange = function() {
+    var did = this.value;
+    var pipeSel = document.getElementById('uc_pipe');
+    var taskSel = document.getElementById('uc_task');
+    pipeSel.innerHTML = '<option value="">-- ไม่ระบุ --</option>';
+    taskSel.innerHTML = '<option value="">-- ไม่ระบุ --</option>';
+    if (did) {
+      var pipes = ST.pipelineByDealer(did);
+      for (var i = 0; i < pipes.length; i++) {
+        if (pipes[i].status !== 'lost' && pipes[i].status !== 'delivered') {
+          pipeSel.innerHTML += '<option value="' + pipes[i].id + '">' + sanitize(pipes[i].projectName || '-') + '</option>';
+        }
+      }
+      var tasks = ST.filter('tasks', function(t) { return t.dealerId === did && t.status === 'active'; });
+      for (var i = 0; i < tasks.length; i++) {
+        taskSel.innerHTML += '<option value="' + tasks[i].id + '">' + sanitize(tasks[i].title) + '</option>';
+      }
+    }
+  };
+  
+  document.getElementById('uc_next_action').onchange = function() {
+    var val = this.value;
+    document.getElementById('uc_task_detail').style.display = val === 'task' ? 'block' : 'none';
+    document.getElementById('uc_followup_detail').style.display = val === 'followup' ? 'block' : 'none';
+    document.getElementById('uc_pipeline_detail').style.display = val === 'update_pipeline' ? 'block' : 'none';
+  };
+  
+  if (prefillDealerId) setTimeout(function() { var el = document.getElementById('uc_dealer'); if (el) el.dispatchEvent(new Event('change')); }, 100);
+}
+
+function submitUnifiedContact() {
+  var summary = document.getElementById('uc_summary').value.trim();
+  if (!summary) { toast('กรุณาใส่รายละเอียด'); return; }
+  
+  var data = {
+    date: dpG('uc_date') || _td(),
+    time: document.getElementById('uc_time').value,
+    channel: document.getElementById('uc_channel').value,
+    summary: summary,
+    dealerId: document.getElementById('uc_dealer').value || '',
+    pipeId: document.getElementById('uc_pipe').value || '',
+    taskId: document.getElementById('uc_task').value || ''
+  };
+  
+  var log = saveLinkedContactLog(data);
+  var nextAction = document.getElementById('uc_next_action').value;
+  
+  if (nextAction === 'task') {
+    var taskTitle = document.getElementById('uc_task_title').value.trim();
+    if (taskTitle) {
+      var newTask = ST.add('tasks', {
+        title: taskTitle, description: 'จาก ' + data.channel + ': ' + summary,
+        dealerId: data.dealerId, pipeId: data.pipeId, dueDate: dpG('uc_task_due'),
+        priority: 'medium', status: 'active', category: 'Contact', contactId: log.id
+      });
+      toast('📋 สร้างงาน: ' + taskTitle);
+    }
+  }
+  
+  if (nextAction === 'followup') {
+    var dueDate = dpG('uc_followup_due');
+    if (dueDate) {
+      var pendingFu = JSON.parse(localStorage.getItem('v7_pending_followups') || '[]');
+      pendingFu.push({ id: 'fu_' + Date.now(), contactId: log.id, dealerId: data.dealerId,
+        pipeId: data.pipeId, note: summary, dueDate: dueDate, channel: data.channel, done: false });
+      localStorage.setItem('v7_pending_followups', JSON.stringify(pendingFu));
+      toast('📞 ตั้งค่าเตือนติดตามวันที่ ' + dueDate);
+    }
+  }
+  
+  if (nextAction === 'update_pipeline' && data.pipeId) {
+    var updateText = document.getElementById('uc_pipe_update').value.trim();
+    var newStatus = document.getElementById('uc_pipe_status').value;
+    if (updateText) ST.add('pipeLog', { pipeId: data.pipeId, type: 'contact',
+      content: '📞 ' + data.channel + ': ' + updateText, date: _nw(), contactId: log.id });
+    if (newStatus) ST.update('pipeline', data.pipeId, { status: newStatus });
+    toast('📊 อัพเดท Pipeline แล้ว');
+  }
+  
+  closeMForce(); toast('✅ บันทึกการติดต่อแล้ว'); render();
+}
+// ================================================================
+// TASK RESCHEDULE (เลื่อน Due Date)
+// ================================================================
+
+function showRescheduleModal(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var oldDueDate = t.dueDate || '';
+  
+  openM('📅 เลื่อนกำหนดเสร็จ', `
+    <div class="fg">
+      <label>📅 วันที่กำหนดเดิม</label>
+      <div class="old-value" style="padding:6px;background:var(--bg2);border-radius:6px">${oldDueDate || 'ไม่ได้ตั้ง'}</div>
+    </div>
+    <div class="fg">
+      <label>📅 กำหนดใหม่ *</label>
+      <input type="text" id="reschedule_new_date" class="dp" value="${oldDueDate || _td()}">
+    </div>
+    <div class="fg">
+      <label>📝 เหตุผลที่เลื่อน</label>
+      <textarea id="reschedule_reason" rows="2" placeholder="เช่น รอเอกสารจากลูกค้า, ลูกค้าขอเลื่อน, งบไม่ออก..."></textarea>
+    </div>
+    <div class="fg">
+      <label>🔔 แจ้งเตือน</label>
+      <div class="check-g">
+        <label><input type="checkbox" id="reschedule_notify" checked> ส่งเตือนใน Notification</label>
+        <label><input type="checkbox" id="reschedule_calendar"> ส่งไปปฏิทิน (.ics)</label>
+      </div>
+    </div>
+    <div class="fm-actions">
+      <button class="btn btn-blue" onclick="saveReschedule('${taskId}')">💾 บันทึก</button>
+      <button class="btn" onclick="closeM()">ยกเลิก</button>
+    </div>
+  `);
+}
+
+function saveReschedule(taskId) {
+  var newDueDate = dpG('reschedule_new_date');
+  var reason = document.getElementById('reschedule_reason').value.trim();
+  var sendNotify = document.getElementById('reschedule_notify')?.checked || false;
+  var sendCalendar = document.getElementById('reschedule_calendar')?.checked || false;
+  
+  if (!newDueDate) { toast('กรุณาใส่วันที่'); return; }
+  
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var oldDueDate = t.dueDate;
+  
+  // บันทึกประวัติ
+  ST.addDueDateHistory(taskId, oldDueDate, newDueDate, reason);
+  
+  // อัพเดท dueDate
+  ST.update('tasks', taskId, { dueDate: newDueDate, updatedAt: _nw() });
+  
+  // เพิ่ม log
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'reschedule',
+    content: `📅 เลื่อนกำหนดจาก ${oldDueDate || '-'} เป็น ${newDueDate}${reason ? ' (' + reason + ')' : ''}`,
+    date: _nw()
+  });
+  
+  // ส่ง Notification
+  if (sendNotify && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('📅 กำหนดการเปลี่ยนแปลง', {
+      body: `งาน "${t.title}" ถูกเลื่อนจาก ${oldDueDate || '-'} เป็น ${newDueDate}`,
+      tag: 'task_' + taskId
+    });
+  }
+  
+  // ส่งไปปฏิทิน
+  if (sendCalendar && typeof exportToICS === 'function') {
+    exportToICS(
+      '📋 ' + t.title,
+      'งานถูกเลื่อนกำหนด: ' + (reason || ''),
+      newDueDate,
+      addD(newDueDate, 1),
+      '',
+      window.location.href
+    );
+  }
+  
+  closeMForce();
+  toast(`📅 เลื่อนกำหนดเป็น ${newDueDate} แล้ว`);
+  render();
+}
+
+// ================================================================
+// FOLLOW-UP DATE MANAGEMENT
+// ================================================================
+
+function setFollowupDate(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  openM('📞 ตั้งค่านัดติดตาม', `
+    <div class="fg">
+      <label>📅 วันที่ต้องติดตาม</label>
+      <input type="text" id="fu_date" class="dp" value="${t.followupDate || addD(_td(), 2)}">
+    </div>
+    <div class="fg">
+      <label>📝 ข้อความเตือน</label>
+      <textarea id="fu_note" rows="2" placeholder="เช่น โทรถามความคืบหน้า, ทวงเอกสาร...">${t.followupNote || ''}</textarea>
+    </div>
+    <div class="fg">
+      <label>🔔 แจ้งเตือนอัตโนมัติ</label>
+      <div class="check-g">
+        <label><input type="checkbox" id="fu_notify" checked> เตือนในวันนั้น</label>
+        <label><input type="checkbox" id="fu_notify_day_before"> เตือนล่วงหน้า 1 วัน</label>
+      </div>
+    </div>
+    <div class="fm-actions">
+      <button class="btn btn-blue" onclick="saveFollowupDate('${taskId}')">💾 บันทึก</button>
+      <button class="btn bd" onclick="clearFollowupDate('${taskId}')">🗑️ ลบการเตือน</button>
+    </div>
+  `);
+}
+
+function saveFollowupDate(taskId) {
+  var dueDate = dpG('fu_date');
+  var note = document.getElementById('fu_note').value.trim();
+  var notifyDayBefore = document.getElementById('fu_notify_day_before')?.checked || false;
+  
+  if (!dueDate) { toast('กรุณาใส่วันที่'); return; }
+  
+  ST.update('tasks', taskId, {
+    followupDate: dueDate,
+    followupNote: note,
+    followupNotifyDayBefore: notifyDayBefore
+  });
+  
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'followup_set',
+    content: `📞 ตั้งนัดติดตามวันที่ ${dueDate}${note ? ' (' + note + ')' : ''}`,
+    date: _nw()
+  });
+  
+  closeMForce();
+  toast(`📞 ตั้งนัดติดตามวันที่ ${dueDate}`);
+  render();
+}
+
+function clearFollowupDate(taskId) {
+  if (!confirm('ลบการเตือนติดตาม?')) return;
+  ST.update('tasks', taskId, { followupDate: '', followupNote: '' });
+  toast('🗑️ ลบการเตือนแล้ว');
+  closeMForce();
+  render();
+}
+
+function markFollowupDone(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var response = prompt('💬 ผลลัพธ์การติดตาม:', '');
+  
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'followup_done',
+    content: `✅ ติดตามแล้ว: ${response || 'เสร็จสิ้น'}`,
+    date: _nw()
+  });
+  
+  ST.update('tasks', taskId, { followupDate: '', followupNote: '' });
+  
+  toast('✅ บันทึกการติดตามแล้ว');
+  render();
+}
+
+function setStartDate(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  openM('🚀 ตั้งวันที่เริ่ม', `
+    <div class="fg">${dpH('start_date', t.startDate || _td(), 'วันที่เริ่มงาน')}</div>
+    <button class="btn btn-blue" onclick="saveStartDate('${taskId}')">💾 บันทึก</button>
+  `);
+}
+
+function saveStartDate(taskId) {
+  var startDate = dpG('start_date');
+  ST.update('tasks', taskId, { startDate: startDate });
+  closeMForce();
+  toast('✅ บันทึกแล้ว');
+  render();
+}
 
 function showTaskM(eid, prefillDealerId) {
   var t = eid ? ST.getOne('tasks', eid) : {};
@@ -1686,4 +2047,96 @@ function processPipelineImport(items) {
   }
   
   return {total: total, success: success, skipped: skipped};
+}
+// ================================================================
+// ADD PIPE ACTION MODAL (สำหรับ Pipeline)
+// ================================================================
+function showAddPipeActionM(pipeId) {
+  var pipe = ST.getOne('pipeline', pipeId);
+  if (!pipe) return;
+  var today = _td();
+
+  var h = '<div style="max-width:450px">';
+  h += '<div style="padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:12px">';
+  h += '<div style="font-weight:600">📊 ' + sanitize(pipe.projectName || pipe.name || '-') + '</div>';
+  h += '</div>';
+
+  // Quick actions
+  h += '<div class="fm-group"><label>⚡ Quick Action</label>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอเอกสารจากลูกค้า\')">📄 รอเอกสาร</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอลูกค้าตอบ Quote\')">💰 รอตอบ Quote</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอ TOR\')">📋 รอ TOR</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'นัด Demo\')">🎯 นัด Demo</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ส่ง Spec เพิ่มเติม\')">🚁 ส่ง Spec</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ติดต่อ DJI\')">📞 ติดต่อ DJI</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'เตรียมเอกสาร Bidding\')">📊 เตรียม Bidding</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'Follow-up ลูกค้า\')">🔄 Follow-up</button>';
+  h += '</div></div>';
+
+  h += '<div class="fm-group"><label>📝 สิ่งที่ต้องทำ / ติดตาม</label>';
+  h += '<input type="text" id="paText" class="fm-input" placeholder="เช่น รอ TOR จากลูกค้า..."></div>';
+
+  h += '<div class="fm-group"><label>📅 กำหนดวัน</label>';
+  h += '<input type="text" id="paDueDate" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
+
+  h += '<div class="fm-group"><label>🔴 ความเร่งด่วน</label>';
+  h += '<select id="paPriority" class="fm-input">';
+  h += '<option value="2">ปกติ</option>';
+  h += '<option value="1">🔴 เร่งด่วน</option>';
+  h += '</select></div>';
+
+  h += '<div class="fm-group"><label>📝 หมายเหตุ (ถ้ามี)</label>';
+  h += '<textarea id="paNote" rows="2" class="fm-input" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>';
+
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="savePipeAction(\'' + pipeId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+
+  openM('➕ Action Item', h);
+}
+
+function paQuickFill(text) {
+  var el = document.getElementById('paText');
+  if (el) el.value = text;
+}
+
+function savePipeAction(pipeId) {
+  var text = (document.getElementById('paText').value || '').trim();
+  var dueDate = (document.getElementById('paDueDate').value || '').trim();
+  var priority = parseInt(document.getElementById('paPriority').value) || 2;
+  var note = (document.getElementById('paNote').value || '').trim();
+
+  if (!text) { toast('กรุณาใส่สิ่งที่ต้องทำ'); return; }
+
+  var actions = getPipeActions();
+  actions.push({
+    id: 'pa_' + Date.now(),
+    pipeId: pipeId,
+    text: text,
+    dueDate: dueDate,
+    priority: priority,
+    note: note,
+    status: 'pending',
+    createdDate: _td(),
+    doneDate: '',
+    response: ''
+  });
+  savePipeActions(actions);
+
+  autoUpdatePipeNextAction(pipeId);
+
+  if (ST && ST.add) {
+    ST.add('pipeLog', {
+      pipeId: pipeId,
+      type: 'action',
+      content: '➕ Action Item: ' + text + (dueDate ? ' (กำหนด ' + dueDate + ')' : ''),
+      date: _nw()
+    });
+  }
+
+  toast('✅ เพิ่ม Action Item แล้ว');
+  closeMForce();
+  render();
 }

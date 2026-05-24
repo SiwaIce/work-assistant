@@ -801,6 +801,8 @@ function isPastDate(day, monthKey) {
   return date < today;
 }
 
+
+
 // ================================================================
 // TASKS (Legacy - ยังใช้งานได้)
 // ================================================================
@@ -833,7 +835,214 @@ function rTasks(el) {
 }
 
 // ================================================================
-// TASK DETAIL
+// แสดง Due Date ของ Step (ใน Card และ Kanban)
+// ================================================================
+
+function renderStepDueDate(step) {
+  if (!step.dueDate) return '';
+  var daysLeft = dTo(step.dueDate);
+  var isOverdue = daysLeft < 0 && !step.done;
+  var isToday = daysLeft === 0 && !step.done;
+  
+  var colorClass = isOverdue ? 'step-overdue' : (isToday ? 'step-today' : 'step-normal');
+  var label = '';
+  if (isOverdue) label = '🔴 เกิน ' + Math.abs(daysLeft) + ' วัน';
+  else if (isToday) label = '🟠 วันนี้!';
+  else if (daysLeft === 1) label = '🟡 พรุ่งนี้';
+  else if (daysLeft <= 3) label = '🟡 อีก ' + daysLeft + ' วัน';
+  
+  return `<div class="step-due ${colorClass}">📅 ${fD(step.dueDate)} ${label ? `<span class="step-due-badge">${label}</span>` : ''}</div>`;
+}
+
+// ================================================================
+// แก้ไข Timeline Log (Inline Edit)
+// ================================================================
+
+function editTimelineLog(logId, currentText, currentType, currentDate) {
+  var cfg = getConfig();
+  var logTypes = [
+    { value: 'note', label: '📝 หมายเหตุ' },
+    { value: 'progress', label: '🟢 คืบหน้า' },
+    { value: 'problem', label: '🔴 ปัญหา' },
+    { value: 'solution', label: '🟡 แก้ไข' },
+    { value: 'followup', label: '📞 ติดตาม' },
+    { value: 'step', label: '✅ Step' },
+    { value: 'update', label: '📝 อัพเดท' }
+  ];
+  
+  var typeOptions = logTypes.map(t => `<option value="${t.value}" ${t.value === currentType ? 'selected' : ''}>${t.label}</option>`).join('');
+  
+  openM('✏️ แก้ไข Log', `
+    <div class="fg">
+      <label>📊 ประเภท</label>
+      <select id="edit_log_type">${typeOptions}</select>
+    </div>
+    <div class="fg">
+      <label>📅 วันที่</label>
+      <input type="text" id="edit_log_date" class="dp" value="${fD(currentDate) || _td()}">
+    </div>
+    <div class="fg">
+      <label>📝 รายละเอียด</label>
+      <textarea id="edit_log_content" rows="4">${sanitize(currentText)}</textarea>
+    </div>
+    <div id="edit_log_step_wrap" style="display:none">
+      <div class="fg">
+        <label>📅 กำหนดเสร็จ (Step)</label>
+        <input type="text" id="edit_log_due" class="dp">
+      </div>
+    </div>
+    <div class="fm-actions">
+      <button class="btn btn-blue" onclick="saveTimelineLog('${logId}')">💾 บันทึก</button>
+      <button class="btn bd" onclick="deleteTimelineLog('${logId}')">🗑️ ลบ</button>
+      <button class="btn" onclick="closeM()">ยกเลิก</button>
+    </div>
+  `);
+  
+  // แสดงฟิลด์ Due Date ถ้าเป็น step
+  var typeSel = document.getElementById('edit_log_type');
+  var stepWrap = document.getElementById('edit_log_step_wrap');
+  
+  if (currentType === 'step') {
+    stepWrap.style.display = 'block';
+    var dueDateInput = document.getElementById('edit_log_due');
+    if (dueDateInput) dueDateInput.value = currentText.match(/📅 Due: ([\d/]+)/)?.[1] || '';
+  }
+  
+  typeSel.onchange = function() {
+    stepWrap.style.display = this.value === 'step' ? 'block' : 'none';
+  };
+}
+
+function saveTimelineLog(logId) {
+  var newType = document.getElementById('edit_log_type').value;
+  var newDate = dpG('edit_log_date') || _td();
+  var newContent = document.getElementById('edit_log_content').value.trim();
+  
+  if (!newContent) { toast('กรุณาใส่รายละเอียด'); return; }
+  
+  // ถ้าเป็น step และมี due date
+  var newDueDate = '';
+  if (newType === 'step') {
+    newDueDate = dpG('edit_log_due');
+    if (newDueDate) newContent = newContent + ` (📅 Due: ${newDueDate})`;
+  }
+  
+  ST.update('taskLogs', logId, {
+    type: newType,
+    content: newContent,
+    date: newDate + 'T' + new Date().toTimeString().slice(0,8)
+  });
+  
+  // ถ้ามี due date และเป็น step ให้อัพเดท task steps ด้วย
+  if (newType === 'step' && newDueDate) {
+    // หา task ที่เกี่ยวข้อง
+    var log = ST.getOne('taskLogs', logId);
+    if (log && log.tid) {
+      var task = ST.getOne('tasks', log.tid);
+      if (task && task.steps) {
+        for (var i = 0; i < task.steps.length; i++) {
+          if (task.steps[i].id === logId || task.steps[i].title === newContent.split('(')[0].trim()) {
+            task.steps[i].dueDate = newDueDate;
+            ST.update('tasks', task.id, { steps: task.steps });
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function deleteTimelineLog(logId) {
+  if (!confirm('ลบ Log นี้?')) return;
+  ST.delete('taskLogs', logId);
+  closeMForce();
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
+// ================================================================
+// เพิ่ม Follow-up ใน Timeline (แก้ไขแล้ว)
+// ================================================================
+
+function addFollowupToTimeline(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var today = _td();
+  var defaultDate = addD(today, 2);
+  
+  openM('📞 เพิ่มนัดติดตาม', `
+    <div class="fg">
+      <label>📅 วันที่ต้องติดตาม *</label>
+      ${dpH('tl_fu_date', defaultDate, 'วันที่ต้องติดตาม *')}
+    </div>
+    <div class="fg">
+      <label>📝 รายละเอียด *</label>
+      <textarea id="tl_fu_note" rows="3" placeholder="เช่น โทรถามความคืบหน้า, ทวงเอกสาร..."></textarea>
+    </div>
+    <div class="fg">
+      <label>🔔 เตือนล่วงหน้า</label>
+      <div class="check-g">
+        <label><input type="checkbox" id="tl_fu_notify_day_before"> เตือนล่วงหน้า 1 วัน</label>
+      </div>
+    </div>
+    <div class="fm-actions">
+      <button class="btn btn-blue" onclick="saveFollowupToTimeline('${taskId}')">💾 บันทึก</button>
+      <button class="btn" onclick="closeM()">ยกเลิก</button>
+    </div>
+  `);
+}
+
+function saveFollowupToTimeline(taskId) {
+  // รับค่าวันที่จาก date picker
+  var dueDateInput = document.getElementById('tl_fu_date');
+  var dueDate = dpG('tl_fu_date');
+  
+  // ถ้าใช้ date picker แบบ dpH ให้ใช้ dpG แทน
+  if (!dueDate || dueDate === '') {
+    dueDate = dpG('tl_fu_date');
+  }
+  
+  var note = document.getElementById('tl_fu_note') ? document.getElementById('tl_fu_note').value.trim() : '';
+  var notifyDayBefore = document.getElementById('tl_fu_notify_day_before') ? document.getElementById('tl_fu_notify_day_before').checked : false;
+  
+  // ตรวจสอบข้อมูล
+  if (!dueDate || dueDate === '') {
+    toast('กรุณาเลือกวันที่');
+    return;
+  }
+  
+  if (!note) {
+    toast('กรุณาใส่รายละเอียด');
+    return;
+  }
+  
+  // อัพเดท task
+  ST.update('tasks', taskId, {
+    followupDate: dueDate,
+    followupNote: note,
+    followupNotifyDayBefore: notifyDayBefore
+  });
+  
+  // เพิ่ม log ใน timeline
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'followup_set',
+    content: `📞 ตั้งนัดติดตามวันที่ ${dueDate}: ${note}`,
+    date: _nw(),
+    dueDate: dueDate
+  });
+  
+  closeMForce();
+  toast(`📞 ตั้งนัดติดตามวันที่ ${dueDate}`);
+  render();
+}
+// ================================================================
+// TASK DETAIL (NEW VERSION with Due Date + Follow-up + Timeline)
 // ================================================================
 
 function rTaskDet(el) {
@@ -842,55 +1051,209 @@ function rTaskDet(el) {
   const logs = ST.taskLogsByTask(t.id);
   const pg = prog(t);
   const isPinned = ST.hasPin(t.id);
+  const dealer = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
+  const isTaskOverdue = isOverdue(t.dueDate, t.status);
+  const isTaskSoon = isDueSoon(t.dueDate, t.status);
+  
   document.getElementById('pgT').textContent = '📋 ' + t.title;
 
-  el.innerHTML = `
+  var html = `
   <div class="bc"><a onclick="go('tasks')">📋 งาน</a><span class="sep">›</span><span class="cur">${sanitize(t.title)}</span></div>
 
-  <div class="card"><h2>📋 ข้อมูลงาน <span class="ml">
-    <button class="btn bsm bs" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,18)}')">⏱️</button>
-    <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('task','${t.id}','${sanitize(t.title)}','');render()">📌</button>
-    <button class="btn bsm bo" onclick="showTaskM('${t.id}')">✏️</button>
-    <button class="btn bsm bd" onclick="delTask('${t.id}')">🗑️</button>
-  </span></h2>
-  <div class="fr"><div><label style="color:#64748b;font-size:.68rem">สถานะ</label><div>${sTag(t.status)} ${t.sequential?'<span class="tag tag-count">⚡ Flow</span>':''}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">สำคัญ</label><div>${pTag(t.priority)}</div></div></div>
-  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">เริ่ม</label><div>${fD(t.startDate)}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">Deadline</label><div>${fD(t.dueDate)} ${dlB(t.dueDate, t.status==='completed')}</div></div></div>
-  ${t.description?`<div style="margin-top:3px">${t.url?`<div style="margin-top:3px"><label style="color:#64748b;font-size:.68rem">🔗 Link</label><div><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">${sanitize(t.url)}</a></div></div>`:''}<label style="color:#64748b;font-size:.68rem">รายละเอียด</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(t.description)}</div></div>`:''}
-  ${t.steps?.length?`<div style="margin-top:4px"><div class="pb" style="height:8px"><div class="pf pf-blue" style="width:${pg}%"></div></div><div style="font-size:.7rem;color:#94a3b8">${pg}%</div></div>`:''}</div>
+  <!-- Task Header -->
+  <div class="card">
+    <h2>📋 ข้อมูลงาน <span class="ml">
+      <button class="btn bsm bs" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,18)}')">⏱️</button>
+      <button class="btn bsm ${isPinned ? 'bw' : 'bo'}" onclick="ST.togglePin('task','${t.id}','${sanitize(t.title)}','');render()">📌</button>
+      <button class="btn bsm bo" onclick="showTaskM('${t.id}')">✏️</button>
+      <button class="btn bsm bd" onclick="delTask('${t.id}')">🗑️</button>
+    </span></h2>
+    <div class="fr">
+      <div><label style="color:#64748b;font-size:.68rem">สถานะ</label><div>${sTag(t.status)} ${t.sequential ? '<span class="tag tag-count">⚡ Flow</span>' : ''}</div></div>
+      <div><label style="color:#64748b;font-size:.68rem">สำคัญ</label><div>${pTag(t.priority)}</div></div>
+    </div>
+    ${t.description ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">รายละเอียด</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(t.description)}</div></div>` : ''}
+    ${t.url ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">🔗 ลิงก์</label><div><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">${sanitize(t.url)}</a></div></div>` : ''}
+  </div>
 
-  <div class="card"><h2>✅ Steps ${t.sequential?'(⚡ ไล่ลำดับ)':''} <span class="ml"><button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></span></h2>
-  ${(t.steps||[]).length ? t.steps.map((s,i) => { const lk = isStepLocked(t,i); checkStepFuOverdue(s);
-  return `<div class="si ${s.done?'done':''} ${lk?'locked-step':''} ${dlC(s.dueDate,s.done)}">
-    <div class="ck ${s.done?'chk':''} ${lk?'locked':''}" onclick="${lk?'':`togStep('${t.id}',${i})`}"></div>
-    <div style="flex:1">
-      <div class="stt" onclick="${lk?'':`editStep('${t.id}',${i})`}">
-        ${i+1}. ${sanitize(s.title)} ${lk?'🔒':''} ${fuBadge(s)}
+  <!-- Date Section -->
+  <div class="card">
+    <h2>📅 กำหนดการ</h2>
+    <div class="date-section">
+      <div class="date-row ${isTaskOverdue ? 'overdue' : isTaskSoon ? 'soon' : ''}">
+        <div class="date-label">📅 กำหนดเสร็จ (Deadline)</div>
+        <div class="date-value">
+          <strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong>
+          ${formatDueDateStatus(t.dueDate, t.status)}
+        </div>
+        <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>
       </div>
-      <div class="sd">${s.startDate?fD(s.startDate):''} ${s.dueDate?'→ '+fD(s.dueDate):''} ${dlB(s.dueDate,s.done)}</div>
-      ${s.notes?`<div style="font-size:.66rem;color:#94a3b8;margin-top:1px">${sanitize(s.notes)}</div>`:''}
-      ${s.url?`<div style="font-size:.66rem;margin-top:1px"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length>40?s.url.substr(0,40)+'...':s.url)}</a></div>`:''}
-      ${buildFuTimeline(t.id, i)}
+      
+      <div class="date-row">
+        <div class="date-label">📞 นัดติดตาม (Follow-up)</div>
+        <div class="date-value">
+          ${t.followupDate ? fD(t.followupDate) : 'ไม่ได้ตั้ง'}
+          ${t.followupDate && dTo(t.followupDate) <= 0 ? '<span class="badge-red">⚠️ ต้องติดตามวันนี้!</span>' : ''}
+        </div>
+        <button class="btn bsm bo" onclick="setFollowupDate('${t.id}')">📞 ตั้ง/แก้ไข</button>
+        ${t.followupDate ? `<button class="btn bsm bs" onclick="markFollowupDone('${t.id}')">✅ ติดตามแล้ว</button>` : ''}
+        <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">➕ เพิ่มนัด</button>
+      </div>
+      
+      <div class="date-row">
+        <div class="date-label">🚀 วันที่เริ่ม</div>
+        <div class="date-value">${fD(t.startDate) || 'ไม่ได้ตั้ง'}</div>
+        <button class="btn bsm bo" onclick="setStartDate('${t.id}')">✏️ แก้ไข</button>
+      </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:3px">
-      <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
-      ${countActiveFu(s)>0?`<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>`:''}
-      <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step','${s.id||i}','${sanitize(s.title).substr(0,18)}')" title="จับเวลา">⏱️</button>
-      <button class="btn bsm bd" onclick="event.stopPropagation();delStep('${t.id}',${i})">✕</button>
+    
+    ${t.dueDateHistory && t.dueDateHistory.length ? `
+    <div class="due-history">
+      <div class="history-title">📝 ประวัติการเลื่อนกำหนด</div>
+      ${t.dueDateHistory.map(function(h, i) {
+        return `<div class="history-item">
+          <span class="history-date">${h.changedAt}</span>
+          <span class="history-change">${h.oldDate || '-'} → ${h.newDate}</span>
+          <span class="history-reason">${h.reason}</span>
+          <span class="history-by">(${h.changedBy})</span>
+        </div>`;
+      }).join('')}
     </div>
-  </div>`; }).join('') : '<div class="empty"><p>ยังไม่มี Steps</p></div>'}
+    ` : ''}
+  </div>
 
-  <div class="card"><h2>📝 Log <span class="ml"><button class="btn bsm bp" onclick="showTaskLogM('${t.id}')">➕</button></span></h2>
-  ${logs.length ? `<div class="tl">${logs.map(l => `<div class="ti tl-${l.type}">
-    <div style="display:flex;justify-content:space-between"><div class="td2">${fDT(l.date)}</div>
-    <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('taskLogs','${l.id}');render()" style="padding:1px 3px">✕</button></div>
-    <div class="tt2">${logL(l.type)}</div><div class="tc2">${sanitize(l.content)}</div>
-  </div>`).join('')}</div>` : '<div class="empty"><p>ยังไม่มี Log</p></div>'}
+  <!-- Steps Section (แสดง Due Date ของแต่ละ Step) -->
+  <div class="card">
+    <h2>✅ Steps ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''} <span class="ml"><button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></span></h2>
+    ${(t.steps || []).length ? t.steps.map(function(s, i) {
+      var lk = isStepLocked(t, i);
+      checkStepFuOverdue(s);
+      return `<div class="si ${s.done ? 'done' : ''} ${lk ? 'locked-step' : ''} ${dlC(s.dueDate, s.done)}">
+        <div class="ck ${s.done ? 'chk' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? '' : `togStep('${t.id}',${i})`}"></div>
+        <div style="flex:1">
+          <div class="stt" onclick="${lk ? '' : `editStep('${t.id}',${i})`}">
+            ${i + 1}. ${sanitize(s.title)} ${lk ? '🔒' : ''} ${fuBadge(s)}
+          </div>
+          <div class="sd">${s.startDate ? fD(s.startDate) : ''} ${s.dueDate ? '→ ' + fD(s.dueDate) : ''} ${dlB(s.dueDate, s.done)}</div>
+          ${renderStepDueDate(s)}
+          ${s.notes ? `<div style="font-size:.66rem;color:#94a3b8;margin-top:1px">${sanitize(s.notes)}</div>` : ''}
+          ${s.url ? `<div style="font-size:.66rem;margin-top:1px"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
+          ${buildFuTimeline(t.id, i)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
+          ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
+          <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
+          <button class="btn bsm bd" onclick="event.stopPropagation();delStep('${t.id}',${i})">✕</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty"><p>ยังไม่มี Steps</p></div>'}
+  </div>
+
+  <!-- Timeline / Logs (พร้อม Edit) -->
+  <div class="card">
+    <h2>📝 ไทม์ไลน์ <span class="ml">
+      <button class="btn bsm bp" onclick="showTaskLogM('${t.id}')">➕</button>
+      <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">📞 + นัด</button>
+    </span></h2>
+    <div id="timelineList">
+      ${logs.length ? `<div class="tl">${logs.map(function(l) {
+        var isFollowupOverdue = l.type === 'followup_set' && l.dueDate && dTo(l.dueDate) < 0;
+        return `<div class="ti tl-${l.type} ${isFollowupOverdue ? 'tl-overdue' : ''}">
+          <div style="display:flex;justify-content:space-between">
+            <div class="td2">${fDT(l.date)}</div>
+            <div style="display:flex;gap:4px">
+              <button class="btn bsm bo" onclick="event.stopPropagation();editTimelineLog('${l.id}', '${sanitize(l.content).replace(/'/g, "\\'")}', '${l.type}', '${l.date}')" style="padding:1px 6px">✏️</button>
+              <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('taskLogs','${l.id}');render()" style="padding:1px 4px">✕</button>
+            </div>
+          </div>
+          <div class="tt2">${logL(l.type)}</div>
+          <div class="tc2">${sanitize(l.content)}</div>
+          ${l.dueDate ? `<div class="td2" style="margin-top:2px">📅 กำหนด: ${fD(l.dueDate)} ${dlB(l.dueDate, false)}</div>` : ''}
+        </div>`;
+      }).join('')}</div>` : '<div class="empty"><p>ยังไม่มี Log</p></div>'}
+    </div>
+  </div>
+  
+  <!-- Quick Add Comment (Inline) -->
+  <div class="card">
+    <div class="inline-comment">
+      <textarea id="quickComment" rows="2" placeholder="พิมพ์ comment ด่วน... (เช่น โทรติดตามแล้ว, ได้รับเอกสารแล้ว)"></textarea>
+      <div class="inline-comment-actions" style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn bsm bp" onclick="addQuickComment('${t.id}')">💬 เพิ่ม Comment</button>
+        <button class="btn bsm bs" onclick="addQuickStep('${t.id}')">✅ + Step</button>
+        <button class="btn bsm bo" onclick="addQuickFollowup('${t.id}')">📞 + นัดติดตาม</button>
+      </div>
+    </div>
   </div>`;
+
+  el.innerHTML = html;
 }
 
-// Step Actions
+// ================================================================
+// QUICK ACTIONS (Inline)
+// ================================================================
+
+function addQuickComment(taskId) {
+  var text = document.getElementById('quickComment')?.value.trim();
+  if (!text) { toast('กรุณาพิมพ์ comment'); return; }
+  
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'note',
+    content: text,
+    date: _nw()
+  });
+  
+  document.getElementById('quickComment').value = '';
+  toast('💬 เพิ่ม comment แล้ว');
+  render();
+}
+
+function addQuickStep(taskId) {
+  var title = prompt('📋 ชื่อ Step:', '');
+  if (!title) return;
+  var dueDate = prompt('📅 กำหนดเสร็จ (DD/MM/YYYY):', addD(_td(), 3));
+  
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'step',
+    content: title,
+    dueDate: dueDate,
+    done: false,
+    date: _nw()
+  });
+  
+  toast('✅ เพิ่ม Step แล้ว');
+  render();
+}
+
+function addQuickFollowup(taskId) {
+  var note = prompt('📞 รายละเอียดการติดตาม:', '');
+  if (!note) return;
+  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
+  
+  // บันทึกเป็น taskLog
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'followup',
+    content: note,
+    dueDate: dueDate,
+    status: 'waiting',
+    date: _nw()
+  });
+  
+  // ตั้ง followupDate ใน task
+  ST.update('tasks', taskId, { followupDate: dueDate, followupNote: note });
+  
+  toast(`📞 ตั้งนัดติดตามวันที่ ${dueDate}`);
+  render();
+}
+
+// ================================================================
+// STEP ACTIONS (KEEP ORIGINAL)
+// ================================================================
+
 function togStep(tid, idx) {
   const t = ST.getOne('tasks', tid);
   if (!t?.steps[idx]) return;
@@ -1257,4 +1620,333 @@ function getAllOverdueFu() {
     });
   });
   return overdue;
+}
+// ================================================================
+// CONTACT LOGS PAGE (ศูนย์รวมการติดต่อ)
+// ================================================================
+
+function rContactLogs(el) {
+  document.getElementById('pgT').textContent = '📞 ศูนย์รวมการติดต่อ';
+  
+  var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
+  var pendingFu = JSON.parse(localStorage.getItem('v7_pending_followups') || '[]');
+  
+  var pendingItems = pendingFu.filter(function(f) { return !f.done; }).map(function(f) {
+    return { id: f.id, date: f.dueDate, channel: '⏰ เตือน', dealerId: f.dealerId,
+      pipeId: f.pipeId, summary: f.note, isPending: true, dueDate: f.dueDate };
+  });
+  
+  var allItems = logs.concat(pendingItems);
+  allItems.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  
+  var channelIcons = { line: '💬', email: '📧', phone: '📞', meeting: '🤝', other: '📝' };
+  
+  var html = '<div style="margin-bottom:12px"><button class="btn bp" onclick="showUnifiedContactForm()">➕ บันทึกการติดต่อ</button></div>';
+  html += '<div class="card"><h2>📋 ตารางการติดต่อ</h2>';
+  
+  if (allItems.length) {
+    for (var i = 0; i < allItems.length; i++) {
+      var item = allItems[i];
+      var dealer = item.dealerId ? ST.getOne('dealers', item.dealerId) : null;
+      var isOverdue = item.dueDate && dTo(item.dueDate) < 0;
+      var icon = channelIcons[item.channel] || '📝';
+      
+      html += '<div class="contact-log-item' + (isOverdue ? ' overdue' : '') + '">';
+      html += '<div class="contact-log-header"><span class="contact-channel">' + icon + ' ' + (item.channel || 'อื่นๆ') + '</span>';
+      html += '<span class="contact-date">' + (item.date || '-') + ' ' + (item.time || '') + '</span>';
+      if (item.dueDate) html += '<span class="contact-due ' + (isOverdue ? 'due-over' : '') + '">📅 กำหนด: ' + item.dueDate + '</span>';
+      html += '</div>';
+      html += '<div class="contact-log-dealer">🏪 ' + (dealer ? dealer.name : 'ไม่ระบุ Dealer') + '</div>';
+      if (item.pipeId) { var pipe = ST.getOne('pipeline', item.pipeId); if (pipe) html += '<div class="contact-log-pipe">📊 ' + sanitize(pipe.projectName || '') + '</div>'; }
+      html += '<div class="contact-log-note">' + sanitize(item.summary || '-') + '</div>';
+      html += '<div class="contact-log-actions">';
+      if (item.isPending) html += '<button class="btn bsm bs" onclick="markPendingDone(\'' + item.id + '\')">✅ เสร็จแล้ว</button>';
+      else html += '<button class="btn bsm bo" onclick="createTaskFromContact(\'' + item.id + '\')">📋 สร้างงาน</button>';
+      html += '<button class="btn bsm bd" onclick="deleteContactLog(\'' + item.id + '\')">🗑️</button></div></div>';
+    }
+  } else {
+    html += '<div class="empty"><p>ยังไม่มีบันทึกการติดต่อ<br><button class="btn bp" onclick="showUnifiedContactForm()">➕ บันทึกครั้งแรก</button></p></div>';
+  }
+  
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function markPendingDone(id) {
+  var pending = JSON.parse(localStorage.getItem('v7_pending_followups') || '[]');
+  for (var i = 0; i < pending.length; i++) {
+    if (pending[i].id === id) { pending[i].done = true; break; }
+  }
+  localStorage.setItem('v7_pending_followups', JSON.stringify(pending));
+  toast('✅ ทำเครื่องหมายเสร็จแล้ว'); render();
+}
+
+function deleteContactLog(id) {
+  if (!confirm('ลบบันทึกนี้?')) return;
+  var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
+  var newLogs = [];
+  for (var i = 0; i < logs.length; i++) { if (logs[i].id !== id) newLogs.push(logs[i]); }
+  localStorage.setItem('v7_contact_logs', JSON.stringify(newLogs));
+  toast('🗑️ ลบแล้ว'); render();
+}
+
+function createTaskFromContact(contactId) {
+  var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
+  var contact = null;
+  for (var i = 0; i < logs.length; i++) { if (logs[i].id === contactId) { contact = logs[i]; break; } }
+  if (!contact) return;
+  
+  var taskTitle = prompt('📋 ชื่องาน:', 'ติดตาม: ' + (contact.summary || '').substr(0, 40));
+  if (!taskTitle) return;
+  var dueDate = prompt('📅 กำหนดเสร็จ (DD/MM/YYYY):', addD(_td(), 3));
+  
+  ST.add('tasks', {
+    title: taskTitle, description: 'จาก ' + contact.channel + ': ' + contact.summary,
+    dealerId: contact.dealerId, pipeId: contact.pipeId, dueDate: dueDate || '',
+    priority: 'medium', status: 'active', category: 'Contact', contactId: contact.id
+  });
+  toast('📋 สร้างงาน: ' + taskTitle); render();
+}
+// ================================================================
+// PIPELINE ACTION ITEMS (สำหรับ Pipeline Detail)
+// ================================================================
+
+// Get pipe actions from localStorage
+function getPipeActions() {
+  var saved = localStorage.getItem('v7_pipeActions');
+  if (saved) {
+    try { return JSON.parse(saved); } catch(e) { return []; }
+  }
+  return [];
+}
+
+function savePipeActions(list) {
+  localStorage.setItem('v7_pipeActions', JSON.stringify(list));
+}
+
+function getPipeActionsByPipe(pipeId) {
+  var actions = getPipeActions();
+  return (actions || []).filter(function(a) {
+    return a.pipeId === pipeId && a.status !== 'dropped';
+  });
+}
+
+function autoUpdatePipeNextAction(pipeId) {
+  var actions = getPipeActionsByPipe(pipeId);
+  var pending = (actions || []).filter(function(a) { return a.status === 'pending'; });
+
+  if (!pending.length) return;
+
+  pending.sort(function(a, b) {
+    var da = ftParseDate(a.dueDate);
+    var db = ftParseDate(b.dueDate);
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
+
+  var nearest = pending[0];
+  var pipe = null;
+  try { pipe = ST.getOne('pipeline', pipeId); } catch(e) { pipe = null; }
+  if (!pipe) return;
+
+  var updates = {};
+  if (nearest.text) updates.nextAction = nearest.text;
+  if (nearest.dueDate) updates.followupDate = nearest.dueDate;
+
+  try { ST.update('pipeline', pipeId, updates); } catch(e) {}
+}
+
+function markPipeActionDone(actionId) {
+  var response = prompt('💬 ผลลัพธ์ / ตอบกลับ (ถ้ามี):');
+  
+  var actions = getPipeActions();
+  var pipeId = '';
+
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      actions[i].status = 'done';
+      actions[i].doneDate = _td();
+      if (response) actions[i].response = response;
+      pipeId = actions[i].pipeId;
+
+      if (ST && ST.add) {
+        ST.add('pipeLog', {
+          pipeId: pipeId,
+          type: 'progress',
+          content: '✅ เสร็จ: ' + actions[i].text + (response ? ' — ' + response : ''),
+          date: _nw()
+        });
+      }
+      break;
+    }
+  }
+  
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+
+  toast('✅ เสร็จแล้ว!');
+  render();
+}
+
+function extendPipeAction(actionId) {
+  var newDate = prompt('📅 กำหนดใหม่ (DD/MM/YYYY):');
+  if (!newDate) return;
+
+  var actions = getPipeActions();
+  var pipeId = '';
+
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      var oldDate = actions[i].dueDate;
+      actions[i].dueDate = newDate;
+      pipeId = actions[i].pipeId;
+
+      if (ST && ST.add) {
+        ST.add('pipeLog', {
+          pipeId: pipeId,
+          type: 'followup',
+          content: '🔄 เลื่อนกำหนด: ' + actions[i].text + ' (' + oldDate + ' → ' + newDate + ')',
+          date: _nw()
+        });
+      }
+      break;
+    }
+  }
+  
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+
+  toast('📅 เลื่อนกำหนดแล้ว');
+  render();
+}
+
+function dropPipeAction(actionId) {
+  if (!confirm('ยกเลิก Action Item นี้?')) return;
+  
+  var actions = getPipeActions();
+  var pipeId = '';
+
+  for (var i = 0; i < actions.length; i++) {
+    if (actions[i].id === actionId) {
+      actions[i].status = 'dropped';
+      pipeId = actions[i].pipeId;
+      break;
+    }
+  }
+  
+  savePipeActions(actions);
+  if (pipeId) autoUpdatePipeNextAction(pipeId);
+
+  toast('🗑️ ยกเลิกแล้ว');
+  render();
+}
+
+function buildPipeActionsHTML(pipeId) {
+  var actions = getPipeActionsByPipe(pipeId);
+  var pending = (actions || []).filter(function(a) { return a.status === 'pending'; });
+  var done = (actions || []).filter(function(a) { return a.status === 'done'; });
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  pending.sort(function(a, b) {
+    var da = ftParseDate(a.dueDate);
+    var db = ftParseDate(b.dueDate);
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
+
+  var h = '<div class="card"><h2>⏳ Action Items';
+  if (pending.length > 0) h += ' <span class="pa-count-badge">' + pending.length + ' ค้าง</span>';
+  h += ' <span class="ml"><button class="btn bsm bp" onclick="showAddPipeActionM(\'' + pipeId + '\')">➕</button></span></h2>';
+
+  if (!pending.length && !done.length) {
+    h += '<div class="empty"><p>ไม่มี Action Item — กด ➕ เพื่อเพิ่ม</p></div>';
+    h += '</div>';
+    return h;
+  }
+
+  // Pending actions
+  if (pending.length) {
+    pending.forEach(function(a) {
+      var due = ftParseDate(a.dueDate);
+      var daysLeft = due ? Math.ceil((due - now) / 86400000) : 999;
+      var urgClass = 'pa-normal';
+      var urgLabel = '';
+
+      if (daysLeft < 0) {
+        urgClass = 'pa-overdue';
+        urgLabel = '<span class="pa-urg pa-urg-red">🔴 เกิน ' + Math.abs(daysLeft) + ' วัน</span>';
+      } else if (daysLeft === 0) {
+        urgClass = 'pa-overdue';
+        urgLabel = '<span class="pa-urg pa-urg-red">🔴 วันนี้!</span>';
+      } else if (daysLeft <= 2) {
+        urgClass = 'pa-urgent';
+        urgLabel = '<span class="pa-urg pa-urg-orange">🟠 อีก ' + daysLeft + ' วัน</span>';
+      } else if (daysLeft <= 5) {
+        urgClass = 'pa-soon';
+        urgLabel = '<span class="pa-urg pa-urg-yellow">🟡 อีก ' + daysLeft + ' วัน</span>';
+      } else {
+        urgLabel = '<span class="pa-urg pa-urg-green">🟢 อีก ' + daysLeft + ' วัน</span>';
+      }
+
+      h += '<div class="pa-item ' + urgClass + '">';
+      h += '<div class="pa-dot"></div>';
+      h += '<div class="pa-content">';
+      h += '<div class="pa-header">';
+      h += '<span class="pa-text">' + sanitize(a.text) + '</span>';
+      h += (a.priority === 1 ? ' <span class="pa-priority">🔴 เร่งด่วน</span>' : '');
+      h += '</div>';
+      h += '<div class="pa-meta">';
+      h += '📅 กำหนด: <strong>' + (a.dueDate || '-') + '</strong> ' + urgLabel;
+      h += '</div>';
+      if (a.note) h += '<div class="pa-note">' + sanitize(a.note) + '</div>';
+      h += '<div class="pa-actions">';
+      h += '<button class="btn-xs pa-btn-done" onclick="markPipeActionDone(\'' + a.id + '\')">✅ เสร็จแล้ว</button>';
+      h += '<button class="btn-xs pa-btn-extend" onclick="extendPipeAction(\'' + a.id + '\')">📅 เลื่อนกำหนด</button>';
+      h += '<button class="btn-xs pa-btn-drop" onclick="dropPipeAction(\'' + a.id + '\')">✕</button>';
+      h += '</div>';
+      h += '</div></div>';
+    });
+  }
+
+  // Done actions (collapsible)
+  if (done.length) {
+    h += '<div class="pa-done-toggle" onclick="togglePaDone()">✅ เสร็จแล้ว (' + done.length + ') <span id="paDoneArrow">▶</span></div>';
+    h += '<div class="pa-done-list" id="paDoneList" style="display:none">';
+    done.sort(function(a, b) {
+      var da = ftParseDate(a.doneDate || a.createdDate);
+      var db = ftParseDate(b.doneDate || b.createdDate);
+      if (!da) return 1;
+      if (!db) return -1;
+      return db - da;
+    });
+    done.forEach(function(a) {
+      h += '<div class="pa-item pa-done">';
+      h += '<div class="pa-dot pa-dot-done"></div>';
+      h += '<div class="pa-content">';
+      h += '<div class="pa-text" style="text-decoration:line-through;opacity:0.6">' + sanitize(a.text) + '</div>';
+      h += '<div class="pa-meta" style="opacity:0.5">✅ ' + (a.doneDate || '-');
+      if (a.response) h += ' — ' + sanitize(a.response);
+      h += '</div></div></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function togglePaDone() {
+  var el = document.getElementById('paDoneList');
+  var arrow = document.getElementById('paDoneArrow');
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = '▶';
+  }
 }
