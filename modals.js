@@ -2160,3 +2160,22 @@ function saveQNote() {
   toast('📝 บันทึกแล้ว');
   render();
 }
+function toggleViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  viewMode = viewMode === 'mobile' ? 'desktop' : 'mobile';
+  localStorage.setItem('v7_viewMode', viewMode);
+  applyViewMode();
+  render();
+}
+
+function applyViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  if (viewMode === 'mobile') {
+    document.body.classList.add('mobile-mode');
+  } else {
+    document.body.classList.remove('mobile-mode');
+  }
+  var icon = document.getElementById('modeIcon');
+  if (icon) icon.textContent = viewMode === 'mobile' ? '🖥️' : '📱';
+  updateMbNav();
+}

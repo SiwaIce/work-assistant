@@ -1454,3 +1454,111 @@ function saveQNote() {
   toast('📝 บันทึกแล้ว');
   render();
 }
+// ================================================================
+// MOBILE BOTTOM NAVIGATION
+// ================================================================
+function mbGo(view) {
+  if (view === 'mbHome') {
+    renderMbHome();
+    return;
+  }
+  go(view);
+  updateMbNav();
+}
+
+function renderMbHome() {
+  var el = document.getElementById('ct');
+  if (!el) return;
+  document.getElementById('pgT').textContent = '🏠 Home';
+  
+  var cfg = getConfig();
+  var now = new Date();
+  var dayNames = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  
+  var dealers = ST.getAll('dealers');
+  var pipeline = ST.getAll('pipeline');
+  var activePipe = pipeline.filter(function(p) { 
+    return ['lost','delivered','on_hold'].indexOf(p.status) === -1; 
+  });
+  var tasks = ST.filter('tasks', function(t) { return t.status === 'active'; });
+  var visits = JSON.parse(localStorage.getItem('v7_visits') || '[]');
+  var todayVisits = visits.filter(function(v) { return v.date === _td(); });
+  
+  var pendingActions = [];
+  try { pendingActions = getAllPendingPipeActions(); } catch(e) { pendingActions = []; }
+  var overdueActions = pendingActions.filter(function(p) { return p.urgency === 'overdue'; });
+
+  var h = '<div class="mb-home">';
+  
+  // Greeting
+  h += '<div class="mb-home-header">';
+  h += '<div class="mb-home-greeting">👋 สวัสดี ' + sanitize(cfg.saleName || 'Siwawong') + '</div>';
+  h += '<div class="mb-home-date">วัน' + dayNames[now.getDay()] + ' ' + _td() + '</div>';
+  h += '</div>';
+
+  // Urgent
+  if (overdueActions.length) {
+    h += '<div class="mb-urgent">';
+    h += '<div class="mb-urgent-title">🔴 ด่วน (' + overdueActions.length + ')</div>';
+    for (var i = 0; i < Math.min(overdueActions.length, 3); i++) {
+      var item = overdueActions[i];
+      h += '<div class="mb-urgent-item" onclick="go(\'pipeDetail\',{pipeId:\'' + item.pipe.id + '\'})">⏳ ' + sanitize(item.action.text) + '</div>';
+    }
+    h += '</div>';
+  }
+
+  // Quick Actions
+  h += '<div class="mb-actions">';
+  h += '<div class="mb-action-btn" onclick="showVisitM()"><span class="mb-action-icon">🤝</span>เพิ่ม Visit</div>';
+  h += '<div class="mb-action-btn" onclick="showTaskM()"><span class="mb-action-icon">📋</span>เพิ่มงาน</div>';
+  h += '<div class="mb-action-btn" onclick="showPipelineM()"><span class="mb-action-icon">📊</span>เพิ่ม Pipeline</div>';
+  h += '<div class="mb-action-btn" onclick="showQNote()"><span class="mb-action-icon">📝</span>Quick Note</div>';
+  h += '<div class="mb-action-btn" onclick="openLineTemplates()"><span class="mb-action-icon">💬</span>LINE</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'visitPlan\')"><span class="mb-action-icon">📅</span>Visit Plan</div>';
+  h += '</div>';
+
+  // Stats Grid
+  h += '<div class="mb-grid">';
+  h += '<div class="mb-tile" onclick="go(\'dealers\')"><div class="mb-tile-icon">🏪</div><div class="mb-tile-count">' + dealers.length + '</div><div class="mb-tile-name">Dealers</div></div>';
+  h += '<div class="mb-tile" onclick="go(\'pipeline\')"><div class="mb-tile-icon">📊</div><div class="mb-tile-count">' + activePipe.length + '</div><div class="mb-tile-name">Pipeline</div></div>';
+  h += '<div class="mb-tile" onclick="go(\'tasks\')"><div class="mb-tile-icon">📋</div><div class="mb-tile-count">' + tasks.length + '</div><div class="mb-tile-name">Tasks</div></div>';
+  h += '<div class="mb-tile" onclick="go(\'visits\')"><div class="mb-tile-icon">🤝</div><div class="mb-tile-count">' + todayVisits.length + '</div><div class="mb-tile-name">Visit วันนี้</div></div>';
+  h += '<div class="mb-tile" onclick="go(\'forecast\')"><div class="mb-tile-icon">📦</div><div class="mb-tile-count">' + pipeline.length + '</div><div class="mb-tile-name">Forecast</div></div>';
+  h += '<div class="mb-tile" onclick="go(\'knowledge\')"><div class="mb-tile-icon">📚</div><div class="mb-tile-count">' + ST.getAll('notes').length + '</div><div class="mb-tile-name">Knowledge</div></div>';
+  h += '</div>';
+
+  // More Menu
+  h += '<div class="card"><h2>📂 เมนูเพิ่มเติม</h2>';
+  h += '<div class="mb-actions">';
+  h += '<div class="mb-action-btn" onclick="go(\'report\')"><span class="mb-action-icon">📊</span>Weekly Report</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'dashboard\')"><span class="mb-action-icon">📈</span>Dashboard</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'calendar\')"><span class="mb-action-icon">📆</span>ปฏิทิน</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'customKpi\')"><span class="mb-action-icon">🎯</span>KPI</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'demoTracker\')"><span class="mb-action-icon">🚁</span>Demo</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'quotations\')"><span class="mb-action-icon">💰</span>Quotation</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'emailDrafts\')"><span class="mb-action-icon">📧</span>Email Draft</div>';
+  h += '<div class="mb-action-btn" onclick="go(\'admin\')"><span class="mb-action-icon">⚙️</span>ตั้งค่า</div>';
+  h += '</div></div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+  updateMbNav();
+}
+
+function updateMbNav() {
+  var items = document.querySelectorAll('.mb-nav-item');
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.remove('act');
+  }
+  var current = S ? S.view : 'today';
+  var navItems = document.querySelectorAll('.mb-nav-item');
+  for (var j = 0; j < navItems.length; j++) {
+    var onclick = navItems[j].getAttribute('onclick') || '';
+    if (onclick.indexOf(current) !== -1) {
+      navItems[j].classList.add('act');
+    }
+    if (current === 'mbHome' && onclick.indexOf('mbHome') !== -1) {
+      navItems[j].classList.add('act');
+    }
+  }
+}
