@@ -1434,3 +1434,23 @@ function qCmdKeydown(e) {
   items[idx].classList.add('qcmd-active');
   items[idx].scrollIntoView({ block: 'nearest' });
 }
+function showQNote() {
+  var dealers = ST.getAll('dealers');
+  var dlrSelect = dealers.length ? '<div class="fg"><label>Dealer (ไม่บังคับ)</label><select id="qn_d">' + dealerOptions('') + '</select></div>' : '';
+  openM('📝 โน้ตด่วน', dlrSelect +
+    '<div class="fg"><label>โน้ต</label><textarea id="qn_t" rows="3" placeholder="จดอะไรก็ได้..."></textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveQNote()">💾 บันทึก</button>');
+}
+
+function saveQNote() {
+  var textEl = document.getElementById('qn_t');
+  var text = textEl ? textEl.value.trim() : '';
+  if (!text) return;
+  var dlrEl = document.getElementById('qn_d');
+  var dealerId = dlrEl ? dlrEl.value : '';
+  ST.add('qnotes', {text: text, dealerId: dealerId});
+  if (dealerId) ST.add('feedback', {dealerId: dealerId, text: text, date: _td(), source: 'quicknote'});
+  closeMForce();
+  toast('📝 บันทึกแล้ว');
+  render();
+}
