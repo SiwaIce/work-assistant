@@ -1400,3 +1400,37 @@ document.addEventListener('keydown', function(e) {
     items[idx].scrollIntoView({ block: 'nearest' });
   }
 });
+// ================================================================
+// QUICK COMMAND KEYBOARD NAVIGATION
+// ================================================================
+function qCmdKeydown(e) {
+  var items = document.querySelectorAll('.qcmd-item');
+  if (!items.length) return;
+  
+  var active = document.querySelector('.qcmd-active');
+  var idx = 0;
+  if (active) idx = parseInt(active.getAttribute('data-idx')) || 0;
+  
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    idx = Math.min(idx + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    idx = Math.max(idx - 1, 0);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (active) active.click();
+    return;
+  } else if (e.key === 'Escape') {
+    closeQCmd();
+    return;
+  } else {
+    return;
+  }
+  
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.remove('qcmd-active');
+  }
+  items[idx].classList.add('qcmd-active');
+  items[idx].scrollIntoView({ block: 'nearest' });
+}
