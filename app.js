@@ -1078,3 +1078,325 @@ function getPipeModelSummary(p) {
     return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : '');
   }).join(', ');
 }
+
+// ================================================================
+// EDIT FAVORITES
+// ================================================================
+function showEditFavorites() {
+  var favs = getFavorites();
+  var ALL_MENU_ITEMS = [
+    {id: 'today', icon: '📌', name: 'วันนี้', action: "go('today')"},
+    {id: 'dealers', icon: '🏪', name: 'Dealers', action: "go('dealers')"},
+    {id: 'pipeline', icon: '📊', name: 'Pipeline', action: "go('pipeline')"},
+    {id: 'pipeBoard', icon: '📋', name: 'Pipeline Board', action: "go('pipeBoard')"},
+    {id: 'pipeDash', icon: '📊', name: 'Pipeline Overview', action: "go('pipeDash')"},
+    {id: 'tasks', icon: '📋', name: 'Tasks', action: "go('tasks')"},
+    {id: 'kanban', icon: '📋', name: 'Kanban', action: "go('kanban')"},
+    {id: 'visitPlan', icon: '📅', name: 'Visit Plan', action: "go('visitPlan')"},
+    {id: 'meetings', icon: '📅', name: 'ประชุม', action: "go('meetings')"},
+    {id: 'calendar', icon: '📆', name: 'ปฏิทิน', action: "go('calendar')"},
+    {id: 'visits', icon: '🤝', name: 'Visit Report', action: "go('visits')"},
+    {id: 'followup', icon: '📞', name: 'Follow-up', action: "go('followup')"},
+    {id: 'forecast', icon: '📦', name: 'Forecast', action: "go('forecast')"},
+    {id: 'report', icon: '📊', name: 'Weekly Report', action: "go('report')"},
+    {id: 'dashboard', icon: '📈', name: 'Dashboard', action: "go('dashboard')"},
+    {id: 'line', icon: '💬', name: 'LINE Message', action: "openLineTemplates()"},
+    {id: 'emailDrafts', icon: '📧', name: 'Email Draft', action: "go('emailDrafts')"},
+    {id: 'presentation', icon: '🎬', name: 'Presentation', action: "openPresentation()"},
+    {id: 'feedback', icon: '💡', name: 'Feedback', action: "go('feedback')"},
+    {id: 'kpi', icon: '🎯', name: 'KPI', action: "go('kpi')"},
+    {id: 'customKpi', icon: '🎯', name: 'KPI Dashboard', action: "go('customKpi')"},
+    {id: 'monthlyGoal', icon: '🎯', name: 'Monthly Goal', action: "go('monthlyGoal')"},
+    {id: 'demoTracker', icon: '🚁', name: 'Demo Equipment', action: "go('demoTracker')"},
+    {id: 'quotations', icon: '💰', name: 'Quotation', action: "go('quotations')"},
+    {id: 'knowledge', icon: '📚', name: 'Knowledge', action: "go('knowledge')"},
+    {id: 'exports', icon: '📤', name: 'Export', action: "go('exports')"},
+    {id: 'health', icon: '🏥', name: 'Data Health', action: "go('health')"},
+    {id: 'admin', icon: '⚙️', name: 'ตั้งค่า', action: "go('admin')"}
+  ];
+  
+  var h = '<div style="max-width:400px">';
+  h += '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">กดเลือกเมนูที่ใช้บ่อย (แนะนำ 3-6 อัน)</div>';
+  
+  for (var i = 0; i < ALL_MENU_ITEMS.length; i++) {
+    var item = ALL_MENU_ITEMS[i];
+    var isFav = favs.indexOf(item.id) !== -1;
+    h += '<div class="fav-edit-item" onclick="toggleFavItem(\'' + item.id + '\',this)">';
+    h += '<input type="checkbox" ' + (isFav ? 'checked' : '') + ' onclick="event.stopPropagation();toggleFavItem(\'' + item.id + '\',this.parentElement)">';
+    h += '<span>' + item.icon + ' ' + item.name + '</span>';
+    h += '</div>';
+  }
+  
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn btn-blue" onclick="saveFavFromModal()">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  
+  openM('⭐ แก้ไข Favorites', h);
+}
+
+function toggleFavItem(itemId, el) {
+  var chk = el.querySelector('input[type=checkbox]');
+  if (chk) chk.checked = !chk.checked;
+}
+
+function saveFavFromModal() {
+  var checks = document.querySelectorAll('.fav-edit-item input[type=checkbox]:checked');
+  var favs = [];
+  for (var i = 0; i < checks.length; i++) {
+    var parent = checks[i].parentElement;
+    var onclick = parent.getAttribute('onclick') || '';
+    var match = onclick.match(/toggleFavItem\('([^']+)'/);
+    if (match) favs.push(match[1]);
+  }
+  saveFavorites(favs);
+  toast('⭐ บันทึก Favorites แล้ว');
+  closeMForce();
+  renderFavorites();
+}
+
+function getFavorites() {
+  var saved = localStorage.getItem('v7_favorites');
+  if (saved) { try { return JSON.parse(saved); } catch(e) { } }
+  return ['today', 'dealers', 'pipeline', 'tasks', 'visits'];
+}
+
+function saveFavorites(list) {
+  localStorage.setItem('v7_favorites', JSON.stringify(list));
+}
+
+function renderFavorites() {
+  var favs = getFavorites();
+  var el = document.getElementById('sbFavorites');
+  if (!el) return;
+  
+  var h = '';
+  var ALL_MENU_ITEMS = {
+    'today': '📌 วันนี้', 'dealers': '🏪 Dealers', 'pipeline': '📊 Pipeline',
+    'pipeBoard': '📋 Board', 'pipeDash': '📊 Overview', 'tasks': '📋 Tasks',
+    'kanban': '📋 Kanban', 'visitPlan': '📅 Visit Plan', 'meetings': '📅 ประชุม',
+    'calendar': '📆 ปฏิทิน', 'visits': '🤝 Visit Report', 'followup': '📞 Follow-up',
+    'forecast': '📦 Forecast', 'report': '📊 Weekly Report', 'dashboard': '📈 Dashboard',
+    'line': '💬 LINE Message', 'emailDrafts': '📧 Email Draft', 'presentation': '🎬 Presentation',
+    'feedback': '💡 Feedback', 'kpi': '🎯 KPI', 'customKpi': '🎯 KPI Dashboard',
+    'monthlyGoal': '🎯 Monthly Goal', 'demoTracker': '🚁 Demo Equipment',
+    'quotations': '💰 Quotation', 'knowledge': '📚 Knowledge', 'exports': '📤 Export',
+    'health': '🏥 Data Health', 'admin': '⚙️ ตั้งค่า'
+  };
+  
+  for (var i = 0; i < favs.length; i++) {
+    var favId = favs[i];
+    var name = ALL_MENU_ITEMS[favId] || favId;
+    var isActive = S && S.view === favId;
+    h += '<div class="sb-fav-item' + (isActive ? ' act' : '') + '" onclick="go(\'' + favId + '\')">';
+    h += name;
+    h += '</div>';
+  }
+  
+  el.innerHTML = h;
+}
+
+// ================================================================
+// TOGGLE VIEW MODE (Desktop/Mobile)
+// ================================================================
+function toggleViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  viewMode = viewMode === 'mobile' ? 'desktop' : 'mobile';
+  localStorage.setItem('v7_viewMode', viewMode);
+  applyViewMode();
+  render();
+}
+
+function applyViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  if (viewMode === 'mobile') {
+    document.body.classList.add('mobile-mode');
+  } else {
+    document.body.classList.remove('mobile-mode');
+  }
+  var icon = document.getElementById('modeIcon');
+  if (icon) icon.textContent = viewMode === 'mobile' ? '🖥️' : '📱';
+  updateMbNav();
+}
+
+function updateMbNav() {
+  var items = document.querySelectorAll('.mb-nav-item');
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.remove('act');
+  }
+  var current = S ? S.view : 'today';
+  var navItems = document.querySelectorAll('.mb-nav-item');
+  for (var j = 0; j < navItems.length; j++) {
+    var onclick = navItems[j].getAttribute('onclick') || '';
+    if (onclick.indexOf(current) !== -1) {
+      navItems[j].classList.add('act');
+    }
+    if (current === 'mbHome' && onclick.indexOf('mbHome') !== -1) {
+      navItems[j].classList.add('act');
+    }
+  }
+}
+
+// ================================================================
+// OPEN QUICK COMMAND (Ctrl+K)
+// ================================================================
+var qCmdOpen = false;
+
+function openQCmd() {
+  var ov = document.getElementById('qcmdOverlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  qCmdOpen = true;
+  var inp = document.getElementById('qcmdInput');
+  if (inp) { inp.value = ''; inp.focus(); }
+  qCmdSearch('');
+}
+
+function closeQCmd() {
+  var ov = document.getElementById('qcmdOverlay');
+  if (ov) ov.style.display = 'none';
+  qCmdOpen = false;
+}
+
+function qCmdSearch(q) {
+  q = (q || '').toLowerCase().trim();
+  var results = [];
+  
+  var navs = [
+    { icon: '📌', name: 'Today', cmd: 'go:today' },
+    { icon: '🏪', name: 'Dealers', cmd: 'go:dealers' },
+    { icon: '📋', name: 'Pipeline', cmd: 'go:pipeline' },
+    { icon: '📋', name: 'Pipeline Board', cmd: 'go:pipeBoard' },
+    { icon: '📍', name: 'Visit Reports', cmd: 'go:visits' },
+    { icon: '📋', name: 'Tasks', cmd: 'go:tasks' },
+    { icon: '📋', name: 'Kanban', cmd: 'go:kanban' },
+    { icon: '📅', name: 'Meetings', cmd: 'go:meetings' },
+    { icon: '📆', name: 'Calendar', cmd: 'go:calendar' },
+    { icon: '📤', name: 'Export', cmd: 'go:exports' },
+    { icon: '📚', name: 'Knowledge Base', cmd: 'go:knowledge' },
+    { icon: '📊', name: 'Weekly Report', cmd: 'go:report' },
+    { icon: '📈', name: 'Dashboard', cmd: 'go:dashboard' },
+    { icon: '🏥', name: 'Data Health', cmd: 'go:health' },
+    { icon: '⚙️', name: 'Admin', cmd: 'go:admin' }
+  ];
+  
+  var acts = [
+    { icon: '➕', name: 'เพิ่ม Visit', cmd: 'act:showVisitM' },
+    { icon: '➕', name: 'เพิ่ม Pipeline', cmd: 'act:showPipelineM' },
+    { icon: '➕', name: 'เพิ่ม Dealer', cmd: 'act:showDealerM' },
+    { icon: '➕', name: 'เพิ่ม Task', cmd: 'act:showTaskM' },
+    { icon: '💬', name: 'LINE Message', cmd: 'act:openLineTemplates' },
+    { icon: '🎬', name: 'Presentation', cmd: 'act:openPresentation' }
+  ];
+  
+  for (var i = 0; i < navs.length; i++) {
+    var n = navs[i];
+    if (!q || n.name.toLowerCase().indexOf(q) !== -1) {
+      results.push({ type: 'nav', icon: n.icon, name: n.name, cmd: n.cmd });
+    }
+  }
+  for (var i = 0; i < acts.length; i++) {
+    var a = acts[i];
+    if (!q || a.name.toLowerCase().indexOf(q) !== -1) {
+      results.push({ type: 'action', icon: a.icon, name: a.name, cmd: a.cmd });
+    }
+  }
+  
+  if (q.length >= 1) {
+    var dealers = ST.getAll('dealers');
+    for (var i = 0; i < dealers.length; i++) {
+      var d = dealers[i];
+      if ((d.name || '').toLowerCase().indexOf(q) !== -1) {
+        results.push({ type: 'dealer', icon: '🏪', name: d.name, cmd: 'dealer:' + d.id });
+      }
+    }
+    
+    var pipeline = ST.getAll('pipeline');
+    for (var i = 0; i < pipeline.length; i++) {
+      var p = pipeline[i];
+      var pname = p.projectName || p.name || '';
+      if (pname.toLowerCase().indexOf(q) !== -1) {
+        results.push({ type: 'pipeline', icon: '📋', name: pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
+      }
+    }
+  }
+  
+  var el = document.getElementById('qcmdResults');
+  if (!el) return;
+  
+  if (!results.length) {
+    el.innerHTML = '<div class="qcmd-empty">ไม่พบผลลัพธ์</div>';
+    return;
+  }
+  
+  var h = '';
+  var lastType = '';
+  for (var i = 0; i < Math.min(results.length, 15); i++) {
+    var r = results[i];
+    if (r.type !== lastType) {
+      var typeLabel = { nav: '📌 Navigation', action: '⚡ Actions', dealer: '🏪 Dealers', pipeline: '📋 Pipeline' };
+      h += '<div class="qcmd-section">' + (typeLabel[r.type] || '') + '</div>';
+      lastType = r.type;
+    }
+    h += '<div class="qcmd-item' + (i === 0 ? ' qcmd-active' : '') + '" onclick="qCmdExec(\'' + r.cmd + '\')" data-idx="' + i + '">';
+    h += '<span class="qcmd-icon">' + r.icon + '</span>';
+    h += '<span class="qcmd-name">' + sanitize(r.name) + '</span>';
+    h += '<span class="qcmd-type">' + r.type + '</span>';
+    h += '</div>';
+  }
+  el.innerHTML = h;
+}
+
+function qCmdExec(cmd) {
+  closeQCmd();
+  var parts = cmd.split(':');
+  var type = parts[0];
+  var val = parts.slice(1).join(':');
+  
+  if (type === 'go') {
+    go(val);
+  } else if (type === 'act') {
+    if (typeof window[val] === 'function') window[val]();
+  } else if (type === 'dealer') {
+    go('dealerDetail', { dealerId: val });
+  } else if (type === 'pipe') {
+    go('pipeDetail', { pipeId: val });
+  }
+}
+
+// Keyboard navigation for command palette
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    if (qCmdOpen) closeQCmd();
+    else openQCmd();
+  }
+  if (e.key === 'Escape' && qCmdOpen) closeQCmd();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (qCmdOpen) {
+    var items = document.querySelectorAll('.qcmd-item');
+    if (!items.length) return;
+    
+    var active = document.querySelector('.qcmd-active');
+    var idx = 0;
+    if (active) idx = parseInt(active.getAttribute('data-idx')) || 0;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      idx = Math.min(idx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      idx = Math.max(idx - 1, 0);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (active) active.click();
+      return;
+    }
+    
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('qcmd-active');
+    items[idx].classList.add('qcmd-active');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  }
+});
