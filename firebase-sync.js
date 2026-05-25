@@ -148,20 +148,24 @@ function initFirebaseListeners() {
     if (!ref) return;
 
     var unsub = ref.onSnapshot(function(snapshot) {
-      var items = [];
-      var isSingleDoc = false;
-      snapshot.forEach(function(doc) {
-        if (doc.id === '_data') {
-          localStorage.setItem(lsKey, JSON.stringify(doc.data().value));
-          isSingleDoc = true;
-          return;
+      try {
+        var items = [];
+        var isSingleDoc = false;
+        snapshot.forEach(function(doc) {
+          if (doc.id === '_data') {
+            localStorage.setItem(lsKey, JSON.stringify(doc.data().value));
+            isSingleDoc = true;
+            return;
+          }
+          var data = doc.data();
+          data.id = doc.id;
+          items.push(data);
+        });
+        if (!isSingleDoc && items.length) {
+          localStorage.setItem(lsKey, JSON.stringify(items));
         }
-        var data = doc.data();
-        data.id = doc.id;
-        items.push(data);
-      });
-      if (!isSingleDoc && items.length) {
-        localStorage.setItem(lsKey, JSON.stringify(items));
+      } catch(e) {
+        console.warn('Listener error for', collName, e);
       }
     }, function(error) {
       console.warn('Listener error:', collName, error);
@@ -173,13 +177,16 @@ function initFirebaseListeners() {
   // Config sync
   var configRef = db.collection('users').doc(CURRENT_USER.uid).collection('_config');
   var unsub2 = configRef.doc('main').onSnapshot(function(doc) {
-    if (doc.exists) {
-      localStorage.setItem('v7_config', JSON.stringify(doc.data()));
+    try {
+      if (doc.exists) {
+        localStorage.setItem('v7_config', JSON.stringify(doc.data()));
+      }
+    } catch(e) {
+      console.warn('Config listener error:', e);
     }
   });
   activeListeners.push(unsub2);
 }
-
 // ================================================================
 // MIGRATE: localStorage → Firebase (first time)
 // ================================================================
@@ -321,7 +328,6 @@ function migrateLocalToFirebase() {
     console.log('✅ ST.setObj override ready');
   }, 100);
 })();
-
 // ================================================================
 // FULL SYNC — Force push all localStorage to Firebase
 // ================================================================
@@ -342,7 +348,9 @@ function forceSyncAll() {
     if (key === 'v7_config') return;
     if (key.indexOf('v7_migrated') === 0) return;
     if (key === 'v7_sbCollapsed') return;
-    if (key === 'v7_theme') return;
+    if (key === 'v7_appearance') return;  // 👈 เพิ่มข้าม appearance
+    if (key === 'v7_viewMode') return;    // 👈 เพิ่มข้าม viewMode (ค่าเป็น string ไม่ใช่ JSON)
+    if (key === 'v7_favorites') return;   // 👈 เพิ่มข้าม favorites
 
     var shortKey = key.replace('v7_', '');
     var data = localStorage.getItem(key);
@@ -368,6 +376,7 @@ function forceSyncAll() {
       count++;
     } catch(e) {
       console.warn('Parse error:', key, e);
+      // ถ้า parse ไม่ได้ ให้ข้ามไป (ไม่ sync)
     }
   });
 
