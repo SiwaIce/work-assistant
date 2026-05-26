@@ -287,22 +287,10 @@ body {
   color: #fff;
   cursor: pointer;
   font-size: 13px;
+  width: 100%;
 }
 .btn-send:hover {
   opacity: 0.9;
-}
-.update-input {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--input-bg);
-  color: var(--text);
-  font-size: 13px;
-}
-.update-input:focus {
-  outline: none;
-  border-color: var(--accent);
 }
 
 /* Modal (Popup) */
@@ -324,7 +312,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   width: 90%;
-  max-width: 480px;
+  max-width: 500px;
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
@@ -504,6 +492,8 @@ function toggleTheme() {
 applyTheme(getSavedTheme());
 
 // ===== HELPER FUNCTIONS =====
+var currentPipeName = '';  // Store current pipe name for modal
+
 function showSuccessToast(message) {
   var toast = document.createElement('div');
   toast.className = 'success-toast';
@@ -520,6 +510,7 @@ function closeModal() {
 }
 
 function showModal(pipeId, pipeName) {
+  currentPipeName = pipeName;
   // Remove existing modal if any
   var existing = document.getElementById('updateModal');
   if (existing) existing.remove();
@@ -534,6 +525,12 @@ function showModal(pipeId, pipeName) {
   modalHtml += '<div class="form-group">';
   modalHtml += '<label>📋 โครงการ</label>';
   modalHtml += '<input type="text" value="' + esc(pipeName) + '" readonly style="background:var(--border);">';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📝 ชื่อผู้แจ้ง / ผู้ติดต่อ *</label>';
+  modalHtml += '<input type="text" id="updateName" placeholder="เช่น คุณสมชาย, บริษัท XXX">';
+  modalHtml += '<div class="hint">💡 เพื่อให้พนักงานทราบว่าเป็นใครและติดต่อกลับ</div>';
   modalHtml += '</div>';
   
   modalHtml += '<div class="form-group">';
@@ -558,12 +555,6 @@ function showModal(pipeId, pipeName) {
   modalHtml += '<div class="hint">💡 แจ้งข้อมูลที่ผิดพลาดหรือต้องการแก้ไขได้ที่นี่</div>';
   modalHtml += '</div>';
   
-  modalHtml += '<div class="form-group">';
-  modalHtml += '<label>📞 ช่องทางติดต่อกลับ (LINE / เบอร์โทร)</label>';
-  modalHtml += '<input type="text" id="updateContact" placeholder="LINE ID หรือ เบอร์โทร">';
-  modalHtml += '<div class="hint">💡 เพื่อให้พนักงานติดต่อกลับได้รวดเร็ว</div>';
-  modalHtml += '</div>';
-  
   modalHtml += '</div>';
   modalHtml += '<div class="modal-footer">';
   modalHtml += '<button class="btn-cancel" onclick="closeModal()">ยกเลิก</button>';
@@ -576,7 +567,13 @@ function showModal(pipeId, pipeName) {
 }
 
 function submitUpdate(pipeId) {
+  var userName = document.getElementById('updateName').value.trim();
   var progressText = document.getElementById('updateProgress').value.trim();
+  
+  if (!userName) {
+    alert('กรุณากรอกชื่อผู้แจ้ง / ผู้ติดต่อ');
+    return;
+  }
   if (!progressText) {
     alert('กรุณากรอกสถานะ/ความคืบหน้า');
     return;
@@ -585,14 +582,12 @@ function submitUpdate(pipeId) {
   var biddingDate = document.getElementById('updateBidding').value.trim();
   var shipmentDate = document.getElementById('updateShipment').value.trim();
   var correctionText = document.getElementById('updateCorrection').value.trim();
-  var contactInfo = document.getElementById('updateContact').value.trim();
   
   // Build log message
-  var logMessage = '📞 ลูกค้าอัพเดท: ' + progressText;
+  var logMessage = '📞 ' + userName + ' อัพเดท: ' + progressText;
   if (biddingDate) logMessage += ' | Bidding: ' + biddingDate;
   if (shipmentDate) logMessage += ' | Shipment: ' + shipmentDate;
   if (correctionText) logMessage += ' | แจ้งแก้ไข: ' + correctionText;
-  if (contactInfo) logMessage += ' | ติดต่อกลับ: ' + contactInfo;
   
   // Save to pipeLog
   var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
@@ -603,11 +598,11 @@ function submitUpdate(pipeId) {
     content: logMessage,
     date: new Date().toISOString(),
     details: {
+      userName: userName,
       progress: progressText,
       biddingDate: biddingDate,
       shipmentDate: shipmentDate,
-      correction: correctionText,
-      contact: contactInfo
+      correction: correctionText
     }
   });
   localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
@@ -625,31 +620,30 @@ function submitUpdate(pipeId) {
     localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
   }
   
-  // Create task for salesperson if correction or contact provided
-  if (correctionText || contactInfo) {
-    var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
-    var taskTitle = '📋 ลูกค้าแจ้งข้อมูล - ' + (pipeName || '');
-    var taskDesc = '';
-    if (correctionText) taskDesc += '🔧 ต้องการแก้ไข: ' + correctionText + '\n';
-    if (contactInfo) taskDesc += '📞 ช่องทางติดต่อ: ' + contactInfo + '\n';
-    taskDesc += '📝 ความคืบหน้า: ' + progressText;
-    
-    tasks.unshift({
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
-      title: taskTitle,
-      description: taskDesc,
-      pipeId: pipeId,
-      dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
-      priority: 'high',
-      status: 'active',
-      category: 'Client',
-      created: new Date().toISOString()
-    });
-    localStorage.setItem('v7_tasks', JSON.stringify(tasks));
-  }
+  // Create task for salesperson
+  var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
+  var taskTitle = '📋 ลูกค้าแจ้งข้อมูล - ' + (currentPipeName || '');
+  var taskDesc = '👤 ผู้แจ้ง: ' + userName + '\n';
+  taskDesc += '📝 ความคืบหน้า: ' + progressText + '\n';
+  if (biddingDate) taskDesc += '📅 Bidding: ' + biddingDate + '\n';
+  if (shipmentDate) taskDesc += '📅 Shipment: ' + shipmentDate + '\n';
+  if (correctionText) taskDesc += '🔧 ต้องการแก้ไข: ' + correctionText + '\n';
+  
+  tasks.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+    title: taskTitle,
+    description: taskDesc,
+    pipeId: pipeId,
+    dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+    priority: 'high',
+    status: 'active',
+    category: 'Client',
+    created: new Date().toISOString()
+  });
+  localStorage.setItem('v7_tasks', JSON.stringify(tasks));
   
   closeModal();
-  showSuccessToast('✅ อัพเดทเรียบร้อยแล้ว! ขอบคุณครับ');
+  showSuccessToast('✅ อัพเดทเรียบร้อยแล้ว! ขอบคุณคุณ ' + userName);
   
   // Refresh data to show new log
   setTimeout(function() { loadData(); }, 1000);
@@ -743,7 +737,7 @@ function showDetail(pipeId) {
   
   // Update button - opens modal
   html += '<div class="cv-section"><div class="cv-section-title">✏️ สอบถามเพิ่มเติม / อัพเดท</div>';
-  html += '<button class="btn-send" style="width:100%" onclick="showModal(\'' + p.id + '\', \'' + esc(p.projectName) + '\')">📩 คลิกเพื่ออัพเดทความคืบหน้า</button>';
+  html += '<button class="btn-send" onclick="showModal(\'' + p.id + '\', \'' + esc(p.projectName) + '\')">📩 คลิกเพื่ออัพเดทความคืบหน้า</button>';
   html += '<div style="font-size:11px;color:var(--text2);margin-top:8px">💡 กดเพื่อแจ้งความคืบหน้า แก้ไขข้อมูล หรือสอบถามเพิ่มเติม</div>';
   html += '</div>';
   
