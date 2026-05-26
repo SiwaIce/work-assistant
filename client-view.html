@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DJI Enterprise - Client View</title>
+<title>DJI Enterprise - ติดตามสถานะโครงการ</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"Segoe UI",sans-serif;background:#0a0e27;color:#e0e6f0}
@@ -44,18 +44,20 @@ td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13
 .update-area{display:flex;gap:6px;margin-top:12px}
 .update-input{flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px}
 .loading{text-align:center;padding:50px;color:#8892b0}
+.success-msg{background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:10px;border-radius:8px;margin-bottom:10px;text-align:center}
 @media(max-width:768px){.container{padding:12px}.name{font-size:22px}.detail-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <div class="container" id="app">
-  <div class="loading">กำลังโหลดข้อมูล...</div>
+  <div class="loading">🔄 กำลังโหลดข้อมูล...</div>
 </div>
 
 <script>
 // รับ dealerId จาก URL parameter
 var urlParams = new URLSearchParams(window.location.search);
 var dealerId = urlParams.get('dealerId');
+var successMsg = urlParams.get('sent') === '1';
 
 // ฟังก์ชัน fmtMoney
 function fmtMoneyFull(n) {
@@ -69,17 +71,16 @@ function esc(s) {
   return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// สถานะ label
 function getStatusText(status) {
   var m = {
-    prospect: '🔵 Prospect',
-    tor_review: '🟣 TOR Review',
-    quotation: '🟠 Quotation',
-    bidding: '🟡 Bidding',
-    negotiation: '🔵 Negotiation',
-    win: '🟢 Win',
-    ordered: '🟢 Ordered',
-    delivered: '✅ Delivered'
+    prospect: '🔵 อยู่ระหว่างเสนอ',
+    tor_review: '🟣 อยู่ระหว่างรอ TOR',
+    quotation: '🟠 อยู่ระหว่างเสนอราคา',
+    bidding: '🟡 กำลังเสนอราคา',
+    negotiation: '🔵 กำลังเจรจา',
+    win: '🟢 ได้รับงานแล้ว',
+    ordered: '🟢 สั่งซื้อแล้ว',
+    delivered: '✅ ส่งมอบแล้ว'
   };
   return m[status] || status;
 }
@@ -109,30 +110,66 @@ function getValueClass(amt) {
 var pipesData = [];
 var dealerName = '';
 
-// ส่งข้อความกลับ
+// ส่งข้อความกลับ (บันทึกลง localStorage โดยตรง)
 function sendUpdate(pipeId) {
   var text = document.getElementById('updateInput').value.trim();
   if (!text) { alert('กรุณาพิมพ์ข้อความ'); return; }
-  if (window.opener) {
-    window.opener.postMessage({
-      type: 'CV_UPDATE',
+  
+  // บันทึก log ลง localStorage
+  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
+  pipeLogs.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+    pipeId: pipeId,
+    type: 'update',
+    content: '📞 ลูกค้าสอบถาม/อัพเดท: ' + text,
+    date: new Date().toISOString()
+  });
+  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
+  
+  // สร้าง Task ให้พนักงาน
+  var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
+  var pipe = null;
+  for (var i = 0; i < pipesData.length; i++) {
+    if (pipesData[i].id === pipeId) { pipe = pipesData[i]; break; }
+  }
+  if (pipe) {
+    tasks.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+      title: '📞 ตอบกลับลูกค้า: ' + (pipe.projectName || '').substr(0, 40),
+      description: 'ลูกค้าสอบถาม/อัพเดท: ' + text,
       pipeId: pipeId,
       dealerId: dealerId,
-      text: text
-    }, '*');
-    alert('✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ');
-    document.getElementById('updateInput').value = '';
-    showOverview();
-  } else {
-    alert('ไม่สามารถส่งได้ กรุณาแจ้งพนักงานขาย');
+      dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+      priority: 'high',
+      status: 'active',
+      category: 'Client',
+      created: new Date().toISOString()
+    });
+    localStorage.setItem('v7_tasks', JSON.stringify(tasks));
   }
+  
+  alert('✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ\nพนักงานขายจะติดต่อกลับโดยเร็วที่สุด');
+  document.getElementById('updateInput').value = '';
+  
+  // รีเฟรชข้อมูล (เพื่อให้เห็น log ล่าสุด)
+  loadData();
 }
 
 // แสดงหน้า overview
 function showOverview() {
   if (!pipesData.length) return;
   
-  var html = '<div class="header">';
+  var html = '';
+  
+  // แสดงข้อความสำเร็จถ้ามี
+  if (successMsg) {
+    html += '<div class="success-msg">✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ</div>';
+    // ลบ parameter ออกจาก URL โดยไม่ reload
+    var newUrl = window.location.pathname + '?dealerId=' + dealerId;
+    window.history.replaceState({}, document.title, newUrl);
+  }
+  
+  html += '<div class="header">';
   html += '<div class="logo">🚁 DJI Enterprise</div>';
   html += '<div class="name">' + esc(dealerName) + '</div>';
   html += '<div class="sub">DJI Authorized Dealer</div>';
@@ -140,7 +177,7 @@ function showOverview() {
   
   html += '<div class="section">';
   html += '<div class="section-title">📊 โครงการของท่าน (' + pipesData.length + ' โครงการ)</div>';
-  html += '<table>';
+  html += '<td>';
   html += '<thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>มูลค่า</th><th>Bidding</th><th>Shipment</th><th></th></tr></thead>';
   html += '<tbody>';
   
@@ -163,7 +200,8 @@ function showOverview() {
   }
   
   html += '</tbody></table></div>';
-  html += '<div class="footer">Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor<br>Siwawong | ' + new Date().toISOString().split('T')[0].replace(/-/g, '/') + '</div>';
+  html += '<div class="footer">💡 สอบถามเพิ่มเติมได้ที่พนักงานขาย หรือกด "ดูรายละเอียด" เพื่อสอบถามทันที</div>';
+  html += '<div class="footer">Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor</div>';
   
   document.getElementById('app').innerHTML = html;
 }
@@ -201,7 +239,12 @@ function showDetail(pipeId) {
     for (var i = 0; i < p.items.length; i++) {
       var it = p.items[i];
       var total = (Number(it.qty) || 1) * (Number(it.price) || 0);
-      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(it.model || '-') + '</td><td>' + (it.qty || 1) + '</td><td>' + fmtMoneyFull(it.price) + '</td><td>' + fmtMoneyFull(total) + '</td></tr>';
+      html += '<tr><td class="cv-num">' + (i + 1) + '</td>';
+      html += '<td>' + esc(it.model || '-') + '</td>';
+      html += '<td>' + (it.qty || 1) + '</td>';
+      html += '<td>' + fmtMoneyFull(it.price) + '</td>';
+      html += '<td>' + fmtMoneyFull(total) + '</td>';
+      html += '</tr>';
     }
     html += '</tbody></table></div>';
   }
@@ -233,26 +276,23 @@ function showDetail(pipeId) {
   }
   
   // อัพเดท
-  html += '<div class="section"><div class="section-title">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>';
+  html += '<div class="section"><div class="section-title">✏️ สอบถามเพิ่มเติม / อัพเดท</div>';
   html += '<div class="update-area">';
   html += '<input type="text" id="updateInput" class="update-input" placeholder="พิมพ์ข้อความอัพเดท...">';
-  html += '<button class="btn-primary" onclick="sendUpdate(\'' + p.id + '\')">💾 ส่งอัพเดท</button>';
+  html += '<button class="btn-primary" onclick="sendUpdate(\'' + p.id + '\')">📩 ส่งข้อความ</button>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:#8892b0;margin-top:8px">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>';
+  html += '<div style="font-size:11px;color:#8892b0;margin-top:8px">💡 สอบถามเพิ่มเติมหรือแจ้งความคืบหน้าได้ที่นี่ พนักงานขายจะได้รับทันที</div>';
   html += '</div>';
   
   document.getElementById('app').innerHTML = html;
 }
 
-// โหลดข้อมูล
+// โหลดข้อมูลจาก localStorage
 function loadData() {
   if (!dealerId) {
     document.getElementById('app').innerHTML = '<div class="loading">❌ ไม่พบข้อมูล Dealer</div>';
     return;
   }
-  
-  // ส่ง request ไปหา opener เพื่อขอข้อมูล (หรือใช้ localStorage โดยตรง)
-  // แต่เนื่องจาก popup อ่าน localStorage เดียวกับหน้าหลักได้ เลยใช้ localStorage ได้เลย
   
   var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
   var dealer = null;
@@ -293,7 +333,7 @@ function loadData() {
       return a.pipeId === p.id && a.status === 'pending';
     });
     
-    // logs
+    // logs (เฉพาะที่มี type ปลอดภัย)
     var logs = pipeLogs.filter(function(l) {
       return l.pipeId === p.id;
     }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 10);
@@ -321,6 +361,13 @@ function loadData() {
 
 // เริ่มต้น
 loadData();
+
+// Auto refresh ทุก 30 วินาที (เผื่อพนักงานอัพเดทข้อมูล)
+setInterval(function() {
+  if (document.getElementById('app').innerHTML.indexOf('detail') === -1) {
+    loadData();
+  }
+}, 30000);
 </script>
 </body>
 </html>

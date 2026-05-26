@@ -1924,3 +1924,18 @@ function fmtMoneyFull(n) {
   n = Number(n);
   return n.toLocaleString('th-TH');
 }
+function copyClientLink(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  
+  // สร้างลิงก์แบบเต็ม (absolute URL)
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
+  
+  // คัดลอกไป clipboard
+  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับลูกค้าแล้ว: ' + d.name);
+  
+  // แจ้งเตือนเพิ่มเติม
+  toast('📋 ลิงก์: ' + clientUrl);
+}
