@@ -1562,3 +1562,41 @@ function updateMbNav() {
     }
   }
 }
+// ================================================================
+// RECEIVE UPDATE FROM CLIENT VIEW (Popup)
+// ================================================================
+window.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'CV_UPDATE') {
+    var data = event.data;
+    if (data.pipeId && data.text) {
+      // Add log to pipeline
+      ST.add('pipeLog', {
+        pipeId: data.pipeId,
+        type: 'update',
+        content: '📞 ลูกค้าสอบถาม/อัพเดท: ' + data.text,
+        date: _nw()
+      });
+      
+      // Show notification
+      toast('📬 ได้รับอัพเดทจากลูกค้า!');
+      
+      // Optional: Add to task
+      var pipe = ST.getOne('pipeline', data.pipeId);
+      if (pipe) {
+        ST.add('tasks', {
+          title: '📞 ตอบกลับลูกค้า: ' + (pipe.projectName || '').substr(0, 40),
+          description: 'ลูกค้าสอบถาม/อัพเดท: ' + data.text,
+          pipeId: data.pipeId,
+          dealerId: pipe.dealerId,
+          dueDate: addD(_td(), 2),
+          priority: 'high',
+          status: 'active',
+          category: 'Client'
+        });
+      }
+      
+      // Auto refresh to show new log
+      setTimeout(function() { render(); }, 500);
+    }
+  }
+});
