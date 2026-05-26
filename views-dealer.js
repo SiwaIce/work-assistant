@@ -1613,7 +1613,7 @@ function toggleDealerDoneTasks() {
 }
 
 // ================================================================
-// CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู) - SIMPLE WORKING VERSION
+// CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู) - FULL FEATURE
 // ================================================================
 function openClientView(dealerId) {
   var d = ST.getOne('dealers', dealerId);
@@ -1622,12 +1622,12 @@ function openClientView(dealerId) {
   var win = window.open('', '_blank');
   if (!win) { toast('กรุณาอนุญาต Popup'); return; }
   
-  var html = buildSimpleClientView(dealerId);
+  var html = buildFullClientView(dealerId);
   win.document.write(html);
   win.document.close();
 }
 
-function buildSimpleClientView(dealerId) {
+function buildFullClientView(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return '<h1>Not Found</h1>';
   
@@ -1636,6 +1636,40 @@ function buildSimpleClientView(dealerId) {
     return ['lost','on_hold'].indexOf(p.status) === -1; 
   });
   var cfg = getConfig();
+  
+  // เตรียมข้อมูล pipeline สำหรับ JavaScript
+  var pipesData = [];
+  for (var i = 0; i < activePipes.length; i++) {
+    var p = activePipes[i];
+    pipesData.push({
+      id: p.id,
+      projectName: p.projectName || '-',
+      endUserTH: p.endUserTH || '-',
+      endUserEN: p.endUserEN || '-',
+      unitType: p.unitType || '-',
+      status: p.status,
+      biddingDate: p.biddingDate || '-',
+      shipmentDate: p.shipmentDate || '-',
+      tor: p.tor || '-',
+      nextAction: p.nextAction || '-',
+      forecastAmount: p.forecastAmount || 0,
+      items: getPipeItems(p),
+      actions: getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === "pending"; }),
+      logs: (function(pid) {
+        var logs = ST.pipeLogsByPipe(pid);
+        var filtered = [];
+        var safeTypes = ["update","progress","status_change","win","action"];
+        for (var j = 0; j < logs.length; j++) {
+          var l = logs[j];
+          if (safeTypes.indexOf(l.type) === -1) continue;
+          var c = (l.content || "").toLowerCase();
+          if (c.indexOf("forecast") !== -1 || c.indexOf("ราคา") !== -1 || c.indexOf("price") !== -1 || c.indexOf("lost") !== -1 || c.indexOf("หมายเหตุ") !== -1) continue;
+          filtered.push(l);
+        }
+        return filtered.slice(0, 10);
+      })(p.id)
+    });
+  }
   
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
   html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
@@ -1654,17 +1688,33 @@ function buildSimpleClientView(dealerId) {
   html += 'th{text-align:left;padding:10px 12px;font-size:11px;color:#8892b0;border-bottom:2px solid rgba(255,255,255,0.08)}';
   html += 'td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}';
   html += '.status{padding:3px 10px;border-radius:12px;font-size:11px;display:inline-block;background:rgba(100,181,246,0.12);color:#64b5f6}';
+  html += '.status-prospect{background:rgba(100,181,246,0.12);color:#64b5f6}';
+  html += '.status-tor{background:rgba(186,104,200,0.12);color:#ba68c8}';
+  html += '.status-quote{background:rgba(255,183,77,0.12);color:#ffb74d}';
+  html += '.status-bidding{background:rgba(255,235,59,0.12);color:#fdd835}';
+  html += '.status-nego{background:rgba(77,208,225,0.12);color:#4dd0e1}';
+  html += '.status-win{background:rgba(129,199,132,0.12);color:#81c784}';
+  html += '.status-ordered{background:rgba(76,175,80,0.12);color:#4caf50}';
+  html += '.status-delivered{background:rgba(76,175,80,0.15);color:#66bb6a}';
   html += '.footer{text-align:center;padding:20px 0;font-size:11px;color:#8892b0}';
-  html += '.btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#8892b0;cursor:pointer;font-size:12px}';
-  html += '.btn:hover{background:rgba(100,181,246,0.1);color:#64b5f6}';
-  html += '.back{display:inline-block;padding:8px 16px;margin-bottom:16px;cursor:pointer;color:#64b5f6}';
+  html += '.btn{padding:6px 12px;border-radius:6px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:11px}';
+  html += '.btn:hover{background:rgba(59,130,246,0.2)}';
+  html += '.btn-primary{padding:6px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:11px}';
   html += '.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}';
   html += '.detail-item{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}';
   html += '.detail-label{font-size:10px;color:#8892b0}';
   html += '.detail-val{font-size:13px;font-weight:600}';
+  html += '.back{cursor:pointer;color:#64b5f6;margin-bottom:16px;display:inline-block}';
+  html += '.back:hover{text-decoration:underline}';
+  html += '.val-col{display:none}';
+  html += '.val-mega{color:#ef4444;font-weight:800}';
+  html += '.val-big{color:#f97316;font-weight:700}';
+  html += '.val-normal{color:#22c55e;font-weight:600}';
+  html += '.cv-action{padding:8px 12px;margin-bottom:6px;border-left:3px solid #64b5f6;background:rgba(255,255,255,0.02);border-radius:6px}';
+  html += '.cv-log{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px}';
+  html += '.cv-log-date{color:#8892b0;font-size:11px;min-width:70px}';
   html += '.update-area{display:flex;gap:6px;margin-top:12px}';
-  html += '.update-input{flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0}';
-  html += '.update-btn{padding:8px 16px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer}';
+  html += '.update-input{flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px}';
   html += '@media(max-width:768px){.container{padding:12px}.name{font-size:22px}.detail-grid{grid-template-columns:repeat(2,1fr)}}';
   html += '</style>';
   html += '</head><body>';
@@ -1677,25 +1727,29 @@ function buildSimpleClientView(dealerId) {
   html += '<div class="sub">DJI Authorized Dealer</div>';
   html += '</div>';
   
-  // Stats
-  var totalModels = 0;
-  var totalQty = 0;
-  for (var i = 0; i < activePipes.length; i++) {
-    var items = getPipeItems(activePipes[i]);
-    for (var j = 0; j < items.length; j++) {
-      totalQty += (Number(items[j].qty) || 1);
-      totalModels++;
-    }
-  }
-  
-  html += '<div class="section">';
-  html += '<div class="section-title">📊 โครงการของท่าน (' + activePipes.length + ' โครงการ)</div>';
-  html += '<table>';
-  html += '<thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>Bidding</th><th>Shipment</th><th></th></tr></thead>';
+  // Overview Section (projects table)
+  html += '<div class="section" id="overviewSection">';
+  html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">';
+  html += '<span>📊 โครงการของท่าน (' + activePipes.length + ' โครงการ)</span>';
+  html += '<button class="btn" onclick="toggleValue()">💰 <span id="valueLabel">แสดงมูลค่า</span></button>';
+  html += '</div>';
+  html += '<table id="projectTable">';
+  html += '<thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th class="val-col">มูลค่า</th><th>Bidding</th><th>Shipment</th><th></th></tr></thead>';
   html += '<tbody id="tableBody">';
   
   for (var i = 0; i < activePipes.length; i++) {
     var p = activePipes[i];
+    var statusClass = '';
+    if (p.status === 'prospect') statusClass = 'status-prospect';
+    else if (p.status === 'tor_review') statusClass = 'status-tor';
+    else if (p.status === 'quotation') statusClass = 'status-quote';
+    else if (p.status === 'bidding') statusClass = 'status-bidding';
+    else if (p.status === 'negotiation') statusClass = 'status-nego';
+    else if (p.status === 'win') statusClass = 'status-win';
+    else if (p.status === 'ordered') statusClass = 'status-ordered';
+    else if (p.status === 'delivered') statusClass = 'status-delivered';
+    else statusClass = 'status-prospect';
+    
     var statusText = '';
     if (p.status === 'prospect') statusText = '🔵 Prospect';
     else if (p.status === 'tor_review') statusText = '🟣 TOR Review';
@@ -1707,19 +1761,30 @@ function buildSimpleClientView(dealerId) {
     else if (p.status === 'delivered') statusText = '✅ Delivered';
     else statusText = p.status;
     
+    // กำหนด class สำหรับมูลค่าตามขนาด
+    var amt = Number(p.forecastAmount) || 0;
+    var valueClass = '';
+    if (amt >= 10000000) valueClass = 'val-mega';
+    else if (amt >= 1500000) valueClass = 'val-big';
+    else valueClass = 'val-normal';
+    
     html += '<tr>';
-    html += '<td>' + (i + 1) + '</td>';
+    html += '<td style="width:40px">' + (i + 1) + '</td>';
     html += '<td><strong>' + sanitize(p.projectName || '-') + '</strong></td>';
     html += '<td>' + sanitize(p.endUserTH || p.endUserEN || '-') + '</td>';
-    html += '<td><span class="status">' + statusText + '</span></td>';
+    html += '<td><span class="status ' + statusClass + '">' + statusText + '</span></td>';
+    html += '<td class="val-col"><span class="' + valueClass + '">' + fmtMoneyShort(amt) + '</span> ฿</td>';
     html += '<td>' + (p.biddingDate || '-') + '</td>';
     html += '<td>' + (p.shipmentDate || '-') + '</td>';
-    html += '<td><button class="btn" onclick="showDetail(' + i + ')">ดูรายละเอียด</button></td>';
+    html += '<td><button class="btn" onclick="showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
     html += '</tr>';
   }
   
   html += '</tbody></table>';
   html += '</div>';
+  
+  // Detail section (hidden initially, will be shown when clicking detail)
+  html += '<div id="detailSection" style="display:none"></div>';
   
   // Footer
   html += '<div class="footer">';
@@ -1731,68 +1796,124 @@ function buildSimpleClientView(dealerId) {
   
   // JavaScript
   html += '<script>';
-  html += 'var pipesData = ' + JSON.stringify(activePipes.map(function(p) {
-    return {
-      id: p.id,
-      projectName: p.projectName,
-      endUserTH: p.endUserTH,
-      endUserEN: p.endUserEN,
-      unitType: p.unitType,
-      status: p.status,
-      biddingDate: p.biddingDate,
-      shipmentDate: p.shipmentDate,
-      tor: p.tor,
-      items: getPipeItems(p)
-    };
-  })) + ';';
+  html += 'var pipesData = ' + JSON.stringify(pipesData) + ';';
   html += 'var dealerId = "' + dealerId + '";';
+  html += 'var showValue = false;';
   
-  html += 'function showDetail(idx){';
-  html += 'var p = pipesData[idx];';
-  html += 'if(!p) return;';
-  html += 'var statusText = "";';
-  html += 'if(p.status==="prospect") statusText="🔵 Prospect";';
-  html += 'else if(p.status==="tor_review") statusText="🟣 TOR Review";';
-  html += 'else if(p.status==="quotation") statusText="🟠 Quotation";';
-  html += 'else if(p.status==="bidding") statusText="🟡 Bidding";';
-  html += 'else if(p.status==="negotiation") statusText="🔵 Negotiation";';
-  html += 'else if(p.status==="win") statusText="🟢 Win";';
-  html += 'else if(p.status==="ordered") statusText="🟢 Ordered";';
-  html += 'else if(p.status==="delivered") statusText="✅ Delivered";';
-  html += 'else statusText=p.status;';
-  html += 'var html = "<div class=\"back\" onclick=\"location.reload()\">← กลับ</div>";';
-  html += 'html += "<div class=\"section\"><div class=\"section-title\">📊 "+esc(p.projectName||"-")+"</div>";';
-  html += 'html += "<div class=\"detail-grid\">";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">Status</div><div class=\"detail-val\">"+statusText+"</div></div>";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">End User</div><div class=\"detail-val\">"+esc(p.endUserTH||p.endUserEN||"-")+"</div></div>";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">Unit Type</div><div class=\"detail-val\">"+(p.unitType||"-")+"</div></div>";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">Bidding Date</div><div class=\"detail-val\">"+(p.biddingDate||"-")+"</div></div>";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">Shipment Date</div><div class=\"detail-val\">"+(p.shipmentDate||"-")+"</div></div>";';
-  html += 'html += "<div class=\"detail-item\"><div class=\"detail-label\">TOR</div><div class=\"detail-val\">"+(p.tor||"-")+"</div></div>";';
-  html += 'html += "</div></div>";';
-  html += 'if(p.items&&p.items.length){';
-  html += 'html += "<div class=\"section\"><div class=\"section-title\">📦 Products ("+p.items.length+")</div><table><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>";';
-  html += 'for(var i=0;i<p.items.length;i++){';
-  html += 'html += "<tr><td>"+(i+1)+"</td><td>"+esc(p.items[i].model||"-")+"</td><td>"+(p.items[i].qty||1)+"</td></tr>";';
-  html += '}';
-  html += 'html += "</tbody></table></div>";';
-  html += '}';
-  html += 'html += "<div class=\"section\"><div class=\"section-title\">✏️ สอบถามเพิ่มเติม / อัพเดท</div>";';
-  html += 'html += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"update-btn\" onclick=\"sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
-  html += 'html += "<div style=\"font-size:11px;color:#8892b0;margin-top:8px\">💡 อัพเดทจะถูกบันทึกทันที</div></div>";';
-  html += 'document.getElementById("app").innerHTML = html;';
+  // Toggle value function
+  html += 'function toggleValue(){';
+  html += '  showValue = !showValue;';
+  html += '  var cols = document.querySelectorAll(".val-col");';
+  html += '  for(var i=0;i<cols.length;i++){ cols[i].style.display = showValue ? "table-cell" : "none"; }';
+  html += '  var label = document.getElementById("valueLabel");';
+  html += '  if(label) label.textContent = showValue ? "ซ่อนมูลค่า" : "แสดงมูลค่า";';
   html += '}';
   
+  // Show detail function
+  html += 'function showDetail(pipeId){';
+  html += '  var p = null;';
+  html += '  for(var i=0;i<pipesData.length;i++){ if(pipesData[i].id === pipeId){ p = pipesData[i]; break; } }';
+  html += '  if(!p){ alert("ไม่พบข้อมูล"); return; }';
+  html += '  var statusText = getStatusText(p.status);';
+  html += '  var statusClass = getStatusClass(p.status);';
+  html += '  var valueClass = getValueClass(p.forecastAmount);';
+  html += '  var html = "<div class=\"back\" onclick=\"showOverview()\">← กลับไปหน้าแรก</div>";';
+  html += '  html += "<div class=\"section\"><div class=\"section-title\">📊 "+esc(p.projectName)+"</div>";';
+  html += '  html += "<div class=\"detail-grid\">";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">สถานะ</div><div class=\"detail-val\"><span class=\"status "+statusClass+"\">"+statusText+"</span></div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">End User</div><div class=\"detail-val\">"+esc(p.endUserTH)+"</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Unit Type</div><div class=\"detail-val\">"+esc(p.unitType)+"</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">มูลค่า</div><div class=\"detail-val "+valueClass+"\">"+fmtMoneyFull(p.forecastAmount)+" ฿</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Bidding Date</div><div class=\"detail-val\">"+p.biddingDate+"</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Shipment Date</div><div class=\"detail-val\">"+p.shipmentDate+"</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">TOR</div><div class=\"detail-val\">"+esc(p.tor)+"</div></div>";';
+  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Next Action</div><div class=\"detail-val\">"+esc(p.nextAction)+"</div></div>";';
+  html += '  html += "</div></div>";';
+  
+  // Products
+  html += '  if(p.items && p.items.length){';
+  html += '    html += "<div class=\"section\"><div class=\"section-title\">📦 รายการสินค้า ("+p.items.length+")</div>";';
+  html += '    html += "<table><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคาต่อหน่วย</th><th>รวม</th></tr></thead><tbody>";';
+  html += '    for(var i=0;i<p.items.length;i++){';
+  html += '      var it = p.items[i];';
+  html += '      var total = (Number(it.qty)||1) * (Number(it.price)||0);';
+  html += '      html += "<tr><td>"+(i+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td><td>"+fmtMoneyFull(it.price)+"</td><td>"+fmtMoneyFull(total)+"</td></tr>";';
+  html += '    }';
+  html += '    html += "</tbody></table></div>";';
+  html += '  }';
+  
+  // Action Items
+  html += '  if(p.actions && p.actions.length){';
+  html += '    html += "<div class=\"section\"><div class=\"section-title\">🎯 รายการที่ต้องดำเนินการ ("+p.actions.length+")</div>";';
+  html += '    for(var i=0;i<p.actions.length;i++){';
+  html += '      var a = p.actions[i];';
+  html += '      html += "<div class=\"cv-action\"><div class=\"cv-action-text\">⏳ "+esc(a.text)+"</div>";';
+  html += '      if(a.dueDate) html += "<div class=\"cv-action-meta\">📅 กำหนด: "+a.dueDate+"</div>";';
+  html += '      html += "</div>";';
+  html += '    }';
+  html += '    html += "</div>";';
+  html += '  }';
+  
+  // Updates
+  html += '  if(p.logs && p.logs.length){';
+  html += '    html += "<div class=\"section\"><div class=\"section-title\">📝 ความคืบหน้าล่าสุด</div>";';
+  html += '    for(var i=0;i<p.logs.length;i++){';
+  html += '      var l = p.logs[i];';
+  html += '      var icon = l.type==="progress"?"🟢":l.type==="win"?"✅":l.type==="status_change"?"🔄":"📝";';
+  html += '      var dateStr = l.date ? l.date.split("T")[0] : "-";';
+  html += '      html += "<div class=\"cv-log\"><span class=\"cv-log-date\">"+dateStr+"</span><span class=\"cv-log-icon\">"+icon+"</span><span class=\"cv-log-text\">"+esc((l.content||"").substr(0,80))+"</span></div>";';
+  html += '    }';
+  html += '    html += "</div>";';
+  html += '  }';
+  
+  // Update form
+  html += '  html += "<div class=\"section\"><div class=\"section-title\">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>";';
+  html += '  html += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"btn-primary\" onclick=\"sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
+  html += '  html += "<div style=\"font-size:11px;color:#8892b0;margin-top:8px\">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>";';
+  html += '  html += "</div>";';
+  html += '  document.getElementById("overviewSection").style.display = "none";';
+  html += '  document.getElementById("detailSection").style.display = "block";';
+  html += '  document.getElementById("detailSection").innerHTML = html;';
+  html += '}';
+  
+  // Show overview
+  html += 'function showOverview(){';
+  html += '  document.getElementById("overviewSection").style.display = "block";';
+  html += '  document.getElementById("detailSection").style.display = "none";';
+  html += '  document.getElementById("detailSection").innerHTML = "";';
+  html += '}';
+  
+  // Helper functions
+  html += 'function getStatusText(status){';
+  html += '  var m={"prospect":"🔵 Prospect","tor_review":"🟣 TOR Review","quotation":"🟠 Quotation","bidding":"🟡 Bidding","negotiation":"🔵 Negotiation","win":"🟢 Win","ordered":"🟢 Ordered","delivered":"✅ Delivered","recurring":"🔄 Recurring"};';
+  html += '  return m[status] || status;';
+  html += '}';
+  html += 'function getStatusClass(status){';
+  html += '  var m={"prospect":"status-prospect","tor_review":"status-tor","quotation":"status-quote","bidding":"status-bidding","negotiation":"status-nego","win":"status-win","ordered":"status-ordered","delivered":"status-delivered"};';
+  html += '  return m[status] || "status-prospect";';
+  html += '}';
+  html += 'function getValueClass(amt){';
+  html += '  amt = Number(amt) || 0;';
+  html += '  if(amt >= 10000000) return "val-mega";';
+  html += '  if(amt >= 1500000) return "val-big";';
+  html += '  return "val-normal";';
+  html += '}';
+  html += 'function fmtMoneyFull(n){if(!n)return"0";n=Number(n);return n.toLocaleString("th-TH");}';
+  html += 'function fmtMoneyShort(n){if(!n)return"-";n=Number(n);if(n>=1000000)return(n/1000000).toFixed(1)+"M";if(n>=1000)return Math.round(n/1000)+"K";return n.toLocaleString();}';
   html += 'function esc(s){if(!s)return"";return String(s).replace(/</g,"&lt;").replace(/>/g,"&gt;");}';
   
+  // Send update
   html += 'function sendUpdate(pipeId){';
-  html += 'var text=document.getElementById("updateInput").value.trim();';
-  html += 'if(!text){alert("กรุณาพิมพ์ข้อความ");return;}';
-  html += 'if(window.opener){';
-  html += 'window.opener.postMessage({type:"CV_UPDATE",pipeId:pipeId,dealerId:dealerId,text:text},"*");';
-  html += 'alert("✅ ส่งอัพเดทเรียบร้อยแล้ว! ขอบคุณครับ");';
-  html += 'document.getElementById("updateInput").value="";';
-  html += '}else{alert("ไม่สามารถส่งอัพเดทได้ กรุณาแจ้งพนักงานขาย");}';
+  html += '  var text = document.getElementById("updateInput").value.trim();';
+  html += '  if(!text){ alert("กรุณาพิมพ์ข้อความ"); return; }';
+  html += '  if(window.opener){';
+  html += '    window.opener.postMessage({type:"CV_UPDATE",pipeId:pipeId,dealerId:dealerId,text:text},"*");';
+  html += '    alert("✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ");';
+  html += '    document.getElementById("updateInput").value = "";';
+  html += '    showOverview();';
+  html += '  }else{';
+  html += '    alert("ไม่สามารถส่งได้ กรุณาแจ้งพนักงานขาย");';
+  html += '  }';
   html += '}';
   
   html += '<\/script>';
