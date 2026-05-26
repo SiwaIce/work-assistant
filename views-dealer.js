@@ -145,14 +145,16 @@ function rDealerDet(el) {
       ${levelTag(d.level)}
       <span style="font-size:.72rem;font-weight:700;color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">Health: ${h.score}/100</span>
     </div>
-    <div class="bg">
-      <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
-      <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
-      <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
-            <button class="btn bsm bo" onclick="openClientView('${d.id}')" title="Present ให้ลูกค้าดู">🖥️</button>
-      <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
-      <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
-    </div>
+// ใน function rDealerDet(el) หาส่วนนี้
+<div class="bg">
+  <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
+  <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
+  <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
+  <button class="btn bsm bo" onclick="openClientView('${d.id}')" title="Present ให้ลูกค้าดู">🖥️</button>
+  <button class="btn bsm bp" onclick="copyClientLink('${d.id}')" title="คัดลอกลิงก์ส่งให้ลูกค้า">🔗 คัดลอกลิงก์</button>
+  <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
+  <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
+</div>
   </div>
 
   <!-- Tabs -->
@@ -1928,13 +1930,13 @@ function copyClientLink(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
   
-  // สร้างลิงก์แบบเต็ม (absolute URL)
+  // สร้างลิงก์ไปยัง client-view.html
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
   
-  // คัดลอกไป clipboard
-  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับลูกค้าแล้ว: ' + d.name);
+  // คัดลอก
+  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + d.name + ' แล้ว! ส่งให้ลูกค้าได้เลย');
   
   // แจ้งเตือนเพิ่มเติม
   toast('📋 ลิงก์: ' + clientUrl);
