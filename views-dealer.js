@@ -1637,21 +1637,21 @@ function buildFinalClientView(dealerId) {
   });
   var cfg = getConfig();
   
-  // เตรียมข้อมูล pipeline สำหรับ JavaScript
+  // เตรียมข้อมูล pipeline สำหรับ JavaScript (แบบ JSON string)
   var pipesData = [];
   for (var i = 0; i < activePipes.length; i++) {
     var p = activePipes[i];
     pipesData.push({
       id: p.id,
-      projectName: p.projectName || '-',
-      endUserTH: p.endUserTH || '-',
-      endUserEN: p.endUserEN || '-',
-      unitType: p.unitType || '-',
+      projectName: (p.projectName || '-'),
+      endUserTH: (p.endUserTH || '-'),
+      endUserEN: (p.endUserEN || '-'),
+      unitType: (p.unitType || '-'),
       status: p.status,
-      biddingDate: p.biddingDate || '-',
-      shipmentDate: p.shipmentDate || '-',
-      tor: p.tor || '-',
-      nextAction: p.nextAction || '-',
+      biddingDate: (p.biddingDate || '-'),
+      shipmentDate: (p.shipmentDate || '-'),
+      tor: (p.tor || '-'),
+      nextAction: (p.nextAction || '-'),
       forecastAmount: p.forecastAmount || 0,
       items: getPipeItems(p),
       actions: getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === "pending"; }),
@@ -1670,6 +1670,8 @@ function buildFinalClientView(dealerId) {
       })(p.id)
     });
   }
+  
+  var pipesDataJson = JSON.stringify(pipesData);
   
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
   html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
@@ -1726,7 +1728,7 @@ function buildFinalClientView(dealerId) {
   html += '<div class="sub">DJI Authorized Dealer</div>';
   html += '</div>';
   
-  // Overview Section - แสดงมูลค่าในคอลัมน์เลย
+  // Overview Section
   html += '<div class="section" id="overviewSection">';
   html += '<div class="section-title">📊 โครงการของท่าน (' + activePipes.length + ' โครงการ)</div>';
   html += '<table id="projectTable">';
@@ -1773,7 +1775,7 @@ function buildFinalClientView(dealerId) {
     html += '<td><span class="' + valueClass + '">' + fmtMoneyFull(amt) + '</span> ฿</td>';
     html += '<td>' + (p.biddingDate || '-') + '</td>';
     html += '<td>' + (p.shipmentDate || '-') + '</td>';
-    html += '<td><button class="btn" onclick="showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
+    html += '<td><button class="btn" onclick="window.showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
     html += '</tr>';
   }
   
@@ -1781,7 +1783,7 @@ function buildFinalClientView(dealerId) {
   html += '</table>';
   html += '</div>';
   
-  // Detail section (hidden initially)
+  // Detail section (hidden)
   html += '<div id="detailSection" style="display:none"></div>';
   
   // Footer
@@ -1792,28 +1794,25 @@ function buildFinalClientView(dealerId) {
   
   html += '</div>';
   
-  // JavaScript
+  // JavaScript - แยกเป็นส่วนๆ เพื่อความชัดเจน
   html += '<script>';
-  html += 'var pipesData = ' + JSON.stringify(pipesData) + ';';
+  html += 'var pipesData = ' + pipesDataJson + ';';
   html += 'var dealerId = "' + dealerId + '";';
   
   // Helper functions
   html += 'function esc(s){if(!s)return"";return String(s).replace(/</g,"&lt;").replace(/>/g,"&gt;");}';
   html += 'function fmtMoneyFull(n){if(!n)return"0";n=Number(n);return n.toLocaleString("th-TH");}';
+  html += 'function fmtMoneyShort(n){if(!n)return"-";n=Number(n);if(n>=1000000)return(n/1000000).toFixed(1)+"M";if(n>=1000)return Math.round(n/1000)+"K";return n.toLocaleString();}';
   
-  // Get status text
+  // Status helpers
   html += 'function getStatusText(status){';
-  html += '  var m={"prospect":"🔵 Prospect","tor_review":"🟣 TOR Review","quotation":"🟠 Quotation","bidding":"🟡 Bidding","negotiation":"🔵 Negotiation","win":"🟢 Win","ordered":"🟢 Ordered","delivered":"✅ Delivered"};';
+  html += '  var m={prospect:"🔵 Prospect",tor_review:"🟣 TOR Review",quotation:"🟠 Quotation",bidding:"🟡 Bidding",negotiation:"🔵 Negotiation",win:"🟢 Win",ordered:"🟢 Ordered",delivered:"✅ Delivered"};';
   html += '  return m[status] || status;';
   html += '}';
-  
-  // Get status class
   html += 'function getStatusClass(status){';
-  html += '  var m={"prospect":"status-prospect","tor_review":"status-tor","quotation":"status-quote","bidding":"status-bidding","negotiation":"status-nego","win":"status-win","ordered":"status-ordered","delivered":"status-delivered"};';
+  html += '  var m={prospect:"status-prospect",tor_review:"status-tor",quotation:"status-quote",bidding:"status-bidding",negotiation:"status-nego",win:"status-win",ordered:"status-ordered",delivered:"status-delivered"};';
   html += '  return m[status] || "status-prospect";';
   html += '}';
-  
-  // Get value class
   html += 'function getValueClass(amt){';
   html += '  amt = Number(amt) || 0;';
   html += '  if(amt >= 10000000) return "val-mega";';
@@ -1821,15 +1820,22 @@ function buildFinalClientView(dealerId) {
   html += '  return "val-normal";';
   html += '}';
   
+  // Show overview
+  html += 'window.showOverview = function(){';
+  html += '  document.getElementById("overviewSection").style.display = "block";';
+  html += '  document.getElementById("detailSection").style.display = "none";';
+  html += '  document.getElementById("detailSection").innerHTML = "";';
+  html += '};';
+  
   // Show detail
-  html += 'function showDetail(pipeId){';
+  html += 'window.showDetail = function(pipeId){';
   html += '  var p = null;';
   html += '  for(var i=0;i<pipesData.length;i++){ if(pipesData[i].id === pipeId){ p = pipesData[i]; break; } }';
   html += '  if(!p){ alert("ไม่พบข้อมูล"); return; }';
   html += '  var statusText = getStatusText(p.status);';
   html += '  var statusClass = getStatusClass(p.status);';
   html += '  var valueClass = getValueClass(p.forecastAmount);';
-  html += '  var html = "<div class=\"back\" onclick=\"showOverview()\">← กลับไปหน้าแรก</div>";';
+  html += '  var html = "<div class=\"back\" onclick=\"window.showOverview()\">← กลับไปหน้าแรก</div>";';
   html += '  html += "<div class=\"section\"><div class=\"section-title\">📊 "+esc(p.projectName)+"</div>";';
   html += '  html += "<div class=\"detail-grid\">";';
   html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">สถานะ</div><div class=\"detail-val\"><span class=\"status "+statusClass+"\">"+statusText+"</span></div></div>";';
@@ -1849,7 +1855,7 @@ function buildFinalClientView(dealerId) {
   html += '    for(var i=0;i<p.items.length;i++){';
   html += '      var it = p.items[i];';
   html += '      var total = (Number(it.qty)||1) * (Number(it.price)||0);';
-  html += '      html += "<tr><td>"+(i+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td><td>"+fmtMoneyFull(it.price)+"</td><td>"+fmtMoneyFull(total)+"</td></tr>";';
+  html += '      html += "<tr><td class=\"cv-num\">"+(i+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td><td>"+fmtMoneyFull(it.price)+"</td><td>"+fmtMoneyFull(total)+"</td></tr>";';
   html += '    }';
   html += '    html += "</tbody></table></div>";';
   html += '  }';
@@ -1880,34 +1886,27 @@ function buildFinalClientView(dealerId) {
   
   // Update form
   html += '  html += "<div class=\"section\"><div class=\"section-title\">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>";';
-  html += '  html += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"btn-primary\" onclick=\"sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
+  html += '  html += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"btn-primary\" onclick=\"window.sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
   html += '  html += "<div style=\"font-size:11px;color:#8892b0;margin-top:8px\">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>";';
   html += '  html += "</div>";';
   html += '  document.getElementById("overviewSection").style.display = "none";';
   html += '  document.getElementById("detailSection").style.display = "block";';
   html += '  document.getElementById("detailSection").innerHTML = html;';
-  html += '}';
-  
-  // Show overview
-  html += 'function showOverview(){';
-  html += '  document.getElementById("overviewSection").style.display = "block";';
-  html += '  document.getElementById("detailSection").style.display = "none";';
-  html += '  document.getElementById("detailSection").innerHTML = "";';
-  html += '}';
+  html += '};';
   
   // Send update
-  html += 'function sendUpdate(pipeId){';
+  html += 'window.sendUpdate = function(pipeId){';
   html += '  var text = document.getElementById("updateInput").value.trim();';
   html += '  if(!text){ alert("กรุณาพิมพ์ข้อความ"); return; }';
   html += '  if(window.opener){';
   html += '    window.opener.postMessage({type:"CV_UPDATE",pipeId:pipeId,dealerId:dealerId,text:text},"*");';
   html += '    alert("✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ");';
   html += '    document.getElementById("updateInput").value = "";';
-  html += '    showOverview();';
+  html += '    window.showOverview();';
   html += '  }else{';
   html += '    alert("ไม่สามารถส่งได้ กรุณาแจ้งพนักงานขาย");';
   html += '  }';
-  html += '}';
+  html += '};';
   
   html += '<\/script>';
   html += '</body></html>';
