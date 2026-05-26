@@ -1611,3 +1611,332 @@ function toggleDealerDoneTasks() {
     if (arrow) arrow.textContent = '▶';
   }
 }
+// ================================================================
+// CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู)
+// ================================================================
+function openClientView(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  
+  var url = window.location.href.split('?')[0] + '?clientView=' + dealerId;
+  var win = window.open('', '_blank');
+  if (!win) { toast('กรุณาอนุญาต Popup'); return; }
+  
+  var html = buildClientViewHTML(dealerId, '');
+  win.document.write(html);
+  win.document.close();
+}
+
+function buildClientViewHTML(dealerId, pipeId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return '<h1>Not Found</h1>';
+  
+  var allPipes = ST.pipelineByDealer(dealerId);
+  var activePipes = allPipes.filter(function(p) { return ['lost','on_hold'].indexOf(p.status) === -1; });
+  var cfg = getConfig();
+  
+  // Collect models
+  var modelSummary = {};
+  var totalQty = 0;
+  activePipes.forEach(function(p) {
+    var items = getPipeItems(p);
+    items.forEach(function(it) {
+      var model = it.model || 'Other';
+      if (!modelSummary[model]) modelSummary[model] = 0;
+      var qty = Number(it.qty) || 1;
+      modelSummary[model] += qty;
+      totalQty += qty;
+    });
+  });
+
+  // Build page
+  var h = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+  h += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+  h += '<title>Pipeline — ' + d.name + '</title>';
+  h += '<style>' + getClientViewCSS() + '</style>';
+  h += '</head><body>';
+  
+  h += '<div class="cv-container">';
+  
+  // Header
+  h += '<div class="cv-header">';
+  h += '<div class="cv-logo">🚁 DJI Enterprise</div>';
+  h += '<div class="cv-dealer-name">' + sanitize(d.name) + '</div>';
+  h += '<div class="cv-dealer-sub">DJI Authorized Dealer</div>';
+  h += '</div>';
+
+  if (pipeId) {
+    // Project Detail View
+    h += buildClientProjectDetail(pipeId, dealerId);
+  } else {
+    // Overview View
+    
+    // Stats
+    h += '<div class="cv-stats">';
+    h += '<div class="cv-stat"><div class="cv-stat-val">' + activePipes.length + '</div><div class="cv-stat-label">Projects</div></div>';
+    h += '<div class="cv-stat"><div class="cv-stat-val">' + totalQty + '</div><div class="cv-stat-label">Units</div></div>';
+    h += '<div class="cv-stat"><div class="cv-stat-val">' + Object.keys(modelSummary).length + '</div><div class="cv-stat-label">Models</div></div>';
+    h += '</div>';
+
+    // Projects Table
+    h += '<div class="cv-section">';
+    h += '<div class="cv-section-title">📊 Projects Overview</div>';
+    h += '<div style="margin-bottom:8px;text-align:right"><button class="cv-toggle-btn" onclick="toggleCVValue()">💰 <span id="cvValLabel">แสดงมูลค่า</span></button></div>';
+    h += '<table class="cv-table">';
+    h += '<thead><tr><th>#</th><th>Project</th><th>End User</th><th>Products</th><th class="cv-val-col" style="display:none">Value</th><th>Status</th><th>Bidding</th><th>Shipment</th><th>Action</th></tr></thead>';
+    h += '<tbody>';
+    
+    activePipes.sort(function(a, b) {
+      var statusOrder = ['bidding','negotiation','quotation','tor_review','prospect','win','ordered','delivered','recurring'];
+      var ia = statusOrder.indexOf(a.status); if (ia === -1) ia = 99;
+      var ib = statusOrder.indexOf(b.status); if (ib === -1) ib = 99;
+      return ia - ib;
+    });
+
+    for (var i = 0; i < activePipes.length; i++) {
+      var p = activePipes[i];
+      var items = getPipeItems(p);
+      var modelText = items.map(function(it) { return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : ''); }).join(', ');
+      var statusLabel = getClientStatusLabel(p.status);
+      
+      h += '<tr class="cv-row" onclick="showCVDetail(\'' + p.id + '\',\'' + dealerId + '\')">';
+      h += '<td class="cv-num">' + (i + 1) + '</td>';
+      h += '<td class="cv-project">' + sanitize((p.projectName || '').substr(0, 40)) + '</td>';
+      h += '<td>' + sanitize((p.endUserTH || p.endUserEN || '').substr(0, 25)) + '</td>';
+      h += '<td class="cv-model">' + sanitize(modelText) + '</td>';
+      h += '<td class="cv-val-col" style="display:none">' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</td>';
+      h += '<td>' + statusLabel + '</td>';
+      h += '<td>' + (p.biddingDate ? fDShort(p.biddingDate) : '-') + '</td>';
+      h += '<td>' + (p.shipmentDate ? fDShort(p.shipmentDate) : '-') + '</td>';
+      h += '<td>' + (p.nextAction ? sanitize((p.nextAction || '').substr(0, 20)) : '-') + '</td>';
+      h += '</tr>';
+    }
+    
+    h += '</tbody></table></div>';
+
+    // Products Summary
+    h += '<div class="cv-section">';
+    h += '<div class="cv-section-title">📦 Products Summary</div>';
+    h += '<div class="cv-products">';
+    var modelList = Object.keys(modelSummary).sort(function(a, b) { return modelSummary[b] - modelSummary[a]; });
+    var maxQty = modelList.length ? modelSummary[modelList[0]] : 1;
+    for (var i = 0; i < modelList.length; i++) {
+      var model = modelList[i];
+      var qty = modelSummary[model];
+      var pct = Math.max(10, Math.round(qty / maxQty * 100));
+      h += '<div class="cv-product-row">';
+      h += '<div class="cv-product-name">' + sanitize(model) + ' <span class="cv-product-qty">x' + qty + '</span></div>';
+      h += '<div class="cv-product-bar"><div class="cv-product-fill" style="width:' + pct + '%"></div></div>';
+      h += '</div>';
+    }
+    h += '</div></div>';
+
+    // Action Items
+    var actions = getPipeActions().filter(function(a) { return a.status === 'pending'; });
+    var dealerActions = [];
+    for (var i = 0; i < actions.length; i++) {
+      var pipe = ST.getOne('pipeline', actions[i].pipeId);
+      if (pipe && pipe.dealerId === dealerId) {
+        dealerActions.push({action: actions[i], pipe: pipe});
+      }
+    }
+
+    if (dealerActions.length) {
+      h += '<div class="cv-section">';
+      h += '<div class="cv-section-title">🎯 Action Items (' + dealerActions.length + ')</div>';
+      var nowDate = new Date();
+      nowDate.setHours(0, 0, 0, 0);
+      for (var i = 0; i < dealerActions.length; i++) {
+        var da = dealerActions[i];
+        var due = ftParseDate(da.action.dueDate);
+        var daysLeft = due ? Math.ceil((due - nowDate) / 86400000) : 999;
+        var urgClass = daysLeft < 0 ? 'cv-action-overdue' : daysLeft <= 3 ? 'cv-action-urgent' : '';
+        h += '<div class="cv-action ' + urgClass + '">';
+        h += '<div class="cv-action-text">⏳ ' + sanitize(da.action.text) + '</div>';
+        h += '<div class="cv-action-meta">📊 ' + sanitize((da.pipe.projectName || '').substr(0, 30));
+        if (da.action.dueDate) h += ' • 📅 ' + da.action.dueDate;
+        if (daysLeft < 0) h += ' <span class="cv-overdue-badge">เกิน ' + Math.abs(daysLeft) + ' วัน</span>';
+        else if (daysLeft <= 3) h += ' <span class="cv-urgent-badge">อีก ' + daysLeft + ' วัน</span>';
+        h += '</div></div>';
+      }
+      h += '</div>';
+    }
+  }
+
+  // Footer
+  h += '<div class="cv-footer">';
+  h += '<div>Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor</div>';
+  h += '<div>' + (cfg.saleName || 'Siwawong') + ' | ' + _td() + '</div>';
+  h += '</div>';
+
+  // Embed data + functions
+  h += '<script>';
+  h += 'var CV_DATA = ' + JSON.stringify({
+    dealer: d,
+    pipes: activePipes.map(function(p) {
+      return {
+        id: p.id,
+        projectName: p.projectName,
+        endUserTH: p.endUserTH,
+        endUserEN: p.endUserEN,
+        unitType: p.unitType,
+        status: p.status,
+        biddingDate: p.biddingDate,
+        shipmentDate: p.shipmentDate,
+        tor: p.tor,
+        nextAction: p.nextAction,
+        items: getPipeItems(p),
+        actions: getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === 'pending'; }),
+        logs: ST.pipeLogsByPipe(p.id).filter(function(l) {
+          var safeTypes = ["update","progress","status_change","win","action"];
+          if (safeTypes.indexOf(l.type) === -1) return false;
+          var c = (l.content || "").toLowerCase();
+          if (c.indexOf("forecast") !== -1 || c.indexOf("ราคา") !== -1 || c.indexOf("price") !== -1 || c.indexOf("lost") !== -1 || c.indexOf("หมายเหตุ") !== -1) return false;
+          return true;
+        }).slice(0, 10)
+      };
+    }),
+    config: {saleName: cfg.saleName}
+  }) + ';';
+  
+  h += 'function showCVDetail(pipeId, dealerId) {';
+  h += '  var p = null; for (var i = 0; i < CV_DATA.pipes.length; i++) { if (CV_DATA.pipes[i].id === pipeId) { p = CV_DATA.pipes[i]; break; } }';
+  h += '  if (!p) return; var container = document.querySelector(".cv-container");';
+  h += '  var headerHtml = document.querySelector(".cv-header").outerHTML;';
+  h += '  var footerHtml = document.querySelector(".cv-footer").outerHTML;';
+  h += '  var h2 = headerHtml;';
+  h += '  h2 += \'<div class="cv-back" onclick="location.reload()">← กลับ</div>\';';
+  h += '  h2 += \'<div class="cv-section"><div class="cv-section-title">📊 \' + esc(p.projectName || "-") + \'</div>\';';
+  h += '  h2 += \'<div class="cv-detail-grid">\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">Status</div><div class="cv-detail-val">\' + getStatusLabel(p.status) + \'</div></div>\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">End User</div><div class="cv-detail-val">\' + esc(p.endUserTH || p.endUserEN || "-") + \'</div></div>\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">Unit Type</div><div class="cv-detail-val">\' + (p.unitType || "-") + \'</div></div>\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">Bidding</div><div class="cv-detail-val">\' + (p.biddingDate || "-") + \'</div></div>\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">Shipment</div><div class="cv-detail-val">\' + (p.shipmentDate || "-") + \'</div></div>\';';
+  h += '  h2 += \'<div class="cv-detail-item"><div class="cv-detail-label">TOR</div><div class="cv-detail-val">\' + (p.tor || "-") + \'</div></div>\';';
+  h += '  h2 += \'</div></div>\';';
+  h += '  if (p.items && p.items.length) {';
+  h += '    h2 += \'<div class="cv-section"><div class="cv-section-title">📦 Products (\' + p.items.length + \')</div>\';';
+  h += '    h2 += \'<table class="cv-table"><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>\';';
+  h += '    p.items.forEach(function(it, idx) { h2 += \'<tr><td class="cv-num">\' + (idx+1) + \'</td><td>\' + esc(it.model || "-") + \'</td><td>\' + (it.qty || 1) + \'</td></tr>\'; });';
+  h += '    h2 += \'</tbody></table></div>\'; }';
+  h += '  if (p.actions && p.actions.length) {';
+  h += '    h2 += \'<div class="cv-section"><div class="cv-section-title">🎯 Action Items (\' + p.actions.length + \')</div>\';';
+  h += '    p.actions.forEach(function(a) { h2 += \'<div class="cv-action"><div class="cv-action-text">⏳ \' + esc(a.text) + \'</div>\'; if (a.dueDate) h2 += \'<div class="cv-action-meta">📅 กำหนด: \' + a.dueDate + \'</div>\'; h2 += \'</div>\'; });';
+  h += '    h2 += \'</div>\'; }';
+  h += '  if (p.logs && p.logs.length) {';
+  h += '    h2 += \'<div class="cv-section"><div class="cv-section-title">📝 Updates (\' + p.logs.length + \')</div>\';';
+  h += '    p.logs.forEach(function(l) { var icon = l.type==="progress"?"🟢":l.type==="win"?"✅":l.type==="status_change"?"🔄":"📝"; var dateStr = l.date ? l.date.split("T")[0] : "-";';
+  h += '      h2 += \'<div class="cv-log"><span class="cv-log-date">\' + dateStr + \'</span><span class="cv-log-icon">\' + icon + \'</span><span class="cv-log-text">\' + esc((l.content||"").substr(0,80)) + \'</span></div>\'; });';
+  h += '    h2 += \'</div>\'; }';
+  h += '  h2 += footerHtml; container.innerHTML = h2; }';
+  h += 'var cvShowVal=false; function toggleCVValue(){cvShowVal=!cvShowVal;var cols=document.querySelectorAll(".cv-val-col");for(var i=0;i<cols.length;i++){cols[i].style.display=cvShowVal?"table-cell":"none";}var lbl=document.getElementById("cvValLabel");if(lbl)lbl.textContent=cvShowVal?"ซ่อนมูลค่า":"แสดงมูลค่า";}';
+  h += 'function esc(s){if(!s)return"";return String(s).replace(/</g,"&lt;").replace(/>/g,"&gt;");}';
+  h += 'function getStatusLabel(s){var m={"prospect":"🔵 Prospect","tor_review":"🟣 TOR Review","quotation":"🟠 Quotation","bidding":"🟡 Bidding","negotiation":"🔵 Negotiation","win":"🟢 Win","ordered":"🟢 Ordered","delivered":"✅ Delivered","recurring":"🔄 Recurring"};return\'<span class="cv-status cv-st-\'+(s||"")+\'">\'+(m[s]||s)+"</span>";}';
+  h += '<\/script>';
+  h += '</body></html>';
+  return h;
+}
+
+function buildClientProjectDetail(pipeId, dealerId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return '<div class="cv-section"><div class="cv-section-title">ไม่พบข้อมูล</div></div>';
+  
+  var items = getPipeItems(p);
+  var logs = ST.pipeLogsByPipe(p.id);
+  var actions = getPipeActions().filter(function(a) { return a.pipeId === pipeId && a.status === 'pending'; });
+
+  var h = '';
+  h += '<div class="cv-back" onclick="location.reload()">← กลับ</div>';
+  h += '<div class="cv-section">';
+  h += '<div class="cv-section-title">📊 ' + sanitize(p.projectName || '-') + '</div>';
+  h += '<div class="cv-detail-grid">';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">Status</div><div class="cv-detail-val">' + getClientStatusLabel(p.status) + '</div></div>';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">End User</div><div class="cv-detail-val">' + sanitize(p.endUserTH || p.endUserEN || '-') + '</div></div>';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">Unit Type</div><div class="cv-detail-val">' + (p.unitType || '-') + '</div></div>';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">Bidding Date</div><div class="cv-detail-val">' + (p.biddingDate || '-') + '</div></div>';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">Shipment Date</div><div class="cv-detail-val">' + (p.shipmentDate || '-') + '</div></div>';
+  h += '<div class="cv-detail-item"><div class="cv-detail-label">TOR</div><div class="cv-detail-val">' + (p.tor || '-') + '</div></div>';
+  h += '</div></div>';
+
+  if (items.length) {
+    h += '<div class="cv-section">';
+    h += '<div class="cv-section-title">📦 Products (' + items.length + ')</div>';
+    h += '<table class="cv-table"><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      h += '<tr><td class="cv-num">' + (i + 1) + '</td><td>' + sanitize(it.model || '-') + '</td><td>' + (it.qty || 1) + '</td></tr>';
+    }
+    h += '</tbody></table></div>';
+  }
+
+  if (actions.length) {
+    h += '<div class="cv-section">';
+    h += '<div class="cv-section-title">🎯 Action Items (' + actions.length + ')</div>';
+    var nowDate = new Date();
+    nowDate.setHours(0, 0, 0, 0);
+    for (var i = 0; i < actions.length; i++) {
+      var a = actions[i];
+      var due = ftParseDate(a.dueDate);
+      var daysLeft = due ? Math.ceil((due - nowDate) / 86400000) : 999;
+      var urgClass = daysLeft < 0 ? 'cv-action-overdue' : daysLeft <= 3 ? 'cv-action-urgent' : '';
+      h += '<div class="cv-action ' + urgClass + '">';
+      h += '<div class="cv-action-text">⏳ ' + sanitize(a.text) + '</div>';
+      if (a.dueDate) h += '<div class="cv-action-meta">📅 กำหนด: ' + a.dueDate + '</div>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+
+  var safeTypes = ['update', 'progress', 'status_change', 'win', 'action'];
+  var filteredLogs = [];
+  for (var i = 0; i < logs.length; i++) {
+    var l = logs[i];
+    if (safeTypes.indexOf(l.type) === -1 && l.type !== 'note') continue;
+    if (l.type === 'note') continue;
+    var content = (l.content || '').toLowerCase();
+    if (content.indexOf('forecast') !== -1) continue;
+    if (content.indexOf('ราคา') !== -1) continue;
+    if (content.indexOf('price') !== -1) continue;
+    if (content.indexOf('lost') !== -1) continue;
+    if (content.indexOf('หมายเหตุ') !== -1) continue;
+    filteredLogs.push(l);
+  }
+
+  if (filteredLogs.length) {
+    h += '<div class="cv-section">';
+    h += '<div class="cv-section-title">📝 Updates (' + filteredLogs.length + ')</div>';
+    for (var i = 0; i < Math.min(filteredLogs.length, 10); i++) {
+      var l = filteredLogs[i];
+      var dateStr = l.date ? l.date.split('T')[0] : '-';
+      var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : l.type === 'action' ? '⏳' : '📝';
+      h += '<div class="cv-log">';
+      h += '<span class="cv-log-date">' + dateStr + '</span>';
+      h += '<span class="cv-log-icon">' + icon + '</span>';
+      h += '<span class="cv-log-text">' + sanitize((l.content || '').substr(0, 80)) + '</span>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+
+  return h;
+}
+
+function getClientStatusLabel(status) {
+  var labels = {
+    prospect: '<span class="cv-status cv-st-prospect">🔵 Prospect</span>',
+    tor_review: '<span class="cv-status cv-st-tor">🟣 TOR Review</span>',
+    quotation: '<span class="cv-status cv-st-quote">🟠 Quotation</span>',
+    bidding: '<span class="cv-status cv-st-bidding">🟡 Bidding</span>',
+    negotiation: '<span class="cv-status cv-st-nego">🔵 Negotiation</span>',
+    win: '<span class="cv-status cv-st-win">🟢 Win</span>',
+    ordered: '<span class="cv-status cv-st-ordered">🟢 Ordered</span>',
+    delivered: '<span class="cv-status cv-st-delivered">✅ Delivered</span>',
+    recurring: '<span class="cv-status cv-st-recur">🔄 Recurring</span>'
+  };
+  return labels[status] || '<span class="cv-status">' + status + '</span>';
+}
+
+function getClientViewCSS() {
+  return '*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Segoe UI","Noto Sans Thai",sans-serif;background:#0a0e27;color:#e0e6f0}.cv-container{max-width:1000px;margin:0 auto;padding:24px}.cv-header{text-align:center;padding:32px 0;margin-bottom:24px;border-bottom:2px solid rgba(100,181,246,0.2)}.cv-logo{font-size:14px;color:#64b5f6;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}.cv-dealer-name{font-size:32px;font-weight:800;background:linear-gradient(90deg,#64b5f6,#42a5f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}.cv-dealer-sub{font-size:14px;color:#8892b0}.cv-stats{display:flex;gap:16px;justify-content:center;margin-bottom:24px}.cv-stat{text-align:center;padding:16px 24px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;min-width:100px}.cv-stat-val{font-size:28px;font-weight:800;color:#64b5f6}.cv-stat-label{font-size:12px;color:#8892b0;margin-top:2px}.cv-section{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:20px;margin-bottom:16px}.cv-section-title{font-size:18px;font-weight:700;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.08)}.cv-table{width:100%;border-collapse:collapse}.cv-table th{text-align:left;padding:10px 12px;font-size:11px;color:#8892b0;text-transform:uppercase;border-bottom:2px solid rgba(255,255,255,0.08)}.cv-table td{padding:12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}.cv-row{cursor:pointer;transition:0.15s}.cv-row:hover td{background:rgba(100,181,246,0.06)}.cv-num{color:#8892b0;font-weight:700;font-size:12px;width:32px}.cv-project{font-weight:600}.cv-model{font-size:12px;color:#8892b0}.cv-status{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}.cv-st-prospect{background:rgba(100,181,246,0.12);color:#64b5f6}.cv-st-tor{background:rgba(186,104,200,0.12);color:#ba68c8}.cv-st-quote{background:rgba(255,183,77,0.12);color:#ffb74d}.cv-st-bidding{background:rgba(255,235,59,0.12);color:#fdd835}.cv-st-nego{background:rgba(77,208,225,0.12);color:#4dd0e1}.cv-st-win{background:rgba(129,199,132,0.12);color:#81c784}.cv-st-ordered{background:rgba(76,175,80,0.12);color:#4caf50}.cv-st-delivered{background:rgba(76,175,80,0.15);color:#66bb6a}.cv-st-recur{background:rgba(121,134,203,0.12);color:#7986cb}.cv-products{}.cv-product-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cv-product-name{width:180px;font-size:13px;font-weight:600;text-align:right}.cv-product-qty{color:#64b5f6;font-weight:700}.cv-product-bar{flex:1;height:24px;background:rgba(255,255,255,0.04);border-radius:6px;overflow:hidden}.cv-product-fill{height:100%;background:linear-gradient(90deg,#42a5f5,#64b5f6);border-radius:6px;transition:width 0.5s}.cv-action{padding:10px 14px;border-radius:8px;margin-bottom:6px;border-left:3px solid #64b5f6;background:rgba(255,255,255,0.02)}.cv-action-overdue{border-left-color:#ff5252;background:rgba(255,82,82,0.06)}.cv-action-urgent{border-left-color:#ff9800;background:rgba(255,152,0,0.04)}.cv-action-text{font-size:14px;font-weight:600;margin-bottom:2px}.cv-action-meta{font-size:12px;color:#8892b0}.cv-overdue-badge{background:rgba(255,82,82,0.2);color:#ff5252;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700}.cv-urgent-badge{background:rgba(255,152,0,0.2);color:#ff9800;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700}.cv-detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.cv-detail-label{font-size:11px;color:#8892b0;margin-bottom:2px}.cv-detail-val{font-size:14px;font-weight:600}.cv-log{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}.cv-log-date{color:#8892b0;font-size:12px;min-width:70px}.cv-log-icon{font-size:14px}.cv-log-text{flex:1;line-height:1.5}.cv-back{display:inline-block;padding:8px 16px;margin-bottom:16px;cursor:pointer;color:#64b5f6;font-size:14px;border-radius:8px;transition:0.15s}.cv-back:hover{background:rgba(100,181,246,0.1)}.cv-footer{text-align:center;padding:24px 0;margin-top:32px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:#8892b0}.cv-toggle-btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#8892b0;cursor:pointer;font-size:12px}.cv-toggle-btn:hover{background:rgba(100,181,246,0.1);color:#64b5f6;border-color:#64b5f6}@media(max-width:768px){.cv-container{padding:12px}.cv-dealer-name{font-size:24px}.cv-stats{flex-wrap:wrap}.cv-detail-grid{grid-template-columns:repeat(2,1fr)}.cv-product-name{width:120px}}';
+}
