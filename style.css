@@ -6673,3 +6673,156 @@ body.mobile-mode .card {
 .theme-midnight .health-widget {
   background: linear-gradient(135deg, #09090b 0%, rgba(74,222,128,0.05) 100%);
 }
+/* ================================================================
+   DEALER DETAIL - PREMIUM LAYOUT
+   ================================================================ */
+
+/* Hero section */
+.dealer-hero {
+  background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.05) 100%);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dealer-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7);
+}
+
+/* Health score widget */
+.health-score-circle {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.health-score-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+/* Stats row */
+.dealer-stats-premium {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-premium-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 10px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.stat-premium-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.stat-premium-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.stat-premium-label {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+/* Grid layout */
+.dealer-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+/* Certification grid */
+.cert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.cert-item-premium {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg3);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* Health metrics */
+.health-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.health-metric-card {
+  text-align: center;
+  padding: 10px;
+  background: var(--bg3);
+  border-radius: 10px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dealer-info-grid,
+  .dealer-stats-premium,
+  .health-metrics-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .stat-premium-card {
+    padding: 10px;
+  }
+  
+  .stat-premium-value {
+    font-size: 20px;
+  }
+  
+  .cert-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Card margin fix */
+.card {
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+/* Tab bar scroll */
+.tab-bar {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-btn {
+  flex-shrink: 0;
+}
