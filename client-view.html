@@ -347,6 +347,59 @@ function applyTheme(theme) {
 function toggleTheme() { var current = getSavedTheme(); var next = current === 'dark' ? 'light' : 'dark'; localStorage.setItem('cv_theme', next); applyTheme(next); }
 applyTheme(getSavedTheme());
 
+// ===== PIN VERIFICATION =====
+var DEALER_PINS = {};
+
+function getDealerPin(dealerId) {
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  return pins[dealerId] || null;
+}
+
+function verifyPin(dealerId, enteredPin) {
+  var correctPin = getDealerPin(dealerId);
+  if (!correctPin) return true;
+  return enteredPin === correctPin;
+}
+
+function showPinScreen(dealerId) {
+  var dealer = null;
+  var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i].id === dealerId) { dealer = dealers[i]; break; }
+  }
+  var dealerName = dealer ? dealer.name : dealerId;
+  
+  var html = '<div class="pin-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center">';
+  html += '<div style="background:var(--card);border-radius:20px;padding:30px;text-align:center;max-width:350px;width:90%">';
+  html += '<div style="font-size:48px;margin-bottom:16px">🔒</div>';
+  html += '<h2 style="margin-bottom:8px">' + esc(dealerName) + '</h2>';
+  html += '<p style="color:var(--text2);margin-bottom:20px">กรุณากรอกรหัสผ่านเพื่อดูข้อมูล</p>';
+  html += '<input type="password" id="pinInput" placeholder="รหัส 4-6 หลัก" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--input-bg);color:var(--text);font-size:18px;text-align:center;margin-bottom:20px" maxlength="6">';
+  html += '<div style="display:flex;gap:10px">';
+  html += '<button class="btn btn-primary" style="flex:1" onclick="checkPinAndLoad(\'' + dealerId + '\')">ยืนยัน</button>';
+  html += '<button class="btn" style="flex:1" onclick="window.close()">ปิด</button>';
+  html += '</div>';
+  html += '<div id="pinError" style="color:var(--danger);margin-top:12px;font-size:12px"></div>';
+  html += '</div></div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function checkPinAndLoad(dealerId) {
+  var pinInput = document.getElementById('pinInput');
+  var enteredPin = pinInput ? pinInput.value : '';
+  
+  if (verifyPin(dealerId, enteredPin)) {
+    var pinScreen = document.querySelector('.pin-screen');
+    if (pinScreen) pinScreen.remove();
+    sessionStorage.setItem('cv_pin_verified_' + dealerId, 'true');
+    loadAllData();
+  } else {
+    var errorEl = document.getElementById('pinError');
+    if (errorEl) errorEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง';
+  }
+}
+
 // ===== HELPER =====
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate().toString().padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getFullYear(); }
@@ -1123,6 +1176,14 @@ function loadAllData() {
     document.getElementById('tabContent').innerHTML = '<div class="section" style="text-align:center"><p>❌ ไม่พบข้อมูล Dealer</p></div>';
     return;
   }
+  
+  // ✅ เพิ่มโค้ดนี้ตรงนี้ (หลัง if(!dealerId) และก่อนโหลดข้อมูล)
+  var isVerified = sessionStorage.getItem('cv_pin_verified_' + dealerId);
+  if (!isVerified && getDealerPin(dealerId)) {
+    showPinScreen(dealerId);
+    return;
+  }
+  // ✅ สิ้นสุดโค้ดที่เพิ่ม
   var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
   var dealer = dealers.find(function(d) { return d.id === dealerId; });
   if (!dealer) {

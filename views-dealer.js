@@ -155,12 +155,13 @@ function rDealerDet(el) {
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
-  <button class="btn bsm bo" onclick="openClientView('${d.id}')" title="Present ให้ลูกค้าดู">🖥️</button>
-  <button class="btn bsm bp" onclick="copyClientLink('${d.id}')" title="คัดลอกลิงก์ส่งให้ลูกค้า">🔗 คัดลอกลิงก์</button>
+  <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
+  <!-- ✅ เพิ่มปุ่มนี้ -->
+  <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>
+  <!-- ✅ -->
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
 </div>
-  </div>
 
   <!-- Tabs -->
   <div class="tab-bar">
@@ -1945,4 +1946,49 @@ function copyClientLink(dealerId) {
   
   // แจ้งเตือนเพิ่มเติม
   toast('📋 ลิงก์: ' + clientUrl);
+}
+// ================================================================
+// DEALER PIN MANAGEMENT
+// ================================================================
+function showDealerPinModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  var currentPin = pins[dealerId] || '';
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
+  
+  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2000">';
+  modalHtml += '<div class="modal-container" style="background:var(--card);border-radius:16px;max-width:400px;width:90%">';
+  modalHtml += '<div class="modal-header" style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><h3>🔒 ตั้งรหัสผ่านสำหรับ ' + sanitize(dealer.name) + '</h3><button class="modal-close" onclick="closeModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button></div>';
+  modalHtml += '<div class="modal-body" style="padding:20px">';
+  modalHtml += '<div class="form-group"><label>รหัสผ่าน (PIN) สำหรับลูกค้า</label><input type="password" id="dealerPin" class="form-control" value="' + currentPin + '" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"><div class="hint" style="font-size:11px;color:var(--text2);margin-top:4px">💡 ถ้าไม่ใส่รหัส ลูกค้าจะไม่ต้องใส่ PIN</div></div>';
+  modalHtml += '<div class="form-group"><label>🔗 ลิงก์สำหรับส่งให้ลูกค้า</label><div style="background:var(--bg);padding:8px;border-radius:8px;font-size:12px;word-break:break-all">' + clientUrl + '</div><button class="btn btn-sm" onclick="copyClientLink(\'' + clientUrl + '\', \'' + sanitize(dealer.name) + '\')" style="margin-top:8px">📋 คัดลอกลิงก์</button></div>';
+  modalHtml += '</div>';
+  modalHtml += '<div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px">';
+  modalHtml += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
+  modalHtml += '<button class="btn btn-primary" onclick="saveDealerPin(\'' + dealerId + '\')">💾 บันทึก</button>';
+  modalHtml += '</div></div></div>';
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function saveDealerPin(dealerId) {
+  var pin = document.getElementById('dealerPin').value.trim();
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  if (pin) {
+    pins[dealerId] = pin;
+  } else {
+    delete pins[dealerId];
+  }
+  localStorage.setItem('v7_dealer_pins', JSON.stringify(pins));
+  toast('✅ บันทึกรหัสผ่านเรียบร้อยแล้ว');
+  closeModal();
+}
+
+function copyClientLink(url, dealerName) {
+  copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
 }
