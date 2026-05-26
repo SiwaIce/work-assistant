@@ -123,10 +123,13 @@ function filterDealerList() {
 let dealerTab = 'info';
 
 function rDealerDet(el) {
+  // ✅ เพิ่ม 2 บรรทัดนี้
+  const ct = document.getElementById('ct');
+  if (ct) ct.style.padding = '16px';
+  
   const d = ST.getOne('dealers', S.dealerId);
   if (!d) return go('dealers');
-  document.getElementById('pgT').textContent = '🏪 ' + d.name;
-  
+  document.getElementById('pgT').textContent = '🏪 ' + d.name;  
   // Store dealerId for context-aware FAB
   S.dealerId = d.id;
   
@@ -1949,13 +1952,6 @@ function copyClientLink(dealerId) {
 }
 
 // ================================================================
-// CLOSE MODAL (สำหรับ PIN Modal)
-// ================================================================
-function closeModal() {
-  var modal = document.querySelector('.modal-overlay');
-  if (modal) modal.remove();
-}
-// ================================================================
 // DEALER PIN MANAGEMENT
 // ================================================================
 function showDealerPinModal(dealerId) {
@@ -1999,4 +1995,8 @@ function saveDealerPin(dealerId) {
 
 function copyClientLink(url, dealerName) {
   copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
+}
+function closeModal() {
+  var modal = document.querySelector('.modal-overlay');
+  if (modal) modal.remove();
 }
