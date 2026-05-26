@@ -5,56 +5,325 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DJI Enterprise - Client View</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:"Segoe UI","Noto Sans Thai",sans-serif;background:#0a0e27;color:#e0e6f0}
-.cv-container{max-width:1000px;margin:0 auto;padding:24px}
-.cv-header{text-align:center;padding:32px 0;margin-bottom:24px;border-bottom:2px solid rgba(100,181,246,0.2)}
-.cv-logo{font-size:14px;color:#64b5f6;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
-.cv-dealer-name{font-size:32px;font-weight:800;background:linear-gradient(90deg,#64b5f6,#42a5f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
-.cv-dealer-sub{font-size:14px;color:#8892b0}
-.cv-stats{display:flex;gap:16px;justify-content:center;margin-bottom:24px}
-.cv-stat{text-align:center;padding:16px 24px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;min-width:100px}
-.cv-stat-val{font-size:28px;font-weight:800;color:#64b5f6}
-.cv-stat-label{font-size:12px;color:#8892b0;margin-top:2px}
-.cv-section{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:20px;margin-bottom:16px}
-.cv-section-title{font-size:18px;font-weight:700;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.08)}
-.cv-table{width:100%;border-collapse:collapse}
-.cv-table th{text-align:left;padding:10px 12px;font-size:11px;color:#8892b0;text-transform:uppercase;border-bottom:2px solid rgba(255,255,255,0.08)}
-.cv-table td{padding:12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}
-.cv-row{cursor:pointer;transition:0.15s}
-.cv-row:hover td{background:rgba(100,181,246,0.06)}
-.cv-num{color:#8892b0;font-weight:700;font-size:12px;width:32px}
-.cv-project{font-weight:600}
-.cv-status{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
-.cv-st-prospect{background:rgba(100,181,246,0.12);color:#64b5f6}
-.cv-st-tor{background:rgba(186,104,200,0.12);color:#ba68c8}
-.cv-st-quote{background:rgba(255,183,77,0.12);color:#ffb74d}
-.cv-st-bidding{background:rgba(255,235,59,0.12);color:#fdd835}
-.cv-st-nego{background:rgba(77,208,225,0.12);color:#4dd0e1}
-.cv-st-win{background:rgba(129,199,132,0.12);color:#81c784}
-.cv-st-ordered{background:rgba(76,175,80,0.12);color:#4caf50}
-.cv-st-delivered{background:rgba(76,175,80,0.15);color:#66bb6a}
-.cv-product-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.cv-product-name{width:180px;font-size:13px;font-weight:600;text-align:right}
-.cv-product-qty{color:#64b5f6;font-weight:700}
-.cv-product-bar{flex:1;height:24px;background:rgba(255,255,255,0.04);border-radius:6px;overflow:hidden}
-.cv-product-fill{height:100%;background:linear-gradient(90deg,#42a5f5,#64b5f6);border-radius:6px;transition:width 0.5s}
-.cv-action{padding:10px 14px;border-radius:8px;margin-bottom:6px;border-left:3px solid #64b5f6;background:rgba(255,255,255,0.02)}
-.cv-action-overdue{border-left-color:#ff5252;background:rgba(255,82,82,0.06)}
-.cv-action-urgent{border-left-color:#ff9800;background:rgba(255,152,0,0.04)}
-.cv-action-text{font-size:14px;font-weight:600;margin-bottom:2px}
-.cv-action-meta{font-size:12px;color:#8892b0}
-.cv-detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.cv-detail-label{font-size:11px;color:#8892b0;margin-bottom:2px}
-.cv-detail-val{font-size:14px;font-weight:600}
-.cv-log{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}
-.cv-log-date{color:#8892b0;font-size:12px;min-width:70px}
-.cv-back{display:inline-block;padding:8px 16px;margin-bottom:16px;cursor:pointer;color:#64b5f6;font-size:14px;border-radius:8px}
-.cv-back:hover{background:rgba(100,181,246,0.1)}
-.cv-footer{text-align:center;padding:24px 0;margin-top:32px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:#8892b0}
-.cv-toggle-btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#8892b0;cursor:pointer;font-size:12px}
-.cv-toggle-btn:hover{background:rgba(100,181,246,0.1);color:#64b5f6;border-color:#64b5f6}
-@media(max-width:768px){.cv-container{padding:12px}.cv-dealer-name{font-size:24px}.cv-stats{flex-wrap:wrap}.cv-detail-grid{grid-template-columns:repeat(2,1fr)}.cv-product-name{width:120px}}
+/* ===== CSS VARIABLES (same as main app) ===== */
+:root {
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --card: #1e293b;
+  --border: #334155;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --accent: #3b82f6;
+  --accent-light: rgba(59,130,246,0.1);
+  --radius: 12px;
+}
+
+/* ===== LIGHT THEME ===== */
+.theme-light {
+  --bg: #f8fafc;
+  --bg2: #ffffff;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text2: #64748b;
+  --text3: #94a3b8;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Noto Sans Thai', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.2s, color 0.2s;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.theme-toggle:hover {
+  transform: scale(1.05);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cv-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Header */
+.cv-header {
+  text-align: center;
+  padding: 32px 0;
+  margin-bottom: 24px;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.2);
+}
+.cv-logo {
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.cv-dealer-name {
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(90deg, var(--accent), #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+.cv-dealer-sub {
+  font-size: 14px;
+  color: var(--text2);
+}
+
+/* Stats */
+.cv-stats {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.cv-stat {
+  text-align: center;
+  padding: 16px 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 100px;
+}
+.cv-stat-val {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.cv-stat-label {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+/* Section */
+.cv-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.cv-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+}
+
+/* Table */
+.cv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.cv-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--border);
+}
+.cv-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.cv-row {
+  cursor: pointer;
+  transition: 0.15s;
+}
+.cv-row:hover td {
+  background: var(--accent-light);
+}
+.cv-num {
+  color: var(--text2);
+  font-weight: 700;
+  font-size: 12px;
+  width: 32px;
+}
+.cv-project {
+  font-weight: 600;
+}
+
+/* Status */
+.cv-status {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+.cv-st-prospect { background: rgba(100,181,246,0.12); color: #64b5f6; }
+.cv-st-tor { background: rgba(186,104,200,0.12); color: #ba68c8; }
+.cv-st-quote { background: rgba(255,183,77,0.12); color: #ffb74d; }
+.cv-st-bidding { background: rgba(255,235,59,0.12); color: #fdd835; }
+.cv-st-nego { background: rgba(77,208,225,0.12); color: #4dd0e1; }
+.cv-st-win { background: rgba(129,199,132,0.12); color: #81c784; }
+.cv-st-ordered { background: rgba(76,175,80,0.12); color: #4caf50; }
+.cv-st-delivered { background: rgba(76,175,80,0.15); color: #66bb6a; }
+
+/* Detail */
+.cv-back {
+  display: inline-block;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 14px;
+  border-radius: 8px;
+}
+.cv-back:hover {
+  background: var(--accent-light);
+}
+.cv-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.cv-detail-item {
+  background: var(--bg);
+  padding: 10px;
+  border-radius: 8px;
+}
+.cv-detail-label {
+  font-size: 10px;
+  color: var(--text2);
+  margin-bottom: 2px;
+}
+.cv-detail-val {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Logs */
+.cv-log {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.cv-log-date {
+  color: var(--text2);
+  font-size: 11px;
+  min-width: 70px;
+}
+.cv-log-icon { font-size: 14px; }
+.cv-log-text { flex: 1; line-height: 1.5; }
+
+/* Action */
+.cv-action {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border-left: 3px solid var(--accent);
+  background: rgba(255,255,255,0.02);
+}
+
+/* Button */
+.cv-toggle-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 12px;
+}
+.cv-toggle-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn-send {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-send:hover {
+  opacity: 0.9;
+}
+.update-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.update-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Footer */
+.cv-footer {
+  text-align: center;
+  padding: 24px 0;
+  margin-top: 32px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* Loading */
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text2);
+}
+
+@media (max-width: 768px) {
+  .cv-container { padding: 12px; }
+  .cv-dealer-name { font-size: 24px; }
+  .cv-stats { flex-wrap: wrap; }
+  .cv-detail-grid { grid-template-columns: repeat(2, 1fr); }
+  .cv-table th, .cv-table td { padding: 6px 8px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -65,15 +334,38 @@ body{font-family:"Segoe UI","Noto Sans Thai",sans-serif;background:#0a0e27;color
     <div class="cv-dealer-sub">DJI Authorized Dealer</div>
   </div>
   <div id="mainContent">
-    <div style="text-align:center;padding:40px">🔄 กำลังโหลดข้อมูล...</div>
+    <div class="loading">🔄 กำลังโหลดข้อมูล...</div>
   </div>
   <div class="cv-footer">
     <div>Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor</div>
     <div id="footerDate"></div>
   </div>
 </div>
+<button class="theme-toggle" onclick="toggleTheme()" title="เปลี่ยนธีม">🌙</button>
 
 <script>
+// ===== THEME =====
+function getSavedTheme() {
+  return localStorage.getItem('cv_theme') || 'dark';
+}
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.body.classList.add('theme-light');
+    document.querySelector('.theme-toggle').textContent = '🌙';
+  } else {
+    document.body.classList.remove('theme-light');
+    document.querySelector('.theme-toggle').textContent = '☀️';
+  }
+}
+function toggleTheme() {
+  var current = getSavedTheme();
+  var next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('cv_theme', next);
+  applyTheme(next);
+}
+applyTheme(getSavedTheme());
+
+// ===== DATA & FUNCTIONS =====
 var dealerId = new URLSearchParams(window.location.search).get('dealerId');
 var pipesData = [];
 var dealerName = '';
@@ -82,14 +374,6 @@ function fmtMoneyFull(n) {
   if (!n) return '0';
   n = Number(n);
   return n.toLocaleString('th-TH');
-}
-
-function fmtMoneyShort(n) {
-  if (!n) return '-';
-  n = Number(n);
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return Math.round(n / 1000) + 'K';
-  return n.toLocaleString();
 }
 
 function esc(s) {
@@ -188,10 +472,10 @@ function showDetail(pipeId) {
   
   html += '<div class="cv-section"><div class="cv-section-title">✏️ สอบถามเพิ่มเติม / อัพเดท</div>';
   html += '<div style="display:flex;gap:6px">';
-  html += '<input type="text" id="updateInput" placeholder="พิมพ์ข้อความ..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px">';
-  html += '<button onclick="sendUpdate(\'' + p.id + '\')" style="padding:8px 16px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:13px">💾 ส่ง</button>';
+  html += '<input type="text" id="updateInput" class="update-input" placeholder="พิมพ์ข้อความ...">';
+  html += '<button class="btn-send" onclick="sendUpdate(\'' + p.id + '\')">💾 ส่ง</button>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:#8892b0;margin-top:4px">💡 สอบถามเพิ่มเติมได้ที่นี่ พนักงานขายจะได้รับทันที</div>';
+  html += '<div style="font-size:11px;color:var(--text2);margin-top:8px">💡 สอบถามเพิ่มเติมได้ที่นี่ พนักงานขายจะได้รับทันที</div>';
   html += '</div>';
   
   document.getElementById('mainContent').innerHTML = html;
