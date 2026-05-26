@@ -1562,9 +1562,6 @@ function updateMbNav() {
     }
   }
 }
-// ================================================================
-// RECEIVE UPDATE FROM CLIENT VIEW (Popup)
-// ================================================================
 window.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'CV_UPDATE') {
     var data = event.data;
