@@ -954,218 +954,209 @@ function uploadForecastExcel(input) {
   reader.readAsArrayBuffer(file);
 }
 
-// ===== RENDER FORECAST TAB =====
-// ===== RENDER FORECAST TAB (Fixed - No undefined) =====
+// ===== RENDER FORECAST TAB (Safe version - No undefined) =====
 function renderForecastTab() {
-  // ตรวจสอบค่าเริ่มต้น
-  if (!allMonths || allMonths.length === 0) {
-    allMonths = generateMonths();
-  }
+  console.log('renderForecastTab called');
   
-  if (!selectedMonth) {
-    if (forecastData.runrate && forecastData.runrate.length > 0) {
-      selectedMonth = forecastData.runrate[0].month;
-    } else if (forecastData.projects && forecastData.projects.length > 0) {
-      selectedMonth = forecastData.projects[0].month;
-    } else if (allMonths.length > 0) {
-      selectedMonth = allMonths[0];
-    } else {
-      selectedMonth = getNextMonthFromNow();
+  // ตรวจสอบและสร้างค่าเริ่มต้น
+  try {
+    if (!allMonths || allMonths.length === 0) {
+      allMonths = generateMonths();
+      console.log('Generated months:', allMonths);
     }
+    
+    if (!selectedMonth) {
+      if (forecastData.runrate && forecastData.runrate.length > 0) {
+        selectedMonth = forecastData.runrate[0].month;
+      } else if (forecastData.projects && forecastData.projects.length > 0) {
+        selectedMonth = forecastData.projects[0].month;
+      } else if (allMonths.length > 0) {
+        selectedMonth = allMonths[0];
+      } else {
+        var now = new Date();
+        var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        var m = next.getMonth() + 1;
+        var y = next.getFullYear() + 543;
+        selectedMonth = (m < 10 ? '0' + m : m) + '/' + y;
+      }
+      console.log('Selected month:', selectedMonth);
+    }
+  } catch(e) {
+    console.error('Init error:', e);
+    document.getElementById('tabContent').innerHTML = '<div class="section" style="padding:20px;text-align:center">❌ เกิดข้อผิดพลาด: ' + e.message + '</div>';
+    return;
   }
   
-  var monthSummary = getMonthSummary();
-  
-  // กรองข้อมูลตามเดือนที่เลือก
+  // ข้อมูลพื้นฐาน
   var monthRunrate = [];
   var monthProjects = [];
-  
-  if (forecastData.runrate && forecastData.runrate.length) {
-    monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  }
-  if (forecastData.projects && forecastData.projects.length) {
-    monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
-  }
-  
   var totalRunrate = 0;
   var totalProject = 0;
   
-  for (var i = 0; i < monthRunrate.length; i++) {
-    totalRunrate += (monthRunrate[i].qty || 0);
-  }
-  for (var i = 0; i < monthProjects.length; i++) {
-    totalProject += (monthProjects[i].totalQty || 0);
-  }
-  
-  // Month Cards (clickable)
-  var monthCardsHtml = '<div class="month-scroll" style="display:flex;gap:12px;overflow-x:auto;padding:4px 0 8px;scroll-behavior:smooth;-webkit-overflow-scrolling:touch">';
-  for (var i = 0; i < allMonths.length; i++) {
-    var m = allMonths[i];
-    var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
-    var activeClass = (selectedMonth === m) ? 'active' : '';
-    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')" style="cursor:pointer;flex:0 0 auto;min-width:100px;padding:12px 8px;background:var(--bg);border:1px solid var(--border);border-radius:14px;text-align:center;transition:all 0.2s ease">';
-    monthCardsHtml += '<div class="month-name" style="font-size:14px;font-weight:700;margin-bottom:4px">' + m + '</div>';
-    monthCardsHtml += '<div class="month-total" style="font-size:18px;font-weight:800;color:var(--accent)">' + summary.total + '</div>';
-    monthCardsHtml += '<div class="month-detail" style="font-size:10px;color:var(--text2);margin-top:4px">🏪' + summary.runrate + ' 📋' + summary.project + '</div>';
-    monthCardsHtml += '</div>';
-  }
-  monthCardsHtml += '</div>';
-  
-  // Stats summary
-  var statsHtml = '<div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">';
-  statsHtml += '<div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น (ชิ้น)</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
-  statsHtml += '</div>';
-  
-  // Run rate list
-  var runrateHtml = '';
-  if (monthRunrate.length > 0) {
-    for (var i = 0; i < monthRunrate.length; i++) {
-      var r = monthRunrate[i];
-      runrateHtml += '<div class="forecast-item" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
-      runrateHtml += '<div style="flex:2"><strong>' + esc(r.model || '-') + '</strong></div>';
-      runrateHtml += '<div style="width:80px;text-align:center">x' + (r.qty || 0) + '</div>';
-      runrateHtml += '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️ แก้ไข</button>';
-      runrateHtml += '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️ ลบ</button>';
-      runrateHtml += '</div>';
+  try {
+    if (forecastData.runrate && forecastData.runrate.length) {
+      monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
+      for (var i = 0; i < monthRunrate.length; i++) totalRunrate += (monthRunrate[i].qty || 0);
     }
-  } else {
-    runrateHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการสินค้าทั่วไป</div>';
-  }
-  
-  // Projects list
-  var projectsHtml = '';
-  if (monthProjects.length > 0) {
-    for (var i = 0; i < monthProjects.length; i++) {
-      var proj = monthProjects[i];
-      var itemsText = '';
-      if (proj.items && proj.items.length) {
-        for (var j = 0; j < proj.items.length; j++) {
-          itemsText += (proj.items[j].model || '-') + ' x' + (proj.items[j].qty || 1);
-          if (j < proj.items.length - 1) itemsText += ', ';
-        }
-      }
-      projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')" style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer;transition:0.15s">';
-      projectsHtml += '<div class="project-name" style="font-weight:700;font-size:15px;color:var(--accent);display:flex;justify-content:space-between;align-items:center">';
-      projectsHtml += '<span>📋 ' + esc(proj.projectName || '-') + '</span>';
-      projectsHtml += '<span style="font-size:12px;color:var(--text2)">' + (proj.totalQty || 0) + ' ชิ้น</span>';
-      projectsHtml += '</div>';
-      if (proj.endUser && proj.endUser !== '-') {
-        projectsHtml += '<div class="project-items" style="font-size:12px;color:var(--text2);margin-top:4px">👤 ' + esc(proj.endUser) + '</div>';
-      }
-      projectsHtml += '<div class="project-items" style="font-size:12px;color:var(--text2);margin-top:4px">📦 ' + itemsText + '</div>';
-      projectsHtml += '<div class="project-detail" id="projectDetail_' + i + '" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:none">';
-      projectsHtml += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">';
-      projectsHtml += '<button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไขโครงการ</button>';
-      projectsHtml += '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();copyProjectToForm(' + i + ')">📋 คัดลอกไปเพิ่มใหม่</button>';
-      projectsHtml += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบโครงการ</button>';
-      projectsHtml += '</div>';
-      projectsHtml += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">';
-      projectsHtml += '<div style="font-size:11px;color:var(--text2)">📝 รายละเอียดสินค้า (แก้ไขได้):</div>';
-      if (proj.items && proj.items.length) {
-        for (var j = 0; j < proj.items.length; j++) {
-          projectsHtml += '<div style="display:flex;gap:8px;align-items:center;margin-top:4px" data-item-idx="' + j + '">';
-          projectsHtml += '<span style="flex:2">' + esc(proj.items[j].model || '-') + '</span>';
-          projectsHtml += '<span>x' + (proj.items[j].qty || 1) + '</span>';
-          projectsHtml += '<button class="btn-xs" onclick="event.stopPropagation();editProjectItemDetail(' + i + ',' + j + ')">✏️</button>';
-          projectsHtml += '</div>';
-        }
-      }
-      projectsHtml += '<button class="btn-xs" style="margin-top:6px" onclick="event.stopPropagation();addItemToProject(' + i + ')">➕ เพิ่มสินค้าในโครงการนี้</button>';
-      projectsHtml += '</div>';
-      projectsHtml += '</div></div>';
+    
+    if (forecastData.projects && forecastData.projects.length) {
+      monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
+      for (var i = 0; i < monthProjects.length; i++) totalProject += (monthProjects[i].totalQty || 0);
     }
-  } else {
-    projectsHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
+  } catch(e) {
+    console.error('Filter error:', e);
   }
   
-  var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงเฉพาะสินค้า ไม่สนใจเดือน) --</option>';
-  if (pipelinesData && pipelinesData.length) {
-    for (var i = 0; i < pipelinesData.length; i++) {
-      existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName || '-') + ' (' + (pipelinesData[i].items ? pipelinesData[i].items.length : 1) + ' สินค้า)</option>';
-    }
-  }
-  
-  var modelDatalist = '<datalist id="globalModelList">';
-  for (var i = 0; i < allModels.length; i++) {
-    modelDatalist += '<option value="' + esc(allModels[i]) + '">';
-  }
-  modelDatalist += '</datalist>';
-  
+  // สร้าง HTML แบบง่ายๆ ก่อน (ไม่มี Month Cards ที่ซับซ้อน)
   var html = '<div class="section" style="width:100%">';
   html += '<div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>';
   
-  // Month carousel
-  html += '<div class="month-carousel" style="background:var(--bg2);border-radius:16px;padding:16px;margin-bottom:24px;border:1px solid var(--border)">';
-  html += monthCardsHtml;
-  html += '<div class="month-selector-dropdown" style="margin-top:12px;text-align:center">';
-  html += '<select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;font-size:13px;min-width:130px">';
+  // แสดงเดือนปัจจุบัน
+  html += '<div style="background:var(--bg2);border-radius:16px;padding:16px;margin-bottom:24px;text-align:center">';
+  html += '<div style="font-size:18px;font-weight:700;margin-bottom:8px">เดือนที่แสดง: <span style="color:var(--accent)">' + (selectedMonth || '-') + '</span></div>';
+  html += '<div style="display:flex;gap:12px;justify-content:center;margin-bottom:12px">';
+  html += '<button class="btn btn-primary" onclick="selectPrevMonth()">◀ เดือนก่อน</button>';
+  html += '<button class="btn btn-primary" onclick="selectNextMonth()">เดือนถัดไป ▶</button>';
+  html += '</div>';
+  
+  // Dropdown เลือกเดือน
+  html += '<select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;font-size:13px">';
   for (var i = 0; i < allMonths.length; i++) {
     var m = allMonths[i];
     html += '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>';
   }
   html += '</select>';
-  html += '</div></div>';
+  html += '</div>';
   
-  html += statsHtml;
+  // สถิติรวม
+  html += '<div class="stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">';
+  html += '<div class="stat-card"><div class="stat-month">รวมทั้งสิ้น</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">ชิ้น</div></div>';
+  html += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
+  html += '<div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div>';
+  html += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
+  html += '</div>';
   
   // Run Rate Section
   html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="font-size:16px">🏪 สินค้าทั่วไป (Run Rate)</div>';
-  html += '<div class="form-row" style="margin-bottom:12px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center">';
-  html += '<div class="form-group" style="margin-bottom:0;flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
-  html += '<div class="form-group" style="margin-bottom:0;width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
-  html += '<div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div>';
+  html += '<div class="form-row" style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">';
+  html += '<input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="flex:2;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
+  html += '<input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
+  html += '<button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button>';
   html += '</div>';
-  html += '<div id="runrateList">' + runrateHtml + '</div>';
+  
+  if (monthRunrate.length > 0) {
+    for (var i = 0; i < monthRunrate.length; i++) {
+      var r = monthRunrate[i];
+      html += '<div class="forecast-item" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
+      html += '<div style="flex:2"><strong>' + esc(r.model || '-') + '</strong></div>';
+      html += '<div style="width:80px;text-align:center">x' + (r.qty || 0) + '</div>';
+      html += '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️ แก้ไข</button>';
+      html += '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️ ลบ</button>';
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการสินค้าทั่วไป</div>';
+  }
   html += '</div>';
   
   // Project Section
   html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="font-size:16px">📋 โครงการ (Project-based)</div>';
-  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี (ดึงเฉพาะสินค้า ไม่สนใจเดือน)</label>';
-  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select>';
-  html += '</div>';
+  
+  // เลือกจากโครงการที่มี
+  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี (ดึงเฉพาะสินค้า)</label>';
+  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
+  html += '<option value="">-- เลือกโครงการ --</option>';
+  if (pipelinesData && pipelinesData.length) {
+    for (var i = 0; i < pipelinesData.length; i++) {
+      html += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName || '-') + '</option>';
+    }
+  }
+  html += '</select></div>';
+  
+  // ฟอร์มเพิ่มโครงการใหม่
   html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">';
-  html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="เช่น โครงการ ม.เกษตรศาสตร์"></div>';
-  html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
-  html += '<div class="form-row" style="margin-bottom:8px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center">';
-  html += '<div class="form-group" style="margin-bottom:0;flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
-  html += '<div class="form-group" style="margin-bottom:0;width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
-  html += '<div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div>';
+  html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"></div>';
+  html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"></div>';
+  html += '<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">';
+  html += '<input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="flex:2;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
+  html += '<input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
+  html += '<button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button>';
   html += '</div>';
   html += '<div id="newProjectItemsContainer" style="margin-bottom:12px"></div>';
-  html += '<div class="form-row" style="margin-top:12px;gap:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  html += '<div style="display:flex;gap:12px;margin-top:12px">';
   html += '<button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button>';
   html += '<button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button>';
   html += '</div></div>';
   
+  // รายการโครงการที่เพิ่มแล้ว
   html += '<div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>';
-  html += '<div id="projectsList" style="margin-top:8px">' + projectsHtml + '</div>';
+  if (monthProjects.length > 0) {
+    for (var i = 0; i < monthProjects.length; i++) {
+      var proj = monthProjects[i];
+      html += '<div class="project-item" style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer" onclick="toggleProjectDetail(' + i + ')">';
+      html += '<div style="font-weight:700;font-size:15px;color:var(--accent);display:flex;justify-content:space-between">';
+      html += '<span>📋 ' + esc(proj.projectName || '-') + '</span>';
+      html += '<span style="font-size:12px;color:var(--text2)">' + (proj.totalQty || 0) + ' ชิ้น</span>';
+      html += '</div>';
+      html += '<div class="project-detail" id="projectDetail_' + i + '" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:none">';
+      html += '<div style="display:flex;gap:8px;margin-top:8px">';
+      html += '<button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button>';
+      html += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button>';
+      html += '</div></div>';
+      html += '</div>';
+    }
+  } else {
+    html += '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
+  }
   html += '</div>';
   
-  // Action buttons
-  html += '<div class="form-row" style="margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">';
+  // ปุ่ม Action
+  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">';
   html += '<button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button>';
   html += '<button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button>';
   html += '<div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div>';
   html += '</div>';
   
-  // Sync buttons
-  html += '<div class="form-row" style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  // ปุ่ม Sync
+  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">';
   html += '<button class="btn btn-warning" onclick="forceSyncToCloud()">☁️ Sync ขึ้น Cloud</button>';
   html += '<button class="btn btn-info" onclick="pullFromCloud()">📥 ดึงข้อมูลจาก Cloud</button>';
   html += '</div>';
   
-  html += modelDatalist;
+  // Datalist สำหรับ Model
+  html += '<datalist id="globalModelList">';
+  for (var i = 0; i < allModels.length; i++) {
+    html += '<option value="' + esc(allModels[i]) + '">';
+  }
+  html += '</datalist>';
+  
   html += '</div>';
   
   window.newProjectItems = [];
   document.getElementById('tabContent').innerHTML = html;
+  console.log('renderForecastTab completed');
 }
 
+// เพิ่มฟังก์ชันเลือกเดือนก่อน/ถัดไป
+function selectPrevMonth() {
+  var idx = allMonths.indexOf(selectedMonth);
+  if (idx > 0) {
+    selectMonth(allMonths[idx - 1]);
+  } else {
+    showSuccessToast('📅 นี่คือเดือนแรกสุดแล้ว');
+  }
+}
+
+function selectNextMonth() {
+  var idx = allMonths.indexOf(selectedMonth);
+  if (idx < allMonths.length - 1) {
+    selectMonth(allMonths[idx + 1]);
+  } else {
+    showSuccessToast('📅 นี่คือเดือนสุดท้ายแล้ว');
+  }
+}
 // ===== LOAD PIPELINE =====
 function loadPipeline() {
   var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
