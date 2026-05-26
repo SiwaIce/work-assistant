@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DJI Enterprise - Client View</title>
+<title>DJI Enterprise - ติดตามสถานะโครงการ</title>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root {
@@ -18,6 +18,9 @@
   --accent-light: rgba(59,130,246,0.1);
   --radius: 12px;
   --input-bg: #0f172a;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
 }
 
 /* ===== LIGHT THEME ===== */
@@ -74,7 +77,7 @@ body {
 }
 
 .cv-container {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 24px;
   padding-top: 20px;
@@ -114,6 +117,7 @@ body {
   gap: 16px;
   justify-content: center;
   margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 .cv-stat {
   text-align: center;
@@ -149,6 +153,11 @@ body {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   color: var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Table */
@@ -168,6 +177,7 @@ body {
   padding: 12px;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
+  vertical-align: middle;
 }
 .cv-row {
   cursor: pointer;
@@ -186,6 +196,28 @@ body {
   font-weight: 600;
 }
 
+/* Last Update Badge */
+.update-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.update-recent {
+  background: rgba(34,197,94,0.15);
+  color: #22c55e;
+}
+.update-old {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+}
+.update-none {
+  background: rgba(100,181,246,0.15);
+  color: #64b5f6;
+}
+
 /* Status */
 .cv-status {
   padding: 3px 10px;
@@ -193,6 +225,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   display: inline-block;
+  white-space: nowrap;
 }
 .cv-st-prospect { background: rgba(100,181,246,0.12); color: #64b5f6; }
 .cv-st-tor { background: rgba(186,104,200,0.12); color: #ba68c8; }
@@ -238,62 +271,50 @@ body {
   font-weight: 600;
 }
 
-/* Logs */
-.cv-log {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
+/* Timeline */
+.timeline {
+  position: relative;
+  padding-left: 24px;
 }
-.cv-log-date {
-  color: var(--text2);
-  font-size: 11px;
-  min-width: 70px;
+.timeline-item {
+  position: relative;
+  padding-bottom: 16px;
+  border-left: 2px solid var(--border);
+  margin-left: 8px;
+  padding-left: 20px;
 }
-.cv-log-icon { font-size: 14px; }
-.cv-log-text { flex: 1; line-height: 1.5; }
-
-/* Action */
-.cv-action {
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 6px;
-  border-left: 3px solid var(--accent);
-  background: rgba(255,255,255,0.02);
+.timeline-item:last-child {
+  border-left-color: transparent;
 }
-
-/* Buttons */
-.cv-toggle-btn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text2);
-  cursor: pointer;
-  font-size: 12px;
-}
-.cv-toggle-btn:hover {
-  background: var(--accent-light);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.btn-send {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
+.timeline-dot {
+  position: absolute;
+  left: -9px;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
   background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  font-size: 13px;
-  width: 100%;
+  border: 2px solid var(--card);
 }
-.btn-send:hover {
-  opacity: 0.9;
+.timeline-date {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.timeline-content {
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--bg);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+.timeline-status-change {
+  background: rgba(100,181,246,0.08);
+  border-left: 3px solid var(--accent);
 }
 
-/* Modal (Popup) */
+/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -312,7 +333,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   width: 90%;
-  max-width: 500px;
+  max-width: 550px;
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
@@ -323,6 +344,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  z-index: 1;
 }
 .modal-header h3 {
   font-size: 18px;
@@ -345,6 +370,9 @@ body {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
 }
 .form-group {
   margin-bottom: 16px;
@@ -407,7 +435,7 @@ body {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  background: #22c55e;
+  background: var(--success);
   color: #fff;
   padding: 12px 24px;
   border-radius: 40px;
@@ -441,6 +469,7 @@ body {
   color: var(--text2);
 }
 
+/* Responsive */
 @media (max-width: 768px) {
   .cv-container { padding: 12px; padding-top: 16px; }
   .cv-dealer-name { font-size: 24px; }
@@ -449,6 +478,7 @@ body {
   .cv-table th, .cv-table td { padding: 6px 8px; font-size: 11px; }
   .form-row { grid-template-columns: 1fr; }
   .theme-toggle { top: 12px; right: 12px; width: 36px; height: 36px; }
+  .cv-table .update-badge { font-size: 9px; padding: 1px 5px; }
 }
 </style>
 </head>
@@ -470,6 +500,18 @@ body {
 <button class="theme-toggle" onclick="toggleTheme()" title="เปลี่ยนธีม">🌙</button>
 
 <script>
+// ===== STATUS LIST =====
+var STATUS_LIST = [
+  { id: 'prospect', name: '🔵 Prospect', order: 0 },
+  { id: 'tor_review', name: '🟣 TOR Review', order: 1 },
+  { id: 'quotation', name: '🟠 Quotation', order: 2 },
+  { id: 'bidding', name: '🟡 Bidding', order: 3 },
+  { id: 'negotiation', name: '🔵 Negotiation', order: 4 },
+  { id: 'win', name: '🟢 Win', order: 5 },
+  { id: 'ordered', name: '🟢 Ordered', order: 6 },
+  { id: 'delivered', name: '✅ Delivered', order: 7 }
+];
+
 // ===== THEME =====
 function getSavedTheme() {
   return localStorage.getItem('cv_theme') || 'dark';
@@ -492,7 +534,84 @@ function toggleTheme() {
 applyTheme(getSavedTheme());
 
 // ===== HELPER FUNCTIONS =====
-var currentPipeName = '';  // Store current pipe name for modal
+function formatDateThai(isoDate) {
+  if (!isoDate) return '';
+  var d = new Date(isoDate);
+  if (isNaN(d.getTime())) return isoDate;
+  var day = d.getDate().toString().padStart(2, '0');
+  var month = (d.getMonth() + 1).toString().padStart(2, '0');
+  var year = d.getFullYear();
+  return day + '/' + month + '/' + year;
+}
+
+function formatDateInput(dateStr) {
+  if (!dateStr) return '';
+  var parts = dateStr.split('/');
+  if (parts.length === 3) {
+    return parts[2] + '-' + parts[1] + '-' + parts[0];
+  }
+  return dateStr;
+}
+
+function formatDateFromInput(dateValue) {
+  if (!dateValue) return '';
+  var d = new Date(dateValue);
+  if (isNaN(d.getTime())) return '';
+  var day = d.getDate().toString().padStart(2, '0');
+  var month = (d.getMonth() + 1).toString().padStart(2, '0');
+  var year = d.getFullYear();
+  return day + '/' + month + '/' + year;
+}
+
+function daysAgo(dateStr) {
+  if (!dateStr) return null;
+  var parts = dateStr.split('T')[0].split('-');
+  if (parts.length !== 3) return null;
+  var d = new Date(parts[0], parts[1]-1, parts[2]);
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+  var diff = Math.floor((now - d) / 86400000);
+  return diff;
+}
+
+function getUpdateBadge(days) {
+  if (days === null) return '<span class="update-badge update-none">🆕 ยังไม่มีอัพเดท</span>';
+  if (days <= 3) return '<span class="update-badge update-recent">📅 อัพเดทล่าสุด ' + days + ' วันที่แล้ว</span>';
+  if (days <= 7) return '<span class="update-badge update-old">⚠️ อัพเดทล่าสุด ' + days + ' วันที่แล้ว</span>';
+  return '<span class="update-badge update-old">🔴 ไม่ได้อัพเดท ' + days + ' วันแล้ว</span>';
+}
+
+function getStatusName(statusId) {
+  for (var i = 0; i < STATUS_LIST.length; i++) {
+    if (STATUS_LIST[i].id === statusId) return STATUS_LIST[i].name;
+  }
+  return statusId;
+}
+
+function getStatusClass(statusId) {
+  var classes = {
+    prospect: 'cv-st-prospect',
+    tor_review: 'cv-st-tor',
+    quotation: 'cv-st-quote',
+    bidding: 'cv-st-bidding',
+    negotiation: 'cv-st-nego',
+    win: 'cv-st-win',
+    ordered: 'cv-st-ordered',
+    delivered: 'cv-st-delivered'
+  };
+  return classes[statusId] || 'cv-st-prospect';
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function fmtMoneyFull(n) {
+  if (!n) return '0';
+  n = Number(n);
+  return n.toLocaleString('th-TH');
+}
 
 function showSuccessToast(message) {
   var toast = document.createElement('div');
@@ -509,11 +628,26 @@ function closeModal() {
   if (modal && modal.remove) modal.remove();
 }
 
-function showModal(pipeId, pipeName) {
+// ===== SEND UPDATE =====
+var currentPipeName = '';
+var currentPipeStatus = '';
+
+function showModal(pipeId, pipeName, currentStatus) {
   currentPipeName = pipeName;
-  // Remove existing modal if any
+  currentPipeStatus = currentStatus;
+  
   var existing = document.getElementById('updateModal');
   if (existing) existing.remove();
+  
+  // Build status options
+  var statusOptions = '';
+  for (var i = 0; i < STATUS_LIST.length; i++) {
+    var s = STATUS_LIST[i];
+    var selected = (s.id === currentStatus) ? 'selected' : '';
+    statusOptions += '<option value="' + s.id + '" ' + selected + '>' + s.name + '</option>';
+  }
+  
+  var today = new Date().toISOString().split('T')[0];
   
   var modalHtml = '<div class="modal-overlay" id="updateModal" onclick="if(event.target===this)closeModal()">';
   modalHtml += '<div class="modal-container">';
@@ -522,30 +656,39 @@ function showModal(pipeId, pipeName) {
   modalHtml += '<button class="modal-close" onclick="closeModal()">✕</button>';
   modalHtml += '</div>';
   modalHtml += '<div class="modal-body">';
+  
   modalHtml += '<div class="form-group">';
   modalHtml += '<label>📋 โครงการ</label>';
   modalHtml += '<input type="text" value="' + esc(pipeName) + '" readonly style="background:var(--border);">';
   modalHtml += '</div>';
   
   modalHtml += '<div class="form-group">';
-  modalHtml += '<label>📝 ชื่อผู้แจ้ง / ผู้ติดต่อ *</label>';
+  modalHtml += '<label>👤 ชื่อผู้แจ้ง / ผู้ติดต่อ *</label>';
   modalHtml += '<input type="text" id="updateName" placeholder="เช่น คุณสมชาย, บริษัท XXX">';
-  modalHtml += '<div class="hint">💡 เพื่อให้พนักงานทราบว่าเป็นใครและติดต่อกลับ</div>';
+  modalHtml += '<div class="hint">💡 เพื่อให้พนักงานทราบว่าเป็นใคร</div>';
   modalHtml += '</div>';
   
   modalHtml += '<div class="form-group">';
-  modalHtml += '<label>📝 สถานะปัจจุบัน / ความคืบหน้า *</label>';
+  modalHtml += '<label>🔄 สถานะปัจจุบันของโครงการ</label>';
+  modalHtml += '<select id="updateStatus">' + statusOptions + '</select>';
+  modalHtml += '<div class="hint">💡 เปลี่ยนได้ทุกเมื่อ จะถูกบันทึกประวัติอัตโนมัติ</div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📝 รายละเอียดความคืบหน้า *</label>';
   modalHtml += '<textarea id="updateProgress" rows="3" placeholder="เช่น: ได้รับ PO แล้ว, กำลังรอส่งมอบ, เอกสารเรียบร้อย..."></textarea>';
   modalHtml += '</div>';
   
   modalHtml += '<div class="form-row">';
   modalHtml += '<div class="form-group">';
-  modalHtml += '<label>📅 Bidding Date (ถ้ามี)</label>';
-  modalHtml += '<input type="text" id="updateBidding" placeholder="DD/MM/YYYY">';
+  modalHtml += '<label>📅 Bidding Date</label>';
+  modalHtml += '<input type="date" id="updateBidding" value="' + today + '">';
+  modalHtml += '<div class="hint">เลือกจากปฏิทิน</div>';
   modalHtml += '</div>';
   modalHtml += '<div class="form-group">';
-  modalHtml += '<label>📅 Shipment Date (ถ้ามี)</label>';
-  modalHtml += '<input type="text" id="updateShipment" placeholder="DD/MM/YYYY">';
+  modalHtml += '<label>📅 Shipment Date</label>';
+  modalHtml += '<input type="date" id="updateShipment">';
+  modalHtml += '<div class="hint">เลือกจากปฏิทิน</div>';
   modalHtml += '</div>';
   modalHtml += '</div>';
   
@@ -568,6 +711,7 @@ function showModal(pipeId, pipeName) {
 
 function submitUpdate(pipeId) {
   var userName = document.getElementById('updateName').value.trim();
+  var newStatus = document.getElementById('updateStatus').value;
   var progressText = document.getElementById('updateProgress').value.trim();
   
   if (!userName) {
@@ -575,13 +719,27 @@ function submitUpdate(pipeId) {
     return;
   }
   if (!progressText) {
-    alert('กรุณากรอกสถานะ/ความคืบหน้า');
+    alert('กรุณากรอกรายละเอียดความคืบหน้า');
     return;
   }
   
-  var biddingDate = document.getElementById('updateBidding').value.trim();
-  var shipmentDate = document.getElementById('updateShipment').value.trim();
+  var biddingDateInput = document.getElementById('updateBidding').value;
+  var shipmentDateInput = document.getElementById('updateShipment').value;
+  var biddingDate = biddingDateInput ? formatDateFromInput(biddingDateInput) : '';
+  var shipmentDate = shipmentDateInput ? formatDateFromInput(shipmentDateInput) : '';
   var correctionText = document.getElementById('updateCorrection').value.trim();
+  
+  // Get current pipeline data to check status change
+  var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
+  var currentPipe = null;
+  var currentStatus = '';
+  for (var i = 0; i < allPipes.length; i++) {
+    if (allPipes[i].id === pipeId) {
+      currentPipe = allPipes[i];
+      currentStatus = currentPipe.status;
+      break;
+    }
+  }
   
   // Build log message
   var logMessage = '📞 ' + userName + ' อัพเดท: ' + progressText;
@@ -605,11 +763,31 @@ function submitUpdate(pipeId) {
       correction: correctionText
     }
   });
-  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
   
-  // Update pipeline if dates provided
-  if (biddingDate || shipmentDate) {
-    var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
+  // If status changed, add status change log
+  if (newStatus !== currentStatus && currentPipe) {
+    pipeLogs.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+      pipeId: pipeId,
+      type: 'status_change',
+      content: '🔄 เปลี่ยนสถานะจาก ' + getStatusName(currentStatus) + ' → ' + getStatusName(newStatus) + ' (' + userName + ')',
+      date: new Date().toISOString(),
+      oldStatus: currentStatus,
+      newStatus: newStatus
+    });
+    
+    // Update pipeline status
+    for (var i = 0; i < allPipes.length; i++) {
+      if (allPipes[i].id === pipeId) {
+        allPipes[i].status = newStatus;
+        if (biddingDate) allPipes[i].biddingDate = biddingDate;
+        if (shipmentDate) allPipes[i].shipmentDate = shipmentDate;
+        break;
+      }
+    }
+    localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
+  } else if (currentPipe) {
+    // Update dates only
     for (var i = 0; i < allPipes.length; i++) {
       if (allPipes[i].id === pipeId) {
         if (biddingDate) allPipes[i].biddingDate = biddingDate;
@@ -620,11 +798,14 @@ function submitUpdate(pipeId) {
     localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
   }
   
+  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
+  
   // Create task for salesperson
   var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
   var taskTitle = '📋 ลูกค้าแจ้งข้อมูล - ' + (currentPipeName || '');
   var taskDesc = '👤 ผู้แจ้ง: ' + userName + '\n';
   taskDesc += '📝 ความคืบหน้า: ' + progressText + '\n';
+  if (newStatus !== currentStatus) taskDesc += '🔄 สถานะ: ' + getStatusName(currentStatus) + ' → ' + getStatusName(newStatus) + '\n';
   if (biddingDate) taskDesc += '📅 Bidding: ' + biddingDate + '\n';
   if (shipmentDate) taskDesc += '📅 Shipment: ' + shipmentDate + '\n';
   if (correctionText) taskDesc += '🔧 ต้องการแก้ไข: ' + correctionText + '\n';
@@ -645,38 +826,42 @@ function submitUpdate(pipeId) {
   closeModal();
   showSuccessToast('✅ อัพเดทเรียบร้อยแล้ว! ขอบคุณคุณ ' + userName);
   
-  // Refresh data to show new log
-  setTimeout(function() { loadData(); }, 1000);
+  // Refresh data
+  setTimeout(function() { loadData(); }, 500);
 }
 
-// ===== DATA FUNCTIONS =====
+// ===== RENDER FUNCTIONS =====
 var dealerId = new URLSearchParams(window.location.search).get('dealerId');
 var pipesData = [];
 var dealerName = '';
 
-function fmtMoneyFull(n) {
-  if (!n) return '0';
-  n = Number(n);
-  return n.toLocaleString('th-TH');
-}
-
-function esc(s) {
-  if (!s) return '';
-  return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function getStatusLabel(status) {
-  var labels = {
-    prospect: '<span class="cv-status cv-st-prospect">🔵 Prospect</span>',
-    tor_review: '<span class="cv-status cv-st-tor">🟣 TOR Review</span>',
-    quotation: '<span class="cv-status cv-st-quote">🟠 Quotation</span>',
-    bidding: '<span class="cv-status cv-st-bidding">🟡 Bidding</span>',
-    negotiation: '<span class="cv-status cv-st-nego">🔵 Negotiation</span>',
-    win: '<span class="cv-status cv-st-win">🟢 Win</span>',
-    ordered: '<span class="cv-status cv-st-ordered">🟢 Ordered</span>',
-    delivered: '<span class="cv-status cv-st-delivered">✅ Delivered</span>'
-  };
-  return labels[status] || '<span class="cv-status">' + status + '</span>';
+  return '<span class="cv-status ' + getStatusClass(status) + '">' + getStatusName(status) + '</span>';
+}
+
+function renderTimeline(logs) {
+  if (!logs || logs.length === 0) return '<div style="padding:12px;text-align:center;color:var(--text2)">ยังไม่มีประวัติอัพเดท</div>';
+  
+  var html = '<div class="timeline">';
+  for (var i = 0; i < logs.length; i++) {
+    var l = logs[i];
+    var isStatusChange = l.type === 'status_change';
+    var icon = '📝';
+    if (l.type === 'progress') icon = '🟢';
+    else if (l.type === 'win') icon = '✅';
+    else if (l.type === 'status_change') icon = '🔄';
+    
+    var dateStr = l.date ? formatDateThai(l.date) : '-';
+    var content = l.content || '';
+    
+    html += '<div class="timeline-item">';
+    html += '<div class="timeline-dot"></div>';
+    html += '<div class="timeline-date">' + dateStr + ' ' + icon + '</div>';
+    html += '<div class="timeline-content ' + (isStatusChange ? 'timeline-status-change' : '') + '">' + esc(content) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 function showDetail(pipeId) {
@@ -686,66 +871,69 @@ function showDetail(pipeId) {
   }
   if (!p) return;
   
-  var html = '<div class="cv-back" onclick="showOverview()">← กลับ</div>';
+  var lastUpdateDays = p.lastUpdateDays;
+  var updateBadge = getUpdateBadge(lastUpdateDays);
   
-  html += '<div class="cv-section"><div class="cv-section-title">📊 ' + esc(p.projectName) + '</div>';
+  var html = '<div class="cv-back" onclick="showOverview()">← กลับไปหน้าแรก</div>';
+  
+  // Header with last update
+  html += '<div class="cv-section">';
+  html += '<div class="cv-section-title">📊 ' + esc(p.projectName) + '</div>';
+  html += '<div style="margin-bottom:12px">' + updateBadge + '</div>';
   html += '<div class="cv-detail-grid">';
-  html += '<div class="cv-detail-item"><div class="cv-detail-label">Status</div><div class="cv-detail-val">' + getStatusLabel(p.status) + '</div></div>';
+  html += '<div class="cv-detail-item"><div class="cv-detail-label">สถานะปัจจุบัน</div><div class="cv-detail-val">' + getStatusLabel(p.status) + '</div></div>';
   html += '<div class="cv-detail-item"><div class="cv-detail-label">End User</div><div class="cv-detail-val">' + esc(p.endUserTH) + '</div></div>';
   html += '<div class="cv-detail-item"><div class="cv-detail-label">Unit Type</div><div class="cv-detail-val">' + esc(p.unitType) + '</div></div>';
   html += '<div class="cv-detail-item"><div class="cv-detail-label">มูลค่า</div><div class="cv-detail-val">' + fmtMoneyFull(p.forecastAmount) + ' ฿</div></div>';
-  html += '<div class="cv-detail-item"><div class="cv-detail-label">Bidding</div><div class="cv-detail-val">' + (p.biddingDate || '-') + '</div></div>';
-  html += '<div class="cv-detail-item"><div class="cv-detail-label">Shipment</div><div class="cv-detail-val">' + (p.shipmentDate || '-') + '</div></div>';
-  html += '<div class="cv-detail-item"><div class="cv-detail-label">TOR</div><div class="cv-detail-val">' + esc(p.tor) + '</div></div>';
+  html += '<div class="cv-detail-item"><div class="cv-detail-label">Bidding Date</div><div class="cv-detail-val">' + (p.biddingDate || '-') + '</div></div>';
+  html += '<div class="cv-detail-item"><div class="cv-detail-label">Shipment Date</div><div class="cv-detail-val">' + (p.shipmentDate || '-') + '</div></div>';
   html += '</div></div>';
   
+  // Products
   if (p.items && p.items.length) {
-    html += '<div class="cv-section"><div class="cv-section-title">📦 Products (' + p.items.length + ')</div>';
-    html += '<table class="cv-table"><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>';
+    html += '<div class="cv-section"><div class="cv-section-title">📦 รายการสินค้า</div>';
+    html += '<table class="cv-table"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
     for (var i = 0; i < p.items.length; i++) {
       var it = p.items[i];
       html += '<tr><td class="cv-num">' + (i + 1) + '</td>';
       html += '<td>' + esc(it.model || '-') + '</td>';
       html += '<td>' + (it.qty || 1) + '</td>';
-      html += '</tr>';
+      html += '</td>';
     }
     html += '</tbody></table></div>';
   }
   
+  // Action Items
   if (p.actions && p.actions.length) {
-    html += '<div class="cv-section"><div class="cv-section-title">🎯 Action Items (' + p.actions.length + ')</div>';
+    html += '<div class="cv-section"><div class="cv-section-title">🎯 รายการที่ต้องดำเนินการ</div>';
     for (var i = 0; i < p.actions.length; i++) {
       var a = p.actions[i];
       html += '<div class="cv-action"><div class="cv-action-text">⏳ ' + esc(a.text) + '</div>';
-      if (a.dueDate) html += '<div class="cv-action-meta">📅 กำหนด: ' + a.dueDate + '</div></div>';
+      if (a.dueDate) html += '<div class="cv-action-meta">📅 กำหนด: ' + a.dueDate + '</div>';
+      html += '</div>';
     }
     html += '</div>';
   }
   
-  if (p.logs && p.logs.length) {
-    html += '<div class="cv-section"><div class="cv-section-title">📝 Updates</div>';
-    for (var i = 0; i < p.logs.length; i++) {
-      var l = p.logs[i];
-      var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : '📝';
-      var dateStr = l.date ? l.date.split('T')[0] : '-';
-      html += '<div class="cv-log"><span class="cv-log-date">' + dateStr + '</span>';
-      html += '<span class="cv-log-icon">' + icon + '</span>';
-      html += '<span class="cv-log-text">' + esc((l.content || '').substr(0, 80)) + '</span></div>';
-    }
-    html += '</div>';
-  }
+  // Timeline
+  html += '<div class="cv-section"><div class="cv-section-title">📝 ประวัติการอัพเดท</div>';
+  html += renderTimeline(p.logs);
+  html += '</div>';
   
-  // Update button - opens modal
+  // Update button
   html += '<div class="cv-section"><div class="cv-section-title">✏️ สอบถามเพิ่มเติม / อัพเดท</div>';
-  html += '<button class="btn-send" onclick="showModal(\'' + p.id + '\', \'' + esc(p.projectName) + '\')">📩 คลิกเพื่ออัพเดทความคืบหน้า</button>';
-  html += '<div style="font-size:11px;color:var(--text2);margin-top:8px">💡 กดเพื่อแจ้งความคืบหน้า แก้ไขข้อมูล หรือสอบถามเพิ่มเติม</div>';
+  html += '<button class="btn-submit" style="width:100%" onclick="showModal(\'' + p.id + '\', \'' + esc(p.projectName) + '\', \'' + p.status + '\')">📩 คลิกเพื่ออัพเดทความคืบหน้า</button>';
+  html += '<div class="hint" style="margin-top:8px;text-align:center">💡 กดเพื่อแจ้งความคืบหน้า แก้ไขข้อมูล เปลี่ยนสถานะ หรือสอบถามเพิ่มเติม</div>';
   html += '</div>';
   
   document.getElementById('mainContent').innerHTML = html;
 }
 
 function showOverview() {
-  if (!pipesData.length) return;
+  if (!pipesData.length) {
+    document.getElementById('mainContent').innerHTML = '<div class="cv-section" style="text-align:center"><p>📭 ไม่มีโครงการที่กำลังดำเนินการ</p></div>';
+    return;
+  }
   
   var totalQty = 0;
   for (var i = 0; i < pipesData.length; i++) {
@@ -756,30 +944,39 @@ function showOverview() {
   }
   
   var html = '<div class="cv-stats">';
-  html += '<div class="cv-stat"><div class="cv-stat-val">' + pipesData.length + '</div><div class="cv-stat-label">Projects</div></div>';
-  html += '<div class="cv-stat"><div class="cv-stat-val">' + totalQty + '</div><div class="cv-stat-label">Units</div></div>';
+  html += '<div class="cv-stat"><div class="cv-stat-val">' + pipesData.length + '</div><div class="cv-stat-label">โครงการทั้งหมด</div></div>';
+  html += '<div class="cv-stat"><div class="cv-stat-val">' + totalQty + '</div><div class="cv-stat-label">จำนวนสินค้า (ชิ้น)</div></div>';
   html += '</div>';
   
   html += '<div class="cv-section">';
-  html += '<div class="cv-section-title">📊 Projects Overview</div>';
+  html += '<div class="cv-section-title">📊 รายการโครงการของท่าน</div>';
+  html += '<div style="overflow-x:auto">';
   html += '<table class="cv-table">';
-  html += '<thead><tr><th>#</th><th>Project</th><th>End User</th><th>Status</th><th>Bidding</th><th>Shipment</th><th></th></tr></thead>';
+  html += '<thead>';
+  html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>อัพเดทล่าสุด</th><th>Bidding</th><th>Shipment</th><th></th></tr>';
+  html += '</thead>';
   html += '<tbody>';
   
   for (var i = 0; i < pipesData.length; i++) {
     var p = pipesData[i];
+    var updateBadge = getUpdateBadge(p.lastUpdateDays);
+    
     html += '<tr class="cv-row" onclick="showDetail(\'' + p.id + '\')">';
     html += '<td class="cv-num">' + (i + 1) + '</td>';
-    html += '<td class="cv-project">' + esc(p.projectName) + '</td>';
+    html += '<td class="cv-project"><strong>' + esc(p.projectName) + '</strong></td>';
     html += '<td>' + esc(p.endUserTH) + '</td>';
     html += '<td>' + getStatusLabel(p.status) + '</td>';
+    html += '<td>' + updateBadge + '</td>';
     html += '<td>' + (p.biddingDate || '-') + '</td>';
     html += '<td>' + (p.shipmentDate || '-') + '</td>';
     html += '<td><button class="cv-toggle-btn" onclick="event.stopPropagation();showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
     html += '</tr>';
   }
   
-  html += '</tbody></table></div>';
+  html += '</tbody>';
+  html += '</table>';
+  html += '</div>';
+  html += '</div>';
   
   document.getElementById('mainContent').innerHTML = html;
 }
@@ -816,6 +1013,8 @@ function loadData() {
   pipesData = [];
   for (var i = 0; i < activePipes.length; i++) {
     var p = activePipes[i];
+    
+    // Get items
     var items = [];
     if (p.items && p.items.length) {
       items = p.items;
@@ -823,13 +1022,20 @@ function loadData() {
       items = [{ model: p.model, qty: p.modelQty || 1, price: 0 }];
     }
     
+    // Get actions
     var actions = pipeActions.filter(function(a) {
       return a.pipeId === p.id && a.status === 'pending';
     });
     
+    // Get logs and calculate last update days
     var logs = pipeLogs.filter(function(l) {
       return l.pipeId === p.id;
-    }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 10);
+    }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    
+    var lastUpdateDays = null;
+    if (logs.length > 0 && logs[0].date) {
+      lastUpdateDays = daysAgo(logs[0].date);
+    }
     
     pipesData.push({
       id: p.id,
@@ -844,9 +1050,17 @@ function loadData() {
       forecastAmount: p.forecastAmount || 0,
       items: items,
       actions: actions,
-      logs: logs
+      logs: logs.slice(0, 20),
+      lastUpdateDays: lastUpdateDays
     });
   }
+  
+  // Sort by last update (oldest first)
+  pipesData.sort(function(a, b) {
+    var da = a.lastUpdateDays === null ? 9999 : a.lastUpdateDays;
+    var db = b.lastUpdateDays === null ? 9999 : b.lastUpdateDays;
+    return db - da;
+  });
   
   showOverview();
 }

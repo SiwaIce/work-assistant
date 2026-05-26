@@ -145,7 +145,7 @@ function rDealerDet(el) {
       ${levelTag(d.level)}
       <span style="font-size:.72rem;font-weight:700;color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">Health: ${h.score}/100</span>
     </div>
-// ใน function rDealerDet(el) หาส่วนนี้
+
 <div class="bg">
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
