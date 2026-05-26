@@ -1597,6 +1597,7 @@ window.addEventListener('message', function(event) {
 
 var fcCompareMode = 'shipment';
 var fcCompareMonth = getCurrentForecastMonth();
+var fcCompareDealer = 'all';
 
 function getCurrentForecastMonth() {
   var now = new Date();
@@ -1654,7 +1655,8 @@ function getPipelineForecastByMonth(dealerId, dateField, monthKey) {
         items.push({
           model: it.model || p.model || '-',
           qty: qty,
-          projectName: p.projectName || '-'
+          projectName: p.projectName || '-',
+          pipeId: p.id
         });
       }
     }
@@ -1710,24 +1712,48 @@ function rForecastComparison(el) {
   var h = '<div class="card">';
   h += '<h2>📊 เปรียบเทียบ Forecast ลูกค้า vs Pipeline</h2>';
   h += '<div class="fr" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">';
+  
+  // Month selector
   h += '<div class="fg"><label>📅 เดือน</label><select id="fcMonth" onchange="refreshForecastComparison()" style="min-width:100px">';
   for (var i = 0; i < monthOptions.length; i++) {
     h += '<option value="' + monthOptions[i].value + '"' + (fcCompareMonth === monthOptions[i].value ? ' selected' : '') + '>' + monthOptions[i].label + '</option>';
   }
   h += '</select></div>';
   
+  // Mode selector (Shipment/Bidding/Register)
   h += '<div class="fg"><label>📊 ใช้ข้อมูลจาก</label><select id="fcMode" onchange="refreshForecastComparison()" style="min-width:140px">';
-  h += '<option value="shipment"' + (fcCompareMode === 'shipment' ? ' selected' : '') + '>🚚 Shipment Date</option>';
-  h += '<option value="bidding"' + (fcCompareMode === 'bidding' ? ' selected' : '') + '>📋 Bidding Date</option>';
-  h += '<option value="register"' + (fcCompareMode === 'register' ? ' selected' : '') + '>📅 Register Date</option>';
+  h += '<option value="shipment"' + (fcCompareMode === 'shipment' ? ' selected' : '') + '>🚚 Shipment Date (วันส่งมอบ)</option>';
+  h += '<option value="bidding"' + (fcCompareMode === 'bidding' ? ' selected' : '') + '>📋 Bidding Date (วันยื่นซอง)</option>';
+  h += '<option value="register"' + (fcCompareMode === 'register' ? ' selected' : '') + '>📅 Register Date (วันลงทะเบียน)</option>';
   h += '</select></div>';
   
+  // Dealer filter
+  h += '<div class="fg"><label>🏪 Dealer</label><select id="fcDealer" onchange="refreshForecastComparison()" style="min-width:150px">';
+  h += '<option value="all">-- ทุก Dealer --</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    h += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
+  }
+  h += '</select></div>';
+  
+  // Export button
   h += '<div class="fg"><button class="btn bp" onclick="exportForecastComparison()">📤 Export CSV</button></div>';
   h += '</div>';
   
+  // Summary cards
+  h += '<div class="sr" style="margin-bottom:16px" id="fcSummaryCards"></div>';
+  
+  // Main table
   h += '<div style="overflow-x:auto"><table class="export-table" id="fcCompareTable">';
-  h += '<thead><tr><th>🏪 Dealer</th><th>📦 ลูกค้าแจ้ง</th><th>📊 Pipeline</th><th>📊 ต่าง (ชิ้น)</th><th>📍 สถานะ</th></tr></thead>';
-  h += '<tbody id="fcCompareBody"></tbody></table></div>';
+  h += '<thead><tr>';
+  h += '<th>🏪 Dealer</th>';
+  h += '<th>📦 ลูกค้าแจ้ง</th>';
+  h += '<th>📊 Pipeline</th>';
+  h += '<th>📊 ต่าง (ชิ้น)</th>';
+  h += '<th>📍 สถานะ</th>';
+  h += '<th></th>';
+  h += '</thead>';
+  h += '<tbody id="fcCompareBody"></tbody>';
+  h += '</table></div>';
   
   h += '<div class="hint" style="margin-top:8px">💡 ลูกค้าแจ้ง = Run Rate + Project (จากหน้า Client View) | Pipeline = โครงการในระบบ</div>';
   h += '</div>';
@@ -1739,17 +1765,24 @@ function rForecastComparison(el) {
 function refreshForecastComparison() {
   var monthSelect = document.getElementById('fcMonth');
   var modeSelect = document.getElementById('fcMode');
+  var dealerSelect = document.getElementById('fcDealer');
   
   if (monthSelect) fcCompareMonth = monthSelect.value;
   if (modeSelect) fcCompareMode = modeSelect.value;
+  if (dealerSelect) fcCompareDealer = dealerSelect.value;
   
   var dealers = ST.getAll('dealers');
   var monthLabel = formatMonthKeyToLabel(fcCompareMonth);
-  var modeLabel = fcCompareMode === 'shipment' ? 'Shipment' : (fcCompareMode === 'bidding' ? 'Bidding' : 'Register');
+  
+  // Filter dealer if needed
+  if (fcCompareDealer !== 'all') {
+    dealers = dealers.filter(function(d) { return d.id === fcCompareDealer; });
+  }
   
   var rows = '';
   var totalClientQty = 0;
   var totalPipelineQty = 0;
+  var dealerDetails = [];
   
   for (var i = 0; i < dealers.length; i++) {
     var d = dealers[i];
@@ -1762,6 +1795,16 @@ function refreshForecastComparison() {
     
     var statusClass = diff === 0 ? 'c2' : (diff > 0 ? 'c3' : 'c4');
     var statusText = diff === 0 ? '✅ ตรงกัน' : (diff > 0 ? '⚠️ ลูกค้าคาดหวังมากกว่า' : '❌ Pipeline มากกว่า');
+    
+    // Store for summary
+    dealerDetails.push({
+      name: d.name,
+      level: d.level,
+      clientQty: clientFc.totalQty,
+      pipelineQty: pipelineFc.totalQty,
+      diff: diff,
+      status: statusText
+    });
     
     var clientItemsHtml = '';
     if (clientFc.items.length > 0) {
@@ -1785,12 +1828,13 @@ function refreshForecastComparison() {
       pipelineItemsHtml += '</div>';
     }
     
-    rows += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
+    rows += '<tr>';
     rows += '<td><strong>' + sanitize(d.name) + '</strong> ' + levelTag(d.level) + '</td>';
     rows += '<td>' + (clientFc.totalQty > 0 ? clientFc.totalQty + ' ชิ้น' : '-') + clientItemsHtml + '</td>';
     rows += '<td>' + (pipelineFc.totalQty > 0 ? pipelineFc.totalQty + ' ชิ้น' : '-') + pipelineItemsHtml + '</td>';
     rows += '<td class="' + statusClass + '" style="font-weight:700">' + (diff !== 0 ? (diff > 0 ? '+' + diff : diff) : '-') + '</td>';
     rows += '<td><span class="tag ' + (diff === 0 ? 'tag-completed' : (diff > 0 ? 'tag-active' : 'tag-lost')) + '">' + statusText + '</span></td>';
+    rows += '<td><button class="btn bsm bo" onclick="goToDealerForecast(\'' + d.id + '\')">ดูรายละเอียด</button></td>';
     rows += '</tr>';
   }
   
@@ -1802,10 +1846,38 @@ function refreshForecastComparison() {
   rows += '<td><strong>' + totalPipelineQty + ' ชิ้น</strong></td>';
   rows += '<td class="' + (totalDiff === 0 ? 'c2' : (totalDiff > 0 ? 'c3' : 'c4')) + '">' + (totalDiff !== 0 ? (totalDiff > 0 ? '+' + totalDiff : totalDiff) : '-') + '</td>';
   rows += '<td><span class="tag ' + (totalDiff === 0 ? 'tag-completed' : (totalDiff > 0 ? 'tag-active' : 'tag-lost')) + '">' + (totalDiff === 0 ? '✅ ตรงกัน' : (totalDiff > 0 ? '⚠️ ลูกค้าคาดหวังรวมมากกว่า' : '❌ Pipeline รวมมากกว่า')) + '</span></td>';
+  rows += '<td></td>';
   rows += '</tr>';
   
   var tbody = document.getElementById('fcCompareBody');
-  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล</td><tr>';
+  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center">ไม่มีข้อมูล</td></tr>';
+  
+  // Update summary cards
+  updateSummaryCards(dealerDetails, totalClientQty, totalPipelineQty, totalDiff, monthLabel);
+}
+
+function updateSummaryCards(dealerDetails, totalClient, totalPipeline, totalDiff, monthLabel) {
+  var container = document.getElementById('fcSummaryCards');
+  if (!container) return;
+  
+  var dealerWithDiff = [];
+  for (var i = 0; i < dealerDetails.length; i++) {
+    if (dealerDetails[i].diff !== 0) {
+      dealerWithDiff.push(dealerDetails[i]);
+    }
+  }
+  
+  var html = '';
+  html += '<div class="sc"><div class="sn c2">' + totalClient + '</div><div class="sl">ลูกค้าแจ้ง (' + monthLabel + ')</div></div>';
+  html += '<div class="sc"><div class="sn c1">' + totalPipeline + '</div><div class="sl">Pipeline (' + monthLabel + ')</div></div>';
+  html += '<div class="sc"><div class="sn ' + (totalDiff === 0 ? 'c2' : (totalDiff > 0 ? 'c3' : 'c4')) + '">' + (totalDiff !== 0 ? (totalDiff > 0 ? '+' + totalDiff : totalDiff) : '0') + '</div><div class="sl">ส่วนต่าง</div></div>';
+  html += '<div class="sc"><div class="sn c5">' + dealerWithDiff.length + '</div><div class="sl">Dealer ที่ต่าง</div></div>';
+  
+  container.innerHTML = html;
+}
+
+function goToDealerForecast(dealerId) {
+  go('dealerDetail', { dealerId: dealerId, tab: 'forecast' });
 }
 
 function exportForecastComparison() {
@@ -1830,17 +1902,15 @@ function exportForecastComparison() {
 }
 
 // ================================================================
-// แก้ไข openClientView ใน views-dealer.js (ถ้ายังไม่ถูกต้อง)
+// เปิดหน้า Dealer Detail ที่แท็บ Forecast
 // ================================================================
-function openClientView(dealerId) {
-  var d = ST.getOne('dealers', dealerId);
-  if (!d) return;
-  
-  // ใช้ path สัมพัทธ์ไปที่ client-view.html
-  var baseUrl = window.location.href.split('?')[0].split('#')[0];
-  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
-  
-  var win = window.open(clientUrl, '_blank');
-  if (!win) { toast('กรุณาอนุญาต Popup'); return; }
+function goToDealerForecast(dealerId) {
+  S.dealerId = dealerId;
+  S.tab = 'forecast';
+  go('dealerDetail', { dealerId: dealerId });
+  // หลังจาก render แล้วให้เปลี่ยนแท็บ
+  setTimeout(function() {
+    dealerTab = 'forecast';
+    if (typeof render === 'function') render();
+  }, 100);
 }

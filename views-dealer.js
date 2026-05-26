@@ -130,9 +130,14 @@ function rDealerDet(el) {
   // Store dealerId for context-aware FAB
   S.dealerId = d.id;
   
+  // ตรวจสอบว่ามีการขอเปิดแท็บ forecast หรือไม่
+  if (S.tab === 'forecast') {
+    dealerTab = 'forecast';
+    delete S.tab;
+  }
+  
   const isPinned = ST.hasPin(d.id);
   const h = calcHealthScore(d.id);
-
   el.innerHTML = `
   <div class="bc">
     <a onclick="go('dealers')">🏪 Dealer</a><span class="sep">›</span>
