@@ -1580,7 +1580,7 @@ window.addEventListener('message', function(event) {
       // Show notification
       toast('📬 ได้รับอัพเดทจากลูกค้า!');
       
-      // Optional: Add to task
+      // Create follow-up task
       var pipe = ST.getOne('pipeline', data.pipeId);
       if (pipe) {
         ST.add('tasks', {
@@ -1595,7 +1595,7 @@ window.addEventListener('message', function(event) {
         });
       }
       
-      // Auto refresh to show new log
+      // Refresh to show new log
       setTimeout(function() { render(); }, 500);
     }
   }
