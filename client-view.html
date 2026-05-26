@@ -5,20 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>DJI Enterprise - ติดตามสถานะโครงการ</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-<script>
-  firebase.initializeApp({
-    apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
-    authDomain: "work-assistant-9e024.firebaseapp.com",
-    projectId: "work-assistant-9e024",
-    storageBucket: "work-assistant-9e024.firebasestorage.app",
-    messagingSenderId: "796607223436",
-    appId: "1:796607223436:web:1455abe90b141104678da9"
-  });
-  var db = firebase.firestore();
-</script>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root {
@@ -413,6 +399,10 @@ body {
 <button class="theme-toggle" onclick="toggleTheme()" title="เปลี่ยนธีม">🌙</button>
 
 <script>
+// ===== CONFIGURATION =====
+// TODO: ใส่ URL ของ Google Apps Script Web App ที่คุณสร้าง
+var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzevpJB0URxXP4-ltCEOJFJWeHjm9k6CLVUxxw-Fw2-uks2Kts8vl7SLUcG6edTm5rqXA/exec';
+
 // ===== THEME =====
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
 function applyTheme(theme) {
@@ -421,77 +411,6 @@ function applyTheme(theme) {
 }
 function toggleTheme() { var current = getSavedTheme(); var next = current === 'dark' ? 'light' : 'dark'; localStorage.setItem('cv_theme', next); applyTheme(next); }
 applyTheme(getSavedTheme());
-
-// ===== PIN VERIFICATION =====
-function getDealerPin(dealerId) {
-  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
-  return pins[dealerId] || null;
-}
-
-function verifyPin(dealerId, enteredPin) {
-  var correctPin = getDealerPin(dealerId);
-  if (!correctPin) return true;
-  return enteredPin === correctPin;
-}
-
-function showPinScreen(dealerId) {
-  var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
-  var dealer = dealers.find(function(d) { return d.id === dealerId; });
-  var dealerName = dealer ? dealer.name : dealerId;
-  
-  var html = '<div class="pin-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center">';
-  html += '<div style="background:var(--card);border-radius:20px;padding:30px;text-align:center;max-width:350px;width:90%">';
-  html += '<div style="font-size:48px;margin-bottom:16px">🔒</div>';
-  html += '<h2 style="margin-bottom:8px">' + esc(dealerName) + '</h2>';
-  html += '<p style="color:var(--text2);margin-bottom:20px">กรุณากรอกรหัสผ่านเพื่อดูข้อมูล</p>';
-  html += '<input type="password" id="pinInput" placeholder="รหัส 4-6 หลัก" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--input-bg);color:var(--text);font-size:18px;text-align:center;margin-bottom:20px" maxlength="6">';
-  html += '<div style="display:flex;gap:10px">';
-  html += '<button class="btn btn-primary" style="flex:1" onclick="checkPinAndLoad(\'' + dealerId + '\')">ยืนยัน</button>';
-  html += '<button class="btn" style="flex:1" onclick="window.close()">ปิด</button>';
-  html += '</div>';
-  html += '<div id="pinError" style="color:var(--danger);margin-top:12px;font-size:12px"></div>';
-  html += '</div></div>';
-  
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function checkPinAndLoad(dealerId) {
-  var pinInput = document.getElementById('pinInput');
-  var enteredPin = pinInput ? pinInput.value : '';
-  
-  if (verifyPin(dealerId, enteredPin)) {
-    var pinScreen = document.querySelector('.pin-screen');
-    if (pinScreen) pinScreen.remove();
-    sessionStorage.setItem('cv_pin_verified_' + dealerId, 'true');
-    loadAllData();
-  } else {
-    var errorEl = document.getElementById('pinError');
-    if (errorEl) errorEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง';
-  }
-}
-
-// ===== FIREBASE SYNC =====
-function syncClientForecastToFirebase(dealerId, data) {
-  if (typeof firebase === 'undefined' || !firebase.apps.length) return;
-  try {
-    firebase.firestore().collection('client_forecasts').doc(dealerId).set({
-      runrate: data.runrate || [],
-      projects: data.projects || [],
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function(err) { console.log('Firebase sync skipped:', err.message); });
-  } catch(e) {}
-}
-
-function loadClientForecastFromFirebase(dealerId) {
-  return new Promise(function(resolve) {
-    if (typeof firebase === 'undefined' || !firebase.apps.length) { resolve(null); return; }
-    try {
-      firebase.firestore().collection('client_forecasts').doc(dealerId).get()
-        .then(function(doc) { resolve(doc.exists ? doc.data() : null); })
-        .catch(function(err) { resolve(null); });
-    } catch(e) { resolve(null); }
-  });
-}
 
 // ===== HELPER =====
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -534,15 +453,6 @@ function generateMonths() {
   return months;
 }
 
-// Get next month from now
-function getNextMonthFromNow() {
-  var now = new Date();
-  var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  var m = next.getMonth() + 1;
-  var y = next.getFullYear() + 543;
-  return (m < 10 ? '0' + m : m) + '/' + y;
-}
-
 // ===== LOAD MODELS =====
 function loadModels() {
   var cfg = localStorage.getItem('v7_config');
@@ -561,6 +471,127 @@ function loadModels() {
   }
 }
 
+// ===== GOOGLE SHEETS API =====
+function loadFromSheets() {
+  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
+    console.warn('Please set SHEETS_API_URL first');
+    loadFromLocal();
+    return;
+  }
+  
+  showSuccessToast('🔄 กำลังโหลดข้อมูลจาก Google Sheets...');
+  
+  // โหลดข้อมูล Dealer
+  fetch(SHEETS_API_URL + '?action=getDealer&dealerId=' + dealerId)
+    .then(r => r.json())
+    .then(result => {
+      if (result.success && result.data) {
+        dealerName = result.data.name || '-';
+        document.getElementById('dealerName').innerHTML = esc(dealerName);
+        localStorage.setItem('cv_dealer_' + dealerId, JSON.stringify(result.data));
+      }
+    })
+    .catch(e => console.warn('Load dealer error:', e));
+  
+  // โหลด Pipeline
+  fetch(SHEETS_API_URL + '?action=getPipeline&dealerId=' + dealerId)
+    .then(r => r.json())
+    .then(result => {
+      if (result.success && result.data) {
+        pipelinesData = result.data;
+        localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
+        if (currentTab === 'pipeline') renderCurrentTab();
+      }
+    })
+    .catch(e => console.warn('Load pipeline error:', e));
+  
+  // โหลด Forecast
+  fetch(SHEETS_API_URL + '?action=getForecast&dealerId=' + dealerId)
+    .then(r => r.json())
+    .then(result => {
+      if (result.success && result.data) {
+        forecastData.runrate = [];
+        forecastData.projects = [];
+        for (var i = 0; i < result.data.length; i++) {
+          var item = result.data[i];
+          if (item.type === 'runrate') {
+            forecastData.runrate.push({
+              id: item.id,
+              model: item.model,
+              qty: parseInt(item.qty) || 0,
+              month: item.month
+            });
+          } else if (item.type === 'project') {
+            forecastData.projects.push({
+              id: item.id,
+              projectName: item.projectName,
+              endUser: item.endUser || '-',
+              month: item.month,
+              items: [{ model: item.model, qty: parseInt(item.qty) || 1 }],
+              totalQty: parseInt(item.qty) || 1
+            });
+          }
+        }
+        localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
+        if (currentTab === 'forecast') renderCurrentTab();
+      }
+    })
+    .catch(e => console.warn('Load forecast error:', e));
+}
+
+function loadFromLocal() {
+  // load pipeline
+  var savedPipeline = localStorage.getItem('cv_pipeline_' + dealerId);
+  if (savedPipeline) {
+    try { pipelinesData = JSON.parse(savedPipeline); } catch(e) {}
+  }
+  
+  // load forecast
+  var savedForecast = localStorage.getItem('cv_forecast_' + dealerId);
+  if (savedForecast) {
+    try { forecastData = JSON.parse(savedForecast); } catch(e) {}
+  }
+  
+  // load dealer
+  var savedDealer = localStorage.getItem('cv_dealer_' + dealerId);
+  if (savedDealer) {
+    try { var d = JSON.parse(savedDealer); dealerName = d.name || '-'; document.getElementById('dealerName').innerHTML = esc(dealerName); } catch(e) {}
+  } else {
+    dealerName = dealerId;
+    document.getElementById('dealerName').innerHTML = esc(dealerName);
+  }
+  
+  if (currentTab === 'pipeline') renderCurrentTab();
+  if (currentTab === 'forecast') renderCurrentTab();
+}
+
+function saveToSheets(action, data) {
+  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
+    // save to local instead
+    if (action === 'savePipeline') {
+      localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
+    } else if (action === 'saveForecast') {
+      localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
+    }
+    showSuccessToast('💾 บันทึกในเครื่องเรียบร้อยแล้ว (ไม่ได้เชื่อมต่อ Sheets)');
+    return;
+  }
+  
+  fetch(SHEETS_API_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: action, ...data })
+  }).catch(e => console.warn('Save error:', e));
+  
+  // save to local as backup
+  if (action === 'savePipeline') {
+    localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
+  } else if (action === 'saveForecast') {
+    localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
+  }
+}
+
 // ===== FORECAST FUNCTIONS =====
 function selectMonth(month) {
   selectedMonth = month;
@@ -569,36 +600,28 @@ function selectMonth(month) {
 
 function getMonthSummary() {
   var summary = {};
-  
-  // สร้างค่าเริ่มต้น
   for (var i = 0; i < allMonths.length; i++) {
     summary[allMonths[i]] = { runrate: 0, project: 0, total: 0 };
   }
   
-  // รวมข้อมูล Run Rate
-  if (forecastData.runrate && forecastData.runrate.length) {
-    for (var i = 0; i < forecastData.runrate.length; i++) {
-      var r = forecastData.runrate[i];
-      if (r && r.month && summary[r.month]) {
-        summary[r.month].runrate += (r.qty || 0);
-        summary[r.month].total += (r.qty || 0);
-      }
+  for (var i = 0; i < forecastData.runrate.length; i++) {
+    var r = forecastData.runrate[i];
+    if (summary[r.month]) {
+      summary[r.month].runrate += r.qty;
+      summary[r.month].total += r.qty;
     }
   }
   
-  // รวมข้อมูล Projects
-  if (forecastData.projects && forecastData.projects.length) {
-    for (var i = 0; i < forecastData.projects.length; i++) {
-      var p = forecastData.projects[i];
-      if (p && p.month && summary[p.month]) {
-        summary[p.month].project += (p.totalQty || 0);
-        summary[p.month].total += (p.totalQty || 0);
-      }
+  for (var i = 0; i < forecastData.projects.length; i++) {
+    var p = forecastData.projects[i];
+    if (summary[p.month]) {
+      summary[p.month].project += p.totalQty;
+      summary[p.month].total += p.totalQty;
     }
   }
-  
   return summary;
 }
+
 function addRunrateItem() {
   var model = document.getElementById('runrateModel').value.trim();
   var qty = parseInt(document.getElementById('runrateQty').value);
@@ -645,71 +668,39 @@ function editRunrateItem(idx) {
   }
 }
 
-function loadClientForecast() {
-  var key = 'v7_client_forecast_' + dealerId;
-  var localData = localStorage.getItem(key);
-  
-  loadClientForecastFromFirebase(dealerId).then(function(firebaseData) {
-    if (firebaseData && (firebaseData.runrate || firebaseData.projects)) {
-      forecastData.runrate = firebaseData.runrate || [];
-      forecastData.projects = firebaseData.projects || [];
-      localStorage.setItem(key, JSON.stringify({
-        runrate: forecastData.runrate,
-        projects: forecastData.projects,
-        updatedAt: new Date().toISOString()
-      }));
-    } else if (localData) {
-      try {
-        var parsed = JSON.parse(localData);
-        forecastData.runrate = parsed.runrate || [];
-        forecastData.projects = parsed.projects || [];
-      } catch(e) {}
-    }
-    
-    allMonths = generateMonths();
-    
-    if (!selectedMonth && forecastData.runrate.length > 0) selectedMonth = forecastData.runrate[0].month;
-    if (!selectedMonth && forecastData.projects.length > 0) selectedMonth = forecastData.projects[0].month;
-    if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
-    
-    if (currentTab === 'forecast') renderCurrentTab();
-  });
-}
-
 function saveClientForecast() {
-  var key = 'v7_client_forecast_' + dealerId;
-  var dataToSave = {
-    runrate: forecastData.runrate,
-    projects: forecastData.projects,
-    updatedAt: new Date().toISOString()
-  };
-  localStorage.setItem(key, JSON.stringify(dataToSave));
-  syncClientForecastToFirebase(dealerId, dataToSave);
-  showSuccessToast('✅ บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
-  if (currentTab === 'forecast') renderForecastTab();
-}
-
-function forceSyncToCloud() {
-  if (!confirm('🔄 ยืนยัน sync ข้อมูลทั้งหมดขึ้น Cloud?')) return;
-  syncClientForecastToFirebase(dealerId, {
-    runrate: forecastData.runrate,
-    projects: forecastData.projects
-  });
-  showSuccessToast('🔄 กำลัง sync ข้อมูลขึ้น Cloud...');
-}
-
-function pullFromCloud() {
-  if (!confirm('📥 ดึงข้อมูลล่าสุดจาก Cloud?')) return;
-  loadClientForecastFromFirebase(dealerId).then(function(firebaseData) {
-    if (firebaseData && (firebaseData.runrate || firebaseData.projects)) {
-      forecastData.runrate = firebaseData.runrate || [];
-      forecastData.projects = firebaseData.projects || [];
-      saveClientForecast();
-      showSuccessToast('📥 ดึงข้อมูลจาก Cloud สำเร็จ');
-    } else {
-      showSuccessToast('❌ ไม่มีข้อมูลใน Cloud');
+  // Save to Sheets
+  for (var i = 0; i < forecastData.runrate.length; i++) {
+    var r = forecastData.runrate[i];
+    saveToSheets('saveForecast', {
+      id: r.id,
+      dealerId: dealerId,
+      month: r.month,
+      type: 'runrate',
+      model: r.model,
+      qty: r.qty,
+      updatedAt: _nw()
+    });
+  }
+  for (var i = 0; i < forecastData.projects.length; i++) {
+    var p = forecastData.projects[i];
+    if (p.items && p.items.length) {
+      saveToSheets('saveForecast', {
+        id: p.id,
+        dealerId: dealerId,
+        month: p.month,
+        type: 'project',
+        projectName: p.projectName,
+        endUser: p.endUser,
+        model: p.items[0].model,
+        qty: p.items[0].qty,
+        updatedAt: _nw()
+      });
     }
-  });
+  }
+  
+  showSuccessToast('✅ บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
+  renderForecastTab();
 }
 
 function deleteProjectItem(projIdx) {
@@ -732,53 +723,6 @@ function editProjectItem(projIdx) {
   }
 }
 
-function editProjectItemDetail(projIdx, itemIdx) {
-  var proj = forecastData.projects[projIdx];
-  if (!proj || !proj.items[itemIdx]) return;
-  var item = proj.items[itemIdx];
-  var newModel = prompt('รุ่นสินค้า:', item.model);
-  var newQty = prompt('จำนวน:', item.qty);
-  if (newModel && newModel.trim()) item.model = newModel.trim();
-  if (newQty && !isNaN(parseInt(newQty))) item.qty = parseInt(newQty);
-  proj.totalQty = 0;
-  for (var i = 0; i < proj.items.length; i++) proj.totalQty += proj.items[i].qty;
-  saveClientForecast();
-}
-
-function addItemToProject(projIdx) {
-  var model = prompt('รุ่นสินค้า:', '');
-  if (!model) return;
-  var qty = parseInt(prompt('จำนวน:', '1')) || 1;
-  var proj = forecastData.projects[projIdx];
-  if (proj) {
-    proj.items.push({ model: model, qty: qty, price: 0 });
-    proj.totalQty += qty;
-    saveClientForecast();
-  }
-}
-
-function copyProjectToForm(projIdx) {
-  var proj = forecastData.projects[projIdx];
-  if (!proj) return;
-  document.getElementById('newProjectName').value = proj.projectName + ' (สำเนา)';
-  document.getElementById('newProjectEndUser').value = proj.endUser || '';
-  window.newProjectItems = [];
-  for (var i = 0; i < proj.items.length; i++) {
-    window.newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty });
-  }
-  renderNewProjectItemsList();
-  showSuccessToast('📋 คัดลอกโครงการ "' + proj.projectName + '" แล้ว');
-}
-
-function clearProjectForm() {
-  if (confirm('ล้างข้อมูลในฟอร์ม?')) {
-    document.getElementById('newProjectName').value = '';
-    document.getElementById('newProjectEndUser').value = '';
-    window.newProjectItems = [];
-    renderNewProjectItemsList();
-  }
-}
-
 function loadProjectToForm() {
   var select = document.getElementById('existingProjectSelect');
   var idx = parseInt(select.value);
@@ -787,11 +731,15 @@ function loadProjectToForm() {
   if (!proj) return;
   
   document.getElementById('newProjectName').value = proj.projectName;
-  document.getElementById('newProjectEndUser').value = proj.endUserTH;
+  document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
   
   window.newProjectItems = [];
-  for (var i = 0; i < proj.items.length; i++) {
-    window.newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
+  if (proj.items && proj.items.length) {
+    for (var i = 0; i < proj.items.length; i++) {
+      window.newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
+    }
+  } else if (proj.model) {
+    window.newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
   }
   renderNewProjectItemsList();
   select.value = '';
@@ -860,6 +808,15 @@ function addNewProject() {
   saveClientForecast();
 }
 
+function clearProjectForm() {
+  if (confirm('ล้างข้อมูลในฟอร์ม?')) {
+    document.getElementById('newProjectName').value = '';
+    document.getElementById('newProjectEndUser').value = '';
+    window.newProjectItems = [];
+    renderNewProjectItemsList();
+  }
+}
+
 function downloadForecastExcel() {
   var wsData = [['ประเภท', 'ชื่อ', 'Model', 'จำนวน', 'End User', 'เดือน']];
   for (var i = 0; i < forecastData.runrate.length; i++) {
@@ -902,50 +859,17 @@ function uploadForecastExcel(input) {
       if (!month || allMonths.indexOf(month) === -1) continue;
       
       if (type === 'Run Rate' && model && qty > 0) {
-        var exists = false;
-        for (var j = 0; j < forecastData.runrate.length; j++) {
-          if (forecastData.runrate[j].model === model && forecastData.runrate[j].month === month) {
-            forecastData.runrate[j].qty += qty;
-            exists = true;
-            break;
-          }
-        }
-        if (!exists) {
-          forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i, model: model, qty: qty, month: month });
-        }
+        forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i, model: model, qty: qty, month: month });
       } else if (type === 'Project' && name && model && qty > 0) {
-        var existingProj = null;
-        for (var j = 0; j < forecastData.projects.length; j++) {
-          if (forecastData.projects[j].projectName === name && forecastData.projects[j].month === month) {
-            existingProj = forecastData.projects[j];
-            break;
-          }
-        }
-        if (existingProj) {
-          var itemExists = false;
-          for (var k = 0; k < existingProj.items.length; k++) {
-            if (existingProj.items[k].model === model) {
-              existingProj.items[k].qty += qty;
-              existingProj.totalQty += qty;
-              itemExists = true;
-              break;
-            }
-          }
-          if (!itemExists) {
-            existingProj.items.push({ model: model, qty: qty });
-            existingProj.totalQty += qty;
-          }
-        } else {
-          forecastData.projects.push({
-            id: 'proj_' + Date.now() + '_' + i,
-            projectName: name,
-            endUser: endUser || '-',
-            month: month,
-            items: [{ model: model, qty: qty }],
-            totalQty: qty,
-            createdAt: new Date().toISOString()
-          });
-        }
+        forecastData.projects.push({
+          id: 'proj_' + Date.now() + '_' + i,
+          projectName: name,
+          endUser: endUser || '-',
+          month: month,
+          items: [{ model: model, qty: qty }],
+          totalQty: qty,
+          createdAt: new Date().toISOString()
+        });
       }
     }
     saveClientForecast();
@@ -954,280 +878,184 @@ function uploadForecastExcel(input) {
   reader.readAsArrayBuffer(file);
 }
 
-// ===== RENDER FORECAST TAB (Safe version - No undefined) =====
+// ===== RENDER FORECAST TAB =====
 function renderForecastTab() {
-  console.log('renderForecastTab called');
+  allMonths = generateMonths();
+  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
   
-  // ตรวจสอบและสร้างค่าเริ่มต้น
-  try {
-    if (!allMonths || allMonths.length === 0) {
-      allMonths = generateMonths();
-      console.log('Generated months:', allMonths);
+  var monthSummary = getMonthSummary();
+  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
+  var monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
+  
+  var totalRunrate = 0, totalProject = 0;
+  for (var i = 0; i < monthRunrate.length; i++) totalRunrate += monthRunrate[i].qty;
+  for (var i = 0; i < monthProjects.length; i++) totalProject += monthProjects[i].totalQty;
+  
+  // Month Cards
+  var monthCardsHtml = '<div class="month-scroll">';
+  for (var i = 0; i < allMonths.length; i++) {
+    var m = allMonths[i];
+    var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
+    var activeClass = (selectedMonth === m) ? 'active' : '';
+    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')">';
+    monthCardsHtml += '<div class="month-name">' + m + '</div>';
+    monthCardsHtml += '<div class="month-total">' + summary.total + '</div>';
+    monthCardsHtml += '<div class="month-detail">🏪' + summary.runrate + ' 📋' + summary.project + '</div>';
+    monthCardsHtml += '</div>';
+  }
+  monthCardsHtml += '</div>';
+  
+  // Stats
+  var statsHtml = '<div class="stats-grid">';
+  statsHtml += '<div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น (ชิ้น)</div></div>';
+  statsHtml += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
+  statsHtml += '<div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div>';
+  statsHtml += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
+  statsHtml += '</div>';
+  
+  // Run rate list
+  var runrateHtml = '';
+  for (var i = 0; i < monthRunrate.length; i++) {
+    var r = monthRunrate[i];
+    runrateHtml += '<div class="forecast-item">';
+    runrateHtml += '<div style="flex:2"><strong>' + esc(r.model) + '</strong></div>';
+    runrateHtml += '<div style="width:80px;text-align:center">x' + r.qty + '</div>';
+    runrateHtml += '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️ แก้ไข</button>';
+    runrateHtml += '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️ ลบ</button>';
+    runrateHtml += '</div>';
+  }
+  if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการสินค้าทั่วไป</div>';
+  
+  // Projects list
+  var projectsHtml = '';
+  for (var i = 0; i < monthProjects.length; i++) {
+    var proj = monthProjects[i];
+    var itemsText = '';
+    for (var j = 0; j < proj.items.length; j++) {
+      itemsText += proj.items[j].model + ' x' + proj.items[j].qty;
+      if (j < proj.items.length - 1) itemsText += ', ';
     }
-    
-    if (!selectedMonth) {
-      if (forecastData.runrate && forecastData.runrate.length > 0) {
-        selectedMonth = forecastData.runrate[0].month;
-      } else if (forecastData.projects && forecastData.projects.length > 0) {
-        selectedMonth = forecastData.projects[0].month;
-      } else if (allMonths.length > 0) {
-        selectedMonth = allMonths[0];
-      } else {
-        var now = new Date();
-        var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        var m = next.getMonth() + 1;
-        var y = next.getFullYear() + 543;
-        selectedMonth = (m < 10 ? '0' + m : m) + '/' + y;
-      }
-      console.log('Selected month:', selectedMonth);
+    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')">';
+    projectsHtml += '<div class="project-name">';
+    projectsHtml += '<span>📋 ' + esc(proj.projectName) + '</span>';
+    projectsHtml += '<span style="font-size:12px;color:var(--text2)">' + proj.totalQty + ' ชิ้น</span>';
+    projectsHtml += '</div>';
+    if (proj.endUser && proj.endUser !== '-') {
+      projectsHtml += '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>';
     }
-  } catch(e) {
-    console.error('Init error:', e);
-    document.getElementById('tabContent').innerHTML = '<div class="section" style="padding:20px;text-align:center">❌ เกิดข้อผิดพลาด: ' + e.message + '</div>';
-    return;
+    projectsHtml += '<div class="project-items">📦 ' + itemsText + '</div>';
+    projectsHtml += '<div class="project-detail" id="projectDetail_' + i + '">';
+    projectsHtml += '<div style="display:flex;gap:8px;margin-top:8px">';
+    projectsHtml += '<button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button>';
+    projectsHtml += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button>';
+    projectsHtml += '</div></div>';
+    projectsHtml += '</div>';
+  }
+  if (projectsHtml === '') projectsHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
+  
+  var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงเฉพาะสินค้า) --</option>';
+  for (var i = 0; i < pipelinesData.length; i++) {
+    existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
   }
   
-  // ข้อมูลพื้นฐาน
-  var monthRunrate = [];
-  var monthProjects = [];
-  var totalRunrate = 0;
-  var totalProject = 0;
-  
-  try {
-    if (forecastData.runrate && forecastData.runrate.length) {
-      monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-      for (var i = 0; i < monthRunrate.length; i++) totalRunrate += (monthRunrate[i].qty || 0);
-    }
-    
-    if (forecastData.projects && forecastData.projects.length) {
-      monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
-      for (var i = 0; i < monthProjects.length; i++) totalProject += (monthProjects[i].totalQty || 0);
-    }
-  } catch(e) {
-    console.error('Filter error:', e);
+  var modelDatalist = '<datalist id="globalModelList">';
+  for (var i = 0; i < allModels.length; i++) {
+    modelDatalist += '<option value="' + esc(allModels[i]) + '">';
   }
+  modelDatalist += '</datalist>';
   
-  // สร้าง HTML แบบง่ายๆ ก่อน (ไม่มี Month Cards ที่ซับซ้อน)
-  var html = '<div class="section" style="width:100%">';
+  var html = '<div class="section">';
   html += '<div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>';
-  
-  // แสดงเดือนปัจจุบัน
-  html += '<div style="background:var(--bg2);border-radius:16px;padding:16px;margin-bottom:24px;text-align:center">';
-  html += '<div style="font-size:18px;font-weight:700;margin-bottom:8px">เดือนที่แสดง: <span style="color:var(--accent)">' + (selectedMonth || '-') + '</span></div>';
-  html += '<div style="display:flex;gap:12px;justify-content:center;margin-bottom:12px">';
-  html += '<button class="btn btn-primary" onclick="selectPrevMonth()">◀ เดือนก่อน</button>';
-  html += '<button class="btn btn-primary" onclick="selectNextMonth()">เดือนถัดไป ▶</button>';
-  html += '</div>';
-  
-  // Dropdown เลือกเดือน
-  html += '<select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;font-size:13px">';
+  html += '<div class="month-carousel">' + monthCardsHtml + '<div class="month-selector-dropdown" style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
   for (var i = 0; i < allMonths.length; i++) {
     var m = allMonths[i];
     html += '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>';
   }
-  html += '</select>';
-  html += '</div>';
+  html += '</select></div></div>';
+  html += statsHtml;
   
-  // สถิติรวม
-  html += '<div class="stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">';
-  html += '<div class="stat-card"><div class="stat-month">รวมทั้งสิ้น</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">ชิ้น</div></div>';
-  html += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
-  html += '<div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div>';
-  html += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
-  html += '</div>';
-  
-  // Run Rate Section
   html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="font-size:16px">🏪 สินค้าทั่วไป (Run Rate)</div>';
-  html += '<div class="form-row" style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">';
-  html += '<input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="flex:2;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
-  html += '<input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
-  html += '<button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button>';
+  html += '<div class="form-row" style="margin-bottom:12px">';
+  html += '<div class="form-group" style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
+  html += '<div class="form-group" style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
+  html += '<div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div>';
+  html += '</div>';
+  html += '<div>' + runrateHtml + '</div>';
   html += '</div>';
   
-  if (monthRunrate.length > 0) {
-    for (var i = 0; i < monthRunrate.length; i++) {
-      var r = monthRunrate[i];
-      html += '<div class="forecast-item" style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
-      html += '<div style="flex:2"><strong>' + esc(r.model || '-') + '</strong></div>';
-      html += '<div style="width:80px;text-align:center">x' + (r.qty || 0) + '</div>';
-      html += '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️ แก้ไข</button>';
-      html += '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️ ลบ</button>';
-      html += '</div>';
-    }
-  } else {
-    html += '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการสินค้าทั่วไป</div>';
-  }
-  html += '</div>';
-  
-  // Project Section
   html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="font-size:16px">📋 โครงการ (Project-based)</div>';
-  
-  // เลือกจากโครงการที่มี
-  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี (ดึงเฉพาะสินค้า)</label>';
-  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
-  html += '<option value="">-- เลือกโครงการ --</option>';
-  if (pipelinesData && pipelinesData.length) {
-    for (var i = 0; i < pipelinesData.length; i++) {
-      html += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName || '-') + '</option>';
-    }
-  }
-  html += '</select></div>';
-  
-  // ฟอร์มเพิ่มโครงการใหม่
+  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label>';
+  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select>';
+  html += '</div>';
   html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">';
-  html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"></div>';
-  html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"></div>';
-  html += '<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">';
-  html += '<input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="flex:2;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
-  html += '<input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">';
-  html += '<button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button>';
+  html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div>';
+  html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
+  html += '<div class="form-row" style="margin-bottom:8px">';
+  html += '<div class="form-group" style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
+  html += '<div class="form-group" style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
+  html += '<div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div>';
   html += '</div>';
   html += '<div id="newProjectItemsContainer" style="margin-bottom:12px"></div>';
-  html += '<div style="display:flex;gap:12px;margin-top:12px">';
+  html += '<div class="form-row" style="margin-top:12px;gap:10px">';
   html += '<button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button>';
   html += '<button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button>';
   html += '</div></div>';
   
-  // รายการโครงการที่เพิ่มแล้ว
   html += '<div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>';
-  if (monthProjects.length > 0) {
-    for (var i = 0; i < monthProjects.length; i++) {
-      var proj = monthProjects[i];
-      html += '<div class="project-item" style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer" onclick="toggleProjectDetail(' + i + ')">';
-      html += '<div style="font-weight:700;font-size:15px;color:var(--accent);display:flex;justify-content:space-between">';
-      html += '<span>📋 ' + esc(proj.projectName || '-') + '</span>';
-      html += '<span style="font-size:12px;color:var(--text2)">' + (proj.totalQty || 0) + ' ชิ้น</span>';
-      html += '</div>';
-      html += '<div class="project-detail" id="projectDetail_' + i + '" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:none">';
-      html += '<div style="display:flex;gap:8px;margin-top:8px">';
-      html += '<button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button>';
-      html += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button>';
-      html += '</div></div>';
-      html += '</div>';
-    }
-  } else {
-    html += '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
-  }
+  html += '<div style="margin-top:8px">' + projectsHtml + '</div>';
   html += '</div>';
   
-  // ปุ่ม Action
-  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">';
+  html += '<div class="form-row" style="margin-top:16px">';
   html += '<button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button>';
   html += '<button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button>';
   html += '<div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div>';
   html += '</div>';
   
-  // ปุ่ม Sync
-  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">';
-  html += '<button class="btn btn-warning" onclick="forceSyncToCloud()">☁️ Sync ขึ้น Cloud</button>';
-  html += '<button class="btn btn-info" onclick="pullFromCloud()">📥 ดึงข้อมูลจาก Cloud</button>';
-  html += '</div>';
-  
-  // Datalist สำหรับ Model
-  html += '<datalist id="globalModelList">';
-  for (var i = 0; i < allModels.length; i++) {
-    html += '<option value="' + esc(allModels[i]) + '">';
-  }
-  html += '</datalist>';
-  
+  html += modelDatalist;
   html += '</div>';
   
   window.newProjectItems = [];
   document.getElementById('tabContent').innerHTML = html;
-  console.log('renderForecastTab completed');
 }
 
-// เพิ่มฟังก์ชันเลือกเดือนก่อน/ถัดไป
-function selectPrevMonth() {
-  var idx = allMonths.indexOf(selectedMonth);
-  if (idx > 0) {
-    selectMonth(allMonths[idx - 1]);
-  } else {
-    showSuccessToast('📅 นี่คือเดือนแรกสุดแล้ว');
-  }
-}
-
-function selectNextMonth() {
-  var idx = allMonths.indexOf(selectedMonth);
-  if (idx < allMonths.length - 1) {
-    selectMonth(allMonths[idx + 1]);
-  } else {
-    showSuccessToast('📅 นี่คือเดือนสุดท้ายแล้ว');
-  }
-}
 // ===== LOAD PIPELINE =====
 function loadPipeline() {
-  var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
-  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
-  var activePipes = allPipes.filter(function(p) { return p.dealerId === dealerId && ['lost','on_hold'].indexOf(p.status) === -1; });
-  
-  pipelinesData = [];
-  for (var i = 0; i < activePipes.length; i++) {
-    var p = activePipes[i];
-    var items = [];
-    if (p.items && p.items.length) items = p.items;
-    else if (p.model) items = [{ model: p.model, qty: p.modelQty || 1 }];
-    
-    var logs = pipeLogs.filter(function(l) { return l.pipeId === p.id; }).sort(function(a,b) { return (b.date||'').localeCompare(a.date||''); });
-    var lastUpdateDays = null;
-    if (logs.length && logs[0].date) {
-      var d = new Date(logs[0].date);
-      var now = new Date(); now.setHours(0,0,0,0);
-      lastUpdateDays = Math.floor((now - d) / 86400000);
-    }
-    
-    pipelinesData.push({
-      id: p.id,
-      projectName: p.projectName || '-',
-      endUserTH: p.endUserTH || '-',
-      status: p.status,
-      items: items,
-      logs: logs,
-      lastUpdateDays: lastUpdateDays
-    });
-  }
-}
-
-// ===== LOAD TIMELINE =====
-function loadTimeline() {
-  var allLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
-  timelineLogs = allLogs.filter(function(l) {
-    var pipe = pipelinesData.find(function(p) { return p.id === l.pipeId; });
-    return pipe;
-  }).sort(function(a,b) { return (b.date||'').localeCompare(a.date||''); }).slice(0, 50);
+  // already loaded from sheets or local
+  if (currentTab === 'pipeline') renderCurrentTab();
 }
 
 // ===== RENDER PIPELINE TAB =====
 function renderPipelineTab() {
-  var addButtonHtml = '<div style="margin-bottom:16px;text-align:right"><button class="btn btn-primary" onclick="showAddNewProjectModal()" style="padding:8px 16px;font-size:13px">➕ เพิ่มโครงการใหม่</button></div>';
-  
   if (!pipelinesData.length) {
-    return '<div class="section"><div class="section-title">📊 โครงการของท่าน</div>' + addButtonHtml + '<div style="text-align:center;padding:40px">📭 ยังไม่มีโครงการ<br><button class="btn btn-primary" style="margin-top:12px" onclick="showAddNewProjectModal()">➕ เพิ่มโครงการแรก</button></div></div>';
+    return '<div class="section"><div class="section-title">📊 โครงการของท่าน</div><div style="text-align:center;padding:40px">📭 ยังไม่มีโครงการ</div></div>';
   }
   
-  var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div>' + addButtonHtml;
+  var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div>';
   html += '<div style="overflow-x:auto"><table class="data-table">';
   html += '<thead><tr>';
-  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>อัพเดทล่าสุด</th><th>สินค้า</th><th></th>';
+  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th></th>';
   html += '</tr></thead><tbody>';
   
   for (var i = 0; i < pipelinesData.length; i++) {
     var p = pipelinesData[i];
-    var updateBadge = p.lastUpdateDays === null ? '<span style="font-size:11px;color:var(--text2)">🆕 ยังไม่มี</span>' : (p.lastUpdateDays <= 3 ? '<span style="font-size:11px;color:#22c55e">✅ ' + p.lastUpdateDays + ' วันที่แล้ว</span>' : '<span style="font-size:11px;color:#f59e0b">⚠️ ' + p.lastUpdateDays + ' วันที่แล้ว</span>');
     var itemsText = '';
-    for (var j = 0; j < p.items.length; j++) {
-      itemsText += p.items[j].model;
-      if (p.items[j].qty > 1) itemsText += ' x' + p.items[j].qty;
-      if (j < p.items.length - 1) itemsText += ', ';
+    if (p.items && p.items.length) {
+      for (var j = 0; j < p.items.length; j++) {
+        itemsText += p.items[j].model;
+        if (p.items[j].qty > 1) itemsText += ' x' + p.items[j].qty;
+        if (j < p.items.length - 1) itemsText += ', ';
+      }
+    } else if (p.model) {
+      itemsText = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
     }
+    
     html += '<tr onclick="showDetailPage(\'' + p.id + '\')" style="cursor:pointer">';
     html += '<td style="width:40px;color:var(--text2);font-weight:600">' + (i+1) + '</td>';
     html += '<td><strong>' + esc(p.projectName) + '</strong></td>';
-    html += '<td>' + esc(p.endUserTH) + '</td>';
+    html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
     html += '<td>' + getStatusLabel(p.status) + '</td>';
-    html += '<td>' + updateBadge + '</td>';
     html += '<td style="font-size:12px;color:var(--text2)">' + itemsText + '</td>';
     html += '<td style="text-align:center"><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">📝 อัพเดท</button></td>';
     html += '</tr>';
@@ -1253,24 +1081,14 @@ function renderTimelineTab() {
   return html;
 }
 
-// ===== RENDER CURRENT TAB =====
-function renderCurrentTab() {
-  var content = '';
-  if (currentTab === 'pipeline') {
-    content = renderPipelineTab();
-  } else if (currentTab === 'forecast') {
-    content = renderForecastTab();
-  } else {
-    content = renderTimelineTab();
-  }
-  document.getElementById('tabContent').innerHTML = content;
-}
-
-// ===== SHOW ADD NEW PROJECT MODAL =====
-function showAddNewProjectModal() {
+// ===== SHOW UPDATE MODAL =====
+function showUpdateModal(pipeId) {
+  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
+  if (!p) return;
+  
   var statusOptions = '';
   for (var i = 0; i < STATUS_LIST.length; i++) {
-    statusOptions += '<option value="' + STATUS_LIST[i].id + '">' + STATUS_LIST[i].name + '</option>';
+    statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
   }
   
   var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
@@ -1278,24 +1096,23 @@ function showAddNewProjectModal() {
     modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
   }
   
-  var itemsHtml = '<div id="editItemsContainer"><div class="form-row"><input list="modelList0" class="editItemModel" style="flex:2" placeholder="พิมพ์ชื่อสินค้า"><datalist id="modelList0">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div></div>';
-  itemsHtml += '<button type="button" class="btn btn-sm" onclick="addEditItem()">➕ เพิ่มสินค้า</button>';
+  var itemsHtml = '<div id="editItemsContainer">';
+  if (p.items && p.items.length) {
+    for (var i = 0; i < p.items.length; i++) {
+      itemsHtml += '<div class="form-row"><input list="modelList' + i + '" class="editItemModel" style="flex:2" value="' + esc(p.items[i].model) + '"><datalist id="modelList' + i + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.items[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
+    }
+  } else if (p.model) {
+    itemsHtml += '<div class="form-row"><input list="modelList0" class="editItemModel" style="flex:2" value="' + esc(p.model) + '"><datalist id="modelList0">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.modelQty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
+  }
+  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItem()">➕ เพิ่มสินค้า</button>';
   
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
-  modalHtml += '<div class="modal-container">';
-  modalHtml += '<div class="modal-header"><h3>➕ เพิ่มโครงการใหม่</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
-  modalHtml += '<div class="modal-body">';
-  modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ *</label><input type="text" id="editProjectName" class="form-control" placeholder="เช่น โครงการจัดซื้อโดรน"></div>';
-  modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
+  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">';
+  modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + esc(p.projectName) + '" class="form-control"></div>';
+  modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" value="' + esc(p.endUserTH || p.endUser || '') + '" class="form-control"></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>';
   modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + '</div>';
-  modalHtml += '<div class="form-row"><div class="form-group"><label>📅 Bidding Date</label><input type="date" id="editBidding" class="form-control"></div>';
-  modalHtml += '<div class="form-group"><label>📅 Shipment Date</label><input type="date" id="editShipment" class="form-control"></div></div>';
-  modalHtml += '<div class="form-group"><label>💰 มูลค่า (฿)</label><input type="number" id="editAmount" class="form-control" placeholder="0"></div>';
-  modalHtml += '<div class="form-group"><label>📝 รายละเอียด</label><textarea id="updateContent" rows="2" class="form-control" placeholder="รายละเอียดโครงการ..."></textarea></div>';
-  modalHtml += '</div>';
-  modalHtml += '<div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitNewProject()">💾 เพิ่มโครงการ</button></div>';
-  modalHtml += '</div></div>';
+  modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..." class="form-control"></textarea></div>';
+  modalHtml += '</div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitFullUpdate(\'' + pipeId + '\')">💾 บันทึก</button></div></div></div>';
   
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
@@ -1321,111 +1138,11 @@ function removeEditItem(btn) {
   if (row) row.remove();
 }
 
-function submitNewProject() {
-  var projectName = document.getElementById('editProjectName').value.trim();
-  var endUser = document.getElementById('editEndUser').value.trim();
-  var status = document.getElementById('editStatus').value;
-  var biddingDateInput = document.getElementById('editBidding').value;
-  var shipmentDateInput = document.getElementById('editShipment').value;
-  var amount = parseFloat(document.getElementById('editAmount').value) || 0;
-  var content = document.getElementById('updateContent').value.trim();
-  
-  if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-  
-  var biddingDate = biddingDateInput ? biddingDateInput.split('-').reverse().join('/') : '';
-  var shipmentDate = shipmentDateInput ? shipmentDateInput.split('-').reverse().join('/') : '';
-  
-  var items = [];
-  var itemRows = document.querySelectorAll('#editItemsContainer .form-row');
-  for (var i = 0; i < itemRows.length; i++) {
-    var modelInput = itemRows[i].querySelector('.editItemModel');
-    var qtyInput = itemRows[i].querySelector('.editItemQty');
-    if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) {
-      items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
-    }
-  }
-  if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  
-  var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
-  var newPipe = {
-    id: 'pipe_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-    registerDate: _td(),
-    projectName: projectName,
-    endUserTH: endUser,
-    endUserEN: '',
-    unitType: '',
-    dealerId: dealerId,
-    djiDealer: '',
-    model: items[0].model,
-    modelQty: items.reduce(function(s, it) { return s + it.qty; }, 0),
-    forecastAmount: amount,
-    realAmount: 0,
-    tor: '',
-    biddingDate: biddingDate,
-    shipmentDate: shipmentDate,
-    remark: content,
-    appointmentLetter: '',
-    status: status,
-    recurring: false,
-    items: items,
-    created: _nw()
-  };
-  
-  allPipes.push(newPipe);
-  localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
-  
-  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
-  pipeLogs.unshift({ id: 'log_' + Date.now(), pipeId: newPipe.id, type: 'update', content: content || '📝 เพิ่มโครงการใหม่', date: _nw() });
-  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
-  
-  showSuccessToast('✅ เพิ่มโครงการ "' + projectName + '" เรียบร้อยแล้ว!');
-  closeModal();
-  setTimeout(function() { loadPipeline(); loadTimeline(); renderCurrentTab(); }, 500);
-}
-
-function showUpdateModal(pipeId) {
-  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
-  if (!p) return;
-  
-  var statusOptions = '';
-  for (var i = 0; i < STATUS_LIST.length; i++) {
-    statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
-  }
-  
-  var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
-  for (var i = 0; i < allModels.length; i++) {
-    modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
-  }
-  
-  var itemsHtml = '<div id="editItemsContainer">';
-  for (var i = 0; i < p.items.length; i++) {
-    itemsHtml += '<div class="form-row"><input list="modelList' + i + '" class="editItemModel" style="flex:2" value="' + esc(p.items[i].model) + '"><datalist id="modelList' + i + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.items[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
-  }
-  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItem()">➕ เพิ่มสินค้า</button>';
-  
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">';
-  modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + esc(p.projectName) + '" class="form-control"></div>';
-  modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" value="' + esc(p.endUserTH) + '" class="form-control"></div>';
-  modalHtml += '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>';
-  modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + '</div>';
-  modalHtml += '<div class="form-row"><div class="form-group"><label>📅 Bidding Date</label><input type="date" id="editBidding" value="' + (p.biddingDate !== '-' && p.biddingDate ? p.biddingDate.split('/').reverse().join('-') : '') + '" class="form-control"></div>';
-  modalHtml += '<div class="form-group"><label>📅 Shipment Date</label><input type="date" id="editShipment" value="' + (p.shipmentDate !== '-' && p.shipmentDate ? p.shipmentDate.split('/').reverse().join('-') : '') + '" class="form-control"></div></div>';
-  modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..." class="form-control"></textarea></div>';
-  modalHtml += '</div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitFullUpdate(\'' + pipeId + '\')">💾 บันทึก</button></div></div></div>';
-  
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-}
-
 function submitFullUpdate(pipeId) {
   var newProjectName = document.getElementById('editProjectName').value.trim();
   var newEndUser = document.getElementById('editEndUser').value.trim();
   var newStatus = document.getElementById('editStatus').value;
-  var biddingDateInput = document.getElementById('editBidding').value;
-  var shipmentDateInput = document.getElementById('editShipment').value;
   var content = document.getElementById('updateContent').value.trim();
-  
-  var biddingDate = biddingDateInput ? biddingDateInput.split('-').reverse().join('/') : '';
-  var shipmentDate = shipmentDateInput ? shipmentDateInput.split('-').reverse().join('/') : '';
   
   if (!newProjectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
   
@@ -1440,29 +1157,38 @@ function submitFullUpdate(pipeId) {
   }
   if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
   
-  var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
-  for (var i = 0; i < allPipes.length; i++) {
-    if (allPipes[i].id === pipeId) {
-      allPipes[i].projectName = newProjectName;
-      allPipes[i].endUserTH = newEndUser;
-      allPipes[i].status = newStatus;
-      if (biddingDate) allPipes[i].biddingDate = biddingDate;
-      if (shipmentDate) allPipes[i].shipmentDate = shipmentDate;
-      allPipes[i].items = items;
-      allPipes[i].model = items[0].model;
-      allPipes[i].modelQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
+  for (var i = 0; i < pipelinesData.length; i++) {
+    if (pipelinesData[i].id === pipeId) {
+      pipelinesData[i].projectName = newProjectName;
+      pipelinesData[i].endUserTH = newEndUser;
+      pipelinesData[i].status = newStatus;
+      pipelinesData[i].items = items;
+      pipelinesData[i].model = items[0].model;
+      pipelinesData[i].modelQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
       break;
     }
   }
-  localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
   
-  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
-  pipeLogs.unshift({ id: 'log_' + Date.now(), pipeId: pipeId, type: 'update', content: content || 'แก้ไขข้อมูลโครงการ', date: _nw() });
-  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
+  // Save to Sheets
+  for (var i = 0; i < pipelinesData.length; i++) {
+    if (pipelinesData[i].id === pipeId) {
+      saveToSheets('savePipeline', {
+        id: pipelinesData[i].id,
+        dealerId: dealerId,
+        projectName: pipelinesData[i].projectName,
+        endUser: pipelinesData[i].endUserTH,
+        status: pipelinesData[i].status,
+        model: pipelinesData[i].model,
+        qty: pipelinesData[i].modelQty,
+        updatedAt: _nw()
+      });
+      break;
+    }
+  }
   
   showSuccessToast('✅ บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
   closeModal();
-  setTimeout(function() { loadPipeline(); loadTimeline(); renderCurrentTab(); }, 500);
+  renderCurrentTab();
 }
 
 function showDetailPage(pipeId) {
@@ -1470,28 +1196,21 @@ function showDetailPage(pipeId) {
   if (!p) return;
   
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
-  for (var i = 0; i < p.items.length; i++) {
-    itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(p.items[i].model) + '</td><td>' + (p.items[i].qty || 1) + '</td></tr>';
+  if (p.items && p.items.length) {
+    for (var i = 0; i < p.items.length; i++) {
+      itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(p.items[i].model) + '</td><td>' + (p.items[i].qty || 1) + '</td></tr>';
+    }
+  } else if (p.model) {
+    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td>' + (p.modelQty || 1) + '</td></tr>';
   }
   itemsHtml += '</tbody></table>';
-  
-  var logsHtml = '<div style="margin-top:16px">';
-  for (var i = 0; i < p.logs.length; i++) {
-    var l = p.logs[i];
-    var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
-    var dateStr = l.date ? formatThaiDate(l.date) : '-';
-    logsHtml += '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="font-size:11px;color:var(--text2)">' + dateStr + ' ' + icon + '</div><div style="font-size:13px;margin-top:4px">' + esc(l.content || '') + '</div></div>';
-  }
-  logsHtml += '</div>';
-  if (p.logs.length === 0) logsHtml = '<div style="padding:20px;text-align:center;color:var(--text2)">ยังไม่มีประวัติอัพเดท</div>';
   
   var html = '<div class="cv-back" onclick="showOverview()">← กลับไปหน้าแรก</div>';
   html += '<div class="detail-header" style="background:var(--bg);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)"><div style="font-size:20px;font-weight:700;color:var(--accent)">' + esc(p.projectName) + '</div><div style="margin-top:8px">' + getStatusLabel(p.status) + '</div></div>';
   html += '<div class="detail-info-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">';
-  html += '<div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">👤 End User</div><div class="detail-info-value">' + esc(p.endUserTH) + '</div></div>';
+  html += '<div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">👤 End User</div><div class="detail-info-value">' + esc(p.endUserTH || p.endUser || '-') + '</div></div>';
   html += '</div>';
   html += '<div class="section"><div class="section-title">📦 รายการสินค้า</div>' + itemsHtml + '</div>';
-  html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div>' + logsHtml + '</div>';
   html += '<div class="section"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดทโครงการ</button></div>';
   
   document.getElementById('tabContent').innerHTML = html;
@@ -1501,6 +1220,19 @@ function showOverview() {
   renderCurrentTab();
 }
 
+// ===== RENDER CURRENT TAB =====
+function renderCurrentTab() {
+  var content = '';
+  if (currentTab === 'pipeline') {
+    content = renderPipelineTab();
+  } else if (currentTab === 'forecast') {
+    content = renderForecastTab();
+  } else {
+    content = renderTimelineTab();
+  }
+  document.getElementById('tabContent').innerHTML = content;
+}
+
 // ===== LOAD ALL DATA =====
 function loadAllData() {
   if (!dealerId) {
@@ -1508,26 +1240,18 @@ function loadAllData() {
     return;
   }
   
-  var isVerified = sessionStorage.getItem('cv_pin_verified_' + dealerId);
-  if (!isVerified && getDealerPin(dealerId)) {
-    showPinScreen(dealerId);
-    return;
-  }
-  
-  var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
-  var dealer = dealers.find(function(d) { return d.id === dealerId; });
-  if (!dealer) {
-    document.getElementById('tabContent').innerHTML = '<div class="section" style="text-align:center"><p>❌ ไม่พบข้อมูล Dealer</p></div>';
-    return;
-  }
-  dealerName = dealer.name || '-';
-  document.getElementById('dealerName').innerHTML = esc(dealerName);
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
-  loadPipeline();
-  loadClientForecast();
-  loadTimeline();
-  renderCurrentTab();
+  loadFromSheets();
+  allMonths = generateMonths();
+  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
+  
+  setTimeout(function() {
+    if (pipelinesData.length === 0 && forecastData.runrate.length === 0) {
+      loadFromLocal();
+    }
+    renderCurrentTab();
+  }, 1000);
 }
 
 // ===== TAB EVENT =====
@@ -1562,15 +1286,9 @@ window.deleteProjectItem = deleteProjectItem;
 window.toggleProjectDetail = toggleProjectDetail;
 window.downloadForecastExcel = downloadForecastExcel;
 window.uploadForecastExcel = uploadForecastExcel;
-window.showAddNewProjectModal = showAddNewProjectModal;
-window.forceSyncToCloud = forceSyncToCloud;
-window.pullFromCloud = pullFromCloud;
+window.clearProjectForm = clearProjectForm;
 window.addEditItem = addEditItem;
 window.removeEditItem = removeEditItem;
-window.copyProjectToForm = copyProjectToForm;
-window.clearProjectForm = clearProjectForm;
-window.editProjectItemDetail = editProjectItemDetail;
-window.addItemToProject = addItemToProject;
 
 loadAllData();
 </script>
