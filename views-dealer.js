@@ -122,15 +122,28 @@ function filterDealerList() {
 // ================================================================
 let dealerTab = 'info';
 
+// เพิ่มใน rDealerDet หลังจาก const d = ST.getOne...
 function rDealerDet(el) {
-  // ✅ เพิ่ม 2 บรรทัดนี้
-  const ct = document.getElementById('ct');
-  if (ct) ct.style.padding = '16px';
-  
   const d = ST.getOne('dealers', S.dealerId);
   if (!d) return go('dealers');
-  document.getElementById('pgT').textContent = '🏪 ' + d.name;  
-  // Store dealerId for context-aware FAB
+  
+  // ✅ บังคับให้ #ct กว้างเต็มที่
+  const ct = document.getElementById('ct');
+  if (ct) {
+    ct.style.width = '100%';
+    ct.style.maxWidth = '100%';
+    ct.style.padding = '16px';
+    ct.style.boxSizing = 'border-box';
+  }
+  
+  // ✅ บังคับให้ #main กว้างเต็มที่
+  const main = document.getElementById('main');
+  if (main) {
+    main.style.width = 'calc(100% - 200px)';
+    main.style.maxWidth = 'calc(100% - 200px)';
+  }
+  
+  document.getElementById('pgT').textContent = '🏪 ' + d.name;  // Store dealerId for context-aware FAB
   S.dealerId = d.id;
   
   // ตรวจสอบว่ามีการขอเปิดแท็บ forecast หรือไม่
