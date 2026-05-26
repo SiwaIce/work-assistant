@@ -5990,3 +5990,26 @@ body.mobile-mode .card {
     grid-template-columns: 1fr !important;
   }
 }
+/* ===== ULTRA FORCE FULL WIDTH ===== */
+#ct .card,
+#ct .card > *,
+#ct .card > div,
+#ct .card > div[style],
+#ct .card .fr,
+#ct .card .fr3,
+#ct .card .fr4 {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ทำให้ div ที่มี style inline ขยายเต็ม */
+#ct div[style*="display:grid"],
+#ct div[style*="display: flex"] {
+  width: 100% !important;
+}
+
+/* ลบ margin ซ้ายขวาที่ไม่ต้องการ */
+.card h2 .ml {
+  margin-left: auto !important;
+}
