@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>DJI Enterprise - ติดตามสถานะโครงการ</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+  firebase.initializeApp({
+    apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+    authDomain: "work-assistant-9e024.firebaseapp.com",
+    projectId: "work-assistant-9e024",
+    storageBucket: "work-assistant-9e024.firebasestorage.app",
+    messagingSenderId: "796607223436",
+    appId: "1:796607223436:web:1455abe90b141104678da9"
+  });
+  var db = firebase.firestore();
+</script>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root {
@@ -399,6 +413,106 @@ function checkPinAndLoad(dealerId) {
     if (errorEl) errorEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง';
   }
 }
+
+// ===== FIREBASE SYNC FOR CLIENT DATA (OPTION B) =====
+function syncClientForecastToFirebase(dealerId, data) {
+  if (typeof firebase === 'undefined' || !firebase.apps.length) {
+    console.log('Firebase not available, skipping sync');
+    return;
+  }
+  
+  var db = firebase.firestore();
+  db.collection('client_forecasts').doc(dealerId).set({
+    runrate: data.runrate || [],
+    projects: data.projects || [],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(err) {
+    console.warn('Firebase sync error:', err);
+  });
+}
+
+function loadClientForecastFromFirebase(dealerId) {
+  return new Promise(function(resolve) {
+    if (typeof firebase === 'undefined' || !firebase.apps.length) {
+      resolve(null);
+      return;
+    }
+    
+    var db = firebase.firestore();
+    db.collection('client_forecasts').doc(dealerId).get().then(function(doc) {
+      if (doc.exists) {
+        resolve(doc.data());
+      } else {
+        resolve(null);
+      }
+    }).catch(function(err) {
+      console.warn('Firebase read error:', err);
+      resolve(null);
+    });
+  });
+}
+
+// แก้ไข saveClientForecast ให้ sync ไป Firebase
+var originalSaveClientForecast = saveClientForecast;
+saveClientForecast = function() {
+  var key = 'v7_client_forecast_' + dealerId;
+  var dataToSave = {
+    runrate: forecastData.runrate,
+    projects: forecastData.projects,
+    updatedAt: new Date().toISOString()
+  };
+  
+  // Save to localStorage
+  localStorage.setItem(key, JSON.stringify(dataToSave));
+  
+  // Sync to Firebase
+  syncClientForecastToFirebase(dealerId, dataToSave);
+  
+  showSuccessToast('✅ บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
+  if (currentTab === 'forecast') renderForecastTab();
+};
+
+// แก้ไข loadClientForecast ให้โหลดจาก Firebase ก่อน
+var originalLoadClientForecast = loadClientForecast;
+loadClientForecast = function() {
+  var key = 'v7_client_forecast_' + dealerId;
+  var localData = localStorage.getItem(key);
+  
+  loadClientForecastFromFirebase(dealerId).then(function(firebaseData) {
+    if (firebaseData) {
+      // Firebase has data - use it and update local
+      forecastData.runrate = firebaseData.runrate || [];
+      forecastData.projects = firebaseData.projects || [];
+      localStorage.setItem(key, JSON.stringify({
+        runrate: forecastData.runrate,
+        projects: forecastData.projects,
+        updatedAt: new Date().toISOString()
+      }));
+    } else if (localData) {
+      try {
+        var parsed = JSON.parse(localData);
+        forecastData.runrate = parsed.runrate || [];
+        forecastData.projects = parsed.projects || [];
+      } catch(e) {
+        forecastData.runrate = [];
+        forecastData.projects = [];
+      }
+    } else {
+      forecastData.runrate = [];
+      forecastData.projects = [];
+    }
+    
+    if (!selectedMonth && forecastData.runrate.length > 0) {
+      selectedMonth = forecastData.runrate[0].month;
+    }
+    if (!selectedMonth && forecastData.projects.length > 0) {
+      selectedMonth = forecastData.projects[0].month;
+    }
+    if (!selectedMonth) selectedMonth = 'มิ.ย. 69';
+    
+    if (currentTab === 'forecast') renderCurrentTab();
+  });
+};
 
 // ===== HELPER =====
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }

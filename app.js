@@ -1665,42 +1665,43 @@ function getPipelineForecastByMonth(dealerId, dateField, monthKey) {
   return { totalQty: totalQty, items: items };
 }
 
+// แก้ไข function getClientForecastByMonth ใน app.js
 function getClientForecastByMonth(dealerId, monthKey) {
+  // ลองอ่านจาก localStorage ก่อน
   var key = 'v7_client_forecast_' + dealerId;
-  var saved = localStorage.getItem(key);
-  if (!saved) return { totalQty: 0, items: [] };
+  var localData = localStorage.getItem(key);
   
-  try {
-    var data = JSON.parse(saved);
-    var monthLabel = formatMonthKeyToLabel(monthKey);
-    var totalQty = 0;
-    var items = [];
-    
-    // Run rate
-    for (var i = 0; i < (data.runrate || []).length; i++) {
-      var rr = data.runrate[i];
-      if (rr.month === monthLabel) {
-        totalQty += rr.qty;
-        items.push({ model: rr.model, qty: rr.qty, type: 'runrate' });
-      }
-    }
-    
-    // Projects
-    for (var i = 0; i < (data.projects || []).length; i++) {
-      var proj = data.projects[i];
-      if (proj.month === monthLabel) {
-        for (var j = 0; j < proj.items.length; j++) {
-          var it = proj.items[j];
-          totalQty += it.qty;
-          items.push({ model: it.model, qty: it.qty, type: 'project', projectName: proj.projectName });
+  if (localData) {
+    try {
+      var data = JSON.parse(localData);
+      var monthLabel = formatMonthKeyToLabel(monthKey);
+      var totalQty = 0;
+      var items = [];
+      
+      for (var i = 0; i < (data.runrate || []).length; i++) {
+        var rr = data.runrate[i];
+        if (rr.month === monthLabel) {
+          totalQty += rr.qty;
+          items.push({ model: rr.model, qty: rr.qty, type: 'runrate' });
         }
       }
-    }
-    
-    return { totalQty: totalQty, items: items };
-  } catch(e) {
-    return { totalQty: 0, items: [] };
+      
+      for (var i = 0; i < (data.projects || []).length; i++) {
+        var proj = data.projects[i];
+        if (proj.month === monthLabel) {
+          for (var j = 0; j < proj.items.length; j++) {
+            var it = proj.items[j];
+            totalQty += it.qty;
+            items.push({ model: it.model, qty: it.qty, type: 'project', projectName: proj.projectName });
+          }
+        }
+      }
+      
+      return { totalQty: totalQty, items: items };
+    } catch(e) {}
   }
+  
+  return { totalQty: 0, items: [] };
 }
 
 function rForecastComparison(el) {
