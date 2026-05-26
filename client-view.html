@@ -257,6 +257,95 @@ body {
   background: var(--card);
 }
 
+/* Month Selector Carousel */
+.month-carousel {
+  background: var(--bg2);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+}
+.month-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 4px 0 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.month-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.month-card {
+  flex: 0 0 auto;
+  min-width: 110px;
+  padding: 12px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.month-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.month-card.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.month-card.active .month-name {
+  color: white;
+}
+.month-card.active .month-total {
+  color: rgba(255,255,255,0.8);
+}
+.month-name {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.month-total {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.month-detail {
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.month-nav-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.month-nav-btn {
+  padding: 6px 20px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: 0.15s;
+}
+.month-nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.month-selector-dropdown {
+  margin-top: 12px;
+  text-align: center;
+}
+.month-selector-dropdown select {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  min-width: 130px;
+}
+
 /* Forecast Items */
 .forecast-item {
   display: flex;
@@ -325,6 +414,9 @@ body {
   .cv-dealer-name { font-size: 24px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .form-row { grid-template-columns: 1fr; }
+  .month-card { min-width: 90px; }
+  .month-name { font-size: 12px; }
+  .month-total { font-size: 16px; }
 }
 </style>
 </head>
@@ -362,8 +454,6 @@ function toggleTheme() { var current = getSavedTheme(); var next = current === '
 applyTheme(getSavedTheme());
 
 // ===== PIN VERIFICATION =====
-var DEALER_PINS = {};
-
 function getDealerPin(dealerId) {
   var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
   return pins[dealerId] || null;
@@ -376,11 +466,8 @@ function verifyPin(dealerId, enteredPin) {
 }
 
 function showPinScreen(dealerId) {
-  var dealer = null;
   var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
-  for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i].id === dealerId) { dealer = dealers[i]; break; }
-  }
+  var dealer = dealers.find(function(d) { return d.id === dealerId; });
   var dealerName = dealer ? dealer.name : dealerId;
   
   var html = '<div class="pin-screen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center">';
@@ -414,7 +501,7 @@ function checkPinAndLoad(dealerId) {
   }
 }
 
-// ===== FIREBASE SYNC FOR CLIENT DATA =====
+// ===== FIREBASE SYNC =====
 function syncClientForecastToFirebase(dealerId, data) {
   if (typeof firebase === 'undefined' || !firebase.apps.length) return;
   firebase.firestore().collection('client_forecasts').doc(dealerId).set({
@@ -447,7 +534,6 @@ var STATUS_LIST = [
   { id: 'ordered', name: '🟢 Ordered' }, { id: 'delivered', name: '✅ Delivered' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(x => x.id === status); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
-function getStatusName(statusId) { var s = STATUS_LIST.find(x => x.id === statusId); return s ? s.name : statusId; }
 
 // ===== DATA =====
 var dealerId = new URLSearchParams(window.location.search).get('dealerId');
@@ -458,11 +544,10 @@ var forecastData = { runrate: [], projects: [] };
 var timelineLogs = [];
 var dealerName = '';
 var selectedMonth = null;
-var editingProjectIndex = null;
-var editingProjectItemIndex = null;
+var allMonths = [];
 
-// Generate dynamic months (next 12 months)
-function generateMonthList() {
+// Generate next 12 months
+function generateMonths() {
   var months = [];
   var now = new Date();
   for (var i = 0; i < 12; i++) {
@@ -473,7 +558,15 @@ function generateMonthList() {
   }
   return months;
 }
-var MONTHS = generateMonthList();
+
+// Get next month from current
+function getNextMonthFromNow() {
+  var now = new Date();
+  var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  var m = next.getMonth() + 1;
+  var y = next.getFullYear() + 543;
+  return (m < 10 ? '0' + m : m) + '/' + y;
+}
 
 // ===== LOAD MODELS =====
 function loadModels() {
@@ -500,19 +593,53 @@ function selectMonth(month) {
 }
 
 function prevMonth() {
-  var idx = MONTHS.indexOf(selectedMonth);
+  var idx = allMonths.indexOf(selectedMonth);
   if (idx > 0) {
-    selectedMonth = MONTHS[idx - 1];
-    renderForecastTab();
+    selectMonth(allMonths[idx - 1]);
+  } else {
+    showSuccessToast('📅 นี่คือเดือนแรกสุดแล้ว');
   }
 }
 
 function nextMonth() {
-  var idx = MONTHS.indexOf(selectedMonth);
-  if (idx < MONTHS.length - 1) {
-    selectedMonth = MONTHS[idx + 1];
-    renderForecastTab();
+  var idx = allMonths.indexOf(selectedMonth);
+  if (idx < allMonths.length - 1) {
+    selectMonth(allMonths[idx + 1]);
+  } else {
+    showSuccessToast('📅 นี่คือเดือนสุดท้ายในแผนแล้ว');
   }
+}
+
+function scrollMonthCarousel(direction) {
+  var container = document.getElementById('monthScrollContainer');
+  if (!container) return;
+  var scrollAmount = 150;
+  container.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+}
+
+function getMonthSummary() {
+  var summary = {};
+  for (var i = 0; i < allMonths.length; i++) {
+    summary[allMonths[i]] = { runrate: 0, project: 0, total: 0 };
+  }
+  
+  for (var i = 0; i < forecastData.runrate.length; i++) {
+    var r = forecastData.runrate[i];
+    if (summary[r.month]) {
+      summary[r.month].runrate += r.qty;
+      summary[r.month].total += r.qty;
+    }
+  }
+  
+  for (var i = 0; i < forecastData.projects.length; i++) {
+    var p = forecastData.projects[i];
+    if (summary[p.month]) {
+      summary[p.month].project += p.totalQty;
+      summary[p.month].total += p.totalQty;
+    }
+  }
+  
+  return summary;
 }
 
 function addRunrateItem() {
@@ -580,14 +707,13 @@ function loadClientForecast() {
         forecastData.runrate = parsed.runrate || [];
         forecastData.projects = parsed.projects || [];
       } catch(e) {}
-    } else {
-      forecastData.runrate = [];
-      forecastData.projects = [];
     }
+    
+    allMonths = generateMonths();
     
     if (!selectedMonth && forecastData.runrate.length > 0) selectedMonth = forecastData.runrate[0].month;
     if (!selectedMonth && forecastData.projects.length > 0) selectedMonth = forecastData.projects[0].month;
-    if (!selectedMonth && MONTHS.length) selectedMonth = MONTHS[0];
+    if (!selectedMonth) selectedMonth = getNextMonthFromNow();
     
     if (currentTab === 'forecast') renderCurrentTab();
   });
@@ -689,7 +815,7 @@ function loadProjectToForm() {
   }
   renderNewProjectItemsList();
   select.value = '';
-  showSuccessToast('📋 โหลดโครงการ "' + proj.projectName + '" แล้ว แก้ไขได้');
+  showSuccessToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
 }
 
 function addProjectItem() {
@@ -749,17 +875,16 @@ function addNewProject() {
   document.getElementById('newProjectName').value = '';
   document.getElementById('newProjectEndUser').value = '';
   window.newProjectItems = [];
-  if (document.getElementById('newProjectItemsContainer')) {
-    document.getElementById('newProjectItemsContainer').innerHTML = '';
-  }
+  renderNewProjectItemsList();
   
   saveClientForecast();
 }
 
 // ===== RENDER FORECAST TAB =====
 function renderForecastTab() {
-  if (!selectedMonth && MONTHS.length) selectedMonth = MONTHS[0];
+  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
   
+  var monthSummary = getMonthSummary();
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
   var monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
   
@@ -767,23 +892,35 @@ function renderForecastTab() {
   for (var i = 0; i < monthRunrate.length; i++) totalRunrate += monthRunrate[i].qty;
   for (var i = 0; i < monthProjects.length; i++) totalProject += monthProjects[i].totalQty;
   
-  var monthSelectorHtml = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;background:var(--bg2);padding:12px;border-radius:12px">';
-  monthSelectorHtml += '<button class="btn btn-sm" onclick="prevMonth()" ' + (MONTHS.indexOf(selectedMonth) === 0 ? 'disabled style="opacity:0.5"' : '') + '>◀</button>';
-  monthSelectorHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">';
-  
-  var currentIdx = MONTHS.indexOf(selectedMonth);
-  var startIdx = Math.max(0, currentIdx - 2);
-  var endIdx = Math.min(MONTHS.length, startIdx + 5);
-  for (var i = startIdx; i < endIdx; i++) {
-    var m = MONTHS[i];
-    var activeClass = (selectedMonth === m) ? 'btn-primary' : 'btn-sm';
-    monthSelectorHtml += '<button class="' + activeClass + '" onclick="selectMonth(\'' + m + '\')" style="padding:6px 12px;font-size:12px">' + m + '</button>';
+  // Month Carousel HTML
+  var monthCardsHtml = '';
+  for (var i = 0; i < allMonths.length; i++) {
+    var m = allMonths[i];
+    var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
+    var activeClass = (selectedMonth === m) ? 'active' : '';
+    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')">';
+    monthCardsHtml += '<div class="month-name">' + m + '</div>';
+    monthCardsHtml += '<div class="month-total">' + summary.total + '</div>';
+    monthCardsHtml += '<div class="month-detail">🏪' + summary.runrate + ' 📋' + summary.project + '</div>';
+    monthCardsHtml += '</div>';
   }
   
+  var monthSelectorHtml = '<div class="month-carousel">';
+  monthSelectorHtml += '<div class="month-scroll" id="monthScrollContainer">' + monthCardsHtml + '</div>';
+  monthSelectorHtml += '<div class="month-nav-buttons">';
+  monthSelectorHtml += '<button class="month-nav-btn" onclick="prevMonth()">◀ เดือนก่อนหน้า</button>';
+  monthSelectorHtml += '<button class="month-nav-btn" onclick="nextMonth()">เดือนถัดไป ▶</button>';
   monthSelectorHtml += '</div>';
-  monthSelectorHtml += '<button class="btn btn-sm" onclick="nextMonth()" ' + (MONTHS.indexOf(selectedMonth) === MONTHS.length - 1 ? 'disabled style="opacity:0.5"' : '') + '>▶</button>';
-  monthSelectorHtml += '</div>';
+  monthSelectorHtml += '<div class="month-selector-dropdown">';
+  monthSelectorHtml += '<select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:6px 12px;border-radius:20px">';
+  for (var i = 0; i < allMonths.length; i++) {
+    var m = allMonths[i];
+    monthSelectorHtml += '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>';
+  }
+  monthSelectorHtml += '</select>';
+  monthSelectorHtml += '</div></div>';
   
+  // Stats summary
   var statsHtml = '<div class="stats-grid">';
   statsHtml += '<div class="stat-card"><div class="stat-month">' + selectedMonth + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น (ชิ้น)</div></div>';
   statsHtml += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
@@ -791,6 +928,7 @@ function renderForecastTab() {
   statsHtml += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
   statsHtml += '</div>';
   
+  // Run rate list
   var runrateHtml = '';
   for (var i = 0; i < monthRunrate.length; i++) {
     var r = monthRunrate[i];
@@ -802,6 +940,7 @@ function renderForecastTab() {
     runrateHtml += '</div>';
   }
   
+  // Projects list
   var projectsHtml = '';
   for (var i = 0; i < monthProjects.length; i++) {
     var proj = monthProjects[i];
@@ -839,7 +978,7 @@ function renderForecastTab() {
     projectsHtml += '</div></div>';
   }
   
-  var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงข้อมูลอัตโนมัติ) --</option>';
+  var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงเฉพาะสินค้า ไม่สนใจเดือน) --</option>';
   for (var i = 0; i < pipelinesData.length; i++) {
     existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + ' (' + (pipelinesData[i].items.length || 1) + ' สินค้า)</option>';
   }
@@ -865,8 +1004,9 @@ function renderForecastTab() {
   
   html += '<div style="margin-bottom:24px">';
   html += '<div class="section-title" style="font-size:16px">📋 โครงการ (Project-based)</div>';
-  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label>';
-  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div>';
+  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี (ดึงเฉพาะสินค้า ไม่สนใจเดือน)</label>';
+  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select>';
+  html += '</div>';
   html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">';
   html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="เช่น โครงการ ม.เกษตรศาสตร์"></div>';
   html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
@@ -1202,7 +1342,7 @@ function uploadForecastExcel(input) {
       var endUser = row[4] || '';
       var month = row[5];
       
-      if (!month || MONTHS.indexOf(month) === -1) continue;
+      if (!month || allMonths.indexOf(month) === -1) continue;
       
       if (type === 'Run Rate' && model && qty > 0) {
         var exists = false;
@@ -1336,6 +1476,7 @@ window.removeEditItem = removeEditItem;
 window.selectMonth = selectMonth;
 window.prevMonth = prevMonth;
 window.nextMonth = nextMonth;
+window.scrollMonthCarousel = scrollMonthCarousel;
 window.addRunrateItem = addRunrateItem;
 window.deleteRunrateItem = deleteRunrateItem;
 window.editRunrateItem = editRunrateItem;
