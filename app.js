@@ -1592,9 +1592,10 @@ window.addEventListener('message', function(event) {
   }
 });
 // ================================================================
-// FORECAST COMPARISON
+// FORECAST COMPARISON PAGE - เพิ่มใน app.js
 // ================================================================
-var fcCompareMode = 'shipment'; // 'shipment', 'bidding', 'register'
+
+var fcCompareMode = 'shipment';
 var fcCompareMonth = getCurrentForecastMonth();
 
 function getCurrentForecastMonth() {
@@ -1602,18 +1603,26 @@ function getCurrentForecastMonth() {
   return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 }
 
-function getMonthOptions() {
+function getMonthOptionsForCompare() {
   var options = [];
   var now = new Date();
   for (var i = 0; i < 12; i++) {
     var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    var year = d.getFullYear() + 543; // Convert to Buddhist year
+    var year = d.getFullYear() + 543;
     var month = d.getMonth() + 1;
     var label = (month < 10 ? '0' + month : month) + '/' + year;
     var value = d.getFullYear() + '-' + String(month).padStart(2, '0');
     options.push({ value: value, label: label });
   }
   return options;
+}
+
+function formatMonthKeyToLabel(monthKey) {
+  var parts = monthKey.split('-');
+  if (parts.length !== 2) return monthKey;
+  var year = parseInt(parts[0]) + 543;
+  var month = parseInt(parts[1]);
+  return (month < 10 ? '0' + month : month) + '/' + year;
 }
 
 function getPipelineForecastByMonth(dealerId, dateField, monthKey) {
@@ -1692,48 +1701,30 @@ function getClientForecastByMonth(dealerId, monthKey) {
   }
 }
 
-function formatMonthKeyToLabel(monthKey) {
-  var parts = monthKey.split('-');
-  if (parts.length !== 2) return monthKey;
-  var year = parseInt(parts[0]) + 543;
-  return parts[1] + '/' + year;
-}
-
-// ================================================================
-// PAGE: FORECAST COMPARISON
-// ================================================================
 function rForecastComparison(el) {
   document.getElementById('pgT').textContent = '📊 เปรียบเทียบ Forecast';
   
-  var monthOptions = getMonthOptions();
+  var monthOptions = getMonthOptionsForCompare();
   var dealers = ST.getAll('dealers');
-  var modeLabels = {
-    shipment: '🚚 Shipment Date (วันส่งมอบ)',
-    bidding: '📋 Bidding Date (วันยื่นซอง)',
-    register: '📅 Register Date (วันลงทะเบียน)'
-  };
   
   var h = '<div class="card">';
   h += '<h2>📊 เปรียบเทียบ Forecast ลูกค้า vs Pipeline</h2>';
-  
-  // Filters
-  h += '<div class="fr" style="margin-bottom:12px">';
-  h += '<div class="fg"><label>📅 เดือน</label><select id="fcMonth" onchange="refreshForecastComparison()">';
+  h += '<div class="fr" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">';
+  h += '<div class="fg"><label>📅 เดือน</label><select id="fcMonth" onchange="refreshForecastComparison()" style="min-width:100px">';
   for (var i = 0; i < monthOptions.length; i++) {
     h += '<option value="' + monthOptions[i].value + '"' + (fcCompareMonth === monthOptions[i].value ? ' selected' : '') + '>' + monthOptions[i].label + '</option>';
   }
   h += '</select></div>';
   
-  h += '<div class="fg"><label>📊 ใช้ข้อมูลจาก</label><select id="fcMode" onchange="refreshForecastComparison()">';
+  h += '<div class="fg"><label>📊 ใช้ข้อมูลจาก</label><select id="fcMode" onchange="refreshForecastComparison()" style="min-width:140px">';
   h += '<option value="shipment"' + (fcCompareMode === 'shipment' ? ' selected' : '') + '>🚚 Shipment Date</option>';
   h += '<option value="bidding"' + (fcCompareMode === 'bidding' ? ' selected' : '') + '>📋 Bidding Date</option>';
   h += '<option value="register"' + (fcCompareMode === 'register' ? ' selected' : '') + '>📅 Register Date</option>';
   h += '</select></div>';
   
-  h += '<div class="fg"><button class="btn bp" onclick="exportForecastComparison()">📤 Export Excel</button></div>';
+  h += '<div class="fg"><button class="btn bp" onclick="exportForecastComparison()">📤 Export CSV</button></div>';
   h += '</div>';
   
-  // Table
   h += '<div style="overflow-x:auto"><table class="export-table" id="fcCompareTable">';
   h += '<thead><tr><th>🏪 Dealer</th><th>📦 ลูกค้าแจ้ง</th><th>📊 Pipeline</th><th>📊 ต่าง (ชิ้น)</th><th>📍 สถานะ</th></tr></thead>';
   h += '<tbody id="fcCompareBody"></tbody></table></div>';
@@ -1746,34 +1737,75 @@ function rForecastComparison(el) {
 }
 
 function refreshForecastComparison() {
-  var month = document.getElementById('fcMonth') ? document.getElementById('fcMonth').value : fcCompareMonth;
-  var mode = document.getElementById('fcMode') ? document.getElementById('fcMode').value : fcCompareMode;
+  var monthSelect = document.getElementById('fcMonth');
+  var modeSelect = document.getElementById('fcMode');
   
-  fcCompareMonth = month;
-  fcCompareMode = mode;
+  if (monthSelect) fcCompareMonth = monthSelect.value;
+  if (modeSelect) fcCompareMode = modeSelect.value;
   
   var dealers = ST.getAll('dealers');
+  var monthLabel = formatMonthKeyToLabel(fcCompareMonth);
+  var modeLabel = fcCompareMode === 'shipment' ? 'Shipment' : (fcCompareMode === 'bidding' ? 'Bidding' : 'Register');
+  
   var rows = '';
+  var totalClientQty = 0;
+  var totalPipelineQty = 0;
   
   for (var i = 0; i < dealers.length; i++) {
     var d = dealers[i];
-    var clientFc = getClientForecastByMonth(d.id, month);
-    var pipelineFc = getPipelineForecastByMonth(d.id, mode, month);
+    var clientFc = getClientForecastByMonth(d.id, fcCompareMonth);
+    var pipelineFc = getPipelineForecastByMonth(d.id, fcCompareMode, fcCompareMonth);
     
     var diff = clientFc.totalQty - pipelineFc.totalQty;
+    totalClientQty += clientFc.totalQty;
+    totalPipelineQty += pipelineFc.totalQty;
+    
     var statusClass = diff === 0 ? 'c2' : (diff > 0 ? 'c3' : 'c4');
     var statusText = diff === 0 ? '✅ ตรงกัน' : (diff > 0 ? '⚠️ ลูกค้าคาดหวังมากกว่า' : '❌ Pipeline มากกว่า');
     
+    var clientItemsHtml = '';
+    if (clientFc.items.length > 0) {
+      clientItemsHtml = '<div style="font-size:10px;color:var(--text3);margin-top:2px">';
+      for (var j = 0; j < Math.min(clientFc.items.length, 3); j++) {
+        clientItemsHtml += clientFc.items[j].model + ' x' + clientFc.items[j].qty;
+        if (j < Math.min(clientFc.items.length, 3) - 1) clientItemsHtml += ', ';
+      }
+      if (clientFc.items.length > 3) clientItemsHtml += '...';
+      clientItemsHtml += '</div>';
+    }
+    
+    var pipelineItemsHtml = '';
+    if (pipelineFc.items.length > 0) {
+      pipelineItemsHtml = '<div style="font-size:10px;color:var(--text3);margin-top:2px">';
+      for (var j = 0; j < Math.min(pipelineFc.items.length, 3); j++) {
+        pipelineItemsHtml += pipelineFc.items[j].model + ' x' + pipelineFc.items[j].qty;
+        if (j < Math.min(pipelineFc.items.length, 3) - 1) pipelineItemsHtml += ', ';
+      }
+      if (pipelineFc.items.length > 3) pipelineItemsHtml += '...';
+      pipelineItemsHtml += '</div>';
+    }
+    
     rows += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
     rows += '<td><strong>' + sanitize(d.name) + '</strong> ' + levelTag(d.level) + '</td>';
-    rows += '<td>' + (clientFc.totalQty > 0 ? clientFc.totalQty + ' ชิ้น' : '-') + '<div style="font-size:10px;color:#64748b">' + clientFc.items.map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div></td>';
-    rows += '<td>' + (pipelineFc.totalQty > 0 ? pipelineFc.totalQty + ' ชิ้น' : '-') + '<div style="font-size:10px;color:#64748b">' + pipelineFc.items.map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div></td>';
-    rows += '<td class="' + statusClass + '">' + (diff !== 0 ? (diff > 0 ? '+' + diff : diff) : '-') + '</td>';
+    rows += '<td>' + (clientFc.totalQty > 0 ? clientFc.totalQty + ' ชิ้น' : '-') + clientItemsHtml + '</td>';
+    rows += '<td>' + (pipelineFc.totalQty > 0 ? pipelineFc.totalQty + ' ชิ้น' : '-') + pipelineItemsHtml + '</td>';
+    rows += '<td class="' + statusClass + '" style="font-weight:700">' + (diff !== 0 ? (diff > 0 ? '+' + diff : diff) : '-') + '</td>';
     rows += '<td><span class="tag ' + (diff === 0 ? 'tag-completed' : (diff > 0 ? 'tag-active' : 'tag-lost')) + '">' + statusText + '</span></td>';
     rows += '</tr>';
   }
   
-  document.getElementById('fcCompareBody').innerHTML = rows || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล</td></tr>';
+  // Summary row
+  var totalDiff = totalClientQty - totalPipelineQty;
+  rows += '<tr style="font-weight:700;border-top:2px solid var(--border)">';
+  rows += '<td><strong>📊 รวมทั้งหมด</strong></td>';
+  rows += '<td><strong>' + totalClientQty + ' ชิ้น</strong></td>';
+  rows += '<td><strong>' + totalPipelineQty + ' ชิ้น</strong></td>';
+  rows += '<td class="' + (totalDiff === 0 ? 'c2' : (totalDiff > 0 ? 'c3' : 'c4')) + '">' + (totalDiff !== 0 ? (totalDiff > 0 ? '+' + totalDiff : totalDiff) : '-') + '</td>';
+  rows += '<td><span class="tag ' + (totalDiff === 0 ? 'tag-completed' : (totalDiff > 0 ? 'tag-active' : 'tag-lost')) + '">' + (totalDiff === 0 ? '✅ ตรงกัน' : (totalDiff > 0 ? '⚠️ ลูกค้าคาดหวังรวมมากกว่า' : '❌ Pipeline รวมมากกว่า')) + '</span></td>';
+  rows += '</tr>';
+  
+  var tbody = document.getElementById('fcCompareBody');
+  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="5" style="text-align:center">ไม่มีข้อมูล</td><tr>';
 }
 
 function exportForecastComparison() {
@@ -1783,7 +1815,7 @@ function exportForecastComparison() {
   var monthLabel = formatMonthKeyToLabel(month);
   var modeLabel = mode === 'shipment' ? 'Shipment Date' : (mode === 'bidding' ? 'Bidding Date' : 'Register Date');
   
-  var csv = '\uFEFF"Dealer","ลูกค้าแจ้ง (ชิ้น)","Pipeline (ชิ้น)","ต่าง","สถานะ"\n';
+  var csv = '\uFEFF"Dealer","Level","ลูกค้าแจ้ง (ชิ้น)","Pipeline (ชิ้น)","ต่าง","สถานะ"\n';
   
   for (var i = 0; i < dealers.length; i++) {
     var d = dealers[i];
@@ -1791,8 +1823,24 @@ function exportForecastComparison() {
     var pipelineFc = getPipelineForecastByMonth(d.id, mode, month);
     var diff = clientFc.totalQty - pipelineFc.totalQty;
     var statusText = diff === 0 ? 'ตรงกัน' : (diff > 0 ? 'ลูกค้าคาดหวังมากกว่า' : 'Pipeline มากกว่า');
-    csv += '"' + d.name + '","' + clientFc.totalQty + '","' + pipelineFc.totalQty + '","' + diff + '","' + statusText + '"\n';
+    csv += '"' + d.name + '","' + (d.level || '-') + '","' + clientFc.totalQty + '","' + pipelineFc.totalQty + '","' + diff + '","' + statusText + '"\n';
   }
   
   dlBlob(csv, 'forecast-comparison-' + monthLabel + '-' + modeLabel + '.csv');
+}
+
+// ================================================================
+// แก้ไข openClientView ใน views-dealer.js (ถ้ายังไม่ถูกต้อง)
+// ================================================================
+function openClientView(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  
+  // ใช้ path สัมพัทธ์ไปที่ client-view.html
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
+  
+  var win = window.open(clientUrl, '_blank');
+  if (!win) { toast('กรุณาอนุญาต Popup'); return; }
 }
