@@ -1527,3 +1527,87 @@ function deleteContact(dealerId, ctIdx) {
   closeMForce();
   render();
 }
+// ================================================================
+// TAB: TASKS (งานของ Dealer)
+// ================================================================
+function dealerTasksTab(d) {
+  var tasks = getTasksByDealer(d.id);
+  var active = tasks.filter(function(t) { return t.status === 'active'; });
+  var completed = tasks.filter(function(t) { return t.status === 'completed'; });
+
+  var h = '<div class="card"><h2>📋 งาน (' + active.length + ' active / ' + tasks.length + ' total)';
+  h += '<span class="ml">';
+  h += '<button class="btn bsm bp" onclick="showTaskM(\'\',\'' + d.id + '\')">➕</button>';
+  h += '</span></h2>';
+
+  if (!tasks.length) {
+    h += '<div class="empty"><p>ยังไม่มีงาน — กด ➕ เพื่อเพิ่ม</p></div>';
+    h += '</div>';
+    return h;
+  }
+
+  // Active tasks
+  if (active.length) {
+    for (var i = 0; i < active.length; i++) {
+      var t = active[i];
+      var pipe = t.pipeId ? ST.getOne('pipeline', t.pipeId) : null;
+      var pg = prog(t);
+      h += '<div class="li ' + dlC(t.dueDate, false) + '" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
+      h += '<div class="lm">';
+      h += '<div class="lt">' + sanitize(t.title) + ' ' + sTag(t.status) + ' ' + pTag(t.priority);
+      if (t.sequential) h += ' <span class="tag tag-count">⚡</span>';
+      h += '</div>';
+      h += '<div class="ls">';
+      if (t.category) h += '📂 ' + t.category + ' • ';
+      if (pipe) h += '📊 ' + sanitize(pipe.projectName || '') + ' • ';
+      h += fD(t.dueDate) + ' ' + dlB(t.dueDate, false);
+      h += '</div>';
+      if (t.steps && t.steps.length) {
+        h += '<div class="pb"><div class="pf pf-blue" style="width:' + pg + '%"></div></div>';
+        h += '<div class="ls">' + pg + '%</div>';
+      }
+      h += '</div></div>';
+    }
+  }
+
+  // Completed tasks (collapsible)
+  if (completed.length) {
+    h += '<div class="pa-done-toggle" onclick="toggleDealerDoneTasks()">✅ เสร็จแล้ว (' + completed.length + ') <span id="ddtArrow">▶</span></div>';
+    h += '<div id="ddtList" style="display:none">';
+    for (var i = 0; i < completed.length; i++) {
+      var t = completed[i];
+      h += '<div class="li dlo" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
+      h += '<div class="lm"><div class="lt" style="text-decoration:line-through;opacity:0.6">' + sanitize(t.title) + '</div>';
+      h += '<div class="ls">' + fD(t.dueDate) + '</div></div></div>';
+    }
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+// ================================================================
+// HELPER: GET TASKS BY DEALER
+// ================================================================
+function getTasksByDealer(dealerId) {
+  return ST.filter('tasks', function(t) {
+    return t.dealerId === dealerId;
+  });
+}
+
+// ================================================================
+// TOGGLE DONE TASKS (สำหรับ Dealer Detail)
+// ================================================================
+function toggleDealerDoneTasks() {
+  var el = document.getElementById('ddtList');
+  var arrow = document.getElementById('ddtArrow');
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = '▶';
+  }
+}
