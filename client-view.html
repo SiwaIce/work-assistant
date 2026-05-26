@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DJI Enterprise - Client View</title>
 <style>
-/* ===== CSS VARIABLES (same as main app) ===== */
+/* ===== CSS VARIABLES ===== */
 :root {
   --bg: #0f172a;
   --bg2: #1e293b;
@@ -17,19 +17,21 @@
   --accent: #3b82f6;
   --accent-light: rgba(59,130,246,0.1);
   --radius: 12px;
+  --input-bg: #0f172a;
 }
 
 /* ===== LIGHT THEME ===== */
 .theme-light {
-  --bg: #f8fafc;
+  --bg: #f1f5f9;
   --bg2: #ffffff;
   --card: #ffffff;
   --border: #e2e8f0;
   --text: #1e293b;
-  --text2: #64748b;
-  --text3: #94a3b8;
+  --text2: #475569;
+  --text3: #64748b;
   --accent: #2563eb;
   --accent-light: #eff6ff;
+  --input-bg: #ffffff;
 }
 
 * {
@@ -45,19 +47,19 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-/* Theme Toggle Button */
+/* ===== THEME TOGGLE - TOP RIGHT ===== */
 .theme-toggle {
   position: fixed;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--card);
   border: 1px solid var(--border);
   color: var(--text2);
   cursor: pointer;
-  font-size: 20px;
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,12 +77,13 @@ body {
   max-width: 1000px;
   margin: 0 auto;
   padding: 24px;
+  padding-top: 20px;
 }
 
 /* Header */
 .cv-header {
   text-align: center;
-  padding: 32px 0;
+  padding: 24px 0 32px;
   margin-bottom: 24px;
   border-bottom: 2px solid rgba(100, 181, 246, 0.2);
 }
@@ -200,7 +203,7 @@ body {
 .cv-st-ordered { background: rgba(76,175,80,0.12); color: #4caf50; }
 .cv-st-delivered { background: rgba(76,175,80,0.15); color: #66bb6a; }
 
-/* Detail */
+/* Back button */
 .cv-back {
   display: inline-block;
   padding: 8px 16px;
@@ -213,6 +216,8 @@ body {
 .cv-back:hover {
   background: var(--accent-light);
 }
+
+/* Detail Grid */
 .cv-detail-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -259,7 +264,7 @@ body {
   background: rgba(255,255,255,0.02);
 }
 
-/* Button */
+/* Buttons */
 .cv-toggle-btn {
   padding: 6px 14px;
   border-radius: 8px;
@@ -291,13 +296,145 @@ body {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--input-bg);
   color: var(--text);
   font-size: 13px;
 }
 .update-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Modal (Popup) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+.modal-container {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 {
+  font-size: 18px;
+  color: var(--accent);
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 24px;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--accent); }
+.modal-body {
+  padding: 20px;
+}
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 5px;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.hint {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.btn-cancel {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+}
+.btn-submit {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.btn-submit:hover { opacity: 0.9; }
+
+/* Success Toast */
+.success-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #22c55e;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 40px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 2001;
+  animation: fadeInUp 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+  box-shadow: 0 4px 16px rgba(34,197,94,0.3);
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes fadeOut {
+  to { opacity: 0; visibility: hidden; }
 }
 
 /* Footer */
@@ -310,7 +447,6 @@ body {
   color: var(--text2);
 }
 
-/* Loading */
 .loading {
   text-align: center;
   padding: 40px;
@@ -318,11 +454,13 @@ body {
 }
 
 @media (max-width: 768px) {
-  .cv-container { padding: 12px; }
+  .cv-container { padding: 12px; padding-top: 16px; }
   .cv-dealer-name { font-size: 24px; }
   .cv-stats { flex-wrap: wrap; }
   .cv-detail-grid { grid-template-columns: repeat(2, 1fr); }
   .cv-table th, .cv-table td { padding: 6px 8px; font-size: 11px; }
+  .form-row { grid-template-columns: 1fr; }
+  .theme-toggle { top: 12px; right: 12px; width: 36px; height: 36px; }
 }
 </style>
 </head>
@@ -351,10 +489,10 @@ function getSavedTheme() {
 function applyTheme(theme) {
   if (theme === 'light') {
     document.body.classList.add('theme-light');
-    document.querySelector('.theme-toggle').textContent = '🌙';
+    document.querySelector('.theme-toggle').textContent = '☀️';
   } else {
     document.body.classList.remove('theme-light');
-    document.querySelector('.theme-toggle').textContent = '☀️';
+    document.querySelector('.theme-toggle').textContent = '🌙';
   }
 }
 function toggleTheme() {
@@ -365,7 +503,159 @@ function toggleTheme() {
 }
 applyTheme(getSavedTheme());
 
-// ===== DATA & FUNCTIONS =====
+// ===== HELPER FUNCTIONS =====
+function showSuccessToast(message) {
+  var toast = document.createElement('div');
+  toast.className = 'success-toast';
+  toast.textContent = message || '✅ อัพเดทเรียบร้อยแล้ว! ขอบคุณครับ';
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    if (toast && toast.remove) toast.remove();
+  }, 3000);
+}
+
+function closeModal() {
+  var modal = document.getElementById('updateModal');
+  if (modal && modal.remove) modal.remove();
+}
+
+function showModal(pipeId, pipeName) {
+  // Remove existing modal if any
+  var existing = document.getElementById('updateModal');
+  if (existing) existing.remove();
+  
+  var modalHtml = '<div class="modal-overlay" id="updateModal" onclick="if(event.target===this)closeModal()">';
+  modalHtml += '<div class="modal-container">';
+  modalHtml += '<div class="modal-header">';
+  modalHtml += '<h3>✏️ อัพเดทความคืบหน้า</h3>';
+  modalHtml += '<button class="modal-close" onclick="closeModal()">✕</button>';
+  modalHtml += '</div>';
+  modalHtml += '<div class="modal-body">';
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📋 โครงการ</label>';
+  modalHtml += '<input type="text" value="' + esc(pipeName) + '" readonly style="background:var(--border);">';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📝 สถานะปัจจุบัน / ความคืบหน้า *</label>';
+  modalHtml += '<textarea id="updateProgress" rows="3" placeholder="เช่น: ได้รับ PO แล้ว, กำลังรอส่งมอบ, เอกสารเรียบร้อย..."></textarea>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-row">';
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📅 Bidding Date (ถ้ามี)</label>';
+  modalHtml += '<input type="text" id="updateBidding" placeholder="DD/MM/YYYY">';
+  modalHtml += '</div>';
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📅 Shipment Date (ถ้ามี)</label>';
+  modalHtml += '<input type="text" id="updateShipment" placeholder="DD/MM/YYYY">';
+  modalHtml += '</div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>🔧 ข้อมูลที่ต้องการให้แก้ไข (เช่น ชื่อโครงการ, Model, QTY)</label>';
+  modalHtml += '<textarea id="updateCorrection" rows="2" placeholder="เช่น: ชื่อโครงการควรเป็น..., Model ควรเป็น M4T x3..."></textarea>';
+  modalHtml += '<div class="hint">💡 แจ้งข้อมูลที่ผิดพลาดหรือต้องการแก้ไขได้ที่นี่</div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📞 ช่องทางติดต่อกลับ (LINE / เบอร์โทร)</label>';
+  modalHtml += '<input type="text" id="updateContact" placeholder="LINE ID หรือ เบอร์โทร">';
+  modalHtml += '<div class="hint">💡 เพื่อให้พนักงานติดต่อกลับได้รวดเร็ว</div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '</div>';
+  modalHtml += '<div class="modal-footer">';
+  modalHtml += '<button class="btn-cancel" onclick="closeModal()">ยกเลิก</button>';
+  modalHtml += '<button class="btn-submit" onclick="submitUpdate(\'' + pipeId + '\')">📩 ส่งอัพเดท</button>';
+  modalHtml += '</div>';
+  modalHtml += '</div>';
+  modalHtml += '</div>';
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function submitUpdate(pipeId) {
+  var progressText = document.getElementById('updateProgress').value.trim();
+  if (!progressText) {
+    alert('กรุณากรอกสถานะ/ความคืบหน้า');
+    return;
+  }
+  
+  var biddingDate = document.getElementById('updateBidding').value.trim();
+  var shipmentDate = document.getElementById('updateShipment').value.trim();
+  var correctionText = document.getElementById('updateCorrection').value.trim();
+  var contactInfo = document.getElementById('updateContact').value.trim();
+  
+  // Build log message
+  var logMessage = '📞 ลูกค้าอัพเดท: ' + progressText;
+  if (biddingDate) logMessage += ' | Bidding: ' + biddingDate;
+  if (shipmentDate) logMessage += ' | Shipment: ' + shipmentDate;
+  if (correctionText) logMessage += ' | แจ้งแก้ไข: ' + correctionText;
+  if (contactInfo) logMessage += ' | ติดต่อกลับ: ' + contactInfo;
+  
+  // Save to pipeLog
+  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
+  pipeLogs.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+    pipeId: pipeId,
+    type: 'update',
+    content: logMessage,
+    date: new Date().toISOString(),
+    details: {
+      progress: progressText,
+      biddingDate: biddingDate,
+      shipmentDate: shipmentDate,
+      correction: correctionText,
+      contact: contactInfo
+    }
+  });
+  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
+  
+  // Update pipeline if dates provided
+  if (biddingDate || shipmentDate) {
+    var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
+    for (var i = 0; i < allPipes.length; i++) {
+      if (allPipes[i].id === pipeId) {
+        if (biddingDate) allPipes[i].biddingDate = biddingDate;
+        if (shipmentDate) allPipes[i].shipmentDate = shipmentDate;
+        break;
+      }
+    }
+    localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
+  }
+  
+  // Create task for salesperson if correction or contact provided
+  if (correctionText || contactInfo) {
+    var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
+    var taskTitle = '📋 ลูกค้าแจ้งข้อมูล - ' + (pipeName || '');
+    var taskDesc = '';
+    if (correctionText) taskDesc += '🔧 ต้องการแก้ไข: ' + correctionText + '\n';
+    if (contactInfo) taskDesc += '📞 ช่องทางติดต่อ: ' + contactInfo + '\n';
+    taskDesc += '📝 ความคืบหน้า: ' + progressText;
+    
+    tasks.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+      title: taskTitle,
+      description: taskDesc,
+      pipeId: pipeId,
+      dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+      priority: 'high',
+      status: 'active',
+      category: 'Client',
+      created: new Date().toISOString()
+    });
+    localStorage.setItem('v7_tasks', JSON.stringify(tasks));
+  }
+  
+  closeModal();
+  showSuccessToast('✅ อัพเดทเรียบร้อยแล้ว! ขอบคุณครับ');
+  
+  // Refresh data to show new log
+  setTimeout(function() { loadData(); }, 1000);
+}
+
+// ===== DATA FUNCTIONS =====
 var dealerId = new URLSearchParams(window.location.search).get('dealerId');
 var pipesData = [];
 var dealerName = '';
@@ -393,25 +683,6 @@ function getStatusLabel(status) {
     delivered: '<span class="cv-status cv-st-delivered">✅ Delivered</span>'
   };
   return labels[status] || '<span class="cv-status">' + status + '</span>';
-}
-
-function sendUpdate(pipeId) {
-  var text = document.getElementById('updateInput').value.trim();
-  if (!text) { alert('กรุณาพิมพ์ข้อความ'); return; }
-  
-  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
-  pipeLogs.unshift({
-    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
-    pipeId: pipeId,
-    type: 'update',
-    content: '📞 ลูกค้าสอบถาม/อัพเดท: ' + text,
-    date: new Date().toISOString()
-  });
-  localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
-  
-  alert('✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ\nพนักงานขายจะติดต่อกลับโดยเร็วที่สุด');
-  document.getElementById('updateInput').value = '';
-  loadData();
 }
 
 function showDetail(pipeId) {
@@ -470,12 +741,10 @@ function showDetail(pipeId) {
     html += '</div>';
   }
   
+  // Update button - opens modal
   html += '<div class="cv-section"><div class="cv-section-title">✏️ สอบถามเพิ่มเติม / อัพเดท</div>';
-  html += '<div style="display:flex;gap:6px">';
-  html += '<input type="text" id="updateInput" class="update-input" placeholder="พิมพ์ข้อความ...">';
-  html += '<button class="btn-send" onclick="sendUpdate(\'' + p.id + '\')">💾 ส่ง</button>';
-  html += '</div>';
-  html += '<div style="font-size:11px;color:var(--text2);margin-top:8px">💡 สอบถามเพิ่มเติมได้ที่นี่ พนักงานขายจะได้รับทันที</div>';
+  html += '<button class="btn-send" style="width:100%" onclick="showModal(\'' + p.id + '\', \'' + esc(p.projectName) + '\')">📩 คลิกเพื่ออัพเดทความคืบหน้า</button>';
+  html += '<div style="font-size:11px;color:var(--text2);margin-top:8px">💡 กดเพื่อแจ้งความคืบหน้า แก้ไขข้อมูล หรือสอบถามเพิ่มเติม</div>';
   html += '</div>';
   
   document.getElementById('mainContent').innerHTML = html;
