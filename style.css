@@ -6826,3 +6826,201 @@ body.mobile-mode .card {
 .tab-btn {
   flex-shrink: 0;
 }
+/* ================================================================
+   FORCE FULL WIDTH FOR ALL TABS IN DEALER DETAIL
+   ================================================================ */
+
+/* บังคับทุก card ใน dealer detail ให้เต็มจอ */
+#ct .card,
+#dealerTabContent .card,
+#dealerTabContent .card > * {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Pipeline Tab - table ขยายเต็ม */
+#dealerTabContent .pipe-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+}
+
+#dealerTabContent .pipe-table {
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+/* Timeline Tab - timeline container */
+#dealerTabContent .tl {
+  width: 100% !important;
+}
+
+#dealerTabContent .ti {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Tasks Tab */
+#dealerTabContent .task-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+#dealerTabContent .date-section {
+  width: 100% !important;
+}
+
+#dealerTabContent .date-row {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+/* Onboard Tab */
+#dealerTabContent .onboard-step {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+#dealerTabContent .ob-summary {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+#dealerTabContent .ob-progress {
+  width: 100% !important;
+}
+
+/* Pipeline Action Items (ใน Timeline Tab) */
+#dealerTabContent .pa-item,
+#dealerTabContent .pa-today-item {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* LI items */
+#dealerTabContent .li {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  justify-content: space-between !important;
+}
+
+/* Empty state */
+#dealerTabContent .empty {
+  width: 100% !important;
+  text-align: center !important;
+  padding: 24px !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #dealerTabContent .ob-summary {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  #dealerTabContent .date-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  #dealerTabContent .ti {
+    padding: 10px !important;
+  }
+  
+  #dealerTabContent .ti .td2 {
+    font-size: 10px !important;
+  }
+  
+  #dealerTabContent .ti .tc2 {
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  #dealerTabContent .ob-summary {
+    grid-template-columns: 1fr !important;
+  }
+}
+/* ================================================================
+   PIPELINE TABLE FULL WIDTH FIX
+   ================================================================ */
+
+/* Pipeline container */
+#dealerTabContent .card .pipe-wrap,
+.pipe-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+  border-radius: 10px !important;
+}
+
+/* Pipeline table */
+.pipe-table {
+  width: 100% !important;
+  min-width: 100% !important;
+  border-collapse: collapse !important;
+}
+
+/* ทำให้ตาราง scroll แนวนอนได้เมื่อจอเล็ก */
+@media (max-width: 768px) {
+  .pipe-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  .pipe-table {
+    min-width: 600px !important;
+  }
+  
+  .pipe-table th,
+  .pipe-table td {
+    white-space: nowrap !important;
+    padding: 6px 8px !important;
+  }
+}
+/* ================================================================
+   TIMELINE TAB FULL WIDTH
+   ================================================================ */
+
+/* Timeline container */
+#dealerTabContent .tl {
+  width: 100% !important;
+  padding-left: 16px !important;
+  position: relative !important;
+}
+
+/* Timeline items */
+#dealerTabContent .ti {
+  width: 100% !important;
+  margin-bottom: 10px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  box-sizing: border-box !important;
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Timeline dot */
+#dealerTabContent .ti::before {
+  left: -20px !important;
+  top: 14px !important;
+}
+
+/* Filter tabs inside timeline */
+#dealerTabContent .ftabs {
+  width: 100% !important;
+  overflow-x: auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  margin-bottom: 12px !important;
+}
+
+#dealerTabContent .ftab {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
