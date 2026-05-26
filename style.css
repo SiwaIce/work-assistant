@@ -7536,3 +7536,273 @@ input:focus, select:focus, textarea:focus {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+/* ================================================================
+   FORCE FULL WIDTH FOR DEALER DETAIL - ALL TABS
+   ================================================================ */
+
+/* บังคับ container หลัก */
+#ct, #dealerTabContent, .dealer-detail-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ทุก Card ใน dealer detail */
+#dealerTabContent .card,
+#dealerTabContent .card > *,
+#dealerTabContent > .card,
+#dealerTabContent > div > .card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* ===== TAB: PIPELINE ===== */
+#dealerTabContent .pipe-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+}
+#dealerTabContent .pipe-table {
+  width: 100% !important;
+  min-width: 100% !important;
+}
+#dealerTabContent .pipe-table th,
+#dealerTabContent .pipe-table td {
+  white-space: nowrap !important;
+}
+@media (max-width: 768px) {
+  #dealerTabContent .pipe-table {
+    min-width: 700px !important;
+  }
+}
+
+/* ===== TAB: VISIT ===== */
+#dealerTabContent .visit-item {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+#dealerTabContent .visit-sub {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ===== TAB: TIMELINE ===== */
+#dealerTabContent .tl {
+  width: 100% !important;
+  padding-left: 20px !important;
+}
+#dealerTabContent .ti {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+#dealerTabContent .ftabs {
+  width: 100% !important;
+  overflow-x: auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+}
+#dealerTabContent .ftab {
+  flex-shrink: 0 !important;
+}
+
+/* ===== TAB: FORECAST ===== */
+#dealerTabContent .export-wrap {
+  width: 100% !important;
+  overflow-x: auto !important;
+}
+#dealerTabContent .export-table {
+  width: 100% !important;
+  min-width: 100% !important;
+}
+#dealerTabContent .fc-chart {
+  width: 100% !important;
+}
+#dealerTabContent .fc-chart-row {
+  width: 100% !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+#dealerTabContent .fc-chart-label {
+  min-width: 100px !important;
+}
+#dealerTabContent .fc-chart-track {
+  flex: 1 !important;
+}
+
+/* ===== TAB: TASKS ===== */
+#dealerTabContent .task-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+#dealerTabContent .date-section {
+  width: 100% !important;
+}
+#dealerTabContent .date-row {
+  width: 100% !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+@media (max-width: 768px) {
+  #dealerTabContent .date-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+}
+
+/* ===== TAB: ONBOARD (สำคัญที่สุด - แก้ card เล็ก) ===== */
+#dealerTabContent .onboard-step {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
+#dealerTabContent .ob-summary {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+#dealerTabContent .ob-summary-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+#dealerTabContent .ob-progress {
+  width: 100% !important;
+  display: flex !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+#dealerTabContent .ob-progress .pb {
+  flex: 1 !important;
+}
+#dealerTabContent .ob-group-label {
+  width: 100% !important;
+  margin-top: 12px !important;
+  margin-bottom: 8px !important;
+}
+@media (max-width: 768px) {
+  #dealerTabContent .ob-summary {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  #dealerTabContent .ob-summary {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== TAB: CONTACTS (ใน info tab) ===== */
+#dealerTabContent .contact-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+#dealerTabContent .contact-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+#dealerTabContent .contact-detail-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+}
+
+/* ===== LINE LOG ===== */
+#dealerTabContent .line-item {
+  width: 100% !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: flex-start !important;
+}
+
+/* ===== General List Items ===== */
+#dealerTabContent .li {
+  width: 100% !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+}
+#dealerTabContent .lm {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+#dealerTabContent .lt {
+  word-break: break-word !important;
+}
+#dealerTabContent .ls {
+  word-break: break-word !important;
+}
+
+/* ===== Empty State ===== */
+#dealerTabContent .empty {
+  width: 100% !important;
+  text-align: center !important;
+  padding: 30px !important;
+  box-sizing: border-box !important;
+}
+
+/* ===== SR (Stats Row) ===== */
+#dealerTabContent .sr {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+#dealerTabContent .sc {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ===== FR Grids ===== */
+#dealerTabContent .fr,
+#dealerTabContent .fr3,
+#dealerTabContent .fr4 {
+  display: grid !important;
+  width: 100% !important;
+  gap: 12px !important;
+}
+#dealerTabContent .fr {
+  grid-template-columns: 1fr 1fr !important;
+}
+#dealerTabContent .fr3 {
+  grid-template-columns: 1fr 1fr 1fr !important;
+}
+#dealerTabContent .fr4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr !important;
+}
+@media (max-width: 768px) {
+  #dealerTabContent .fr,
+  #dealerTabContent .fr3,
+  #dealerTabContent .fr4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== Tab Bar ===== */
+#dealerTabContent .tab-bar {
+  width: 100% !important;
+  overflow-x: auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 2px !important;
+  margin-bottom: 16px !important;
+}
+#dealerTabContent .tab-btn {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}

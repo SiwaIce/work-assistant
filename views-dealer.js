@@ -1273,8 +1273,9 @@ function buildVisitUpdateText(v) {
 
   return txt.trim();
 }
+
 // ================================================================
-// TAB: ONBOARD
+// TAB: ONBOARD (Fixed Full Width)
 // ================================================================
 function dealerOnboardTab(d) {
   var cfg = getConfig();
@@ -1282,7 +1283,7 @@ function dealerOnboardTab(d) {
   
   // Not started
   if (!ob || !ob.steps || !ob.steps.length) {
-    return '<div class="card"><h2>🔄 Dealer Onboarding</h2>' +
+    return '<div class="card" style="width:100%"><h2>🔄 Dealer Onboarding</h2>' +
       '<div class="empty"><div class="icon">🔄</div>' +
       '<p>ยังไม่ได้เริ่ม Onboarding</p>' +
       '<button class="btn bp" style="margin-top:8px" onclick="startOnboarding(\'' + d.id + '\')">🚀 เริ่ม Onboarding</button>' +
@@ -1308,57 +1309,59 @@ function dealerOnboardTab(d) {
     else onboardSteps.push({step: ob.steps[i], idx: i});
   }
 
-  var html = '<div class="card"><h2>🔄 Dealer Onboarding ' +
+  var html = '<div class="card" style="width:100%"><h2>🔄 Dealer Onboarding ' +
     (isComplete ? '<span class="tag tag-completed">✅ เสร็จสมบูรณ์</span>' : '<span class="tag tag-active">🔄 กำลังดำเนินการ</span>') +
     ' <span class="ml">' +
     '<button class="btn bsm bo" onclick="resetOnboarding(\'' + d.id + '\')">🔄 Reset</button>' +
     '</span></h2>' +
     
     // Summary
-    '<div class="ob-summary">' +
-    '<div class="ob-summary-card"><div class="val c2">' + done + '</div><div class="lbl">เสร็จแล้ว</div></div>' +
-    '<div class="ob-summary-card"><div class="val c3">' + (total - done) + '</div><div class="lbl">เหลือ</div></div>' +
-    '<div class="ob-summary-card"><div class="val ' + (pct >= 80 ? 'c2' : pct >= 50 ? 'c3' : 'c4') + '">' + pct + '%</div><div class="lbl">Progress</div></div>' +
+    '<div class="ob-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;width:100%">' +
+    '<div class="ob-summary-card" style="width:100%"><div class="val c2">' + done + '</div><div class="lbl">เสร็จแล้ว</div></div>' +
+    '<div class="ob-summary-card" style="width:100%"><div class="val c3">' + (total - done) + '</div><div class="lbl">เหลือ</div></div>' +
+    '<div class="ob-summary-card" style="width:100%"><div class="val ' + (pct >= 80 ? 'c2' : pct >= 50 ? 'c3' : 'c4') + '">' + pct + '%</div><div class="lbl">Progress</div></div>' +
     '</div>' +
     
     // Progress bar
-    '<div class="ob-progress">' +
+    '<div class="ob-progress" style="display:flex;gap:10px;align-items:center;width:100%;margin-bottom:16px">' +
     '<div class="pb" style="flex:1;height:10px"><div class="pf ' + (pct >= 80 ? 'pf-green' : pct >= 50 ? 'pf-yellow' : 'pf-blue') + '" style="width:' + pct + '%"></div></div>' +
     '<div class="pct">' + pct + '%</div></div>' +
     
     (ob.startDate ? '<div style="font-size:.7rem;color:var(--text3);margin-bottom:10px">เริ่ม: ' + fD(ob.startDate) + ' (' + daysBetween(ob.startDate, _td()) + ' วันที่แล้ว)</div>' : '');
 
   // Onboard Steps
-  html += '<div class="ob-group-label">📋 ขั้นตอน Onboarding</div>';
+  html += '<div class="ob-group-label" style="width:100%;margin-top:12px;margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border)">📋 ขั้นตอน Onboarding</div>';
   for (var i = 0; i < onboardSteps.length; i++) {
-    html += renderOnboardStep(d.id, onboardSteps[i].step, onboardSteps[i].idx, currentIdx);
+    html += renderOnboardStepFullWidth(d.id, onboardSteps[i].step, onboardSteps[i].idx, currentIdx);
   }
   
   // After Onboard Steps
-  html += '<div class="ob-group-label">📋 หลัง Onboard</div>';
-  for (var i = 0; i < afterSteps.length; i++) {
-    html += renderOnboardStep(d.id, afterSteps[i].step, afterSteps[i].idx, currentIdx);
+  if (afterSteps.length) {
+    html += '<div class="ob-group-label" style="width:100%;margin-top:12px;margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border)">📋 หลัง Onboard</div>';
+    for (var i = 0; i < afterSteps.length; i++) {
+      html += renderOnboardStepFullWidth(d.id, afterSteps[i].step, afterSteps[i].idx, currentIdx);
+    }
   }
   
   html += '</div>';
   return html;
 }
 
-function renderOnboardStep(dealerId, step, idx, currentIdx) {
+function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {
   var isCurrent = idx === currentIdx;
   var cls = step.done ? 'done' : isCurrent ? 'current' : '';
   
-  return '<div class="onboard-step ' + cls + '">' +
-    '<div class="ob-num" onclick="toggleOnboardStep(\'' + dealerId + '\',' + idx + ')" style="cursor:pointer">' + 
+  return '<div class="onboard-step ' + cls + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;width:100%;box-sizing:border-box">' +
+    '<div class="ob-num" onclick="toggleOnboardStep(\'' + dealerId + '\',' + idx + ')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center;flex-shrink:0">' + 
     (step.done ? '✓' : (idx + 1)) + '</div>' +
-    '<div class="ob-content">' +
-    '<div class="ob-title">' + sanitize(step.title) + '</div>' +
-    '<div class="ob-meta">' +
+    '<div class="ob-content" style="flex:1;min-width:0">' +
+    '<div class="ob-title" style="font-size:.8rem;font-weight:500;margin-bottom:2px">' + sanitize(step.title) + '</div>' +
+    '<div class="ob-meta" style="font-size:.66rem;color:var(--text3)">' +
     (step.done && step.date ? '✅ ' + fD(step.date) : '') +
     (isCurrent ? '🔄 ขั้นตอนปัจจุบัน' : '') +
     (!step.done && !isCurrent ? '☐ ยังไม่ได้ทำ' : '') +
     '</div>' +
-    (step.note ? '<div class="ob-note">' + sanitize(step.note) + '</div>' : '') +
+    (step.note ? '<div class="ob-note" style="font-size:.7rem;color:var(--text2);margin-top:3px;white-space:pre-wrap">' + sanitize(step.note) + '</div>' : '') +
     '</div>' +
     '<button class="btn bsm bo" onclick="editOnboardStep(\'' + dealerId + '\',' + idx + ')" style="flex-shrink:0">📝</button>' +
     '</div>';
