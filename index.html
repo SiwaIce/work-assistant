@@ -201,17 +201,16 @@ var auth = firebase.auth();
 <script src="storage.js"></script>
 <script src="firebase-sync.js"></script>
 <script src="views-today.js"></script>
+<script src="modals.js"></script>   <!-- ✅ ย้ายมาที่นี่ -->
 <script src="views-dealer.js"></script>
 <script src="views-pipeline.js"></script>
 <script src="views-visit.js"></script>
 <script src="views-work.js"></script>
 <script src="kanban.js"></script>
-<script src="modals.js"></script>
 <script src="export.js"></script>
 <script src="admin.js"></script>
 <script src="features.js"></script>
-<script src="app.js"></script>
-<div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
+<script src="app.js"></script><div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
   <div class="qcmd-box">
     <div class="qcmd-input-wrap">
       <span>🔍</span>

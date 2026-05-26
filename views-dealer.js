@@ -1947,6 +1947,14 @@ function copyClientLink(dealerId) {
   // แจ้งเตือนเพิ่มเติม
   toast('📋 ลิงก์: ' + clientUrl);
 }
+
+// ================================================================
+// CLOSE MODAL (สำหรับ PIN Modal)
+// ================================================================
+function closeModal() {
+  var modal = document.querySelector('.modal-overlay');
+  if (modal) modal.remove();
+}
 // ================================================================
 // DEALER PIN MANAGEMENT
 // ================================================================
