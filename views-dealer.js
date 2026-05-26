@@ -1637,7 +1637,7 @@ function buildFinalClientView(dealerId) {
   });
   var cfg = getConfig();
   
-  // เตรียมข้อมูล pipeline สำหรับ JavaScript (แบบ JSON string)
+  // เตรียมข้อมูล pipeline
   var pipesData = [];
   for (var i = 0; i < activePipes.length; i++) {
     var p = activePipes[i];
@@ -1775,12 +1775,12 @@ function buildFinalClientView(dealerId) {
     html += '<td><span class="' + valueClass + '">' + fmtMoneyFull(amt) + '</span> ฿</td>';
     html += '<td>' + (p.biddingDate || '-') + '</td>';
     html += '<td>' + (p.shipmentDate || '-') + '</td>';
-    html += '<td><button class="btn" onclick="window.showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
+    html += '<td><button class="btn" data-pipeid="' + p.id + '" onclick="showDetail(this)">ดูรายละเอียด</button></td>';
     html += '</tr>';
   }
   
   html += '</tbody>';
-  html += '</table>';
+  html += '<table>';
   html += '</div>';
   
   // Detail section (hidden)
@@ -1794,7 +1794,7 @@ function buildFinalClientView(dealerId) {
   
   html += '</div>';
   
-  // JavaScript - แยกเป็นส่วนๆ เพื่อความชัดเจน
+  // JavaScript
   html += '<script>';
   html += 'var pipesData = ' + pipesDataJson + ';';
   html += 'var dealerId = "' + dealerId + '";';
@@ -1821,92 +1821,99 @@ function buildFinalClientView(dealerId) {
   html += '}';
   
   // Show overview
-  html += 'window.showOverview = function(){';
+  html += 'function showOverview(){';
   html += '  document.getElementById("overviewSection").style.display = "block";';
   html += '  document.getElementById("detailSection").style.display = "none";';
   html += '  document.getElementById("detailSection").innerHTML = "";';
-  html += '};';
+  html += '}';
   
-  // Show detail
-  html += 'window.showDetail = function(pipeId){';
-  html += '  var p = null;';
-  html += '  for(var i=0;i<pipesData.length;i++){ if(pipesData[i].id === pipeId){ p = pipesData[i]; break; } }';
-  html += '  if(!p){ alert("ไม่พบข้อมูล"); return; }';
+  // Build detail HTML
+  html += 'function buildDetailHTML(p){';
   html += '  var statusText = getStatusText(p.status);';
   html += '  var statusClass = getStatusClass(p.status);';
   html += '  var valueClass = getValueClass(p.forecastAmount);';
-  html += '  var html = "<div class=\"back\" onclick=\"window.showOverview()\">← กลับไปหน้าแรก</div>";';
-  html += '  html += "<div class=\"section\"><div class=\"section-title\">📊 "+esc(p.projectName)+"</div>";';
-  html += '  html += "<div class=\"detail-grid\">";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">สถานะ</div><div class=\"detail-val\"><span class=\"status "+statusClass+"\">"+statusText+"</span></div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">End User</div><div class=\"detail-val\">"+esc(p.endUserTH)+"</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Unit Type</div><div class=\"detail-val\">"+esc(p.unitType)+"</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">มูลค่า</div><div class=\"detail-val "+valueClass+"\">"+fmtMoneyFull(p.forecastAmount)+" ฿</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Bidding Date</div><div class=\"detail-val\">"+p.biddingDate+"</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Shipment Date</div><div class=\"detail-val\">"+p.shipmentDate+"</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">TOR</div><div class=\"detail-val\">"+esc(p.tor)+"</div></div>";';
-  html += '  html += "<div class=\"detail-item\"><div class=\"detail-label\">Next Action</div><div class=\"detail-val\">"+esc(p.nextAction)+"</div></div>";';
-  html += '  html += "</div></div>";';
+  html += '  var h = "<div class=\"back\" onclick=\"showOverview()\">← กลับไปหน้าแรก</div>";';
+  html += '  h += "<div class=\"section\"><div class=\"section-title\">📊 "+esc(p.projectName)+"</div>";';
+  html += '  h += "<div class=\"detail-grid\">";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">สถานะ</div><div class=\"detail-val\"><span class=\"status "+statusClass+"\">"+statusText+"</span></div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">End User</div><div class=\"detail-val\">"+esc(p.endUserTH)+"</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">Unit Type</div><div class=\"detail-val\">"+esc(p.unitType)+"</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">มูลค่า</div><div class=\"detail-val "+valueClass+"\">"+fmtMoneyFull(p.forecastAmount)+" ฿</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">Bidding Date</div><div class=\"detail-val\">"+p.biddingDate+"</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">Shipment Date</div><div class=\"detail-val\">"+p.shipmentDate+"</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">TOR</div><div class=\"detail-val\">"+esc(p.tor)+"</div></div>";';
+  html += '  h += "<div class=\"detail-item\"><div class=\"detail-label\">Next Action</div><div class=\"detail-val\">"+esc(p.nextAction)+"</div></div>";';
+  html += '  h += "</div></div>";';
   
   // Products
   html += '  if(p.items && p.items.length){';
-  html += '    html += "<div class=\"section\"><div class=\"section-title\">📦 รายการสินค้า ("+p.items.length+")</div>";';
-  html += '    html += "<table style=\"width:100%\"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคาต่อหน่วย</th><th>รวม</th></tr></thead><tbody>";';
+  html += '    h += "<div class=\"section\"><div class=\"section-title\">📦 รายการสินค้า ("+p.items.length+")</div>";';
+  html += '    h += "<table style=\"width:100%\"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคาต่อหน่วย</th><th>รวม</th></tr></thead><tbody>";';
   html += '    for(var i=0;i<p.items.length;i++){';
   html += '      var it = p.items[i];';
   html += '      var total = (Number(it.qty)||1) * (Number(it.price)||0);';
-  html += '      html += "<tr><td class=\"cv-num\">"+(i+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td><td>"+fmtMoneyFull(it.price)+"</td><td>"+fmtMoneyFull(total)+"</td></tr>";';
+  html += '      h += "<td><td class=\"cv-num\">"+(i+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"<td>"+fmtMoneyFull(it.price)+"<td>"+fmtMoneyFull(total)+"</td></tr>";';
   html += '    }';
-  html += '    html += "</tbody></table></div>";';
+  html += '    h += "</tbody></table></div>";';
   html += '  }';
   
   // Action Items
   html += '  if(p.actions && p.actions.length){';
-  html += '    html += "<div class=\"section\"><div class=\"section-title\">🎯 รายการที่ต้องดำเนินการ ("+p.actions.length+")</div>";';
+  html += '    h += "<div class=\"section\"><div class=\"section-title\">🎯 รายการที่ต้องดำเนินการ ("+p.actions.length+")</div>";';
   html += '    for(var i=0;i<p.actions.length;i++){';
   html += '      var a = p.actions[i];';
-  html += '      html += "<div class=\"cv-action\"><div class=\"cv-action-text\">⏳ "+esc(a.text)+"</div>";';
-  html += '      if(a.dueDate) html += "<div class=\"cv-action-meta\">📅 กำหนด: "+a.dueDate+"</div>";';
-  html += '      html += "</div>";';
+  html += '      h += "<div class=\"cv-action\"><div class=\"cv-action-text\">⏳ "+esc(a.text)+"</div>";';
+  html += '      if(a.dueDate) h += "<div class=\"cv-action-meta\">📅 กำหนด: "+a.dueDate+"</div>";';
+  html += '      h += "</div>";';
   html += '    }';
-  html += '    html += "</div>";';
+  html += '    h += "</div>";';
   html += '  }';
   
   // Updates
   html += '  if(p.logs && p.logs.length){';
-  html += '    html += "<div class=\"section\"><div class=\"section-title\">📝 ความคืบหน้าล่าสุด</div>";';
+  html += '    h += "<div class=\"section\"><div class=\"section-title\">📝 ความคืบหน้าล่าสุด</div>";';
   html += '    for(var i=0;i<p.logs.length;i++){';
   html += '      var l = p.logs[i];';
   html += '      var icon = l.type==="progress"?"🟢":l.type==="win"?"✅":l.type==="status_change"?"🔄":"📝";';
   html += '      var dateStr = l.date ? l.date.split("T")[0] : "-";';
-  html += '      html += "<div class=\"cv-log\"><span class=\"cv-log-date\">"+dateStr+"</span><span class=\"cv-log-icon\">"+icon+"</span><span class=\"cv-log-text\">"+esc((l.content||"").substr(0,80))+"</span></div>";';
+  html += '      h += "<div class=\"cv-log\"><span class=\"cv-log-date\">"+dateStr+"</span><span class=\"cv-log-icon\">"+icon+"</span><span class=\"cv-log-text\">"+esc((l.content||"").substr(0,80))+"</span></div>";';
   html += '    }';
-  html += '    html += "</div>";';
+  html += '    h += "</div>";';
   html += '  }';
   
   // Update form
-  html += '  html += "<div class=\"section\"><div class=\"section-title\">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>";';
-  html += '  html += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"btn-primary\" onclick=\"window.sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
-  html += '  html += "<div style=\"font-size:11px;color:#8892b0;margin-top:8px\">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>";';
-  html += '  html += "</div>";';
+  html += '  h += "<div class=\"section\"><div class=\"section-title\">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>";';
+  html += '  h += "<div class=\"update-area\"><input type=\"text\" id=\"updateInput\" class=\"update-input\" placeholder=\"พิมพ์ข้อความอัพเดท...\"><button class=\"btn-primary\" onclick=\"sendUpdate(\'"+p.id+"\')\">💾 ส่งอัพเดท</button></div>";';
+  html += '  h += "<div style=\"font-size:11px;color:#8892b0;margin-top:8px\">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>";';
+  html += '  h += "</div>";';
+  html += '  return h;';
+  html += '}';
+  
+  // Show detail function
+  html += 'function showDetail(btn){';
+  html += '  var pipeId = btn.getAttribute("data-pipeid");';
+  html += '  var p = null;';
+  html += '  for(var i=0;i<pipesData.length;i++){ if(pipesData[i].id === pipeId){ p = pipesData[i]; break; } }';
+  html += '  if(!p){ alert("ไม่พบข้อมูล"); return; }';
+  html += '  var detailHtml = buildDetailHTML(p);';
   html += '  document.getElementById("overviewSection").style.display = "none";';
   html += '  document.getElementById("detailSection").style.display = "block";';
-  html += '  document.getElementById("detailSection").innerHTML = html;';
-  html += '};';
+  html += '  document.getElementById("detailSection").innerHTML = detailHtml;';
+  html += '}';
   
   // Send update
-  html += 'window.sendUpdate = function(pipeId){';
+  html += 'function sendUpdate(pipeId){';
   html += '  var text = document.getElementById("updateInput").value.trim();';
   html += '  if(!text){ alert("กรุณาพิมพ์ข้อความ"); return; }';
   html += '  if(window.opener){';
   html += '    window.opener.postMessage({type:"CV_UPDATE",pipeId:pipeId,dealerId:dealerId,text:text},"*");';
   html += '    alert("✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ");';
   html += '    document.getElementById("updateInput").value = "";';
-  html += '    window.showOverview();';
+  html += '    showOverview();';
   html += '  }else{';
   html += '    alert("ไม่สามารถส่งได้ กรุณาแจ้งพนักงานขาย");';
   html += '  }';
-  html += '};';
+  html += '}';
   
   html += '<\/script>';
   html += '</body></html>';
@@ -1919,4 +1926,3 @@ function fmtMoneyFull(n) {
   n = Number(n);
   return n.toLocaleString('th-TH');
 }
-
