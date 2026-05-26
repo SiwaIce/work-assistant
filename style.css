@@ -5944,3 +5944,49 @@ body.mobile-mode .card {
     grid-template-columns: 1fr !important;
   }
 }
+/* ===== FORCE FULL WIDTH FOR DEALER DETAIL ===== */
+#ct .card {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+#ct .card .fr,
+#ct .card .fr3,
+#ct .card .fr4 {
+  display: grid !important;
+  width: 100% !important;
+  gap: 16px !important;
+}
+
+#ct .card .fr {
+  grid-template-columns: 1fr 1fr !important;
+}
+
+#ct .card .fr3 {
+  grid-template-columns: 1fr 1fr 1fr !important;
+}
+
+#ct .card .fr4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr !important;
+}
+
+/* Health score section */
+#ct .card div[style*="display:flex;align-items:center;gap:6px"] {
+  width: 100% !important;
+}
+
+/* Certification section */
+#ct .card div[style*="display:grid;grid-template-columns:1fr 1fr;gap:6px"] {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  width: 100% !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #ct .card .fr,
+  #ct .card .fr3,
+  #ct .card .fr4 {
+    grid-template-columns: 1fr !important;
+  }
+}
