@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJI Enterprise - Client View</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI",sans-serif;background:#0a0e27;color:#e0e6f0}
+.container{max-width:1000px;margin:0 auto;padding:20px}
+.header{text-align:center;padding:24px 0;border-bottom:2px solid rgba(100,181,246,0.2)}
+.logo{font-size:14px;color:#64b5f6}
+.name{font-size:28px;font-weight:800;background:linear-gradient(90deg,#64b5f6,#42a5f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{font-size:14px;color:#8892b0}
+.section{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:20px;margin-bottom:16px}
+.section-title{font-size:16px;font-weight:700;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.08)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:11px;color:#8892b0;border-bottom:2px solid rgba(255,255,255,0.08)}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}
+.status{padding:3px 10px;border-radius:12px;font-size:11px;display:inline-block}
+.status-prospect{background:rgba(100,181,246,0.12);color:#64b5f6}
+.status-tor{background:rgba(186,104,200,0.12);color:#ba68c8}
+.status-quote{background:rgba(255,183,77,0.12);color:#ffb74d}
+.status-bidding{background:rgba(255,235,59,0.12);color:#fdd835}
+.status-nego{background:rgba(77,208,225,0.12);color:#4dd0e1}
+.status-win{background:rgba(129,199,132,0.12);color:#81c784}
+.status-ordered{background:rgba(76,175,80,0.12);color:#4caf50}
+.status-delivered{background:rgba(76,175,80,0.15);color:#66bb6a}
+.footer{text-align:center;padding:20px 0;font-size:11px;color:#8892b0}
+.btn{padding:6px 12px;border-radius:6px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;font-size:11px}
+.btn-primary{padding:6px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:11px}
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.detail-item{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}
+.detail-label{font-size:10px;color:#8892b0}
+.detail-val{font-size:13px;font-weight:600}
+.back{cursor:pointer;color:#64b5f6;margin-bottom:16px;display:inline-block}
+.back:hover{text-decoration:underline}
+.val-mega{color:#ef4444;font-weight:800}
+.val-big{color:#f97316;font-weight:700}
+.val-normal{color:#22c55e;font-weight:600}
+.cv-action{padding:8px 12px;margin-bottom:6px;border-left:3px solid #64b5f6;background:rgba(255,255,255,0.02);border-radius:6px}
+.cv-log{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px}
+.cv-log-date{color:#8892b0;font-size:11px;min-width:70px}
+.update-area{display:flex;gap:6px;margin-top:12px}
+.update-input{flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px}
+.loading{text-align:center;padding:50px;color:#8892b0}
+@media(max-width:768px){.container{padding:12px}.name{font-size:22px}.detail-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="loading">กำลังโหลดข้อมูล...</div>
+</div>
+
+<script>
+// รับ dealerId จาก URL parameter
+var urlParams = new URLSearchParams(window.location.search);
+var dealerId = urlParams.get('dealerId');
+
+// ฟังก์ชัน fmtMoney
+function fmtMoneyFull(n) {
+  if (!n) return '0';
+  n = Number(n);
+  return n.toLocaleString('th-TH');
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// สถานะ label
+function getStatusText(status) {
+  var m = {
+    prospect: '🔵 Prospect',
+    tor_review: '🟣 TOR Review',
+    quotation: '🟠 Quotation',
+    bidding: '🟡 Bidding',
+    negotiation: '🔵 Negotiation',
+    win: '🟢 Win',
+    ordered: '🟢 Ordered',
+    delivered: '✅ Delivered'
+  };
+  return m[status] || status;
+}
+
+function getStatusClass(status) {
+  var m = {
+    prospect: 'status-prospect',
+    tor_review: 'status-tor',
+    quotation: 'status-quote',
+    bidding: 'status-bidding',
+    negotiation: 'status-nego',
+    win: 'status-win',
+    ordered: 'status-ordered',
+    delivered: 'status-delivered'
+  };
+  return m[status] || 'status-prospect';
+}
+
+function getValueClass(amt) {
+  amt = Number(amt) || 0;
+  if (amt >= 10000000) return 'val-mega';
+  if (amt >= 1500000) return 'val-big';
+  return 'val-normal';
+}
+
+// State
+var pipesData = [];
+var dealerName = '';
+
+// ส่งข้อความกลับ
+function sendUpdate(pipeId) {
+  var text = document.getElementById('updateInput').value.trim();
+  if (!text) { alert('กรุณาพิมพ์ข้อความ'); return; }
+  if (window.opener) {
+    window.opener.postMessage({
+      type: 'CV_UPDATE',
+      pipeId: pipeId,
+      dealerId: dealerId,
+      text: text
+    }, '*');
+    alert('✅ ส่งข้อความเรียบร้อยแล้ว! ขอบคุณครับ');
+    document.getElementById('updateInput').value = '';
+    showOverview();
+  } else {
+    alert('ไม่สามารถส่งได้ กรุณาแจ้งพนักงานขาย');
+  }
+}
+
+// แสดงหน้า overview
+function showOverview() {
+  if (!pipesData.length) return;
+  
+  var html = '<div class="header">';
+  html += '<div class="logo">🚁 DJI Enterprise</div>';
+  html += '<div class="name">' + esc(dealerName) + '</div>';
+  html += '<div class="sub">DJI Authorized Dealer</div>';
+  html += '</div>';
+  
+  html += '<div class="section">';
+  html += '<div class="section-title">📊 โครงการของท่าน (' + pipesData.length + ' โครงการ)</div>';
+  html += '<table>';
+  html += '<thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>มูลค่า</th><th>Bidding</th><th>Shipment</th><th></th></tr></thead>';
+  html += '<tbody>';
+  
+  for (var i = 0; i < pipesData.length; i++) {
+    var p = pipesData[i];
+    var statusClass = getStatusClass(p.status);
+    var statusText = getStatusText(p.status);
+    var valueClass = getValueClass(p.forecastAmount);
+    
+    html += '<tr>';
+    html += '<td>' + (i + 1) + '</td>';
+    html += '<td><strong>' + esc(p.projectName) + '</strong></td>';
+    html += '<td>' + esc(p.endUserTH) + '</td>';
+    html += '<td><span class="status ' + statusClass + '">' + statusText + '</span></td>';
+    html += '<td><span class="' + valueClass + '">' + fmtMoneyFull(p.forecastAmount) + '</span> ฿</td>';
+    html += '<td>' + (p.biddingDate || '-') + '</td>';
+    html += '<td>' + (p.shipmentDate || '-') + '</td>';
+    html += '<td><button class="btn" onclick="showDetail(\'' + p.id + '\')">ดูรายละเอียด</button></td>';
+    html += '</tr>';
+  }
+  
+  html += '</tbody></table></div>';
+  html += '<div class="footer">Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor<br>Siwawong | ' + new Date().toISOString().split('T')[0].replace(/-/g, '/') + '</div>';
+  
+  document.getElementById('app').innerHTML = html;
+}
+
+// แสดงหน้า detail
+function showDetail(pipeId) {
+  var p = null;
+  for (var i = 0; i < pipesData.length; i++) {
+    if (pipesData[i].id === pipeId) { p = pipesData[i]; break; }
+  }
+  if (!p) { alert('ไม่พบข้อมูล'); return; }
+  
+  var statusText = getStatusText(p.status);
+  var statusClass = getStatusClass(p.status);
+  var valueClass = getValueClass(p.forecastAmount);
+  
+  var html = '<div class="back" onclick="showOverview()">← กลับไปหน้าแรก</div>';
+  
+  html += '<div class="section"><div class="section-title">📊 ' + esc(p.projectName) + '</div>';
+  html += '<div class="detail-grid">';
+  html += '<div class="detail-item"><div class="detail-label">สถานะ</div><div class="detail-val"><span class="status ' + statusClass + '">' + statusText + '</span></div></div>';
+  html += '<div class="detail-item"><div class="detail-label">End User</div><div class="detail-val">' + esc(p.endUserTH) + '</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">Unit Type</div><div class="detail-val">' + esc(p.unitType) + '</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">มูลค่า</div><div class="detail-val ' + valueClass + '">' + fmtMoneyFull(p.forecastAmount) + ' ฿</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">Bidding Date</div><div class="detail-val">' + (p.biddingDate || '-') + '</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">Shipment Date</div><div class="detail-val">' + (p.shipmentDate || '-') + '</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">TOR</div><div class="detail-val">' + esc(p.tor) + '</div></div>';
+  html += '<div class="detail-item"><div class="detail-label">Next Action</div><div class="detail-val">' + esc(p.nextAction) + '</div></div>';
+  html += '</div></div>';
+  
+  // สินค้า
+  if (p.items && p.items.length) {
+    html += '<div class="section"><div class="section-title">📦 รายการสินค้า (' + p.items.length + ')</div>';
+    html += '<table><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>';
+    for (var i = 0; i < p.items.length; i++) {
+      var it = p.items[i];
+      var total = (Number(it.qty) || 1) * (Number(it.price) || 0);
+      html += '<tr><td>' + (i + 1) + '</td><td>' + esc(it.model || '-') + '</td><td>' + (it.qty || 1) + '</td><td>' + fmtMoneyFull(it.price) + '</td><td>' + fmtMoneyFull(total) + '</td></tr>';
+    }
+    html += '</tbody></table></div>';
+  }
+  
+  // Action Items
+  if (p.actions && p.actions.length) {
+    html += '<div class="section"><div class="section-title">🎯 รายการที่ต้องดำเนินการ (' + p.actions.length + ')</div>';
+    for (var i = 0; i < p.actions.length; i++) {
+      var a = p.actions[i];
+      html += '<div class="cv-action"><div class="cv-action-text">⏳ ' + esc(a.text) + '</div>';
+      if (a.dueDate) html += '<div class="cv-action-meta">📅 กำหนด: ' + a.dueDate + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  // ความคืบหน้า
+  if (p.logs && p.logs.length) {
+    html += '<div class="section"><div class="section-title">📝 ความคืบหน้าล่าสุด</div>';
+    for (var i = 0; i < p.logs.length; i++) {
+      var l = p.logs[i];
+      var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
+      var dateStr = l.date ? l.date.split('T')[0] : '-';
+      html += '<div class="cv-log"><span class="cv-log-date">' + dateStr + '</span>';
+      html += '<span class="cv-log-icon">' + icon + '</span>';
+      html += '<span class="cv-log-text">' + esc((l.content || '').substr(0, 80)) + '</span></div>';
+    }
+    html += '</div>';
+  }
+  
+  // อัพเดท
+  html += '<div class="section"><div class="section-title">✏️ สอบถามเพิ่มเติม / อัพเดทความคืบหน้า</div>';
+  html += '<div class="update-area">';
+  html += '<input type="text" id="updateInput" class="update-input" placeholder="พิมพ์ข้อความอัพเดท...">';
+  html += '<button class="btn-primary" onclick="sendUpdate(\'' + p.id + '\')">💾 ส่งอัพเดท</button>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:#8892b0;margin-top:8px">💡 อัพเดทจะถูกบันทึกทันที พนักงานขายจะได้รับแจ้ง</div>';
+  html += '</div>';
+  
+  document.getElementById('app').innerHTML = html;
+}
+
+// โหลดข้อมูล
+function loadData() {
+  if (!dealerId) {
+    document.getElementById('app').innerHTML = '<div class="loading">❌ ไม่พบข้อมูล Dealer</div>';
+    return;
+  }
+  
+  // ส่ง request ไปหา opener เพื่อขอข้อมูล (หรือใช้ localStorage โดยตรง)
+  // แต่เนื่องจาก popup อ่าน localStorage เดียวกับหน้าหลักได้ เลยใช้ localStorage ได้เลย
+  
+  var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+  var dealer = null;
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i].id === dealerId) { dealer = dealers[i]; break; }
+  }
+  
+  if (!dealer) {
+    document.getElementById('app').innerHTML = '<div class="loading">❌ ไม่พบข้อมูล Dealer</div>';
+    return;
+  }
+  
+  dealerName = dealer.name || '-';
+  
+  var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
+  var pipeActions = JSON.parse(localStorage.getItem('v7_pipeActions') || '[]');
+  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
+  
+  var activePipes = allPipes.filter(function(p) {
+    return p.dealerId === dealerId && ['lost', 'on_hold'].indexOf(p.status) === -1;
+  });
+  
+  // เตรียมข้อมูล
+  pipesData = [];
+  for (var i = 0; i < activePipes.length; i++) {
+    var p = activePipes[i];
+    
+    // items
+    var items = [];
+    if (p.items && p.items.length) {
+      items = p.items;
+    } else if (p.model) {
+      items = [{ model: p.model, qty: p.modelQty || 1, price: 0, total: p.forecastAmount || 0 }];
+    }
+    
+    // actions
+    var actions = pipeActions.filter(function(a) {
+      return a.pipeId === p.id && a.status === 'pending';
+    });
+    
+    // logs
+    var logs = pipeLogs.filter(function(l) {
+      return l.pipeId === p.id;
+    }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 10);
+    
+    pipesData.push({
+      id: p.id,
+      projectName: p.projectName || '-',
+      endUserTH: p.endUserTH || '-',
+      endUserEN: p.endUserEN || '-',
+      unitType: p.unitType || '-',
+      status: p.status,
+      biddingDate: p.biddingDate || '-',
+      shipmentDate: p.shipmentDate || '-',
+      tor: p.tor || '-',
+      nextAction: p.nextAction || '-',
+      forecastAmount: p.forecastAmount || 0,
+      items: items,
+      actions: actions,
+      logs: logs
+    });
+  }
+  
+  showOverview();
+}
+
+// เริ่มต้น
+loadData();
+</script>
+</body>
+</html>

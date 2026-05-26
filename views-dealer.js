@@ -1619,12 +1619,10 @@ function openClientView(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
   
-  var win = window.open('', '_blank');
+  // เปิด popup ไปที่ client-view.html พร้อมส่ง dealerId
+  var url = window.location.href.split('/').slice(0, -1).join('/') + '/client-view.html?dealerId=' + dealerId;
+  var win = window.open(url, '_blank');
   if (!win) { toast('กรุณาอนุญาต Popup'); return; }
-  
-  var html = buildFinalClientView(dealerId);
-  win.document.write(html);
-  win.document.close();
 }
 
 function buildFinalClientView(dealerId) {
