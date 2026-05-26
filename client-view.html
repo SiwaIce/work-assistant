@@ -251,6 +251,30 @@ body {
 
 .loading { text-align: center; padding: 40px; color: var(--text2); }
 
+/* Forecast Items */
+.forecast-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.summary-card {
+  text-align: center;
+  padding: 6px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -304,6 +328,7 @@ var STATUS_LIST = [
   { id: 'ordered', name: '🟢 Ordered' }, { id: 'delivered', name: '✅ Delivered' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(x => x.id === status); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
+function getStatusNameFromId(statusId) { var s = STATUS_LIST.find(function(x) { return x.id === statusId; }); return s ? s.name : statusId; }
 
 // ===== DATA =====
 var dealerId = new URLSearchParams(window.location.search).get('dealerId');
@@ -394,7 +419,7 @@ function loadTimeline() {
   }).sort(function(a,b) { return (b.date||'').localeCompare(a.date||''); }).slice(0, 50);
 }
 
-// ===== RENDER PIPELINE TAB (เหมือนเก่า มีปุ่มอัพเดท + เพิ่มโครงการ) =====
+// ===== RENDER PIPELINE TAB =====
 function renderPipelineTab() {
   if (!pipelinesData.length) {
     return '<div class="section">' +
@@ -434,177 +459,77 @@ function renderPipelineTab() {
   return html;
 }
 
-// ===== RENDER FORECAST TAB (แบบง่าย: เพิ่มทีละรายการ) =====
-function renderForecastTab() {
-  var months = ['มิ.ย. 69', 'ก.ค. 69', 'ส.ค. 69', 'ก.ย. 69', 'ต.ค. 69', 'พ.ย. 69', 'ธ.ค. 69', 'ม.ค. 70', 'ก.พ. 70', 'มี.ค. 70', 'เม.ย. 70', 'พ.ค. 70'];
-  
-  // สร้าง dropdown options
-  var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
-  for (var i = 0; i < allModels.length; i++) {
-    modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
-  }
-  
-  var monthOptions = '';
-  for (var i = 0; i < months.length; i++) {
-    monthOptions += '<option value="' + months[i] + '">' + months[i] + '</option>';
-  }
-  
-  // รายการที่บันทึกแล้ว
-  var itemsHtml = '';
-  var summaryByMonth = {};
-  for (var i = 0; i < forecastData.items.length; i++) {
-    var it = forecastData.items[i];
-    itemsHtml += '<div class="forecast-item" style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
-    itemsHtml += '<div style="flex:2"><strong>' + esc(it.model) + '</strong></div>';
-    itemsHtml += '<div style="width:80px;text-align:center">x' + it.qty + '</div>';
-    itemsHtml += '<div style="width:100px">' + esc(it.month) + '</div>';
-    itemsHtml += '<div style="flex:1">' + (it.projectName ? esc(it.projectName) : '<span style="color:var(--text3)">Run rate</span>') + '</div>';
-    itemsHtml += '<button class="btn btn-sm btn-danger" onclick="deleteForecastItem(' + i + ')">🗑️</button>';
-    itemsHtml += '</div>';
-    
-    if (!summaryByMonth[it.month]) summaryByMonth[it.month] = 0;
-    summaryByMonth[it.month] += it.qty;
-  }
-  
-  var summaryHtml = '<div class="summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px;margin-top:12px">';
-  for (var i = 0; i < months.length; i++) {
-    var qty = summaryByMonth[months[i]] || 0;
-    summaryHtml += '<div class="summary-card" style="text-align:center;padding:6px;background:var(--bg);border-radius:8px"><div style="font-size:11px;color:var(--text2)">' + months[i] + '</div><div style="font-size:18px;font-weight:700;color:' + (qty > 0 ? '#22c55e' : '#64748b') + '">' + qty + '</div></div>';
-  }
-  summaryHtml += '</div>';
-  
-  var html = '<div class="section">';
-  html += '<div class="section-title">📦 แผนการสั่งซื้อ</div>';
-  html += '<div class="form-row" style="margin-bottom:16px">';
-  html += '<div class="form-group"><label>📦 สินค้า</label><input type="text" id="forecastModelInput" list="modelList" placeholder="พิมพ์ชื่อสินค้า หรือเลือก..." style="width:100%"><datalist id="modelList">' + modelOptions.replace(/option value=/g, 'option value=') + '</datalist></div>';
-  html += '<div class="form-group"><label>🔢 จำนวน (ชิ้น)</label><input type="number" id="forecastQty" value="1" min="1" style="width:100%"></div>';
-  html += '<div class="form-group"><label>📅 เดือน</label><select id="forecastMonth" style="width:100%">' + monthOptions + '</select></div>';
-  html += '<div class="form-group"><label>📋 โครงการ (ถ้ามี)</label><input type="text" id="forecastProject" placeholder="ชื่อโครงการ..."></div>';
-  html += '<div><button class="btn btn-primary" onclick="addForecastItem()" style="margin-top:28px">➕ เพิ่ม</button></div>';
-  html += '</div>';
-  
-  html += '<div style="margin-top:16px"><strong>📋 รายการที่แจ้งแล้ว</strong></div>';
-  html += '<div style="max-height:300px;overflow-y:auto;margin-top:8px">' + (itemsHtml || '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการ</div>') + '</div>';
-  
-  html += '<div style="margin-top:16px"><strong>📊 สรุปรายเดือน</strong></div>';
-  html += summaryHtml;
-  
-  html += '<div class="form-row" style="margin-top:16px">';
-  html += '<button class="btn btn-primary" onclick="downloadForecastTemplate()">📎 ดาวน์โหลด Template Excel</button>';
-  html += '<div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadExcelFile(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div>';
-  html += '<button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button>';
-  html += '</div>';
-  html += '</div>';
-  
-  return html;
-}
-
-// ===== FORECAST FUNCTIONS =====
-function addForecastItem() {
-  var model = document.getElementById('forecastModelInput').value.trim();
-  var qty = parseInt(document.getElementById('forecastQty').value);
-  var month = document.getElementById('forecastMonth').value;
-  var projectName = document.getElementById('forecastProject').value.trim();
-  
-  if (!model) { alert('กรุณาเลือกสินค้า'); return; }
-  if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
-  
-  forecastData.items.push({
-    id: 'fc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    model: model,
-    qty: qty,
-    month: month,
-    projectName: projectName || '',
-    createdAt: new Date().toISOString()
-  });
-  
-  document.getElementById('forecastModelInput').value = '';
-  document.getElementById('forecastQty').value = '1';
-  document.getElementById('forecastProject').value = '';
-  
-  saveClientForecast();
-}
-
-function deleteForecastItem(idx) {
-  if (!confirm('ลบรายการนี้?')) return;
-  forecastData.items.splice(idx, 1);
-  saveClientForecast();
-}
-
-// ===== EXCEL FUNCTIONS =====
-function downloadForecastTemplate() {
-  var wsData = [['Model / สินค้า', 'จำนวน', 'เดือน', 'โครงการ (ถ้ามี)']];
-  wsData.push(['', '', 'มิ.ย. 69', '']);
-  wsData.push(['', '', 'ก.ค. 69', '']);
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
-  XLSX.writeFile(wb, 'Forecast_Template_' + new Date().toISOString().split('T')[0] + '.xlsx');
-}
-
-function uploadExcelFile(input) {
-  var file = input.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var data = new Uint8Array(e.target.result);
-    var workbook = XLSX.read(data, { type: 'array' });
-    var sheet = workbook.Sheets[workbook.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); return; }
-    
-    var newItems = [];
-    for (var i = 1; i < rows.length; i++) {
-      var row = rows[i];
-      if (!row || !row[0]) continue;
-      var model = row[0];
-      var qty = parseInt(row[1]) || 0;
-      var month = row[2];
-      var project = row[3] || '';
-      if (model && qty > 0 && month) {
-        newItems.push({ model: model, qty: qty, month: month, projectName: project });
-      }
-    }
-    
-    for (var i = 0; i < newItems.length; i++) {
-      forecastData.items.push({
-        id: 'fc_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4),
-        model: newItems[i].model,
-        qty: newItems[i].qty,
-        month: newItems[i].month,
-        projectName: newItems[i].projectName,
-        createdAt: new Date().toISOString()
-      });
-    }
-    saveClientForecast();
-    input.value = '';
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-// ===== UPDATE PIPELINE MODAL (เหมือนเก่า) =====
+// ===== UPDATE PIPELINE MODAL (แบบเต็ม เหมือนเก่า) =====
 function showUpdatePipelineModal(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
   
+  var lastLog = p.logs && p.logs.length > 0 ? p.logs[0] : null;
+  var lastUpdateText = lastLog ? lastLog.content : '';
+  
   var statusOptions = '';
   for (var i = 0; i < STATUS_LIST.length; i++) {
-    statusOptions += '<option value="' + STATUS_LIST[i].id + '"' + (p.status === STATUS_LIST[i].id ? ' selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
+    var selected = (p.status === STATUS_LIST[i].id) ? 'selected' : '';
+    statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + selected + '>' + STATUS_LIST[i].name + '</option>';
+  }
+  
+  var itemsText = '';
+  for (var i = 0; i < p.items.length; i++) {
+    itemsText += '• ' + p.items[i].model + (p.items[i].qty > 1 ? ' x' + p.items[i].qty : '') + '<br>';
   }
   
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
-  modalHtml += '<div class="modal-container">';
-  modalHtml += '<div class="modal-header"><h3>📝 อัพเดทโครงการ: ' + esc(p.projectName) + '</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
-  modalHtml += '<div class="modal-body">';
-  modalHtml += '<div class="form-group"><label>📋 สถานะปัจจุบัน</label><select id="updateStatus" class="form-control">' + statusOptions + '</select></div>';
-  modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท *</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว, อยู่ระหว่างส่งมอบ..."></textarea></div>';
-  modalHtml += '<div class="form-group"><label>📅 Bidding Date (ถ้ามี)</label><input type="text" id="updateBidding" placeholder="DD/MM/YYYY" value="' + (p.biddingDate !== '-' ? p.biddingDate : '') + '"></div>';
-  modalHtml += '<div class="form-group"><label>📅 Shipment Date (ถ้ามี)</label><input type="text" id="updateShipment" placeholder="DD/MM/YYYY" value="' + (p.shipmentDate !== '-' ? p.shipmentDate : '') + '"></div>';
+  modalHtml += '<div class="modal-container" style="max-width:500px;width:90%">';
+  
+  modalHtml += '<div class="modal-header">';
+  modalHtml += '<h3>📝 อัพเดทโครงการ</h3>';
+  modalHtml += '<button class="modal-close" onclick="closeModal()">✕</button>';
   modalHtml += '</div>';
+  
+  modalHtml += '<div class="modal-body">';
+  
+  modalHtml += '<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:16px">';
+  modalHtml += '<div style="font-weight:700;margin-bottom:4px">' + esc(p.projectName) + '</div>';
+  modalHtml += '<div style="font-size:12px;color:var(--text2)">' + esc(p.endUserTH) + '</div>';
+  modalHtml += '<div style="font-size:12px;margin-top:4px">' + itemsText + '</div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📊 สถานะปัจจุบัน</label>';
+  modalHtml += '<select id="updateStatus" class="form-control" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">' + statusOptions + '</select>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📝 รายละเอียดอัพเดท *</label>';
+  modalHtml += '<textarea id="updateContent" rows="4" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)" placeholder="เช่น ได้รับ PO แล้ว, กำลังรอส่งมอบ, เอกสารเรียบร้อย..."></textarea>';
+  modalHtml += '</div>';
+  
+  modalHtml += '<div class="form-row">';
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📅 Bidding Date</label>';
+  modalHtml += '<input type="date" id="updateBidding" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)" value="' + (p.biddingDate !== '-' && p.biddingDate ? p.biddingDate.split('/').reverse().join('-') : '') + '">';
+  modalHtml += '</div>';
+  modalHtml += '<div class="form-group">';
+  modalHtml += '<label>📅 Shipment Date</label>';
+  modalHtml += '<input type="date" id="updateShipment" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)" value="' + (p.shipmentDate !== '-' && p.shipmentDate ? p.shipmentDate.split('/').reverse().join('-') : '') + '">';
+  modalHtml += '</div>';
+  modalHtml += '</div>';
+  
+  if (lastUpdateText) {
+    modalHtml += '<div class="form-group">';
+    modalHtml += '<label>📝 อัพเดทล่าสุด</label>';
+    modalHtml += '<div style="padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text2)">' + esc(lastUpdateText) + '</div>';
+    modalHtml += '</div>';
+  }
+  
+  modalHtml += '</div>';
+  
   modalHtml += '<div class="modal-footer">';
   modalHtml += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
   modalHtml += '<button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 บันทึกอัพเดท</button>';
-  modalHtml += '</div></div></div>';
+  modalHtml += '</div>';
+  
+  modalHtml += '</div></div>';
   
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
@@ -612,16 +537,27 @@ function showUpdatePipelineModal(pipeId) {
 function submitPipelineUpdate(pipeId) {
   var newStatus = document.getElementById('updateStatus').value;
   var content = document.getElementById('updateContent').value.trim();
-  var biddingDate = document.getElementById('updateBidding').value.trim();
-  var shipmentDate = document.getElementById('updateShipment').value.trim();
+  var biddingDateInput = document.getElementById('updateBidding').value;
+  var shipmentDateInput = document.getElementById('updateShipment').value;
   
-  if (!content) { alert('กรุณาใส่รายละเอียดอัพเดท'); return; }
+  var biddingDate = biddingDateInput ? biddingDateInput.split('-').reverse().join('/') : '';
+  var shipmentDate = shipmentDateInput ? shipmentDateInput.split('-').reverse().join('/') : '';
+  
+  if (!content) {
+    alert('กรุณาใส่รายละเอียดอัพเดท');
+    return;
+  }
   
   var allPipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
   var oldStatus = '';
+  var oldBidding = '';
+  var oldShipment = '';
+  
   for (var i = 0; i < allPipes.length; i++) {
     if (allPipes[i].id === pipeId) {
-      oldStatus = allPipes[i].status;
+      oldStatus = allPipes[i].status || 'prospect';
+      oldBidding = allPipes[i].biddingDate || '';
+      oldShipment = allPipes[i].shipmentDate || '';
       allPipes[i].status = newStatus;
       if (biddingDate) allPipes[i].biddingDate = biddingDate;
       if (shipmentDate) allPipes[i].shipmentDate = shipmentDate;
@@ -630,13 +566,21 @@ function submitPipelineUpdate(pipeId) {
   }
   localStorage.setItem('v7_pipeline', JSON.stringify(allPipes));
   
-  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
   var logMsg = content;
-  if (oldStatus && newStatus !== oldStatus) {
-    var oldName = STATUS_LIST.find(s => s.id === oldStatus)?.name || oldStatus;
-    var newName = STATUS_LIST.find(s => s.id === newStatus)?.name || newStatus;
-    logMsg = '🔄 เปลี่ยนสถานะ: ' + oldName + ' → ' + newName + '\n' + content;
+  var oldStatusName = getStatusNameFromId(oldStatus);
+  var newStatusName = getStatusNameFromId(newStatus);
+  
+  if (oldStatusName !== newStatusName) {
+    logMsg = '🔄 เปลี่ยนสถานะ: ' + oldStatusName + ' → ' + newStatusName + '\n' + content;
   }
+  if (biddingDate && biddingDate !== oldBidding) {
+    logMsg += '\n📅 Bidding: ' + biddingDate;
+  }
+  if (shipmentDate && shipmentDate !== oldShipment) {
+    logMsg += '\n🚚 Shipment: ' + shipmentDate;
+  }
+  
+  var pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]');
   pipeLogs.unshift({
     id: 'log_' + Date.now(),
     pipeId: pipeId,
@@ -646,16 +590,16 @@ function submitPipelineUpdate(pipeId) {
   });
   localStorage.setItem('v7_pipelog', JSON.stringify(pipeLogs));
   
-  // สร้าง Task ให้พนักงาน
   var tasks = JSON.parse(localStorage.getItem('v7_tasks') || '[]');
+  var project = pipelinesData.find(function(p) { return p.id === pipeId; });
   tasks.unshift({
     id: 'task_' + Date.now(),
-    title: '📋 ลูกค้าอัพเดทโครงการ: ' + (pipelinesData.find(p => p.id === pipeId)?.projectName || ''),
+    title: '📋 ลูกค้าอัพเดทโครงการ: ' + (project ? project.projectName : ''),
     description: 'ลูกค้า ' + dealerName + ' อัพเดทโครงการ\n\n' + logMsg,
     pipeId: pipeId,
     dealerId: dealerId,
     dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
-    priority: 'medium',
+    priority: 'high',
     status: 'active',
     category: 'Client Update'
   });
@@ -663,7 +607,12 @@ function submitPipelineUpdate(pipeId) {
   
   showSuccessToast('✅ อัพเดทเรียบร้อยแล้ว!');
   closeModal();
-  setTimeout(function() { loadPipeline(); loadTimeline(); renderCurrentTab(); }, 500);
+  
+  setTimeout(function() { 
+    loadPipeline(); 
+    loadTimeline(); 
+    renderCurrentTab(); 
+  }, 500);
 }
 
 // ===== ADD NEW PROJECT MODAL =====
@@ -779,6 +728,152 @@ function submitNewProject() {
   showSuccessToast('✅ เพิ่มโครงการ "' + projectName + '" เรียบร้อยแล้ว');
   closeModal();
   setTimeout(function() { loadPipeline(); loadTimeline(); renderCurrentTab(); }, 500);
+}
+
+// ===== RENDER FORECAST TAB =====
+function renderForecastTab() {
+  var months = ['มิ.ย. 69', 'ก.ค. 69', 'ส.ค. 69', 'ก.ย. 69', 'ต.ค. 69', 'พ.ย. 69', 'ธ.ค. 69', 'ม.ค. 70', 'ก.พ. 70', 'มี.ค. 70', 'เม.ย. 70', 'พ.ค. 70'];
+  
+  var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < allModels.length; i++) {
+    modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
+  }
+  
+  var monthOptions = '';
+  for (var i = 0; i < months.length; i++) {
+    monthOptions += '<option value="' + months[i] + '">' + months[i] + '</option>';
+  }
+  
+  var itemsHtml = '';
+  var summaryByMonth = {};
+  for (var i = 0; i < forecastData.items.length; i++) {
+    var it = forecastData.items[i];
+    itemsHtml += '<div class="forecast-item">';
+    itemsHtml += '<div style="flex:2"><strong>' + esc(it.model) + '</strong></div>';
+    itemsHtml += '<div style="width:80px;text-align:center">x' + it.qty + '</div>';
+    itemsHtml += '<div style="width:100px">' + esc(it.month) + '</div>';
+    itemsHtml += '<div style="flex:1">' + (it.projectName ? esc(it.projectName) : '<span style="color:var(--text3)">Run rate</span>') + '</div>';
+    itemsHtml += '<button class="btn btn-sm btn-danger" onclick="deleteForecastItem(' + i + ')">🗑️</button>';
+    itemsHtml += '</div>';
+    
+    if (!summaryByMonth[it.month]) summaryByMonth[it.month] = 0;
+    summaryByMonth[it.month] += it.qty;
+  }
+  
+  var summaryHtml = '<div class="summary-grid">';
+  for (var i = 0; i < months.length; i++) {
+    var qty = summaryByMonth[months[i]] || 0;
+    summaryHtml += '<div class="summary-card"><div style="font-size:11px;color:var(--text2)">' + months[i] + '</div><div style="font-size:18px;font-weight:700;color:' + (qty > 0 ? '#22c55e' : '#64748b') + '">' + qty + '</div></div>';
+  }
+  summaryHtml += '</div>';
+  
+  var html = '<div class="section">';
+  html += '<div class="section-title">📦 แผนการสั่งซื้อ</div>';
+  html += '<div class="form-row" style="margin-bottom:16px">';
+  html += '<div class="form-group"><label>📦 สินค้า</label><input type="text" id="forecastModelInput" list="modelList" placeholder="พิมพ์ชื่อสินค้า หรือเลือก..." style="width:100%"><datalist id="modelList">' + modelOptions.replace(/option value=/g, 'option value=') + '</datalist></div>';
+  html += '<div class="form-group"><label>🔢 จำนวน (ชิ้น)</label><input type="number" id="forecastQty" value="1" min="1" style="width:100%"></div>';
+  html += '<div class="form-group"><label>📅 เดือน</label><select id="forecastMonth" style="width:100%">' + monthOptions + '</select></div>';
+  html += '<div class="form-group"><label>📋 โครงการ (ถ้ามี)</label><input type="text" id="forecastProject" placeholder="ชื่อโครงการ..."></div>';
+  html += '<div><button class="btn btn-primary" onclick="addForecastItem()" style="margin-top:28px">➕ เพิ่ม</button></div>';
+  html += '</div>';
+  
+  html += '<div style="margin-top:16px"><strong>📋 รายการที่แจ้งแล้ว</strong></div>';
+  html += '<div style="max-height:300px;overflow-y:auto;margin-top:8px">' + (itemsHtml || '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการ</div>') + '</div>';
+  
+  html += '<div style="margin-top:16px"><strong>📊 สรุปรายเดือน</strong></div>';
+  html += summaryHtml;
+  
+  html += '<div class="form-row" style="margin-top:16px">';
+  html += '<button class="btn btn-primary" onclick="downloadForecastTemplate()">📎 ดาวน์โหลด Template Excel</button>';
+  html += '<div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadExcelFile(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div>';
+  html += '<button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button>';
+  html += '</div>';
+  html += '</div>';
+  
+  return html;
+}
+
+// ===== FORECAST FUNCTIONS =====
+function addForecastItem() {
+  var model = document.getElementById('forecastModelInput').value.trim();
+  var qty = parseInt(document.getElementById('forecastQty').value);
+  var month = document.getElementById('forecastMonth').value;
+  var projectName = document.getElementById('forecastProject').value.trim();
+  
+  if (!model) { alert('กรุณาเลือกสินค้า'); return; }
+  if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
+  
+  forecastData.items.push({
+    id: 'fc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    model: model,
+    qty: qty,
+    month: month,
+    projectName: projectName || '',
+    createdAt: new Date().toISOString()
+  });
+  
+  document.getElementById('forecastModelInput').value = '';
+  document.getElementById('forecastQty').value = '1';
+  document.getElementById('forecastProject').value = '';
+  
+  saveClientForecast();
+}
+
+function deleteForecastItem(idx) {
+  if (!confirm('ลบรายการนี้?')) return;
+  forecastData.items.splice(idx, 1);
+  saveClientForecast();
+}
+
+// ===== EXCEL FUNCTIONS =====
+function downloadForecastTemplate() {
+  var wsData = [['Model / สินค้า', 'จำนวน', 'เดือน', 'โครงการ (ถ้ามี)']];
+  wsData.push(['', '', 'มิ.ย. 69', '']);
+  wsData.push(['', '', 'ก.ค. 69', '']);
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
+  XLSX.writeFile(wb, 'Forecast_Template_' + new Date().toISOString().split('T')[0] + '.xlsx');
+}
+
+function uploadExcelFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var data = new Uint8Array(e.target.result);
+    var workbook = XLSX.read(data, { type: 'array' });
+    var sheet = workbook.Sheets[workbook.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); return; }
+    
+    var newItems = [];
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row || !row[0]) continue;
+      var model = row[0];
+      var qty = parseInt(row[1]) || 0;
+      var month = row[2];
+      var project = row[3] || '';
+      if (model && qty > 0 && month) {
+        newItems.push({ model: model, qty: qty, month: month, projectName: project });
+      }
+    }
+    
+    for (var i = 0; i < newItems.length; i++) {
+      forecastData.items.push({
+        id: 'fc_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4),
+        model: newItems[i].model,
+        qty: newItems[i].qty,
+        month: newItems[i].month,
+        projectName: newItems[i].projectName,
+        createdAt: new Date().toISOString()
+      });
+    }
+    saveClientForecast();
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ===== RENDER TIMELINE TAB =====
