@@ -409,6 +409,61 @@ body {
 }
 .cv-back:hover { background: var(--accent-light); }
 
+/* ===== FIX DARK MODE TEXT COLOR ===== */
+/* ทำให้ข้อความใน Dark Mode เป็นสีขาวทั้งหมด */
+.theme-light .forecast-item,
+.theme-light .project-item,
+.theme-light .month-card,
+.theme-light .stat-card,
+.theme-light .section,
+.theme-light .form-group input,
+.theme-light .form-group select,
+.theme-light .form-group textarea,
+.theme-light .btn,
+.theme-light .data-table td,
+.theme-light .data-table th {
+  color: #1e293b !important;
+}
+
+/* Dark Mode - ข้อความต้องสว่าง */
+.forecast-item,
+.project-item,
+.month-card,
+.stat-card {
+  color: var(--text) !important;
+}
+
+.forecast-item strong,
+.project-item .project-name,
+.month-card .month-name {
+  color: var(--text) !important;
+}
+
+/* ปุ่มใน dark mode */
+.btn-sm {
+  color: var(--text2) !important;
+}
+.btn-sm:hover {
+  color: var(--accent) !important;
+}
+
+/* Dropdown ใน dark mode */
+select, option {
+  color: var(--text) !important;
+  background: var(--input-bg) !important;
+}
+
+/* สินค้าในโครงการ */
+.project-items {
+  color: var(--text2) !important;
+}
+
+/* รายละเอียดสินค้า */
+[style*="font-size:11px"],
+[style*="font-size:12px"] {
+  color: var(--text2) !important;
+}
+
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -589,13 +644,14 @@ function loadModels() {
 // ===== FORECAST FUNCTIONS =====
 function selectMonth(month) {
   selectedMonth = month;
-  renderForecastTab();
+  renderForecastTab();  // รีเฟรชทันที
 }
 
 function prevMonth() {
   var idx = allMonths.indexOf(selectedMonth);
   if (idx > 0) {
-    selectMonth(allMonths[idx - 1]);
+    selectedMonth = allMonths[idx - 1];
+    renderForecastTab();  // รีเฟรชทันที
   } else {
     showSuccessToast('📅 นี่คือเดือนแรกสุดแล้ว');
   }
@@ -604,7 +660,8 @@ function prevMonth() {
 function nextMonth() {
   var idx = allMonths.indexOf(selectedMonth);
   if (idx < allMonths.length - 1) {
-    selectMonth(allMonths[idx + 1]);
+    selectedMonth = allMonths[idx + 1];
+    renderForecastTab();  // รีเฟรชทันที
   } else {
     showSuccessToast('📅 นี่คือเดือนสุดท้ายในแผนแล้ว');
   }
@@ -657,8 +714,8 @@ function addRunrateItem() {
   document.getElementById('runrateModel').value = '';
   document.getElementById('runrateQty').value = '1';
   saveClientForecast();
+  renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
 }
-
 function deleteRunrateItem(idx) {
   if (!confirm('ลบรายการนี้?')) return;
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
@@ -670,8 +727,8 @@ function deleteRunrateItem(idx) {
     }
   }
   saveClientForecast();
+  renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
 }
-
 function editRunrateItem(idx) {
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
   var actualItem = monthRunrate[idx];
@@ -685,9 +742,9 @@ function editRunrateItem(idx) {
       }
     }
     saveClientForecast();
+    renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
   }
 }
-
 function loadClientForecast() {
   var key = 'v7_client_forecast_' + dealerId;
   var localData = localStorage.getItem(key);
@@ -736,6 +793,7 @@ function deleteProjectItem(projIdx) {
   if (!confirm('ลบโครงการนี้?')) return;
   forecastData.projects.splice(projIdx, 1);
   saveClientForecast();
+  renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
 }
 
 function toggleProjectDetail(projIdx) {
@@ -749,6 +807,7 @@ function editProjectItem(projIdx) {
   if (newName && newName.trim()) {
     proj.projectName = newName.trim();
     saveClientForecast();
+    renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
   }
 }
 
@@ -878,6 +937,7 @@ function addNewProject() {
   renderNewProjectItemsList();
   
   saveClientForecast();
+  renderForecastTab();  // ✅ เพิ่มบรรทัดนี้: รีเฟรชทันที
 }
 
 // ===== RENDER FORECAST TAB =====
