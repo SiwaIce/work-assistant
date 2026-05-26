@@ -6013,3 +6013,663 @@ body.mobile-mode .card {
 .card h2 .ml {
   margin-left: auto !important;
 }
+/* ============================================================
+   DEALER DETAIL PAGE - PREMIUM ENHANCEMENTS
+   ============================================================ */
+
+/* Dealer Detail Main Container */
+.dealer-detail-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Hero Section - Dealer Header */
+.dealer-hero {
+  background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.05) 100%);
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dealer-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7);
+}
+
+.dealer-name-large {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dealer-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dealer-badge-platinum {
+  background: linear-gradient(135deg, #e5e4e2, #c0c0c0);
+  color: #1e293b;
+}
+
+.dealer-badge-gold {
+  background: linear-gradient(135deg, #ffd700, #ffb347);
+  color: #1e293b;
+}
+
+.dealer-meta-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.dealer-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+/* Stats Grid - Premium */
+.dealer-stats-premium {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-premium-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 12px;
+  text-align: center;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-premium-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.stat-premium-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.stat-premium-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.stat-premium-label {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Company Info Card */
+.company-info-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card-header-premium {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border);
+}
+
+.card-header-premium h3 {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.card-header-premium h3 i {
+  font-size: 20px;
+}
+
+.company-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.info-icon {
+  font-size: 18px;
+  min-width: 32px;
+  color: var(--accent);
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  word-break: break-word;
+}
+
+/* Certification Section */
+.cert-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.cert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cert-item-premium {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.cert-item-premium:hover {
+  border-color: var(--accent);
+  background: rgba(59,130,246,0.03);
+}
+
+.cert-icon {
+  font-size: 24px;
+}
+
+.cert-info {
+  flex: 1;
+}
+
+.cert-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.cert-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.cert-status.valid {
+  background: rgba(34,197,94,0.15);
+  color: #22c55e;
+}
+
+.cert-status.expired {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+}
+
+.cert-status.warning {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+}
+
+/* Health Score Widget */
+.health-widget {
+  background: linear-gradient(135deg, var(--card) 0%, rgba(34,197,94,0.05) 100%);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+}
+
+.health-score-container {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.health-score-circle {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+}
+
+.health-score-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.health-score-label {
+  font-size: 10px;
+  color: var(--text2);
+  text-align: center;
+}
+
+.health-details {
+  flex: 1;
+}
+
+.health-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.health-metric {
+  text-align: center;
+  padding: 8px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 10px;
+}
+
+.health-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.health-metric-label {
+  font-size: 10px;
+  color: var(--text2);
+}
+
+/* Tabs - Premium Styling */
+.tab-bar-premium {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 6px;
+  border: 1px solid var(--border);
+}
+
+.tab-btn-premium {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text2);
+  transition: all 0.2s;
+  text-align: center;
+  background: transparent;
+  border: none;
+}
+
+.tab-btn-premium:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.03);
+}
+
+.tab-btn-premium.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+}
+
+/* Contact Person Card */
+.contact-premium {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+
+.contact-premium:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.contact-header-premium {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.contact-avatar {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--accent), #60a5fa);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.contact-name-premium {
+  flex: 1;
+}
+
+.contact-name-premium h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.contact-title {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.contact-actions-premium {
+  display: flex;
+  gap: 8px;
+}
+
+.contact-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.contact-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.contact-detail-item i {
+  color: var(--accent);
+}
+
+/* Visit History Timeline */
+.timeline-premium {
+  position: relative;
+  padding-left: 30px;
+}
+
+.timeline-premium::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
+
+.timeline-item-premium {
+  position: relative;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 0.2s;
+}
+
+.timeline-item-premium:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.timeline-dot-premium {
+  position: absolute;
+  left: -26px;
+  top: 20px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.timeline-date-premium {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-content-premium {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Pipeline Summary Card */
+.pipeline-summary-premium {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.pipeline-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pipeline-stat-item {
+  text-align: center;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+}
+
+.pipeline-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.pipeline-stat-label {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .dealer-stats-premium {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .company-info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .pipeline-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .dealer-hero {
+    padding: 16px;
+  }
+  
+  .dealer-name-large {
+    font-size: 22px;
+  }
+  
+  .dealer-stats-premium {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  
+  .stat-premium-value {
+    font-size: 22px;
+  }
+  
+  .health-score-container {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .health-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .tab-bar-premium {
+    flex-wrap: wrap;
+  }
+  
+  .tab-btn-premium {
+    flex: auto;
+    min-width: calc(33% - 4px);
+  }
+  
+  .cert-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .contact-detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dealer-stats-premium {
+    grid-template-columns: 1fr;
+  }
+  
+  .tab-btn-premium {
+    min-width: calc(50% - 4px);
+  }
+}
+
+/* Animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dealer-hero,
+.stat-premium-card,
+.company-info-card,
+.cert-section,
+.health-widget,
+.tab-bar-premium {
+  animation: slideIn 0.3s ease forwards;
+}
+
+.stat-premium-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-premium-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-premium-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-premium-card:nth-child(4) { animation-delay: 0.2s; }
+.stat-premium-card:nth-child(5) { animation-delay: 0.25s; }
+
+/* Light Theme Specific */
+.theme-light .dealer-hero {
+  background: linear-gradient(135deg, #ffffff 0%, rgba(59,130,246,0.03) 100%);
+}
+
+.theme-light .stat-premium-card {
+  background: #ffffff;
+}
+
+.theme-light .cert-item-premium {
+  background: #f8fafc;
+}
+
+.theme-light .timeline-item-premium {
+  background: #ffffff;
+}
+
+/* Midnight Theme Specific */
+.theme-midnight .dealer-hero {
+  background: linear-gradient(135deg, #09090b 0%, rgba(74,222,128,0.05) 100%);
+}
+
+.theme-midnight .stat-premium-card {
+  background: #09090b;
+}
+
+.theme-midnight .health-widget {
+  background: linear-gradient(135deg, #09090b 0%, rgba(74,222,128,0.05) 100%);
+}
