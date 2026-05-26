@@ -5908,3 +5908,39 @@ body.mobile-mode .card {
   color: #f59e0b;
   margin-top: 4px;
 }
+/* ===== FIX DEALER DETAIL WIDTH ===== */
+#main, #ct, .cv-container, .container {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.tab-bar {
+  width: 100% !important;
+  overflow-x: auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+}
+
+.tab-btn {
+  flex-shrink: 0 !important;
+}
+
+.fr {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .fr {
+    grid-template-columns: 1fr !important;
+  }
+}
