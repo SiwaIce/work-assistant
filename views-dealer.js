@@ -1614,6 +1614,9 @@ function toggleDealerDoneTasks() {
 // ================================================================
 // CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู)
 // ================================================================
+// ================================================================
+// CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู)
+// ================================================================
 function openClientView(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
@@ -1769,7 +1772,7 @@ function buildClientViewHTML(dealerId, pipeId) {
   h += '<div>' + (cfg.saleName || 'Siwawong') + ' | ' + _td() + '</div>';
   h += '</div>';
 
-  // JavaScript functions
+  // JavaScript functions - แบบเรียบง่าย ไม่ซับซ้อน
   h += '<script>';
   h += 'var cvShowVal=false;';
   h += 'function toggleCVValue(){cvShowVal=!cvShowVal;var cols=document.querySelectorAll(".cv-val-col");for(var i=0;i<cols.length;i++){cols[i].style.display=cvShowVal?"table-cell":"none";}var lbl=document.getElementById("cvValLabel");if(lbl)lbl.textContent=cvShowVal?"ซ่อนมูลค่า":"แสดงมูลค่า";}';
@@ -1780,64 +1783,11 @@ function buildClientViewHTML(dealerId, pipeId) {
   h += 'function ftParseDate(str){if(!str)return null;var p=str.split("/");if(p.length!==3)return null;return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));}';
   h += 'function getPipeActions(){var saved=localStorage.getItem("v7_pipeActions");if(saved){try{return JSON.parse(saved);}catch(e){return[];}}return[];}';
   h += 'function saveCVUpdate(pipeId, dealerId){var text=document.getElementById("cvUpdateInput").value.trim();if(!text){alert("กรุณาพิมพ์ข้อความ");return;}if(window.opener){window.opener.postMessage({type:"CV_UPDATE",pipeId:pipeId,dealerId:dealerId,text:text},"*");alert("✅ ส่งอัพเดทเรียบร้อยแล้ว! ขอบคุณครับ");document.getElementById("cvUpdateInput").value="";}else{alert("ไม่สามารถส่งอัพเดทได้ กรุณาแจ้งพนักงานขาย");}}';
-  h += 'function showCVDetail(pipeId, dealerId){var container=document.querySelector(".cv-container");var headerHtml=document.querySelector(".cv-header").outerHTML;var footerHtml=document.querySelector(".cv-footer").outerHTML;var p=' + JSON.stringify(activePipes.map(function(p) {
-    return {
-      id: p.id,
-      projectName: p.projectName,
-      endUserTH: p.endUserTH,
-      endUserEN: p.endUserEN,
-      unitType: p.unitType,
-      status: p.status,
-      biddingDate: p.biddingDate,
-      shipmentDate: p.shipmentDate,
-      tor: p.tor,
-      nextAction: p.nextAction,
-      forecastAmount: p.forecastAmount,
-      items: getPipeItems(p),
-      actions: getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === "pending"; }),
-      logs: ST.pipeLogsByPipe(p.id).filter(function(l) {
-        var safeTypes = ["update","progress","status_change","win","action"];
-        if (safeTypes.indexOf(l.type) === -1) return false;
-        var c = (l.content || "").toLowerCase();
-        if (c.indexOf("forecast") !== -1 || c.indexOf("ราคา") !== -1 || c.indexOf("price") !== -1 || c.indexOf("lost") !== -1 || c.indexOf("หมายเหตุ") !== -1) return false;
-        return true;
-      }).slice(0, 10)
-    };
-  })) + ';';
-  h += 'for(var i=0;i<p.length;i++){if(p[i].id===pipeId){p=p[i];break;}}';
-  h += 'if(!p)return;var h2=headerHtml;';
-  h += 'h2+="<div class=\"cv-back\" onclick=\"location.reload()\">← กลับ</div>";';
-  h += 'h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📊 "+esc(p.projectName||"-")+"</div>";';
-  h += 'h2+="<div class=\"cv-detail-grid\">";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Status</div><div class=\"cv-detail-val\">"+getStatusLabel(p.status)+"</div></div>";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">End User</div><div class=\"cv-detail-val\">"+esc(p.endUserTH||p.endUserEN||"-")+"</div></div>";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Unit Type</div><div class=\"cv-detail-val\">"+(p.unitType||"-")+"</div></div>";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Bidding</div><div class=\"cv-detail-val\">"+(p.biddingDate||"-")+"</div></div>";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Shipment</div><div class=\"cv-detail-val\">"+(p.shipmentDate||"-")+"</div></div>";';
-  h += 'h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">TOR</div><div class=\"cv-detail-val\">"+(p.tor||"-")+"</div></div>";';
-  h += 'h2+="</div></div>";';
-  h += 'if(p.items&&p.items.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📦 Products ("+p.items.length+")</div>";';
-  h += 'h2+="<table class=\"cv-table\"><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>";';
-  h += 'p.items.forEach(function(it,idx){h2+="<tr><td class=\"cv-num\">"+(idx+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td></tr>";});';
-  h += 'h2+="</tbody></table></div>";}';
-  h += 'if(p.actions&&p.actions.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">🎯 Action Items ("+p.actions.length+")</div>";';
-  h += 'p.actions.forEach(function(a){h2+="<div class=\"cv-action\"><div class=\"cv-action-text\">⏳ "+esc(a.text)+"</div>";if(a.dueDate)h2+="<div class=\"cv-action-meta\">📅 กำหนด: "+a.dueDate+"</div>";h2+="</div>";});';
-  h += 'h2+="</div>";}';
-  h += 'if(p.logs&&p.logs.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📝 Updates ("+p.logs.length+")</div>";';
-  h += 'p.logs.forEach(function(l){var icon=l.type==="progress"?"🟢":l.type==="win"?"✅":l.type==="status_change"?"🔄":"📝";var dateStr=l.date?l.date.split("T")[0]:"-";';
-  h += 'h2+="<div class=\"cv-log\"><span class=\"cv-log-date\">"+dateStr+"</span><span class=\"cv-log-icon\">"+icon+"</span><span class=\"cv-log-text\">"+esc((l.content||"").substr(0,80))+"</span></div>";});';
-  h += 'h2+="</div>";}';
-  // Update button
-  h += 'h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">✏️ สอบถามเพิ่มเติม / อัพเดท</div>";';
-  h += 'h2+="<div style=\"display:flex;gap:6px\">";';
-  h += 'h2+="<input type=\"text\" id=\"cvUpdateInput\" placeholder=\"พิมพ์ข้อความอัพเดท...\" style=\"flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px\">";';
-  h += 'h2+="<button onclick=\"saveCVUpdate(\'"+p.id+"\', \'"+dealerId+"\')\" style=\"padding:8px 16px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:13px\">💾 ส่งอัพเดท</button>";';
-  h += 'h2+="</div>";';
-  h += 'h2+="<div style=\"font-size:11px;color:#8892b0;margin-top:4px\">💡 อัพเดทจะถูกบันทึกทันที</div>";';
-  h += 'h2+="</div>";';
-  h += 'h2+=footerHtml;container.innerHTML=h2;}';
+  h += 'function showCVDetail(pipeId, dealerId){var container=document.querySelector(".cv-container");var headerHtml=document.querySelector(".cv-header").outerHTML;var footerHtml=document.querySelector(".cv-footer").outerHTML;fetch("/api/pipeline?id="+pipeId).then(r=>r.json()).then(p=>{if(!p)return;var h2=headerHtml;h2+="<div class=\"cv-back\" onclick=\"location.reload()\">← กลับ</div>";h2+=buildDetailPage(p, dealerId);h2+=footerHtml;container.innerHTML=h2;}).catch(()=>{alert("ไม่สามารถโหลดข้อมูลได้");});}';
+  h += 'function buildDetailPage(p, dealerId){var h2="";h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📊 "+esc(p.projectName||"-")+"</div>";h2+="<div class=\"cv-detail-grid\">";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Status</div><div class=\"cv-detail-val\">"+getStatusLabel(p.status)+"</div></div>";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">End User</div><div class=\"cv-detail-val\">"+esc(p.endUserTH||p.endUserEN||"-")+"</div></div>";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Unit Type</div><div class=\"cv-detail-val\">"+(p.unitType||"-")+"</div></div>";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Bidding</div><div class=\"cv-detail-val\">"+(p.biddingDate||"-")+"</div></div>";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">Shipment</div><div class=\"cv-detail-val\">"+(p.shipmentDate||"-")+"</div></div>";h2+="<div class=\"cv-detail-item\"><div class=\"cv-detail-label\">TOR</div><div class=\"cv-detail-val\">"+(p.tor||"-")+"</div></div>";h2+="</div></div>";if(p.items&&p.items.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📦 Products ("+p.items.length+")</div><table class=\"cv-table\"><thead><tr><th>#</th><th>Model</th><th>QTY</th></tr></thead><tbody>";p.items.forEach(function(it,idx){h2+="<tr><td class=\"cv-num\">"+(idx+1)+"</td><td>"+esc(it.model||"-")+"</td><td>"+(it.qty||1)+"</td></tr>";});h2+="</tbody></table></div>";}if(p.actions&&p.actions.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">🎯 Action Items ("+p.actions.length+")</div>";p.actions.forEach(function(a){h2+="<div class=\"cv-action\"><div class=\"cv-action-text\">⏳ "+esc(a.text)+"</div>";if(a.dueDate)h2+="<div class=\"cv-action-meta\">📅 กำหนด: "+a.dueDate+"</div>";h2+="</div>";});h2+="</div>";}if(p.logs&&p.logs.length){h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">📝 Updates ("+p.logs.length+")</div>";p.logs.forEach(function(l){var icon=l.type==="progress"?"🟢":l.type==="win"?"✅":l.type==="status_change"?"🔄":"📝";var dateStr=l.date?l.date.split("T")[0]:"-";h2+="<div class=\"cv-log\"><span class=\"cv-log-date\">"+dateStr+"</span><span class=\"cv-log-icon\">"+icon+"</span><span class=\"cv-log-text\">"+esc((l.content||"").substr(0,80))+"</span></div>";});h2+="</div>";}h2+="<div class=\"cv-section\"><div class=\"cv-section-title\">✏️ สอบถามเพิ่มเติม / อัพเดท</div><div style=\"display:flex;gap:6px\"><input type=\"text\" id=\"cvUpdateInput\" placeholder=\"พิมพ์ข้อความอัพเดท...\" style=\"flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e0e6f0;font-size:13px\"><button onclick=\"saveCVUpdate(\'"+p.id+"\', \'"+dealerId+"\')\" style=\"padding:8px 16px;border-radius:8px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:13px\">💾 ส่งอัพเดท</button></div><div style=\"font-size:11px;color:#8892b0;margin-top:4px\">💡 อัพเดทจะถูกบันทึกทันที</div></div>";return h2;}';
   h += '<\/script>';
   h += '</body></html>';
+  
   return h;
 }
 
@@ -1933,6 +1883,19 @@ function buildClientProjectDetail(pipeId, dealerId) {
   h += '</div>';
   
   return h;
+}
+
+// ฟังก์ชัน saveCVUpdate สำหรับใช้ในหน้า detail (fallback)
+function saveCVUpdate(pipeId, dealerId) {
+  var text = document.getElementById('cvUpdateInput') ? document.getElementById('cvUpdateInput').value.trim() : '';
+  if (!text) { alert('กรุณาพิมพ์ข้อความ'); return; }
+  if (window.opener) {
+    window.opener.postMessage({ type: 'CV_UPDATE', pipeId: pipeId, dealerId: dealerId, text: text }, '*');
+    alert('✅ ส่งอัพเดทเรียบร้อยแล้ว! ขอบคุณครับ');
+    if (document.getElementById('cvUpdateInput')) document.getElementById('cvUpdateInput').value = '';
+  } else {
+    alert('ไม่สามารถส่งอัพเดทได้ กรุณาแจ้งพนักงานขาย');
+  }
 }
 
 function getClientStatusLabel(status) {

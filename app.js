@@ -1569,18 +1569,14 @@ window.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'CV_UPDATE') {
     var data = event.data;
     if (data.pipeId && data.text) {
-      // Add log to pipeline
       ST.add('pipeLog', {
         pipeId: data.pipeId,
         type: 'update',
         content: '📞 ลูกค้าสอบถาม/อัพเดท: ' + data.text,
         date: _nw()
       });
-      
-      // Show notification
       toast('📬 ได้รับอัพเดทจากลูกค้า!');
       
-      // Create follow-up task
       var pipe = ST.getOne('pipeline', data.pipeId);
       if (pipe) {
         ST.add('tasks', {
@@ -1594,8 +1590,6 @@ window.addEventListener('message', function(event) {
           category: 'Client'
         });
       }
-      
-      // Refresh to show new log
       setTimeout(function() { render(); }, 500);
     }
   }
