@@ -1,3 +1,5 @@
+// ===== GOOGLE SHEETS API CONFIG =====
+var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxxx/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
 // ================================================================
 // DEFAULT CONFIG
 // ================================================================
@@ -1914,4 +1916,91 @@ function goToDealerForecast(dealerId) {
     dealerTab = 'forecast';
     if (typeof render === 'function') render();
   }, 100);
+}
+// ===== SYNC WITH GOOGLE SHEETS =====
+function syncFirebaseToSheets() {
+  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
+    toast('❌ กรุณาตั้งค่า SHEETS_API_URL ก่อน');
+    return;
+  }
+  
+  if (!confirm('📤 ส่งข้อมูลจาก Firebase ไปยัง Google Sheets?\n\nข้อมูล Pipeline ทั้งหมดจะถูกส่งไป Sheets')) {
+    return;
+  }
+  
+  toast('🔄 กำลัง Sync ข้อมูล...');
+  
+  var dealers = ST.getAll('dealers');
+  var pipelines = ST.getAll('pipeline');
+  
+  fetch(SHEETS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'syncFromFirebase',
+      dealers: dealers,
+      pipelines: pipelines
+    })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(result) {
+    if (result.success) {
+      toast('✅ Sync ไป Google Sheets สำเร็จ!');
+    } else {
+      toast('❌ Sync ล้มเหลว: ' + (result.data?.error || 'Unknown error'));
+    }
+  })
+  .catch(function(err) {
+    toast('❌ Error: ' + err.message);
+  });
+}
+
+function pullSheetsToFirebase() {
+  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
+    toast('❌ กรุณาตั้งค่า SHEETS_API_URL ก่อน');
+    return;
+  }
+  
+  if (!confirm('📥 ดึงข้อมูลจาก Google Sheets มาแทนที่ Firebase?\n\nข้อมูล Pipeline ในระบบจะถูกเพิ่มจาก Sheets')) {
+    return;
+  }
+  
+  toast('🔄 กำลังดึงข้อมูล...');
+  
+  fetch(SHEETS_API_URL + '?action=getAllData')
+    .then(function(res) { return res.json(); })
+    .then(function(result) {
+      if (result.success && result.data) {
+        var pipelineData = result.data.pipeline || [];
+        var added = 0;
+        
+        for (var i = 0; i < pipelineData.length; i++) {
+          var p = pipelineData[i];
+          // ตรวจสอบว่ามี id นี้ในระบบแล้วหรือยัง
+          var existing = ST.getOne('pipeline', p.id);
+          if (!existing && p.dealerId && p.projectName) {
+            ST.add('pipeline', {
+              id: p.id,
+              projectName: p.projectName,
+              dealerId: p.dealerId,
+              endUserTH: p.endUser || '',
+              status: p.status || 'prospect',
+              model: p.model || '',
+              modelQty: parseInt(p.qty) || 1,
+              forecastAmount: parseFloat(p.amount) || 0,
+              created: new Date().toISOString()
+            });
+            added++;
+          }
+        }
+        
+        toast('✅ ดึงข้อมูลจาก Sheets สำเร็จ! เพิ่ม ' + added + ' โครงการ');
+        render(); // รีเฟรชหน้า
+      } else {
+        toast('❌ ไม่มีข้อมูลใน Sheets');
+      }
+    })
+    .catch(function(err) {
+      toast('❌ Error: ' + err.message);
+    });
 }

@@ -300,6 +300,18 @@ function rAdmin(el) {
       '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>') +
     '</div></div>' +
 
+// Cloud Sync Section
+'<div class="card"><h2>☁️ Google Sheets Sync</h2>' +
+'<div class="bg" style="flex-wrap:wrap; gap:8px">' +
+'<button class="btn bp" onclick="syncFirebaseToSheets()" style="background:#3b82f6">📤 Sync to Sheets</button>' +
+'<button class="btn bs" onclick="pullSheetsToFirebase()" style="background:#22c55e">📥 Pull from Sheets</button>' +
+'</div>' +
+'<div class="hint" style="margin-top:8px; font-size:11px; color:var(--text2)">' +
+'💡 <strong>Sync to Sheets</strong> = ส่งข้อมูล Firebase ไปยัง Google Sheets<br>' +
+'💡 <strong>Pull from Sheets</strong> = ดึงข้อมูลจาก Google Sheets กลับมา Firebase<br>' +
+'📌 ใช้เมื่อต้องการให้ลูกค้าเห็นข้อมูล หรือดึงข้อมูลที่ลูกค้าแก้ไขกลับมา' +
+'</div></div>' +
+
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
     '<div class="bg">' +
