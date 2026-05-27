@@ -2004,3 +2004,181 @@ function pullSheetsToFirebase() {
       toast('❌ Error: ' + err.message);
     });
 }
+// ================================================================
+// CUSTOMER UPDATE LISTENER & APPROVAL
+// ================================================================
+
+var customerUpdateListener = null;
+
+function initCustomerUpdateListener() {
+  if (!CURRENT_USER) return;
+  
+  if (customerUpdateListener) customerUpdateListener();
+  
+  customerUpdateListener = db.collection('dealerUpdates').onSnapshot(function(snapshot) {
+    snapshot.docChanges().forEach(function(change) {
+      if (change.type === 'added' || change.type === 'modified') {
+        var dealerId = change.doc.id;
+        var dealer = ST.getOne('dealers', dealerId);
+        
+        // ตรวจสอบ pipeline updates
+        change.doc.ref.collection('pipeline').where('_status', '==', 'pending').get().then(function(querySnapshot) {
+          querySnapshot.forEach(function(pipeDoc) {
+            var update = pipeDoc.data();
+            showCustomerNotification(dealerId, dealer?.name, update.projectName, 'pipeline', pipeDoc.id);
+          });
+        });
+        
+        // ตรวจสอบ forecast updates
+        change.doc.ref.collection('forecast').where('_status', '==', 'pending').get().then(function(querySnapshot) {
+          querySnapshot.forEach(function(fcDoc) {
+            var update = fcDoc.data();
+            var typeName = update.type === 'runrate' ? 'Run Rate' : 'โครงการ';
+            showCustomerNotification(dealerId, dealer?.name, typeName, 'forecast', fcDoc.id);
+          });
+        });
+      }
+    });
+  });
+}
+
+function showCustomerNotification(dealerId, dealerName, projectName, type, updateId) {
+  var msg = `📥 ${dealerName || dealerId} อัพเดท${type === 'pipeline' ? 'โครงการ' : 'แผนสั่งซื้อ'}: ${projectName}`;
+  
+  // Toast notification
+  toast(msg);
+  
+  // LINE Notify (ถ้าตั้งค่าไว้)
+  sendLineNotify(msg);
+  
+  // Save to localStorage for badge
+  var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
+  updates.unshift({
+    id: updateId,
+    dealerId: dealerId,
+    dealerName: dealerName || dealerId,
+    projectName: projectName,
+    type: type,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  localStorage.setItem('v7_customer_updates', JSON.stringify(updates.slice(0, 50)));
+  
+  // Update badge
+  updateCustomerUpdateBadge();
+}
+
+function updateCustomerUpdateBadge() {
+  var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
+  var unread = updates.filter(function(u) { return !u.read; }).length;
+  var badge = document.getElementById('customerUpdateBadge');
+  if (badge) {
+    if (unread > 0) {
+      badge.textContent = unread;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+function sendLineNotify(message) {
+  // ถ้ามี LINE Notify token ให้ส่ง
+  var token = localStorage.getItem('line_notify_token');
+  if (!token) return;
+  
+  fetch('https://notify-api.line.me/api/notify', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'message=' + encodeURIComponent(message)
+  }).catch(function(e) { console.warn('LINE Notify error:', e); });
+}
+
+// หน้า Approve Updates
+function rCustomerUpdates(el) {
+  document.getElementById('pgT').textContent = '📥 คำขออัพเดทจากลูกค้า';
+  
+  var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
+  
+  if (!updates.length) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขออัพเดทจากลูกค้า</p></div></div>';
+    return;
+  }
+  
+  var html = '<div class="card"><h2>📥 คำขออัพเดทจากลูกค้า</h2>';
+  
+  for (var i = 0; i < updates.length; i++) {
+    var u = updates[i];
+    html += '<div class="li" style="border-left:3px solid #f59e0b">';
+    html += '<div class="lm">';
+    html += '<div class="lt">🏪 ' + sanitize(u.dealerName) + ' - ' + (u.type === 'pipeline' ? '📋 โครงการ' : '📦 แผนสั่งซื้อ') + '</div>';
+    html += '<div class="ls">📌 ' + sanitize(u.projectName) + '</div>';
+    html += '<div class="ls">⏰ ' + fD(u.timestamp?.split('T')[0]) + '</div>';
+    html += '</div>';
+    html += '<button class="btn bsm bp" onclick="approveCustomerUpdate(\'' + u.id + '\', \'' + u.dealerId + '\', \'' + u.type + '\')">✅ ตรวจสอบและนำเข้า</button>';
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function approveCustomerUpdate(updateId, dealerId, type) {
+  if (!CURRENT_USER) return;
+  
+  if (type === 'pipeline') {
+    var pipelineRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId);
+    pipelineRef.get().then(function(doc) {
+      if (!doc.exists) return;
+      var data = doc.data();
+      
+      // ลบ metadata
+      delete data._customerUpdate;
+      delete data._updatedAt;
+      delete data._status;
+      delete data._originalDealerId;
+      delete data._originalPipeId;
+      delete data._updateType;
+      delete data.updateNote;
+      delete data.updatedBy;
+      
+      // นำเข้า pipeline หลัก
+      var mainRef = db.collection('users').doc(CURRENT_USER.uid).collection('pipeline').doc(updateId);
+      mainRef.set(data, { merge: true }).then(function() {
+        // อัพเดทสถานะเป็น approved
+        pipelineRef.update({ _status: 'approved', _approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        
+        // อัพเดท localStorage
+        var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
+        updates = updates.filter(function(u) { return u.id !== updateId; });
+        localStorage.setItem('v7_customer_updates', JSON.stringify(updates));
+        
+        toast('✅ นำเข้าข้อมูลเรียบร้อยแล้ว');
+        updateCustomerUpdateBadge();
+        render();
+        
+        // รีเฟรชหน้า updates
+        go('customerUpdates');
+      });
+    });
+  }
+}
+
+// เพิ่มเมนูใน sidebar
+// ในฟังก์ชัน renderSidebar หรือเพิ่มใน admin.js:
+function addCustomerUpdateMenuItem() {
+  var sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  
+  var menuHtml = '<div class="nl" onclick="go(\'customerUpdates\')">📥 คำขออัพเดท <span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>';
+  var insertAfter = document.querySelector('.nl[data-v="insights"]');
+  if (insertAfter) {
+    insertAfter.insertAdjacentHTML('afterend', menuHtml);
+  }
+}
+
+// เรียกใช้ตอน init
+setTimeout(addCustomerUpdateMenuItem, 1000);

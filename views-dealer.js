@@ -2029,18 +2029,15 @@ function fmtMoneyFull(n) {
   return n.toLocaleString('th-TH');
 }
 function copyClientLink(dealerId) {
-  var d = ST.getOne('dealers', dealerId);
-  if (!d) return;
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
   
-  // สร้างลิงก์ไปยัง client-view.html
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId;
+  var encodedName = encodeURIComponent(dealer.name);
+  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&name=' + encodedName;
   
-  // คัดลอก
-  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + d.name + ' แล้ว! ส่งให้ลูกค้าได้เลย');
-  
-  // แจ้งเตือนเพิ่มเติม
+  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + dealer.name + ' แล้ว! ส่งให้ลูกค้าได้เลย');
   toast('📋 ลิงก์: ' + clientUrl);
 }
 
