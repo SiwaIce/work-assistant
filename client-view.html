@@ -401,7 +401,7 @@ body {
 <script>
 // ===== CONFIGURATION =====
 // TODO: ใส่ URL ของ Google Apps Script Web App ที่คุณสร้าง
-var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbz4EIjBihFXkLIBHfnLSXZ8LitmJueCLepB5v3whtP5lTWyW3laR3-9bPgUAdIMpJt1fA/exec';
+var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';
 
 // ===== THEME =====
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
@@ -471,42 +471,30 @@ function loadModels() {
   }
 }
 
-// ===== GOOGLE SHEETS API VIA PROXY =====
-var PROXY_URL = window.location.origin + '/work-assistant/proxy.html';
+// ===== JSONP CALL (No CORS issue) =====
+var scriptCounter = 0;
 
-function callSheetsAPI(action, dealerId, callback, postData) {
+function callSheetsAPI(action, dealerId, callback) {
   var apiUrl = SHEETS_API_URL;
-  var proxyUrl;
+  var callbackName = 'jsonp_callback_' + (++scriptCounter);
   
-  if (postData) {
-    // POST request
-    proxyUrl = PROXY_URL + '?url=' + encodeURIComponent(apiUrl) + '&method=POST&data=' + encodeURIComponent(JSON.stringify(postData));
-  } else {
-    // GET request
-    proxyUrl = PROXY_URL + '?url=' + encodeURIComponent(apiUrl + '?action=' + action + '&dealerId=' + dealerId);
-  }
+  // สร้าง callback function ชั่วคราว
+  window[callbackName] = function(data) {
+    delete window[callbackName];
+    document.body.removeChild(script);
+    if (callback) callback(data);
+  };
   
-  fetch(proxyUrl)
-    .then(function(r) { return r.text(); })
-    .then(function(text) {
-      try {
-        var result = JSON.parse(text);
-        if (callback) callback(result);
-      } catch(e) {
-        console.error('Parse error:', e);
-        if (callback) callback({ success: false, error: e.message });
-      }
-    })
-    .catch(function(e) {
-      console.error('Proxy error:', e);
-      if (callback) callback({ success: false, error: e.message });
-    });
+  // สร้าง script tag
+  var script = document.createElement('script');
+  script.src = apiUrl + '?action=' + action + '&dealerId=' + dealerId + '&callback=' + callbackName;
+  document.body.appendChild(script);
 }
 
 function loadFromSheets() {
   if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
     console.warn('Please set SHEETS_API_URL first');
-    loadFromLocal();
+    showSuccessToast('⚠️ ยังไม่ได้ตั้งค่าเชื่อมต่อข้อมูล');
     return;
   }
   
@@ -514,24 +502,28 @@ function loadFromSheets() {
   
   // โหลด Dealer
   callSheetsAPI('getDealer', dealerId, function(result) {
+    console.log('Dealer response:', result);
     if (result.success && result.data) {
       dealerName = result.data.name || '-';
       document.getElementById('dealerName').innerHTML = esc(dealerName);
-      localStorage.setItem('cv_dealer_' + dealerId, JSON.stringify(result.data));
     }
   });
   
   // โหลด Pipeline
   callSheetsAPI('getPipeline', dealerId, function(result) {
+    console.log('Pipeline response:', result);
     if (result.success && result.data) {
       pipelinesData = result.data;
-      localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
+      if (currentTab === 'pipeline') renderCurrentTab();
+    } else {
+      console.log('No pipeline data');
       if (currentTab === 'pipeline') renderCurrentTab();
     }
   });
   
   // โหลด Forecast
   callSheetsAPI('getForecast', dealerId, function(result) {
+    console.log('Forecast response:', result);
     if (result.success && result.data) {
       forecastData.runrate = [];
       forecastData.projects = [];
@@ -555,12 +547,10 @@ function loadFromSheets() {
           });
         }
       }
-      localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
       if (currentTab === 'forecast') renderCurrentTab();
     }
   });
 }
-
 function saveToSheets(action, data) {
   if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
     // save to local
@@ -1263,6 +1253,20 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   renderCurrentTab();
 });
 
+function loadFromLocal() {
+  console.log('Loading from local storage (fallback)');
+  
+  // ตัวอย่างข้อมูล fallback (ใช้ pipeline ที่คุณให้มา)
+  if (dealerId === 'mogtynh94x7zce') {
+    pipelinesData = [
+      { id: 'pipe_001', dealerId: 'mogtynh94x7zce', projectName: 'ชุดครุภัณฑ์ห้องปฏิบัติการ', endUserTH: 'ม.ราชมงคลธัญญบุรี', status: 'win', model: 'M4E', modelQty: 1, forecastAmount: 93380 },
+      { id: 'pipe_002', dealerId: 'mogtynh94x7zce', projectName: 'โครงการจัดซื้อ LiDAR', endUserTH: 'ม.เชียงใหม่', status: 'prospect', model: 'M400', modelQty: 1, forecastAmount: 484050 }
+    ];
+    dealerName = 'Poladrone (Aonic)';
+    document.getElementById('dealerName').innerHTML = esc(dealerName);
+    if (currentTab === 'pipeline') renderCurrentTab();
+  }
+}
 // ===== EXPORT GLOBAL FUNCTIONS =====
 window.toggleTheme = toggleTheme;
 window.showUpdateModal = showUpdateModal;
