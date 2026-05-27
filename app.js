@@ -1,5 +1,5 @@
 // ===== GOOGLE SHEETS API CONFIG =====
-var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbytF7-FG5btYuhYEvHXJV1A1sh74xRPonxTpojqB6JyztW1ui05v_5O0F_vu8xH1yXVew/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
+var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbz4EIjBihFXkLIBHfnLSXZ8LitmJueCLepB5v3whtP5lTWyW3laR3-9bPgUAdIMpJt1fA/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
 // ================================================================
 // DEFAULT CONFIG
 // ================================================================

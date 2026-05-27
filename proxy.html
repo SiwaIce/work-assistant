@@ -10,14 +10,16 @@
     var urlParams = new URLSearchParams(window.location.search);
     var targetUrl = urlParams.get('url');
     var method = urlParams.get('method') || 'GET';
-    var callback = urlParams.get('callback');
+    var dataStr = urlParams.get('data');
     
     if (!targetUrl) {
-      document.body.innerHTML = 'Missing url parameter';
+      document.body.innerHTML = JSON.stringify({ error: 'Missing url parameter' });
       return;
     }
     
-    var dataStr = urlParams.get('data');
+    // Decode URL
+    targetUrl = decodeURIComponent(targetUrl);
+    
     var options = {
       method: method,
       mode: 'cors',
@@ -27,21 +29,26 @@
     };
     
     if (method === 'POST' && dataStr) {
-      options.body = dataStr;
+      options.body = decodeURIComponent(dataStr);
     }
     
     fetch(targetUrl, options)
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        var result = JSON.stringify(data);
-        if (callback) {
-          document.write('<script>window.parent.' + callback + '(' + result + ');<\/script>');
+      .then(function(res) {
+        // ตรวจสอบว่า response เป็น JSON หรือ HTML
+        var contentType = res.headers.get('content-type');
+        if (contentType && contentType.indexOf('application/json') !== -1) {
+          return res.json();
         } else {
-          document.body.innerHTML = '<pre>' + result + '</pre>';
+          return res.text().then(function(text) {
+            throw new Error('Server returned HTML instead of JSON. Status: ' + res.status);
+          });
         }
       })
+      .then(function(data) {
+        document.body.innerHTML = JSON.stringify(data);
+      })
       .catch(function(err) {
-        document.body.innerHTML = 'Error: ' + err.message;
+        document.body.innerHTML = JSON.stringify({ error: err.message });
       });
   })();
 </script>
