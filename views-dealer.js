@@ -242,7 +242,7 @@ function dealerInfoTab(d) {
     { name: 'FH2', status: d.fh2Status, pass: d.fh2Status === 'pass' },
     { name: 'Lark', status: d.larkStatus, pass: d.larkStatus === 'added' }
   ];
-       var updatesPanel = '<div id="customerUpdatesPanel"></div>';
+  // ลบบรรทัดนี้ทิ้ง → var updatesPanel = '<div id="customerUpdatesPanel"></div>';
 
   return `
   <!-- Hero Section -->
@@ -391,8 +391,12 @@ function dealerInfoTab(d) {
   <div class="card">
     <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
     ${renderLineLog(d.id, 5)}
-  </div>`;
-}
+  </div>
+  
+  <!-- Customer Updates Panel -->
+  <div id="customerUpdatesPanel"></div>
+  `;
+}  // ← ปิดฟังก์ชันให้ถูกต้อง
 
 function certField(name, status, count, lastCheck) {
   const pass = status === 'pass' || status === 'yes' || status === 'added';
