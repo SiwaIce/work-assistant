@@ -2183,8 +2183,10 @@ function addCustomerUpdateMenuItem() {
   }
 }
 // ================================================================
-// CUSTOMER UPDATES MANAGEMENT (เพิ่มใน app.js)
+// CUSTOMER UPDATES MANAGEMENT (Enhanced with Batch Approve)
 // ================================================================
+
+var selectedUpdates = {};  // เก็บสถานะการเลือก
 
 function rCustomerUpdates(el) {
   document.getElementById('pgT').textContent = '📥 คำขออัพเดทจากลูกค้า';
@@ -2199,6 +2201,8 @@ function rCustomerUpdates(el) {
     el.innerHTML = '<div class="card"><div class="empty"><p>ไม่มี Dealer ในระบบ</p></div></div>';
     return;
   }
+  
+  selectedUpdates = {};
   
   var allUpdates = [];
   var pendingCount = 0;
@@ -2238,24 +2242,40 @@ function rCustomerUpdates(el) {
         return;
       }
       
-      var html = '<div class="card"><h2>📥 คำขออัพเดท (' + pendingCount + ')</h2>';
-      html += '<div style="margin-bottom:10px"><button class="btn bsm bo" onclick="refreshCustomerUpdates()">🔄 รีเฟรช</button></div>';
-      
+      // จัดกลุ่มตาม Dealer
+      var byDealer = {};
       allUpdates.forEach(function(u) {
-        var updateDate = u._updatedAt ? (u._updatedAt.seconds ? new Date(u._updatedAt.seconds * 1000).toLocaleString() : u._updatedAt) : '-';
-        html += '<div class="li" style="border-left:3px solid #f59e0b; margin-bottom:8px">';
-        html += '<div class="lm" style="flex:1">';
-        html += '<div class="lt">🏪 <strong>' + sanitize(u.dealerName) + '</strong> <span class="tag tag-active">รอตรวจสอบ</span></div>';
-        html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
-        if (u.updateNote) html += '<div class="ls">📝 ' + sanitize(u.updateNote.substr(0, 100)) + '</div>';
-        html += '<div class="ls">⏰ ' + updateDate + '</div>';
-        html += '</div>';
-        html += '<div class="bg" style="flex-shrink:0">';
-        html += '<button class="btn bsm bs" onclick="approvePipelineUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">✅ อนุมัติ</button>';
-        html += '<button class="btn bsm bd" onclick="rejectPipelineUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">❌ ปฏิเสธ</button>';
-        html += '<button class="btn bsm bo" onclick="viewPipelineUpdateDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
-        html += '</div></div>';
+        if (!byDealer[u.dealerId]) {
+          byDealer[u.dealerId] = { dealerName: u.dealerName, updates: [] };
+        }
+        byDealer[u.dealerId].updates.push(u);
       });
+      
+      var html = '<div class="card"><h2>📥 คำขออัพเดท (' + pendingCount + ')</h2>';
+      
+      // ✅ ปุ่ม Batch Actions
+      html += '<div class="bg" style="margin-bottom:12px; flex-wrap:wrap">';
+      html += '<button class="btn bp" onclick="batchApproveSelected()" style="background:#22c55e">✅ Approve ที่เลือก (' + getSelectedCount() + ')</button>';
+      html += '<button class="btn bs" onclick="batchApproveAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
+      html += '<button class="btn bsm bo" onclick="toggleSelectAll()">☑️ เลือกทั้งหมด</button>';
+      html += '<button class="btn bsm bo" onclick="clearSelection()">✖️ ยกเลิกเลือก</button>';
+      html += '</div>';
+      
+      // ✅ Filter ตาม Dealer
+      html += '<div class="ftabs" style="margin-bottom:12px">';
+      html += '<div class="ftab" onclick="filterUpdatesByDealer(\'all\')">🏪 ทุก Dealer (' + pendingCount + ')</div>';
+      var dealerIds = Object.keys(byDealer);
+      for (var di = 0; di < dealerIds.length; di++) {
+        var did = dealerIds[di];
+        var dealer = byDealer[did];
+        html += '<div class="ftab" onclick="filterUpdatesByDealer(\'' + did + '\')">🏪 ' + sanitize(dealer.dealerName) + ' (' + dealer.updates.length + ')</div>';
+      }
+      html += '</div>';
+      
+      // ✅ รายการ Updates
+      html += '<div id="updatesListContainer">';
+      html += renderUpdatesList(allUpdates);
+      html += '</div>';
       
       html += '</div>';
       el.innerHTML = html;
@@ -2265,23 +2285,243 @@ function rCustomerUpdates(el) {
   checkAllDealers();
 }
 
-function refreshCustomerUpdates() {
-  if (typeof render === 'function') render();
-  else go('customerUpdates');
+function renderUpdatesList(updates) {
+  if (!updates.length) {
+    return '<div class="empty"><p>ไม่มีรายการ</p></div>';
+  }
+  
+  var html = '<div style="max-height:60vh; overflow-y:auto">';
+  
+  for (var i = 0; i < updates.length; i++) {
+    var u = updates[i];
+    var isSelected = selectedUpdates[u.id] === true;
+    var updateDate = u._updatedAt ? (u._updatedAt.seconds ? new Date(u._updatedAt.seconds * 1000).toLocaleString() : u._updatedAt) : '-';
+    
+    html += '<div class="li" style="border-left:3px solid #f59e0b; margin-bottom:8px; display:flex; flex-wrap:wrap">';
+    
+    // ✅ Checkbox
+    html += '<div style="margin-right:10px">';
+    html += '<input type="checkbox" class="update-checkbox" data-id="' + u.id + '" data-dealer="' + u.dealerId + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleUpdateSelection(\'' + u.id + '\', this.checked)">';
+    html += '</div>';
+    
+    html += '<div class="lm" style="flex:1; min-width:200px">';
+    html += '<div class="lt">🏪 <strong>' + sanitize(u.dealerName) + '</strong> <span class="tag tag-active">รอตรวจสอบ</span></div>';
+    html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
+    if (u.updateNote) html += '<div class="ls">📝 ' + sanitize(u.updateNote.substr(0, 100)) + '</div>';
+    html += '<div class="ls">⏰ ' + updateDate + '</div>';
+    html += '</div>';
+    
+    html += '<div class="bg" style="flex-shrink:0; margin-top:5px">';
+    html += '<button class="btn bsm bs" onclick="approveSingleUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">✅ อนุมัติ</button>';
+    html += '<button class="btn bsm bd" onclick="rejectSingleUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">❌ ปฏิเสธ</button>';
+    html += '<button class="btn bsm bo" onclick="viewPipelineUpdateDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  return html;
 }
 
-function approvePipelineUpdate(dealerId, updateId) {
-  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
-    toast('❌ กรุณา login ก่อน');
+function getSelectedCount() {
+  var count = 0;
+  for (var key in selectedUpdates) {
+    if (selectedUpdates[key]) count++;
+  }
+  return count;
+}
+
+function toggleUpdateSelection(updateId, isChecked) {
+  selectedUpdates[updateId] = isChecked;
+  updateBatchButtonBadge();
+}
+
+function toggleSelectAll() {
+  var checkboxes = document.querySelectorAll('.update-checkbox');
+  var allChecked = true;
+  
+  for (var i = 0; i < checkboxes.length; i++) {
+    if (!checkboxes[i].checked) {
+      allChecked = false;
+      break;
+    }
+  }
+  
+  var newState = !allChecked;
+  for (var i = 0; i < checkboxes.length; i++) {
+    checkboxes[i].checked = newState;
+    selectedUpdates[checkboxes[i].dataset.id] = newState;
+  }
+  
+  updateBatchButtonBadge();
+}
+
+function clearSelection() {
+  var checkboxes = document.querySelectorAll('.update-checkbox');
+  for (var i = 0; i < checkboxes.length; i++) {
+    checkboxes[i].checked = false;
+    selectedUpdates[checkboxes[i].dataset.id] = false;
+  }
+  updateBatchButtonBadge();
+}
+
+function updateBatchButtonBadge() {
+  var count = getSelectedCount();
+  var btn = document.querySelector('button[onclick="batchApproveSelected()"]');
+  if (btn) {
+    btn.innerHTML = '✅ Approve ที่เลือก (' + count + ')';
+  }
+}
+
+var currentFilterDealer = 'all';
+var allUpdatesData = [];
+
+function filterUpdatesByDealer(dealerId) {
+  currentFilterDealer = dealerId;
+  
+  // เก็บข้อมูลทั้งหมดไว้ก่อน
+  if (allUpdatesData.length === 0) {
+    // ดึงข้อมูลใหม่หรือใช้จาก global
+    refreshUpdatesList();
+  }
+}
+
+function refreshUpdatesList() {
+  // โหลดข้อมูลใหม่ทั้งหมด
+  if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    // เรียก rCustomerUpdates ใหม่
+    rCustomerUpdates(document.getElementById('ct'));
+  }
+}
+
+// ✅ Batch Approve Selected
+function batchApproveSelected() {
+  var selectedIds = [];
+  var selectedDealers = {};
+  
+  for (var updateId in selectedUpdates) {
+    if (selectedUpdates[updateId]) {
+      // หา dealerId และ updateId จาก DOM
+      var checkbox = document.querySelector('.update-checkbox[data-id="' + updateId + '"]');
+      if (checkbox) {
+        var dealerId = checkbox.dataset.dealer;
+        if (!selectedDealers[dealerId]) selectedDealers[dealerId] = [];
+        selectedDealers[dealerId].push(updateId);
+        selectedIds.push(updateId);
+      }
+    }
+  }
+  
+  if (selectedIds.length === 0) {
+    toast('⚠️ กรุณาเลือกรายการที่ต้องการอนุมัติ');
     return;
   }
   
-  if (!confirm('✅ อนุมัติคำขอนี้? ข้อมูลจะถูกนำเข้าไปยัง Pipeline หลักและแสดงให้ลูกค้าเห็นทันที')) return;
+  if (!confirm('✅ อนุมัติ ' + selectedIds.length + ' รายการ? ข้อมูลจะถูกนำเข้าไปยัง Pipeline หลัก')) return;
+  
+  var completed = 0;
+  var errors = 0;
+  
+  for (var dealerId in selectedDealers) {
+    var updateIds = selectedDealers[dealerId];
+    updateIds.forEach(function(updateId) {
+      approvePipelineUpdate(dealerId, updateId, function(success) {
+        completed++;
+        if (!success) errors++;
+        if (completed === selectedIds.length) {
+          toast('✅ อนุมัติ ' + (selectedIds.length - errors) + ' รายการ' + (errors ? ' (ผิดพลาด ' + errors + ')' : ''));
+          setTimeout(function() {
+            if (typeof render === 'function') render();
+            else if (typeof rCustomerUpdates === 'function') rCustomerUpdates(document.getElementById('ct'));
+          }, 1000);
+        }
+      });
+    });
+  }
+}
+
+// ✅ Batch Approve All
+function batchApproveAll() {
+  var updates = [];
+  // รวบรวมทั้งหมดจาก DOM
+  var checkboxes = document.querySelectorAll('.update-checkbox');
+  for (var i = 0; i < checkboxes.length; i++) {
+    updates.push({
+      id: checkboxes[i].dataset.id,
+      dealerId: checkboxes[i].dataset.dealer
+    });
+  }
+  
+  if (updates.length === 0) {
+    toast('⚠️ ไม่มีรายการที่ต้องอนุมัติ');
+    return;
+  }
+  
+  if (!confirm('✅ อนุมัติทั้งหมด ' + updates.length + ' รายการ?')) return;
+  
+  var completed = 0;
+  var errors = 0;
+  
+  updates.forEach(function(u) {
+    approvePipelineUpdate(u.dealerId, u.id, function(success) {
+      completed++;
+      if (!success) errors++;
+      if (completed === updates.length) {
+        toast('✅ อนุมัติทั้งหมด ' + (updates.length - errors) + ' รายการ' + (errors ? ' (ผิดพลาด ' + errors + ')' : ''));
+        setTimeout(function() {
+          if (typeof render === 'function') render();
+        }, 1000);
+      }
+    });
+  });
+}
+
+// ✅ Approve Single (แก้ไขให้มี callback)
+function approveSingleUpdate(dealerId, updateId) {
+  approvePipelineUpdate(dealerId, updateId, function(success) {
+    if (success) {
+      toast('✅ อนุมัติแล้ว');
+      setTimeout(function() {
+        if (typeof render === 'function') render();
+      }, 500);
+    }
+  });
+}
+
+// ✅ Reject Single
+function rejectSingleUpdate(dealerId, updateId) {
+  if (!confirm('❌ ปฏิเสธคำขอนี้?')) return;
+  
+  db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId)
+    .update({ 
+      _status: 'rejected', 
+      _rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _rejectedBy: CURRENT_USER ? CURRENT_USER.uid : 'unknown'
+    })
+    .then(function() {
+      toast('❌ ปฏิเสธคำขอแล้ว');
+      setTimeout(function() {
+        if (typeof render === 'function') render();
+      }, 500);
+    })
+    .catch(function(err) {
+      toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+    });
+}
+
+// ✅ แก้ไข approvePipelineUpdate ให้มี callback
+function approvePipelineUpdate(dealerId, updateId, callback) {
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    if (callback) callback(false);
+    toast('❌ กรุณา login ก่อน');
+    return;
+  }
   
   var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId);
   
   updateRef.get().then(function(doc) {
     if (!doc.exists) {
+      if (callback) callback(false);
       toast('❌ ไม่พบข้อมูล');
       return;
     }
@@ -2290,7 +2530,6 @@ function approvePipelineUpdate(dealerId, updateId) {
     var pipeId = updateData._originalPipeId || updateId;
     var mainRef = db.collection('users').doc(CURRENT_USER.uid).collection('pipeline').doc(pipeId);
     
-    // สร้างสำเนาข้อมูลที่ไม่มี metadata
     var cleanData = {};
     for (var key in updateData) {
       if (key.indexOf('_') !== 0) {
@@ -2300,10 +2539,8 @@ function approvePipelineUpdate(dealerId, updateId) {
     cleanData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
     cleanData.lastUpdatedBy = 'customer_approved';
     
-    // บันทึกไปยัง pipeline หลัก
     mainRef.set(cleanData, { merge: true }).then(function() {
-      // ✅ หลังจาก approve แล้ว ให้ sync กลับไปยัง dealerUpdates ทันที
-      // เพื่อให้ลูกค้าเห็นข้อมูลที่อัพเดทแล้ว
+      // Sync กลับไปยัง dealerUpdates
       var approvedData = {
         id: pipeId,
         projectName: cleanData.projectName || '',
@@ -2321,14 +2558,12 @@ function approvePipelineUpdate(dealerId, updateId) {
         nextAction: cleanData.nextAction || '',
         registerDate: cleanData.registerDate || '',
         _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        _status: 'approved',  // เปลี่ยนจาก pending เป็น approved
+        _status: 'approved',
         _source: 'sales_approved'
       };
       
-      // อัพเดทใน dealerUpdates (ทับของเดิม)
       return updateRef.set(approvedData, { merge: true });
     }).then(function() {
-      // อัพเดท localStorage
       var existingPipe = ST.getOne('pipeline', pipeId);
       if (existingPipe) {
         ST.update('pipeline', pipeId, cleanData);
@@ -2337,7 +2572,6 @@ function approvePipelineUpdate(dealerId, updateId) {
         ST.add('pipeline', cleanData);
       }
       
-      // เพิ่ม log
       ST.add('pipeLog', {
         pipeId: pipeId,
         type: 'update',
@@ -2345,17 +2579,13 @@ function approvePipelineUpdate(dealerId, updateId) {
         date: _nw()
       });
       
-      toast('✅ อนุมัติและ Sync ข้อมูลให้ลูกค้าเรียบร้อยแล้ว');
-      render();
-      
-      // รีเฟรชหน้า updates ถ้ากำลังดูอยู่
-      if (S && S.view === 'customerUpdates') {
-        go('customerUpdates');
-      }
+      if (callback) callback(true);
     }).catch(function(err) {
+      if (callback) callback(false);
       toast('❌ เกิดข้อผิดพลาด: ' + err.message);
     });
   }).catch(function(err) {
+    if (callback) callback(false);
     toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   });
 }
