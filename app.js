@@ -2274,7 +2274,7 @@ function approvePipelineUpdate(dealerId, updateId) {
     return;
   }
   
-  if (!confirm('✅ อนุมัติคำขอนี้? ข้อมูลจะถูกนำเข้าไปยัง Pipeline หลัก')) return;
+  if (!confirm('✅ อนุมัติคำขอนี้? ข้อมูลจะถูกนำเข้าไปยัง Pipeline หลักและแสดงให้ลูกค้าเห็นทันที')) return;
   
   var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId);
   
@@ -2300,14 +2300,33 @@ function approvePipelineUpdate(dealerId, updateId) {
     
     // บันทึกไปยัง pipeline หลัก
     mainRef.set(cleanData, { merge: true }).then(function() {
-      // อัพเดทสถานะเป็น approved
-      updateRef.update({ 
-        _status: 'approved', 
-        _approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        _approvedBy: CURRENT_USER.uid
-      });
+      // ✅ หลังจาก approve แล้ว ให้ sync กลับไปยัง dealerUpdates ทันที
+      // เพื่อให้ลูกค้าเห็นข้อมูลที่อัพเดทแล้ว
+      var approvedData = {
+        id: pipeId,
+        projectName: cleanData.projectName || '',
+        endUserTH: cleanData.endUserTH || '',
+        endUserEN: cleanData.endUserEN || '',
+        unitType: cleanData.unitType || '',
+        status: cleanData.status || 'prospect',
+        model: cleanData.model || '',
+        modelQty: cleanData.modelQty || 1,
+        items: cleanData.items || [],
+        forecastAmount: cleanData.forecastAmount || 0,
+        biddingDate: cleanData.biddingDate || '',
+        shipmentDate: cleanData.shipmentDate || '',
+        tor: cleanData.tor || '',
+        nextAction: cleanData.nextAction || '',
+        registerDate: cleanData.registerDate || '',
+        _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        _status: 'approved',  // เปลี่ยนจาก pending เป็น approved
+        _source: 'sales_approved'
+      };
       
-      // อัพเดท localStorage ด้วย
+      // อัพเดทใน dealerUpdates (ทับของเดิม)
+      return updateRef.set(approvedData, { merge: true });
+    }).then(function() {
+      // อัพเดท localStorage
       var existingPipe = ST.getOne('pipeline', pipeId);
       if (existingPipe) {
         ST.update('pipeline', pipeId, cleanData);
@@ -2324,7 +2343,7 @@ function approvePipelineUpdate(dealerId, updateId) {
         date: _nw()
       });
       
-      toast('✅ อนุมัติและนำเข้าข้อมูลเรียบร้อยแล้ว');
+      toast('✅ อนุมัติและ Sync ข้อมูลให้ลูกค้าเรียบร้อยแล้ว');
       render();
       
       // รีเฟรชหน้า updates ถ้ากำลังดูอยู่
@@ -2338,7 +2357,6 @@ function approvePipelineUpdate(dealerId, updateId) {
     toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   });
 }
-
 function rejectPipelineUpdate(dealerId, updateId) {
   if (!confirm('❌ ปฏิเสธคำขอนี้?')) return;
   
@@ -2481,13 +2499,12 @@ function syncDealerPipelineToCustomer(dealerId) {
     return;
   }
   
-  if (!confirm(`🔄 Sync ข้อมูล Pipeline ของ Dealer นี้ไปยังระบบลูกค้า?\n\nลูกค้าจะเห็นเฉพาะโครงการที่ status ไม่ใช่ lost/delivered/on_hold`)) {
+  if (!confirm(`🔄 Sync ข้อมูล Pipeline ของ Dealer นี้ไปยังระบบลูกค้า?\n\nลูกค้าจะเห็นข้อมูลทันทีเมื่อเปิดลิงก์`)) {
     return;
   }
   
   toast('🔄 กำลัง Sync...');
   
-  // ดึง pipeline ของ dealer นี้
   var pipes = ST.pipelineByDealer(dealerId);
   var activePipes = pipes.filter(function(p) {
     return ['lost', 'delivered', 'on_hold'].indexOf(p.status) === -1;
@@ -2502,7 +2519,6 @@ function syncDealerPipelineToCustomer(dealerId) {
   var dealerUpdatesRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
   
   activePipes.forEach(function(p) {
-    // สร้างข้อมูลสำหรับลูกค้า (เอาเฉพาะ필드ที่จำเป็น)
     var customerData = {
       id: p.id,
       projectName: p.projectName || '',
@@ -2520,7 +2536,7 @@ function syncDealerPipelineToCustomer(dealerId) {
       nextAction: p.nextAction || '',
       registerDate: p.registerDate || '',
       _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      _status: 'approved',  // ข้อมูลจาก Sales ถือว่าอนุมัติแล้ว
+      _status: 'approved',
       _source: 'sales_sync'
     };
     
@@ -2530,7 +2546,6 @@ function syncDealerPipelineToCustomer(dealerId) {
   batch.commit().then(function() {
     toast(`✅ Sync สำเร็จ! ส่ง ${activePipes.length} โครงการให้ลูกค้า`);
     
-    // อัพเดท badge
     if (typeof updateCustomerUpdateBadge === 'function') {
       updateCustomerUpdateBadge();
     }
@@ -2538,7 +2553,6 @@ function syncDealerPipelineToCustomer(dealerId) {
     toast('❌ Sync ล้มเหลว: ' + err.message);
   });
 }
-
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
   var sidebar = document.getElementById('sidebar');
