@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>API Proxy</title>
+</head>
+<body>
+<script>
+  (function() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var targetUrl = urlParams.get('url');
+    var method = urlParams.get('method') || 'GET';
+    var callback = urlParams.get('callback');
+    
+    if (!targetUrl) {
+      document.body.innerHTML = 'Missing url parameter';
+      return;
+    }
+    
+    var dataStr = urlParams.get('data');
+    var options = {
+      method: method,
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+    
+    if (method === 'POST' && dataStr) {
+      options.body = dataStr;
+    }
+    
+    fetch(targetUrl, options)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var result = JSON.stringify(data);
+        if (callback) {
+          document.write('<script>window.parent.' + callback + '(' + result + ');<\/script>');
+        } else {
+          document.body.innerHTML = '<pre>' + result + '</pre>';
+        }
+      })
+      .catch(function(err) {
+        document.body.innerHTML = 'Error: ' + err.message;
+      });
+  })();
+</script>
+</body>
+</html>

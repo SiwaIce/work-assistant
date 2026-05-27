@@ -471,7 +471,38 @@ function loadModels() {
   }
 }
 
-// ===== GOOGLE SHEETS API =====
+// ===== GOOGLE SHEETS API VIA PROXY =====
+var PROXY_URL = window.location.origin + '/work-assistant/proxy.html';
+
+function callSheetsAPI(action, dealerId, callback, postData) {
+  var apiUrl = SHEETS_API_URL;
+  var proxyUrl;
+  
+  if (postData) {
+    // POST request
+    proxyUrl = PROXY_URL + '?url=' + encodeURIComponent(apiUrl) + '&method=POST&data=' + encodeURIComponent(JSON.stringify(postData));
+  } else {
+    // GET request
+    proxyUrl = PROXY_URL + '?url=' + encodeURIComponent(apiUrl + '?action=' + action + '&dealerId=' + dealerId);
+  }
+  
+  fetch(proxyUrl)
+    .then(function(r) { return r.text(); })
+    .then(function(text) {
+      try {
+        var result = JSON.parse(text);
+        if (callback) callback(result);
+      } catch(e) {
+        console.error('Parse error:', e);
+        if (callback) callback({ success: false, error: e.message });
+      }
+    })
+    .catch(function(e) {
+      console.error('Proxy error:', e);
+      if (callback) callback({ success: false, error: e.message });
+    });
+}
+
 function loadFromSheets() {
   if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
     console.warn('Please set SHEETS_API_URL first');
@@ -479,110 +510,76 @@ function loadFromSheets() {
     return;
   }
   
-  showSuccessToast('🔄 กำลังโหลดข้อมูลจาก Google Sheets...');
+  showSuccessToast('🔄 กำลังโหลดข้อมูล...');
   
-  // โหลดข้อมูล Dealer
-  fetch(SHEETS_API_URL + '?action=getDealer&dealerId=' + dealerId)
-    .then(r => r.json())
-    .then(result => {
-      if (result.success && result.data) {
-        dealerName = result.data.name || '-';
-        document.getElementById('dealerName').innerHTML = esc(dealerName);
-        localStorage.setItem('cv_dealer_' + dealerId, JSON.stringify(result.data));
-      }
-    })
-    .catch(e => console.warn('Load dealer error:', e));
+  // โหลด Dealer
+  callSheetsAPI('getDealer', dealerId, function(result) {
+    if (result.success && result.data) {
+      dealerName = result.data.name || '-';
+      document.getElementById('dealerName').innerHTML = esc(dealerName);
+      localStorage.setItem('cv_dealer_' + dealerId, JSON.stringify(result.data));
+    }
+  });
   
   // โหลด Pipeline
-  fetch(SHEETS_API_URL + '?action=getPipeline&dealerId=' + dealerId)
-    .then(r => r.json())
-    .then(result => {
-      if (result.success && result.data) {
-        pipelinesData = result.data;
-        localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
-        if (currentTab === 'pipeline') renderCurrentTab();
-      }
-    })
-    .catch(e => console.warn('Load pipeline error:', e));
+  callSheetsAPI('getPipeline', dealerId, function(result) {
+    if (result.success && result.data) {
+      pipelinesData = result.data;
+      localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
+      if (currentTab === 'pipeline') renderCurrentTab();
+    }
+  });
   
   // โหลด Forecast
-  fetch(SHEETS_API_URL + '?action=getForecast&dealerId=' + dealerId)
-    .then(r => r.json())
-    .then(result => {
-      if (result.success && result.data) {
-        forecastData.runrate = [];
-        forecastData.projects = [];
-        for (var i = 0; i < result.data.length; i++) {
-          var item = result.data[i];
-          if (item.type === 'runrate') {
-            forecastData.runrate.push({
-              id: item.id,
-              model: item.model,
-              qty: parseInt(item.qty) || 0,
-              month: item.month
-            });
-          } else if (item.type === 'project') {
-            forecastData.projects.push({
-              id: item.id,
-              projectName: item.projectName,
-              endUser: item.endUser || '-',
-              month: item.month,
-              items: [{ model: item.model, qty: parseInt(item.qty) || 1 }],
-              totalQty: parseInt(item.qty) || 1
-            });
-          }
+  callSheetsAPI('getForecast', dealerId, function(result) {
+    if (result.success && result.data) {
+      forecastData.runrate = [];
+      forecastData.projects = [];
+      for (var i = 0; i < result.data.length; i++) {
+        var item = result.data[i];
+        if (item.type === 'runrate') {
+          forecastData.runrate.push({
+            id: item.id,
+            model: item.model,
+            qty: parseInt(item.qty) || 0,
+            month: item.month
+          });
+        } else if (item.type === 'project') {
+          forecastData.projects.push({
+            id: item.id,
+            projectName: item.projectName,
+            endUser: item.endUser || '-',
+            month: item.month,
+            items: [{ model: item.model, qty: parseInt(item.qty) || 1 }],
+            totalQty: parseInt(item.qty) || 1
+          });
         }
-        localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
-        if (currentTab === 'forecast') renderCurrentTab();
       }
-    })
-    .catch(e => console.warn('Load forecast error:', e));
-}
-
-function loadFromLocal() {
-  // load pipeline
-  var savedPipeline = localStorage.getItem('cv_pipeline_' + dealerId);
-  if (savedPipeline) {
-    try { pipelinesData = JSON.parse(savedPipeline); } catch(e) {}
-  }
-  
-  // load forecast
-  var savedForecast = localStorage.getItem('cv_forecast_' + dealerId);
-  if (savedForecast) {
-    try { forecastData = JSON.parse(savedForecast); } catch(e) {}
-  }
-  
-  // load dealer
-  var savedDealer = localStorage.getItem('cv_dealer_' + dealerId);
-  if (savedDealer) {
-    try { var d = JSON.parse(savedDealer); dealerName = d.name || '-'; document.getElementById('dealerName').innerHTML = esc(dealerName); } catch(e) {}
-  } else {
-    dealerName = dealerId;
-    document.getElementById('dealerName').innerHTML = esc(dealerName);
-  }
-  
-  if (currentTab === 'pipeline') renderCurrentTab();
-  if (currentTab === 'forecast') renderCurrentTab();
+      localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
+      if (currentTab === 'forecast') renderCurrentTab();
+    }
+  });
 }
 
 function saveToSheets(action, data) {
   if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
-    // save to local instead
+    // save to local
     if (action === 'savePipeline') {
       localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
     } else if (action === 'saveForecast') {
       localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
     }
-    showSuccessToast('💾 บันทึกในเครื่องเรียบร้อยแล้ว (ไม่ได้เชื่อมต่อ Sheets)');
+    showSuccessToast('💾 บันทึกในเครื่องเรียบร้อยแล้ว');
     return;
   }
   
-  fetch(SHEETS_API_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: action, ...data })
-  }).catch(e => console.warn('Save error:', e));
+  var postData = { action: action, ...data };
+  
+  callSheetsAPI(null, null, function(result) {
+    if (result && result.success) {
+      showSuccessToast('💾 บันทึกสำเร็จ!');
+    }
+  }, postData);
   
   // save to local as backup
   if (action === 'savePipeline') {
