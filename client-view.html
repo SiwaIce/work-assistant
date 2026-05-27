@@ -392,17 +392,17 @@ function toggleTheme() { var current = getSavedTheme(); var next = current === '
 applyTheme(getSavedTheme());
 
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate().toString().padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getFullYear(); }
-function showSuccessToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || '✅ สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
+function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
+function showSuccessToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
 function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
 function _td() { var now = new Date(); return now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0'); }
 function _nw() { return new Date().toISOString(); }
 
 var STATUS_LIST = [
-  { id: 'prospect', name: '🔵 Prospect' }, { id: 'tor_review', name: '🟣 TOR Review' },
-  { id: 'quotation', name: '🟠 Quotation' }, { id: 'bidding', name: '🟡 Bidding' },
-  { id: 'negotiation', name: '🔵 Negotiation' }, { id: 'win', name: '🟢 Win' },
-  { id: 'ordered', name: '🟢 Ordered' }, { id: 'delivered', name: '✅ Delivered' }
+  { id: 'prospect', name: 'Prospect' }, { id: 'tor_review', name: 'TOR Review' },
+  { id: 'quotation', name: 'Quotation' }, { id: 'bidding', name: 'Bidding' },
+  { id: 'negotiation', name: 'Negotiation' }, { id: 'win', name: 'Win' },
+  { id: 'ordered', name: 'Ordered' }, { id: 'delivered', name: 'Delivered' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
 
@@ -447,7 +447,7 @@ function loadModels() {
 
 function loadFromFirebase() {
   if (!dealerId) return;
-  showSuccessToast('🔄 กำลังโหลดข้อมูล...');
+  showSuccessToast('กำลังโหลดข้อมูล...');
   
   db.collection('dealers').doc(dealerId).get().then(function(doc) {
     if (doc.exists) {
@@ -492,27 +492,14 @@ function loadFromFirebase() {
   }).catch(function(err) { console.warn('Load timeline error:', err); });
 }
 
-// แทนที่การโหลด Pipeline แบบครั้งเดียว เป็นแบบ Real-time
-function loadPipelineRealtime() {
-  db.collection('pipeline')
-    .where('dealerId', '==', dealerId)
-    .onSnapshot(function(querySnapshot) {
-      pipelinesData = [];
-      querySnapshot.forEach(function(doc) {
-        var data = doc.data();
-        data.id = doc.id;
-        pipelinesData.push(data);
-      });
-      if (currentTab === 'pipeline') renderPipelineTab();
-      showSuccessToast('🔄 ข้อมูลอัพเดทอัตโนมัติ');
-    }, function(err) {
-      console.warn('Listener error:', err);
-    });
-}
-
 function saveToFirebase(collection, data) {
   if (!dealerId) return;
   db.collection(collection).doc(data.id).set(data).catch(function(err) { console.warn('Save error:', err); });
+}
+
+function refreshData() {
+  showSuccessToast('กำลังโหลดข้อมูลล่าสุด...');
+  loadFromFirebase();
 }
 
 function selectMonth(month) { selectedMonth = month; renderForecastTab(); }
@@ -539,7 +526,7 @@ function addRunrateItem() {
   saveToFirebase('forecast', newItem);
   document.getElementById('runrateModel').value = '';
   document.getElementById('runrateQty').value = '1';
-  showSuccessToast('✅ เพิ่ม Run Rate แล้ว');
+  showSuccessToast('เพิ่ม Run Rate แล้ว');
   renderForecastTab();
 }
 function deleteRunrateItem(idx) {
@@ -553,7 +540,7 @@ function deleteRunrateItem(idx) {
       break;
     }
   }
-  showSuccessToast('🗑️ ลบรายการแล้ว');
+  showSuccessToast('ลบรายการแล้ว');
   renderForecastTab();
 }
 function editRunrateItem(idx) {
@@ -569,14 +556,14 @@ function editRunrateItem(idx) {
         break;
       }
     }
-    showSuccessToast('✅ แก้ไขจำนวนแล้ว');
+    showSuccessToast('แก้ไขจำนวนแล้ว');
     renderForecastTab();
   }
 }
 function saveClientForecast() {
   for (var i = 0; i < forecastData.runrate.length; i++) saveToFirebase('forecast', forecastData.runrate[i]);
   for (var i = 0; i < forecastData.projects.length; i++) saveToFirebase('forecast', forecastData.projects[i]);
-  showSuccessToast('✅ บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
+  showSuccessToast('บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
   renderForecastTab();
 }
 function deleteProjectItem(projIdx) {
@@ -584,14 +571,14 @@ function deleteProjectItem(projIdx) {
   var actualItem = forecastData.projects[projIdx];
   forecastData.projects.splice(projIdx, 1);
   db.collection('forecast').doc(actualItem.id).delete().catch(function(e) {});
-  showSuccessToast('🗑️ ลบโครงการแล้ว');
+  showSuccessToast('ลบโครงการแล้ว');
   renderForecastTab();
 }
 function toggleProjectDetail(projIdx) { var el = document.getElementById('projectDetail_' + projIdx); if (el) el.classList.toggle('show'); }
 function editProjectItem(projIdx) {
   var proj = forecastData.projects[projIdx];
   var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
-  if (newName && newName.trim()) { proj.projectName = newName.trim(); saveToFirebase('forecast', proj); showSuccessToast('✅ แก้ไขแล้ว'); renderForecastTab(); }
+  if (newName && newName.trim()) { proj.projectName = newName.trim(); saveToFirebase('forecast', proj); showSuccessToast('แก้ไขแล้ว'); renderForecastTab(); }
 }
 function loadProjectToForm() {
   var select = document.getElementById('existingProjectSelect');
@@ -609,7 +596,7 @@ function loadProjectToForm() {
   }
   renderNewProjectItemsList();
   select.value = '';
-  showSuccessToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
+  showSuccessToast('โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
 }
 function addProjectItem() {
   var model = document.getElementById('newProjectItemModel').value.trim();
@@ -635,7 +622,7 @@ function renderNewProjectItemsList() {
   for (var i = 0; i < window.newProjectItems.length; i++) {
     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--border)">';
     html += '<span>' + esc(window.newProjectItems[i].model) + ' x' + window.newProjectItems[i].qty + '</span>';
-    html += '<button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">🗑️</button>';
+    html += '<button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">ลบ</button>';
     html += '</div>';
   }
   container.innerHTML = html || '<div class="hint" style="padding:8px">ยังไม่มีสินค้า</div>';
@@ -654,7 +641,7 @@ function addNewProject() {
   document.getElementById('newProjectEndUser').value = '';
   window.newProjectItems = [];
   renderNewProjectItemsList();
-  showSuccessToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
+  showSuccessToast('เพิ่มโครงการใหม่เรียบร้อยแล้ว');
   renderForecastTab();
 }
 function clearProjectForm() {
@@ -727,84 +714,58 @@ function renderForecastTab() {
     var m = allMonths[i];
     var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
     var activeClass = (selectedMonth === m) ? 'active' : '';
-    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')"><div class="month-name">' + m + '</div><div class="month-total">' + summary.total + '</div><div class="month-detail">🏪' + summary.runrate + ' 📋' + summary.project + '</div></div>';
+    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')"><div class="month-name">' + m + '</div><div class="month-total">' + summary.total + '</div><div class="month-detail">' + summary.runrate + '/' + summary.project + '</div></div>';
   }
   monthCardsHtml += '</div>';
-  var statsHtml = '<div class="stats-grid"><div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น (ชิ้น)</div></div><div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div></div>';
+  var statsHtml = '<div class="stats-grid"><div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น</div></div><div class="stat-card"><div class="stat-month">Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">รายการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">โครงการ</div></div></div>';
   var runrateHtml = '';
   for (var i = 0; i < monthRunrate.length; i++) {
     var r = monthRunrate[i];
-    runrateHtml += '<div class="forecast-item"><div style="flex:2"><strong>' + esc(r.model) + '</strong></div><div style="width:80px;text-align:center">x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️ ลบ</button></div>';
+    runrateHtml += '<div class="forecast-item"><div><strong>' + esc(r.model) + '</strong></div><div>x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">แก้ไข</button><button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">ลบ</button></div>';
   }
-  if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการสินค้าทั่วไป</div>';
+  if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการ</div>';
   var projectsHtml = '';
   for (var i = 0; i < monthProjects.length; i++) {
     var proj = monthProjects[i];
     var itemsText = '';
     for (var j = 0; j < proj.items.length; j++) itemsText += proj.items[j].model + ' x' + proj.items[j].qty + (j < proj.items.length - 1 ? ', ' : '');
-    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')"><div class="project-name"><span>📋 ' + esc(proj.projectName) + '</span><span style="font-size:12px;color:var(--text2)">' + proj.totalQty + ' ชิ้น</span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>' : '') + '<div class="project-items">📦 ' + itemsText + '</div><div class="project-detail" id="projectDetail_' + i + '"><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button></div></div></div>';
+    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')"><div class="project-name"><span>' + esc(proj.projectName) + '</span><span>' + proj.totalQty + ' ชิ้น</span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div>' + esc(proj.endUser) + '</div>' : '') + '<div>' + itemsText + '</div><div class="project-detail" id="projectDetail_' + i + '"><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">แก้ไข</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">ลบ</button></div></div></div>';
   }
   if (projectsHtml === '') projectsHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
-  var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงเฉพาะสินค้า) --</option>';
-  for (var i = 0; i < pipelinesData.length; i++) existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
+  var existingOptions = '<option value="">-- เลือกโครงการที่มี --</option>';
+  for (var i = 0; i < pipelinesData.length; i++) existingOptions += '<option value="' + i + '">' + esc(pipelinesData[i].projectName) + '</option>';
   var modelDatalist = '<datalist id="globalModelList">';
   for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
   modelDatalist += '</datalist>';
-  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>';
-  
-  // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
-  html += '<div style="text-align:right; margin-bottom:10px">';
-   html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรชข้อมูล</button>';  // เปลี่ยนเป็น refreshData()
-  html += '</div>';
-    html += '<div class="month-carousel">' + monthCardsHtml + '<div class="month-selector-dropdown" style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
- // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
-  html += '<div style="text-align:right; margin-bottom:10px">';
-  html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรชข้อมูล</button>';  // เปลี่ยนเป็น refreshData()
-  html += '</div>';
+  var html = '<div class="section"><div class="section-title">แผนการสั่งซื้อ</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div class="month-carousel">' + monthCardsHtml + '<div style="margin-top:12px;text-align:center"><select onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
   for (var i = 0; i < allMonths.length; i++) html += '<option value="' + allMonths[i] + '" ' + (selectedMonth === allMonths[i] ? 'selected' : '') + '>' + allMonths[i] + '</option>';
-  html += '</select></div></div>' + statsHtml + '<div style="margin-bottom:24px"><div class="section-title" style="font-size:16px">🏪 สินค้าทั่วไป (Run Rate)</div><div class="form-row" style="margin-bottom:12px"><div class="form-group" style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="form-group" style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div><div>' + runrateHtml + '</div></div><div style="margin-bottom:24px"><div class="section-title" style="font-size:16px">📋 โครงการ (Project-based)</div><div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div class="form-group" style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="form-group" style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div><div style="margin-top:8px">' + projectsHtml + '</div></div><div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
+  html += '</select></div></div>' + statsHtml + '<div style="margin-bottom:24px"><div class="section-title">Run Rate</div><div class="form-row" style="margin-bottom:12px"><div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จํานวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">เพิ่ม</button></div></div><div>' + runrateHtml + '</div></div><div><div class="section-title">Project</div><div class="form-group"><label>เลือกจากโครงการที่มี</label><select class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จํานวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>รายการโครงการที่เพิ่มแล้ว</strong></div><div style="margin-top:8px">' + projectsHtml + '</div></div><div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById('excelFile').click()">อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
   window.newProjectItems = [];
   document.getElementById('tabContent').innerHTML = html;
 }
 function renderPipelineTab() {
   if (!pipelinesData.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📊 โครงการของท่าน</div><div style="text-align:center;padding:40px">📭 ยังไม่มีโครงการ</div></div>';
+    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">โครงการของท่าน</div><div style="text-align:center;padding:40px">ยังไม่มีโครงการ</div></div>';
     return;
   }
-  var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)
-// เพิ่มใน header
-html += '<div style="text-align:right; margin-bottom:10px">';
-html += '<button class="btn btn-sm btn-primary" onclick="location.reload()">🔄 รีเฟรชข้อมูล</button>';
-html += '</div>';
-</div><div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
+  var html = '<div class="section"><div class="section-title">โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
   for (var i = 0; i < pipelinesData.length; i++) {
     var p = pipelinesData[i];
     var itemsText = '';
     if (p.items && p.items.length) {
-      for (var j = 0; j < p.items.length; j++) {
-        itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '') + (j < p.items.length - 1 ? ', ' : '');
-      }
+      for (var j = 0; j < p.items.length; j++) itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '') + (j < p.items.length - 1 ? ', ' : '');
     } else if (p.model) {
       itemsText = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
     }
     var amount = p.forecastAmount || 0;
-    var amountClass = amount >= 10000000 ? 'val-mega' : (amount >= 1500000 ? 'val-big' : 'val-normal');
-    html += '<tr onclick="showDetailPage(\'' + p.id + '\')" style="cursor:pointer"><td style="width:40px;color:var(--text2);font-weight:600">' + (i+1) + '</td><td><strong>' + esc(p.projectName) + '</strong></td><td>' + esc(p.endUserTH || p.endUser || '-') + '</td><td>' + getStatusLabel(p.status) + '</td><td style="font-size:12px;color:var(--text2)">' + itemsText + '</td><td class="' + amountClass + '">' + amount.toLocaleString('th-TH') + ' ฿</td><td style="text-align:center"><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">📝 อัพเดท</button></td></tr>';
+    html += '<tr onclick="showDetailPage(' + p.id + ')" style="cursor:pointer"><td>' + (i+1) + '</td><td><strong>' + esc(p.projectName) + '</strong></td><td>' + esc(p.endUserTH || p.endUser || '-') + '</td><td>' + getStatusLabel(p.status) + '</td><td>' + itemsText + '</td><td>' + amount.toLocaleString('th-TH') + ' ฿</td><td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(' + p.id + ')">อัพเดท</button></td></tr>';
   }
   html += '</tbody></table></div></div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 function renderTimelineTab() {
-  if (!timelineLogs.length) { document.getElementById('tabContent').innerHTML = '<div class="section"><div style="text-align:center;padding:40px">📭 ยังไม่มีประวัติการอัพเดท</div></div>'; return; }
-   var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดททั้งหมด</div>';
-  
-  // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
-  html += '<div style="text-align:right; margin-bottom:10px">';
-  html += '<button class="btn btn-sm btn-primary" onclick="location.reload()">🔄 รีเฟรชข้อมูล</button>';
-  html += '</div>';
-  
-  html += '<div style="max-height:500px;overflow-y:auto">';
-
+  if (!timelineLogs.length) { document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">ประวัติการอัพเดท</div><div style="text-align:center;padding:40px">ยังไม่มีประวัติ</div></div>'; return; }
+  var html = '<div class="section"><div class="section-title">ประวัติการอัพเดท</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div style="max-height:500px;overflow-y:auto">';
   for (var i = 0; i < timelineLogs.length; i++) {
     var l = timelineLogs[i];
     var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
@@ -823,12 +784,13 @@ function showUpdateModal(pipeId) {
   for (var i = 0; i < allModels.length; i++) modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
   var itemsHtml = '<div id="editItemsContainer">';
   if (p.items && p.items.length) {
-    for (var i = 0; i < p.items.length; i++) itemsHtml += '<div class="form-row"><input list="modelList' + i + '" class="editItemModel" style="flex:2" value="' + esc(p.items[i].model) + '"><datalist id="modelList' + i + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.items[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
+    for (var i = 0; i < p.items.length; i++) itemsHtml += '<div class="form-row"><input list="modelList' + i + '" class="editItemModel" value="' + esc(p.items[i].model) + '"><datalist id="modelList' + i + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.items[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
+    }
   } else if (p.model) {
-    itemsHtml += '<div class="form-row"><input list="modelList0" class="editItemModel" style="flex:2" value="' + esc(p.model) + '"><datalist id="modelList0">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.modelQty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
+    itemsHtml += '<div class="form-row"><input list="modelList0" class="editItemModel" value="' + esc(p.model) + '"><datalist id="modelList0">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.modelQty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
   }
-  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItem()">➕ เพิ่มสินค้า</button>';
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + esc(p.projectName) + '" class="form-control"></div><div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" value="' + esc(p.endUserTH || p.endUser || '') + '" class="form-control"></div><div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + '</div><div class="form-group"><label>📝 รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..." class="form-control"></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitFullUpdate(\'' + pipeId + '\')">💾 บันทึก</button></div></div></div>';
+  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItem()">เพิ่มสินค้า</button>';
+  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + esc(p.projectName) + '" class="form-control"></div><div class="form-group"><label>End User</label><input type="text" id="editEndUser" value="' + esc(p.endUserTH || p.endUser || '') + '" class="form-control"></div><div class="form-group"><label>สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>สินค้า</label>' + itemsHtml + '</div><div class="form-group"><label>รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..." class="form-control"></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitFullUpdate(' + pipeId + ')">บันทึก</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 function addEditItem() {
@@ -837,7 +799,7 @@ function addEditItem() {
   var idx = Date.now();
   var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
   for (var i = 0; i < allModels.length; i++) modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
-  var html = '<div class="form-row" data-item-index="' + idx + '"><input list="modelList' + idx + '" class="editItemModel" style="flex:2" placeholder="พิมพ์ชื่อสินค้า"><datalist id="modelList' + idx + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">🗑️</button></div>';
+  var html = '<div class="form-row" data-item-index="' + idx + '"><input list="modelList' + idx + '" class="editItemModel" style="flex:2" placeholder="พิมพ์ชื่อสินค้า"><datalist id="modelList' + idx + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
   container.insertAdjacentHTML('beforeend', html);
 }
 function removeEditItem(btn) { var row = btn.closest('.form-row'); if (row) row.remove(); }
@@ -870,7 +832,7 @@ function submitFullUpdate(pipeId) {
   var newLog = { id: 'log_' + Date.now(), pipeId: pipeId, type: 'update', content: content || 'แก้ไขข้อมูลโครงการ', date: _nw(), dealerId: dealerId };
   db.collection('pipeLog').doc(newLog.id).set(newLog).catch(function(e) {});
   timelineLogs.unshift(newLog);
-  showSuccessToast('✅ บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
+  showSuccessToast('บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
   closeModal();
   renderCurrentTab();
 }
@@ -884,7 +846,7 @@ function showDetailPage(pipeId) {
     itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td>' + (p.modelQty || 1) + '</td></tr>';
   }
   itemsHtml += '</tbody></table>';
-  var html = '<div class="cv-back" onclick="showOverview()">← กลับไปหน้าแรก</div><div class="detail-header" style="background:var(--bg);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)"><div style="font-size:20px;font-weight:700;color:var(--accent)">' + esc(p.projectName) + '</div><div style="margin-top:8px">' + getStatusLabel(p.status) + '</div></div><div class="detail-info-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px"><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">👤 End User</div><div class="detail-info-value">' + esc(p.endUserTH || p.endUser || '-') + '</div></div><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">💰 มูลค่า</div><div class="detail-info-value">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div></div></div><div class="section"><div class="section-title">📦 รายการสินค้า</div>' + itemsHtml + '</div><div class="section"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดทโครงการ</button></div>';
+  var html = '<div class="cv-back" onclick="showOverview()">← กลับ</div><div class="detail-header" style="background:var(--bg);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)"><div style="font-size:20px;font-weight:700;color:var(--accent)">' + esc(p.projectName) + '</div><div style="margin-top:8px">' + getStatusLabel(p.status) + '</div></div><div class="detail-info-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px"><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">End User</div><div class="detail-info-value">' + esc(p.endUserTH || p.endUser || '-') + '</div></div><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">มูลค่า</div><div class="detail-info-value">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div></div></div><div class="section"><div class="section-title">รายการสินค้า</div>' + itemsHtml + '</div><div class="section"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(' + pipeId + ')">แก้ไขข้อมูล / อัพเดท</button></div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 function showOverview() { renderCurrentTab(); }
@@ -893,17 +855,8 @@ function renderCurrentTab() {
   else if (currentTab === 'forecast') renderForecastTab();
   else renderTimelineTab();
 }
-// ✅ เพิ่มฟังก์ชันนี้ก่อน function loadAllData()
-function refreshData() {
-  showSuccessToast('🔄 กำลังโหลดข้อมูลล่าสุด...');
-  loadFromFirebase();  // โหลดข้อมูลใหม่โดยไม่ต้อง reload หน้า
-}
-
 function loadAllData() {
-  if (!dealerId) { 
-    document.getElementById('tabContent').innerHTML = '<div class="section"><p>❌ ไม่พบข้อมูล Dealer</p></div>'; 
-    return; 
-  }
+  if (!dealerId) { document.getElementById('tabContent').innerHTML = '<div class="section"><p>ไม่พบข้อมูล Dealer</p></div>'; return; }
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
   loadFromFirebase();
@@ -918,9 +871,7 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   currentTab = tab;
   document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
-  if (tab === 'pipeline') loadFromFirebase();
-  else if (tab === 'forecast') loadFromFirebase();
-  else loadFromFirebase();
+  loadFromFirebase();
 });
 window.toggleTheme = toggleTheme;
 window.selectMonth = selectMonth;
@@ -945,6 +896,7 @@ window.showOverview = showOverview;
 window.closeModal = closeModal;
 window.addEditItem = addEditItem;
 window.removeEditItem = removeEditItem;
+window.refreshData = refreshData;
 loadAllData();
 </script>
 </body>
