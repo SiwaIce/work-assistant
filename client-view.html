@@ -515,9 +515,21 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
   updateData._originalPipeId = pipeId;
   updateData._updateType = 'pipeline';
   
-  return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId)
-    .set(updateData, { merge: true });
+  return getCustomerPipelineRef(dealerId, pipeId).set(updateData, { merge: true }).then(function() {
+    var timelineRef = getCustomerTimelineRef(dealerId);
+    var timelineEntry = {
+      id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      type: 'pipeline_update',
+      pipeId: pipeId,
+      projectName: data.projectName,
+      content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      status: 'pending'
+    };
+    return timelineRef.doc(timelineEntry.id).set(timelineEntry);
+  });
 }
+
 function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
   var updateData = JSON.parse(JSON.stringify(data));
   updateData._customerUpdate = true;
@@ -542,45 +554,35 @@ function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
 // โหลดข้อมูล
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
-  
-  // อ่านจาก public_pipeline (ไม่ต้องใช้ uid แล้ว)
-  return db.collection('public_pipeline')
-    .where('dealerId', '==', dealerId).get()
-    .then(function(querySnapshot) {
-      pipelinesData = [];
-      querySnapshot.forEach(function(doc) {
-        var data = doc.data();
-        data.id = doc.id;
-        pipelinesData.push(data);
-      });
-      return pipelinesData;
-    }).catch(function(err) { 
-      console.warn('Load pipeline error:', err); 
-      return [];
+  return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
+    pipelinesData = [];
+    querySnapshot.forEach(function(doc) {
+      var data = doc.data();
+      data.id = doc.id;
+      pipelinesData.push(data);
     });
+    return pipelinesData;
+  }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
 }
+
 function loadForecast() {
   if (!dealerId) return Promise.resolve();
-  
-  var uid = 'UX5W0i60eOaQqxeA2X2c6KXlDp73';
-  
-  return db.collection('users').doc(uid).collection('forecast')
-    .where('dealerId', '==', dealerId).get()
-    .then(function(querySnapshot) {
-      forecastData.runrate = [];
-      forecastData.projects = [];
-      querySnapshot.forEach(function(doc) {
-        var item = doc.data();
-        item.id = doc.id;
-        if (item.type === 'runrate') forecastData.runrate.push(item);
-        else if (item.type === 'project') forecastData.projects.push(item);
-      });
-      return Promise.resolve();
-    }).catch(function(err) { 
-      console.warn('Load forecast error:', err); 
-      return Promise.resolve();
+  return getCustomerForecastRef(dealerId).get().then(function(querySnapshot) {
+    forecastData.runrate = [];
+    forecastData.projects = [];
+    querySnapshot.forEach(function(doc) {
+      var item = doc.data();
+      item.id = doc.id;
+      if (item.type === 'runrate') forecastData.runrate.push(item);
+      else if (item.type === 'project') forecastData.projects.push(item);
     });
+    return Promise.resolve();
+  }).catch(function(err) { 
+    console.warn('Load forecast error:', err); 
+    return Promise.resolve();
+  });
 }
+
 function loadTimeline() {
   if (!dealerId) return Promise.resolve([]);
   return getCustomerTimelineRef(dealerId).orderBy('timestamp', 'desc').limit(50).get().then(function(querySnapshot) {

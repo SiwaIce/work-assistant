@@ -122,6 +122,7 @@ function filterDealerList() {
 // ================================================================
 let dealerTab = 'info';
 
+// เพิ่มใน rDealerDet หลังจาก const d = ST.getOne...
 function rDealerDet(el) {
   const d = ST.getOne('dealers', S.dealerId);
   if (!d) return go('dealers');
@@ -142,7 +143,7 @@ function rDealerDet(el) {
     main.style.maxWidth = 'calc(100% - 200px)';
   }
   
-  document.getElementById('pgT').textContent = '🏪 ' + d.name;
+  document.getElementById('pgT').textContent = '🏪 ' + d.name;  // Store dealerId for context-aware FAB
   S.dealerId = d.id;
   
   // ตรวจสอบว่ามีการขอเปิดแท็บ forecast หรือไม่
@@ -153,7 +154,6 @@ function rDealerDet(el) {
   
   const isPinned = ST.hasPin(d.id);
   const h = calcHealthScore(d.id);
-  
   el.innerHTML = `
   <div class="bc">
     <a onclick="go('dealers')">🏪 Dealer</a><span class="sep">›</span>
@@ -172,7 +172,9 @@ function rDealerDet(el) {
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
   <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
+  <!-- ✅ เพิ่มปุ่มนี้ -->
   <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>
+  <!-- ✅ -->
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
 </div>
@@ -190,14 +192,8 @@ function rDealerDet(el) {
 
   <!-- Tab Content -->
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
-  
-// หลังจาก render เสร็จ
-setTimeout(function() {
-  if (typeof syncPipelineToPublic === 'function') {
-    syncPipelineToPublic(d.id);
-  }
-}, 500);
 }
+
 function renderDealerTab(d) {
   switch (dealerTab) {
     case 'info': return dealerInfoTab(d);
@@ -205,11 +201,12 @@ function renderDealerTab(d) {
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
     case 'forecast': return dealerForecastTab(d);
-    case 'tasks': return dealerTasksTab(d);
+        case 'tasks': return dealerTasksTab(d);
     case 'onboard': return dealerOnboardTab(d);
     default: return dealerInfoTab(d);
   }
 }
+
 // ================================================================
 // TAB: INFO (Redesigned - Premium)
 // ================================================================
@@ -232,7 +229,6 @@ function dealerInfoTab(d) {
     { name: 'FH2', status: d.fh2Status, pass: d.fh2Status === 'pass' },
     { name: 'Lark', status: d.larkStatus, pass: d.larkStatus === 'added' }
   ];
-  // ลบบรรทัดนี้ทิ้ง → var updatesPanel = '<div id="customerUpdatesPanel"></div>';
 
   return `
   <!-- Hero Section -->
@@ -381,12 +377,8 @@ function dealerInfoTab(d) {
   <div class="card">
     <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
     ${renderLineLog(d.id, 5)}
-  </div>
-  
-  <!-- Customer Updates Panel -->
-  <div id="customerUpdatesPanel"></div>
-  `;
-}  // ← ปิดฟังก์ชันให้ถูกต้อง
+  </div>`;
+}
 
 function certField(name, status, count, lastCheck) {
   const pass = status === 'pass' || status === 'yes' || status === 'added';
@@ -2037,18 +2029,18 @@ function fmtMoneyFull(n) {
   return n.toLocaleString('th-TH');
 }
 function copyClientLink(dealerId) {
-    var dealer = ST.getOne('dealers', dealerId);
-    if (!dealer) return;
-    
-    var uid = CURRENT_USER ? CURRENT_USER.uid : '';
-    var baseUrl = window.location.href.split('?')[0].split('#')[0];
-    var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-    var encodedName = encodeURIComponent(dealer.name);
-    var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid + '&name=' + encodedName;
-    
-    copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + dealer.name + ' แล้ว');
-    toast('📋 ลิงก์: ' + clientUrl);
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var encodedName = encodeURIComponent(dealer.name);
+  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&name=' + encodedName;
+  
+  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + dealer.name + ' แล้ว! ส่งให้ลูกค้าได้เลย');
+  toast('📋 ลิงก์: ' + clientUrl);
 }
+
 // ================================================================
 // DEALER PIN MANAGEMENT
 // ================================================================
