@@ -4,14 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>DJI Enterprise - ติดตามสถานะโครงการ</title>
-<!-- SheetJS สำหรับ Excel -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
 /* ================================================================
-   MODERN DARK THEME - RAYCAST STYLE
+   MODERN DARK THEME
    ================================================================ */
 :root {
   --bg: #0a0c10;
@@ -20,15 +18,11 @@
   --border: rgba(255,255,255,0.06);
   --text: #e4e6eb;
   --text2: #787c85;
-  --text3: #52525b;
   --accent: #3b82f6;
-  --accent-light: rgba(59,130,246,0.1);
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
   --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .theme-light {
   --bg: #f8fafc;
@@ -37,20 +31,15 @@
   --border: #e9ecef;
   --text: #1e293b;
   --text2: #64748b;
-  --text3: #94a3b8;
   --accent: #2563eb;
-  --accent-light: #eff6ff;
-  --shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai', sans-serif;
   background: var(--bg);
   color: var(--text);
-  transition: background 0.2s, color 0.2s;
+  transition: all 0.2s;
   padding-bottom: 20px;
-  font-feature-settings: 'calt' 1;
-  letter-spacing: -0.01em;
 }
 .theme-toggle {
   position: fixed;
@@ -68,10 +57,10 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 .theme-toggle:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.05); }
-.cv-container { max-width: 1400px; margin: 0 auto; padding: 24px; padding-top: 20px; }
+.cv-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
 .cv-header {
   text-align: center;
   padding: 32px 0 40px;
@@ -80,7 +69,7 @@ body {
   background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.03) 100%);
   border-radius: 20px;
 }
-.cv-logo { font-size: 14px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+.cv-logo { font-size: 14px; color: var(--accent); letter-spacing: 2px; margin-bottom: 8px; }
 .cv-dealer-name {
   font-size: 32px;
   font-weight: 800;
@@ -111,20 +100,14 @@ body {
   white-space: nowrap;
 }
 .tab-btn:hover { color: var(--accent); background: var(--accent-light); }
-.tab-btn.active {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(59,130,246,0.3);
-}
+.tab-btn.active { background: var(--accent); color: #fff; }
 .section {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 20px;
-  transition: all 0.2s;
 }
-.section:hover { border-color: rgba(59,130,246,0.3); }
 .section-title {
   font-size: 16px;
   font-weight: 700;
@@ -155,7 +138,7 @@ body {
 }
 .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .stat-card.active { border-color: var(--accent); background: var(--accent-light); }
-.stat-month { font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-month { font-size: 13px; font-weight: 700; color: var(--accent); }
 .stat-qty { font-size: 28px; font-weight: 800; margin: 6px 0; }
 .stat-detail { font-size: 11px; color: var(--text2); }
 .data-table {
@@ -168,8 +151,6 @@ body {
   font-size: 11px;
   font-weight: 700;
   color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   border-bottom: 2px solid var(--border);
 }
 .data-table td {
@@ -194,8 +175,6 @@ body {
 .status-win { background: rgba(129,199,132,0.12); color: #81c784; }
 .status-ordered { background: rgba(76,175,80,0.12); color: #4caf50; }
 .status-delivered { background: rgba(76,175,80,0.15); color: #66bb6a; }
-.status-on_hold { background: rgba(144,164,174,0.12); color: #90a4ae; }
-.status-lost { background: rgba(239,68,68,0.12); color: #f87171; }
 .btn {
   padding: 8px 16px;
   border-radius: 10px;
@@ -214,7 +193,6 @@ body {
 .btn-danger:hover { background: rgba(239,68,68,0.1); }
 .btn-success { background: var(--success); border-color: var(--success); color: #fff; }
 .btn-warning { background: var(--warning); border-color: var(--warning); color: #fff; }
-.btn-warning:hover { opacity: 0.9; }
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
 .form-group input, .form-group select, .form-group textarea {
@@ -255,7 +233,6 @@ body {
   max-height: 85vh;
   overflow-y: auto;
   border: 1px solid var(--border);
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
 }
 .modal-header {
   padding: 16px 20px;
@@ -266,10 +243,9 @@ body {
   position: sticky;
   top: 0;
   background: var(--card);
-  border-radius: 20px 20px 0 0;
 }
 .modal-header h3 { font-size: 18px; color: var(--accent); font-weight: 700; }
-.modal-close { background: none; border: none; color: var(--text2); font-size: 24px; cursor: pointer; padding: 4px; }
+.modal-close { background: none; border: none; color: var(--text2); font-size: 24px; cursor: pointer; }
 .modal-body { padding: 20px; }
 .modal-footer {
   padding: 16px 20px;
@@ -280,7 +256,6 @@ body {
   position: sticky;
   bottom: 0;
   background: var(--card);
-  border-radius: 0 0 20px 20px;
 }
 .month-carousel {
   background: var(--bg);
@@ -295,7 +270,6 @@ body {
   overflow-x: auto;
   padding: 4px 0 8px;
   scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
 }
 .month-card {
   flex: 0 0 auto;
@@ -306,7 +280,7 @@ body {
   border-radius: 14px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 .month-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .month-card.active { background: var(--accent); border-color: var(--accent); }
@@ -353,7 +327,6 @@ body {
   font-weight: 600;
   z-index: 2001;
   animation: fadeInUp 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateX(-50%) translateY(20px); }
@@ -384,17 +357,6 @@ body {
   color: var(--text2);
 }
 .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-.pipe-item-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 12px;
-}
-.pipe-item-model { flex: 2; font-weight: 500; }
-.pipe-item-qty { width: 60px; text-align: center; color: var(--accent); }
-.pipe-item-price { width: 100px; text-align: right; color: var(--text2); }
-.pipe-item-total { width: 100px; text-align: right; font-weight: 700; color: var(--success); }
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -419,7 +381,7 @@ body {
     <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
     <div class="tab-btn" data-tab="timeline">📝 ประวัติการอัพเดท</div>
   </div>
-  <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div style="margin-top:12px">กำลังโหลดข้อมูล...</div></div></div>
+  <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
     <div>Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor</div>
     <div id="footerDate"></div>
@@ -428,9 +390,7 @@ body {
 <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
 
 <script>
-// ================================================================
-// FIREBASE CONFIGURATION
-// ================================================================
+// Firebase Config
 var firebaseConfig = {
   apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
   authDomain: "work-assistant-9e024.firebaseapp.com",
@@ -442,9 +402,7 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
-// ================================================================
-// GLOBAL VARIABLES
-// ================================================================
+// Global variables
 var dealerId = null;
 var uid = null;
 var currentTab = 'pipeline';
@@ -457,9 +415,7 @@ var selectedMonth = null;
 var allMonths = [];
 var newProjectItems = [];
 
-// ================================================================
-// HELPER FUNCTIONS
-// ================================================================
+// Helper functions
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
 function applyTheme(theme) {
   if (theme === 'light') { document.body.classList.add('theme-light'); document.querySelector('.theme-toggle').textContent = '☀️'; }
@@ -475,7 +431,6 @@ function closeModal() { var modal = document.querySelector('.modal-overlay'); if
 function _td() { var now = new Date(); return now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0'); }
 function _nw() { return new Date().toISOString(); }
 
-// Status list
 var STATUS_LIST = [
   { id: 'prospect', name: '🔍 Prospect' }, { id: 'tor_review', name: '📋 TOR Review' },
   { id: 'quotation', name: '💰 Quotation' }, { id: 'bidding', name: '⏳ Bidding' },
@@ -485,7 +440,6 @@ var STATUS_LIST = [
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
 
-// Generate months (12 months ahead)
 function generateMonths() {
   var months = [];
   var now = new Date();
@@ -498,7 +452,6 @@ function generateMonths() {
   return months;
 }
 
-// Load product models from config
 function loadModels() {
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
@@ -516,14 +469,12 @@ function loadModels() {
   }
 }
 
-// Get Firebase collection references
+// Firebase references
 function getPipelineRef() { return db.collection('users').doc(uid).collection('pipeline'); }
 function getPipeLogRef() { return db.collection('users').doc(uid).collection('pipelog'); }
 function getForecastRef() { return db.collection('users').doc(uid).collection('forecast'); }
 
-// ================================================================
-// LOAD DATA FROM FIREBASE
-// ================================================================
+// Load data
 function loadPipeline() {
   if (!uid || !dealerId) return Promise.resolve([]);
   return getPipelineRef().where('dealerId', '==', dealerId).get().then(function(querySnapshot) {
@@ -549,45 +500,17 @@ function loadForecast() {
       if (item.type === 'runrate') forecastData.runrate.push(item);
       else if (item.type === 'project') forecastData.projects.push(item);
     });
-  }).catch(function(err) { 
-    console.warn('Load forecast error:', err);
-    // Try without where clause as fallback
-    return getForecastRef().get().then(function(qs) {
-      forecastData.runrate = [];
-      forecastData.projects = [];
-      qs.forEach(function(doc) {
-        var item = doc.data();
-        if (item.dealerId === dealerId) {
-          item.id = doc.id;
-          if (item.type === 'runrate') forecastData.runrate.push(item);
-          else if (item.type === 'project') forecastData.projects.push(item);
-        }
-      });
-    }).catch(function(e) {});
-  });
+  }).catch(function(err) { console.warn('Load forecast error:', err); });
 }
+
 function loadTimeline() {
   if (!uid || !dealerId) return Promise.resolve([]);
-  // query without orderBy first to avoid index requirement
   return getPipeLogRef().where('dealerId', '==', dealerId).get().then(function(querySnapshot) {
     timelineLogs = [];
     querySnapshot.forEach(function(doc) { timelineLogs.push(doc.data()); });
-    // sort manually after fetching
     timelineLogs.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
     return timelineLogs.slice(0, 50);
-  }).catch(function(err) { 
-    console.warn('Load timeline error:', err); 
-    // Fallback: try without where clause
-    return getPipeLogRef().get().then(function(qs) {
-      timelineLogs = [];
-      qs.forEach(function(doc) { 
-        var data = doc.data();
-        if (data.dealerId === dealerId) timelineLogs.push(data);
-      });
-      timelineLogs.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
-      return timelineLogs.slice(0, 50);
-    }).catch(function(e) { return []; });
-  });
+  }).catch(function(err) { console.warn('Load timeline error:', err); return []; });
 }
 
 function loadDealerName() {
@@ -610,12 +533,13 @@ function loadAllData() {
 
 function refreshData() { loadAllData(); }
 
-// ================================================================
-// SAVE TO FIREBASE
-// ================================================================
+// Save to Firebase
 function savePipelineItem(pipeId, data) {
-  if (!uid) return;
-  return getPipelineRef().doc(pipeId).set(data, { merge: true }).catch(function(err) { console.warn('Save pipeline error:', err); });
+  if (!uid) return Promise.reject('No uid');
+  return getPipelineRef().doc(pipeId).set(data, { merge: true }).catch(function(err) { 
+    console.warn('Save pipeline error:', err);
+    throw err;
+  });
 }
 
 function saveForecastItem(item) {
@@ -634,9 +558,7 @@ function addPipeLog(pipeId, content, type) {
   return getPipeLogRef().doc(log.id).set(log).catch(function(err) { console.warn('Add log error:', err); });
 }
 
-// ================================================================
-// PIPELINE TAB
-// ================================================================
+// Pipeline Tab Functions
 function renderPipelineTab() {
   if (!pipelinesData.length) {
     document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📋 โครงการของท่าน</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีโครงการ</div></div></div>';
@@ -698,7 +620,7 @@ function showPipelineDetail(pipeId) {
     totalAmt = p.forecastAmount || 0;
     itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td><td>-</td><td class="pipe-item-total">' + (totalAmt ? totalAmt.toLocaleString('th-TH') : '-') + '</td></tr>';
   }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td><td></td><td class="pipe-item-total">' + totalAmt.toLocaleString('th-TH') + ' ฿</td></tr>';
+  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong><tr><td class="pipe-item-qty">x' + totalItems + '</td><td></td><td class="pipe-item-total">' + totalAmt.toLocaleString('th-TH') + ' ฿</td></tr>';
   itemsHtml += '</tbody></table>';
   
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
@@ -722,9 +644,9 @@ function showUpdateModal(pipeId) {
     statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
   }
   
-  var modelOptions = '<datalist id="globalModelListEdit">';
-  for (var i = 0; i < allModels.length; i++) modelOptions += '<option value="' + esc(allModels[i]) + '">';
-  modelOptions += '</datalist>';
+  var modelDatalist = '<datalist id="globalModelListEdit">';
+  for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
+  modelDatalist += '</datalist>';
   
   var itemsHtml = '<div id="editItemsContainer">';
   var editItems = [];
@@ -746,7 +668,7 @@ function showUpdateModal(pipeId) {
   modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div>';
   modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>';
-  modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelOptions + '</div>';
+  modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div>';
   modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว..."></textarea></div>';
   modalHtml += '</div><div class="modal-footer">';
   modalHtml += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
@@ -788,7 +710,6 @@ function submitPipelineUpdate(pipeId) {
   if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
   
   var totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
-  var totalAmount = (items[0] && items[0].price) ? items.reduce(function(s, it) { return s + (it.qty * it.price); }, 0) : 0;
   
   var updatedPipeline = null;
   for (var i = 0; i < pipelinesData.length; i++) {
@@ -799,7 +720,6 @@ function submitPipelineUpdate(pipeId) {
       pipelinesData[i].items = items;
       pipelinesData[i].model = items[0].model;
       pipelinesData[i].modelQty = totalQty;
-      if (totalAmount > 0) pipelinesData[i].forecastAmount = totalAmount;
       updatedPipeline = pipelinesData[i];
       break;
     }
@@ -817,21 +737,7 @@ function submitPipelineUpdate(pipeId) {
   }
 }
 
-// ================================================================
-// FORECAST TAB
-// ================================================================
-function generateMonths() {
-  var months = [];
-  var now = new Date();
-  for (var i = 0; i < 12; i++) {
-    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    var m = d.getMonth() + 1;
-    var y = d.getFullYear() + 543;
-    months.push((m < 10 ? '0' + m : m) + '/' + y);
-  }
-  return months;
-}
-
+// Forecast Tab Functions
 function getMonthSummary() {
   var summary = {};
   for (var i = 0; i < allMonths.length; i++) summary[allMonths[i]] = { runrate: 0, project: 0, total: 0 };
@@ -1014,20 +920,17 @@ function uploadForecastExcel(input) {
     var sheet = workbook.Sheets[workbook.SheetNames[0]];
     var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); input.value = ''; return; }
-    var newRunrate = [], newProjects = [];
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       if (!row || !row[0]) continue;
       var type = row[0], name = row[1], model = row[2], qty = parseInt(row[3]) || 0, endUser = row[4] || '', month = row[5];
       if (!month || allMonths.indexOf(month) === -1) continue;
       if (type === 'Run Rate' && model && qty > 0) {
-        newRunrate.push({ id: 'rr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' });
+        forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' });
       } else if (type === 'Project' && name && model && qty > 0) {
-        newProjects.push({ id: 'proj_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' });
+        forecastData.projects.push({ id: 'proj_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' });
       }
     }
-    for (var i = 0; i < newRunrate.length; i++) forecastData.runrate.push(newRunrate[i]);
-    for (var i = 0; i < newProjects.length; i++) forecastData.projects.push(newProjects[i]);
     saveClientForecast();
     input.value = '';
   };
@@ -1143,9 +1046,7 @@ function renderForecastTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ================================================================
-// TIMELINE TAB
-// ================================================================
+// Timeline Tab
 function renderTimelineTab() {
   if (!timelineLogs.length) {
     document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div></div>';
@@ -1158,7 +1059,7 @@ function renderTimelineTab() {
     var l = timelineLogs[i];
     var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
     var dateStr = l.date ? formatThaiDate(l.date) : '-';
-    html += '<div style="padding:14px;border-bottom:1px solid var(--border);transition:0.15s">';
+    html += '<div style="padding:14px;border-bottom:1px solid var(--border)">';
     html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + dateStr + ' ' + icon + '</div>';
     html += '<div style="font-size:13px;line-height:1.5">' + esc(l.content || '') + '</div>';
     if (l.pipeId) {
@@ -1171,33 +1072,28 @@ function renderTimelineTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ================================================================
-// RENDER CURRENT TAB
-// ================================================================
 function renderCurrentTab() {
   if (currentTab === 'pipeline') renderPipelineTab();
   else if (currentTab === 'forecast') renderForecastTab();
   else renderTimelineTab();
 }
 
-// ================================================================
-// INITIALIZATION
-// ================================================================
+// Initialize
 var urlParams = new URLSearchParams(window.location.search);
 dealerId = urlParams.get('dealerId');
 uid = urlParams.get('uid');
 
 if (!dealerId) {
-  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div style="margin-top:8px;font-size:12px">กรุณาติดต่อผู้ดูแลระบบ</div></div>';
+  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div></div>';
 } else if (!uid) {
-  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔐</div><div>ไม่พบข้อมูลการเชื่อมต่อ</div><div style="margin-top:8px;font-size:12px">กรุณาติดต่อผู้ดูแลระบบ</div></div>';
+  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔐</div><div>ไม่พบข้อมูลการเชื่อมต่อ</div></div>';
 } else {
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
   loadAllData();
 }
 
-// Tab click event
+// Tab click
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');
   if (!btn) return;
@@ -1209,7 +1105,7 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   renderCurrentTab();
 });
 
-// Expose functions globally
+// Expose global functions
 window.toggleTheme = toggleTheme;
 window.refreshData = refreshData;
 window.selectMonth = selectMonth;
