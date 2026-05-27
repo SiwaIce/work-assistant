@@ -277,7 +277,8 @@ function render() {
     customKpi: rCustomKPI,
     today: rToday, kpi: rKPI,
     report: rWeeklyReport, dashboard: rDashboard, health: rDataHealth,
-        customerUpdates: rCustomerUpdates,
+    customerUpdates: rCustomerUpdates,
+    customerUpdateHistory: rCustomerUpdateHistory,
     dealers: rDealers, dealerDetail: rDealerDet,pipeDash: rPipeDashboard,
     contactLogs: rContactLogs,
     pipeline: rPipeline, pipeBoard: rPipeBoard, pipeDetail: rPipeDet,
@@ -2552,6 +2553,242 @@ function syncDealerPipelineToCustomer(dealerId) {
   }).catch(function(err) {
     toast('❌ Sync ล้มเหลว: ' + err.message);
   });
+}
+
+// ================================================================
+// CUSTOMER UPDATE HISTORY - ดูประวัติการอัพเดทของลูกค้า
+// ================================================================
+
+var historyStartDate = '';
+var historyEndDate = '';
+var historyFilterStatus = 'all'; // all, pending, approved, rejected
+var historyFilterDealer = 'all';
+
+function rCustomerUpdateHistory(el) {
+  document.getElementById('pgT').textContent = '📜 ประวัติลูกค้าอัพเดท';
+  
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    el.innerHTML = '<div class="card"><div class="empty"><p>กรุณา login เพื่อดูประวัติ</p></div></div>';
+    return;
+  }
+  
+  var dealers = ST.getAll('dealers');
+  if (!dealers.length) {
+    el.innerHTML = '<div class="card"><div class="empty"><p>ไม่มี Dealer ในระบบ</p></div></div>';
+    return;
+  }
+  
+  // ตัวเลือก Dealer
+  var dealerOptions = '<option value="all">🏪 ทุก Dealer</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    dealerOptions += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
+  }
+  
+  var statusOptions = `
+    <option value="all" ${historyFilterStatus === 'all' ? 'selected' : ''}>✅ ทั้งหมด</option>
+    <option value="pending" ${historyFilterStatus === 'pending' ? 'selected' : ''}>🟡 รอตรวจสอบ</option>
+    <option value="approved" ${historyFilterStatus === 'approved' ? 'selected' : ''}>🟢 อนุมัติแล้ว</option>
+    <option value="rejected" ${historyFilterStatus === 'rejected' ? 'selected' : ''}>🔴 ปฏิเสธ</option>
+  `;
+  
+  var html = `
+    <div class="card">
+      <h2>📅 ช่วงเวลา</h2>
+      <div class="fr">
+        ${dpH('history_from', historyStartDate || addD(_td(), -30), 'จากวันที่')}
+        ${dpH('history_to', historyEndDate || _td(), 'ถึงวันที่')}
+      </div>
+      <div class="fr" style="margin-top:8px">
+        <div class="fg"><label>🏪 Dealer</label><select id="historyDealer" onchange="historyFilterDealer=this.value;loadHistoryData()">${dealerOptions}</select></div>
+        <div class="fg"><label>📊 สถานะ</label><select id="historyStatus" onchange="historyFilterStatus=this.value;loadHistoryData()">${statusOptions}</select></div>
+        <div class="fg"><label>&nbsp;</label><button class="btn bp" onclick="loadHistoryData()">🔍 ค้นหา</button></div>
+      </div>
+    </div>
+    <div id="historySummary"></div>
+    <div id="historyList"></div>
+  `;
+  
+  el.innerHTML = html;
+  
+  // โหลดข้อมูล
+  loadHistoryData();
+}
+
+function loadHistoryData() {
+  historyStartDate = dpG('history_from') || addD(_td(), -30);
+  historyEndDate = dpG('history_to') || _td();
+  historyFilterDealer = document.getElementById('historyDealer') ? document.getElementById('historyDealer').value : 'all';
+  historyFilterStatus = document.getElementById('historyStatus') ? document.getElementById('historyStatus').value : 'all';
+  
+  var dealers = ST.getAll('dealers');
+  var allUpdates = [];
+  var promises = [];
+  
+  // เลือก dealer ที่จะ查询
+  var targetDealers = [];
+  if (historyFilterDealer !== 'all') {
+    var d = ST.getOne('dealers', historyFilterDealer);
+    if (d) targetDealers.push(d);
+  } else {
+    targetDealers = dealers;
+  }
+  
+  targetDealers.forEach(function(dealer) {
+    var promise = db.collection('dealerUpdates').doc(dealer.id).collection('timeline')
+      .orderBy('timestamp', 'desc')
+      .get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          data.id = doc.id;
+          data.dealerName = dealer.name;
+          data.dealerId = dealer.id;
+          
+          // กรองตามวันที่
+          var timestamp = data.timestamp;
+          if (timestamp && timestamp.toDate) {
+            var dateStr = timestamp.toDate().toISOString().split('T')[0];
+            if (dateStr >= historyStartDate && dateStr <= historyEndDate) {
+              allUpdates.push(data);
+            }
+          }
+        });
+      })
+      .catch(function(err) {
+        console.warn('Error loading timeline for dealer:', dealer.name, err);
+      });
+    promises.push(promise);
+  });
+  
+  Promise.all(promises).then(function() {
+    // กรองตามสถานะ
+    if (historyFilterStatus !== 'all') {
+      allUpdates = allUpdates.filter(function(u) { return u.status === historyFilterStatus; });
+    }
+    
+    // เรียงตามเวลา (ล่าสุดสุด)
+    allUpdates.sort(function(a, b) {
+      var ta = a.timestamp && a.timestamp.toDate ? a.timestamp.toDate() : new Date(0);
+      var tb = b.timestamp && b.timestamp.toDate ? b.timestamp.toDate() : new Date(0);
+      return tb - ta;
+    });
+    
+    renderHistorySummary(allUpdates);
+    renderHistoryList(allUpdates);
+  });
+}
+
+function renderHistorySummary(updates) {
+  var container = document.getElementById('historySummary');
+  if (!container) return;
+  
+  var pending = updates.filter(function(u) { return u.status === 'pending'; }).length;
+  var approved = updates.filter(function(u) { return u.status === 'approved'; }).length;
+  var rejected = updates.filter(function(u) { return u.status === 'rejected'; }).length;
+  
+  var html = `
+    <div class="sr" style="margin-bottom:12px">
+      <div class="sc"><div class="sn c1">${updates.length}</div><div class="sl">ทั้งหมด</div></div>
+      <div class="sc"><div class="sn c3">${pending}</div><div class="sl">⏳ รอตรวจสอบ</div></div>
+      <div class="sc"><div class="sn c2">${approved}</div><div class="sl">✅ อนุมัติแล้ว</div></div>
+      <div class="sc"><div class="sn c4">${rejected}</div><div class="sl">❌ ปฏิเสธ</div></div>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+
+function renderHistoryList(updates) {
+  var container = document.getElementById('historyList');
+  if (!container) return;
+  
+  if (updates.length === 0) {
+    container.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีประวัติการอัพเดทในช่วงเวลาที่เลือก</p></div></div>';
+    return;
+  }
+  
+  var html = '<div class="card"><h2>📋 รายการอัพเดท (' + updates.length + ')</h2>';
+  html += '<div class="tl">';
+  
+  updates.forEach(function(u) {
+    var dateStr = u.timestamp && u.timestamp.toDate ? fDT(u.timestamp.toDate()) : '-';
+    var statusIcon = u.status === 'pending' ? '🟡' : (u.status === 'approved' ? '🟢' : '🔴');
+    var statusText = u.status === 'pending' ? 'รอตรวจสอบ' : (u.status === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธ');
+    
+    html += '<div class="ti tl-' + u.type + '">';
+    html += '<div class="td2">' + dateStr + ' ' + statusIcon + ' <span class="tag tag-' + u.status + '">' + statusText + '</span></div>';
+    html += '<div class="tt2">🏪 ' + sanitize(u.dealerName) + '</div>';
+    
+    if (u.projectName) {
+      html += '<div class="tt2">📋 ' + sanitize(u.projectName) + '</div>';
+    }
+    
+    html += '<div class="tc2">' + sanitize(u.content || '-') + '</div>';
+    
+    // ปุ่มดูรายละเอียด (ถ้ามีการเปลี่ยนแปลง field)
+    if (u.changes && Object.keys(u.changes).length) {
+      html += '<div class="ti-link" onclick="showChangeDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">🔍 ดูรายละเอียดการเปลี่ยนแปลง</div>';
+    }
+    
+    html += '</div>';
+  });
+  
+  html += '</div>';
+  html += '<div class="bg" style="margin-top:12px"><button class="btn bp" onclick="exportHistoryCSV()">📥 Export CSV</button></div>';
+  html += '</div>';
+  
+  container.innerHTML = html;
+}
+
+function showChangeDetail(dealerId, updateId) {
+  db.collection('dealerUpdates').doc(dealerId).collection('timeline').doc(updateId).get().then(function(doc) {
+    if (!doc.exists) return;
+    var data = doc.data();
+    
+    var html = '<div style="max-width:500px">';
+    html += '<h3>📝 รายละเอียดการอัพเดท</h3>';
+    html += '<div><strong>🏪 Dealer:</strong> ' + sanitize(data.dealerName || dealerId) + '</div>';
+    if (data.projectName) html += '<div><strong>📋 โครงการ:</strong> ' + sanitize(data.projectName) + '</div>';
+    html += '<div><strong>⏰ เวลา:</strong> ' + (data.timestamp && data.timestamp.toDate ? fDT(data.timestamp.toDate()) : '-') + '</div>';
+    html += '<div><strong>📊 สถานะ:</strong> ' + (data.status || '-') + '</div>';
+    html += '<hr style="margin:12px 0">';
+    html += '<div><strong>📝 รายละเอียด:</strong></div>';
+    html += '<div style="white-space:pre-wrap;background:var(--bg2);padding:10px;border-radius:8px;margin-top:6px">' + sanitize(data.content || '-') + '</div>';
+    
+    if (data.changes) {
+      html += '<hr style="margin:12px 0">';
+      html += '<div><strong>🔄 การเปลี่ยนแปลง:</strong></div>';
+      html += '<table style="width:100%;margin-top:6px;border-collapse:collapse">';
+      for (var key in data.changes) {
+        html += '<tr><td style="padding:4px;border-bottom:1px solid var(--border)">' + key + '</td>';
+        html += '<td style="padding:4px;border-bottom:1px solid var(--border)">' + sanitize(String(data.changes[key].old || '-')) + '</td>';
+        html += '<td style="padding:4px;border-bottom:1px solid var(--border)">→</td>';
+        html += '<td style="padding:4px;border-bottom:1px solid var(--border)"><strong>' + sanitize(String(data.changes[key].new || '-')) + '</strong></td></tr>';
+      }
+      html += '</table>';
+    }
+    
+    html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeM()">ปิด</button></div>';
+    html += '</div>';
+    
+    openM('📋 รายละเอียด', html);
+  });
+}
+
+function exportHistoryCSV() {
+  // สร้าง CSV จากข้อมูลที่แสดงอยู่
+  var rows = [];
+  var headers = ['วันที่', 'Dealer', 'โครงการ', 'ประเภท', 'รายละเอียด', 'สถานะ'];
+  rows.push(headers);
+  
+  var updates = [];
+  // ต้องดึงข้อมูลใหม่ หรือใช้จาก global
+  // (เพิ่ม logic การดึงข้อมูลและ export)
+  
+  var csv = rows.map(function(row) {
+    return row.map(function(cell) { return '"' + String(cell).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\n');
+  
+  dlBlob(csv, 'customer-update-history-' + _td() + '.csv');
 }
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
