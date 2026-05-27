@@ -420,6 +420,7 @@ var db = firebase.firestore();
 
 // Global variables
 var dealerId = null;
+var uid = null;
 var currentTab = 'pipeline';
 var pipelinesData = [];
 var forecastData = { runrate: [], projects: [] };
@@ -551,13 +552,21 @@ function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
   });
 }
 
-// แทนที่ function loadPipeline() ใน client-view.html (บรรทัดประมาณ 470-480)
+// แทนที่ function loadPipeline() ทั้งหมด
 
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   
+  console.log('loadPipeline called - dealerId:', dealerId, 'uid:', uid);
+  
   // ดึง pipeline หลักจาก users collection (ถ้ามี uid)
-  var mainPromise = uid ? db.collection('users').doc(uid).collection('pipeline').get() : Promise.resolve({ docs: [] });
+  var mainPromise;
+  if (uid && uid !== 'null' && uid !== 'undefined') {
+    mainPromise = db.collection('users').doc(uid).collection('pipeline').get();
+  } else {
+    console.log('No uid provided, skipping main pipeline');
+    mainPromise = Promise.resolve({ docs: [] });
+  }
   
   // ดึง pending updates จาก dealerUpdates
   var pendingPromise = getCustomerPipelineRef(dealerId).get();
@@ -575,6 +584,8 @@ function loadPipeline() {
       mainPipes.push(data);
     });
     
+    console.log('Main pipelines count:', mainPipes.length);
+    
     // Process pending updates
     results[1].forEach(function(doc) {
       var data = doc.data();
@@ -583,6 +594,8 @@ function loadPipeline() {
       data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
       pendingPipes.push(data);
     });
+    
+    console.log('Pending updates count:', pendingPipes.length);
     
     // Merge: pending updates จะทับข้อมูลหลัก
     var pipeMap = {};
@@ -594,7 +607,17 @@ function loadPipeline() {
       var originalId = p._originalPipeId || p.id;
       if (pipeMap[originalId]) {
         // ทับข้อมูลเดิมด้วยข้อมูลที่ลูกค้าส่งมา (แต่เก็บสถานะ pending ไว้)
-        var merged = { ...pipeMap[originalId], ...p };
+        var merged = {};
+        // Copy all properties from original
+        for (var key in pipeMap[originalId]) {
+          merged[key] = pipeMap[originalId][key];
+        }
+        // Override with pending data
+        for (var key in p) {
+          if (key.indexOf('_') !== 0 || key === '_status' || key === '_displayStatus') {
+            merged[key] = p[key];
+          }
+        }
         merged._displayStatus = p._status === 'pending' ? 'pending' : 'approved';
         merged.source = 'pending';
         pipeMap[originalId] = merged;
@@ -604,6 +627,7 @@ function loadPipeline() {
     });
     
     pipelinesData = Object.values(pipeMap);
+    console.log('Total pipelines to display:', pipelinesData.length);
     return pipelinesData;
   }).catch(function(err) {
     console.warn('Load pipeline error:', err);
@@ -664,10 +688,14 @@ function showNotice(message, isSuccess) {
   }, 5000);
 }
 
+// เพิ่ม console.log ใน loadAllData (ประมาณบรรทัด 670)
+
 function loadAllData() {
   if (!dealerId) return;
+  console.log('loadAllData - dealerId:', dealerId, 'uid:', uid);
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]).then(function() {
+    console.log('All data loaded, pipelines:', pipelinesData.length);
     renderCurrentTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
   }).catch(function(err) { 
@@ -675,7 +703,6 @@ function loadAllData() {
     document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div></div>';
   });
 }
-
 function refreshData() { loadAllData(); }
 
 // ================================================================
@@ -1216,6 +1243,9 @@ function renderCurrentTab() {
 // Initialize
 var urlParams = new URLSearchParams(window.location.search);
 dealerId = urlParams.get('dealerId');
+uid = urlParams.get('uid');
+
+console.log('dealerId:', dealerId, 'uid:', uid);  // สำหรับ debug
 
 if (!dealerId) {
   document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div></div>';
@@ -1224,7 +1254,6 @@ if (!dealerId) {
   loadModels();
   loadAllData();
 }
-
 // Tab click
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');
