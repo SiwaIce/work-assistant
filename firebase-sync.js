@@ -43,20 +43,30 @@ var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
 // ================================================================
 // AUTH
 // ================================================================
+// แทนที่ function loginWithGoogle ใน firebase-sync.js
 function loginWithGoogle() {
   var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).then(function(result) {
+  // เปลี่ยนจาก signInWithPopup เป็น signInWithRedirect
+  auth.signInWithRedirect(provider);
+}
+
+// เพิ่ม handler ก่อนหน้า function loginWithGoogle
+auth.getRedirectResult().then(function(result) {
+  if (result.user) {
     CURRENT_USER = result.user;
     SYNC_ENABLED = true;
-    document.getElementById('loginScreen').style.display = 'none';
+    var loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) loginScreen.style.display = 'none';
     toast('✅ Login: ' + result.user.displayName);
     migrateLocalToFirebase();
     initFirebaseListeners();
-    render();
-  }).catch(function(error) {
-    document.getElementById('loginError').textContent = error.message;
-  });
-}
+    if (typeof render === 'function') render();
+  }
+}).catch(function(error) {
+  var errorEl = document.getElementById('loginError');
+  if (errorEl) errorEl.textContent = error.message;
+  console.error('Redirect login error:', error);
+});
 
 function useOffline() {
   SYNC_ENABLED = false;
