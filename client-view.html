@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>DJI Enterprise - ติดตามสถานะโครงการ</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root {
@@ -399,9 +401,17 @@ body {
 <button class="theme-toggle" onclick="toggleTheme()" title="เปลี่ยนธีม">🌙</button>
 
 <script>
-// ===== CONFIGURATION =====
-// TODO: ใส่ URL ของ Google Apps Script Web App ที่คุณสร้าง
-var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';
+// ===== FIREBASE CONFIG =====
+var firebaseConfig = {
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
 
 // ===== THEME =====
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
@@ -471,112 +481,97 @@ function loadModels() {
   }
 }
 
-// ===== JSONP CALL (No CORS issue) =====
-var scriptCounter = 0;
-
-function callSheetsAPI(action, dealerId, callback) {
-  var apiUrl = SHEETS_API_URL;
-  var callbackName = 'jsonp_callback_' + (++scriptCounter);
-  
-  // สร้าง callback function ชั่วคราว
-  window[callbackName] = function(data) {
-    delete window[callbackName];
-    document.body.removeChild(script);
-    if (callback) callback(data);
-  };
-  
-  // สร้าง script tag
-  var script = document.createElement('script');
-  script.src = apiUrl + '?action=' + action + '&dealerId=' + dealerId + '&callback=' + callbackName;
-  document.body.appendChild(script);
-}
-
-function loadFromSheets() {
-  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
-    console.warn('Please set SHEETS_API_URL first');
-    showSuccessToast('⚠️ ยังไม่ได้ตั้งค่าเชื่อมต่อข้อมูล');
-    return;
-  }
+// ===== FIREBASE LOAD FUNCTIONS =====
+function loadFromFirebase() {
+  if (!dealerId) return;
   
   showSuccessToast('🔄 กำลังโหลดข้อมูล...');
   
-  // โหลด Dealer
-  callSheetsAPI('getDealer', dealerId, function(result) {
-    console.log('Dealer response:', result);
-    if (result.success && result.data) {
-      dealerName = result.data.name || '-';
-      document.getElementById('dealerName').innerHTML = esc(dealerName);
-    }
-  });
+  // โหลด Dealer Info
+  db.collection('dealers').doc(dealerId).get()
+    .then(function(doc) {
+      if (doc.exists) {
+        dealerName = doc.data().name || '-';
+        document.getElementById('dealerName').innerHTML = esc(dealerName);
+      } else {
+        dealerName = dealerId;
+        document.getElementById('dealerName').innerHTML = esc(dealerId);
+      }
+    })
+    .catch(function(err) { console.warn('Load dealer error:', err); });
   
   // โหลด Pipeline
-  callSheetsAPI('getPipeline', dealerId, function(result) {
-    console.log('Pipeline response:', result);
-    if (result.success && result.data) {
-      pipelinesData = result.data;
+  db.collection('pipeline').where('dealerId', '==', dealerId).get()
+    .then(function(querySnapshot) {
+      pipelinesData = [];
+      querySnapshot.forEach(function(doc) {
+        var data = doc.data();
+        data.id = doc.id;
+        pipelinesData.push(data);
+      });
       if (currentTab === 'pipeline') renderCurrentTab();
-    } else {
-      console.log('No pipeline data');
-      if (currentTab === 'pipeline') renderCurrentTab();
-    }
-  });
+    })
+    .catch(function(err) { console.warn('Load pipeline error:', err); });
   
   // โหลด Forecast
-  callSheetsAPI('getForecast', dealerId, function(result) {
-    console.log('Forecast response:', result);
-    if (result.success && result.data) {
+  db.collection('forecast').where('dealerId', '==', dealerId).get()
+    .then(function(querySnapshot) {
       forecastData.runrate = [];
       forecastData.projects = [];
-      for (var i = 0; i < result.data.length; i++) {
-        var item = result.data[i];
+      querySnapshot.forEach(function(doc) {
+        var item = doc.data();
+        item.id = doc.id;
         if (item.type === 'runrate') {
-          forecastData.runrate.push({
-            id: item.id,
-            model: item.model,
-            qty: parseInt(item.qty) || 0,
-            month: item.month
-          });
+          forecastData.runrate.push(item);
         } else if (item.type === 'project') {
-          forecastData.projects.push({
-            id: item.id,
-            projectName: item.projectName,
-            endUser: item.endUser || '-',
-            month: item.month,
-            items: [{ model: item.model, qty: parseInt(item.qty) || 1 }],
-            totalQty: parseInt(item.qty) || 1
-          });
+          forecastData.projects.push(item);
         }
-      }
+      });
       if (currentTab === 'forecast') renderCurrentTab();
-    }
-  });
+    })
+    .catch(function(err) { console.warn('Load forecast error:', err); });
+  
+  // โหลด Timeline (pipeLogs)
+  db.collection('pipeLog').where('dealerId', '==', dealerId).orderBy('date', 'desc').limit(50).get()
+    .then(function(querySnapshot) {
+      timelineLogs = [];
+      querySnapshot.forEach(function(doc) {
+        timelineLogs.push(doc.data());
+      });
+      if (currentTab === 'timeline') renderCurrentTab();
+    })
+    .catch(function(err) { console.warn('Load timeline error:', err); });
 }
-function saveToSheets(action, data) {
-  if (!SHEETS_API_URL || SHEETS_API_URL.indexOf('YOUR_WEB_APP_URL') !== -1) {
-    // save to local
-    if (action === 'savePipeline') {
-      localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
-    } else if (action === 'saveForecast') {
-      localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
+
+// ===== SAVE TO FIREBASE =====
+function saveToFirebase(collection, data) {
+  if (!dealerId) return;
+  
+  db.collection(collection).doc(data.id).set(data)
+    .then(function() {
+      console.log('Saved to Firebase:', collection, data.id);
+    })
+    .catch(function(err) {
+      console.warn('Save error:', err);
+      // fallback to localStorage
+      saveToLocal(collection, data);
+    });
+}
+
+function saveToLocal(collection, data) {
+  var key = 'cv_' + collection + '_' + dealerId;
+  var existing = JSON.parse(localStorage.getItem(key) || '[]');
+  var found = false;
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].id === data.id) {
+      existing[i] = data;
+      found = true;
+      break;
     }
-    showSuccessToast('💾 บันทึกในเครื่องเรียบร้อยแล้ว');
-    return;
   }
-  
-  var postData = { action: action, ...data };
-  
-  callSheetsAPI(null, null, function(result) {
-    if (result && result.success) {
-      showSuccessToast('💾 บันทึกสำเร็จ!');
-    }
-  }, postData);
-  
-  // save to local as backup
-  if (action === 'savePipeline') {
-    localStorage.setItem('cv_pipeline_' + dealerId, JSON.stringify(pipelinesData));
-  } else if (action === 'saveForecast') {
-    localStorage.setItem('cv_forecast_' + dealerId, JSON.stringify(forecastData));
-  }
+  if (!found) existing.push(data);
+  localStorage.setItem(key, JSON.stringify(existing));
+  showSuccessToast('💾 บันทึกในเครื่องเรียบร้อยแล้ว');
 }
 
 // ===== FORECAST FUNCTIONS =====
@@ -615,15 +610,21 @@ function addRunrateItem() {
   if (!model) { alert('กรุณาเลือกสินค้า'); return; }
   if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
   
-  forecastData.runrate.push({
+  var newItem = {
     id: 'rr_' + Date.now(),
     model: model,
     qty: qty,
-    month: selectedMonth
-  });
+    month: selectedMonth,
+    dealerId: dealerId,
+    type: 'runrate',
+    createdAt: _nw()
+  };
+  forecastData.runrate.push(newItem);
+  saveToFirebase('forecast', newItem);
   document.getElementById('runrateModel').value = '';
   document.getElementById('runrateQty').value = '1';
-  saveClientForecast();
+  showSuccessToast('✅ เพิ่ม Run Rate เรียบร้อยแล้ว');
+  renderForecastTab();
 }
 
 function deleteRunrateItem(idx) {
@@ -633,10 +634,12 @@ function deleteRunrateItem(idx) {
   for (var i = 0; i < forecastData.runrate.length; i++) {
     if (forecastData.runrate[i].id === actualItem.id) {
       forecastData.runrate.splice(i, 1);
+      db.collection('forecast').doc(actualItem.id).delete().catch(function(e) {});
       break;
     }
   }
-  saveClientForecast();
+  showSuccessToast('🗑️ ลบรายการแล้ว');
+  renderForecastTab();
 }
 
 function editRunrateItem(idx) {
@@ -648,52 +651,33 @@ function editRunrateItem(idx) {
     for (var i = 0; i < forecastData.runrate.length; i++) {
       if (forecastData.runrate[i].id === actualItem.id) {
         forecastData.runrate[i].qty = parseInt(newQty);
+        saveToFirebase('forecast', forecastData.runrate[i]);
         break;
       }
     }
-    saveClientForecast();
+    showSuccessToast('✅ แก้ไขจำนวนแล้ว');
+    renderForecastTab();
   }
 }
 
 function saveClientForecast() {
-  // Save to Sheets
   for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    saveToSheets('saveForecast', {
-      id: r.id,
-      dealerId: dealerId,
-      month: r.month,
-      type: 'runrate',
-      model: r.model,
-      qty: r.qty,
-      updatedAt: _nw()
-    });
+    saveToFirebase('forecast', forecastData.runrate[i]);
   }
   for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    if (p.items && p.items.length) {
-      saveToSheets('saveForecast', {
-        id: p.id,
-        dealerId: dealerId,
-        month: p.month,
-        type: 'project',
-        projectName: p.projectName,
-        endUser: p.endUser,
-        model: p.items[0].model,
-        qty: p.items[0].qty,
-        updatedAt: _nw()
-      });
-    }
+    saveToFirebase('forecast', forecastData.projects[i]);
   }
-  
   showSuccessToast('✅ บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
   renderForecastTab();
 }
 
 function deleteProjectItem(projIdx) {
   if (!confirm('ลบโครงการนี้?')) return;
+  var actualItem = forecastData.projects[projIdx];
   forecastData.projects.splice(projIdx, 1);
-  saveClientForecast();
+  db.collection('forecast').doc(actualItem.id).delete().catch(function(e) {});
+  showSuccessToast('🗑️ ลบโครงการแล้ว');
+  renderForecastTab();
 }
 
 function toggleProjectDetail(projIdx) {
@@ -706,7 +690,9 @@ function editProjectItem(projIdx) {
   var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
   if (newName && newName.trim()) {
     proj.projectName = newName.trim();
-    saveClientForecast();
+    saveToFirebase('forecast', proj);
+    showSuccessToast('✅ แก้ไขชื่อโครงการแล้ว');
+    renderForecastTab();
   }
 }
 
@@ -777,22 +763,28 @@ function addNewProject() {
   var totalQty = 0;
   for (var i = 0; i < window.newProjectItems.length; i++) totalQty += window.newProjectItems[i].qty;
   
-  forecastData.projects.push({
+  var newProject = {
     id: 'proj_' + Date.now(),
     projectName: projectName,
     endUser: endUser || '-',
     month: selectedMonth,
     items: JSON.parse(JSON.stringify(window.newProjectItems)),
     totalQty: totalQty,
-    createdAt: new Date().toISOString()
-  });
+    dealerId: dealerId,
+    type: 'project',
+    createdAt: _nw()
+  };
+  
+  forecastData.projects.push(newProject);
+  saveToFirebase('forecast', newProject);
   
   document.getElementById('newProjectName').value = '';
   document.getElementById('newProjectEndUser').value = '';
   window.newProjectItems = [];
   renderNewProjectItemsList();
   
-  saveClientForecast();
+  showSuccessToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
+  renderForecastTab();
 }
 
 function clearProjectForm() {
@@ -846,7 +838,7 @@ function uploadForecastExcel(input) {
       if (!month || allMonths.indexOf(month) === -1) continue;
       
       if (type === 'Run Rate' && model && qty > 0) {
-        forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i, model: model, qty: qty, month: month });
+        forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i, model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' });
       } else if (type === 'Project' && name && model && qty > 0) {
         forecastData.projects.push({
           id: 'proj_' + Date.now() + '_' + i,
@@ -855,7 +847,8 @@ function uploadForecastExcel(input) {
           month: month,
           items: [{ model: model, qty: qty }],
           totalQty: qty,
-          createdAt: new Date().toISOString()
+          dealerId: dealerId,
+          type: 'project'
         });
       }
     }
@@ -1007,12 +1000,6 @@ function renderForecastTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ===== LOAD PIPELINE =====
-function loadPipeline() {
-  // already loaded from sheets or local
-  if (currentTab === 'pipeline') renderCurrentTab();
-}
-
 // ===== RENDER PIPELINE TAB =====
 function renderPipelineTab() {
   if (!pipelinesData.length) {
@@ -1022,7 +1009,7 @@ function renderPipelineTab() {
   var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div>';
   html += '<div style="overflow-x:auto"><table class="data-table">';
   html += '<thead><tr>';
-  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th></th>';
+  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th>';
   html += '</tr></thead><tbody>';
   
   for (var i = 0; i < pipelinesData.length; i++) {
@@ -1038,12 +1025,16 @@ function renderPipelineTab() {
       itemsText = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
     }
     
+    var amount = p.forecastAmount || 0;
+    var amountClass = amount >= 10000000 ? 'val-mega' : (amount >= 1500000 ? 'val-big' : 'val-normal');
+    
     html += '<tr onclick="showDetailPage(\'' + p.id + '\')" style="cursor:pointer">';
     html += '<td style="width:40px;color:var(--text2);font-weight:600">' + (i+1) + '</td>';
     html += '<td><strong>' + esc(p.projectName) + '</strong></td>';
     html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
     html += '<td>' + getStatusLabel(p.status) + '</td>';
     html += '<td style="font-size:12px;color:var(--text2)">' + itemsText + '</td>';
+    html += '<td class="' + amountClass + '">' + amount.toLocaleString('th-TH') + ' ฿</td>';
     html += '<td style="text-align:center"><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">📝 อัพเดท</button></td>';
     html += '</tr>';
   }
@@ -1152,26 +1143,24 @@ function submitFullUpdate(pipeId) {
       pipelinesData[i].items = items;
       pipelinesData[i].model = items[0].model;
       pipelinesData[i].modelQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
+      // บันทึกไป Firebase
+      db.collection('pipeline').doc(pipeId).set(pipelinesData[i])
+        .catch(function(e) { console.warn('Update pipeline error:', e); });
       break;
     }
   }
   
-  // Save to Sheets
-  for (var i = 0; i < pipelinesData.length; i++) {
-    if (pipelinesData[i].id === pipeId) {
-      saveToSheets('savePipeline', {
-        id: pipelinesData[i].id,
-        dealerId: dealerId,
-        projectName: pipelinesData[i].projectName,
-        endUser: pipelinesData[i].endUserTH,
-        status: pipelinesData[i].status,
-        model: pipelinesData[i].model,
-        qty: pipelinesData[i].modelQty,
-        updatedAt: _nw()
-      });
-      break;
-    }
-  }
+  // บันทึก log
+  var newLog = {
+    id: 'log_' + Date.now(),
+    pipeId: pipeId,
+    type: 'update',
+    content: content || 'แก้ไขข้อมูลโครงการ',
+    date: _nw(),
+    dealerId: dealerId
+  };
+  db.collection('pipeLog').doc(newLog.id).set(newLog).catch(function(e) {});
+  timelineLogs.unshift(newLog);
   
   showSuccessToast('✅ บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
   closeModal();
@@ -1196,6 +1185,7 @@ function showDetailPage(pipeId) {
   html += '<div class="detail-header" style="background:var(--bg);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)"><div style="font-size:20px;font-weight:700;color:var(--accent)">' + esc(p.projectName) + '</div><div style="margin-top:8px">' + getStatusLabel(p.status) + '</div></div>';
   html += '<div class="detail-info-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">';
   html += '<div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">👤 End User</div><div class="detail-info-value">' + esc(p.endUserTH || p.endUser || '-') + '</div></div>';
+  html += '<div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">💰 มูลค่า</div><div class="detail-info-value">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div></div>';
   html += '</div>';
   html += '<div class="section"><div class="section-title">📦 รายการสินค้า</div>' + itemsHtml + '</div>';
   html += '<div class="section"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดทโครงการ</button></div>';
@@ -1229,16 +1219,9 @@ function loadAllData() {
   
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
-  loadFromSheets();
+  loadFromFirebase();
   allMonths = generateMonths();
   if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
-  
-  setTimeout(function() {
-    if (pipelinesData.length === 0 && forecastData.runrate.length === 0) {
-      loadFromLocal();
-    }
-    renderCurrentTab();
-  }, 1000);
 }
 
 // ===== TAB EVENT =====
@@ -1250,23 +1233,15 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   currentTab = tab;
   document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
-  renderCurrentTab();
+  if (tab === 'pipeline') {
+    loadFromFirebase();
+  } else if (tab === 'forecast') {
+    loadFromFirebase();
+  } else if (tab === 'timeline') {
+    loadFromFirebase();
+  }
 });
 
-function loadFromLocal() {
-  console.log('Loading from local storage (fallback)');
-  
-  // ตัวอย่างข้อมูล fallback (ใช้ pipeline ที่คุณให้มา)
-  if (dealerId === 'mogtynh94x7zce') {
-    pipelinesData = [
-      { id: 'pipe_001', dealerId: 'mogtynh94x7zce', projectName: 'ชุดครุภัณฑ์ห้องปฏิบัติการ', endUserTH: 'ม.ราชมงคลธัญญบุรี', status: 'win', model: 'M4E', modelQty: 1, forecastAmount: 93380 },
-      { id: 'pipe_002', dealerId: 'mogtynh94x7zce', projectName: 'โครงการจัดซื้อ LiDAR', endUserTH: 'ม.เชียงใหม่', status: 'prospect', model: 'M400', modelQty: 1, forecastAmount: 484050 }
-    ];
-    dealerName = 'Poladrone (Aonic)';
-    document.getElementById('dealerName').innerHTML = esc(dealerName);
-    if (currentTab === 'pipeline') renderCurrentTab();
-  }
-}
 // ===== EXPORT GLOBAL FUNCTIONS =====
 window.toggleTheme = toggleTheme;
 window.showUpdateModal = showUpdateModal;
