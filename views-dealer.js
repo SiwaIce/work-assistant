@@ -1350,7 +1350,9 @@ function dealerOnboardTab(d) {
   }
   
   html += '</div>';
-  return html;
+  return `
+${html}
+`;
 }
 
 function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {

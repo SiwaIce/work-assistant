@@ -2475,13 +2475,176 @@ function addCustomerUpdateMenuItem() {
 // เรียกใช้ตอน init
 setTimeout(addCustomerUpdateMenuItem, 1000);
 
-// เพิ่มหลังจาก cert section หรือก่อนปิด div สุดท้าย
 function dealerInfoTab(d) {
-    // ... existing code ...
+  const pipes = ST.pipelineByDealer(d.id);
+  const wonAmt = pipes.filter(p => ['win','ordered','delivered'].includes(p.status)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
+  const targetAmt = Number(d.targetRevenue) || 0;
+  const pct = targetAmt ? Math.round(wonAmt / targetAmt * 100) : 0;
+  const h = calcHealthScore(d.id);
+  const lcd = ST.getLastContactDays(d.id);
+  const lvd = ST.getLastVisitDays(d.id);
+
+  // Health color
+  const healthColor = h.level === 'good' ? '#22c55e' : h.level === 'warn' ? '#f59e0b' : '#ef4444';
+  
+  // Cert badges
+  const certs = [
+    { name: 'DSEC', status: d.dsecStatus, pass: d.dsecStatus === 'pass' },
+    { name: 'CRM', status: d.crmStatus, pass: d.crmStatus === 'yes' },
+    { name: 'FH2', status: d.fh2Status, pass: d.fh2Status === 'pass' },
+    { name: 'Lark', status: d.larkStatus, pass: d.larkStatus === 'added' }
+  ];
+
+  return `
+  <!-- Hero Section -->
+  <div style="background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.05) 100%); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border); position: relative; overflow: hidden">
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7)"></div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px">
+      <div>
+        <div style="font-size: 24px; font-weight: 700; margin-bottom: 4px">🏢 ${sanitize(d.name)}</div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px">
+          ${levelTag(d.level)}
+          <span style="font-size: 12px; color: var(--text2)">📋 SIS: ${d.sisCode || '-'}</span>
+          <span style="font-size: 12px; color: var(--text2)">🔢 DJI: ${d.djiCode || '-'}</span>
+          <span style="font-size: 12px; color: var(--text2)">🏪 DJI Dealer: ${d.djiDealer || '-'}</span>
+        </div>
+      </div>
+      <div style="text-align: right">
+        <div style="font-size: 32px; font-weight: 800; color: ${healthColor}">${h.score}/100</div>
+        <div style="font-size: 11px; color: var(--text2)">Health Score</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="sr" style="margin-bottom: 20px">
+    <div class="sc"><div class="sn c2">${fmtMoneyShort(wonAmt)}</div><div class="sl">ยอดขาย Won</div></div>
+    <div class="sc"><div class="sn c3">${fmtMoneyShort(targetAmt)}</div><div class="sl">เป้ายอดขาย</div></div>
+    <div class="sc"><div class="sn ${pct >= 70 ? 'c2' : pct >= 40 ? 'c3' : 'c4'}">${pct}%</div><div class="sl">Achievement</div></div>
+    <div class="sc"><div class="sn c1">${pipes.filter(p => !['lost','delivered','on_hold'].includes(p.status)).length}</div><div class="sl">Pipeline Active</div></div>
+  </div>
+
+  <!-- Main Info Grid -->
+  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px">
     
-    // เพิ่ม Panel สำหรับแสดงคำขออัพเดท
-    var updatesPanel = '<div id="customerUpdatesPanel"></div>';
-    
-    // เพิ่มเข้าไปใน return html ก่อน closing div
-    return html + updatesPanel;
+    <!-- Company Info Card -->
+    <div class="card" style="margin-bottom: 0">
+      <h2>🏢 ข้อมูลบริษัท</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">📋</span>
+          <div><div style="font-size: 10px; color: var(--text2)">SIS Code</div><div style="font-size: 13px; font-weight: 500">${d.sisCode || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">🔢</span>
+          <div><div style="font-size: 10px; color: var(--text2)">DJI Code</div><div style="font-size: 13px; font-weight: 500">${d.djiCode || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">🏪</span>
+          <div><div style="font-size: 10px; color: var(--text2)">DJI Dealer Type</div><div style="font-size: 13px; font-weight: 500">${d.djiDealer || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">🏷️</span>
+          <div><div style="font-size: 10px; color: var(--text2)">Level / Term</div><div style="font-size: 13px; font-weight: 500">${levelTag(d.level)} / ${d.creditTerm || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 18px">💳</span>
+          <div><div style="font-size: 10px; color: var(--text2)">วงเงินเครดิต</div><div style="font-size: 13px; font-weight: 500">${d.creditLimit ? fmtMoney(d.creditLimit) + ' ฿' : '-'}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact Card -->
+    <div class="card" style="margin-bottom: 0">
+      <h2>👤 ผู้ติดต่อ</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">📞</span>
+          <div><div style="font-size: 10px; color: var(--text2)">เบอร์ติดต่อ</div><div style="font-size: 13px; font-weight: 500">${d.contact ? sanitize(d.contact) : '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">📝</span>
+          <div><div style="font-size: 10px; color: var(--text2)">รายละเอียดลูกค้า</div><div style="font-size: 12px; color: var(--text3)">${d.customerDetail ? sanitize(d.customerDetail) : '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 18px">🚚</span>
+          <div><div style="font-size: 10px; color: var(--text2)">Shippto</div><div style="font-size: 13px; font-weight: 500">${d.shippto || 'NO'}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Business Card -->
+    <div class="card" style="margin-bottom: 0">
+      <h2>💼 ธุรกิจ & การเงิน</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">💰</span>
+          <div><div style="font-size: 10px; color: var(--text2)">เป้ายอดขาย / Won</div><div style="font-size: 13px; font-weight: 500">${targetAmt ? fmtMoney(targetAmt) + ' ฿' : '-'} → ${fmtMoney(wonAmt)} ฿</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">📊</span>
+          <div><div style="font-size: 10px; color: var(--text2)">Demo Unit</div><div style="font-size: 13px; font-weight: 500">${d.demoUnit || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">🎯</span>
+          <div><div style="font-size: 10px; color: var(--text2)">กลุ่มลูกค้าหลัก</div><div style="font-size: 13px; font-weight: 500">${d.customerSegment || '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 18px">📅</span>
+          <div><div style="font-size: 10px; color: var(--text2)">หนังสือแต่งตั้ง</div><div style="font-size: 13px; font-weight: 500">${d.appointmentLetter || '-'} ${d.appointmentDate ? '(' + fD(d.appointmentDate) + ')' : ''}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Certification Card -->
+    <div class="card" style="margin-bottom: 0">
+      <h2>📋 Certification</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px">
+        ${certs.map(cert => `
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg3); border-radius: 8px; border: 1px solid ${cert.pass ? '#22c55e' : 'var(--border)'}">
+            <span style="font-size: 18px">${cert.pass ? '✅' : '❌'}</span>
+            <div><div style="font-size: 12px; font-weight: 600">${cert.name}</div><div style="font-size: 10px; color: var(--text3)">${cert.status || 'ยังไม่ทำ'}</div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- Health Score Detail -->
+  <div class="card">
+    <h2>🏥 สุขภาพองค์กร — รายละเอียด</h2>
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px">
+      ${h.details.map(det => `
+        <div style="text-align: center; padding: 10px; background: var(--bg3); border-radius: 10px">
+          <div style="font-size: 20px; font-weight: 800; color: ${det.status === 'good' ? '#22c55e' : det.status === 'warn' ? '#f59e0b' : '#ef4444'}">${det.score}/${det.max}</div>
+          <div style="font-size: 10px; color: var(--text2)">${det.label}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); padding-top: 12px; border-top: 1px solid var(--border)">
+      <span>📞 ติดต่อล่าสุด: ${lcd !== null ? lcd + ' วัน (' + fD(ST.getLastContactDate(d.id)) + ')' : 'ไม่เคย'}</span>
+      <span>🤝 Visit ล่าสุด: ${lvd !== null ? lvd + ' วัน (' + fD(ST.getLastVisitDate(d.id)) + ')' : 'ไม่เคย'}</span>
+    </div>
+  </div>
+
+  <!-- Notes & Payment -->
+  ${(d.paymentCondition || d.notes) ? `
+  <div class="card">
+    <h2>📝 หมายเหตุเพิ่มเติม</h2>
+    ${d.paymentCondition ? `<div style="margin-bottom: 8px"><label style="font-size: 11px; color: var(--text2)">เงื่อนไขชำระเงิน</label><div style="font-size: 13px; white-space: pre-wrap">${sanitize(d.paymentCondition)}</div></div>` : ''}
+    ${d.notes ? `<div><label style="font-size: 11px; color: var(--text2)">หมายเหตุ</label><div style="font-size: 13px; white-space: pre-wrap">${sanitize(d.notes)}</div></div>` : ''}
+  </div>
+  ` : ''}
+
+  ${renderDealerContacts(d)}
+
+  <!-- LINE Log -->
+  <div class="card">
+    <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
+    ${renderLineLog(d.id, 5)}
+  </div>
+  
+  <!-- Customer Updates Panel -->
+  <div id="customerUpdatesPanel"></div>
+  `;
 }
