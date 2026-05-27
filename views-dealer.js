@@ -1719,12 +1719,13 @@ function toggleDealerDoneTasks() {
   }
 }
 
-// ================================================================
-// CLIENT PRESENTATION VIEW (Popup สำหรับลูกค้าดู) - FINAL WORKING
-// ================================================================
+// แทนที่ function openClientView ใน views-dealer.js (ประมาณปลายไฟล์)
+
 function openClientView(dealerId) {
   var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.uid : '';
-  var url = window.location.href.split('/').slice(0, -1).join('/') + '/client-view.html?dealerId=' + dealerId + '&uid=' + uid;
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var url = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid;
   var win = window.open(url, '_blank');
   if (!win) { toast('กรุณาอนุญาต Popup'); return; }
 }

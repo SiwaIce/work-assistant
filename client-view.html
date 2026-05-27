@@ -551,20 +551,65 @@ function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
   });
 }
 
-// โหลดข้อมูล
+// แทนที่ function loadPipeline() ใน client-view.html (บรรทัดประมาณ 470-480)
+
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
-  return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
-    pipelinesData = [];
-    querySnapshot.forEach(function(doc) {
+  
+  // ดึง pipeline หลักจาก users collection (ถ้ามี uid)
+  var mainPromise = uid ? db.collection('users').doc(uid).collection('pipeline').get() : Promise.resolve({ docs: [] });
+  
+  // ดึง pending updates จาก dealerUpdates
+  var pendingPromise = getCustomerPipelineRef(dealerId).get();
+  
+  return Promise.all([mainPromise, pendingPromise]).then(function(results) {
+    var mainPipes = [];
+    var pendingPipes = [];
+    
+    // Process main pipeline
+    results[0].forEach(function(doc) {
       var data = doc.data();
       data.id = doc.id;
-      pipelinesData.push(data);
+      data.source = 'main';
+      data._displayStatus = 'approved';
+      mainPipes.push(data);
     });
+    
+    // Process pending updates
+    results[1].forEach(function(doc) {
+      var data = doc.data();
+      data.id = doc.id;
+      data.source = 'pending';
+      data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
+      pendingPipes.push(data);
+    });
+    
+    // Merge: pending updates จะทับข้อมูลหลัก
+    var pipeMap = {};
+    mainPipes.forEach(function(p) {
+      pipeMap[p.id] = p;
+    });
+    
+    pendingPipes.forEach(function(p) {
+      var originalId = p._originalPipeId || p.id;
+      if (pipeMap[originalId]) {
+        // ทับข้อมูลเดิมด้วยข้อมูลที่ลูกค้าส่งมา (แต่เก็บสถานะ pending ไว้)
+        var merged = { ...pipeMap[originalId], ...p };
+        merged._displayStatus = p._status === 'pending' ? 'pending' : 'approved';
+        merged.source = 'pending';
+        pipeMap[originalId] = merged;
+      } else {
+        pipeMap[p.id] = p;
+      }
+    });
+    
+    pipelinesData = Object.values(pipeMap);
     return pipelinesData;
-  }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
+  }).catch(function(err) {
+    console.warn('Load pipeline error:', err);
+    return [];
+  });
 }
-
 function loadForecast() {
   if (!dealerId) return Promise.resolve();
   return getCustomerForecastRef(dealerId).get().then(function(querySnapshot) {
@@ -637,44 +682,35 @@ function refreshData() { loadAllData(); }
 // PIPELINE FUNCTIONS
 // ================================================================
 
-function renderPipelineTab() {
-  if (!pipelinesData.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📋 โครงการของท่าน</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีโครงการ</div><div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div></div></div>';
-    return;
-  }
-  
-  var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div>';
-  html += '<div style="text-align:right; margin-bottom:12px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  html += '<div style="overflow-x:auto"><table class="data-table"><thead><tr>';
-  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th>';
-  html += '</tr></thead><tbody>';
-  
-  for (var i = 0; i < pipelinesData.length; i++) {
-    var p = pipelinesData[i];
-    var itemsText = '';
-    if (p.items && p.items.length) {
-      for (var j = 0; j < p.items.length; j++) {
-        itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '');
-        if (j < p.items.length - 1) itemsText += ', ';
-      }
-    } else if (p.model) {
-      itemsText = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+// ใน function renderPipelineTab() บรรทัดประมาณ 560-580
+// แก้ไขส่วนที่สร้าง html สำหรับแต่ละโครงการ
+
+for (var i = 0; i < pipelinesData.length; i++) {
+  var p = pipelinesData[i];
+  var itemsText = '';
+  if (p.items && p.items.length) {
+    for (var j = 0; j < p.items.length; j++) {
+      itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '');
+      if (j < p.items.length - 1) itemsText += ', ';
     }
-    var amount = p.forecastAmount || 0;
-    var isPending = p._status === 'pending';
-    
-    html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')">';
-    html += '<td style="width:45px">' + (i+1) + '</td>';
-    html += '<td><strong>' + esc(p.projectName) + '</strong>' + (isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '') + '</td>';
-    html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-    html += '<td>' + getStatusLabel(p.status) + '</td>';
-    html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
-    html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
-    html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
-    html += '</tr>';
+  } else if (p.model) {
+    itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
   }
-  html += '</tbody></table></div></div>';
-  document.getElementById('tabContent').innerHTML = html;
+  var amount = p.forecastAmount || 0;
+  
+  // ตรวจสอบสถานะ pending
+  var isPending = p._status === 'pending' || p._displayStatus === 'pending';
+  var pendingBadge = isPending ? '<span class="pending-badge" style="background:#f59e0b;color:#000;margin-left:8px">⏳ รอตรวจสอบ</span>' : '';
+  
+  html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')">';
+  html += '<td style="width:45px">' + (i+1) + '</td>';
+  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td>';
+  html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
+  html += '<td>' + getStatusLabel(p.status) + '</td>';
+  html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
+  html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
+  html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
+  html += '</tr>';
 }
 
 function showPipelineDetail(pipeId) {
