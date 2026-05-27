@@ -2043,18 +2043,18 @@ function fmtMoneyFull(n) {
   return n.toLocaleString('th-TH');
 }
 function copyClientLink(dealerId) {
-  var dealer = ST.getOne('dealers', dealerId);
-  if (!dealer) return;
-  
-  var baseUrl = window.location.href.split('?')[0].split('#')[0];
-  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  var encodedName = encodeURIComponent(dealer.name);
-  var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&name=' + encodedName;
-  
-  copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + dealer.name + ' แล้ว! ส่งให้ลูกค้าได้เลย');
-  toast('📋 ลิงก์: ' + clientUrl);
+    var dealer = ST.getOne('dealers', dealerId);
+    if (!dealer) return;
+    
+    var uid = CURRENT_USER ? CURRENT_USER.uid : '';
+    var baseUrl = window.location.href.split('?')[0].split('#')[0];
+    var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+    var encodedName = encodeURIComponent(dealer.name);
+    var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid + '&name=' + encodedName;
+    
+    copyText(clientUrl, '🔗 คัดลอกลิงก์สำหรับ ' + dealer.name + ' แล้ว');
+    toast('📋 ลิงก์: ' + clientUrl);
 }
-
 // ================================================================
 // DEALER PIN MANAGEMENT
 // ================================================================
