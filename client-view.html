@@ -532,16 +532,20 @@ function loadFromFirebase() {
     .catch(function(err) { console.warn('Load forecast error:', err); });
   
   // โหลด Timeline (pipeLogs)
-  db.collection('pipeLog').where('dealerId', '==', dealerId).orderBy('date', 'desc').limit(50).get()
-    .then(function(querySnapshot) {
-      timelineLogs = [];
-      querySnapshot.forEach(function(doc) {
-        timelineLogs.push(doc.data());
-      });
-      if (currentTab === 'timeline') renderCurrentTab();
-    })
-    .catch(function(err) { console.warn('Load timeline error:', err); });
-}
+// โหลด Timeline (pipeLogs) - ไม่ใช้ orderBy ชั่วคราว
+db.collection('pipeLog').where('dealerId', '==', dealerId).get()
+  .then(function(querySnapshot) {
+    timelineLogs = [];
+    querySnapshot.forEach(function(doc) {
+      timelineLogs.push(doc.data());
+    });
+    // เรียงลำดับใน JavaScript แทน
+    timelineLogs.sort(function(a, b) {
+      return (b.date || '').localeCompare(a.date || '');
+    });
+    timelineLogs = timelineLogs.slice(0, 50);
+    if (currentTab === 'timeline') renderCurrentTab();
+  })
 
 // ===== SAVE TO FIREBASE =====
 function saveToFirebase(collection, data) {
