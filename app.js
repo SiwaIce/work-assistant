@@ -400,8 +400,15 @@ function approvePipelineUpdate(updateId, dealerId) {
         updateRef.update({ _status: 'approved', _approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
         
         toast('✅ นำเข้าข้อมูลเรียบร้อยแล้ว');
-        loadCustomerUpdates();
-        render();
+        
+        // 🔥 แก้ไข: reload หน้าเดิม ไม่ใช่กลับไป today
+        loadCustomerUpdates();  // รีเฟรช panel
+        render();  // render ใหม่
+        
+        // ถ้าอยู่ในหน้า customerUpdates ให้กลับไปหน้า dealerDetail
+        if (S.view === 'customerUpdates') {
+            go('dealerDetail', { dealerId: dealerId });
+        }
     }).catch(function(err) { toast('เกิดข้อผิดพลาด: ' + err.message); });
 }
 
@@ -433,8 +440,14 @@ function approveForecastUpdate(updateId, dealerId, type) {
         updateRef.update({ _status: 'approved', _approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
         
         toast('✅ นำเข้าข้อมูลเรียบร้อยแล้ว');
+        
+        // 🔥 แก้ไข: reload หน้าเดิม
         loadCustomerUpdates();
-        if (typeof renderForecastTab === 'function') renderForecastTab();
+        render();
+        
+        if (S.view === 'customerUpdates') {
+            go('dealerDetail', { dealerId: dealerId });
+        }
     }).catch(function(err) { toast('เกิดข้อผิดพลาด: ' + err.message); });
 }
 
@@ -446,9 +459,15 @@ function rejectCustomerUpdate(type, updateId, dealerId) {
     ref.update({ _status: 'rejected', _rejectedAt: firebase.firestore.FieldValue.serverTimestamp() });
     
     toast('🗑️ ปฏิเสธคำขอแล้ว');
+    
+    // 🔥 แก้ไข: reload หน้าเดิม
     loadCustomerUpdates();
+    render();
+    
+    if (S.view === 'customerUpdates') {
+        go('dealerDetail', { dealerId: dealerId });
+    }
 }
-
 // หน้าแยกสำหรับดูคำขออัพเดททั้งหมด
 function rCustomerUpdates(el) {
     document.getElementById('pgT').textContent = '📥 คำขออัพเดทจากลูกค้า';
