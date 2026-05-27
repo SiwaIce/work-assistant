@@ -492,6 +492,24 @@ function loadFromFirebase() {
   }).catch(function(err) { console.warn('Load timeline error:', err); });
 }
 
+// แทนที่การโหลด Pipeline แบบครั้งเดียว เป็นแบบ Real-time
+function loadPipelineRealtime() {
+  db.collection('pipeline')
+    .where('dealerId', '==', dealerId)
+    .onSnapshot(function(querySnapshot) {
+      pipelinesData = [];
+      querySnapshot.forEach(function(doc) {
+        var data = doc.data();
+        data.id = doc.id;
+        pipelinesData.push(data);
+      });
+      if (currentTab === 'pipeline') renderPipelineTab();
+      showSuccessToast('🔄 ข้อมูลอัพเดทอัตโนมัติ');
+    }, function(err) {
+      console.warn('Listener error:', err);
+    });
+}
+
 function saveToFirebase(collection, data) {
   if (!dealerId) return;
   db.collection(collection).doc(data.id).set(data).catch(function(err) { console.warn('Save error:', err); });
@@ -732,7 +750,17 @@ function renderForecastTab() {
   var modelDatalist = '<datalist id="globalModelList">';
   for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
   modelDatalist += '</datalist>';
-  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div><div class="month-carousel">' + monthCardsHtml + '<div class="month-selector-dropdown" style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
+  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>';
+  
+  // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
+  html += '<div style="text-align:right; margin-bottom:10px">';
+   html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรชข้อมูล</button>';  // เปลี่ยนเป็น refreshData()
+  html += '</div>';
+    html += '<div class="month-carousel">' + monthCardsHtml + '<div class="month-selector-dropdown" style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
+ // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
+  html += '<div style="text-align:right; margin-bottom:10px">';
+  html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรชข้อมูล</button>';  // เปลี่ยนเป็น refreshData()
+  html += '</div>';
   for (var i = 0; i < allMonths.length; i++) html += '<option value="' + allMonths[i] + '" ' + (selectedMonth === allMonths[i] ? 'selected' : '') + '>' + allMonths[i] + '</option>';
   html += '</select></div></div>' + statsHtml + '<div style="margin-bottom:24px"><div class="section-title" style="font-size:16px">🏪 สินค้าทั่วไป (Run Rate)</div><div class="form-row" style="margin-bottom:12px"><div class="form-group" style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="form-group" style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div><div>' + runrateHtml + '</div></div><div style="margin-bottom:24px"><div class="section-title" style="font-size:16px">📋 โครงการ (Project-based)</div><div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div class="form-group" style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="form-group" style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div><div style="margin-top:8px">' + projectsHtml + '</div></div><div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
   window.newProjectItems = [];
@@ -743,7 +771,12 @@ function renderPipelineTab() {
     document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📊 โครงการของท่าน</div><div style="text-align:center;padding:40px">📭 ยังไม่มีโครงการ</div></div>';
     return;
   }
-  var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div><div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
+  var html = '<div class="section"><div class="section-title">📊 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)
+// เพิ่มใน header
+html += '<div style="text-align:right; margin-bottom:10px">';
+html += '<button class="btn btn-sm btn-primary" onclick="location.reload()">🔄 รีเฟรชข้อมูล</button>';
+html += '</div>';
+</div><div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
   for (var i = 0; i < pipelinesData.length; i++) {
     var p = pipelinesData[i];
     var itemsText = '';
@@ -763,7 +796,15 @@ function renderPipelineTab() {
 }
 function renderTimelineTab() {
   if (!timelineLogs.length) { document.getElementById('tabContent').innerHTML = '<div class="section"><div style="text-align:center;padding:40px">📭 ยังไม่มีประวัติการอัพเดท</div></div>'; return; }
-  var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดททั้งหมด</div><div style="max-height:500px;overflow-y:auto">';
+   var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดททั้งหมด</div>';
+  
+  // ✅ เพิ่มปุ่ม Refresh ตรงนี้ (ใต้ section-title)
+  html += '<div style="text-align:right; margin-bottom:10px">';
+  html += '<button class="btn btn-sm btn-primary" onclick="location.reload()">🔄 รีเฟรชข้อมูล</button>';
+  html += '</div>';
+  
+  html += '<div style="max-height:500px;overflow-y:auto">';
+
   for (var i = 0; i < timelineLogs.length; i++) {
     var l = timelineLogs[i];
     var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
@@ -852,8 +893,17 @@ function renderCurrentTab() {
   else if (currentTab === 'forecast') renderForecastTab();
   else renderTimelineTab();
 }
+// ✅ เพิ่มฟังก์ชันนี้ก่อน function loadAllData()
+function refreshData() {
+  showSuccessToast('🔄 กำลังโหลดข้อมูลล่าสุด...');
+  loadFromFirebase();  // โหลดข้อมูลใหม่โดยไม่ต้อง reload หน้า
+}
+
 function loadAllData() {
-  if (!dealerId) { document.getElementById('tabContent').innerHTML = '<div class="section"><p>❌ ไม่พบข้อมูล Dealer</p></div>'; return; }
+  if (!dealerId) { 
+    document.getElementById('tabContent').innerHTML = '<div class="section"><p>❌ ไม่พบข้อมูล Dealer</p></div>'; 
+    return; 
+  }
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
   loadFromFirebase();
