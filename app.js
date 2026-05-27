@@ -279,6 +279,7 @@ function render() {
     report: rWeeklyReport, dashboard: rDashboard, health: rDataHealth,
     customerUpdates: rCustomerUpdates,
     customerUpdateHistory: rCustomerUpdateHistory,
+    customerForecastSummary: rCustomerForecastSummary,
     dealers: rDealers, dealerDetail: rDealerDet,pipeDash: rPipeDashboard,
     contactLogs: rContactLogs,
     pipeline: rPipeline, pipeBoard: rPipeBoard, pipeDetail: rPipeDet,
@@ -2789,6 +2790,340 @@ function exportHistoryCSV() {
   }).join('\n');
   
   dlBlob(csv, 'customer-update-history-' + _td() + '.csv');
+}
+// ================================================================
+// CUSTOMER FORECAST SUMMARY - สรุป Forecast จากลูกค้า
+// ================================================================
+
+var fcSummaryMonth = '';
+var fcSummaryDealer = 'all';
+
+function rCustomerForecastSummary(el) {
+  document.getElementById('pgT').textContent = '📊 สรุป Forecast ลูกค้า';
+  
+  if (!fcSummaryMonth) {
+    var now = new Date();
+    fcSummaryMonth = (now.getMonth() + 1) + '/' + (now.getFullYear() + 543);
+  }
+  
+  var months = generateMonthOptions();
+  var dealers = ST.getAll('dealers');
+  
+  var dealerOpts = '<option value="all">🏪 ทุก Dealer</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    dealerOpts += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
+  }
+  
+  var html = `
+    <div class="card">
+      <h2>📅 เลือกเดือน</h2>
+      <div class="fr">
+        <div class="fg"><label>📆 เดือน</label>
+          <select id="fcSummaryMonth" onchange="fcSummaryMonth=this.value;loadForecastSummary()" style="min-width:120px">
+            ${months}
+          </select>
+        </div>
+        <div class="fg"><label>🏪 Dealer</label>
+          <select id="fcSummaryDealer" onchange="fcSummaryDealer=this.value;loadForecastSummary()" style="min-width:150px">
+            ${dealerOpts}
+          </select>
+        </div>
+        <div class="fg"><label>&nbsp;</label>
+          <button class="btn bp" onclick="loadForecastSummary()">🔍 แสดงผล</button>
+        </div>
+      </div>
+    </div>
+    <div id="fcSummaryStats"></div>
+    <div id="fcSummaryContent"></div>
+    <div class="bg" style="margin-top:12px">
+      <button class="btn bp" onclick="exportForecastSummary()">📥 Export CSV</button>
+      <button class="btn bo" onclick="copyForecastSummary()">📋 Copy ตาราง</button>
+    </div>
+  `;
+  
+  el.innerHTML = html;
+  loadForecastSummary();
+}
+
+function generateMonthOptions() {
+  var options = '';
+  var now = new Date();
+  for (var i = 0; i < 12; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    var month = d.getMonth() + 1;
+    var year = d.getFullYear() + 543;
+    var monthKey = month + '/' + year;
+    var monthLabel = (month < 10 ? '0' + month : month) + '/' + year;
+    options += '<option value="' + monthKey + '"' + (fcSummaryMonth === monthKey ? ' selected' : '') + '>' + monthLabel + '</option>';
+  }
+  return options;
+}
+
+function loadForecastSummary() {
+  var monthSelect = document.getElementById('fcSummaryMonth');
+  var dealerSelect = document.getElementById('fcSummaryDealer');
+  
+  if (monthSelect) fcSummaryMonth = monthSelect.value;
+  if (dealerSelect) fcSummaryDealer = dealerSelect.value;
+  
+  var dealers = ST.getAll('dealers');
+  var targetDealers = [];
+  
+  if (fcSummaryDealer !== 'all') {
+    var d = ST.getOne('dealers', fcSummaryDealer);
+    if (d) targetDealers.push(d);
+  } else {
+    targetDealers = dealers;
+  }
+  
+  var allRunrate = [];
+  var allProjects = [];
+  var promises = [];
+  
+  targetDealers.forEach(function(dealer) {
+    var promise = db.collection('dealerUpdates').doc(dealer.id).collection('forecast').get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          data.id = doc.id;
+          data.dealerName = dealer.name;
+          data.dealerId = dealer.id;
+          
+          // กรองตามเดือน
+          if (data.month === fcSummaryMonth) {
+            if (data.type === 'runrate') {
+              allRunrate.push(data);
+            } else if (data.type === 'project') {
+              allProjects.push(data);
+            }
+          }
+        });
+      })
+      .catch(function(err) {
+        console.warn('Error loading forecast for dealer:', dealer.name, err);
+      });
+    promises.push(promise);
+  });
+  
+  Promise.all(promises).then(function() {
+    renderForecastSummaryStats(allRunrate, allProjects);
+    renderForecastSummaryContent(allRunrate, allProjects);
+  });
+}
+
+function renderForecastSummaryStats(runrate, projects) {
+  var container = document.getElementById('fcSummaryStats');
+  if (!container) return;
+  
+  var totalRunrateQty = 0;
+  runrate.forEach(function(r) { totalRunrateQty += (r.qty || 0); });
+  
+  var totalProjectQty = 0;
+  projects.forEach(function(p) { totalProjectQty += (p.totalQty || 0); });
+  
+  var totalQty = totalRunrateQty + totalProjectQty;
+  var uniqueDealers = {};
+  runrate.forEach(function(r) { if (r.dealerName) uniqueDealers[r.dealerName] = true; });
+  projects.forEach(function(p) { if (p.dealerName) uniqueDealers[p.dealerName] = true; });
+  var dealerCount = Object.keys(uniqueDealers).length;
+  
+  var html = `
+    <div class="sr">
+      <div class="sc"><div class="sn c1">${dealerCount}</div><div class="sl">Dealer ที่แจ้ง</div></div>
+      <div class="sc"><div class="sn c2">${totalRunrateQty}</div><div class="sl">📦 Run Rate (ชิ้น)</div></div>
+      <div class="sc"><div class="sn c3">${totalProjectQty}</div><div class="sl">🏢 Project (ชิ้น)</div></div>
+      <div class="sc"><div class="sn c5">${totalQty}</div><div class="sl">📊 รวมทั้งหมด</div></div>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+
+function renderForecastSummaryContent(runrate, projects) {
+  var container = document.getElementById('fcSummaryContent');
+  if (!container) return;
+  
+  if (runrate.length === 0 && projects.length === 0) {
+    container.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีข้อมูล Forecast ในเดือน ' + fcSummaryMonth + '</p></div></div>';
+    return;
+  }
+  
+  // จัดกลุ่มตาม Dealer
+  var byDealer = {};
+  
+  runrate.forEach(function(r) {
+    var dealerName = r.dealerName || 'ไม่ระบุ Dealer';
+    if (!byDealer[dealerName]) {
+      byDealer[dealerName] = { runrate: [], projects: [], dealerId: r.dealerId };
+    }
+    byDealer[dealerName].runrate.push(r);
+  });
+  
+  projects.forEach(function(p) {
+    var dealerName = p.dealerName || 'ไม่ระบุ Dealer';
+    if (!byDealer[dealerName]) {
+      byDealer[dealerName] = { runrate: [], projects: [], dealerId: p.dealerId };
+    }
+    byDealer[dealerName].projects.push(p);
+  });
+  
+  // สร้าง HTML
+  var html = '';
+  var dealerNames = Object.keys(byDealer).sort();
+  
+  for (var i = 0; i < dealerNames.length; i++) {
+    var dealerName = dealerNames[i];
+    var data = byDealer[dealerName];
+    
+    // คำนวณรวมของ Dealer นี้
+    var dealerRunrateQty = 0;
+    data.runrate.forEach(function(r) { dealerRunrateQty += (r.qty || 0); });
+    
+    var dealerProjectQty = 0;
+    data.projects.forEach(function(p) { dealerProjectQty += (p.totalQty || 0); });
+    
+    var dealerTotal = dealerRunrateQty + dealerProjectQty;
+    
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div class="fcd-header" onclick="toggleDealerForecastDetail(\'' + dealerName.replace(/'/g, "\\'") + '\')" style="cursor:pointer">';
+    html += '<div class="fcd-top">';
+    html += '<div class="fcd-name">🏪 ' + sanitize(dealerName) + '</div>';
+    html += '<div class="fcd-toggle" id="toggle_' + dealerName.replace(/[^a-zA-Z0-9]/g, '_') + '">▼</div>';
+    html += '</div>';
+    html += '<div class="fcd-stats">';
+    html += '<span class="fcd-stat">📦 Run Rate: ' + dealerRunrateQty + ' ชิ้น</span>';
+    html += '<span class="fcd-stat">🏢 Project: ' + dealerProjectQty + ' ชิ้น</span>';
+    html += '<span class="fcd-stat">📊 รวม: ' + dealerTotal + ' ชิ้น</span>';
+    html += '</div>';
+    html += '</div>';
+    
+    // รายละเอียด (ซ่อนไว้ก่อน)
+    html += '<div id="detail_' + dealerName.replace(/[^a-zA-Z0-9]/g, '_') + '" style="display:block; margin-top:12px">';
+    
+    // Run Rate Section
+    if (data.runrate.length > 0) {
+      var modelSummary = {};
+      data.runrate.forEach(function(r) {
+        var model = r.model || 'ไม่ระบุ';
+        if (!modelSummary[model]) modelSummary[model] = 0;
+        modelSummary[model] += (r.qty || 0);
+      });
+      
+      html += '<div class="form-section">📦 Run Rate</div>';
+      html += '<div class="export-wrap" style="margin-bottom:12px">';
+      html += '<table class="export-table" style="width:100%">';
+      html += '<thead><tr><th>Model</th><th style="text-align:center">จำนวน (ชิ้น)</th><th></th></tr></thead>';
+      html += '<tbody>';
+      
+      var modelNames = Object.keys(modelSummary).sort();
+      for (var mi = 0; mi < modelNames.length; mi++) {
+        var model = modelNames[mi];
+        var qty = modelSummary[model];
+        html += '<tr><td><strong>' + sanitize(model) + '</strong></td><td style="text-align:center">' + qty + '</td><td style="width:50px"></td></tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+    
+    // Project Section
+    if (data.projects.length > 0) {
+      html += '<div class="form-section">🏢 โครงการ</div>';
+      for (var pj = 0; pj < data.projects.length; pj++) {
+        var proj = data.projects[pj];
+        html += '<div class="project-item" style="margin-bottom:8px">';
+        html += '<div class="project-name">📋 ' + sanitize(proj.projectName || 'ไม่ระบุชื่อโครงการ') + '</div>';
+        if (proj.endUser) html += '<div class="project-items">👤 ' + sanitize(proj.endUser) + '</div>';
+        html += '<div class="project-items">';
+        for (var it = 0; it < (proj.items || []).length; it++) {
+          var item = proj.items[it];
+          html += (it > 0 ? ', ' : '') + (item.model || '-') + ' x' + (item.qty || 1);
+        }
+        html += '</div>';
+        html += '</div>';
+      }
+    }
+    
+    html += '</div>'; // close detail
+    html += '</div>'; // close card
+  }
+  
+  container.innerHTML = html;
+}
+
+function toggleDealerForecastDetail(dealerName) {
+  var id = 'detail_' + dealerName.replace(/[^a-zA-Z0-9]/g, '_');
+  var toggleId = 'toggle_' + dealerName.replace(/[^a-zA-Z0-9]/g, '_');
+  var detail = document.getElementById(id);
+  var toggle = document.getElementById(toggleId);
+  
+  if (detail && toggle) {
+    if (detail.style.display === 'none') {
+      detail.style.display = 'block';
+      toggle.textContent = '▼';
+    } else {
+      detail.style.display = 'none';
+      toggle.textContent = '▶';
+    }
+  }
+}
+
+function exportForecastSummary() {
+  // สร้าง CSV จากข้อมูลที่แสดง
+  var dealers = ST.getAll('dealers');
+  var allRunrate = [];
+  var allProjects = [];
+  var promises = [];
+  
+  var targetDealers = [];
+  if (fcSummaryDealer !== 'all') {
+    var d = ST.getOne('dealers', fcSummaryDealer);
+    if (d) targetDealers.push(d);
+  } else {
+    targetDealers = dealers;
+  }
+  
+  targetDealers.forEach(function(dealer) {
+    var promise = db.collection('dealerUpdates').doc(dealer.id).collection('forecast').get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          if (data.month === fcSummaryMonth) {
+            data.dealerName = dealer.name;
+            if (data.type === 'runrate') {
+              allRunrate.push(data);
+            } else if (data.type === 'project') {
+              allProjects.push(data);
+            }
+          }
+        });
+      });
+    promises.push(promise);
+  });
+  
+  Promise.all(promises).then(function() {
+    var csv = '\uFEFF"ประเภท","Dealer","ชื่อโครงการ","End User","Model","จำนวน","เดือน"\n';
+    
+    allRunrate.forEach(function(r) {
+      csv += '"Run Rate","' + (r.dealerName || '') + '","","","' + (r.model || '') + '","' + (r.qty || 0) + '","' + r.month + '"\n';
+    });
+    
+    allProjects.forEach(function(p) {
+      for (var i = 0; i < (p.items || []).length; i++) {
+        var item = p.items[i];
+        csv += '"Project","' + (p.dealerName || '') + '","' + (p.projectName || '') + '","' + (p.endUser || '') + '","' + (item.model || '') + '","' + (item.qty || 0) + '","' + p.month + '"\n';
+      }
+    });
+    
+    dlBlob(csv, 'forecast-summary-' + fcSummaryMonth + '.csv');
+    toast('📥 Export CSV เรียบร้อย');
+  });
+}
+
+function copyForecastSummary() {
+  // คัดลอกข้อความสรุป
+  var text = '📊 สรุป Forecast ลูกค้า - ' + fcSummaryMonth + '\n';
+  text += '='.repeat(40) + '\n\n';
+  
+  // ใช้ข้อมูลจาก DOM หรือ query อีกครั้ง
+  toast('📋 คัดลอกแล้ว (ใช้ Export CSV แทน)');
 }
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
