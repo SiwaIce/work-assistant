@@ -145,6 +145,7 @@ function rDealerDet(el) {
   document.getElementById('pgT').textContent = '🏪 ' + d.name;
   S.dealerId = d.id;
   
+  // ตรวจสอบว่ามีการขอเปิดแท็บ forecast หรือไม่
   if (S.tab === 'forecast') {
     dealerTab = 'forecast';
     delete S.tab;
@@ -190,12 +191,13 @@ function rDealerDet(el) {
   <!-- Tab Content -->
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
   
-  // ✅ เรียก loadCustomerUpdates หลังจาก render เสร็จ (อยู่ภายในฟังก์ชัน rDealerDet)
+  // ✅ โหลดคำขออัพเดทจากลูกค้า (ส่ง dealerId ไปด้วย)
   setTimeout(function() {
-    if (typeof loadCustomerUpdates === 'function') loadCustomerUpdates();
+    if (typeof loadCustomerUpdates === 'function') {
+      loadCustomerUpdates(d.id);
+    }
   }, 500);
-}  // ← ปิดฟังก์ชัน rDealerDet
-
+}
 function renderDealerTab(d) {
   switch (dealerTab) {
     case 'info': return dealerInfoTab(d);
@@ -1350,9 +1352,7 @@ function dealerOnboardTab(d) {
   }
   
   html += '</div>';
-  return `
-${html}
-`;
+  return html;
 }
 
 function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {

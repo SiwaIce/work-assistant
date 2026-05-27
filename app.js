@@ -281,10 +281,9 @@ var customerUpdates = {
 };
 
 // โหลดข้อมูลที่ลูกค้าอัพเดท
-function loadCustomerUpdates() {
+// โหลดข้อมูลที่ลูกค้าอัพเดท - รับ dealerId เป็นพารามิเตอร์
+function loadCustomerUpdates(dealerId) {
     if (!CURRENT_USER) return;
-    
-    var dealerId = S.dealerId;
     if (!dealerId) return;
     
     // โหลด Pipeline Updates
@@ -295,7 +294,7 @@ function loadCustomerUpdates() {
             data.id = doc.id;
             customerUpdates.pipeline.push(data);
         });
-        renderCustomerUpdatesPanel();
+        renderCustomerUpdatesPanel(dealerId);  // ส่ง dealerId ไปด้วย
     }).catch(function(err) { console.warn(err); });
     
     // โหลด Forecast Updates
@@ -306,12 +305,12 @@ function loadCustomerUpdates() {
             data.id = doc.id;
             customerUpdates.forecast.push(data);
         });
-        renderCustomerUpdatesPanel();
+        renderCustomerUpdatesPanel(dealerId);  // ส่ง dealerId ไปด้วย
     }).catch(function(err) { console.warn(err); });
 }
 
-// แสดง Panel ใน Dealer Detail
-function renderCustomerUpdatesPanel() {
+// แสดง Panel ใน Dealer Detail - รับ dealerId เป็นพารามิเตอร์
+function renderCustomerUpdatesPanel(dealerId) {
     var panel = document.getElementById('customerUpdatesPanel');
     if (!panel) return;
     
@@ -368,7 +367,6 @@ function renderCustomerUpdatesPanel() {
     html += '</div>';
     panel.innerHTML = html;
 }
-
 // อนุมัติ Pipeline Update
 function approvePipelineUpdate(updateId, dealerId) {
     if (!confirm('ยืนยันนำเข้าข้อมูลนี้?')) return;
