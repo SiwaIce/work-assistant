@@ -2,375 +2,64 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>DJI Enterprise - ติดตามสถานะโครงการ</title>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJI Enterprise - ติดตามโครงการ</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
-:root {
-  --bg: #0f172a;
-  --bg2: #1e293b;
-  --card: #1e293b;
-  --border: #334155;
-  --text: #e2e8f0;
-  --text2: #94a3b8;
-  --text3: #64748b;
-  --accent: #3b82f6;
-  --accent-light: rgba(59,130,246,0.1);
-  --radius: 12px;
-  --input-bg: #0f172a;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-}
-.theme-light {
-  --bg: #f1f5f9;
-  --bg2: #ffffff;
-  --card: #ffffff;
-  --border: #e2e8f0;
-  --text: #1e293b;
-  --text2: #475569;
-  --text3: #64748b;
-  --accent: #2563eb;
-  --accent-light: #eff6ff;
-  --input-bg: #ffffff;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: 'Segoe UI', 'Noto Sans Thai', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  transition: background 0.2s, color 0.2s;
-  padding-bottom: 20px;
-}
-.theme-toggle {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text2);
-  cursor: pointer;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  transition: 0.2s;
-}
-.theme-toggle:hover { transform: scale(1.05); border-color: var(--accent); color: var(--accent); }
-.cv-container { max-width: 1200px; margin: 0 auto; padding: 24px; padding-top: 20px; }
-.cv-header { text-align: center; padding: 24px 0 32px; margin-bottom: 24px; border-bottom: 2px solid rgba(100,181,246,0.2); }
-.cv-logo { font-size: 14px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
-.cv-dealer-name { font-size: 32px; font-weight: 800; background: linear-gradient(90deg, var(--accent), #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 4px; }
-.cv-dealer-sub { font-size: 14px; color: var(--text2); }
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0;
-  overflow-x: auto;
-}
-.tab-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--text2);
-  border-bottom: 2px solid transparent;
-  transition: 0.15s;
-  white-space: nowrap;
-}
-.tab-btn:hover { color: var(--accent); }
-.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-.section {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.section-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  color: var(--accent);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.stat-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  text-align: center;
-  cursor: pointer;
-  transition: 0.15s;
-}
-.stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-.stat-card.active { border-color: var(--accent); background: var(--accent-light); }
-.stat-month { font-size: 14px; font-weight: 700; color: var(--accent); }
-.stat-qty { font-size: 28px; font-weight: 800; margin: 4px 0; }
-.stat-detail { font-size: 10px; color: var(--text2); }
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.data-table th {
-  text-align: left;
-  padding: 12px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 2px solid var(--border);
-}
-.data-table td {
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-.data-table tr:hover td {
-  background: rgba(59, 130, 246, 0.05);
-}
-.status-badge {
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  display: inline-block;
-}
-.status-prospect { background: rgba(100,181,246,0.12); color: #64b5f6; }
-.status-tor { background: rgba(186,104,200,0.12); color: #ba68c8; }
-.status-quote { background: rgba(255,183,77,0.12); color: #ffb74d; }
-.status-bidding { background: rgba(255,235,59,0.12); color: #fdd835; }
-.status-nego { background: rgba(77,208,225,0.12); color: #4dd0e1; }
-.status-win { background: rgba(129,199,132,0.12); color: #81c784; }
-.status-ordered { background: rgba(76,175,80,0.12); color: #4caf50; }
-.status-delivered { background: rgba(76,175,80,0.15); color: #66bb6a; }
-.btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 12px; transition: 0.15s; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { opacity: 0.9; }
-.btn-sm { padding: 4px 8px; font-size: 11px; }
-.btn-danger { border-color: var(--danger); color: var(--danger); }
-.btn-danger:hover { background: rgba(239,68,68,0.1); }
-.btn-success { background: var(--success); border-color: var(--success); color: #fff; }
-.btn-warning { background: var(--warning); border-color: var(--warning); color: #fff; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
-.form-group input, .form-group select, .form-group textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--input-bg);
-  color: var(--text);
-  font-size: 13px;
-}
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-.hint { font-size: 11px; color: var(--text2); margin-top: 4px; }
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-.modal-container {
-  background: var(--card);
-  border-radius: 16px;
-  max-width: 550px;
-  width: 90%;
-  max-height: 85vh;
-  overflow-y: auto;
-}
-.modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: sticky;
-  top: 0;
-  background: var(--card);
-}
-.modal-header h3 { font-size: 18px; color: var(--accent); }
-.modal-close { background: none; border: none; color: var(--text2); font-size: 24px; cursor: pointer; }
-.modal-body { padding: 20px; }
-.modal-footer {
-  padding: 16px 20px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  position: sticky;
-  bottom: 0;
-  background: var(--card);
-}
-.month-carousel {
-  background: var(--bg2);
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 24px;
-  border: 1px solid var(--border);
-}
-.month-scroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 4px 0 8px;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-.month-card {
-  flex: 0 0 auto;
-  min-width: 100px;
-  padding: 12px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.month-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-}
-.month-card.active {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.month-card.active .month-name,
-.month-card.active .month-total,
-.month-card.active .month-detail {
-  color: white;
-}
-.month-name {
-  font-size: 14px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.month-total {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--accent);
-}
-.month-detail {
-  font-size: 10px;
-  color: var(--text2);
-  margin-top: 4px;
-}
-.forecast-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  background: var(--bg);
-  border-radius: 8px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-}
-.project-item {
-  background: var(--bg);
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: 0.15s;
-}
-.project-item:hover { border-color: var(--accent); background: var(--accent-light); }
-.project-name { font-weight: 700; font-size: 15px; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
-.project-items { font-size: 12px; color: var(--text2); margin-top: 4px; }
-.project-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
-.project-detail.show { display: block; }
-.success-toast {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--success);
-  color: #fff;
-  padding: 12px 24px;
-  border-radius: 40px;
-  font-size: 14px;
-  font-weight: 600;
-  z-index: 2001;
-  animation: fadeInUp 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
-}
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-@keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
-.loading { text-align: center; padding: 40px; color: var(--text2); }
-.cv-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  margin-bottom: 20px;
-  cursor: pointer;
-  color: var(--accent);
-  font-size: 14px;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-.cv-back:hover { background: var(--accent-light); }
-@media (max-width: 768px) {
-  .cv-container { padding: 12px; }
-  .cv-dealer-name { font-size: 24px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .form-row { grid-template-columns: 1fr; }
-  .month-card { min-width: 90px; }
-  .data-table th, .data-table td { padding: 8px 6px; font-size: 11px; }
-}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:20px}
+.header{text-align:center;padding:20px 0 30px;border-bottom:2px solid #334155;margin-bottom:20px}
+.logo{font-size:14px;color:#3b82f6}
+.name{font-size:32px;font-weight:800;background:linear-gradient(90deg,#3b82f6,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{font-size:14px;color:#94a3b8}
+.tab-bar{display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid #334155}
+.tab-btn{padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;color:#94a3b8;border-bottom:2px solid transparent}
+.tab-btn.active{color:#3b82f6;border-bottom-color:#3b82f6}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:20px}
+.card h2{font-size:16px;color:#3b82f6;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #334155}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #334155}
+th{color:#94a3b8;font-size:12px}
+tr:hover td{background:rgba(59,130,246,0.05)}
+.status{padding:3px 10px;border-radius:12px;font-size:11px;display:inline-block}
+.status-win{background:rgba(34,197,94,0.12);color:#86efac}
+.status-prospect{background:rgba(100,181,246,0.12);color:#64b5f6}
+.btn{padding:6px 12px;border-radius:6px;border:1px solid #334155;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px}
+.btn-primary{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.btn-sm{padding:4px 8px;font-size:11px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:10px 20px;border-radius:40px;z-index:2000;animation:fadeOut 3s forwards}
+@keyframes fadeOut{0%{opacity:1}70%{opacity:1}100%{opacity:0;visibility:hidden}}
+.modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2000}
+.modal-content{background:#1e293b;border-radius:16px;max-width:500px;width:90%;max-height:85vh;overflow-y:auto}
+.modal-header{padding:16px;border-bottom:1px solid #334155;display:flex;justify-content:space-between}
+.modal-body{padding:16px}
+.modal-footer{padding:16px;border-top:1px solid #334155;display:flex;justify-content:flex-end;gap:10px}
+.close{background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer}
+input,select,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:4px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:768px){.name{font-size:24px}.form-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="cv-container">
-  <div class="cv-header">
-    <div class="cv-logo">🚁 DJI Enterprise</div>
-    <div class="cv-dealer-name" id="dealerName">กำลังโหลด...</div>
-    <div class="cv-dealer-sub">DJI Authorized Dealer</div>
+<div style="max-width:1200px;margin:0 auto">
+  <div class="header">
+    <div class="logo">🚁 DJI Enterprise</div>
+    <div class="name" id="dealerName">กำลังโหลด...</div>
+    <div class="sub">DJI Authorized Dealer</div>
   </div>
-  <div class="tab-bar" id="tabBar">
+  <div class="tab-bar">
     <div class="tab-btn active" data-tab="pipeline">📋 โครงการของฉัน</div>
     <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
-    <div class="tab-btn" data-tab="timeline">📝 ประวัติการอัพเดท</div>
   </div>
-  <div id="tabContent"></div>
-  <div class="cv-footer" style="text-align:center; padding:24px 0; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
-    <div>Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor</div>
-    <div id="footerDate"></div>
+  <div id="content"></div>
+  <div style="text-align:center;padding:24px 0;font-size:12px;color:#94a3b8">
+    Powered by SIS Distribution (Thailand) PLC
   </div>
 </div>
-<button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+
 <script>
 var firebaseConfig = {
   apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
@@ -383,521 +72,252 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
-function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
-function applyTheme(theme) {
-  if (theme === 'light') { document.body.classList.add('theme-light'); document.querySelector('.theme-toggle').textContent = '☀️'; }
-  else { document.body.classList.remove('theme-light'); document.querySelector('.theme-toggle').textContent = '🌙'; }
+function showToast(msg){
+  var t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ if(t.remove) t.remove(); }, 3000);
 }
-function toggleTheme() { var current = getSavedTheme(); var next = current === 'dark' ? 'light' : 'dark'; localStorage.setItem('cv_theme', next); applyTheme(next); }
-applyTheme(getSavedTheme());
 
-function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
-function showSuccessToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
-function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
-function _td() { var now = new Date(); return now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0'); }
-function _nw() { return new Date().toISOString(); }
-
-var STATUS_LIST = [
-  { id: 'prospect', name: 'Prospect' }, { id: 'tor_review', name: 'TOR Review' },
-  { id: 'quotation', name: 'Quotation' }, { id: 'bidding', name: 'Bidding' },
-  { id: 'negotiation', name: 'Negotiation' }, { id: 'win', name: 'Win' },
-  { id: 'ordered', name: 'Ordered' }, { id: 'delivered', name: 'Delivered' }
-];
-function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
-
-var dealerId = new URLSearchParams(window.location.search).get('dealerId');
+var dealerId = new URLSearchParams(location.search).get('dealerId');
 var currentTab = 'pipeline';
-var allModels = [];
-var pipelinesData = [];
-var forecastData = { runrate: [], projects: [] };
-var timelineLogs = [];
-var dealerName = '';
-var selectedMonth = null;
-var allMonths = [];
+var pipelines = [];
 
-function generateMonths() {
-  var months = [];
-  var now = new Date();
-  for (var i = 0; i < 12; i++) {
-    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    var m = d.getMonth() + 1;
-    var y = d.getFullYear() + 543;
-    months.push((m < 10 ? '0' + m : m) + '/' + y);
-  }
-  return months;
+function loadDealer(){
+  if(!dealerId) return;
+  db.collection('dealers').doc(dealerId).get().then(function(doc){
+    var name = doc.exists ? (doc.data().name || dealerId) : dealerId;
+    document.getElementById('dealerName').innerHTML = name;
+  }).catch(function(){
+    document.getElementById('dealerName').innerHTML = dealerId;
+  });
 }
 
-function loadModels() {
-  var cfg = localStorage.getItem('v7_config');
-  if (cfg) {
-    try {
-      var config = JSON.parse(cfg);
-      if (config.models && config.models.length) {
-        allModels = config.models.map(function(m) { return typeof m === 'object' ? m.name : m; }).filter(function(m) { return m; });
-      }
-    } catch(e) {}
-  }
-  if (!allModels.length) {
-    allModels = ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Matrice 4TD', 'DJI Matrice 400', 'DJI Matrice 30', 'DJI Matrice 30T',
-      'Zenmuse L2', 'Zenmuse L3', 'Zenmuse H30', 'Zenmuse H30T', 'Zenmuse P1', 'DJI Dock 2', 'DJI Dock 3',
-      'DJI FlightHub 2', 'DJI Terra', 'Mavic 3 Enterprise', 'Mavic 3 Multispectral'];
-  }
-}
-
-function loadFromFirebase() {
-  if (!dealerId) return;
-  showSuccessToast('กำลังโหลดข้อมูล...');
-  
-  db.collection('dealers').doc(dealerId).get().then(function(doc) {
-    if (doc.exists) {
-      dealerName = doc.data().name || dealerId;
-    } else {
-      dealerName = dealerId;
-    }
-    document.getElementById('dealerName').innerHTML = esc(dealerName);
-  }).catch(function(err) { console.warn('Load dealer error:', err); });
-  
-  db.collection('pipeline').where('dealerId', '==', dealerId).get().then(function(querySnapshot) {
-    pipelinesData = [];
-    querySnapshot.forEach(function(doc) {
+function loadPipeline(){
+  if(!dealerId) return;
+  showToast('กำลังโหลดข้อมูล...');
+  db.collection('pipeline').where('dealerId', '==', dealerId).get().then(function(qs){
+    pipelines = [];
+    qs.forEach(function(doc){
       var data = doc.data();
       data.id = doc.id;
-      pipelinesData.push(data);
+      pipelines.push(data);
     });
-    if (currentTab === 'pipeline') renderCurrentTab();
-  }).catch(function(err) { console.warn('Load pipeline error:', err); });
-  
-  db.collection('forecast').where('dealerId', '==', dealerId).get().then(function(querySnapshot) {
-    forecastData.runrate = [];
-    forecastData.projects = [];
-    querySnapshot.forEach(function(doc) {
-      var item = doc.data();
-      item.id = doc.id;
-      if (item.type === 'runrate') {
-        forecastData.runrate.push(item);
-      } else if (item.type === 'project') {
-        forecastData.projects.push(item);
-      }
-    });
-    if (currentTab === 'forecast') renderCurrentTab();
-  }).catch(function(err) { console.warn('Load forecast error:', err); });
-  
-  db.collection('pipeLog').where('dealerId', '==', dealerId).orderBy('date', 'desc').limit(50).get().then(function(querySnapshot) {
-    timelineLogs = [];
-    querySnapshot.forEach(function(doc) {
-      timelineLogs.push(doc.data());
-    });
-    if (currentTab === 'timeline') renderCurrentTab();
-  }).catch(function(err) { console.warn('Load timeline error:', err); });
+    renderPipeline();
+  }).catch(function(err){
+    console.error(err);
+    renderPipeline();
+  });
 }
 
-function saveToFirebase(collection, data) {
-  if (!dealerId) return;
-  db.collection(collection).doc(data.id).set(data).catch(function(err) { console.warn('Save error:', err); });
-}
-
-function refreshData() {
-  showSuccessToast('กำลังโหลดข้อมูลล่าสุด...');
-  loadFromFirebase();
-}
-
-function selectMonth(month) { selectedMonth = month; renderForecastTab(); }
-function getMonthSummary() {
-  var summary = {};
-  for (var i = 0; i < allMonths.length; i++) summary[allMonths[i]] = { runrate: 0, project: 0, total: 0 };
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; }
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; }
-  }
-  return summary;
-}
-function addRunrateItem() {
-  var model = document.getElementById('runrateModel').value.trim();
-  var qty = parseInt(document.getElementById('runrateQty').value);
-  if (!model) { alert('กรุณาเลือกสินค้า'); return; }
-  if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
-  var newItem = { id: 'rr_' + Date.now(), model: model, qty: qty, month: selectedMonth, dealerId: dealerId, type: 'runrate', createdAt: _nw() };
-  forecastData.runrate.push(newItem);
-  saveToFirebase('forecast', newItem);
-  document.getElementById('runrateModel').value = '';
-  document.getElementById('runrateQty').value = '1';
-  showSuccessToast('เพิ่ม Run Rate แล้ว');
-  renderForecastTab();
-}
-function deleteRunrateItem(idx) {
-  if (!confirm('ลบรายการนี้?')) return;
-  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  var actualItem = monthRunrate[idx];
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    if (forecastData.runrate[i].id === actualItem.id) {
-      forecastData.runrate.splice(i, 1);
-      db.collection('forecast').doc(actualItem.id).delete().catch(function(e) {});
-      break;
-    }
-  }
-  showSuccessToast('ลบรายการแล้ว');
-  renderForecastTab();
-}
-function editRunrateItem(idx) {
-  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  var actualItem = monthRunrate[idx];
-  if (!actualItem) return;
-  var newQty = prompt('แก้ไขจำนวน ' + actualItem.model, actualItem.qty);
-  if (newQty && !isNaN(parseInt(newQty))) {
-    for (var i = 0; i < forecastData.runrate.length; i++) {
-      if (forecastData.runrate[i].id === actualItem.id) {
-        forecastData.runrate[i].qty = parseInt(newQty);
-        saveToFirebase('forecast', forecastData.runrate[i]);
-        break;
-      }
-    }
-    showSuccessToast('แก้ไขจำนวนแล้ว');
-    renderForecastTab();
-  }
-}
-function saveClientForecast() {
-  for (var i = 0; i < forecastData.runrate.length; i++) saveToFirebase('forecast', forecastData.runrate[i]);
-  for (var i = 0; i < forecastData.projects.length; i++) saveToFirebase('forecast', forecastData.projects[i]);
-  showSuccessToast('บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
-  renderForecastTab();
-}
-function deleteProjectItem(projIdx) {
-  if (!confirm('ลบโครงการนี้?')) return;
-  var actualItem = forecastData.projects[projIdx];
-  forecastData.projects.splice(projIdx, 1);
-  db.collection('forecast').doc(actualItem.id).delete().catch(function(e) {});
-  showSuccessToast('ลบโครงการแล้ว');
-  renderForecastTab();
-}
-function toggleProjectDetail(projIdx) { var el = document.getElementById('projectDetail_' + projIdx); if (el) el.classList.toggle('show'); }
-function editProjectItem(projIdx) {
-  var proj = forecastData.projects[projIdx];
-  var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
-  if (newName && newName.trim()) { proj.projectName = newName.trim(); saveToFirebase('forecast', proj); showSuccessToast('แก้ไขแล้ว'); renderForecastTab(); }
-}
-function loadProjectToForm() {
-  var select = document.getElementById('existingProjectSelect');
-  var idx = parseInt(select.value);
-  if (isNaN(idx) || idx < 0) return;
-  var proj = pipelinesData[idx];
-  if (!proj) return;
-  document.getElementById('newProjectName').value = proj.projectName;
-  document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
-  window.newProjectItems = [];
-  if (proj.items && proj.items.length) {
-    for (var i = 0; i < proj.items.length; i++) window.newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
-  } else if (proj.model) {
-    window.newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
-  }
-  renderNewProjectItemsList();
-  select.value = '';
-  showSuccessToast('โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
-}
-function addProjectItem() {
-  var model = document.getElementById('newProjectItemModel').value.trim();
-  var qty = parseInt(document.getElementById('newProjectItemQty').value);
-  if (!model) { alert('กรุณาเลือกสินค้า'); return; }
-  if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
-  if (!window.newProjectItems) window.newProjectItems = [];
-  window.newProjectItems.push({ model: model, qty: qty });
-  document.getElementById('newProjectItemModel').value = '';
-  document.getElementById('newProjectItemQty').value = '1';
-  renderNewProjectItemsList();
-}
-function removeNewProjectItem(idx) {
-  if (!window.newProjectItems) return;
-  window.newProjectItems.splice(idx, 1);
-  renderNewProjectItemsList();
-}
-function renderNewProjectItemsList() {
-  var container = document.getElementById('newProjectItemsContainer');
-  if (!container) return;
-  if (!window.newProjectItems) window.newProjectItems = [];
-  var html = '';
-  for (var i = 0; i < window.newProjectItems.length; i++) {
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--border)">';
-    html += '<span>' + esc(window.newProjectItems[i].model) + ' x' + window.newProjectItems[i].qty + '</span>';
-    html += '<button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">ลบ</button>';
-    html += '</div>';
-  }
-  container.innerHTML = html || '<div class="hint" style="padding:8px">ยังไม่มีสินค้า</div>';
-}
-function addNewProject() {
-  var projectName = document.getElementById('newProjectName').value.trim();
-  var endUser = document.getElementById('newProjectEndUser').value.trim();
-  if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-  if (!window.newProjectItems || window.newProjectItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  var totalQty = 0;
-  for (var i = 0; i < window.newProjectItems.length; i++) totalQty += window.newProjectItems[i].qty;
-  var newProject = { id: 'proj_' + Date.now(), projectName: projectName, endUser: endUser || '-', month: selectedMonth, items: JSON.parse(JSON.stringify(window.newProjectItems)), totalQty: totalQty, dealerId: dealerId, type: 'project', createdAt: _nw() };
-  forecastData.projects.push(newProject);
-  saveToFirebase('forecast', newProject);
-  document.getElementById('newProjectName').value = '';
-  document.getElementById('newProjectEndUser').value = '';
-  window.newProjectItems = [];
-  renderNewProjectItemsList();
-  showSuccessToast('เพิ่มโครงการใหม่เรียบร้อยแล้ว');
-  renderForecastTab();
-}
-function clearProjectForm() {
-  if (confirm('ล้างข้อมูลในฟอร์ม?')) {
-    document.getElementById('newProjectName').value = '';
-    document.getElementById('newProjectEndUser').value = '';
-    window.newProjectItems = [];
-    renderNewProjectItemsList();
-  }
-}
-function downloadForecastExcel() {
-  var wsData = [['ประเภท', 'ชื่อ', 'Model', 'จำนวน', 'End User', 'เดือน']];
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    wsData.push(['Run Rate', '', r.model, r.qty, '', r.month]);
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    for (var j = 0; j < p.items.length; j++) {
-      wsData.push(['Project', p.projectName, p.items[j].model, p.items[j].qty, p.endUser || '', p.month]);
-    }
-  }
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
-  XLSX.writeFile(wb, 'Forecast_' + dealerName + '.xlsx');
-}
-function uploadForecastExcel(input) {
-  var file = input.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var data = new Uint8Array(e.target.result);
-    var workbook = XLSX.read(data, { type: 'array' });
-    var sheet = workbook.Sheets[workbook.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); return; }
-    for (var i = 1; i < rows.length; i++) {
-      var row = rows[i];
-      if (!row || !row[0]) continue;
-      var type = row[0];
-      var name = row[1];
-      var model = row[2];
-      var qty = parseInt(row[3]) || 0;
-      var endUser = row[4] || '';
-      var month = row[5];
-      if (!month || allMonths.indexOf(month) === -1) continue;
-      if (type === 'Run Rate' && model && qty > 0) {
-        forecastData.runrate.push({ id: 'rr_' + Date.now() + '_' + i, model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' });
-      } else if (type === 'Project' && name && model && qty > 0) {
-        forecastData.projects.push({ id: 'proj_' + Date.now() + '_' + i, projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' });
-      }
-    }
-    saveClientForecast();
-    input.value = '';
-  };
-  reader.readAsArrayBuffer(file);
-}
-function renderForecastTab() {
-  allMonths = generateMonths();
-  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
-  var monthSummary = getMonthSummary();
-  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  var monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
-  var totalRunrate = 0, totalProject = 0;
-  for (var i = 0; i < monthRunrate.length; i++) totalRunrate += monthRunrate[i].qty;
-  for (var i = 0; i < monthProjects.length; i++) totalProject += monthProjects[i].totalQty;
-  var monthCardsHtml = '<div class="month-scroll">';
-  for (var i = 0; i < allMonths.length; i++) {
-    var m = allMonths[i];
-    var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
-    var activeClass = (selectedMonth === m) ? 'active' : '';
-    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')"><div class="month-name">' + m + '</div><div class="month-total">' + summary.total + '</div><div class="month-detail">' + summary.runrate + '/' + summary.project + '</div></div>';
-  }
-  monthCardsHtml += '</div>';
-  var statsHtml = '<div class="stats-grid"><div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น</div></div><div class="stat-card"><div class="stat-month">Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">รายการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">โครงการ</div></div></div>';
-  var runrateHtml = '';
-  for (var i = 0; i < monthRunrate.length; i++) {
-    var r = monthRunrate[i];
-    runrateHtml += '<div class="forecast-item"><div><strong>' + esc(r.model) + '</strong></div><div>x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">แก้ไข</button><button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">ลบ</button></div>';
-  }
-  if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีรายการ</div>';
-  var projectsHtml = '';
-  for (var i = 0; i < monthProjects.length; i++) {
-    var proj = monthProjects[i];
-    var itemsText = '';
-    for (var j = 0; j < proj.items.length; j++) itemsText += proj.items[j].model + ' x' + proj.items[j].qty + (j < proj.items.length - 1 ? ', ' : '');
-    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')"><div class="project-name"><span>' + esc(proj.projectName) + '</span><span>' + proj.totalQty + ' ชิ้น</span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div>' + esc(proj.endUser) + '</div>' : '') + '<div>' + itemsText + '</div><div class="project-detail" id="projectDetail_' + i + '"><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">แก้ไข</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">ลบ</button></div></div></div>';
-  }
-  if (projectsHtml === '') projectsHtml = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีโครงการ</div>';
-  var existingOptions = '<option value="">-- เลือกโครงการที่มี --</option>';
-  for (var i = 0; i < pipelinesData.length; i++) existingOptions += '<option value="' + i + '">' + esc(pipelinesData[i].projectName) + '</option>';
-  var modelDatalist = '<datalist id="globalModelList">';
-  for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
-  modelDatalist += '</datalist>';
-  var html = '<div class="section"><div class="section-title">แผนการสั่งซื้อ</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div class="month-carousel">' + monthCardsHtml + '<div style="margin-top:12px;text-align:center"><select onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px">';
-  for (var i = 0; i < allMonths.length; i++) html += '<option value="' + allMonths[i] + '" ' + (selectedMonth === allMonths[i] ? 'selected' : '') + '>' + allMonths[i] + '</option>';
-  html += '</select></div></div>' + statsHtml + '<div style="margin-bottom:24px"><div class="section-title">Run Rate</div><div class="form-row" style="margin-bottom:12px"><div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จํานวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">เพิ่ม</button></div></div><div>' + runrateHtml + '</div></div><div><div class="section-title">Project</div><div class="form-group"><label>เลือกจากโครงการที่มี</label><select class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จํานวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>รายการโครงการที่เพิ่มแล้ว</strong></div><div style="margin-top:8px">' + projectsHtml + '</div></div><div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById('excelFile').click()">อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
-  window.newProjectItems = [];
-  document.getElementById('tabContent').innerHTML = html;
-}
-function renderPipelineTab() {
-  if (!pipelinesData.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">โครงการของท่าน</div><div style="text-align:center;padding:40px">ยังไม่มีโครงการ</div></div>';
+function renderPipeline(){
+  var container = document.getElementById('content');
+  if(pipelines.length === 0){
+    container.innerHTML = '<div class="card"><h2>📊 โครงการของท่าน</h2><div style="text-align:center;padding:40px">📭 ยังไม่มีโครงการ</div></div>';
     return;
   }
-  var html = '<div class="section"><div class="section-title">โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
-  for (var i = 0; i < pipelinesData.length; i++) {
-    var p = pipelinesData[i];
-    var itemsText = '';
-    if (p.items && p.items.length) {
-      for (var j = 0; j < p.items.length; j++) itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '') + (j < p.items.length - 1 ? ', ' : '');
-    } else if (p.model) {
-      itemsText = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+  var html = '<div class="card"><h2>📊 โครงการของท่าน (' + pipelines.length + ' โครงการ)</h2>';
+  html += '<div style="text-align:right;margin-bottom:10px"><button class="btn btn-sm" onclick="refresh()">🔄 รีเฟรช</button></div>';
+  html += '<div style="overflow-x:auto"><table>';
+  html += '<thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
+  for(var i=0; i<pipelines.length; i++){
+    var p = pipelines[i];
+    var items = '';
+    if(p.items && p.items.length){
+      for(var j=0; j<p.items.length; j++){
+        items += p.items[j].model;
+        if(p.items[j].qty > 1) items += ' x' + p.items[j].qty;
+        if(j < p.items.length-1) items += ', ';
+      }
+    } else if(p.model){
+      items = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
     }
-    var amount = p.forecastAmount || 0;
-    html += '<tr onclick="showDetailPage(' + p.id + ')" style="cursor:pointer"><td>' + (i+1) + '</td><td><strong>' + esc(p.projectName) + '</strong></td><td>' + esc(p.endUserTH || p.endUser || '-') + '</td><td>' + getStatusLabel(p.status) + '</td><td>' + itemsText + '</td><td>' + amount.toLocaleString('th-TH') + ' ฿</td><td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(' + p.id + ')">อัพเดท</button></td></tr>';
+    var statusClass = (p.status === 'win') ? 'status-win' : 'status-prospect';
+    var statusText = (p.status === 'win') ? '✅ Win' : '🔍 Prospect';
+    var amount = (p.forecastAmount || 0).toLocaleString('th-TH');
+    html += '<tr onclick="showDetail(\'' + p.id + '\')" style="cursor:pointer">';
+    html += '<td>' + (i+1) + '</td>';
+    html += '<td><strong>' + escapeHtml(p.projectName) + '</strong></td>';
+    html += '<td>' + escapeHtml(p.endUserTH || p.endUser || '-') + '</td>';
+    html += '<td><span class="status ' + statusClass + '">' + statusText + '</span></td>';
+    html += '<td>' + escapeHtml(items) + '</td>';
+    html += '<td>' + amount + ' ฿</td>';
+    html += '<td><button class="btn btn-sm" onclick="event.stopPropagation();openEditModal(\'' + p.id + '\')">📝 อัพเดท</button></td>';
+    html += '</tr>';
   }
   html += '</tbody></table></div></div>';
-  document.getElementById('tabContent').innerHTML = html;
+  container.innerHTML = html;
 }
-function renderTimelineTab() {
-  if (!timelineLogs.length) { document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">ประวัติการอัพเดท</div><div style="text-align:center;padding:40px">ยังไม่มีประวัติ</div></div>'; return; }
-  var html = '<div class="section"><div class="section-title">ประวัติการอัพเดท</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">Refresh</button></div><div style="max-height:500px;overflow-y:auto">';
-  for (var i = 0; i < timelineLogs.length; i++) {
-    var l = timelineLogs[i];
-    var icon = l.type === 'progress' ? '🟢' : l.type === 'win' ? '✅' : l.type === 'status_change' ? '🔄' : '📝';
-    var dateStr = l.date ? formatThaiDate(l.date) : '-';
-    html += '<div style="padding:12px;border-bottom:1px solid var(--border)"><div style="font-size:11px;color:var(--text2)">' + dateStr + ' ' + icon + '</div><div style="font-size:13px;margin-top:4px">' + esc(l.content || '') + '</div></div>';
-  }
-  html += '</div></div>';
-  document.getElementById('tabContent').innerHTML = html;
-}
-function showUpdateModal(pipeId) {
-  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
-  if (!p) return;
-  var statusOptions = '';
-  for (var i = 0; i < STATUS_LIST.length; i++) statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
-  var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
-  for (var i = 0; i < allModels.length; i++) modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
-  var itemsHtml = '<div id="editItemsContainer">';
-  if (p.items && p.items.length) {
-    for (var i = 0; i < p.items.length; i++) itemsHtml += '<div class="form-row"><input list="modelList' + i + '" class="editItemModel" value="' + esc(p.items[i].model) + '"><datalist id="modelList' + i + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.items[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
+
+function showDetail(pipeId){
+  var p = pipelines.find(function(x){ return x.id === pipeId; });
+  if(!p) return;
+  var itemsHtml = '<table><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
+  if(p.items && p.items.length){
+    for(var i=0; i<p.items.length; i++){
+      itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + escapeHtml(p.items[i].model) + '</td><td>' + (p.items[i].qty||1) + '</td></tr>';
     }
-  } else if (p.model) {
-    itemsHtml += '<div class="form-row"><input list="modelList0" class="editItemModel" value="' + esc(p.model) + '"><datalist id="modelList0">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="' + (p.modelQty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
+  } else if(p.model){
+    itemsHtml += '<tr><td>1</td><td>' + escapeHtml(p.model) + '</td><td>' + (p.modelQty||1) + '</td></tr>';
   }
-  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItem()">เพิ่มสินค้า</button>';
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + esc(p.projectName) + '" class="form-control"></div><div class="form-group"><label>End User</label><input type="text" id="editEndUser" value="' + esc(p.endUserTH || p.endUser || '') + '" class="form-control"></div><div class="form-group"><label>สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>สินค้า</label>' + itemsHtml + '</div><div class="form-group"><label>รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..." class="form-control"></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitFullUpdate(' + pipeId + ')">บันทึก</button></div></div></div>';
+  itemsHtml += '</tbody></table>';
+  var statusText = (p.status === 'win') ? '✅ Win' : '🔍 Prospect';
+  var amount = (p.forecastAmount || 0).toLocaleString('th-TH');
+  var html = '<div class="card">';
+  html += '<div style="margin-bottom:16px"><a href="#" onclick="refresh(); return false;" style="color:#3b82f6">← กลับ</a></div>';
+  html += '<h2>' + escapeHtml(p.projectName) + '</h2>';
+  html += '<div><strong>👤 End User:</strong> ' + escapeHtml(p.endUserTH || p.endUser || '-') + '</div>';
+  html += '<div><strong>📊 สถานะ:</strong> ' + statusText + '</div>';
+  html += '<div><strong>💰 มูลค่า:</strong> ' + amount + ' ฿</div>';
+  html += '<div style="margin-top:12px"><strong>📦 รายการสินค้า:</strong></div>';
+  html += itemsHtml;
+  html += '<div style="margin-top:12px"><button class="btn btn-primary" onclick="openEditModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล</button></div>';
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function openEditModal(pipeId){
+  var p = pipelines.find(function(x){ return x.id === pipeId; });
+  if(!p) return;
+  var statusOpts = '<option value="prospect"' + (p.status==='prospect'?' selected':'') + '>🔍 Prospect</option>';
+  statusOpts += '<option value="win"' + (p.status==='win'?' selected':'') + '>✅ Win</option>';
+  var itemsHtml = '<div id="editItemsContainer">';
+  if(p.items && p.items.length){
+    for(var i=0; i<p.items.length; i++){
+      itemsHtml += '<div class="form-row" style="margin-bottom:8px">';
+      itemsHtml += '<input type="text" class="editItemModel" value="' + escapeHtml(p.items[i].model) + '" placeholder="Model" style="flex:2">';
+      itemsHtml += '<input type="number" class="editItemQty" value="' + (p.items[i].qty||1) + '" min="1" style="width:80px">';
+      itemsHtml += '<button type="button" class="btn btn-sm" onclick="this.parentElement.remove()">🗑️</button>';
+      itemsHtml += '</div>';
+    }
+  } else if(p.model){
+    itemsHtml += '<div class="form-row" style="margin-bottom:8px">';
+    itemsHtml += '<input type="text" class="editItemModel" value="' + escapeHtml(p.model) + '" placeholder="Model" style="flex:2">';
+    itemsHtml += '<input type="number" class="editItemQty" value="' + (p.modelQty||1) + '" min="1" style="width:80px">';
+    itemsHtml += '<button type="button" class="btn btn-sm" onclick="this.parentElement.remove()">🗑️</button>';
+    itemsHtml += '</div>';
+  }
+  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
+  var modalHtml = '<div class="modal" id="editModal">';
+  modalHtml += '<div class="modal-content">';
+  modalHtml += '<div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="close" onclick="closeModal()">✕</button></div>';
+  modalHtml += '<div class="modal-body">';
+  modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" value="' + escapeHtml(p.projectName) + '"></div>';
+  modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" value="' + escapeHtml(p.endUserTH||p.endUser||'') + '"></div>';
+  modalHtml += '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus">' + statusOpts + '</select></div>';
+  modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + '</div>';
+  modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท</label><textarea id="updateContent" rows="3" placeholder="เช่น ได้รับ PO แล้ว..."></textarea></div>';
+  modalHtml += '</div><div class="modal-footer">';
+  modalHtml += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
+  modalHtml += '<button class="btn btn-primary" onclick="saveUpdate(\'' + pipeId + '\')">💾 บันทึก</button>';
+  modalHtml += '</div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
-function addEditItem() {
+
+function addEditItemRow(){
   var container = document.getElementById('editItemsContainer');
-  if (!container) return;
-  var idx = Date.now();
-  var modelOptions = '<option value="">-- เลือกสินค้า --</option>';
-  for (var i = 0; i < allModels.length; i++) modelOptions += '<option value="' + esc(allModels[i]) + '">' + esc(allModels[i]) + '</option>';
-  var html = '<div class="form-row" data-item-index="' + idx + '"><input list="modelList' + idx + '" class="editItemModel" style="flex:2" placeholder="พิมพ์ชื่อสินค้า"><datalist id="modelList' + idx + '">' + modelOptions + '</datalist><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItem(this)">ลบ</button></div>';
+  if(!container) return;
+  var html = '<div class="form-row" style="margin-bottom:8px">';
+  html += '<input type="text" class="editItemModel" placeholder="Model" style="flex:2">';
+  html += '<input type="number" class="editItemQty" value="1" min="1" style="width:80px">';
+  html += '<button type="button" class="btn btn-sm" onclick="this.parentElement.remove()">🗑️</button>';
+  html += '</div>';
   container.insertAdjacentHTML('beforeend', html);
 }
-function removeEditItem(btn) { var row = btn.closest('.form-row'); if (row) row.remove(); }
-function submitFullUpdate(pipeId) {
-  var newProjectName = document.getElementById('editProjectName').value.trim();
+
+function saveUpdate(pipeId){
+  var newName = document.getElementById('editProjectName').value.trim();
   var newEndUser = document.getElementById('editEndUser').value.trim();
   var newStatus = document.getElementById('editStatus').value;
   var content = document.getElementById('updateContent').value.trim();
-  if (!newProjectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
+  if(!newName){ alert('กรุณากรอกชื่อโครงการ'); return; }
   var items = [];
-  var itemRows = document.querySelectorAll('#editItemsContainer .form-row');
-  for (var i = 0; i < itemRows.length; i++) {
-    var modelInput = itemRows[i].querySelector('.editItemModel');
-    var qtyInput = itemRows[i].querySelector('.editItemQty');
-    if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
+  var rows = document.querySelectorAll('#editItemsContainer .form-row');
+  for(var i=0; i<rows.length; i++){
+    var modelInput = rows[i].querySelector('.editItemModel');
+    var qtyInput = rows[i].querySelector('.editItemQty');
+    if(modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value)>0){
+      items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
+    }
   }
-  if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  for (var i = 0; i < pipelinesData.length; i++) {
-    if (pipelinesData[i].id === pipeId) {
-      pipelinesData[i].projectName = newProjectName;
-      pipelinesData[i].endUserTH = newEndUser;
-      pipelinesData[i].status = newStatus;
-      pipelinesData[i].items = items;
-      pipelinesData[i].model = items[0].model;
-      pipelinesData[i].modelQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
-      db.collection('pipeline').doc(pipeId).set(pipelinesData[i]).catch(function(e) {});
+  if(items.length === 0){ alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  var updatedData = null;
+  for(var i=0; i<pipelines.length; i++){
+    if(pipelines[i].id === pipeId){
+      pipelines[i].projectName = newName;
+      pipelines[i].endUserTH = newEndUser;
+      pipelines[i].status = newStatus;
+      pipelines[i].items = items;
+      pipelines[i].model = items[0].model;
+      pipelines[i].modelQty = 0;
+      for(var j=0; j<items.length; j++) pipelines[i].modelQty += items[j].qty;
+      updatedData = pipelines[i];
       break;
     }
   }
-  var newLog = { id: 'log_' + Date.now(), pipeId: pipeId, type: 'update', content: content || 'แก้ไขข้อมูลโครงการ', date: _nw(), dealerId: dealerId };
-  db.collection('pipeLog').doc(newLog.id).set(newLog).catch(function(e) {});
-  timelineLogs.unshift(newLog);
-  showSuccessToast('บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
-  closeModal();
-  renderCurrentTab();
-}
-function showDetailPage(pipeId) {
-  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
-  if (!p) return;
-  var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
-  if (p.items && p.items.length) {
-    for (var i = 0; i < p.items.length; i++) itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(p.items[i].model) + '</td><td>' + (p.items[i].qty || 1) + '</td></tr>';
-  } else if (p.model) {
-    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td>' + (p.modelQty || 1) + '</td></tr>';
+  if(updatedData){
+    db.collection('pipeline').doc(pipeId).set(updatedData).catch(function(e){ console.warn(e); });
+    var logData = {
+      id: 'log_' + Date.now(),
+      pipeId: pipeId,
+      type: 'update',
+      content: content || 'แก้ไขข้อมูลโครงการ',
+      date: new Date().toISOString(),
+      dealerId: dealerId
+    };
+    db.collection('pipeLog').doc(logData.id).set(logData).catch(function(e){});
+    showToast('✅ บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว!');
   }
-  itemsHtml += '</tbody></table>';
-  var html = '<div class="cv-back" onclick="showOverview()">← กลับ</div><div class="detail-header" style="background:var(--bg);border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid var(--border)"><div style="font-size:20px;font-weight:700;color:var(--accent)">' + esc(p.projectName) + '</div><div style="margin-top:8px">' + getStatusLabel(p.status) + '</div></div><div class="detail-info-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px"><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">End User</div><div class="detail-info-value">' + esc(p.endUserTH || p.endUser || '-') + '</div></div><div class="detail-info-card" style="background:var(--bg);border-radius:10px;padding:12px"><div class="detail-info-label">มูลค่า</div><div class="detail-info-value">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div></div></div><div class="section"><div class="section-title">รายการสินค้า</div>' + itemsHtml + '</div><div class="section"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(' + pipeId + ')">แก้ไขข้อมูล / อัพเดท</button></div>';
-  document.getElementById('tabContent').innerHTML = html;
+  closeModal();
+  refresh();
 }
-function showOverview() { renderCurrentTab(); }
-function renderCurrentTab() {
-  if (currentTab === 'pipeline') renderPipelineTab();
-  else if (currentTab === 'forecast') renderForecastTab();
-  else renderTimelineTab();
+
+function closeModal(){
+  var modal = document.querySelector('.modal');
+  if(modal) modal.remove();
 }
-function loadAllData() {
-  if (!dealerId) { document.getElementById('tabContent').innerHTML = '<div class="section"><p>ไม่พบข้อมูล Dealer</p></div>'; return; }
-  document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-  loadModels();
-  loadFromFirebase();
-  allMonths = generateMonths();
-  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
+
+function renderForecast(){
+  document.getElementById('content').innerHTML = '<div class="card"><h2>📦 แผนการสั่งซื้อ</h2><div style="text-align:center;padding:40px">🚧 กำลังพัฒนา</div></div>';
 }
-document.getElementById('tabBar').addEventListener('click', function(e) {
-  var btn = e.target.closest('.tab-btn');
-  if (!btn) return;
-  var tab = btn.dataset.tab;
-  if (!tab) return;
-  currentTab = tab;
-  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  loadFromFirebase();
+
+function refresh(){
+  loadPipeline();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/[&<>]/g, function(m){
+    if(m === '&') return '&amp;';
+    if(m === '<') return '&lt;';
+    if(m === '>') return '&gt;';
+    return m;
+  });
+}
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var tab = this.dataset.tab;
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    this.classList.add('active');
+    if(tab === 'pipeline') refresh();
+    else renderForecast();
+  });
 });
-window.toggleTheme = toggleTheme;
-window.selectMonth = selectMonth;
-window.addRunrateItem = addRunrateItem;
-window.deleteRunrateItem = deleteRunrateItem;
-window.editRunrateItem = editRunrateItem;
-window.loadProjectToForm = loadProjectToForm;
-window.addProjectItem = addProjectItem;
-window.removeNewProjectItem = removeNewProjectItem;
-window.addNewProject = addNewProject;
-window.editProjectItem = editProjectItem;
-window.deleteProjectItem = deleteProjectItem;
-window.toggleProjectDetail = toggleProjectDetail;
-window.downloadForecastExcel = downloadForecastExcel;
-window.uploadForecastExcel = uploadForecastExcel;
-window.clearProjectForm = clearProjectForm;
-window.saveClientForecast = saveClientForecast;
-window.showUpdateModal = showUpdateModal;
-window.submitFullUpdate = submitFullUpdate;
-window.showDetailPage = showDetailPage;
-window.showOverview = showOverview;
+
+// Export functions to global
+window.refresh = refresh;
+window.showDetail = showDetail;
+window.openEditModal = openEditModal;
 window.closeModal = closeModal;
-window.addEditItem = addEditItem;
-window.removeEditItem = removeEditItem;
-window.refreshData = refreshData;
-loadAllData();
+window.saveUpdate = saveUpdate;
+window.addEditItemRow = addEditItemRow;
+
+loadDealer();
+loadPipeline();
 </script>
 </body>
 </html>
