@@ -142,6 +142,14 @@ function rDealerDet(el) {
     main.style.width = 'calc(100% - 200px)';
     main.style.maxWidth = 'calc(100% - 200px)';
   }
+
+// เรียกโหลดข้อมูลอัพเดท
+    if (CURRENT_USER) {
+        setTimeout(function() {
+            loadCustomerUpdates();
+        }, 500);
+    }
+}
   
   document.getElementById('pgT').textContent = '🏪 ' + d.name;  // Store dealerId for context-aware FAB
   S.dealerId = d.id;
@@ -193,6 +201,11 @@ function rDealerDet(el) {
   <!-- Tab Content -->
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
 }
+// เพิ่มบรรทัดนี้หลัง render เสร็จ
+    setTimeout(function() {
+        if (typeof loadCustomerUpdates === 'function') loadCustomerUpdates();
+    }, 500);
+}
 
 function renderDealerTab(d) {
   switch (dealerTab) {
@@ -229,6 +242,7 @@ function dealerInfoTab(d) {
     { name: 'FH2', status: d.fh2Status, pass: d.fh2Status === 'pass' },
     { name: 'Lark', status: d.larkStatus, pass: d.larkStatus === 'added' }
   ];
+       var updatesPanel = '<div id="customerUpdatesPanel"></div>';
 
   return `
   <!-- Hero Section -->

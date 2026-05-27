@@ -271,6 +271,279 @@ function go(v, p) {
   window.scrollTo(0, 0);
 }
 
+// ================================================================
+// CUSTOMER UPDATES MANAGEMENT
+// ================================================================
+
+var customerUpdates = {
+    pipeline: [],
+    forecast: []
+};
+
+// โหลดข้อมูลที่ลูกค้าอัพเดท
+function loadCustomerUpdates() {
+    if (!CURRENT_USER) return;
+    
+    var dealerId = S.dealerId;
+    if (!dealerId) return;
+    
+    // โหลด Pipeline Updates
+    db.collection('dealerUpdates').doc(dealerId).collection('pipeline').where('_status', '==', 'pending').get().then(function(snapshot) {
+        customerUpdates.pipeline = [];
+        snapshot.forEach(function(doc) {
+            var data = doc.data();
+            data.id = doc.id;
+            customerUpdates.pipeline.push(data);
+        });
+        renderCustomerUpdatesPanel();
+    }).catch(function(err) { console.warn(err); });
+    
+    // โหลด Forecast Updates
+    db.collection('dealerUpdates').doc(dealerId).collection('forecast').where('_status', '==', 'pending').get().then(function(snapshot) {
+        customerUpdates.forecast = [];
+        snapshot.forEach(function(doc) {
+            var data = doc.data();
+            data.id = doc.id;
+            customerUpdates.forecast.push(data);
+        });
+        renderCustomerUpdatesPanel();
+    }).catch(function(err) { console.warn(err); });
+}
+
+// แสดง Panel ใน Dealer Detail
+function renderCustomerUpdatesPanel() {
+    var panel = document.getElementById('customerUpdatesPanel');
+    if (!panel) return;
+    
+    var total = customerUpdates.pipeline.length + customerUpdates.forecast.length;
+    if (total === 0) {
+        panel.innerHTML = '<div class="card"><h2>📥 คำขออัพเดทจากลูกค้า</h2><div class="empty"><p>✅ ไม่มีคำขออัพเดท</p></div></div>';
+        return;
+    }
+    
+    var html = '<div class="card"><h2>📥 คำขออัพเดทจากลูกค้า <span class="tag tag-active">' + total + ' รายการ</span></h2>';
+    
+    // Pipeline Updates
+    if (customerUpdates.pipeline.length) {
+        html += '<h3 style="font-size:13px;margin:8px 0 4px">📋 โครงการที่รอตรวจสอบ (' + customerUpdates.pipeline.length + ')</h3>';
+        for (var i = 0; i < customerUpdates.pipeline.length; i++) {
+            var p = customerUpdates.pipeline[i];
+            html += '<div class="li" style="border-left:3px solid #f59e0b">';
+            html += '<div class="lm">';
+            html += '<div class="lt">📋 ' + esc(p.projectName) + '</div>';
+            html += '<div class="ls">👤 ' + esc(p.endUserTH || '-') + '</div>';
+            html += '<div class="ls">📊 สถานะ: ' + getPipeName(p.status) + '</div>';
+            html += '<div class="ls">📦 ' + (p.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+            if (p.updateNote) html += '<div class="ls" style="color:#f59e0b">💬 ' + esc(p.updateNote) + '</div>';
+            html += '</div>';
+            html += '<button class="btn bsm bp" onclick="approvePipelineUpdate(\'' + p.id + '\', \'' + dealerId + '\')">✅ อนุมัติและนำเข้า</button>';
+            html += '<button class="btn bsm bd" onclick="rejectCustomerUpdate(\'pipeline\', \'' + p.id + '\', \'' + dealerId + '\')">❌ ปฏิเสธ</button>';
+            html += '</div>';
+        }
+    }
+    
+    // Forecast Updates
+    if (customerUpdates.forecast.length) {
+        html += '<h3 style="font-size:13px;margin:12px 0 4px">📦 แผนการสั่งซื้อที่รอตรวจสอบ (' + customerUpdates.forecast.length + ')</h3>';
+        for (var i = 0; i < customerUpdates.forecast.length; i++) {
+            var f = customerUpdates.forecast[i];
+            var typeName = f.type === 'runrate' ? '🏪 Run Rate' : '📋 โครงการ';
+            html += '<div class="li" style="border-left:3px solid #f59e0b">';
+            html += '<div class="lm">';
+            html += '<div class="lt">' + typeName + '</div>';
+            if (f.type === 'project') {
+                html += '<div class="ls">📋 ' + esc(f.projectName) + '</div>';
+                html += '<div class="ls">📦 ' + (f.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+            } else {
+                html += '<div class="ls">📦 ' + esc(f.model) + ' x' + f.qty + '</div>';
+            }
+            html += '<div class="ls">📅 เดือน: ' + esc(f.month) + '</div>';
+            html += '</div>';
+            html += '<button class="btn bsm bp" onclick="approveForecastUpdate(\'' + f.id + '\', \'' + dealerId + '\', \'' + f.type + '\')">✅ อนุมัติและนำเข้า</button>';
+            html += '<button class="btn bsm bd" onclick="rejectCustomerUpdate(\'forecast\', \'' + f.id + '\', \'' + dealerId + '\')">❌ ปฏิเสธ</button>';
+            html += '</div>';
+        }
+    }
+    
+    html += '</div>';
+    panel.innerHTML = html;
+}
+
+// อนุมัติ Pipeline Update
+function approvePipelineUpdate(updateId, dealerId) {
+    if (!confirm('ยืนยันนำเข้าข้อมูลนี้?')) return;
+    
+    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId);
+    updateRef.get().then(function(doc) {
+        if (!doc.exists) return;
+        var data = doc.data();
+        
+        // ลบ metadata
+        delete data._customerUpdate;
+        delete data._updatedAt;
+        delete data._status;
+        delete data._originalDealerId;
+        delete data._originalPipeId;
+        delete data._updateType;
+        delete data.updateNote;
+        delete data.updatedBy;
+        delete data.updatedAt;
+        
+        // ตรวจสอบว่า id ซ้ำหรือไม่
+        var existing = ST.getOne('pipeline', updateId);
+        if (existing) {
+            ST.update('pipeline', updateId, data);
+        } else {
+            ST.add('pipeline', data);
+        }
+        
+        updateRef.update({ _status: 'approved', _approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        
+        toast('✅ นำเข้าข้อมูลเรียบร้อยแล้ว');
+        loadCustomerUpdates();
+        render();
+    }).catch(function(err) { toast('เกิดข้อผิดพลาด: ' + err.message); });
+}
+
+// อนุมัติ Forecast Update
+function approveForecastUpdate(updateId, dealerId, type) {
+    if (!confirm('ยืนยันนำเข้าข้อมูลนี้?')) return;
+    
+    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+    updateRef.get().then(function(doc) {
+        if (!doc.exists) return;
+        var data = doc.data();
+        
+        delete data._customerUpdate;
+        delete data._updatedAt;
+        delete data._status;
+        delete data._originalDealerId;
+        
+        var forecastKey = 'v7_forecast';
+        var forecasts = JSON.parse(localStorage.getItem(forecastKey) || '[]');
+        var existingIndex = forecasts.findIndex(function(f) { return f.id === updateId; });
+        
+        if (existingIndex !== -1) {
+            forecasts[existingIndex] = data;
+        } else {
+            forecasts.push(data);
+        }
+        localStorage.setItem(forecastKey, JSON.stringify(forecasts));
+        
+        updateRef.update({ _status: 'approved', _approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        
+        toast('✅ นำเข้าข้อมูลเรียบร้อยแล้ว');
+        loadCustomerUpdates();
+        if (typeof renderForecastTab === 'function') renderForecastTab();
+    }).catch(function(err) { toast('เกิดข้อผิดพลาด: ' + err.message); });
+}
+
+// ปฏิเสธการอัพเดท
+function rejectCustomerUpdate(type, updateId, dealerId) {
+    if (!confirm('ปฏิเสธคำขอนี้?')) return;
+    
+    var ref = db.collection('dealerUpdates').doc(dealerId).collection(type === 'pipeline' ? 'pipeline' : 'forecast').doc(updateId);
+    ref.update({ _status: 'rejected', _rejectedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    
+    toast('🗑️ ปฏิเสธคำขอแล้ว');
+    loadCustomerUpdates();
+}
+
+// หน้าแยกสำหรับดูคำขออัพเดททั้งหมด
+function rCustomerUpdates(el) {
+    document.getElementById('pgT').textContent = '📥 คำขออัพเดทจากลูกค้า';
+    
+    if (!CURRENT_USER) {
+        el.innerHTML = '<div class="card"><div class="empty"><p>🔐 กรุณา Login เพื่อดูข้อมูล</p></div></div>';
+        return;
+    }
+    
+    el.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลด...</div></div>';
+    
+    db.collection('dealerUpdates').get().then(function(dealerSnapshot) {
+        var allUpdates = [];
+        var promises = [];
+        
+        dealerSnapshot.forEach(function(dealerDoc) {
+            var dealerId = dealerDoc.id;
+            var dealer = ST.getOne('dealers', dealerId);
+            
+            var p = dealerDoc.ref.collection('pipeline').where('_status', '==', 'pending').get().then(function(snapshot) {
+                snapshot.forEach(function(doc) {
+                    var data = doc.data();
+                    data.id = doc.id;
+                    data.dealerId = dealerId;
+                    data.dealerName = dealer ? dealer.name : dealerId;
+                    data.type = 'pipeline';
+                    allUpdates.push(data);
+                });
+            });
+            promises.push(p);
+            
+            var f = dealerDoc.ref.collection('forecast').where('_status', '==', 'pending').get().then(function(snapshot) {
+                snapshot.forEach(function(doc) {
+                    var data = doc.data();
+                    data.id = doc.id;
+                    data.dealerId = dealerId;
+                    data.dealerName = dealer ? dealer.name : dealerId;
+                    data.type = data.type === 'runrate' ? 'runrate' : 'project';
+                    allUpdates.push(data);
+                });
+            });
+            promises.push(f);
+        });
+        
+        Promise.all(promises).then(function() {
+            if (allUpdates.length === 0) {
+                el.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขออัพเดทจากลูกค้า</p></div></div>';
+                return;
+            }
+            
+            var html = '<div class="card"><h2>📥 คำขออัพเดทจากลูกค้า (' + allUpdates.length + ')</h2>';
+            
+            allUpdates.sort(function(a, b) { return (b._updatedAt || '').localeCompare(a._updatedAt || ''); });
+            
+            for (var i = 0; i < allUpdates.length; i++) {
+                var u = allUpdates[i];
+                html += '<div class="li" style="border-left:3px solid #f59e0b">';
+                html += '<div class="lm">';
+                html += '<div class="lt">🏪 ' + esc(u.dealerName) + ' - ' + (u.type === 'pipeline' ? '📋 โครงการ' : '📦 แผนการสั่งซื้อ') + '</div>';
+                if (u.type === 'pipeline') {
+                    html += '<div class="ls">📋 ' + esc(u.projectName) + '</div>';
+                    html += '<div class="ls">📊 ' + getPipeName(u.status) + '</div>';
+                } else if (u.type === 'project') {
+                    html += '<div class="ls">📋 ' + esc(u.projectName) + '</div>';
+                    html += '<div class="ls">📦 ' + (u.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+                } else {
+                    html += '<div class="ls">📦 ' + esc(u.model) + ' x' + u.qty + '</div>';
+                }
+                html += '<div class="ls">📅 ' + esc(u.month || '-') + '</div>';
+                html += '</div>';
+                html += '<button class="btn bsm bp" onclick="approveUpdateFromList(\'' + u.type + '\', \'' + u.id + '\', \'' + u.dealerId + '\')">✅ อนุมัติ</button>';
+                html += '<button class="btn bsm bd" onclick="rejectUpdateFromList(\'' + u.type + '\', \'' + u.id + '\', \'' + u.dealerId + '\')">❌ ปฏิเสธ</button>';
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            el.innerHTML = html;
+        });
+    });
+}
+
+function approveUpdateFromList(type, updateId, dealerId) {
+    if (type === 'pipeline') {
+        approvePipelineUpdate(updateId, dealerId);
+    } else {
+        approveForecastUpdate(updateId, dealerId, type);
+    }
+    setTimeout(function() { if (typeof render === 'function') render(); }, 1000);
+}
+
+function rejectUpdateFromList(type, updateId, dealerId) {
+    rejectCustomerUpdate(type === 'pipeline' ? 'pipeline' : 'forecast', updateId, dealerId);
+    setTimeout(function() { if (typeof render === 'function') render(); }, 1000);
+}
+
 function render() {
   var el = document.getElementById('ct');
   var R = {
@@ -278,7 +551,7 @@ function render() {
     today: rToday, kpi: rKPI,
     report: rWeeklyReport, dashboard: rDashboard, health: rDataHealth,
     dealers: rDealers, dealerDetail: rDealerDet,pipeDash: rPipeDashboard,
-    contactLogs: rContactLogs,
+    contactLogs: rContactLogs, customerUpdates: rCustomerUpdates,
     pipeline: rPipeline, pipeBoard: rPipeBoard, pipeDetail: rPipeDet,
     forecastComparison: rForecastComparison, forecast: rForecast,
     visits: rVisits, visitDetail: rVisitDet,
@@ -2182,3 +2455,14 @@ function addCustomerUpdateMenuItem() {
 
 // เรียกใช้ตอน init
 setTimeout(addCustomerUpdateMenuItem, 1000);
+
+// เพิ่มหลังจาก cert section หรือก่อนปิด div สุดท้าย
+function dealerInfoTab(d) {
+    // ... existing code ...
+    
+    // เพิ่ม Panel สำหรับแสดงคำขออัพเดท
+    var updatesPanel = '<div id="customerUpdatesPanel"></div>';
+    
+    // เพิ่มเข้าไปใน return html ก่อน closing div
+    return html + updatesPanel;
+}
