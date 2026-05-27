@@ -981,6 +981,29 @@ function updateNotifBadge() {
 // ================================================================
 // GET STREAK DATA (SAFE VERSION)
 // ================================================================
+// ================================================================
+// GET STREAK DATA (SAFE VERSION)
+// ================================================================
+
+// เพิ่มฟังก์ชัน helper ก่อน getStreakData
+function safeGetDateString(value) {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    return value.split(' ')[0];
+  }
+  if (typeof value === 'object' && value !== null) {
+    if (value.toDate) {
+      var d = value.toDate();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    if (value.seconds) {
+      var d2 = new Date(value.seconds * 1000);
+      return d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0') + '-' + String(d2.getDate()).padStart(2, '0');
+    }
+  }
+  return '';
+}
+
 function getStreakData() {
   var activities = {};
 
@@ -996,13 +1019,17 @@ function getStreakData() {
   try { tasklogs = JSON.parse(localStorage.getItem('v7_tasklogs') || '[]'); } catch(e) { tasklogs = []; }
   try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
 
-  (visits || []).forEach(function (v) { if (v.date) activities[v.date] = true; });
-  (followups || []).forEach(function (f) { var d = f.date || f.dueDate; if (d) activities[d] = true; });
-  (pipelog || []).forEach(function (l) { if (l.date) activities[l.date.split(' ')[0]] = true; });
-  (tasklogs || []).forEach(function (l) { if (l.date) activities[l.date.split(' ')[0]] = true; });
-  (pipeline || []).forEach(function (p) {
-    if (p.updatedAt) activities[p.updatedAt.split(' ')[0]] = true;
-    if (p.date) activities[p.date] = true;
+  (visits || []).forEach(function(v) { if (v && v.date) activities[v.date] = true; });
+  (followups || []).forEach(function(f) { var d = f.date || f.dueDate; if (d) activities[d] = true; });
+  (pipelog || []).forEach(function(l) { if (l && l.date) activities[l.date.split(' ')[0]] = true; });
+  (tasklogs || []).forEach(function(l) { if (l && l.date) activities[l.date.split(' ')[0]] = true; });
+  
+  // แก้ไขส่วนนี้: ใช้ safeGetDateString
+  (pipeline || []).forEach(function(p) {
+    if (!p) return;
+    var dateStr = safeGetDateString(p.updatedAt);
+    if (dateStr) activities[dateStr] = true;
+    if (p.date && typeof p.date === 'string') activities[p.date] = true;
   });
 
   var now = new Date();
@@ -1028,7 +1055,6 @@ function getStreakData() {
 
   return { streak: streak, thisWeek: getWeekActivity(activities) };
 }
-
 function getWeekActivity(activities) {
   var now = new Date();
   var today = fmtDateKey(now);
