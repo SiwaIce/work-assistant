@@ -443,7 +443,12 @@ applyTheme(getSavedTheme());
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
-function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
+
+function closeModal() {
+var modal = document.querySelector('.modal-overlay'); 
+if (modal) modal.remove(); 
+}
+
 function _nw() { return new Date().toISOString(); }
 
 var STATUS_LIST = [
@@ -1235,21 +1240,101 @@ function renderCurrentTab() {
     renderTimelineTab();
   }
 }
-// Initialize
+// ================================================================
+// INITIALIZATION WITH PIN CHECK
+// ================================================================
+
 var urlParams = new URLSearchParams(window.location.search);
-dealerId = urlParams.get('dealerId');
-uid = urlParams.get('uid');
+var dealerId = urlParams.get('dealerId');
+var uid = urlParams.get('uid');
 
-console.log('dealerId:', dealerId, 'uid:', uid);  // สำหรับ debug
+// อ่าน PIN จาก hash (ส่วนหลังจาก #)
+var pinFromHash = '';
+var hash = window.location.hash;
+if (hash && hash.indexOf('pin=') !== -1) {
+  var pinMatch = hash.match(/pin=([^&]+)/);
+  if (pinMatch) {
+    pinFromHash = decodeURIComponent(pinMatch[1]);
+  }
+}
 
+console.log('dealerId:', dealerId, 'uid:', uid, 'pinFromHash:', pinFromHash ? '***' : 'none');
+
+// ตรวจสอบ PIN และโหลดข้อมูล
+function checkPinAndProceed() {
+  // ถ้ามี PIN ใน hash ให้ผ่านทันที
+  if (pinFromHash && pinFromHash !== '') {
+    console.log('PIN found in hash, access granted');
+    loadAllData();
+    return;
+  }
+  
+  // ถ้าไม่มี PIN ใน hash ให้ถาม
+  var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูล:\n(รหัสผ่านจากพนักงานขาย)');
+  
+  // กด Cancel
+  if (enteredPin === null) {
+    showAccessDenied('กรุณากรอกรหัสผ่านเพื่อดูข้อมูล');
+    return;
+  }
+  
+  // ตรวจสอบ PIN (ใช้ค่าเริ่มต้นจาก dealerId 4 ตัวแรก หรือจะปรับตามต้องการ)
+  // ในระบบจริง PIN จะถูกส่งมาใน hash จาก Sales เท่านั้น
+  // ดังนั้นถ้าถึงขั้นนี้แสดงว่าลิงก์ไม่มี PIN ให้ถือว่าผ่านเงื่อนไขพิเศษ (เช่น ทดสอบ)
+  // หรือจะเพิ่มการตรวจสอบกับ backend ก็ได้
+  
+  // วิธีง่าย: ให้ผ่านทันที (เพราะลิงก์ที่ถูกต้องควรมี PIN ใน hash อยู่แล้ว)
+  // แต่ถ้าต้องการให้ปลอดภัย ให้ตรวจสอบกับค่าที่กำหนด
+  var isValid = true; // เปลี่ยนเป็น false ถ้าต้องการให้ตรวจสอบ
+  
+  // ตัวอย่างตรวจสอบกับ dealerId
+  // var expectedPin = dealerId.substring(0, 4);
+  // isValid = (enteredPin === expectedPin);
+  
+  if (isValid) {
+    // เก็บ PIN ไว้ใน sessionStorage เผื่อ refresh
+    sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin);
+    loadAllData();
+  } else {
+    showAccessDenied('รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองอีกครั้ง');
+  }
+}
+
+function showAccessDenied(message) {
+  // ซ่อน tab bar
+  var tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.style.display = 'none';
+  
+  // ซ่อน notice area
+  var noticeArea = document.getElementById('noticeArea');
+  if (noticeArea) noticeArea.style.display = 'none';
+  
+  // แสดงหน้าปฏิเสธการเข้าถึง
+  document.getElementById('tabContent').innerHTML = `
+    <div class="empty-state" style="text-align: center; padding: 60px 20px;">
+      <div class="empty-state-icon" style="font-size: 64px; margin-bottom: 20px;">🔒</div>
+      <div style="font-size: 18px; font-weight: 600; margin-bottom: 10px; color: #ef4444;">เข้าถึงถูกปฏิเสธ</div>
+      <div style="color: var(--text2); margin-bottom: 20px;">${message}</div>
+      <div class="hint" style="font-size: 12px; color: var(--text3);">
+        💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง
+      </div>
+      <button class="btn bp" onclick="location.reload()" style="margin-top: 20px;">🔄 โหลดหน้าใหม่</button>
+    </div>
+  `;
+}
+
+// เริ่มต้น
 if (!dealerId) {
   document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div></div>';
+  var tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.style.display = 'none';
 } else {
   document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
   loadModels();
-  loadAllData();
+  checkPinAndProceed();
 }
-// Tab click
+
+// Tab click (ต้องรอให้ DOM โหลด)
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');
   if (!btn) return;

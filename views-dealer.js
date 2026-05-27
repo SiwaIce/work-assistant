@@ -2098,26 +2098,32 @@ function copyClientLink(dealerId) {
 }
 
 // ================================================================
-// DEALER PIN MANAGEMENT
+// DEALER PIN MANAGEMENT (แก้ไขทั้งหมด)
 // ================================================================
+
 function showDealerPinModal(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
   
-  // ดึง PIN ปัจจุบัน (ถ้ามี)
+  // ดึง PIN ปัจจุบัน (จาก localStorage)
   var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
   var currentPin = pins[dealerId] || '';
   
   var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.uid : '';
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  // สร้างลิงก์แบบมี hash pin
   var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid;
+  if (currentPin) {
+    clientUrl += '#pin=' + encodeURIComponent(currentPin);
+  }
   
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2000">';
   modalHtml += '<div class="modal-container" style="background:var(--card);border-radius:16px;max-width:400px;width:90%">';
   modalHtml += '<div class="modal-header" style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><h3>🔒 ตั้งรหัสผ่านสำหรับ ' + sanitize(dealer.name) + '</h3><button class="modal-close" onclick="closeModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button></div>';
   modalHtml += '<div class="modal-body" style="padding:20px">';
-  modalHtml += '<div class="form-group"><label>รหัสผ่าน (PIN) สำหรับลูกค้า</label><input type="password" id="dealerPin" class="form-control" value="' + currentPin + '" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"><div class="hint" style="font-size:11px;color:var(--text2);margin-top:4px">💡 ถ้าไม่ใส่รหัส ลูกค้าจะไม่ต้องใส่ PIN</div></div>';
+  modalHtml += '<div class="form-group"><label>รหัสผ่าน (PIN) สำหรับลูกค้า</label><input type="password" id="dealerPin" class="form-control" value="' + currentPin + '" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"><div class="hint" style="font-size:11px;color:var(--text2);margin-top:4px">💡 ถ้าไม่ใส่รหัส ลูกค้าจะไม่ต้องใส่ PIN (ลิงก์จะไม่มีรหัส)</div></div>';
   modalHtml += '<div class="form-group"><label>🔗 ลิงก์สำหรับส่งให้ลูกค้า</label><div style="background:var(--bg);padding:8px;border-radius:8px;font-size:12px;word-break:break-all">' + clientUrl + '</div><button class="btn btn-sm" onclick="copyClientLink(\'' + clientUrl + '\', \'' + sanitize(dealer.name) + '\')" style="margin-top:8px">📋 คัดลอกลิงก์</button></div>';
   modalHtml += '</div>';
   modalHtml += '<div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px">';
@@ -2127,19 +2133,52 @@ function showDealerPinModal(dealerId) {
   
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
+
 function saveDealerPin(dealerId) {
   var pin = document.getElementById('dealerPin').value.trim();
   var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  
   if (pin) {
     pins[dealerId] = pin;
+    toast('✅ บันทึกรหัสผ่านเรียบร้อยแล้ว');
   } else {
     delete pins[dealerId];
+    toast('🗑️ ลบรหัสผ่านแล้ว (ลิงก์จะไม่มีรหัส)');
   }
+  
   localStorage.setItem('v7_dealer_pins', JSON.stringify(pins));
-  toast('✅ บันทึกรหัสผ่านเรียบร้อยแล้ว');
   closeModal();
+  
+  // รีเฟรชหน้าเพื่ออัพเดทปุ่ม
+  render();
 }
 
+function copyClientLink(url, dealerName) {
+  copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
+}
+
+function openClientView(dealerId) {
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  var dealerPin = pins[dealerId] || '';
+  
+  var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.uid : '';
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  // สร้างลิงก์แบบใช้ hash (#) เพื่อซ่อน PIN
+  var url = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid;
+  if (dealerPin) {
+    url += '#pin=' + encodeURIComponent(dealerPin);
+  }
+  
+  var win = window.open(url, '_blank');
+  if (!win) { toast('กรุณาอนุญาต Popup'); return; }
+}
+
+function closeModal() {
+  var modal = document.querySelector('.modal-overlay');
+  if (modal) modal.remove();
+}
 function copyClientLink(url, dealerName) {
   copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
   toast('📋 ลิงก์: ' + url);
