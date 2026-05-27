@@ -549,16 +549,45 @@ function loadForecast() {
       if (item.type === 'runrate') forecastData.runrate.push(item);
       else if (item.type === 'project') forecastData.projects.push(item);
     });
-  }).catch(function(err) { console.warn('Load forecast error:', err); });
+  }).catch(function(err) { 
+    console.warn('Load forecast error:', err);
+    // Try without where clause as fallback
+    return getForecastRef().get().then(function(qs) {
+      forecastData.runrate = [];
+      forecastData.projects = [];
+      qs.forEach(function(doc) {
+        var item = doc.data();
+        if (item.dealerId === dealerId) {
+          item.id = doc.id;
+          if (item.type === 'runrate') forecastData.runrate.push(item);
+          else if (item.type === 'project') forecastData.projects.push(item);
+        }
+      });
+    }).catch(function(e) {});
+  });
 }
-
 function loadTimeline() {
   if (!uid || !dealerId) return Promise.resolve([]);
-  return getPipeLogRef().where('dealerId', '==', dealerId).orderBy('date', 'desc').limit(50).get().then(function(querySnapshot) {
+  // query without orderBy first to avoid index requirement
+  return getPipeLogRef().where('dealerId', '==', dealerId).get().then(function(querySnapshot) {
     timelineLogs = [];
     querySnapshot.forEach(function(doc) { timelineLogs.push(doc.data()); });
-    return timelineLogs;
-  }).catch(function(err) { console.warn('Load timeline error:', err); return []; });
+    // sort manually after fetching
+    timelineLogs.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    return timelineLogs.slice(0, 50);
+  }).catch(function(err) { 
+    console.warn('Load timeline error:', err); 
+    // Fallback: try without where clause
+    return getPipeLogRef().get().then(function(qs) {
+      timelineLogs = [];
+      qs.forEach(function(doc) { 
+        var data = doc.data();
+        if (data.dealerId === dealerId) timelineLogs.push(data);
+      });
+      timelineLogs.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+      return timelineLogs.slice(0, 50);
+    }).catch(function(e) { return []; });
+  });
 }
 
 function loadDealerName() {
