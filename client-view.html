@@ -556,90 +556,24 @@ function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   
   console.log('loadPipeline called - dealerId:', dealerId);
-  console.log('uid from URL:', uid);
   
-  // ดึงข้อมูลจาก users/{uid}/pipeline (ข้อมูลหลัก)
-  var mainPromise;
-  if (uid && uid !== 'null' && uid !== 'undefined' && uid !== '') {
-    mainPromise = db.collection('users').doc(uid).collection('pipeline').get();
-    console.log('Fetching from users/' + uid + '/pipeline');
-  } else {
-    console.log('No valid uid, using dealerUpdates only');
-    mainPromise = Promise.resolve({ docs: [] });
-  }
-  
-  // ดึง pending updates จาก dealerUpdates
-  var pendingPromise = getCustomerPipelineRef(dealerId).get();
-  
-  return Promise.all([mainPromise, pendingPromise]).then(function(results) {
-    var mainPipes = [];
-    var pendingPipes = [];
-    var pipeMap = {};
-    
-    // Process main pipeline (ข้อมูลหลัก)
-    results[0].forEach(function(doc) {
+  // อ่านจาก dealerUpdates/{dealerId}/pipeline เท่านั้น
+  return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
+    pipelinesData = [];
+    querySnapshot.forEach(function(doc) {
       var data = doc.data();
       data.id = doc.id;
-      data.source = 'main';
-      data._displayStatus = 'approved';
-      mainPipes.push(data);
-      pipeMap[data.id] = data;
-      console.log('Main pipeline found:', data.projectName);
-    });
-    
-    console.log('Main pipelines count:', mainPipes.length);
-    
-    // Process pending updates (ข้อมูลที่ลูกค้าส่งมา รออนุมัติ)
-    results[1].forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.source = 'pending';
+      // แสดงสถานะ pending ถ้ายังไม่ได้รับการอนุมัติ
       data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
-      pendingPipes.push(data);
-      console.log('Pending update found:', data.projectName, 'status:', data._status);
+      pipelinesData.push(data);
+      console.log('Loaded pipeline:', data.projectName, 'status:', data._status);
     });
     
-    console.log('Pending updates count:', pendingPipes.length);
-    
-    // ถ้าไม่มีข้อมูลจาก main pipeline ให้ใช้ pending updates แทน
-    if (mainPipes.length === 0 && pendingPipes.length > 0) {
-      console.log('No main pipeline data, using pending updates only');
-      pipelinesData = pendingPipes;
-    } else {
-      // รวมข้อมูล: pending updates จะทับข้อมูลหลัก
-      pendingPipes.forEach(function(p) {
-        var originalId = p._originalPipeId || p.id;
-        if (pipeMap[originalId]) {
-          // ทับข้อมูลเดิม
-          for (var key in p) {
-            if (key.indexOf('_') !== 0 || key === '_status' || key === '_displayStatus') {
-              pipeMap[originalId][key] = p[key];
-            }
-          }
-          pipeMap[originalId]._displayStatus = p._status === 'pending' ? 'pending' : 'approved';
-          pipeMap[originalId].source = 'pending';
-        } else {
-          pipeMap[p.id] = p;
-        }
-      });
-      pipelinesData = Object.values(pipeMap);
-    }
-    
-    console.log('Total pipelines to display:', pipelinesData.length);
+    console.log('Total pipelines for this dealer:', pipelinesData.length);
     return pipelinesData;
   }).catch(function(err) {
-    console.error('Load pipeline error:', err);
-    // Fallback: ถ้า error ให้ลองอ่านแค่ dealerUpdates
-    return getCustomerPipelineRef(dealerId).get().then(function(snapshot) {
-      pipelinesData = [];
-      snapshot.forEach(function(doc) {
-        var data = doc.data();
-        data.id = doc.id;
-        pipelinesData.push(data);
-      });
-      console.log('Fallback - loaded from dealerUpdates only:', pipelinesData.length);
-      return pipelinesData;
-    });
+    console.warn('Load pipeline error:', err);
+    return [];
   });
 }
 function loadForecast() {

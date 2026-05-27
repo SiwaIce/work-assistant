@@ -172,9 +172,8 @@ function rDealerDet(el) {
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
   <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
-  <!-- ✅ เพิ่มปุ่มนี้ -->
   <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>
-  <!-- ✅ -->
+<button class="btn bsm bp" onclick="syncDealerPipelineToCustomer('${d.id}')" title="Sync Pipeline ให้ลูกค้า">🔄 Sync</button>
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
 </div>
@@ -1719,15 +1718,71 @@ function toggleDealerDoneTasks() {
   }
 }
 
-// แทนที่ function openClientView ใน views-dealer.js (ประมาณปลายไฟล์)
-
 function openClientView(dealerId) {
+  // ตรวจสอบว่ามีการตั้ง PIN หรือไม่
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  var dealerPin = pins[dealerId];
+  
   var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.uid : '';
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   var url = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid;
+  
+  if (dealerPin) {
+    // ถ้ามี PIN ให้ถามก่อนเปิด
+    var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูล:\n(รหัสผ่านตั้งโดยพนักงานขาย)');
+    if (enteredPin !== dealerPin) {
+      toast('❌ รหัสผ่านไม่ถูกต้อง');
+      return;
+    }
+  }
+  
   var win = window.open(url, '_blank');
   if (!win) { toast('กรุณาอนุญาต Popup'); return; }
+}
+
+// เพิ่มฟังก์ชันนี้ก่อน loadAllData()
+
+function checkDealerPin() {
+  return new Promise(function(resolve) {
+    var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+    var savedPin = pins[dealerId];
+    
+    if (!savedPin) {
+      // ไม่มี PIN ให้ผ่าน
+      resolve(true);
+      return;
+    }
+    
+    var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูลโครงการ');
+    if (enteredPin === savedPin) {
+      resolve(true);
+    } else {
+      alert('❌ รหัสผ่านไม่ถูกต้อง');
+      resolve(false);
+    }
+  });
+}
+
+// แก้ไข loadAllData() ให้ตรวจสอบ PIN ก่อน
+function loadAllData() {
+  if (!dealerId) return;
+  
+  checkDealerPin().then(function(access) {
+    if (!access) {
+      document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔒</div><div>รหัสผ่านไม่ถูกต้อง</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div></div>';
+      return;
+    }
+    
+    showNotice('🔄 กำลังโหลดข้อมูล...', false);
+    Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]).then(function() {
+      renderCurrentTab();
+      showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
+    }).catch(function(err) { 
+      console.error('Load error:', err); 
+      document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div></div>';
+    });
+  });
 }
 
 function buildFinalClientView(dealerId) {

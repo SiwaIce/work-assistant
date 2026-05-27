@@ -2471,6 +2471,73 @@ function updateCustomerUpdateBadge() {
       });
   });
 }
+// ================================================================
+// SYNC PIPELINE TO DEALER UPDATES (สำหรับส่งให้ลูกค้าดู)
+// ================================================================
+
+function syncDealerPipelineToCustomer(dealerId) {
+  if (!dealerId) {
+    toast('❌ ไม่พบ Dealer');
+    return;
+  }
+  
+  if (!confirm(`🔄 Sync ข้อมูล Pipeline ของ Dealer นี้ไปยังระบบลูกค้า?\n\nลูกค้าจะเห็นเฉพาะโครงการที่ status ไม่ใช่ lost/delivered/on_hold`)) {
+    return;
+  }
+  
+  toast('🔄 กำลัง Sync...');
+  
+  // ดึง pipeline ของ dealer นี้
+  var pipes = ST.pipelineByDealer(dealerId);
+  var activePipes = pipes.filter(function(p) {
+    return ['lost', 'delivered', 'on_hold'].indexOf(p.status) === -1;
+  });
+  
+  if (activePipes.length === 0) {
+    toast('⚠️ ไม่มี Pipeline ที่ต้อง Sync (active เท่านั้น)');
+    return;
+  }
+  
+  var batch = db.batch();
+  var dealerUpdatesRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
+  
+  activePipes.forEach(function(p) {
+    // สร้างข้อมูลสำหรับลูกค้า (เอาเฉพาะ필드ที่จำเป็น)
+    var customerData = {
+      id: p.id,
+      projectName: p.projectName || '',
+      endUserTH: p.endUserTH || '',
+      endUserEN: p.endUserEN || '',
+      unitType: p.unitType || '',
+      status: p.status || 'prospect',
+      model: p.model || '',
+      modelQty: p.modelQty || 1,
+      items: p.items || [],
+      forecastAmount: p.forecastAmount || 0,
+      biddingDate: p.biddingDate || '',
+      shipmentDate: p.shipmentDate || '',
+      tor: p.tor || '',
+      nextAction: p.nextAction || '',
+      registerDate: p.registerDate || '',
+      _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _status: 'approved',  // ข้อมูลจาก Sales ถือว่าอนุมัติแล้ว
+      _source: 'sales_sync'
+    };
+    
+    batch.set(dealerUpdatesRef.doc(p.id), customerData, { merge: true });
+  });
+  
+  batch.commit().then(function() {
+    toast(`✅ Sync สำเร็จ! ส่ง ${activePipes.length} โครงการให้ลูกค้า`);
+    
+    // อัพเดท badge
+    if (typeof updateCustomerUpdateBadge === 'function') {
+      updateCustomerUpdateBadge();
+    }
+  }).catch(function(err) {
+    toast('❌ Sync ล้มเหลว: ' + err.message);
+  });
+}
 
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
