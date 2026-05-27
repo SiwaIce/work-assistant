@@ -2646,3 +2646,57 @@ function dealerInfoTab(d) {
   <div id="customerUpdatesPanel"></div>
   `;
 }
+// ================================================================
+// SYNC PIPELINE TO PUBLIC (ให้ลูกค้าอ่าน)
+// ================================================================
+
+function syncPipelineToPublic(dealerId) {
+  if (!CURRENT_USER) return;
+  
+  var pipelines = ST.pipelineByDealer(dealerId);
+  var uid = CURRENT_USER.uid;
+  
+  pipelines.forEach(function(p) {
+    var publicData = {
+      id: p.id,
+      projectName: p.projectName || '',
+      endUserTH: p.endUserTH || '',
+      status: p.status || 'prospect',
+      model: p.model || '',
+      modelQty: p.modelQty || 1,
+      forecastAmount: p.forecastAmount || 0,
+      dealerId: p.dealerId,
+      items: p.items || [],
+      biddingDate: p.biddingDate || '',
+      shipmentDate: p.shipmentDate || '',
+      _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _sourceUid: uid
+    };
+    
+    db.collection('public_pipeline').doc(p.id).set(publicData).catch(function(err) {
+      console.warn('Sync to public_pipeline error:', err);
+    });
+  });
+}
+
+// Sync ทุกครั้งที่เปิดหน้า Dealer Detail
+function syncAllDealersPipelineToPublic() {
+  if (!CURRENT_USER) return;
+  
+  var dealers = ST.getAll('dealers');
+  dealers.forEach(function(d) {
+    syncPipelineToPublic(d.id);
+  });
+}
+
+// เรียก sync เมื่อมีการเปลี่ยนแปลง pipeline
+function watchPipelineChanges() {
+  if (!CURRENT_USER) return;
+  
+  // ฟังการเปลี่ยนแปลงของ pipeline (ใช้ localStorage event)
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'v7_pipeline') {
+      syncAllDealersPipelineToPublic();
+    }
+  });
+}

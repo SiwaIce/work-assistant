@@ -191,12 +191,12 @@ function rDealerDet(el) {
   <!-- Tab Content -->
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
   
-  // ✅ โหลดคำขออัพเดทจากลูกค้า (ส่ง dealerId ไปด้วย)
-  setTimeout(function() {
-    if (typeof loadCustomerUpdates === 'function') {
-      loadCustomerUpdates(d.id);
-    }
-  }, 500);
+// หลังจาก render เสร็จ
+setTimeout(function() {
+  if (typeof syncPipelineToPublic === 'function') {
+    syncPipelineToPublic(d.id);
+  }
+}, 500);
 }
 function renderDealerTab(d) {
   switch (dealerTab) {

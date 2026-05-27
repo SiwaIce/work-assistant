@@ -92,11 +92,21 @@ auth.onAuthStateChanged(function(user) {
     document.getElementById('loginScreen').style.display = 'none';
     initFirebaseListeners();
     if (typeof render === 'function') render();
+    
+    // ✅ โค้ดที่เพิ่มเข้าไป
+    setTimeout(function() {
+      if (typeof syncAllDealersPipelineToPublic === 'function') {
+        syncAllDealersPipelineToPublic();
+      }
+      if (typeof watchPipelineChanges === 'function') {
+        watchPipelineChanges();
+      }
+    }, 2000);
+    
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
   }
 });
-
 // ================================================================
 // FIRESTORE HELPERS
 // ================================================================
