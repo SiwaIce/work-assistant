@@ -122,7 +122,6 @@ function filterDealerList() {
 // ================================================================
 let dealerTab = 'info';
 
-// เพิ่มใน rDealerDet หลังจาก const d = ST.getOne...
 function rDealerDet(el) {
   const d = ST.getOne('dealers', S.dealerId);
   if (!d) return go('dealers');
@@ -142,19 +141,10 @@ function rDealerDet(el) {
     main.style.width = 'calc(100% - 200px)';
     main.style.maxWidth = 'calc(100% - 200px)';
   }
-
-// เรียกโหลดข้อมูลอัพเดท
-    if (CURRENT_USER) {
-        setTimeout(function() {
-            loadCustomerUpdates();
-        }, 500);
-    }
-}
   
-  document.getElementById('pgT').textContent = '🏪 ' + d.name;  // Store dealerId for context-aware FAB
+  document.getElementById('pgT').textContent = '🏪 ' + d.name;
   S.dealerId = d.id;
   
-  // ตรวจสอบว่ามีการขอเปิดแท็บ forecast หรือไม่
   if (S.tab === 'forecast') {
     dealerTab = 'forecast';
     delete S.tab;
@@ -162,6 +152,7 @@ function rDealerDet(el) {
   
   const isPinned = ST.hasPin(d.id);
   const h = calcHealthScore(d.id);
+  
   el.innerHTML = `
   <div class="bc">
     <a onclick="go('dealers')">🏪 Dealer</a><span class="sep">›</span>
@@ -180,9 +171,7 @@ function rDealerDet(el) {
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
   <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
-  <!-- ✅ เพิ่มปุ่มนี้ -->
   <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>
-  <!-- ✅ -->
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
 </div>
@@ -200,12 +189,12 @@ function rDealerDet(el) {
 
   <!-- Tab Content -->
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
-}
-// เพิ่มบรรทัดนี้หลัง render เสร็จ
-    setTimeout(function() {
-        if (typeof loadCustomerUpdates === 'function') loadCustomerUpdates();
-    }, 500);
-}
+  
+  // ✅ เรียก loadCustomerUpdates หลังจาก render เสร็จ (อยู่ภายในฟังก์ชัน rDealerDet)
+  setTimeout(function() {
+    if (typeof loadCustomerUpdates === 'function') loadCustomerUpdates();
+  }, 500);
+}  // ← ปิดฟังก์ชัน rDealerDet
 
 function renderDealerTab(d) {
   switch (dealerTab) {
@@ -214,12 +203,11 @@ function renderDealerTab(d) {
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
     case 'forecast': return dealerForecastTab(d);
-        case 'tasks': return dealerTasksTab(d);
+    case 'tasks': return dealerTasksTab(d);
     case 'onboard': return dealerOnboardTab(d);
     default: return dealerInfoTab(d);
   }
 }
-
 // ================================================================
 // TAB: INFO (Redesigned - Premium)
 // ================================================================
