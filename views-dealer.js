@@ -2104,10 +2104,15 @@ function showDealerPinModal(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
   
+  // ดึง PIN ปัจจุบัน (ถ้ามี)
+  var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
+  var currentPin = pins[dealerId] || '';
+  
   var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.uid : '';
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   var clientUrl = basePath + 'client-view.html?dealerId=' + dealerId + '&uid=' + uid;
+  
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:2000">';
   modalHtml += '<div class="modal-container" style="background:var(--card);border-radius:16px;max-width:400px;width:90%">';
   modalHtml += '<div class="modal-header" style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><h3>🔒 ตั้งรหัสผ่านสำหรับ ' + sanitize(dealer.name) + '</h3><button class="modal-close" onclick="closeModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button></div>';
@@ -2122,7 +2127,6 @@ function showDealerPinModal(dealerId) {
   
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
-
 function saveDealerPin(dealerId) {
   var pin = document.getElementById('dealerPin').value.trim();
   var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
@@ -2138,6 +2142,7 @@ function saveDealerPin(dealerId) {
 
 function copyClientLink(url, dealerName) {
   copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
+  toast('📋 ลิงก์: ' + url);
 }
 function closeModal() {
   var modal = document.querySelector('.modal-overlay');

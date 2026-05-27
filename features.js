@@ -7,9 +7,15 @@
 // ================================================================
 function ftParseDate(str) {
   if (!str) return null;
+  // ถ้าเป็น object หรือ不是 string ให้ return null
+  if (typeof str !== 'string') return null;
   var p = str.split('/');
   if (p.length !== 3) return null;
-  return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+  var day = parseInt(p[0], 10);
+  var month = parseInt(p[1], 10) - 1;
+  var year = parseInt(p[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  return new Date(year, month, day);
 }
 function ftDaysBetween(d1, d2) {
   return Math.floor(Math.abs(d2 - d1) / 86400000);
