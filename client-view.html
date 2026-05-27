@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
+/* [ใส่ CSS เหมือนเดิม - ขอไม่ใส่ซ้ำเพื่อความกระชับ] */
 :root {
   --bg: #0a0c10;
   --bg2: #15171c;
@@ -515,7 +516,6 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
   updateData._updateType = 'pipeline';
   
   return getCustomerPipelineRef(dealerId, pipeId).set(updateData, { merge: true }).then(function() {
-    // บันทึก timeline ด้วย
     var timelineRef = getCustomerTimelineRef(dealerId);
     var timelineEntry = {
       id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -530,7 +530,6 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
   });
 }
 
-// บันทึก forecast update
 function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
   var updateData = JSON.parse(JSON.stringify(data));
   updateData._customerUpdate = true;
@@ -552,7 +551,7 @@ function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
   });
 }
 
-// โหลดข้อมูล (จาก dealerUpdates collection)
+// โหลดข้อมูล
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
@@ -566,7 +565,6 @@ function loadPipeline() {
   }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
 }
 
-// แทนที่ function loadForecast
 function loadForecast() {
   if (!dealerId) return Promise.resolve();
   return getCustomerForecastRef(dealerId).get().then(function(querySnapshot) {
@@ -585,7 +583,6 @@ function loadForecast() {
   });
 }
 
-// แทนที่ function loadTimeline
 function loadTimeline() {
   if (!dealerId) return Promise.resolve([]);
   return getCustomerTimelineRef(dealerId).orderBy('timestamp', 'desc').limit(50).get().then(function(querySnapshot) {
@@ -599,8 +596,8 @@ function loadTimeline() {
     return Promise.resolve([]);
   });
 }
+
 function loadDealerName() {
-  // พยายามโหลดจาก URL หรือ localStorage
   var urlParams = new URLSearchParams(window.location.search);
   var nameParam = urlParams.get('name');
   if (nameParam) {
@@ -676,7 +673,7 @@ function renderPipelineTab() {
     html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
     html += '</tr>';
   }
-  html += '</tbody><tr></div></div>';
+  html += '</tbody></table></div></div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 
@@ -697,7 +694,7 @@ function showPipelineDetail(pipeId) {
   } else if (p.model) {
     var qty = p.modelQty || 1;
     totalItems = qty;
-    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>';
+    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '<td>';
   }
   itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr>';
   itemsHtml += '</tbody></table>';
@@ -805,9 +802,6 @@ function submitPipelineUpdate(pipeId) {
     updatedAt: new Date().toISOString()
   };
   
-  // เก็บข้อมูลเดิมเพื่อส่ง notification
-  var oldPipeline = pipelinesData.find(function(x) { return x.id === pipeId; });
-  
   saveCustomerPipelineUpdate(dealerId, pipeId, updatedPipeline).then(function() {
     showToast('✅ ส่งข้อมูลอัพเดทให้พนักงานขายเรียบร้อยแล้ว!');
     showNotice('📨 ข้อมูลถูกส่งให้พนักงานขายเรียบร้อยแล้ว จะได้รับการติดต่อกลับ', true);
@@ -819,7 +813,7 @@ function submitPipelineUpdate(pipeId) {
 }
 
 // ================================================================
-// FORECAST FUNCTIONS (ย่อเพื่อความยาว แต่โครงสร้างเหมือนเดิม)
+// FORECAST FUNCTIONS
 // ================================================================
 
 function getMonthSummary() {
@@ -859,9 +853,7 @@ function deleteRunrateItem(idx) {
   for (var i = 0; i < forecastData.runrate.length; i++) {
     if (forecastData.runrate[i].id === actualItem.id) {
       forecastData.runrate.splice(i, 1);
-      // ลบจาก Firebase ด้วย (mark as deleted)
-      var deleteRef = getCustomerForecastRef(dealerId, actualItem.id);
-      deleteRef.delete().catch(function(e) {});
+      getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e) {});
       break;
     }
   }
@@ -882,32 +874,16 @@ function editRunrateItem(idx) {
   }
 }
 
-function saveClientForecast() {
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    saveCustomerForecastUpdate(dealerId, forecastData.runrate[i].id, forecastData.runrate[i], 'runrate');
+function editProjectItem(projIdx) {
+  var proj = forecastData.projects[projIdx];
+  if (!proj) return;
+  var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
+  if (newName && newName.trim()) {
+    proj.projectName = newName.trim();
+    saveCustomerForecastUpdate(dealerId, proj.id, proj, 'project');
+    showToast('✅ แก้ไขโครงการเรียบร้อยแล้ว');
+    renderForecastTab();
   }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    saveCustomerForecastUpdate(dealerId, forecastData.projects[i].id, forecastData.projects[i], 'project');
-  }
-  showToast('💾 บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
-  renderForecastTab();
-}
-
-function addNewProject() {
-  var projectName = document.getElementById('newProjectName').value.trim();
-  var endUser = document.getElementById('newProjectEndUser').value.trim();
-  if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-  if (newProjectItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  var totalQty = newProjectItems.reduce(function(s, it) { return s + it.qty; }, 0);
-  var newProject = { id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), projectName: projectName, endUser: endUser || '-', month: selectedMonth, items: JSON.parse(JSON.stringify(newProjectItems)), totalQty: totalQty, dealerId: dealerId, type: 'project' };
-  forecastData.projects.push(newProject);
-  saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
-  document.getElementById('newProjectName').value = '';
-  document.getElementById('newProjectEndUser').value = '';
-  newProjectItems = [];
-  renderNewProjectItemsList();
-  showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
-  renderForecastTab();
 }
 
 function deleteProjectItem(projIdx) {
@@ -920,25 +896,6 @@ function deleteProjectItem(projIdx) {
 }
 
 function toggleProjectDetail(projIdx) { var el = document.getElementById('projectDetail_' + projIdx); if (el) el.classList.toggle('show'); }
-
-function loadProjectToForm() {
-  var select = document.getElementById('existingProjectSelect');
-  var idx = parseInt(select.value);
-  if (isNaN(idx) || idx < 0) return;
-  var proj = pipelinesData[idx];
-  if (!proj) return;
-  document.getElementById('newProjectName').value = proj.projectName;
-  document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
-  newProjectItems = [];
-  if (proj.items && proj.items.length) {
-    for (var i = 0; i < proj.items.length; i++) newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
-  } else if (proj.model) {
-    newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
-  }
-  renderNewProjectItemsList();
-  select.value = '';
-  showToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
-}
 
 function addProjectItem() {
   var model = document.getElementById('newProjectItemModel').value.trim();
@@ -967,6 +924,51 @@ function renderNewProjectItemsList() {
   container.innerHTML = html;
 }
 
+function addNewProject() {
+  var projectName = document.getElementById('newProjectName').value.trim();
+  var endUser = document.getElementById('newProjectEndUser').value.trim();
+  if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
+  if (newProjectItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  var totalQty = newProjectItems.reduce(function(s, it) { return s + it.qty; }, 0);
+  var newProject = { 
+    id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), 
+    projectName: projectName, 
+    endUser: endUser || '-', 
+    month: selectedMonth, 
+    items: JSON.parse(JSON.stringify(newProjectItems)), 
+    totalQty: totalQty, 
+    dealerId: dealerId, 
+    type: 'project' 
+  };
+  forecastData.projects.push(newProject);
+  saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
+  document.getElementById('newProjectName').value = '';
+  document.getElementById('newProjectEndUser').value = '';
+  newProjectItems = [];
+  renderNewProjectItemsList();
+  showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
+  renderForecastTab();
+}
+
+function loadProjectToForm() {
+  var select = document.getElementById('existingProjectSelect');
+  var idx = parseInt(select.value);
+  if (isNaN(idx) || idx < 0) return;
+  var proj = pipelinesData[idx];
+  if (!proj) return;
+  document.getElementById('newProjectName').value = proj.projectName;
+  document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
+  newProjectItems = [];
+  if (proj.items && proj.items.length) {
+    for (var i = 0; i < proj.items.length; i++) newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
+  } else if (proj.model) {
+    newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
+  }
+  renderNewProjectItemsList();
+  select.value = '';
+  showToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
+}
+
 function clearProjectForm() {
   if (confirm('ล้างข้อมูลในฟอร์ม?')) {
     document.getElementById('newProjectName').value = '';
@@ -975,6 +977,17 @@ function clearProjectForm() {
     renderNewProjectItemsList();
     showToast('🗑️ ล้างฟอร์มแล้ว');
   }
+}
+
+function saveClientForecast() {
+  for (var i = 0; i < forecastData.runrate.length; i++) {
+    saveCustomerForecastUpdate(dealerId, forecastData.runrate[i].id, forecastData.runrate[i], 'runrate');
+  }
+  for (var i = 0; i < forecastData.projects.length; i++) {
+    saveCustomerForecastUpdate(dealerId, forecastData.projects[i].id, forecastData.projects[i], 'project');
+  }
+  showToast('💾 บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
+  renderForecastTab();
 }
 
 function downloadForecastExcel() {
@@ -1164,163 +1177,6 @@ function renderCurrentTab() {
   else renderTimelineTab();
 }
 
-// เพิ่ม function นี้ ก่อน function renderCurrentTab()
-
-function editProjectItem(projIdx) {
-  var proj = forecastData.projects[projIdx];
-  if (!proj) return;
-  
-  var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
-  if (newName && newName.trim()) {
-    proj.projectName = newName.trim();
-    saveCustomerForecastUpdate(dealerId, proj.id, proj, 'project');
-    showToast('✅ แก้ไขแล้ว');
-    renderForecastTab();
-  }
-}
-
-function editRunrateItem(idx) {
-  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  var actualItem = monthRunrate[idx];
-  if (!actualItem) return;
-  var newQty = prompt('แก้ไขจำนวน ' + actualItem.model, actualItem.qty);
-  if (newQty && !isNaN(parseInt(newQty))) {
-    actualItem.qty = parseInt(newQty);
-    saveCustomerForecastUpdate(dealerId, actualItem.id, actualItem, 'runrate');
-    showToast('✅ แก้ไขจำนวนแล้ว');
-    renderForecastTab();
-  }
-}
-
-function addProjectItem() {
-  var model = document.getElementById('newProjectItemModel').value.trim();
-  var qty = parseInt(document.getElementById('newProjectItemQty').value);
-  if (!model) { alert('กรุณาเลือกสินค้า'); return; }
-  if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
-  newProjectItems.push({ model: model, qty: qty });
-  document.getElementById('newProjectItemModel').value = '';
-  document.getElementById('newProjectItemQty').value = '1';
-  renderNewProjectItemsList();
-}
-
-function addNewProject() {
-  var projectName = document.getElementById('newProjectName').value.trim();
-  var endUser = document.getElementById('newProjectEndUser').value.trim();
-  if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-  if (newProjectItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  var totalQty = newProjectItems.reduce(function(s, it) { return s + it.qty; }, 0);
-  var newProject = { 
-    id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), 
-    projectName: projectName, 
-    endUser: endUser || '-', 
-    month: selectedMonth, 
-    items: JSON.parse(JSON.stringify(newProjectItems)), 
-    totalQty: totalQty, 
-    dealerId: dealerId, 
-    type: 'project' 
-  };
-  forecastData.projects.push(newProject);
-  saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
-  document.getElementById('newProjectName').value = '';
-  document.getElementById('newProjectEndUser').value = '';
-  newProjectItems = [];
-  renderNewProjectItemsList();
-  showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
-  renderForecastTab();
-}
-
-function deleteProjectItem(projIdx) {
-  if (!confirm('ลบโครงการนี้?')) return;
-  var actualItem = forecastData.projects[projIdx];
-  forecastData.projects.splice(projIdx, 1);
-  getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e) {});
-  showToast('🗑️ ลบโครงการแล้ว');
-  renderForecastTab();
-}
-
-function toggleProjectDetail(projIdx) { 
-  var el = document.getElementById('projectDetail_' + projIdx); 
-  if (el) el.classList.toggle('show'); 
-}
-
-function loadProjectToForm() {
-  var select = document.getElementById('existingProjectSelect');
-  var idx = parseInt(select.value);
-  if (isNaN(idx) || idx < 0) return;
-  var proj = pipelinesData[idx];
-  if (!proj) return;
-  document.getElementById('newProjectName').value = proj.projectName;
-  document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
-  newProjectItems = [];
-  if (proj.items && proj.items.length) {
-    for (var i = 0; i < proj.items.length; i++) newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
-  } else if (proj.model) {
-    newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
-  }
-  renderNewProjectItemsList();
-  select.value = '';
-  showToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
-}
-
-function clearProjectForm() {
-  if (confirm('ล้างข้อมูลในฟอร์ม?')) {
-    document.getElementById('newProjectName').value = '';
-    document.getElementById('newProjectEndUser').value = '';
-    newProjectItems = [];
-    renderNewProjectItemsList();
-    showToast('🗑️ ล้างฟอร์มแล้ว');
-  }
-}
-
-function downloadForecastExcel() {
-  var wsData = [['ประเภท', 'ชื่อ', 'Model', 'จำนวน', 'End User', 'เดือน']];
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    wsData.push(['Run Rate', '', r.model, r.qty, '', r.month]);
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    for (var j = 0; j < p.items.length; j++) {
-      wsData.push(['Project', p.projectName, p.items[j].model, p.items[j].qty, p.endUser || '', p.month]);
-    }
-  }
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
-  XLSX.writeFile(wb, 'Forecast_' + dealerName + '.xlsx');
-  showToast('📎 ดาวน์โหลด Excel แล้ว');
-}
-
-function uploadForecastExcel(input) {
-  var file = input.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var data = new Uint8Array(e.target.result);
-    var workbook = XLSX.read(data, { type: 'array' });
-    var sheet = workbook.Sheets[workbook.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); input.value = ''; return; }
-    for (var i = 1; i < rows.length; i++) {
-      var row = rows[i];
-      if (!row || !row[0]) continue;
-      var type = row[0], name = row[1], model = row[2], qty = parseInt(row[3]) || 0, endUser = row[4] || '', month = row[5];
-      if (!month || allMonths.indexOf(month) === -1) continue;
-      if (type === 'Run Rate' && model && qty > 0) {
-        var newRunrate = { id: 'rr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' };
-        forecastData.runrate.push(newRunrate);
-        saveCustomerForecastUpdate(dealerId, newRunrate.id, newRunrate, 'runrate');
-      } else if (type === 'Project' && name && model && qty > 0) {
-        var newProject = { id: 'proj_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' };
-        forecastData.projects.push(newProject);
-        saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
-      }
-    }
-    saveClientForecast();
-    input.value = '';
-  };
-  reader.readAsArrayBuffer(file);
-}
 // Initialize
 var urlParams = new URLSearchParams(window.location.search);
 dealerId = urlParams.get('dealerId');
@@ -1352,15 +1208,16 @@ window.selectMonth = selectMonth;
 window.addRunrateItem = addRunrateItem;
 window.deleteRunrateItem = deleteRunrateItem;
 window.editRunrateItem = editRunrateItem;
-window.loadProjectToForm = loadProjectToForm;
-window.addProjectItem = addProjectItem;
-window.addNewProject = addNewProject;
+window.editProjectItem = editProjectItem;
 window.deleteProjectItem = deleteProjectItem;
 window.toggleProjectDetail = toggleProjectDetail;
-window.downloadForecastExcel = downloadForecastExcel;
-window.uploadForecastExcel = uploadForecastExcel;
+window.addProjectItem = addProjectItem;
+window.addNewProject = addNewProject;
+window.loadProjectToForm = loadProjectToForm;
 window.clearProjectForm = clearProjectForm;
 window.saveClientForecast = saveClientForecast;
+window.downloadForecastExcel = downloadForecastExcel;
+window.uploadForecastExcel = uploadForecastExcel;
 window.showUpdateModal = showUpdateModal;
 window.showPipelineDetail = showPipelineDetail;
 window.closeModal = closeModal;
@@ -1368,7 +1225,6 @@ window.addEditItemRow = addEditItemRow;
 window.removeEditItemRow = removeEditItemRow;
 window.submitPipelineUpdate = submitPipelineUpdate;
 window.removeNewProjectItem = removeNewProjectItem;
-window.editProjectItem = editProjectItem;
 </script>
 </body>
 </html>
