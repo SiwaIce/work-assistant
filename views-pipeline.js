@@ -1098,3 +1098,91 @@ function addQuickPipeFollowup(pipeId) {
   toast('📞 บันทึกนัดติดตามแล้ว');
   render();
 }
+// ✅ โหลด Forecast ทั้งหมด (รวม rejected)
+function loadAllForecastUpdates() {
+  var dealers = ST.getAll('dealers');
+  var allUpdates = [];
+  
+  return Promise.all(dealers.map(function(dealer) {
+    return db.collection('dealerUpdates').doc(dealer.id).collection('forecast')
+      .get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          data.id = doc.id;
+          data.dealerName = dealer.name;
+          data.dealerId = dealer.id;
+          allUpdates.push(data);
+        });
+      });
+  })).then(function() {
+    return allUpdates;
+  });
+}
+
+// ✅ แสดง Forecast ที่ถูกปฏิเสธ (rejected)
+function renderRejectedForecastList(updates) {
+  var rejected = updates.filter(function(u) { return u._status === 'rejected'; });
+  if (!rejected.length) return '';
+  
+  var html = '<div class="card" style="border-color:#ef4444; margin-top:16px">';
+  html += '<h2 style="color:#ef4444">❌ แผนการสั่งซื้อที่ถูกปฏิเสธ (' + rejected.length + ')</h2>';
+  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">⚠️ รายการเหล่านี้ไม่ถูกนับรวมในสรุป สามารถกด "ส่งใหม่" เพื่อให้พนักงานขายตรวจสอบอีกครั้ง</div>';
+  
+  for (var i = 0; i < rejected.length; i++) {
+    var u = rejected[i];
+    var typeIcon = u.type === 'runrate' ? '📦' : '🏢';
+    var typeText = u.type === 'runrate' ? 'Run Rate' : 'โครงการ';
+    
+    html += '<div class="li" style="border-left:3px solid #ef4444; margin-bottom:8px">';
+    html += '<div class="lm" style="flex:1">';
+    html += '<div class="lt">' + typeIcon + ' ' + sanitize(u.dealerName) + ' - ' + typeText + ' <span class="tag tag-cancelled">❌ ปฏิเสธ</span></div>';
+    
+    if (u.type === 'runrate') {
+      html += '<div class="ls">📦 ' + sanitize(u.model || '-') + ' x' + (u.qty || 0) + ' ชิ้น • เดือน ' + (u.month || '-') + '</div>';
+    } else {
+      html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
+      if (u.endUser) html += '<div class="ls">👤 ' + sanitize(u.endUser) + '</div>';
+      html += '<div class="ls">📦 ' + (u.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+      html += '<div class="ls">📅 เดือน ' + (u.month || '-') + '</div>';
+    }
+    
+    if (u._rejectedAt) {
+      var rejectDate = u._rejectedAt.seconds ? new Date(u._rejectedAt.seconds * 1000).toLocaleString() : u._rejectedAt;
+      html += '<div class="ls">⏰ ปฏิเสธเมื่อ: ' + rejectDate + '</div>';
+    }
+    
+    html += '</div>';
+    html += '<div class="bg" style="flex-shrink:0">';
+    html += '<button class="btn bsm bs" onclick="resubmitForecast(\'' + u.dealerId + '\', \'' + u.id + '\')">🔄 ส่งใหม่</button>';
+    html += '<button class="btn bsm bo" onclick="viewForecastDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
+    html += '</div></div>';
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+// ✅ ส่ง Forecast ที่ถูกปฏิเสธกลับไปให้พนักงานขายตรวจสอบใหม่
+async function resubmitForecast(dealerId, updateId) {
+  if (!confirm('ส่งแผนการสั่งซื้อนี้ให้พนักงานขายตรวจสอบใหม่อีกครั้ง?')) return;
+  
+  try {
+    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+    await updateRef.update({
+      _status: 'pending',
+      _resubmittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _previousStatus: 'rejected'
+    });
+    
+    toast('✅ ส่งคำขอใหม่เรียบร้อยแล้ว รอการอนุมัติจากพนักงานขาย');
+    setTimeout(function() { location.reload(); }, 1000);
+  } catch(err) {
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
+// ใน rCustomerForecastUpdates หลังจากแสดง pending ให้เพิ่มส่วน rejected
+var rejectedUpdates = allUpdates.filter(function(u) { return u._status === 'rejected'; });
+if (rejectedUpdates.length) {
+  html += renderRejectedForecastList(rejectedUpdates);
+}

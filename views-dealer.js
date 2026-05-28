@@ -164,18 +164,10 @@ async function loadExistingTokens(dealerId) {
     if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
   } catch(e) {}
   
-  if (!currentPin) {
-    container.innerHTML = '<div class="hint">ℹ️ ยังไม่ได้ตั้ง PIN — กด "สร้างลิงก์" เพื่อตั้ง PIN และสร้างลิงก์แรก</div>';
-    return;
-  }
+  // ลิงก์ปัจจุบัน (ไม่มี PIN ในลิงก์)
+  var currentUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
   
-  // ✅ สร้างลิงก์แบบไม่มี PIN (ลูกค้าต้องพิมพ์เอาเอง)
-  var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
-  
-  var expiryDays = 30;
-  var expiryDate = addD(_td(), expiryDays);
-  
-  var pinStatus = `🔒 มี PIN (${currentPin}) - ลูกค้าต้องใส่รหัสจึงจะเห็นข้อมูล`;
+  var pinStatus = currentPin ? `🔒 มี PIN (${currentPin}) - ลูกค้าต้องใส่รหัส` : '🔓 ไม่มี PIN - เข้าได้เลย';
   
   container.innerHTML = `
     <div class="card" style="margin-bottom:8px;padding:10px;background:rgba(34,197,94,0.05)">
@@ -183,19 +175,15 @@ async function loadExistingTokens(dealerId) {
         <span style="font-weight:700;color:#22c55e">✅ ลิงก์ปัจจุบัน</span>
         <span style="font-size:10px;color:var(--text2)">${pinStatus}</span>
       </div>
-      <div style="font-size:10px;word-break:break-all;background:var(--bg);padding:6px;border-radius:6px;margin-bottom:6px">${fullUrl}</div>
-      <div style="display:flex;gap:6px;justify-content:space-between">
-        <span style="font-size:10px">หมดอายุ: ${expiryDate} (${expiryDays} วัน)</span>
-        <div style="display:flex;gap:4px">
-          <button class="btn bsm bp" onclick="copyToClipboard('${fullUrl.replace(/'/g, "\\'")}')">📋 คัดลอก</button>
-          <button class="btn bsm bd" onclick="window.open('${fullUrl}', '_blank')">🔗 ทดสอบเปิด</button>
-        </div>
+      <div style="font-size:10px;word-break:break-all;background:var(--bg);padding:6px;border-radius:6px;margin-bottom:6px">${currentUrl}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bsm bp" onclick="copyToClipboard('${currentUrl.replace(/'/g, "\\'")}')">📋 คัดลอก</button>
+        <button class="btn bsm bd" onclick="window.open('${currentUrl}', '_blank')">🔗 ทดสอบเปิด</button>
       </div>
-      <div class="hint" style="margin-top:6px;font-size:10px">💡 แจ้ง PIN: <strong>${currentPin}</strong> แยกช่องทาง (LINE, โทร, Email) ห้ามใส่ในลิงก์เด็ดขาด</div>
+      ${currentPin ? `<div class="hint" style="margin-top:6px;font-size:10px">💡 PIN: <strong>${currentPin}</strong> (แจ้งลูกค้าแยกช่องทาง)</div>` : ''}
     </div>
   `;
 }
-
 async function createTokenAndLink(dealerId) {
   var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
   var pin = document.getElementById('tokenPin').value.trim();
@@ -482,7 +470,7 @@ function rDealerDet(el) {
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
 <button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 สร้างลิงก์</button>
 <button class="btn bsm bo" onclick="showChangePinModal('${d.id}')">🔒 PIN</button>
-  <button class="btn bsm bo" onclick="showTokenList('${d.id}')">📋 ลิงก์ที่สร้าง</button>
+  <button class="btn bsm bo" onclick="showCurrentLinkModal('${d.id}')">🔗 ลิงก์ปัจจุบัน</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
 <button class="btn bsm bp" onclick="syncDealerPipelineToCustomer('${d.id}')" title="Sync Pipeline ให้ลูกค้า">🔄 Sync</button>
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
@@ -2461,4 +2449,46 @@ async function savePinOnly(dealerId) {
   } catch(e) {
     toast('❌ เกิดข้อผิดพลาด: ' + e.message);
   }
+}
+// ✅ แสดงลิงก์ปัจจุบัน (แทนที่ showTokenList เดิม)
+async function showCurrentLinkModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  // ดึง PIN ปัจจุบันจาก Firebase
+  var currentPin = '';
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
+  } catch(e) {}
+  
+  // ลิงก์ปัจจุบัน (ไม่มี PIN ในลิงก์)
+  var currentUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
+  
+  var pinStatus = currentPin ? '🔒 มี PIN (ลูกค้าต้องใส่รหัส)' : '🔓 ไม่มี PIN (เข้าได้เลย)';
+  var pinWarning = currentPin ? `<div class="hint" style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
+    🔑 <strong>PIN สำหรับลูกค้า:</strong> ${currentPin}
+    <div class="hint">⚠️ แจ้ง PIN แยกช่องทาง ห้ามใส่ในลิงก์</div>
+  </div>` : '';
+  
+  var html = `
+    <div style="max-width:500px">
+      <div class="form-group"><label>🏪 Dealer</label><div><strong>${sanitize(dealer.name)}</strong></div></div>
+      <div class="form-group"><label>🔗 ลิงก์ปัจจุบัน</label>
+        <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${currentUrl}</div>
+        <div class="hint" style="margin-top:4px">${pinStatus}</div>
+      </div>
+      ${pinWarning}
+      <div class="bg" style="margin-top:12px">
+        <button class="btn bp" onclick="copyToClipboard('${currentUrl.replace(/'/g, "\\'")}')">📋 คัดลอกลิงก์</button>
+        <button class="btn bd" onclick="window.open('${currentUrl}', '_blank')">🔗 ทดสอบเปิด</button>
+      </div>
+      <div class="hint" style="margin-top:12px;font-size:11px">💡 ต้องการเปลี่ยน PIN? กดปุ่ม "🔒 PIN" ด้านบน</div>
+    </div>
+  `;
+  
+  openM('🔗 ลิงก์ปัจจุบัน', html);
 }
