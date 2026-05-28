@@ -7,8 +7,6 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-<!-- JWT library -->
-<script src="https://cdn.jsdelivr.net/npm/jose@4.14.4/dist/browser/index.js"></script>
 <style>
 /* ===== BASE THEME ===== */
 :root {
@@ -519,6 +517,9 @@ function revokeAllTokensForDealer(dealerId) {
   saveTokenRegistry(registry); return revoked;
 }
 // แทนที่ฟังก์ชัน verifyCustomerTokenV2
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 function verifyCustomerTokenV2(token) {
   try {
@@ -532,10 +533,10 @@ function verifyCustomerTokenV2(token) {
       return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
     }
     
-    // ตรวจสอบ signature (ต้องใช้ secret เดียวกับฝั่ง Sales)
+    // ตรวจสอบ signature
     var secret = localStorage.getItem('jwt_secret');
     if (!secret) {
-      // ถ้าไม่มี secret ให้ลอง sync จาก registry
+      // ถ้าไม่มี secret ให้ตรวจสอบจาก registry แทน
       var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
       for (var id in registry) {
         if (registry[id].token === token && registry[id].isActive) {
@@ -543,10 +544,6 @@ function verifyCustomerTokenV2(token) {
         }
       }
       return { valid: false, error: 'ไม่พบข้อมูล token' };
-    }
-    
-    function base64url(str) {
-      return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
     
     var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
@@ -1375,7 +1372,11 @@ function cancelUpdate(type, dealerId, updateId) {
 }
 
 async function verifyAndProceed() {
-  var token = urlParams.get('token');
+  // ตรวจสอบว่า token ถูกประกาศไว้แล้ว
+  if (typeof token === 'undefined') {
+    var urlParams = new URLSearchParams(window.location.search);
+    var token = urlParams.get('token');
+  }
   
   if (!token) {
     showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย');
@@ -1384,7 +1385,7 @@ async function verifyAndProceed() {
   
   showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
   
-  var result = await verifyCustomerTokenV2(token);
+  var result = verifyCustomerTokenV2(token);  // ไม่ต้อง await เพราะไม่ใช่ async
   
   if (!result.valid) {
     showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง');
@@ -1394,9 +1395,10 @@ async function verifyAndProceed() {
   dealerId = result.dealerId;
   console.log('Token verified, dealerId:', dealerId);
   
-  // ✅ ตรวจสอบ PIN หลังจาก token ถูกต้อง
+  // ตรวจสอบ PIN
   await checkAndVerifyPin(dealerId);
 }
+
 function showAccessDenied(message) {
   var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
   var noticeArea = document.getElementById('noticeArea'); if (noticeArea) noticeArea.style.display = 'none';
