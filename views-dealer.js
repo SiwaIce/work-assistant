@@ -2531,8 +2531,10 @@ async function savePinOnly(dealerId) {
   }
 }
 // ================================================================
-// SHOW TOKEN LIST (ดูรายการลิงก์ที่สร้างแล้ว)
+// SHOW TOKEN LIST (ดูรายการลิงก์ที่สร้างแล้ว แยกแท็บ)
 // ================================================================
+
+var tokenListTab = 'active'; // active, revoked, expired
 
 function showTokenList(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
@@ -2548,59 +2550,105 @@ function showTokenList(dealerId) {
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   
-  var html = '<div style="max-width:500px">';
+  // แยกตามสถานะ
+  var activeTokens = [];
+  var revokedTokens = [];
+  var expiredTokens = [];
+  
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i];
+    var isExpired = new Date(t.expiresAt) < new Date();
+    if (!t.isActive) {
+      revokedTokens.push(t);
+    } else if (isExpired) {
+      expiredTokens.push(t);
+    } else {
+      activeTokens.push(t);
+    }
+  }
+  
+  var html = '<div style="max-width:600px">';
   html += '<div class="form-group"><label>🏪 Dealer</label><div><strong>' + sanitize(dealer.name) + '</strong></div></div>';
   
   if (tokens.length === 0) {
     html += '<div class="empty-state" style="padding:20px"><div class="empty-state-icon">🔗</div><div>ยังไม่มีลิงก์ที่สร้าง</div><div class="hint">กดปุ่ม "🔗 สร้างลิงก์ปลอดภัย" เพื่อสร้างลิงก์แรก</div></div>';
   } else {
-    html += '<div style="margin-bottom:12px"><span class="tag tag-count">' + tokens.length + ' ลิงก์</span></div>';
-    html += '<div style="max-height:400px;overflow-y:auto">';
-    
-    for (var i = 0; i < tokens.length; i++) {
-      var t = tokens[i];
-      var isActive = t.isActive;
-      var isExpired = new Date(t.expiresAt) < new Date();
-      var statusColor = '';
-      var statusText = '';
-      
-      if (!isActive) {
-        statusColor = '#ef4444';
-        statusText = '❌ ถูกเพิกถอน';
-      } else if (isExpired) {
-        statusColor = '#64748b';
-        statusText = '⏰ หมดอายุแล้ว';
-      } else {
-        statusColor = '#22c55e';
-        statusText = '✅ ใช้งานได้';
-      }
-      
-      var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(t.token);
-      var daysLeft = Math.ceil((new Date(t.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
-      
-      html += '<div class="card" style="margin-bottom:12px;padding:12px">';
-      html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">';
-      html += '<span style="font-weight:700; color:' + statusColor + '">' + statusText + '</span>';
-      html += '<span style="font-size:11px; color:var(--text2)">สร้าง: ' + fD(t.createdAt.split('T')[0]) + '</span>';
-      html += '</div>';
-      html += '<div style="font-size:11px; word-break:break-all; background:var(--bg); padding:8px; border-radius:8px; margin-bottom:6px">';
-      html += '<span style="color:var(--text2)">🔗 </span>' + fullUrl;
-      html += '</div>';
-      html += '<div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center">';
-      html += '<div style="font-size:11px; color:var(--text2)">📅 หมดอายุ: ' + fD(t.expiresAt.split('T')[0]) + ' (' + daysLeft + ' วัน)</div>';
-      html += '<div style="display:flex; gap:4px">';
-      html += '<button class="btn bsm bp" onclick="copyToClipboard(\'' + fullUrl.replace(/'/g, "\\'") + '\')">📋 คัดลอก</button>';
-      if (isActive && !isExpired) {
-        html += '<button class="btn bsm bd" onclick="revokeSingleToken(\'' + t.id + '\', \'' + dealerId + '\')">🗑️ เพิกถอน</button>';
-      }
-      html += '</div></div></div>';
-    }
+    // แท็บ
+    html += '<div class="ftabs" style="margin-bottom:12px">';
+    html += '<div class="ftab ' + (tokenListTab === 'active' ? 'act' : '') + '" onclick="tokenListTab=\'active\'; showTokenList(\'' + dealerId + '\')">🟢 ใช้งานได้ (' + activeTokens.length + ')</div>';
+    html += '<div class="ftab ' + (tokenListTab === 'revoked' ? 'act' : '') + '" onclick="tokenListTab=\'revoked\'; showTokenList(\'' + dealerId + '\')">🔴 ถูกเพิกถอน (' + revokedTokens.length + ')</div>';
+    html += '<div class="ftab ' + (tokenListTab === 'expired' ? 'act' : '') + '" onclick="tokenListTab=\'expired\'; showTokenList(\'' + dealerId + '\')">⏰ หมดอายุ (' + expiredTokens.length + ')</div>';
     html += '</div>';
+    
+    // เลือกข้อมูลตามแท็บ
+    var displayTokens = [];
+    if (tokenListTab === 'active') displayTokens = activeTokens;
+    else if (tokenListTab === 'revoked') displayTokens = revokedTokens;
+    else displayTokens = expiredTokens;
+    
+    if (displayTokens.length === 0) {
+      html += '<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📭</div><div>ไม่มีลิงก์ในหมวดนี้</div></div>';
+    } else {
+      html += '<div style="max-height:500px;overflow-y:auto">';
+      
+      for (var i = 0; i < displayTokens.length; i++) {
+        var t = displayTokens[i];
+        var isActive = t.isActive;
+        var isExpired = new Date(t.expiresAt) < new Date();
+        var statusColor = '';
+        var statusText = '';
+        var statusIcon = '';
+        
+        if (!isActive) {
+          statusColor = '#ef4444';
+          statusText = 'ถูกเพิกถอน';
+          statusIcon = '🔴';
+        } else if (isExpired) {
+          statusColor = '#64748b';
+          statusText = 'หมดอายุ';
+          statusIcon = '⏰';
+        } else {
+          statusColor = '#22c55e';
+          statusText = 'ใช้งานได้';
+          statusIcon = '✅';
+        }
+        
+        var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(t.token);
+        var daysLeft = Math.ceil((new Date(t.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+        var canOpen = isActive && !isExpired;
+        
+        html += '<div class="card" style="margin-bottom:12px;padding:12px">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">';
+        html += '<span style="font-weight:700; color:' + statusColor + '">' + statusIcon + ' ' + statusText + '</span>';
+        html += '<span style="font-size:11px; color:var(--text2)">สร้าง: ' + fD(t.createdAt.split('T')[0]) + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:11px; word-break:break-all; background:var(--bg); padding:8px; border-radius:8px; margin-bottom:6px">';
+        html += '<span style="color:var(--text2)">🔗 </span>' + fullUrl;
+        html += '</div>';
+        html += '<div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center">';
+        html += '<div style="font-size:11px; color:var(--text2)">📅 หมดอายุ: ' + fD(t.expiresAt.split('T')[0]) + (daysLeft > 0 ? ' (' + daysLeft + ' วัน)' : '');
+        if (isExpired) html += ' (หมดอายุแล้ว)';
+        html += '</div>';
+        html += '<div style="display:flex; gap:4px">';
+        
+        // ✅ ปุ่มเปิดลิงก์ (เฉพาะที่ยังใช้งานได้)
+        if (canOpen) {
+          html += '<button class="btn bsm bs" onclick="window.open(\'' + fullUrl + '\', \'_blank\')">🔗 เปิด</button>';
+        }
+        html += '<button class="btn bsm bp" onclick="copyToClipboard(\'' + fullUrl.replace(/'/g, "\\'") + '\')">📋 คัดลอก</button>';
+        
+        if (isActive && !isExpired) {
+          html += '<button class="btn bsm bd" onclick="revokeSingleToken(\'' + t.id + '\', \'' + dealerId + '\')">🗑️ เพิกถอน</button>';
+        }
+        html += '</div></div></div>';
+      }
+      html += '</div>';
+    }
   }
   
   html += '<div class="bg" style="margin-top:12px">';
   html += '<button class="btn btn-primary" onclick="showDealerTokenModal(\'' + dealerId + '\')">➕ สร้างลิงก์ใหม่</button>';
-  html += '<button class="btn bd" onclick="if(confirm(\'เพิกถอนลิงก์ทั้งหมด?\')){ revokeAllDealerTokens(\'' + dealerId + '\'); closeModal(); showTokenList(\'' + dealerId + '\'); }">🗑️ เพิกถอนทั้งหมด</button>';
+  html += '<button class="btn bd" onclick="if(confirm(\'เพิกถอนลิงก์ทั้งหมดของ Dealer นี้?\\n\\nลิงก์ที่ลูกค้ามีอยู่จะใช้ไม่ได้ทันที\')){ revokeAllDealerTokens(\'' + dealerId + '\'); closeModal(); showTokenList(\'' + dealerId + '\'); }">🗑️ เพิกถอนทั้งหมด</button>';
   html += '</div>';
   html += '</div>';
   
