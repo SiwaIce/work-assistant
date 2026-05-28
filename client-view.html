@@ -784,6 +784,8 @@ for (var i = 0; i < pipelinesData.length; i++) {
   html += '</tr>';
 }
 
+// แทนที่ function showPipelineDetail ใน client-view.html
+
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
@@ -801,21 +803,219 @@ function showPipelineDetail(pipeId) {
   } else if (p.model) {
     var qty = p.modelQty || 1;
     totalItems = qty;
-    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '<td>';
+    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td>';
   }
   itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr>';
   itemsHtml += '</tbody></table>';
   
+  // สถานะ badge
+  var statusColor = '';
+  var statusText = '';
+  if (p._status === 'pending') {
+    statusColor = '#f59e0b';
+    statusText = '⏳ รอตรวจสอบ';
+  } else if (p._status === 'approved') {
+    statusColor = '#22c55e';
+    statusText = '✅ อนุมัติแล้ว';
+  } else if (p._status === 'rejected') {
+    statusColor = '#ef4444';
+    statusText = '❌ ปฏิเสธ';
+  } else {
+    statusColor = '#3b82f6';
+    statusText = '📋 ปกติ';
+  }
+  
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
   html += '<div class="section"><div class="section-title">' + esc(p.projectName) + '</div>';
   html += '<div class="form-row"><div><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div>';
-  html += '<div><strong>📊 สถานะ:</strong> ' + getStatusLabel(p.status) + '</div></div>';
+  html += '<div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div></div>';
   html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> ' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div>';
   html += '<div><strong>📅 Bidding:</strong> ' + (p.biddingDate || '-') + '</div></div>';
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
   html += '<div style="margin-top:20px"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดท</button></div>';
   html += '</div>';
+  
+  // ✅ เพิ่มส่วน Timeline การอัพเดท
+  html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div>';
+  html += '<div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div>';
+  html += '</div>';
+  
   document.getElementById('tabContent').innerHTML = html;
+  
+  // โหลด timeline ของโครงการนี้
+  loadPipeTimeline(pipeId, p);
+}
+
+function loadPipeTimeline(pipeId, currentData) {
+  var container = document.getElementById('pipeTimeline_' + pipeId);
+  if (!container) return;
+  
+  var allEvents = [];
+  
+  // 1. ดึงจาก timeline collection
+  getCustomerTimelineRef(dealerId).where('pipeId', '==', pipeId).get().then(function(snapshot) {
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      data.id = doc.id;
+      data._source = 'timeline';
+      allEvents.push(data);
+    });
+    
+    // 2. เพิ่ม record ปัจจุบัน (ถ้ามีการอัพเดทที่ยังไม่ถูกบันทึกใน timeline)
+    if (currentData && currentData._updatedAt) {
+      var hasExisting = allEvents.some(function(e) { 
+        return e.timestamp && e.timestamp.seconds === currentData._updatedAt.seconds;
+      });
+      if (!hasExisting) {
+        allEvents.push({
+          id: 'current_' + pipeId,
+          type: 'pipeline_update',
+          content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ',
+          timestamp: currentData._updatedAt,
+          status: currentData._status || 'pending',
+          _source: 'current',
+          changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null
+        });
+      }
+    }
+    
+    // เรียงตามเวลา (ล่าสุดสุด)
+    allEvents.sort(function(a, b) {
+      var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0;
+      var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0;
+      return tb - ta;
+    });
+    
+    renderPipeTimeline(container, allEvents, currentData);
+  }).catch(function(err) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>ไม่สามารถโหลดประวัติได้</div></div>';
+  });
+}
+
+function renderPipeTimeline(container, events, currentData) {
+  if (!events.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div>';
+    return;
+  }
+  
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var dateStr = ev.timestamp ? (ev.timestamp.seconds ? new Date(ev.timestamp.seconds * 1000).toLocaleString('th-TH') : ev.timestamp) : '-';
+    var isCurrent = ev._source === 'current';
+    var status = ev.status || (isCurrent ? (currentData ? currentData._status : 'pending') : 'pending');
+    var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var icon = ev.type === 'pipeline_update' ? '📋' : '📝';
+    
+    // ตรวจสอบว่ามีการเปลี่ยนแปลง (before/after)
+    var hasChanges = ev.changes || (ev._snapshot && currentData);
+    var changeSummary = '';
+    if (hasChanges) {
+      var before = ev.changes ? ev.changes.before : ev._snapshot;
+      var after = ev.changes ? ev.changes.after : currentData;
+      if (before && after) {
+        var changedFields = [];
+        if (before.status !== after.status) changedFields.push('สถานะ');
+        if (before.forecastAmount !== after.forecastAmount) changedFields.push('มูลค่า');
+        if (before.model !== after.model) changedFields.push('Model');
+        if (JSON.stringify(before.items) !== JSON.stringify(after.items)) changedFields.push('สินค้า');
+        if (changedFields.length) {
+          changeSummary = '<div style="font-size:11px;color:var(--accent);margin-top:2px">🔄 เปลี่ยนแปลง: ' + changedFields.join(', ') + '</div>';
+        }
+      }
+    }
+    
+    html += '<div class="timeline-event" style="border-left:3px solid ' + statusColor + '; padding:10px 12px; background:rgba(255,255,255,0.02); border-radius:8px">';
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:4px">';
+    html += '<div><span style="font-size:16px">' + icon + '</span> <strong>' + (ev.type === 'pipeline_update' ? 'อัพเดทโครงการ' : 'หมายเหตุ') + '</strong>';
+    html += ' <span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:2px 8px; border-radius:12px; font-size:10px">' + statusText + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:11px; color:var(--text2)">' + dateStr + '</div>';
+    html += '</div>';
+    html += '<div style="font-size:13px; line-height:1.5">' + esc(ev.content || ev.updateNote || 'อัพเดทข้อมูล') + '</div>';
+    html += changeSummary;
+    
+    // ปุ่มดูรายละเอียดการเปลี่ยนแปลง
+    if (hasChanges) {
+      html += '<button class="btn btn-sm" style="margin-top:8px; padding:4px 10px" onclick="viewTimelineChangeDetail(\'' + pipeId + '\', \'' + (ev.id || 'current') + '\')">👁️ ดูการเปลี่ยนแปลง</button>';
+    }
+    
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function viewTimelineChangeDetail(pipeId, eventId) {
+  // หาข้อมูลจาก currentData หรือจาก events
+  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
+  if (!p) return;
+  
+  // ใช้ before/after จาก currentData
+  var before = p._snapshot || null;
+  var after = p;
+  
+  var html = '<div style="max-width:550px">';
+  html += '<h3>📋 รายละเอียดการเปลี่ยนแปลง</h3>';
+  html += '<div style="margin-bottom:12px"><strong>📋 โครงการ:</strong> ' + esc(p.projectName) + '</div>';
+  
+  if (!before) {
+    html += '<div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:8px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
+  }
+  
+  // สร้างตารางเปรียบเทียบ
+  html += '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
+  html += '<thead><tr style="border-bottom:2px solid var(--border)">';
+  html += '<th style="text-align:left;padding:8px">ฟิลด์</th>';
+  if (before) html += '<th style="text-align:left;padding:8px">ก่อน</th>';
+  html += '<th style="text-align:left;padding:8px">หลัง</th>';
+  html += '</tr></thead><tbody>';
+  
+  var fields = [
+    { key: 'status', label: 'สถานะ' },
+    { key: 'forecastAmount', label: 'มูลค่า (฿)' },
+    { key: 'model', label: 'Model' },
+    { key: 'biddingDate', label: 'Bidding Date' },
+    { key: 'shipmentDate', label: 'Shipment Date' }
+  ];
+  
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    var newVal = after[f.key] || '-';
+    var oldVal = before ? (before[f.key] || '-') : null;
+    var isChanged = before && String(oldVal) !== String(newVal);
+    var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
+    
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:8px">' + f.label + '</td>';
+    if (before) {
+      html += '<td style="padding:8px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(String(oldVal)) + '</td>';
+    }
+    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td>';
+    html += '</tr>';
+  }
+  
+  // รายการสินค้า
+  var newItems = (after.items || []).map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
+  var oldItems = before && before.items ? before.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : null;
+  var itemsChanged = before && oldItems !== newItems;
+  
+  html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)">';
+  html += '<td style="padding:8px">สินค้า</td>';
+  if (before) {
+    html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
+  }
+  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+  html += '</table>';
+  
+  html += '</tbody></table>';
+  html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div>';
+  html += '</div>';
+  
+  showDetailModal('📋 การเปลี่ยนแปลง', html);
 }
 
 function showUpdateModal(pipeId) {
