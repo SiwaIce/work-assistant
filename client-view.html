@@ -518,17 +518,68 @@ function revokeAllTokensForDealer(dealerId) {
   }
   saveTokenRegistry(registry); return revoked;
 }
-async function verifyCustomerTokenV2(token) {
-  try {
-    var { payload } = await jose.jwtVerify(token, JWT_SECRET);
-    var registry = getTokenRegistry(); var tokenEntry = null;
-    for (var id in registry) { if (registry[id].token === token) { tokenEntry = registry[id]; break; } }
-    if (tokenEntry && !tokenEntry.isActive) return { valid: false, error: 'Token ถูกเพิกถอนแล้ว กรุณาขอลิงก์ใหม่' };
-    if (tokenEntry) { tokenEntry.lastUsed = new Date().toISOString(); tokenEntry.useCount++; saveTokenRegistry(registry); }
-    return { valid: true, dealerId: payload.dealerId };
-  } catch (err) { return { valid: false, error: err.message }; }
-}
+// แทนที่ฟังก์ชัน verifyCustomerTokenV2
 
+function verifyCustomerTokenV2(token) {
+  try {
+    var parts = token.split('.');
+    if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
+    
+    var payload = JSON.parse(atob(parts[1]));
+    
+    // ตรวจสอบวันหมดอายุ
+    if (payload.exp < Date.now() / 1000) {
+      return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
+    }
+    
+    // ตรวจสอบ signature (ต้องใช้ secret เดียวกับฝั่ง Sales)
+    var secret = localStorage.getItem('jwt_secret');
+    if (!secret) {
+      // ถ้าไม่มี secret ให้ลอง sync จาก registry
+      var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+      for (var id in registry) {
+        if (registry[id].token === token && registry[id].isActive) {
+          return { valid: true, dealerId: payload.dealerId };
+        }
+      }
+      return { valid: false, error: 'ไม่พบข้อมูล token' };
+    }
+    
+    function base64url(str) {
+      return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    
+    var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
+    
+    if (parts[2] !== expectedSignature) {
+      return { valid: false, error: 'token ไม่ถูกต้อง' };
+    }
+    
+    // ตรวจสอบใน registry ว่า active หรือไม่
+    var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+    var isActive = false;
+    for (var id in registry) {
+      if (registry[id].token === token) {
+        isActive = registry[id].isActive;
+        if (isActive) {
+          registry[id].lastUsed = new Date().toISOString();
+          registry[id].useCount++;
+          localStorage.setItem('v7_token_registry', JSON.stringify(registry));
+        }
+        break;
+      }
+    }
+    
+    if (!isActive) {
+      return { valid: false, error: 'Token ถูกเพิกถอนแล้ว กรุณาขอลิงก์ใหม่' };
+    }
+    
+    return { valid: true, dealerId: payload.dealerId };
+    
+  } catch(e) {
+    return { valid: false, error: e.message };
+  }
+}
 // ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;

@@ -1,23 +1,79 @@
 // ================================================================
-// JWT TOKEN FUNCTIONS (FOR CLIENT LINK)
+// JWT TOKEN FUNCTIONS (แบบไม่ต้องใช้ library)
 // ================================================================
 
-// ฟังก์ชันสร้าง token (ต้องเหมือนกับใน client-view)
-async function generateCustomerToken(dealerId, expiryDays) {
-  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
-  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
-  var jwt = await new jose.SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).sign(JWT_SECRET);
-  return jwt;
+// Base64URL encode
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// เก็บ/อ่าน secret key (ต้องตรงกับ client-view)
+// สร้าง token (ไม่ต้องใช้ library)
+function generateSimpleToken(dealerId, expiryDays) {
+  var header = { alg: 'HS256', typ: 'JWT' };
+  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+  var payload = { 
+    dealerId: dealerId, 
+    exp: exp, 
+    iat: Math.floor(Date.now() / 1000), 
+    iss: 'dji-sales-assistant' 
+  };
+  
+  var encodedHeader = base64url(JSON.stringify(header));
+  var encodedPayload = base64url(JSON.stringify(payload));
+  
+  // สร้าง signature (แบบง่าย ใช้ secret)
+  var secret = localStorage.getItem('jwt_secret');
+  if (!secret) {
+    secret = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('jwt_secret', secret);
+  }
+  
+  var signatureInput = encodedHeader + '.' + encodedPayload;
+  var signature = base64url(signatureInput + secret);
+  
+  return encodedHeader + '.' + encodedPayload + '.' + signature;
+}
+
+// ตรวจสอบ token (ไม่ต้องใช้ library)
+function verifySimpleToken(token) {
+  try {
+    var parts = token.split('.');
+    if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
+    
+    var payload = JSON.parse(atob(parts[1]));
+    
+    // ตรวจสอบวันหมดอายุ
+    if (payload.exp < Date.now() / 1000) {
+      return { valid: false, error: 'ลิงก์หมดอายุแล้ว' };
+    }
+    
+    // ตรวจสอบ signature (เบื้องต้น)
+    var secret = localStorage.getItem('jwt_secret');
+    var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
+    
+    if (parts[2] !== expectedSignature) {
+      return { valid: false, error: 'token ไม่ถูกต้อง' };
+    }
+    
+    return { valid: true, dealerId: payload.dealerId };
+    
+  } catch(e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+// ใช้ generateSimpleToken แทน generateCustomerToken
+var generateCustomerToken = generateSimpleToken;
+var verifyCustomerToken = verifySimpleToken;
+
+// เก็บ secret key
 function getJWTSecret() {
   var saved = localStorage.getItem('jwt_secret');
   if (!saved) {
     saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
     localStorage.setItem('jwt_secret', saved);
   }
-  return new TextEncoder().encode(saved);
+  return saved;
 }
 var JWT_SECRET = getJWTSecret();
 
