@@ -1,4 +1,197 @@
 // ================================================================
+// JWT TOKEN FUNCTIONS (FOR CLIENT LINK)
+// ================================================================
+
+// ฟังก์ชันสร้าง token (ต้องเหมือนกับใน client-view)
+async function generateCustomerToken(dealerId, expiryDays) {
+  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
+  var jwt = await new jose.SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).sign(JWT_SECRET);
+  return jwt;
+}
+
+// เก็บ/อ่าน secret key (ต้องตรงกับ client-view)
+function getJWTSecret() {
+  var saved = localStorage.getItem('jwt_secret');
+  if (!saved) {
+    saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('jwt_secret', saved);
+  }
+  return new TextEncoder().encode(saved);
+}
+var JWT_SECRET = getJWTSecret();
+
+// บันทึก token ใน registry
+function saveTokenToRegistry(token, dealerId, expiryDays, createdBy) {
+  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+  var tokenId = 'tok_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  var payload = JSON.parse(atob(token.split('.')[1]));
+  registry[tokenId] = {
+    id: tokenId, token: token, dealerId: dealerId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(payload.exp * 1000).toISOString(),
+    expiryDays: expiryDays, createdBy: createdBy,
+    isActive: true, lastUsed: null, useCount: 0
+  };
+  localStorage.setItem('v7_token_registry', JSON.stringify(registry));
+  return tokenId;
+}
+
+// เพิกถอน token ทั้งหมดของ dealer
+function revokeAllTokensForDealer(dealerId) {
+  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+  var revoked = 0;
+  for (var id in registry) {
+    if (registry[id].dealerId === dealerId && registry[id].isActive === true) {
+      registry[id].isActive = false;
+      registry[id].revokedAt = new Date().toISOString();
+      revoked++;
+    }
+  }
+  localStorage.setItem('v7_token_registry', JSON.stringify(registry));
+  return revoked;
+}
+// ================================================================
+// SHOW TOKEN MODAL (แทน PIN Modal เดิม)
+// ================================================================
+
+async function showDealerTokenModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var html = `
+    <div style="max-width:500px">
+      <div class="form-group">
+        <label>🏪 Dealer</label>
+        <div><strong>${sanitize(dealer.name)}</strong></div>
+      </div>
+      <div class="form-group">
+        <label>⏰ วันหมดอายุ</label>
+        <select id="tokenExpiryDays" class="form-control" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+          <option value="7">7 วัน</option>
+          <option value="14">14 วัน</option>
+          <option value="30" selected>30 วัน (แนะนำ)</option>
+          <option value="60">60 วัน</option>
+          <option value="90">90 วัน</option>
+          <option value="180">180 วัน</option>
+          <option value="365">1 ปี (ถาวร)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>📝 หมายเหตุ (ไม่บังคับ)</label>
+        <input type="text" id="tokenNote" class="form-control" placeholder="เช่น ส่งให้คุณสมชาย วันที่ 1 มิ.ย." style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+      </div>
+      <div class="bg" style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn bp" onclick="createTokenAndLink('${dealerId}')" style="flex:1">🔗 สร้างลิงก์</button>
+        <button class="btn bd" onclick="revokeAllDealerTokens('${dealerId}')" style="flex:1">🗑️ เพิกถอนลิงก์เก่า</button>
+      </div>
+      <div id="tokenListArea" style="margin-top:16px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">📋 ลิงก์ที่สร้างแล้ว:</div>
+        <div id="existingTokenList">กำลังโหลด...</div>
+      </div>
+    </div>
+  `;
+  
+  openM('🔗 สร้างลิงก์ปลอดภัยสำหรับ ' + dealer.name, html);
+  loadExistingTokens(dealerId);
+}
+
+async function createTokenAndLink(dealerId) {
+  var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
+  var note = document.getElementById('tokenNote').value.trim();
+  var createdBy = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong';
+  
+  var token = await generateCustomerToken(dealerId, expiryDays);
+  saveTokenToRegistry(token, dealerId, expiryDays, createdBy);
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(token);
+  var expiryDate = addD(_td(), expiryDays);
+  
+  openM('✅ สร้างลิงก์เรียบร้อย', `
+    <div class="form-group">
+      <label>📋 ลิงก์สำหรับลูกค้า</label>
+      <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${fullUrl}</div>
+    </div>
+    <div class="form-row">
+      <div><label>📅 หมดอายุ</label><div>${expiryDate} (${expiryDays} วัน)</div></div>
+      <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
+    </div>
+    <div class="bg" style="margin-top:12px">
+      <button class="btn bp" onclick="copyToClipboard('${fullUrl}')">📋 คัดลอกลิงก์</button>
+      <button class="btn bo" onclick="showDealerTokenModal('${dealerId}')">↩️ กลับ</button>
+    </div>
+    <div class="hint" style="margin-top:12px">🔒 ลิงก์นี้ปลอดภัย หมดอายุอัตโนมัติ</div>
+  `);
+}
+
+function revokeAllDealerTokens(dealerId) {
+  if (!confirm('⚠️ เพิกถอนลิงก์ทั้งหมดของ Dealer นี้?\n\nลิงก์ที่ลูกค้ามีอยู่จะใช้ไม่ได้ทันที\nต้องส่งลิงก์ใหม่ให้ลูกค้า')) return;
+  var count = revokeAllTokensForDealer(dealerId);
+  toast(`🗑️ เพิกถอน ${count} ลิงก์แล้ว`);
+  loadExistingTokens(dealerId);
+}
+
+function loadExistingTokens(dealerId) {
+  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+  var tokens = [];
+  for (var id in registry) {
+    if (registry[id].dealerId === dealerId) tokens.push(registry[id]);
+  }
+  tokens.sort(function(a,b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+  
+  var container = document.getElementById('existingTokenList');
+  if (!container) return;
+  
+  if (tokens.length === 0) {
+    container.innerHTML = '<div class="hint">ยังไม่มีลิงก์ที่สร้าง</div>';
+    return;
+  }
+  
+  var html = '';
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i];
+    var isActive = t.isActive;
+    var isExpired = new Date(t.expiresAt) < new Date();
+    var status = '';
+    if (!isActive) status = '🔴 ถูกเพิกถอน';
+    else if (isExpired) status = '⚫ หมดอายุ';
+    else status = '🟢 ใช้งานได้';
+    
+    html += `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:11px">
+        <div>
+          <div>${status}</div>
+          <div style="color:var(--text2)">หมดอายุ ${fD(t.expiresAt.split('T')[0])} | สร้าง ${fD(t.createdAt.split('T')[0])}</div>
+        </div>
+        <div>
+          ${isActive && !isExpired ? `<button class="btn bsm bd" onclick="revokeSingleToken('${t.id}', '${dealerId}')" style="padding:2px 6px">เพิกถอน</button>` : ''}
+        </div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+function revokeSingleToken(tokenId, dealerId) {
+  if (!confirm('เพิกถอนลิงก์นี้? ลูกค้าจะใช้ลิงก์นี้ไม่ได้อีก')) return;
+  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+  if (registry[tokenId]) {
+    registry[tokenId].isActive = false;
+    registry[tokenId].revokedAt = new Date().toISOString();
+    localStorage.setItem('v7_token_registry', JSON.stringify(registry));
+    toast('🗑️ เพิกถอนลิงก์แล้ว');
+    loadExistingTokens(dealerId);
+  }
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text);
+  toast('📋 คัดลอกลิงก์แล้ว');
+  closeModal();
+}
+// ================================================================
 // DEALER LIST
 // ================================================================
 let dealerFilter = 'all';
@@ -170,6 +363,8 @@ function rDealerDet(el) {
 <div class="bg">
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
+// ใน rDealerDet() หา div class="bg" แล้วเพิ่มปุ่มนี้ข้างๆ ปุ่ม PIN
+<button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 ลิงก์ปลอดภัย</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
   <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
   <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>

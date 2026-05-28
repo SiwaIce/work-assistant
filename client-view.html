@@ -7,8 +7,10 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<!-- JWT library -->
+<script src="https://cdn.jsdelivr.net/npm/jose@4.14.4/dist/browser/index.js"></script>
 <style>
-/* ===== BASE ===== */
+/* ===== BASE THEME ===== */
 :root {
   --bg: #0a0c10;
   --bg2: #15171c;
@@ -418,9 +420,7 @@ body {
   padding: 8px 14px;
   margin-top: 18px;
 }
-.reset-btn:hover {
-  background: rgba(239,68,68,0.2);
-}
+.reset-btn:hover { background: rgba(239,68,68,0.2); }
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -469,6 +469,66 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
+// ========== JWT TOKEN MANAGEMENT ==========
+var JWT_SECRET = null;
+function initJWTSecret() {
+  var saved = localStorage.getItem('jwt_secret');
+  if (!saved) {
+    saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('jwt_secret', saved);
+  }
+  JWT_SECRET = new TextEncoder().encode(saved);
+}
+initJWTSecret();
+
+async function generateCustomerToken(dealerId, expiryDays) {
+  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
+  var jwt = await new jose.SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).sign(JWT_SECRET);
+  return jwt;
+}
+function decodeTokenPayload(token) {
+  try { var parts = token.split('.'); return JSON.parse(atob(parts[1])); } catch(e) { return null; }
+}
+function getTokenRegistry() {
+  var saved = localStorage.getItem('v7_token_registry');
+  return saved ? JSON.parse(saved) : {};
+}
+function saveTokenRegistry(registry) { localStorage.setItem('v7_token_registry', JSON.stringify(registry)); }
+async function generateAndRegisterToken(dealerId, expiryDays, createdBy) {
+  var token = await generateCustomerToken(dealerId, expiryDays);
+  var payload = decodeTokenPayload(token);
+  var tokenId = 'tok_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  var registry = getTokenRegistry();
+  registry[tokenId] = {
+    id: tokenId, token: token, dealerId: dealerId, createdAt: new Date().toISOString(),
+    expiresAt: new Date(payload.exp * 1000).toISOString(), expiryDays: expiryDays,
+    createdBy: createdBy || 'system', isActive: true, lastUsed: null, useCount: 0
+  };
+  saveTokenRegistry(registry);
+  return { token: token, tokenId: tokenId };
+}
+function revokeAllTokensForDealer(dealerId) {
+  var registry = getTokenRegistry(); var revoked = 0;
+  for (var id in registry) {
+    if (registry[id].dealerId === dealerId && registry[id].isActive === true) {
+      registry[id].isActive = false; registry[id].revokedAt = new Date().toISOString();
+      revoked++;
+    }
+  }
+  saveTokenRegistry(registry); return revoked;
+}
+async function verifyCustomerTokenV2(token) {
+  try {
+    var { payload } = await jose.jwtVerify(token, JWT_SECRET);
+    var registry = getTokenRegistry(); var tokenEntry = null;
+    for (var id in registry) { if (registry[id].token === token) { tokenEntry = registry[id]; break; } }
+    if (tokenEntry && !tokenEntry.isActive) return { valid: false, error: 'Token ถูกเพิกถอนแล้ว กรุณาขอลิงก์ใหม่' };
+    if (tokenEntry) { tokenEntry.lastUsed = new Date().toISOString(); tokenEntry.useCount++; saveTokenRegistry(registry); }
+    return { valid: true, dealerId: payload.dealerId };
+  } catch (err) { return { valid: false, error: err.message }; }
+}
+
 // ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;
@@ -484,6 +544,7 @@ var newProjectItems = [];
 var pipelineSearch = '';
 var pipelineSort = 'date_desc';
 var pipelineFilter = 'all';
+var historyFilter = 'all';
 
 // ========== HELPERS ==========
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
@@ -493,14 +554,11 @@ function applyTheme(theme) {
 }
 function toggleTheme() { var current = getSavedTheme(); var next = current === 'dark' ? 'light' : 'dark'; localStorage.setItem('cv_theme', next); applyTheme(next); }
 applyTheme(getSavedTheme());
-
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 var sanitize = esc;
-function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
 function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
 function _nw() { return new Date().toISOString(); }
-
 var STATUS_LIST = [
   { id: 'prospect', name: '🔍 Prospect' }, { id: 'tor_review', name: '📋 TOR Review' },
   { id: 'quotation', name: '💰 Quotation' }, { id: 'bidding', name: '⏳ Bidding' },
@@ -510,25 +568,14 @@ var STATUS_LIST = [
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
 function generateMonths() {
-  var months = [];
-  var now = new Date();
-  for (var i = 0; i < 12; i++) {
-    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    var m = d.getMonth() + 1;
-    var y = d.getFullYear() + 543;
-    months.push((m < 10 ? '0' + m : m) + '/' + y);
-  }
+  var months = []; var now = new Date();
+  for (var i = 0; i < 12; i++) { var d = new Date(now.getFullYear(), now.getMonth() + i, 1); var m = d.getMonth() + 1; var y = d.getFullYear() + 543; months.push((m < 10 ? '0' + m : m) + '/' + y); }
   return months;
 }
 function loadModels() {
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
-    try {
-      var config = JSON.parse(cfg);
-      if (config.models && config.models.length) {
-        allModels = config.models.map(function(m) { return typeof m === 'object' ? m.name : m; }).filter(function(m) { return m; });
-      }
-    } catch(e) {}
+    try { var config = JSON.parse(cfg); if (config.models && config.models.length) { allModels = config.models.map(function(m) { return typeof m === 'object' ? m.name : m; }).filter(function(m) { return m; }); } } catch(e) {}
   }
   if (!allModels.length) {
     allModels = ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Matrice 4TD', 'DJI Matrice 400', 'DJI Matrice 30', 'DJI Matrice 30T',
@@ -536,43 +583,23 @@ function loadModels() {
       'DJI FlightHub 2', 'DJI Terra', 'Mavic 3 Enterprise', 'Mavic 3 Multispectral'];
   }
 }
-
-// ========== FIRESTORE REFS ==========
-function getCustomerPipelineRef(dealerId, pipeId) {
-  if (pipeId) return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId);
-  return db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
-}
-function getCustomerForecastRef(dealerId, forecastId) {
-  if (forecastId) return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId);
-  return db.collection('dealerUpdates').doc(dealerId).collection('forecast');
-}
+function getCustomerPipelineRef(dealerId, pipeId) { if (pipeId) return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId); return db.collection('dealerUpdates').doc(dealerId).collection('pipeline'); }
+function getCustomerForecastRef(dealerId, forecastId) { if (forecastId) return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId); return db.collection('dealerUpdates').doc(dealerId).collection('forecast'); }
 function getCustomerTimelineRef(dealerId) { return db.collection('dealerUpdates').doc(dealerId).collection('timeline'); }
 
-// ========== DATA LOAD ==========
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
     pipelinesData = [];
-    querySnapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
-      pipelinesData.push(data);
-    });
+    querySnapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data._displayStatus = data._status === 'pending' ? 'pending' : 'approved'; pipelinesData.push(data); });
     return pipelinesData;
   }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
 }
 function loadForecast() {
   if (!dealerId) return Promise.resolve();
   return getCustomerForecastRef(dealerId).get().then(function(querySnapshot) {
-    forecastData.runrate = [];
-    forecastData.projects = [];
-    querySnapshot.forEach(function(doc) {
-      var item = doc.data();
-      item.id = doc.id;
-      if (item.type === 'runrate') forecastData.runrate.push(item);
-      else if (item.type === 'project') forecastData.projects.push(item);
-    });
+    forecastData.runrate = []; forecastData.projects = [];
+    querySnapshot.forEach(function(doc) { var item = doc.data(); item.id = doc.id; if (item.type === 'runrate') forecastData.runrate.push(item); else if (item.type === 'project') forecastData.projects.push(item); });
     return Promise.resolve();
   }).catch(function(err) { console.warn('Load forecast error:', err); return Promise.resolve(); });
 }
@@ -587,14 +614,8 @@ function loadTimeline() {
 function loadDealerName() {
   var urlParams = new URLSearchParams(window.location.search);
   var nameParam = urlParams.get('name');
-  if (nameParam) {
-    dealerName = decodeURIComponent(nameParam);
-    document.getElementById('dealerName').innerHTML = esc(dealerName);
-    return Promise.resolve(dealerName);
-  }
-  dealerName = 'Dealer';
-  document.getElementById('dealerName').innerHTML = 'Dealer';
-  return Promise.resolve(dealerName);
+  if (nameParam) { dealerName = decodeURIComponent(nameParam); document.getElementById('dealerName').innerHTML = esc(dealerName); return Promise.resolve(dealerName); }
+  dealerName = 'Dealer'; document.getElementById('dealerName').innerHTML = 'Dealer'; return Promise.resolve(dealerName);
 }
 function showNotice(message, isSuccess) {
   var noticeArea = document.getElementById('noticeArea');
@@ -608,20 +629,15 @@ function loadAllData() {
   Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]).then(function() {
     renderCurrentTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
-  }).catch(function(err) { 
-    console.error('Load error:', err); 
-    document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div></div>';
-  });
+  }).catch(function(err) { console.error('Load error:', err); document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div></div>'; });
 }
 function refreshData() { loadAllData(); }
 
-// ========== FILTER / SORT / SEARCH (PIPELINE) ==========
+// ========== PIPELINE TAB ==========
 function filterAndSortPipelines(pipelines) {
   if (!pipelines.length) return [];
   var result = pipelines.slice();
-  if (pipelineFilter !== 'all') {
-    result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
-  }
+  if (pipelineFilter !== 'all') result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
   if (pipelineSearch && pipelineSearch.trim() !== '') {
     var term = pipelineSearch.toLowerCase().trim();
     result = result.filter(function(p) {
@@ -629,32 +645,20 @@ function filterAndSortPipelines(pipelines) {
       if ((p.endUserTH || '').toLowerCase().indexOf(term) !== -1) return true;
       if ((p.endUserEN || '').toLowerCase().indexOf(term) !== -1) return true;
       if ((p.model || '').toLowerCase().indexOf(term) !== -1) return true;
-      if (p.items && p.items.length) {
-        for (var i=0;i<p.items.length;i++) if ((p.items[i].model || '').toLowerCase().indexOf(term) !== -1) return true;
-      }
+      if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) if ((p.items[i].model || '').toLowerCase().indexOf(term) !== -1) return true; }
       return false;
     });
   }
-  if (pipelineSort === 'date_desc') {
-    result.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
-  } else if (pipelineSort === 'amount_desc') {
-    result.sort(function(a,b) { return (b.forecastAmount || 0) - (a.forecastAmount || 0); });
-  } else if (pipelineSort === 'name_asc') {
-    result.sort(function(a,b) { var na = (a.projectName || '').toLowerCase(); var nb = (b.projectName || '').toLowerCase(); if (na < nb) return -1; if (na > nb) return 1; return 0; });
-  }
+  if (pipelineSort === 'date_desc') result.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
+  else if (pipelineSort === 'amount_desc') result.sort(function(a,b) { return (b.forecastAmount || 0) - (a.forecastAmount || 0); });
+  else if (pipelineSort === 'name_asc') result.sort(function(a,b) { var na = (a.projectName || '').toLowerCase(); var nb = (b.projectName || '').toLowerCase(); if (na < nb) return -1; if (na > nb) return 1; return 0; });
   return result;
 }
-function resetPipelineFilters() {
-  pipelineSearch = '';
-  pipelineSort = 'date_desc';
-  pipelineFilter = 'all';
-  renderPipelineTab();
-}
+function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; renderPipelineTab(); }
 function renderPipelineTab() {
   var filtered = filterAndSortPipelines(pipelinesData);
   var hasData = filtered.length > 0;
   var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ')</div>';
-  // ----- TOOLBAR (always visible) -----
   html += '<div class="toolbar-row">';
   html += '<div class="toolbar-item"><label>🔍 ค้นหา</label><input type="text" id="pipelineSearchInput" class="toolbar-input" placeholder="ชื่อโครงการ, End User, Model..." value="' + esc(pipelineSearch) + '" oninput="pipelineSearch=this.value; renderPipelineTab()"></div>';
   html += '<div class="toolbar-item"><label>📅 เรียงลำดับ</label><select id="pipelineSortSelect" class="toolbar-select" onchange="pipelineSort=this.value; renderPipelineTab()">';
@@ -669,19 +673,12 @@ function renderPipelineTab() {
   html += '<option value="rejected"' + (pipelineFilter === 'rejected' ? ' selected' : '') + '>❌ ปฏิเสธ</option>';
   html += '</select></div>';
   html += '<div class="toolbar-item" style="flex:0.5; min-width:auto"><label>&nbsp;</label><button class="btn btn-primary" style="width:100%" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  if (pipelineSearch || pipelineFilter !== 'all') {
-    html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
-  }
+  if (pipelineSearch || pipelineFilter !== 'all') html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
   html += '</div>';
-  // ----- TABLE OR EMPTY STATE (with toolbar still visible) -----
   if (!hasData) {
     html += '<div class="empty-state" style="padding:40px 20px"><div class="empty-state-icon">📭</div><div style="font-weight:500; margin-bottom:6px">ไม่มีโครงการที่ตรงกับเงื่อนไข</div>';
-    if (pipelineSearch || pipelineFilter !== 'all') {
-      html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div>';
-      html += '<button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
-    } else {
-      html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
-    }
+    if (pipelineSearch || pipelineFilter !== 'all') html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div><button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
+    else html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
     html += '</div>';
   } else {
     html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
@@ -711,15 +708,14 @@ function renderPipelineTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ========== PIPELINE DETAIL (with Timeline + Before/After + Who) ==========
+// ========== PIPELINE DETAIL ==========
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
   var totalItems = 0;
-  if (p.items && p.items.length) {
-    for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
-  } else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; } }
+  else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
   itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '值</td></tr></tbody></table>';
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
   var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
@@ -742,16 +738,7 @@ function loadPipeTimeline(pipeId, currentData) {
     if (currentData && currentData._updatedAt) {
       var hasExisting = allEvents.some(function(e) { return e.timestamp && e.timestamp.seconds === currentData._updatedAt.seconds; });
       if (!hasExisting) {
-        allEvents.push({
-          id: 'current_' + pipeId,
-          type: 'pipeline_update',
-          content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ',
-          timestamp: currentData._updatedAt,
-          status: currentData._status || 'pending',
-          _source: 'current',
-          changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null,
-          updatedBy: currentData.updatedBy || 'customer'
-        });
+        allEvents.push({ id: 'current_' + pipeId, type: 'pipeline_update', content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ', timestamp: currentData._updatedAt, status: currentData._status || 'pending', _source: 'current', changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null, updatedBy: currentData.updatedBy || 'customer' });
       }
     }
     allEvents.sort(function(a,b) { var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0; var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0; return tb - ta; });
@@ -824,14 +811,12 @@ function viewTimelineChangeDetail(pipeId, eventId) {
   var itemsChanged = before && oldItems !== newItems;
   html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า</td>';
   if (before) html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
-  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
-  html += '</table>';
-  html += '</tbody></table><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
+  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td></tr>';
+  html += '</tbody><tr><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
   showDetailModal('📋 การเปลี่ยนแปลง', html);
 }
 function showDetailModal(title, bodyHtml) {
-  var existing = document.getElementById('detailModal');
-  if (existing) existing.remove();
+  var existing = document.getElementById('detailModal'); if (existing) existing.remove();
   var el = document.createElement('div');
   el.id = 'detailModal';
   el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:3000;backdrop-filter:blur(4px);padding:16px';
@@ -841,7 +826,6 @@ function showDetailModal(title, bodyHtml) {
 }
 function closeDetailModal() { var el = document.getElementById('detailModal'); if (el) el.remove(); }
 
-// ========== UPDATE MODAL ==========
 function showUpdateModal(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
@@ -913,8 +897,7 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
     });
   });
 }
-
-// ========== FORECAST (unchanged but keep existing functions) ==========
+// ========== FORECAST (keep original) ==========
 function getMonthSummary() { var summary = {}; for (var i=0;i<allMonths.length;i++) summary[allMonths[i]] = { runrate:0, project:0, total:0 };
   for (var i=0;i<forecastData.runrate.length;i++) { var r = forecastData.runrate[i]; if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; } }
   for (var i=0;i<forecastData.projects.length;i++) { var p = forecastData.projects[i]; if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; } }
@@ -1100,7 +1083,6 @@ function renderForecastTab() {
 }
 
 // ========== UPDATE HISTORY TAB ==========
-var historyFilter = 'all';
 function renderUpdateHistoryTab() {
   if (!dealerId) return;
   var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div class="ftabs">';
@@ -1177,7 +1159,7 @@ function buildBeforeAfterPipeline(oldData, newData) {
   if (!hasSnapshot) html += '<div style="font-size:12px;color:var(--text2);padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
   if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
-  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></table></thead>';
   html += '<tbody>';
   var fields = [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUserTH', label:'End User (TH)' },{ key:'status', label:'สถานะ' },{ key:'model', label:'Model หลัก' },{ key:'modelQty', label:'จำนวนรวม' },{ key:'forecastAmount', label:'มูลค่า (฿)' },{ key:'biddingDate', label:'Bidding Date' },{ key:'shipmentDate', label:'Shipment Date' },{ key:'tor', label:'TOR' },{ key:'nextAction', label:'Next Action' }];
   for (var i=0;i<fields.length;i++) {
@@ -1212,7 +1194,7 @@ function buildBeforeAfterForecast(oldData, newData) {
   var hasSnapshot = !!oldData;
   var html = '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔄 การเปลี่ยนแปลง</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
   if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
-  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>\)</thead>';
   html += '<tbody>';
   var fields = newData.type === 'runrate' ? [{ key:'model', label:'Model' },{ key:'qty', label:'จำนวน (ชิ้น)' },{ key:'month', label:'เดือน' }] : [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUser', label:'End User' },{ key:'month', label:'เดือน' }];
   for (var i=0;i<fields.length;i++) {
@@ -1242,40 +1224,33 @@ function buildBeforeAfterForecast(oldData, newData) {
   html += '</tbody></table></div>';
   return html;
 }
-function editUpdate(type, updateId) {
-  if (type === 'pipeline') showUpdateModal(updateId);
-  else showToast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา');
-}
+function editUpdate(type, updateId) { if (type === 'pipeline') showUpdateModal(updateId); else showToast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา'); }
 function cancelUpdate(type, dealerId, updateId) {
   if (!confirm('ยกเลิกการอัพเดทนี้? ข้อมูลจะถูกลบ')) return;
   var ref = type === 'pipeline' ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId) : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
   ref.delete().then(function() { showToast('🗑️ ยกเลิกการอัพเดทแล้ว'); renderUpdateHistoryTab(); }).catch(function(err) { showToast('❌ ผิดพลาด: ' + err.message); });
 }
 
-// ========== PIN CHECK & INIT ==========
+// ========== TOKEN VERIFICATION & INIT ==========
 var urlParams = new URLSearchParams(window.location.search);
-dealerId = urlParams.get('dealerId');
-uid = urlParams.get('uid');
-var pinFromHash = '';
-var hash = window.location.hash;
-if (hash && hash.indexOf('pin=') !== -1) { var pinMatch = hash.match(/pin=([^&]+)/); if (pinMatch) pinFromHash = decodeURIComponent(pinMatch[1]); }
-function checkPinAndProceed() {
-  if (pinFromHash && pinFromHash !== '') { loadAllData(); return; }
-  var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูล:\n(รหัสผ่านจากพนักงานขาย)');
-  if (enteredPin === null) { showAccessDenied('กรุณากรอกรหัสผ่านเพื่อดูข้อมูล'); return; }
-  var isValid = true;
-  if (isValid) { sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin); loadAllData(); }
-  else showAccessDenied('รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองอีกครั้ง');
+var token = urlParams.get('token');
+async function verifyAndProceed() {
+  if (!token) { showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย'); return; }
+  showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
+  var result = await verifyCustomerTokenV2(token);
+  if (!result.valid) { showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง'); return; }
+  dealerId = result.dealerId;
+  console.log('Token verified, dealerId:', dealerId);
+  document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
+  loadModels();
+  loadAllData();
 }
 function showAccessDenied(message) {
   var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
   var noticeArea = document.getElementById('noticeArea'); if (noticeArea) noticeArea.style.display = 'none';
   document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
 }
-if (!dealerId) {
-  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div></div>';
-  var tb = document.querySelector('.tab-bar'); if (tb) tb.style.display = 'none';
-} else { document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/'); loadModels(); checkPinAndProceed(); }
+if (!token) { showAccessDenied('ไม่พบ Token'); } else { verifyAndProceed(); }
 function renderCurrentTab() {
   if (currentTab === 'pipeline') renderPipelineTab();
   else if (currentTab === 'forecast') renderForecastTab();
