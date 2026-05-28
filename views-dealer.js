@@ -63,7 +63,91 @@ var generateCustomerToken = generateSimpleToken;
 var verifyCustomerToken = verifySimpleToken;
 
 // ================================================================
-// SHOW TOKEN MODAL & CREATE LINK (PIN + HASH)
+// JWT TOKEN WITH FIREBASE REGISTRY
+// ================================================================
+
+// JWT Secret (เก็บใน localStorage)
+function getJWTSecret() {
+  var saved = localStorage.getItem('jwt_secret');
+  if (!saved) {
+    saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('jwt_secret', saved);
+  }
+  return new TextEncoder().encode(saved);
+}
+var JWT_SECRET = getJWTSecret();
+
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function generateCustomerToken(dealerId, expiryDays) {
+  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
+  var encodedHeader = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  var encodedPayload = base64url(JSON.stringify(payload));
+  var signatureInput = encodedHeader + '.' + encodedPayload;
+  var signature = base64url(signatureInput + new TextDecoder().decode(JWT_SECRET));
+  return encodedHeader + '.' + encodedPayload + '.' + signature;
+}
+
+async function saveTokenToFirebase(token, dealerId, expiryDays, createdBy) {
+  var payload = JSON.parse(atob(token.split('.')[1]));
+  var tokenData = {
+    token: token,
+    dealerId: dealerId,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    expiresAt: new Date(payload.exp * 1000),
+    expiryDays: expiryDays,
+    createdBy: createdBy || (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? CURRENT_USER.displayName : 'system'),
+    isActive: true,
+    useCount: 0
+  };
+  var docRef = await db.collection('tokenRegistry').add(tokenData);
+  return { id: docRef.id, ...tokenData };
+}
+
+async function revokeTokenFirebase(tokenId) {
+  await db.collection('tokenRegistry').doc(tokenId).update({
+    isActive: false,
+    revokedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function revokeAllTokensForDealerFirebase(dealerId) {
+  var snapshot = await db.collection('tokenRegistry')
+    .where('dealerId', '==', dealerId)
+    .where('isActive', '==', true)
+    .get();
+  var batch = db.batch();
+  snapshot.forEach(function(doc) {
+    batch.update(doc.ref, { isActive: false, revokedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  });
+  await batch.commit();
+  return snapshot.size;
+}
+
+async function getTokensForDealer(dealerId) {
+  var snapshot = await db.collection('tokenRegistry')
+    .where('dealerId', '==', dealerId)
+    .orderBy('createdAt', 'desc')
+    .get();
+  var tokens = [];
+  snapshot.forEach(function(doc) {
+    var data = doc.data();
+    tokens.push({ id: doc.id, ...data });
+  });
+  return tokens;
+}
+
+async function createTokenAndSave(dealerId, expiryDays, createdBy) {
+  var token = await generateCustomerToken(dealerId, expiryDays);
+  var saved = await saveTokenToFirebase(token, dealerId, expiryDays, createdBy);
+  return { token: token, tokenId: saved.id };
+}
+
+// ================================================================
+// SHOW TOKEN MODAL & CREATE LINK (PIN ไม่ติดลิงก์ - ต้องใส่เอง)
 // ================================================================
 
 async function loadExistingTokens(dealerId) {
@@ -73,6 +157,7 @@ async function loadExistingTokens(dealerId) {
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   
+  // ดึง PIN ปัจจุบันจาก Firebase
   var currentPin = '';
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
@@ -80,24 +165,23 @@ async function loadExistingTokens(dealerId) {
   } catch(e) {}
   
   if (!currentPin) {
-    container.innerHTML = '<div class="hint">ℹ️ ยังไม่ได้ตั้ง PIN — กด "สร้างลิงก์" เพื่อสร้างลิงก์แรก</div>';
+    container.innerHTML = '<div class="hint">ℹ️ ยังไม่ได้ตั้ง PIN — กด "สร้างลิงก์" เพื่อตั้ง PIN และสร้างลิงก์แรก</div>';
     return;
   }
   
-  // สร้างลิงก์แบบ hash (#) เพื่อซ่อน PIN
+  // ✅ สร้างลิงก์แบบไม่มี PIN (ลูกค้าต้องพิมพ์เอาเอง)
   var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
-  if (currentPin) {
-    fullUrl += '#pin=' + encodeURIComponent(currentPin);
-  }
   
   var expiryDays = 30;
   var expiryDate = addD(_td(), expiryDays);
   
+  var pinStatus = `🔒 มี PIN (${currentPin}) - ลูกค้าต้องใส่รหัสจึงจะเห็นข้อมูล`;
+  
   container.innerHTML = `
     <div class="card" style="margin-bottom:8px;padding:10px;background:rgba(34,197,94,0.05)">
       <div style="display:flex; justify-content:space-between; margin-bottom:4px">
-        <span style="font-weight:700;color:#22c55e">✅ ลิงก์ปัจจุบัน (ใช้งานได้)</span>
-        <span style="font-size:10px;color:var(--text2)">PIN ซ่อนอยู่ใน #</span>
+        <span style="font-weight:700;color:#22c55e">✅ ลิงก์ปัจจุบัน</span>
+        <span style="font-size:10px;color:var(--text2)">${pinStatus}</span>
       </div>
       <div style="font-size:10px;word-break:break-all;background:var(--bg);padding:6px;border-radius:6px;margin-bottom:6px">${fullUrl}</div>
       <div style="display:flex;gap:6px;justify-content:space-between">
@@ -107,7 +191,7 @@ async function loadExistingTokens(dealerId) {
           <button class="btn bsm bd" onclick="window.open('${fullUrl}', '_blank')">🔗 ทดสอบเปิด</button>
         </div>
       </div>
-      <div class="hint" style="margin-top:6px;font-size:10px">💡 ถ้าต้องการเปลี่ยน PIN ให้กรอก PIN ใหม่แล้วกด "สร้างลิงก์" อีกครั้ง</div>
+      <div class="hint" style="margin-top:6px;font-size:10px">💡 แจ้ง PIN: <strong>${currentPin}</strong> แยกช่องทาง (LINE, โทร, Email) ห้ามใส่ในลิงก์เด็ดขาด</div>
     </div>
   `;
 }
@@ -134,22 +218,20 @@ async function createTokenAndLink(dealerId) {
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   
-  // สร้างลิงก์แบบ hash (#) เพื่อซ่อน PIN
+  // ✅ สร้างลิงก์แบบไม่มี PIN (ลูกค้าต้องพิมพ์เอาเอง)
   var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
-  if (pin) {
-    fullUrl += '#pin=' + encodeURIComponent(pin);
-  }
   
   var expiryDate = addD(_td(), expiryDays);
   
   var pinMessage = pin ? `<div style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
-    🔒 <strong>PIN สำหรับลูกค้า:</strong> <span style="font-size:16px;font-weight:700;letter-spacing:2px">${pin}</span>
-    <div class="hint">⚠️ แจ้ง PIN แยกช่องทาง ห้ามใส่ในลิงก์</div>
-  </div>` : '<div class="hint">ℹ️ ไม่ได้ตั้ง PIN ลูกค้าเข้าดูได้เลย</div>';
+    🔒 <strong>PIN สำหรับลูกค้า:</strong> <span style="font-size:20px;font-weight:700;letter-spacing:2px">${pin}</span>
+    <div class="hint" style="color:#f59e0b">⚠️ สำคัญ! แจ้ง PIN แยกช่องทาง (LINE, โทร, Email) ห้ามใส่ในลิงก์เด็ดขาด</div>
+    <div class="hint">💡 ลูกค้าจะต้องพิมพ์ PIN นี้เมื่อเปิดลิงก์ จึงจะเห็นข้อมูล</div>
+  </div>` : '<div class="hint">ℹ️ ไม่ได้ตั้ง PIN ลูกค้าเข้าดูข้อมูลได้เลย (ไม่ต้องใส่รหัส)</div>';
   
   openM('✅ สร้างลิงก์เรียบร้อย', `
     <div class="form-group">
-      <label>📋 ลิงก์สำหรับลูกค้า</label>
+      <label>📋 ลิงก์สำหรับลูกค้า (ไม่มี PIN ในลิงก์)</label>
       <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${fullUrl}</div>
     </div>
     <div class="form-row">
@@ -192,7 +274,7 @@ async function showDealerTokenModal(dealerId) {
       </div>
       <div class="form-group"><label>🔒 PIN (ไม่บังคับ)</label>
         <input type="password" id="tokenPin" class="form-control" value="${currentPin}" placeholder="กรอกรหัสผ่าน 4-6 หลัก" maxlength="6">
-        <div class="hint">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่าน</div>
+        <div class="hint">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่านเมื่อเปิดลิงก์ (PIN จะไม่ติดไปในลิงก์)</div>
       </div>
       <div class="form-group"><label>📝 หมายเหตุ</label>
         <input type="text" id="tokenNote" class="form-control" placeholder="เช่น ส่งให้คุณสมชาย">
@@ -941,14 +1023,14 @@ function buildDlrFcModel(modelList, totalFc, totalQty, d) {
     h += '<td style="text-align:center">' + m.qty + '</td>';
     h += '<td style="text-align:right">' + fmtMoneyStyled(m.amount) + '</td>';
     h += '<td style="font-size:.64rem">' + projNames + '</td>';
-    h += '</tr>';
+    h += '</table>';
   });
 
   h += '<tr style="font-weight:700;border-top:2px solid var(--border)">';
   h += '<td><td>รวม</td>';
   h += '<td style="text-align:center">' + totalQty + '</td>';
   h += '<td style="text-align:right">' + fmtMoneyStyled(totalFc) + '</td>';
-  h += '<tr></td>';
+  h += '</tr></td>';
   h += '</tbody></table></div>';
   return h;
 }
@@ -1014,7 +1096,7 @@ function buildDlrFcMonthly(pipes, d) {
     var tQty = 0;
     var tAmt = 0;
     h += '<tr>';
-    h += '<td><strong>' + sanitize(model) + '</strong></td>';
+    h += '<td><strong>' + sanitize(model) + '</strong></tr>';
     for (var mc = 0; mc < 12; mc++) {
       var cell = models[model][mc];
       var isCur = mc === now.getMonth();
@@ -1050,7 +1132,7 @@ function buildDlrFcMonthly(pipes, d) {
   }
   h += '<td style="text-align:right">' + fmtMoneyShort(grand) + '</td>';
   h += '</tr>';
-  h += '</tbody></table></div>';
+  h += '</tbody></tr></div>';
   return h;
 }
 
@@ -2157,7 +2239,7 @@ function buildFinalClientView(dealerId) {
   
   html += '  if(p.items && p.items.length){';
   html += '    h += "<div class=\"section\"><div class=\"section-title\">📦 รายการสินค้า ("+p.items.length+")</div>";';
-  html += '    h += "<table style=\"width:100%\"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคาต่อหน่วย</th><th>รวม</th></tr></thead><tbody>";';
+  html += '    h += "<table style=\"width:100%\"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th><th>ราคาต่อหน่วย</th><th>รวม</th><tr></thead><tbody>";';
   html += '    for(var i=0;i<p.items.length;i++){';
   html += '      var it = p.items[i];';
   html += '      var total = (Number(it.qty)||1) * (Number(it.price)||0);';

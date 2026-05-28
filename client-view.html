@@ -731,64 +731,49 @@ function loadAllData() {
 }
 function refreshData() { loadAllData(); }
 
-// ========== READ PIN FROM HASH (ซ่อน PIN) ==========
+// ========== PIN VERIFICATION (อ่าน PIN จาก Firebase) ==========
 var urlParams = new URLSearchParams(window.location.search);
 var tokenParam = urlParams.get('token');
 var dealerIdParam = urlParams.get('dealerId');
 var uidParam = urlParams.get('uid');
 
-// ✅ อ่าน PIN จาก hash (#) แทน query parameter
-var urlPin = '';
-var hash = window.location.hash;
-if (hash && hash.includes('pin=')) {
-  urlPin = hash.split('pin=')[1].split('&')[0];
-  console.log('PIN from hash:', urlPin ? 'YES' : 'NO');
-}
-
-// ✅ ฟังก์ชันอ่าน PIN จาก sessionStorage (เปิดลิงก์ซ้ำไม่ต้องใส่ PIN อีก)
+// ✅ เก็บ PIN ที่กรอกถูกต้องไว้ใน sessionStorage (ไม่ต้องพิมพ์ซ้ำ)
 function getStoredPin(dealerId) {
-  var saved = sessionStorage.getItem('dealer_pin_' + dealerId);
-  if (saved) {
-    console.log('PIN loaded from sessionStorage');
-    return saved;
-  }
-  return null;
+  return sessionStorage.getItem('dealer_pin_' + dealerId);
 }
 
-// ✅ ฟังก์ชันตรวจสอบ PIN (optional - ถ้าไม่มี PIN เข้าได้เลย)
-async function checkOptionalPin(dealerId) {
+function saveStoredPin(dealerId, pin) {
+  sessionStorage.setItem('dealer_pin_' + dealerId, pin);
+}
+
+// ✅ ตรวจสอบ PIN จาก Firebase
+async function checkPin(dealerId) {
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
     var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
     
-    // ไม่มี PIN → เข้าได้เลย (เหมือนเดิม)
+    console.log('PIN check - required:', requiredPin ? 'YES' : 'NO');
+    
+    // ไม่มี PIN → เข้าได้เลย
     if (!requiredPin || requiredPin === '') {
-      console.log('No PIN required');
+      console.log('No PIN required, loading data');
       return true;
     }
     
-    // ตรวจสอบ PIN จาก hash
-    if (urlPin && urlPin === requiredPin) {
-      // เก็บไว้ใน sessionStorage
-      sessionStorage.setItem('dealer_pin_' + dealerId, urlPin);
-      console.log('PIN from hash matched, saved to sessionStorage');
-      return true;
-    }
-    
-    // ตรวจสอบ PIN จาก sessionStorage
+    // มี PIN → ตรวจสอบจาก sessionStorage ก่อน
     var savedPin = getStoredPin(dealerId);
-    if (savedPin && savedPin === requiredPin) {
-      console.log('PIN from sessionStorage matched');
+    if (savedPin === requiredPin) {
+      console.log('PIN matched from sessionStorage');
       return true;
     }
     
-    // ไม่มี PIN ใน hash และ sessionStorage → แสดงหน้าต่างขอ PIN
+    // ไม่มีใน sessionStorage หรือไม่ตรง → แสดงหน้าต่างขอ PIN
     console.log('Showing PIN dialog');
     showPinDialog(dealerId, requiredPin);
     return false;
   } catch(err) {
-    console.warn('PIN check error:', err);
-    return true;
+    console.error('PIN check error:', err);
+    return true; // error ให้ผ่านไปก่อน
   }
 }
 
@@ -818,13 +803,20 @@ function showPinDialog(dealerId, requiredPin) {
     </div>
   `;
   document.getElementById('tabContent').innerHTML = html;
-  setTimeout(function() { var el = document.getElementById('pinInput'); if (el) el.focus(); }, 100);
+  
+  setTimeout(function() { 
+    var pinInput = document.getElementById('pinInput'); 
+    if (pinInput) pinInput.focus(); 
+  }, 100);
 }
 
 // ✅ ส่ง PIN ที่กรอก
 async function submitPinCode(dealerId) {
   var enteredPin = document.getElementById('pinInput').value.trim();
-  if (!enteredPin) { showToast('กรุณากรอกรหัสผ่าน'); return; }
+  if (!enteredPin) { 
+    showToast('กรุณากรอกรหัสผ่าน'); 
+    return; 
+  }
   
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
@@ -832,110 +824,7 @@ async function submitPinCode(dealerId) {
     
     if (enteredPin === requiredPin) {
       // เก็บ PIN ไว้ใน sessionStorage
-      sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin);
-      showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
-      var tabBar = document.querySelector('.tab-bar');
-      if (tabBar) tabBar.style.display = 'flex';
-      var noticeArea = document.getElementById('noticeArea');
-      if (noticeArea) noticeArea.style.display = 'block';
-      loadAllData();
-    } else {
-      showToast('❌ รหัสผ่านไม่ถูกต้อง');
-      document.getElementById('pinInput').value = '';
-      document.getElementById('pinInput').focus();
-    }
-  } catch(err) {
-    showToast('❌ เกิดข้อผิดพลาด: ' + err.message);
-  }
-}
-
-// ========== PIN VERIFICATION (OPTIONAL) ==========
-var urlParams = new URLSearchParams(window.location.search);
-var tokenParam = urlParams.get('token');
-var dealerIdParam = urlParams.get('dealerId');
-var uidParam = urlParams.get('uid');
-
-// อ่าน PIN จาก URL (รองรับทั้ง query และ hash)
-var urlPin = '';
-var hash = window.location.hash;
-if (hash && hash.includes('pin=')) {
-  urlPin = hash.split('pin=')[1].split('&')[0];
-}
-if (!urlPin) {
-  urlPin = urlParams.get('pin') || '';
-}
-
-async function checkOptionalPin(dealerId) {
-  try {
-    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
-    
-    console.log('PIN check - required:', requiredPin ? 'YES' : 'NO', 'urlPin:', urlPin ? 'YES' : 'NO');
-    
-    if (!requiredPin || requiredPin === '') {
-      console.log('No PIN required');
-      return true;
-    }
-    
-    if (urlPin && urlPin === requiredPin) {
-      console.log('PIN from URL matched');
-      sessionStorage.setItem('dealer_pin_' + dealerId, urlPin);
-      return true;
-    }
-    
-    var savedPin = sessionStorage.getItem('dealer_pin_' + dealerId);
-    if (savedPin && savedPin === requiredPin) {
-      console.log('PIN from sessionStorage matched');
-      return true;
-    }
-    
-    console.log('Showing PIN dialog');
-    showPinDialog(dealerId, requiredPin);
-    return false;
-  } catch(err) {
-    console.error('PIN check error:', err);
-    return true;
-  }
-}
-
-function showPinDialog(dealerId, requiredPin) {
-  var tabBar = document.querySelector('.tab-bar');
-  if (tabBar) tabBar.style.display = 'none';
-  var noticeArea = document.getElementById('noticeArea');
-  if (noticeArea) noticeArea.style.display = 'none';
-  
-  var html = `
-    <div class="empty-state" style="text-align:center;padding:60px 20px">
-      <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
-      <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
-      <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
-      <div style="max-width:250px;margin:0 auto">
-        <input type="password" id="pinInput" placeholder="รหัสผ่าน 4-6 หลัก" 
-               style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);
-                      background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" 
-               maxlength="6" autocomplete="off">
-      </div>
-      <div style="margin-top:20px">
-        <button class="btn btn-primary" onclick="submitPinCode('${dealerId}')" style="margin-right:8px">✅ ยืนยัน</button>
-        <button class="btn" onclick="location.reload()">ยกเลิก</button>
-      </div>
-      <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
-    </div>
-  `;
-  document.getElementById('tabContent').innerHTML = html;
-  setTimeout(function() { var el = document.getElementById('pinInput'); if (el) el.focus(); }, 100);
-}
-
-async function submitPinCode(dealerId) {
-  var enteredPin = document.getElementById('pinInput').value.trim();
-  if (!enteredPin) { showToast('กรุณากรอกรหัสผ่าน'); return; }
-  
-  try {
-    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
-    
-    if (enteredPin === requiredPin) {
-      sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin);
+      saveStoredPin(dealerId, enteredPin);
       showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
       var tabBar = document.querySelector('.tab-bar');
       if (tabBar) tabBar.style.display = 'flex';
@@ -955,6 +844,7 @@ async function submitPinCode(dealerId) {
 async function verifyAndProceed() {
   console.log('verifyAndProceed called');
   
+  // แบบที่ 1: ใช้ token (ระบบเก่า - รองรับความเข้ากันได้)
   if (tokenParam) {
     showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
     var parts = tokenParam.split('.');
@@ -965,22 +855,25 @@ async function verifyAndProceed() {
           dealerId = payload.dealerId;
           console.log('Token verified, dealerId:', dealerId);
           loadModels();
-          var pinOk = await checkOptionalPin(dealerId);
+          var pinOk = await checkPin(dealerId);
           if (pinOk) loadAllData();
           return;
         }
-      } catch(e) { console.warn('Token decode error:', e); }
+      } catch(e) {
+        console.warn('Token decode error:', e);
+      }
     }
     showAccessDenied('ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว');
     return;
   }
   
+  // แบบที่ 2: ใช้ dealerId โดยตรง (แบบหลัก)
   if (dealerIdParam) {
     dealerId = dealerIdParam;
     uid = uidParam || '';
     console.log('Using dealerId from URL:', dealerId);
     loadModels();
-    var pinOk = await checkOptionalPin(dealerId);
+    var pinOk = await checkPin(dealerId);
     if (pinOk) loadAllData();
     return;
   }
@@ -1197,7 +1090,7 @@ function viewTimelineChangeDetail(pipeId, eventId) {
   var newItems = (after.items || []).map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
   var oldItems = before && before.items ? before.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : null;
   var itemsChanged = before && oldItems !== newItems;
-  html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า</td>';
+  html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า<\/td>';
   if (before) html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
   html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
   html += '</tr>';
@@ -1890,9 +1783,9 @@ function buildBeforeAfterForecast(oldData, newData) {
     var rowStyle2 = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
     html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า<\/td>';
-    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<tr><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
-    html += '<tr>';
+    html += '</tr>';
   }
   html += '</tbody></table></div>';
   return html;
