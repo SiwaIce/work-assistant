@@ -275,7 +275,169 @@ async function loadExistingTokens(dealerId) {
   html += '</div><div id="tokenListDetail">' + renderTokenList(active) + '</div>';
   container.innerHTML = html;
 }
+// ================================================================
+// SHOW TOKEN MODAL & CREATE LINK (VERSION 2 - ใช้ dealerId + PIN)
+// ================================================================
 
+async function showDealerTokenModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var currentPin = '';
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
+  } catch(e) {
+    console.warn('Error loading PIN:', e);
+  }
+  
+  var html = `
+    <div style="max-width:500px">
+      <div class="form-group"><label>🏪 Dealer</label><div><strong>${sanitize(dealer.name)}</strong></div></div>
+      <div class="form-group"><label>⏰ วันหมดอายุ</label>
+        <select id="tokenExpiryDays" class="form-control">
+          <option value="7">7 วัน</option>
+          <option value="14">14 วัน</option>
+          <option value="30" selected>30 วัน (แนะนำ)</option>
+          <option value="60">60 วัน</option>
+          <option value="90">90 วัน</option>
+          <option value="180">180 วัน</option>
+          <option value="365">1 ปี (ถาวร)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>🔒 PIN (ไม่บังคับ)</label>
+        <input type="password" id="tokenPin" class="form-control" value="${currentPin}" placeholder="กรอกรหัสผ่าน 4-6 หลัก" maxlength="6">
+        <div class="hint">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่าน</div>
+      </div>
+      <div class="form-group"><label>📝 หมายเหตุ</label>
+        <input type="text" id="tokenNote" class="form-control" placeholder="เช่น ส่งให้คุณสมชาย">
+      </div>
+      <div class="bg" style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn bp" onclick="createTokenAndLink('${dealerId}')" style="flex:1">🔗 สร้างลิงก์</button>
+        <button class="btn bd" onclick="revokeDealerPin('${dealerId}')" style="flex:1">🗑️ ล้าง PIN</button>
+      </div>
+      <div id="tokenListArea" style="margin-top:16px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">📋 ลิงก์ที่สร้างแล้ว:</div>
+        <div id="existingTokenList">กำลังโหลด...</div>
+      </div>
+    </div>
+  `;
+  openM('🔗 สร้างลิงก์ปลอดภัยสำหรับ ' + dealer.name, html);
+  loadExistingTokens(dealerId);
+}
+
+async function createTokenAndLink(dealerId) {
+  var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
+  var pin = document.getElementById('tokenPin').value.trim();
+  var note = document.getElementById('tokenNote').value.trim();
+  var createdBy = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong';
+  
+  // บันทึก PIN ลง dealerUpdates
+  if (pin) {
+    await db.collection('dealerUpdates').doc(dealerId).set({ 
+      pin: pin,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } else {
+    await db.collection('dealerUpdates').doc(dealerId).set({ 
+      pin: '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
+  if (pin) {
+    fullUrl += '&pin=' + encodeURIComponent(pin);
+  }
+  
+  var expiryDate = addD(_td(), expiryDays);
+  
+  var pinMessage = pin ? `<div style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
+    🔒 <strong>PIN สำหรับลูกค้า:</strong> <span style="font-size:16px;font-weight:700;letter-spacing:2px">${pin}</span>
+    <div class="hint">⚠️ แจ้ง PIN แยกช่องทาง ห้ามใส่ในลิงก์</div>
+  </div>` : '<div class="hint">ℹ️ ไม่ได้ตั้ง PIN ลูกค้าเข้าดูได้เลย</div>';
+  
+  openM('✅ สร้างลิงก์เรียบร้อย', `
+    <div class="form-group">
+      <label>📋 ลิงก์สำหรับลูกค้า</label>
+      <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${fullUrl}</div>
+    </div>
+    <div class="form-row">
+      <div><label>📅 หมดอายุ</label><div>${expiryDate} (${expiryDays} วัน)</div></div>
+      <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
+    </div>
+    ${pinMessage}
+    <div class="bg" style="margin-top:12px">
+      <button class="btn bp" onclick="copyToClipboard('${fullUrl}')">📋 คัดลอกลิงก์</button>
+      <button class="btn bo" onclick="showDealerTokenModal('${dealerId}')">↩️ กลับ</button>
+    </div>
+  `);
+}
+
+async function loadExistingTokens(dealerId) {
+  var container = document.getElementById('existingTokenList');
+  if (!container) return;
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  var currentPin = '';
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
+  } catch(e) {}
+  
+  if (!currentPin) {
+    container.innerHTML = '<div class="hint">ℹ️ ยังไม่ได้ตั้ง PIN — กด "สร้างลิงก์" เพื่อสร้างลิงก์แรก</div>';
+    return;
+  }
+  
+  var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
+  if (currentPin) {
+    fullUrl += '&pin=' + encodeURIComponent(currentPin);
+  }
+  
+  var expiryDays = 30;
+  var expiryDate = addD(_td(), expiryDays);
+  
+  container.innerHTML = `
+    <div class="card" style="margin-bottom:8px;padding:10px;background:rgba(34,197,94,0.05)">
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px">
+        <span style="font-weight:700;color:#22c55e">✅ ลิงก์ปัจจุบัน (ใช้งานได้)</span>
+        <span style="font-size:10px;color:var(--text2)">สร้างล่าสุด</span>
+      </div>
+      <div style="font-size:10px;word-break:break-all;background:var(--bg);padding:6px;border-radius:6px;margin-bottom:6px">${fullUrl}</div>
+      <div style="display:flex;gap:6px;justify-content:space-between">
+        <span style="font-size:10px">หมดอายุ: ${expiryDate} (${expiryDays} วัน)</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn bsm bp" onclick="copyToClipboard('${fullUrl.replace(/'/g, "\\'")}')">📋 คัดลอก</button>
+          <button class="btn bsm bd" onclick="window.open('${fullUrl}', '_blank')">🔗 ทดสอบเปิด</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:6px;font-size:10px">💡 ถ้าต้องการเปลี่ยน PIN ให้กรอก PIN ใหม่แล้วกด "สร้างลิงก์" อีกครั้ง</div>
+    </div>
+  `;
+}
+
+async function revokeDealerPin(dealerId) {
+  if (!confirm('⚠️ ล้าง PIN ของ Dealer นี้? ลิงก์เดิมจะใช้งานไม่ได้อีก (ลูกค้าจะไม่ต้องใส่ PIN)')) return;
+  
+  try {
+    await db.collection('dealerUpdates').doc(dealerId).set({ 
+      pin: '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    toast('🗑️ ล้าง PIN แล้ว');
+    closeModal();
+    showDealerTokenModal(dealerId);
+  } catch(err) {
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
 function renderTokenList(tokens) {
   if (tokens.length === 0) return '<div class="hint">ไม่มีลิงก์</div>';
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
