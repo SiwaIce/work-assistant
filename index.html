@@ -205,6 +205,7 @@ var auth = firebase.auth();
 <script src="firebase-sync.js"></script>
 <script src="views-today.js"></script>
 <script src="modals.js"></script>   <!-- ✅ ย้ายมาที่นี่ -->
+<script src="https://cdn.jsdelivr.net/npm/jose@4.14.4/dist/browser/jose.min.js"></script>
 <script src="views-dealer.js"></script>
 <script src="views-pipeline.js"></script>
 <script src="views-visit.js"></script>
@@ -213,9 +214,7 @@ var auth = firebase.auth();
 <script src="export.js"></script>
 <script src="admin.js"></script>
 <script src="features.js"></script>
-<script src="app.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jose@4.14.4/dist/browser/index.js"></script>
-<div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
+<script src="app.js"></script><div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
   <div class="qcmd-box">
     <div class="qcmd-input-wrap">
       <span>🔍</span>
