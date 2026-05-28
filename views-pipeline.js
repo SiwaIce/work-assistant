@@ -11,6 +11,10 @@ var pipeBoardDealer = 'all';
 var pipeBoardMode = 'active';
 var pipeBoardCollapsed = {};
 
+// ✅ ตัวแปรสำหรับ Forecast Tab (Pending / Rejected)
+var forecastTab = 'pending';
+var selectedForecastUpdates = {};
+
 // ================================================================
 // PIPELINE LIST
 // ================================================================
@@ -205,15 +209,12 @@ function renderPipeTable(pipes) {
     var isWon = (p.status === 'win' || p.status === 'ordered' || p.status === 'delivered');
     var isLost = (p.status === 'lost');
     
-    // Age calculation
     var regDate = p.registerDate || (p.created ? p.created.split('T')[0] : '');
     var ageDays = regDate ? daysBetween(regDate, _td()) : 0;
     var ageClass = ageDays > 180 ? 'very-old' : (ageDays > 90 ? 'old' : '');
     
-    // Model text (support multi-model)
     var modelText = getPipeModelSummary(p);
     
-    // Next Action HTML
     var nextHtml = '';
     if (p.nextAction) {
       var naClass = '';
@@ -247,9 +248,10 @@ function renderPipeTable(pipes) {
       '</tr>';
   }
   
-  html += '</tbody></tr></div>';
+  html += '</tbody></table></div>';
   return html;
 }
+
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 function dlPipeCSV() {
@@ -347,7 +349,7 @@ function rPipeDet(el) {
   }
   html += '</div></div>';
 
-// Updates Timeline (พร้อมแก้ไขและลบ)
+  // Updates Timeline
   html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml"><button class="btn bsm bp" onclick="showPipeLogM(\'' + p.id + '\')">➕ Update</button></span></h2>';
   if (logs.length) {
     html += '<div class="tl">';
@@ -360,9 +362,7 @@ function rPipeDet(el) {
       html += '<div class="td2">' + fDT(l.date) + '</div>';
       html += '<div style="display:flex;gap:4px">';
       if (isEditable) {
-        // ปุ่มแก้ไข
         html += '<button class="btn bsm bo" onclick="event.stopPropagation();editPipelineLog(\'' + l.id + '\', \'' + p.id + '\', \'' + sanitize(l.content || '').replace(/'/g, "\\'") + '\', \'' + (l.type || 'update') + '\', \'' + (l.date || '') + '\')" style="padding:1px 6px" title="แก้ไข">✏️</button>';
-        // ปุ่มลบ
         html += '<button class="btn bsm bd" onclick="event.stopPropagation();deletePipelineLog(\'' + l.id + '\', \'' + p.id + '\')" style="padding:1px 4px" title="ลบ">🗑️</button>';
       } else {
         html += '<span style="font-size:10px;color:var(--text2);padding:2px 6px">🔒</span>';
@@ -626,9 +626,6 @@ function getPipeName(statusId) {
   return statusId;
 }
 
-// ================================================================
-// INLINE PIPE COMMENT
-// ================================================================
 function addQuickPipeComment(pipeId) {
   var text = document.getElementById('quickPipeComment')?.value.trim();
   if (!text) { toast('กรุณาพิมพ์ comment'); return; }
@@ -648,9 +645,6 @@ function addQuickPipeFollowup(pipeId) {
   render();
 }
 
-// ================================================================
-// PIPELINE DASHBOARD
-// ================================================================
 function rPipeDashboard(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
   var allPipes = ST.getAll('pipeline');
@@ -679,6 +673,7 @@ function rPipeDashboard(el) {
     '<div class="bg"><button class="btn bp" onclick="go(\'pipeline\')">📊 ดูทั้งหมด</button>' +
     '<button class="btn bo" onclick="go(\'pipeBoard\')">📋 Board</button></div></div>';
 }
+
 // ================================================================
 // PIPELINE ACTION ITEMS
 // ================================================================
@@ -912,19 +907,14 @@ function getPipeTotalQty(p) {
 
 function getPipeModelSummary(p) {
   if (!p) return '';
-  // ถ้ามี items (multi-model)
   if (p.items && p.items.length > 0) {
     return p.items.map(function(it) {
       return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : '');
     }).join(', ');
   }
-  // แบบเดิม (single model)
   return (p.model || '') + (p.modelQty > 1 ? ' x' + p.modelQty : '');
 }
 
-// ================================================================
-// SHOW ADD PIPE ACTION MODAL
-// ================================================================
 function showAddPipeActionM(pipeId) {
   var pipe = ST.getOne('pipeline', pipeId);
   if (!pipe) return;
@@ -995,8 +985,9 @@ function fmtMoneyStyled(amount) {
   }
   return '<span class="val-normal">' + text + ' ฿</span>';
 }
+
 // ================================================================
-// EDIT PIPELINE LOG (INLINE MODAL)
+// EDIT PIPELINE LOG
 // ================================================================
 function editPipelineLog(logId, pipeId, currentText, currentType, currentDate) {
   var logTypes = [
@@ -1061,109 +1052,10 @@ function deletePipelineLog(logId, pipeId) {
 }
 
 // ================================================================
-// QUICK PIPE COMMENT & FOLLOWUP
+// CUSTOMER FORECAST UPDATES (APPROVE PAGE)
 // ================================================================
-function addQuickPipeComment(pipeId) {
-  var text = document.getElementById('quickPipeComment')?.value.trim();
-  if (!text) { toast('กรุณาพิมพ์ comment'); return; }
-  
-  ST.add('pipeLog', {
-    pipeId: pipeId,
-    type: 'note',
-    content: text,
-    date: _nw()
-  });
-  
-  document.getElementById('quickPipeComment').value = '';
-  toast('💬 เพิ่ม comment แล้ว');
-  render();
-}
 
-function addQuickPipeFollowup(pipeId) {
-  var note = prompt('📞 รายละเอียดการติดตาม:', '');
-  if (!note) return;
-  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
-  
-  ST.add('pipeLog', {
-    pipeId: pipeId,
-    type: 'followup',
-    content: note + (dueDate ? ' (นัดติดตาม ' + dueDate + ')' : ''),
-    date: _nw()
-  });
-  
-  if (dueDate) {
-    ST.update('pipeline', pipeId, { followupDate: dueDate });
-  }
-  
-  toast('📞 บันทึกนัดติดตามแล้ว');
-  render();
-}
-// ✅ โหลด Forecast ทั้งหมด (รวม rejected)
-function loadAllForecastUpdates() {
-  var dealers = ST.getAll('dealers');
-  var allUpdates = [];
-  
-  return Promise.all(dealers.map(function(dealer) {
-    return db.collection('dealerUpdates').doc(dealer.id).collection('forecast')
-      .get()
-      .then(function(snapshot) {
-        snapshot.forEach(function(doc) {
-          var data = doc.data();
-          data.id = doc.id;
-          data.dealerName = dealer.name;
-          data.dealerId = dealer.id;
-          allUpdates.push(data);
-        });
-      });
-  })).then(function() {
-    return allUpdates;
-  });
-}
-
-// ✅ แสดง Forecast ที่ถูกปฏิเสธ (rejected)
-function renderRejectedForecastList(updates) {
-  var rejected = updates.filter(function(u) { return u._status === 'rejected'; });
-  if (!rejected.length) return '';
-  
-  var html = '<div class="card" style="border-color:#ef4444; margin-top:16px">';
-  html += '<h2 style="color:#ef4444">❌ แผนการสั่งซื้อที่ถูกปฏิเสธ (' + rejected.length + ')</h2>';
-  html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">⚠️ รายการเหล่านี้ไม่ถูกนับรวมในสรุป สามารถกด "ส่งใหม่" เพื่อให้พนักงานขายตรวจสอบอีกครั้ง</div>';
-  
-  for (var i = 0; i < rejected.length; i++) {
-    var u = rejected[i];
-    var typeIcon = u.type === 'runrate' ? '📦' : '🏢';
-    var typeText = u.type === 'runrate' ? 'Run Rate' : 'โครงการ';
-    
-    html += '<div class="li" style="border-left:3px solid #ef4444; margin-bottom:8px">';
-    html += '<div class="lm" style="flex:1">';
-    html += '<div class="lt">' + typeIcon + ' ' + sanitize(u.dealerName) + ' - ' + typeText + ' <span class="tag tag-cancelled">❌ ปฏิเสธ</span></div>';
-    
-    if (u.type === 'runrate') {
-      html += '<div class="ls">📦 ' + sanitize(u.model || '-') + ' x' + (u.qty || 0) + ' ชิ้น • เดือน ' + (u.month || '-') + '</div>';
-    } else {
-      html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
-      if (u.endUser) html += '<div class="ls">👤 ' + sanitize(u.endUser) + '</div>';
-      html += '<div class="ls">📦 ' + (u.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
-      html += '<div class="ls">📅 เดือน ' + (u.month || '-') + '</div>';
-    }
-    
-    if (u._rejectedAt) {
-      var rejectDate = u._rejectedAt.seconds ? new Date(u._rejectedAt.seconds * 1000).toLocaleString() : u._rejectedAt;
-      html += '<div class="ls">⏰ ปฏิเสธเมื่อ: ' + rejectDate + '</div>';
-    }
-    
-    html += '</div>';
-    html += '<div class="bg" style="flex-shrink:0">';
-    html += '<button class="btn bsm bs" onclick="resubmitForecast(\'' + u.dealerId + '\', \'' + u.id + '\')">🔄 ส่งใหม่</button>';
-    html += '<button class="btn bsm bo" onclick="viewForecastDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
-    html += '</div></div>';
-  }
-  
-  html += '</div>';
-  return html;
-}
-
-// ✅ ส่ง Forecast ที่ถูกปฏิเสธกลับไปให้พนักงานขายตรวจสอบใหม่
+// ✅ ฟังก์ชันสำหรับ client (ลูกค้ากดส่งใหม่)
 async function resubmitForecast(dealerId, updateId) {
   if (!confirm('ส่งแผนการสั่งซื้อนี้ให้พนักงานขายตรวจสอบใหม่อีกครั้ง?')) return;
   
@@ -1181,7 +1073,25 @@ async function resubmitForecast(dealerId, updateId) {
     toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   }
 }
-var forecastTab = 'pending';
+
+// ✅ ฟังก์ชันสำหรับ admin (กด restore)
+async function restoreForecastUpdate(dealerId, updateId) {
+  if (!confirm('ส่งคำขอนี้กลับไปให้ตรวจสอบใหม่อีกครั้ง?')) return;
+  
+  try {
+    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+    await updateRef.update({
+      _status: 'pending',
+      _restoredAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _restoredBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
+    });
+    
+    toast('🔄 ส่งกลับไปตรวจสอบใหม่แล้ว');
+    rCustomerForecastUpdates(document.getElementById('ct'));
+  } catch(err) {
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
 
 function rCustomerForecastUpdates(el) {
   document.getElementById('pgT').textContent = '📦 แผนการสั่งซื้อจากลูกค้า';
@@ -1229,7 +1139,6 @@ function rCustomerForecastUpdates(el) {
       badge.style.display = pendingCount ? 'inline' : 'none';
     }
     
-    // ✅ แยกตามสถานะ
     var pendingUpdates = allUpdates.filter(function(u) { return u._status === 'pending'; });
     var rejectedUpdates = allUpdates.filter(function(u) { return u._status === 'rejected'; });
     
@@ -1240,17 +1149,16 @@ function rCustomerForecastUpdates(el) {
     
     var html = '<div class="card"><h2>📦 แผนการสั่งซื้อจากลูกค้า</h2>';
     
-    // ✅ แท็บสำหรับสลับระหว่าง Pending และ Rejected
+    // แท็บ
     html += '<div class="ftabs" style="margin-bottom:12px">';
-    html += '<div class="ftab ' + (forecastTab === 'pending' ? 'act' : '') + '" onclick="forecastTab=\'pending\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">⏳ รอตรวจสอบ (' + pendingCount + ')</div>';
-    html += '<div class="ftab ' + (forecastTab === 'rejected' ? 'act' : '') + '" onclick="forecastTab=\'rejected\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">❌ ปฏิเสธ (' + rejectedCount + ')</div>';
+    html += '<div class="ftab ' + (forecastTab === 'pending' ? 'act' : '') + '" onclick="forecastTab=\'pending\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">⏳ รอตรวจสอบ (' + pendingUpdates.length + ')</div>';
+    html += '<div class="ftab ' + (forecastTab === 'rejected' ? 'act' : '') + '" onclick="forecastTab=\'rejected\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">❌ ปฏิเสธ (' + rejectedUpdates.length + ')</div>';
     html += '</div>';
     
-    // ✅ Batch actions (เฉพาะ pending)
     if (forecastTab === 'pending') {
       html += '<div class="bg" style="margin-bottom:12px">';
       html += '<button class="btn bp" onclick="batchApproveForecastSelected()" style="background:#22c55e">✅ Approve ที่เลือก</button>';
-      html += '<button class="btn bs" onclick="batchApproveForecastAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
+      html += '<button class="btn bs" onclick="batchApproveForecastAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingUpdates.length + ')</button>';
       html += '<button class="btn bsm bo" onclick="toggleSelectAllForecast()">☑️ เลือกทั้งหมด</button>';
       html += '</div>';
     }
@@ -1258,7 +1166,6 @@ function rCustomerForecastUpdates(el) {
     html += '<div id="forecastUpdatesList">';
     
     if (forecastTab === 'pending') {
-      // ✅ แสดง pending updates (เหมือนเดิม)
       for (var i = 0; i < pendingUpdates.length; i++) {
         var u = pendingUpdates[i];
         var isSelected = selectedForecastUpdates[u.id] === true;
@@ -1291,7 +1198,7 @@ function rCustomerForecastUpdates(el) {
         html += '</div></div>';
       }
     } else {
-      // ✅ แสดง rejected updates (พร้อมปุ่ม Restore)
+      // แสดง rejected updates
       for (var i = 0; i < rejectedUpdates.length; i++) {
         var u = rejectedUpdates[i];
         var updateDate = u._updatedAt ? (u._updatedAt.seconds ? new Date(u._updatedAt.seconds * 1000).toLocaleString() : u._updatedAt) : '-';
@@ -1327,27 +1234,169 @@ function rCustomerForecastUpdates(el) {
   });
 }
 
-// ✅ ฟังก์ชัน Restore Forecast (เปลี่ยนจาก rejected กลับเป็น pending)
-async function restoreForecastUpdate(dealerId, updateId) {
-  if (!confirm('ส่งคำขอนี้กลับไปให้ลูกค้าตรวจสอบใหม่อีกครั้ง?')) return;
+function toggleForecastSelection(updateId, isChecked) {
+  selectedForecastUpdates[updateId] = isChecked;
+  updateForecastBatchButtonBadge();
+}
+
+function updateForecastBatchButtonBadge() {
+  var count = 0;
+  for (var k in selectedForecastUpdates) if (selectedForecastUpdates[k]) count++;
+  var btn = document.querySelector('button[onclick="batchApproveForecastSelected()"]');
+  if (btn) btn.innerHTML = '✅ Approve ที่เลือก (' + count + ')';
+}
+
+function toggleSelectAllForecast() {
+  var checkboxes = document.querySelectorAll('.forecast-checkbox');
+  var allChecked = true;
+  for (var i = 0; i < checkboxes.length; i++) {
+    if (!checkboxes[i].checked) { allChecked = false; break; }
+  }
+  var newState = !allChecked;
+  for (var i = 0; i < checkboxes.length; i++) {
+    checkboxes[i].checked = newState;
+    selectedForecastUpdates[checkboxes[i].dataset.id] = newState;
+  }
+  updateForecastBatchButtonBadge();
+}
+
+function batchApproveForecastSelected() {
+  var selectedIds = [];
+  var selectedDealers = {};
+  var checkboxes = document.querySelectorAll('.forecast-checkbox:checked');
   
-  try {
-    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
-    await updateRef.update({
-      _status: 'pending',
-      _restoredAt: firebase.firestore.FieldValue.serverTimestamp(),
-      _restoredBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
+  for (var i = 0; i < checkboxes.length; i++) {
+    var updateId = checkboxes[i].dataset.id;
+    var dealerId = checkboxes[i].dataset.dealer;
+    if (!selectedDealers[dealerId]) selectedDealers[dealerId] = [];
+    selectedDealers[dealerId].push(updateId);
+    selectedIds.push(updateId);
+  }
+  
+  if (selectedIds.length === 0) { toast('⚠️ กรุณาเลือกรายการ'); return; }
+  if (!confirm('✅ อนุมัติ ' + selectedIds.length + ' รายการ?')) return;
+  
+  var completed = 0, errors = 0;
+  
+  for (var dealerId in selectedDealers) {
+    selectedDealers[dealerId].forEach(function(updateId) {
+      approveForecastUpdate(dealerId, updateId, function(success) {
+        completed++;
+        if (!success) errors++;
+        if (completed === selectedIds.length) {
+          toast('✅ อนุมัติ ' + (selectedIds.length - errors) + ' รายการ');
+          setTimeout(function() { render(); }, 1000);
+        }
+      });
     });
-    
-    toast('🔄 ส่งกลับไปตรวจสอบใหม่แล้ว');
-    // รีเฟรชหน้า
-    rCustomerForecastUpdates(document.getElementById('ct'));
-  } catch(err) {
-    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   }
 }
-// ใน rCustomerForecastUpdates หลังจากแสดง pending ให้เพิ่มส่วน rejected
-var rejectedUpdates = allUpdates.filter(function(u) { return u._status === 'rejected'; });
-if (rejectedUpdates.length) {
-  html += renderRejectedForecastList(rejectedUpdates);
+
+function batchApproveForecastAll() {
+  var checkboxes = document.querySelectorAll('.forecast-checkbox');
+  if (checkboxes.length === 0) { toast('⚠️ ไม่มีรายการ'); return; }
+  if (!confirm('✅ อนุมัติทั้งหมด ' + checkboxes.length + ' รายการ?')) return;
+  
+  var completed = 0, errors = 0;
+  
+  for (var i = 0; i < checkboxes.length; i++) {
+    var updateId = checkboxes[i].dataset.id;
+    var dealerId = checkboxes[i].dataset.dealer;
+    approveForecastUpdate(dealerId, updateId, function(success) {
+      completed++;
+      if (!success) errors++;
+      if (completed === checkboxes.length) {
+        toast('✅ อนุมัติทั้งหมด ' + (checkboxes.length - errors) + ' รายการ');
+        setTimeout(function() { render(); }, 1000);
+      }
+    });
+  }
+}
+
+function approveForecastUpdate(dealerId, updateId, callback) {
+  if (!CURRENT_USER) {
+    if (callback) callback(false);
+    toast('❌ กรุณา login');
+    return;
+  }
+  
+  var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+  
+  updateRef.get().then(function(doc) {
+    if (!doc.exists) { if (callback) callback(false); return; }
+    
+    var updateData = doc.data();
+    
+    delete updateData._customerUpdate;
+    delete updateData._updatedAt;
+    delete updateData._status;
+    delete updateData._originalDealerId;
+    delete updateData._updateType;
+    
+    var customerForecasts = JSON.parse(localStorage.getItem('v7_customer_forecasts') || '[]');
+    updateData.approvedAt = new Date().toISOString();
+    updateData.approvedBy = CURRENT_USER.uid;
+    customerForecasts.push(updateData);
+    localStorage.setItem('v7_customer_forecasts', JSON.stringify(customerForecasts));
+    
+    updateRef.update({ 
+      _status: 'approved', 
+      _approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _approvedBy: CURRENT_USER.uid
+    }).then(function() {
+      if (callback) callback(true);
+      toast('✅ อนุมัติ Forecast แล้ว');
+    }).catch(function(err) {
+      if (callback) callback(false);
+      toast('❌ ผิดพลาด: ' + err.message);
+    });
+  }).catch(function(err) {
+    if (callback) callback(false);
+    toast('❌ ผิดพลาด: ' + err.message);
+  });
+}
+
+function rejectForecastUpdate(dealerId, updateId) {
+  if (!confirm('❌ ปฏิเสธ?')) return;
+  
+  db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId)
+    .update({ _status: 'rejected', _rejectedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(function() {
+      toast('❌ ปฏิเสธแล้ว');
+      render();
+    });
+}
+
+function viewForecastDetail(dealerId, updateId) {
+  db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId).get().then(function(doc) {
+    if (!doc.exists) return;
+    var data = doc.data();
+    
+    var html = '<div style="max-width:500px">';
+    html += '<h3>📦 รายละเอียดแผนการสั่งซื้อ</h3>';
+    html += '<div><strong>🏪 Dealer:</strong> ' + sanitize(data.dealerName || dealerId) + '</div>';
+    html += '<div><strong>📅 เดือน:</strong> ' + (data.month || '-') + '</div>';
+    html += '<div><strong>📊 ประเภท:</strong> ' + (data.type === 'runrate' ? 'Run Rate' : 'โครงการ') + '</div>';
+    
+    if (data.type === 'runrate') {
+      html += '<div><strong>📦 Model:</strong> ' + sanitize(data.model || '-') + '</div>';
+      html += '<div><strong>🔢 จำนวน:</strong> ' + (data.qty || 0) + ' ชิ้น</div>';
+    } else {
+      html += '<div><strong>📋 โครงการ:</strong> ' + sanitize(data.projectName || '-') + '</div>';
+      if (data.endUser) html += '<div><strong>👤 End User:</strong> ' + sanitize(data.endUser) + '</div>';
+      html += '<div><strong>📦 สินค้า:</strong></div><ul>';
+      (data.items || []).forEach(function(it) {
+        html += '<li>' + sanitize(it.model) + ' x' + (it.qty || 1) + '</li>';
+      });
+      html += '</ul>';
+    }
+    
+    html += '<div class="fm-actions" style="margin-top:16px">';
+    html += '<button class="btn bs" onclick="closeM();approveForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">✅ อนุมัติ</button>';
+    html += '<button class="btn bd" onclick="closeM();rejectForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">❌ ปฏิเสธ</button>';
+    html += '<button class="btn" onclick="closeM()">ปิด</button>';
+    html += '</div></div>';
+    
+    openM('📦 รายละเอียด', html);
+  });
 }
