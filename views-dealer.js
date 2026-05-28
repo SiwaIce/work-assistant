@@ -460,10 +460,10 @@ function rDealerDet(el) {
 <div class="bg">
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
-<button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 ลิงก์ปลอดภัย</button>
+<button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 สร้างลิงก์</button>
 <button class="btn bsm bo" onclick="showChangePinModal('${d.id}')">🔒 PIN</button>
+  <button class="btn bsm bo" onclick="showTokenList('${d.id}')">📋 ลิงก์ที่สร้าง</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
-  <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
 <button class="btn bsm bp" onclick="syncDealerPipelineToCustomer('${d.id}')" title="Sync Pipeline ให้ลูกค้า">🔄 Sync</button>
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
@@ -2529,4 +2529,80 @@ async function savePinOnly(dealerId) {
   } catch(e) {
     toast('❌ เกิดข้อผิดพลาด: ' + e.message);
   }
+}
+// ================================================================
+// SHOW TOKEN LIST (ดูรายการลิงก์ที่สร้างแล้ว)
+// ================================================================
+
+function showTokenList(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+  var tokens = [];
+  for (var id in registry) {
+    if (registry[id].dealerId === dealerId) tokens.push(registry[id]);
+  }
+  tokens.sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  
+  var html = '<div style="max-width:500px">';
+  html += '<div class="form-group"><label>🏪 Dealer</label><div><strong>' + sanitize(dealer.name) + '</strong></div></div>';
+  
+  if (tokens.length === 0) {
+    html += '<div class="empty-state" style="padding:20px"><div class="empty-state-icon">🔗</div><div>ยังไม่มีลิงก์ที่สร้าง</div><div class="hint">กดปุ่ม "🔗 สร้างลิงก์ปลอดภัย" เพื่อสร้างลิงก์แรก</div></div>';
+  } else {
+    html += '<div style="margin-bottom:12px"><span class="tag tag-count">' + tokens.length + ' ลิงก์</span></div>';
+    html += '<div style="max-height:400px;overflow-y:auto">';
+    
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      var isActive = t.isActive;
+      var isExpired = new Date(t.expiresAt) < new Date();
+      var statusColor = '';
+      var statusText = '';
+      
+      if (!isActive) {
+        statusColor = '#ef4444';
+        statusText = '❌ ถูกเพิกถอน';
+      } else if (isExpired) {
+        statusColor = '#64748b';
+        statusText = '⏰ หมดอายุแล้ว';
+      } else {
+        statusColor = '#22c55e';
+        statusText = '✅ ใช้งานได้';
+      }
+      
+      var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(t.token);
+      var daysLeft = Math.ceil((new Date(t.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+      
+      html += '<div class="card" style="margin-bottom:12px;padding:12px">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">';
+      html += '<span style="font-weight:700; color:' + statusColor + '">' + statusText + '</span>';
+      html += '<span style="font-size:11px; color:var(--text2)">สร้าง: ' + fD(t.createdAt.split('T')[0]) + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:11px; word-break:break-all; background:var(--bg); padding:8px; border-radius:8px; margin-bottom:6px">';
+      html += '<span style="color:var(--text2)">🔗 </span>' + fullUrl;
+      html += '</div>';
+      html += '<div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center">';
+      html += '<div style="font-size:11px; color:var(--text2)">📅 หมดอายุ: ' + fD(t.expiresAt.split('T')[0]) + ' (' + daysLeft + ' วัน)</div>';
+      html += '<div style="display:flex; gap:4px">';
+      html += '<button class="btn bsm bp" onclick="copyToClipboard(\'' + fullUrl.replace(/'/g, "\\'") + '\')">📋 คัดลอก</button>';
+      if (isActive && !isExpired) {
+        html += '<button class="btn bsm bd" onclick="revokeSingleToken(\'' + t.id + '\', \'' + dealerId + '\')">🗑️ เพิกถอน</button>';
+      }
+      html += '</div></div></div>';
+    }
+    html += '</div>';
+  }
+  
+  html += '<div class="bg" style="margin-top:12px">';
+  html += '<button class="btn btn-primary" onclick="showDealerTokenModal(\'' + dealerId + '\')">➕ สร้างลิงก์ใหม่</button>';
+  html += '<button class="btn bd" onclick="if(confirm(\'เพิกถอนลิงก์ทั้งหมด?\')){ revokeAllDealerTokens(\'' + dealerId + '\'); closeModal(); showTokenList(\'' + dealerId + '\'); }">🗑️ เพิกถอนทั้งหมด</button>';
+  html += '</div>';
+  html += '</div>';
+  
+  openM('🔗 รายการลิงก์ปลอดภัย', html);
 }
