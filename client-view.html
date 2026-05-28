@@ -377,6 +377,50 @@ body {
 .ftab.act { background:var(--accent); border-color:var(--accent); color:#fff; }
 .timeline-event { transition: all 0.15s; }
 .timeline-event:hover { background: rgba(255,255,255,0.04) !important; }
+.toolbar-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.toolbar-item {
+  flex: 1;
+  min-width: 160px;
+}
+.toolbar-item label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+.toolbar-input, .toolbar-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.toolbar-input:focus, .toolbar-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+}
+.reset-btn {
+  background: rgba(239,68,68,0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+  padding: 8px 14px;
+  margin-top: 18px;
+}
+.reset-btn:hover {
+  background: rgba(239,68,68,0.2);
+}
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -386,6 +430,8 @@ body {
   .data-table th, .data-table td { padding: 10px 6px; font-size: 11px; }
   .tab-btn { padding: 8px 16px; font-size: 13px; }
   .section { padding: 14px; }
+  .toolbar-item { min-width: 100%; }
+  .reset-btn { margin-top: 0; }
 }
 </style>
 </head>
@@ -569,7 +615,7 @@ function loadAllData() {
 }
 function refreshData() { loadAllData(); }
 
-// ========== PIPELINE TAB (with Search / Sort / Filter) ==========
+// ========== FILTER / SORT / SEARCH (PIPELINE) ==========
 function filterAndSortPipelines(pipelines) {
   if (!pipelines.length) return [];
   var result = pipelines.slice();
@@ -598,39 +644,70 @@ function filterAndSortPipelines(pipelines) {
   }
   return result;
 }
+function resetPipelineFilters() {
+  pipelineSearch = '';
+  pipelineSort = 'date_desc';
+  pipelineFilter = 'all';
+  renderPipelineTab();
+}
 function renderPipelineTab() {
   var filtered = filterAndSortPipelines(pipelinesData);
-  if (!filtered.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📋 โครงการของท่าน</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีโครงการ' + (pipelineSearch ? ' ที่ตรงกับ "' + esc(pipelineSearch) + '"' : '') + '</div><div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div></div></div>';
-    return;
-  }
-  var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + filtered.length + ')</div>';
-  html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center">';
-  html += '<div style="flex:2; min-width:150px"><input type="text" id="pipelineSearchInput" placeholder="🔍 ค้นหาโครงการ, End User, Model..." value="' + esc(pipelineSearch) + '" style="width:100%; padding:8px 12px" oninput="pipelineSearch=this.value; renderPipelineTab()"></div>';
-  html += '<div style="width:140px"><select id="pipelineSortSelect" onchange="pipelineSort=this.value; renderPipelineTab()" style="width:100%; padding:8px 8px">';
+  var hasData = filtered.length > 0;
+  var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ')</div>';
+  // ----- TOOLBAR (always visible) -----
+  html += '<div class="toolbar-row">';
+  html += '<div class="toolbar-item"><label>🔍 ค้นหา</label><input type="text" id="pipelineSearchInput" class="toolbar-input" placeholder="ชื่อโครงการ, End User, Model..." value="' + esc(pipelineSearch) + '" oninput="pipelineSearch=this.value; renderPipelineTab()"></div>';
+  html += '<div class="toolbar-item"><label>📅 เรียงลำดับ</label><select id="pipelineSortSelect" class="toolbar-select" onchange="pipelineSort=this.value; renderPipelineTab()">';
   html += '<option value="date_desc"' + (pipelineSort === 'date_desc' ? ' selected' : '') + '>📅 ล่าสุด</option>';
   html += '<option value="amount_desc"' + (pipelineSort === 'amount_desc' ? ' selected' : '') + '>💰 มูลค่ามากสุด</option>';
   html += '<option value="name_asc"' + (pipelineSort === 'name_asc' ? ' selected' : '') + '>🔤 ชื่อ A-Z</option>';
   html += '</select></div>';
-  html += '<div style="width:130px"><select id="pipelineFilterSelect" onchange="pipelineFilter=this.value; renderPipelineTab()" style="width:100%; padding:8px 8px">';
+  html += '<div class="toolbar-item"><label>📊 สถานะ</label><select id="pipelineFilterSelect" class="toolbar-select" onchange="pipelineFilter=this.value; renderPipelineTab()">';
   html += '<option value="all"' + (pipelineFilter === 'all' ? ' selected' : '') + '>📊 ทั้งหมด</option>';
   html += '<option value="pending"' + (pipelineFilter === 'pending' ? ' selected' : '') + '>⏳ รอตรวจสอบ</option>';
   html += '<option value="approved"' + (pipelineFilter === 'approved' ? ' selected' : '') + '>✅ อนุมัติแล้ว</option>';
   html += '<option value="rejected"' + (pipelineFilter === 'rejected' ? ' selected' : '') + '>❌ ปฏิเสธ</option>';
   html += '</select></div>';
-  html += '<div><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div></div>';
-  html += '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
-  for (var i=0;i<filtered.length;i++) {
-    var p = filtered[i];
-    var itemsText = '';
-    if (p.items && p.items.length) { for (var j=0;j<p.items.length;j++) { itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : ''); if (j < p.items.length-1) itemsText += ', '; } }
-    else if (p.model) itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
-    var amount = p.forecastAmount || 0;
-    var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-    var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
-    html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')"><td style="width:45px">' + (i+1) + '</td><td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td><td>' + esc(p.endUserTH || p.endUser || '-') + '</td><td>' + getStatusLabel(p.status) + '</td><td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td><td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td><td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td></tr>';
+  html += '<div class="toolbar-item" style="flex:0.5; min-width:auto"><label>&nbsp;</label><button class="btn btn-primary" style="width:100%" onclick="refreshData()">🔄 รีเฟรช</button></div>';
+  if (pipelineSearch || pipelineFilter !== 'all') {
+    html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
   }
-  html += '</tbody></table></div><div style="margin-top:8px; font-size:11px; color:var(--text2); text-align:right">แสดง ' + filtered.length + ' รายการ' + (pipelineSearch ? ' (ค้นหา: "' + esc(pipelineSearch) + '")' : '') + '</div></div>';
+  html += '</div>';
+  // ----- TABLE OR EMPTY STATE (with toolbar still visible) -----
+  if (!hasData) {
+    html += '<div class="empty-state" style="padding:40px 20px"><div class="empty-state-icon">📭</div><div style="font-weight:500; margin-bottom:6px">ไม่มีโครงการที่ตรงกับเงื่อนไข</div>';
+    if (pipelineSearch || pipelineFilter !== 'all') {
+      html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div>';
+      html += '<button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
+    } else {
+      html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
+    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr>';
+    html += '</thead><tbody>';
+    for (var i=0;i<filtered.length;i++) {
+      var p = filtered[i];
+      var itemsText = '';
+      if (p.items && p.items.length) { for (var j=0;j<p.items.length;j++) { itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : ''); if (j < p.items.length-1) itemsText += ', '; } }
+      else if (p.model) itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+      var amount = p.forecastAmount || 0;
+      var isPending = p._status === 'pending' || p._displayStatus === 'pending';
+      var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
+      html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')"><td style="width:45px">' + (i+1) + '</td>';
+      html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td>';
+      html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
+      html += '<td>' + getStatusLabel(p.status) + '</td>';
+      html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
+      html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
+      html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    html += '<div style="margin-top:8px; font-size:11px; color:var(--text2); text-align:right">แสดง ' + filtered.length + ' รายการ' + (pipelineSearch ? ' (ค้นหา: "' + esc(pipelineSearch) + '")' : '') + '</div>';
+  }
+  html += '</div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 
@@ -641,9 +718,9 @@ function showPipelineDetail(pipeId) {
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
   var totalItems = 0;
   if (p.items && p.items.length) {
-    for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
-  } else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr></tbody></table>';
+    for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  } else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '值</td></tr></tbody></table>';
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
   var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
@@ -739,14 +816,16 @@ function viewTimelineChangeDetail(pipeId, eventId) {
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
     html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px">' + f.label + '</td>';
     if (before) html += '<td style="padding:8px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(String(oldVal)) + '</td>';
-    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td></tr>';
+    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td>';
+    html += '</tr>';
   }
   var newItems = (after.items || []).map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
   var oldItems = before && before.items ? before.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : null;
   var itemsChanged = before && oldItems !== newItems;
   html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า</td>';
   if (before) html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
-  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td></tr>';
+  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+  html += '</table>';
   html += '</tbody></table><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
   showDetailModal('📋 การเปลี่ยนแปลง', html);
 }
@@ -778,12 +857,7 @@ function showUpdateModal(pipeId) {
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div><div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div><div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div><div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
-function addEditItemRow() {
-  var container = document.getElementById('editItemsContainer');
-  if (!container) return;
-  var html = '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
-  container.insertAdjacentHTML('beforeend', html);
-}
+function addEditItemRow() { var container = document.getElementById('editItemsContainer'); if (!container) return; var html = '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>'; container.insertAdjacentHTML('beforeend', html); }
 function removeEditItemRow(btn) { var row = btn.closest('.edit-item-row'); if (row) row.remove(); }
 function submitPipelineUpdate(pipeId) {
   var newProjectName = document.getElementById('editProjectName').value.trim();
@@ -1115,7 +1189,7 @@ function buildBeforeAfterPipeline(oldData, newData) {
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
     html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
-    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '</td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '<td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
     html += '</tr>';
   }
@@ -1125,8 +1199,8 @@ function buildBeforeAfterPipeline(oldData, newData) {
   if (newItems || (hasSnapshot && oldItems)) {
     var rowStyle2 = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'รายการสินค้า</td>';
-    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'รายการสินค้า<\/td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
     html += '</tr>';
   }
@@ -1160,7 +1234,7 @@ function buildBeforeAfterForecast(oldData, newData) {
     var itemsChanged = hasSnapshot && oldItems !== newItems;
     var rowStyle2 = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า</td>';
+    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า<\/td>';
     if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
     html += '</tr>';
@@ -1243,6 +1317,7 @@ window.removeNewProjectItem = removeNewProjectItem;
 window.viewUpdateDetail = viewUpdateDetail;
 window.editUpdate = editUpdate;
 window.cancelUpdate = cancelUpdate;
+window.resetPipelineFilters = resetPipelineFilters;
 </script>
 </body>
 </html>
