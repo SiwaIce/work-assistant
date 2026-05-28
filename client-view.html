@@ -892,11 +892,42 @@ function submitPin() {
 // ========== TOKEN VERIFICATION & INIT ==========
 var urlParams = new URLSearchParams(window.location.search);
 var token = urlParams.get('token');
+var _urlDealerId = urlParams.get('dealerId');
+var _urlPin = urlParams.get('pin');
 
 async function verifyAndProceed() {
-  if (!token) { showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย'); return; }
+  // --- รูปแบบ 1: ?dealerId=xxx (&pin=xxx) — ลิงก์ที่สร้างจากระบบปัจจุบัน ---
+  if (_urlDealerId && !token) {
+    dealerId = _urlDealerId;
+    showNotice('🔄 กำลังโหลดข้อมูล...', false);
+    if (_urlPin) {
+      // มี PIN ใน URL → ตรวจ auto
+      try {
+        var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+        var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+        if (!requiredPin || requiredPin === '' || _urlPin === requiredPin) {
+          loadAllData();
+        } else {
+          showPinPrompt(dealerId, requiredPin);
+        }
+      } catch(err) {
+        console.warn('PIN check error, loading anyway:', err);
+        loadAllData();
+      }
+    } else {
+      // ไม่มี PIN ใน URL → ตรวจสอบว่า Dealer ตั้ง PIN ไว้ไหม
+      await checkAndVerifyPin(dealerId);
+    }
+    return;
+  }
+
+  // --- รูปแบบ 2: ?token=xxx — JWT แบบเดิม ---
+  if (!token) {
+    showAccessDenied('ไม่พบ Token หรือ dealerId กรุณาขอลิงก์ใหม่จากพนักงานขาย');
+    return;
+  }
   showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
-  var result = verifyCustomerTokenV2(token);
+  var result = await verifyCustomerTokenV2(token);
   if (!result.valid) { showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง'); return; }
   dealerId = result.dealerId;
   console.log('Token verified, dealerId:', dealerId);
@@ -909,7 +940,11 @@ function showAccessDenied(message) {
   document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
 }
 
-if (!token) { showAccessDenied('ไม่พบ Token'); } else { verifyAndProceed(); }
+if (!token && !_urlDealerId) {
+  showAccessDenied('ไม่พบ Token หรือ dealerId กรุณาขอลิงก์ใหม่จากพนักงานขาย');
+} else {
+  verifyAndProceed();
+}
 
 // ========== PIPELINE TAB ==========
 function filterAndSortPipelines(pipelines) {
