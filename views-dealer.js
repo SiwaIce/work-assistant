@@ -280,12 +280,35 @@ function renderTokenList(tokens) {
 }
 
 async function revokeSingleTokenFirebase(tokenId, dealerId) {
-  if (!confirm('เพิกถอนลิงก์นี้?')) return;
-  await revokeTokenFirebase(tokenId);
-  toast('🗑️ เพิกถอนแล้ว');
-  loadExistingTokens(dealerId);
+  if (!confirm('เพิกถอนลิงก์นี้? ลูกค้าจะใช้ลิงก์นี้ไม่ได้อีก')) return;
+  
+  try {
+    var docRef = db.collection('tokenRegistry').doc(tokenId);
+    var doc = await docRef.get();
+    
+    if (!doc.exists) {
+      // ถ้าไม่พบใน Firebase แสดงว่าสร้างก่อนเปลี่ยนระบบ
+      toast('⚠️ ลิงก์นี้สร้างก่อนเปลี่ยนระบบ ไม่สามารถเพิกถอนได้');
+      return;
+    }
+    
+    await docRef.update({
+      isActive: false,
+      revokedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    toast('🗑️ เพิกถอนลิงก์แล้ว');
+    loadExistingTokens(dealerId);
+    
+  } catch(err) {
+    console.error('Revoke error:', err);
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
 }
-
+// Alias for old function name
+function revokeSingleToken(tokenId, dealerId) {
+  revokeSingleTokenFirebase(tokenId, dealerId);
+}
 async function showTokenListByStatus(dealerId, status) {
   var tokens = await getTokensForDealer(dealerId);
   var filtered = [];
