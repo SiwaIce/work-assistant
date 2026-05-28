@@ -754,38 +754,97 @@ async function verifyCustomerTokenV2(token) {
     if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
     
     var payload = JSON.parse(atob(parts[1]));
-    if (payload.exp < Date.now() / 1000) return { valid: false, error: 'ลิงก์หมดอายุแล้ว' };
     
+    // ตรวจสอบวันหมดอายุ
+    if (payload.exp < Date.now() / 1000) {
+      return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
+    }
+    
+    // ตรวจสอบ signature
     var secret = localStorage.getItem('jwt_secret');
-    if (!secret) return { valid: false, error: 'ระบบไม่พร้อมใช้งาน' };
+    if (!secret) {
+      return { valid: false, error: 'ระบบไม่พร้อมใช้งาน' };
+    }
     
-    function base64url(s) { return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+    function base64url(str) {
+      return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    
     var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
-    if (parts[2] !== expectedSignature) return { valid: false, error: 'token ไม่ถูกต้อง' };
+    if (parts[2] !== expectedSignature) {
+      return { valid: false, error: 'token ไม่ถูกต้อง' };
+    }
     
-    // ✅ ตรวจสอบกับ Firebase Registry
-    var registryQuery = await db.collection('tokenRegistry').where('token', '==', token).limit(1).get();
+    // ========== ตรวจสอบกับ Registry (Firebase + Fallback) ==========
+    var isActive = true;
+    var registryChecked = false;
     
-    if (!registryQuery.empty) {
-      var tokenDoc = registryQuery.docs[0];
-      var tokenData = tokenDoc.data();
-      if (tokenData.isActive === false) return { valid: false, error: 'ลิงก์ถูกเพิกถอนแล้ว กรุณาติดต่อพนักงานขาย' };
-      tokenDoc.ref.update({ lastUsedAt: firebase.firestore.FieldValue.serverTimestamp(), useCount: firebase.firestore.FieldValue.increment(1) }).catch(function(e) {});
-    } else {
-      // Token เก่า ไม่มีใน registry → บันทึกอัตโนมัติ
-      await db.collection('tokenRegistry').add({
-        token: token, dealerId: payload.dealerId,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        expiresAt: new Date(payload.exp * 1000), isActive: true, useCount: 1, source: 'auto_discovered'
-      });
+    // 1. ลองตรวจสอบกับ Firebase Registry ก่อน
+    try {
+      var registryQuery = await db.collection('tokenRegistry')
+        .where('token', '==', token)
+        .limit(1)
+        .get();
+      
+      if (!registryQuery.empty) {
+        registryChecked = true;
+        var tokenData = registryQuery.docs[0].data();
+        isActive = tokenData.isActive === true;
+        
+        // อัพเดทสถิติ (ไม่ต้องรอ)
+        registryQuery.docs[0].ref.update({
+          lastUsedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          useCount: firebase.firestore.FieldValue.increment(1)
+        }).catch(function(e) { console.warn('Failed to update stats:', e); });
+      }
+    } catch(firebaseError) {
+      // Firebase Registry error (index ยังไม่พร้อม, network error, etc.)
+      console.warn('Firebase Registry error, falling back to localStorage:', firebaseError.message);
+    }
+    
+    // 2. ถ้า Firebase Registry ยังไม่ทำงาน ให้ใช้ localStorage แทน
+    if (!registryChecked) {
+      var localStorageRegistry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+      for (var id in localStorageRegistry) {
+        if (localStorageRegistry[id].token === token) {
+          isActive = localStorageRegistry[id].isActive === true;
+          registryChecked = true;
+          break;
+        }
+      }
+    }
+    
+    // 3. ถ้ายังไม่เจอ token ใน registry เลย (token เก่ามาก) ให้ถือว่ายัง active
+    if (!registryChecked) {
+      console.warn('Token not found in any registry, allowing access (legacy token)');
+      isActive = true;
+      
+      // พยายามบันทึกไป Firebase (เผื่อไว้)
+      try {
+        await db.collection('tokenRegistry').add({
+          token: token,
+          dealerId: payload.dealerId,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          expiresAt: new Date(payload.exp * 1000),
+          isActive: true,
+          useCount: 1,
+          source: 'legacy_token'
+        });
+      } catch(e) {}
+    }
+    
+    // 4. ตรวจสอบผลลัพธ์
+    if (!isActive) {
+      return { valid: false, error: 'ลิงก์ถูกเพิกถอนแล้ว กรุณาติดต่อพนักงานขาย' };
     }
     
     return { valid: true, dealerId: payload.dealerId };
+    
   } catch(e) {
-    return { valid: false, error: e.message };
+    console.error('Token verification error:', e);
+    return { valid: false, error: 'เกิดข้อผิดพลาดในการตรวจสอบความปลอดภัย: ' + e.message };
   }
 }
-
 // ========== PIN VERIFICATION ==========
 async function checkAndVerifyPin(dealerId) {
   try {
