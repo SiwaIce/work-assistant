@@ -31,6 +31,14 @@
   --text2: #64748b;
   --accent: #2563eb;
 }
+/* Filter tabs */
+.ftabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; }
+.ftab { padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text2); border:1px solid var(--border); transition:all .15s; }
+.ftab:hover { border-color:var(--accent); color:var(--accent); }
+.ftab.act { background:var(--accent); border-color:var(--accent); color:#fff; }
+/* Update history cards */
+.update-card { transition: box-shadow .15s; }
+.update-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai', sans-serif;
@@ -395,7 +403,7 @@ body {
   <div class="tab-bar" id="tabBar">
     <div class="tab-btn active" data-tab="pipeline">📋 โครงการของฉัน</div>
     <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
-    <div class="tab-btn" data-tab="timeline">📝 ประวัติการอัพเดท</div>
+    <div class="tab-btn" data-tab="updateHistory">📝 ประวัติการอัพเดท</div>
   </div>
   <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
@@ -441,6 +449,7 @@ function toggleTheme() { var current = getSavedTheme(); var next = current === '
 applyTheme(getSavedTheme());
 
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+var sanitize = esc; // alias
 function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
 
@@ -512,27 +521,49 @@ function getCustomerTimelineRef(dealerId) {
 }
 
 // บันทึก pipeline update
+// บันทึก pipeline update (พร้อม snapshot เดิมสำหรับ before/after)
 function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
-  var updateData = JSON.parse(JSON.stringify(data));
-  updateData._customerUpdate = true;
-  updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-  updateData._status = 'pending';
-  updateData._originalDealerId = dealerId;
-  updateData._originalPipeId = pipeId;
-  updateData._updateType = 'pipeline';
-  
-  return getCustomerPipelineRef(dealerId, pipeId).set(updateData, { merge: true }).then(function() {
-    var timelineRef = getCustomerTimelineRef(dealerId);
-    var timelineEntry = {
-      id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      type: 'pipeline_update',
-      pipeId: pipeId,
-      projectName: data.projectName,
-      content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'pending'
-    };
-    return timelineRef.doc(timelineEntry.id).set(timelineEntry);
+  // ดึงข้อมูลเดิมก่อน เพื่อบันทึก snapshot สำหรับ before/after
+  var existingRef = getCustomerPipelineRef(dealerId, pipeId);
+  return existingRef.get().then(function(existingDoc) {
+    var snapshot = existingDoc.exists ? existingDoc.data() : null;
+
+    var updateData = JSON.parse(JSON.stringify(data));
+    updateData._customerUpdate = true;
+    updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    updateData._status = 'pending';
+    updateData._originalDealerId = dealerId;
+    updateData._originalPipeId = pipeId;
+    updateData._updateType = 'pipeline';
+
+    // เก็บ snapshot ของข้อมูลเดิม (ก่อนแก้) เพื่อใช้เปรียบเทียบ before/after
+    if (snapshot && !snapshot._snapshot) {
+      // ลบ fields ระบบออกจาก snapshot
+      var cleanSnap = JSON.parse(JSON.stringify(snapshot));
+      delete cleanSnap._customerUpdate;
+      delete cleanSnap._updatedAt;
+      delete cleanSnap._status;
+      delete cleanSnap._snapshot;
+      delete cleanSnap._approvedAt;
+      updateData._snapshot = cleanSnap;
+    } else if (snapshot && snapshot._snapshot) {
+      // ถ้ามี snapshot เก่าอยู่แล้ว ให้ใช้อันเดิม (เก็บ before ที่แท้จริง)
+      updateData._snapshot = snapshot._snapshot;
+    }
+
+    return existingRef.set(updateData, { merge: true }).then(function() {
+      var timelineRef = getCustomerTimelineRef(dealerId);
+      var timelineEntry = {
+        id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        type: 'pipeline_update',
+        pipeId: pipeId,
+        projectName: data.projectName,
+        content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'pending'
+      };
+      return timelineRef.doc(timelineEntry.id).set(timelineEntry);
+    });
   });
 }
 
@@ -1206,142 +1237,6 @@ function renderForecastTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-function renderTimelineTab() {
-  if (!timelineLogs.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div></div>';
-    return;
-  }
-  var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดททั้งหมด</div>';
-  html += '<div style="text-align:right; margin-bottom:12px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  html += '<div style="max-height:500px;overflow-y:auto">';
-  for (var i = 0; i < timelineLogs.length; i++) {
-    var l = timelineLogs[i];
-    var icon = l.type === 'pipeline_update' ? '📋' : (l.type === 'runrate_update' ? '📦' : '📝');
-    var dateStr = l.timestamp ? formatThaiDate(l.timestamp.toDate ? l.timestamp.toDate() : l.timestamp) : '-';
-    var statusLabel = l.status === 'pending' ? '<span class="pending-badge" style="margin-left:6px">รอตรวจสอบ</span>' : '';
-    html += '<div style="padding:14px;border-bottom:1px solid var(--border)">';
-    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + dateStr + ' ' + icon + statusLabel + '</div>';
-    html += '<div style="font-size:13px;line-height:1.5">' + esc(l.content || '') + '</div>';
-    html += '</div>';
-  }
-  html += '</div></div>';
-  document.getElementById('tabContent').innerHTML = html;
-}
-
-function renderMyRequestsTab() {
-  if (!dealerId) return;
-  
-  var pendingPipeline = [];
-  var approvedPipeline = [];
-  var pendingForecast = [];
-  var approvedForecast = [];
-  
-  // ดึง pipeline pending
-  getCustomerPipelineRef(dealerId).where('_status', '==', 'pending').get().then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'pipeline';
-      data.requestType = 'pipeline';
-      pendingPipeline.push(data);
-    });
-    
-    // ดึง pipeline approved
-    return getCustomerPipelineRef(dealerId).where('_status', '==', 'approved').get();
-  }).then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'pipeline';
-      data.requestType = 'pipeline';
-      approvedPipeline.push(data);
-    });
-    
-    // ดึง forecast pending
-    return getCustomerForecastRef(dealerId).where('_status', '==', 'pending').get();
-  }).then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'forecast';
-      data.requestType = data.type === 'runrate' ? 'runrate' : 'project';
-      pendingForecast.push(data);
-    });
-    
-    // ดึง forecast approved
-    return getCustomerForecastRef(dealerId).where('_status', '==', 'approved').get();
-  }).then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'forecast';
-      data.requestType = data.type === 'runrate' ? 'runrate' : 'project';
-      approvedForecast.push(data);
-    });
-    
-    var pending = [...pendingPipeline, ...pendingForecast];
-    var approved = [...approvedPipeline, ...approvedForecast];
-    
-    var html = '<div class="section">';
-    html += '<div class="section-title">📝 คำขอของฉัน</div>';
-    
-    // Pending section
-    html += '<h3 style="margin:12px 0 8px; color:#f59e0b">⏳ รอตรวจสอบ (' + pending.length + ')</h3>';
-    if (pending.length === 0) {
-      html += '<div class="empty-state"><div class="empty-state-icon">✅</div><div>ไม่มีคำขอที่รอตรวจสอบ</div></div>';
-    } else {
-      for (var i = 0; i < pending.length; i++) {
-        var req = pending[i];
-        var icon = req.type === 'pipeline' ? '📋' : (req.requestType === 'runrate' ? '📦' : '🏢');
-        var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.requestType === 'runrate' ? req.model : req.projectName);
-        var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString() : req._updatedAt) : '-';
-        
-        html += '<div class="request-card" style="border:1px solid #f59e0b; border-radius:10px; padding:12px; margin-bottom:10px; background:rgba(245,158,11,0.05)">';
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap">';
-        html += '<div><span style="font-size:18px">' + icon + '</span> <strong>' + sanitize(title) + '</strong></div>';
-        html += '<span class="status-badge status-bidding" style="background:#f59e0b20; color:#f59e0b">⏳ รอตรวจสอบ</span>';
-        html += '</div>';
-        html += '<div style="font-size:12px; color:var(--text2); margin-top:6px">📅 ส่งเมื่อ: ' + dateStr + '</div>';
-        if (req.updateNote) html += '<div style="font-size:12px; margin-top:4px">📝 ' + sanitize(req.updateNote) + '</div>';
-        
-        // ✅ ปุ่มดูรายละเอียด (เพิ่มตรงนี้)
-        html += '<div style="display:flex; gap:8px; margin-top:12px">';
-        html += '<button class="btn btn-sm" onclick="viewMyRequestDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
-        html += '<button class="btn btn-sm btn-warning" onclick="editMyRequest(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button>';
-        html += '<button class="btn btn-sm btn-danger" onclick="cancelMyRequest(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
-        html += '</div></div>';
-      }
-    }
-    
-    // Approved section
-    html += '<h3 style="margin:16px 0 8px; color:#22c55e">✅ อนุมัติแล้ว (' + approved.length + ')</h3>';
-    if (approved.length === 0) {
-      html += '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีคำขอที่อนุมัติแล้ว</div></div>';
-    } else {
-      for (var i = 0; i < approved.length; i++) {
-        var req = approved[i];
-        var icon = req.type === 'pipeline' ? '📋' : (req.requestType === 'runrate' ? '📦' : '🏢');
-        var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.requestType === 'runrate' ? req.model : req.projectName);
-        var dateStr = req._approvedAt ? (req._approvedAt.seconds ? new Date(req._approvedAt.seconds * 1000).toLocaleString() : req._approvedAt) : '-';
-        
-        html += '<div class="request-card" style="border:1px solid #22c55e; border-radius:10px; padding:12px; margin-bottom:10px; background:rgba(34,197,94,0.05); opacity:0.7">';
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap">';
-        html += '<div><span style="font-size:18px">' + icon + '</span> <strong>' + sanitize(title) + '</strong></div>';
-        html += '<span class="status-badge status-win" style="background:#22c55e20; color:#22c55e">✅ อนุมัติแล้ว</span>';
-        html += '</div>';
-        html += '<div style="font-size:12px; color:var(--text2); margin-top:6px">📅 อนุมัติเมื่อ: ' + dateStr + '</div>';
-        
-        // ✅ ปุ่มดูรายละเอียด (สำหรับ approved ด้วย)
-        html += '<div style="margin-top:8px">';
-        html += '<button class="btn btn-sm" onclick="viewMyRequestDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ ดูรายละเอียด</button>';
-        html += '</div></div>';
-      }
-    }
-    
-    html += '</div>';
-    document.getElementById('tabContent').innerHTML = html;
-  });
-}
 
 // แทนที่ function renderCurrentTab()
 
@@ -1449,139 +1344,7 @@ if (!dealerId) {
   checkPinAndProceed();
 }
 // ================================================================
-// VIEW MY REQUEST DETAIL (สำหรับลูกค้า)
-// ================================================================
-
-function viewMyRequestDetail(type, requestId) {
-  if (!dealerId) return;
-  
-  var ref = type === 'pipeline' 
-    ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(requestId)
-    : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(requestId);
-  
-  ref.get().then(function(doc) {
-    if (!doc.exists) return;
-    
-    var data = doc.data();
-    var statusText = data._status === 'pending' ? '⏳ รอตรวจสอบ' : (data._status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
-    var statusColor = data._status === 'pending' ? '#f59e0b' : (data._status === 'approved' ? '#22c55e' : '#ef4444');
-    var updateDate = data._updatedAt ? (data._updatedAt.seconds ? new Date(data._updatedAt.seconds * 1000).toLocaleString() : data._updatedAt) : '-';
-    
-    var html = '<div style="max-width:550px">';
-    html += '<h3>📋 รายละเอียดคำขอ</h3>';
-    html += '<div><strong>📅 ส่งเมื่อ:</strong> ' + updateDate + '</div>';
-    html += '<div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div>';
-    
-    if (data.updateNote) {
-      html += '<div style="margin:12px 0; padding:10px; background:rgba(245,158,11,0.1); border-radius:8px">';
-      html += '<strong>📝 ข้อความอัพเดท:</strong><br>' + sanitize(data.updateNote);
-      html += '</div>';
-    }
-    
-    html += '<hr style="margin:12px 0">';
-    html += '<div><strong>🔄 รายละเอียดการเปลี่ยนแปลง:</strong></div>';
-    
-    if (type === 'pipeline') {
-      // ดึงข้อมูลเดิม (ถ้ามี) เพื่อเปรียบเทียบ
-      var originalId = data._originalPipeId || requestId;
-      var originalRef = db.collection('users').doc(uid).collection('pipeline').doc(originalId);
-      
-      originalRef.get().then(function(originalDoc) {
-        var originalData = originalDoc.exists ? originalDoc.data() : {};
-        html += buildChangeTable(data, originalData, 'pipeline');
-        html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeM()">ปิด</button></div>';
-        html += '</div>';
-        openM('📋 รายละเอียดคำขอ', html);
-      }).catch(function() {
-        html += buildChangeTable(data, {}, 'pipeline');
-        html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeM()">ปิด</button></div>';
-        html += '</div>';
-        openM('📋 รายละเอียดคำขอ', html);
-      });
-    } else if (type === 'forecast') {
-      html += buildForecastDetail(data);
-      html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeM()">ปิด</button></div>';
-      html += '</div>';
-      openM('📦 รายละเอียดแผนการสั่งซื้อ', html);
-    }
-  }).catch(function(err) {
-    toast('❌ ไม่สามารถโหลดรายละเอียดได้: ' + err.message);
-  });
-}
-
-function buildChangeTable(newData, oldData, type) {
-  if (type === 'pipeline') {
-    var fields = [
-      { key: 'projectName', label: 'ชื่อโครงการ' },
-      { key: 'endUserTH', label: 'End User (TH)' },
-      { key: 'endUserEN', label: 'End User (EN)' },
-      { key: 'status', label: 'สถานะ' },
-      { key: 'model', label: 'Model' },
-      { key: 'modelQty', label: 'จำนวน' },
-      { key: 'forecastAmount', label: 'มูลค่า (฿)' },
-      { key: 'biddingDate', label: 'Bidding Date' },
-      { key: 'shipmentDate', label: 'Shipment Date' },
-      { key: 'tor', label: 'TOR' },
-      { key: 'nextAction', label: 'Next Action' }
-    ];
-    
-    var html = '<table style="width:100%; margin-top:8px; border-collapse:collapse">';
-    html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:6px">ฟิลด์</th><th style="text-align:left;padding:6px">ค่าเดิม</th><th style="text-align:left;padding:6px">ค่าใหม่</th></tr>';
-    
-    for (var i = 0; i < fields.length; i++) {
-      var f = fields[i];
-      var oldVal = oldData[f.key] || '-';
-      var newVal = newData[f.key] || '-';
-      var isChanged = String(oldVal) !== String(newVal);
-      var highlight = isChanged ? 'style="background:rgba(245,158,11,0.15)"' : '';
-      
-      html += '<tr ' + highlight + '>';
-      html += '<td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04)">' + f.label + '</td>';
-      html += '<td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04)">' + sanitize(String(oldVal)) + '</td>';
-      html += '<td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04)"><strong>' + sanitize(String(newVal)) + '</strong></td>';
-      html += '</tr>';
-    }
-    
-    // รายการสินค้า
-    if (newData.items && newData.items.length) {
-      html += '<tr><td style="padding:6px">สินค้า</td><td style="padding:6px">-</td><td style="padding:6px">';
-      for (var j = 0; j < newData.items.length; j++) {
-        html += (j > 0 ? ', ' : '') + newData.items[j].model + ' x' + newData.items[j].qty;
-      }
-      html += '</td></tr>';
-    }
-    
-    html += '</table>';
-    return html;
-  }
-  return '';
-}
-
-function buildForecastDetail(data) {
-  var html = '<div style="margin-top:12px">';
-  
-  if (data.type === 'runrate') {
-    html += '<div><strong>📦 Model:</strong> ' + sanitize(data.model || '-') + '</div>';
-    html += '<div><strong>🔢 จำนวน:</strong> ' + (data.qty || 0) + ' ชิ้น</div>';
-    html += '<div><strong>📅 เดือน:</strong> ' + (data.month || '-') + '</div>';
-  } else if (data.type === 'project') {
-    html += '<div><strong>📋 ชื่อโครงการ:</strong> ' + sanitize(data.projectName || '-') + '</div>';
-    if (data.endUser) html += '<div><strong>👤 End User:</strong> ' + sanitize(data.endUser) + '</div>';
-    html += '<div><strong>📦 รายการสินค้า:</strong></div>';
-    html += '<ul style="margin:6px 0 0 20px">';
-    for (var i = 0; i < (data.items || []).length; i++) {
-      html += '<li>' + sanitize(data.items[i].model) + ' x' + (data.items[i].qty || 1) + '</li>';
-    }
-    html += '</ul>';
-    html += '<div><strong>📅 เดือน:</strong> ' + (data.month || '-') + '</div>';
-  }
-  
-  html += '</div>';
-  return html;
-}
-// ================================================================
-// UPDATE HISTORY TAB - แสดงประวัติการอัพเดททั้งหมด
-// ================================================================
+// UPDATE HISTORY TAB
 
 var historyFilter = 'all'; // all, pending, approved, rejected
 
@@ -1710,122 +1473,273 @@ function renderUpdateHistoryList(updates) {
   container.innerHTML = html;
 }
 // ================================================================
-// VIEW UPDATE DETAIL (แสดงการเปลี่ยนแปลง field ต่อ field)
+// VIEW UPDATE DETAIL — Before / After comparison
 // ================================================================
+
+var PIPELINE_FIELDS = [
+  { key: 'projectName',    label: 'ชื่อโครงการ' },
+  { key: 'endUserTH',      label: 'End User (TH)' },
+  { key: 'endUserEN',      label: 'End User (EN)' },
+  { key: 'status',         label: 'สถานะ' },
+  { key: 'model',          label: 'Model หลัก' },
+  { key: 'modelQty',       label: 'จำนวนรวม' },
+  { key: 'forecastAmount', label: 'มูลค่า (฿)' },
+  { key: 'biddingDate',    label: 'Bidding Date' },
+  { key: 'shipmentDate',   label: 'Shipment Date' },
+  { key: 'tor',            label: 'TOR' },
+  { key: 'nextAction',     label: 'Next Action' }
+];
+
+function getItemsText(data) {
+  if (data && data.items && data.items.length) {
+    return data.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
+  }
+  return '';
+}
 
 function viewUpdateDetail(type, updateId) {
   if (!dealerId) return;
-  
-  var ref = type === 'pipeline' 
+
+  var ref = type === 'pipeline'
     ? getCustomerPipelineRef(dealerId, updateId)
     : getCustomerForecastRef(dealerId, updateId);
-  
+
   ref.get().then(function(doc) {
-    if (!doc.exists) return;
-    
-    var data = doc.data();
-    var status = data._status || 'pending';
-    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    if (!doc.exists) { showToast('❌ ไม่พบข้อมูล'); return; }
+
+    var newData   = doc.data();
+    var oldData   = newData._snapshot || null; // snapshot ก่อนแก้ไข
+    var status    = newData._status || 'pending';
+    var statusText  = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-    var updateDate = data._updatedAt ? (data._updatedAt.seconds ? new Date(data._updatedAt.seconds * 1000).toLocaleString() : data._updatedAt) : '-';
-    
-    var html = '<div style="max-width:550px">';
-    html += '<h3>📋 รายละเอียดการอัพเดท</h3>';
-    html += '<div style="margin-bottom:8px"><strong>📅 ส่งเมื่อ:</strong> ' + updateDate + '</div>';
-    html += '<div style="margin-bottom:12px"><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div>';
-    
-    if (data.updateNote) {
-      html += '<div style="margin:12px 0; padding:10px; background:rgba(245,158,11,0.1); border-radius:8px">';
-      html += '<strong>📝 ข้อความอัพเดท:</strong><br>' + sanitize(data.updateNote);
+    var updateDate  = newData._updatedAt
+      ? (newData._updatedAt.seconds ? new Date(newData._updatedAt.seconds * 1000).toLocaleString('th-TH') : newData._updatedAt)
+      : '-';
+    var approvedDate = newData._approvedAt
+      ? (newData._approvedAt.seconds ? new Date(newData._approvedAt.seconds * 1000).toLocaleString('th-TH') : newData._approvedAt)
+      : '';
+
+    // ─── Modal header ───
+    var html = '';
+    // Status bar
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:' + statusColor + '18;border:1px solid ' + statusColor + '40">';
+    html += '<span style="font-size:20px">' + (status === 'pending' ? '⏳' : status === 'approved' ? '✅' : '❌') + '</span>';
+    html += '<div>';
+    html += '<div style="font-weight:700;color:' + statusColor + '">' + statusText + '</div>';
+    html += '<div style="font-size:11px;color:var(--text2)">ส่งเมื่อ: ' + updateDate + (approvedDate && status === 'approved' ? ' &nbsp;|&nbsp; อนุมัติเมื่อ: ' + approvedDate : '') + '</div>';
+    html += '</div></div>';
+
+    // Update note
+    if (newData.updateNote) {
+      html += '<div style="margin-bottom:14px;padding:10px 14px;background:rgba(245,158,11,0.08);border-radius:8px;border-left:3px solid #f59e0b">';
+      html += '<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">📝 ข้อความจากลูกค้า</div>';
+      html += '<div style="font-size:13px">' + esc(newData.updateNote) + '</div>';
       html += '</div>';
     }
-    
-    html += '<hr style="margin:12px 0">';
-    html += '<div><strong>🔄 รายละเอียดการเปลี่ยนแปลง:</strong></div>';
-    
+
+    // ─── Before / After table ───
     if (type === 'pipeline') {
-      html += buildPipelineChangeTable(data);
+      html += buildBeforeAfterPipeline(oldData, newData);
     } else {
-      html += buildForecastDetailTable(data);
+      html += buildBeforeAfterForecast(oldData, newData);
     }
-    
-    html += '<div class="fm-actions" style="margin-top:16px">';
+
+    // Action buttons
+    html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">';
     if (status === 'pending') {
-      html += '<button class="btn btn-warning" onclick="closeM();editUpdate(\'' + type + '\', \'' + updateId + '\')">✏️ แก้ไข</button>';
-      html += '<button class="btn btn-danger" onclick="closeM();cancelUpdate(\'' + type + '\', \'' + dealerId + '\', \'' + updateId + '\')">🗑️ ยกเลิก</button>';
+      html += '<button class="btn btn-warning" style="flex:1" onclick="closeDetailModal();editUpdate(\'' + type + '\', \'' + updateId + '\')">✏️ แก้ไข</button>';
+      html += '<button class="btn btn-danger" style="flex:1" onclick="closeDetailModal();cancelUpdate(\'' + type + '\', \'' + dealerId + '\', \'' + updateId + '\')">🗑️ ยกเลิก</button>';
     }
-    html += '<button class="btn" onclick="closeM()">ปิด</button>';
-    html += '</div></div>';
-    
-    openM('📋 รายละเอียด', html);
+    html += '<button class="btn" style="' + (status === 'pending' ? '' : 'flex:1') + '" onclick="closeDetailModal()">ปิด</button>';
+    html += '</div>';
+
+    showDetailModal('📋 รายละเอียดการอัพเดท', html);
+
   }).catch(function(err) {
-    toast('❌ ไม่สามารถโหลดรายละเอียดได้: ' + err.message);
+    showToast('❌ ไม่สามารถโหลดรายละเอียดได้');
+    console.error(err);
   });
 }
 
-function buildPipelineChangeTable(data) {
-  var fields = [
-    { key: 'projectName', label: 'ชื่อโครงการ' },
-    { key: 'endUserTH', label: 'End User (TH)' },
-    { key: 'endUserEN', label: 'End User (EN)' },
-    { key: 'status', label: 'สถานะ' },
-    { key: 'model', label: 'Model' },
-    { key: 'modelQty', label: 'จำนวน' },
-    { key: 'forecastAmount', label: 'มูลค่า (฿)' },
-    { key: 'biddingDate', label: 'Bidding Date' },
-    { key: 'shipmentDate', label: 'Shipment Date' },
-    { key: 'tor', label: 'TOR' },
-    { key: 'nextAction', label: 'Next Action' }
-  ];
-  
-  var html = '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
-  html += '<tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th><th style="text-align:left;padding:8px">ค่า</th></tr>';
-  
-  for (var i = 0; i < fields.length; i++) {
-    var f = fields[i];
-    var val = data[f.key];
-    if (val && val !== '') {
-      html += '<tr>';
-      html += '<td style="padding:8px;border-bottom:1px solid rgba(255,255,255,0.04)">' + f.label + '</td>';
-      html += '<td style="padding:8px;border-bottom:1px solid rgba(255,255,255,0.04)"><strong>' + sanitize(String(val)) + '</strong></td>';
-      html += '</tr>';
-    }
+// ─── Standalone modal (ไม่ขึ้นกับ openM ของ main app) ───
+function showDetailModal(title, bodyHtml) {
+  closeDetailModal();
+  var el = document.createElement('div');
+  el.id = 'detailModal';
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:3000;backdrop-filter:blur(4px);padding:16px';
+  el.innerHTML =
+    '<div style="background:var(--card);border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border)">' +
+      '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--card)">' +
+        '<div style="font-size:16px;font-weight:700;color:var(--accent)">' + title + '</div>' +
+        '<button onclick="closeDetailModal()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1">✕</button>' +
+      '</div>' +
+      '<div style="padding:20px;overflow-y:auto">' + bodyHtml + '</div>' +
+    '</div>';
+  el.addEventListener('click', function(e) { if (e.target === el) closeDetailModal(); });
+  document.body.appendChild(el);
+}
+function closeDetailModal() {
+  var el = document.getElementById('detailModal');
+  if (el) el.remove();
+}
+
+// ─── Before / After: Pipeline ───
+function buildBeforeAfterPipeline(oldData, newData) {
+  var hasSnapshot = !!oldData;
+  var html = '';
+
+  html += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:.5px">🔄 การเปลี่ยนแปลง</div>';
+
+  if (!hasSnapshot) {
+    html += '<div style="font-size:12px;color:var(--text2);padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
   }
-  
-  if (data.items && data.items.length) {
-    var itemsText = '';
-    for (var j = 0; j < data.items.length; j++) {
-      itemsText += (j > 0 ? ', ' : '') + data.items[j].model + ' x' + data.items[j].qty;
-    }
-    html += '<tr><td style="padding:8px">สินค้า</td><td style="padding:8px"><strong>' + sanitize(itemsText) + '</strong></td></tr>';
+
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+
+  // Header
+  if (hasSnapshot) {
+    html += '<thead><tr>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th>';
+    html += '</tr></thead>';
+  } else {
+    html += '<thead><tr>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>';
+    html += '</tr></thead>';
   }
-  
-  html += '</table>';
+
+  html += '<tbody>';
+
+  var anyChanged = false;
+
+  for (var i = 0; i < PIPELINE_FIELDS.length; i++) {
+    var f = PIPELINE_FIELDS[i];
+    var newVal = (newData[f.key] !== undefined && newData[f.key] !== null) ? String(newData[f.key]) : '';
+    var oldVal = hasSnapshot ? ((oldData[f.key] !== undefined && oldData[f.key] !== null) ? String(oldData[f.key]) : '') : null;
+
+    // ข้ามถ้าทั้งคู่ว่าง
+    if (!newVal && (!hasSnapshot || !oldVal)) continue;
+
+    var isChanged = hasSnapshot && (oldVal !== newVal);
+    if (isChanged) anyChanged = true;
+
+    var rowStyle = isChanged
+      ? 'background:rgba(59,130,246,0.06)'
+      : '';
+    var changedDot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + changedDot + f.label + '</td>';
+
+    if (hasSnapshot) {
+      var oldDisplay = oldVal || '<span style="color:var(--text2);font-style:italic">-</span>';
+      var newDisplay = newVal || '<span style="color:var(--text2);font-style:italic">-</span>';
+      html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '') + (!oldVal ? '<span style="color:var(--text2);font-style:italic">-</span>' : '') + '</td>';
+      html += '<td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '') + (!newVal ? '<span style="color:var(--text2);font-style:italic">-</span>' : '') + '</td>';
+    } else {
+      html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  // รายการสินค้า
+  var newItems = getItemsText(newData);
+  var oldItems = hasSnapshot ? getItemsText(oldData) : null;
+  var itemsChanged = hasSnapshot && (oldItems !== newItems);
+  if (newItems || (hasSnapshot && oldItems)) {
+    if (itemsChanged) anyChanged = true;
+    var itemRowStyle = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
+    var itemDot = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+    html += '<tr style="' + itemRowStyle + ';border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + itemDot + 'รายการสินค้า</td>';
+    if (hasSnapshot) {
+      html += '<td style="padding:8px 10px;font-size:12px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
+      html += '<td style="padding:8px 10px;font-size:12px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    } else {
+      html += '<td style="padding:8px 10px;font-size:12px">' + esc(newItems) + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
+
+  // Summary badge
+  if (hasSnapshot) {
+    html += '<div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:right">';
+    if (anyChanged) {
+      html += '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent)"></span> ฟิลด์ที่เปลี่ยนแปลงจะแสดงเป็นสีน้ำเงิน</span>';
+    } else {
+      html += '✓ ข้อมูลไม่มีการเปลี่ยนแปลงที่ตรวจพบ';
+    }
+    html += '</div>';
+  }
+
   return html;
 }
 
-function buildForecastDetailTable(data) {
-  var html = '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
-  html += '<tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th><th style="text-align:left;padding:8px">ค่า</th></tr>';
-  
-  if (data.type === 'runrate') {
-    html += '<tr><td style="padding:8px">Model</td><td style="padding:8px"><strong>' + sanitize(data.model || '-') + '</strong></td></tr>';
-    html += '<tr><td style="padding:8px">จำนวน</td><td style="padding:8px"><strong>' + (data.qty || 0) + ' ชิ้น</strong></td></tr>';
-    html += '<tr><td style="padding:8px">เดือน</td><td style="padding:8px"><strong>' + (data.month || '-') + '</strong></td></tr>';
-  } else if (data.type === 'project') {
-    html += '<tr><td style="padding:8px">ชื่อโครงการ</td><td style="padding:8px"><strong>' + sanitize(data.projectName || '-') + '</strong></td></tr>';
-    if (data.endUser) {
-      html += '<tr><td style="padding:8px">End User</td><td style="padding:8px"><strong>' + sanitize(data.endUser) + '</strong></td></tr>';
-    }
-    html += '<tr><td style="padding:8px">สินค้า</td><td style="padding:8px"><strong>';
-    for (var i = 0; i < (data.items || []).length; i++) {
-      html += (i > 0 ? ', ' : '') + data.items[i].model + ' x' + data.items[i].qty;
-    }
-    html += '</strong></td></tr>';
-    html += '<tr><td style="padding:8px">เดือน</td><td style="padding:8px"><strong>' + (data.month || '-') + '</strong></td></tr>';
+// ─── Before / After: Forecast ───
+function buildBeforeAfterForecast(oldData, newData) {
+  var hasSnapshot = !!oldData;
+  var html = '';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:.5px">🔄 การเปลี่ยนแปลง</div>';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+
+  if (hasSnapshot) {
+    html += '<thead><tr>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th>';
+    html += '</tr></thead><tbody>';
+  } else {
+    html += '<thead><tr>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
+    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>';
+    html += '</tr></thead><tbody>';
   }
-  
-  html += '</table>';
+
+  var fcastFields = newData.type === 'runrate'
+    ? [{ key: 'model', label: 'Model' }, { key: 'qty', label: 'จำนวน (ชิ้น)' }, { key: 'month', label: 'เดือน' }]
+    : [{ key: 'projectName', label: 'ชื่อโครงการ' }, { key: 'endUser', label: 'End User' }, { key: 'month', label: 'เดือน' }];
+
+  for (var i = 0; i < fcastFields.length; i++) {
+    var f = fcastFields[i];
+    var newVal = (newData[f.key] !== undefined && newData[f.key] !== null) ? String(newData[f.key]) : '';
+    var oldVal = hasSnapshot ? ((oldData[f.key] !== undefined && oldData[f.key] !== null) ? String(oldData[f.key]) : '') : null;
+    if (!newVal && (!hasSnapshot || !oldVal)) continue;
+    var isChanged = hasSnapshot && oldVal !== newVal;
+    var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
+    var dot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
+    if (hasSnapshot) {
+      html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '</td>';
+      html += '<td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
+    } else {
+      html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  // สินค้า (สำหรับ project)
+  if (newData.type === 'project') {
+    var newItems = getItemsText(newData);
+    var oldItems = hasSnapshot ? getItemsText(oldData) : null;
+    var itemsChanged = hasSnapshot && oldItems !== newItems;
+    var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+    html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า</td>';
+    if (hasSnapshot) {
+      html += '<td style="padding:8px 10px;font-size:12px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
+      html += '<td style="padding:8px 10px;font-size:12px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    } else {
+      html += '<td style="padding:8px 10px;font-size:12px">' + esc(newItems) + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div>';
   return html;
 }
 // ================================================================
