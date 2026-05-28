@@ -740,27 +740,77 @@ function loadAllData() {
 }
 function refreshData() { loadAllData(); }
 
-// ========== JWT VERIFICATION ==========
+// ================================================================
+// TOKEN VERIFICATION WITH FIREBASE REGISTRY
+// ================================================================
+
 function base64url(str) {
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function verifyCustomerTokenV2(token) {
+async function verifyCustomerTokenV2(token) {
   try {
     var parts = token.split('.');
     if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
+    
     var payload = JSON.parse(atob(parts[1]));
-    if (payload.exp < Date.now() / 1000) return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
+    
+    // 1. ตรวจสอบวันหมดอายุ
+    if (payload.exp < Date.now() / 1000) {
+      return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
+    }
+    
+    // 2. ตรวจสอบ signature
     var secret = localStorage.getItem('jwt_secret');
     if (!secret) {
-      var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-      for (var id in registry) { if (registry[id].token === token && registry[id].isActive) return { valid: true, dealerId: payload.dealerId }; }
-      return { valid: false, error: 'ไม่พบข้อมูล token' };
+      return { valid: false, error: 'ระบบไม่พร้อมใช้งาน' };
     }
+    
     var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
-    if (parts[2] !== expectedSignature) return { valid: false, error: 'token ไม่ถูกต้อง' };
+    if (parts[2] !== expectedSignature) {
+      return { valid: false, error: 'token ไม่ถูกต้อง' };
+    }
+    
+    // 3. ✅ ตรวจสอบกับ Firebase Registry ว่า token ยัง active หรือไม่
+    var registryQuery = await db.collection('tokenRegistry')
+      .where('token', '==', token)
+      .limit(1)
+      .get();
+    
+    if (!registryQuery.empty) {
+      var tokenDoc = registryQuery.docs[0];
+      var tokenData = tokenDoc.data();
+      
+      if (tokenData.isActive === false) {
+        return { valid: false, error: 'ลิงก์ถูกเพิกถอนแล้ว กรุณาติดต่อพนักงานขาย' };
+      }
+      
+      // อัพเดทสถิติการใช้งาน (แบบไม่รอ)
+      tokenDoc.ref.update({
+        lastUsedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        useCount: firebase.firestore.FieldValue.increment(1)
+      }).catch(function(e) { console.warn('Failed to update useCount:', e); });
+      
+    } else {
+      // ไม่พบใน registry (token เก่า) → บันทึกอัตโนมัติ
+      console.warn('Token not found in registry, adding automatically');
+      await db.collection('tokenRegistry').add({
+        token: token,
+        dealerId: payload.dealerId,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        expiresAt: new Date(payload.exp * 1000),
+        isActive: true,
+        useCount: 1,
+        source: 'auto_discovered'
+      });
+    }
+    
     return { valid: true, dealerId: payload.dealerId };
-  } catch(e) { return { valid: false, error: e.message }; }
+    
+  } catch(e) {
+    console.error('Token verification error:', e);
+    return { valid: false, error: 'เกิดข้อผิดพลาดในการตรวจสอบความปลอดภัย' };
+  }
 }
 
 // ========== PIN VERIFICATION ==========

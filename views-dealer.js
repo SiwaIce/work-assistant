@@ -77,52 +77,109 @@ function getJWTSecret() {
 }
 var JWT_SECRET = getJWTSecret();
 
-// บันทึก token ใน registry
-function saveTokenToRegistry(token, dealerId, expiryDays, createdBy) {
-  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-  var tokenId = 'tok_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-  var payload = JSON.parse(atob(token.split('.')[1]));
-  registry[tokenId] = {
-    id: tokenId, token: token, dealerId: dealerId,
-    createdAt: new Date().toISOString(),
-    expiresAt: new Date(payload.exp * 1000).toISOString(),
-    expiryDays: expiryDays, createdBy: createdBy,
-    isActive: true, lastUsed: null, useCount: 0
-  };
-  localStorage.setItem('v7_token_registry', JSON.stringify(registry));
-  return tokenId;
-}
+// ================================================================
+// TOKEN REGISTRY WITH FIREBASE
+// ================================================================
 
-// เพิกถอน token ทั้งหมดของ dealer
-function revokeAllTokensForDealer(dealerId) {
-  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-  var revoked = 0;
-  for (var id in registry) {
-    if (registry[id].dealerId === dealerId && registry[id].isActive === true) {
-      registry[id].isActive = false;
-      registry[id].revokedAt = new Date().toISOString();
-      revoked++;
-    }
+// JWT Secret (เก็บใน localStorage เหมือนเดิม)
+function getJWTSecret() {
+  var saved = localStorage.getItem('jwt_secret');
+  if (!saved) {
+    saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('jwt_secret', saved);
   }
-  localStorage.setItem('v7_token_registry', JSON.stringify(registry));
-  return revoked;
+  return new TextEncoder().encode(saved);
 }
-// ================================================================
-// SHOW TOKEN MODAL (แทน PIN Modal เดิม)
-// ================================================================
+var JWT_SECRET = getJWTSecret();
 
+// Base64URL encode
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// สร้าง Token
+async function generateCustomerToken(dealerId, expiryDays) {
+  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
+  var encodedHeader = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  var encodedPayload = base64url(JSON.stringify(payload));
+  var signature = base64url(encodedHeader + '.' + encodedPayload + new TextDecoder().decode(JWT_SECRET));
+  return encodedHeader + '.' + encodedPayload + '.' + signature;
+}
+
+// ✅ บันทึก Token ไป Firebase
+async function saveTokenToFirebase(token, dealerId, expiryDays, createdBy) {
+  var payload = JSON.parse(atob(token.split('.')[1]));
+  var tokenData = {
+    token: token,
+    dealerId: dealerId,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    expiresAt: new Date(payload.exp * 1000),
+    expiryDays: expiryDays,
+    createdBy: createdBy || (CURRENT_USER ? CURRENT_USER.displayName : 'system'),
+    isActive: true,
+    useCount: 0
+  };
+  
+  var docRef = await db.collection('tokenRegistry').add(tokenData);
+  return { id: docRef.id, ...tokenData };
+}
+
+// ✅ เพิกถอน Token ทีละตัว
+async function revokeTokenFirebase(tokenId) {
+  await db.collection('tokenRegistry').doc(tokenId).update({
+    isActive: false,
+    revokedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+// ✅ เพิกถอน Token ทั้งหมดของ Dealer
+async function revokeAllTokensForDealerFirebase(dealerId) {
+  var snapshot = await db.collection('tokenRegistry')
+    .where('dealerId', '==', dealerId)
+    .where('isActive', '==', true)
+    .get();
+  
+  var batch = db.batch();
+  snapshot.forEach(function(doc) {
+    batch.update(doc.ref, { isActive: false, revokedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  });
+  await batch.commit();
+  return snapshot.size;
+}
+
+// ✅ ดึง Token ของ Dealer
+async function getTokensForDealer(dealerId) {
+  var snapshot = await db.collection('tokenRegistry')
+    .where('dealerId', '==', dealerId)
+    .orderBy('createdAt', 'desc')
+    .get();
+  
+  var tokens = [];
+  snapshot.forEach(function(doc) {
+    tokens.push({ id: doc.id, ...doc.data() });
+  });
+  return tokens;
+}
+
+// ✅ สร้าง Token และบันทึก
+async function createTokenAndSave(dealerId, expiryDays, createdBy) {
+  var token = await generateCustomerToken(dealerId, expiryDays);
+  var saved = await saveTokenToFirebase(token, dealerId, expiryDays, createdBy);
+  return { token: token, tokenId: saved.id };
+}
 async function showDealerTokenModal(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
   
-  // ดึง PIN ปัจจุบันจาก Firebase
+  // ดึง PIN ปัจจุบัน
   var currentPin = '';
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
     if (pinDoc.exists && pinDoc.data().pin) {
       currentPin = pinDoc.data().pin;
     }
-  } catch(e) { console.warn('Error loading PIN:', e); }
+  } catch(e) {}
   
   var html = `
     <div style="max-width:500px">
@@ -132,7 +189,7 @@ async function showDealerTokenModal(dealerId) {
       </div>
       <div class="form-group">
         <label>⏰ วันหมดอายุ</label>
-        <select id="tokenExpiryDays" class="form-control" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+        <select id="tokenExpiryDays" class="form-control">
           <option value="7">7 วัน</option>
           <option value="14">14 วัน</option>
           <option value="30" selected>30 วัน (แนะนำ)</option>
@@ -142,15 +199,14 @@ async function showDealerTokenModal(dealerId) {
           <option value="365">1 ปี (ถาวร)</option>
         </select>
       </div>
-      <!-- ✅ เพิ่มฟิลด์ PIN -->
       <div class="form-group">
-        <label>🔒 PIN (รหัสผ่านสำหรับลูกค้า) <span style="font-size:10px;color:var(--text2)">(ไม่บังคับ ถ้าไม่ใส่ไม่ต้องใช้)</span></label>
-        <input type="password" id="tokenPin" class="form-control" value="${currentPin}" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
-        <div class="hint" style="margin-top:4px">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่านหลังจากเปิดลิงก์ (เพิ่มความปลอดภัย)</div>
+        <label>🔒 PIN (รหัสผ่านสำหรับลูกค้า) <span style="font-size:10px;color:var(--text2)">(ไม่บังคับ)</span></label>
+        <input type="password" id="tokenPin" class="form-control" value="${currentPin}" placeholder="กรอกรหัสผ่าน 4-6 หลัก" maxlength="6">
+        <div class="hint">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่านหลังจากเปิดลิงก์</div>
       </div>
       <div class="form-group">
-        <label>📝 หมายเหตุ (ไม่บังคับ)</label>
-        <input type="text" id="tokenNote" class="form-control" placeholder="เช่น ส่งให้คุณสมชาย วันที่ 1 มิ.ย." style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+        <label>📝 หมายเหตุ</label>
+        <input type="text" id="tokenNote" class="form-control" placeholder="เช่น ส่งให้คุณสมชาย">
       </div>
       <div class="bg" style="display:flex;gap:8px;margin-top:8px">
         <button class="btn bp" onclick="createTokenAndLink('${dealerId}')" style="flex:1">🔗 สร้างลิงก์</button>
@@ -166,19 +222,6 @@ async function showDealerTokenModal(dealerId) {
   openM('🔗 สร้างลิงก์ปลอดภัยสำหรับ ' + dealer.name, html);
   loadExistingTokens(dealerId);
 }
-// ฟังก์ชันอัพเดท PIN ไป Firebase
-async function updateDealerPin(dealerId, pin) {
-  try {
-    await db.collection('dealerUpdates').doc(dealerId).set({ 
-      pin: pin || '',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-    return true;
-  } catch(e) {
-    console.warn('Error saving PIN:', e);
-    return false;
-  }
-}
 
 async function createTokenAndLink(dealerId) {
   var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
@@ -186,20 +229,19 @@ async function createTokenAndLink(dealerId) {
   var note = document.getElementById('tokenNote').value.trim();
   var createdBy = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong';
   
-  // ✅ บันทึก PIN ไป Firebase
+  // บันทึก PIN ไป Firebase
   if (pin) {
-    await updateDealerPin(dealerId, pin);
+    await db.collection('dealerUpdates').doc(dealerId).set({ pin: pin }, { merge: true });
   } else {
-    // ถ้าไม่ใส่ PIN ให้ลบ PIN เดิม
-    await updateDealerPin(dealerId, '');
+    await db.collection('dealerUpdates').doc(dealerId).set({ pin: '' }, { merge: true });
   }
   
-  var token = await generateCustomerToken(dealerId, expiryDays);
-  saveTokenToRegistry(token, dealerId, expiryDays, createdBy);
+  // สร้าง Token และบันทึกใน Firebase Registry
+  var result = await createTokenAndSave(dealerId, expiryDays, createdBy);
   
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(token);
+  var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(result.token);
   var expiryDate = addD(_td(), expiryDays);
   
   var pinMessage = pin ? `<div style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
@@ -223,21 +265,17 @@ async function createTokenAndLink(dealerId) {
     </div>
   `);
 }
-function revokeAllDealerTokens(dealerId) {
+
+async function revokeAllDealerTokens(dealerId) {
   if (!confirm('⚠️ เพิกถอนลิงก์ทั้งหมดของ Dealer นี้?\n\nลิงก์ที่ลูกค้ามีอยู่จะใช้ไม่ได้ทันที\nต้องส่งลิงก์ใหม่ให้ลูกค้า')) return;
-  var count = revokeAllTokensForDealer(dealerId);
+  
+  var count = await revokeAllTokensForDealerFirebase(dealerId);
   toast(`🗑️ เพิกถอน ${count} ลิงก์แล้ว`);
   loadExistingTokens(dealerId);
 }
 
-function loadExistingTokens(dealerId) {
-  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-  var tokens = [];
-  for (var id in registry) {
-    if (registry[id].dealerId === dealerId) tokens.push(registry[id]);
-  }
-  tokens.sort(function(a,b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-  
+async function loadExistingTokens(dealerId) {
+  var tokens = await getTokensForDealer(dealerId);
   var container = document.getElementById('existingTokenList');
   if (!container) return;
   
@@ -246,47 +284,77 @@ function loadExistingTokens(dealerId) {
     return;
   }
   
-  var html = '';
-  for (var i = 0; i < tokens.length; i++) {
-    var t = tokens[i];
-    var isActive = t.isActive;
-    var isExpired = new Date(t.expiresAt) < new Date();
-    var status = '';
-    if (!isActive) status = '🔴 ถูกเพิกถอน';
-    else if (isExpired) status = '⚫ หมดอายุ';
-    else status = '🟢 ใช้งานได้';
-    
-    html += `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:11px">
-        <div>
-          <div>${status}</div>
-          <div style="color:var(--text2)">หมดอายุ ${fD(t.expiresAt.split('T')[0])} | สร้าง ${fD(t.createdAt.split('T')[0])}</div>
-        </div>
-        <div>
-          ${isActive && !isExpired ? `<button class="btn bsm bd" onclick="revokeSingleToken('${t.id}', '${dealerId}')" style="padding:2px 6px">เพิกถอน</button>` : ''}
-        </div>
-      </div>
-    `;
-  }
+  var activeTokens = tokens.filter(function(t) { return t.isActive === true && new Date(t.expiresAt) > new Date(); });
+  var revokedTokens = tokens.filter(function(t) { return t.isActive === false; });
+  var expiredTokens = tokens.filter(function(t) { return t.isActive === true && new Date(t.expiresAt) <= new Date(); });
+  
+  var html = '<div class="ftabs" style="margin-bottom:8px">';
+  html += '<div class="ftab" onclick="showTokenListByStatus(\'' + dealerId + '\', \'active\')">🟢 ใช้งานได้ (' + activeTokens.length + ')</div>';
+  html += '<div class="ftab" onclick="showTokenListByStatus(\'' + dealerId + '\', \'revoked\')">🔴 ถูกเพิกถอน (' + revokedTokens.length + ')</div>';
+  html += '<div class="ftab" onclick="showTokenListByStatus(\'' + dealerId + '\', \'expired\')">⏰ หมดอายุ (' + expiredTokens.length + ')</div>';
+  html += '</div>';
+  
+  var displayTokens = activeTokens;
+  html += '<div id="tokenListDetail">' + renderTokenList(displayTokens) + '</div>';
   container.innerHTML = html;
 }
 
-function revokeSingleToken(tokenId, dealerId) {
-  if (!confirm('เพิกถอนลิงก์นี้? ลูกค้าจะใช้ลิงก์นี้ไม่ได้อีก')) return;
-  var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-  if (registry[tokenId]) {
-    registry[tokenId].isActive = false;
-    registry[tokenId].revokedAt = new Date().toISOString();
-    localStorage.setItem('v7_token_registry', JSON.stringify(registry));
-    toast('🗑️ เพิกถอนลิงก์แล้ว');
-    loadExistingTokens(dealerId);
+function renderTokenList(tokens) {
+  if (tokens.length === 0) return '<div class="hint">ไม่มีลิงก์</div>';
+  
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var html = '<div style="max-height:300px;overflow-y:auto">';
+  
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i];
+    var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(t.token);
+    var daysLeft = Math.ceil((new Date(t.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+    var statusIcon = t.isActive ? (daysLeft > 0 ? '✅' : '⏰') : '🔴';
+    var statusText = t.isActive ? (daysLeft > 0 ? 'ใช้งานได้' : 'หมดอายุ') : 'ถูกเพิกถอน';
+    
+    html += '<div class="card" style="margin-bottom:8px;padding:10px">';
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">';
+    html += '<span style="font-weight:700">' + statusIcon + ' ' + statusText + '</span>';
+    html += '<span style="font-size:10px;color:var(--text2)">' + new Date(t.createdAt.toDate()).toLocaleDateString('th-TH') + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:10px;word-break:break-all;background:var(--bg);padding:6px;border-radius:6px;margin-bottom:6px">' + fullUrl + '</div>';
+    html += '<div style="display:flex;gap:6px;justify-content:space-between;align-items:center">';
+    html += '<span style="font-size:10px;color:var(--text2)">หมดอายุ: ' + new Date(t.expiresAt).toLocaleDateString('th-TH') + (daysLeft > 0 ? ' (' + daysLeft + ' วัน)' : '') + '</span>';
+    html += '<div style="display:flex;gap:4px">';
+    html += '<button class="btn bsm bp" onclick="copyToClipboard(\'' + fullUrl.replace(/'/g, "\\'") + '\')">📋 คัดลอก</button>';
+    if (t.isActive && daysLeft > 0) {
+      html += '<button class="btn bsm bd" onclick="revokeSingleTokenFirebase(\'' + t.id + '\', \'' + t.dealerId + '\')">🗑️ เพิกถอน</button>';
+    }
+    html += '</div></div></div>';
   }
+  html += '</div>';
+  return html;
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text);
-  toast('📋 คัดลอกลิงก์แล้ว');
-  closeModal();
+async function revokeSingleTokenFirebase(tokenId, dealerId) {
+  if (!confirm('เพิกถอนลิงก์นี้? ลูกค้าจะใช้ลิงก์นี้ไม่ได้อีก')) return;
+  await revokeTokenFirebase(tokenId);
+  toast('🗑️ เพิกถอนลิงก์แล้ว');
+  loadExistingTokens(dealerId);
+}
+
+async function showTokenListByStatus(dealerId, status) {
+  var tokens = await getTokensForDealer(dealerId);
+  var filtered = [];
+  
+  if (status === 'active') {
+    filtered = tokens.filter(function(t) { return t.isActive === true && new Date(t.expiresAt) > new Date(); });
+  } else if (status === 'revoked') {
+    filtered = tokens.filter(function(t) { return t.isActive === false; });
+  } else {
+    filtered = tokens.filter(function(t) { return t.isActive === true && new Date(t.expiresAt) <= new Date(); });
+  }
+  
+  var detailContainer = document.getElementById('tokenListDetail');
+  if (detailContainer) {
+    detailContainer.innerHTML = renderTokenList(filtered);
+  }
 }
 // ================================================================
 // DEALER LIST
