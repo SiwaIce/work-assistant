@@ -2667,3 +2667,7 @@ function showTokenList(dealerId) {
   
   openM('🔗 รายการลิงก์ปลอดภัย', html);
 }
+// Alias for backward compatibility
+function revokeSingleToken(tokenId, dealerId) {
+  revokeSingleTokenFirebase(tokenId, dealerId);
+}
