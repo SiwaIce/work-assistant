@@ -1206,6 +1206,12 @@ function renderNewProjItemsList() {
   }
   container.innerHTML = html;
 }
+function removeNewProjectItem(idx) {
+  if (typeof newProjItemsArray !== 'undefined') {
+    newProjItemsArray.splice(idx, 1);
+    renderNewProjItemsList();
+  }
+}
 
 function submitNewProject() {
   var projectName = document.getElementById('newProjName').value.trim();
