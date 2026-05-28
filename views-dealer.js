@@ -115,6 +115,15 @@ async function showDealerTokenModal(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
   
+  // ดึง PIN ปัจจุบันจาก Firebase
+  var currentPin = '';
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (pinDoc.exists && pinDoc.data().pin) {
+      currentPin = pinDoc.data().pin;
+    }
+  } catch(e) { console.warn('Error loading PIN:', e); }
+  
   var html = `
     <div style="max-width:500px">
       <div class="form-group">
@@ -132,6 +141,12 @@ async function showDealerTokenModal(dealerId) {
           <option value="180">180 วัน</option>
           <option value="365">1 ปี (ถาวร)</option>
         </select>
+      </div>
+      <!-- ✅ เพิ่มฟิลด์ PIN -->
+      <div class="form-group">
+        <label>🔒 PIN (รหัสผ่านสำหรับลูกค้า) <span style="font-size:10px;color:var(--text2)">(ไม่บังคับ ถ้าไม่ใส่ไม่ต้องใช้)</span></label>
+        <input type="password" id="tokenPin" class="form-control" value="${currentPin}" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+        <div class="hint" style="margin-top:4px">💡 ถ้าใส่ PIN ลูกค้าจะต้องกรอกรหัสผ่านหลังจากเปิดลิงก์ (เพิ่มความปลอดภัย)</div>
       </div>
       <div class="form-group">
         <label>📝 หมายเหตุ (ไม่บังคับ)</label>
@@ -151,11 +166,33 @@ async function showDealerTokenModal(dealerId) {
   openM('🔗 สร้างลิงก์ปลอดภัยสำหรับ ' + dealer.name, html);
   loadExistingTokens(dealerId);
 }
+// ฟังก์ชันอัพเดท PIN ไป Firebase
+async function updateDealerPin(dealerId, pin) {
+  try {
+    await db.collection('dealerUpdates').doc(dealerId).set({ 
+      pin: pin || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return true;
+  } catch(e) {
+    console.warn('Error saving PIN:', e);
+    return false;
+  }
+}
 
 async function createTokenAndLink(dealerId) {
   var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
+  var pin = document.getElementById('tokenPin').value.trim();
   var note = document.getElementById('tokenNote').value.trim();
   var createdBy = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong';
+  
+  // ✅ บันทึก PIN ไป Firebase
+  if (pin) {
+    await updateDealerPin(dealerId, pin);
+  } else {
+    // ถ้าไม่ใส่ PIN ให้ลบ PIN เดิม
+    await updateDealerPin(dealerId, '');
+  }
   
   var token = await generateCustomerToken(dealerId, expiryDays);
   saveTokenToRegistry(token, dealerId, expiryDays, createdBy);
@@ -164,6 +201,11 @@ async function createTokenAndLink(dealerId) {
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
   var fullUrl = basePath + 'client-view.html?token=' + encodeURIComponent(token);
   var expiryDate = addD(_td(), expiryDays);
+  
+  var pinMessage = pin ? `<div style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
+    🔒 <strong>PIN สำหรับลูกค้า:</strong> <span style="font-size:16px;font-weight:700;letter-spacing:2px">${pin}</span>
+    <div class="hint" style="margin-top:4px">⚠️ แจ้ง PIN นี้ให้ลูกค้าทาง LINE หรือโทรศัพท์ (ห้ามใส่ในลิงก์)</div>
+  </div>` : '<div class="hint">ℹ️ ไม่ได้ตั้ง PIN ลูกค้าสามารถเข้าดูได้เลย</div>';
   
   openM('✅ สร้างลิงก์เรียบร้อย', `
     <div class="form-group">
@@ -174,14 +216,13 @@ async function createTokenAndLink(dealerId) {
       <div><label>📅 หมดอายุ</label><div>${expiryDate} (${expiryDays} วัน)</div></div>
       <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
     </div>
+    ${pinMessage}
     <div class="bg" style="margin-top:12px">
       <button class="btn bp" onclick="copyToClipboard('${fullUrl}')">📋 คัดลอกลิงก์</button>
       <button class="btn bo" onclick="showDealerTokenModal('${dealerId}')">↩️ กลับ</button>
     </div>
-    <div class="hint" style="margin-top:12px">🔒 ลิงก์นี้ปลอดภัย หมดอายุอัตโนมัติ</div>
   `);
 }
-
 function revokeAllDealerTokens(dealerId) {
   if (!confirm('⚠️ เพิกถอนลิงก์ทั้งหมดของ Dealer นี้?\n\nลิงก์ที่ลูกค้ามีอยู่จะใช้ไม่ได้ทันที\nต้องส่งลิงก์ใหม่ให้ลูกค้า')) return;
   var count = revokeAllTokensForDealer(dealerId);
@@ -419,11 +460,10 @@ function rDealerDet(el) {
 <div class="bg">
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
-// ใน rDealerDet() หา div class="bg" แล้วเพิ่มปุ่มนี้ข้างๆ ปุ่ม PIN
 <button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 ลิงก์ปลอดภัย</button>
+<button class="btn bsm bo" onclick="showChangePinModal('${d.id}')">🔒 PIN</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
   <button class="btn bsm bo" onclick="openClientView('${d.id}')">🖥️</button>
-  <button class="btn bsm bo" onclick="showDealerPinModal('${d.id}')" title="ตั้งรหัสผ่านสำหรับลูกค้า">🔒 PIN</button>
 <button class="btn bsm bp" onclick="syncDealerPipelineToCustomer('${d.id}')" title="Sync Pipeline ให้ลูกค้า">🔄 Sync</button>
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
   <button class="btn bsm bd" onclick="delDealer('${d.id}')">🗑️</button>
@@ -2437,4 +2477,56 @@ function copyClientLink(url, dealerName) {
 function closeModal() {
   var modal = document.querySelector('.modal-overlay');
   if (modal) modal.remove();
+}
+// ================================================================
+// MANAGE PIN ONLY (ไม่ต้องสร้าง Token ใหม่)
+// ================================================================
+
+async function showChangePinModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var currentPin = '';
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (pinDoc.exists && pinDoc.data().pin) {
+      currentPin = pinDoc.data().pin;
+    }
+  } catch(e) {}
+  
+  var html = `
+    <div style="max-width:400px">
+      <div class="form-group">
+        <label>🏪 Dealer</label>
+        <div><strong>${sanitize(dealer.name)}</strong></div>
+      </div>
+      <div class="form-group">
+        <label>🔒 ตั้งรหัสผ่าน (PIN)</label>
+        <input type="password" id="changePinInput" class="form-control" value="${currentPin}" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6">
+        <div class="hint">💡 ถ้าเว้นว่าง จะลบ PIN (ลูกค้าไม่ต้องใส่รหัส)</div>
+      </div>
+      <div class="bg" style="margin-top:8px">
+        <button class="btn bp" onclick="savePinOnly('${dealerId}')">💾 บันทึก PIN</button>
+        <button class="btn bo" onclick="closeModal()">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+  
+  openM('🔒 ตั้งรหัสผ่านสำหรับ ' + dealer.name, html);
+}
+
+async function savePinOnly(dealerId) {
+  var pin = document.getElementById('changePinInput').value.trim();
+  
+  try {
+    await db.collection('dealerUpdates').doc(dealerId).set({ 
+      pin: pin || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    toast(pin ? '✅ บันทึก PIN เรียบร้อย' : '🗑️ ลบ PIN แล้ว');
+    closeModal();
+  } catch(e) {
+    toast('❌ เกิดข้อผิดพลาด: ' + e.message);
+  }
 }

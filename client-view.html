@@ -580,6 +580,98 @@ function verifyCustomerTokenV2(token) {
     return { valid: false, error: e.message };
   }
 }
+// ================================================================
+// PIN VERIFICATION (หลังจาก verify token)
+// ================================================================
+
+var pendingDealerId = null;  // เก็บ dealerId ระหว่างรอใส่ PIN
+
+async function checkAndVerifyPin(dealerId) {
+  try {
+    // ดึง PIN จาก Firebase
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+    
+    // ถ้าไม่มี PIN ให้ผ่านเลย
+    if (!requiredPin || requiredPin === '') {
+      console.log('No PIN required, loading data...');
+      loadAllData();
+      return true;
+    }
+    
+    // มี PIN ให้แสดงหน้าสำหรับใส่
+    showPinPrompt(dealerId, requiredPin);
+    return false;
+    
+  } catch(err) {
+    console.warn('Error checking PIN:', err);
+    // ถ้า error ให้ผ่านไปก่อน (fallback)
+    loadAllData();
+    return true;
+  }
+}
+
+function showPinPrompt(dealerId, requiredPin) {
+  pendingDealerId = dealerId;
+  
+  var html = `
+    <div class="empty-state" style="text-align:center;padding:60px 20px">
+      <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
+      <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
+      <div style="max-width:250px;margin:0 auto">
+        <input type="password" id="pinInput" placeholder="请输入 PIN 4-6 หลัก" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" maxlength="6" autocomplete="off">
+      </div>
+      <div style="margin-top:20px">
+        <button class="btn btn-primary" onclick="submitPin()" style="margin-right:8px">✅ ยืนยัน</button>
+        <button class="btn" onclick="showAccessDenied('ไม่มีรหัสผ่านไม่สามารถเข้าดูข้อมูลได้')">ยกเลิก</button>
+      </div>
+      <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
+    </div>
+  `;
+  
+  document.getElementById('tabContent').innerHTML = html;
+  
+  // ซ่อน tab bar
+  var tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.style.display = 'none';
+  
+  // ให้ focus ที่ input
+  setTimeout(function() {
+    var pinInput = document.getElementById('pinInput');
+    if (pinInput) pinInput.focus();
+  }, 100);
+}
+
+function submitPin() {
+  var enteredPin = document.getElementById('pinInput').value.trim();
+  if (!enteredPin) {
+    showToast('กรุณากรอกรหัสผ่าน');
+    return;
+  }
+  
+  // ดึง PIN ที่ถูกต้องจาก Firebase อีกครั้ง
+  db.collection('dealerUpdates').doc(pendingDealerId).get().then(function(doc) {
+    var requiredPin = doc.exists ? doc.data().pin : '';
+    
+    if (enteredPin === requiredPin) {
+      // PIN ถูกต้อง
+      showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
+      // แสดง tab bar กลับมา
+      var tabBar = document.querySelector('.tab-bar');
+      if (tabBar) tabBar.style.display = 'flex';
+      loadAllData();
+    } else {
+      // PIN ผิด
+      showToast('❌ รหัสผ่านไม่ถูกต้อง');
+      // ล้างค่า
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinInput').focus();
+    }
+  }).catch(function(err) {
+    showToast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  });
+}
 // ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;
@@ -1282,19 +1374,28 @@ function cancelUpdate(type, dealerId, updateId) {
   ref.delete().then(function() { showToast('🗑️ ยกเลิกการอัพเดทแล้ว'); renderUpdateHistoryTab(); }).catch(function(err) { showToast('❌ ผิดพลาด: ' + err.message); });
 }
 
-// ========== TOKEN VERIFICATION & INIT ==========
-var urlParams = new URLSearchParams(window.location.search);
-var token = urlParams.get('token');
 async function verifyAndProceed() {
-  if (!token) { showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย'); return; }
+  var token = urlParams.get('token');
+  
+  if (!token) {
+    showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย');
+    return;
+  }
+  
   showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
+  
   var result = await verifyCustomerTokenV2(token);
-  if (!result.valid) { showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง'); return; }
+  
+  if (!result.valid) {
+    showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง');
+    return;
+  }
+  
   dealerId = result.dealerId;
   console.log('Token verified, dealerId:', dealerId);
-  document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-  loadModels();
-  loadAllData();
+  
+  // ✅ ตรวจสอบ PIN หลังจาก token ถูกต้อง
+  await checkAndVerifyPin(dealerId);
 }
 function showAccessDenied(message) {
   var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
