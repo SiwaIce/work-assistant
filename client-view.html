@@ -8,7 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <style>
-/* [ใส่ CSS เหมือนเดิม - ขอไม่ใส่ซ้ำเพื่อความกระชับ] */
+/* ===== BASE ===== */
 :root {
   --bg: #0a0c10;
   --bg2: #15171c;
@@ -31,14 +31,6 @@
   --text2: #64748b;
   --accent: #2563eb;
 }
-/* Filter tabs */
-.ftabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; }
-.ftab { padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text2); border:1px solid var(--border); transition:all .15s; }
-.ftab:hover { border-color:var(--accent); color:var(--accent); }
-.ftab.act { background:var(--accent); border-color:var(--accent); color:#fff; }
-/* Update history cards */
-.update-card { transition: box-shadow .15s; }
-.update-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai', sans-serif;
@@ -63,7 +55,6 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  transition: all 0.2s;
 }
 .theme-toggle:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.05); }
 .cv-container { max-width: 1400px; margin: 0 auto; padding: 24px; }
@@ -380,6 +371,12 @@ body {
   font-weight: 600;
   margin-left: 8px;
 }
+.ftabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; }
+.ftab { padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text2); border:1px solid var(--border); transition:all .15s; }
+.ftab:hover { border-color:var(--accent); color:var(--accent); }
+.ftab.act { background:var(--accent); border-color:var(--accent); color:#fff; }
+.timeline-event { transition: all 0.15s; }
+.timeline-event:hover { background: rgba(255,255,255,0.04) !important; }
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -426,7 +423,7 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
-// Global variables
+// ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;
 var currentTab = 'pipeline';
@@ -438,8 +435,11 @@ var allModels = [];
 var selectedMonth = null;
 var allMonths = [];
 var newProjectItems = [];
+var pipelineSearch = '';
+var pipelineSort = 'date_desc';
+var pipelineFilter = 'all';
 
-// Helper functions
+// ========== HELPERS ==========
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
 function applyTheme(theme) {
   if (theme === 'light') { document.body.classList.add('theme-light'); document.querySelector('.theme-toggle').textContent = '☀️'; }
@@ -449,15 +449,10 @@ function toggleTheme() { var current = getSavedTheme(); var next = current === '
 applyTheme(getSavedTheme());
 
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-var sanitize = esc; // alias
+var sanitize = esc;
 function formatThaiDate(iso) { if (!iso) return ''; var d = new Date(iso); if (isNaN(d)) return iso; return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
-
-function closeModal() {
-var modal = document.querySelector('.modal-overlay'); 
-if (modal) modal.remove(); 
-}
-
+function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
 function _nw() { return new Date().toISOString(); }
 
 var STATUS_LIST = [
@@ -468,7 +463,6 @@ var STATUS_LIST = [
   { id: 'on_hold', name: '⏸️ On Hold' }, { id: 'lost', name: '❌ Lost' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
-
 function generateMonths() {
   var months = [];
   var now = new Date();
@@ -480,7 +474,6 @@ function generateMonths() {
   }
   return months;
 }
-
 function loadModels() {
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
@@ -498,138 +491,30 @@ function loadModels() {
   }
 }
 
-// ================================================================
-// FIRESTORE: เขียนไปที่ dealerUpdates (ไม่ต้อง login)
-// ================================================================
-
+// ========== FIRESTORE REFS ==========
 function getCustomerPipelineRef(dealerId, pipeId) {
-  if (pipeId) {
-    return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId);
-  }
+  if (pipeId) return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId);
   return db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
 }
-
 function getCustomerForecastRef(dealerId, forecastId) {
-  if (forecastId) {
-    return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId);
-  }
+  if (forecastId) return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId);
   return db.collection('dealerUpdates').doc(dealerId).collection('forecast');
 }
+function getCustomerTimelineRef(dealerId) { return db.collection('dealerUpdates').doc(dealerId).collection('timeline'); }
 
-function getCustomerTimelineRef(dealerId) {
-  return db.collection('dealerUpdates').doc(dealerId).collection('timeline');
-}
-
-// บันทึก pipeline update
-// บันทึก pipeline update (พร้อม snapshot เดิมสำหรับ before/after)
-function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
-  // ดึงข้อมูลเดิมก่อน เพื่อบันทึก snapshot สำหรับ before/after
-  var existingRef = getCustomerPipelineRef(dealerId, pipeId);
-  return existingRef.get().then(function(existingDoc) {
-    var snapshot = existingDoc.exists ? existingDoc.data() : null;
-
-    var updateData = JSON.parse(JSON.stringify(data));
-    updateData._customerUpdate = true;
-    updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-    updateData._status = 'pending';
-    updateData._originalDealerId = dealerId;
-    updateData._originalPipeId = pipeId;
-    updateData._updateType = 'pipeline';
-
-    // เก็บ snapshot ของข้อมูลเดิม (ก่อนแก้) เพื่อใช้เปรียบเทียบ before/after
-    if (snapshot && !snapshot._snapshot) {
-      // ลบ fields ระบบออกจาก snapshot
-      var cleanSnap = JSON.parse(JSON.stringify(snapshot));
-      delete cleanSnap._customerUpdate;
-      delete cleanSnap._updatedAt;
-      delete cleanSnap._status;
-      delete cleanSnap._snapshot;
-      delete cleanSnap._approvedAt;
-      updateData._snapshot = cleanSnap;
-    } else if (snapshot && snapshot._snapshot) {
-      // ถ้ามี snapshot เก่าอยู่แล้ว ให้ใช้อันเดิม (เก็บ before ที่แท้จริง)
-      updateData._snapshot = snapshot._snapshot;
-    }
-
-    return existingRef.set(updateData, { merge: true }).then(function() {
-      var timelineRef = getCustomerTimelineRef(dealerId);
-      var timelineEntry = {
-        id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-        type: 'pipeline_update',
-        pipeId: pipeId,
-        projectName: data.projectName,
-        content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'pending'
-      };
-      return timelineRef.doc(timelineEntry.id).set(timelineEntry);
-    });
-  });
-}
-
-// แทนที่ function saveCustomerForecastUpdate
-
-function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
-  // ดึงข้อมูลเดิมก่อน
-  var existingRef = getCustomerForecastRef(dealerId, forecastId);
-  return existingRef.get().then(function(existingDoc) {
-    var snapshot = existingDoc.exists ? existingDoc.data() : null;
-    
-    var updateData = JSON.parse(JSON.stringify(data));
-    updateData._customerUpdate = true;
-    updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-    updateData._status = 'pending';
-    updateData._originalDealerId = dealerId;
-    updateData._updateType = type;
-    
-    // เก็บ snapshot ของข้อมูลเดิม
-    if (snapshot && !snapshot._snapshot) {
-      var cleanSnap = JSON.parse(JSON.stringify(snapshot));
-      delete cleanSnap._customerUpdate;
-      delete cleanSnap._updatedAt;
-      delete cleanSnap._status;
-      delete cleanSnap._snapshot;
-      updateData._snapshot = cleanSnap;
-    } else if (snapshot && snapshot._snapshot) {
-      updateData._snapshot = snapshot._snapshot;
-    }
-    
-    return existingRef.set(updateData, { merge: true }).then(function() {
-      var timelineRef = getCustomerTimelineRef(dealerId);
-      var timelineEntry = {
-        id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-        type: type === 'runrate' ? 'runrate_update' : 'project_update',
-        content: type === 'runrate' ? 'อัพเดทแผนสั่งซื้อ (Run Rate)' : 'อัพเดทแผนสั่งซื้อ (โครงการ)',
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'pending'
-      };
-      return timelineRef.doc(timelineEntry.id).set(timelineEntry);
-    });
-  });
-}
+// ========== DATA LOAD ==========
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
-  
-  console.log('loadPipeline called - dealerId:', dealerId);
-  
-  // อ่านจาก dealerUpdates/{dealerId}/pipeline เท่านั้น
   return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
     pipelinesData = [];
     querySnapshot.forEach(function(doc) {
       var data = doc.data();
       data.id = doc.id;
-      // แสดงสถานะ pending ถ้ายังไม่ได้รับการอนุมัติ
       data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
       pipelinesData.push(data);
-      console.log('Loaded pipeline:', data.projectName, 'status:', data._status);
     });
-    
-    console.log('Total pipelines for this dealer:', pipelinesData.length);
     return pipelinesData;
-  }).catch(function(err) {
-    console.warn('Load pipeline error:', err);
-    return [];
-  });
+  }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
 }
 function loadForecast() {
   if (!dealerId) return Promise.resolve();
@@ -643,26 +528,16 @@ function loadForecast() {
       else if (item.type === 'project') forecastData.projects.push(item);
     });
     return Promise.resolve();
-  }).catch(function(err) { 
-    console.warn('Load forecast error:', err); 
-    return Promise.resolve();
-  });
+  }).catch(function(err) { console.warn('Load forecast error:', err); return Promise.resolve(); });
 }
-
 function loadTimeline() {
   if (!dealerId) return Promise.resolve([]);
   return getCustomerTimelineRef(dealerId).orderBy('timestamp', 'desc').limit(50).get().then(function(querySnapshot) {
     timelineLogs = [];
-    querySnapshot.forEach(function(doc) {
-      timelineLogs.push(doc.data());
-    });
+    querySnapshot.forEach(function(doc) { timelineLogs.push(doc.data()); });
     return timelineLogs;
-  }).catch(function(err) { 
-    console.warn('Load timeline error:', err); 
-    return Promise.resolve([]);
-  });
+  }).catch(function(err) { console.warn('Load timeline error:', err); return Promise.resolve([]); });
 }
-
 function loadDealerName() {
   var urlParams = new URLSearchParams(window.location.search);
   var nameParam = urlParams.get('name');
@@ -675,24 +550,16 @@ function loadDealerName() {
   document.getElementById('dealerName').innerHTML = 'Dealer';
   return Promise.resolve(dealerName);
 }
-
 function showNotice(message, isSuccess) {
   var noticeArea = document.getElementById('noticeArea');
   if (!noticeArea) return;
   noticeArea.innerHTML = '<div class="cv-notice ' + (isSuccess ? 'success' : '') + '">' + esc(message) + '</div>';
-  setTimeout(function() {
-    if (noticeArea) noticeArea.innerHTML = '';
-  }, 5000);
+  setTimeout(function() { if (noticeArea) noticeArea.innerHTML = ''; }, 5000);
 }
-
-// เพิ่ม console.log ใน loadAllData (ประมาณบรรทัด 670)
-
 function loadAllData() {
   if (!dealerId) return;
-  console.log('loadAllData - dealerId:', dealerId, 'uid:', uid);
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]).then(function() {
-    console.log('All data loaded, pipelines:', pipelinesData.length);
     renderCurrentTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
   }).catch(function(err) { 
@@ -701,171 +568,102 @@ function loadAllData() {
   });
 }
 function refreshData() { loadAllData(); }
-// เพิ่ม function renderPipelineTab() ถ้ายังไม่มี
 
+// ========== PIPELINE TAB (with Search / Sort / Filter) ==========
+function filterAndSortPipelines(pipelines) {
+  if (!pipelines.length) return [];
+  var result = pipelines.slice();
+  if (pipelineFilter !== 'all') {
+    result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
+  }
+  if (pipelineSearch && pipelineSearch.trim() !== '') {
+    var term = pipelineSearch.toLowerCase().trim();
+    result = result.filter(function(p) {
+      if ((p.projectName || '').toLowerCase().indexOf(term) !== -1) return true;
+      if ((p.endUserTH || '').toLowerCase().indexOf(term) !== -1) return true;
+      if ((p.endUserEN || '').toLowerCase().indexOf(term) !== -1) return true;
+      if ((p.model || '').toLowerCase().indexOf(term) !== -1) return true;
+      if (p.items && p.items.length) {
+        for (var i=0;i<p.items.length;i++) if ((p.items[i].model || '').toLowerCase().indexOf(term) !== -1) return true;
+      }
+      return false;
+    });
+  }
+  if (pipelineSort === 'date_desc') {
+    result.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
+  } else if (pipelineSort === 'amount_desc') {
+    result.sort(function(a,b) { return (b.forecastAmount || 0) - (a.forecastAmount || 0); });
+  } else if (pipelineSort === 'name_asc') {
+    result.sort(function(a,b) { var na = (a.projectName || '').toLowerCase(); var nb = (b.projectName || '').toLowerCase(); if (na < nb) return -1; if (na > nb) return 1; return 0; });
+  }
+  return result;
+}
 function renderPipelineTab() {
-  console.log('renderPipelineTab called, pipelinesData length:', pipelinesData.length);
-  
-  if (!pipelinesData.length) {
-    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📋 โครงการของท่าน</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีโครงการ</div><div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div></div></div>';
+  var filtered = filterAndSortPipelines(pipelinesData);
+  if (!filtered.length) {
+    document.getElementById('tabContent').innerHTML = '<div class="section"><div class="section-title">📋 โครงการของท่าน</div><div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีโครงการ' + (pipelineSearch ? ' ที่ตรงกับ "' + esc(pipelineSearch) + '"' : '') + '</div><div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div></div></div>';
     return;
   }
-  
-  var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ' โครงการ)</div>';
-  html += '<div style="text-align:right; margin-bottom:12px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  html += '<div style="overflow-x:auto"><table class="data-table"><thead><tr>';
-  html += '<th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th>';
-  html += '<tr></thead><tbody>';
-  
-  for (var i = 0; i < pipelinesData.length; i++) {
-    var p = pipelinesData[i];
+  var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + filtered.length + ')</div>';
+  html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center">';
+  html += '<div style="flex:2; min-width:150px"><input type="text" id="pipelineSearchInput" placeholder="🔍 ค้นหาโครงการ, End User, Model..." value="' + esc(pipelineSearch) + '" style="width:100%; padding:8px 12px" oninput="pipelineSearch=this.value; renderPipelineTab()"></div>';
+  html += '<div style="width:140px"><select id="pipelineSortSelect" onchange="pipelineSort=this.value; renderPipelineTab()" style="width:100%; padding:8px 8px">';
+  html += '<option value="date_desc"' + (pipelineSort === 'date_desc' ? ' selected' : '') + '>📅 ล่าสุด</option>';
+  html += '<option value="amount_desc"' + (pipelineSort === 'amount_desc' ? ' selected' : '') + '>💰 มูลค่ามากสุด</option>';
+  html += '<option value="name_asc"' + (pipelineSort === 'name_asc' ? ' selected' : '') + '>🔤 ชื่อ A-Z</option>';
+  html += '</select></div>';
+  html += '<div style="width:130px"><select id="pipelineFilterSelect" onchange="pipelineFilter=this.value; renderPipelineTab()" style="width:100%; padding:8px 8px">';
+  html += '<option value="all"' + (pipelineFilter === 'all' ? ' selected' : '') + '>📊 ทั้งหมด</option>';
+  html += '<option value="pending"' + (pipelineFilter === 'pending' ? ' selected' : '') + '>⏳ รอตรวจสอบ</option>';
+  html += '<option value="approved"' + (pipelineFilter === 'approved' ? ' selected' : '') + '>✅ อนุมัติแล้ว</option>';
+  html += '<option value="rejected"' + (pipelineFilter === 'rejected' ? ' selected' : '') + '>❌ ปฏิเสธ</option>';
+  html += '</select></div>';
+  html += '<div><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div></div>';
+  html += '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
+  for (var i=0;i<filtered.length;i++) {
+    var p = filtered[i];
     var itemsText = '';
-    if (p.items && p.items.length) {
-      for (var j = 0; j < p.items.length; j++) {
-        itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '');
-        if (j < p.items.length - 1) itemsText += ', ';
-      }
-    } else if (p.model) {
-      itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
-    }
+    if (p.items && p.items.length) { for (var j=0;j<p.items.length;j++) { itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : ''); if (j < p.items.length-1) itemsText += ', '; } }
+    else if (p.model) itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
     var amount = p.forecastAmount || 0;
-    
-    // ตรวจสอบสถานะ pending
     var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-    var pendingBadge = isPending ? '<span class="pending-badge" style="background:#f59e0b;color:#000;margin-left:8px">⏳ รอตรวจสอบ</span>' : '';
-    
-    html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')">';
-    html += '<td style="width:45px">' + (i+1) + '</td>';
-    html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td>';
-    html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-    html += '<td>' + getStatusLabel(p.status) + '</td>';
-    html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
-    html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
-    html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
-    html += '</tr>';
+    var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
+    html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')"><td style="width:45px">' + (i+1) + '</td><td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td><td>' + esc(p.endUserTH || p.endUser || '-') + '</td><td>' + getStatusLabel(p.status) + '</td><td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td><td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td><td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td></tr>';
   }
-  
-  html += '</tbody></table></div></div>';
+  html += '</tbody></table></div><div style="margin-top:8px; font-size:11px; color:var(--text2); text-align:right">แสดง ' + filtered.length + ' รายการ' + (pipelineSearch ? ' (ค้นหา: "' + esc(pipelineSearch) + '")' : '') + '</div></div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ================================================================
-// PIPELINE FUNCTIONS
-// ================================================================
-
-// ใน function renderPipelineTab() บรรทัดประมาณ 560-580
-// แก้ไขส่วนที่สร้าง html สำหรับแต่ละโครงการ
-
-for (var i = 0; i < pipelinesData.length; i++) {
-  var p = pipelinesData[i];
-  var itemsText = '';
-  if (p.items && p.items.length) {
-    for (var j = 0; j < p.items.length; j++) {
-      itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : '');
-      if (j < p.items.length - 1) itemsText += ', ';
-    }
-  } else if (p.model) {
-    itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
-  }
-  var amount = p.forecastAmount || 0;
-  
-  // ตรวจสอบสถานะ pending
-  var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-  var pendingBadge = isPending ? '<span class="pending-badge" style="background:#f59e0b;color:#000;margin-left:8px">⏳ รอตรวจสอบ</span>' : '';
-  
-  html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')">';
-  html += '<td style="width:45px">' + (i+1) + '</td>';
-  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + '</td>';
-  html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-  html += '<td>' + getStatusLabel(p.status) + '</td>';
-  html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
-  html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
-  html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
-  html += '</tr>';
-}
-
-// แทนที่ function showPipelineDetail ใน client-view.html
-
+// ========== PIPELINE DETAIL (with Timeline + Before/After + Who) ==========
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
-  
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
   var totalItems = 0;
-  
   if (p.items && p.items.length) {
-    for (var i = 0; i < p.items.length; i++) {
-      var it = p.items[i];
-      var qty = it.qty || 1;
-      totalItems += qty;
-      itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>';
-    }
-  } else if (p.model) {
-    var qty = p.modelQty || 1;
-    totalItems = qty;
-    itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td>';
-  }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr>';
-  itemsHtml += '</tbody></table>';
-  
-  // สถานะ badge
-  var statusColor = '';
-  var statusText = '';
-  if (p._status === 'pending') {
-    statusColor = '#f59e0b';
-    statusText = '⏳ รอตรวจสอบ';
-  } else if (p._status === 'approved') {
-    statusColor = '#22c55e';
-    statusText = '✅ อนุมัติแล้ว';
-  } else if (p._status === 'rejected') {
-    statusColor = '#ef4444';
-    statusText = '❌ ปฏิเสธ';
-  } else {
-    statusColor = '#3b82f6';
-    statusText = '📋 ปกติ';
-  }
-  
+    for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  } else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr></tbody></table>';
+  var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
+  var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
   html += '<div class="section"><div class="section-title">' + esc(p.projectName) + '</div>';
-  html += '<div class="form-row"><div><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div>';
-  html += '<div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div></div>';
-  html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> ' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div>';
-  html += '<div><strong>📅 Bidding:</strong> ' + (p.biddingDate || '-') + '</div></div>';
+  html += '<div class="form-row"><div><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div><div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div></div>';
+  html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> ' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div><div><strong>📅 Bidding:</strong> ' + (p.biddingDate || '-') + '</div></div>';
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
-  html += '<div style="margin-top:20px"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดท</button></div>';
-  html += '</div>';
-  
-  // ✅ เพิ่มส่วน Timeline การอัพเดท
-  html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div>';
-  html += '<div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div>';
-  html += '</div>';
-  
+  html += '<div style="margin-top:20px"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดท</button></div></div>';
+  html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
   document.getElementById('tabContent').innerHTML = html;
-  
-  // โหลด timeline ของโครงการนี้
   loadPipeTimeline(pipeId, p);
 }
-
 function loadPipeTimeline(pipeId, currentData) {
   var container = document.getElementById('pipeTimeline_' + pipeId);
   if (!container) return;
-  
   var allEvents = [];
-  
-  // 1. ดึงจาก timeline collection
   getCustomerTimelineRef(dealerId).where('pipeId', '==', pipeId).get().then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data._source = 'timeline';
-      allEvents.push(data);
-    });
-    
-    // 2. เพิ่ม record ปัจจุบัน (ถ้ามีการอัพเดทที่ยังไม่ถูกบันทึกใน timeline)
+    snapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data._source = 'timeline'; allEvents.push(data); });
     if (currentData && currentData._updatedAt) {
-      var hasExisting = allEvents.some(function(e) { 
-        return e.timestamp && e.timestamp.seconds === currentData._updatedAt.seconds;
-      });
+      var hasExisting = allEvents.some(function(e) { return e.timestamp && e.timestamp.seconds === currentData._updatedAt.seconds; });
       if (!hasExisting) {
         allEvents.push({
           id: 'current_' + pipeId,
@@ -874,42 +672,27 @@ function loadPipeTimeline(pipeId, currentData) {
           timestamp: currentData._updatedAt,
           status: currentData._status || 'pending',
           _source: 'current',
-          changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null
+          changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null,
+          updatedBy: currentData.updatedBy || 'customer'
         });
       }
     }
-    
-    // เรียงตามเวลา (ล่าสุดสุด)
-    allEvents.sort(function(a, b) {
-      var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0;
-      var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0;
-      return tb - ta;
-    });
-    
+    allEvents.sort(function(a,b) { var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0; var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0; return tb - ta; });
     renderPipeTimeline(container, allEvents, currentData);
-  }).catch(function(err) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>ไม่สามารถโหลดประวัติได้</div></div>';
-  });
+  }).catch(function(err) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>ไม่สามารถโหลดประวัติได้</div></div>'; });
 }
-
 function renderPipeTimeline(container, events, currentData) {
-  if (!events.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div>';
-    return;
-  }
-  
+  if (!events.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div>'; return; }
   var html = '<div style="display:flex;flex-direction:column;gap:12px">';
-  
-  for (var i = 0; i < events.length; i++) {
+  for (var i=0;i<events.length;i++) {
     var ev = events[i];
     var dateStr = ev.timestamp ? (ev.timestamp.seconds ? new Date(ev.timestamp.seconds * 1000).toLocaleString('th-TH') : ev.timestamp) : '-';
-    var isCurrent = ev._source === 'current';
-    var status = ev.status || (isCurrent ? (currentData ? currentData._status : 'pending') : 'pending');
+    var status = ev.status || (ev._source === 'current' ? (currentData ? currentData._status : 'pending') : 'pending');
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
     var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
     var icon = ev.type === 'pipeline_update' ? '📋' : '📝';
-    
-    // ตรวจสอบว่ามีการเปลี่ยนแปลง (before/after)
+    var updatedBy = ev.updatedBy || (ev._source === 'current' ? (currentData ? currentData.updatedBy : 'customer') : (ev._source === 'timeline' ? 'customer' : 'unknown'));
+    var byBadge = updatedBy === 'sales' ? '<span style="background:#3b82f620; color:#3b82f6; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👨‍💼 พนักงานขาย</span>' : '<span style="background:#f59e0b20; color:#f59e0b; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👤 ลูกค้า</span>';
     var hasChanges = ev.changes || (ev._snapshot && currentData);
     var changeSummary = '';
     if (hasChanges) {
@@ -921,342 +704,229 @@ function renderPipeTimeline(container, events, currentData) {
         if (before.forecastAmount !== after.forecastAmount) changedFields.push('มูลค่า');
         if (before.model !== after.model) changedFields.push('Model');
         if (JSON.stringify(before.items) !== JSON.stringify(after.items)) changedFields.push('สินค้า');
-        if (changedFields.length) {
-          changeSummary = '<div style="font-size:11px;color:var(--accent);margin-top:2px">🔄 เปลี่ยนแปลง: ' + changedFields.join(', ') + '</div>';
-        }
+        if (changedFields.length) changeSummary = '<div style="font-size:11px;color:var(--accent);margin-top:2px">🔄 เปลี่ยนแปลง: ' + changedFields.join(', ') + '</div>';
       }
     }
-    
     html += '<div class="timeline-event" style="border-left:3px solid ' + statusColor + '; padding:10px 12px; background:rgba(255,255,255,0.02); border-radius:8px">';
     html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:4px">';
-    html += '<div><span style="font-size:16px">' + icon + '</span> <strong>' + (ev.type === 'pipeline_update' ? 'อัพเดทโครงการ' : 'หมายเหตุ') + '</strong>';
-    html += ' <span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:2px 8px; border-radius:12px; font-size:10px">' + statusText + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:11px; color:var(--text2)">' + dateStr + '</div>';
-    html += '</div>';
-    html += '<div style="font-size:13px; line-height:1.5">' + esc(ev.content || ev.updateNote || 'อัพเดทข้อมูล') + '</div>';
-    html += changeSummary;
-    
-    // ปุ่มดูรายละเอียดการเปลี่ยนแปลง
-    if (hasChanges) {
-      html += '<button class="btn btn-sm" style="margin-top:8px; padding:4px 10px" onclick="viewTimelineChangeDetail(\'' + pipeId + '\', \'' + (ev.id || 'current') + '\')">👁️ ดูการเปลี่ยนแปลง</button>';
-    }
-    
+    html += '<div><span style="font-size:16px">' + icon + '</span> <strong>' + (ev.type === 'pipeline_update' ? 'อัพเดทโครงการ' : 'หมายเหตุ') + '</strong>' + byBadge;
+    html += ' <span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:2px 8px; border-radius:12px; font-size:10px">' + statusText + '</span></div>';
+    html += '<div style="font-size:11px; color:var(--text2)">' + dateStr + '</div></div>';
+    html += '<div style="font-size:13px; line-height:1.5">' + esc(ev.content || ev.updateNote || 'อัพเดทข้อมูล') + '</div>' + changeSummary;
+    if (hasChanges) html += '<button class="btn btn-sm" style="margin-top:8px; padding:4px 10px" onclick="viewTimelineChangeDetail(\'' + pipeId + '\', \'' + (ev.id || 'current') + '\')">👁️ ดูการเปลี่ยนแปลง</button>';
     html += '</div>';
   }
-  
   html += '</div>';
   container.innerHTML = html;
 }
-
 function viewTimelineChangeDetail(pipeId, eventId) {
-  // หาข้อมูลจาก currentData หรือจาก events
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
-  
-  // ใช้ before/after จาก currentData
   var before = p._snapshot || null;
   var after = p;
-  
-  var html = '<div style="max-width:550px">';
-  html += '<h3>📋 รายละเอียดการเปลี่ยนแปลง</h3>';
-  html += '<div style="margin-bottom:12px"><strong>📋 โครงการ:</strong> ' + esc(p.projectName) + '</div>';
-  
-  if (!before) {
-    html += '<div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:8px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
-  }
-  
-  // สร้างตารางเปรียบเทียบ
-  html += '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
-  html += '<thead><tr style="border-bottom:2px solid var(--border)">';
-  html += '<th style="text-align:left;padding:8px">ฟิลด์</th>';
-  if (before) html += '<th style="text-align:left;padding:8px">ก่อน</th>';
-  html += '<th style="text-align:left;padding:8px">หลัง</th>';
-  html += '</tr></thead><tbody>';
-  
+  var html = '<div style="max-width:550px"><h3>📋 รายละเอียดการเปลี่ยนแปลง</h3><div style="margin-bottom:12px"><strong>📋 โครงการ:</strong> ' + esc(p.projectName) + '</div>';
+  if (!before) html += '<div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:8px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
+  html += '<table style="width:100%; margin-top:12px; border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th>' + (before ? '<th style="text-align:left;padding:8px">ก่อน</th>' : '') + '<th style="text-align:left;padding:8px">หลัง</th></tr></thead><tbody>';
   var fields = [
-    { key: 'status', label: 'สถานะ' },
-    { key: 'forecastAmount', label: 'มูลค่า (฿)' },
-    { key: 'model', label: 'Model' },
-    { key: 'biddingDate', label: 'Bidding Date' },
-    { key: 'shipmentDate', label: 'Shipment Date' }
+    { key: 'status', label: 'สถานะ' }, { key: 'forecastAmount', label: 'มูลค่า (฿)' },
+    { key: 'model', label: 'Model' }, { key: 'biddingDate', label: 'Bidding Date' }, { key: 'shipmentDate', label: 'Shipment Date' }
   ];
-  
-  for (var i = 0; i < fields.length; i++) {
+  for (var i=0;i<fields.length;i++) {
     var f = fields[i];
     var newVal = after[f.key] || '-';
     var oldVal = before ? (before[f.key] || '-') : null;
     var isChanged = before && String(oldVal) !== String(newVal);
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
-    
-    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
-    html += '<td style="padding:8px">' + f.label + '</td>';
-    if (before) {
-      html += '<td style="padding:8px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(String(oldVal)) + '</td>';
-    }
-    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td>';
-    html += '</tr>';
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px">' + f.label + '</td>';
+    if (before) html += '<td style="padding:8px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(String(oldVal)) + '</td>';
+    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td></tr>';
   }
-  
-  // รายการสินค้า
   var newItems = (after.items || []).map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
   var oldItems = before && before.items ? before.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : null;
   var itemsChanged = before && oldItems !== newItems;
-  
-  html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)">';
-  html += '<td style="padding:8px">สินค้า</td>';
-  if (before) {
-    html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
-  }
-  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
-  html += '</table>';
-  
-  html += '</tbody></table>';
-  html += '<div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div>';
-  html += '</div>';
-  
+  html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า</td>';
+  if (before) html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
+  html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td></tr>';
+  html += '</tbody></table><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
   showDetailModal('📋 การเปลี่ยนแปลง', html);
 }
+function showDetailModal(title, bodyHtml) {
+  var existing = document.getElementById('detailModal');
+  if (existing) existing.remove();
+  var el = document.createElement('div');
+  el.id = 'detailModal';
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:3000;backdrop-filter:blur(4px);padding:16px';
+  el.innerHTML = '<div style="background:var(--card);border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border)"><div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--card)"><div style="font-size:16px;font-weight:700;color:var(--accent)">' + title + '</div><button onclick="closeDetailModal()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer">✕</button></div><div style="padding:20px;overflow-y:auto">' + bodyHtml + '</div></div>';
+  el.addEventListener('click', function(e) { if (e.target === el) closeDetailModal(); });
+  document.body.appendChild(el);
+}
+function closeDetailModal() { var el = document.getElementById('detailModal'); if (el) el.remove(); }
 
+// ========== UPDATE MODAL ==========
 function showUpdateModal(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
-  
   var statusOptions = '';
-  for (var i = 0; i < STATUS_LIST.length; i++) {
-    statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
-  }
-  
-  var modelDatalist = '<datalist id="globalModelListEdit">';
-  for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
-  modelDatalist += '</datalist>';
-  
+  for (var i=0;i<STATUS_LIST.length;i++) statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
+  var modelDatalist = '<datalist id="globalModelListEdit">' + allModels.map(function(m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist>';
+  var editItems = (p.items && p.items.length) ? JSON.parse(JSON.stringify(p.items)) : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
   var itemsHtml = '<div id="editItemsContainer">';
-  var editItems = [];
-  if (p.items && p.items.length) editItems = JSON.parse(JSON.stringify(p.items));
-  else if (p.model) editItems = [{ model: p.model, qty: p.modelQty || 1 }];
-  
-  for (var i = 0; i < editItems.length; i++) {
-    itemsHtml += '<div class="form-row edit-item-row" data-idx="' + i + '">';
-    itemsHtml += '<input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(editItems[i].model) + '" placeholder="ชื่อสินค้า" style="flex:2">';
-    itemsHtml += '<input type="number" class="editItemQty" value="' + (editItems[i].qty || 1) + '" min="1" style="width:80px">';
-    itemsHtml += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button>';
-    itemsHtml += '</div>';
+  for (var i=0;i<editItems.length;i++) {
+    itemsHtml += '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(editItems[i].model) + '" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="' + (editItems[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
   }
-  itemsHtml += '</div><button type="button" class="btn btn-sm" style="margin-top:8px" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
-  
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
-  modalHtml += '<div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
-  modalHtml += '<div class="modal-body">';
-  modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div>';
-  modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>';
-  modalHtml += '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>';
-  modalHtml += '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div>';
-  modalHtml += '<div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div>';
-  modalHtml += '</div><div class="modal-footer">';
-  modalHtml += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
-  modalHtml += '<button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button>';
-  modalHtml += '</div></div></div>';
+  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
+  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div><div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div><div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div><div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
-
 function addEditItemRow() {
   var container = document.getElementById('editItemsContainer');
   if (!container) return;
-  var html = '<div class="form-row edit-item-row">';
-  html += '<input type="text" class="editItemModel" list="globalModelListEdit" placeholder="ชื่อสินค้า" style="flex:2">';
-  html += '<input type="number" class="editItemQty" value="1" min="1" style="width:80px">';
-  html += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button>';
-  html += '</div>';
+  var html = '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
   container.insertAdjacentHTML('beforeend', html);
 }
-
 function removeEditItemRow(btn) { var row = btn.closest('.edit-item-row'); if (row) row.remove(); }
-
 function submitPipelineUpdate(pipeId) {
   var newProjectName = document.getElementById('editProjectName').value.trim();
   var newEndUser = document.getElementById('editEndUser').value.trim();
   var newStatus = document.getElementById('editStatus').value;
   var updateContent = document.getElementById('updateContent').value.trim();
-  
   if (!newProjectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-  
   var items = [];
   var itemRows = document.querySelectorAll('#editItemsContainer .edit-item-row');
-  for (var i = 0; i < itemRows.length; i++) {
+  for (var i=0;i<itemRows.length;i++) {
     var modelInput = itemRows[i].querySelector('.editItemModel');
     var qtyInput = itemRows[i].querySelector('.editItemQty');
-    if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) {
-      items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
-    }
+    if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
   }
   if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-  
   var totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
-  
   var updatedPipeline = {
-    id: pipeId,
-    projectName: newProjectName,
-    endUserTH: newEndUser,
-    status: newStatus,
-    items: items,
-    model: items[0].model,
-    modelQty: totalQty,
-    forecastAmount: 0,
-    dealerId: dealerId,
-    updateNote: updateContent || 'อัพเดทข้อมูลทั่วไป',
-    updatedBy: 'customer',
-    updatedAt: new Date().toISOString()
+    id: pipeId, projectName: newProjectName, endUserTH: newEndUser, status: newStatus,
+    items: items, model: items[0].model, modelQty: totalQty, forecastAmount: 0,
+    dealerId: dealerId, updateNote: updateContent || 'อัพเดทข้อมูลทั่วไป',
+    updatedBy: 'customer', updatedAt: new Date().toISOString()
   };
-  
   saveCustomerPipelineUpdate(dealerId, pipeId, updatedPipeline).then(function() {
     showToast('✅ ส่งข้อมูลอัพเดทให้พนักงานขายเรียบร้อยแล้ว!');
     showNotice('📨 ข้อมูลถูกส่งให้พนักงานขายเรียบร้อยแล้ว จะได้รับการติดต่อกลับ', true);
     closeModal();
     loadAllData();
-  }).catch(function(err) { 
-    alert('เกิดข้อผิดพลาด: ' + err.message);
+  }).catch(function(err) { alert('เกิดข้อผิดพลาด: ' + err.message); });
+}
+function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
+  var existingRef = getCustomerPipelineRef(dealerId, pipeId);
+  return existingRef.get().then(function(existingDoc) {
+    var snapshot = existingDoc.exists ? existingDoc.data() : null;
+    var updateData = JSON.parse(JSON.stringify(data));
+    updateData._customerUpdate = true;
+    updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    updateData._status = 'pending';
+    updateData._originalDealerId = dealerId;
+    updateData._originalPipeId = pipeId;
+    updateData._updateType = 'pipeline';
+    if (snapshot && !snapshot._snapshot) {
+      var cleanSnap = JSON.parse(JSON.stringify(snapshot));
+      delete cleanSnap._customerUpdate; delete cleanSnap._updatedAt; delete cleanSnap._status; delete cleanSnap._snapshot;
+      updateData._snapshot = cleanSnap;
+    } else if (snapshot && snapshot._snapshot) updateData._snapshot = snapshot._snapshot;
+    return existingRef.set(updateData, { merge: true }).then(function() {
+      return getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
+        type: 'pipeline_update', pipeId: pipeId, projectName: data.projectName,
+        content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending',
+        updatedBy: 'customer'
+      });
+    });
   });
 }
 
-// ================================================================
-// FORECAST FUNCTIONS
-// ================================================================
-
-function getMonthSummary() {
-  var summary = {};
-  for (var i = 0; i < allMonths.length; i++) summary[allMonths[i]] = { runrate: 0, project: 0, total: 0 };
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; }
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; }
-  }
+// ========== FORECAST (unchanged but keep existing functions) ==========
+function getMonthSummary() { var summary = {}; for (var i=0;i<allMonths.length;i++) summary[allMonths[i]] = { runrate:0, project:0, total:0 };
+  for (var i=0;i<forecastData.runrate.length;i++) { var r = forecastData.runrate[i]; if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; } }
+  for (var i=0;i<forecastData.projects.length;i++) { var p = forecastData.projects[i]; if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; } }
   return summary;
 }
-
 function selectMonth(month) { selectedMonth = month; renderForecastTab(); }
-
 function addRunrateItem() {
   var model = document.getElementById('runrateModel').value.trim();
   var qty = parseInt(document.getElementById('runrateQty').value);
   if (!model) { alert('กรุณาเลือกสินค้า'); return; }
   if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
-  var newItem = { id: 'rr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), model: model, qty: qty, month: selectedMonth, dealerId: dealerId, type: 'runrate' };
+  var newItem = { id: 'rr_' + Date.now() + '_' + Math.random().toString(36).substr(2,4), model: model, qty: qty, month: selectedMonth, dealerId: dealerId, type: 'runrate' };
   forecastData.runrate.push(newItem);
-  saveCustomerForecastUpdate(dealerId, newItem.id, newItem, 'runrate');
-  document.getElementById('runrateModel').value = '';
-  document.getElementById('runrateQty').value = '1';
+  var updateData = JSON.parse(JSON.stringify(newItem));
+  updateData._customerUpdate = true; updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData._status = 'pending';
+  getCustomerForecastRef(dealerId, newItem.id).set(updateData).then(function() {
+    getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
+      type: 'runrate_update', content: 'เพิ่มแผนสั่งซื้อ (Run Rate)', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer'
+    });
+  });
+  document.getElementById('runrateModel').value = ''; document.getElementById('runrateQty').value = '1';
   showToast('✅ เพิ่ม Run Rate แล้ว ข้อมูลจะถูกส่งให้พนักงานขาย');
   renderForecastTab();
 }
-
-function deleteRunrateItem(idx) {
-  if (!confirm('ลบรายการนี้?')) return;
+function deleteRunrateItem(idx) { if (!confirm('ลบรายการนี้?')) return;
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
   var actualItem = monthRunrate[idx];
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    if (forecastData.runrate[i].id === actualItem.id) {
-      forecastData.runrate.splice(i, 1);
-      getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e) {});
-      break;
-    }
-  }
-  showToast('🗑️ ลบรายการแล้ว');
-  renderForecastTab();
+  for (var i=0;i<forecastData.runrate.length;i++) { if (forecastData.runrate[i].id === actualItem.id) { forecastData.runrate.splice(i,1); getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e){}); break; } }
+  showToast('🗑️ ลบรายการแล้ว'); renderForecastTab();
 }
-
-function editRunrateItem(idx) {
-  var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
-  var actualItem = monthRunrate[idx];
-  if (!actualItem) return;
+function editRunrateItem(idx) { var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; }); var actualItem = monthRunrate[idx]; if (!actualItem) return;
   var newQty = prompt('แก้ไขจำนวน ' + actualItem.model, actualItem.qty);
-  if (newQty && !isNaN(parseInt(newQty))) {
-    actualItem.qty = parseInt(newQty);
-    saveCustomerForecastUpdate(dealerId, actualItem.id, actualItem, 'runrate');
-    showToast('✅ แก้ไขจำนวนแล้ว');
-    renderForecastTab();
+  if (newQty && !isNaN(parseInt(newQty))) { actualItem.qty = parseInt(newQty);
+    getCustomerForecastRef(dealerId, actualItem.id).set(actualItem, { merge: true });
+    showToast('✅ แก้ไขจำนวนแล้ว'); renderForecastTab();
   }
 }
-
-function editProjectItem(projIdx) {
-  var proj = forecastData.projects[projIdx];
-  if (!proj) return;
+function editProjectItem(projIdx) { var proj = forecastData.projects[projIdx]; if (!proj) return;
   var newName = prompt('แก้ไขชื่อโครงการ', proj.projectName);
-  if (newName && newName.trim()) {
-    proj.projectName = newName.trim();
-    saveCustomerForecastUpdate(dealerId, proj.id, proj, 'project');
-    showToast('✅ แก้ไขโครงการเรียบร้อยแล้ว');
-    renderForecastTab();
+  if (newName && newName.trim()) { proj.projectName = newName.trim();
+    getCustomerForecastRef(dealerId, proj.id).set(proj, { merge: true });
+    showToast('✅ แก้ไขโครงการเรียบร้อยแล้ว'); renderForecastTab();
   }
 }
-
-function deleteProjectItem(projIdx) {
-  if (!confirm('ลบโครงการนี้?')) return;
+function deleteProjectItem(projIdx) { if (!confirm('ลบโครงการนี้?')) return;
   var actualItem = forecastData.projects[projIdx];
-  forecastData.projects.splice(projIdx, 1);
-  getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e) {});
-  showToast('🗑️ ลบโครงการแล้ว');
-  renderForecastTab();
+  forecastData.projects.splice(projIdx,1);
+  getCustomerForecastRef(dealerId, actualItem.id).delete().catch(function(e){});
+  showToast('🗑️ ลบโครงการแล้ว'); renderForecastTab();
 }
-
 function toggleProjectDetail(projIdx) { var el = document.getElementById('projectDetail_' + projIdx); if (el) el.classList.toggle('show'); }
-
 function addProjectItem() {
   var model = document.getElementById('newProjectItemModel').value.trim();
   var qty = parseInt(document.getElementById('newProjectItemQty').value);
   if (!model) { alert('กรุณาเลือกสินค้า'); return; }
   if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
   newProjectItems.push({ model: model, qty: qty });
-  document.getElementById('newProjectItemModel').value = '';
-  document.getElementById('newProjectItemQty').value = '1';
+  document.getElementById('newProjectItemModel').value = ''; document.getElementById('newProjectItemQty').value = '1';
   renderNewProjectItemsList();
 }
-
-function removeNewProjectItem(idx) { newProjectItems.splice(idx, 1); renderNewProjectItemsList(); }
-
+function removeNewProjectItem(idx) { newProjectItems.splice(idx,1); renderNewProjectItemsList(); }
 function renderNewProjectItemsList() {
   var container = document.getElementById('newProjectItemsContainer');
   if (!container) return;
   if (!newProjectItems.length) { container.innerHTML = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีสินค้า — กด ➔ เพื่อเพิ่ม</div>'; return; }
   var html = '';
-  for (var i = 0; i < newProjectItems.length; i++) {
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border)">';
-    html += '<span><strong>' + esc(newProjectItems[i].model) + '</strong> x' + newProjectItems[i].qty + '</span>';
-    html += '<button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">ลบ</button>';
-    html += '</div>';
-  }
+  for (var i=0;i<newProjectItems.length;i++) html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border)"><span><strong>' + esc(newProjectItems[i].model) + '</strong> x' + newProjectItems[i].qty + '</span><button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">ลบ</button></div>';
   container.innerHTML = html;
 }
-
 function addNewProject() {
   var projectName = document.getElementById('newProjectName').value.trim();
   var endUser = document.getElementById('newProjectEndUser').value.trim();
   if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
   if (newProjectItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
   var totalQty = newProjectItems.reduce(function(s, it) { return s + it.qty; }, 0);
-  var newProject = { 
-    id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4), 
-    projectName: projectName, 
-    endUser: endUser || '-', 
-    month: selectedMonth, 
-    items: JSON.parse(JSON.stringify(newProjectItems)), 
-    totalQty: totalQty, 
-    dealerId: dealerId, 
-    type: 'project' 
-  };
+  var newProject = { id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2,4), projectName: projectName, endUser: endUser || '-', month: selectedMonth, items: JSON.parse(JSON.stringify(newProjectItems)), totalQty: totalQty, dealerId: dealerId, type: 'project' };
   forecastData.projects.push(newProject);
-  saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
-  document.getElementById('newProjectName').value = '';
-  document.getElementById('newProjectEndUser').value = '';
-  newProjectItems = [];
-  renderNewProjectItemsList();
-  showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว');
-  renderForecastTab();
+  var updateData = JSON.parse(JSON.stringify(newProject));
+  updateData._customerUpdate = true; updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData._status = 'pending';
+  getCustomerForecastRef(dealerId, newProject.id).set(updateData);
+  getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
+    type: 'project_update', projectName: projectName, content: 'เพิ่มโครงการใหม่', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer'
+  });
+  document.getElementById('newProjectName').value = ''; document.getElementById('newProjectEndUser').value = ''; newProjectItems = []; renderNewProjectItemsList();
+  showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว'); renderForecastTab();
 }
-
 function loadProjectToForm() {
   var select = document.getElementById('existingProjectSelect');
   var idx = parseInt(select.value);
@@ -1266,56 +936,24 @@ function loadProjectToForm() {
   document.getElementById('newProjectName').value = proj.projectName;
   document.getElementById('newProjectEndUser').value = proj.endUserTH || '';
   newProjectItems = [];
-  if (proj.items && proj.items.length) {
-    for (var i = 0; i < proj.items.length; i++) newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 });
-  } else if (proj.model) {
-    newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
-  }
+  if (proj.items && proj.items.length) { for (var i=0;i<proj.items.length;i++) newProjectItems.push({ model: proj.items[i].model, qty: proj.items[i].qty || 1 }); }
+  else if (proj.model) newProjectItems.push({ model: proj.model, qty: proj.modelQty || 1 });
   renderNewProjectItemsList();
   select.value = '';
   showToast('📋 โหลดสินค้าจากโครงการ "' + proj.projectName + '" แล้ว');
 }
-
-function clearProjectForm() {
-  if (confirm('ล้างข้อมูลในฟอร์ม?')) {
-    document.getElementById('newProjectName').value = '';
-    document.getElementById('newProjectEndUser').value = '';
-    newProjectItems = [];
-    renderNewProjectItemsList();
-    showToast('🗑️ ล้างฟอร์มแล้ว');
-  }
-}
-
+function clearProjectForm() { if (confirm('ล้างข้อมูลในฟอร์ม?')) { document.getElementById('newProjectName').value = ''; document.getElementById('newProjectEndUser').value = ''; newProjectItems = []; renderNewProjectItemsList(); showToast('🗑️ ล้างฟอร์มแล้ว'); } }
 function saveClientForecast() {
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    saveCustomerForecastUpdate(dealerId, forecastData.runrate[i].id, forecastData.runrate[i], 'runrate');
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    saveCustomerForecastUpdate(dealerId, forecastData.projects[i].id, forecastData.projects[i], 'project');
-  }
-  showToast('💾 บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
-  renderForecastTab();
+  for (var i=0;i<forecastData.runrate.length;i++) getCustomerForecastRef(dealerId, forecastData.runrate[i].id).set(forecastData.runrate[i], { merge: true });
+  for (var i=0;i<forecastData.projects.length;i++) getCustomerForecastRef(dealerId, forecastData.projects[i].id).set(forecastData.projects[i], { merge: true });
+  showToast('💾 บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว'); renderForecastTab();
 }
-
 function downloadForecastExcel() {
-  var wsData = [['ประเภท', 'ชื่อ', 'Model', 'จำนวน', 'End User', 'เดือน']];
-  for (var i = 0; i < forecastData.runrate.length; i++) {
-    var r = forecastData.runrate[i];
-    wsData.push(['Run Rate', '', r.model, r.qty, '', r.month]);
-  }
-  for (var i = 0; i < forecastData.projects.length; i++) {
-    var p = forecastData.projects[i];
-    for (var j = 0; j < p.items.length; j++) {
-      wsData.push(['Project', p.projectName, p.items[j].model, p.items[j].qty, p.endUser || '', p.month]);
-    }
-  }
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Forecast');
-  XLSX.writeFile(wb, 'Forecast_' + dealerName + '.xlsx');
-  showToast('📎 ดาวน์โหลด Excel แล้ว');
+  var wsData = [['ประเภท','ชื่อ','Model','จำนวน','End User','เดือน']];
+  for (var i=0;i<forecastData.runrate.length;i++) wsData.push(['Run Rate','',forecastData.runrate[i].model,forecastData.runrate[i].qty,'',forecastData.runrate[i].month]);
+  for (var i=0;i<forecastData.projects.length;i++) for (var j=0;j<forecastData.projects[i].items.length;j++) wsData.push(['Project',forecastData.projects[i].projectName,forecastData.projects[i].items[j].model,forecastData.projects[i].items[j].qty,forecastData.projects[i].endUser||'',forecastData.projects[i].month]);
+  var ws = XLSX.utils.aoa_to_sheet(wsData); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Forecast'); XLSX.writeFile(wb, 'Forecast_' + dealerName + '.xlsx'); showToast('📎 ดาวน์โหลด Excel แล้ว');
 }
-
 function uploadForecastExcel(input) {
   var file = input.files[0];
   if (!file) return;
@@ -1326,19 +964,23 @@ function uploadForecastExcel(input) {
     var sheet = workbook.Sheets[workbook.SheetNames[0]];
     var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (!rows || rows.length < 2) { alert('ไม่พบข้อมูล'); input.value = ''; return; }
-    for (var i = 1; i < rows.length; i++) {
+    for (var i=1;i<rows.length;i++) {
       var row = rows[i];
       if (!row || !row[0]) continue;
       var type = row[0], name = row[1], model = row[2], qty = parseInt(row[3]) || 0, endUser = row[4] || '', month = row[5];
       if (!month || allMonths.indexOf(month) === -1) continue;
       if (type === 'Run Rate' && model && qty > 0) {
-        var newRunrate = { id: 'rr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' };
+        var newRunrate = { id: 'rr_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2,4), model: model, qty: qty, month: month, dealerId: dealerId, type: 'runrate' };
         forecastData.runrate.push(newRunrate);
-        saveCustomerForecastUpdate(dealerId, newRunrate.id, newRunrate, 'runrate');
+        var updateData = JSON.parse(JSON.stringify(newRunrate));
+        updateData._customerUpdate = true; updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData._status = 'pending';
+        getCustomerForecastRef(dealerId, newRunrate.id).set(updateData);
       } else if (type === 'Project' && name && model && qty > 0) {
-        var newProject = { id: 'proj_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4), projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' };
+        var newProject = { id: 'proj_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2,4), projectName: name, endUser: endUser || '-', month: month, items: [{ model: model, qty: qty }], totalQty: qty, dealerId: dealerId, type: 'project' };
         forecastData.projects.push(newProject);
-        saveCustomerForecastUpdate(dealerId, newProject.id, newProject, 'project');
+        var updateData2 = JSON.parse(JSON.stringify(newProject));
+        updateData2._customerUpdate = true; updateData2._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData2._status = 'pending';
+        getCustomerForecastRef(dealerId, newProject.id).set(updateData2);
       }
     }
     saveClientForecast();
@@ -1346,7 +988,6 @@ function uploadForecastExcel(input) {
   };
   reader.readAsArrayBuffer(file);
 }
-
 function renderForecastTab() {
   allMonths = generateMonths();
   if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
@@ -1354,774 +995,218 @@ function renderForecastTab() {
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth; });
   var monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth; });
   var totalRunrate = 0, totalProject = 0;
-  for (var i = 0; i < monthRunrate.length; i++) totalRunrate += monthRunrate[i].qty;
-  for (var i = 0; i < monthProjects.length; i++) totalProject += monthProjects[i].totalQty;
-  
+  for (var i=0;i<monthRunrate.length;i++) totalRunrate += monthRunrate[i].qty;
+  for (var i=0;i<monthProjects.length;i++) totalProject += monthProjects[i].totalQty;
   var monthCardsHtml = '<div class="month-scroll">';
-  for (var i = 0; i < allMonths.length; i++) {
-    var m = allMonths[i];
-    var summary = monthSummary[m] || { total: 0, runrate: 0, project: 0 };
-    var activeClass = (selectedMonth === m) ? 'active' : '';
-    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')">';
-    monthCardsHtml += '<div class="month-name">' + m + '</div>';
-    monthCardsHtml += '<div class="month-total">' + summary.total + '</div>';
-    monthCardsHtml += '<div class="month-detail">🏪' + summary.runrate + ' 📋' + summary.project + '</div>';
-    monthCardsHtml += '</div>';
+  for (var i=0;i<allMonths.length;i++) { var m = allMonths[i]; var summary = monthSummary[m] || { total:0, runrate:0, project:0 }; var activeClass = (selectedMonth === m) ? 'active' : '';
+    monthCardsHtml += '<div class="month-card ' + activeClass + '" onclick="selectMonth(\'' + m + '\')"><div class="month-name">' + m + '</div><div class="month-total">' + summary.total + '</div><div class="month-detail">🏪' + summary.runrate + ' 📋' + summary.project + '</div></div>';
   }
   monthCardsHtml += '</div>';
-  
-  var statsHtml = '<div class="stats-grid">';
-  statsHtml += '<div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div>';
-  statsHtml += '<div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div>';
-  statsHtml += '</div>';
-  
+  var statsHtml = '<div class="stats-grid"><div class="stat-card"><div class="stat-month">' + (selectedMonth || '-') + '</div><div class="stat-qty">' + (totalRunrate + totalProject) + '</div><div class="stat-detail">รวมทั้งสิ้น</div></div><div class="stat-card"><div class="stat-month">🏪 Run Rate</div><div class="stat-qty">' + totalRunrate + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">📋 โครงการ</div><div class="stat-qty">' + totalProject + '</div><div class="stat-detail">ชิ้น</div></div><div class="stat-card"><div class="stat-month">📦 โครงการ</div><div class="stat-qty">' + monthProjects.length + '</div><div class="stat-detail">รายการ</div></div></div>';
   var runrateHtml = '';
-  for (var i = 0; i < monthRunrate.length; i++) {
-    var r = monthRunrate[i];
-    runrateHtml += '<div class="forecast-item">';
-    runrateHtml += '<div style="flex:2"><strong>' + esc(r.model) + '</strong></div>';
-    runrateHtml += '<div style="width:80px;text-align:center">x' + r.qty + '</div>';
-    runrateHtml += '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️</button>';
-    runrateHtml += '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️</button>';
-    runrateHtml += '</div>';
+  for (var i=0;i<monthRunrate.length;i++) { var r = monthRunrate[i];
+    runrateHtml += '<div class="forecast-item"><div style="flex:2"><strong>' + esc(r.model) + '</strong></div><div style="width:80px;text-align:center">x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️</button></div>';
   }
   if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:16px;text-align:center">ยังไม่มีรายการ — เพิ่มด้านล่าง</div>';
-  
   var projectsHtml = '';
-  for (var i = 0; i < monthProjects.length; i++) {
-    var proj = monthProjects[i];
+  for (var i=0;i<monthProjects.length;i++) { var proj = monthProjects[i];
     var itemsText = '';
-    for (var j = 0; j < proj.items.length; j++) {
-      itemsText += proj.items[j].model + ' x' + proj.items[j].qty;
-      if (j < proj.items.length - 1) itemsText += ', ';
-    }
-    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')">';
-    projectsHtml += '<div class="project-name"><span>📋 ' + esc(proj.projectName) + '</span><span style="font-size:12px">' + proj.totalQty + ' ชิ้น</span></div>';
-    if (proj.endUser && proj.endUser !== '-') projectsHtml += '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>';
-    projectsHtml += '<div class="project-items">📦 ' + esc(itemsText) + '</div>';
-    projectsHtml += '<div class="project-detail" id="projectDetail_' + i + '">';
-    projectsHtml += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button>';
-    projectsHtml += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button></div></div></div>';
+    for (var j=0;j<proj.items.length;j++) itemsText += proj.items[j].model + ' x' + proj.items[j].qty + (j < proj.items.length-1 ? ', ' : '');
+    projectsHtml += '<div class="project-item" onclick="toggleProjectDetail(' + i + ')"><div class="project-name"><span>📋 ' + esc(proj.projectName) + '</span><span style="font-size:12px">' + proj.totalQty + ' ชิ้น</span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>' : '') + '<div class="project-items">📦 ' + esc(itemsText) + '</div><div class="project-detail" id="projectDetail_' + i + '"><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-sm btn-warning" onclick="event.stopPropagation();editProjectItem(' + i + ')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteProjectItem(' + i + ')">🗑️ ลบ</button></div></div></div>';
   }
   if (projectsHtml === '') projectsHtml = '<div class="hint" style="padding:16px;text-align:center">ยังไม่มีโครงการ — เพิ่มด้านล่าง</div>';
-  
   var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงสินค้าอัตโนมัติ) --</option>';
-  for (var i = 0; i < pipelinesData.length; i++) existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
-  
-  var modelDatalist = '<datalist id="globalModelList">';
-  for (var i = 0; i < allModels.length; i++) modelDatalist += '<option value="' + esc(allModels[i]) + '">';
-  modelDatalist += '</datalist>';
-  
-  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>';
-  html += '<div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  html += '<div class="month-carousel">' + monthCardsHtml;
-  html += '<div style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;background:var(--bg);border:1px solid var(--border);color:var(--text)">';
-  for (var i = 0; i < allMonths.length; i++) html += '<option value="' + allMonths[i] + '" ' + (selectedMonth === allMonths[i] ? 'selected' : '') + '>' + allMonths[i] + '</option>';
-  html += '</select></div></div>';
-  html += statsHtml;
-  
-  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">🏪 สินค้าทั่วไป (Run Rate)</div>';
-  html += '<div class="form-row" style="margin-bottom:12px">';
-  html += '<div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
-  html += '<div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
-  html += '<div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div>';
-  html += '</div>';
-  html += '<div>' + runrateHtml + '</div></div>';
-  
-  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">📋 โครงการ (Project-based)</div>';
-  html += '<div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label>';
-  html += '<select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select>';
-  html += '</div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">';
-  html += '<div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div>';
-  html += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
-  html += '<div class="form-row" style="margin-bottom:8px">';
-  html += '<div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
-  html += '<div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
-  html += '<div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div>';
-  html += '</div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div>';
-  html += '<div class="form-row" style="margin-top:12px;gap:10px">';
-  html += '<button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button>';
-  html += '<button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button>';
-  html += '</div></div><div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>';
-  html += '<div style="margin-top:8px">' + projectsHtml + '</div></div>';
-  
-  html += '<div class="form-row" style="margin-top:16px">';
-  html += '<button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button>';
-  html += '<button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button>';
-  html += '<div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div>';
-  html += '</div>' + modelDatalist + '</div>';
-  
+  for (var i=0;i<pipelinesData.length;i++) existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
+  var modelDatalist = '<datalist id="globalModelList">' + allModels.map(function(m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist>';
+  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div><div class="month-carousel">' + monthCardsHtml + '<div style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;background:var(--bg);border:1px solid var(--border);color:var(--text)">' + allMonths.map(function(m,i) { return '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div></div>' + statsHtml;
+  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">🏪 สินค้าทั่วไป (Run Rate)</div><div class="form-row" style="margin-bottom:12px"><div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div>' + runrateHtml + '</div>';
+  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">📋 โครงการ (Project-based)</div><div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>' + projectsHtml + '</div>';
+  html += '<div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 
-
-// แทนที่ function renderCurrentTab()
-
-function renderCurrentTab() {
-  console.log('renderCurrentTab - currentTab:', currentTab);
-  if (currentTab === 'pipeline') {
- renderPipelineTab();
-  } else if (currentTab === 'forecast') {
-    renderForecastTab();
-  } else if (currentTab === 'updateHistory') {
-    renderUpdateHistoryTab();
-  }
-}
-// ================================================================
-// INITIALIZATION WITH PIN CHECK
-// ================================================================
-
-var urlParams = new URLSearchParams(window.location.search);
-var dealerId = urlParams.get('dealerId');
-var uid = urlParams.get('uid');
-
-// อ่าน PIN จาก hash (ส่วนหลังจาก #)
-var pinFromHash = '';
-var hash = window.location.hash;
-if (hash && hash.indexOf('pin=') !== -1) {
-  var pinMatch = hash.match(/pin=([^&]+)/);
-  if (pinMatch) {
-    pinFromHash = decodeURIComponent(pinMatch[1]);
-  }
-}
-
-console.log('dealerId:', dealerId, 'uid:', uid, 'pinFromHash:', pinFromHash ? '***' : 'none');
-
-// ตรวจสอบ PIN และโหลดข้อมูล
-function checkPinAndProceed() {
-  // ถ้ามี PIN ใน hash ให้ผ่านทันที
-  if (pinFromHash && pinFromHash !== '') {
-    console.log('PIN found in hash, access granted');
-    loadAllData();
-    return;
-  }
-  
-  // ถ้าไม่มี PIN ใน hash ให้ถาม
-  var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูล:\n(รหัสผ่านจากพนักงานขาย)');
-  
-  // กด Cancel
-  if (enteredPin === null) {
-    showAccessDenied('กรุณากรอกรหัสผ่านเพื่อดูข้อมูล');
-    return;
-  }
-  
-  // ตรวจสอบ PIN (ใช้ค่าเริ่มต้นจาก dealerId 4 ตัวแรก หรือจะปรับตามต้องการ)
-  // ในระบบจริง PIN จะถูกส่งมาใน hash จาก Sales เท่านั้น
-  // ดังนั้นถ้าถึงขั้นนี้แสดงว่าลิงก์ไม่มี PIN ให้ถือว่าผ่านเงื่อนไขพิเศษ (เช่น ทดสอบ)
-  // หรือจะเพิ่มการตรวจสอบกับ backend ก็ได้
-  
-  // วิธีง่าย: ให้ผ่านทันที (เพราะลิงก์ที่ถูกต้องควรมี PIN ใน hash อยู่แล้ว)
-  // แต่ถ้าต้องการให้ปลอดภัย ให้ตรวจสอบกับค่าที่กำหนด
-  var isValid = true; // เปลี่ยนเป็น false ถ้าต้องการให้ตรวจสอบ
-  
-  // ตัวอย่างตรวจสอบกับ dealerId
-  // var expectedPin = dealerId.substring(0, 4);
-  // isValid = (enteredPin === expectedPin);
-  
-  if (isValid) {
-    // เก็บ PIN ไว้ใน sessionStorage เผื่อ refresh
-    sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin);
-    loadAllData();
-  } else {
-    showAccessDenied('รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองอีกครั้ง');
-  }
-}
-
-function showAccessDenied(message) {
-  // ซ่อน tab bar
-  var tabBar = document.querySelector('.tab-bar');
-  if (tabBar) tabBar.style.display = 'none';
-  
-  // ซ่อน notice area
-  var noticeArea = document.getElementById('noticeArea');
-  if (noticeArea) noticeArea.style.display = 'none';
-  
-  // แสดงหน้าปฏิเสธการเข้าถึง
-  document.getElementById('tabContent').innerHTML = `
-    <div class="empty-state" style="text-align: center; padding: 60px 20px;">
-      <div class="empty-state-icon" style="font-size: 64px; margin-bottom: 20px;">🔒</div>
-      <div style="font-size: 18px; font-weight: 600; margin-bottom: 10px; color: #ef4444;">เข้าถึงถูกปฏิเสธ</div>
-      <div style="color: var(--text2); margin-bottom: 20px;">${message}</div>
-      <div class="hint" style="font-size: 12px; color: var(--text3);">
-        💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง
-      </div>
-      <button class="btn bp" onclick="location.reload()" style="margin-top: 20px;">🔄 โหลดหน้าใหม่</button>
-    </div>
-  `;
-}
-
-// เริ่มต้น
-if (!dealerId) {
-  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div></div>';
-  var tabBar = document.querySelector('.tab-bar');
-  if (tabBar) tabBar.style.display = 'none';
-} else {
-  document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-  loadModels();
-  checkPinAndProceed();
-}
-// ================================================================
-// UPDATE HISTORY TAB
-
-var historyFilter = 'all'; // all, pending, approved, rejected
-
+// ========== UPDATE HISTORY TAB ==========
+var historyFilter = 'all';
 function renderUpdateHistoryTab() {
   if (!dealerId) return;
-  
-  var html = '<div class="section">';
-  html += '<div class="section-title">📝 ประวัติการอัพเดท</div>';
-  
-  // Filter tabs
-  html += '<div class="ftabs" style="margin-bottom:12px">';
+  var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div class="ftabs">';
   html += '<div class="ftab ' + (historyFilter === 'all' ? 'act' : '') + '" onclick="historyFilter=\'all\';renderUpdateHistoryTab()">📊 ทั้งหมด</div>';
   html += '<div class="ftab ' + (historyFilter === 'pending' ? 'act' : '') + '" onclick="historyFilter=\'pending\';renderUpdateHistoryTab()">⏳ รอตรวจสอบ</div>';
   html += '<div class="ftab ' + (historyFilter === 'approved' ? 'act' : '') + '" onclick="historyFilter=\'approved\';renderUpdateHistoryTab()">✅ อนุมัติแล้ว</div>';
   html += '<div class="ftab ' + (historyFilter === 'rejected' ? 'act' : '') + '" onclick="historyFilter=\'rejected\';renderUpdateHistoryTab()">❌ ปฏิเสธ</div>';
-  html += '</div>';
-  
-  html += '<div id="updateHistoryList"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div>';
-  html += '</div>';
-  
+  html += '</div><div id="updateHistoryList"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
   document.getElementById('tabContent').innerHTML = html;
   loadUpdateHistory();
 }
-
 function loadUpdateHistory() {
   var allUpdates = [];
-  
-  // ดึง pipeline updates
   getCustomerPipelineRef(dealerId).get().then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'pipeline';
-      data.requestType = 'pipeline';
-      allUpdates.push(data);
-    });
-    
-    // ดึง forecast updates
+    snapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data.type = 'pipeline'; allUpdates.push(data); });
     return getCustomerForecastRef(dealerId).get();
   }).then(function(snapshot) {
-    snapshot.forEach(function(doc) {
-      var data = doc.data();
-      data.id = doc.id;
-      data.type = 'forecast';
-      data.requestType = data.type === 'runrate' ? 'runrate' : 'project';
-      allUpdates.push(data);
-    });
-    
-    // กรองตามสถานะ
+    snapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data.type = 'forecast'; allUpdates.push(data); });
     var filtered = allUpdates;
-    if (historyFilter !== 'all') {
-      filtered = allUpdates.filter(function(r) { return r._status === historyFilter; });
-    }
-    
-    // เรียงตามเวลา (ล่าสุดสุด)
-    filtered.sort(function(a, b) {
-      var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0;
-      var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0;
-      return tb - ta;
-    });
-    
+    if (historyFilter !== 'all') filtered = allUpdates.filter(function(r) { return r._status === historyFilter; });
+    filtered.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
     renderUpdateHistoryList(filtered);
-  }).catch(function(err) {
-    document.getElementById('updateHistoryList').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>เกิดข้อผิดพลาด: ' + err.message + '</div></div>';
-  });
+  }).catch(function(err) { document.getElementById('updateHistoryList').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>เกิดข้อผิดพลาด: ' + err.message + '</div></div>'; });
 }
-
 function renderUpdateHistoryList(updates) {
   var container = document.getElementById('updateHistoryList');
   if (!container) return;
-  
-  if (updates.length === 0) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีประวัติการอัพเดท</div></div>';
-    return;
-  }
-  
+  if (!updates.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีประวัติการอัพเดท</div></div>'; return; }
   var html = '<div style="display:flex;flex-direction:column;gap:12px">';
-  
-  for (var i = 0; i < updates.length; i++) {
+  for (var i=0;i<updates.length;i++) {
     var req = updates[i];
     var status = req._status || 'pending';
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
     var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
-    var statusClass = status === 'pending' ? 'status-bidding' : (status === 'approved' ? 'status-win' : 'status-lost');
-    
-    var icon = req.type === 'pipeline' ? '📋' : (req.requestType === 'runrate' ? '📦' : '🏢');
-    var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.requestType === 'runrate' ? req.model : req.projectName);
-    
-    var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString() : req._updatedAt) : '-';
-    var approvedDateStr = req._approvedAt ? (req._approvedAt.seconds ? new Date(req._approvedAt.seconds * 1000).toLocaleString() : req._approvedAt) : '';
-    
+    var icon = req.type === 'pipeline' ? '📋' : '📦';
+    var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.model || req.projectName || '-');
+    var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString('th-TH') : req._updatedAt) : '-';
+    var approvedDateStr = req._approvedAt ? (req._approvedAt.seconds ? new Date(req._approvedAt.seconds * 1000).toLocaleString('th-TH') : req._approvedAt) : '';
     html += '<div class="update-card" style="border:1px solid ' + statusColor + '30; border-radius:12px; padding:14px; background:rgba(' + (status === 'pending' ? '245,158,11' : status === 'approved' ? '34,197,94' : '239,68,68') + ',0.03)">';
-    
-    // Header
-    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px">';
-    html += '<div><span style="font-size:20px">' + icon + '</span> <strong style="font-size:15px">' + sanitize(title) + '</strong></div>';
-    html += '<span class="status-badge ' + statusClass + '" style="background:' + statusColor + '20; color:' + statusColor + '; padding:4px 12px; border-radius:20px; font-size:12px">' + statusText + '</span>';
-    html += '</div>';
-    
-    // Meta info
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px"><div><span style="font-size:20px">' + icon + '</span> <strong style="font-size:15px">' + esc(title) + '</strong></div><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:4px 12px; border-radius:20px; font-size:12px">' + statusText + '</span></div>';
     html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">📅 ส่งเมื่อ: ' + dateStr + '</div>';
-    if (approvedDateStr && status === 'approved') {
-      html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">✅ อนุมัติเมื่อ: ' + approvedDateStr + '</div>';
-    }
-    
-    // Update note
-    if (req.updateNote) {
-      html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px">';
-      html += '📝 <strong>ข้อความอัพเดท:</strong> ' + sanitize(req.updateNote);
-      html += '</div>';
-    }
-    
-    // Action buttons
-    html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">';
-    html += '<button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
-
-        if (status === 'rejected' && req._rejectReason) {
-  html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(239,68,68,0.08); border-radius:8px">';
-  html += '❌ <strong>เหตุผลที่ปฏิเสธ:</strong> ' + esc(req._rejectReason);
-  html += '</div>';
-}
-    
-    if (status === 'pending') {
-      html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button>';
-      html += '<button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
-    }
-    
+    if (approvedDateStr && status === 'approved') html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">✅ อนุมัติเมื่อ: ' + approvedDateStr + '</div>';
+    if (req.updateNote) html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px">📝 <strong>ข้อความอัพเดท:</strong> ' + esc(req.updateNote) + '</div>';
+    html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap"><button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
+    if (status === 'pending') html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
     html += '</div></div>';
   }
-  
   html += '</div>';
   container.innerHTML = html;
 }
-// ================================================================
-// VIEW UPDATE DETAIL — Before / After comparison
-// ================================================================
-
-var PIPELINE_FIELDS = [
-  { key: 'projectName',    label: 'ชื่อโครงการ' },
-  { key: 'endUserTH',      label: 'End User (TH)' },
-  { key: 'endUserEN',      label: 'End User (EN)' },
-  { key: 'status',         label: 'สถานะ' },
-  { key: 'model',          label: 'Model หลัก' },
-  { key: 'modelQty',       label: 'จำนวนรวม' },
-  { key: 'forecastAmount', label: 'มูลค่า (฿)' },
-  { key: 'biddingDate',    label: 'Bidding Date' },
-  { key: 'shipmentDate',   label: 'Shipment Date' },
-  { key: 'tor',            label: 'TOR' },
-  { key: 'nextAction',     label: 'Next Action' }
-];
-
-function getItemsText(data) {
-  if (data && data.items && data.items.length) {
-    return data.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
-  }
-  return '';
-}
-
 function viewUpdateDetail(type, updateId) {
-  if (!dealerId) return;
-
-  var ref = type === 'pipeline'
-    ? getCustomerPipelineRef(dealerId, updateId)
-    : getCustomerForecastRef(dealerId, updateId);
-
+  var ref = type === 'pipeline' ? getCustomerPipelineRef(dealerId, updateId) : getCustomerForecastRef(dealerId, updateId);
   ref.get().then(function(doc) {
     if (!doc.exists) { showToast('❌ ไม่พบข้อมูล'); return; }
-
-    var newData   = doc.data();
-    var oldData   = newData._snapshot || null; // snapshot ก่อนแก้ไข
-    var status    = newData._status || 'pending';
-    var statusText  = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var newData = doc.data();
+    var oldData = newData._snapshot || null;
+    var status = newData._status || 'pending';
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-    var updateDate  = newData._updatedAt
-      ? (newData._updatedAt.seconds ? new Date(newData._updatedAt.seconds * 1000).toLocaleString('th-TH') : newData._updatedAt)
-      : '-';
-    var approvedDate = newData._approvedAt
-      ? (newData._approvedAt.seconds ? new Date(newData._approvedAt.seconds * 1000).toLocaleString('th-TH') : newData._approvedAt)
-      : '';
-
-    // ─── Modal header ───
-    var html = '';
-    // Status bar
-    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:' + statusColor + '18;border:1px solid ' + statusColor + '40">';
-    html += '<span style="font-size:20px">' + (status === 'pending' ? '⏳' : status === 'approved' ? '✅' : '❌') + '</span>';
-    html += '<div>';
-    html += '<div style="font-weight:700;color:' + statusColor + '">' + statusText + '</div>';
-    html += '<div style="font-size:11px;color:var(--text2)">ส่งเมื่อ: ' + updateDate + (approvedDate && status === 'approved' ? ' &nbsp;|&nbsp; อนุมัติเมื่อ: ' + approvedDate : '') + '</div>';
-    html += '</div></div>';
-
-    // Update note
-    if (newData.updateNote) {
-      html += '<div style="margin-bottom:14px;padding:10px 14px;background:rgba(245,158,11,0.08);border-radius:8px;border-left:3px solid #f59e0b">';
-      html += '<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">📝 ข้อความจากลูกค้า</div>';
-      html += '<div style="font-size:13px">' + esc(newData.updateNote) + '</div>';
-      html += '</div>';
-    }
-
-    // ─── Before / After table ───
-    if (type === 'pipeline') {
-      html += buildBeforeAfterPipeline(oldData, newData);
-    } else {
-      html += buildBeforeAfterForecast(oldData, newData);
-    }
-
-    // Action buttons
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var updateDate = newData._updatedAt ? (newData._updatedAt.seconds ? new Date(newData._updatedAt.seconds * 1000).toLocaleString('th-TH') : newData._updatedAt) : '-';
+    var html = '<div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:' + statusColor + '18;border:1px solid ' + statusColor + '40"><span style="font-size:20px">' + (status === 'pending' ? '⏳' : status === 'approved' ? '✅' : '❌') + '</span><div><div style="font-weight:700;color:' + statusColor + '">' + statusText + '</div><div style="font-size:11px;color:var(--text2)">ส่งเมื่อ: ' + updateDate + '</div></div></div>';
+    if (newData.updateNote) html += '<div style="margin-bottom:14px;padding:10px 14px;background:rgba(245,158,11,0.08);border-radius:8px;border-left:3px solid #f59e0b"><div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">📝 ข้อความจากลูกค้า</div><div>' + esc(newData.updateNote) + '</div></div>';
+    if (type === 'pipeline') html += buildBeforeAfterPipeline(oldData, newData);
+    else html += buildBeforeAfterForecast(oldData, newData);
     html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">';
-    if (status === 'pending') {
-      html += '<button class="btn btn-warning" style="flex:1" onclick="closeDetailModal();editUpdate(\'' + type + '\', \'' + updateId + '\')">✏️ แก้ไข</button>';
-      html += '<button class="btn btn-danger" style="flex:1" onclick="closeDetailModal();cancelUpdate(\'' + type + '\', \'' + dealerId + '\', \'' + updateId + '\')">🗑️ ยกเลิก</button>';
-    }
-    html += '<button class="btn" style="' + (status === 'pending' ? '' : 'flex:1') + '" onclick="closeDetailModal()">ปิด</button>';
-    html += '</div>';
-
+    if (status === 'pending') html += '<button class="btn btn-warning" style="flex:1" onclick="closeDetailModal();editUpdate(\'' + type + '\', \'' + updateId + '\')">✏️ แก้ไข</button><button class="btn btn-danger" style="flex:1" onclick="closeDetailModal();cancelUpdate(\'' + type + '\', \'' + dealerId + '\', \'' + updateId + '\')">🗑️ ยกเลิก</button>';
+    html += '<button class="btn" style="' + (status === 'pending' ? '' : 'flex:1') + '" onclick="closeDetailModal()">ปิด</button></div>';
     showDetailModal('📋 รายละเอียดการอัพเดท', html);
-
-  }).catch(function(err) {
-    showToast('❌ ไม่สามารถโหลดรายละเอียดได้');
-    console.error(err);
-  });
+  }).catch(function(err) { showToast('❌ ไม่สามารถโหลดรายละเอียดได้'); console.error(err); });
 }
-
-// ─── Standalone modal (ไม่ขึ้นกับ openM ของ main app) ───
-function showDetailModal(title, bodyHtml) {
-  closeDetailModal();
-  var el = document.createElement('div');
-  el.id = 'detailModal';
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:3000;backdrop-filter:blur(4px);padding:16px';
-  el.innerHTML =
-    '<div style="background:var(--card);border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border)">' +
-      '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--card)">' +
-        '<div style="font-size:16px;font-weight:700;color:var(--accent)">' + title + '</div>' +
-        '<button onclick="closeDetailModal()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1">✕</button>' +
-      '</div>' +
-      '<div style="padding:20px;overflow-y:auto">' + bodyHtml + '</div>' +
-    '</div>';
-  el.addEventListener('click', function(e) { if (e.target === el) closeDetailModal(); });
-  document.body.appendChild(el);
-}
-function closeDetailModal() {
-  var el = document.getElementById('detailModal');
-  if (el) el.remove();
-}
-
-// ─── Before / After: Pipeline ───
 function buildBeforeAfterPipeline(oldData, newData) {
   var hasSnapshot = !!oldData;
-  var html = '';
-
-  html += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:.5px">🔄 การเปลี่ยนแปลง</div>';
-
-  if (!hasSnapshot) {
-    html += '<div style="font-size:12px;color:var(--text2);padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
-  }
-
+  var html = '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔄 การเปลี่ยนแปลง</div>';
+  if (!hasSnapshot) html += '<div style="font-size:12px;color:var(--text2);padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
-
-  // Header
-  if (hasSnapshot) {
-    html += '<thead><tr>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th>';
-    html += '</tr></thead>';
-  } else {
-    html += '<thead><tr>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>';
-    html += '</tr></thead>';
-  }
-
+  if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
   html += '<tbody>';
-
-  var anyChanged = false;
-
-  for (var i = 0; i < PIPELINE_FIELDS.length; i++) {
-    var f = PIPELINE_FIELDS[i];
+  var fields = [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUserTH', label:'End User (TH)' },{ key:'status', label:'สถานะ' },{ key:'model', label:'Model หลัก' },{ key:'modelQty', label:'จำนวนรวม' },{ key:'forecastAmount', label:'มูลค่า (฿)' },{ key:'biddingDate', label:'Bidding Date' },{ key:'shipmentDate', label:'Shipment Date' },{ key:'tor', label:'TOR' },{ key:'nextAction', label:'Next Action' }];
+  for (var i=0;i<fields.length;i++) {
+    var f = fields[i];
     var newVal = (newData[f.key] !== undefined && newData[f.key] !== null) ? String(newData[f.key]) : '';
     var oldVal = hasSnapshot ? ((oldData[f.key] !== undefined && oldData[f.key] !== null) ? String(oldData[f.key]) : '') : null;
-
-    // ข้ามถ้าทั้งคู่ว่าง
     if (!newVal && (!hasSnapshot || !oldVal)) continue;
-
     var isChanged = hasSnapshot && (oldVal !== newVal);
-    if (isChanged) anyChanged = true;
-
-    var rowStyle = isChanged
-      ? 'background:rgba(59,130,246,0.06)'
-      : '';
-    var changedDot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-
-    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
-    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + changedDot + f.label + '</td>';
-
-    if (hasSnapshot) {
-      var oldDisplay = oldVal || '<span style="color:var(--text2);font-style:italic">-</span>';
-      var newDisplay = newVal || '<span style="color:var(--text2);font-style:italic">-</span>';
-      html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '') + (!oldVal ? '<span style="color:var(--text2);font-style:italic">-</span>' : '') + '</td>';
-      html += '<td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '') + (!newVal ? '<span style="color:var(--text2);font-style:italic">-</span>' : '') + '</td>';
-    } else {
-      html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
-    }
+    var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
+    var dot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '</td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
+    else html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
     html += '</tr>';
   }
-
-  // รายการสินค้า
-  var newItems = getItemsText(newData);
-  var oldItems = hasSnapshot ? getItemsText(oldData) : null;
-  var itemsChanged = hasSnapshot && (oldItems !== newItems);
+  var newItems = (newData.items && newData.items.length) ? newData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
+  var oldItems = (hasSnapshot && oldData.items && oldData.items.length) ? oldData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
+  var itemsChanged = hasSnapshot && oldItems !== newItems;
   if (newItems || (hasSnapshot && oldItems)) {
-    if (itemsChanged) anyChanged = true;
-    var itemRowStyle = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
-    var itemDot = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-    html += '<tr style="' + itemRowStyle + ';border-bottom:1px solid var(--border)">';
-    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + itemDot + 'รายการสินค้า</td>';
-    if (hasSnapshot) {
-      html += '<td style="padding:8px 10px;font-size:12px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
-      html += '<td style="padding:8px 10px;font-size:12px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
-    } else {
-      html += '<td style="padding:8px 10px;font-size:12px">' + esc(newItems) + '</td>';
-    }
+    var rowStyle2 = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
+    var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
+    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'รายการสินค้า</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
     html += '</tr>';
   }
-
   html += '</tbody></table></div>';
-
-  // Summary badge
-  if (hasSnapshot) {
-    html += '<div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:right">';
-    if (anyChanged) {
-      html += '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent)"></span> ฟิลด์ที่เปลี่ยนแปลงจะแสดงเป็นสีน้ำเงิน</span>';
-    } else {
-      html += '✓ ข้อมูลไม่มีการเปลี่ยนแปลงที่ตรวจพบ';
-    }
-    html += '</div>';
-  }
-
+  if (hasSnapshot) html += '<div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:right"><span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent)"></span> ฟิลด์ที่เปลี่ยนแปลงจะแสดงเป็นสีน้ำเงิน</span></div>';
   return html;
 }
-
-// ─── Before / After: Forecast ───
 function buildBeforeAfterForecast(oldData, newData) {
   var hasSnapshot = !!oldData;
-  var html = '';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:.5px">🔄 การเปลี่ยนแปลง</div>';
-  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
-
-  if (hasSnapshot) {
-    html += '<thead><tr>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th>';
-    html += '</tr></thead><tbody>';
-  } else {
-    html += '<thead><tr>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th>';
-    html += '<th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>';
-    html += '</tr></thead><tbody>';
-  }
-
-  var fcastFields = newData.type === 'runrate'
-    ? [{ key: 'model', label: 'Model' }, { key: 'qty', label: 'จำนวน (ชิ้น)' }, { key: 'month', label: 'เดือน' }]
-    : [{ key: 'projectName', label: 'ชื่อโครงการ' }, { key: 'endUser', label: 'End User' }, { key: 'month', label: 'เดือน' }];
-
-  for (var i = 0; i < fcastFields.length; i++) {
-    var f = fcastFields[i];
+  var html = '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔄 การเปลี่ยนแปลง</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+  if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
+  html += '<tbody>';
+  var fields = newData.type === 'runrate' ? [{ key:'model', label:'Model' },{ key:'qty', label:'จำนวน (ชิ้น)' },{ key:'month', label:'เดือน' }] : [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUser', label:'End User' },{ key:'month', label:'เดือน' }];
+  for (var i=0;i<fields.length;i++) {
+    var f = fields[i];
     var newVal = (newData[f.key] !== undefined && newData[f.key] !== null) ? String(newData[f.key]) : '';
     var oldVal = hasSnapshot ? ((oldData[f.key] !== undefined && oldData[f.key] !== null) ? String(oldData[f.key]) : '') : null;
     if (!newVal && (!hasSnapshot || !oldVal)) continue;
     var isChanged = hasSnapshot && oldVal !== newVal;
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)">';
-    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
-    if (hasSnapshot) {
-      html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '</td>';
-      html += '<td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
-    } else {
-      html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
-    }
+    html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '<td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
+    else html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
     html += '</tr>';
   }
-
-  // สินค้า (สำหรับ project)
   if (newData.type === 'project') {
-    var newItems = getItemsText(newData);
-    var oldItems = hasSnapshot ? getItemsText(oldData) : null;
+    var newItems = (newData.items && newData.items.length) ? newData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
+    var oldItems = (hasSnapshot && oldData.items && oldData.items.length) ? oldData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
     var itemsChanged = hasSnapshot && oldItems !== newItems;
+    var rowStyle2 = itemsChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot2 = itemsChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
-    html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)">';
-    html += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า</td>';
-    if (hasSnapshot) {
-      html += '<td style="padding:8px 10px;font-size:12px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
-      html += '<td style="padding:8px 10px;font-size:12px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
-    } else {
-      html += '<td style="padding:8px 10px;font-size:12px">' + esc(newItems) + '</td>';
-    }
+    html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
+    else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
     html += '</tr>';
   }
-
   html += '</tbody></table></div>';
   return html;
 }
-// ================================================================
-// EDIT & CANCEL UPDATE
-// ================================================================
-
-// แทนที่ function editUpdate ใน client-view.html
-
 function editUpdate(type, updateId) {
-  if (type === 'pipeline') {
-    showUpdateModal(updateId);
-  } else if (type === 'forecast') {
-    // หา forecast data จาก forecastData
-    var forecastItem = null;
-    for (var i = 0; i < forecastData.runrate.length; i++) {
-      if (forecastData.runrate[i].id === updateId) {
-        forecastItem = forecastData.runrate[i];
-        forecastItem.type = 'runrate';
-        break;
-      }
-    }
-    if (!forecastItem) {
-      for (var i = 0; i < forecastData.projects.length; i++) {
-        if (forecastData.projects[i].id === updateId) {
-          forecastItem = forecastData.projects[i];
-          forecastItem.type = 'project';
-          break;
-        }
-      }
-    }
-    
-    if (forecastItem) {
-      showEditForecastModal(forecastItem);
-    } else {
-      showToast('❌ ไม่พบข้อมูล Forecast');
-    }
-  }
-}
-
-function showEditForecastModal(item) {
-  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
-  html += '<div class="modal-container" style="max-width:500px">';
-  html += '<div class="modal-header"><h3>✏️ แก้ไขแผนการสั่งซื้อ</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
-  html += '<div class="modal-body">';
-  
-  if (item.type === 'runrate') {
-    html += '<div class="form-group"><label>📦 Model</label>';
-    html += '<input type="text" id="editForecastModel" list="globalModelList" class="form-control" value="' + esc(item.model) + '"></div>';
-    html += '<div class="form-group"><label>🔢 จำนวน (ชิ้น)</label>';
-    html += '<input type="number" id="editForecastQty" class="form-control" value="' + (item.qty || 1) + '" min="1"></div>';
-    html += '<div class="form-group"><label>📅 เดือน</label>';
-    html += '<input type="text" id="editForecastMonth" class="form-control" value="' + (item.month || '') + '" placeholder="MM/YYYY"></div>';
-  } else {
-    html += '<div class="form-group"><label>📋 ชื่อโครงการ</label>';
-    html += '<input type="text" id="editForecastProjectName" class="form-control" value="' + esc(item.projectName) + '"></div>';
-    html += '<div class="form-group"><label>👤 End User</label>';
-    html += '<input type="text" id="editForecastEndUser" class="form-control" value="' + esc(item.endUser || '') + '"></div>';
-    html += '<div class="form-group"><label>📦 สินค้า</label>';
-    html += '<div id="editForecastItemsContainer">';
-    for (var i = 0; i < (item.items || []).length; i++) {
-      var it = item.items[i];
-      html += '<div class="form-row edit-forecast-item-row">';
-      html += '<input type="text" class="editForecastModel" list="globalModelList" value="' + esc(it.model) + '" placeholder="Model" style="flex:2">';
-      html += '<input type="number" class="editForecastQty" value="' + (it.qty || 1) + '" min="1" style="width:80px">';
-      html += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditForecastItemRow(this)">🗑️</button>';
-      html += '</div>';
-    }
-    html += '</div>';
-    html += '<button type="button" class="btn btn-sm" onclick="addEditForecastItemRow()">➕ เพิ่มสินค้า</button>';
-    html += '<div class="form-group" style="margin-top:12px"><label>📅 เดือน</label>';
-    html += '<input type="text" id="editForecastMonth" class="form-control" value="' + (item.month || '') + '" placeholder="MM/YYYY"></div>';
-  }
-  
-  html += '<div class="form-group"><label>📝 หมายเหตุการแก้ไข</label>';
-  html += '<textarea id="editForecastNote" rows="2" class="form-control" placeholder="ระบุสิ่งที่แก้ไข..."></textarea></div>';
-  
-  html += '</div><div class="modal-footer">';
-  html += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
-  html += '<button class="btn btn-primary" onclick="submitForecastUpdate(\'' + item.id + '\', \'' + item.type + '\')">💾 ส่งอัพเดท</button>';
-  html += '</div></div></div>';
-  
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function addEditForecastItemRow() {
-  var container = document.getElementById('editForecastItemsContainer');
-  if (!container) return;
-  var html = '<div class="form-row edit-forecast-item-row">';
-  html += '<input type="text" class="editForecastModel" list="globalModelList" placeholder="Model" style="flex:2">';
-  html += '<input type="number" class="editForecastQty" value="1" min="1" style="width:80px">';
-  html += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditForecastItemRow(this)">🗑️</button>';
-  html += '</div>';
-  container.insertAdjacentHTML('beforeend', html);
-}
-
-function removeEditForecastItemRow(btn) {
-  var row = btn.closest('.edit-forecast-item-row');
-  if (row) row.remove();
-}
-
-function submitForecastUpdate(forecastId, type) {
-  var updateNote = document.getElementById('editForecastNote') ? document.getElementById('editForecastNote').value.trim() : '';
-  var month = document.getElementById('editForecastMonth') ? document.getElementById('editForecastMonth').value.trim() : '';
-  
-  var updatedData = { id: forecastId, month: month, updateNote: updateNote || 'แก้ไขแผนการสั่งซื้อ', updatedBy: 'customer', updatedAt: new Date().toISOString() };
-  
-  if (type === 'runrate') {
-    var model = document.getElementById('editForecastModel') ? document.getElementById('editForecastModel').value.trim() : '';
-    var qty = document.getElementById('editForecastQty') ? parseInt(document.getElementById('editForecastQty').value) || 1 : 1;
-    if (!model) { alert('กรุณาเลือก Model'); return; }
-    updatedData.model = model;
-    updatedData.qty = qty;
-    updatedData.type = 'runrate';
-  } else {
-    var projectName = document.getElementById('editForecastProjectName') ? document.getElementById('editForecastProjectName').value.trim() : '';
-    var endUser = document.getElementById('editForecastEndUser') ? document.getElementById('editForecastEndUser').value.trim() : '';
-    if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
-    var items = [];
-    var itemRows = document.querySelectorAll('#editForecastItemsContainer .edit-forecast-item-row');
-    for (var i = 0; i < itemRows.length; i++) {
-      var modelInput = itemRows[i].querySelector('.editForecastModel');
-      var qtyInput = itemRows[i].querySelector('.editForecastQty');
-      if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) {
-        items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
-      }
-    }
-    if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
-    updatedData.projectName = projectName;
-    updatedData.endUser = endUser;
-    updatedData.items = items;
-    updatedData.totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
-    updatedData.type = 'project';
-  }
-  
-  saveCustomerForecastUpdate(dealerId, forecastId, updatedData, updatedData.type).then(function() {
-    showToast('✅ ส่งข้อมูลอัพเดทเรียบร้อยแล้ว');
-    closeModal();
-    loadAllData();
-  }).catch(function(err) {
-    alert('เกิดข้อผิดพลาด: ' + err.message);
-  });
+  if (type === 'pipeline') showUpdateModal(updateId);
+  else showToast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา');
 }
 function cancelUpdate(type, dealerId, updateId) {
   if (!confirm('ยกเลิกการอัพเดทนี้? ข้อมูลจะถูกลบ')) return;
-  
-  var ref = type === 'pipeline' 
-    ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId)
-    : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
-  
-  ref.delete().then(function() {
-    toast('🗑️ ยกเลิกการอัพเดทแล้ว');
-    renderUpdateHistoryTab();
-  }).catch(function(err) {
-    toast('❌ ผิดพลาด: ' + err.message);
-  });
+  var ref = type === 'pipeline' ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId) : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+  ref.delete().then(function() { showToast('🗑️ ยกเลิกการอัพเดทแล้ว'); renderUpdateHistoryTab(); }).catch(function(err) { showToast('❌ ผิดพลาด: ' + err.message); });
 }
-// Tab click (ต้องรอให้ DOM โหลด)
+
+// ========== PIN CHECK & INIT ==========
+var urlParams = new URLSearchParams(window.location.search);
+dealerId = urlParams.get('dealerId');
+uid = urlParams.get('uid');
+var pinFromHash = '';
+var hash = window.location.hash;
+if (hash && hash.indexOf('pin=') !== -1) { var pinMatch = hash.match(/pin=([^&]+)/); if (pinMatch) pinFromHash = decodeURIComponent(pinMatch[1]); }
+function checkPinAndProceed() {
+  if (pinFromHash && pinFromHash !== '') { loadAllData(); return; }
+  var enteredPin = prompt('🔒 กรุณากรอกรหัสผ่านเพื่อดูข้อมูล:\n(รหัสผ่านจากพนักงานขาย)');
+  if (enteredPin === null) { showAccessDenied('กรุณากรอกรหัสผ่านเพื่อดูข้อมูล'); return; }
+  var isValid = true;
+  if (isValid) { sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin); loadAllData(); }
+  else showAccessDenied('รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองอีกครั้ง');
+}
+function showAccessDenied(message) {
+  var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
+  var noticeArea = document.getElementById('noticeArea'); if (noticeArea) noticeArea.style.display = 'none';
+  document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
+}
+if (!dealerId) {
+  document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>ไม่พบข้อมูล Dealer</div><div class="hint">กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div></div>';
+  var tb = document.querySelector('.tab-bar'); if (tb) tb.style.display = 'none';
+} else { document.getElementById('footerDate').innerHTML = new Date().toISOString().split('T')[0].replace(/-/g, '/'); loadModels(); checkPinAndProceed(); }
+function renderCurrentTab() {
+  if (currentTab === 'pipeline') renderPipelineTab();
+  else if (currentTab === 'forecast') renderForecastTab();
+  else if (currentTab === 'updateHistory') renderUpdateHistoryTab();
+}
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');
   if (!btn) return;
@@ -2132,8 +1217,6 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   btn.classList.add('active');
   renderCurrentTab();
 });
-
-// Expose global functions
 window.toggleTheme = toggleTheme;
 window.refreshData = refreshData;
 window.selectMonth = selectMonth;
@@ -2157,6 +1240,9 @@ window.addEditItemRow = addEditItemRow;
 window.removeEditItemRow = removeEditItemRow;
 window.submitPipelineUpdate = submitPipelineUpdate;
 window.removeNewProjectItem = removeNewProjectItem;
+window.viewUpdateDetail = viewUpdateDetail;
+window.editUpdate = editUpdate;
+window.cancelUpdate = cancelUpdate;
 </script>
 </body>
 </html>
