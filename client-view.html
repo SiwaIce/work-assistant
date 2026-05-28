@@ -396,7 +396,6 @@ body {
     <div class="tab-btn active" data-tab="pipeline">📋 โครงการของฉัน</div>
     <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
     <div class="tab-btn" data-tab="timeline">📝 ประวัติการอัพเดท</div>
-        <div class="tab-btn" data-tab="myRequests">📝 คำขอของฉัน</div>
   </div>
   <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
@@ -1349,11 +1348,11 @@ function renderMyRequestsTab() {
 function renderCurrentTab() {
   console.log('renderCurrentTab - currentTab:', currentTab);
   if (currentTab === 'pipeline') {
-    renderPipelineTab();  // ชื่อนี้ต้องตรงกับฟังก์ชันที่มีอยู่
+ renderPipelineTab();
   } else if (currentTab === 'forecast') {
     renderForecastTab();
-  } else {
-    renderTimelineTab();
+  } else if (currentTab === 'updateHistory') {
+    renderUpdateHistoryTab();
   }
 }
 // ================================================================
@@ -1579,6 +1578,281 @@ function buildForecastDetail(data) {
   
   html += '</div>';
   return html;
+}
+// ================================================================
+// UPDATE HISTORY TAB - แสดงประวัติการอัพเดททั้งหมด
+// ================================================================
+
+var historyFilter = 'all'; // all, pending, approved, rejected
+
+function renderUpdateHistoryTab() {
+  if (!dealerId) return;
+  
+  var html = '<div class="section">';
+  html += '<div class="section-title">📝 ประวัติการอัพเดท</div>';
+  
+  // Filter tabs
+  html += '<div class="ftabs" style="margin-bottom:12px">';
+  html += '<div class="ftab ' + (historyFilter === 'all' ? 'act' : '') + '" onclick="historyFilter=\'all\';renderUpdateHistoryTab()">📊 ทั้งหมด</div>';
+  html += '<div class="ftab ' + (historyFilter === 'pending' ? 'act' : '') + '" onclick="historyFilter=\'pending\';renderUpdateHistoryTab()">⏳ รอตรวจสอบ</div>';
+  html += '<div class="ftab ' + (historyFilter === 'approved' ? 'act' : '') + '" onclick="historyFilter=\'approved\';renderUpdateHistoryTab()">✅ อนุมัติแล้ว</div>';
+  html += '<div class="ftab ' + (historyFilter === 'rejected' ? 'act' : '') + '" onclick="historyFilter=\'rejected\';renderUpdateHistoryTab()">❌ ปฏิเสธ</div>';
+  html += '</div>';
+  
+  html += '<div id="updateHistoryList"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div>';
+  html += '</div>';
+  
+  document.getElementById('tabContent').innerHTML = html;
+  loadUpdateHistory();
+}
+
+function loadUpdateHistory() {
+  var allUpdates = [];
+  
+  // ดึง pipeline updates
+  getCustomerPipelineRef(dealerId).get().then(function(snapshot) {
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      data.id = doc.id;
+      data.type = 'pipeline';
+      data.requestType = 'pipeline';
+      allUpdates.push(data);
+    });
+    
+    // ดึง forecast updates
+    return getCustomerForecastRef(dealerId).get();
+  }).then(function(snapshot) {
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      data.id = doc.id;
+      data.type = 'forecast';
+      data.requestType = data.type === 'runrate' ? 'runrate' : 'project';
+      allUpdates.push(data);
+    });
+    
+    // กรองตามสถานะ
+    var filtered = allUpdates;
+    if (historyFilter !== 'all') {
+      filtered = allUpdates.filter(function(r) { return r._status === historyFilter; });
+    }
+    
+    // เรียงตามเวลา (ล่าสุดสุด)
+    filtered.sort(function(a, b) {
+      var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0;
+      var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0;
+      return tb - ta;
+    });
+    
+    renderUpdateHistoryList(filtered);
+  }).catch(function(err) {
+    document.getElementById('updateHistoryList').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><div>เกิดข้อผิดพลาด: ' + err.message + '</div></div>';
+  });
+}
+
+function renderUpdateHistoryList(updates) {
+  var container = document.getElementById('updateHistoryList');
+  if (!container) return;
+  
+  if (updates.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีประวัติการอัพเดท</div></div>';
+    return;
+  }
+  
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  
+  for (var i = 0; i < updates.length; i++) {
+    var req = updates[i];
+    var status = req._status || 'pending';
+    var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var statusClass = status === 'pending' ? 'status-bidding' : (status === 'approved' ? 'status-win' : 'status-lost');
+    
+    var icon = req.type === 'pipeline' ? '📋' : (req.requestType === 'runrate' ? '📦' : '🏢');
+    var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.requestType === 'runrate' ? req.model : req.projectName);
+    
+    var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString() : req._updatedAt) : '-';
+    var approvedDateStr = req._approvedAt ? (req._approvedAt.seconds ? new Date(req._approvedAt.seconds * 1000).toLocaleString() : req._approvedAt) : '';
+    
+    html += '<div class="update-card" style="border:1px solid ' + statusColor + '30; border-radius:12px; padding:14px; background:rgba(' + (status === 'pending' ? '245,158,11' : status === 'approved' ? '34,197,94' : '239,68,68') + ',0.03)">';
+    
+    // Header
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px">';
+    html += '<div><span style="font-size:20px">' + icon + '</span> <strong style="font-size:15px">' + sanitize(title) + '</strong></div>';
+    html += '<span class="status-badge ' + statusClass + '" style="background:' + statusColor + '20; color:' + statusColor + '; padding:4px 12px; border-radius:20px; font-size:12px">' + statusText + '</span>';
+    html += '</div>';
+    
+    // Meta info
+    html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">📅 ส่งเมื่อ: ' + dateStr + '</div>';
+    if (approvedDateStr && status === 'approved') {
+      html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">✅ อนุมัติเมื่อ: ' + approvedDateStr + '</div>';
+    }
+    
+    // Update note
+    if (req.updateNote) {
+      html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px">';
+      html += '📝 <strong>ข้อความอัพเดท:</strong> ' + sanitize(req.updateNote);
+      html += '</div>';
+    }
+    
+    // Action buttons
+    html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">';
+    html += '<button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
+    
+    if (status === 'pending') {
+      html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button>';
+      html += '<button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
+    }
+    
+    html += '</div></div>';
+  }
+  
+  html += '</div>';
+  container.innerHTML = html;
+}
+// ================================================================
+// VIEW UPDATE DETAIL (แสดงการเปลี่ยนแปลง field ต่อ field)
+// ================================================================
+
+function viewUpdateDetail(type, updateId) {
+  if (!dealerId) return;
+  
+  var ref = type === 'pipeline' 
+    ? getCustomerPipelineRef(dealerId, updateId)
+    : getCustomerForecastRef(dealerId, updateId);
+  
+  ref.get().then(function(doc) {
+    if (!doc.exists) return;
+    
+    var data = doc.data();
+    var status = data._status || 'pending';
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
+    var updateDate = data._updatedAt ? (data._updatedAt.seconds ? new Date(data._updatedAt.seconds * 1000).toLocaleString() : data._updatedAt) : '-';
+    
+    var html = '<div style="max-width:550px">';
+    html += '<h3>📋 รายละเอียดการอัพเดท</h3>';
+    html += '<div style="margin-bottom:8px"><strong>📅 ส่งเมื่อ:</strong> ' + updateDate + '</div>';
+    html += '<div style="margin-bottom:12px"><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div>';
+    
+    if (data.updateNote) {
+      html += '<div style="margin:12px 0; padding:10px; background:rgba(245,158,11,0.1); border-radius:8px">';
+      html += '<strong>📝 ข้อความอัพเดท:</strong><br>' + sanitize(data.updateNote);
+      html += '</div>';
+    }
+    
+    html += '<hr style="margin:12px 0">';
+    html += '<div><strong>🔄 รายละเอียดการเปลี่ยนแปลง:</strong></div>';
+    
+    if (type === 'pipeline') {
+      html += buildPipelineChangeTable(data);
+    } else {
+      html += buildForecastDetailTable(data);
+    }
+    
+    html += '<div class="fm-actions" style="margin-top:16px">';
+    if (status === 'pending') {
+      html += '<button class="btn btn-warning" onclick="closeM();editUpdate(\'' + type + '\', \'' + updateId + '\')">✏️ แก้ไข</button>';
+      html += '<button class="btn btn-danger" onclick="closeM();cancelUpdate(\'' + type + '\', \'' + dealerId + '\', \'' + updateId + '\')">🗑️ ยกเลิก</button>';
+    }
+    html += '<button class="btn" onclick="closeM()">ปิด</button>';
+    html += '</div></div>';
+    
+    openM('📋 รายละเอียด', html);
+  }).catch(function(err) {
+    toast('❌ ไม่สามารถโหลดรายละเอียดได้: ' + err.message);
+  });
+}
+
+function buildPipelineChangeTable(data) {
+  var fields = [
+    { key: 'projectName', label: 'ชื่อโครงการ' },
+    { key: 'endUserTH', label: 'End User (TH)' },
+    { key: 'endUserEN', label: 'End User (EN)' },
+    { key: 'status', label: 'สถานะ' },
+    { key: 'model', label: 'Model' },
+    { key: 'modelQty', label: 'จำนวน' },
+    { key: 'forecastAmount', label: 'มูลค่า (฿)' },
+    { key: 'biddingDate', label: 'Bidding Date' },
+    { key: 'shipmentDate', label: 'Shipment Date' },
+    { key: 'tor', label: 'TOR' },
+    { key: 'nextAction', label: 'Next Action' }
+  ];
+  
+  var html = '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
+  html += '<tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th><th style="text-align:left;padding:8px">ค่า</th></tr>';
+  
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    var val = data[f.key];
+    if (val && val !== '') {
+      html += '<tr>';
+      html += '<td style="padding:8px;border-bottom:1px solid rgba(255,255,255,0.04)">' + f.label + '</td>';
+      html += '<td style="padding:8px;border-bottom:1px solid rgba(255,255,255,0.04)"><strong>' + sanitize(String(val)) + '</strong></td>';
+      html += '</tr>';
+    }
+  }
+  
+  if (data.items && data.items.length) {
+    var itemsText = '';
+    for (var j = 0; j < data.items.length; j++) {
+      itemsText += (j > 0 ? ', ' : '') + data.items[j].model + ' x' + data.items[j].qty;
+    }
+    html += '<tr><td style="padding:8px">สินค้า</td><td style="padding:8px"><strong>' + sanitize(itemsText) + '</strong></td></tr>';
+  }
+  
+  html += '</table>';
+  return html;
+}
+
+function buildForecastDetailTable(data) {
+  var html = '<table style="width:100%; margin-top:12px; border-collapse:collapse">';
+  html += '<tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th><th style="text-align:left;padding:8px">ค่า</th></tr>';
+  
+  if (data.type === 'runrate') {
+    html += '<tr><td style="padding:8px">Model</td><td style="padding:8px"><strong>' + sanitize(data.model || '-') + '</strong></td></tr>';
+    html += '<tr><td style="padding:8px">จำนวน</td><td style="padding:8px"><strong>' + (data.qty || 0) + ' ชิ้น</strong></td></tr>';
+    html += '<tr><td style="padding:8px">เดือน</td><td style="padding:8px"><strong>' + (data.month || '-') + '</strong></td></tr>';
+  } else if (data.type === 'project') {
+    html += '<tr><td style="padding:8px">ชื่อโครงการ</td><td style="padding:8px"><strong>' + sanitize(data.projectName || '-') + '</strong></td></tr>';
+    if (data.endUser) {
+      html += '<tr><td style="padding:8px">End User</td><td style="padding:8px"><strong>' + sanitize(data.endUser) + '</strong></td></tr>';
+    }
+    html += '<tr><td style="padding:8px">สินค้า</td><td style="padding:8px"><strong>';
+    for (var i = 0; i < (data.items || []).length; i++) {
+      html += (i > 0 ? ', ' : '') + data.items[i].model + ' x' + data.items[i].qty;
+    }
+    html += '</strong></td></tr>';
+    html += '<tr><td style="padding:8px">เดือน</td><td style="padding:8px"><strong>' + (data.month || '-') + '</strong></td></tr>';
+  }
+  
+  html += '</table>';
+  return html;
+}
+// ================================================================
+// EDIT & CANCEL UPDATE
+// ================================================================
+
+function editUpdate(type, updateId) {
+  if (type === 'pipeline') {
+    showUpdateModal(updateId);
+  } else {
+    toast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา');
+  }
+}
+
+function cancelUpdate(type, dealerId, updateId) {
+  if (!confirm('ยกเลิกการอัพเดทนี้? ข้อมูลจะถูกลบ')) return;
+  
+  var ref = type === 'pipeline' 
+    ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId)
+    : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+  
+  ref.delete().then(function() {
+    toast('🗑️ ยกเลิกการอัพเดทแล้ว');
+    renderUpdateHistoryTab();
+  }).catch(function(err) {
+    toast('❌ ผิดพลาด: ' + err.message);
+  });
 }
 // Tab click (ต้องรอให้ DOM โหลด)
 document.getElementById('tabBar').addEventListener('click', function(e) {
