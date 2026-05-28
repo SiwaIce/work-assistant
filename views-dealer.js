@@ -199,58 +199,6 @@ async function loadExistingTokens(dealerId) {
     </div>
   `;
 }
-// แทนที่ฟังก์ชัน createTokenAndLink ใน views-dealer.js
-async function createTokenAndLink(dealerId) {
-  var expiryDays = parseInt(document.getElementById('tokenExpiryDays').value);
-  var pin = document.getElementById('tokenPin').value.trim();
-  var note = document.getElementById('tokenNote').value.trim();
-  var createdBy = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong';
-  
-  // บันทึก PIN ลง dealerUpdates
-  if (pin) {
-    await db.collection('dealerUpdates').doc(dealerId).set({ 
-      pin: pin,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-  } else {
-    await db.collection('dealerUpdates').doc(dealerId).set({ 
-      pin: '',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-  }
-  
-  var baseUrl = window.location.href.split('?')[0].split('#')[0];
-  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  
-  // สร้างลิงก์แบบใหม่ (ใช้ dealerId + pin)
-  var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
-  if (pin) {
-    fullUrl += '&pin=' + encodeURIComponent(pin);
-  }
-  
-  var expiryDate = addD(_td(), expiryDays);
-  
-  var pinMessage = pin ? `<div style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
-    🔒 <strong>PIN สำหรับลูกค้า:</strong> <span style="font-size:16px;font-weight:700;letter-spacing:2px">${pin}</span>
-    <div class="hint">⚠️ แจ้ง PIN แยกช่องทาง ห้ามใส่ในลิงก์</div>
-  </div>` : '<div class="hint">ℹ️ ไม่ได้ตั้ง PIN ลูกค้าเข้าดูได้เลย</div>';
-  
-  openM('✅ สร้างลิงก์เรียบร้อย', `
-    <div class="form-group">
-      <label>📋 ลิงก์สำหรับลูกค้า</label>
-      <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${fullUrl}</div>
-    </div>
-    <div class="form-row">
-      <div><label>📅 หมดอายุ</label><div>${expiryDate} (${expiryDays} วัน)</div></div>
-      <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
-    </div>
-    ${pinMessage}
-    <div class="bg" style="margin-top:12px">
-      <button class="btn bp" onclick="copyToClipboard('${fullUrl}')">📋 คัดลอกลิงก์</button>
-      <button class="btn bo" onclick="showDealerTokenModal('${dealerId}')">↩️ กลับ</button>
-    </div>
-  `);
-}
 async function revokeAllDealerTokens(dealerId) {
   if (!confirm('⚠️ เพิกถอนลิงก์ทั้งหมดของ Dealer นี้? ลิงก์เก่าจะใช้ไม่ได้ทันที')) return;
   var count = await revokeAllTokensForDealerFirebase(dealerId);
