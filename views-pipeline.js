@@ -1181,6 +1181,8 @@ async function resubmitForecast(dealerId, updateId) {
     toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   }
 }
+var forecastTab = 'pending';
+
 function rCustomerForecastUpdates(el) {
   document.getElementById('pgT').textContent = '📦 แผนการสั่งซื้อจากลูกค้า';
   
@@ -1324,9 +1326,6 @@ function rCustomerForecastUpdates(el) {
     el.innerHTML = html;
   });
 }
-
-// ✅ ตัวแปรสำหรับเก็บแท็บปัจจุบัน (เพิ่มไว้ด้านบนของไฟล์)
-var forecastTab = 'pending';
 
 // ✅ ฟังก์ชัน Restore Forecast (เปลี่ยนจาก rejected กลับเป็น pending)
 async function restoreForecastUpdate(dealerId, updateId) {
