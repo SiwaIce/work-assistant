@@ -567,27 +567,46 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
   });
 }
 
+// แทนที่ function saveCustomerForecastUpdate
+
 function saveCustomerForecastUpdate(dealerId, forecastId, data, type) {
-  var updateData = JSON.parse(JSON.stringify(data));
-  updateData._customerUpdate = true;
-  updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-  updateData._status = 'pending';
-  updateData._originalDealerId = dealerId;
-  updateData._updateType = type;
-  
-  return getCustomerForecastRef(dealerId, forecastId).set(updateData, { merge: true }).then(function() {
-    var timelineRef = getCustomerTimelineRef(dealerId);
-    var timelineEntry = {
-      id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      type: type === 'runrate' ? 'runrate_update' : 'project_update',
-      content: type === 'runrate' ? 'อัพเดทแผนสั่งซื้อ (Run Rate)' : 'อัพเดทแผนสั่งซื้อ (โครงการ)',
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'pending'
-    };
-    return timelineRef.doc(timelineEntry.id).set(timelineEntry);
+  // ดึงข้อมูลเดิมก่อน
+  var existingRef = getCustomerForecastRef(dealerId, forecastId);
+  return existingRef.get().then(function(existingDoc) {
+    var snapshot = existingDoc.exists ? existingDoc.data() : null;
+    
+    var updateData = JSON.parse(JSON.stringify(data));
+    updateData._customerUpdate = true;
+    updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    updateData._status = 'pending';
+    updateData._originalDealerId = dealerId;
+    updateData._updateType = type;
+    
+    // เก็บ snapshot ของข้อมูลเดิม
+    if (snapshot && !snapshot._snapshot) {
+      var cleanSnap = JSON.parse(JSON.stringify(snapshot));
+      delete cleanSnap._customerUpdate;
+      delete cleanSnap._updatedAt;
+      delete cleanSnap._status;
+      delete cleanSnap._snapshot;
+      updateData._snapshot = cleanSnap;
+    } else if (snapshot && snapshot._snapshot) {
+      updateData._snapshot = snapshot._snapshot;
+    }
+    
+    return existingRef.set(updateData, { merge: true }).then(function() {
+      var timelineRef = getCustomerTimelineRef(dealerId);
+      var timelineEntry = {
+        id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        type: type === 'runrate' ? 'runrate_update' : 'project_update',
+        content: type === 'runrate' ? 'อัพเดทแผนสั่งซื้อ (Run Rate)' : 'อัพเดทแผนสั่งซื้อ (โครงการ)',
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'pending'
+      };
+      return timelineRef.doc(timelineEntry.id).set(timelineEntry);
+    });
   });
 }
-
 function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   
@@ -1460,6 +1479,12 @@ function renderUpdateHistoryList(updates) {
     // Action buttons
     html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">';
     html += '<button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
+
+        if (status === 'rejected' && req._rejectReason) {
+  html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(239,68,68,0.08); border-radius:8px">';
+  html += '❌ <strong>เหตุผลที่ปฏิเสธ:</strong> ' + esc(req._rejectReason);
+  html += '</div>';
+}
     
     if (status === 'pending') {
       html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button>';
@@ -1746,14 +1771,142 @@ function buildBeforeAfterForecast(oldData, newData) {
 // EDIT & CANCEL UPDATE
 // ================================================================
 
+// แทนที่ function editUpdate ใน client-view.html
+
 function editUpdate(type, updateId) {
   if (type === 'pipeline') {
     showUpdateModal(updateId);
-  } else {
-    toast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา');
+  } else if (type === 'forecast') {
+    // หา forecast data จาก forecastData
+    var forecastItem = null;
+    for (var i = 0; i < forecastData.runrate.length; i++) {
+      if (forecastData.runrate[i].id === updateId) {
+        forecastItem = forecastData.runrate[i];
+        forecastItem.type = 'runrate';
+        break;
+      }
+    }
+    if (!forecastItem) {
+      for (var i = 0; i < forecastData.projects.length; i++) {
+        if (forecastData.projects[i].id === updateId) {
+          forecastItem = forecastData.projects[i];
+          forecastItem.type = 'project';
+          break;
+        }
+      }
+    }
+    
+    if (forecastItem) {
+      showEditForecastModal(forecastItem);
+    } else {
+      showToast('❌ ไม่พบข้อมูล Forecast');
+    }
   }
 }
 
+function showEditForecastModal(item) {
+  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
+  html += '<div class="modal-container" style="max-width:500px">';
+  html += '<div class="modal-header"><h3>✏️ แก้ไขแผนการสั่งซื้อ</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
+  html += '<div class="modal-body">';
+  
+  if (item.type === 'runrate') {
+    html += '<div class="form-group"><label>📦 Model</label>';
+    html += '<input type="text" id="editForecastModel" list="globalModelList" class="form-control" value="' + esc(item.model) + '"></div>';
+    html += '<div class="form-group"><label>🔢 จำนวน (ชิ้น)</label>';
+    html += '<input type="number" id="editForecastQty" class="form-control" value="' + (item.qty || 1) + '" min="1"></div>';
+    html += '<div class="form-group"><label>📅 เดือน</label>';
+    html += '<input type="text" id="editForecastMonth" class="form-control" value="' + (item.month || '') + '" placeholder="MM/YYYY"></div>';
+  } else {
+    html += '<div class="form-group"><label>📋 ชื่อโครงการ</label>';
+    html += '<input type="text" id="editForecastProjectName" class="form-control" value="' + esc(item.projectName) + '"></div>';
+    html += '<div class="form-group"><label>👤 End User</label>';
+    html += '<input type="text" id="editForecastEndUser" class="form-control" value="' + esc(item.endUser || '') + '"></div>';
+    html += '<div class="form-group"><label>📦 สินค้า</label>';
+    html += '<div id="editForecastItemsContainer">';
+    for (var i = 0; i < (item.items || []).length; i++) {
+      var it = item.items[i];
+      html += '<div class="form-row edit-forecast-item-row">';
+      html += '<input type="text" class="editForecastModel" list="globalModelList" value="' + esc(it.model) + '" placeholder="Model" style="flex:2">';
+      html += '<input type="number" class="editForecastQty" value="' + (it.qty || 1) + '" min="1" style="width:80px">';
+      html += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditForecastItemRow(this)">🗑️</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<button type="button" class="btn btn-sm" onclick="addEditForecastItemRow()">➕ เพิ่มสินค้า</button>';
+    html += '<div class="form-group" style="margin-top:12px"><label>📅 เดือน</label>';
+    html += '<input type="text" id="editForecastMonth" class="form-control" value="' + (item.month || '') + '" placeholder="MM/YYYY"></div>';
+  }
+  
+  html += '<div class="form-group"><label>📝 หมายเหตุการแก้ไข</label>';
+  html += '<textarea id="editForecastNote" rows="2" class="form-control" placeholder="ระบุสิ่งที่แก้ไข..."></textarea></div>';
+  
+  html += '</div><div class="modal-footer">';
+  html += '<button class="btn" onclick="closeModal()">ยกเลิก</button>';
+  html += '<button class="btn btn-primary" onclick="submitForecastUpdate(\'' + item.id + '\', \'' + item.type + '\')">💾 ส่งอัพเดท</button>';
+  html += '</div></div></div>';
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function addEditForecastItemRow() {
+  var container = document.getElementById('editForecastItemsContainer');
+  if (!container) return;
+  var html = '<div class="form-row edit-forecast-item-row">';
+  html += '<input type="text" class="editForecastModel" list="globalModelList" placeholder="Model" style="flex:2">';
+  html += '<input type="number" class="editForecastQty" value="1" min="1" style="width:80px">';
+  html += '<button type="button" class="btn btn-sm btn-danger" onclick="removeEditForecastItemRow(this)">🗑️</button>';
+  html += '</div>';
+  container.insertAdjacentHTML('beforeend', html);
+}
+
+function removeEditForecastItemRow(btn) {
+  var row = btn.closest('.edit-forecast-item-row');
+  if (row) row.remove();
+}
+
+function submitForecastUpdate(forecastId, type) {
+  var updateNote = document.getElementById('editForecastNote') ? document.getElementById('editForecastNote').value.trim() : '';
+  var month = document.getElementById('editForecastMonth') ? document.getElementById('editForecastMonth').value.trim() : '';
+  
+  var updatedData = { id: forecastId, month: month, updateNote: updateNote || 'แก้ไขแผนการสั่งซื้อ', updatedBy: 'customer', updatedAt: new Date().toISOString() };
+  
+  if (type === 'runrate') {
+    var model = document.getElementById('editForecastModel') ? document.getElementById('editForecastModel').value.trim() : '';
+    var qty = document.getElementById('editForecastQty') ? parseInt(document.getElementById('editForecastQty').value) || 1 : 1;
+    if (!model) { alert('กรุณาเลือก Model'); return; }
+    updatedData.model = model;
+    updatedData.qty = qty;
+    updatedData.type = 'runrate';
+  } else {
+    var projectName = document.getElementById('editForecastProjectName') ? document.getElementById('editForecastProjectName').value.trim() : '';
+    var endUser = document.getElementById('editForecastEndUser') ? document.getElementById('editForecastEndUser').value.trim() : '';
+    if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
+    var items = [];
+    var itemRows = document.querySelectorAll('#editForecastItemsContainer .edit-forecast-item-row');
+    for (var i = 0; i < itemRows.length; i++) {
+      var modelInput = itemRows[i].querySelector('.editForecastModel');
+      var qtyInput = itemRows[i].querySelector('.editForecastQty');
+      if (modelInput && modelInput.value && qtyInput && parseInt(qtyInput.value) > 0) {
+        items.push({ model: modelInput.value, qty: parseInt(qtyInput.value) });
+      }
+    }
+    if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+    updatedData.projectName = projectName;
+    updatedData.endUser = endUser;
+    updatedData.items = items;
+    updatedData.totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
+    updatedData.type = 'project';
+  }
+  
+  saveCustomerForecastUpdate(dealerId, forecastId, updatedData, updatedData.type).then(function() {
+    showToast('✅ ส่งข้อมูลอัพเดทเรียบร้อยแล้ว');
+    closeModal();
+    loadAllData();
+  }).catch(function(err) {
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+  });
+}
 function cancelUpdate(type, dealerId, updateId) {
   if (!confirm('ยกเลิกการอัพเดทนี้? ข้อมูลจะถูกลบ')) return;
   

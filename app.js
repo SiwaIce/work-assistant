@@ -3006,21 +3006,47 @@ function showChangeDetail(dealerId, updateId) {
   });
 }
 
+// แก้ไข function exportHistoryCSV
+
 function exportHistoryCSV() {
-  // สร้าง CSV จากข้อมูลที่แสดงอยู่
-  var rows = [];
-  var headers = ['วันที่', 'Dealer', 'โครงการ', 'ประเภท', 'รายละเอียด', 'สถานะ'];
-  rows.push(headers);
+  var rows = [['วันที่', 'Dealer', 'โครงการ', 'ประเภท', 'รายละเอียด', 'สถานะ', 'เหตุผลปฏิเสธ']];
   
+  // ดึงข้อมูลจาก currentUpdates แทน
   var updates = [];
-  // ต้องดึงข้อมูลใหม่ หรือใช้จาก global
-  // (เพิ่ม logic การดึงข้อมูลและ export)
+  var dealers = ST.getAll('dealers');
+  var promises = dealers.map(function(dealer) {
+    return db.collection('dealerUpdates').doc(dealer.id).collection('timeline')
+      .orderBy('timestamp', 'desc')
+      .get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          data.dealerName = dealer.name;
+          updates.push(data);
+        });
+      });
+  });
   
-  var csv = rows.map(function(row) {
-    return row.map(function(cell) { return '"' + String(cell).replace(/"/g, '""') + '"'; }).join(',');
-  }).join('\n');
-  
-  dlBlob(csv, 'customer-update-history-' + _td() + '.csv');
+  Promise.all(promises).then(function() {
+    updates.forEach(function(u) {
+      var dateStr = u.timestamp && u.timestamp.toDate ? u.timestamp.toDate().toLocaleString('th-TH') : '-';
+      rows.push([
+        dateStr,
+        u.dealerName || '-',
+        u.projectName || '-',
+        u.type || '-',
+        (u.content || '').substring(0, 200),
+        u.status || '-',
+        u.rejectReason || '-'
+      ]);
+    });
+    
+    var csv = rows.map(function(row) {
+      return row.map(function(cell) { return '"' + String(cell).replace(/"/g, '""') + '"'; }).join(',');
+    }).join('\n');
+    
+    dlBlob(csv, 'customer-update-history-' + _td() + '.csv');
+  });
 }
 // ================================================================
 // CUSTOMER FORECAST SUMMARY (COMPLETE VERSION)
@@ -3609,6 +3635,33 @@ function viewForecastDetail(dealerId, updateId) {
     
     openM('📦 รายละเอียด', html);
   });
+}
+// เพิ่มใน rAdmin function (app.js) - ในส่วน Cloud Sync
+
+'<div class="card"><h2>💬 LINE Notify</h2>' +
+'<div class="fg"><label>LINE Notify Token</label>' +
+'<input type="password" id="lineToken" value="' + (localStorage.getItem('line_notify_token') || '') + '" placeholder="ใส่ Token ที่ได้จาก LINE Notify">' +
+'<div class="hint"><a href="https://notify-bot.line.me/my/" target="_blank">🔗 ไปที่ LINE Notify เพื่อขอ Token</a></div></div>' +
+'<button class="btn bp" onclick="saveLineToken()">💾 บันทึก Token</button>' +
+'<button class="btn bo" onclick="testLineNotify()">📤 ทดสอบส่งข้อความ</button></div>'
+
+// เพิ่มฟังก์ชัน
+function saveLineToken() {
+  var token = document.getElementById('lineToken').value.trim();
+  if (token) {
+    localStorage.setItem('line_notify_token', token);
+    toast('✅ บันทึก Token แล้ว');
+  } else {
+    localStorage.removeItem('line_notify_token');
+    toast('🗑️ ลบ Token แล้ว');
+  }
+}
+
+function testLineNotify() {
+  var token = localStorage.getItem('line_notify_token');
+  if (!token) { toast('❌ กรุณาใส่ Token ก่อน'); return; }
+  sendLineNotify('🧪 ทดสอบการแจ้งเตือนจาก DJI Sales Assistant');
+  toast('📤 ส่งข้อความทดสอบแล้ว');
 }
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
