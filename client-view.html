@@ -1107,6 +1107,41 @@ function showDetailModal(title, bodyHtml) {
   document.body.appendChild(el);
 }
 function closeDetailModal() { var el = document.getElementById('detailModal'); if (el) el.remove(); }
+// ========== DATE PICKER HELPER FUNCTIONS ==========
+function dpH(id, val, label, req) {
+  var displayVal = val ? fD(val) : '';
+  return `<div class="form-group">
+    <label>${label}${req ? ' *' : ''}</label>
+    <input type="text" id="${id}" class="form-control" value="${displayVal}" placeholder="DD/MM/YYYY" autocomplete="off">
+    <div class="hint">รูปแบบ: วันที่/เดือน/ปี (เช่น 31/12/2568)</div>
+  </div>`;
+}
+
+function dpG(id) {
+  var val = document.getElementById(id) ? document.getElementById(id).value : '';
+  if (!val) return '';
+  var parts = val.split('/');
+  if (parts.length !== 3) return '';
+  var day = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10);
+  var year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return '';
+  var buddhistYear = year;
+  var christianYear = buddhistYear - 543;
+  if (christianYear < 1900) christianYear = 1900;
+  return christianYear + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+
+function fD(iso) {
+  if (!iso) return '';
+  var parts = iso.split('T')[0].split('-');
+  if (parts.length !== 3) return '';
+  var year = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10);
+  var day = parseInt(parts[2], 10);
+  var buddhistYear = year + 543;
+  return String(day).padStart(2, '0') + '/' + String(month).padStart(2, '0') + '/' + buddhistYear;
+}
 
 function showUpdateModal(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
@@ -1121,18 +1156,18 @@ function showUpdateModal(pipeId) {
   }
   itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
   
-  // ✅ เพิ่มฟิลด์วันที่
-  var biddingDateVal = p.biddingDate ? fD(p.biddingDate) : '';
-  var shipmentDateVal = p.shipmentDate ? fD(p.shipmentDate) : '';
+  // ✅ รับค่าวันที่ปัจจุบันจาก p
+  var biddingDateVal = p.biddingDate || '';
+  var shipmentDateVal = p.shipmentDate || '';
   var forecastAmountVal = p.forecastAmount || 0;
   
-  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">' +
+  var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container" style="max-width:550px"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">' +
     '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div>' +
     '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>' +
     '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>' +
     '<div class="form-row">' +
-    dpH('editBiddingDate', biddingDateVal, '📅 Bidding Date') +
-    dpH('editShipmentDate', shipmentDateVal, '🚚 Shipment Date') +
+    '<div class="form-group"><label>📅 Bidding Date</label><input type="text" id="editBiddingDate" class="form-control" value="' + (biddingDateVal ? fD(biddingDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off"></div>' +
+    '<div class="form-group"><label>🚚 Shipment Date</label><input type="text" id="editShipmentDate" class="form-control" value="' + (shipmentDateVal ? fD(shipmentDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off"></div>' +
     '</div>' +
     '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="editForecastAmount" class="form-control" value="' + forecastAmountVal + '"></div>' +
     '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div>' +
@@ -1148,9 +1183,27 @@ function submitPipelineUpdate(pipeId) {
   var newEndUser = document.getElementById('editEndUser').value.trim();
   var newStatus = document.getElementById('editStatus').value;
   var updateContent = document.getElementById('updateContent').value.trim();
-  var newBiddingDate = dpG('editBiddingDate') || '';
-  var newShipmentDate = dpG('editShipmentDate') || '';
-  var newForecastAmount = parseFloat(document.getElementById('editForecastAmount').value) || 0;
+  
+  // ✅ อ่านวันที่จาก input (รูปแบบ DD/MM/YYYY)
+  var biddingDateStr = document.getElementById('editBiddingDate') ? document.getElementById('editBiddingDate').value.trim() : '';
+  var shipmentDateStr = document.getElementById('editShipmentDate') ? document.getElementById('editShipmentDate').value.trim() : '';
+  var newForecastAmount = parseFloat(document.getElementById('editForecastAmount') ? document.getElementById('editForecastAmount').value : 0) || 0;
+  
+  // ✅ แปลงวันที่เป็น ISO format (YYYY-MM-DD)
+  function convertToISODate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('/');
+    if (parts.length !== 3) return '';
+    var day = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10);
+    var year = parseInt(parts[2], 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return '';
+    var christianYear = year - 543;
+    return christianYear + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+  
+  var newBiddingDate = convertToISODate(biddingDateStr);
+  var newShipmentDate = convertToISODate(shipmentDateStr);
   
   if (!newProjectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
   
@@ -1243,10 +1296,10 @@ function showCreateProjectModal() {
   modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ *</label><input type="text" id="newProjName" class="form-control" placeholder="เช่น โครงการพัฒนาระบบ..."></div>';
   modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะเริ่มต้น</label><select id="newProjStatus" class="form-control">' + statusOptions + '</select></div>';
-  modalHtml += '<div class="form-row">' +
-    dpH('newBiddingDate', '', '📅 Bidding Date') +
-    dpH('newShipmentDate', '', '🚚 Shipment Date') +
-    '</div>';
+  modalHtml += '<div class="form-row">';
+  modalHtml += '<div class="form-group"><label>📅 Bidding Date</label><input type="text" id="newBiddingDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off"></div>';
+  modalHtml += '<div class="form-group"><label>🚚 Shipment Date</label><input type="text" id="newShipmentDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off"></div>';
+  modalHtml += '</div>';
   modalHtml += '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="newProjAmount" class="form-control" placeholder="0"></div>';
   modalHtml += '<div class="form-group"><label>📦 รายการสินค้า</label>';
   modalHtml += '<div class="forecast-row" style="margin-bottom:8px">';
@@ -1309,9 +1362,23 @@ function submitNewProject() {
   var amount = parseFloat(document.getElementById('newProjAmount').value) || 0;
   var endUser = document.getElementById('newProjEndUser').value.trim();
   var status = document.getElementById('newProjStatus').value;
-  var biddingDate = dpG('newBiddingDate') || '';
-  var shipmentDate = dpG('newShipmentDate') || '';
   var note = document.getElementById('newProjNote').value.trim();
+  
+  // ✅ อ่านและแปลงวันที่
+  function convertToISODate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('/');
+    if (parts.length !== 3) return '';
+    var day = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10);
+    var year = parseInt(parts[2], 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return '';
+    var christianYear = year - 543;
+    return christianYear + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+  
+  var biddingDate = convertToISODate(document.getElementById('newBiddingDate').value);
+  var shipmentDate = convertToISODate(document.getElementById('newShipmentDate').value);
   
   var newPipeline = {
     id: 'pipe_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
@@ -1352,9 +1419,29 @@ function submitNewProject() {
   });
 }
 // ========== FORECAST FUNCTIONS ==========
-function getMonthSummary() { var summary = {}; for (var i=0;i<allMonths.length;i++) summary[allMonths[i]] = { runrate:0, project:0, total:0 };
-  for (var i=0;i<forecastData.runrate.length;i++) { var r = forecastData.runrate[i]; if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; } }
-  for (var i=0;i<forecastData.projects.length;i++) { var p = forecastData.projects[i]; if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; } }
+function getMonthSummary() { 
+  var summary = {}; 
+  for (var i=0;i<allMonths.length;i++) summary[allMonths[i]] = { runrate:0, project:0, total:0 };
+  
+  // ✅ Run Rate - กรองเอา rejected ออก
+  for (var i=0;i<forecastData.runrate.length;i++) { 
+    var r = forecastData.runrate[i]; 
+    if (r._status === 'rejected') continue;
+    if (summary[r.month]) { 
+      summary[r.month].runrate += r.qty; 
+      summary[r.month].total += r.qty; 
+    } 
+  }
+  
+  // ✅ Project - กรองเอา rejected ออก
+  for (var i=0;i<forecastData.projects.length;i++) { 
+    var p = forecastData.projects[i]; 
+    if (p._status === 'rejected') continue;
+    if (summary[p.month]) { 
+      summary[p.month].project += p.totalQty; 
+      summary[p.month].total += p.totalQty; 
+    } 
+  }
   return summary;
 }
 function selectMonth(month) { selectedMonth = month; renderForecastTab(); }

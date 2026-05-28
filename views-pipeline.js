@@ -1181,6 +1181,172 @@ async function resubmitForecast(dealerId, updateId) {
     toast('❌ เกิดข้อผิดพลาด: ' + err.message);
   }
 }
+function rCustomerForecastUpdates(el) {
+  document.getElementById('pgT').textContent = '📦 แผนการสั่งซื้อจากลูกค้า';
+  
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    el.innerHTML = '<div class="card"><div class="empty"><p>กรุณา login เพื่อดูคำขอ</p></div></div>';
+    return;
+  }
+  
+  var dealers = ST.getAll('dealers');
+  if (!dealers.length) {
+    el.innerHTML = '<div class="card"><div class="empty"><p>ไม่มี Dealer ในระบบ</p></div></div>';
+    return;
+  }
+  
+  selectedForecastUpdates = {};
+  var allUpdates = [];
+  var pendingCount = 0;
+  var rejectedCount = 0;
+  
+  var promises = dealers.map(function(dealer) {
+    return db.collection('dealerUpdates').doc(dealer.id).collection('forecast')
+      .get()
+      .then(function(snapshot) {
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          data.id = doc.id;
+          data.dealerName = dealer.name;
+          data.dealerId = dealer.id;
+          allUpdates.push(data);
+          if (data._status === 'pending') pendingCount++;
+          if (data._status === 'rejected') rejectedCount++;
+        });
+      })
+      .catch(function(err) { 
+        console.warn('Error checking forecast for dealer:', dealer.name, err);
+        return Promise.resolve();
+      });
+  });
+  
+  Promise.all(promises).then(function() {
+    var badge = document.getElementById('forecastUpdateBadge');
+    if (badge) {
+      badge.textContent = pendingCount;
+      badge.style.display = pendingCount ? 'inline' : 'none';
+    }
+    
+    // ✅ แยกตามสถานะ
+    var pendingUpdates = allUpdates.filter(function(u) { return u._status === 'pending'; });
+    var rejectedUpdates = allUpdates.filter(function(u) { return u._status === 'rejected'; });
+    
+    if (pendingUpdates.length === 0 && rejectedUpdates.length === 0) {
+      el.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขอแผนการสั่งซื้อจากลูกค้า</p></div></div>';
+      return;
+    }
+    
+    var html = '<div class="card"><h2>📦 แผนการสั่งซื้อจากลูกค้า</h2>';
+    
+    // ✅ แท็บสำหรับสลับระหว่าง Pending และ Rejected
+    html += '<div class="ftabs" style="margin-bottom:12px">';
+    html += '<div class="ftab ' + (forecastTab === 'pending' ? 'act' : '') + '" onclick="forecastTab=\'pending\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">⏳ รอตรวจสอบ (' + pendingCount + ')</div>';
+    html += '<div class="ftab ' + (forecastTab === 'rejected' ? 'act' : '') + '" onclick="forecastTab=\'rejected\'; rCustomerForecastUpdates(document.getElementById(\'ct\'))">❌ ปฏิเสธ (' + rejectedCount + ')</div>';
+    html += '</div>';
+    
+    // ✅ Batch actions (เฉพาะ pending)
+    if (forecastTab === 'pending') {
+      html += '<div class="bg" style="margin-bottom:12px">';
+      html += '<button class="btn bp" onclick="batchApproveForecastSelected()" style="background:#22c55e">✅ Approve ที่เลือก</button>';
+      html += '<button class="btn bs" onclick="batchApproveForecastAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
+      html += '<button class="btn bsm bo" onclick="toggleSelectAllForecast()">☑️ เลือกทั้งหมด</button>';
+      html += '</div>';
+    }
+    
+    html += '<div id="forecastUpdatesList">';
+    
+    if (forecastTab === 'pending') {
+      // ✅ แสดง pending updates (เหมือนเดิม)
+      for (var i = 0; i < pendingUpdates.length; i++) {
+        var u = pendingUpdates[i];
+        var isSelected = selectedForecastUpdates[u.id] === true;
+        var updateDate = u._updatedAt ? (u._updatedAt.seconds ? new Date(u._updatedAt.seconds * 1000).toLocaleString() : u._updatedAt) : '-';
+        var typeIcon = u.type === 'runrate' ? '📦' : '🏢';
+        var typeText = u.type === 'runrate' ? 'Run Rate' : 'โครงการ';
+        
+        html += '<div class="li" style="border-left:3px solid #f59e0b; margin-bottom:8px; display:flex; flex-wrap:wrap">';
+        html += '<div style="margin-right:10px">';
+        html += '<input type="checkbox" class="forecast-checkbox" data-id="' + u.id + '" data-dealer="' + u.dealerId + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleForecastSelection(\'' + u.id + '\', this.checked)">';
+        html += '</div>';
+        html += '<div class="lm" style="flex:1">';
+        html += '<div class="lt">' + typeIcon + ' <strong>' + sanitize(u.dealerName) + '</strong> - ' + typeText + ' <span class="tag tag-active">รอตรวจสอบ</span></div>';
+        
+        if (u.type === 'runrate') {
+          html += '<div class="ls">📦 ' + sanitize(u.model || '-') + ' x' + (u.qty || 0) + ' ชิ้น • เดือน ' + (u.month || '-') + '</div>';
+        } else {
+          html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
+          if (u.endUser) html += '<div class="ls">👤 ' + sanitize(u.endUser) + '</div>';
+          html += '<div class="ls">📦 ' + (u.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+          html += '<div class="ls">📅 เดือน ' + (u.month || '-') + '</div>';
+        }
+        
+        html += '<div class="ls">⏰ ' + updateDate + '</div>';
+        html += '</div>';
+        html += '<div class="bg" style="flex-shrink:0">';
+        html += '<button class="btn bsm bs" onclick="approveForecastUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">✅ อนุมัติ</button>';
+        html += '<button class="btn bsm bd" onclick="rejectForecastUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">❌ ปฏิเสธ</button>';
+        html += '<button class="btn bsm bo" onclick="viewForecastDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
+        html += '</div></div>';
+      }
+    } else {
+      // ✅ แสดง rejected updates (พร้อมปุ่ม Restore)
+      for (var i = 0; i < rejectedUpdates.length; i++) {
+        var u = rejectedUpdates[i];
+        var updateDate = u._updatedAt ? (u._updatedAt.seconds ? new Date(u._updatedAt.seconds * 1000).toLocaleString() : u._updatedAt) : '-';
+        var rejectDate = u._rejectedAt ? (u._rejectedAt.seconds ? new Date(u._rejectedAt.seconds * 1000).toLocaleString() : u._rejectedAt) : '-';
+        var typeIcon = u.type === 'runrate' ? '📦' : '🏢';
+        var typeText = u.type === 'runrate' ? 'Run Rate' : 'โครงการ';
+        
+        html += '<div class="li" style="border-left:3px solid #ef4444; margin-bottom:8px; display:flex; flex-wrap:wrap; background:rgba(239,68,68,0.03)">';
+        html += '<div class="lm" style="flex:1">';
+        html += '<div class="lt">' + typeIcon + ' <strong>' + sanitize(u.dealerName) + '</strong> - ' + typeText + ' <span class="tag tag-cancelled" style="background:#ef4444; color:white">❌ ปฏิเสธ</span></div>';
+        
+        if (u.type === 'runrate') {
+          html += '<div class="ls">📦 ' + sanitize(u.model || '-') + ' x' + (u.qty || 0) + ' ชิ้น • เดือน ' + (u.month || '-') + '</div>';
+        } else {
+          html += '<div class="ls">📋 ' + sanitize(u.projectName || '-') + '</div>';
+          if (u.endUser) html += '<div class="ls">👤 ' + sanitize(u.endUser) + '</div>';
+          html += '<div class="ls">📦 ' + (u.items || []).map(function(it) { return it.model + ' x' + it.qty; }).join(', ') + '</div>';
+          html += '<div class="ls">📅 เดือน ' + (u.month || '-') + '</div>';
+        }
+        
+        html += '<div class="ls">⏰ ส่งเมื่อ: ' + updateDate + '</div>';
+        html += '<div class="ls">❌ ปฏิเสธเมื่อ: ' + rejectDate + '</div>';
+        html += '</div>';
+        html += '<div class="bg" style="flex-shrink:0">';
+        html += '<button class="btn bsm bs" onclick="restoreForecastUpdate(\'' + u.dealerId + '\', \'' + u.id + '\')">🔄 ส่งกลับไปตรวจสอบใหม่</button>';
+        html += '<button class="btn bsm bo" onclick="viewForecastDetail(\'' + u.dealerId + '\', \'' + u.id + '\')">👁️ รายละเอียด</button>';
+        html += '</div></div>';
+      }
+    }
+    
+    html += '</div></div>';
+    el.innerHTML = html;
+  });
+}
+
+// ✅ ตัวแปรสำหรับเก็บแท็บปัจจุบัน (เพิ่มไว้ด้านบนของไฟล์)
+var forecastTab = 'pending';
+
+// ✅ ฟังก์ชัน Restore Forecast (เปลี่ยนจาก rejected กลับเป็น pending)
+async function restoreForecastUpdate(dealerId, updateId) {
+  if (!confirm('ส่งคำขอนี้กลับไปให้ลูกค้าตรวจสอบใหม่อีกครั้ง?')) return;
+  
+  try {
+    var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+    await updateRef.update({
+      _status: 'pending',
+      _restoredAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _restoredBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
+    });
+    
+    toast('🔄 ส่งกลับไปตรวจสอบใหม่แล้ว');
+    // รีเฟรชหน้า
+    rCustomerForecastUpdates(document.getElementById('ct'));
+  } catch(err) {
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
 // ใน rCustomerForecastUpdates หลังจากแสดง pending ให้เพิ่มส่วน rejected
 var rejectedUpdates = allUpdates.filter(function(u) { return u._status === 'rejected'; });
 if (rejectedUpdates.length) {
