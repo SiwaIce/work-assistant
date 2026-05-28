@@ -849,10 +849,112 @@ async function submitPinCode(dealerId) {
   }
 }
 
+// ========== PIN VERIFICATION (OPTIONAL) ==========
+var urlParams = new URLSearchParams(window.location.search);
+var tokenParam = urlParams.get('token');
+var dealerIdParam = urlParams.get('dealerId');
+var uidParam = urlParams.get('uid');
+
+// อ่าน PIN จาก URL (รองรับทั้ง query และ hash)
+var urlPin = '';
+var hash = window.location.hash;
+if (hash && hash.includes('pin=')) {
+  urlPin = hash.split('pin=')[1].split('&')[0];
+}
+if (!urlPin) {
+  urlPin = urlParams.get('pin') || '';
+}
+
+async function checkOptionalPin(dealerId) {
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+    
+    console.log('PIN check - required:', requiredPin ? 'YES' : 'NO', 'urlPin:', urlPin ? 'YES' : 'NO');
+    
+    if (!requiredPin || requiredPin === '') {
+      console.log('No PIN required');
+      return true;
+    }
+    
+    if (urlPin && urlPin === requiredPin) {
+      console.log('PIN from URL matched');
+      sessionStorage.setItem('dealer_pin_' + dealerId, urlPin);
+      return true;
+    }
+    
+    var savedPin = sessionStorage.getItem('dealer_pin_' + dealerId);
+    if (savedPin && savedPin === requiredPin) {
+      console.log('PIN from sessionStorage matched');
+      return true;
+    }
+    
+    console.log('Showing PIN dialog');
+    showPinDialog(dealerId, requiredPin);
+    return false;
+  } catch(err) {
+    console.error('PIN check error:', err);
+    return true;
+  }
+}
+
+function showPinDialog(dealerId, requiredPin) {
+  var tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.style.display = 'none';
+  var noticeArea = document.getElementById('noticeArea');
+  if (noticeArea) noticeArea.style.display = 'none';
+  
+  var html = `
+    <div class="empty-state" style="text-align:center;padding:60px 20px">
+      <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
+      <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
+      <div style="max-width:250px;margin:0 auto">
+        <input type="password" id="pinInput" placeholder="รหัสผ่าน 4-6 หลัก" 
+               style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);
+                      background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" 
+               maxlength="6" autocomplete="off">
+      </div>
+      <div style="margin-top:20px">
+        <button class="btn btn-primary" onclick="submitPinCode('${dealerId}')" style="margin-right:8px">✅ ยืนยัน</button>
+        <button class="btn" onclick="location.reload()">ยกเลิก</button>
+      </div>
+      <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
+    </div>
+  `;
+  document.getElementById('tabContent').innerHTML = html;
+  setTimeout(function() { var el = document.getElementById('pinInput'); if (el) el.focus(); }, 100);
+}
+
+async function submitPinCode(dealerId) {
+  var enteredPin = document.getElementById('pinInput').value.trim();
+  if (!enteredPin) { showToast('กรุณากรอกรหัสผ่าน'); return; }
+  
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+    
+    if (enteredPin === requiredPin) {
+      sessionStorage.setItem('dealer_pin_' + dealerId, enteredPin);
+      showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
+      var tabBar = document.querySelector('.tab-bar');
+      if (tabBar) tabBar.style.display = 'flex';
+      var noticeArea = document.getElementById('noticeArea');
+      if (noticeArea) noticeArea.style.display = 'block';
+      loadAllData();
+    } else {
+      showToast('❌ รหัสผ่านไม่ถูกต้อง');
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinInput').focus();
+    }
+  } catch(err) {
+    showToast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
+
 async function verifyAndProceed() {
   console.log('verifyAndProceed called');
   
-  // แบบที่ 1: ใช้ token (ระบบเก่า - รองรับความเข้ากันได้)
   if (tokenParam) {
     showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
     var parts = tokenParam.split('.');
@@ -867,15 +969,12 @@ async function verifyAndProceed() {
           if (pinOk) loadAllData();
           return;
         }
-      } catch(e) {
-        console.warn('Token decode error:', e);
-      }
+      } catch(e) { console.warn('Token decode error:', e); }
     }
     showAccessDenied('ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว');
     return;
   }
   
-  // แบบที่ 2: ใช้ dealerId โดยตรง (แบบหลัก)
   if (dealerIdParam) {
     dealerId = dealerIdParam;
     uid = uidParam || '';
