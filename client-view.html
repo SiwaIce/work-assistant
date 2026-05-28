@@ -667,13 +667,10 @@ function loadModels() {
   }
 }
 
-// ========== ENSURE MODELS LOADED ==========
 function ensureModelsLoaded() {
   if (!allModels || allModels.length === 0) {
-    console.warn('AllModels is empty, loading from config');
     loadModels();
   }
-  console.log('AllModels count:', allModels.length);
   return allModels;
 }
 
@@ -740,198 +737,134 @@ function loadAllData() {
 }
 function refreshData() { loadAllData(); }
 
-// ================================================================
-// TOKEN VERIFICATION WITH FIREBASE REGISTRY
-// ================================================================
+// ========== TOKEN VERIFICATION & PIN ==========
+var urlParams = new URLSearchParams(window.location.search);
+var tokenParam = urlParams.get('token');
+var dealerIdParam = urlParams.get('dealerId');
+var uidParam = urlParams.get('uid');
+var urlPin = urlParams.get('pin');  // ✅ เพิ่มรับ PIN จาก URL
 
-function base64url(str) {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function verifyCustomerTokenV2(token) {
-  try {
-    var parts = token.split('.');
-    if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
-    
-    var payload = JSON.parse(atob(parts[1]));
-    
-    // ตรวจสอบวันหมดอายุ
-    if (payload.exp < Date.now() / 1000) {
-      return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
-    }
-    
-    // ตรวจสอบ signature
-    var secret = localStorage.getItem('jwt_secret');
-    if (!secret) {
-      return { valid: false, error: 'ระบบไม่พร้อมใช้งาน' };
-    }
-    
-    function base64url(str) {
-      return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-    
-    var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
-    if (parts[2] !== expectedSignature) {
-      return { valid: false, error: 'token ไม่ถูกต้อง' };
-    }
-    
-    // ========== ตรวจสอบกับ Registry (Firebase + Fallback) ==========
-    var isActive = true;
-    var registryChecked = false;
-    
-    // 1. ลองตรวจสอบกับ Firebase Registry ก่อน
-    try {
-      var registryQuery = await db.collection('tokenRegistry')
-        .where('token', '==', token)
-        .limit(1)
-        .get();
-      
-      if (!registryQuery.empty) {
-        registryChecked = true;
-        var tokenData = registryQuery.docs[0].data();
-        isActive = tokenData.isActive === true;
-        
-        // อัพเดทสถิติ (ไม่ต้องรอ)
-        registryQuery.docs[0].ref.update({
-          lastUsedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          useCount: firebase.firestore.FieldValue.increment(1)
-        }).catch(function(e) { console.warn('Failed to update stats:', e); });
-      }
-    } catch(firebaseError) {
-      // Firebase Registry error (index ยังไม่พร้อม, network error, etc.)
-      console.warn('Firebase Registry error, falling back to localStorage:', firebaseError.message);
-    }
-    
-    // 2. ถ้า Firebase Registry ยังไม่ทำงาน ให้ใช้ localStorage แทน
-    if (!registryChecked) {
-      var localStorageRegistry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-      for (var id in localStorageRegistry) {
-        if (localStorageRegistry[id].token === token) {
-          isActive = localStorageRegistry[id].isActive === true;
-          registryChecked = true;
-          break;
-        }
-      }
-    }
-    
-    // 3. ถ้ายังไม่เจอ token ใน registry เลย (token เก่ามาก) ให้ถือว่ายัง active
-    if (!registryChecked) {
-      console.warn('Token not found in any registry, allowing access (legacy token)');
-      isActive = true;
-      
-      // พยายามบันทึกไป Firebase (เผื่อไว้)
-      try {
-        await db.collection('tokenRegistry').add({
-          token: token,
-          dealerId: payload.dealerId,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          expiresAt: new Date(payload.exp * 1000),
-          isActive: true,
-          useCount: 1,
-          source: 'legacy_token'
-        });
-      } catch(e) {}
-    }
-    
-    // 4. ตรวจสอบผลลัพธ์
-    if (!isActive) {
-      return { valid: false, error: 'ลิงก์ถูกเพิกถอนแล้ว กรุณาติดต่อพนักงานขาย' };
-    }
-    
-    return { valid: true, dealerId: payload.dealerId };
-    
-  } catch(e) {
-    console.error('Token verification error:', e);
-    return { valid: false, error: 'เกิดข้อผิดพลาดในการตรวจสอบความปลอดภัย: ' + e.message };
-  }
-}
-// ========== PIN VERIFICATION ==========
-async function checkAndVerifyPin(dealerId) {
+// ✅ ฟังก์ชันตรวจสอบ PIN
+async function checkPin(dealerId) {
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
     var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
-    if (!requiredPin || requiredPin === '') { loadAllData(); return true; }
-    showPinPrompt(dealerId, requiredPin);
+    
+    // ไม่มี PIN หรือ PIN ว่าง → ผ่านเลย
+    if (!requiredPin || requiredPin === '') {
+      return true;
+    }
+    
+    // ถ้ามี PIN ใน URL และตรงกัน → ผ่านเลย
+    if (urlPin && urlPin === requiredPin) {
+      return true;
+    }
+    
+    // ไม่ผ่าน → แสดงหน้าต่างขอ PIN
+    showPinInput(dealerId, requiredPin);
     return false;
-  } catch(err) { console.warn('Error checking PIN:', err); loadAllData(); return true; }
+  } catch(err) {
+    console.warn('PIN check error:', err);
+    return true; // error ให้ผ่านไปก่อน
+  }
 }
 
-function showPinPrompt(dealerId, requiredPin) {
+// ✅ แสดงหน้าต่างขอ PIN
+function showPinInput(dealerId, requiredPin) {
+  var tabBar = document.querySelector('.tab-bar');
+  if (tabBar) tabBar.style.display = 'none';
+  
   var html = `
     <div class="empty-state" style="text-align:center;padding:60px 20px">
       <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
       <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
       <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
-      <div style="max-width:250px;margin:0 auto"><input type="password" id="pinInput" placeholder="กรอกรหัสผ่าน 4-6 หลัก" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" maxlength="6" autocomplete="off"></div>
-      <div style="margin-top:20px"><button class="btn btn-primary" onclick="submitPin()" style="margin-right:8px">✅ ยืนยัน</button><button class="btn" onclick="showAccessDenied('ไม่มีรหัสผ่านไม่สามารถเข้าดูข้อมูลได้')">ยกเลิก</button></div>
+      <div style="max-width:250px;margin:0 auto">
+        <input type="password" id="pinInput" placeholder="กรอกรหัสผ่าน 4-6 หลัก" 
+               style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);
+                      background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" 
+               maxlength="6" autocomplete="off">
+      </div>
+      <div style="margin-top:20px">
+        <button class="btn btn-primary" onclick="submitPinCode('${dealerId}')" style="margin-right:8px">✅ ยืนยัน</button>
+        <button class="btn" onclick="showAccessDenied('ไม่มีรหัสผ่านไม่สามารถเข้าดูข้อมูลได้')">ยกเลิก</button>
+      </div>
       <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
     </div>
   `;
   document.getElementById('tabContent').innerHTML = html;
-  var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
-  setTimeout(function() { var pinInput = document.getElementById('pinInput'); if (pinInput) pinInput.focus(); }, 100);
+  
+  setTimeout(function() { 
+    var pinInput = document.getElementById('pinInput'); 
+    if (pinInput) pinInput.focus(); 
+  }, 100);
 }
 
-function submitPin() {
+// ✅ ส่ง PIN ที่กรอก
+async function submitPinCode(dealerId) {
   var enteredPin = document.getElementById('pinInput').value.trim();
-  if (!enteredPin) { showToast('กรุณากรอกรหัสผ่าน'); return; }
-  db.collection('dealerUpdates').doc(dealerId).get().then(function(doc) {
-    var requiredPin = doc.exists ? doc.data().pin : '';
+  if (!enteredPin) { 
+    showToast('กรุณากรอกรหัสผ่าน'); 
+    return; 
+  }
+  
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+    
     if (enteredPin === requiredPin) {
       showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
-      var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'flex';
+      var tabBar = document.querySelector('.tab-bar');
+      if (tabBar) tabBar.style.display = 'flex';
       loadAllData();
     } else {
       showToast('❌ รหัสผ่านไม่ถูกต้อง');
       document.getElementById('pinInput').value = '';
       document.getElementById('pinInput').focus();
     }
-  }).catch(function(err) { showToast('❌ เกิดข้อผิดพลาด: ' + err.message); });
+  } catch(err) {
+    showToast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  }
 }
 
-// ========== TOKEN VERIFICATION & INIT ==========
-var urlParams = new URLSearchParams(window.location.search);
-var token = urlParams.get('token');
-var _urlDealerId = urlParams.get('dealerId');
-var _urlPin = urlParams.get('pin');
-
 async function verifyAndProceed() {
-  // --- รูปแบบ 1: ?dealerId=xxx (&pin=xxx) — ลิงก์ที่สร้างจากระบบปัจจุบัน ---
-  if (_urlDealerId && !token) {
-    dealerId = _urlDealerId;
-    showNotice('🔄 กำลังโหลดข้อมูล...', false);
-    if (_urlPin) {
-      // มี PIN ใน URL → ตรวจ auto
+  // แบบที่ 1: ใช้ token (ระบบเก่า)
+  if (tokenParam) {
+    showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
+    var parts = tokenParam.split('.');
+    if (parts.length === 3) {
       try {
-        var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-        var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
-        if (!requiredPin || requiredPin === '' || _urlPin === requiredPin) {
-          loadAllData();
-        } else {
-          showPinPrompt(dealerId, requiredPin);
+        var payload = JSON.parse(atob(parts[1]));
+        if (payload.dealerId && payload.exp > Date.now() / 1000) {
+          dealerId = payload.dealerId;
+          console.log('Token verified, dealerId:', dealerId);
+          loadModels();
+          // ✅ ตรวจสอบ PIN
+          var pinOk = await checkPin(dealerId);
+          if (pinOk) loadAllData();
+          return;
         }
-      } catch(err) {
-        console.warn('PIN check error, loading anyway:', err);
-        loadAllData();
+      } catch(e) {
+        console.warn('Token decode error:', e);
       }
-    } else {
-      // ไม่มี PIN ใน URL → ตรวจสอบว่า Dealer ตั้ง PIN ไว้ไหม
-      await checkAndVerifyPin(dealerId);
     }
+    showAccessDenied('ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว');
     return;
   }
-
-  // --- รูปแบบ 2: ?token=xxx — JWT แบบเดิม ---
-  if (!token) {
-    showAccessDenied('ไม่พบ Token หรือ dealerId กรุณาขอลิงก์ใหม่จากพนักงานขาย');
+  
+  // แบบที่ 2: ใช้ dealerId โดยตรง (แบบที่ใช้งานได้)
+  if (dealerIdParam) {
+    dealerId = dealerIdParam;
+    uid = uidParam || '';
+    console.log('Using dealerId from URL:', dealerId);
+    loadModels();
+    // ✅ ตรวจสอบ PIN
+    var pinOk = await checkPin(dealerId);
+    if (pinOk) loadAllData();
     return;
   }
-  showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
-  var result = await verifyCustomerTokenV2(token);
-  if (!result.valid) { showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง'); return; }
-  dealerId = result.dealerId;
-  console.log('Token verified, dealerId:', dealerId);
-  await checkAndVerifyPin(dealerId);
+  
+  showAccessDenied('ไม่พบข้อมูล Dealer กรุณาขอลิงก์ใหม่จากพนักงานขาย');
 }
 
 function showAccessDenied(message) {
@@ -940,17 +873,30 @@ function showAccessDenied(message) {
   document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
 }
 
-if (!token && !_urlDealerId) {
-  showAccessDenied('ไม่พบ Token หรือ dealerId กรุณาขอลิงก์ใหม่จากพนักงานขาย');
-} else {
-  verifyAndProceed();
-}
+verifyAndProceed();
 
 // ========== PIPELINE TAB ==========
 function filterAndSortPipelines(pipelines) {
   if (!pipelines.length) return [];
   var result = pipelines.slice();
-  if (pipelineFilter !== 'all') result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
+  
+  // ✅ เพิ่ม: กรองเอา rejected ออก ไม่ให้แสดงในหน้า client
+  result = result.filter(function(p) { 
+    var st = p._status || 'approved';
+    // ไม่แสดงโครงการที่ถูกปฏิเสธ (rejected)
+    if (st === 'rejected') return false;
+    return true;
+  });
+  
+  // กรองตาม filter (pending/approved)
+  if (pipelineFilter !== 'all') {
+    result = result.filter(function(p) { 
+      var st = p._status || 'approved'; 
+      return st === pipelineFilter; 
+    });
+  }
+  
+  // ค้นหา
   if (pipelineSearch && pipelineSearch.trim() !== '') {
     var term = pipelineSearch.toLowerCase().trim();
     result = result.filter(function(p) {
@@ -958,13 +904,22 @@ function filterAndSortPipelines(pipelines) {
       if ((p.endUserTH || '').toLowerCase().indexOf(term) !== -1) return true;
       if ((p.endUserEN || '').toLowerCase().indexOf(term) !== -1) return true;
       if ((p.model || '').toLowerCase().indexOf(term) !== -1) return true;
-      if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) if ((p.items[i].model || '').toLowerCase().indexOf(term) !== -1) return true; }
+      if (p.items && p.items.length) { 
+        for (var i=0;i<p.items.length;i++) 
+          if ((p.items[i].model || '').toLowerCase().indexOf(term) !== -1) return true; 
+      }
       return false;
     });
   }
-  if (pipelineSort === 'date_desc') result.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
-  else if (pipelineSort === 'amount_desc') result.sort(function(a,b) { return (b.forecastAmount || 0) - (a.forecastAmount || 0); });
-  else if (pipelineSort === 'name_asc') result.sort(function(a,b) { var na = (a.projectName || '').toLowerCase(); var nb = (b.projectName || '').toLowerCase(); if (na < nb) return -1; if (na > nb) return 1; return 0; });
+  
+  // เรียงลำดับ
+  if (pipelineSort === 'date_desc') 
+    result.sort(function(a,b) { var ta = a._updatedAt ? (a._updatedAt.seconds || 0) : 0; var tb = b._updatedAt ? (b._updatedAt.seconds || 0) : 0; return tb - ta; });
+  else if (pipelineSort === 'amount_desc') 
+    result.sort(function(a,b) { return (b.forecastAmount || 0) - (a.forecastAmount || 0); });
+  else if (pipelineSort === 'name_asc') 
+    result.sort(function(a,b) { var na = (a.projectName || '').toLowerCase(); var nb = (b.projectName || '').toLowerCase(); if (na < nb) return -1; if (na > nb) return 1; return 0; });
+  
   return result;
 }
 function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; renderPipelineTab(); }
