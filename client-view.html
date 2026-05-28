@@ -1334,6 +1334,8 @@ function removeNewProjItem(idx) {
   newProjItemsArray.splice(idx, 1);
   renderNewProjItemsList();
 }
+// ✅ เพิ่ม alias เพื่อป้องกัน error
+var removeNewProjectItem = removeNewProjItem;
 
 function renderNewProjItemsList() {
   var container = document.getElementById('newProjItemsContainer');
