@@ -21,6 +21,8 @@
   --warning: #f59e0b;
   --danger: #ef4444;
   --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .theme-light {
   --bg: #f8fafc;
@@ -106,7 +108,7 @@ body {
   transition: all 0.2s;
   white-space: nowrap;
 }
-.tab-btn:hover { color: var(--accent); background: var(--accent-light); }
+.tab-btn:hover { color: var(--accent); background: rgba(59,130,246,0.05); }
 .tab-btn.active { background: var(--accent); color: #fff; }
 .section {
   background: var(--card);
@@ -144,7 +146,7 @@ body {
   transition: all 0.2s;
 }
 .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-.stat-card.active { border-color: var(--accent); background: var(--accent-light); }
+.stat-card.active { border-color: var(--accent); background: rgba(59,130,246,0.05); }
 .stat-month { font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; }
 .stat-qty { font-size: 28px; font-weight: 800; margin: 6px 0; }
 .stat-detail { font-size: 11px; color: var(--text2); }
@@ -304,7 +306,9 @@ body {
   border-radius: 12px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  border: 1px solid var(--border);
 }
+.forecast-item:hover { border-color: var(--accent); }
 .project-item {
   background: var(--bg);
   border-radius: 12px;
@@ -314,7 +318,7 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
-.project-item:hover { border-color: var(--accent); background: var(--accent-light); }
+.project-item:hover { border-color: var(--accent); background: rgba(59,130,246,0.03); }
 .project-name { font-weight: 700; font-size: 15px; color: var(--accent); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .project-items { font-size: 12px; color: var(--text2); margin-top: 6px; }
 .project-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
@@ -355,7 +359,7 @@ body {
   background: var(--bg);
   border: 1px solid var(--border);
 }
-.cv-back:hover { background: var(--accent-light); }
+.cv-back:hover { background: rgba(59,130,246,0.05); }
 .empty-state {
   text-align: center;
   padding: 60px 20px;
@@ -371,10 +375,10 @@ body {
   font-weight: 600;
   margin-left: 8px;
 }
-.ftabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; }
-.ftab { padding:7px 16px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text2); border:1px solid var(--border); transition:all .15s; }
-.ftab:hover { border-color:var(--accent); color:var(--accent); }
-.ftab.act { background:var(--accent); border-color:var(--accent); color:#fff; }
+.ftabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+.ftab { padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text2); border: 1px solid var(--border); transition: all .15s; }
+.ftab:hover { border-color: var(--accent); color: var(--accent); }
+.ftab.act { background: var(--accent); border-color: var(--accent); color: #fff; }
 .timeline-event { transition: all 0.15s; }
 .timeline-event:hover { background: rgba(255,255,255,0.04) !important; }
 .toolbar-row {
@@ -419,6 +423,40 @@ body {
   margin-top: 18px;
 }
 .reset-btn:hover { background: rgba(239,68,68,0.2); }
+/* Forecast form styling */
+.forecast-form-card {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+}
+.forecast-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.forecast-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.forecast-item-row .model-input { flex: 2; min-width: 140px; }
+.forecast-item-row .qty-input { width: 90px; text-align: center; }
+.forecast-item-row .remove-btn { flex-shrink: 0; }
+.add-item-btn {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+}
 @media (max-width: 768px) {
   .cv-container { padding: 12px; }
   .cv-dealer-name { font-size: 24px; }
@@ -430,6 +468,9 @@ body {
   .section { padding: 14px; }
   .toolbar-item { min-width: 100%; }
   .reset-btn { margin-top: 0; }
+  .forecast-item-row { flex-direction: column; align-items: stretch; }
+  .forecast-item-row .model-input { width: 100%; }
+  .forecast-item-row .qty-input { width: 100%; }
 }
 </style>
 </head>
@@ -467,208 +508,6 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
-// ========== JWT TOKEN MANAGEMENT ==========
-var JWT_SECRET = null;
-function initJWTSecret() {
-  var saved = localStorage.getItem('jwt_secret');
-  if (!saved) {
-    saved = 'dji-sales-secret-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('jwt_secret', saved);
-  }
-  JWT_SECRET = new TextEncoder().encode(saved);
-}
-initJWTSecret();
-
-async function generateCustomerToken(dealerId, expiryDays) {
-  var exp = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
-  var payload = { dealerId: dealerId, exp: exp, iat: Math.floor(Date.now() / 1000), iss: 'dji-sales-assistant' };
-  var jwt = await new jose.SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).sign(JWT_SECRET);
-  return jwt;
-}
-function decodeTokenPayload(token) {
-  try { var parts = token.split('.'); return JSON.parse(atob(parts[1])); } catch(e) { return null; }
-}
-function getTokenRegistry() {
-  var saved = localStorage.getItem('v7_token_registry');
-  return saved ? JSON.parse(saved) : {};
-}
-function saveTokenRegistry(registry) { localStorage.setItem('v7_token_registry', JSON.stringify(registry)); }
-async function generateAndRegisterToken(dealerId, expiryDays, createdBy) {
-  var token = await generateCustomerToken(dealerId, expiryDays);
-  var payload = decodeTokenPayload(token);
-  var tokenId = 'tok_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-  var registry = getTokenRegistry();
-  registry[tokenId] = {
-    id: tokenId, token: token, dealerId: dealerId, createdAt: new Date().toISOString(),
-    expiresAt: new Date(payload.exp * 1000).toISOString(), expiryDays: expiryDays,
-    createdBy: createdBy || 'system', isActive: true, lastUsed: null, useCount: 0
-  };
-  saveTokenRegistry(registry);
-  return { token: token, tokenId: tokenId };
-}
-function revokeAllTokensForDealer(dealerId) {
-  var registry = getTokenRegistry(); var revoked = 0;
-  for (var id in registry) {
-    if (registry[id].dealerId === dealerId && registry[id].isActive === true) {
-      registry[id].isActive = false; registry[id].revokedAt = new Date().toISOString();
-      revoked++;
-    }
-  }
-  saveTokenRegistry(registry); return revoked;
-}
-// แทนที่ฟังก์ชัน verifyCustomerTokenV2
-function base64url(str) {
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function verifyCustomerTokenV2(token) {
-  try {
-    var parts = token.split('.');
-    if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
-    
-    var payload = JSON.parse(atob(parts[1]));
-    
-    // ตรวจสอบวันหมดอายุ
-    if (payload.exp < Date.now() / 1000) {
-      return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
-    }
-    
-    // ตรวจสอบ signature
-    var secret = localStorage.getItem('jwt_secret');
-    if (!secret) {
-      // ถ้าไม่มี secret ให้ตรวจสอบจาก registry แทน
-      var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-      for (var id in registry) {
-        if (registry[id].token === token && registry[id].isActive) {
-          return { valid: true, dealerId: payload.dealerId };
-        }
-      }
-      return { valid: false, error: 'ไม่พบข้อมูล token' };
-    }
-    
-    var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
-    
-    if (parts[2] !== expectedSignature) {
-      return { valid: false, error: 'token ไม่ถูกต้อง' };
-    }
-    
-    // ตรวจสอบใน registry ว่า active หรือไม่
-    var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
-    var isActive = false;
-    for (var id in registry) {
-      if (registry[id].token === token) {
-        isActive = registry[id].isActive;
-        if (isActive) {
-          registry[id].lastUsed = new Date().toISOString();
-          registry[id].useCount++;
-          localStorage.setItem('v7_token_registry', JSON.stringify(registry));
-        }
-        break;
-      }
-    }
-    
-    if (!isActive) {
-      return { valid: false, error: 'Token ถูกเพิกถอนแล้ว กรุณาขอลิงก์ใหม่' };
-    }
-    
-    return { valid: true, dealerId: payload.dealerId };
-    
-  } catch(e) {
-    return { valid: false, error: e.message };
-  }
-}
-// ================================================================
-// PIN VERIFICATION (หลังจาก verify token)
-// ================================================================
-
-var pendingDealerId = null;  // เก็บ dealerId ระหว่างรอใส่ PIN
-
-async function checkAndVerifyPin(dealerId) {
-  try {
-    // ดึง PIN จาก Firebase
-    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
-    
-    // ถ้าไม่มี PIN ให้ผ่านเลย
-    if (!requiredPin || requiredPin === '') {
-      console.log('No PIN required, loading data...');
-      loadAllData();
-      return true;
-    }
-    
-    // มี PIN ให้แสดงหน้าสำหรับใส่
-    showPinPrompt(dealerId, requiredPin);
-    return false;
-    
-  } catch(err) {
-    console.warn('Error checking PIN:', err);
-    // ถ้า error ให้ผ่านไปก่อน (fallback)
-    loadAllData();
-    return true;
-  }
-}
-
-function showPinPrompt(dealerId, requiredPin) {
-  pendingDealerId = dealerId;
-  
-  var html = `
-    <div class="empty-state" style="text-align:center;padding:60px 20px">
-      <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
-      <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
-      <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
-      <div style="max-width:250px;margin:0 auto">
-        <input type="password" id="pinInput" placeholder="请输入 PIN 4-6 หลัก" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" maxlength="6" autocomplete="off">
-      </div>
-      <div style="margin-top:20px">
-        <button class="btn btn-primary" onclick="submitPin()" style="margin-right:8px">✅ ยืนยัน</button>
-        <button class="btn" onclick="showAccessDenied('ไม่มีรหัสผ่านไม่สามารถเข้าดูข้อมูลได้')">ยกเลิก</button>
-      </div>
-      <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
-    </div>
-  `;
-  
-  document.getElementById('tabContent').innerHTML = html;
-  
-  // ซ่อน tab bar
-  var tabBar = document.querySelector('.tab-bar');
-  if (tabBar) tabBar.style.display = 'none';
-  
-  // ให้ focus ที่ input
-  setTimeout(function() {
-    var pinInput = document.getElementById('pinInput');
-    if (pinInput) pinInput.focus();
-  }, 100);
-}
-
-function submitPin() {
-  var enteredPin = document.getElementById('pinInput').value.trim();
-  if (!enteredPin) {
-    showToast('กรุณากรอกรหัสผ่าน');
-    return;
-  }
-  
-  // ดึง PIN ที่ถูกต้องจาก Firebase อีกครั้ง
-  db.collection('dealerUpdates').doc(pendingDealerId).get().then(function(doc) {
-    var requiredPin = doc.exists ? doc.data().pin : '';
-    
-    if (enteredPin === requiredPin) {
-      // PIN ถูกต้อง
-      showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
-      // แสดง tab bar กลับมา
-      var tabBar = document.querySelector('.tab-bar');
-      if (tabBar) tabBar.style.display = 'flex';
-      loadAllData();
-    } else {
-      // PIN ผิด
-      showToast('❌ รหัสผ่านไม่ถูกต้อง');
-      // ล้างค่า
-      document.getElementById('pinInput').value = '';
-      document.getElementById('pinInput').focus();
-    }
-  }).catch(function(err) {
-    showToast('❌ เกิดข้อผิดพลาด: ' + err.message);
-  });
-}
 // ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;
@@ -686,7 +525,7 @@ var pipelineSort = 'date_desc';
 var pipelineFilter = 'all';
 var historyFilter = 'all';
 
-// ========== HELPERS ==========
+// ========== THEME ==========
 function getSavedTheme() { return localStorage.getItem('cv_theme') || 'dark'; }
 function applyTheme(theme) {
   if (theme === 'light') { document.body.classList.add('theme-light'); document.querySelector('.theme-toggle').textContent = '☀️'; }
@@ -694,11 +533,15 @@ function applyTheme(theme) {
 }
 function toggleTheme() { var current = getSavedTheme(); var next = current === 'dark' ? 'light' : 'dark'; localStorage.setItem('cv_theme', next); applyTheme(next); }
 applyTheme(getSavedTheme());
+
 function esc(s) { if (!s) return ''; return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 var sanitize = esc;
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
 function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
 function _nw() { return new Date().toISOString(); }
+function _td() { return new Date().toISOString().split('T')[0]; }
+function addD(iso, n) { var d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+
 var STATUS_LIST = [
   { id: 'prospect', name: '🔍 Prospect' }, { id: 'tor_review', name: '📋 TOR Review' },
   { id: 'quotation', name: '💰 Quotation' }, { id: 'bidding', name: '⏳ Bidding' },
@@ -708,8 +551,14 @@ var STATUS_LIST = [
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
 function generateMonths() {
-  var months = []; var now = new Date();
-  for (var i = 0; i < 12; i++) { var d = new Date(now.getFullYear(), now.getMonth() + i, 1); var m = d.getMonth() + 1; var y = d.getFullYear() + 543; months.push((m < 10 ? '0' + m : m) + '/' + y); }
+  var months = [];
+  var now = new Date();
+  for (var i = 0; i < 12; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    var m = d.getMonth() + 1;
+    var y = d.getFullYear() + 543;
+    months.push((m < 10 ? '0' + m : m) + '/' + y);
+  }
   return months;
 }
 function loadModels() {
@@ -723,6 +572,8 @@ function loadModels() {
       'DJI FlightHub 2', 'DJI Terra', 'Mavic 3 Enterprise', 'Mavic 3 Multispectral'];
   }
 }
+
+// ========== FIRESTORE REFS ==========
 function getCustomerPipelineRef(dealerId, pipeId) { if (pipeId) return db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId); return db.collection('dealerUpdates').doc(dealerId).collection('pipeline'); }
 function getCustomerForecastRef(dealerId, forecastId) { if (forecastId) return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId); return db.collection('dealerUpdates').doc(dealerId).collection('forecast'); }
 function getCustomerTimelineRef(dealerId) { return db.collection('dealerUpdates').doc(dealerId).collection('timeline'); }
@@ -773,6 +624,95 @@ function loadAllData() {
 }
 function refreshData() { loadAllData(); }
 
+// ========== JWT VERIFICATION (ไม่ต้องใช้ library) ==========
+function base64url(str) {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function verifyCustomerTokenV2(token) {
+  try {
+    var parts = token.split('.');
+    if (parts.length !== 3) return { valid: false, error: 'รูปแบบ token ไม่ถูกต้อง' };
+    var payload = JSON.parse(atob(parts[1]));
+    if (payload.exp < Date.now() / 1000) return { valid: false, error: 'ลิงก์หมดอายุแล้ว กรุณาติดต่อพนักงานขาย' };
+    var secret = localStorage.getItem('jwt_secret');
+    if (!secret) {
+      var registry = JSON.parse(localStorage.getItem('v7_token_registry') || '{}');
+      for (var id in registry) { if (registry[id].token === token && registry[id].isActive) return { valid: true, dealerId: payload.dealerId }; }
+      return { valid: false, error: 'ไม่พบข้อมูล token' };
+    }
+    var expectedSignature = base64url(parts[0] + '.' + parts[1] + secret);
+    if (parts[2] !== expectedSignature) return { valid: false, error: 'token ไม่ถูกต้อง' };
+    return { valid: true, dealerId: payload.dealerId };
+  } catch(e) { return { valid: false, error: e.message }; }
+}
+
+// ========== PIN VERIFICATION ==========
+async function checkAndVerifyPin(dealerId) {
+  try {
+    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var requiredPin = pinDoc.exists ? pinDoc.data().pin : '';
+    if (!requiredPin || requiredPin === '') { loadAllData(); return true; }
+    showPinPrompt(dealerId, requiredPin);
+    return false;
+  } catch(err) { console.warn('Error checking PIN:', err); loadAllData(); return true; }
+}
+
+function showPinPrompt(dealerId, requiredPin) {
+  var html = `
+    <div class="empty-state" style="text-align:center;padding:60px 20px">
+      <div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:10px">กรุณากรอกรหัสผ่าน</div>
+      <div style="color:var(--text2);margin-bottom:20px">ผู้ดูแลระบบได้ตั้งรหัสผ่านสำหรับ Dealer นี้</div>
+      <div style="max-width:250px;margin:0 auto"><input type="password" id="pinInput" placeholder="请输入 PIN 4-6 หลัก" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center;font-size:18px;letter-spacing:4px" maxlength="6" autocomplete="off"></div>
+      <div style="margin-top:20px"><button class="btn btn-primary" onclick="submitPin()" style="margin-right:8px">✅ ยืนยัน</button><button class="btn" onclick="showAccessDenied('ไม่มีรหัสผ่านไม่สามารถเข้าดูข้อมูลได้')">ยกเลิก</button></div>
+      <div class="hint" style="margin-top:16px">💡 กรุณาติดต่อพนักงานขายเพื่อรับรหัสผ่าน</div>
+    </div>
+  `;
+  document.getElementById('tabContent').innerHTML = html;
+  var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
+  setTimeout(function() { var pinInput = document.getElementById('pinInput'); if (pinInput) pinInput.focus(); }, 100);
+}
+
+function submitPin() {
+  var enteredPin = document.getElementById('pinInput').value.trim();
+  if (!enteredPin) { showToast('กรุณากรอกรหัสผ่าน'); return; }
+  db.collection('dealerUpdates').doc(dealerId).get().then(function(doc) {
+    var requiredPin = doc.exists ? doc.data().pin : '';
+    if (enteredPin === requiredPin) {
+      showToast('✅ รหัสผ่านถูกต้อง กำลังโหลดข้อมูล...');
+      var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'flex';
+      loadAllData();
+    } else {
+      showToast('❌ รหัสผ่านไม่ถูกต้อง');
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinInput').focus();
+    }
+  }).catch(function(err) { showToast('❌ เกิดข้อผิดพลาด: ' + err.message); });
+}
+
+// ========== TOKEN VERIFICATION & INIT ==========
+var urlParams = new URLSearchParams(window.location.search);
+var token = urlParams.get('token');
+
+async function verifyAndProceed() {
+  if (!token) { showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย'); return; }
+  showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
+  var result = verifyCustomerTokenV2(token);
+  if (!result.valid) { showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง'); return; }
+  dealerId = result.dealerId;
+  console.log('Token verified, dealerId:', dealerId);
+  await checkAndVerifyPin(dealerId);
+}
+
+function showAccessDenied(message) {
+  var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
+  var noticeArea = document.getElementById('noticeArea'); if (noticeArea) noticeArea.style.display = 'none';
+  document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
+}
+
+if (!token) { showAccessDenied('ไม่พบ Token'); } else { verifyAndProceed(); }
+
 // ========== PIPELINE TAB ==========
 function filterAndSortPipelines(pipelines) {
   if (!pipelines.length) return [];
@@ -821,9 +761,7 @@ function renderPipelineTab() {
     else html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
     html += '</div>';
   } else {
-    html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
-    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr>';
-    html += '</thead><tbody>';
+    html += '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr></thead><tbody>';
     for (var i=0;i<filtered.length;i++) {
       var p = filtered[i];
       var itemsText = '';
@@ -848,15 +786,14 @@ function renderPipelineTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-// ========== PIPELINE DETAIL ==========
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
   var totalItems = 0;
-  if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; } }
-  else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '<td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '值</td></tr></tbody></table>';
+  if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td>' + (i+1) + '</td><td>' + esc(it.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; } }
+  else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td>1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
+  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr></tbody></table>';
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
   var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
@@ -877,9 +814,7 @@ function loadPipeTimeline(pipeId, currentData) {
     snapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data._source = 'timeline'; allEvents.push(data); });
     if (currentData && currentData._updatedAt) {
       var hasExisting = allEvents.some(function(e) { return e.timestamp && e.timestamp.seconds === currentData._updatedAt.seconds; });
-      if (!hasExisting) {
-        allEvents.push({ id: 'current_' + pipeId, type: 'pipeline_update', content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ', timestamp: currentData._updatedAt, status: currentData._status || 'pending', _source: 'current', changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null, updatedBy: currentData.updatedBy || 'customer' });
-      }
+      if (!hasExisting) { allEvents.push({ id: 'current_' + pipeId, type: 'pipeline_update', content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ', timestamp: currentData._updatedAt, status: currentData._status || 'pending', _source: 'current', changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null, updatedBy: currentData.updatedBy || 'customer' }); }
     }
     allEvents.sort(function(a,b) { var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0; var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0; return tb - ta; });
     renderPipeTimeline(container, allEvents, currentData);
@@ -931,10 +866,7 @@ function viewTimelineChangeDetail(pipeId, eventId) {
   var html = '<div style="max-width:550px"><h3>📋 รายละเอียดการเปลี่ยนแปลง</h3><div style="margin-bottom:12px"><strong>📋 โครงการ:</strong> ' + esc(p.projectName) + '</div>';
   if (!before) html += '<div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:8px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
   html += '<table style="width:100%; margin-top:12px; border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">ฟิลด์</th>' + (before ? '<th style="text-align:left;padding:8px">ก่อน</th>' : '') + '<th style="text-align:left;padding:8px">หลัง</th></tr></thead><tbody>';
-  var fields = [
-    { key: 'status', label: 'สถานะ' }, { key: 'forecastAmount', label: 'มูลค่า (฿)' },
-    { key: 'model', label: 'Model' }, { key: 'biddingDate', label: 'Bidding Date' }, { key: 'shipmentDate', label: 'Shipment Date' }
-  ];
+  var fields = [{ key: 'status', label: 'สถานะ' }, { key: 'forecastAmount', label: 'มูลค่า (฿)' }, { key: 'model', label: 'Model' }, { key: 'biddingDate', label: 'Bidding Date' }, { key: 'shipmentDate', label: 'Shipment Date' }];
   for (var i=0;i<fields.length;i++) {
     var f = fields[i];
     var newVal = after[f.key] || '-';
@@ -943,8 +875,7 @@ function viewTimelineChangeDetail(pipeId, eventId) {
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
     html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px">' + f.label + '</td>';
     if (before) html += '<td style="padding:8px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(String(oldVal)) + '</td>';
-    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td>';
-    html += '</tr>';
+    html += '<td style="padding:8px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(String(newVal)) + '</td></tr>';
   }
   var newItems = (after.items || []).map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ');
   var oldItems = before && before.items ? before.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : null;
@@ -952,7 +883,7 @@ function viewTimelineChangeDetail(pipeId, eventId) {
   html += '<tr style="' + (itemsChanged ? 'background:rgba(59,130,246,0.06)' : '') + ';border-bottom:1px solid var(--border)"><td style="padding:8px">สินค้า</td>';
   if (before) html += '<td style="padding:8px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '</td>';
   html += '<td style="padding:8px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td></tr>';
-  html += '</tbody><tr><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
+  html += '</tbody></table><div class="fm-actions" style="margin-top:16px"><button class="btn" onclick="closeModal()">ปิด</button></div></div>';
   showDetailModal('📋 การเปลี่ยนแปลง', html);
 }
 function showDetailModal(title, bodyHtml) {
@@ -974,9 +905,7 @@ function showUpdateModal(pipeId) {
   var modelDatalist = '<datalist id="globalModelListEdit">' + allModels.map(function(m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist>';
   var editItems = (p.items && p.items.length) ? JSON.parse(JSON.stringify(p.items)) : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
   var itemsHtml = '<div id="editItemsContainer">';
-  for (var i=0;i<editItems.length;i++) {
-    itemsHtml += '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(editItems[i].model) + '" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="' + (editItems[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
-  }
+  for (var i=0;i<editItems.length;i++) { itemsHtml += '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(editItems[i].model) + '" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="' + (editItems[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>'; }
   itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body"><div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div><div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div><div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div><div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div><div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div></div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -1037,7 +966,8 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
     });
   });
 }
-// ========== FORECAST (keep original) ==========
+
+// ========== FORECAST TAB (Enhanced UI) ==========
 function getMonthSummary() { var summary = {}; for (var i=0;i<allMonths.length;i++) summary[allMonths[i]] = { runrate:0, project:0, total:0 };
   for (var i=0;i<forecastData.runrate.length;i++) { var r = forecastData.runrate[i]; if (summary[r.month]) { summary[r.month].runrate += r.qty; summary[r.month].total += r.qty; } }
   for (var i=0;i<forecastData.projects.length;i++) { var p = forecastData.projects[i]; if (summary[p.month]) { summary[p.month].project += p.totalQty; summary[p.month].total += p.totalQty; } }
@@ -1054,9 +984,7 @@ function addRunrateItem() {
   var updateData = JSON.parse(JSON.stringify(newItem));
   updateData._customerUpdate = true; updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData._status = 'pending';
   getCustomerForecastRef(dealerId, newItem.id).set(updateData).then(function() {
-    getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
-      type: 'runrate_update', content: 'เพิ่มแผนสั่งซื้อ (Run Rate)', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer'
-    });
+    getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({ type: 'runrate_update', content: 'เพิ่มแผนสั่งซื้อ (Run Rate)', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer' });
   });
   document.getElementById('runrateModel').value = ''; document.getElementById('runrateQty').value = '1';
   showToast('✅ เพิ่ม Run Rate แล้ว ข้อมูลจะถูกส่งให้พนักงานขาย');
@@ -1104,7 +1032,7 @@ function renderNewProjectItemsList() {
   if (!container) return;
   if (!newProjectItems.length) { container.innerHTML = '<div class="hint" style="padding:12px;text-align:center">ยังไม่มีสินค้า — กด ➔ เพื่อเพิ่ม</div>'; return; }
   var html = '';
-  for (var i=0;i<newProjectItems.length;i++) html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border)"><span><strong>' + esc(newProjectItems[i].model) + '</strong> x' + newProjectItems[i].qty + '</span><button class="btn btn-sm btn-danger" onclick="removeNewProjectItem(' + i + ')">ลบ</button></div>';
+  for (var i=0;i<newProjectItems.length;i++) html += '<div class="forecast-item-row"><input type="text" class="model-input" value="' + esc(newProjectItems[i].model) + '" readonly style="background:rgba(255,255,255,0.03)"><span class="qty-input">x' + newProjectItems[i].qty + '</span><button class="btn btn-sm btn-danger remove-btn" onclick="removeNewProjectItem(' + i + ')">🗑️</button></div>';
   container.innerHTML = html;
 }
 function addNewProject() {
@@ -1118,9 +1046,7 @@ function addNewProject() {
   var updateData = JSON.parse(JSON.stringify(newProject));
   updateData._customerUpdate = true; updateData._updatedAt = firebase.firestore.FieldValue.serverTimestamp(); updateData._status = 'pending';
   getCustomerForecastRef(dealerId, newProject.id).set(updateData);
-  getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
-    type: 'project_update', projectName: projectName, content: 'เพิ่มโครงการใหม่', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer'
-  });
+  getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({ type: 'project_update', projectName: projectName, content: 'เพิ่มโครงการใหม่', timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending', updatedBy: 'customer' });
   document.getElementById('newProjectName').value = ''; document.getElementById('newProjectEndUser').value = ''; newProjectItems = []; renderNewProjectItemsList();
   showToast('✅ เพิ่มโครงการใหม่เรียบร้อยแล้ว'); renderForecastTab();
 }
@@ -1215,11 +1141,18 @@ function renderForecastTab() {
   var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงสินค้าอัตโนมัติ) --</option>';
   for (var i=0;i<pipelinesData.length;i++) existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
   var modelDatalist = '<datalist id="globalModelList">' + allModels.map(function(m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist>';
-  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div><div class="month-carousel">' + monthCardsHtml + '<div style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;background:var(--bg);border:1px solid var(--border);color:var(--text)">' + allMonths.map(function(m,i) { return '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div></div>' + statsHtml;
-  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">🏪 สินค้าทั่วไป (Run Rate)</div><div class="form-row" style="margin-bottom:12px"><div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div>' + runrateHtml + '</div>';
-  html += '<div style="margin-bottom:24px"><div class="section-title" style="font-size:15px">📋 โครงการ (Project-based)</div><div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="form-row" style="margin-bottom:8px"><div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div></div><div id="newProjectItemsContainer" style="margin-bottom:12px"></div><div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div><div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>' + projectsHtml + '</div>';
+  var html = '<div class="section"><div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div><div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>';
+  html += '<div class="month-carousel">' + monthCardsHtml + '<div style="margin-top:12px;text-align:center"><select id="monthDropdown" onchange="selectMonth(this.value)" style="padding:8px 16px;border-radius:20px;background:var(--bg);border:1px solid var(--border);color:var(--text)">' + allMonths.map(function(m,i) { return '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div></div>' + statsHtml;
+  html += '<div style="margin-bottom:24px"><div class="forecast-section-title">🏪 สินค้าทั่วไป (Run Rate)</div><div class="forecast-form-card"><div class="form-row" style="margin-bottom:12px"><div style="flex:2"><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div>' + runrateHtml + '</div></div>';
+  html += '<div style="margin-bottom:24px"><div class="forecast-section-title">📋 โครงการ (Project-based)</div><div class="forecast-form-card"><div class="form-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div>';
+  html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px"><div class="form-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="ชื่อโครงการ"></div><div class="form-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
+  html += '<div class="forecast-section-title" style="margin-top:12px;font-size:13px">📦 รายการสินค้า</div><div class="form-row" style="margin-bottom:8px"><div style="flex:2"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div style="width:100px"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่มสินค้า</button></div></div>';
+  html += '<div id="newProjectItemsContainer" style="margin-bottom:12px"></div>';
+  html += '<div class="form-row" style="margin-top:12px;gap:10px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div></div></div>';
+  html += '<div style="margin-top:16px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>' + projectsHtml;
   html += '<div class="form-row" style="margin-top:16px"><button class="btn btn-success" onclick="saveClientForecast()">💾 บันทึกทั้งหมด</button><button class="btn btn-primary" onclick="downloadForecastExcel()">📎 ดาวน์โหลด Excel</button><div><input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="uploadForecastExcel(this)"><button class="btn" onclick="document.getElementById(\'excelFile\').click()">📤 อัปโหลด Excel</button></div></div>' + modelDatalist + '</div>';
   document.getElementById('tabContent').innerHTML = html;
+  renderNewProjectItemsList();
 }
 
 // ========== UPDATE HISTORY TAB ==========
@@ -1299,7 +1232,7 @@ function buildBeforeAfterPipeline(oldData, newData) {
   if (!hasSnapshot) html += '<div style="font-size:12px;color:var(--text2);padding:8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">ℹ️ ไม่มีข้อมูลก่อนหน้า (บันทึกครั้งแรก)</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
   if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
-  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></table></thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
   html += '<tbody>';
   var fields = [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUserTH', label:'End User (TH)' },{ key:'status', label:'สถานะ' },{ key:'model', label:'Model หลัก' },{ key:'modelQty', label:'จำนวนรวม' },{ key:'forecastAmount', label:'มูลค่า (฿)' },{ key:'biddingDate', label:'Bidding Date' },{ key:'shipmentDate', label:'Shipment Date' },{ key:'tor', label:'TOR' },{ key:'nextAction', label:'Next Action' }];
   for (var i=0;i<fields.length;i++) {
@@ -1311,9 +1244,9 @@ function buildBeforeAfterPipeline(oldData, newData) {
     var rowStyle = isChanged ? 'background:rgba(59,130,246,0.06)' : '';
     var dot = isChanged ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle"></span>' : '';
     html += '<tr style="' + rowStyle + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot + f.label + '</td>';
-    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '<td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '</td>';
+    if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (isChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (isChanged ? 'line-through' : 'none') + '">' + esc(oldVal || '-') + '<td><td style="padding:8px 10px;font-weight:' + (isChanged ? '700' : '400') + ';color:' + (isChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newVal || '-') + '<tr>';
     else html += '<td style="padding:8px 10px">' + esc(newVal) + '</td>';
-    html += '</tr>';
+    html += '<tr>';
   }
   var newItems = (newData.items && newData.items.length) ? newData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
   var oldItems = (hasSnapshot && oldData.items && oldData.items.length) ? oldData.items.map(function(it) { return it.model + ' x' + (it.qty || 1); }).join(', ') : '';
@@ -1324,7 +1257,7 @@ function buildBeforeAfterPipeline(oldData, newData) {
     html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'รายการสินค้า<\/td>';
     if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
-    html += '</tr>';
+    html += '<tr>';
   }
   html += '</tbody></table></div>';
   if (hasSnapshot) html += '<div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:right"><span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent)"></span> ฟิลด์ที่เปลี่ยนแปลงจะแสดงเป็นสีน้ำเงิน</span></div>';
@@ -1334,7 +1267,7 @@ function buildBeforeAfterForecast(oldData, newData) {
   var hasSnapshot = !!oldData;
   var html = '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">🔄 การเปลี่ยนแปลง</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
   if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th></tr></thead>';
-  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th>\)</thead>';
+  else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></table></thead>';
   html += '<tbody>';
   var fields = newData.type === 'runrate' ? [{ key:'model', label:'Model' },{ key:'qty', label:'จำนวน (ชิ้น)' },{ key:'month', label:'เดือน' }] : [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUser', label:'End User' },{ key:'month', label:'เดือน' }];
   for (var i=0;i<fields.length;i++) {
@@ -1359,7 +1292,7 @@ function buildBeforeAfterForecast(oldData, newData) {
     html += '<tr style="' + rowStyle2 + ';border-bottom:1px solid var(--border)"><td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + dot2 + 'สินค้า<\/td>';
     if (hasSnapshot) html += '<td style="padding:8px 10px;color:' + (itemsChanged ? '#64748b' : 'var(--text)') + ';text-decoration:' + (itemsChanged ? 'line-through' : 'none') + '">' + esc(oldItems || '-') + '<td><td style="padding:8px 10px;font-weight:' + (itemsChanged ? '700' : '400') + ';color:' + (itemsChanged ? 'var(--accent)' : 'var(--text)') + '">' + esc(newItems || '-') + '</td>';
     else html += '<td style="padding:8px 10px">' + esc(newItems || '-') + '</td>';
-    html += '</tr>';
+    html += '<tr>';
   }
   html += '</tbody></table></div>';
   return html;
@@ -1371,40 +1304,6 @@ function cancelUpdate(type, dealerId, updateId) {
   ref.delete().then(function() { showToast('🗑️ ยกเลิกการอัพเดทแล้ว'); renderUpdateHistoryTab(); }).catch(function(err) { showToast('❌ ผิดพลาด: ' + err.message); });
 }
 
-async function verifyAndProceed() {
-  // ตรวจสอบว่า token ถูกประกาศไว้แล้ว
-  if (typeof token === 'undefined') {
-    var urlParams = new URLSearchParams(window.location.search);
-    var token = urlParams.get('token');
-  }
-  
-  if (!token) {
-    showAccessDenied('ไม่พบ Token กรุณาขอลิงก์ใหม่จากพนักงานขาย');
-    return;
-  }
-  
-  showNotice('🔐 กำลังตรวจสอบความปลอดภัย...', false);
-  
-  var result = verifyCustomerTokenV2(token);  // ไม่ต้อง await เพราะไม่ใช่ async
-  
-  if (!result.valid) {
-    showAccessDenied(result.error || 'ลิงก์ไม่ถูกต้อง');
-    return;
-  }
-  
-  dealerId = result.dealerId;
-  console.log('Token verified, dealerId:', dealerId);
-  
-  // ตรวจสอบ PIN
-  await checkAndVerifyPin(dealerId);
-}
-
-function showAccessDenied(message) {
-  var tabBar = document.querySelector('.tab-bar'); if (tabBar) tabBar.style.display = 'none';
-  var noticeArea = document.getElementById('noticeArea'); if (noticeArea) noticeArea.style.display = 'none';
-  document.getElementById('tabContent').innerHTML = '<div class="empty-state" style="text-align:center;padding:60px 20px"><div class="empty-state-icon" style="font-size:64px;margin-bottom:20px">🔒</div><div style="font-size:18px;font-weight:600;margin-bottom:10px;color:#ef4444">เข้าถึงถูกปฏิเสธ</div><div style="color:var(--text2);margin-bottom:20px">' + message + '</div><div class="hint" style="font-size:12px;color:var(--text3)">💡 กรุณาติดต่อพนักงานขายเพื่อรับลิงก์ที่ถูกต้อง</div><button class="btn bp" onclick="location.reload()" style="margin-top:20px">🔄 โหลดหน้าใหม่</button></div>';
-}
-if (!token) { showAccessDenied('ไม่พบ Token'); } else { verifyAndProceed(); }
 function renderCurrentTab() {
   if (currentTab === 'pipeline') renderPipelineTab();
   else if (currentTab === 'forecast') renderForecastTab();
@@ -1420,6 +1319,7 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   btn.classList.add('active');
   renderCurrentTab();
 });
+
 window.toggleTheme = toggleTheme;
 window.refreshData = refreshData;
 window.selectMonth = selectMonth;
@@ -1447,6 +1347,7 @@ window.viewUpdateDetail = viewUpdateDetail;
 window.editUpdate = editUpdate;
 window.cancelUpdate = cancelUpdate;
 window.resetPipelineFilters = resetPipelineFilters;
+window.renderNewProjectItemsList = renderNewProjectItemsList;
 </script>
 </body>
 </html>
