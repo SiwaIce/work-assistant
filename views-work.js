@@ -1080,15 +1080,15 @@ function rTaskDet(el) {
   <div class="card">
     <h2>📅 กำหนดการ</h2>
     <div class="date-section">
-      <div class="date-row ${isTaskOverdue ? 'overdue' : isTaskSoon ? 'soon' : ''}">
-        <div class="date-label">📅 กำหนดเสร็จ (Deadline)</div>
-        <div class="date-value">
-          <strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong>
-          ${formatDueDateStatus(t.dueDate, t.status)}
-        </div>
-        <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>
-      </div>
-      
+// ในส่วน Date Section ของ rTaskDet
+<div class="date-row ${isTaskOverdue ? 'overdue' : isTaskSoon ? 'soon' : ''}">
+  <div class="date-label">📅 กำหนดเสร็จ (Deadline)</div>
+  <div class="date-value">
+    <strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong>
+    ${formatDueDateStatus(t.dueDate, t.status)}
+  </div>
+  <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>  <!-- ✅ ปุ่มนี้ -->
+</div>      
       <div class="date-row">
         <div class="date-label">📞 นัดติดตาม (Follow-up)</div>
         <div class="date-value">
@@ -1949,4 +1949,128 @@ function togglePaDone() {
     el.style.display = 'none';
     if (arrow) arrow.textContent = '▶';
   }
+}
+// ================================================================
+// RESCHEDULE TASK (เลื่อนกำหนดงาน)
+// ================================================================
+
+function showRescheduleModal(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var oldDueDate = t.dueDate || '';
+  var defaultDate = t.dueDate || _td();
+  
+  // แปลงวันที่ให้แสดงในรูปแบบ DD/MM/YYYY
+  function formatDateToDisplay(isoDate) {
+    if (!isoDate) return '';
+    var parts = isoDate.split('-');
+    if (parts.length !== 3) return isoDate;
+    var day = parts[2];
+    var month = parts[1];
+    var year = parseInt(parts[0]) + 543;
+    return day + '/' + month + '/' + year;
+  }
+  
+  var html = `
+    <div style="max-width:450px">
+      <div class="fg">
+        <label>📅 วันที่กำหนดเดิม</label>
+        <div style="padding:8px;background:var(--bg2);border-radius:6px;font-size:14px">${oldDueDate || 'ไม่ได้ตั้ง'}</div>
+      </div>
+      <div class="fg">
+        <label>📅 กำหนดใหม่ *</label>
+        <input type="text" id="newDueDateInput" class="fm-input" value="${formatDateToDisplay(defaultDate)}" placeholder="DD/MM/YYYY" autocomplete="off">
+        <div class="hint">รูปแบบ: วัน/เดือน/ปี (เช่น 31/12/2568)</div>
+      </div>
+      <div class="fg">
+        <label>📝 เหตุผลที่เลื่อน</label>
+        <textarea id="rescheduleReason" rows="2" class="fm-input" placeholder="เช่น รอเอกสารจากลูกค้า, ลูกค้าขอเลื่อน, งบไม่ออก..."></textarea>
+      </div>
+      <div class="fg">
+        <label>🔔 แจ้งเตือน</label>
+        <div class="check-g">
+          <label><input type="checkbox" id="notifyChange" checked> ส่งเตือนใน Notification</label>
+        </div>
+      </div>
+      <div class="fm-actions" style="margin-top:16px">
+        <button class="btn btn-blue" onclick="saveRescheduleTask('${taskId}')">💾 บันทึก</button>
+        <button class="btn" onclick="closeM()">ยกเลิก</button>
+      </div>
+    </div>
+  `;
+  
+  openM('📅 เลื่อนกำหนดเสร็จ', html);
+}
+
+function saveRescheduleTask(taskId) {
+  // อ่านวันที่จาก input (รูปแบบ DD/MM/YYYY)
+  var dateStr = document.getElementById('newDueDateInput').value.trim();
+  var reason = document.getElementById('rescheduleReason').value.trim();
+  var sendNotify = document.getElementById('notifyChange')?.checked || false;
+  
+  if (!dateStr) {
+    toast('⚠️ กรุณาใส่วันที่');
+    return;
+  }
+  
+  // แปลงวันที่จาก DD/MM/YYYY เป็น YYYY-MM-DD
+  function convertToISODate(dateStr) {
+    var parts = dateStr.split('/');
+    if (parts.length !== 3) return null;
+    var day = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10);
+    var year = parseInt(parts[2], 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    var christianYear = year - 543;
+    return christianYear + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+  
+  var newDueDate = convertToISODate(dateStr);
+  if (!newDueDate) {
+    toast('⚠️ รูปแบบวันที่ไม่ถูกต้อง (ใช้ DD/MM/YYYY)');
+    return;
+  }
+  
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  
+  var oldDueDate = t.dueDate;
+  
+  // บันทึกประวัติการเลื่อน
+  var history = t.dueDateHistory || [];
+  history.push({
+    oldDate: oldDueDate || '',
+    newDate: newDueDate,
+    reason: reason || 'ไม่ได้ระบุ',
+    changedBy: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : 'Siwawong',
+    changedAt: _td()
+  });
+  
+  // อัพเดท task
+  ST.update('tasks', taskId, { 
+    dueDate: newDueDate, 
+    dueDateHistory: history,
+    updatedAt: _nw()
+  });
+  
+  // เพิ่ม log
+  ST.add('taskLogs', {
+    tid: taskId,
+    type: 'reschedule',
+    content: `📅 เลื่อนกำหนดจาก ${oldDueDate || '-'} เป็น ${newDueDate}${reason ? ' (' + reason + ')' : ''}`,
+    date: _nw()
+  });
+  
+  // ส่ง Notification (ถ้าเปิด)
+  if (sendNotify && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('📅 กำหนดการเปลี่ยนแปลง', {
+      body: `งาน "${t.title}" ถูกเลื่อนจาก ${oldDueDate || '-'} เป็น ${newDueDate}`,
+      tag: 'task_' + taskId
+    });
+  }
+  
+  closeMForce();
+  toast(`📅 เลื่อนกำหนดเป็น ${newDueDate} แล้ว`);
+  render();
 }
