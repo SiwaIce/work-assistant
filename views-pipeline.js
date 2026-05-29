@@ -1382,37 +1382,58 @@ ealer = ST.getOne('dealers', dealerId);
 }
 
 function rejectForecastUpdate(dealerId, updateId) {
-  if (!confirm('❌ ปฏิเสธ?')) return;
- updateRef.update({ 
-    _status: 'rejected', 
-    _rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    _rejectedBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
-  }).then(function() {
-    // ✅ Audit Log
-    var dealer = ST.getOne('dealers', dealerId);
-    var updateData = doc.data();
-    var itemName = updateData.type === 'runrate' 
-      ? (updateData.model + ' x' + updateData.qty) 
-      : updateData.projectName;
-    
-    addAuditLog(
-      'reject_forecast',
-      'forecast',
-      updateId,
-      itemName,
-      dealerId,
-      dealer ? dealer.name : '',
-      { oldValue: 'pending', newValue: 'rejected', type: updateData.type }
-    );
+  if (!confirm('❌ ปฏิเสธแผนการสั่งซื้อนี้?')) return;
   
-  db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId)
-    .update({ _status: 'rejected', _rejectedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    .then(function() {
-      toast('❌ ปฏิเสธแล้ว');
-      render();
+  var updateRef = db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
+  
+  // ดึงข้อมูลก่อนเพื่อใช้ใน audit log
+  updateRef.get().then(function(doc) {
+    if (!doc.exists) {
+      toast('❌ ไม่พบข้อมูล');
+      return;
+    }
+    
+    var updateData = doc.data();
+    var oldStatus = updateData._status || 'pending';
+    
+    // ทำการ reject
+    return updateRef.update({ 
+      _status: 'rejected', 
+      _rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      _rejectedBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
+    }).then(function() {
+      // ✅ Audit Log
+      var dealer = ST.getOne('dealers', dealerId);
+      var itemName = updateData.type === 'runrate' 
+        ? (updateData.model + ' x' + updateData.qty) 
+        : updateData.projectName;
+      
+      if (typeof addAuditLog === 'function') {
+        addAuditLog(
+          'reject_forecast',
+          'forecast',
+          updateId,
+          itemName,
+          dealerId,
+          dealer ? dealer.name : '',
+          { oldValue: oldStatus, newValue: 'rejected', type: updateData.type }
+        );
+      }
+      
+      toast('❌ ปฏิเสธแผนการสั่งซื้อแล้ว');
+      
+      // รีเฟรชหน้า
+      if (typeof render === 'function') {
+        render();
+      } else if (typeof rCustomerForecastUpdates === 'function') {
+        rCustomerForecastUpdates(document.getElementById('ct'));
+      }
     });
+  }).catch(function(err) {
+    console.error('Reject forecast error:', err);
+    toast('❌ เกิดข้อผิดพลาด: ' + err.message);
+  });
 }
-
 function viewForecastDetail(dealerId, updateId) {
   db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId).get().then(function(doc) {
     if (!doc.exists) return;
@@ -1431,18 +1452,39 @@ function viewForecastDetail(dealerId, updateId) {
       html += '<div><strong>📋 โครงการ:</strong> ' + sanitize(data.projectName || '-') + '</div>';
       if (data.endUser) html += '<div><strong>👤 End User:</strong> ' + sanitize(data.endUser) + '</div>';
       html += '<div><strong>📦 สินค้า:</strong></div><ul>';
-      (data.items || []).forEach(function(it) {
-        html += '<li>' + sanitize(it.model) + ' x' + (it.qty || 1) + '</li>';
-      });
+      if (data.items && data.items.length) {
+        for (var i = 0; i < data.items.length; i++) {
+          html += '<li>' + sanitize(data.items[i].model) + ' x' + (data.items[i].qty || 1) + '</li>';
+        }
+      } else {
+        html += '<li>ไม่มีข้อมูลสินค้า</li>';
+      }
       html += '</ul>';
     }
     
+    // แสดงสถานะปัจจุบัน
+    var statusText = '';
+    if (data._status === 'pending') statusText = '<span class="tag tag-active">⏳ รอตรวจสอบ</span>';
+    else if (data._status === 'approved') statusText = '<span class="tag tag-completed">✅ อนุมัติแล้ว</span>';
+    else if (data._status === 'rejected') statusText = '<span class="tag tag-cancelled">❌ ปฏิเสธ</span>';
+    html += '<div><strong>📊 สถานะ:</strong> ' + statusText + '</div>';
+    
     html += '<div class="fm-actions" style="margin-top:16px">';
-    html += '<button class="btn bs" onclick="closeM();approveForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">✅ อนุมัติ</button>';
-    html += '<button class="btn bd" onclick="closeM();rejectForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">❌ ปฏิเสธ</button>';
+    
+    // แสดงปุ่มตามสถานะ
+    if (data._status === 'pending') {
+      html += '<button class="btn bs" onclick="closeM();approveForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">✅ อนุมัติ</button>';
+      html += '<button class="btn bd" onclick="closeM();rejectForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">❌ ปฏิเสธ</button>';
+    } else if (data._status === 'rejected') {
+      html += '<button class="btn bs" onclick="closeM();restoreForecastUpdate(\'' + dealerId + '\', \'' + updateId + '\')">🔄 ส่งกลับไปตรวจสอบใหม่</button>';
+    }
+    
     html += '<button class="btn" onclick="closeM()">ปิด</button>';
     html += '</div></div>';
     
     openM('📦 รายละเอียด', html);
+  }).catch(function(err) {
+    console.error('View forecast detail error:', err);
+    toast('❌ ไม่สามารถโหลดรายละเอียดได้');
   });
 }
