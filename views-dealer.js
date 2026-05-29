@@ -221,11 +221,13 @@ async function createTokenAndLink(dealerId) {
     <div class="form-group">
       <label>📋 ลิงก์สำหรับลูกค้า (ไม่มี PIN ในลิงก์)</label>
       <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${fullUrl}</div>
-    </div>
-    <div class="form-row">
-      <div><label>📅 หมดอายุ</label><div>${expiryDate} (${expiryDays} วัน)</div></div>
-      <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
-    </div>
+<div class="form-row">
+  <div><label>📅 วันที่สร้าง</label><div>${_td()}</div></div>
+  <div><label>👤 สร้างโดย</label><div>${createdBy}</div></div>
+</div>
+<div class="hint" style="margin-top:8px;font-size:11px;color:var(--text2)">
+  💡 ลิงก์นี้ไม่มีวันหมดอายุ (ใช้งานได้ตลอดไป)
+</div>
     ${pinMessage}
     <div class="bg" style="margin-top:12px">
       <button class="btn bp" onclick="copyToClipboard('${fullUrl}')">📋 คัดลอกลิงก์</button>
