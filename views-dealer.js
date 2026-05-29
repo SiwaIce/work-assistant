@@ -205,6 +205,17 @@ async function createTokenAndLink(dealerId) {
   
   var baseUrl = window.location.href.split('?')[0].split('#')[0];
   var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  // ✅ Audit Log
+  var dealer = ST.getOne('dealers', dealerId);
+  addAuditLog(
+    'create_link',
+    'link',
+    dealerId,
+    'ลิงก์สำหรับ ' + (dealer ? dealer.name : dealerId),
+    dealerId,
+    dealer ? dealer.name : '',
+    { pin: pin || '(ไม่มี)', createdBy: createdBy }
+  );
   
   // ✅ สร้างลิงก์แบบไม่มี PIN (ลูกค้าต้องพิมพ์เอาเอง)
   var fullUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
@@ -2441,10 +2452,25 @@ async function savePinOnly(dealerId) {
   var pin = document.getElementById('changePinInput').value.trim();
   
   try {
+    var oldDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    var oldPin = oldDoc.exists ? oldDoc.data().pin : '';
+    
     await db.collection('dealerUpdates').doc(dealerId).set({ 
       pin: pin || '',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+    
+    // ✅ Audit Log
+    var dealer = ST.getOne('dealers', dealerId);
+    addAuditLog(
+      pin ? 'set_pin' : 'remove_pin',
+      'pin',
+      dealerId,
+      dealer ? dealer.name : dealerId,
+      dealerId,
+      dealer ? dealer.name : '',
+      { oldValue: oldPin || '(ไม่มี)', newValue: pin || '(ไม่มี)' }
+    );
     
     toast(pin ? '✅ บันทึก PIN เรียบร้อย' : '🗑️ ลบ PIN แล้ว');
     closeModal();

@@ -293,6 +293,7 @@ function render() {
         visitPlan: rVisitPlan, emailDrafts: rEmailDrafts,
     exports: rExports,
     reminders: rRemind, insights: rInsights,
+    auditLog: rAuditLog,
     admin: rAdmin,
     tasks: rUnifiedTasks, taskDetail: rTaskDet,
     smartFilter: rSmartFilter,
@@ -2579,6 +2580,17 @@ function approvePipelineUpdate(dealerId, updateId, callback) {
         content: '✅ อนุมัติการอัพเดทจากลูกค้า: ' + (updateData.updateNote || 'อัพเดทข้อมูลโครงการ'),
         date: _nw()
       });
+// ✅ เพิ่ม Audit Log
+var dealer = ST.getOne('dealers', dealerId);
+addAuditLog(
+  'approve_pipeline',
+  'pipeline',
+  pipeId,
+  cleanData.projectName || '',
+  dealerId,
+  dealer ? dealer.name : '',
+  { oldValue: 'pending', newValue: 'approved', updateNote: updateData.updateNote || '' }
+);
       
       if (callback) callback(true);
     }).catch(function(err) {

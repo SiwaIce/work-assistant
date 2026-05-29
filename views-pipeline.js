@@ -1085,6 +1085,17 @@ async function restoreForecastUpdate(dealerId, updateId) {
       _restoredAt: firebase.firestore.FieldValue.serverTimestamp(),
       _restoredBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
     });
+ // ✅ Audit Log
+  var dealer = ST.getOne('dealers', dealerId);
+  addAuditLog(
+    'restore_forecast',
+    'forecast',
+    updateId,
+    'Restore forecast',
+    dealerId,
+    dealer ? dealer.name : '',
+    { oldValue: 'rejected', newValue: 'pending' }
+  );
     
     toast('🔄 ส่งกลับไปตรวจสอบใหม่แล้ว');
     rCustomerForecastUpdates(document.getElementById('ct'));
@@ -1344,6 +1355,20 @@ function approveForecastUpdate(dealerId, updateId, callback) {
       _approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
       _approvedBy: CURRENT_USER.uid
     }).then(function() {
+ealer = ST.getOne('dealers', dealerId);
+    var itemName = updateData.type === 'runrate' 
+      ? (updateData.model + ' x' + updateData.qty) 
+      : updateData.projectName;
+    
+    addAuditLog(
+      'approve_forecast',
+      'forecast',
+      updateId,
+      itemName,
+      dealerId,
+      dealer ? dealer.name : '',
+      { oldValue: 'pending', newValue: 'approved', type: updateData.type }
+    );
       if (callback) callback(true);
       toast('✅ อนุมัติ Forecast แล้ว');
     }).catch(function(err) {
@@ -1358,6 +1383,27 @@ function approveForecastUpdate(dealerId, updateId, callback) {
 
 function rejectForecastUpdate(dealerId, updateId) {
   if (!confirm('❌ ปฏิเสธ?')) return;
+ updateRef.update({ 
+    _status: 'rejected', 
+    _rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    _rejectedBy: CURRENT_USER ? CURRENT_USER.uid : 'admin'
+  }).then(function() {
+    // ✅ Audit Log
+    var dealer = ST.getOne('dealers', dealerId);
+    var updateData = doc.data();
+    var itemName = updateData.type === 'runrate' 
+      ? (updateData.model + ' x' + updateData.qty) 
+      : updateData.projectName;
+    
+    addAuditLog(
+      'reject_forecast',
+      'forecast',
+      updateId,
+      itemName,
+      dealerId,
+      dealer ? dealer.name : '',
+      { oldValue: 'pending', newValue: 'rejected', type: updateData.type }
+    );
   
   db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId)
     .update({ _status: 'rejected', _rejectedAt: firebase.firestore.FieldValue.serverTimestamp() })

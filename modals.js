@@ -69,7 +69,21 @@ function saveDealer(eid) {
     notes: document.getElementById('fd_notes').value.trim()
   };
   if (!data.name) return alert('ใส่ชื่อบริษัท');
-  if (eid) { ST.update('dealers', eid, data); closeMForce(); go('dealerDetail', {dealerId: eid}); }
+  if (eid) { ST.update('dealers', eid, data); 
+
+ // ✅ Audit Log
+    addAuditLog('update_dealer', 'dealer', eid, data.name, eid, data.name, {});
+    closeMForce();
+    go('dealerDetail', {dealerId: eid});
+  } else {
+    var c = ST.add('dealers', data);
+    // ✅ Audit Log
+    addAuditLog('create_dealer', 'dealer', c.id, data.name, c.id, data.name, {});
+    closeMForce();
+    go('dealerDetail', {dealerId: c.id});
+  }
+
+closeMForce(); go('dealerDetail', {dealerId: eid}); }
   else { var c = ST.add('dealers', data); closeMForce(); go('dealerDetail', {dealerId: c.id}); }
   toast('💾 บันทึกแล้ว');
 }
