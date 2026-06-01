@@ -665,7 +665,30 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
 }
-
+.btn-update {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+}
+.btn-update:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59,130,246,0.4);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+@media (max-width: 768px) {
+  .btn-update {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 24px;
+  }
+}
 /* Responsive */
 @media (max-width: 768px) {
   .info-grid {
@@ -1848,11 +1871,8 @@ var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (
   
   // HTML หลัก
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
-  html += '<div class="section">';
-  html += '<div class="section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap">';
-  html += '<span>📊 ' + esc(p.projectName) + '</span>';
-  html += '<button class="btn btn-primary btn-sm" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ อัพเดทโครงการ</button>';
-  html += '</div>';
+html += '<div class="section">';
+html += '<div class="section-title">📊 ' + esc(p.projectName) + '</div>';
   html += staleWarning;
   
   // Grid 2 คอลัมน์
@@ -1877,6 +1897,9 @@ var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (
   html += '</div>'; // ปิด grid
   
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
+    html += '<div style="margin-top:24px; text-align:center">';
+    html += '<button class="btn-update" onclick="showUpdateModal(\'' + pipeId + '\')" style="padding:12px 32px; font-size:16px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; border-radius:40px; cursor:pointer; font-weight:700; box-shadow:0 4px 12px rgba(59,130,246,0.3)">✏️ อัพเดทโครงการ</button>';
+html += '</div>';
   html += '</div>';
   html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
   
