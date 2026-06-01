@@ -649,6 +649,73 @@ input[list]::-webkit-calendar-picker-indicator {
   .btn { padding: 8px 12px; font-size: 12px; }
   .forecast-item { padding: 8px; }
 }
+/* Price color classes */
+.price-ultra { color: #ef4444; font-weight: 800; }
+.price-mega { color: #f97316; font-weight: 700; }
+.price-big { color: #eab308; font-weight: 600; }
+.price-normal { color: #22c55e; font-weight: 500; }
+.price-zero { color: #64748b; }
+
+/* Bidding date status */
+.bidding-urgent { color: #ef4444; font-weight: 700; }
+.bidding-soon { color: #f59e0b; font-weight: 600; }
+.bidding-normal { color: var(--text2); }
+.bidding-past { color: #64748b; text-decoration: line-through; }
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+.modal-container {
+  background: var(--card);
+  border-radius: 20px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+}
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+}
+.modal-header h3 { font-size: 18px; color: var(--accent); font-weight: 700; }
+.modal-close { background: none; border: none; color: var(--text2); font-size: 24px; cursor: pointer; }
+.modal-body { padding: 20px; max-height: 60vh; overflow-y: auto; }
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  border-radius: 0 0 20px 20px;
+}
+
+/* Responsive modal */
+@media (max-width: 768px) {
+  .modal-container { width: 95%; max-width: 95%; }
+  .modal-body { padding: 14px; }
+}
 @media (hover: none) and (pointer: coarse) {
   .data-table, .tab-bar, .month-scroll, .pb2-board { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
   .stat-card:hover, .month-card:hover, .project-item:hover, .forecast-item:hover { transform: none; }
@@ -748,7 +815,55 @@ function generateMonths() {
   }
   return months;
 }
+// ฟังก์ชันกำหนดคลาสของราคาตามมูลค่า
+function getPriceClass(amount) {
+  var amt = Number(amount) || 0;
+  if (amt >= 10000000) return 'price-ultra';
+  if (amt >= 1500000) return 'price-mega';
+  if (amt >= 500000) return 'price-big';
+  if (amt > 0) return 'price-normal';
+  return 'price-zero';
+}
 
+// ฟังก์ชัน格式化 Bidding Date พร้อมคลาสตามวันที่
+function formatBiddingDate(biddingDate) {
+  if (!biddingDate) return '<span class="bidding-normal">-</span>';
+  
+  var daysLeft = dTo(biddingDate);
+  var formattedDate = fD(biddingDate);
+  
+  if (daysLeft < 0) {
+    return '<span class="bidding-past" title="เลยกำหนดไปแล้ว ' + Math.abs(daysLeft) + ' วัน">📅 ' + formattedDate + '</span>';
+  } else if (daysLeft === 0) {
+    return '<span class="bidding-urgent" title="วันนี้!">🔴 ' + formattedDate + '</span>';
+  } else if (daysLeft <= 7) {
+    return '<span class="bidding-urgent" title="อีก ' + daysLeft + ' วัน">🔴 ' + formattedDate + '</span>';
+  } else if (daysLeft <= 30) {
+    return '<span class="bidding-soon" title="อีก ' + daysLeft + ' วัน">🟡 ' + formattedDate + '</span>';
+  }
+  return '<span class="bidding-normal">📅 ' + formattedDate + '</span>';
+}
+
+// ฟังก์ชันดึงราคา Model จาก config
+function getModelPrice(modelName) {
+  if (!modelName) return 0;
+  var cfg = localStorage.getItem('v7_config');
+  if (cfg) {
+    try {
+      var config = JSON.parse(cfg);
+      if (config.models && config.models.length) {
+        for (var i = 0; i < config.models.length; i++) {
+          var m = config.models[i];
+          var name = typeof m === 'object' ? m.name : m;
+          if (name === modelName) {
+            return typeof m === 'object' ? (m.price || 0) : 0;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+  return 0;
+}
 // ✅ ฟังก์ชันคำนวณจำนวนวันที่ไม่ได้อัพเดท
 function getLastUpdateDays(p) {
   if (!p._updatedAt) return null;
@@ -1113,37 +1228,49 @@ function renderPipelineTab() {
     html += '</div>';
   } else {
     html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
-    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr>';
+    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>📅 Bidding</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr>';
     html += '</thead><tbody>';
-    for (var i = 0; i < filtered.length; i++) {
-      var p = filtered[i];
-      var itemsText = '';
-      if (p.items && p.items.length) { for (var j = 0; j < p.items.length; j++) { itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : ''); if (j < p.items.length-1) itemsText += ', '; } }
-      else if (p.model) itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
-      var amount = p.forecastAmount || 0;
-      var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-      var isRejected = p._status === 'rejected';
-      var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
-      var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
-      
-      // ✅ stale badge
-      var lastUpdateDays = getLastUpdateDays(p);
-      var staleBadge = '';
-      if (lastUpdateDays !== null && lastUpdateDays > 30) {
-        staleBadge = '<span class="stale-badge" style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">⚠️ ' + lastUpdateDays + ' วัน</span>';
-      } else if (lastUpdateDays !== null && lastUpdateDays > 14) {
-        staleBadge = '<span class="stale-badge" style="background:#f59e0b; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">🟡 ' + lastUpdateDays + ' วัน</span>';
-      }
-      
-      html += '<tr onclick="showPipelineDetail(\'' + p.id + '\')"><td style="width:45px">' + (i+1) + '</td>';
-      html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
-      html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-      html += '<td>' + getStatusLabel(p.status) + '</td>';
-      html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
-      html += '<td style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿</td>';
-      html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
-      html += '</tr>';
-    }
+for (var i = 0; i < filtered.length; i++) {
+  var p = filtered[i];
+  var itemsText = '';
+  if (p.items && p.items.length) { 
+    for (var j = 0; j < p.items.length; j++) { 
+      itemsText += p.items[j].model + (p.items[j].qty > 1 ? ' x' + p.items[j].qty : ''); 
+      if (j < p.items.length-1) itemsText += ', '; 
+    } 
+  } else if (p.model) { 
+    itemsText += p.model + (p.modelQty > 1 ? ' x' + p.modelQty : ''); 
+  }
+  
+  var amount = p.forecastAmount || 0;
+  var priceClass = getPriceClass(amount);
+  var isPending = p._status === 'pending' || p._displayStatus === 'pending';
+  var isRejected = p._status === 'rejected';
+  var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
+  var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
+  
+  // ✅ Bidding date formatted
+  var biddingHtml = formatBiddingDate(p.biddingDate);
+  
+  var lastUpdateDays = getLastUpdateDays(p);
+  var staleBadge = '';
+  if (lastUpdateDays !== null && lastUpdateDays > 30) {
+    staleBadge = '<span class="stale-badge" style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">⚠️ ' + lastUpdateDays + ' วัน</span>';
+  } else if (lastUpdateDays !== null && lastUpdateDays > 14) {
+    staleBadge = '<span class="stale-badge" style="background:#f59e0b; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">🟡 ' + lastUpdateDays + ' วัน</span>';
+  }
+  
+    html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetailModal(\'' + p.id + '\')">';
+  html += '<td class="pipe-row-num">' + (i+1) + '</td>';
+  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
+  html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
+  html += '<td>' + getStatusLabel(p.status) + '</td>';
+  html += '<td>' + biddingHtml + '</td>';  // ✅ เพิ่มเซลล์ Bidding Date
+  html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
+  html += '<td class="' + priceClass + '" style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿<\/td>';
+  html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
+  html += '</tr>';
+}
     html += '</tbody><tr></div>';
     html += '<div style="margin-top:8px; font-size:11px; color:var(--text2); text-align:right">แสดง ' + filtered.length + ' รายการ' + (pipelineSearch ? ' (ค้นหา: "' + esc(pipelineSearch) + '")' : '') + '</div>';
   }
@@ -1155,7 +1282,7 @@ function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
   
-  // ✅ คำนวณวันอัพเดทล่าสุด
+  // คำนวณวันอัพเดทล่าสุด
   var lastUpdate = p._updatedAt ? (p._updatedAt.seconds ? new Date(p._updatedAt.seconds * 1000) : new Date(p._updatedAt)) : null;
   var lastUpdateStr = lastUpdate ? lastUpdate.toLocaleString('th-TH') : 'ไม่ทราบ';
   var daysSince = lastUpdate ? Math.floor((new Date() - lastUpdate) / (1000 * 60 * 60 * 24)) : null;
@@ -1175,20 +1302,64 @@ function showPipelineDetail(pipeId) {
       '</div>';
   }
   
-  var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Model</th><th>จำนวน</th></tr></thead><tbody>';
+  // ตารางสินค้า (พร้อมราคา)
+  var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead>' +
+    '<th>#</th><th>Model</th><th style="text-align:center">จำนวน</th><th style="text-align:right">ราคา/หน่วย</th><th style="text-align:right">รวม</th>' +
+    '</thead><tbody>';
   var totalItems = 0;
-  if (p.items && p.items.length) { for (var i=0;i<p.items.length;i++) { var it = p.items[i]; var qty = it.qty || 1; totalItems += qty; itemsHtml += '<tr><td class="pipe-row-num">' + (i+1) + '</td><td>' + esc(it.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; } }
-  else if (p.model) { var qty = p.modelQty || 1; totalItems = qty; itemsHtml += '<tr><td class="pipe-row-num">1</td><td>' + esc(p.model) + '</td><td class="pipe-item-qty">x' + qty + '</td></tr>'; }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="2"><strong>รวม</strong></td><td class="pipe-item-qty">x' + totalItems + '</td></tr></tbody></table>';
+  var totalAmount = 0;
+  
+  if (p.items && p.items.length) { 
+    for (var i = 0; i < p.items.length; i++) { 
+      var it = p.items[i]; 
+      var qty = it.qty || 1; 
+      var price = it.price || getModelPrice(it.model) || 0;
+      var itemTotal = qty * price;
+      totalItems += qty; 
+      totalAmount += itemTotal;
+      itemsHtml += '<tr>' +
+        '<td class="pipe-row-num">' + (i+1) + '</td>' +
+        '<td>' + esc(it.model) + '</td>' +
+        '<td style="text-align:center">x' + qty + '</td>' +
+        '<td style="text-align:right">' + (price ? price.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
+        '<td style="text-align:right">' + (itemTotal ? itemTotal.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
+        '</tr>';
+    } 
+  } else if (p.model) { 
+    var qty = p.modelQty || 1; 
+    var price = getModelPrice(p.model) || 0;
+    var itemTotal = qty * price;
+    totalItems = qty; 
+    totalAmount = itemTotal || p.forecastAmount || 0;
+    itemsHtml += '<tr>' +
+      '<td class="pipe-row-num">1</td>' +
+      '<td>' + esc(p.model) + '</td>' +
+      '<td style="text-align:center">x' + qty + '</td>' +
+      '<td style="text-align:right">' + (price ? price.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
+      '<td style="text-align:right">' + (itemTotal ? itemTotal.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
+      '</tr>';
+  }
+  
+  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700">' +
+    '<td colspan="2"><strong>รวม</strong></td>' +
+    '<td style="text-align:center">x' + totalItems + '</td>' +
+    '<td></td>' +
+    '<td style="text-align:right">' + (totalAmount || p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</td>' +
+    '</tr>';
+  itemsHtml += '</tbody></table>';
   
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
   var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
+  
+  // ใช้ฟังก์ชัน helper
+  var biddingHtml = formatBiddingDate(p.biddingDate);
+  var priceClass = getPriceClass(p.forecastAmount);
   
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
   html += '<div class="section"><div class="section-title">' + esc(p.projectName) + '</div>';
   html += staleWarning;
   html += '<div class="form-row"><div><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div><div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div></div>';
-  html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> ' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</div><div><strong>📅 Bidding:</strong> ' + (p.biddingDate || '-') + '</div></div>';
+  html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> <span class="' + priceClass + '">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</span></div><div><strong>📅 Bidding:</strong> ' + biddingHtml + '</div></div>';
   html += '<div class="form-row"><div><strong>📅 อัพเดทล่าสุด:</strong> ' + lastUpdateStr + (daysSince !== null ? ' (' + daysSince + ' วันที่แล้ว)' : '') + '</div><div><strong>🚚 Shipment:</strong> ' + (p.shipmentDate || '-') + '</div></div>';
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
   html += '<div style="margin-top:20px"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดท</button></div></div>';
@@ -1196,7 +1367,6 @@ function showPipelineDetail(pipeId) {
   document.getElementById('tabContent').innerHTML = html;
   loadPipeTimeline(pipeId, p);
 }
-
 function loadPipeTimeline(pipeId, currentData) {
   var container = document.getElementById('pipeTimeline_' + pipeId);
   if (!container) return;
