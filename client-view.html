@@ -380,6 +380,364 @@ body {
   background: rgba(59,130,246,0.08);
   cursor: pointer;
 }
+/* ========== DETAIL PAGE STYLES ========== */
+
+/* Detail Header */
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+}
+.detail-title {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.info-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  transition: all 0.2s;
+}
+.info-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.info-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.info-card-header i {
+  font-size: 20px;
+}
+.info-card-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.info-row {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.04);
+}
+.info-row:last-child {
+  border-bottom: none;
+}
+.info-label {
+  width: 100px;
+  font-size: 11px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+.info-value {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* Status Badge Large */
+.status-badge-large {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.status-badge-large.pending {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+}
+.status-badge-large.approved {
+  background: rgba(34,197,94,0.15);
+  color: #22c55e;
+}
+.status-badge-large.rejected {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+}
+
+/* Products Table */
+.products-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+.products-table th {
+  text-align: left;
+  padding: 10px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(255,255,255,0.02);
+  border-bottom: 2px solid var(--border);
+}
+.products-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+.products-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+.products-total {
+  background: rgba(59,130,246,0.05);
+  font-weight: 700;
+}
+/* ========== DETAIL PAGE STYLES ========== */
+
+/* Detail Header */
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+}
+.detail-title {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.info-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  transition: all 0.2s;
+}
+.info-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.info-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.info-card-header i {
+  font-size: 20px;
+}
+.info-card-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.info-row {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.04);
+}
+.info-row:last-child {
+  border-bottom: none;
+}
+.info-label {
+  width: 100px;
+  font-size: 11px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+.info-value {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* Status Badge Large */
+.status-badge-large {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.status-badge-large.pending {
+  background: rgba(245,158,11,0.15);
+  color: #f59e0b;
+}
+.status-badge-large.approved {
+  background: rgba(34,197,94,0.15);
+  color: #22c55e;
+}
+.status-badge-large.rejected {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+}
+
+/* Products Table */
+.products-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+.products-table th {
+  text-align: left;
+  padding: 10px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(255,255,255,0.02);
+  border-bottom: 2px solid var(--border);
+}
+.products-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+.products-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+.products-total {
+  background: rgba(59,130,246,0.05);
+  font-weight: 700;
+}
+
+/* Stale Warning */
+.stale-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  animation: pulse 2s infinite;
+}
+.stale-warning.danger {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.stale-warning.warning {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .info-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .info-label {
+    width: auto;
+    font-size: 10px;
+  }
+  .info-value {
+    font-size: 13px;
+  }
+  .products-table {
+    font-size: 12px;
+  }
+  .products-table th, .products-table td {
+    padding: 6px 4px;
+  }
+}
+
+/* Stale Warning */
+.stale-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  animation: pulse 2s infinite;
+}
+.stale-warning.danger {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.stale-warning.warning {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .info-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .info-label {
+    width: auto;
+    font-size: 10px;
+  }
+  .info-value {
+    font-size: 13px;
+  }
+  .products-table {
+    font-size: 12px;
+  }
+  .products-table th, .products-table td {
+    padding: 6px 4px;
+  }
+}
 
 /* Active row (optional - ถ้าต้องการ highlight แถวที่กำลังดู) */
 .data-table tr.active-row td {
@@ -672,6 +1030,16 @@ input[list]::-webkit-calendar-picker-indicator {
 .bidding-soon { color: #f59e0b; font-weight: 600; }
 .bidding-normal { color: var(--text2); }
 .bidding-past { color: #64748b; text-decoration: line-through; }
+
+/* Form row spacing */
+.form-row {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(255,255,255,0.05);
+}
+.form-row:last-child {
+  border-bottom: none;
+}
 
 /* Modal styles */
 .modal-overlay {
@@ -1309,15 +1677,86 @@ for (var i = 0; i < filtered.length; i++) {
   document.getElementById('tabContent').innerHTML = html;
 }
 
+// ========== DATE HELPER FUNCTIONS ==========
+function _td() { 
+  return new Date().toISOString().split('T')[0]; 
+}
+
+function dTo(dateStr) {
+  if (!dateStr) return 999;
+  var today = _td();
+  var d1 = new Date(today);
+  var d2 = new Date(dateStr);
+  return Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+function fD(iso) {
+  if (!iso) return '-';
+  var parts = iso.split('T')[0].split('-');
+  if (parts.length !== 3) return '-';
+  var day = parts[2];
+  var month = parts[1];
+  var year = parseInt(parts[0]) + 543;
+  return day + '/' + month + '/' + year;
+}
+
+// ========== FORMATTING FUNCTIONS ==========
+function formatBiddingDate(biddingDate) {
+  if (!biddingDate) return '<span class="bidding-normal">-</span>';
+  
+  var daysLeft = dTo(biddingDate);
+  var formattedDate = fD(biddingDate);
+  
+  if (daysLeft < 0) {
+    return '<span class="bidding-past" title="เลยกำหนดไปแล้ว ' + Math.abs(daysLeft) + ' วัน">📅 ' + formattedDate + '</span>';
+  } else if (daysLeft === 0) {
+    return '<span class="bidding-urgent" title="วันนี้!">🔴 ' + formattedDate + '</span>';
+  } else if (daysLeft <= 7) {
+    return '<span class="bidding-urgent" title="อีก ' + daysLeft + ' วัน">🔴 ' + formattedDate + '</span>';
+  } else if (daysLeft <= 30) {
+    return '<span class="bidding-soon" title="อีก ' + daysLeft + ' วัน">🟡 ' + formattedDate + '</span>';
+  }
+  return '<span class="bidding-normal">📅 ' + formattedDate + '</span>';
+}
+
+function getPriceClass(amount) {
+  var amt = Number(amount) || 0;
+  if (amt >= 10000000) return 'price-ultra';
+  if (amt >= 1500000) return 'price-mega';
+  if (amt >= 500000) return 'price-big';
+  if (amt > 0) return 'price-normal';
+  return 'price-zero';
+}
+
+function getModelPrice(modelName) {
+  if (!modelName) return 0;
+  var cfg = localStorage.getItem('v7_config');
+  if (cfg) {
+    try {
+      var config = JSON.parse(cfg);
+      if (config.models && config.models.length) {
+        for (var i = 0; i < config.models.length; i++) {
+          var m = config.models[i];
+          var name = typeof m === 'object' ? m.name : m;
+          if (name === modelName) {
+            return typeof m === 'object' ? (m.price || 0) : 0;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+  return 0;
+}
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
   
-  // คำนวณวันอัพเดทล่าสุด
+  // คำนวณวันอัพเดท
   var lastUpdate = p._updatedAt ? (p._updatedAt.seconds ? new Date(p._updatedAt.seconds * 1000) : new Date(p._updatedAt)) : null;
   var lastUpdateStr = lastUpdate ? lastUpdate.toLocaleString('th-TH') : 'ไม่ทราบ';
   var daysSince = lastUpdate ? Math.floor((new Date() - lastUpdate) / (1000 * 60 * 60 * 24)) : null;
   
+  // Stale warning
   var staleWarning = '';
   if (daysSince !== null && daysSince > 30) {
     staleWarning = '<div style="background:#ef4444; color:white; padding:10px 14px; border-radius:10px; margin-bottom:16px; display:flex; align-items:center; gap:10px">' +
@@ -1368,7 +1807,7 @@ function showPipelineDetail(pipeId) {
       '<td style="text-align:center">x' + qty + '</td>' +
       '<td style="text-align:right">' + (price ? price.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
       '<td style="text-align:right">' + (itemTotal ? itemTotal.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
-      '</tr>';
+      '<tr>';
   }
   
   itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700">' +
@@ -1381,45 +1820,48 @@ function showPipelineDetail(pipeId) {
   
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
   var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
-// ========== DATE HELPER FUNCTIONS ==========
-function _td() { return new Date().toISOString().split('T')[0]; }
-
-// คำนวณจำนวนวันจากวันนี้ถึงวันที่กำหนด (返回负数ถ้าเลยแล้ว)
-function dTo(dateStr) {
-  if (!dateStr) return 999;
-  var today = _td();
-  var d1 = new Date(today);
-  var d2 = new Date(dateStr);
-  return Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
-}
-
-// แปลง ISO date เป็น DD/MM/YYYY
-function fD(iso) {
-  if (!iso) return '-';
-  var parts = iso.split('T')[0].split('-');
-  if (parts.length !== 3) return '-';
-  var day = parts[2];
-  var month = parts[1];
-  var year = parseInt(parts[0]) + 543;
-  return day + '/' + month + '/' + year;
-}
   
-  // ใช้ฟังก์ชัน helper
   var biddingHtml = formatBiddingDate(p.biddingDate);
   var priceClass = getPriceClass(p.forecastAmount);
   
+  // HTML หลัก
   var html = '<div class="cv-back" onclick="renderCurrentTab()">← กลับ</div>';
-  html += '<div class="section"><div class="section-title">' + esc(p.projectName) + '</div>';
+  html += '<div class="section">';
+  html += '<div class="section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap">';
+  html += '<span>📊 ' + esc(p.projectName) + '</span>';
+  html += '<button class="btn btn-primary btn-sm" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ อัพเดทโครงการ</button>';
+  html += '</div>';
   html += staleWarning;
-  html += '<div class="form-row"><div><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div><div><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div></div>';
-  html += '<div class="form-row"><div><strong>💰 มูลค่า:</strong> <span class="' + priceClass + '">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</span></div><div><strong>📅 Bidding:</strong> ' + biddingHtml + '</div></div>';
-  html += '<div class="form-row"><div><strong>📅 อัพเดทล่าสุด:</strong> ' + lastUpdateStr + (daysSince !== null ? ' (' + daysSince + ' วันที่แล้ว)' : '') + '</div><div><strong>🚚 Shipment:</strong> ' + (p.shipmentDate || '-') + '</div></div>';
+  
+  // Grid 2 คอลัมน์
+  html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px">';
+  
+  // คอลัมน์ซ้าย
+  html += '<div>';
+  html += '<div class="form-row"><strong>👤 End User:</strong> ' + esc(p.endUserTH || p.endUser || '-') + '</div>';
+  html += '<div class="form-row"><strong>📊 สถานะ:</strong> <span style="color:' + statusColor + '">' + statusText + '</span></div>';
+  html += '<div class="form-row"><strong>💰 มูลค่า:</strong> <span class="' + priceClass + '">' + (p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</span></div>';
+  html += '<div class="form-row"><strong>📅 Bidding:</strong> ' + biddingHtml + '</div>';
+  html += '</div>';
+  
+  // คอลัมน์ขวา
+  html += '<div>';
+  html += '<div class="form-row"><strong>🚚 Shipment:</strong> ' + (p.shipmentDate ? fD(p.shipmentDate) : '-') + '</div>';
+  html += '<div class="form-row"><strong>📅 อัพเดทล่าสุด:</strong> ' + lastUpdateStr + (daysSince !== null ? ' (' + daysSince + ' วันที่แล้ว)' : '') + '</div>';
+  if (p.nextAction) html += '<div class="form-row"><strong>🎯 Next Action:</strong> ' + esc(p.nextAction) + '</div>';
+  if (p.followupDate) html += '<div class="form-row"><strong>📞 Follow-up:</strong> ' + fD(p.followupDate) + '</div>';
+  html += '</div>';
+  
+  html += '</div>'; // ปิด grid
+  
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
-  html += '<div style="margin-top:20px"><button class="btn btn-primary" style="width:100%" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ แก้ไขข้อมูล / อัพเดท</button></div></div>';
+  html += '</div>';
   html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
+  
   document.getElementById('tabContent').innerHTML = html;
   loadPipeTimeline(pipeId, p);
 }
+
 function loadPipeTimeline(pipeId, currentData) {
   var container = document.getElementById('pipeTimeline_' + pipeId);
   if (!container) return;
