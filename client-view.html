@@ -1683,7 +1683,7 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
   
     html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
-  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + approvedBadge + rejectedBadge + staleBadge + '</td>';
+    html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
   html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
   html += '<td>' + statusText + '</td>';
   html += '<td>' + biddingHtml + '</td>';  // ✅ เพิ่มเซลล์ Bidding Date
