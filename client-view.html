@@ -1643,10 +1643,12 @@ for (var i = 0; i < filtered.length; i++) {
   
   var amount = p.forecastAmount || 0;
   var priceClass = getPriceClass(amount);
-  var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-  var isRejected = p._status === 'rejected';
-  var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
-  var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
+var isPending = p._status === 'pending' || p._displayStatus === 'pending';
+var isApproved = p._status === 'approved';
+var isRejected = p._status === 'rejected';
+var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
+var approvedBadge = isApproved ? '<span class="pending-badge" style="background:#22c55e; color:white">✅ อัพเดทข้อมูลแล้ว</span>' : '';
+var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
   
   // ✅ Bidding date formatted
   var biddingHtml = formatBiddingDate(p.biddingDate);
@@ -1661,7 +1663,7 @@ for (var i = 0; i < filtered.length; i++) {
   
     html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
-  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
+  html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + approvedBadge + rejectedBadge + staleBadge + '</td>';
   html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
   html += '<td>' + getStatusLabel(p.status) + '</td>';
   html += '<td>' + biddingHtml + '</td>';  // ✅ เพิ่มเซลล์ Bidding Date
@@ -1819,7 +1821,7 @@ function showPipelineDetail(pipeId) {
   itemsHtml += '</tbody></table>';
   
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
-  var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อนุมัติแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
+var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อัพเดทข้อมูลแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
   
   var biddingHtml = formatBiddingDate(p.biddingDate);
   var priceClass = getPriceClass(p.forecastAmount);
@@ -1885,7 +1887,7 @@ function renderPipeTimeline(container, events, currentData) {
     var dateStr = ev.timestamp ? (ev.timestamp.seconds ? new Date(ev.timestamp.seconds * 1000).toLocaleString('th-TH') : ev.timestamp) : '-';
     var status = ev.status || (ev._source === 'current' ? (currentData ? currentData._status : 'pending') : 'pending');
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+         var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อัพเดทข้อมูลแล้ว' : '❌ ปฏิเสธ');
     var icon = ev.type === 'pipeline_update' ? '📋' : '📝';
     var updatedBy = ev.updatedBy || (ev._source === 'current' ? (currentData ? currentData.updatedBy : 'customer') : (ev._source === 'timeline' ? 'customer' : 'unknown'));
     var byBadge = updatedBy === 'sales' ? '<span style="background:#3b82f620; color:#3b82f6; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👨‍💼 พนักงานขาย</span>' : '<span style="background:#f59e0b20; color:#f59e0b; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👤 ลูกค้า</span>';
