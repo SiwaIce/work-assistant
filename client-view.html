@@ -1644,28 +1644,48 @@ for (var i = 0; i < filtered.length; i++) {
   var amount = p.forecastAmount || 0;
   var priceClass = getPriceClass(amount);
 var isPending = p._status === 'pending' || p._displayStatus === 'pending';
-var isApproved = p._status === 'approved';
 var isRejected = p._status === 'rejected';
 var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
-var approvedBadge = isApproved ? '<span class="pending-badge" style="background:#22c55e; color:white">✅ อัพเดทข้อมูลแล้ว</span>' : '';
 var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
+
+// ✅ statusText สำหรับแสดงในเซลล์สถานะ (ไม่ใช่ badge)
+var statusText = '';
+if (p._status === 'pending') {
+  statusText = '⏳ รอตรวจสอบ';
+} else if (p._status === 'rejected') {
+  statusText = '❌ ปฏิเสธ';
+} else if (p._status === 'approved') {
+  var days = getLastUpdateDays(p);
+  if (days !== null && days <= 3) {
+    statusText = '✅ อัพเดทข้อมูลแล้ว';
+  } else {
+    statusText = '📋 ปกติ';  // เกิน 3 วัน ไม่แสดง badge
+  }
+} else {
+  statusText = '📋 ปกติ';
+}
   
   // ✅ Bidding date formatted
   var biddingHtml = formatBiddingDate(p.biddingDate);
   
-  var lastUpdateDays = getLastUpdateDays(p);
-  var staleBadge = '';
-  if (lastUpdateDays !== null && lastUpdateDays > 30) {
-    staleBadge = '<span class="stale-badge" style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">⚠️ ' + lastUpdateDays + ' วัน</span>';
-  } else if (lastUpdateDays !== null && lastUpdateDays > 14) {
-    staleBadge = '<span class="stale-badge" style="background:#f59e0b; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">🟡 ' + lastUpdateDays + ' วัน</span>';
+var lastUpdateDays = getLastUpdateDays(p);
+var staleBadge = '';
+
+// แสดงเฉพาะเมื่อผ่านไป 8 วันขึ้นไป
+if (lastUpdateDays !== null && lastUpdateDays >= 8) {
+  if (lastUpdateDays >= 15) {
+    staleBadge = '<span class="stale-badge" style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">⚠️ ไม่ได้อัพเดท ' + lastUpdateDays + ' วัน</span>';
+  } else {
+    staleBadge = '<span class="stale-badge" style="background:#f59e0b; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">🟡 ไม่ได้อัพเดท ' + lastUpdateDays + ' วัน</span>';
   }
+}
+// 0-7 วัน → ไม่แสดง badge
   
     html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
   html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + approvedBadge + rejectedBadge + staleBadge + '</td>';
   html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-  html += '<td>' + getStatusLabel(p.status) + '</td>';
+  html += '<td>' + statusText + '</td>';
   html += '<td>' + biddingHtml + '</td>';  // ✅ เพิ่มเซลล์ Bidding Date
   html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
   html += '<td class="' + priceClass + '" style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿<\/td>';
