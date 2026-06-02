@@ -3702,6 +3702,14 @@ function testLineNotify() {
   sendLineNotify('🧪 ทดสอบการแจ้งเตือนจาก DJI Sales Assistant');
   toast('📤 ส่งข้อความทดสอบแล้ว');
 }
+// เพิ่มฟังก์ชันเปิด Email Draft
+function openEmailDraft() {
+  if (typeof showEmailDraftWithDealer === 'function') {
+    showEmailDraftWithDealer();
+  } else {
+    toast('⚠️ ฟังก์ชันยังไม่พร้อม');
+  }
+}
 // เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
 function addCustomerUpdateMenuItem() {
   var sidebar = document.getElementById('sidebar');

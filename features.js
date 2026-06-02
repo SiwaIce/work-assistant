@@ -4843,3 +4843,475 @@ function showAddKpiM() {
 function manageKpiConfigs() {
   toast('🚧 ฟังก์ชันกำลังพัฒนา');
 }
+// ================================================================
+// EMAIL DRAFT WITH DEALER SELECTION
+// ================================================================
+
+var emailDealerId = '';
+var emailTemplateId = '';
+
+function showEmailDraftWithDealer() {
+  var dealers = ST.getAll('dealers');
+  var cfg = getConfig();
+  
+  var dealerOptions = '<option value="">-- เลือก Dealer --</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    dealerOptions += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
+  }
+  
+  var templateOptions = '<option value="visit_report">📋 Visit Report</option>';
+  templateOptions += '<option value="pipeline_update">📊 Pipeline Update</option>';
+  templateOptions += '<option value="forecast_summary">📦 Forecast Summary</option>';
+  templateOptions += '<option value="custom">✏️ เขียนเอง</option>';
+  
+  // โหลด templates ที่บันทึกไว้
+  var savedTemplates = getEmailTemplates();
+  for (var i = 0; i < savedTemplates.length; i++) {
+    if (savedTemplates[i].type === 'custom') {
+      templateOptions += '<option value="' + savedTemplates[i].id + '">📝 ' + sanitize(savedTemplates[i].name) + '</option>';
+    }
+  }
+  
+  var html = `
+    <div style="max-width:550px">
+      <div class="fg">
+        <label>🏪 เลือก Dealer</label>
+        <select id="emailDealerSelect" class="fm-input" onchange="loadDealerEmailContacts()">
+          ${dealerOptions}
+        </select>
+      </div>
+      <div class="fg">
+        <label>📧 ผู้รับ (โหลดจาก Dealer)</label>
+        <div id="dealerContactsList" style="margin-bottom:8px; font-size:12px; color:var(--text2)"></div>
+        <input type="text" id="emailToInput" class="fm-input" placeholder="email@company.com, another@email.com">
+        <div class="hint">💡 สามารถพิมพ์เพิ่มเองได้ คั่นด้วย comma (,)</div>
+      </div>
+      <div class="fg">
+        <label>📋 CC (สำเนา)</label>
+        <input type="text" id="emailCcInput" class="fm-input" placeholder="cc@company.com">
+      </div>
+      <div class="fg">
+        <label>📋 เลือก Template</label>
+        <select id="emailTemplateSelect" class="fm-input" onchange="previewEmailTemplate()">
+          ${templateOptions}
+        </select>
+      </div>
+      <div class="fg">
+        <label>📋 หัวข้อ</label>
+        <input type="text" id="emailSubject" class="fm-input" placeholder="หัวข้ออีเมล">
+      </div>
+      <div class="fg">
+        <label>📝 เนื้อหา</label>
+        <textarea id="emailBody" rows="10" class="fm-input" placeholder="เนื้อหาอีเมล..."></textarea>
+      </div>
+      <div class="bg" style="margin-top:12px">
+        <button class="btn bp" onclick="sendEmailFromDraft()">📧 ส่งอีเมล</button>
+        <button class="btn bo" onclick="copyEmailDraft()">📋 Copy</button>
+        <button class="btn bo" onclick="saveCurrentEmailTemplate()">💾 บันทึก Template</button>
+      </div>
+    </div>
+  `;
+  
+  openM('📧 สร้างอีเมล (เลือก Dealer)', html);
+}
+
+function loadDealerEmailContacts() {
+  var dealerId = document.getElementById('emailDealerSelect').value;
+  if (!dealerId) return;
+  
+  var dealer = ST.getOne('dealers', dealerId);
+  var contacts = dealer.contacts || [];
+  var emails = [];
+  
+  // ดึงอีเมลจาก contacts
+  for (var i = 0; i < contacts.length; i++) {
+    if (contacts[i].email) emails.push(contacts[i].email);
+  }
+  
+  // เพิ่มอีเมลจาก dealer โดยตรง (ถ้ามี)
+  if (dealer.email) emails.push(dealer.email);
+  
+  var emailList = emails.join(', ');
+  document.getElementById('emailToInput').value = emailList;
+  
+  // แสดงรายชื่อผู้ติดต่อ
+  var contactsHtml = '<div style="font-size:12px;margin-bottom:4px;font-weight:600">📞 ผู้ติดต่อ:</div>';
+  if (contacts.length === 0) {
+    contactsHtml += '<div class="hint">ไม่มีข้อมูลผู้ติดต่อ กรุณาเพิ่มในหน้า Dealer</div>';
+  } else {
+    for (var i = 0; i < contacts.length; i++) {
+      var c = contacts[i];
+      contactsHtml += `<div style="font-size:11px; padding:4px 0; border-bottom:1px solid var(--border)">
+        <strong>${sanitize(c.name)}</strong>
+        ${c.role ? ' (' + sanitize(c.role) + ')' : ''}<br>
+        ${c.email ? '📧 ' + sanitize(c.email) + ' ' : ''}
+        ${c.phone ? '📞 ' + sanitize(c.phone) : ''}
+      </div>`;
+    }
+  }
+  document.getElementById('dealerContactsList').innerHTML = contactsHtml;
+}
+
+function previewEmailTemplate() {
+  var template = document.getElementById('emailTemplateSelect').value;
+  var dealerId = document.getElementById('emailDealerSelect').value;
+  var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var cfg = getConfig();
+  var today = _td();
+  var formattedDate = fD(today);
+  
+  var subject = '';
+  var body = '';
+  
+  // ตรวจสอบว่าเป็น template ที่บันทึกไว้หรือไม่
+  if (template.indexOf('et_') === 0) {
+    var savedTemplates = getEmailTemplates();
+    for (var i = 0; i < savedTemplates.length; i++) {
+      if (savedTemplates[i].id === template) {
+        subject = savedTemplates[i].subject || '';
+        body = savedTemplates[i].body || '';
+        break;
+      }
+    }
+    // แทนที่ตัวแปร
+    subject = subject.replace(/\{dealer\}/g, dealer ? dealer.name : '').replace(/\{date\}/g, formattedDate);
+    body = body.replace(/\{dealer\}/g, dealer ? dealer.name : '').replace(/\{date\}/g, formattedDate).replace(/\{sale\}/g, cfg.saleName || 'Siwawong');
+    document.getElementById('emailSubject').value = subject;
+    document.getElementById('emailBody').value = body;
+    return;
+  }
+  
+  // Templates ในตัว
+  var contactName = dealer ? (dealer.contactName || dealer.name || '') : '';
+  
+  if (template === 'visit_report') {
+    subject = `Visit Report — ${dealer ? dealer.name : 'Dealer'} ${formattedDate}`;
+    body = `เรียนคุณ${contactName},\n\n`;
+    body += `ตามที่ได้เข้าเยี่ยมชมและพูดคุยกัน ขอสรุปประเด็นสำคัญดังนี้\n\n`;
+    body += `📋 ประเด็นที่คุย:\n`;
+    body += `• ...\n\n`;
+    body += `📊 Pipeline Update:\n`;
+    body += `• ...\n\n`;
+    body += `📦 Forecast:\n`;
+    body += `• ...\n\n`;
+    body += `📝 สรุป:\n`;
+    body += `• ...\n\n`;
+    body += `ติดต่อสอบถามเพิ่มเติมได้ที่ ${cfg.saleName || 'Siwawong'}\n`;
+    body += `SIS Distribution (Thailand) PLC\n`;
+    body += `DJI Authorized Distributor`;
+  } else if (template === 'pipeline_update') {
+    // ดึงข้อมูล pipeline ของ dealer
+    var pipes = dealerId ? ST.pipelineByDealer(dealerId) : [];
+    var activePipes = pipes.filter(function(p) { return ['lost','delivered','on_hold'].indexOf(p.status) === -1; });
+    var activeCount = activePipes.length;
+    var activeAmount = 0;
+    for (var i = 0; i < activePipes.length; i++) {
+      activeAmount += (Number(activePipes[i].forecastAmount) || 0);
+    }
+    
+    subject = `Pipeline Update — ${dealer ? dealer.name : 'Dealer'} ${formattedDate}`;
+    body = `เรียนคุณ${contactName},\n\n`;
+    body += `ขออัพเดทความคืบหน้าโครงการดังนี้\n\n`;
+    body += `📊 สรุป Pipeline (${activeCount} โครงการ)\n`;
+    body += `• มูลค่ารวม: ${fmtMoney(activeAmount)} ฿\n\n`;
+    body += `✅ โครงการที่กำลังดำเนินการ:\n`;
+    for (var i = 0; i < Math.min(activePipes.length, 5); i++) {
+      var p = activePipes[i];
+      body += `• ${p.projectName || '-'} — ${fmtMoney(p.forecastAmount)} ฿\n`;
+    }
+    if (activePipes.length > 5) body += `• ... และอีก ${activePipes.length - 5} โครงการ\n`;
+    body += `\n📅 แผนการดำเนินงาน:\n`;
+    body += `• ...\n\n`;
+    body += `สอบถามเพิ่มเติมได้ที่ ${cfg.saleName || 'Siwawong'}\n`;
+    body += `SIS Distribution (Thailand) PLC`;
+  } else if (template === 'forecast_summary') {
+    subject = `Forecast Summary — ${dealer ? dealer.name : 'Dealer'} ${formattedDate}`;
+    body = `เรียนคุณ${contactName},\n\n`;
+    body += `สรุปแผนการสั่งซื้อประจำเดือน ${formattedDate}\n\n`;
+    body += `📦 Run Rate:\n`;
+    body += `• ...\n\n`;
+    body += `🏢 โครงการ:\n`;
+    body += `• ...\n\n`;
+    body += `📝 หมายเหตุ:\n`;
+    body += `• ...\n\n`;
+    body += `หากต้องการปรับเปลี่ยนแผนกรุณาแจ้งภายในวันที่ ...\n\n`;
+    body += `${cfg.saleName || 'Siwawong'}\n`;
+    body += `SIS Distribution (Thailand) PLC\n`;
+    body += `DJI Authorized Distributor`;
+  } else {
+    subject = '';
+    body = '';
+  }
+  
+  document.getElementById('emailSubject').value = subject;
+  document.getElementById('emailBody').value = body;
+}
+
+function sendEmailFromDraft() {
+  var to = document.getElementById('emailToInput').value.trim();
+  var cc = document.getElementById('emailCcInput').value.trim();
+  var subject = document.getElementById('emailSubject').value.trim();
+  var body = document.getElementById('emailBody').value.trim();
+  var dealerId = document.getElementById('emailDealerSelect').value;
+  
+  if (!to) {
+    toast('⚠️ กรุณาใส่ผู้รับ');
+    return;
+  }
+  if (!subject || !body) {
+    toast('⚠️ กรุณาใส่หัวข้อและเนื้อหา');
+    return;
+  }
+  
+  // ✅ บันทึก Draft ก่อนส่ง
+  saveEmailDraft(to, cc, subject, body, dealerId);
+  
+  // สร้าง mailto link
+  var mailtoUrl = 'mailto:' + encodeURIComponent(to);
+  if (cc) mailtoUrl += '?cc=' + encodeURIComponent(cc);
+  mailtoUrl += '&subject=' + encodeURIComponent(subject);
+  mailtoUrl += '&body=' + encodeURIComponent(body);
+  
+  window.open(mailtoUrl);
+  toast('📧 เปิดอีเมลคลายเอ็นท์แล้ว');
+  
+  // บันทึกประวัติการส่ง
+  var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
+  ST.add('emails', {
+    type: 'manual',
+    to: to,
+    cc: cc,
+    subject: subject,
+    body: body.substring(0, 200),
+    sentAt: _nw(),
+    dealerId: dealerId,
+    dealerName: dealer ? dealer.name : ''
+  });
+  
+  closeM();
+}
+// ✅ บันทึก Email Draft
+function saveEmailDraft(to, cc, subject, body, dealerId) {
+  var drafts = getEmailDrafts();
+  var draft = {
+    id: 'draft_' + Date.now(),
+    to: to,
+    cc: cc || '',
+    subject: subject,
+    body: body,
+    dealerId: dealerId || '',
+    createdAt: _nw(),
+    updatedAt: _nw()
+  };
+  drafts.unshift(draft);
+  // เก็บแค่ 20 draft ล่าสุด
+  if (drafts.length > 20) drafts = drafts.slice(0, 20);
+  localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
+  console.log('✅ บันทึก Draft แล้ว');
+}
+
+// ✅ อ่าน Email Drafts
+function getEmailDrafts() {
+  var drafts = localStorage.getItem('v7_email_drafts');
+  if (drafts) {
+    try { return JSON.parse(drafts); } catch(e) {}
+  }
+  return [];
+}
+
+// ✅ โหลด Draft มาแสดง
+function loadEmailDraft(draftId) {
+  var drafts = getEmailDrafts();
+  var draft = null;
+  for (var i = 0; i < drafts.length; i++) {
+    if (drafts[i].id === draftId) { draft = drafts[i]; break; }
+  }
+  if (!draft) return;
+  
+  document.getElementById('emailToInput').value = draft.to || '';
+  document.getElementById('emailCcInput').value = draft.cc || '';
+  document.getElementById('emailSubject').value = draft.subject || '';
+  document.getElementById('emailBody').value = draft.body || '';
+  
+  // เลือก Dealer ที่เกี่ยวข้อง (ถ้ามี)
+  if (draft.dealerId) {
+    var dealerSelect = document.getElementById('emailDealerSelect');
+    if (dealerSelect) dealerSelect.value = draft.dealerId;
+    loadDealerEmailContacts();
+  }
+  
+  toast('📂 โหลด Draft แล้ว');
+}
+
+// ✅ ลบ Draft
+function deleteEmailDraft(draftId) {
+  if (!confirm('ลบ Draft นี้?')) return;
+  var drafts = getEmailDrafts();
+  drafts = drafts.filter(function(d) { return d.id !== draftId; });
+  localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
+  toast('🗑️ ลบ Draft แล้ว');
+  showEmailDraftWithDealer(); // รีเฟรชหน้า
+}
+function showEmailDraftWithDealer() {
+  var dealers = ST.getAll('dealers');
+  var cfg = getConfig();
+  var drafts = getEmailDrafts();
+  
+  var dealerOptions = '<option value="">-- เลือก Dealer --</option>';
+  for (var i = 0; i < dealers.length; i++) {
+    dealerOptions += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
+  }
+  
+  // ✅ สร้างรายการ Drafts
+  var draftsHtml = '';
+  if (drafts.length > 0) {
+    draftsHtml = '<div class="fg"><label>📂 Drafts ที่บันทึกไว้</label><div style="max-height:150px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:4px">';
+    for (var i = 0; i < drafts.length; i++) {
+      var d = drafts[i];
+      var preview = (d.subject || d.body || '').substring(0, 40);
+      draftsHtml += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-bottom:1px solid var(--border)">';
+      draftsHtml += '<span style="font-size:12px; cursor:pointer" onclick="loadEmailDraft(\'' + d.id + '\')">📄 ' + sanitize(preview) + '</span>';
+      draftsHtml += '<button class="btn bsm bd" onclick="event.stopPropagation();deleteEmailDraft(\'' + d.id + '\')">🗑️</button>';
+      draftsHtml += '</div>';
+    }
+    draftsHtml += '</div></div>';
+  }
+  
+  var templateOptions = '<option value="visit_report">📋 Visit Report</option>';
+  templateOptions += '<option value="pipeline_update">📊 Pipeline Update</option>';
+  templateOptions += '<option value="forecast_summary">📦 Forecast Summary</option>';
+  templateOptions += '<option value="custom">✏️ เขียนเอง</option>';
+  
+  // โหลด templates ที่บันทึกไว้
+  var savedTemplates = getEmailTemplates();
+  for (var i = 0; i < savedTemplates.length; i++) {
+    if (savedTemplates[i].type === 'custom') {
+      templateOptions += '<option value="' + savedTemplates[i].id + '">📝 ' + sanitize(savedTemplates[i].name) + '</option>';
+    }
+  }
+  
+  var html = `
+    <div style="max-width:550px">
+      ${draftsHtml}
+      <div class="fg">
+        <label>🏪 เลือก Dealer</label>
+        <select id="emailDealerSelect" class="fm-input" onchange="loadDealerEmailContacts()">
+          ${dealerOptions}
+        </select>
+      </div>
+      <div class="fg">
+        <label>📧 ผู้รับ (โหลดจาก Dealer)</label>
+        <div id="dealerContactsList" style="margin-bottom:8px; font-size:12px; color:var(--text2)"></div>
+        <input type="text" id="emailToInput" class="fm-input" placeholder="email@company.com, another@email.com">
+        <div class="hint">💡 สามารถพิมพ์เพิ่มเองได้ คั่นด้วย comma (,)</div>
+      </div>
+      <div class="fg">
+        <label>📋 CC (สำเนา)</label>
+        <input type="text" id="emailCcInput" class="fm-input" placeholder="cc@company.com">
+      </div>
+      <div class="fg">
+        <label>📋 เลือก Template</label>
+        <select id="emailTemplateSelect" class="fm-input" onchange="previewEmailTemplate()">
+          ${templateOptions}
+        </select>
+      </div>
+      <div class="fg">
+        <label>📋 หัวข้อ</label>
+        <input type="text" id="emailSubject" class="fm-input" placeholder="หัวข้ออีเมล">
+      </div>
+      <div class="fg">
+        <label>📝 เนื้อหา</label>
+        <textarea id="emailBody" rows="10" class="fm-input" placeholder="เนื้อหาอีเมล..."></textarea>
+      </div>
+      <div class="bg" style="margin-top:12px; flex-wrap:wrap">
+        <button class="btn bp" onclick="sendEmailFromDraft()">📧 ส่งอีเมล</button>
+        <button class="btn bs" onclick="saveEmailDraftFromModal()">💾 บันทึก Draft</button>
+        <button class="btn bo" onclick="copyEmailDraft()">📋 Copy</button>
+        <button class="btn bo" onclick="saveCurrentEmailTemplate()">💾 บันทึก Template</button>
+      </div>
+    </div>
+  `;
+  
+  openM('📧 สร้างอีเมล (เลือก Dealer)', html);
+}
+
+// ✅ บันทึก Draft จาก Modal
+function saveEmailDraftFromModal() {
+  var to = document.getElementById('emailToInput').value.trim();
+  var cc = document.getElementById('emailCcInput').value.trim();
+  var subject = document.getElementById('emailSubject').value.trim();
+  var body = document.getElementById('emailBody').value.trim();
+  var dealerId = document.getElementById('emailDealerSelect').value;
+  
+  if (!to && !subject && !body) {
+    toast('⚠️ ไม่มีข้อมูลที่จะบันทึก');
+    return;
+  }
+  
+  saveEmailDraft(to, cc, subject, body, dealerId);
+  toast('💾 บันทึก Draft เรียบร้อย');
+  closeM();
+  showEmailDraftWithDealer(); // รีเฟรชหน้า
+}
+function copyEmailDraft() {
+  var to = document.getElementById('emailToInput').value;
+  var cc = document.getElementById('emailCcInput').value;
+  var subject = document.getElementById('emailSubject').value;
+  var body = document.getElementById('emailBody').value;
+  
+  var text = 'ถึง: ' + to + '\n';
+  if (cc) text += 'สำเนา: ' + cc + '\n';
+  text += 'หัวข้อ: ' + subject + '\n\n';
+  text += body;
+  
+  copyText(text);
+  toast('📋 คัดลอกเนื้อหาอีเมลแล้ว');
+}
+
+function saveCurrentEmailTemplate() {
+  var subject = document.getElementById('emailSubject').value.trim();
+  var body = document.getElementById('emailBody').value.trim();
+  
+  if (!subject && !body) {
+    toast('⚠️ ไม่มีเนื้อหาที่จะบันทึก');
+    return;
+  }
+  
+  var name = prompt('📝 ชื่อ Template:', subject.substring(0, 30) || 'Template ใหม่');
+  if (!name) return;
+  
+  var templates = getEmailTemplates();
+  templates.push({
+    id: 'et_' + Date.now(),
+    name: name,
+    subject: subject,
+    body: body,
+    type: 'custom',
+    createdAt: _nw()
+  });
+  saveEmailTemplates(templates);
+  
+  toast('💾 บันทึก Template "' + name + '" เรียบร้อย');
+  
+  // รีเฟรช dropdown
+  var select = document.getElementById('emailTemplateSelect');
+  if (select) {
+    var newOption = document.createElement('option');
+    newOption.value = templates[templates.length - 1].id;
+    newOption.textContent = '📝 ' + name;
+    select.appendChild(newOption);
+  }
+}
+
+// ฟังก์ชัน helper สำหรับ getEmailTemplates (ถ้ายังไม่มี)
+function getEmailTemplates() {
+  var saved = localStorage.getItem('v7_emailTmpl');
+  if (saved) {
+    try { return JSON.parse(saved); } catch(e) {}
+  }
+  return [];
+}
+
+function saveEmailTemplates(list) {
+  localStorage.setItem('v7_emailTmpl', JSON.stringify(list));
+}
