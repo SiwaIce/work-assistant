@@ -1139,6 +1139,7 @@ input[list]::-webkit-calendar-picker-indicator {
     <div class="tab-btn active" data-tab="pipeline">📋 โครงการของฉัน</div>
     <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
     <div class="tab-btn" data-tab="updateHistory">📝 ประวัติการอัพเดท</div>
+        <div class="tab-btn" data-tab="compliance">📊 สถานะพาร์ทเนอร์</div>
   </div>
   <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
@@ -2584,6 +2585,7 @@ function renderCurrentTab() {
   if (currentTab === 'pipeline') renderPipelineTab();
   else if (currentTab === 'forecast') renderForecastTab();
   else if (currentTab === 'updateHistory') renderUpdateHistoryTab();
+    else if (currentTab === 'compliance') renderComplianceTab();
 }
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');
@@ -2595,6 +2597,290 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
   btn.classList.add('active');
   renderCurrentTab();
 });
+// ================================================================
+// COMPLIANCE DASHBOARD FUNCTIONS
+// ================================================================
+
+function renderComplianceTab() {
+  if (!dealerId) return;
+  
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) {
+    document.getElementById('tabContent').innerHTML = '<div class="empty"><p>ไม่พบข้อมูล Dealer</p></div>';
+    return;
+  }
+  
+  var cfg = getConfig();
+  var level = dealer.level || 'Other';
+  var requirements = cfg.levelRequirements?.[level] || getDefaultRequirements(level);
+  var demoItems = getDemoItemsByDealer(dealerId);
+  
+  // คำนวณสถานะต่างๆ
+  var h1Status = calculateH1Status(dealerId, requirements);
+  var dsecStatus = calculateDSECStatus(dealer, requirements);
+  var demoStatus = calculateDemoStatus(demoItems, requirements);
+  var policyAlert = getNewDemoPolicyAlert(cfg);
+  
+  var html = '<div class="section">';
+  html += '<div class="section-title">📊 Partner Compliance Status</div>';
+  
+  // 1. H1 Target Card
+  html += renderH1Card(h1Status, level);
+  
+  // 2. Demo Status Card
+  html += renderDemoCard(demoStatus, demoItems, requirements);
+  
+  // 3. DSEC Card
+  html += renderDSECCard(dsecStatus, requirements);
+  
+  // 4. New Demo Policy Alert
+  if (policyAlert && policyAlert.active) {
+    html += renderPolicyAlert(policyAlert);
+  }
+  
+  html += '</div>';
+  document.getElementById('tabContent').innerHTML = html;
+}
+
+function getDefaultRequirements(level) {
+  var defaults = {
+    S: { h1Target: 27000000, dsecRequired: 3, demoRequired: 'both', option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'] },
+    A: { h1Target: 4500000, dsecRequired: 1, demoRequired: 'either', option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'], option2Models: ['DJI Dock 2', 'DJI Matrice 4TD'] },
+    B: { h1Target: 1500000, dsecRequired: 1, demoRequired: 'either', option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'], option2Models: ['DJI Dock 2'] },
+    Other: { h1Target: 0, dsecRequired: 0, demoRequired: 'none', option1Models: [], option2Models: [] }
+  };
+  return defaults[level] || defaults.B;
+}
+
+function getDemoItemsByDealer(dealerId) {
+  // ดึงจาก v7_demo ที่มี dealerId ตรงกัน
+  var allDemo = [];
+  try {
+    allDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
+  } catch(e) {}
+  return allDemo.filter(function(d) { return d.dealerId === dealerId && d.status === 'lent'; });
+}
+
+function calculateH1Status(dealerId, requirements) {
+  var now = new Date();
+  var cfg = getConfig();
+  var h1Period = cfg.h1Period || { startMonth: 0, startDay: 1, endMonth: 5, endDay: 30 };
+  
+  var startDate = new Date(now.getFullYear(), h1Period.startMonth, h1Period.startDay);
+  var endDate = new Date(now.getFullYear(), h1Period.endMonth, h1Period.endDay);
+  
+  var pipelines = [];
+  try {
+    pipelines = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
+  } catch(e) {}
+  
+  // คำนวณยอดขายที่ win/ordered/delivered ในช่วง H1
+  var wonAmount = 0;
+  for (var i = 0; i < pipelines.length; i++) {
+    var p = pipelines[i];
+    if (p.dealerId !== dealerId) continue;
+    if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
+    
+    var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
+    if (shipDate && shipDate >= startDate && shipDate <= endDate) {
+      wonAmount += (Number(p.forecastAmount) || 0);
+    }
+  }
+  
+  var target = requirements.h1Target || 0;
+  var percent = target > 0 ? Math.round(wonAmount / target * 100) : 100;
+  var isOk = wonAmount >= target;
+  
+  return {
+    target: target,
+    actual: wonAmount,
+    percent: Math.min(percent, 100),
+    isOk: isOk,
+    gap: target - wonAmount,
+    startDate: startDate,
+    endDate: endDate
+  };
+}
+
+function calculateDSECStatus(dealer, requirements) {
+  // สมมติว่า dealer มี field dsecPeople (array) หรือ dsecCertCount
+  var currentCount = Number(dealer.dsecCertCount) || 0;
+  var required = requirements.dsecRequired || 0;
+  
+  return {
+    current: currentCount,
+    required: required,
+    isOk: currentCount >= required,
+    need: Math.max(0, required - currentCount)
+  };
+}
+
+function calculateDemoStatus(demoItems, requirements) {
+  var hasOption1 = true;
+  var hasOption2 = true;
+  var missingOption1 = [];
+  var missingOption2 = [];
+  var foundModels = {};
+  
+  // สร้าง map ของ model ที่มี
+  for (var i = 0; i < demoItems.length; i++) {
+    foundModels[demoItems[i].model] = true;
+  }
+  
+  // ตรวจสอบ Option 1
+  var opt1Models = requirements.option1Models || [];
+  for (var i = 0; i < opt1Models.length; i++) {
+    if (!foundModels[opt1Models[i]]) {
+      hasOption1 = false;
+      missingOption1.push(opt1Models[i]);
+    }
+  }
+  
+  // ตรวจสอบ Option 2
+  var opt2Models = requirements.option2Models || [];
+  for (var i = 0; i < opt2Models.length; i++) {
+    if (!foundModels[opt2Models[i]]) {
+      hasOption2 = false;
+      missingOption2.push(opt2Models[i]);
+    }
+  }
+  
+  var demoRequired = requirements.demoRequired || 'none';
+  var isOk = false;
+  
+  if (demoRequired === 'none') isOk = true;
+  else if (demoRequired === 'option1') isOk = hasOption1;
+  else if (demoRequired === 'option2') isOk = hasOption2;
+  else if (demoRequired === 'either') isOk = hasOption1 || hasOption2;
+  else if (demoRequired === 'both') isOk = hasOption1 && hasOption2;
+  
+  return {
+    isOk: isOk,
+    hasOption1: hasOption1,
+    hasOption2: hasOption2,
+    missingOption1: missingOption1,
+    missingOption2: missingOption2,
+    required: demoRequired,
+    option1Models: opt1Models,
+    option2Models: opt2Models,
+    demoItems: demoItems
+  };
+}
+
+function getNewDemoPolicyAlert(cfg) {
+  var policy = cfg.newDemoPolicy;
+  if (!policy || !policy.enabled) return null;
+  
+  var releaseDate = new Date(policy.releaseDate);
+  var now = new Date();
+  var deadline = new Date(releaseDate);
+  deadline.setDate(deadline.getDate() + (policy.orderWithinDays || 60));
+  
+  var daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+  var isUrgent = daysLeft <= 30 && daysLeft > 0;
+  var isOverdue = daysLeft < 0;
+  
+  return {
+    active: true,
+    productName: policy.productName,
+    releaseDate: policy.releaseDate,
+    orderWithinDays: policy.orderWithinDays,
+    deadline: deadline.toISOString().split('T')[0],
+    daysLeft: daysLeft,
+    isUrgent: isUrgent,
+    isOverdue: isOverdue,
+    message: policy.alertMessage
+  };
+}
+
+function renderH1Card(status, level) {
+  var colorClass = status.isOk ? 'c2' : (status.percent >= 70 ? 'c3' : 'c4');
+  var statusText = status.isOk ? '✅ สำเร็จเกินเป้า!' : (status.gap > 0 ? '⚠️ เหลืออีก ' + fmtMoneyShort(status.gap) + ' บาท' : '');
+  var barColor = status.isOk ? '#22c55e' : (status.percent >= 70 ? '#f59e0b' : '#ef4444');
+  
+  return '<div class="card" style="margin-bottom:12px">' +
+    '<div class="section-title" style="margin-bottom:8px">🎯 เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + ' (' + level + ' Level)</div>' +
+    '<div class="fr" style="margin-bottom:8px">' +
+    '<div class="sc" style="flex:1"><div class="sn c3">' + fmtMoneyShort(status.target) + '</div><div class="sl">เป้าหมาย</div></div>' +
+    '<div class="sc" style="flex:1"><div class="sn c2">' + fmtMoneyShort(status.actual) + '</div><div class="sl">ยอดขายจริง</div></div>' +
+    '<div class="sc" style="flex:1"><div class="sn ' + colorClass + '">' + status.percent + '%</div><div class="sl">ความสำเร็จ</div></div>' +
+    '</div>' +
+    '<div class="pb" style="height:10px;margin-bottom:6px"><div class="pf" style="width:' + status.percent + '%;background:' + barColor + '"></div></div>' +
+    '<div style="font-size:13px;color:' + (status.isOk ? '#22c55e' : '#f59e0b') + '">' + statusText + '</div>' +
+    '<div class="hint" style="margin-top:4px">📅 ช่วงเวลา: ' + formatDateThai(status.startDate) + ' — ' + formatDateThai(status.endDate) + '</div>' +
+    '</div>';
+}
+
+function renderDemoCard(status, demoItems, requirements) {
+  var statusIcon = status.isOk ? '✅' : '🔴';
+  var statusText = status.isOk ? 'ครบถ้วน' : 'ยังไม่ครบ';
+  var statusColor = status.isOk ? '#22c55e' : '#ef4444';
+  
+  var requiredText = '';
+  if (requirements.demoRequired === 'none') requiredText = '❌ ไม่ต้องมี Demo';
+  else if (requirements.demoRequired === 'option1') requiredText = '📦 ต้องมี Option 1 เท่านั้น';
+  else if (requirements.demoRequired === 'option2') requiredText = '📦 ต้องมี Option 2 เท่านั้น';
+  else if (requirements.demoRequired === 'either') requiredText = '📦 ต้องมี Option 1 หรือ Option 2';
+  else if (requirements.demoRequired === 'both') requiredText = '📦 ต้องมีทั้ง Option 1 และ Option 2';
+  
+  var option1Html = '<div style="margin-top:8px"><strong>📦 Option 1:</strong> ' + (status.hasOption1 ? '✅ ครบ' : '❌ ไม่ครบ');
+  if (!status.hasOption1 && status.missingOption1.length) {
+    option1Html += '<div class="hint" style="color:#ef4444">ขาด: ' + status.missingOption1.join(', ') + '</div>';
+  }
+  option1Html += '</div>';
+  
+  var option2Html = '<div><strong>📦 Option 2:</strong> ' + (status.hasOption2 ? '✅ ครบ' : '❌ ไม่ครบ');
+  if (!status.hasOption2 && status.missingOption2.length) {
+    option2Html += '<div class="hint" style="color:#ef4444">ขาด: ' + status.missingOption2.join(', ') + '</div>';
+  }
+  option2Html += '</div>';
+  
+  // รายการ Demo ที่มีอยู่
+  var demoListHtml = '';
+  if (demoItems.length) {
+    demoListHtml = '<div style="margin-top:8px"><strong>📋 อุปกรณ์ Demo ที่มี:</strong><ul style="margin:4px 0 0 20px;font-size:12px">';
+    for (var i = 0; i < demoItems.length; i++) {
+      demoListHtml += '<li>' + sanitize(demoItems[i].model) + ' (S/N: ' + sanitize(demoItems[i].serialNumber || '-') + ')</li>';
+    }
+    demoListHtml += '</ul></div>';
+  } else {
+    demoListHtml = '<div class="hint" style="margin-top:8px">⚠️ ยังไม่มีข้อมูล Demo ที่ลงทะเบียน</div>';
+  }
+  
+  return '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + statusColor + '">' +
+    '<div class="section-title" style="margin-bottom:8px">🚁 Demo Unit Requirement ' + statusIcon + ' ' + statusText + '</div>' +
+    '<div class="hint">' + requiredText + '</div>' +
+    option1Html + option2Html +
+    demoListHtml +
+    '</div>';
+}
+
+function renderDSECCard(status, requirements) {
+  var statusIcon = status.isOk ? '✅' : '🔴';
+  var statusText = status.isOk ? 'ผ่านเงื่อนไข' : 'ยังไม่ผ่าน';
+  var statusColor = status.isOk ? '#22c55e' : '#ef4444';
+  
+  return '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + statusColor + '">' +
+    '<div class="section-title" style="margin-bottom:8px">📋 DSEC Certification ' + statusIcon + ' ' + statusText + '</div>' +
+    '<div class="fr" style="margin-bottom:8px">' +
+    '<div class="sc" style="flex:1"><div class="sn c3">' + status.current + '</div><div class="sl">พนักงานที่ผ่าน</div></div>' +
+    '<div class="sc" style="flex:1"><div class="sn c2">' + status.required + '</div><div class="sl">จำนวนที่ต้องมี</div></div>' +
+    '</div>' +
+    (status.need > 0 ? '<div style="color:#ef4444;margin-top:4px">⚠️ ต้องดำเนินการสอบเพิ่มอีก ' + status.need + ' คน ภายใน มิถุนายน 2026</div>' : '<div style="color:#22c55e">✅ ผ่านเงื่อนไข DSEC แล้ว</div>') +
+    '<div class="bg" style="margin-top:8px"><button class="btn bsm bs" onclick="window.open(\'https://dji-training.com\', \'_blank\')">🔗 ไปที่ DJI Training Portal</button></div>' +
+    '</div>';
+}
+
+function renderPolicyAlert(alert) {
+  var statusIcon = alert.isOverdue ? '🔴' : (alert.isUrgent ? '🟠' : '🟡');
+  var statusText = alert.isOverdue ? 'เลยกำหนด!' : (alert.isUrgent ? 'ใกล้กำหนด!' : 'แจ้งเตือนล่วงหน้า');
+  var statusColor = alert.isOverdue ? '#ef4444' : (alert.isUrgent ? '#f97316' : '#f59e0b');
+  
+  return '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + statusColor + ';background:rgba(245,158,11,0.05)">' +
+    '<div class="section-title" style="margin-bottom:8px">⚠️ New Demo Policy ' + statusIcon + ' ' + statusText + '</div>' +
+    '<div><strong>🚁 สินค้าใหม่:</strong> ' + sanitize(alert.productName) + '</div>' +
+    '<div><strong>📅 วันที่วางจำหน่าย:</strong> ' + formatDateThai(new Date(alert.releaseDate)) + '</div>' +
+    '<div><strong>⏰ ต้องสั่งซื้อภายใน:</strong> ' + formatDateThai(new Date(alert.deadline)) + ' (' + (alert.daysLeft > 0 ? 'เหลือ ' + alert.daysLeft + ' วัน'
 
 // Export functions to window
 window.toggleTheme = toggleTheme;

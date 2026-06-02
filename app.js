@@ -11,8 +11,63 @@ var DEF_CONFIG = {
     visitPerWeek: 1
   },
 
+// เพิ่มใน DEF_CONFIG (หลัง dealerLevels)
+
   dealerLevels: ['S','A','B','Other'],
   dealerTiers: ['Platinum','Gold','Silver','Bronze','New'],
+  
+  // ===== PARTNER LEVEL REQUIREMENTS (สามารถปรับได้ใน Admin) =====
+  levelRequirements: {
+    S: {
+      name: 'S (Strategic Partner)',
+      h1Target: 27000000,
+      dsecRequired: 3,
+      demoRequired: 'both',        // 'none', 'option1', 'option2', 'either', 'both'
+      option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'],
+      option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD']
+    },
+    A: {
+      name: 'A (Authorized Partner)',
+      h1Target: 4500000,
+      dsecRequired: 1,
+      demoRequired: 'either',
+      option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'],
+      option2Models: ['DJI Dock 2', 'DJI Matrice 4TD']
+    },
+    B: {
+      name: 'B (Basic Partner)',
+      h1Target: 1500000,
+      dsecRequired: 1,
+      demoRequired: 'either',
+      option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'],
+      option2Models: ['DJI Dock 2']
+    },
+    Other: {
+      name: 'Other (Trial Partner)',
+      h1Target: 0,
+      dsecRequired: 0,
+      demoRequired: 'none',
+      option1Models: [],
+      option2Models: []
+    }
+  },
+  
+  // ===== NEW DEMO POLICY ALERT (สามารถปรับได้ใน Admin) =====
+  newDemoPolicy: {
+    enabled: true,
+    productName: 'DJI Matrice 5 Series',
+    releaseDate: '2026-06-15',      // YYYY-MM-DD
+    orderWithinDays: 60,             // ต้องสั่งซื้อภายในกี่วัน
+    alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
+  },
+  
+  // ===== H1 PERIOD (สามารถปรับได้) =====
+  h1Period: {
+    startMonth: 0,   // มกราคม (0-index)
+    startDay: 1,
+    endMonth: 5,     // มิถุนายน
+    endDay: 30
+  },
   djiDealerTypes: ['SAB','Other'],
   creditTerms: ['COD','30 วัน','45 วัน','60 วัน','อื่นๆ'],
   unitTypes: ['University','Government','Government Agency','State Enterprise','Private','Military','Local Administration','อื่นๆ'],

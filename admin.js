@@ -202,6 +202,241 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="admImportModelsText()">📝 Import Text</button>' +
     '</div>' +
     '<div style="font-size:.6rem;color:var(--text2);margin-top:4px">💡 ราคาจะถูกดึงอัตโนมัติเมื่อเพิ่มสินค้าใน Pipeline</div></div>' +
+// ================================================================
+// LEVEL REQUIREMENTS MANAGEMENT (ใน rAdmin)
+// ================================================================
+
+// เพิ่ม section นี้ใน rAdmin function (หลัง Models section)
+
+    // Level Requirements
+    '<div class="card"><h2>📋 Partner Level Requirements</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดเป้าหมายและเงื่อนไขตามระดับ Dealer (S/A/B/Other)</p>' +
+    '<div class="ftabs" style="margin-bottom:10px" id="reqLevelTabs">' +
+    '<div class="ftab act" data-level="S">S (Strategic)</div>' +
+    '<div class="ftab" data-level="A">A (Authorized)</div>' +
+    '<div class="ftab" data-level="B">B (Basic)</div>' +
+    '<div class="ftab" data-level="Other">Other (Trial)</div>' +
+    '</div>' +
+    '<div id="reqEditor"></div>' +
+    '<div class="bg" style="margin-top:12px">' +
+    '<button class="btn bp" onclick="saveLevelRequirements()">💾 บันทึก Requirements ทั้งหมด</button>' +
+    '<button class="btn bo" onclick="resetLevelRequirements()">↻ Reset เป็นค่าเริ่มต้น</button>' +
+    '</div></div>' +
+
+    // New Demo Policy Alert
+    '<div class="card"><h2>⚠️ New Demo Policy Alert</h2>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>🚁 สินค้าใหม่</label><input type="text" id="ndp_product" class="fm-input" value="' + sanitize(cfg.newDemoPolicy?.productName || '') + '"></div>' +
+    '<div class="fg">' + dpH('ndp_release', cfg.newDemoPolicy?.releaseDate || '', '📅 วันที่วางจำหน่าย') + '</div>' +
+    '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="' + (cfg.newDemoPolicy?.orderWithinDays || 60) + '"></div>' +
+    '<div class="fg"><label>🔔 เปิดใช้งาน</label><select id="ndp_enabled" class="fm-input">' +
+    '<option value="true"' + (cfg.newDemoPolicy?.enabled !== false ? ' selected' : '') + '>✅ เปิดใช้งาน</option>' +
+    '<option value="false"' + (cfg.newDemoPolicy?.enabled === false ? ' selected' : '') + '>❌ ปิดใช้งาน</option>' +
+    '</select></div>' +
+    '</div>' +
+    '<div class="fg"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="2" class="fm-input">' + sanitize(cfg.newDemoPolicy?.alertMessage || '') + '</textarea></div>' +
+    '<button class="btn bp bsm" onclick="saveNewDemoPolicy()">💾 บันทึก Policy</button></div>' +
+
+    // H1 Period Setting
+    '<div class="card"><h2>📅 H1 Period Setting</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย)</p>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h1_start_month" class="fm-input">' +
+    monthOptions(cfg.h1Period?.startMonth || 0) +
+    '</select></div>' +
+    '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h1_start_day" class="fm-input" value="' + (cfg.h1Period?.startDay || 1) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h1_end_month" class="fm-input">' +
+    monthOptions(cfg.h1Period?.endMonth || 5) +
+    '</select></div>' +
+    '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h1_end_day" class="fm-input" value="' + (cfg.h1Period?.endDay || 30) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<button class="btn bp bsm" onclick="saveH1Period()">💾 บันทึก Period</button></div>' +
+
+// ================================================================
+// ฟังก์ชันสำหรับ Level Requirements
+// ================================================================
+
+function monthOptions(selected) {
+  var months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 
+                'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var h = '';
+  for (var i = 0; i < months.length; i++) {
+    h += '<option value="' + i + '"' + (selected === i ? ' selected' : '') + '>' + months[i] + '</option>';
+  }
+  return h;
+}
+
+function renderLevelRequirementsEditor(level) {
+  var cfg = getConfig();
+  var req = cfg.levelRequirements?.[level] || {};
+  var demoRequired = req.demoRequired || 'either';
+  
+  var h = '<div class="form-section">🎯 เป้าหมาย H1 ' + new Date().getFullYear() + '</div>';
+  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="number" id="req_h1_target" class="fm-input" value="' + (req.h1Target || 0) + '"></div></div>';
+  
+  h += '<div class="form-section">📋 DSEC Certification</div>';
+  h += '<div class="fr"><div class="fg"><label>จำนวนพนักงานที่ต้องผ่าน DSEC</label><input type="number" id="req_dsec_required" class="fm-input" value="' + (req.dsecRequired || 0) + '" min="0"></div></div>';
+  
+  h += '<div class="form-section">🚁 Demo Requirement</div>';
+  h += '<div class="fg"><label>เงื่อนไข Demo</label><select id="req_demo_required" class="fm-input">';
+  h += '<option value="none"' + (demoRequired === 'none' ? ' selected' : '') + '>❌ ไม่ต้องมี Demo</option>';
+  h += '<option value="option1"' + (demoRequired === 'option1' ? ' selected' : '') + '>📦 ต้องมี Option 1 เท่านั้น</option>';
+  h += '<option value="option2"' + (demoRequired === 'option2' ? ' selected' : '') + '>📦 ต้องมี Option 2 เท่านั้น</option>';
+  h += '<option value="either"' + (demoRequired === 'either' ? ' selected' : '') + '>📦 มี Option 1 หรือ Option 2 อย่างใดอย่างหนึ่ง</option>';
+  h += '<option value="both"' + (demoRequired === 'both' ? ' selected' : '') + '>📦 ต้องมีทั้ง Option 1 และ Option 2</option>';
+  h += '</select></div>';
+  
+  // Option 1 Models
+  h += '<div class="fg"><label>📦 Option 1 Models (Drone + Payload + Small Drone)</label>';
+  h += '<div id="req_option1_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
+  var opt1Models = req.option1Models || [];
+  for (var i = 0; i < opt1Models.length; i++) {
+    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt1Models[i]) + 
+         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption1Model(' + i + ')">✕</button></span>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;gap:4px"><input type="text" id="opt1_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
+  h += '<button class="btn bsm bp" onclick="addOption1Model()">➕</button></div></div>';
+  
+  // Option 2 Models
+  h += '<div class="fg"><label>📦 Option 2 Models (Dock + Drone)</label>';
+  h += '<div id="req_option2_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
+  var opt2Models = req.option2Models || [];
+  for (var i = 0; i < opt2Models.length; i++) {
+    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt2Models[i]) + 
+         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption2Model(' + i + ')">✕</button></span>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;gap:4px"><input type="text" id="opt2_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
+  h += '<button class="btn bsm bp" onclick="addOption2Model()">➕</button></div></div>';
+  
+  document.getElementById('reqEditor').innerHTML = h;
+  
+  // Store current level for save
+  window.currentReqLevel = level;
+}
+
+function addOption1Model() {
+  var input = document.getElementById('opt1_new_model');
+  var model = input.value.trim();
+  if (!model) return;
+  
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
+  if (!cfg.levelRequirements[window.currentReqLevel].option1Models) cfg.levelRequirements[window.currentReqLevel].option1Models = [];
+  
+  cfg.levelRequirements[window.currentReqLevel].option1Models.push(model);
+  saveConfig(cfg);
+  
+  input.value = '';
+  renderLevelRequirementsEditor(window.currentReqLevel);
+}
+
+function removeOption1Model(idx) {
+  var cfg = getConfig();
+  if (cfg.levelRequirements?.[window.currentReqLevel]?.option1Models) {
+    cfg.levelRequirements[window.currentReqLevel].option1Models.splice(idx, 1);
+    saveConfig(cfg);
+    renderLevelRequirementsEditor(window.currentReqLevel);
+  }
+}
+
+function addOption2Model() {
+  var input = document.getElementById('opt2_new_model');
+  var model = input.value.trim();
+  if (!model) return;
+  
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
+  if (!cfg.levelRequirements[window.currentReqLevel].option2Models) cfg.levelRequirements[window.currentReqLevel].option2Models = [];
+  
+  cfg.levelRequirements[window.currentReqLevel].option2Models.push(model);
+  saveConfig(cfg);
+  
+  input.value = '';
+  renderLevelRequirementsEditor(window.currentReqLevel);
+}
+
+function removeOption2Model(idx) {
+  var cfg = getConfig();
+  if (cfg.levelRequirements?.[window.currentReqLevel]?.option2Models) {
+    cfg.levelRequirements[window.currentReqLevel].option2Models.splice(idx, 1);
+    saveConfig(cfg);
+    renderLevelRequirementsEditor(window.currentReqLevel);
+  }
+}
+
+function saveLevelRequirements() {
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
+  
+  cfg.levelRequirements[window.currentReqLevel].h1Target = parseFloat(document.getElementById('req_h1_target').value) || 0;
+  cfg.levelRequirements[window.currentReqLevel].dsecRequired = parseInt(document.getElementById('req_dsec_required').value) || 0;
+  cfg.levelRequirements[window.currentReqLevel].demoRequired = document.getElementById('req_demo_required').value;
+  // Models already saved via add/remove functions
+  
+  saveConfig(cfg);
+  toast('💾 บันทึก Requirements สำหรับ Level ' + window.currentReqLevel + ' แล้ว');
+  render();
+}
+
+function resetLevelRequirements() {
+  if (!confirm('⚠️ Reset Requirements ทั้งหมดเป็นค่าเริ่มต้น?')) return;
+  var cfg = getConfig();
+  cfg.levelRequirements = JSON.parse(JSON.stringify(DEF_CONFIG.levelRequirements));
+  saveConfig(cfg);
+  toast('🔄 Reset แล้ว');
+  render();
+}
+
+function saveNewDemoPolicy() {
+  var cfg = getConfig();
+  cfg.newDemoPolicy = {
+    enabled: document.getElementById('ndp_enabled').value === 'true',
+    productName: document.getElementById('ndp_product').value.trim(),
+    releaseDate: dpG('ndp_release'),
+    orderWithinDays: parseInt(document.getElementById('ndp_days').value) || 60,
+    alertMessage: document.getElementById('ndp_message').value.trim()
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก New Demo Policy แล้ว');
+  render();
+}
+
+function saveH1Period() {
+  var cfg = getConfig();
+  cfg.h1Period = {
+    startMonth: parseInt(document.getElementById('h1_start_month').value) || 0,
+    startDay: parseInt(document.getElementById('h1_start_day').value) || 1,
+    endMonth: parseInt(document.getElementById('h1_end_month').value) || 5,
+    endDay: parseInt(document.getElementById('h1_end_day').value) || 30
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก H1 Period แล้ว');
+  render();
+}
+
+// เพิ่ม event listener สำหรับ tabs ใน rAdmin (ใส่หลัง render reqEditor)
+function initLevelRequirementTabs() {
+  var tabs = document.querySelectorAll('#reqLevelTabs .ftab');
+  if (!tabs.length) return;
+  tabs.forEach(function(tab) {
+    tab.onclick = function() {
+      tabs.forEach(function(t) { t.classList.remove('act'); });
+      this.classList.add('act');
+      renderLevelRequirementsEditor(this.dataset.level);
+    };
+  });
+  // Initialize with S
+  renderLevelRequirementsEditor('S');
+}
 
     // Unit Types
     '<div class="card"><h2>🏢 Unit Types</h2>' +
