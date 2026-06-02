@@ -202,13 +202,8 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="admImportModelsText()">📝 Import Text</button>' +
     '</div>' +
     '<div style="font-size:.6rem;color:var(--text2);margin-top:4px">💡 ราคาจะถูกดึงอัตโนมัติเมื่อเพิ่มสินค้าใน Pipeline</div></div>' +
-// ================================================================
-// LEVEL REQUIREMENTS MANAGEMENT (ใน rAdmin)
-// ================================================================
 
-// เพิ่ม section นี้ใน rAdmin function (หลัง Models section)
-
-    // Level Requirements
+    // Level Requirements (เพิ่มตรงนี้)
     '<div class="card"><h2>📋 Partner Level Requirements</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดเป้าหมายและเงื่อนไขตามระดับ Dealer (S/A/B/Other)</p>' +
     '<div class="ftabs" style="margin-bottom:10px" id="reqLevelTabs">' +
@@ -244,199 +239,27 @@ function rAdmin(el) {
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย)</p>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h1_start_month" class="fm-input">' +
-    monthOptions(cfg.h1Period?.startMonth || 0) +
+    '<option value="0"' + (cfg.h1Period?.startMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
+    '<option value="1"' + (cfg.h1Period?.startMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
+    '<option value="2"' + (cfg.h1Period?.startMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
+    '<option value="3"' + (cfg.h1Period?.startMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
+    '<option value="4"' + (cfg.h1Period?.startMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
+    '<option value="5"' + (cfg.h1Period?.startMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
     '</select></div>' +
     '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h1_start_day" class="fm-input" value="' + (cfg.h1Period?.startDay || 1) + '" min="1" max="31"></div>' +
     '</div>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h1_end_month" class="fm-input">' +
-    monthOptions(cfg.h1Period?.endMonth || 5) +
+    '<option value="0"' + (cfg.h1Period?.endMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
+    '<option value="1"' + (cfg.h1Period?.endMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
+    '<option value="2"' + (cfg.h1Period?.endMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
+    '<option value="3"' + (cfg.h1Period?.endMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
+    '<option value="4"' + (cfg.h1Period?.endMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
+    '<option value="5"' + (cfg.h1Period?.endMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
     '</select></div>' +
     '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h1_end_day" class="fm-input" value="' + (cfg.h1Period?.endDay || 30) + '" min="1" max="31"></div>' +
     '</div>' +
     '<button class="btn bp bsm" onclick="saveH1Period()">💾 บันทึก Period</button></div>' +
-
-// ================================================================
-// ฟังก์ชันสำหรับ Level Requirements
-// ================================================================
-
-function monthOptions(selected) {
-  var months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 
-                'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-  var h = '';
-  for (var i = 0; i < months.length; i++) {
-    h += '<option value="' + i + '"' + (selected === i ? ' selected' : '') + '>' + months[i] + '</option>';
-  }
-  return h;
-}
-
-function renderLevelRequirementsEditor(level) {
-  var cfg = getConfig();
-  var req = cfg.levelRequirements?.[level] || {};
-  var demoRequired = req.demoRequired || 'either';
-  
-  var h = '<div class="form-section">🎯 เป้าหมาย H1 ' + new Date().getFullYear() + '</div>';
-  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="number" id="req_h1_target" class="fm-input" value="' + (req.h1Target || 0) + '"></div></div>';
-  
-  h += '<div class="form-section">📋 DSEC Certification</div>';
-  h += '<div class="fr"><div class="fg"><label>จำนวนพนักงานที่ต้องผ่าน DSEC</label><input type="number" id="req_dsec_required" class="fm-input" value="' + (req.dsecRequired || 0) + '" min="0"></div></div>';
-  
-  h += '<div class="form-section">🚁 Demo Requirement</div>';
-  h += '<div class="fg"><label>เงื่อนไข Demo</label><select id="req_demo_required" class="fm-input">';
-  h += '<option value="none"' + (demoRequired === 'none' ? ' selected' : '') + '>❌ ไม่ต้องมี Demo</option>';
-  h += '<option value="option1"' + (demoRequired === 'option1' ? ' selected' : '') + '>📦 ต้องมี Option 1 เท่านั้น</option>';
-  h += '<option value="option2"' + (demoRequired === 'option2' ? ' selected' : '') + '>📦 ต้องมี Option 2 เท่านั้น</option>';
-  h += '<option value="either"' + (demoRequired === 'either' ? ' selected' : '') + '>📦 มี Option 1 หรือ Option 2 อย่างใดอย่างหนึ่ง</option>';
-  h += '<option value="both"' + (demoRequired === 'both' ? ' selected' : '') + '>📦 ต้องมีทั้ง Option 1 และ Option 2</option>';
-  h += '</select></div>';
-  
-  // Option 1 Models
-  h += '<div class="fg"><label>📦 Option 1 Models (Drone + Payload + Small Drone)</label>';
-  h += '<div id="req_option1_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
-  var opt1Models = req.option1Models || [];
-  for (var i = 0; i < opt1Models.length; i++) {
-    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt1Models[i]) + 
-         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption1Model(' + i + ')">✕</button></span>';
-  }
-  h += '</div>';
-  h += '<div style="display:flex;gap:4px"><input type="text" id="opt1_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
-  h += '<button class="btn bsm bp" onclick="addOption1Model()">➕</button></div></div>';
-  
-  // Option 2 Models
-  h += '<div class="fg"><label>📦 Option 2 Models (Dock + Drone)</label>';
-  h += '<div id="req_option2_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
-  var opt2Models = req.option2Models || [];
-  for (var i = 0; i < opt2Models.length; i++) {
-    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt2Models[i]) + 
-         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption2Model(' + i + ')">✕</button></span>';
-  }
-  h += '</div>';
-  h += '<div style="display:flex;gap:4px"><input type="text" id="opt2_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
-  h += '<button class="btn bsm bp" onclick="addOption2Model()">➕</button></div></div>';
-  
-  document.getElementById('reqEditor').innerHTML = h;
-  
-  // Store current level for save
-  window.currentReqLevel = level;
-}
-
-function addOption1Model() {
-  var input = document.getElementById('opt1_new_model');
-  var model = input.value.trim();
-  if (!model) return;
-  
-  var cfg = getConfig();
-  if (!cfg.levelRequirements) cfg.levelRequirements = {};
-  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
-  if (!cfg.levelRequirements[window.currentReqLevel].option1Models) cfg.levelRequirements[window.currentReqLevel].option1Models = [];
-  
-  cfg.levelRequirements[window.currentReqLevel].option1Models.push(model);
-  saveConfig(cfg);
-  
-  input.value = '';
-  renderLevelRequirementsEditor(window.currentReqLevel);
-}
-
-function removeOption1Model(idx) {
-  var cfg = getConfig();
-  if (cfg.levelRequirements?.[window.currentReqLevel]?.option1Models) {
-    cfg.levelRequirements[window.currentReqLevel].option1Models.splice(idx, 1);
-    saveConfig(cfg);
-    renderLevelRequirementsEditor(window.currentReqLevel);
-  }
-}
-
-function addOption2Model() {
-  var input = document.getElementById('opt2_new_model');
-  var model = input.value.trim();
-  if (!model) return;
-  
-  var cfg = getConfig();
-  if (!cfg.levelRequirements) cfg.levelRequirements = {};
-  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
-  if (!cfg.levelRequirements[window.currentReqLevel].option2Models) cfg.levelRequirements[window.currentReqLevel].option2Models = [];
-  
-  cfg.levelRequirements[window.currentReqLevel].option2Models.push(model);
-  saveConfig(cfg);
-  
-  input.value = '';
-  renderLevelRequirementsEditor(window.currentReqLevel);
-}
-
-function removeOption2Model(idx) {
-  var cfg = getConfig();
-  if (cfg.levelRequirements?.[window.currentReqLevel]?.option2Models) {
-    cfg.levelRequirements[window.currentReqLevel].option2Models.splice(idx, 1);
-    saveConfig(cfg);
-    renderLevelRequirementsEditor(window.currentReqLevel);
-  }
-}
-
-function saveLevelRequirements() {
-  var cfg = getConfig();
-  if (!cfg.levelRequirements) cfg.levelRequirements = {};
-  if (!cfg.levelRequirements[window.currentReqLevel]) cfg.levelRequirements[window.currentReqLevel] = {};
-  
-  cfg.levelRequirements[window.currentReqLevel].h1Target = parseFloat(document.getElementById('req_h1_target').value) || 0;
-  cfg.levelRequirements[window.currentReqLevel].dsecRequired = parseInt(document.getElementById('req_dsec_required').value) || 0;
-  cfg.levelRequirements[window.currentReqLevel].demoRequired = document.getElementById('req_demo_required').value;
-  // Models already saved via add/remove functions
-  
-  saveConfig(cfg);
-  toast('💾 บันทึก Requirements สำหรับ Level ' + window.currentReqLevel + ' แล้ว');
-  render();
-}
-
-function resetLevelRequirements() {
-  if (!confirm('⚠️ Reset Requirements ทั้งหมดเป็นค่าเริ่มต้น?')) return;
-  var cfg = getConfig();
-  cfg.levelRequirements = JSON.parse(JSON.stringify(DEF_CONFIG.levelRequirements));
-  saveConfig(cfg);
-  toast('🔄 Reset แล้ว');
-  render();
-}
-
-function saveNewDemoPolicy() {
-  var cfg = getConfig();
-  cfg.newDemoPolicy = {
-    enabled: document.getElementById('ndp_enabled').value === 'true',
-    productName: document.getElementById('ndp_product').value.trim(),
-    releaseDate: dpG('ndp_release'),
-    orderWithinDays: parseInt(document.getElementById('ndp_days').value) || 60,
-    alertMessage: document.getElementById('ndp_message').value.trim()
-  };
-  saveConfig(cfg);
-  toast('💾 บันทึก New Demo Policy แล้ว');
-  render();
-}
-
-function saveH1Period() {
-  var cfg = getConfig();
-  cfg.h1Period = {
-    startMonth: parseInt(document.getElementById('h1_start_month').value) || 0,
-    startDay: parseInt(document.getElementById('h1_start_day').value) || 1,
-    endMonth: parseInt(document.getElementById('h1_end_month').value) || 5,
-    endDay: parseInt(document.getElementById('h1_end_day').value) || 30
-  };
-  saveConfig(cfg);
-  toast('💾 บันทึก H1 Period แล้ว');
-  render();
-}
-
-// เพิ่ม event listener สำหรับ tabs ใน rAdmin (ใส่หลัง render reqEditor)
-function initLevelRequirementTabs() {
-  var tabs = document.querySelectorAll('#reqLevelTabs .ftab');
-  if (!tabs.length) return;
-  tabs.forEach(function(tab) {
-    tab.onclick = function() {
-      tabs.forEach(function(t) { t.classList.remove('act'); });
-      this.classList.add('act');
-      renderLevelRequirementsEditor(this.dataset.level);
-    };
-  });
-  // Initialize with S
-  renderLevelRequirementsEditor('S');
-}
 
     // Unit Types
     '<div class="card"><h2>🏢 Unit Types</h2>' +
@@ -535,17 +358,17 @@ function initLevelRequirementTabs() {
       '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>') +
     '</div></div>' +
 
-// Cloud Sync Section
-'<div class="card"><h2>☁️ Google Sheets Sync</h2>' +
-'<div class="bg" style="flex-wrap:wrap; gap:8px">' +
-'<button class="btn bp" onclick="syncFirebaseToSheets()" style="background:#3b82f6">📤 Sync to Sheets</button>' +
-'<button class="btn bs" onclick="pullSheetsToFirebase()" style="background:#22c55e">📥 Pull from Sheets</button>' +
-'</div>' +
-'<div class="hint" style="margin-top:8px; font-size:11px; color:var(--text2)">' +
-'💡 <strong>Sync to Sheets</strong> = ส่งข้อมูล Firebase ไปยัง Google Sheets<br>' +
-'💡 <strong>Pull from Sheets</strong> = ดึงข้อมูลจาก Google Sheets กลับมา Firebase<br>' +
-'📌 ใช้เมื่อต้องการให้ลูกค้าเห็นข้อมูล หรือดึงข้อมูลที่ลูกค้าแก้ไขกลับมา' +
-'</div></div>' +
+    // Cloud Sync Section
+    '<div class="card"><h2>☁️ Google Sheets Sync</h2>' +
+    '<div class="bg" style="flex-wrap:wrap; gap:8px">' +
+    '<button class="btn bp" onclick="syncFirebaseToSheets()" style="background:#3b82f6">📤 Sync to Sheets</button>' +
+    '<button class="btn bs" onclick="pullSheetsToFirebase()" style="background:#22c55e">📥 Pull from Sheets</button>' +
+    '</div>' +
+    '<div class="hint" style="margin-top:8px; font-size:11px; color:var(--text2)">' +
+    '💡 <strong>Sync to Sheets</strong> = ส่งข้อมูล Firebase ไปยัง Google Sheets<br>' +
+    '💡 <strong>Pull from Sheets</strong> = ดึงข้อมูลจาก Google Sheets กลับมา Firebase<br>' +
+    '📌 ใช้เมื่อต้องการให้ลูกค้าเห็นข้อมูล หรือดึงข้อมูลที่ลูกค้าแก้ไขกลับมา' +
+    '</div></div>' +
 
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
@@ -563,10 +386,15 @@ function initLevelRequirementTabs() {
       nfEl.textContent = 'Browser ไม่รองรับ';
     }
   }
+  
+  // Initialize level requirement tabs after render
+  setTimeout(function() {
+    initLevelRequirementTabs();
+  }, 100);
 }
 
 // ================================================================
-// SAVE FUNCTIONS
+// SAVE FUNCTIONS (เดิม)
 // ================================================================
 function admSaveName() {
   var cfg = getConfig();
@@ -659,7 +487,6 @@ function admAddModel() {
   cfg.models.push({name: '', price: 0});
   saveConfig(cfg);
   render();
-  // Focus new input
   setTimeout(function() {
     var el = document.getElementById('am_n_' + (cfg.models.length - 1));
     if (el) el.focus();
@@ -710,7 +537,6 @@ function admDoImportModels() {
   lines.forEach(function(line) {
     var name = line.trim();
     if (!name) return;
-    // Check duplicate
     var exists = false;
     for (var i = 0; i < cfg.models.length; i++) {
       var mName = typeof cfg.models[i] === 'object' ? cfg.models[i].name : cfg.models[i];
@@ -839,7 +665,7 @@ function admReqNotif() {
 }
 
 // ================================================================
-// TEMPLATE FUNCTIONS (used in Admin)
+// TEMPLATE FUNCTIONS
 // ================================================================
 function showTplDet(id) {
   var tp = ST.getOne('templates', id);
@@ -916,6 +742,7 @@ function applyTpl(tid) {
   toast('🚀 สร้างแล้ว');
   go('taskDetail', { taskId: t.id });
 }
+
 // ================================================================
 // SAVE DJI DEALER TYPES / TIERS / TERMS
 // ================================================================
@@ -945,6 +772,7 @@ function admSaveTerms() {
   saveConfig(cfg);
   toast('💾 บันทึก Terms แล้ว');
 }
+
 // ================================================================
 // IMPORT PIPELINE FROM JSON
 // ================================================================
@@ -1007,8 +835,6 @@ function processPipelineImport(items) {
   
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
-    
-    // Find dealer by name
     var dealerId = '';
     var dealerName = item.dealerName || '';
     for (var j = 0; j < dealers.length; j++) {
@@ -1019,7 +845,6 @@ function processPipelineImport(items) {
       }
     }
     
-    // Also try partial match
     if (!dealerId && dealerName) {
       var searchName = dealerName.toLowerCase().replace(/[^a-z0-9]/g, '');
       for (var j = 0; j < dealers.length; j++) {
@@ -1037,7 +862,6 @@ function processPipelineImport(items) {
       continue;
     }
     
-// Check duplicate by Register Date + Dealer + Forecast Amount
     var existingPipes = ST.pipelineByDealer(dealerId);
     var isDuplicate = false;
     var regDate = (item.registerDate || '').trim();
@@ -1045,7 +869,6 @@ function processPipelineImport(items) {
     
     for (var k = 0; k < existingPipes.length; k++) {
       var ep = existingPipes[k];
-      // ซ้ำเมื่อ: วันที่เดียวกัน + Dealer เดียวกัน + มูลค่าเท่ากัน
       if (regDate && ep.registerDate === regDate && 
           (parseFloat(ep.forecastAmount) || 0) === fcAmt && fcAmt > 0) {
         isDuplicate = true;
@@ -1059,7 +882,6 @@ function processPipelineImport(items) {
       continue;
     }
     
-    // Create pipeline
     var pipeData = {
       registerDate: item.registerDate || '',
       projectName: item.projectName || '',
@@ -1081,14 +903,12 @@ function processPipelineImport(items) {
       recurring: !!item.recurring
     };
     
-    // Win/Loss reasons
     if (item.lossReason) pipeData.lossReason = item.lossReason;
     if (item.lossCompetitor) pipeData.lossCompetitor = item.lossCompetitor;
     if (item.winReason) pipeData.winReason = item.winReason;
     
     var pipe = ST.add('pipeline', pipeData);
     
-    // Add updates as pipeline logs
     var updates = item.updates || [];
     for (var u = 0; u < updates.length; u++) {
       if (updates[u] && updates[u].trim()) {
@@ -1106,6 +926,7 @@ function processPipelineImport(items) {
   
   return { total: total, success: success, skipped: skipped };
 }
+
 // ================================================================
 // APPEARANCE FUNCTIONS
 // ================================================================
@@ -1113,7 +934,6 @@ function setAppOpt(key, value) {
   var settings = getAppearance();
   settings[key] = value;
   saveAppearance(settings);
-  // Re-render admin to update active buttons
   render();
 }
 
@@ -1124,6 +944,7 @@ function resetAppearance() {
   toast('🔄 Reset Appearance แล้ว');
   render();
 }
+
 function admSaveOnboard() {
   var cfg = getConfig();
   var el = document.getElementById('adm_onboard');
@@ -1146,4 +967,185 @@ function admSaveOnboard() {
   cfg.onboardingSteps = steps;
   saveConfig(cfg);
   toast('💾 บันทึก Onboarding Steps แล้ว');
+}
+
+// ================================================================
+// LEVEL REQUIREMENTS FUNCTIONS (NEW)
+// ================================================================
+
+// ตัวแปรเก็บ current level ที่กำลังแก้ไข
+var currentReqLevel = 'S';
+
+function initLevelRequirementTabs() {
+  var tabs = document.querySelectorAll('#reqLevelTabs .ftab');
+  if (!tabs.length) return;
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].onclick = function() {
+      var parent = this.parentElement;
+      var allTabs = parent.querySelectorAll('.ftab');
+      for (var j = 0; j < allTabs.length; j++) {
+        allTabs[j].classList.remove('act');
+      }
+      this.classList.add('act');
+      renderLevelRequirementsEditor(this.dataset.level);
+    };
+  }
+  // Initialize with active tab
+  var activeTab = document.querySelector('#reqLevelTabs .ftab.act');
+  if (activeTab) {
+    renderLevelRequirementsEditor(activeTab.dataset.level);
+  } else {
+    renderLevelRequirementsEditor('S');
+  }
+}
+
+function renderLevelRequirementsEditor(level) {
+  var cfg = getConfig();
+  var req = cfg.levelRequirements?.[level] || {};
+  var demoRequired = req.demoRequired || 'either';
+  
+  var h = '<div class="form-section">🎯 เป้าหมาย H1 ' + new Date().getFullYear() + '</div>';
+  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="number" id="req_h1_target" class="fm-input" value="' + (req.h1Target || 0) + '"></div></div>';
+  
+  h += '<div class="form-section">📋 DSEC Certification</div>';
+  h += '<div class="fr"><div class="fg"><label>จำนวนพนักงานที่ต้องผ่าน DSEC</label><input type="number" id="req_dsec_required" class="fm-input" value="' + (req.dsecRequired || 0) + '" min="0"></div></div>';
+  
+  h += '<div class="form-section">🚁 Demo Requirement</div>';
+  h += '<div class="fg"><label>เงื่อนไข Demo</label><select id="req_demo_required" class="fm-input">';
+  h += '<option value="none"' + (demoRequired === 'none' ? ' selected' : '') + '>❌ ไม่ต้องมี Demo</option>';
+  h += '<option value="option1"' + (demoRequired === 'option1' ? ' selected' : '') + '>📦 ต้องมี Option 1 เท่านั้น</option>';
+  h += '<option value="option2"' + (demoRequired === 'option2' ? ' selected' : '') + '>📦 ต้องมี Option 2 เท่านั้น</option>';
+  h += '<option value="either"' + (demoRequired === 'either' ? ' selected' : '') + '>📦 มี Option 1 หรือ Option 2 อย่างใดอย่างหนึ่ง</option>';
+  h += '<option value="both"' + (demoRequired === 'both' ? ' selected' : '') + '>📦 ต้องมีทั้ง Option 1 และ Option 2</option>';
+  h += '</select></div>';
+  
+  // Option 1 Models
+  h += '<div class="fg"><label>📦 Option 1 Models (Drone + Payload + Small Drone)</label>';
+  h += '<div id="req_option1_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
+  var opt1Models = req.option1Models || [];
+  for (var i = 0; i < opt1Models.length; i++) {
+    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt1Models[i]) + 
+         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption1Model(' + i + ')">✕</button></span>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;gap:4px"><input type="text" id="opt1_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
+  h += '<button class="btn bsm bp" onclick="addOption1Model()">➕</button></div></div>';
+  
+  // Option 2 Models
+  h += '<div class="fg"><label>📦 Option 2 Models (Dock + Drone)</label>';
+  h += '<div id="req_option2_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
+  var opt2Models = req.option2Models || [];
+  for (var i = 0; i < opt2Models.length; i++) {
+    h += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px">' + sanitize(opt2Models[i]) + 
+         ' <button class="btn-xs" style="padding:0 4px" onclick="removeOption2Model(' + i + ')">✕</button></span>';
+  }
+  h += '</div>';
+  h += '<div style="display:flex;gap:4px"><input type="text" id="opt2_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
+  h += '<button class="btn bsm bp" onclick="addOption2Model()">➕</button></div></div>';
+  
+  document.getElementById('reqEditor').innerHTML = h;
+  currentReqLevel = level;
+}
+
+function addOption1Model() {
+  var input = document.getElementById('opt1_new_model');
+  var model = input.value.trim();
+  if (!model) return;
+  
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[currentReqLevel]) cfg.levelRequirements[currentReqLevel] = {};
+  if (!cfg.levelRequirements[currentReqLevel].option1Models) cfg.levelRequirements[currentReqLevel].option1Models = [];
+  
+  cfg.levelRequirements[currentReqLevel].option1Models.push(model);
+  saveConfig(cfg);
+  
+  input.value = '';
+  renderLevelRequirementsEditor(currentReqLevel);
+}
+
+function removeOption1Model(idx) {
+  var cfg = getConfig();
+  if (cfg.levelRequirements?.[currentReqLevel]?.option1Models) {
+    cfg.levelRequirements[currentReqLevel].option1Models.splice(idx, 1);
+    saveConfig(cfg);
+    renderLevelRequirementsEditor(currentReqLevel);
+  }
+}
+
+function addOption2Model() {
+  var input = document.getElementById('opt2_new_model');
+  var model = input.value.trim();
+  if (!model) return;
+  
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[currentReqLevel]) cfg.levelRequirements[currentReqLevel] = {};
+  if (!cfg.levelRequirements[currentReqLevel].option2Models) cfg.levelRequirements[currentReqLevel].option2Models = [];
+  
+  cfg.levelRequirements[currentReqLevel].option2Models.push(model);
+  saveConfig(cfg);
+  
+  input.value = '';
+  renderLevelRequirementsEditor(currentReqLevel);
+}
+
+function removeOption2Model(idx) {
+  var cfg = getConfig();
+  if (cfg.levelRequirements?.[currentReqLevel]?.option2Models) {
+    cfg.levelRequirements[currentReqLevel].option2Models.splice(idx, 1);
+    saveConfig(cfg);
+    renderLevelRequirementsEditor(currentReqLevel);
+  }
+}
+
+function saveLevelRequirements() {
+  var cfg = getConfig();
+  if (!cfg.levelRequirements) cfg.levelRequirements = {};
+  if (!cfg.levelRequirements[currentReqLevel]) cfg.levelRequirements[currentReqLevel] = {};
+  
+  cfg.levelRequirements[currentReqLevel].h1Target = parseFloat(document.getElementById('req_h1_target').value) || 0;
+  cfg.levelRequirements[currentReqLevel].dsecRequired = parseInt(document.getElementById('req_dsec_required').value) || 0;
+  cfg.levelRequirements[currentReqLevel].demoRequired = document.getElementById('req_demo_required').value;
+  
+  saveConfig(cfg);
+  toast('💾 บันทึก Requirements สำหรับ Level ' + currentReqLevel + ' แล้ว');
+  render();
+}
+
+function resetLevelRequirements() {
+  if (!confirm('⚠️ Reset Requirements ทั้งหมดเป็นค่าเริ่มต้น?')) return;
+  var DEF = window.DEF_CONFIG;
+  var cfg = getConfig();
+  cfg.levelRequirements = JSON.parse(JSON.stringify(DEF.levelRequirements || {}));
+  saveConfig(cfg);
+  toast('🔄 Reset แล้ว');
+  render();
+}
+
+function saveNewDemoPolicy() {
+  var cfg = getConfig();
+  cfg.newDemoPolicy = {
+    enabled: document.getElementById('ndp_enabled').value === 'true',
+    productName: document.getElementById('ndp_product').value.trim(),
+    releaseDate: dpG('ndp_release'),
+    orderWithinDays: parseInt(document.getElementById('ndp_days').value) || 60,
+    alertMessage: document.getElementById('ndp_message').value.trim()
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก New Demo Policy แล้ว');
+  render();
+}
+
+function saveH1Period() {
+  var cfg = getConfig();
+  cfg.h1Period = {
+    startMonth: parseInt(document.getElementById('h1_start_month').value) || 0,
+    startDay: parseInt(document.getElementById('h1_start_day').value) || 1,
+    endMonth: parseInt(document.getElementById('h1_end_month').value) || 5,
+    endDay: parseInt(document.getElementById('h1_end_day').value) || 30
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก H1 Period แล้ว');
+  render();
 }
