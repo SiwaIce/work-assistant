@@ -73,11 +73,11 @@ newDemoPolicies: [
 ]  
   // ===== H1 PERIOD (สามารถปรับได้) =====
   h1Period: {
-    startMonth: 0,   // มกราคม (0-index)
+    startMonth: 0,
     startDay: 1,
-    endMonth: 5,     // มิถุนายน
+    endMonth: 5,
     endDay: 30
-  },
+  }    // ✅ ไม่มี comma (เพราะเป็น property สุดท้าย)
   djiDealerTypes: ['SAB','Other'],
   creditTerms: ['COD','30 วัน','45 วัน','60 วัน','อื่นๆ'],
   unitTypes: ['University','Government','Government Agency','State Enterprise','Private','Military','Local Administration','อื่นๆ'],
