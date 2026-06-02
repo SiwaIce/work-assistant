@@ -2817,12 +2817,13 @@ function renderComplianceTab() {
   
   html += '</div>';
   
-  // H1 Detail Section
-  html += '<div class="card" style="margin-bottom: 16px">';
-  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">';
-  html += '<span>🎯 เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</span>';
-  html += '<span class="tag ' + (h1Status.isOk ? 'tag-completed' : (h1Status.percent >= 70 ? 'tag-active' : 'tag-cancelled')) + '">' + (h1Status.isOk ? 'สำเร็จ' : (h1Status.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</span>';
-  html += '</div>';
+// ใน renderComplianceTab หา H1 Detail Section แล้วแก้ไขหัวข้อ
+html += '<div class="card" style="margin-bottom: 16px">';
+html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
+html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">🎯</div><div><div style="font-size:16px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text2)">Half Year Target</div></div></div>';
+html += '<span class="tag ' + (h1Status.isOk ? 'tag-completed' : (h1Status.percent >= 70 ? 'tag-active' : 'tag-cancelled')) + '" style="font-size:13px;padding:4px 12px">' + (h1Status.isOk ? 'สำเร็จ' : (h1Status.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</span>';
+html += '</div>';
+
   html += '<div class="pb" style="height: 12px; margin-bottom: 12px"><div class="pf" style="width: ' + h1Status.percent + '%; background: linear-gradient(90deg, ' + (h1Status.isOk ? '#22c55e' : '#f59e0b') + ', ' + (h1Status.isOk ? '#86efac' : '#fbbf24') + ')"></div></div>';
   html += '<div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px">';
   html += '<div><span style="color: var(--text2)">เป้าหมาย:</span> <strong>' + fmtMoneyShort(h1Status.target) + ' ฿</strong></div>';
@@ -2835,11 +2836,11 @@ function renderComplianceTab() {
   html += renderDemoDetailCard(dealer, demoStatus, requirements);
   
   // DSEC Detail Section
-  html += '<div class="card" style="margin-bottom: 16px">';
-  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">';
-  html += '<span>📋 สถานะ DSEC Certification</span>';
-  html += '<span class="tag ' + (dsecStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '">' + (dsecStatus.isOk ? 'ผ่าน' : 'ไม่ผ่าน') + '</span>';
-  html += '</div>';
+html += '<div class="card" style="margin-bottom: 16px">';
+html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
+html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">📋</div><div><div style="font-size:16px;font-weight:800">DSEC Certification</div><div style="font-size:11px;color:var(--text2)">Personnel Certification Status</div></div></div>';
+html += '<span class="tag ' + (dsecStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:13px;padding:4px 12px">' + (dsecStatus.isOk ? 'ผ่าน' : 'ไม่ผ่าน') + '</span>';
+html += '</div>';
   html += '<div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap">';
   html += '<div style="flex: 1"><div class="pb" style="height: 10px"><div class="pf" style="width: ' + (dsecStatus.required > 0 ? (dsecStatus.current / dsecStatus.required * 100) : 100) + '%; background: ' + (dsecStatus.isOk ? '#22c55e' : '#ef4444') + '"></div></div></div>';
   html += '<div><strong>' + dsecStatus.current + '/' + dsecStatus.required + '</strong> คน</div>';
@@ -2933,24 +2934,34 @@ function renderDemoDetailCard(dealer, demoStatus, requirements) {
   };
   
   var html = '<div class="card" style="margin-bottom:16px;border-left:4px solid ' + statusColor + '">';
-  html += '<div class="section-title" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">';
-  html += '<span>🚁 Demo Unit Requirement ' + statusIcon + ' ' + statusText + '</span>';
-  html += '<span class="tag ' + (demoStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '">' + optionText[demoStatus.demoOption] + '</span>';
+  
+  // ✅ HEADER ที่เด่นชัดขึ้น
+  html += '<div class="section-title" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--accent);padding-bottom:8px">';
+  html += '<div style="display:flex;align-items:center;gap:10px">';
+  html += '<div style="font-size:28px">🚁</div>';
+  html += '<div><div style="font-size:16px;font-weight:800">Demo Unit Requirement</div>';
+  html += '<div style="font-size:12px;color:var(--text2)">' + optionText[demoStatus.demoOption] + '</div></div>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<span class="tag ' + (demoStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:14px;padding:4px 12px">' + statusIcon + ' ' + statusText + '</span>';
+  html += '</div>';
   html += '</div>';
   
-  // แสดงรายการอุปกรณ์ที่ต้องมี
-  html += '<div style="margin-top:8px"><strong>📦 รายการอุปกรณ์ที่ต้องมี:</strong></div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:8px">';
+  // แสดงรายการอุปกรณ์ที่มี
+  html += '<div style="margin-top:12px"><strong style="font-size:14px;color:var(--accent)">📦 รายการอุปกรณ์ที่มี:</strong></div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:10px">';
   
   for (var i = 0; i < demoStatus.requiredModels.length; i++) {
     var model = demoStatus.requiredModels[i];
     var owned = demoStatus.ownedModels[model];
-    html += '<div style="padding:10px 12px;border-radius:10px;background:' + (owned ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)') + ';border:1px solid ' + (owned ? '#22c55e' : '#ef4444') + '">';
+    html += '<div style="padding:12px;border-radius:12px;background:' + (owned ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)') + ';border:1px solid ' + (owned ? '#22c55e' : '#ef4444') + '">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<div style="font-weight:600">' + (owned ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
+    html += '<div style="font-size:14px;font-weight:600">' + (owned ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
     html += '</div>';
     if (owned && owned.serialNumber) {
-      html += '<div style="font-size:11px;color:var(--text2);margin-top:6px">🔢 Serial Number: <strong>' + sanitize(owned.serialNumber) + '</strong></div>';
+      html += '<div style="font-size:11px;color:var(--text2);margin-top:8px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.05)">';
+      html += '🔢 Serial Number: <strong style="color:var(--accent)">' + sanitize(owned.serialNumber) + '</strong>';
+      html += '</div>';
     }
     html += '</div>';
   }
@@ -2958,18 +2969,18 @@ function renderDemoDetailCard(dealer, demoStatus, requirements) {
   html += '</div>';
   
   if (!demoStatus.isOk && demoStatus.missingModels.length > 0) {
-    html += '<div style="margin-top:12px;padding:10px;background:rgba(239,68,68,0.1);border-radius:8px">';
-    html += '⚠️ ขาดอุปกรณ์: <strong>' + demoStatus.missingModels.join(', ') + '</strong>';
+    html += '<div style="margin-top:14px;padding:12px;background:rgba(239,68,68,0.12);border-radius:10px;border-left:3px solid #ef4444">';
+    html += '<span style="font-weight:700">⚠️ ขาดอุปกรณ์:</span> <strong>' + demoStatus.missingModels.join(', ') + '</strong>';
     html += '</div>';
   }
   
-  // แสดง Option ที่ไม่ได้เลือก (แจ้งให้ทราบ)
+  // แสดง Option ที่ไม่ได้เลือก
   if (demoStatus.demoOption === 'option1') {
-    html += '<div class="hint" style="margin-top:12px;padding:8px;background:var(--bg2);border-radius:8px">';
+    html += '<div class="hint" style="margin-top:14px;padding:10px;background:var(--bg2);border-radius:8px;border:1px dashed var(--border)">';
     html += 'ℹ️ Option 2 (Dock + Drone) ไม่ได้อยู่ในแผนของพาร์ทเนอร์นี้';
     html += '</div>';
   } else if (demoStatus.demoOption === 'option2') {
-    html += '<div class="hint" style="margin-top:12px;padding:8px;background:var(--bg2);border-radius:8px">';
+    html += '<div class="hint" style="margin-top:14px;padding:10px;background:var(--bg2);border-radius:8px;border:1px dashed var(--border)">';
     html += 'ℹ️ Option 1 (Drone + Payload) ไม่ได้อยู่ในแผนของพาร์ทเนอร์นี้';
     html += '</div>';
   }
