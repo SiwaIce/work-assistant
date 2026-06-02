@@ -3070,30 +3070,26 @@ function calculateDSECStatus(dealer, requirements) {
 function getNewDemoPolicyAlerts() {
   var alerts = [];
   
-  // อ่านจาก localStorage (เผื่อมี)
+  // อ่านจาก localStorage
   var cfg = null;
   try {
     var saved = localStorage.getItem('v7_config');
     if (saved) cfg = JSON.parse(saved);
   } catch(e) {}
   
-  var policies = (cfg && cfg.newDemoPolicies) ? cfg.newDemoPolicies : [];
+  // ✅ แก้ไข: ไม่ใช้ค่าเริ่มต้น ถ้าไม่มีข้อมูลให้ return []
+  var policies = (cfg && cfg.newDemoPolicies && cfg.newDemoPolicies.length) ? cfg.newDemoPolicies : [];
   
-  // ถ้าไม่มีข้อมูลใน config ให้ใช้ค่าเริ่มต้น
+  // ✅ ถ้าไม่มี policy เลย ให้คืนค่า array ว่าง (ไม่แสดงอะไร)
   if (!policies.length) {
-    policies = [{
-      enabled: true,
-      productName: 'DJI Matrice 5 Series',
-      releaseDate: '2026-06-15',
-      orderWithinDays: 60,
-      alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
-    }];
+    return alerts;  // return [] ไม่แสดง Policy Alert
   }
   
   var now = new Date();
   
   for (var i = 0; i < policies.length; i++) {
     var policy = policies[i];
+    // ข้ามถ้าปิดใช้งาน
     if (!policy.enabled) continue;
     
     var releaseDate = new Date(policy.releaseDate);
@@ -3102,6 +3098,7 @@ function getNewDemoPolicyAlerts() {
     
     var daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
     
+    // แสดงเฉพาะที่ยังไม่เลยกำหนดเกิน 30 วัน
     if (daysLeft > -30) {
       var isUrgent = daysLeft <= 30 && daysLeft > 0;
       var isOverdue = daysLeft < 0;

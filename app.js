@@ -63,15 +63,14 @@ var DEF_CONFIG = {
 // ✅ เพิ่มข้างล่างนี้ (หรือแทนที่อันเดิม)
 newDemoPolicies: [
   {
-    id: 'ndp_1',
-    enabled: true,
-    productName: 'DJI Matrice 5 Series',
-    releaseDate: '2026-06-15',
+    id: 'ndp_example',
+    enabled: false,  // ✅ ปิดไว้เป็นตัวอย่าง
+    productName: 'ตัวอย่างสินค้าใหม่',
+    releaseDate: '2026-12-31',
     orderWithinDays: 60,
-    alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
+    alertMessage: 'ตัวอย่างข้อความแจ้งเตือน'
   }
-],
-  
+]  
   // ===== H1 PERIOD (สามารถปรับได้) =====
   h1Period: {
     startMonth: 0,   // มกราคม (0-index)
