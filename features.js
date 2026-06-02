@@ -5091,14 +5091,15 @@ function sendEmailFromDraft() {
   closeM();
 }
 // ✅ บันทึก Email Draft
+// ✅ บันทึก Email Draft
 function saveEmailDraft(to, cc, subject, body, dealerId) {
   var drafts = getEmailDrafts();
   var draft = {
     id: 'draft_' + Date.now(),
-    to: to,
+    to: to || '',
     cc: cc || '',
-    subject: subject,
-    body: body,
+    subject: subject || '',
+    body: body || '',
     dealerId: dealerId || '',
     createdAt: _nw(),
     updatedAt: _nw()
@@ -5107,14 +5108,19 @@ function saveEmailDraft(to, cc, subject, body, dealerId) {
   // เก็บแค่ 20 draft ล่าสุด
   if (drafts.length > 20) drafts = drafts.slice(0, 20);
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
-  console.log('✅ บันทึก Draft แล้ว');
+  console.log('✅ บันทึก Draft แล้ว:', draft.id);
+  return draft;
 }
-
 // ✅ อ่าน Email Drafts
 function getEmailDrafts() {
   var drafts = localStorage.getItem('v7_email_drafts');
   if (drafts) {
-    try { return JSON.parse(drafts); } catch(e) {}
+    try { 
+      var parsed = JSON.parse(drafts);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch(e) { 
+      return []; 
+    }
   }
   return [];
 }
@@ -5126,7 +5132,10 @@ function loadEmailDraft(draftId) {
   for (var i = 0; i < drafts.length; i++) {
     if (drafts[i].id === draftId) { draft = drafts[i]; break; }
   }
-  if (!draft) return;
+  if (!draft) {
+    toast('❌ ไม่พบ Draft');
+    return;
+  }
   
   document.getElementById('emailToInput').value = draft.to || '';
   document.getElementById('emailCcInput').value = draft.cc || '';
@@ -5136,13 +5145,14 @@ function loadEmailDraft(draftId) {
   // เลือก Dealer ที่เกี่ยวข้อง (ถ้ามี)
   if (draft.dealerId) {
     var dealerSelect = document.getElementById('emailDealerSelect');
-    if (dealerSelect) dealerSelect.value = draft.dealerId;
-    loadDealerEmailContacts();
+    if (dealerSelect) {
+      dealerSelect.value = draft.dealerId;
+      loadDealerEmailContacts();
+    }
   }
   
-  toast('📂 โหลด Draft แล้ว');
+  toast('📂 โหลด Draft: ' + (draft.subject || 'ไม่มีหัวข้อ'));
 }
-
 // ✅ ลบ Draft
 function deleteEmailDraft(draftId) {
   if (!confirm('ลบ Draft นี้?')) return;
@@ -5155,26 +5165,35 @@ function deleteEmailDraft(draftId) {
 function showEmailDraftWithDealer() {
   var dealers = ST.getAll('dealers');
   var cfg = getConfig();
-  var drafts = getEmailDrafts();
+  var drafts = getEmailDrafts();  // ✅ โหลด draft ทุกครั้งที่เปิด
   
   var dealerOptions = '<option value="">-- เลือก Dealer --</option>';
   for (var i = 0; i < dealers.length; i++) {
     dealerOptions += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
   }
   
-  // ✅ สร้างรายการ Drafts
+  // ✅ สร้างรายการ Drafts (แสดงเฉพาะ 10 รายการล่าสุด)
   var draftsHtml = '';
   if (drafts.length > 0) {
-    draftsHtml = '<div class="fg"><label>📂 Drafts ที่บันทึกไว้</label><div style="max-height:150px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:4px">';
+    draftsHtml = '<div class="fg"><label>📂 Drafts ที่บันทึกไว้ (' + drafts.length + ')</label>';
+    draftsHtml += '<div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:4px; margin-top:4px">';
     for (var i = 0; i < drafts.length; i++) {
       var d = drafts[i];
-      var preview = (d.subject || d.body || '').substring(0, 40);
-      draftsHtml += '<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-bottom:1px solid var(--border)">';
-      draftsHtml += '<span style="font-size:12px; cursor:pointer" onclick="loadEmailDraft(\'' + d.id + '\')">📄 ' + sanitize(preview) + '</span>';
+      var preview = '';
+      if (d.subject) preview = d.subject;
+      else if (d.to) preview = 'ถึง: ' + d.to;
+      else preview = (d.body || '').substring(0, 30);
+      draftsHtml += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border)">';
+      draftsHtml += '<div style="flex:1; cursor:pointer" onclick="loadEmailDraft(\'' + d.id + '\')">';
+      draftsHtml += '<div style="font-size:12px; font-weight:500">📄 ' + sanitize(preview.substring(0, 40)) + '</div>';
+      draftsHtml += '<div style="font-size:10px; color:var(--text2)">' + (d.to ? 'ถึง: ' + sanitize(d.to.substring(0, 30)) : '') + '</div>';
+      draftsHtml += '</div>';
       draftsHtml += '<button class="btn bsm bd" onclick="event.stopPropagation();deleteEmailDraft(\'' + d.id + '\')">🗑️</button>';
       draftsHtml += '</div>';
     }
     draftsHtml += '</div></div>';
+  } else {
+    draftsHtml = '<div class="fg"><label>📂 Drafts</label><div class="hint" style="padding:8px; text-align:center">ยังไม่มี Draft ที่บันทึกไว้<br>กรอกข้อมูลแล้วกด "💾 บันทึก Draft"</div></div>';
   }
   
   var templateOptions = '<option value="visit_report">📋 Visit Report</option>';
@@ -5221,7 +5240,7 @@ function showEmailDraftWithDealer() {
       </div>
       <div class="fg">
         <label>📝 เนื้อหา</label>
-        <textarea id="emailBody" rows="10" class="fm-input" placeholder="เนื้อหาอีเมล..."></textarea>
+        <textarea id="emailBody" rows="8" class="fm-input" placeholder="เนื้อหาอีเมล..."></textarea>
       </div>
       <div class="bg" style="margin-top:12px; flex-wrap:wrap">
         <button class="btn bp" onclick="sendEmailFromDraft()">📧 ส่งอีเมล</button>
@@ -5234,8 +5253,6 @@ function showEmailDraftWithDealer() {
   
   openM('📧 สร้างอีเมล (เลือก Dealer)', html);
 }
-
-// ✅ บันทึก Draft จาก Modal
 function saveEmailDraftFromModal() {
   var to = document.getElementById('emailToInput').value.trim();
   var cc = document.getElementById('emailCcInput').value.trim();
@@ -5248,10 +5265,14 @@ function saveEmailDraftFromModal() {
     return;
   }
   
-  saveEmailDraft(to, cc, subject, body, dealerId);
+  var draft = saveEmailDraft(to, cc, subject, body, dealerId);
   toast('💾 บันทึก Draft เรียบร้อย');
+  
+  // ปิด modal แล้วเปิดใหม่เพื่อแสดงรายการ
   closeM();
-  showEmailDraftWithDealer(); // รีเฟรชหน้า
+  setTimeout(function() {
+    showEmailDraftWithDealer();
+  }, 200);
 }
 function copyEmailDraft() {
   var to = document.getElementById('emailToInput').value;
