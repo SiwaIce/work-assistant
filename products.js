@@ -691,3 +691,395 @@ if (typeof window.getModelPrice === 'undefined') {
     return product ? product.price : 0;
   };
 }
+// ================================================================
+// PAGE RENDERERS FOR SIDEBAR MENU
+// ================================================================
+
+function rProducts(el) {
+  document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
+  
+  var products = Products.getAll();
+  var html = '<div class="card">';
+  html += '<h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button></span></h2>';
+  
+  // Search
+  html += '<div class="fg"><input type="text" id="productSearch" placeholder="🔍 ค้นหา (ชื่อ, SKU, EAN)" oninput="filterProductsList()" style="margin-bottom:12px"></div>';
+  
+  // Filter tabs
+  html += '<div class="ftabs" style="margin-bottom:12px">';
+  html += '<div class="ftab act" onclick="filterProductsType(\'all\')">📦 ทั้งหมด</div>';
+  html += '<div class="ftab" onclick="filterProductsType(\'active\')">✅ มีขาย</div>';
+  html += '<div class="ftab" onclick="filterProductsType(\'eol\')">⏰ EOL</div>';
+  html += '<div class="ftab" onclick="filterProductsType(\'software\')">💻 Software</div>';
+  html += '<div class="ftab" onclick="filterProductsType(\'service\')">🛠️ Service</div>';
+  html += '</div>';
+  
+  // Table
+  html += '<div class="export-wrap"><table class="export-table" id="productsTable">';
+  html += '<thead><tr><th>#</th><th>EAN</th><th>SKU</th><th>ชื่อสินค้า</th><th>ราคา B</th><th>S</th><th>A</th><th>Other</th><th>สถานะ</th><th></th></tr></thead>';
+  html += '<tbody id="productsTableBody"></tbody>';
+  html += '</table></div>';
+  html += '</div>';
+  
+  el.innerHTML = html;
+  renderProductsTable(products);
+  
+  // Store products for filtering
+  window.allProducts = products;
+  window.currentProductFilter = 'all';
+}
+
+function renderProductsTable(products) {
+  var tbody = document.getElementById('productsTableBody');
+  if (!tbody) return;
+  
+  var html = '';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var statusBadge = p.eol ? '<span class="tag tag-cancelled">⏰ EOL</span>' : '<span class="tag tag-completed">✅ มีขาย</span>';
+    if (p.isSoftware) statusBadge += ' <span class="tag tag-active">💻 SW</span>';
+    if (p.isService) statusBadge += ' <span class="tag tag-on-hold">🛠️ SV</span>';
+    
+    html += '<tr>';
+    html += '<td class="pipe-row-num">' + (i + 1) + '</td>';
+    html += '<td>' + (p.ean || '-') + '</td>';
+    html += '<td>' + (p.sku || '-') + '</td>';
+    html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
+    html += '<td>' + statusBadge + '</td>';
+    html += '<td><button class="btn bsm bo" onclick="showEditProductM(\'' + p.id + '\')">✏️</button></td>';
+    html += '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function filterProductsList() {
+  var search = document.getElementById('productSearch')?.value.toLowerCase() || '';
+  var filter = window.currentProductFilter || 'all';
+  var products = window.allProducts || [];
+  
+  var filtered = products.filter(function(p) {
+    if (filter === 'active' && p.eol) return false;
+    if (filter === 'eol' && !p.eol) return false;
+    if (filter === 'software' && !p.isSoftware) return false;
+    if (filter === 'service' && !p.isService) return false;
+    if (search && !p.name.toLowerCase().includes(search) && 
+        !(p.sku || '').toLowerCase().includes(search) &&
+        !(p.ean || '').includes(search)) return false;
+    return true;
+  });
+  
+  renderProductsTable(filtered);
+}
+
+function filterProductsType(type) {
+  window.currentProductFilter = type;
+  // Update active tab style
+  var tabs = document.querySelectorAll('.ftab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('act');
+  }
+  event.target.classList.add('act');
+  filterProductsList();
+}
+
+function showAddProductM() {
+  var h = '<div style="max-width:500px">';
+  h += '<div class="fm-group"><label>SKU (SiS part)</label><input type="text" id="prod_sku" placeholder="เช่น DJI-6941565998040"></div>';
+  h += '<div class="fm-group"><label>EAN</label><input type="text" id="prod_ean" placeholder="13 หลัก"></div>';
+  h += '<div class="fm-group"><label>ชื่อสินค้า *</label><input type="text" id="prod_name"></div>';
+  h += '<div class="fr"><div class="fm-group"><label>ประเภท</label><select id="prod_type">';
+  h += '<option value="hardware">🖥️ Hardware</option>';
+  h += '<option value="software">💻 Software</option>';
+  h += '<option value="service">🛠️ Service</option>';
+  h += '</select></div>';
+  h += '<div class="fm-group"><label>สถานะ</label><select id="prod_status">';
+  h += '<option value="active">✅ มีขาย</option>';
+  h += '<option value="eol">⏰ EOL (停产)</option>';
+  h += '</select></div></div>';
+  h += '<div class="form-section">💰 ราคา (ไม่รวม VAT)</div>';
+  h += '<div class="fr"><div class="fm-group"><label>Level S</label><input type="number" id="prod_price_s"></div>';
+  h += '<div class="fm-group"><label>Level A</label><input type="number" id="prod_price_a"></div></div>';
+  h += '<div class="fr"><div class="fm-group"><label>Level B (MSRP)</label><input type="number" id="prod_price_b"></div>';
+  h += '<div class="fm-group"><label>Level Other</label><input type="number" id="prod_price_other"></div></div>';
+  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="saveNewProduct()">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  openM('➕ เพิ่มสินค้า', h);
+}
+
+function saveNewProduct() {
+  var name = document.getElementById('prod_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var productData = {
+    name: name,
+    sku: document.getElementById('prod_sku').value.trim(),
+    ean: document.getElementById('prod_ean').value.trim(),
+    price: parseFloat(document.getElementById('prod_price_b').value) || 0,
+    typePrices: {
+      S: parseFloat(document.getElementById('prod_price_s').value) || 0,
+      A: parseFloat(document.getElementById('prod_price_a').value) || 0,
+      B: parseFloat(document.getElementById('prod_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('prod_price_other').value) || 0
+    },
+    eol: document.getElementById('prod_status').value === 'eol',
+    isSoftware: document.getElementById('prod_type').value === 'software',
+    isService: document.getElementById('prod_type').value === 'service'
+  };
+  
+  Products.add(productData);
+  closeMForce();
+  toast('✅ เพิ่มสินค้าแล้ว');
+  render();
+}
+
+function showEditProductM(productId) {
+  var p = Products.getById(productId);
+  if (!p) return;
+  
+  var h = '<div style="max-width:500px">';
+  h += '<div class="fm-group"><label>SKU</label><input type="text" id="prod_sku" value="' + sanitize(p.sku || '') + '"></div>';
+  h += '<div class="fm-group"><label>EAN</label><input type="text" id="prod_ean" value="' + sanitize(p.ean || '') + '"></div>';
+  h += '<div class="fm-group"><label>ชื่อสินค้า *</label><input type="text" id="prod_name" value="' + sanitize(p.name) + '"></div>';
+  h += '<div class="fr"><div class="fm-group"><label>ประเภท</label><select id="prod_type">';
+  h += '<option value="hardware"' + (!p.isSoftware && !p.isService ? ' selected' : '') + '>🖥️ Hardware</option>';
+  h += '<option value="software"' + (p.isSoftware ? ' selected' : '') + '>💻 Software</option>';
+  h += '<option value="service"' + (p.isService ? ' selected' : '') + '>🛠️ Service</option>';
+  h += '</select></div>';
+  h += '<div class="fm-group"><label>สถานะ</label><select id="prod_status">';
+  h += '<option value="active"' + (!p.eol ? ' selected' : '') + '>✅ มีขาย</option>';
+  h += '<option value="eol"' + (p.eol ? ' selected' : '') + '>⏰ EOL</option>';
+  h += '</select></div></div>';
+  h += '<div class="form-section">💰 ราคา (ไม่รวม VAT)</div>';
+  h += '<div class="fr"><div class="fm-group"><label>Level S</label><input type="number" id="prod_price_s" value="' + (p.typePrices?.S || '') + '"></div>';
+  h += '<div class="fm-group"><label>Level A</label><input type="number" id="prod_price_a" value="' + (p.typePrices?.A || '') + '"></div></div>';
+  h += '<div class="fr"><div class="fm-group"><label>Level B</label><input type="number" id="prod_price_b" value="' + (p.price || '') + '"></div>';
+  h += '<div class="fm-group"><label>Level Other</label><input type="number" id="prod_price_other" value="' + (p.typePrices?.Other || '') + '"></div></div>';
+  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="updateProduct(\'' + productId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bd" onclick="deleteProductConfirm(\'' + productId + '\')">🗑️ ลบ</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  openM('✏️ แก้ไขสินค้า', h);
+}
+
+function updateProduct(productId) {
+  var name = document.getElementById('prod_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var updates = {
+    name: name,
+    sku: document.getElementById('prod_sku').value.trim(),
+    ean: document.getElementById('prod_ean').value.trim(),
+    price: parseFloat(document.getElementById('prod_price_b').value) || 0,
+    typePrices: {
+      S: parseFloat(document.getElementById('prod_price_s').value) || 0,
+      A: parseFloat(document.getElementById('prod_price_a').value) || 0,
+      B: parseFloat(document.getElementById('prod_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('prod_price_other').value) || 0
+    },
+    eol: document.getElementById('prod_status').value === 'eol',
+    isSoftware: document.getElementById('prod_type').value === 'software',
+    isService: document.getElementById('prod_type').value === 'service'
+  };
+  
+  Products.update(productId, updates);
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function deleteProductConfirm(productId) {
+  if (!confirm('ลบสินค้านี้?')) return;
+  Products.delete(productId);
+  closeMForce();
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
+// ================================================================
+// PAGE: ราคาตาม Level
+// ================================================================
+
+function rProductPrices(el) {
+  document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
+  
+  var products = Products.getAll();
+  var levels = ['S', 'A', 'B', 'Other'];
+  
+  var html = '<div class="card"><h2>💰 ราคาสินค้าแยกตาม Level</h2>';
+  html += '<div class="export-wrap"><table class="export-table" id="priceTable">';
+  html += '<thead><tr><th>#</th><th>สินค้า</th><th>ราคา S</th><th>ราคา A</th><th>ราคา B</th><th>ราคา Other</th><th></th></tr></thead>';
+  html += '<tbody>';
+  
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    html += '<tr>';
+    html += '<td class="pipe-row-num">' + (i + 1) + '</td>';
+    html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td><input type="number" id="price_s_' + p.id + '" value="' + (p.typePrices?.S || '') + '" style="width:100px" class="fm-input"></td>';
+    html += '<td><input type="number" id="price_a_' + p.id + '" value="' + (p.typePrices?.A || '') + '" style="width:100px" class="fm-input"></td>';
+    html += '<td><input type="number" id="price_b_' + p.id + '" value="' + (p.price || '') + '" style="width:100px" class="fm-input"></td>';
+    html += '<td><input type="number" id="price_o_' + p.id + '" value="' + (p.typePrices?.Other || '') + '" style="width:100px" class="fm-input"></td>';
+    html += '<td><button class="btn bsm bp" onclick="saveSingleProductPrice(\'' + p.id + '\')">💾</button></td>';
+    html += '<tr>';
+  }
+  
+  html += '</tbody></table></div>';
+  html += '<div class="bg" style="margin-top:12px"><button class="btn bp" onclick="saveAllProductPrices()">💾 บันทึกทั้งหมด</button></div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function saveSingleProductPrice(productId) {
+  var priceS = parseFloat(document.getElementById('price_s_' + productId).value) || 0;
+  var priceA = parseFloat(document.getElementById('price_a_' + productId).value) || 0;
+  var priceB = parseFloat(document.getElementById('price_b_' + productId).value) || 0;
+  var priceO = parseFloat(document.getElementById('price_o_' + productId).value) || 0;
+  
+  Products.update(productId, {
+    price: priceB,
+    typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
+  });
+  toast('💾 บันทึกราคาแล้ว');
+}
+
+function saveAllProductPrices() {
+  var products = Products.getAll();
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var priceS = parseFloat(document.getElementById('price_s_' + p.id).value) || 0;
+    var priceA = parseFloat(document.getElementById('price_a_' + p.id).value) || 0;
+    var priceB = parseFloat(document.getElementById('price_b_' + p.id).value) || 0;
+    var priceO = parseFloat(document.getElementById('price_o_' + p.id).value) || 0;
+    
+    Products.update(p.id, {
+      price: priceB,
+      typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
+    });
+  }
+  toast('💾 บันทึกราคาทั้งหมดแล้ว');
+}
+
+// ================================================================
+// PAGE: BUNDLE/COMBO (Placeholder)
+// ================================================================
+
+function rProductBundles(el) {
+  document.getElementById('pgT').textContent = '🎁 Bundle/Combo';
+  var bundles = Products.getAllBundles();
+  
+  var html = '<div class="card"><h2>🎁 Bundle/Combo <span class="ml"><button class="btn bp" onclick="showAddBundleM()">➕ เพิ่ม Bundle</button></span></h2>';
+  
+  if (!bundles.length) {
+    html += '<div class="empty"><p>ยังไม่มี Bundle/Combo</p><button class="btn bp" onclick="showAddBundleM()">➕ สร้าง Bundle แรก</button></div>';
+  } else {
+    for (var i = 0; i < bundles.length; i++) {
+      var b = bundles[i];
+      html += '<div class="card" style="margin-bottom:12px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<h3>' + sanitize(b.name) + '</h3>';
+      html += '<div><button class="btn bsm bo" onclick="editBundle(\'' + b.id + '\')">✏️</button>';
+      html += '<button class="btn bsm bd" onclick="deleteBundle(\'' + b.id + '\')">🗑️</button></div>';
+      html += '</div>';
+      if (b.description) html += '<p>' + sanitize(b.description) + '</p>';
+      html += '<div class="fr"><div>S: ' + fmtMoney(b.typePrices?.S) + '</div>';
+      html += '<div>A: ' + fmtMoney(b.typePrices?.A) + '</div>';
+      html += '<div>B: ' + fmtMoney(b.typePrices?.B) + '</div>';
+      html += '<div>Other: ' + fmtMoney(b.typePrices?.Other) + '</div></div>';
+      html += '</div>';
+    }
+  }
+  
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function showAddBundleM() {
+  toast('🚧 กำลังพัฒนา');
+}
+
+// ================================================================
+// PAGE: DEMO UNIT (Placeholder)
+// ================================================================
+
+function rProductDemo(el) {
+  document.getElementById('pgT').textContent = '🚁 Demo Unit';
+  var demos = Products.getAllDemoUnits();
+  
+  var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button></span></h2>';
+  
+  if (!demos.length) {
+    html += '<div class="empty"><p>ยังไม่มี Demo Unit</p></div>';
+  } else {
+    html += '<div class="export-wrap"><table class="export-table">';
+    html += '<thead><tr><th>#</th><th>SKU</th><th>EAN</th><th>สินค้า</th><th>ราคา Demo</th><th></th></tr></thead><tbody>';
+    for (var i = 0; i < demos.length; i++) {
+      var d = demos[i];
+      html += '<tr>';
+      html += '<td class="pipe-row-num">' + (i + 1) + '</td>';
+      html += '<td>' + (d.sku || '-') + '</td>';
+      html += '<td>' + (d.ean || '-') + '</td>';
+      html += '<td>' + sanitize(d.productName || d.name) + '</td>';
+      html += '<td style="text-align:right">' + fmtMoney(d.price) + '</td>';
+      html += '<td><button class="btn bsm bo" onclick="editDemoUnit(\'' + d.id + '\')">✏️</button></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+  }
+  
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function showAddDemoUnitM() {
+  toast('🚧 กำลังพัฒนา');
+}
+
+// ================================================================
+// PAGE: IMPORT/EXPORT (Placeholder)
+// ================================================================
+
+function rProductImport(el) {
+  document.getElementById('pgT').textContent = '📥 Import/Export สินค้า';
+  
+  var html = '<div class="card"><h2>📥 Import สินค้าจาก Excel</h2>';
+  html += '<div class="fg"><label>เลือกไฟล์ Excel (.xlsx, .xls)</label>';
+  html += '<input type="file" id="importExcelFile" accept=".xlsx,.xls" onchange="importProductsFromExcelFile(this)"></div>';
+  html += '<div class="hint">รูปแบบไฟล์ต้องมีคอลัมน์: SiS part, EAN, Product Name, Type 1-4 P EX Tax THB</div>';
+  html += '</div>';
+  
+  html += '<div class="card"><h2>📤 Export สินค้า</h2>';
+  html += '<button class="btn bp" onclick="exportProductsToCSV()">📤 Export to CSV</button>';
+  html += '<button class="btn bo" onclick="copyProductsTable()">📋 Copy ตาราง</button>';
+  html += '</div>';
+  
+  el.innerHTML = html;
+}
+
+function importProductsFromExcelFile(input) {
+  toast('🚧 กำลังพัฒนา (ใช้ Console import แทน)');
+}
+
+function exportProductsToCSV() {
+  var products = Products.getAll();
+  var csv = '\uFEFF"SKU","EAN","ชื่อสินค้า","ราคา B","ราคา S","ราคา A","ราคา Other","EOL","ประเภท"\n';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var type = p.isSoftware ? 'Software' : (p.isService ? 'Service' : 'Hardware');
+    csv += '"' + (p.sku || '') + '","' + (p.ean || '') + '","' + (p.name || '') + '","' + (p.price || 0) + '","' + (p.typePrices?.S || 0) + '","' + (p.typePrices?.A || 0) + '","' + (p.typePrices?.Other || 0) + '","' + (p.eol ? 'EOL' : '') + '","' + type + '"\n';
+  }
+  dlBlob(csv, 'products-export-' + _td() + '.csv');
+}
+
+function copyProductsTable() {
+  var products = Products.getAll();
+  var tsv = 'SKU\tEAN\tชื่อสินค้า\tราคา B\tราคา S\tราคา A\tราคา Other\tEOL\tประเภท\n';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var type = p.isSoftware ? 'Software' : (p.isService ? 'Service' : 'Hardware');
+    tsv += (p.sku || '') + '\t' + (p.ean || '') + '\t' + (p.name || '') + '\t' + (p.price || 0) + '\t' + (p.typePrices?.S || 0) + '\t' + (p.typePrices?.A || 0) + '\t' + (p.typePrices?.Other || 0) + '\t' + (p.eol ? 'EOL' : '') + '\t' + type + '\n';
+  }
+  copyText(tsv, '📋 Copy ตารางสินค้าแล้ว');
+}
