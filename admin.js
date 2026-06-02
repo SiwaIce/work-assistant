@@ -1121,17 +1121,39 @@ function resetLevelRequirements() {
 }
 
 function saveNewDemoPolicy() {
+  var productName = document.getElementById('ndp_product').value.trim();
+  var releaseDate = dpG('ndp_release');
+  var orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
+  var alertMessage = document.getElementById('ndp_message').value.trim();
+  var enabled = document.getElementById('ndp_enabled').value === 'true';
+  
+  if (!productName) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  if (!releaseDate) { toast('กรุณาใส่วันที่วางจำหน่าย'); return; }
+  if (!alertMessage) alertMessage = '⚠️ ต้องสั่งซื้อ Demo รุ่นใหม่ภายใน ' + orderWithinDays + ' วัน มิฉะนั้นอาจส่งผลต่อสถานะพาร์ทเนอร์';
+  
   var cfg = getConfig();
-  cfg.newDemoPolicy = {
-    enabled: document.getElementById('ndp_enabled').value === 'true',
-    productName: document.getElementById('ndp_product').value.trim(),
-    releaseDate: dpG('ndp_release'),
-    orderWithinDays: parseInt(document.getElementById('ndp_days').value) || 60,
-    alertMessage: document.getElementById('ndp_message').value.trim()
-  };
+  if (!cfg.newDemoPolicies) cfg.newDemoPolicies = [];
+  
+  cfg.newDemoPolicies.push({
+    id: 'ndp_' + Date.now(),
+    enabled: enabled,
+    productName: productName,
+    releaseDate: releaseDate,
+    orderWithinDays: orderWithinDays,
+    alertMessage: alertMessage
+  });
+  
   saveConfig(cfg);
-  toast('💾 บันทึก New Demo Policy แล้ว');
-  render();
+  closeMForce();
+  toast('✅ เพิ่มนโยบายสินค้าใหม่แล้ว');
+  renderNewDemoPoliciesList();
+  
+  // ✅ เพิ่ม auto sync
+  if (typeof forceSyncAll === 'function') {
+    forceSyncAll();
+  } else {
+    toast('⚠️ กรุณากด Force Sync All เพื่อให้ข้อมูลอัปเดต', true);
+  }
 }
 
 function saveH1Period() {
@@ -1255,12 +1277,17 @@ function updateNewDemoPolicy(idx) {
   cfg.newDemoPolicies[idx].releaseDate = dpG('ndp_release');
   cfg.newDemoPolicies[idx].orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
   cfg.newDemoPolicies[idx].alertMessage = document.getElementById('ndp_message').value.trim();
+  cfg.newDemoPolicies[idx].enabled = document.getElementById('ndp_enabled').value === 'true';
   
   saveConfig(cfg);
   closeMForce();
   toast('💾 บันทึกแล้ว');
   renderNewDemoPoliciesList();
-  render();
+  
+  // ✅ เพิ่ม auto sync
+  if (typeof forceSyncAll === 'function') {
+    forceSyncAll();
+  }
 }
 
 function toggleNewDemoPolicy(idx) {
@@ -1270,9 +1297,12 @@ function toggleNewDemoPolicy(idx) {
   saveConfig(cfg);
   toast(cfg.newDemoPolicies[idx].enabled ? '✅ เปิดใช้งานแล้ว' : '⏸ ปิดใช้งานแล้ว');
   renderNewDemoPoliciesList();
-  render();
+  
+  // ✅ เพิ่ม auto sync
+  if (typeof forceSyncAll === 'function') {
+    forceSyncAll();
+  }
 }
-
 function deleteNewDemoPolicy(idx) {
   if (!confirm('ลบนโยบายนี้?')) return;
   var cfg = getConfig();
@@ -1280,9 +1310,12 @@ function deleteNewDemoPolicy(idx) {
   saveConfig(cfg);
   toast('🗑️ ลบแล้ว');
   renderNewDemoPoliciesList();
-  render();
+  
+  // ✅ เพิ่ม auto sync
+  if (typeof forceSyncAll === 'function') {
+    forceSyncAll();
+  }
 }
-
 function resetNewDemoPolicies() {
   if (!confirm('⚠️ Reset นโยบายสินค้าใหม่เป็นค่าเริ่มต้น?')) return;
   var cfg = getConfig();
@@ -1299,9 +1332,12 @@ function resetNewDemoPolicies() {
   saveConfig(cfg);
   toast('🔄 Reset แล้ว');
   renderNewDemoPoliciesList();
-  render();
+  
+  // ✅ เพิ่ม auto sync
+  if (typeof forceSyncAll === 'function') {
+    forceSyncAll();
+  }
 }
-
 // เรียกตอนโหลดหน้า admin
 function initNewDemoPolicies() {
   renderNewDemoPoliciesList();
