@@ -495,6 +495,7 @@ function rDealerDet(el) {
     <div class="tab-btn ${dealerTab==='pipeline'?'act':''}" onclick="dealerTab='pipeline';render()">📊 Pipeline</div>
     <div class="tab-btn ${dealerTab==='visit'?'act':''}" onclick="dealerTab='visit';render()">🤝 Visit</div>
     <div class="tab-btn ${dealerTab==='timeline'?'act':''}" onclick="dealerTab='timeline';render()">📝 Timeline</div>
+    <div class="tab-btn ${dealerTab==='demo'?'act':''}" onclick="dealerTab='demo';render()">🚁 Demo</div>
     <div class="tab-btn ${dealerTab==='forecast'?'act':''}" onclick="dealerTab='forecast';render()">📦 Forecast</div>
     <div class="tab-btn ${dealerTab==='tasks'?'act':''}" onclick="dealerTab='tasks';render()">📋 งาน</div>
     <div class="tab-btn ' + (dealerTab==='onboard'?'act':'') + '" onclick="dealerTab=\'onboard\';render()">🔄 Onboard</div>
@@ -509,6 +510,7 @@ function renderDealerTab(d) {
     case 'pipeline': return dealerPipelineTab(d);
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
+    case 'demo': return dealerDemoTab(d);
     case 'forecast': return dealerForecastTab(d);
     case 'tasks': return dealerTasksTab(d);
     case 'onboard': return dealerOnboardTab(d);
@@ -2519,4 +2521,321 @@ async function showCurrentLinkModal(dealerId) {
   `;
   
   openM('🔗 ลิงก์ปัจจุบัน', html);
+}
+// ================================================================
+// DEALER DEMO TAB (กำหนด Demo Option และรายการอุปกรณ์)
+// ================================================================
+
+function dealerDemoTab(d) {
+  var demoOption = d.demoOption || 'option1';
+  var demoItems = d.demoItems || [];
+  var cfg = getConfig();
+  
+  // ดึงรายการ Model ที่ต้องมีตาม Option (จาก Config)
+  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
+    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
+  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
+    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+  
+  var html = '<div class="card">';
+  html += '<h2>🚁 Demo Requirement <span class="ml"><span class="hint" style="font-size:11px">ตั้งค่าสำหรับ Dealer นี้โดยเฉพาะ</span></span></h2>';
+  
+  // ===== 1. Demo Option Selection =====
+  html += '<div class="form-section">📌 เลือก Option ที่ Dealer ใช้</div>';
+  html += '<div class="radio-g" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px">';
+  html += '<label style="padding:8px 12px;background:' + (demoOption === 'none' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="none"' + (demoOption === 'none' ? ' checked' : '') + ' style="margin-right:5px"><span>❌ ไม่มีข้อกำหนด</span></label>';
+  html += '<label style="padding:8px 12px;background:' + (demoOption === 'option1' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio"name="demoOption" value="option1"' + (demoOption === 'option1' ? ' checked' : '') + '><span>📦 Option 1 (Drone + Payload)</span></label>';
+  html += '<label style="padding:8px 12px;background:' + (demoOption === 'option2' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="option2"' + (demoOption === 'option2' ? ' checked' : '') + '><span>🏗️ Option 2 (Dock + Drone)</span></label>';
+  html += '<label style="padding:8px 12px;background:' + (demoOption === 'both' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="both"' + (demoOption === 'both' ? ' checked' : '') + '><span>📦🏗️ Both (ต้องมีทั้งสอง)</span></label>';
+  html += '</div>';
+  
+  // ===== 2. รายการอุปกรณ์ที่มีอยู่ =====
+  html += '<div class="form-section">📦 รายการอุปกรณ์ Demo ที่มีอยู่</div>';
+  html += '<div class="hint" style="margin-bottom:8px">💡 กรอก Serial Number ของอุปกรณ์ที่ Dealer มีอยู่จริง (จากที่แจ้งมา)</div>';
+  html += '<div id="demoItemsList" style="margin-bottom:12px">';
+  
+  for (var i = 0; i < demoItems.length; i++) {
+    html += '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<select id="demo_model_' + i + '" class="demo-model" style="width:100%" data-idx="' + i + '">' + modelOptionsNew(demoItems[i].model) + '</select>';
+    html += '</div>';
+    html += '<div style="flex:1">';
+    html += '<input type="text" id="demo_sn_' + i + '" class="demo-sn" style="width:100%" placeholder="Serial Number (ถ้ามี)" value="' + sanitize(demoItems[i].serialNumber || '') + '">';
+    html += '</div>';
+    html += '<button class="btn bsm bd" onclick="removeDemoItem(' + i + ')">🗑️</button>';
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  html += '<button class="btn bsm bp" onclick="addDemoItemRow()" style="margin-bottom:16px">➕ เพิ่มอุปกรณ์</button>';
+  
+  // ===== 3. Preview สถานะตาม Option ที่เลือก =====
+  html += '<div class="form-section">📊 สถานะปัจจุบัน (Preview)</div>';
+  html += '<div id="demoPreviewContainer">';
+  html += renderDemoPreview(d, requiredOption1, requiredOption2);
+  html += '</div>';
+  
+  // ===== 4. Save Button =====
+  html += '<div class="bg" style="margin-top:16px;gap:12px">';
+  html += '<button class="btn bp" onclick="saveDemoSetting(\'' + d.id + '\')" style="flex:1">💾 บันทึกการตั้งค่า Demo</button>';
+  html += '<button class="btn bo" onclick="syncDemoToGlobal(\'' + d.id + '\')" style="flex:1">🔄 Sync ไปยังหน้า Demo Equipment</button>';
+  html += '</div>';
+  
+  html += '</div>';
+  
+  // เพิ่ม script สำหรับ preview แบบ Real-time
+  html += '<script>';
+  html += 'function updateDemoPreview() {';
+  html += '  var dealerId = "' + d.id + '";';
+  html += '  var demoOption = document.querySelector(\'input[name="demoOption"]:checked\').value;';
+  html += '  var demoItems = [];';
+  html += '  var rows = document.querySelectorAll("#demoItemsList .demo-item-row");';
+  html += '  for(var i=0;i<rows.length;i++){';
+  html += '    var model = rows[i].querySelector(".demo-model").value;';
+  html += '    var sn = rows[i].querySelector(".demo-sn").value;';
+  html += '    if(model) demoItems.push({model:model,serialNumber:sn});';
+  html += '  }';
+  html += '  var previewHtml = renderDemoPreviewDynamic(demoOption, demoItems);';
+  html += '  document.getElementById("demoPreviewContainer").innerHTML = previewHtml;';
+  html += '}';
+  html += 'document.querySelectorAll(\'input[name="demoOption"]\').forEach(function(btn){ btn.onclick = function(){ setTimeout(updateDemoPreview, 50); }; });';
+  html += 'setInterval(updateDemoPreview, 500);';
+  html += '</script>';
+  
+  return html;
+}
+
+// ================================================================
+// HELPER FUNCTIONS FOR DEMO TAB
+// ================================================================
+
+function addDemoItemRow() {
+  var container = document.getElementById('demoItemsList');
+  var idx = Date.now();
+  var newRow = '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
+  newRow += '<div style="flex:1"><select id="demo_model_' + idx + '" class="demo-model" style="width:100%">' + modelOptionsNew('') + '</select></div>';
+  newRow += '<div style="flex:1"><input type="text" id="demo_sn_' + idx + '" class="demo-sn" style="width:100%" placeholder="Serial Number"></div>';
+  newRow += '<button class="btn bsm bd" onclick="removeDemoItemRow(this)">🗑️</button>';
+  newRow += '</div>';
+  container.insertAdjacentHTML('beforeend', newRow);
+}
+
+function removeDemoItemRow(btn) {
+  btn.closest('.demo-item-row').remove();
+  updateDemoPreview();
+}
+
+function removeDemoItem(idx) {
+  var row = document.querySelector('#demoItemsList .demo-item-row .demo-model[data-idx="' + idx + '"]');
+  if (row) row.closest('.demo-item-row').remove();
+  updateDemoPreview();
+}
+
+function renderDemoPreview(dealer, requiredOption1, requiredOption2) {
+  var demoOption = dealer.demoOption || 'option1';
+  var demoItems = dealer.demoItems || [];
+  
+  var ownedModels = {};
+  for (var i = 0; i < demoItems.length; i++) {
+    if (demoItems[i] && demoItems[i].model) {
+      ownedModels[demoItems[i].model] = demoItems[i];
+    }
+  }
+  
+  var optionText = {
+    'none': '❌ ไม่มีข้อกำหนด',
+    'option1': '📦 Option 1 (Drone + Payload)',
+    'option2': '🏗️ Option 2 (Dock + Drone)',
+    'both': '📦🏗️ Both Options'
+  };
+  
+  var html = '<div style="background:var(--bg3);border-radius:12px;padding:12px">';
+  html += '<div style="margin-bottom:8px"><strong>📌 ตัวเลือก:</strong> ' + optionText[demoOption] + '</div>';
+  
+  if (demoOption === 'none') {
+    html += '<div class="hint">ℹ️ ไม่มีข้อกำหนด Demo สำหรับ Dealer นี้</div>';
+    html += '</div>';
+    return html;
+  }
+  
+  // Helper to check if a model is required
+  function isRequired(model, option) {
+    if (option === 'option1') return requiredOption1.indexOf(model) !== -1;
+    if (option === 'option2') return requiredOption2.indexOf(model) !== -1;
+    return true;
+  }
+  
+  if (demoOption === 'option1' || demoOption === 'both') {
+    html += '<div style="margin-top:8px"><strong>📦 Option 1 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption1.length; i++) {
+      var model = requiredOption1[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
+      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  if (demoOption === 'option2' || demoOption === 'both') {
+    html += '<div style="margin-top:12px"><strong>🏗️ Option 2 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption2.length; i++) {
+      var model = requiredOption2[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
+      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+function renderDemoPreviewDynamic(demoOption, demoItems) {
+  var cfg = getConfig();
+  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
+    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
+  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
+    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+  
+  var ownedModels = {};
+  for (var i = 0; i < demoItems.length; i++) {
+    if (demoItems[i] && demoItems[i].model) {
+      ownedModels[demoItems[i].model] = demoItems[i];
+    }
+  }
+  
+  var optionText = {
+    'none': '❌ ไม่มีข้อกำหนด',
+    'option1': '📦 Option 1 (Drone + Payload)',
+    'option2': '🏗️ Option 2 (Dock + Drone)',
+    'both': '📦🏗️ Both Options'
+  };
+  
+  var html = '<div style="background:var(--bg3);border-radius:12px;padding:12px">';
+  html += '<div style="margin-bottom:8px"><strong>📌 ตัวเลือก:</strong> ' + (optionText[demoOption] || demoOption) + '</div>';
+  
+  if (demoOption === 'none') {
+    html += '<div class="hint">ℹ️ ไม่มีข้อกำหนด Demo สำหรับ Dealer นี้</div>';
+    html += '</div>';
+    return html;
+  }
+  
+  if (demoOption === 'option1' || demoOption === 'both') {
+    html += '<div style="margin-top:8px"><strong>📦 Option 1 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption1.length; i++) {
+      var model = requiredOption1[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
+      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  if (demoOption === 'option2' || demoOption === 'both') {
+    html += '<div style="margin-top:12px"><strong>🏗️ Option 2 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption2.length; i++) {
+      var model = requiredOption2[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
+      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+function saveDemoSetting(dealerId) {
+  // Get selected option
+  var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
+  if (!demoOptionElem) {
+    toast('⚠️ กรุณาเลือก Option');
+    return;
+  }
+  var demoOption = demoOptionElem.value;
+  
+  // Collect demo items
+  var demoItems = [];
+  var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var modelSelect = rows[i].querySelector('.demo-model');
+    var snInput = rows[i].querySelector('.demo-sn');
+    if (modelSelect && modelSelect.value) {
+      demoItems.push({
+        model: modelSelect.value,
+        serialNumber: snInput ? snInput.value.trim() : ''
+      });
+    }
+  }
+  
+  // Update dealer
+  ST.update('dealers', dealerId, {
+    demoOption: demoOption,
+    demoItems: demoItems
+  });
+  
+  // Audit log
+  if (typeof addAuditLog === 'function') {
+    var dealer = ST.getOne('dealers', dealerId);
+    addAuditLog('update_dealer_demo', 'dealer', dealerId, dealer ? dealer.name : '', dealerId, dealer ? dealer.name : '', {
+      demoOption: demoOption,
+      itemCount: demoItems.length
+    });
+  }
+  
+  toast('💾 บันทึกการตั้งค่า Demo แล้ว');
+  render();
+}
+
+function syncDemoToGlobal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var demoItems = dealer.demoItems || [];
+  if (demoItems.length === 0) {
+    toast('⚠️ ไม่มีอุปกรณ์ Demo ให้ Sync');
+    return;
+  }
+  
+  // Get existing global demo items
+  var globalDemo = [];
+  try {
+    globalDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
+  } catch(e) {}
+  
+  // Remove existing items for this dealer
+  globalDemo = globalDemo.filter(function(d) { return d.dealerId !== dealerId; });
+  
+  // Add new items
+  for (var i = 0; i < demoItems.length; i++) {
+    globalDemo.push({
+      id: 'dm_' + Date.now() + '_' + i,
+      name: demoItems[i].model,
+      model: demoItems[i].model,
+      serialNumber: demoItems[i].serialNumber,
+      dealerId: dealerId,
+      status: 'lent',
+      lentDate: _td(),
+      note: 'Synced from Dealer Demo Tab'
+    });
+  }
+  
+  localStorage.setItem('v7_demo', JSON.stringify(globalDemo));
+  
+  toast('🔄 Sync อุปกรณ์ Demo ไปยังหน้า Demo Equipment แล้ว (' + demoItems.length + ' รายการ)');
+  render();
 }
