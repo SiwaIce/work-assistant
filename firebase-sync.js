@@ -1,5 +1,5 @@
 // ================================================================
-// FIREBASE SYNC LAYER
+// FIREBASE SYNC LAYER (FIXED)
 // ================================================================
 var SYNC_ENABLED = false;
 var CURRENT_USER = null;
@@ -41,38 +41,36 @@ var SYNC_KEY_MAP = {
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
 
 // ================================================================
-// AUTH
+// AUTH (ใช้ popup แทน redirect เพื่อความเสถียร)
 // ================================================================
-// แทนที่ function loginWithGoogle ใน firebase-sync.js
-function loginWithGoogle() {
-  var provider = new firebase.auth.GoogleAuthProvider();
-  // เปลี่ยนจาก signInWithPopup เป็น signInWithRedirect
-  auth.signInWithRedirect(provider);
-}
 
-// เพิ่ม handler ก่อนหน้า function loginWithGoogle
-auth.getRedirectResult().then(function(result) {
-  if (result.user) {
-    CURRENT_USER = result.user;
-    SYNC_ENABLED = true;
-    var loginScreen = document.getElementById('loginScreen');
-    if (loginScreen) loginScreen.style.display = 'none';
-    toast('✅ Login: ' + result.user.displayName);
-    migrateLocalToFirebase();
-    initFirebaseListeners();
-    if (typeof render === 'function') render();
-  }
-}).catch(function(error) {
-  var errorEl = document.getElementById('loginError');
-  if (errorEl) errorEl.textContent = error.message;
-  console.error('Redirect login error:', error);
-});
+function loginWithGoogle() {
+  console.log('🔑 Login with Google clicked');
+  var provider = new firebase.auth.GoogleAuthProvider();
+  
+  // ใช้ popup แทน redirect (เสถียรกว่า)
+  auth.signInWithPopup(provider)
+    .then(function(result) {
+      console.log('✅ Login success:', result.user.email);
+      // onAuthStateChanged จะจัดการส่วนที่เหลือ
+    })
+    .catch(function(error) {
+      console.error('❌ Login error:', error);
+      var errorEl = document.getElementById('loginError');
+      if (errorEl) errorEl.textContent = error.message;
+      toast('❌ เข้าสู่ระบบล้มเหลว: ' + error.message);
+    });
+}
 
 function useOffline() {
   SYNC_ENABLED = false;
   CURRENT_USER = null;
-  document.getElementById('loginScreen').style.display = 'none';
-  render();
+  var loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  var main = document.getElementById('main');
+  if (main) main.style.display = 'flex';
+  if (typeof render === 'function') render();
+  toast('📱 โหมด Offline (ข้อมูลไม่ sync)');
 }
 
 function logoutUser() {
@@ -84,16 +82,39 @@ function logoutUser() {
   });
 }
 
-// Check auth state on load
+// ✅ Auth State Listener (หลัก)
 auth.onAuthStateChanged(function(user) {
+  console.log('🔥 Auth state changed:', user ? user.email : 'No user');
+  
   if (user) {
     CURRENT_USER = user;
     SYNC_ENABLED = true;
-    document.getElementById('loginScreen').style.display = 'none';
+    
+    // ซ่อน login screen
+    var loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) loginScreen.style.display = 'none';
+    
+    // แสดง main
+    var main = document.getElementById('main');
+    if (main) main.style.display = 'flex';
+    
+    // Toast แจ้งเตือน
+    toast('✅ เข้าสู่ระบบ: ' + (user.displayName || user.email));
+    
+    // Migrate และ sync
+    migrateLocalToFirebase();
     initFirebaseListeners();
+    
+    // รีเฟรช UI
     if (typeof render === 'function') render();
+    
   } else {
-    document.getElementById('loginScreen').style.display = 'flex';
+    // ไม่มี user → แสดง login screen
+    var loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) loginScreen.style.display = 'flex';
+    
+    var main = document.getElementById('main');
+    if (main) main.style.display = 'none';
   }
 });
 
@@ -148,7 +169,10 @@ function syncDeleteFromFirebase(collName, docId) {
 var activeListeners = [];
 
 function initFirebaseListeners() {
-  activeListeners.forEach(function(unsub) { unsub(); });
+  // ลบ listeners เดิม
+  activeListeners.forEach(function(unsub) { 
+    if (typeof unsub === 'function') unsub(); 
+  });
   activeListeners = [];
 
   ALL_SYNC_KEYS.forEach(function(key) {
@@ -185,18 +209,21 @@ function initFirebaseListeners() {
   });
 
   // Config sync
-  var configRef = db.collection('users').doc(CURRENT_USER.uid).collection('_config');
-  var unsub2 = configRef.doc('main').onSnapshot(function(doc) {
-    try {
-      if (doc.exists) {
-        localStorage.setItem('v7_config', JSON.stringify(doc.data()));
+  if (CURRENT_USER) {
+    var configRef = db.collection('users').doc(CURRENT_USER.uid).collection('_config');
+    var unsub2 = configRef.doc('main').onSnapshot(function(doc) {
+      try {
+        if (doc.exists) {
+          localStorage.setItem('v7_config', JSON.stringify(doc.data()));
+        }
+      } catch(e) {
+        console.warn('Config listener error:', e);
       }
-    } catch(e) {
-      console.warn('Config listener error:', e);
-    }
-  });
-  activeListeners.push(unsub2);
+    });
+    activeListeners.push(unsub2);
+  }
 }
+
 // ================================================================
 // MIGRATE: localStorage → Firebase (first time)
 // ================================================================
@@ -204,7 +231,10 @@ function migrateLocalToFirebase() {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
 
   var migrated = localStorage.getItem('v7_migrated_' + CURRENT_USER.uid);
-  if (migrated) return;
+  if (migrated) {
+    console.log('Already migrated');
+    return;
+  }
 
   toast('🔄 กำลัง sync ข้อมูลไป Cloud...');
 
@@ -282,23 +312,19 @@ function migrateLocalToFirebase() {
       _origDelete(coll, id);
       
       if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER) {
-        // Find the key for this collection
         var key = ST._keys[coll];
         if (!key) return;
         var shortKey = key.replace('v7_', '');
         
-        // Delete from Firebase
         if (id) {
           db.collection('users').doc(CURRENT_USER.uid).collection(shortKey).doc(id).delete().catch(function(e) {
             console.warn('Delete sync error:', coll, id, e);
           });
         }
         
-        // Also sync the updated array
         try {
           var items = JSON.parse(localStorage.getItem(key) || '[]');
           var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
-          // Re-sync entire collection to be safe
           if (Array.isArray(items)) {
             items.forEach(function(item) {
               if (item && item.id) {
@@ -310,8 +336,7 @@ function migrateLocalToFirebase() {
       }
     };
     
-    console.log('✅ ST._set override ready');
-    console.log('✅ ST.delete override ready');
+    console.log('✅ ST._set and ST.delete override ready');
   }, 100);
 })();
 
@@ -338,6 +363,7 @@ function migrateLocalToFirebase() {
     console.log('✅ ST.setObj override ready');
   }, 100);
 })();
+
 // ================================================================
 // FULL SYNC — Force push all localStorage to Firebase
 // ================================================================
@@ -358,9 +384,9 @@ function forceSyncAll() {
     if (key === 'v7_config') return;
     if (key.indexOf('v7_migrated') === 0) return;
     if (key === 'v7_sbCollapsed') return;
-    if (key === 'v7_appearance') return;  // 👈 เพิ่มข้าม appearance
-    if (key === 'v7_viewMode') return;    // 👈 เพิ่มข้าม viewMode (ค่าเป็น string ไม่ใช่ JSON)
-    if (key === 'v7_favorites') return;   // 👈 เพิ่มข้าม favorites
+    if (key === 'v7_appearance') return;
+    if (key === 'v7_viewMode') return;
+    if (key === 'v7_favorites') return;
 
     var shortKey = key.replace('v7_', '');
     var data = localStorage.getItem(key);
@@ -386,11 +412,9 @@ function forceSyncAll() {
       count++;
     } catch(e) {
       console.warn('Parse error:', key, e);
-      // ถ้า parse ไม่ได้ ให้ข้ามไป (ไม่ sync)
     }
   });
 
-  // Config
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
     try {
