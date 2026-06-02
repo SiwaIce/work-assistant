@@ -2599,13 +2599,63 @@ document.getElementById('tabBar').addEventListener('click', function(e) {
 });
   
 // ================================================================
-// COMPLIANCE DASHBOARD (Partner Status)
+// SIMPLE STORAGE LAYER FOR CLIENT VIEW
 // ================================================================
-
+var ST = {
+  _keys: {
+    dealers: 'v7_dealers',
+    pipeline: 'v7_pipeline',
+    visits: 'v7_visits',
+    demo: 'v7_demo'
+  },
+  
+  getOne: function(collection, id) {
+    var data = this.getAll(collection);
+    if (!data) return null;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i] && data[i].id === id) return data[i];
+    }
+    return null;
+  },
+  
+  getAll: function(collection) {
+    var key = this._keys[collection];
+    if (!key) return [];
+    try {
+      var data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch(e) {
+      return [];
+    }
+  },
+  
+  filter: function(collection, predicate) {
+    var items = this.getAll(collection);
+    if (!items || !predicate) return [];
+    var result = [];
+    for (var i = 0; i < items.length; i++) {
+      if (predicate(items[i])) result.push(items[i]);
+    }
+    return result;
+  }
+};
 function renderComplianceTab() {
   if (!dealerId) return;
   
-  var dealer = ST.getOne('dealers', dealerId);
+  // ดึงข้อมูล Dealer โดยตรงจาก localStorage
+  var dealers = [];
+  try {
+    dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+  } catch(e) {}
+  
+  var dealer = null;
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i].id === dealerId) {
+      dealer = dealers[i];
+      break;
+    }
+  }
+  
   if (!dealer) {
     document.getElementById('tabContent').innerHTML = '<div class="empty"><p>ไม่พบข้อมูล Dealer</p></div>';
     return;
@@ -2614,7 +2664,13 @@ function renderComplianceTab() {
   var cfg = getConfig();
   var level = dealer.level || 'Other';
   var requirements = cfg.levelRequirements?.[level] || getDefaultRequirements(level);
-  var demoItems = getDemoItemsByDealer(dealerId);
+  
+  // ดึงข้อมูล Demo โดยตรงจาก localStorage
+  var allDemo = [];
+  try {
+    allDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
+  } catch(e) {}
+  var demoItems = allDemo.filter(function(d) { return d.dealerId === dealerId; });
   
   var h1Status = calculateH1Status(dealerId, requirements);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
@@ -2636,28 +2692,12 @@ function renderComplianceTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-function getDefaultRequirements(level) {
-  var defaults = {
-    S: { h1Target: 27000000, dsecRequired: 3, demoRequired: 'both', 
-         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
-         option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'] },
-    A: { h1Target: 4500000, dsecRequired: 1, demoRequired: 'either', 
-         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'], 
-         option2Models: ['DJI Dock 2', 'DJI Matrice 4TD'] },
-    B: { h1Target: 1500000, dsecRequired: 1, demoRequired: 'either', 
-         option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'], 
-         option2Models: ['DJI Dock 2'] },
-    Other: { h1Target: 0, dsecRequired: 0, demoRequired: 'none', option1Models: [], option2Models: [] }
-  };
-  return defaults[level] || defaults.B;
-}
-
 function getDemoItemsByDealer(dealerId) {
   var allDemo = [];
   try {
     allDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
   } catch(e) {}
-  return allDemo.filter(function(d) { return d.dealerId === dealerId && d.status === 'lent'; });
+  return allDemo.filter(function(d) { return d.dealerId === dealerId; });
 }
 
 function calculateH1Status(dealerId, requirements) {
@@ -2676,7 +2716,7 @@ function calculateH1Status(dealerId, requirements) {
   var wonAmount = 0;
   for (var i = 0; i < pipelines.length; i++) {
     var p = pipelines[i];
-    if (p.dealerId !== dealerId) continue;
+    if (!p || p.dealerId !== dealerId) continue;
     if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
     
     var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
@@ -2716,8 +2756,12 @@ function calculateDemoStatus(demoItems, requirements) {
   var missingOption2 = [];
   var foundModels = {};
   
-  for (var i = 0; i < demoItems.length; i++) {
-    foundModels[demoItems[i].model] = true;
+  if (demoItems && demoItems.length) {
+    for (var i = 0; i < demoItems.length; i++) {
+      if (demoItems[i] && demoItems[i].model) {
+        foundModels[demoItems[i].model] = true;
+      }
+    }
   }
   
   var opt1Models = requirements.option1Models || [];
@@ -2753,7 +2797,7 @@ function calculateDemoStatus(demoItems, requirements) {
     required: demoRequired,
     option1Models: opt1Models,
     option2Models: opt2Models,
-    demoItems: demoItems
+    demoItems: demoItems || []
   };
 }
 
@@ -2825,10 +2869,12 @@ function renderDemoCard(status, demoItems, requirements) {
   option2Html += '</div>';
   
   var demoListHtml = '';
-  if (demoItems.length) {
+  if (demoItems && demoItems.length) {
     demoListHtml = '<div style="margin-top:8px"><strong>📋 อุปกรณ์ Demo ที่มี:</strong><ul style="margin:4px 0 0 20px;font-size:12px">';
     for (var i = 0; i < demoItems.length; i++) {
-      demoListHtml += '<li>' + sanitize(demoItems[i].model) + ' (S/N: ' + sanitize(demoItems[i].serialNumber || '-') + ')</li>';
+      if (demoItems[i]) {
+        demoListHtml += '<li>' + sanitize(demoItems[i].model) + ' (S/N: ' + sanitize(demoItems[i].serialNumber || '-') + ')</li>';
+      }
     }
     demoListHtml += '</ul></div>';
   } else {
@@ -2881,7 +2927,6 @@ function formatDateThai(date) {
   return day + '/' + month + '/' + year;
 }
 
-// Helper for money short (ถ้ายังไม่มี)
 function fmtMoneyShort(amount) {
   if (!amount) return '0';
   var num = Number(amount);
