@@ -90,9 +90,12 @@ function getAllProducts() {
 function getProductById(id) {
   var products = getAllProducts();
   for (var i = 0; i < products.length; i++) {
-    if (products[i].id === id) return products[i];
+    var p = products[i];
+    // ✅ รองรับทั้ง id และ index fallback
+    var pId = p.id || (typeof p === 'object' ? i.toString() : null);
+    if (pId === id) return p;
     // backward compatible: ถ้าไม่มี id ให้ใช้ index แทน
-    if (!products[i].id && i.toString() === id) return products[i];
+    if (!p.id && i.toString() === id) return p;
   }
   return null;
 }
@@ -162,14 +165,18 @@ function updateProduct(productId, updates) {
   
   for (var i = 0; i < data.models.length; i++) {
     var p = data.models[i];
-    var pId = p.id || i.toString();
+    // ✅ แก้ไข: รองรับทั้ง id และ index fallback
+    var pId = p.id || (typeof p === 'object' ? i.toString() : null);
+    
     if (pId === productId) {
       for (var key in updates) {
         if (updates.hasOwnProperty(key)) {
           if (key === 'typePrices' && typeof updates[key] === 'object') {
             if (!p.typePrices) p.typePrices = {};
             for (var level in updates[key]) {
-              p.typePrices[level] = updates[key][level];
+              if (updates[key].hasOwnProperty(level)) {
+                p.typePrices[level] = updates[key][level];
+              }
             }
           } else {
             p[key] = updates[key];
@@ -182,7 +189,24 @@ function updateProduct(productId, updates) {
       return true;
     }
   }
-  return false;
+  
+  // ✅ ถ้าไม่พบ id ให้ลองสร้างใหม่
+  var newProduct = {
+    id: productId,
+    name: updates.name || 'Unknown',
+    sku: updates.sku || '',
+    ean: updates.ean || '',
+    price: updates.price || 0,
+    typePrices: updates.typePrices || { S: 0, A: 0, B: 0, Other: 0 },
+    eol: updates.eol || false,
+    isSoftware: updates.isSoftware || false,
+    isService: updates.isService || false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  data.models.push(newProduct);
+  saveProductsData(data);
+  return true;
 }
 
 function deleteProduct(productId) {
