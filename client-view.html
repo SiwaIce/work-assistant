@@ -2642,15 +2642,18 @@ var ST = {
 function renderComplianceTab() {
   if (!dealerId) return;
   
-  // ดึงข้อมูล Dealer โดยตรงจาก localStorage
+  // ดึงข้อมูล Dealer
   var dealers = [];
   try {
-    dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
-  } catch(e) {}
+    var dealerData = localStorage.getItem('v7_dealers');
+    dealers = dealerData ? JSON.parse(dealerData) : [];
+  } catch(e) {
+    dealers = [];
+  }
   
   var dealer = null;
   for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i].id === dealerId) {
+    if (dealers[i] && dealers[i].id === dealerId) {
       dealer = dealers[i];
       break;
     }
@@ -2663,7 +2666,7 @@ function renderComplianceTab() {
   
   var level = dealer.level || 'Other';
   
-  // ใช้ default values แทน getConfig()
+  // กำหนดค่า requirements ตาม level
   var levelRequirements = {
     S: { h1Target: 27000000, dsecRequired: 3, demoRequired: 'both', 
          option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
@@ -2679,7 +2682,31 @@ function renderComplianceTab() {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // New Demo Policy defaults
+  // ดึงข้อมูล Demo (ป้องกัน null)
+  var allDemo = [];
+  try {
+    var demoRaw = localStorage.getItem('v7_demo');
+    if (demoRaw) {
+      allDemo = JSON.parse(demoRaw);
+      if (!Array.isArray(allDemo)) allDemo = [];
+    }
+  } catch(e) {
+    allDemo = [];
+  }
+  
+  var demoItems = [];
+  for (var i = 0; i < allDemo.length; i++) {
+    if (allDemo[i] && allDemo[i].dealerId === dealerId) {
+      demoItems.push(allDemo[i]);
+    }
+  }
+  
+  // คำนวณสถานะต่างๆ
+  var h1Status = calculateH1Status(dealerId, requirements);
+  var dsecStatus = calculateDSECStatus(dealer, requirements);
+  var demoStatus = calculateDemoStatus(demoItems, requirements);
+  
+  // New Demo Policy
   var newDemoPolicy = {
     enabled: true,
     productName: 'DJI Matrice 5 Series',
@@ -2687,21 +2714,7 @@ function renderComplianceTab() {
     orderWithinDays: 60,
     alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
   };
-  
-  // H1 Period defaults
-  var h1Period = { startMonth: 0, startDay: 1, endMonth: 5, endDay: 30 };
-  
-  // ดึงข้อมูล Demo
-  var allDemo = [];
-  try {
-    allDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
-  } catch(e) {}
-  var demoItems = allDemo.filter(function(d) { return d.dealerId === dealerId; });
-  
-  var h1Status = calculateH1StatusWithConfig(dealerId, requirements, h1Period);
-  var dsecStatus = calculateDSECStatus(dealer, requirements);
-  var demoStatus = calculateDemoStatus(demoItems, requirements);
-  var policyAlert = getNewDemoPolicyAlertWithConfig(newDemoPolicy);
+  var policyAlert = getNewDemoPolicyAlert(newDemoPolicy);
   
   var html = '<div class="section">';
   html += '<div class="section-title">📊 สถานะพาร์ทเนอร์ (' + level + ' Level)</div>';
@@ -2718,15 +2731,18 @@ function renderComplianceTab() {
   document.getElementById('tabContent').innerHTML = html;
 }
 
-function calculateH1StatusWithConfig(dealerId, requirements, h1Period) {
+function calculateH1Status(dealerId, requirements) {
   var now = new Date();
-  var startDate = new Date(now.getFullYear(), h1Period.startMonth, h1Period.startDay);
-  var endDate = new Date(now.getFullYear(), h1Period.endMonth, h1Period.endDay);
+  var startDate = new Date(now.getFullYear(), 0, 1);  // 1 Jan
+  var endDate = new Date(now.getFullYear(), 5, 30);   // 30 Jun
   
   var pipelines = [];
   try {
-    pipelines = JSON.parse(localStorage.getItem('v7_pipeline') || '[]');
-  } catch(e) {}
+    var pipeRaw = localStorage.getItem('v7_pipeline');
+    pipelines = pipeRaw ? JSON.parse(pipeRaw) : [];
+  } catch(e) {
+    pipelines = [];
+  }
   
   var wonAmount = 0;
   for (var i = 0; i < pipelines.length; i++) {
@@ -2753,7 +2769,73 @@ function calculateH1StatusWithConfig(dealerId, requirements, h1Period) {
   };
 }
 
-function getNewDemoPolicyAlertWithConfig(policy) {
+function calculateDSECStatus(dealer, requirements) {
+  var currentCount = Number(dealer.dsecCertCount) || 0;
+  var required = requirements.dsecRequired || 0;
+  return {
+    current: currentCount,
+    required: required,
+    isOk: currentCount >= required,
+    need: Math.max(0, required - currentCount)
+  };
+}
+
+function calculateDemoStatus(demoItems, requirements) {
+  // ตรวจสอบว่า demoItems เป็น array หรือไม่
+  if (!demoItems || !Array.isArray(demoItems)) {
+    demoItems = [];
+  }
+  
+  var hasOption1 = true;
+  var hasOption2 = true;
+  var missingOption1 = [];
+  var missingOption2 = [];
+  var foundModels = {};
+  
+  for (var i = 0; i < demoItems.length; i++) {
+    if (demoItems[i] && demoItems[i].model) {
+      foundModels[demoItems[i].model] = true;
+    }
+  }
+  
+  var opt1Models = requirements.option1Models || [];
+  for (var i = 0; i < opt1Models.length; i++) {
+    if (!foundModels[opt1Models[i]]) {
+      hasOption1 = false;
+      missingOption1.push(opt1Models[i]);
+    }
+  }
+  
+  var opt2Models = requirements.option2Models || [];
+  for (var i = 0; i < opt2Models.length; i++) {
+    if (!foundModels[opt2Models[i]]) {
+      hasOption2 = false;
+      missingOption2.push(opt2Models[i]);
+    }
+  }
+  
+  var demoRequired = requirements.demoRequired || 'none';
+  var isOk = false;
+  if (demoRequired === 'none') isOk = true;
+  else if (demoRequired === 'option1') isOk = hasOption1;
+  else if (demoRequired === 'option2') isOk = hasOption2;
+  else if (demoRequired === 'either') isOk = hasOption1 || hasOption2;
+  else if (demoRequired === 'both') isOk = hasOption1 && hasOption2;
+  
+  return {
+    isOk: isOk,
+    hasOption1: hasOption1,
+    hasOption2: hasOption2,
+    missingOption1: missingOption1,
+    missingOption2: missingOption2,
+    required: demoRequired,
+    option1Models: opt1Models,
+    option2Models: opt2Models,
+    demoItems: demoItems
+  };
+}
+
+function getNewDemoPolicyAlert(policy) {
   if (!policy || !policy.enabled) return null;
   
   var releaseDate = new Date(policy.releaseDate);
@@ -2777,6 +2859,7 @@ function getNewDemoPolicyAlertWithConfig(policy) {
     message: policy.alertMessage
   };
 }
+
 function renderH1Card(status, level) {
   var colorClass = status.isOk ? 'c2' : (status.percent >= 70 ? 'c3' : 'c4');
   var statusText = status.isOk ? '✅ สำเร็จเกินเป้า!' : (status.gap > 0 ? '⚠️ เหลืออีก ' + fmtMoneyShort(status.gap) + ' บาท' : '');
@@ -2819,7 +2902,7 @@ function renderDemoCard(status, demoItems, requirements) {
   option2Html += '</div>';
   
   var demoListHtml = '';
-  if (demoItems && demoItems.length) {
+  if (demoItems && demoItems.length > 0) {
     demoListHtml = '<div style="margin-top:8px"><strong>📋 อุปกรณ์ Demo ที่มี:</strong><ul style="margin:4px 0 0 20px;font-size:12px">';
     for (var i = 0; i < demoItems.length; i++) {
       if (demoItems[i]) {
