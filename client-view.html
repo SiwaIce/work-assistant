@@ -2640,9 +2640,67 @@ var ST = {
   }
 };
 // ================================================================
-// COMPLIANCE DASHBOARD - PREMIUM DESIGN
+// GET CONFIG FROM LOCALSTORAGE
 // ================================================================
-
+function getConfig() {
+  var defaultConfig = {
+    saleName: 'Siwawong',
+    levelRequirements: {
+      S: { h1Target: 27000000, dsecRequired: 3, 
+           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
+           option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'] },
+      A: { h1Target: 4500000, dsecRequired: 1, 
+           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'], 
+           option2Models: ['DJI Dock 2', 'DJI Matrice 4TD'] },
+      B: { h1Target: 1500000, dsecRequired: 1, 
+           option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'], 
+           option2Models: ['DJI Dock 2'] },
+      Other: { h1Target: 0, dsecRequired: 0, option1Models: [], option2Models: [] }
+    },
+    newDemoPolicies: [
+      {
+        enabled: true,
+        productName: 'DJI Matrice 5 Series',
+        releaseDate: '2026-06-15',
+        orderWithinDays: 60,
+        alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
+      }
+    ],
+    h1Period: {
+      startMonth: 0,
+      startDay: 1,
+      endMonth: 5,
+      endDay: 30
+    }
+  };
+  
+  try {
+    var saved = localStorage.getItem('v7_config');
+    if (saved) {
+      var cfg = JSON.parse(saved);
+      // Merge with defaults
+      var result = JSON.parse(JSON.stringify(defaultConfig));
+      for (var key in cfg) {
+        if (cfg.hasOwnProperty(key) && result.hasOwnProperty(key)) {
+          if (typeof cfg[key] === 'object' && cfg[key] !== null && !Array.isArray(cfg[key])) {
+            for (var subKey in cfg[key]) {
+              if (cfg[key].hasOwnProperty(subKey)) {
+                result[key][subKey] = cfg[key][subKey];
+              }
+            }
+          } else {
+            result[key] = cfg[key];
+          }
+        }
+      }
+      return result;
+    }
+  } catch(e) {
+    console.warn('Error loading config:', e);
+  }
+  
+  return defaultConfig;
+}
 // ================================================================
 // COMPLIANCE DASHBOARD - UPDATED WITH DEMO OPTION
 // ================================================================
@@ -2960,12 +3018,20 @@ function calculateDSECStatus(dealer, requirements) {
 }
 
 function getNewDemoPolicyAlerts() {
-  // สามารถอ่านจาก config ได้หลายรายการ
-  var cfg = getConfig();
-  var policies = cfg.newDemoPolicies || [];
+  var alerts = [];
   
-  // ถ้ายังไม่มี ให้ใช้ค่าเริ่มต้น
-  if (policies.length === 0) {
+  // ลองอ่านจาก localStorage โดยตรง
+  var cfg = null;
+  try {
+    var saved = localStorage.getItem('v7_config');
+    if (saved) cfg = JSON.parse(saved);
+  } catch(e) {}
+  
+  var policies = [];
+  if (cfg && cfg.newDemoPolicies && cfg.newDemoPolicies.length) {
+    policies = cfg.newDemoPolicies;
+  } else {
+    // ค่าเริ่มต้น
     policies = [{
       enabled: true,
       productName: 'DJI Matrice 5 Series',
@@ -2975,7 +3041,6 @@ function getNewDemoPolicyAlerts() {
     }];
   }
   
-  var alerts = [];
   for (var i = 0; i < policies.length; i++) {
     var policy = policies[i];
     if (!policy || !policy.enabled) continue;
