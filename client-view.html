@@ -2708,6 +2708,21 @@ function getConfig() {
 function renderComplianceTab() {
   if (!dealerId) return;
   
+  // แสดง loading ก่อน
+  document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
+  
+  // โหลดข้อมูลล่าสุดจาก Firebase ก่อน แล้วค่อยแสดงผล
+  loadLatestConfigFromFirebase().then(function() {
+    renderComplianceTabContent();
+  }).catch(function() {
+    renderComplianceTabContent();
+  });
+}
+
+// ย้ายโค้ด render เดิมมาไว้ในฟังก์ชันนี้
+function renderComplianceTabContent() {
+  if (!dealerId) return;
+  
   // ดึงข้อมูล Dealer
   var dealers = [];
   try {
@@ -2731,7 +2746,7 @@ function renderComplianceTab() {
   var level = dealer.level || 'Other';
   var levelName = { S: 'Strategic Partner', A: 'Authorized Partner', B: 'Basic Partner', Other: 'Trial Partner' }[level] || level;
   
-  // กำหนดค่า requirements ตาม level (ใช้เป็น template)
+  // กำหนดค่า requirements ตาม level
   var levelRequirements = {
     S: { h1Target: 27000000, dsecRequired: 3, 
          option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
@@ -2747,12 +2762,27 @@ function renderComplianceTab() {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
+  // ดึงข้อมูล Demo
+  var allDemo = [];
+  try {
+    var demoRaw = localStorage.getItem('v7_demo');
+    allDemo = demoRaw ? JSON.parse(demoRaw) : [];
+    if (!Array.isArray(allDemo)) allDemo = [];
+  } catch(e) { allDemo = []; }
+  
+  var demoItems = [];
+  for (var i = 0; i < allDemo.length; i++) {
+    if (allDemo[i] && allDemo[i].dealerId === dealerId) {
+      demoItems.push(allDemo[i]);
+    }
+  }
+  
   // คำนวณสถานะต่างๆ
   var h1Status = calculateH1Status(dealerId, requirements);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var demoStatus = calculateDemoStatus(dealer, requirements);
   
-  // New Demo Policy (สามารถเพิ่มหลายรายการได้)
+  // New Demo Policy Alerts (จะได้ข้อมูลล่าสุดจาก localStorage ที่เพิ่งโหลดจาก Firebase)
   var policyAlerts = getNewDemoPolicyAlerts();
   
   // คำนวณ Overall Score
@@ -2770,7 +2800,7 @@ function renderComplianceTab() {
   var overallScore = totalWeight > 0 ? Math.round(totalScore / totalWeight * 100) : 100;
   var overallColor = overallScore >= 80 ? '#22c55e' : (overallScore >= 50 ? '#f59e0b' : '#ef4444');
   
-  // สร้าง HTML Dashboard
+  // สร้าง HTML
   var html = '';
   
   // Hero Header
@@ -2781,6 +2811,7 @@ function renderComplianceTab() {
   html += '<div style="display: flex; align-items: center; gap: 8px"><span class="tag tag-' + (level === 'S' ? 's' : level === 'A' ? 'a' : level === 'B' ? 'b' : 'other') + '" style="font-size: 14px; padding: 4px 16px">' + level + ' ' + levelName + '</span>';
   html += '<span style="font-size: 13px; color: var(--text2)">DJI Authorized Dealer</span></div></div>';
   html += '<div style="text-align: center"><div style="font-size: 42px; font-weight: 800; color: ' + overallColor + '">' + overallScore + '%</div><div style="font-size: 12px; color: var(--text2)">Overall Compliance Score</div></div>';
+  html += '<button class="btn bo" onclick="refreshClientData()" style="align-self:center">🔄 รีเฟรชข้อมูล</button>';
   html += '</div></div>';
   
   // 3 Score Cards
@@ -2817,13 +2848,12 @@ function renderComplianceTab() {
   
   html += '</div>';
   
-// ใน renderComplianceTab หา H1 Detail Section แล้วแก้ไขหัวข้อ
-html += '<div class="card" style="margin-bottom: 16px">';
-html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
-html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">🎯</div><div><div style="font-size:16px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text2)">Half Year Target</div></div></div>';
-html += '<span class="tag ' + (h1Status.isOk ? 'tag-completed' : (h1Status.percent >= 70 ? 'tag-active' : 'tag-cancelled')) + '" style="font-size:13px;padding:4px 12px">' + (h1Status.isOk ? 'สำเร็จ' : (h1Status.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</span>';
-html += '</div>';
-
+  // H1 Detail Section
+  html += '<div class="card" style="margin-bottom: 16px">';
+  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">🎯</div><div><div style="font-size:16px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text2)">Half Year Target</div></div></div>';
+  html += '<span class="tag ' + (h1Status.isOk ? 'tag-completed' : (h1Status.percent >= 70 ? 'tag-active' : 'tag-cancelled')) + '" style="font-size:13px;padding:4px 12px">' + (h1Status.isOk ? 'สำเร็จ' : (h1Status.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</span>';
+  html += '</div>';
   html += '<div class="pb" style="height: 12px; margin-bottom: 12px"><div class="pf" style="width: ' + h1Status.percent + '%; background: linear-gradient(90deg, ' + (h1Status.isOk ? '#22c55e' : '#f59e0b') + ', ' + (h1Status.isOk ? '#86efac' : '#fbbf24') + ')"></div></div>';
   html += '<div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px">';
   html += '<div><span style="color: var(--text2)">เป้าหมาย:</span> <strong>' + fmtMoneyShort(h1Status.target) + ' ฿</strong></div>';
@@ -2832,15 +2862,15 @@ html += '</div>';
   html += '</div>';
   html += '</div>';
   
-  // Demo Detail Section (ตาม Option ที่เลือก)
+  // Demo Detail Section
   html += renderDemoDetailCard(dealer, demoStatus, requirements);
   
   // DSEC Detail Section
-html += '<div class="card" style="margin-bottom: 16px">';
-html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
-html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">📋</div><div><div style="font-size:16px;font-weight:800">DSEC Certification</div><div style="font-size:11px;color:var(--text2)">Personnel Certification Status</div></div></div>';
-html += '<span class="tag ' + (dsecStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:13px;padding:4px 12px">' + (dsecStatus.isOk ? 'ผ่าน' : 'ไม่ผ่าน') + '</span>';
-html += '</div>';
+  html += '<div class="card" style="margin-bottom: 16px">';
+  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">📋</div><div><div style="font-size:16px;font-weight:800">DSEC Certification</div><div style="font-size:11px;color:var(--text2)">Personnel Certification Status</div></div></div>';
+  html += '<span class="tag ' + (dsecStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:13px;padding:4px 12px">' + (dsecStatus.isOk ? 'ผ่าน' : 'ไม่ผ่าน') + '</span>';
+  html += '</div>';
   html += '<div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap">';
   html += '<div style="flex: 1"><div class="pb" style="height: 10px"><div class="pf" style="width: ' + (dsecStatus.required > 0 ? (dsecStatus.current / dsecStatus.required * 100) : 100) + '%; background: ' + (dsecStatus.isOk ? '#22c55e' : '#ef4444') + '"></div></div></div>';
   html += '<div><strong>' + dsecStatus.current + '/' + dsecStatus.required + '</strong> คน</div>';
@@ -2861,6 +2891,15 @@ html += '</div>';
   document.getElementById('tabContent').innerHTML = html;
 }
 
+// ✅ เพิ่มฟังก์ชันรีเฟรชข้อมูล
+function refreshClientData() {
+  loadLatestConfigFromFirebase().then(function() {
+    toast('✅ อัปเดตข้อมูลเรียบร้อย');
+    renderComplianceTabContent();
+  }).catch(function() {
+    toast('⚠️ โหลดข้อมูลไม่สำเร็จ');
+  });
+}
 // ================================================================
 // DEMO STATUS CALCULATION (ใช้ demoOption และ demoItems จาก Dealer โดยตรง)
 // ================================================================
@@ -3031,7 +3070,7 @@ function calculateDSECStatus(dealer, requirements) {
 function getNewDemoPolicyAlerts() {
   var alerts = [];
   
-  // อ่านจาก localStorage โดยตรง
+  // อ่านจาก localStorage (เผื่อมี)
   var cfg = null;
   try {
     var saved = localStorage.getItem('v7_config');
@@ -3055,17 +3094,14 @@ function getNewDemoPolicyAlerts() {
   
   for (var i = 0; i < policies.length; i++) {
     var policy = policies[i];
-    // ข้ามถ้าปิดใช้งาน
     if (!policy.enabled) continue;
     
     var releaseDate = new Date(policy.releaseDate);
     var deadline = new Date(releaseDate);
     deadline.setDate(deadline.getDate() + (policy.orderWithinDays || 60));
     
-    // ถ้าเลยกำหนดไปแล้วเกิน 30 วัน ไม่แสดง
     var daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
     
-    // แสดงเฉพาะที่ยังไม่หมดอายุเกิน 30 วัน
     if (daysLeft > -30) {
       var isUrgent = daysLeft <= 30 && daysLeft > 0;
       var isOverdue = daysLeft < 0;
@@ -3086,6 +3122,48 @@ function getNewDemoPolicyAlerts() {
   }
   
   return alerts;
+}
+// ================================================================
+// โหลดข้อมูล Config ล่าสุดจาก Firebase
+// ================================================================
+function loadLatestConfigFromFirebase() {
+  return new Promise(function(resolve, reject) {
+    // ดึง uid จาก URL
+    var urlParams = new URLSearchParams(window.location.search);
+    var uid = urlParams.get('uid');
+    
+    // ถ้าไม่มี uid หรือไม่มี Firebase ให้ใช้ localStorage อย่างเดียว
+    if (!uid || typeof db === 'undefined') {
+      resolve();
+      return;
+    }
+    
+    // ดึงข้อมูลจาก Firebase
+    db.collection('users').doc(uid).collection('_config').doc('main').get().then(function(doc) {
+      if (doc.exists) {
+        var firebaseConfig = doc.data();
+        
+        // อ่าน config เดิมจาก localStorage
+        var localConfig = {};
+        try {
+          var saved = localStorage.getItem('v7_config');
+          if (saved) localConfig = JSON.parse(saved);
+        } catch(e) {}
+        
+        // รวมข้อมูล (ข้อมูลจาก Firebase มีความสำคัญกว่า)
+        var mergedConfig = Object.assign({}, localConfig, firebaseConfig);
+        
+        // บันทึกกลับไปที่ localStorage
+        localStorage.setItem('v7_config', JSON.stringify(mergedConfig));
+        
+        console.log('✅ โหลด Config ล่าสุดจาก Firebase สำเร็จ');
+      }
+      resolve();
+    }).catch(function(err) {
+      console.warn('❌ โหลด Config จาก Firebase ล้มเหลว:', err);
+      resolve(); // ยังให้ทำงานต่อไป
+    });
+  });
 }
 function renderPolicyAlert(alert) {
   var statusIcon = alert.isOverdue ? '🔴' : (alert.isUrgent ? '🟠' : '🟡');
