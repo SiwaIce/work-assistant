@@ -3031,18 +3031,17 @@ function calculateDSECStatus(dealer, requirements) {
 function getNewDemoPolicyAlerts() {
   var alerts = [];
   
-  // ลองอ่านจาก localStorage โดยตรง
+  // อ่านจาก localStorage โดยตรง
   var cfg = null;
   try {
     var saved = localStorage.getItem('v7_config');
     if (saved) cfg = JSON.parse(saved);
   } catch(e) {}
   
-  var policies = [];
-  if (cfg && cfg.newDemoPolicies && cfg.newDemoPolicies.length) {
-    policies = cfg.newDemoPolicies;
-  } else {
-    // ค่าเริ่มต้น
+  var policies = (cfg && cfg.newDemoPolicies) ? cfg.newDemoPolicies : [];
+  
+  // ถ้าไม่มีข้อมูลใน config ให้ใช้ค่าเริ่มต้น
+  if (!policies.length) {
     policies = [{
       enabled: true,
       productName: 'DJI Matrice 5 Series',
@@ -3052,35 +3051,42 @@ function getNewDemoPolicyAlerts() {
     }];
   }
   
+  var now = new Date();
+  
   for (var i = 0; i < policies.length; i++) {
     var policy = policies[i];
-    if (!policy || !policy.enabled) continue;
+    // ข้ามถ้าปิดใช้งาน
+    if (!policy.enabled) continue;
     
     var releaseDate = new Date(policy.releaseDate);
-    var now = new Date();
     var deadline = new Date(releaseDate);
     deadline.setDate(deadline.getDate() + (policy.orderWithinDays || 60));
     
+    // ถ้าเลยกำหนดไปแล้วเกิน 30 วัน ไม่แสดง
     var daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
-    var isUrgent = daysLeft <= 30 && daysLeft > 0;
-    var isOverdue = daysLeft < 0;
     
-    alerts.push({
-      active: true,
-      productName: policy.productName,
-      releaseDate: policy.releaseDate,
-      orderWithinDays: policy.orderWithinDays,
-      deadline: deadline.toISOString().split('T')[0],
-      daysLeft: daysLeft,
-      isUrgent: isUrgent,
-      isOverdue: isOverdue,
-      message: policy.alertMessage
-    });
+    // แสดงเฉพาะที่ยังไม่หมดอายุเกิน 30 วัน
+    if (daysLeft > -30) {
+      var isUrgent = daysLeft <= 30 && daysLeft > 0;
+      var isOverdue = daysLeft < 0;
+      
+      alerts.push({
+        id: policy.id || i,
+        active: true,
+        productName: policy.productName,
+        releaseDate: policy.releaseDate,
+        orderWithinDays: policy.orderWithinDays,
+        deadline: deadline.toISOString().split('T')[0],
+        daysLeft: daysLeft,
+        isUrgent: isUrgent,
+        isOverdue: isOverdue,
+        message: policy.alertMessage
+      });
+    }
   }
   
   return alerts;
 }
-
 function renderPolicyAlert(alert) {
   var statusIcon = alert.isOverdue ? '🔴' : (alert.isUrgent ? '🟠' : '🟡');
   var statusText = alert.isOverdue ? 'เลยกำหนด!' : (alert.isUrgent ? 'ใกล้กำหนด!' : 'แจ้งเตือนล่วงหน้า');

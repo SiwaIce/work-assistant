@@ -60,6 +60,17 @@ var DEF_CONFIG = {
     orderWithinDays: 60,             // ต้องสั่งซื้อภายในกี่วัน
     alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
   },
+// ✅ เพิ่มข้างล่างนี้ (หรือแทนที่อันเดิม)
+newDemoPolicies: [
+  {
+    id: 'ndp_1',
+    enabled: true,
+    productName: 'DJI Matrice 5 Series',
+    releaseDate: '2026-06-15',
+    orderWithinDays: 60,
+    alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
+  }
+],
   
   // ===== H1 PERIOD (สามารถปรับได้) =====
   h1Period: {

@@ -78,6 +78,10 @@ function rAdmin(el) {
       '<div class="lm"><div class="lt">📑 ' + sanitize(tp.name) + '</div>' +
       '<div class="ls">' + (tp.steps || []).length + ' steps ' + (tp.sequential ? '⚡' : '') + '</div></div></div>';
   }
+// ต่อท้าย rAdmin function ก่อนบรรทัด el.innerHTML = html (หรือหลัง el.innerHTML)
+setTimeout(function() {
+  initNewDemoPolicies();
+}, 100);
 
   el.innerHTML = '' +
     // Data Overview
@@ -218,21 +222,14 @@ function rAdmin(el) {
     '<button class="btn bo" onclick="resetLevelRequirements()">↻ Reset เป็นค่าเริ่มต้น</button>' +
     '</div></div>' +
 
-    // New Demo Policy Alert
-    '<div class="card"><h2>⚠️ New Demo Policy Alert</h2>' +
-    '<div class="fr">' +
-    '<div class="fg"><label>🚁 สินค้าใหม่</label><input type="text" id="ndp_product" class="fm-input" value="' + sanitize(cfg.newDemoPolicy?.productName || '') + '"></div>' +
-    '<div class="fg">' + dpH('ndp_release', cfg.newDemoPolicy?.releaseDate || '', '📅 วันที่วางจำหน่าย') + '</div>' +
-    '</div>' +
-    '<div class="fr">' +
-    '<div class="fg"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="' + (cfg.newDemoPolicy?.orderWithinDays || 60) + '"></div>' +
-    '<div class="fg"><label>🔔 เปิดใช้งาน</label><select id="ndp_enabled" class="fm-input">' +
-    '<option value="true"' + (cfg.newDemoPolicy?.enabled !== false ? ' selected' : '') + '>✅ เปิดใช้งาน</option>' +
-    '<option value="false"' + (cfg.newDemoPolicy?.enabled === false ? ' selected' : '') + '>❌ ปิดใช้งาน</option>' +
-    '</select></div>' +
-    '</div>' +
-    '<div class="fg"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="2" class="fm-input">' + sanitize(cfg.newDemoPolicy?.alertMessage || '') + '</textarea></div>' +
-    '<button class="btn bp bsm" onclick="saveNewDemoPolicy()">💾 บันทึก Policy</button></div>' +
+    // New Demo Policies Management (รองรับหลายรายการ)
+    '<div class="card"><h2>⚠️ New Demo Policies Management</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">จัดการสินค้าใหม่ที่ต้องแจ้งเตือน Dealer (รองรับหลายรายการ)</p>' +
+    '<div id="ndpListContainer"></div>' +
+    '<div class="bg" style="margin-top:8px">' +
+    '<button class="btn bp bsm" onclick="showAddNewDemoPolicyM()">➕ เพิ่มสินค้าใหม่</button>' +
+    '<button class="btn bo bsm" onclick="resetNewDemoPolicies()">↻ Reset ค่าเริ่มต้น</button>' +
+    '</div></div>' +
 
     // H1 Period Setting
     '<div class="card"><h2>📅 H1 Period Setting</h2>' +
@@ -1148,4 +1145,164 @@ function saveH1Period() {
   saveConfig(cfg);
   toast('💾 บันทึก H1 Period แล้ว');
   render();
+}
+// ================================================================
+// NEW DEMO POLICIES MANAGEMENT (เพิ่มต่อท้าย admin.js)
+// ================================================================
+
+function renderNewDemoPoliciesList() {
+  var cfg = getConfig();
+  var policies = cfg.newDemoPolicies || [];
+  
+  var container = document.getElementById('ndpListContainer');
+  if (!container) return;
+  
+  if (!policies.length) {
+    container.innerHTML = '<div class="empty"><p>ยังไม่มีนโยบาย Demo สินค้าใหม่</p></div>';
+    return;
+  }
+  
+  var html = '<div style="display:flex;flex-direction:column;gap:8px">';
+  for (var i = 0; i < policies.length; i++) {
+    var p = policies[i];
+    var statusColor = p.enabled ? '#22c55e' : '#64748b';
+    var statusText = p.enabled ? '✅ เปิดใช้งาน' : '⏸ ปิดใช้งาน';
+    
+    html += '<div class="ndp-item" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:20px">🚁</span>';
+    html += '<strong>' + sanitize(p.productName) + '</strong>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:4px">';
+    html += '<button class="btn bsm ' + (p.enabled ? 'bs' : 'bo') + '" onclick="toggleNewDemoPolicy(' + i + ')">' + (p.enabled ? '✅ เปิด' : '🔘 ปิด') + '</button>';
+    html += '<button class="btn bsm bo" onclick="editNewDemoPolicy(' + i + ')">✏️</button>';
+    html += '<button class="btn bsm bd" onclick="deleteNewDemoPolicy(' + i + ')">🗑️</button>';
+    html += '</div></div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">📅 วางจำหน่าย: ' + fD(p.releaseDate) + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px">⏰ ต้องสั่งซื้อภายใน: ' + p.orderWithinDays + ' วัน</div>';
+    html += '<div style="font-size:11px;color:var(--text3);margin-top:4px;padding:6px;background:rgba(245,158,11,0.05);border-radius:6px">📝 ' + sanitize(p.alertMessage) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function showAddNewDemoPolicyM() {
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>🚁 ชื่อสินค้า *</label><input type="text" id="ndp_product" class="fm-input" placeholder="เช่น DJI Matrice 5 Series"></div>';
+  h += '<div class="fm-group">' + dpH('ndp_release', '', '📅 วันที่วางจำหน่าย') + '</div>';
+  h += '<div class="fm-group"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="60" min="1"></div>';
+  h += '<div class="fm-group"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="3" class="fm-input" placeholder="ข้อความเตือนที่จะแสดงให้ Dealer เห็น..."></textarea></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="saveNewDemoPolicy()">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('➕ เพิ่มนโยบายสินค้าใหม่', h);
+}
+
+function saveNewDemoPolicy() {
+  var productName = document.getElementById('ndp_product').value.trim();
+  var releaseDate = dpG('ndp_release');
+  var orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
+  var alertMessage = document.getElementById('ndp_message').value.trim();
+  
+  if (!productName) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  if (!releaseDate) { toast('กรุณาใส่วันที่วางจำหน่าย'); return; }
+  if (!alertMessage) alertMessage = '⚠️ ต้องสั่งซื้อ Demo รุ่นใหม่ภายใน ' + orderWithinDays + ' วัน มิฉะนั้นอาจส่งผลต่อสถานะพาร์ทเนอร์';
+  
+  var cfg = getConfig();
+  if (!cfg.newDemoPolicies) cfg.newDemoPolicies = [];
+  
+  cfg.newDemoPolicies.push({
+    id: 'ndp_' + Date.now(),
+    enabled: true,
+    productName: productName,
+    releaseDate: releaseDate,
+    orderWithinDays: orderWithinDays,
+    alertMessage: alertMessage
+  });
+  
+  saveConfig(cfg);
+  closeMForce();
+  toast('✅ เพิ่มนโยบายสินค้าใหม่แล้ว');
+  renderNewDemoPoliciesList();
+  render();
+}
+
+function editNewDemoPolicy(idx) {
+  var cfg = getConfig();
+  var p = cfg.newDemoPolicies[idx];
+  if (!p) return;
+  
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>🚁 ชื่อสินค้า *</label><input type="text" id="ndp_product" class="fm-input" value="' + sanitize(p.productName) + '"></div>';
+  h += '<div class="fm-group">' + dpH('ndp_release', p.releaseDate, '📅 วันที่วางจำหน่าย') + '</div>';
+  h += '<div class="fm-group"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="' + p.orderWithinDays + '" min="1"></div>';
+  h += '<div class="fm-group"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="3" class="fm-input">' + sanitize(p.alertMessage) + '</textarea></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="updateNewDemoPolicy(' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('✏️ แก้ไขนโยบายสินค้าใหม่', h);
+}
+
+function updateNewDemoPolicy(idx) {
+  var cfg = getConfig();
+  if (!cfg.newDemoPolicies || !cfg.newDemoPolicies[idx]) return;
+  
+  cfg.newDemoPolicies[idx].productName = document.getElementById('ndp_product').value.trim();
+  cfg.newDemoPolicies[idx].releaseDate = dpG('ndp_release');
+  cfg.newDemoPolicies[idx].orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
+  cfg.newDemoPolicies[idx].alertMessage = document.getElementById('ndp_message').value.trim();
+  
+  saveConfig(cfg);
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  renderNewDemoPoliciesList();
+  render();
+}
+
+function toggleNewDemoPolicy(idx) {
+  var cfg = getConfig();
+  if (!cfg.newDemoPolicies || !cfg.newDemoPolicies[idx]) return;
+  cfg.newDemoPolicies[idx].enabled = !cfg.newDemoPolicies[idx].enabled;
+  saveConfig(cfg);
+  toast(cfg.newDemoPolicies[idx].enabled ? '✅ เปิดใช้งานแล้ว' : '⏸ ปิดใช้งานแล้ว');
+  renderNewDemoPoliciesList();
+  render();
+}
+
+function deleteNewDemoPolicy(idx) {
+  if (!confirm('ลบนโยบายนี้?')) return;
+  var cfg = getConfig();
+  cfg.newDemoPolicies.splice(idx, 1);
+  saveConfig(cfg);
+  toast('🗑️ ลบแล้ว');
+  renderNewDemoPoliciesList();
+  render();
+}
+
+function resetNewDemoPolicies() {
+  if (!confirm('⚠️ Reset นโยบายสินค้าใหม่เป็นค่าเริ่มต้น?')) return;
+  var cfg = getConfig();
+  cfg.newDemoPolicies = [
+    {
+      id: 'ndp_1',
+      enabled: true,
+      productName: 'DJI Matrice 5 Series',
+      releaseDate: '2026-06-15',
+      orderWithinDays: 60,
+      alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
+    }
+  ];
+  saveConfig(cfg);
+  toast('🔄 Reset แล้ว');
+  renderNewDemoPoliciesList();
+  render();
+}
+
+// เรียกตอนโหลดหน้า admin
+function initNewDemoPolicies() {
+  renderNewDemoPoliciesList();
 }
