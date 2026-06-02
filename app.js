@@ -11,18 +11,19 @@ var DEF_CONFIG = {
     visitPerWeek: 1
   },
 
-// เพิ่มใน DEF_CONFIG (หลัง dealerLevels)
-
   dealerLevels: ['S','A','B','Other'],
   dealerTiers: ['Platinum','Gold','Silver','Bronze','New'],
-  
-  // ===== PARTNER LEVEL REQUIREMENTS (สามารถปรับได้ใน Admin) =====
+  djiDealerTypes: ['SAB','Other'],
+  creditTerms: ['COD','30 วัน','45 วัน','60 วัน','อื่นๆ'],
+  unitTypes: ['University','Government','Government Agency','State Enterprise','Private','Military','Local Administration','อื่นๆ'],
+
+  // ===== PARTNER LEVEL REQUIREMENTS =====
   levelRequirements: {
     S: {
       name: 'S (Strategic Partner)',
       h1Target: 27000000,
       dsecRequired: 3,
-      demoRequired: 'both',        // 'none', 'option1', 'option2', 'either', 'both'
+      demoRequired: 'both',
       option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'],
       option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD']
     },
@@ -52,37 +53,18 @@ var DEF_CONFIG = {
     }
   },
   
-  // ===== NEW DEMO POLICY ALERT (สามารถปรับได้ใน Admin) =====
-  newDemoPolicy: {
-    enabled: true,
-    productName: 'DJI Matrice 5 Series',
-    releaseDate: '2026-06-15',      // YYYY-MM-DD
-    orderWithinDays: 60,             // ต้องสั่งซื้อภายในกี่วัน
-    alertMessage: '⚠️ หากไม่ดำเนินการสั่งซื้อ Demo รุ่นใหม่ภายในเวลาที่กำหนด อาจส่งผลต่อการพิจารณาปรับลดสถานะ SAB Level ได้'
-  },
-// ✅ เพิ่มข้างล่างนี้ (หรือแทนที่อันเดิม)
-newDemoPolicies: [
-  {
-    id: 'ndp_example',
-    enabled: false,  // ✅ ปิดไว้เป็นตัวอย่าง
-    productName: 'ตัวอย่างสินค้าใหม่',
-    releaseDate: '2026-12-31',
-    orderWithinDays: 60,
-    alertMessage: 'ตัวอย่างข้อความแจ้งเตือน'
-  }
-]  
-  // ===== H1 PERIOD (สามารถปรับได้) =====
+  // ===== NEW DEMO POLICIES (รองรับหลายรายการ) =====
+  newDemoPolicies: [],
+
+  // ===== H1 PERIOD =====
   h1Period: {
     startMonth: 0,
     startDay: 1,
     endMonth: 5,
     endDay: 30
-  }    // ✅ ไม่มี comma (เพราะเป็น property สุดท้าย)
-  djiDealerTypes: ['SAB','Other'],
-  creditTerms: ['COD','30 วัน','45 วัน','60 วัน','อื่นๆ'],
-  unitTypes: ['University','Government','Government Agency','State Enterprise','Private','Military','Local Administration','อื่นๆ'],
+  },
 
- models: [
+  models: [
     {name:'DJI Mavic 3 Enterprise (M3E)', price:0},
     {name:'DJI Mavic 3 Thermal (M3T)', price:0},
     {name:'DJI Mavic 3 Multispectral (M3M)', price:0},
@@ -197,7 +179,8 @@ newDemoPolicies: [
   externalLinks: [],
 
   noteCategories: ['📋 Policy','📦 Product','📝 SOP','📅 Meeting Notes','📌 อื่นๆ'],
-onboardingSteps: [
+  
+  onboardingSteps: [
     {id: 'interested', title: 'สนใจเข้าร่วม', group: 'onboard'},
     {id: 'request_docs', title: 'ขอเอกสาร', group: 'onboard'},
     {id: 'submit_docs', title: 'Submit เอกสารแล้ว', group: 'onboard'},
@@ -229,7 +212,6 @@ onboardingSteps: [
     forecast: 15
   }
 };
-
 function getConfig() {
   var saved = ST.getObj('config');
   var cfg = JSON.parse(JSON.stringify(DEF_CONFIG));
