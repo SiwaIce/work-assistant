@@ -35,7 +35,10 @@ var SYNC_KEY_MAP = {
   'favorites': 'favorites',
   'appearance': 'appearance',
   'actions': 'actions',
-  'backup': 'backup'
+  'backup': 'backup',
+'products': 'products',  // ✅ เพิ่มบรรทัดนี้
+  'bundles': 'bundles',    // ✅ เพิ่ม
+  'demoUnits': 'demoUnits' // ✅ เพิ่ม
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);

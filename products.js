@@ -57,16 +57,111 @@ function getProductsData() {
 }
 
 function saveProductsData(data) {
+  // บันทึก localStorage
   localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(data));
   
-  // Sync กลับไปยัง config เดิม (เพื่อให้ระบบเก่าทำงานได้)
-  var cfg = getConfigFromLocalStorage();
+  // Sync ไป config เดิม
+  var cfg = localStorage.getItem('v7_config');
   if (cfg) {
-    cfg.models = data.models;
-    if (!cfg.bundles) cfg.bundles = data.bundles;
-    if (!cfg.demoUnitPrices) cfg.demoUnitPrices = {};
-    cfg.demoUnitPrices.items = data.demoUnits;
-    localStorage.setItem('v7_config', JSON.stringify(cfg));
+    var config = JSON.parse(cfg);
+    config.models = data.models;
+    config.bundles = data.bundles;
+    if (data.demoUnits) {
+      if (!config.demoUnitPrices) config.demoUnitPrices = {};
+      config.demoUnitPrices.items = data.demoUnits;
+    }
+    localStorage.setItem('v7_config', JSON.stringify(config));
+  }
+  
+  // ✅ เพิ่ม: Sync ไป Firebase (ถ้ามีการ login)
+  if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    var userRef = db.collection('users').doc(CURRENT_USER.uid);
+    
+    // บันทึก products ไปที่ subcollection
+    var batch = db.batch();
+    
+    // ลบเก่าก่อน (หรือจะอัปเดตทีละตัว)
+    userRef.collection('products').get().then(function(snapshot) {
+      snapshot.forEach(function(doc) {
+        batch.delete(doc.ref);
+      });
+      
+      // เพิ่มใหม่
+      for (var i = 0; i < data.models.length; i++) {
+        var productRef = userRef.collection('products').doc(data.models[i].id || ('prod_' + i));
+        batch.set(productRef, data.models[i]);
+      }
+      
+      // บันทึก bundles
+      if (data.bundles) {
+        for (var i = 0; i < data.bundles.length; i++) {
+          var bundleRef = userRef.collection('bundles').doc(data.bundles[i].id);
+          batch.set(bundleRef, data.bundles[i]);
+        }
+      }
+      
+      // บันทึก demo units
+      if (data.demoUnits) {
+        for (var i = 0; i < data.demoUnits.length; i++) {
+          var demoRef = userRef.collection('demoUnits').doc(data.demoUnits[i].id);
+          batch.set(demoRef, data.demoUnits[i]);
+        }
+      }
+      
+      batch.commit().then(function() {
+        console.log('✅ Synced products to Firebase');
+      }).catch(function(err) {
+        console.warn('Firebase sync error:', err);
+      });
+    });
+  }
+}
+function loadProductsFromFirebase() {
+  if (typeof db === 'undefined' || typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    console.log('No Firebase user, using localStorage only');
+    return Promise.resolve(false);
+  }
+  
+  var userRef = db.collection('users').doc(CURRENT_USER.uid);
+  
+  return userRef.collection('products').get().then(function(snapshot) {
+    if (snapshot.empty) {
+      console.log('No products in Firebase');
+      return false;
+    }
+    
+    var products = [];
+    snapshot.forEach(function(doc) {
+      products.push(doc.data());
+    });
+    
+    var data = getProductsData();
+    data.models = products;
+    data.lastUpdated = new Date().toISOString();
+    
+    // บันทึก localStorage
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(data));
+    
+    // Sync to config
+    var cfg = localStorage.getItem('v7_config');
+    if (cfg) {
+      var config = JSON.parse(cfg);
+      config.models = products;
+      localStorage.setItem('v7_config', JSON.stringify(config));
+    }
+    
+    console.log('✅ Loaded', products.length, 'products from Firebase');
+    return true;
+  }).catch(function(err) {
+    console.warn('Error loading products from Firebase:', err);
+    return false;
+  });
+}
+
+// เรียกตอนเริ่มต้น (หลัง login)
+function initProductsSync() {
+  if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    loadProductsFromFirebase();
   }
 }
 
@@ -623,7 +718,6 @@ function initProductsModule() {
   
   // ตรวจสอบและ sync ข้อมูล
   if (cfg && cfg.models && (!data.models || data.models.length === 0)) {
-    // copy from config
     data.models = JSON.parse(JSON.stringify(cfg.models));
     // เพิ่มฟิลด์ที่ขาด
     for (var i = 0; i < data.models.length; i++) {
@@ -645,9 +739,18 @@ function initProductsModule() {
     saveProductsData(data);
   }
   
+  // ✅ พยายามโหลดจาก Firebase ถ้ามี login
+  if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    loadProductsFromFirebase().then(function(loaded) {
+      if (loaded) {
+        // รีเฟรชหน้า ถ้าจำเป็น
+        if (typeof render === 'function') render();
+      }
+    });
+  }
+  
   console.log('✅ Products Module initialized', data.models.length, 'products');
 }
-
 // Auto initialize
 initProductsModule();
 
