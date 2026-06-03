@@ -728,6 +728,12 @@ function rProducts(el) {
   
   // Search
   html += '<div class="fg"><input type="text" id="productSearch" placeholder="🔍 ค้นหา (ชื่อ, SKU, EAN)" oninput="filterProductsList()" style="margin-bottom:12px"></div>';
+
+// ในส่วน h2
+html += '<h2>📋 สินค้าทั้งหมด <span class="ml">';
+html += '<button class="btn bsm bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button>';
+html += '<button class="btn bsm bo" onclick="exportProductsToExcel()">📥 Export Excel</button>';
+html += '</span></h2>';
   
   // Filter tabs
   html += '<div class="ftabs" style="margin-bottom:12px">';
@@ -1062,48 +1068,381 @@ function showAddDemoUnitM() {
 }
 
 // ================================================================
-// PAGE: IMPORT/EXPORT (Placeholder)
+// PAGE: IMPORT/EXPORT (Full Version)
 // ================================================================
 
 function rProductImport(el) {
   document.getElementById('pgT').textContent = '📥 Import/Export สินค้า';
   
-  var html = '<div class="card"><h2>📥 Import สินค้าจาก Excel</h2>';
-  html += '<div class="fg"><label>เลือกไฟล์ Excel (.xlsx, .xls)</label>';
-  html += '<input type="file" id="importExcelFile" accept=".xlsx,.xls" onchange="importProductsFromExcelFile(this)"></div>';
-  html += '<div class="hint">รูปแบบไฟล์ต้องมีคอลัมน์: SiS part, EAN, Product Name, Type 1-4 P EX Tax THB</div>';
+  var html = '';
+  
+  // Export Section
+  html += '<div class="card">';
+  html += '<h2>📤 Export สินค้า</h2>';
+  html += '<p class="hint">Export ข้อมูลสินค้าทั้งหมดไปเป็นไฟล์ Excel เพื่อแก้ไข</p>';
+  html += '<div class="bg">';
+  html += '<button class="btn bp" onclick="exportProductsToExcel()">📥 Export สินค้าทั้งหมด</button>';
+  html += '<button class="btn bo" onclick="exportDemoUnitsToExcel()">🚁 Export Demo Units</button>';
+  html += '</div>';
   html += '</div>';
   
-  html += '<div class="card"><h2>📤 Export สินค้า</h2>';
-  html += '<button class="btn bp" onclick="exportProductsToCSV()">📤 Export to CSV</button>';
-  html += '<button class="btn bo" onclick="copyProductsTable()">📋 Copy ตาราง</button>';
+  // Import Section
+  html += '<div class="card">';
+  html += '<h2>📥 Import สินค้า (Update)</h2>';
+  html += '<p class="hint">เลือกไฟล์ Excel ที่ Export ไว้ แก้ไขแล้วนำกลับมา import</p>';
+  html += '<div class="fg">';
+  html += '<input type="file" id="importProductsFile" accept=".xlsx,.xls" style="margin-bottom:8px">';
+  html += '<button class="btn bp" onclick="doImportProducts()">📤 เริ่ม Import สินค้า</button>';
+  html += '</div>';
+  html += '<div id="importProgress" style="margin-top:8px; display:none">';
+  html += '<div class="pb"><div class="pf pf-blue" id="importProgressBar" style="width:0%"></div></div>';
+  html += '<div id="importStatus" style="margin-top:4px; font-size:12px"></div>';
+  html += '</div>';
+  html += '</div>';
+  
+  // Import Demo Section
+  html += '<div class="card">';
+  html += '<h2>🚁 Import Demo Units</h2>';
+  html += '<div class="fg">';
+  html += '<input type="file" id="importDemoFile" accept=".xlsx,.xls">';
+  html += '<button class="btn bp" onclick="doImportDemoUnits()">📤 Import Demo Units</button>';
+  html += '</div>';
+  html += '</div>';
+  
+  // Instructions
+  html += '<div class="card">';
+  html += '<h2>📋 คำแนะนำ</h2>';
+  html += '<div class="hint">';
+  html += '1. กด "Export สินค้าทั้งหมด" เพื่อดาวน์โหลดไฟล์ Excel<br>';
+  html += '2. เปิดไฟล์ Excel ด้วยโปรแกรม (Excel, Google Sheets, WPS)<br>';
+  html += '3. แก้ไขข้อมูลที่ต้องการ (ชื่อ, SKU, EAN, ราคา, EOL, Type)<br>';
+  html += '4. บันทึกไฟล์ (อย่าเปลี่ยนชื่อคอลัมน์)<br>';
+  html += '5. กด "เลือกไฟล์" แล้ว "เริ่ม Import"<br>';
+  html += '<br>';
+  html += '💡 <strong>คอลัมน์ที่ต้องมี:</strong><br>';
+  html += '• SKU (SiS part) - รหัสสินค้า<br>';
+  html += '• EAN - บาร์โค้ดสินค้า<br>';
+  html += '• Product Name - ชื่อสินค้า<br>';
+  html += '• Price S/A/B/Other - ราคาแยกตาม Level<br>';
+  html += '• EOL - ใส่ "EOL" ถ้าสินค้าหมดอายุ<br>';
+  html += '• Type - Hardware / Software / Service<br>';
+  html += '</div>';
   html += '</div>';
   
   el.innerHTML = html;
 }
 
-function importProductsFromExcelFile(input) {
-  toast('🚧 กำลังพัฒนา (ใช้ Console import แทน)');
+// ================================================================
+// IMPORT ACTIONS (UI Handlers)
+// ================================================================
+
+function doImportProducts() {
+  var fileInput = document.getElementById('importProductsFile');
+  var file = fileInput.files[0];
+  
+  if (!file) {
+    toast('⚠️ กรุณาเลือกไฟล์ Excel');
+    return;
+  }
+  
+  // Show progress
+  var progressDiv = document.getElementById('importProgress');
+  var progressBar = document.getElementById('importProgressBar');
+  var statusDiv = document.getElementById('importStatus');
+  
+  progressDiv.style.display = 'block';
+  progressBar.style.width = '30%';
+  statusDiv.innerHTML = 'กำลังอ่านไฟล์...';
+  
+  importProductsFromExcel(file, function(result) {
+    if (result.success) {
+      progressBar.style.width = '100%';
+      statusDiv.innerHTML = '✅ นำเข้าเสร็จ! เพิ่ม ' + result.imported + ' รายการ, อัปเดต ' + result.updated + ' รายการ' + (result.errors ? ' (ผิดพลาด ' + result.errors + ')' : '');
+      
+      if (result.errorList && result.errorList.length) {
+        statusDiv.innerHTML += '<br><span style="color:#f59e0b">⚠️ ' + result.errorList.slice(0, 5).join('<br>') + '</span>';
+      }
+      
+      toast('✅ Import สำเร็จ! ' + (result.imported + result.updated) + ' รายการ');
+      
+      setTimeout(function() {
+        progressDiv.style.display = 'none';
+        progressBar.style.width = '0%';
+        fileInput.value = '';
+        render(); // รีเฟรชหน้า
+      }, 2000);
+    } else {
+      progressBar.style.width = '0%';
+      statusDiv.innerHTML = '❌ เกิดข้อผิดพลาด: ' + result.error;
+      toast('❌ Import ล้มเหลว', true);
+    }
+  });
 }
 
-function exportProductsToCSV() {
-  var products = Products.getAll();
-  var csv = '\uFEFF"SKU","EAN","ชื่อสินค้า","ราคา B","ราคา S","ราคา A","ราคา Other","EOL","ประเภท"\n';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    var type = p.isSoftware ? 'Software' : (p.isService ? 'Service' : 'Hardware');
-    csv += '"' + (p.sku || '') + '","' + (p.ean || '') + '","' + (p.name || '') + '","' + (p.price || 0) + '","' + (p.typePrices?.S || 0) + '","' + (p.typePrices?.A || 0) + '","' + (p.typePrices?.Other || 0) + '","' + (p.eol ? 'EOL' : '') + '","' + type + '"\n';
+function doImportDemoUnits() {
+  var fileInput = document.getElementById('importDemoFile');
+  var file = fileInput.files[0];
+  
+  if (!file) {
+    toast('⚠️ กรุณาเลือกไฟล์ Demo Units');
+    return;
   }
-  dlBlob(csv, 'products-export-' + _td() + '.csv');
+  
+  toast('🔄 กำลังนำเข้า Demo Units...');
+  
+  importDemoUnitsFromExcel(file, function(result) {
+    if (result.success) {
+      toast('✅ Import Demo Units สำเร็จ! เพิ่ม ' + result.imported + ', อัปเดต ' + result.updated);
+      fileInput.value = '';
+      render();
+    } else {
+      toast('❌ Import Demo Units ล้มเหลว: ' + result.error, true);
+    }
+  });
 }
 
-function copyProductsTable() {
+// ================================================================
+// EXPORT PRODUCTS TO EXCEL
+// ================================================================
+
+function exportProductsToExcel() {
   var products = Products.getAll();
-  var tsv = 'SKU\tEAN\tชื่อสินค้า\tราคา B\tราคา S\tราคา A\tราคา Other\tEOL\tประเภท\n';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    var type = p.isSoftware ? 'Software' : (p.isService ? 'Service' : 'Hardware');
-    tsv += (p.sku || '') + '\t' + (p.ean || '') + '\t' + (p.name || '') + '\t' + (p.price || 0) + '\t' + (p.typePrices?.S || 0) + '\t' + (p.typePrices?.A || 0) + '\t' + (p.typePrices?.Other || 0) + '\t' + (p.eol ? 'EOL' : '') + '\t' + type + '\n';
-  }
-  copyText(tsv, '📋 Copy ตารางสินค้าแล้ว');
+  
+  // จัดรูปแบบข้อมูลสำหรับ Excel
+  var excelData = products.map(function(p, idx) {
+    return {
+      '#': idx + 1,
+      'SKU (SiS part)': p.sku || '',
+      'EAN': p.ean || '',
+      'Product Name': p.name,
+      'Price S (Type 1)': p.typePrices?.S || 0,
+      'Price A (Type 2)': p.typePrices?.A || 0,
+      'Price B (Type 3)': p.price || 0,
+      'Price Other (Type 4)': p.typePrices?.Other || 0,
+      'EOL': p.eol ? 'EOL' : '',
+      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : 'Hardware'),
+      'Last Updated': p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('th-TH') : ''
+    };
+  });
+  
+  // สร้าง worksheet
+  var ws = XLSX.utils.json_to_sheet(excelData);
+  
+  // จัดความกว้างคอลัมน์
+  ws['!cols'] = [
+    {wch:5},   // #
+    {wch:20},  // SKU
+    {wch:15},  // EAN
+    {wch:40},  // Product Name
+    {wch:12},  // Price S
+    {wch:12},  // Price A
+    {wch:12},  // Price B
+    {wch:12},  // Price Other
+    {wch:8},   // EOL
+    {wch:12},  // Type
+    {wch:12}   // Last Updated
+  ];
+  
+  // สร้าง workbook
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Products');
+  
+  // ดาวน์โหลด
+  XLSX.writeFile(wb, 'products-export-' + _td() + '.xlsx');
+  
+  toast('📥 Export Excel สำเร็จ!');
+}
+
+// ================================================================
+// EXPORT DEMO UNITS TO EXCEL
+// ================================================================
+
+function exportDemoUnitsToExcel() {
+  var demos = Products.getAllDemoUnits();
+  
+  var excelData = demos.map(function(d, idx) {
+    // หา product ที่เกี่ยวข้อง
+    var product = d.productId ? Products.getById(d.productId) : null;
+    
+    return {
+      '#': idx + 1,
+      'SKU': d.sku || '',
+      'EAN': d.ean || '',
+      'Product Name': d.productName || d.name || '',
+      'Demo Price': d.price || 0,
+      'Related Product': product ? product.name : '',
+      'Status': d.enabled ? 'Active' : 'Inactive',
+      'Note': d.note || ''
+    };
+  });
+  
+  var ws = XLSX.utils.json_to_sheet(excelData);
+  ws['!cols'] = [{wch:5}, {wch:20}, {wch:15}, {wch:40}, {wch:15}, {wch:30}, {wch:10}, {wch:20}];
+  
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'DemoUnits');
+  XLSX.writeFile(wb, 'demo-units-export-' + _td() + '.xlsx');
+  
+  toast('📥 Export Demo Units สำเร็จ!');
+}
+
+// ================================================================
+// IMPORT PRODUCTS FROM EXCEL FILE
+// ================================================================
+
+function importProductsFromExcel(file, onComplete) {
+  var reader = new FileReader();
+  
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet);
+      
+      var imported = 0;
+      var updated = 0;
+      var errors = 0;
+      var errorList = [];
+      
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          
+          // อ่านข้อมูลจาก Excel (รองรับหลายรูปแบบคอลัมน์)
+          var sku = row['SKU (SiS part)'] || row['SKU'] || row['SiS part'] || '';
+          var ean = row['EAN'] || '';
+          var name = row['Product Name'] || row['name'] || '';
+          var priceS = parseFloat(row['Price S (Type 1)'] || row['Price S'] || row['Type 1'] || 0);
+          var priceA = parseFloat(row['Price A (Type 2)'] || row['Price A'] || row['Type 2'] || 0);
+          var priceB = parseFloat(row['Price B (Type 3)'] || row['Price B'] || row['Type 3'] || row['price'] || 0);
+          var priceOther = parseFloat(row['Price Other (Type 4)'] || row['Price Other'] || row['Type 4'] || 0);
+          var eol = (row['EOL'] === 'EOL' || row['EOL'] === true || row['eol'] === 'EOL');
+          var type = row['Type'] || 'Hardware';
+          
+          if (!name) {
+            errors++;
+            errorList.push('Row ' + (i+2) + ': ไม่มีชื่อสินค้า');
+            continue;
+          }
+          
+          // ตรวจสอบว่ามีสินค้านี้อยู่แล้วหรือไม่
+          var existing = Products.getBySku(sku) || Products.getByEan(ean);
+          
+          var productData = {
+            name: name,
+            sku: sku,
+            ean: ean,
+            price: priceB,
+            typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+            eol: eol,
+            isSoftware: (type === 'Software' || name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
+            isService: (type === 'Service' || name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1)
+          };
+          
+          if (existing) {
+            Products.update(existing.id, productData);
+            updated++;
+          } else {
+            Products.add(productData);
+            imported++;
+          }
+        } catch(err) {
+          errors++;
+          errorList.push('Row ' + (i+2) + ': ' + err.message);
+        }
+      }
+      
+      var result = {
+        success: true,
+        imported: imported,
+        updated: updated,
+        errors: errors,
+        errorList: errorList,
+        total: rows.length
+      };
+      
+      if (onComplete) onComplete(result);
+      
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  
+  reader.onerror = function() {
+    if (onComplete) onComplete({ success: false, error: 'ไม่สามารถอ่านไฟล์ได้' });
+  };
+  
+  reader.readAsArrayBuffer(file);
+}
+
+// ================================================================
+// IMPORT DEMO UNITS FROM EXCEL FILE
+// ================================================================
+
+function importDemoUnitsFromExcel(file, onComplete) {
+  var reader = new FileReader();
+  
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet);
+      
+      var imported = 0;
+      var updated = 0;
+      var errors = 0;
+      
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          var sku = row['SKU'] || '';
+          var ean = row['EAN'] || '';
+          var name = row['Product Name'] || row['name'] || '';
+          var price = parseFloat(row['Demo Price'] || row['price'] || 0);
+          var enabled = (row['Status'] !== 'Inactive');
+          
+          if (!name) continue;
+          
+          // หา product ที่เกี่ยวข้อง
+          var product = Products.getBySku(sku) || Products.getByEan(ean);
+          
+          var existingDemo = null;
+          var allDemos = Products.getAllDemoUnits();
+          for (var j = 0; j < allDemos.length; j++) {
+            if (allDemos[j].sku === sku || allDemos[j].ean === ean) {
+              existingDemo = allDemos[j];
+              break;
+            }
+          }
+          
+          var demoData = {
+            productId: product ? product.id : null,
+            productName: name,
+            sku: sku,
+            ean: ean,
+            price: price,
+            enabled: enabled
+          };
+          
+          if (existingDemo) {
+            Products.updateDemoUnit(existingDemo.id, demoData);
+            updated++;
+          } else {
+            Products.addDemoUnit(demoData);
+            imported++;
+          }
+        } catch(err) {
+          errors++;
+        }
+      }
+      
+      if (onComplete) onComplete({ success: true, imported: imported, updated: updated, errors: errors, total: rows.length });
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  
+  reader.readAsArrayBuffer(file);
 }
