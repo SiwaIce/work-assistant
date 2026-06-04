@@ -825,7 +825,194 @@ function importDemoUnitsFromExcel(file, onComplete) {
   };
   reader.readAsArrayBuffer(file);
 }
+// ================================================================
+// IMPORT ข้อมูลทั้งหมดจาก Excel (3 แผ่นงานในครั้งเดียว)
+// ================================================================
 
+function importProductsFromRows(rows) {
+  var imported = 0, updated = 0, errors = 0;
+  for (var i = 0; i < rows.length; i++) {
+    try {
+      var row = rows[i];
+      var sku = row['SiS part'] || row['SKU'] || '';
+      var ean = row['EAN'] || '';
+      var name = row['Product Name'] || row['name'] || '';
+      var priceS = parseFloat(row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
+      var priceA = parseFloat(row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
+      var priceB = parseFloat(row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
+      var priceOther = parseFloat(row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
+      var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
+      var type = row['Type'] || 'Hardware';
+      if (!name) { errors++; continue; }
+      var existing = getProductBySku(sku) || getProductByEan(ean);
+      var productData = {
+        name: name, sku: sku, ean: ean,
+        price: priceB,
+        typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+        eol: eol,
+        isSoftware: (type === 'Software' || name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
+        isService: (type === 'Service' || name.indexOf('Warranty') !== -1)
+      };
+      if (existing) { updateProduct(existing.id, productData); updated++; }
+      else { addProduct(productData); imported++; }
+    } catch(e) { errors++; }
+  }
+  return { imported: imported, updated: updated, errors: errors };
+}
+
+function importBundlesFromRows(rows) {
+  var imported = 0, updated = 0, errors = 0;
+  var bundleMap = {}; // รวมแถวที่เป็น bundle เดียวกัน (combo No.)
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var comboNo = row['combo No.'] || row['comboNo'] || '';
+    if (!comboNo) continue;
+    if (!bundleMap[comboNo]) {
+      bundleMap[comboNo] = {
+        name: row['combo name'] || '',
+        items: [],
+        typePrices: {
+          S: parseFloat(row['Type 1 P EX Tax THB'] || 0),
+          A: parseFloat(row['Type 2 P EX Tax THB'] || 0),
+          B: parseFloat(row['Type 3 P EX Tax THB'] || 0),
+          Other: parseFloat(row['Type 4 P EX Tax THB'] || 0)
+        },
+        enabled: true
+      };
+    }
+    // เพิ่ม item (product EAN, quantity)
+    var productEan = row['product EAN'] || '';
+    var qty = parseInt(row['quantity']) || 1;
+    if (productEan) {
+      var product = getProductByEan(productEan);
+      if (product) {
+        bundleMap[comboNo].items.push({
+          productId: product.id,
+          sku: product.sku,
+          name: product.name,
+          qty: qty
+        });
+      } else {
+        bundleMap[comboNo].items.push({
+          productId: null,
+          sku: '',
+          name: row['product name'] || '',
+          qty: qty
+        });
+      }
+    }
+  }
+  // บันทึก bundle
+  for (var combo in bundleMap) {
+    var b = bundleMap[combo];
+    if (!b.name) continue;
+    var existing = getBundleByName(b.name);
+    if (existing) {
+      updateBundle(existing.id, b);
+      updated++;
+    } else {
+      addBundle(b);
+      imported++;
+    }
+  }
+  return { imported: imported, updated: updated, errors: errors };
+}
+
+function importDemoUnitsFromRows(rows) {
+  var imported = 0, updated = 0, errors = 0;
+  for (var i = 0; i < rows.length; i++) {
+    try {
+      var row = rows[i];
+      var sku = row['SiS part'] || row['SKU'] || '';
+      var ean = row['EAN'] || '';
+      var name = row['Product Name'] || row['name'] || '';
+      var price = parseFloat(row['TYPE1-4 P THB ex VAT'] || row['Demo Price'] || 0);
+      if (!name) continue;
+      var product = getProductBySku(sku) || getProductByEan(ean);
+      var existing = null;
+      var allDemos = getAllDemoUnits();
+      for (var j = 0; j < allDemos.length; j++) {
+        if (allDemos[j].sku === sku || allDemos[j].ean === ean) {
+          existing = allDemos[j];
+          break;
+        }
+      }
+      var demoData = {
+        productId: product ? product.id : null,
+        productName: name,
+        sku: sku,
+        ean: ean,
+        price: price,
+        enabled: true,
+        note: ''
+      };
+      if (existing) { updateDemoUnit(existing.id, demoData); updated++; }
+      else { addDemoUnit(demoData); imported++; }
+    } catch(e) { errors++; }
+  }
+  return { imported: imported, updated: updated, errors: errors };
+}
+
+function importFullExcelData(file, onComplete) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var result = {
+        products: { imported: 0, updated: 0, errors: 0 },
+        bundles: { imported: 0, updated: 0, errors: 0 },
+        demos: { imported: 0, updated: 0, errors: 0 }
+      };
+      if (workbook.SheetNames.includes('single')) {
+        var sheet = workbook.Sheets['single'];
+        var rows = XLSX.utils.sheet_to_json(sheet);
+        result.products = importProductsFromRows(rows);
+      }
+      if (workbook.SheetNames.includes('combo')) {
+        var sheet = workbook.Sheets['combo'];
+        var rows = XLSX.utils.sheet_to_json(sheet);
+        result.bundles = importBundlesFromRows(rows);
+      }
+      if (workbook.SheetNames.includes('demo')) {
+        var sheet = workbook.Sheets['demo'];
+        var rows = XLSX.utils.sheet_to_json(sheet);
+        result.demos = importDemoUnitsFromRows(rows);
+      }
+      if (onComplete) onComplete({ success: true, result: result });
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function doImportFullExcel() {
+  var fileInput = document.getElementById('importFullFile');
+  if (!fileInput || !fileInput.files[0]) { toast('⚠️ กรุณาเลือกไฟล์ Excel'); return; }
+  var progressDiv = document.getElementById('importFullProgress');
+  var progressBar = progressDiv ? progressDiv.querySelector('.pf') : null;
+  var statusDiv = document.getElementById('importFullStatus');
+  if (progressDiv) progressDiv.style.display = 'block';
+  if (progressBar) progressBar.style.width = '30%';
+  if (statusDiv) statusDiv.innerHTML = 'กำลังนำเข้าข้อมูล...';
+  toast('🔄 กำลังนำเข้าทั้งหมด (สินค้า, Bundle, Demo)...');
+  importFullExcelData(fileInput.files[0], function(res) {
+    if (res.success) {
+      if (progressBar) progressBar.style.width = '100%';
+      var msg = '✅ นำเข้าเสร็จ! ';
+      msg += 'สินค้า: +' + res.result.products.imported + ' อัปเดต ' + res.result.products.updated;
+      msg += ', Bundle: +' + res.result.bundles.imported + ' อัปเดต ' + res.result.bundles.updated;
+      msg += ', Demo: +' + res.result.demos.imported + ' อัปเดต ' + res.result.demos.updated;
+      if (statusDiv) statusDiv.innerHTML = msg;
+      toast(msg);
+      setTimeout(function() { render(); }, 1500);
+    } else {
+      if (statusDiv) statusDiv.innerHTML = '❌ ' + res.error;
+      toast('❌ นำเข้าล้มเหลว: ' + res.error, true);
+    }
+  });
+}
 // ================================================================
 // PAGE RENDERERS
 // ================================================================
@@ -1304,6 +1491,12 @@ function rProductImport(el) {
   document.getElementById('pgT').textContent = '📥 Import/Export สินค้า';
   
   var html = '';
+// ภายใน rProductImport ก่อน export section
+html += '<div class="card"><h2>🚀 นำเข้าข้อมูลทั้งหมด (ครั้งเดียวจบ)</h2>';
+html += '<p class="hint">เลือกไฟล์ Excel ที่มี 3 แผ่นงาน (single, combo, demo) เพื่อนำเข้าทั้งสินค้า, Bundle และ Demo Unit พร้อมกัน</p>';
+html += '<div class="fg"><input type="file" id="importFullFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportFullExcel()">📤 นำเข้าทั้งหมด</button></div>';
+html += '<div id="importFullProgress" style="display:none"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importFullStatus"></div></div>';
+html += '</div>';
   
   // Export Section
   html += '<div class="card"><h2>📤 Export ข้อมูล</h2>';
