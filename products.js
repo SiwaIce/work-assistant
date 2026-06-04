@@ -877,8 +877,6 @@ function importDemoUnitsFromExcel(file, onComplete) {
 
 function importProductsFromRows(rows) {
   var imported = 0, updated = 0, errors = 0;
-  var errorList = [];
-  
   for (var i = 0; i < rows.length; i++) {
     try {
       var row = rows[i];
@@ -886,18 +884,41 @@ function importProductsFromRows(rows) {
       var ean = row['EAN'] || '';
       var name = row['Product Name'] || row['name'] || '';
       
-      // รองรับชื่อ column ที่มี newline (\n) และช่องว่างหลายแบบ
-      var priceS = parseFloat(row['Type 1 P\nEX Tax THB'] || row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
-      var priceA = parseFloat(row['Type 2 P\nEX Tax  THB'] || row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
-      var priceB = parseFloat(row['Type 3 P\nEX Tax THB'] || row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
-      var priceOther = parseFloat(row['Type 4 P\nEX Tax THB'] || row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
+      // อ่านราคาโดยลองหลายรูปแบบ (รองรับ newline และช่องว่าง)
+      var priceS = parseFloat(
+        row['Type 1 P\nEX Tax THB'] || 
+        row['Type 1 P EX Tax THB'] || 
+        row['Type 1 P EX Tax THB'] || 
+        row['Price S'] || 0
+      );
+      var priceA = parseFloat(
+        row['Type 2 P\nEX Tax  THB'] ||   // มีสองช่องว่าง
+        row['Type 2 P EX Tax THB'] || 
+        row['Type 2 P EX Tax  THB'] || 
+        row['Price A'] || 0
+      );
+      var priceB = parseFloat(
+        row['Type 3 P\nEX Tax THB'] || 
+        row['Type 3 P EX Tax THB'] || 
+        row['Price B'] || 
+        row['RRP Ex Vat'] || 0
+      );
+      var priceOther = parseFloat(
+        row['Type 4 P\nEX Tax THB'] || 
+        row['Type 4 P EX Tax THB'] || 
+        row['Price Other'] || 0
+      );
+      
+      // ถ้า priceB ยังเป็น 0 แต่มี RRP Ex Vat ให้ใช้ค่านั้น
+      if (priceB === 0 && row['RRP Ex Vat']) {
+        priceB = parseFloat(row['RRP Ex Vat']) || 0;
+      }
       
       var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
       var type = row['Type'] || 'Hardware';
       
       if (!name) {
         errors++;
-        errorList.push('Row ' + (i+2) + ': ไม่มีชื่อสินค้า');
         continue;
       }
       
@@ -922,11 +943,10 @@ function importProductsFromRows(rows) {
       }
     } catch(e) {
       errors++;
-      errorList.push('Row ' + (i+2) + ': ' + e.message);
+      console.warn('Import product error:', e);
     }
   }
-  
-  return { imported: imported, updated: updated, errors: errors, errorList: errorList };
+  return { imported: imported, updated: updated, errors: errors };
 }
 function importBundlesFromRows(rows) {
   var imported = 0, updated = 0, errors = 0;
