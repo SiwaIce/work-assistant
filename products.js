@@ -13,16 +13,46 @@ function getProductsData() {
     var saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
       var parsed = JSON.parse(saved);
-      // ตรวจสอบโครงสร้าง
+      
+      // Case 1: เป็น array โดยตรง (Firebase sync เขียนมาแบบนี้)
+      if (Array.isArray(parsed)) {
+        return {
+          models: parsed,
+          bundles: [],
+          demoUnits: [],
+          levelPrices: { S: {}, A: {}, B: {}, Other: {} },
+          lastUpdated: null,
+          version: '1.0'
+        };
+      }
+      
+      // Case 2: เป็น object แบบ {0: {...}, 1: {...}} (Object.values แปลงเป็น array ได้)
+      if (parsed && typeof parsed === 'object' && !parsed.models && !parsed.bundles && !parsed.demoUnits) {
+        var values = Object.values(parsed);
+        if (values.length > 0 && values[0].id) {
+          return {
+            models: values,
+            bundles: [],
+            demoUnits: [],
+            levelPrices: { S: {}, A: {}, B: {}, Other: {} },
+            lastUpdated: null,
+            version: '1.0'
+          };
+        }
+      }
+      
+      // Case 3: format ปกติ (มี models, bundles, demoUnits)
       if (!parsed.models) parsed.models = [];
       if (!parsed.bundles) parsed.bundles = [];
       if (!parsed.demoUnits) parsed.demoUnits = [];
       return parsed;
     }
-  } catch(e) {}
+  } catch(e) {
+    console.warn('Error parsing products data:', e);
+  }
   
-  var cfg = getConfigFromLocalStorage();
-  var defaultData = {
+  // Fallback: สร้างโครงสร้างเริ่มต้น
+  return {
     models: [],
     bundles: [],
     demoUnits: [],
@@ -30,32 +60,7 @@ function getProductsData() {
     lastUpdated: null,
     version: '1.0'
   };
-  
-  if (cfg && cfg.models) {
-    defaultData.models = JSON.parse(JSON.stringify(cfg.models));
-    for (var i = 0; i < defaultData.models.length; i++) {
-      var m = defaultData.models[i];
-      if (typeof m === 'object') {
-        if (m.eol === undefined) m.eol = false;
-        if (m.ean === undefined) m.ean = '';
-        if (m.sku === undefined) m.sku = '';
-        if (m.isSoftware === undefined) m.isSoftware = false;
-        if (m.isService === undefined) m.isService = false;
-        if (!m.typePrices) {
-          m.typePrices = {
-            S: m.price || 0,
-            A: m.price || 0,
-            B: m.price || 0,
-            Other: m.price || 0
-          };
-        }
-      }
-    }
-  }
-  
-  return defaultData;
 }
-
 function initProductsModule() {
   var data = getProductsData();
   
@@ -872,78 +877,110 @@ function importDemoUnitsFromExcel(file, onComplete) {
 
 function importProductsFromRows(rows) {
   var imported = 0, updated = 0, errors = 0;
+  var errorList = [];
+  
   for (var i = 0; i < rows.length; i++) {
     try {
       var row = rows[i];
       var sku = row['SiS part'] || row['SKU'] || '';
       var ean = row['EAN'] || '';
       var name = row['Product Name'] || row['name'] || '';
-      var priceS = parseFloat(row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
-      var priceA = parseFloat(row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
-      var priceB = parseFloat(row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
-      var priceOther = parseFloat(row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
+      
+      // รองรับชื่อ column ที่มี newline (\n) และช่องว่างหลายแบบ
+      var priceS = parseFloat(row['Type 1 P\nEX Tax THB'] || row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
+      var priceA = parseFloat(row['Type 2 P\nEX Tax  THB'] || row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
+      var priceB = parseFloat(row['Type 3 P\nEX Tax THB'] || row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
+      var priceOther = parseFloat(row['Type 4 P\nEX Tax THB'] || row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
+      
       var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
       var type = row['Type'] || 'Hardware';
-      if (!name) { errors++; continue; }
+      
+      if (!name) {
+        errors++;
+        errorList.push('Row ' + (i+2) + ': ไม่มีชื่อสินค้า');
+        continue;
+      }
+      
       var existing = getProductBySku(sku) || getProductByEan(ean);
       var productData = {
-        name: name, sku: sku, ean: ean,
+        name: name,
+        sku: sku,
+        ean: ean,
         price: priceB,
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
         eol: eol,
         isSoftware: (type === 'Software' || name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
         isService: (type === 'Service' || name.indexOf('Warranty') !== -1)
       };
-      if (existing) { updateProduct(existing.id, productData); updated++; }
-      else { addProduct(productData); imported++; }
-    } catch(e) { errors++; }
+      
+      if (existing) {
+        updateProduct(existing.id, productData);
+        updated++;
+      } else {
+        addProduct(productData);
+        imported++;
+      }
+    } catch(e) {
+      errors++;
+      errorList.push('Row ' + (i+2) + ': ' + e.message);
+    }
   }
-  return { imported: imported, updated: updated, errors: errors };
+  
+  return { imported: imported, updated: updated, errors: errors, errorList: errorList };
 }
-
 function importBundlesFromRows(rows) {
   var imported = 0, updated = 0, errors = 0;
-  var bundleMap = {}; // รวมแถวที่เป็น bundle เดียวกัน (combo No.)
+  var bundleMap = {};
+  
   for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    var comboNo = row['combo No.'] || row['comboNo'] || '';
-    if (!comboNo) continue;
-    if (!bundleMap[comboNo]) {
-      bundleMap[comboNo] = {
-        name: row['combo name'] || '',
-        items: [],
-        typePrices: {
-          S: parseFloat(row['Type 1 P EX Tax THB'] || 0),
-          A: parseFloat(row['Type 2 P EX Tax THB'] || 0),
-          B: parseFloat(row['Type 3 P EX Tax THB'] || 0),
-          Other: parseFloat(row['Type 4 P EX Tax THB'] || 0)
-        },
-        enabled: true
-      };
-    }
-    // เพิ่ม item (product EAN, quantity)
-    var productEan = row['product EAN'] || '';
-    var qty = parseInt(row['quantity']) || 1;
-    if (productEan) {
-      var product = getProductByEan(productEan);
-      if (product) {
-        bundleMap[comboNo].items.push({
-          productId: product.id,
-          sku: product.sku,
-          name: product.name,
-          qty: qty
-        });
-      } else {
-        bundleMap[comboNo].items.push({
-          productId: null,
-          sku: '',
-          name: row['product name'] || '',
-          qty: qty
-        });
+    try {
+      var row = rows[i];
+      var comboNo = row['combo No.'] || row['comboNo'] || '';
+      if (!comboNo) continue;
+      
+      if (!bundleMap[comboNo]) {
+        // รองรับชื่อ column ที่มี newline
+        var priceS = parseFloat(row['Type 1 P\nEX Tax THB'] || row['Type 1 P EX Tax THB'] || 0);
+        var priceA = parseFloat(row['Type 2 P\nEX Tax  THB'] || row['Type 2 P EX Tax THB'] || 0);
+        var priceB = parseFloat(row['Type 3 P\nEX Tax THB'] || row['Type 3 P EX Tax THB'] || 0);
+        var priceOther = parseFloat(row['Type 4 P\nEX Tax THB'] || row['Type 4 P EX Tax THB'] || 0);
+        
+        bundleMap[comboNo] = {
+          name: row['combo name'] || row['comboName'] || '',
+          description: row['combo description'] || '',
+          items: [],
+          typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+          enabled: true
+        };
       }
+      
+      var productEan = row['product EAN'] || row['productEAN'] || '';
+      var qty = parseInt(row['quantity']) || 1;
+      var productName = row['product name'] || '';
+      
+      if (productEan) {
+        var product = getProductByEan(productEan);
+        if (product) {
+          bundleMap[comboNo].items.push({
+            productId: product.id,
+            sku: product.sku,
+            name: product.name,
+            qty: qty
+          });
+        } else {
+          bundleMap[comboNo].items.push({
+            productId: null,
+            sku: '',
+            name: productName,
+            qty: qty
+          });
+        }
+      }
+    } catch(e) {
+      errors++;
     }
   }
-  // บันทึก bundle
+  
   for (var combo in bundleMap) {
     var b = bundleMap[combo];
     if (!b.name) continue;
@@ -956,9 +993,9 @@ function importBundlesFromRows(rows) {
       imported++;
     }
   }
+  
   return { imported: imported, updated: updated, errors: errors };
 }
-
 function importDemoUnitsFromRows(rows) {
   var imported = 0, updated = 0, errors = 0;
   for (var i = 0; i < rows.length; i++) {
