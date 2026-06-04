@@ -883,45 +883,21 @@ function importProductsFromRows(rows) {
       var sku = row['SiS part'] || row['SKU'] || '';
       var ean = row['EAN'] || '';
       var name = row['Product Name'] || row['name'] || '';
-      
-      // อ่านราคาโดยลองหลายรูปแบบ (รองรับ newline และช่องว่าง)
-      var priceS = parseFloat(
-        row['Type 1 P\nEX Tax THB'] || 
-        row['Type 1 P EX Tax THB'] || 
-        row['Type 1 P EX Tax THB'] || 
-        row['Price S'] || 0
-      );
-      var priceA = parseFloat(
-        row['Type 2 P\nEX Tax  THB'] ||   // มีสองช่องว่าง
-        row['Type 2 P EX Tax THB'] || 
-        row['Type 2 P EX Tax  THB'] || 
-        row['Price A'] || 0
-      );
-      var priceB = parseFloat(
-        row['Type 3 P\nEX Tax THB'] || 
-        row['Type 3 P EX Tax THB'] || 
-        row['Price B'] || 
-        row['RRP Ex Vat'] || 0
-      );
-      var priceOther = parseFloat(
-        row['Type 4 P\nEX Tax THB'] || 
-        row['Type 4 P EX Tax THB'] || 
-        row['Price Other'] || 0
-      );
-      
-      // ถ้า priceB ยังเป็น 0 แต่มี RRP Ex Vat ให้ใช้ค่านั้น
-      if (priceB === 0 && row['RRP Ex Vat']) {
-        priceB = parseFloat(row['RRP Ex Vat']) || 0;
-      }
-      
+      if (!name) continue;
+
+      // อ่านราคาจากคอลัมน์ตาม Excel
+      var priceS = parseFloat(row['Type 1 P EX Tax THB']) || 0;
+      var priceA = parseFloat(row['Type 2 P EX Tax THB']) || 0;
+      var priceB = parseFloat(row['Type 3 P EX Tax THB']) || 0;
+      var priceOther = parseFloat(row['Type 4 P EX Tax THB']) || 0;
+      var rrp = parseFloat(row['RRP Ex Vat']) || 0;
+
+      // ถ้า priceB เป็น 0 แต่มี RRP ให้ใช้ RRP แทน
+      if (priceB === 0 && rrp > 0) priceB = rrp;
+
       var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
       var type = row['Type'] || 'Hardware';
-      
-      if (!name) {
-        errors++;
-        continue;
-      }
-      
+
       var existing = getProductBySku(sku) || getProductByEan(ean);
       var productData = {
         name: name,
@@ -933,7 +909,7 @@ function importProductsFromRows(rows) {
         isSoftware: (type === 'Software' || name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
         isService: (type === 'Service' || name.indexOf('Warranty') !== -1)
       };
-      
+
       if (existing) {
         updateProduct(existing.id, productData);
         updated++;
@@ -943,7 +919,7 @@ function importProductsFromRows(rows) {
       }
     } catch(e) {
       errors++;
-      console.warn('Import product error:', e);
+      console.warn('Import error row', i, e);
     }
   }
   return { imported: imported, updated: updated, errors: errors };
