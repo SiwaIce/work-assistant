@@ -81,7 +81,14 @@ function getNextQuoteNumber() {
 // HELPER FUNCTIONS
 // ================================================================
 
+// ================================================================
+// HELPER FUNCTIONS (FIXED)
+// ================================================================
+
 function getModelPriceByLevelForQuote(modelName, level) {
+  if (!modelName) return 0;
+  
+  // 1. ลองจาก Products module
   if (typeof Products !== 'undefined' && Products.getByName) {
     var p = Products.getByName(modelName);
     if (p) {
@@ -91,9 +98,95 @@ function getModelPriceByLevelForQuote(modelName, level) {
       return (p.typePrices && p.typePrices[target] !== undefined) ? p.typePrices[target] : (p.rrpExVat || p.price || 0);
     }
   }
+  
+  // 2. ลองจาก localStorage v7_products โดยตรง
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      var products = [];
+      if (Array.isArray(parsed)) products = parsed;
+      else if (parsed && Array.isArray(parsed.models)) products = parsed.models;
+      else if (parsed && typeof parsed === 'object') {
+        var vals = Object.values(parsed);
+        if (vals.length && vals[0] && vals[0].id) products = vals;
+      }
+      for (var i = 0; i < products.length; i++) {
+        if (products[i].name === modelName) {
+          if (level === 'RRP') return products[i].rrpExVat || products[i].price || 0;
+          var levelMap2 = { 'S': 'S', 'A': 'A', 'B': 'B', 'Other': 'Other' };
+          var target2 = levelMap2[level] || 'B';
+          return (products[i].typePrices && products[i].typePrices[target2] !== undefined) ? products[i].typePrices[target2] : (products[i].rrpExVat || products[i].price || 0);
+        }
+      }
+    }
+  } catch(e) {}
+  
+  // 3. Fallback: อ่านจาก config.models
+  var cfg = getConfig();
+  var models = cfg.models || [];
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var name = typeof m === 'object' ? m.name : m;
+    if (name === modelName) {
+      if (level === 'RRP') return (typeof m === 'object' && m.rrpExVat) ? m.rrpExVat : (m.price || 0);
+      return (typeof m === 'object' && m.typePrices && m.typePrices[level]) ? m.typePrices[level] : (m.price || 0);
+    }
+  }
   return 0;
 }
 
+function getAllModelsWithPriceForQuote() {
+  var products = [];
+  
+  // 1. ลองจาก Products module
+  if (typeof Products !== 'undefined' && Products.getAll) {
+    var prods = Products.getAll();
+    if (prods && prods.length) {
+      return prods.filter(function(p) { return p && p.name; });
+    }
+  }
+  
+  // 2. ลองจาก localStorage v7_products โดยตรง
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed.filter(function(p) { return p && p.name; });
+      if (parsed && Array.isArray(parsed.models)) return parsed.models.filter(function(p) { return p && p.name; });
+      if (parsed && typeof parsed === 'object') {
+        var vals = Object.values(parsed);
+        if (vals.length && vals[0] && vals[0].id) return vals.filter(function(p) { return p && p.name; });
+      }
+    }
+  } catch(e) {}
+  
+  // 3. Fallback: อ่านจาก config.models
+  var cfg = getConfig();
+  var cfgModels = cfg.models || [];
+  if (cfgModels.length) {
+    return cfgModels.map(function(m) {
+      return typeof m === 'object' ? m : { name: m, price: 0, rrpExVat: 0 };
+    });
+  }
+  
+  // 4. สุดท้าย: ใช้ hardcoded list (เผื่อไม่มีข้อมูล)
+  return [
+    { name: 'DJI Matrice 4E', sku: '6937224106352', price: 93380, rrpExVat: 93380 },
+    { name: 'DJI Matrice 4T', sku: '6937224106369', price: 142170, rrpExVat: 142170 },
+    { name: 'DJI Matrice 4TD', sku: '6937224106383A', price: 210500, rrpExVat: 210500 },
+    { name: 'DJI Matrice 400', sku: '6937224106406', price: 162300, rrpExVat: 162300 },
+    { name: 'DJI Matrice 30', sku: '6937224106246', price: 162300, rrpExVat: 162300 },
+    { name: 'DJI Matrice 30T', sku: '6937224106253', price: 210500, rrpExVat: 210500 },
+    { name: 'DJI Zenmuse L2', sku: '6941565994103', price: 125000, rrpExVat: 125000 },
+    { name: 'DJI Zenmuse L3', sku: '6941565994202', price: 175000, rrpExVat: 175000 },
+    { name: 'DJI Zenmuse H30T', sku: '6941565994301', price: 210500, rrpExVat: 210500 },
+    { name: 'DJI Dock 2', sku: '6941565994400', price: 175000, rrpExVat: 175000 },
+    { name: 'DJI Matrice 4D Series Battery', sku: '6937224107649', price: 8220, rrpExVat: 8220 },
+    { name: 'DJI RC Plus 2', sku: '6941565984197', price: 37810, rrpExVat: 37810 },
+    { name: 'DJI Matrice 4 Series Propellers', sku: '6941565994301', price: 2610, rrpExVat: 2610 }
+  ];
+}
 function getAllModelsWithPriceForQuote() {
   var products = [];
   if (typeof Products !== 'undefined' && Products.getAll) {
