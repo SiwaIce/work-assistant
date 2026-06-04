@@ -885,14 +885,13 @@ function importProductsFromRows(rows) {
       var name = row['Product Name'] || row['name'] || '';
       if (!name) continue;
 
-      // อ่านราคาจากคอลัมน์ตาม Excel
+      // ใช้ชื่อคอลัมน์ตาม Excel ปัจจุบัน (ไม่มี \n)
       var priceS = parseFloat(row['Type 1 P EX Tax THB']) || 0;
       var priceA = parseFloat(row['Type 2 P EX Tax THB']) || 0;
       var priceB = parseFloat(row['Type 3 P EX Tax THB']) || 0;
       var priceOther = parseFloat(row['Type 4 P EX Tax THB']) || 0;
       var rrp = parseFloat(row['RRP Ex Vat']) || 0;
 
-      // ถ้า priceB เป็น 0 แต่มี RRP ให้ใช้ RRP แทน
       if (priceB === 0 && rrp > 0) priceB = rrp;
 
       var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
@@ -919,7 +918,7 @@ function importProductsFromRows(rows) {
       }
     } catch(e) {
       errors++;
-      console.warn('Import error row', i, e);
+      console.warn(e);
     }
   }
   return { imported: imported, updated: updated, errors: errors };
