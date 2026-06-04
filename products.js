@@ -777,31 +777,22 @@ function importProductsFromExcel(file, onComplete) {
 
 function importDemoUnitsFromExcel(file, onComplete) {
   var reader = new FileReader();
-  
   reader.onload = function(e) {
     try {
       var data = new Uint8Array(e.target.result);
       var workbook = XLSX.read(data, { type: 'array' });
       var sheet = workbook.Sheets[workbook.SheetNames[0]];
       var rows = XLSX.utils.sheet_to_json(sheet);
-      
-      var imported = 0;
-      var updated = 0;
-      var errors = 0;
-      
+      var imported = 0, updated = 0, errors = 0;
       for (var i = 0; i < rows.length; i++) {
         try {
           var row = rows[i];
-          var sku = row['SKU'] || '';
+          var sku = row['SiS part'] || row['SKU'] || '';
           var ean = row['EAN'] || '';
           var name = row['Product Name'] || row['name'] || '';
-          var price = parseFloat(row['Demo Price'] || row['price'] || 0);
-          var enabled = (row['Status'] !== 'Inactive');
-          
+          var price = parseFloat(row['TYPE1-4 P THB ex VAT'] || row['Demo Price'] || row['price'] || 0);
           if (!name) continue;
-          
           var product = getProductBySku(sku) || getProductByEan(ean);
-          
           var existingDemo = null;
           var allDemos = getAllDemoUnits();
           for (var j = 0; j < allDemos.length; j++) {
@@ -810,16 +801,14 @@ function importDemoUnitsFromExcel(file, onComplete) {
               break;
             }
           }
-          
           var demoData = {
             productId: product ? product.id : null,
             productName: name,
             sku: sku,
             ean: ean,
             price: price,
-            enabled: enabled
+            enabled: true
           };
-          
           if (existingDemo) {
             updateDemoUnit(existingDemo.id, demoData);
             updated++;
@@ -827,17 +816,13 @@ function importDemoUnitsFromExcel(file, onComplete) {
             addDemoUnit(demoData);
             imported++;
           }
-        } catch(err) {
-          errors++;
-        }
+        } catch(err) { errors++; }
       }
-      
       if (onComplete) onComplete({ success: true, imported: imported, updated: updated, errors: errors, total: rows.length });
     } catch(err) {
       if (onComplete) onComplete({ success: false, error: err.message });
     }
   };
-  
   reader.readAsArrayBuffer(file);
 }
 
@@ -1004,13 +989,46 @@ function saveAllProductPrices() {
 function rProductBundles(el) {
   document.getElementById('pgT').textContent = '🎁 Bundle/Combo';
   var bundles = getAllBundles();
-  var html = '<div class="card"><h2>🎁 Bundle/Combo <span class="ml"><button class="btn bp" onclick="showAddBundleM()">➕ เพิ่ม Bundle</button></span></h2>';
+  var products = getAllProducts();
+  
+  var html = '<div class="card"><h2>🎁 Bundle/Combo <span class="ml"><button class="btn bp" onclick="showAddBundleM()">➕ เพิ่ม Bundle</button><button class="btn bo" onclick="exportBundlesToExcel()">📥 Export Excel</button></span></h2>';
+  
   if (bundles.length === 0) {
     html += '<div class="empty"><p>ยังไม่มี Bundle/Combo</p><button class="btn bp" onclick="showAddBundleM()">➕ สร้าง Bundle แรก</button></div>';
   } else {
     for (var i = 0; i < bundles.length; i++) {
       var b = bundles[i];
-      html += '<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center"><h3>' + sanitize(b.name) + '</h3><div><button class="btn bsm bo" onclick="editBundle(\'' + b.id + '\')">✏️</button><button class="btn bsm bd" onclick="deleteBundleConfirm(\'' + b.id + '\')">🗑️</button></div></div>' + (b.description ? '<p>' + sanitize(b.description) + '</p>' : '') + '<div class="fr"><div>S: ' + fmtMoney(b.typePrices?.S) + '</div><div>A: ' + fmtMoney(b.typePrices?.A) + '</div><div>B: ' + fmtMoney(b.typePrices?.B) + '</div><div>Other: ' + fmtMoney(b.typePrices?.Other) + '</div></div></div>';
+      var statusBadge = b.enabled ? '<span class="tag tag-completed">✅ เปิดใช้งาน</span>' : '<span class="tag tag-cancelled">⏸ ปิดใช้งาน</span>';
+      html += '<div class="card" style="margin-bottom:12px; border-left:4px solid var(--accent)">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">';
+      html += '<div><h3 style="margin:0">' + sanitize(b.name) + ' ' + statusBadge + '</h3>';
+      if (b.description) html += '<div class="hint" style="margin-top:4px">' + sanitize(b.description) + '</div>';
+      html += '</div>';
+      html += '<div><button class="btn bsm bo" onclick="editBundle(\'' + b.id + '\')">✏️ แก้ไข</button> ';
+      html += '<button class="btn bsm bd" onclick="deleteBundleConfirm(\'' + b.id + '\')">🗑️ ลบ</button></div>';
+      html += '</div>';
+      
+      // แสดงรายการสินค้าใน bundle
+      if (b.items && b.items.length) {
+        html += '<div style="margin-top:8px"><strong>📦 สินค้าใน Bundle:</strong><ul style="margin:4px 0 0 20px">';
+        for (var j = 0; j < b.items.length; j++) {
+          var item = b.items[j];
+          var product = getProductBySku(item.sku) || getProductById(item.productId);
+          var productName = product ? product.name : (item.name || item.sku || 'ไม่ระบุ');
+          html += '<li>' + sanitize(productName) + (item.qty > 1 ? ' x' + item.qty : '') + '</li>';
+        }
+        html += '</ul></div>';
+      }
+      
+      // แสดงราคา
+      html += '<div class="fr" style="margin-top:8px; gap:12px">';
+      html += '<div><span class="hint">ราคา S:</span> <strong>' + fmtMoney(b.typePrices?.S || 0) + ' ฿</strong></div>';
+      html += '<div><span class="hint">ราคา A:</span> <strong>' + fmtMoney(b.typePrices?.A || 0) + ' ฿</strong></div>';
+      html += '<div><span class="hint">ราคา B:</span> <strong>' + fmtMoney(b.typePrices?.B || 0) + ' ฿</strong></div>';
+      html += '<div><span class="hint">ราคา Other:</span> <strong>' + fmtMoney(b.typePrices?.Other || 0) + ' ฿</strong></div>';
+      html += '</div>';
+      
+      html += '</div>';
     }
   }
   html += '</div>';
@@ -1018,16 +1036,153 @@ function rProductBundles(el) {
 }
 
 function showAddBundleM() {
-  toast('🚧 กำลังพัฒนา');
+  editBundle(null); // ใช้ฟังก์ชันเดียวกัน โดยส่ง null
 }
 
-function editBundle(id) {
-  toast('🚧 กำลังพัฒนา');
+function editBundle(bundleId) {
+  var bundle = bundleId ? getBundleById(bundleId) : null;
+  var products = getAllProducts();
+  
+  // สร้าง dropdown รายการสินค้า
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    productOptions += '<option value="' + products[i].id + '" data-sku="' + sanitize(products[i].sku || '') + '" data-name="' + sanitize(products[i].name) + '">' + sanitize(products[i].name) + ' (' + (products[i].sku || '-') + ')</option>';
+  }
+  
+  // สร้าง HTML สำหรับสินค้าที่อยู่ใน bundle แล้ว
+  var itemsHtml = '<div id="bundleItemsContainer">';
+  if (bundle && bundle.items && bundle.items.length) {
+    for (var i = 0; i < bundle.items.length; i++) {
+      var it = bundle.items[i];
+      var prod = it.productId ? getProductById(it.productId) : (it.sku ? getProductBySku(it.sku) : null);
+      var prodName = prod ? prod.name : (it.name || it.sku || '');
+      itemsHtml += '<div class="bundle-item-row" style="display:flex; gap:8px; margin-bottom:6px; align-items:center">';
+      itemsHtml += '<select class="bundle-item-product" style="flex:2">' + productOptions + '</select>';
+      itemsHtml += '<input type="number" class="bundle-item-qty" value="' + (it.qty || 1) + '" style="width:80px" min="1" placeholder="จำนวน">';
+      itemsHtml += '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>';
+      itemsHtml += '</div>';
+      // pre-select ค่าที่มีอยู่
+      setTimeout(function(sel, prodId) {
+        if (sel) sel.value = prodId || '';
+      }, 10, document.querySelectorAll('.bundle-item-product')[i], prod ? prod.id : '');
+    }
+  } else {
+    // เริ่มต้นหนึ่งแถว
+    itemsHtml += '<div class="bundle-item-row" style="display:flex; gap:8px; margin-bottom:6px; align-items:center">';
+    itemsHtml += '<select class="bundle-item-product" style="flex:2">' + productOptions + '</select>';
+    itemsHtml += '<input type="number" class="bundle-item-qty" value="1" style="width:80px" min="1">';
+    itemsHtml += '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>';
+    itemsHtml += '</div>';
+  }
+  itemsHtml += '</div>';
+  
+  var h = '<div style="max-width:550px">';
+  h += '<div class="fm-group"><label>ชื่อ Bundle *</label><input type="text" id="bundle_name" value="' + (bundle ? sanitize(bundle.name) : '') + '"></div>';
+  h += '<div class="fm-group"><label>คำอธิบาย</label><textarea id="bundle_desc" rows="2">' + (bundle ? sanitize(bundle.description || '') : '') + '</textarea></div>';
+  h += '<div class="form-section">📦 สินค้าใน Bundle</div>';
+  h += itemsHtml;
+  h += '<button class="btn bsm bo" onclick="addBundleItemRow()" style="margin-top:4px">➕ เพิ่มสินค้า</button>';
+  h += '<div class="form-section">💰 ราคา (ไม่รวม VAT)</div>';
+  h += '<div class="fr"><div class="fm-group"><label>ราคา S</label><input type="number" id="bundle_price_s" value="' + (bundle ? (bundle.typePrices?.S || 0) : 0) + '"></div>';
+  h += '<div class="fm-group"><label>ราคา A</label><input type="number" id="bundle_price_a" value="' + (bundle ? (bundle.typePrices?.A || 0) : 0) + '"></div></div>';
+  h += '<div class="fr"><div class="fm-group"><label>ราคา B</label><input type="number" id="bundle_price_b" value="' + (bundle ? (bundle.typePrices?.B || 0) : 0) + '"></div>';
+  h += '<div class="fm-group"><label>ราคา Other</label><input type="number" id="bundle_price_o" value="' + (bundle ? (bundle.typePrices?.Other || 0) : 0) + '"></div></div>';
+  h += '<div class="fm-group"><label>สถานะ</label><select id="bundle_enabled">';
+  h += '<option value="true"' + (bundle && bundle.enabled === false ? '' : ' selected') + '>✅ เปิดใช้งาน</option>';
+  h += '<option value="false"' + (bundle && bundle.enabled === false ? ' selected' : '') + '>⏸ ปิดใช้งาน</option>';
+  h += '</select></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="saveBundle(\'' + (bundleId || '') + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  
+  openM(bundleId ? '✏️ แก้ไข Bundle' : '➕ เพิ่ม Bundle', h);
+  
+  // เลือกสินค้าที่มีอยู่แล้วในแถว
+  setTimeout(function() {
+    if (bundle && bundle.items) {
+      var rows = document.querySelectorAll('.bundle-item-row');
+      for (var i = 0; i < bundle.items.length && i < rows.length; i++) {
+        var it = bundle.items[i];
+        var prod = it.productId ? getProductById(it.productId) : (it.sku ? getProductBySku(it.sku) : null);
+        if (prod) {
+          var sel = rows[i].querySelector('.bundle-item-product');
+          if (sel) sel.value = prod.id;
+        }
+      }
+    }
+  }, 50);
 }
 
-function deleteBundleConfirm(id) {
+function addBundleItemRow() {
+  var container = document.getElementById('bundleItemsContainer');
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    productOptions += '<option value="' + products[i].id + '">' + sanitize(products[i].name) + '</option>';
+  }
+  var newRow = '<div class="bundle-item-row" style="display:flex; gap:8px; margin-bottom:6px; align-items:center">';
+  newRow += '<select class="bundle-item-product" style="flex:2">' + productOptions + '</select>';
+  newRow += '<input type="number" class="bundle-item-qty" value="1" style="width:80px" min="1">';
+  newRow += '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>';
+  newRow += '</div>';
+  container.insertAdjacentHTML('beforeend', newRow);
+}
+
+function removeBundleItemRow(btn) {
+  btn.closest('.bundle-item-row').remove();
+}
+
+function saveBundle(bundleId) {
+  var name = document.getElementById('bundle_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อ Bundle'); return; }
+  
+  var items = [];
+  var rows = document.querySelectorAll('#bundleItemsContainer .bundle-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var productId = rows[i].querySelector('.bundle-item-product').value;
+    var qty = parseInt(rows[i].querySelector('.bundle-item-qty').value) || 1;
+    if (productId) {
+      var product = getProductById(productId);
+      if (product) {
+        items.push({
+          productId: product.id,
+          sku: product.sku || '',
+          name: product.name,
+          qty: qty
+        });
+      }
+    }
+  }
+  if (items.length === 0) { toast('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  
+  var bundleData = {
+    name: name,
+    description: document.getElementById('bundle_desc').value.trim(),
+    items: items,
+    typePrices: {
+      S: parseFloat(document.getElementById('bundle_price_s').value) || 0,
+      A: parseFloat(document.getElementById('bundle_price_a').value) || 0,
+      B: parseFloat(document.getElementById('bundle_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('bundle_price_o').value) || 0
+    },
+    enabled: document.getElementById('bundle_enabled').value === 'true'
+  };
+  
+  if (bundleId) {
+    updateBundle(bundleId, bundleData);
+    toast('💾 อัปเดต Bundle แล้ว');
+  } else {
+    addBundle(bundleData);
+    toast('✅ เพิ่ม Bundle ใหม่แล้ว');
+  }
+  closeMForce();
+  render();
+}
+
+function deleteBundleConfirm(bundleId) {
   if (!confirm('ลบ Bundle นี้?')) return;
-  deleteBundle(id);
+  deleteBundle(bundleId);
   toast('🗑️ ลบแล้ว');
   render();
 }
@@ -1035,38 +1190,360 @@ function deleteBundleConfirm(id) {
 function rProductDemo(el) {
   document.getElementById('pgT').textContent = '🚁 Demo Unit';
   var demos = getAllDemoUnits();
-  var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button></span></h2>';
+  var products = getAllProducts();
+  
+  var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button><button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button></span></h2>';
+  
   if (demos.length === 0) {
-    html += '<div class="empty"><p>ยังไม่มี Demo Unit</p></div>';
+    html += '<div class="empty"><p>ยังไม่มี Demo Unit</p><button class="btn bp" onclick="showAddDemoUnitM()">➕ สร้างรายการแรก</button></div>';
   } else {
     html += '<div class="export-wrap"><table class="export-table"><thead><tr><th>#</th><th>SKU</th><th>EAN</th><th>สินค้า</th><th>ราคา Demo</th><th>สถานะ</th><th></th></tr></thead><tbody>';
     for (var i = 0; i < demos.length; i++) {
       var d = demos[i];
-      html += '<tr><td class="pipe-row-num">' + (i+1) + '</td><td>' + sanitize(d.sku||'-') + '</td><td>' + sanitize(d.ean||'-') + '</td><td>' + sanitize(d.productName||d.name) + '</td><td style="text-align:right">' + fmtMoney(d.price) + '</td><td>' + (d.enabled ? '✅ Active' : '⏸ Inactive') + '</td><td><button class="btn bsm bo" onclick="editDemoUnit(\'' + d.id + '\')">✏️</button></td></tr>';
+      var product = d.productId ? getProductById(d.productId) : null;
+      var productName = product ? product.name : (d.productName || d.name || '');
+      html += '<tr>';
+      html += '<td class="pipe-row-num">' + (i+1) + '</td>';
+      html += '<td>' + sanitize(d.sku || '-') + '</td>';
+      html += '<td>' + sanitize(d.ean || '-') + '</td>';
+      html += '<td>' + sanitize(productName) + '</td>';
+      html += '<td style="text-align:right">' + fmtMoney(d.price) + '</td>';
+      html += '<td>' + (d.enabled ? '✅ Active' : '⏸ Inactive') + '</td>';
+      html += '<td><button class="btn bsm bo" onclick="editDemoUnit(\'' + d.id + '\')">✏️</button></td>';
+      html += '</td>';
     }
     html += '</tbody></table></div>';
   }
   html += '</div>';
   el.innerHTML = html;
 }
-
 function showAddDemoUnitM() {
-  toast('🚧 กำลังพัฒนา');
+  editDemoUnit(null);
 }
 
-function editDemoUnit(id) {
-  toast('🚧 กำลังพัฒนา');
+function editDemoUnit(demoId) {
+  var demo = demoId ? getDemoUnitById(demoId) : null;
+  var products = getAllProducts();
+  
+  var productOptions = '<option value="">-- เลือกสินค้า (ไม่บังคับ) --</option>';
+  for (var i = 0; i < products.length; i++) {
+    productOptions += '<option value="' + products[i].id + '" data-sku="' + sanitize(products[i].sku || '') + '" data-ean="' + sanitize(products[i].ean || '') + '">' + sanitize(products[i].name) + '</option>';
+  }
+  
+  var h = '<div style="max-width:500px">';
+  h += '<div class="fm-group"><label>เชื่อมโยงกับสินค้า (optional)</label><select id="demo_product_id" onchange="updateDemoFromProduct()">' + productOptions + '</select></div>';
+  h += '<div class="fm-group"><label>SKU (ถ้าไม่เชื่อม)</label><input type="text" id="demo_sku" value="' + sanitize(demo?.sku || '') + '"></div>';
+  h += '<div class="fm-group"><label>EAN</label><input type="text" id="demo_ean" value="' + sanitize(demo?.ean || '') + '"></div>';
+  h += '<div class="fm-group"><label>ชื่อสินค้า *</label><input type="text" id="demo_name" value="' + sanitize(demo?.productName || demo?.name || '') + '"></div>';
+  h += '<div class="fm-group"><label>💰 ราคา Demo (บาท)</label><input type="number" id="demo_price" value="' + (demo?.price || 0) + '"></div>';
+  h += '<div class="fm-group"><label>หมายเหตุ</label><textarea id="demo_note" rows="2">' + sanitize(demo?.note || '') + '</textarea></div>';
+  h += '<div class="fm-group"><label>สถานะ</label><select id="demo_enabled">';
+  h += '<option value="true"' + (demo?.enabled !== false ? ' selected' : '') + '>✅ เปิดใช้งาน</option>';
+  h += '<option value="false"' + (demo?.enabled === false ? ' selected' : '') + '>⏸ ปิดใช้งาน</option>';
+  h += '</select></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="saveDemoUnit(\'' + (demoId || '') + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  
+  openM(demoId ? '✏️ แก้ไข Demo Unit' : '➕ เพิ่ม Demo Unit', h);
+  
+  // เลือก product ถ้ามี
+  setTimeout(function() {
+    if (demo && demo.productId) {
+      var sel = document.getElementById('demo_product_id');
+      if (sel) sel.value = demo.productId;
+    }
+  }, 50);
 }
+
+function updateDemoFromProduct() {
+  var sel = document.getElementById('demo_product_id');
+  var productId = sel.value;
+  if (productId) {
+    var product = getProductById(productId);
+    if (product) {
+      document.getElementById('demo_sku').value = product.sku || '';
+      document.getElementById('demo_ean').value = product.ean || '';
+      document.getElementById('demo_name').value = product.name;
+      // ไม่ auto set ราคา demo เพราะอาจพิเศษ
+    }
+  }
+}
+
+function saveDemoUnit(demoId) {
+  var name = document.getElementById('demo_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var productId = document.getElementById('demo_product_id').value || null;
+  var demoData = {
+    productId: productId,
+    productName: name,
+    sku: document.getElementById('demo_sku').value.trim(),
+    ean: document.getElementById('demo_ean').value.trim(),
+    price: parseFloat(document.getElementById('demo_price').value) || 0,
+    note: document.getElementById('demo_note').value.trim(),
+    enabled: document.getElementById('demo_enabled').value === 'true'
+  };
+  
+  if (demoId) {
+    updateDemoUnit(demoId, demoData);
+    toast('💾 อัปเดต Demo Unit แล้ว');
+  } else {
+    addDemoUnit(demoData);
+    toast('✅ เพิ่ม Demo Unit ใหม่แล้ว');
+  }
+  closeMForce();
+  render();
+}
+// ================================================================
+// PAGE: IMPORT/EXPORT (Full Version with Bundles & Demo)
+// ================================================================
 
 function rProductImport(el) {
   document.getElementById('pgT').textContent = '📥 Import/Export สินค้า';
-  var html = '<div class="card"><h2>📤 Export สินค้า</h2><div class="bg"><button class="btn bp" onclick="exportProductsToExcel()">📥 Export สินค้าทั้งหมด</button><button class="btn bo" onclick="exportDemoUnitsToExcel()">🚁 Export Demo Units</button></div></div>';
-  html += '<div class="card"><h2>📥 Import สินค้า</h2><div class="fg"><input type="file" id="importProductsFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportProducts()">📤 เริ่ม Import</button></div><div id="importProgress" style="display:none"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importStatus"></div></div></div>';
-  html += '<div class="card"><h2>🚁 Import Demo Units</h2><div class="fg"><input type="file" id="importDemoFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportDemoUnits()">📤 Import Demo Units</button></div></div>';
-  html += '<div class="card"><h2>📋 คำแนะนำ</h2><div class="hint">1. กด Export เพื่อดาวน์โหลดไฟล์ Excel<br>2. แก้ไขข้อมูล (SKU, EAN, ชื่อ, ราคา, EOL, Type)<br>3. บันทึกแล้ว Import กลับ</div></div>';
+  
+  var html = '';
+  
+  // Export Section
+  html += '<div class="card"><h2>📤 Export ข้อมูล</h2>';
+  html += '<div class="bg" style="gap:8px; flex-wrap:wrap">';
+  html += '<button class="btn bp" onclick="exportProductsToExcel()">📦 Export สินค้าทั้งหมด</button>';
+  html += '<button class="btn bo" onclick="exportBundlesToExcel()">🎁 Export Bundles</button>';
+  html += '<button class="btn bo" onclick="exportDemoUnitsToExcel()">🚁 Export Demo Units</button>';
+  html += '</div></div>';
+  
+  // Import Products Section
+  html += '<div class="card"><h2>📥 Import สินค้า</h2>';
+  html += '<div class="fg"><input type="file" id="importProductsFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportProducts()">📤 เริ่ม Import สินค้า</button></div>';
+  html += '<div id="importProgress" style="display:none"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importStatus"></div></div>';
+  html += '</div>';
+  
+  // Import Bundles Section
+  html += '<div class="card"><h2>🎁 Import Bundles (Excel)</h2>';
+  html += '<div class="fg"><input type="file" id="importBundlesFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportBundles()">📤 เริ่ม Import Bundles</button></div>';
+  html += '<div id="importBundlesProgress" style="display:none; margin-top:8px"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importBundlesStatus"></div></div>';
+  html += '</div>';
+  
+  // Import Demo Units Section
+  html += '<div class="card"><h2>🚁 Import Demo Units</h2>';
+  html += '<div class="fg"><input type="file" id="importDemoFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportDemoUnits()">📤 เริ่ม Import Demo Units</button></div>';
+  html += '<div id="importDemoProgress" style="display:none; margin-top:8px"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importDemoStatus"></div></div>';
+  html += '</div>';
+  
+  // Instructions
+  html += '<div class="card"><h2>📋 คำแนะนำ</h2>';
+  html += '<div class="hint">';
+  html += '📦 <strong>สินค้า:</strong> กด Export สินค้าทั้งหมด เพื่อดาวน์โหลดไฟล์ Excel สำหรับแก้ไข (SKU, EAN, ชื่อ, ราคา, EOL, Type)<br>';
+  html += '🎁 <strong>Bundle:</strong> Export Bundles เพื่อแก้ไขรายการ Bundle (ชื่อ, รายการสินค้า, ราคา, สถานะ)<br>';
+  html += '🚁 <strong>Demo Unit:</strong> Export Demo Units เพื่อแก้ไขราคา Demo<br>';
+  html += 'หลังจากแก้ไขใน Excel แล้ว ให้เลือกไฟล์และกด Import ที่เกี่ยวข้อง';
+  html += '</div></div>';
+  
   el.innerHTML = html;
 }
 
+// ================================================================
+// EXPORT BUNDLES TO EXCEL
+// ================================================================
+
+function exportBundlesToExcel() {
+  var bundles = getAllBundles();
+  var excelData = bundles.map(function(b, idx) {
+    var itemsText = (b.items || []).map(function(it) {
+      var prod = it.productId ? getProductById(it.productId) : null;
+      return (prod ? prod.name : it.name) + (it.qty > 1 ? ' x' + it.qty : '');
+    }).join(', ');
+    return {
+      '#': idx + 1,
+      'Bundle Name': b.name,
+      'Description': b.description || '',
+      'Items': itemsText,
+      'Price S': b.typePrices?.S || 0,
+      'Price A': b.typePrices?.A || 0,
+      'Price B': b.typePrices?.B || 0,
+      'Price Other': b.typePrices?.Other || 0,
+      'Enabled': b.enabled ? 'Active' : 'Inactive'
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(excelData);
+  ws['!cols'] = [{wch:5}, {wch:30}, {wch:40}, {wch:50}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:10}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Bundles');
+  XLSX.writeFile(wb, 'bundles-export-' + _td() + '.xlsx');
+  toast('📥 Export Bundles สำเร็จ!');
+}
+
+// ================================================================
+// IMPORT BUNDLES FROM EXCEL
+// ================================================================
+
+function importBundlesFromExcel(file, onComplete) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet);
+      if (!rows || rows.length === 0) {
+        if (onComplete) onComplete({ success: false, error: 'ไม่มีข้อมูลในไฟล์' });
+        return;
+      }
+      var imported = 0, updated = 0, errors = 0;
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          var name = row['Bundle Name'] || row['name'];
+          if (!name) continue;
+          var itemsText = row['Items'] || '';
+          var items = [];
+          var parts = itemsText.split(',');
+          for (var j = 0; j < parts.length; j++) {
+            var part = parts[j].trim();
+            var match = part.match(/(.*?)(?:\s*x(\d+))?$/);
+            if (match) {
+              var productName = match[1].trim();
+              var qty = parseInt(match[2]) || 1;
+              var product = getProductByName(productName);
+              if (product) {
+                items.push({ productId: product.id, sku: product.sku, name: product.name, qty: qty });
+              } else {
+                items.push({ productId: null, sku: '', name: productName, qty: qty });
+              }
+            }
+          }
+          var bundleData = {
+            name: name,
+            description: row['Description'] || '',
+            items: items,
+            typePrices: {
+              S: parseFloat(row['Price S']) || 0,
+              A: parseFloat(row['Price A']) || 0,
+              B: parseFloat(row['Price B']) || 0,
+              Other: parseFloat(row['Price Other']) || 0
+            },
+            enabled: (row['Enabled'] !== 'Inactive')
+          };
+          var existing = getBundleByName(name);
+          if (existing) {
+            updateBundle(existing.id, bundleData);
+            updated++;
+          } else {
+            addBundle(bundleData);
+            imported++;
+          }
+        } catch(err) { errors++; }
+      }
+      if (onComplete) onComplete({ success: true, imported: imported, updated: updated, errors: errors, total: rows.length });
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function doImportBundles() {
+  var fileInput = document.getElementById('importBundlesFile');
+  if (!fileInput || !fileInput.files[0]) { toast('⚠️ กรุณาเลือกไฟล์'); return; }
+  var progressDiv = document.getElementById('importBundlesProgress');
+  var progressBar = progressDiv ? progressDiv.querySelector('.pf') : null;
+  var statusDiv = document.getElementById('importBundlesStatus');
+  if (progressDiv) progressDiv.style.display = 'block';
+  if (progressBar) progressBar.style.width = '30%';
+  if (statusDiv) statusDiv.innerHTML = 'กำลังอ่านไฟล์...';
+  toast('🔄 กำลังนำเข้า Bundles...');
+  importBundlesFromExcel(fileInput.files[0], function(res) {
+    if (res.success) {
+      if (progressBar) progressBar.style.width = '100%';
+      if (statusDiv) statusDiv.innerHTML = '✅ นำเข้าเสร็จ! เพิ่ม ' + res.imported + ' รายการ, อัปเดต ' + res.updated;
+      toast('✅ Import Bundles สำเร็จ! เพิ่ม ' + res.imported + ', อัปเดต ' + res.updated);
+      setTimeout(function() { render(); }, 1000);
+    } else {
+      if (statusDiv) statusDiv.innerHTML = '❌ ' + res.error;
+      toast('❌ Import Bundles ล้มเหลว: ' + res.error, true);
+    }
+  });
+}
+
+// ================================================================
+// IMPORT DEMO UNITS FROM EXCEL (ปรับให้ตรงกับไฟล์ตัวอย่าง)
+// ================================================================
+
+function importDemoUnitsFromExcel(file, onComplete) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet);
+      var imported = 0, updated = 0, errors = 0;
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          var sku = row['SiS part'] || row['SKU'] || '';
+          var ean = row['EAN'] || '';
+          var name = row['Product Name'] || row['name'] || '';
+          var price = parseFloat(row['TYPE1-4 P THB ex VAT'] || row['Demo Price'] || row['price'] || 0);
+          if (!name) continue;
+          var product = getProductBySku(sku) || getProductByEan(ean);
+          var existingDemo = null;
+          var allDemos = getAllDemoUnits();
+          for (var j = 0; j < allDemos.length; j++) {
+            if (allDemos[j].sku === sku || allDemos[j].ean === ean) {
+              existingDemo = allDemos[j];
+              break;
+            }
+          }
+          var demoData = {
+            productId: product ? product.id : null,
+            productName: name,
+            sku: sku,
+            ean: ean,
+            price: price,
+            enabled: true,
+            note: ''
+          };
+          if (existingDemo) {
+            updateDemoUnit(existingDemo.id, demoData);
+            updated++;
+          } else {
+            addDemoUnit(demoData);
+            imported++;
+          }
+        } catch(err) { errors++; }
+      }
+      if (onComplete) onComplete({ success: true, imported: imported, updated: updated, errors: errors, total: rows.length });
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function doImportDemoUnits() {
+  var fileInput = document.getElementById('importDemoFile');
+  if (!fileInput || !fileInput.files[0]) { toast('⚠️ กรุณาเลือกไฟล์'); return; }
+  var progressDiv = document.getElementById('importDemoProgress');
+  var progressBar = progressDiv ? progressDiv.querySelector('.pf') : null;
+  var statusDiv = document.getElementById('importDemoStatus');
+  if (progressDiv) progressDiv.style.display = 'block';
+  if (progressBar) progressBar.style.width = '30%';
+  if (statusDiv) statusDiv.innerHTML = 'กำลังอ่านไฟล์...';
+  toast('🔄 กำลังนำเข้า Demo Units...');
+  importDemoUnitsFromExcel(fileInput.files[0], function(res) {
+    if (res.success) {
+      if (progressBar) progressBar.style.width = '100%';
+      if (statusDiv) statusDiv.innerHTML = '✅ นำเข้าเสร็จ! เพิ่ม ' + res.imported + ' รายการ, อัปเดต ' + res.updated;
+      toast('✅ Import Demo Units สำเร็จ! เพิ่ม ' + res.imported + ', อัปเดต ' + res.updated);
+      setTimeout(function() { render(); }, 1000);
+    } else {
+      if (statusDiv) statusDiv.innerHTML = '❌ ' + res.error;
+      toast('❌ Import Demo Units ล้มเหลว: ' + res.error, true);
+    }
+  });
+}
 function doImportProducts() {
   var fileInput = document.getElementById('importProductsFile');
   if (!fileInput || !fileInput.files[0]) { toast('⚠️ กรุณาเลือกไฟล์'); return; }
@@ -1102,6 +1579,98 @@ function doImportDemoUnits() {
       toast('❌ Import ล้มเหลว: ' + res.error, true);
     }
   });
+}
+function exportBundlesToExcel() {
+  var bundles = getAllBundles();
+  var excelData = bundles.map(function(b, idx) {
+    var itemsText = (b.items || []).map(function(it) {
+      var prod = it.productId ? getProductById(it.productId) : null;
+      return (prod ? prod.name : it.name) + (it.qty > 1 ? ' x' + it.qty : '');
+    }).join(', ');
+    return {
+      '#': idx + 1,
+      'Bundle Name': b.name,
+      'Description': b.description || '',
+      'Items': itemsText,
+      'Price S': b.typePrices?.S || 0,
+      'Price A': b.typePrices?.A || 0,
+      'Price B': b.typePrices?.B || 0,
+      'Price Other': b.typePrices?.Other || 0,
+      'Enabled': b.enabled ? 'Active' : 'Inactive'
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(excelData);
+  ws['!cols'] = [{wch:5}, {wch:30}, {wch:40}, {wch:50}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:10}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Bundles');
+  XLSX.writeFile(wb, 'bundles-export-' + _td() + '.xlsx');
+  toast('📥 Export Bundles สำเร็จ!');
+}
+
+function importBundlesFromExcel(file, onComplete) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet);
+      if (!rows || rows.length === 0) {
+        if (onComplete) onComplete({ success: false, error: 'ไม่มีข้อมูล' });
+        return;
+      }
+      var imported = 0, updated = 0, errors = 0;
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          var name = row['Bundle Name'] || row['name'];
+          if (!name) continue;
+          // พาร์สสินค้าใน bundle (items) จากข้อความ เช่น "DJI Matrice 4E x2, DJI Zenmuse L2"
+          var itemsText = row['Items'] || '';
+          var items = [];
+          var parts = itemsText.split(',');
+          for (var j = 0; j < parts.length; j++) {
+            var part = parts[j].trim();
+            var match = part.match(/(.*?)(?:\s*x(\d+))?$/);
+            if (match) {
+              var productName = match[1].trim();
+              var qty = parseInt(match[2]) || 1;
+              var product = getProductByName(productName);
+              if (product) {
+                items.push({ productId: product.id, sku: product.sku, name: product.name, qty: qty });
+              } else {
+                items.push({ productId: null, sku: '', name: productName, qty: qty });
+              }
+            }
+          }
+          var bundleData = {
+            name: name,
+            description: row['Description'] || '',
+            items: items,
+            typePrices: {
+              S: parseFloat(row['Price S']) || 0,
+              A: parseFloat(row['Price A']) || 0,
+              B: parseFloat(row['Price B']) || 0,
+              Other: parseFloat(row['Price Other']) || 0
+            },
+            enabled: (row['Enabled'] !== 'Inactive')
+          };
+          var existing = getBundleByName(name);
+          if (existing) {
+            updateBundle(existing.id, bundleData);
+            updated++;
+          } else {
+            addBundle(bundleData);
+            imported++;
+          }
+        } catch(err) { errors++; }
+      }
+      if (onComplete) onComplete({ success: true, imported: imported, updated: updated, errors: errors, total: rows.length });
+    } catch(err) {
+      if (onComplete) onComplete({ success: false, error: err.message });
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ================================================================
