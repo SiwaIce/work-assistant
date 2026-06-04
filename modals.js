@@ -2,6 +2,47 @@
 // MODALS.JS - ALL MODAL DIALOGS (UPDATED TO USE Products MODULE)
 // ================================================================
 // ================================================================
+// GET ALL MODELS FROM PRODUCTS (for datalist)
+// ================================================================
+function getAllModelsFromProducts() {
+  var models = [];
+  // 1. ลองจาก products.js
+  if (typeof Products !== 'undefined' && Products.getAll) {
+    var products = Products.getAll();
+    for (var i = 0; i < products.length; i++) {
+      if (products[i] && products[i].name) models.push(products[i].name);
+    }
+    if (models.length) return models;
+  }
+  // 2. ลองจาก v7_products โดยตรง
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      var products2 = [];
+      if (Array.isArray(parsed)) products2 = parsed;
+      else if (parsed && Array.isArray(parsed.models)) products2 = parsed.models;
+      else if (parsed && typeof parsed === 'object') {
+        var vals = Object.values(parsed);
+        if (vals.length && vals[0] && vals[0].id) products2 = vals;
+      }
+      for (var i = 0; i < products2.length; i++) {
+        if (products2[i] && products2[i].name) models.push(products2[i].name);
+      }
+      if (models.length) return models;
+    }
+  } catch(e) {}
+  // 3. Fallback จาก config
+  var cfg = getConfig();
+  var cfgModels = cfg.models || [];
+  for (var i = 0; i < cfgModels.length; i++) {
+    var m = cfgModels[i];
+    var name = typeof m === 'object' ? m.name : m;
+    if (name) models.push(name);
+  }
+  return models;
+}
+// ================================================================
 // SAFE MODEL OPTIONS (ใช้ products module ถ้ามี)
 // ================================================================
 
@@ -213,7 +254,15 @@ function buildPipeItemsSection(p) {
   if (pipeItemMode === 'items') {
     // Quick Add Row - ใช้ window.modelOptionsNew
     h += '<div class="pipe-qa-row">';
-h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + safeModelOptions('') + '</select>';
+// สร้าง datalist สำหรับ autocomplete
+var modelDatalistId = 'globalModelList_' + Date.now();
+h += '<input type="text" id="pqa_model" class="pipe-qa-model" list="' + modelDatalistId + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" onchange="pqaModelChanged()">';
+h += '<datalist id="' + modelDatalistId + '">';
+var allModelsForDatalist = getAllModelsFromProducts();
+for (var mi = 0; mi < allModelsForDatalist.length; mi++) {
+  h += '<option value="' + sanitize(allModelsForDatalist[mi]) + '">';
+}
+h += '</datalist>';
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
@@ -255,7 +304,16 @@ h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">
 
   } else {
     // Lump sum mode - ใช้ window.modelOptionsNew
-h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + safeModelOptions(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
+var lumpDatalistId = 'lumpModelList_' + Date.now();
+h += '<div class="fr"><div class="fg"><label>Model</label>';
+h += '<input type="text" id="fp_model_lump" list="' + lumpDatalistId + '" value="' + sanitize(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off">';
+h += '<datalist id="' + lumpDatalistId + '">';
+var allModels2 = getAllModelsFromProducts();
+for (var mi2 = 0; mi2 < allModels2.length; mi2++) {
+  h += '<option value="' + sanitize(allModels2[mi2]) + '">';
+}
+h += '</datalist></div>';
+Temp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
     h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
     h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
   }
@@ -264,7 +322,8 @@ h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_l
 
 // Quick Add functions - ใช้ window.getModelPrice
 function pqaModelChanged() {
-  var modelName = document.getElementById('pqa_model').value;
+  var modelInput = document.getElementById('pqa_model');
+  var modelName = modelInput ? modelInput.value : '';
   var priceEl = document.getElementById('pqa_price');
   if (priceEl && modelName) {
     var price = typeof window.getModelPrice === 'function' ? window.getModelPrice(modelName) : 0;
@@ -272,13 +331,11 @@ function pqaModelChanged() {
   }
 }
 function pqaAdd() {
-  var modelEl = document.getElementById('pqa_model');
-  var qtyEl = document.getElementById('pqa_qty');
+  var modelInput = document.getElementById('pqa_model');
+  var model = modelInput ? modelInput.value.trim() : '';
+  var qty = parseInt(document.getElementById('pqa_qty').value) || 1;
   var priceEl = document.getElementById('pqa_price');
-  
-  var model = modelEl ? modelEl.value : '';
-  var qty = qtyEl ? (parseInt(qtyEl.value) || 1) : 1;
-  var price = priceEl ? (parseFloat(priceEl.value) || 0) : window.getModelPrice(model);
+  var price = priceEl ? (parseFloat(priceEl.value) || 0) : (typeof window.getModelPrice === 'function' ? window.getModelPrice(model) : 0);
   
   if (!model) { toast('เลือก Model ก่อน'); return; }
   
@@ -293,13 +350,12 @@ function pqaAdd() {
   updatePipeFcFromItems();
   
   // Reset inputs
-  if (modelEl) modelEl.value = '';
-  if (qtyEl) qtyEl.value = '1';
+  if (modelInput) modelInput.value = '';
+  document.getElementById('pqa_qty').value = '1';
   if (priceEl) priceEl.value = '';
   
   toast('➕ เพิ่ม ' + model + ' x' + qty);
 }
-
 function pqaRemove(idx) {
   pipeItemsTemp.splice(idx, 1);
   var el = document.getElementById('pipeItemsSection');
