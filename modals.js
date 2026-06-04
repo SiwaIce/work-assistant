@@ -1,4 +1,8 @@
 // ================================================================
+// MODALS.JS - ALL MODAL DIALOGS (UPDATED TO USE Products MODULE)
+// ================================================================
+
+// ================================================================
 // DEALER MODAL
 // ================================================================
 function showDealerM(eid) {
@@ -92,7 +96,7 @@ function saveDealer(eid) {
   toast('💾 บันทึกแล้ว');
 }
 // ================================================================
-// PIPELINE MODAL (Multi-Model)
+// PIPELINE MODAL (Multi-Model) - UPDATED TO USE Products MODULE
 // ================================================================
 var pipeItemsTemp = [];
 var pipeItemMode = 'items';
@@ -106,7 +110,7 @@ function showPipelineM(dealerId, eid) {
     pipeItemsTemp = JSON.parse(JSON.stringify(p.items));
     pipeItemMode = 'items';
   } else if (eid && p.model) {
-    pipeItemsTemp = [{model: p.model, qty: Number(p.modelQty) || 1, price: getModelPrice(p.model), total: Number(p.forecastAmount) || 0}];
+    pipeItemsTemp = [{model: p.model, qty: Number(p.modelQty) || 1, price: window.getModelPrice(p.model), total: Number(p.forecastAmount) || 0}];
     pipeItemMode = 'lump';
   } else {
     pipeItemsTemp = [];
@@ -150,17 +154,15 @@ function switchPipeMode(mode) {
   pipeItemMode = mode;
   var el = document.getElementById('pipeItemsSection');
   if (el) el.innerHTML = buildPipeItemsSection({});
-  // Re-render mode buttons
-  var btns = el ? el.parentElement.querySelectorAll('.form-section + div .btn') : [];
 }
 
 function buildPipeItemsSection(p) {
   var h = '';
 
   if (pipeItemMode === 'items') {
-    // Quick Add Row
+    // Quick Add Row - ใช้ window.modelOptionsNew
     h += '<div class="pipe-qa-row">';
-         h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + window.modelOptionsNew('') + '</select>';
+    h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + window.modelOptionsNew('') + '</select>';
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
@@ -201,14 +203,15 @@ function buildPipeItemsSection(p) {
     }
 
   } else {
-// Lump sum mode (เหมือนเดิม) - แก้ไข
-h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + window.modelOptionsNew(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
-h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
-h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
+    // Lump sum mode - ใช้ window.modelOptionsNew
+    h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + window.modelOptionsNew(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
+    h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
+    h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
+  }
   return h;
 }
 
-// Quick Add functions
+// Quick Add functions - ใช้ window.getModelPrice
 function pqaModelChanged() {
   var modelName = document.getElementById('pqa_model').value;
   var priceEl = document.getElementById('pqa_price');
