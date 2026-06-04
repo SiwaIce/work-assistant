@@ -1564,6 +1564,11 @@ html += '</div>';
   html += '<div class="fg"><input type="file" id="importDemoFile" accept=".xlsx,.xls"><button class="btn bp" onclick="doImportDemoUnits()">📤 เริ่ม Import Demo Units</button></div>';
   html += '<div id="importDemoProgress" style="display:none; margin-top:8px"><div class="pb"><div class="pf pf-blue" style="width:0%"></div></div><div id="importDemoStatus"></div></div>';
   html += '</div>';
+// การจัดการข้อมูล
+html += '<div class="card"><h2>⚠️ การจัดการข้อมูล</h2>';
+html += '<div class="bg"><button class="btn bd" onclick="clearAllProductsData()">🗑️ ลบข้อมูลทั้งหมด (สินค้า, Bundle, Demo)</button></div>';
+html += '<div class="hint">เมื่อลบแล้วไม่สามารถกู้คืนได้ ยกเว้นมีข้อมูลใน Firebase และล็อกอินอยู่</div>';
+html += '</div>';
   
   // Instructions
   html += '<div class="card"><h2>📋 คำแนะนำ</h2>';
@@ -1906,7 +1911,33 @@ function importBundlesFromExcel(file, onComplete) {
   };
   reader.readAsArrayBuffer(file);
 }
+// ================================================================
+// CLEAR ALL PRODUCTS, BUNDLES, DEMO UNITS
+// ================================================================
 
+function clearAllProductsData() {
+  if (!confirm('⚠️ ยืนยันลบข้อมูลทั้งหมด (สินค้า, Bundle, Demo Unit)? ข้อมูลจะหายไปถาวร')) return;
+  
+  var data = getProductsData();
+  data.models = [];
+  data.bundles = [];
+  data.demoUnits = [];
+  data.lastUpdated = new Date().toISOString();
+  saveProductsData(data);
+  
+  // ล้างใน config ด้วย
+  var cfg = localStorage.getItem('v7_config');
+  if (cfg) {
+    var config = JSON.parse(cfg);
+    config.models = [];
+    config.bundles = [];
+    if (config.demoUnitPrices) config.demoUnitPrices.items = [];
+    localStorage.setItem('v7_config', JSON.stringify(config));
+  }
+  
+  toast('🗑️ ลบข้อมูลสินค้า, Bundle และ Demo Unit ทั้งหมดแล้ว');
+  render();
+}
 // ================================================================
 // INITIALIZE
 // ================================================================
