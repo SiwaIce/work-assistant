@@ -1297,11 +1297,13 @@ function formatBiddingDate(biddingDate) {
 // ฟังก์ชันดึงราคา Model จาก Products module
 function getModelPrice(modelName) {
   if (!modelName) return 0;
-  if (typeof Products !== 'undefined' && Products.getByName) {
-    var p = Products.getByName(modelName);
-    return p ? p.price : 0;
+  
+  // ใช้ window.getModelPrice ถ้ามี (จาก products.js)
+  if (typeof window.getModelPrice === 'function') {
+    return window.getModelPrice(modelName);
   }
-  // fallback
+  
+  // Fallback: อ่านจาก localStorage โดยตรง ไม่เรียกตัวเอง
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
     try {
@@ -1310,14 +1312,15 @@ function getModelPrice(modelName) {
         for (var i = 0; i < config.models.length; i++) {
           var m = config.models[i];
           var name = typeof m === 'object' ? m.name : m;
-          if (name === modelName) return typeof m === 'object' ? (m.price || 0) : 0;
+          if (name === modelName) {
+            return typeof m === 'object' ? (m.price || 0) : 0;
+          }
         }
       }
     } catch(e) {}
   }
   return 0;
 }
-
 function getLastUpdateDays(p) {
   if (!p._updatedAt) return null;
   var lastUpdate = p._updatedAt.seconds ? new Date(p._updatedAt.seconds * 1000) : new Date(p._updatedAt);
@@ -1774,7 +1777,43 @@ function getPriceClass(amount) {
   return 'price-zero';
 }
 
-function getModelPrice(modelName) { return window.getModelPrice ? window.getModelPrice(modelName) : 0; }
+var _getModelPriceCalling = false;
+
+function getModelPrice(modelName) {
+  if (!modelName) return 0;
+  if (_getModelPriceCalling) return 0;
+  
+  _getModelPriceCalling = true;
+  var result = 0;
+  
+  try {
+    if (typeof Products !== 'undefined' && Products.getByName) {
+      var p = Products.getByName(modelName);
+      result = p ? p.price : 0;
+    } else {
+      var cfg = localStorage.getItem('v7_config');
+      if (cfg) {
+        try {
+          var config = JSON.parse(cfg);
+          if (config.models && config.models.length) {
+            for (var i = 0; i < config.models.length; i++) {
+              var m = config.models[i];
+              var name = typeof m === 'object' ? m.name : m;
+              if (name === modelName) {
+                result = typeof m === 'object' ? (m.price || 0) : 0;
+                break;
+              }
+            }
+          }
+        } catch(e) {}
+      }
+    }
+  } finally {
+    _getModelPriceCalling = false;
+  }
+  
+  return result;
+}
 
 function showPipelineDetail(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
