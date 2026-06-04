@@ -8,7 +8,6 @@
 var quotations = [];
 var currentQuoteId = null;
 var quotationItems = [];
-var quotationDiscountPercent = 0;
 var selectedLevelForPrice = 'B';
 var quoteStatusList = ['draft', 'sent', 'approved', 'rejected', 'expired'];
 var quoteStatusLabels = {
@@ -126,26 +125,33 @@ function recalculateQuotationTotal() {
   for (var i = 0; i < quotationItems.length; i++) {
     grossTotal += (Number(quotationItems[i].amount) || 0);
   }
-  var discountAmount = 0;
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
+  var discountAmount = 0;
   if (discountPercentElem && discountPercentElem.value && parseFloat(discountPercentElem.value) > 0) {
     var discountPct = parseFloat(discountPercentElem.value) || 0;
     discountAmount = grossTotal * discountPct / 100;
-    document.getElementById('quoteDiscountRow')?.classList.remove('hidden');
+    var discountRow = document.getElementById('quoteDiscountRow');
+    if (discountRow) discountRow.style.display = 'flex';
   } else {
-    document.getElementById('quoteDiscountRow')?.classList.add('hidden');
-    discountPercentElem ? discountPercentElem.value = '0' : null;
+    var discountRow = document.getElementById('quoteDiscountRow');
+    if (discountRow) discountRow.style.display = 'none';
+    if (discountPercentElem) discountPercentElem.value = '0';
   }
   var netAmount = grossTotal - discountAmount;
   var vatPercent = 7;
   var vatAmount = netAmount * vatPercent / 100;
   var totalAmount = netAmount + vatAmount;
   
-  document.getElementById('quoteGrossTotal').textContent = formatNumber(grossTotal) + ' ฿';
-  document.getElementById('quoteDiscountAmount').textContent = formatNumber(discountAmount) + ' ฿';
-  document.getElementById('quoteNetAmount').textContent = formatNumber(netAmount) + ' ฿';
-  document.getElementById('quoteVatAmount').textContent = formatNumber(vatAmount) + ' ฿';
-  document.getElementById('quoteTotalAmount').textContent = formatNumber(totalAmount) + ' ฿';
+  var grossEl = document.getElementById('quoteGrossTotal');
+  if (grossEl) grossEl.textContent = formatNumber(grossTotal) + ' ฿';
+  var discountAmtEl = document.getElementById('quoteDiscountAmount');
+  if (discountAmtEl) discountAmtEl.textContent = formatNumber(discountAmount) + ' ฿';
+  var netEl = document.getElementById('quoteNetAmount');
+  if (netEl) netEl.textContent = formatNumber(netAmount) + ' ฿';
+  var vatEl = document.getElementById('quoteVatAmount');
+  if (vatEl) vatEl.textContent = formatNumber(vatAmount) + ' ฿';
+  var totalEl = document.getElementById('quoteTotalAmount');
+  if (totalEl) totalEl.textContent = formatNumber(totalAmount) + ' ฿';
   
   return { grossTotal: grossTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount };
 }
@@ -159,21 +165,29 @@ function renderQuotationItemsTable() {
   if (!container) return;
   
   if (quotationItems.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-state-icon">📦</div><p>ยังไม่มีสินค้า — กด ➔ เพื่อเพิ่ม</p></div>';
+    container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center"><div class="empty-state-icon">📦</div><p>ยังไม่มีสินค้า — เลือกสินค้าด้านล่าง แล้วกด ➕ เพิ่ม</p></div>';
     return;
   }
   
-  var html = '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" id="quoteItemsTable">';
-  html += '<thead><tr><th style="width:40px">#</th><th>SKU</th><th>ชื่อสินค้า</th><th style="width:80px;text-align:center">จำนวน</th><th style="width:120px;text-align:right">ราคาต่อหน่วย</th><th style="width:120px;text-align:right">รวม</th><th style="width:50px"></th></thead><tbody>';
+  var html = '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
+  html += '<thead><tr>';
+  html += '<th style="width:40px">#</th>';
+  html += '<th>SKU</th>';
+  html += '<th>ชื่อสินค้า</th>';
+  html += '<th style="width:80px;text-align:center">จำนวน</th>';
+  html += '<th style="width:120px;text-align:right">ราคาต่อหน่วย</th>';
+  html += '<th style="width:120px;text-align:right">รวม</th>';
+  html += '<th style="width:50px"></th>';
+  html += '</tr></thead><tbody>';
   
   for (var i = 0; i < quotationItems.length; i++) {
     var item = quotationItems[i];
     html += '<tr>';
-    html += '<td class="pipe-row-num">' + (i + 1) + '</td>';
+    html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px">' + sanitize(item.sku || '-') + '</td>';
     html += '<td><strong>' + sanitize(item.name) + '</strong></td>';
-    html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + (item.quantity || 1) + '" min="1" style="width:70px;text-align:center" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
-    html += '<td style="text-align:right"><input type="number" class="quote-item-price" data-idx="' + i + '" value="' + (item.unitPrice || 0) + '" min="0" step="0.01" style="width:110px;text-align:right" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
+    html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + (item.quantity || 1) + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
+    html += '<td style="text-align:right"><input type="number" class="quote-item-price" data-idx="' + i + '" value="' + (item.unitPrice || 0) + '" min="0" step="0.01" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
     html += '<td style="text-align:center"><button class="btn bsm bd" onclick="removeQuotationItem(' + i + ')">🗑️</button></td>';
     html += '</tr>';
@@ -205,7 +219,11 @@ function removeQuotationItem(idx) {
   recalculateQuotationTotal();
 }
 
-function addQuotationItem() {
+// ================================================================
+// ADD PRODUCT WITH AUTOCOMPLETE
+// ================================================================
+
+function addQuotationItemFromInput() {
   var modelInput = document.getElementById('newItemModel');
   var modelName = modelInput ? modelInput.value.trim() : '';
   var qty = parseInt(document.getElementById('newItemQty')?.value) || 1;
@@ -231,13 +249,26 @@ function addQuotationItem() {
   
   var unitPrice = getModelPriceByLevelForQuote(modelName, selectedLevelForPrice);
   
-  quotationItems.push({
-    sku: selectedProduct.sku || '',
-    name: modelName,
-    quantity: qty,
-    unitPrice: unitPrice,
-    amount: qty * unitPrice
-  });
+  // Check for duplicate
+  var existing = false;
+  for (var i = 0; i < quotationItems.length; i++) {
+    if (quotationItems[i].name === modelName) {
+      quotationItems[i].quantity += qty;
+      quotationItems[i].amount = quotationItems[i].quantity * quotationItems[i].unitPrice;
+      existing = true;
+      break;
+    }
+  }
+  
+  if (!existing) {
+    quotationItems.push({
+      sku: selectedProduct.sku || '',
+      name: modelName,
+      quantity: qty,
+      unitPrice: unitPrice,
+      amount: qty * unitPrice
+    });
+  }
   
   if (modelInput) modelInput.value = '';
   document.getElementById('newItemQty').value = '1';
@@ -248,7 +279,7 @@ function addQuotationItem() {
 }
 
 // ================================================================
-// RENDER QUOTATION LIST PAGE
+// RENDER QUOTATION LIST PAGE (HOME)
 // ================================================================
 
 function rQuotationV2(el) {
@@ -262,9 +293,11 @@ function rQuotationV2(el) {
   }
   
   var html = '';
+  
+  // Header with create button
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
   html += '<h2 style="font-size:1rem;margin:0">📋 รายการใบเสนอราคา</h2>';
-  html += '<button class="btn bp" onclick="showCreateQuotationModal()">➕ สร้างใบเสนอราคา</button>';
+  html += '<button class="btn bp" onclick="showCreateQuotationModal()" style="background:#22c55e">➕ สร้างใบเสนอราคา</button>';
   html += '</div>';
   
   // Filter bar
@@ -276,11 +309,11 @@ function rQuotationV2(el) {
   html += '<div class="fg" style="flex:0.5"><label>&nbsp;</label><button class="btn bo" style="width:100%" onclick="resetQuoteFilters()">✖️ ล้าง</button></div>';
   html += '</div></div>';
   
-  // Quote cards
+  // Quote cards grid
   html += '<div class="quote-grid" id="quoteGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">';
   
   if (quotations.length === 0) {
-    html += '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">💰</div><p>ยังไม่มีใบเสนอราคา<br><button class="btn bp" onclick="showCreateQuotationModal()" style="margin-top:8px">➕ สร้างใบแรก</button></p></div>';
+    html += '<div class="empty-state" style="grid-column:1/-1;text-align:center;padding:40px"><div class="empty-state-icon" style="font-size:48px">💰</div><p>ยังไม่มีใบเสนอราคา</p><button class="btn bp" onclick="showCreateQuotationModal()" style="margin-top:8px">➕ สร้างใบแรก</button></div>';
   } else {
     for (var i = 0; i < quotations.length; i++) {
       var q = quotations[i];
@@ -288,7 +321,7 @@ function rQuotationV2(el) {
       var statusColor = quoteStatusColors[q.status] || '#64748b';
       var statusLabel = quoteStatusLabels[q.status] || q.status;
       
-      html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="openQuotationDetail(\'' + q.id + '\')">';
+      html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">';
       html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
       html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + sanitize(q.quoteNo) + '</div>';
       html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
@@ -331,7 +364,7 @@ function filterQuoteList() {
   if (!grid) return;
   
   if (filtered.length === 0) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">💰</div><p>ไม่พบใบเสนอราคา</p></div>';
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;text-align:center;padding:40px"><div class="empty-state-icon">💰</div><p>ไม่พบใบเสนอราคา</p></div>';
     return;
   }
   
@@ -342,7 +375,7 @@ function filterQuoteList() {
     var statusColor = quoteStatusColors[q.status] || '#64748b';
     var statusLabel = quoteStatusLabels[q.status] || q.status;
     
-    html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="openQuotationDetail(\'' + q.id + '\')">';
+    html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
     html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + sanitize(q.quoteNo) + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
@@ -373,7 +406,7 @@ function resetQuoteFilters() {
 }
 
 // ================================================================
-// CREATE / EDIT QUOTATION
+// CREATE NEW QUOTATION (MODAL)
 // ================================================================
 
 function showCreateQuotationModal() {
@@ -466,6 +499,10 @@ function createNewQuotation() {
   editQuotation(newQuote.id);
 }
 
+// ================================================================
+// EDIT QUOTATION (FULL PAGE)
+// ================================================================
+
 function editQuotation(quoteId) {
   loadQuotations();
   var quote = null;
@@ -476,7 +513,6 @@ function editQuotation(quoteId) {
   
   currentQuoteId = quoteId;
   quotationItems = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
-  quotationDiscountPercent = quote.discountPercent || 0;
   selectedLevelForPrice = quote.levelUsed || 'B';
   
   var dealers = ST.getAll('dealers');
@@ -485,11 +521,18 @@ function editQuotation(quoteId) {
     dealerOptions += '<option value="' + dealers[i].id + '"' + (quote.dealerId === dealers[i].id ? ' selected' : '') + '>' + sanitize(dealers[i].name) + ' (' + (dealers[i].level || '-') + ')</option>';
   }
   
-  var levelOptions = '<option value="RRP" ' + (quote.levelUsed === 'RRP' ? 'selected' : '') + '>💰 RRP (ราคาขายปลีก)</option>';
-  levelOptions += '<option value="S" ' + (quote.levelUsed === 'S' ? 'selected' : '') + '>👑 S (Type 1)</option>';
-  levelOptions += '<option value="A" ' + (quote.levelUsed === 'A' ? 'selected' : '') + '>⭐ A (Type 2)</option>';
-  levelOptions += '<option value="B" ' + (quote.levelUsed === 'B' ? 'selected' : '') + '>📦 B (Type 3)</option>';
-  levelOptions += '<option value="Other" ' + (quote.levelUsed === 'Other' ? 'selected' : '') + '>🔄 Other (Type 4)</option>';
+  var levelOptions = '';
+  var levels = ['RRP', 'S', 'A', 'B', 'Other'];
+  var levelLabels = {
+    'RRP': '💰 RRP (ราคาขายปลีก)',
+    'S': '👑 S (Type 1)',
+    'A': '⭐ A (Type 2)',
+    'B': '📦 B (Type 3)',
+    'Other': '🔄 Other (Type 4)'
+  };
+  for (var i = 0; i < levels.length; i++) {
+    levelOptions += '<option value="' + levels[i] + '"' + (quote.levelUsed === levels[i] ? ' selected' : '') + '>' + levelLabels[levels[i]] + '</option>';
+  }
   
   var statusOptions = '';
   for (var i = 0; i < quoteStatusList.length; i++) {
@@ -497,24 +540,17 @@ function editQuotation(quoteId) {
     statusOptions += '<option value="' + s + '"' + (quote.status === s ? ' selected' : '') + '>' + quoteStatusLabels[s] + '</option>';
   }
   
-  var contactsHtml = '';
-  if (quote.contacts && quote.contacts.length) {
-    for (var i = 0; i < quote.contacts.length; i++) {
-      var c = quote.contacts[i];
-      contactsHtml += '<div class="contact-item" style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:6px">';
-      contactsHtml += '<div style="flex:1"><strong>' + sanitize(c.name) + '</strong>' + (c.role ? ' (' + sanitize(c.role) + ')' : '') + '<br><span style="font-size:11px">📧 ' + (c.email || '-') + ' • 📞 ' + (c.phone || '-') + '</span></div>';
-      contactsHtml += '<button class="btn bsm bd" onclick="removeQuoteContact(' + i + ')">🗑️</button></div>';
-    }
-  }
+  var products = getAllModelsWithPriceForQuote();
+  var modelDatalistId = 'quoteModelList_' + Date.now();
   
   var html = '<div style="max-width:1200px;margin:0 auto;padding:16px">';
   html += '<div class="bc"><a onclick="go(\'quotationV2\')">💰 Quotation</a><span class="sep">›</span><span class="cur">' + sanitize(quote.quoteNo) + '</span></div>';
   
-  // Form
-  html += '<div class="card">';
+  // Form Card
+  html += '<div class="card" style="margin-bottom:16px">';
   html += '<h2>✏️ แก้ไขใบเสนอราคา <span class="ml"><button class="btn bsm bd" onclick="deleteQuotation(\'' + quoteId + '\')">🗑️ ลบ</button></span></h2>';
   
-  html += '<div class="fr"><div class="fg"><label>🏪 Dealer</label><select id="editQuoteDealer" class="fm-input" onchange="editQuoteDealerChanged()">' + dealerOptions + '</select></div>';
+  html += '<div class="fr"><div class="fg"><label>🏪 Dealer *</label><select id="editQuoteDealer" class="fm-input" onchange="editQuoteDealerChanged()">' + dealerOptions + '</select></div>';
   html += '<div class="fg"><label>📄 เลขที่</label><input type="text" id="editQuoteNo" class="fm-input" value="' + sanitize(quote.quoteNo) + '"></div></div>';
   
   html += '<div class="fr"><div class="fg"><label>📅 วันที่เริ่ม</label><input type="text" id="editQuoteValidFrom" class="fm-input dp" value="' + quote.validFrom + '"></div>';
@@ -532,15 +568,13 @@ function editQuotation(quoteId) {
   html += '<div class="fg"><label>📝 หมายเหตุ</label><textarea id="editQuoteRemark" rows="2" class="fm-input">' + sanitize(quote.remark || '') + '</textarea></div>';
   html += '</div>';
   
-  // Products section
-  html += '<div class="card">';
+  // Products Section
+  html += '<div class="card" style="margin-bottom:16px">';
   html += '<h2>📦 รายการสินค้า</h2>';
   
-  // Add product row
-  var products = getAllModelsWithPriceForQuote();
-  var modelDatalistId = 'quoteModelList_' + Date.now();
+  // Add product row with autocomplete
   html += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end">';
-  html += '<div class="fg" style="flex:3"><label>🔍 เลือกสินค้า</label>';
+  html += '<div class="fg" style="flex:3"><label>🔍 เลือกสินค้า (พิมพ์ค้นหา)</label>';
   html += '<input type="text" id="newItemModel" list="' + modelDatalistId + '" class="fm-input" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off">';
   html += '<datalist id="' + modelDatalistId + '">';
   for (var i = 0; i < products.length; i++) {
@@ -549,35 +583,43 @@ function editQuotation(quoteId) {
   }
   html += '</datalist></div>';
   html += '<div class="fg" style="width:100px"><label>🔢 จำนวน</label><input type="number" id="newItemQty" class="fm-input" value="1" min="1"></div>';
-  html += '<div><button class="btn bp" onclick="addQuotationItem()" style="margin-bottom:4px">➕ เพิ่ม</button></div>';
+  html += '<div><button class="btn bp" onclick="addQuotationItemFromInput()" style="margin-bottom:4px;background:#22c55e">➕ เพิ่มสินค้า</button></div>';
   html += '</div>';
   
   html += '<div id="quotationItemsContainer"></div>';
   html += '</div>';
   
-  // Summary
-  html += '<div class="card">';
+  // Summary Card
+  html += '<div class="card" style="margin-bottom:16px">';
   html += '<h2>💰 สรุป</h2>';
   html += '<div style="max-width:400px;margin-left:auto">';
-  html += '<div class="fr" style="justify-content:space-between"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
-  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
-  html += '<div class="fr" style="justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;padding-top:4px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
-  html += '<div class="fr" style="justify-content:space-between"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
-  html += '<div class="fr" style="justify-content:space-between;border-top:2px solid var(--accent);margin-top:4px;padding-top:6px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
+  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0;display:none"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:6px 0;border-top:2px solid var(--accent);margin-top:4px;padding-top:8px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:flex-end;padding:4px 0"><button class="btn bsm bo" onclick="toggleDiscountField()">➕ เพิ่มส่วนลด</button></div>';
   html += '</div></div>';
   
-  // Contacts section
-  html += '<div class="card">';
+  // Contacts Card
+  html += '<div class="card" style="margin-bottom:16px">';
   html += '<h2>👤 ผู้ติดต่อ <span class="ml"><button class="btn bsm bp" onclick="showAddQuoteContactModal()">➕</button></span></h2>';
-  html += '<div id="quoteContactsContainer">' + contactsHtml + '</div>';
-  if (!quote.contacts || !quote.contacts.length) {
+  html += '<div id="quoteContactsContainer">';
+  if (quote.contacts && quote.contacts.length) {
+    for (var i = 0; i < quote.contacts.length; i++) {
+      var c = quote.contacts[i];
+      html += '<div class="contact-item" style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:6px">';
+      html += '<div style="flex:1"><strong>' + sanitize(c.name) + '</strong>' + (c.role ? ' (' + sanitize(c.role) + ')' : '') + '<br><span style="font-size:11px">📧 ' + (c.email || '-') + ' • 📞 ' + (c.phone || '-') + '</span></div>';
+      html += '<button class="btn bsm bd" onclick="removeQuoteContact(' + i + ')">🗑️</button></div>';
+    }
+  } else {
     html += '<div class="empty"><p>ยังไม่มีผู้ติดต่อ — กด ➔ เพื่อเพิ่ม</p></div>';
   }
-  html += '</div>';
+  html += '</div></div>';
   
-  // Actions
-  html += '<div class="bg" style="margin-top:16px;gap:8px;justify-content:center">';
-  html += '<button class="btn bp" onclick="saveCurrentQuotation()">💾 บันทึก</button>';
+  // Action Buttons
+  html += '<div class="bg" style="margin-top:16px;gap:8px;justify-content:center;flex-wrap:wrap">';
+  html += '<button class="btn bp" onclick="saveCurrentQuotation()" style="background:#3b82f6">💾 บันทึก</button>';
   html += '<button class="btn bo" onclick="previewQuotation(\'' + quoteId + '\')">👁️ Preview</button>';
   html += '<button class="btn bs" onclick="exportQuotationToPDF(\'' + quoteId + '\')">📎 PDF</button>';
   html += '<button class="btn bo" onclick="sendQuotationEmail(\'' + quoteId + '\')">📧 ส่ง Email</button>';
@@ -594,7 +636,6 @@ function editQuotation(quoteId) {
     if (levelSelect) {
       levelSelect.onchange = function() {
         selectedLevelForPrice = this.value;
-        // Recalculate prices for all items
         for (var i = 0; i < quotationItems.length; i++) {
           var newPrice = getModelPriceByLevelForQuote(quotationItems[i].name, selectedLevelForPrice);
           quotationItems[i].unitPrice = newPrice;
@@ -603,7 +644,6 @@ function editQuotation(quoteId) {
         renderQuotationItemsTable();
         recalculateQuotationTotal();
         
-        // Update datalist prices
         var newDatalistId = 'quoteModelList_' + Date.now();
         var newInput = document.getElementById('newItemModel');
         if (newInput) {
@@ -622,6 +662,11 @@ function editQuotation(quoteId) {
       };
     }
   }, 100);
+}
+
+function toggleDiscountField() {
+  var row = document.getElementById('quoteDiscountRow');
+  if (row) row.style.display = 'flex';
 }
 
 function editQuoteDealerChanged() {
@@ -662,6 +707,8 @@ function saveCurrentQuotation() {
   if (!quoteNo) { toast('กรุณาใส่เลขที่'); return; }
   
   var dealer = ST.getOne('dealers', dealerId);
+  var discountPercentElem = document.getElementById('quoteDiscountPercent');
+  var discountPercent = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
   var totals = recalculateQuotationTotal();
   
   for (var i = 0; i < quotations.length; i++) {
@@ -678,7 +725,7 @@ function saveCurrentQuotation() {
       quotations[i].poNo = poNo;
       quotations[i].items = JSON.parse(JSON.stringify(quotationItems));
       quotations[i].grossTotal = totals.grossTotal;
-      quotations[i].discountPercent = parseFloat(document.getElementById('quoteDiscountPercent')?.value) || 0;
+      quotations[i].discountPercent = discountPercent;
       quotations[i].discountAmount = totals.discountAmount;
       quotations[i].netAmount = totals.netAmount;
       quotations[i].vatPercent = 7;
@@ -704,10 +751,6 @@ function deleteQuotation(quoteId) {
   go('quotationV2');
 }
 
-function openQuotationDetail(quoteId) {
-  editQuotation(quoteId);
-}
-
 // ================================================================
 // QUOTATION CONTACTS
 // ================================================================
@@ -731,17 +774,12 @@ function addQuoteContact() {
   var email = document.getElementById('newContactEmail').value.trim();
   var phone = document.getElementById('newContactPhone').value.trim();
   
-  if (!quotations[currentQuoteId] && quotations.length) {
-    for (var i = 0; i < quotations.length; i++) {
-      if (quotations[i].id === currentQuoteId) {
-        if (!quotations[i].contacts) quotations[i].contacts = [];
-        quotations[i].contacts.push({ name: name, role: role, email: email, phone: phone });
-        break;
-      }
+  for (var i = 0; i < quotations.length; i++) {
+    if (quotations[i].id === currentQuoteId) {
+      if (!quotations[i].contacts) quotations[i].contacts = [];
+      quotations[i].contacts.push({ name: name, role: role, email: email, phone: phone });
+      break;
     }
-  } else if (quotations[currentQuoteId]) {
-    if (!quotations[currentQuoteId].contacts) quotations[currentQuoteId].contacts = [];
-    quotations[currentQuoteId].contacts.push({ name: name, role: role, email: email, phone: phone });
   }
   
   closeModal();
@@ -749,8 +787,12 @@ function addQuoteContact() {
 }
 
 function removeQuoteContact(idx) {
-  if (!quotations[currentQuoteId]) return;
-  quotations[currentQuoteId].contacts.splice(idx, 1);
+  for (var i = 0; i < quotations.length; i++) {
+    if (quotations[i].id === currentQuoteId) {
+      quotations[i].contacts.splice(idx, 1);
+      break;
+    }
+  }
   editQuotation(currentQuoteId);
 }
 
@@ -862,7 +904,6 @@ function sendQuotationEmail(quoteId) {
   window.open('mailto:' + to + '?subject=' + subject + '&body=' + body);
   toast('📧 เปิดอีเมลแล้ว กรุณาแนบ PDF (พิมพ์จากหน้า Preview)');
   
-  // Update status to sent if currently draft
   if (quote.status === 'draft') {
     for (var i = 0; i < quotations.length; i++) {
       if (quotations[i].id === quoteId) {
