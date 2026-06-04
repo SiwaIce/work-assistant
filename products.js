@@ -880,23 +880,28 @@ function importProductsFromRows(rows) {
   for (var i = 0; i < rows.length; i++) {
     try {
       var row = rows[i];
-      var sku = row['SiS part'] || row['SKU'] || '';
-      var ean = row['EAN'] || '';
-      var name = row['Product Name'] || row['name'] || '';
+      var sku = (row['SiS part'] || row['SKU'] || '').toString().trim();
+      var ean = (row['EAN'] || '').toString().trim();
+      var name = (row['Product Name'] || row['name'] || '').toString().trim();
+      
+      // ข้ามแถวที่เป็น bundle (SKU ลงท้ายด้วย 'A', EAN ขึ้นต้นด้วย 'CB.', หรือชื่อมีคำว่า Extended Warranty/SP Plus)
+      if (sku && sku.endsWith('A')) continue;
+      if (ean && ean.startsWith('CB.')) continue;
+      if (name && (name.includes('Extended Warranty') || name.includes('SP Plus +'))) continue;
+      
       if (!name) continue;
-
-      // ใช้ชื่อคอลัมน์ตาม Excel ปัจจุบัน (ไม่มี \n)
+      
+      // อ่านราคา (ใช้คอลัมน์ตามที่ปรากฏในไฟล์ Excel)
       var priceS = parseFloat(row['Type 1 P EX Tax THB']) || 0;
       var priceA = parseFloat(row['Type 2 P EX Tax THB']) || 0;
       var priceB = parseFloat(row['Type 3 P EX Tax THB']) || 0;
       var priceOther = parseFloat(row['Type 4 P EX Tax THB']) || 0;
       var rrp = parseFloat(row['RRP Ex Vat']) || 0;
-
+      
+      // หาก priceB เป็น 0 แต่มี RRP ให้ใช้ RRP แทน
       if (priceB === 0 && rrp > 0) priceB = rrp;
-
-      var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
-      var type = row['Type'] || 'Hardware';
-
+      
+      // ตรวจสอบสินค้าซ้ำ
       var existing = getProductBySku(sku) || getProductByEan(ean);
       var productData = {
         name: name,
@@ -904,11 +909,11 @@ function importProductsFromRows(rows) {
         ean: ean,
         price: priceB,
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
-        eol: eol,
-        isSoftware: (type === 'Software' || name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
-        isService: (type === 'Service' || name.indexOf('Warranty') !== -1)
+        eol: false,
+        isSoftware: (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
+        isService: (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1)
       };
-
+      
       if (existing) {
         updateProduct(existing.id, productData);
         updated++;
@@ -918,7 +923,7 @@ function importProductsFromRows(rows) {
       }
     } catch(e) {
       errors++;
-      console.warn(e);
+      console.warn('Import product error at row', i, e);
     }
   }
   return { imported: imported, updated: updated, errors: errors };
@@ -1037,21 +1042,28 @@ function importFullExcelData(file, onComplete) {
         bundles: { imported: 0, updated: 0, errors: 0 },
         demos: { imported: 0, updated: 0, errors: 0 }
       };
+      
+      // นำเข้าสินค้าจาก sheet 'single' (ข้าม bundle แล้ว)
       if (workbook.SheetNames.includes('single')) {
         var sheet = workbook.Sheets['single'];
         var rows = XLSX.utils.sheet_to_json(sheet);
         result.products = importProductsFromRows(rows);
       }
+      
+      // นำเข้า bundles จาก sheet 'combo'
       if (workbook.SheetNames.includes('combo')) {
         var sheet = workbook.Sheets['combo'];
         var rows = XLSX.utils.sheet_to_json(sheet);
         result.bundles = importBundlesFromRows(rows);
       }
+      
+      // นำเข้า demo units จาก sheet 'demo'
       if (workbook.SheetNames.includes('demo')) {
         var sheet = workbook.Sheets['demo'];
         var rows = XLSX.utils.sheet_to_json(sheet);
         result.demos = importDemoUnitsFromRows(rows);
       }
+      
       if (onComplete) onComplete({ success: true, result: result });
     } catch(err) {
       if (onComplete) onComplete({ success: false, error: err.message });
