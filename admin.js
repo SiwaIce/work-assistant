@@ -1,5 +1,5 @@
 // ================================================================
-// ADMIN PANEL
+// ADMIN PANEL - FULLY INTEGRATED WITH PRODUCTS MODULE
 // ================================================================
 function rAdmin(el) {
   document.getElementById('pgT').textContent = '⚙️ ตั้งค่า';
@@ -78,10 +78,9 @@ function rAdmin(el) {
       '<div class="lm"><div class="lt">📑 ' + sanitize(tp.name) + '</div>' +
       '<div class="ls">' + (tp.steps || []).length + ' steps ' + (tp.sequential ? '⚡' : '') + '</div></div></div>';
   }
-// ต่อท้าย rAdmin function ก่อนบรรทัด el.innerHTML = html (หรือหลัง el.innerHTML)
-setTimeout(function() {
-  initNewDemoPolicies();
-}, 100);
+  setTimeout(function() {
+    initNewDemoPolicies();
+  }, 100);
 
   el.innerHTML = '' +
     // Data Overview
@@ -164,7 +163,7 @@ setTimeout(function() {
     '<input type="text" id="adm_name" value="' + sanitize(cfg.saleName) + '"></div>' +
     '<button class="btn bp bsm" onclick="admSaveName()">💾 บันทึก</button></div>' +
 
-    // KPI
+    // KPI Settings
     '<div class="card"><h2>🎯 KPI Settings</h2>' +
     '<div class="admin-row"><label>Follow-up / สัปดาห์</label>' +
     '<input type="number" id="adm_kpi_fu" value="' + cfg.kpi.followupPerWeek + '" min="0"></div>' +
@@ -181,33 +180,22 @@ setTimeout(function() {
     '<button class="btn bsm bp" onclick="admAddPSt()">➕</button></div>' +
     '<button class="btn bp bsm" style="margin-top:6px" onclick="admSavePSt()">💾 บันทึกทั้งหมด</button></div>' +
 
-    // Models
-    '<div class="card"><h2>📦 Product Models & ราคา</h2>' +
-    '<div id="admModelList">' + (function() {
-      var mh = '';
-      for (var mi = 0; mi < cfg.models.length; mi++) {
-        var m = cfg.models[mi];
-        var mName = typeof m === 'object' ? m.name : m;
-        var mPrice = typeof m === 'object' ? (m.price || '') : '';
-        mh += '<div class="admin-row" style="display:flex;align-items:center;gap:4px" id="amr_' + mi + '">' +
-          '<span style="color:var(--text2);font-size:11px;font-weight:700;min-width:20px;text-align:center">' + (mi + 1) + '</span>' +
-          '<input type="text" value="' + sanitize(mName) + '" id="am_n_' + mi + '" style="flex:2;min-width:120px" placeholder="ชื่อ Model">' +
-          '<input type="number" value="' + mPrice + '" id="am_p_' + mi + '" style="flex:1;min-width:80px" placeholder="ราคา (฿)">' +
-          '<button class="btn bsm bo" onclick="admMoveModel(' + mi + ',-1)" style="padding:2px 6px">⬆️</button>' +
-          '<button class="btn bsm bo" onclick="admMoveModel(' + mi + ',1)" style="padding:2px 6px">⬇️</button>' +
-          '<button class="btn bsm bd" onclick="admRmModel(' + mi + ')">✕</button>' +
-          '</div>';
-      }
-      return mh;
-    })() + '</div>' +
-    '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
-    '<button class="btn bp bsm" onclick="admSaveModels()">💾 บันทึก</button>' +
-    '<button class="btn bo bsm" onclick="admAddModel()">➕ เพิ่ม Model</button>' +
-    '<button class="btn bo bsm" onclick="admImportModelsText()">📝 Import Text</button>' +
+    // ===================== PRODUCTS MANAGEMENT (USING Products MODULE) =====================
+    '<div class="card"><h2>📦 จัดการสินค้าทั้งหมด (Products Module)</h2>' +
+    '<p style="font-size:.7rem;color:var(--text3);margin-bottom:6px">📌 สินค้าและราคาแสดงผลจาก Products Module (v7_products) แล้ว</p>' +
+    '<div id="admProductList" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">' +
+    renderProductListForAdmin() +
     '</div>' +
-    '<div style="font-size:.6rem;color:var(--text2);margin-top:4px">💡 ราคาจะถูกดึงอัตโนมัติเมื่อเพิ่มสินค้าใน Pipeline</div></div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button class="btn bp bsm" onclick="showAddProductAdminModal()">➕ เพิ่มสินค้า (ใช้ Products)</button>' +
+    '<button class="btn bo bsm" onclick="exportProductsToExcel()">📥 Export Excel</button>' +
+    '<button class="btn bo bsm" onclick="document.getElementById(\'importProductFileAdmin\').click()">📤 Import Excel</button>' +
+    '<input type="file" id="importProductFileAdmin" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)">' +
+    '</div>' +
+    '<div class="hint" style="margin-top:6px">💡 ข้อมูลสินค้าและราคาทั้งหมดถูกจัดการผ่าน Products module แล้ว</div>' +
+    '</div>' +
 
-    // Level Requirements (เพิ่มตรงนี้)
+    // Level Requirements
     '<div class="card"><h2>📋 Partner Level Requirements</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดเป้าหมายและเงื่อนไขตามระดับ Dealer (S/A/B/Other)</p>' +
     '<div class="ftabs" style="margin-bottom:10px" id="reqLevelTabs">' +
@@ -222,7 +210,7 @@ setTimeout(function() {
     '<button class="btn bo" onclick="resetLevelRequirements()">↻ Reset เป็นค่าเริ่มต้น</button>' +
     '</div></div>' +
 
-    // New Demo Policies Management (รองรับหลายรายการ)
+    // New Demo Policies Management
     '<div class="card"><h2>⚠️ New Demo Policies Management</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">จัดการสินค้าใหม่ที่ต้องแจ้งเตือน Dealer (รองรับหลายรายการ)</p>' +
     '<div id="ndpListContainer"></div>' +
@@ -270,7 +258,8 @@ setTimeout(function() {
     '<div class="fg"><label>Online Plan</label>' +
     '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
     '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
-// DJI Dealer Types
+    
+    // DJI Dealer Types
     '<div class="card"><h2>🏪 DJI Dealer Types</h2>' +
     '<textarea id="adm_djitypes" rows="3" style="font-size:.72rem">' + (cfg.djiDealerTypes || []).join('\n') + '</textarea>' +
     '<div style="font-size:.62rem;color:#64748b;margin:3px 0">แต่ละบรรทัด = 1 ประเภท</div>' +
@@ -355,7 +344,7 @@ setTimeout(function() {
       '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>') +
     '</div></div>' +
 
-    // Cloud Sync Section
+    // Google Sheets Sync
     '<div class="card"><h2>☁️ Google Sheets Sync</h2>' +
     '<div class="bg" style="flex-wrap:wrap; gap:8px">' +
     '<button class="btn bp" onclick="syncFirebaseToSheets()" style="background:#3b82f6">📤 Sync to Sheets</button>' +
@@ -391,7 +380,168 @@ setTimeout(function() {
 }
 
 // ================================================================
-// SAVE FUNCTIONS (เดิม)
+// PRODUCTS MANAGEMENT FUNCTIONS FOR ADMIN (USING Products MODULE)
+// ================================================================
+
+function renderProductListForAdmin() {
+  if (typeof Products === 'undefined') return '<div class="empty"><p>⚠️ Products module ยังไม่โหลด</p></div>';
+  var products = Products.getAll();
+  if (!products.length) return '<div class="empty"><p>ยังไม่มีสินค้า — กด ➕ เพื่อเพิ่ม หรือ Import Excel</p></div>';
+  
+  var html = '<table class="export-table" style="width:100%;font-size:.7rem">' +
+    '<thead><tr><th>#</th><th>SKU</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>ราคา B (฿)</th><th>EOL</th><th></th></tr></thead><tbody>';
+  
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var categoryName = getCategoryNameFromId(p.category);
+    var eolBadge = p.eol ? '<span class="tag tag-cancelled">⏰ EOL</span>' : '<span class="tag tag-completed">✅</span>';
+    html += '<td>' +
+      '<td class="pipe-row-num">' + (i+1) + '</td>' +
+      '<td>' + sanitize(p.sku || '-') + '</td>' +
+      '<td><strong>' + sanitize(p.name) + '</strong></td>' +
+      '<td>' + categoryName + '</td>' +
+      '<td style="text-align:right">' + fmtMoney(p.price) + '</td>' +
+      '<td>' + eolBadge + '</td>' +
+      '<td><button class="btn bsm bo" onclick="editProductAdmin(\'' + p.id + '\')">✏️</button></td>' +
+      '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function getCategoryNameFromId(catId) {
+  var cat = PRODUCT_CATEGORIES.find(function(c) { return c.id === catId; });
+  return cat ? cat.name : '📦 Other';
+}
+
+// Modal แก้ไขสินค้า (ใช้ Products.update)
+function editProductAdmin(productId) {
+  var p = Products.getById(productId);
+  if (!p) { toast('ไม่พบสินค้า'); return; }
+  
+  var categoryOptions = '';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    categoryOptions += '<option value="' + cat.id + '"' + (p.category === cat.id ? ' selected' : '') + '>' + cat.name + '</option>';
+  }
+  
+  var html = '<div style="max-width:550px">' +
+    '<div class="fm-group"><label>ชื่อสินค้า *</label><input type="text" id="edit_p_name" value="' + sanitize(p.name) + '" class="fm-input"></div>' +
+    '<div class="fm-group"><label>SKU (SiS part)</label><input type="text" id="edit_p_sku" value="' + sanitize(p.sku || '') + '" class="fm-input"></div>' +
+    '<div class="fm-group"><label>EAN</label><input type="text" id="edit_p_ean" value="' + sanitize(p.ean || '') + '" class="fm-input"></div>' +
+    '<div class="fm-group"><label>หมวดหมู่</label><select id="edit_p_category" class="fm-input">' + categoryOptions + '</select></div>' +
+    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="number" id="edit_p_price" value="' + (p.price || 0) + '" class="fm-input"></div>' +
+    '<div class="fm-group"><label>⚡ สถานะ EOL</label><div class="radio-g">' +
+    '<label><input type="radio" name="edit_eol" value="1"' + (p.eol ? ' checked' : '') + '><span>⏰ EOL</span></label>' +
+    '<label><input type="radio" name="edit_eol" value="0"' + (!p.eol ? ' checked' : '') + '><span>✅ ปกติ</span></label>' +
+    '</div></div>' +
+    '<div class="fm-group"><label>🔧 ประเภทสินค้า (สำหรับระบบ)</label><div class="check-g">' +
+    '<label><input type="checkbox" id="edit_is_bundle"' + (p.isBundle ? ' checked' : '') + '> 🎁 Bundle</label>' +
+    '<label><input type="checkbox" id="edit_is_software"' + (p.isSoftware ? ' checked' : '') + '> 💻 Software</label>' +
+    '<label><input type="checkbox" id="edit_is_service"' + (p.isService ? ' checked' : '') + '> 🛠️ Service</label>' +
+    '</div></div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="saveProductEditAdmin(\'' + p.id + '\')">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('✏️ แก้ไขสินค้า', html);
+}
+
+function saveProductEditAdmin(productId) {
+  var name = document.getElementById('edit_p_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var updates = {
+    name: name,
+    sku: document.getElementById('edit_p_sku').value.trim(),
+    ean: document.getElementById('edit_p_ean').value.trim(),
+    category: document.getElementById('edit_p_category').value,
+    price: parseFloat(document.getElementById('edit_p_price').value) || 0,
+    eol: document.querySelector('input[name="edit_eol"]:checked') ? document.querySelector('input[name="edit_eol"]:checked').value === '1' : false,
+    isBundle: document.getElementById('edit_is_bundle').checked,
+    isSoftware: document.getElementById('edit_is_software').checked,
+    isService: document.getElementById('edit_is_service').checked
+  };
+  
+  Products.update(productId, updates);
+  closeMForce();
+  toast('💾 อัปเดตสินค้าเรียบร้อย');
+  render(); // รีเฟรชหน้า admin
+}
+
+function showAddProductAdminModal() {
+  var categoryOptions = '';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    categoryOptions += '<option value="' + PRODUCT_CATEGORIES[i].id + '">' + PRODUCT_CATEGORIES[i].name + '</option>';
+  }
+  
+  var html = '<div style="max-width:550px">' +
+    '<div class="fm-group"><label>ชื่อสินค้า *</label><input type="text" id="new_p_name" class="fm-input"></div>' +
+    '<div class="fm-group"><label>SKU (SiS part)</label><input type="text" id="new_p_sku" class="fm-input"></div>' +
+    '<div class="fm-group"><label>EAN</label><input type="text" id="new_p_ean" class="fm-input"></div>' +
+    '<div class="fm-group"><label>หมวดหมู่</label><select id="new_p_category" class="fm-input">' + categoryOptions + '</select></div>' +
+    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="number" id="new_p_price" class="fm-input" value="0"></div>' +
+    '<div class="fm-group"><label>🔧 ประเภทสินค้า</label><div class="check-g">' +
+    '<label><input type="checkbox" id="new_is_bundle"> 🎁 Bundle</label>' +
+    '<label><input type="checkbox" id="new_is_software"> 💻 Software</label>' +
+    '<label><input type="checkbox" id="new_is_service"> 🛠️ Service</label>' +
+    '</div></div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="addProductAdmin()">💾 เพิ่มสินค้า</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('➕ เพิ่มสินค้า (Products Module)', html);
+}
+
+function addProductAdmin() {
+  var name = document.getElementById('new_p_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  Products.add({
+    name: name,
+    sku: document.getElementById('new_p_sku').value.trim(),
+    ean: document.getElementById('new_p_ean').value.trim(),
+    category: document.getElementById('new_p_category').value,
+    price: parseFloat(document.getElementById('new_p_price').value) || 0,
+    isBundle: document.getElementById('new_is_bundle').checked,
+    isSoftware: document.getElementById('new_is_software').checked,
+    isService: document.getElementById('new_is_service').checked,
+    eol: false,
+    typePrices: { S: 0, A: 0, B: 0, Other: 0 }
+  });
+  
+  closeMForce();
+  toast('✅ เพิ่มสินค้าเรียบร้อย');
+  render();
+}
+
+function importProductsFromExcelAdmin(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  
+  if (typeof Products === 'undefined' || typeof Products.importFull !== 'function') {
+    toast('❌ Products module ยังไม่พร้อม');
+    return;
+  }
+  
+  toast('🔄 กำลังนำเข้า...');
+  Products.importFull(file, function(result) {
+    if (result.success) {
+      var msg = '✅ นำเข้าเสร็จ! ';
+      if (result.result.products) msg += 'สินค้า: +' + result.result.products.imported + ' อัปเดต ' + result.result.products.updated;
+      toast(msg);
+      setTimeout(function() { render(); }, 1000);
+    } else {
+      toast('❌ นำเข้าล้มเหลว: ' + result.error);
+    }
+  });
+  event.target.value = '';
+}
+
+// ================================================================
+// SAVE FUNCTIONS (เดิม แต่ไม่เกี่ยวข้องกับ products)
 // ================================================================
 function admSaveName() {
   var cfg = getConfig();
@@ -461,94 +611,29 @@ function admRmPSt(idx) {
   render();
 }
 
+// ฟังก์ชันเก่าเกี่ยวกับ Models ใน config เดิม - ปิดใช้งาน (redirect ไปใช้ Products module)
 function admSaveModels() {
-  var cfg = getConfig();
-  var newModels = [];
-  for (var i = 0; i < cfg.models.length; i++) {
-    var nameEl = document.getElementById('am_n_' + i);
-    var priceEl = document.getElementById('am_p_' + i);
-    if (!nameEl) continue;
-    var name = nameEl.value.trim();
-    if (!name) continue;
-    var price = priceEl ? (parseFloat(priceEl.value) || 0) : 0;
-    newModels.push({name: name, price: price});
-  }
-  cfg.models = newModels;
-  saveConfig(cfg);
-  toast('💾 บันทึก Models แล้ว (' + newModels.length + ' รายการ)');
-  render();
+  toast('📦 กรุณาใช้ "สินค้าทั้งหมด (Products Module)" แทนการบันทึกแบบเดิม');
 }
 
 function admAddModel() {
-  var cfg = getConfig();
-  cfg.models.push({name: '', price: 0});
-  saveConfig(cfg);
-  render();
-  setTimeout(function() {
-    var el = document.getElementById('am_n_' + (cfg.models.length - 1));
-    if (el) el.focus();
-  }, 100);
+  toast('📦 กรุณาใช้ปุ่ม "➕ เพิ่มสินค้า (ใช้ Products)" ในส่วนสินค้าทั้งหมด');
 }
 
 function admRmModel(idx) {
-  var cfg = getConfig();
-  var name = typeof cfg.models[idx] === 'object' ? cfg.models[idx].name : cfg.models[idx];
-  if (!confirm('ลบ "' + name + '"?')) return;
-  cfg.models.splice(idx, 1);
-  saveConfig(cfg);
-  toast('🗑️ ลบแล้ว');
-  render();
+  toast('📦 กรุณาใช้ปุ่มแก้ไขในส่วนสินค้าทั้งหมด');
 }
 
 function admMoveModel(idx, dir) {
-  var cfg = getConfig();
-  var newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= cfg.models.length) return;
-  var tmp = cfg.models[idx];
-  cfg.models[idx] = cfg.models[newIdx];
-  cfg.models[newIdx] = tmp;
-  saveConfig(cfg);
-  render();
+  toast('📦 การเรียงลำดับสินค้าใช้ในส่วนสินค้าทั้งหมดเท่านั้น');
 }
 
 function admImportModelsText() {
-  var h = '<div style="max-width:450px">';
-  h += '<div class="fm-group"><label>📝 วาง Model ทีละบรรทัด</label>';
-  h += '<textarea id="admMImport" rows="10" class="fm-input" placeholder="DJI Matrice 400 (M400)\nDJI Zenmuse L3\nDJI Dock 2\n..."></textarea></div>';
-  h += '<div style="font-size:.62rem;color:var(--text2);margin-bottom:8px">💡 แต่ละบรรทัด = 1 model (ราคาใส่ทีหลังได้)</div>';
-  h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="admDoImportModels()">📥 Import</button>';
-  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
-  h += '</div></div>';
-  openM('📝 Import Models', h);
+  toast('📦 กรุณาใช้ฟังก์ชัน Import Excel ในส่วนสินค้าทั้งหมด');
 }
 
 function admDoImportModels() {
-  var text = document.getElementById('admMImport');
-  if (!text) return;
-  var lines = text.value.trim().split('\n').filter(function(s) { return s.trim(); });
-  if (!lines.length) { toast('ไม่มีข้อมูล'); return; }
-  
-  var cfg = getConfig();
-  var added = 0;
-  lines.forEach(function(line) {
-    var name = line.trim();
-    if (!name) return;
-    var exists = false;
-    for (var i = 0; i < cfg.models.length; i++) {
-      var mName = typeof cfg.models[i] === 'object' ? cfg.models[i].name : cfg.models[i];
-      if (mName === name) { exists = true; break; }
-    }
-    if (!exists) {
-      cfg.models.push({name: name, price: 0});
-      added++;
-    }
-  });
-  
-  saveConfig(cfg);
-  closeMForce();
-  toast('📥 Import ' + added + ' models (' + (lines.length - added) + ' ซ้ำ)');
-  render();
+  toast('📦 กรุณาใช้ฟังก์ชัน Import Excel ในส่วนสินค้าทั้งหมด');
 }
 
 function admSaveUnits() {
@@ -662,7 +747,7 @@ function admReqNotif() {
 }
 
 // ================================================================
-// TEMPLATE FUNCTIONS
+// TEMPLATE FUNCTIONS (เหมือนเดิม)
 // ================================================================
 function showTplDet(id) {
   var tp = ST.getOne('templates', id);
@@ -771,7 +856,7 @@ function admSaveTerms() {
 }
 
 // ================================================================
-// IMPORT PIPELINE FROM JSON
+// IMPORT PIPELINE FROM JSON (เหมือนเดิม)
 // ================================================================
 function showImportPipelineM() {
   openM('📥 Import Pipeline', 
@@ -967,10 +1052,8 @@ function admSaveOnboard() {
 }
 
 // ================================================================
-// LEVEL REQUIREMENTS FUNCTIONS (NEW)
+// LEVEL REQUIREMENTS FUNCTIONS (เดิม)
 // ================================================================
-
-// ตัวแปรเก็บ current level ที่กำลังแก้ไข
 var currentReqLevel = 'S';
 
 function initLevelRequirementTabs() {
@@ -987,7 +1070,6 @@ function initLevelRequirementTabs() {
       renderLevelRequirementsEditor(this.dataset.level);
     };
   }
-  // Initialize with active tab
   var activeTab = document.querySelector('#reqLevelTabs .ftab.act');
   if (activeTab) {
     renderLevelRequirementsEditor(activeTab.dataset.level);
@@ -1016,7 +1098,6 @@ function renderLevelRequirementsEditor(level) {
   h += '<option value="both"' + (demoRequired === 'both' ? ' selected' : '') + '>📦 ต้องมีทั้ง Option 1 และ Option 2</option>';
   h += '</select></div>';
   
-  // Option 1 Models
   h += '<div class="fg"><label>📦 Option 1 Models (Drone + Payload + Small Drone)</label>';
   h += '<div id="req_option1_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
   var opt1Models = req.option1Models || [];
@@ -1028,7 +1109,6 @@ function renderLevelRequirementsEditor(level) {
   h += '<div style="display:flex;gap:4px"><input type="text" id="opt1_new_model" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList">';
   h += '<button class="btn bsm bp" onclick="addOption1Model()">➕</button></div></div>';
   
-  // Option 2 Models
   h += '<div class="fg"><label>📦 Option 2 Models (Dock + Drone)</label>';
   h += '<div id="req_option2_list" class="tag-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
   var opt2Models = req.option2Models || [];
@@ -1120,76 +1200,20 @@ function resetLevelRequirements() {
   render();
 }
 
-function saveNewDemoPolicy() {
-  var productName = document.getElementById('ndp_product').value.trim();
-  var releaseDate = dpG('ndp_release');
-  var orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
-  var alertMessage = document.getElementById('ndp_message').value.trim();
-  var enabled = document.getElementById('ndp_enabled').value === 'true';
-  
-  if (!productName) { toast('กรุณาใส่ชื่อสินค้า'); return; }
-  if (!releaseDate) { toast('กรุณาใส่วันที่วางจำหน่าย'); return; }
-  if (!alertMessage) alertMessage = '⚠️ ต้องสั่งซื้อ Demo รุ่นใหม่ภายใน ' + orderWithinDays + ' วัน มิฉะนั้นอาจส่งผลต่อสถานะพาร์ทเนอร์';
-  
-  var cfg = getConfig();
-  if (!cfg.newDemoPolicies) cfg.newDemoPolicies = [];
-  
-  cfg.newDemoPolicies.push({
-    id: 'ndp_' + Date.now(),
-    enabled: enabled,
-    productName: productName,
-    releaseDate: releaseDate,
-    orderWithinDays: orderWithinDays,
-    alertMessage: alertMessage
-  });
-  
-  saveConfig(cfg);
-  closeMForce();
-  toast('✅ เพิ่มนโยบายสินค้าใหม่แล้ว');
-  renderNewDemoPoliciesList();
-  
-  // ✅ เพิ่ม auto sync
-  if (typeof forceSyncAll === 'function') {
-    forceSyncAll();
-  } else {
-    toast('⚠️ กรุณากด Force Sync All เพื่อให้ข้อมูลอัปเดต', true);
-  }
-}
-
-function saveH1Period() {
-  var cfg = getConfig();
-  cfg.h1Period = {
-    startMonth: parseInt(document.getElementById('h1_start_month').value) || 0,
-    startDay: parseInt(document.getElementById('h1_start_day').value) || 1,
-    endMonth: parseInt(document.getElementById('h1_end_month').value) || 5,
-    endDay: parseInt(document.getElementById('h1_end_day').value) || 30
-  };
-  saveConfig(cfg);
-  toast('💾 บันทึก H1 Period แล้ว');
-  render();
-}
 // ================================================================
-// NEW DEMO POLICIES MANAGEMENT (เพิ่มต่อท้าย admin.js)
+// NEW DEMO POLICIES (เหมือนเดิม)
 // ================================================================
-
 function renderNewDemoPoliciesList() {
   var cfg = getConfig();
   var policies = cfg.newDemoPolicies || [];
-  
   var container = document.getElementById('ndpListContainer');
   if (!container) return;
-  
-  if (!policies.length) {
-    container.innerHTML = '<div class="empty"><p>ยังไม่มีนโยบาย Demo สินค้าใหม่</p></div>';
-    return;
-  }
-  
+  if (!policies.length) { container.innerHTML = '<div class="empty"><p>ยังไม่มีนโยบาย Demo สินค้าใหม่</p></div>'; return; }
   var html = '<div style="display:flex;flex-direction:column;gap:8px">';
   for (var i = 0; i < policies.length; i++) {
     var p = policies[i];
     var statusColor = p.enabled ? '#22c55e' : '#64748b';
     var statusText = p.enabled ? '✅ เปิดใช้งาน' : '⏸ ปิดใช้งาน';
-    
     html += '<div class="ndp-item" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     html += '<div style="display:flex;align-items:center;gap:8px">';
@@ -1228,14 +1252,11 @@ function saveNewDemoPolicy() {
   var releaseDate = dpG('ndp_release');
   var orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
   var alertMessage = document.getElementById('ndp_message').value.trim();
-  
   if (!productName) { toast('กรุณาใส่ชื่อสินค้า'); return; }
   if (!releaseDate) { toast('กรุณาใส่วันที่วางจำหน่าย'); return; }
   if (!alertMessage) alertMessage = '⚠️ ต้องสั่งซื้อ Demo รุ่นใหม่ภายใน ' + orderWithinDays + ' วัน มิฉะนั้นอาจส่งผลต่อสถานะพาร์ทเนอร์';
-  
   var cfg = getConfig();
   if (!cfg.newDemoPolicies) cfg.newDemoPolicies = [];
-  
   cfg.newDemoPolicies.push({
     id: 'ndp_' + Date.now(),
     enabled: true,
@@ -1244,19 +1265,18 @@ function saveNewDemoPolicy() {
     orderWithinDays: orderWithinDays,
     alertMessage: alertMessage
   });
-  
   saveConfig(cfg);
   closeMForce();
   toast('✅ เพิ่มนโยบายสินค้าใหม่แล้ว');
   renderNewDemoPoliciesList();
   render();
+  if (typeof forceSyncAll === 'function') forceSyncAll();
 }
 
 function editNewDemoPolicy(idx) {
   var cfg = getConfig();
   var p = cfg.newDemoPolicies[idx];
   if (!p) return;
-  
   var h = '<div style="max-width:450px">';
   h += '<div class="fm-group"><label>🚁 ชื่อสินค้า *</label><input type="text" id="ndp_product" class="fm-input" value="' + sanitize(p.productName) + '"></div>';
   h += '<div class="fm-group">' + dpH('ndp_release', p.releaseDate, '📅 วันที่วางจำหน่าย') + '</div>';
@@ -1272,22 +1292,15 @@ function editNewDemoPolicy(idx) {
 function updateNewDemoPolicy(idx) {
   var cfg = getConfig();
   if (!cfg.newDemoPolicies || !cfg.newDemoPolicies[idx]) return;
-  
   cfg.newDemoPolicies[idx].productName = document.getElementById('ndp_product').value.trim();
   cfg.newDemoPolicies[idx].releaseDate = dpG('ndp_release');
   cfg.newDemoPolicies[idx].orderWithinDays = parseInt(document.getElementById('ndp_days').value) || 60;
   cfg.newDemoPolicies[idx].alertMessage = document.getElementById('ndp_message').value.trim();
-  cfg.newDemoPolicies[idx].enabled = document.getElementById('ndp_enabled').value === 'true';
-  
   saveConfig(cfg);
   closeMForce();
   toast('💾 บันทึกแล้ว');
   renderNewDemoPoliciesList();
-  
-  // ✅ เพิ่ม auto sync
-  if (typeof forceSyncAll === 'function') {
-    forceSyncAll();
-  }
+  if (typeof forceSyncAll === 'function') forceSyncAll();
 }
 
 function toggleNewDemoPolicy(idx) {
@@ -1297,12 +1310,9 @@ function toggleNewDemoPolicy(idx) {
   saveConfig(cfg);
   toast(cfg.newDemoPolicies[idx].enabled ? '✅ เปิดใช้งานแล้ว' : '⏸ ปิดใช้งานแล้ว');
   renderNewDemoPoliciesList();
-  
-  // ✅ เพิ่ม auto sync
-  if (typeof forceSyncAll === 'function') {
-    forceSyncAll();
-  }
+  if (typeof forceSyncAll === 'function') forceSyncAll();
 }
+
 function deleteNewDemoPolicy(idx) {
   if (!confirm('ลบนโยบายนี้?')) return;
   var cfg = getConfig();
@@ -1310,12 +1320,9 @@ function deleteNewDemoPolicy(idx) {
   saveConfig(cfg);
   toast('🗑️ ลบแล้ว');
   renderNewDemoPoliciesList();
-  
-  // ✅ เพิ่ม auto sync
-  if (typeof forceSyncAll === 'function') {
-    forceSyncAll();
-  }
+  if (typeof forceSyncAll === 'function') forceSyncAll();
 }
+
 function resetNewDemoPolicies() {
   if (!confirm('⚠️ Reset นโยบายสินค้าใหม่เป็นค่าเริ่มต้น?')) return;
   var cfg = getConfig();
@@ -1332,13 +1339,22 @@ function resetNewDemoPolicies() {
   saveConfig(cfg);
   toast('🔄 Reset แล้ว');
   renderNewDemoPoliciesList();
-  
-  // ✅ เพิ่ม auto sync
-  if (typeof forceSyncAll === 'function') {
-    forceSyncAll();
-  }
+  if (typeof forceSyncAll === 'function') forceSyncAll();
 }
-// เรียกตอนโหลดหน้า admin
+
+function saveH1Period() {
+  var cfg = getConfig();
+  cfg.h1Period = {
+    startMonth: parseInt(document.getElementById('h1_start_month').value) || 0,
+    startDay: parseInt(document.getElementById('h1_start_day').value) || 1,
+    endMonth: parseInt(document.getElementById('h1_end_month').value) || 5,
+    endDay: parseInt(document.getElementById('h1_end_day').value) || 30
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก H1 Period แล้ว');
+  render();
+}
+
 function initNewDemoPolicies() {
   renderNewDemoPoliciesList();
 }
