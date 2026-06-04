@@ -1,5 +1,5 @@
 // ================================================================
-// PRODUCTS MANAGEMENT MODULE - FULL VERSION
+// PRODUCTS MANAGEMENT MODULE - COMPLETE & FULL FEATURED
 // ================================================================
 
 var PRODUCTS_STORAGE_KEY = 'v7_products';
@@ -257,16 +257,33 @@ function deleteProduct(productId) {
 }
 
 // ================================================================
-// EOL HELPERS
+// PRICE & EOL HELPERS
 // ================================================================
 
-function setProductEOL(productId, isEOL) {
-  return updateProduct(productId, { eol: isEOL });
+function getPriceByLevel(productId, level) {
+  var p = getProductById(productId);
+  if (!p) return 0;
+  var map = { S: 'S', A: 'A', B: 'B', Other: 'Other' };
+  var target = map[level] || 'B';
+  return (p.typePrices && p.typePrices[target] !== undefined) ? p.typePrices[target] : p.price;
+}
+
+function updateProductPrice(productId, level, price) {
+  var p = getProductById(productId);
+  if (!p) return false;
+  if (!p.typePrices) p.typePrices = { S: p.price, A: p.price, B: p.price, Other: p.price };
+  p.typePrices[level] = price;
+  if (level === 'B') p.price = price;
+  return updateProduct(productId, { typePrices: p.typePrices, price: p.price });
 }
 
 function isProductEOL(productId) {
   var p = getProductById(productId);
   return p ? p.eol === true : false;
+}
+
+function setProductEOL(productId, isEOL) {
+  return updateProduct(productId, { eol: isEOL });
 }
 
 function getActiveProducts() {
@@ -278,7 +295,60 @@ function getEOLProducts() {
 }
 
 // ================================================================
-// MODAL แก้ไขสินค้า (ใหม่)
+// ฟังก์ชันดึงราคาสำหรับระบบ (แยกตามการใช้งาน)
+// ================================================================
+
+// ฟังก์ชันสำหรับ Pipeline และทั่วไป: ดึง RRP Ex Vat (ราคาขายปลีกไม่รวม VAT)
+window.getModelPrice = function(modelName) {
+  var p = getProductByName(modelName);
+  if (!p) return 0;
+  // ลำดับ: RRP Ex Vat > ราคา B (Type 3) > 0
+  return p.rrpExVat || p.price || 0;
+};
+
+// ฟังก์ชันสำหรับดึงราคาตาม Level Dealer (S/A/B/Other)
+window.getModelPriceByLevel = function(modelName, level) {
+  var p = getProductByName(modelName);
+  if (!p) return 0;
+  var levelMap = { 'S': 'S', 'A': 'A', 'B': 'B', 'Other': 'Other' };
+  var target = levelMap[level] || 'B';
+  return (p.typePrices && p.typePrices[target] !== undefined) ? p.typePrices[target] : (p.rrpExVat || p.price || 0);
+};
+
+// ฟังก์ชันดึงราคา RRP Ex Vat โดยตรง
+window.getModelRrpExVat = function(modelName) {
+  var p = getProductByName(modelName);
+  return p ? (p.rrpExVat || 0) : 0;
+};
+
+// ฟังก์ชันดึงราคา RRP In Vat โดยตรง
+window.getModelRrpInVat = function(modelName) {
+  var p = getProductByName(modelName);
+  return p ? (p.rrpInVat || 0) : 0;
+};
+
+// ================================================================
+// MODEL OPTIONS FOR DROPDOWN (แสดง RRP Ex Vat)
+// ================================================================
+
+window.modelOptionsNew = function(selected, showEOLBadge) {
+  var products = getAllProducts();
+  var html = '<option value="">-- เลือก Model --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var label = p.name;
+    // แสดง RRP Ex Vat (หรือราคา B ถ้าไม่มี)
+    var displayPrice = p.rrpExVat || p.price;
+    if (displayPrice > 0) label += ' (฿' + fmtMoney(displayPrice) + ')';
+    if (showEOLBadge && p.eol) label += ' ⏰ EOL';
+    if (p.isBundle) label += ' 🎁';
+    html += '<option value="' + sanitize(p.name) + '"' + (selected === p.name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
+  }
+  return html;
+};
+
+// ================================================================
+// MODAL แก้ไขสินค้า (ครบทุกฟิลด์)
 // ================================================================
 
 function showEditProductModal(productId) {
@@ -868,7 +938,7 @@ function rProducts(el) {
   html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
   html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
   html += '<th>สถานะ</th><th></th>';
-  html += '<tr></thead><tbody id="productsTableBody"></tbody></table></div>';
+  html += '</tr></thead><tbody id="productsTableBody"></tbody></table></div>';
   html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
   html += '</div>';
   
@@ -925,7 +995,7 @@ function renderProductsTable(products) {
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';
-    html += '</tr>';
+    html += '</table>';
   }
   tbody.innerHTML = html;
 }
@@ -1192,25 +1262,6 @@ initProductsModule();
 // OVERRIDE GLOBAL FUNCTIONS
 // ================================================================
 
-window.modelOptionsNew = function(selected, showEOLBadge) {
-  var products = getAllProducts();
-  var html = '<option value="">-- เลือก Model --</option>';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    var label = p.name;
-    if (p.price > 0) label += ' (฿' + fmtMoney(p.price) + ')';
-    if (showEOLBadge && p.eol) label += ' ⏰ EOL';
-    if (p.isBundle) label += ' 🎁';
-    html += '<option value="' + sanitize(p.name) + '"' + (selected === p.name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
-  }
-  return html;
-};
-
-window.getModelPrice = function(modelName) {
-  var p = getProductByName(modelName);
-  return p ? p.price : 0;
-};
-
 window.Products = {
   getAll: getAllProducts,
   getById: getProductById,
@@ -1220,6 +1271,8 @@ window.Products = {
   add: addProduct,
   update: updateProduct,
   delete: deleteProduct,
+  getPriceByLevel: getPriceByLevel,
+  updatePrice: updateProductPrice,
   setEOL: setProductEOL,
   isEOL: isProductEOL,
   getActive: getActiveProducts,
@@ -1239,3 +1292,10 @@ window.Products = {
   exportToExcel: exportProductsToExcel,
   importFull: importFullExcel
 };
+
+// ฟังก์ชัน global สำหรับใช้ในระบบอื่น
+window.getModelPrice = getModelPrice;
+window.getModelPriceByLevel = getModelPriceByLevel;
+window.getModelRrpExVat = getModelRrpExVat;
+window.getModelRrpInVat = getModelRrpInVat;
+window.modelOptionsNew = modelOptionsNew;
