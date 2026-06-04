@@ -1,6 +1,27 @@
 // ================================================================
 // MODALS.JS - ALL MODAL DIALOGS (UPDATED TO USE Products MODULE)
 // ================================================================
+// ================================================================
+// SAFE MODEL OPTIONS (ใช้ products module ถ้ามี)
+// ================================================================
+
+function safeModelOptions(selected) {
+  if (typeof window.modelOptionsNew === 'function') {
+    return window.modelOptionsNew(selected);
+  }
+  // Fallback ถ้า products.js ยังไม่โหลด
+  var cfg = getConfig();
+  var models = cfg.models || [];
+  var html = '<option value="">-- เลือก Model --</option>';
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var name = typeof m === 'object' ? m.name : m;
+    var price = typeof m === 'object' ? (m.price || 0) : 0;
+    var label = name + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '');
+    html += '<option value="' + sanitize(name) + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
+  }
+  return html;
+}
 
 // ================================================================
 // DEALER MODAL
@@ -162,7 +183,7 @@ function buildPipeItemsSection(p) {
   if (pipeItemMode === 'items') {
     // Quick Add Row - ใช้ window.modelOptionsNew
     h += '<div class="pipe-qa-row">';
-    h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + window.modelOptionsNew('') + '</select>';
+h += '<select id="pqa_model" class="pipe-qa-model" onchange="pqaModelChanged()">' + safeModelOptions('') + '</select>';
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
@@ -204,7 +225,7 @@ function buildPipeItemsSection(p) {
 
   } else {
     // Lump sum mode - ใช้ window.modelOptionsNew
-    h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + window.modelOptionsNew(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
+h += '<div class="fr"><div class="fg"><label>Model</label><select id="fp_model_lump">' + safeModelOptions(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
     h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
     h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
   }
@@ -216,11 +237,10 @@ function pqaModelChanged() {
   var modelName = document.getElementById('pqa_model').value;
   var priceEl = document.getElementById('pqa_price');
   if (priceEl && modelName) {
-    var price = window.getModelPrice(modelName);
+    var price = typeof window.getModelPrice === 'function' ? window.getModelPrice(modelName) : 0;
     if (price > 0) priceEl.value = price;
   }
 }
-
 function pqaAdd() {
   var modelEl = document.getElementById('pqa_model');
   var qtyEl = document.getElementById('pqa_qty');
