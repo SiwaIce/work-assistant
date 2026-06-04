@@ -878,10 +878,10 @@ function importProductsFromRows(rows) {
       var sku = row['SiS part'] || row['SKU'] || '';
       var ean = row['EAN'] || '';
       var name = row['Product Name'] || row['name'] || '';
-      var priceS = parseFloat(row['Type 1 P\nEX Tax THB'] || row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
-      var priceA = parseFloat(row['Type 2 P\nEX Tax  THB'] || row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
-      var priceB = parseFloat(row['Type 3 P\nEX Tax THB'] || row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
-      var priceOther = parseFloat(row['Type 4 P\nEX Tax THB'] || row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
+      var priceS = parseFloat(row['Type 1 P EX Tax THB'] || row['Price S'] || 0);
+      var priceA = parseFloat(row['Type 2 P EX Tax THB'] || row['Price A'] || 0);
+      var priceB = parseFloat(row['Type 3 P EX Tax THB'] || row['Price B'] || row['RRP Ex Vat'] || 0);
+      var priceOther = parseFloat(row['Type 4 P EX Tax THB'] || row['Price Other'] || 0);
       var eol = (row['EOL Status'] === 'EOL' || row['EOL'] === 'EOL');
       var type = row['Type'] || 'Hardware';
       if (!name) { errors++; continue; }
@@ -913,10 +913,10 @@ function importBundlesFromRows(rows) {
         name: row['combo name'] || '',
         items: [],
         typePrices: {
-          S: parseFloat(row['Type 1 P\nEX Tax THB'] || row['Type 1 P EX Tax THB'] || 0),
-          A: parseFloat(row['Type 2 P\nEX Tax  THB'] || row['Type 2 P EX Tax THB'] || 0),
-          B: parseFloat(row['Type 3 P\nEX Tax THB'] || row['Type 3 P EX Tax THB'] || 0),
-          Other: parseFloat(row['Type 4 P\nEX Tax THB'] || row['Type 4 P EX Tax THB'] || 0)
+          S: parseFloat(row['Type 1 P EX Tax THB'] || 0),
+          A: parseFloat(row['Type 2 P EX Tax THB'] || 0),
+          B: parseFloat(row['Type 3 P EX Tax THB'] || 0),
+          Other: parseFloat(row['Type 4 P EX Tax THB'] || 0)
         },
         enabled: true
       };
@@ -1007,20 +1007,17 @@ function importFullExcelData(file, onComplete) {
       };
       if (workbook.SheetNames.includes('single')) {
         var sheet = workbook.Sheets['single'];
-        // range:1 = skip แถวแรก (S/A/B/Other label row) ใช้แถวที่ 2 เป็น header จริง
-        var rows = XLSX.utils.sheet_to_json(sheet, { range: 1, defval: '' });
+        var rows = XLSX.utils.sheet_to_json(sheet);
         result.products = importProductsFromRows(rows);
       }
       if (workbook.SheetNames.includes('combo')) {
         var sheet = workbook.Sheets['combo'];
-        // range:1 = skip แถวแรก ใช้แถวที่ 2 เป็น header
-        var rows = XLSX.utils.sheet_to_json(sheet, { range: 1, defval: '' });
+        var rows = XLSX.utils.sheet_to_json(sheet);
         result.bundles = importBundlesFromRows(rows);
       }
       if (workbook.SheetNames.includes('demo')) {
         var sheet = workbook.Sheets['demo'];
-        // demo sheet มีแถว header เดียว ไม่ต้อง skip
-        var rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        var rows = XLSX.utils.sheet_to_json(sheet);
         result.demos = importDemoUnitsFromRows(rows);
       }
       if (onComplete) onComplete({ success: true, result: result });
