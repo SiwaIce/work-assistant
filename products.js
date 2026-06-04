@@ -1,8 +1,23 @@
 // ================================================================
-// PRODUCTS MANAGEMENT MODULE - COMPLETE & FULL FEATURED
+// PRODUCTS MANAGEMENT MODULE - FULL VERSION
 // ================================================================
 
 var PRODUCTS_STORAGE_KEY = 'v7_products';
+
+// ================================================================
+// หมวดหมู่สินค้า
+// ================================================================
+
+var PRODUCT_CATEGORIES = [
+  { id: 'drone', name: '🚁 Drone', icon: '🚁' },
+  { id: 'payload', name: '📷 Payload', icon: '📷' },
+  { id: 'battery', name: '🔋 Battery', icon: '🔋' },
+  { id: 'charger', name: '⚡ Charger/Accessory', icon: '⚡' },
+  { id: 'software', name: '💻 Software', icon: '💻' },
+  { id: 'service', name: '🛠️ Service', icon: '🛠️' },
+  { id: 'bundle', name: '🎁 Bundle', icon: '🎁' },
+  { id: 'other', name: '📦 Other', icon: '📦' }
+];
 
 // ================================================================
 // CORE DATA MANAGEMENT
@@ -13,18 +28,15 @@ function getProductsData() {
     var saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
       var parsed = JSON.parse(saved);
-      // Handle array format (Firebase sync legacy)
       if (Array.isArray(parsed)) {
         return { models: parsed, bundles: [], demoUnits: [], lastUpdated: null };
       }
-      // Handle indexed object {"0": {...}, "1": {...}}
       if (parsed && !parsed.models && typeof parsed === 'object') {
         var vals = Object.values(parsed);
         if (vals.length && vals[0] && vals[0].id) {
           return { models: vals, bundles: [], demoUnits: [], lastUpdated: null };
         }
       }
-      // Normal format
       if (!parsed.models) parsed.models = [];
       if (!parsed.bundles) parsed.bundles = [];
       if (!parsed.demoUnits) parsed.demoUnits = [];
@@ -36,7 +48,6 @@ function getProductsData() {
 
 function saveProductsData(data) {
   localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(data));
-  // Sync to v7_config for backward compatibility
   var cfg = localStorage.getItem('v7_config');
   if (cfg) {
     var config = JSON.parse(cfg);
@@ -48,15 +59,10 @@ function saveProductsData(data) {
     }
     localStorage.setItem('v7_config', JSON.stringify(config));
   }
-  // Sync to Firebase if available
   if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
     syncProductsToFirebase(data);
   }
 }
-
-// ================================================================
-// FIREBASE SYNC (optional, safe if not present)
-// ================================================================
 
 function syncProductsToFirebase(data) {
   if (typeof db === 'undefined' || !CURRENT_USER) return;
@@ -93,7 +99,6 @@ function loadProductsFromFirebase() {
     if (snapshot.empty) return false;
     var products = [];
     snapshot.forEach(function(doc) { products.push(doc.data()); });
-    // ✅ แปลงโครงสร้างให้มีฟิลด์ใหม่ (rrpInVat, rrpExVat) ถ้าขาด
     products = products.map(function(p) { return ensureProductStructure(p); });
     var data = getProductsData();
     data.models = products;
@@ -103,10 +108,8 @@ function loadProductsFromFirebase() {
   }).catch(function() { return false; });
 }
 
-// ✅ ฟังก์ชันตรวจสอบและเติมฟิลด์ที่ขาดหายใน product
 function ensureProductStructure(p) {
-  if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 } };
-  // ฟิลด์พื้นฐาน
+  if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 }, category: 'other', eol: false };
   if (p.rrpInVat === undefined) p.rrpInVat = 0;
   if (p.rrpExVat === undefined) p.rrpExVat = 0;
   if (!p.typePrices) {
@@ -117,12 +120,17 @@ function ensureProductStructure(p) {
     if (p.typePrices.B === undefined) p.typePrices.B = p.price || 0;
     if (p.typePrices.Other === undefined) p.typePrices.Other = 0;
   }
-  // ราคา B (type 3) ควรตรงกับ p.price
   if (p.price === undefined) p.price = p.typePrices.B;
+  if (p.category === undefined) {
+    if (p.isSoftware) p.category = 'software';
+    else if (p.isService) p.category = 'service';
+    else if (p.isBundle) p.category = 'bundle';
+    else p.category = 'other';
+  }
+  if (p.eol === undefined) p.eol = false;
   return p;
 }
 
-// ตรวจสอบและแปลงโครงสร้างของสินค้าทั้งหมด
 function ensureProductsStructure() {
   var data = getProductsData();
   if (data.models && data.models.length) {
@@ -196,6 +204,7 @@ function addProduct(productData) {
     rrpExVat: productData.rrpExVat || 0,
     price: productData.price || 0,
     typePrices: productData.typePrices || { S: 0, A: 0, B: 0, Other: 0 },
+    category: productData.category || 'other',
     eol: productData.eol || false,
     isBundle: productData.isBundle || false,
     isSoftware: productData.isSoftware || false,
@@ -203,7 +212,6 @@ function addProduct(productData) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  // ตรวจสอบให้ typePrices.B ตรงกับ price
   if (newProduct.typePrices.B !== newProduct.price) newProduct.typePrices.B = newProduct.price;
   data.models.push(newProduct);
   data.lastUpdated = new Date().toISOString();
@@ -227,7 +235,6 @@ function updateProduct(productId, updates) {
           data.models[i][key] = updates[key];
         }
       }
-      // ตรวจสอบความสอดคล้อง: price ควรเท่ากับ typePrices.B
       if (data.models[i].typePrices && data.models[i].typePrices.B !== undefined) {
         data.models[i].price = data.models[i].typePrices.B;
       }
@@ -250,33 +257,16 @@ function deleteProduct(productId) {
 }
 
 // ================================================================
-// PRICE & EOL HELPERS
+// EOL HELPERS
 // ================================================================
 
-function getPriceByLevel(productId, level) {
-  var p = getProductById(productId);
-  if (!p) return 0;
-  var map = { S: 'S', A: 'A', B: 'B', Other: 'Other' };
-  var target = map[level] || 'B';
-  return (p.typePrices && p.typePrices[target] !== undefined) ? p.typePrices[target] : p.price;
-}
-
-function updateProductPrice(productId, level, price) {
-  var p = getProductById(productId);
-  if (!p) return false;
-  if (!p.typePrices) p.typePrices = { S: p.price, A: p.price, B: p.price, Other: p.price };
-  p.typePrices[level] = price;
-  if (level === 'B') p.price = price;
-  return updateProduct(productId, { typePrices: p.typePrices, price: p.price });
+function setProductEOL(productId, isEOL) {
+  return updateProduct(productId, { eol: isEOL });
 }
 
 function isProductEOL(productId) {
   var p = getProductById(productId);
   return p ? p.eol === true : false;
-}
-
-function setProductEOL(productId, isEOL) {
-  return updateProduct(productId, { eol: isEOL });
 }
 
 function getActiveProducts() {
@@ -288,7 +278,85 @@ function getEOLProducts() {
 }
 
 // ================================================================
-// BUNDLE MANAGEMENT (ยังคงเดิม)
+// MODAL แก้ไขสินค้า (ใหม่)
+// ================================================================
+
+function showEditProductModal(productId) {
+  var p = getProductById(productId);
+  if (!p) { toast('ไม่พบสินค้า'); return; }
+  
+  var categoryOptions = '';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    categoryOptions += '<option value="' + cat.id + '"' + (p.category === cat.id ? ' selected' : '') + '>' + cat.name + '</option>';
+  }
+  
+  var html = '<div style="max-width:600px">';
+  html += '<div class="form-section">📋 ข้อมูลทั่วไป</div>';
+  html += '<div class="fg"><label>ชื่อสินค้า *</label><input type="text" id="edit_name" class="fm-input" value="' + sanitize(p.name) + '"></div>';
+  html += '<div class="fr"><div class="fg"><label>SKU (SiS part)</label><input type="text" id="edit_sku" class="fm-input" value="' + sanitize(p.sku || '') + '"></div>';
+  html += '<div class="fg"><label>EAN</label><input type="text" id="edit_ean" class="fm-input" value="' + sanitize(p.ean || '') + '"></div></div>';
+  
+  html += '<div class="form-section">💰 ราคา</div>';
+  html += '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="number" id="edit_rrp_in" class="fm-input" value="' + (p.rrpInVat || 0) + '"></div>';
+  html += '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="number" id="edit_rrp_ex" class="fm-input" value="' + (p.rrpExVat || 0) + '"></div></div>';
+  html += '<div class="fr4">';
+  html += '<div class="fg"><label>S (Type 1)</label><input type="number" id="edit_price_s" class="fm-input" value="' + (p.typePrices?.S || 0) + '"></div>';
+  html += '<div class="fg"><label>A (Type 2)</label><input type="number" id="edit_price_a" class="fm-input" value="' + (p.typePrices?.A || 0) + '"></div>';
+  html += '<div class="fg"><label>B (Type 3)</label><input type="number" id="edit_price_b" class="fm-input" value="' + (p.price || 0) + '"></div>';
+  html += '<div class="fg"><label>Other (Type 4)</label><input type="number" id="edit_price_o" class="fm-input" value="' + (p.typePrices?.Other || 0) + '"></div></div>';
+  
+  html += '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>';
+  html += '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="edit_category" class="fm-input">' + categoryOptions + '</select></div>';
+  html += '<div class="fg"><label>⚡ สถานะ EOL</label><div class="radio-g"><label><input type="radio" name="edit_eol" value="1"' + (p.eol ? ' checked' : '') + '><span>⏰ EOL (หมดอายุ)</span></label><label><input type="radio" name="edit_eol" value="0"' + (!p.eol ? ' checked' : '') + '><span>✅ ปกติ</span></label></div></div></div>';
+  
+  html += '<div class="form-section">🔧 ประเภทสินค้า (สำหรับระบบ)</div>';
+  html += '<div class="fr">';
+  html += '<div class="fg"><label><input type="checkbox" id="edit_is_bundle"' + (p.isBundle ? ' checked' : '') + '> 🎁 Bundle/Combo</label></div>';
+  html += '<div class="fg"><label><input type="checkbox" id="edit_is_software"' + (p.isSoftware ? ' checked' : '') + '> 💻 Software</label></div>';
+  html += '<div class="fg"><label><input type="checkbox" id="edit_is_service"' + (p.isService ? ' checked' : '') + '> 🛠️ Service</label></div>';
+  html += '</div>';
+  
+  html += '<div class="fm-actions" style="margin-top:16px">';
+  html += '<button class="btn btn-blue" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
+  html += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  html += '</div></div>';
+  
+  openM('✏️ แก้ไขสินค้า: ' + sanitize(p.name), html);
+}
+
+function saveProductEdit(productId) {
+  var name = document.getElementById('edit_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var updates = {
+    name: name,
+    sku: document.getElementById('edit_sku').value.trim(),
+    ean: document.getElementById('edit_ean').value.trim(),
+    rrpInVat: parseFloat(document.getElementById('edit_rrp_in').value) || 0,
+    rrpExVat: parseFloat(document.getElementById('edit_rrp_ex').value) || 0,
+    category: document.getElementById('edit_category').value,
+    eol: document.querySelector('input[name="edit_eol"]:checked') ? document.querySelector('input[name="edit_eol"]:checked').value === '1' : false,
+    isBundle: document.getElementById('edit_is_bundle').checked,
+    isSoftware: document.getElementById('edit_is_software').checked,
+    isService: document.getElementById('edit_is_service').checked,
+    price: parseFloat(document.getElementById('edit_price_b').value) || 0,
+    typePrices: {
+      S: parseFloat(document.getElementById('edit_price_s').value) || 0,
+      A: parseFloat(document.getElementById('edit_price_a').value) || 0,
+      B: parseFloat(document.getElementById('edit_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('edit_price_o').value) || 0
+    }
+  };
+  
+  updateProduct(productId, updates);
+  closeMForce();
+  toast('💾 บันทึกสินค้าเรียบร้อย');
+  render();
+}
+
+// ================================================================
+// BUNDLE MANAGEMENT
 // ================================================================
 
 function getAllBundles() {
@@ -362,7 +430,7 @@ function getActiveBundles() {
 }
 
 // ================================================================
-// DEMO UNIT MANAGEMENT (ยังคงเดิม)
+// DEMO UNIT MANAGEMENT
 // ================================================================
 
 function getAllDemoUnits() {
@@ -454,9 +522,6 @@ function importProductsFromSheet(worksheet) {
         errors++;
         continue;
       }
-      // ตามโครงสร้างไฟล์: 
-      // [0]=SiS part, [1]=EAN, [2]=Product Name, [3]=RRP in Vat, [4]=RRP Ex Vat,
-      // [5]=Type1(S), [6]=Type2(A), [7]=Type3(B), [8]=Type4(Other)
       var sku = (row[0] !== undefined ? row[0] : '').toString().trim();
       var ean = (row[1] !== undefined ? row[1] : '').toString().trim();
       var name = (row[2] !== undefined ? row[2] : '').toString().trim();
@@ -472,12 +537,20 @@ function importProductsFromSheet(worksheet) {
       var priceB = parseFloat(row[7]) || 0;
       var priceOther = parseFloat(row[8]) || 0;
 
-      // ถ้าไม่มีราคา B แต่มี RRP Ex Vat ให้ใช้ RRP Ex Vat
       if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
 
       var isBundle = (sku && sku.endsWith('A')) || (ean && ean.startsWith('CB.'));
       var isSoftware = (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1);
       var isService = (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1 || name.indexOf('Staffing') !== -1);
+      
+      var category = 'other';
+      if (isSoftware) category = 'software';
+      else if (isService) category = 'service';
+      else if (isBundle) category = 'bundle';
+      else if (name.indexOf('Matrice') !== -1 || name.indexOf('Mavic') !== -1 || name.indexOf('M30') !== -1) category = 'drone';
+      else if (name.indexOf('Zenmuse') !== -1 || name.indexOf('Payload') !== -1) category = 'payload';
+      else if (name.indexOf('Battery') !== -1) category = 'battery';
+      else if (name.indexOf('Charger') !== -1 || name.indexOf('Adapter') !== -1 || name.indexOf('Propeller') !== -1) category = 'charger';
 
       var productData = {
         name: name,
@@ -487,6 +560,7 @@ function importProductsFromSheet(worksheet) {
         rrpExVat: rrpExVat,
         price: priceB,
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+        category: category,
         eol: false,
         isBundle: isBundle,
         isSoftware: isSoftware,
@@ -511,7 +585,6 @@ function importProductsFromSheet(worksheet) {
 }
 
 function importBundlesFromSheet(worksheet) {
-  // (คงเดิม ตามที่มี)
   var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
   if (!rows || rows.length < 2) return { imported: 0, updated: 0, errors: 0 };
   var imported = 0, updated = 0, errors = 0;
@@ -562,7 +635,6 @@ function importBundlesFromSheet(worksheet) {
 }
 
 function importDemoUnitsFromSheet(worksheet) {
-  // (คงเดิม)
   var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
   if (!rows || rows.length < 2) return { imported: 0, updated: 0, errors: 0 };
   var imported = 0, updated = 0, errors = 0;
@@ -662,7 +734,7 @@ function doImportFullExcel() {
 }
 
 // ================================================================
-// EXPORT TO EXCEL (ตรงกับโครงสร้างไฟล์ที่ใช้ import)
+// EXPORT TO EXCEL
 // ================================================================
 
 function exportProductsToExcel() {
@@ -679,11 +751,12 @@ function exportProductsToExcel() {
       'Type 3 P EX Tax THB (B)': p.typePrices?.B || 0,
       'Type 4 P EX Tax THB (Other)': p.typePrices?.Other || 0,
       'EOL': p.eol ? 'EOL' : '',
-      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : (p.isBundle ? 'Bundle' : 'Hardware'))
+      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : (p.isBundle ? 'Bundle' : 'Hardware')),
+      'Category': getCategoryName(p.category)
     };
   });
   var ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:20},{wch:15},{wch:40},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:8},{wch:12}];
+  ws['!cols'] = [{wch:20},{wch:15},{wch:40},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:8},{wch:12},{wch:15}];
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'single');
   XLSX.writeFile(wb, 'products-export-' + _td() + '.xlsx');
@@ -691,7 +764,6 @@ function exportProductsToExcel() {
 }
 
 function exportBundlesToExcel() {
-  // คงเดิม
   var bundles = getAllBundles();
   var data = bundles.map(function(b, idx) {
     return {
@@ -715,7 +787,6 @@ function exportBundlesToExcel() {
 }
 
 function exportDemoUnitsToExcel() {
-  // คงเดิม
   var demos = getAllDemoUnits();
   var data = demos.map(function(d, idx) {
     var product = d.productId ? getProductById(d.productId) : null;
@@ -754,21 +825,74 @@ function clearAllProductsData() {
 }
 
 // ================================================================
-// PAGE RENDERERS (ปรับปรุงให้แสดง RRP in/Ex Vat)
+// PAGE RENDERERS (พร้อม search + category filter + EOL checkbox)
 // ================================================================
+
+var productSearch = '';
+var productCategoryFilter = 'all';
+var priceSearch = '';
+var priceCategoryFilter = 'all';
 
 function rProducts(el) {
   document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
   var products = getAllProducts();
+  
+  if (productSearch) {
+    var q = productSearch.toLowerCase();
+    products = products.filter(function(p) {
+      return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.ean || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  if (productCategoryFilter !== 'all') {
+    products = products.filter(function(p) { return p.category === productCategoryFilter; });
+  }
+  
   var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button></span></h2>';
-  html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>' +
-    '<th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th>' +
-    '<th>RRP in Vat</th><th>RRP Ex Vat</th>' +
-    '<th>S</th><th>A</th><th>B</th><th>Other</th>' +
-    '<th>สถานะ</th><th></th>' +
-    '</tr></thead><tbody id="productsTableBody"></tbody></table></div></div>';
+  
+  html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+  html += '<input type="text" id="productSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(productSearch) + '" oninput="productSearch=this.value;renderProductsList()">';
+  html += '<select id="productCategorySelect" class="fm-input" style="width:150px" onchange="productCategoryFilter=this.value;renderProductsList()">';
+  html += '<option value="all" ' + (productCategoryFilter === 'all' ? 'selected' : '') + '>📂 ทุกหมวด</option>';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    html += '<option value="' + cat.id + '" ' + (productCategoryFilter === cat.id ? 'selected' : '') + '>' + cat.name + '</option>';
+  }
+  html += '</select>';
+  html += '<button class="btn bsm bo" onclick="productSearch=\'\';productCategoryFilter=\'all\';renderProductsList()">✖️ ล้าง</button>';
+  html += '</div>';
+  
+  html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>';
+  html += '<th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th>';
+  html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
+  html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
+  html += '<th>สถานะ</th><th></th>';
+  html += '<tr></thead><tbody id="productsTableBody"></tbody></table></div>';
+  html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
+  html += '</div>';
+  
   el.innerHTML = html;
   renderProductsTable(products);
+  
+  window.renderProductsList = function() {
+    var newProducts = getAllProducts();
+    var q = document.getElementById('productSearchInput') ? document.getElementById('productSearchInput').value.toLowerCase() : '';
+    var cat = document.getElementById('productCategorySelect') ? document.getElementById('productCategorySelect').value : 'all';
+    if (q) {
+      newProducts = newProducts.filter(function(p) {
+        return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+               (p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+               (p.ean || '').toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    if (cat !== 'all') {
+      newProducts = newProducts.filter(function(p) { return p.category === cat; });
+    }
+    productSearch = q;
+    productCategoryFilter = cat;
+    renderProductsTable(newProducts);
+  };
 }
 
 function renderProductsTable(products) {
@@ -783,11 +907,16 @@ function renderProductsTable(products) {
     if (p.isSoftware) badge += ' <span class="tag tag-active">💻 SW</span>';
     if (p.isService) badge += ' <span class="tag tag-on-hold">🛠️ SV</span>';
     if (p.isBundle) badge += ' <span class="tag tag-count">🎁 Bundle</span>';
+    
+    var categoryName = getCategoryName(p.category);
+    var categoryIcon = getCategoryIcon(p.category);
+    
     html += '<tr>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td>' + sanitize(p.sku || '-') + '</td>';
     html += '<td>' + sanitize(p.ean || '-') + '</td>';
     html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
@@ -795,7 +924,7 @@ function renderProductsTable(products) {
     html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
-    html += '<td><button class="btn bsm bo" onclick="showEditProductM(\'' + p.id + '\')">✏️</button></td>';
+    html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';
     html += '</tr>';
   }
   tbody.innerHTML = html;
@@ -804,33 +933,144 @@ function renderProductsTable(products) {
 function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
   var products = getAllProducts();
+  
+  if (priceSearch) {
+    var q = priceSearch.toLowerCase();
+    products = products.filter(function(p) {
+      return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.ean || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  if (priceCategoryFilter !== 'all') {
+    products = products.filter(function(p) { return p.category === priceCategoryFilter; });
+  }
+  
   var html = '<div class="card"><h2>💰 ราคาสินค้าแยกตาม Level</h2>';
-  html += '<div class="export-wrap"><table class="export-table"><thead><tr>' +
-    '<th>#</th><th>สินค้า</th>' +
-    '<th>RRP in Vat</th><th>RRP Ex Vat</th>' +
-    '<th>S</th><th>A</th><th>B</th><th>Other</th><th></th>' +
-    '</tr></thead><tbody>';
+  
+  html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+  html += '<input type="text" id="priceSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(priceSearch) + '" oninput="priceSearch=this.value;renderPriceList()">';
+  html += '<select id="priceCategorySelect" class="fm-input" style="width:150px" onchange="priceCategoryFilter=this.value;renderPriceList()">';
+  html += '<option value="all" ' + (priceCategoryFilter === 'all' ? 'selected' : '') + '>📂 ทุกหมวด</option>';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    html += '<option value="' + cat.id + '" ' + (priceCategoryFilter === cat.id ? 'selected' : '') + '>' + cat.name + '</option>';
+  }
+  html += '</select>';
+  html += '<button class="btn bsm bo" onclick="priceSearch=\'\';priceCategoryFilter=\'all\';renderPriceList()">✖️ ล้าง</button>';
+  html += '</div>';
+  
+  html += '<div class="export-wrap"><table class="export-table"><thead><tr>';
+  html += '<th>#</th><th>สินค้า</th><th>หมวดหมู่</th>';
+  html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
+  html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
+  html += '<th>EOL</th><th></th>';
+  html += '</tr></thead><tbody id="priceTableBody"></tbody></table></div>';
+  html += '<div class="bg" style="margin-top:12px"><button class="btn bp" onclick="saveAllProductPrices()">💾 บันทึกทั้งหมด</button></div>';
+  html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
+  html += '</div>';
+  
+  el.innerHTML = html;
+  renderPriceTable(products);
+  
+  window.renderPriceList = function() {
+    var newProducts = getAllProducts();
+    var q = document.getElementById('priceSearchInput') ? document.getElementById('priceSearchInput').value.toLowerCase() : '';
+    var cat = document.getElementById('priceCategorySelect') ? document.getElementById('priceCategorySelect').value : 'all';
+    if (q) {
+      newProducts = newProducts.filter(function(p) {
+        return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+               (p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+               (p.ean || '').toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    if (cat !== 'all') {
+      newProducts = newProducts.filter(function(p) { return p.category === cat; });
+    }
+    priceSearch = q;
+    priceCategoryFilter = cat;
+    renderPriceTable(newProducts);
+  };
+}
+
+function renderPriceTable(products) {
+  var tbody = document.getElementById('priceTableBody');
+  if (!tbody) return;
+  var html = '';
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
+    var categoryName = getCategoryName(p.category);
+    var categoryIcon = getCategoryIcon(p.category);
+    
     html += '<tr>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
-    html += '<td><input type="number" id="rrp_in_vat_' + p.id + '" value="' + (p.rrpInVat || 0) + '" style="width:110px" class="fm-input"></td>';
-    html += '<td><input type="number" id="rrp_ex_vat_' + p.id + '" value="' + (p.rrpExVat || 0) + '" style="width:110px" class="fm-input"></td>';
-    html += '<td><input type="number" id="price_s_' + p.id + '" value="' + (p.typePrices?.S || 0) + '" style="width:100px" class="fm-input"></td>';
-    html += '<td><input type="number" id="price_a_' + p.id + '" value="' + (p.typePrices?.A || 0) + '" style="width:100px" class="fm-input"></td>';
-    html += '<td><input type="number" id="price_b_' + p.id + '" value="' + (p.price || 0) + '" style="width:100px" class="fm-input"></td>';
-    html += '<td><input type="number" id="price_o_' + p.id + '" value="' + (p.typePrices?.Other || 0) + '" style="width:100px" class="fm-input"></td>';
+    html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
+    html += '<td><input type="number" id="rrp_in_vat_' + p.id + '" value="' + (p.rrpInVat || 0) + '" style="width:100px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="number" id="rrp_ex_vat_' + p.id + '" value="' + (p.rrpExVat || 0) + '" style="width:100px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="number" id="price_s_' + p.id + '" value="' + (p.typePrices?.S || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="number" id="price_a_' + p.id + '" value="' + (p.typePrices?.A || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="number" id="price_b_' + p.id + '" value="' + (p.price || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="number" id="price_o_' + p.id + '" value="' + (p.typePrices?.Other || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
+    html += '<td style="text-align:center"><input type="checkbox" id="eol_chk_' + p.id + '" ' + (p.eol ? 'checked' : '') + ' onchange="toggleEOLFromPrice(\'' + p.id + '\', this.checked)"></td>';
     html += '<td><button class="btn bsm bp" onclick="saveSingleProductPrice(\'' + p.id + '\')">💾</button></td>';
     html += '</tr>';
   }
-  html += '</tbody></table></div>';
-  html += '<div class="bg" style="margin-top:12px"><button class="btn bp" onclick="saveAllProductPrices()">💾 บันทึกทั้งหมด</button></div></div>';
-  el.innerHTML = html;
+  tbody.innerHTML = html;
+}
+
+function toggleEOLFromPrice(productId, isChecked) {
+  setProductEOL(productId, isChecked);
+  toast(isChecked ? '⏰ ตั้งค่า EOL แล้ว' : '✅ ยกเลิก EOL แล้ว');
+  if (typeof renderProductsList === 'function') renderProductsList();
+}
+
+function saveSingleProductPrice(id) {
+  var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + id).value) || 0;
+  var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + id).value) || 0;
+  var priceS = parseFloat(document.getElementById('price_s_' + id).value) || 0;
+  var priceA = parseFloat(document.getElementById('price_a_' + id).value) || 0;
+  var priceB = parseFloat(document.getElementById('price_b_' + id).value) || 0;
+  var priceO = parseFloat(document.getElementById('price_o_' + id).value) || 0;
+  var eolChk = document.getElementById('eol_chk_' + id);
+  var eol = eolChk ? eolChk.checked : false;
+  
+  updateProduct(id, {
+    rrpInVat: rrpInVat,
+    rrpExVat: rrpExVat,
+    price: priceB,
+    typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO },
+    eol: eol
+  });
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function saveAllProductPrices() {
+  var products = getAllProducts();
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + p.id).value) || 0;
+    var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + p.id).value) || 0;
+    var priceS = parseFloat(document.getElementById('price_s_' + p.id).value) || 0;
+    var priceA = parseFloat(document.getElementById('price_a_' + p.id).value) || 0;
+    var priceB = parseFloat(document.getElementById('price_b_' + p.id).value) || 0;
+    var priceO = parseFloat(document.getElementById('price_o_' + p.id).value) || 0;
+    var eolChk = document.getElementById('eol_chk_' + p.id);
+    var eol = eolChk ? eolChk.checked : false;
+    updateProduct(p.id, {
+      rrpInVat: rrpInVat,
+      rrpExVat: rrpExVat,
+      price: priceB,
+      typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO },
+      eol: eol
+    });
+  }
+  toast('💾 บันทึกราคาทั้งหมดแล้ว');
+  render();
 }
 
 function rProductBundles(el) {
-  // คงเดิม
   document.getElementById('pgT').textContent = '🎁 Bundle/Combo';
   var bundles = getAllBundles();
   var html = '<div class="card"><h2>🎁 Bundle/Combo <span class="ml"><button class="btn bp" onclick="showAddBundleM()">➕ เพิ่ม Bundle</button><button class="btn bo" onclick="exportBundlesToExcel()">📥 Export Excel</button></span></h2>';
@@ -866,7 +1106,6 @@ function rProductBundles(el) {
 }
 
 function rProductDemo(el) {
-  // คงเดิม
   document.getElementById('pgT').textContent = '🚁 Demo Unit';
   var demos = getAllDemoUnits();
   var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button><button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button></span></h2>';
@@ -897,50 +1136,24 @@ function rProductImport(el) {
 }
 
 // ================================================================
-// SIMPLE MODALS FOR ADD/EDIT (placeholder)
+// HELPER หมวดหมู่
+// ================================================================
+
+function getCategoryName(catId) {
+  var cat = PRODUCT_CATEGORIES.find(function(c) { return c.id === catId; });
+  return cat ? cat.name : '📦 Other';
+}
+
+function getCategoryIcon(catId) {
+  var cat = PRODUCT_CATEGORIES.find(function(c) { return c.id === catId; });
+  return cat ? cat.icon : '📦';
+}
+
+// ================================================================
+// ฟังก์ชันอื่นๆ (placeholder)
 // ================================================================
 
 function showAddProductM() { toast('🚧 ใช้ปุ่ม Import Excel แทนการเพิ่มทีละรายการ'); }
-function showEditProductM(id) { toast('🚧 ใช้ Export -> แก้ไข -> Import แทน'); }
-
-function saveSingleProductPrice(id) {
-  var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + id).value) || 0;
-  var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + id).value) || 0;
-  var priceS = parseFloat(document.getElementById('price_s_' + id).value) || 0;
-  var priceA = parseFloat(document.getElementById('price_a_' + id).value) || 0;
-  var priceB = parseFloat(document.getElementById('price_b_' + id).value) || 0;
-  var priceO = parseFloat(document.getElementById('price_o_' + id).value) || 0;
-  updateProduct(id, {
-    rrpInVat: rrpInVat,
-    rrpExVat: rrpExVat,
-    price: priceB,
-    typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
-  });
-  toast('💾 บันทึกแล้ว');
-  render();
-}
-
-function saveAllProductPrices() {
-  var products = getAllProducts();
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + p.id).value) || 0;
-    var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + p.id).value) || 0;
-    var priceS = parseFloat(document.getElementById('price_s_' + p.id).value) || 0;
-    var priceA = parseFloat(document.getElementById('price_a_' + p.id).value) || 0;
-    var priceB = parseFloat(document.getElementById('price_b_' + p.id).value) || 0;
-    var priceO = parseFloat(document.getElementById('price_o_' + p.id).value) || 0;
-    updateProduct(p.id, {
-      rrpInVat: rrpInVat,
-      rrpExVat: rrpExVat,
-      price: priceB,
-      typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
-    });
-  }
-  toast('💾 บันทึกราคาทั้งหมดแล้ว');
-  render();
-}
-
 function showAddBundleM() { toast('🚧 กำลังพัฒนา'); }
 function editBundle(id) { toast('🚧 กำลังพัฒนา'); }
 function deleteBundleConfirm(id) { if (confirm('ลบ Bundle นี้?')) { deleteBundle(id); toast('🗑️ ลบแล้ว'); render(); } }
@@ -964,7 +1177,6 @@ function initProductsModule() {
       }
     }
   }
-  // ✅ บังคับให้ทุก product มีโครงสร้างใหม่
   ensureProductsStructure();
   if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
     loadProductsFromFirebase().then(function(loaded) {
@@ -974,11 +1186,10 @@ function initProductsModule() {
   console.log('✅ Products Module initialized', data.models.length, 'products');
 }
 
-// เรียกทันที
 initProductsModule();
 
 // ================================================================
-// OVERRIDE GLOBAL FUNCTIONS (for compatibility)
+// OVERRIDE GLOBAL FUNCTIONS
 // ================================================================
 
 window.modelOptionsNew = function(selected, showEOLBadge) {
@@ -1009,10 +1220,8 @@ window.Products = {
   add: addProduct,
   update: updateProduct,
   delete: deleteProduct,
-  getPriceByLevel: getPriceByLevel,
-  updatePrice: updateProductPrice,
-  isEOL: isProductEOL,
   setEOL: setProductEOL,
+  isEOL: isProductEOL,
   getActive: getActiveProducts,
   getEOL: getEOLProducts,
   getAllBundles: getAllBundles,
