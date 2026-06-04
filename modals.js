@@ -252,17 +252,18 @@ function buildPipeItemsSection(p) {
   var h = '';
 
   if (pipeItemMode === 'items') {
-    // Quick Add Row - ใช้ window.modelOptionsNew
+    // สร้าง datalist id เฉพาะ
+    var modelDatalistId = 'globalModelList_' + Date.now();
+    
+    // Quick Add Row - ใช้ input + datalist แทน select
     h += '<div class="pipe-qa-row">';
-// สร้าง datalist สำหรับ autocomplete
-var modelDatalistId = 'globalModelList_' + Date.now();
-h += '<input type="text" id="pqa_model" class="pipe-qa-model" list="' + modelDatalistId + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" onchange="pqaModelChanged()">';
-h += '<datalist id="' + modelDatalistId + '">';
-var allModelsForDatalist = getAllModelsFromProducts();
-for (var mi = 0; mi < allModelsForDatalist.length; mi++) {
-  h += '<option value="' + sanitize(allModelsForDatalist[mi]) + '">';
-}
-h += '</datalist>';
+    h += '<input type="text" id="pqa_model" class="pipe-qa-model" list="' + modelDatalistId + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" onchange="pqaModelChanged()">';
+    h += '<datalist id="' + modelDatalistId + '">';
+    var allModels = getAllModelsFromProducts();
+    for (var mi = 0; mi < allModels.length; mi++) {
+      h += '<option value="' + sanitize(allModels[mi]) + '">';
+    }
+    h += '</datalist>';
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
@@ -303,23 +304,21 @@ h += '</datalist>';
     }
 
   } else {
-    // Lump sum mode - ใช้ window.modelOptionsNew
-var lumpDatalistId = 'lumpModelList_' + Date.now();
-h += '<div class="fr"><div class="fg"><label>Model</label>';
-h += '<input type="text" id="fp_model_lump" list="' + lumpDatalistId + '" value="' + sanitize(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off">';
-h += '<datalist id="' + lumpDatalistId + '">';
-var allModels2 = getAllModelsFromProducts();
-for (var mi2 = 0; mi2 < allModels2.length; mi2++) {
-  h += '<option value="' + sanitize(allModels2[mi2]) + '">';
-}
-h += '</datalist></div>';
-Temp.length ? pipeItemsTemp[0].model : '')) + '</select></div>';
+    // Lump sum mode - ใช้ input + datalist
+    var lumpDatalistId = 'lumpModelList_' + Date.now();
+    h += '<div class="fr"><div class="fg"><label>Model</label>';
+    h += '<input type="text" id="fp_model_lump" list="' + lumpDatalistId + '" value="' + sanitize(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off">';
+    h += '<datalist id="' + lumpDatalistId + '">';
+    var allModels2 = getAllModelsFromProducts();
+    for (var mi2 = 0; mi2 < allModels2.length; mi2++) {
+      h += '<option value="' + sanitize(allModels2[mi2]) + '">';
+    }
+    h += '</datalist></div>';
     h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
     h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
   }
   return h;
 }
-
 // Quick Add functions - ใช้ window.getModelPrice
 function pqaModelChanged() {
   var modelInput = document.getElementById('pqa_model');
