@@ -883,26 +883,20 @@ function importProductsFromRows(rows) {
       var sku = (row['SiS part'] || row['SKU'] || '').toString().trim();
       var ean = (row['EAN'] || '').toString().trim();
       var name = (row['Product Name'] || row['name'] || '').toString().trim();
-      
-      // ข้ามแถวที่เป็น bundle (SKU ลงท้ายด้วย 'A', EAN ขึ้นต้นด้วย 'CB.', หรือชื่อมีคำว่า Extended Warranty/SP Plus)
-      if (sku && sku.endsWith('A')) continue;
-      if (ean && ean.startsWith('CB.')) continue;
-      if (name && (name.includes('Extended Warranty') || name.includes('SP Plus +'))) continue;
-      
       if (!name) continue;
-      
-      // อ่านราคา (ใช้คอลัมน์ตามที่ปรากฏในไฟล์ Excel)
-      var priceS = parseFloat(row['Type 1 P EX Tax THB']) || 0;
-      var priceA = parseFloat(row['Type 2 P EX Tax THB']) || 0;
-      var priceB = parseFloat(row['Type 3 P EX Tax THB']) || 0;
-      var priceOther = parseFloat(row['Type 4 P EX Tax THB']) || 0;
-      var rrp = parseFloat(row['RRP Ex Vat']) || 0;
-      
-      // หาก priceB เป็น 0 แต่มี RRP ให้ใช้ RRP แทน
+
+      // ตรวจสอบว่าเป็น bundle หรือไม่ (SKU ลงท้าย A หรือ EAN ขึ้นต้น CB.)
+      var isBundle = (sku.endsWith('A') || ean.startsWith('CB.'));
+
+      // อ่านราคา (ใช้คอลัมน์ตาม Excel)
+      var priceS = Number(row['Type 1 P EX Tax THB']) || 0;
+      var priceA = Number(row['Type 2 P EX Tax THB']) || 0;
+      var priceB = Number(row['Type 3 P EX Tax THB']) || 0;
+      var priceOther = Number(row['Type 4 P EX Tax THB']) || 0;
+      var rrp = Number(row['RRP Ex Vat']) || 0;
       if (priceB === 0 && rrp > 0) priceB = rrp;
-      
-      // ตรวจสอบสินค้าซ้ำ
-      var existing = getProductBySku(sku) || getProductByEan(ean);
+
+      var existing = Products.getBySku(sku) || Products.getByEan(ean);
       var productData = {
         name: name,
         sku: sku,
@@ -910,10 +904,11 @@ function importProductsFromRows(rows) {
         price: priceB,
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
         eol: false,
+        isBundle: isBundle,      // ✅ เพิ่ม flag บอกว่าเป็น bundle
         isSoftware: (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
         isService: (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1)
       };
-      
+
       if (existing) {
         updateProduct(existing.id, productData);
         updated++;
@@ -923,7 +918,7 @@ function importProductsFromRows(rows) {
       }
     } catch(e) {
       errors++;
-      console.warn('Import product error at row', i, e);
+      console.warn('Import error row', i, e);
     }
   }
   return { imported: imported, updated: updated, errors: errors };
@@ -1126,11 +1121,23 @@ function renderProductsTable(products) {
     var statusBadge = p.eol ? '<span class="tag tag-cancelled">⏰ EOL</span>' : '<span class="tag tag-completed">✅ มีขาย</span>';
     if (p.isSoftware) statusBadge += ' <span class="tag tag-active">💻 SW</span>';
     if (p.isService) statusBadge += ' <span class="tag tag-on-hold">🛠️ SV</span>';
-    html += '<tr><td class="pipe-row-num">' + (i+1) + '</td><td>' + sanitize(p.sku||'-') + '</td><td>' + sanitize(p.ean||'-') + '</td><td><strong>' + sanitize(p.name) + '</strong></td><td style="text-align:right">' + fmtMoney(p.price) + '</td><td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td><td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td><td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td><td>' + statusBadge + '</td><td><button class="btn bsm bo" onclick="showEditProductM(\'' + p.id + '\')">✏️</button></td></tr>';
+    if (p.isBundle) statusBadge += ' <span class="tag tag-count">🎁 Bundle</span>';   // ✅ เพิ่ม badge bundle
+
+    html += '<tr>';
+    html += '<td class="pipe-row-num">' + (i+1) + '</td>';
+    html += '<td>' + sanitize(p.sku || '-') + '</td>';
+    html += '<td>' + sanitize(p.ean || '-') + '</td>';
+    html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
+    html += '<td>' + statusBadge + '</td>';
+    html += '<td><button class="btn bsm bo" onclick="showEditProductM(\'' + p.id + '\')">✏️</button></td>';
+    html += '</tr>';
   }
   tbody.innerHTML = html;
 }
-
 function filterProductsList() {
   var search = document.getElementById('productSearch')?.value.toLowerCase() || '';
   var filter = window.currentProductFilter || 'all';
