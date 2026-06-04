@@ -63,6 +63,28 @@ var generateCustomerToken = generateSimpleToken;
 var verifyCustomerToken = verifySimpleToken;
 
 // ================================================================
+// SAFE MODEL OPTIONS (ใช้ products module ถ้ามี)
+// ================================================================
+
+function safeModelOptions(selected) {
+  if (typeof window.modelOptionsNew === 'function') {
+    return window.modelOptionsNew(selected);
+  }
+  // Fallback ถ้า products.js ยังไม่โหลด
+  var cfg = getConfig();
+  var models = cfg.models || [];
+  var html = '<option value="">-- เลือก Model --</option>';
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var name = typeof m === 'object' ? m.name : m;
+    var price = typeof m === 'object' ? (m.price || 0) : 0;
+    var label = name + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '');
+    html += '<option value="' + sanitize(name) + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
+  }
+  return html;
+}
+
+// ================================================================
 // JWT TOKEN WITH FIREBASE REGISTRY
 // ================================================================
 
@@ -315,27 +337,6 @@ function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
   toast('📋 คัดลอกแล้ว');
   closeModal();
-}
-// ================================================================
-// MODEL OPTIONS FALLBACK (ใช้ Products module ถ้ามี)
-// ================================================================
-
-function getModelOptionsNew(selected) {
-  if (typeof window.modelOptionsNew === 'function') {
-    return window.modelOptionsNew(selected);
-  }
-  // Fallback: ดึงจาก config.models แบบเก่า
-  var cfg = getConfig();
-  var models = cfg.models || [];
-  var html = '<option value="">-- เลือก Model --</option>';
-  for (var i = 0; i < models.length; i++) {
-    var m = models[i];
-    var name = typeof m === 'object' ? m.name : m;
-    var price = typeof m === 'object' ? (m.price || 0) : 0;
-    var label = name + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '');
-    html += '<option value="' + sanitize(name) + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
-  }
-  return html;
 }
 
 // ================================================================
