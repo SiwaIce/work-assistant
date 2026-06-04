@@ -142,7 +142,7 @@ function getAllModelsWithPriceForQuote() {
   // 1. ลองจาก Products module
   if (typeof Products !== 'undefined' && Products.getAll) {
     var prods = Products.getAll();
-    if (prods && prods.length) {
+    if (prods && prods.length && prods[0] && prods[0].name) {
       return prods.filter(function(p) { return p && p.name; });
     }
   }
@@ -152,39 +152,47 @@ function getAllModelsWithPriceForQuote() {
     var saved = localStorage.getItem('v7_products');
     if (saved) {
       var parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed.filter(function(p) { return p && p.name; });
-      if (parsed && Array.isArray(parsed.models)) return parsed.models.filter(function(p) { return p && p.name; });
+      if (Array.isArray(parsed) && parsed.length && parsed[0].name) {
+        return parsed.filter(function(p) { return p && p.name; });
+      }
+      if (parsed && Array.isArray(parsed.models) && parsed.models.length && parsed.models[0].name) {
+        return parsed.models.filter(function(p) { return p && p.name; });
+      }
       if (parsed && typeof parsed === 'object') {
         var vals = Object.values(parsed);
-        if (vals.length && vals[0] && vals[0].id) return vals.filter(function(p) { return p && p.name; });
+        if (vals.length && vals[0] && vals[0].name) {
+          return vals.filter(function(p) { return p && p.name; });
+        }
       }
     }
-  } catch(e) {}
+  } catch(e) { console.warn('Error reading v7_products:', e); }
   
-  // 3. Fallback: อ่านจาก config.models
+  // 3. ลองจาก v7_config (models)
   var cfg = getConfig();
-  var cfgModels = cfg.models || [];
-  if (cfgModels.length) {
-    return cfgModels.map(function(m) {
-      return typeof m === 'object' ? m : { name: m, price: 0, rrpExVat: 0 };
-    });
+  if (cfg && cfg.models && cfg.models.length) {
+    return cfg.models.map(function(m) {
+      if (typeof m === 'object' && m.name) return m;
+      if (typeof m === 'string') return { name: m, price: 0, rrpExVat: 0 };
+      return { name: String(m), price: 0, rrpExVat: 0 };
+    }).filter(function(p) { return p && p.name; });
   }
   
-  // 4. สุดท้าย: ใช้ hardcoded list (เผื่อไม่มีข้อมูล)
+  // 4. สุดท้าย: fallback hardcoded list (กัน error)
+  console.warn('No products found, using fallback list');
   return [
-    { name: 'DJI Matrice 4E', sku: '6937224106352', price: 93380, rrpExVat: 93380 },
-    { name: 'DJI Matrice 4T', sku: '6937224106369', price: 142170, rrpExVat: 142170 },
-    { name: 'DJI Matrice 4TD', sku: '6937224106383A', price: 210500, rrpExVat: 210500 },
-    { name: 'DJI Matrice 400', sku: '6937224106406', price: 162300, rrpExVat: 162300 },
-    { name: 'DJI Matrice 30', sku: '6937224106246', price: 162300, rrpExVat: 162300 },
-    { name: 'DJI Matrice 30T', sku: '6937224106253', price: 210500, rrpExVat: 210500 },
-    { name: 'DJI Zenmuse L2', sku: '6941565994103', price: 125000, rrpExVat: 125000 },
-    { name: 'DJI Zenmuse L3', sku: '6941565994202', price: 175000, rrpExVat: 175000 },
-    { name: 'DJI Zenmuse H30T', sku: '6941565994301', price: 210500, rrpExVat: 210500 },
-    { name: 'DJI Dock 2', sku: '6941565994400', price: 175000, rrpExVat: 175000 },
-    { name: 'DJI Matrice 4D Series Battery', sku: '6937224107649', price: 8220, rrpExVat: 8220 },
-    { name: 'DJI RC Plus 2', sku: '6941565984197', price: 37810, rrpExVat: 37810 },
-    { name: 'DJI Matrice 4 Series Propellers', sku: '6941565994301', price: 2610, rrpExVat: 2610 }
+    { name: 'DJI Matrice 4E', sku: '6937224106352', price: 93380, rrpExVat: 93380, typePrices: { S: 0, A: 0, B: 93380, Other: 0 } },
+    { name: 'DJI Matrice 4T', sku: '6937224106369', price: 142170, rrpExVat: 142170, typePrices: { S: 0, A: 0, B: 142170, Other: 0 } },
+    { name: 'DJI Matrice 4TD', sku: '6937224106383A', price: 210500, rrpExVat: 210500, typePrices: { S: 0, A: 0, B: 210500, Other: 0 } },
+    { name: 'DJI Matrice 400', sku: '6937224106406', price: 162300, rrpExVat: 162300, typePrices: { S: 0, A: 0, B: 162300, Other: 0 } },
+    { name: 'DJI Matrice 30', sku: '6937224106246', price: 162300, rrpExVat: 162300, typePrices: { S: 0, A: 0, B: 162300, Other: 0 } },
+    { name: 'DJI Matrice 30T', sku: '6937224106253', price: 210500, rrpExVat: 210500, typePrices: { S: 0, A: 0, B: 210500, Other: 0 } },
+    { name: 'DJI Zenmuse L2', sku: '6941565994103', price: 125000, rrpExVat: 125000, typePrices: { S: 0, A: 0, B: 125000, Other: 0 } },
+    { name: 'DJI Zenmuse L3', sku: '6941565994202', price: 175000, rrpExVat: 175000, typePrices: { S: 0, A: 0, B: 175000, Other: 0 } },
+    { name: 'DJI Zenmuse H30T', sku: '6941565994301', price: 210500, rrpExVat: 210500, typePrices: { S: 0, A: 0, B: 210500, Other: 0 } },
+    { name: 'DJI Dock 2', sku: '6941565994400', price: 175000, rrpExVat: 175000, typePrices: { S: 0, A: 0, B: 175000, Other: 0 } },
+    { name: 'DJI Matrice 4D Series Battery', sku: '6937224107649', price: 8220, rrpExVat: 8220, typePrices: { S: 0, A: 0, B: 8220, Other: 0 } },
+    { name: 'DJI RC Plus 2', sku: '6941565984197', price: 37810, rrpExVat: 37810, typePrices: { S: 0, A: 0, B: 37810, Other: 0 } },
+    { name: 'DJI Matrice 4 Series Propellers', sku: '6941565994301', price: 2610, rrpExVat: 2610, typePrices: { S: 0, A: 0, B: 2610, Other: 0 } }
   ];
 }
 function getAllModelsWithPriceForQuote() {
@@ -589,9 +597,26 @@ function createNewQuotation() {
   saveQuotations();
   closeModal();
   toast('✅ สร้างใบเสนอราคาแล้ว');
-  editQuotation(newQuote.id);
+  
+  // ✅ สำคัญ: โหลด quotations อีกครั้งก่อนเปิด edit
+  loadQuotations();
+  
+  // ✅ ตรวจสอบว่ามีข้อมูลก่อนเปิด edit
+  var found = false;
+  for (var i = 0; i < quotations.length; i++) {
+    if (quotations[i].id === newQuote.id) {
+      found = true;
+      break;
+    }
+  }
+  
+  if (found) {
+    editQuotation(newQuote.id);
+  } else {
+    toast('❌ เกิดข้อผิดพลาด: ไม่สามารถเปิดใบเสนอราคาได้');
+    go('quotationV2');
+  }
 }
-
 // ================================================================
 // EDIT QUOTATION (FULL PAGE)
 // ================================================================
