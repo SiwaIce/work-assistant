@@ -93,12 +93,51 @@ function loadProductsFromFirebase() {
     if (snapshot.empty) return false;
     var products = [];
     snapshot.forEach(function(doc) { products.push(doc.data()); });
+    // ✅ แปลงโครงสร้างให้มีฟิลด์ใหม่ (rrpInVat, rrpExVat) ถ้าขาด
+    products = products.map(function(p) { return ensureProductStructure(p); });
     var data = getProductsData();
     data.models = products;
     data.lastUpdated = new Date().toISOString();
     saveProductsData(data);
     return true;
   }).catch(function() { return false; });
+}
+
+// ✅ ฟังก์ชันตรวจสอบและเติมฟิลด์ที่ขาดหายใน product
+function ensureProductStructure(p) {
+  if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 } };
+  // ฟิลด์พื้นฐาน
+  if (p.rrpInVat === undefined) p.rrpInVat = 0;
+  if (p.rrpExVat === undefined) p.rrpExVat = 0;
+  if (!p.typePrices) {
+    p.typePrices = { S: 0, A: 0, B: p.price || 0, Other: 0 };
+  } else {
+    if (p.typePrices.S === undefined) p.typePrices.S = 0;
+    if (p.typePrices.A === undefined) p.typePrices.A = 0;
+    if (p.typePrices.B === undefined) p.typePrices.B = p.price || 0;
+    if (p.typePrices.Other === undefined) p.typePrices.Other = 0;
+  }
+  // ราคา B (type 3) ควรตรงกับ p.price
+  if (p.price === undefined) p.price = p.typePrices.B;
+  return p;
+}
+
+// ตรวจสอบและแปลงโครงสร้างของสินค้าทั้งหมด
+function ensureProductsStructure() {
+  var data = getProductsData();
+  if (data.models && data.models.length) {
+    var changed = false;
+    data.models = data.models.map(function(p) {
+      var old = JSON.stringify(p);
+      var newP = ensureProductStructure(p);
+      if (JSON.stringify(newP) !== old) changed = true;
+      return newP;
+    });
+    if (changed) {
+      data.lastUpdated = new Date().toISOString();
+      saveProductsData(data);
+    }
+  }
 }
 
 // ================================================================
@@ -153,6 +192,8 @@ function addProduct(productData) {
     name: productData.name || '',
     sku: productData.sku || '',
     ean: productData.ean || '',
+    rrpInVat: productData.rrpInVat || 0,
+    rrpExVat: productData.rrpExVat || 0,
     price: productData.price || 0,
     typePrices: productData.typePrices || { S: 0, A: 0, B: 0, Other: 0 },
     eol: productData.eol || false,
@@ -162,6 +203,8 @@ function addProduct(productData) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+  // ตรวจสอบให้ typePrices.B ตรงกับ price
+  if (newProduct.typePrices.B !== newProduct.price) newProduct.typePrices.B = newProduct.price;
   data.models.push(newProduct);
   data.lastUpdated = new Date().toISOString();
   saveProductsData(data);
@@ -183,6 +226,10 @@ function updateProduct(productId, updates) {
         } else {
           data.models[i][key] = updates[key];
         }
+      }
+      // ตรวจสอบความสอดคล้อง: price ควรเท่ากับ typePrices.B
+      if (data.models[i].typePrices && data.models[i].typePrices.B !== undefined) {
+        data.models[i].price = data.models[i].typePrices.B;
       }
       data.models[i].updatedAt = new Date().toISOString();
       data.lastUpdated = new Date().toISOString();
@@ -241,7 +288,7 @@ function getEOLProducts() {
 }
 
 // ================================================================
-// BUNDLE MANAGEMENT
+// BUNDLE MANAGEMENT (ยังคงเดิม)
 // ================================================================
 
 function getAllBundles() {
@@ -315,7 +362,7 @@ function getActiveBundles() {
 }
 
 // ================================================================
-// DEMO UNIT MANAGEMENT
+// DEMO UNIT MANAGEMENT (ยังคงเดิม)
 // ================================================================
 
 function getAllDemoUnits() {
@@ -392,7 +439,7 @@ function deleteDemoUnit(demoId) {
 }
 
 // ================================================================
-// IMPORT FROM EXCEL (USING COLUMN INDEX FOR RELIABILITY)
+// IMPORT FROM EXCEL (ใช้ column index ตามไฟล์ที่ให้)
 // ================================================================
 
 function importProductsFromSheet(worksheet) {
@@ -407,6 +454,9 @@ function importProductsFromSheet(worksheet) {
         errors++;
         continue;
       }
+      // ตามโครงสร้างไฟล์: 
+      // [0]=SiS part, [1]=EAN, [2]=Product Name, [3]=RRP in Vat, [4]=RRP Ex Vat,
+      // [5]=Type1(S), [6]=Type2(A), [7]=Type3(B), [8]=Type4(Other)
       var sku = (row[0] !== undefined ? row[0] : '').toString().trim();
       var ean = (row[1] !== undefined ? row[1] : '').toString().trim();
       var name = (row[2] !== undefined ? row[2] : '').toString().trim();
@@ -415,29 +465,35 @@ function importProductsFromSheet(worksheet) {
         continue;
       }
 
-      var isBundle = (sku.endsWith('A') || ean.startsWith('CB.'));
-
-      // Column indices: 3=RRP in Vat, 4=RRP Ex Vat, 5=Type1, 6=Type2, 7=Type3, 8=Type4
+      var rrpInVat = parseFloat(row[3]) || 0;
+      var rrpExVat = parseFloat(row[4]) || 0;
       var priceS = parseFloat(row[5]) || 0;
       var priceA = parseFloat(row[6]) || 0;
       var priceB = parseFloat(row[7]) || 0;
       var priceOther = parseFloat(row[8]) || 0;
-      var rrp = parseFloat(row[4]) || 0;
-      if (priceB === 0 && rrp > 0) priceB = rrp;
 
-      var existing = getProductBySku(sku) || getProductByEan(ean);
+      // ถ้าไม่มีราคา B แต่มี RRP Ex Vat ให้ใช้ RRP Ex Vat
+      if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
+
+      var isBundle = (sku && sku.endsWith('A')) || (ean && ean.startsWith('CB.'));
+      var isSoftware = (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1);
+      var isService = (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1 || name.indexOf('Staffing') !== -1);
+
       var productData = {
         name: name,
         sku: sku,
         ean: ean,
+        rrpInVat: rrpInVat,
+        rrpExVat: rrpExVat,
         price: priceB,
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
         eol: false,
         isBundle: isBundle,
-        isSoftware: (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1),
-        isService: (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1)
+        isSoftware: isSoftware,
+        isService: isService
       };
 
+      var existing = getProductBySku(sku) || getProductByEan(ean);
       if (existing) {
         updateProduct(existing.id, productData);
         updated++;
@@ -455,7 +511,7 @@ function importProductsFromSheet(worksheet) {
 }
 
 function importBundlesFromSheet(worksheet) {
-  // Simplified: assumes bundle sheet has columns: combo No., combo name, product EAN, quantity, etc.
+  // (คงเดิม ตามที่มี)
   var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
   if (!rows || rows.length < 2) return { imported: 0, updated: 0, errors: 0 };
   var imported = 0, updated = 0, errors = 0;
@@ -463,11 +519,11 @@ function importBundlesFromSheet(worksheet) {
   for (var i = 1; i < rows.length; i++) {
     var row = rows[i];
     if (!row || row.length < 2) continue;
-    var comboNo = (row[1] || '').toString().trim();   // Assuming combo No. is column B (index 1)
-    var comboName = (row[2] || '').toString().trim(); // combo name column C (index 2)
-    var productEan = (row[3] || '').toString().trim(); // product EAN column D (index 3)
-    var qty = parseInt(row[4]) || 1;                  // quantity column E (index 4)
-    var priceS = parseFloat(row[8]) || 0;             // Type 1 price (index 8)
+    var comboNo = (row[1] || '').toString().trim();
+    var comboName = (row[2] || '').toString().trim();
+    var productEan = (row[3] || '').toString().trim();
+    var qty = parseInt(row[4]) || 1;
+    var priceS = parseFloat(row[8]) || 0;
     var priceA = parseFloat(row[9]) || 0;
     var priceB = parseFloat(row[10]) || 0;
     var priceOther = parseFloat(row[11]) || 0;
@@ -506,6 +562,7 @@ function importBundlesFromSheet(worksheet) {
 }
 
 function importDemoUnitsFromSheet(worksheet) {
+  // (คงเดิม)
   var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
   if (!rows || rows.length < 2) return { imported: 0, updated: 0, errors: 0 };
   var imported = 0, updated = 0, errors = 0;
@@ -605,35 +662,36 @@ function doImportFullExcel() {
 }
 
 // ================================================================
-// EXPORT TO EXCEL
+// EXPORT TO EXCEL (ตรงกับโครงสร้างไฟล์ที่ใช้ import)
 // ================================================================
 
 function exportProductsToExcel() {
   var products = getAllProducts();
   var data = products.map(function(p, idx) {
     return {
-      '#': idx + 1,
-      'SKU (SiS part)': p.sku || '',
+      'SiS part': p.sku || '',
       'EAN': p.ean || '',
       'Product Name': p.name,
-      'Price S (Type 1)': p.typePrices?.S || 0,
-      'Price A (Type 2)': p.typePrices?.A || 0,
-      'Price B (Type 3)': p.price || 0,
-      'Price Other (Type 4)': p.typePrices?.Other || 0,
+      'RRP in Vat': p.rrpInVat || 0,
+      'RRP Ex Vat': p.rrpExVat || 0,
+      'Type 1 P EX Tax THB (S)': p.typePrices?.S || 0,
+      'Type 2 P EX Tax THB (A)': p.typePrices?.A || 0,
+      'Type 3 P EX Tax THB (B)': p.typePrices?.B || 0,
+      'Type 4 P EX Tax THB (Other)': p.typePrices?.Other || 0,
       'EOL': p.eol ? 'EOL' : '',
-      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : (p.isBundle ? 'Bundle' : 'Hardware')),
-      'Last Updated': p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('th-TH') : ''
+      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : (p.isBundle ? 'Bundle' : 'Hardware'))
     };
   });
   var ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:5},{wch:20},{wch:15},{wch:40},{wch:12},{wch:12},{wch:12},{wch:12},{wch:8},{wch:12},{wch:12}];
+  ws['!cols'] = [{wch:20},{wch:15},{wch:40},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:15},{wch:8},{wch:12}];
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Products');
+  XLSX.utils.book_append_sheet(wb, ws, 'single');
   XLSX.writeFile(wb, 'products-export-' + _td() + '.xlsx');
   toast('📥 Export Excel สำเร็จ!');
 }
 
 function exportBundlesToExcel() {
+  // คงเดิม
   var bundles = getAllBundles();
   var data = bundles.map(function(b, idx) {
     return {
@@ -651,12 +709,13 @@ function exportBundlesToExcel() {
   var ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [{wch:5},{wch:30},{wch:40},{wch:50},{wch:12},{wch:12},{wch:12},{wch:12},{wch:10}];
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Bundles');
+  XLSX.utils.book_append_sheet(wb, ws, 'combo');
   XLSX.writeFile(wb, 'bundles-export-' + _td() + '.xlsx');
   toast('📥 Export Bundles สำเร็จ!');
 }
 
 function exportDemoUnitsToExcel() {
+  // คงเดิม
   var demos = getAllDemoUnits();
   var data = demos.map(function(d, idx) {
     var product = d.productId ? getProductById(d.productId) : null;
@@ -674,7 +733,7 @@ function exportDemoUnitsToExcel() {
   var ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [{wch:5},{wch:20},{wch:15},{wch:40},{wch:15},{wch:30},{wch:10},{wch:20}];
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'DemoUnits');
+  XLSX.utils.book_append_sheet(wb, ws, 'demo');
   XLSX.writeFile(wb, 'demo-units-export-' + _td() + '.xlsx');
   toast('📥 Export Demo Units สำเร็จ!');
 }
@@ -695,14 +754,19 @@ function clearAllProductsData() {
 }
 
 // ================================================================
-// PAGE RENDERERS
+// PAGE RENDERERS (ปรับปรุงให้แสดง RRP in/Ex Vat)
 // ================================================================
 
 function rProducts(el) {
   document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
   var products = getAllProducts();
   var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button></span></h2>';
-  html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr><th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th><th>ราคา B</th><th>S</th><th>A</th><th>Other</th><th>สถานะ</th><th></th></tr></thead><tbody id="productsTableBody"></tbody></table></div></div>';
+  html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>' +
+    '<th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th>' +
+    '<th>RRP in Vat</th><th>RRP Ex Vat</th>' +
+    '<th>S</th><th>A</th><th>B</th><th>Other</th>' +
+    '<th>สถานะ</th><th></th>' +
+    '</tr></thead><tbody id="productsTableBody"></tbody></table></div></div>';
   el.innerHTML = html;
   renderProductsTable(products);
 }
@@ -724,9 +788,11 @@ function renderProductsTable(products) {
     html += '<td>' + sanitize(p.sku || '-') + '</td>';
     html += '<td>' + sanitize(p.ean || '-') + '</td>';
     html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductM(\'' + p.id + '\')">✏️</button></td>';
@@ -739,12 +805,18 @@ function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
   var products = getAllProducts();
   var html = '<div class="card"><h2>💰 ราคาสินค้าแยกตาม Level</h2>';
-  html += '<div class="export-wrap"><table class="export-table"><thead><tr><th>#</th><th>สินค้า</th><th>ราคา S</th><th>ราคา A</th><th>ราคา B</th><th>ราคา Other</th><th></th></tr></thead><tbody>';
+  html += '<div class="export-wrap"><table class="export-table"><thead><tr>' +
+    '<th>#</th><th>สินค้า</th>' +
+    '<th>RRP in Vat</th><th>RRP Ex Vat</th>' +
+    '<th>S</th><th>A</th><th>B</th><th>Other</th><th></th>' +
+    '</tr></thead><tbody>';
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
     html += '<tr>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td><input type="number" id="rrp_in_vat_' + p.id + '" value="' + (p.rrpInVat || 0) + '" style="width:110px" class="fm-input"></td>';
+    html += '<td><input type="number" id="rrp_ex_vat_' + p.id + '" value="' + (p.rrpExVat || 0) + '" style="width:110px" class="fm-input"></td>';
     html += '<td><input type="number" id="price_s_' + p.id + '" value="' + (p.typePrices?.S || 0) + '" style="width:100px" class="fm-input"></td>';
     html += '<td><input type="number" id="price_a_' + p.id + '" value="' + (p.typePrices?.A || 0) + '" style="width:100px" class="fm-input"></td>';
     html += '<td><input type="number" id="price_b_' + p.id + '" value="' + (p.price || 0) + '" style="width:100px" class="fm-input"></td>';
@@ -758,6 +830,7 @@ function rProductPrices(el) {
 }
 
 function rProductBundles(el) {
+  // คงเดิม
   document.getElementById('pgT').textContent = '🎁 Bundle/Combo';
   var bundles = getAllBundles();
   var html = '<div class="card"><h2>🎁 Bundle/Combo <span class="ml"><button class="btn bp" onclick="showAddBundleM()">➕ เพิ่ม Bundle</button><button class="btn bo" onclick="exportBundlesToExcel()">📥 Export Excel</button></span></h2>';
@@ -793,6 +866,7 @@ function rProductBundles(el) {
 }
 
 function rProductDemo(el) {
+  // คงเดิม
   document.getElementById('pgT').textContent = '🚁 Demo Unit';
   var demos = getAllDemoUnits();
   var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button><button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button></span></h2>';
@@ -823,33 +897,50 @@ function rProductImport(el) {
 }
 
 // ================================================================
-// SIMPLE MODALS FOR ADD/EDIT (placeholders)
+// SIMPLE MODALS FOR ADD/EDIT (placeholder)
 // ================================================================
 
 function showAddProductM() { toast('🚧 ใช้ปุ่ม Import Excel แทนการเพิ่มทีละรายการ'); }
 function showEditProductM(id) { toast('🚧 ใช้ Export -> แก้ไข -> Import แทน'); }
+
 function saveSingleProductPrice(id) {
+  var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + id).value) || 0;
+  var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + id).value) || 0;
   var priceS = parseFloat(document.getElementById('price_s_' + id).value) || 0;
   var priceA = parseFloat(document.getElementById('price_a_' + id).value) || 0;
   var priceB = parseFloat(document.getElementById('price_b_' + id).value) || 0;
   var priceO = parseFloat(document.getElementById('price_o_' + id).value) || 0;
-  updateProduct(id, { price: priceB, typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO } });
+  updateProduct(id, {
+    rrpInVat: rrpInVat,
+    rrpExVat: rrpExVat,
+    price: priceB,
+    typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
+  });
   toast('💾 บันทึกแล้ว');
   render();
 }
+
 function saveAllProductPrices() {
   var products = getAllProducts();
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
+    var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + p.id).value) || 0;
+    var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + p.id).value) || 0;
     var priceS = parseFloat(document.getElementById('price_s_' + p.id).value) || 0;
     var priceA = parseFloat(document.getElementById('price_a_' + p.id).value) || 0;
     var priceB = parseFloat(document.getElementById('price_b_' + p.id).value) || 0;
     var priceO = parseFloat(document.getElementById('price_o_' + p.id).value) || 0;
-    updateProduct(p.id, { price: priceB, typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO } });
+    updateProduct(p.id, {
+      rrpInVat: rrpInVat,
+      rrpExVat: rrpExVat,
+      price: priceB,
+      typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO }
+    });
   }
   toast('💾 บันทึกราคาทั้งหมดแล้ว');
   render();
 }
+
 function showAddBundleM() { toast('🚧 กำลังพัฒนา'); }
 function editBundle(id) { toast('🚧 กำลังพัฒนา'); }
 function deleteBundleConfirm(id) { if (confirm('ลบ Bundle นี้?')) { deleteBundle(id); toast('🗑️ ลบแล้ว'); render(); } }
@@ -873,6 +964,8 @@ function initProductsModule() {
       }
     }
   }
+  // ✅ บังคับให้ทุก product มีโครงสร้างใหม่
+  ensureProductsStructure();
   if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
     loadProductsFromFirebase().then(function(loaded) {
       if (loaded && typeof render === 'function') render();
@@ -880,6 +973,8 @@ function initProductsModule() {
   }
   console.log('✅ Products Module initialized', data.models.length, 'products');
 }
+
+// เรียกทันที
 initProductsModule();
 
 // ================================================================
