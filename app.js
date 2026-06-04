@@ -363,6 +363,7 @@ var R = {
   smartFilter: rSmartFilter,
   knowledge: rKnowledge, 
   noteDetail: rNoteDet,
+quotationV2: rQuotationV2,
   
   // ✅ เพิ่มตรงนี้
   products: rProducts,

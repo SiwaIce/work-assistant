@@ -26,6 +26,7 @@ var SYNC_KEY_MAP = {
   'visitPlans': 'visitPlans',
   'demo': 'demo',
   'quotes': 'quotes',
+'quotations_v2': 'quotations_v2',
   'goals_v2': 'goals_v2',
   'kpiConfig': 'kpiConfig',
   'kpiEntries': 'kpiEntries',
