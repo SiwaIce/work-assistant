@@ -363,14 +363,16 @@ var R = {
   smartFilter: rSmartFilter,
   knowledge: rKnowledge, 
   noteDetail: rNoteDet,
-quotationV2: rQuotationV2,
   
   // ✅ เพิ่มตรงนี้
   products: rProducts,
   productPrices: rProductPrices,
   productBundles: rProductBundles,
   productDemo: rProductDemo,
-  productImport: rProductImport
+  productImport: rProductImport,
+  
+  // ✅ เพิ่ม Quotation V2
+  quotationV2: rQuotationV2      // <--- เพิ่มบรรทัดนี้
 };
 
 // เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)
