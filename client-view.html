@@ -1341,22 +1341,43 @@ function isWarningProject(p) {
 // โหลดสินค้าจาก Products module (หรือ fallback)
 function loadModelsFromProducts() {
   if (typeof Products !== 'undefined' && Products.getActive) {
-    productList = Products.getActive(); // เฉพาะ non-EOL
-    allModels = productList.map(function(p) { return p.name; });
-    console.log('Products loaded:', productList.length);
-  } else {
-    // fallback ใช้ config.models
-    var cfg = localStorage.getItem('v7_config');
-    if (cfg) {
-      try { var config = JSON.parse(cfg); if (config.models && config.models.length) { allModels = config.models.map(function(m) { return typeof m === 'object' ? m.name : m; }).filter(function(m) { return m; }); } } catch(e) {}
+    var active = Products.getActive(); // เฉพาะ non-EOL
+    if (active && active.length > 0) {
+      productList = active;
+      allModels = productList.map(function(p) { return p.name; });
+      console.log('Products loaded:', productList.length);
+      return productList;
     }
-    if (!allModels.length) {
-      allModels = ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Matrice 4TD', 'DJI Matrice 400', 'DJI Matrice 30', 'DJI Matrice 30T',
-        'Zenmuse L2', 'Zenmuse L3', 'Zenmuse H30', 'Zenmuse H30T', 'Zenmuse P1', 'DJI Dock 2', 'DJI Dock 3',
-        'DJI FlightHub 2', 'DJI Terra', 'Mavic 3 Enterprise', 'Mavic 3 Multispectral'];
-    }
-    productList = allModels.map(function(name) { return { name: name, category: 'other' }; });
   }
+  // Fallback 1: อ่านจาก v7_products โดยตรง
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      var rawModels = [];
+      if (Array.isArray(parsed)) { rawModels = parsed; }
+      else if (parsed && Array.isArray(parsed.models)) { rawModels = parsed.models; }
+      else if (parsed && typeof parsed === 'object') { var vals = Object.values(parsed); if (vals.length && vals[0] && vals[0].id) rawModels = vals; }
+      var active2 = rawModels.filter(function(m) { return m && !m.eol; });
+      if (active2.length > 0) {
+        productList = active2;
+        allModels = productList.map(function(p) { return p.name; });
+        console.log('Products from v7_products:', productList.length);
+        return productList;
+      }
+    }
+  } catch(e) {}
+  // Fallback 2: อ่านจาก v7_config.models
+  var cfg = localStorage.getItem('v7_config');
+  if (cfg) {
+    try { var config = JSON.parse(cfg); if (config.models && config.models.length) { allModels = config.models.map(function(m) { return typeof m === 'object' ? m.name : m; }).filter(function(m) { return m; }); } } catch(e) {}
+  }
+  if (!allModels.length) {
+    allModels = ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Matrice 4TD', 'DJI Matrice 400', 'DJI Matrice 30', 'DJI Matrice 30T',
+      'Zenmuse L2', 'Zenmuse L3', 'Zenmuse H30', 'Zenmuse H30T', 'Zenmuse P1', 'DJI Dock 2', 'DJI Dock 3',
+      'DJI FlightHub 2', 'DJI Terra', 'Mavic 3 Enterprise', 'Mavic 3 Multispectral'];
+  }
+  productList = allModels.map(function(name) { return { name: name, category: 'other' }; });
   return productList;
 }
 
@@ -2011,6 +2032,8 @@ function closeDetailModal() { var el = document.getElementById('detailModal'); i
 function showUpdateModal(pipeId) {
   var p = pipelinesData.find(function(x) { return x.id === pipeId; });
   if (!p) return;
+  // ✅ ตรวจสอบว่าโหลดสินค้าแล้ว (สำคัญมาก)
+  ensureModelsLoaded();
   var statusOptions = '';
   for (var i=0;i<STATUS_LIST.length;i++) statusOptions += '<option value="' + STATUS_LIST[i].id + '" ' + (p.status === STATUS_LIST[i].id ? 'selected' : '') + '>' + STATUS_LIST[i].name + '</option>';
   var modelDatalist = '<datalist id="globalModelListEdit">' + productList.map(function(m) { return '<option value="' + esc(m.name) + '">'; }).join('') + '</datalist>';

@@ -9,14 +9,44 @@ function safeModelOptions(selected) {
   if (typeof window.modelOptionsNew === 'function') {
     return window.modelOptionsNew(selected);
   }
-  // Fallback ถ้า products.js ยังไม่โหลด
-  var cfg = getConfig();
-  var models = cfg.models || [];
+  // Fallback 1: อ่านจาก v7_products โดยตรง
+  var models = [];
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        models = parsed;
+      } else if (parsed && Array.isArray(parsed.models)) {
+        models = parsed.models;
+      } else if (parsed && typeof parsed === 'object') {
+        var vals = Object.values(parsed);
+        if (vals.length && vals[0] && vals[0].id) models = vals;
+      }
+    }
+  } catch(e) {}
+  // Fallback 2: อ่านจาก v7_config.models ถ้า v7_products ว่าง
+  if (!models.length) {
+    try {
+      var cfgRaw = localStorage.getItem('v7_config');
+      if (cfgRaw) {
+        var cfgObj = JSON.parse(cfgRaw);
+        if (cfgObj && Array.isArray(cfgObj.models)) models = cfgObj.models;
+      }
+    } catch(e) {}
+  }
+  // Fallback 3: getConfig() ถ้ายังว่าง
+  if (!models.length && typeof getConfig === 'function') {
+    var cfg = getConfig();
+    models = cfg.models || [];
+  }
   var html = '<option value="">-- เลือก Model --</option>';
   for (var i = 0; i < models.length; i++) {
     var m = models[i];
+    if (!m) continue;
     var name = typeof m === 'object' ? m.name : m;
-    var price = typeof m === 'object' ? (m.price || 0) : 0;
+    if (!name) continue;
+    var price = typeof m === 'object' ? (m.rrpExVat || m.price || 0) : 0;
     var label = name + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '');
     html += '<option value="' + sanitize(name) + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
   }
