@@ -12,7 +12,12 @@ function getProductsData() {
   try {
     var saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      var parsed = JSON.parse(saved);
+      // ตรวจสอบโครงสร้าง
+      if (!parsed.models) parsed.models = [];
+      if (!parsed.bundles) parsed.bundles = [];
+      if (!parsed.demoUnits) parsed.demoUnits = [];
+      return parsed;
     }
   } catch(e) {}
   
@@ -51,6 +56,42 @@ function getProductsData() {
   return defaultData;
 }
 
+function initProductsModule() {
+  var data = getProductsData();
+  
+  // ตรวจสอบให้แน่ใจว่า data มี properties ที่จำเป็น
+  if (!data.models) data.models = [];
+  if (!data.bundles) data.bundles = [];
+  if (!data.demoUnits) data.demoUnits = [];
+  
+  if (data.models.length === 0) {
+    var cfg = getConfigFromLocalStorage();
+    if (cfg && cfg.models && cfg.models.length) {
+      console.log('🔄 Migrating old config.models to products...');
+      data.models = JSON.parse(JSON.stringify(cfg.models));
+      for (var i = 0; i < data.models.length; i++) {
+        var m = data.models[i];
+        if (typeof m === 'object') {
+          if (m.eol === undefined) m.eol = false;
+          if (m.ean === undefined) m.ean = '';
+          if (m.sku === undefined) m.sku = '';
+          if (!m.typePrices) {
+            m.typePrices = { S: m.price || 0, A: m.price || 0, B: m.price || 0, Other: m.price || 0 };
+          }
+        }
+      }
+      saveProductsData(data);
+    }
+  }
+  
+  if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    loadProductsFromFirebase().then(function(loaded) {
+      if (loaded && typeof render === 'function') render();
+    });
+  }
+  
+  console.log('✅ Products Module initialized', data.models.length, 'products');
+}
 function getConfigFromLocalStorage() {
   try {
     var saved = localStorage.getItem('v7_config');
