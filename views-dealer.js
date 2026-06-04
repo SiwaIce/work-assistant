@@ -316,6 +316,27 @@ function copyToClipboard(text) {
   toast('📋 คัดลอกแล้ว');
   closeModal();
 }
+// ================================================================
+// MODEL OPTIONS FALLBACK (ใช้ Products module ถ้ามี)
+// ================================================================
+
+function getModelOptionsNew(selected) {
+  if (typeof window.modelOptionsNew === 'function') {
+    return window.modelOptionsNew(selected);
+  }
+  // Fallback: ดึงจาก config.models แบบเก่า
+  var cfg = getConfig();
+  var models = cfg.models || [];
+  var html = '<option value="">-- เลือก Model --</option>';
+  for (var i = 0; i < models.length; i++) {
+    var m = models[i];
+    var name = typeof m === 'object' ? m.name : m;
+    var price = typeof m === 'object' ? (m.price || 0) : 0;
+    var label = name + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '');
+    html += '<option value="' + sanitize(name) + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(label) + '</option>';
+  }
+  return html;
+}
 
 // ================================================================
 // DEALER LIST
@@ -2557,7 +2578,7 @@ function dealerDemoTab(d) {
   for (var i = 0; i < demoItems.length; i++) {
     html += '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
     html += '<div style="flex:1;min-width:0">';
-    html += '<select id="demo_model_' + i + '" class="demo-model" style="width:100%" data-idx="' + i + '">' + modelOptionsNew(demoItems[i].model) + '</select>';
+'<select id="demo_model_' + i + '" class="demo-model" style="width:100%" data-idx="' + i + '">' + safeModelOptions(demoItems[i].model) + '</select>';
     html += '</div>';
     html += '<div style="flex:1">';
     html += '<input type="text" id="demo_sn_' + i + '" class="demo-sn" style="width:100%" placeholder="Serial Number (ถ้ามี)" value="' + sanitize(demoItems[i].serialNumber || '') + '">';
@@ -2613,7 +2634,7 @@ function addDemoItemRow() {
   var container = document.getElementById('demoItemsList');
   var idx = Date.now();
   var newRow = '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
-  newRow += '<div style="flex:1"><select id="demo_model_' + idx + '" class="demo-model" style="width:100%">' + modelOptionsNew('') + '</select></div>';
+newRow += '<div style="flex:1"><select id="demo_model_' + idx + '" class="demo-model" style="width:100%">' + safeModelOptions('') + '</select></div>';
   newRow += '<div style="flex:1"><input type="text" id="demo_sn_' + idx + '" class="demo-sn" style="width:100%" placeholder="Serial Number"></div>';
   newRow += '<button class="btn bsm bd" onclick="removeDemoItemRow(this)">🗑️</button>';
   newRow += '</div>';
