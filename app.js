@@ -299,7 +299,6 @@ var calM = new Date().getMonth();
 var taskFlt = 'all';
 var mtFlt = 'all';
 var kbFilter = 'all';
-var pipeFlt = 'all';
 var visitFlt = 'all';
 
 function go(v, p) {
@@ -1299,24 +1298,6 @@ function applyViewMode() {
   var icon = document.getElementById('modeIcon');
   if (icon) icon.textContent = viewMode === 'mobile' ? '🖥️' : '📱';
   updateMbNav();
-}
-
-function updateMbNav() {
-  var items = document.querySelectorAll('.mb-nav-item');
-  for (var i = 0; i < items.length; i++) {
-    items[i].classList.remove('act');
-  }
-  var current = S ? S.view : 'today';
-  var navItems = document.querySelectorAll('.mb-nav-item');
-  for (var j = 0; j < navItems.length; j++) {
-    var onclick = navItems[j].getAttribute('onclick') || '';
-    if (onclick.indexOf(current) !== -1) {
-      navItems[j].classList.add('act');
-    }
-    if (current === 'mbHome' && onclick.indexOf('mbHome') !== -1) {
-      navItems[j].classList.add('act');
-    }
-  }
 }
 
 // ================================================================
@@ -3452,8 +3433,6 @@ function copyForecastSummary() {
 // ================================================================
 // CUSTOMER FORECAST UPDATES MANAGEMENT
 // ================================================================
-
-var selectedForecastUpdates = {};
 
 function rCustomerForecastUpdates(el) {
   document.getElementById('pgT').textContent = '📦 แผนการสั่งซื้อจากลูกค้า';

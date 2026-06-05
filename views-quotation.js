@@ -200,27 +200,6 @@ function getAllModelsWithPriceForQuote() {
     { name: 'DJI Matrice 4 Series Propellers', sku: '6941565994301', price: 2610, rrpExVat: 2610, typePrices: { S: 0, A: 0, B: 2610, Other: 0 } }
   ];
 }
-function getAllModelsWithPriceForQuote() {
-  var products = [];
-  if (typeof Products !== 'undefined' && Products.getAll) {
-    products = Products.getAll();
-    if (products.length) return products.filter(function(p) { return p && p.name; });
-  }
-  try {
-    var saved = localStorage.getItem('v7_products');
-    if (saved) {
-      var parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
-      if (parsed && Array.isArray(parsed.models)) return parsed.models;
-    }
-  } catch(e) {}
-  var cfg = getConfig();
-  var cfgModels = cfg.models || [];
-  return cfgModels.map(function(m) {
-    return typeof m === 'object' ? m : { name: m, price: 0, rrpExVat: 0 };
-  });
-}
-
 function formatNumber(n) {
   if (n === null || n === undefined) return '0';
   return Number(n).toLocaleString('th-TH');

@@ -2402,10 +2402,6 @@ function saveDealerPin(dealerId) {
   render();
 }
 
-function copyClientLink(url, dealerName) {
-  copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
-}
-
 function openClientView(dealerId) {
   var pins = JSON.parse(localStorage.getItem('v7_dealer_pins') || '{}');
   var dealerPin = pins[dealerId] || '';
@@ -2423,10 +2419,6 @@ function openClientView(dealerId) {
   if (!win) { toast('กรุณาอนุญาต Popup'); return; }
 }
 
-function closeModal() {
-  var modal = document.querySelector('.modal-overlay');
-  if (modal) modal.remove();
-}
 function copyClientLink(url, dealerName) {
   copyText(url, '🔗 คัดลอกลิงก์สำหรับ ' + dealerName + ' แล้ว');
   toast('📋 ลิงก์: ' + url);

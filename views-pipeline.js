@@ -975,16 +975,6 @@ function savePipeAction(pipeId) {
   closeMForce();
   render();
 }
-function fmtMoneyStyled(amount) {
-  var v = parseFloat(amount) || 0;
-  var text = fmtMoney(v);
-  if (v >= 10000000) {
-    return '<span class="val-mega">' + text + ' ฿</span>';
-  } else if (v >= 1500000) {
-    return '<span class="val-big">' + text + ' ฿</span>';
-  }
-  return '<span class="val-normal">' + text + ' ฿</span>';
-}
 
 // ================================================================
 // EDIT PIPELINE LOG
