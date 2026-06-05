@@ -548,7 +548,7 @@ function renderDealerTab(d) {
 }
 
 // ================================================================
-// TAB: INFO (Redesigned - Premium)
+// TAB: INFO (Redesigned - Premium) WITH SIS REVENUE
 // ================================================================
 function dealerInfoTab(d) {
   const pipes = ST.pipelineByDealer(d.id);
@@ -616,9 +616,22 @@ function dealerInfoTab(d) {
           <span style="font-size: 18px">🏷️</span>
           <div><div style="font-size: 10px; color: var(--text2)">Level / Term</div><div style="font-size: 13px; font-weight: 500">${levelTag(d.level)} / ${d.creditTerm || '-'}</div></div>
         </div>
-        <div style="display: flex; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">💳</span>
           <div><div style="font-size: 10px; color: var(--text2)">วงเงินเครดิต</div><div style="font-size: 13px; font-weight: 500">${d.creditLimit ? fmtMoney(d.creditLimit) + ' ฿' : '-'}</div></div>
+        </div>
+        <!-- ✅ ADD SIS REVENUE SECTION -->
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">💰</span>
+          <div style="flex:1">
+            <div style="font-size: 10px; color: var(--text2)">ยอดขาย SIS (บาท)</div>
+            <div style="font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <span>${fmtMoney(d.sisRevenue || 0)}</span>
+              <button class="btn bsm bo" onclick="showEditSisRevenueModal('${d.id}')" style="padding: 2px 8px; font-size: 10px">✏️ แก้ไข</button>
+              <span style="font-size: 10px; color: var(--text3)">${d.sisRevenueUpdatedAt ? 'อัพเดท ' + fD(d.sisRevenueUpdatedAt) : ''}</span>
+            </div>
+            ${d.sisRevenueNote ? '<div style="font-size: 10px; color: var(--text3); margin-top: 4px">📝 ' + sanitize(d.sisRevenueNote) + '</div>' : ''}
+          </div>
         </div>
       </div>
     </div>
@@ -2668,6 +2681,58 @@ if (allDemoProducts.length === 0 && typeof Products !== 'undefined') {
   
   html += renderDemoPreviewDynamic(demoOption, demoItems || [], requiredOption1, requiredOption2);
   html += '</div>';
+
+// ✅ เพิ่มส่วน Custom Demo Requirements (หลังจาก Preview และก่อนปุ่มบันทึก)
+var customReqHtml = renderCustomDemoRequirementsEditor(d);
+html += customReqHtml;
+
+// ✅ ฟังก์ชัน renderCustomDemoRequirementsEditor
+function renderCustomDemoRequirementsEditor(dealer) {
+  var level = dealer.level || 'Other';
+  var cfg = getConfig();
+  var levelRequirements = cfg.levelRequirements || {};
+  var defaultReq = levelRequirements[level] || levelRequirements.B || { option1Models: [], option2Models: [] };
+  
+  var customReq = dealer.customDemoRequirements || {};
+  var useCustom = customReq.enabled === true;
+  
+  var option1Models = useCustom ? (customReq.option1Models || defaultReq.option1Models || []) : (defaultReq.option1Models || []);
+  var option2Models = useCustom ? (customReq.option2Models || defaultReq.option2Models || []) : (defaultReq.option2Models || []);
+  
+  var opt1Html = '';
+  for (var i = 0; i < option1Models.length; i++) {
+    opt1Html += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;margin:2px">' + 
+      sanitize(option1Models[i]) + 
+      '<button class="btn-xs" style="padding:0 4px;margin-left:4px" onclick="this.parentElement.remove()">✕</button></span>';
+  }
+  
+  var opt2Html = '';
+  for (var i = 0; i < option2Models.length; i++) {
+    opt2Html += '<span class="tag tag-count" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;margin:2px">' + 
+      sanitize(option2Models[i]) + 
+      '<button class="btn-xs" style="padding:0 4px;margin-left:4px" onclick="this.parentElement.remove()">✕</button></span>';
+  }
+  
+  return '<div class="form-section" style="margin-top: 16px">📌 กำหนดเกณฑ์ Demo (Manual)</div>' +
+    '<div class="fg">' +
+    '<label><input type="checkbox" id="useCustomDemoReq" onchange="toggleCustomDemoReq()" ' + (useCustom ? 'checked' : '') + '> 📝 กำหนดเอง (ไม่ใช้ตาม Level)</label>' +
+    '<div class="hint">เมื่อเลือก ระบบจะใช้เกณฑ์ที่กำหนดด้านล่าง แทนการดึงจาก Admin</div>' +
+    '</div>' +
+    '<div id="customDemoReqPanel" style="' + (useCustom ? '' : 'display:none') + '">' +
+    '<div class="fg" style="margin-top: 12px"><label>📦 Option 1 (Drone + Payload) - รุ่นที่ต้องมี</label>' +
+    '<div id="customOption1List" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + opt1Html + '</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+    '<input type="text" id="customOpt1NewModel" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList" style="flex:2">' +
+    '<button class="btn bsm bp" onclick="addCustomOption1Model()">➕ เพิ่ม</button>' +
+    '</div></div>' +
+    '<div class="fg" style="margin-top: 12px"><label>🏗️ Option 2 (Dock + Drone) - รุ่นที่ต้องมี</label>' +
+    '<div id="customOption2List" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + opt2Html + '</div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<input type="text" id="customOpt2NewModel" class="fm-input" placeholder="พิมพ์ชื่อ Model..." list="globalModelList" style="flex:2">' +
+    '<button class="btn bsm bp" onclick="addCustomOption2Model()">➕ เพิ่ม</button>' +
+    '</div></div>' +
+    '</div>';
+}
   
   // ปุ่มบันทึก
   html += '<div class="bg" style="margin-top:8px;gap:12px">';
@@ -2897,23 +2962,65 @@ function saveDemoSettingEnhanced(dealerId) {
     }
   }
   
-  ST.update('dealers', dealerId, {
+  // ✅ เก็บ custom demo requirements (เพิ่มส่วนนี้)
+  var useCustom = document.getElementById('useCustomDemoReq') ? document.getElementById('useCustomDemoReq').checked : false;
+  var customReq = null;
+  
+  if (useCustom) {
+    var opt1Models = [];
+    var opt1Container = document.getElementById('customOption1List');
+    if (opt1Container) {
+      var items1 = opt1Container.querySelectorAll('.tag');
+      for (var i = 0; i < items1.length; i++) {
+        var text = items1[i].textContent.replace('✕', '').trim();
+        if (text) opt1Models.push(text);
+      }
+    }
+    
+    var opt2Models = [];
+    var opt2Container = document.getElementById('customOption2List');
+    if (opt2Container) {
+      var items2 = opt2Container.querySelectorAll('.tag');
+      for (var i = 0; i < items2.length; i++) {
+        var text = items2[i].textContent.replace('✕', '').trim();
+        if (text) opt2Models.push(text);
+      }
+    }
+    
+    customReq = {
+      enabled: true,
+      option1Models: opt1Models,
+      option2Models: opt2Models
+    };
+  }
+  
+  // ✅ สร้าง updates object
+  var updates = {
     demoOption: demoOption,
     demoItems: demoItems
-  });
+  };
+  
+  if (customReq) {
+    updates.customDemoRequirements = customReq;
+  } else {
+    updates.customDemoRequirements = { enabled: false };
+  }
+  
+  // ✅ บันทึกข้อมูล
+  ST.update('dealers', dealerId, updates);
   
   if (typeof addAuditLog === 'function') {
     var dealer = ST.getOne('dealers', dealerId);
     addAuditLog('update_dealer_demo', 'dealer', dealerId, dealer ? dealer.name : '', dealerId, dealer ? dealer.name : '', {
       demoOption: demoOption,
-      itemCount: demoItems.length
+      itemCount: demoItems.length,
+      useCustomReq: useCustom
     });
   }
   
   toast('💾 บันทึกการตั้งค่า Demo เรียบร้อย (' + demoItems.length + ' รายการ)');
   render();
 }
-
 function syncDemoToGlobalEnhanced(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
@@ -3228,4 +3335,114 @@ function getDealerDemoItems(dealer) {
     return dealer.demoItems;
   }
   return [];
+}
+// ================================================================
+// PART: SIS REVENUE MANAGEMENT
+// ================================================================
+
+function showEditSisRevenueModal(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var html = '<div style="max-width:400px">' +
+    '<div class="fg"><label>💰 ยอดขาย SIS (บาท)</label>' +
+    '<input type="number" id="sisRevenueInput" class="fm-input" value="' + (dealer.sisRevenue || 0) + '" step="1000" placeholder="0">' +
+    '<div class="hint">💡 ยอดขายจริงที่ Dealer สั่งซื้อจาก SIS</div>' +
+    '</div>' +
+    '<div class="fg"><label>📝 หมายเหตุ (ถ้ามี)</label>' +
+    '<textarea id="sisRevenueNote" rows="2" class="fm-input" placeholder="เช่น อัพเดทตามใบแจ้งหนี้ ประจำเดือน มิ.ย."></textarea>' +
+    '</div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="saveSisRevenue(\'' + dealerId + '\')">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('💰 แก้ไขยอดขาย SIS', html);
+}
+
+function saveSisRevenue(dealerId) {
+  var newRevenue = parseFloat(document.getElementById('sisRevenueInput').value) || 0;
+  var note = document.getElementById('sisRevenueNote') ? document.getElementById('sisRevenueNote').value.trim() : '';
+  
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var oldRevenue = dealer.sisRevenue || 0;
+  
+  ST.update('dealers', dealerId, {
+    sisRevenue: newRevenue,
+    sisRevenueUpdatedAt: new Date().toISOString(),
+    sisRevenueNote: note || 'อัพเดทยอดขาย SIS'
+  });
+  
+  if (typeof addAuditLog === 'function') {
+    addAuditLog('update_sis_revenue', 'dealer', dealerId, dealer.name || dealerId, dealerId, dealer.name || '', { oldValue: oldRevenue, newValue: newRevenue, note: note });
+  }
+  
+  closeMForce();
+  toast('💾 บันทึกยอดขาย SIS แล้ว');
+  render();
+}
+
+// ================================================================
+// PART: CUSTOM DEMO REQUIREMENTS
+// ================================================================
+
+function toggleCustomDemoReq() {
+  var chk = document.getElementById('useCustomDemoReq');
+  var panel = document.getElementById('customDemoReqPanel');
+  if (panel) panel.style.display = chk && chk.checked ? 'block' : 'none';
+}
+
+function addCustomOption1Model() {
+  var input = document.getElementById('customOpt1NewModel');
+  var model = input ? input.value.trim() : '';
+  if (!model) return;
+  var container = document.getElementById('customOption1List');
+  if (!container) return;
+  var idx = container.children.length;
+  var span = document.createElement('span');
+  span.className = 'tag tag-count';
+  span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;margin:2px';
+  span.innerHTML = sanitize(model) + '<button class="btn-xs" style="padding:0 4px;margin-left:4px" onclick="this.parentElement.remove()">✕</button>';
+  container.appendChild(span);
+  input.value = '';
+}
+
+function addCustomOption2Model() {
+  var input = document.getElementById('customOpt2NewModel');
+  var model = input ? input.value.trim() : '';
+  if (!model) return;
+  var container = document.getElementById('customOption2List');
+  if (!container) return;
+  var span = document.createElement('span');
+  span.className = 'tag tag-count';
+  span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;margin:2px';
+  span.innerHTML = sanitize(model) + '<button class="btn-xs" style="padding:0 4px;margin-left:4px" onclick="this.parentElement.remove()">✕</button>';
+  container.appendChild(span);
+  input.value = '';
+}
+
+function getCustomDemoRequirementsFromUI() {
+  var option1Models = [];
+  var option1Container = document.getElementById('customOption1List');
+  if (option1Container) {
+    var items = option1Container.querySelectorAll('.tag');
+    for (var i = 0; i < items.length; i++) {
+      var text = items[i].textContent.replace('✕', '').trim();
+      if (text) option1Models.push(text);
+    }
+  }
+  
+  var option2Models = [];
+  var option2Container = document.getElementById('customOption2List');
+  if (option2Container) {
+    var items = option2Container.querySelectorAll('.tag');
+    for (var i = 0; i < items.length; i++) {
+      var text = items[i].textContent.replace('✕', '').trim();
+      if (text) option2Models.push(text);
+    }
+  }
+  
+  return { option1Models: option1Models, option2Models: option2Models };
 }

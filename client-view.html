@@ -1246,13 +1246,17 @@ function _td() { return new Date().toISOString().split('T')[0]; }
 function addD(iso, n) { var d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
 
 var STATUS_LIST = [
-  { id: 'prospect', name: '🔍 Prospect' }, { id: 'tor_review', name: '📋 TOR Review' },
-  { id: 'quotation', name: '💰 Quotation' }, { id: 'bidding', name: '⏳ Bidding' },
-  { id: 'negotiation', name: '📋 Negotiation' }, { id: 'win', name: '✅ Win' },
-  { id: 'ordered', name: '📦 Ordered' }, { id: 'delivered', name: '🚚 Delivered' },
-  { id: 'on_hold', name: '⏸️ On Hold' }, { id: 'lost', name: '❌ Lost' }
+  { id: 'prospect', name: '🔍 Prospect' },
+  { id: 'tor_review', name: '📋 TOR Review' },
+  { id: 'quotation', name: '💰 Quotation' },
+  { id: 'bidding', name: '⏳ Bidding' },
+  { id: 'negotiation', name: '📋 Negotiation' },
+  { id: 'win', name: '✅ Win' },
+  { id: 'ordered', name: '📦 Ordered' },
+  { id: 'delivered', name: '🚚 Delivered' },
+  { id: 'on_hold', name: '⏸️ On Hold' },
+  { id: 'lost', name: '❌ Lost' }
 ];
-
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
 function generateMonths() {
   var months = [];
@@ -1723,21 +1727,22 @@ var isPending = p._status === 'pending' || p._displayStatus === 'pending';
 var isRejected = p._status === 'rejected';
 var pendingBadge = isPending ? '<span class="pending-badge">⏳ รอตรวจสอบ</span>' : '';
 var rejectedBadge = isRejected ? '<span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>' : '';
-var statusText = '';
+
+// ================================================================
+// ✅ FIXED: แสดงสถานะตาม Pipeline Status (Position F)
+// ================================================================
+// หาสถานะจาก STATUS_LIST
+var statusObj = STATUS_LIST.find(function(s) { return s.id === p.status; });
+var statusText = statusObj ? statusObj.name : (p.status || '📋 ไม่ระบุ');
+
+// เพิ่ม pending/rejected badge ถ้ามี
 if (p._status === 'pending') {
-  statusText = '⏳ รอตรวจสอบ';
+  statusText += ' <span class="pending-badge">⏳ รอตรวจสอบ</span>';
 } else if (p._status === 'rejected') {
-  statusText = '❌ ปฏิเสธ';
-} else if (p._status === 'approved') {
-  var days = getLastUpdateDays(p);
-  if (days !== null && days <= 3) {
-    statusText = '✅ อัพเดทข้อมูลแล้ว';
-  } else {
-    statusText = '📋 ปกติ';
-  }
-} else {
-  statusText = '📋 ปกติ';
+  statusText += ' <span class="pending-badge" style="background:#ef4444; color:white">❌ ปฏิเสธ</span>';
 }
+// ================================================================
+
   var biddingHtml = formatBiddingDate(p.biddingDate);
 var lastUpdateDays = getLastUpdateDays(p);
 var staleBadge = '';
@@ -1765,7 +1770,6 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
   html += '</div>';
   document.getElementById('tabContent').innerHTML = html;
 }
-
 // ========== DATE HELPER FUNCTIONS ==========
 function _td() { return new Date().toISOString().split('T')[0]; }
 function dTo(dateStr) {
@@ -2895,7 +2899,7 @@ function getConfig() {
   return defaultConfig;
 }
 // ================================================================
-// COMPLIANCE DASHBOARD - UPDATED WITH DEMO STATUS (CLIENT VIEW)
+// COMPLIANCE DASHBOARD - UPDATED WITH DEMO STATUS & H1 SOURCE SELECTOR (CLIENT VIEW)
 // ================================================================
 
 function renderComplianceTab() {
@@ -2954,8 +2958,11 @@ function renderComplianceTabContent() {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // คำนวณสถานะต่างๆ
-  var h1Status = calculateH1Status(dealerId, requirements);
+  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline (Position I)
+  var h1UseSisRevenue = (dealer.h1UseSisRevenue === true);
+  
+  // ✅ คำนวณ H1 Status แบบมีตัวเลือก (ใช้ฟังก์ชันใหม่)
+  var h1Status = calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
   
@@ -2993,13 +3000,23 @@ function renderComplianceTabContent() {
   // 3 Cards: H1 Target, DSEC, Demo (Preview)
   html += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px">';
   
-  // H1 Target Card
+  // ✅ H1 Target Card WITH RADIO BUTTON (Position I)
   var h1Color = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
   html += '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
   html += '<div style="font-size: 32px; margin-bottom: 8px">🎯</div>';
   html += '<div style="font-size: 28px; font-weight: 800; color: ' + h1Color + '">' + h1Status.percent + '%</div>';
   html += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">H1 Target Achievement</div>';
   html += '<div style="font-size: 11px; margin-top: 8px"><span style="color: var(--text-secondary)">' + fmtMoneyShort(h1Status.actual) + '</span> / <span style="color: var(--accent)">' + fmtMoneyShort(h1Status.target) + '</span> ฿</div>';
+  html += '<div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px">' + h1Status.sourceText + '</div>';
+  // ✅ Radio buttons for selecting H1 source
+  html += '<div style="margin-top: 8px; display: flex; gap: 12px; justify-content: center">' +
+    '<label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor:pointer">' +
+    '<input type="radio" name="h1Source" value="pipeline" ' + (!h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', false)"> 📊 Pipeline' +
+    '</label>' +
+    '<label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor:pointer">' +
+    '<input type="radio" name="h1Source" value="sis" ' + (h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', true)"> 💰 ยอด SIS' +
+    '</label>' +
+    '</div>';
   html += '</div>';
   
   // DSEC Card
@@ -3043,7 +3060,7 @@ function renderComplianceTabContent() {
   html += '<div><span style="color: var(--text-secondary)">ความคืบหน้า:</span> <strong>' + h1Status.percent + '%</strong></div>';
   html += '</div></div>';
   
-  // ✅ Demo Status Detail (แบบเต็ม ตามที่ขอ)
+  // ✅ Demo Status Detail (แบบเต็ม)
   html += renderDemoStatusForClient(dealer, levelRequirements);
   
   // DSEC Detail Card
@@ -3070,6 +3087,89 @@ function renderComplianceTabContent() {
   }
   
   document.getElementById('tabContent').innerHTML = html;
+}
+
+// ================================================================
+// H1 STATUS WITH SIS REVENUE OPTION (Position H - ต้องมีในไฟล์)
+// ================================================================
+
+function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
+  var dealer = null;
+  var dealers = [];
+  try { 
+    var dealerData = localStorage.getItem('v7_dealers'); 
+    dealers = dealerData ? JSON.parse(dealerData) : []; 
+  } catch(e) { dealers = []; }
+  
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i] && dealers[i].id === dealerId) {
+      dealer = dealers[i];
+      break;
+    }
+  }
+  
+  var actualAmount = 0;
+  var sourceText = '';
+  
+  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
+    actualAmount = dealer.sisRevenue || 0;
+    sourceText = '(ยอด SIS)';
+  } else {
+    // คำนวณจาก Pipeline
+    var now = new Date();
+    var startDate = new Date(now.getFullYear(), 0, 1);
+    var endDate = new Date(now.getFullYear(), 5, 30);
+    var pipelines = [];
+    try { 
+      var pipeRaw = localStorage.getItem('v7_pipeline'); 
+      pipelines = pipeRaw ? JSON.parse(pipeRaw) : []; 
+    } catch(e) { pipelines = []; }
+    
+    for (var i = 0; i < pipelines.length; i++) {
+      var p = pipelines[i];
+      if (!p || p.dealerId !== dealerId) continue;
+      if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
+      var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
+      if (shipDate && shipDate >= startDate && shipDate <= endDate) {
+        actualAmount += (Number(p.forecastAmount) || 0);
+      }
+    }
+    sourceText = '(จาก Pipeline)';
+  }
+  
+  var target = requirements.h1Target || 0;
+  var percent = target > 0 ? Math.round(actualAmount / target * 100) : 100;
+  var isOk = actualAmount >= target;
+  
+  return { 
+    target: target, 
+    actual: actualAmount, 
+    percent: Math.min(percent, 100), 
+    isOk: isOk, 
+    gap: target - actualAmount,
+    sourceText: sourceText,
+    useSisRevenue: useSisRevenue
+  };
+}
+
+function changeH1Source(dealerId, useSisRevenue) {
+  // บันทึก preference
+  var dealers = [];
+  try { 
+    var dealerData = localStorage.getItem('v7_dealers'); 
+    dealers = dealerData ? JSON.parse(dealerData) : []; 
+  } catch(e) { dealers = []; }
+  
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i] && dealers[i].id === dealerId) {
+      dealers[i].h1UseSisRevenue = useSisRevenue;
+      break;
+    }
+  }
+  localStorage.setItem('v7_dealers', JSON.stringify(dealers));
+  
+  // รีเฟรชหน้า
+  renderComplianceTabContent();
 }
 
 // ================================================================
@@ -3343,6 +3443,69 @@ function renderDemoDetailCard(dealer, demoStatus, requirements) {
   else if (demoStatus.demoOption === 'option2') html += '<div class="hint" style="margin-top:14px;padding:10px;background:var(--bg2);border-radius:8px;border:1px dashed var(--border)">ℹ️ Option 1 (Drone + Payload) ไม่ได้อยู่ในแผนของพาร์ทเนอร์นี้</div>';
   html += '</div>';
   return html;
+}
+function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
+  var dealer = null;
+  var dealers = [];
+  try { 
+    var dealerData = localStorage.getItem('v7_dealers'); 
+    dealers = dealerData ? JSON.parse(dealerData) : []; 
+  } catch(e) { dealers = []; }
+  
+  for (var i = 0; i < dealers.length; i++) {
+    if (dealers[i] && dealers[i].id === dealerId) {
+      dealer = dealers[i];
+      break;
+    }
+  }
+  
+  var actualAmount = 0;
+  var sourceText = '';
+  
+  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
+    actualAmount = dealer.sisRevenue || 0;
+    sourceText = '(ยอด SIS)';
+  } else {
+    // คำนวณจาก Pipeline (วิธีเดิม)
+    var now = new Date();
+    var startDate = new Date(now.getFullYear(), 0, 1);
+    var endDate = new Date(now.getFullYear(), 5, 30);
+    var pipelines = [];
+    try { 
+      var pipeRaw = localStorage.getItem('v7_pipeline'); 
+      pipelines = pipeRaw ? JSON.parse(pipeRaw) : []; 
+    } catch(e) { pipelines = []; }
+    
+    for (var i = 0; i < pipelines.length; i++) {
+      var p = pipelines[i];
+      if (!p || p.dealerId !== dealerId) continue;
+      if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
+      var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
+      if (shipDate && shipDate >= startDate && shipDate <= endDate) {
+        actualAmount += (Number(p.forecastAmount) || 0);
+      }
+    }
+    sourceText = '(จาก Pipeline)';
+  }
+  
+  var target = requirements.h1Target || 0;
+  var percent = target > 0 ? Math.round(actualAmount / target * 100) : 100;
+  var isOk = actualAmount >= target;
+  
+  return { 
+    target: target, 
+    actual: actualAmount, 
+    percent: Math.min(percent, 100), 
+    isOk: isOk, 
+    gap: target - actualAmount,
+    sourceText: sourceText,
+    useSisRevenue: useSisRevenue
+  };
+}
+
+function changeH1Source(dealerId, useSisRevenue) {
+  ST.update('dealers', dealerId, { h1UseSisRevenue: useSisRevenue });
+  renderComplianceTabContent();
 }
 function calculateH1Status(dealerId, requirements) {
   var now = new Date();
