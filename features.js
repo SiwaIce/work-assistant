@@ -3587,6 +3587,12 @@ function copyVisitPlan() {
   toast('📋 Copy Visit Plan แล้ว!');
 }
 
+function fmtDateKey(date) {
+  var d = date.getDate();
+  var m = date.getMonth() + 1;
+  var y = date.getFullYear();
+  return (d < 10 ? '0' + d : d) + '/' + (m < 10 ? '0' + m : m) + '/' + y;
+}
 // ================================================================
 // SMART FILTER PAGE
 // ================================================================

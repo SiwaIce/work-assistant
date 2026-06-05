@@ -1,6 +1,19 @@
 // ================================================================
 // views-work.js - WORK MANAGEMENT (Tasks, Meetings, Unified View)
 // ================================================================
+// ================================================================
+// HELPER: PARSE THAI DATE (DD/MM/YYYY)
+// ================================================================
+function parseThaiDate(str) {
+  if (!str) return null;
+  var parts = str.split('/');
+  if (parts.length !== 3) return null;
+  var day = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10) - 1;
+  var year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  return new Date(year, month, day);
+}
 
 // ================================================================
 // UNIFIED TASKS PAGE (List + Kanban + Timeline)

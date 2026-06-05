@@ -1873,6 +1873,55 @@ function showTplDet(id) {
     '<button class="btn bo" onclick="closeMForce();showTemplateM(\'' + tp.id + '\')">✏️</button>' +
     '<button class="btn bd" onclick="ST.delete(\'templates\',\'' + tp.id + '\');closeMForce();render()">🗑️</button></div>');
 }
+
+function useTpl(tid) {
+  var tp = ST.getOne('templates', tid);
+  if (!tp) return;
+  openM('🚀 ใช้ Template', '' +
+    '<div class="fg"><label>ชื่อ *</label><input type="text" id="ut_n" value="' + sanitize(tp.name) + '"></div>' +
+    dpH('ut_d', _td(), 'วันเริ่ม') +
+    '<button class="btn bp btn-full" onclick="applyTpl(\'' + tid + '\')">🚀 สร้างงาน</button>');
+}
+
+function applyTpl(tid) {
+  var tp = ST.getOne('templates', tid);
+  if (!tp) return;
+  var nameEl = document.getElementById('ut_n');
+  var nm = nameEl ? nameEl.value.trim() : '';
+  var sd = dpG('ut_d') || _td();
+  if (!nm) return alert('ใส่ชื่อ');
+  
+  var steps = [];
+  var tpSteps = tp.steps || [];
+  for (var i = 0; i < tpSteps.length; i++) {
+    steps.push({
+      id: gid(),
+      title: tpSteps[i].title,
+      startDate: addD(sd, tpSteps[i].offsetDays || 0),
+      dueDate: addD(sd, (tpSteps[i].offsetDays || 0) + (tpSteps[i].durationDays || 0)),
+      notes: '',
+      done: false,
+      kanban: 'todo'
+    });
+  }
+  
+  var last = steps.length ? steps[steps.length - 1].dueDate : sd;
+  var t = ST.add('tasks', {
+    title: nm,
+    description: 'จาก Template: ' + tp.name,
+    startDate: sd,
+    dueDate: last,
+    priority: 'medium',
+    category: 'Template',
+    status: 'active',
+    steps: steps,
+    sequential: !!tp.sequential
+  });
+  closeMForce();
+  toast('🚀 สร้างแล้ว');
+  go('taskDetail', {taskId: t.id});
+}
+
 // ================================================================
 // KNOWLEDGE BASE MODAL (Enhanced)
 // ================================================================
@@ -2139,6 +2188,99 @@ function processPipelineImport(items) {
   }
   
   return {total: total, success: success, skipped: skipped};
+}
+// ================================================================
+// ADD PIPE ACTION MODAL (สำหรับ Pipeline)
+// ================================================================
+function showAddPipeActionM(pipeId) {
+  var pipe = ST.getOne('pipeline', pipeId);
+  if (!pipe) return;
+  var today = _td();
+
+  var h = '<div style="max-width:450px">';
+  h += '<div style="padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:12px">';
+  h += '<div style="font-weight:600">📊 ' + sanitize(pipe.projectName || pipe.name || '-') + '</div>';
+  h += '</div>';
+
+  // Quick actions
+  h += '<div class="fm-group"><label>⚡ Quick Action</label>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอเอกสารจากลูกค้า\')">📄 รอเอกสาร</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอลูกค้าตอบ Quote\')">💰 รอตอบ Quote</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'รอ TOR\')">📋 รอ TOR</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'นัด Demo\')">🎯 นัด Demo</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ส่ง Spec เพิ่มเติม\')">🚁 ส่ง Spec</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'ติดต่อ DJI\')">📞 ติดต่อ DJI</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'เตรียมเอกสาร Bidding\')">📊 เตรียม Bidding</button>';
+  h += '<button class="btn-sm" onclick="paQuickFill(\'Follow-up ลูกค้า\')">🔄 Follow-up</button>';
+  h += '</div></div>';
+
+  h += '<div class="fm-group"><label>📝 สิ่งที่ต้องทำ / ติดตาม</label>';
+  h += '<input type="text" id="paText" class="fm-input" placeholder="เช่น รอ TOR จากลูกค้า..."></div>';
+
+  h += '<div class="fm-group"><label>📅 กำหนดวัน</label>';
+  h += '<input type="text" id="paDueDate" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
+
+  h += '<div class="fm-group"><label>🔴 ความเร่งด่วน</label>';
+  h += '<select id="paPriority" class="fm-input">';
+  h += '<option value="2">ปกติ</option>';
+  h += '<option value="1">🔴 เร่งด่วน</option>';
+  h += '</select></div>';
+
+  h += '<div class="fm-group"><label>📝 หมายเหตุ (ถ้ามี)</label>';
+  h += '<textarea id="paNote" rows="2" class="fm-input" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>';
+
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="savePipeAction(\'' + pipeId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+
+  openM('➕ Action Item', h);
+}
+
+function paQuickFill(text) {
+  var el = document.getElementById('paText');
+  if (el) el.value = text;
+}
+
+function savePipeAction(pipeId) {
+  var text = (document.getElementById('paText').value || '').trim();
+  var dueDate = (document.getElementById('paDueDate').value || '').trim();
+  var priority = parseInt(document.getElementById('paPriority').value) || 2;
+  var note = (document.getElementById('paNote').value || '').trim();
+
+  if (!text) { toast('กรุณาใส่สิ่งที่ต้องทำ'); return; }
+
+  var actions = getPipeActions();
+  actions.push({
+    id: 'pa_' + Date.now(),
+    pipeId: pipeId,
+    text: text,
+    dueDate: dueDate,
+    priority: priority,
+    note: note,
+    status: 'pending',
+    createdDate: _td(),
+    doneDate: '',
+    response: ''
+  });
+  savePipeActions(actions);
+
+  autoUpdatePipeNextAction(pipeId);
+
+  if (ST && ST.add) {
+    ST.add('pipeLog', {
+      pipeId: pipeId,
+      type: 'action',
+      content: '➕ Action Item: ' + text + (dueDate ? ' (กำหนด ' + dueDate + ')' : ''),
+      date: _nw()
+    });
+  }
+
+  toast('✅ เพิ่ม Action Item แล้ว');
+  closeMForce();
+  render();
+}
 function showQNote() {
   var dealers = ST.getAll('dealers');
   var dlrSelect = dealers.length ? '<div class="fg"><label>Dealer (ไม่บังคับ)</label><select id="qn_d">' + dealerOptions('') + '</select></div>' : '';
@@ -2158,4 +2300,23 @@ function saveQNote() {
   closeMForce();
   toast('📝 บันทึกแล้ว');
   render();
+}
+function toggleViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  viewMode = viewMode === 'mobile' ? 'desktop' : 'mobile';
+  localStorage.setItem('v7_viewMode', viewMode);
+  applyViewMode();
+  render();
+}
+
+function applyViewMode() {
+  var viewMode = localStorage.getItem('v7_viewMode') || 'desktop';
+  if (viewMode === 'mobile') {
+    document.body.classList.add('mobile-mode');
+  } else {
+    document.body.classList.remove('mobile-mode');
+  }
+  var icon = document.getElementById('modeIcon');
+  if (icon) icon.textContent = viewMode === 'mobile' ? '🖥️' : '📱';
+  updateMbNav();
 }

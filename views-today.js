@@ -477,6 +477,800 @@ function rKPI(el) {
 
 function copyDealerHealth() { copyTable('healthTable', '📋 Copy Health Score'); }
 
+// ================================================================
+// SMART FILTER VIEW
+// ================================================================
+function rSmartFilter(el) {
+  const fid = S.filterId;
+  const f = getSmartFilters().find(x => x.id === fid);
+  document.getElementById('pgT').textContent = f ? f.icon + ' ' + f.name : '🔍';
+  
+  let html = '';
+
+  switch(fid) {
+    case 'overdue_tasks': {
+      const items = getUrgentItems().filter(i => dTo(i.dueDate) < 0);
+      html = items.map(i => `<div class="li dlo" onclick="go('taskDetail',{taskId:'${i.refId}'})"><div class="lm"><div class="lt">${sanitize(i.title)}</div><div class="ls">${i.parent?sanitize(i.parent)+' • ':''}${dlB(i.dueDate,false)}</div></div></div>`).join('') || emp('ไม่มี');
+      break; }
+    case 'bidding_soon': {
+      const w = getWeekRange();
+      const items = ST.filter('pipeline', p => p.biddingDate && isInRange(p.biddingDate, w.start, w.end) && !['lost','delivered'].includes(p.status));
+      html = items.map(p => pipeListItem(p)).join('') || emp('ไม่มี');
+      break; }
+    case 'stale_pipeline': {
+      html = getStalePipelines().map(p => pipeListItem(p)).join('') || emp('ไม่มี');
+      break; }
+    case 'big_projects': {
+      const items = ST.filter('pipeline', p => Number(p.forecastAmount) >= 1500000 && !['lost','delivered','on_hold'].includes(p.status));
+      html = items.map(p => pipeListItem(p)).join('') || emp('ไม่มี');
+      break; }
+    case 'waiting_overdue': {
+      go('reminders'); return; }
+    case 'no_contact_14d': {
+      const items = getDealerContactStatus().filter(d => d.lastContactDays === null || d.lastContactDays > 14);
+      html = items.map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt"><span class="health-dot ${d.contactStatus}"></span> ${sanitize(d.name)} ${levelTag(d.level)}</div><div class="ls">${d.lastContactDate ? contactLabel(d.lastContactDays) : '⚪ ไม่เคยติดต่อ'}</div></div>
+      <span class="dealer-act" onclick="event.stopPropagation();showFollowupM('${d.id}')">📞</span></div>`).join('') || emp('ไม่มี');
+      break; }
+    case 'fu_remaining': {
+      go('kpi'); return; }
+    case 'low_health': {
+      const items = ST.getAll('dealers').filter(d => calcHealthScore(d.id).score < 40).map(d => ({...d, health: calcHealthScore(d.id)}));
+      html = items.map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt">${sanitize(d.name)} ${levelTag(d.level)} <span style="color:#ef4444;font-weight:700">${d.health.score}/100</span></div><div class="ls">${d.health.details.filter(x => x.status === 'bad').map(x => x.label).join(' • ')}</div></div></div>`).join('') || emp('ไม่มี');
+      break; }
+  }
+  el.innerHTML = `<div class="card"><h2>${f ? f.icon + ' ' + f.name : ''}</h2>${html}</div>`;
+}
+
+function emp(msg) { return `<div class="empty"><p>✅ ${msg}</p></div>`; }
+
+function pipeListItem(p) {
+  const d = ST.getOne('dealers', p.dealerId);
+  return `<div class="li ${dlC(p.biddingDate, ['lost','delivered'].includes(p.status))}" onclick="go('pipeDetail',{pipeId:'${p.id}'})"><div class="lm"><div class="lt">${sanitize(p.projectName)} ${pipeTag(p.status)}</div><div class="ls">${d?.name||''} • ${p.model||''} • 💰 ${fmtMoney(p.forecastAmount)} ${p.biddingDate?'• Bid: '+fDShort(p.biddingDate)+' '+dlB(p.biddingDate,['lost','delivered'].includes(p.status)):''}</div></div></div>`;
+}
+
+// ================================================================
+// CALENDAR
+// ================================================================
+function rCalendar(el) {
+  document.getElementById('pgT').textContent = '📆 ปฏิทิน';
+  const dim = new Date(calY, calM+1, 0).getDate();
+  const fd = new Date(calY, calM, 1).getDay();
+  const tdy = _td();
+  const evs = getCalEvents(calY, calM);
+  
+  let h = `<div class="cal-nav"><button class="btn bo" onclick="calM--;if(calM<0){calM=11;calY--}render()">◀</button><h3>${MONTHS[calM]} ${calY}</h3><button class="btn bo" onclick="calM++;if(calM>11){calM=0;calY++}render()">▶</button></div><div class="cal-grid">`;
+  DAYS_S.forEach(d => h += `<div class="cal-hd">${d}</div>`);
+  const pv = new Date(calY, calM, 0).getDate();
+  for (let i = fd-1; i >= 0; i--) h += `<div class="cal-cell other"><div class="cal-num">${pv-i}</div></div>`;
+  for (let d = 1; d <= dim; d++) {
+    const iso = `${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const de = evs.filter(e => e.date === iso);
+    h += `<div class="cal-cell${iso===tdy?' today':''}" onclick="showCalDay('${iso}')"><div class="cal-num">${d}</div>${de.slice(0,3).map(e => `<div class="cal-ev ev-${e.type}">${sanitize(e.label)}</div>`).join('')}${de.length>3?`<div style="font-size:.48rem;color:#64748b">+${de.length-3}</div>`:''}</div>`;
+  }
+  const tot = fd + dim, rem = 7 - tot % 7;
+  if (rem < 7) for (let i = 1; i <= rem; i++) h += `<div class="cal-cell other"><div class="cal-num">${i}</div></div>`;
+  h += `</div>`;
+  el.innerHTML = h;
+}
+
+function getCalEvents(y, m) {
+  let e = [];
+  const pf = `${y}-${String(m+1).padStart(2,'0')}`;
+  ST.filter('pipeline', p => !['lost','delivered'].includes(p.status)).forEach(p => {
+    if (p.biddingDate?.startsWith(pf)) e.push({date:p.biddingDate, type:'bidding', label:'⏳ '+p.projectName?.substr(0,12)});
+    if (p.shipmentDate?.startsWith(pf)) e.push({date:p.shipmentDate, type:'deadline', label:'🚚 '+p.projectName?.substr(0,12)});
+  });
+  ST.filter('tasks', t => t.status === 'active' && t.dueDate?.startsWith(pf)).forEach(t => {
+    e.push({date:t.dueDate, type:'deadline', label:'📋 '+t.title?.substr(0,12)});
+  });
+  ST.filter('meetings', mt => mt.date?.startsWith(pf)).forEach(mt => {
+    e.push({date:mt.date, type:'meeting', label:'📅 '+mt.title?.substr(0,12)});
+  });
+  ST.filter('visits', v => v.date?.startsWith(pf)).forEach(v => {
+    const d = ST.getOne('dealers', v.dealerId);
+    e.push({date:v.date, type:'visit', label:(v.mode==='offline'?'🤝':'📞')+(d?.name||'').substr(0,10)});
+  });
+  return e;
+}
+
+function showCalDay(iso) {
+  let evs = [];
+  ST.filter('pipeline', p => p.biddingDate === iso).forEach(p => evs.push({t:`⏳ ${p.projectName}`, a:`go('pipeDetail',{pipeId:'${p.id}'})`}));
+  ST.filter('meetings', m => m.date === iso).forEach(m => evs.push({t:`📅 ${m.title} ${m.time||''}`, a:`go('meetingDetail',{meetingId:'${m.id}'})`}));
+  ST.filter('visits', v => v.date === iso).forEach(v => { const d = ST.getOne('dealers', v.dealerId); evs.push({t:`🤝 ${d?.name||'?'} ${v.time||''}`, a:`go('visitDetail',{visitId:'${v.id}'})`}); });
+  ST.filter('tasks', t => t.status === 'active' && t.dueDate === iso).forEach(t => evs.push({t:`📋 ${t.title}`, a:`go('taskDetail',{taskId:'${t.id}'})`}));
+  if (!evs.length) return;
+  openM(`📆 ${fD(iso)}`, evs.map(e => `<div class="li" onclick="closeM();${e.a}"><div class="lm"><div class="lt">${sanitize(e.t)}</div></div></div>`).join(''));
+}
+
+// ================================================================
+// HEATMAP
+// ================================================================
+function rHeatmap(el) {
+  document.getElementById('pgT').textContent = '🗓️ Heatmap';
+  const weeks = 12, endDate = _td(), startDate = addD(endDate, -(weeks * 7));
+  const counts = {};
+  [...ST.getAll('pipeLog'), ...ST.getAll('taskLogs')].forEach(l => { const d = l.date?.split('T')[0]; if (d) counts[d] = (counts[d]||0) + 1; });
+  ST.getAll('visits').forEach(v => { if (v.date) counts[v.date] = (counts[v.date]||0) + 1; });
+  ST.getAll('followups').forEach(f => { if (f.date) counts[f.date] = (counts[f.date]||0) + 1; });
+  ST.getAll('rtChecks').forEach(r => { if (r.done) counts[r.date] = (counts[r.date]||0) + r.done.length; });
+  
+  const maxC = Math.max(...Object.values(counts), 1);
+  let cells = [], cur = startDate;
+  while (cur <= endDate) { const c = counts[cur]||0; cells.push({date:cur, count:c, level:c===0?0:c<=maxC*.25?1:c<=maxC*.5?2:c<=maxC*.75?3:4}); cur = addD(cur, 1); }
+  const sd = new Date(startDate).getDay();
+  for (let i = 0; i < sd; i++) cells.unshift(null);
+  
+  const totalAct = Object.values(counts).reduce((a,b) => a+b, 0);
+  const activeDays = Object.keys(counts).filter(d => d >= startDate).length;
+  let streak = 0, d2 = _td();
+  while (counts[d2]) { streak++; d2 = addD(d2, -1); }
+
+  el.innerHTML = `<div class="sr">
+    <div class="sc"><div class="sn c2">${totalAct}</div><div class="sl">Activities</div></div>
+    <div class="sc"><div class="sn c1">${activeDays}</div><div class="sl">Active Days</div></div>
+    <div class="sc"><div class="sn c3">${streak}🔥</div><div class="sl">Streak</div></div>
+    <div class="sc"><div class="sn c5">${activeDays?(totalAct/activeDays).toFixed(1):0}</div><div class="sl">เฉลี่ย/วัน</div></div>
+  </div>
+  <div class="card"><h2>🗓️ Heatmap — ${weeks} สัปดาห์</h2>
+  <div class="hm-grid">${DAYS_S.map(d => `<div style="font-size:.54rem;color:#475569;text-align:center;padding:2px">${d}</div>`).join('')}
+  ${cells.map(c => c ? `<div class="hm-cell hm-${c.level}" title="${fD(c.date)}: ${c.count}">${c.count||''}</div>` : '<div class="hm-cell hm-0"></div>').join('')}</div>
+  <div style="display:flex;gap:3px;align-items:center;margin-top:5px;font-size:.6rem;color:#64748b">น้อย ${[0,1,2,3,4].map(l => `<div class="hm-cell hm-${l}" style="width:10px;height:10px;display:inline-block"></div>`).join('')} เยอะ</div></div>`;
+}
+
+// ================================================================
+// WORKLOAD
+// ================================================================
+function rWorkload(el) {
+  document.getElementById('pgT').textContent = '📊 Workload';
+  const wks = 6, now = new Date(), dow = now.getDay();
+  const weekStart = addD(_td(), -(dow === 0 ? 6 : dow - 1));
+  
+  let bars = [];
+  for (let w = 0; w < wks; w++) {
+    const ws = addD(weekStart, w * 7), we = addD(ws, 6);
+    let count = 0;
+    count += ST.filter('pipeline', p => p.biddingDate && isInRange(p.biddingDate, ws, we) && !['lost','delivered'].includes(p.status)).length;
+    count += ST.filter('tasks', t => t.status === 'active' && t.dueDate && isInRange(t.dueDate, ws, we)).length;
+    count += ST.filter('meetings', m => isInRange(m.date, ws, we)).length;
+    count += ST.filter('visits', v => isInRange(v.date, ws, we)).length;
+    bars.push({label: `${fDShort(ws)}—${fDShort(we)}`, count, isThis: w === 0});
+  }
+  const maxC = Math.max(...bars.map(b => b.count), 1);
+  
+  el.innerHTML = `<div class="card"><h2>📊 Workload — ${wks} สัปดาห์</h2>
+  ${bars.map(b => { const pct = Math.round(b.count/maxC*100); const cls = b.count > maxC*.8 ? 'wl-overload' : b.count > maxC*.5 ? 'wl-busy' : 'wl-normal';
+  return `<div class="wl-bar"><div class="wl-label">${b.label} ${b.isThis?'← นี้':''}</div><div style="flex:1;background:#334155;border-radius:5px;overflow:hidden"><div class="wl-fill ${cls}" style="width:${Math.max(pct,5)}%">${b.count}</div></div></div>`; }).join('')}
+  <div style="display:flex;gap:8px;margin-top:6px;font-size:.66rem;color:#64748b"><span>🟦 ปกติ</span><span>🟨 เยอะ</span><span>🟥 ล้น</span></div></div>`;
+}
+
+// ================================================================
+// REMINDERS
+// ================================================================
+function rRemind(el) {
+  document.getElementById('pgT').textContent = '🔔 แจ้งเตือน';
+  const urgTasks = getUrgentItems();
+  const bidUrg = ST.filter('pipeline', p => p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 3 && !['lost','delivered'].includes(p.status));
+  const waitUrg = ST.filter('waiting', w => !w.resolved && w.dueDate && dTo(w.dueDate) <= 0);
+  const waitAll = ST.filter('waiting', w => !w.resolved).sort((a,b) => (a.dueDate||'z').localeCompare(b.dueDate||'z'));
+  const mtUrg = ST.filter('meetings', m => dTo(m.date) >= 0 && dTo(m.date) <= 3).sort((a,b) => a.date.localeCompare(b.date));
+  const stale = getStalePipelines();
+  const noContact = getDealerContactStatus().filter(d => (d.lastContactDays === null || d.lastContactDays > 14) && d.level && d.level !== 'Other');
+
+  el.innerHTML = `
+  ${bidUrg.length ? `<div class="card"><h2>⏳ Bidding ใกล้ถึง</h2>${bidUrg.map(p => pipeListItem(p)).join('')}</div>` : ''}
+  ${urgTasks.length ? `<div class="card"><h2>📋 งานใกล้/เลย Deadline</h2>${urgTasks.map(i => `<div class="li ${dlC(i.dueDate,false)}" onclick="go('taskDetail',{taskId:'${i.refId}'})"><div class="lm"><div class="lt">${sanitize(i.title)}</div><div class="ls">${dlB(i.dueDate,false)}</div></div></div>`).join('')}</div>` : ''}
+  
+  <div class="card"><h2>📭 รอคนอื่น (${waitAll.length}) <span class="ml"><button class="btn bsm bp" onclick="showWaitM()">➕</button></span></h2>
+  ${waitAll.length ? waitAll.map(w => {
+    const isOver = w.dueDate && dTo(w.dueDate) < 0;
+    const isWarn = w.dueDate && dTo(w.dueDate) <= 3 && dTo(w.dueDate) >= 0;
+    const days = w.sentDate ? daysBetween(w.sentDate, _td()) : 0;
+    return `<div class="wait-card ${isOver?'overdue':''} ${isWarn?'warning':''}">
+      <div style="flex:1"><div class="wait-title">${sanitize(w.title)}</div>
+      <div class="wait-days">${w.person?'👤 '+sanitize(w.person):''} ${w.sentDate?'• ส่ง: '+fDShort(w.sentDate):''} ${days?'• รอ '+days+'d':''} ${w.dueDate?'• กำหนด: '+fDShort(w.dueDate)+' '+dlB(w.dueDate,false):''}</div></div>
+      <button class="btn bsm bs" onclick="ST.resolveWaiting('${w.id}');toast('✅');render()">✅</button>
+      <button class="btn bsm bd" onclick="ST.delete('waiting','${w.id}');render()">✕</button></div>`;
+  }).join('') : emp('ไม่มี')}</div>
+  
+  ${noContact.length ? `<div class="card"><h2>📞 ไม่ติดต่อ > 14 วัน (${noContact.length})</h2>
+  ${noContact.slice(0,10).map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt"><span class="health-dot ${d.contactStatus}"></span> ${sanitize(d.name)} ${levelTag(d.level)}</div><div class="ls">${contactLabel(d.lastContactDays)}</div></div>
+  <span class="dealer-act" onclick="event.stopPropagation();showFollowupM('${d.id}')">📞</span></div>`).join('')}</div>` : ''}
+  
+  ${stale.length ? `<div class="card"><h2>🔄 Pipeline ไม่อัพเดต > 14 วัน (${stale.length})</h2>${stale.map(p => pipeListItem(p)).join('')}</div>` : ''}
+  
+  ${mtUrg.length ? `<div class="card"><h2>📅 ประชุมใน 3 วัน</h2>${mtUrg.map(m => `<div class="li" onclick="go('meetingDetail',{meetingId:'${m.id}'})"><div class="lm"><div class="lt">${sanitize(m.title)}</div><div class="ls">${fD(m.date)} ${m.time||''} ${dlB(m.date,false)}</div></div></div>`).join('')}</div>` : ''}
+  
+  <div class="card"><h2>🔔 Browser Notification</h2>
+  <button class="btn bs" onclick="if('Notification' in window)Notification.requestPermission().then(p=>toast(p==='granted'?'✅ เปิดแล้ว':'❌'));else toast('ไม่รองรับ',true)">🔔 เปิดการแจ้งเตือน</button>
+  <div style="margin-top:4px;font-size:.7rem;color:#64748b">${'Notification' in window ? 'สถานะ: '+Notification.permission : 'ไม่รองรับ'}</div></div>`;
+}
+
+// ================================================================
+// INSIGHTS
+// ================================================================
+function rInsights(el) {
+  document.getElementById('pgT').textContent = '🤖 Insights';
+  const insights = generateInsights();
+  const sf = getSmartFilters();
+  
+  el.innerHTML = `
+  <div class="card"><h2>🔍 Smart Filters</h2>
+  <div class="sf-grid">${sf.map(f => `<div class="sf-card" onclick="go('smartFilter',{filterId:'${f.id}'})">
+    <div class="sf-icon">${f.icon}</div><div class="sf-info"><div class="sf-name">${f.name}</div></div>
+    <div class="sf-count" style="color:${f.color}">${f.count}</div></div>`).join('')}</div></div>
+
+  <div class="card"><h2>🤖 Smart Insights</h2>
+  ${insights.length ? insights.map(i => `<div class="insight-card">
+    <div class="insight-icon">${i.icon}</div>
+    <div class="insight-body">
+      <div class="insight-title">${sanitize(i.title)}</div>
+      <div class="insight-desc">${sanitize(i.desc)}</div>
+      ${i.action ? `<div class="insight-action"><button class="btn bsm bo" onclick="${i.action}">ดู →</button></div>` : ''}
+    </div></div>`).join('') : '<div class="empty"><p>ยังไม่มีข้อมูลพอวิเคราะห์</p></div>'}
+  </div>
+
+  <!-- Win/Loss Summary -->
+  <div class="card"><h2>📊 Win/Loss Analysis</h2>
+  ${renderWinLoss()}</div>`;
+}
+
+function renderWinLoss() {
+  const pipes = ST.getAll('pipeline');
+  const won = pipes.filter(p => ['win','ordered','delivered'].includes(p.status));
+  const lost = pipes.filter(p => p.status === 'lost');
+  const total = won.length + lost.length;
+  
+  if (total < 1) return '<div class="empty"><p>ยังไม่มีข้อมูล Win/Loss</p></div>';
+  
+  const winRate = total ? Math.round(won.length / total * 100) : 0;
+  const wonAmt = won.reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
+  const lostAmt = lost.reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
+  
+  // Loss reasons
+  const reasons = {};
+  lost.forEach(p => {
+    const r = p.lossReason || 'ไม่ระบุ';
+    reasons[r] = (reasons[r]||0) + 1;
+  });
+  
+  return `
+  <div class="sr" style="margin-bottom:8px">
+    <div class="sc"><div class="sn c2">${won.length}</div><div class="sl">✅ Win</div></div>
+    <div class="sc"><div class="sn c4">${lost.length}</div><div class="sl">❌ Lost</div></div>
+    <div class="sc"><div class="sn ${winRate>=60?'c2':'c4'}">${winRate}%</div><div class="sl">Win Rate</div></div>
+    <div class="sc"><div class="sn c2">${fmtMoneyShort(wonAmt)}</div><div class="sl">Won Value</div></div>
+  </div>
+  ${Object.keys(reasons).length ? `<div style="font-size:.78rem;color:#94a3b8;margin-bottom:4px">สาเหตุที่แพ้:</div>
+  ${Object.entries(reasons).sort((a,b) => b[1]-a[1]).map(([r,c]) => `<div class="wl-reason"><span style="flex:1">${sanitize(r)}</span><span style="font-weight:700;color:#ef4444">${c} ครั้ง</span></div>`).join('')}` : ''}`;
+}
+
+// ================================================================
+// SUMMARY (Weekly Auto-Report)
+// ================================================================
+function rSummary(el) {
+  document.getElementById('pgT').textContent = '📊 สรุปสัปดาห์';
+  const w = getWeekRange();
+  el.innerHTML = `<div class="card"><h2>📊 สรุป ${fD(w.start)} — ${fD(w.end)}</h2>
+  <div id="sumC">${genSummary(w.start, w.end)}</div>
+  <div class="bg" style="margin-top:8px">
+    <button class="btn bp" onclick="copySummary()">📋 Copy</button>
+    <button class="btn bo" onclick="showDraftSummary()">📧 Draft Email</button>
+    <button class="btn bo" onclick="customSummary()">📅 เลือกช่วง</button>
+  </div></div>`;
+}
+
+function genSummary(from, to) {
+  const cfg = getConfig();
+  const kpi = getKPIData({start: from, end: to});
+  const visits = ST.filter('visits', v => isInRange(v.date, from, to)).sort((a,b) => a.date.localeCompare(b.date));
+  const fus = ST.filter('followups', f => isInRange(f.date, from, to));
+  const mts = ST.filter('meetings', m => isInRange(m.date, from, to));
+  const ps = getPipeSummary();
+  const logs = [...ST.getAll('pipeLog'), ...ST.getAll('taskLogs')].filter(l => l.date && isInRange(l.date.split('T')[0], from, to));
+  
+  let txt = `📊 Weekly Report ${fD(from)} — ${fD(to)}\nSale: ${cfg.saleName}\n${'─'.repeat(35)}\n\n`;
+  txt += `KPI:\n`;
+  txt += `  📞 Follow-up: ${kpi.followup.current}/${kpi.followup.target} ${kpi.followup.current >= kpi.followup.target ? '✅' : '❌'}\n`;
+  txt += `  🤝 Visit: ${kpi.visit.current}/${kpi.visit.target} ${kpi.visit.current >= kpi.visit.target ? '✅' : '❌'}\n`;
+  txt += `  📊 Pipeline: ${kpi.pipeUpdated ? '✅ Updated' : '❌'}\n`;
+  txt += `  📦 Forecast: ${kpi.fcUpdated ? '✅ Updated' : '❌'}\n\n`;
+  
+  txt += `Pipeline Summary:\n`;
+  txt += `  Total: ${fmtMoney(ps.totalPipeline)} ฿\n`;
+  txt += `  Won: ${fmtMoney(ps.totalWon)} ฿\n\n`;
+  
+  if (visits.length) {
+    txt += `Visit (${visits.length}):\n`;
+    visits.forEach(v => {
+      const d = ST.getOne('dealers', v.dealerId);
+      txt += `  ${fD(v.date)} ${v.mode==='offline'?'Onsite':'Online'} — ${d?.name||''}\n`;
+    });
+    txt += '\n';
+  }
+  
+  if (fus.length) {
+    txt += `Follow-up (${fus.length}):\n`;
+    fus.forEach(f => {
+      const d = ST.getOne('dealers', f.dealerId);
+      txt += `  ${fD(f.date)} ${f.method||''} — ${d?.name||''}: ${f.summary?.substr(0,50)||''}\n`;
+    });
+    txt += '\n';
+  }
+  
+  return `<div class="sum-copy" id="sumTxt">${txt}</div>`;
+}
+
+function copySummary() {
+  const t = document.getElementById('sumTxt')?.textContent;
+  if (t) copyText(t, '📋 Copy สรุปแล้ว!');
+}
+
+function showDraftSummary() {
+  const cfg = getConfig();
+  const body = document.getElementById('sumTxt')?.textContent || '';
+  showDraft(
+    'Weekly Report — ' + fD(_td()),
+    `To: ${cfg.emailRecipients.visitPlan.join('; ')}`,
+    body,
+    cfg.emailRecipients.visitPlan
+  );
+}
+
+function customSummary() {
+  openM('📅 เลือกช่วง', `
+    ${dpH('csf', addD(_td(), -7), 'จาก')}
+    ${dpH('cst', _td(), 'ถึง')}
+    <button class="btn bp btn-full" onclick="document.getElementById('sumC').innerHTML=genSummary(dpG('csf'),dpG('cst'));closeM()">📊 สรุป</button>
+  `);
+}
+
+// ================================================================
+// FOLLOW-UP LIST
+// ================================================================
+function rFollowup(el) {
+  document.getElementById('pgT').textContent = '📞 Follow-up';
+  const kpi = getKPIData();
+  const fus = ST.sort('followups', (a,b) => (b.date||'').localeCompare(a.date||''));
+  
+  el.innerHTML = `
+  <div class="card" style="padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:.82rem">📞 สัปดาห์นี้: <b style="color:${kpi.followup.current>=kpi.followup.target?'#22c55e':'#ef4444'}">${kpi.followup.current}/${kpi.followup.target}</b> ราย</div>
+    <button class="btn bp" onclick="showFollowupM()">➕ Follow-up</button>
+  </div></div>
+  ${fus.length ? fus.slice(0, 50).map(f => {
+    const d = ST.getOne('dealers', f.dealerId);
+    return `<div class="li"><div class="lm"><div class="lt">${d?.name||'?'} <span class="tag ${f.method==='line'?'tag-active':f.method==='call'?'tag-completed':f.method==='email'?'tag-a':'tag-count'}">${f.method||'?'}</span> ${levelTag(d?.level)}</div>
+    <div class="ls">${fD(f.date)} • ${sanitize(f.summary?.substr(0,80)||'')}</div></div>
+    <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('followups','${f.id}');render()">✕</button></div>`;
+  }).join('') : '<div class="empty"><div class="icon">📞</div><p>ยังไม่มี</p></div>'}`;
+}
+
+// ================================================================
+// FEEDBACK
+// ================================================================
+function rFeedback(el) {
+  document.getElementById('pgT').textContent = '💡 Feedback รวม';
+  const all = ST.sort('feedback', (a,b) => (b.date||'').localeCompare(a.date||''));
+  
+  el.innerHTML = `<div class="card"><h2>💡 Feedback ทุก Dealer (${all.length}) <span class="ml">
+    <button class="btn bsm bo" onclick="copyAllFeedback()">📋 Copy</button>
+    <button class="btn bsm bo" onclick="dlFeedbackCSV()">📤 CSV</button>
+  </span></h2>
+  ${all.length ? all.map(f => {
+    const d = ST.getOne('dealers', f.dealerId);
+    return `<div class="visit-sub"><div style="display:flex;justify-content:space-between"><b>${d?.name||'?'}</b><span style="font-size:.62rem;color:#64748b">${fD(f.date)} • ${f.source||''}</span></div>
+    <div style="font-size:.74rem;margin-top:2px">${sanitize(f.text)}</div></div>`;
+  }).join('') : emp('ยังไม่มี')}
+  </div>`;
+}
+
+function copyAllFeedback() {
+  const all = ST.sort('feedback', (a,b) => (b.date||'').localeCompare(a.date||''));
+  let tsv = 'วันที่\tDealer\tFeedback\tSource\n';
+  all.forEach(f => { const d = ST.getOne('dealers', f.dealerId); tsv += `${fD(f.date)}\t${d?.name||''}\t${f.text||''}\t${f.source||''}\n`; });
+  copyText(tsv, '📋 Copy Feedback แล้ว!');
+}
+
+function dlFeedbackCSV() {
+  const all = ST.sort('feedback', (a,b) => (b.date||'').localeCompare(a.date||''));
+  let csv = '\uFEFF"วันที่","Dealer","Feedback","Source"\n';
+  all.forEach(f => { const d = ST.getOne('dealers', f.dealerId); csv += `"${fD(f.date)}","${d?.name||''}","${esc(f.text)}","${f.source||''}"\n`; });
+  dlBlob(csv, `feedback-${_td()}.csv`);
+}
+
+// ================================================================
+// FORECAST (Enhanced v2)
+// ================================================================
+var fcStatusFilter = 'active';
+var fcView = 'model';
+var fcDealerFilter = 'all';
+var fcDealerExpanded = {};
+
+function rForecast(el) {
+  document.getElementById('pgT').textContent = '📦 Forecast';
+  var allPipes = ST.getAll('pipeline');
+  var dealers = ST.getAll('dealers');
+  
+  // Status filter
+  var pipes;
+  if (fcStatusFilter === 'all') {
+    pipes = allPipes;
+  } else if (fcStatusFilter === 'won') {
+    pipes = allPipes.filter(function(p) { return ['win','ordered','delivered'].indexOf(p.status) !== -1; });
+  } else {
+    pipes = allPipes.filter(function(p) { return ['lost','delivered','on_hold'].indexOf(p.status) === -1; });
+  }
+  
+  // Dealer filter
+  if (fcDealerFilter !== 'all') {
+    pipes = pipes.filter(function(p) { return p.dealerId === fcDealerFilter; });
+  }
+  
+  var totalFc = 0;
+  var totalQty = 0;
+  pipes.forEach(function(p) {
+    totalFc += (Number(p.forecastAmount) || 0);
+    totalQty += getPipeTotalQty(p);
+  });
+
+  // Group by model (support multi-model items)
+  var byModel = {};
+  pipes.forEach(function(p) {
+    var items = getPipeItems(p);
+    if (!items.length) return;
+    items.forEach(function(it) {
+      var model = it.model || 'ไม่ระบุ';
+      if (!byModel[model]) byModel[model] = {model: model, qty: 0, amount: 0, projects: [], dealers: {}};
+      byModel[model].qty += (Number(it.qty) || 1);
+      byModel[model].amount += (Number(it.total) || (Number(it.qty) || 1) * (Number(it.price) || 0));
+      // Add project if not already
+      var found = false;
+      for (var pi = 0; pi < byModel[model].projects.length; pi++) {
+        if (byModel[model].projects[pi].id === p.id) { found = true; break; }
+      }
+      if (!found) byModel[model].projects.push(p);
+      if (p.dealerId) {
+        var dd = ST.getOne('dealers', p.dealerId);
+        if (dd) byModel[model].dealers[dd.name] = true;
+      }
+    });
+  });
+
+  var modelList = Object.values(byModel).sort(function(a, b) { return b.amount - a.amount; });
+
+  // Get dealers that have pipelines
+  var dealerIds = {};
+  allPipes.forEach(function(p) { if (p.dealerId) dealerIds[p.dealerId] = true; });
+  var pipelineDealers = dealers.filter(function(d) { return dealerIds[d.id]; });
+
+  var h = '';
+
+  // Stats
+  h += '<div class="sr">';
+  h += '<div class="sc"><div class="sn c1">' + pipes.length + '</div><div class="sl">Projects</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalFc) + '</div><div class="sl">Forecast</div></div>';
+  h += '<div class="sc"><div class="sn c5">' + totalQty + '</div><div class="sl">จำนวน (ชิ้น)</div></div>';
+  h += '<div class="sc"><div class="sn c1">' + modelList.length + '</div><div class="sl">Models</div></div>';
+  h += '</div>';
+
+  // Toolbar
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">';
+  
+  // Status filter
+  h += '<div style="display:flex;gap:4px">';
+  h += '<button class="btn bsm ' + (fcStatusFilter === 'active' ? 'bp' : 'bo') + '" onclick="fcStatusFilter=\'active\';render()">⚡ Active</button>';
+  h += '<button class="btn bsm ' + (fcStatusFilter === 'won' ? 'bp' : 'bo') + '" onclick="fcStatusFilter=\'won\';render()">🏆 Won</button>';
+  h += '<button class="btn bsm ' + (fcStatusFilter === 'all' ? 'bp' : 'bo') + '" onclick="fcStatusFilter=\'all\';render()">📊 ทั้งหมด</button>';
+  h += '</div>';
+  
+  // Dealer filter
+  h += '<select id="fcDealerSel" onchange="fcDealerFilter=this.value;render()" style="min-width:140px;padding:5px 10px;font-size:12px">';
+  h += '<option value="all"' + (fcDealerFilter === 'all' ? ' selected' : '') + '>🏪 ทุก Dealer</option>';
+  pipelineDealers.sort(function(a, b) { return a.name.localeCompare(b.name); });
+  pipelineDealers.forEach(function(d) {
+    var cnt = allPipes.filter(function(p) { return p.dealerId === d.id; }).length;
+    h += '<option value="' + d.id + '"' + (fcDealerFilter === d.id ? ' selected' : '') + '>' + sanitize(d.name) + ' (' + cnt + ')</option>';
+  });
+  h += '</select>';
+  
+  h += '<div style="flex:1"></div>';
+  
+  // View toggle
+  h += '<div style="display:flex;gap:4px">';
+  h += '<button class="btn bsm ' + (fcView === 'model' ? 'bp' : 'bo') + '" onclick="fcView=\'model\';render()">📦 Model</button>';
+  h += '<button class="btn bsm ' + (fcView === 'monthly' ? 'bp' : 'bo') + '" onclick="fcView=\'monthly\';render()">📅 รายเดือน</button>';
+  h += '<button class="btn bsm ' + (fcView === 'quarterly' ? 'bp' : 'bo') + '" onclick="fcView=\'quarterly\';render()">📊 รายไตรมาส</button>';
+  h += '</div>';
+  h += '</div>';
+
+  // Current filter label
+  if (fcDealerFilter !== 'all') {
+    var selDealer = ST.getOne('dealers', fcDealerFilter);
+    h += '<div style="text-align:center;margin-bottom:8px;font-size:13px">';
+    h += '🏪 กำลังดู: <strong>' + (selDealer ? sanitize(selDealer.name) : '-') + '</strong>';
+    h += ' <button class="btn-xs" onclick="fcDealerFilter=\'all\';render()">✕ ดูทั้งหมด</button>';
+    h += '</div>';
+  }
+
+  // Views
+  if (fcView === 'monthly') {
+    h += buildFcMonthly(pipes, dealers);
+  } else if (fcView === 'quarterly') {
+    h += buildFcQuarterly(pipes, dealers);
+  } else {
+    h += buildFcModel(modelList, totalFc);
+  }
+
+  // Dealer Summary (only show when viewing all dealers)
+  if (fcDealerFilter === 'all') {
+    h += buildFcDealerSummary(pipes, dealers);
+  }
+
+  // Bar Chart
+  h += buildFcBarChart(modelList);
+
+  el.innerHTML = h;
+}
+
+// ================================================================
+// MODEL VIEW
+// ================================================================
+function buildFcModel(modelList, totalFc) {
+  var h = '<div class="card"><h2>📦 Forecast ตาม Model';
+  h += '<span class="ml"><button class="btn bsm bo" onclick="copyTable(\'fcTable\')">📋</button>';
+  h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcTable\',\'forecast\')">📤</button></span></h2>';
+  h += '<div class="export-wrap"><table class="export-table" id="fcTable">';
+  h += '<thead><tr><th>#</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่ารวม (฿)</th><th>Dealer</th><th>โครงการ</th></tr></thead>';
+  h += '<tbody>';
+
+  modelList.forEach(function(m, idx) {
+    var dealerNames = Object.keys(m.dealers).join(', ');
+    var projNames = m.projects.map(function(p) { return sanitize((p.projectName || '').substr(0, 20)); }).join(', ');
+    
+    h += '<tr>';
+    h += '<td class="pipe-row-num">' + (idx + 1) + '</td>';
+    h += '<td><strong>' + sanitize(m.model) + '</strong></td>';
+    h += '<td style="text-align:center">' + m.qty + '</td>';
+    h += '<td style="text-align:right">' + fmtMoneyStyled(m.amount) + '</td>';
+    h += '<td style="font-size:.68rem">' + sanitize(dealerNames) + '</td>';
+    h += '<td style="font-size:.64rem">' + projNames + '</td>';
+    h += '</tr>';
+  });
+
+  h += '<tr style="font-weight:700;border-top:2px solid #475569">';
+  h += '<td></td><td>รวม</td><td></td>';
+  h += '<td style="text-align:right">' + fmtMoneyStyled(totalFc) + '</td>';
+  h += '<td></td><td></td></tr>';
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+// ================================================================
+// MONTHLY VIEW
+// ================================================================
+function buildFcMonthly(pipes, dealers) {
+  var now = new Date();
+  var year = now.getFullYear();
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  
+  var models = {};
+  var monthTotals = {};
+  for (var mi = 0; mi < 12; mi++) monthTotals[mi] = {qty: 0, amt: 0};
+
+  pipes.forEach(function(p) {
+    var shipDate = ftParseDate(p.shipmentDate);
+    if (!shipDate) return;
+    if (shipDate.getFullYear() !== year) return;
+    var m = shipDate.getMonth();
+    
+    var items = getPipeItems(p);
+    if (!items.length) return;
+    
+    items.forEach(function(it) {
+      var model = it.model || 'ไม่ระบุ';
+      var qty = Number(it.qty) || 1;
+      var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+      
+      if (!models[model]) {
+        models[model] = {};
+        for (var i = 0; i < 12; i++) models[model][i] = {qty: 0, amt: 0, projects: []};
+      }
+      
+      models[model][m].qty += qty;
+      models[model][m].amt += amt;
+      
+      var found = false;
+      for (var pi = 0; pi < models[model][m].projects.length; pi++) {
+        if (models[model][m].projects[pi].id === p.id) { found = true; break; }
+      }
+      if (!found) models[model][m].projects.push(p);
+      
+      monthTotals[m].qty += qty;
+      monthTotals[m].amt += amt;
+    });
+  });
+
+  var modelNames = Object.keys(models).sort();
+
+  var h = '<div class="card"><h2>📅 Forecast รายเดือน — ' + year;
+  h += '<span class="ml"><button class="btn bsm bo" onclick="copyTable(\'fcMonthTable\')">📋</button>';
+  h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcMonthTable\',\'forecast-monthly\')">📤</button></span></h2>';
+  
+  if (!modelNames.length) {
+    h += '<div class="empty"><p>ไม่มีข้อมูล — ต้องใส่ Shipment Date ใน Pipeline</p></div></div>';
+    return h;
+  }
+
+  h += '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" id="fcMonthTable">';
+  h += '<thead><tr><th>Model</th>';
+  for (var mh = 0; mh < 12; mh++) {
+    var isCurrentMonth = mh === now.getMonth();
+    h += '<th style="text-align:center;min-width:60px' + (isCurrentMonth ? ';background:rgba(59,130,246,0.15)' : '') + '">' + months[mh] + '</th>';
+  }
+  h += '<th style="text-align:right">รวม</th></tr></thead>';
+  h += '<tbody>';
+
+  modelNames.forEach(function(model) {
+    var totalQty = 0;
+    var totalAmt = 0;
+    h += '<tr>';
+    h += '<td><strong>' + sanitize(model) + '</strong></td>';
+    for (var mc = 0; mc < 12; mc++) {
+      var cell = models[model][mc];
+      var isCurrentMonth = mc === now.getMonth();
+      var bgStyle = isCurrentMonth ? 'background:rgba(59,130,246,0.08);' : '';
+      if (cell.qty > 0) {
+        totalQty += cell.qty;
+        totalAmt += cell.amt;
+        var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
+        h += '<td style="text-align:center;' + bgStyle + '" title="' + sanitize(tooltip) + '">';
+        h += '<div style="font-weight:700">' + cell.qty + '</div>';
+        h += '<div style="font-size:.58rem;color:var(--text2)">' + fmtMoneyShort(cell.amt) + '</div>';
+        h += '</td>';
+      } else {
+        h += '<td style="text-align:center;color:var(--text2);' + bgStyle + '">-</td>';
+      }
+    }
+    h += '<td style="text-align:right;font-weight:700">' + totalQty + '<div style="font-size:.6rem">' + fmtMoneyShort(totalAmt) + '</div></td>';
+    h += '</tr>';
+  });
+
+  h += '<tr style="font-weight:700;border-top:2px solid #475569">';
+  h += '<td>รวม</td>';
+  var grandTotal = 0;
+  for (var mt = 0; mt < 12; mt++) {
+    var isCurrentMonth = mt === now.getMonth();
+    var bgStyle = isCurrentMonth ? 'background:rgba(59,130,246,0.08);' : '';
+    grandTotal += monthTotals[mt].amt;
+    if (monthTotals[mt].qty > 0) {
+      h += '<td style="text-align:center;' + bgStyle + '">' + monthTotals[mt].qty + '<div style="font-size:.6rem">' + fmtMoneyShort(monthTotals[mt].amt) + '</div></td>';
+    } else {
+      h += '<td style="text-align:center;' + bgStyle + '">-</td>';
+    }
+  }
+  h += '<td style="text-align:right">' + fmtMoneyShort(grandTotal) + '</td>';
+  h += '</tr>';
+
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+// ================================================================
+// QUARTERLY VIEW
+// ================================================================
+function buildFcQuarterly(pipes, dealers) {
+  var now = new Date();
+  var year = now.getFullYear();
+  var qLabels = ['Q1 (ม.ค.-มี.ค.)', 'Q2 (เม.ย.-มิ.ย.)', 'Q3 (ก.ค.-ก.ย.)', 'Q4 (ต.ค.-ธ.ค.)'];
+  
+  var models = {};
+  var qTotals = [{qty:0,amt:0},{qty:0,amt:0},{qty:0,amt:0},{qty:0,amt:0}];
+
+  pipes.forEach(function(p) {
+    var shipDate = ftParseDate(p.shipmentDate);
+    if (!shipDate) return;
+    if (shipDate.getFullYear() !== year) return;
+    var q = Math.floor(shipDate.getMonth() / 3);
+    
+    var items = getPipeItems(p);
+    if (!items.length) return;
+    
+    items.forEach(function(it) {
+      var model = it.model || 'ไม่ระบุ';
+      var qty = Number(it.qty) || 1;
+      var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+      
+      if (!models[model]) {
+        models[model] = [{qty:0,amt:0,projects:[]},{qty:0,amt:0,projects:[]},{qty:0,amt:0,projects:[]},{qty:0,amt:0,projects:[]}];
+      }
+      
+      models[model][q].qty += qty;
+      models[model][q].amt += amt;
+      
+      var found = false;
+      for (var pi = 0; pi < models[model][q].projects.length; pi++) {
+        if (models[model][q].projects[pi].id === p.id) { found = true; break; }
+      }
+      if (!found) models[model][q].projects.push(p);
+      
+      qTotals[q].qty += qty;
+      qTotals[q].amt += amt;
+    });
+  });
+
+  var modelNames = Object.keys(models).sort();
+  var currentQ = Math.floor(now.getMonth() / 3);
+
+  var h = '<div class="card"><h2>📊 Forecast รายไตรมาส — ' + year;
+  h += '<span class="ml"><button class="btn bsm bo" onclick="copyTable(\'fcQTable\')">📋</button>';
+  h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcQTable\',\'forecast-quarterly\')">📤</button></span></h2>';
+
+  if (!modelNames.length) {
+    h += '<div class="empty"><p>ไม่มีข้อมูล — ต้องใส่ Shipment Date ใน Pipeline</p></div></div>';
+    return h;
+  }
+
+  h += '<div class="export-wrap"><table class="export-table" id="fcQTable">';
+  h += '<thead><tr><th>Model</th>';
+  for (var qh = 0; qh < 4; qh++) {
+    var isCurrentQ = qh === currentQ;
+    h += '<th style="text-align:center;min-width:100px' + (isCurrentQ ? ';background:rgba(59,130,246,0.15)' : '') + '">' + qLabels[qh] + '</th>';
+  }
+  h += '<th style="text-align:right">รวม</th></tr></thead>';
+  h += '<tbody>';
+
+  modelNames.forEach(function(model) {
+    var totalQty = 0;
+    var totalAmt = 0;
+    h += '<tr>';
+    h += '<td><strong>' + sanitize(model) + '</strong></td>';
+    for (var qc = 0; qc < 4; qc++) {
+      var cell = models[model][qc];
+      var isCurrentQ = qc === currentQ;
+      var bgStyle = isCurrentQ ? 'background:rgba(59,130,246,0.08);' : '';
+      if (cell.qty > 0) {
+        totalQty += cell.qty;
+        totalAmt += cell.amt;
+        var dealerSet = {};
+        cell.projects.forEach(function(pp) {
+          if (pp.dealerId) {
+            var dd = ST.getOne('dealers', pp.dealerId);
+            if (dd) dealerSet[dd.name] = true;
+          }
+        });
+        var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
+        h += '<td style="text-align:center;' + bgStyle + '" title="' + sanitize(tooltip) + '">';
+        h += '<div style="font-weight:700;font-size:1.1em">' + cell.qty + '</div>';
+        h += '<div style="font-size:.62rem">' + fmtMoneyStyled(cell.amt) + '</div>';
+        h += '<div style="font-size:.56rem;color:var(--text2)">' + Object.keys(dealerSet).join(', ') + '</div>';
+        h += '</td>';
+      } else {
+        h += '<td style="text-align:center;color:var(--text2);' + bgStyle + '">-</td>';
+      }
+    }
+    h += '<td style="text-align:right;font-weight:700">' + totalQty + '<div style="font-size:.62rem">' + fmtMoneyShort(totalAmt) + '</div></td>';
+    h += '</tr>';
+  });
+
+  h += '<tr style="font-weight:700;border-top:2px solid #475569">';
+  h += '<td>รวม</td>';
+  var grandTotal = 0;
+  for (var qt = 0; qt < 4; qt++) {
+    var isCurrentQ = qt === currentQ;
+    var bgStyle = isCurrentQ ? 'background:rgba(59,130,246,0.08);' : '';
+    grandTotal += qTotals[qt].amt;
+    h += '<td style="text-align:center;' + bgStyle + '">';
+    h += '<div>' + qTotals[qt].qty + '</div>';
+    h += '<div style="font-size:.62rem">' + fmtMoneyShort(qTotals[qt].amt) + '</div>';
+    h += '</td>';
+  }
+  h += '<td style="text-align:right">' + fmtMoneyShort(grandTotal) + '</td>';
+  h += '</tr>';
+
+  h += '</tbody></table></div></div>';
+  return h;
+}
 
 // ================================================================
 // DEALER SUMMARY (Expandable Cards)
@@ -663,6 +1457,123 @@ function buildFcBarChart(modelList) {
 // ================================================================
 // KNOWLEDGE BASE (Enhanced)
 // ================================================================
+var noteFilter = 'all';
+var noteStatusFilter = 'active';
+var noteSearch = '';
+
+function rKnowledge(el) {
+  document.getElementById('pgT').textContent = '📚 Knowledge Base';
+  var cfg = getConfig();
+  var cats = cfg.noteCategories || [];
+  var allNotes = ST.getAll('notes');
+  var notes = allNotes.slice();
+  
+  // Filter by status
+  if (noteStatusFilter !== 'all') {
+    notes = notes.filter(function(n) { return (n.status || 'active') === noteStatusFilter; });
+  }
+  
+  // Filter by category
+  if (noteFilter !== 'all') {
+    notes = notes.filter(function(n) { return n.category === noteFilter; });
+  }
+  
+  // Search
+  if (noteSearch) {
+    var q = noteSearch.toLowerCase();
+    notes = notes.filter(function(n) {
+      return (n.title || '').toLowerCase().indexOf(q) !== -1 ||
+             (n.content || '').toLowerCase().indexOf(q) !== -1 ||
+             (n.tags || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  
+  // Sort: pinned first, then by date
+  notes.sort(function(a, b) {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return (b.created || '').localeCompare(a.created || '');
+  });
+  
+  // Count per category
+  var catCounts = {};
+  for (var i = 0; i < allNotes.length; i++) {
+    var cat = allNotes[i].category || '📌 อื่นๆ';
+    catCounts[cat] = (catCounts[cat] || 0) + 1;
+  }
+  
+  // Count per status
+  var statusCounts = {active: 0, expired: 0, cancelled: 0, draft: 0};
+  for (var i = 0; i < allNotes.length; i++) {
+    var st = allNotes[i].status || 'active';
+    statusCounts[st] = (statusCounts[st] || 0) + 1;
+  }
+  
+  // Check for expired/remind
+  var expiredNotes = allNotes.filter(function(n) {
+    return (n.status || 'active') === 'active' && n.expireDate && dTo(n.expireDate) <= 0;
+  });
+  var remindNotes = allNotes.filter(function(n) {
+    return (n.status || 'active') === 'active' && n.remindDate && dTo(n.remindDate) <= 3 && dTo(n.remindDate) >= 0;
+  });
+
+  el.innerHTML = '' +
+    // Alerts
+    (expiredNotes.length ? '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⏰ Note หมดอายุ (' + expiredNotes.length + ')</h2>' +
+    expiredNotes.map(function(n) {
+      return '<div class="li dlo" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
+        '<div class="lm"><div class="lt">⏰ ' + sanitize(n.title) + '</div>' +
+        '<div class="ls">หมดอายุ: ' + fD(n.expireDate) + ' ' + dlB(n.expireDate, false) + '</div></div>' +
+        '<button class="btn bsm bw" onclick="event.stopPropagation();markNoteExpired(\'' + n.id + '\')">ทำเครื่องหมาย</button></div>';
+    }).join('') + '</div>' : '') +
+    
+    (remindNotes.length ? '<div class="card" style="border-color:#f59e0b"><h2 style="color:#f59e0b">🔔 เตือน Note (' + remindNotes.length + ')</h2>' +
+    remindNotes.map(function(n) {
+      return '<div class="li dl3" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
+        '<div class="lm"><div class="lt">🔔 ' + sanitize(n.title) + '</div>' +
+        '<div class="ls">เตือน: ' + fD(n.remindDate) + ' ' + dlB(n.remindDate, false) + '</div></div></div>';
+    }).join('') + '</div>' : '') +
+    
+    // Toolbar
+    '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">' +
+    '<button class="btn bp" onclick="showNoteM()">➕ เพิ่ม Note</button>' +
+    '</div>' +
+    
+    // Search
+    '<div style="margin-bottom:8px">' +
+    '<input type="text" id="noteSrc" value="' + sanitize(noteSearch) + '" placeholder="🔍 ค้นหา Note... (ชื่อ, เนื้อหา, Tags)" oninput="noteSearch=this.value;render()" autocomplete="off">' +
+    '</div>' +
+    
+    // Status Filter
+    '<div class="ftabs" style="margin-bottom:4px">' +
+    '<div class="ftab ' + (noteStatusFilter === 'all' ? 'act' : '') + '" onclick="noteStatusFilter=\'all\';render()">ทั้งหมด (' + allNotes.length + ')</div>' +
+    '<div class="ftab ' + (noteStatusFilter === 'active' ? 'act' : '') + '" onclick="noteStatusFilter=\'active\';render()">✅ ใช้งาน (' + statusCounts.active + ')</div>' +
+    '<div class="ftab ' + (noteStatusFilter === 'expired' ? 'act' : '') + '" onclick="noteStatusFilter=\'expired\';render()">⏰ หมดอายุ (' + statusCounts.expired + ')</div>' +
+    '<div class="ftab ' + (noteStatusFilter === 'cancelled' ? 'act' : '') + '" onclick="noteStatusFilter=\'cancelled\';render()">❌ ยกเลิก (' + statusCounts.cancelled + ')</div>' +
+    '<div class="ftab ' + (noteStatusFilter === 'draft' ? 'act' : '') + '" onclick="noteStatusFilter=\'draft\';render()">📝 Draft (' + statusCounts.draft + ')</div>' +
+    '</div>' +
+    
+    // Category Filter
+    '<div class="ftabs">' +
+    '<div class="ftab ' + (noteFilter === 'all' ? 'act' : '') + '" onclick="noteFilter=\'all\';render()">ทุกหมวด</div>' +
+    cats.map(function(cat) {
+      return '<div class="ftab ' + (noteFilter === cat ? 'act' : '') + '" onclick="noteFilter=\'' + cat.replace(/'/g, "\\'") + '\';render()">' + cat + ' (' + (catCounts[cat] || 0) + ')</div>';
+    }).join('') +
+    '</div>' +
+    
+    // Notes List
+    '<div>' +
+    (notes.length ? notes.map(function(n) { return noteCardHTML(n); }).join('') :
+    '<div class="empty"><div class="icon">📚</div><p>ไม่มี Note' +
+    (noteSearch ? ' ที่ตรงกับ "' + sanitize(noteSearch) + '"' : '') + '</p></div>') +
+    '</div>';
+  
+  // Focus search
+  if (noteSearch) {
+    var srcEl = document.getElementById('noteSrc');
+    if (srcEl) { srcEl.focus(); srcEl.setSelectionRange(noteSearch.length, noteSearch.length); }
+  }
+}
 
 function noteCardHTML(n) {
   var catClass = 'note-cat-other';
