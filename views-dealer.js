@@ -62,6 +62,13 @@ function verifySimpleToken(token) {
 var generateCustomerToken = generateSimpleToken;
 var verifyCustomerToken = verifySimpleToken;
 
+function getConfig() {
+  try {
+    var saved = localStorage.getItem('v7_config');
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return { levelRequirements: { A: { option1Models: [], option2Models: [] } } };
+}
 // ================================================================
 // SAFE MODEL OPTIONS (ใช้ products module ถ้ามี)
 // ================================================================
@@ -2541,28 +2548,31 @@ async function showCurrentLinkModal(dealerId) {
 // ================================================================
 
 function dealerDemoTab(d) {
-  var cfg = getConfig();  // ✅ เพิ่มบรรทัดนี้最重要
+  var cfg = getConfig();
   var demoOption = d.demoOption || 'option1';
   var demoItems = d.demoItems || [];
   
-  // ดึงรายการ Demo Unit ทั้งหมดจาก Products module และ Demo Units
-  var allDemoProducts = [];
-  if (typeof Products !== 'undefined') {
-    var products = Products.getAll();
-    for (var i = 0; i < products.length; i++) {
-      var p = products[i];
-      if (p.category === 'demo' || (p.name && p.name.includes('(Demo)'))) {
-        allDemoProducts.push({
-          id: p.id,
-          name: p.name,
-          price: p.demoPrice || p.price || 0,
-          sku: p.sku,
-          ean: p.ean
-        });
-      }
+// ดึงรายการ Demo Unit ทั้งหมด (ใช้ฟังก์ชันใหม่)
+var allDemoProducts = getAllDemoUnitsFromProducts();
+console.log('📦 Demo Units ในระบบ:', allDemoProducts.length, 'รายการ');
+
+// ถ้ายังไม่มี ให้ลองโหลดจาก Products module อีกครั้ง
+if (allDemoProducts.length === 0 && typeof Products !== 'undefined') {
+  var products = Products.getAll();
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    if (p && (p.category === 'demo' || (p.name && p.name.indexOf('(Demo)') !== -1))) {
+      allDemoProducts.push({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        ean: p.ean || '',
+        price: p.demoPrice || p.price || 0
+      });
     }
   }
-  
+  console.log('📦 โหลดจาก Products.getAll:', allDemoProducts.length, 'รายการ');
+}  
   // เพิ่มจาก Demo Units
   var demoUnits = getAllDemoUnits();
   for (var i = 0; i < demoUnits.length; i++) {
@@ -3138,4 +3148,84 @@ function renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requir
   
   html += '</div>';
   return html;
+}
+// ================================================================
+// DEMO UNIT HELPER FUNCTIONS (เพิ่มเพื่อให้ทำงานกับ products.js)
+// ================================================================
+
+// อ่านข้อมูล Demo Unit ทั้งหมดจาก Products module
+function getAllDemoUnitsFromProducts() {
+  var demos = [];
+  
+  // วิธีที่ 1: ใช้ Products module โดยตรง
+  if (typeof Products !== 'undefined' && Products.getAll) {
+    var allProducts = Products.getAll();
+    for (var i = 0; i < allProducts.length; i++) {
+      var p = allProducts[i];
+      // ตรวจสอบว่าเป็น Demo Unit (category === 'demo' หรือชื่อมี (Demo))
+      if (p.category === 'demo' || (p.name && p.name.indexOf('(Demo)') !== -1)) {
+        demos.push({
+          id: p.id,
+          name: p.name,
+          sku: p.sku || '',
+          ean: p.ean || '',
+          price: p.demoPrice || p.price || 0,
+          category: p.category
+        });
+      }
+    }
+    if (demos.length > 0) {
+      console.log('📦 โหลด Demo Unit จาก Products module:', demos.length, 'รายการ');
+      return demos;
+    }
+  }
+  
+  // วิธีที่ 2: อ่านจาก localStorage โดยตรง (fallback)
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var data = JSON.parse(saved);
+      var products = [];
+      
+      // รองรับหลายรูปแบบของ v7_products
+      if (Array.isArray(data)) {
+        products = data;
+      } else if (data.models && Array.isArray(data.models)) {
+        products = data.models;
+      } else if (typeof data === 'object') {
+        var values = Object.values(data);
+        if (values.length && values[0] && values[0].id) {
+          products = values;
+        }
+      }
+      
+      for (var i = 0; i < products.length; i++) {
+        var p = products[i];
+        if (p && (p.category === 'demo' || (p.name && p.name.indexOf('(Demo)') !== -1))) {
+          demos.push({
+            id: p.id,
+            name: p.name,
+            sku: p.sku || '',
+            ean: p.ean || '',
+            price: p.demoPrice || p.price || 0,
+            category: p.category
+          });
+        }
+      }
+      console.log('📦 โหลด Demo Unit จาก localStorage:', demos.length, 'รายการ');
+    }
+  } catch(e) {
+    console.error('Error loading demo units:', e);
+  }
+  
+  return demos;
+}
+
+// อ่าน Demo Unit สำหรับ Dealer (จาก dealer.demoItems)
+function getDealerDemoItems(dealer) {
+  if (!dealer) return [];
+  if (dealer.demoItems && Array.isArray(dealer.demoItems)) {
+    return dealer.demoItems;
+  }
+  return [];
 }
