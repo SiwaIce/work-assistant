@@ -2332,8 +2332,8 @@ window.Products = {
   deleteDemoUnit: deleteDemoUnit,
   clearAll: clearAllProductsData,
   exportToExcel: exportProductsToExcel,
-  importFull: importFullExcel
-     isDemo: isDemoProduct,
+  importFull: importFullExcel,  // ✅ เพิ่ม comma ตรงนี้
+  isDemo: isDemoProduct,
   isMain: isMainProduct,
   getMain: getMainProducts,
   getDemo: getDemoProducts,
