@@ -3153,25 +3153,32 @@ function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
 }
 
 function changeH1Source(dealerId, useSisRevenue) {
-  // บันทึก preference
+  // โหลดข้อมูล dealers ปัจจุบัน
   var dealers = [];
   try { 
     var dealerData = localStorage.getItem('v7_dealers'); 
     dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { dealers = []; }
+  } catch(e) { 
+    dealers = []; 
+  }
   
+  // อัปเดตค่า h1UseSisRevenue ของ dealer ที่ต้องการ
   for (var i = 0; i < dealers.length; i++) {
     if (dealers[i] && dealers[i].id === dealerId) {
       dealers[i].h1UseSisRevenue = useSisRevenue;
       break;
     }
   }
+  
+  // บันทึกกลับไปยัง localStorage
   localStorage.setItem('v7_dealers', JSON.stringify(dealers));
+  
+  // แสดง toast แจ้งเตือน
+  toast('เปลี่ยนแหล่งข้อมูลเป็น ' + (useSisRevenue ? 'ยอด SIS' : 'Pipeline') + ' แล้ว');
   
   // รีเฟรชหน้า
   renderComplianceTabContent();
 }
-
 // ================================================================
 // RENDER DEMO STATUS IN COMPLIANCE TAB (CLIENT VIEW)
 // ================================================================
@@ -3552,6 +3559,23 @@ function getNewDemoPolicyAlerts() {
     }
   }
   return alerts;
+}
+// เพิ่มฟังก์ชัน toast ทดแทน (วางใน <script> ของ client-view.html)
+function toast(msg, isError) {
+  var toastEl = document.getElementById('toast');
+  if (!toastEl) {
+    // สร้าง toast element ถ้ายังไม่มี
+    toastEl = document.createElement('div');
+    toastEl.id = 'toast';
+    toastEl.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#22c55e;color:white;padding:10px 20px;border-radius:30px;font-size:13px;z-index:9999;display:none;white-space:nowrap';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = msg;
+  toastEl.style.background = isError ? '#ef4444' : '#22c55e';
+  toastEl.style.display = 'block';
+  setTimeout(function() {
+    toastEl.style.display = 'none';
+  }, 3000);
 }
 function loadLatestConfigFromFirebase() {
   return new Promise(function(resolve, reject) {
