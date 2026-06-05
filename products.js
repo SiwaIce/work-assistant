@@ -9,16 +9,48 @@ var PRODUCTS_STORAGE_KEY = 'v7_products';
 // ================================================================
 
 var PRODUCT_CATEGORIES = [
-  { id: 'drone', name: '🚁 Drone', icon: '🚁' },
-  { id: 'payload', name: '📷 Payload', icon: '📷' },
-  { id: 'battery', name: '🔋 Battery', icon: '🔋' },
-  { id: 'charger', name: '⚡ Charger/Accessory', icon: '⚡' },
-  { id: 'software', name: '💻 Software', icon: '💻' },
-  { id: 'service', name: '🛠️ Service', icon: '🛠️' },
-  { id: 'bundle', name: '🎁 Bundle', icon: '🎁' },
-  { id: 'other', name: '📦 Other', icon: '📦' }
+  { id: 'drone', name: '🚁 Drone', icon: '🚁', type: 'main' },
+  { id: 'payload', name: '📷 Payload', icon: '📷', type: 'main' },
+  { id: 'battery', name: '🔋 Battery', icon: '🔋', type: 'main' },
+  { id: 'charger', name: '⚡ Charger/Accessory', icon: '⚡', type: 'main' },
+  { id: 'software', name: '💻 Software', icon: '💻', type: 'main' },
+  { id: 'service', name: '🛠️ Service', icon: '🛠️', type: 'main' },
+  { id: 'bundle', name: '🎁 Bundle', icon: '🎁', type: 'main' },
+  { id: 'demo', name: '🚁 Demo Unit', icon: '🎪', type: 'demo' },      // ✅ เพิ่ม Demo
+  { id: 'demo_accessory', name: '🔧 Demo Accessory', icon: '🔧', type: 'demo' },  // ✅ เพิ่ม Demo Accessory
+  { id: 'other', name: '📦 Other', icon: '📦', type: 'main' }
 ];
 
+// เช็คว่าเป็นสินค้า Demo หรือไม่
+function isDemoProduct(product) {
+  if (!product) return false;
+  // เช็คจาก category
+  if (product.category === 'demo' || product.category === 'demo_accessory') return true;
+  // เช็คจากป้าย isDemo
+  if (product.isDemo === true) return true;
+  // เช็คจากชื่อ
+  if (product.name && (product.name.indexOf('(Demo)') !== -1 || product.name.indexOf('Demo Unit') !== -1)) return true;
+  return false;
+}
+
+// เช็คว่าเป็นสินค้าหลัก (Main Product) หรือไม่
+function isMainProduct(product) {
+  if (!product) return false;
+  if (isDemoProduct(product)) return false;
+  // เช็คจาก category
+  var mainCategories = ['drone', 'payload', 'battery', 'charger', 'software', 'service', 'bundle', 'other'];
+  return mainCategories.indexOf(product.category) !== -1;
+}
+
+// ดึงเฉพาะสินค้าหลัก
+function getMainProducts() {
+  return getAllProducts().filter(isMainProduct);
+}
+
+// ดึงเฉพาะสินค้า Demo
+function getDemoProducts() {
+  return getAllProducts().filter(isDemoProduct);
+}
 // ================================================================
 // CORE DATA MANAGEMENT
 // ================================================================
@@ -1079,18 +1111,20 @@ function clearAllProductsData() {
 }
 
 // ================================================================
-// PAGE RENDERERS (พร้อม search + category filter + EOL checkbox)
+// PAGE RENDERERS (พร้อม search + category filter + type filter + EOL checkbox)
 // ================================================================
 
 var productSearch = '';
 var productCategoryFilter = 'all';
+var productTypeFilter = 'all';     // ✅ เพิ่ม: 'all', 'main', 'demo'
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
 function rProducts(el) {
   document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
   var products = getAllProducts();
-  
+
+  // ✅ กรองตามคำค้นหา
   if (productSearch) {
     var q = productSearch.toLowerCase();
     products = products.filter(function(p) {
@@ -1099,14 +1133,26 @@ function rProducts(el) {
              (p.ean || '').toLowerCase().indexOf(q) !== -1;
     });
   }
+  
+  // ✅ กรองตามหมวดหมู่
   if (productCategoryFilter !== 'all') {
     products = products.filter(function(p) { return p.category === productCategoryFilter; });
   }
   
+  // ✅ กรองตามประเภทสินค้า (Main / Demo)
+  if (productTypeFilter === 'main') {
+    products = products.filter(function(p) { return !isDemoProduct(p); });
+  } else if (productTypeFilter === 'demo') {
+    products = products.filter(function(p) { return isDemoProduct(p); });
+  }
+  
   var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button></span></h2>';
   
+  // ✅ แถบกรอง (เพิ่ม Select สำหรับประเภทสินค้า)
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
   html += '<input type="text" id="productSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(productSearch) + '" oninput="productSearch=this.value;renderProductsList()">';
+  
+  // Filter หมวดหมู่
   html += '<select id="productCategorySelect" class="fm-input" style="width:150px" onchange="productCategoryFilter=this.value;renderProductsList()">';
   html += '<option value="all" ' + (productCategoryFilter === 'all' ? 'selected' : '') + '>📂 ทุกหมวด</option>';
   for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
@@ -1114,7 +1160,15 @@ function rProducts(el) {
     html += '<option value="' + cat.id + '" ' + (productCategoryFilter === cat.id ? 'selected' : '') + '>' + cat.name + '</option>';
   }
   html += '</select>';
-  html += '<button class="btn bsm bo" onclick="productSearch=\'\';productCategoryFilter=\'all\';renderProductsList()">✖️ ล้าง</button>';
+  
+  // ✅ Filter ประเภทสินค้า (เพิ่มตรงนี้)
+  html += '<select id="productTypeSelect" class="fm-input" style="width:140px" onchange="productTypeFilter=this.value;renderProductsList()">';
+  html += '<option value="all" ' + (productTypeFilter === 'all' ? 'selected' : '') + '>🔧 ทุกประเภท</option>';
+  html += '<option value="main" ' + (productTypeFilter === 'main' ? 'selected' : '') + '>📦 Main Product</option>';
+  html += '<option value="demo" ' + (productTypeFilter === 'demo' ? 'selected' : '') + '>🎪 Demo Unit</option>';
+  html += '</select>';
+  
+  html += '<button class="btn bsm bo" onclick="resetProductFilters()">✖️ ล้าง</button>';
   html += '</div>';
   
   html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>';
@@ -1122,17 +1176,20 @@ function rProducts(el) {
   html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
   html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
   html += '<th>สถานะ</th><th></th>';
-  html += '</tr></thead><tbody id="productsTableBody"></tbody></table></div>';
+  html += ' hilab</thead><tbody id="productsTableBody"></tbody></table></div>';
   html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
   html += '</div>';
   
   el.innerHTML = html;
   renderProductsTable(products);
   
+  // ✅ ฟังก์ชัน renderProductsList (อัปเดตให้รองรับ type filter)
   window.renderProductsList = function() {
     var newProducts = getAllProducts();
     var q = document.getElementById('productSearchInput') ? document.getElementById('productSearchInput').value.toLowerCase() : '';
     var cat = document.getElementById('productCategorySelect') ? document.getElementById('productCategorySelect').value : 'all';
+    var type = document.getElementById('productTypeSelect') ? document.getElementById('productTypeSelect').value : 'all';
+    
     if (q) {
       newProducts = newProducts.filter(function(p) {
         return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
@@ -1143,10 +1200,48 @@ function rProducts(el) {
     if (cat !== 'all') {
       newProducts = newProducts.filter(function(p) { return p.category === cat; });
     }
+    // ✅ กรองตามประเภท
+    if (type === 'main') {
+      newProducts = newProducts.filter(function(p) { return !isDemoProduct(p); });
+    } else if (type === 'demo') {
+      newProducts = newProducts.filter(function(p) { return isDemoProduct(p); });
+    }
+    
     productSearch = q;
     productCategoryFilter = cat;
+    productTypeFilter = type;
     renderProductsTable(newProducts);
   };
+}
+
+// ✅ ฟังก์ชัน reset filters
+function resetProductFilters() {
+  productSearch = '';
+  productCategoryFilter = 'all';
+  productTypeFilter = 'all';
+  
+  var searchInput = document.getElementById('productSearchInput');
+  if (searchInput) searchInput.value = '';
+  
+  var catSelect = document.getElementById('productCategorySelect');
+  if (catSelect) catSelect.value = 'all';
+  
+  var typeSelect = document.getElementById('productTypeSelect');
+  if (typeSelect) typeSelect.value = 'all';
+  
+  renderProductsList();
+}
+
+// ✅ ฟังก์ชัน isDemoProduct (ใช้สำหรับกรอง)
+function isDemoProduct(product) {
+  if (!product) return false;
+  // เช็คจาก category
+  if (product.category === 'demo' || product.category === 'demo_accessory') return true;
+  // เช็คจากป้าย isDemo
+  if (product.isDemo === true) return true;
+  // เช็คจากชื่อ
+  if (product.name && (product.name.indexOf('(Demo)') !== -1 || product.name.indexOf('Demo Unit') !== -1)) return true;
+  return false;
 }
 
 function renderProductsTable(products) {
@@ -1158,6 +1253,9 @@ function renderProductsTable(products) {
     var badge = '';
     if (p.eol) badge += '<span class="tag tag-cancelled">⏰ EOL</span>';
     else badge += '<span class="tag tag-completed">✅ มีขาย</span>';
+    
+    // ✅ เพิ่มป้าย Demo
+    if (isDemoProduct(p)) badge += ' <span class="tag" style="background:#f59e0b;color:#fff">🎪 Demo</span>';
     if (p.isSoftware) badge += ' <span class="tag tag-active">💻 SW</span>';
     if (p.isService) badge += ' <span class="tag tag-on-hold">🛠️ SV</span>';
     if (p.isBundle) badge += ' <span class="tag tag-count">🎁 Bundle</span>';
@@ -1174,16 +1272,15 @@ function renderProductsTable(products) {
     html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '<td>';
     html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';
-    html += '</table>';
+    html += '</tr>';
   }
   tbody.innerHTML = html;
 }
-
 function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
   var products = getAllProducts();
@@ -1722,13 +1819,459 @@ function getCategoryIcon(catId) {
 // ฟังก์ชันอื่นๆ (placeholder)
 // ================================================================
 
-function showAddProductM() { toast('🚧 ใช้ปุ่ม Import Excel แทนการเพิ่มทีละรายการ'); }
-function showAddBundleM() { toast('🚧 กำลังพัฒนา'); }
-function editBundle(id) { toast('🚧 กำลังพัฒนา'); }
-function deleteBundleConfirm(id) { if (confirm('ลบ Bundle นี้?')) { deleteBundle(id); toast('🗑️ ลบแล้ว'); render(); } }
-function showAddDemoUnitM() { toast('🚧 กำลังพัฒนา'); }
-function editDemoUnit(id) { toast('🚧 กำลังพัฒนา'); }
+function showAddProductM() {
+  var categoryOptions = '';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    categoryOptions += '<option value="' + cat.id + '">' + cat.name + '</option>';
+  }
+  
+  var html = '<div style="max-width:550px">' +
+    '<div class="form-section">📋 ข้อมูลทั่วไป</div>' +
+    '<div class="fg"><label>ชื่อสินค้า *</label><input type="text" id="new_p_name" class="fm-input"></div>' +
+    '<div class="fr"><div class="fg"><label>SKU (SiS part)</label><input type="text" id="new_p_sku" class="fm-input"></div>' +
+    '<div class="fg"><label>EAN</label><input type="text" id="new_p_ean" class="fm-input"></div></div>' +
+    
+    '<div class="form-section">💰 ราคา</div>' +
+    '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="number" id="new_rrp_in" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="number" id="new_rrp_ex" class="fm-input" value="0"></div></div>' +
+    '<div class="fr4">' +
+    '<div class="fg"><label>S (Type 1)</label><input type="number" id="new_price_s" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>A (Type 2)</label><input type="number" id="new_price_a" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>B (Type 3)</label><input type="number" id="new_price_b" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>Other (Type 4)</label><input type="number" id="new_price_o" class="fm-input" value="0"></div></div>' +
+    
+    '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>' +
+    '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="new_category" class="fm-input">' + categoryOptions + '</select></div>' +
+    '<div class="fg"><label>⚡ สถานะ EOL</label><div class="radio-g">' +
+    '<label><input type="radio" name="new_eol" value="0" checked><span>✅ ปกติ</span></label>' +
+    '<label><input type="radio" name="new_eol" value="1"><span>⏰ EOL</span></label>' +
+    '</div></div></div>' +
+    
+    '<div class="form-section">🔧 ประเภทสินค้า (สำหรับระบบ)</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label><input type="checkbox" id="new_is_bundle"> 🎁 Bundle/Combo</label></div>' +
+    '<div class="fg"><label><input type="checkbox" id="new_is_software"> 💻 Software</label></div>' +
+    '<div class="fg"><label><input type="checkbox" id="new_is_service"> 🛠️ Service</label></div>' +
+    '<div class="fg"><label><input type="checkbox" id="new_is_demo"> 🎪 Demo Unit</label></div>' +  // ✅ เพิ่ม checkbox Demo
+    '</div>' +
+    
+    '<div class="fm-actions" style="margin-top:16px">' +
+    '<button class="btn btn-blue" onclick="addProductFromModal()">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('➕ เพิ่มสินค้า', html);
+}
 
+function addProductFromModal() {
+  var name = document.getElementById('new_p_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+  
+  var isDemo = document.getElementById('new_is_demo') ? document.getElementById('new_is_demo').checked : false;
+  var selectedCategory = document.getElementById('new_category').value;
+  
+  // ถ้าเลือก isDemo ให้เปลี่ยนหมวดหมู่เป็น demo โดยอัตโนมัติ
+  var category = selectedCategory;
+  if (isDemo && (selectedCategory === 'drone' || selectedCategory === 'payload' || selectedCategory === 'other')) {
+    category = 'demo';
+  }
+  
+  var productData = {
+    name: name,
+    sku: document.getElementById('new_p_sku').value.trim(),
+    ean: document.getElementById('new_p_ean').value.trim(),
+    category: category,
+    rrpInVat: parseFloat(document.getElementById('new_rrp_in').value) || 0,
+    rrpExVat: parseFloat(document.getElementById('new_rrp_ex').value) || 0,
+    price: parseFloat(document.getElementById('new_price_b').value) || 0,
+    typePrices: {
+      S: parseFloat(document.getElementById('new_price_s').value) || 0,
+      A: parseFloat(document.getElementById('new_price_a').value) || 0,
+      B: parseFloat(document.getElementById('new_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('new_price_o').value) || 0
+    },
+    eol: document.querySelector('input[name="new_eol"]:checked')?.value === '1',
+    isBundle: document.getElementById('new_is_bundle').checked,
+    isSoftware: document.getElementById('new_is_software').checked,
+    isService: document.getElementById('new_is_service').checked,
+    isDemo: isDemo,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  Products.add(productData);
+  closeMForce();
+  toast('✅ เพิ่มสินค้าเรียบร้อย');
+  render();
+}
+function exportMainProductsToExcel() {
+  var products = getMainProducts();
+  exportProductsToExcelWithData(products, 'main-products');
+}
+
+function exportDemoProductsToExcel() {
+  var products = getDemoProducts();
+  exportProductsToExcelWithData(products, 'demo-products');
+}
+
+function exportProductsToExcelWithData(products, filename) {
+  var data = products.map(function(p, idx) {
+    return {
+      '#': idx + 1,
+      'SiS part': p.sku || '',
+      'EAN': p.ean || '',
+      'Product Name': p.name,
+      'RRP in Vat': p.rrpInVat || 0,
+      'RRP Ex Vat': p.rrpExVat || 0,
+      'Type 1 (S)': p.typePrices?.S || 0,
+      'Type 2 (A)': p.typePrices?.A || 0,
+      'Type 3 (B)': p.typePrices?.B || 0,
+      'Type 4 (Other)': p.typePrices?.Other || 0,
+      'EOL': p.eol ? 'EOL' : '',
+      'Type': p.isSoftware ? 'Software' : (p.isService ? 'Service' : (p.isBundle ? 'Bundle' : 'Hardware')),
+      'Category': getCategoryName(p.category),
+      'Is Demo': isDemoProduct(p) ? 'Yes' : 'No'
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, filename);
+  XLSX.writeFile(wb, filename + '-' + _td() + '.xlsx');
+  toast('📥 Export ' + filename + ' สำเร็จ!');
+}
+function showAddBundleM() {
+  // ดึงรายการสินค้าทั้งหมดมาให้เลือกประกอบ Bundle
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '">' + 
+      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
+  }
+  
+  var html = '<div style="max-width:550px">' +
+    '<div class="fg"><label>🎁 ชื่อ Bundle *</label><input type="text" id="bundle_name" class="fm-input"></div>' +
+    '<div class="fg"><label>📝 รายละเอียด</label><textarea id="bundle_desc" rows="2" class="fm-input"></textarea></div>' +
+    '<div class="form-section">📦 สินค้าใน Bundle</div>' +
+    '<div id="bundleItemsList">' +
+    '<div class="bundle-item-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">' +
+    '<select class="bundle-product" style="flex:2;padding:8px;border-radius:8px">' + productOptions + '</select>' +
+    '<input type="number" class="bundle-qty" value="1" min="1" style="width:80px;padding:8px;border-radius:8px" placeholder="จำนวน">' +
+    '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>' +
+    '</div></div>' +
+    '<button class="btn bsm bp" onclick="addBundleItemRow()" style="margin-bottom:12px">➕ เพิ่มสินค้า</button>' +
+    '<div class="form-section">💰 ราคา (ตาม Level)</div>' +
+    '<div class="fr4">' +
+    '<div class="fg"><label>S</label><input type="number" id="bundle_price_s" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>A</label><input type="number" id="bundle_price_a" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>B</label><input type="number" id="bundle_price_b" class="fm-input" value="0"></div>' +
+    '<div class="fg"><label>Other</label><input type="number" id="bundle_price_o" class="fm-input" value="0"></div></div>' +
+    '<div class="fm-actions"><button class="btn btn-blue" onclick="saveNewBundle()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  
+  openM('🎁 เพิ่ม Bundle/Combo', html);
+}
+
+function addBundleItemRow() {
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '">' + 
+      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
+  }
+  
+  var container = document.getElementById('bundleItemsList');
+  var newRow = '<div class="bundle-item-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">' +
+    '<select class="bundle-product" style="flex:2;padding:8px;border-radius:8px">' + productOptions + '</select>' +
+    '<input type="number" class="bundle-qty" value="1" min="1" style="width:80px;padding:8px;border-radius:8px">' +
+    '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>' +
+    '</div>';
+  container.insertAdjacentHTML('beforeend', newRow);
+}
+
+function removeBundleItemRow(btn) {
+  var row = btn.closest('.bundle-item-row');
+  if (row && document.querySelectorAll('.bundle-item-row').length > 1) {
+    row.remove();
+  } else {
+    toast('ต้องมีสินค้าอย่างน้อย 1 รายการ');
+  }
+}
+
+function saveNewBundle() {
+  var name = document.getElementById('bundle_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อ Bundle'); return; }
+  
+  var items = [];
+  var rows = document.querySelectorAll('#bundleItemsList .bundle-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var select = rows[i].querySelector('.bundle-product');
+    var qty = rows[i].querySelector('.bundle-qty').value;
+    if (select && select.value) {
+      items.push({
+        productId: select.value,
+        name: select.options[select.selectedIndex]?.text.split(' (')[0] || '',
+        qty: parseInt(qty) || 1
+      });
+    }
+  }
+  
+  if (items.length === 0) { toast('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  
+  addBundle({
+    name: name,
+    description: document.getElementById('bundle_desc').value.trim(),
+    items: items,
+    typePrices: {
+      S: parseFloat(document.getElementById('bundle_price_s').value) || 0,
+      A: parseFloat(document.getElementById('bundle_price_a').value) || 0,
+      B: parseFloat(document.getElementById('bundle_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('bundle_price_o').value) || 0
+    },
+    enabled: true
+  });
+  
+  closeMForce();
+  toast('✅ เพิ่ม Bundle แล้ว');
+  render();
+}
+function editBundle(id) {
+  var bundle = getBundleById(id);
+  if (!bundle) { toast('ไม่พบ Bundle'); return; }
+  
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '">' + 
+      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
+  }
+  
+  var itemsHtml = '';
+  for (var i = 0; i < (bundle.items || []).length; i++) {
+    var it = bundle.items[i];
+    itemsHtml += '<div class="bundle-item-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">' +
+      '<select class="bundle-product" style="flex:2;padding:8px;border-radius:8px">' + productOptions + '</select>' +
+      '<input type="number" class="bundle-qty" value="' + (it.qty || 1) + '" min="1" style="width:80px;padding:8px;border-radius:8px">' +
+      '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>' +
+      '</div>';
+  }
+  if (itemsHtml === '') {
+    itemsHtml = '<div class="bundle-item-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">' +
+      '<select class="bundle-product" style="flex:2;padding:8px;border-radius:8px">' + productOptions + '</select>' +
+      '<input type="number" class="bundle-qty" value="1" min="1" style="width:80px;padding:8px;border-radius:8px">' +
+      '<button class="btn bsm bd" onclick="removeBundleItemRow(this)">🗑️</button>' +
+      '</div>';
+  }
+  
+  var html = '<div style="max-width:550px">' +
+    '<div class="fg"><label>🎁 ชื่อ Bundle *</label><input type="text" id="bundle_name" class="fm-input" value="' + sanitize(bundle.name) + '"></div>' +
+    '<div class="fg"><label>📝 รายละเอียด</label><textarea id="bundle_desc" rows="2" class="fm-input">' + sanitize(bundle.description || '') + '</textarea></div>' +
+    '<div class="form-section">📦 สินค้าใน Bundle</div>' +
+    '<div id="bundleItemsList">' + itemsHtml + '</div>' +
+    '<button class="btn bsm bp" onclick="addBundleItemRow()" style="margin-bottom:12px">➕ เพิ่มสินค้า</button>' +
+    '<div class="form-section">💰 ราคา (ตาม Level)</div>' +
+    '<div class="fr4">' +
+    '<div class="fg"><label>S</label><input type="number" id="bundle_price_s" class="fm-input" value="' + (bundle.typePrices?.S || 0) + '"></div>' +
+    '<div class="fg"><label>A</label><input type="number" id="bundle_price_a" class="fm-input" value="' + (bundle.typePrices?.A || 0) + '"></div>' +
+    '<div class="fg"><label>B</label><input type="number" id="bundle_price_b" class="fm-input" value="' + (bundle.typePrices?.B || 0) + '"></div>' +
+    '<div class="fg"><label>Other</label><input type="number" id="bundle_price_o" class="fm-input" value="' + (bundle.typePrices?.Other || 0) + '"></div></div>' +
+    '<div class="fm-actions"><button class="btn btn-blue" onclick="updateBundle(\'' + id + '\')">💾 อัปเดต</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  
+  openM('✏️ แก้ไข Bundle', html);
+}
+
+function updateBundle(id) {
+  var name = document.getElementById('bundle_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อ Bundle'); return; }
+  
+  var items = [];
+  var rows = document.querySelectorAll('#bundleItemsList .bundle-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var select = rows[i].querySelector('.bundle-product');
+    var qty = rows[i].querySelector('.bundle-qty').value;
+    if (select && select.value) {
+      items.push({
+        productId: select.value,
+        name: select.options[select.selectedIndex]?.text.split(' (')[0] || '',
+        qty: parseInt(qty) || 1
+      });
+    }
+  }
+  
+  if (items.length === 0) { toast('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  
+  updateBundle(id, {
+    name: name,
+    description: document.getElementById('bundle_desc').value.trim(),
+    items: items,
+    typePrices: {
+      S: parseFloat(document.getElementById('bundle_price_s').value) || 0,
+      A: parseFloat(document.getElementById('bundle_price_a').value) || 0,
+      B: parseFloat(document.getElementById('bundle_price_b').value) || 0,
+      Other: parseFloat(document.getElementById('bundle_price_o').value) || 0
+    }
+  });
+  
+  closeMForce();
+  toast('💾 อัปเดต Bundle แล้ว');
+  render();
+}
+function deleteBundleConfirm(id) { if (confirm('ลบ Bundle นี้?')) { deleteBundle(id); toast('🗑️ ลบแล้ว'); render(); } }
+function showAddDemoUnitM() {
+  // ดึงรายการสินค้าทั้งหมด (ที่ไม่ใช่ Demo) มาให้เลือก
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า (หรือพิมพ์ค้นหา) --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    // ไม่เลือกสินค้าที่เป็น Demo อยู่แล้ว
+    if (isDemoProduct(p)) continue;
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '">' + 
+      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
+  }
+  
+  var html = '<div style="max-width:500px">' +
+    '<div class="fg"><label>🔍 เลือกสินค้า</label>' +
+    '<select id="demo_product_id" class="fm-input" onchange="updateDemoPriceFromSelect()">' + productOptions + '</select>' +
+    '</div>' +
+    '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
+    '<input type="number" id="demo_price" class="fm-input" value="0" step="0.01">' +
+    '</div>' +
+    '<div class="fg"><label>📝 หมายเหตุ</label>' +
+    '<textarea id="demo_note" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
+    '</div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('➕ เพิ่ม Demo Unit', html);
+}
+
+function updateDemoPriceFromSelect() {
+  var select = document.getElementById('demo_product_id');
+  var priceInput = document.getElementById('demo_price');
+  if (select && select.selectedIndex > 0) {
+    var selectedOption = select.options[select.selectedIndex];
+    var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+    priceInput.value = price;
+  }
+}
+
+function saveNewDemoUnit() {
+  var productId = document.getElementById('demo_product_id').value;
+  if (!productId) { toast('กรุณาเลือกสินค้า'); return; }
+  
+  var product = getProductById(productId);
+  if (!product) { toast('ไม่พบสินค้า'); return; }
+  
+  var price = parseFloat(document.getElementById('demo_price').value) || product.price || 0;
+  var note = document.getElementById('demo_note').value.trim();
+  
+  // ตรวจสอบว่ามี Demo Unit นี้อยู่แล้วหรือไม่
+  var existing = getDemoUnitByProductId(productId);
+  if (existing) {
+    if (!confirm('สินค้านี้มี Demo Unit อยู่แล้ว ต้องการอัปเดตหรือไม่?')) return;
+    updateDemoUnit(existing.id, {
+      price: price,
+      note: note,
+      enabled: true
+    });
+    toast('💾 อัปเดต Demo Unit แล้ว');
+  } else {
+    addDemoUnit({
+      productId: productId,
+      productName: product.name,
+      sku: product.sku || '',
+      ean: product.ean || '',
+      price: price,
+      note: note,
+      enabled: true
+    });
+    toast('✅ เพิ่ม Demo Unit แล้ว');
+  }
+  
+  closeMForce();
+  render();
+}
+
+function editDemoUnit(id) {
+  var demo = getDemoUnitById(id);
+  if (!demo) { toast('ไม่พบ Demo Unit'); return; }
+  
+  // ดึงรายการสินค้าทั้งหมด
+  var products = getAllProducts();
+  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var selected = (demo.productId === p.id) ? 'selected' : '';
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '" ' + selected + '>' + 
+      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
+  }
+  
+  var html = '<div style="max-width:500px">' +
+    '<div class="fg"><label>🔍 สินค้า</label>' +
+    '<select id="edit_demo_product_id" class="fm-input" onchange="editDemoUpdatePrice()">' + productOptions + '</select>' +
+    '</div>' +
+    '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
+    '<input type="number" id="edit_demo_price" class="fm-input" value="' + (demo.price || 0) + '" step="0.01">' +
+    '</div>' +
+    '<div class="fg"><label>📝 หมายเหตุ</label>' +
+    '<textarea id="edit_demo_note" rows="2" class="fm-input">' + sanitize(demo.note || '') + '</textarea>' +
+    '</div>' +
+    '<div class="fg"><label>📊 สถานะ</label>' +
+    '<select id="edit_demo_status" class="fm-input">' +
+    '<option value="true" ' + (demo.enabled !== false ? 'selected' : '') + '>✅ Active</option>' +
+    '<option value="false" ' + (demo.enabled === false ? 'selected' : '') + '>⏸ Inactive</option>' +
+    '</select>' +
+    '</div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="updateDemoUnitFromModal(\'' + id + '\')">💾 บันทึก</button>' +
+    '<button class="btn bd" onclick="deleteDemoUnitConfirm(\'' + id + '\')">🗑️ ลบ</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('✏️ แก้ไข Demo Unit', html);
+}
+
+function editDemoUpdatePrice() {
+  var select = document.getElementById('edit_demo_product_id');
+  var priceInput = document.getElementById('edit_demo_price');
+  if (select && select.selectedIndex > 0) {
+    var selectedOption = select.options[select.selectedIndex];
+    var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+    if (priceInput.value == 0 || priceInput.value == '0') {
+      priceInput.value = price;
+    }
+  }
+}
+
+function updateDemoUnitFromModal(id) {
+  var productId = document.getElementById('edit_demo_product_id').value;
+  var price = parseFloat(document.getElementById('edit_demo_price').value) || 0;
+  var note = document.getElementById('edit_demo_note').value.trim();
+  var enabled = document.getElementById('edit_demo_status').value === 'true';
+  
+  if (!productId) { toast('กรุณาเลือกสินค้า'); return; }
+  
+  var product = getProductById(productId);
+  if (!product) { toast('ไม่พบสินค้า'); return; }
+  
+  updateDemoUnit(id, {
+    productId: productId,
+    productName: product.name,
+    sku: product.sku || '',
+    ean: product.ean || '',
+    price: price,
+    note: note,
+    enabled: enabled
+  });
+  
+  closeMForce();
+  toast('💾 อัปเดต Demo Unit แล้ว');
+  render();
+}
 // ================================================================
 // INITIALIZATION
 // ================================================================
@@ -1790,6 +2333,12 @@ window.Products = {
   clearAll: clearAllProductsData,
   exportToExcel: exportProductsToExcel,
   importFull: importFullExcel
+     isDemo: isDemoProduct,
+  isMain: isMainProduct,
+  getMain: getMainProducts,
+  getDemo: getDemoProducts,
+  exportMain: exportMainProductsToExcel,
+  exportDemo: exportDemoProductsToExcel
 };
 
 // ฟังก์ชัน global สำหรับใช้ในระบบอื่น
