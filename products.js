@@ -23,6 +23,7 @@ var PRODUCT_CATEGORIES = [
 // CORE DATA MANAGEMENT
 // ================================================================
 
+// โค้ดเดิม (มีปัญหา)
 function getProductsData() {
   try {
     var saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
@@ -30,12 +31,6 @@ function getProductsData() {
       var parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
         return { models: parsed, bundles: [], demoUnits: [], lastUpdated: null };
-      }
-      if (parsed && !parsed.models && typeof parsed === 'object') {
-        var vals = Object.values(parsed);
-        if (vals.length && vals[0] && vals[0].id) {
-          return { models: vals, bundles: [], demoUnits: [], lastUpdated: null };
-        }
       }
       if (!parsed.models) parsed.models = [];
       if (!parsed.bundles) parsed.bundles = [];
@@ -45,7 +40,6 @@ function getProductsData() {
   } catch(e) {}
   return { models: [], bundles: [], demoUnits: [], lastUpdated: null };
 }
-
 function saveProductsData(data) {
   localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(data));
   var cfg = localStorage.getItem('v7_config');
@@ -94,20 +88,34 @@ function syncProductsToFirebase(data) {
 
 function loadProductsFromFirebase() {
   if (typeof db === 'undefined' || !CURRENT_USER) return Promise.resolve(false);
+  
   var userRef = db.collection('users').doc(CURRENT_USER.uid);
   return userRef.collection('products').get().then(function(snapshot) {
     if (snapshot.empty) return false;
+    
     var products = [];
-    snapshot.forEach(function(doc) { products.push(doc.data()); });
-    products = products.map(function(p) { return ensureProductStructure(p); });
+    snapshot.forEach(function(doc) { 
+      var data = doc.data();
+      // ✅ ป้องกันข้อมูลเสีย
+      if (data && !data.id) data.id = doc.id;
+      products.push(data); 
+    });
+    
+    // ✅ ถ้าได้ Array ให้แปลงเป็น Object structure
     var data = getProductsData();
-    data.models = products;
+    if (Array.isArray(products)) {
+      data.models = products;
+    } else if (products.models) {
+      data.models = products.models;
+    } else {
+      data.models = products;
+    }
+    
     data.lastUpdated = new Date().toISOString();
     saveProductsData(data);
     return true;
   }).catch(function() { return false; });
 }
-
 function ensureProductStructure(p) {
   if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 }, category: 'other', eol: false };
   if (p.rrpInVat === undefined) p.rrpInVat = 0;

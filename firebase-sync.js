@@ -242,6 +242,9 @@ function migrateLocalToFirebase() {
 
   toast('🔄 กำลัง sync ข้อมูลไป Cloud...');
 
+  // ✅ เพิ่ม: ตรวจสอบและซ่อมแซมโครงสร้างก่อน sync
+  fixProductsStructureBeforeSync();
+
   ALL_SYNC_KEYS.forEach(function(key) {
     var lsKey = 'v7_' + key;
     var data = localStorage.getItem(lsKey);
@@ -249,24 +252,41 @@ function migrateLocalToFirebase() {
     try {
       var parsed = JSON.parse(data);
       var collName = SYNC_KEY_MAP[key];
+      
+      // ✅ เพิ่ม: สำหรับ products ให้แปลงเป็นโครงสร้างที่ถูกต้อง
+      if (key === 'products' && Array.isArray(parsed)) {
+        parsed = { models: parsed, bundles: [], demoUnits: [] };
+      }
+      
       syncToFirebase(collName, parsed);
     } catch(e) {
       console.warn('Migration error for ' + key, e);
     }
   });
 
-  // Config
-  var cfg = localStorage.getItem('v7_config');
-  if (cfg) {
-    try {
-      db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg));
-    } catch(e) {}
-  }
-
   localStorage.setItem('v7_migrated_' + CURRENT_USER.uid, 'true');
   toast('✅ Sync เสร็จแล้ว!');
 }
 
+// ✅ เพิ่มฟังก์ชันนี้
+function fixProductsStructureBeforeSync() {
+  var raw = localStorage.getItem('v7_products');
+  if (!raw) return;
+  
+  try {
+    var parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      var fixed = {
+        models: parsed,
+        bundles: [],
+        demoUnits: [],
+        lastUpdated: new Date().toISOString()
+      };
+      localStorage.setItem('v7_products', JSON.stringify(fixed));
+      console.log('✅ ซ่อมแซมโครงสร้าง v7_products ก่อน sync');
+    }
+  } catch(e) {}
+}
 // ================================================================
 // AUTO SYNC — Override ST._set
 // ================================================================
