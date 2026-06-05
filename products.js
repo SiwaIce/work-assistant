@@ -854,25 +854,131 @@ function importFullExcel(file, onComplete) {
 
 function doImportFullExcel() {
   var fileInput = document.getElementById('importFullFile');
-  if (!fileInput || !fileInput.files[0]) {
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
     toast('⚠️ กรุณาเลือกไฟล์ Excel');
     return;
   }
+  
   toast('🔄 กำลังนำเข้าข้อมูล...');
-  importFullExcel(fileInput.files[0], function(res) {
-    if (res.success) {
-      var msg = '✅ นำเข้าเสร็จ! ';
-      if (res.result.products) msg += 'สินค้า: +' + res.result.products.imported + ' อัปเดต ' + res.result.products.updated + ' ';
-      if (res.result.bundles) msg += 'Bundle: +' + res.result.bundles.imported + ' ';
-      if (res.result.demos) msg += 'Demo: +' + res.result.demos.imported;
-      toast(msg);
-      setTimeout(function() { location.reload(); }, 1500);
-    } else {
-      toast('❌ นำเข้าล้มเหลว: ' + res.error, true);
+  
+  var file = fileInput.files[0];
+  var reader = new FileReader();
+  
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: 'array' });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      
+      if (!rows || rows.length < 2) {
+        toast('❌ ไม่พบข้อมูลในไฟล์');
+        return;
+      }
+      
+      // สร้างโครงสร้างข้อมูลใหม่
+      var productsData = {
+        models: [],
+        bundles: [],
+        demoUnits: [],
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // อ่าน header
+      var headers = rows[0];
+      var colIdx = { sku: 0, ean: 1, name: 2, rrpInVat: 3, rrpExVat: 4, priceS: 5, priceA: 6, priceB: 7, priceOther: 8 };
+      
+      // หา column อัตโนมัติ
+      for (var i = 0; i < headers.length; i++) {
+        var h = String(headers[i] || '').toLowerCase();
+        if (h.indexOf('sis') !== -1 || h.indexOf('part') !== -1) colIdx.sku = i;
+        if (h.indexOf('ean') !== -1) colIdx.ean = i;
+        if (h.indexOf('product') !== -1 || h.indexOf('name') !== -1) colIdx.name = i;
+        if (h.indexOf('rrp in vat') !== -1) colIdx.rrpInVat = i;
+        if (h.indexOf('rrp ex vat') !== -1) colIdx.rrpExVat = i;
+        if (h.indexOf('type 1') !== -1) colIdx.priceS = i;
+        if (h.indexOf('type 2') !== -1) colIdx.priceA = i;
+        if (h.indexOf('type 3') !== -1) colIdx.priceB = i;
+        if (h.indexOf('type 4') !== -1) colIdx.priceOther = i;
+      }
+      
+      var imported = 0;
+      var errors = 0;
+      
+      for (var i = 1; i < rows.length; i++) {
+        try {
+          var row = rows[i];
+          var name = row[colIdx.name] ? String(row[colIdx.name]).trim() : '';
+          
+          if (!name) {
+            errors++;
+            continue;
+          }
+          
+          var sku = row[colIdx.sku] ? String(row[colIdx.sku]).trim() : '';
+          var ean = row[colIdx.ean] ? String(row[colIdx.ean]).trim() : '';
+          var rrpInVat = parseFloat(row[colIdx.rrpInVat]) || 0;
+          var rrpExVat = parseFloat(row[colIdx.rrpExVat]) || 0;
+          var priceS = parseFloat(row[colIdx.priceS]) || 0;
+          var priceA = parseFloat(row[colIdx.priceA]) || 0;
+          var priceB = parseFloat(row[colIdx.priceB]) || 0;
+          var priceOther = parseFloat(row[colIdx.priceOther]) || 0;
+          
+          if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
+          
+          // กำหนดหมวดหมู่
+          var category = 'other';
+          var nameLower = name.toLowerCase();
+          if (nameLower.indexOf('matrice') !== -1 || nameLower.indexOf('mavic') !== -1) category = 'drone';
+          else if (nameLower.indexOf('zenmuse') !== -1) category = 'payload';
+          else if (nameLower.indexOf('battery') !== -1) category = 'battery';
+          else if (nameLower.indexOf('flighthub') !== -1 || nameLower.indexOf('terra') !== -1) category = 'software';
+          else if (nameLower.indexOf('dock') !== -1) category = 'bundle';
+          
+          productsData.models.push({
+            id: 'prod_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4),
+            name: name,
+            sku: sku,
+            ean: ean,
+            category: category,
+            rrpInVat: rrpInVat,
+            rrpExVat: rrpExVat,
+            price: priceB,
+            typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+            eol: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          imported++;
+          
+        } catch(e) {
+          errors++;
+        }
+      }
+      
+      localStorage.setItem('v7_products', JSON.stringify(productsData));
+      
+      // รีเฟรช Products module
+      if (typeof Products !== 'undefined' && Products.refresh) {
+        Products.refresh();
+      }
+      
+      toast('✅ นำเข้าเสร็จ! ' + imported + ' รายการ');
+      
+      if (typeof render === 'function') render();
+      
+    } catch(err) {
+      console.error('Import error:', err);
+      toast('❌ นำเข้าล้มเหลว: ' + err.message);
     }
-  });
+  };
+  
+  reader.onerror = function() {
+    toast('❌ ไม่สามารถอ่านไฟล์ได้');
+  };
+  
+  reader.readAsArrayBuffer(file);
 }
-
 // ================================================================
 // EXPORT TO EXCEL
 // ================================================================
