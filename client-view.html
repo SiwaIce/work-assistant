@@ -3184,11 +3184,31 @@ function changeH1Source(dealerId, useSisRevenue) {
 // ================================================================
 
 function renderDemoStatusForClient(dealer, levelRequirements) {
-  // ตรวจสอบว่ามีข้อมูล demo หรือไม่
-  var demoOption = dealer.demoOption || 'none';
-  var demoItems = dealer.demoItems || [];
+  // ✅ เพิ่ม debug ตรวจสอบข้อมูล
+  console.log('=== renderDemoStatusForClient ===');
+  console.log('Dealer:', dealer ? dealer.name : 'null');
+  console.log('demoOption:', dealer ? dealer.demoOption : 'none');
+  console.log('demoItems:', dealer ? dealer.demoItems : 'null');
+  console.log('demoItems length:', dealer && dealer.demoItems ? dealer.demoItems.length : 0);
   
-  // สร้าง list ของรุ่นที่มี (จาก demoItems)
+  var demoOption = (dealer && dealer.demoOption) || 'none';
+  var demoItems = (dealer && dealer.demoItems && Array.isArray(dealer.demoItems)) ? dealer.demoItems : [];
+  
+  var level = (dealer && dealer.level) || 'Other';
+  
+  // ✅ ตรวจสอบ custom requirements
+  var customReq = (dealer && dealer.customDemoRequirements) || {};
+  var useCustom = customReq.enabled === true;
+  
+  var requirements = (levelRequirements && levelRequirements[level]) || levelRequirements.B || { option1Models: [], option2Models: [] };
+  var option1Models = useCustom ? (customReq.option1Models || []) : (requirements.option1Models || []);
+  var option2Models = useCustom ? (customReq.option2Models || []) : (requirements.option2Models || []);
+  
+  console.log('option1Models:', option1Models);
+  console.log('option2Models:', option2Models);
+  console.log('useCustom:', useCustom);
+  
+  // ✅ สร้าง ownedModels จาก demoItems
   var ownedModels = {};
   var ownedDetails = {};
   for (var i = 0; i < demoItems.length; i++) {
@@ -3198,13 +3218,9 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
     }
   }
   
-  // ดึง requirement ตามระดับของ Dealer (S/A/B/Other)
-  var level = dealer.level || 'Other';
-  var requirements = levelRequirements[level] || levelRequirements.B;
-  var option1Models = requirements.option1Models || [];
-  var option2Models = requirements.option2Models || [];
+  console.log('ownedModels:', ownedModels);
   
-  // กำหนดค่าเริ่มต้น
+  // กำหนด required models ตาม option
   var requiredModels = [];
   var optionText = '';
   var isOk = false;
@@ -3214,21 +3230,21 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
     optionText = '❌ ไม่มีข้อกำหนด';
     isOk = true;
   } else if (demoOption === 'option1') {
-    optionText = '📦 Option 1 (Drone + Payload)';
+    optionText = '📦 Option 1 (Drone + Payload)' + (useCustom ? ' ✏️ กำหนดเอง' : '');
     requiredModels = option1Models;
     for (var i = 0; i < requiredModels.length; i++) {
       if (!ownedModels[requiredModels[i]]) missingModels.push(requiredModels[i]);
     }
     isOk = missingModels.length === 0;
   } else if (demoOption === 'option2') {
-    optionText = '🏗️ Option 2 (Dock + Drone)';
+    optionText = '🏗️ Option 2 (Dock + Drone)' + (useCustom ? ' ✏️ กำหนดเอง' : '');
     requiredModels = option2Models;
     for (var i = 0; i < requiredModels.length; i++) {
       if (!ownedModels[requiredModels[i]]) missingModels.push(requiredModels[i]);
     }
     isOk = missingModels.length === 0;
   } else if (demoOption === 'both') {
-    optionText = '📦🏗️ Both Options (ต้องมีทั้งสอง)';
+    optionText = '📦🏗️ Both Options' + (useCustom ? ' ✏️ กำหนดเอง' : '');
     var allRequired = option1Models.concat(option2Models);
     requiredModels = allRequired;
     for (var i = 0; i < allRequired.length; i++) {
@@ -3248,11 +3264,11 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
   html += '<div style="display:flex;align-items:center;gap:8px"><span class="tag ' + (isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:14px;padding:4px 12px">' + statusIcon + ' ' + statusText + '</span></div>';
   html += '</div>';
   
-  // แสดงรายการอุปกรณ์ที่มี (ตามที่ Dealer เลือกมา)
   if (demoOption !== 'none') {
     html += '<div style="margin-top:12px"><strong style="font-size:14px;color:var(--accent)">📦 รายการอุปกรณ์ที่มี:</strong></div>';
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:10px">';
     
+    // แสดงเฉพาะ requiredModels เท่านั้น (ตาม Option ที่เลือก)
     for (var i = 0; i < requiredModels.length; i++) {
       var model = requiredModels[i];
       var owned = ownedModels[model];
@@ -3266,7 +3282,6 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
     }
     html += '</div>';
     
-    // แสดงข้อความขาดอุปกรณ์
     if (!isOk && missingModels.length > 0) {
       html += '<div style="margin-top:14px;padding:12px;background:rgba(239,68,68,0.12);border-radius:10px;border-left:3px solid #ef4444">';
       html += '<span style="font-weight:700">⚠️ ขาดอุปกรณ์:</span> <strong>' + missingModels.join(', ') + '</strong>';
@@ -3274,7 +3289,7 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
     }
   }
   
-  // แสดงข้อความ Option ที่ไม่ได้เลือก (แจ้งเตือน)
+  // ข้อความแจ้งเตือน Option ที่ไม่ได้เลือก
   if (demoOption === 'option1') {
     html += '<div class="hint" style="margin-top:14px;padding:10px;background:var(--bg-page);border-radius:8px;border:1px dashed var(--border)">';
     html += 'ℹ️ Option 2 (Dock + Drone) ไม่ได้อยู่ในแผนของพาร์ทเนอร์นี้';
@@ -3290,9 +3305,10 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
   }
   
   html += '</div>';
+  
+  console.log('✅ renderDemoStatusForClient completed');
   return html;
 }
-
 // ================================================================
 // H1 STATUS CALCULATION (เดิม)
 // ================================================================
