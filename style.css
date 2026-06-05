@@ -8549,3 +8549,100 @@ input:focus, select:focus, textarea:focus {
 .theme-midnight .health-widget {
   background: linear-gradient(135deg, #09090b 0%, rgba(74,222,128,0.05) 100%);
 }
+/* Modal styles for Quotation */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-container {
+  background: var(--card);
+  border-radius: 20px;
+  max-width: 550px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  color: var(--accent);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.modal-close:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  border-radius: 0 0 20px 20px;
+}
+
+/* Input styling */
+.fm-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.fm-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}

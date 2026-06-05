@@ -523,28 +523,77 @@ function resetQuoteFilters() {
 
 function showCreateQuotationModal() {
   var dealers = ST.getAll('dealers');
-  var dealerOptions = '<option value="">-- เลือก Dealer --</option>';
+  
+  // สร้าง datalist สำหรับ Dealer ให้พิมพ์ค้นหาได้
+  var dealerDatalistId = 'dealerList_' + Date.now();
+  var dealerOptionsHtml = '';
   for (var i = 0; i < dealers.length; i++) {
-    dealerOptions += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + ' (' + (dealers[i].level || '-') + ')</option>';
+    dealerOptionsHtml += '<option value="' + sanitize(dealers[i].name) + '" data-id="' + dealers[i].id + '" data-level="' + (dealers[i].level || 'B') + '" data-term="' + (dealers[i].creditTerm || '') + '">';
   }
   
-  var levelOptions = '<option value="RRP">💰 RRP (ราคาขายปลีก)</option><option value="S">👑 S (Type 1)</option><option value="A">⭐ A (Type 2)</option><option value="B">📦 B (Type 3)</option><option value="Other">🔄 Other (Type 4)</option>';
+  var levelOptions = '<option value="RRP">💰 RRP (ราคาขายปลีก)</option>';
+  levelOptions += '<option value="S">👑 S (Type 1)</option>';
+  levelOptions += '<option value="A">⭐ A (Type 2)</option>';
+  levelOptions += '<option value="B" selected>📦 B (Type 3)</option>';
+  levelOptions += '<option value="Other">🔄 Other (Type 4)</option>';
   
-  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container" style="max-width:550px">';
-  html += '<div class="modal-header"><h3>➕ สร้างใบเสนอราคาใหม่</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
-  html += '<div class="modal-body">';
-  html += '<div class="fg"><label>🏪 เลือก Dealer *</label><select id="newQuoteDealer" class="fm-input" onchange="newQuoteDealerChanged()">' + dealerOptions + '</select></div>';
-  html += '<div class="fr"><div class="fg"><label>📅 วันที่เริ่ม</label><input type="text" id="newQuoteValidFrom" class="fm-input dp" value="' + _td() + '"></div>';
-  html += '<div class="fg"><label>📅 วันที่หมดอายุ</label><input type="text" id="newQuoteValidTo" class="fm-input dp" value="' + addD(_td(), 30) + '"></div></div>';
-  html += '<div class="fr"><div class="fg"><label>💰 ระดับราคาที่ใช้</label><select id="newQuoteLevel" class="fm-input">' + levelOptions + '</select></div>';
-  html += '<div class="fg"><label>💳 เงื่อนไขชำระเงิน</label><input type="text" id="newQuotePaymentTerm" class="fm-input" placeholder="Net due 30 days"></div></div>';
-  html += '<div class="fg"><label>📄 เลขที่อ้างอิง (PO No.)</label><input type="text" id="newQuotePoNo" class="fm-input" placeholder="1214845984"></div>';
-  html += '<div class="fg"><label>📝 หมายเหตุ</label><textarea id="newQuoteRemark" rows="2" class="fm-input" placeholder="เงื่อนไขเพิ่มเติม..."></textarea></div>';
-  html += '</div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="createNewQuotation()">📝 สร้าง</button></div></div></div>';
+  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10000">';
+  html += '<div class="modal-container" style="background:var(--card);border-radius:20px;max-width:550px;width:90%;max-height:85vh;overflow-y:auto;border:1px solid var(--border)">';
+  html += '<div class="modal-header" style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--card)">';
+  html += '<h3 style="font-size:18px;color:var(--accent);margin:0">➕ สร้างใบเสนอราคาใหม่</h3>';
+  html += '<button class="modal-close" onclick="closeModal()" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer">✕</button>';
+  html += '</div>';
+  html += '<div class="modal-body" style="padding:20px">';
+  
+  // Dealer - เปลี่ยนเป็น input + datalist ให้พิมพ์เองได้
+  html += '<div class="fg"><label>🏪 ชื่อ Dealer <span style="color:#ef4444">*</span></label>';
+  html += '<input type="text" id="newQuoteDealerName" list="' + dealerDatalistId + '" class="fm-input" placeholder="พิมพ์ชื่อ Dealer หรือเลือกจากรายการ..." autocomplete="off" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)">';
+  html += '<datalist id="' + dealerDatalistId + '">' + dealerOptionsHtml + '</datalist>';
+  html += '<input type="hidden" id="newQuoteDealerId">';
+  html += '<input type="hidden" id="newQuoteDealerLevel">';
+  html += '</div>';
+  
+  html += '<div class="fr"><div class="fg"><label>📅 วันที่เริ่ม</label>';
+  html += '<input type="text" id="newQuoteValidFrom" class="fm-input dp" value="' + _td() + '" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  html += '<div class="fg"><label>📅 วันที่หมดอายุ</label>';
+  html += '<input type="text" id="newQuoteValidTo" class="fm-input dp" value="' + addD(_td(), 30) + '" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div></div>';
+  
+  html += '<div class="fr"><div class="fg"><label>💰 ระดับราคาที่ใช้</label>';
+  html += '<select id="newQuoteLevel" class="fm-input" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)">' + levelOptions + '</select></div>';
+  html += '<div class="fg"><label>💳 เงื่อนไขชำระเงิน</label>';
+  html += '<input type="text" id="newQuotePaymentTerm" class="fm-input" placeholder="Net due 30 days" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div></div>';
+  
+  html += '<div class="fg"><label>📄 เลขที่อ้างอิง (PO No.)</label>';
+  html += '<input type="text" id="newQuotePoNo" class="fm-input" placeholder="1214845984" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  
+  html += '<div class="fg"><label>📝 หมายเหตุ</label>';
+  html += '<textarea id="newQuoteRemark" rows="2" class="fm-input" placeholder="เงื่อนไขเพิ่มเติม..." style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></textarea></div>';
+  
+  html += '</div>';
+  html += '<div class="modal-footer" style="padding:16px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px">';
+  html += '<button class="btn" onclick="closeModal()" style="padding:8px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">ยกเลิก</button>';
+  html += '<button class="btn btn-primary" onclick="createNewQuotation()" style="padding:8px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer">📝 สร้าง</button>';
+  html += '</div></div></div>';
   
   document.body.insertAdjacentHTML('beforeend', html);
+  
+  // เพิ่ม event เมื่อเลือก Dealer จาก datalist
+  var dealerInput = document.getElementById('newQuoteDealerName');
+  if (dealerInput) {
+    dealerInput.addEventListener('change', function() {
+      var selectedName = this.value;
+      var option = document.querySelector('#dealerList_' + dealerDatalistId.split('_')[1] + ' option[value="' + selectedName.replace(/"/g, '&quot;') + '"]');
+      if (option) {
+        document.getElementById('newQuoteDealerId').value = option.dataset.id;
+        document.getElementById('newQuoteDealerLevel').value = option.dataset.level;
+        var termInput = document.getElementById('newQuotePaymentTerm');
+        if (termInput && !termInput.value && option.dataset.term) {
+          termInput.value = option.dataset.term;
+        }
+      }
+    });
+  }
 }
-
 function newQuoteDealerChanged() {
   var dealerId = document.getElementById('newQuoteDealer').value;
   if (!dealerId) return;
@@ -556,23 +605,22 @@ function newQuoteDealerChanged() {
 }
 
 function createNewQuotation() {
-  var dealerId = document.getElementById('newQuoteDealer').value;
-  if (!dealerId) { toast('กรุณาเลือก Dealer'); return; }
-  
-  var dealer = ST.getOne('dealers', dealerId);
+  var dealerName = document.getElementById('newQuoteDealerName').value.trim();
+  var dealerId = document.getElementById('newQuoteDealerId').value;
+  var dealerLevel = document.getElementById('newQuoteDealerLevel').value;
   var validFrom = dpG('newQuoteValidFrom') || _td();
   var validTo = dpG('newQuoteValidTo') || addD(_td(), 30);
   var levelUsed = document.getElementById('newQuoteLevel').value;
-  var paymentTerm = document.getElementById('newQuotePaymentTerm').value || (dealer ? dealer.creditTerm : 'Net due 30 days');
+  var paymentTerm = document.getElementById('newQuotePaymentTerm').value.trim() || 'Net due 30 days';
   var poNo = document.getElementById('newQuotePoNo').value.trim();
   var remark = document.getElementById('newQuoteRemark').value.trim();
   
-  // Get contacts from dealer
-  var contacts = [];
-  if (dealer && dealer.contacts && dealer.contacts.length) {
-    contacts = dealer.contacts.map(function(c) {
-      return { name: c.name, email: c.email, phone: c.phone, role: c.role };
-    });
+  if (!dealerName) { toast('กรุณากรอกชื่อ Dealer'); return; }
+  
+  // ถ้าไม่มี dealerId (พิมพ์เอง) ให้สร้าง dealer ชั่วคราว
+  if (!dealerId) {
+    dealerId = 'temp_' + Date.now();
+    dealerLevel = 'B';
   }
   
   var newId = 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -582,8 +630,8 @@ function createNewQuotation() {
     id: newId,
     quoteNo: newQuoteNo,
     dealerId: dealerId,
-    dealerName: dealer ? dealer.name : '',
-    dealerLevel: dealer ? dealer.level : '',
+    dealerName: dealerName,
+    dealerLevel: dealerLevel || 'B',
     levelUsed: levelUsed,
     createdAt: new Date().toISOString(),
     validFrom: validFrom,
@@ -600,42 +648,29 @@ function createNewQuotation() {
     vatAmount: 0,
     totalAmount: 0,
     remark: remark,
-    contacts: contacts,
+    contacts: [],
     status: 'draft',
     sentDate: null,
     approvedDate: null,
     updatedAt: new Date().toISOString()
   };
   
-  // ✅ โหลดข้อมูลเดิมก่อน
+  // โหลดข้อมูลเดิม
   var existingQuotes = [];
   try {
     existingQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
   } catch(e) {}
   
-  // ✅ เพิ่มของใหม่
   existingQuotes.push(newQuote);
-  
-  // ✅ บันทึก
   localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
-  
-  // ✅ อัปเดต global array
   quotations = existingQuotes;
-  
-  // ✅ Sync Firebase (ถ้ามี)
-  if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
-    db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(newId).set(newQuote).catch(function(e) {
-      console.warn('Firebase sync error:', e);
-    });
-  }
   
   closeModal();
   toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   
-  // ✅ กลับไปหน้า列表และรีเฟรช
-  go('quotationV2');
+  // ไปที่หน้าแก้ไขทันที
+  renderEditQuotationPage(newQuote);
 }
-
 // ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
 function renderEditQuotationPage(quote) {
   if (!quote) {
@@ -842,8 +877,10 @@ function editQuoteLevelChanged() {
 }
 
 function saveCurrentQuotation() {
+  // อ่านค่าจากฟอร์ม
   var quoteNo = document.getElementById('editQuoteNo')?.value.trim();
   var dealerId = document.getElementById('editQuoteDealer')?.value;
+  var dealerName = document.getElementById('editQuoteDealer')?.options[document.getElementById('editQuoteDealer').selectedIndex]?.text || '';
   var validFrom = dpG('editQuoteValidFrom') || _td();
   var validTo = dpG('editQuoteValidTo') || addD(_td(), 30);
   var levelUsed = document.getElementById('editQuoteLevel')?.value || 'B';
@@ -853,20 +890,27 @@ function saveCurrentQuotation() {
   var status = document.getElementById('editQuoteStatus')?.value || 'draft';
   var remark = document.getElementById('editQuoteRemark')?.value.trim() || '';
   
-  if (!dealerId) { toast('กรุณาเลือก Dealer'); return; }
   if (!quoteNo) { toast('กรุณาใส่เลขที่'); return; }
   
-  var dealer = ST.getOne('dealers', dealerId);
+  // ✅ คำนวณ totals จาก quotationItems ปัจจุบัน
+  var grossTotal = 0;
+  for (var i = 0; i < quotationItems.length; i++) {
+    grossTotal += (Number(quotationItems[i].amount) || 0);
+  }
+  
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPercent = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
-  var totals = recalculateQuotationTotal();
+  var discountAmount = grossTotal * discountPercent / 100;
+  var netAmount = grossTotal - discountAmount;
+  var vatAmount = netAmount * 7 / 100;
+  var totalAmount = netAmount + vatAmount;
   
+  // ✅ อัปเดต quote ใน array
   for (var i = 0; i < quotations.length; i++) {
     if (quotations[i].id === currentQuoteId) {
       quotations[i].quoteNo = quoteNo;
       quotations[i].dealerId = dealerId;
-      quotations[i].dealerName = dealer ? dealer.name : '';
-      quotations[i].dealerLevel = dealer ? dealer.level : '';
+      quotations[i].dealerName = dealerName;
       quotations[i].levelUsed = levelUsed;
       quotations[i].validFrom = validFrom;
       quotations[i].validTo = validTo;
@@ -874,13 +918,13 @@ function saveCurrentQuotation() {
       quotations[i].quotedBy = quotedBy;
       quotations[i].poNo = poNo;
       quotations[i].items = JSON.parse(JSON.stringify(quotationItems));
-      quotations[i].grossTotal = totals.grossTotal;
+      quotations[i].grossTotal = grossTotal;
       quotations[i].discountPercent = discountPercent;
-      quotations[i].discountAmount = totals.discountAmount;
-      quotations[i].netAmount = totals.netAmount;
+      quotations[i].discountAmount = discountAmount;
+      quotations[i].netAmount = netAmount;
       quotations[i].vatPercent = 7;
-      quotations[i].vatAmount = totals.vatAmount;
-      quotations[i].totalAmount = totals.totalAmount;
+      quotations[i].vatAmount = vatAmount;
+      quotations[i].totalAmount = totalAmount;
       quotations[i].remark = remark;
       quotations[i].status = status;
       quotations[i].updatedAt = new Date().toISOString();
@@ -888,11 +932,12 @@ function saveCurrentQuotation() {
     }
   }
   
-  saveQuotations();
+  // ✅ บันทึก
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
+  
   toast('💾 บันทึกใบเสนอราคาแล้ว');
   go('quotationV2');
 }
-
 function deleteQuotation(quoteId) {
   if (!confirm('ลบใบเสนอราคานี้?')) return;
   
@@ -973,12 +1018,26 @@ function removeQuoteContact(idx) {
 // ================================================================
 
 function previewQuotation(quoteId) {
-  var quote = null;
-  for (var i = 0; i < quotations.length; i++) {
-    if (quotations[i].id === quoteId) { quote = quotations[i]; break; }
-  }
-  if (!quote) { toast('ไม่พบข้อมูล'); return; }
+  // ✅ โหลดข้อมูลล่าสุดจาก localStorage
+  var latestQuotes = [];
+  try {
+    latestQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+  } catch(e) {}
   
+  var quote = null;
+  for (var i = 0; i < latestQuotes.length; i++) {
+    if (latestQuotes[i].id === quoteId) {
+      quote = latestQuotes[i];
+      break;
+    }
+  }
+  
+  if (!quote) { 
+    toast('ไม่พบข้อมูล'); 
+    return; 
+  }
+  
+  // ที่เหลือเหมือนเดิม...
   var dealer = ST.getOne('dealers', quote.dealerId) || { name: quote.dealerName, address: '', phone: '', email: '' };
   var companyName = 'SIS Distribution (Thailand) PLC';
   var companyAddress = '9 G-Tower, 9th Floor, Room 901, Ratchadaphisek Road, Din Daeng, Bangkok 10400';
