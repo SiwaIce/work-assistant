@@ -1178,23 +1178,338 @@ function rProductBundles(el) {
 function rProductDemo(el) {
   document.getElementById('pgT').textContent = '🚁 Demo Unit';
   var demos = getAllDemoUnits();
-  var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml"><button class="btn bp" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button><button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button></span></h2>';
-  if (!demos.length) {
-    html += '<div class="empty"><p>ยังไม่มี Demo Unit</p><button class="btn bp" onclick="showAddDemoUnitM()">➕ สร้างรายการแรก</button></div>';
-  } else {
-    html += '<div class="export-wrap"><table class="export-table"><thead><tr><th>#</th><th>SKU</th><th>EAN</th><th>สินค้า</th><th>ราคา Demo</th><th>สถานะ</th><th></th></tr></thead><tbody>';
-    for (var i = 0; i < demos.length; i++) {
-      var d = demos[i];
-      var product = d.productId ? getProductById(d.productId) : null;
-      var productName = product ? product.name : (d.productName || d.name || '');
-      html += '<tr><td class="pipe-row-num">' + (i+1) + '</td><td>' + sanitize(d.sku || '-') + '</td><td>' + sanitize(d.ean || '-') + '</td><td>' + sanitize(productName) + '</td><td style="text-align:right">' + fmtMoney(d.price) + '</td><td>' + (d.enabled ? '✅ Active' : '⏸ Inactive') + '</td><td><button class="btn bsm bo" onclick="editDemoUnit(\'' + d.id + '\')">✏️</button></td></tr>';
+  
+  // ถ้าไม่มีข้อมูล ให้โหลดจาก Products module
+  if (!demos.length && typeof Products !== 'undefined') {
+    var allProducts = Products.getAll();
+    var demoProducts = allProducts.filter(function(p) {
+      return p.category === 'demo' || (p.name && p.name.includes('(Demo)'));
+    });
+    if (demoProducts.length) {
+      demos = demoProducts.map(function(p) {
+        return {
+          id: p.id,
+          sku: p.sku || '',
+          ean: p.ean || '',
+          productName: p.name,
+          productId: p.id,
+          price: p.demoPrice || p.price || 0,
+          enabled: true,
+          note: ''
+        };
+      });
     }
-    html += '</tbody></table></div>';
   }
+  
+  var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml">' +
+    '<button class="btn bp" onclick="showAddDemoUnitM()" style="background:#22c55e">➕ เพิ่ม Demo Unit</button>' +
+    '<button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button>' +
+    '<button class="btn bo" onclick="syncDemoFromProducts()">🔄 Sync จาก Products</button>' +
+    '</span></h2>';
+  
+  // ปุ่มล้าง filter และค้นหา
+  html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+    '<input type="text" id="demoSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า..." style="flex:1;min-width:150px" oninput="filterDemoList()">' +
+    '<button class="btn bsm bo" onclick="resetDemoFilter()">✖️ ล้าง</button>' +
+    '</div>';
+  
+  if (!demos.length) {
+    html += '<div class="empty"><p>ยังไม่มี Demo Unit</p>' +
+      '<div class="hint" style="margin-top:8px">💡 กด "Sync จาก Products" เพื่อโหลดข้อมูล Demo จากสินค้าที่มีอยู่<br>' +
+      'หรือกด "➕ เพิ่ม Demo Unit" เพื่อเพิ่มทีละรายการ</div>' +
+      '</div>';
+  } else {
+    html += '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" id="demoTable">' +
+      '<thead><tr>' +
+      '<th style="width:40px">#</th>' +
+      '<th>SKU</th>' +
+      '<th>EAN</th>' +
+      '<th>สินค้า</th>' +
+      '<th style="text-align:right">ราคา Demo (฿)</th>' +
+      '<th>สถานะ</th>' +
+      '<th style="width:80px"></th>' +
+      '</tr></thead>' +
+      '<tbody id="demoTableBody"></tbody>' +
+      '</table></div>';
+  }
+  
+  html += '<div class="hint" style="margin-top:8px">💡 Demo Unit ที่เพิ่มแล้วจะแสดงในหน้า Dealer Detail → แท็บ Demo</div>';
   html += '</div>';
+  
   el.innerHTML = html;
+  
+  if (demos.length) {
+    renderDemoTable(demos);
+  }
+  
+  // ฟังก์ชันกรอง
+  window.filterDemoList = function() {
+    var search = document.getElementById('demoSearchInput')?.value.toLowerCase() || '';
+    var demos2 = getAllDemoUnits();
+    if (!demos2.length && typeof Products !== 'undefined') {
+      var allProducts = Products.getAll();
+      demos2 = allProducts.filter(function(p) {
+        return p.category === 'demo' || (p.name && p.name.includes('(Demo)'));
+      }).map(function(p) {
+        return {
+          id: p.id,
+          sku: p.sku || '',
+          ean: p.ean || '',
+          productName: p.name,
+          price: p.demoPrice || p.price || 0,
+          enabled: true
+        };
+      });
+    }
+    if (search) {
+      demos2 = demos2.filter(function(d) {
+        return (d.productName || '').toLowerCase().indexOf(search) !== -1 ||
+               (d.sku || '').toLowerCase().indexOf(search) !== -1 ||
+               (d.ean || '').toLowerCase().indexOf(search) !== -1;
+      });
+    }
+    renderDemoTable(demos2);
+  };
+  
+  window.resetDemoFilter = function() {
+    var input = document.getElementById('demoSearchInput');
+    if (input) input.value = '';
+    filterDemoList();
+  };
 }
 
+function renderDemoTable(demos) {
+  var tbody = document.getElementById('demoTableBody');
+  if (!tbody) return;
+  
+  var html = '';
+  for (var i = 0; i < demos.length; i++) {
+    var d = demos[i];
+    html += '<tr>' +
+      '<td class="pipe-row-num">' + (i + 1) + '</td>' +
+      '<td>' + sanitize(d.sku || '-') + '</td>' +
+      '<td>' + sanitize(d.ean || '-') + '</td>' +
+      '<td><strong>' + sanitize(d.productName) + '</strong></td>' +
+      '<td style="text-align:right;color:#22c55e;font-weight:700">' + fmtMoney(d.price) + '</td>' +
+      '<td>' + (d.enabled !== false ? '<span class="tag tag-completed">✅ Active</span>' : '<span class="tag tag-cancelled">⏸ Inactive</span>') + '</td>' +
+      '<td><button class="btn bsm bo" onclick="editDemoUnit(\'' + d.id + '\')">✏️</button> ' +
+      '<button class="btn bsm bd" onclick="deleteDemoUnitConfirm(\'' + d.id + '\')">🗑️</button></td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// ฟังก์ชัน Sync Demo จาก Products
+function syncDemoFromProducts() {
+  if (typeof Products === 'undefined') {
+    toast('❌ Products module ไม่พร้อม');
+    return;
+  }
+  
+  var allProducts = Products.getAll();
+  var demoProducts = allProducts.filter(function(p) {
+    return p.category === 'demo' || (p.name && p.name.includes('(Demo)'));
+  });
+  
+  var existingDemos = getAllDemoUnits();
+  var imported = 0;
+  var updated = 0;
+  
+  demoProducts.forEach(function(p) {
+    var existing = null;
+    for (var i = 0; i < existingDemos.length; i++) {
+      if (existingDemos[i].productId === p.id || existingDemos[i].sku === p.sku) {
+        existing = existingDemos[i];
+        break;
+      }
+    }
+    
+    var demoData = {
+      productId: p.id,
+      productName: p.name,
+      sku: p.sku || '',
+      ean: p.ean || '',
+      price: p.demoPrice || p.price || 0,
+      enabled: true,
+      note: ''
+    };
+    
+    if (existing) {
+      updateDemoUnit(existing.id, demoData);
+      updated++;
+    } else {
+      addDemoUnit(demoData);
+      imported++;
+    }
+  });
+  
+  toast('✅ Sync เสร็จ! เพิ่ม ' + imported + ' รายการ, อัพเดท ' + updated + ' รายการ');
+  render();
+}
+
+// แก้ไขฟังก์ชัน showAddDemoUnitM
+function showAddDemoUnitM() {
+  // ดึงรายการสินค้าทั้งหมดจาก Products module
+  var products = [];
+  if (typeof Products !== 'undefined') {
+    products = Products.getAll();
+  }
+  
+  var productOptions = '<option value="">-- เลือกสินค้า (หรือพิมพ์ค้นหา) --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-sku="' + sanitize(p.sku || '') + '" data-ean="' + sanitize(p.ean || '') + '" data-price="' + (p.demoPrice || p.price || 0) + '">' + 
+      sanitize(p.name) + ' (' + (p.sku || p.ean || '-') + ')' + '</option>';
+  }
+  
+  var html = '<div style="max-width:500px">' +
+    '<div class="fm-group"><label>🔍 เลือกสินค้า (พิมพ์ค้นหาได้)</label>' +
+    '<input type="text" id="newDemoProductSearch" class="fm-input" list="productListDatalist" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" onchange="selectDemoProduct()" oninput="filterProductForDemo()">' +
+    '<datalist id="productListDatalist">' + productOptions + '</datalist>' +
+    '<input type="hidden" id="newDemoProductId">' +
+    '</div>' +
+    '<div class="fm-group"><label>💰 ราคา Demo (฿)</label>' +
+    '<input type="number" id="newDemoPrice" class="fm-input" placeholder="0" step="0.01">' +
+    '</div>' +
+    '<div class="fm-group"><label>📝 หมายเหตุ</label>' +
+    '<textarea id="newDemoNote" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
+    '</div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('➕ เพิ่ม Demo Unit', html);
+}
+
+function filterProductForDemo() {
+  var search = document.getElementById('newDemoProductSearch')?.value.toLowerCase() || '';
+  var datalist = document.getElementById('productListDatalist');
+  if (!datalist) return;
+  
+  var options = datalist.querySelectorAll('option');
+  for (var i = 0; i < options.length; i++) {
+    var opt = options[i];
+    if (opt.value && opt.value.toLowerCase().indexOf(search) !== -1) {
+      opt.style.display = '';
+    } else if (opt.value) {
+      opt.style.display = 'none';
+    }
+  }
+}
+
+function selectDemoProduct() {
+  var input = document.getElementById('newDemoProductSearch');
+  var selectedName = input.value;
+  var datalist = document.getElementById('productListDatalist');
+  var options = datalist.querySelectorAll('option');
+  
+  for (var i = 0; i < options.length; i++) {
+    var opt = options[i];
+    if (opt.value === selectedName) {
+      document.getElementById('newDemoProductId').value = opt.value;
+      var price = parseFloat(opt.getAttribute('data-price')) || 0;
+      document.getElementById('newDemoPrice').value = price;
+      break;
+    }
+  }
+}
+
+function saveNewDemoUnit() {
+  var productId = document.getElementById('newDemoProductId').value;
+  var productName = document.getElementById('newDemoProductSearch').value.trim();
+  var price = parseFloat(document.getElementById('newDemoPrice').value) || 0;
+  var note = document.getElementById('newDemoNote').value.trim();
+  
+  if (!productId && !productName) {
+    toast('⚠️ กรุณาเลือกสินค้า');
+    return;
+  }
+  
+  // หาข้อมูลสินค้า
+  var sku = '', ean = '';
+  if (typeof Products !== 'undefined') {
+    var product = Products.getById(productId) || Products.getByName(productName);
+    if (product) {
+      sku = product.sku || '';
+      ean = product.ean || '';
+      if (!price) price = product.demoPrice || product.price || 0;
+    }
+  }
+  
+  addDemoUnit({
+    productId: productId,
+    productName: productName,
+    sku: sku,
+    ean: ean,
+    price: price,
+    enabled: true,
+    note: note
+  });
+  
+  closeMForce();
+  toast('✅ เพิ่ม Demo Unit แล้ว');
+  render();
+}
+
+function deleteDemoUnitConfirm(id) {
+  if (confirm('ลบ Demo Unit นี้?')) {
+    deleteDemoUnit(id);
+    toast('🗑️ ลบแล้ว');
+    render();
+  }
+}
+
+function editDemoUnit(id) {
+  var demo = getDemoUnitById(id);
+  if (!demo) return;
+  
+  var html = '<div style="max-width:500px">' +
+    '<div class="fm-group"><label>📦 ชื่อสินค้า</label>' +
+    '<input type="text" id="editDemoName" class="fm-input" value="' + sanitize(demo.productName) + '">' +
+    '</div>' +
+    '<div class="fm-group"><label>💰 ราคา Demo (฿)</label>' +
+    '<input type="number" id="editDemoPrice" class="fm-input" value="' + demo.price + '" step="0.01">' +
+    '</div>' +
+    '<div class="fm-group"><label>📝 หมายเหตุ</label>' +
+    '<textarea id="editDemoNote" rows="2" class="fm-input">' + sanitize(demo.note || '') + '</textarea>' +
+    '</div>' +
+    '<div class="fm-group"><label>📊 สถานะ</label>' +
+    '<select id="editDemoStatus" class="fm-input">' +
+    '<option value="true" ' + (demo.enabled !== false ? 'selected' : '') + '>✅ Active</option>' +
+    '<option value="false" ' + (demo.enabled === false ? 'selected' : '') + '>⏸ Inactive</option>' +
+    '</select>' +
+    '</div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn btn-blue" onclick="saveEditDemoUnit(\'' + id + '\')">💾 บันทึก</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
+    '</div></div>';
+  
+  openM('✏️ แก้ไข Demo Unit', html);
+}
+
+function saveEditDemoUnit(id) {
+  var name = document.getElementById('editDemoName').value.trim();
+  var price = parseFloat(document.getElementById('editDemoPrice').value) || 0;
+  var note = document.getElementById('editDemoNote').value.trim();
+  var enabled = document.getElementById('editDemoStatus').value === 'true';
+  
+  if (!name) {
+    toast('⚠️ กรุณาใส่ชื่อสินค้า');
+    return;
+  }
+  
+  updateDemoUnit(id, {
+    productName: name,
+    price: price,
+    note: note,
+    enabled: enabled
+  });
+  
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
 function rProductImport(el) {
   document.getElementById('pgT').textContent = '📥 Import/Export สินค้า';
   var html = '';

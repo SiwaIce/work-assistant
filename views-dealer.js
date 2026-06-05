@@ -2543,172 +2543,252 @@ async function showCurrentLinkModal(dealerId) {
 function dealerDemoTab(d) {
   var demoOption = d.demoOption || 'option1';
   var demoItems = d.demoItems || [];
-  var cfg = getConfig();
   
-  // ดึงรายการ Model ที่ต้องมีตาม Option (จาก Config)
-  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
-    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
-  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
-    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
-  
-  var html = '<div class="card">';
-  html += '<h2>🚁 Demo Requirement <span class="ml"><span class="hint" style="font-size:11px">ตั้งค่าสำหรับ Dealer นี้โดยเฉพาะ</span></span></h2>';
-  
-  // ===== 1. Demo Option Selection =====
-  html += '<div class="form-section">📌 เลือก Option ที่ Dealer ใช้</div>';
-  html += '<div class="radio-g" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px">';
-  html += '<label style="padding:8px 12px;background:' + (demoOption === 'none' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="none"' + (demoOption === 'none' ? ' checked' : '') + ' style="margin-right:5px"><span>❌ ไม่มีข้อกำหนด</span></label>';
-  html += '<label style="padding:8px 12px;background:' + (demoOption === 'option1' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio"name="demoOption" value="option1"' + (demoOption === 'option1' ? ' checked' : '') + '><span>📦 Option 1 (Drone + Payload)</span></label>';
-  html += '<label style="padding:8px 12px;background:' + (demoOption === 'option2' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="option2"' + (demoOption === 'option2' ? ' checked' : '') + '><span>🏗️ Option 2 (Dock + Drone)</span></label>';
-  html += '<label style="padding:8px 12px;background:' + (demoOption === 'both' ? 'var(--accent-light)' : 'var(--bg2)') + ';border-radius:10px;cursor:pointer"><input type="radio" name="demoOption" value="both"' + (demoOption === 'both' ? ' checked' : '') + '><span>📦🏗️ Both (ต้องมีทั้งสอง)</span></label>';
-  html += '</div>';
-  
-  // ===== 2. รายการอุปกรณ์ที่มีอยู่ =====
-  html += '<div class="form-section">📦 รายการอุปกรณ์ Demo ที่มีอยู่</div>';
-  html += '<div class="hint" style="margin-bottom:8px">💡 กรอก Serial Number ของอุปกรณ์ที่ Dealer มีอยู่จริง (จากที่แจ้งมา)</div>';
-  html += '<div id="demoItemsList" style="margin-bottom:12px">';
-  
-  for (var i = 0; i < demoItems.length; i++) {
-    html += '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
-    html += '<div style="flex:1;min-width:0">';
-'<select id="demo_model_' + i + '" class="demo-model" style="width:100%" data-idx="' + i + '">' + safeModelOptions(demoItems[i].model) + '</select>';
-    html += '</div>';
-    html += '<div style="flex:1">';
-    html += '<input type="text" id="demo_sn_' + i + '" class="demo-sn" style="width:100%" placeholder="Serial Number (ถ้ามี)" value="' + sanitize(demoItems[i].serialNumber || '') + '">';
-    html += '</div>';
-    html += '<button class="btn bsm bd" onclick="removeDemoItem(' + i + ')">🗑️</button>';
-    html += '</div>';
+  // ดึงรายการ Demo Unit ทั้งหมดจาก Products module และ Demo Units
+  var allDemoProducts = [];
+  if (typeof Products !== 'undefined') {
+    // ดึงจาก Products module
+    var products = Products.getAll();
+    for (var i = 0; i < products.length; i++) {
+      var p = products[i];
+      if (p.category === 'demo' || (p.name && p.name.includes('(Demo)'))) {
+        allDemoProducts.push({
+          id: p.id,
+          name: p.name,
+          price: p.demoPrice || p.price || 0,
+          sku: p.sku,
+          ean: p.ean
+        });
+      }
+    }
   }
   
-  html += '</div>';
-  html += '<button class="btn bsm bp" onclick="addDemoItemRow()" style="margin-bottom:16px">➕ เพิ่มอุปกรณ์</button>';
+  // เพิ่มจาก Demo Units (เผื่อมีเพิ่มนอกเหนือ)
+  var demoUnits = getAllDemoUnits();
+  for (var i = 0; i < demoUnits.length; i++) {
+    var du = demoUnits[i];
+    var exists = false;
+    for (var j = 0; j < allDemoProducts.length; j++) {
+      if (allDemoProducts[j].name === du.productName) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists && du.enabled !== false) {
+      allDemoProducts.push({
+        id: du.id,
+        name: du.productName,
+        price: du.price,
+        sku: du.sku,
+        ean: du.ean
+      });
+    }
+  }
   
-  // ===== 3. Preview สถานะตาม Option ที่เลือก =====
+  // สร้าง datalist options
+  var modelOptions = '';
+  for (var i = 0; i < allDemoProducts.length; i++) {
+    var p = allDemoProducts[i];
+    var price = p.price || 0;
+    modelOptions += '<option value="' + sanitize(p.name) + '" data-price="' + price + '">' + 
+      sanitize(p.name) + (price > 0 ? ' (฿' + fmtMoney(price) + ')' : '') + '</option>';
+  }
+  
+  var html = '<div class="card">';
+  html += '<h2>🚁 Demo Requirement</h2>';
+  
+  // ตัวเลือก Option
+  html += '<div class="form-section">📌 เลือก Option</div>';
+  html += '<div class="radio-g" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px">';
+  html += '<label><input type="radio" name="demoOption" value="none"' + (demoOption === 'none' ? ' checked' : '') + '> ❌ ไม่มีข้อกำหนด</label>';
+  html += '<label><input type="radio" name="demoOption" value="option1"' + (demoOption === 'option1' ? ' checked' : '') + '> 📦 Option 1 (Drone + Payload)</label>';
+  html += '<label><input type="radio" name="demoOption" value="option2"' + (demoOption === 'option2' ? ' checked' : '') + '> 🏗️ Option 2 (Dock + Drone)</label>';
+  html += '<label><input type="radio" name="demoOption" value="both"' + (demoOption === 'both' ? ' checked' : '') + '> 📦🏗️ Both Options</label>';
+  html += '</div>';
+  
+  // รายการอุปกรณ์ที่มี
+  html += '<div class="form-section">📦 รายการอุปกรณ์ Demo ที่มีอยู่</div>';
+  html += '<div class="hint" style="margin-bottom:8px">💡 พิมพ์ชื่อสินค้า ระบบจะแสดงราคาอัตโนมัติ (กดเพิ่มได้ทีละรายการ)</div>';
+  
+  html += '<div id="demoItemsList" style="margin-bottom:12px; max-height: 300px; overflow-y: auto">';
+  for (var i = 0; i < demoItems.length; i++) {
+    var item = demoItems[i];
+    html += '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;background:var(--bg2);border-radius:10px;flex-wrap:wrap">';
+    html += '<div style="flex:2;min-width:180px">';
+    html += '<input type="text" id="demo_model_' + i + '" class="demo-model" list="demoDatalist" style="width:100%;padding:8px;border-radius:8px" value="' + sanitize(item.model || '') + '" placeholder="พิมพ์ชื่อสินค้า..." data-idx="' + i + '" onchange="updateDemoPriceFromList(this)">';
+    html += '</div>';
+    html += '<div style="width:120px">';
+    html += '<input type="text" id="demo_price_' + i + '" class="demo-price" style="width:100%;padding:8px;border-radius:8px;text-align:right;background:var(--bg3)" value="' + fmtMoney(item.price || 0) + '" placeholder="ราคา" readonly>';
+    html += '</div>';
+    html += '<div style="flex:1;min-width:120px">';
+    html += '<input type="text" id="demo_sn_' + i + '" class="demo-sn" style="width:100%;padding:8px;border-radius:8px" placeholder="Serial Number" value="' + sanitize(item.serialNumber || '') + '">';
+    html += '</div>';
+    html += '<button class="btn bsm bd" onclick="removeDemoItemRow(this)">🗑️</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  
+  // ปุ่มเพิ่ม + ฟอร์มเพิ่ม
+  html += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div style="flex:2;min-width:180px">';
+  html += '<label style="font-size:11px;color:var(--text2)">📦 เพิ่มอุปกรณ์ Demo</label>';
+  html += '<input type="text" id="newDemoModel" list="demoDatalist" class="fm-input" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" style="width:100%" onchange="previewNewDemoPriceFromList()" oninput="previewNewDemoPriceFromList()">';
+  html += '</div>';
+  html += '<div style="width:120px">';
+  html += '<label style="font-size:11px;color:var(--text2)">💰 ราคา</label>';
+  html += '<input type="text" id="newDemoPrice" class="fm-input" placeholder="ราคา" readonly style="width:100%;text-align:right;background:var(--bg3)">';
+  html += '</div>';
+  html += '<div>';
+  html += '<label style="font-size:11px;color:var(--text2)">&nbsp;</label><br>';
+  html += '<button class="btn bp" onclick="addNewDemoItemFromList()" style="padding:8px 16px">➕ เพิ่ม</button>';
+  html += '</div>';
+  html += '</div>';
+  
+  // Datalist
+  html += '<datalist id="demoDatalist">' + modelOptions + '</datalist>';
+  
+  // Preview
   html += '<div class="form-section">📊 สถานะปัจจุบัน (Preview)</div>';
-  html += '<div id="demoPreviewContainer">';
-  html += renderDemoPreview(d, requiredOption1, requiredOption2);
+  html += '<div id="demoPreviewContainer" style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:12px">';
+  html += renderDemoPreviewDynamic(demoOption, demoItems);
   html += '</div>';
   
-  // ===== 4. Save Button =====
-  html += '<div class="bg" style="margin-top:16px;gap:12px">';
-  html += '<button class="btn bp" onclick="saveDemoSetting(\'' + d.id + '\')" style="flex:1">💾 บันทึกการตั้งค่า Demo</button>';
-  html += '<button class="btn bo" onclick="syncDemoToGlobal(\'' + d.id + '\')" style="flex:1">🔄 Sync ไปยังหน้า Demo Equipment</button>';
+  // ปุ่มบันทึก
+  html += '<div class="bg" style="margin-top:8px;gap:12px">';
+  html += '<button class="btn bp" onclick="saveDemoSettingEnhanced(\'' + d.id + '\')">💾 บันทึก</button>';
+  html += '<button class="btn bo" onclick="syncDemoToGlobalEnhanced(\'' + d.id + '\')">🔄 Sync ไปยัง Demo Equipment</button>';
   html += '</div>';
   
   html += '</div>';
   
-  // เพิ่ม script สำหรับ preview แบบ Real-time
-  html += '<script>';
-  html += 'function updateDemoPreview() {';
-  html += '  var dealerId = "' + d.id + '";';
-  html += '  var demoOption = document.querySelector(\'input[name="demoOption"]:checked\').value;';
-  html += '  var demoItems = [];';
-  html += '  var rows = document.querySelectorAll("#demoItemsList .demo-item-row");';
-  html += '  for(var i=0;i<rows.length;i++){';
-  html += '    var model = rows[i].querySelector(".demo-model").value;';
-  html += '    var sn = rows[i].querySelector(".demo-sn").value;';
-  html += '    if(model) demoItems.push({model:model,serialNumber:sn});';
-  html += '  }';
-  html += '  var previewHtml = renderDemoPreviewDynamic(demoOption, demoItems);';
-  html += '  document.getElementById("demoPreviewContainer").innerHTML = previewHtml;';
-  html += '}';
-  html += 'document.querySelectorAll(\'input[name="demoOption"]\').forEach(function(btn){ btn.onclick = function(){ setTimeout(updateDemoPreview, 50); }; });';
-  html += 'setInterval(updateDemoPreview, 500);';
-  html += '</script>';
+  // เพิ่ม script สำหรับ event listeners
+  setTimeout(function() {
+    var radios = document.querySelectorAll('input[name="demoOption"]');
+    for (var i = 0; i < radios.length; i++) {
+      radios[i].addEventListener('change', function() {
+        updateDemoPreviewFromDealer();
+      });
+    }
+    updateDemoPreviewFromDealer();
+  }, 100);
   
   return html;
 }
 
 // ================================================================
-// HELPER FUNCTIONS FOR DEMO TAB
+// ฟังก์ชันเสริมสำหรับ Demo Tab
 // ================================================================
 
-function addDemoItemRow() {
+function updateDemoPriceFromList(inputEl) {
+  var modelName = inputEl.value;
+  var row = inputEl.closest('.demo-item-row');
+  if (!row) return;
+  var priceInput = row.querySelector('.demo-price');
+  if (!priceInput) return;
+  
+  // หาราคาจาก datalist
+  var datalist = document.getElementById('demoDatalist');
+  if (datalist) {
+    var options = datalist.querySelectorAll('option');
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].value === modelName) {
+        var price = parseInt(options[i].getAttribute('data-price')) || 0;
+        priceInput.value = price > 0 ? price.toLocaleString('th-TH') : '0';
+        break;
+      }
+    }
+  }
+  updateDemoPreviewFromDealer();
+}
+
+function previewNewDemoPriceFromList() {
+  var modelInput = document.getElementById('newDemoModel');
+  var priceInput = document.getElementById('newDemoPrice');
+  if (!modelInput || !priceInput) return;
+  
+  var modelName = modelInput.value.trim();
+  if (!modelName) {
+    priceInput.value = '';
+    return;
+  }
+  
+  var datalist = document.getElementById('demoDatalist');
+  if (datalist) {
+    var options = datalist.querySelectorAll('option');
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].value === modelName) {
+        var price = parseInt(options[i].getAttribute('data-price')) || 0;
+        priceInput.value = price > 0 ? price.toLocaleString('th-TH') : '';
+        break;
+      }
+    }
+  }
+}
+
+function addNewDemoItemFromList() {
+  var modelInput = document.getElementById('newDemoModel');
+  var priceInput = document.getElementById('newDemoPrice');
+  var model = modelInput ? modelInput.value.trim() : '';
+  
+  if (!model) {
+    toast('⚠️ กรุณาเลือกสินค้า Demo');
+    return;
+  }
+  
+  var price = 0;
+  if (priceInput && priceInput.value) {
+    price = parseInt(priceInput.value.replace(/[^0-9]/g, '')) || 0;
+  }
+  
   var container = document.getElementById('demoItemsList');
+  if (!container) return;
+  
   var idx = Date.now();
-  var newRow = '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
-newRow += '<div style="flex:1"><select id="demo_model_' + idx + '" class="demo-model" style="width:100%">' + safeModelOptions('') + '</select></div>';
-  newRow += '<div style="flex:1"><input type="text" id="demo_sn_' + idx + '" class="demo-sn" style="width:100%" placeholder="Serial Number"></div>';
+  var newRow = '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;background:var(--bg2);border-radius:10px;flex-wrap:wrap">';
+  newRow += '<div style="flex:2;min-width:180px">';
+  newRow += '<input type="text" id="demo_model_' + idx + '" class="demo-model" list="demoDatalist" style="width:100%;padding:8px;border-radius:8px" value="' + sanitize(model) + '" placeholder="พิมพ์ชื่อสินค้า..." data-idx="' + idx + '" onchange="updateDemoPriceFromList(this)">';
+  newRow += '</div>';
+  newRow += '<div style="width:120px">';
+  newRow += '<input type="text" id="demo_price_' + idx + '" class="demo-price" style="width:100%;padding:8px;border-radius:8px;text-align:right;background:var(--bg3)" value="' + (price > 0 ? price.toLocaleString('th-TH') : '0') + '" placeholder="ราคา" readonly>';
+  newRow += '</div>';
+  newRow += '<div style="flex:1;min-width:120px">';
+  newRow += '<input type="text" id="demo_sn_' + idx + '" class="demo-sn" style="width:100%;padding:8px;border-radius:8px" placeholder="Serial Number" value="">';
+  newRow += '</div>';
   newRow += '<button class="btn bsm bd" onclick="removeDemoItemRow(this)">🗑️</button>';
   newRow += '</div>';
+  
   container.insertAdjacentHTML('beforeend', newRow);
+  
+  modelInput.value = '';
+  priceInput.value = '';
+  modelInput.focus();
+  
+  updateDemoPreviewFromDealer();
 }
 
 function removeDemoItemRow(btn) {
-  btn.closest('.demo-item-row').remove();
-  updateDemoPreview();
+  var row = btn.closest('.demo-item-row');
+  if (row) row.remove();
+  updateDemoPreviewFromDealer();
 }
 
-function removeDemoItem(idx) {
-  var row = document.querySelector('#demoItemsList .demo-item-row .demo-model[data-idx="' + idx + '"]');
-  if (row) row.closest('.demo-item-row').remove();
-  updateDemoPreview();
-}
-
-function renderDemoPreview(dealer, requiredOption1, requiredOption2) {
-  var demoOption = dealer.demoOption || 'option1';
-  var demoItems = dealer.demoItems || [];
+function updateDemoPreviewFromDealer() {
+  var container = document.getElementById('demoPreviewContainer');
+  if (!container) return;
   
-  var ownedModels = {};
-  for (var i = 0; i < demoItems.length; i++) {
-    if (demoItems[i] && demoItems[i].model) {
-      ownedModels[demoItems[i].model] = demoItems[i];
+  var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
+  var demoOption = demoOptionElem ? demoOptionElem.value : 'option1';
+  
+  var demoItems = [];
+  var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var modelInput = rows[i].querySelector('.demo-model');
+    if (modelInput && modelInput.value) {
+      demoItems.push({ model: modelInput.value });
     }
   }
   
-  var optionText = {
-    'none': '❌ ไม่มีข้อกำหนด',
-    'option1': '📦 Option 1 (Drone + Payload)',
-    'option2': '🏗️ Option 2 (Dock + Drone)',
-    'both': '📦🏗️ Both Options'
-  };
-  
-  var html = '<div style="background:var(--bg3);border-radius:12px;padding:12px">';
-  html += '<div style="margin-bottom:8px"><strong>📌 ตัวเลือก:</strong> ' + optionText[demoOption] + '</div>';
-  
-  if (demoOption === 'none') {
-    html += '<div class="hint">ℹ️ ไม่มีข้อกำหนด Demo สำหรับ Dealer นี้</div>';
-    html += '</div>';
-    return html;
-  }
-  
-  // Helper to check if a model is required
-  function isRequired(model, option) {
-    if (option === 'option1') return requiredOption1.indexOf(model) !== -1;
-    if (option === 'option2') return requiredOption2.indexOf(model) !== -1;
-    return true;
-  }
-  
-  if (demoOption === 'option1' || demoOption === 'both') {
-    html += '<div style="margin-top:8px"><strong>📦 Option 1 (ต้องมี):</strong></div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
-    for (var i = 0; i < requiredOption1.length; i++) {
-      var model = requiredOption1[i];
-      var has = ownedModels[model];
-      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
-      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
-      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-  
-  if (demoOption === 'option2' || demoOption === 'both') {
-    html += '<div style="margin-top:12px"><strong>🏗️ Option 2 (ต้องมี):</strong></div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
-    for (var i = 0; i < requiredOption2.length; i++) {
-      var model = requiredOption2[i];
-      var has = ownedModels[model];
-      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
-      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
-      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-  
-  html += '</div>';
-  return html;
+  container.innerHTML = renderDemoPreviewDynamic(demoOption, demoItems);
 }
 
 function renderDemoPreviewDynamic(demoOption, demoItems) {
@@ -2720,8 +2800,282 @@ function renderDemoPreviewDynamic(demoOption, demoItems) {
   
   var ownedModels = {};
   for (var i = 0; i < demoItems.length; i++) {
+    if (demoItems[i].model) ownedModels[demoItems[i].model] = true;
+  }
+  
+  var optionText = {
+    'none': '❌ ไม่มีข้อกำหนด',
+    'option1': '📦 Option 1 (Drone + Payload)',
+    'option2': '🏗️ Option 2 (Dock + Drone)',
+    'both': '📦🏗️ Both Options'
+  };
+  
+  var html = '<div style="margin-bottom:8px"><strong>📌 ตัวเลือก:</strong> ' + (optionText[demoOption] || demoOption) + '</div>';
+  
+  if (demoOption === 'none') {
+    html += '<div class="hint">ℹ️ ไม่มีข้อกำหนด Demo สำหรับ Dealer นี้</div>';
+    return html;
+  }
+  
+  if (demoOption === 'option1' || demoOption === 'both') {
+    html += '<div style="margin-top:8px"><strong>📦 Option 1 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption1.length; i++) {
+      var model = requiredOption1[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:6px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += (has ? '✅' : '❌') + ' ' + sanitize(model);
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  if (demoOption === 'option2' || demoOption === 'both') {
+    html += '<div style="margin-top:12px"><strong>🏗️ Option 2 (ต้องมี):</strong></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">';
+    for (var i = 0; i < requiredOption2.length; i++) {
+      var model = requiredOption2[i];
+      var has = ownedModels[model];
+      html += '<div style="padding:6px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += (has ? '✅' : '❌') + ' ' + sanitize(model);
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  
+  return html;
+}
+
+function saveDemoSettingEnhanced(dealerId) {
+  var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
+  if (!demoOptionElem) {
+    toast('⚠️ กรุณาเลือก Option');
+    return;
+  }
+  var demoOption = demoOptionElem.value;
+  
+  var demoItems = [];
+  var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var modelInput = rows[i].querySelector('.demo-model');
+    var snInput = rows[i].querySelector('.demo-sn');
+    var priceInput = rows[i].querySelector('.demo-price');
+    
+    if (modelInput && modelInput.value) {
+      var price = 0;
+      if (priceInput && priceInput.value) {
+        price = parseInt(priceInput.value.replace(/[^0-9]/g, '')) || 0;
+      }
+      demoItems.push({
+        model: modelInput.value,
+        serialNumber: snInput ? snInput.value.trim() : '',
+        price: price
+      });
+    }
+  }
+  
+  ST.update('dealers', dealerId, {
+    demoOption: demoOption,
+    demoItems: demoItems
+  });
+  
+  if (typeof addAuditLog === 'function') {
+    var dealer = ST.getOne('dealers', dealerId);
+    addAuditLog('update_dealer_demo', 'dealer', dealerId, dealer ? dealer.name : '', dealerId, dealer ? dealer.name : '', {
+      demoOption: demoOption,
+      itemCount: demoItems.length
+    });
+  }
+  
+  toast('💾 บันทึกการตั้งค่า Demo เรียบร้อย (' + demoItems.length + ' รายการ)');
+  render();
+}
+
+function syncDemoToGlobalEnhanced(dealerId) {
+  var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return;
+  
+  var demoItems = dealer.demoItems || [];
+  if (demoItems.length === 0) {
+    toast('⚠️ ไม่มีอุปกรณ์ Demo ให้ Sync');
+    return;
+  }
+  
+  var globalDemo = getAllDemoUnits();
+  
+  for (var i = 0; i < demoItems.length; i++) {
+    var item = demoItems[i];
+    var exists = false;
+    for (var j = 0; j < globalDemo.length; j++) {
+      if (globalDemo[j].productName === item.model) {
+        exists = true;
+        updateDemoUnit(globalDemo[j].id, {
+          price: item.price || 0,
+          note: 'Synced from Dealer: ' + dealer.name
+        });
+        break;
+      }
+    }
+    if (!exists) {
+      addDemoUnit({
+        productName: item.model,
+        price: item.price || 0,
+        sku: '',
+        ean: '',
+        enabled: true,
+        note: 'Synced from Dealer: ' + dealer.name
+      });
+    }
+  }
+  
+  toast('🔄 Sync Demo Unit ไปยังหน้า Demo Equipment แล้ว (' + demoItems.length + ' รายการ)');
+  render();
+}
+
+// ฟังก์ชัน getAllDemoUnits (ถ้ายังไม่มี)
+function getAllDemoUnits() {
+  var data = getProductsData();
+  return data.demoUnits || [];
+}
+
+function addDemoUnit(data) {
+  var productsData = getProductsData();
+  if (!productsData.demoUnits) productsData.demoUnits = [];
+  var newDemo = {
+    id: 'demo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    productId: data.productId || '',
+    productName: data.productName || '',
+    sku: data.sku || '',
+    ean: data.ean || '',
+    price: data.price || 0,
+    note: data.note || '',
+    enabled: data.enabled !== false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  productsData.demoUnits.push(newDemo);
+  productsData.lastUpdated = new Date().toISOString();
+  saveProductsData(productsData);
+  return newDemo;
+}
+
+function updateDemoUnit(demoId, updates) {
+  var productsData = getProductsData();
+  if (!productsData.demoUnits) return false;
+  for (var i = 0; i < productsData.demoUnits.length; i++) {
+    if (productsData.demoUnits[i].id === demoId) {
+      for (var key in updates) {
+        if (updates.hasOwnProperty(key)) productsData.demoUnits[i][key] = updates[key];
+      }
+      productsData.demoUnits[i].updatedAt = new Date().toISOString();
+      productsData.lastUpdated = new Date().toISOString();
+      saveProductsData(productsData);
+      return true;
+    }
+  }
+  return false;
+}
+
+function deleteDemoUnit(demoId) {
+  var productsData = getProductsData();
+  if (!productsData.demoUnits) return false;
+  productsData.demoUnits = productsData.demoUnits.filter(function(d) { return d.id !== demoId; });
+  productsData.lastUpdated = new Date().toISOString();
+  saveProductsData(productsData);
+  return true;
+}
+
+function getProductsData() {
+  try {
+    var saved = localStorage.getItem('v7_products');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      if (parsed && !parsed.demoUnits) parsed.demoUnits = [];
+      if (parsed && !parsed.models) parsed.models = [];
+      return parsed;
+    }
+  } catch(e) {}
+  return { models: [], bundles: [], demoUnits: [], lastUpdated: null };
+}
+
+function saveProductsData(data) {
+  localStorage.setItem('v7_products', JSON.stringify(data));
+}
+// ================================================================
+// HELPER FUNCTIONS FOR DEMO TAB (UPDATED)
+// ================================================================
+
+// ✅ เก็บไว้ - ใช้เพิ่มรายการ Demo แบบ Select dropdown
+function addDemoItemRow() {
+  var container = document.getElementById('demoItemsList');
+  var idx = Date.now();
+  var newRow = '<div class="demo-item-row" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg2);border-radius:10px">';
+  newRow += '<div style="flex:1"><input type="text" id="demo_model_' + idx + '" class="demo-model" list="demoDatalist" style="width:100%;padding:8px;border-radius:8px" placeholder="พิมพ์ชื่อสินค้า..."></div>';
+  newRow += '<div style="width:100px"><input type="text" id="demo_price_' + idx + '" class="demo-price" style="width:100%;padding:8px;border-radius:8px;text-align:right" placeholder="ราคา" readonly></div>';
+  newRow += '<div style="flex:1"><input type="text" id="demo_sn_' + idx + '" class="demo-sn" style="width:100%;padding:8px;border-radius:8px" placeholder="Serial Number"></div>';
+  newRow += '<button class="btn bsm bd" onclick="removeDemoItemRow(this)">🗑️</button>';
+  newRow += '</div>';
+  container.insertAdjacentHTML('beforeend', newRow);
+}
+
+// ✅ เก็บไว้ - ลบรายการ Demo
+function removeDemoItemRow(btn) {
+  var row = btn.closest('.demo-item-row');
+  if (row) row.remove();
+  updateDemoPreviewFromDealer(); // เปลี่ยนจาก updateDemoPreview()
+}
+
+// ✅ เก็บไว้ - Preview แรกเริ่ม
+function renderDemoPreview(dealer, requiredOption1, requiredOption2) {
+  // โค้ดเดิม保持不变
+  // ... (ตามที่คุณมี)
+}
+
+// ✅ เก็บไว้ - บันทึกข้อมูล
+function saveDemoSetting(dealerId) {
+  // โค้ดเดิม保持不变
+  // ... (ตามที่คุณมี)
+}
+
+// ✅ เก็บไว้ - Sync ไป global
+function syncDemoToGlobal(dealerId) {
+  // โค้ดเดิม保持不变
+  // ... (ตามที่คุณมี)
+}
+
+// ✅ ฟังก์ชันใหม่เพิ่มเข้าไป (ถ้ายังไม่มี)
+function updateDemoPreviewFromDealer() {
+  var container = document.getElementById('demoPreviewContainer');
+  if (!container) return;
+  
+  var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
+  var demoOption = demoOptionElem ? demoOptionElem.value : 'option1';
+  
+  var demoItems = [];
+  var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var modelInput = rows[i].querySelector('.demo-model');
+    if (modelInput && modelInput.value) {
+      demoItems.push({ model: modelInput.value });
+    }
+  }
+  
+  var cfg = getConfig();
+  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
+    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
+  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
+    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+  
+  var html = renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requiredOption2);
+  container.innerHTML = html;
+}
+
+// ✅ ฟังก์ชัน Preview แบบ dynamic (เพิ่มพารามิเตอร์ required)
+function renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requiredOption2) {
+  var ownedModels = {};
+  for (var i = 0; i < demoItems.length; i++) {
     if (demoItems[i] && demoItems[i].model) {
-      ownedModels[demoItems[i].model] = demoItems[i];
+      ownedModels[demoItems[i].model] = true;
     }
   }
   
@@ -2747,9 +3101,8 @@ function renderDemoPreviewDynamic(demoOption, demoItems) {
     for (var i = 0; i < requiredOption1.length; i++) {
       var model = requiredOption1[i];
       var has = ownedModels[model];
-      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
-      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
-      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '<div style="padding:6px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += (has ? '✅' : '❌') + ' ' + sanitize(model);
       html += '</div>';
     }
     html += '</div>';
@@ -2761,9 +3114,8 @@ function renderDemoPreviewDynamic(demoOption, demoItems) {
     for (var i = 0; i < requiredOption2.length; i++) {
       var model = requiredOption2[i];
       var has = ownedModels[model];
-      html += '<div style="padding:8px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
-      html += '<div style="font-weight:600">' + (has ? '✅' : '❌') + ' ' + sanitize(model) + '</div>';
-      if (has && has.serialNumber) html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">🔢 ' + sanitize(has.serialNumber) + '</div>';
+      html += '<div style="padding:6px 12px;border-radius:10px;background:' + (has ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)') + ';border:1px solid ' + (has ? '#22c55e' : '#ef4444') + '">';
+      html += (has ? '✅' : '❌') + ' ' + sanitize(model);
       html += '</div>';
     }
     html += '</div>';
@@ -2771,85 +3123,4 @@ function renderDemoPreviewDynamic(demoOption, demoItems) {
   
   html += '</div>';
   return html;
-}
-
-function saveDemoSetting(dealerId) {
-  // Get selected option
-  var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
-  if (!demoOptionElem) {
-    toast('⚠️ กรุณาเลือก Option');
-    return;
-  }
-  var demoOption = demoOptionElem.value;
-  
-  // Collect demo items
-  var demoItems = [];
-  var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
-  for (var i = 0; i < rows.length; i++) {
-    var modelSelect = rows[i].querySelector('.demo-model');
-    var snInput = rows[i].querySelector('.demo-sn');
-    if (modelSelect && modelSelect.value) {
-      demoItems.push({
-        model: modelSelect.value,
-        serialNumber: snInput ? snInput.value.trim() : ''
-      });
-    }
-  }
-  
-  // Update dealer
-  ST.update('dealers', dealerId, {
-    demoOption: demoOption,
-    demoItems: demoItems
-  });
-  
-  // Audit log
-  if (typeof addAuditLog === 'function') {
-    var dealer = ST.getOne('dealers', dealerId);
-    addAuditLog('update_dealer_demo', 'dealer', dealerId, dealer ? dealer.name : '', dealerId, dealer ? dealer.name : '', {
-      demoOption: demoOption,
-      itemCount: demoItems.length
-    });
-  }
-  
-  toast('💾 บันทึกการตั้งค่า Demo แล้ว');
-  render();
-}
-
-function syncDemoToGlobal(dealerId) {
-  var dealer = ST.getOne('dealers', dealerId);
-  if (!dealer) return;
-  
-  var demoItems = dealer.demoItems || [];
-  if (demoItems.length === 0) {
-    toast('⚠️ ไม่มีอุปกรณ์ Demo ให้ Sync');
-    return;
-  }
-  
-  // Get existing global demo items
-  var globalDemo = [];
-  try {
-    globalDemo = JSON.parse(localStorage.getItem('v7_demo') || '[]');
-  } catch(e) {}
-  
-  // Remove existing items for this dealer
-  globalDemo = globalDemo.filter(function(d) { return d.dealerId !== dealerId; });
-  
-  // Add new items
-  for (var i = 0; i < demoItems.length; i++) {
-    globalDemo.push({
-      id: 'dm_' + Date.now() + '_' + i,
-      name: demoItems[i].model,
-      model: demoItems[i].model,
-      serialNumber: demoItems[i].serialNumber,
-      dealerId: dealerId,
-      status: 'lent',
-      lentDate: _td(),
-      note: 'Synced from Dealer Demo Tab'
-    });
-  }
-  
-  localStorage.setItem('v7_demo', JSON.stringify(globalDemo));
-  
-  toast('🔄 Sync อุปกรณ์ Demo ไปยังหน้า Demo Equipment แล้ว (' + demoItems.length + ' รายการ)');
-  render();
 }
