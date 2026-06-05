@@ -2541,13 +2541,13 @@ async function showCurrentLinkModal(dealerId) {
 // ================================================================
 
 function dealerDemoTab(d) {
+  var cfg = getConfig();  // ✅ เพิ่มบรรทัดนี้最重要
   var demoOption = d.demoOption || 'option1';
   var demoItems = d.demoItems || [];
   
   // ดึงรายการ Demo Unit ทั้งหมดจาก Products module และ Demo Units
   var allDemoProducts = [];
   if (typeof Products !== 'undefined') {
-    // ดึงจาก Products module
     var products = Products.getAll();
     for (var i = 0; i < products.length; i++) {
       var p = products[i];
@@ -2563,7 +2563,7 @@ function dealerDemoTab(d) {
     }
   }
   
-  // เพิ่มจาก Demo Units (เผื่อมีเพิ่มนอกเหนือ)
+  // เพิ่มจาก Demo Units
   var demoUnits = getAllDemoUnits();
   for (var i = 0; i < demoUnits.length; i++) {
     var du = demoUnits[i];
@@ -2647,15 +2647,16 @@ function dealerDemoTab(d) {
   // Datalist
   html += '<datalist id="demoDatalist">' + modelOptions + '</datalist>';
   
-  // Preview
+  // Preview - ✅ ใช้ cfg ที่ประกาศไว้ตอนต้น
   html += '<div class="form-section">📊 สถานะปัจจุบัน (Preview)</div>';
   html += '<div id="demoPreviewContainer" style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:12px">';
-var requiredOption1 = cfg?.levelRequirements?.A?.option1Models || 
-  ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
-var requiredOption2 = cfg?.levelRequirements?.A?.option2Models || 
-  ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
-
-html += renderDemoPreviewDynamic(demoOption, demoItems || [], requiredOption1, requiredOption2);
+  
+  var requiredOption1 = cfg?.levelRequirements?.A?.option1Models || 
+    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
+  var requiredOption2 = cfg?.levelRequirements?.A?.option2Models || 
+    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+  
+  html += renderDemoPreviewDynamic(demoOption, demoItems || [], requiredOption1, requiredOption2);
   html += '</div>';
   
   // ปุ่มบันทึก
@@ -2666,7 +2667,7 @@ html += renderDemoPreviewDynamic(demoOption, demoItems || [], requiredOption1, r
   
   html += '</div>';
   
-  // เพิ่ม script สำหรับ event listeners
+  // event listeners
   setTimeout(function() {
     var radios = document.querySelectorAll('input[name="demoOption"]');
     for (var i = 0; i < radios.length; i++) {
@@ -2679,7 +2680,6 @@ html += renderDemoPreviewDynamic(demoOption, demoItems || [], requiredOption1, r
   
   return html;
 }
-
 // ================================================================
 // ฟังก์ชันเสริมสำหรับ Demo Tab
 // ================================================================
