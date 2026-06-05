@@ -581,10 +581,67 @@ function deleteDemoUnit(demoId) {
 // ================================================================
 
 function importProductsFromSheet(worksheet) {
-  var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-  if (!rows || rows.length < 2) return { imported: 0, updated: 0, errors: 0 };
+  // แปลง sheet เป็น JSON array
+  var rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+  if (!rows || rows.length < 2) {
+    console.warn('No data rows found');
+    return { imported: 0, updated: 0, errors: 0 };
+  }
 
+  // อ่าน header row เพื่อหาตำแหน่ง column
+  var headers = rows[0] || [];
+  var colIndex = {
+    sku: -1,
+    ean: -1,
+    name: -1,
+    rrpInVat: -1,
+    rrpExVat: -1,
+    priceS: -1,
+    priceA: -1,
+    priceB: -1,
+    priceOther: -1
+  };
+  
+  // หา column index (รองรับทั้งภาษาไทยและอังกฤษ)
+  for (var i = 0; i < headers.length; i++) {
+    var h = (headers[i] || '').toString().toLowerCase().trim();
+    if (h.indexOf('sis') !== -1 || h.indexOf('part') !== -1 || h === 'sku') colIndex.sku = i;
+    else if (h === 'ean' || h.indexOf('ean') !== -1) colIndex.ean = i;
+    else if (h.indexOf('product') !== -1 || h.indexOf('name') !== -1) colIndex.name = i;
+    else if (h.indexOf('rrp in vat') !== -1) colIndex.rrpInVat = i;
+    else if (h.indexOf('rrp ex vat') !== -1) colIndex.rrpExVat = i;
+    else if (h.indexOf('type 1') !== -1 || h.indexOf('type1') !== -1) colIndex.priceS = i;
+    else if (h.indexOf('type 2') !== -1 || h.indexOf('type2') !== -1) colIndex.priceA = i;
+    else if (h.indexOf('type 3') !== -1 || h.indexOf('type3') !== -1) colIndex.priceB = i;
+    else if (h.indexOf('type 4') !== -1 || h.indexOf('type4') !== -1) colIndex.priceOther = i;
+  }
+  
+  // ถ้าหาไม่เจอ ให้ใช้ลำดับ default (ตามไฟล์ Excel ที่ให้มา)
+  if (colIndex.sku === -1) colIndex.sku = 0;
+  if (colIndex.ean === -1) colIndex.ean = 1;
+  if (colIndex.name === -1) colIndex.name = 2;
+  if (colIndex.rrpInVat === -1) colIndex.rrpInVat = 3;
+  if (colIndex.rrpExVat === -1) colIndex.rrpExVat = 4;
+  if (colIndex.priceS === -1) colIndex.priceS = 5;
+  if (colIndex.priceA === -1) colIndex.priceA = 6;
+  if (colIndex.priceB === -1) colIndex.priceB = 7;
+  if (colIndex.priceOther === -1) colIndex.priceOther = 8;
+  
+  console.log('📋 Column mapping:', colIndex);
+  console.log('📊 Found', (rows.length - 1), 'data rows');
+  
   var imported = 0, updated = 0, errors = 0;
+  var existingProducts = getAllProducts();
+  var existingMap = {};
+  
+  // สร้าง map สำหรับตรวจสอบซ้ำ (ใช้ sku, ean, name)
+  for (var i = 0; i < existingProducts.length; i++) {
+    var p = existingProducts[i];
+    if (p && p.sku) existingMap['sku_' + p.sku] = p;
+    if (p && p.ean) existingMap['ean_' + p.ean] = p;
+    if (p && p.name) existingMap['name_' + p.name] = p;
+  }
+  
   for (var i = 1; i < rows.length; i++) {
     try {
       var row = rows[i];
@@ -592,36 +649,45 @@ function importProductsFromSheet(worksheet) {
         errors++;
         continue;
       }
-      var sku = (row[0] !== undefined ? row[0] : '').toString().trim();
-      var ean = (row[1] !== undefined ? row[1] : '').toString().trim();
-      var name = (row[2] !== undefined ? row[2] : '').toString().trim();
-      if (!name) {
+      
+      var sku = (row[colIndex.sku] !== undefined && row[colIndex.sku] !== null) ? row[colIndex.sku].toString().trim() : '';
+      var ean = (row[colIndex.ean] !== undefined && row[colIndex.ean] !== null) ? row[colIndex.ean].toString().trim() : '';
+      var name = (row[colIndex.name] !== undefined && row[colIndex.name] !== null) ? row[colIndex.name].toString().trim() : '';
+      
+      // ข้ามแถวที่ไม่มีชื่อสินค้า
+      if (!name || name === '') {
         errors++;
         continue;
       }
-
-      var rrpInVat = parseFloat(row[3]) || 0;
-      var rrpExVat = parseFloat(row[4]) || 0;
-      var priceS = parseFloat(row[5]) || 0;
-      var priceA = parseFloat(row[6]) || 0;
-      var priceB = parseFloat(row[7]) || 0;
-      var priceOther = parseFloat(row[8]) || 0;
-
-      if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
-
-      var isBundle = (sku && sku.endsWith('A')) || (ean && ean.startsWith('CB.'));
-      var isSoftware = (name.indexOf('FlightHub') !== -1 || name.indexOf('Terra') !== -1);
-      var isService = (name.indexOf('Warranty') !== -1 || name.indexOf('Service') !== -1 || name.indexOf('Staffing') !== -1);
       
+      // อ่านราคา (จัดการค่าว่าง)
+      var rrpInVat = parseFloat(row[colIndex.rrpInVat]) || 0;
+      var rrpExVat = parseFloat(row[colIndex.rrpExVat]) || 0;
+      var priceS = parseFloat(row[colIndex.priceS]) || 0;
+      var priceA = parseFloat(row[colIndex.priceA]) || 0;
+      var priceB = parseFloat(row[colIndex.priceB]) || 0;
+      var priceOther = parseFloat(row[colIndex.priceOther]) || 0;
+      
+      // ถ้า priceB เป็น 0 แต่มี rrpExVat ให้ใช้ rrpExVat แทน
+      if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
+      
+      // ตรวจสอบว่ามีสินค้านี้อยู่แล้วหรือไม่
+      var existing = null;
+      if (sku && existingMap['sku_' + sku]) existing = existingMap['sku_' + sku];
+      else if (ean && existingMap['ean_' + ean]) existing = existingMap['ean_' + ean];
+      else if (existingMap['name_' + name]) existing = existingMap['name_' + name];
+      
+      // กำหนดหมวดหมู่อัตโนมัติ
       var category = 'other';
-      if (isSoftware) category = 'software';
-      else if (isService) category = 'service';
-      else if (isBundle) category = 'bundle';
-      else if (name.indexOf('Matrice') !== -1 || name.indexOf('Mavic') !== -1 || name.indexOf('M30') !== -1) category = 'drone';
-      else if (name.indexOf('Zenmuse') !== -1 || name.indexOf('Payload') !== -1) category = 'payload';
-      else if (name.indexOf('Battery') !== -1) category = 'battery';
-      else if (name.indexOf('Charger') !== -1 || name.indexOf('Adapter') !== -1 || name.indexOf('Propeller') !== -1) category = 'charger';
-
+      var nameLower = name.toLowerCase();
+      if (nameLower.indexOf('matrice') !== -1 || nameLower.indexOf('mavic') !== -1) category = 'drone';
+      else if (nameLower.indexOf('zenmuse') !== -1) category = 'payload';
+      else if (nameLower.indexOf('battery') !== -1) category = 'battery';
+      else if (nameLower.indexOf('charger') !== -1 || nameLower.indexOf('adapter') !== -1 || nameLower.indexOf('propeller') !== -1) category = 'charger';
+      else if (nameLower.indexOf('flighthub') !== -1 || nameLower.indexOf('terra') !== -1) category = 'software';
+      else if (nameLower.indexOf('service') !== -1 || nameLower.indexOf('staffing') !== -1) category = 'service';
+      else if (nameLower.indexOf('dock') !== -1) category = 'bundle';
+      
       var productData = {
         name: name,
         sku: sku,
@@ -632,25 +698,29 @@ function importProductsFromSheet(worksheet) {
         typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
         category: category,
         eol: false,
-        isBundle: isBundle,
-        isSoftware: isSoftware,
-        isService: isService
+        updatedAt: new Date().toISOString()
       };
-
-      var existing = getProductBySku(sku) || getProductByEan(ean);
+      
       if (existing) {
+        // อัพเดทข้อมูลเดิม (เก็บ id เดิม)
         updateProduct(existing.id, productData);
         updated++;
+        if (updated % 50 === 0) console.log('🔄 อัพเดทไปแล้ว', updated, 'รายการ');
       } else {
+        // เพิ่มใหม่
+        productData.createdAt = new Date().toISOString();
         addProduct(productData);
         imported++;
+        if (imported % 50 === 0) console.log('✅ เพิ่มไปแล้ว', imported, 'รายการ');
       }
+      
     } catch(e) {
       errors++;
       console.warn('Row', i, 'error:', e);
     }
   }
-  console.log(`Import products: +${imported}, updated ${updated}, errors ${errors}`);
+  
+  console.log(`📊 Import products: +${imported}, updated ${updated}, errors ${errors}`);
   return { imported: imported, updated: updated, errors: errors };
 }
 
