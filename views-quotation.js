@@ -564,9 +564,12 @@ function createNewQuotation() {
     });
   }
   
+  var newId = 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  var newQuoteNo = getNextQuoteNumber();
+  
   var newQuote = {
-    id: 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-    quoteNo: getNextQuoteNumber(),
+    id: newId,
+    quoteNo: newQuoteNo,
     dealerId: dealerId,
     dealerName: dealer ? dealer.name : '',
     dealerLevel: dealer ? dealer.level : '',
@@ -593,43 +596,28 @@ function createNewQuotation() {
     updatedAt: new Date().toISOString()
   };
   
+  // Load existing quotations, add new one, save
+  loadQuotations();
   quotations.push(newQuote);
   saveQuotations();
+  
+  // Close modal
   closeModal();
-  toast('✅ สร้างใบเสนอราคาแล้ว');
+  toast('✅ สร้างใบเสนอราคาแล้ว: ' + newQuoteNo);
   
-  // ✅ สำคัญ: โหลด quotations อีกครั้งก่อนเปิด edit
-  loadQuotations();
-  
-  // ✅ ตรวจสอบว่ามีข้อมูลก่อนเปิด edit
-  var found = false;
-  for (var i = 0; i < quotations.length; i++) {
-    if (quotations[i].id === newQuote.id) {
-      found = true;
-      break;
-    }
-  }
-  
-  if (found) {
-    editQuotation(newQuote.id);
-  } else {
-    toast('❌ เกิดข้อผิดพลาด: ไม่สามารถเปิดใบเสนอราคาได้');
-    go('quotationV2');
-  }
+  // Clear the old edit function and directly render edit page
+  renderEditQuotationPage(newQuote);
 }
-// ================================================================
-// EDIT QUOTATION (FULL PAGE)
-// ================================================================
 
-function editQuotation(quoteId) {
-  loadQuotations();
-  var quote = null;
-  for (var i = 0; i < quotations.length; i++) {
-    if (quotations[i].id === quoteId) { quote = quotations[i]; break; }
+// ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
+function renderEditQuotationPage(quote) {
+  if (!quote) {
+    toast('❌ ไม่พบข้อมูล');
+    go('quotationV2');
+    return;
   }
-  if (!quote) { toast('ไม่พบข้อมูล'); return; }
   
-  currentQuoteId = quoteId;
+  currentQuoteId = quote.id;
   quotationItems = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
   selectedLevelForPrice = quote.levelUsed || 'B';
   
@@ -666,7 +654,7 @@ function editQuotation(quoteId) {
   
   // Form Card
   html += '<div class="card" style="margin-bottom:16px">';
-  html += '<h2>✏️ แก้ไขใบเสนอราคา <span class="ml"><button class="btn bsm bd" onclick="deleteQuotation(\'' + quoteId + '\')">🗑️ ลบ</button></span></h2>';
+  html += '<h2>✏️ แก้ไขใบเสนอราคา <span class="ml"><button class="btn bsm bd" onclick="deleteQuotation(\'' + quote.id + '\')">🗑️ ลบ</button></span></h2>';
   
   html += '<div class="fr"><div class="fg"><label>🏪 Dealer *</label><select id="editQuoteDealer" class="fm-input" onchange="editQuoteDealerChanged()">' + dealerOptions + '</select></div>';
   html += '<div class="fg"><label>📄 เลขที่</label><input type="text" id="editQuoteNo" class="fm-input" value="' + sanitize(quote.quoteNo) + '"></div></div>';
@@ -738,9 +726,9 @@ function editQuotation(quoteId) {
   // Action Buttons
   html += '<div class="bg" style="margin-top:16px;gap:8px;justify-content:center;flex-wrap:wrap">';
   html += '<button class="btn bp" onclick="saveCurrentQuotation()" style="background:#3b82f6">💾 บันทึก</button>';
-  html += '<button class="btn bo" onclick="previewQuotation(\'' + quoteId + '\')">👁️ Preview</button>';
-  html += '<button class="btn bs" onclick="exportQuotationToPDF(\'' + quoteId + '\')">📎 PDF</button>';
-  html += '<button class="btn bo" onclick="sendQuotationEmail(\'' + quoteId + '\')">📧 ส่ง Email</button>';
+  html += '<button class="btn bo" onclick="previewQuotation(\'' + quote.id + '\')">👁️ Preview</button>';
+  html += '<button class="btn bs" onclick="exportQuotationToPDF(\'' + quote.id + '\')">📎 PDF</button>';
+  html += '<button class="btn bo" onclick="sendQuotationEmail(\'' + quote.id + '\')">📧 ส่ง Email</button>';
   html += '<button class="btn bo" onclick="go(\'quotationV2\')">↩️ กลับ</button>';
   html += '</div></div>';
   
@@ -782,6 +770,23 @@ function editQuotation(quoteId) {
   }, 100);
 }
 
+// ✅ แก้ไข editQuotation ให้ใช้ renderEditQuotationPage
+function editQuotation(quoteId) {
+  loadQuotations();
+  var quote = null;
+  for (var i = 0; i < quotations.length; i++) {
+    if (quotations[i].id === quoteId) { 
+      quote = quotations[i]; 
+      break; 
+    }
+  }
+  if (!quote) { 
+    toast('❌ ไม่พบข้อมูลใบเสนอราคา');
+    go('quotationV2');
+    return; 
+  }
+  renderEditQuotationPage(quote);
+}
 function toggleDiscountField() {
   var row = document.getElementById('quoteDiscountRow');
   if (row) row.style.display = 'flex';
