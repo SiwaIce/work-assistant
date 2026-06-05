@@ -44,17 +44,22 @@ function loadQuotations() {
 }
 
 function saveQuotations() {
+  // ✅ บันทึกไป localStorage
   localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
-  // Sync to Firebase
+  
+  // ✅ Sync to Firebase
   if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
-    db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').get().then(function(snapshot) {
-      var batch = db.batch();
-      snapshot.forEach(function(doc) { batch.delete(doc.ref); });
-      quotations.forEach(function(q) {
-        var ref = db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(q.id);
-        batch.set(ref, q);
-      });
-      batch.commit().catch(function(e) { console.warn('Firebase sync error:', e); });
+    // ใช้ batch ดีกว่า
+    var batch = db.batch();
+    var userRef = db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2');
+    
+    quotations.forEach(function(q) {
+      var ref = userRef.doc(q.id);
+      batch.set(ref, q);
+    });
+    
+    batch.commit().catch(function(e) {
+      console.warn('Firebase sync error:', e);
     });
   }
 }
@@ -385,7 +390,13 @@ function addQuotationItemFromInput() {
 
 function rQuotationV2(el) {
   document.getElementById('pgT').textContent = '💰 Quotation Tracker';
-  loadQuotations();
+  
+  // ✅ โหลดข้อมูลทุกครั้งที่เปิดหน้า
+  try {
+    quotations = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+  } catch(e) {
+    quotations = [];
+  }
   
   var dealers = ST.getAll('dealers');
   var dealerMap = {};
@@ -596,17 +607,33 @@ function createNewQuotation() {
     updatedAt: new Date().toISOString()
   };
   
-  // Load existing quotations, add new one, save
-  loadQuotations();
-  quotations.push(newQuote);
-  saveQuotations();
+  // ✅ โหลดข้อมูลเดิมก่อน
+  var existingQuotes = [];
+  try {
+    existingQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+  } catch(e) {}
   
-  // Close modal
+  // ✅ เพิ่มของใหม่
+  existingQuotes.push(newQuote);
+  
+  // ✅ บันทึก
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
+  
+  // ✅ อัปเดต global array
+  quotations = existingQuotes;
+  
+  // ✅ Sync Firebase (ถ้ามี)
+  if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(newId).set(newQuote).catch(function(e) {
+      console.warn('Firebase sync error:', e);
+    });
+  }
+  
   closeModal();
-  toast('✅ สร้างใบเสนอราคาแล้ว: ' + newQuoteNo);
+  toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   
-  // Clear the old edit function and directly render edit page
-  renderEditQuotationPage(newQuote);
+  // ✅ กลับไปหน้า列表และรีเฟรช
+  go('quotationV2');
 }
 
 // ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
@@ -868,12 +895,34 @@ function saveCurrentQuotation() {
 
 function deleteQuotation(quoteId) {
   if (!confirm('ลบใบเสนอราคานี้?')) return;
-  quotations = quotations.filter(function(q) { return q.id !== quoteId; });
-  saveQuotations();
+  
+  // ✅ โหลดข้อมูลปัจจุบัน
+  var currentQuotes = [];
+  try {
+    currentQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+  } catch(e) {}
+  
+  // ✅ กรองเอารายการที่ต้องการลบออก
+  var newQuotes = currentQuotes.filter(function(q) { return q.id !== quoteId; });
+  
+  // ✅ บันทึก
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(newQuotes));
+  
+  // ✅ อัปเดต global array
+  quotations = newQuotes;
+  
+  // ✅ ลบจาก Firebase
+  if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(quoteId).delete().catch(function(e) {
+      console.warn('Firebase delete error:', e);
+    });
+  }
+  
   toast('🗑️ ลบแล้ว');
+  
+  // ✅ กลับไปหน้า列表
   go('quotationV2');
 }
-
 // ================================================================
 // QUOTATION CONTACTS
 // ================================================================
