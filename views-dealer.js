@@ -2650,7 +2650,7 @@ function dealerDemoTab(d) {
   // Preview
   html += '<div class="form-section">📊 สถานะปัจจุบัน (Preview)</div>';
   html += '<div id="demoPreviewContainer" style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:12px">';
-  html += renderDemoPreviewDynamic(demoOption, demoItems);
+  html += renderDemoPreviewDynamic(demoOption, demoItems || []);
   html += '</div>';
   
   // ปุ่มบันทึก
@@ -2791,16 +2791,25 @@ function updateDemoPreviewFromDealer() {
   container.innerHTML = renderDemoPreviewDynamic(demoOption, demoItems);
 }
 
-function renderDemoPreviewDynamic(demoOption, demoItems) {
-  var cfg = getConfig();
-  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
-    ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
-  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
-    ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+function renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requiredOption2) {
+  // ✅ ป้องกัน demoItems เป็น undefined หรือ null
+  if (!demoItems || typeof demoItems !== 'object') {
+    demoItems = [];
+  }
+  
+  // ✅ ตรวจสอบว่ามี requiredOption1 หรือ requiredOption2 หรือไม่
+  if (!requiredOption1 || !Array.isArray(requiredOption1)) {
+    requiredOption1 = ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
+  }
+  if (!requiredOption2 || !Array.isArray(requiredOption2)) {
+    requiredOption2 = ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
+  }
   
   var ownedModels = {};
   for (var i = 0; i < demoItems.length; i++) {
-    if (demoItems[i].model) ownedModels[demoItems[i].model] = true;
+    if (demoItems[i] && demoItems[i].model) {
+      ownedModels[demoItems[i].model] = true;
+    }
   }
   
   var optionText = {
@@ -2845,7 +2854,6 @@ function renderDemoPreviewDynamic(demoOption, demoItems) {
   
   return html;
 }
-
 function saveDemoSettingEnhanced(dealerId) {
   var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
   if (!demoOptionElem) {
@@ -3051,25 +3059,27 @@ function updateDemoPreviewFromDealer() {
   var demoOptionElem = document.querySelector('input[name="demoOption"]:checked');
   var demoOption = demoOptionElem ? demoOptionElem.value : 'option1';
   
+  // ✅ ป้องกัน null
   var demoItems = [];
   var rows = document.querySelectorAll('#demoItemsList .demo-item-row');
-  for (var i = 0; i < rows.length; i++) {
-    var modelInput = rows[i].querySelector('.demo-model');
-    if (modelInput && modelInput.value) {
-      demoItems.push({ model: modelInput.value });
+  if (rows && rows.length) {
+    for (var i = 0; i < rows.length; i++) {
+      var modelInput = rows[i].querySelector('.demo-model');
+      if (modelInput && modelInput.value) {
+        demoItems.push({ model: modelInput.value });
+      }
     }
   }
   
   var cfg = getConfig();
-  var requiredOption1 = cfg.levelRequirements?.A?.option1Models || 
+  var requiredOption1 = cfg?.levelRequirements?.A?.option1Models || 
     ['DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse L2', 'DJI Zenmuse H30T'];
-  var requiredOption2 = cfg.levelRequirements?.A?.option2Models || 
+  var requiredOption2 = cfg?.levelRequirements?.A?.option2Models || 
     ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'];
   
   var html = renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requiredOption2);
   container.innerHTML = html;
 }
-
 // ✅ ฟังก์ชัน Preview แบบ dynamic (เพิ่มพารามิเตอร์ required)
 function renderDemoPreviewDynamic(demoOption, demoItems, requiredOption1, requiredOption2) {
   var ownedModels = {};
