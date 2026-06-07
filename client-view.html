@@ -3055,7 +3055,7 @@ async function renderComplianceTab() {
   
   await loadLatestConfigFromFirebase();
 
-// ✅ เพิ่ม 2 บรรทัดนี้ (ให้โหลด pipeline และ forecast ก่อน)
+  // ✅ โหลด pipeline และ forecast ก่อน
   if (!pipelinesData || pipelinesData.length === 0) {
     await loadPipeline();
   }
@@ -3149,6 +3149,19 @@ async function renderComplianceTab() {
     } catch(e) {}
   }
   
+  // ✅ เพิ่มส่วนนี้ (ตรวจสอบ pipelines และ forecast ซ้ำ)
+  if (!pipelinesData || pipelinesData.length === 0) {
+    console.log('⚠️ Pipelines still empty, reloading...');
+    await loadPipeline();
+  }
+  if (!forecastData.runrate.length && !forecastData.projects.length) {
+    console.log('⚠️ Forecast still empty, reloading...');
+    await loadForecast();
+  }
+  
+  console.log('✅ Final pipelines count:', pipelinesData.length);
+  console.log('✅ Final dealer demoItems:', dealer.demoItems?.length || 0);
+  
   // เรียก render เนื้อหา compliance
   await renderComplianceTabContent(dealer);
 }
@@ -3178,25 +3191,40 @@ async function renderComplianceTabContent(dealer) {
     return;
   }
   
-  // ✅ โหลด pipelines จาก Firebase สำหรับคำนวณยอดขาย H1
-  let pipelines = [];
-  try {
-    const snapshot = await db.collection('dealerUpdates')
-      .doc(dealerId)
-      .collection('pipeline')
-      .get();
-    
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      data.id = doc.id;
-      pipelines.push(data);
-    });
-    console.log('✅ โหลด pipelines สำหรับ H1:', pipelines.length, 'รายการ');
-  } catch(e) {
-    console.warn('Error loading pipelines for H1:', e);
+  // ✅ โหลด pipelines จาก Firebase สำหรับคำนวณยอดขาย H1 (ใช้ pipelinesData ที่โหลดไว้แล้ว หรือโหลดใหม่)
+  let pipelines = pipelinesData;
+  if (!pipelines || pipelines.length === 0) {
+    console.log('⚠️ No pipelines in cache, loading from Firebase...');
+    try {
+      const snapshot = await db.collection('dealerUpdates')
+        .doc(dealerId)
+        .collection('pipeline')
+        .get();
+      
+      pipelines = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        pipelines.push(data);
+      });
+      pipelinesData = pipelines;
+      console.log('✅ Reloaded pipelines:', pipelines.length);
+    } catch(e) {
+      console.warn('Error loading pipelines:', e);
+      pipelines = [];
+    }
   }
   
-  // ✅ ถ้า dealer ยังไม่มี demoItems ให้ลองโหลดจาก localStorage
+  // ✅ ถ้ายังไม่มี pipelines ให้ลองจาก cache
+  if (pipelines.length === 0) {
+    const cached = localStorage.getItem('v7_pipeline_cache_' + dealerId);
+    if (cached) {
+      pipelines = JSON.parse(cached);
+      console.log('📦 Loaded pipelines from cache:', pipelines.length);
+    }
+  }
+  
+  // ✅ ถ้า dealer ยังไม่มี demoItems ให้ลองโหลดจาก localStorage (อีกครั้ง)
   if (!dealer.demoItems || dealer.demoItems.length === 0) {
     try {
       const cachedDealer = localStorage.getItem('v7_dealer_cache_' + dealerId);
@@ -3220,12 +3248,16 @@ async function renderComplianceTabContent(dealer) {
           console.log('📦 โหลด demoItems จาก v7_dealers:', dealer.demoItems.length);
           
           // ✅ sync กลับไป Firebase
-          await db.collection('dealerUpdates').doc(dealerId).set({
-            demoItems: dealer.demoItems,
-            demoOption: dealer.demoOption,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
-          console.log('🔄 Synced demoItems to Firebase');
+          try {
+            await db.collection('dealerUpdates').doc(dealerId).set({
+              demoItems: dealer.demoItems,
+              demoOption: dealer.demoOption,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            console.log('🔄 Synced demoItems to Firebase');
+          } catch(syncErr) {
+            console.warn('Sync to Firebase failed:', syncErr);
+          }
         }
       } catch(e) {}
     }
@@ -3263,8 +3295,8 @@ async function renderComplianceTabContent(dealer) {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline - Default เป็น SIS
-  var h1UseSisRevenue = true;  // เปลี่ยนเป็น true เสมอ
+  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline - Default เป็น SIS เสมอ
+  var h1UseSisRevenue = true;
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
   var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines);
@@ -3288,38 +3320,38 @@ async function renderComplianceTabContent(dealer) {
   var overallScore = totalWeight > 0 ? Math.round(totalScore / totalWeight * 100) : 100;
   var overallColor = overallScore >= 80 ? '#22c55e' : (overallScore >= 50 ? '#f59e0b' : '#ef4444');
   
+  // ✅ กำหนด class สำหรับ level badge
+  var levelClass = '';
+  var levelDisplay = level;
+  if (level === 'S') {
+    levelClass = 'level-s';
+    levelDisplay = 'S';
+  } else if (level === 'A') {
+    levelClass = 'level-a';
+    levelDisplay = 'A';
+  } else if (level === 'B') {
+    levelClass = 'level-b';
+    levelDisplay = 'B';
+  } else {
+    levelClass = 'level-other';
+    levelDisplay = 'Other';
+  }
+  
   // สร้าง HTML
   var html = '';
   
-// กำหนด class สำหรับ level badge (ต้องประกาศก่อนใช้)
-var levelClass = '';
-var levelDisplay = level;
-if (level === 'S') {
-  levelClass = 'level-s';
-  levelDisplay = 'S';
-} else if (level === 'A') {
-  levelClass = 'level-a';
-  levelDisplay = 'A';
-} else if (level === 'B') {
-  levelClass = 'level-b';
-  levelDisplay = 'B';
-} else {
-  levelClass = 'level-other';
-  levelDisplay = 'Other';
-}
-
-// Header Card
-html += '<div style="background: linear-gradient(135deg, var(--bg-card) 0%, rgba(59,130,246,0.08) 100%); border-radius: 20px; padding: 24px; margin-bottom: 20px; border: 1px solid var(--border); position: relative; overflow: hidden">';
-html += '<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7)"></div>';
-html += '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px">';
-html += '<div><div style="font-size: 24px; font-weight: 800; margin-bottom: 4px">' + sanitize(dealer.name) + '</div>';
-html += '<div style="display: flex; align-items: center; gap: 8px">';
-html += '<span class="level-badge ' + levelClass + '">' + levelDisplay + '</span>';
-html += '<span style="font-size: 13px; color: var(--text-secondary)">' + levelName + '</span>';
-html += '</div></div>';
-html += '<div style="text-align: center"><div style="font-size: 42px; font-weight: 800; color: ' + overallColor + '">' + overallScore + '%</div><div style="font-size: 12px; color: var(--text-secondary)">Overall Compliance Score</div></div>';
-html += '<button class="btn bo" onclick="refreshClientData()" style="align-self:center;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔄 รีเฟรชข้อมูล</button>';
-html += '</div></div>';
+  // Header Card
+  html += '<div style="background: linear-gradient(135deg, var(--bg-card) 0%, rgba(59,130,246,0.08) 100%); border-radius: 20px; padding: 24px; margin-bottom: 20px; border: 1px solid var(--border); position: relative; overflow: hidden">';
+  html += '<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7)"></div>';
+  html += '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px">';
+  html += '<div><div style="font-size: 24px; font-weight: 800; margin-bottom: 4px">' + sanitize(dealer.name) + '</div>';
+  html += '<div style="display: flex; align-items: center; gap: 8px">';
+  html += '<span class="level-badge ' + levelClass + '">' + levelDisplay + '</span>';
+  html += '<span style="font-size: 13px; color: var(--text-secondary)">' + levelName + '</span>';
+  html += '</div></div>';
+  html += '<div style="text-align: center"><div style="font-size: 42px; font-weight: 800; color: ' + overallColor + '">' + overallScore + '%</div><div style="font-size: 12px; color: var(--text-secondary)">Overall Compliance Score</div></div>';
+  html += '<button class="btn bo" onclick="refreshClientData()" style="align-self:center;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔄 รีเฟรชข้อมูล</button>';
+  html += '</div></div>';
   
   // 3 Cards: H1 Target, DSEC, Demo
   html += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px">';
