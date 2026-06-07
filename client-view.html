@@ -1450,35 +1450,134 @@ function getCustomerPipelineRef(dealerId, pipeId) { if (pipeId) return db.collec
 function getCustomerForecastRef(dealerId, forecastId) { if (forecastId) return db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(forecastId); return db.collection('dealerUpdates').doc(dealerId).collection('forecast'); }
 function getCustomerTimelineRef(dealerId) { return db.collection('dealerUpdates').doc(dealerId).collection('timeline'); }
 
-function loadPipeline() {
+async function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
-  return getCustomerPipelineRef(dealerId).get().then(function(querySnapshot) {
-    pipelinesData = [];
-    querySnapshot.forEach(function(doc) { var data = doc.data(); data.id = doc.id; data._displayStatus = data._status === 'pending' ? 'pending' : 'approved'; pipelinesData.push(data); });
+  
+  try {
+    // โหลดจาก Firebase ก่อน
+    const snapshot = await db.collection('dealerUpdates')
+      .doc(dealerId)
+      .collection('pipeline')
+      .get();
+    
+    const pipelines = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.id = doc.id;
+      data._displayStatus = data._status === 'pending' ? 'pending' : 'approved';
+      pipelines.push(data);
+    });
+    
+    if (pipelines.length > 0) {
+      pipelinesData = pipelines;
+      // Cache ไว้เผื่อ offline
+      localStorage.setItem('v7_pipeline_cache_' + dealerId, JSON.stringify(pipelines));
+      return pipelines;
+    }
+  } catch(e) {
+    console.warn('Load pipeline from Firebase error:', e);
+  }
+  
+  // Fallback: โหลดจาก cache
+  const cached = localStorage.getItem('v7_pipeline_cache_' + dealerId);
+  if (cached) {
+    pipelinesData = JSON.parse(cached);
     return pipelinesData;
-  }).catch(function(err) { console.warn('Load pipeline error:', err); return []; });
+  }
+  
+  return [];
 }
-function loadForecast() {
+async function loadForecast() {
   if (!dealerId) return Promise.resolve();
-  return getCustomerForecastRef(dealerId).get().then(function(querySnapshot) {
-    forecastData.runrate = []; forecastData.projects = [];
-    querySnapshot.forEach(function(doc) { var item = doc.data(); item.id = doc.id; if (item.type === 'runrate') forecastData.runrate.push(item); else if (item.type === 'project') forecastData.projects.push(item); });
-    return Promise.resolve();
-  }).catch(function(err) { console.warn('Load forecast error:', err); return Promise.resolve(); });
+  
+  try {
+    const snapshot = await db.collection('dealerUpdates')
+      .doc(dealerId)
+      .collection('forecast')
+      .get();
+    
+    forecastData.runrate = [];
+    forecastData.projects = [];
+    
+    snapshot.forEach(doc => {
+      const item = doc.data();
+      item.id = doc.id;
+      if (item.type === 'runrate') forecastData.runrate.push(item);
+      else if (item.type === 'project') forecastData.projects.push(item);
+    });
+    
+    // Cache
+    localStorage.setItem('v7_forecast_cache_' + dealerId, JSON.stringify(forecastData));
+    return;
+  } catch(e) {
+    console.warn('Load forecast from Firebase error:', e);
+  }
+  
+  // Fallback: โหลดจาก cache
+  const cached = localStorage.getItem('v7_forecast_cache_' + dealerId);
+  if (cached) {
+    const data = JSON.parse(cached);
+    forecastData.runrate = data.runrate || [];
+    forecastData.projects = data.projects || [];
+  }
 }
-function loadTimeline() {
+async function loadTimeline() {
   if (!dealerId) return Promise.resolve([]);
-  return getCustomerTimelineRef(dealerId).orderBy('timestamp', 'desc').limit(50).get().then(function(querySnapshot) {
+  
+  try {
+    const snapshot = await db.collection('dealerUpdates')
+      .doc(dealerId)
+      .collection('timeline')
+      .orderBy('timestamp', 'desc')
+      .limit(50)
+      .get();
+    
     timelineLogs = [];
-    querySnapshot.forEach(function(doc) { timelineLogs.push(doc.data()); });
+    snapshot.forEach(doc => {
+      timelineLogs.push(doc.data());
+    });
+    
+    localStorage.setItem('v7_timeline_cache_' + dealerId, JSON.stringify(timelineLogs));
     return timelineLogs;
-  }).catch(function(err) { console.warn('Load timeline error:', err); return Promise.resolve([]); });
+  } catch(e) {
+    console.warn('Load timeline error:', e);
+  }
+  
+  // Fallback: โหลดจาก cache
+  const cached = localStorage.getItem('v7_timeline_cache_' + dealerId);
+  if (cached) {
+    timelineLogs = JSON.parse(cached);
+    return timelineLogs;
+  }
+  
+  return [];
 }
-function loadDealerName() {
+async function loadDealerName() {
   var urlParams = new URLSearchParams(window.location.search);
   var nameParam = urlParams.get('name');
-  if (nameParam) { dealerName = decodeURIComponent(nameParam); document.getElementById('dealerName').innerHTML = esc(dealerName); return Promise.resolve(dealerName); }
-  dealerName = 'Dealer'; document.getElementById('dealerName').innerHTML = 'Dealer'; return Promise.resolve(dealerName);
+  
+  if (nameParam) { 
+    dealerName = decodeURIComponent(nameParam); 
+    document.getElementById('dealerName').innerHTML = esc(dealerName); 
+    return dealerName;
+  }
+  
+  // ✅ ถ้าไม่มี name parameter ให้โหลดจาก Firebase
+  try {
+    const doc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (doc.exists && doc.data().name) {
+      dealerName = doc.data().name;
+    } else {
+      dealerName = dealerId;
+    }
+    document.getElementById('dealerName').innerHTML = esc(dealerName);
+    return dealerName;
+  } catch(e) {
+    console.warn('Load dealer name error:', e);
+    dealerName = dealerId;
+    document.getElementById('dealerName').innerHTML = esc(dealerId);
+    return dealerName;
+  }
 }
 function showNotice(message, isSuccess) {
   var noticeArea = document.getElementById('noticeArea');
@@ -1486,13 +1585,18 @@ function showNotice(message, isSuccess) {
   noticeArea.innerHTML = '<div class="cv-notice ' + (isSuccess ? 'success' : '') + '">' + esc(message) + '</div>';
   setTimeout(function() { if (noticeArea) noticeArea.innerHTML = ''; }, 5000);
 }
-function loadAllData() {
+async function loadAllData() {
   if (!dealerId) return;
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
-  Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]).then(function() {
+  
+  try {
+    await Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]);
     renderCurrentTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
-  }).catch(function(err) { console.error('Load error:', err); document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div></div>'; });
+  } catch(err) {
+    console.error('Load error:', err);
+    document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div><button class="btn bp" onclick="location.reload()" style="margin-top:12px">🔄 ลองใหม่</button></div>';
+  }
 }
 function refreshData() { loadAllData(); }
 
@@ -2902,37 +3006,90 @@ function getConfig() {
 // COMPLIANCE DASHBOARD - UPDATED WITH DEMO STATUS & H1 SOURCE SELECTOR (CLIENT VIEW)
 // ================================================================
 
-function renderComplianceTab() {
+async function renderComplianceTab() {
   if (!dealerId) return;
+  
   document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
-  loadLatestConfigFromFirebase().then(function() {
-    renderComplianceTabContent();
-  }).catch(function() { renderComplianceTabContent(); });
+  
+  // โหลด config จาก Firebase ก่อน
+  await loadLatestConfigFromFirebase();
+  
+  // ✅ โหลด Dealer จาก Firebase แทน localStorage
+  let dealer = null;
+  
+  try {
+    // วิธีที่ 1: โหลดจาก dealerUpdates collection
+    const dealerDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (dealerDoc.exists) {
+      dealer = dealerDoc.data();
+      dealer.id = dealerDoc.id;
+      console.log('✅ โหลด Dealer จาก Firebase สำเร็จ');
+    }
+  } catch(e) {
+    console.warn('Error loading dealer from Firebase:', e);
+  }
+  
+  // วิธีที่ 2: Fallback - โหลดจาก localStorage cache
+  if (!dealer) {
+    try {
+      const cachedDealer = localStorage.getItem('v7_dealer_cache_' + dealerId);
+      if (cachedDealer) {
+        dealer = JSON.parse(cachedDealer);
+        console.log('📦 โหลด Dealer จาก cache');
+      }
+    } catch(e) {}
+  }
+  
+  // วิธีที่ 3: Fallback สุดท้าย - โหลดจาก v7_dealers
+  if (!dealer) {
+    try {
+      const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      dealer = dealers.find(d => d.id === dealerId);
+      if (dealer) console.log('📦 โหลด Dealer จาก v7_dealers');
+    } catch(e) {}
+  }
+  
+  if (!dealer) {
+    document.getElementById('tabContent').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🏪</div>
+        <div style="font-weight:600; margin-bottom:8px">ไม่พบข้อมูล Dealer</div>
+        <div class="hint">กรุณาติดต่อพนักงานขายเพื่อขอรับลิงก์ใหม่</div>
+        <button class="btn bp" onclick="location.reload()" style="margin-top:16px">🔄 ลองใหม่</button>
+      </div>
+    `;
+    return;
+  }
+  
+  // เรียก render เนื้อหา compliance
+  renderComplianceTabContent(dealer);
 }
-
-function renderComplianceTabContent() {
+function renderComplianceTabContent(dealer) {
   if (!dealerId) return;
   
-  // โหลดข้อมูล Dealer
-  var dealers = [];
-  try { 
-    var dealerData = localStorage.getItem('v7_dealers'); 
-    dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { dealers = []; }
-  
-  var dealer = null;
-  for (var i = 0; i < dealers.length; i++) { 
-    if (dealers[i] && dealers[i].id === dealerId) { 
-      dealer = dealers[i]; 
-      break; 
-    } 
+  // ✅ ถ้าไม่ได้รับ dealer มา ให้ลองหาจากที่อื่น
+  if (!dealer) {
+    // ลองจาก localStorage cache
+    try {
+      const cachedDealer = localStorage.getItem('v7_dealer_cache_' + dealerId);
+      if (cachedDealer) dealer = JSON.parse(cachedDealer);
+    } catch(e) {}
+    
+    // ลองจาก v7_dealers
+    if (!dealer) {
+      try {
+        const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+        dealer = dealers.find(d => d.id === dealerId);
+      } catch(e) {}
+    }
   }
   
-  if (!dealer) { 
-    document.getElementById('tabContent').innerHTML = '<div class="empty"><p>ไม่พบข้อมูล Dealer</p></div>'; 
-    return; 
+  if (!dealer) {
+    document.getElementById('tabContent').innerHTML = '<div class="empty"><p>ไม่พบข้อมูล Dealer</p></div>';
+    return;
   }
   
+  // ✅ ส่วนที่เหลือเป็นโค้ดเดิมของคุณทั้งหมด (ไม่ต้องแก้)
   var level = dealer.level || 'Other';
   var levelName = { 
     S: 'Strategic Partner', 
@@ -2941,7 +3098,6 @@ function renderComplianceTabContent() {
     Other: 'Trial Partner' 
   }[level] || level;
   
-  // ดึง levelRequirements จาก config
   var cfg = getConfig();
   var levelRequirements = cfg.levelRequirements || {
     S: { h1Target: 27000000, dsecRequired: 3, 
