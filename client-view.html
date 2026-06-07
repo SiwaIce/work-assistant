@@ -1633,7 +1633,7 @@ async function loadAllData() {
       loadPipeline(), 
       loadForecast(), 
       loadTimeline(),
-      loadLatestConfigFromFirebase()  // ✅ เพิ่ม config ด้วย
+      loadLatestConfigFromFirebase()
     ]);
     
     // ✅ รอสักครู่ให้ข้อมูลเซ็ตเสร็จ (เผื่อ race condition)
@@ -1644,6 +1644,14 @@ async function loadAllData() {
     
     // ✅ ตั้งค่า currentTab ให้เป็น compliance ก่อน render
     currentTab = 'compliance';
+    
+    // ✅ เปลี่ยน active class ในแท็บ
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      btn.classList.remove('active');
+      if (btn.dataset.tab === 'compliance') {
+        btn.classList.add('active');
+      }
+    });
     
     // ✅ เรียก render โดยตรง ไม่ผ่าน renderCurrentTab
     await renderComplianceTab();
