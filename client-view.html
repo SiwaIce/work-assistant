@@ -1196,8 +1196,8 @@ input[list]::-webkit-calendar-picker-indicator {
   </div>
   <div id="noticeArea"></div>
 <div class="tab-bar" id="tabBar">
-  <div class="tab-btn active" data-tab="compliance">📊 สถานะพาร์ทเนอร์</div>
-  <div class="tab-btn" data-tab="pipeline">📋 โครงการของฉัน</div>
+<div class="tab-btn active" data-tab="compliance">📊 สถานะพาร์ทเนอร์</div>
+<div class="tab-btn" data-tab="pipeline">📋 โครงการของฉัน</div>
   <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
   <div class="tab-btn" data-tab="updateHistory">📝 ประวัติการอัพเดท</div>
 </div>
@@ -1225,7 +1225,7 @@ var db = firebase.firestore();
 // ========== GLOBALS ==========
 var dealerId = null;
 var uid = null;
-var currentTab = 'pipeline';
+var currentTab = 'compliance';
 var pipelinesData = [];
 var forecastData = { runrate: [], projects: [] };
 var timelineLogs = [];
@@ -1621,12 +1621,18 @@ function showNotice(message, isSuccess) {
   noticeArea.innerHTML = '<div class="cv-notice ' + (isSuccess ? 'success' : '') + '">' + esc(message) + '</div>';
   setTimeout(function() { if (noticeArea) noticeArea.innerHTML = ''; }, 5000);
 }
+// แก้ไข loadAllData() ให้รับ callback หรือส่งต่อว่า rendering เสร็จแล้ว
 async function loadAllData() {
   if (!dealerId) return;
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   
   try {
     await Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]);
+    
+    // ✅ โหลด compliance data เพิ่ม (เผื่อไว้)
+    await loadLatestConfigFromFirebase();
+    
+    // ✅ เรียก render หลังจากโหลดเสร็จ
     renderCurrentTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
   } catch(err) {
@@ -3048,6 +3054,14 @@ async function renderComplianceTab() {
   document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
   
   await loadLatestConfigFromFirebase();
+
+// ✅ เพิ่ม 2 บรรทัดนี้ (ให้โหลด pipeline และ forecast ก่อน)
+  if (!pipelinesData || pipelinesData.length === 0) {
+    await loadPipeline();
+  }
+  if (!forecastData.runrate.length && !forecastData.projects.length) {
+    await loadForecast();
+  }
   
   let dealer = null;
   
