@@ -1621,40 +1621,22 @@ function showNotice(message, isSuccess) {
   noticeArea.innerHTML = '<div class="cv-notice ' + (isSuccess ? 'success' : '') + '">' + esc(message) + '</div>';
   setTimeout(function() { if (noticeArea) noticeArea.innerHTML = ''; }, 5000);
 }
-// แก้ไข loadAllData() ให้รับ callback หรือส่งต่อว่า rendering เสร็จแล้ว
 async function loadAllData() {
   if (!dealerId) return;
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   
   try {
-    // ✅ โหลดทุกอย่างพร้อมกัน
+    // ✅ เพิ่ม loadLatestConfigFromFirebase
     await Promise.all([
       loadDealerName(), 
       loadPipeline(), 
       loadForecast(), 
       loadTimeline(),
-      loadLatestConfigFromFirebase()
+      loadLatestConfigFromFirebase()  // ← เพิ่มบรรทัดนี้
     ]);
     
-    // ✅ รอสักครู่ให้ข้อมูลเซ็ตเสร็จ (เผื่อ race condition)
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    console.log('✅ All data loaded - pipelines:', pipelinesData.length);
-    console.log('✅ Forecast loaded - runrate:', forecastData.runrate.length);
-    
-    // ✅ ตั้งค่า currentTab ให้เป็น compliance ก่อน render
-    currentTab = 'compliance';
-    
-    // ✅ เปลี่ยน active class ในแท็บ
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      btn.classList.remove('active');
-      if (btn.dataset.tab === 'compliance') {
-        btn.classList.add('active');
-      }
-    });
-    
-    // ✅ เรียก render โดยตรง ไม่ผ่าน renderCurrentTab
-    await renderComplianceTab();
+    // ✅ เปลี่ยนจาก renderCurrentTab() เป็น renderComplianceTab() โดยตรง
+    await renderComplianceTab();  // ← แก้บรรทัดนี้
     
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
   } catch(err) {
@@ -1663,7 +1645,6 @@ async function loadAllData() {
       <div class="empty-state">
         <div class="empty-state-icon">⚠️</div>
         <div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div>
-        <div class="hint">${err.message}</div>
         <button class="btn bp" onclick="location.reload()" style="margin-top:12px">🔄 ลองใหม่</button>
       </div>
     `;
@@ -3563,23 +3544,12 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
 }
 
 async function changeH1Source(dealerId, useSisRevenue) {
-  // โหลด dealers ปัจจุบัน
-  var dealers = [];
-  try { 
-    var dealerData = localStorage.getItem('v7_dealers'); 
-    dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { dealers = []; }
+  console.log('🔄 changeH1Source called:', dealerId, useSisRevenue);
   
-  // อัปเดตค่า
-  for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i] && dealers[i].id === dealerId) {
-      dealers[i].h1UseSisRevenue = useSisRevenue;
-      break;
-    }
-  }
-  localStorage.setItem('v7_dealers', JSON.stringify(dealers));
+  // ✅ บันทึกค่าใน sessionStorage (จำไว้ข้ามการ refresh)
+  sessionStorage.setItem('h1Source_' + dealerId, useSisRevenue ? 'sis' : 'pipeline');
   
-  // โหลด dealer ปัจจุบันใหม่
+  // ✅ โหลด dealer ปัจจุบันอีกครั้ง
   let dealer = null;
   try {
     const dealerDoc = await db.collection('dealerUpdates').doc(dealerId).get();
@@ -3587,16 +3557,29 @@ async function changeH1Source(dealerId, useSisRevenue) {
       dealer = dealerDoc.data();
       dealer.id = dealerDoc.id;
     }
-  } catch(e) {}
+  } catch(e) {
+    console.warn('Error reloading dealer:', e);
+  }
+  
+  if (!dealer) {
+    // fallback จาก localStorage
+    try {
+      const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      dealer = dealers.find(d => d.id === dealerId);
+    } catch(e) {}
+  }
   
   if (!dealer) {
     toast('ไม่พบข้อมูล Dealer');
     return;
   }
   
+  // ✅ อัปเดตค่าใน dealer object
+  dealer.h1UseSisRevenue = useSisRevenue;
+  
   toast('เปลี่ยนแหล่งข้อมูลเป็น ' + (useSisRevenue ? 'ยอด SIS' : 'Pipeline') + ' แล้ว');
   
-  // รีเฟรชหน้า (ใช้ค่าใหม่)
+  // ✅ รีเฟรชหน้า compliance tab
   await renderComplianceTabContent(dealer);
 }
 // ================================================================
