@@ -3508,8 +3508,8 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
     actualAmount = dealer.sisRevenue || 0;
     sourceText = '(ยอด SIS)';
   } else {
-    // ✅ ใช้ pipelines ที่ส่งเข้ามา (จาก Firebase)
-    var pipelines = customPipelines || [];
+    // ✅ ใช้ pipelines ที่ส่งเข้ามา หรือ fallback ไปใช้ global pipelinesData
+    var pipelines = (customPipelines && customPipelines.length > 0) ? customPipelines : (pipelinesData || []);
     var now = new Date();
     var startDate = new Date(now.getFullYear(), 0, 1);
     var endDate = new Date(now.getFullYear(), 5, 30);
@@ -3878,64 +3878,7 @@ function renderDemoDetailCard(dealer, demoStatus, requirements) {
   html += '</div>';
   return html;
 }
-function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
-  var dealer = null;
-  var dealers = [];
-  try { 
-    var dealerData = localStorage.getItem('v7_dealers'); 
-    dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { dealers = []; }
-  
-  for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i] && dealers[i].id === dealerId) {
-      dealer = dealers[i];
-      break;
-    }
-  }
-  
-  var actualAmount = 0;
-  var sourceText = '';
-  
-  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
-    actualAmount = dealer.sisRevenue || 0;
-    sourceText = '(ยอด SIS)';
-  } else {
-    // คำนวณจาก Pipeline (วิธีเดิม)
-    var now = new Date();
-    var startDate = new Date(now.getFullYear(), 0, 1);
-    var endDate = new Date(now.getFullYear(), 5, 30);
-    var pipelines = [];
-    try { 
-      var pipeRaw = localStorage.getItem('v7_pipeline'); 
-      pipelines = pipeRaw ? JSON.parse(pipeRaw) : []; 
-    } catch(e) { pipelines = []; }
-    
-    for (var i = 0; i < pipelines.length; i++) {
-      var p = pipelines[i];
-      if (!p || p.dealerId !== dealerId) continue;
-      if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
-      var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
-      if (shipDate && shipDate >= startDate && shipDate <= endDate) {
-        actualAmount += (Number(p.forecastAmount) || 0);
-      }
-    }
-    sourceText = '(จาก Pipeline)';
-  }
-  
-  var target = requirements.h1Target || 0;
-  var percent = target > 0 ? Math.round(actualAmount / target * 100) : 100;
-  var isOk = actualAmount >= target;
-  
-  return { 
-    target: target, 
-    actual: actualAmount, 
-    percent: Math.min(percent, 100), 
-    isOk: isOk, 
-    gap: target - actualAmount,
-    sourceText: sourceText,
-    useSisRevenue: useSisRevenue
-  };
-}
+
 function toast(msg, isError) {
   var toastEl = document.getElementById('toast');
   if (!toastEl) {
