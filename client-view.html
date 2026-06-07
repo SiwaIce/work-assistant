@@ -1624,9 +1624,6 @@ function showNotice(message, isSuccess) {
 async function loadAllData() {
   if (!dealerId) return;
   
-  // ✅ ตรวจสอบว่าเคย reload แล้วหรือยัง
-  const hasReloaded = sessionStorage.getItem('has_reloaded_' + dealerId);
-  
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   
   try {
@@ -1637,17 +1634,6 @@ async function loadAllData() {
       loadTimeline(),
       loadLatestConfigFromFirebase()
     ]);
-    
-    // ✅ ถ้ายังไม่เคย reload ให้ reload อัตโนมัติ 1 ครั้ง
-    if (!hasReloaded) {
-      sessionStorage.setItem('has_reloaded_' + dealerId, 'true');
-      console.log('🔄 Auto reloading page...');
-      showNotice('✅ โหลดข้อมูลเสร็จ กำลังโหลดหน้าใหม่...', true);
-      setTimeout(() => {
-        location.reload();
-      }, 500);
-      return;
-    }
     
     await renderComplianceTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
