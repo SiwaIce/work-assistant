@@ -3446,3 +3446,154 @@ function getCustomDemoRequirementsFromUI() {
   
   return { option1Models: option1Models, option2Models: option2Models };
 }
+// ✅ ฟังก์ชัน sync ข้อมูล Dealer ไป Firebase (ให้ client-view ดึงไปใช้)
+async function syncDealerToFirebase(dealerId) {
+  if (!CURRENT_USER) {
+    console.warn('No user logged in, cannot sync');
+    return false;
+  }
+  
+  const dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) return false;
+  
+  try {
+    // สร้าง object สำหรับ sync (เฉพาะข้อมูลที่ client-view ต้องการ)
+    const syncData = {
+      name: dealer.name,
+      level: dealer.level,
+      djiDealer: dealer.djiDealer,
+      dsecCertCount: dealer.dsecCertCount || 0,
+      dsecStatus: dealer.dsecStatus || '',
+      demoOption: dealer.demoOption || 'none',
+      demoItems: dealer.demoItems || [],
+      sisRevenue: dealer.sisRevenue || 0,
+      h1UseSisRevenue: dealer.h1UseSisRevenue || false,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    await db.collection('dealerUpdates').doc(dealerId).set(syncData, { merge: true });
+    console.log('✅ Synced dealer to Firebase:', dealer.name);
+    return true;
+  } catch(e) {
+    console.error('Sync dealer error:', e);
+    return false;
+  }
+}
+
+// ✅ sync ข้อมูล Pipeline ทั้งหมดของ Dealer
+async function syncAllPipelinesToFirebase(dealerId) {
+  if (!CURRENT_USER) return false;
+  
+  const pipelines = ST.pipelineByDealer(dealerId);
+  const batch = db.batch();
+  const pipelineRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
+  
+  for (const pipe of pipelines) {
+    const docRef = pipelineRef.doc(pipe.id);
+    const syncPipe = {
+      projectName: pipe.projectName,
+      dealerId: pipe.dealerId,
+      status: pipe.status,
+      forecastAmount: pipe.forecastAmount,
+      items: pipe.items || [],
+      biddingDate: pipe.biddingDate,
+      shipmentDate: pipe.shipmentDate,
+      _status: pipe._status || 'approved',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    batch.set(docRef, syncPipe, { merge: true });
+  }
+  
+  await batch.commit();
+  console.log(`✅ Synced ${pipelines.length} pipelines for dealer`);
+  return true;
+}
+// ================================================================
+// SYNC DEALER DATA TO FIREBASE (สำหรับ client-view)
+// เพิ่มเมื่อ: มิถุนายน 2026
+// ================================================================
+
+async function syncDealerToFirebase(dealerId) {
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    console.warn('No user logged in, cannot sync');
+    return false;
+  }
+  
+  const dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) {
+    console.warn('Dealer not found:', dealerId);
+    return false;
+  }
+  
+  try {
+    // สร้าง object สำหรับ sync (เฉพาะข้อมูลที่ client-view ต้องการ)
+    const syncData = {
+      name: dealer.name,
+      level: dealer.level,
+      djiDealer: dealer.djiDealer || '',
+      dsecCertCount: Number(dealer.dsecCertCount) || 0,
+      dsecStatus: dealer.dsecStatus || '',
+      crmStatus: dealer.crmStatus || '',
+      fh2Status: dealer.fh2Status || '',
+      larkStatus: dealer.larkStatus || '',
+      demoOption: dealer.demoOption || 'none',
+      demoItems: dealer.demoItems || [],
+      sisRevenue: Number(dealer.sisRevenue) || 0,
+      h1UseSisRevenue: dealer.h1UseSisRevenue === true,
+      customDemoRequirements: dealer.customDemoRequirements || { enabled: false },
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    await db.collection('dealerUpdates').doc(dealerId).set(syncData, { merge: true });
+    console.log('✅ Synced dealer to Firebase:', dealer.name);
+    return true;
+  } catch(e) {
+    console.error('Sync dealer error:', e);
+    return false;
+  }
+}
+
+async function syncAllPipelinesToFirebase(dealerId) {
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
+    console.warn('No user logged in, skipping pipeline sync');
+    return false;
+  }
+  
+  const pipelines = ST.pipelineByDealer(dealerId);
+  if (!pipelines.length) {
+    console.log('No pipelines to sync for dealer:', dealerId);
+    return true;
+  }
+  
+  try {
+    const batch = db.batch();
+    const pipelineRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
+    
+    for (const pipe of pipelines) {
+      const docRef = pipelineRef.doc(pipe.id);
+      const syncPipe = {
+        projectName: pipe.projectName || '',
+        dealerId: pipe.dealerId,
+        status: pipe.status || 'prospect',
+        forecastAmount: Number(pipe.forecastAmount) || 0,
+        items: pipe.items || [],
+        model: pipe.model || '',
+        modelQty: Number(pipe.modelQty) || 1,
+        biddingDate: pipe.biddingDate || '',
+        shipmentDate: pipe.shipmentDate || '',
+        endUserTH: pipe.endUserTH || '',
+        endUserEN: pipe.endUserEN || '',
+        _status: pipe._status || 'approved',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      batch.set(docRef, syncPipe, { merge: true });
+    }
+    
+    await batch.commit();
+    console.log(`✅ Synced ${pipelines.length} pipelines for dealer ${dealerId}`);
+    return true;
+  } catch(e) {
+    console.error('Sync pipelines error:', e);
+    return false;
+  }
+}

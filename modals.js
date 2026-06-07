@@ -187,7 +187,7 @@ function showDealerM(eid) {
     '<button class="btn bp btn-full" onclick="saveDealer(\'' + (eid || '') + '\')">💾 บันทึก</button>');
 }
 
-function saveDealer(eid) {
+async function saveDealer(eid) {
   var data = {
     name: document.getElementById('fd_name').value.trim(),
     sisCode: document.getElementById('fd_sis').value.trim(),
@@ -226,6 +226,15 @@ function saveDealer(eid) {
     if (typeof addAuditLog === 'function') {
       addAuditLog('update_dealer', 'dealer', eid, data.name, eid, data.name, {});
     }
+    
+    // ✅ เพิ่ม sync ไป Firebase (ให้ client-view ดึงไปใช้)
+    if (typeof syncDealerToFirebase === 'function') {
+      await syncDealerToFirebase(eid);
+    }
+    if (typeof syncAllPipelinesToFirebase === 'function') {
+      await syncAllPipelinesToFirebase(eid);
+    }
+    
     closeMForce();
     go('dealerDetail', {dealerId: eid});
   } else {
@@ -234,12 +243,19 @@ function saveDealer(eid) {
     if (typeof addAuditLog === 'function') {
       addAuditLog('create_dealer', 'dealer', c.id, data.name, c.id, data.name, {});
     }
+    
+    // ✅ เพิ่ม sync ไป Firebase (ให้ client-view ดึงไปใช้)
+    if (typeof syncDealerToFirebase === 'function') {
+      await syncDealerToFirebase(c.id);
+    }
+    
     closeMForce();
     go('dealerDetail', {dealerId: c.id});
   }
   
   toast('💾 บันทึกแล้ว');
 }
+
 // ================================================================
 // PIPELINE MODAL (Multi-Model) - UPDATED TO USE Products MODULE
 // ================================================================

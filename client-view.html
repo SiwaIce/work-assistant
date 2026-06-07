@@ -1454,7 +1454,6 @@ async function loadPipeline() {
   if (!dealerId) return Promise.resolve([]);
   
   try {
-    // โหลดจาก Firebase ก่อน
     const snapshot = await db.collection('dealerUpdates')
       .doc(dealerId)
       .collection('pipeline')
@@ -1487,6 +1486,7 @@ async function loadPipeline() {
   
   return [];
 }
+
 async function loadForecast() {
   if (!dealerId) return Promise.resolve();
   
@@ -1506,7 +1506,6 @@ async function loadForecast() {
       else if (item.type === 'project') forecastData.projects.push(item);
     });
     
-    // Cache
     localStorage.setItem('v7_forecast_cache_' + dealerId, JSON.stringify(forecastData));
     return;
   } catch(e) {
@@ -1562,7 +1561,7 @@ async function loadDealerName() {
     return dealerName;
   }
   
-  // ✅ ถ้าไม่มี name parameter ให้โหลดจาก Firebase
+  // โหลดจาก Firebase ถ้าไม่มี name parameter
   try {
     const doc = await db.collection('dealerUpdates').doc(dealerId).get();
     if (doc.exists && doc.data().name) {
@@ -3011,14 +3010,12 @@ async function renderComplianceTab() {
   
   document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
   
-  // โหลด config จาก Firebase ก่อน
   await loadLatestConfigFromFirebase();
   
-  // ✅ โหลด Dealer จาก Firebase แทน localStorage
   let dealer = null;
   
+  // ✅ โหลด Dealer จาก Firebase ก่อน
   try {
-    // วิธีที่ 1: โหลดจาก dealerUpdates collection
     const dealerDoc = await db.collection('dealerUpdates').doc(dealerId).get();
     if (dealerDoc.exists) {
       dealer = dealerDoc.data();
@@ -3029,7 +3026,7 @@ async function renderComplianceTab() {
     console.warn('Error loading dealer from Firebase:', e);
   }
   
-  // วิธีที่ 2: Fallback - โหลดจาก localStorage cache
+  // Fallback จาก cache
   if (!dealer) {
     try {
       const cachedDealer = localStorage.getItem('v7_dealer_cache_' + dealerId);
@@ -3040,7 +3037,7 @@ async function renderComplianceTab() {
     } catch(e) {}
   }
   
-  // วิธีที่ 3: Fallback สุดท้าย - โหลดจาก v7_dealers
+  // Fallback จาก v7_dealers
   if (!dealer) {
     try {
       const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
@@ -3062,12 +3059,13 @@ async function renderComplianceTab() {
   }
   
   // เรียก render เนื้อหา compliance
-  renderComplianceTabContent(dealer);
+  await renderComplianceTabContent(dealer);
 }
-function renderComplianceTabContent(dealer) {
+// ✅ แก้ไข: รับ dealer parameter และเป็น async
+async function renderComplianceTabContent(dealer) {
   if (!dealerId) return;
   
-  // ✅ ถ้าไม่ได้รับ dealer มา ให้ลองหาจากที่อื่น
+  // ถ้าไม่ได้รับ dealer มา ให้ลองหาจากที่อื่น
   if (!dealer) {
     // ลองจาก localStorage cache
     try {
@@ -3089,7 +3087,24 @@ function renderComplianceTabContent(dealer) {
     return;
   }
   
-  // ✅ ส่วนที่เหลือเป็นโค้ดเดิมของคุณทั้งหมด (ไม่ต้องแก้)
+  // ✅ โหลด pipelines จาก Firebase สำหรับคำนวณยอดขาย H1
+  let pipelines = [];
+  try {
+    const snapshot = await db.collection('dealerUpdates')
+      .doc(dealerId)
+      .collection('pipeline')
+      .get();
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.id = doc.id;
+      pipelines.push(data);
+    });
+    console.log('✅ โหลด pipelines สำหรับ H1:', pipelines.length, 'รายการ');
+  } catch(e) {
+    console.warn('Error loading pipelines for H1:', e);
+  }
+  
   var level = dealer.level || 'Other';
   var levelName = { 
     S: 'Strategic Partner', 
@@ -3114,13 +3129,16 @@ function renderComplianceTabContent(dealer) {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline (Position I)
+  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline (มีอยู่แล้วใน dealer)
   var h1UseSisRevenue = (dealer.h1UseSisRevenue === true);
   
-  // ✅ คำนวณ H1 Status แบบมีตัวเลือก (ใช้ฟังก์ชันใหม่)
-  var h1Status = calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue);
+  // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
+  var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
+  
+  // ✅ ส่วนที่เหลือเป็นโค้ด HTML เดิม (copy มาจากไฟล์เดิม)
+  // (ตั้งแต่บรรทัดที่คำนวณ scores จนถึงสิ้นสุดฟังก์ชัน)
   
   // คำนวณคะแนนรวม (Overall Compliance Score)
   var scores = [];
@@ -3139,7 +3157,7 @@ function renderComplianceTabContent(dealer) {
   var overallScore = totalWeight > 0 ? Math.round(totalScore / totalWeight * 100) : 100;
   var overallColor = overallScore >= 80 ? '#22c55e' : (overallScore >= 50 ? '#f59e0b' : '#ef4444');
   
-  // สร้าง HTML
+  // สร้าง HTML (copy จากไฟล์เดิมทั้งหมด ตั้งแต่ส่วน Header Card ไปจนจบ)
   var html = '';
   
   // Header Card
@@ -3153,10 +3171,10 @@ function renderComplianceTabContent(dealer) {
   html += '<button class="btn bo" onclick="refreshClientData()" style="align-self:center;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔄 รีเฟรชข้อมูล</button>';
   html += '</div></div>';
   
-  // 3 Cards: H1 Target, DSEC, Demo (Preview)
+  // 3 Cards: H1 Target, DSEC, Demo
   html += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px">';
   
-  // ✅ H1 Target Card WITH RADIO BUTTON (Position I)
+  // H1 Target Card
   var h1Color = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
   html += '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
   html += '<div style="font-size: 32px; margin-bottom: 8px">🎯</div>';
@@ -3164,7 +3182,7 @@ function renderComplianceTabContent(dealer) {
   html += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">H1 Target Achievement</div>';
   html += '<div style="font-size: 11px; margin-top: 8px"><span style="color: var(--text-secondary)">' + fmtMoneyShort(h1Status.actual) + '</span> / <span style="color: var(--accent)">' + fmtMoneyShort(h1Status.target) + '</span> ฿</div>';
   html += '<div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px">' + h1Status.sourceText + '</div>';
-  // ✅ Radio buttons for selecting H1 source
+  // Radio buttons
   html += '<div style="margin-top: 8px; display: flex; gap: 12px; justify-content: center">' +
     '<label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor:pointer">' +
     '<input type="radio" name="h1Source" value="pipeline" ' + (!h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', false)"> 📊 Pipeline' +
@@ -3183,7 +3201,7 @@ function renderComplianceTabContent(dealer) {
   html += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">DSEC Certified Personnel</div>';
   html += '</div>';
   
-  // Demo Card (Preview - รอ renderDemoStatusForClient)
+  // Demo Card Preview
   var demoOption = dealer.demoOption || 'none';
   var demoPreviewHtml = '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
   if (demoOption === 'none') {
@@ -3200,7 +3218,6 @@ function renderComplianceTabContent(dealer) {
   }
   demoPreviewHtml += '</div>';
   html += demoPreviewHtml;
-  
   html += '</div>';
   
   // H1 Target Detail Card
@@ -3216,7 +3233,7 @@ function renderComplianceTabContent(dealer) {
   html += '<div><span style="color: var(--text-secondary)">ความคืบหน้า:</span> <strong>' + h1Status.percent + '%</strong></div>';
   html += '</div></div>';
   
-  // ✅ Demo Status Detail (แบบเต็ม)
+  // Demo Status Detail
   html += renderDemoStatusForClient(dealer, levelRequirements);
   
   // DSEC Detail Card
@@ -3249,9 +3266,12 @@ function renderComplianceTabContent(dealer) {
 // H1 STATUS WITH SIS REVENUE OPTION (Position H - ต้องมีในไฟล์)
 // ================================================================
 
-function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
+// ✅ แก้ไข: เพิ่ม parameter customPipelines
+async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue, customPipelines) {
   var dealer = null;
   var dealers = [];
+  
+  // โหลด dealer จาก localStorage (fallback)
   try { 
     var dealerData = localStorage.getItem('v7_dealers'); 
     dealers = dealerData ? JSON.parse(dealerData) : []; 
@@ -3271,15 +3291,11 @@ function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue) {
     actualAmount = dealer.sisRevenue || 0;
     sourceText = '(ยอด SIS)';
   } else {
-    // คำนวณจาก Pipeline
+    // ✅ ใช้ pipelines ที่ส่งเข้ามา (จาก Firebase)
+    var pipelines = customPipelines || [];
     var now = new Date();
     var startDate = new Date(now.getFullYear(), 0, 1);
     var endDate = new Date(now.getFullYear(), 5, 30);
-    var pipelines = [];
-    try { 
-      var pipeRaw = localStorage.getItem('v7_pipeline'); 
-      pipelines = pipeRaw ? JSON.parse(pipeRaw) : []; 
-    } catch(e) { pipelines = []; }
     
     for (var i = 0; i < pipelines.length; i++) {
       var p = pipelines[i];
