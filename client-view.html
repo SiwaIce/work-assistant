@@ -3021,6 +3021,10 @@ async function renderComplianceTab() {
       dealer = dealerDoc.data();
       dealer.id = dealerDoc.id;
       console.log('✅ โหลด Dealer จาก Firebase สำเร็จ');
+      console.log('   - demoOption:', dealer.demoOption);
+      console.log('   - demoItems:', dealer.demoItems?.length || 0);
+      console.log('   - dsecCertCount:', dealer.dsecCertCount);
+      console.log('   - dsecStatus:', dealer.dsecStatus);
     }
   } catch(e) {
     console.warn('Error loading dealer from Firebase:', e);
@@ -3042,7 +3046,24 @@ async function renderComplianceTab() {
     try {
       const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
       dealer = dealers.find(d => d.id === dealerId);
-      if (dealer) console.log('📦 โหลด Dealer จาก v7_dealers');
+      if (dealer) {
+        console.log('📦 โหลด Dealer จาก v7_dealers');
+        // ✅ ถ้าได้จาก v7_dealers ให้ sync ไป Firebase ด้วย
+        try {
+          await db.collection('dealerUpdates').doc(dealerId).set({
+            name: dealer.name,
+            level: dealer.level,
+            demoOption: dealer.demoOption || 'none',
+            demoItems: dealer.demoItems || [],
+            dsecCertCount: dealer.dsecCertCount || 0,
+            dsecStatus: dealer.dsecStatus || '',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          console.log('🔄 Synced dealer from v7_dealers to Firebase');
+        } catch(syncErr) {
+          console.warn('Sync to Firebase failed:', syncErr);
+        }
+      }
     } catch(e) {}
   }
   
@@ -3056,6 +3077,25 @@ async function renderComplianceTab() {
       </div>
     `;
     return;
+  }
+  
+  // ✅ ตรวจสอบและดึงข้อมูลเพิ่มเติมถ้าจำเป็น (เผื่อข้อมูลไม่สมบูรณ์)
+  if (!dealer.demoItems || dealer.demoItems.length === 0) {
+    console.log('⚠️ No demoItems found, checking localStorage fallback...');
+    try {
+      const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      const localDealer = dealers.find(d => d.id === dealerId);
+      if (localDealer && localDealer.demoItems && localDealer.demoItems.length > 0) {
+        dealer.demoItems = localDealer.demoItems;
+        dealer.demoOption = localDealer.demoOption || dealer.demoOption;
+        console.log('📦 Loaded demoItems from localStorage:', dealer.demoItems.length);
+      }
+      if (localDealer && (localDealer.dsecCertCount || localDealer.dsecStatus)) {
+        dealer.dsecCertCount = localDealer.dsecCertCount || dealer.dsecCertCount;
+        dealer.dsecStatus = localDealer.dsecStatus || dealer.dsecStatus;
+        console.log('📋 Loaded DSEC from localStorage:', dealer.dsecCertCount);
+      }
+    } catch(e) {}
   }
   
   // เรียก render เนื้อหา compliance
@@ -3129,7 +3169,7 @@ async function renderComplianceTabContent(dealer) {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline (มีอยู่แล้วใน dealer)
+  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline
   var h1UseSisRevenue = (dealer.h1UseSisRevenue === true);
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
@@ -3137,8 +3177,7 @@ async function renderComplianceTabContent(dealer) {
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
   
-  // ✅ ส่วนที่เหลือเป็นโค้ด HTML เดิม (copy มาจากไฟล์เดิม)
-  // (ตั้งแต่บรรทัดที่คำนวณ scores จนถึงสิ้นสุดฟังก์ชัน)
+  // ✅ ส่วนที่เหลือเป็นโค้ด HTML เดิม (copy จากไฟล์เดิมตั้งแต่ตรงนี้ไปจนจบ)
   
   // คำนวณคะแนนรวม (Overall Compliance Score)
   var scores = [];
@@ -3157,7 +3196,7 @@ async function renderComplianceTabContent(dealer) {
   var overallScore = totalWeight > 0 ? Math.round(totalScore / totalWeight * 100) : 100;
   var overallColor = overallScore >= 80 ? '#22c55e' : (overallScore >= 50 ? '#f59e0b' : '#ef4444');
   
-  // สร้าง HTML (copy จากไฟล์เดิมทั้งหมด ตั้งแต่ส่วน Header Card ไปจนจบ)
+  // สร้าง HTML (ส่วนที่เหลือเหมือนเดิม - copy จาก client-view.html เดิม)
   var html = '';
   
   // Header Card
@@ -3261,7 +3300,6 @@ async function renderComplianceTabContent(dealer) {
   
   document.getElementById('tabContent').innerHTML = html;
 }
-
 // ================================================================
 // H1 STATUS WITH SIS REVENUE OPTION (Position H - ต้องมีในไฟล์)
 // ================================================================
@@ -3324,7 +3362,7 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
   };
 }
 
-function changeH1Source(dealerId, useSisRevenue) {
+async function changeH1Source(dealerId, useSisRevenue) {
   // โหลดข้อมูล dealers ปัจจุบัน
   var dealers = [];
   try { 
@@ -3342,14 +3380,38 @@ function changeH1Source(dealerId, useSisRevenue) {
     }
   }
   
-  // บันทึกกลับไปยัง localStorage
   localStorage.setItem('v7_dealers', JSON.stringify(dealers));
   
-  // แสดง toast แจ้งเตือน
+  // ✅ โหลด dealer ปัจจุบันอีกครั้งจาก Firebase
+  let dealer = null;
+  try {
+    const dealerDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (dealerDoc.exists) {
+      dealer = dealerDoc.data();
+      dealer.id = dealerDoc.id;
+      // ✅ รวมข้อมูลจาก localStorage ด้วย
+      const localDealer = dealers.find(d => d.id === dealerId);
+      if (localDealer) {
+        dealer.demoOption = localDealer.demoOption || dealer.demoOption;
+        dealer.demoItems = localDealer.demoItems || dealer.demoItems;
+        dealer.dsecCertCount = localDealer.dsecCertCount || dealer.dsecCertCount;
+        dealer.dsecStatus = localDealer.dsecStatus || dealer.dsecStatus;
+        dealer.h1UseSisRevenue = useSisRevenue;
+      }
+    }
+  } catch(e) {
+    console.warn('Error reloading dealer:', e);
+  }
+  
+  if (!dealer) {
+    toast('ไม่พบข้อมูล Dealer');
+    return;
+  }
+  
   toast('เปลี่ยนแหล่งข้อมูลเป็น ' + (useSisRevenue ? 'ยอด SIS' : 'Pipeline') + ' แล้ว');
   
-  // รีเฟรชหน้า
-  renderComplianceTabContent();
+  // ✅ ส่ง dealer parameter
+  await renderComplianceTabContent(dealer);
 }
 // ================================================================
 // RENDER DEMO STATUS IN COMPLIANCE TAB (CLIENT VIEW)
@@ -3363,13 +3425,19 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
   console.log('demoItems:', dealer ? dealer.demoItems : 'null');
   console.log('demoItems length:', dealer && dealer.demoItems ? dealer.demoItems.length : 0);
   
-  var demoOption = (dealer && dealer.demoOption) || 'none';
-  var demoItems = (dealer && dealer.demoItems && Array.isArray(dealer.demoItems)) ? dealer.demoItems : [];
+  // ✅ ป้องกัน dealer เป็น null
+  if (!dealer) {
+    console.warn('dealer is null or undefined');
+    return '<div class="card" style="margin-bottom:16px"><div class="section-title">🚁 Demo Unit Requirement</div><div class="empty"><p>ไม่พบข้อมูล Dealer</p></div></div>';
+  }
   
-  var level = (dealer && dealer.level) || 'Other';
+  var demoOption = dealer.demoOption || 'none';
+  var demoItems = (dealer.demoItems && Array.isArray(dealer.demoItems)) ? dealer.demoItems : [];
+  
+  var level = dealer.level || 'Other';
   
   // ✅ ตรวจสอบ custom requirements
-  var customReq = (dealer && dealer.customDemoRequirements) || {};
+  var customReq = dealer.customDemoRequirements || {};
   var useCustom = customReq.enabled === true;
   
   var requirements = (levelRequirements && levelRequirements[level]) || levelRequirements.B || { option1Models: [], option2Models: [] };
@@ -3380,7 +3448,7 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
   console.log('option2Models:', option2Models);
   console.log('useCustom:', useCustom);
   
-  // ✅ สร้าง ownedModels จาก demoItems
+  // ✅ สร้าง ownedModels และ ownedDetails จาก demoItems
   var ownedModels = {};
   var ownedDetails = {};
   for (var i = 0; i < demoItems.length; i++) {
@@ -3390,7 +3458,7 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
     }
   }
   
-  console.log('ownedModels:', ownedModels);
+  console.log('ownedModels:', Object.keys(ownedModels));
   
   // กำหนด required models ตาม option
   var requiredModels = [];
@@ -3437,22 +3505,26 @@ function renderDemoStatusForClient(dealer, levelRequirements) {
   html += '</div>';
   
   if (demoOption !== 'none') {
-    html += '<div style="margin-top:12px"><strong style="font-size:14px;color:var(--accent)">📦 รายการอุปกรณ์ที่มี:</strong></div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:10px">';
-    
-    // แสดงเฉพาะ requiredModels เท่านั้น (ตาม Option ที่เลือก)
-    for (var i = 0; i < requiredModels.length; i++) {
-      var model = requiredModels[i];
-      var owned = ownedModels[model];
-      var detail = ownedDetails[model];
-      html += '<div style="padding:12px;border-radius:12px;background:' + (owned ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)') + ';border:1px solid ' + (owned ? '#22c55e' : '#ef4444') + '">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:14px;font-weight:600">' + (owned ? '✅' : '❌') + ' ' + sanitize(model) + '</div></div>';
-      if (owned && detail && detail.serialNumber) {
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.05)">🔢 Serial Number: <strong style="color:var(--accent)">' + sanitize(detail.serialNumber) + '</strong></div>';
+    if (requiredModels.length > 0) {
+      html += '<div style="margin-top:12px"><strong style="font-size:14px;color:var(--accent)">📦 รายการอุปกรณ์ที่มี:</strong></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:10px">';
+      
+      // แสดงเฉพาะ requiredModels เท่านั้น (ตาม Option ที่เลือก)
+      for (var i = 0; i < requiredModels.length; i++) {
+        var model = requiredModels[i];
+        var owned = ownedModels[model];
+        var detail = ownedDetails[model];
+        html += '<div style="padding:12px;border-radius:12px;background:' + (owned ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)') + ';border:1px solid ' + (owned ? '#22c55e' : '#ef4444') + '">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:14px;font-weight:600">' + (owned ? '✅' : '❌') + ' ' + sanitize(model) + '</div></div>';
+        if (owned && detail && detail.serialNumber) {
+          html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.05)">🔢 Serial Number: <strong style="color:var(--accent)">' + sanitize(detail.serialNumber) + '</strong></div>';
+        }
+        html += '</div>';
       }
       html += '</div>';
+    } else {
+      html += '<div class="hint" style="margin-top:12px">⚠️ ไม่มีการกำหนดรุ่นที่ต้องมีสำหรับ Option นี้</div>';
     }
-    html += '</div>';
     
     if (!isOk && missingModels.length > 0) {
       html += '<div style="margin-top:14px;padding:12px;background:rgba(239,68,68,0.12);border-radius:10px;border-left:3px solid #ef4444">';

@@ -3448,31 +3448,50 @@ function getCustomDemoRequirementsFromUI() {
 }
 // ✅ ฟังก์ชัน sync ข้อมูล Dealer ไป Firebase (ให้ client-view ดึงไปใช้)
 async function syncDealerToFirebase(dealerId) {
-  if (!CURRENT_USER) {
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
     console.warn('No user logged in, cannot sync');
     return false;
   }
   
   const dealer = ST.getOne('dealers', dealerId);
-  if (!dealer) return false;
+  if (!dealer) {
+    console.warn('Dealer not found:', dealerId);
+    return false;
+  }
   
   try {
-    // สร้าง object สำหรับ sync (เฉพาะข้อมูลที่ client-view ต้องการ)
+    // ✅ เพิ่มข้อมูล Demo และ DSEC
     const syncData = {
       name: dealer.name,
       level: dealer.level,
-      djiDealer: dealer.djiDealer,
-      dsecCertCount: dealer.dsecCertCount || 0,
+      djiDealer: dealer.djiDealer || '',
+      
+      // ✅ DSEC (เพิ่ม)
+      dsecCertCount: Number(dealer.dsecCertCount) || 0,
       dsecStatus: dealer.dsecStatus || '',
+      crmStatus: dealer.crmStatus || '',
+      fh2Status: dealer.fh2Status || '',
+      larkStatus: dealer.larkStatus || '',
+      
+      // ✅ Demo (เพิ่ม)
       demoOption: dealer.demoOption || 'none',
       demoItems: dealer.demoItems || [],
-      sisRevenue: dealer.sisRevenue || 0,
-      h1UseSisRevenue: dealer.h1UseSisRevenue || false,
+      
+      // ✅ SIS Revenue
+      sisRevenue: Number(dealer.sisRevenue) || 0,
+      h1UseSisRevenue: dealer.h1UseSisRevenue === true,
+      
+      // ✅ Custom Demo Requirements
+      customDemoRequirements: dealer.customDemoRequirements || { enabled: false },
+      
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     
     await db.collection('dealerUpdates').doc(dealerId).set(syncData, { merge: true });
     console.log('✅ Synced dealer to Firebase:', dealer.name);
+    console.log('   - demoOption:', syncData.demoOption);
+    console.log('   - demoItems:', syncData.demoItems?.length || 0);
+    console.log('   - dsecCertCount:', syncData.dsecCertCount);
     return true;
   } catch(e) {
     console.error('Sync dealer error:', e);
