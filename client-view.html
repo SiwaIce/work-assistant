@@ -1567,14 +1567,16 @@ async function loadDealerName() {
     if (doc.exists && doc.data().name) {
       dealerName = doc.data().name;
     } else {
-      dealerName = dealerId;
+      // ✅ ถ้าไม่มีชื่อ ให้แสดง "Dealer" แทน ID
+      dealerName = 'Dealer';
     }
     document.getElementById('dealerName').innerHTML = esc(dealerName);
     return dealerName;
   } catch(e) {
     console.warn('Load dealer name error:', e);
-    dealerName = dealerId;
-    document.getElementById('dealerName').innerHTML = esc(dealerId);
+    // ✅ ถ้า error ให้แสดง "Dealer" แทน ID
+    dealerName = 'Dealer';
+    document.getElementById('dealerName').innerHTML = esc(dealerName);
     return dealerName;
   }
 }
@@ -3145,6 +3147,49 @@ async function renderComplianceTabContent(dealer) {
     console.warn('Error loading pipelines for H1:', e);
   }
   
+  // ✅ ถ้า dealer ยังไม่มี demoItems ให้ลองโหลดจาก localStorage
+  if (!dealer.demoItems || dealer.demoItems.length === 0) {
+    try {
+      const cachedDealer = localStorage.getItem('v7_dealer_cache_' + dealerId);
+      if (cachedDealer) {
+        const cached = JSON.parse(cachedDealer);
+        if (cached.demoItems && cached.demoItems.length > 0) {
+          dealer.demoItems = cached.demoItems;
+          dealer.demoOption = cached.demoOption || dealer.demoOption;
+          console.log('📦 โหลด demoItems จาก cache:', dealer.demoItems.length);
+        }
+      }
+    } catch(e) {}
+    
+    if (!dealer.demoItems || dealer.demoItems.length === 0) {
+      try {
+        const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+        const localDealer = dealers.find(d => d.id === dealerId);
+        if (localDealer && localDealer.demoItems && localDealer.demoItems.length > 0) {
+          dealer.demoItems = localDealer.demoItems;
+          dealer.demoOption = localDealer.demoOption || dealer.demoOption;
+          console.log('📦 โหลด demoItems จาก v7_dealers:', dealer.demoItems.length);
+          
+          // ✅ sync กลับไป Firebase
+          await db.collection('dealerUpdates').doc(dealerId).set({
+            demoItems: dealer.demoItems,
+            demoOption: dealer.demoOption,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          console.log('🔄 Synced demoItems to Firebase');
+        }
+      } catch(e) {}
+    }
+  }
+  
+  // ✅ ถ้ายังไม่มี demoItems ให้ใช้ empty array
+  if (!dealer.demoItems) {
+    dealer.demoItems = [];
+  }
+  if (!dealer.demoOption) {
+    dealer.demoOption = 'none';
+  }
+  
   var level = dealer.level || 'Other';
   var levelName = { 
     S: 'Strategic Partner', 
@@ -3169,15 +3214,13 @@ async function renderComplianceTabContent(dealer) {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline
-  var h1UseSisRevenue = (dealer.h1UseSisRevenue === true);
+  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline - Default เป็น SIS
+  var h1UseSisRevenue = true;  // เปลี่ยนเป็น true เสมอ
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
   var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
-  
-  // ✅ ส่วนที่เหลือเป็นโค้ด HTML เดิม (copy จากไฟล์เดิมตั้งแต่ตรงนี้ไปจนจบ)
   
   // คำนวณคะแนนรวม (Overall Compliance Score)
   var scores = [];
@@ -3196,7 +3239,7 @@ async function renderComplianceTabContent(dealer) {
   var overallScore = totalWeight > 0 ? Math.round(totalScore / totalWeight * 100) : 100;
   var overallColor = overallScore >= 80 ? '#22c55e' : (overallScore >= 50 ? '#f59e0b' : '#ef4444');
   
-  // สร้าง HTML (ส่วนที่เหลือเหมือนเดิม - copy จาก client-view.html เดิม)
+  // สร้าง HTML
   var html = '';
   
   // Header Card
@@ -3363,6 +3406,8 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
 }
 
 async function changeH1Source(dealerId, useSisRevenue) {
+// ✅ บันทึกค่าที่ผู้ใช้เลือก
+  sessionStorage.setItem('h1Source_' + dealerId, useSisRevenue ? 'sis' : 'pipeline');
   // โหลดข้อมูล dealers ปัจจุบัน
   var dealers = [];
   try { 
