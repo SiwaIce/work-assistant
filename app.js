@@ -2863,6 +2863,25 @@ function syncDealerPipelineToCustomer(dealerId) {
     batch.set(dealerUpdatesRef.doc(p.id), customerData, { merge: true });
   });
   
+  // ✅ Sync dealer info (name, level, demoOption, demoItems, dsecCertCount, sisRevenue)
+  // ข้อมูลเหล่านี้ client-view ต้องการแสดง Partner Status
+  var dealer = ST.getOne('dealers', dealerId);
+  if (dealer) {
+    var dealerDocRef = db.collection('dealerUpdates').doc(dealerId);
+    var dealerInfo = {
+      name: dealer.name || '',
+      level: dealer.level || 'Other',
+      demoOption: dealer.demoOption || 'none',
+      demoItems: dealer.demoItems || [],
+      dsecCertCount: dealer.dsecCertCount || 0,
+      dsecStatus: dealer.dsecStatus || '',
+      sisRevenue: dealer.sisRevenue || 0,
+      customDemoRequirements: dealer.customDemoRequirements || { enabled: false },
+      _dealerSyncedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    batch.set(dealerDocRef, dealerInfo, { merge: true });
+  }
+
   batch.commit().then(function() {
     toast(`✅ Sync สำเร็จ! ส่ง ${activePipes.length} โครงการให้ลูกค้า`);
     
@@ -3817,4 +3836,3 @@ if (typeof setInterval !== 'undefined') {
 }
 // เรียกใช้ตอน init
 setTimeout(addCustomerUpdateMenuItem, 1000);
-
