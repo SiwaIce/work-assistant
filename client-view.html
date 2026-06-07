@@ -1627,17 +1627,38 @@ async function loadAllData() {
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   
   try {
-    await Promise.all([loadDealerName(), loadPipeline(), loadForecast(), loadTimeline()]);
+    // ✅ โหลดทุกอย่างพร้อมกัน
+    await Promise.all([
+      loadDealerName(), 
+      loadPipeline(), 
+      loadForecast(), 
+      loadTimeline(),
+      loadLatestConfigFromFirebase()  // ✅ เพิ่ม config ด้วย
+    ]);
     
-    // ✅ โหลด compliance data เพิ่ม (เผื่อไว้)
-    await loadLatestConfigFromFirebase();
+    // ✅ รอสักครู่ให้ข้อมูลเซ็ตเสร็จ (เผื่อ race condition)
+    await new Promise(resolve => setTimeout(resolve, 100));
     
-    // ✅ เรียก render หลังจากโหลดเสร็จ
-    renderCurrentTab();
+    console.log('✅ All data loaded - pipelines:', pipelinesData.length);
+    console.log('✅ Forecast loaded - runrate:', forecastData.runrate.length);
+    
+    // ✅ ตั้งค่า currentTab ให้เป็น compliance ก่อน render
+    currentTab = 'compliance';
+    
+    // ✅ เรียก render โดยตรง ไม่ผ่าน renderCurrentTab
+    await renderComplianceTab();
+    
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
   } catch(err) {
     console.error('Load error:', err);
-    document.getElementById('tabContent').innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div><button class="btn bp" onclick="location.reload()" style="margin-top:12px">🔄 ลองใหม่</button></div>';
+    document.getElementById('tabContent').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <div>เกิดข้อผิดพลาดในการโหลดข้อมูล</div>
+        <div class="hint">${err.message}</div>
+        <button class="btn bp" onclick="location.reload()" style="margin-top:12px">🔄 ลองใหม่</button>
+      </div>
+    `;
   }
 }
 function refreshData() { loadAllData(); }
@@ -1751,7 +1772,10 @@ async function verifyAndProceed() {
     console.log('Using dealerId from URL:', dealerId);
     loadModels();
     var pinOk = await checkOptionalPin(dealerId);
-    if (pinOk) loadAllData();
+    if (pinOk){
+      // ✅ โหลดข้อมูลและแสดง compliance ทันที
+      await loadAllData();
+    }
     return;
   }
   showAccessDenied('ไม่พบข้อมูล Dealer กรุณาขอลิงก์ใหม่จากพนักงานขาย');
@@ -3053,15 +3077,31 @@ async function renderComplianceTab() {
   
   document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
   
+  // ✅ โหลด config ก่อน
   await loadLatestConfigFromFirebase();
-
-  // ✅ โหลด pipeline และ forecast ก่อน
+  
+  // ✅ บังคับโหลด pipeline และ forecast ถ้ายังไม่มี
   if (!pipelinesData || pipelinesData.length === 0) {
+    console.log('🔄 No pipelines, loading now...');
     await loadPipeline();
   }
   if (!forecastData.runrate.length && !forecastData.projects.length) {
+    console.log('🔄 No forecast, loading now...');
     await loadForecast();
   }
+  
+  // ✅ ถ้ายังไม่มี pipelines ให้ลองโหลดจาก cache
+  if (pipelinesData.length === 0) {
+    const cached = localStorage.getItem('v7_pipeline_cache_' + dealerId);
+    if (cached) {
+      pipelinesData = JSON.parse(cached);
+      console.log('📦 Loaded pipelines from cache:', pipelinesData.length);
+    }
+  }
+  
+  console.log('✅ pipelines count:', pipelinesData.length);
+  console.log('✅ forecast runrate:', forecastData.runrate.length);
+  console.log('✅ forecast projects:', forecastData.projects.length);
   
   let dealer = null;
   
@@ -3149,7 +3189,7 @@ async function renderComplianceTab() {
     } catch(e) {}
   }
   
-  // ✅ เพิ่มส่วนนี้ (ตรวจสอบ pipelines และ forecast ซ้ำ)
+  // ✅ ตรวจสอบ pipelines และ forecast ซ้ำ (เผื่อโหลดไม่ทัน)
   if (!pipelinesData || pipelinesData.length === 0) {
     console.log('⚠️ Pipelines still empty, reloading...');
     await loadPipeline();
@@ -3157,6 +3197,15 @@ async function renderComplianceTab() {
   if (!forecastData.runrate.length && !forecastData.projects.length) {
     console.log('⚠️ Forecast still empty, reloading...');
     await loadForecast();
+  }
+  
+  // ✅ ถ้ายังไม่มีอีก ให้ลองโหลดจาก cache อีกครั้ง
+  if (pipelinesData.length === 0) {
+    const cached = localStorage.getItem('v7_pipeline_cache_' + dealerId);
+    if (cached) {
+      pipelinesData = JSON.parse(cached);
+      console.log('📦 Loaded pipelines from cache (2nd attempt):', pipelinesData.length);
+    }
   }
   
   console.log('✅ Final pipelines count:', pipelinesData.length);
