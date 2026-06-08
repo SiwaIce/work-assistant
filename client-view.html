@@ -3376,103 +3376,143 @@ async function renderComplianceTabContent(dealer) {
   // สร้าง HTML
   var html = '';
   
-  // Header Card
-  html += '<div style="background: linear-gradient(135deg, var(--bg-card) 0%, rgba(59,130,246,0.08) 100%); border-radius: 20px; padding: 24px; margin-bottom: 20px; border: 1px solid var(--border); position: relative; overflow: hidden">';
-  html += '<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7)"></div>';
-  html += '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px">';
-  html += '<div><div style="font-size: 24px; font-weight: 800; margin-bottom: 4px">' + sanitize(dealer.name) + '</div>';
-  html += '<div style="display: flex; align-items: center; gap: 8px">';
-  html += '<span class="level-badge ' + levelClass + '">' + levelDisplay + '</span>';
-  html += '<span style="font-size: 13px; color: var(--text-secondary)">' + levelName + '</span>';
-  html += '</div></div>';
-  html += '<div style="text-align: center"><div style="font-size: 42px; font-weight: 800; color: ' + overallColor + '">' + overallScore + '%</div><div style="font-size: 12px; color: var(--text-secondary)">Overall Compliance Score</div></div>';
-  html += '<button class="btn bo" onclick="refreshClientData()" style="align-self:center;background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔄 รีเฟรชข้อมูล</button>';
-  html += '</div></div>';
-  
-  // 3 Cards: H1 Target, DSEC, Demo
-  html += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px">';
-  
-  // H1 Target Card
+  // ====== HP BAR H1: คำนวณ percent จริง รวม overflow ======
   var h1Color = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
-  html += '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
-  html += '<div style="font-size: 32px; margin-bottom: 8px">🎯</div>';
-  html += '<div style="font-size: 28px; font-weight: 800; color: ' + h1Color + '">' + h1Status.percent + '%</div>';
-  html += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">H1 Target Achievement</div>';
-  html += '<div style="font-size: 11px; margin-top: 8px"><span style="color: var(--text-secondary)">' + fmtMoneyShort(h1Status.actual) + '</span> / <span style="color: var(--accent)">' + fmtMoneyShort(h1Status.target) + '</span> ฿</div>';
-  html += '<div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px">' + h1Status.sourceText + '</div>';
-  // Radio buttons
-  html += '<div style="margin-top: 8px; display: flex; gap: 12px; justify-content: center">' +
-    '<label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor:pointer">' +
-    '<input type="radio" name="h1Source" value="pipeline" ' + (!h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', false)"> 📊 Pipeline' +
-    '</label>' +
-    '<label style="display: flex; align-items: center; gap: 4px; font-size: 10px; cursor:pointer">' +
-    '<input type="radio" name="h1Source" value="sis" ' + (h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', true)"> 💰 ยอด SIS' +
-    '</label>' +
-    '</div>';
+  var h1RawPct = h1Status.target > 0 ? (h1Status.actual / h1Status.target * 100) : (h1Status.actual > 0 ? 999 : 0);
+  var h1BarPct = Math.min(h1RawPct, 100);
+  var h1IsOver = h1RawPct > 100;
+  var h1DisplayPct = Math.round(h1RawPct);
+  var h1BarColor = h1IsOver ? 'linear-gradient(90deg,#22c55e,#86efac,#bbf7d0)' : (h1Status.isOk ? 'linear-gradient(90deg,#22c55e,#86efac)' : (h1Status.percent >= 70 ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : 'linear-gradient(90deg,#ef4444,#f87171)'));
+  var h1GlowColor = h1IsOver ? 'rgba(34,197,94,0.5)' : (h1Status.isOk ? 'rgba(34,197,94,0.3)' : (h1Status.percent >= 70 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'));
+
+  // ====== HEADER CARD ======
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px 20px 16px;margin-bottom:16px;position:relative;overflow:hidden">';
+  html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),#60a5fa,#a855f7)"></div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+  html += '<div style="min-width:0;flex:1">';
+  html += '<div style="font-size:20px;font-weight:800;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(dealer.name) + '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<span class="level-badge ' + levelClass + '" style="font-size:13px;padding:5px 14px">' + levelDisplay + '</span>';
+  html += '<span style="font-size:13px;color:var(--text2)">' + levelName + '</span>';
+  html += '</div></div>';
+  // Right: Overall Score ring + refresh button
+  html += '<div style="display:flex;align-items:center;gap:12px">';
+  var ringDash = 188;
+  var ringOffset = Math.round((1 - Math.min(overallScore,100)/100) * ringDash);
+  html += '<div style="text-align:center;position:relative;width:64px;height:64px">';
+  html += '<svg width="64" height="64" viewBox="0 0 64 64" style="transform:rotate(-90deg);position:absolute;top:0;left:0">';
+  html += '<circle cx="32" cy="32" r="26" fill="none" stroke="var(--border)" stroke-width="5"/>';
+  html += '<circle cx="32" cy="32" r="26" fill="none" stroke="' + overallColor + '" stroke-width="5" stroke-linecap="round" stroke-dasharray="' + ringDash + '" stroke-dashoffset="' + ringOffset + '" style="transition:stroke-dashoffset 0.8s ease"/>';
+  html += '</svg>';
+  html += '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">';
+  html += '<div style="font-size:15px;font-weight:800;color:' + overallColor + ';line-height:1">' + overallScore + '%</div>';
+  html += '<div style="font-size:8px;color:var(--text2);margin-top:1px">SCORE</div>';
+  html += '</div></div>';
+  html += '<button onclick="refreshClientData()" style="background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--text2);font-size:18px;line-height:1" title="รีเฟรช">&#x1F504;</button>';
+  html += '</div></div>';
+
+  // ====== HP BAR ยอดขาย H1 ======
+  html += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--text2)">🎯 ยอดขาย H1 ' + new Date().getFullYear() + '</div>';
+  html += '<div style="font-size:14px;font-weight:800;color:' + h1Color + '">' + h1DisplayPct + '%' + (h1IsOver ? ' 🔥 ทะลุเป้า!' : '') + '</div>';
   html += '</div>';
-  
+  // HP Bar track
+  html += '<div style="position:relative;height:16px;background:var(--bg);border-radius:99px;border:1px solid var(--border)">';
+  html += '<div style="position:absolute;left:0;top:0;height:100%;width:' + h1BarPct + '%;background:' + h1BarColor + ';border-radius:99px;box-shadow:0 0 10px ' + h1GlowColor + ';overflow:hidden">';
+  html += '<div style="position:absolute;right:0;top:0;width:24px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25));border-radius:99px"></div>';
+  html += '</div>';
+  // overflow spike
+  if (h1IsOver) {
+    html += '<div style="position:absolute;right:-4px;top:-4px;width:8px;height:24px;background:linear-gradient(180deg,#86efac,#22c55e);border-radius:4px;box-shadow:0 0 10px rgba(34,197,94,0.9)"></div>';
+  }
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text2)">';
+  html += '<div>ยอดจริง: <span style="color:var(--text);font-weight:700">' + fmtMoneyShort(h1Status.actual) + ' ฿</span></div>';
+  html += '<div>เป้า: <span style="color:var(--accent);font-weight:700">' + fmtMoneyShort(h1Status.target) + ' ฿</span></div>';
+  html += '</div>';
+  html += '<div style="margin-top:8px;display:flex;gap:14px">';
+  html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="h1Source" value="pipeline" ' + (!h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', false)"> 📊 Pipeline</label>';
+  html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="h1Source" value="sis" ' + (h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', true)"> 💰 ยอด SIS</label>';
+  html += '</div>';
+  html += '</div></div>';
+
+  // ====== 3 SUMMARY CARDS ======
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">';
+
+  // H1 Card
+  html += '<div style="background:var(--card);border:1px solid ' + (h1Status.isOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
+  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">H1 TARGET</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:' + h1Color + ';line-height:1">' + h1DisplayPct + '%</div>';
+  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (h1Status.isOk ? '✅ สำเร็จ' : (h1Status.percent >= 70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</div>';
+  html += '</div>';
+
   // DSEC Card
   var dsecColor = dsecStatus.isOk ? '#22c55e' : '#ef4444';
-  html += '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
-  html += '<div style="font-size: 32px; margin-bottom: 8px">📋</div>';
-  html += '<div style="font-size: 28px; font-weight: 800; color: ' + dsecColor + '">' + dsecStatus.current + '/' + dsecStatus.required + '</div>';
-  html += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">DSEC Certified Personnel</div>';
+  html += '<div style="background:var(--card);border:1px solid ' + (dsecStatus.isOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
+  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">DSEC</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:' + dsecColor + ';line-height:1">' + dsecStatus.current + '<span style="font-size:13px;opacity:0.6">/' + dsecStatus.required + '</span></div>';
+  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (dsecStatus.isOk ? '✅ ครบเกณฑ์' : '🔴 ต้องเพิ่ม ' + (dsecStatus.need || 0) + ' คน') + '</div>';
   html += '</div>';
-  
-  // Demo Card Preview
+
+  // Demo Card
   var demoOption = dealer.demoOption || 'none';
-  var demoPreviewHtml = '<div class="card" style="text-align: center; padding: 20px; cursor: default">';
+  var hasDemoItems = (dealer.demoItems && dealer.demoItems.length > 0);
+  var demoOk = demoOption !== 'none' && hasDemoItems;
+  html += '<div style="background:var(--card);border:1px solid ' + (demoOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
+  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">DEMO UNIT</div>';
   if (demoOption === 'none') {
-    demoPreviewHtml += '<div style="font-size: 32px; margin-bottom: 8px">🚁</div>';
-    demoPreviewHtml += '<div style="font-size: 28px; font-weight: 800; color: #f59e0b">❓</div>';
-    demoPreviewHtml += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">Demo Unit Status</div>';
-    demoPreviewHtml += '<div style="font-size: 11px; margin-top: 8px">ยังไม่กำหนด Option</div>';
+    html += '<div style="font-size:20px;line-height:1">❓</div><div style="font-size:10px;color:var(--text2);margin-top:4px">ยังไม่กำหนด Option</div>';
   } else {
-    var hasDemoItems = (dealer.demoItems && dealer.demoItems.length > 0);
-    demoPreviewHtml += '<div style="font-size: 32px; margin-bottom: 8px">🚁</div>';
-    demoPreviewHtml += '<div style="font-size: 28px; font-weight: 800; color: ' + (hasDemoItems ? '#22c55e' : '#ef4444') + '">' + (hasDemoItems ? '✅' : '🔴') + '</div>';
-    demoPreviewHtml += '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">Demo Unit Status</div>';
-    demoPreviewHtml += '<div style="font-size: 11px; margin-top: 8px">' + (demoOption === 'option1' ? 'Option 1' : demoOption === 'option2' ? 'Option 2' : 'Both Options') + '</div>';
+    html += '<div style="font-size:20px;line-height:1">' + (demoOk ? '✅' : '🔴') + '</div>';
+    html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (demoOption === 'option1' ? 'Option 1' : demoOption === 'option2' ? 'Option 2' : 'Both Options') + '</div>';
   }
-  demoPreviewHtml += '</div>';
-  html += demoPreviewHtml;
   html += '</div>';
-  
-  // H1 Target Detail Card
-  html += '<div class="card" style="margin-bottom: 16px">';
-  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
-  html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">🎯</div><div><div style="font-size:16px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text-secondary)">Half Year Target</div></div></div>';
-  html += '<span class="tag ' + (h1Status.isOk ? 'tag-completed' : (h1Status.percent >= 70 ? 'tag-active' : 'tag-cancelled')) + '" style="font-size:13px;padding:4px 12px">' + (h1Status.isOk ? 'สำเร็จ' : (h1Status.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</span>';
   html += '</div>';
-  html += '<div class="pb" style="height: 12px; margin-bottom: 12px"><div class="pf" style="width: ' + h1Status.percent + '%; background: linear-gradient(90deg, ' + (h1Status.isOk ? '#22c55e' : '#f59e0b') + ', ' + (h1Status.isOk ? '#86efac' : '#fbbf24') + ')"></div></div>';
-  html += '<div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px">';
-  html += '<div><span style="color: var(--text-secondary)">เป้าหมาย:</span> <strong>' + fmtMoneyShort(h1Status.target) + ' ฿</strong></div>';
-  html += '<div><span style="color: var(--text-secondary)">ยอดขายจริง:</span> <strong style="color: #22c55e">' + fmtMoneyShort(h1Status.actual) + ' ฿</strong></div>';
-  html += '<div><span style="color: var(--text-secondary)">ความคืบหน้า:</span> <strong>' + h1Status.percent + '%</strong></div>';
-  html += '</div></div>';
-  
-  // Demo Status Detail
+
+  // ====== H1 TARGET DETAIL CARD ======
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🎯</span><div><div style="font-size:15px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text2)">Half Year Target</div></div></div>';
+  html += '<span style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:' + (h1Status.isOk ? 'rgba(34,197,94,0.15)' : (h1Status.percent>=70 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)')) + ';color:' + h1Color + '">' + (h1Status.isOk ? '✅ สำเร็จ' : (h1Status.percent>=70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</span>';
+  html += '</div>';
+  // HP Bar detail version
+  html += '<div style="position:relative;height:22px;background:var(--bg);border-radius:99px;border:1px solid var(--border);margin-bottom:10px">';
+  html += '<div style="position:absolute;left:0;top:0;height:100%;width:' + h1BarPct + '%;background:' + h1BarColor + ';border-radius:99px;box-shadow:0 0 12px ' + h1GlowColor + ';overflow:hidden">';
+  html += '<div style="position:absolute;right:0;top:0;width:32px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.2));border-radius:99px"></div>';
+  html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(0,0,0,0.5);' + (h1BarPct < 25 ? 'display:none!important' : '') + '">' + h1DisplayPct + '%</div>';
+  html += '</div>';
+  if (h1IsOver) {
+    html += '<div style="position:absolute;right:-5px;top:-4px;width:10px;height:30px;background:linear-gradient(180deg,#bbf7d0,#22c55e);border-radius:5px;box-shadow:0 0 12px rgba(34,197,94,0.9)"></div>';
+  }
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px">';
+  html += '<div style="color:var(--text2)">เป้าหมาย: <strong style="color:var(--accent)">' + fmtMoneyShort(h1Status.target) + ' ฿</strong></div>';
+  html += '<div style="color:var(--text2)">ยอดขายจริง: <strong style="color:#22c55e">' + fmtMoneyShort(h1Status.actual) + ' ฿</strong></div>';
+  html += '<div style="color:var(--text2)">ความคืบหน้า: <strong style="color:' + h1Color + '">' + h1DisplayPct + '%</strong></div>';
+  html += '</div>';
+  html += '</div>';
+
+  // ====== DEMO STATUS DETAIL (ไม่ตัด) ======
   html += renderDemoStatusForClient(dealer, levelRequirements);
-  
-  // DSEC Detail Card
-  html += '<div class="card" style="margin-bottom: 16px">';
-  html += '<div class="section-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); padding-bottom: 8px">';
-  html += '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:24px">📋</div><div><div style="font-size:16px;font-weight:800">DSEC Certification</div><div style="font-size:11px;color:var(--text-secondary)">Personnel Certification Status</div></div></div>';
-  html += '<span class="tag ' + (dsecStatus.isOk ? 'tag-completed' : 'tag-cancelled') + '" style="font-size:13px;padding:4px 12px">' + (dsecStatus.isOk ? 'ผ่าน' : 'ไม่ผ่าน') + '</span>';
+
+  // ====== DSEC DETAIL CARD ======
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">📋</span><div><div style="font-size:15px;font-weight:800">DSEC Certification</div><div style="font-size:11px;color:var(--text2)">Personnel Certification Status</div></div></div>';
+  html += '<span style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:' + (dsecStatus.isOk ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)') + ';color:' + dsecColor + '">' + (dsecStatus.isOk ? '✅ ผ่าน' : '🔴 ไม่ผ่าน') + '</span>';
   html += '</div>';
-  html += '<div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap">';
-  html += '<div style="flex: 1"><div class="pb" style="height: 10px"><div class="pf" style="width: ' + (dsecStatus.required > 0 ? (dsecStatus.current / dsecStatus.required * 100) : 100) + '%; background: ' + (dsecStatus.isOk ? '#22c55e' : '#ef4444') + '"></div></div></div>';
-  html += '<div><strong>' + dsecStatus.current + '/' + dsecStatus.required + '</strong> คน</div>';
+  html += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">';
+  html += '<div style="flex:1;min-width:100px"><div style="height:10px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border)"><div style="height:100%;width:' + (dsecStatus.required > 0 ? Math.min(dsecStatus.current/dsecStatus.required*100,100) : 100) + '%;background:' + (dsecStatus.isOk ? '#22c55e' : '#ef4444') + ';border-radius:99px;transition:width 0.8s ease"></div></div></div>';
+  html += '<div style="font-size:16px;font-weight:800;white-space:nowrap">' + dsecStatus.current + ' <span style="font-size:12px;color:var(--text2)">/ ' + dsecStatus.required + ' คน</span></div>';
   html += '</div>';
   if (!dsecStatus.isOk && dsecStatus.need > 0) {
-    html += '<div style="background: rgba(239,68,68,0.1); padding: 10px; border-radius: 8px; margin-top: 12px">';
-    html += '⚠️ ต้องดำเนินการสอบ DSEC เพิ่มอีก <strong>' + dsecStatus.need + '</strong> คน ภายใน มิถุนายน 2026';
-    html += '</div>';
+    html += '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);padding:10px 12px;border-radius:10px;margin-top:12px;font-size:13px">⚠️ ต้องดำเนินการสอบ DSEC เพิ่มอีก <strong>' + dsecStatus.need + '</strong> คน ภายใน มิถุนายน 2026</div>';
   }
-  html += '<div class="bg" style="margin-top: 12px"><button class="btn bsm bs" onclick="window.open(\'https://dji-training.com\', \'_blank\')" style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔗 ไปที่ DJI Training Portal</button></div>';
+  html += '<div style="margin-top:12px"><button class="btn bsm bs" onclick="window.open(\'https://dji-training.com\', \'_blank\')" style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer">🔗 ไปที่ DJI Training Portal</button></div>';
   html += '</div>';
-  
-  // Policy Alerts
+
+  // ====== POLICY ALERTS (ทุกอัน ไม่ตัด) ======
   for (var i = 0; i < policyAlerts.length; i++) { 
     html += renderPolicyAlert(policyAlerts[i]); 
   }
