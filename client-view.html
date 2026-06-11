@@ -2158,6 +2158,20 @@ function loadPipeTimeline(pipeId, currentData) {
       if (!hasExisting) { allEvents.push({ id: 'current_' + pipeId, type: 'pipeline_update', content: currentData.updateNote || 'อัพเดทข้อมูลโครงการ', timestamp: currentData._updatedAt, status: currentData._status || 'pending', _source: 'current', changes: currentData._snapshot ? { before: currentData._snapshot, after: currentData } : null, updatedBy: currentData.updatedBy || 'customer' }); }
     }
     allEvents.sort(function(a,b) { var ta = a.timestamp ? (a.timestamp.seconds || 0) : 0; var tb = b.timestamp ? (b.timestamp.seconds || 0) : 0; return tb - ta; });
+    // timeline event บันทึก status: 'pending' เสมอ — ใช้ currentData._status ของ event ล่าสุดแทน
+    if (allEvents.length > 0 && currentData && currentData._status) {
+      allEvents[0].status = currentData._status;
+    }
+    // event เก่าที่ไม่มี changedFields → compute จาก _snapshot ที่เก็บใน pipeline doc
+    if (allEvents.length > 0 && currentData && currentData._snapshot && (!allEvents[0].changedFields || !allEvents[0].changedFields.length)) {
+      var bf = currentData._snapshot, af = currentData, cf = [];
+      if (bf.status !== af.status) cf.push({ field: 'status', label: 'สถานะ', before: bf.status, after: af.status });
+      if (String(bf.forecastAmount||0) !== String(af.forecastAmount||0)) cf.push({ field: 'forecastAmount', label: 'มูลค่า', before: bf.forecastAmount||0, after: af.forecastAmount||0 });
+      if (JSON.stringify(bf.items||[]) !== JSON.stringify(af.items||[])) cf.push({ field: 'items', label: 'สินค้า', before: (bf.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||bf.model||'-', after: (af.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||af.model||'-' });
+      if ((bf.biddingDate||'') !== (af.biddingDate||'')) cf.push({ field: 'biddingDate', label: 'Bidding Date', before: bf.biddingDate||'-', after: af.biddingDate||'-' });
+      if ((bf.endUserTH||bf.endUser||'') !== (af.endUserTH||'')) cf.push({ field: 'endUser', label: 'End User', before: bf.endUserTH||bf.endUser||'-', after: af.endUserTH||'-' });
+      allEvents[0].changedFields = cf;
+    }
     renderPipeTimeline(container, allEvents, currentData);
   }).catch(function(err) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>ไม่สามารถโหลดประวัติได้</div></div>'; });
 }
