@@ -1344,7 +1344,7 @@ function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return 
 function generateMonths() {
   var months = [];
   var now = new Date();
-  for (var i = 0; i < 12; i++) {
+  for (var i = -3; i < 12; i++) {
     var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     var m = d.getMonth() + 1;
     var y = d.getFullYear() + 543;
@@ -1887,7 +1887,7 @@ function renderPipelineTab() {
   html += '<div class="toolbar-item"><label>📊 สถานะ</label><select id="pipelineFilterSelect" class="toolbar-select" onchange="pipelineFilter=this.value; renderPipelineTab()">';
   html += '<option value="all"' + (pipelineFilter === 'all' ? ' selected' : '') + '>📊 ทั้งหมด</option>';
   html += '<option value="pending"' + (pipelineFilter === 'pending' ? ' selected' : '') + '>⏳ รอตรวจสอบ</option>';
-  html += '<option value="approved"' + (pipelineFilter === 'approved' ? ' selected' : '') + '>✅ อนุมัติแล้ว</option>';
+  html += '<option value="approved"' + (pipelineFilter === 'approved' ? ' selected' : '') + '>✅ อัพเดทแล้ว</option>';
   html += '<option value="rejected"' + (pipelineFilter === 'rejected' ? ' selected' : '') + '>❌ ปฏิเสธ</option>';
   html += '</select></div>';
   html += '<div class="toolbar-item"><label>⏰ อัพเดท</label><select id="staleFilterSelect" class="toolbar-select" onchange="staleFilter=this.value; renderPipelineTab()">';
@@ -2202,7 +2202,7 @@ function renderPipeTimeline(container, events, currentData) {
 
     // --- Status badge ---
     var stBg = status === 'approved' ? '#22c55e' : status === 'rejected' ? '#ef4444' : '#f59e0b';
-    var stLabel = status === 'approved' ? '✅ อนุมัติแล้ว' : status === 'rejected' ? '❌ ปฏิเสธ' : '⏳ รอตรวจสอบ';
+    var stLabel = status === 'approved' ? '✅ อัพเดทแล้ว' : status === 'rejected' ? '❌ ปฏิเสธ' : '⏳ รอตรวจสอบ';
 
     // --- By badge ---
     var by = ev.updatedBy || (ev._source === 'current' && currentData ? currentData.updatedBy : '') || 'customer';
@@ -2861,7 +2861,7 @@ async function resubmitRejectedForecast(forecastId, type) {
 
 function renderForecastTab() {
   allMonths = generateMonths();
-  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[0];
+  if (!selectedMonth && allMonths.length) selectedMonth = allMonths[3];
   var monthRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth && r._status !== 'rejected'; });
   var monthProjects = forecastData.projects.filter(function(p) { return p.month === selectedMonth && p._status !== 'rejected'; });
   var rejectedRunrate = forecastData.runrate.filter(function(r) { return r.month === selectedMonth && r._status === 'rejected'; });
@@ -2968,6 +2968,10 @@ function renderForecastTab() {
   renderEditableItemsList();
   // รีเฟรช datalist หลังจาก render
   buildFilteredDatalist();
+  setTimeout(function() {
+    var activeCard = document.querySelector('.month-card.active');
+    if (activeCard) activeCard.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+  }, 50);
 }
 
 // ========== UPDATE HISTORY TAB ==========
@@ -2976,7 +2980,7 @@ function renderUpdateHistoryTab() {
   var html = '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div class="ftabs">';
   html += '<div class="ftab ' + (historyFilter === 'all' ? 'act' : '') + '" onclick="historyFilter=\'all\';renderUpdateHistoryTab()">📊 ทั้งหมด</div>';
   html += '<div class="ftab ' + (historyFilter === 'pending' ? 'act' : '') + '" onclick="historyFilter=\'pending\';renderUpdateHistoryTab()">⏳ รอตรวจสอบ</div>';
-  html += '<div class="ftab ' + (historyFilter === 'approved' ? 'act' : '') + '" onclick="historyFilter=\'approved\';renderUpdateHistoryTab()">✅ อนุมัติแล้ว</div>';
+  html += '<div class="ftab ' + (historyFilter === 'approved' ? 'act' : '') + '" onclick="historyFilter=\'approved\';renderUpdateHistoryTab()">✅ อัพเดทแล้ว</div>';
   html += '<div class="ftab ' + (historyFilter === 'rejected' ? 'act' : '') + '" onclick="historyFilter=\'rejected\';renderUpdateHistoryTab()">❌ ปฏิเสธ</div>';
   html += '</div><div id="updateHistoryList"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
   document.getElementById('tabContent').innerHTML = html;
@@ -3004,7 +3008,7 @@ function renderUpdateHistoryList(updates) {
     var req = updates[i];
     var status = req._status || 'pending';
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อัพเดทแล้ว' : '❌ ปฏิเสธ');
     var icon = req.type === 'pipeline' ? '📋' : '📦';
     var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.model || req.projectName || '-');
     var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString('th-TH') : req._updatedAt) : '-';
@@ -3029,7 +3033,7 @@ function viewUpdateDetail(type, updateId) {
     var oldData = newData._snapshot || null;
     var status = newData._status || 'pending';
     var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อนุมัติแล้ว' : '❌ ปฏิเสธ');
+    var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อัพเดทแล้ว' : '❌ ปฏิเสธ');
     var updateDate = newData._updatedAt ? (newData._updatedAt.seconds ? new Date(newData._updatedAt.seconds * 1000).toLocaleString('th-TH') : newData._updatedAt) : '-';
     var html = '<div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:' + statusColor + '18;border:1px solid ' + statusColor + '40"><span style="font-size:20px">' + (status === 'pending' ? '⏳' : status === 'approved' ? '✅' : '❌') + '</span><div><div style="font-weight:700;color:' + statusColor + '">' + statusText + '</div><div style="font-size:11px;color:var(--text2)">ส่งเมื่อ: ' + updateDate + '</div></div></div>';
     if (newData.updateNote) html += '<div style="margin-bottom:14px;padding:10px 14px;background:rgba(245,158,11,0.08);border-radius:8px;border-left:3px solid #f59e0b"><div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:4px">📝 ข้อความจากลูกค้า</div><div>' + esc(newData.updateNote) + '</div></div>';
