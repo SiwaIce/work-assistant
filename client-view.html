@@ -1233,9 +1233,12 @@ input[list]::-webkit-calendar-picker-indicator {
 }
 .btn, .tab-btn, .stat-card, .month-card, .project-item { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .btn:active, .tab-btn:active, .stat-card:active, .month-card:active { opacity: 0.7; transition: opacity 0.05s; }
+#offlineBanner { display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:#ef4444; color:#fff; text-align:center; padding:9px 16px; font-size:13px; font-weight:600; letter-spacing:0.2px; }
+#offlineBanner.show { display:block; }
 </style>
 </head>
 <body>
+<div id="offlineBanner">📡 ไม่มีสัญญาณอินเทอร์เน็ต — การบันทึกจะไม่สำเร็จจนกว่าจะออนไลน์อีกครั้ง</div>
 <div class="cv-container">
   <div class="cv-header">
     <div class="cv-logo">🚁 DJI Enterprise</div>
@@ -1341,6 +1344,32 @@ var STATUS_LIST = [
   { id: 'lost', name: '❌ Lost' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
+function isMonthInPast(monthStr) {
+  if (!monthStr) return false;
+  var parts = monthStr.split('/');
+  if (parts.length !== 2) return false;
+  var m = parseInt(parts[0]), y = parseInt(parts[1]) - 543;
+  var now = new Date();
+  return (y < now.getFullYear()) || (y === now.getFullYear() && m < now.getMonth() + 1);
+}
+function checkOnline() {
+  if (!navigator.onLine) { showToast('📡 ไม่มีสัญญาณ — กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนบันทึก'); return false; }
+  return true;
+}
+function updateOfflineBanner() {
+  var b = document.getElementById('offlineBanner');
+  if (b) b.classList.toggle('show', !navigator.onLine);
+}
+async function logReadReceipt() {
+  if (!dealerId || !db) return;
+  try {
+    await db.collection('dealerUpdates').doc(dealerId).collection('meta').doc('lastView').set({
+      viewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      platform: 'client-view',
+      ua: navigator.userAgent.substring(0, 200)
+    }, { merge: true });
+  } catch(e) { /* silent */ }
+}
 function generateMonths() {
   var months = [];
   var now = new Date();
@@ -1685,6 +1714,7 @@ async function loadAllData() {
     
     await renderComplianceTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
+    logReadReceipt();
   } catch(err) {
     console.error('Load error:', err);
     document.getElementById('tabContent').innerHTML = `
@@ -1823,6 +1853,9 @@ function showAccessDenied(message) {
 }
 
 verifyAndProceed();
+window.addEventListener('online', updateOfflineBanner);
+window.addEventListener('offline', updateOfflineBanner);
+updateOfflineBanner();
 
 // ========== PIPELINE TAB ==========
 function filterAndSortPipelines(pipelines) {
@@ -2139,7 +2172,15 @@ html += '<div class="section-title">📊 ' + esc(p.projectName) + '</div>';
   html += '</div>';
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
     html += '<div style="margin-top:24px; text-align:center">';
-    html += '<button class="btn-update" onclick="showUpdateModal(\'' + pipeId + '\')" style="padding:12px 32px; font-size:16px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; border-radius:40px; cursor:pointer; font-weight:700; box-shadow:0 4px 12px rgba(59,130,246,0.3)">✏️ อัพเดทโครงการ</button>';
+    if (p._status === 'pending') {
+      html += '<div style="background:#f59e0b18;border:1px solid #f59e0b44;border-radius:12px;padding:10px 16px;margin-bottom:12px;font-size:13px;color:#f59e0b">⏳ มีคำขออัพเดทรอการตรวจสอบอยู่</div>';
+      html += '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">';
+      html += '<button onclick="editUpdate(\'pipeline\',\'' + pipeId + '\')" style="padding:10px 24px;font-size:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;border-radius:40px;cursor:pointer;font-weight:700">✏️ แก้ไขคำขอ</button>';
+      html += '<button onclick="cancelUpdate(\'pipeline\',\'' + dealerId + '\',\'' + pipeId + '\')" style="padding:10px 24px;font-size:14px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid #ef4444;border-radius:40px;cursor:pointer;font-weight:600">🗑️ ยกเลิกคำขอ</button>';
+      html += '</div>';
+    } else {
+      html += '<button class="btn-update" onclick="showUpdateModal(\'' + pipeId + '\')" style="padding:12px 32px; font-size:16px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; border-radius:40px; cursor:pointer; font-weight:700; box-shadow:0 4px 12px rgba(59,130,246,0.3)">✏️ อัพเดทโครงการ</button>';
+    }
 html += '</div>';
   html += '</div>';
   html += '<div class="section"><div class="section-title">📝 ประวัติการอัพเดท</div><div id="pipeTimeline_' + pipeId + '"><div style="text-align:center;padding:20px">⏳ กำลังโหลด...</div></div></div>';
@@ -2477,6 +2518,7 @@ function submitPipelineUpdate(pipeId) {
 }
 
 function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
+  if (!navigator.onLine) { showToast('📡 ไม่มีสัญญาณ — กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนบันทึก'); return Promise.reject(new Error('offline')); }
   var existingRef = getCustomerPipelineRef(dealerId, pipeId);
   return existingRef.get().then(function(existingDoc) {
     var snapshot = existingDoc.exists ? existingDoc.data() : null;
@@ -2657,6 +2699,7 @@ function addRunrateItem() {
   var qty = parseInt(document.getElementById('runrateQty').value);
   if (!model) { alert('กรุณาเลือกสินค้า'); return; }
   if (!qty || qty <= 0) { alert('กรุณากรอกจำนวน'); return; }
+  if (isMonthInPast(selectedMonth)) showToast('⚠️ เดือนที่เลือกผ่านมาแล้ว — ตรวจสอบให้แน่ใจก่อนบันทึก');
   var newItem = { id: 'rr_' + Date.now() + '_' + Math.random().toString(36).substr(2,4), model: model, qty: qty, month: selectedMonth, dealerId: dealerId, type: 'runrate' };
   forecastData.runrate.push(newItem);
   var updateData = JSON.parse(JSON.stringify(newItem));
@@ -2754,6 +2797,7 @@ function addNewProject() {
   var endUser = document.getElementById('newProjectEndUser').value.trim();
   if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
   if (editableItems.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
+  if (isMonthInPast(selectedMonth)) showToast('⚠️ เดือนที่เลือกผ่านมาแล้ว — ตรวจสอบให้แน่ใจก่อนบันทึก');
   var totalQty = editableItems.reduce(function(s, it) { return s + it.qty; }, 0);
   var newProject = {
     id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2,4),
@@ -2810,6 +2854,7 @@ function clearProjectForm() {
   }
 }
 function saveClientForecast() {
+  if (!checkOnline()) return;
   for (var i=0;i<forecastData.runrate.length;i++) getCustomerForecastRef(dealerId, forecastData.runrate[i].id).set(forecastData.runrate[i], { merge: true });
   for (var i=0;i<forecastData.projects.length;i++) getCustomerForecastRef(dealerId, forecastData.projects[i].id).set(forecastData.projects[i], { merge: true });
   showToast('💾 บันทึกแผนการสั่งซื้อเรียบร้อยแล้ว');
