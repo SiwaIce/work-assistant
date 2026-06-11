@@ -839,7 +839,11 @@ body {
 .tl-chip-items { background: rgba(245,158,11,0.1); color: #f59e0b; border-color: rgba(245,158,11,0.2); }
 .tl-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
 .tl-detail.show { display: block; }
-.tl-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.tl-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; table-layout: fixed; }
+.tl-diff-table col:nth-child(1) { width: 28%; }
+.tl-diff-table col:nth-child(2) { width: 36%; }
+.tl-diff-table col:nth-child(3) { width: 36%; }
+.tl-diff-table td, .tl-diff-table th { overflow-wrap: break-word; word-break: break-word; }
 .tl-diff-table th { text-align: left; padding: 6px 8px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px; }
 .tl-diff-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
 .tl-diff-changed { background: rgba(59,130,246,0.05); }
@@ -2326,7 +2330,7 @@ function renderPipeTimeline(container, events, currentData) {
     if (hasDetail) {
       html += '<div class="tl-detail" id="' + evId + '_detail">';
       html += '<div style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em">รายละเอียดการเปลี่ยนแปลง</div>';
-      html += '<table class="tl-diff-table"><thead><tr><th>ฟิลด์</th><th>ก่อน</th><th>หลัง</th></tr></thead><tbody>';
+      html += '<table class="tl-diff-table"><colgroup><col><col><col></colgroup><thead><tr><th>ฟิลด์</th><th>ก่อน</th><th>หลัง</th></tr></thead><tbody>';
       for (var d = 0; d < changedFields.length; d++) {
         var df = changedFields[d];
         var bVal = df.field === 'status' ? getPipeStatusName(df.before) : esc(String(df.before));
@@ -2461,6 +2465,13 @@ function fD(iso) {
 function addEditItemRow() { var container = document.getElementById('editItemsContainer'); if (!container) return; var html = '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="1" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>'; container.insertAdjacentHTML('beforeend', html); }
 function removeEditItemRow(btn) { var row = btn.closest('.edit-item-row'); if (row) row.remove(); }
 
+function syncDateFromPicker(textId, pickerId) {
+  var isoVal = document.getElementById(pickerId).value;
+  if (!isoVal) return;
+  var p = isoVal.split('-');
+  var buddhistYear = parseInt(p[0]) + 543;
+  document.getElementById(textId).value = p[2] + '/' + p[1] + '/' + buddhistYear;
+}
 function convertToISODate(dateStr) {
   if (!dateStr) return '';
   var parts = dateStr.split('/');
@@ -2579,8 +2590,8 @@ function showCreateProjectModal() {
   modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะเริ่มต้น</label><select id="newProjStatus" class="form-control">' + statusOptions + '</select></div>';
   modalHtml += '<div class="form-row">';
-  modalHtml += '<div class="form-group"><label>📅 Bidding Date</label><input type="text" id="newBiddingDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off"></div>';
-  modalHtml += '<div class="form-group"><label>🚚 Shipment Date</label><input type="text" id="newShipmentDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off"></div>';
+  modalHtml += '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newBiddingDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newBiddingDate\',\'newBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'newBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>';
+  modalHtml += '<div class="form-group"><label>🚚 Shipment Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newShipmentDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newShipmentDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newShipmentDate\',\'newShipmentDatePicker\')"><button type="button" onclick="document.getElementById(\'newShipmentDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>';
   modalHtml += '</div>';
   modalHtml += '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="newProjAmount" class="form-control" placeholder="0"></div>';
   modalHtml += '<div class="form-group"><label>📦 รายการสินค้า</label>';
