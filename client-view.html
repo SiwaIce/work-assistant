@@ -812,6 +812,44 @@ body {
 .ftab.act { background: var(--accent); border-color: var(--accent); color: #fff; }
 .timeline-event { transition: all 0.15s; }
 .timeline-event:hover { background: rgba(255,255,255,0.04) !important; }
+
+/* ===== VISUAL TIMELINE ===== */
+.tl-wrap { position: relative; padding-left: 34px; display: flex; flex-direction: column; gap: 0; }
+.tl-wrap::before { content: ''; position: absolute; left: 16px; top: 28px; bottom: 28px; width: 2px; background: linear-gradient(to bottom, rgba(59,130,246,0.6), rgba(59,130,246,0.15)); border-radius: 2px; }
+.tl-item { position: relative; margin-bottom: 0; }
+.tl-dot { position: absolute; left: -28px; top: 14px; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; border: 2px solid var(--card); z-index: 1; flex-shrink: 0; }
+.tl-dot-pending { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
+.tl-dot-approved { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.2); }
+.tl-dot-rejected { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
+.tl-dot-normal { background: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+.tl-dot-create { background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+.tl-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; cursor: pointer; transition: all 0.15s; }
+.tl-card:hover { border-color: var(--accent); background: rgba(59,130,246,0.04); }
+.tl-card.tl-expanded { border-color: var(--accent); }
+.tl-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.tl-card-left { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.tl-card-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-card-meta { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tl-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.tl-note { font-size: 12px; color: var(--text); margin-top: 8px; padding: 8px 10px; background: rgba(245,158,11,0.07); border-left: 3px solid #f59e0b; border-radius: 0 6px 6px 0; line-height: 1.5; }
+.tl-changes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.tl-chip { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: rgba(59,130,246,0.1); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); white-space: nowrap; }
+.tl-chip-status { background: rgba(139,92,246,0.1); color: #8b5cf6; border-color: rgba(139,92,246,0.2); }
+.tl-chip-amount { background: rgba(34,197,94,0.1); color: #22c55e; border-color: rgba(34,197,94,0.2); }
+.tl-chip-items { background: rgba(245,158,11,0.1); color: #f59e0b; border-color: rgba(245,158,11,0.2); }
+.tl-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: none; }
+.tl-detail.show { display: block; }
+.tl-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.tl-diff-table th { text-align: left; padding: 6px 8px; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px; }
+.tl-diff-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+.tl-diff-changed { background: rgba(59,130,246,0.05); }
+.tl-val-old { color: var(--text2); text-decoration: line-through; }
+.tl-val-new { color: var(--accent); font-weight: 600; }
+.tl-expand-btn { font-size: 11px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 2px 0; text-decoration: underline; white-space: nowrap; }
+.tl-badge-by { font-size: 10px; padding: 2px 7px; border-radius: 10px; }
+.tl-badge-customer { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.tl-badge-sales { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.tl-badge-system { background: rgba(100,116,139,0.15); color: #64748b; }
 .toolbar-row {
   display: flex;
   gap: 12px;
@@ -1043,6 +1081,16 @@ input[list]::-webkit-calendar-picker-indicator {
   .success-toast { bottom: 20px; padding: 10px 20px; font-size: 13px; white-space: normal; text-align: center; max-width: 90vw; }
   .timeline-event { padding: 8px 10px; }
   .timeline-event .status-badge { font-size: 9px; }
+  .tl-wrap { padding-left: 28px; }
+  .tl-wrap::before { left: 12px; }
+  .tl-dot { left: -22px; width: 18px; height: 18px; font-size: 9px; top: 16px; }
+  .tl-card { padding: 10px 12px; }
+  .tl-card-head { flex-wrap: wrap; gap: 6px; }
+  .tl-card-title { font-size: 12px; }
+  .tl-card-meta { font-size: 10px; }
+  .tl-note { font-size: 11px; }
+  .tl-diff-table td, .tl-diff-table th { padding: 5px 6px; font-size: 11px; }
+  .tl-card-right { width: 100%; align-items: flex-start; }
   #detailModal .modal-container { max-width: 95%; }
   #detailModal table { font-size: 12px; }
   #detailModal td, #detailModal th { padding: 6px 4px; }
@@ -2114,43 +2162,157 @@ function loadPipeTimeline(pipeId, currentData) {
   }).catch(function(err) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>ไม่สามารถโหลดประวัติได้</div></div>'; });
 }
 
+function getPipeStatusName(statusId) {
+  var s = STATUS_LIST.find(function(x) { return x.id === statusId; });
+  return s ? s.name : (statusId || '-');
+}
+
 function renderPipeTimeline(container, events, currentData) {
-  if (!events.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ยังไม่มีประวัติการอัพเดท</div></div>'; return; }
-  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
-  for (var i=0;i<events.length;i++) {
-    var ev = events[i];
-    var dateStr = ev.timestamp ? (ev.timestamp.seconds ? new Date(ev.timestamp.seconds * 1000).toLocaleString('th-TH') : ev.timestamp) : '-';
-    var status = ev.status || (ev._source === 'current' ? (currentData ? currentData._status : 'pending') : 'pending');
-    var statusColor = status === 'pending' ? '#f59e0b' : (status === 'approved' ? '#22c55e' : '#ef4444');
-         var statusText = status === 'pending' ? '⏳ รอตรวจสอบ' : (status === 'approved' ? '✅ อัพเดทข้อมูลแล้ว' : '❌ ปฏิเสธ');
-    var icon = ev.type === 'pipeline_update' ? '📋' : '📝';
-    var updatedBy = ev.updatedBy || (ev._source === 'current' ? (currentData ? currentData.updatedBy : 'customer') : (ev._source === 'timeline' ? 'customer' : 'unknown'));
-    var byBadge = updatedBy === 'sales' ? '<span style="background:#3b82f620; color:#3b82f6; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👨‍💼 พนักงานขาย</span>' : '<span style="background:#f59e0b20; color:#f59e0b; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:6px">👤 ลูกค้า</span>';
-    var hasChanges = ev.changes || (ev._snapshot && currentData);
-    var changeSummary = '';
-    if (hasChanges) {
-      var before = ev.changes ? ev.changes.before : ev._snapshot;
-      var after = ev.changes ? ev.changes.after : currentData;
-      if (before && after) {
-        var changedFields = [];
-        if (before.status !== after.status) changedFields.push('สถานะ');
-        if (before.forecastAmount !== after.forecastAmount) changedFields.push('มูลค่า');
-        if (before.model !== after.model) changedFields.push('Model');
-        if (JSON.stringify(before.items) !== JSON.stringify(after.items)) changedFields.push('สินค้า');
-        if (changedFields.length) changeSummary = '<div style="font-size:11px;color:var(--accent);margin-top:2px">🔄 เปลี่ยนแปลง: ' + changedFields.join(', ') + '</div>';
-      }
-    }
-    html += '<div class="timeline-event" style="border-left:3px solid ' + statusColor + '; padding:10px 12px; background:rgba(255,255,255,0.02); border-radius:8px">';
-    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:4px">';
-    html += '<div><span style="font-size:16px">' + icon + '</span> <strong>' + (ev.type === 'pipeline_update' ? 'อัพเดทโครงการ' : 'หมายเหตุ') + '</strong>' + byBadge;
-    html += ' <span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:2px 8px; border-radius:12px; font-size:10px">' + statusText + '</span></div>';
-    html += '<div style="font-size:11px; color:var(--text2)">' + dateStr + '</div></div>';
-    html += '<div style="font-size:13px; line-height:1.5">' + esc(ev.content || ev.updateNote || 'อัพเดทข้อมูล') + '</div>' + changeSummary;
-    if (hasChanges) html += '<button class="btn btn-sm" style="margin-top:8px; padding:4px 10px" onclick="viewTimelineChangeDetail(\'' + pipeId + '\', \'' + (ev.id || 'current') + '\')">👁️ ดูการเปลี่ยนแปลง</button>';
-    html += '</div>';
+  if (!events.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div style="margin-top:8px">ยังไม่มีประวัติการอัพเดท</div><div class="hint" style="margin-top:4px">เมื่อคุณหรือพนักงานขายอัพเดทโครงการ ประวัติจะแสดงที่นี่</div></div>';
+    return;
   }
-  html += '</div>';
+
+  // เก็บ events ไว้ใน window เพื่อให้ toggleTlDetail เข้าถึงได้
+  window._tlEvents = events;
+  window._tlCurrentData = currentData;
+
+  var html = '<div class="tl-wrap">';
+
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var evId = 'tl_ev_' + i;
+
+    // --- Timestamp ---
+    var ts = ev.timestamp;
+    var dateObj = ts ? (ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)) : null;
+    var dateStr = dateObj ? dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    var timeStr = dateObj ? dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+    var relStr = dateObj ? tlRelativeTime(dateObj) : '';
+
+    // --- Status ---
+    var status = ev.status || (ev._source === 'current' && currentData ? currentData._status : '') || 'pending';
+    var dotClass = status === 'approved' ? 'tl-dot-approved' : status === 'rejected' ? 'tl-dot-rejected' : ev.type === 'pipeline_create' ? 'tl-dot-create' : 'tl-dot-pending';
+
+    // --- Type labels ---
+    var typeIcon, typeLabel;
+    if (ev.type === 'pipeline_create') { typeIcon = '🆕'; typeLabel = 'สร้างโครงการใหม่'; }
+    else if (ev.type === 'pipeline_update') { typeIcon = '✏️'; typeLabel = 'อัพเดทโครงการ'; }
+    else { typeIcon = '📝'; typeLabel = ev.type || 'อัพเดท'; }
+
+    // --- Status badge ---
+    var stBg = status === 'approved' ? '#22c55e' : status === 'rejected' ? '#ef4444' : '#f59e0b';
+    var stLabel = status === 'approved' ? '✅ อนุมัติแล้ว' : status === 'rejected' ? '❌ ปฏิเสธ' : '⏳ รอตรวจสอบ';
+
+    // --- By badge ---
+    var by = ev.updatedBy || (ev._source === 'current' && currentData ? currentData.updatedBy : '') || 'customer';
+    var byClass = by === 'sales' ? 'tl-badge-sales' : by === 'system' ? 'tl-badge-system' : 'tl-badge-customer';
+    var byLabel = by === 'sales' ? '👨‍💼 พนักงานขาย' : by === 'system' ? '🤖 ระบบ' : '👤 คุณ';
+
+    // --- Changed fields chips ---
+    // ใช้ changedFields จาก timeline event ที่บันทึกใหม่ หรือ compute จาก snapshot ถ้าเป็น current event
+    var changedFields = ev.changedFields || [];
+    if (!changedFields.length && ev._source === 'current' && currentData && currentData._snapshot) {
+      var bf = currentData._snapshot;
+      var af = currentData;
+      if (bf.status !== af.status) changedFields.push({ field: 'status', label: 'สถานะ', before: bf.status, after: af.status });
+      if (String(bf.forecastAmount||0) !== String(af.forecastAmount||0)) changedFields.push({ field: 'forecastAmount', label: 'มูลค่า', before: bf.forecastAmount||0, after: af.forecastAmount||0 });
+      if (JSON.stringify(bf.items||[]) !== JSON.stringify(af.items||[])) changedFields.push({ field: 'items', label: 'สินค้า', before: (bf.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||bf.model||'-', after: (af.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||af.model||'-' });
+      if ((bf.biddingDate||'') !== (af.biddingDate||'')) changedFields.push({ field: 'biddingDate', label: 'Bidding Date', before: bf.biddingDate||'-', after: af.biddingDate||'-' });
+    }
+
+    var chipsHtml = '';
+    if (changedFields.length) {
+      chipsHtml = '<div class="tl-changes">';
+      for (var c = 0; c < changedFields.length; c++) {
+        var cf = changedFields[c];
+        var chipClass = cf.field === 'status' ? 'tl-chip-status' : cf.field === 'forecastAmount' ? 'tl-chip-amount' : cf.field === 'items' ? 'tl-chip-items' : '';
+        chipsHtml += '<span class="tl-chip ' + chipClass + '">🔄 ' + esc(cf.label) + '</span>';
+      }
+      chipsHtml += '</div>';
+    }
+
+    // --- Update note ---
+    var note = ev.updateNote || ev.content || '';
+    var noteHtml = note ? '<div class="tl-note">💬 ' + esc(note) + '</div>' : '';
+
+    // --- Has detail to expand ---
+    var hasDetail = changedFields.length > 0;
+
+    html += '<div class="tl-item">';
+    html += '<div class="tl-dot ' + dotClass + '">' + typeIcon + '</div>';
+    html += '<div class="tl-card' + (hasDetail ? '' : '') + '" id="' + evId + '_card" ' + (hasDetail ? 'onclick="toggleTlDetail(\'' + evId + '\')"' : '') + ' style="' + (hasDetail ? 'cursor:pointer' : 'cursor:default') + '">';
+
+    // Card header
+    html += '<div class="tl-card-head">';
+    html += '<div class="tl-card-left">';
+    html += '<div class="tl-card-title">';
+    html += '<span>' + typeLabel + '</span>';
+    html += '<span class="tl-badge-by ' + byClass + '">' + byLabel + '</span>';
+    html += '<span style="background:' + stBg + '22; color:' + stBg + '; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600">' + stLabel + '</span>';
+    html += '</div>';
+    html += '<div class="tl-card-meta">';
+    html += '<span title="' + dateStr + ' ' + timeStr + '">🕐 ' + (relStr || dateStr) + '</span>';
+    if (timeStr) html += '<span style="color:var(--text2)">· ' + dateStr + ' ' + timeStr + '</span>';
+    html += '</div>';
+    html += '</div>';
+    if (hasDetail) {
+      html += '<div class="tl-card-right"><button class="tl-expand-btn" id="' + evId + '_btn">ดูรายละเอียด ▾</button></div>';
+    }
+    html += '</div>';
+
+    // Note
+    html += noteHtml;
+
+    // Changed field chips (summary)
+    html += chipsHtml;
+
+    // Expandable detail
+    if (hasDetail) {
+      html += '<div class="tl-detail" id="' + evId + '_detail">';
+      html += '<div style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em">รายละเอียดการเปลี่ยนแปลง</div>';
+      html += '<table class="tl-diff-table"><thead><tr><th>ฟิลด์</th><th>ก่อน</th><th>หลัง</th></tr></thead><tbody>';
+      for (var d = 0; d < changedFields.length; d++) {
+        var df = changedFields[d];
+        var bVal = df.field === 'status' ? getPipeStatusName(df.before) : esc(String(df.before));
+        var aVal = df.field === 'status' ? getPipeStatusName(df.after) : df.field === 'forecastAmount' ? Number(df.after).toLocaleString('th-TH') + ' ฿' : esc(String(df.after));
+        var bDisplay = df.field === 'forecastAmount' ? Number(df.before).toLocaleString('th-TH') + ' ฿' : bVal;
+        html += '<tr class="tl-diff-changed">';
+        html += '<td style="font-weight:600; color:var(--text2); white-space:nowrap">' + esc(df.label) + '</td>';
+        html += '<td class="tl-val-old">' + bDisplay + '</td>';
+        html += '<td class="tl-val-new">' + aVal + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      html += '</div>'; // tl-detail
+    }
+
+    html += '</div>'; // tl-card
+    html += '</div>'; // tl-item
+  }
+
+  html += '</div>'; // tl-wrap
   container.innerHTML = html;
+}
+
+function toggleTlDetail(evId) {
+  var detail = document.getElementById(evId + '_detail');
+  var btn = document.getElementById(evId + '_btn');
+  var card = document.getElementById(evId + '_card');
+  if (!detail) return;
+  var isOpen = detail.classList.contains('show');
+  detail.classList.toggle('show', !isOpen);
+  if (card) card.classList.toggle('tl-expanded', !isOpen);
+  if (btn) btn.textContent = isOpen ? 'ดูรายละเอียด ▾' : 'ซ่อน ▴';
+}
+
+function tlRelativeTime(dateObj) {
+  var diff = Math.floor((new Date() - dateObj) / 1000);
+  if (diff < 60) return 'เมื่อกี้';
+  if (diff < 3600) return Math.floor(diff / 60) + ' นาทีที่แล้ว';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' ชั่วโมงที่แล้ว';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + ' วันที่แล้ว';
+  return null;
 }
 
 function viewTimelineChangeDetail(pipeId, eventId) {
@@ -2316,10 +2478,22 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
       delete cleanSnap._customerUpdate; delete cleanSnap._updatedAt; delete cleanSnap._status; delete cleanSnap._snapshot;
       updateData._snapshot = cleanSnap;
     } else if (snapshot && snapshot._snapshot) updateData._snapshot = snapshot._snapshot;
+    // คำนวณ changedFields เพื่อเก็บใน timeline
+    var changedFields = [];
+    var beforeSnap = updateData._snapshot || snapshot;
+    if (beforeSnap) {
+      if (beforeSnap.status !== data.status) changedFields.push({ field: 'status', label: 'สถานะ', before: beforeSnap.status, after: data.status });
+      if (String(beforeSnap.forecastAmount||0) !== String(data.forecastAmount||0)) changedFields.push({ field: 'forecastAmount', label: 'มูลค่า', before: beforeSnap.forecastAmount||0, after: data.forecastAmount||0 });
+      if (JSON.stringify(beforeSnap.items||[]) !== JSON.stringify(data.items||[])) changedFields.push({ field: 'items', label: 'สินค้า', before: (beforeSnap.items||[]).map(function(i){return i.model+' x'+i.qty;}).join(', ')||beforeSnap.model||'-', after: (data.items||[]).map(function(i){return i.model+' x'+i.qty;}).join(', ')||data.model||'-' });
+      if ((beforeSnap.biddingDate||'') !== (data.biddingDate||'')) changedFields.push({ field: 'biddingDate', label: 'Bidding Date', before: beforeSnap.biddingDate||'-', after: data.biddingDate||'-' });
+      if ((beforeSnap.endUserTH||beforeSnap.endUser||'') !== (data.endUserTH||'')) changedFields.push({ field: 'endUser', label: 'End User', before: beforeSnap.endUserTH||beforeSnap.endUser||'-', after: data.endUserTH||'-' });
+    }
     return existingRef.set(updateData, { merge: true }).then(function() {
       return getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
         type: 'pipeline_update', pipeId: pipeId, projectName: data.projectName,
-        content: 'อัพเดทข้อมูลโครงการ: ' + (data.projectName || ''),
+        content: data.updateNote || 'อัพเดทข้อมูลโครงการ',
+        updateNote: data.updateNote || '',
+        changedFields: changedFields,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'pending',
         updatedBy: 'customer'
       });
@@ -4073,6 +4247,7 @@ window.showCreateProjectModal = showCreateProjectModal;
 window.submitNewProject = submitNewProject;
 window.filterProductList = filterProductList;
 window.resetProductFilter = resetProductFilter;
+window.toggleTlDetail = toggleTlDetail;
 </script>
 </body>
 </html>
