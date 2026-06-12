@@ -1239,6 +1239,25 @@ input[list]::-webkit-calendar-picker-indicator {
 .btn:active, .tab-btn:active, .stat-card:active, .month-card:active { opacity: 0.7; transition: opacity 0.05s; }
 #offlineBanner { display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:#ef4444; color:#fff; text-align:center; padding:9px 16px; font-size:13px; font-weight:600; letter-spacing:0.2px; }
 #offlineBanner.show { display:block; }
+/* Pipeline Summary Dashboard */
+.ps-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+.ps-stats { display: flex; gap: 8px; text-align: center; }
+.ps-stat { flex: 1; padding: 8px 4px; border-radius: 10px; background: rgba(59,130,246,0.05); }
+.ps-stat-num { font-size: 20px; font-weight: 800; line-height: 1.2; }
+.ps-stat-lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.ps-sub { font-size: 11.5px; color: var(--text2); margin-top: 10px; text-align: center; }
+.ps-toggle { display: block; width: 100%; margin-top: 10px; padding: 8px; background: transparent; border: 1px dashed var(--border); border-radius: 10px; color: var(--text2); font-size: 12.5px; cursor: pointer; }
+.ps-toggle:hover { background: rgba(59,130,246,0.06); color: var(--text); }
+.ps-chart-wrap { margin-top: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.ps-chart { display: flex; align-items: flex-end; gap: 6px; min-width: 480px; height: 130px; }
+.ps-bar-col { flex: 1; min-width: 34px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.ps-bar-val { font-size: 9.5px; color: var(--text2); margin-bottom: 2px; white-space: nowrap; }
+.ps-bar-stack { width: 70%; max-width: 30px; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 4px 4px 0 0; overflow: hidden; }
+.ps-bar-est { background: rgba(59,130,246,0.3); }
+.ps-bar-real { background: #3b82f6; }
+.ps-bar-lbl { font-size: 9.5px; color: var(--text2); margin-top: 4px; white-space: nowrap; }
+.ps-chart-note { font-size: 10.5px; color: var(--text2); margin-top: 8px; }
+@media (max-width: 480px) { .ps-stat-num { font-size: 16px; } .ps-stat-lbl { font-size: 10px; } }
 </style>
 </head>
 <body>
@@ -1905,10 +1924,121 @@ function filterAndSortPipelines(pipelines) {
 
 function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; staleFilter = 'all'; renderPipelineTab(); }
 
+// ========== PIPELINE SUMMARY DASHBOARD ==========
+var pipeChartOpen = false;
+function togglePipeChart() { pipeChartOpen = !pipeChartOpen; renderPipelineTab(); }
+var TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+// หาเดือนส่งมอบของโครงการ: shipmentDate จริง > biddingDate+2เดือน (ประมาณ) > null
+function getPipeShipMonth(p) {
+  if (p.shipmentDate) {
+    var sd = String(p.shipmentDate).slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(sd)) return { key: sd, est: false };
+  }
+  if (p.biddingDate) {
+    var d = new Date(p.biddingDate);
+    if (!isNaN(d.getTime())) {
+      d.setMonth(d.getMonth() + 2);
+      return { key: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'), est: true };
+    }
+  }
+  return null;
+}
+
+function buildPipeSummaryHtml() {
+  var active = [], onhold = [], lost = [];
+  for (var i = 0; i < pipelinesData.length; i++) {
+    var p = pipelinesData[i];
+    if (!p || p._status === 'rejected') continue;
+    if (p.status === 'lost') lost.push(p);
+    else if (p.status === 'on_hold') onhold.push(p);
+    else active.push(p);
+  }
+  var sumAmt = function(arr) { var s = 0; for (var i = 0; i < arr.length; i++) s += Number(arr[i].forecastAmount) || 0; return s; };
+  var totalActive = sumAmt(active);
+  var now = new Date();
+  var thisYear = now.getFullYear(), nextYear = thisYear + 1;
+  var thisYearAmt = 0, nextYearAmt = 0;
+
+  // เตรียม buckets 12 เดือนข้างหน้า + ไม่ระบุ
+  var buckets = {}, bucketKeys = [];
+  for (var m = 0; m < 12; m++) {
+    var d = new Date(thisYear, now.getMonth() + m, 1);
+    var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    buckets[key] = { real: 0, est: 0 };
+    bucketKeys.push(key);
+  }
+  var unknown = { real: 0, est: 0, count: 0 };
+
+  for (var i = 0; i < active.length; i++) {
+    var p = active[i];
+    var amt = Number(p.forecastAmount) || 0;
+    var sm = getPipeShipMonth(p);
+    if (sm) {
+      var y = parseInt(sm.key.slice(0, 4));
+      if (y === thisYear) thisYearAmt += amt;
+      else if (y === nextYear) nextYearAmt += amt;
+      if (buckets[sm.key]) buckets[sm.key][sm.est ? 'est' : 'real'] += amt;
+    } else { unknown.est += amt; unknown.count++; }
+  }
+
+  var html = '<div class="ps-card">';
+  html += '<div class="ps-stats">';
+  html += '<div class="ps-stat"><div class="ps-stat-num">' + active.length + '</div><div class="ps-stat-lbl">📋 โครงการ</div></div>';
+  html += '<div class="ps-stat"><div class="ps-stat-num">' + fmtMoneyShort(totalActive) + '</div><div class="ps-stat-lbl">💰 ยอดรวม (฿)</div></div>';
+  html += '<div class="ps-stat"><div class="ps-stat-num">' + fmtMoneyShort(thisYearAmt) + '</div><div class="ps-stat-lbl">ปีนี้ (' + (thisYear + 543) + ')</div></div>';
+  html += '<div class="ps-stat"><div class="ps-stat-num">' + fmtMoneyShort(nextYearAmt) + '</div><div class="ps-stat-lbl">ปีหน้า (' + (nextYear + 543) + ')</div></div>';
+  html += '</div>';
+  if (onhold.length || lost.length) {
+    var subs = [];
+    if (onhold.length) subs.push('⏸️ On Hold ' + onhold.length + ' (' + fmtMoneyShort(sumAmt(onhold)) + ')');
+    if (lost.length) subs.push('❌ Lost ' + lost.length + ' (' + fmtMoneyShort(sumAmt(lost)) + ')');
+    html += '<div class="ps-sub">' + subs.join(' · ') + ' — ไม่รวมในยอดรวม</div>';
+  }
+  html += '<button class="ps-toggle" onclick="togglePipeChart()">' + (pipeChartOpen ? '📉 ซ่อนยอดรายเดือน ▴' : '📈 ดูยอดรายเดือน ▾') + '</button>';
+
+  if (pipeChartOpen) {
+    var maxVal = unknown.real + unknown.est;
+    for (var k = 0; k < bucketKeys.length; k++) { var b = buckets[bucketKeys[k]]; if (b.real + b.est > maxVal) maxVal = b.real + b.est; }
+    if (maxVal <= 0) {
+      html += '<div class="ps-sub" style="padding:16px 0">ไม่มียอดในช่วง 12 เดือนข้างหน้า</div>';
+    } else {
+      var BAR_H = 86;
+      html += '<div class="ps-chart-wrap"><div class="ps-chart">';
+      var renderBar = function(label, b, titlePrefix) {
+        var total = b.real + b.est;
+        var realH = Math.round(b.real / maxVal * BAR_H);
+        var estH = Math.round(b.est / maxVal * BAR_H);
+        if (total > 0 && realH + estH < 3) { if (b.real > 0) realH = 3; else estH = 3; }
+        var tip = titlePrefix + ': ' + fmtMoneyShort(total) + (b.est > 0 ? ' (จริง ' + fmtMoneyShort(b.real) + ' + ประมาณ ' + fmtMoneyShort(b.est) + ')' : '');
+        var h = '<div class="ps-bar-col" title="' + tip + '">';
+        h += '<div class="ps-bar-val">' + (total > 0 ? fmtMoneyShort(total) : '') + '</div>';
+        h += '<div class="ps-bar-stack">';
+        if (estH > 0) h += '<div class="ps-bar-est" style="height:' + estH + 'px"></div>';
+        if (realH > 0) h += '<div class="ps-bar-real" style="height:' + realH + 'px"></div>';
+        h += '</div><div class="ps-bar-lbl">' + label + '</div></div>';
+        return h;
+      };
+      for (var k = 0; k < bucketKeys.length; k++) {
+        var key = bucketKeys[k];
+        var mIdx = parseInt(key.slice(5, 7)) - 1;
+        var yShort = String(parseInt(key.slice(0, 4)) + 543).slice(-2);
+        html += renderBar(TH_MONTHS_SHORT[mIdx] + ' ' + yShort, buckets[key], TH_MONTHS_SHORT[mIdx] + ' ' + (parseInt(key.slice(0, 4)) + 543));
+      }
+      if (unknown.count > 0) html += renderBar('ไม่ระบุ', unknown, 'ไม่ระบุเดือน (' + unknown.count + ' โครงการ)');
+      html += '</div></div>';
+      html += '<div class="ps-chart-note">🟦 สีเข้ม = Shipment Date จริง · <span style="opacity:0.55">🟦</span> สีอ่อน = ประมาณจาก Bidding Date + 2 เดือน</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderPipelineTab() {
   var filtered = filterAndSortPipelines(pipelinesData);
   var hasData = filtered.length > 0;
   var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ')</div>';
+  html += buildPipeSummaryHtml();
   html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">';
   html += '<button class="btn btn-primary" onclick="showCreateProjectModal()" style="background:#22c55e">➕ สร้างโครงการใหม่</button>';
   html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button>';
@@ -1986,6 +2116,13 @@ if (p._status === 'pending') {
 // ================================================================
 
   var biddingHtml = formatBiddingDate(p.biddingDate);
+  // badge เดือนส่งมอบประมาณการ (ยังไม่มี shipmentDate จริง)
+  var estSm = getPipeShipMonth(p);
+  if (estSm && estSm.est && p.status !== 'lost' && p.status !== 'on_hold') {
+    var estMIdx = parseInt(estSm.key.slice(5, 7)) - 1;
+    var estYShort = String(parseInt(estSm.key.slice(0, 4)) + 543).slice(-2);
+    biddingHtml += '<div style="font-size:10px;color:var(--text2);margin-top:2px" title="ประมาณจาก Bidding Date + 2 เดือน">🚚 ~' + TH_MONTHS_SHORT[estMIdx] + ' ' + estYShort + ' (ประมาณ)</div>';
+  }
 var lastUpdateDays = getLastUpdateDays(p);
 var staleBadge = '';
 if (lastUpdateDays !== null && lastUpdateDays >= 8) {
@@ -4287,6 +4424,7 @@ function formatDateThai(date) { if (!date || isNaN(date.getTime())) return '-'; 
 function fmtMoneyShort(amount) { if (!amount) return '0'; var num = Number(amount); if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'; if (num >= 1000) return Math.round(num / 1000) + 'K'; return num.toLocaleString('th-TH'); }
 // Export functions to window
 window.toggleTheme = toggleTheme;
+window.togglePipeChart = togglePipeChart;
 window.refreshData = refreshData;
 window.selectMonth = selectMonth;
 window.addRunrateItem = addRunrateItem;
