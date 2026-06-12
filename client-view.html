@@ -2524,7 +2524,7 @@ function submitPipelineUpdate(pipeId) {
     showToast('✅ ส่งข้อมูลอัพเดทให้พนักงานขายเรียบร้อยแล้ว!');
     showNotice('📨 ข้อมูลถูกส่งให้พนักงานขายเรียบร้อยแล้ว จะได้รับการติดต่อกลับ', true);
     closeModal();
-    loadAllData();
+    loadPipeline().then(function() { renderCurrentTab(); });
   }).catch(function(err) { alert('เกิดข้อผิดพลาด: ' + err.message); });
 }
 
@@ -3383,6 +3383,7 @@ async function renderComplianceTab() {
             demoItems: dealer.demoItems || [],
             dsecCertCount: dealer.dsecCertCount || 0,
             dsecStatus: dealer.dsecStatus || '',
+            sisRevenue: dealer.sisRevenue !== undefined ? dealer.sisRevenue : null,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
           console.log('🔄 Synced dealer from v7_dealers to Firebase');
@@ -3583,7 +3584,7 @@ async function renderComplianceTabContent(dealer) {
   var h1UseSisRevenue = true;
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
-  var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines);
+  var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines, dealer);
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
   
@@ -3772,21 +3773,17 @@ async function renderComplianceTabContent(dealer) {
 // ================================================================
 
 // ✅ แก้ไข: เพิ่ม parameter customPipelines
-async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue, customPipelines) {
-  var dealer = null;
-  var dealers = [];
-  
-  // โหลด dealer จาก localStorage (fallback)
-  try { 
-    var dealerData = localStorage.getItem('v7_dealers'); 
-    dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { dealers = []; }
-  
-  for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i] && dealers[i].id === dealerId) {
-      dealer = dealers[i];
-      break;
-    }
+async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue, customPipelines, passedDealer) {
+  var dealer = passedDealer || null;
+
+  // โหลด dealer จาก localStorage (fallback เมื่อไม่มี passedDealer)
+  if (!dealer) {
+    try {
+      var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      for (var i = 0; i < dealers.length; i++) {
+        if (dealers[i] && dealers[i].id === dealerId) { dealer = dealers[i]; break; }
+      }
+    } catch(e) {}
   }
   
   var actualAmount = 0;
