@@ -1738,6 +1738,7 @@ async function loadAllData() {
     await renderComplianceTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
     logReadReceipt();
+    listenDealerDoc();  // ✅ ฟังการเปลี่ยนแปลง tier/สถานะแบบ real-time
   } catch(err) {
     console.error('Load error:', err);
     document.getElementById('tabContent').innerHTML = `
@@ -1750,6 +1751,21 @@ async function loadAllData() {
   }
 }
 function refreshData() { loadAllData(); }
+
+// ✅ Real-time listener สำหรับ dealer doc (tier/สถานะ) — อัปเดตอัตโนมัติไม่ต้องกดรีเฟรช
+var _dealerDocUnsub = null;
+var _dealerDocFirst = true;
+function listenDealerDoc() {
+  if (!dealerId || _dealerDocUnsub) return;  // ตั้ง listener ครั้งเดียว
+  _dealerDocFirst = true;
+  _dealerDocUnsub = db.collection('dealerUpdates').doc(dealerId).onSnapshot(function(doc) {
+    if (_dealerDocFirst) { _dealerDocFirst = false; return; }  // ข้าม snapshot แรก (โหลดไปแล้ว)
+    // ข้อมูล dealer เปลี่ยน → ถ้ากำลังดูแท็บ compliance ให้ render ใหม่
+    if (typeof currentTab !== 'undefined' && currentTab === 'compliance') {
+      renderComplianceTab();
+    }
+  }, function(err) { console.warn('Dealer doc listener error:', err); });
+}
 
 // ========== READ PIN FROM HASH (ซ่อน PIN) ==========
 var urlParams = new URLSearchParams(window.location.search);
@@ -2041,7 +2057,10 @@ function renderPipelineTab() {
   html += buildPipeSummaryHtml();
   html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">';
   html += '<button class="btn btn-primary" onclick="showCreateProjectModal()" style="background:#22c55e">➕ สร้างโครงการใหม่</button>';
+  html += '<div style="display:flex; gap:8px">';
+  html += '<button class="btn btn-sm btn-primary" onclick="downloadPipelineExcel()">📎 ดาวน์โหลด Excel</button>';
   html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button>';
+  html += '</div>';
   html += '</div>';
   html += '<div class="toolbar-row">';
   html += '<div class="toolbar-item"><label>🔍 ค้นหา</label><input type="text" id="pipelineSearchInput" class="toolbar-input" placeholder="ชื่อโครงการ, End User, Model..." value="' + esc(pipelineSearch) + '" oninput="pipelineSearch=this.value; renderPipelineTab()"></div>';
@@ -3018,6 +3037,46 @@ function downloadForecastExcel() {
   XLSX.writeFile(wb, 'Forecast_' + dealerName + '.xlsx');
   showToast('📎 ดาวน์โหลด Excel แล้ว');
 }
+function downloadPipelineExcel() {
+  if (!pipelinesData || !pipelinesData.length) { showToast('⚠️ ไม่มีข้อมูลโครงการให้ดาวน์โหลด'); return; }
+  var wsData = [['#','โครงการ','End User','สถานะ','Bidding Date','สินค้า','จำนวนรวม','มูลค่า (บาท)','อัพเดทล่าสุด']];
+  for (var i=0;i<pipelinesData.length;i++) {
+    var p = pipelinesData[i];
+    var itemsText = '';
+    var totalQty = 0;
+    if (p.items && p.items.length) {
+      for (var j=0;j<p.items.length;j++) {
+        itemsText += p.items[j].model + (p.items[j].qty>1?' x'+p.items[j].qty:'');
+        if (j<p.items.length-1) itemsText += ', ';
+        totalQty += (p.items[j].qty||1);
+      }
+    } else if (p.model) {
+      itemsText = p.model + (p.modelQty>1?' x'+p.modelQty:'');
+      totalQty = p.modelQty || 1;
+    }
+    var statusText = p._status==='pending' ? 'รอตรวจสอบ' : (p._status==='rejected' ? 'ปฏิเสธ' : 'อัพเดทแล้ว');
+    var updatedAt = '';
+    if (p._updatedAt && typeof p._updatedAt.toDate === 'function') {
+      try { updatedAt = p._updatedAt.toDate().toLocaleDateString('th-TH'); } catch(e) {}
+    }
+    wsData.push([
+      i+1,
+      p.projectName || '',
+      p.endUserTH || p.endUserEN || '',
+      statusText,
+      p.biddingDate || '',
+      itemsText,
+      totalQty,
+      p.forecastAmount || 0,
+      updatedAt
+    ]);
+  }
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pipeline');
+  XLSX.writeFile(wb, 'Pipeline_' + (dealerName || dealerId) + '.xlsx');
+  showToast('📎 ดาวน์โหลด Excel แล้ว');
+}
 function uploadForecastExcel(input) {
   var file = input.files[0];
   if (!file) return;
@@ -3717,8 +3776,9 @@ async function renderComplianceTabContent(dealer) {
   
   var requirements = levelRequirements[level] || levelRequirements.B;
   
-  // ✅ ตรวจสอบว่าใช้ SIS Revenue หรือ Pipeline - Default เป็น SIS เสมอ
-  var h1UseSisRevenue = true;
+  // ✅ ใช้ค่าที่เลือกไว้ (จำผ่าน sessionStorage ต่อ dealer) — ค่าเริ่มต้นเป็น SIS
+  var _h1Src = sessionStorage.getItem('h1Source_' + dealerId);
+  var h1UseSisRevenue = _h1Src ? (_h1Src === 'sis') : true;
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
   var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines, dealer);
@@ -4317,33 +4377,8 @@ function toast(msg, isError) {
   }, 3000);
 }
 
-function changeH1Source(dealerId, useSisRevenue) {
-  // ✅ ไม่ใช้ ST.update ใช้ localStorage โดยตรง
-  var dealers = [];
-  try { 
-    var dealerData = localStorage.getItem('v7_dealers'); 
-    dealers = dealerData ? JSON.parse(dealerData) : []; 
-  } catch(e) { 
-    dealers = []; 
-  }
-  
-  for (var i = 0; i < dealers.length; i++) {
-    if (dealers[i] && dealers[i].id === dealerId) {
-      dealers[i].h1UseSisRevenue = useSisRevenue;
-      break;
-    }
-  }
-  
-  localStorage.setItem('v7_dealers', JSON.stringify(dealers));
-  
-  // เรียกใช้ toast (ต้องมีฟังก์ชัน toast ในไฟล์ด้วย)
-  if (typeof toast === 'function') {
-    toast('เปลี่ยนแหล่งข้อมูลเป็น ' + (useSisRevenue ? 'ยอด SIS' : 'Pipeline') + ' แล้ว');
-  }
-  
-  // รีเฟรชหน้า
-  renderComplianceTabContent();
-}
+// (ลบ changeH1Source ตัวซ้ำที่นี่ — รวมไว้เป็นเวอร์ชัน async ด้านบนที่บันทึก sessionStorage
+//  + โหลด dealer ใหม่ + re-render compliance tab อย่างถูกต้องแล้ว)
 function calculateH1Status(dealerId, requirements) {
   var now = new Date();
   var startDate = new Date(now.getFullYear(), 0, 1);
@@ -4439,6 +4474,7 @@ window.loadProjectToForm = loadProjectToForm;
 window.clearProjectForm = clearProjectForm;
 window.saveClientForecast = saveClientForecast;
 window.downloadForecastExcel = downloadForecastExcel;
+window.downloadPipelineExcel = downloadPipelineExcel;
 window.uploadForecastExcel = uploadForecastExcel;
 window.showUpdateModal = showUpdateModal;
 window.showPipelineDetail = showPipelineDetail;

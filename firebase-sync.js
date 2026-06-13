@@ -45,6 +45,41 @@ var SYNC_KEY_MAP = {
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
 
 // ================================================================
+// SAFETY: แปลง Firestore Timestamp → ISO string + กันค่า null ก่อนเก็บ localStorage
+// (กันบั๊กแบบ "dateStr.split is not a function" และ ".filter of null")
+// ================================================================
+function normalizeFirestoreValue(val) {
+  if (val === null || val === undefined) return val;
+  if (typeof val !== 'object') return val;
+  // Firestore Timestamp (มี toDate)
+  if (typeof val.toDate === 'function') {
+    try { return val.toDate().toISOString(); } catch(e) { return val; }
+  }
+  // Timestamp แบบ plain object {seconds, nanoseconds}
+  if (typeof val.seconds === 'number' && typeof val.nanoseconds === 'number') {
+    try { return new Date(val.seconds * 1000).toISOString(); } catch(e) { return val; }
+  }
+  if (Array.isArray(val)) return val.map(normalizeFirestoreValue);
+  var out = {};
+  for (var k in val) { if (val.hasOwnProperty(k)) out[k] = normalizeFirestoreValue(val[k]); }
+  return out;
+}
+
+// ✅ ลบ key ที่เก็บค่าพิษ ("null"/"undefined") ตอนเปิดแอป — แก้ getter ทั้งหมดที่ทำ .filter/.map พร้อมกัน
+(function sanitizePoisonedLocalStorage() {
+  try {
+    Object.keys(localStorage).forEach(function(k) {
+      if (!k || k.indexOf('v7_') !== 0) return;
+      var v = localStorage.getItem(k);
+      if (v === 'null' || v === 'undefined') {
+        localStorage.removeItem(k);
+        console.warn('🧹 ลบ localStorage key ที่เป็นค่าพิษ:', k);
+      }
+    });
+  } catch(e) { console.warn('sanitizePoisonedLocalStorage error:', e); }
+})();
+
+// ================================================================
 // AUTH (ใช้ popup แทน redirect เพื่อความเสถียร)
 // ================================================================
 
@@ -191,11 +226,17 @@ function initFirebaseListeners() {
         var isSingleDoc = false;
         snapshot.forEach(function(doc) {
           if (doc.id === '_data') {
-            localStorage.setItem(lsKey, JSON.stringify(doc.data().value));
+            var val = normalizeFirestoreValue(doc.data().value);
+            // ✅ กันค่า null/undefined ไม่ให้เก็บเป็นสตริง "null" (ทำให้ getter พังตอน .filter/.map)
+            if (val === null || val === undefined) {
+              localStorage.removeItem(lsKey);
+            } else {
+              localStorage.setItem(lsKey, JSON.stringify(val));
+            }
             isSingleDoc = true;
             return;
           }
-          var data = doc.data();
+          var data = normalizeFirestoreValue(doc.data());
           data.id = doc.id;
           items.push(data);
         });
@@ -285,7 +326,7 @@ function fixProductsStructureBeforeSync() {
       localStorage.setItem('v7_products', JSON.stringify(fixed));
       console.log('✅ ซ่อมแซมโครงสร้าง v7_products ก่อน sync');
     }
-  } catch(e) {}
+  } catch(e) { console.warn('fixProductsStructureBeforeSync error:', e); }
 }
 // ================================================================
 // AUTO SYNC — Override ST._set
@@ -352,14 +393,14 @@ function fixProductsStructureBeforeSync() {
           if (Array.isArray(items)) {
             items.forEach(function(item) {
               if (item && item.id) {
-                ref.doc(item.id).set(item).catch(function(e) {});
+                ref.doc(item.id).set(item).catch(function(e) { console.warn('Re-sync error after delete:', shortKey, item.id, e); });
               }
             });
           }
-        } catch(e) {}
+        } catch(e) { console.warn('Re-sync after delete failed:', coll, e); }
       }
     };
-    
+
     console.log('✅ ST._set and ST.delete override ready');
   }, 100);
 })();
@@ -443,7 +484,7 @@ function forceSyncAll() {
   if (cfg) {
     try {
       db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg));
-    } catch(e) {}
+    } catch(e) { console.warn('Config sync error in forceSyncAll:', e); }
   }
 
   setTimeout(function() {

@@ -246,5 +246,15 @@ var auth = firebase.auth();
   <div class="mb-nav-item" onclick="mbGo('pipeline')"><span class="mb-nav-icon">📊</span><span class="mb-nav-label">Pipeline</span></div>
   <div class="mb-nav-item" onclick="mbGo('tasks')"><span class="mb-nav-icon">📋</span><span class="mb-nav-label">Tasks</span></div>
 </div>
+<!-- Service Worker (PWA / offline) -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./sw.js')
+        .then(function(reg) { console.log('✅ SW registered:', reg.scope); })
+        .catch(function(err) { console.warn('SW register failed:', err); });
+    });
+  }
+</script>
 </body>
 </html>

@@ -1611,7 +1611,11 @@ function renderUpcomingTimeline() {
 function getPipeActions() {
   var saved = localStorage.getItem('v7_pipeActions');
   if (saved) {
-    try { return JSON.parse(saved); } catch (e) { return []; }
+    try {
+      var parsed = JSON.parse(saved);
+      // ✅ กัน null/object ที่ sync มาจาก Firebase — ต้องคืน array เสมอ
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
   }
   return [];
 }
@@ -1907,6 +1911,13 @@ function getWeekData(range) {
   }
   function inRangeDT(dateStr) {
     if (!dateStr) return false;
+    // ✅ รองรับ Firestore Timestamp / Date / object {seconds} ไม่ใช่แค่ string
+    if (typeof dateStr !== 'string') {
+      if (typeof dateStr.toDate === 'function') dateStr = dateStr.toDate().toISOString();
+      else if (dateStr.seconds) dateStr = new Date(dateStr.seconds * 1000).toISOString();
+      else if (dateStr instanceof Date) dateStr = dateStr.toISOString();
+      else return false;
+    }
     var d = ftParseDate(dateStr.split(' ')[0]);
     return d && d >= start && d <= end;
   }

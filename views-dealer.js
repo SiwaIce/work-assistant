@@ -1743,7 +1743,10 @@ function toggleOnboardStep(dealerId, stepIdx) {
     }
   }
   
-  ST.update('dealers', dealerId, {onboarding: d.onboarding});
+  // ✅ บันทึกทั้ง object (รวม level/status ที่เปลี่ยนจาก updates) ไม่ใช่แค่ onboarding
+  ST.update('dealers', dealerId, d);
+  // ✅ sync ไป dealerUpdates เพื่อให้ client-view เห็น tier/สถานะใหม่ทันที
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
   toast(step.done ? '✅ ' + step.title : '↩️ ยกเลิก ' + step.title);
   render();
 }
@@ -1788,6 +1791,8 @@ function saveOnboardStep(dealerId, stepIdx) {
   }
   
   ST.update('dealers', dealerId, d);
+  // ✅ sync ไป dealerUpdates เพื่อให้ client-view เห็น tier/สถานะใหม่ทันที
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
   closeMForce();
   toast('💾 บันทึกแล้ว');
   render();
