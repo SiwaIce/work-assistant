@@ -1717,17 +1717,21 @@ function getPipelineForecastByMonth(dealerId, dateField, monthKey) {
     var p = pipes[i];
     if (['lost', 'delivered', 'on_hold'].indexOf(p.status) !== -1) continue;
     
-    var targetDate = null;
-    if (dateField === 'shipment') targetDate = p.shipmentDate;
-    else if (dateField === 'bidding') targetDate = p.biddingDate;
-    else targetDate = p.registerDate;
-    
-    if (!targetDate) continue;
-    
-    var parts = targetDate.split('-');
-    if (parts.length !== 3) continue;
-    var pipeMonth = parts[0] + '-' + parts[1];
-    
+    var pipeMonth = null;
+    if (dateField === 'shipment') {
+      // ✅ ใช้ Shipment จริง > Bidding + 2 เดือน (tentative) เหมือน client-view
+      var _sh = (typeof getPipeShipDate === 'function') ? getPipeShipDate(p) : null;
+      if (!_sh) continue;
+      if (fcHideTentative && _sh.est) continue;
+      pipeMonth = _sh.date.getFullYear() + '-' + String(_sh.date.getMonth() + 1).padStart(2, '0');
+    } else {
+      var targetDate = (dateField === 'bidding') ? p.biddingDate : p.registerDate;
+      if (!targetDate) continue;
+      var parts = String(targetDate).split('-');
+      if (parts.length !== 3) continue;
+      pipeMonth = parts[0] + '-' + parts[1];
+    }
+
     if (pipeMonth === monthKey) {
       var pipeItems = getPipeItems(p);
       for (var j = 0; j < pipeItems.length; j++) {

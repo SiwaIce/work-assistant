@@ -7,9 +7,22 @@
 // ================================================================
 function ftParseDate(str) {
   if (!str) return null;
-  // ถ้าเป็น object หรือ不是 string ให้ return null
+  if (str instanceof Date) return isNaN(str.getTime()) ? null : str;
   if (typeof str !== 'string') return null;
-  var p = str.split('/');
+  var s = str.trim();
+  if (!s) return null;
+  // ✅ ISO: YYYY-MM-DD (อาจมีเวลา/timezone ต่อท้าย)
+  if (s.indexOf('-') !== -1) {
+    var datePart = s.split('T')[0].split(' ')[0];
+    var a = datePart.split('-');
+    if (a.length === 3) {
+      var y = parseInt(a[0], 10), mo = parseInt(a[1], 10) - 1, dd = parseInt(a[2], 10);
+      if (!isNaN(y) && !isNaN(mo) && !isNaN(dd)) return new Date(y, mo, dd);
+    }
+    return null;
+  }
+  // DD/MM/YYYY (รูปแบบเดิม)
+  var p = s.split('/');
   if (p.length !== 3) return null;
   var day = parseInt(p[0], 10);
   var month = parseInt(p[1], 10) - 1;

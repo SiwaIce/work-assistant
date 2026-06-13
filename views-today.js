@@ -993,6 +993,16 @@ function rForecast(el) {
     h += '</div>';
   }
 
+  // ✅ สรุปตามหมวดหมู่สินค้า (Drone/Software/Payload...) + ตัวเลือกค่าประมาณ
+  var _fcYear = new Date().getFullYear();
+  h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  h += '<h3 style="margin:0">📦 สรุปตามหมวดหมู่ — ' + _fcYear + '</h3>';
+  h += fcTentativeToggleHtml();
+  h += '</div>';
+  h += fcCategorySummaryHtml(pipes, _fcYear);
+  if (fcView === 'monthly' || fcView === 'quarterly') h += fcLegendHtml();
+  h += '</div>';
+
   // Views
   if (fcView === 'monthly') {
     h += buildFcMonthly(pipes, dealers);
@@ -1059,8 +1069,11 @@ function buildFcMonthly(pipes, dealers) {
   for (var mi = 0; mi < 12; mi++) monthTotals[mi] = {qty: 0, amt: 0};
 
   pipes.forEach(function(p) {
-    var shipDate = ftParseDate(p.shipmentDate);
-    if (!shipDate) return;
+    var _ship = getPipeShipDate(p);
+    if (!_ship) return;
+    if (fcHideTentative && _ship.est) return;
+    var shipDate = _ship.date;
+    var _est = _ship.est;
     if (shipDate.getFullYear() !== year) return;
     var m = shipDate.getMonth();
     
@@ -1079,13 +1092,14 @@ function buildFcMonthly(pipes, dealers) {
       
       models[model][m].qty += qty;
       models[model][m].amt += amt;
-      
+      if (_est) models[model][m].est = true;  // ช่องนี้มีค่าประมาณ
+
       var found = false;
       for (var pi = 0; pi < models[model][m].projects.length; pi++) {
         if (models[model][m].projects[pi].id === p.id) { found = true; break; }
       }
       if (!found) models[model][m].projects.push(p);
-      
+
       monthTotals[m].qty += qty;
       monthTotals[m].amt += amt;
     });
@@ -1098,7 +1112,7 @@ function buildFcMonthly(pipes, dealers) {
   h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcMonthTable\',\'forecast-monthly\')">📤</button></span></h2>';
   
   if (!modelNames.length) {
-    h += '<div class="empty"><p>ไม่มีข้อมูล — ต้องใส่ Shipment Date ใน Pipeline</p></div></div>';
+    h += '<div class="empty"><p>ไม่มีข้อมูล (ต้องมี Shipment Date หรือ Bidding Date ในรายการ Pipeline)</p></div></div>';
     return h;
   }
 
@@ -1124,8 +1138,10 @@ function buildFcMonthly(pipes, dealers) {
         totalQty += cell.qty;
         totalAmt += cell.amt;
         var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
-        h += '<td style="text-align:center;' + bgStyle + '" title="' + sanitize(tooltip) + '">';
-        h += '<div style="font-weight:700">' + cell.qty + '</div>';
+        var _es = cell.est ? 'opacity:0.5;' : '';
+        var _em = cell.est ? '~' : '';
+        h += '<td style="text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        h += '<div style="font-weight:700">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.58rem;color:var(--text2)">' + fmtMoneyShort(cell.amt) + '</div>';
         h += '</td>';
       } else {
@@ -1168,8 +1184,11 @@ function buildFcQuarterly(pipes, dealers) {
   var qTotals = [{qty:0,amt:0},{qty:0,amt:0},{qty:0,amt:0},{qty:0,amt:0}];
 
   pipes.forEach(function(p) {
-    var shipDate = ftParseDate(p.shipmentDate);
-    if (!shipDate) return;
+    var _ship = getPipeShipDate(p);
+    if (!_ship) return;
+    if (fcHideTentative && _ship.est) return;
+    var shipDate = _ship.date;
+    var _est = _ship.est;
     if (shipDate.getFullYear() !== year) return;
     var q = Math.floor(shipDate.getMonth() / 3);
     
@@ -1187,7 +1206,8 @@ function buildFcQuarterly(pipes, dealers) {
       
       models[model][q].qty += qty;
       models[model][q].amt += amt;
-      
+      if (_est) models[model][q].est = true;  // ไตรมาสนี้มีค่าประมาณ
+
       var found = false;
       for (var pi = 0; pi < models[model][q].projects.length; pi++) {
         if (models[model][q].projects[pi].id === p.id) { found = true; break; }
@@ -1207,7 +1227,7 @@ function buildFcQuarterly(pipes, dealers) {
   h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcQTable\',\'forecast-quarterly\')">📤</button></span></h2>';
 
   if (!modelNames.length) {
-    h += '<div class="empty"><p>ไม่มีข้อมูล — ต้องใส่ Shipment Date ใน Pipeline</p></div></div>';
+    h += '<div class="empty"><p>ไม่มีข้อมูล (ต้องมี Shipment Date หรือ Bidding Date ในรายการ Pipeline)</p></div></div>';
     return h;
   }
 
@@ -1240,8 +1260,10 @@ function buildFcQuarterly(pipes, dealers) {
           }
         });
         var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
-        h += '<td style="text-align:center;' + bgStyle + '" title="' + sanitize(tooltip) + '">';
-        h += '<div style="font-weight:700;font-size:1.1em">' + cell.qty + '</div>';
+        var _es = cell.est ? 'opacity:0.5;' : '';
+        var _em = cell.est ? '~' : '';
+        h += '<td style="text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        h += '<div style="font-weight:700;font-size:1.1em">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.62rem">' + fmtMoneyStyled(cell.amt) + '</div>';
         h += '<div style="font-size:.56rem;color:var(--text2)">' + Object.keys(dealerSet).join(', ') + '</div>';
         h += '</td>';

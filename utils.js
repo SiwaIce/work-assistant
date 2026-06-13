@@ -1,4 +1,110 @@
 // ================================================================
+// FORECAST HELPERS — เดือนส่งมอบ (tentative) + หมวดหมู่สินค้า
+// ================================================================
+var fcHideTentative = false;  // toggle: ซ่อนค่าประมาณการ (Bidding + 2 เดือน)
+
+// parser วันที่ที่รองรับทั้ง ISO (YYYY-MM-DD) และ DD/MM/YYYY และ Date object
+// (สำคัญ: shipmentDate/biddingDate เก็บเป็น ISO — ftParseDate เดิม parse ได้เฉพาะ DD/MM/YYYY)
+function fcParseDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  if (typeof v !== 'string') return null;
+  var s = v.trim();
+  if (!s) return null;
+  var d = null;
+  if (s.indexOf('-') !== -1) {               // ISO: YYYY-MM-DD (อาจมีเวลา/timezone ต่อท้าย)
+    var datePart = s.split('T')[0].split(' ')[0];
+    var a = datePart.split('-');
+    if (a.length === 3) d = new Date(parseInt(a[0], 10), parseInt(a[1], 10) - 1, parseInt(a[2], 10));
+  } else if (s.indexOf('/') !== -1) {        // DD/MM/YYYY
+    var b = s.split('/');
+    if (b.length === 3) d = new Date(parseInt(b[2], 10), parseInt(b[1], 10) - 1, parseInt(b[0], 10));
+  }
+  if (d && !isNaN(d.getTime())) return d;
+  var fallback = new Date(s);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+// เดือนส่งมอบของโครงการ: shipmentDate จริง > biddingDate + 2 เดือน (ประมาณ) > null
+function getPipeShipDate(p) {
+  if (!p) return null;
+  var sd = fcParseDate(p.shipmentDate);
+  if (sd) return { date: sd, est: false };
+  var bd = fcParseDate(p.biddingDate);
+  if (bd) return { date: new Date(bd.getFullYear(), bd.getMonth() + 2, bd.getDate()), est: true };
+  return null;
+}
+
+// หมวดหมู่ของ model (drone/payload/software/...) จากเมนูสินค้า
+function getModelCategory(modelName) {
+  if (modelName && typeof getProductByName === 'function') {
+    var prod = getProductByName(modelName);
+    if (prod && prod.category) return prod.category;
+  }
+  return 'other';
+}
+
+// คำอธิบาย (legend) จริง/ประมาณ — ใช้ร่วมในทุกตาราง forecast
+function fcLegendHtml() {
+  return '<div style="font-size:.64rem;color:var(--text2);margin:6px 0;line-height:1.5">' +
+    '🔢 ตัวเลขปกติ = Shipment Date จริง · ' +
+    '<span style="opacity:0.5">~ตัวเลขจาง</span> = ประมาณจาก Bidding Date + 2 เดือน (พอใส่ Shipment จริงจะย้ายไปเดือนจริงเอง)' +
+    '</div>';
+}
+
+// ปุ่ม toggle ซ่อน/แสดงค่าประมาณ
+function fcTentativeToggleHtml() {
+  return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:.72rem;cursor:pointer;color:var(--text2)">' +
+    '<input type="checkbox" style="width:auto" ' + (fcHideTentative ? 'checked' : '') + ' onchange="fcToggleTentative()"> ' +
+    'ซ่อนค่าประมาณ (แสดงเฉพาะ Shipment จริง)</label>';
+}
+function fcToggleTentative() {
+  fcHideTentative = !fcHideTentative;
+  if (typeof render === 'function') render();
+}
+
+// รวมยอดตามหมวดหมู่สินค้า (สำหรับ "Drone กี่ลำ / Software กี่อัน")
+function fcComputeCategoryTotals(pipes, year) {
+  var cats = {};
+  (pipes || []).forEach(function(p) {
+    var ship = getPipeShipDate(p);
+    if (!ship) return;
+    if (fcHideTentative && ship.est) return;
+    if (year && ship.date.getFullYear() !== year) return;
+    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
+    items.forEach(function(it) {
+      var qty = Number(it.qty) || 1;
+      var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+      var cat = getModelCategory(it.model);
+      if (!cats[cat]) cats[cat] = { qty: 0, amt: 0 };
+      cats[cat].qty += qty;
+      cats[cat].amt += amt;
+    });
+  });
+  return cats;
+}
+
+// การ์ดสรุปตามหมวดหมู่
+function fcCategorySummaryHtml(pipes, year) {
+  var cats = fcComputeCategoryTotals(pipes, year);
+  var ids = Object.keys(cats);
+  if (!ids.length) return '';
+  var order = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : ids;
+  ids.sort(function(a, b) { return order.indexOf(a) - order.indexOf(b); });
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">';
+  ids.forEach(function(id) {
+    var name = (typeof getCategoryName === 'function') ? getCategoryName(id) : id;
+    h += '<div style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:108px">' +
+      '<div style="font-size:.7rem;color:var(--text2)">' + name + '</div>' +
+      '<div style="font-weight:800;font-size:1.15rem">' + cats[id].qty + ' <span style="font-size:.58rem;color:var(--text2)">ชิ้น</span></div>' +
+      '<div style="font-size:.6rem;color:var(--text2)">' + fmtMoneyShort(cats[id].amt) + '</div>' +
+      '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// ================================================================
 // PARSE THAI DATE (DD/MM/YYYY)
 // ================================================================
 function parseThaiDate(str) {
