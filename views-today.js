@@ -1002,6 +1002,9 @@ function rForecast(el) {
   if (fcView === 'monthly' || fcView === 'quarterly') h += fcLegendHtml();
   h += '</div>';
 
+  // ✅ แดชบอร์ด: กราฟแท่งรายเดือน
+  h += fcMonthlyBarsHtml(pipes, _fcYear);
+
   // Views
   if (fcView === 'monthly') {
     h += buildFcMonthly(pipes, dealers);

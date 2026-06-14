@@ -2598,6 +2598,8 @@ function showUpdateModal(pipeId) {
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container" style="max-width:550px"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">' +
     '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div>' +
     '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>' +
+    '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="editAgencyMain" class="form-control" value="' + esc(p.agencyMain || '') + '" placeholder="กรม/กระทรวง"></div>' +
+    '<div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="editAgencySub" class="form-control" value="' + esc(p.agencySub || '') + '" placeholder="กอง/สำนัก"></div></div>' +
     '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>' +
     '<div class="form-row">' +
     '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editBiddingDate" class="form-control" value="' + (biddingDateVal ? fD(biddingDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editBiddingDate\',\'editBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'editBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
@@ -2665,8 +2667,10 @@ function submitPipelineUpdate(pipeId) {
   var totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
   var updatedPipeline = {
     id: pipeId, 
-    projectName: newProjectName, 
-    endUserTH: newEndUser, 
+    projectName: newProjectName,
+    endUserTH: newEndUser,
+    agencyMain: document.getElementById('editAgencyMain') ? document.getElementById('editAgencyMain').value.trim() : '',
+    agencySub: document.getElementById('editAgencySub') ? document.getElementById('editAgencySub').value.trim() : '',
     status: newStatus,
     items: items, 
     model: items[0].model, 
@@ -2747,6 +2751,7 @@ function showCreateProjectModal() {
   modalHtml += '<div class="modal-body">';
   modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ *</label><input type="text" id="newProjName" class="form-control" placeholder="เช่น โครงการพัฒนาระบบ..."></div>';
   modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
+  modalHtml += '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="newProjAgencyMain" class="form-control" placeholder="กรม/กระทรวง"></div><div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="newProjAgencySub" class="form-control" placeholder="กอง/สำนัก"></div></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะเริ่มต้น</label><select id="newProjStatus" class="form-control">' + statusOptions + '</select></div>';
   modalHtml += '<div class="form-row">';
   modalHtml += '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newBiddingDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newBiddingDate\',\'newBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'newBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>';
@@ -2815,6 +2820,8 @@ function submitNewProject() {
     id: 'pipe_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     projectName: projectName,
     endUserTH: endUser,
+    agencyMain: document.getElementById('newProjAgencyMain') ? document.getElementById('newProjAgencyMain').value.trim() : '',
+    agencySub: document.getElementById('newProjAgencySub') ? document.getElementById('newProjAgencySub').value.trim() : '',
     endUserEN: '',
     status: status,
     items: JSON.parse(JSON.stringify(newProjItemsArray)),

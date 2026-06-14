@@ -105,6 +105,112 @@ function fcCategorySummaryHtml(pipes, year) {
 }
 
 // ================================================================
+// ตรวจ "งานชนกัน" ระหว่าง Dealer (similarity ภาษาไทยด้วย bigram)
+// ================================================================
+function fcStrSim(a, b) {
+  a = (a || '').toString().toLowerCase().replace(/\s+/g, '');
+  b = (b || '').toString().toLowerCase().replace(/\s+/g, '');
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+  function grams(s) { var m = {}; for (var i = 0; i < s.length - 1; i++) { var g = s.substr(i, 2); m[g] = (m[g] || 0) + 1; } return m; }
+  var ba = grams(a), bb = grams(b), inter = 0, total = 0;
+  for (var g in ba) { total += ba[g]; if (bb[g]) inter += Math.min(ba[g], bb[g]); }
+  for (var g2 in bb) { total += bb[g2]; }
+  return total ? (2 * inter / total) : 0;
+}
+function pipeModelsSet(p) {
+  var s = {};
+  var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : (p.items || []);
+  (items || []).forEach(function (it) { if (it && it.model) s[(it.model + '').toLowerCase().replace(/\s+/g, '')] = true; });
+  if (p.model) s[(p.model + '').toLowerCase().replace(/\s+/g, '')] = true;
+  return s;
+}
+function pipeMatchScore(a, b) {
+  var name = fcStrSim(a.projectName, b.projectName);
+  var eu = fcStrSim(a.endUserTH || a.endUserEN || '', b.endUserTH || b.endUserEN || '');
+  var am = fcStrSim(a.agencyMain, b.agencyMain);
+  var asb = fcStrSim(a.agencySub, b.agencySub);
+  var sa = pipeModelsSet(a), sb = pipeModelsSet(b), inter = 0, uni = {};
+  for (var k in sa) { uni[k] = true; if (sb[k]) inter++; }
+  for (var k2 in sb) uni[k2] = true;
+  var uniCount = Object.keys(uni).length;
+  var model = uniCount ? inter / uniCount : 0;
+  var bid = 0;
+  var da = fcParseDate(a.biddingDate), db = fcParseDate(b.biddingDate);
+  if (da && db) { var diff = Math.abs(da - db) / 86400000; bid = diff <= 30 ? 1 : (diff >= 90 ? 0 : 1 - (diff - 30) / 60); }
+  var score = name * 0.35 + eu * 0.25 + am * 0.15 + asb * 0.10 + model * 0.10 + bid * 0.05;
+  return Math.round(score * 100);
+}
+function getDismissedConflicts() {
+  try { return JSON.parse(localStorage.getItem('v7_conflict_dismissed') || '{}') || {}; } catch (e) { return {}; }
+}
+function dismissConflict(key) {
+  var d = getDismissedConflicts(); d[key] = true;
+  try { localStorage.setItem('v7_conflict_dismissed', JSON.stringify(d)); } catch (e) {}
+}
+function detectPipelineConflicts(pipes, threshold) {
+  threshold = threshold || 60;
+  var active = (pipes || []).filter(function (p) { return p && ['lost', 'delivered'].indexOf(p.status) === -1; });
+  var dismissed = getDismissedConflicts();
+  var pairs = [];
+  for (var i = 0; i < active.length; i++) {
+    for (var j = i + 1; j < active.length; j++) {
+      if (active[i].dealerId && active[i].dealerId === active[j].dealerId) continue; // ข้าม dealer เดียวกัน
+      var key = [active[i].id, active[j].id].sort().join('__');
+      if (dismissed[key]) continue;
+      var sc = pipeMatchScore(active[i], active[j]);
+      if (sc >= threshold) pairs.push({ a: active[i], b: active[j], score: sc, key: key });
+    }
+  }
+  pairs.sort(function (x, y) { return y.score - x.score; });
+  return pairs;
+}
+
+// กราฟแท่งรายเดือน (CSS ล้วน) — เข้ม=Shipment จริง, จาง=ประมาณการ
+function fcMonthlyBarsHtml(pipes, year) {
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var data = [];
+  for (var i = 0; i < 12; i++) data.push({ conf: 0, est: 0 });
+  (pipes || []).forEach(function (p) {
+    var ship = getPipeShipDate(p);
+    if (!ship) return;
+    if (fcHideTentative && ship.est) return;
+    if (year && ship.date.getFullYear() !== year) return;
+    var m = ship.date.getMonth();
+    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
+    var amt = 0;
+    items.forEach(function (it) { amt += (Number(it.qty) || 1) * (Number(it.price) || 0); });
+    if (!amt) amt = Number(p.forecastAmount) || 0;
+    if (ship.est) data[m].est += amt; else data[m].conf += amt;
+  });
+  var max = 1, hasData = false;
+  data.forEach(function (d) { var t = d.conf + d.est; if (t > max) max = t; if (t > 0) hasData = true; });
+  if (!hasData) return '';
+  var curM = new Date().getMonth();
+  var h = '<div class="card" style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;margin-bottom:10px">📊 ภาพรวมรายเดือน — ' + year +
+    ' <span style="font-size:11px;font-weight:400;color:var(--text2)">(🟦 เข้ม=Shipment จริง · จาง=ประมาณ)</span></div>';
+  h += '<div style="display:flex;align-items:flex-end;gap:4px;height:150px;padding-top:8px">';
+  for (var j = 0; j < 12; j++) {
+    var d2 = data[j], tot = d2.conf + d2.est;
+    var totH = Math.round((tot / max) * 110);
+    var confH = tot > 0 ? Math.round((d2.conf / tot) * totH) : 0;
+    var estH = totH - confH;
+    var isCur = j === curM;
+    h += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%" title="' + months[j] + ': ' + fmtMoneyShort(tot) + (d2.est ? (' (ประมาณ ' + fmtMoneyShort(d2.est) + ')') : '') + '">';
+    if (tot > 0) h += '<div style="font-size:9px;color:var(--text2);margin-bottom:2px">' + fmtMoneyShort(tot) + '</div>';
+    h += '<div style="width:100%;max-width:26px;display:flex;flex-direction:column;justify-content:flex-end;border-radius:4px 4px 0 0;overflow:hidden">';
+    if (estH > 0) h += '<div style="height:' + estH + 'px;background:rgba(59,130,246,0.35)"></div>';
+    if (confH > 0) h += '<div style="height:' + confH + 'px;background:#3b82f6"></div>';
+    h += '</div>';
+    h += '<div style="font-size:10px;margin-top:4px;' + (isCur ? 'color:#3b82f6;font-weight:700' : 'color:var(--text2)') + '">' + months[j] + '</div>';
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+// ================================================================
 // PARSE THAI DATE (DD/MM/YYYY)
 // ================================================================
 function parseThaiDate(str) {

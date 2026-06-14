@@ -18,6 +18,61 @@ var selectedForecastUpdates = {};
 // ================================================================
 // PIPELINE LIST
 // ================================================================
+// ================================================================
+// โซน "งานที่อาจชนกัน" + modal เทียบ (Phase 3)
+// ================================================================
+function buildConflictZoneHtml(conflicts) {
+  if (!conflicts || !conflicts.length) return '';
+  var h = '<div class="card" style="border:1px solid #f59e0b;margin-bottom:10px">';
+  h += '<div style="font-weight:700;color:#f59e0b;margin-bottom:8px">⚠️ งานที่อาจชนกัน (' + conflicts.length + ')</div>';
+  conflicts.slice(0, 20).forEach(function(c) {
+    var da = ST.getOne('dealers', c.a.dealerId), db = ST.getOne('dealers', c.b.dealerId);
+    var scColor = c.score >= 80 ? '#ef4444' : '#f59e0b';
+    h += '<div style="border:1px solid var(--border,#334155);border-radius:10px;padding:10px;margin-bottom:8px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">';
+    h += '<div style="font-weight:600">' + sanitize(c.a.projectName || '-') + ' ↔ ' + sanitize(c.b.projectName || '-') + '</div>';
+    h += '<span style="background:' + scColor + '22;color:' + scColor + ';padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700">ตรงกัน ' + c.score + '%</span>';
+    h += '</div>';
+    h += '<div style="font-size:12px;color:var(--text2);margin:4px 0">🏪 ' + sanitize(da ? da.name : '?') + ' (' + getPipeName(c.a.status) + ') ↔ ' + sanitize(db ? db.name : '?') + ' (' + getPipeName(c.b.status) + ')</div>';
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">';
+    h += '<button class="btn bsm bp" onclick="compareConflict(\'' + c.a.id + '\',\'' + c.b.id + '\')">🔍 เทียบ</button>';
+    h += '<button class="btn bsm bo" onclick="dismissConflictPair(\'' + c.key + '\')">✓ ไม่ใช่งานเดียวกัน</button>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+function dismissConflictPair(key) {
+  if (typeof dismissConflict === 'function') dismissConflict(key);
+  toast('✓ ทำเครื่องหมายแล้ว');
+  render();
+}
+function compareConflict(idA, idB) {
+  var a = ST.getOne('pipeline', idA), b = ST.getOne('pipeline', idB);
+  if (!a || !b) return;
+  var da = ST.getOne('dealers', a.dealerId), db = ST.getOne('dealers', b.dealerId);
+  function col(p, d) {
+    var items = (getPipeItems(p) || []).map(function(it){ return sanitize(it.model) + ' x' + (it.qty || 1); }).join(', ');
+    var upd = p.updated ? String(p.updated).slice(0, 10) : '';
+    var x = '<div style="flex:1;min-width:200px;border:1px solid var(--border,#334155);border-radius:10px;padding:10px">';
+    x += '<div style="font-weight:700">' + sanitize(d ? d.name : '?') + '</div>';
+    x += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + getPipeName(p.status) + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>โครงการ:</strong> ' + sanitize(p.projectName || '-') + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>End User:</strong> ' + sanitize(p.endUserTH || p.endUserEN || '-') + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>หน่วยงาน:</strong> ' + sanitize((p.agencyMain || '-') + ' / ' + (p.agencySub || '-')) + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>สินค้า:</strong> ' + (items || '-') + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>มูลค่า:</strong> ' + fmtMoney(p.forecastAmount) + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>Bidding:</strong> ' + (p.biddingDate ? fD(p.biddingDate) : '-') + '</div>';
+    x += '<div style="font-size:12px;margin:2px 0"><strong>อัปเดตล่าสุด:</strong> ' + (upd ? fD(upd) : '-') + '</div>';
+    x += '<div style="margin-top:8px"><button class="btn bsm bo" onclick="closeM();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">เปิดโปรเจค</button></div>';
+    x += '</div>';
+    return x;
+  }
+  var html = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">ความเหมือน ' + pipeMatchScore(a, b) + '% — ดูว่าควรให้ dealer เจ้าไหนทำงานนี้</div>';
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap">' + col(a, da) + col(b, db) + '</div>';
+  openM('🔍 เทียบงานที่อาจชนกัน', html);
+}
+
 function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
   var cfg = getConfig();
@@ -55,6 +110,7 @@ function rPipeline(el) {
     if (p.status === 'lost') lostAmt += amt;
   });
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && ['prospect','tor_review','quotation','bidding','negotiation'].indexOf(p.status) !== -1; });
+  var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(allPipes, 60) : [];
 
   el.innerHTML = '' +
     '<div class="sr">' +
@@ -64,7 +120,10 @@ function rPipeline(el) {
     '<div class="sc"><div class="sn c2">' + fmtMoneyShort(wonAmt) + '</div><div class="sl">Won</div></div>' +
     '<div class="sc"><div class="sn c4">' + fmtMoneyShort(lostAmt) + '</div><div class="sl">Lost</div></div>' +
     '<div class="sc"><div class="sn c3">' + biddingSoon.length + '</div><div class="sl">Bidding 30d</div></div>' +
+    (conflicts.length ? '<div class="sc"><div class="sn c4">' + conflicts.length + '</div><div class="sl">⚠️ อาจชนกัน</div></div>' : '') +
     '</div>' +
+
+    buildConflictZoneHtml(conflicts) +
 
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
     '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +

@@ -998,6 +998,8 @@ function dealerForecastTab(d) {
   h += '</div>';
   h += fcCategorySummaryHtml(pipes, _dlrFcYear);
   if (dlrFcView === 'monthly' || dlrFcView === 'quarterly') h += fcLegendHtml();
+  // ✅ แดชบอร์ด: กราฟแท่งรายเดือน
+  h += fcMonthlyBarsHtml(pipes, _dlrFcYear);
 
   if (dlrFcView === 'monthly') {
     h += buildDlrFcMonthly(pipes, d);

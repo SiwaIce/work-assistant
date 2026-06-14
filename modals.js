@@ -283,6 +283,8 @@ function showPipelineM(dealerId, eid) {
     '<div class="fg"><label>Project Name *</label><textarea id="fp_name" rows="2">' + sanitize(p.projectName || '') + '</textarea></div>' +
     '<div class="fr"><div class="fg"><label>End User (TH)</label><input type="text" id="fp_eu_th" value="' + sanitize(p.endUserTH || '') + '"></div>' +
     '<div class="fg"><label>End User (EN)</label><input type="text" id="fp_eu_en" value="' + sanitize(p.endUserEN || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="fp_agency_main" value="' + sanitize(p.agencyMain || '') + '" placeholder="เช่น กรม/กระทรวง/บริษัทแม่"></div>' +
+    '<div class="fg"><label>หน่วยงานย่อย</label><input type="text" id="fp_agency_sub" value="' + sanitize(p.agencySub || '') + '" placeholder="เช่น กอง/สำนัก/สาขา"></div></div>' +
     '<div class="fr"><div class="fg"><label>Unit Type</label><select id="fp_unit">' + optionsHTML(cfg.unitTypes, p.unitType, '--') + '</select></div>' +
     '<div class="fg"><label>Dealer *</label><select id="fp_dealer">' + dealerOptions(dealerId || p.dealerId) + '</select></div></div>' +
     '<div class="fr"><div class="fg"><label>DJI Dealer</label><select id="fp_djid">' + optionsHTML(cfg.djiDealerTypes, p.djiDealer, '--') + '</select></div>' +
@@ -635,6 +637,8 @@ function savePipeline(dealerId, eid) {
     projectName: document.getElementById('fp_name').value.trim(),
     endUserTH: document.getElementById('fp_eu_th').value.trim(),
     endUserEN: document.getElementById('fp_eu_en').value.trim(),
+    agencyMain: document.getElementById('fp_agency_main') ? document.getElementById('fp_agency_main').value.trim() : '',
+    agencySub: document.getElementById('fp_agency_sub') ? document.getElementById('fp_agency_sub').value.trim() : '',
     unitType: document.getElementById('fp_unit').value,
     dealerId: document.getElementById('fp_dealer').value || dealerId,
     djiDealer: document.getElementById('fp_djid').value,
