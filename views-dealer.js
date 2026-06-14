@@ -972,12 +972,13 @@ function dealerForecastTab(d) {
   var h = '<div class="card"><h2>📦 Forecast — ' + sanitize(d.name);
   h += '<span class="ml"><button class="btn bsm bo" onclick="copyDealerForecast(\'' + d.id + '\')">📋</button></span></h2>';
 
-  h += '<div class="sr" style="margin-bottom:8px">';
-  h += '<div class="sc"><div class="sn c1">' + pipes.length + '</div><div class="sl">Projects</div></div>';
-  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalFc) + '</div><div class="sl">Forecast</div></div>';
-  h += '<div class="sc"><div class="sn c5">' + totalQty + '</div><div class="sl">จำนวน (ชิ้น)</div></div>';
-  h += '<div class="sc"><div class="sn c1">' + modelList.length + '</div><div class="sl">Models</div></div>';
-  h += '</div>';
+  // สถิติย้ายไปไว้ล่าง (หลังตาราง) — เก็บไว้ใน statsHtml ก่อน
+  var statsHtml = '<div class="sr" style="margin-bottom:8px">' +
+    '<div class="sc"><div class="sn c1">' + pipes.length + '</div><div class="sl">Projects</div></div>' +
+    '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalFc) + '</div><div class="sl">Forecast</div></div>' +
+    '<div class="sc"><div class="sn c5">' + totalQty + '</div><div class="sl">จำนวน (ชิ้น)</div></div>' +
+    '<div class="sc"><div class="sn c1">' + modelList.length + '</div><div class="sl">Models</div></div>' +
+    '</div>';
 
   h += '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">';
   h += '<button class="btn bsm ' + (dlrFcStatus === 'active' ? 'bp' : 'bo') + '" onclick="dlrFcStatus=\'active\';render()">⚡ Active</button>';
@@ -1007,6 +1008,9 @@ function dealerForecastTab(d) {
   }
 
   h += '</div>';
+
+  // ✅ สถิติ (มูลค่า/จำนวน/Projects) ย้ายมาไว้ล่างตาราง
+  h += '<div class="card" style="margin-bottom:12px">' + statsHtml + '</div>';
 
   if (modelList.length) {
     h += '<div class="card"><h2>📊 Chart — ' + sanitize(d.name) + '</h2>';
@@ -1089,6 +1093,44 @@ function buildDlrFcModel(modelList, totalFc, totalQty, d) {
   return h;
 }
 
+// คลิกช่องเดือนในตาราง forecast → เด้ง modal รายละเอียดโปรเจค + แก้ Shipment Date ได้
+function fcCellDetail(idx) {
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var ref = (window._fcCellRefs || [])[idx];
+  if (!ref) return;
+  var periodLabel = ref.label || months[ref.monthIndex] || '';
+  var html = '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">ช่วง <strong>' + periodLabel + '</strong> · รุ่น <strong>' + sanitize(ref.model) + '</strong></div>';
+  (ref.projectIds || []).forEach(function(pid) {
+    var p = ST.getOne('pipeline', pid);
+    if (!p) return;
+    var ship = getPipeShipDate(p);
+    var estNote = (ship && ship.est) ? ' <span style="color:#f59e0b">(ตอนนี้ประมาณจาก Bidding +2 เดือน)</span>' : '';
+    var itemsTxt = (getPipeItems(p) || []).map(function(it){ return sanitize(it.model) + ' x' + (it.qty || 1); }).join(', ');
+    var shipVal = p.shipmentDate ? String(p.shipmentDate).slice(0, 10) : '';
+    html += '<div style="border:1px solid var(--border,#334155);border-radius:10px;padding:10px;margin-bottom:8px">';
+    html += '<div style="font-weight:700">' + sanitize(p.projectName || '-') + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin:2px 0">👤 ' + sanitize(p.endUserTH || p.endUserEN || '-') + ' · ' + (typeof pipeTag === 'function' ? pipeTag(p.status) : (p.status || '')) + '</div>';
+    html += '<div style="font-size:12px;margin:2px 0">📦 ' + itemsTxt + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">';
+    html += '<label style="font-size:12px">🚚 Shipment:' + estNote + '</label>';
+    html += '<input type="date" id="fcsd_' + p.id + '" value="' + shipVal + '" style="padding:6px;border-radius:6px">';
+    html += '<button class="btn bsm bp" onclick="fcSaveShipment(\'' + p.id + '\')">💾 บันทึก</button>';
+    html += '<button class="btn bsm bo" onclick="closeM();showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">✏️ แก้ทั้งหมด</button>';
+    html += '</div></div>';
+  });
+  openM('📦 รายละเอียดเดือน', html);
+}
+function fcSaveShipment(pid) {
+  var el = document.getElementById('fcsd_' + pid);
+  if (!el) return;
+  ST.update('pipeline', pid, { shipmentDate: el.value || '' });
+  var p = ST.getOne('pipeline', pid);
+  if (p && p.dealerId && typeof syncAllPipelinesToFirebase === 'function') syncAllPipelinesToFirebase(p.dealerId);
+  toast('✅ บันทึก Shipment Date แล้ว');
+  closeM();
+  render();
+}
+
 function buildDlrFcMonthly(pipes, d) {
   var now = new Date();
   var year = now.getFullYear();
@@ -1141,6 +1183,7 @@ function buildDlrFcMonthly(pipes, d) {
     return '<div class="empty"><p>ไม่มีข้อมูล (ต้องมี Shipment Date หรือ Bidding Date ในรายการ Pipeline)</p></div>';
   }
 
+  window._fcCellRefs = [];
   var h = '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" id="fcDlrM_' + d.id + '">';
   h += '<thead><tr><th>Model</th>';
   for (var mh = 0; mh < 12; mh++) {
@@ -1165,7 +1208,8 @@ function buildDlrFcMonthly(pipes, d) {
         var tip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
         var _es = cell.est ? 'opacity:0.5;' : '';
         var _em = cell.est ? '~' : '';
-        h += '<td style="text-align:center;' + bg + _es + '" title="' + sanitize(tip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        var _ci = window._fcCellRefs.push({ model: model, monthIndex: mc, dealerId: d.id, projectIds: cell.projects.map(function(pp){ return pp.id; }) }) - 1;
+        h += '<td onclick="fcCellDetail(' + _ci + ')" style="cursor:pointer;text-align:center;' + bg + _es + '" title="' + sanitize(tip) + ' — คลิกดู/แก้ Shipment">';
         h += '<div style="font-weight:700">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.56rem;color:var(--text2)">' + fmtMoneyShort(cell.amt) + '</div>';
         h += '</td>';
@@ -1250,6 +1294,7 @@ function buildDlrFcQuarterly(pipes, d) {
     return '<div class="empty"><p>ไม่มีข้อมูล (ต้องมี Shipment Date หรือ Bidding Date ในรายการ Pipeline)</p></div>';
   }
 
+  window._fcCellRefs = [];
   var h = '<div class="export-wrap"><table class="export-table" id="fcDlrQ_' + d.id + '">';
   h += '<thead><tr><th>Model</th>';
   for (var qh = 0; qh < 4; qh++) {
@@ -1274,7 +1319,8 @@ function buildDlrFcQuarterly(pipes, d) {
         var tip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
         var _es = cell.est ? 'opacity:0.5;' : '';
         var _em = cell.est ? '~' : '';
-        h += '<td style="text-align:center;' + bg + _es + '" title="' + sanitize(tip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        var _ci = window._fcCellRefs.push({ model: model, label: qLabels[qc], dealerId: d.id, projectIds: cell.projects.map(function(pp){ return pp.id; }) }) - 1;
+        h += '<td onclick="fcCellDetail(' + _ci + ')" style="cursor:pointer;text-align:center;' + bg + _es + '" title="' + sanitize(tip) + ' — คลิกดู/แก้ Shipment">';
         h += '<div style="font-weight:700;font-size:1.1em">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.58rem">' + fmtMoneyStyled(cell.amt) + '</div>';
         h += '</td>';

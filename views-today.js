@@ -1115,6 +1115,7 @@ function buildFcMonthly(pipes, dealers) {
     return h;
   }
 
+  window._fcCellRefs = [];
   h += '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" id="fcMonthTable">';
   h += '<thead><tr><th>Model</th>';
   for (var mh = 0; mh < 12; mh++) {
@@ -1139,7 +1140,8 @@ function buildFcMonthly(pipes, dealers) {
         var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
         var _es = cell.est ? 'opacity:0.5;' : '';
         var _em = cell.est ? '~' : '';
-        h += '<td style="text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        var _ci = window._fcCellRefs.push({ model: model, label: months[mc], projectIds: cell.projects.map(function(pp){ return pp.id; }) }) - 1;
+        h += '<td onclick="fcCellDetail(' + _ci + ')" style="cursor:pointer;text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + ' — คลิกดู/แก้ Shipment">';
         h += '<div style="font-weight:700">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.58rem;color:var(--text2)">' + fmtMoneyShort(cell.amt) + '</div>';
         h += '</td>';
@@ -1230,6 +1232,7 @@ function buildFcQuarterly(pipes, dealers) {
     return h;
   }
 
+  window._fcCellRefs = [];
   h += '<div class="export-wrap"><table class="export-table" id="fcQTable">';
   h += '<thead><tr><th>Model</th>';
   for (var qh = 0; qh < 4; qh++) {
@@ -1261,7 +1264,8 @@ function buildFcQuarterly(pipes, dealers) {
         var tooltip = cell.projects.map(function(pp) { return (pp.projectName || '').substr(0, 25); }).join('\n');
         var _es = cell.est ? 'opacity:0.5;' : '';
         var _em = cell.est ? '~' : '';
-        h += '<td style="text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + (cell.est ? ' (ประมาณจาก Bidding + 2 เดือน)' : '') + '">';
+        var _ci = window._fcCellRefs.push({ model: model, label: qLabels[qc], projectIds: cell.projects.map(function(pp){ return pp.id; }) }) - 1;
+        h += '<td onclick="fcCellDetail(' + _ci + ')" style="cursor:pointer;text-align:center;' + bgStyle + _es + '" title="' + sanitize(tooltip) + ' — คลิกดู/แก้ Shipment">';
         h += '<div style="font-weight:700;font-size:1.1em">' + _em + cell.qty + '</div>';
         h += '<div style="font-size:.62rem">' + fmtMoneyStyled(cell.amt) + '</div>';
         h += '<div style="font-size:.56rem;color:var(--text2)">' + Object.keys(dealerSet).join(', ') + '</div>';
