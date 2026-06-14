@@ -2928,10 +2928,22 @@ function cvAppendEditRow(model, qty) {
   container.insertAdjacentHTML('beforeend', html);
 }
 function closeCvPicker() { var ov = document.getElementById('cvPickerOv'); if (ov) ov.style.display = 'none'; }
+function cvFlash(msg) {
+  var ov = document.getElementById('cvPickerOv');
+  if (!ov) return;
+  var f = document.getElementById('cvFlashEl');
+  if (!f) { f = document.createElement('div'); f.id = 'cvFlashEl'; ov.appendChild(f); }
+  f.textContent = msg;
+  f.setAttribute('style', 'position:absolute;top:14px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:10px;font-size:13px;z-index:100001;box-shadow:0 2px 10px rgba(0,0,0,.35);max-width:90%');
+  f.style.display = 'block';
+  clearTimeout(cvFlash._t);
+  cvFlash._t = setTimeout(function () { if (f) f.style.display = 'none'; }, 1500);
+}
 function cvSearch(v) { _cvpp.search = v || ''; cvPickerRenderList(); }
 function cvDoAdd(model, qty) {
   addCvRecent(model);
-  if (typeof showToast === 'function') showToast('✅ เพิ่ม ' + model + ' x' + (qty || 1) + ' แล้ว');
+  cvFlash('✅ เพิ่ม ' + model + ' x' + (qty || 1) + ' แล้ว');
+  if (typeof showToast === 'function' && _cvpp.addFn !== 'addRunrateItem') showToast('✅ เพิ่ม ' + model + ' x' + (qty || 1) + ' แล้ว');
   if (typeof _cvpp.cb === 'function') { _cvpp.cb(model, qty || 1); return; }
   var mi = document.getElementById(_cvpp.modelId);
   var qi = document.getElementById(_cvpp.qtyId);
@@ -3040,6 +3052,16 @@ function deleteRunrateItem(idx) {
     }
   }
   showToast('🗑️ ลบรายการแล้ว');
+  renderForecastTab();
+}
+function updateRunrateQty(idx, val) {
+  var q = parseInt(val, 10) || 1; if (q < 1) q = 1;
+  var monthRunrate = forecastData.runrate.filter(function (r) { return r.month === selectedMonth; });
+  var actualItem = monthRunrate[idx];
+  if (!actualItem) return;
+  actualItem.qty = q;
+  getCustomerForecastRef(dealerId, actualItem.id).set(actualItem, { merge: true });
+  showToast('✅ แก้จำนวนแล้ว');
   renderForecastTab();
 }
 function editRunrateItem(idx) {
@@ -3319,8 +3341,7 @@ function renderForecastTab() {
     var r = monthRunrate[i];
     runrateHtml += '<div class="forecast-item">' +
       '<div style="flex:2"><strong>' + esc(r.model) + '</strong></div>' +
-      '<div style="width:80px;text-align:center">x' + r.qty + '</div>' +
-      '<button class="btn btn-sm btn-warning" onclick="editRunrateItem(' + i + ')">✏️</button>' +
+      '<input type="number" class="editable-qty" value="' + r.qty + '" min="1" onchange="updateRunrateQty(' + i + ', this.value)" style="width:64px;text-align:center" title="แก้จำนวน"> ' +
       '<button class="btn btn-sm btn-danger" onclick="deleteRunrateItem(' + i + ')">🗑️</button></div>';
   }
   if (runrateHtml === '') runrateHtml = '<div class="hint" style="padding:16px;text-align:center">ยังไม่มีรายการ — เพิ่มด้านล่าง</div>';
@@ -4610,6 +4631,7 @@ window.selectMonth = selectMonth;
 window.addRunrateItem = addRunrateItem;
 window.deleteRunrateItem = deleteRunrateItem;
 window.editRunrateItem = editRunrateItem;
+window.updateRunrateQty = updateRunrateQty;
 window.editProjectItem = editProjectItem;
 window.deleteProjectItem = deleteProjectItem;
 window.toggleProjectDetail = toggleProjectDetail;

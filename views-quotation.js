@@ -308,6 +308,15 @@ function removeQuotationItem(idx) {
 // ADD PRODUCT WITH AUTOCOMPLETE
 // ================================================================
 
+function pickerAddToQuote(model, qty) {
+  var mi = document.getElementById('newItemModel');
+  var qi = document.getElementById('newItemQty');
+  if (mi) mi.value = model;
+  if (qi) qi.value = qty || 1;
+  if (typeof addRecentModel === 'function') addRecentModel(model);
+  addQuotationItemFromInput();
+}
+
 function addQuotationItemFromInput() {
   var modelInput = document.getElementById('newItemModel');
   var modelName = modelInput ? modelInput.value.trim() : '';
@@ -730,7 +739,8 @@ function renderEditQuotationPage(quote) {
   }
   html += '</datalist></div>';
   html += '<div class="fg" style="width:100px"><label>🔢 จำนวน</label><input type="number" id="newItemQty" class="fm-input" value="1" min="1"></div>';
-  html += '<div><button class="btn bp" onclick="addQuotationItemFromInput()" style="margin-bottom:4px;background:#22c55e">➕ เพิ่มสินค้า</button></div>';
+  html += '<div><button class="btn bp" onclick="addQuotationItemFromInput()" style="margin-bottom:4px;background:#22c55e">➕ เพิ่มสินค้า</button>' +
+    '<button class="btn bo" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToQuote})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)" style="margin-bottom:4px;margin-left:4px">📋 แคตตาล็อก</button></div>';
   html += '</div>';
   
   html += '<div id="quotationItemsContainer"></div>';

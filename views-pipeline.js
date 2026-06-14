@@ -298,8 +298,7 @@ function rPipeDet(el) {
   html += '<button class="btn bsm bs" onclick="startTimer(\'pipeline\',\'' + p.id + '\',\'' + sanitize((p.projectName || '').substr(0, 18)) + '\')">⏱️</button>';
   html += '<button class="btn bsm ' + (isPinned ? 'bw' : 'bo') + '" onclick="ST.togglePin(\'pipeline\',\'' + p.id + '\',\'' + sanitize((p.projectName || '').substr(0, 20)) + '\',\'' + (d ? d.name : '') + '\');render()">📌</button>';
   html += '<button class="btn bsm bo" onclick="copyPipeRow(\'' + p.id + '\')">📋 Row</button>';
-  html += '<button class="btn bsm bp" onclick="showUnifiedPipelineUpdate(\'' + p.id + '\')">✏️ อัพเดท</button>';
-  html += '<button class="btn bsm bo" onclick="showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">📝 แก้ไขทั้งหมด</button>';
+  html += '<button class="btn bsm bp" onclick="showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">✏️ แก้ไข</button>';
   html += '<button class="btn bsm bd" onclick="delPipe(\'' + p.id + '\')">🗑️</button>';
   html += '</span></h2>';
   

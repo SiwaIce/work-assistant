@@ -341,7 +341,7 @@ function buildPipeItemsSection(p) {
         h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
         h += '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(it.model) + '</span>';
         h += '<input type="number" min="1" value="' + (Number(it.qty) || 1) + '" onchange="pqaUpdateQty(' + ii + ', this.value)" style="width:56px" title="แก้จำนวน">';
-        h += '<span style="width:84px;text-align:right;opacity:.65;font-size:12px">฿' + fmtMoneyShort(lineTotal) + '</span>';
+        h += '<span id="pqitot_' + ii + '" style="width:84px;text-align:right;opacity:.65;font-size:12px">฿' + fmtMoneyShort(lineTotal) + '</span>';
         h += '<button class="btn bd bsm" onclick="pqaRemove(' + ii + ')" title="ลบ">🗑️</button>';
         h += '</div>';
       }
@@ -350,12 +350,18 @@ function buildPipeItemsSection(p) {
       h += '<div style="margin-top:8px;padding:10px;text-align:center;opacity:.55;font-size:13px">ยังไม่มีสินค้า — พิมพ์/กด 📋 เพื่อเพิ่ม</div>';
     }
 
+    // มูลค่ารวม (Forecast Amount) — คำนวณจากรายการ แก้ได้
+    var _grand = 0;
+    for (var gi = 0; gi < pipeItemsTemp.length; gi++) _grand += (Number(pipeItemsTemp[gi].qty) || 1) * (Number(pipeItemsTemp[gi].price) || 0);
+    h += '<div class="fg" style="margin-top:8px"><label>💰 มูลค่ารวม (Forecast Amount) ฿</label><input type="number" id="fp_fc" value="' + (_grand || (p && p.forecastAmount) || '') + '" placeholder="คำนวณจากรายการ — แก้ได้"></div>';
+
   } else {
     // Lump sum mode
     var lumpDatalistId = 'lumpModelList_' + Date.now();
     h += '<div class="fr"><div class="fg"><label>Model</label>';
     h += '<input type="text" id="fp_model_lump" list="' + lumpDatalistId + '" value="' + sanitize(p.model || (pipeItemsTemp.length ? pipeItemsTemp[0].model : '')) + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off">';
     h += buildAdminModelDatalist(lumpDatalistId);
+    h += '<button class="btn bo bsm" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerSetLump})" title="เลือกจากแคตตาล็อก" style="margin-top:4px">📋 แคตตาล็อก</button>';
     h += '</div>';
     h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
     h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
@@ -414,9 +420,21 @@ function pqaUpdateQty(idx, val) {
   if (q < 1) q = 1;
   pipeItemsTemp[idx].qty = q;
   pipeItemsTemp[idx].total = q * (Number(pipeItemsTemp[idx].price) || 0);
-  var el = document.getElementById('pipeItemsSection');
-  if (el) el.innerHTML = buildPipeItemsSection({});
+  // อัปเดตเฉพาะยอดบรรทัด + Forecast (ไม่ re-render ทั้งก้อน เพื่อไม่ให้ข้อความที่พิมพ์ค้างในช่องเพิ่มหาย)
+  var totEl = document.getElementById('pqitot_' + idx);
+  if (totEl) totEl.textContent = '฿' + fmtMoneyShort(pipeItemsTemp[idx].total);
   updatePipeFcFromItems();
+}
+function pickerSetLump(model, qty, price) {
+  var mi = document.getElementById('fp_model_lump');
+  var qi = document.getElementById('fp_qty_lump');
+  var fc = document.getElementById('fp_fc');
+  if (mi) mi.value = model;
+  if (qi) qi.value = qty || 1;
+  if (fc && price) fc.value = (qty || 1) * price;
+  if (typeof addRecentModel === 'function') addRecentModel(model);
+  toast('➕ เลือก ' + model);
+  ppFlash('✅ เลือก ' + model + ' แล้ว');
 }
 
 function updatePipeFcFromItems() {
@@ -437,6 +455,19 @@ function updatePipeFcFromItems() {
 var _ppState = { showPrice: true, onAdd: null, dealerId: '', search: '' };
 var _ppRefs = [];
 
+// แสดงข้อความยืนยันในกล่องแคตตาล็อกเอง (เห็นง่ายขณะกล่องเปิดอยู่)
+function ppFlash(msg) {
+  var ov = document.getElementById('productPickerOv');
+  if (!ov) return;
+  var f = document.getElementById('ppFlashEl');
+  if (!f) { f = document.createElement('div'); f.id = 'ppFlashEl'; ov.appendChild(f); }
+  f.textContent = msg;
+  f.setAttribute('style', 'position:absolute;top:14px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:10px;font-size:13px;z-index:100001;box-shadow:0 2px 10px rgba(0,0,0,.35);max-width:90%');
+  f.style.display = 'block';
+  clearTimeout(ppFlash._t);
+  ppFlash._t = setTimeout(function () { if (f) f.style.display = 'none'; }, 1500);
+}
+
 // callback สำหรับหน้า pipeline: ดันเข้า pipeItemsTemp
 function pickerAddToPipe(model, qty, price) {
   var total = (Number(qty) || 1) * (Number(price) || 0);
@@ -446,6 +477,7 @@ function pickerAddToPipe(model, qty, price) {
   if (el) el.innerHTML = buildPipeItemsSection({});
   updatePipeFcFromItems();
   toast('➕ เพิ่ม ' + model + ' x' + (Number(qty) || 1));
+  ppFlash('✅ เพิ่ม ' + model + ' x' + (Number(qty) || 1) + ' แล้ว');
 }
 
 // ---------- ข้อมูล "แนะนำ / เพิ่งใช้ / ขายดี" ----------
