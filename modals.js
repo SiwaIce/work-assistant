@@ -329,6 +329,7 @@ function buildPipeItemsSection(p) {
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
+    h += '<button class="btn bo bsm" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToPipe})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา/หมวดหมู่)">📋</button>';
     h += '</div>';
 
     // ส่วน Items List (เหมือนเดิม)
@@ -377,7 +378,8 @@ function pqaAdd() {
   
   var total = qty * price;
   pipeItemsTemp.push({model: model, qty: qty, price: price, total: total});
-  
+  if (typeof addRecentModel === 'function') addRecentModel(model);
+
   var el = document.getElementById('pipeItemsSection');
   if (el) el.innerHTML = buildPipeItemsSection({});
   
@@ -404,6 +406,171 @@ function updatePipeFcFromItems() {
   }
   var fcEl = document.getElementById('fp_fc');
   if (fcEl && total > 0) fcEl.value = total;
+}
+
+// ================================================================
+// PRODUCT PICKER (กล่องเลือกสินค้า) — reusable component
+// เรียก: openProductPicker({ dealerId, showPrice, onAdd(model, qty, price) })
+// client-view/forecast ใช้ตัวนี้ได้ภายหลังโดยส่ง showPrice:false
+// ================================================================
+var _ppState = { showPrice: true, onAdd: null, dealerId: '', search: '' };
+var _ppRefs = [];
+
+// callback สำหรับหน้า pipeline: ดันเข้า pipeItemsTemp
+function pickerAddToPipe(model, qty, price) {
+  var total = (Number(qty) || 1) * (Number(price) || 0);
+  pipeItemsTemp.push({ model: model, qty: Number(qty) || 1, price: Number(price) || 0, total: total });
+  addRecentModel(model);
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+  updatePipeFcFromItems();
+  toast('➕ เพิ่ม ' + model + ' x' + (Number(qty) || 1));
+}
+
+// ---------- ข้อมูล "แนะนำ / เพิ่งใช้ / ขายดี" ----------
+function getRecentModels() {
+  try { var a = JSON.parse(localStorage.getItem('v7_recent_models') || '[]'); return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }
+}
+function addRecentModel(name) {
+  if (!name) return;
+  var a = getRecentModels().filter(function (x) { return x !== name; });
+  a.unshift(name);
+  try { localStorage.setItem('v7_recent_models', JSON.stringify(a.slice(0, 8))); } catch (e) {}
+}
+function _ppCountModels(pipes) {
+  var counts = {};
+  (pipes || []).forEach(function (p) {
+    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : (p.items || []);
+    items.forEach(function (it) {
+      if (it && it.model) counts[it.model] = (counts[it.model] || 0) + (Number(it.qty) || 1);
+    });
+  });
+  return Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+}
+function getTopModels(limit) {
+  return _ppCountModels(ST.getAll('pipeline')).slice(0, limit || 6);
+}
+function getRecommendedModels(dealerId, limit) {
+  if (dealerId) {
+    var byDealer = _ppCountModels(ST.pipelineByDealer(dealerId));
+    if (byDealer.length) return byDealer.slice(0, limit || 6);
+  }
+  var rec = getRecentModels();
+  if (rec.length) return rec.slice(0, limit || 6);
+  return getTopModels(limit || 6);
+}
+
+// ---------- ราคา / ค้นหา ----------
+function ppModelPrice(model) {
+  var price = 0;
+  if (typeof window.getModelRrpExVat === 'function') price = window.getModelRrpExVat(model) || 0;
+  if (!price && typeof window.getModelPrice === 'function') price = window.getModelPrice(model) || 0;
+  return price;
+}
+function ppMatch(prod, q) {
+  if (!q) return true;
+  var name = ((prod.name || '') + ' ' + (prod.sku || '')).toLowerCase().replace(/\s+/g, '');
+  var tokens = q.toLowerCase().match(/[a-z]+|\d+/g) || [q.toLowerCase()];
+  return tokens.every(function (t) { return name.indexOf(t) !== -1; });
+}
+function ppEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+// ---------- เปิด/ปิด/render ----------
+function openProductPicker(opts) {
+  opts = opts || {};
+  _ppState.showPrice = opts.showPrice !== false;
+  _ppState.onAdd = opts.onAdd || null;
+  _ppState.dealerId = opts.dealerId ||
+    (document.getElementById('fp_dealer') ? document.getElementById('fp_dealer').value : '');
+  _ppState.search = '';
+  var ov = document.getElementById('productPickerOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'productPickerOv';
+    ov.onclick = function (e) { if (e.target === ov) closeProductPicker(); };
+    document.body.appendChild(ov);
+  }
+  ov.setAttribute('style', 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px');
+  pickerRender();
+}
+function closeProductPicker() {
+  var ov = document.getElementById('productPickerOv');
+  if (ov) ov.style.display = 'none';
+}
+function ppSearch(v) { _ppState.search = v || ''; pickerRenderList(); }
+function ppDoAdd(model, qty) {
+  if (_ppState.onAdd) _ppState.onAdd(model, Number(qty) || 1, ppModelPrice(model));
+}
+function ppPickModel(model) { ppDoAdd(model, 1); }
+function ppPick(idx) {
+  var model = _ppRefs[idx];
+  var qel = document.getElementById('ppq_' + idx);
+  ppDoAdd(model, qel ? (parseInt(qel.value, 10) || 1) : 1);
+}
+function _ppChip(model, bg, color) {
+  return '<span onclick="ppPickModel(\'' + ppEsc(model) + '\')" style="cursor:pointer;font-size:12px;background:' + bg + ';color:' + color + ';padding:5px 10px;border-radius:8px">+ ' + sanitize(model) + '</span>';
+}
+function pickerRender() {
+  var ov = document.getElementById('productPickerOv');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  var rec = getRecommendedModels(_ppState.dealerId, 6);
+  var recent = getRecentModels().slice(0, 6);
+  var chips = '';
+  if (rec.length) {
+    chips += '<div style="font-size:12px;color:#fbbf24;margin:2px 0 5px">⭐ รายการที่แนะนำ</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+    rec.forEach(function (m) { chips += _ppChip(m, '#3b2f0b', '#fbbf24'); });
+    chips += '</div>';
+  }
+  if (recent.length) {
+    chips += '<div style="font-size:12px;color:#8892b0;margin:2px 0 5px">🕘 เพิ่งใช้</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+    recent.forEach(function (m) { chips += _ppChip(m, '#1e293b', '#cbd5e1'); });
+    chips += '</div>';
+  }
+  ov.innerHTML =
+    '<div style="width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;background:#0f172a;border:1px solid #334155;border-radius:14px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1e293b">' +
+        '<span style="font-size:15px;font-weight:700;color:#e0e6f0">📦 เลือกสินค้า</span>' +
+        '<button onclick="closeProductPicker()" style="background:none;border:none;color:#8892b0;font-size:18px;cursor:pointer">✕</button>' +
+      '</div>' +
+      '<div style="padding:12px 16px;overflow-y:auto">' +
+        '<input id="ppSearch" type="text" oninput="ppSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / SKU / M350..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e0e6f0;margin-bottom:10px">' +
+        chips +
+        '<div id="ppListWrap"></div>' +
+      '</div>' +
+    '</div>';
+  pickerRenderList();
+  var s = document.getElementById('ppSearch');
+  if (s) s.focus();
+}
+function pickerRenderList() {
+  var wrap = document.getElementById('ppListWrap');
+  if (!wrap) return;
+  _ppRefs = [];
+  var all = (typeof getAllProducts === 'function') ? (getAllProducts() || []) : [];
+  var cats = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES : [{ id: 'other', name: 'อื่นๆ' }];
+  var q = _ppState.search;
+  var html = '';
+  var shown = 0;
+  cats.forEach(function (cat) {
+    var items = all.filter(function (pr) { return pr && !pr.eol && (pr.category || 'other') === cat.id && ppMatch(pr, q); });
+    if (!items.length) return;
+    html += '<div style="font-size:12px;color:#8892b0;margin:10px 0 6px">' + sanitize(cat.name) + '</div>';
+    items.forEach(function (pr) {
+      shown++;
+      var idx = _ppRefs.push(pr.name) - 1;
+      var price = _ppState.showPrice ? ppModelPrice(pr.name) : 0;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #1e293b;border-radius:8px;margin-bottom:5px">' +
+        '<span style="font-size:14px;color:#e0e6f0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(pr.name) + '</span>' +
+        ((_ppState.showPrice && price) ? '<span style="font-size:12px;color:#8892b0;white-space:nowrap">฿' + fmtMoneyShort(price) + '</span>' : '') +
+        '<input id="ppq_' + idx + '" type="number" value="1" min="1" style="width:46px;padding:4px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e0e6f0">' +
+        '<button onclick="ppPick(' + idx + ')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap">+ เพิ่ม</button>' +
+        '</div>';
+    });
+  });
+  if (!shown) html = '<div style="text-align:center;color:#8892b0;padding:24px">ไม่พบสินค้า' + (q ? ' "' + sanitize(q) + '"' : '') + '</div>';
+  wrap.innerHTML = html;
 }
 
 // ================================================================

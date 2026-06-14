@@ -2588,7 +2588,7 @@ function showUpdateModal(pipeId) {
   for (var i=0;i<editItems.length;i++) {
     itemsHtml += '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(editItems[i].model) + '" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="' + (editItems[i].qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
   }
-  itemsHtml += '</div><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button>';
+  itemsHtml += '</div><div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="btn btn-sm" onclick="addEditItemRow()">➕ เพิ่มสินค้า</button><button type="button" class="btn btn-sm" onclick="openCvPickerEdit()" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)">📋 แคตตาล็อก</button></div>';
   var biddingDateVal = p.biddingDate || '';
   var shipmentDateVal = p.shipmentDate || '';
   var forecastAmountVal = p.forecastAmount || 0;
@@ -2755,6 +2755,7 @@ function showCreateProjectModal() {
   modalHtml += '<div class="model-input"><input type="text" id="newProjItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
   modalHtml += '<div class="qty-input"><input type="number" id="newProjItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div>';
   modalHtml += '<button class="btn btn-sm" onclick="addNewProjItem()">➕ เพิ่ม</button>';
+  modalHtml += '<button class="btn btn-sm" onclick="openCvPicker(\'newProjItemModel\',\'newProjItemQty\',\'addNewProjItem\')" title="เลือกจากแคตตาล็อก">📋</button>';
   modalHtml += '</div>';
   modalHtml += '<div id="newProjItemsContainer" class="items-list" style="margin-top:8px"></div>';
   modalHtml += '</div>';
@@ -2861,6 +2862,144 @@ function getMonthSummary() {
   return summary;
 }
 function selectMonth(month) { selectedMonth = month; renderForecastTab(); }
+// ================================================================
+// PRODUCT PICKER (client-view) — ไม่แสดงราคา + แนะนำจากประวัติของ dealer รายนี้
+// เรียก: openCvPicker(modelInputId, qtyInputId, 'addFunctionName')
+// ================================================================
+var _cvpp = { modelId: '', qtyId: '', addFn: '', cb: null, search: '' };
+var _cvppRefs = [];
+
+function cvRecentKey() { return 'cv_recent_models_' + dealerId; }
+function getCvRecent() {
+  try { var a = JSON.parse(localStorage.getItem(cvRecentKey()) || '[]'); return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }
+}
+function addCvRecent(name) {
+  if (!name) return;
+  var a = getCvRecent().filter(function (x) { return x !== name; });
+  a.unshift(name);
+  try { localStorage.setItem(cvRecentKey(), JSON.stringify(a.slice(0, 8))); } catch (e) {}
+}
+function getCvRecommended(limit) {
+  var counts = {};
+  (pipelinesData || []).forEach(function (p) {
+    var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+    items.forEach(function (it) { if (it && it.model) counts[it.model] = (counts[it.model] || 0) + (Number(it.qty) || 1); });
+  });
+  var arr = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+  if (arr.length) return arr.slice(0, limit || 6);
+  return getCvRecent().slice(0, limit || 6);
+}
+function cvppMatch(pr, q) {
+  if (!q) return true;
+  var name = ((pr.name || '') + '').toLowerCase().replace(/\s+/g, '');
+  var tokens = q.toLowerCase().match(/[a-z]+|\d+/g) || [q.toLowerCase()];
+  return tokens.every(function (t) { return name.indexOf(t) !== -1; });
+}
+function cvEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+function _cvOpenOverlay() {
+  if ((!productList || !productList.length) && typeof loadModelsFromProducts === 'function') loadModelsFromProducts();
+  var ov = document.getElementById('cvPickerOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cvPickerOv';
+    ov.onclick = function (e) { if (e.target === ov) closeCvPicker(); };
+    document.body.appendChild(ov);
+  }
+  ov.setAttribute('style', 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px');
+  cvPickerRender();
+}
+function openCvPicker(modelId, qtyId, addFn) {
+  _cvpp.modelId = modelId; _cvpp.qtyId = qtyId; _cvpp.addFn = addFn; _cvpp.cb = null; _cvpp.search = '';
+  _cvOpenOverlay();
+}
+function openCvPickerEdit() {
+  _cvpp.modelId = ''; _cvpp.qtyId = ''; _cvpp.addFn = ''; _cvpp.cb = cvAppendEditRow; _cvpp.search = '';
+  _cvOpenOverlay();
+}
+function cvAppendEditRow(model, qty) {
+  var container = document.getElementById('editItemsContainer'); if (!container) return;
+  var html = '<div class="form-row edit-item-row"><input type="text" class="editItemModel" list="globalModelListEdit" value="' + esc(model) + '" placeholder="ชื่อสินค้า" style="flex:2"><input type="number" class="editItemQty" value="' + (qty || 1) + '" min="1" style="width:80px"><button type="button" class="btn btn-sm btn-danger" onclick="removeEditItemRow(this)">🗑️</button></div>';
+  container.insertAdjacentHTML('beforeend', html);
+}
+function closeCvPicker() { var ov = document.getElementById('cvPickerOv'); if (ov) ov.style.display = 'none'; }
+function cvSearch(v) { _cvpp.search = v || ''; cvPickerRenderList(); }
+function cvDoAdd(model, qty) {
+  addCvRecent(model);
+  if (typeof _cvpp.cb === 'function') { _cvpp.cb(model, qty || 1); return; }
+  var mi = document.getElementById(_cvpp.modelId);
+  var qi = document.getElementById(_cvpp.qtyId);
+  if (mi) mi.value = model;
+  if (qi) qi.value = qty || 1;
+  if (typeof window[_cvpp.addFn] === 'function') window[_cvpp.addFn]();
+}
+function cvPickModel(m) { cvDoAdd(m, 1); }
+function cvPick(idx) {
+  var m = _cvppRefs[idx];
+  var qel = document.getElementById('cvq_' + idx);
+  cvDoAdd(m, qel ? (parseInt(qel.value, 10) || 1) : 1);
+}
+function cvChip(m, bg, c) {
+  return '<span onclick="cvPickModel(\'' + cvEsc(m) + '\')" style="cursor:pointer;font-size:12px;background:' + bg + ';color:' + c + ';padding:5px 10px;border-radius:8px">+ ' + esc(m) + '</span>';
+}
+function cvPickerRender() {
+  var ov = document.getElementById('cvPickerOv'); if (!ov) return;
+  ov.style.display = 'flex';
+  var rec = getCvRecommended(6), recent = getCvRecent().slice(0, 6), chips = '';
+  if (rec.length) {
+    chips += '<div style="font-size:12px;color:#fbbf24;margin:2px 0 5px">⭐ รายการที่แนะนำ</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+    rec.forEach(function (m) { chips += cvChip(m, '#3b2f0b', '#fbbf24'); });
+    chips += '</div>';
+  }
+  if (recent.length) {
+    chips += '<div style="font-size:12px;color:#8892b0;margin:2px 0 5px">🕘 เพิ่งใช้</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+    recent.forEach(function (m) { chips += cvChip(m, '#1e293b', '#cbd5e1'); });
+    chips += '</div>';
+  }
+  ov.innerHTML =
+    '<div style="width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:14px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border,#1e293b)">' +
+        '<span style="font-size:15px;font-weight:700;color:var(--text,#e0e6f0)">📦 เลือกสินค้า</span>' +
+        '<button onclick="closeCvPicker()" style="background:none;border:none;color:var(--text2,#8892b0);font-size:18px;cursor:pointer">✕</button>' +
+      '</div>' +
+      '<div style="padding:12px 16px;overflow-y:auto">' +
+        '<input id="cvSearchInp" type="text" oninput="cvSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / M350..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--border,#334155);background:var(--bg2,#1e293b);color:var(--text,#e0e6f0);margin-bottom:10px">' +
+        chips +
+        '<div id="cvListWrap"></div>' +
+      '</div>' +
+    '</div>';
+  cvPickerRenderList();
+  var s = document.getElementById('cvSearchInp'); if (s) s.focus();
+}
+function cvPickerRenderList() {
+  var wrap = document.getElementById('cvListWrap'); if (!wrap) return;
+  _cvppRefs = [];
+  var q = _cvpp.search, html = '', shown = 0;
+  var matched = (productList || []).filter(function (pr) { return pr && cvppMatch(pr, q); });
+  function renderGroup(label, items) {
+    if (!items.length) return;
+    html += '<div style="font-size:12px;color:#8892b0;margin:10px 0 6px">' + esc(label) + '</div>';
+    items.forEach(function (pr) {
+      shown++;
+      var idx = _cvppRefs.push(pr.name) - 1;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #1e293b;border-radius:8px;margin-bottom:5px">' +
+        '<span style="font-size:14px;color:var(--text,#e0e6f0);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + esc(pr.name) + '</span>' +
+        '<input id="cvq_' + idx + '" type="number" value="1" min="1" style="width:46px;padding:4px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e0e6f0">' +
+        '<button onclick="cvPick(' + idx + ')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap">+ เพิ่ม</button>' +
+        '</div>';
+    });
+  }
+  if (typeof PRODUCT_CATEGORIES !== 'undefined' && PRODUCT_CATEGORIES.length) {
+    PRODUCT_CATEGORIES.forEach(function (cat) {
+      renderGroup(cat.name, matched.filter(function (pr) { return (pr.category || 'other') === cat.id; }));
+    });
+  } else {
+    renderGroup('สินค้า', matched);
+  }
+  if (!shown) html = '<div style="text-align:center;color:#8892b0;padding:24px">ไม่พบสินค้า' + (q ? ' "' + esc(q) + '"' : '') + '</div>';
+  wrap.innerHTML = html;
+}
+
 function addRunrateItem() {
   var model = document.getElementById('runrateModel').value.trim();
   var qty = parseInt(document.getElementById('runrateQty').value);
@@ -3220,8 +3359,8 @@ function renderForecastTab() {
     allMonths.map(function(m,i) { return '<option value="' + m + '" ' + (selectedMonth === m ? 'selected' : '') + '>' + m + '</option>'; }).join('') +
     '</select></div></div>' + statsHtml + filterHtml;
   html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px">';
-  html += '<div class="forecast-section"><div class="forecast-section-title">🏪 สินค้าทั่วไป (Run Rate)</div><div class="forecast-card"><div class="forecast-row"><div class="forecast-input-group" style="flex:2"><label>📦 ชื่อสินค้า</label><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..."></div><div class="forecast-input-group" style="width:120px"><label>🔢 จำนวน</label><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน"></div><div style="margin-top:18px"><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button></div></div><div id="runrateList" class="items-list">' + runrateHtml + '</div></div></div>';
-  html += '<div class="forecast-section"><div class="forecast-section-title">📋 โครงการ (Project-based)</div><div class="forecast-card"><div class="forecast-input-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div class="forecast-input-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="เช่น โครงการพัฒนาระบบ..."></div><div class="forecast-input-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="forecast-input-group"><label>📦 รายการสินค้า</label><div class="forecast-row"><div class="model-input"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="qty-input"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่ม</button></div><div id="newProjectItemsContainer" class="items-list" style="margin-top:8px"></div></div><div class="forecast-row" style="margin-top:12px; gap:8px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div></div>';
+  html += '<div class="forecast-section"><div class="forecast-section-title">🏪 สินค้าทั่วไป (Run Rate)</div><div class="forecast-card"><div class="forecast-row"><div class="forecast-input-group" style="flex:2"><label>📦 ชื่อสินค้า</label><input type="text" id="runrateModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..."></div><div class="forecast-input-group" style="width:120px"><label>🔢 จำนวน</label><input type="number" id="runrateQty" value="1" min="1" placeholder="จำนวน"></div><div style="margin-top:18px;display:flex;gap:6px"><button class="btn btn-primary" onclick="addRunrateItem()">➕ เพิ่ม</button><button class="btn" onclick="openCvPicker(\'runrateModel\',\'runrateQty\',\'addRunrateItem\')" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)">📋</button></div></div><div id="runrateList" class="items-list">' + runrateHtml + '</div></div></div>';
+  html += '<div class="forecast-section"><div class="forecast-section-title">📋 โครงการ (Project-based)</div><div class="forecast-card"><div class="forecast-input-group"><label>🔗 เลือกจากโครงการที่มี</label><select id="existingProjectSelect" class="form-control" onchange="loadProjectToForm()">' + existingOptions + '</select></div><div class="forecast-input-group"><label>📋 ชื่อโครงการใหม่</label><input type="text" id="newProjectName" class="form-control" placeholder="เช่น โครงการพัฒนาระบบ..."></div><div class="forecast-input-group"><label>👤 End User</label><input type="text" id="newProjectEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div><div class="forecast-input-group"><label>📦 รายการสินค้า</label><div class="forecast-row"><div class="model-input"><input type="text" id="newProjectItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div><div class="qty-input"><input type="number" id="newProjectItemQty" value="1" min="1" placeholder="จำนวน" style="width:100%"></div><button class="btn btn-sm" onclick="addProjectItem()">➕ เพิ่ม</button><button class="btn btn-sm" onclick="openCvPicker(\'newProjectItemModel\',\'newProjectItemQty\',\'addProjectItem\')" title="เลือกจากแคตตาล็อก">📋</button></div><div id="newProjectItemsContainer" class="items-list" style="margin-top:8px"></div></div><div class="forecast-row" style="margin-top:12px; gap:8px"><button class="btn btn-primary" onclick="addNewProject()">📌 เพิ่มโครงการนี้</button><button class="btn btn-warning" onclick="clearProjectForm()">🗑️ ล้างฟอร์ม</button></div></div></div>';
   html += '</div>';
   html += '<div style="margin-top:20px"><strong>📋 รายการโครงการที่เพิ่มแล้ว</strong></div>' + projectsHtml;
   html += rejectedHtml;
@@ -4475,6 +4614,12 @@ window.clearProjectForm = clearProjectForm;
 window.saveClientForecast = saveClientForecast;
 window.downloadForecastExcel = downloadForecastExcel;
 window.downloadPipelineExcel = downloadPipelineExcel;
+window.openCvPicker = openCvPicker;
+window.openCvPickerEdit = openCvPickerEdit;
+window.closeCvPicker = closeCvPicker;
+window.cvSearch = cvSearch;
+window.cvPick = cvPick;
+window.cvPickModel = cvPickModel;
 window.uploadForecastExcel = uploadForecastExcel;
 window.showUpdateModal = showUpdateModal;
 window.showPipelineDetail = showPipelineDetail;
