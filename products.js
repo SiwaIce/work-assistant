@@ -87,7 +87,22 @@ function saveProductsData(data) {
   }
   if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
     syncProductsToFirebase(data);
+    publishCatalogToClientView();
   }
+}
+
+// ✅ Publish แคตตาล็อก (ชื่อ+หมวด) ไป Firestore ให้ client-view อ่านได้ (ลูกค้าอ่าน localStorage เครื่องเซลล์ไม่ได้)
+function publishCatalogToClientView() {
+  if (typeof db === 'undefined') return;
+  try {
+    var src = (typeof getActiveProducts === 'function') ? getActiveProducts() : getAllProducts();
+    var models = (src || []).map(function(p) { return { name: p.name, category: p.category || 'other' }; });
+    if (!models.length) return;
+    db.collection('dealerUpdates').doc('__catalog__').set({
+      models: models,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(e) { console.warn('publishCatalog error:', e); });
+  } catch(e) { console.warn('publishCatalog error:', e); }
 }
 
 function syncProductsToFirebase(data) {

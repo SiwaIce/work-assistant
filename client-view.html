@@ -1488,6 +1488,25 @@ function isWarningProject(p) {
   return days !== null && days > 14 && days <= 30;
 }
 
+// ✅ โหลดแคตตาล็อกสินค้าจริงจาก Firestore (publish โดย app หลัก) — client-view อ่าน localStorage เครื่องตัวเองไม่ได้
+async function loadCatalogFromFirebase() {
+  try {
+    var doc = await db.collection('dealerUpdates').doc('__catalog__').get();
+    if (doc.exists) {
+      var m = doc.data().models;
+      if (Array.isArray(m) && m.length) {
+        productList = m;
+        allModels = m.map(function(p) { return p.name; });
+        try { localStorage.setItem('v7_products', JSON.stringify({ models: m })); } catch(e) {}
+        console.log('✅ Catalog from Firestore:', m.length);
+        return;
+      }
+    }
+  } catch(e) { console.warn('loadCatalogFromFirebase error:', e); }
+  // fallback เดิม
+  if (typeof loadModelsFromProducts === 'function') loadModelsFromProducts();
+}
+
 // โหลดสินค้าจาก Products module (หรือ fallback)
 function loadModelsFromProducts() {
   if (typeof Products !== 'undefined' && Products.getActive) {
@@ -1730,18 +1749,20 @@ async function loadAllData() {
   showNotice('🔄 กำลังโหลดข้อมูล...', false);
   
   try {
+    // โหลดเฉพาะที่จำเป็นต่อการแสดงผลก่อน (timeline โหลดเบื้องหลังทีหลัง → เร็วขึ้น)
     await Promise.all([
-      loadDealerName(), 
-      loadPipeline(), 
-      loadForecast(), 
-      loadTimeline(),
+      loadDealerName(),
+      loadPipeline(),
+      loadForecast(),
+      loadCatalogFromFirebase(),
       loadLatestConfigFromFirebase()
     ]);
-    
+
     await renderComplianceTab();
     showNotice('✅ โหลดข้อมูลเรียบร้อยแล้ว', true);
     logReadReceipt();
     listenDealerDoc();  // ✅ ฟังการเปลี่ยนแปลง tier/สถานะแบบ real-time
+    loadTimeline();     // โหลด timeline เบื้องหลัง ไม่บล็อกการแสดงผล
   } catch(err) {
     console.error('Load error:', err);
     document.getElementById('tabContent').innerHTML = `
@@ -3380,8 +3401,8 @@ function renderForecastTab() {
     rejectedHtml = '<div class="section" style="border:1px solid #ef4444; margin-top:20px; background:rgba(239,68,68,0.03)">';
     rejectedHtml += '<div class="section-title" style="color:#ef4444">❌ รายการที่ถูกปฏิเสธ</div>';
     rejectedHtml += '<div class="hint" style="margin-bottom:12px;color:#ef4444">⚠️ รายการเหล่านี้ไม่ถูกนับรวมในสรุป สามารถกด "ส่งใหม่" เพื่อขออนุมัติอีกครั้ง</div>';
-    for (var i=0;i<rejectedRunrate.length;i++) { var r = rejectedRunrate[i]; rejectedHtml += '<div class="forecast-item" style="border:1px solid #ef4444; opacity:0.8; background:rgba(239,68,68,0.05)"><div style="flex:2"><strong>' + esc(r.model) + '</strong> <span class="tag tag-cancelled" style="background:#ef4444; color:white">❌ ปฏิเสธ</span></div><div style="width:80px;text-align:center">x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="resubmitRejectedForecast(\'' + r.id + '\', \'runrate\')">🔄 ส่งใหม่</button></div>'; }
-    for (var i=0;i<rejectedProjects.length;i++) { var proj = rejectedProjects[i]; var itemsText = ''; for (var j=0;j<proj.items.length;j++) { itemsText += proj.items[j].model + ' x' + proj.items[j].qty; if (j < proj.items.length-1) itemsText += ', '; } rejectedHtml += '<div class="project-item" style="border:1px solid #ef4444; opacity:0.8; background:rgba(239,68,68,0.05)"><div class="project-name"><span>📋 ' + esc(proj.projectName) + ' <span class="tag tag-cancelled" style="background:#ef4444; color:white">❌ ปฏิเสธ</span></span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>' : '') + '<div class="project-items">📦 ' + esc(itemsText) + '</div><button class="btn btn-sm btn-warning" style="margin-top:8px" onclick="resubmitRejectedForecast(\'' + proj.id + '\', \'project\')">🔄 ส่งใหม่</button></div>'; }
+    for (var i=0;i<rejectedRunrate.length;i++) { var r = rejectedRunrate[i]; rejectedHtml += '<div class="forecast-item" style="border:1px solid #ef4444; opacity:0.8; background:rgba(239,68,68,0.05)"><div style="flex:2"><strong>' + esc(r.model) + '</strong> <span class="tag tag-cancelled" style="background:#ef4444; color:white">❌ ปฏิเสธ</span></div><div style="width:80px;text-align:center">x' + r.qty + '</div><button class="btn btn-sm btn-warning" onclick="resubmitRejectedForecast(\'' + r.id + '\', \'runrate\')">🔄 ส่งใหม่</button> <button class="btn btn-sm btn-danger" onclick="deleteRejectedForecast(\'' + r.id + '\')">🗑️ ลบ</button></div>'; }
+    for (var i=0;i<rejectedProjects.length;i++) { var proj = rejectedProjects[i]; var itemsText = ''; for (var j=0;j<proj.items.length;j++) { itemsText += proj.items[j].model + ' x' + proj.items[j].qty; if (j < proj.items.length-1) itemsText += ', '; } rejectedHtml += '<div class="project-item" style="border:1px solid #ef4444; opacity:0.8; background:rgba(239,68,68,0.05)"><div class="project-name"><span>📋 ' + esc(proj.projectName) + ' <span class="tag tag-cancelled" style="background:#ef4444; color:white">❌ ปฏิเสธ</span></span></div>' + (proj.endUser && proj.endUser !== '-' ? '<div class="project-items">👤 ' + esc(proj.endUser) + '</div>' : '') + '<div class="project-items">📦 ' + esc(itemsText) + '</div><button class="btn btn-sm btn-warning" style="margin-top:8px" onclick="resubmitRejectedForecast(\'' + proj.id + '\', \'project\')">🔄 ส่งใหม่</button> <button class="btn btn-sm btn-danger" onclick="deleteRejectedForecast(\'' + proj.id + '\')">🗑️ ลบ</button></div>'; }
     rejectedHtml += '</div>';
   }
   var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงสินค้าอัตโนมัติ) --</option>';
@@ -3462,6 +3483,7 @@ function renderUpdateHistoryList(updates) {
     if (req.updateNote) html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px">📝 <strong>ข้อความอัพเดท:</strong> ' + esc(req.updateNote) + '</div>';
     html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap"><button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
     if (status === 'pending') html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
+    if (status === 'rejected') html += '<button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ลบ</button>';
     html += '</div></div>';
   }
   html += '</div>';
@@ -3559,6 +3581,15 @@ function buildBeforeAfterForecast(oldData, newData) {
   return html;
 }
 function editUpdate(type, updateId) { if (type === 'pipeline') showUpdateModal(updateId); else showToast('🚧 ฟังก์ชันแก้ไข Forecast กำลังพัฒนา'); }
+function deleteRejectedForecast(id) {
+  if (!confirm('ลบรายการที่ถูกปฏิเสธนี้?')) return;
+  getCustomerForecastRef(dealerId, id).delete().then(function() {
+    forecastData.runrate = forecastData.runrate.filter(function(r){ return r.id !== id; });
+    forecastData.projects = forecastData.projects.filter(function(p){ return p.id !== id; });
+    showToast('🗑️ ลบรายการแล้ว');
+    renderForecastTab();
+  }).catch(function(e){ showToast('❌ ' + e.message); });
+}
 function cancelUpdate(type, dealerId, updateId) {
   if (!confirm('ยกเลิกการอัพเดทนี้? ข้อมูลจะถูกลบ')) return;
   var ref = type === 'pipeline' ? db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(updateId) : db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(updateId);
@@ -3684,8 +3715,8 @@ async function renderComplianceTab() {
   
   document.getElementById('tabContent').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div>';
   
-  // ✅ โหลด config ก่อน
-  await loadLatestConfigFromFirebase();
+  // ✅ โหลด config (ข้ามถ้ามีแล้ว — กันโหลดซ้ำทุกครั้งที่ render → เร็วขึ้น)
+  if (!localStorage.getItem('v7_config')) await loadLatestConfigFromFirebase();
   
   // ✅ บังคับโหลด pipeline และ forecast ถ้ายังไม่มี
   if (!pipelinesData || pipelinesData.length === 0) {
@@ -3718,6 +3749,7 @@ async function renderComplianceTab() {
     if (dealerDoc.exists) {
       dealer = dealerDoc.data();
       dealer.id = dealerDoc.id;
+      try { localStorage.setItem('v7_dealer_cache_' + dealerId, JSON.stringify(dealer)); } catch(e) {}
       console.log('✅ โหลด Dealer จาก Firebase สำเร็จ');
       console.log('   - demoOption:', dealer.demoOption);
       console.log('   - demoItems:', dealer.demoItems?.length || 0);
@@ -4671,6 +4703,7 @@ window.updateNewProjItemQty = updateNewProjItemQty;
 window.viewUpdateDetail = viewUpdateDetail;
 window.editUpdate = editUpdate;
 window.cancelUpdate = cancelUpdate;
+window.deleteRejectedForecast = deleteRejectedForecast;
 window.resetPipelineFilters = resetPipelineFilters;
 window.renderNewProjItemsList = renderNewProjItemsList;
 window.showCreateProjectModal = showCreateProjectModal;

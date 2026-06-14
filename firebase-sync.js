@@ -143,6 +143,9 @@ auth.onAuthStateChanged(function(user) {
     // Migrate และ sync
     migrateLocalToFirebase();
     initFirebaseListeners();
+
+    // ✅ Publish แคตตาล็อกสินค้าให้ client-view (รอ products sync ลง localStorage ก่อน)
+    setTimeout(function() { if (typeof publishCatalogToClientView === 'function') publishCatalogToClientView(); }, 5000);
     
     // รีเฟรช UI
     if (typeof render === 'function') render();
