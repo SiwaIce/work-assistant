@@ -227,7 +227,6 @@ function rToday(el) {
   tabHtml += '<div class="today-tab ' + (todayTab === 'other' ? 'act' : '') + '" onclick="todayTab=\'other\';render()">⚙️ อื่นๆ</div>';
   tabHtml += '</div>';
 
- var briefingHtml = renderDailyBriefing();
   var briefingHtml = renderDailyBriefing();
   var timelineHtml = renderUpcomingTimeline();
   var notifHtml = renderSmartNotifPanel();

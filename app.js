@@ -302,6 +302,17 @@ var kbFilter = 'all';
 var pipeFlt = 'all';
 var visitFlt = 'all';
 
+// Soft refresh: re-render หน้าเดิม + ดึงข้อมูลล่าสุด (ไม่รีโหลดทั้งหน้า ไม่เสีย state)
+function softRefresh() {
+  try {
+    if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && typeof initFirebaseListeners === 'function') {
+      initFirebaseListeners();
+    }
+  } catch (e) { console.warn('softRefresh sync error:', e); }
+  if (typeof render === 'function') render();
+  if (typeof toast === 'function') toast('🔄 รีเฟรชแล้ว');
+}
+
 function go(v, p) {
   if (!p) p = {};
   S = {view: v};

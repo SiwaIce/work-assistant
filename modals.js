@@ -329,14 +329,25 @@ function buildPipeItemsSection(p) {
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
     h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
-    h += '<button class="btn bo bsm" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToPipe})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา/หมวดหมู่)">📋</button>';
+    h += '<button class="btn bo bsm" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToPipe})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา/หมวดหมู่)">📋 แคตตาล็อก</button>';
     h += '</div>';
 
-    // ส่วน Items List (เหมือนเดิม)
+    // ส่วน Items List — แสดงรายการที่เพิ่ม + แก้จำนวน inline + ลบ
     if (pipeItemsTemp.length > 0) {
-      // ... โค้ดเดิม ...
+      h += '<div style="margin-top:8px">';
+      for (var ii = 0; ii < pipeItemsTemp.length; ii++) {
+        var it = pipeItemsTemp[ii];
+        var lineTotal = (Number(it.qty) || 1) * (Number(it.price) || 0);
+        h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
+        h += '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(it.model) + '</span>';
+        h += '<input type="number" min="1" value="' + (Number(it.qty) || 1) + '" onchange="pqaUpdateQty(' + ii + ', this.value)" style="width:56px" title="แก้จำนวน">';
+        h += '<span style="width:84px;text-align:right;opacity:.65;font-size:12px">฿' + fmtMoneyShort(lineTotal) + '</span>';
+        h += '<button class="btn bd bsm" onclick="pqaRemove(' + ii + ')" title="ลบ">🗑️</button>';
+        h += '</div>';
+      }
+      h += '</div>';
     } else {
-      // ... โค้ดเดิม ...
+      h += '<div style="margin-top:8px;padding:10px;text-align:center;opacity:.55;font-size:13px">ยังไม่มีสินค้า — พิมพ์/กด 📋 เพื่อเพิ่ม</div>';
     }
 
   } else {
@@ -393,6 +404,16 @@ function pqaAdd() {
 }
 function pqaRemove(idx) {
   pipeItemsTemp.splice(idx, 1);
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+  updatePipeFcFromItems();
+}
+function pqaUpdateQty(idx, val) {
+  if (!pipeItemsTemp[idx]) return;
+  var q = parseInt(val, 10) || 1;
+  if (q < 1) q = 1;
+  pipeItemsTemp[idx].qty = q;
+  pipeItemsTemp[idx].total = q * (Number(pipeItemsTemp[idx].price) || 0);
   var el = document.getElementById('pipeItemsSection');
   if (el) el.innerHTML = buildPipeItemsSection({});
   updatePipeFcFromItems();
