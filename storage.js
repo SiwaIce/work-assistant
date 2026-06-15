@@ -32,7 +32,15 @@ const ST = {
     quotes: 'v7_quotes',
     actions: 'v7_actions',
     config: 'v7_config',
-    backupDate: 'v7_backup'
+    backupDate: 'v7_backup',
+    products: 'v7_products',
+    quotations: 'v7_quotations_v2',
+    goalsV2: 'v7_goals_v2',
+    customerForecasts: 'v7_customer_forecasts',
+    kpiConfig: 'v7_kpiConfig',
+    kpiEntries: 'v7_kpiEntries',
+    dealerPins: 'v7_dealer_pins',
+    appearance: 'v7_appearance'
   },
 
   _get(key) {

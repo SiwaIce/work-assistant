@@ -15,32 +15,132 @@ var pipeBoardCollapsed = {};
 var forecastTab = 'pending';
 var selectedForecastUpdates = {};
 
+var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
+
 // ================================================================
 // PIPELINE LIST
 // ================================================================
 // ================================================================
 // โซน "งานที่อาจชนกัน" + modal เทียบ (Phase 3)
 // ================================================================
-function buildConflictZoneHtml(conflicts) {
+// สร้าง lookup map: pipeId → [{otherId, dealerName, score, key}]
+function buildConflictMap(conflicts) {
+  var map = {};
+  (conflicts || []).forEach(function(c) {
+    var da = ST.getOne('dealers', c.a.dealerId);
+    var db = ST.getOne('dealers', c.b.dealerId);
+    if (!map[c.a.id]) map[c.a.id] = [];
+    if (!map[c.b.id]) map[c.b.id] = [];
+    map[c.a.id].push({ otherId: c.b.id, dealerName: db ? db.name : '?', score: c.score, key: c.key });
+    map[c.b.id].push({ otherId: c.a.id, dealerName: da ? da.name : '?', score: c.score, key: c.key });
+  });
+  return map;
+}
+
+// จัดกลุ่ม conflict pairs ที่ซ้อนกันให้เป็น cluster เดียว (Union-Find)
+function buildConflictClusters(conflicts) {
+  var parent = {};
+  function find(x) {
+    if (!parent[x]) parent[x] = x;
+    if (parent[x] !== x) parent[x] = find(parent[x]);
+    return parent[x];
+  }
+  (conflicts || []).forEach(function(c) {
+    var px = find(c.a.id), py = find(c.b.id);
+    if (px !== py) parent[px] = py;
+  });
+  var pipeMap = {};
+  (conflicts || []).forEach(function(c) { pipeMap[c.a.id] = c.a; pipeMap[c.b.id] = c.b; });
+  var groups = {};
+  Object.keys(pipeMap).forEach(function(id) {
+    var root = find(id);
+    if (!groups[root]) groups[root] = [];
+    if (groups[root].indexOf(id) === -1) groups[root].push(id);
+  });
+  var clusters = [];
+  Object.keys(groups).forEach(function(root) {
+    var ids = groups[root];
+    var clPipes = ids.map(function(id) { return pipeMap[id]; });
+    var maxScore = 0;
+    var clConflicts = [];
+    (conflicts || []).forEach(function(c) {
+      if (ids.indexOf(c.a.id) !== -1 && ids.indexOf(c.b.id) !== -1) {
+        clConflicts.push(c);
+        if (c.score > maxScore) maxScore = c.score;
+      }
+    });
+    clusters.push({ pipes: clPipes, maxScore: maxScore, conflicts: clConflicts });
+  });
+  clusters.sort(function(a, b) { return b.maxScore - a.maxScore; });
+  return clusters;
+}
+
+// แสดง End User cluster view แทนแบบคู่ๆ เดิม
+function buildConflictClusterHtml(conflicts) {
   if (!conflicts || !conflicts.length) return '';
+  var clusters = buildConflictClusters(conflicts);
   var h = '<div class="card" style="border:1px solid #f59e0b;margin-bottom:10px">';
-  h += '<div style="font-weight:700;color:#f59e0b;margin-bottom:8px">⚠️ งานที่อาจชนกัน (' + conflicts.length + ')</div>';
-  conflicts.slice(0, 20).forEach(function(c) {
-    var da = ST.getOne('dealers', c.a.dealerId), db = ST.getOne('dealers', c.b.dealerId);
-    var scColor = c.score >= 80 ? '#ef4444' : '#f59e0b';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+  h += '<div style="font-weight:700;color:#f59e0b">⚠️ End User ที่มี Dealer หลายเจ้า (' + clusters.length + ' กลุ่ม)</div>';
+  h += '<span style="font-size:11px;color:var(--text2)">' + conflicts.length + ' คู่ที่อาจชนกัน</span>';
+  h += '</div>';
+  clusters.slice(0, 10).forEach(function(cluster) {
+    var scColor = cluster.maxScore >= 80 ? '#ef4444' : '#f59e0b';
+    var label = '';
+    cluster.pipes.forEach(function(p) { if (!label) label = p.endUserTH || p.endUserEN || p.projectName || ''; });
     h += '<div style="border:1px solid var(--border,#334155);border-radius:10px;padding:10px;margin-bottom:8px">';
-    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">';
-    h += '<div style="font-weight:600">' + sanitize(c.a.projectName || '-') + ' ↔ ' + sanitize(c.b.projectName || '-') + '</div>';
-    h += '<span style="background:' + scColor + '22;color:' + scColor + ';padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700">ตรงกัน ' + c.score + '%</span>';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+    h += '<div style="font-weight:600;font-size:13px">' + sanitize(label || '-') + '</div>';
+    h += '<span style="background:' + scColor + '22;color:' + scColor + ';padding:2px 10px;border-radius:8px;font-size:11px;font-weight:700">ตรงกัน ' + cluster.maxScore + '%</span>';
     h += '</div>';
-    h += '<div style="font-size:12px;color:var(--text2);margin:4px 0">🏪 ' + sanitize(da ? da.name : '?') + ' (' + getPipeName(c.a.status) + ') ↔ ' + sanitize(db ? db.name : '?') + ' (' + getPipeName(c.b.status) + ')</div>';
-    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">';
-    h += '<button class="btn bsm bp" onclick="compareConflict(\'' + c.a.id + '\',\'' + c.b.id + '\')">🔍 เทียบ</button>';
-    h += '<button class="btn bsm bo" onclick="dismissConflictPair(\'' + c.key + '\')">✓ ไม่ใช่งานเดียวกัน</button>';
+    cluster.pipes.forEach(function(p) {
+      var d = ST.getOne('dealers', p.dealerId);
+      var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
+      var modelText = items.slice(0, 2).map(function(it) { return (it.model || '') + (it.qty > 1 ? '×' + it.qty : ''); }).filter(Boolean).join(', ') || p.model || '-';
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg2,rgba(0,0,0,.15));border-radius:6px;margin-bottom:4px;flex-wrap:wrap">';
+      h += '<div style="width:8px;height:8px;border-radius:50%;background:' + scColor + ';flex-shrink:0"></div>';
+      h += '<div style="font-size:12px;font-weight:600;min-width:80px">' + sanitize(d ? d.name : '?') + '</div>';
+      h += '<div style="font-size:11px;color:var(--text2);flex:1;min-width:80px">' + sanitize(modelText.substr(0, 30)) + '</div>';
+      h += pipeTag(p.status);
+      h += '<div style="font-size:11px;color:var(--text2)">' + (p.biddingDate ? 'Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
+      h += '<div style="font-size:11px;font-weight:600">' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div>';
+      h += '</div>';
+    });
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
+    cluster.conflicts.forEach(function(c) {
+      var da2 = ST.getOne('dealers', c.a.dealerId), db2 = ST.getOne('dealers', c.b.dealerId);
+      var na = da2 ? da2.name.split(' ')[0] : '?', nb = db2 ? db2.name.split(' ')[0] : '?';
+      h += '<button class="btn bsm bp" onclick="compareConflict(\'' + c.a.id + '\',\'' + c.b.id + '\')">🔍 ' + sanitize(na) + ' ↔ ' + sanitize(nb) + '</button>';
+    });
+    h += '<button class="btn bsm bo" onclick="dismissCluster([' + cluster.conflicts.map(function(c) { return '\'' + c.key + '\''; }).join(',') + '])">✓ ไม่ใช่งานเดียวกัน</button>';
     h += '</div></div>';
   });
   h += '</div>';
   return h;
+}
+
+// Dismiss ทุก pair ในกลุ่มพร้อมกัน
+function dismissCluster(keys) {
+  if (typeof dismissConflict === 'function') keys.forEach(function(k) { dismissConflict(k); });
+  toast('✓ ทำเครื่องหมายแล้ว');
+  render();
+}
+
+// Modal แสดงรายชื่อ Dealer ที่ชนกับ pipe นี้ (กรณีชนหลายเจ้า)
+function showConflictListM(pipeId) {
+  var cList = _conflictMap[pipeId];
+  if (!cList || !cList.length) return;
+  var p = ST.getOne('pipeline', pipeId);
+  var html = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">โปรเจค: <strong>' + sanitize(p ? p.projectName : '') + '</strong> อาจชนกับ:</div>';
+  cList.forEach(function(c) {
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border,#334155);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
+    html += '<div style="flex:1;font-weight:600;font-size:13px">' + sanitize(c.dealerName) + '</div>';
+    html += '<span style="font-size:11px;background:#ef444422;color:#ef4444;padding:2px 8px;border-radius:6px;font-weight:700">' + c.score + '%</span>';
+    html += '<button class="btn bsm bp" onclick="closeM();compareConflict(\'' + pipeId + '\',\'' + c.otherId + '\')">🔍 เทียบ</button>';
+    html += '<button class="btn bsm bo" onclick="dismissConflict(\'' + c.key + '\');render();closeM()">✓ ไม่ชน</button>';
+    html += '</div>';
+  });
+  openM('⚠️ งานที่อาจชนกัน', html);
 }
 function dismissConflictPair(key) {
   if (typeof dismissConflict === 'function') dismissConflict(key);
@@ -111,6 +211,7 @@ function rPipeline(el) {
   });
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && ['prospect','tor_review','quotation','bidding','negotiation'].indexOf(p.status) !== -1; });
   var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(allPipes, 60) : [];
+  _conflictMap = buildConflictMap(conflicts);
 
   el.innerHTML = '' +
     '<div class="sr">' +
@@ -123,7 +224,7 @@ function rPipeline(el) {
     (conflicts.length ? '<div class="sc"><div class="sn c4">' + conflicts.length + '</div><div class="sl">⚠️ อาจชนกัน</div></div>' : '') +
     '</div>' +
 
-    buildConflictZoneHtml(conflicts) +
+    buildConflictClusterHtml(conflicts) +
 
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
     '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +
@@ -226,11 +327,18 @@ function renderPipeCards(pipes) {
     var amt = Number(p.forecastAmount) || 0;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
     
+    var cCard = _conflictMap[p.id];
+    var cCardTag = '';
+    if (cCard && cCard.length === 1) {
+      cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();compareConflict(\'' + p.id + '\',\'' + cCard[0].otherId + '\')">⚠️ ชน ' + sanitize((cCard[0].dealerName || '').split(' ')[0]) + '</span>';
+    } else if (cCard && cCard.length > 1) {
+      cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cCard.length + ' เจ้า</span>';
+    }
     html += '<div class="dealer-card" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
     html += '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>';
     html += '<h3 style="font-size:.78rem;margin:0">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3></div>';
     html += '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') + '</div>';
-    html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + '</div>';
+    html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + '</div>';
     html += '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.76rem;align-items:center">' + fmtMoneyStyled(amt) + '</div>';
     html += '<div class="meta" style="margin-top:2px">' + (p.model ? '📦 ' + sanitize((p.model || '').substr(0, 25)) : '') + (p.biddingDate ? ' • Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
     if (lastLog) html += '<div style="font-size:.6rem;color:#475569;margin-top:3px">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 35)) + '</div>';
@@ -285,7 +393,15 @@ function renderPipeTable(pipes) {
       nextHtml = '<div class="next-action ' + naClass + '">' + sanitize((p.nextAction || '').substr(0, 20)) +
         (p.followupDate ? ' ' + fDShort(p.followupDate) : '') + '</div>';
     }
-    
+
+    var cRow = _conflictMap[p.id];
+    var cRowTag = '';
+    if (cRow && cRow.length === 1) {
+      cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();compareConflict(\'' + p.id + '\',\'' + cRow[0].otherId + '\')">⚠️ ' + sanitize((cRow[0].dealerName || '').split(' ')[0]) + '</div>';
+    } else if (cRow && cRow.length > 1) {
+      cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cRow.length + ' เจ้า</div>';
+    }
+
     html += '<tr class="' + (isWon ? 'pipe-win' : '') + (isLost ? 'pipe-lost' : '') + '"' +
       ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
       '<td class="pipe-row-num">' + (i + 1) + '</td>' +
@@ -297,7 +413,7 @@ function renderPipeTable(pipes) {
       '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(amt) + '</td>' +
       '<td style="white-space:nowrap">' + (p.tor || '-') + '</td>' +
       '<td style="white-space:nowrap">' + (p.biddingDate ? fDShort(p.biddingDate) : '-') + ' ' + (p.biddingDate ? dlB(p.biddingDate, isWon || isLost) : '') + '</td>' +
-      '<td style="white-space:nowrap">' + pipeTag(p.status) + '</td>' +
+      '<td>' + pipeTag(p.status) + cRowTag + '</td>' +
       '<td style="max-width:140px">' + nextHtml + '</td>' +
       '<td style="white-space:nowrap"><span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></td>' +
       '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem">' +

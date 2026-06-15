@@ -3673,6 +3673,14 @@ function pipeListItem(p) {
 var noteFilter = 'all';
 var noteStatusFilter = 'active';
 var noteSearch = '';
+var noteView = 'list';
+var noteSort = 'created_desc';
+
+var _noteCatColors = ['#3b82f6','#8b5cf6','#22c55e','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16'];
+function noteCatColor(cat, cats) {
+  var idx = cats ? cats.indexOf(cat) : -1;
+  return idx !== -1 ? _noteCatColors[idx % _noteCatColors.length] : '#64748b';
+}
 
 function rKnowledge(el) {
   document.getElementById('pgT').textContent = '📚 Knowledge Base';
@@ -3681,15 +3689,9 @@ function rKnowledge(el) {
   var allNotes = [];
   try { allNotes = ST.getAll('notes'); } catch(e) { allNotes = []; }
   var notes = allNotes.slice();
-  
-  if (noteStatusFilter !== 'all') {
-    notes = notes.filter(function(n) { return (n.status || 'active') === noteStatusFilter; });
-  }
-  
-  if (noteFilter !== 'all') {
-    notes = notes.filter(function(n) { return n.category === noteFilter; });
-  }
-  
+
+  if (noteStatusFilter !== 'all') notes = notes.filter(function(n) { return (n.status || 'active') === noteStatusFilter; });
+  if (noteFilter !== 'all') notes = notes.filter(function(n) { return n.category === noteFilter; });
   if (noteSearch) {
     var q = noteSearch.toLowerCase();
     notes = notes.filter(function(n) {
@@ -3698,110 +3700,185 @@ function rKnowledge(el) {
              (n.tags || '').toLowerCase().indexOf(q) !== -1;
     });
   }
-  
   notes.sort(function(a, b) {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
+    if (noteSort === 'updated_desc') return (b.updated || b.created || '').localeCompare(a.updated || a.created || '');
+    if (noteSort === 'title_asc') return (a.title || '').localeCompare(b.title || '');
     return (b.created || '').localeCompare(a.created || '');
   });
-  
-  var catCounts = {};
-  for (var i = 0; i < allNotes.length; i++) {
-    var cat = allNotes[i].category || '📌 อื่นๆ';
-    catCounts[cat] = (catCounts[cat] || 0) + 1;
-  }
-  
+
   var statusCounts = {active: 0, expired: 0, cancelled: 0, draft: 0};
-  for (var i = 0; i < allNotes.length; i++) {
-    var st = allNotes[i].status || 'active';
+  var catCounts = {};
+  var expireSoon = 0;
+  allNotes.forEach(function(n) {
+    var st = n.status || 'active';
     statusCounts[st] = (statusCounts[st] || 0) + 1;
-  }
-  
-  var expiredNotes = allNotes.filter(function(n) {
-    return (n.status || 'active') === 'active' && n.expireDate && dTo(n.expireDate) <= 0;
-  });
-  var remindNotes = allNotes.filter(function(n) {
-    return (n.status || 'active') === 'active' && n.remindDate && dTo(n.remindDate) <= 3 && dTo(n.remindDate) >= 0;
+    var cat = n.category || '📌 อื่นๆ';
+    catCounts[cat] = (catCounts[cat] || 0) + 1;
+    if (st === 'active' && n.expireDate && dTo(n.expireDate) >= 0 && dTo(n.expireDate) <= 30) expireSoon++;
   });
 
+  var expiredNotes = allNotes.filter(function(n) { return (n.status||'active') === 'active' && n.expireDate && dTo(n.expireDate) <= 0; });
+  var remindNotes  = allNotes.filter(function(n) { return (n.status||'active') === 'active' && n.remindDate && dTo(n.remindDate) <= 3 && dTo(n.remindDate) >= 0; });
+
   var h = '';
-  
+
+  // Alert banners (compact)
   if (expiredNotes.length) {
-    h += '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⏰ Note หมดอายุ (' + expiredNotes.length + ')</h2>';
-    expiredNotes.forEach(function(n) {
-      h += '<div class="li dlo" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
-        '<div class="lm"><div class="lt">⏰ ' + sanitize(n.title) + '</div>' +
-        '<div class="ls">หมดอายุ: ' + fD(n.expireDate) + ' ' + dlB(n.expireDate, false) + '</div></div>' +
-        '<button class="btn bsm bw" onclick="event.stopPropagation();markNoteExpired(\'' + n.id + '\')">ทำเครื่องหมาย</button></div>';
-    });
-    h += '</div>';
+    h += '<div class="card" style="border-color:#ef4444;padding:8px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-weight:700;color:#ef4444;font-size:13px">⏰ Note หมดอายุ ' + expiredNotes.length + ' รายการ</span>' +
+      '<button class="btn bsm bo" onclick="noteStatusFilter=\'expired\';render()">ดูทั้งหมด</button></div>';
   }
-  
   if (remindNotes.length) {
-    h += '<div class="card" style="border-color:#f59e0b"><h2 style="color:#f59e0b">🔔 เตือน Note (' + remindNotes.length + ')</h2>';
-    remindNotes.forEach(function(n) {
-      h += '<div class="li dl3" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
-        '<div class="lm"><div class="lt">🔔 ' + sanitize(n.title) + '</div>' +
-        '<div class="ls">เตือน: ' + fD(n.remindDate) + ' ' + dlB(n.remindDate, false) + '</div></div></div>';
+    h += '<div class="card" style="border-color:#f59e0b;padding:8px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-weight:700;color:#f59e0b;font-size:13px">🔔 ใกล้ถึงกำหนดเตือน ' + remindNotes.length + ' รายการ</span>' +
+      '<button class="btn bsm bo" onclick="noteStatusFilter=\'active\';render()">ดูทั้งหมด</button></div>';
+  }
+
+  // Stats bar
+  h += '<div class="note-stat-bar">';
+  h += '<div class="note-stat"><div class="note-stat-n" style="color:var(--c1,#3b82f6)">' + allNotes.length + '</div><div class="note-stat-l">ทั้งหมด</div></div>';
+  h += '<div class="note-stat"><div class="note-stat-n" style="color:#22c55e">' + statusCounts.active + '</div><div class="note-stat-l">ใช้งาน</div></div>';
+  if (expireSoon) h += '<div class="note-stat"><div class="note-stat-n" style="color:#f59e0b">' + expireSoon + '</div><div class="note-stat-l">⏰ ใกล้หมด</div></div>';
+  if (statusCounts.draft) h += '<div class="note-stat"><div class="note-stat-n" style="color:#8b5cf6">' + statusCounts.draft + '</div><div class="note-stat-l">📝 Draft</div></div>';
+  h += '</div>';
+
+  // Toolbar
+  h += '<div class="note-toolbar">' +
+    '<input type="text" id="noteSrc" value="' + sanitize(noteSearch) + '" placeholder="🔍 ค้นหา Note..." oninput="noteSearch=this.value;render()" autocomplete="off" style="flex:1;min-width:120px">' +
+    '<select onchange="noteSort=this.value;render()" style="min-width:110px">' +
+    '<option value="created_desc"' + (noteSort==='created_desc'?' selected':'') + '>สร้างล่าสุด</option>' +
+    '<option value="updated_desc"' + (noteSort==='updated_desc'?' selected':'') + '>แก้ไขล่าสุด</option>' +
+    '<option value="title_asc"'    + (noteSort==='title_asc'?' selected':'')    + '>A-Z</option></select>' +
+    '<button class="btn bsm ' + (noteView==='list'?'bp':'bo') + '" onclick="noteView=\'list\';render()" title="List">☰</button>' +
+    '<button class="btn bsm ' + (noteView==='grid'?'bp':'bo') + '" onclick="noteView=\'grid\';render()" title="Grid">⊞</button>' +
+    '<button class="btn bp" onclick="showNoteM()">➕ เพิ่ม</button>' +
+    '</div>';
+
+  // Status filter pills
+  h += '<div class="note-cpills">' +
+    '<div class="note-cpill ' + (noteStatusFilter==='all'?'act':'') + '" onclick="noteStatusFilter=\'all\';render()">ทั้งหมด</div>' +
+    '<div class="note-cpill ' + (noteStatusFilter==='active'?'act':'') + '" onclick="noteStatusFilter=\'active\';render()">✅ ใช้งาน <span class="cpill-cnt">' + statusCounts.active + '</span></div>' +
+    '<div class="note-cpill ' + (noteStatusFilter==='expired'?'act':'') + '" onclick="noteStatusFilter=\'expired\';render()">⏰ หมดอายุ <span class="cpill-cnt">' + statusCounts.expired + '</span></div>' +
+    (statusCounts.cancelled ? '<div class="note-cpill ' + (noteStatusFilter==='cancelled'?'act':'') + '" onclick="noteStatusFilter=\'cancelled\';render()">❌ ยกเลิก <span class="cpill-cnt">' + statusCounts.cancelled + '</span></div>' : '') +
+    (statusCounts.draft ? '<div class="note-cpill ' + (noteStatusFilter==='draft'?'act':'') + '" onclick="noteStatusFilter=\'draft\';render()">📝 Draft <span class="cpill-cnt">' + statusCounts.draft + '</span></div>' : '') +
+    '</div>';
+
+  // Category filter pills
+  if (cats.length) {
+    h += '<div class="note-cpills">' +
+      '<div class="note-cpill ' + (noteFilter==='all'?'act':'') + '" onclick="noteFilter=\'all\';render()">ทุกหมวด</div>';
+    cats.forEach(function(cat) {
+      h += '<div class="note-cpill ' + (noteFilter===cat?'act':'') + '" onclick="noteFilter=\'' + cat.replace(/'/g,"\\'") + '\';render()">' + sanitize(cat) + ' <span class="cpill-cnt">' + (catCounts[cat]||0) + '</span></div>';
     });
     h += '</div>';
   }
-  
-  h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">' +
-    '<button class="btn bp" onclick="showNoteM()">➕ เพิ่ม Note</button>' +
-    '</div>';
-  
-  h += '<div style="margin-bottom:8px">' +
-    '<input type="text" id="noteSrc" value="' + sanitize(noteSearch) + '" placeholder="🔍 ค้นหา Note... (ชื่อ, เนื้อหา, Tags)" oninput="noteSearch=this.value;render()" autocomplete="off">' +
-    '</div>';
-  
-  h += '<div class="ftabs" style="margin-bottom:4px">' +
-    '<div class="ftab ' + (noteStatusFilter === 'all' ? 'act' : '') + '" onclick="noteStatusFilter=\'all\';render()">ทั้งหมด (' + allNotes.length + ')</div>' +
-    '<div class="ftab ' + (noteStatusFilter === 'active' ? 'act' : '') + '" onclick="noteStatusFilter=\'active\';render()">✅ ใช้งาน (' + statusCounts.active + ')</div>' +
-    '<div class="ftab ' + (noteStatusFilter === 'expired' ? 'act' : '') + '" onclick="noteStatusFilter=\'expired\';render()">⏰ หมดอายุ (' + statusCounts.expired + ')</div>' +
-    '<div class="ftab ' + (noteStatusFilter === 'cancelled' ? 'act' : '') + '" onclick="noteStatusFilter=\'cancelled\';render()">❌ ยกเลิก (' + statusCounts.cancelled + ')</div>' +
-    '<div class="ftab ' + (noteStatusFilter === 'draft' ? 'act' : '') + '" onclick="noteStatusFilter=\'draft\';render()">📝 Draft (' + statusCounts.draft + ')</div>' +
-    '</div>';
-  
-  h += '<div class="ftabs">' +
-    '<div class="ftab ' + (noteFilter === 'all' ? 'act' : '') + '" onclick="noteFilter=\'all\';render()">ทุกหมวด</div>';
-  cats.forEach(function(cat) {
-    h += '<div class="ftab ' + (noteFilter === cat ? 'act' : '') + '" onclick="noteFilter=\'' + cat.replace(/'/g, "\\'") + '\';render()">' + cat + ' (' + (catCounts[cat] || 0) + ')</div>';
-  });
-  h += '</div>';
-  
-  h += '<div>' + (notes.length ? notes.map(function(n) { return noteCardHTML(n); }).join('') : '<div class="empty"><div class="icon">📚</div><p>ไม่มี Note</p></div>') + '</div>';
-  
+
+  // Notes content
+  if (!notes.length) {
+    h += '<div class="empty"><div class="icon">📚</div><p>ไม่มี Note' + (noteSearch ? ' ที่ตรงกับ "' + sanitize(noteSearch) + '"' : '') + '</p></div>';
+  } else if (noteView === 'grid') {
+    h += noteGridHTML(notes, cats);
+  } else {
+    var canGroup = noteFilter === 'all' && !noteSearch && cats.length;
+    h += noteListHTML(notes, cats, canGroup);
+  }
+
+  h += '<div style="font-size:.64rem;color:#64748b;margin-top:6px">' + notes.length + ' note' + (noteSearch ? ' · ค้นหา: "' + sanitize(noteSearch) + '"' : '') + '</div>';
+
   el.innerHTML = h;
-  
   if (noteSearch) {
     var srcEl = document.getElementById('noteSrc');
     if (srcEl) { srcEl.focus(); srcEl.setSelectionRange(noteSearch.length, noteSearch.length); }
   }
 }
 
-function noteCardHTML(n) {
+function noteListHTML(notes, cats, groupByCat) {
+  if (!groupByCat) {
+    return '<div>' + notes.map(function(n) { return noteCardHTML(n, cats); }).join('') + '</div>';
+  }
+  var groups = {}, catOrder = [];
+  notes.forEach(function(n) {
+    var cat = n.category || '📌 อื่นๆ';
+    if (!groups[cat]) { groups[cat] = []; catOrder.push(cat); }
+    groups[cat].push(n);
+  });
+  var h = '';
+  catOrder.forEach(function(cat) {
+    var color = noteCatColor(cat, cats);
+    h += '<div class="note-cat-group">' +
+      '<div class="note-cat-header">' +
+        '<div class="note-cat-accent" style="background:' + color + '"></div>' +
+        '<div class="note-cat-name">' + sanitize(cat) + '</div>' +
+        '<div class="note-cat-count">' + groups[cat].length + ' note</div>' +
+      '</div>' +
+      groups[cat].map(function(n) { return noteCardHTML(n, cats); }).join('') +
+      '</div>';
+  });
+  return h;
+}
+
+function noteGridHTML(notes, cats) {
+  return '<div class="note-grid">' + notes.map(function(n) { return noteGridCardHTML(n, cats); }).join('') + '</div>';
+}
+
+function noteGridCardHTML(n, cats) {
+  if (!cats) { var cfg2 = getConfig(); cats = (cfg2 && cfg2.noteCategories) || []; }
   var status = n.status || 'active';
   var isInactive = status === 'expired' || status === 'cancelled';
-  var dealer = n.dealerId ? ST.getOne('dealers', n.dealerId) : null;
-  
-  var statusBadge = '';
-  if (status === 'expired') statusBadge = '<span class="tag tag-cancelled">⏰ หมดอายุ</span>';
-  else if (status === 'cancelled') statusBadge = '<span class="tag tag-cancelled">❌ ยกเลิก</span>';
-  else if (status === 'draft') statusBadge = '<span class="tag tag-on-hold">📝 Draft</span>';
-  
-  return '<div class="note-card ' + (n.pinned ? 'pinned' : '') + '" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})" style="' + (isInactive ? 'opacity:.5;' : '') + '">' +
-    '<h3>' + (n.pinned ? '📌 ' : '') + sanitize(n.title || 'ไม่มีชื่อ') + ' ' + statusBadge + '</h3>' +
-    '<div class="note-meta">' +
-    '<span class="note-cat-badge">' + (n.category || 'อื่นๆ') + '</span>' +
-    '<span>' + fD(n.created ? n.created.split('T')[0] : '') + '</span>' +
-    (dealer ? '<span>🏪 ' + dealer.name + '</span>' : '') +
-    (n.expireDate ? '<span>' + (dTo(n.expireDate) <= 0 ? '⏰ หมดอายุ ' : '📅 หมดอายุ ') + fDShort(n.expireDate) + '</span>' : '') +
-    (n.remindDate && dTo(n.remindDate) <= 3 && dTo(n.remindDate) >= 0 ? '<span style="color:#f59e0b">🔔 เตือน ' + fDShort(n.remindDate) + '</span>' : '') +
+  var color = noteCatColor(n.category || '📌 อื่นๆ', cats);
+  var badge = status === 'expired' ? '<span class="note-badge red">⏰ หมด</span>'
+    : status === 'cancelled' ? '<span class="note-badge red">❌</span>'
+    : status === 'draft'     ? '<span class="note-badge grey">📝</span>'
+    : (n.expireDate && dTo(n.expireDate) >= 0 && dTo(n.expireDate) <= 30) ? '<span class="note-badge warn">📅</span>'
+    : '<span class="note-badge green">✅</span>';
+  return '<div class="note-grid-card' + (n.pinned?' pinned':'') + '" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})" style="' + (isInactive?'opacity:.5;':'') + '">' +
+    '<div class="note-gc-top-bar" style="background:' + color + '"></div>' +
+    '<div style="padding:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+        '<span class="note-badge" style="background:' + color + '22;color:' + color + '">' + sanitize(n.category || '📌 อื่นๆ') + '</span>' +
+        badge +
+      '</div>' +
+      '<div class="note-gc-title">' + (n.pinned?'📌 ':'') + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
+      '<div class="note-gc-preview">' + sanitize((n.content||'').substr(0, 100)) + '</div>' +
+      '<div class="note-gc-meta">' + fDShort(n.created ? n.created.split('T')[0] : '') + '</div>' +
     '</div>' +
-    '<div class="note-preview">' + sanitize((n.content || '').substr(0, 120)) + '</div>' +
-    (n.tags ? '<div class="note-tags">' + n.tags.split(',').map(function(t) { return '<span class="note-tag">' + sanitize(t.trim()) + '</span>'; }).join('') + '</div>' : '') +
-    '</div>';
+  '</div>';
+}
+
+function noteCardHTML(n, cats) {
+  if (!cats) { var cfg2 = getConfig(); cats = (cfg2 && cfg2.noteCategories) || []; }
+  var status = n.status || 'active';
+  var isInactive = status === 'expired' || status === 'cancelled';
+  var color = noteCatColor(n.category || '📌 อื่นๆ', cats);
+  var badge = status === 'expired' ? '<span class="note-badge red">⏰ หมด</span>'
+    : status === 'cancelled' ? '<span class="note-badge red">❌ ยกเลิก</span>'
+    : status === 'draft'     ? '<span class="note-badge grey">📝 Draft</span>'
+    : (n.expireDate && dTo(n.expireDate) >= 0 && dTo(n.expireDate) <= 30) ? '<span class="note-badge warn">📅 ใกล้หมด ' + fDShort(n.expireDate) + '</span>'
+    : (n.remindDate && dTo(n.remindDate) >= 0 && dTo(n.remindDate) <= 3) ? '<span class="note-badge warn">🔔 ' + fDShort(n.remindDate) + '</span>'
+    : '';
+  var tags = n.tags ? n.tags.split(',').filter(function(t){return t.trim();}) : [];
+  return '<div class="note-list-card' + (n.pinned?' pinned':'') + '" style="' + (isInactive?'opacity:.5;':'') + '">' +
+    '<div class="note-lc-bar" style="background:' + color + '"></div>' +
+    '<div class="note-lc-body" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
+      '<div class="note-lc-top">' +
+        '<div class="note-lc-title">' + (n.pinned?'📌 ':'') + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
+        badge +
+      '</div>' +
+      '<div class="note-lc-preview">' + sanitize((n.content||'').substr(0,130)) + '</div>' +
+      '<div class="note-lc-meta">' +
+        '<span class="note-badge" style="background:' + color + '22;color:' + color + '">' + sanitize(n.category||'📌 อื่นๆ') + '</span>' +
+        '<span class="nlm-date">' + fDShort(n.created ? n.created.split('T')[0] : '') + '</span>' +
+        (tags.length ? tags.map(function(t){return '<span class="note-badge grey">#' + sanitize(t.trim()) + '</span>';}).join('') : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="note-lc-qs">' +
+      '<button class="qs-btn" onclick="event.stopPropagation();showNoteM(\'' + n.id + '\')" title="แก้ไข">✏️</button>' +
+      '<button class="qs-btn" onclick="event.stopPropagation();ST.update(\'notes\',\'' + n.id + '\',{pinned:' + (!n.pinned) + '});render()" title="' + (n.pinned?'เอาออกจากปัก':'ปักหมุด') + '">' + (n.pinned?'📌':'📍') + '</button>' +
+      '<button class="qs-btn" onclick="event.stopPropagation();if(confirm(\'ลบ Note นี้?\')){ST.delete(\'notes\',\'' + n.id + '\');render();}" title="ลบ">🗑️</button>' +
+    '</div>' +
+  '</div>';
 }
 
 function markNoteExpired(noteId) {

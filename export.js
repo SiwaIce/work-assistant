@@ -25,20 +25,17 @@ function rExports(el) {
   <div class="fr" style="margin-bottom:6px">${dpH('xt_f', addD(_td(),-7), 'จาก')}${dpH('xt_t', _td(), 'ถึง')}</div>
   <div class="bg" style="margin-bottom:6px"><button class="btn bp" onclick="xTimer()">📊 แสดง</button></div><div id="xt_area"></div></div>
 
-// เพิ่มปุ่มนี้เข้าไปใน card สำรองข้อมูล
-<div class="bg">
-  <button class="btn bp" onclick="doExportJSON()">📤 Export JSON</button>
-  <button class="btn bo" onclick="document.getElementById('impFile').click()">📥 Import JSON</button>
-  <button class="btn bo" onclick="showMergeImportM()">🔄 Merge Import (ไม่ซ้ำ)</button>
-  <button class="btn bd" onclick="doClearAll()">🗑️ ล้างทั้งหมด</button>
-</div>
-
   <div class="card"><h2>💾 สำรองข้อมูล</h2>
   <p class="hint" style="margin-bottom:6px">Backup ล่าสุด: ${ST.getLastBackup() ? fD(ST.getLastBackup()) + ' (' + ST.getDaysSinceBackup() + ' วันที่แล้ว)' : '❌ ยังไม่เคย'} • ขนาด: ${ST.getStorageSizeFormatted()}</p>
-  <div class="bg"><button class="btn bp" onclick="doExportJSON()">📤 Export JSON</button>
-  <button class="btn bo" onclick="document.getElementById('impFile').click()">📥 Import JSON</button>
+  <div class="bg" style="gap:6px;flex-wrap:wrap">
+    <button class="btn bp" onclick="doExportJSON()">📤 Export JSON</button>
+    <button class="btn bo" onclick="document.getElementById('impFile').click()">📥 Import (วางทับ)</button>
+    <button class="btn bo" onclick="showMergeImportM()">🔄 Merge Import (ไม่ซ้ำ)</button>
+    <button class="btn bd" onclick="doClearAll()">🗑️ ล้างทั้งหมด</button>
+  </div>
   <input type="file" id="impFile" accept=".json" style="display:none" onchange="doImportJSON(event)">
-  <button class="btn bd" onclick="doClearAll()">🗑️ ล้างทั้งหมด</button></div></div>`;
+  <p class="hint" style="margin-top:6px">Export JSON = สำรองครบทุกข้อมูล · Import (วางทับ) = กู้คืนทั้งหมด · Merge = เพิ่มเฉพาะข้อมูลใหม่โดยไม่ลบของเดิม</p>
+  </div>`;
 }
 
 function xRender(areaId, headers, rows, filename) {
@@ -207,228 +204,236 @@ function showMergePreview() {
 }
 
 function doMergeImport() {
-  if (!mergeData) {
-    toast('❌ กรุณาเลือกไฟล์ JSON ก่อน');
-    return;
-  }
-  
+  if (!mergeData) { toast('❌ กรุณาเลือกไฟล์ JSON ก่อน'); return; }
+
   var checked = [];
   var chks = document.querySelectorAll('#mergeTypes input:checked');
-  for (var i = 0; i < chks.length; i++) {
-    checked.push(chks[i].value);
-  }
-  
+  for (var i = 0; i < chks.length; i++) checked.push(chks[i].value);
+
   var dupAction = document.getElementById('mergeDupAction').value;
-  
+
   var results = {
-    dealers: { added: 0, skipped: 0, updated: 0 },
-    pipeline: { added: 0, skipped: 0, updated: 0 },
-    visits: { added: 0, skipped: 0, updated: 0 },
+    dealers:   { added: 0, skipped: 0, updated: 0 },
+    pipeline:  { added: 0, skipped: 0, updated: 0 },
+    pipeLog:   { added: 0, skipped: 0 },
+    visits:    { added: 0, skipped: 0, updated: 0 },
     followups: { added: 0, skipped: 0, updated: 0 },
-    feedback: { added: 0, skipped: 0, updated: 0 },
-    tasks: { added: 0, skipped: 0, updated: 0 },
-    notes: { added: 0, skipped: 0, updated: 0 }
+    feedback:  { added: 0, skipped: 0 },
+    tasks:     { added: 0, skipped: 0 },
+    notes:     { added: 0, skipped: 0 }
   };
-  
-  // 1. Import Dealers (ใช้ name เป็น key ตรวจสอบซ้ำ)
+
+  // ── สร้าง dealer ID map: old dealerId → new dealerId (จับคู่ด้วยชื่อ) ──
+  var dealerIdMap = {};
+  var existingDealers = ST.getAll('dealers');
+  var existingNameMap = {};
+  existingDealers.forEach(function(d) { existingNameMap[d.name] = d.id; });
+  if (mergeData.v7_dealers) {
+    mergeData.v7_dealers.forEach(function(od) {
+      if (od.id && od.name && existingNameMap[od.name]) dealerIdMap[od.id] = existingNameMap[od.name];
+    });
+  }
+
+  // ── 1. Dealers ──
   if (checked.indexOf('dealers') !== -1 && mergeData.v7_dealers) {
-    var existingDealers = ST.getAll('dealers');
-    var existingNames = {};
-    for (var i = 0; i < existingDealers.length; i++) {
-      existingNames[existingDealers[i].name] = existingDealers[i];
-    }
-    
     for (var i = 0; i < mergeData.v7_dealers.length; i++) {
       var newD = mergeData.v7_dealers[i];
       if (!newD.name) continue;
-      
-      var existing = existingNames[newD.name];
-      
-      if (existing) {
+      var existId = existingNameMap[newD.name];
+      if (existId) {
         if (dupAction === 'overwrite') {
-          // อัพเดทข้อมูลเดิม (เก็บ id เดิม)
-          ST.update('dealers', existing.id, newD);
+          ST.update('dealers', existId, newD);
           results.dealers.updated++;
         } else if (dupAction === 'rename') {
-          newD.name = newD.name + '_v2';
-          ST.add('dealers', newD);
+          var ren = Object.assign({}, newD); delete ren.id; ren.name += '_v2';
+          var rd = ST.add('dealers', ren);
+          dealerIdMap[newD.id] = rd.id; existingNameMap[ren.name] = rd.id;
           results.dealers.added++;
         } else {
           results.dealers.skipped++;
         }
       } else {
-        ST.add('dealers', newD);
+        var nd = Object.assign({}, newD); delete nd.id;
+        var adD = ST.add('dealers', nd);
+        dealerIdMap[newD.id] = adD.id; existingNameMap[newD.name] = adD.id;
         results.dealers.added++;
-        existingNames[newD.name] = newD;
       }
     }
   }
-  
-  // 2. Import Pipeline (ใช้ dealerName + projectName + forecastAmount ตรวจสอบซ้ำ)
+
+  // ── 2. Pipeline (fingerprint = projectName + registerDate) ──
+  var pipelineIdMap = {};
   if (checked.indexOf('pipeline') !== -1 && mergeData.v7_pipeline) {
     var existingPipes = ST.getAll('pipeline');
-    var dealersList = ST.getAll('dealers');
-    var dealerByName = {};
-    for (var i = 0; i < dealersList.length; i++) {
-      dealerByName[dealersList[i].name] = dealersList[i].id;
-    }
-    
-    // สร้าง fingerprint สำหรับ pipeline ที่มีอยู่
-    var existingFingerprints = {};
-    for (var i = 0; i < existingPipes.length; i++) {
-      var p = existingPipes[i];
-      var dealer = ST.getOne('dealers', p.dealerId);
-      var fp = (dealer ? dealer.name : '') + '|' + (p.projectName || '') + '|' + (p.forecastAmount || 0);
-      existingFingerprints[fp] = p;
-    }
-    
+    var existingPipeFP = {};
+    existingPipes.forEach(function(p) {
+      var fp = (p.projectName || '') + '|' + (p.registerDate || (p.created || '').split('T')[0]);
+      existingPipeFP[fp] = p;
+    });
     for (var i = 0; i < mergeData.v7_pipeline.length; i++) {
       var newP = mergeData.v7_pipeline[i];
-      var dealerId = dealerByName[newP.dealerName] || '';
-      
-      var fp = (newP.dealerName || '') + '|' + (newP.projectName || '') + '|' + (newP.forecastAmount || 0);
-      var existing = existingFingerprints[fp];
-      
-      if (existing) {
+      var fp = (newP.projectName || '') + '|' + (newP.registerDate || (newP.created || '').split('T')[0]);
+      var existP = existingPipeFP[fp];
+      var resolvedDid = dealerIdMap[newP.dealerId] || newP.dealerId;
+      if (existP) {
+        pipelineIdMap[newP.id] = existP.id;
         if (dupAction === 'overwrite') {
-          // อัพเดท แต่ต้อง map dealerId
-          newP.dealerId = existing.dealerId;
-          ST.update('pipeline', existing.id, newP);
+          ST.update('pipeline', existP.id, Object.assign({}, newP, { dealerId: existP.dealerId }));
           results.pipeline.updated++;
         } else {
           results.pipeline.skipped++;
         }
-      } else if (dealerId) {
-        newP.dealerId = dealerId;
-        ST.add('pipeline', newP);
+      } else if (resolvedDid) {
+        var np = Object.assign({}, newP, { dealerId: resolvedDid }); delete np.id;
+        var adP = ST.add('pipeline', np);
+        pipelineIdMap[newP.id] = adP.id;
         results.pipeline.added++;
       } else {
         results.pipeline.skipped++;
       }
     }
   }
-  
-  // 3. Import Visits (ใช้ dealerId + date ตรวจสอบซ้ำ)
+
+  // ── 3. pipeLog (import อัตโนมัติเมื่อเลือก pipeline — แมป pipeId) ──
+  if (checked.indexOf('pipeline') !== -1 && mergeData.v7_pipelog) {
+    var exLogs = ST.getAll('pipeLog');
+    var exLogSet = {};
+    exLogs.forEach(function(l) {
+      exLogSet[(l.pipeId || '') + '|' + (l.date || '') + '|' + (l.content || '').substr(0, 20)] = true;
+    });
+    for (var i = 0; i < mergeData.v7_pipelog.length; i++) {
+      var newL = mergeData.v7_pipelog[i];
+      var newPid = pipelineIdMap[newL.pipeId] || newL.pipeId;
+      var lk = newPid + '|' + (newL.date || '') + '|' + (newL.content || '').substr(0, 20);
+      if (!exLogSet[lk]) {
+        var nl = Object.assign({}, newL, { pipeId: newPid }); delete nl.id;
+        ST.add('pipeLog', nl);
+        exLogSet[lk] = true;
+        results.pipeLog.added++;
+      } else {
+        results.pipeLog.skipped++;
+      }
+    }
+  }
+
+  // ── 4. Visits (dealerId + date) ──
   if (checked.indexOf('visits') !== -1 && mergeData.v7_visits) {
-    var existingVisits = ST.getAll('visits');
-    var dealersList2 = ST.getAll('dealers');
-    var dealerByName2 = {};
-    for (var i = 0; i < dealersList2.length; i++) {
-      dealerByName2[dealersList2[i].name] = dealersList2[i].id;
-    }
-    
-    var existingVisitKeys = {};
-    for (var i = 0; i < existingVisits.length; i++) {
-      var v = existingVisits[i];
-      existingVisitKeys[v.dealerId + '|' + v.date] = v;
-    }
-    
+    var exVisits = ST.getAll('visits');
+    var exVSet = {};
+    exVisits.forEach(function(v) { exVSet[(v.dealerId || '') + '|' + (v.date || '')] = v; });
     for (var i = 0; i < mergeData.v7_visits.length; i++) {
       var newV = mergeData.v7_visits[i];
-      var dealerId = dealerByName2[newV.dealerName] || '';
-      var key = dealerId + '|' + newV.date;
-      
-      if (existingVisitKeys[key]) {
+      var vid = dealerIdMap[newV.dealerId] || newV.dealerId;
+      var vk = (vid || '') + '|' + (newV.date || '');
+      if (exVSet[vk]) {
         if (dupAction === 'overwrite') {
-          newV.dealerId = dealerId;
-          ST.update('visits', existingVisitKeys[key].id, newV);
+          ST.update('visits', exVSet[vk].id, Object.assign({}, newV, { dealerId: vid }));
           results.visits.updated++;
-        } else {
-          results.visits.skipped++;
-        }
-      } else if (dealerId) {
-        newV.dealerId = dealerId;
-        ST.add('visits', newV);
+        } else { results.visits.skipped++; }
+      } else if (vid) {
+        var nv = Object.assign({}, newV, { dealerId: vid }); delete nv.id;
+        ST.add('visits', nv);
         results.visits.added++;
-      } else {
-        results.visits.skipped++;
-      }
+      } else { results.visits.skipped++; }
     }
   }
-  
-  // 4. Import Follow-ups (ใช้ dealerId + date ตรวจสอบซ้ำ)
+
+  // ── 5. Follow-ups (dealerId + date) ──
   if (checked.indexOf('followups') !== -1 && mergeData.v7_followups) {
-    var existingFUs = ST.getAll('followups');
-    var dealersList3 = ST.getAll('dealers');
-    var dealerByName3 = {};
-    for (var i = 0; i < dealersList3.length; i++) {
-      dealerByName3[dealersList3[i].name] = dealersList3[i].id;
-    }
-    
-    var existingFUKeys = {};
-    for (var i = 0; i < existingFUs.length; i++) {
-      var fu = existingFUs[i];
-      existingFUKeys[fu.dealerId + '|' + fu.date] = fu;
-    }
-    
+    var exFUs = ST.getAll('followups');
+    var exFUSet = {};
+    exFUs.forEach(function(fu) { exFUSet[(fu.dealerId || '') + '|' + (fu.date || '')] = fu; });
     for (var i = 0; i < mergeData.v7_followups.length; i++) {
-      var newF = mergeData.v7_followups[i];
-      var dealerId = dealerByName3[newF.dealerName] || '';
-      var key = dealerId + '|' + newF.date;
-      
-      if (!existingFUKeys[key] && dealerId) {
-        newF.dealerId = dealerId;
-        ST.add('followups', newF);
+      var newFu = mergeData.v7_followups[i];
+      var fuid = dealerIdMap[newFu.dealerId] || newFu.dealerId;
+      var fuk = (fuid || '') + '|' + (newFu.date || '');
+      if (exFUSet[fuk]) {
+        if (dupAction === 'overwrite') {
+          ST.update('followups', exFUSet[fuk].id, Object.assign({}, newFu, { dealerId: fuid }));
+          results.followups.updated++;
+        } else { results.followups.skipped++; }
+      } else if (fuid) {
+        var nfu = Object.assign({}, newFu, { dealerId: fuid }); delete nfu.id;
+        ST.add('followups', nfu);
         results.followups.added++;
-      } else {
-        results.followups.skipped++;
-      }
+      } else { results.followups.skipped++; }
     }
   }
-  
-  // 5. Import Feedback (ใช้ dealerId + text + date ตรวจสอบคร่าว)
+
+  // ── 6. Feedback (dealerId + text 30 ตัวแรก) ──
   if (checked.indexOf('feedback') !== -1 && mergeData.v7_feedback) {
-    var existingFB = ST.getAll('feedback');
-    var dealersList4 = ST.getAll('dealers');
-    var dealerByName4 = {};
-    for (var i = 0; i < dealersList4.length; i++) {
-      dealerByName4[dealersList4[i].name] = dealersList4[i].id;
-    }
-    
+    var exFB = ST.getAll('feedback');
+    var exFBSet = {};
+    exFB.forEach(function(f) { exFBSet[(f.dealerId || '') + '|' + (f.text || '').substr(0, 30)] = true; });
     for (var i = 0; i < mergeData.v7_feedback.length; i++) {
       var newFb = mergeData.v7_feedback[i];
-      var dealerId = dealerByName4[newFb.dealerName] || '';
-      
-      if (dealerId) {
-        newFb.dealerId = dealerId;
-        ST.add('feedback', newFb);
+      var fbid = dealerIdMap[newFb.dealerId] || newFb.dealerId;
+      var fbk = (fbid || '') + '|' + (newFb.text || '').substr(0, 30);
+      if (!exFBSet[fbk] && fbid) {
+        var nfb = Object.assign({}, newFb, { dealerId: fbid }); delete nfb.id;
+        ST.add('feedback', nfb);
+        exFBSet[fbk] = true;
         results.feedback.added++;
-      } else {
-        results.feedback.skipped++;
-      }
+      } else { results.feedback.skipped++; }
     }
   }
-  
-  // 6. Import Tasks (ใช้ title ตรวจสอบซ้ำ)
+
+  // ── 7. Tasks (title) ──
   if (checked.indexOf('tasks') !== -1 && mergeData.v7_tasks) {
-    var existingTasks = ST.getAll('tasks');
-    var existingTaskTitles = {};
-    for (var i = 0; i < existingTasks.length; i++) {
-      existingTaskTitles[existingTasks[i].title] = existingTasks[i];
-    }
-    
+    var exTasks = ST.getAll('tasks');
+    var exTaskT = {};
+    exTasks.forEach(function(t) { exTaskT[t.title || ''] = true; });
     for (var i = 0; i < mergeData.v7_tasks.length; i++) {
       var newT = mergeData.v7_tasks[i];
-      if (!existingTaskTitles[newT.title]) {
-        ST.add('tasks', newT);
+      if (!exTaskT[newT.title || '']) {
+        var nt = Object.assign({}, newT); delete nt.id;
+        ST.add('tasks', nt);
         results.tasks.added++;
-      } else {
-        results.tasks.skipped++;
-      }
+      } else { results.tasks.skipped++; }
     }
   }
-  
-  // สรุปผล
-  var summary = '✅ Import เสร็จสิ้น!\n\n';
-  if (results.dealers.added || results.dealers.updated) summary += '🏪 Dealer: +' + results.dealers.added + ' ราย' + (results.dealers.updated ? ' (อัพเดท ' + results.dealers.updated + ')' : '') + (results.dealers.skipped ? ' (ข้าม ' + results.dealers.skipped + ' ซ้ำ)' : '') + '\n';
-  if (results.pipeline.added) summary += '📊 Pipeline: +' + results.pipeline.added + ' ราย' + (results.pipeline.skipped ? ' (ข้าม ' + results.pipeline.skipped + ' ซ้ำ)' : '') + '\n';
-  if (results.visits.added) summary += '🤝 Visit: +' + results.visits.added + ' ราย\n';
-  if (results.followups.added) summary += '📞 Follow-up: +' + results.followups.added + ' ราย\n';
-  if (results.feedback.added) summary += '💡 Feedback: +' + results.feedback.added + ' ราย\n';
-  if (results.tasks.added) summary += '📋 Task: +' + results.tasks.added + ' ราย\n';
-  
-  alert(summary);
-  toast('📥 Import เสร็จ! ' + (results.dealers.added + results.pipeline.added + results.visits.added) + ' รายการใหม่');
+
+  // ── 8. Notes (dealerId + text 30 ตัวแรก) ──
+  if (checked.indexOf('notes') !== -1 && mergeData.v7_notes) {
+    var exNotes = ST.getAll('notes');
+    var exNoteSet = {};
+    exNotes.forEach(function(n) { exNoteSet[(n.dealerId || '') + '|' + (n.text || '').substr(0, 30)] = true; });
+    for (var i = 0; i < mergeData.v7_notes.length; i++) {
+      var newN = mergeData.v7_notes[i];
+      var nid = newN.dealerId ? (dealerIdMap[newN.dealerId] || newN.dealerId) : '';
+      var nk = nid + '|' + (newN.text || '').substr(0, 30);
+      if (!exNoteSet[nk]) {
+        var nn = Object.assign({}, newN, { dealerId: nid || newN.dealerId }); delete nn.id;
+        ST.add('notes', nn);
+        exNoteSet[nk] = true;
+        results.notes.added++;
+      } else { results.notes.skipped++; }
+    }
+  }
+
+  // ── สรุปผล ──
+  var totalAdded = 0;
+  function rLine(icon, key, label) {
+    var r = results[key]; if (!r) return '';
+    totalAdded += r.added;
+    if (!r.added && !r.updated && !r.skipped) return '';
+    var s = icon + ' ' + label + ': +' + r.added;
+    if (r.updated) s += ' (อัพเดท ' + r.updated + ')';
+    if (r.skipped) s += ' (ข้าม ' + r.skipped + ' ซ้ำ)';
+    return s;
+  }
+  var lines = ['✅ Merge Import เสร็จสิ้น!\n',
+    rLine('🏪', 'dealers',   'Dealer'),
+    rLine('📊', 'pipeline',  'Pipeline'),
+    rLine('📝', 'pipeLog',   'Pipeline History'),
+    rLine('🤝', 'visits',    'Visit'),
+    rLine('📞', 'followups', 'Follow-up'),
+    rLine('💡', 'feedback',  'Feedback'),
+    rLine('📋', 'tasks',     'Task'),
+    rLine('📚', 'notes',     'Note')
+  ].filter(Boolean);
+  alert(lines.join('\n'));
+  toast('📥 Import เสร็จ! ' + totalAdded + ' รายการใหม่');
   closeMForce();
   mergeData = null;
   render();
