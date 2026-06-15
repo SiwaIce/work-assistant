@@ -335,15 +335,17 @@ function buildPipeItemsSection(p) {
     h += '</div>';
 
     // ส่วน Items List — แสดงรายการที่เพิ่ม + แก้จำนวน inline + ลบ
+    var itemModelListId = 'pipeItemModelList_' + Date.now();
+    h += buildAdminModelDatalist(itemModelListId);
     if (pipeItemsTemp.length > 0) {
       h += '<div style="margin-top:8px">';
       for (var ii = 0; ii < pipeItemsTemp.length; ii++) {
         var it = pipeItemsTemp[ii];
         var lineTotal = (Number(it.qty) || 1) * (Number(it.price) || 0);
-        h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
-        h += '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(it.model) + '</span>';
+        h += '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
+        h += '<input type="text" list="' + itemModelListId + '" value="' + sanitize(it.model) + '" onchange="pqaUpdateModel(' + ii + ', this.value)" style="flex:1;min-width:0;font-size:.82rem" title="แก้สินค้า" autocomplete="off">';
         h += '<input type="number" min="1" value="' + (Number(it.qty) || 1) + '" onchange="pqaUpdateQty(' + ii + ', this.value)" style="width:56px" title="แก้จำนวน">';
-        h += '<span id="pqitot_' + ii + '" style="width:84px;text-align:right;opacity:.65;font-size:12px">฿' + fmtMoneyShort(lineTotal) + '</span>';
+        h += '<span id="pqitot_' + ii + '" style="width:84px;text-align:right;opacity:.65;font-size:12px;flex-shrink:0">฿' + fmtMoneyShort(lineTotal) + '</span>';
         h += '<button class="btn bd bsm" onclick="pqaRemove(' + ii + ')" title="ลบ">🗑️</button>';
         h += '</div>';
       }
@@ -422,7 +424,20 @@ function pqaUpdateQty(idx, val) {
   if (q < 1) q = 1;
   pipeItemsTemp[idx].qty = q;
   pipeItemsTemp[idx].total = q * (Number(pipeItemsTemp[idx].price) || 0);
-  // อัปเดตเฉพาะยอดบรรทัด + Forecast (ไม่ re-render ทั้งก้อน เพื่อไม่ให้ข้อความที่พิมพ์ค้างในช่องเพิ่มหาย)
+  var totEl = document.getElementById('pqitot_' + idx);
+  if (totEl) totEl.textContent = '฿' + fmtMoneyShort(pipeItemsTemp[idx].total);
+  updatePipeFcFromItems();
+}
+function pqaUpdateModel(idx, newModel) {
+  if (!pipeItemsTemp[idx]) return;
+  newModel = newModel.trim();
+  if (!newModel) return;
+  pipeItemsTemp[idx].model = newModel;
+  var newPrice = 0;
+  if (typeof window.getModelRrpExVat === 'function') newPrice = window.getModelRrpExVat(newModel);
+  if (!newPrice && typeof window.getModelPrice === 'function') newPrice = window.getModelPrice(newModel);
+  if (newPrice > 0) pipeItemsTemp[idx].price = newPrice;
+  pipeItemsTemp[idx].total = (Number(pipeItemsTemp[idx].qty) || 1) * (Number(pipeItemsTemp[idx].price) || 0);
   var totEl = document.getElementById('pqitot_' + idx);
   if (totEl) totEl.textContent = '฿' + fmtMoneyShort(pipeItemsTemp[idx].total);
   updatePipeFcFromItems();

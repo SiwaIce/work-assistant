@@ -248,13 +248,19 @@ function recalculateQuotationTotal() {
 function renderQuotationItemsTable() {
   var container = document.getElementById('quotationItemsContainer');
   if (!container) return;
-  
+
   if (quotationItems.length === 0) {
     container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center"><div class="empty-state-icon">📦</div><p>ยังไม่มีสินค้า — เลือกสินค้าด้านล่าง แล้วกด ➕ เพิ่ม</p></div>';
     return;
   }
-  
-  var html = '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
+
+  var dlId = 'quoteItemNameList';
+  var prods = ST.getAll('products');
+  var dlHtml = '<datalist id="' + dlId + '">';
+  for (var pi = 0; pi < prods.length; pi++) dlHtml += '<option value="' + sanitize(prods[pi].name) + '">';
+  dlHtml += '</datalist>';
+
+  var html = dlHtml + '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
   html += '<thead><tr>';
   html += '<th style="width:40px">#</th>';
   html += '<th>SKU</th>';
@@ -264,13 +270,13 @@ function renderQuotationItemsTable() {
   html += '<th style="width:120px;text-align:right">รวม</th>';
   html += '<th style="width:50px"></th>';
   html += '</tr></thead><tbody>';
-  
+
   for (var i = 0; i < quotationItems.length; i++) {
     var item = quotationItems[i];
     html += '<tr>';
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
-    html += '<td style="font-size:11px">' + sanitize(item.sku || '-') + '</td>';
-    html += '<td><strong>' + sanitize(item.name) + '</strong></td>';
+    html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + sanitize(item.sku || '-') + '</td>';
+    html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)"></td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + (item.quantity || 1) + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="number" class="quote-item-price" data-idx="' + i + '" value="' + (item.unitPrice || 0) + '" min="0" step="0.01" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
@@ -294,6 +300,28 @@ function updateQuotationItemPrice(idx, price) {
   price = parseFloat(price) || 0;
   quotationItems[idx].unitPrice = price;
   quotationItems[idx].amount = (quotationItems[idx].quantity || 1) * price;
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+}
+
+function updateQuotationItemName(idx, newName) {
+  newName = newName.trim();
+  if (!newName || !quotationItems[idx]) return;
+  quotationItems[idx].name = newName;
+  var prods = ST.getAll('products');
+  var found = prods.find(function(p) { return p.name === newName; });
+  if (found) {
+    if (found.sku) quotationItems[idx].sku = found.sku;
+    var selectedLevel = document.getElementById('editQuoteLevel');
+    var level = selectedLevel ? selectedLevel.value : null;
+    var newPrice = level && typeof getModelPriceByLevelForQuote === 'function'
+      ? getModelPriceByLevelForQuote(newName, level)
+      : (found.rrpExVat || found.price || 0);
+    if (newPrice > 0) {
+      quotationItems[idx].unitPrice = newPrice;
+      quotationItems[idx].amount = (quotationItems[idx].quantity || 1) * newPrice;
+    }
+  }
   renderQuotationItemsTable();
   recalculateQuotationTotal();
 }
