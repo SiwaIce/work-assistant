@@ -82,11 +82,74 @@ function rAdmin(el) {
     initNewDemoPolicies();
   }, 100);
 
-  el.innerHTML = '' +
-    // Data Overview
-    '<div class="card"><h2>💾 ข้อมูลในระบบ (' + ST.getStorageSizeFormatted() + ')</h2>' +
-    '<div class="sr">' + countCards + '</div></div>' +
-// Appearance
+  var activeAdminTab = localStorage.getItem('v7_admin_tab') || 'general';
+  function aTab(id) { return id === activeAdminTab ? ' act' : ''; }
+
+  el.innerHTML =
+    '<div class="admin-tabs">' +
+    '<div class="admin-tab' + aTab('general') + '" onclick="switchAdminTab(\'general\')">👤 ทั่วไป</div>' +
+    '<div class="admin-tab' + aTab('appearance') + '" onclick="switchAdminTab(\'appearance\')">🎨 หน้าตา</div>' +
+    '<div class="admin-tab' + aTab('data') + '" onclick="switchAdminTab(\'data\')">📋 ข้อมูล</div>' +
+    '<div class="admin-tab' + aTab('connect') + '" onclick="switchAdminTab(\'connect\')">☁️ เชื่อมต่อ</div>' +
+    '<div class="admin-tab' + aTab('advanced') + '" onclick="switchAdminTab(\'advanced\')">⚙️ ขั้นสูง</div>' +
+    '</div>' +
+
+    // ===== TAB: ทั่วไป =====
+    '<div class="admin-tab-pane' + aTab('general') + '" id="atp-general">' +
+
+    // Profile
+    '<div class="card"><h2>👤 Profile</h2>' +
+    '<div class="admin-row"><label>ชื่อ Sale</label>' +
+    '<input type="text" id="adm_name" value="' + sanitize(cfg.saleName) + '"></div>' +
+    '<button class="btn bp bsm" onclick="admSaveName()">💾 บันทึก</button></div>' +
+
+    // KPI Settings
+    '<div class="card"><h2>🎯 KPI Settings</h2>' +
+    '<div class="admin-row"><label>Follow-up / สัปดาห์</label>' +
+    '<input type="number" id="adm_kpi_fu" value="' + cfg.kpi.followupPerWeek + '" min="0"></div>' +
+    '<div class="admin-row"><label>Visit / สัปดาห์</label>' +
+    '<input type="number" id="adm_kpi_vs" value="' + cfg.kpi.visitPerWeek + '" min="0"></div>' +
+    '<button class="btn bp bsm" onclick="admSaveKPI()">💾 บันทึก</button></div>' +
+
+    // H1 Period Setting
+    '<div class="card"><h2>📅 H1 Period Setting</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย)</p>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h1_start_month" class="fm-input">' +
+    '<option value="0"' + (cfg.h1Period?.startMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
+    '<option value="1"' + (cfg.h1Period?.startMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
+    '<option value="2"' + (cfg.h1Period?.startMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
+    '<option value="3"' + (cfg.h1Period?.startMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
+    '<option value="4"' + (cfg.h1Period?.startMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
+    '<option value="5"' + (cfg.h1Period?.startMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h1_start_day" class="fm-input" value="' + (cfg.h1Period?.startDay || 1) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h1_end_month" class="fm-input">' +
+    '<option value="0"' + (cfg.h1Period?.endMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
+    '<option value="1"' + (cfg.h1Period?.endMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
+    '<option value="2"' + (cfg.h1Period?.endMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
+    '<option value="3"' + (cfg.h1Period?.endMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
+    '<option value="4"' + (cfg.h1Period?.endMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
+    '<option value="5"' + (cfg.h1Period?.endMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h1_end_day" class="fm-input" value="' + (cfg.h1Period?.endDay || 30) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<button class="btn bp bsm" onclick="saveH1Period()">💾 บันทึก Period</button></div>' +
+
+    // Notification
+    '<div class="card"><h2>🔔 Browser Notification</h2>' +
+    '<button class="btn bs" onclick="admReqNotif()">🔔 เปิดการแจ้งเตือน</button>' +
+    '<div style="margin-top:4px;font-size:.68rem;color:#64748b" id="adm_nf_status"></div></div>' +
+
+    // Quick Links
+    quickLinks +
+
+    '</div>' + // end tab general
+
+    // ===== TAB: หน้าตา =====
+    '<div class="admin-tab-pane' + aTab('appearance') + '" id="atp-appearance">' +
     '<div class="card"><h2>🎨 Appearance</h2>' +
     '<div class="appearance-grid">' +
     
@@ -157,19 +220,10 @@ function rAdmin(el) {
     '<div class="li" style="margin-top:6px"><div class="lm"><div class="lt">ตัวอย่าง List Item</div><div class="ls">รายละเอียดเพิ่มเติม</div></div></div>' +
     '</div></div>' +
 
-    // Profile
-    '<div class="card"><h2>👤 Profile</h2>' +
-    '<div class="admin-row"><label>ชื่อ Sale</label>' +
-    '<input type="text" id="adm_name" value="' + sanitize(cfg.saleName) + '"></div>' +
-    '<button class="btn bp bsm" onclick="admSaveName()">💾 บันทึก</button></div>' +
+    '</div>' + // end tab appearance
 
-    // KPI Settings
-    '<div class="card"><h2>🎯 KPI Settings</h2>' +
-    '<div class="admin-row"><label>Follow-up / สัปดาห์</label>' +
-    '<input type="number" id="adm_kpi_fu" value="' + cfg.kpi.followupPerWeek + '" min="0"></div>' +
-    '<div class="admin-row"><label>Visit / สัปดาห์</label>' +
-    '<input type="number" id="adm_kpi_vs" value="' + cfg.kpi.visitPerWeek + '" min="0"></div>' +
-    '<button class="btn bp bsm" onclick="admSaveKPI()">💾 บันทึก</button></div>' +
+    // ===== TAB: ข้อมูล =====
+    '<div class="admin-tab-pane' + aTab('data') + '" id="atp-data">' +
 
     // Pipeline Statuses
     '<div class="card"><h2>📊 Pipeline Status</h2>' +
@@ -219,46 +273,11 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="resetNewDemoPolicies()">↻ Reset ค่าเริ่มต้น</button>' +
     '</div></div>' +
 
-    // H1 Period Setting
-    '<div class="card"><h2>📅 H1 Period Setting</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย)</p>' +
-    '<div class="fr">' +
-    '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h1_start_month" class="fm-input">' +
-    '<option value="0"' + (cfg.h1Period?.startMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
-    '<option value="1"' + (cfg.h1Period?.startMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
-    '<option value="2"' + (cfg.h1Period?.startMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
-    '<option value="3"' + (cfg.h1Period?.startMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
-    '<option value="4"' + (cfg.h1Period?.startMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
-    '<option value="5"' + (cfg.h1Period?.startMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
-    '</select></div>' +
-    '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h1_start_day" class="fm-input" value="' + (cfg.h1Period?.startDay || 1) + '" min="1" max="31"></div>' +
-    '</div>' +
-    '<div class="fr">' +
-    '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h1_end_month" class="fm-input">' +
-    '<option value="0"' + (cfg.h1Period?.endMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
-    '<option value="1"' + (cfg.h1Period?.endMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
-    '<option value="2"' + (cfg.h1Period?.endMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
-    '<option value="3"' + (cfg.h1Period?.endMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
-    '<option value="4"' + (cfg.h1Period?.endMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
-    '<option value="5"' + (cfg.h1Period?.endMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
-    '</select></div>' +
-    '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h1_end_day" class="fm-input" value="' + (cfg.h1Period?.endDay || 30) + '" min="1" max="31"></div>' +
-    '</div>' +
-    '<button class="btn bp bsm" onclick="saveH1Period()">💾 บันทึก Period</button></div>' +
-
     // Unit Types
     '<div class="card"><h2>🏢 Unit Types</h2>' +
     '<textarea id="adm_units" rows="4" style="font-size:.72rem">' + cfg.unitTypes.join('\n') + '</textarea>' +
     '<button class="btn bp bsm" style="margin-top:4px" onclick="admSaveUnits()">💾 บันทึก</button></div>' +
 
-    // Email Recipients
-    '<div class="card"><h2>📧 Email Recipients</h2>' +
-    '<div class="fg"><label>Visit Plan</label>' +
-    '<input type="text" id="adm_em_vp" value="' + cfg.emailRecipients.visitPlan.join(', ') + '"></div>' +
-    '<div class="fg"><label>Online Plan</label>' +
-    '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
-    '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
-    
     // DJI Dealer Types
     '<div class="card"><h2>🏪 DJI Dealer Types</h2>' +
     '<textarea id="adm_djitypes" rows="3" style="font-size:.72rem">' + (cfg.djiDealerTypes || []).join('\n') + '</textarea>' +
@@ -289,22 +308,10 @@ function rAdmin(el) {
     '<div style="font-size:.62rem;color:#64748b;margin:3px 0">แต่ละบรรทัด = 1 รายการ (Reset ทุกต้นเดือน)</div>' +
     '<button class="btn bp bsm" onclick="admSaveMonthly()">💾 บันทึก</button></div>' +
 
-    // External Links
-    '<div class="card"><h2>🔗 External Links</h2>' +
-    '<p style="font-size:.68rem;color:#64748b;margin-bottom:6px">Pricelist, Stock Check, เครื่องมือภายนอก</p>' +
-    '<div id="adm_links">' + linkRows + '</div>' +
-    '<div style="display:flex;gap:3px;margin-top:4px">' +
-    '<input type="text" id="lk_new_n" placeholder="ชื่อ" style="width:80px">' +
-    '<input type="url" id="lk_new_u" placeholder="https://..." style="flex:1">' +
-    '<button class="btn bsm bp" onclick="admAddLink()">➕</button></div>' +
-    '<button class="btn bp bsm" style="margin-top:6px" onclick="admSaveLinks()">💾 บันทึกทั้งหมด</button></div>' +
-
-    quickLinks +
-
     // Onboarding Steps Template
     '<div class="card"><h2>🔄 Onboarding Steps Template</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:6px">ขั้นตอน Onboard Dealer ใหม่ — ใช้เป็น Template สำหรับทุก Dealer</p>' +
-    '<textarea id="adm_onboard" rows="10" style="font-size:.72rem">' + 
+    '<textarea id="adm_onboard" rows="10" style="font-size:.72rem">' +
     (cfg.onboardingSteps || []).map(function(s) { return s.title + '|' + (s.group || 'onboard'); }).join('\n') +
     '</textarea>' +
     '<div style="font-size:.62rem;color:var(--text3);margin:3px 0">แต่ละบรรทัด: ชื่อขั้นตอน|กลุ่ม (onboard หรือ after)</div>' +
@@ -322,10 +329,10 @@ function rAdmin(el) {
     '<button class="btn bp bsm" style="margin-bottom:6px" onclick="showTemplateM()">➕ สร้าง</button>' +
     tplRows + '</div>' +
 
-    // Notification
-    '<div class="card"><h2>🔔 Browser Notification</h2>' +
-    '<button class="btn bs" onclick="admReqNotif()">🔔 เปิดการแจ้งเตือน</button>' +
-    '<div style="margin-top:4px;font-size:.68rem;color:#64748b" id="adm_nf_status"></div></div>' +
+    '</div>' + // end tab data
+
+    // ===== TAB: เชื่อมต่อ =====
+    '<div class="admin-tab-pane' + aTab('connect') + '" id="atp-connect">' +
 
     // Cloud Sync
     '<div class="card"><h2>☁️ Cloud Sync</h2>' +
@@ -365,27 +372,67 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="copyGMLink()">🔗 Copy GM Link</button>' +
     '</div></div>' +
 
+    // Email Recipients
+    '<div class="card"><h2>📧 Email Recipients</h2>' +
+    '<div class="fg"><label>Visit Plan</label>' +
+    '<input type="text" id="adm_em_vp" value="' + cfg.emailRecipients.visitPlan.join(', ') + '"></div>' +
+    '<div class="fg"><label>Online Plan</label>' +
+    '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
+    '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
+
+    // External Links
+    '<div class="card"><h2>🔗 External Links</h2>' +
+    '<p style="font-size:.68rem;color:#64748b;margin-bottom:6px">Pricelist, Stock Check, เครื่องมือภายนอก</p>' +
+    '<div id="adm_links">' + linkRows + '</div>' +
+    '<div style="display:flex;gap:3px;margin-top:4px">' +
+    '<input type="text" id="lk_new_n" placeholder="ชื่อ" style="width:80px">' +
+    '<input type="url" id="lk_new_u" placeholder="https://..." style="flex:1">' +
+    '<button class="btn bsm bp" onclick="admAddLink()">➕</button></div>' +
+    '<button class="btn bp bsm" style="margin-top:6px" onclick="admSaveLinks()">💾 บันทึกทั้งหมด</button></div>' +
+
+    quickLinks +
+
+    '</div>' + // end tab connect
+
+    // ===== TAB: ขั้นสูง =====
+    '<div class="admin-tab-pane' + aTab('advanced') + '" id="atp-advanced">' +
+
+    // Data Overview
+    '<div class="card"><h2>💾 ข้อมูลในระบบ (' + ST.getStorageSizeFormatted() + ')</h2>' +
+    '<div class="sr">' + countCards + '</div></div>' +
+
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
     '<div class="bg">' +
     '<button class="btn bd" onclick="admResetRoutines()">🔄 Reset Routines</button>' +
     '<button class="btn bd" onclick="doClearAll()">🗑️ ล้างข้อมูลทั้งหมด</button>' +
-    '</div></div>';
+    '</div></div>' +
+
+    '</div>'; // end tab advanced
 
   // Set notification status
   var nfEl = document.getElementById('adm_nf_status');
   if (nfEl) {
-    if ('Notification' in window) {
-      nfEl.textContent = 'สถานะ: ' + Notification.permission;
-    } else {
-      nfEl.textContent = 'Browser ไม่รองรับ';
-    }
+    nfEl.textContent = ('Notification' in window) ? 'สถานะ: ' + Notification.permission : 'Browser ไม่รองรับ';
   }
-  
-  // Initialize level requirement tabs after render
+
   setTimeout(function() {
+    initNewDemoPolicies();
     initLevelRequirementTabs();
   }, 100);
+}
+
+function switchAdminTab(id) {
+  localStorage.setItem('v7_admin_tab', id);
+  document.querySelectorAll('.admin-tab').forEach(function(t) {
+    t.classList.toggle('act', t.getAttribute('onclick').indexOf("'" + id + "'") !== -1);
+  });
+  document.querySelectorAll('.admin-tab-pane').forEach(function(p) {
+    p.classList.toggle('act', p.id === 'atp-' + id);
+  });
+  if (id === 'data') {
+    setTimeout(function() { initNewDemoPolicies(); initLevelRequirementTabs(); }, 50);
+  }
 }
 
 // ================================================================

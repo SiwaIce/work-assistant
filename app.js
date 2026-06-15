@@ -3855,10 +3855,40 @@ function addCustomerUpdateMenuItem() {
   }
 }
 
+function toggleSbGroup(key) {
+  var items = document.getElementById('sgi-' + key);
+  var chev = document.getElementById('sgc-' + key);
+  if (!items) return;
+  var nowCollapsed = items.classList.toggle('sg-collapsed');
+  if (chev) chev.classList.toggle('sg-c', nowCollapsed);
+  try {
+    var state = JSON.parse(localStorage.getItem('v7_sb_state') || '{}');
+    state[key] = !nowCollapsed;
+    localStorage.setItem('v7_sb_state', JSON.stringify(state));
+  } catch(e) {}
+}
+
+function initSbGroups() {
+  var defaults = { fav: true, main: true, work: false, data: false, tools: false, products: false, track: false, system: false };
+  try {
+    var saved = JSON.parse(localStorage.getItem('v7_sb_state') || '{}');
+    Object.keys(saved).forEach(function(k) { defaults[k] = saved[k]; });
+  } catch(e) {}
+  Object.keys(defaults).forEach(function(key) {
+    if (!defaults[key]) {
+      var items = document.getElementById('sgi-' + key);
+      var chev = document.getElementById('sgc-' + key);
+      if (items) items.classList.add('sg-collapsed');
+      if (chev) chev.classList.add('sg-c');
+    }
+  });
+}
+
 // เรียกใช้เพิ่มเมนูเมื่อโหลดเสร็จ
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(addCustomerUpdateMenuItem, 500);
+    initSbGroups();
   });
 }
 

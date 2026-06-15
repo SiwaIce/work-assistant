@@ -22,6 +22,19 @@ a{color:#3b82f6;text-decoration:none}
 .nb{background:#ef4444;color:#fff;font-size:.55rem;padding:1px 5px;border-radius:10px;margin-left:auto;min-width:14px;text-align:center;line-height:1.3}
 .ns{height:1px;background:#334155;margin:3px 12px}
 .nl-label{font-size:.58rem;color:#475569;padding:8px 14px 2px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.nl-label.sg-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding-right:10px;user-select:none}
+.nl-label.sg-toggle:hover{color:#94a3b8}
+.sg-chev{font-size:.6rem;color:#475569;transition:transform .2s;flex-shrink:0;margin-left:auto;padding-left:4px}
+.sg-chev.sg-c{transform:rotate(-90deg)}
+.sg-items{overflow:hidden}
+.sg-items.sg-collapsed{display:none}
+/* admin tabs */
+.admin-tabs{display:flex;gap:2px;border-bottom:1px solid #334155;margin-bottom:12px;overflow-x:auto;flex-shrink:0}
+.admin-tab{padding:7px 12px;font-size:.72rem;font-weight:600;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s}
+.admin-tab:hover{color:#e2e8f0}
+.admin-tab.act{color:#3b82f6;border-bottom-color:#3b82f6}
+.admin-tab-pane{display:none}
+.admin-tab-pane.act{display:block}
 
 /* === MAIN === */
 #main{margin-left:200px;flex:1;min-height:100vh;display:flex;flex-direction:column;transition:margin-left .25s ease}
@@ -1585,6 +1598,12 @@ input:focus, select:focus, textarea:focus {
 .theme-light .nl:hover { background: #f4f4f5; color: #18181b; }
 .theme-light .nl.act { background: #eff6ff; color: #2563eb; border-left-color: #2563eb; }
 .theme-light .nl-label { color: #a1a1aa; }
+.theme-light .nl-label.sg-toggle:hover { color: #52525b; }
+.theme-light .sg-chev { color: #a1a1aa; }
+.theme-light .admin-tabs { border-bottom-color: #e4e4e7; }
+.theme-light .admin-tab { color: #71717a; }
+.theme-light .admin-tab:hover { color: #18181b; }
+.theme-light .admin-tab.act { color: #2563eb; border-bottom-color: #2563eb; }
 .theme-light .ns { background: #e4e4e7; }
 .theme-light .nb { background: #dc2626; }
 
