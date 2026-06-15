@@ -2123,7 +2123,7 @@ function renderPipelineTab() {
     html += '</div>';
   } else {
     html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
-    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>📅 Bidding</th><th>สินค้า</th><th>มูลค่า</th><th></th></tr>';
+    html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>📅 Bidding</th><th>สินค้า</th><th>มูลค่า</th><th>อัพเดทล่าสุด</th><th></th></tr>';
     html += '</thead><tbody>';
 for (var i = 0; i < filtered.length; i++) {
   var p = filtered[i];
@@ -2183,6 +2183,12 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
   html += '<td>' + biddingHtml + '</td>';
   html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
   html += '<td class="' + priceClass + '" style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿<\/td>';
+  var logCell = '-';
+  if (p.latestLog && p.latestLog.content) {
+    var logDate = p.latestLog.date ? '<span style="color:var(--text2);font-size:10px;display:block;margin-bottom:2px">' + fD(p.latestLog.date) + '</span>' : '';
+    logCell = logDate + '<span style="font-size:11px">' + esc((p.latestLog.content || '').substr(0, 50)) + (p.latestLog.content.length > 50 ? '…' : '') + '</span>';
+  }
+  html += '<td style="max-width:160px;font-size:11px;color:var(--text1)">' + logCell + '</td>';
   html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
   html += '</tr>';
 }

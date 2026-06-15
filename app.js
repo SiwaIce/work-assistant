@@ -2841,6 +2841,16 @@ function syncDealerPipelineToCustomer(dealerId) {
   var dealerUpdatesRef = db.collection('dealerUpdates').doc(dealerId).collection('pipeline');
   
   activePipes.forEach(function(p) {
+    var latestLog = null;
+    var logs = ST.pipeLogsByPipe(p.id);
+    if (logs && logs.length) {
+      var l = logs[0];
+      latestLog = {
+        date: l.date ? l.date.split('T')[0] : '',
+        content: l.content || ''
+      };
+    }
+
     var customerData = {
       id: p.id,
       projectName: p.projectName || '',
@@ -2857,11 +2867,12 @@ function syncDealerPipelineToCustomer(dealerId) {
       tor: p.tor || '',
       nextAction: p.nextAction || '',
       registerDate: p.registerDate || '',
+      latestLog: latestLog,
       _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
       _status: 'approved',
       _source: 'sales_sync'
     };
-    
+
     batch.set(dealerUpdatesRef.doc(p.id), customerData, { merge: true });
   });
   

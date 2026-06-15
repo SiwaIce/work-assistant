@@ -192,25 +192,35 @@ var PIPE_STATUSES = [
   var params = new URLSearchParams(location.search);
   SALES_ID = params.get('id') || '';
   if (!SALES_ID) {
-    document.getElementById('pinSub').textContent = '❌ ไม่พบ Sales ID ในลิงก์';
-    document.getElementById('pinInput').disabled = true;
-    document.querySelector('.pin-btn').disabled = true;
+    showPinError('❌ ลิงก์ไม่ถูกต้อง — ขอลิงก์ใหม่จาก Admin');
     return;
   }
-  // Load profile to get name
+  document.getElementById('pinSub').textContent = '🔄 กำลังโหลด...';
   db.collection('salesMembers').doc(SALES_ID).get().then(function(doc) {
     if (!doc.exists) {
-      document.getElementById('pinSub').textContent = '❌ ไม่พบ Sales Member นี้';
-      document.getElementById('pinInput').disabled = true;
+      showPinError('❌ ไม่พบบัญชีนี้ในระบบ — กรุณาขอลิงก์ใหม่จาก Admin');
       return;
     }
     SALES_PROFILE = doc.data();
+    if (SALES_PROFILE.active === false) {
+      showPinError('⛔ บัญชีนี้ถูกปิดใช้งาน — ติดต่อ Admin');
+      return;
+    }
     document.getElementById('pinTitle').textContent = '👤 ' + (SALES_PROFILE.name || 'Sales');
     document.getElementById('pinSub').textContent = 'กรุณาใส่ PIN เพื่อเข้าใช้งาน';
+    document.getElementById('pinInput').focus();
   }).catch(function(e) {
-    document.getElementById('pinSub').textContent = 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบการเชื่อมต่อ';
+    document.getElementById('pinSub').textContent = '⚠️ โหลดข้อมูลไม่ได้ — ตรวจสอบการเชื่อมต่อแล้วรีเฟรช';
+    console.error('salesMembers load error:', e);
   });
 })();
+
+function showPinError(msg) {
+  var box = document.querySelector('.pin-box');
+  box.innerHTML = '<div class="pin-logo">⚠️</div>' +
+    '<div class="pin-title" style="color:#ef4444">เข้าไม่ได้</div>' +
+    '<div class="pin-sub" style="color:#ef4444;margin-top:8px">' + msg + '</div>';
+}
 
 function doLogin() {
   var pin = document.getElementById('pinInput').value.trim();
