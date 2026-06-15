@@ -532,6 +532,7 @@ function buildDealerForm(d){
   h+='<div class="fg"><label>เบอร์โทร</label><input id="fd_phone" class="fi" value="'+esc(d?d.phone||'':'')+'" placeholder="08x-xxx" inputmode="tel"></div></div>';
   h+='<div class="fg"><label>อีเมล</label><input id="fd_email" class="fi" value="'+esc(d?d.email||'':'')+'" placeholder="contact@dealer.com"></div>';
   h+='<div class="fg"><label>หมายเหตุ</label><textarea id="fd_remark" class="fi" rows="2">'+esc(d?d.remark||'':'')+'</textarea></div>';
+  h+='<div class="fg"><label>PIN สำหรับ Client View</label><input id="fd_cpin" class="fi" value="'+esc(d?d.clientPin||'':'')+'" placeholder="4-6 หลัก (เว้นว่างถ้าไม่ต้อง PIN)" inputmode="numeric" maxlength="6"><div style="font-size:10px;color:var(--text3);margin-top:3px">ลิงก์: client-view-sales.html?salesId='+SALES_ID+'&amp;dealerId='+(d?d.id:'[id]')+'</div></div>';
   h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveDealer()">💾 บันทึก</button>';
   if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteDealer(\''+editId+'\')">🗑️</button>';
   h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
@@ -552,6 +553,7 @@ function saveDealer(){
     phone:document.getElementById('fd_phone').value.trim(),
     email:document.getElementById('fd_email').value.trim(),
     remark:document.getElementById('fd_remark').value.trim(),
+    clientPin:document.getElementById('fd_cpin').value.trim()||null,
     updatedAt:new Date().toISOString()
   };
   if(!editId)data.createdAt=new Date().toISOString();
