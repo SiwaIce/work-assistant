@@ -61,10 +61,10 @@ function xPipe() {
   const pipes = ST.sort('pipeline', (a,b) => (a.registerDate||'').localeCompare(b.registerDate||''));
   if (!pipes.length) { document.getElementById('xp_area').innerHTML = '<div class="empty"><p>ไม่มี</p></div>'; return; }
   let maxUp = 0; pipes.forEach(p => { const c = ST.pipeLogsByPipe(p.id).length; if (c > maxUp) maxUp = c; });
-  const headers = ['Register Date','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Model','Forecast Amount','Real Amount','TOR','Bidding Date','Shipment date','Remark','หนังสือแต่งตั้ง','Status','งานซ้ำ'];
+  const headers = ['Register Date','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Model','Forecast Amount','Real Amount','TOR','Bidding Date','Shipment date','Expected Close Date','Remark','หนังสือแต่งตั้ง','Status','งานซ้ำ'];
   for (let i = 1; i <= Math.max(maxUp,1); i++) headers.push('Update '+i);
   const rows = pipes.map(p => { const d = ST.getOne('dealers', p.dealerId); const logs = ST.pipeLogsByPipe(p.id).reverse();
-    const row = [fD(p.registerDate), p.projectName||'', p.endUserTH||'', p.endUserEN||'', p.unitType||'', d?.name||'', p.djiDealer||'', (p.model||'')+(p.modelQty>1?'*'+p.modelQty:''), p.forecastAmount||'', p.realAmount||'', p.tor||'', fD(p.biddingDate), fD(p.shipmentDate), p.remark||'', p.appointmentLetter||'', getPipeName(p.status), p.recurring?'Yes':''];
+    const row = [fD(p.registerDate), p.projectName||'', p.endUserTH||'', p.endUserEN||'', p.unitType||'', d?.name||'', p.djiDealer||'', (p.model||'')+(p.modelQty>1?'*'+p.modelQty:''), p.forecastAmount||'', p.realAmount||'', p.tor||'', fD(p.biddingDate), fD(p.shipmentDate), fD(p.expectedCloseDate||''), p.remark||'', p.appointmentLetter||'', getPipeName(p.status), p.recurring?'Yes':''];
     for (let i = 0; i < Math.max(maxUp,1); i++) row.push(logs[i]?fDShort(logs[i].date?.split('T')[0])+' '+logs[i].content:'');
     return row; });
   xRender('xp_area', headers, rows, 'pipeline');

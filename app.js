@@ -3814,34 +3814,7 @@ function saveLineToken() {
     toast('🗑️ ลบ Token แล้ว');
   }
 }
-function rPipeDashboard(el) {
-  document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
-  var allPipes = ST.getAll('pipeline');
-  var activeCount = 0, activeAmt = 0, wonCount = 0, wonAmt = 0, lostCount = 0, lostAmt = 0;
-  for (var i = 0; i < allPipes.length; i++) {
-    var amt = Number(allPipes[i].forecastAmount) || 0;
-    if (allPipes[i].status === 'win' || allPipes[i].status === 'ordered' || allPipes[i].status === 'delivered') {
-      wonCount++; wonAmt += amt;
-    } else if (allPipes[i].status === 'lost') {
-      lostCount++; lostAmt += amt;
-    } else if (allPipes[i].status !== 'on_hold') {
-      activeCount++; activeAmt += amt;
-    }
-  }
-  var closedCount = wonCount + lostCount;
-  var winRate = closedCount > 0 ? Math.round(wonCount / closedCount * 100) : 0;
-  var wrColor = winRate >= 70 ? '#22c55e' : winRate >= 50 ? '#f59e0b' : '#ef4444';
-  
-  el.innerHTML = '<div class="card"><h2>📊 Pipeline Dashboard</h2>' +
-    '<div class="sr"><div class="sc"><div class="sn c1">' + allPipes.length + '</div><div class="sl">ทั้งหมด</div></div>' +
-    '<div class="sc"><div class="sn c2">' + activeCount + '</div><div class="sl">Active</div></div>' +
-    '<div class="sc"><div class="sn c2">' + fmtMoneyShort(activeAmt) + '</div><div class="sl">มูลค่า Active</div></div>' +
-    '<div class="sc"><div class="sn c2">' + wonCount + '</div><div class="sl">Won</div></div>' +
-    '<div class="sc"><div class="sn c4">' + lostCount + '</div><div class="sl">Lost</div></div>' +
-    '<div class="sc"><div class="sn" style="color:' + wrColor + '">' + winRate + '%</div><div class="sl">Win Rate</div></div></div>' +
-    '<div class="bg"><button class="btn bp" onclick="go(\'pipeline\')">📊 ดูทั้งหมด</button>' +
-    '<button class="btn bo" onclick="go(\'pipeBoard\')">📋 Board</button></div></div>';
-}
+// rPipeDashboard defined in views-pipeline.js
 function testLineNotify() {
   var token = localStorage.getItem('line_notify_token');
   if (!token) { toast('❌ กรุณาใส่ Token ก่อน'); return; }

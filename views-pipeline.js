@@ -244,6 +244,7 @@ function rPipeline(el) {
     '<option value="amount_desc"' + (pipeSort === 'amount_desc' ? ' selected' : '') + '>มูลค่า มากสุด</option>' +
     '<option value="amount_asc"' + (pipeSort === 'amount_asc' ? ' selected' : '') + '>มูลค่า น้อยสุด</option>' +
     '<option value="bidding"' + (pipeSort === 'bidding' ? ' selected' : '') + '>Bidding ใกล้สุด</option>' +
+    '<option value="close"'   + (pipeSort === 'close'   ? ' selected' : '') + '>Expected Close ใกล้สุด</option>' +
     '<option value="dealer"' + (pipeSort === 'dealer' ? ' selected' : '') + '>ตาม Dealer</option>' +
     '<option value="status"' + (pipeSort === 'status' ? ' selected' : '') + '>ตาม Status</option>' +
     '</select>' +
@@ -293,6 +294,13 @@ function sortPipes(pipes, sortBy) {
       sorted.sort(function(a, b) {
         var da = a.biddingDate || '9999';
         var db = b.biddingDate || '9999';
+        return da.localeCompare(db);
+      });
+      break;
+    case 'close':
+      sorted.sort(function(a, b) {
+        var da = a.expectedCloseDate || a.biddingDate || '9999';
+        var db = b.expectedCloseDate || b.biddingDate || '9999';
         return da.localeCompare(db);
       });
       break;
@@ -822,30 +830,174 @@ function addQuickPipeFollowup(pipeId) {
 function rPipeDashboard(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
   var allPipes = ST.getAll('pipeline');
-  var activeCount = 0, activeAmt = 0, wonCount = 0, wonAmt = 0, lostCount = 0, lostAmt = 0;
-  for (var i = 0; i < allPipes.length; i++) {
-    var amt = Number(allPipes[i].forecastAmount) || 0;
-    if (allPipes[i].status === 'win' || allPipes[i].status === 'ordered' || allPipes[i].status === 'delivered') {
-      wonCount++; wonAmt += amt;
-    } else if (allPipes[i].status === 'lost') {
-      lostCount++; lostAmt += amt;
-    } else if (allPipes[i].status !== 'on_hold') {
-      activeCount++; activeAmt += amt;
+  var today = _td();
+  var thisYM = today.substr(0, 7);
+
+  var active = [], won = [], lost = [];
+  var activeAmt = 0, wonAmt = 0;
+  allPipes.forEach(function(p) {
+    var amt = Number(p.forecastAmount) || 0;
+    if (['win','ordered','delivered'].indexOf(p.status) !== -1) { won.push(p); wonAmt += amt; }
+    else if (p.status === 'lost') { lost.push(p); }
+    else if (p.status !== 'on_hold') { active.push(p); activeAmt += amt; }
+  });
+  var closedCount = won.length + lost.length;
+  var winRate = closedCount > 0 ? Math.round(won.length / closedCount * 100) : 0;
+  var wrColor = winRate >= 70 ? '#22c55e' : winRate >= 50 ? '#f59e0b' : '#ef4444';
+  var closingThis = active.filter(function(p) {
+    var cd = p.expectedCloseDate || p.biddingDate;
+    return cd && cd.substr(0,7) === thisYM;
+  });
+
+  // ── Zone A: Stats ──
+  var h = '<div class="sr" style="margin-bottom:12px">' +
+    '<div class="sc"><div class="sn c1">' + allPipes.length + '</div><div class="sl">ทั้งหมด</div></div>' +
+    '<div class="sc"><div class="sn c2">' + active.length + '</div><div class="sl">Active</div></div>' +
+    '<div class="sc"><div class="sn c2">' + fmtMoneyShort(activeAmt) + '</div><div class="sl">มูลค่า Active</div></div>' +
+    '<div class="sc"><div class="sn c5">' + closingThis.length + '</div><div class="sl">ปิดเดือนนี้</div></div>' +
+    '<div class="sc"><div class="sn c2">' + won.length + '</div><div class="sl">Won</div></div>' +
+    '<div class="sc"><div class="sn" style="color:' + wrColor + '">' + winRate + '%</div><div class="sl">Win Rate</div></div>' +
+    '</div>';
+
+  // ── Zone B: Monthly Timeline (6 months) ──
+  var thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var months = [];
+  var d = new Date(today + 'T00:00:00');
+  d.setDate(1);
+  for (var mi = 0; mi < 6; mi++) {
+    var y = d.getFullYear(), m = d.getMonth();
+    var ym = y + '-' + (m + 1 < 10 ? '0' : '') + (m + 1);
+    months.push({ ym: ym, year: y, month: m, pipes: [], amt: 0 });
+    d.setMonth(d.getMonth() + 1);
+  }
+  active.forEach(function(p) {
+    var cd = p.expectedCloseDate || p.biddingDate;
+    if (!cd) return;
+    var ym = cd.substr(0, 7);
+    for (var i = 0; i < months.length; i++) {
+      if (months[i].ym === ym) { months[i].pipes.push(p); months[i].amt += Number(p.forecastAmount) || 0; break; }
+    }
+  });
+  var maxAmt = 0;
+  months.forEach(function(mo) { if (mo.amt > maxAmt) maxAmt = mo.amt; });
+
+  h += '<div class="card" style="margin-bottom:10px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h += '<h2 style="margin:0">📅 Timeline 6 เดือน</h2>';
+  h += '<span style="font-size:.68rem;color:#64748b">Expected Close / Bidding Date</span></div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+
+  months.forEach(function(mo) {
+    var thaiYr = String(mo.year + 543).substr(2);
+    var label = thMonths[mo.month] + ' ' + thaiYr;
+    var isThis = mo.ym === thisYM;
+    var barPct = maxAmt > 0 ? Math.round(mo.amt / maxAmt * 100) : 0;
+    var borderCol = isThis ? '#3b82f6' : 'rgba(255,255,255,.06)';
+    var bgCol = isThis ? 'rgba(59,130,246,.1)' : 'rgba(255,255,255,.03)';
+
+    h += '<div style="background:' + bgCol + ';border:1px solid ' + borderCol + ';border-radius:10px;padding:10px;' + (mo.pipes.length ? 'cursor:pointer' : '') + '"' +
+      (mo.pipes.length ? ' onclick="showPipeMonthM(\'' + mo.ym + '\')"' : '') + '>';
+    h += '<div style="font-size:.72rem;font-weight:700;color:' + (isThis ? '#3b82f6' : '#64748b') + ';margin-bottom:4px">' + label + (isThis ? ' ◀' : '') + '</div>';
+    h += '<div style="font-size:1.15rem;font-weight:800;color:' + (mo.pipes.length ? '#e2e8f0' : '#334155') + '">' + mo.pipes.length + ' <span style="font-size:.62rem;font-weight:400;color:#475569">โครงการ</span></div>';
+    h += '<div style="font-size:.7rem;color:#22c55e;margin:2px 0 4px">' + (mo.amt ? fmtMoneyShort(mo.amt) : '—') + '</div>';
+    if (mo.pipes.length) {
+      h += '<div style="height:3px;background:rgba(255,255,255,.06);border-radius:2px;margin-bottom:5px"><div style="height:3px;background:#3b82f6;border-radius:2px;width:' + barPct + '%"></div></div>';
+      mo.pipes.slice(0, 2).forEach(function(p) {
+        h += '<div style="font-size:.6rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ' + sanitize((p.projectName || '').substr(0, 22)) + '</div>';
+      });
+      if (mo.pipes.length > 2) h += '<div style="font-size:.58rem;color:#334155">+' + (mo.pipes.length - 2) + ' เพิ่มเติม</div>';
+    }
+    h += '</div>';
+  });
+  h += '</div></div>';
+
+  // ── Zone C: Action needed ──
+  var actionItems = active.filter(function(p) {
+    var fd = p.followupDate ? dTo(p.followupDate) : null;
+    var bd = p.biddingDate ? dTo(p.biddingDate) : null;
+    var cd = p.expectedCloseDate ? dTo(p.expectedCloseDate) : null;
+    return (fd !== null && fd <= 14) ||
+           (bd !== null && bd >= 0 && bd <= 14) ||
+           (cd !== null && cd >= 0 && cd <= 14);
+  });
+  actionItems.sort(function(a, b) {
+    var da = Math.min(
+      a.followupDate ? dTo(a.followupDate) : 999,
+      a.biddingDate  ? Math.max(0, dTo(a.biddingDate)) : 999,
+      a.expectedCloseDate ? Math.max(0, dTo(a.expectedCloseDate)) : 999
+    );
+    var db = Math.min(
+      b.followupDate ? dTo(b.followupDate) : 999,
+      b.biddingDate  ? Math.max(0, dTo(b.biddingDate)) : 999,
+      b.expectedCloseDate ? Math.max(0, dTo(b.expectedCloseDate)) : 999
+    );
+    return da - db;
+  });
+
+  h += '<div class="card" style="margin-bottom:10px">';
+  h += '<h2>🔔 ต้องจัดการ <span style="font-size:.7rem;font-weight:400;color:#64748b">Followup / Bidding / Close ภายใน 14 วัน</span></h2>';
+  if (!actionItems.length) {
+    h += '<div style="text-align:center;padding:16px;color:#475569;font-size:.85rem">ไม่มีรายการเร่งด่วน ✅</div>';
+  } else {
+    actionItems.slice(0, 8).forEach(function(p) {
+      var dealer = ST.getOne('dealers', p.dealerId);
+      var fd = p.followupDate ? dTo(p.followupDate) : null;
+      var bd = p.biddingDate  ? dTo(p.biddingDate)  : null;
+      var cd = p.expectedCloseDate ? dTo(p.expectedCloseDate) : null;
+      h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">';
+      h += '<div class="lm">';
+      h += '<div class="lt">' + sanitize((p.projectName || '').substr(0, 45)) + '</div>';
+      h += '<div class="ls">' + (dealer ? dealer.name : '-') + (p.nextAction ? ' • ' + sanitize(p.nextAction) : '') + '</div>';
+      h += '<div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">';
+      if (fd !== null) h += dlB(p.followupDate, false);
+      if (bd !== null && bd >= 0 && bd <= 14) h += '<span style="font-size:.62rem;background:rgba(124,58,237,.15);color:#a78bfa;padding:1px 6px;border-radius:4px">🎯 Bid ' + fDShort(p.biddingDate) + '</span>';
+      if (cd !== null && cd >= 0 && cd <= 14) h += '<span style="font-size:.62rem;background:rgba(34,197,94,.12);color:#22c55e;padding:1px 6px;border-radius:4px">✅ Close ' + fDShort(p.expectedCloseDate) + '</span>';
+      h += '</div></div></div>';
+    });
+    if (actionItems.length > 8) {
+      h += '<div style="text-align:center;padding:6px"><button class="btn bsm bo" onclick="go(\'pipeline\')">ดูทั้งหมด (' + actionItems.length + ')</button></div>';
     }
   }
-  var closedCount = wonCount + lostCount;
-  var winRate = closedCount > 0 ? Math.round(wonCount / closedCount * 100) : 0;
-  var wrColor = winRate >= 70 ? '#22c55e' : winRate >= 50 ? '#f59e0b' : '#ef4444';
-  
-  el.innerHTML = '<div class="card"><h2>📊 Pipeline Dashboard</h2>' +
-    '<div class="sr"><div class="sc"><div class="sn c1">' + allPipes.length + '</div><div class="sl">ทั้งหมด</div></div>' +
-    '<div class="sc"><div class="sn c2">' + activeCount + '</div><div class="sl">Active</div></div>' +
-    '<div class="sc"><div class="sn c2">' + fmtMoneyShort(activeAmt) + '</div><div class="sl">มูลค่า Active</div></div>' +
-    '<div class="sc"><div class="sn c2">' + wonCount + '</div><div class="sl">Won</div></div>' +
-    '<div class="sc"><div class="sn c4">' + lostCount + '</div><div class="sl">Lost</div></div>' +
-    '<div class="sc"><div class="sn" style="color:' + wrColor + '">' + winRate + '%</div><div class="sl">Win Rate</div></div></div>' +
-    '<div class="bg"><button class="btn bp" onclick="go(\'pipeline\')">📊 ดูทั้งหมด</button>' +
-    '<button class="btn bo" onclick="go(\'pipeBoard\')">📋 Board</button></div></div>';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button class="btn bp" onclick="go(\'pipeline\')">📋 ดู Pipeline ทั้งหมด</button>' +
+    '<button class="btn bo" onclick="go(\'pipeBoard\')">🃏 Board View</button>' +
+    '</div>';
+
+  el.innerHTML = h;
+}
+
+function showPipeMonthM(ym) {
+  var allPipes = ST.getAll('pipeline');
+  var pipes = allPipes.filter(function(p) {
+    if (['win','ordered','delivered','lost'].indexOf(p.status) !== -1) return false;
+    var cd = p.expectedCloseDate || p.biddingDate;
+    return cd && cd.substr(0, 7) === ym;
+  });
+  pipes.sort(function(a, b) { return (Number(b.forecastAmount)||0) - (Number(a.forecastAmount)||0); });
+
+  var thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var parts = ym.split('-');
+  var label = thMonths[parseInt(parts[1]) - 1] + ' ' + (parseInt(parts[0]) + 543);
+  var totalAmt = pipes.reduce(function(a, p) { return a + (Number(p.forecastAmount)||0); }, 0);
+
+  var h = '<div style="font-size:.78rem;color:#64748b;margin-bottom:10px">' + pipes.length + ' โครงการ • รวม ' + fmtMoneyShort(totalAmt) + '</div>';
+  if (!pipes.length) { h += '<div style="text-align:center;padding:20px;color:#475569">ไม่มีโครงการในเดือนนี้</div>'; }
+  pipes.forEach(function(p) {
+    var dealer = ST.getOne('dealers', p.dealerId);
+    var hasClose = p.expectedCloseDate && p.expectedCloseDate.substr(0,7) === ym;
+    h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
+      '<div class="lm">' +
+      '<div class="lt">' + sanitize(p.projectName || '') + '</div>' +
+      '<div class="ls">' + (dealer ? dealer.name : '-') + ' • ' + sanitize(p.endUserTH || '-') + '</div>' +
+      '<div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap">' +
+      pipeTag(p.status) + ' ' + fmtMoneyStyled(Number(p.forecastAmount)||0) +
+      (hasClose ? ' <span style="font-size:.62rem;background:rgba(34,197,94,.12);color:#22c55e;padding:1px 6px;border-radius:4px">🎯 ' + fDShort(p.expectedCloseDate) + '</span>' : '') +
+      '</div>' +
+      '</div></div>';
+  });
+  openM('📅 โครงการเดือน ' + label, h);
 }
 
 // ================================================================

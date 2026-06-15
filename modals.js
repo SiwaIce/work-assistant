@@ -303,6 +303,7 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="number" id="fp_real" value="' + (p.realAmount || '') + '"></div>' +
     '<div class="fg"><label>TOR</label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
     '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
+    '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"></div></div>' +
     '<div class="form-section">🎯 Next Action</div>' +
@@ -662,6 +663,7 @@ function savePipeline(dealerId, eid) {
     tor: document.getElementById('fp_tor').value,
     biddingDate: dpG('fp_bid'),
     shipmentDate: dpG('fp_ship'),
+    expectedCloseDate: dpG('fp_close'),
     appointmentLetter: document.getElementById('fp_appt').value,
     status: document.getElementById('fp_status').value,
     nextAction: document.getElementById('fp_next').value,
