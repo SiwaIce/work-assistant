@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Sales View — DJI Assistant</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;min-height:100vh}
+:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--accent:#3b82f6;--red:#ef4444;--green:#22c55e;--orange:#f97316;--yellow:#eab308}
+
+/* PIN Screen */
+#pinScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a}
+.pin-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;max-width:340px;width:90%;text-align:center}
+.pin-logo{font-size:48px;margin-bottom:8px}
+.pin-title{font-size:18px;font-weight:700;margin-bottom:4px}
+.pin-sub{font-size:12px;color:#64748b;margin-bottom:24px}
+.pin-input{width:100%;padding:14px;font-size:22px;letter-spacing:8px;text-align:center;background:#0f172a;border:2px solid #334155;border-radius:10px;color:#e2e8f0;outline:none;margin-bottom:12px}
+.pin-input:focus{border-color:#3b82f6}
+.pin-btn{width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+.pin-btn:hover{background:#2563eb}
+.pin-err{color:#ef4444;font-size:12px;margin-top:8px;min-height:20px}
+
+/* Main App */
+#mainApp{display:none;flex-direction:column;min-height:100vh}
+header{background:#1e293b;border-bottom:1px solid #334155;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.header-name{font-weight:700;font-size:15px}
+.header-sub{font-size:11px;color:#64748b}
+
+/* Tabs */
+.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;padding:0 12px}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:#64748b;transition:all .15s}
+.tab.act{border-bottom-color:#3b82f6;color:#3b82f6;font-weight:600}
+
+/* Content */
+.content{flex:1;padding:12px;max-width:700px;margin:0 auto;width:100%}
+
+/* Cards / List */
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:10px}
+.card h2{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.li{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
+.li:hover{background:#1e293b}
+.lt{font-weight:600;font-size:13px}
+.ls{font-size:11px;color:#64748b;margin-top:2px}
+.empty{text-align:center;padding:32px 16px;color:#64748b;font-size:13px}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700}
+.badge-blue{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
+.badge-red{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
+.badge-green{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
+.badge-yellow{background:#eab30820;color:#eab308;border:1px solid #eab30840}
+.badge-orange{background:#f9731620;color:#f97316;border:1px solid #f9731640}
+.badge-grey{background:#33415520;color:#94a3b8;border:1px solid #33415540}
+
+/* FAB */
+.fab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:#3b82f6;color:#fff;font-size:24px;border:none;cursor:pointer;box-shadow:0 4px 16px #0008;display:flex;align-items:center;justify-content:center;z-index:100}
+.fab:hover{background:#2563eb}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:#0008;z-index:200;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:#1e293b;border:1px solid #334155;border-radius:16px 16px 0 0;width:100%;max-width:540px;max-height:92vh;overflow-y:auto;padding:20px}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px}
+
+/* Form */
+.fm-group{margin-bottom:12px}
+.fm-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:4px}
+.fm-input{width:100%;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none}
+.fm-input:focus{border-color:#3b82f6}
+.fm-row{display:flex;gap:8px}
+.fm-row .fm-group{flex:1}
+.fm-actions{display:flex;gap:8px;margin-top:16px}
+.btn{padding:10px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.btn-primary{background:#3b82f6;color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-outline{background:transparent;color:#94a3b8;border:1px solid #334155}
+.btn-outline:hover{background:#334155}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat-card{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center}
+.stat-num{font-size:20px;font-weight:700;color:#3b82f6}
+.stat-lbl{font-size:10px;color:#64748b;margin-top:2px}
+
+/* Pipe status colors */
+.s-prospect{color:#94a3b8}.s-tor_review{color:#f97316}.s-quotation{color:#eab308}.s-bidding{color:#3b82f6}.s-negotiation{color:#a855f7}.s-win{color:#22c55e}.s-ordered{color:#10b981}.s-delivered{color:#10b981}.s-lost{color:#ef4444}
+
+/* Toast */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1}
+
+/* Conflict badge */
+.conflict-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430}
+
+select.fm-input option{background:#1e293b}
+textarea.fm-input{resize:vertical;min-height:80px}
+</style>
+</head>
+<body>
+
+<!-- PIN Login -->
+<div id="pinScreen">
+  <div class="pin-box">
+    <div class="pin-logo">👤</div>
+    <div class="pin-title" id="pinTitle">Sales View</div>
+    <div class="pin-sub" id="pinSub">กรุณาใส่ PIN เพื่อเข้าใช้งาน</div>
+    <input type="password" class="pin-input" id="pinInput" maxlength="6" placeholder="••••" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="pin-btn" onclick="doLogin()">🔓 เข้าสู่ระบบ</button>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp">
+  <header>
+    <div>
+      <div class="header-name" id="hdrName">Sales View</div>
+      <div class="header-sub">DJI Sales Assistant</div>
+    </div>
+    <div style="font-size:11px;color:#64748b" id="hdrConflictBadge"></div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab act" onclick="showTab('pipeline')" id="tabPipeline">📊 Pipeline</div>
+    <div class="tab" onclick="showTab('dealers')" id="tabDealers">🏪 Dealer</div>
+  </div>
+
+  <div class="content" id="tabContent"></div>
+
+  <button class="fab" onclick="showAddModal()" id="fabBtn">＋</button>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span id="modalTitle">Modal</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+
+// ================================================================
+// STATE
+// ================================================================
+var SALES_ID = '';
+var SALES_PROFILE = null;
+var dealers = [];
+var pipeline = [];
+var teamPipeline = []; // other members' pipeline for conflict detection
+var currentTab = 'pipeline';
+var editId = null;
+
+// Pipeline statuses
+var PIPE_STATUSES = [
+  {id:'prospect',name:'Prospect',cls:'s-prospect'},
+  {id:'tor_review',name:'TOR Review',cls:'s-tor_review'},
+  {id:'quotation',name:'Quotation',cls:'s-quotation'},
+  {id:'bidding',name:'Bidding',cls:'s-bidding'},
+  {id:'negotiation',name:'Negotiation',cls:'s-negotiation'},
+  {id:'win',name:'Win',cls:'s-win'},
+  {id:'ordered',name:'Ordered',cls:'s-ordered'},
+  {id:'delivered',name:'Delivered',cls:'s-delivered'},
+  {id:'lost',name:'Lost',cls:'s-lost'}
+];
+
+// ================================================================
+// INIT
+// ================================================================
+(function init() {
+  var params = new URLSearchParams(location.search);
+  SALES_ID = params.get('id') || '';
+  if (!SALES_ID) {
+    document.getElementById('pinSub').textContent = '❌ ไม่พบ Sales ID ในลิงก์';
+    document.getElementById('pinInput').disabled = true;
+    document.querySelector('.pin-btn').disabled = true;
+    return;
+  }
+  // Load profile to get name
+  db.collection('salesMembers').doc(SALES_ID).get().then(function(doc) {
+    if (!doc.exists) {
+      document.getElementById('pinSub').textContent = '❌ ไม่พบ Sales Member นี้';
+      document.getElementById('pinInput').disabled = true;
+      return;
+    }
+    SALES_PROFILE = doc.data();
+    document.getElementById('pinTitle').textContent = '👤 ' + (SALES_PROFILE.name || 'Sales');
+    document.getElementById('pinSub').textContent = 'กรุณาใส่ PIN เพื่อเข้าใช้งาน';
+  }).catch(function(e) {
+    document.getElementById('pinSub').textContent = 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบการเชื่อมต่อ';
+  });
+})();
+
+function doLogin() {
+  var pin = document.getElementById('pinInput').value.trim();
+  var errEl = document.getElementById('pinErr');
+  if (!pin) { errEl.textContent = 'กรุณาใส่ PIN'; return; }
+  if (!SALES_PROFILE) { errEl.textContent = 'กำลังโหลด...'; return; }
+  if (SALES_PROFILE.active === false) { errEl.textContent = '⛔ บัญชีนี้ถูกปิดใช้งาน'; return; }
+  if (pin !== String(SALES_PROFILE.pin)) { errEl.textContent = '❌ PIN ไม่ถูกต้อง'; return; }
+  // Login success
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'flex';
+  document.getElementById('hdrName').textContent = '👤 ' + SALES_PROFILE.name;
+  loadData();
+}
+
+// ================================================================
+// DATA LOAD
+// ================================================================
+function loadData() {
+  var baseRef = db.collection('salesMembers').doc(SALES_ID);
+  // Load dealers
+  baseRef.collection('dealers').get().then(function(snap) {
+    dealers = [];
+    snap.forEach(function(d) { dealers.push(d.data()); });
+    dealers.sort(function(a,b) { return (a.name||'').localeCompare(b.name||''); });
+  });
+  // Load pipeline + listen for changes
+  baseRef.collection('pipeline').onSnapshot(function(snap) {
+    pipeline = [];
+    snap.forEach(function(d) { pipeline.push(d.data()); });
+    pipeline.sort(function(a,b) { return (b.createdAt||'').localeCompare(a.createdAt||''); });
+    loadTeamPipeline();
+  });
+}
+
+function loadTeamPipeline() {
+  db.collection('teamPipeline').get().then(function(snap) {
+    teamPipeline = [];
+    snap.forEach(function(d) {
+      var data = d.data();
+      if (data.ownerId !== SALES_ID) { // exclude own (by salesId; also exclude by mainUid)
+        data._isTeam = true;
+        teamPipeline.push(data);
+      }
+    });
+    renderCurrentTab();
+  }).catch(function() { renderCurrentTab(); });
+}
+
+// ================================================================
+// CONFLICT DETECTION (bigram similarity)
+// ================================================================
+function bigrams(str) {
+  var s = (str || '').toLowerCase().replace(/\s+/g, '');
+  var set = {};
+  for (var i = 0; i < s.length - 1; i++) set[s[i] + s[i+1]] = true;
+  return set;
+}
+function bigramSim(a, b) {
+  var ba = bigrams(a), bb = bigrams(b);
+  var inter = 0, ua = Object.keys(ba).length, ub = Object.keys(bb).length;
+  Object.keys(ba).forEach(function(k) { if (bb[k]) inter++; });
+  return (ua + ub) === 0 ? 0 : Math.round((2 * inter / (ua + ub)) * 100);
+}
+function pipeScore(a, b) {
+  var s = 0;
+  s += bigramSim(a.projectName, b.projectName) * 0.5;
+  s += bigramSim(a.endUserTH, b.endUserTH) * 0.35;
+  s += bigramSim(a.endUserEN, b.endUserEN) * 0.15;
+  return Math.round(s);
+}
+
+function buildConflictMap() {
+  var map = {};
+  var allPipes = pipeline.concat(teamPipeline);
+  var active = allPipes.filter(function(p) { return p && ['lost','delivered'].indexOf(p.status) === -1; });
+  for (var i = 0; i < active.length; i++) {
+    for (var j = i + 1; j < active.length; j++) {
+      var a = active[i], b = active[j];
+      if (a._isTeam && b._isTeam) continue; // both team — skip
+      var sc = pipeScore(a, b);
+      if (sc < 60) continue;
+      var key = [a.id, b.id].sort().join('__');
+      if (!a._isTeam) {
+        if (!map[a.id]) map[a.id] = [];
+        map[a.id].push({ otherId: b.id, dealerName: b._dealerName || b.dealerName || '?', score: sc, key: key, ownerName: b._ownerName || b.ownerName || null, isTeam: !!b._isTeam });
+      }
+      if (!b._isTeam) {
+        if (!map[b.id]) map[b.id] = [];
+        map[b.id].push({ otherId: a.id, dealerName: a._dealerName || a.dealerName || '?', score: sc, key: key, ownerName: a._ownerName || a.ownerName || null, isTeam: !!a._isTeam });
+      }
+    }
+  }
+  return map;
+}
+
+// ================================================================
+// TABS
+// ================================================================
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('act'); });
+  document.getElementById('tab' + (tab === 'pipeline' ? 'Pipeline' : 'Dealers')).classList.add('act');
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  if (currentTab === 'pipeline') renderPipeline();
+  else renderDealers();
+  updateConflictBadge();
+}
+
+function updateConflictBadge() {
+  var cMap = buildConflictMap();
+  var cnt = Object.keys(cMap).length;
+  var el = document.getElementById('hdrConflictBadge');
+  if (el) el.innerHTML = cnt > 0 ? '<span class="conflict-tag">⚠️ ' + cnt + ' ชน</span>' : '';
+}
+
+// ================================================================
+// PIPELINE TAB
+// ================================================================
+function renderPipeline() {
+  var cMap = buildConflictMap();
+  var active = pipeline.filter(function(p) { return ['lost','delivered'].indexOf(p.status) === -1; });
+  var totalAmt = pipeline.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+  var activeAmt = active.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+  var conflictCnt = Object.keys(cMap).length;
+
+  var h = '<div class="stats-row">' +
+    '<div class="stat-card"><div class="stat-num">' + pipeline.length + '</div><div class="stat-lbl">ทั้งหมด</div></div>' +
+    '<div class="stat-card"><div class="stat-num" style="color:#22c55e">' + fmtShort(activeAmt) + '</div><div class="stat-lbl">Active ฿</div></div>' +
+    (conflictCnt > 0 ? '<div class="stat-card"><div class="stat-num" style="color:#ef4444">' + conflictCnt + '</div><div class="stat-lbl">⚠️ อาจชน</div></div>' : '<div class="stat-card"><div class="stat-num">' + active.length + '</div><div class="stat-lbl">Active</div></div>') +
+    '</div>';
+
+  if (!pipeline.length) {
+    h += '<div class="empty">📊 ยังไม่มี Pipeline<br><small>กด ＋ เพื่อเพิ่มโครงการ</small></div>';
+  } else {
+    pipeline.forEach(function(p) {
+      var d = dealers.find(function(x) { return x.id === p.dealerId; });
+      var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {name:p.status,cls:'s-prospect'};
+      var cc = cMap[p.id];
+      var cTag = '';
+      if (cc && cc.length === 1) {
+        cTag = ' <span class="conflict-tag">⚠️ ชน ' + esc(cc[0].dealerName.split(' ')[0]) + (cc[0].ownerName ? '' : '') + '</span>';
+      } else if (cc && cc.length > 1) {
+        cTag = ' <span class="conflict-tag">⚠️ ชน ' + cc.length + ' เจ้า</span>';
+      }
+      h += '<div class="li" onclick="showPipeDetail(\'' + p.id + '\')">';
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
+      h += '<div style="flex:1;min-width:0"><div class="lt">' + esc(p.projectName || '(ไม่มีชื่อ)') + '</div>';
+      h += '<div class="ls">' + (d ? esc(d.name) : (p.dealerName || '—')) + ' • ' + (p.endUserTH || '—') + '</div></div>';
+      h += '<div style="text-align:right;flex-shrink:0"><span class="' + st.cls + '" style="font-size:10px;font-weight:600">' + st.name + '</span>';
+      if (p.forecastAmount) h += '<div style="font-size:11px;color:#3b82f6;margin-top:2px">' + fmtShort(p.forecastAmount) + '</div>';
+      h += '</div></div>';
+      if (cTag) h += '<div style="margin-top:4px">' + cTag + '</div>';
+      h += '</div>';
+    });
+  }
+  document.getElementById('tabContent').innerHTML = h;
+}
+
+function showPipeDetail(id) {
+  var p = pipeline.find(function(x) { return x.id === id; });
+  if (!p) return;
+  var d = dealers.find(function(x) { return x.id === p.dealerId; });
+  var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {name:p.status};
+  var h = '';
+  h += '<div style="margin-bottom:12px;padding:10px;background:#0f172a;border-radius:8px">';
+  h += '<div style="font-size:13px;font-weight:700;margin-bottom:4px">' + esc(p.projectName || '—') + '</div>';
+  h += '<div style="font-size:11px;color:#94a3b8">Dealer: ' + (d ? esc(d.name) : (p.dealerName || '—')) + '</div>';
+  h += '<div style="font-size:11px;color:#94a3b8">End User: ' + esc(p.endUserTH || '—') + '</div>';
+  if (p.forecastAmount) h += '<div style="font-size:13px;color:#3b82f6;margin-top:4px;font-weight:600">฿' + Number(p.forecastAmount).toLocaleString() + '</div>';
+  h += '<div style="margin-top:6px"><span class="' + st.cls + '" style="font-size:11px;font-weight:600">' + st.name + '</span></div>';
+  if (p.remark) h += '<div style="font-size:11px;color:#94a3b8;margin-top:6px;padding:6px;background:#1e293b;border-radius:6px">' + esc(p.remark) + '</div>';
+  h += '</div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-primary" style="flex:1" onclick="closeModal();showEditPipe(\'' + id + '\')">✏️ แก้ไข</button>';
+  h += '<button class="btn btn-danger btn-sm" onclick="deletePipe(\'' + id + '\')">🗑️</button>';
+  h += '</div>';
+  openModal('📋 รายละเอียด', h);
+}
+
+function showAddPipe() {
+  editId = null;
+  var dealerOpts = '<option value="">— เลือก Dealer —</option>' + dealers.map(function(d) {
+    return '<option value="' + d.id + '">' + esc(d.name) + '</option>';
+  }).join('');
+  var statusOpts = PIPE_STATUSES.map(function(s) {
+    return '<option value="' + s.id + '"' + (s.id === 'prospect' ? ' selected' : '') + '>' + s.name + '</option>';
+  }).join('');
+  var h = '<div class="fm-group"><label>ชื่อโครงการ *</label><input id="fp_proj" class="fm-input" placeholder="ชื่อโครงการ"></div>';
+  h += '<div class="fm-group"><label>Dealer</label><select id="fp_dealer" class="fm-input">' + dealerOpts + '</select></div>';
+  h += '<div class="fm-group"><label>End User (TH)</label><input id="fp_eu" class="fm-input" placeholder="ชื่อองค์กร/หน่วยงาน"></div>';
+  h += '<div class="fm-group"><label>Status</label><select id="fp_status" class="fm-input">' + statusOpts + '</select></div>';
+  h += '<div class="fm-group"><label>มูลค่าประมาณ (฿)</label><input id="fp_amt" class="fm-input" type="number" placeholder="0"></div>';
+  h += '<div class="fm-group"><label>สินค้า/รุ่น</label><input id="fp_model" class="fm-input" placeholder="เช่น DJI Matrice 350 RTK"></div>';
+  h += '<div class="fm-group"><label>หมายเหตุ</label><textarea id="fp_remark" class="fm-input" rows="3" placeholder="..."></textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-primary" style="flex:1" onclick="savePipe()">💾 บันทึก</button><button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button></div>';
+  openModal('➕ เพิ่ม Pipeline', h);
+}
+
+function showEditPipe(id) {
+  var p = pipeline.find(function(x) { return x.id === id; });
+  if (!p) return;
+  editId = id;
+  var dealerOpts = '<option value="">— เลือก Dealer —</option>' + dealers.map(function(d) {
+    return '<option value="' + d.id + '"' + (d.id === p.dealerId ? ' selected' : '') + '>' + esc(d.name) + '</option>';
+  }).join('');
+  var statusOpts = PIPE_STATUSES.map(function(s) {
+    return '<option value="' + s.id + '"' + (s.id === p.status ? ' selected' : '') + '>' + s.name + '</option>';
+  }).join('');
+  var h = '<div class="fm-group"><label>ชื่อโครงการ *</label><input id="fp_proj" class="fm-input" value="' + esc(p.projectName||'') + '"></div>';
+  h += '<div class="fm-group"><label>Dealer</label><select id="fp_dealer" class="fm-input">' + dealerOpts + '</select></div>';
+  h += '<div class="fm-group"><label>End User (TH)</label><input id="fp_eu" class="fm-input" value="' + esc(p.endUserTH||'') + '"></div>';
+  h += '<div class="fm-group"><label>Status</label><select id="fp_status" class="fm-input">' + statusOpts + '</select></div>';
+  h += '<div class="fm-group"><label>มูลค่าประมาณ (฿)</label><input id="fp_amt" class="fm-input" type="number" value="' + (p.forecastAmount||'') + '"></div>';
+  h += '<div class="fm-group"><label>สินค้า/รุ่น</label><input id="fp_model" class="fm-input" value="' + esc(p.model||'') + '"></div>';
+  h += '<div class="fm-group"><label>หมายเหตุ</label><textarea id="fp_remark" class="fm-input" rows="3">' + esc(p.remark||'') + '</textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-primary" style="flex:1" onclick="savePipe()">💾 บันทึก</button><button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button></div>';
+  openModal('✏️ แก้ไข Pipeline', h);
+}
+
+function savePipe() {
+  var proj = document.getElementById('fp_proj').value.trim();
+  if (!proj) { showToast('กรุณาใส่ชื่อโครงการ'); return; }
+  var dealerId = document.getElementById('fp_dealer').value;
+  var d = dealers.find(function(x) { return x.id === dealerId; });
+  var data = {
+    id: editId || ('pipe_' + Date.now().toString(36)),
+    projectName: proj,
+    dealerId: dealerId,
+    dealerName: d ? d.name : '',
+    endUserTH: document.getElementById('fp_eu').value.trim(),
+    status: document.getElementById('fp_status').value,
+    forecastAmount: parseFloat(document.getElementById('fp_amt').value) || 0,
+    model: document.getElementById('fp_model').value.trim(),
+    remark: document.getElementById('fp_remark').value.trim(),
+    ownerId: SALES_ID,
+    ownerName: SALES_PROFILE ? SALES_PROFILE.name : '',
+    ownerType: 'sales',
+    updatedAt: new Date().toISOString()
+  };
+  if (!editId) data.createdAt = new Date().toISOString();
+
+  var baseRef = db.collection('salesMembers').doc(SALES_ID);
+  baseRef.collection('pipeline').doc(data.id).set(data).then(function() {
+    // Mirror to teamPipeline for cross-team conflict detection
+    var active = ['lost','delivered'].indexOf(data.status) === -1;
+    var tpRef = db.collection('teamPipeline').doc(data.id);
+    if (active) {
+      tpRef.set({
+        id: data.id, dealerId: data.dealerId, dealerName: data.dealerName,
+        projectName: data.projectName, endUserTH: data.endUserTH, endUserEN: '',
+        forecastAmount: data.forecastAmount, status: data.status,
+        ownerName: data.ownerName, ownerId: SALES_ID, ownerType: 'sales',
+        updatedAt: data.updatedAt
+      });
+    } else {
+      tpRef.delete().catch(function(){});
+    }
+    closeModal();
+    showToast('✅ บันทึกแล้ว');
+  }).catch(function(e) { showToast('❌ Error: ' + e.message); });
+}
+
+function deletePipe(id) {
+  if (!confirm('ลบโครงการนี้?')) return;
+  db.collection('salesMembers').doc(SALES_ID).collection('pipeline').doc(id).delete().then(function() {
+    db.collection('teamPipeline').doc(id).delete().catch(function(){});
+    closeModal();
+    showToast('🗑️ ลบแล้ว');
+  }).catch(function(e) { showToast('❌ Error: ' + e.message); });
+}
+
+// ================================================================
+// DEALERS TAB
+// ================================================================
+function renderDealers() {
+  var h = '';
+  if (!dealers.length) {
+    h = '<div class="empty">🏪 ยังไม่มี Dealer<br><small>กด ＋ เพื่อเพิ่ม</small></div>';
+  } else {
+    dealers.forEach(function(d) {
+      var pipeCnt = pipeline.filter(function(p) { return p.dealerId === d.id && ['lost','delivered'].indexOf(p.status) === -1; }).length;
+      h += '<div class="li" onclick="showDealerDetail(\'' + d.id + '\')">';
+      h += '<div style="display:flex;align-items:center;justify-content:space-between">';
+      h += '<div><div class="lt">' + esc(d.name || '—') + '</div>';
+      h += '<div class="ls">' + (d.contact || '') + (d.province ? ' • ' + esc(d.province) : '') + '</div></div>';
+      if (pipeCnt > 0) h += '<span class="badge badge-blue">' + pipeCnt + ' งาน</span>';
+      h += '</div></div>';
+    });
+  }
+  document.getElementById('tabContent').innerHTML = h;
+}
+
+function showDealerDetail(id) {
+  var d = dealers.find(function(x) { return x.id === id; });
+  if (!d) return;
+  var pipes = pipeline.filter(function(p) { return p.dealerId === id; });
+  var h = '<div style="margin-bottom:12px;padding:10px;background:#0f172a;border-radius:8px">';
+  h += '<div style="font-size:14px;font-weight:700">' + esc(d.name || '—') + '</div>';
+  if (d.contact) h += '<div style="font-size:11px;color:#94a3b8;margin-top:3px">📞 ' + esc(d.contact) + '</div>';
+  if (d.province) h += '<div style="font-size:11px;color:#94a3b8">📍 ' + esc(d.province) + '</div>';
+  if (d.remark) h += '<div style="font-size:11px;color:#94a3b8;margin-top:4px">' + esc(d.remark) + '</div>';
+  h += '</div>';
+  if (pipes.length) {
+    h += '<div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px">Pipeline (' + pipes.length + ')</div>';
+    pipes.forEach(function(p) {
+      var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; });
+      h += '<div style="padding:6px 8px;background:#0f172a;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">';
+      h += '<span style="font-size:12px">' + esc(p.projectName || '—') + '</span>';
+      h += '<span class="' + (st ? st.cls : '') + '" style="font-size:10px">' + (st ? st.name : p.status) + '</span></div>';
+    });
+  }
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-primary" style="flex:1" onclick="closeModal();showEditDealer(\'' + id + '\')">✏️ แก้ไข</button>';
+  h += '<button class="btn btn-danger btn-sm" onclick="deleteDealer(\'' + id + '\')">🗑️</button>';
+  h += '</div>';
+  openModal('🏪 ' + esc(d.name || 'Dealer'), h);
+}
+
+function showAddDealer() {
+  editId = null;
+  var h = '<div class="fm-group"><label>ชื่อ Dealer *</label><input id="fd_name" class="fm-input" placeholder="ชื่อบริษัท/ร้าน"></div>';
+  h += '<div class="fm-group"><label>ชื่อผู้ติดต่อ</label><input id="fd_contact" class="fm-input" placeholder="ชื่อ-นามสกุล หรือเบอร์โทร"></div>';
+  h += '<div class="fm-group"><label>จังหวัด</label><input id="fd_province" class="fm-input" placeholder="กรุงเทพฯ, ..."></div>';
+  h += '<div class="fm-group"><label>หมายเหตุ</label><textarea id="fd_remark" class="fm-input" rows="2" placeholder="..."></textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-primary" style="flex:1" onclick="saveDealer()">💾 บันทึก</button><button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button></div>';
+  openModal('➕ เพิ่ม Dealer', h);
+}
+
+function showEditDealer(id) {
+  var d = dealers.find(function(x) { return x.id === id; });
+  if (!d) return;
+  editId = id;
+  var h = '<div class="fm-group"><label>ชื่อ Dealer *</label><input id="fd_name" class="fm-input" value="' + esc(d.name||'') + '"></div>';
+  h += '<div class="fm-group"><label>ชื่อผู้ติดต่อ</label><input id="fd_contact" class="fm-input" value="' + esc(d.contact||'') + '"></div>';
+  h += '<div class="fm-group"><label>จังหวัด</label><input id="fd_province" class="fm-input" value="' + esc(d.province||'') + '"></div>';
+  h += '<div class="fm-group"><label>หมายเหตุ</label><textarea id="fd_remark" class="fm-input" rows="2">' + esc(d.remark||'') + '</textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-primary" style="flex:1" onclick="saveDealer()">💾 บันทึก</button><button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button></div>';
+  openModal('✏️ แก้ไข Dealer', h);
+}
+
+function saveDealer() {
+  var name = document.getElementById('fd_name').value.trim();
+  if (!name) { showToast('กรุณาใส่ชื่อ Dealer'); return; }
+  var data = {
+    id: editId || ('dealer_' + Date.now().toString(36)),
+    name: name,
+    contact: document.getElementById('fd_contact').value.trim(),
+    province: document.getElementById('fd_province').value.trim(),
+    remark: document.getElementById('fd_remark').value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if (!editId) data.createdAt = new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(data.id).set(data).then(function() {
+    if (editId) {
+      var idx = dealers.findIndex(function(x) { return x.id === data.id; });
+      if (idx >= 0) dealers[idx] = data; else dealers.push(data);
+    } else {
+      dealers.push(data);
+    }
+    dealers.sort(function(a,b) { return (a.name||'').localeCompare(b.name||''); });
+    closeModal();
+    showToast('✅ บันทึกแล้ว');
+    renderDealers();
+  }).catch(function(e) { showToast('❌ Error: ' + e.message); });
+}
+
+function deleteDealer(id) {
+  if (!confirm('ลบ Dealer นี้?')) return;
+  db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(id).delete().then(function() {
+    dealers = dealers.filter(function(x) { return x.id !== id; });
+    closeModal();
+    showToast('🗑️ ลบแล้ว');
+    renderDealers();
+  }).catch(function(e) { showToast('❌ Error: ' + e.message); });
+}
+
+// ================================================================
+// FAB
+// ================================================================
+function showAddModal() {
+  if (currentTab === 'pipeline') showAddPipe();
+  else showAddDealer();
+}
+
+// ================================================================
+// MODAL
+// ================================================================
+function openModal(title, body) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('open');
+  editId = null;
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtShort(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return n.toString();
+}
+var _toastTimer;
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+</script>
+</body>
+</html>

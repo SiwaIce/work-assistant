@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>GM View — DJI Assistant</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;min-height:100vh}
+:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--accent:#3b82f6;--red:#ef4444;--green:#22c55e;--orange:#f97316;--yellow:#eab308}
+
+header{background:#1e293b;border-bottom:1px solid #334155;padding:12px 16px;position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px}
+.hdr-icon{font-size:24px}
+.hdr-title{font-size:16px;font-weight:700}
+.hdr-sub{font-size:11px;color:#64748b}
+
+/* Tabs */
+.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;padding:0 12px;overflow-x:auto}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:#64748b;white-space:nowrap;transition:all .15s}
+.tab.act{border-bottom-color:#3b82f6;color:#3b82f6;font-weight:600}
+
+/* Content */
+.content{padding:12px;max-width:900px;margin:0 auto}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:10px}
+.card h2{font-size:14px;font-weight:700;margin-bottom:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+@media(min-width:480px){.stats-row{grid-template-columns:repeat(4,1fr)}}
+.stat-card{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:12px;text-align:center}
+.stat-num{font-size:22px;font-weight:700;color:#3b82f6}
+.stat-lbl{font-size:10px;color:#64748b;margin-top:3px}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+select.filter-sel{padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:7px;color:#e2e8f0;font-size:12px;outline:none;cursor:pointer}
+select.filter-sel:focus{border-color:#3b82f6}
+
+/* Table */
+.pipe-table{width:100%;border-collapse:collapse;font-size:12px}
+.pipe-table th{background:#0f172a;padding:7px 8px;text-align:left;color:#64748b;font-weight:600;border-bottom:1px solid #334155;position:sticky;top:0;white-space:nowrap}
+.pipe-table td{padding:7px 8px;border-bottom:1px solid #1e293b;vertical-align:top}
+.pipe-table tr:hover td{background:#1e293b}
+.pipe-table tr.is-won td{background:#22c55e08}
+.pipe-table tr.is-lost td{background:#ef444408;opacity:.7}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
+.b-main{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
+.b-sales{background:#f9731620;color:#f97316;border:1px solid #f9731640}
+.b-conflict{background:#ef444418;color:#ef4444;border:1px solid #ef444430}
+.b-status{display:inline-block;font-size:10px;font-weight:600}
+.s-prospect{color:#94a3b8}.s-tor_review{color:#f97316}.s-quotation{color:#eab308}.s-bidding{color:#3b82f6}.s-negotiation{color:#a855f7}.s-win{color:#22c55e}.s-ordered{color:#10b981}.s-delivered{color:#10b981}.s-lost{color:#ef4444}
+
+/* Owner tag */
+.owner-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;margin-right:3px}
+
+/* Loading */
+.loading{text-align:center;padding:40px;color:#64748b;font-size:13px}
+
+/* Forecast bar */
+.fc-bar-wrap{background:#0f172a;border-radius:4px;overflow:hidden;height:6px;margin-top:4px}
+.fc-bar{height:6px;background:#3b82f6;border-radius:4px}
+
+/* Conflict section */
+.conflict-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#ef444408;border:1px solid #ef444420;border-radius:8px;margin-bottom:6px}
+.conflict-icon{font-size:18px;flex-shrink:0;margin-top:2px}
+.conflict-body{flex:1;min-width:0}
+.conflict-title{font-size:13px;font-weight:600;margin-bottom:3px}
+.conflict-meta{font-size:11px;color:#94a3b8}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+
+/* Empty */
+.empty{text-align:center;padding:32px;color:#64748b;font-size:13px}
+
+/* Month grid */
+.month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.month-cell{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;cursor:pointer}
+.month-cell:hover{border-color:#3b82f6}
+.month-cell.cur{border-color:#3b82f6;background:#3b82f610}
+.month-name{font-size:11px;color:#64748b;margin-bottom:4px}
+.month-amt{font-size:15px;font-weight:700;color:#3b82f6}
+.month-cnt{font-size:10px;color:#64748b}
+.month-bar-wrap{background:#334155;border-radius:3px;overflow:hidden;height:4px;margin-top:6px}
+.month-bar{height:4px;background:#3b82f6;border-radius:3px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-icon">📊</div>
+  <div>
+    <div class="hdr-title">GM Dashboard</div>
+    <div class="hdr-sub">DJI Sales Team — ภาพรวมทีม</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab act" onclick="showTab('overview')" id="tabOverview">📈 ภาพรวม</div>
+  <div class="tab" onclick="showTab('pipeline')" id="tabPipeline">📊 Pipeline ทั้งหมด</div>
+  <div class="tab" onclick="showTab('conflicts')" id="tabConflicts">⚠️ ชนกัน</div>
+  <div class="tab" onclick="showTab('forecast')" id="tabForecast">💰 Forecast</div>
+</div>
+
+<div class="content" id="mainContent">
+  <div class="loading">🔄 กำลังโหลดข้อมูล...</div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+
+// ================================================================
+// STATE
+// ================================================================
+var allPipeline = [];   // from teamPipeline collection
+var teamMembers = [];   // from teamConfig
+var conflicts = [];     // computed pairs
+var currentTab = 'overview';
+var filterOwner = 'all';
+var filterStatus = 'all';
+
+var PIPE_STATUSES = [
+  {id:'prospect',name:'Prospect',cls:'s-prospect'},
+  {id:'tor_review',name:'TOR',cls:'s-tor_review'},
+  {id:'quotation',name:'Quotation',cls:'s-quotation'},
+  {id:'bidding',name:'Bidding',cls:'s-bidding'},
+  {id:'negotiation',name:'Negotiation',cls:'s-negotiation'},
+  {id:'win',name:'Win',cls:'s-win'},
+  {id:'ordered',name:'Ordered',cls:'s-ordered'},
+  {id:'delivered',name:'Delivered',cls:'s-delivered'},
+  {id:'lost',name:'Lost',cls:'s-lost'}
+];
+var ACTIVE_STATUSES = ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'];
+var MONTHS_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+// ================================================================
+// LOAD DATA
+// ================================================================
+function loadData() {
+  Promise.all([
+    db.collection('teamPipeline').get(),
+    db.collection('teamConfig').doc('main').get()
+  ]).then(function(results) {
+    var pipeSnap = results[0];
+    var configDoc = results[1];
+
+    allPipeline = [];
+    pipeSnap.forEach(function(d) { allPipeline.push(d.data()); });
+    allPipeline.sort(function(a,b) { return (b.updatedAt||'').localeCompare(a.updatedAt||''); });
+
+    if (configDoc.exists) {
+      var cfg = configDoc.data();
+      teamMembers = cfg.members || [];
+    }
+
+    conflicts = detectConflicts(allPipeline);
+    renderTab(currentTab);
+  }).catch(function(e) {
+    document.getElementById('mainContent').innerHTML = '<div class="empty">❌ โหลดข้อมูลล้มเหลว<br><small style="color:#ef4444">' + e.message + '</small></div>';
+  });
+}
+
+// ================================================================
+// CONFLICT DETECTION
+// ================================================================
+function bigrams(str) {
+  var s = (str || '').toLowerCase().replace(/\s+/g, '');
+  var set = {};
+  for (var i = 0; i < s.length - 1; i++) set[s[i] + s[i+1]] = true;
+  return set;
+}
+function bigramSim(a, b) {
+  var ba = bigrams(a), bb = bigrams(b);
+  var inter = 0, ua = Object.keys(ba).length, ub = Object.keys(bb).length;
+  Object.keys(ba).forEach(function(k) { if (bb[k]) inter++; });
+  return (ua + ub) === 0 ? 0 : Math.round(2 * inter / (ua + ub) * 100);
+}
+function pipeScore(a, b) {
+  return Math.round(bigramSim(a.projectName, b.projectName) * 0.5 + bigramSim(a.endUserTH, b.endUserTH) * 0.35 + bigramSim(a.endUserEN, b.endUserEN) * 0.15);
+}
+function detectConflicts(pipes) {
+  var active = pipes.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
+  var pairs = [];
+  for (var i = 0; i < active.length; i++) {
+    for (var j = i + 1; j < active.length; j++) {
+      // Skip if same owner
+      if (active[i].ownerId && active[i].ownerId === active[j].ownerId) continue;
+      var sc = pipeScore(active[i], active[j]);
+      if (sc >= 60) pairs.push({ a: active[i], b: active[j], score: sc });
+    }
+  }
+  pairs.sort(function(a,b) { return b.score - a.score; });
+  return pairs;
+}
+
+// ================================================================
+// TABS
+// ================================================================
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('act'); });
+  var tabIds = {overview:'tabOverview',pipeline:'tabPipeline',conflicts:'tabConflicts',forecast:'tabForecast'};
+  if (tabIds[tab]) document.getElementById(tabIds[tab]).classList.add('act');
+  renderTab(tab);
+}
+function renderTab(tab) {
+  if (tab === 'overview') renderOverview();
+  else if (tab === 'pipeline') renderPipelineTab();
+  else if (tab === 'conflicts') renderConflictsTab();
+  else if (tab === 'forecast') renderForecastTab();
+}
+
+// ================================================================
+// OVERVIEW TAB
+// ================================================================
+function renderOverview() {
+  var active = allPipeline.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
+  var won = allPipeline.filter(function(p) { return ['win','ordered','delivered'].indexOf(p.status) !== -1; });
+  var totalAmt = active.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+  var wonAmt = won.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+
+  // Owner breakdown
+  var ownerMap = {};
+  allPipeline.forEach(function(p) {
+    var k = p.ownerName || 'Unknown';
+    if (!ownerMap[k]) ownerMap[k] = { name: k, type: p.ownerType, count: 0, active: 0, amt: 0, won: 0 };
+    ownerMap[k].count++;
+    if (ACTIVE_STATUSES.indexOf(p.status) !== -1) { ownerMap[k].active++; ownerMap[k].amt += Number(p.forecastAmount)||0; }
+    if (['win','ordered','delivered'].indexOf(p.status) !== -1) ownerMap[k].won += Number(p.forecastAmount)||0;
+  });
+
+  // Monthly forecast (next 6 months)
+  var now = new Date();
+  var months = [];
+  for (var m = 0; m < 6; m++) {
+    var d = new Date(now.getFullYear(), now.getMonth() + m, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth(), label: MONTHS_TH[d.getMonth()] + ' ' + (d.getFullYear() % 100), amt: 0, cnt: 0 });
+  }
+  allPipeline.forEach(function(p) {
+    if (ACTIVE_STATUSES.indexOf(p.status) === -1) return;
+    var dateStr = p.expectedCloseDate || p.biddingDate || '';
+    if (!dateStr) return;
+    var dt = new Date(dateStr);
+    if (isNaN(dt.getTime())) return;
+    months.forEach(function(m) {
+      if (dt.getFullYear() === m.year && dt.getMonth() === m.month) {
+        m.amt += Number(p.forecastAmount) || 0;
+        m.cnt++;
+      }
+    });
+  });
+  var maxAmt = Math.max(1, months.reduce(function(s,m) { return Math.max(s, m.amt); }, 0));
+
+  var h = '';
+  h += '<div class="stats-row">';
+  h += '<div class="stat-card"><div class="stat-num">' + allPipeline.length + '</div><div class="stat-lbl">Pipeline ทั้งหมด</div></div>';
+  h += '<div class="stat-card"><div class="stat-num" style="color:#22c55e">' + fmtShort(totalAmt) + '</div><div class="stat-lbl">Active Forecast ฿</div></div>';
+  h += '<div class="stat-card"><div class="stat-num" style="color:#a855f7">' + fmtShort(wonAmt) + '</div><div class="stat-lbl">Won ฿</div></div>';
+  h += '<div class="stat-card"><div class="stat-num" style="color:#ef4444">' + conflicts.length + '</div><div class="stat-lbl">⚠️ ชนกัน</div></div>';
+  h += '</div>';
+
+  // Team breakdown
+  h += '<div class="card"><h2>👥 สรุปแยกตามทีม</h2>';
+  Object.values(ownerMap).forEach(function(o) {
+    var cls = o.type === 'main' ? 'b-main' : 'b-sales';
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #334155">';
+    h += '<span class="badge ' + cls + '">' + esc(o.name) + '</span>';
+    h += '<div style="flex:1">';
+    h += '<div style="font-size:12px">' + o.active + ' งาน Active <span style="color:#64748b">/ ' + o.count + ' ทั้งหมด</span></div>';
+    h += '<div style="font-size:11px;color:#3b82f6">' + fmtShort(o.amt) + ' ฿ forecast</div>';
+    if (o.amt > 0) {
+      h += '<div class="fc-bar-wrap"><div class="fc-bar" style="width:' + Math.round(o.amt/totalAmt*100) + '%"></div></div>';
+    }
+    h += '</div>';
+    if (o.won > 0) h += '<div style="text-align:right;font-size:11px;color:#22c55e">Won<br>' + fmtShort(o.won) + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+
+  // 6-month timeline
+  h += '<div class="card"><h2>📅 Timeline 6 เดือน (Expected Close)</h2>';
+  h += '<div class="month-grid">';
+  var curM = now.getMonth(), curY = now.getFullYear();
+  months.forEach(function(m) {
+    var isCur = m.year === curY && m.month === curM;
+    var pct = Math.round(m.amt / maxAmt * 100);
+    h += '<div class="month-cell ' + (isCur ? 'cur' : '') + '" onclick="showMonthDetail(' + m.year + ',' + m.month + ')">';
+    h += '<div class="month-name">' + m.label + '</div>';
+    h += '<div class="month-amt">' + (m.amt > 0 ? fmtShort(m.amt) : '—') + '</div>';
+    h += '<div class="month-cnt">' + (m.cnt > 0 ? m.cnt + ' โครงการ' : '') + '</div>';
+    h += '<div class="month-bar-wrap"><div class="month-bar" style="width:' + pct + '%"></div></div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
+
+  document.getElementById('mainContent').innerHTML = h;
+}
+
+function showMonthDetail(year, month) {
+  var label = MONTHS_TH[month] + ' ' + year;
+  var items = allPipeline.filter(function(p) {
+    if (ACTIVE_STATUSES.indexOf(p.status) === -1) return false;
+    var dateStr = p.expectedCloseDate || p.biddingDate || '';
+    if (!dateStr) return false;
+    var dt = new Date(dateStr);
+    return !isNaN(dt.getTime()) && dt.getFullYear() === year && dt.getMonth() === month;
+  });
+  if (!items.length) { showToast('ไม่มีโครงการในเดือนนี้'); return; }
+  var totalAmt = items.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+  var h = '<div style="margin-bottom:8px;font-size:13px;color:#94a3b8">รวม ' + items.length + ' โครงการ • ' + fmtShort(totalAmt) + ' ฿</div>';
+  items.forEach(function(p) {
+    var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {};
+    h += '<div style="padding:8px;background:#0f172a;border-radius:8px;margin-bottom:6px">';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
+    h += '<div style="flex:1;font-size:13px;font-weight:600">' + esc(p.projectName || '—') + '</div>';
+    h += '<span class="' + (st.cls||'') + '" style="font-size:10px;font-weight:600">' + (st.name||p.status) + '</span>';
+    h += '</div>';
+    h += '<div style="font-size:11px;color:#94a3b8;margin-top:3px">' + esc(p.dealerName || '—') + '</div>';
+    if (p.forecastAmount) h += '<div style="font-size:12px;color:#3b82f6;margin-top:2px">฿' + Number(p.forecastAmount).toLocaleString() + '</div>';
+    var ownerCls = p.ownerType === 'main' ? 'b-main' : 'b-sales';
+    h += '<div style="margin-top:4px"><span class="badge ' + ownerCls + '">' + esc(p.ownerName || '—') + '</span></div>';
+    h += '</div>';
+  });
+  // Simple modal using alert-style div
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#0009;z-index:200;display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:16px 16px 0 0;width:100%;max-width:540px;max-height:85vh;overflow-y:auto;padding:20px';
+  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><strong style="font-size:15px">📅 ' + label + '</strong><button onclick="this.closest(\'div\').parentElement.parentElement.remove()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button></div>' + h;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+// ================================================================
+// PIPELINE TAB
+// ================================================================
+function renderPipelineTab() {
+  // Build unique owners list
+  var owners = [];
+  allPipeline.forEach(function(p) {
+    if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName);
+  });
+
+  var ownerFilter = '<select class="filter-sel" id="fOwner" onchange="filterOwner=this.value;renderPipelineTab()"><option value="all">ทุกคน</option>' +
+    owners.map(function(o) { return '<option value="' + esc(o) + '"' + (filterOwner === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+  var statusFilter = '<select class="filter-sel" id="fStatus" onchange="filterStatus=this.value;renderPipelineTab()"><option value="all">ทุก Status</option>' +
+    PIPE_STATUSES.map(function(s) { return '<option value="' + s.id + '"' + (filterStatus === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select>';
+
+  var filtered = allPipeline.filter(function(p) {
+    if (filterOwner !== 'all' && p.ownerName !== filterOwner) return false;
+    if (filterStatus !== 'all' && p.status !== filterStatus) return false;
+    return true;
+  });
+
+  // Build conflict lookup (pipeId → conflict entries)
+  var cMap = {};
+  conflicts.forEach(function(c) {
+    if (!cMap[c.a.id]) cMap[c.a.id] = [];
+    if (!cMap[c.b.id]) cMap[c.b.id] = [];
+    cMap[c.a.id].push({ other: c.b, score: c.score });
+    cMap[c.b.id].push({ other: c.a, score: c.score });
+  });
+
+  var totalAmt = filtered.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; })
+    .reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+
+  var h = '<div class="filter-bar">' + ownerFilter + statusFilter + '</div>';
+  h += '<div style="font-size:11px;color:#64748b;margin-bottom:8px">' + filtered.length + ' รายการ • Active: ' + fmtShort(totalAmt) + ' ฿</div>';
+
+  if (!filtered.length) {
+    h += '<div class="empty">ไม่มีข้อมูล</div>';
+  } else {
+    h += '<div style="overflow-x:auto"><table class="pipe-table"><thead><tr>';
+    h += '<th>#</th><th>โครงการ</th><th>Dealer</th><th>Status</th><th>฿ Forecast</th><th>Sales</th><th></th>';
+    h += '</tr></thead><tbody>';
+    filtered.forEach(function(p, i) {
+      var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {};
+      var cc = cMap[p.id];
+      var isWon = ['win','ordered','delivered'].indexOf(p.status) !== -1;
+      var isLost = p.status === 'lost';
+      var ownerCls = p.ownerType === 'main' ? 'b-main' : 'b-sales';
+      h += '<tr class="' + (isWon ? 'is-won' : isLost ? 'is-lost' : '') + '">';
+      h += '<td style="color:#64748b">' + (i+1) + '</td>';
+      h += '<td style="max-width:200px"><div style="font-weight:600">' + esc((p.projectName||'').substr(0,40)) + '</div>';
+      if (p.endUserTH) h += '<div style="font-size:10px;color:#64748b">' + esc(p.endUserTH.substr(0,30)) + '</div>';
+      h += '</td>';
+      h += '<td style="max-width:130px;font-size:11px">' + esc((p.dealerName||'—').substr(0,25)) + '</td>';
+      h += '<td><span class="b-status ' + (st.cls||'') + '">' + (st.name||p.status) + '</span></td>';
+      h += '<td style="text-align:right;color:#3b82f6;font-weight:600">' + (p.forecastAmount ? fmtShort(p.forecastAmount) : '—') + '</td>';
+      h += '<td><span class="badge ' + ownerCls + '" style="font-size:9px">' + esc(p.ownerName||'?') + '</span></td>';
+      h += '<td>';
+      if (cc && cc.length) h += '<span class="badge b-conflict">⚠️ ' + cc.length + '</span>';
+      h += '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  document.getElementById('mainContent').innerHTML = h;
+}
+
+// ================================================================
+// CONFLICTS TAB
+// ================================================================
+function renderConflictsTab() {
+  var h = '';
+  if (!conflicts.length) {
+    h = '<div class="empty">✅ ไม่มีโครงการที่อาจชนกัน</div>';
+  } else {
+    h += '<div style="font-size:11px;color:#64748b;margin-bottom:10px">' + conflicts.length + ' คู่ที่อาจชนกัน (score ≥ 60%)</div>';
+    conflicts.forEach(function(c, i) {
+      var scoreColor = c.score >= 80 ? '#ef4444' : c.score >= 70 ? '#f97316' : '#eab308';
+      var aOwnerCls = c.a.ownerType === 'main' ? 'b-main' : 'b-sales';
+      var bOwnerCls = c.b.ownerType === 'main' ? 'b-main' : 'b-sales';
+      h += '<div class="conflict-item">';
+      h += '<div class="conflict-icon">⚠️</div>';
+      h += '<div class="conflict-body">';
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+      h += '<span style="font-size:13px;font-weight:700;color:' + scoreColor + '">' + c.score + '%</span>';
+      h += '<span style="font-size:11px;color:#64748b">ความคล้ายคลึง</span>';
+      h += '</div>';
+      h += '<div style="background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
+      h += '<span class="badge ' + aOwnerCls + '" style="font-size:9px">' + esc(c.a.ownerName||'?') + '</span>';
+      h += '<span style="font-size:12px;font-weight:600">' + esc((c.a.projectName||'—').substr(0,45)) + '</span>';
+      h += '</div>';
+      h += '<div style="font-size:11px;color:#64748b;padding-left:4px">🏪 ' + esc(c.a.dealerName||'—') + (c.a.endUserTH ? ' • ' + esc(c.a.endUserTH.substr(0,30)) : '') + '</div>';
+      h += '</div>';
+      h += '<div style="background:#0f172a;border-radius:6px;padding:8px">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
+      h += '<span class="badge ' + bOwnerCls + '" style="font-size:9px">' + esc(c.b.ownerName||'?') + '</span>';
+      h += '<span style="font-size:12px;font-weight:600">' + esc((c.b.projectName||'—').substr(0,45)) + '</span>';
+      h += '</div>';
+      h += '<div style="font-size:11px;color:#64748b;padding-left:4px">🏪 ' + esc(c.b.dealerName||'—') + (c.b.endUserTH ? ' • ' + esc(c.b.endUserTH.substr(0,30)) : '') + '</div>';
+      h += '</div>';
+      h += '</div></div>';
+    });
+  }
+  document.getElementById('mainContent').innerHTML = h;
+}
+
+// ================================================================
+// FORECAST TAB
+// ================================================================
+function renderForecastTab() {
+  var active = allPipeline.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
+  var byStatus = {};
+  PIPE_STATUSES.forEach(function(s) { byStatus[s.id] = { cnt: 0, amt: 0 }; });
+  active.forEach(function(p) {
+    if (byStatus[p.status]) { byStatus[p.status].cnt++; byStatus[p.status].amt += Number(p.forecastAmount)||0; }
+  });
+  var totalAmt = active.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+  var wonAmt = allPipeline.filter(function(p) { return ['win','ordered'].indexOf(p.status) !== -1; }).reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+
+  var h = '<div class="stats-row">';
+  h += '<div class="stat-card"><div class="stat-num">' + fmtShort(totalAmt) + '</div><div class="stat-lbl">Active Forecast ฿</div></div>';
+  h += '<div class="stat-card"><div class="stat-num" style="color:#22c55e">' + fmtShort(wonAmt) + '</div><div class="stat-lbl">Won / Ordered ฿</div></div>';
+  h += '<div class="stat-card"><div class="stat-num">' + active.length + '</div><div class="stat-lbl">โครงการ Active</div></div>';
+  h += '<div class="stat-card"><div class="stat-num" style="color:#f97316">' + (totalAmt > 0 ? Math.round(wonAmt/totalAmt*100) : 0) + '%</div><div class="stat-lbl">Win Rate</div></div>';
+  h += '</div>';
+
+  // Funnel by status
+  h += '<div class="card"><h2>📊 Pipeline Funnel</h2>';
+  var funnelStatuses = ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'];
+  var maxAmt = Math.max(1, funnelStatuses.reduce(function(s,id) { return Math.max(s, (byStatus[id]||{}).amt||0); }, 0));
+  funnelStatuses.forEach(function(id) {
+    var st = PIPE_STATUSES.find(function(s) { return s.id === id; }) || {};
+    var d = byStatus[id] || { cnt: 0, amt: 0 };
+    if (!d.cnt) return;
+    var pct = Math.round(d.amt / maxAmt * 100);
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #1e293b">';
+    h += '<div style="width:90px;font-size:11px;font-weight:600" class="' + (st.cls||'') + '">' + (st.name||id) + '</div>';
+    h += '<div style="flex:1"><div style="background:#334155;border-radius:3px;overflow:hidden;height:14px">';
+    h += '<div style="height:14px;border-radius:3px;background:var(--accent);width:' + pct + '%"></div></div></div>';
+    h += '<div style="width:70px;text-align:right;font-size:11px;color:#3b82f6">' + fmtShort(d.amt) + '</div>';
+    h += '<div style="width:40px;text-align:right;font-size:11px;color:#64748b">' + d.cnt + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+
+  // By owner
+  h += '<div class="card"><h2>👥 แยกตาม Sales</h2>';
+  var ownerAmt = {};
+  active.forEach(function(p) {
+    var k = p.ownerName || '?';
+    if (!ownerAmt[k]) ownerAmt[k] = { name: k, type: p.ownerType, amt: 0, cnt: 0 };
+    ownerAmt[k].amt += Number(p.forecastAmount)||0;
+    ownerAmt[k].cnt++;
+  });
+  var maxOwnerAmt = Math.max(1, Object.values(ownerAmt).reduce(function(s,o) { return Math.max(s, o.amt); }, 0));
+  Object.values(ownerAmt).sort(function(a,b) { return b.amt - a.amt; }).forEach(function(o) {
+    var pct = Math.round(o.amt / maxOwnerAmt * 100);
+    var cls = o.type === 'main' ? 'b-main' : 'b-sales';
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1e293b">';
+    h += '<span class="badge ' + cls + '" style="width:80px;text-align:center">' + esc(o.name) + '</span>';
+    h += '<div style="flex:1"><div style="background:#334155;border-radius:3px;overflow:hidden;height:14px">';
+    h += '<div style="height:14px;border-radius:3px;background:' + (o.type === 'main' ? '#3b82f6' : '#f97316') + ';width:' + pct + '%"></div></div></div>';
+    h += '<div style="width:70px;text-align:right;font-size:12px;font-weight:600;color:#3b82f6">' + fmtShort(o.amt) + '</div>';
+    h += '<div style="width:40px;text-align:right;font-size:11px;color:#64748b">' + o.cnt + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+
+  document.getElementById('mainContent').innerHTML = h;
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtShort(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return n.toString();
+}
+var _toastTimer;
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+
+// ================================================================
+// START
+// ================================================================
+loadData();
+</script>
+</body>
+</html>

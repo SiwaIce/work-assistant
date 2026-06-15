@@ -23,16 +23,22 @@ var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
 // ================================================================
 // โซน "งานที่อาจชนกัน" + modal เทียบ (Phase 3)
 // ================================================================
-// สร้าง lookup map: pipeId → [{otherId, dealerName, score, key}]
+// สร้าง lookup map: pipeId → [{otherId, dealerName, score, key, ownerName, isTeam}]
 function buildConflictMap(conflicts) {
   var map = {};
   (conflicts || []).forEach(function(c) {
-    var da = ST.getOne('dealers', c.a.dealerId);
-    var db = ST.getOne('dealers', c.b.dealerId);
-    if (!map[c.a.id]) map[c.a.id] = [];
-    if (!map[c.b.id]) map[c.b.id] = [];
-    map[c.a.id].push({ otherId: c.b.id, dealerName: db ? db.name : '?', score: c.score, key: c.key });
-    map[c.b.id].push({ otherId: c.a.id, dealerName: da ? da.name : '?', score: c.score, key: c.key });
+    var aIsTeam = !!c.a._isTeam;
+    var bIsTeam = !!c.b._isTeam;
+    var aDealer = aIsTeam ? (c.a._dealerName || '?') : (function() { var d = ST.getOne('dealers', c.a.dealerId); return d ? d.name : '?'; })();
+    var bDealer = bIsTeam ? (c.b._dealerName || '?') : (function() { var d = ST.getOne('dealers', c.b.dealerId); return d ? d.name : '?'; })();
+    if (!aIsTeam) {
+      if (!map[c.a.id]) map[c.a.id] = [];
+      map[c.a.id].push({ otherId: c.b.id, dealerName: bDealer, score: c.score, key: c.key, ownerName: c.b._ownerName || null, isTeam: bIsTeam });
+    }
+    if (!bIsTeam) {
+      if (!map[c.b.id]) map[c.b.id] = [];
+      map[c.b.id].push({ otherId: c.a.id, dealerName: aDealer, score: c.score, key: c.key, ownerName: c.a._ownerName || null, isTeam: aIsTeam });
+    }
   });
   return map;
 }
@@ -134,9 +140,9 @@ function showConflictListM(pipeId) {
   var html = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">โปรเจค: <strong>' + sanitize(p ? p.projectName : '') + '</strong> อาจชนกับ:</div>';
   cList.forEach(function(c) {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border,#334155);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">';
-    html += '<div style="flex:1;font-weight:600;font-size:13px">' + sanitize(c.dealerName) + '</div>';
+    html += '<div style="flex:1;font-weight:600;font-size:13px">' + sanitize(c.dealerName) + (c.ownerName ? ' <span style="font-size:.65rem;color:#f97316;font-weight:400;background:#f9731618;padding:1px 6px;border-radius:4px">👤 ' + sanitize(c.ownerName) + '</span>' : '') + '</div>';
     html += '<span style="font-size:11px;background:#ef444422;color:#ef4444;padding:2px 8px;border-radius:6px;font-weight:700">' + c.score + '%</span>';
-    html += '<button class="btn bsm bp" onclick="closeM();compareConflict(\'' + pipeId + '\',\'' + c.otherId + '\')">🔍 เทียบ</button>';
+    if (!c.isTeam) html += '<button class="btn bsm bp" onclick="closeM();compareConflict(\'' + pipeId + '\',\'' + c.otherId + '\')">🔍 เทียบ</button>';
     html += '<button class="btn bsm bo" onclick="dismissConflict(\'' + c.key + '\');render();closeM()">✓ ไม่ชน</button>';
     html += '</div>';
   });
@@ -210,7 +216,8 @@ function rPipeline(el) {
     if (p.status === 'lost') lostAmt += amt;
   });
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && ['prospect','tor_review','quotation','bidding','negotiation'].indexOf(p.status) !== -1; });
-  var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(allPipes, 60) : [];
+  var teamPipes = (typeof _teamPipelineData !== 'undefined' && Array.isArray(_teamPipelineData)) ? _teamPipelineData : [];
+  var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(allPipes.concat(teamPipes), 60) : [];
   _conflictMap = buildConflictMap(conflicts);
 
   el.innerHTML = '' +
@@ -338,7 +345,10 @@ function renderPipeCards(pipes) {
     var cCard = _conflictMap[p.id];
     var cCardTag = '';
     if (cCard && cCard.length === 1) {
-      cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();compareConflict(\'' + p.id + '\',\'' + cCard[0].otherId + '\')">⚠️ ชน ' + sanitize((cCard[0].dealerName || '').split(' ')[0]) + '</span>';
+      var cLabel = sanitize((cCard[0].dealerName || '').split(' ')[0]);
+      if (cCard[0].ownerName) cLabel += ' (' + sanitize(cCard[0].ownerName) + ')';
+      var cCardAction = cCard[0].isTeam ? 'showConflictListM(\'' + p.id + '\')' : 'compareConflict(\'' + p.id + '\',\'' + cCard[0].otherId + '\')';
+      cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();' + cCardAction + '">⚠️ ชน ' + cLabel + '</span>';
     } else if (cCard && cCard.length > 1) {
       cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cCard.length + ' เจ้า</span>';
     }
@@ -405,7 +415,10 @@ function renderPipeTable(pipes) {
     var cRow = _conflictMap[p.id];
     var cRowTag = '';
     if (cRow && cRow.length === 1) {
-      cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();compareConflict(\'' + p.id + '\',\'' + cRow[0].otherId + '\')">⚠️ ' + sanitize((cRow[0].dealerName || '').split(' ')[0]) + '</div>';
+      var rLabel = sanitize((cRow[0].dealerName || '').split(' ')[0]);
+      if (cRow[0].ownerName) rLabel += ' (' + sanitize(cRow[0].ownerName) + ')';
+      var cRowAction = cRow[0].isTeam ? 'showConflictListM(\'' + p.id + '\')' : 'compareConflict(\'' + p.id + '\',\'' + cRow[0].otherId + '\')';
+      cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();' + cRowAction + '">⚠️ ' + rLabel + '</div>';
     } else if (cRow && cRow.length > 1) {
       cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cRow.length + ' เจ้า</div>';
     }

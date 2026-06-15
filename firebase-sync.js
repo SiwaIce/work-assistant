@@ -146,6 +146,13 @@ auth.onAuthStateChanged(function(user) {
 
     // ✅ Publish แคตตาล็อกสินค้าให้ client-view (รอ products sync ลง localStorage ก่อน)
     setTimeout(function() { if (typeof publishCatalogToClientView === 'function') publishCatalogToClientView(); }, 5000);
+
+    // ✅ Sync pipeline to shared teamPipeline + load other team members' pipeline
+    setTimeout(function() {
+      if (typeof syncMainPipelineToShared === 'function') syncMainPipelineToShared();
+      if (typeof loadSharedTeamPipeline === 'function') loadSharedTeamPipeline();
+      if (typeof publishTeamConfig === 'function' && typeof getSalesMembers === 'function') publishTeamConfig(getSalesMembers());
+    }, 7000);
     
     // รีเฟรช UI
     if (typeof render === 'function') render();
@@ -551,4 +558,71 @@ function exportFullBackup() {
   a.click();
   document.body.removeChild(a);
   toast('📥 Export Full Backup แล้ว!');
+}
+
+// ================================================================
+// TEAM PIPELINE SYNC (cross-team conflict detection)
+// ================================================================
+var _teamPipelineData = []; // pipeline จาก sales members อื่น (ใช้ใน conflict detection)
+
+function syncMainPipelineToShared() {
+  if (!SYNC_ENABLED || !CURRENT_USER) return;
+  var pipes = [];
+  try { pipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) {}
+  if (!pipes.length) return;
+  var dealers = [];
+  try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) {}
+  var dealerMap = {};
+  dealers.forEach(function(d) { if (d && d.id) dealerMap[d.id] = d.name || ''; });
+  var ownerName = CURRENT_USER.displayName || CURRENT_USER.email || 'Main';
+  var colRef = db.collection('teamPipeline');
+  pipes.forEach(function(p) {
+    if (!p || !p.id) return;
+    if (['lost', 'delivered'].indexOf(p.status) !== -1) {
+      colRef.doc(p.id).delete().catch(function(e) { console.warn('teamPipeline delete:', e); });
+    } else {
+      colRef.doc(p.id).set({
+        id: p.id,
+        dealerId: p.dealerId || '',
+        dealerName: dealerMap[p.dealerId] || '',
+        projectName: p.projectName || '',
+        endUserTH: p.endUserTH || '',
+        endUserEN: p.endUserEN || '',
+        forecastAmount: Number(p.forecastAmount) || 0,
+        status: p.status || 'prospect',
+        ownerName: ownerName,
+        ownerId: CURRENT_USER.uid,
+        ownerType: 'main',
+        updatedAt: new Date().toISOString()
+      }).catch(function(e) { console.warn('teamPipeline write:', e); });
+    }
+  });
+}
+
+function loadSharedTeamPipeline() {
+  if (!SYNC_ENABLED || !CURRENT_USER) return;
+  var myUid = CURRENT_USER.uid;
+  db.collection('teamPipeline').get().then(function(snapshot) {
+    var items = [];
+    snapshot.forEach(function(doc) {
+      var d = doc.data();
+      if (!d || d.ownerId === myUid) return;
+      d._isTeam = true;
+      d._ownerName = d.ownerName || '';
+      d._dealerName = d.dealerName || '';
+      items.push(d);
+    });
+    _teamPipelineData = items;
+    console.log('✅ loadSharedTeamPipeline:', items.length, 'items from team');
+  }).catch(function(e) { console.warn('loadSharedTeamPipeline error:', e); });
+}
+
+function publishTeamConfig(members) {
+  if (typeof db === 'undefined' || !SYNC_ENABLED || !CURRENT_USER) return;
+  db.collection('teamConfig').doc('main').set({
+    mainUid: CURRENT_USER.uid,
+    mainName: CURRENT_USER.displayName || CURRENT_USER.email || 'Main',
+    members: members || [],
+    updatedAt: new Date().toISOString()
+  }).catch(function(e) { console.warn('publishTeamConfig error:', e); });
 }

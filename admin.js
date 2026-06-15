@@ -356,6 +356,15 @@ function rAdmin(el) {
     '📌 ใช้เมื่อต้องการให้ลูกค้าเห็นข้อมูล หรือดึงข้อมูลที่ลูกค้าแก้ไขกลับมา' +
     '</div></div>' +
 
+    // Team Management
+    '<div class="card"><h2>👥 ทีม Sales</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">เพิ่มสมาชิกทีม Sales — แต่ละคนได้ Link แยกสำหรับ sales-view • GM ดูภาพรวมได้จาก gm-view</p>' +
+    '<div id="teamMemberList">' + renderTeamMemberListHTML() + '</div>' +
+    '<div class="bg" style="margin-top:10px;flex-wrap:wrap">' +
+    '<button class="btn bp bsm" onclick="showAddSalesMemberM()">➕ เพิ่ม Sales</button>' +
+    '<button class="btn bo bsm" onclick="copyGMLink()">🔗 Copy GM Link</button>' +
+    '</div></div>' +
+
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
     '<div class="bg">' +
@@ -1357,4 +1366,118 @@ function saveH1Period() {
 
 function initNewDemoPolicies() {
   renderNewDemoPoliciesList();
+}
+
+// ================================================================
+// TEAM MANAGEMENT FUNCTIONS
+// ================================================================
+function getSalesMembers() {
+  try { return JSON.parse(localStorage.getItem('v7_salesMembers') || '[]'); } catch(e) { return []; }
+}
+
+function saveSalesMembers(members) {
+  localStorage.setItem('v7_salesMembers', JSON.stringify(members));
+  if (typeof publishTeamConfig === 'function') publishTeamConfig(members);
+}
+
+function renderTeamMemberListHTML() {
+  var members = getSalesMembers();
+  if (!members.length) return '<div style="padding:16px;color:var(--text3);font-size:.76rem;text-align:center">ยังไม่มีสมาชิกทีม — กด ➕ เพิ่ม Sales</div>';
+  var html = '<div style="display:flex;flex-direction:column;gap:6px">';
+  for (var i = 0; i < members.length; i++) {
+    var m = members[i];
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">';
+    html += '<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.82rem;flex-shrink:0">' + (m.name || '?').charAt(0).toUpperCase() + '</div>';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-weight:600;font-size:.8rem">' + sanitize(m.name) + (m.active === false ? ' <span style="font-size:.6rem;color:#94a3b8;background:var(--bg3);padding:1px 5px;border-radius:4px">ปิด</span>' : '') + '</div>';
+    html += '<div style="font-size:.63rem;color:var(--text3);margin-top:2px">PIN: <code style="background:var(--bg3);padding:1px 6px;border-radius:3px;font-size:.68rem">' + m.pin + '</code>&nbsp;·&nbsp;ID: <span style="opacity:.7">' + m.id + '</span></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:4px;flex-shrink:0">';
+    html += '<button class="btn bsm ' + (m.active !== false ? 'bs' : 'bo') + '" onclick="toggleSalesMember(\'' + m.id + '\')" title="' + (m.active !== false ? 'เปิดใช้งาน' : 'ปิดใช้งาน') + '">' + (m.active !== false ? '✅' : '⏸') + '</button>';
+    html += '<button class="btn bsm bo" onclick="copyTeamLink(\'' + m.id + '\')" title="Copy Sales Link">🔗</button>';
+    html += '<button class="btn bsm bd" onclick="deleteSalesMember(\'' + m.id + '\')">✕</button>';
+    html += '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function showAddSalesMemberM() {
+  var rndPin = Math.floor(1000 + Math.random() * 9000).toString();
+  openM('➕ เพิ่มสมาชิกทีม Sales',
+    '<div class="fm-group"><label>ชื่อ Sales *</label>' +
+    '<input type="text" id="sm_name" class="fm-input" placeholder="เช่น นายก, Krit..."></div>' +
+    '<div class="fm-group"><label>PIN (4 หลัก) — ใช้ Login sales-view</label>' +
+    '<input type="text" id="sm_pin" class="fm-input" maxlength="6" placeholder="ตัวเลข 4-6 หลัก" value="' + rndPin + '"></div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn bp" onclick="addSalesMember()">💾 เพิ่มสมาชิก</button>' +
+    '<button class="btn bo" onclick="closeM()">ยกเลิก</button>' +
+    '</div>'
+  );
+}
+
+function addSalesMember() {
+  var nameEl = document.getElementById('sm_name');
+  var pinEl = document.getElementById('sm_pin');
+  if (!nameEl || !nameEl.value.trim()) { toast('กรุณาใส่ชื่อ'); return; }
+  if (!pinEl || !pinEl.value.trim()) { toast('กรุณาใส่ PIN'); return; }
+  var name = nameEl.value.trim();
+  var pin = pinEl.value.trim();
+  if (!/^\d{4,6}$/.test(pin)) { toast('PIN ต้องเป็นตัวเลข 4-6 หลัก'); return; }
+  var members = getSalesMembers();
+  var id = 'sm_' + Date.now().toString(36);
+  members.push({ id: id, name: name, pin: pin, active: true, createdAt: new Date().toISOString() });
+  saveSalesMembers(members);
+  if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+    db.collection('salesMembers').doc(id).set({
+      name: name, pin: pin, active: true,
+      mainUid: CURRENT_USER.uid,
+      createdAt: new Date().toISOString()
+    }).catch(function(e) { console.warn('salesMembers write error:', e); });
+  }
+  closeMForce();
+  toast('✅ เพิ่ม ' + name + ' แล้ว');
+  var el = document.getElementById('teamMemberList');
+  if (el) el.innerHTML = renderTeamMemberListHTML();
+}
+
+function deleteSalesMember(id) {
+  if (!confirm('ลบสมาชิกนี้?\nข้อมูล Pipeline ของเขาใน Firestore จะยังคงอยู่')) return;
+  var members = getSalesMembers().filter(function(m) { return m.id !== id; });
+  saveSalesMembers(members);
+  toast('🗑️ ลบสมาชิกแล้ว');
+  var el = document.getElementById('teamMemberList');
+  if (el) el.innerHTML = renderTeamMemberListHTML();
+}
+
+function toggleSalesMember(id) {
+  var members = getSalesMembers();
+  for (var i = 0; i < members.length; i++) {
+    if (members[i].id === id) { members[i].active = members[i].active === false ? true : false; break; }
+  }
+  saveSalesMembers(members);
+  var el = document.getElementById('teamMemberList');
+  if (el) el.innerHTML = renderTeamMemberListHTML();
+}
+
+function copyTeamLink(salesId) {
+  var link = location.href.replace(/[^/]*(\?.*)?$/, '') + 'sales-view.html?id=' + salesId;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function() { toast('📋 Copy Link แล้ว!'); });
+  } else {
+    var ta = document.createElement('textarea'); ta.value = link;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('📋 Copy Link แล้ว!');
+  }
+}
+
+function copyGMLink() {
+  var link = location.href.replace(/[^/]*(\?.*)?$/, '') + 'gm-view.html';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function() { toast('📋 Copy GM Link แล้ว!'); });
+  } else {
+    var ta = document.createElement('textarea'); ta.value = link;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('📋 Copy GM Link แล้ว!');
+  }
 }
