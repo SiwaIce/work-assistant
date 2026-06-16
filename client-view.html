@@ -2184,11 +2184,13 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
   html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
   html += '<td class="' + priceClass + '" style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿<\/td>';
   var logCell = '-';
-  if (p.latestLog && p.latestLog.content) {
-    var logDate = p.latestLog.date ? '<span style="color:var(--text2);font-size:10px;display:block;margin-bottom:2px">' + fD(p.latestLog.date) + '</span>' : '';
-    logCell = logDate + '<span style="font-size:11px">' + esc((p.latestLog.content || '').substr(0, 50)) + (p.latestLog.content.length > 50 ? '…' : '') + '</span>';
+  if (p._updatedAt) {
+    var _upd = p._updatedAt.seconds ? new Date(p._updatedAt.seconds * 1000) : new Date(p._updatedAt);
+    var _days = Math.floor((new Date() - _upd) / 864e5);
+    logCell = '<span style="font-size:11px">' + _upd.toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'2-digit'}) + '</span>' +
+              '<span style="font-size:10px;color:var(--text2);display:block;margin-top:1px">' + (_days === 0 ? 'วันนี้' : _days + ' วันที่แล้ว') + '</span>';
   }
-  html += '<td style="max-width:160px;font-size:11px;color:var(--text1)">' + logCell + '</td>';
+  html += '<td style="max-width:140px;font-size:11px;color:var(--text1)">' + logCell + '</td>';
   html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
   html += '</tr>';
 }

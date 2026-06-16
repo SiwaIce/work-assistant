@@ -581,6 +581,15 @@ function syncMainPipelineToShared() {
     if (['lost', 'delivered'].indexOf(p.status) !== -1) {
       colRef.doc(p.id).delete().catch(function(e) { console.warn('teamPipeline delete:', e); });
     } else {
+      var modelSummary = '';
+      var totalQty = 0;
+      if (p.items && p.items.length) {
+        modelSummary = p.items.map(function(it) { return (it.model || '') + (it.qty > 1 ? ' x' + it.qty : ''); }).filter(Boolean).join(', ');
+        p.items.forEach(function(it) { totalQty += Number(it.qty) || 1; });
+      } else if (p.model) {
+        modelSummary = p.model + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+        totalQty = Number(p.modelQty) || 1;
+      }
       colRef.doc(p.id).set({
         id: p.id,
         dealerId: p.dealerId || '',
@@ -590,6 +599,8 @@ function syncMainPipelineToShared() {
         endUserEN: p.endUserEN || '',
         forecastAmount: Number(p.forecastAmount) || 0,
         status: p.status || 'prospect',
+        model: modelSummary,
+        totalQty: totalQty,
         ownerName: ownerName,
         ownerId: CURRENT_USER.uid,
         ownerType: 'main',

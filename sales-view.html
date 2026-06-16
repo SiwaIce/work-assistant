@@ -992,6 +992,7 @@ function savePipe(){
       tpRef.set({id:data.id,dealerId:data.dealerId,dealerName:data.dealerName,
         projectName:data.projectName,endUserTH:data.endUserTH,endUserEN:'',
         forecastAmount:data.forecastAmount,status:data.status,
+        model:data.model||'',totalQty:1,
         ownerName:data.ownerName,ownerId:SALES_ID,ownerType:'sales',updatedAt:data.updatedAt});
     } else {tpRef.delete().catch(function(){});}
     closeModal();showToast('✅ บันทึกแล้ว');
