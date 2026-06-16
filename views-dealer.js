@@ -528,7 +528,8 @@ function rDealerDet(el) {
     <div class="tab-btn ${dealerTab==='demo'?'act':''}" onclick="dealerTab='demo';render()">🚁 Demo</div>
     <div class="tab-btn ${dealerTab==='forecast'?'act':''}" onclick="dealerTab='forecast';render()">📦 Forecast</div>
     <div class="tab-btn ${dealerTab==='tasks'?'act':''}" onclick="dealerTab='tasks';render()">📋 งาน</div>
-    <div class="tab-btn ' + (dealerTab==='onboard'?'act':'') + '" onclick="dealerTab=\'onboard\';render()">🔄 Onboard</div>
+    <div class="tab-btn ${dealerTab==='onboard'?'act':''}" onclick="dealerTab='onboard';render()">🔄 Onboard</div>
+    <div class="tab-btn ${dealerTab==='announcements'?'act':''}" onclick="dealerTab='announcements';render()">📢 ประกาศ</div>
   </div>
 
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
@@ -544,6 +545,7 @@ function renderDealerTab(d) {
     case 'forecast': return dealerForecastTab(d);
     case 'tasks': return dealerTasksTab(d);
     case 'onboard': return dealerOnboardTab(d);
+    case 'announcements': return dealerAnnouncementsTab(d);
     default: return dealerInfoTab(d);
   }
 }

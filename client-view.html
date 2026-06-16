@@ -1277,6 +1277,7 @@ input[list]::-webkit-calendar-picker-indicator {
 <div class="tab-btn" data-tab="pipeline">📋 โครงการของฉัน</div>
   <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
   <div class="tab-btn" data-tab="updateHistory">📝 ประวัติการอัพเดท</div>
+  <div class="tab-btn" data-tab="announcements" id="annTabBtn">📢 ประกาศ</div>
 </div>
   <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
@@ -3609,6 +3610,192 @@ function renderCurrentTab() {
   else if (currentTab === 'forecast') renderForecastTab();
   else if (currentTab === 'updateHistory') renderUpdateHistoryTab();
   else if (currentTab === 'compliance') renderComplianceTab();
+  else if (currentTab === 'announcements') renderAnnouncementsTab();
+}
+
+// ================================================================
+// ANNOUNCEMENTS TAB (client-view)
+// ================================================================
+var _cvAnnData = null;
+
+var CV_ANN_BADGES = {
+  'ด่วน':      { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)' },
+  'ใหม่':      { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.3)' },
+  'สำคัญ':    { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' },
+  'นโยบาย':   { color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.3)' },
+  'สินค้า':   { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)' },
+  'โปรโมชั่น': { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.3)' }
+};
+
+function cvAnnBadge(b) {
+  var s = CV_ANN_BADGES[b] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)' };
+  return '<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.4px;color:' + s.color + ';background:' + s.bg + ';border:1px solid ' + s.border + ';margin-right:3px">' + b + '</span>';
+}
+
+function renderAnnouncementsTab() {
+  var tc = document.getElementById('tabContent');
+  if (!tc) return;
+  tc.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดประกาศ...</div></div>';
+
+  var now = Date.now();
+  db.collection('announcements')
+    .where('status', '==', 'active')
+    .orderBy('createdAt', 'desc')
+    .get()
+    .then(function(snap) {
+      var allAnns = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+      // Filter to announcements targeted at this dealer
+      var anns = allAnns.filter(function(a) {
+        if (a.targetMode === 'selected') {
+          return (a.targetDealerIds || []).indexOf(dealerId) >= 0;
+        }
+        return true; // 'all'
+      }).filter(function(a) {
+        // Filter out expired
+        if (!a.expireAt) return true;
+        var exp = a.expireAt.seconds ? a.expireAt.seconds * 1000 : new Date(a.expireAt).getTime();
+        return exp > now;
+      });
+
+      _cvAnnData = anns;
+
+      if (!anns.length) {
+        tc.innerHTML = '<div class="section"><div style="text-align:center;padding:40px;color:var(--text2)"><div style="font-size:40px;margin-bottom:12px">📭</div><div>ยังไม่มีประกาศในขณะนี้</div></div></div>';
+        return;
+      }
+
+      // Load read status for each announcement
+      var promises = anns.map(function(ann) {
+        return db.collection('dealers').doc(dealerId).collection('announcementDeliveries').doc(ann.id).get()
+          .then(function(doc) { return { id: ann.id, dlv: doc.exists ? doc.data() : {} }; })
+          .catch(function() { return { id: ann.id, dlv: {} }; });
+      });
+
+      Promise.all(promises).then(function(results) {
+        var dlvMap = {};
+        results.forEach(function(r) { dlvMap[r.id] = r.dlv; });
+
+        // Count unread
+        var unread = anns.filter(function(a) {
+          var dlv = dlvMap[a.id] || {};
+          return !dlv.portalReadAt || (dlv.portalReadVersion || 0) < (a.version || 1);
+        }).length;
+
+        // Update badge on tab
+        var btn = document.getElementById('annTabBtn');
+        if (btn) btn.innerHTML = '📢 ประกาศ' + (unread > 0 ? ' <span style="display:inline-block;background:#ef4444;color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;margin-left:2px">' + unread + '</span>' : '');
+
+        var h = '';
+        anns.forEach(function(ann) {
+          var dlv = dlvMap[ann.id] || {};
+          var isRead = dlv.portalReadAt && (dlv.portalReadVersion || 0) >= (ann.version || 1);
+          var accentColor = '#3b82f6';
+          if (ann.badges && ann.badges.length) {
+            var topBadge = ann.badges[0];
+            if (CV_ANN_BADGES[topBadge]) accentColor = CV_ANN_BADGES[topBadge].color;
+          }
+          var publishDate = ann.publishAt
+            ? (ann.publishAt.seconds ? new Date(ann.publishAt.seconds*1000) : new Date(ann.publishAt)).toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'2-digit'})
+            : (ann.createdAt ? (ann.createdAt.seconds ? new Date(ann.createdAt.seconds*1000) : new Date(ann.createdAt)).toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'2-digit'}) : '');
+
+          h += '<div class="section" style="margin-bottom:14px;border-left:4px solid ' + accentColor + ';position:relative;padding:16px 18px;' + (isRead ? 'opacity:0.75' : '') + '" id="ann_' + ann.id + '">';
+          if (!isRead) {
+            h += '<div style="position:absolute;top:14px;right:14px;width:8px;height:8px;background:#ef4444;border-radius:50%" title="ยังไม่ได้อ่าน"></div>';
+          }
+          h += '<div style="margin-bottom:8px">';
+          (ann.badges || []).forEach(function(b) { h += cvAnnBadge(b); });
+          h += '</div>';
+          h += '<div style="font-size:16px;font-weight:700;line-height:1.4;margin-bottom:6px">' + escHtml(ann.title || '') + '</div>';
+          h += '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">';
+          h += 'v' + (ann.version || 1) + ' · ' + publishDate;
+          if (ann.expireAt) {
+            var expMs = ann.expireAt.seconds ? ann.expireAt.seconds*1000 : new Date(ann.expireAt).getTime();
+            var daysLeft = Math.ceil((expMs - now) / 86400000);
+            h += ' · <span style="color:#f59e0b">หมดอายุใน ' + daysLeft + ' วัน</span>';
+          }
+          h += '</div>';
+          h += '<div style="white-space:pre-wrap;line-height:1.8;font-size:14px;color:var(--text)">' + escHtml(ann.content || '') + '</div>';
+          if (ann.link) {
+            h += '<div style="margin-top:12px">';
+            h += '<a href="' + escHtml(ann.link) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:13px;word-break:break-all;text-decoration:underline">🔗 ' + escHtml(ann.link) + '</a>';
+            h += '</div>';
+          }
+          if ((ann.version || 1) > 1) {
+            h += '<div style="margin-top:10px"><button onclick="cvToggleChangelog(\'' + ann.id + '\')" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">📋 ดู Changelog ▸</button>';
+            h += '<div id="cl_' + ann.id + '" style="display:none;margin-top:6px;padding:8px;background:var(--bg2);border-radius:6px;font-size:12px;color:var(--text2)">กำลังโหลด...</div></div>';
+          }
+          h += '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">';
+          h += '<span style="font-size:12px;color:var(--text2)">' + (isRead ? '✅ อ่านแล้ว' : '⬜ ยังไม่ได้อ่าน') + '</span>';
+          if (!isRead) {
+            h += '<button onclick="cvMarkAnnRead(\'' + ann.id + '\',' + (ann.version||1) + ')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">✓ ทำเครื่องหมายว่าอ่านแล้ว</button>';
+          }
+          h += '</div></div>';
+        });
+
+        tc.innerHTML = h || '<div class="section"><div style="text-align:center;padding:32px;color:var(--text2)">ไม่มีประกาศ</div></div>';
+
+        // Auto-mark portal view after 2s (passive read)
+        setTimeout(function() {
+          anns.forEach(function(ann) {
+            var dlv = dlvMap[ann.id] || {};
+            if (!dlv.portalReadAt) {
+              cvMarkAnnRead(ann.id, ann.version || 1, true);
+            }
+          });
+        }, 2000);
+      });
+    })
+    .catch(function(e) {
+      tc.innerHTML = '<div class="section"><div style="color:#ef4444;padding:20px">เกิดข้อผิดพลาด: ' + escHtml(e.message) + '</div></div>';
+    });
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function cvMarkAnnRead(annId, version, silent) {
+  if (!dealerId) return;
+  var now = firebase.firestore.FieldValue.serverTimestamp();
+  db.collection('dealers').doc(dealerId).collection('announcementDeliveries').doc(annId)
+    .set({ portalReadAt: now, portalReadVersion: version || 1 }, { merge: true })
+    .then(function() {
+      if (!silent) {
+        // Update the card visually
+        var card = document.getElementById('ann_' + annId);
+        if (card) {
+          card.style.opacity = '0.75';
+          var dot = card.querySelector('[title="ยังไม่ได้อ่าน"]');
+          if (dot) dot.remove();
+          var statusRow = card.querySelectorAll('[style*="border-top"]');
+          if (statusRow.length) {
+            var last = statusRow[statusRow.length - 1];
+            last.innerHTML = '<span style="font-size:12px;color:var(--text2)">✅ อ่านแล้ว</span>';
+          }
+        }
+        showToast('✅ ทำเครื่องหมายว่าอ่านแล้ว');
+      }
+    })
+    .catch(function(e) { console.warn('cvMarkAnnRead error:', e); });
+}
+
+function cvToggleChangelog(annId) {
+  var el = document.getElementById('cl_' + annId);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  if (el.textContent.trim() === 'กำลังโหลด...') {
+    db.collection('announcements').doc(annId).collection('changelog').orderBy('updatedAt','desc').get()
+      .then(function(snap) {
+        if (!snap.docs.length) { el.textContent = 'ยังไม่มี Changelog'; return; }
+        el.innerHTML = snap.docs.map(function(d) {
+          var log = d.data();
+          var dt = log.updatedAt ? (log.updatedAt.seconds ? new Date(log.updatedAt.seconds*1000) : new Date(log.updatedAt)).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}) : '';
+          return '<div style="margin-bottom:6px"><span style="font-weight:600">v' + (log.version||'?') + '</span> · ' + dt + '<br>' + escHtml(log.changeNote||'') + '</div>';
+        }).join('');
+      })
+      .catch(function(e) { el.textContent = 'เกิดข้อผิดพลาด: ' + e.message; });
+  }
 }
 document.getElementById('tabBar').addEventListener('click', function(e) {
   var btn = e.target.closest('.tab-btn');

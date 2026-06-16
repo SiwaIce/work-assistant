@@ -383,7 +383,10 @@ var R = {
   productImport: rProductImport,
   
   // ✅ เพิ่ม Quotation V2
-  quotationV2: rQuotationV2      // <--- เพิ่มบรรทัดนี้
+  quotationV2: rQuotationV2,
+
+  // ✅ Announcement & Policy
+  announcements: rAnnouncements
 };
 
 // เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)
