@@ -1317,6 +1317,7 @@ var pipelineSearch = '';
 var pipelineSort = 'date_desc';
 var pipelineFilter = 'all';
 var staleFilter = 'all';
+var pipelineView = 'list'; // 'list' | 'kanban'
 var historyFilter = 'all';
 
 // ตัวแปรสำหรับกรองสินค้าใน forecast
@@ -2085,6 +2086,10 @@ function renderPipelineTab() {
   html += '<div style="display:flex; gap:8px">';
   html += '<button class="btn btn-sm btn-primary" onclick="downloadPipelineExcel()">📎 ดาวน์โหลด Excel</button>';
   html += '<button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button>';
+  html += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  html += '<button class="btn btn-sm" onclick="pipelineView=\'list\';renderPipelineTab()" style="border-radius:0;border:none;' + (pipelineView === 'list' ? 'background:var(--accent);color:white' : 'background:transparent') + '" title="มุมมองรายการ">☰</button>';
+  html += '<button class="btn btn-sm" onclick="pipelineView=\'kanban\';renderPipelineTab()" style="border-radius:0;border:none;' + (pipelineView === 'kanban' ? 'background:var(--accent);color:white' : 'background:transparent') + '" title="มุมมอง Kanban">⊞</button>';
+  html += '</div>';
   html += '</div>';
   html += '</div>';
   html += '<div class="toolbar-row">';
@@ -2123,6 +2128,9 @@ function renderPipelineTab() {
     else html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
     html += '</div>';
   } else {
+    if (pipelineView === 'kanban') {
+      html += renderKanbanPipeline(filtered);
+    } else {
     html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
     html += '<tr><th>#</th><th>โครงการ</th><th>End User</th><th>สถานะ</th><th>📅 Bidding</th><th>สินค้า</th><th>มูลค่า</th><th>อัพเดทล่าสุด</th><th></th></tr>';
     html += '</thead><tbody>';
@@ -2197,9 +2205,51 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
 }
     html += '</tbody></table></div>';
     html += '<div style="margin-top:8px; font-size:11px; color:var(--text2); text-align:right">แสดง ' + filtered.length + ' รายการ' + (pipelineSearch ? ' (ค้นหา: "' + esc(pipelineSearch) + '")' : '') + '</div>';
+    } // end list view
   }
   html += '</div>';
   document.getElementById('tabContent').innerHTML = html;
+}
+function renderKanbanPipeline(filtered) {
+  var LANES = [
+    { id: 'prospect', label: '🔍 Prospect', color: '#6366f1', statuses: ['prospect'] },
+    { id: 'proposal', label: '📋 Proposal', color: '#f59e0b', statuses: ['tor_review', 'quotation'] },
+    { id: 'bidding', label: '⏳ Bidding', color: '#3b82f6', statuses: ['bidding', 'negotiation'] },
+    { id: 'win', label: '✅ Win', color: '#22c55e', statuses: ['win', 'ordered', 'delivered'] }
+  ];
+  var html = '<div style="overflow-x:auto;padding-bottom:12px">';
+  html += '<div style="display:flex;gap:10px;min-width:max-content;align-items:flex-start;padding:4px 2px">';
+  for (var li = 0; li < LANES.length; li++) {
+    var lane = LANES[li];
+    var laneCards = filtered.filter(function(p) { return LANES[li].statuses.indexOf(p.status) !== -1; });
+    // re-capture lane in closure
+    (function(ln, cards) {
+      var laneTotal = 0;
+      for (var ci = 0; ci < cards.length; ci++) laneTotal += (cards[ci].forecastAmount || 0);
+      html += '<div style="width:195px;flex-shrink:0">';
+      html += '<div style="background:' + ln.color + '15;border:1px solid ' + ln.color + '35;border-radius:10px 10px 0 0;padding:9px 12px;display:flex;justify-content:space-between;align-items:center">';
+      html += '<div style="font-size:13px;font-weight:700;color:' + ln.color + '">' + ln.label + '</div>';
+      html += '<span style="background:' + ln.color + ';color:white;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">' + cards.length + '</span>';
+      html += '</div>';
+      html += '<div style="background:var(--card);border:1px solid ' + ln.color + '20;border-top:none;border-radius:0 0 10px 10px;min-height:64px;display:flex;flex-direction:column;gap:7px;padding:8px">';
+      if (laneTotal > 0) html += '<div style="font-size:10px;color:var(--text2);text-align:center;padding:2px 0 5px;border-bottom:1px solid var(--border)">💰 ' + fmtMoneyShort(laneTotal) + ' ฿</div>';
+      for (var ci = 0; ci < cards.length; ci++) {
+        var p = cards[ci];
+        var bddDays = p.biddingDate ? dTo(p.biddingDate) : null;
+        var bddColor = bddDays !== null ? (bddDays <= 7 ? '#ef4444' : bddDays <= 30 ? '#f59e0b' : 'var(--text2)') : 'var(--text2)';
+        html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
+        html += '<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px" title="' + esc(p.projectName) + '">' + esc(p.projectName) + '</div>';
+        if (p.forecastAmount) html += '<div style="font-size:11px;color:var(--accent);font-weight:600">' + fmtMoneyShort(p.forecastAmount) + ' ฿</div>';
+        if (p.biddingDate) html += '<div style="font-size:10px;color:' + bddColor + '">📅 ' + fD(p.biddingDate) + '</div>';
+        if (p._status === 'pending') html += '<div style="font-size:10px;color:#f59e0b;margin-top:2px">⏳ รอตรวจสอบ</div>';
+        html += '</div>';
+      }
+      if (cards.length === 0) html += '<div style="text-align:center;font-size:11px;color:var(--text2);padding:16px 0">ไม่มีโครงการ</div>';
+      html += '</div></div>';
+    })(lane, laneCards);
+  }
+  html += '</div></div>';
+  return html;
 }
 // ========== DATE HELPER FUNCTIONS ==========
 function _td() { return new Date().toISOString().split('T')[0]; }
@@ -3349,6 +3399,46 @@ function renderForecastTab() {
   for (var i=0;i<allMonths.length;i++) monthSummary[allMonths[i]] = { total:0, runrate:0, project:0 };
   for (var i=0;i<forecastData.runrate.length;i++) { var r = forecastData.runrate[i]; if (r._status !== 'rejected' && monthSummary[r.month]) { monthSummary[r.month].runrate += r.qty; monthSummary[r.month].total += r.qty; } }
   for (var i=0;i<forecastData.projects.length;i++) { var p = forecastData.projects[i]; if (p._status !== 'rejected' && monthSummary[p.month]) { monthSummary[p.month].project += p.totalQty; monthSummary[p.month].total += p.totalQty; } }
+  // ====== SVG BAR CHART ======
+  var _chartHtml = '';
+  if (allMonths.length > 0) {
+    var _maxVal = 0;
+    for (var _ci = 0; _ci < allMonths.length; _ci++) { var _s = monthSummary[allMonths[_ci]]; if (_s && _s.total > _maxVal) _maxVal = _s.total; }
+    if (_maxVal > 0) {
+      var _W = 360, _H = 100, _pad = 6, _labelH = 18;
+      var _barW = Math.floor((_W - _pad * (allMonths.length + 1)) / allMonths.length);
+      var _chartBars = '';
+      for (var _ci = 0; _ci < allMonths.length; _ci++) {
+        var _m = allMonths[_ci];
+        var _ms = monthSummary[_m] || { total: 0, runrate: 0, project: 0 };
+        var _barH = _maxVal > 0 ? Math.max(2, Math.round((_ms.total / _maxVal) * (_H - _labelH - 4))) : 2;
+        var _x = _pad + _ci * (_barW + _pad);
+        var _y = _H - _labelH - _barH;
+        var _isSel = (_m === selectedMonth);
+        var _mIdx = parseInt(_m.slice(5, 7)) - 1;
+        var _mLbl = (TH_MONTHS_SHORT && TH_MONTHS_SHORT[_mIdx]) ? TH_MONTHS_SHORT[_mIdx] : (_mIdx + 1);
+        // runrate portion
+        var _rrH = _ms.total > 0 ? Math.round((_ms.runrate / _ms.total) * _barH) : _barH;
+        var _prH = _barH - _rrH;
+        if (_isSel) {
+          _chartBars += '<rect x="' + _x + '" y="' + (_y + _prH) + '" width="' + _barW + '" height="' + _rrH + '" rx="2" fill="#6366f1" opacity="0.9"/>';
+          _chartBars += '<rect x="' + _x + '" y="' + _y + '" width="' + _barW + '" height="' + _prH + '" rx="2" fill="#a855f7" opacity="0.9"/>';
+          _chartBars += '<rect x="' + (_x - 1) + '" y="' + (_y - 1) + '" width="' + (_barW + 2) + '" height="' + (_barH + 2) + '" rx="3" fill="none" stroke="#6366f1" stroke-width="1.5"/>';
+        } else {
+          _chartBars += '<rect x="' + _x + '" y="' + (_y + _prH) + '" width="' + _barW + '" height="' + _rrH + '" rx="2" fill="#6366f1" opacity="0.35"/>';
+          _chartBars += '<rect x="' + _x + '" y="' + _y + '" width="' + _barW + '" height="' + _prH + '" rx="2" fill="#a855f7" opacity="0.35"/>';
+        }
+        if (_ms.total > 0) _chartBars += '<text x="' + (_x + _barW/2) + '" y="' + (_y - 2) + '" text-anchor="middle" font-size="8" fill="var(--text2)">' + _ms.total + '</text>';
+        _chartBars += '<text x="' + (_x + _barW/2) + '" y="' + (_H - 2) + '" text-anchor="middle" font-size="8" fill="' + (_isSel ? '#6366f1' : 'var(--text2)') + '" font-weight="' + (_isSel ? '700' : '400') + '" onclick="selectMonth(\'' + _m + '\')" style="cursor:pointer">' + _mLbl + '</text>';
+      }
+      _chartHtml = '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:14px">';
+      _chartHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:700">📊 ภาพรวม Forecast รายเดือน</div><div style="display:flex;gap:10px;font-size:10px;color:var(--text2)"><span><span style="display:inline-block;width:8px;height:8px;background:#6366f1;border-radius:1px;margin-right:3px;opacity:0.7"></span>Run Rate</span><span><span style="display:inline-block;width:8px;height:8px;background:#a855f7;border-radius:1px;margin-right:3px;opacity:0.7"></span>โครงการ</span></div></div>';
+      _chartHtml += '<svg viewBox="0 0 ' + _W + ' ' + _H + '" width="100%" height="90" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">' + _chartBars + '</svg>';
+      _chartHtml += '<div style="font-size:10px;color:var(--text2);margin-top:4px;text-align:center">แตะแท่งเพื่อเลือกเดือน</div>';
+      _chartHtml += '</div>';
+    }
+  }
+
   var monthCardsHtml = '<div class="month-scroll">';
   for (var i=0;i<allMonths.length;i++) {
     var m = allMonths[i];
@@ -3417,7 +3507,7 @@ function renderForecastTab() {
   var existingOptions = '<option value="">-- เลือกโครงการที่มี (ดึงสินค้าอัตโนมัติ) --</option>';
   for (var i=0;i<pipelinesData.length;i++) existingOptions += '<option value="' + i + '">📋 ' + esc(pipelinesData[i].projectName) + '</option>';
   var modelDatalist = getModelDatalistHtml();
-  var html = '<div class="section">' +
+  var html = _chartHtml + '<div class="section">' +
     '<div class="section-title">📦 แผนการสั่งซื้อ (Forecast)</div>' +
     '<div style="text-align:right; margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="refreshData()">🔄 รีเฟรช</button></div>' +
     '<div class="month-carousel">' + monthCardsHtml + 
@@ -3475,7 +3565,9 @@ function renderUpdateHistoryList(updates) {
   var container = document.getElementById('updateHistoryList');
   if (!container) return;
   if (!updates.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>ไม่มีประวัติการอัพเดท</div></div>'; return; }
-  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  var html = '<div style="position:relative;padding-left:28px">';
+  // vertical timeline line
+  html += '<div style="position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:linear-gradient(180deg,var(--accent),rgba(var(--accent-rgb,99,102,241),0.1))"></div>';
   for (var i=0;i<updates.length;i++) {
     var req = updates[i];
     var status = req._status || 'pending';
@@ -3485,15 +3577,22 @@ function renderUpdateHistoryList(updates) {
     var title = req.type === 'pipeline' ? (req.projectName || '-') : (req.model || req.projectName || '-');
     var dateStr = req._updatedAt ? (req._updatedAt.seconds ? new Date(req._updatedAt.seconds * 1000).toLocaleString('th-TH') : req._updatedAt) : '-';
     var approvedDateStr = req._approvedAt ? (req._approvedAt.seconds ? new Date(req._approvedAt.seconds * 1000).toLocaleString('th-TH') : req._approvedAt) : '';
-    html += '<div class="update-card" style="border:1px solid ' + statusColor + '30; border-radius:12px; padding:14px; background:rgba(' + (status === 'pending' ? '245,158,11' : status === 'approved' ? '34,197,94' : '239,68,68') + ',0.03)">';
-    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px"><div><span style="font-size:20px">' + icon + '</span> <strong style="font-size:15px">' + esc(title) + '</strong></div><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '; padding:4px 12px; border-radius:20px; font-size:12px">' + statusText + '</span></div>';
-    html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">📅 ส่งเมื่อ: ' + dateStr + '</div>';
-    if (approvedDateStr && status === 'approved') html += '<div style="font-size:12px; color:var(--text2); margin-bottom:6px">✅ อนุมัติเมื่อ: ' + approvedDateStr + '</div>';
-    if (req.updateNote) html += '<div style="font-size:12px; margin:8px 0; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px">📝 <strong>ข้อความอัพเดท:</strong> ' + esc(req.updateNote) + '</div>';
-    html += '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap"><button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
+    html += '<div style="position:relative;margin-bottom:16px">';
+    // dot on timeline
+    html += '<div style="position:absolute;left:-22px;top:14px;width:12px;height:12px;border-radius:50%;background:' + statusColor + ';border:2px solid var(--bg);box-shadow:0 0 0 2px ' + statusColor + '40;z-index:1"></div>';
+    html += '<div style="border:1px solid ' + statusColor + '30;border-radius:12px;padding:12px 14px;background:rgba(255,255,255,0.02)">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    html += '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:16px">' + icon + '</span><strong style="font-size:14px">' + esc(title) + '</strong></div>';
+    html += '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:' + statusColor + '18;color:' + statusColor + '">' + statusText + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">📅 ' + dateStr + '</div>';
+    if (approvedDateStr && status === 'approved') html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">✅ อนุมัติ: ' + approvedDateStr + '</div>';
+    if (req.updateNote) html += '<div style="font-size:12px;margin:6px 0;padding:7px 10px;background:rgba(245,158,11,0.08);border-radius:8px;border-left:3px solid #f59e0b">📝 ' + esc(req.updateNote) + '</div>';
+    html += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
+    html += '<button class="btn btn-sm" onclick="viewUpdateDetail(\'' + req.type + '\', \'' + req.id + '\')">👁️ รายละเอียด</button>';
     if (status === 'pending') html += '<button class="btn btn-sm btn-warning" onclick="editUpdate(\'' + req.type + '\', \'' + req.id + '\')">✏️ แก้ไข</button><button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ยกเลิก</button>';
     if (status === 'rejected') html += '<button class="btn btn-sm btn-danger" onclick="cancelUpdate(\'' + req.type + '\', \'' + dealerId + '\', \'' + req.id + '\')">🗑️ ลบ</button>';
-    html += '</div></div>';
+    html += '</div></div></div>';
   }
   html += '</div>';
   container.innerHTML = html;
@@ -4223,7 +4322,43 @@ async function renderComplianceTabContent(dealer) {
   
   // สร้าง HTML
   var html = '';
-  
+
+  // ====== QUICK STATS BAR ======
+  var _activeDeals = pipelines.filter(function(p) { return p.status !== 'lost' && p.status !== 'on_hold' && p._status !== 'rejected'; });
+  var _totalPipeVal = 0;
+  for (var _qi = 0; _qi < _activeDeals.length; _qi++) _totalPipeVal += (_activeDeals[_qi].forecastAmount || 0);
+  var _today = new Date().toISOString().split('T')[0];
+  var _nextBid = null;
+  for (var _qi = 0; _qi < _activeDeals.length; _qi++) { var _bd = _activeDeals[_qi].biddingDate; if (_bd && _bd >= _today && (!_nextBid || _bd < _nextBid)) _nextBid = _bd; }
+  var _nextBidTxt = _nextBid ? fD(_nextBid) : '-';
+  var _daysToNextBid = _nextBid ? dTo(_nextBid) : null;
+  var _nextBidColor = _daysToNextBid !== null ? (_daysToNextBid <= 7 ? '#ef4444' : _daysToNextBid <= 30 ? '#f59e0b' : '#22c55e') : 'var(--text2)';
+  var _wonDeals = pipelines.filter(function(p) { return (p.status === 'win' || p.status === 'ordered' || p.status === 'delivered') && p._status !== 'rejected'; });
+  html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px">';
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px">';
+  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">📋 โครงการ Active</div>';
+  html += '<div style="font-size:24px;font-weight:800;line-height:1.1">' + _activeDeals.length + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2)">✅ Win: ' + _wonDeals.length + ' รายการ</div>';
+  html += '</div>';
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px">';
+  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">💰 มูลค่า Pipeline</div>';
+  html += '<div style="font-size:18px;font-weight:800;line-height:1.2;color:var(--accent)">' + fmtMoneyShort(_totalPipeVal) + ' ฿</div>';
+  html += '<div style="font-size:10px;color:var(--text2)">รวมทุกโครงการ Active</div>';
+  html += '</div>';
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px">';
+  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">📅 Bidding ถัดไป</div>';
+  html += '<div style="font-size:18px;font-weight:700;line-height:1.2;color:' + _nextBidColor + '">' + _nextBidTxt + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2)">' + (_daysToNextBid !== null ? 'อีก ' + _daysToNextBid + ' วัน' : 'ไม่มีกำหนด') + '</div>';
+  html += '</div>';
+  var _qsH1Clr = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
+  var _qsH1Pct = h1Status.target > 0 ? Math.round(h1Status.actual / h1Status.target * 100) : (h1Status.actual > 0 ? 100 : 0);
+  html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px">';
+  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">🎯 H1 Progress</div>';
+  html += '<div style="font-size:24px;font-weight:800;line-height:1.1;color:' + _qsH1Clr + '">' + _qsH1Pct + '%</div>';
+  html += '<div style="font-size:10px;color:var(--text2)">' + (h1Status.isOk ? '✅ บรรลุเป้า' : 'เป้า ' + fmtMoneyShort(h1Status.target) + ' ฿') + '</div>';
+  html += '</div>';
+  html += '</div>';
+
   // ====== HP BAR H1: คำนวณ percent จริง รวม overflow ======
   var h1Color = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
   var h1RawPct = h1Status.target > 0 ? (h1Status.actual / h1Status.target * 100) : (h1Status.actual > 0 ? 999 : 0);
@@ -4317,6 +4452,45 @@ async function renderComplianceTabContent(dealer) {
   }
   html += '</div>';
   html += '</div>';
+
+  // ====== NEXT LEVEL ROADMAP ======
+  var _levelOrder = ['Other', 'B', 'A', 'S'];
+  var _curIdx = _levelOrder.indexOf(level);
+  if (_curIdx < _levelOrder.length - 1) {
+    var _nextLevel = _levelOrder[_curIdx + 1];
+    var _nextLevelName = { S: 'Strategic Partner', A: 'Authorized Partner', B: 'Basic Partner', Other: 'Trial Partner' }[_nextLevel] || _nextLevel;
+    var _nextReq = levelRequirements[_nextLevel] || {};
+    var _nextH1 = _nextReq.h1Target || 0;
+    var _nextDsec = _nextReq.dsecRequired || 0;
+    var _h1Gap = Math.max(0, _nextH1 - h1Status.actual);
+    var _h1Pct = _nextH1 > 0 ? Math.min(Math.round(h1Status.actual / _nextH1 * 100), 100) : 100;
+    var _dsecPct = _nextDsec > 0 ? Math.min(Math.round(dsecStatus.current / _nextDsec * 100), 100) : 100;
+    html += '<div style="background:var(--card);border:1px solid rgba(168,85,247,0.3);border-radius:16px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden">';
+    html += '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#a855f7,#60a5fa)"></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">';
+    html += '<span style="font-size:18px">🚀</span>';
+    html += '<div><div style="font-size:13px;font-weight:800;color:var(--text)">เส้นทางสู่ระดับถัดไป</div>';
+    html += '<div style="font-size:11px;color:var(--text2)">เป้าหมาย: <span style="color:#a855f7;font-weight:700">' + _nextLevel + ' — ' + _nextLevelName + '</span></div></div>';
+    html += '</div>';
+    if (_nextH1 > 0) {
+      var _h1GapColor = _h1Pct >= 100 ? '#22c55e' : (_h1Pct >= 70 ? '#f59e0b' : '#ef4444');
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:var(--text2);font-weight:600">🎯 ยอดขาย H1</span><span style="color:' + _h1GapColor + ';font-weight:700">' + _h1Pct + '%' + (_h1Pct >= 100 ? ' ✅' : ' (ขาด ' + fmtMoneyShort(_h1Gap) + ' ฿)') + '</span></div>';
+      html += '<div style="height:8px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border)">';
+      html += '<div style="height:100%;width:' + _h1Pct + '%;background:' + (_h1Pct >= 100 ? '#22c55e' : 'linear-gradient(90deg,#a855f7,#60a5fa)') + ';border-radius:99px;transition:width 0.8s"></div></div>';
+      html += '</div>';
+    }
+    if (_nextDsec > 0) {
+      var _dsecGapColor = _dsecPct >= 100 ? '#22c55e' : '#ef4444';
+      var _dsecGap = Math.max(0, _nextDsec - dsecStatus.current);
+      html += '<div style="margin-bottom:4px">';
+      html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:var(--text2);font-weight:600">📋 DSEC</span><span style="color:' + _dsecGapColor + ';font-weight:700">' + dsecStatus.current + '/' + _nextDsec + ' คน' + (_dsecPct >= 100 ? ' ✅' : ' (ขาด ' + _dsecGap + ' คน)') + '</span></div>';
+      html += '<div style="height:8px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border)">';
+      html += '<div style="height:100%;width:' + _dsecPct + '%;background:' + (_dsecPct >= 100 ? '#22c55e' : 'linear-gradient(90deg,#a855f7,#60a5fa)') + ';border-radius:99px;transition:width 0.8s"></div></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
 
   // ====== H1 TARGET DETAIL CARD ======
   html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px">';

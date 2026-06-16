@@ -101,9 +101,16 @@ function rAnnouncements(el) {
     return;
   }
 
+  var dealers = ST.getAll('dealers');
+
   filtered.forEach(function(ann) {
-    var isExpired = ann.expireAt && (ann.expireAt.seconds ? ann.expireAt.seconds * 1000 : new Date(ann.expireAt).getTime()) < now;
-    h += '<div class="bg" style="margin-bottom:10px;padding:14px 16px;border-left:4px solid ' + (isExpired ? '#ef4444' : ann.status==='active' ? '#22c55e' : '#475569') + ';cursor:pointer" onclick="go(\'announcements\',{annId:\'' + ann.id + '\'})">';
+    var expMs = ann.expireAt ? (ann.expireAt.seconds ? ann.expireAt.seconds * 1000 : new Date(ann.expireAt).getTime()) : null;
+    var isExpired = expMs !== null && expMs < now;
+    var daysLeft = (expMs !== null && !isExpired) ? Math.ceil((expMs - now) / 86400000) : null;
+    var warnExpiry = daysLeft !== null && daysLeft <= 7;
+    var borderColor = isExpired ? '#ef4444' : warnExpiry ? '#f59e0b' : ann.status === 'active' ? '#22c55e' : '#475569';
+
+    h += '<div class="bg" style="margin-bottom:10px;padding:14px 16px;border-left:4px solid ' + borderColor + ';cursor:pointer" onclick="go(\'announcements\',{annId:\'' + ann.id + '\'})">';
     h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
     h += '<div style="flex:1;min-width:0">';
     h += '<div style="margin-bottom:5px">' + annBadgeHtml(ann.badges) + '</div>';
@@ -111,9 +118,11 @@ function rAnnouncements(el) {
     h += '<div style="font-size:12px;color:var(--text2);margin-top:5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">';
     h += annStatusHtml(ann.status);
     if (isExpired) h += '<span style="color:#ef4444;font-size:11px">⚠️ หมดอายุ</span>';
+    else if (warnExpiry) h += '<span style="color:#f59e0b;font-size:11px">⏰ เหลือ ' + daysLeft + ' วัน</span>';
     h += '<span>🎯 ' + annTargetLabel(ann) + '</span>';
     h += '<span>v' + (ann.version || 1) + '</span>';
     h += '<span>' + fmtAnnDate(ann.updatedAt || ann.createdAt) + '</span>';
+    h += '<span id="ann-stat-' + ann.id + '" style="color:var(--text2)">…</span>';
     h += '</div>';
     if (ann.content) {
       h += '<div style="font-size:12px;color:var(--text2);margin-top:6px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">' + sanitize(ann.content).replace(/\n/g, ' ') + '</div>';
@@ -121,11 +130,13 @@ function rAnnouncements(el) {
     h += '</div>';
     h += '<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">';
     h += '<button class="btn bsm bo" onclick="event.stopPropagation();showAnnModal(\'' + ann.id + '\')" style="font-size:11px;padding:4px 9px">✏️ แก้ไข</button>';
+    h += '<button class="btn bsm bo" onclick="event.stopPropagation();duplicateAnn(\'' + ann.id + '\')" style="font-size:11px;padding:4px 9px">⧉ Clone</button>';
     h += '<button class="btn bsm bo" onclick="event.stopPropagation();showAnnDeliveryModal(\'' + ann.id + '\')" style="font-size:11px;padding:4px 9px">📤 ส่ง</button>';
     h += '</div></div></div>';
   });
 
   el.innerHTML = h + '</div>';
+  _loadAnnListStats(filtered, dealers);
 }
 
 // ================================================================
@@ -155,6 +166,7 @@ function rAnnDetail(el) {
   h += '<button class="btn bsm bo" onclick="go(\'announcements\')">← กลับ</button>';
   h += '<div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--text2)">ประกาศ</div>';
   h += '<div style="font-weight:700;font-size:17px;line-height:1.3">' + sanitize(ann.title || '') + '</div></div>';
+  h += '<button class="btn bsm bo" onclick="duplicateAnn(\'' + ann.id + '\')">⧉ Clone</button>';
   h += '<button class="btn bsm bo" onclick="showAnnModal(\'' + ann.id + '\')">✏️ แก้ไข</button>';
   h += '</div>';
 
@@ -173,6 +185,8 @@ function rAnnDetail(el) {
   }
   h += '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">';
   h += '<button class="btn bsm bpr" onclick="showAnnDeliveryModal(\'' + ann.id + '\')">📤 บันทึกการส่ง</button>';
+  h += '<button class="btn bsm bo" onclick="showMarkAllSentModal(\'' + ann.id + '\')">📤 ส่งทั้งหมด</button>';
+  h += '<button class="btn bsm bo" onclick="showDraftAnnEmail(\'' + ann.id + '\')">📧 Draft Email</button>';
   h += '<button class="btn bsm bo" onclick="showAnnChangelogModal(\'' + ann.id + '\')">📋 Changelog</button>';
   h += '</div></div>';
 
@@ -625,4 +639,244 @@ function showAnnDeliveryModalForDealer(annId, dealerId) {
   h += '</div></div>';
 
   openM('บันทึกการส่ง', h);
+}
+
+// ================================================================
+// 1. STATS IN LIST VIEW
+// ================================================================
+function _loadAnnListStats(anns, dealers) {
+  if (!anns.length || !dealers.length) return;
+  // Query one subcollection per dealer, gather all deliveries
+  var stats = {};
+  anns.forEach(function(ann) {
+    var total = ann.targetMode === 'selected'
+      ? (ann.targetDealerIds || []).length
+      : dealers.length;
+    stats[ann.id] = { read: 0, lineSent: 0, emailSent: 0, total: total };
+  });
+
+  var done = 0;
+  dealers.forEach(function(d) {
+    db.collection('dealers').doc(d.id).collection('announcementDeliveries').get()
+      .then(function(snap) {
+        snap.docs.forEach(function(doc) {
+          var s = stats[doc.id];
+          if (!s) return;
+          // Only count if this dealer is a target
+          var ann = anns.find(function(a) { return a.id === doc.id; });
+          if (!ann) return;
+          if (ann.targetMode === 'selected' && (ann.targetDealerIds || []).indexOf(d.id) < 0) return;
+          var dlv = doc.data();
+          if (dlv.portalReadAt) s.read++;
+          if (dlv.channels && dlv.channels.LINE && dlv.channels.LINE.sentAt) s.lineSent++;
+          if (dlv.channels && dlv.channels.Email && dlv.channels.Email.sentAt) s.emailSent++;
+        });
+      })
+      .catch(function() {})
+      .finally(function() {
+        done++;
+        if (done === dealers.length) {
+          // Fill placeholders
+          Object.keys(stats).forEach(function(annId) {
+            var el = document.getElementById('ann-stat-' + annId);
+            if (!el) return;
+            var s = stats[annId];
+            var parts = [];
+            if (s.lineSent > 0 || s.emailSent > 0) parts.push('📤 LINE ' + s.lineSent + '/' + s.total + ' · Email ' + s.emailSent + '/' + s.total);
+            parts.push('👁 อ่าน ' + s.read + '/' + s.total);
+            el.textContent = parts.join(' · ');
+          });
+        }
+      });
+  });
+}
+
+// ================================================================
+// 2. DUPLICATE ANNOUNCEMENT
+// ================================================================
+async function duplicateAnn(annId) {
+  var ann = _annData && _annData.find(function(a) { return a.id === annId; });
+  if (!ann) { toast('ไม่พบข้อมูลประกาศ'); return; }
+  var now = firebase.firestore.FieldValue.serverTimestamp();
+  var user = typeof CURRENT_USER !== 'undefined' && CURRENT_USER
+    ? (CURRENT_USER.displayName || CURRENT_USER.email || 'unknown') : 'unknown';
+  var data = {
+    title: 'Copy of ' + (ann.title || ''),
+    content: ann.content || '',
+    badges: ann.badges || [],
+    targetMode: ann.targetMode || 'all',
+    targetDealerIds: ann.targetDealerIds || [],
+    status: 'draft',
+    publishAt: null,
+    expireAt: null,
+    link: ann.link || null,
+    version: 1,
+    lastChangeNote: '',
+    createdAt: now,
+    createdBy: user,
+    updatedAt: now,
+    updatedBy: user
+  };
+  try {
+    await db.collection('announcements').add(data);
+    _annData = null;
+    toast('✅ Clone แล้ว — บันทึกเป็น Draft');
+    render();
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
+// ================================================================
+// 3. EMAIL DRAFT FROM ANNOUNCEMENT
+// ================================================================
+function showDraftAnnEmail(annId) {
+  var ann = _annData && _annData.find(function(a) { return a.id === annId; });
+  if (!ann) { toast('ไม่พบข้อมูลประกาศ'); return; }
+  var dealers = ST.getAll('dealers');
+  var targetDealers = ann.targetMode === 'selected'
+    ? dealers.filter(function(d) { return (ann.targetDealerIds || []).indexOf(d.id) >= 0; })
+    : dealers;
+
+  var h = '<div style="display:flex;flex-direction:column;gap:12px">';
+  h += '<div style="font-size:13px;padding:8px 10px;background:var(--bg2);border-radius:6px">📢 <strong>' + sanitize(ann.title) + '</strong></div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">ส่งถึง Dealer</label>';
+  h += '<select id="dae_dealer" class="inp" onchange="updateDraftAnnEmailTo(this)" style="width:100%;margin-top:3px">';
+  h += '<option value="">-- เลือก Dealer --</option>';
+  targetDealers.forEach(function(d) {
+    var email = _getDealerEmail(d);
+    h += '<option value="' + d.id + '" data-email="' + sanitize(email) + '">' + sanitize(d.name || d.id) + (email ? ' (' + email + ')' : ' (ไม่มี email)') + '</option>';
+  });
+  h += '</select></div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">To (email)</label>';
+  h += '<input type="text" id="dae_to" class="inp" placeholder="email@company.com" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">Subject</label>';
+  h += '<input type="text" id="dae_subject" class="inp" value="' + sanitize('[แจ้ง] ' + (ann.title || '')) + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">เนื้อหา</label>';
+  var body = _buildAnnEmailBody(ann);
+  h += '<textarea id="dae_body" class="inp" rows="8" style="width:100%;box-sizing:border-box;resize:vertical;margin-top:3px">' + sanitize(body) + '</textarea></div>';
+  h += '<div style="display:flex;gap:8px;justify-content:flex-end">';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '<button class="btn bo" onclick="copyDraftAnnEmail()">📋 Copy</button>';
+  h += '<button class="btn bpr" onclick="openDraftAnnEmail()">📧 เปิด Email</button>';
+  h += '</div></div>';
+  openM('📧 Draft Email ประกาศ', h);
+}
+
+function _getDealerEmail(d) {
+  if (d.contacts && d.contacts.length) {
+    for (var i = 0; i < d.contacts.length; i++) {
+      if (d.contacts[i].email) return d.contacts[i].email;
+    }
+  }
+  return d.email || '';
+}
+
+function _buildAnnEmailBody(ann) {
+  var cfg = typeof getConfig === 'function' ? getConfig() : {};
+  var body = 'เรียน ทีมงาน,\n\n';
+  body += '━━━━━━━━━━━━━━━━━━━━\n';
+  body += '📢 ' + (ann.title || '') + '\n';
+  body += '━━━━━━━━━━━━━━━━━━━━\n\n';
+  body += (ann.content || '') + '\n';
+  if (ann.link) body += '\n🔗 ลิงก์เพิ่มเติม: ' + ann.link + '\n';
+  body += '\n━━━━━━━━━━━━━━━━━━━━\n';
+  body += 'ขอบคุณครับ/ค่ะ\n';
+  body += (cfg.saleName || '') + '\n';
+  body += 'SIS Distribution (Thailand) PLC\n';
+  body += 'DJI Authorized Distributor';
+  return body;
+}
+
+function updateDraftAnnEmailTo(sel) {
+  var email = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].dataset.email : '';
+  var toEl = document.getElementById('dae_to');
+  if (toEl) toEl.value = email || '';
+}
+
+function copyDraftAnnEmail() {
+  var subject = (document.getElementById('dae_subject').value || '');
+  var body = (document.getElementById('dae_body').value || '');
+  if (typeof copyText === 'function') copyText('Subject: ' + subject + '\n\n' + body);
+  toast('📋 Copy แล้ว');
+}
+
+function openDraftAnnEmail() {
+  var to = encodeURIComponent(document.getElementById('dae_to').value || '');
+  var subject = encodeURIComponent(document.getElementById('dae_subject').value || '');
+  var body = encodeURIComponent(document.getElementById('dae_body').value || '');
+  window.open('mailto:' + to + '?subject=' + subject + '&body=' + body);
+  toast('📧 เปิด Email Client แล้ว');
+}
+
+// ================================================================
+// 4. MARK ALL AS SENT
+// ================================================================
+function showMarkAllSentModal(annId) {
+  var ann = _annData && _annData.find(function(a) { return a.id === annId; });
+  if (!ann) { toast('ไม่พบข้อมูลประกาศ'); return; }
+  var dealers = ST.getAll('dealers');
+  var targetDealers = ann.targetMode === 'selected'
+    ? dealers.filter(function(d) { return (ann.targetDealerIds || []).indexOf(d.id) >= 0; })
+    : dealers;
+
+  var h = '<div style="display:flex;flex-direction:column;gap:12px">';
+  h += '<div style="font-size:13px;padding:8px 10px;background:var(--bg2);border-radius:6px">📢 <strong>' + sanitize(ann.title) + '</strong></div>';
+  h += '<div style="padding:10px;background:rgba(59,130,246,0.08);border-radius:8px;font-size:13px">จะบันทึกว่าส่งให้ <strong>' + targetDealers.length + ' Dealer</strong> ทั้งหมด</div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">ช่องทาง *</label>';
+  h += '<select id="mas_channel" class="inp" style="width:100%;margin-top:3px">';
+  h += '<option value="LINE">LINE</option><option value="Email">Email</option>';
+  h += '</select></div>';
+  h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">หมายเหตุ</label>';
+  h += '<input type="text" id="mas_note" class="inp" placeholder="เช่น ส่ง LINE Official, Broadcast..." style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
+  h += '<div style="display:flex;gap:8px;justify-content:flex-end">';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '<button class="btn bpr" onclick="markAllAnnDelivered(\'' + annId + '\',' + (ann.version || 1) + ')">📤 บันทึกทั้งหมด</button>';
+  h += '</div></div>';
+  openM('📤 ส่งทั้งหมด', h);
+}
+
+async function markAllAnnDelivered(annId, version) {
+  var channel = document.getElementById('mas_channel').value;
+  var note = (document.getElementById('mas_note').value || '').trim();
+  if (!channel) { toast('เลือกช่องทางก่อน'); return; }
+
+  var ann = _annData && _annData.find(function(a) { return a.id === annId; });
+  if (!ann) { toast('ไม่พบข้อมูลประกาศ'); return; }
+  var dealers = ST.getAll('dealers');
+  var targetDealers = ann.targetMode === 'selected'
+    ? dealers.filter(function(d) { return (ann.targetDealerIds || []).indexOf(d.id) >= 0; })
+    : dealers;
+
+  var now = firebase.firestore.FieldValue.serverTimestamp();
+  var user = typeof CURRENT_USER !== 'undefined' && CURRENT_USER
+    ? (CURRENT_USER.displayName || CURRENT_USER.email || 'unknown') : 'unknown';
+
+  var update = {};
+  update['channels.' + channel + '.sentAt'] = now;
+  update['channels.' + channel + '.sentVersion'] = version || 1;
+  update['channels.' + channel + '.sentBy'] = user;
+  if (note) update.note = note;
+
+  try {
+    // Firestore batch max 500 — split if needed
+    var batch = db.batch();
+    var count = 0;
+    for (var i = 0; i < targetDealers.length; i++) {
+      var ref = db.collection('dealers').doc(targetDealers[i].id).collection('announcementDeliveries').doc(annId);
+      batch.set(ref, update, { merge: true });
+      count++;
+      if (count === 490 && i < targetDealers.length - 1) {
+        await batch.commit();
+        batch = db.batch();
+        count = 0;
+      }
+    }
+    await batch.commit();
+    closeMForce();
+    toast('✅ บันทึก ' + targetDealers.length + ' Dealers แล้ว');
+    render();
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
 }
