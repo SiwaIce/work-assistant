@@ -7,74 +7,90 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;min-height:100vh}
-:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--accent:#3b82f6;--red:#ef4444;--green:#22c55e;--orange:#f97316;--yellow:#eab308}
+:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--accent:#3b82f6;--red:#ef4444;--green:#22c55e;--orange:#f97316;--yellow:#eab308;--purple:#a855f7}
 
-header{background:#1e293b;border-bottom:1px solid #334155;padding:12px 16px;position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px}
-.hdr-icon{font-size:24px}
-.hdr-title{font-size:16px;font-weight:700}
-.hdr-sub{font-size:11px;color:#64748b}
+header{background:#1e293b;border-bottom:1px solid #334155;padding:12px 16px;position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr-icon{font-size:22px}
+.hdr-title{font-size:15px;font-weight:700}
+.hdr-sub{font-size:10px;color:#64748b}
+.hdr-refresh{background:none;border:1px solid #334155;color:#94a3b8;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer}
+.hdr-refresh:hover{border-color:#3b82f6;color:#3b82f6}
 
-/* Tabs */
-.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;padding:0 12px;overflow-x:auto}
-.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:#64748b;white-space:nowrap;transition:all .15s}
+.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;padding:0 12px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:#64748b;white-space:nowrap;transition:.15s}
 .tab.act{border-bottom-color:#3b82f6;color:#3b82f6;font-weight:600}
 
-/* Content */
-.content{padding:12px;max-width:900px;margin:0 auto}
+.content{padding:12px;max-width:1100px;margin:0 auto}
 .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:10px}
-.card h2{font-size:14px;font-weight:700;margin-bottom:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+.card-h{font-size:12px;font-weight:700;margin-bottom:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between}
 
 /* Stats */
 .stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
-@media(min-width:480px){.stats-row{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:500px){.stats-row{grid-template-columns:repeat(4,1fr)}}
 .stat-card{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:12px;text-align:center}
 .stat-num{font-size:22px;font-weight:700;color:#3b82f6}
 .stat-lbl{font-size:10px;color:#64748b;margin-top:3px}
 
 /* Filter bar */
-.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-select.filter-sel{padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:7px;color:#e2e8f0;font-size:12px;outline:none;cursor:pointer}
-select.filter-sel:focus{border-color:#3b82f6}
+.fbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.fsel{padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:7px;color:#e2e8f0;font-size:12px;outline:none;cursor:pointer}
+.fsel:focus{border-color:#3b82f6}
+.fsearch{padding:6px 10px;background:#0f172a;border:1px solid #334155;border-radius:7px;color:#e2e8f0;font-size:12px;outline:none;flex:1;min-width:120px}
+.fsearch:focus{border-color:#3b82f6}
+.fcount{font-size:11px;color:#64748b;margin-left:auto;white-space:nowrap}
 
 /* Table */
 .pipe-table{width:100%;border-collapse:collapse;font-size:12px}
-.pipe-table th{background:#0f172a;padding:7px 8px;text-align:left;color:#64748b;font-weight:600;border-bottom:1px solid #334155;position:sticky;top:0;white-space:nowrap}
-.pipe-table td{padding:7px 8px;border-bottom:1px solid #1e293b;vertical-align:top}
-.pipe-table tr:hover td{background:#1e293b}
+.pipe-table th{background:#0f172a;padding:7px 8px;text-align:left;color:#64748b;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap;position:sticky;top:0;z-index:1}
+.pipe-table td{padding:8px;border-bottom:1px solid #1e293b;vertical-align:top}
+.pipe-table tr:hover td{background:#1e293b;cursor:pointer}
 .pipe-table tr.is-won td{background:#22c55e08}
-.pipe-table tr.is-lost td{background:#ef444408;opacity:.7}
+.pipe-table tr.is-lost td{opacity:.55}
 
-/* Badge */
+/* Badges */
 .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
 .b-main{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
 .b-sales{background:#f9731620;color:#f97316;border:1px solid #f9731640}
 .b-conflict{background:#ef444418;color:#ef4444;border:1px solid #ef444430}
-.b-status{display:inline-block;font-size:10px;font-weight:600}
 .s-prospect{color:#94a3b8}.s-tor_review{color:#f97316}.s-quotation{color:#eab308}.s-bidding{color:#3b82f6}.s-negotiation{color:#a855f7}.s-win{color:#22c55e}.s-ordered{color:#10b981}.s-delivered{color:#10b981}.s-lost{color:#ef4444}
 
-/* Owner tag */
-.owner-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;margin-right:3px}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:#0009;z-index:200;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:#1e293b;border:1px solid #334155;border-radius:16px 16px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:18px 16px}
+.modal-hd{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.modal-x{background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer}
 
-/* Loading */
-.loading{text-align:center;padding:40px;color:#64748b;font-size:13px}
+/* Form (modal) */
+.fg{margin-bottom:10px}
+.fg label{display:block;font-size:11px;color:#94a3b8;margin-bottom:3px}
+.fi{width:100%;padding:9px 11px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:13px;outline:none}
+.fi:focus{border-color:#3b82f6}
+.fi-row{display:flex;gap:8px}.fi-row .fg{flex:1}
+textarea.fi{resize:vertical;min-height:65px}
+select.fi option{background:#1e293b}
+.fa{display:flex;gap:8px;margin-top:14px}
+.btn{padding:9px 14px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.btn-p{background:#3b82f6;color:#fff}.btn-o{background:transparent;color:#94a3b8;border:1px solid #334155}.btn-d{background:#ef4444;color:#fff}
+.btn-sm{padding:5px 10px;font-size:11px}
 
-/* Forecast bar */
-.fc-bar-wrap{background:#0f172a;border-radius:4px;overflow:hidden;height:6px;margin-top:4px}
-.fc-bar{height:6px;background:#3b82f6;border-radius:4px}
+/* Detail rows in modal */
+.drow{padding:6px 0;border-bottom:1px solid #334155;display:flex;gap:10px;font-size:12px}
+.dk{color:#64748b;width:90px;flex-shrink:0;font-size:11px}
+.dv{color:#e2e8f0}
 
-/* Conflict section */
+/* Conflict item */
 .conflict-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#ef444408;border:1px solid #ef444420;border-radius:8px;margin-bottom:6px}
-.conflict-icon{font-size:18px;flex-shrink:0;margin-top:2px}
-.conflict-body{flex:1;min-width:0}
-.conflict-title{font-size:13px;font-weight:600;margin-bottom:3px}
-.conflict-meta{font-size:11px;color:#94a3b8}
 
-/* Toast */
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
-#toast.show{opacity:1}
-
-/* Empty */
-.empty{text-align:center;padding:32px;color:#64748b;font-size:13px}
+/* Forecast funnel */
+.funnel-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #1e293b}
+.funnel-label{width:90px;font-size:11px;font-weight:600;flex-shrink:0}
+.funnel-bar-wrap{flex:1;background:#334155;border-radius:3px;overflow:hidden;height:14px}
+.funnel-bar{height:14px;border-radius:3px;background:#3b82f6}
+.funnel-amt{width:70px;text-align:right;font-size:11px;color:#3b82f6;flex-shrink:0}
+.funnel-cnt{width:36px;text-align:right;font-size:11px;color:#64748b;flex-shrink:0}
 
 /* Month grid */
 .month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -86,15 +102,66 @@ select.filter-sel:focus{border-color:#3b82f6}
 .month-cnt{font-size:10px;color:#64748b}
 .month-bar-wrap{background:#334155;border-radius:3px;overflow:hidden;height:4px;margin-top:6px}
 .month-bar{height:4px;background:#3b82f6;border-radius:3px}
+
+/* Member forecast table */
+.mem-table{width:100%;border-collapse:collapse;font-size:12px}
+.mem-table th{padding:7px 8px;text-align:left;color:#64748b;font-weight:600;border-bottom:1px solid #334155}
+.mem-table td{padding:7px 8px;border-bottom:1px solid #1e293b;vertical-align:middle}
+
+/* Loading */
+.loading{text-align:center;padding:40px;color:#64748b;font-size:13px}
+.empty{text-align:center;padding:32px;color:#64748b;font-size:13px}
+
+/* PIN Screen */
+#pinScreen{display:none;position:fixed;inset:0;background:#0f172a;z-index:300;align-items:center;justify-content:center;flex-direction:column}
+#pinScreen.show{display:flex}
+.pin-box{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px 24px;width:100%;max-width:340px;text-align:center}
+.pin-icon{font-size:40px;margin-bottom:12px}
+.pin-title{font-size:17px;font-weight:700;margin-bottom:4px}
+.pin-sub{font-size:12px;color:#64748b;margin-bottom:20px}
+.pin-input{width:100%;padding:12px;background:#0f172a;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-size:20px;text-align:center;letter-spacing:6px;outline:none;margin-bottom:6px}
+.pin-input:focus{border-color:#3b82f6}
+.pin-err{font-size:12px;color:#ef4444;min-height:18px;margin-bottom:10px}
+.pin-btn{width:100%;padding:11px;background:#3b82f6;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.pin-btn:hover{background:#2563eb}
+.btn-logout{background:none;border:1px solid #334155;color:#64748b;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;margin-left:8px}
+.btn-logout:hover{border-color:#ef4444;color:#ef4444}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:90vw}
+#toast.show{opacity:1}
+
+@media(max-width:500px){.hide-sm{display:none}}
 </style>
 </head>
 <body>
 
+<!-- PIN Screen -->
+<div id="pinScreen">
+  <div class="pin-box">
+    <div class="pin-icon">🔐</div>
+    <div class="pin-title">GM Dashboard</div>
+    <div class="pin-sub">กรุณาใส่รหัสผ่านเพื่อเข้าใช้งาน</div>
+    <input id="pinInput" class="pin-input" type="password" placeholder="••••" maxlength="20" autocomplete="off"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="pin-err" id="pinErr"></div>
+    <button class="pin-btn" onclick="doLogin()">เข้าสู่ระบบ</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appWrapper" style="display:none">
 <header>
-  <div class="hdr-icon">📊</div>
-  <div>
-    <div class="hdr-title">GM Dashboard</div>
-    <div class="hdr-sub">DJI Sales Team — ภาพรวมทีม</div>
+  <div class="hdr-left">
+    <div class="hdr-icon">📊</div>
+    <div>
+      <div class="hdr-title">GM Dashboard</div>
+      <div class="hdr-sub" id="hdrSub">DJI Sales Team</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button class="hdr-refresh" onclick="reload()">🔄 รีเฟรช</button>
+    <button class="btn-logout" id="btnLogout" onclick="doLogout()" style="display:none">🚪 ออก</button>
   </div>
 </header>
 
@@ -109,34 +176,88 @@ select.filter-sel:focus{border-color:#3b82f6}
   <div class="loading">🔄 กำลังโหลดข้อมูล...</div>
 </div>
 
+<!-- Pipeline Detail / Edit Modal -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <span id="modalTitle">รายละเอียด</span>
+      <button class="modal-x" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
+</div><!-- /appWrapper -->
 
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <script>
 firebase.initializeApp({
-  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
-  authDomain: "work-assistant-9e024.firebaseapp.com",
-  projectId: "work-assistant-9e024",
-  storageBucket: "work-assistant-9e024.firebasestorage.app",
-  messagingSenderId: "796607223436",
-  appId: "1:796607223436:web:1455abe90b141104678da9"
+  apiKey:"AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain:"work-assistant-9e024.firebaseapp.com",
+  projectId:"work-assistant-9e024",
+  storageBucket:"work-assistant-9e024.firebasestorage.app",
+  messagingSenderId:"796607223436",
+  appId:"1:796607223436:web:1455abe90b141104678da9"
 });
 var db = firebase.firestore();
 
-// ================================================================
-// STATE
-// ================================================================
-var allPipeline = [];   // from teamPipeline collection
-var teamMembers = [];   // from teamConfig
-var conflicts = [];     // computed pairs
+// ── AUTH ───────────────────────────────────────────────
+var GM_PIN = null;
+
+function init() {
+  if(sessionStorage.getItem('gm_auth')==='1'){showApp();return;}
+  db.collection('teamConfig').doc('main').get().then(function(doc){
+    if(doc.exists&&doc.data().gmPin){
+      GM_PIN=String(doc.data().gmPin);
+      document.getElementById('pinScreen').classList.add('show');
+    } else {
+      showApp();
+    }
+  }).catch(function(){ showApp(); });
+}
+
+function doLogin() {
+  var val=document.getElementById('pinInput').value.trim();
+  if(!val)return;
+  if(val===GM_PIN){
+    sessionStorage.setItem('gm_auth','1');
+    showApp();
+  } else {
+    var err=document.getElementById('pinErr');
+    err.textContent='รหัสไม่ถูกต้อง';
+    document.getElementById('pinInput').value='';
+    document.getElementById('pinInput').focus();
+    setTimeout(function(){err.textContent='';},2000);
+  }
+}
+
+function showApp() {
+  document.getElementById('pinScreen').classList.remove('show');
+  document.getElementById('appWrapper').style.display='';
+  if(GM_PIN)document.getElementById('btnLogout').style.display='';
+  loadData();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('gm_auth');
+  location.reload();
+}
+
+// ── STATE ──────────────────────────────────────────────
+var allPipeline = [];
+var conflicts = [];
 var currentTab = 'overview';
 var filterOwner = 'all';
 var filterStatus = 'all';
+var searchQ = '';
+var editingPipeId = null;
+var _toastTimer;
 
 var PIPE_STATUSES = [
   {id:'prospect',name:'Prospect',cls:'s-prospect'},
-  {id:'tor_review',name:'TOR',cls:'s-tor_review'},
+  {id:'tor_review',name:'TOR Review',cls:'s-tor_review'},
   {id:'quotation',name:'Quotation',cls:'s-quotation'},
   {id:'bidding',name:'Bidding',cls:'s-bidding'},
   {id:'negotiation',name:'Negotiation',cls:'s-negotiation'},
@@ -145,404 +266,558 @@ var PIPE_STATUSES = [
   {id:'delivered',name:'Delivered',cls:'s-delivered'},
   {id:'lost',name:'Lost',cls:'s-lost'}
 ];
-var ACTIVE_STATUSES = ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'];
+var ACTIVE = ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'];
 var MONTHS_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
-// ================================================================
-// LOAD DATA
-// ================================================================
+// ── LOAD ───────────────────────────────────────────────
 function loadData() {
-  Promise.all([
-    db.collection('teamPipeline').get(),
-    db.collection('teamConfig').doc('main').get()
-  ]).then(function(results) {
-    var pipeSnap = results[0];
-    var configDoc = results[1];
-
+  document.getElementById('mainContent').innerHTML = '<div class="loading">🔄 กำลังโหลด...</div>';
+  db.collection('teamPipeline').get().then(function(snap) {
     allPipeline = [];
-    pipeSnap.forEach(function(d) { allPipeline.push(d.data()); });
+    snap.forEach(function(d) { allPipeline.push(d.data()); });
     allPipeline.sort(function(a,b) { return (b.updatedAt||'').localeCompare(a.updatedAt||''); });
-
-    if (configDoc.exists) {
-      var cfg = configDoc.data();
-      teamMembers = cfg.members || [];
-    }
-
     conflicts = detectConflicts(allPipeline);
+    var owners = [];
+    allPipeline.forEach(function(p) { if(p.ownerName && owners.indexOf(p.ownerName)===-1) owners.push(p.ownerName); });
+    document.getElementById('hdrSub').textContent = 'DJI Sales Team · ' + allPipeline.length + ' Pipeline · ' + owners.length + ' คน';
     renderTab(currentTab);
   }).catch(function(e) {
-    document.getElementById('mainContent').innerHTML = '<div class="empty">❌ โหลดข้อมูลล้มเหลว<br><small style="color:#ef4444">' + e.message + '</small></div>';
+    document.getElementById('mainContent').innerHTML = '<div class="empty">❌ ' + e.message + '</div>';
   });
 }
 
-// ================================================================
-// CONFLICT DETECTION
-// ================================================================
+function reload() { loadData(); }
+
+// ── CONFLICT DETECTION ─────────────────────────────────
 function bigrams(str) {
-  var s = (str || '').toLowerCase().replace(/\s+/g, '');
-  var set = {};
-  for (var i = 0; i < s.length - 1; i++) set[s[i] + s[i+1]] = true;
+  var s=(str||'').toLowerCase().replace(/\s+/g,''),set={};
+  for(var i=0;i<s.length-1;i++)set[s[i]+s[i+1]]=true;
   return set;
 }
-function bigramSim(a, b) {
-  var ba = bigrams(a), bb = bigrams(b);
-  var inter = 0, ua = Object.keys(ba).length, ub = Object.keys(bb).length;
-  Object.keys(ba).forEach(function(k) { if (bb[k]) inter++; });
-  return (ua + ub) === 0 ? 0 : Math.round(2 * inter / (ua + ub) * 100);
+function bigramSim(a,b) {
+  var ba=bigrams(a),bb=bigrams(b),inter=0,ua=Object.keys(ba).length,ub=Object.keys(bb).length;
+  Object.keys(ba).forEach(function(k){if(bb[k])inter++;});
+  return(ua+ub)===0?0:Math.round(2*inter/(ua+ub)*100);
 }
-function pipeScore(a, b) {
-  return Math.round(bigramSim(a.projectName, b.projectName) * 0.5 + bigramSim(a.endUserTH, b.endUserTH) * 0.35 + bigramSim(a.endUserEN, b.endUserEN) * 0.15);
+function pipeScore(a,b) {
+  return Math.round(bigramSim(a.projectName,b.projectName)*0.5+bigramSim(a.endUserTH,b.endUserTH)*0.35+bigramSim(a.endUserEN,b.endUserEN)*0.15);
 }
 function detectConflicts(pipes) {
-  var active = pipes.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
-  var pairs = [];
-  for (var i = 0; i < active.length; i++) {
-    for (var j = i + 1; j < active.length; j++) {
-      // Skip if same owner
-      if (active[i].ownerId && active[i].ownerId === active[j].ownerId) continue;
-      var sc = pipeScore(active[i], active[j]);
-      if (sc >= 60) pairs.push({ a: active[i], b: active[j], score: sc });
-    }
+  var active=pipes.filter(function(p){return ACTIVE.indexOf(p.status)!==-1;});
+  var pairs=[];
+  for(var i=0;i<active.length;i++) for(var j=i+1;j<active.length;j++) {
+    if(active[i].ownerId&&active[i].ownerId===active[j].ownerId)continue;
+    var sc=pipeScore(active[i],active[j]);
+    if(sc>=60)pairs.push({a:active[i],b:active[j],score:sc});
   }
-  pairs.sort(function(a,b) { return b.score - a.score; });
-  return pairs;
+  return pairs.sort(function(a,b){return b.score-a.score;});
 }
 
-// ================================================================
-// TABS
-// ================================================================
+// ── TABS ───────────────────────────────────────────────
 function showTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('act'); });
-  var tabIds = {overview:'tabOverview',pipeline:'tabPipeline',conflicts:'tabConflicts',forecast:'tabForecast'};
-  if (tabIds[tab]) document.getElementById(tabIds[tab]).classList.add('act');
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('act');});
+  var map={overview:'tabOverview',pipeline:'tabPipeline',conflicts:'tabConflicts',forecast:'tabForecast'};
+  if(map[tab])document.getElementById(map[tab]).classList.add('act');
   renderTab(tab);
 }
 function renderTab(tab) {
-  if (tab === 'overview') renderOverview();
-  else if (tab === 'pipeline') renderPipelineTab();
-  else if (tab === 'conflicts') renderConflictsTab();
-  else if (tab === 'forecast') renderForecastTab();
+  if(tab==='overview')renderOverview();
+  else if(tab==='pipeline')renderPipelineTab();
+  else if(tab==='conflicts')renderConflictsTab();
+  else if(tab==='forecast')renderForecastTab();
 }
 
-// ================================================================
-// OVERVIEW TAB
-// ================================================================
+// ── OVERVIEW ───────────────────────────────────────────
 function renderOverview() {
-  var active = allPipeline.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
-  var won = allPipeline.filter(function(p) { return ['win','ordered','delivered'].indexOf(p.status) !== -1; });
-  var totalAmt = active.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
-  var wonAmt = won.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+  var active=allPipeline.filter(function(p){return ACTIVE.indexOf(p.status)!==-1;});
+  var won=allPipeline.filter(function(p){return['win','ordered','delivered'].indexOf(p.status)!==-1;});
+  var totalAmt=active.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var wonAmt=won.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
 
-  // Owner breakdown
-  var ownerMap = {};
-  allPipeline.forEach(function(p) {
-    var k = p.ownerName || 'Unknown';
-    if (!ownerMap[k]) ownerMap[k] = { name: k, type: p.ownerType, count: 0, active: 0, amt: 0, won: 0 };
-    ownerMap[k].count++;
-    if (ACTIVE_STATUSES.indexOf(p.status) !== -1) { ownerMap[k].active++; ownerMap[k].amt += Number(p.forecastAmount)||0; }
-    if (['win','ordered','delivered'].indexOf(p.status) !== -1) ownerMap[k].won += Number(p.forecastAmount)||0;
+  var ownerMap={};
+  allPipeline.forEach(function(p){
+    var k=p.ownerName||'?';
+    if(!ownerMap[k])ownerMap[k]={name:k,type:p.ownerType,cnt:0,active:0,amt:0,won:0};
+    ownerMap[k].cnt++;
+    if(ACTIVE.indexOf(p.status)!==-1){ownerMap[k].active++;ownerMap[k].amt+=Number(p.forecastAmount)||0;}
+    if(['win','ordered','delivered'].indexOf(p.status)!==-1)ownerMap[k].won+=Number(p.forecastAmount)||0;
   });
 
-  // Monthly forecast (next 6 months)
-  var now = new Date();
-  var months = [];
-  for (var m = 0; m < 6; m++) {
-    var d = new Date(now.getFullYear(), now.getMonth() + m, 1);
-    months.push({ year: d.getFullYear(), month: d.getMonth(), label: MONTHS_TH[d.getMonth()] + ' ' + (d.getFullYear() % 100), amt: 0, cnt: 0 });
+  var now=new Date();
+  var months=[];
+  for(var m=0;m<6;m++){
+    var d=new Date(now.getFullYear(),now.getMonth()+m,1);
+    months.push({year:d.getFullYear(),month:d.getMonth(),label:MONTHS_TH[d.getMonth()]+' '+(d.getFullYear()%100),amt:0,cnt:0});
   }
-  allPipeline.forEach(function(p) {
-    if (ACTIVE_STATUSES.indexOf(p.status) === -1) return;
-    var dateStr = p.expectedCloseDate || p.biddingDate || '';
-    if (!dateStr) return;
-    var dt = new Date(dateStr);
-    if (isNaN(dt.getTime())) return;
-    months.forEach(function(m) {
-      if (dt.getFullYear() === m.year && dt.getMonth() === m.month) {
-        m.amt += Number(p.forecastAmount) || 0;
-        m.cnt++;
-      }
-    });
+  allPipeline.forEach(function(p){
+    if(ACTIVE.indexOf(p.status)===-1)return;
+    var ds=p.expectedCloseDate||p.biddingDate||'';if(!ds)return;
+    var dt=new Date(ds);if(isNaN(dt.getTime()))return;
+    months.forEach(function(m){if(dt.getFullYear()===m.year&&dt.getMonth()===m.month){m.amt+=Number(p.forecastAmount)||0;m.cnt++;}});
   });
-  var maxAmt = Math.max(1, months.reduce(function(s,m) { return Math.max(s, m.amt); }, 0));
+  var maxAmt=Math.max(1,months.reduce(function(s,m){return Math.max(s,m.amt);},0));
 
-  var h = '';
-  h += '<div class="stats-row">';
-  h += '<div class="stat-card"><div class="stat-num">' + allPipeline.length + '</div><div class="stat-lbl">Pipeline ทั้งหมด</div></div>';
-  h += '<div class="stat-card"><div class="stat-num" style="color:#22c55e">' + fmtShort(totalAmt) + '</div><div class="stat-lbl">Active Forecast ฿</div></div>';
-  h += '<div class="stat-card"><div class="stat-num" style="color:#a855f7">' + fmtShort(wonAmt) + '</div><div class="stat-lbl">Won ฿</div></div>';
-  h += '<div class="stat-card"><div class="stat-num" style="color:#ef4444">' + conflicts.length + '</div><div class="stat-lbl">⚠️ ชนกัน</div></div>';
-  h += '</div>';
+  var h='<div class="stats-row">';
+  h+='<div class="stat-card"><div class="stat-num">'+allPipeline.length+'</div><div class="stat-lbl">Pipeline ทั้งหมด</div></div>';
+  h+='<div class="stat-card"><div class="stat-num" style="color:#22c55e">'+fmtShort(totalAmt)+'</div><div class="stat-lbl">Active Forecast ฿</div></div>';
+  h+='<div class="stat-card"><div class="stat-num" style="color:#a855f7">'+fmtShort(wonAmt)+'</div><div class="stat-lbl">Won ฿</div></div>';
+  h+='<div class="stat-card"><div class="stat-num" style="color:#ef4444">'+conflicts.length+'</div><div class="stat-lbl">⚠️ ชนกัน</div></div>';
+  h+='</div>';
 
-  // Team breakdown
-  h += '<div class="card"><h2>👥 สรุปแยกตามทีม</h2>';
-  Object.values(ownerMap).forEach(function(o) {
-    var cls = o.type === 'main' ? 'b-main' : 'b-sales';
-    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #334155">';
-    h += '<span class="badge ' + cls + '">' + esc(o.name) + '</span>';
-    h += '<div style="flex:1">';
-    h += '<div style="font-size:12px">' + o.active + ' งาน Active <span style="color:#64748b">/ ' + o.count + ' ทั้งหมด</span></div>';
-    h += '<div style="font-size:11px;color:#3b82f6">' + fmtShort(o.amt) + ' ฿ forecast</div>';
-    if (o.amt > 0) {
-      h += '<div class="fc-bar-wrap"><div class="fc-bar" style="width:' + Math.round(o.amt/totalAmt*100) + '%"></div></div>';
-    }
-    h += '</div>';
-    if (o.won > 0) h += '<div style="text-align:right;font-size:11px;color:#22c55e">Won<br>' + fmtShort(o.won) + '</div>';
-    h += '</div>';
+  h+='<div class="card"><div class="card-h">👥 สรุปแยกตามทีม</div>';
+  Object.values(ownerMap).sort(function(a,b){return b.amt-a.amt;}).forEach(function(o){
+    var cls=o.type==='main'?'b-main':'b-sales';
+    var pct=totalAmt>0?Math.round(o.amt/totalAmt*100):0;
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #334155">';
+    h+='<span class="badge '+cls+'" style="min-width:70px;text-align:center">'+esc(o.name)+'</span>';
+    h+='<div style="flex:1">';
+    h+='<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>'+o.active+' active / '+o.cnt+' ทั้งหมด</span><span style="color:#3b82f6">'+fmtShort(o.amt)+' ฿</span></div>';
+    h+='<div style="background:#334155;border-radius:3px;height:6px"><div style="background:'+(o.type==='main'?'#3b82f6':'#f97316')+';border-radius:3px;height:6px;width:'+pct+'%"></div></div>';
+    h+='</div>';
+    h+='<div style="text-align:right;font-size:10px;color:#22c55e;min-width:50px">'+(o.won>0?'Won<br>'+fmtShort(o.won):'')+'</div>';
+    h+='</div>';
   });
-  h += '</div>';
+  h+='</div>';
 
-  // 6-month timeline
-  h += '<div class="card"><h2>📅 Timeline 6 เดือน (Expected Close)</h2>';
-  h += '<div class="month-grid">';
-  var curM = now.getMonth(), curY = now.getFullYear();
-  months.forEach(function(m) {
-    var isCur = m.year === curY && m.month === curM;
-    var pct = Math.round(m.amt / maxAmt * 100);
-    h += '<div class="month-cell ' + (isCur ? 'cur' : '') + '" onclick="showMonthDetail(' + m.year + ',' + m.month + ')">';
-    h += '<div class="month-name">' + m.label + '</div>';
-    h += '<div class="month-amt">' + (m.amt > 0 ? fmtShort(m.amt) : '—') + '</div>';
-    h += '<div class="month-cnt">' + (m.cnt > 0 ? m.cnt + ' โครงการ' : '') + '</div>';
-    h += '<div class="month-bar-wrap"><div class="month-bar" style="width:' + pct + '%"></div></div>';
-    h += '</div>';
+  h+='<div class="card"><div class="card-h">📅 Timeline 6 เดือน (Expected Close)</div>';
+  h+='<div class="month-grid">';
+  months.forEach(function(m){
+    var isCur=m.year===now.getFullYear()&&m.month===now.getMonth();
+    var pct=Math.round(m.amt/maxAmt*100);
+    h+='<div class="month-cell'+(isCur?' cur':'')+'" onclick="showMonthDetail('+m.year+','+m.month+')">';
+    h+='<div class="month-name">'+m.label+'</div>';
+    h+='<div class="month-amt">'+(m.amt>0?fmtShort(m.amt):'—')+'</div>';
+    h+='<div class="month-cnt">'+(m.cnt>0?m.cnt+' โครงการ':'')+'</div>';
+    h+='<div class="month-bar-wrap"><div class="month-bar" style="width:'+pct+'%"></div></div>';
+    h+='</div>';
   });
-  h += '</div></div>';
+  h+='</div></div>';
 
-  document.getElementById('mainContent').innerHTML = h;
+  document.getElementById('mainContent').innerHTML=h;
 }
 
-function showMonthDetail(year, month) {
-  var label = MONTHS_TH[month] + ' ' + year;
-  var items = allPipeline.filter(function(p) {
-    if (ACTIVE_STATUSES.indexOf(p.status) === -1) return false;
-    var dateStr = p.expectedCloseDate || p.biddingDate || '';
-    if (!dateStr) return false;
-    var dt = new Date(dateStr);
-    return !isNaN(dt.getTime()) && dt.getFullYear() === year && dt.getMonth() === month;
+function showMonthDetail(year,month) {
+  var label=MONTHS_TH[month]+' '+year;
+  var items=allPipeline.filter(function(p){
+    if(ACTIVE.indexOf(p.status)===-1)return false;
+    var ds=p.expectedCloseDate||p.biddingDate||'';if(!ds)return false;
+    var dt=new Date(ds);
+    return!isNaN(dt.getTime())&&dt.getFullYear()===year&&dt.getMonth()===month;
   });
-  if (!items.length) { showToast('ไม่มีโครงการในเดือนนี้'); return; }
-  var totalAmt = items.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
-  var h = '<div style="margin-bottom:8px;font-size:13px;color:#94a3b8">รวม ' + items.length + ' โครงการ • ' + fmtShort(totalAmt) + ' ฿</div>';
-  items.forEach(function(p) {
-    var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {};
-    h += '<div style="padding:8px;background:#0f172a;border-radius:8px;margin-bottom:6px">';
-    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
-    h += '<div style="flex:1;font-size:13px;font-weight:600">' + esc(p.projectName || '—') + '</div>';
-    h += '<span class="' + (st.cls||'') + '" style="font-size:10px;font-weight:600">' + (st.name||p.status) + '</span>';
-    h += '</div>';
-    h += '<div style="font-size:11px;color:#94a3b8;margin-top:3px">' + esc(p.dealerName || '—') + '</div>';
-    if (p.forecastAmount) h += '<div style="font-size:12px;color:#3b82f6;margin-top:2px">฿' + Number(p.forecastAmount).toLocaleString() + '</div>';
-    var ownerCls = p.ownerType === 'main' ? 'b-main' : 'b-sales';
-    h += '<div style="margin-top:4px"><span class="badge ' + ownerCls + '">' + esc(p.ownerName || '—') + '</span></div>';
-    h += '</div>';
+  if(!items.length){showToast('ไม่มีโครงการในเดือนนี้');return;}
+  var total=items.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var h='<div style="font-size:12px;color:#94a3b8;margin-bottom:10px">'+items.length+' โครงการ · '+fmtShort(total)+' ฿</div>';
+  items.forEach(function(p){
+    var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{};
+    var cls=p.ownerType==='main'?'b-main':'b-sales';
+    h+='<div style="padding:8px;background:#0f172a;border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="closeModal();openPipeDetail(\''+p.id+'\')">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+    h+='<div style="flex:1"><div style="font-size:12px;font-weight:600">'+esc((p.projectName||'—').substr(0,45))+'</div>';
+    h+='<div style="font-size:10px;color:#94a3b8;margin-top:2px">'+esc(p.dealerName||'—')+(p.endUserTH?' · '+esc(p.endUserTH.substr(0,25)):'')+'</div></div>';
+    h+='<span class="'+(st.cls||'')+'" style="font-size:10px;font-weight:600;flex-shrink:0">'+(st.name||p.status)+'</span></div>';
+    h+='<div style="margin-top:4px;display:flex;justify-content:space-between;align-items:center">';
+    h+='<span class="badge '+cls+'" style="font-size:9px">'+esc(p.ownerName||'?')+'</span>';
+    if(p.forecastAmount)h+='<span style="font-size:12px;color:#3b82f6;font-weight:700">฿'+Number(p.forecastAmount).toLocaleString()+'</span>';
+    h+='</div></div>';
   });
-  // Simple modal using alert-style div
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:#0009;z-index:200;display:flex;align-items:flex-end;justify-content:center';
-  overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
-  var box = document.createElement('div');
-  box.style.cssText = 'background:#1e293b;border:1px solid #334155;border-radius:16px 16px 0 0;width:100%;max-width:540px;max-height:85vh;overflow-y:auto;padding:20px';
-  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><strong style="font-size:15px">📅 ' + label + '</strong><button onclick="this.closest(\'div\').parentElement.parentElement.remove()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button></div>' + h;
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
+  openModal('📅 '+label,h);
 }
 
-// ================================================================
-// PIPELINE TAB
-// ================================================================
+// ── PIPELINE TAB ───────────────────────────────────────
 function renderPipelineTab() {
-  // Build unique owners list
-  var owners = [];
-  allPipeline.forEach(function(p) {
-    if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName);
-  });
+  var owners=[];
+  allPipeline.forEach(function(p){if(p.ownerName&&owners.indexOf(p.ownerName)===-1)owners.push(p.ownerName);});
 
-  var ownerFilter = '<select class="filter-sel" id="fOwner" onchange="filterOwner=this.value;renderPipelineTab()"><option value="all">ทุกคน</option>' +
-    owners.map(function(o) { return '<option value="' + esc(o) + '"' + (filterOwner === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
-  var statusFilter = '<select class="filter-sel" id="fStatus" onchange="filterStatus=this.value;renderPipelineTab()"><option value="all">ทุก Status</option>' +
-    PIPE_STATUSES.map(function(s) { return '<option value="' + s.id + '"' + (filterStatus === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select>';
-
-  var filtered = allPipeline.filter(function(p) {
-    if (filterOwner !== 'all' && p.ownerName !== filterOwner) return false;
-    if (filterStatus !== 'all' && p.status !== filterStatus) return false;
+  var q=searchQ.toLowerCase();
+  var filtered=allPipeline.filter(function(p){
+    if(filterOwner!=='all'&&p.ownerName!==filterOwner)return false;
+    if(filterStatus!=='all'&&p.status!==filterStatus)return false;
+    if(q&&!((p.projectName||'').toLowerCase().includes(q)|(p.endUserTH||'').toLowerCase().includes(q)|(p.dealerName||'').toLowerCase().includes(q)|(p.endUserEN||'').toLowerCase().includes(q)))return false;
     return true;
   });
 
-  // Build conflict lookup (pipeId → conflict entries)
-  var cMap = {};
-  conflicts.forEach(function(c) {
-    if (!cMap[c.a.id]) cMap[c.a.id] = [];
-    if (!cMap[c.b.id]) cMap[c.b.id] = [];
-    cMap[c.a.id].push({ other: c.b, score: c.score });
-    cMap[c.b.id].push({ other: c.a, score: c.score });
+  var cMap={};
+  conflicts.forEach(function(c){
+    if(!cMap[c.a.id])cMap[c.a.id]=[];if(!cMap[c.b.id])cMap[c.b.id]=[];
+    cMap[c.a.id].push({other:c.b,score:c.score});cMap[c.b.id].push({other:c.a,score:c.score});
   });
 
-  var totalAmt = filtered.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; })
-    .reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
+  var activeAmt=filtered.filter(function(p){return ACTIVE.indexOf(p.status)!==-1;}).reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
 
-  var h = '<div class="filter-bar">' + ownerFilter + statusFilter + '</div>';
-  h += '<div style="font-size:11px;color:#64748b;margin-bottom:8px">' + filtered.length + ' รายการ • Active: ' + fmtShort(totalAmt) + ' ฿</div>';
+  var ownerOpts='<option value="all">ทุกคน</option>'+owners.map(function(o){return'<option value="'+esc(o)+'"'+(filterOwner===o?' selected':'')+'>'+esc(o)+'</option>';}).join('');
+  var stOpts='<option value="all">ทุก Status</option>'+PIPE_STATUSES.map(function(s){return'<option value="'+s.id+'"'+(filterStatus===s.id?' selected':'')+'>'+s.name+'</option>';}).join('');
 
-  if (!filtered.length) {
-    h += '<div class="empty">ไม่มีข้อมูล</div>';
+  var h='<div class="fbar">';
+  h+='<input class="fsearch" placeholder="🔍 ค้นหาโครงการ / End User / Dealer" value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderPipelineTab()">';
+  h+='<select class="fsel" onchange="filterOwner=this.value;renderPipelineTab()">'+ownerOpts+'</select>';
+  h+='<select class="fsel" onchange="filterStatus=this.value;renderPipelineTab()">'+stOpts+'</select>';
+  h+='<span class="fcount">'+filtered.length+' รายการ · '+fmtShort(activeAmt)+' ฿</span>';
+  h+='</div>';
+
+  if(!filtered.length){
+    h+='<div class="empty">ไม่มีข้อมูล</div>';
   } else {
-    h += '<div style="overflow-x:auto"><table class="pipe-table"><thead><tr>';
-    h += '<th>#</th><th>โครงการ</th><th>Dealer</th><th>Status</th><th>฿ Forecast</th><th>Sales</th><th></th>';
-    h += '</tr></thead><tbody>';
-    filtered.forEach(function(p, i) {
-      var st = PIPE_STATUSES.find(function(s) { return s.id === p.status; }) || {};
-      var cc = cMap[p.id];
-      var isWon = ['win','ordered','delivered'].indexOf(p.status) !== -1;
-      var isLost = p.status === 'lost';
-      var ownerCls = p.ownerType === 'main' ? 'b-main' : 'b-sales';
-      h += '<tr class="' + (isWon ? 'is-won' : isLost ? 'is-lost' : '') + '">';
-      h += '<td style="color:#64748b">' + (i+1) + '</td>';
-      h += '<td style="max-width:200px"><div style="font-weight:600">' + esc((p.projectName||'').substr(0,40)) + '</div>';
-      if (p.endUserTH) h += '<div style="font-size:10px;color:#64748b">' + esc(p.endUserTH.substr(0,30)) + '</div>';
-      h += '</td>';
-      h += '<td style="max-width:130px;font-size:11px">' + esc((p.dealerName||'—').substr(0,25)) + '</td>';
-      h += '<td><span class="b-status ' + (st.cls||'') + '">' + (st.name||p.status) + '</span></td>';
-      h += '<td style="text-align:right;color:#3b82f6;font-weight:600">' + (p.forecastAmount ? fmtShort(p.forecastAmount) : '—') + '</td>';
-      h += '<td><span class="badge ' + ownerCls + '" style="font-size:9px">' + esc(p.ownerName||'?') + '</span></td>';
-      h += '<td>';
-      if (cc && cc.length) h += '<span class="badge b-conflict">⚠️ ' + cc.length + '</span>';
-      h += '</td></tr>';
+    h+='<div style="overflow-x:auto"><table class="pipe-table"><thead><tr>';
+    h+='<th>#</th><th>ชื่อโครงการ</th><th>End User</th><th class="hide-sm">Dealer</th><th class="hide-sm">รุ่น / Qty</th><th>Status</th><th>฿ Forecast</th><th class="hide-sm">อัปเดต</th><th>Sales</th><th>⚠️</th>';
+    h+='</tr></thead><tbody>';
+    filtered.forEach(function(p,i){
+      var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{};
+      var cc=cMap[p.id];
+      var isWon=['win','ordered','delivered'].indexOf(p.status)!==-1;
+      var isLost=p.status==='lost';
+      var cls=p.ownerType==='main'?'b-main':'b-sales';
+      var modelTxt=pipeModelSummary(p);
+      var updTxt=p.updatedAt?p.updatedAt.slice(0,10):'—';
+      h+='<tr class="'+(isWon?'is-won':isLost?'is-lost':'')+'" onclick="openPipeDetail(\''+p.id+'\')">';
+      h+='<td style="color:#64748b;font-size:11px">'+(i+1)+'</td>';
+      h+='<td style="max-width:180px"><div style="font-weight:600;font-size:12px">'+esc((p.projectName||'—').substr(0,38))+'</div>'+(p.endUserTH?'<div style="font-size:10px;color:#64748b;margin-top:1px">'+esc(p.endUserTH.substr(0,25))+'</div>':'')+'</td>';
+      h+='<td style="max-width:130px"><div style="font-size:11px;color:#94a3b8">'+esc((p.endUserTH||'—').substr(0,28))+'</div>'+(p.endUserEN?'<div style="font-size:10px;color:#64748b">'+esc(p.endUserEN.substr(0,22))+'</div>':'')+'</td>';
+      h+='<td class="hide-sm" style="font-size:11px;color:#94a3b8;max-width:110px">'+esc((p.dealerName||'—').substr(0,20))+'</td>';
+      h+='<td class="hide-sm" style="font-size:11px;max-width:120px"><span style="color:#e2e8f0">'+(modelTxt?esc(modelTxt.substr(0,25)):'<span style="color:#334155">—</span>')+'</span>'+(p.totalQty>0?'<div style="font-size:10px;color:#64748b">Qty: '+p.totalQty+'</div>':'')+'</td>';
+      h+='<td><span class="'+(st.cls||'')+'" style="font-size:10px;font-weight:600">'+(st.name||p.status)+'</span></td>';
+      h+='<td style="text-align:right;color:#3b82f6;font-weight:600;white-space:nowrap">'+(p.forecastAmount?fmtShort(p.forecastAmount):'—')+'</td>';
+      h+='<td class="hide-sm" style="font-size:10px;color:#64748b;white-space:nowrap">'+updTxt+'</td>';
+      h+='<td><span class="badge '+cls+'" style="font-size:9px">'+esc((p.ownerName||'?').split(' ')[0])+'</span></td>';
+      h+='<td>'+(cc&&cc.length?'<span class="badge b-conflict" style="font-size:9px">⚠️'+cc.length+'</span>':'')+'</td>';
+      h+='</tr>';
     });
-    h += '</tbody></table></div>';
+    h+='</tbody></table></div>';
   }
-  document.getElementById('mainContent').innerHTML = h;
+  document.getElementById('mainContent').innerHTML=h;
 }
 
-// ================================================================
-// CONFLICTS TAB
-// ================================================================
+// ── PIPE DETAIL + EDIT ─────────────────────────────────
+function openPipeDetail(pipeId) {
+  var tp=allPipeline.find(function(x){return x.id===pipeId;});
+  if(!tp)return;
+  openModal('🔄 กำลังโหลด...','<div class="loading">กำลังดึงข้อมูลเต็ม...</div>');
+
+  // Load full doc from source
+  var srcRef = tp.ownerType==='sales'
+    ? db.collection('salesMembers').doc(tp.ownerId).collection('pipeline').doc(pipeId)
+    : db.collection('users').doc(tp.ownerId).collection('pipeline').doc(pipeId);
+
+  srcRef.get().then(function(doc){
+    var p = doc.exists ? Object.assign({},tp,doc.data()) : tp;
+    showPipeDetail(p, tp);
+  }).catch(function(){
+    showPipeDetail(tp, tp);
+  });
+}
+
+function pipeItems(p) {
+  if(p.items&&p.items.length)return p.items;
+  if(p.model)return[{model:p.model,qty:Number(p.modelQty)||1,total:Number(p.forecastAmount)||0}];
+  return[];
+}
+function pipeModelSummary(p) {
+  return pipeItems(p).map(function(it){return(it.model||'')+(it.qty>1?' x'+it.qty:'');}).filter(Boolean).join(', ');
+}
+function fDate(s){if(!s)return'—';var d=new Date(s);return isNaN(d)?s:d.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'});}
+function daysLeft(s,done){
+  if(!s||done)return'';
+  var diff=Math.round((new Date(s)-new Date())/(864e5));
+  if(diff<0)return'<span style="color:#ef4444;font-size:9px"> (เกินแล้ว '+(Math.abs(diff))+'วัน)</span>';
+  if(diff<=7)return'<span style="color:#f97316;font-size:9px"> (อีก '+diff+' วัน)</span>';
+  return'<span style="color:#64748b;font-size:9px"> (อีก '+diff+' วัน)</span>';
+}
+
+function showPipeDetail(p, tp) {
+  var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{name:p.status,cls:'s-prospect'};
+  var cls=tp.ownerType==='main'?'b-main':'b-sales';
+  var isWon=['win','ordered','delivered'].indexOf(p.status)!==-1;
+  var isLost=p.status==='lost';
+  document.getElementById('modalTitle').textContent = '📋 ' + (p.projectName||'Pipeline').substr(0,35);
+
+  var items=pipeItems(p);
+  var totalQty=items.reduce(function(s,it){return s+(Number(it.qty)||1);},0);
+
+  var h='<div style="background:#0f172a;border-radius:10px;padding:12px;margin-bottom:12px">';
+  // Title row
+  h+='<div style="font-size:15px;font-weight:700;margin-bottom:8px;line-height:1.3">'+esc(p.projectName||'—')+'</div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  h+='<span class="'+st.cls+'" style="font-size:11px;font-weight:700">'+st.name+'</span>';
+  h+='<span class="badge '+cls+'" style="font-size:10px">'+esc(tp.ownerName||'?')+'</span>';
+  if(tp.ownerType)h+='<span style="font-size:10px;color:#64748b">'+esc(tp.ownerType)+'</span>';
+  h+='</div>';
+
+  // End User
+  if(p.endUserTH||p.endUserEN||p.endUser){
+    h+='<div class="drow"><span class="dk">End User TH</span><span class="dv">'+esc(p.endUserTH||p.endUser||'—')+'</span></div>';
+    if(p.endUserEN)h+='<div class="drow"><span class="dk">End User EN</span><span class="dv">'+esc(p.endUserEN)+'</span></div>';
+  }
+  if(p.dealerName)h+='<div class="drow"><span class="dk">Dealer</span><span class="dv">'+esc(p.dealerName)+'</span></div>';
+  if(p.unitType)h+='<div class="drow"><span class="dk">Unit Type</span><span class="dv">'+esc(p.unitType)+'</span></div>';
+  if(p.djiDealer)h+='<div class="drow"><span class="dk">DJI Dealer</span><span class="dv">'+esc(p.djiDealer)+'</span></div>';
+
+  // Items/Model block
+  if(items.length){
+    h+='<div class="drow" style="flex-direction:column;gap:6px"><span class="dk" style="width:auto;margin-bottom:2px">📦 สินค้า ('+totalQty+' ชิ้น)</span>';
+    items.forEach(function(it){
+      h+='<div style="background:#1e293b;border-radius:6px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px">';
+      h+='<div><div style="font-size:12px;font-weight:600">'+esc(it.model||'—')+'</div>';
+      if(it.category||it.series)h+='<div style="font-size:10px;color:#64748b">'+esc([it.category,it.series].filter(Boolean).join(' · '))+'</div>';
+      h+='</div>';
+      h+='<div style="text-align:right;flex-shrink:0">';
+      h+='<div style="font-size:12px;color:#94a3b8">Qty: <strong style="color:#e2e8f0">'+( it.qty||1)+'</strong></div>';
+      if(it.total)h+='<div style="font-size:11px;color:#3b82f6">฿'+Number(it.total).toLocaleString()+'</div>';
+      h+='</div></div>';
+    });
+    h+='</div>';
+  } else if(p.model){
+    h+='<div class="drow"><span class="dk">สินค้า/รุ่น</span><span class="dv">'+esc(p.model)+(p.modelQty>1?' x'+p.modelQty:'')+'</span></div>';
+  }
+
+  // Amounts
+  h+='<div class="drow"><span class="dk">Forecast ฿</span><span class="dv" style="color:#3b82f6;font-weight:700">'+(p.forecastAmount?'฿'+Number(p.forecastAmount).toLocaleString():'—')+'</span></div>';
+  if(p.realAmount)h+='<div class="drow"><span class="dk">Real ฿</span><span class="dv" style="color:#22c55e;font-weight:700">฿'+Number(p.realAmount).toLocaleString()+'</span></div>';
+
+  // Dates
+  if(p.registerDate)h+='<div class="drow"><span class="dk">Register</span><span class="dv">'+fDate(p.registerDate)+'</span></div>';
+  if(p.tor)h+='<div class="drow"><span class="dk">TOR</span><span class="dv">'+esc(p.tor)+'</span></div>';
+  if(p.biddingDate)h+='<div class="drow"><span class="dk">Bidding</span><span class="dv">'+fDate(p.biddingDate)+daysLeft(p.biddingDate,isWon||isLost)+'</span></div>';
+  if(p.expectedCloseDate||p.closeDate)h+='<div class="drow"><span class="dk">Expected Close</span><span class="dv">'+fDate(p.expectedCloseDate||p.closeDate)+daysLeft(p.expectedCloseDate||p.closeDate,isWon||isLost)+'</span></div>';
+  if(p.shipmentDate)h+='<div class="drow"><span class="dk">Shipment</span><span class="dv">'+fDate(p.shipmentDate)+'</span></div>';
+  if(p.appointmentLetter)h+='<div class="drow"><span class="dk">หนังสือแต่งตั้ง</span><span class="dv">'+esc(p.appointmentLetter)+'</span></div>';
+  if(p.recurring)h+='<div class="drow"><span class="dk">งานซ้ำ</span><span class="dv">✅ ใช่</span></div>';
+
+  // Next action / followup
+  if(p.nextAction)h+='<div class="drow"><span class="dk">🎯 Next Action</span><span class="dv" style="color:#eab308">'+esc(p.nextAction)+'</span></div>';
+  if(p.followupDate)h+='<div class="drow"><span class="dk">📅 Follow-up</span><span class="dv">'+fDate(p.followupDate)+daysLeft(p.followupDate,isWon||isLost)+'</span></div>';
+
+  if(p.remark||p.note)h+='<div class="drow" style="flex-direction:column"><span class="dk">หมายเหตุ</span><span class="dv" style="margin-top:3px;color:#94a3b8">'+esc(p.remark||p.note)+'</span></div>';
+
+  // Win/Loss reason
+  if(isWon&&p.winReason)h+='<div style="margin-top:8px;background:#14532d30;border:1px solid #22c55e30;border-radius:8px;padding:8px"><div style="font-size:11px;color:#22c55e;font-weight:700;margin-bottom:2px">✅ Win Reason</div><div style="font-size:12px">'+esc(p.winReason)+(p.winNote?' — '+esc(p.winNote):'')+'</div></div>';
+  if(isLost&&p.lossReason)h+='<div style="margin-top:8px;background:#7f1d1d30;border:1px solid #ef444430;border-radius:8px;padding:8px"><div style="font-size:11px;color:#ef4444;font-weight:700;margin-bottom:2px">❌ Loss Reason</div><div style="font-size:12px">'+esc(p.lossReason)+(p.lossCompetitor?' — ชนะโดย: '+esc(p.lossCompetitor):'')+(p.lossNote?' — '+esc(p.lossNote):'')+'</div></div>';
+
+  if(p.updatedAt)h+='<div style="margin-top:8px;font-size:10px;color:#475569;text-align:right">อัปเดต: '+p.updatedAt.slice(0,16).replace('T',' ')+'</div>';
+  h+='</div>';
+
+  var cMap={};
+  conflicts.forEach(function(c){
+    if(!cMap[c.a.id])cMap[c.a.id]=[];if(!cMap[c.b.id])cMap[c.b.id]=[];
+    cMap[c.a.id].push({other:c.b,score:c.score});cMap[c.b.id].push({other:c.a,score:c.score});
+  });
+  if(cMap[p.id]&&cMap[p.id].length){
+    h+='<div style="background:#ef444410;border:1px solid #ef444430;border-radius:8px;padding:8px;margin-bottom:12px">';
+    h+='<div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:4px">⚠️ อาจชนกับ '+cMap[p.id].length+' รายการ</div>';
+    cMap[p.id].forEach(function(c){
+      var oc=c.other.ownerType==='main'?'b-main':'b-sales';
+      h+='<div style="font-size:11px;color:#94a3b8;padding:2px 0">'+c.score+'% · '+esc(c.other.projectName||'—')+' <span class="badge '+oc+'" style="font-size:9px">'+esc(c.other.ownerName)+'</span></div>';
+    });
+    h+='</div>';
+  }
+
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="showEditForm(\''+p.id+'\')">✏️ แก้ไข</button><button class="btn btn-o" onclick="closeModal()">ปิด</button></div>';
+  document.getElementById('modalBody').innerHTML=h;
+}
+
+function showEditForm(pipeId) {
+  var tp=allPipeline.find(function(x){return x.id===pipeId;});
+  if(!tp)return;
+  editingPipeId=pipeId;
+
+  var srcRef=tp.ownerType==='sales'
+    ?db.collection('salesMembers').doc(tp.ownerId).collection('pipeline').doc(pipeId)
+    :db.collection('users').doc(tp.ownerId).collection('pipeline').doc(pipeId);
+
+  srcRef.get().then(function(doc){
+    var p=doc.exists?Object.assign({},tp,doc.data()):tp;
+    document.getElementById('modalTitle').textContent='✏️ แก้ไข Pipeline';
+    var stOpts=PIPE_STATUSES.map(function(s){
+      return'<option value="'+s.id+'"'+(p.status===s.id?' selected':'')+'>'+s.name+'</option>';
+    }).join('');
+    var h='<div class="fg"><label>ชื่อโครงการ</label><input id="ep_proj" class="fi" value="'+esc(p.projectName||'')+'"></div>';
+    h+='<div class="fi-row"><div class="fg"><label>End User TH</label><input id="ep_eu" class="fi" value="'+esc(p.endUserTH||p.endUser||'')+'"></div><div class="fg"><label>End User EN</label><input id="ep_euen" class="fi" value="'+esc(p.endUserEN||'')+'"></div></div>';
+    h+='<div class="fi-row"><div class="fg"><label>Status</label><select id="ep_status" class="fi">'+stOpts+'</select></div><div class="fg"><label>มูลค่า Forecast (฿)</label><input id="ep_amt" class="fi" type="number" value="'+(p.forecastAmount||'')+'"></div></div>';
+    h+='<div class="fi-row"><div class="fg"><label>สินค้า/รุ่น</label><input id="ep_model" class="fi" value="'+esc(p.model||p.products||'')+'"></div><div class="fg"><label>Expected Close</label><input id="ep_close" class="fi" type="date" value="'+(p.expectedCloseDate||p.closeDate||'')+'"></div></div>';
+    h+='<div class="fg"><label>หมายเหตุ</label><textarea id="ep_remark" class="fi" rows="2">'+esc(p.remark||p.note||'')+'</textarea></div>';
+    h+='<div style="font-size:10px;color:#64748b;margin-bottom:10px">Sales: <strong>'+esc(tp.ownerName||'?')+'</strong> · Type: '+esc(tp.ownerType||'?')+'</div>';
+    h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="savePipeEdit()">💾 บันทึก</button><button class="btn btn-o" onclick="openPipeDetail(\''+pipeId+'\')">← กลับ</button></div>';
+    document.getElementById('modalBody').innerHTML=h;
+  }).catch(function(){
+    showToast('❌ โหลดข้อมูลล้มเหลว');
+  });
+}
+
+function savePipeEdit() {
+  var pipeId=editingPipeId;
+  var tp=allPipeline.find(function(x){return x.id===pipeId;});
+  if(!tp||!pipeId)return;
+
+  var upd={
+    projectName:document.getElementById('ep_proj').value.trim(),
+    endUserTH:document.getElementById('ep_eu').value.trim(),
+    endUserEN:document.getElementById('ep_euen').value.trim(),
+    status:document.getElementById('ep_status').value,
+    forecastAmount:parseFloat(document.getElementById('ep_amt').value)||0,
+    model:document.getElementById('ep_model').value.trim(),
+    expectedCloseDate:document.getElementById('ep_close').value,
+    remark:document.getElementById('ep_remark').value.trim(),
+    updatedAt:new Date().toISOString()
+  };
+
+  // teamPipeline fields
+  var tpUpd={
+    projectName:upd.projectName, endUserTH:upd.endUserTH, endUserEN:upd.endUserEN,
+    status:upd.status, forecastAmount:upd.forecastAmount, updatedAt:upd.updatedAt
+  };
+
+  var srcRef=tp.ownerType==='sales'
+    ?db.collection('salesMembers').doc(tp.ownerId).collection('pipeline').doc(pipeId)
+    :db.collection('users').doc(tp.ownerId).collection('pipeline').doc(pipeId);
+
+  var isActive=ACTIVE.indexOf(upd.status)!==-1;
+  var tpRef=db.collection('teamPipeline').doc(pipeId);
+
+  Promise.all([
+    srcRef.update(upd),
+    isActive ? tpRef.update(tpUpd) : tpRef.delete().catch(function(){})
+  ]).then(function(){
+    // Update local state
+    Object.assign(tp,tpUpd);
+    if(!isActive) allPipeline=allPipeline.filter(function(x){return x.id!==pipeId;});
+    conflicts=detectConflicts(allPipeline);
+    closeModal();
+    showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){ showToast('❌ '+e.message); });
+}
+
+// ── CONFLICTS TAB ──────────────────────────────────────
 function renderConflictsTab() {
-  var h = '';
-  if (!conflicts.length) {
-    h = '<div class="empty">✅ ไม่มีโครงการที่อาจชนกัน</div>';
-  } else {
-    h += '<div style="font-size:11px;color:#64748b;margin-bottom:10px">' + conflicts.length + ' คู่ที่อาจชนกัน (score ≥ 60%)</div>';
-    conflicts.forEach(function(c, i) {
-      var scoreColor = c.score >= 80 ? '#ef4444' : c.score >= 70 ? '#f97316' : '#eab308';
-      var aOwnerCls = c.a.ownerType === 'main' ? 'b-main' : 'b-sales';
-      var bOwnerCls = c.b.ownerType === 'main' ? 'b-main' : 'b-sales';
-      h += '<div class="conflict-item">';
-      h += '<div class="conflict-icon">⚠️</div>';
-      h += '<div class="conflict-body">';
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-      h += '<span style="font-size:13px;font-weight:700;color:' + scoreColor + '">' + c.score + '%</span>';
-      h += '<span style="font-size:11px;color:#64748b">ความคล้ายคลึง</span>';
-      h += '</div>';
-      h += '<div style="background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">';
-      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
-      h += '<span class="badge ' + aOwnerCls + '" style="font-size:9px">' + esc(c.a.ownerName||'?') + '</span>';
-      h += '<span style="font-size:12px;font-weight:600">' + esc((c.a.projectName||'—').substr(0,45)) + '</span>';
-      h += '</div>';
-      h += '<div style="font-size:11px;color:#64748b;padding-left:4px">🏪 ' + esc(c.a.dealerName||'—') + (c.a.endUserTH ? ' • ' + esc(c.a.endUserTH.substr(0,30)) : '') + '</div>';
-      h += '</div>';
-      h += '<div style="background:#0f172a;border-radius:6px;padding:8px">';
-      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
-      h += '<span class="badge ' + bOwnerCls + '" style="font-size:9px">' + esc(c.b.ownerName||'?') + '</span>';
-      h += '<span style="font-size:12px;font-weight:600">' + esc((c.b.projectName||'—').substr(0,45)) + '</span>';
-      h += '</div>';
-      h += '<div style="font-size:11px;color:#64748b;padding-left:4px">🏪 ' + esc(c.b.dealerName||'—') + (c.b.endUserTH ? ' • ' + esc(c.b.endUserTH.substr(0,30)) : '') + '</div>';
-      h += '</div>';
-      h += '</div></div>';
+  var h='';
+  if(!conflicts.length){h='<div class="empty">✅ ไม่มีโครงการที่อาจชนกัน</div>';}
+  else{
+    h+='<div style="font-size:11px;color:#64748b;margin-bottom:10px">'+conflicts.length+' คู่ที่อาจชนกัน (bigram similarity ≥ 60%)</div>';
+    conflicts.forEach(function(c){
+      var sc=c.score;
+      var scColor=sc>=80?'#ef4444':sc>=70?'#f97316':'#eab308';
+      var aT=c.a.ownerType==='main'?'b-main':'b-sales';
+      var bT=c.b.ownerType==='main'?'b-main':'b-sales';
+      h+='<div class="conflict-item">';
+      h+='<div><div style="font-size:14px;font-weight:800;color:'+scColor+'">'+sc+'%</div><div style="font-size:10px;color:#64748b">คล้าย</div></div>';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="background:#0f172a;border-radius:6px;padding:8px;margin-bottom:5px;cursor:pointer" onclick="openPipeDetail(\''+c.a.id+'\')">';
+      h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+aT+'" style="font-size:9px">'+esc(c.a.ownerName||'?')+'</span>';
+      h+='<span style="font-size:12px;font-weight:600">'+esc((c.a.projectName||'—').substr(0,40))+'</span></div>';
+      h+='<div style="font-size:10px;color:#64748b;margin-top:2px">🏪 '+esc(c.a.dealerName||'—')+(c.a.endUserTH?' · '+esc(c.a.endUserTH.substr(0,25)):'')+'</div>';
+      h+='</div>';
+      h+='<div style="background:#0f172a;border-radius:6px;padding:8px;cursor:pointer" onclick="openPipeDetail(\''+c.b.id+'\')">';
+      h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+bT+'" style="font-size:9px">'+esc(c.b.ownerName||'?')+'</span>';
+      h+='<span style="font-size:12px;font-weight:600">'+esc((c.b.projectName||'—').substr(0,40))+'</span></div>';
+      h+='<div style="font-size:10px;color:#64748b;margin-top:2px">🏪 '+esc(c.b.dealerName||'—')+(c.b.endUserTH?' · '+esc(c.b.endUserTH.substr(0,25)):'')+'</div>';
+      h+='</div>';
+      h+='</div></div>';
     });
   }
-  document.getElementById('mainContent').innerHTML = h;
+  document.getElementById('mainContent').innerHTML=h;
 }
 
-// ================================================================
-// FORECAST TAB
-// ================================================================
+// ── FORECAST TAB ───────────────────────────────────────
 function renderForecastTab() {
-  var active = allPipeline.filter(function(p) { return ACTIVE_STATUSES.indexOf(p.status) !== -1; });
-  var byStatus = {};
-  PIPE_STATUSES.forEach(function(s) { byStatus[s.id] = { cnt: 0, amt: 0 }; });
-  active.forEach(function(p) {
-    if (byStatus[p.status]) { byStatus[p.status].cnt++; byStatus[p.status].amt += Number(p.forecastAmount)||0; }
-  });
-  var totalAmt = active.reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
-  var wonAmt = allPipeline.filter(function(p) { return ['win','ordered'].indexOf(p.status) !== -1; }).reduce(function(s,p) { return s + (Number(p.forecastAmount)||0); }, 0);
-
-  var h = '<div class="stats-row">';
-  h += '<div class="stat-card"><div class="stat-num">' + fmtShort(totalAmt) + '</div><div class="stat-lbl">Active Forecast ฿</div></div>';
-  h += '<div class="stat-card"><div class="stat-num" style="color:#22c55e">' + fmtShort(wonAmt) + '</div><div class="stat-lbl">Won / Ordered ฿</div></div>';
-  h += '<div class="stat-card"><div class="stat-num">' + active.length + '</div><div class="stat-lbl">โครงการ Active</div></div>';
-  h += '<div class="stat-card"><div class="stat-num" style="color:#f97316">' + (totalAmt > 0 ? Math.round(wonAmt/totalAmt*100) : 0) + '%</div><div class="stat-lbl">Win Rate</div></div>';
-  h += '</div>';
+  var active=allPipeline.filter(function(p){return ACTIVE.indexOf(p.status)!==-1;});
+  var totalAmt=active.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var wonAmt=allPipeline.filter(function(p){return['win','ordered'].indexOf(p.status)!==-1;}).reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var topDeals=allPipeline.filter(function(p){return p.forecastAmount>0;}).sort(function(a,b){return(Number(b.forecastAmount)||0)-(Number(a.forecastAmount)||0);}).slice(0,10);
 
   // Funnel by status
-  h += '<div class="card"><h2>📊 Pipeline Funnel</h2>';
-  var funnelStatuses = ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'];
-  var maxAmt = Math.max(1, funnelStatuses.reduce(function(s,id) { return Math.max(s, (byStatus[id]||{}).amt||0); }, 0));
-  funnelStatuses.forEach(function(id) {
-    var st = PIPE_STATUSES.find(function(s) { return s.id === id; }) || {};
-    var d = byStatus[id] || { cnt: 0, amt: 0 };
-    if (!d.cnt) return;
-    var pct = Math.round(d.amt / maxAmt * 100);
-    h += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #1e293b">';
-    h += '<div style="width:90px;font-size:11px;font-weight:600" class="' + (st.cls||'') + '">' + (st.name||id) + '</div>';
-    h += '<div style="flex:1"><div style="background:#334155;border-radius:3px;overflow:hidden;height:14px">';
-    h += '<div style="height:14px;border-radius:3px;background:var(--accent);width:' + pct + '%"></div></div></div>';
-    h += '<div style="width:70px;text-align:right;font-size:11px;color:#3b82f6">' + fmtShort(d.amt) + '</div>';
-    h += '<div style="width:40px;text-align:right;font-size:11px;color:#64748b">' + d.cnt + '</div>';
-    h += '</div>';
+  var byStatus={};
+  PIPE_STATUSES.forEach(function(s){byStatus[s.id]={cnt:0,amt:0};});
+  active.forEach(function(p){if(byStatus[p.status]){byStatus[p.status].cnt++;byStatus[p.status].amt+=Number(p.forecastAmount)||0;}});
+  var maxFunnel=Math.max(1,Object.values(byStatus).reduce(function(s,x){return Math.max(s,x.amt);},0));
+
+  // Per-member
+  var ownerAmt={};
+  active.forEach(function(p){
+    var k=p.ownerName||'?';
+    if(!ownerAmt[k])ownerAmt[k]={name:k,type:p.ownerType,amt:0,cnt:0,won:0};
+    ownerAmt[k].amt+=Number(p.forecastAmount)||0;ownerAmt[k].cnt++;
   });
-  h += '</div>';
-
-  // By owner
-  h += '<div class="card"><h2>👥 แยกตาม Sales</h2>';
-  var ownerAmt = {};
-  active.forEach(function(p) {
-    var k = p.ownerName || '?';
-    if (!ownerAmt[k]) ownerAmt[k] = { name: k, type: p.ownerType, amt: 0, cnt: 0 };
-    ownerAmt[k].amt += Number(p.forecastAmount)||0;
-    ownerAmt[k].cnt++;
+  allPipeline.filter(function(p){return['win','ordered','delivered'].indexOf(p.status)!==-1;}).forEach(function(p){
+    var k=p.ownerName||'?';
+    if(ownerAmt[k])ownerAmt[k].won+=Number(p.forecastAmount)||0;
   });
-  var maxOwnerAmt = Math.max(1, Object.values(ownerAmt).reduce(function(s,o) { return Math.max(s, o.amt); }, 0));
-  Object.values(ownerAmt).sort(function(a,b) { return b.amt - a.amt; }).forEach(function(o) {
-    var pct = Math.round(o.amt / maxOwnerAmt * 100);
-    var cls = o.type === 'main' ? 'b-main' : 'b-sales';
-    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1e293b">';
-    h += '<span class="badge ' + cls + '" style="width:80px;text-align:center">' + esc(o.name) + '</span>';
-    h += '<div style="flex:1"><div style="background:#334155;border-radius:3px;overflow:hidden;height:14px">';
-    h += '<div style="height:14px;border-radius:3px;background:' + (o.type === 'main' ? '#3b82f6' : '#f97316') + ';width:' + pct + '%"></div></div></div>';
-    h += '<div style="width:70px;text-align:right;font-size:12px;font-weight:600;color:#3b82f6">' + fmtShort(o.amt) + '</div>';
-    h += '<div style="width:40px;text-align:right;font-size:11px;color:#64748b">' + o.cnt + '</div>';
-    h += '</div>';
+  var maxOwner=Math.max(1,Object.values(ownerAmt).reduce(function(s,o){return Math.max(s,o.amt);},0));
+
+  var h='<div class="stats-row">';
+  h+='<div class="stat-card"><div class="stat-num">'+fmtShort(totalAmt)+'</div><div class="stat-lbl">Active Forecast ฿</div></div>';
+  h+='<div class="stat-card"><div class="stat-num" style="color:#22c55e">'+fmtShort(wonAmt)+'</div><div class="stat-lbl">Won / Ordered ฿</div></div>';
+  h+='<div class="stat-card"><div class="stat-num">'+active.length+'</div><div class="stat-lbl">โครงการ Active</div></div>';
+  h+='<div class="stat-card"><div class="stat-num" style="color:#f97316">'+(totalAmt>0?Math.round(wonAmt/totalAmt*100):0)+'%</div><div class="stat-lbl">Win Rate</div></div>';
+  h+='</div>';
+
+  // Funnel
+  h+='<div class="card"><div class="card-h">📊 Pipeline Funnel</div>';
+  ['prospect','tor_review','quotation','bidding','negotiation','win','ordered'].forEach(function(id){
+    var st=PIPE_STATUSES.find(function(s){return s.id===id;})||{};
+    var d=byStatus[id]||{cnt:0,amt:0};if(!d.cnt)return;
+    var pct=Math.round(d.amt/maxFunnel*100);
+    h+='<div class="funnel-row"><div class="funnel-label '+( st.cls||'')+'">'+(st.name||id)+'</div>';
+    h+='<div class="funnel-bar-wrap"><div class="funnel-bar" style="width:'+pct+'%"></div></div>';
+    h+='<div class="funnel-amt">'+fmtShort(d.amt)+'</div><div class="funnel-cnt">'+d.cnt+'</div>';
+    h+='</div>';
   });
-  h += '</div>';
+  h+='</div>';
 
-  document.getElementById('mainContent').innerHTML = h;
+  // Per-member table
+  h+='<div class="card"><div class="card-h">👥 แยกตาม Sales</div>';
+  h+='<div style="overflow-x:auto"><table class="mem-table"><thead><tr><th>Sales</th><th>Active งาน</th><th>Forecast ฿</th><th>Won ฿</th><th>% ของทีม</th><th>Win Rate</th></tr></thead><tbody>';
+  Object.values(ownerAmt).sort(function(a,b){return b.amt-a.amt;}).forEach(function(o){
+    var pct=totalAmt>0?Math.round(o.amt/totalAmt*100):0;
+    var winRate=o.amt>0?Math.round(o.won/o.amt*100):0;
+    var cls=o.type==='main'?'b-main':'b-sales';
+    h+='<tr>';
+    h+='<td><span class="badge '+cls+'">'+esc(o.name)+'</span></td>';
+    h+='<td style="text-align:center">'+o.cnt+'</td>';
+    h+='<td style="color:#3b82f6;font-weight:700">'+fmtShort(o.amt)+'</td>';
+    h+='<td style="color:#22c55e">'+fmtShort(o.won)+'</td>';
+    h+='<td><div style="display:flex;align-items:center;gap:6px"><div style="background:#334155;border-radius:3px;height:6px;width:60px"><div style="background:'+(o.type==='main'?'#3b82f6':'#f97316')+';border-radius:3px;height:6px;width:'+pct+'%"></div></div><span style="font-size:10px;color:#64748b">'+pct+'%</span></div></td>';
+    h+='<td style="color:'+(winRate>=50?'#22c55e':winRate>=30?'#f97316':'#64748b')+'">'+winRate+'%</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+
+  // Top deals
+  h+='<div class="card"><div class="card-h">🏆 Top 10 โครงการ (มูลค่าสูงสุด)</div>';
+  topDeals.forEach(function(p,i){
+    var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{};
+    var cls=p.ownerType==='main'?'b-main':'b-sales';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1e293b;cursor:pointer" onclick="openPipeDetail(\''+p.id+'\')">';
+    h+='<span style="font-size:12px;font-weight:700;color:#64748b;width:22px;text-align:right">'+(i+1)+'</span>';
+    h+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">'+esc((p.projectName||'—').substr(0,40))+'</div>';
+    h+='<div style="font-size:10px;color:#64748b">'+esc((p.dealerName||'—').substr(0,25))+(p.endUserTH?' · '+esc(p.endUserTH.substr(0,20)):'')+'</div></div>';
+    h+='<span class="'+(st.cls||'')+'" style="font-size:10px;font-weight:600">'+( st.name||p.status)+'</span>';
+    h+='<span style="font-size:13px;font-weight:700;color:#3b82f6;min-width:55px;text-align:right">'+fmtShort(p.forecastAmount)+'</span>';
+    h+='<span class="badge '+cls+'" style="font-size:9px">'+esc((p.ownerName||'?').split(' ')[0])+'</span>';
+    h+='</div>';
+  });
+  h+='</div>';
+
+  document.getElementById('mainContent').innerHTML=h;
 }
 
-// ================================================================
-// UTILS
-// ================================================================
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── MODAL ──────────────────────────────────────────────
+function openModal(title,body){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=body;
+  document.getElementById('modalBg').classList.add('open');
 }
-function fmtShort(n) {
-  n = Number(n) || 0;
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
-  return n.toString();
-}
-var _toastTimer;
-function showToast(msg) {
-  var el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
+function closeModal(){
+  document.getElementById('modalBg').classList.remove('open');
+  editingPipeId=null;
 }
 
-// ================================================================
-// START
-// ================================================================
-loadData();
+// ── UTILS ──────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtShort(n){n=Number(n)||0;if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return n.toString();}
+function showToast(msg){
+  var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
+  clearTimeout(_toastTimer);_toastTimer=setTimeout(function(){el.classList.remove('show');},2500);
+}
+
+init();
 </script>
 </body>
 </html>
