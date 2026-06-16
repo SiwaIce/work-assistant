@@ -3639,13 +3639,12 @@ function renderAnnouncementsTab() {
 
   var now = Date.now();
   db.collection('announcements')
-    .where('status', '==', 'active')
     .orderBy('createdAt', 'desc')
     .get()
     .then(function(snap) {
       var allAnns = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
       // Filter to announcements targeted at this dealer
-      var anns = allAnns.filter(function(a) {
+      var anns = allAnns.filter(function(a) { return a.status === 'active'; }).filter(function(a) {
         if (a.targetMode === 'selected') {
           return (a.targetDealerIds || []).indexOf(dealerId) >= 0;
         }
