@@ -395,6 +395,7 @@ function rDealers(el) {
   <div class="bg" style="margin-bottom:8px">
     <button class="btn bsm bo" onclick="copyDealerSummary()">📋 Copy ตาราง</button>
     <button class="btn bsm bo" onclick="dlDealerCSV()">📤 CSV</button>
+    <button class="btn bsm bo" onclick="exportDealersExcel()">📊 Excel</button>
   </div>
 
   <div class="card-grid" id="dGrid">
@@ -1522,6 +1523,37 @@ function dlDealerCSV() {
     csv += `"${d.sisCode||''}","${d.djiCode||''}","${esc(d.name)}","${d.level||''}","${esc(d.contact)}","${d.phone||''}","${d.email||''}","${d.creditTerm||''}","${d.creditLimit||''}","${target}","${won}","${target?Math.round(won/target*100):0}%","${d.dsecStatus||''}","${d.crmStatus||''}","${d.fh2Status||''}","${d.larkStatus||''}","${d.googleMap||''}"\n`;
   });
   dlBlob(csv, `dealers-${_td()}.csv`);
+}
+
+function exportDealersExcel() {
+  var dealers = ST.getAll('dealers');
+  if (!dealers.length) return toast('\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Dealer');
+  var headers = ['id','\u0E0A\u0E37\u0E48\u0E2D\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17','SIS Code','DJI Code','Level','DJI Dealer','Credit Term','Credit Limit','Target Revenue','\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D','Google Map','\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38','Payment Condition'];
+  var rows = [headers];
+  dealers.forEach(function(d) {
+    rows.push([
+      d.id||'',
+      d.name||'',
+      d.sisCode||'',
+      d.djiCode||'',
+      d.level||'',
+      d.djiDealer||'',
+      d.creditTerm||'',
+      d.creditLimit||'',
+      d.targetRevenue||'',
+      d.contact||'',
+      d.googleMap||'',
+      d.notes||'',
+      d.paymentCondition||''
+    ]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  // \u0E04\u0E2D\u0E25\u0E31\u0E21\u0E19\u0E4C id \u0E17\u0E33 read-only hint \u0E14\u0E49\u0E27\u0E22\u0E2A\u0E35
+  ws['!cols'] = [{wch:20},{wch:35},{wch:12},{wch:12},{wch:8},{wch:15},{wch:12},{wch:14},{wch:14},{wch:30},{wch:40},{wch:30},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Dealers');
+  XLSX.writeFile(wb, 'dealers-export-' + _td() + '.xlsx');
+  toast('\uD83D\uDCCA Export ' + dealers.length + ' Dealer \u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08');
 }
 
 function copyDealerVisits(dealerId) {

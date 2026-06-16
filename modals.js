@@ -2269,43 +2269,77 @@ function saveNote(eid) {
 // IMPORT DEALER MODAL
 // ================================================================
 function showImportDealerM() {
-  openM('📥 Import Dealer', '' +
-    '<div class="fg"><label>วาง Tab-separated data จาก Excel</label>' +
-    '<div class="hint">Format: SIS Code ⟨Tab⟩ DJI Code ⟨Tab⟩ Company Name ⟨Tab⟩ Level ⟨Tab⟩ Contact ⟨Tab⟩ Google Map</div>' +
-    '<textarea id="imp_data" rows="8" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea></div>' +
-    '<button class="btn bp btn-full" onclick="importDealers()">📥 Import</button>');
+  openM('📥 Import Dealer (.xlsx)',
+    '<div class="fg"><label>เลือกไฟล์ Excel</label>' +
+    '<input type="file" id="imp_dl_file" accept=".xlsx,.xls" class="fi" onchange="previewDealerImport(this)">' +
+    '<div class="hint" style="margin-top:5px">คอลัมน์ที่รองรับ: id, ชื่อบริษัท, SIS Code, DJI Code, Level, DJI Dealer, Credit Term, Credit Limit, Target Revenue, ผู้ติดต่อ, Google Map, หมายเหตุ<br>ถ้ามี id และตรงกับข้อมูลเดิม → อัปเดต, ถ้าไม่มี id → เพิ่มใหม่</div></div>' +
+    '<div id="imp_dl_preview"></div>' +
+    '<button class="btn bp btn-full" onclick="importDealersExcel()" style="margin-top:8px">📥 Import</button>');
 }
 
-function importDealers() {
-  var el = document.getElementById('imp_data');
-  var raw = el ? el.value.trim() : '';
-  if (!raw) return alert('วางข้อมูล');
-  var lines = raw.split('\n');
-  var count = 0;
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    if (!line) continue;
-    var cols = line.split('\t');
-    if (cols.length < 3) continue;
-    var name = cols[2] ? cols[2].trim() : '';
-    if (!name) continue;
-    // Check duplicate
-    var existing = ST.filter('dealers', function(d) { return d.name === name; });
-    if (existing.length) continue;
-    ST.add('dealers', {
-      sisCode: cols[0] ? cols[0].trim() : '',
-      djiCode: cols[1] ? cols[1].trim() : '',
-      name: name,
-      level: cols[3] ? cols[3].trim() : 'B',
-      showSerial: 'Y',
-      contact: cols[4] ? cols[4].trim() : '',
-      googleMap: cols[5] ? cols[5].trim() : ''
+function previewDealerImport(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wb = XLSX.read(e.target.result, {type:'array'});
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    var prev = document.getElementById('imp_dl_preview');
+    if (!prev) return;
+    if (!rows.length) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไม่พบข้อมูลในไฟล์</div>'; return; }
+    var add = 0, upd = 0;
+    rows.forEach(function(r) {
+      var id = String(r['id']||'').trim();
+      if (id && ST.getOne('dealers', id)) upd++; else add++;
     });
-    count++;
-  }
-  closeMForce();
-  toast('📥 Import ' + count + ' Dealer สำเร็จ!');
-  render();
+    prev.innerHTML = '<div style="font-size:12px;color:#94a3b8;background:#0f172a;border-radius:6px;padding:8px;margin-top:6px">' +
+      '✅ พบข้อมูล <strong>' + rows.length + '</strong> แถว — เพิ่มใหม่ <strong style="color:#22c55e">' + add + '</strong> อัปเดต <strong style="color:#3b82f6">' + upd + '</strong></div>';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function importDealersExcel() {
+  var file = document.getElementById('imp_dl_file') && document.getElementById('imp_dl_file').files[0];
+  if (!file) return alert('เลือกไฟล์ก่อน');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wb = XLSX.read(e.target.result, {type:'array'});
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    if (!rows.length) return alert('ไม่พบข้อมูลในไฟล์');
+    var added = 0, updated = 0, skipped = 0;
+    rows.forEach(function(r) {
+      var name = String(r['ชื่อบริษัท'] || r['name'] || '').trim();
+      if (!name) { skipped++; return; }
+      var id = String(r['id'] || '').trim();
+      var data = {
+        name: name,
+        sisCode:        String(r['SIS Code']       || r['sisCode']        || '').trim(),
+        djiCode:        String(r['DJI Code']        || r['djiCode']        || '').trim(),
+        level:          String(r['Level']           || r['level']          || 'B').trim(),
+        djiDealer:      String(r['DJI Dealer']      || r['djiDealer']      || '').trim(),
+        creditTerm:     String(r['Credit Term']     || r['creditTerm']     || '').trim(),
+        creditLimit:    String(r['Credit Limit']    || r['creditLimit']    || '').trim(),
+        targetRevenue:  String(r['Target Revenue']  || r['targetRevenue']  || '').trim(),
+        contact:        String(r['ผู้ติดต่อ']       || r['contact']        || '').trim(),
+        googleMap:      String(r['Google Map']      || r['googleMap']      || '').trim(),
+        notes:          String(r['หมายเหตุ']        || r['notes']          || '').trim(),
+        paymentCondition: String(r['Payment Condition'] || r['paymentCondition'] || '').trim()
+      };
+      if (id && ST.getOne('dealers', id)) {
+        ST.update('dealers', id, data);
+        updated++;
+      } else {
+        ST.add('dealers', data);
+        added++;
+      }
+    });
+    closeMForce();
+    toast('📥 เพิ่ม ' + added + ' อัปเดต ' + updated + (skipped ? ' ข้าม ' + skipped : '') + ' Dealer');
+    render();
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ================================================================

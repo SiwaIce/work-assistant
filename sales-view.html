@@ -212,6 +212,7 @@ select.fi option{background:var(--bg2)}
 
 <div id="toast"></div>
 
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <script>
@@ -490,9 +491,13 @@ function renderHome(el){
 
 // ── DEALER LIST ────────────────────────────────────────
 function renderDealerList(el){
-  var h='';
+  var h='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+  h+='<button class="btn btn-o btn-sm" onclick="exportSalesDealersExcel()">📊 Export Excel</button>';
+  h+='<button class="btn btn-o btn-sm" onclick="document.getElementById(\'sv_import_file\').click()">📥 Import Excel</button>';
+  h+='<input type="file" id="sv_import_file" accept=".xlsx,.xls" style="display:none" onchange="importSalesDealersExcel(this)">';
+  h+='</div>';
   if(!dealers.length){
-    h='<div class="empty">🏪 ยังไม่มี Dealer<br><small>กด ＋ เพื่อเพิ่ม</small></div>';
+    h+='<div class="empty">🏪 ยังไม่มี Dealer<br><small>กด ＋ เพื่อเพิ่ม</small></div>';
   } else {
     dealers.forEach(function(d){
       var ap=pipeline.filter(function(p){return p.dealerId===d.id&&['lost','delivered'].indexOf(p.status)===-1;});
@@ -512,6 +517,70 @@ function renderDealerList(el){
 }
 
 function tierColor(t){return t==='S'?'purple':t==='A'?'blue':t==='B'?'green':'grey';}
+
+// ── DEALER EXCEL EXPORT / IMPORT ───────────────────────
+var DEALER_XLS_COLS = ['id','ชื่อ Dealer','ประเภท','Tier','จังหวัด','ที่อยู่','ผู้ติดต่อ','เบอร์โทร','อีเมล','เครดิต','หมายเหตุ'];
+var DEALER_XLS_FIELDS = ['id','name','type','tier','province','address','contact','phone','email','creditTerms','remark'];
+
+function exportSalesDealersExcel(){
+  if(!dealers.length){showToast('ไม่มีข้อมูล Dealer');return;}
+  var rows=[DEALER_XLS_COLS];
+  dealers.forEach(function(d){
+    rows.push(DEALER_XLS_FIELDS.map(function(f){return d[f]||'';}));
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:22},{wch:35},{wch:14},{wch:8},{wch:16},{wch:35},{wch:20},{wch:14},{wch:28},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Dealers');
+  XLSX.writeFile(wb,'dealers-'+SALES_ID+'-'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('📊 Export '+dealers.length+' Dealer สำเร็จ');
+}
+
+function importSalesDealersExcel(input){
+  var file=input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var wb=XLSX.read(e.target.result,{type:'array'});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){showToast('ไม่พบข้อมูลในไฟล์');return;}
+    var added=0,updated=0,skipped=0;
+    var base=db.collection('salesMembers').doc(SALES_ID).collection('dealers');
+    var batch=db.batch();
+    rows.forEach(function(r){
+      var name=String(r['ชื่อ Dealer']||r['name']||'').trim();
+      if(!name){skipped++;return;}
+      var id=String(r['id']||'').trim();
+      var data={
+        name:name,
+        type:String(r['ประเภท']||r['type']||'').trim(),
+        tier:String(r['Tier']||r['tier']||'').trim(),
+        province:String(r['จังหวัด']||r['province']||'').trim(),
+        address:String(r['ที่อยู่']||r['address']||'').trim(),
+        contact:String(r['ผู้ติดต่อ']||r['contact']||'').trim(),
+        phone:String(r['เบอร์โทร']||r['phone']||'').trim(),
+        email:String(r['อีเมล']||r['email']||'').trim(),
+        creditTerms:String(r['เครดิต']||r['creditTerms']||'').trim(),
+        remark:String(r['หมายเหตุ']||r['remark']||'').trim(),
+        updatedAt:new Date().toISOString()
+      };
+      var existing=id&&dealers.find(function(d){return d.id===id;});
+      if(existing){
+        batch.update(base.doc(id),data);updated++;
+      } else {
+        var ref=base.doc();
+        data.createdAt=new Date().toISOString();
+        batch.set(ref,data);added++;
+      }
+    });
+    batch.commit().then(function(){
+      showToast('📥 เพิ่ม '+added+' อัปเดต '+updated+(skipped?' ข้าม '+skipped:'')+' Dealer');
+      input.value='';
+    }).catch(function(err){showToast('❌ '+err.message);});
+  };
+  reader.readAsArrayBuffer(file);
+}
 
 // ── DEALER FORM ────────────────────────────────────────
 function showAddDealer(){editId=null;openModal('➕ เพิ่ม Dealer',buildDealerForm(null));}
