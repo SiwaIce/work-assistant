@@ -23,6 +23,7 @@ var _lfSec      = {common: [], personal: [], company: []};
 var _lfTab      = 'common';
 var _lfUseType  = false;
 var _ldCache    = null;
+var _ldFilter   = {type: 'all', date: 'all'};
 
 // ---------- Main list ----------
 
@@ -484,11 +485,28 @@ function _ldAnalyticsHtml(form, subs) {
 
   h += '</div>'; // end charts row
 
-  // Search + table
+  // Filter + search
+  _ldFilter = {type: 'all', date: 'all'};
+  h += '<div class="ld-filter-wrap">';
+  if (form.useTypeToggle) {
+    h += '<div class="ld-filter-row"><span class="ld-filter-lbl">ประเภท</span><div class="ld-filter-btns" id="ldf_type">';
+    h += '<button onclick="ldSetFilter(\'type\',\'all\')" class="ld-fbtn act">ทั้งหมด</button>';
+    h += '<button onclick="ldSetFilter(\'type\',\'personal\')" class="ld-fbtn">👤 บุคคล</button>';
+    h += '<button onclick="ldSetFilter(\'type\',\'company\')" class="ld-fbtn">🏢 บริษัท</button>';
+    h += '</div></div>';
+  }
+  h += '<div class="ld-filter-row"><span class="ld-filter-lbl">วันที่</span><div class="ld-filter-btns" id="ldf_date">';
+  h += '<button onclick="ldSetFilter(\'date\',\'all\')" class="ld-fbtn act">ทั้งหมด</button>';
+  h += '<button onclick="ldSetFilter(\'date\',\'today\')" class="ld-fbtn">วันนี้</button>';
+  h += '<button onclick="ldSetFilter(\'date\',\'week\')" class="ld-fbtn">สัปดาห์นี้</button>';
+  h += '<button onclick="ldSetFilter(\'date\',\'month\')" class="ld-fbtn">เดือนนี้</button>';
+  h += '</div></div>';
+  h += '</div>';
+
   h += '<div class="ld-search-row">';
-  h += '<div class="ld-count-lbl">ข้อมูลทั้งหมด <span class="ld-count-num">' + subs.length + '</span> รายการ</div>';
-  h += '<div class="ld-search-box"><span style="color:var(--text2,#64748b);font-size:.9em;">🔍</span>';
-  h += '<input id="ld_search" class="ld-search-inp" placeholder="ค้นหา..." oninput="ldFilterTable(this.value)"></div>';
+  h += '<div class="ld-count-lbl">แสดง <span class="ld-count-num" id="ld_filtered_count">' + subs.length + '</span> จาก ' + subs.length + ' รายการ</div>';
+  h += '<div class="ld-search-box"><span style="color:var(--text2,#64748b);font-size:.88em;">🔍</span>';
+  h += '<input id="ld_search" class="ld-search-inp" placeholder="ค้นหา..." oninput="ldApplyFilters()"></div>';
   h += '</div>';
   h += '<div id="ld_table_wrap" style="overflow-x:auto;border-radius:10px;border:1px solid var(--border,#334155);">' + _ldTableHtml(form, subs, allFields) + '</div>';
   h += '</div>';
@@ -503,16 +521,49 @@ function _ldStatCard(n, label, icon, color) {
     '<div class="ld-stat-lbl">' + label + '</div></div>';
 }
 
-function ldFilterTable(q) {
-  q = (q || '').toLowerCase();
-  var filtered = q ? (window._ldAllSubs || []).filter(function(s) {
-    return JSON.stringify(s.answers || {}).toLowerCase().indexOf(q) >= 0;
-  }) : (window._ldAllSubs || []);
-  var allFields = ((window._ldForm.commonFields || window._ldForm.fields || [])
-    .concat(window._ldForm.personalFields || [])
-    .concat(window._ldForm.companyFields  || []));
-  document.getElementById('ld_table_wrap').innerHTML = _ldTableHtml(window._ldForm, filtered, allFields);
+function ldSetFilter(key, val) {
+  _ldFilter[key] = val;
+  var container = document.getElementById('ldf_' + key);
+  if (container) {
+    container.querySelectorAll('.ld-fbtn').forEach(function(b) { b.classList.remove('act'); });
+    var idxMap = key === 'type'
+      ? {all: 0, personal: 1, company: 2}
+      : {all: 0, today: 1, week: 2, month: 3};
+    var btns = container.querySelectorAll('.ld-fbtn');
+    if (btns[idxMap[val] || 0]) btns[idxMap[val] || 0].classList.add('act');
+  }
+  ldApplyFilters();
 }
+
+function ldApplyFilters() {
+  var q    = ((document.getElementById('ld_search') || {}).value || '').toLowerCase();
+  var subs = window._ldAllSubs || [];
+  var form = window._ldForm;
+  var now  = new Date();
+
+  var filtered = subs.filter(function(s) {
+    if (_ldFilter.type !== 'all' && s.contactType !== _ldFilter.type) return false;
+    if (_ldFilter.date !== 'all') {
+      if (!s.createdAt) return false;
+      var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+      if (_ldFilter.date === 'today' && d.toDateString() !== now.toDateString()) return false;
+      if (_ldFilter.date === 'week'  && d < new Date(now - 7 * 864e5)) return false;
+      if (_ldFilter.date === 'month' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return false;
+    }
+    if (q) {
+      var hay = JSON.stringify(s.answers || {}).toLowerCase() + (s.contactType || '') + _ldFmtDate(s.createdAt).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  var allFields = ((form.commonFields || form.fields || []).concat(form.personalFields || []).concat(form.companyFields || []));
+  var countEl = document.getElementById('ld_filtered_count');
+  if (countEl) countEl.textContent = filtered.length;
+  document.getElementById('ld_table_wrap').innerHTML = _ldTableHtml(form, filtered, allFields);
+}
+
+function ldFilterTable(q) { ldApplyFilters(); }
 
 function _ldTableHtml(form, subs, allFields) {
   if (!subs.length) return '<div style="padding:28px;text-align:center;color:var(--text2);">ไม่พบข้อมูล</div>';
