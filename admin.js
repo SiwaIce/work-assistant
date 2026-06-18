@@ -486,7 +486,7 @@ function editProductAdmin(productId) {
     '<div class="fm-group"><label>SKU (SiS part)</label><input type="text" id="edit_p_sku" value="' + sanitize(p.sku || '') + '" class="fm-input"></div>' +
     '<div class="fm-group"><label>EAN</label><input type="text" id="edit_p_ean" value="' + sanitize(p.ean || '') + '" class="fm-input"></div>' +
     '<div class="fm-group"><label>หมวดหมู่</label><select id="edit_p_category" class="fm-input">' + categoryOptions + '</select></div>' +
-    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="number" id="edit_p_price" value="' + (p.price || 0) + '" class="fm-input"></div>' +
+    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="text" inputmode="decimal" id="edit_p_price" value="' + nmI(p.price || 0) + '" class="fm-input js-money"></div>' +
     '<div class="fm-group"><label>⚡ สถานะ EOL</label><div class="radio-g">' +
     '<label><input type="radio" name="edit_eol" value="1"' + (p.eol ? ' checked' : '') + '><span>⏰ EOL</span></label>' +
     '<label><input type="radio" name="edit_eol" value="0"' + (!p.eol ? ' checked' : '') + '><span>✅ ปกติ</span></label>' +
@@ -513,7 +513,7 @@ function saveProductEditAdmin(productId) {
     sku: document.getElementById('edit_p_sku').value.trim(),
     ean: document.getElementById('edit_p_ean').value.trim(),
     category: document.getElementById('edit_p_category').value,
-    price: parseFloat(document.getElementById('edit_p_price').value) || 0,
+    price: parseNum(document.getElementById('edit_p_price').value),
     eol: document.querySelector('input[name="edit_eol"]:checked') ? document.querySelector('input[name="edit_eol"]:checked').value === '1' : false,
     isBundle: document.getElementById('edit_is_bundle').checked,
     isSoftware: document.getElementById('edit_is_software').checked,
@@ -537,7 +537,7 @@ function showAddProductAdminModal() {
     '<div class="fm-group"><label>SKU (SiS part)</label><input type="text" id="new_p_sku" class="fm-input"></div>' +
     '<div class="fm-group"><label>EAN</label><input type="text" id="new_p_ean" class="fm-input"></div>' +
     '<div class="fm-group"><label>หมวดหมู่</label><select id="new_p_category" class="fm-input">' + categoryOptions + '</select></div>' +
-    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="number" id="new_p_price" class="fm-input" value="0"></div>' +
+    '<div class="fm-group"><label>💰 ราคา B (Type 3) (฿)</label><input type="text" inputmode="decimal" id="new_p_price" class="fm-input js-money" value="0.00"></div>' +
     '<div class="fm-group"><label>🔧 ประเภทสินค้า</label><div class="check-g">' +
     '<label><input type="checkbox" id="new_is_bundle"> 🎁 Bundle</label>' +
     '<label><input type="checkbox" id="new_is_software"> 💻 Software</label>' +
@@ -560,7 +560,7 @@ function addProductAdmin() {
     sku: document.getElementById('new_p_sku').value.trim(),
     ean: document.getElementById('new_p_ean').value.trim(),
     category: document.getElementById('new_p_category').value,
-    price: parseFloat(document.getElementById('new_p_price').value) || 0,
+    price: parseNum(document.getElementById('new_p_price').value),
     isBundle: document.getElementById('new_is_bundle').checked,
     isSoftware: document.getElementById('new_is_software').checked,
     isService: document.getElementById('new_is_service').checked,
@@ -1140,7 +1140,7 @@ function renderLevelRequirementsEditor(level) {
   var demoRequired = req.demoRequired || 'either';
   
   var h = '<div class="form-section">🎯 เป้าหมาย H1 ' + new Date().getFullYear() + '</div>';
-  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="number" id="req_h1_target" class="fm-input" value="' + (req.h1Target || 0) + '"></div></div>';
+  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="text" inputmode="decimal" id="req_h1_target" class="fm-input js-money" value="' + nmI(req.h1Target || 0) + '"></div></div>';
   
   h += '<div class="form-section">📋 DSEC Certification</div>';
   h += '<div class="fr"><div class="fg"><label>จำนวนพนักงานที่ต้องผ่าน DSEC</label><input type="number" id="req_dsec_required" class="fm-input" value="' + (req.dsecRequired || 0) + '" min="0"></div></div>';
@@ -1237,7 +1237,7 @@ function saveLevelRequirements() {
   if (!cfg.levelRequirements) cfg.levelRequirements = {};
   if (!cfg.levelRequirements[currentReqLevel]) cfg.levelRequirements[currentReqLevel] = {};
   
-  cfg.levelRequirements[currentReqLevel].h1Target = parseFloat(document.getElementById('req_h1_target').value) || 0;
+  cfg.levelRequirements[currentReqLevel].h1Target = parseNum(document.getElementById('req_h1_target').value);
   cfg.levelRequirements[currentReqLevel].dsecRequired = parseInt(document.getElementById('req_dsec_required').value) || 0;
   cfg.levelRequirements[currentReqLevel].demoRequired = document.getElementById('req_demo_required').value;
   

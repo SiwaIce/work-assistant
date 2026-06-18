@@ -1406,6 +1406,26 @@ function pipeFYStatus(p) {
   if (days <= 90) return { e:'🟡', t:'เร่ง! ปลายปีงบ '+fy, c:'#f59e0b' };
   return { e:'🟢', t:'ทันงบปีนี้ ('+fy+')', c:'#22c55e' };
 }
+
+// ===== ตัวเลขเงิน: คอมมา + ทศนิยม 2 ตำแหน่ง =====
+function parseNum(v) { if (v == null) return 0; var n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? 0 : n; }
+function nmI(v) { if (v === '' || v == null) return ''; var n = parseFloat(String(v).replace(/,/g,'')); if (isNaN(n)) return ''; return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _moneyLiveFmt(el) {
+  var sel = el.selectionStart || 0;
+  var digitsBefore = el.value.slice(0, sel).replace(/[^0-9]/g,'').length;
+  var raw = el.value.replace(/[^0-9.]/g,''); var p = raw.split('.');
+  var intp = p[0] || ''; var dec = p.length>1 ? '.'+p.slice(1).join('').slice(0,2) : '';
+  el.value = intp.replace(/\B(?=(\d{3})+(?!\d))/g,',') + dec;
+  var pos=0, cnt=0; while (pos<el.value.length && cnt<digitsBefore) { if(/[0-9]/.test(el.value[pos])) cnt++; pos++; }
+  try { el.setSelectionRange(pos,pos); } catch(_) {}
+}
+function _moneyBlurFmt(el) {
+  var raw = el.value.replace(/,/g,'').trim();
+  if (raw==='' || raw==='.') { el.value=''; return; }
+  var n = parseFloat(raw); el.value = isNaN(n) ? '' : n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+document.addEventListener('input', function(e){ var t=e.target; if(t&&t.classList&&t.classList.contains('js-money')) _moneyLiveFmt(t); });
+document.addEventListener('focusout', function(e){ var t=e.target; if(t&&t.classList&&t.classList.contains('js-money')) _moneyBlurFmt(t); });
 function isMonthInPast(monthStr) {
   if (!monthStr) return false;
   var parts = monthStr.split('/');
@@ -2736,7 +2756,7 @@ function showUpdateModal(pipeId) {
     '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editBiddingDate" class="form-control" value="' + (biddingDateVal ? fD(biddingDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editBiddingDate\',\'editBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'editBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
     '<div class="form-group"><label>🚚 Shipment Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editShipmentDate" class="form-control" value="' + (shipmentDateVal ? fD(shipmentDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editShipmentDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editShipmentDate\',\'editShipmentDatePicker\')"><button type="button" onclick="document.getElementById(\'editShipmentDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
     '</div>' +
-    '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="editForecastAmount" class="form-control" value="' + forecastAmountVal + '"></div>' +
+    '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="text" inputmode="decimal" class="form-control js-money" id="editForecastAmount" value="' + nmI(forecastAmountVal) + '"></div>' +
     '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div>' +
     '<div class="form-group" style="border-top:1px solid var(--border);padding-top:12px"><label>🏛️ ปีงบประมาณของโครงการ</label><select id="editProjFY" class="form-control">' + fyOptionsHTML(p.budgetFiscalYear, thaiFYFromISO(p.expectedCloseDate || p.biddingDate)) + '</select></div>' +
     '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="editProjCrm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'editProjCrmDateWrap\').style.display=this.checked?\'block\':\'none\'"> 🗂️ ลงทะเบียนใน CRM ของ DJI แล้ว</label>' +
@@ -2787,7 +2807,7 @@ function submitPipelineUpdate(pipeId) {
   var updateContent = document.getElementById('updateContent').value.trim();
   var biddingDateStr = document.getElementById('editBiddingDate') ? document.getElementById('editBiddingDate').value.trim() : '';
   var shipmentDateStr = document.getElementById('editShipmentDate') ? document.getElementById('editShipmentDate').value.trim() : '';
-  var newForecastAmount = parseFloat(document.getElementById('editForecastAmount') ? document.getElementById('editForecastAmount').value : 0) || 0;
+  var newForecastAmount = parseNum(document.getElementById('editForecastAmount') ? document.getElementById('editForecastAmount').value : 0);
   var newBiddingDate = convertToISODate(biddingDateStr);
   var newShipmentDate = convertToISODate(shipmentDateStr);
   if (!newProjectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
@@ -2896,7 +2916,7 @@ function showCreateProjectModal() {
   modalHtml += '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newBiddingDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newBiddingDate\',\'newBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'newBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>';
   modalHtml += '<div class="form-group"><label>🚚 Shipment Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newShipmentDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newShipmentDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newShipmentDate\',\'newShipmentDatePicker\')"><button type="button" onclick="document.getElementById(\'newShipmentDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>';
   modalHtml += '</div>';
-  modalHtml += '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="newProjAmount" class="form-control" placeholder="0"></div>';
+  modalHtml += '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="text" inputmode="decimal" class="form-control js-money" id="newProjAmount" placeholder="0.00"></div>';
   modalHtml += '<div class="form-group"><label>📦 รายการสินค้า</label>';
   modalHtml += '<div class="forecast-row" style="margin-bottom:8px">';
   modalHtml += '<div class="model-input"><input type="text" id="newProjItemModel" list="globalModelList" placeholder="พิมพ์ชื่อสินค้า..." style="width:100%"></div>';
@@ -2953,7 +2973,7 @@ function submitNewProject() {
   if (!projectName) { alert('กรุณากรอกชื่อโครงการ'); return; }
   if (newProjItemsArray.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
   var totalQty = newProjItemsArray.reduce(function(s, it) { return s + it.qty; }, 0);
-  var amount = parseFloat(document.getElementById('newProjAmount').value) || 0;
+  var amount = parseNum(document.getElementById('newProjAmount').value);
   var endUser = document.getElementById('newProjEndUser').value.trim();
   var status = document.getElementById('newProjStatus').value;
   var note = document.getElementById('newProjNote').value.trim();

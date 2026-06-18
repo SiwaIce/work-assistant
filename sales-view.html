@@ -961,7 +961,7 @@ function buildPipeForm(p,prefill){
   h+='<div class="fg"><label>Dealer</label><select id="fp_dealer" class="fi">'+dealerOpts+'</select></div>';
   h+='<div class="fg"><label>End User (TH)</label><input id="fp_eu" class="fi" value="'+esc(p?p.endUserTH||'':'')+'" placeholder="ชื่อองค์กร"></div>';
   h+='<div class="fi-row"><div class="fg"><label>Status</label><select id="fp_status" class="fi">'+statusOpts+'</select></div>';
-  h+='<div class="fg"><label>มูลค่า (฿)</label><input id="fp_amt" class="fi" type="number" value="'+(p?p.forecastAmount||'':'')+'" inputmode="numeric"></div></div>';
+  h+='<div class="fg"><label>มูลค่า (฿)</label><input id="fp_amt" class="fi js-money" type="text" inputmode="decimal" value="'+nmI(p?p.forecastAmount||'':'')+'"></div></div>';
   h+='<div class="fg"><label>สินค้า/รุ่น</label><input id="fp_model" class="fi" value="'+esc(p?p.model||'':'')+'" placeholder="DJI Matrice 350 RTK"></div>';
   h+='<div class="fg"><label>หมายเหตุ</label><textarea id="fp_remark" class="fi" rows="2">'+esc(p?p.remark||'':'')+'</textarea></div>';
   h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="savePipe()">💾 บันทึก</button><button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
@@ -978,7 +978,7 @@ function savePipe(){
     projectName:proj,dealerId:dealerId,dealerName:d?d.name:'',
     endUserTH:document.getElementById('fp_eu').value.trim(),
     status:document.getElementById('fp_status').value,
-    forecastAmount:parseFloat(document.getElementById('fp_amt').value)||0,
+    forecastAmount:parseNum(document.getElementById('fp_amt').value),
     model:document.getElementById('fp_model').value.trim(),
     remark:document.getElementById('fp_remark').value.trim(),
     ownerId:SALES_ID,ownerName:SALES_PROFILE?SALES_PROFILE.name:'',ownerType:'sales',
@@ -1268,6 +1268,12 @@ function closeModal(){document.getElementById('modalBg').classList.remove('open'
 
 // ── UTILS ──────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function parseNum(v){if(v==null)return 0;var n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;}
+function nmI(v){if(v===''||v==null)return'';var n=parseFloat(String(v).replace(/,/g,''));if(isNaN(n))return'';return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _moneyLiveFmt(el){var sel=el.selectionStart||0;var db=el.value.slice(0,sel).replace(/[^0-9]/g,'').length;var raw=el.value.replace(/[^0-9.]/g,'');var p=raw.split('.');var ip=p[0]||'';var dc=p.length>1?'.'+p.slice(1).join('').slice(0,2):'';el.value=ip.replace(/\B(?=(\d{3})+(?!\d))/g,',')+dc;var pos=0,c=0;while(pos<el.value.length&&c<db){if(/[0-9]/.test(el.value[pos]))c++;pos++;}try{el.setSelectionRange(pos,pos);}catch(_){}}
+function _moneyBlurFmt(el){var raw=el.value.replace(/,/g,'').trim();if(raw===''||raw==='.'){el.value='';return;}var n=parseFloat(raw);el.value=isNaN(n)?'':n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+document.addEventListener('input',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyLiveFmt(t);});
+document.addEventListener('focusout',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyBlurFmt(t);});
 function fmtShort(n){n=Number(n)||0;if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return n.toString();}
 function showToast(msg){
   var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');

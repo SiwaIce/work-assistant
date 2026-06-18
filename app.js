@@ -69,6 +69,53 @@ function pipeFYStatus(p) {
   if (days <= 90) return { e: '🟡', t: 'เร่ง! ปลายปีงบ ' + fy, c: '#f59e0b' };
   return { e: '🟢', t: 'ทันงบปีนี้ (' + fy + ')', c: '#22c55e' };
 }
+
+// ===== ตัวเลขเงิน: คอมมา + ทศนิยม 2 ตำแหน่ง =====
+// แปลงค่าจาก input (ที่อาจมี ",") กลับเป็นตัวเลขจริง — ใช้ตอนบันทึกแทน parseFloat
+function parseNum(v) {
+  if (v == null) return 0;
+  var n = parseFloat(String(v).replace(/,/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+// จัดรูปแบบค่าเริ่มต้นใส่ใน input (คอมมา + 2 ทศนิยม) — '' ถ้าว่าง
+function nmI(v) {
+  if (v === '' || v == null) return '';
+  var n = parseFloat(String(v).replace(/,/g, ''));
+  if (isNaN(n)) return '';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// จัดรูปแบบสดระหว่างพิมพ์ (ใส่คอมมา, รักษาตำแหน่ง caret)
+function _moneyLiveFmt(el) {
+  var sel = el.selectionStart || 0;
+  var digitsBefore = el.value.slice(0, sel).replace(/[^0-9]/g, '').length;
+  var raw = el.value.replace(/[^0-9.]/g, '');
+  var p = raw.split('.');
+  var intp = p[0] || '';
+  var dec = p.length > 1 ? '.' + p.slice(1).join('').slice(0, 2) : '';
+  var intFmt = intp.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  el.value = intFmt + dec;
+  var pos = 0, cnt = 0;
+  while (pos < el.value.length && cnt < digitsBefore) { if (/[0-9]/.test(el.value[pos])) cnt++; pos++; }
+  try { el.setSelectionRange(pos, pos); } catch (_) {}
+}
+// จัดให้เหลือ 2 ทศนิยมตอนออกจากช่อง
+function _moneyBlurFmt(el) {
+  var raw = el.value.replace(/,/g, '').trim();
+  if (raw === '' || raw === '.') { el.value = ''; return; }
+  var n = parseFloat(raw);
+  el.value = isNaN(n) ? '' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// ต่อ listener ครั้งเดียว (delegation) — คุมทุก input.js-money ที่ render ภายหลัง
+if (typeof document !== 'undefined') {
+  document.addEventListener('input', function(e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('js-money')) _moneyLiveFmt(t);
+  });
+  document.addEventListener('focusout', function(e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('js-money')) _moneyBlurFmt(t);
+  });
+}
 // ================================================================
 // DEFAULT CONFIG
 // ================================================================

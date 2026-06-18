@@ -278,7 +278,7 @@ function renderQuotationItemsTable() {
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + sanitize(item.sku || '-') + '</td>';
     html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)"></td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + (item.quantity || 1) + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
-    html += '<td style="text-align:right"><input type="number" class="quote-item-price" data-idx="' + i + '" value="' + (item.unitPrice || 0) + '" min="0" step="0.01" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
+    html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
     html += '<td style="text-align:center"><button class="btn bsm bd" onclick="removeQuotationItem(' + i + ')">🗑️</button></td>';
     html += '</tr>';
@@ -297,7 +297,7 @@ function updateQuotationItemQty(idx, qty) {
 }
 
 function updateQuotationItemPrice(idx, price) {
-  price = parseFloat(price) || 0;
+  price = parseNum(price);
   quotationItems[idx].unitPrice = price;
   quotationItems[idx].amount = (quotationItems[idx].quantity || 1) * price;
   renderQuotationItemsTable();

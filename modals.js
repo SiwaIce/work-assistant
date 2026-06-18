@@ -162,8 +162,8 @@ function showDealerM(eid) {
     '<div class="fg"><label>โชว์ซีเรียล</label><select id="fd_serial"><option value="Y"' + ((d.showSerial || 'Y') === 'Y' ? ' selected' : '') + '>Y</option><option value="N"' + (d.showSerial === 'N' ? ' selected' : '') + '>N</option></select></div></div>' +
     '<div class="fr"><div class="fg"><label>DJI Dealer</label><select id="fd_djid">' + optionsHTML(cfg.djiDealerTypes, d.djiDealer, '--') + '</select></div>' +
     '<div class="fg"><label>Term</label><select id="fd_term">' + optionsHTML(cfg.creditTerms, d.creditTerm, '--') + '</select></div></div>' +
-    '<div class="fr"><div class="fg"><label>วงเงินเครดิต (฿)</label><input type="number" id="fd_credit" value="' + (d.creditLimit || '') + '"></div>' +
-    '<div class="fg"><label>เป้ายอดขาย (฿)</label><input type="number" id="fd_target" value="' + (d.targetRevenue || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>วงเงินเครดิต (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fd_credit" value="' + nmI(d.creditLimit || '') + '"></div>' +
+    '<div class="fg"><label>เป้ายอดขาย (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fd_target" value="' + nmI(d.targetRevenue || '') + '"></div></div>' +
     '<div class="fg"><label>เงื่อนไขชำระเงิน</label><textarea id="fd_payment" rows="2">' + sanitize(d.paymentCondition || '') + '</textarea></div>' +
     '<div class="form-section">👤 ผู้ติดต่อ</div>' +
     '<div class="fg"><label>ผู้ติดต่อ</label><textarea id="fd_contact" rows="3">' + sanitize(d.contact || '') + '</textarea></div>' +
@@ -196,8 +196,8 @@ async function saveDealer(eid) {
     showSerial: document.getElementById('fd_serial').value,
     djiDealer: document.getElementById('fd_djid').value,
     creditTerm: document.getElementById('fd_term').value,
-    creditLimit: document.getElementById('fd_credit').value,
-    targetRevenue: document.getElementById('fd_target').value,
+    creditLimit: parseNum(document.getElementById('fd_credit').value),
+    targetRevenue: parseNum(document.getElementById('fd_target').value),
     paymentCondition: document.getElementById('fd_payment').value.trim(),
     contact: document.getElementById('fd_contact').value.trim(),
     customerDetail: document.getElementById('fd_detail').value.trim(),
@@ -300,7 +300,7 @@ function showPipelineM(dealerId, eid) {
     '<div id="pipeItemsSection">' + buildPipeItemsSection(p) + '</div>' +
 
     // ---- Other Fields ----
-    '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="number" id="fp_real" value="' + (p.realAmount || '') + '"></div>' +
+    '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_real" value="' + nmI(p.realAmount || '') + '"></div>' +
     '<div class="fg"><label>TOR</label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
     '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
@@ -338,7 +338,7 @@ function buildPipeItemsSection(p) {
     h += '<input type="text" id="pqa_model" class="pipe-qa-model" list="' + modelDatalistId + '" placeholder="พิมพ์ชื่อสินค้า..." autocomplete="off" onchange="pqaModelChanged()" oninput="pqaModelChanged()">';
     h += buildAdminModelDatalist(modelDatalistId);
     h += '<input type="number" id="pqa_qty" class="pipe-qa-qty" value="1" min="1" placeholder="QTY">';
-    h += '<input type="number" id="pqa_price" class="pipe-qa-price" placeholder="ราคา/ชิ้น">';
+    h += '<input type="text" inputmode="decimal" id="pqa_price" class="pipe-qa-price js-money" placeholder="ราคา/ชิ้น">';
     h += '<button class="btn bp bsm" onclick="pqaAdd()">➕</button>';
     h += '<button class="btn bo bsm" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToPipe})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา/หมวดหมู่)">📋 แคตตาล็อก</button>';
     h += '</div>';
@@ -366,7 +366,7 @@ function buildPipeItemsSection(p) {
     // มูลค่ารวม (Forecast Amount) — คำนวณจากรายการ แก้ได้
     var _grand = 0;
     for (var gi = 0; gi < pipeItemsTemp.length; gi++) _grand += (Number(pipeItemsTemp[gi].qty) || 1) * (Number(pipeItemsTemp[gi].price) || 0);
-    h += '<div class="fg" style="margin-top:8px"><label>💰 มูลค่ารวม (Forecast Amount) ฿</label><input type="number" id="fp_fc" value="' + (_grand || (p && p.forecastAmount) || '') + '" placeholder="คำนวณจากรายการ — แก้ได้"></div>';
+    h += '<div class="fg" style="margin-top:8px"><label>💰 มูลค่ารวม (Forecast Amount) ฿</label><input type="text" inputmode="decimal" class="js-money" id="fp_fc" value="' + nmI(_grand || (p && p.forecastAmount) || '') + '" placeholder="คำนวณจากรายการ — แก้ได้"></div>';
 
   } else {
     // Lump sum mode
@@ -377,7 +377,7 @@ function buildPipeItemsSection(p) {
     h += '<button class="btn bo bsm" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerSetLump})" title="เลือกจากแคตตาล็อก" style="margin-top:4px">📋 แคตตาล็อก</button>';
     h += '</div>';
     h += '<div class="fg"><label>Model QTY</label><input type="number" id="fp_qty_lump" value="' + (p.modelQty || (pipeItemsTemp.length ? pipeItemsTemp[0].qty : 1)) + '" min="1"></div></div>';
-    h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="number" id="fp_fc" value="' + (p.forecastAmount || '') + '"></div>';
+    h += '<div class="fg"><label>Forecast Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_fc" value="' + nmI(p.forecastAmount || '') + '"></div>';
   }
   return h;
 }
@@ -394,7 +394,7 @@ function pqaModelChanged() {
     if (price === 0 && typeof window.getModelPrice === 'function') {
       price = window.getModelPrice(modelName);
     }
-    if (price > 0) priceEl.value = price;
+    if (price > 0) priceEl.value = nmI(price);
   }
 }
 function pqaAdd() {
@@ -402,7 +402,7 @@ function pqaAdd() {
   var model = modelInput ? modelInput.value.trim() : '';
   var qty = parseInt(document.getElementById('pqa_qty').value) || 1;
   var priceEl = document.getElementById('pqa_price');
-  var price = priceEl ? (parseFloat(priceEl.value) || 0) : 0;
+  var price = priceEl ? parseNum(priceEl.value) : 0;
   
   if (!model) { toast('เลือก Model ก่อน'); return; }
   
@@ -457,7 +457,7 @@ function pickerSetLump(model, qty, price) {
   var fc = document.getElementById('fp_fc');
   if (mi) mi.value = model;
   if (qi) qi.value = qty || 1;
-  if (fc && price) fc.value = (qty || 1) * price;
+  if (fc && price) fc.value = nmI((qty || 1) * price);
   if (typeof addRecentModel === 'function') addRecentModel(model);
   toast('➕ เลือก ' + model);
   ppFlash('✅ เลือก ' + model + ' แล้ว');
@@ -470,7 +470,7 @@ function updatePipeFcFromItems() {
     total += (Number(it.qty) || 1) * (Number(it.price) || 0);
   }
   var fcEl = document.getElementById('fp_fc');
-  if (fcEl && total > 0) fcEl.value = total;
+  if (fcEl && total > 0) fcEl.value = nmI(total);
 }
 
 // ================================================================
@@ -666,8 +666,8 @@ function savePipeline(dealerId, eid) {
     unitType: document.getElementById('fp_unit').value,
     dealerId: document.getElementById('fp_dealer').value || dealerId,
     djiDealer: document.getElementById('fp_djid').value,
-    forecastAmount: parseFloat(document.getElementById('fp_fc') ? document.getElementById('fp_fc').value : 0) || 0,
-    realAmount: parseFloat(document.getElementById('fp_real') ? document.getElementById('fp_real').value : 0) || 0,
+    forecastAmount: parseNum(document.getElementById('fp_fc') ? document.getElementById('fp_fc').value : 0),
+    realAmount: parseNum(document.getElementById('fp_real') ? document.getElementById('fp_real').value : 0),
     tor: document.getElementById('fp_tor').value,
     biddingDate: dpG('fp_bid'),
     shipmentDate: dpG('fp_ship'),
@@ -795,7 +795,7 @@ function showWinReasonM(pipeId, newStatus) {
   openM('✅ Win — สาเหตุที่ได้งาน', '' +
     '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.winReasons.map(function(r) { return '<label><input type="checkbox" name="wr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="wr_note" rows="2"></textarea></div>' +
-    '<div class="fg"><label>Real Amount (฿)</label><input type="number" id="wr_amt" value="' + (p ? p.forecastAmount || '' : '') + '"></div>' +
+    '<div class="fg"><label>Real Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="wr_amt" value="' + nmI(p ? p.forecastAmount || '' : '') + '"></div>' +
     '<button class="btn bp btn-full" onclick="saveWinReason(\'' + pipeId + '\',\'' + newStatus + '\')">💾 บันทึก</button>');
 }
 
@@ -804,7 +804,7 @@ function saveWinReason(pipeId, newStatus) {
   var chks = document.querySelectorAll('input[name="wr"]:checked');
   for (var i = 0; i < chks.length; i++) reasons.push(chks[i].value);
   var note = document.getElementById('wr_note') ? document.getElementById('wr_note').value.trim() : '';
-  var amt = parseFloat(document.getElementById('wr_amt') ? document.getElementById('wr_amt').value : 0) || 0;
+  var amt = parseNum(document.getElementById('wr_amt') ? document.getElementById('wr_amt').value : 0);
   var updates = {status: newStatus, winReason: reasons.join(', '), winNote: note};
   if (amt) updates.realAmount = amt;
   ST.update('pipeline', pipeId, updates);
@@ -817,7 +817,7 @@ function showLossReasonM(pipeId) {
   openM('❌ Lost — สาเหตุที่ไม่ได้งาน', '' +
     '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.lossReasons.map(function(r) { return '<label><input type="checkbox" name="lr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
     '<div class="fg"><label>คู่แข่งที่ชนะ</label><input type="text" id="lr_comp"></div>' +
-    '<div class="fg"><label>ราคาคู่แข่ง (฿)</label><input type="number" id="lr_price"></div>' +
+    '<div class="fg"><label>ราคาคู่แข่ง (฿)</label><input type="text" inputmode="decimal" class="js-money" id="lr_price"></div>' +
     '<div class="fg"><label>บทเรียน</label><textarea id="lr_note" rows="2"></textarea></div>' +
     '<button class="btn bp btn-full" onclick="saveLossReason(\'' + pipeId + '\')">💾 บันทึก</button>');
 }
@@ -827,7 +827,7 @@ function saveLossReason(pipeId) {
   var chks = document.querySelectorAll('input[name="lr"]:checked');
   for (var i = 0; i < chks.length; i++) reasons.push(chks[i].value);
   var comp = document.getElementById('lr_comp') ? document.getElementById('lr_comp').value.trim() : '';
-  var price = document.getElementById('lr_price') ? document.getElementById('lr_price').value : '';
+  var price = document.getElementById('lr_price') ? parseNum(document.getElementById('lr_price').value) : '';
   var note = document.getElementById('lr_note') ? document.getElementById('lr_note').value.trim() : '';
   ST.update('pipeline', pipeId, {status: 'lost', lossReason: reasons.join(', '), lossCompetitor: comp, lossCompetitorPrice: price, lossNote: note});
   ST.add('pipeLog', {pipeId: pipeId, type: 'lost', content: '❌ Lost: ' + reasons.join(', ') + (comp ? ' — ชนะโดย: ' + comp : '') + (note ? ' — ' + note : ''), date: _nw()});
@@ -950,8 +950,8 @@ function buildTopicInput(topic, td, v, dealer, prevVisit) {
 
   switch (id) {
     case 'sales_perf':
-      return '<div class="fr"><div class="fg"><label>ยอดขาย (฿)</label><input type="number" id="vt_revenue" value="' + prevRev + '">' + (prevRev ? '<div class="prev-data">ค่าล่าสุด: ' + fmtMoney(prevRev) + '</div>' : '') + '</div>' +
-        '<div class="fg"><label>เป้าที่คาด (฿)</label><input type="number" id="vt_expected" value="' + (v.expectedRevenue || '') + '"></div></div>' +
+      return '<div class="fr"><div class="fg"><label>ยอดขาย (฿)</label><input type="text" inputmode="decimal" class="js-money" id="vt_revenue" value="' + nmI(prevRev) + '">' + (prevRev ? '<div class="prev-data">ค่าล่าสุด: ' + fmtMoney(prevRev) + '</div>' : '') + '</div>' +
+        '<div class="fg"><label>เป้าที่คาด (฿)</label><input type="text" inputmode="decimal" class="js-money" id="vt_expected" value="' + nmI(v.expectedRevenue || '') + '"></div></div>' +
         '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
     case 'downstream':
       return '<div class="fg"><label>กลุ่มลูกค้า</label><input type="text" id="vt_segment" value="' + sanitize(prevSeg) + '">' + (prevSeg ? '<div class="prev-data">ค่าล่าสุด: ' + sanitize(prevSeg) + '</div>' : '') + '</div>' +
@@ -1108,7 +1108,7 @@ function togglePipeSelect(pipeId) {
 
 // Forecast & Feedback rows
 function fcRow(i, fn) {
-  return '<div class="fr" style="margin-bottom:4px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:6px"><input type="text" id="fc_m_' + i + '" value="' + sanitize(fn.month || '') + '" placeholder="เดือน"><input type="number" id="fc_a_' + i + '" value="' + (fn.amount || '') + '" placeholder="มูลค่า (฿)"><textarea id="fc_i_' + i + '" rows="2" style="margin-top:3px;grid-column:1/-1" placeholder="รายการสินค้า...">' + sanitize(fn.items || '') + '</textarea></div>';
+  return '<div class="fr" style="margin-bottom:4px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:6px"><input type="text" id="fc_m_' + i + '" value="' + sanitize(fn.month || '') + '" placeholder="เดือน"><input type="text" inputmode="decimal" class="js-money" id="fc_a_' + i + '" value="' + nmI(fn.amount || '') + '" placeholder="มูลค่า (฿)"><textarea id="fc_i_' + i + '" rows="2" style="margin-top:3px;grid-column:1/-1" placeholder="รายการสินค้า...">' + sanitize(fn.items || '') + '</textarea></div>';
 }
 function addFcRow() { var c = document.getElementById('fv_fcs'); if (c) c.insertAdjacentHTML('beforeend', fcRow(c.children.length, {})); }
 function fbRow(i, f) { return '<div style="margin-bottom:3px"><input type="text" id="fb_' + i + '" value="' + sanitize(f || '') + '" placeholder="Feedback ' + (i + 1) + '..."></div>'; }
@@ -1167,7 +1167,7 @@ function saveVisit(dealerId, eid) {
     var m = (document.getElementById('fc_m_' + i) || {}).value || '';
     var a = (document.getElementById('fc_a_' + i) || {}).value || '';
     var it = (document.getElementById('fc_i_' + i) || {}).value || '';
-    if (m.trim() || a || it.trim()) forecastNotes.push({month: m.trim(), amount: parseFloat(a) || 0, items: it.trim()});
+    if (m.trim() || a || it.trim()) forecastNotes.push({month: m.trim(), amount: parseNum(a), items: it.trim()});
   }
 
   // Feedback
@@ -1182,8 +1182,8 @@ function saveVisit(dealerId, eid) {
     djiDealer: (document.getElementById('fv_djid') || {}).value || '',
     location: (document.getElementById('fv_loc') || {}).value || '',
     summary: (document.getElementById('fv_summary') || {}).value || '',
-    revenue: parseFloat((document.getElementById('vt_revenue') || {}).value) || 0,
-    expectedRevenue: parseFloat((document.getElementById('vt_expected') || {}).value) || 0,
+    revenue: parseNum((document.getElementById('vt_revenue') || {}).value),
+    expectedRevenue: parseNum((document.getElementById('vt_expected') || {}).value),
     customerSegment: (document.getElementById('vt_segment') || {}).value || '',
     dockInterest: (document.getElementById('vt_dock') || {}).value || '',
     topicData: topicData, pipelineUpdates: pipelineUpdates, forecastNotes: forecastNotes, feedbackItems: feedbackItems,

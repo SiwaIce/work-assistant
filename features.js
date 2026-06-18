@@ -2731,7 +2731,7 @@ function showSetGoalM() {
 
   var h = '<div style="max-width:400px">';
   h += '<div style="text-align:center;font-weight:700;margin-bottom:12px">🎯 ตั้งเป้าเดือน ' + goalMonth + '</div>';
-  h += '<div class="fm-group"><label>💰 Revenue Target (฿)</label><input type="number" id="gl_rev" class="fm-input" value="' + (t.revenue || '') + '"></div>';
+  h += '<div class="fm-group"><label>💰 Revenue Target (฿)</label><input type="text" inputmode="decimal" id="gl_rev" class="fm-input js-money" value="' + nmI(t.revenue || '') + '"></div>';
   h += '<div class="fm-group"><label>📍 Visit Target</label><input type="number" id="gl_visit" class="fm-input" value="' + (t.visits || '') + '"></div>';
   h += '<div class="fm-group"><label>📞 Follow-up Target</label><input type="number" id="gl_fu" class="fm-input" value="' + (t.followups || '') + '"></div>';
   h += '<div class="fm-group"><label>📋 Pipeline ใหม่ Target</label><input type="number" id="gl_pipe" class="fm-input" value="' + (t.newPipeline || '') + '"></div>';
@@ -2747,7 +2747,7 @@ function showSetGoalM() {
 function saveGoalTargets() {
   var goals = getMonthlyGoals();
   var targets = {
-    revenue: parseFloat(document.getElementById('gl_rev').value) || 0,
+    revenue: parseNum(document.getElementById('gl_rev').value),
     visits: parseInt(document.getElementById('gl_visit').value) || 0,
     followups: parseInt(document.getElementById('gl_fu').value) || 0,
     newPipeline: parseInt(document.getElementById('gl_pipe').value) || 0,
@@ -3204,7 +3204,7 @@ function showAddQuoteM() {
   h += '</select></div>';
   h += '<div class="fm-group"><label>📊 Pipeline Project</label><select id="qt_pipe" class="fm-input"><option value="">-- ไม่ระบุ --</option></select></div>';
   h += '<div class="fm-group"><label>📋 รายละเอียด</label><input type="text" id="qt_desc" class="fm-input" placeholder="เช่น M400 x3 + L3 x1"></div>';
-  h += '<div class="fm-group"><label>💰 มูลค่า (฿)</label><input type="number" id="qt_amt" class="fm-input"></div>';
+  h += '<div class="fm-group"><label>💰 มูลค่า (฿)</label><input type="text" inputmode="decimal" id="qt_amt" class="fm-input js-money"></div>';
   h += '<div class="fm-group"><label>📅 วันที่ส่ง</label><input type="text" id="qt_sent" class="fm-input dp" value="' + _td() + '"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="qt_note" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
@@ -3242,7 +3242,7 @@ function saveQuote() {
     dealerId: dealerId,
     pipeId: document.getElementById('qt_pipe').value || '',
     projectName: (document.getElementById('qt_desc').value || '').trim(),
-    amount: parseFloat(document.getElementById('qt_amt').value) || 0,
+    amount: parseNum(document.getElementById('qt_amt').value),
     sentDate: (document.getElementById('qt_sent').value || '').trim() || _td(),
     note: (document.getElementById('qt_note').value || '').trim(),
     status: 'pending'
@@ -3277,7 +3277,7 @@ function showEditQuoteM(quoteId) {
   dealers.forEach(function(d) { h += '<option value="' + d.id + '"' + (q.dealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; });
   h += '</select></div>';
   h += '<div class="fm-group"><label>📋 รายละเอียด</label><input type="text" id="qt_desc" class="fm-input" value="' + sanitize(q.projectName || '') + '"></div>';
-  h += '<div class="fm-group"><label>💰 มูลค่า</label><input type="number" id="qt_amt" class="fm-input" value="' + (q.amount || '') + '"></div>';
+  h += '<div class="fm-group"><label>💰 มูลค่า</label><input type="text" inputmode="decimal" id="qt_amt" class="fm-input js-money" value="' + nmI(q.amount || '') + '"></div>';
   h += '<div class="fm-group"><label>📅 วันที่ส่ง</label><input type="text" id="qt_sent" class="fm-input dp" value="' + (q.sentDate || '') + '"></div>';
   h += '<div class="fm-group"><label>📊 สถานะ</label><select id="qt_status" class="fm-input">';
   h += '<option value="pending"' + (q.status === 'pending' ? ' selected' : '') + '>⏳ รอตอบ</option>';
@@ -3301,7 +3301,7 @@ function updateQuote(quoteId) {
       quotes[i].quoteNumber = (document.getElementById('qt_num').value || '').trim();
       quotes[i].dealerId = document.getElementById('qt_dealer').value || '';
       quotes[i].projectName = (document.getElementById('qt_desc').value || '').trim();
-      quotes[i].amount = parseFloat(document.getElementById('qt_amt').value) || 0;
+      quotes[i].amount = parseNum(document.getElementById('qt_amt').value);
       quotes[i].sentDate = (document.getElementById('qt_sent').value || '').trim();
       quotes[i].status = document.getElementById('qt_status').value || 'pending';
       quotes[i].note = (document.getElementById('qt_note').value || '').trim();

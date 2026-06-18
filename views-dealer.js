@@ -3454,7 +3454,7 @@ function showEditSisRevenueModal(dealerId) {
   
   var html = '<div style="max-width:400px">' +
     '<div class="fg"><label>💰 ยอดขาย SIS (บาท)</label>' +
-    '<input type="number" id="sisRevenueInput" class="fm-input" value="' + (dealer.sisRevenue || 0) + '" step="1000" placeholder="0">' +
+    '<input type="text" inputmode="decimal" id="sisRevenueInput" class="fm-input js-money" value="' + nmI(dealer.sisRevenue || 0) + '" placeholder="0.00">' +
     '<div class="hint">💡 ยอดขายจริงที่ Dealer สั่งซื้อจาก SIS</div>' +
     '</div>' +
     '<div class="fg"><label>📝 หมายเหตุ (ถ้ามี)</label>' +
@@ -3469,7 +3469,7 @@ function showEditSisRevenueModal(dealerId) {
 }
 
 function saveSisRevenue(dealerId) {
-  var newRevenue = parseFloat(document.getElementById('sisRevenueInput').value) || 0;
+  var newRevenue = parseNum(document.getElementById('sisRevenueInput').value);
   var note = document.getElementById('sisRevenueNote') ? document.getElementById('sisRevenueNote').value.trim() : '';
   
   var dealer = ST.getOne('dealers', dealerId);

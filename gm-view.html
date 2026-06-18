@@ -631,7 +631,7 @@ function showEditForm(pipeId) {
     }).join('');
     var h='<div class="fg"><label>ชื่อโครงการ</label><input id="ep_proj" class="fi" value="'+esc(p.projectName||'')+'"></div>';
     h+='<div class="fi-row"><div class="fg"><label>End User TH</label><input id="ep_eu" class="fi" value="'+esc(p.endUserTH||p.endUser||'')+'"></div><div class="fg"><label>End User EN</label><input id="ep_euen" class="fi" value="'+esc(p.endUserEN||'')+'"></div></div>';
-    h+='<div class="fi-row"><div class="fg"><label>Status</label><select id="ep_status" class="fi">'+stOpts+'</select></div><div class="fg"><label>มูลค่า Forecast (฿)</label><input id="ep_amt" class="fi" type="number" value="'+(p.forecastAmount||'')+'"></div></div>';
+    h+='<div class="fi-row"><div class="fg"><label>Status</label><select id="ep_status" class="fi">'+stOpts+'</select></div><div class="fg"><label>มูลค่า Forecast (฿)</label><input id="ep_amt" class="fi js-money" type="text" inputmode="decimal" value="'+nmI(p.forecastAmount||'')+'"></div></div>';
     h+='<div class="fi-row"><div class="fg"><label>สินค้า/รุ่น</label><input id="ep_model" class="fi" value="'+esc(p.model||p.products||'')+'"></div><div class="fg"><label>Expected Close</label><input id="ep_close" class="fi" type="date" value="'+(p.expectedCloseDate||p.closeDate||'')+'"></div></div>';
     h+='<div class="fg"><label>หมายเหตุ</label><textarea id="ep_remark" class="fi" rows="2">'+esc(p.remark||p.note||'')+'</textarea></div>';
     h+='<div style="font-size:10px;color:#64748b;margin-bottom:10px">Sales: <strong>'+esc(tp.ownerName||'?')+'</strong> · Type: '+esc(tp.ownerType||'?')+'</div>';
@@ -652,7 +652,7 @@ function savePipeEdit() {
     endUserTH:document.getElementById('ep_eu').value.trim(),
     endUserEN:document.getElementById('ep_euen').value.trim(),
     status:document.getElementById('ep_status').value,
-    forecastAmount:parseFloat(document.getElementById('ep_amt').value)||0,
+    forecastAmount:parseNum(document.getElementById('ep_amt').value),
     model:document.getElementById('ep_model').value.trim(),
     expectedCloseDate:document.getElementById('ep_close').value,
     remark:document.getElementById('ep_remark').value.trim(),
@@ -811,6 +811,12 @@ function closeModal(){
 
 // ── UTILS ──────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function parseNum(v){if(v==null)return 0;var n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;}
+function nmI(v){if(v===''||v==null)return'';var n=parseFloat(String(v).replace(/,/g,''));if(isNaN(n))return'';return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _moneyLiveFmt(el){var sel=el.selectionStart||0;var db=el.value.slice(0,sel).replace(/[^0-9]/g,'').length;var raw=el.value.replace(/[^0-9.]/g,'');var p=raw.split('.');var ip=p[0]||'';var dc=p.length>1?'.'+p.slice(1).join('').slice(0,2):'';el.value=ip.replace(/\B(?=(\d{3})+(?!\d))/g,',')+dc;var pos=0,c=0;while(pos<el.value.length&&c<db){if(/[0-9]/.test(el.value[pos]))c++;pos++;}try{el.setSelectionRange(pos,pos);}catch(_){}}
+function _moneyBlurFmt(el){var raw=el.value.replace(/,/g,'').trim();if(raw===''||raw==='.'){el.value='';return;}var n=parseFloat(raw);el.value=isNaN(n)?'':n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+document.addEventListener('input',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyLiveFmt(t);});
+document.addEventListener('focusout',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyBlurFmt(t);});
 function fmtShort(n){n=Number(n)||0;if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return n.toString();}
 function showToast(msg){
   var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');

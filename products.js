@@ -423,13 +423,13 @@ function showEditProductModal(productId) {
   html += '<div class="fg"><label>EAN</label><input type="text" id="edit_ean" class="fm-input" value="' + sanitize(p.ean || '') + '"></div></div>';
   
   html += '<div class="form-section">💰 ราคา</div>';
-  html += '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="number" id="edit_rrp_in" class="fm-input" value="' + (p.rrpInVat || 0) + '"></div>';
-  html += '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="number" id="edit_rrp_ex" class="fm-input" value="' + (p.rrpExVat || 0) + '"></div></div>';
+  html += '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="text" inputmode="decimal" id="edit_rrp_in" class="fm-input js-money" value="' + nmI(p.rrpInVat || 0) + '"></div>';
+  html += '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="text" inputmode="decimal" id="edit_rrp_ex" class="fm-input js-money" value="' + nmI(p.rrpExVat || 0) + '"></div></div>';
   html += '<div class="fr4">';
-  html += '<div class="fg"><label>S (Type 1)</label><input type="number" id="edit_price_s" class="fm-input" value="' + (p.typePrices?.S || 0) + '"></div>';
-  html += '<div class="fg"><label>A (Type 2)</label><input type="number" id="edit_price_a" class="fm-input" value="' + (p.typePrices?.A || 0) + '"></div>';
-  html += '<div class="fg"><label>B (Type 3)</label><input type="number" id="edit_price_b" class="fm-input" value="' + (p.price || 0) + '"></div>';
-  html += '<div class="fg"><label>Other (Type 4)</label><input type="number" id="edit_price_o" class="fm-input" value="' + (p.typePrices?.Other || 0) + '"></div></div>';
+  html += '<div class="fg"><label>S (Type 1)</label><input type="text" inputmode="decimal" id="edit_price_s" class="fm-input js-money" value="' + nmI(p.typePrices?.S || 0) + '"></div>';
+  html += '<div class="fg"><label>A (Type 2)</label><input type="text" inputmode="decimal" id="edit_price_a" class="fm-input js-money" value="' + nmI(p.typePrices?.A || 0) + '"></div>';
+  html += '<div class="fg"><label>B (Type 3)</label><input type="text" inputmode="decimal" id="edit_price_b" class="fm-input js-money" value="' + nmI(p.price || 0) + '"></div>';
+  html += '<div class="fg"><label>Other (Type 4)</label><input type="text" inputmode="decimal" id="edit_price_o" class="fm-input js-money" value="' + nmI(p.typePrices?.Other || 0) + '"></div></div>';
   
   html += '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>';
   html += '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="edit_category" class="fm-input">' + categoryOptions + '</select></div>';
@@ -458,19 +458,19 @@ function saveProductEdit(productId) {
     name: name,
     sku: document.getElementById('edit_sku').value.trim(),
     ean: document.getElementById('edit_ean').value.trim(),
-    rrpInVat: parseFloat(document.getElementById('edit_rrp_in').value) || 0,
-    rrpExVat: parseFloat(document.getElementById('edit_rrp_ex').value) || 0,
+    rrpInVat: parseNum(document.getElementById('edit_rrp_in').value),
+    rrpExVat: parseNum(document.getElementById('edit_rrp_ex').value),
     category: document.getElementById('edit_category').value,
     eol: document.querySelector('input[name="edit_eol"]:checked') ? document.querySelector('input[name="edit_eol"]:checked').value === '1' : false,
     isBundle: document.getElementById('edit_is_bundle').checked,
     isSoftware: document.getElementById('edit_is_software').checked,
     isService: document.getElementById('edit_is_service').checked,
-    price: parseFloat(document.getElementById('edit_price_b').value) || 0,
+    price: parseNum(document.getElementById('edit_price_b').value),
     typePrices: {
-      S: parseFloat(document.getElementById('edit_price_s').value) || 0,
-      A: parseFloat(document.getElementById('edit_price_a').value) || 0,
-      B: parseFloat(document.getElementById('edit_price_b').value) || 0,
-      Other: parseFloat(document.getElementById('edit_price_o').value) || 0
+      S: parseNum(document.getElementById('edit_price_s').value),
+      A: parseNum(document.getElementById('edit_price_a').value),
+      B: parseNum(document.getElementById('edit_price_b').value),
+      Other: parseNum(document.getElementById('edit_price_o').value)
     }
   };
   
@@ -1372,12 +1372,12 @@ function renderPriceTable(products) {
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
     html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
-    html += '<td><input type="number" id="rrp_in_vat_' + p.id + '" value="' + (p.rrpInVat || 0) + '" style="width:100px" class="fm-input" step="0.01"></td>';
-    html += '<td><input type="number" id="rrp_ex_vat_' + p.id + '" value="' + (p.rrpExVat || 0) + '" style="width:100px" class="fm-input" step="0.01"></td>';
-    html += '<td><input type="number" id="price_s_' + p.id + '" value="' + (p.typePrices?.S || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
-    html += '<td><input type="number" id="price_a_' + p.id + '" value="' + (p.typePrices?.A || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
-    html += '<td><input type="number" id="price_b_' + p.id + '" value="' + (p.price || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
-    html += '<td><input type="number" id="price_o_' + p.id + '" value="' + (p.typePrices?.Other || 0) + '" style="width:90px" class="fm-input" step="0.01"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="rrp_in_vat_' + p.id + '" value="' + nmI(p.rrpInVat || 0) + '" style="width:100px" class="fm-input js-money"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="rrp_ex_vat_' + p.id + '" value="' + nmI(p.rrpExVat || 0) + '" style="width:100px" class="fm-input js-money"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="price_s_' + p.id + '" value="' + nmI(p.typePrices?.S || 0) + '" style="width:90px" class="fm-input js-money"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="price_a_' + p.id + '" value="' + nmI(p.typePrices?.A || 0) + '" style="width:90px" class="fm-input js-money"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="price_b_' + p.id + '" value="' + nmI(p.price || 0) + '" style="width:90px" class="fm-input js-money"></td>';
+    html += '<td><input type="text" inputmode="decimal" id="price_o_' + p.id + '" value="' + nmI(p.typePrices?.Other || 0) + '" style="width:90px" class="fm-input js-money"></td>';
     html += '<td style="text-align:center"><input type="checkbox" id="eol_chk_' + p.id + '" ' + (p.eol ? 'checked' : '') + ' onchange="toggleEOLFromPrice(\'' + p.id + '\', this.checked)"></td>';
     html += '<td><button class="btn bsm bp" onclick="saveSingleProductPrice(\'' + p.id + '\')">💾</button></td>';
     html += '</tr>';
@@ -1392,12 +1392,12 @@ function toggleEOLFromPrice(productId, isChecked) {
 }
 
 function saveSingleProductPrice(id) {
-  var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + id).value) || 0;
-  var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + id).value) || 0;
-  var priceS = parseFloat(document.getElementById('price_s_' + id).value) || 0;
-  var priceA = parseFloat(document.getElementById('price_a_' + id).value) || 0;
-  var priceB = parseFloat(document.getElementById('price_b_' + id).value) || 0;
-  var priceO = parseFloat(document.getElementById('price_o_' + id).value) || 0;
+  var rrpInVat = parseNum(document.getElementById('rrp_in_vat_' + id).value);
+  var rrpExVat = parseNum(document.getElementById('rrp_ex_vat_' + id).value);
+  var priceS = parseNum(document.getElementById('price_s_' + id).value);
+  var priceA = parseNum(document.getElementById('price_a_' + id).value);
+  var priceB = parseNum(document.getElementById('price_b_' + id).value);
+  var priceO = parseNum(document.getElementById('price_o_' + id).value);
   var eolChk = document.getElementById('eol_chk_' + id);
   var eol = eolChk ? eolChk.checked : false;
   
@@ -1416,12 +1416,12 @@ function saveAllProductPrices() {
   var products = getAllProducts();
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
-    var rrpInVat = parseFloat(document.getElementById('rrp_in_vat_' + p.id).value) || 0;
-    var rrpExVat = parseFloat(document.getElementById('rrp_ex_vat_' + p.id).value) || 0;
-    var priceS = parseFloat(document.getElementById('price_s_' + p.id).value) || 0;
-    var priceA = parseFloat(document.getElementById('price_a_' + p.id).value) || 0;
-    var priceB = parseFloat(document.getElementById('price_b_' + p.id).value) || 0;
-    var priceO = parseFloat(document.getElementById('price_o_' + p.id).value) || 0;
+    var rrpInVat = parseNum(document.getElementById('rrp_in_vat_' + p.id).value);
+    var rrpExVat = parseNum(document.getElementById('rrp_ex_vat_' + p.id).value);
+    var priceS = parseNum(document.getElementById('price_s_' + p.id).value);
+    var priceA = parseNum(document.getElementById('price_a_' + p.id).value);
+    var priceB = parseNum(document.getElementById('price_b_' + p.id).value);
+    var priceO = parseNum(document.getElementById('price_o_' + p.id).value);
     var eolChk = document.getElementById('eol_chk_' + p.id);
     var eol = eolChk ? eolChk.checked : false;
     updateProduct(p.id, {
@@ -1665,7 +1665,7 @@ function showAddDemoUnitM() {
     '<input type="hidden" id="newDemoProductId">' +
     '</div>' +
     '<div class="fm-group"><label>💰 ราคา Demo (฿)</label>' +
-    '<input type="number" id="newDemoPrice" class="fm-input" placeholder="0" step="0.01">' +
+    '<input type="text" inputmode="decimal" id="newDemoPrice" class="fm-input js-money" placeholder="0.00">' +
     '</div>' +
     '<div class="fm-group"><label>📝 หมายเหตุ</label>' +
     '<textarea id="newDemoNote" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
@@ -1705,7 +1705,7 @@ function selectDemoProduct() {
     if (opt.value === selectedName) {
       document.getElementById('newDemoProductId').value = opt.value;
       var price = parseFloat(opt.getAttribute('data-price')) || 0;
-      document.getElementById('newDemoPrice').value = price;
+      document.getElementById('newDemoPrice').value = nmI(price);
       break;
     }
   }
@@ -1714,7 +1714,7 @@ function selectDemoProduct() {
 function saveNewDemoUnit() {
   var productId = document.getElementById('newDemoProductId').value;
   var productName = document.getElementById('newDemoProductSearch').value.trim();
-  var price = parseFloat(document.getElementById('newDemoPrice').value) || 0;
+  var price = parseNum(document.getElementById('newDemoPrice').value);
   var note = document.getElementById('newDemoNote').value.trim();
   
   if (!productId && !productName) {
@@ -1765,7 +1765,7 @@ function editDemoUnit(id) {
     '<input type="text" id="editDemoName" class="fm-input" value="' + sanitize(demo.productName) + '">' +
     '</div>' +
     '<div class="fm-group"><label>💰 ราคา Demo (฿)</label>' +
-    '<input type="number" id="editDemoPrice" class="fm-input" value="' + demo.price + '" step="0.01">' +
+    '<input type="text" inputmode="decimal" id="editDemoPrice" class="fm-input js-money" value="' + nmI(demo.price) + '">' +
     '</div>' +
     '<div class="fm-group"><label>📝 หมายเหตุ</label>' +
     '<textarea id="editDemoNote" rows="2" class="fm-input">' + sanitize(demo.note || '') + '</textarea>' +
@@ -1786,7 +1786,7 @@ function editDemoUnit(id) {
 
 function saveEditDemoUnit(id) {
   var name = document.getElementById('editDemoName').value.trim();
-  var price = parseFloat(document.getElementById('editDemoPrice').value) || 0;
+  var price = parseNum(document.getElementById('editDemoPrice').value);
   var note = document.getElementById('editDemoNote').value.trim();
   var enabled = document.getElementById('editDemoStatus').value === 'true';
   
@@ -1848,13 +1848,13 @@ function showAddProductM() {
     '<div class="fg"><label>EAN</label><input type="text" id="new_p_ean" class="fm-input"></div></div>' +
     
     '<div class="form-section">💰 ราคา</div>' +
-    '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="number" id="new_rrp_in" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="number" id="new_rrp_ex" class="fm-input" value="0"></div></div>' +
+    '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="text" inputmode="decimal" id="new_rrp_in" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="text" inputmode="decimal" id="new_rrp_ex" class="fm-input js-money" value="0.00"></div></div>' +
     '<div class="fr4">' +
-    '<div class="fg"><label>S (Type 1)</label><input type="number" id="new_price_s" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>A (Type 2)</label><input type="number" id="new_price_a" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>B (Type 3)</label><input type="number" id="new_price_b" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>Other (Type 4)</label><input type="number" id="new_price_o" class="fm-input" value="0"></div></div>' +
+    '<div class="fg"><label>S (Type 1)</label><input type="text" inputmode="decimal" id="new_price_s" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>A (Type 2)</label><input type="text" inputmode="decimal" id="new_price_a" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>B (Type 3)</label><input type="text" inputmode="decimal" id="new_price_b" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>Other (Type 4)</label><input type="text" inputmode="decimal" id="new_price_o" class="fm-input js-money" value="0.00"></div></div>' +
     
     '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>' +
     '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="new_category" class="fm-input">' + categoryOptions + '</select></div>' +
@@ -1897,14 +1897,14 @@ function addProductFromModal() {
     sku: document.getElementById('new_p_sku').value.trim(),
     ean: document.getElementById('new_p_ean').value.trim(),
     category: category,
-    rrpInVat: parseFloat(document.getElementById('new_rrp_in').value) || 0,
-    rrpExVat: parseFloat(document.getElementById('new_rrp_ex').value) || 0,
-    price: parseFloat(document.getElementById('new_price_b').value) || 0,
+    rrpInVat: parseNum(document.getElementById('new_rrp_in').value),
+    rrpExVat: parseNum(document.getElementById('new_rrp_ex').value),
+    price: parseNum(document.getElementById('new_price_b').value),
     typePrices: {
-      S: parseFloat(document.getElementById('new_price_s').value) || 0,
-      A: parseFloat(document.getElementById('new_price_a').value) || 0,
-      B: parseFloat(document.getElementById('new_price_b').value) || 0,
-      Other: parseFloat(document.getElementById('new_price_o').value) || 0
+      S: parseNum(document.getElementById('new_price_s').value),
+      A: parseNum(document.getElementById('new_price_a').value),
+      B: parseNum(document.getElementById('new_price_b').value),
+      Other: parseNum(document.getElementById('new_price_o').value)
     },
     eol: document.querySelector('input[name="new_eol"]:checked')?.value === '1',
     isBundle: document.getElementById('new_is_bundle').checked,
@@ -1978,10 +1978,10 @@ function showAddBundleM() {
     '<button class="btn bsm bp" onclick="addBundleItemRow()" style="margin-bottom:12px">➕ เพิ่มสินค้า</button>' +
     '<div class="form-section">💰 ราคา (ตาม Level)</div>' +
     '<div class="fr4">' +
-    '<div class="fg"><label>S</label><input type="number" id="bundle_price_s" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>A</label><input type="number" id="bundle_price_a" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>B</label><input type="number" id="bundle_price_b" class="fm-input" value="0"></div>' +
-    '<div class="fg"><label>Other</label><input type="number" id="bundle_price_o" class="fm-input" value="0"></div></div>' +
+    '<div class="fg"><label>S</label><input type="text" inputmode="decimal" id="bundle_price_s" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>A</label><input type="text" inputmode="decimal" id="bundle_price_a" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>B</label><input type="text" inputmode="decimal" id="bundle_price_b" class="fm-input js-money" value="0.00"></div>' +
+    '<div class="fg"><label>Other</label><input type="text" inputmode="decimal" id="bundle_price_o" class="fm-input js-money" value="0.00"></div></div>' +
     '<div class="fm-actions"><button class="btn btn-blue" onclick="saveNewBundle()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   
   openM('🎁 เพิ่ม Bundle/Combo', html);
@@ -2039,10 +2039,10 @@ function saveNewBundle() {
     description: document.getElementById('bundle_desc').value.trim(),
     items: items,
     typePrices: {
-      S: parseFloat(document.getElementById('bundle_price_s').value) || 0,
-      A: parseFloat(document.getElementById('bundle_price_a').value) || 0,
-      B: parseFloat(document.getElementById('bundle_price_b').value) || 0,
-      Other: parseFloat(document.getElementById('bundle_price_o').value) || 0
+      S: parseNum(document.getElementById('bundle_price_s').value),
+      A: parseNum(document.getElementById('bundle_price_a').value),
+      B: parseNum(document.getElementById('bundle_price_b').value),
+      Other: parseNum(document.getElementById('bundle_price_o').value)
     },
     enabled: true
   });
@@ -2088,10 +2088,10 @@ function editBundle(id) {
     '<button class="btn bsm bp" onclick="addBundleItemRow()" style="margin-bottom:12px">➕ เพิ่มสินค้า</button>' +
     '<div class="form-section">💰 ราคา (ตาม Level)</div>' +
     '<div class="fr4">' +
-    '<div class="fg"><label>S</label><input type="number" id="bundle_price_s" class="fm-input" value="' + (bundle.typePrices?.S || 0) + '"></div>' +
-    '<div class="fg"><label>A</label><input type="number" id="bundle_price_a" class="fm-input" value="' + (bundle.typePrices?.A || 0) + '"></div>' +
-    '<div class="fg"><label>B</label><input type="number" id="bundle_price_b" class="fm-input" value="' + (bundle.typePrices?.B || 0) + '"></div>' +
-    '<div class="fg"><label>Other</label><input type="number" id="bundle_price_o" class="fm-input" value="' + (bundle.typePrices?.Other || 0) + '"></div></div>' +
+    '<div class="fg"><label>S</label><input type="text" inputmode="decimal" id="bundle_price_s" class="fm-input js-money" value="' + nmI(bundle.typePrices?.S || 0) + '"></div>' +
+    '<div class="fg"><label>A</label><input type="text" inputmode="decimal" id="bundle_price_a" class="fm-input js-money" value="' + nmI(bundle.typePrices?.A || 0) + '"></div>' +
+    '<div class="fg"><label>B</label><input type="text" inputmode="decimal" id="bundle_price_b" class="fm-input js-money" value="' + nmI(bundle.typePrices?.B || 0) + '"></div>' +
+    '<div class="fg"><label>Other</label><input type="text" inputmode="decimal" id="bundle_price_o" class="fm-input js-money" value="' + nmI(bundle.typePrices?.Other || 0) + '"></div></div>' +
     '<div class="fm-actions"><button class="btn btn-blue" onclick="updateBundle(\'' + id + '\')">💾 อัปเดต</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   
   openM('✏️ แก้ไข Bundle', html);
@@ -2122,10 +2122,10 @@ function updateBundle(id) {
     description: document.getElementById('bundle_desc').value.trim(),
     items: items,
     typePrices: {
-      S: parseFloat(document.getElementById('bundle_price_s').value) || 0,
-      A: parseFloat(document.getElementById('bundle_price_a').value) || 0,
-      B: parseFloat(document.getElementById('bundle_price_b').value) || 0,
-      Other: parseFloat(document.getElementById('bundle_price_o').value) || 0
+      S: parseNum(document.getElementById('bundle_price_s').value),
+      A: parseNum(document.getElementById('bundle_price_a').value),
+      B: parseNum(document.getElementById('bundle_price_b').value),
+      Other: parseNum(document.getElementById('bundle_price_o').value)
     }
   });
   
@@ -2151,7 +2151,7 @@ function showAddDemoUnitM() {
     '<select id="demo_product_id" class="fm-input" onchange="updateDemoPriceFromSelect()">' + productOptions + '</select>' +
     '</div>' +
     '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
-    '<input type="number" id="demo_price" class="fm-input" value="0" step="0.01">' +
+    '<input type="text" inputmode="decimal" id="demo_price" class="fm-input js-money" value="0.00">' +
     '</div>' +
     '<div class="fg"><label>📝 หมายเหตุ</label>' +
     '<textarea id="demo_note" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
@@ -2170,7 +2170,7 @@ function updateDemoPriceFromSelect() {
   if (select && select.selectedIndex > 0) {
     var selectedOption = select.options[select.selectedIndex];
     var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
-    priceInput.value = price;
+    priceInput.value = nmI(price);
   }
 }
 
@@ -2181,7 +2181,7 @@ function saveNewDemoUnit() {
   var product = getProductById(productId);
   if (!product) { toast('ไม่พบสินค้า'); return; }
   
-  var price = parseFloat(document.getElementById('demo_price').value) || product.price || 0;
+  var price = parseNum(document.getElementById('demo_price').value) || product.price || 0;
   var note = document.getElementById('demo_note').value.trim();
   
   // ตรวจสอบว่ามี Demo Unit นี้อยู่แล้วหรือไม่
@@ -2230,7 +2230,7 @@ function editDemoUnit(id) {
     '<select id="edit_demo_product_id" class="fm-input" onchange="editDemoUpdatePrice()">' + productOptions + '</select>' +
     '</div>' +
     '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
-    '<input type="number" id="edit_demo_price" class="fm-input" value="' + (demo.price || 0) + '" step="0.01">' +
+    '<input type="text" inputmode="decimal" id="edit_demo_price" class="fm-input js-money" value="' + nmI(demo.price || 0) + '">' +
     '</div>' +
     '<div class="fg"><label>📝 หมายเหตุ</label>' +
     '<textarea id="edit_demo_note" rows="2" class="fm-input">' + sanitize(demo.note || '') + '</textarea>' +
@@ -2256,15 +2256,15 @@ function editDemoUpdatePrice() {
   if (select && select.selectedIndex > 0) {
     var selectedOption = select.options[select.selectedIndex];
     var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
-    if (priceInput.value == 0 || priceInput.value == '0') {
-      priceInput.value = price;
+    if (parseNum(priceInput.value) === 0) {
+      priceInput.value = nmI(price);
     }
   }
 }
 
 function updateDemoUnitFromModal(id) {
   var productId = document.getElementById('edit_demo_product_id').value;
-  var price = parseFloat(document.getElementById('edit_demo_price').value) || 0;
+  var price = parseNum(document.getElementById('edit_demo_price').value);
   var note = document.getElementById('edit_demo_note').value.trim();
   var enabled = document.getElementById('edit_demo_status').value === 'true';
   
