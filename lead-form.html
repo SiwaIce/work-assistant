@@ -3,127 +3,133 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
-<meta name="theme-color" content="#0c1425">
+<meta name="theme-color" content="#f5f5f5">
 <title>Form</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0c1425;--card:#141f33;--surface:#1a2744;
-  --blue:#3b82f6;--blue-bg:rgba(59,130,246,.12);
-  --text:#f0f6ff;--muted:#7a90b0;
-  --border:rgba(255,255,255,.08);--err:#f87171;
+  --bg:#f0f2f5;--card:#fff;--surface:#f7f8fa;
+  --blue:#2563eb;--blue-bg:#eff6ff;--blue-bd:rgba(37,99,235,.3);
+  --text:#111827;--text2:#374151;--muted:#6b7280;
+  --border:#e5e7eb;--shadow:0 1px 4px rgba(0,0,0,.06),0 8px 28px rgba(0,0,0,.07);
+  --err:#dc2626;--err-bg:#fff5f5;
 }
-body{background:var(--bg);min-height:100vh;padding:20px 14px 60px;
+body{background:var(--bg);min-height:100vh;padding:24px 14px 64px;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   color:var(--text);-webkit-font-smoothing:antialiased}
-.card{max-width:460px;margin:0 auto;background:var(--card);
-  border-radius:20px;padding:26px 20px;border:1px solid var(--border)}
+.card{max-width:480px;margin:0 auto;background:var(--card);border-radius:18px;
+  padding:28px 24px;box-shadow:var(--shadow)}
 
-/* Header */
-.fh{text-align:center;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:20px}
-.fh-ico{font-size:2.8em;display:block;margin-bottom:8px}
-.fh-title{font-size:1.2em;font-weight:700;line-height:1.35}
+/* ── Header ── */
+.fh{text-align:center;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:22px}
+.fh-ico{font-size:2.6em;display:block;margin-bottom:8px}
+.fh-title{font-size:1.22em;font-weight:700;line-height:1.35;color:var(--text)}
 .fh-ev{font-size:.83em;color:var(--muted);margin-top:5px}
 
-/* Type selector */
-.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
-.tc{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;
-  padding:18px 10px;text-align:center;cursor:pointer;transition:.18s;
+/* ── Type selector ── */
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.tc{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;
+  padding:18px 10px;text-align:center;cursor:pointer;transition:.15s;
   -webkit-tap-highlight-color:transparent;user-select:none;position:relative}
 .tc:active{transform:scale(.97)}
-.tc-ico{font-size:2.2em;display:block;margin-bottom:7px}
-.tc-name{font-size:.9em;font-weight:700}
-.tc-sub{font-size:.72em;color:var(--muted);margin-top:3px}
+.tc-ico{font-size:2.1em;display:block;margin-bottom:7px}
+.tc-name{font-size:.9em;font-weight:700;color:var(--text)}
+.tc-sub{font-size:.71em;color:var(--muted);margin-top:3px}
 .tc.sel{border-color:var(--blue);background:var(--blue-bg)}
-.tc.sel::after{content:'✓';position:absolute;top:8px;right:10px;
-  font-size:.8em;color:var(--blue);font-weight:700}
-.type-err{color:var(--err);font-size:.8em;text-align:center;margin:-6px 0 12px;display:none}
+.tc.sel .tc-name{color:var(--blue)}
+.tc.sel::after{content:'✓';position:absolute;top:8px;right:10px;font-size:.8em;color:var(--blue);font-weight:700}
+.type-err{color:var(--err);font-size:.8em;text-align:center;margin:-4px 0 12px;display:none}
 
-/* Section divider */
-.sdiv{display:flex;align-items:center;gap:8px;margin:16px 0 12px;
-  font-size:.75em;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+/* ── Section divider ── */
+.sdiv{display:flex;align-items:center;gap:8px;margin:18px 0 12px;
+  font-size:.72em;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
 .sdiv::before,.sdiv::after{content:'';flex:1;height:1px;background:var(--border)}
 
-/* Field */
-.fg{margin-bottom:13px}
-.lbl{display:block;font-size:.82em;color:var(--muted);margin-bottom:6px;font-weight:500}
+/* ── Field ── */
+.fg{margin-bottom:14px}
+.lbl{display:block;font-size:.84em;color:var(--text2);margin-bottom:6px;font-weight:600}
 .req{color:var(--err)}
-.opt-tag{font-size:.7em;color:var(--muted);background:rgba(255,255,255,.06);
-  padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle}
+.opt-tag{font-size:.7em;font-weight:400;color:var(--muted);background:var(--surface);
+  border:1px solid var(--border);padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle}
 
+/* ── Inputs ── */
 input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],select,textarea{
-  width:100%;padding:14px 15px;border-radius:12px;
-  border:1.5px solid var(--border);background:var(--surface);color:var(--text);
+  width:100%;padding:12px 14px;border-radius:10px;
+  border:1.5px solid var(--border);background:#fff;color:var(--text);
   font-size:16px;outline:none;transition:.15s;
   -webkit-appearance:none;appearance:none;font-family:inherit}
-input:focus,select:focus,textarea:focus{
-  border-color:rgba(59,130,246,.6);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
-textarea{resize:vertical;min-height:88px;line-height:1.55}
-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a90b0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+input::placeholder,textarea::placeholder{color:#b0b7c3}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+input.ef,select.ef,textarea.ef{border-color:var(--err);background:var(--err-bg)}
+textarea{resize:vertical;min-height:86px;line-height:1.55}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
 
-/* Radio */
-.radio-group{display:flex;flex-direction:column;gap:8px}
-.ri{display:flex;align-items:center;gap:12px;padding:13px 15px;
-  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
-  cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+/* ── Radio ── */
+.radio-group{display:flex;flex-direction:column;gap:7px}
+.ri{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;
+  border:1.5px solid var(--border);background:#fff;cursor:pointer;transition:.15s;
+  -webkit-tap-highlight-color:transparent;user-select:none}
 .ri:active{transform:scale(.99)}
 .ri.sel{border-color:var(--blue);background:var(--blue-bg)}
-.ri input{width:18px!important;height:18px!important;accent-color:var(--blue);
-  flex-shrink:0;pointer-events:none;margin:0}
-.ri span{font-size:.93em;line-height:1.3;flex:1}
+.ri input{width:18px!important;height:18px!important;accent-color:var(--blue);flex-shrink:0;pointer-events:none;margin:0}
+.ri span{font-size:.93em;line-height:1.3;flex:1;color:var(--text)}
 
-/* Multicheck */
-.mchk-group{display:flex;flex-direction:column;gap:8px}
-.mci{display:flex;align-items:center;gap:12px;padding:13px 15px;
-  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
-  cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+/* ── Multicheck ── */
+.mchk-group{display:flex;flex-direction:column;gap:7px}
+.mci{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;
+  border:1.5px solid var(--border);background:#fff;cursor:pointer;transition:.15s;
+  -webkit-tap-highlight-color:transparent;user-select:none}
 .mci:active{transform:scale(.99)}
 .mci.sel{border-color:var(--blue);background:var(--blue-bg)}
-.mci input{width:18px!important;height:18px!important;accent-color:var(--blue);
-  flex-shrink:0;pointer-events:none;margin:0}
-.mci span{font-size:.93em;line-height:1.3;flex:1}
-.mchk-hint{font-size:.75em;color:var(--muted);margin-top:5px}
+.mci input{width:18px!important;height:18px!important;accent-color:var(--blue);flex-shrink:0;pointer-events:none;margin:0}
+.mci span{font-size:.93em;line-height:1.3;flex:1;color:var(--text)}
+.mchk-hint{font-size:.75em;color:var(--muted);margin-top:5px;padding-left:2px}
 
-/* Checkbox single */
-.cbs{display:flex;align-items:center;gap:12px;padding:13px 15px;
-  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer}
+/* ── Checkbox single ── */
+.cbs{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;cursor:pointer}
 .cbs input{width:18px!important;height:18px!important;accent-color:var(--blue);flex-shrink:0}
-.cbs span{font-size:.93em}
+.cbs span{font-size:.93em;color:var(--text)}
 
-/* Rating */
-.rating-wrap{display:flex;gap:8px;padding:4px 0}
-.star-btn{background:none;border:none;font-size:2.4em;cursor:pointer;
-  color:rgba(255,255,255,.15);transition:.12s;padding:0;line-height:1;
-  -webkit-tap-highlight-color:transparent}
-.star-btn.on{color:#fbbf24}
+/* ── Rating ── */
+.rating-wrap{display:flex;gap:6px;padding:4px 0}
+.star-btn{background:none;border:none;font-size:2.3em;cursor:pointer;color:#d1d5db;transition:.12s;padding:0;line-height:1;-webkit-tap-highlight-color:transparent}
+.star-btn.on{color:#f59e0b}
 .star-btn:active{transform:scale(.88)}
 
-/* Error */
-.ferr{display:none;color:var(--err);font-size:.79em;margin-top:5px}
+/* ── Error ── */
+.ferr{display:none;color:var(--err);font-size:.79em;margin-top:5px;padding-left:2px}
 
-/* Submit */
-.btn-sub{display:flex;align-items:center;justify-content:center;gap:8px;
-  width:100%;padding:16px;border-radius:14px;border:none;
-  background:var(--blue);color:#fff;font-size:1.05em;font-weight:700;
-  cursor:pointer;transition:.2s;margin-top:10px;letter-spacing:.3px}
-.btn-sub:hover{background:#2563eb}
+/* ── Submit ── */
+.btn-sub{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  padding:15px;border-radius:12px;border:none;background:var(--blue);color:#fff;
+  font-size:1.02em;font-weight:700;cursor:pointer;transition:.2s;margin-top:12px;letter-spacing:.3px}
+.btn-sub:hover{background:#1d4ed8}
 .btn-sub:active{transform:scale(.98)}
-.btn-sub:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.btn-sub:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
-/* Success */
-.success-wrap{display:none;text-align:center;padding:16px 8px}
-.si{font-size:3.8em;display:block;margin-bottom:14px}
-.st{font-size:1.25em;font-weight:700;margin-bottom:8px}
-.ss{color:var(--muted);font-size:.9em;line-height:1.7}
+/* ── Thank-you page ── */
+.ty-wrap{text-align:center;padding:12px 8px 4px}
+.ty-icon{font-size:4em;display:block;margin-bottom:16px}
+.ty-title{font-size:1.28em;font-weight:700;color:var(--text);margin-bottom:8px}
+.ty-msg{color:var(--muted);font-size:.9em;line-height:1.75;margin-bottom:24px}
+.ty-divider{height:1px;background:var(--border);margin:20px 0}
+.add-more-btn{display:inline-flex;align-items:center;gap:6px;
+  background:none;border:1.5px solid var(--border);border-radius:9px;
+  font-family:inherit;font-size:.85em;color:var(--muted);cursor:pointer;
+  padding:9px 18px;transition:.15s}
+.add-more-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
 
-.add-more-btn{display:none;margin-top:18px;background:none;border:none;font-family:inherit;font-size:.82em;color:var(--muted);cursor:pointer;text-decoration:underline;padding:4px 8px}
-.add-more-btn:hover{color:var(--text)}
+/* ── Loading / Error ── */
 .loading-wrap{text-align:center;padding:52px 0;color:var(--muted)}
 .err-wrap{text-align:center;padding:48px 16px}
 .err-wrap .ei{font-size:2.5em;display:block;margin-bottom:12px}
 .err-wrap p{color:var(--muted)}
-.brand{text-align:center;margin-top:18px;font-size:.72em;color:rgba(255,255,255,.16)}
-@media(max-width:380px){.card{padding:20px 14px}.tc{padding:14px 8px}.tc-ico{font-size:1.9em}}
+.brand{text-align:center;margin-top:16px;font-size:.72em;color:#b0b7c3}
+
+@media(max-width:380px){
+  .card{padding:22px 16px}
+  .tc{padding:14px 8px}.tc-ico{font-size:1.9em}
+}
 </style>
 </head>
 <body>
@@ -146,26 +152,58 @@ firebase.initializeApp({
   appId:"1:796607223436:web:1455abe90b141104678da9"
 });
 var db = firebase.firestore();
-var _form = null, _cType = null, _ratingVals = {};
+var _form = null, _cType = null, _ratingVals = {}, _activeFlds = {};
 
 function _p(k){ return new URLSearchParams(window.location.search).get(k); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+/* ── Init ── */
 (function init(){
   var fid = _p('form');
   if(!fid){ showErr('ไม่พบ Form ID ใน URL'); return; }
   db.collection('leadForms').doc(fid).get()
     .then(function(d){
       if(!d.exists||!d.data().active){ showErr('Form ไม่พบหรือถูกปิดใช้งาน'); return; }
-      _form = Object.assign({id:d.id},d.data());
+      _form = Object.assign({id:d.id}, d.data());
       document.title = _form.title||'Form';
       renderForm();
+      initKeyNav();
     })
     .catch(function(){ showErr('โหลด Form ไม่ได้ กรุณาตรวจสอบการเชื่อมต่อ'); });
 })();
 
+/* ── Enter → next field ── */
+function initKeyNav(){
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Enter') return;
+    var tag = e.target.tagName;
+    if(tag==='TEXTAREA'||tag==='BUTTON'||tag==='SELECT') return;
+    if(e.target.type==='checkbox'||e.target.type==='radio') return;
+    e.preventDefault();
+    var all = Array.from(document.querySelectorAll(
+      '#app input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not(:disabled), #app select, #app textarea'
+    ));
+    var idx = all.indexOf(e.target);
+    if(idx >= 0 && idx < all.length-1) all[idx+1].focus();
+    else if(idx === all.length-1) submitForm();
+  });
+}
+
+/* ── Phone auto-format ── */
+function fmtPhone(el){
+  var v = el.value.replace(/\D/g,'').slice(0,10);
+  if(v.length>6) v = v.slice(0,3)+'-'+v.slice(3,6)+'-'+v.slice(6);
+  else if(v.length>3) v = v.slice(0,3)+'-'+v.slice(3);
+  el.value = v;
+}
+
+/* ── Render form ── */
 function renderForm(){
   var f = _form;
+  _activeFlds = {};
+  var allFld = (f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
+  allFld.forEach(function(x){ _activeFlds[x.id] = x; });
+
   var h = '<div class="fh"><span class="fh-ico">📋</span>';
   h += '<div class="fh-title">'+esc(f.title)+'</div>';
   if(f.eventName) h += '<div class="fh-ev">📍 '+esc(f.eventName)+'</div>';
@@ -199,31 +237,40 @@ function renderForm(){
     h += '</div>';
   }
 
-  h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล <span>→</span></button>';
-  h += '<div class="success-wrap" id="sw">' +
-    '<span class="si">✅</span>' +
-    '<div class="st">ขอบคุณสำหรับข้อมูล!</div>' +
-    '<div class="ss" id="ss-sub"></div>' +
-    '<button class="add-more-btn" id="add-more-btn" onclick="resetForm()">+ ส่งข้อมูลเพิ่ม</button>' +
-    '</div>';
+  h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
   document.getElementById('app').innerHTML = h;
+
+  // Autofocus first visible input (skip if type toggle — user must pick type first)
+  if(!f.useTypeToggle){
+    setTimeout(function(){
+      var first = document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel],#app input[type=number],#app select');
+      if(first) first.focus();
+    }, 150);
+  }
 }
 
+/* ── Render field ── */
 function rField(f){
   var id  = 'fld_'+f.id;
   var req = f.required;
   var lbl = '<span class="lbl">'+esc(f.label)+(req?'<span class="req"> *</span>':'<span class="opt-tag">ไม่บังคับ</span>')+'</span>';
-  var inp = '';
+  var blur = 'onblur="validateFld(\''+f.id+'\')"';
+  var inp  = '';
   switch(f.type){
-    case 'textarea': inp='<textarea id="'+id+'" rows="3" placeholder="พิมพ์ที่นี่..."></textarea>'; break;
-    case 'email':    inp='<input type="email" id="'+id+'" inputmode="email" placeholder="example@email.com">'; break;
-    case 'phone':    inp='<input type="tel" id="'+id+'" inputmode="tel" placeholder="0812345678">'; break;
-    case 'number':   inp='<input type="number" id="'+id+'">'; break;
-    case 'date':     inp='<input type="date" id="'+id+'">'; break;
+    case 'textarea':
+      inp='<textarea id="'+id+'" rows="3" placeholder="พิมพ์ที่นี่..." '+blur+'></textarea>'; break;
+    case 'email':
+      inp='<input type="email" id="'+id+'" inputmode="email" placeholder="example@email.com" '+blur+'>'; break;
+    case 'phone':
+      inp='<input type="tel" id="'+id+'" inputmode="tel" placeholder="081-234-5678" oninput="fmtPhone(this)" '+blur+'>'; break;
+    case 'number':
+      inp='<input type="number" id="'+id+'" '+blur+'>'; break;
+    case 'date':
+      inp='<input type="date" id="'+id+'" '+blur+'>'; break;
     case 'select':
       var opts='<option value="">— เลือก —</option>';
       (f.options||[]).forEach(function(o){ opts+='<option value="'+esc(o)+'">'+esc(o)+'</option>'; });
-      inp='<select id="'+id+'">'+opts+'</select>'; break;
+      inp='<select id="'+id+'" '+blur+'>'+opts+'</select>'; break;
     case 'radio':
       inp='<div class="radio-group" id="'+id+'">';
       (f.options||[]).forEach(function(o){
@@ -243,11 +290,24 @@ function rField(f){
       inp='<div class="rating-wrap" id="'+id+'">';
       for(var i=1;i<=5;i++) inp+='<button type="button" class="star-btn" data-fid="'+f.id+'" data-v="'+i+'" onclick="setRating(\''+f.id+'\','+i+')">★</button>';
       inp+='</div>'; break;
-    default: inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่...">'; break;
+    default:
+      inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่..." '+blur+'>'; break;
   }
   return '<div class="fg">'+lbl+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
 }
 
+/* ── Validate on blur ── */
+function validateFld(fid){
+  var fld = _activeFlds[fid]; if(!fld) return;
+  var v   = getVal(fld);
+  var err = document.getElementById('err_'+fid);
+  var el  = document.getElementById('fld_'+fid);
+  var bad = fld.required && (v===''||v===0||v===false);
+  if(err) err.style.display = bad ? 'block' : 'none';
+  if(el)  el.classList.toggle('ef', bad);
+}
+
+/* ── Interactions ── */
 function hlRI(el){
   var n=el.querySelector('input').name;
   document.querySelectorAll('[name="'+n+'"]').forEach(function(r){ r.closest('.ri').classList.remove('sel'); });
@@ -261,7 +321,6 @@ function setRating(fid,v){
   _ratingVals[fid]=v;
   document.querySelectorAll('[data-fid="'+fid+'"]').forEach(function(s){ s.classList.toggle('on',parseInt(s.dataset.v)<=v); });
 }
-
 function selType(t){
   _cType=t;
   document.getElementById('tc_p').classList.toggle('sel',t==='personal');
@@ -269,8 +328,15 @@ function selType(t){
   document.getElementById('type_err').style.display='none';
   document.getElementById('sec_p').style.display=t==='personal'?'':'none';
   document.getElementById('sec_c').style.display=t==='company'?'':'none';
+  // Autofocus first field after type selection
+  setTimeout(function(){
+    var first = document.querySelector('#sec_'+(t==='personal'?'p':'c')+' input[type=text],#sec_'+(t==='personal'?'p':'c')+' input[type=email],#sec_'+(t==='personal'?'p':'c')+' input[type=tel]');
+    if(!first) first = document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel]');
+    if(first) first.focus();
+  }, 80);
 }
 
+/* ── Get value ── */
 function getVal(f){
   var id='fld_'+f.id;
   if(f.type==='radio'){ var r=document.querySelector('[name="rg_'+id+'"]:checked'); return r?r.value:''; }
@@ -283,6 +349,7 @@ function getVal(f){
   var el=document.getElementById(id); return el?el.value.trim():'';
 }
 
+/* ── Submit ── */
 function submitForm(){
   var f=_form, answers={}, valid=true;
   if(f.useTypeToggle&&!_cType){
@@ -296,10 +363,17 @@ function submitForm(){
 
   active.forEach(function(fld){
     var v=getVal(fld);
-    var errEl=document.getElementById('err_'+fld.id);
     var empty=(v===''||v===0||v===false);
-    if(fld.required&&empty){ if(errEl) errEl.style.display='block'; valid=false; }
-    else { if(errEl) errEl.style.display='none'; }
+    var err=document.getElementById('err_'+fld.id);
+    var el=document.getElementById('fld_'+fld.id);
+    if(fld.required&&empty){
+      if(err) err.style.display='block';
+      if(el)  el.classList.add('ef');
+      valid=false;
+    } else {
+      if(err) err.style.display='none';
+      if(el)  el.classList.remove('ef');
+    }
     answers[fld.id]=v;
   });
 
@@ -334,11 +408,12 @@ function submitForm(){
       }
     }
 
-    var sub = f.submitAction==='email'?'เราจะส่งข้อมูลไปยังอีเมลของคุณเร็วๆ นี้'
-            : f.submitAction==='redirect'?'กำลังพาคุณไปที่หน้าถัดไป...' : '';
-    showSuccess(sub);
     if(f.submitAction==='redirect'&&f.redirectUrl){
+      showThankyou('กำลังพาคุณไปที่หน้าถัดไป...', true);
       setTimeout(function(){ window.location.href=f.redirectUrl; },1600);
+    } else {
+      var msg = f.submitAction==='email' ? 'เราจะส่งข้อมูลที่ท่านต้องการไปยังอีเมลเร็วๆ นี้' : '';
+      showThankyou(msg, false);
     }
   }).catch(function(e){
     btn.disabled=false; btn.textContent='ส่งข้อมูล →';
@@ -346,20 +421,28 @@ function submitForm(){
   });
 }
 
-function showSuccess(sub){
-  document.getElementById('sub-btn').style.display='none';
-  document.getElementById('ss-sub').textContent=sub||'';
-  document.getElementById('sw').style.display='block';
-  if(_form.submitAction!=='redirect'){
-    document.getElementById('add-more-btn').style.display='block';
+/* ── Thank-you page ── */
+function showThankyou(msg, isRedirect){
+  var h = '<div class="ty-wrap">';
+  h += '<span class="ty-icon">'+(isRedirect?'🔗':'✅')+'</span>';
+  h += '<div class="ty-title">ขอบคุณสำหรับข้อมูล!</div>';
+  if(msg) h += '<div class="ty-msg">'+esc(msg)+'</div>';
+  if(!isRedirect){
+    h += '<div class="ty-divider"></div>';
+    h += '<button class="add-more-btn" onclick="resetForm()">+ ส่งข้อมูลเพิ่ม</button>';
   }
+  h += '</div>';
+  document.getElementById('app').innerHTML = h;
+  window.scrollTo({top:0, behavior:'smooth'});
 }
+
+/* ── Reset form ── */
 function resetForm(){
-  _cType=null;
-  _ratingVals={};
+  _cType=null; _ratingVals={};
   renderForm();
-  document.getElementById('app').scrollIntoView({behavior:'smooth',block:'start'});
+  window.scrollTo({top:0, behavior:'smooth'});
 }
+
 function showErr(msg){
   document.getElementById('app').innerHTML='<div class="err-wrap"><span class="ei">⚠️</span><p>'+esc(msg)+'</p></div>';
 }

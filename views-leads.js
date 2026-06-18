@@ -418,23 +418,23 @@ function _ldAnalyticsHtml(form, subs) {
 
   // Header
   h += '<div class="ld-top">';
-  h += '<button onclick="rLeads()" class="btn bo" style="margin-right:10px;">← กลับ</button>';
-  h += '<h2 class="ld-title" style="flex:1;">' + esc(form.title) + '</h2>';
-  if (subs.length) h += '<button onclick="exportLeadSubs()" class="btn bp">📎 Export Excel</button>';
-  h += '</div>';
+  h += '<button onclick="rLeads()" class="btn bo bsm">← กลับ</button>';
+  h += '<h2 class="ld-title" style="flex:1;margin:0 12px;font-size:1.05em;">' + esc(form.title) + '</h2>';
+  h += '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">';
+  h += '<button onclick="showLeadQR(\'' + form.id + '\')" class="btn bsm bo">📱 QR</button>';
+  h += '<button onclick="showEditLeadFormM(\'' + form.id + '\')" class="btn bsm bo">✏️</button>';
+  if (subs.length) h += '<button onclick="exportLeadSubs()" class="btn bsm bp">📎 Export</button>';
+  h += '</div></div>';
 
   // Stat cards
   h += '<div class="ld-stats-row">';
-  h += _ldStatCard(subs.length, 'ทั้งหมด',  '🙋', '#3b82f6');
-  h += _ldStatCard(todayCnt,    'วันนี้',    '📅', '#22c55e');
+  h += _ldStatCard(subs.length, 'ทั้งหมด', '🙋', '#3b82f6');
+  h += _ldStatCard(todayCnt,    'วันนี้',   '📅', '#22c55e');
   if (form.useTypeToggle) {
-    h += _ldStatCard(pCnt, 'บุคคล',   '👤', '#a855f7');
-    h += _ldStatCard(cCnt, 'บริษัท',  '🏢', '#f97316');
+    h += _ldStatCard(pCnt, 'บุคคล',  '👤', '#a855f7');
+    h += _ldStatCard(cCnt, 'บริษัท', '🏢', '#f97316');
   }
-  h += '<div class="ld-stat-actions">';
-  h += '<button onclick="showLeadQR(\'' + form.id + '\')" class="btn bsm bo">📱 QR</button>';
-  h += '<button onclick="showEditLeadFormM(\'' + form.id + '\')" class="btn bsm bo" style="margin-top:4px;">✏️ แก้ไข</button>';
-  h += '</div></div>';
+  h += '</div>';
 
   if (!subs.length) {
     h += '<div style="text-align:center;padding:48px;color:var(--text2);">ยังไม่มีใครกรอกฟอร์มนี้</div>';
@@ -485,11 +485,12 @@ function _ldAnalyticsHtml(form, subs) {
   h += '</div>'; // end charts row
 
   // Search + table
-  h += '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">';
-  h += '<b>ข้อมูลทั้งหมด (' + subs.length + ')</b>';
-  h += '<input id="ld_search" class="fm-input" style="max-width:240px;padding:6px 12px;" placeholder="🔍 ค้นหา..." oninput="ldFilterTable(this.value)">';
+  h += '<div class="ld-search-row">';
+  h += '<div class="ld-count-lbl">ข้อมูลทั้งหมด <span class="ld-count-num">' + subs.length + '</span> รายการ</div>';
+  h += '<div class="ld-search-box"><span style="color:var(--text2,#64748b);font-size:.9em;">🔍</span>';
+  h += '<input id="ld_search" class="ld-search-inp" placeholder="ค้นหา..." oninput="ldFilterTable(this.value)"></div>';
   h += '</div>';
-  h += '<div id="ld_table_wrap" style="overflow-x:auto;">' + _ldTableHtml(form, subs, allFields) + '</div>';
+  h += '<div id="ld_table_wrap" style="overflow-x:auto;border-radius:10px;border:1px solid var(--border,#334155);">' + _ldTableHtml(form, subs, allFields) + '</div>';
   h += '</div>';
   return h;
 }
@@ -514,21 +515,26 @@ function ldFilterTable(q) {
 }
 
 function _ldTableHtml(form, subs, allFields) {
-  if (!subs.length) return '<div style="padding:24px;text-align:center;color:var(--text2);">ไม่พบข้อมูล</div>';
-  var h = '<table class="tbl"><thead><tr><th>วันที่</th>';
-  if (form.useTypeToggle) h += '<th>ประเภท</th>';
+  if (!subs.length) return '<div style="padding:28px;text-align:center;color:var(--text2);">ไม่พบข้อมูล</div>';
+  var h = '<table class="tbl ld-tbl"><thead><tr><th style="min-width:90px;">วันที่</th>';
+  if (form.useTypeToggle) h += '<th style="min-width:56px;text-align:center;">ประเภท</th>';
   allFields.forEach(function(f) { h += '<th>' + esc(f.label) + '</th>'; });
   h += '</tr></thead><tbody>';
-  subs.forEach(function(s) {
-    h += '<tr><td style="white-space:nowrap;font-size:.8em;">' + _ldFmtDate(s.createdAt) + '</td>';
+  subs.forEach(function(s, ri) {
+    h += '<tr class="' + (ri % 2 === 1 ? 'ld-row-alt' : '') + '">';
+    h += '<td class="ld-td-date">' + _ldFmtDate(s.createdAt) + '</td>';
     if (form.useTypeToggle) {
-      h += '<td>' + (s.contactType === 'personal' ? '👤 บุคคล' : s.contactType === 'company' ? '🏢 บริษัท' : '—') + '</td>';
+      var tIcon = s.contactType === 'personal' ? '👤' : s.contactType === 'company' ? '🏢' : '—';
+      var tTip  = s.contactType === 'personal' ? 'บุคคล' : s.contactType === 'company' ? 'บริษัท' : '';
+      h += '<td style="text-align:center;" title="' + tTip + '">' + tIcon + '</td>';
     }
     allFields.forEach(function(f) {
       var v = (s.answers && s.answers[f.id] !== undefined) ? s.answers[f.id] : '';
-      if (f.type === 'rating')   v = '⭐'.repeat(parseInt(v) || 0) || '—';
-      if (f.type === 'checkbox') v = v ? '✅' : '—';
-      h += '<td>' + esc(String(v === '' ? '—' : v)) + '</td>';
+      var display = String(v);
+      if (f.type === 'rating')   display = v ? '★'.repeat(parseInt(v)||0) : '—';
+      if (f.type === 'checkbox') display = v ? '✓' : '—';
+      if (display === '' || display === 'undefined') display = '—';
+      h += '<td title="' + esc(display) + '">' + esc(display) + '</td>';
     });
     h += '</tr>';
   });
