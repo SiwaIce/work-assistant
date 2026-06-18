@@ -2,7 +2,7 @@
 // SERVICE WORKER — DJI Sales Assistant
 // กลยุทธ์: network-first (ได้โค้ดล่าสุดเสมอเมื่อออนไลน์) + cache fallback (ออฟไลน์)
 // ================================================================
-var CACHE_VERSION = 'dji-sales-v9';   // ⬅️ bump เลขนี้ทุกครั้งที่ deploy โค้ดใหม่ (v1 → v2 → v3 ...)
+var CACHE_VERSION = 'dji-sales-v10';   // ⬅️ bump เลขนี้ทุกครั้งที่ deploy โค้ดใหม่ (v1 → v2 → v3 ...)
 
 // app shell ที่จะ precache (relative path → ทำงานใต้ /work-assistant/)
 var APP_SHELL = [

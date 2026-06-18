@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Form</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:20px}
+.card{background:#1e293b;border-radius:20px;padding:28px 24px;max-width:500px;width:100%;margin:0 auto}
+.form-logo{font-size:2em;text-align:center;margin-bottom:8px}
+.form-title{font-size:1.3em;font-weight:700;text-align:center;margin-bottom:4px}
+.form-event{color:#94a3b8;font-size:.9em;text-align:center;margin-bottom:24px}
+.fg{margin-bottom:18px}
+.fg label{display:block;font-size:.85em;color:#94a3b8;margin-bottom:6px}
+.fg label .req{color:#f87171}
+input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],select,textarea{width:100%;padding:11px 14px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:1em;outline:none;transition:.15s}
+input:focus,select:focus,textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+textarea{resize:vertical;min-height:80px}
+.radio-group,.checkbox-group{display:flex;flex-direction:column;gap:10px}
+.radio-item,.checkbox-item{display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#0f172a;transition:.15s}
+.radio-item:hover,.checkbox-item:hover{border-color:#3b82f6}
+.radio-item input,.checkbox-item input{width:18px;height:18px;accent-color:#3b82f6;flex-shrink:0}
+.rating-wrap{display:flex;gap:6px}
+.star-btn{background:none;border:none;font-size:2em;cursor:pointer;color:#334155;transition:.15s;padding:0;line-height:1}
+.star-btn.on{color:#f59e0b}
+.btn-submit{width:100%;padding:14px;border-radius:12px;border:none;background:#3b82f6;color:#fff;font-size:1.05em;font-weight:600;cursor:pointer;margin-top:8px;transition:.15s}
+.btn-submit:hover{background:#2563eb}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed}
+.err{color:#f87171;font-size:.8em;margin-top:5px;display:none}
+.success{text-align:center;padding:24px 0}
+.success-icon{font-size:3.5em;margin-bottom:16px}
+.success h3{font-size:1.3em;margin-bottom:8px}
+.success p{color:#94a3b8;font-size:.9em}
+.loading-msg{text-align:center;padding:40px;color:#64748b}
+.err-page{text-align:center;padding:40px}
+.err-page .err-icon{font-size:2.5em;margin-bottom:12px}
+.err-page p{color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="fc"><div class="loading-msg">⏳ กำลังโหลดฟอร์ม...</div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+// ← ถ้าต้องการให้ส่งอีเมลหลัง submit ให้ใส่ URL ของ Apps Script ที่นี่
+var LEAD_EMAIL_API_URL = '';
+
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+
+var _form = null;
+var _ratingVals = {};
+
+function _param(k) { return new URLSearchParams(window.location.search).get(k); }
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// --- Init ---
+(function init() {
+  var fid = _param('form');
+  if (!fid) { showErr('ไม่พบ Form ID ใน URL'); return; }
+
+  db.collection('leadForms').doc(fid).get()
+    .then(function(d) {
+      if (!d.exists || !d.data().active) { showErr('Form ไม่พบหรือถูกปิดใช้งานแล้ว'); return; }
+      _form = Object.assign({id: d.id}, d.data());
+      document.title = _form.title || 'Form';
+      renderForm(_form);
+    })
+    .catch(function() { showErr('ไม่สามารถโหลด Form ได้ กรุณาตรวจสอบการเชื่อมต่อ'); });
+})();
+
+// --- Render form ---
+function renderForm(form) {
+  var fields = form.fields || [];
+  var h = '';
+  h += '<div class="form-logo">📋</div>';
+  h += '<div class="form-title">' + esc(form.title) + '</div>';
+  if (form.eventName) h += '<div class="form-event">📍 ' + esc(form.eventName) + '</div>';
+
+  fields.forEach(function(f) {
+    h += '<div class="fg">';
+    h += '<label>' + esc(f.label) + (f.required ? '<span class="req"> *</span>' : '') + '</label>';
+    h += renderField(f);
+    h += '<div class="err" id="err_' + f.id + '">กรุณากรอกข้อมูลในช่องนี้</div>';
+    h += '</div>';
+  });
+
+  h += '<button class="btn-submit" id="sub-btn" onclick="submitForm()">ส่งข้อมูล ➜</button>';
+  document.getElementById('fc').innerHTML = h;
+}
+
+function renderField(f) {
+  var id = 'fld_' + f.id;
+  switch (f.type) {
+    case 'textarea':
+      return '<textarea id="' + id + '" rows="3" placeholder="พิมพ์ที่นี่..."></textarea>';
+
+    case 'email':
+      return '<input type="email" id="' + id + '" inputmode="email" placeholder="example@email.com">';
+
+    case 'phone':
+      return '<input type="tel" id="' + id + '" inputmode="tel" placeholder="0812345678">';
+
+    case 'number':
+      return '<input type="number" id="' + id + '">';
+
+    case 'date':
+      return '<input type="date" id="' + id + '">';
+
+    case 'select':
+      var opts = '<option value="">-- เลือก --</option>';
+      (f.options || []).forEach(function(o) { opts += '<option value="' + esc(o) + '">' + esc(o) + '</option>'; });
+      return '<select id="' + id + '">' + opts + '</select>';
+
+    case 'radio':
+      var rh = '<div class="radio-group" id="' + id + '">';
+      (f.options || []).forEach(function(o) {
+        rh += '<label class="radio-item"><input type="radio" name="rg_' + id + '" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+      });
+      return rh + '</div>';
+
+    case 'checkbox':
+      return '<label class="checkbox-item"><input type="checkbox" id="' + id + '"> ใช่ / Yes</label>';
+
+    case 'rating':
+      _ratingVals[f.id] = 0;
+      var sh = '<div class="rating-wrap" id="' + id + '">';
+      for (var i = 1; i <= 5; i++) {
+        sh += '<button type="button" class="star-btn" data-fid="' + f.id + '" data-v="' + i + '" onclick="setRating(\'' + f.id + '\',' + i + ')">★</button>';
+      }
+      return sh + '</div>';
+
+    default: // text
+      return '<input type="text" id="' + id + '" placeholder="พิมพ์ที่นี่...">';
+  }
+}
+
+function setRating(fid, v) {
+  _ratingVals[fid] = v;
+  document.querySelectorAll('[data-fid="' + fid + '"]').forEach(function(s) {
+    s.classList.toggle('on', parseInt(s.dataset.v) <= v);
+  });
+}
+
+function getFieldVal(f) {
+  var id = 'fld_' + f.id;
+  if (f.type === 'radio') {
+    var r = document.querySelector('[name="rg_' + id + '"]:checked');
+    return r ? r.value : '';
+  }
+  if (f.type === 'checkbox') {
+    var cb = document.getElementById(id);
+    return cb ? cb.checked : false;
+  }
+  if (f.type === 'rating') return _ratingVals[f.id] || 0;
+  var el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+// --- Submit ---
+function submitForm() {
+  var fields  = _form.fields || [];
+  var answers = {};
+  var valid   = true;
+
+  fields.forEach(function(f) {
+    var v    = getFieldVal(f);
+    var errEl = document.getElementById('err_' + f.id);
+    var empty = (v === '' || v === 0 || v === false);
+    if (f.required && empty) {
+      if (errEl) errEl.style.display = 'block';
+      valid = false;
+    } else {
+      if (errEl) errEl.style.display = 'none';
+    }
+    answers[f.id] = v;
+  });
+
+  if (!valid) {
+    document.querySelector('.err[style*="block"]').scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
+
+  var btn = document.getElementById('sub-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังส่ง...';
+
+  db.collection('leadSubmissions').add({
+    formId:     _form.id,
+    formTitle:  _form.title,
+    answers:    answers,
+    createdAt:  firebase.firestore.FieldValue.serverTimestamp(),
+    emailSent:  false,
+  }).then(function(ref) {
+    // Increment counter (best-effort, ignore failure)
+    db.collection('leadForms').doc(_form.id).update({
+      submissionsCount: firebase.firestore.FieldValue.increment(1)
+    }).catch(function() {});
+
+    // Optional email
+    if (_form.submitMode === 'email' && LEAD_EMAIL_API_URL && _form.emailConfig) {
+      var cfg     = _form.emailConfig;
+      var toEmail = cfg.toFieldId ? answers[cfg.toFieldId] : '';
+      if (toEmail && String(toEmail).indexOf('@') > 0) {
+        var body = cfg.body || '';
+        (fields).forEach(function(f) {
+          body = body.replace(new RegExp('\\{\\{' + f.label + '\\}\\}', 'g'), String(answers[f.id] || ''));
+        });
+        fetch(LEAD_EMAIL_API_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({action: 'sendEmail', to: toEmail, subject: cfg.subject || '', body: body})
+        }).then(function() {
+          db.collection('leadSubmissions').doc(ref.id).update({emailSent: true}).catch(function() {});
+        }).catch(function() {});
+      }
+    }
+
+    showSuccess();
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = 'ส่งข้อมูล ➜';
+    alert('เกิดข้อผิดพลาด: ' + e.message);
+  });
+}
+
+function showSuccess() {
+  var emailNote = (_form.submitMode === 'email')
+    ? '<p>เราจะส่งข้อมูลไปยังอีเมลของคุณเร็วๆ นี้</p>'
+    : '';
+  document.getElementById('fc').innerHTML =
+    '<div class="success">' +
+    '<div class="success-icon">✅</div>' +
+    '<h3>ขอบคุณสำหรับข้อมูล!</h3>' +
+    emailNote +
+    '</div>';
+}
+
+function showErr(msg) {
+  document.getElementById('fc').innerHTML =
+    '<div class="err-page"><div class="err-icon">⚠️</div><p>' + esc(msg) + '</p></div>';
+}
+</script>
+</body>
+</html>

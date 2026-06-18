@@ -5,6 +5,11 @@ var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xx
 // วาง Web app URL ของ Apps Script proxy (ที่ซ่อน GEMINI_KEY) ตรงนี้
 var GEMINI_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
 
+// ===== LEAD FORM EMAIL CONFIG =====
+// URL ของ Apps Script สำหรับส่งอีเมล (ใส่ถ้าต้องการฟีเจอร์ส่งอีเมลหลัง submit)
+// Apps Script ต้องรองรับ action:'sendEmail' → MailApp.sendEmail(to, subject, body)
+var LEAD_EMAIL_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
+
 // เรียก Gemini ผ่าน proxy — คืน text หรือ null ถ้า error
 async function askGemini(prompt) {
   if (!GEMINI_API_URL) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_URL'); return null; }
@@ -502,7 +507,10 @@ var R = {
   quotationV2: rQuotationV2,
 
   // ✅ Announcement & Policy
-  announcements: rAnnouncements
+  announcements: rAnnouncements,
+
+  // ✅ Lead Forms
+  leads: rLeads
 };
 
 // เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)

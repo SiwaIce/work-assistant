@@ -8862,3 +8862,45 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
 }
+
+/* === LEAD FORMS === */
+.ld-wrap{padding:20px;max-width:1100px}
+.ld-top{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.ld-title{font-size:1.2em;font-weight:700;flex:1}
+
+/* Form card grid */
+.ld-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.ld-card{background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;transition:.15s}
+.ld-card:hover{border-color:#3b82f6;box-shadow:0 0 0 1px rgba(59,130,246,.2)}
+.ld-card-hd{display:flex;align-items:flex-start;gap:8px;justify-content:space-between}
+.ld-card-title{font-weight:600;font-size:.95em;flex:1}
+.ld-card-event{font-size:.8em;color:var(--text2,#94a3b8)}
+.ld-card-stats{display:flex;gap:12px;font-size:.8em;color:var(--text2,#94a3b8)}
+.ld-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+
+/* Badges */
+.ld-badge{font-size:.72em;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.ld-badge-blue{background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3)}
+.ld-badge-gray{background:rgba(100,116,139,.15);color:#94a3b8;border:1px solid rgba(100,116,139,.3)}
+
+/* Field builder rows */
+.lf-frow{background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:12px;margin-bottom:8px}
+.lf-frow-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lf-flbl{flex:1;min-width:120px}
+.lf-ftype{width:160px;flex-shrink:0}
+.lf-req-chk{display:flex;align-items:center;gap:4px;font-size:.8em;color:var(--text2,#94a3b8);white-space:nowrap;cursor:pointer}
+.lf-opts-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--border,#334155)}
+.lf-opts-wrap small{display:block;margin-bottom:6px}
+
+/* Submissions stats row */
+.ld-stats-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.ld-stat{background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:12px;padding:14px 18px;text-align:center;min-width:90px}
+.ld-stat-num{font-size:1.6em;font-weight:700;color:#3b82f6}
+.ld-stat-lbl{font-size:.75em;color:var(--text2,#94a3b8);margin-top:2px}
+.ld-stat-actions{display:flex;flex-direction:column;justify-content:center;gap:6px}
+
+@media(max-width:640px){
+  .ld-grid{grid-template-columns:1fr}
+  .lf-frow-top{flex-direction:column;align-items:stretch}
+  .lf-ftype{width:100%}
+}
