@@ -3432,6 +3432,28 @@ div[style*="color:#475569"], span[style*="color:#475569"] {
   color: var(--text2, #94a3b8);
 }
 
+/* Focus strip */
+.pb2-focus { background: var(--bg2, #0f1923); border: 1px solid var(--border, #334155); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.pb2-focus-hd { font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--text, #e0e6f0); }
+.pb2-focus-cnt { background: #ef4444; color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 11px; margin-left: 4px; }
+.pb2-focus-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.pb2-focus-card { min-width: 180px; max-width: 200px; flex-shrink: 0; background: var(--card, #1e293b); border: 1px solid var(--border, #334155); border-left: 3px solid; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: 0.15s; }
+.pb2-focus-card:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.pb2-focus-reason { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+.pb2-focus-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb2-focus-dealer { font-size: 10px; color: var(--text2, #94a3b8); margin-top: 2px; }
+
+/* Move button + chips (board card) */
+.pb2-move-btn { margin-left: auto; background: var(--bg2, #0f1923); border: 1px solid var(--border, #334155); color: var(--text2, #94a3b8); border-radius: 6px; font-size: 13px; line-height: 1; padding: 2px 7px; cursor: pointer; flex-shrink: 0; }
+.pb2-move-btn:hover { background: var(--accent, #3b82f6); color: #fff; border-color: var(--accent, #3b82f6); }
+.pb2-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pb2-chip { font-size: 10px; font-weight: 600; background: var(--bg2, #0f1923); border-radius: 6px; padding: 1px 6px; }
+
+@media (max-width: 640px) {
+  .pb2-col { min-width: 200px; max-width: 220px; }
+  .pb2-focus-card { min-width: 160px; max-width: 180px; }
+}
+
 /* Scroll wrapper */
 .pb2-scroll-wrap {
   position: relative;

@@ -1,5 +1,74 @@
 // ===== GOOGLE SHEETS API CONFIG =====
 var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
+
+// ===== GEMINI AI PROXY CONFIG =====
+// วาง Web app URL ของ Apps Script proxy (ที่ซ่อน GEMINI_KEY) ตรงนี้
+var GEMINI_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
+
+// เรียก Gemini ผ่าน proxy — คืน text หรือ null ถ้า error
+async function askGemini(prompt) {
+  if (!GEMINI_API_URL) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_URL'); return null; }
+  try {
+    var res = await fetch(GEMINI_API_URL, { method: 'POST', body: JSON.stringify({ action: 'gemini', prompt: prompt }) });
+    var data = await res.json();
+    if (!data.ok) { toast('❌ AI: ' + (data.error || 'unknown error')); return null; }
+    return (data.text || '').trim();
+  } catch (e) {
+    console.warn('askGemini failed:', e);
+    toast('❌ เชื่อมต่อ AI ไม่ได้');
+    return null;
+  }
+}
+
+// helper: สลับปุ่มเป็นสถานะโหลด แล้วคืนค่าเดิมเมื่อเสร็จ
+function _aiBtnBusy(btn, busyText) {
+  if (!btn) return function(){};
+  var orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = busyText || '⏳ กำลังประมวลผล...';
+  return function(){ btn.disabled = false; btn.innerHTML = orig; };
+}
+
+// ===== ปีงบประมาณไทย (Thai Fiscal Year) =====
+// ปีงบ = 1 ต.ค. ถึง 30 ก.ย. ปีถัดไป, เรียกชื่อด้วย พ.ศ. ปีที่สิ้นสุด
+// คืนปีงบ (พ.ศ.) จากวันที่ ISO 'YYYY-MM-DD' (ปี ค.ศ.) — null ถ้าไม่มีวันที่
+function thaiFYFromISO(iso) {
+  if (!iso) return null;
+  var s = String(iso).split('T')[0].split('-');
+  if (s.length < 2) return null;
+  var y = parseInt(s[0], 10), m = parseInt(s[1], 10);
+  if (isNaN(y) || isNaN(m)) return null;
+  return ((m >= 10) ? y + 1 : y) + 543;
+}
+function currentThaiFY() {
+  var d = new Date();
+  return ((d.getMonth() + 1 >= 10) ? d.getFullYear() + 1 : d.getFullYear()) + 543;
+}
+function fyEndISO(fyBE) { return (fyBE - 543) + '-09-30'; }     // วันสุดท้ายของปีงบ (ค.ศ.)
+// dropdown options: ปีงบ cur-1 .. cur+3
+function fyOptionsHTML(selectedFY, autoFY) {
+  var cur = currentThaiFY();
+  var sel = selectedFY || autoFY || '';
+  var html = '<option value="">— ไม่ระบุ —</option>';
+  for (var fy = cur - 1; fy <= cur + 3; fy++) {
+    var hint = (fy === autoFY && !selectedFY) ? ' (เดาให้)' : '';
+    html += '<option value="' + fy + '"' + (String(sel) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + ' (ต.ค.' + String(fy - 1).slice(-2) + '–ก.ย.' + String(fy).slice(-2) + ')' + hint + '</option>';
+  }
+  return html;
+}
+// สถานะโฟกัสตามปีงบ — คืน {e,t,c} หรือ null
+function pipeFYStatus(p) {
+  var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
+  if (!fy) return null;
+  fy = parseInt(fy, 10);
+  var cur = currentThaiFY();
+  if (fy < cur) return { e: '🔴', t: 'ปีงบ ' + fy + ' (เลยแล้ว)', c: '#ef4444' };
+  if (fy > cur) return { e: '🔵', t: 'ปีงบ ' + fy + ' (ปีหน้า)', c: '#3b82f6' };
+  var closeISO = p.expectedCloseDate || p.biddingDate || '';
+  var endISO = fyEndISO(fy);
+  if (closeISO && closeISO > endISO) return { e: '🔴', t: 'เสี่ยงตกปีงบหน้า', c: '#ef4444' };
+  var days = Math.ceil((new Date(endISO) - new Date()) / 86400000);
+  if (days <= 90) return { e: '🟡', t: 'เร่ง! ปลายปีงบ ' + fy, c: '#f59e0b' };
+  return { e: '🟢', t: 'ทันงบปีนี้ (' + fy + ')', c: '#22c55e' };
+}
 // ================================================================
 // DEFAULT CONFIG
 // ================================================================

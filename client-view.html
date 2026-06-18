@@ -1317,6 +1317,7 @@ var pipelineSearch = '';
 var pipelineSort = 'date_desc';
 var pipelineFilter = 'all';
 var staleFilter = 'all';
+var cvPipeFY = 'all';
 var pipelineView = 'list'; // 'list' | 'kanban'
 var historyFilter = 'all';
 
@@ -1372,6 +1373,39 @@ var STATUS_LIST = [
   { id: 'lost', name: '❌ Lost' }
 ];
 function getStatusLabel(status) { var s = STATUS_LIST.find(function(x) { return x.id === status; }); return '<span class="status-badge status-'+status+'">'+(s ? s.name : status)+'</span>'; }
+
+// ===== ปีงบประมาณไทย (1 ต.ค.–30 ก.ย., เรียกด้วย พ.ศ. ปีที่สิ้นสุด) =====
+function thaiFYFromISO(iso) {
+  if (!iso) return null;
+  var s = String(iso).split('T')[0].split('-');
+  if (s.length < 2) return null;
+  var y = parseInt(s[0],10), m = parseInt(s[1],10);
+  if (isNaN(y) || isNaN(m)) return null;
+  return ((m >= 10) ? y + 1 : y) + 543;
+}
+function currentThaiFY() { var d = new Date(); return ((d.getMonth()+1 >= 10) ? d.getFullYear()+1 : d.getFullYear()) + 543; }
+function fyEndISO(fyBE) { return (fyBE - 543) + '-09-30'; }
+function fyOptionsHTML(selectedFY, autoFY) {
+  var cur = currentThaiFY(); var sel = selectedFY || autoFY || '';
+  var html = '<option value="">— ไม่ระบุ —</option>';
+  for (var fy = cur-1; fy <= cur+3; fy++) {
+    var hint = (fy === autoFY && !selectedFY) ? ' (เดาให้)' : '';
+    html += '<option value="'+fy+'"'+(String(sel)===String(fy)?' selected':'')+'>ปีงบ '+fy+' (ต.ค.'+String(fy-1).slice(-2)+'–ก.ย.'+String(fy).slice(-2)+')'+hint+'</option>';
+  }
+  return html;
+}
+function pipeFYStatus(p) {
+  var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
+  if (!fy) return null;
+  fy = parseInt(fy,10); var cur = currentThaiFY();
+  if (fy < cur) return { e:'🔴', t:'ปีงบ '+fy+' (เลยแล้ว)', c:'#ef4444' };
+  if (fy > cur) return { e:'🔵', t:'ปีงบ '+fy+' (ปีหน้า)', c:'#3b82f6' };
+  var closeISO = p.expectedCloseDate || p.biddingDate || ''; var endISO = fyEndISO(fy);
+  if (closeISO && closeISO > endISO) return { e:'🔴', t:'เสี่ยงตกปีงบหน้า', c:'#ef4444' };
+  var days = Math.ceil((new Date(endISO) - new Date())/86400000);
+  if (days <= 90) return { e:'🟡', t:'เร่ง! ปลายปีงบ '+fy, c:'#f59e0b' };
+  return { e:'🟢', t:'ทันงบปีนี้ ('+fy+')', c:'#22c55e' };
+}
 function isMonthInPast(monthStr) {
   if (!monthStr) return false;
   var parts = monthStr.split('/');
@@ -1939,6 +1973,12 @@ function filterAndSortPipelines(pipelines) {
   if (pipelineFilter !== 'all') {
     result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
   }
+  if (cvPipeFY !== 'all') {
+    result = result.filter(function(p) {
+      var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
+      return String(fy || '') === String(cvPipeFY);
+    });
+  }
   if (pipelineSearch && pipelineSearch.trim() !== '') {
     var term = pipelineSearch.toLowerCase().trim();
     result = result.filter(function(p) {
@@ -1964,7 +2004,7 @@ function filterAndSortPipelines(pipelines) {
   return result;
 }
 
-function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; staleFilter = 'all'; renderPipelineTab(); }
+function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; staleFilter = 'all'; cvPipeFY = 'all'; renderPipelineTab(); }
 
 // ========== PIPELINE SUMMARY DASHBOARD ==========
 var pipeChartOpen = false;
@@ -2111,8 +2151,12 @@ function renderPipelineTab() {
   html += '<option value="warning"' + (staleFilter === 'warning' ? ' selected' : '') + '>🟡 >14 วัน</option>';
   html += '<option value="stale"' + (staleFilter === 'stale' ? ' selected' : '') + '>🔴 >30 วัน</option>';
   html += '</select></div>';
+  html += '<div class="toolbar-item"><label>🏛️ ปีงบ</label><select id="cvPipeFYSel" class="toolbar-select" onchange="cvPipeFY=this.value; renderPipelineTab()">';
+  html += '<option value="all"' + (cvPipeFY === 'all' ? ' selected' : '') + '>🏛️ ทุกปีงบ</option>';
+  html += (function() { var cur = currentThaiFY(); var o = ''; for (var fy = cur + 2; fy >= cur - 2; fy--) o += '<option value="' + fy + '"' + (String(cvPipeFY) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + (fy === cur ? ' (ปีนี้)' : '') + '</option>'; return o; })();
+  html += '</select></div>';
   html += '<div class="toolbar-item" style="flex:0.5; min-width:auto"><label>&nbsp;</label><button class="btn btn-primary" style="width:100%" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  if (pipelineSearch || pipelineFilter !== 'all' || staleFilter !== 'all') html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
+  if (pipelineSearch || pipelineFilter !== 'all' || staleFilter !== 'all' || cvPipeFY !== 'all') html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
   html += '</div>';
   
   var staleCount = pipelinesData.filter(function(p) { return isStaleProject(p) && p._status !== 'rejected'; }).length;
@@ -2124,7 +2168,7 @@ function renderPipelineTab() {
   }
   if (!hasData) {
     html += '<div class="empty-state" style="padding:40px 20px"><div class="empty-state-icon">📭</div><div style="font-weight:500; margin-bottom:6px">ไม่มีโครงการที่ตรงกับเงื่อนไข</div>';
-    if (pipelineSearch || pipelineFilter !== 'all' || staleFilter !== 'all') html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div><button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
+    if (pipelineSearch || pipelineFilter !== 'all' || staleFilter !== 'all' || cvPipeFY !== 'all') html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div><button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
     else html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
     html += '</div>';
   } else {
@@ -2188,7 +2232,8 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
   html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
-  html += '<td>' + statusText + '</td>';
+  var _fyRow = pipeFYStatus(p);
+  html += '<td>' + statusText + (_fyRow ? '<div style="font-size:10px;color:' + _fyRow.c + ';margin-top:3px;white-space:nowrap">' + _fyRow.e + ' ' + _fyRow.t + '</div>' : '') + '</td>';
   html += '<td>' + biddingHtml + '</td>';
   html += '<td style="font-size:12px;max-width:200px">' + esc(itemsText) + '</td>';
   html += '<td class="' + priceClass + '" style="white-space:nowrap">' + amount.toLocaleString('th-TH') + ' ฿<\/td>';
@@ -2241,6 +2286,8 @@ function renderKanbanPipeline(filtered) {
         html += '<div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px" title="' + esc(p.projectName) + '">' + esc(p.projectName) + '</div>';
         if (p.forecastAmount) html += '<div style="font-size:11px;color:var(--accent);font-weight:600">' + fmtMoneyShort(p.forecastAmount) + ' ฿</div>';
         if (p.biddingDate) html += '<div style="font-size:10px;color:' + bddColor + '">📅 ' + fD(p.biddingDate) + '</div>';
+        var _fyK = pipeFYStatus(p);
+        if (_fyK) html += '<div style="font-size:10px;color:' + _fyK.c + ';margin-top:2px">' + _fyK.e + ' ' + _fyK.t + '</div>';
         if (p._status === 'pending') html += '<div style="font-size:10px;color:#f59e0b;margin-top:2px">⏳ รอตรวจสอบ</div>';
         html += '</div>';
       }
@@ -2411,6 +2458,10 @@ html += '<div class="section-title">📊 ' + esc(p.projectName) + '</div>';
   html += '<div class="form-row"><strong>📅 อัพเดทล่าสุด:</strong> ' + lastUpdateStr + (daysSince !== null ? ' (' + daysSince + ' วันที่แล้ว)' : '') + '</div>';
   if (p.nextAction) html += '<div class="form-row"><strong>🎯 Next Action:</strong> ' + esc(p.nextAction) + '</div>';
   if (p.followupDate) html += '<div class="form-row"><strong>📞 Follow-up:</strong> ' + fD(p.followupDate) + '</div>';
+  var _fyDet = pipeFYStatus(p);
+  html += '<div class="form-row"><strong>🏛️ ปีงบประมาณ:</strong> ' + (p.budgetFiscalYear ? 'ปีงบ ' + p.budgetFiscalYear : '— ไม่ระบุ') + (_fyDet ? ' <span style="background:' + _fyDet.c + '22;color:' + _fyDet.c + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + _fyDet.e + ' ' + _fyDet.t + '</span>' : '') + '</div>';
+  html += '<div class="form-row"><strong>🗂️ CRM ของ DJI:</strong> ' + (p.djiCrmRegistered ? '✅ ลงทะเบียนแล้ว' + (p.djiCrmDate ? ' (' + fD(p.djiCrmDate) + ')' : '') : '⬜ ยังไม่ลงทะเบียน') + '</div>';
+  html += '<div class="form-row"><strong>⚔️ คู่แข่ง:</strong> ' + (p.hasCompetitor ? '⚠️ คาดว่ามี' : '— ไม่ระบุ') + '</div>';
   html += '</div>';
   html += '</div>';
   html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
@@ -2687,6 +2738,10 @@ function showUpdateModal(pipeId) {
     '</div>' +
     '<div class="form-group"><label>💰 มูลค่าโดยประมาณ (฿)</label><input type="number" id="editForecastAmount" class="form-control" value="' + forecastAmountVal + '"></div>' +
     '<div class="form-group"><label>📦 สินค้า</label>' + itemsHtml + modelDatalist + '</div>' +
+    '<div class="form-group" style="border-top:1px solid var(--border);padding-top:12px"><label>🏛️ ปีงบประมาณของโครงการ</label><select id="editProjFY" class="form-control">' + fyOptionsHTML(p.budgetFiscalYear, thaiFYFromISO(p.expectedCloseDate || p.biddingDate)) + '</select></div>' +
+    '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="editProjCrm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'editProjCrmDateWrap\').style.display=this.checked?\'block\':\'none\'"> 🗂️ ลงทะเบียนใน CRM ของ DJI แล้ว</label>' +
+    '<div id="editProjCrmDateWrap" style="' + (p.djiCrmRegistered ? 'display:block' : 'display:none') + ';margin-top:8px"><label style="font-size:12px;color:var(--text2)">📅 วันที่ลงทะเบียน</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editProjCrmDate" class="form-control" value="' + (p.djiCrmDate ? fD(p.djiCrmDate) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editProjCrmDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editProjCrmDate\',\'editProjCrmDatePicker\')"><button type="button" onclick="document.getElementById(\'editProjCrmDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div></div>' +
+    '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="editProjComp"' + (p.hasCompetitor ? ' checked' : '') + '> ⚔️ คาดว่ามีคู่แข่งในโครงการนี้</label></div>' +
     '<div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div>' +
     '</div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -2758,7 +2813,11 @@ function submitPipelineUpdate(pipeId) {
     forecastAmount: newForecastAmount,
     biddingDate: newBiddingDate,
     shipmentDate: newShipmentDate,
-    dealerId: dealerId, 
+    djiCrmRegistered: document.getElementById('editProjCrm') ? document.getElementById('editProjCrm').checked : false,
+    djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : ''),
+    hasCompetitor: document.getElementById('editProjComp') ? document.getElementById('editProjComp').checked : false,
+    budgetFiscalYear: document.getElementById('editProjFY') && document.getElementById('editProjFY').value ? parseInt(document.getElementById('editProjFY').value, 10) : null,
+    dealerId: dealerId,
     updateNote: updateContent || 'อัพเดทข้อมูลทั่วไป',
     updatedBy: 'customer', 
     updatedAt: new Date().toISOString()
@@ -2847,6 +2906,10 @@ function showCreateProjectModal() {
   modalHtml += '</div>';
   modalHtml += '<div id="newProjItemsContainer" class="items-list" style="margin-top:8px"></div>';
   modalHtml += '</div>';
+  modalHtml += '<div class="form-group" style="border-top:1px solid var(--border);padding-top:12px"><label>🏛️ ปีงบประมาณของโครงการ</label><select id="newProjFY" class="form-control">' + fyOptionsHTML(null, currentThaiFY()) + '</select><div class="hint" style="font-size:11px;margin-top:4px">ปีงบไทย: 1 ต.ค.–30 ก.ย. (เลือกปีที่คาดว่าจะปิดงบ)</div></div>';
+  modalHtml += '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="newProjCrm" onchange="document.getElementById(\'newProjCrmDateWrap\').style.display=this.checked?\'block\':\'none\'"> 🗂️ ลงทะเบียนใน CRM ของ DJI แล้ว</label>';
+  modalHtml += '<div id="newProjCrmDateWrap" style="display:none;margin-top:8px"><label style="font-size:12px;color:var(--text2)">📅 วันที่ลงทะเบียน</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="newProjCrmDate" class="form-control" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="newProjCrmDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'newProjCrmDate\',\'newProjCrmDatePicker\')"><button type="button" onclick="document.getElementById(\'newProjCrmDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div></div>';
+  modalHtml += '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="newProjComp"> ⚔️ คาดว่ามีคู่แข่งในโครงการนี้</label></div>';
   modalHtml += '<div class="form-group"><label>📝 หมายเหตุ (ถ้ามี)</label><textarea id="newProjNote" rows="2" class="form-control" placeholder="ข้อมูลเพิ่มเติม..."></textarea></div>';
   modalHtml += modelDatalist;
   modalHtml += '</div><div class="modal-footer">';
@@ -2910,6 +2973,10 @@ function submitNewProject() {
     forecastAmount: amount,
     biddingDate: biddingDate,
     shipmentDate: shipmentDate,
+    djiCrmRegistered: document.getElementById('newProjCrm') ? document.getElementById('newProjCrm').checked : false,
+    djiCrmDate: convertToISODate(document.getElementById('newProjCrmDate') ? document.getElementById('newProjCrmDate').value : ''),
+    hasCompetitor: document.getElementById('newProjComp') ? document.getElementById('newProjComp').checked : false,
+    budgetFiscalYear: document.getElementById('newProjFY') && document.getElementById('newProjFY').value ? parseInt(document.getElementById('newProjFY').value, 10) : null,
     dealerId: dealerId,
     updateNote: note || 'สร้างโครงการใหม่',
     updatedBy: 'customer',

@@ -306,6 +306,14 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"></div></div>' +
+    '<div class="form-section">🏛️ ปีงบประมาณ</div>' +
+    '<div class="fr"><div class="fg"><label>ปีงบประมาณของโครงการ</label><select id="fp_fy">' + fyOptionsHTML(p.budgetFiscalYear, thaiFYFromISO(p.expectedCloseDate || p.biddingDate)) + '</select></div>' +
+    '<div class="fg"></div></div>' +
+    '<div class="form-section">🗂️ CRM & คู่แข่ง</div>' +
+    '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_crm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'fp_crmdate_wrap\').style.display=this.checked?\'\':\'none\'"> ลงทะเบียน CRM ของ DJI แล้ว</label></div>' +
+    '<div id="fp_crmdate_wrap" style="flex:1;' + (p.djiCrmRegistered ? '' : 'display:none') + '">' + dpH('fp_crmdate', p.djiCrmDate || '', 'วันที่ลงทะเบียน') + '</div></div>' +
+    '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_comp"' + (p.hasCompetitor ? ' checked' : '') + ' onchange="document.getElementById(\'fp_compname_wrap\').style.display=this.checked?\'\':\'none\'"> คาดว่ามีคู่แข่ง</label></div>' +
+    '<div class="fg" id="fp_compname_wrap" style="' + (p.hasCompetitor ? '' : 'display:none') + '"><label>ชื่อคู่แข่ง 🔒 (ภายใน — dealer ไม่เห็น)</label><input type="text" id="fp_compname" value="' + sanitize(p.competitorName || '') + '" placeholder="ชื่อคู่แข่ง / รายละเอียด"></div></div>' +
     '<div class="form-section">🎯 Next Action</div>' +
     '<div class="fr"><div class="fg"><label>ต้องทำอะไรต่อ</label><select id="fp_next"><option value="">-- ไม่ระบุ --</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div>' +
     dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '</div>' +
@@ -669,7 +677,12 @@ function savePipeline(dealerId, eid) {
     nextAction: document.getElementById('fp_next').value,
     followupDate: dpG('fp_fudate'),
     recurring: document.querySelector('input[name="fp_rec"]:checked') ? document.querySelector('input[name="fp_rec"]:checked').value === '1' : false,
-    remark: document.getElementById('fp_remark').value.trim()
+    remark: document.getElementById('fp_remark').value.trim(),
+    djiCrmRegistered: document.getElementById('fp_crm') ? document.getElementById('fp_crm').checked : false,
+    djiCrmDate: dpG('fp_crmdate'),
+    hasCompetitor: document.getElementById('fp_comp') ? document.getElementById('fp_comp').checked : false,
+    competitorName: document.getElementById('fp_compname') ? document.getElementById('fp_compname').value.trim() : '',
+    budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null
   };
 
   // Handle items based on mode
@@ -840,7 +853,7 @@ function showVisitM(dealerId, eid) {
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
-      '<div class="fg"><label>สรุป *</label><textarea id="fv_summary" rows="5">' + sanitize(v.summary || '') + '</textarea></div>' +
+      '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="5" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
       '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>' +
       '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</span> <span class="vm-btn full" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</span></div>');
     return;
@@ -879,7 +892,7 @@ function showVisitM(dealerId, eid) {
   }
 
   html += '<div class="form-section">📝 สรุปเพิ่มเติม</div>' +
-    '<div class="fg"><label>สรุปการคุย</label><textarea id="fv_summary" rows="3">' + sanitize(v.summary || '') + '</textarea></div>' +
+    '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="3" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
     '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
     '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
     '<div class="form-section">📦 Forecast QTY</div><div id="fv_fcs">';
@@ -893,6 +906,21 @@ function showVisitM(dealerId, eid) {
   html += '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button></div>';
 
   openM(visitMode === 'full' ? '📋 Full Visit Report' : '📝 Standard Visit', html);
+}
+
+async function aiCleanVisitNote() {
+  var el = document.getElementById('fv_summary');
+  if (!el) return;
+  var raw = (el.value || '').trim();
+  if (!raw) { toast('💡 พิมพ์โน้ตคร่าวๆ ก่อน'); return; }
+  var restore = _aiBtnBusy(document.getElementById('vSumAiBtn'), '⏳ กำลังจัด...');
+  var prompt = 'คุณเป็นผู้ช่วยฝ่ายขายโดรน DJI ' +
+    'ช่วยจัดบันทึกการเข้าพบลูกค้า (visit note) ที่เขียนคร่าวๆ ให้เป็นระเบียบ อ่านง่าย เป็นภาษาไทย ' +
+    'จัดเป็นหัวข้อสั้นๆ เช่น สรุปการคุย / ประเด็นสำคัญ / สิ่งที่ต้องทำต่อ (next step) ตามที่มีข้อมูล ' +
+    'อย่าแต่งเติมข้อมูลที่ไม่มีในโน้ต ตอบเฉพาะเนื้อหาที่จัดระเบียบแล้ว\n\nโน้ตดิบ:\n' + raw;
+  var out = await askGemini(prompt);
+  restore();
+  if (out) { el.value = out; toast('✨ จัดระเบียบเสร็จแล้ว — ตรวจทานก่อนบันทึกได้'); }
 }
 
 // ================================================================

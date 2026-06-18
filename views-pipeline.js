@@ -3,6 +3,7 @@
 // ================================================================
 
 var pipeFlt = 'all';
+var pipeFY = 'all';
 var pipeSearch = '';
 var pipeSort = 'date_desc';
 var pipeView = 'table';
@@ -10,6 +11,7 @@ var pipeGroup = 'none';
 var pipeBoardDealer = 'all';
 var pipeBoardMode = 'active';
 var pipeBoardCollapsed = {};
+var pipeBoardFY = 'all';
 
 // ✅ ตัวแปรสำหรับ Forecast Tab (Pending / Rejected)
 var forecastTab = 'pending';
@@ -186,7 +188,11 @@ function rPipeline(el) {
   
   var pipes = allPipes;
   if (pipeFlt !== 'all') pipes = pipes.filter(function(p) { return p.status === pipeFlt; });
-  
+  if (pipeFY !== 'all') pipes = pipes.filter(function(p) {
+    var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
+    return String(fy || '') === String(pipeFY);
+  });
+
   if (pipeSearch) {
     var q = pipeSearch.toLowerCase();
     pipes = pipes.filter(function(p) {
@@ -254,6 +260,14 @@ function rPipeline(el) {
     '<option value="close"'   + (pipeSort === 'close'   ? ' selected' : '') + '>Expected Close ใกล้สุด</option>' +
     '<option value="dealer"' + (pipeSort === 'dealer' ? ' selected' : '') + '>ตาม Dealer</option>' +
     '<option value="status"' + (pipeSort === 'status' ? ' selected' : '') + '>ตาม Status</option>' +
+    '</select>' +
+    '<select id="pipeFYSel" onchange="pipeFY=this.value;render()" style="min-width:120px">' +
+    '<option value="all"' + (pipeFY === 'all' ? ' selected' : '') + '>🏛️ ทุกปีงบ</option>' +
+    (function() {
+      var cur = currentThaiFY(); var o = '';
+      for (var fy = cur + 2; fy >= cur - 2; fy--) o += '<option value="' + fy + '"' + (String(pipeFY) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + (fy === cur ? ' (ปีนี้)' : '') + '</option>';
+      return o;
+    })() +
     '</select>' +
     '</div>' +
 
@@ -356,7 +370,8 @@ function renderPipeCards(pipes) {
     html += '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>';
     html += '<h3 style="font-size:.78rem;margin:0">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3></div>';
     html += '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') + '</div>';
-    html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + '</div>';
+    var _fyCard = pipeFYStatus(p);
+    html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + (_fyCard ? ' <span class="tag" style="background:' + _fyCard.c + '18;color:' + _fyCard.c + '">' + _fyCard.e + ' ' + _fyCard.t + '</span>' : '') + '</div>';
     html += '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.76rem;align-items:center">' + fmtMoneyStyled(amt) + '</div>';
     html += '<div class="meta" style="margin-top:2px">' + (p.model ? '📦 ' + sanitize((p.model || '').substr(0, 25)) : '') + (p.biddingDate ? ' • Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
     if (lastLog) html += '<div style="font-size:.6rem;color:#475569;margin-top:3px">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 35)) + '</div>';
@@ -434,7 +449,7 @@ function renderPipeTable(pipes) {
       '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(amt) + '</td>' +
       '<td style="white-space:nowrap">' + (p.tor || '-') + '</td>' +
       '<td style="white-space:nowrap">' + (p.biddingDate ? fDShort(p.biddingDate) : '-') + ' ' + (p.biddingDate ? dlB(p.biddingDate, isWon || isLost) : '') + '</td>' +
-      '<td>' + pipeTag(p.status) + cRowTag + '</td>' +
+      '<td>' + pipeTag(p.status) + cRowTag + (function() { var f = pipeFYStatus(p); return f ? '<div style="font-size:10px;color:' + f.c + ';margin-top:3px;white-space:nowrap">' + f.e + ' ' + f.t + '</div>' : ''; })() + '</td>' +
       '<td style="max-width:140px">' + nextHtml + '</td>' +
       '<td style="white-space:nowrap"><span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></td>' +
       '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem">' +
@@ -521,6 +536,12 @@ function rPipeDet(el) {
   
   html += '<div class="fr"><div><label>หนังสือแต่งตั้ง</label><div>' + (p.appointmentLetter || '-') + '</div></div>';
   html += '<div><label>งานซ้ำ</label><div>' + (p.recurring ? '✅ ใช่' : 'ไม่ใช่') + '</div></div></div>';
+
+  var _fyS = pipeFYStatus(p);
+  html += '<div class="fr"><div><label>🏛️ ปีงบประมาณ</label><div>' + (p.budgetFiscalYear ? 'ปีงบ ' + p.budgetFiscalYear : '— ไม่ระบุ') + (_fyS ? ' <span style="background:' + _fyS.c + '22;color:' + _fyS.c + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + _fyS.e + ' ' + _fyS.t + '</span>' : '') + '</div></div>';
+  html += '<div><label></label><div></div></div></div>';
+  html += '<div class="fr"><div><label>🗂️ ลงทะเบียน CRM ของ DJI</label><div>' + (p.djiCrmRegistered ? '✅ ลงแล้ว' + (p.djiCrmDate ? ' (' + fD(p.djiCrmDate) + ')' : '') : '⬜ ยังไม่ลง') + '</div></div>';
+  html += '<div><label>⚔️ คู่แข่ง</label><div>' + (p.hasCompetitor ? '⚠️ คาดว่ามี' + (p.competitorName ? ' — <span style="color:#f59e0b">' + sanitize(p.competitorName) + '</span> <span style="font-size:10px;color:#475569">🔒 ภายใน</span>' : '') : '— ไม่ระบุ') + '</div></div></div>';
   
   html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + (p.nextAction ? '<span class="next-action">' + sanitize(p.nextAction) + '</span>' : '<span style="color:#475569">ไม่ได้ตั้ง</span>') + '</div></div>';
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
@@ -634,7 +655,10 @@ function rPipeBoard(el) {
   if (pipeBoardDealer !== 'all') {
     pipes = pipes.filter(function(p) { return p.dealerId === pipeBoardDealer; });
   }
-  
+  if (pipeBoardFY !== 'all') {
+    pipes = pipes.filter(function(p) { var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate); return String(fy || '') === String(pipeBoardFY); });
+  }
+
   var dealerIds = {};
   allPipes.forEach(function(p) { if (p.dealerId) dealerIds[p.dealerId] = true; });
   var pipelineDealers = dealers.filter(function(d) { return dealerIds[d.id]; });
@@ -669,9 +693,41 @@ function rPipeBoard(el) {
     var cnt = allPipes.filter(function(p) { return p.dealerId === d.id; }).length;
     h += '<option value="' + d.id + '"' + (pipeBoardDealer === d.id ? ' selected' : '') + '>' + d.name + ' (' + cnt + ')</option>';
   });
+  h += '</select>';
+  h += '<select id="pipeBoardFYSel" onchange="pipeBoardFY=this.value;render()" class="pb2-dealer-sel" style="margin-left:6px">';
+  h += '<option value="all"' + (pipeBoardFY === 'all' ? ' selected' : '') + '>🏛️ ทุกปีงบ</option>';
+  (function() { var cur = currentThaiFY(); for (var fy = cur + 2; fy >= cur - 2; fy--) h += '<option value="' + fy + '"' + (String(pipeBoardFY) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + (fy === cur ? ' (ปีนี้)' : '') + '</option>'; })();
   h += '</select></div>';
-  
+
   h += '<div class="pb2-stats">📊 ' + pipes.length + ' โครงการ • Active: ' + fmtMoneyStyled(activeFiltered) + ' • Total: ' + fmtMoneyStyled(totalFiltered) + '</div>';
+
+  // ===== แถบ "ต้องโฟกัส" =====
+  var focus = [], seen = {};
+  pipes.forEach(function(p) {
+    if (['lost','delivered','on_hold'].indexOf(p.status) !== -1) return;
+    var fu = p.followupDate ? dTo(p.followupDate) : null;
+    var bd = p.biddingDate ? dTo(p.biddingDate) : null;
+    var fy = pipeFYStatus(p);
+    var reason = null, color = null;
+    if (fu !== null && fu < 0) { reason = '📞 ติดตามเลยกำหนด ' + Math.abs(fu) + 'd'; color = '#ef4444'; }
+    else if (bd !== null && bd >= 0 && bd <= 7) { reason = '🔴 Bidding ' + bd + 'd'; color = '#ef4444'; }
+    else if (fy && fy.t.indexOf('เสี่ยง') === 0) { reason = '🏛️ เสี่ยงตกปีงบหน้า'; color = '#ef4444'; }
+    else if (bd !== null && bd >= 0 && bd <= 30) { reason = '🟡 Bidding ' + bd + 'd'; color = '#f59e0b'; }
+    if (reason && !seen[p.id]) { seen[p.id] = 1; focus.push({ p: p, reason: reason, color: color }); }
+  });
+  focus.sort(function(a, b) { return (a.color === '#ef4444' ? 0 : 1) - (b.color === '#ef4444' ? 0 : 1); });
+  if (focus.length) {
+    h += '<div class="pb2-focus"><div class="pb2-focus-hd">🎯 ต้องโฟกัส <span class="pb2-focus-cnt">' + focus.length + '</span></div><div class="pb2-focus-row">';
+    focus.slice(0, 20).forEach(function(f) {
+      var fd = ST.getOne('dealers', f.p.dealerId);
+      h += '<div class="pb2-focus-card" style="border-left-color:' + f.color + '" onclick="go(\'pipeDetail\',{pipeId:\'' + f.p.id + '\'})">';
+      h += '<div class="pb2-focus-reason" style="color:' + f.color + '">' + f.reason + '</div>';
+      h += '<div class="pb2-focus-name">' + sanitize((f.p.projectName || '').substr(0, 34)) + '</div>';
+      h += '<div class="pb2-focus-dealer">' + (fd ? sanitize(fd.name) : '-') + ' • ' + fmtMoneyShort(Number(f.p.forecastAmount) || 0) + '</div>';
+      h += '</div>';
+    });
+    h += '</div></div>';
+  }
 
   h += '<div class="pb2-scroll-wrap">';
   h += '<button class="pb2-scroll-btn pb2-scroll-left" onclick="scrollBoard(-1)">◀</button>';
@@ -720,10 +776,11 @@ function rPipeBoard(el) {
   h += '</div>';
   h += '<button class="pb2-scroll-btn pb2-scroll-right" onclick="scrollBoard(1)">▶</button>';
   h += '</div>';
-  h += '<div class="pb2-legend">💡 ลากการ์ดย้าย Status • กดหัวคอลัมน์เพื่อพับ • เลื่อนซ้ายขวาด้วย ◀▶ หรือลากนิ้ว</div>';
+  h += '<div class="pb2-legend">💡 ลากการ์ดย้าย Status (คอม) • กดปุ่ม ⇄ บนการ์ดเพื่อย้าย (มือถือ) • กดหัวคอลัมน์เพื่อพับ</div>';
 
   el.innerHTML = h;
   initBoardScroll();
+  initBoardDnD();
 }
 
 function pipeBoardCardV2(p, st, idx) {
@@ -739,12 +796,26 @@ function pipeBoardCardV2(p, st, idx) {
     else if (bd <= 30) bidHTML = '<div class="pb2-bid bid-soon">🟡 Bid ' + fDShort(p.biddingDate) + ' (' + bd + 'd)</div>';
   }
 
+  // ค้างนาน (จาก activity ล่าสุด)
+  var lastDate = (lastLog && lastLog.date) ? lastLog.date.split('T')[0] : (p.registerDate || '');
+  var staleHTML = '';
+  if (lastDate) {
+    var dsl = daysBetween(lastDate, _td());
+    if (dsl >= 30) staleHTML = '<div class="pb2-chip" style="color:#ef4444">⏰ ค้าง ' + dsl + 'd</div>';
+    else if (dsl >= 14) staleHTML = '<div class="pb2-chip" style="color:#f59e0b">⏰ ค้าง ' + dsl + 'd</div>';
+  }
+  // badge ปีงบ
+  var fySt = pipeFYStatus(p);
+  var fyHTML = fySt ? '<div class="pb2-chip" style="color:' + fySt.c + '">' + fySt.e + ' ' + fySt.t + '</div>' : '';
+
   var h = '<div class="pb2-card" draggable="true" data-pipeid="' + p.id + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
-  h += '<div class="pb2-card-head"><span class="pb2-card-num">#' + (idx + 1) + '</span><span class="pb2-card-title">' + sanitize((p.projectName || '').substr(0, 30)) + '</span></div>';
+  h += '<div class="pb2-card-head"><span class="pb2-card-num">#' + (idx + 1) + '</span><span class="pb2-card-title">' + sanitize((p.projectName || '').substr(0, 32)) + '</span>';
+  h += '<button class="pb2-move-btn" draggable="false" title="ย้ายสถานะ" onclick="event.stopPropagation();showMoveStatusM(\'' + p.id + '\')">⇄</button></div>';
   h += '<div class="pb2-card-dealer">' + (d ? d.name : '-') + '</div>';
   if (p.model) h += '<div class="pb2-card-model">📦 ' + sanitize((p.model || '').substr(0, 20)) + (p.modelQty > 1 ? ' x' + p.modelQty : '') + '</div>';
   h += '<div class="pb2-card-amt">' + fmtMoneyStyled(amt) + '</div>';
   h += bidHTML;
+  if (fyHTML || staleHTML) h += '<div class="pb2-chips">' + fyHTML + staleHTML + '</div>';
   if (p.nextAction) {
     var naClass = '';
     if (p.followupDate) {
@@ -790,6 +861,59 @@ function initBoardScroll() {
     var x = e.pageX - board.offsetLeft;
     var walk = (x - startX) * 1.5;
     board.scrollLeft = scrollLeft - walk;
+  });
+}
+
+// เปิดเมนูเลือกสถานะ (สำหรับมือถือ/สำรอง)
+function showMoveStatusM(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var cfg = getConfig();
+  var h = '<div style="display:flex;flex-direction:column;gap:6px">';
+  cfg.pipelineStatuses.forEach(function(st) {
+    var cur = p.status === st.id;
+    h += '<button class="btn ' + (cur ? 'bp' : 'bo') + '" style="justify-content:flex-start;text-align:left;' + (cur ? '' : 'border-color:' + st.color + ';color:' + st.color) + '"' + (cur ? ' disabled' : '') + ' onclick="closeMForce();changePipeStatus(\'' + pipeId + '\',\'' + st.id + '\')">' + st.name + (cur ? ' • ปัจจุบัน' : '') + '</button>';
+  });
+  h += '</div>';
+  openM('⇄ ย้ายสถานะ: ' + sanitize((p.projectName || '').substr(0, 40)), h);
+}
+
+// ต่อ drag-and-drop ย้าย Status จริง (เดิมมีแต่ draggable ไม่มี handler)
+function initBoardDnD() {
+  var board = document.getElementById('pb2Board');
+  if (!board) return;
+  var dragId = null;
+  board.addEventListener('dragstart', function(e) {
+    var card = e.target.closest('.pb2-card');
+    if (!card) return;
+    dragId = card.getAttribute('data-pipeid');
+    card.classList.add('dragging');
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {} }
+  });
+  board.addEventListener('dragend', function(e) {
+    var card = e.target.closest('.pb2-card');
+    if (card) card.classList.remove('dragging');
+    var cols = board.querySelectorAll('.pb2-col.drag-over');
+    for (var i = 0; i < cols.length; i++) cols[i].classList.remove('drag-over');
+    dragId = null;
+  });
+  board.addEventListener('dragover', function(e) {
+    var col = e.target.closest('.pb2-col[data-pipecol]');
+    if (!col) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    var cols = board.querySelectorAll('.pb2-col.drag-over');
+    for (var i = 0; i < cols.length; i++) if (cols[i] !== col) cols[i].classList.remove('drag-over');
+    col.classList.add('drag-over');
+  });
+  board.addEventListener('drop', function(e) {
+    var col = e.target.closest('.pb2-col[data-pipecol]');
+    if (!col) return;
+    e.preventDefault();
+    var sid = col.getAttribute('data-pipecol');
+    var id = dragId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+    col.classList.remove('drag-over');
+    if (id && sid) changePipeStatus(id, sid); // จัดการ win/lost + log + render ในตัว
   });
 }
 
