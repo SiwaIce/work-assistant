@@ -2,318 +2,350 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
+<meta name="theme-color" content="#0c1425">
 <title>Form</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--blue:#3b82f6;--blue2:#1d4ed8;--card:#1e293b;--bg:#0f172a;--text:#e2e8f0;--text2:#94a3b8;--border:#2d3f55;--radius:12px}
-body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;padding:20px 14px 48px;display:flex;flex-direction:column;align-items:center}
-.card{background:var(--card);border-radius:20px;padding:28px 22px;max-width:480px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.45)}
-.form-header{text-align:center;margin-bottom:24px}
-.form-logo{font-size:2.4em;margin-bottom:8px}
-.form-title{font-size:1.25em;font-weight:700;line-height:1.35}
-.form-event{font-size:.85em;color:var(--text2);margin-top:4px}
-.type-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
-.type-card{background:var(--bg);border:2px solid var(--border);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;transition:.18s;-webkit-tap-highlight-color:transparent;user-select:none}
-.type-card:hover{border-color:var(--blue)}
-.type-card.sel{border-color:var(--blue);background:rgba(59,130,246,.1)}
-.type-icon{font-size:2em;margin-bottom:6px}
-.type-name{font-size:.92em;font-weight:600}
-.type-sub{font-size:.75em;color:var(--text2);margin-top:2px}
-.type-err{color:#f87171;font-size:.8em;text-align:center;margin:-10px 0 14px;display:none}
-.sec-divider{display:flex;align-items:center;gap:8px;margin:16px 0 12px;color:var(--text2);font-size:.8em}
-.sec-divider::before,.sec-divider::after{content:'';flex:1;height:1px;background:var(--border)}
-.fg{margin-bottom:14px}
-.fg .lbl{font-size:.83em;color:var(--text2);margin-bottom:5px;display:block;font-weight:500}
-.fg .req{color:#f87171}
-.fg input,.fg select,.fg textarea{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:.95em;outline:none;transition:.15s;-webkit-appearance:none;appearance:none}
-.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
-.fg textarea{resize:vertical;min-height:80px}
-.radio-group,.checkbox-group{display:flex;flex-direction:column;gap:8px}
-.radio-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent}
-.radio-item:hover,.radio-item.sel{border-color:var(--blue)}
-.radio-item.sel{background:rgba(59,130,246,.08)}
-.radio-item input{width:16px;height:16px;accent-color:var(--blue);flex-shrink:0;pointer-events:none}
-.checkbox-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;-webkit-tap-highlight-color:transparent}
-.checkbox-item input{width:18px;height:18px;accent-color:var(--blue);flex-shrink:0}
-.rating-wrap{display:flex;gap:8px}
-.star-btn{background:none;border:none;font-size:2.2em;cursor:pointer;color:var(--border);transition:.15s;padding:0;line-height:1;-webkit-tap-highlight-color:transparent}
-.star-btn.on{color:#f59e0b}
-.ferr{color:#f87171;font-size:.78em;margin-top:5px;display:none}
-.btn-sub{width:100%;padding:15px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-size:1em;font-weight:700;cursor:pointer;transition:.2s;margin-top:8px;letter-spacing:.3px}
-.btn-sub:hover{background:var(--blue2)}
-.btn-sub:disabled{opacity:.6;cursor:not-allowed}
-.result{text-align:center;padding:20px 0 8px;display:none}
-.result-icon{font-size:3.5em;margin-bottom:14px}
-.result-title{font-size:1.25em;font-weight:700;margin-bottom:8px}
-.result-sub{color:var(--text2);font-size:.9em;line-height:1.6}
-.loading-msg{text-align:center;padding:48px 0;color:var(--text2)}
-.brand{text-align:center;margin-top:20px;font-size:.75em;color:#334155}
+:root{
+  --bg:#0c1425;--card:#141f33;--surface:#1a2744;
+  --blue:#3b82f6;--blue-bg:rgba(59,130,246,.12);
+  --text:#f0f6ff;--muted:#7a90b0;
+  --border:rgba(255,255,255,.08);--err:#f87171;
+}
+body{background:var(--bg);min-height:100vh;padding:20px 14px 60px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color:var(--text);-webkit-font-smoothing:antialiased}
+.card{max-width:460px;margin:0 auto;background:var(--card);
+  border-radius:20px;padding:26px 20px;border:1px solid var(--border)}
+
+/* Header */
+.fh{text-align:center;padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.fh-ico{font-size:2.8em;display:block;margin-bottom:8px}
+.fh-title{font-size:1.2em;font-weight:700;line-height:1.35}
+.fh-ev{font-size:.83em;color:var(--muted);margin-top:5px}
+
+/* Type selector */
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.tc{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;
+  padding:18px 10px;text-align:center;cursor:pointer;transition:.18s;
+  -webkit-tap-highlight-color:transparent;user-select:none;position:relative}
+.tc:active{transform:scale(.97)}
+.tc-ico{font-size:2.2em;display:block;margin-bottom:7px}
+.tc-name{font-size:.9em;font-weight:700}
+.tc-sub{font-size:.72em;color:var(--muted);margin-top:3px}
+.tc.sel{border-color:var(--blue);background:var(--blue-bg)}
+.tc.sel::after{content:'✓';position:absolute;top:8px;right:10px;
+  font-size:.8em;color:var(--blue);font-weight:700}
+.type-err{color:var(--err);font-size:.8em;text-align:center;margin:-6px 0 12px;display:none}
+
+/* Section divider */
+.sdiv{display:flex;align-items:center;gap:8px;margin:16px 0 12px;
+  font-size:.75em;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.sdiv::before,.sdiv::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Field */
+.fg{margin-bottom:13px}
+.lbl{display:block;font-size:.82em;color:var(--muted);margin-bottom:6px;font-weight:500}
+.req{color:var(--err)}
+.opt-tag{font-size:.7em;color:var(--muted);background:rgba(255,255,255,.06);
+  padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle}
+
+input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],select,textarea{
+  width:100%;padding:14px 15px;border-radius:12px;
+  border:1.5px solid var(--border);background:var(--surface);color:var(--text);
+  font-size:16px;outline:none;transition:.15s;
+  -webkit-appearance:none;appearance:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{
+  border-color:rgba(59,130,246,.6);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+textarea{resize:vertical;min-height:88px;line-height:1.55}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a90b0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+
+/* Radio */
+.radio-group{display:flex;flex-direction:column;gap:8px}
+.ri{display:flex;align-items:center;gap:12px;padding:13px 15px;
+  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
+  cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.ri:active{transform:scale(.99)}
+.ri.sel{border-color:var(--blue);background:var(--blue-bg)}
+.ri input{width:18px!important;height:18px!important;accent-color:var(--blue);
+  flex-shrink:0;pointer-events:none;margin:0}
+.ri span{font-size:.93em;line-height:1.3;flex:1}
+
+/* Multicheck */
+.mchk-group{display:flex;flex-direction:column;gap:8px}
+.mci{display:flex;align-items:center;gap:12px;padding:13px 15px;
+  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);
+  cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.mci:active{transform:scale(.99)}
+.mci.sel{border-color:var(--blue);background:var(--blue-bg)}
+.mci input{width:18px!important;height:18px!important;accent-color:var(--blue);
+  flex-shrink:0;pointer-events:none;margin:0}
+.mci span{font-size:.93em;line-height:1.3;flex:1}
+.mchk-hint{font-size:.75em;color:var(--muted);margin-top:5px}
+
+/* Checkbox single */
+.cbs{display:flex;align-items:center;gap:12px;padding:13px 15px;
+  border-radius:12px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer}
+.cbs input{width:18px!important;height:18px!important;accent-color:var(--blue);flex-shrink:0}
+.cbs span{font-size:.93em}
+
+/* Rating */
+.rating-wrap{display:flex;gap:8px;padding:4px 0}
+.star-btn{background:none;border:none;font-size:2.4em;cursor:pointer;
+  color:rgba(255,255,255,.15);transition:.12s;padding:0;line-height:1;
+  -webkit-tap-highlight-color:transparent}
+.star-btn.on{color:#fbbf24}
+.star-btn:active{transform:scale(.88)}
+
+/* Error */
+.ferr{display:none;color:var(--err);font-size:.79em;margin-top:5px}
+
+/* Submit */
+.btn-sub{display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:16px;border-radius:14px;border:none;
+  background:var(--blue);color:#fff;font-size:1.05em;font-weight:700;
+  cursor:pointer;transition:.2s;margin-top:10px;letter-spacing:.3px}
+.btn-sub:hover{background:#2563eb}
+.btn-sub:active{transform:scale(.98)}
+.btn-sub:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+/* Success */
+.success-wrap{display:none;text-align:center;padding:16px 8px}
+.si{font-size:3.8em;display:block;margin-bottom:14px}
+.st{font-size:1.25em;font-weight:700;margin-bottom:8px}
+.ss{color:var(--muted);font-size:.9em;line-height:1.7}
+
+.loading-wrap{text-align:center;padding:52px 0;color:var(--muted)}
+.err-wrap{text-align:center;padding:48px 16px}
+.err-wrap .ei{font-size:2.5em;display:block;margin-bottom:12px}
+.err-wrap p{color:var(--muted)}
+.brand{text-align:center;margin-top:18px;font-size:.72em;color:rgba(255,255,255,.16)}
+@media(max-width:380px){.card{padding:20px 14px}.tc{padding:14px 8px}.tc-ico{font-size:1.9em}}
 </style>
 </head>
 <body>
 <div class="card" id="app">
-  <div class="loading-msg">⏳ กำลังโหลดฟอร์ม...</div>
+  <div class="loading-wrap">⏳ กำลังโหลดฟอร์ม...</div>
 </div>
-<div class="brand">Powered by DJI Work Assistant</div>
+<div class="brand">DJI Work Assistant</div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <script>
-// ← ถ้าต้องการส่งอีเมลหลัง submit ให้ใส่ URL Apps Script ที่นี่
 var LEAD_EMAIL_API_URL = '';
 
 firebase.initializeApp({
-  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
-  authDomain: "work-assistant-9e024.firebaseapp.com",
-  projectId: "work-assistant-9e024",
-  storageBucket: "work-assistant-9e024.firebasestorage.app",
-  messagingSenderId: "796607223436",
-  appId: "1:796607223436:web:1455abe90b141104678da9"
+  apiKey:"AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain:"work-assistant-9e024.firebaseapp.com",
+  projectId:"work-assistant-9e024",
+  storageBucket:"work-assistant-9e024.firebasestorage.app",
+  messagingSenderId:"796607223436",
+  appId:"1:796607223436:web:1455abe90b141104678da9"
 });
 var db = firebase.firestore();
+var _form = null, _cType = null, _ratingVals = {};
 
-var _form       = null;
-var _cType      = null;
-var _ratingVals = {};
+function _p(k){ return new URLSearchParams(window.location.search).get(k); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function _p(k) { return new URLSearchParams(window.location.search).get(k); }
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-(function init() {
+(function init(){
   var fid = _p('form');
-  if (!fid) { showErr('ไม่พบ Form ID ใน URL'); return; }
+  if(!fid){ showErr('ไม่พบ Form ID ใน URL'); return; }
   db.collection('leadForms').doc(fid).get()
-    .then(function(d) {
-      if (!d.exists || !d.data().active) { showErr('Form ไม่พบหรือถูกปิดใช้งานแล้ว'); return; }
-      _form = Object.assign({id: d.id}, d.data());
-      document.title = _form.title || 'Form';
+    .then(function(d){
+      if(!d.exists||!d.data().active){ showErr('Form ไม่พบหรือถูกปิดใช้งาน'); return; }
+      _form = Object.assign({id:d.id},d.data());
+      document.title = _form.title||'Form';
       renderForm();
     })
-    .catch(function() { showErr('ไม่สามารถโหลด Form ได้ กรุณาตรวจสอบการเชื่อมต่อ'); });
+    .catch(function(){ showErr('โหลด Form ไม่ได้ กรุณาตรวจสอบการเชื่อมต่อ'); });
 })();
 
-function renderForm() {
-  var f  = _form;
-  var h  = '<div class="form-header">';
-  h += '<div class="form-logo">📋</div>';
-  h += '<div class="form-title">' + esc(f.title) + '</div>';
-  if (f.eventName) h += '<div class="form-event">📍 ' + esc(f.eventName) + '</div>';
+function renderForm(){
+  var f = _form;
+  var h = '<div class="fh"><span class="fh-ico">📋</span>';
+  h += '<div class="fh-title">'+esc(f.title)+'</div>';
+  if(f.eventName) h += '<div class="fh-ev">📍 '+esc(f.eventName)+'</div>';
   h += '</div>';
 
-  if (f.useTypeToggle) {
-    h += '<div class="type-wrap">';
-    h += '<div class="type-card" id="tc_p" onclick="selType(\'personal\')">';
-    h += '<div class="type-icon">👤</div><div class="type-name">บุคคล</div><div class="type-sub">Individual</div></div>';
-    h += '<div class="type-card" id="tc_c" onclick="selType(\'company\')">';
-    h += '<div class="type-icon">🏢</div><div class="type-name">บริษัท / องค์กร</div><div class="type-sub">Organization</div></div>';
-    h += '</div><div class="type-err" id="type_err">กรุณาเลือกประเภท</div>';
+  if(f.useTypeToggle){
+    h += '<div class="type-grid">';
+    h += '<div class="tc" id="tc_p" onclick="selType(\'personal\')"><span class="tc-ico">👤</span><div class="tc-name">บุคคล</div><div class="tc-sub">Individual</div></div>';
+    h += '<div class="tc" id="tc_c" onclick="selType(\'company\')"><span class="tc-ico">🏢</span><div class="tc-name">บริษัท / องค์กร</div><div class="tc-sub">Organization</div></div>';
+    h += '</div><div class="type-err" id="type_err">⚠ กรุณาเลือกประเภท</div>';
   }
 
-  // Common fields (always shown)
-  var commonFields = f.commonFields || f.fields || [];
-  if (commonFields.length) {
-    if (f.useTypeToggle) h += '<div class="sec-divider">ข้อมูลทั่วไป</div>';
-    commonFields.forEach(function(fld) { h += renderField(fld); });
+  var common = f.commonFields||f.fields||[];
+  if(common.length){
+    if(f.useTypeToggle) h += '<div class="sdiv">ข้อมูลทั่วไป</div>';
+    common.forEach(function(fld){ h += rField(fld); });
   }
 
-  // Personal fields
-  if (f.useTypeToggle) {
-    h += '<div id="sec_personal" style="display:none;">';
-    if ((f.personalFields || []).length) {
-      h += '<div class="sec-divider">ข้อมูลส่วนตัว</div>';
-      f.personalFields.forEach(function(fld) { h += renderField(fld); });
+  if(f.useTypeToggle){
+    h += '<div id="sec_p" style="display:none;">';
+    if((f.personalFields||[]).length){
+      h += '<div class="sdiv">ข้อมูลส่วนตัว</div>';
+      f.personalFields.forEach(function(fld){ h += rField(fld); });
     }
     h += '</div>';
-
-    // Company fields
-    h += '<div id="sec_company" style="display:none;">';
-    if ((f.companyFields || []).length) {
-      h += '<div class="sec-divider">ข้อมูลบริษัท / องค์กร</div>';
-      f.companyFields.forEach(function(fld) { h += renderField(fld); });
+    h += '<div id="sec_c" style="display:none;">';
+    if((f.companyFields||[]).length){
+      h += '<div class="sdiv">ข้อมูลบริษัท / องค์กร</div>';
+      f.companyFields.forEach(function(fld){ h += rField(fld); });
     }
     h += '</div>';
   }
 
-  h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
-  h += '<div class="result" id="result-wrap">';
-  h += '<div class="result-icon" id="result-icon">✅</div>';
-  h += '<div class="result-title" id="result-title">ขอบคุณสำหรับข้อมูล!</div>';
-  h += '<div class="result-sub" id="result-sub"></div>';
-  h += '</div>';
+  h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล <span>→</span></button>';
+  h += '<div class="success-wrap" id="sw"><span class="si">✅</span><div class="st">ขอบคุณสำหรับข้อมูล!</div><div class="ss" id="ss-sub"></div></div>';
   document.getElementById('app').innerHTML = h;
 }
 
-function selType(t) {
-  _cType = t;
-  document.getElementById('tc_p').classList.toggle('sel', t === 'personal');
-  document.getElementById('tc_c').classList.toggle('sel', t === 'company');
-  document.getElementById('type_err').style.display = 'none';
-  document.getElementById('sec_personal').style.display = t === 'personal' ? '' : 'none';
-  document.getElementById('sec_company').style.display  = t === 'company'  ? '' : 'none';
-}
-
-function renderField(f) {
-  var id  = 'fld_' + f.id;
+function rField(f){
+  var id  = 'fld_'+f.id;
+  var req = f.required;
+  var lbl = '<span class="lbl">'+esc(f.label)+(req?'<span class="req"> *</span>':'<span class="opt-tag">ไม่บังคับ</span>')+'</span>';
   var inp = '';
-  switch (f.type) {
-    case 'textarea':
-      inp = '<textarea id="' + id + '" rows="3" placeholder="พิมพ์ที่นี่..."></textarea>'; break;
-    case 'email':
-      inp = '<input type="email" id="' + id + '" inputmode="email" placeholder="example@email.com">'; break;
-    case 'phone':
-      inp = '<input type="tel" id="' + id + '" inputmode="tel" placeholder="0812345678">'; break;
-    case 'number':
-      inp = '<input type="number" id="' + id + '">'; break;
-    case 'date':
-      inp = '<input type="date" id="' + id + '">'; break;
+  switch(f.type){
+    case 'textarea': inp='<textarea id="'+id+'" rows="3" placeholder="พิมพ์ที่นี่..."></textarea>'; break;
+    case 'email':    inp='<input type="email" id="'+id+'" inputmode="email" placeholder="example@email.com">'; break;
+    case 'phone':    inp='<input type="tel" id="'+id+'" inputmode="tel" placeholder="0812345678">'; break;
+    case 'number':   inp='<input type="number" id="'+id+'">'; break;
+    case 'date':     inp='<input type="date" id="'+id+'">'; break;
     case 'select':
-      var opts = '<option value="">— เลือก —</option>';
-      (f.options || []).forEach(function(o) { opts += '<option value="' + esc(o) + '">' + esc(o) + '</option>'; });
-      inp = '<select id="' + id + '">' + opts + '</select>'; break;
+      var opts='<option value="">— เลือก —</option>';
+      (f.options||[]).forEach(function(o){ opts+='<option value="'+esc(o)+'">'+esc(o)+'</option>'; });
+      inp='<select id="'+id+'">'+opts+'</select>'; break;
     case 'radio':
-      inp = '<div class="radio-group" id="' + id + '">';
-      (f.options || []).forEach(function(o) {
-        inp += '<label class="radio-item" onclick="hlRadio(this)">' +
-          '<input type="radio" name="rg_' + id + '" value="' + esc(o) + '"> ' + esc(o) + '</label>';
+      inp='<div class="radio-group" id="'+id+'">';
+      (f.options||[]).forEach(function(o){
+        inp+='<label class="ri" onclick="hlRI(this)"><input type="radio" name="rg_'+id+'" value="'+esc(o)+'"><span>'+esc(o)+'</span></label>';
       });
-      inp += '</div>'; break;
+      inp+='</div>'; break;
+    case 'multicheck':
+      inp='<div class="mchk-group" id="'+id+'">';
+      (f.options||[]).forEach(function(o){
+        inp+='<label class="mci" onclick="hlMCI(this)"><input type="checkbox" name="mc_'+id+'" value="'+esc(o)+'"><span>'+esc(o)+'</span></label>';
+      });
+      inp+='</div><div class="mchk-hint">เลือกได้มากกว่า 1 ข้อ</div>'; break;
     case 'checkbox':
-      inp = '<label class="checkbox-item"><input type="checkbox" id="' + id + '"> ใช่ / Yes</label>'; break;
+      inp='<label class="cbs"><input type="checkbox" id="'+id+'"><span>ใช่ / Yes</span></label>'; break;
     case 'rating':
-      _ratingVals[f.id] = 0;
-      inp = '<div class="rating-wrap" id="' + id + '">';
-      for (var i = 1; i <= 5; i++) {
-        inp += '<button type="button" class="star-btn" data-fid="' + f.id + '" data-v="' + i + '" onclick="setRating(\'' + f.id + '\',' + i + ')">★</button>';
-      }
-      inp += '</div>'; break;
-    default:
-      inp = '<input type="text" id="' + id + '" placeholder="พิมพ์ที่นี่...">'; break;
+      _ratingVals[f.id]=0;
+      inp='<div class="rating-wrap" id="'+id+'">';
+      for(var i=1;i<=5;i++) inp+='<button type="button" class="star-btn" data-fid="'+f.id+'" data-v="'+i+'" onclick="setRating(\''+f.id+'\','+i+')">★</button>';
+      inp+='</div>'; break;
+    default: inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่...">'; break;
   }
-  return '<div class="fg"><span class="lbl">' + esc(f.label) + (f.required ? '<span class="req"> *</span>' : '') + '</span>' +
-    inp + '<div class="ferr" id="err_' + f.id + '">กรุณากรอกข้อมูลในช่องนี้</div></div>';
+  return '<div class="fg">'+lbl+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
 }
 
-function hlRadio(el) {
-  var name = el.querySelector('input').name;
-  document.querySelectorAll('[name="' + name + '"]').forEach(function(r) {
-    r.closest('.radio-item').classList.remove('sel');
-  });
+function hlRI(el){
+  var n=el.querySelector('input').name;
+  document.querySelectorAll('[name="'+n+'"]').forEach(function(r){ r.closest('.ri').classList.remove('sel'); });
   el.classList.add('sel');
 }
+function hlMCI(el){
+  var cb=el.querySelector('input[type=checkbox]');
+  setTimeout(function(){ el.classList.toggle('sel',cb.checked); },0);
+}
+function setRating(fid,v){
+  _ratingVals[fid]=v;
+  document.querySelectorAll('[data-fid="'+fid+'"]').forEach(function(s){ s.classList.toggle('on',parseInt(s.dataset.v)<=v); });
+}
 
-function setRating(fid, v) {
-  _ratingVals[fid] = v;
-  document.querySelectorAll('[data-fid="' + fid + '"]').forEach(function(s) {
-    s.classList.toggle('on', parseInt(s.dataset.v) <= v);
+function selType(t){
+  _cType=t;
+  document.getElementById('tc_p').classList.toggle('sel',t==='personal');
+  document.getElementById('tc_c').classList.toggle('sel',t==='company');
+  document.getElementById('type_err').style.display='none';
+  document.getElementById('sec_p').style.display=t==='personal'?'':'none';
+  document.getElementById('sec_c').style.display=t==='company'?'':'none';
+}
+
+function getVal(f){
+  var id='fld_'+f.id;
+  if(f.type==='radio'){ var r=document.querySelector('[name="rg_'+id+'"]:checked'); return r?r.value:''; }
+  if(f.type==='checkbox'){ var c=document.getElementById(id); return c?c.checked:false; }
+  if(f.type==='rating') return _ratingVals[f.id]||0;
+  if(f.type==='multicheck'){
+    var cbs=document.querySelectorAll('[name="mc_'+id+'"]:checked');
+    var vals=[]; cbs.forEach(function(c){ vals.push(c.value); }); return vals.join(', ');
+  }
+  var el=document.getElementById(id); return el?el.value.trim():'';
+}
+
+function submitForm(){
+  var f=_form, answers={}, valid=true;
+  if(f.useTypeToggle&&!_cType){
+    document.getElementById('type_err').style.display='block';
+    document.getElementById('tc_p').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+  var active=(f.commonFields||f.fields||[]).slice();
+  if(_cType==='personal') active=active.concat(f.personalFields||[]);
+  if(_cType==='company')  active=active.concat(f.companyFields||[]);
+
+  active.forEach(function(fld){
+    var v=getVal(fld);
+    var errEl=document.getElementById('err_'+fld.id);
+    var empty=(v===''||v===0||v===false);
+    if(fld.required&&empty){ if(errEl) errEl.style.display='block'; valid=false; }
+    else { if(errEl) errEl.style.display='none'; }
+    answers[fld.id]=v;
   });
-}
 
-function getVal(f) {
-  var id = 'fld_' + f.id;
-  if (f.type === 'radio')    { var r = document.querySelector('[name="rg_' + id + '"]:checked'); return r ? r.value : ''; }
-  if (f.type === 'checkbox') { var c = document.getElementById(id); return c ? c.checked : false; }
-  if (f.type === 'rating')   return _ratingVals[f.id] || 0;
-  var el = document.getElementById(id);
-  return el ? el.value.trim() : '';
-}
-
-function submitForm() {
-  var f       = _form;
-  var answers = {};
-  var valid   = true;
-
-  // Validate type selection
-  if (f.useTypeToggle && !_cType) {
-    document.getElementById('type_err').style.display = 'block';
-    document.getElementById('tc_p').scrollIntoView({behavior: 'smooth', block: 'center'});
+  if(!valid){
+    var first=document.querySelector('.ferr[style*="block"]');
+    if(first) first.scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
 
-  // Collect active fields
-  var activeFields = (f.commonFields || f.fields || []).slice();
-  if (_cType === 'personal') activeFields = activeFields.concat(f.personalFields || []);
-  if (_cType === 'company')  activeFields = activeFields.concat(f.companyFields  || []);
-
-  activeFields.forEach(function(fld) {
-    var v     = getVal(fld);
-    var errEl = document.getElementById('err_' + fld.id);
-    var empty = (v === '' || v === 0 || v === false);
-    if (fld.required && empty) { if (errEl) errEl.style.display = 'block'; valid = false; }
-    else                       { if (errEl) errEl.style.display = 'none'; }
-    answers[fld.id] = v;
-  });
-
-  if (!valid) {
-    var first = document.querySelector('.ferr[style*="block"]');
-    if (first) first.scrollIntoView({behavior: 'smooth', block: 'center'});
-    return;
-  }
-
-  var btn = document.getElementById('sub-btn');
-  btn.disabled = true; btn.textContent = '⏳ กำลังส่ง...';
+  var btn=document.getElementById('sub-btn');
+  btn.disabled=true; btn.textContent='⏳ กำลังส่ง...';
 
   db.collection('leadSubmissions').add({
-    formId:      f.id,
-    formTitle:   f.title,
-    contactType: _cType || null,
-    answers:     answers,
-    createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
-    emailSent:   false,
-  }).then(function(ref) {
-    // Increment counter
+    formId:f.id, formTitle:f.title,
+    contactType:_cType||null, answers:answers,
+    createdAt:firebase.firestore.FieldValue.serverTimestamp(), emailSent:false,
+  }).then(function(ref){
     db.collection('leadForms').doc(f.id).update({
-      submissionsCount: firebase.firestore.FieldValue.increment(1)
-    }).catch(function() {});
+      submissionsCount:firebase.firestore.FieldValue.increment(1)
+    }).catch(function(){});
 
-    // Email (optional)
-    if (f.submitAction === 'email' && LEAD_EMAIL_API_URL && f.emailConfig) {
-      var cfg      = f.emailConfig;
-      var allFlds  = (f.commonFields || f.fields || []).concat(f.personalFields || []).concat(f.companyFields || []);
-      var toEmail  = cfg.toFieldId ? answers[cfg.toFieldId] : '';
-      if (toEmail && String(toEmail).indexOf('@') > 0) {
-        var body = cfg.body || '';
-        allFlds.forEach(function(fld) {
-          body = body.replace(new RegExp('\\{\\{' + fld.label + '\\}\\}', 'g'), String(answers[fld.id] || ''));
-        });
-        fetch(LEAD_EMAIL_API_URL, {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({action: 'sendEmail', to: toEmail, subject: cfg.subject || '', body: body})
-        }).then(function() {
-          db.collection('leadSubmissions').doc(ref.id).update({emailSent: true}).catch(function() {});
-        }).catch(function() {});
+    if(f.submitAction==='email'&&LEAD_EMAIL_API_URL&&f.emailConfig){
+      var cfg=f.emailConfig;
+      var allFlds=(f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
+      var toEmail=cfg.toFieldId?answers[cfg.toFieldId]:'';
+      if(toEmail&&String(toEmail).indexOf('@')>0){
+        var body=cfg.body||'';
+        allFlds.forEach(function(fld){ body=body.replace(new RegExp('\\{\\{'+fld.label+'\\}\\}','g'),String(answers[fld.id]||'')); });
+        fetch(LEAD_EMAIL_API_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'sendEmail',to:toEmail,subject:cfg.subject||'',body:body})
+        }).then(function(){ db.collection('leadSubmissions').doc(ref.id).update({emailSent:true}).catch(function(){}); }).catch(function(){});
       }
     }
 
-    // Post-submit action
-    if (f.submitAction === 'redirect' && f.redirectUrl) {
-      showSuccess('กำลังพาคุณไปที่หน้าถัดไป...');
-      setTimeout(function() { window.location.href = f.redirectUrl; }, 1500);
-    } else if (f.submitAction === 'email') {
-      showSuccess('เราจะส่งข้อมูลไปยังอีเมลของคุณเร็วๆ นี้');
-    } else {
-      showSuccess('');
+    var sub = f.submitAction==='email'?'เราจะส่งข้อมูลไปยังอีเมลของคุณเร็วๆ นี้'
+            : f.submitAction==='redirect'?'กำลังพาคุณไปที่หน้าถัดไป...' : '';
+    showSuccess(sub);
+    if(f.submitAction==='redirect'&&f.redirectUrl){
+      setTimeout(function(){ window.location.href=f.redirectUrl; },1600);
     }
-  }).catch(function(e) {
-    btn.disabled = false; btn.textContent = 'ส่งข้อมูล →';
-    alert('เกิดข้อผิดพลาด: ' + e.message);
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent='ส่งข้อมูล →';
+    alert('เกิดข้อผิดพลาด: '+e.message);
   });
 }
 
-function showSuccess(sub) {
-  document.getElementById('sub-btn').style.display = 'none';
-  var rw = document.getElementById('result-wrap');
-  document.getElementById('result-sub').textContent = sub || '';
-  rw.style.display = 'block';
+function showSuccess(sub){
+  document.getElementById('sub-btn').style.display='none';
+  document.getElementById('ss-sub').textContent=sub||'';
+  document.getElementById('sw').style.display='block';
 }
-
-function showErr(msg) {
-  document.getElementById('app').innerHTML =
-    '<div style="text-align:center;padding:40px 20px;">' +
-    '<div style="font-size:2.5em;margin-bottom:12px;">⚠️</div>' +
-    '<div style="color:#f87171;">' + esc(msg) + '</div></div>';
+function showErr(msg){
+  document.getElementById('app').innerHTML='<div class="err-wrap"><span class="ei">⚠️</span><p>'+esc(msg)+'</p></div>';
 }
 </script>
 </body>

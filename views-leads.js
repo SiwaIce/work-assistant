@@ -11,8 +11,9 @@ var LEAD_FIELD_TYPES = [
   {v:'number',   l:'ตัวเลข'},
   {v:'select',   l:'Dropdown (เลือก 1)'},
   {v:'radio',    l:'Radio (เลือก 1)'},
-  {v:'checkbox', l:'Checkbox'},
-  {v:'date',     l:'วันที่'},
+  {v:'checkbox',   l:'Checkbox'},
+  {v:'multicheck', l:'Checkbox หลายตัวเลือก'},
+  {v:'date',       l:'วันที่'},
   {v:'rating',   l:'Rating (ดาว 1–5)'},
 ];
 
@@ -228,7 +229,7 @@ function _lfSecHtml(sec) {
   }
   var h = '';
   fields.forEach(function(f) {
-    var hasOpts = f.type === 'select' || f.type === 'radio';
+    var hasOpts = f.type === 'select' || f.type === 'radio' || f.type === 'multicheck';
     h += '<div class="lf-frow" id="lfrow_' + f.id + '">';
     h += '<div class="lf-frow-top">';
     h += '<input class="fm-input lf-flbl" placeholder="ชื่อ Field เช่น บริษัท" value="' + esc(f.label) + '" oninput="_lfSetLabel(\'' + sec + '\',\'' + f.id + '\',this.value)">';
@@ -410,11 +411,11 @@ function _ldAnalyticsHtml(form, subs) {
 
   // Stat cards
   h += '<div class="ld-stats-row">';
-  h += _ldStatCard(subs.length, 'ทั้งหมด', '🙋');
-  h += _ldStatCard(todayCnt, 'วันนี้', '📅');
+  h += _ldStatCard(subs.length, 'ทั้งหมด',  '🙋', '#3b82f6');
+  h += _ldStatCard(todayCnt,    'วันนี้',    '📅', '#22c55e');
   if (form.useTypeToggle) {
-    h += _ldStatCard(pCnt, 'บุคคล', '👤');
-    h += _ldStatCard(cCnt, 'บริษัท', '🏢');
+    h += _ldStatCard(pCnt, 'บุคคล',   '👤', '#a855f7');
+    h += _ldStatCard(cCnt, 'บริษัท',  '🏢', '#f97316');
   }
   h += '<div class="ld-stat-actions">';
   h += '<button onclick="showLeadQR(\'' + form.id + '\')" class="btn bsm bo">📱 QR</button>';
@@ -442,13 +443,21 @@ function _ldAnalyticsHtml(form, subs) {
     h += '</div>';
   }
 
-  // Field insights (select/radio)
-  var insFields = allFields.filter(function(f) { return f.type === 'select' || f.type === 'radio'; }).slice(0, 3);
+  // Field insights (select/radio/multicheck)
+  var insFields = allFields.filter(function(f) { return f.type === 'select' || f.type === 'radio' || f.type === 'multicheck'; }).slice(0, 3);
   insFields.forEach(function(f) {
     var counts = {};
     subs.forEach(function(s) {
       var v = s.answers && s.answers[f.id];
-      if (v) counts[v] = (counts[v] || 0) + 1;
+      if (!v) return;
+      // multicheck stores comma-separated values — count each option individually
+      if (f.type === 'multicheck') {
+        String(v).split(',').forEach(function(part) {
+          var p = part.trim(); if (p) counts[p] = (counts[p] || 0) + 1;
+        });
+      } else {
+        counts[v] = (counts[v] || 0) + 1;
+      }
     });
     var keys = [];
     for (var k in counts) { if (counts.hasOwnProperty(k)) keys.push(k); }
@@ -471,8 +480,12 @@ function _ldAnalyticsHtml(form, subs) {
   return h;
 }
 
-function _ldStatCard(n, label, icon) {
-  return '<div class="ld-stat"><div class="ld-stat-icon">' + icon + '</div><div class="ld-stat-num">' + n + '</div><div class="ld-stat-lbl">' + label + '</div></div>';
+function _ldStatCard(n, label, icon, color) {
+  var c = color || '#3b82f6';
+  return '<div class="ld-stat" style="border-top:3px solid ' + c + ';">' +
+    '<div class="ld-stat-icon">' + icon + '</div>' +
+    '<div class="ld-stat-num" style="color:' + c + ';">' + n + '</div>' +
+    '<div class="ld-stat-lbl">' + label + '</div></div>';
 }
 
 function ldFilterTable(q) {
@@ -528,37 +541,54 @@ function _ldDayData(subs, days) {
 }
 
 function _ldBarChartSvg(data) {
-  var W = 300, H = 110, padX = 20, padY = 24;
+  var W = 320, H = 120, padL = 12, padR = 12, padT = 20, padB = 28;
   var maxV = 1;
   data.forEach(function(d) { if (d.cnt > maxV) maxV = d.cnt; });
-  var bw   = Math.floor((W - padX * 2) / data.length) - 3;
+  var cols = data.length;
+  var slot = (W - padL - padR) / cols;
+  var bw   = Math.max(6, Math.floor(slot * 0.6));
   var svg  = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;overflow:visible">';
-  for (var g = 0; g <= 3; g++) {
-    var gy = padY + (H - padY * 2) * (1 - g / 3);
-    svg += '<line x1="' + padX + '" y1="' + gy.toFixed(1) + '" x2="' + (W - padX / 2) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,.05)" stroke-width="1"/>';
+  // grid lines
+  for (var g = 1; g <= 3; g++) {
+    var gy = padT + (H - padT - padB) * (1 - g / 3);
+    svg += '<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,.06)" stroke-width="1" stroke-dasharray="3,3"/>';
   }
+  // baseline
+  svg += '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="rgba(255,255,255,.1)" stroke-width="1"/>';
   data.forEach(function(d, i) {
-    var x  = padX + i * (bw + 3);
-    var bh = Math.max(2, (H - padY * 2) * d.cnt / maxV);
-    var y  = H - padY - bh;
-    var today = (i === data.length - 1);
-    svg += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw + '" height="' + bh.toFixed(1) + '" rx="3" fill="' + (today ? '#3b82f6' : '#1e3a6e') + '"/>';
-    svg += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - padY + 13) + '" text-anchor="middle" fill="#475569" font-size="8">' + d.lbl + '</text>';
-    if (d.cnt > 0) svg += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 3).toFixed(1) + '" text-anchor="middle" fill="#64748b" font-size="9">' + d.cnt + '</text>';
+    var cx  = padL + slot * i + slot / 2;
+    var x   = cx - bw / 2;
+    var bh  = Math.max(2, (H - padT - padB) * d.cnt / maxV);
+    var y   = H - padB - bh;
+    var isToday = (i === data.length - 1);
+    var fill = isToday ? '#3b82f6' : (d.cnt > 0 ? '#1e4080' : '#1a2744');
+    svg += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw + '" height="' + bh.toFixed(1) + '" rx="4" fill="' + fill + '"/>';
+    svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - padB + 14) + '" text-anchor="middle" fill="#475569" font-size="9">' + d.lbl + '</text>';
+    if (d.cnt > 0) {
+      svg += '<text x="' + cx.toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle" fill="' + (isToday ? '#93c5fd' : '#64748b') + '" font-size="10" font-weight="' + (isToday ? '600' : '400') + '">' + d.cnt + '</text>';
+    }
   });
   return svg + '</svg>';
 }
 
 function _ldTypeBarSvg(pCnt, cCnt) {
   var total = pCnt + cCnt || 1;
-  var W = 220, rowH = 26;
-  var svg = '<svg viewBox="0 0 ' + W + ' 72" style="width:100%;max-width:' + W + 'px">';
-  var pW = Math.round((W - 20) * pCnt / total);
-  var cW = Math.round((W - 20) * cCnt / total);
-  svg += '<rect x="10" y="6" width="' + pW + '" height="14" rx="4" fill="#3b82f6"/>';
-  svg += '<text x="10" y="36" fill="#64748b" font-size="11">👤 บุคคล — ' + pCnt + ' คน (' + Math.round(pCnt / total * 100) + '%)</text>';
-  svg += '<rect x="10" y="44" width="' + cW + '" height="14" rx="4" fill="#8b5cf6"/>';
-  svg += '<text x="10" y="70" fill="#64748b" font-size="11">🏢 บริษัท — ' + cCnt + ' คน (' + Math.round(cCnt / total * 100) + '%)</text>';
+  var W = 260, bh = 16, gap = 36;
+  var H = gap * 2 + 8;
+  var barW = W - 20;
+  var pW = Math.max(4, Math.round(barW * pCnt / total));
+  var cW = Math.max(4, Math.round(barW * cCnt / total));
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px">';
+  // track
+  svg += '<rect x="10" y="2" width="' + barW + '" height="' + bh + '" rx="8" fill="rgba(255,255,255,.05)"/>';
+  svg += '<rect x="10" y="2" width="' + pW + '" height="' + bh + '" rx="8" fill="#3b82f6"/>';
+  svg += '<text x="10" y="32" fill="#94a3b8" font-size="11.5">👤 บุคคล</text>';
+  svg += '<text x="' + (W - 10) + '" y="32" text-anchor="end" fill="#60a5fa" font-size="12" font-weight="600">' + pCnt + ' (' + Math.round(pCnt / total * 100) + '%)</text>';
+  // track 2
+  svg += '<rect x="10" y="' + (gap + 2) + '" width="' + barW + '" height="' + bh + '" rx="8" fill="rgba(255,255,255,.05)"/>';
+  svg += '<rect x="10" y="' + (gap + 2) + '" width="' + cW + '" height="' + bh + '" rx="8" fill="#a855f7"/>';
+  svg += '<text x="10" y="' + (gap + 32) + '" fill="#94a3b8" font-size="11.5">🏢 บริษัท</text>';
+  svg += '<text x="' + (W - 10) + '" y="' + (gap + 32) + '" text-anchor="end" fill="#c084fc" font-size="12" font-weight="600">' + cCnt + ' (' + Math.round(cCnt / total * 100) + '%)</text>';
   return svg + '</svg>';
 }
 
@@ -566,18 +596,30 @@ function _ldFieldBarSvg(counts) {
   var entries = [];
   for (var k in counts) { if (counts.hasOwnProperty(k)) entries.push([k, counts[k]]); }
   entries.sort(function(a, b) { return b[1] - a[1]; });
-  entries = entries.slice(0, 5);
+  entries = entries.slice(0, 6);
   var maxV = entries[0] ? entries[0][1] : 1;
-  var rowH = 20, padTop = 4;
-  var H    = padTop + entries.length * rowH + 4;
-  var W    = 240;
+  var rowH = 26, padTop = 2, labelW = 88, gap = 8, numW = 28;
+  var W    = 260;
+  var H    = padTop + entries.length * rowH;
+  var barAreaW = W - labelW - gap - numW;
   var svg  = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px">';
   entries.forEach(function(e, i) {
-    var y  = padTop + i * rowH;
-    var bw = Math.round((W - 90) * e[1] / maxV);
-    svg += '<rect x="82" y="' + y + '" width="' + bw + '" height="13" rx="3" fill="#1e3a6e"/>';
-    svg += '<text x="78" y="' + (y + 11) + '" text-anchor="end" fill="#64748b" font-size="10">' + esc(String(e[0]).slice(0, 11)) + '</text>';
-    svg += '<text x="' + (85 + bw) + '" y="' + (y + 11) + '" fill="#475569" font-size="10"> ' + e[1] + '</text>';
+    var y   = padTop + i * rowH;
+    var bh  = 14;
+    var by  = y + (rowH - bh) / 2;
+    var bw  = Math.max(4, Math.round(barAreaW * e[1] / maxV));
+    var pct = Math.round(e[1] / maxV * 100);
+    // track bg
+    svg += '<rect x="' + labelW + '" y="' + by.toFixed(1) + '" width="' + barAreaW + '" height="' + bh + '" rx="7" fill="rgba(255,255,255,.05)"/>';
+    // bar (gradient from blue-dark to blue)
+    var fillColor = i === 0 ? '#3b82f6' : (i === 1 ? '#2563eb' : '#1e4080');
+    svg += '<rect x="' + labelW + '" y="' + by.toFixed(1) + '" width="' + bw + '" height="' + bh + '" rx="7" fill="' + fillColor + '"/>';
+    // label
+    var lbl = String(e[0]);
+    if (lbl.length > 12) lbl = lbl.slice(0, 11) + '…';
+    svg += '<text x="' + (labelW - 6) + '" y="' + (by + bh / 2 + 4) + '" text-anchor="end" fill="#94a3b8" font-size="10.5">' + esc(lbl) + '</text>';
+    // count
+    svg += '<text x="' + (labelW + barAreaW + 4) + '" y="' + (by + bh / 2 + 4) + '" fill="' + (i === 0 ? '#93c5fd' : '#64748b') + '" font-size="11" font-weight="' + (i === 0 ? '600' : '400') + '">' + e[1] + '</text>';
   });
   return svg + '</svg>';
 }
