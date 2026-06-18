@@ -8951,6 +8951,14 @@ input:focus, select:focus, textarea:focus {
 .lf-ord-btn{padding:2px 7px!important;font-size:.7em!important;line-height:1.4;min-width:0}
 .lf-ord-btn:disabled{opacity:.2;cursor:default}
 
+/* Section header field */
+.lf-frow-sec{background:rgba(59,130,246,.06);border-left:3px solid #3b82f6!important;border-radius:8px}
+.lf-frow-sec .lf-flbl{font-weight:600;color:var(--text,#f1f5f9)}
+
+/* Hint input */
+.lf-hint-wrap{margin-top:6px}
+.lf-hint-inp{padding:7px 12px!important;font-size:.8em!important;color:var(--text2,#94a3b8)!important;border-style:dashed!important;background:transparent!important}
+
 /* Analytics filter */
 .ld-filter-wrap{background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
 .ld-filter-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}

@@ -96,6 +96,15 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .star-btn.on{color:#f59e0b}
 .star-btn:active{transform:scale(.88)}
 
+/* ── Section header ── */
+.fld-sec{margin:20px 0 10px;display:flex;align-items:center;gap:10px}
+.fld-sec-title{font-size:.88em;font-weight:700;color:var(--text2);white-space:nowrap}
+.fld-sec::before,.fld-sec::after{content:'';flex:1;height:1px;background:var(--border)}
+.fld-sec-sub{font-size:.78em;color:var(--muted);margin-top:2px;padding-left:2px}
+
+/* ── Hint text ── */
+.fld-hint{font-size:.79em;color:var(--muted);margin-bottom:6px;line-height:1.4;padding-left:1px}
+
 /* ── Error ── */
 .ferr{display:none;color:var(--err);font-size:.79em;margin-top:5px;padding-left:2px}
 
@@ -202,7 +211,7 @@ function renderForm(){
   var f = _form;
   _activeFlds = {};
   var allFld = (f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
-  allFld.forEach(function(x){ _activeFlds[x.id] = x; });
+  allFld.filter(function(x){ return x.type!=='section'; }).forEach(function(x){ _activeFlds[x.id]=x; });
 
   var h = '<div class="fh"><span class="fh-ico">📋</span>';
   h += '<div class="fh-title">'+esc(f.title)+'</div>';
@@ -251,9 +260,15 @@ function renderForm(){
 
 /* ── Render field ── */
 function rField(f){
-  var id  = 'fld_'+f.id;
-  var req = f.required;
-  var lbl = '<span class="lbl">'+esc(f.label)+(req?'<span class="req"> *</span>':'<span class="opt-tag">ไม่บังคับ</span>')+'</span>';
+  // Section header — not an input, render as divider
+  if(f.type==='section'){
+    return '<div class="fld-sec"><span class="fld-sec-title">'+esc(f.label||'')+'</span></div>'+
+      (f.hint?'<div class="fld-sec-sub">'+esc(f.hint)+'</div>':'');
+  }
+  var id   = 'fld_'+f.id;
+  var req  = f.required;
+  var lbl  = '<span class="lbl">'+esc(f.label)+(req?'<span class="req"> *</span>':'<span class="opt-tag">ไม่บังคับ</span>')+'</span>';
+  var hint = f.hint?'<div class="fld-hint">'+esc(f.hint)+'</div>':'';
   var blur = 'onblur="validateFld(\''+f.id+'\')"';
   var inp  = '';
   switch(f.type){
@@ -293,7 +308,7 @@ function rField(f){
     default:
       inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่..." '+blur+'>'; break;
   }
-  return '<div class="fg">'+lbl+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
+  return '<div class="fg">'+lbl+hint+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
 }
 
 /* ── Validate on blur ── */
@@ -360,6 +375,7 @@ function submitForm(){
   var active=(f.commonFields||f.fields||[]).slice();
   if(_cType==='personal') active=active.concat(f.personalFields||[]);
   if(_cType==='company')  active=active.concat(f.companyFields||[]);
+  active=active.filter(function(fld){ return fld.type!=='section'; });
 
   active.forEach(function(fld){
     var v=getVal(fld);

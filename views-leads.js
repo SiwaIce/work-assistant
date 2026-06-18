@@ -4,17 +4,18 @@ var LEAD_FORM_COL = 'leadForms';
 var LEAD_SUB_COL  = 'leadSubmissions';
 
 var LEAD_FIELD_TYPES = [
-  {v:'text',     l:'ข้อความสั้น'},
-  {v:'textarea', l:'ข้อความยาว'},
-  {v:'email',    l:'อีเมล'},
-  {v:'phone',    l:'เบอร์โทรศัพท์'},
-  {v:'number',   l:'ตัวเลข'},
-  {v:'select',   l:'Dropdown (เลือก 1)'},
-  {v:'radio',    l:'Radio (เลือก 1)'},
+  {v:'text',       l:'ข้อความสั้น'},
+  {v:'textarea',   l:'ข้อความยาว'},
+  {v:'email',      l:'อีเมล'},
+  {v:'phone',      l:'เบอร์โทรศัพท์'},
+  {v:'number',     l:'ตัวเลข'},
+  {v:'select',     l:'Dropdown (เลือก 1)'},
+  {v:'radio',      l:'Radio (เลือก 1)'},
   {v:'checkbox',   l:'Checkbox'},
   {v:'multicheck', l:'Checkbox หลายตัวเลือก'},
   {v:'date',       l:'วันที่'},
-  {v:'rating',   l:'Rating (ดาว 1–5)'},
+  {v:'rating',     l:'Rating (ดาว 1–5)'},
+  {v:'section',    l:'── หัวข้อ Section ──'},
 ];
 
 // ---------- State ----------
@@ -33,15 +34,21 @@ function rLeads() {
     '<button onclick="showCreateLeadFormM()" class="btn bp">+ สร้าง Form ใหม่</button></div>' +
     '<div style="padding:24px;color:var(--text2)">กำลังโหลด...</div></div>';
 
-  db.collection(LEAD_FORM_COL).orderBy('createdAt', 'desc').get()
-    .then(function(snap) {
-      var forms = [];
-      snap.forEach(function(d) { forms.push(Object.assign({id: d.id}, d.data())); });
-      document.getElementById('ct').innerHTML = _ldListHtml(forms);
-    })
-    .catch(function(e) {
-      document.getElementById('ct').innerHTML = '<div style="padding:24px;color:#ef4444;">โหลดไม่ได้: ' + esc(e.message) + '</div>';
+  Promise.all([
+    db.collection(LEAD_FORM_COL).orderBy('createdAt', 'desc').get(),
+    db.collection(LEAD_SUB_COL).get()
+  ]).then(function(results) {
+    var forms = [], counts = {};
+    results[0].forEach(function(d) { forms.push(Object.assign({id: d.id}, d.data())); });
+    results[1].forEach(function(d) {
+      var fid = d.data().formId;
+      if (fid) counts[fid] = (counts[fid] || 0) + 1;
     });
+    forms.forEach(function(f) { f._realCount = counts[f.id] || 0; });
+    document.getElementById('ct').innerHTML = _ldListHtml(forms);
+  }).catch(function(e) {
+    document.getElementById('ct').innerHTML = '<div style="padding:24px;color:#ef4444;">โหลดไม่ได้: ' + esc(e.message) + '</div>';
+  });
 }
 
 function _ldListHtml(forms) {
@@ -58,18 +65,20 @@ function _ldListHtml(forms) {
     var action = f.submitAction || 'only';
     var aLabel = action === 'email' ? '📧 ส่งอีเมล' : action === 'redirect' ? '🔗 Redirect' : '📥 Submit only';
     var aCls   = action === 'email' ? 'ld-badge-blue' : action === 'redirect' ? 'ld-badge-green' : 'ld-badge-gray';
-    var total  = ((f.commonFields || f.fields || []).length) + (f.personalFields || []).length + (f.companyFields || []).length;
+    var noSec  = function(arr) { return (arr||[]).filter(function(x){ return x.type!=='section'; }); };
+    var total  = noSec(f.commonFields||f.fields).length + noSec(f.personalFields).length + noSec(f.companyFields).length;
     h += '<div class="ld-card">';
     h += '<div class="ld-card-hd"><span class="ld-card-title">' + esc(f.title) + '</span>';
     h += '<span class="ld-badge ' + aCls + '">' + aLabel + '</span></div>';
     if (f.eventName) h += '<div class="ld-card-event">📍 ' + esc(f.eventName) + '</div>';
     h += '<div class="ld-card-stats"><span>' + total + ' fields</span>';
     if (f.useTypeToggle) h += '<span class="ld-badge ld-badge-purple">👤🏢 แยกประเภท</span>';
-    h += '<span style="margin-left:auto;">🙋 <b>' + (f.submissionsCount || 0) + '</b></span></div>';
+    h += '<span style="margin-left:auto;">🙋 <b>' + (f._realCount || 0) + '</b></span></div>';
     h += '<div class="ld-card-actions">';
     h += '<button onclick="showLeadFormDetail(\'' + f.id + '\')" class="btn bsm bo">📊 ดูข้อมูล</button>';
     h += '<button onclick="showEditLeadFormM(\'' + f.id + '\')" class="btn bsm bo">✏️ แก้ไข</button>';
     h += '<button onclick="showLeadQR(\'' + f.id + '\')" class="btn bsm bo">📱 QR</button>';
+    h += '<button onclick="copyLeadForm(\'' + f.id + '\')" class="btn bsm bo" title="คัดลอก Form">📋</button>';
     h += '<button onclick="deleteLeadForm(\'' + f.id + '\')" class="btn bsm bd">🗑️</button>';
     h += '</div></div>';
   });
@@ -230,23 +239,30 @@ function _lfSecHtml(sec) {
   }
   var h = '';
   fields.forEach(function(f, idx) {
-    var hasOpts = f.type === 'select' || f.type === 'radio' || f.type === 'multicheck';
-    h += '<div class="lf-frow" id="lfrow_' + f.id + '">';
+    var isSec   = f.type === 'section';
+    var hasOpts = !isSec && (f.type === 'select' || f.type === 'radio' || f.type === 'multicheck');
+    h += '<div class="lf-frow' + (isSec ? ' lf-frow-sec' : '') + '" id="lfrow_' + f.id + '">';
     h += '<div class="lf-frow-top">';
-    h += '<input class="fm-input lf-flbl" placeholder="ชื่อ Field เช่น บริษัท" value="' + esc(f.label) + '" oninput="_lfSetLabel(\'' + sec + '\',\'' + f.id + '\',this.value)">';
+    h += '<input class="fm-input lf-flbl" placeholder="' + (isSec ? 'ชื่อหัวข้อ Section เช่น ข้อมูลส่วนตัว' : 'ชื่อ Field เช่น บริษัท') + '" value="' + esc(f.label) + '" oninput="_lfSetLabel(\'' + sec + '\',\'' + f.id + '\',this.value)">';
     h += '<select class="fm-input lf-ftype" onchange="_lfSetType(\'' + sec + '\',\'' + f.id + '\',this.value)">';
     LEAD_FIELD_TYPES.forEach(function(t) {
       h += '<option value="' + t.v + '"' + (f.type === t.v ? ' selected' : '') + '>' + t.l + '</option>';
     });
     h += '</select>';
-    h += '<label class="lf-req-chk" title="บังคับกรอก"><input type="checkbox" ' + (f.required ? 'checked' : '') +
-      ' onchange="_lfSetReq(\'' + sec + '\',\'' + f.id + '\',this.checked)"> บังคับ</label>';
+    if (!isSec) {
+      h += '<label class="lf-req-chk" title="บังคับกรอก"><input type="checkbox" ' + (f.required ? 'checked' : '') +
+        ' onchange="_lfSetReq(\'' + sec + '\',\'' + f.id + '\',this.checked)"> บังคับ</label>';
+    }
     h += '<div class="lf-order-btns">';
     h += '<button onclick="_lfMoveF(\'' + sec + '\',\'' + f.id + '\',-1)" class="btn bsm bo lf-ord-btn" title="เลื่อนขึ้น"' + (idx === 0 ? ' disabled' : '') + '>▲</button>';
     h += '<button onclick="_lfMoveF(\'' + sec + '\',\'' + f.id + '\',1)" class="btn bsm bo lf-ord-btn" title="เลื่อนลง"' + (idx === fields.length - 1 ? ' disabled' : '') + '>▼</button>';
     h += '</div>';
+    h += '<button onclick="_lfDupF(\'' + sec + '\',\'' + f.id + '\')" class="btn bsm bo" title="คัดลอก field">📋</button>';
     h += '<button onclick="_lfDelF(\'' + sec + '\',\'' + f.id + '\')" class="btn bsm bd" title="ลบ">✕</button>';
     h += '</div>';
+    if (!isSec) {
+      h += '<div class="lf-hint-wrap"><input class="fm-input lf-hint-inp" placeholder="💡 คำอธิบาย / hint ให้ลูกค้า (ไม่บังคับ)" value="' + esc(f.hint || '') + '" oninput="_lfSetHint(\'' + sec + '\',\'' + f.id + '\',this.value)"></div>';
+    }
     if (hasOpts) {
       h += '<div class="lf-opts-wrap"><small style="color:var(--text2);">ตัวเลือก (1 บรรทัด = 1 ตัวเลือก)</small>';
       h += '<textarea class="fm-input" rows="3" oninput="_lfSetOpts(\'' + sec + '\',\'' + f.id + '\',this.value)">' +
@@ -292,13 +308,27 @@ function _lfMoveF(s, id, dir) {
   document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s);
 }
 
+function _lfSetHint(s, id, v) { var f = _lfGet(s, id); if (f) f.hint = v; }
+
+function _lfDupF(s, id) {
+  var arr = _lfSec[s];
+  var idx = arr.findIndex(function(x) { return x.id === id; });
+  if (idx < 0) return;
+  var copy = JSON.parse(JSON.stringify(arr[idx]));
+  copy.id = _lfId();
+  arr.splice(idx + 1, 0, copy);
+  document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s);
+  document.getElementById('lf_tabs_wrap').innerHTML   = _lfTabsHtml();
+  _lfSyncEmailDdl();
+}
+
 function _lfSyncEmailDdl() {
   var sel = document.getElementById('lf_email_field');
   if (!sel) return;
   var cur = sel.value;
   sel.innerHTML = '<option value="">-- เลือก field ที่เป็นอีเมลลูกค้า --</option>';
   _lfSec.common.concat(_lfSec.personal).concat(_lfSec.company).forEach(function(f) {
-    if (f.label) sel.innerHTML += '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+    if (f.label && f.type !== 'section') sel.innerHTML += '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.label) + '</option>';
   });
 }
 
@@ -361,6 +391,22 @@ function deleteLeadForm(formId) {
   });
 }
 
+function copyLeadForm(formId) {
+  if (!confirm('คัดลอก Form นี้?')) return;
+  db.collection(LEAD_FORM_COL).doc(formId).get().then(function(d) {
+    if (!d.exists) return Promise.reject(new Error('ไม่พบ Form'));
+    var data = d.data();
+    data.title          = 'สำเนา — ' + (data.title || '');
+    data.submissionsCount = 0;
+    data.createdAt      = firebase.firestore.FieldValue.serverTimestamp();
+    data.updatedAt      = firebase.firestore.FieldValue.serverTimestamp();
+    data.createdBy      = CURRENT_USER.email;
+    return db.collection(LEAD_FORM_COL).add(data);
+  }).then(function() {
+    rLeads(); toast('📋 คัดลอก Form แล้ว');
+  }).catch(function(e) { alert('คัดลอกไม่ได้: ' + e.message); });
+}
+
 // ---------- QR Modal ----------
 
 function showLeadQR(formId) {
@@ -404,7 +450,8 @@ function showLeadFormDetail(formId) {
 function _ldAnalyticsHtml(form, subs) {
   var allFields = (form.commonFields || form.fields || [])
     .concat(form.personalFields || [])
-    .concat(form.companyFields  || []);
+    .concat(form.companyFields  || [])
+    .filter(function(f) { return f.type !== 'section'; });
 
   var todayStr  = new Date().toISOString().split('T')[0];
   var todayCnt  = subs.filter(function(s) {
@@ -708,7 +755,8 @@ function exportLeadSubs() {
   if (!_ldCache) return;
   var form   = _ldCache.form;
   var subs   = _ldCache.subs;
-  var fields = (form.commonFields || form.fields || []).concat(form.personalFields || []).concat(form.companyFields || []);
+  var fields = (form.commonFields || form.fields || []).concat(form.personalFields || []).concat(form.companyFields || [])
+    .filter(function(f) { return f.type !== 'section'; });
   var header = ['วันที่'];
   if (form.useTypeToggle) header.push('ประเภท');
   header = header.concat(fields.map(function(f) { return f.label; }));
