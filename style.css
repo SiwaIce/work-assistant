@@ -8951,6 +8951,11 @@ input:focus, select:focus, textarea:focus {
 .ld-chart-card{background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:14px;padding:16px 14px}
 .ld-chart-title{font-size:.8em;color:var(--text2,#94a3b8);font-weight:600;margin-bottom:12px;letter-spacing:.2px}
 
+/* Field order buttons */
+.lf-order-btns{display:flex;flex-direction:column;gap:2px}
+.lf-ord-btn{padding:2px 7px!important;font-size:.7em!important;line-height:1.4;min-width:0}
+.lf-ord-btn:disabled{opacity:.2;cursor:default}
+
 @media(max-width:640px){
   .ld-grid{grid-template-columns:1fr}
   .lf-frow-top{flex-direction:column;align-items:stretch}

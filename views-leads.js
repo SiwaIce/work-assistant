@@ -228,7 +228,7 @@ function _lfSecHtml(sec) {
       secHint + '<br><small>กด "+ เพิ่ม Field"</small></div>';
   }
   var h = '';
-  fields.forEach(function(f) {
+  fields.forEach(function(f, idx) {
     var hasOpts = f.type === 'select' || f.type === 'radio' || f.type === 'multicheck';
     h += '<div class="lf-frow" id="lfrow_' + f.id + '">';
     h += '<div class="lf-frow-top">';
@@ -240,6 +240,10 @@ function _lfSecHtml(sec) {
     h += '</select>';
     h += '<label class="lf-req-chk" title="บังคับกรอก"><input type="checkbox" ' + (f.required ? 'checked' : '') +
       ' onchange="_lfSetReq(\'' + sec + '\',\'' + f.id + '\',this.checked)"> บังคับ</label>';
+    h += '<div class="lf-order-btns">';
+    h += '<button onclick="_lfMoveF(\'' + sec + '\',\'' + f.id + '\',-1)" class="btn bsm bo lf-ord-btn" title="เลื่อนขึ้น"' + (idx === 0 ? ' disabled' : '') + '>▲</button>';
+    h += '<button onclick="_lfMoveF(\'' + sec + '\',\'' + f.id + '\',1)" class="btn bsm bo lf-ord-btn" title="เลื่อนลง"' + (idx === fields.length - 1 ? ' disabled' : '') + '>▼</button>';
+    h += '</div>';
     h += '<button onclick="_lfDelF(\'' + sec + '\',\'' + f.id + '\')" class="btn bsm bd" title="ลบ">✕</button>';
     h += '</div>';
     if (hasOpts) {
@@ -275,6 +279,16 @@ function _lfDelF(s, id) {
   document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s);
   document.getElementById('lf_tabs_wrap').innerHTML   = _lfTabsHtml();
   _lfSyncEmailDdl();
+}
+
+function _lfMoveF(s, id, dir) {
+  var arr = _lfSec[s];
+  var idx = arr.findIndex(function(x) { return x.id === id; });
+  if (idx < 0) return;
+  var to = idx + dir;
+  if (to < 0 || to >= arr.length) return;
+  var tmp = arr[idx]; arr[idx] = arr[to]; arr[to] = tmp;
+  document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s);
 }
 
 function _lfSyncEmailDdl() {

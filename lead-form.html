@@ -116,6 +116,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .st{font-size:1.25em;font-weight:700;margin-bottom:8px}
 .ss{color:var(--muted);font-size:.9em;line-height:1.7}
 
+.add-more-btn{display:none;margin-top:18px;background:none;border:none;font-family:inherit;font-size:.82em;color:var(--muted);cursor:pointer;text-decoration:underline;padding:4px 8px}
+.add-more-btn:hover{color:var(--text)}
 .loading-wrap{text-align:center;padding:52px 0;color:var(--muted)}
 .err-wrap{text-align:center;padding:48px 16px}
 .err-wrap .ei{font-size:2.5em;display:block;margin-bottom:12px}
@@ -198,7 +200,12 @@ function renderForm(){
   }
 
   h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล <span>→</span></button>';
-  h += '<div class="success-wrap" id="sw"><span class="si">✅</span><div class="st">ขอบคุณสำหรับข้อมูล!</div><div class="ss" id="ss-sub"></div></div>';
+  h += '<div class="success-wrap" id="sw">' +
+    '<span class="si">✅</span>' +
+    '<div class="st">ขอบคุณสำหรับข้อมูล!</div>' +
+    '<div class="ss" id="ss-sub"></div>' +
+    '<button class="add-more-btn" id="add-more-btn" onclick="resetForm()">+ ส่งข้อมูลเพิ่ม</button>' +
+    '</div>';
   document.getElementById('app').innerHTML = h;
 }
 
@@ -343,6 +350,15 @@ function showSuccess(sub){
   document.getElementById('sub-btn').style.display='none';
   document.getElementById('ss-sub').textContent=sub||'';
   document.getElementById('sw').style.display='block';
+  if(_form.submitAction!=='redirect'){
+    document.getElementById('add-more-btn').style.display='block';
+  }
+}
+function resetForm(){
+  _cType=null;
+  _ratingVals={};
+  renderForm();
+  document.getElementById('app').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function showErr(msg){
   document.getElementById('app').innerHTML='<div class="err-wrap"><span class="ei">⚠️</span><p>'+esc(msg)+'</p></div>';
