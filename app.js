@@ -1,23 +1,30 @@
 // ===== GOOGLE SHEETS API CONFIG =====
 var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
 
-// ===== GEMINI AI PROXY CONFIG =====
-// วาง Web app URL ของ Apps Script proxy (ที่ซ่อน GEMINI_KEY) ตรงนี้
-var GEMINI_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
+// ===== GEMINI AI CONFIG =====
+// วาง Gemini API Key ตรงนี้ (ได้จาก aistudio.google.com)
+var GEMINI_API_KEY = 'AQ.Ab8RN6JjcRAETzgRHQeYVXkjtaYhgd3GHI0Hqd7K52TV7woEog';  // <--- วาง key ของคุณตรงนี้
 
 // ===== LEAD FORM EMAIL CONFIG =====
 // URL ของ Apps Script สำหรับส่งอีเมล (ใส่ถ้าต้องการฟีเจอร์ส่งอีเมลหลัง submit)
 // Apps Script ต้องรองรับ action:'sendEmail' → MailApp.sendEmail(to, subject, body)
 var LEAD_EMAIL_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
 
-// เรียก Gemini ผ่าน proxy — คืน text หรือ null ถ้า error
+// เรียก Gemini API ตรงๆ — คืน text หรือ null ถ้า error
 async function askGemini(prompt) {
-  if (!GEMINI_API_URL) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_URL'); return null; }
+  if (!GEMINI_API_KEY) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน app.js'); return null; }
   try {
-    var res = await fetch(GEMINI_API_URL, { method: 'POST', body: JSON.stringify({ action: 'gemini', prompt: prompt }) });
+    var res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
     var data = await res.json();
-    if (!data.ok) { toast('❌ AI: ' + (data.error || 'unknown error')); return null; }
-    return (data.text || '').trim();
+    if (!res.ok) { toast('❌ AI: ' + ((data.error && data.error.message) || res.status)); return null; }
+    return ((data.candidates[0].content.parts[0].text) || '').trim();
   } catch (e) {
     console.warn('askGemini failed:', e);
     toast('❌ เชื่อมต่อ AI ไม่ได้');

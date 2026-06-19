@@ -244,6 +244,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="showImportPipelineM()">📥 Import</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="dlPipeCSV()">📤 CSV</button>' +
+    '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' +
     '<div style="flex:1"></div>' +
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()">🃏</button>' +
@@ -484,6 +485,44 @@ function dlPipeCSV() {
     csv += '\n';
   });
   dlBlob(csv, 'pipeline-' + _td() + '.csv');
+}
+
+async function aiAnalyzePipeline(btn) {
+  var allPipes = ST.getAll('pipeline');
+  if (!allPipes.length) { toast('ยังไม่มีข้อมูล Pipeline'); return; }
+
+  var restore = _aiBtnBusy(btn, '⏳ กำลังวิเคราะห์...');
+
+  var statusCount = {}, statusAmt = {};
+  var totalAmt = 0, biddingSoon = [];
+  allPipes.forEach(function(p) {
+    var s = p.status || 'unknown';
+    var amt = Number(p.forecastAmount) || 0;
+    statusCount[s] = (statusCount[s] || 0) + 1;
+    statusAmt[s] = (statusAmt[s] || 0) + amt;
+    totalAmt += amt;
+    if (p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30)
+      biddingSoon.push(p.projectName || 'ไม่ระบุชื่อ');
+  });
+
+  var statusLines = Object.keys(statusCount).map(function(s) {
+    return s + ': ' + statusCount[s] + ' รายการ มูลค่า ' + fmtMoneyShort(statusAmt[s] || 0);
+  }).join('\n');
+
+  var prompt = 'คุณเป็นที่ปรึกษาฝ่ายขาย B2B ช่วยวิเคราะห์สถานะ Pipeline ต่อไปนี้และให้คำแนะนำเป็นภาษาไทย:\n\n' +
+    'จำนวนโครงการทั้งหมด: ' + allPipes.length + ' รายการ\n' +
+    'มูลค่ารวม: ' + fmtMoneyShort(totalAmt) + '\n\n' +
+    'แบ่งตาม Status:\n' + statusLines + '\n\n' +
+    (biddingSoon.length ? 'โครงการที่ต้อง Bid ภายใน 30 วัน: ' + biddingSoon.join(', ') + '\n\n' : '') +
+    'กรุณาสรุป: 1) จุดแข็ง 2) ความเสี่ยง 3) สิ่งที่ควรทำต่อไป (Next Action) โดยกระชับและเป็นประโยชน์';
+
+  var result = await askGemini(prompt);
+  restore();
+  if (!result) return;
+
+  openM('🤖 AI วิเคราะห์ Pipeline',
+    '<div style="white-space:pre-wrap;font-size:.88rem;line-height:1.7;color:var(--text)">' + sanitize(result) + '</div>'
+  );
 }
 
 // ================================================================

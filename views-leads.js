@@ -472,6 +472,7 @@ function _ldAnalyticsHtml(form, subs) {
   h += '<button onclick="showLeadQR(\'' + form.id + '\')" class="btn bsm bo">📱 QR</button>';
   h += '<button onclick="showEditLeadFormM(\'' + form.id + '\')" class="btn bsm bo">✏️</button>';
   if (subs.length) h += '<button onclick="exportLeadSubs()" class="btn bsm bp">📎 Export</button>';
+  if (subs.length) h += '<button id="ldAiBtn" onclick="aiAnalyzeLeads(this)" class="btn bsm bo">🤖 AI</button>';
   h += '</div></div>';
 
   // Stat cards
@@ -771,4 +772,55 @@ function exportLeadSubs() {
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
   XLSX.writeFile(wb, form.title + '_submissions.xlsx');
+}
+
+async function aiAnalyzeLeads(btn) {
+  if (!_ldCache) return;
+  var form = _ldCache.form;
+  var subs = _ldCache.subs;
+  if (!subs.length) { toast('ยังไม่มีข้อมูล'); return; }
+
+  var restore = _aiBtnBusy(btn, '⏳ วิเคราะห์...');
+
+  var fields = (form.commonFields || form.fields || []).concat(form.personalFields || []).concat(form.companyFields || [])
+    .filter(function(f) { return f.type !== 'section'; });
+
+  // สรุปข้อมูลแต่ละ field
+  var fieldSummaries = fields.slice(0, 10).map(function(f) {
+    var vals = subs.map(function(s) { return s.answers && s.answers[f.id]; }).filter(function(v) { return v !== undefined && v !== '' && v !== null; });
+    if (!vals.length) return null;
+    if (f.type === 'select' || f.type === 'radio' || f.type === 'multicheck') {
+      var cnt = {};
+      vals.forEach(function(v) {
+        var items = Array.isArray(v) ? v : [v];
+        items.forEach(function(i) { cnt[i] = (cnt[i] || 0) + 1; });
+      });
+      var top = Object.keys(cnt).sort(function(a,b){return cnt[b]-cnt[a];}).slice(0,5)
+        .map(function(k){ return k + '(' + cnt[k] + ')'; }).join(', ');
+      return f.label + ': ' + top;
+    }
+    return f.label + ': ' + vals.length + ' คำตอบ';
+  }).filter(Boolean).join('\n');
+
+  var todayStr = new Date().toISOString().split('T')[0];
+  var todayCnt = subs.filter(function(s) {
+    if (!s.createdAt) return false;
+    var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+    return d.toISOString().split('T')[0] === todayStr;
+  }).length;
+
+  var prompt = 'คุณเป็นนักวิเคราะห์การตลาด ช่วยวิเคราะห์ข้อมูล Lead Form ต่อไปนี้และให้คำแนะนำเป็นภาษาไทย:\n\n' +
+    'ชื่อฟอร์ม: ' + form.title + '\n' +
+    'จำนวน Submissions ทั้งหมด: ' + subs.length + '\n' +
+    'วันนี้: ' + todayCnt + ' คน\n\n' +
+    'สรุปข้อมูลที่กรอก:\n' + (fieldSummaries || 'ไม่มีข้อมูล') + '\n\n' +
+    'กรุณาวิเคราะห์: 1) กลุ่มลูกค้าหลักที่เห็น 2) Insight ที่น่าสนใจ 3) คำแนะนำ Next Step สำหรับทีมขาย';
+
+  var result = await askGemini(prompt);
+  restore();
+  if (!result) return;
+
+  openM('🤖 AI วิเคราะห์ Lead — ' + esc(form.title),
+    '<div style="white-space:pre-wrap;font-size:.88rem;line-height:1.7;color:var(--text)">' + sanitize(result) + '</div>'
+  );
 }
