@@ -15,10 +15,13 @@ async function askGemini(prompt) {
   if (!GEMINI_API_KEY) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน app.js'); return null; }
   try {
     var res = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + GEMINI_API_KEY
+        },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       }
     );
