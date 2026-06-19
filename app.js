@@ -2,29 +2,25 @@
 var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
 
 // ===== GEMINI AI CONFIG =====
-// วาง Gemini API Key ตรงนี้ (ได้จาก aistudio.google.com)
-var GEMINI_API_KEY = 'AQ.Ab8RN6JjcRAETzgRHQeYVXkjtaYhgd3GHI0Hqd7K52TV7woEog';  // <--- วาง key ของคุณตรงนี้
+// Key โหลดจาก Firestore (ตั้งค่าที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ → Gemini AI)
+var GEMINI_API_KEY = '';
 
 // ===== LEAD FORM EMAIL CONFIG =====
-// URL ของ Apps Script สำหรับส่งอีเมล (ใส่ถ้าต้องการฟีเจอร์ส่งอีเมลหลัง submit)
-// Apps Script ต้องรองรับ action:'sendEmail' → MailApp.sendEmail(to, subject, body)
-var LEAD_EMAIL_API_URL = '';  // <--- เช่น 'https://script.google.com/macros/s/.../exec'
+var LEAD_EMAIL_API_URL = '';
 
-// เรียก Gemini API ตรงๆ — คืน text หรือ null ถ้า error
+// เรียก Gemini API — รองรับทั้ง AQ. (Bearer) และ AIzaSy (key param)
 async function askGemini(prompt) {
-  if (!GEMINI_API_KEY) { toast('❌ ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน app.js'); return null; }
+  if (!GEMINI_API_KEY) { toast('❌ ยังไม่ได้ตั้งค่า Gemini Key — ไปที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ'); return null; }
   try {
-    var res = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + GEMINI_API_KEY
-        },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      }
-    );
+    var isBearer = GEMINI_API_KEY.startsWith('AQ.');
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent' +
+      (isBearer ? '' : '?key=' + GEMINI_API_KEY);
+    var headers = { 'Content-Type': 'application/json' };
+    if (isBearer) headers['Authorization'] = 'Bearer ' + GEMINI_API_KEY;
+    var res = await fetch(url, {
+      method: 'POST', headers: headers,
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
     var data = await res.json();
     if (!res.ok) { toast('❌ AI: ' + ((data.error && data.error.message) || res.status)); return null; }
     return ((data.candidates[0].content.parts[0].text) || '').trim();
@@ -33,6 +29,80 @@ async function askGemini(prompt) {
     toast('❌ เชื่อมต่อ AI ไม่ได้');
     return null;
   }
+}
+
+// ===== AI CHAT PANEL =====
+var _aiHistory = [];
+
+function toggleAiChat() {
+  var panel = document.getElementById('aiChatPanel');
+  if (!panel) return;
+  var isOpen = panel.classList.contains('open');
+  if (isOpen) { panel.classList.remove('open'); return; }
+  panel.classList.add('open');
+  if (!_aiHistory.length) _aiRenderMsgs();
+  setTimeout(function() {
+    var inp = document.getElementById('aiChatInput');
+    if (inp) inp.focus();
+  }, 200);
+}
+
+function _aiRenderMsgs() {
+  var el = document.getElementById('aiChatMsgs');
+  if (!el) return;
+  if (!_aiHistory.length) {
+    el.innerHTML = '<div class="ai-welcome">สวัสดีครับ 👋 ถามหรือสั่งงานได้เลย เช่น<br>"สรุป pipeline เดือนนี้" หรือ "lead form มีกี่คน"</div>';
+    return;
+  }
+  el.innerHTML = _aiHistory.map(function(m) {
+    return '<div class="ai-msg ai-msg-' + m.role + '">' +
+      '<div class="ai-bubble">' + (m.role === 'user' ? sanitize(m.text) : m.text.replace(/\n/g, '<br>')) + '</div>' +
+      '</div>';
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAiMsg() {
+  var inp = document.getElementById('aiChatInput');
+  if (!inp) return;
+  var text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  inp.disabled = true;
+
+  _aiHistory.push({ role: 'user', text: text });
+  _aiRenderMsgs();
+
+  // สร้าง context จากข้อมูลในแอป
+  var ctx = '';
+  try {
+    var pipes = ST.getAll('pipeline');
+    var dealers = ST.getAll('dealers');
+    if (pipes.length) {
+      var statusCnt = {};
+      pipes.forEach(function(p) { statusCnt[p.status] = (statusCnt[p.status] || 0) + 1; });
+      ctx += 'Pipeline (' + pipes.length + ' รายการ): ' + Object.keys(statusCnt).map(function(s){ return s+'='+statusCnt[s]; }).join(', ') + '\n';
+    }
+    if (dealers.length) ctx += 'Dealers: ' + dealers.length + ' บริษัท\n';
+  } catch(e) {}
+
+  var systemCtx = ctx ? ('ข้อมูลปัจจุบันในระบบ:\n' + ctx + '\n') : '';
+  var historyText = _aiHistory.slice(-6, -1).map(function(m){ return (m.role==='user'?'User':'AI') + ': ' + m.text; }).join('\n');
+  var fullPrompt = 'คุณเป็นผู้ช่วย AI สำหรับทีมขาย B2B ตอบเป็นภาษาไทยกระชับ ตรงประเด็น\n' +
+    systemCtx + (historyText ? 'บทสนทนาก่อนหน้า:\n' + historyText + '\n\n' : '') +
+    'User: ' + text;
+
+  var reply = await askGemini(fullPrompt);
+  inp.disabled = false;
+  inp.focus();
+  if (!reply) return;
+  _aiHistory.push({ role: 'ai', text: reply });
+  _aiRenderMsgs();
+}
+
+function clearAiChat() {
+  _aiHistory = [];
+  _aiRenderMsgs();
 }
 
 // helper: สลับปุ่มเป็นสถานะโหลด แล้วคืนค่าเดิมเมื่อเสร็จ

@@ -380,6 +380,16 @@ function rAdmin(el) {
     '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
     '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
 
+    // Gemini AI Key
+    '<div class="card"><h2>🤖 Gemini AI</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">API Key สำหรับ AI วิเคราะห์ข้อมูล — ได้จาก aistudio.google.com</p>' +
+    '<div id="adm_gemini_status" style="font-size:.72rem;margin-bottom:8px;color:var(--text2)">⏳ กำลังโหลด...</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">' +
+    '<input type="password" id="adm_gemini_key" placeholder="AQ. หรือ AIzaSy..." style="flex:1;font-family:monospace;font-size:.8rem">' +
+    '<button class="btn bo bsm" onclick="var i=document.getElementById(\'adm_gemini_key\');i.type=i.type===\'password\'?\'text\':\'password\'">👁</button>' +
+    '</div>' +
+    '<button class="btn bp bsm" onclick="saveGeminiKey()">💾 บันทึก Key</button></div>' +
+
     // External Links
     '<div class="card"><h2>🔗 External Links</h2>' +
     '<p style="font-size:.68rem;color:#64748b;margin-bottom:6px">Pricelist, Stock Check, เครื่องมือภายนอก</p>' +
@@ -432,6 +442,9 @@ function switchAdminTab(id) {
   });
   if (id === 'data') {
     setTimeout(function() { initNewDemoPolicies(); initLevelRequirementTabs(); }, 50);
+  }
+  if (id === 'connect') {
+    setTimeout(loadGeminiKeyToAdmin, 100);
   }
 }
 
@@ -718,6 +731,36 @@ function admSaveMonthly() {
   cfg.monthlyChecklist = el.value.trim().split('\n').filter(function(s) { return s.trim(); }).map(function(s) { return s.trim(); });
   saveConfig(cfg);
   toast('💾 บันทึกแล้ว');
+}
+
+function saveGeminiKey() {
+  var key = (document.getElementById('adm_gemini_key').value || '').trim();
+  if (!key) { toast('❌ กรุณาใส่ API Key'); return; }
+  if (!SYNC_ENABLED) { toast('❌ ต้อง Login Google ก่อน'); return; }
+  db.collection('appConfig').doc('gemini').set({ apiKey: key }, { merge: true })
+    .then(function() {
+      GEMINI_API_KEY = key;
+      toast('✅ บันทึก Gemini Key แล้ว');
+      var st = document.getElementById('adm_gemini_status');
+      if (st) st.textContent = '✅ ตั้งค่าแล้ว (บันทึกเมื่อกี้)';
+      document.getElementById('adm_gemini_key').value = '';
+      document.getElementById('adm_gemini_key').type = 'password';
+    })
+    .catch(function(e) { toast('❌ บันทึกไม่ได้: ' + e.message); });
+}
+
+function loadGeminiKeyToAdmin() {
+  if (!SYNC_ENABLED) return;
+  db.collection('appConfig').doc('gemini').get().then(function(doc) {
+    var st = document.getElementById('adm_gemini_status');
+    if (!st) return;
+    if (doc.exists && doc.data().apiKey) {
+      GEMINI_API_KEY = doc.data().apiKey;
+      st.textContent = '✅ ตั้งค่าแล้ว (ใส่ key ใหม่เพื่อเปลี่ยน)';
+    } else {
+      st.textContent = '⚠️ ยังไม่ได้ตั้งค่า — ใส่ key แล้วกด บันทึก';
+    }
+  }).catch(function() {});
 }
 
 function admSaveLinks() {

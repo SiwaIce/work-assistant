@@ -137,6 +137,7 @@
   <button class="mode-toggle" onclick="toggleViewMode()" title="สลับ Desktop/Mobile">
     <span id="modeIcon">📱</span>
   </button>
+  <button class="ai-chat-btn" onclick="toggleAiChat()" title="AI Assistant">🤖</button>
   <button class="theme-btn" onclick="switchTheme()" title="สลับ Theme">🎨</button>
   <button class="refresh-btn" onclick="softRefresh()" title="รีเฟรชข้อมูล (อยู่หน้าเดิม)">🔄</button>
   <div id="clock"></div>
@@ -183,6 +184,22 @@
   <input type="text" id="searchInp" placeholder="🔍 ค้นหา Dealer, Pipeline, Visit..." oninput="doSearch()" autocomplete="off">
   <div class="search-results" id="searchRes"></div>
 </div>
+</div>
+
+<!-- AI CHAT PANEL -->
+<div id="aiChatPanel" class="ai-panel">
+  <div class="ai-panel-header">
+    <span>🤖 AI Assistant</span>
+    <div style="display:flex;gap:6px">
+      <button class="btn bo bsm" onclick="clearAiChat()" title="ล้างแชท">🗑</button>
+      <button class="btn bo bsm" onclick="toggleAiChat()">✕</button>
+    </div>
+  </div>
+  <div id="aiChatMsgs" class="ai-msgs"></div>
+  <div class="ai-input-row">
+    <input type="text" id="aiChatInput" class="ai-input" placeholder="ถามหรือสั่งงาน AI..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){sendAiMsg();event.preventDefault()}" autocomplete="off">
+    <button class="btn bp bsm" onclick="sendAiMsg()">ส่ง</button>
+  </div>
 </div>
 
 <!-- TIMER BAR -->
