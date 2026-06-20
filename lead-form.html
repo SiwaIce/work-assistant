@@ -139,9 +139,41 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   .card{padding:22px 16px}
   .tc{padding:14px 8px}.tc-ico{font-size:1.9em}
 }
+
+/* ── Cover image ── */
+#cover-slot{max-width:480px;margin:0 auto}
+.cover-img{width:100%;border-radius:14px 14px 0 0;display:block;max-height:220px;object-fit:cover}
+.card.no-top-radius{border-radius:0 0 18px 18px}
+
+/* ── Logo ── */
+.form-logo{width:56px;height:56px;border-radius:12px;object-fit:cover;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+
+/* ── Description ── */
+.form-desc{font-size:.82em;color:var(--muted);line-height:1.65;margin-top:8px;white-space:pre-line;text-align:left}
+
+/* ── Countdown ── */
+.countdown-wrap{display:flex;justify-content:center;gap:8px;margin-top:12px}
+.cd-unit{text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:7px 12px;min-width:52px}
+.cd-num{font-size:1.3em;font-weight:700;color:var(--blue);display:block;line-height:1.2}
+.cd-lbl{color:var(--muted);font-size:.68em;margin-top:2px;display:block}
+
+/* ── Progress bar ── */
+.progress-bar-wrap{margin:0 0 18px}
+.progress-pct{text-align:right;font-size:.7em;color:var(--muted);margin-bottom:3px}
+.progress-bar-track{background:var(--border);border-radius:99px;height:4px;overflow:hidden}
+.progress-bar-fill{height:100%;background:var(--blue);border-radius:99px;transition:width .4s ease;min-width:0}
+
+/* ── Image / Video field ── */
+.fld-display-img{width:100%;border-radius:10px;display:block;margin:4px 0 14px;object-fit:cover}
+.fld-vid-wrap{position:relative;padding-bottom:56.25%;height:0;margin:4px 0 14px;border-radius:10px;overflow:hidden;background:#000}
+.fld-vid-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+
+/* ── Conditional hidden ── */
+.fld-cond-hidden{display:none!important}
 </style>
 </head>
 <body>
+<div id="cover-slot"></div>
 <div class="card" id="app">
   <div class="loading-wrap">⏳ กำลังโหลดฟอร์ม...</div>
 </div>
@@ -209,61 +241,111 @@ function fmtPhone(el){
 /* ── Render form ── */
 function renderForm(){
   var f = _form;
+
+  // Apply theme color
+  if(f.themeColor){
+    document.documentElement.style.setProperty('--blue', f.themeColor);
+    document.documentElement.style.setProperty('--blue-bd', f.themeColor+'4d');
+    document.querySelector('meta[name=theme-color]').content = f.themeColor;
+  }
+
+  // Cover image (outside card)
+  var cs = document.getElementById('cover-slot');
+  if(cs){
+    if(f.coverImage){
+      cs.innerHTML='<img src="'+esc(f.coverImage)+'" class="cover-img" onerror="this.style.display=\'none\'">';
+      document.getElementById('app').classList.add('no-top-radius');
+    } else {
+      cs.innerHTML='';
+      document.getElementById('app').classList.remove('no-top-radius');
+    }
+  }
+
   _activeFlds = {};
-  var allFld = (f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
-  allFld.filter(function(x){ return x.type!=='section'; }).forEach(function(x){ _activeFlds[x.id]=x; });
+  var allFld=(f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
+  allFld.filter(function(x){ return x.type!=='section'&&x.type!=='image'&&x.type!=='video'; }).forEach(function(x){ _activeFlds[x.id]=x; });
 
-  var h = '<div class="fh"><span class="fh-ico">📋</span>';
-  h += '<div class="fh-title">'+esc(f.title)+'</div>';
-  if(f.eventName) h += '<div class="fh-ev">📍 '+esc(f.eventName)+'</div>';
-  h += '</div>';
+  // Header
+  var h='<div class="fh">';
+  if(f.logoUrl) h+='<img src="'+esc(f.logoUrl)+'" class="form-logo" onerror="this.style.display=\'none\'">';
+  else h+='<span class="fh-ico">📋</span>';
+  h+='<div class="fh-title">'+esc(f.title)+'</div>';
+  if(f.eventName) h+='<div class="fh-ev">📍 '+esc(f.eventName)+'</div>';
+  if(f.description) h+='<div class="form-desc">'+esc(f.description)+'</div>';
+  if(f.countdownEnd) h+='<div id="cd-wrap" class="countdown-wrap"></div>';
+  h+='</div>';
+
+  // Progress bar (only if has required fields)
+  var reqCount=Object.values(_activeFlds).filter(function(x){return x.required;}).length;
+  if(reqCount>0) h+='<div class="progress-bar-wrap"><div class="progress-pct" id="progress-pct">0%</div><div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div></div>';
 
   if(f.useTypeToggle){
-    h += '<div class="type-grid">';
-    h += '<div class="tc" id="tc_p" onclick="selType(\'personal\')"><span class="tc-ico">👤</span><div class="tc-name">บุคคล</div><div class="tc-sub">Individual</div></div>';
-    h += '<div class="tc" id="tc_c" onclick="selType(\'company\')"><span class="tc-ico">🏢</span><div class="tc-name">บริษัท / องค์กร</div><div class="tc-sub">Organization</div></div>';
-    h += '</div><div class="type-err" id="type_err">⚠ กรุณาเลือกประเภท</div>';
+    h+='<div class="type-grid">';
+    h+='<div class="tc" id="tc_p" onclick="selType(\'personal\')"><span class="tc-ico">👤</span><div class="tc-name">บุคคล</div><div class="tc-sub">Individual</div></div>';
+    h+='<div class="tc" id="tc_c" onclick="selType(\'company\')"><span class="tc-ico">🏢</span><div class="tc-name">บริษัท / องค์กร</div><div class="tc-sub">Organization</div></div>';
+    h+='</div><div class="type-err" id="type_err">⚠ กรุณาเลือกประเภท</div>';
   }
 
-  var common = f.commonFields||f.fields||[];
+  var common=f.commonFields||f.fields||[];
   if(common.length){
-    if(f.useTypeToggle) h += '<div class="sdiv">ข้อมูลทั่วไป</div>';
-    common.forEach(function(fld){ h += rField(fld); });
+    if(f.useTypeToggle) h+='<div class="sdiv">ข้อมูลทั่วไป</div>';
+    common.forEach(function(fld){ h+=rField(fld); });
   }
 
   if(f.useTypeToggle){
-    h += '<div id="sec_p" style="display:none;">';
+    h+='<div id="sec_p" style="display:none;">';
     if((f.personalFields||[]).length){
-      h += '<div class="sdiv">ข้อมูลส่วนตัว</div>';
-      f.personalFields.forEach(function(fld){ h += rField(fld); });
+      h+='<div class="sdiv">ข้อมูลส่วนตัว</div>';
+      f.personalFields.forEach(function(fld){ h+=rField(fld); });
     }
-    h += '</div>';
-    h += '<div id="sec_c" style="display:none;">';
+    h+='</div>';
+    h+='<div id="sec_c" style="display:none;">';
     if((f.companyFields||[]).length){
-      h += '<div class="sdiv">ข้อมูลบริษัท / องค์กร</div>';
-      f.companyFields.forEach(function(fld){ h += rField(fld); });
+      h+='<div class="sdiv">ข้อมูลบริษัท / องค์กร</div>';
+      f.companyFields.forEach(function(fld){ h+=rField(fld); });
     }
-    h += '</div>';
+    h+='</div>';
   }
 
-  h += '<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
-  document.getElementById('app').innerHTML = h;
+  h+='<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
+  document.getElementById('app').innerHTML=h;
 
-  // Autofocus first visible input (skip if type toggle — user must pick type first)
+  if(f.countdownEnd) initCountdown(f.countdownEnd);
+  initConditional();
+  updateProgress();
+  document.getElementById('app').addEventListener('input', updateProgress);
+  document.getElementById('app').addEventListener('change', function(){ _updateConditional(); updateProgress(); });
+
   if(!f.useTypeToggle){
     setTimeout(function(){
-      var first = document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel],#app input[type=number],#app select');
+      var first=document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel],#app input[type=number],#app select');
       if(first) first.focus();
-    }, 150);
+    },150);
   }
+}
+
+/* ── YouTube URL → embed URL ── */
+function _ytEmbed(url){
+  var m=(url||'').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m?'https://www.youtube.com/embed/'+m[1]:null;
 }
 
 /* ── Render field ── */
 function rField(f){
-  // Section header — not an input, render as divider
   if(f.type==='section'){
     return '<div class="fld-sec"><span class="fld-sec-title">'+esc(f.label||'')+'</span></div>'+
       (f.hint?'<div class="fld-sec-sub">'+esc(f.hint)+'</div>':'');
+  }
+  if(f.type==='image'){
+    if(!f.url) return '';
+    return (f.label?'<p style="font-size:.8em;color:var(--muted);margin-bottom:4px">'+esc(f.label)+'</p>':'')+
+      '<img src="'+esc(f.url)+'" class="fld-display-img" alt="'+esc(f.label||'')+'" onerror="this.style.display=\'none\'">';
+  }
+  if(f.type==='video'){
+    var eu=_ytEmbed(f.url||'');
+    if(!eu) return '';
+    return (f.label?'<div class="fld-sec-sub" style="margin:14px 0 6px">'+esc(f.label)+'</div>':'')+
+      '<div class="fld-vid-wrap"><iframe src="'+esc(eu)+'" allowfullscreen loading="lazy"></iframe></div>';
   }
   var id   = 'fld_'+f.id;
   var req  = f.required;
@@ -308,7 +390,7 @@ function rField(f){
     default:
       inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่..." '+blur+'>'; break;
   }
-  return '<div class="fg">'+lbl+hint+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
+  return '<div class="fg" id="fg_'+f.id+'">'+lbl+hint+inp+'<div class="ferr" id="err_'+f.id+'">กรุณากรอกข้อมูลในช่องนี้</div></div>';
 }
 
 /* ── Validate on blur ── */
@@ -343,6 +425,7 @@ function selType(t){
   document.getElementById('type_err').style.display='none';
   document.getElementById('sec_p').style.display=t==='personal'?'':'none';
   document.getElementById('sec_c').style.display=t==='company'?'':'none';
+  _updateConditional(); updateProgress();
   // Autofocus first field after type selection
   setTimeout(function(){
     var first = document.querySelector('#sec_'+(t==='personal'?'p':'c')+' input[type=text],#sec_'+(t==='personal'?'p':'c')+' input[type=email],#sec_'+(t==='personal'?'p':'c')+' input[type=tel]');
@@ -375,7 +458,11 @@ function submitForm(){
   var active=(f.commonFields||f.fields||[]).slice();
   if(_cType==='personal') active=active.concat(f.personalFields||[]);
   if(_cType==='company')  active=active.concat(f.companyFields||[]);
-  active=active.filter(function(fld){ return fld.type!=='section'; });
+  active=active.filter(function(fld){
+    if(fld.type==='section'||fld.type==='image'||fld.type==='video') return false;
+    var el=document.getElementById('fg_'+fld.id);
+    return !el||!el.classList.contains('fld-cond-hidden');
+  });
 
   active.forEach(function(fld){
     var v=getVal(fld);
@@ -457,6 +544,61 @@ function resetForm(){
   _cType=null; _ratingVals={};
   renderForm();
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ── Countdown ── */
+function initCountdown(endDate){
+  var endMs=new Date(endDate).getTime();
+  if(isNaN(endMs)) return;
+  function pad(n){return n<10?'0'+n:String(n);}
+  function tick(){
+    var el=document.getElementById('cd-wrap'); if(!el) return;
+    var diff=Math.max(0,endMs-Date.now());
+    if(diff<=0){el.innerHTML='<span style="color:var(--err);font-size:.85em">⏰ หมดเวลาแล้ว</span>';return;}
+    var d=Math.floor(diff/86400000),h=Math.floor((diff%86400000)/3600000),
+        m=Math.floor((diff%3600000)/60000),s=Math.floor((diff%60000)/1000);
+    el.innerHTML=
+      '<div class="cd-unit"><span class="cd-num">'+d+'</span><span class="cd-lbl">วัน</span></div>'+
+      '<div class="cd-unit"><span class="cd-num">'+pad(h)+'</span><span class="cd-lbl">ชั่วโมง</span></div>'+
+      '<div class="cd-unit"><span class="cd-num">'+pad(m)+'</span><span class="cd-lbl">นาที</span></div>'+
+      '<div class="cd-unit"><span class="cd-num">'+pad(s)+'</span><span class="cd-lbl">วินาที</span></div>';
+    setTimeout(tick,1000);
+  }
+  tick();
+}
+
+/* ── Conditional fields ── */
+function initConditional(){ _updateConditional(); }
+function _updateConditional(){
+  var allFlds=(_form.commonFields||_form.fields||[]).concat(_form.personalFields||[]).concat(_form.companyFields||[]);
+  allFlds.forEach(function(f){
+    if(!f.condition||!f.condition.fieldId) return;
+    var el=document.getElementById('fg_'+f.id); if(!el) return;
+    var trig=_activeFlds[f.condition.fieldId];
+    if(!trig){el.classList.remove('fld-cond-hidden');return;}
+    var val=getVal(trig), condVal=(f.condition.value||'').toLowerCase();
+    var match=Array.isArray(val)?val.some(function(v){return v.toLowerCase()===condVal;}):String(val||'').toLowerCase()===condVal;
+    el.classList.toggle('fld-cond-hidden',!match);
+  });
+}
+
+/* ── Progress bar ── */
+function updateProgress(){
+  var fill=document.getElementById('progress-fill');
+  var pctEl=document.getElementById('progress-pct');
+  if(!fill||!pctEl) return;
+  var total=0,done=0;
+  Object.values(_activeFlds).forEach(function(f){
+    if(!f.required) return;
+    var el=document.getElementById('fg_'+f.id);
+    if(el&&el.classList.contains('fld-cond-hidden')) return;
+    total++;
+    var v=getVal(f);
+    if(v!==''&&v!==0&&v!==false) done++;
+  });
+  var pct=total?Math.round(done/total*100):0;
+  fill.style.width=pct+'%';
+  pctEl.textContent=pct+'%';
 }
 
 function showErr(msg){

@@ -8891,6 +8891,11 @@ input:focus, select:focus, textarea:focus {
 .lf-req-chk{display:flex;align-items:center;gap:4px;font-size:.8em;color:var(--text2,#94a3b8);white-space:nowrap;cursor:pointer}
 .lf-opts-wrap{margin-top:10px;padding-top:10px;border-top:1px solid var(--border,#334155)}
 .lf-opts-wrap small{display:block;margin-bottom:6px}
+.lf-cond-wrap{display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border,#334155);flex-wrap:wrap}
+.lf-cond-lbl{font-size:.75em;color:var(--text2,#94a3b8);white-space:nowrap;flex-shrink:0}
+.lf-cond-sel{flex:1;min-width:120px;font-size:.8em}
+.lf-cond-eq{font-size:.8em;color:var(--text2,#94a3b8);flex-shrink:0}
+.lf-cond-val{width:110px;font-size:.8em}
 
 /* Submissions stats row — grid fills full width */
 .ld-stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:10px;margin-bottom:16px}

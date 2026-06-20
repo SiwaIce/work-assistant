@@ -16,6 +16,8 @@ var LEAD_FIELD_TYPES = [
   {v:'date',       l:'วันที่'},
   {v:'rating',     l:'Rating (ดาว 1–5)'},
   {v:'section',    l:'── หัวข้อ Section ──'},
+  {v:'image',      l:'🖼️ แสดงรูปภาพ'},
+  {v:'video',      l:'▶️ วิดีโอ YouTube'},
 ];
 
 // ---------- State ----------
@@ -135,10 +137,15 @@ function showEditLeadFormM(formId) {
 }
 
 function _openLeadModal(f) {
-  var isEdit = !!f;
-  var action = f ? (f.submitAction || 'only') : 'only';
-  var eCfg   = (f && f.emailConfig) || {};
-  var rUrl   = (f && f.redirectUrl) || '';
+  var isEdit      = !!f;
+  var action      = f ? (f.submitAction || 'only') : 'only';
+  var eCfg        = (f && f.emailConfig) || {};
+  var rUrl        = (f && f.redirectUrl) || '';
+  var coverImage  = (f && f.coverImage)  || '';
+  var logoUrl     = (f && f.logoUrl)     || '';
+  var description = (f && f.description) || '';
+  var themeColor  = (f && f.themeColor)  || '#2563eb';
+  var countdownEnd= (f && f.countdownEnd)|| '';
 
   var h = '<div>';
   h += '<div class="fg"><label>ชื่อ Form *</label><input id="lf_title" class="fm-input" value="' + esc(f ? f.title || '' : '') + '" placeholder="เช่น Lead Form — DJI Drone Show 2026"></div>';
@@ -169,6 +176,20 @@ function _openLeadModal(f) {
   h += '<div class="fg"><label>เนื้อหา <small style="color:var(--text2);">(ใช้ {{ชื่อ Field}} แทนข้อมูลที่กรอก)</small></label>';
   h += '<textarea id="lf_email_body" class="fm-input" rows="4" placeholder="สวัสดีคุณ {{ชื่อ-นามสกุล}}\n\nขอบคุณที่สนใจ...">' + esc(eCfg.body || '') + '</textarea></div>';
   h += '</div>';
+
+  // Design settings
+  h += '<hr style="border-color:var(--border,#334155);margin:16px 0;">';
+  h += '<details style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:700;font-size:.9em;padding:6px 0;user-select:none">🎨 การออกแบบฟอร์ม <small style="font-weight:400;color:var(--text2)">(ไม่บังคับ)</small></summary>';
+  h += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;">';
+  h += '<div class="fr" style="gap:10px;flex-wrap:wrap">';
+  h += '<div class="fg" style="flex:1;min-width:200px"><label>🖼️ Cover Image URL</label><input id="lf_cover_img" class="fm-input" value="' + esc(coverImage) + '" placeholder="https://... (แบนเนอร์หัวฟอร์ม)"></div>';
+  h += '<div class="fg" style="flex:1;min-width:180px"><label>🏷️ Logo URL</label><input id="lf_logo_url" class="fm-input" value="' + esc(logoUrl) + '" placeholder="https://... (โลโก้มุมซ้ายบน)"></div>';
+  h += '</div>';
+  h += '<div class="fg"><label>📝 คำอธิบายฟอร์ม</label><textarea id="lf_desc" class="fm-input" rows="2" placeholder="รายละเอียดหรือคำชี้แจงสำหรับลูกค้า">' + esc(description) + '</textarea></div>';
+  h += '<div class="fr" style="gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  h += '<div class="fg"><label>🎨 สีธีมหลัก</label><div style="display:flex;align-items:center;gap:8px"><input type="color" id="lf_theme_color" value="' + esc(themeColor) + '" style="width:42px;height:36px;padding:2px;border-radius:6px;border:1px solid var(--border,#334155);cursor:pointer"><span style="font-size:.78rem;color:var(--text2)">สีปุ่ม / accent</span></div></div>';
+  h += '<div class="fg" style="flex:1;min-width:180px"><label>⏱️ Countdown ถึงวันที่</label><input type="datetime-local" id="lf_countdown" class="fm-input" value="' + esc(countdownEnd) + '"></div>';
+  h += '</div></div></details>';
 
   // Field builder
   h += '<hr style="border-color:var(--border,#334155);margin:16px 0;">';
@@ -239,17 +260,22 @@ function _lfSecHtml(sec) {
   }
   var h = '';
   fields.forEach(function(f, idx) {
-    var isSec   = f.type === 'section';
-    var hasOpts = !isSec && (f.type === 'select' || f.type === 'radio' || f.type === 'multicheck');
+    var isSec    = f.type === 'section';
+    var isImg    = f.type === 'image';
+    var isVid    = f.type === 'video';
+    var isDisplay= isSec || isImg || isVid;
+    var hasOpts  = !isDisplay && (f.type === 'select' || f.type === 'radio' || f.type === 'multicheck');
+    var lblPlaceholder = isSec ? 'ชื่อหัวข้อ Section' : isImg ? 'คำอธิบายรูป (ไม่บังคับ)' : isVid ? 'ชื่อวิดีโอ (ไม่บังคับ)' : 'ชื่อ Field เช่น บริษัท';
+
     h += '<div class="lf-frow' + (isSec ? ' lf-frow-sec' : '') + '" id="lfrow_' + f.id + '">';
     h += '<div class="lf-frow-top">';
-    h += '<input class="fm-input lf-flbl" placeholder="' + (isSec ? 'ชื่อหัวข้อ Section เช่น ข้อมูลส่วนตัว' : 'ชื่อ Field เช่น บริษัท') + '" value="' + esc(f.label) + '" oninput="_lfSetLabel(\'' + sec + '\',\'' + f.id + '\',this.value)">';
+    h += '<input class="fm-input lf-flbl" placeholder="' + lblPlaceholder + '" value="' + esc(f.label) + '" oninput="_lfSetLabel(\'' + sec + '\',\'' + f.id + '\',this.value)">';
     h += '<select class="fm-input lf-ftype" onchange="_lfSetType(\'' + sec + '\',\'' + f.id + '\',this.value)">';
     LEAD_FIELD_TYPES.forEach(function(t) {
       h += '<option value="' + t.v + '"' + (f.type === t.v ? ' selected' : '') + '>' + t.l + '</option>';
     });
     h += '</select>';
-    if (!isSec) {
+    if (!isDisplay) {
       h += '<label class="lf-req-chk" title="บังคับกรอก"><input type="checkbox" ' + (f.required ? 'checked' : '') +
         ' onchange="_lfSetReq(\'' + sec + '\',\'' + f.id + '\',this.checked)"> บังคับ</label>';
     }
@@ -260,13 +286,47 @@ function _lfSecHtml(sec) {
     h += '<button onclick="_lfDupF(\'' + sec + '\',\'' + f.id + '\')" class="btn bsm bo" title="คัดลอก field">📋</button>';
     h += '<button onclick="_lfDelF(\'' + sec + '\',\'' + f.id + '\')" class="btn bsm bd" title="ลบ">✕</button>';
     h += '</div>';
-    if (!isSec) {
+
+    // Image URL input + preview
+    if (isImg) {
+      h += '<div class="lf-hint-wrap"><input class="fm-input lf-hint-inp" placeholder="🔗 URL รูปภาพ https://..." value="' + esc(f.url || '') + '" oninput="_lfSetUrl(\'' + sec + '\',\'' + f.id + '\',this.value)">';
+      if (f.url) h += '<img src="' + esc(f.url) + '" style="max-height:70px;border-radius:6px;margin-top:6px;display:block" onerror="this.style.display=\'none\'">';
+      h += '</div>';
+    }
+    // Video URL input
+    if (isVid) {
+      h += '<div class="lf-hint-wrap"><input class="fm-input lf-hint-inp" placeholder="🎬 YouTube URL https://www.youtube.com/watch?v=..." value="' + esc(f.url || '') + '" oninput="_lfSetUrl(\'' + sec + '\',\'' + f.id + '\',this.value)"></div>';
+    }
+    // Hint (non-display fields)
+    if (!isDisplay) {
       h += '<div class="lf-hint-wrap"><input class="fm-input lf-hint-inp" placeholder="💡 คำอธิบาย / hint ให้ลูกค้า (ไม่บังคับ)" value="' + esc(f.hint || '') + '" oninput="_lfSetHint(\'' + sec + '\',\'' + f.id + '\',this.value)"></div>';
     }
+    // Options (select/radio/multicheck)
     if (hasOpts) {
       h += '<div class="lf-opts-wrap"><small style="color:var(--text2);">ตัวเลือก (1 บรรทัด = 1 ตัวเลือก)</small>';
       h += '<textarea class="fm-input" rows="3" oninput="_lfSetOpts(\'' + sec + '\',\'' + f.id + '\',this.value)">' +
         esc((f.options || []).join('\n')) + '</textarea></div>';
+    }
+    // Conditional field (non-display fields only)
+    if (!isDisplay) {
+      var trigFields = fields.filter(function(tf) {
+        return tf.id !== f.id && (tf.type === 'radio' || tf.type === 'select' || tf.type === 'multicheck') && tf.label;
+      });
+      if (trigFields.length) {
+        h += '<div class="lf-cond-wrap">';
+        h += '<span class="lf-cond-lbl">⚡ แสดงเมื่อ</span>';
+        h += '<select class="fm-input lf-cond-sel" onchange="_lfSetCondField(\'' + sec + '\',\'' + f.id + '\',this.value)">';
+        h += '<option value="">— ไม่มีเงื่อนไข —</option>';
+        trigFields.forEach(function(tf) {
+          h += '<option value="' + tf.id + '"' + (f.condition && f.condition.fieldId === tf.id ? ' selected' : '') + '>' + esc(tf.label) + '</option>';
+        });
+        h += '</select>';
+        if (f.condition && f.condition.fieldId) {
+          h += '<span class="lf-cond-eq"> = </span>';
+          h += '<input class="fm-input lf-cond-val" placeholder="ค่าที่ต้องตรงกัน" value="' + esc(f.condition.value || '') + '" oninput="_lfSetCondVal(\'' + sec + '\',\'' + f.id + '\',this.value)">';
+        }
+        h += '</div>';
+      }
     }
     h += '</div>';
   });
@@ -308,7 +368,10 @@ function _lfMoveF(s, id, dir) {
   document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s);
 }
 
-function _lfSetHint(s, id, v) { var f = _lfGet(s, id); if (f) f.hint = v; }
+function _lfSetHint(s, id, v)      { var f = _lfGet(s, id); if (f) f.hint = v; }
+function _lfSetUrl(s, id, v)       { var f = _lfGet(s, id); if (f) { f.url = v; document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s); } }
+function _lfSetCondField(s, id, v) { var f = _lfGet(s, id); if (!f) return; f.condition = v ? {fieldId: v, value: (f.condition && f.condition.value) || ''} : null; document.getElementById('lf_fields_wrap').innerHTML = _lfSecHtml(s); }
+function _lfSetCondVal(s, id, v)   { var f = _lfGet(s, id); if (f && f.condition) f.condition.value = v; }
 
 function _lfDupF(s, id) {
   var arr = _lfSec[s];
@@ -328,7 +391,7 @@ function _lfSyncEmailDdl() {
   var cur = sel.value;
   sel.innerHTML = '<option value="">-- เลือก field ที่เป็นอีเมลลูกค้า --</option>';
   _lfSec.common.concat(_lfSec.personal).concat(_lfSec.company).forEach(function(f) {
-    if (f.label && f.type !== 'section') sel.innerHTML += '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.label) + '</option>';
+    if (f.label && f.type !== 'section' && f.type !== 'image' && f.type !== 'video') sel.innerHTML += '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.label) + '</option>';
   });
 }
 
@@ -343,12 +406,17 @@ function saveLeadForm() {
     title:          title,
     eventName:      (document.getElementById('lf_event').value || '').trim(),
     useTypeToggle:  _lfUseType,
-    commonFields:   _lfSec.common.filter(function(f) { return f.label.trim(); }),
-    personalFields: _lfSec.personal.filter(function(f) { return f.label.trim(); }),
-    companyFields:  _lfSec.company.filter(function(f) { return f.label.trim(); }),
+    commonFields:   _lfSec.common.filter(function(f) { return f.label.trim() || f.type === 'image' || f.type === 'video'; }),
+    personalFields: _lfSec.personal.filter(function(f) { return f.label.trim() || f.type === 'image' || f.type === 'video'; }),
+    companyFields:  _lfSec.company.filter(function(f) { return f.label.trim() || f.type === 'image' || f.type === 'video'; }),
     submitAction:   action,
     active:         true,
     updatedAt:      firebase.firestore.FieldValue.serverTimestamp(),
+    coverImage:     (document.getElementById('lf_cover_img') ? document.getElementById('lf_cover_img').value.trim() : ''),
+    logoUrl:        (document.getElementById('lf_logo_url')  ? document.getElementById('lf_logo_url').value.trim()  : ''),
+    description:    (document.getElementById('lf_desc')      ? document.getElementById('lf_desc').value.trim()      : ''),
+    themeColor:     (document.getElementById('lf_theme_color') ? document.getElementById('lf_theme_color').value : '#2563eb'),
+    countdownEnd:   (document.getElementById('lf_countdown') ? document.getElementById('lf_countdown').value : ''),
   };
 
   if (action === 'redirect') {
