@@ -154,9 +154,12 @@ auth.onAuthStateChanged(function(user) {
       if (typeof publishTeamConfig === 'function' && typeof getSalesMembers === 'function') publishTeamConfig(getSalesMembers());
     }, 7000);
     
-    // โหลด Gemini Key จาก Firestore
+    // โหลด Gemini config จาก Firestore
     db.collection('appConfig').doc('gemini').get().then(function(doc) {
-      if (doc.exists && doc.data().apiKey) GEMINI_API_KEY = doc.data().apiKey;
+      if (!doc.exists) return;
+      var d = doc.data();
+      if (d.proxyUrl) GEMINI_PROXY_URL = d.proxyUrl;
+      if (d.apiKey) GEMINI_API_KEY = d.apiKey;
     }).catch(function() {});
 
     // รีเฟรช UI

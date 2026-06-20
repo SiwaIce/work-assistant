@@ -2,28 +2,38 @@
 var SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzl71mCGeEJyvRq6xxyqvbcDSJzb49NCxZRj76DsLZNoX4FVcoNk9EEHLJ9dJ1ghpf6WA/exec';  // <--- เปลี่ยนเป็น URL จากขั้นตอนที่ 1.4
 
 // ===== GEMINI AI CONFIG =====
-// Key โหลดจาก Firestore (ตั้งค่าที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ → Gemini AI)
+// โหลดจาก Firestore (ตั้งค่าที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ → Gemini AI)
 var GEMINI_API_KEY = '';
+var GEMINI_PROXY_URL = '';
 
 // ===== LEAD FORM EMAIL CONFIG =====
 var LEAD_EMAIL_API_URL = '';
 
-// เรียก Gemini API — รองรับทั้ง AQ. (Bearer) และ AIzaSy (key param)
+// เรียก Gemini — ผ่าน proxy URL (Apps Script) ถ้ามี ไม่งั้นใช้ key ตรง
 async function askGemini(prompt) {
-  if (!GEMINI_API_KEY) { toast('❌ ยังไม่ได้ตั้งค่า Gemini Key — ไปที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ'); return null; }
   try {
-    var isBearer = GEMINI_API_KEY.startsWith('AQ.');
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent' +
-      (isBearer ? '' : '?key=' + GEMINI_API_KEY);
-    var headers = { 'Content-Type': 'application/json' };
-    if (isBearer) headers['Authorization'] = 'Bearer ' + GEMINI_API_KEY;
-    var res = await fetch(url, {
-      method: 'POST', headers: headers,
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-    var data = await res.json();
-    if (!res.ok) { toast('❌ AI: ' + ((data.error && data.error.message) || res.status)); return null; }
-    return ((data.candidates[0].content.parts[0].text) || '').trim();
+    var res, data;
+    if (GEMINI_PROXY_URL) {
+      res = await fetch(GEMINI_PROXY_URL, {
+        method: 'POST',
+        body: JSON.stringify({ prompt: prompt })
+      });
+      data = await res.json();
+      if (!data.ok) { toast('❌ AI: ' + (data.error || 'error')); return null; }
+      return (data.text || '').trim();
+    } else if (GEMINI_API_KEY) {
+      res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
+      );
+      data = await res.json();
+      if (!res.ok) { toast('❌ AI: ' + ((data.error && data.error.message) || res.status)); return null; }
+      return ((data.candidates[0].content.parts[0].text) || '').trim();
+    } else {
+      toast('❌ ยังไม่ได้ตั้งค่า Gemini — ไปที่ ⚙️ ตั้งค่า → ☁️ เชื่อมต่อ');
+      return null;
+    }
   } catch (e) {
     console.warn('askGemini failed:', e);
     toast('❌ เชื่อมต่อ AI ไม่ได้');

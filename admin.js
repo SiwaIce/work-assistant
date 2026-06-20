@@ -380,15 +380,18 @@ function rAdmin(el) {
     '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
     '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
 
-    // Gemini AI Key
+    // Gemini AI
     '<div class="card"><h2>🤖 Gemini AI</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">API Key สำหรับ AI วิเคราะห์ข้อมูล — ได้จาก aistudio.google.com</p>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ใส่ Apps Script Proxy URL (แนะนำ) หรือ Gemini API Key ตรง</p>' +
     '<div id="adm_gemini_status" style="font-size:.72rem;margin-bottom:8px;color:var(--text2)">⏳ กำลังโหลด...</div>' +
-    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">' +
-    '<input type="password" id="adm_gemini_key" placeholder="AQ. หรือ AIzaSy..." style="flex:1;font-family:monospace;font-size:.8rem">' +
+    '<div class="fg"><label style="font-size:.75rem">Proxy URL (Apps Script) — แนะนำ</label>' +
+    '<input type="url" id="adm_gemini_proxy" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:.78rem"></div>' +
+    '<div class="fg" style="margin-top:6px"><label style="font-size:.75rem">หรือ Gemini API Key ตรง (AIzaSy...)</label>' +
+    '<div style="display:flex;gap:6px">' +
+    '<input type="password" id="adm_gemini_key" placeholder="AIzaSy..." style="flex:1;font-family:monospace;font-size:.8rem">' +
     '<button class="btn bo bsm" onclick="var i=document.getElementById(\'adm_gemini_key\');i.type=i.type===\'password\'?\'text\':\'password\'">👁</button>' +
-    '</div>' +
-    '<button class="btn bp bsm" onclick="saveGeminiKey()">💾 บันทึก Key</button></div>' +
+    '</div></div>' +
+    '<button class="btn bp bsm" style="margin-top:8px" onclick="saveGeminiKey()">💾 บันทึก</button></div>' +
 
     // External Links
     '<div class="card"><h2>🔗 External Links</h2>' +
@@ -734,17 +737,20 @@ function admSaveMonthly() {
 }
 
 function saveGeminiKey() {
-  var key = (document.getElementById('adm_gemini_key').value || '').trim();
-  if (!key) { toast('❌ กรุณาใส่ API Key'); return; }
   if (!SYNC_ENABLED) { toast('❌ ต้อง Login Google ก่อน'); return; }
-  db.collection('appConfig').doc('gemini').set({ apiKey: key }, { merge: true })
+  var proxy = (document.getElementById('adm_gemini_proxy').value || '').trim();
+  var key = (document.getElementById('adm_gemini_key').value || '').trim();
+  if (!proxy && !key) { toast('❌ กรุณาใส่ Proxy URL หรือ API Key'); return; }
+  var data = {};
+  if (proxy) { data.proxyUrl = proxy; GEMINI_PROXY_URL = proxy; }
+  if (key) { data.apiKey = key; GEMINI_API_KEY = key; }
+  db.collection('appConfig').doc('gemini').set(data, { merge: true })
     .then(function() {
-      GEMINI_API_KEY = key;
-      toast('✅ บันทึก Gemini Key แล้ว');
+      toast('✅ บันทึก Gemini config แล้ว');
       var st = document.getElementById('adm_gemini_status');
-      if (st) st.textContent = '✅ ตั้งค่าแล้ว (บันทึกเมื่อกี้)';
+      if (st) st.textContent = proxy ? '✅ ใช้ Proxy URL' : '✅ ใช้ API Key ตรง';
+      document.getElementById('adm_gemini_proxy').value = '';
       document.getElementById('adm_gemini_key').value = '';
-      document.getElementById('adm_gemini_key').type = 'password';
     })
     .catch(function(e) { toast('❌ บันทึกไม่ได้: ' + e.message); });
 }
@@ -754,11 +760,13 @@ function loadGeminiKeyToAdmin() {
   db.collection('appConfig').doc('gemini').get().then(function(doc) {
     var st = document.getElementById('adm_gemini_status');
     if (!st) return;
-    if (doc.exists && doc.data().apiKey) {
-      GEMINI_API_KEY = doc.data().apiKey;
-      st.textContent = '✅ ตั้งค่าแล้ว (ใส่ key ใหม่เพื่อเปลี่ยน)';
+    if (doc.exists) {
+      var d = doc.data();
+      if (d.proxyUrl) { GEMINI_PROXY_URL = d.proxyUrl; st.textContent = '✅ ใช้ Proxy URL (Apps Script)'; }
+      else if (d.apiKey) { GEMINI_API_KEY = d.apiKey; st.textContent = '✅ ใช้ API Key ตรง'; }
+      else { st.textContent = '⚠️ ยังไม่ได้ตั้งค่า'; }
     } else {
-      st.textContent = '⚠️ ยังไม่ได้ตั้งค่า — ใส่ key แล้วกด บันทึก';
+      st.textContent = '⚠️ ยังไม่ได้ตั้งค่า — ใส่ Proxy URL แล้วกด บันทึก';
     }
   }).catch(function() {});
 }
