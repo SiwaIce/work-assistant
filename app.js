@@ -627,6 +627,22 @@ function toggleSidebar() {
   if (sidebar) sidebar.classList.toggle('show');
 }
 
+function toggleSidebarCollapse() {
+  var collapsed = document.body.classList.toggle('sb-collapsed');
+  localStorage.setItem('sb_collapsed', collapsed ? '1' : '0');
+  var btn = document.querySelector('.collapse-btn');
+  if (btn) btn.textContent = collapsed ? '▶' : '◀';
+}
+(function() {
+  if (localStorage.getItem('sb_collapsed') === '1') {
+    document.body.classList.add('sb-collapsed');
+    document.addEventListener('DOMContentLoaded', function() {
+      var btn = document.querySelector('.collapse-btn');
+      if (btn) btn.textContent = '▶';
+    });
+  }
+})();
+
 // ================================================================
 // MODAL (with safety check)
 // ================================================================

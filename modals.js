@@ -2388,9 +2388,13 @@ function showImportPipelineM() {
     '<div style="margin:10px 0;text-align:center;color:#64748b;font-size:.72rem">— หรือ —</div>' +
     '<div class="fg"><label>วิธีที่ 2: เลือกไฟล์ .json</label>' +
     '<input type="file" id="imp_pipe_file" accept=".json" onchange="importPipelineFile(event)" style="font-size:.76rem"></div>' +
+    '<div style="margin:10px 0;text-align:center;color:#64748b;font-size:.72rem">— หรือ —</div>' +
+    '<div class="fg"><label>วิธีที่ 3: นำเข้าจาก Google Sheet (.csv)</label>' +
+    '<input type="file" id="imp_pipe_csv" accept=".csv" onchange="importPipelineCSVFile(event)" style="font-size:.76rem"></div>' +
     '<div style="margin-top:10px;font-size:.68rem;color:#64748b">' +
     '💡 จับคู่ Dealer Name อัตโนมัติ<br>' +
-    '⚠️ ถ้าหาไม่เจอจะสร้าง Dealer ใหม่ให้</div>');
+    '⚠️ ถ้าหาไม่เจอจะสร้าง Dealer ใหม่ให้<br>' +
+    '📥 CSV: จะมีหน้า Preview ให้เลือก Dealer ก่อน ไม่กระทบ Dealer/Pipeline เดิม</div>');
 }
 
 function importPipelineJSON() {
@@ -2512,9 +2516,186 @@ function processPipelineImport(items) {
     }
     success++;
   }
-  
+
   return {total: total, success: success, skipped: skipped};
 }
+
+// ================================================================
+// IMPORT PIPELINE FROM GOOGLE SHEET CSV — เลือกได้เฉพาะ Dealer ใหม่
+// ================================================================
+var _csvImportGroups = null;
+
+function importPipelineCSVFile(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var text = String(e.target.result || '').replace(/^﻿/, '');
+      var rows = _parseCSVText(text);
+      if (!rows.length) { alert('❌ ไฟล์ว่างหรืออ่านไม่ได้'); return; }
+      var headers = rows[0].map(function(h) { return h.trim(); });
+      var objects = rows.slice(1).filter(function(r) { return r.some(function(c) { return c && c.trim(); }); }).map(function(r) {
+        var o = {};
+        headers.forEach(function(h, idx) { o[h] = r[idx] !== undefined ? r[idx] : ''; });
+        return o;
+      });
+      if (!objects.length) { alert('❌ ไม่พบข้อมูลในไฟล์'); return; }
+      _buildCsvImportGroups(objects);
+      showPipeCSVPreviewM();
+    } catch (err) { alert('❌ อ่านไฟล์ไม่ได้: ' + err.message); }
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = '';
+}
+
+// CSV parser รองรับ quoted field ที่มี comma/newline ข้างใน (เช่นเซลล์ Model หลายบรรทัด)
+function _parseCSVText(text) {
+  var rows = [], row = [], field = '', inQuotes = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(function(r) { return r.length > 1 || (r[0] && r[0].trim()); });
+}
+
+function _csvDateToISO(s) {
+  s = (s || '').trim();
+  if (!s || s === '-') return '';
+  var p = s.split('/');
+  if (p.length !== 3) return '';
+  var y = p[2].length === 2 ? '20' + p[2] : p[2];
+  return y + '-' + ('' + p[1]).padStart(2, '0') + '-' + ('' + p[0]).padStart(2, '0');
+}
+
+function _csvStatusToId(text) {
+  text = (text || '').trim();
+  var cfg = getConfig();
+  var list = cfg.pipelineStatuses || [];
+  for (var i = 0; i < list.length; i++) { if (list[i].name === text) return list[i].id; }
+  var clean = text.replace(/[^฀-๿a-zA-Z]/g, '').toLowerCase();
+  for (var j = 0; j < list.length; j++) {
+    var lc = list[j].name.replace(/[^฀-๿a-zA-Z]/g, '').toLowerCase();
+    if (lc === clean) return list[j].id;
+  }
+  return 'prospect';
+}
+
+function _buildCsvImportGroups(objects) {
+  var dealers = ST.getAll('dealers');
+  var groups = {};
+  objects.forEach(function(o) {
+    var dn = (o['Dealer Name'] || '').trim();
+    if (!dn) return;
+    if (!groups[dn]) {
+      var match = null;
+      for (var j = 0; j < dealers.length; j++) {
+        if (!dealers[j].name) continue;
+        var a = dealers[j].name.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+        var b = dn.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+        if (a && b && (a.indexOf(b) !== -1 || b.indexOf(a) !== -1)) { match = dealers[j]; break; }
+      }
+      groups[dn] = { dealerName: dn, rows: [], existingMatch: match };
+    }
+    groups[dn].rows.push(o);
+  });
+  _csvImportGroups = groups;
+}
+
+function showPipeCSVPreviewM() {
+  var groups = _csvImportGroups;
+  if (!groups) return;
+  var names = Object.keys(groups);
+  var h = '<div style="max-width:560px">';
+  h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:10px">ติ๊กเฉพาะ Dealer ที่ต้องการนำเข้า — Dealer ที่ไม่ติ๊กจะไม่ถูกแก้ไขหรือสร้างใหม่เลย</p>';
+  h += '<div style="max-height:50vh;overflow-y:auto;border:1px solid var(--border,#334155);border-radius:8px">';
+  h += '<table class="tbl" style="width:100%"><thead><tr><th></th><th>Dealer Name (จากไฟล์)</th><th>จำนวน</th><th>สถานะ</th></tr></thead><tbody>';
+  names.forEach(function(n, idx) {
+    var g = groups[n];
+    var warn = g.existingMatch ? ('⚠️ มีชื่อคล้าย "' + sanitize(g.existingMatch.name) + '" อยู่แล้ว') : '🆕 ใหม่';
+    var checked = g.existingMatch ? '' : 'checked';
+    h += '<tr><td><input type="checkbox" id="csvg_' + idx + '" ' + checked + '></td>';
+    h += '<td>' + sanitize(n) + '</td><td>' + g.rows.length + '</td><td style="font-size:.74rem">' + warn + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="display:flex;gap:8px;margin-top:14px">';
+  h += '<button class="btn bp" style="flex:1" onclick="confirmPipeCSVImport()">📥 นำเข้าที่เลือกไว้</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button></div></div>';
+  openM('📥 Preview Import จาก Google Sheet', h);
+  window._csvGroupNames = names;
+}
+
+function confirmPipeCSVImport() {
+  var groups = _csvImportGroups, names = window._csvGroupNames || [];
+  if (!groups) return;
+  var dealersAdded = 0, pipesAdded = 0;
+
+  names.forEach(function(n, idx) {
+    var chk = document.getElementById('csvg_' + idx);
+    if (!chk || !chk.checked) return;
+    var g = groups[n];
+
+    var newDealer = ST.add('dealers', { name: n, level: 'B', showSerial: 'Y', djiDealer: (g.rows[0]['DJI Dealer'] || '') });
+    dealersAdded++;
+
+    g.rows.forEach(function(o) {
+      var modelLines = (o['Model'] || '').split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+      var items = modelLines.map(function(l) {
+        var p = l.split('*');
+        return { model: p[0] || '', qty: parseInt(p[1]) || 1 };
+      });
+      var pipeData = {
+        registerDate: _csvDateToISO(o['Register Date']),
+        projectName: o['Project Name'] || '',
+        endUserTH: o['End User Name'] || '',
+        endUserEN: o['End User Name Eng'] || '',
+        unitType: o['Unit type'] || '',
+        dealerId: newDealer.id,
+        djiDealer: o['DJI Dealer'] || '',
+        projectRevenue: parseFloat(o['Project revenue']) || 0,
+        items: items,
+        model: items[0] ? items[0].model : '',
+        modelQty: items[0] ? items[0].qty : 1,
+        forecastAmount: parseFloat(o['Forecast Amount']) || 0,
+        realAmount: parseFloat(o['Real Amount']) || 0,
+        tor: o['TOR'] || '',
+        biddingDate: _csvDateToISO(o['Bidding Date']),
+        shipmentDate: _csvDateToISO(o['Shipment date']),
+        remark: o['Remark'] || '',
+        appointmentLetter: o['Letter of Authorized หนังสือแต่งตั้ง'] || '',
+        status: _csvStatusToId(o['Status']),
+        recurring: (o['Duplicate งานซ้ำ'] || '').trim().toLowerCase() === 'yes',
+        saleName: o['Sale'] || '',
+        sheetDisplay: (o['DISPLAY (Hide/Show)'] || 'Show').trim() || 'Show',
+        nextAction: '', followupDate: ''
+      };
+      var pipe = ST.add('pipeline', pipeData);
+      pipesAdded++;
+
+      for (var u = 1; u <= 6; u++) {
+        var up = (o['Update ' + u] || '').trim();
+        if (up) ST.add('pipeLog', { pipeId: pipe.id, type: 'note', content: up, date: pipeData.registerDate || _nw() });
+      }
+    });
+  });
+
+  closeMForce();
+  toast('📥 นำเข้าสำเร็จ: Dealer ใหม่ ' + dealersAdded + ' ราย, Pipeline ' + pipesAdded + ' โครงการ');
+  render();
+}
+
 // ================================================================
 // ADD PIPE ACTION MODAL (สำหรับ Pipeline)
 // ================================================================

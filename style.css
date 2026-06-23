@@ -43,6 +43,10 @@ a{color:#3b82f6;text-decoration:none}
 .topbar-l{display:flex;align-items:center;gap:8px;min-width:0}
 .topbar-r{display:flex;align-items:center;gap:8px}
 .menu-btn{display:none;background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px}
+.collapse-btn{background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px}
+.collapse-btn:hover{color:#e2e8f0}
+body.sb-collapsed #sidebar{transform:translateX(-200px)}
+body.sb-collapsed #main{margin-left:0}
 .tt{font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #clock{color:#64748b;font-size:.72rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 .strig{background:#0f172a;border:1px solid #334155;color:#64748b;padding:4px 10px;border-radius:7px;font-size:.7rem;cursor:pointer;transition:.15s;white-space:nowrap}
@@ -521,6 +525,7 @@ textarea{min-height:50px;resize:vertical}
   #main{margin-left:0}
   #bnav{display:block}
   .menu-btn{display:block}
+  .collapse-btn{display:none}
   .hide-mobile{display:none}
   #ct{padding:10px;padding-bottom:80px}
   .fr,.fr3,.fr4{grid-template-columns:1fr}
