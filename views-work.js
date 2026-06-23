@@ -817,6 +817,9 @@ function rTasks(el) {
   ts.sort((a,b) => { if (a.status !== b.status) return a.status === 'active' ? -1 : 1; return ({high:0,medium:1,low:2}[a.priority]||1) - ({high:0,medium:1,low:2}[b.priority]||1); });
 
   el.innerHTML = `
+  <div class="fr" style="margin-bottom:8px;gap:6px">
+    <input type="text" id="qaTaskInput" class="fm-input" placeholder="⚡ พิมพ์ชื่องานแล้วกด Enter เพื่อสร้างทันที..." onkeydown="if(event.key==='Enter'){quickAddTask();}" style="flex:1">
+  </div>
   <div style="margin-bottom:8px;display:flex;gap:5px;flex-wrap:wrap">
     <button class="btn bp" onclick="showTaskM()">➕ เพิ่มงาน</button>
     <button class="btn bo" onclick="go('kanban')">📋 Kanban</button>
@@ -832,6 +835,19 @@ function rTasks(el) {
     <div class="lt">${sanitize(t.title)} ${sTag(t.status)} ${pTag(t.priority)} ${t.sequential?'<span class="tag tag-count">⚡</span>':''}</div>
     <div class="ls">${t.dealerId?(function(){var dd=ST.getOne('dealers',t.dealerId);return dd?'🏪 '+dd.name+' • ':''})():''}${t.category?'📂 '+t.category+' • ':''}${fD(t.dueDate)} ${dlB(t.dueDate, t.status==='completed')}</div>
     ${t.steps?.length?`<div class="pb"><div class="pf pf-blue" style="width:${pg}%"></div></div><div class="ls">${pg}%</div>`:''}</div></div>`; }).join('') : '<div class="empty"><div class="icon">📋</div><p>ยังไม่มีงาน</p></div>'}`;
+}
+
+function quickAddTask() {
+  var el = document.getElementById('qaTaskInput');
+  var title = el ? el.value.trim() : '';
+  if (!title) return;
+  ST.add('tasks', {
+    title: title, description: '', startDate: _td(), dueDate: '', priority: 'medium',
+    category: '', status: 'active', sequential: false, url: '', dealerId: '', pipeId: '', steps: []
+  });
+  el.value = '';
+  toast('⚡ เพิ่มงานแล้ว: ' + title);
+  render();
 }
 
 // ================================================================
@@ -1127,7 +1143,8 @@ function rTaskDet(el) {
     ${(t.steps || []).length ? t.steps.map(function(s, i) {
       var lk = isStepLocked(t, i);
       checkStepFuOverdue(s);
-      return `<div class="si ${s.done ? 'done' : ''} ${lk ? 'locked-step' : ''} ${dlC(s.dueDate, s.done)}">
+      return `<div class="si ${s.done ? 'done' : ''} ${lk ? 'locked-step' : ''} ${dlC(s.dueDate, s.done)}" draggable="true" ondragstart="stepDragStart(event,'${t.id}',${i})" ondragover="stepDragOver(event)" ondrop="stepDrop(event,'${t.id}',${i})">
+        <div style="cursor:grab;color:#475569;padding:0 2px;align-self:center" title="ลากเพื่อจัดลำดับ">⠿</div>
         <div class="ck ${s.done ? 'chk' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? '' : `togStep('${t.id}',${i})`}"></div>
         <div style="flex:1">
           <div class="stt" onclick="${lk ? '' : `editStep('${t.id}',${i})`}">
@@ -1246,6 +1263,27 @@ function addQuickFollowup(taskId) {
   ST.update('tasks', taskId, { followupDate: dueDate, followupNote: note });
   
   toast(`📞 ตั้งนัดติดตามวันที่ ${dueDate}`);
+  render();
+}
+
+// ================================================================
+// STEP DRAG REORDER
+// ================================================================
+function stepDragStart(e, tid, idx) {
+  e.dataTransfer.setData('text/plain', JSON.stringify({tid: tid, idx: idx}));
+}
+function stepDragOver(e) { e.preventDefault(); }
+function stepDrop(e, tid, toIdx) {
+  e.preventDefault();
+  var data;
+  try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { return; }
+  if (!data || data.tid !== tid || data.idx === toIdx) return;
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps) return;
+  var arr = t.steps;
+  var moved = arr.splice(data.idx, 1)[0];
+  arr.splice(toIdx, 0, moved);
+  ST.update('tasks', tid, {steps: arr});
   render();
 }
 

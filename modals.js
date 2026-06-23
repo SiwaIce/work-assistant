@@ -1776,9 +1776,25 @@ function showTaskM(eid, prefillDealerId) {
     }
   }
   
+  window._ftDescMode = 'text';
+  var tplOpts = ST.getAll('templates').map(function(tp) {
+    return '<option value="' + tp.id + '">' + sanitize(tp.name) + ' (' + (tp.steps || []).length + ')</option>';
+  }).join('');
+
   openM(eid ? '✏️ งาน' : '➕ งาน', '' +
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="ft_t" value="' + sanitize(t.title || '') + '"></div>' +
-    '<div class="fg"><label>รายละเอียด</label><textarea id="ft_d">' + sanitize(t.description || '') + '</textarea></div>' +
+    '<div class="fg"><label>รายละเอียด</label>' +
+    (eid ? '' : '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+      '<button type="button" class="btn bsm bp" id="ft_mode_text" onclick="setTaskDescMode(\'text\')">📝 ข้อความยาว</button>' +
+      '<button type="button" class="btn bsm bo" id="ft_mode_bullet" onclick="setTaskDescMode(\'bullet\')">☑ Bullet list</button></div>') +
+    '<div id="ft_text_wrap"><textarea id="ft_d">' + sanitize(t.description || '') + '</textarea></div>' +
+    (eid ? '' : '<div id="ft_bullet_wrap" style="display:none">' +
+      '<div class="fr" style="margin-bottom:6px;gap:6px">' +
+      '<select id="ft_tpl" style="flex:1" onchange="applyTaskTplToBullets(this.value)"><option value="">-- เลือกจาก Template --</option>' + tplOpts + '</select>' +
+      '<button type="button" class="btn bsm bo" onclick="saveBulletsAsTemplate()">💾 บันทึกเป็น Template</button></div>' +
+      '<textarea id="ft_bullets" rows="6" placeholder="พิมพ์ 1 บรรทัด = 1 bullet เช่น&#10;โทรลูกค้า A&#10;ส่งใบเสนอราคา B&#10;เช็คสต็อก C"></textarea>' +
+      '<div class="hint">💡 แต่ละบรรทัดจะกลายเป็น Step ในงานนี้ — แก้ไขรายละเอียด/วันที่/link ของแต่ละ bullet ได้ทีหลังในหน้า Task</div></div>') +
+    '</div>' +
     '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
     '<div class="fr">' +
     '<div class="fg"><label>🏪 Dealer</label><select id="ft_dealer" onchange="taskDealerChanged()">' + dealerOpts + '</select></div>' +
@@ -1825,6 +1841,42 @@ function taskDealerChanged() {
   }
 }
 
+function setTaskDescMode(mode) {
+  window._ftDescMode = mode;
+  document.getElementById('ft_text_wrap').style.display = mode === 'text' ? '' : 'none';
+  document.getElementById('ft_bullet_wrap').style.display = mode === 'bullet' ? '' : 'none';
+  document.getElementById('ft_mode_text').className = 'btn bsm ' + (mode === 'text' ? 'bp' : 'bo');
+  document.getElementById('ft_mode_bullet').className = 'btn bsm ' + (mode === 'bullet' ? 'bp' : 'bo');
+}
+
+function applyTaskTplToBullets(id) {
+  if (!id) return;
+  var tp = ST.getOne('templates', id);
+  if (!tp) return;
+  var el = document.getElementById('ft_bullets');
+  if (el) el.value = (tp.steps || []).map(function(s) { return s.title; }).join('\n');
+}
+
+function saveBulletsAsTemplate() {
+  var el = document.getElementById('ft_bullets');
+  var lines = el ? el.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean) : [];
+  if (!lines.length) return alert('พิมพ์ bullet ก่อนค่อยบันทึกเป็น Template');
+  var name = prompt('ชื่อ Template:', '');
+  if (!name || !name.trim()) return;
+  ST.add('templates', {
+    name: name.trim(),
+    sequential: false,
+    steps: lines.map(function(l) { return {title: l, offsetDays: 0, durationDays: 0}; })
+  });
+  toast('💾 บันทึก Template แล้ว');
+  var sel = document.getElementById('ft_tpl');
+  if (sel) {
+    sel.innerHTML = '<option value="">-- เลือกจาก Template --</option>' + ST.getAll('templates').map(function(tp) {
+      return '<option value="' + tp.id + '">' + sanitize(tp.name) + ' (' + (tp.steps || []).length + ')</option>';
+    }).join('');
+  }
+}
+
 function saveTask(eid) {
   var title = document.getElementById('ft_t');
   if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
@@ -1846,7 +1898,13 @@ function saveTask(eid) {
     closeMForce();
     go('taskDetail', {taskId: eid});
   } else {
-    data.steps = [];
+    var steps = [];
+    if (window._ftDescMode === 'bullet') {
+      var bulletsEl = document.getElementById('ft_bullets');
+      var lines = bulletsEl ? bulletsEl.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean) : [];
+      steps = lines.map(function(l) { return {id: gid(), title: l, startDate: '', dueDate: '', url: '', notes: '', done: false, kanban: 'todo'}; });
+    }
+    data.steps = steps;
     var t = ST.add('tasks', data);
     closeMForce();
     go('taskDetail', {taskId: t.id});
