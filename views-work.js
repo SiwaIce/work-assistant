@@ -1080,7 +1080,6 @@ function rTaskDet(el) {
   <div class="card">
     <h2>📅 กำหนดการ</h2>
     <div class="date-section">
-// ในส่วน Date Section ของ rTaskDet
 <div class="date-row ${isTaskOverdue ? 'overdue' : isTaskSoon ? 'soon' : ''}">
   <div class="date-label">📅 กำหนดเสร็จ (Deadline)</div>
   <div class="date-value">

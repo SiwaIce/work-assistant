@@ -468,23 +468,54 @@ function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 function dlPipeCSV() {
   var pipes = ST.getAll('pipeline').sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
-  var maxUp = 0;
-  pipes.forEach(function(p) { var c = ST.pipeLogsByPipe(p.id).length; if (c > maxUp) maxUp = c; });
-  
-  var csv = '\uFEFF"#","Register Date","Project Name","End User Name","End User Name Eng","Unit type","Dealer Name","DJI Dealer","Model","Forecast Amount","Real Amount","TOR","Bidding Date","Shipment date","Remark","หนังสือแต่งตั้ง","Status","งานซ้ำ"';
-  for (var u = 1; u <= Math.max(maxUp, 1); u++) csv += ',"Update ' + u + '"';
-  csv += '\n';
-  
-  pipes.forEach(function(p, idx) {
+  var UP_COLS = 6;
+
+  var csv = '﻿"Register Date","Project Name","End User Name","End User Name Eng","Unit type","Dealer Name","DJI Dealer","Project revenue","Model","M4T Qty.","M4E Qty.","Dock 3 Qty.","M4TD Qty.","M400 Qty.","Forecast Amount","Real Amount","TOR","Bidding Date","Forecast Month","Shipment date","Remark","Letter of Authorized หนังสือแต่งตั้ง","Status","Duplicate งานซ้ำ"';
+  for (var u = 1; u <= UP_COLS; u++) csv += ',"Update ' + u + '"';
+  csv += ',"Sale","DISPLAY (Hide/Show)"\n';
+
+  pipes.forEach(function(p) {
     var d = ST.getOne('dealers', p.dealerId);
     var logs = ST.pipeLogsByPipe(p.id).reverse();
-    csv += '"' + (idx + 1) + '","' + fD(p.registerDate) + '","' + esc(p.projectName) + '","' + esc(p.endUserTH) + '","' + esc(p.endUserEN) + '","' + (p.unitType || '') + '","' + (d ? d.name : '') + '","' + (p.djiDealer || '') + '","' + (p.model || '') + (p.modelQty > 1 ? '*' + p.modelQty : '') + '","' + (p.forecastAmount || '') + '","' + (p.realAmount || '') + '","' + (p.tor || '') + '","' + fD(p.biddingDate) + '","' + fD(p.shipmentDate) + '","' + esc(p.remark) + '","' + (p.appointmentLetter || '') + '","' + getPipeName(p.status) + '","' + (p.recurring ? 'Yes' : '') + '"';
-    for (var li = 0; li < Math.max(maxUp, 1); li++) {
+    var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+    var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
+    var g = _pipeModelQtyByGroup(items);
+    csv += '"' + fD(p.registerDate) + '","' + esc(p.projectName) + '","' + esc(p.endUserTH) + '","' + esc(p.endUserEN) + '","' + (p.unitType || '') + '","' + (d ? d.name : '') + '","' + (p.djiDealer || '') + '","' + (p.projectRevenue || '') + '","' + _csvKeepNL(modelCell) + '","' + (g.m4t || '') + '","' + (g.m4e || '') + '","' + (g.dock3 || '') + '","' + (g.m4td || '') + '","' + (g.m400 || '') + '","' + (p.forecastAmount || '') + '","' + (p.realAmount || '') + '","' + (p.tor || '') + '","' + fD(p.biddingDate) + '","' + _fmtForecastMonth(p.biddingDate) + '","' + fD(p.shipmentDate) + '","' + esc(p.remark) + '","' + (p.appointmentLetter || '') + '","' + getPipeName(p.status) + '","' + (p.recurring ? 'Yes' : '') + '"';
+    for (var li = 0; li < UP_COLS; li++) {
       csv += ',"' + (logs[li] ? esc(fDShort(logs[li].date ? logs[li].date.split('T')[0] : '') + ' ' + logs[li].content) : '') + '"';
     }
-    csv += '\n';
+    csv += ',"' + esc(p.saleName) + '","' + (p.sheetDisplay || 'Show') + '"\n';
   });
   dlBlob(csv, 'pipeline-' + _td() + '.csv');
+}
+
+// เก็บ \n ไว้ (สำหรับเซลล์ Model หลายบรรทัด) แค่ escape "
+function _csvKeepNL(s) { return String(s || '').replace(/"/g, '""').replace(/\r/g, ''); }
+
+// แตก qty ตามกลุ่มสินค้าหลัก (M4T/M4E/M4TD/M400/Dock 3) — เช็คเฉพาะเจาะจงก่อนกว้าง กัน M4TD หลุดไป M4T
+// สินค้าที่ไม่ใช่ main drone product (battery, RC, accessory ฯลฯ) ไม่นับ
+function _pipeModelQtyByGroup(items) {
+  var g = { m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0 };
+  (items || []).forEach(function(it) {
+    var name = (it.model || '').toUpperCase();
+    var qty = Number(it.qty) || 0;
+    if (name.indexOf('M4TD') !== -1) g.m4td += qty;
+    else if (name.indexOf('M4T') !== -1) g.m4t += qty;
+    else if (name.indexOf('M4E') !== -1) g.m4e += qty;
+    else if (name.indexOf('M400') !== -1) g.m400 += qty;
+    else if (name.indexOf('DOCK 3') !== -1) g.dock3 += qty;
+  });
+  return g;
+}
+
+// Forecast Month = Bidding Date + 2 เดือน, format "2026 Jun"
+function _fmtForecastMonth(biddingDate) {
+  if (!biddingDate) return '';
+  var d = new Date(biddingDate);
+  if (isNaN(d.getTime())) return '';
+  d.setMonth(d.getMonth() + 2);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getFullYear() + ' ' + months[d.getMonth()];
 }
 
 async function aiAnalyzePipeline(btn) {

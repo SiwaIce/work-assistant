@@ -314,6 +314,10 @@ function showPipelineM(dealerId, eid) {
     '<div id="fp_crmdate_wrap" style="flex:1;' + (p.djiCrmRegistered ? '' : 'display:none') + '">' + dpH('fp_crmdate', p.djiCrmDate || '', 'วันที่ลงทะเบียน') + '</div></div>' +
     '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_comp"' + (p.hasCompetitor ? ' checked' : '') + ' onchange="document.getElementById(\'fp_compname_wrap\').style.display=this.checked?\'\':\'none\'"> คาดว่ามีคู่แข่ง</label></div>' +
     '<div class="fg" id="fp_compname_wrap" style="' + (p.hasCompetitor ? '' : 'display:none') + '"><label>ชื่อคู่แข่ง 🔒 (ภายใน — dealer ไม่เห็น)</label><input type="text" id="fp_compname" value="' + sanitize(p.competitorName || '') + '" placeholder="ชื่อคู่แข่ง / รายละเอียด"></div></div>' +
+    '<div class="form-section">📊 ข้อมูลสำหรับ Google Sheet 🔒 (ภายใน — dealer ไม่เห็น)</div>' +
+    '<div class="fr"><div class="fg"><label>Project Revenue (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_projrev" value="' + nmI(p.projectRevenue || '') + '" placeholder="มูลค่ารวมทั้งโปรเจกต์ (DJI+Service+อื่นๆ)"></div>' +
+    '<div class="fg"><label>Sale (ผู้รับผิดชอบ)</label><input type="text" id="fp_sale" value="' + sanitize(eid ? (p.saleName || '') : (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '')) + '"></div></div>' +
+    '<div class="fg"><label>แสดงใน Google Sheet</label><div class="radio-g"><label><input type="radio" name="fp_disp" value="Show"' + (p.sheetDisplay !== 'Hide' ? ' checked' : '') + '><span>Show</span></label><label><input type="radio" name="fp_disp" value="Hide"' + (p.sheetDisplay === 'Hide' ? ' checked' : '') + '><span>Hide</span></label></div></div>' +
     '<div class="form-section">🎯 Next Action</div>' +
     '<div class="fr"><div class="fg"><label>ต้องทำอะไรต่อ</label><select id="fp_next"><option value="">-- ไม่ระบุ --</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div>' +
     dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '</div>' +
@@ -682,7 +686,10 @@ function savePipeline(dealerId, eid) {
     djiCrmDate: dpG('fp_crmdate'),
     hasCompetitor: document.getElementById('fp_comp') ? document.getElementById('fp_comp').checked : false,
     competitorName: document.getElementById('fp_compname') ? document.getElementById('fp_compname').value.trim() : '',
-    budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null
+    budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null,
+    projectRevenue: parseNum(document.getElementById('fp_projrev') ? document.getElementById('fp_projrev').value : 0),
+    saleName: document.getElementById('fp_sale') ? document.getElementById('fp_sale').value.trim() : '',
+    sheetDisplay: document.querySelector('input[name="fp_disp"]:checked') ? document.querySelector('input[name="fp_disp"]:checked').value : 'Show'
   };
 
   // Handle items based on mode
