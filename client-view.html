@@ -153,6 +153,37 @@ body {
 }
 .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .stat-card.active { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+.cv-item-list { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.cv-item-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  transition: background 0.15s;
+}
+.cv-item-row:last-child { border-bottom: none; }
+.cv-item-row:hover { background: rgba(59,130,246,0.04); }
+.cv-item-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(59,130,246,0.1); color: var(--accent);
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cv-item-name { flex: 1; font-weight: 600; font-size: 14px; }
+.cv-item-qty {
+  background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px;
+  flex-shrink: 0;
+}
+.cv-item-total {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(59,130,246,0.02));
+  font-weight: 700; font-size: 14px;
+}
+.cv-item-total .cv-item-qty { background: var(--accent); }
 .stat-month { font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; }
 .stat-qty { font-size: 28px; font-weight: 800; margin: 6px 0; }
 .stat-detail { font-size: 11px; color: var(--text2); }
@@ -2416,35 +2447,30 @@ function showPipelineDetail(pipeId) {
       '<button class="btn btn-sm btn-warning" onclick="showUpdateModal(\'' + pipeId + '\')">✏️ อัพเดทตอนนี้</button>' +
       '</div>';
   }
-  var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead>' +
-    '<th>#</th><th>Model</th><th style="text-align:center">จำนวน</th>' +
-    '</thead><tbody>';
+  var itemsHtml = '<div class="cv-item-list">';
   var totalItems = 0;
   if (p.items && p.items.length) {
     for (var i = 0; i < p.items.length; i++) {
       var it = p.items[i];
       var qty = it.qty || 1;
       totalItems += qty;
-      itemsHtml += '<tr>' +
-        '<td class="pipe-row-num">' + (i+1) + '</td>' +
-        '<td>' + esc(it.model) + '</td>' +
-        '<td style="text-align:center">x' + qty + '</td>' +
-        '</tr>';
+      itemsHtml += '<div class="cv-item-row">' +
+        '<div class="cv-item-num">' + (i+1) + '</div>' +
+        '<div class="cv-item-name">🚁 ' + esc(it.model) + '</div>' +
+        '<div class="cv-item-qty">x' + qty + '</div>' +
+        '</div>';
     }
   } else if (p.model) {
     var qty = p.modelQty || 1;
     totalItems = qty;
-    itemsHtml += '<tr>' +
-      '<td class="pipe-row-num">1</td>' +
-      '<td>' + esc(p.model) + '</td>' +
-      '<td style="text-align:center">x' + qty + '</td>' +
-      '</tr>';
+    itemsHtml += '<div class="cv-item-row">' +
+      '<div class="cv-item-num">1</div>' +
+      '<div class="cv-item-name">🚁 ' + esc(p.model) + '</div>' +
+      '<div class="cv-item-qty">x' + qty + '</div>' +
+      '</div>';
   }
-  itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700">' +
-    '<td colspan="2"><strong>รวม</strong></td>' +
-    '<td style="text-align:center">x' + totalItems + '</td>' +
-    '</tr>';
-  itemsHtml += '</tbody></table>';
+  itemsHtml += '<div class="cv-item-total"><span>รวมทั้งหมด</span><span class="cv-item-qty">x' + totalItems + '</span></div>';
+  itemsHtml += '</div>';
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
 var statusText = p._status === 'pending' ? '⏳ รอตรวจสอบ' : (p._status === 'approved' ? '✅ อัพเดทข้อมูลแล้ว' : (p._status === 'rejected' ? '❌ ปฏิเสธ' : '📋 ปกติ'));
   var biddingHtml = formatBiddingDate(p.biddingDate);
@@ -2471,7 +2497,7 @@ html += '<div class="section-title">📊 ' + esc(p.projectName) + '</div>';
   html += '<div class="form-row"><strong>⚔️ คู่แข่ง:</strong> ' + (p.hasCompetitor ? '⚠️ คาดว่ามี' : '— ไม่ระบุ') + '</div>';
   html += '</div>';
   html += '</div>';
-  html += '<div style="margin-top:16px"><strong>📦 รายการสินค้า:</strong></div>' + itemsHtml;
+  html += '<div style="margin-top:20px;margin-bottom:10px;font-weight:700;font-size:15px">📦 รายการสินค้า</div>' + itemsHtml;
     html += '<div style="margin-top:24px; text-align:center">';
     if (p._status === 'pending') {
       html += '<div style="background:#f59e0b18;border:1px solid #f59e0b44;border-radius:12px;padding:10px 16px;margin-bottom:12px;font-size:13px;color:#f59e0b">⏳ มีคำขออัพเดทรอการตรวจสอบอยู่</div>';

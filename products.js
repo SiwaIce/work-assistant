@@ -1191,7 +1191,7 @@ function rProducts(el) {
   html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
   html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
   html += '<th>สถานะ</th><th></th>';
-  html += ' hilab</thead><tbody id="productsTableBody"></tbody></table></div>';
+  html += '</thead><tbody id="productsTableBody"></tbody></table></div>';
   html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
   html += '</div>';
   
@@ -1287,8 +1287,8 @@ function renderProductsTable(products) {
     html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '<td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.price) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
+    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.B) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';
