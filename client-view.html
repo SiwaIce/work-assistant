@@ -163,6 +163,14 @@ body {
 }
 .cv-item-row:last-child { border-bottom: none; }
 .cv-item-row:hover { background: rgba(59,130,246,0.04); }
+.cv-item-head {
+  background: var(--bg);
+  font-size: 12px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.cv-item-head:hover { background: var(--bg); }
+.cv-item-head .cv-item-num { background: none; color: var(--text2); width: auto; border-radius: 0; }
+.cv-item-qty-head { background: none; color: var(--text2); padding: 4px 10px; }
 .cv-item-num {
   width: 26px; height: 26px; border-radius: 50%;
   background: rgba(59,130,246,0.1); color: var(--accent);
@@ -2448,6 +2456,7 @@ function showPipelineDetail(pipeId) {
       '</div>';
   }
   var itemsHtml = '<div class="cv-item-list">';
+  itemsHtml += '<div class="cv-item-row cv-item-head"><div class="cv-item-num">ลำดับ</div><div class="cv-item-name">รายการ</div><div class="cv-item-qty cv-item-qty-head">จำนวน</div></div>';
   var totalItems = 0;
   if (p.items && p.items.length) {
     for (var i = 0; i < p.items.length; i++) {
@@ -2456,7 +2465,7 @@ function showPipelineDetail(pipeId) {
       totalItems += qty;
       itemsHtml += '<div class="cv-item-row">' +
         '<div class="cv-item-num">' + (i+1) + '</div>' +
-        '<div class="cv-item-name">🚁 ' + esc(it.model) + '</div>' +
+        '<div class="cv-item-name">' + esc(it.model) + '</div>' +
         '<div class="cv-item-qty">x' + qty + '</div>' +
         '</div>';
     }
@@ -2465,7 +2474,7 @@ function showPipelineDetail(pipeId) {
     totalItems = qty;
     itemsHtml += '<div class="cv-item-row">' +
       '<div class="cv-item-num">1</div>' +
-      '<div class="cv-item-name">🚁 ' + esc(p.model) + '</div>' +
+      '<div class="cv-item-name">' + esc(p.model) + '</div>' +
       '<div class="cv-item-qty">x' + qty + '</div>' +
       '</div>';
   }
