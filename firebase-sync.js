@@ -77,6 +77,7 @@ var SYNC_KEY_MAP = {
   'pipeActions': 'pipeActions',
   'visitPlans': 'visitPlans',
   'demo': 'demo',
+  'demoLoans': 'demoLoans',
   'quotes': 'quotes',
 'quotations_v2': 'quotations_v2',
   'goals_v2': 'goals_v2',
