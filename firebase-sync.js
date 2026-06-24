@@ -90,7 +90,9 @@ var SYNC_KEY_MAP = {
   'appearance': 'appearance',
   'actions': 'actions',
   'backup': 'backup',
-'products': 'products',  // ✅ เพิ่มบรรทัดนี้
+  // 'products' ไม่ลงทะเบียนตรงนี้โดยตั้งใจ — v7_products เป็น object {models,bundles,demoUnits}
+  // ไม่ใช่ array ธรรมดา มี loadProductsFromFirebase() ใน products.js ดึงข้อมูลแบบถูกโครงสร้างอยู่แล้ว
+  // ถ้าลงทะเบียนตรงนี้ listener ทั่วไปจะเขียน v7_products ทับด้วย array ดิบ ทำให้ราคาสินค้าหาย
   'bundles': 'bundles',    // ✅ เพิ่ม
   'demoUnits': 'demoUnits', // ✅ เพิ่ม
   'audit_logs': 'auditLogs',
@@ -140,6 +142,22 @@ function normalizeFirestoreValue(val) {
       }
     });
   } catch(e) { console.warn('sanitizePoisonedLocalStorage error:', e); }
+})();
+
+// ✅ ซ่อม v7_products อัตโนมัติทุกครั้งที่เปิดแอป ถ้าเพี้ยนเป็น array ดิบ (เช่นจาก listener เก่าทับผิดโครงสร้าง)
+// ให้กลับเป็น object {models,bundles,demoUnits} เสมอ ก่อนโค้ดอื่นจะอ่านค่านี้ไปใช้
+(function selfHealProductsStructure() {
+  try {
+    var raw = localStorage.getItem('v7_products');
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      localStorage.setItem('v7_products', JSON.stringify({
+        models: parsed, bundles: [], demoUnits: [], lastUpdated: new Date().toISOString()
+      }));
+      console.warn('🧹 ซ่อมโครงสร้าง v7_products ที่เพี้ยนเป็น array กลับเป็น object แล้ว');
+    }
+  } catch(e) { console.warn('selfHealProductsStructure error:', e); }
 })();
 
 // ================================================================
