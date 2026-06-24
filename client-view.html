@@ -2417,45 +2417,32 @@ function showPipelineDetail(pipeId) {
       '</div>';
   }
   var itemsHtml = '<table style="width:100%;border-collapse:collapse"><thead>' +
-    '<th>#</th><th>Model</th><th style="text-align:center">จำนวน</th><th style="text-align:right">ราคา/หน่วย</th><th style="text-align:right">รวม</th>' +
+    '<th>#</th><th>Model</th><th style="text-align:center">จำนวน</th>' +
     '</thead><tbody>';
   var totalItems = 0;
-  var totalAmount = 0;
-  if (p.items && p.items.length) { 
-    for (var i = 0; i < p.items.length; i++) { 
-      var it = p.items[i]; 
-      var qty = it.qty || 1; 
-      var price = it.price || getModelPrice(it.model) || 0;
-      var itemTotal = qty * price;
-      totalItems += qty; 
-      totalAmount += itemTotal;
+  if (p.items && p.items.length) {
+    for (var i = 0; i < p.items.length; i++) {
+      var it = p.items[i];
+      var qty = it.qty || 1;
+      totalItems += qty;
       itemsHtml += '<tr>' +
         '<td class="pipe-row-num">' + (i+1) + '</td>' +
         '<td>' + esc(it.model) + '</td>' +
         '<td style="text-align:center">x' + qty + '</td>' +
-        '<td style="text-align:right">' + (price ? price.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
-        '<td style="text-align:right">' + (itemTotal ? itemTotal.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
         '</tr>';
-    } 
-  } else if (p.model) { 
-    var qty = p.modelQty || 1; 
-    var price = getModelPrice(p.model) || 0;
-    var itemTotal = qty * price;
-    totalItems = qty; 
-    totalAmount = itemTotal || p.forecastAmount || 0;
+    }
+  } else if (p.model) {
+    var qty = p.modelQty || 1;
+    totalItems = qty;
     itemsHtml += '<tr>' +
       '<td class="pipe-row-num">1</td>' +
       '<td>' + esc(p.model) + '</td>' +
       '<td style="text-align:center">x' + qty + '</td>' +
-      '<td style="text-align:right">' + (price ? price.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
-      '<td style="text-align:right">' + (itemTotal ? itemTotal.toLocaleString('th-TH') + ' ฿' : '-') + '</td>' +
       '</tr>';
   }
   itemsHtml += '<tr style="border-top:2px solid var(--border);font-weight:700">' +
     '<td colspan="2"><strong>รวม</strong></td>' +
     '<td style="text-align:center">x' + totalItems + '</td>' +
-    '<td></td>' +
-    '<td style="text-align:right">' + (totalAmount || p.forecastAmount || 0).toLocaleString('th-TH') + ' ฿</td>' +
     '</tr>';
   itemsHtml += '</tbody></table>';
   var statusColor = p._status === 'pending' ? '#f59e0b' : (p._status === 'approved' ? '#22c55e' : (p._status === 'rejected' ? '#ef4444' : '#3b82f6'));
