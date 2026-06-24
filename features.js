@@ -2830,6 +2830,15 @@ var DEMO_STATUS_META = {
   lost: { label: '💔 Lost/Damaged', cls: 'demo-lost', desc: 'มีปัญหาอยู่ ไม่พร้อมให้จอง' }
 };
 
+// สีประจำรุ่น (ไม่ใช่ตามสถานะ) ใช้แยกเครื่องรุ่นเดียวกันด้วย S/N ต่างกันในการ์ด/ปฏิทิน
+var DEMO_MODEL_PALETTE = ['#3b82f6', '#a855f7', '#06b6d4', '#f97316', '#ec4899', '#22c55e', '#eab308', '#ef4444'];
+function demoModelColor(name) {
+  var s = name || '';
+  var hash = 0;
+  for (var i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) % 997;
+  return DEMO_MODEL_PALETTE[Math.abs(hash) % DEMO_MODEL_PALETTE.length];
+}
+
 // สถานะที่แสดงจริง: ถ้ากำลังยืมแต่วันยืมยังไม่มาถึง = Reserved, ถ้าวันยืมมาถึงแล้ว = On Borrowed
 function getDemoEffectiveStatus(item) {
   if (item.status === 'lost' || item.status === 'unavailable') return item.status;
@@ -2953,7 +2962,7 @@ function rDemoTracker(el) {
     h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div><p>' + (items.length ? 'ไม่พบอุปกรณ์ในสถานะนี้' : 'ยังไม่มีอุปกรณ์ Demo — กด ➕ เพื่อเพิ่ม') + '</p></div>';
   }
 
-  h += '<div class="card">';
+  h += '<div class="demo-grid">';
   for (var i = 0; i < shown.length; i++) {
     var d = shown[i];
     var eff = getDemoEffectiveStatus(d);
@@ -2962,15 +2971,20 @@ function rDemoTracker(el) {
     var lentDate = ftParseDate(d.lentDate);
     var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
     var isOverdue = eff === 'lent' && daysBorrowed > 30;
+    var mColor = demoModelColor(d.name);
 
-    h += '<div class="demo-card' + (isOverdue ? ' demo-overdue' : '') + '">';
-    h += '<div class="demo-header">';
-    h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
+    h += '<div class="demo-card2' + (isOverdue ? ' demo-overdue' : '') + '" style="border-left-color:' + mColor + '">';
+    h += '<div class="demo-card2-top">';
+    h += '<div class="demo-card2-id">';
+    h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">🚁</div>';
+    h += '<div>';
+    h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">' + sanitize(d.name) + '</div>';
+    if (d.serialNumber) h += '<span class="demo-sn-chip" style="background:' + mColor + '22;color:' + mColor + '">S/N ' + sanitize(d.serialNumber) + '</span>';
+    h += '</div></div>';
     h += '<span class="demo-status ' + meta.cls + '">' + meta.label + '</span>';
     h += '</div>';
-    h += '<div class="demo-info">';
+    h += '<div class="demo-card2-info">';
     if (d.sku) h += '<div>🏷️ SiS Part: ' + sanitize(d.sku) + '</div>';
-    if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
     if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + sanitize(d.rentalDbNo) + '</div>';
     if (eff === 'lent' || eff === 'reserved') {
       h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
@@ -2981,7 +2995,7 @@ function rDemoTracker(el) {
     if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
     h += '</div>';
     h += demoComplianceBadges(d);
-    h += '<div class="demo-actions">';
+    h += '<div class="demo-card2-actions">';
     h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียด</button>';
     if (eff === 'available') h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม/จอง</button>';
     if (eff === 'lent' || eff === 'reserved') h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
@@ -3010,27 +3024,34 @@ function renderDemoCalendar() {
   var year = base.getFullYear(), month = base.getMonth();
   var monthKey = (month + 1) + '/' + year;
   var totalDays = getDaysInMonth(monthKey);
+  var monthStart = new Date(year, month, 1);
+  var monthEnd = new Date(year, month, totalDays);
+  var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
 
   var allUnits = getDemoItems();
-  var loans = getDemoLoans().filter(function(l) { return demoCalUnitFilter === 'all' || l.demoId === demoCalUnitFilter; });
-  var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
-  var byDay = {};
+  var loans = getDemoLoans();
+  if (demoCalUnitFilter !== 'all') loans = loans.filter(function(l) { return l.demoId === demoCalUnitFilter; });
+
+  // จัดกลุ่มประวัติยืม/จองตามเครื่อง (1 เครื่อง = 1 แถวเสมอ ไม่ปนกับเครื่องรุ่นเดียวกันตัวอื่น)
+  var byUnit = {};
   loans.forEach(function(l) {
     if (!l.lentDate) return;
     var start = ftParseDate(l.lentDate);
     var end = (l.actualReturnDate && ftParseDate(l.actualReturnDate)) || (l.returnDate && ftParseDate(l.returnDate)) || new Date();
     if (!start) return;
     if (end < start) end = start;
-    var cur = new Date(start);
-    while (cur <= end) {
-      if (cur.getFullYear() === year && cur.getMonth() === month) {
-        var day = cur.getDate();
-        if (!byDay[day]) byDay[day] = [];
-        byDay[day].push(l);
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
+    if (end < monthStart || start > monthEnd) return;
+    if (!byUnit[l.demoId]) byUnit[l.demoId] = [];
+    byUnit[l.demoId].push({ loan: l, start: start, end: end });
   });
+
+  var unitIds = demoCalUnitFilter !== 'all' ? [demoCalUnitFilter] : Object.keys(byUnit);
+  var rows = unitIds.map(function(id) {
+    var unit = null;
+    for (var i = 0; i < allUnits.length; i++) { if (allUnits[i].id === id) { unit = allUnits[i]; break; } }
+    return { id: id, unit: unit, bars: byUnit[id] || [] };
+  }).filter(function(r) { return r.unit; });
+  rows.sort(function(a, b) { return (a.unit.name + (a.unit.serialNumber || '')).localeCompare(b.unit.name + (b.unit.serialNumber || '')); });
 
   var monthName = getMonthName(month) + ' ' + year;
   var h = '<div class="card" style="padding:10px;margin-bottom:10px">';
@@ -3040,34 +3061,51 @@ function renderDemoCalendar() {
   h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
   h += '</div>';
   h += '<select class="fm-input" onchange="demoCalUnitFilter=this.value;render()">';
-  h += '<option value="all"' + (demoCalUnitFilter === 'all' ? ' selected' : '') + '>🚁 ดูทุกเครื่อง (ภาพรวม)</option>';
+  h += '<option value="all"' + (demoCalUnitFilter === 'all' ? ' selected' : '') + '>🚁 ดูทุกเครื่องที่มีการยืม/จองเดือนนี้</option>';
   allUnits.forEach(function(u) {
-    h += '<option value="' + u.id + '"' + (demoCalUnitFilter === u.id ? ' selected' : '') + '>' + sanitize(u.name) + '</option>';
+    h += '<option value="' + u.id + '"' + (demoCalUnitFilter === u.id ? ' selected' : '') + '>' + sanitize(u.name) + (u.serialNumber ? ' (S/N ' + sanitize(u.serialNumber) + ')' : '') + '</option>';
   });
   h += '</select>';
   h += '</div>';
 
-  h += '<div class="timeline-month"><div class="timeline-grid">';
-  for (var d = 1; d <= totalDays; d++) {
-    var dayLoans = byDay[d] || [];
-    var isToday = isTodayDate(d, monthKey);
-    var isPast = isPastDate(d, monthKey);
-    h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? ' timeline-day-past' : '') + '">';
-    h += '<div class="timeline-day-num">' + d + '</div>';
-    dayLoans.slice(0, 4).forEach(function(l) {
-      var cls = '';
-      var lStart = ftParseDate(l.lentDate);
-      var isFuture = lStart && lStart > todayD;
-      if (l.status === 'active') {
-        cls = isFuture ? 'timeline-task-reserved' : 'timeline-task-overdue';
-      }
-      var label = l.status === 'active' && isFuture ? '📅 ' : '🚁 ';
-      h += '<div class="timeline-task ' + cls + '" onclick="go(\'demoDetail\',{demoId:\'' + l.demoId + '\'})" title="' + sanitize((l.demoName || '') + ' - ' + (l.borrower || '')) + '"><div class="timeline-task-title">' + label + sanitize(l.demoName || '-') + '</div></div>';
-    });
-    if (dayLoans.length > 4) h += '<div style="font-size:9px;color:var(--text2)">+' + (dayLoans.length - 4) + ' อื่นๆ</div>';
-    h += '</div>';
+  if (!rows.length) {
+    return h + '<div class="card" style="text-align:center;padding:30px;color:var(--text2)">ไม่มีเครื่องที่ถูกยืม/จองในเดือนนี้</div>';
+  }
+
+  h += '<div class="demo-gantt-wrap"><div class="demo-gantt card" style="padding:10px">';
+  h += '<div class="demo-gantt-head"><div></div><div class="demo-gantt-head-days">';
+  var step = totalDays > 28 ? 2 : 1;
+  for (var dnum = 1; dnum <= totalDays; dnum += step) {
+    h += '<span style="left:' + ((dnum - 0.5) / totalDays * 100) + '%">' + dnum + '</span>';
   }
   h += '</div></div>';
+
+  var todayPct = (todayD >= monthStart && todayD <= monthEnd) ? ((todayD.getDate() - 0.5) / totalDays * 100) : null;
+
+  rows.forEach(function(r) {
+    var mColor = demoModelColor(r.unit.name);
+    h += '<div class="demo-gantt-row">';
+    h += '<div class="demo-gantt-label"><b>' + sanitize(r.unit.name) + '</b>' + (r.unit.serialNumber ? '<br><span class="demo-gantt-sn" style="color:' + mColor + '">S/N ' + sanitize(r.unit.serialNumber) + '</span>' : '') + '</div>';
+    h += '<div class="demo-gantt-track">';
+    if (todayPct !== null) h += '<div class="demo-gantt-today-line" style="left:' + todayPct + '%" title="วันนี้"></div>';
+    r.bars.forEach(function(b) {
+      var clipStart = b.start < monthStart ? monthStart : b.start;
+      var clipEnd = b.end > monthEnd ? monthEnd : b.end;
+      var leftPct = (clipStart.getDate() - 1) / totalDays * 100;
+      var widthPct = Math.max((clipEnd.getDate() - clipStart.getDate() + 1) / totalDays * 100, 100 / totalDays);
+      var isFuture = b.start > todayD;
+      var label = (isFuture ? '📅 ' : '📤 ') + (b.loan.borrower || '-');
+      h += '<div class="demo-gantt-bar' + (isFuture ? ' is-reserved' : '') + '" style="left:' + leftPct + '%;width:' + widthPct + '%;' + (isFuture ? 'color:' + mColor : 'background:' + mColor) + '" onclick="go(\'demoDetail\',{demoId:\'' + r.id + '\'})" title="' + sanitize((r.unit.name || '') + ' - ' + (b.loan.borrower || '')) + '">' + sanitize(label) + '</div>';
+    });
+    h += '</div></div>';
+  });
+  h += '</div></div>';
+
+  h += '<div class="demo-gantt-legend">';
+  h += '<span><span class="demo-gantt-legend-dot" style="background:var(--accent)"></span>กำลังถูกยืม</span>';
+  h += '<span><span class="demo-gantt-legend-dot" style="border:1px dashed var(--accent);background:transparent"></span>จองล่วงหน้า</span>';
+  h += '<span style="color:var(--text3)">สีของแถบ = แยกตามรุ่นเครื่อง ไม่ใช่ตามสถานะ</span>';
+  h += '</div>';
   return h;
 }
 
