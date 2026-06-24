@@ -2915,7 +2915,7 @@ function rDemoTracker(el) {
       h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
       h += '<span class="demo-status demo-available">✅ ว่าง</span>';
       h += '</div>';
-      if (d.serialNumber) h += '<div class="demo-info"><div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div></div>';
+      if (d.serialNumber || d.sku) h += '<div class="demo-info">' + (d.serialNumber ? '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>' : '') + (d.sku ? '<div>🏷️ SKU: ' + sanitize(d.sku) + '</div>' : '') + '</div>';
       h += '<div class="demo-actions">';
       h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม</button>';
       h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
@@ -3028,6 +3028,7 @@ function rDemoDetail(el) {
   h += '<div class="demo-info">';
   if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
   if (d.model) h += '<div>📦 Model: ' + sanitize(d.model) + '</div>';
+  if (d.sku) h += '<div>🏷️ SKU: ' + sanitize(d.sku) + '</div>';
   h += '<div>📊 สถานะ: ' + statusLabel + '</div>';
   if (d.status === 'lent') {
     var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
@@ -3058,11 +3059,30 @@ function rDemoDetail(el) {
   el.innerHTML = h;
 }
 
+// ตัวเลือก Model ดึงจากสินค้าหมวด Demo Unit ใน Products module พร้อม SKU
+function demoUnitOptions(selected) {
+  var products = [];
+  try { products = getAllProducts().filter(function(p) { return isDemoProduct(p); }); } catch (e) { products = []; }
+  var h = '<option value="">-- เลือก Model --</option>';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    h += '<option value="' + sanitize(p.name) + '" data-sku="' + sanitize(p.sku || '') + '"' + (selected === p.name ? ' selected' : '') + '>' + sanitize(p.name) + (p.sku ? ' (' + sanitize(p.sku) + ')' : '') + '</option>';
+  }
+  return h;
+}
+function fillDemoSku(selectEl) {
+  var sel = selectEl.selectedOptions && selectEl.selectedOptions[0];
+  var sku = sel ? (sel.dataset.sku || '') : '';
+  var skuInput = document.getElementById('dm_sku');
+  if (skuInput) skuInput.value = sku;
+}
+
 function showAddDemoM() {
   var h = '<div style="max-width:400px">';
   h += '<div class="fm-group"><label>🚁 ชื่ออุปกรณ์ *</label><input type="text" id="dm_name" class="fm-input" placeholder="เช่น L3 Demo Unit #1"></div>';
   h += '<div class="fm-group"><label>🔢 Serial Number</label><input type="text" id="dm_sn" class="fm-input" placeholder="S/N"></div>';
-  h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input">' + modelOptionsNew('') + '</select></div>';
+  h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions('') + '</select></div>';
+  h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" placeholder="ดึงอัตโนมัติจาก Model"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveDemo()">💾 บันทึก</button>';
@@ -3080,6 +3100,7 @@ function saveDemo() {
     name: name,
     serialNumber: (document.getElementById('dm_sn').value || '').trim(),
     model: document.getElementById('dm_model').value || '',
+    sku: (document.getElementById('dm_sku').value || '').trim(),
     note: (document.getElementById('dm_note').value || '').trim(),
     status: 'available',
     dealerId: '',
@@ -3192,7 +3213,8 @@ function showEditDemoM(demoId) {
   var h = '<div style="max-width:400px">';
   h += '<div class="fm-group"><label>🚁 ชื่อ</label><input type="text" id="dm_name" class="fm-input" value="' + sanitize(d.name || '') + '"></div>';
   h += '<div class="fm-group"><label>🔢 S/N</label><input type="text" id="dm_sn" class="fm-input" value="' + sanitize(d.serialNumber || '') + '"></div>';
-  h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input">' + modelOptionsNew(d.model || '') + '</select></div>';
+  h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions(d.model || '') + '</select></div>';
+  h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" value="' + sanitize(d.sku || '') + '" placeholder="ดึงอัตโนมัติจาก Model"></div>';
   h += '<div class="fm-group"><label>📊 สถานะ</label><select id="dm_status" class="fm-input">';
   h += '<option value="available"' + (d.status === 'available' ? ' selected' : '') + '>✅ ว่าง</option>';
   h += '<option value="lent"' + (d.status === 'lent' ? ' selected' : '') + '>📤 ให้ยืม</option>';
@@ -3214,6 +3236,7 @@ function updateDemo(demoId) {
       items[i].name = (document.getElementById('dm_name').value || '').trim();
       items[i].serialNumber = (document.getElementById('dm_sn').value || '').trim();
       items[i].model = document.getElementById('dm_model').value || '';
+      items[i].sku = (document.getElementById('dm_sku').value || '').trim();
       items[i].status = document.getElementById('dm_status').value || 'available';
       items[i].note = (document.getElementById('dm_note').value || '').trim();
       break;
