@@ -2815,6 +2815,28 @@ function saveDemoItems(list) {
   localStorage.setItem('v7_demo', JSON.stringify(list));
 }
 
+// ================================================================
+// DEMO LOAN HISTORY — เก็บทุกครั้งที่ยืม/คืน ไม่ลบทิ้ง
+// ================================================================
+function getDemoLoans() {
+  var saved = localStorage.getItem('v7_demoLoans');
+  if (saved) {
+    try { var p = JSON.parse(saved); return Array.isArray(p) ? p : []; }
+    catch (e) { return []; }
+  }
+  return [];
+}
+function saveDemoLoans(list) {
+  if (!list || !Array.isArray(list)) list = [];
+  localStorage.setItem('v7_demoLoans', JSON.stringify(list));
+}
+function demoLoansByDemo(demoId) {
+  return getDemoLoans().filter(function(l) { return l.demoId === demoId; })
+    .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); });
+}
+
+var demoTrackerTab = 'list'; // 'list' | 'calendar'
+
 function rDemoTracker(el) {
   document.getElementById('pgT').textContent = '🚁 Demo Equipment';
   var items = getDemoItems();
@@ -2833,6 +2855,16 @@ function rDemoTracker(el) {
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์</button>';
   h += '</div>';
+
+  h += '<div class="today-tabs" style="margin-bottom:10px">';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoTrackerTab=\'list\';render()">📋 รายการ</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoTrackerTab=\'calendar\';render()">🗓️ ปฏิทิน</div>';
+  h += '</div>';
+
+  if (demoTrackerTab === 'calendar') {
+    el.innerHTML = h + renderDemoCalendar();
+    return;
+  }
 
   // Stats
   h += '<div class="sr">';
@@ -2854,11 +2886,12 @@ function rDemoTracker(el) {
 
       h += '<div class="demo-card' + (isOverdue ? ' demo-overdue' : '') + '">';
       h += '<div class="demo-header">';
-      h += '<div class="demo-name">🚁 ' + sanitize(d.name) + '</div>';
+      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
       h += '<span class="demo-status demo-lent">📤 ให้ยืม</span>';
       h += '</div>';
       h += '<div class="demo-info">';
       h += '<div>🏪 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
+      if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
       h += '<div>📅 ยืมตั้งแต่: ' + (d.lentDate || '-') + ' (' + daysBorrowed + ' วัน)</div>';
       if (d.returnDate) h += '<div>📅 กำหนดคืน: ' + d.returnDate + '</div>';
       if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
@@ -2879,7 +2912,7 @@ function rDemoTracker(el) {
       var d = available[i];
       h += '<div class="demo-card">';
       h += '<div class="demo-header">';
-      h += '<div class="demo-name">🚁 ' + sanitize(d.name) + '</div>';
+      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
       h += '<span class="demo-status demo-available">✅ ว่าง</span>';
       h += '</div>';
       if (d.serialNumber) h += '<div class="demo-info"><div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div></div>';
@@ -2899,7 +2932,7 @@ function rDemoTracker(el) {
       var d = maintenance[i];
       h += '<div class="demo-card">';
       h += '<div class="demo-header">';
-      h += '<div class="demo-name">🚁 ' + sanitize(d.name) + '</div>';
+      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
       h += '<span class="demo-status demo-maint">🔧 ซ่อม</span>';
       h += '</div>';
       if (d.note) h += '<div class="demo-info"><div>📝 ' + sanitize(d.note) + '</div></div>';
@@ -2914,6 +2947,113 @@ function rDemoTracker(el) {
   if (!items.length) {
     h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div><p>ยังไม่มีอุปกรณ์ Demo — กด ➕ เพื่อเพิ่ม</p></div>';
   }
+
+  el.innerHTML = h;
+}
+
+// ================================================================
+// DEMO CALENDAR — ภาพรวมว่าวันไหนเครื่องไหนถูกยืม
+// ================================================================
+var demoCalMonthOffset = 0;
+function demoCalChangeMonth(delta) { demoCalMonthOffset += delta; render(); }
+
+function renderDemoCalendar() {
+  var base = new Date();
+  base.setDate(1);
+  base.setMonth(base.getMonth() + demoCalMonthOffset);
+  var year = base.getFullYear(), month = base.getMonth();
+  var monthKey = (month + 1) + '/' + year;
+  var totalDays = getDaysInMonth(monthKey);
+
+  var loans = getDemoLoans();
+  var byDay = {};
+  loans.forEach(function(l) {
+    if (!l.lentDate) return;
+    var start = new Date(l.lentDate);
+    var end = l.actualReturnDate ? new Date(l.actualReturnDate) : (l.returnDate ? new Date(l.returnDate) : new Date());
+    if (isNaN(start.getTime())) return;
+    if (isNaN(end.getTime()) || end < start) end = start;
+    var cur = new Date(start);
+    while (cur <= end) {
+      if (cur.getFullYear() === year && cur.getMonth() === month) {
+        var day = cur.getDate();
+        if (!byDay[day]) byDay[day] = [];
+        byDay[day].push(l);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+
+  var monthName = getMonthName(month) + ' ' + year;
+  var h = '<div class="card" style="padding:10px;margin-bottom:10px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(-1)">◀</button>';
+  h += '<b>🚁 ' + monthName + '</b>';
+  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
+  h += '</div></div>';
+
+  h += '<div class="timeline-month"><div class="timeline-grid">';
+  for (var d = 1; d <= totalDays; d++) {
+    var dayLoans = byDay[d] || [];
+    var isToday = isTodayDate(d, monthKey);
+    var isPast = isPastDate(d, monthKey);
+    h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? ' timeline-day-past' : '') + '">';
+    h += '<div class="timeline-day-num">' + d + '</div>';
+    dayLoans.slice(0, 4).forEach(function(l) {
+      h += '<div class="timeline-task ' + (l.status === 'active' ? 'timeline-task-overdue' : '') + '" onclick="go(\'demoDetail\',{demoId:\'' + l.demoId + '\'})" title="' + sanitize((l.demoName || '') + ' - ' + (l.borrower || '')) + '"><div class="timeline-task-title">🚁 ' + sanitize(l.demoName || '-') + '</div></div>';
+    });
+    if (dayLoans.length > 4) h += '<div style="font-size:9px;color:var(--text2)">+' + (dayLoans.length - 4) + ' อื่นๆ</div>';
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+// ================================================================
+// DEMO DETAIL — spec + ประวัติการยืมทั้งหมด
+// ================================================================
+function rDemoDetail(el) {
+  var items = getDemoItems();
+  var d = null;
+  for (var i = 0; i < items.length; i++) { if (items[i].id === S.demoId) { d = items[i]; break; } }
+  if (!d) { go('demoTracker'); return; }
+
+  document.getElementById('pgT').textContent = '🚁 ' + d.name;
+
+  var statusLabel = d.status === 'available' ? '✅ ว่าง' : d.status === 'lent' ? '📤 ให้ยืม' : '🔧 ซ่อม';
+  var h = '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
+
+  h += '<div class="card">';
+  h += '<h2>🚁 ' + sanitize(d.name) + '</h2>';
+  h += '<div class="demo-info">';
+  if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
+  if (d.model) h += '<div>📦 Model: ' + sanitize(d.model) + '</div>';
+  h += '<div>📊 สถานะ: ' + statusLabel + '</div>';
+  if (d.status === 'lent') {
+    var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
+    h += '<div>👤 ผู้ยืม: ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
+    if (d.purpose) h += '<div>🎯 ใช้งานกับ: ' + sanitize(d.purpose) + '</div>';
+    h += '<div>📅 ยืมตั้งแต่: ' + (d.lentDate || '-') + (d.returnDate ? ' • กำหนดคืน: ' + d.returnDate : '') + '</div>';
+  }
+  h += '</div></div>';
+
+  var history = demoLoansByDemo(d.id);
+  h += '<div class="card"><h2>📜 ประวัติการยืม (' + history.length + ')</h2>';
+  if (!history.length) {
+    h += '<p style="color:var(--text2)">ยังไม่มีประวัติการยืม</p>';
+  } else {
+    history.forEach(function(l) {
+      var dd = l.dealerId ? ST.getOne('dealers', l.dealerId) : null;
+      h += '<div class="li">';
+      h += '<div class="lm">';
+      h += '<div class="lt">👤 ' + sanitize(dd ? dd.name : (l.borrower || '-')) + ' <span class="fu-badge ' + (l.status === 'active' ? 'fu-badge-red' : '') + '">' + (l.status === 'active' ? '📤 กำลังยืม' : '✅ คืนแล้ว') + '</span></div>';
+      h += '<div class="ls">📅 ยืม: ' + (l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + l.actualReturnDate : (l.returnDate ? ' • กำหนดคืน: ' + l.returnDate : '')) + '</div>';
+      if (l.purpose) h += '<div class="ls">🎯 ' + sanitize(l.purpose) + '</div>';
+      if (l.note) h += '<div class="ls">📝 ' + sanitize(l.note) + '</div>';
+      h += '</div></div>';
+    });
+  }
+  h += '</div>';
 
   el.innerHTML = h;
 }
@@ -2962,6 +3102,7 @@ function showLendDemoM(demoId) {
   dealers.forEach(function(d) { h += '<option value="' + d.id + '">' + sanitize(d.name) + '</option>'; });
   h += '</select></div>';
   h += '<div class="fm-group"><label>👤 ผู้ยืม (ถ้าไม่ใช่ Dealer)</label><input type="text" id="dm_borrower" class="fm-input" placeholder="ชื่อผู้ยืม"></div>';
+  h += '<div class="fm-group"><label>🎯 ใช้งานกับ / End User / วัตถุประสงค์</label><input type="text" id="dm_purpose" class="fm-input" placeholder="เช่น สาธิตให้บริษัท ABC ดู / สำรวจพื้นที่ก่อสร้าง"></div>';
   h += '<div class="fm-group"><label>📅 วันที่ยืม</label><input type="text" id="dm_lent" class="fm-input dp" value="' + _td() + '"></div>';
   h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_lnote" rows="2" class="fm-input"></textarea></div>';
@@ -2974,18 +3115,38 @@ function showLendDemoM(demoId) {
 
 function lendDemo(demoId) {
   var items = getDemoItems();
+  var dealerId = document.getElementById('dm_dealer').value || '';
+  var borrower = (document.getElementById('dm_borrower').value || '').trim();
+  var purpose = document.getElementById('dm_purpose') ? document.getElementById('dm_purpose').value.trim() : '';
+  var lentDate = (document.getElementById('dm_lent').value || '').trim() || _td();
+  var returnDate = (document.getElementById('dm_return').value || '').trim();
+  var note = (document.getElementById('dm_lnote').value || '').trim();
+  var demoName = '';
+
   for (var i = 0; i < items.length; i++) {
     if (items[i].id === demoId) {
       items[i].status = 'lent';
-      items[i].dealerId = document.getElementById('dm_dealer').value || '';
-      items[i].borrower = (document.getElementById('dm_borrower').value || '').trim();
-      items[i].lentDate = (document.getElementById('dm_lent').value || '').trim() || _td();
-      items[i].returnDate = (document.getElementById('dm_return').value || '').trim();
-      items[i].note = (document.getElementById('dm_lnote').value || '').trim();
+      items[i].dealerId = dealerId;
+      items[i].borrower = borrower;
+      items[i].purpose = purpose;
+      items[i].lentDate = lentDate;
+      items[i].returnDate = returnDate;
+      items[i].note = note;
+      demoName = items[i].name;
       break;
     }
   }
   saveDemoItems(items);
+
+  var loans = getDemoLoans();
+  loans.push({
+    id: gid(), demoId: demoId, demoName: demoName,
+    dealerId: dealerId, borrower: borrower, purpose: purpose,
+    lentDate: lentDate, returnDate: returnDate, actualReturnDate: '',
+    note: note, status: 'active', created: _nw()
+  });
+  saveDemoLoans(loans);
+
   toast('📤 ให้ยืมแล้ว');
   closeMForce();
   render();
@@ -2999,6 +3160,7 @@ function returnDemo(demoId) {
       items[i].status = 'available';
       items[i].dealerId = '';
       items[i].borrower = '';
+      items[i].purpose = '';
       items[i].lentDate = '';
       items[i].returnDate = '';
       items[i].note = '';
@@ -3006,6 +3168,17 @@ function returnDemo(demoId) {
     }
   }
   saveDemoItems(items);
+
+  var loans = getDemoLoans();
+  for (var j = loans.length - 1; j >= 0; j--) {
+    if (loans[j].demoId === demoId && loans[j].status === 'active') {
+      loans[j].status = 'returned';
+      loans[j].actualReturnDate = _td();
+      break;
+    }
+  }
+  saveDemoLoans(loans);
+
   toast('✅ คืนอุปกรณ์แล้ว');
   render();
 }
