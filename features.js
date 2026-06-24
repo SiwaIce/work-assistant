@@ -2800,11 +2800,16 @@ function getCurrentMonthKey() {
 function getDemoItems() {
   var saved = localStorage.getItem('v7_demo');
   if (saved) {
-    try { 
+    try {
       var parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch(e) { 
-      return []; 
+      if (!Array.isArray(parsed)) return [];
+      // migrate สถานะเดิม "maintenance" -> "unavailable"
+      var migrated = false;
+      parsed.forEach(function(d) { if (d.status === 'maintenance') { d.status = 'unavailable'; migrated = true; } });
+      if (migrated) saveDemoItems(parsed);
+      return parsed;
+    } catch(e) {
+      return [];
     }
   }
   return [];
@@ -2813,6 +2818,26 @@ function getDemoItems() {
 function saveDemoItems(list) {
   if (!list || !Array.isArray(list)) list = [];
   localStorage.setItem('v7_demo', JSON.stringify(list));
+}
+
+var DEMO_STATUS_META = {
+  available: { label: '✅ Available', cls: 'demo-available', desc: 'พร้อมให้จอง ณ ปัจจุบัน' },
+  reserved: { label: '📅 Reserved', cls: 'demo-reserved', desc: 'มีการจองในอนาคต — ดูรายละเอียดที่ปฏิทิน' },
+  lent: { label: '📤 On Borrowed', cls: 'demo-lent', desc: 'มีการยืมอยู่ในปัจจุบัน' },
+  unavailable: { label: '⛔ Unavailable', cls: 'demo-unavailable', desc: 'ไม่ว่างให้จอง หรือไม่พร้อมใช้งาน' },
+  lost: { label: '💔 Lost/Damaged', cls: 'demo-lost', desc: 'มีปัญหาอยู่ ไม่พร้อมให้จอง' }
+};
+
+// สถานะที่แสดงจริง: ถ้ากำลังยืมแต่วันยืมยังไม่มาถึง = Reserved, ถ้าวันยืมมาถึงแล้ว = On Borrowed
+function getDemoEffectiveStatus(item) {
+  if (item.status === 'lost' || item.status === 'unavailable') return item.status;
+  if (item.status === 'lent') {
+    var lentDate = ftParseDate(item.lentDate);
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    if (lentDate && lentDate > today) return 'reserved';
+    return 'lent';
+  }
+  return 'available';
 }
 
 // ================================================================
@@ -2836,20 +2861,30 @@ function demoLoansByDemo(demoId) {
 }
 
 var demoTrackerTab = 'list'; // 'list' | 'calendar'
+var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
+var demoModelFilter = 'all';
+var demoSearch = '';
+
+function demoSetStatusFilter(s) { demoStatusFilter = s; render(); }
+function demoClearFilters() { demoStatusFilter = 'all'; demoModelFilter = 'all'; demoSearch = ''; render(); }
+
+function demoComplianceBadges(d) {
+  var h = '<div class="demo-compliance">';
+  h += '<span>' + (d.nbtcRegistered ? '✅' : '❌') + ' กสทช</span>';
+  h += '<span>' + (d.droneInsurance ? '✅' : '❌') + ' ประกันภัย</span>';
+  h += '<span>' + (d.caatRegistered ? '✅' : '❌') + ' CAAT</span>';
+  h += '</div>';
+  return h;
+}
 
 function rDemoTracker(el) {
   document.getElementById('pgT').textContent = '🚁 Demo Equipment';
   var items = getDemoItems();
-  var dealers = [];
-  try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
-
   if (!items || !Array.isArray(items)) items = [];
 
-  var available = (items || []).filter(function(d) { return d && d.status === 'available'; });
-  var lent = (items || []).filter(function(d) { return d && d.status === 'lent'; });
-  var maintenance = (items || []).filter(function(d) { return d && d.status === 'maintenance'; });
-
   var now = new Date();
+  var counts = { available: 0, reserved: 0, lent: 0, unavailable: 0, lost: 0 };
+  items.forEach(function(d) { counts[getDemoEffectiveStatus(d)]++; });
 
   var h = '';
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
@@ -2869,84 +2904,91 @@ function rDemoTracker(el) {
   // Stats
   h += '<div class="sr">';
   h += '<div class="sc"><div class="sn c1">' + items.length + '</div><div class="sl">ทั้งหมด</div></div>';
-  h += '<div class="sc"><div class="sn c2">' + available.length + '</div><div class="sl">✅ ว่าง</div></div>';
-  h += '<div class="sc"><div class="sn c4">' + lent.length + '</div><div class="sl">📤 ให้ยืม</div></div>';
-  h += '<div class="sc"><div class="sn c3">' + maintenance.length + '</div><div class="sl">🔧 ซ่อม</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + counts.available + '</div><div class="sl">✅ Available</div></div>';
+  h += '<div class="sc"><div class="sn c5">' + counts.reserved + '</div><div class="sl">📅 Reserved</div></div>';
+  h += '<div class="sc"><div class="sn c4">' + counts.lent + '</div><div class="sl">📤 On Borrowed</div></div>';
+  h += '<div class="sc"><div class="sn c3">' + counts.unavailable + '</div><div class="sl">⛔ Unavailable</div></div>';
+  h += '<div class="sc"><div class="sn c6">' + counts.lost + '</div><div class="sl">💔 Lost/Damaged</div></div>';
   h += '</div>';
 
-  // Lent items (urgent)
-  if (lent.length) {
-    h += '<div class="card"><h2>📤 ให้ยืมอยู่ (' + lent.length + ')</h2>';
-    for (var i = 0; i < lent.length; i++) {
-      var d = lent[i];
-      var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
-      var lentDate = ftParseDate(d.lentDate);
-      var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
-      var isOverdue = daysBorrowed > 30;
+  // Status filter chips
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<button class="demo-filter-chip ' + (demoStatusFilter === 'all' ? 'act' : '') + '" onclick="demoSetStatusFilter(\'all\')">ทั้งหมด (' + items.length + ')</button>';
+  Object.keys(DEMO_STATUS_META).forEach(function(s) {
+    h += '<button class="demo-filter-chip ' + (demoStatusFilter === s ? 'act' : '') + '" onclick="demoSetStatusFilter(\'' + s + '\')">' + DEMO_STATUS_META[s].label + ' (' + counts[s] + ')</button>';
+  });
+  h += '</div>';
 
-      h += '<div class="demo-card' + (isOverdue ? ' demo-overdue' : '') + '">';
-      h += '<div class="demo-header">';
-      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
-      h += '<span class="demo-status demo-lent">📤 ให้ยืม</span>';
-      h += '</div>';
-      h += '<div class="demo-info">';
-      h += '<div>🏪 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
+  // ค้นหา + กรองตามรุ่น
+  var uniqueModels = [];
+  items.forEach(function(d) { if (d.name && uniqueModels.indexOf(d.name) === -1) uniqueModels.push(d.name); });
+  uniqueModels.sort();
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+  h += '<input type="text" class="fm-input" style="flex:1;min-width:200px" placeholder="🔍 ค้นหา (ชื่อ, SKU, S/N, เลขเครื่องเช่า)" value="' + sanitize(demoSearch) + '" oninput="demoSearch=this.value;render()">';
+  h += '<select class="fm-input" style="min-width:200px" onchange="demoModelFilter=this.value;render()">';
+  h += '<option value="all"' + (demoModelFilter === 'all' ? ' selected' : '') + '>📦 ทุกรุ่น (' + uniqueModels.length + ')</option>';
+  uniqueModels.forEach(function(m) {
+    var cnt = items.filter(function(d) { return d.name === m; }).length;
+    h += '<option value="' + sanitize(m) + '"' + (demoModelFilter === m ? ' selected' : '') + '>' + sanitize(m) + ' (' + cnt + ')</option>';
+  });
+  h += '</select>';
+  h += '<button class="btn bsm bo" onclick="demoClearFilters()">✖️ ล้าง</button>';
+  h += '</div>';
+
+  var shown = items.filter(function(d) {
+    if (demoStatusFilter !== 'all' && getDemoEffectiveStatus(d) !== demoStatusFilter) return false;
+    if (demoModelFilter !== 'all' && d.name !== demoModelFilter) return false;
+    if (demoSearch) {
+      var q = demoSearch.toLowerCase();
+      var hay = ((d.name || '') + ' ' + (d.sku || '') + ' ' + (d.serialNumber || '') + ' ' + (d.rentalDbNo || '')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+
+  if (!shown.length) {
+    h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div><p>' + (items.length ? 'ไม่พบอุปกรณ์ในสถานะนี้' : 'ยังไม่มีอุปกรณ์ Demo — กด ➕ เพื่อเพิ่ม') + '</p></div>';
+  }
+
+  h += '<div class="card">';
+  for (var i = 0; i < shown.length; i++) {
+    var d = shown[i];
+    var eff = getDemoEffectiveStatus(d);
+    var meta = DEMO_STATUS_META[eff];
+    var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
+    var lentDate = ftParseDate(d.lentDate);
+    var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
+    var isOverdue = eff === 'lent' && daysBorrowed > 30;
+
+    h += '<div class="demo-card' + (isOverdue ? ' demo-overdue' : '') + '">';
+    h += '<div class="demo-header">';
+    h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
+    h += '<span class="demo-status ' + meta.cls + '">' + meta.label + '</span>';
+    h += '</div>';
+    h += '<div class="demo-info">';
+    if (d.sku) h += '<div>🏷️ SiS Part: ' + sanitize(d.sku) + '</div>';
+    if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
+    if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + sanitize(d.rentalDbNo) + '</div>';
+    if (eff === 'lent' || eff === 'reserved') {
+      h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
       if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
-      h += '<div>📅 ยืมตั้งแต่: ' + (d.lentDate || '-') + ' (' + daysBorrowed + ' วัน)</div>';
+      h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '') + '</div>';
       if (d.returnDate) h += '<div>📅 กำหนดคืน: ' + d.returnDate + '</div>';
-      if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
-      h += '</div>';
-      h += '<div class="demo-actions">';
-      h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
-      h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
-      if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
-      h += '</div></div>';
     }
+    if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
     h += '</div>';
+    h += demoComplianceBadges(d);
+    h += '<div class="demo-actions">';
+    h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียด</button>';
+    if (eff === 'available') h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม/จอง</button>';
+    if (eff === 'lent' || eff === 'reserved') h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
+    if (eff === 'unavailable') h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ พร้อมใช้</button>';
+    h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
+    if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')">🗑️</button>';
+    if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
+    h += '</div></div>';
   }
-
-  // Available items
-  if (available.length) {
-    h += '<div class="card"><h2>✅ ว่าง (' + available.length + ')</h2>';
-    for (var i = 0; i < available.length; i++) {
-      var d = available[i];
-      h += '<div class="demo-card">';
-      h += '<div class="demo-header">';
-      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
-      h += '<span class="demo-status demo-available">✅ ว่าง</span>';
-      h += '</div>';
-      if (d.serialNumber || d.sku) h += '<div class="demo-info">' + (d.serialNumber ? '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>' : '') + (d.sku ? '<div>🏷️ SKU: ' + sanitize(d.sku) + '</div>' : '') + '</div>';
-      h += '<div class="demo-actions">';
-      h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม</button>';
-      h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
-      h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')">🗑️</button>';
-      h += '</div></div>';
-    }
-    h += '</div>';
-  }
-
-  // Maintenance items
-  if (maintenance.length) {
-    h += '<div class="card"><h2>🔧 ซ่อม/บำรุง (' + maintenance.length + ')</h2>';
-    for (var i = 0; i < maintenance.length; i++) {
-      var d = maintenance[i];
-      h += '<div class="demo-card">';
-      h += '<div class="demo-header">';
-      h += '<div class="demo-name" style="cursor:pointer" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">🚁 ' + sanitize(d.name) + '</div>';
-      h += '<span class="demo-status demo-maint">🔧 ซ่อม</span>';
-      h += '</div>';
-      if (d.note) h += '<div class="demo-info"><div>📝 ' + sanitize(d.note) + '</div></div>';
-      h += '<div class="demo-actions">';
-      h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ พร้อมใช้</button>';
-      h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
-      h += '</div></div>';
-    }
-    h += '</div>';
-  }
-
-  if (!items.length) {
-    h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div><p>ยังไม่มีอุปกรณ์ Demo — กด ➕ เพื่อเพิ่ม</p></div>';
-  }
+  h += '</div>';
 
   el.innerHTML = h;
 }
@@ -2955,6 +2997,7 @@ function rDemoTracker(el) {
 // DEMO CALENDAR — ภาพรวมว่าวันไหนเครื่องไหนถูกยืม
 // ================================================================
 var demoCalMonthOffset = 0;
+var demoCalUnitFilter = 'all';
 function demoCalChangeMonth(delta) { demoCalMonthOffset += delta; render(); }
 
 function renderDemoCalendar() {
@@ -2965,14 +3008,16 @@ function renderDemoCalendar() {
   var monthKey = (month + 1) + '/' + year;
   var totalDays = getDaysInMonth(monthKey);
 
-  var loans = getDemoLoans();
+  var allUnits = getDemoItems();
+  var loans = getDemoLoans().filter(function(l) { return demoCalUnitFilter === 'all' || l.demoId === demoCalUnitFilter; });
+  var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
   var byDay = {};
   loans.forEach(function(l) {
     if (!l.lentDate) return;
-    var start = new Date(l.lentDate);
-    var end = l.actualReturnDate ? new Date(l.actualReturnDate) : (l.returnDate ? new Date(l.returnDate) : new Date());
-    if (isNaN(start.getTime())) return;
-    if (isNaN(end.getTime()) || end < start) end = start;
+    var start = ftParseDate(l.lentDate);
+    var end = (l.actualReturnDate && ftParseDate(l.actualReturnDate)) || (l.returnDate && ftParseDate(l.returnDate)) || new Date();
+    if (!start) return;
+    if (end < start) end = start;
     var cur = new Date(start);
     while (cur <= end) {
       if (cur.getFullYear() === year && cur.getMonth() === month) {
@@ -2986,11 +3031,18 @@ function renderDemoCalendar() {
 
   var monthName = getMonthName(month) + ' ' + year;
   var h = '<div class="card" style="padding:10px;margin-bottom:10px">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
   h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(-1)">◀</button>';
   h += '<b>🚁 ' + monthName + '</b>';
   h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
-  h += '</div></div>';
+  h += '</div>';
+  h += '<select class="fm-input" onchange="demoCalUnitFilter=this.value;render()">';
+  h += '<option value="all"' + (demoCalUnitFilter === 'all' ? ' selected' : '') + '>🚁 ดูทุกเครื่อง (ภาพรวม)</option>';
+  allUnits.forEach(function(u) {
+    h += '<option value="' + u.id + '"' + (demoCalUnitFilter === u.id ? ' selected' : '') + '>' + sanitize(u.name) + '</option>';
+  });
+  h += '</select>';
+  h += '</div>';
 
   h += '<div class="timeline-month"><div class="timeline-grid">';
   for (var d = 1; d <= totalDays; d++) {
@@ -3000,7 +3052,14 @@ function renderDemoCalendar() {
     h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? ' timeline-day-past' : '') + '">';
     h += '<div class="timeline-day-num">' + d + '</div>';
     dayLoans.slice(0, 4).forEach(function(l) {
-      h += '<div class="timeline-task ' + (l.status === 'active' ? 'timeline-task-overdue' : '') + '" onclick="go(\'demoDetail\',{demoId:\'' + l.demoId + '\'})" title="' + sanitize((l.demoName || '') + ' - ' + (l.borrower || '')) + '"><div class="timeline-task-title">🚁 ' + sanitize(l.demoName || '-') + '</div></div>';
+      var cls = '';
+      var lStart = ftParseDate(l.lentDate);
+      var isFuture = lStart && lStart > todayD;
+      if (l.status === 'active') {
+        cls = isFuture ? 'timeline-task-reserved' : 'timeline-task-overdue';
+      }
+      var label = l.status === 'active' && isFuture ? '📅 ' : '🚁 ';
+      h += '<div class="timeline-task ' + cls + '" onclick="go(\'demoDetail\',{demoId:\'' + l.demoId + '\'})" title="' + sanitize((l.demoName || '') + ' - ' + (l.borrower || '')) + '"><div class="timeline-task-title">' + label + sanitize(l.demoName || '-') + '</div></div>';
     });
     if (dayLoans.length > 4) h += '<div style="font-size:9px;color:var(--text2)">+' + (dayLoans.length - 4) + ' อื่นๆ</div>';
     h += '</div>';
@@ -3020,23 +3079,28 @@ function rDemoDetail(el) {
 
   document.getElementById('pgT').textContent = '🚁 ' + d.name;
 
-  var statusLabel = d.status === 'available' ? '✅ ว่าง' : d.status === 'lent' ? '📤 ให้ยืม' : '🔧 ซ่อม';
+  var eff = getDemoEffectiveStatus(d);
+  var meta = DEMO_STATUS_META[eff];
   var h = '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
 
   h += '<div class="card">';
-  h += '<h2>🚁 ' + sanitize(d.name) + '</h2>';
+  h += '<h2>🚁 ' + sanitize(d.name) + ' <span class="demo-status ' + meta.cls + '">' + meta.label + '</span></h2>';
   h += '<div class="demo-info">';
   if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
   if (d.model) h += '<div>📦 Model: ' + sanitize(d.model) + '</div>';
-  if (d.sku) h += '<div>🏷️ SKU: ' + sanitize(d.sku) + '</div>';
-  h += '<div>📊 สถานะ: ' + statusLabel + '</div>';
-  if (d.status === 'lent') {
+  if (d.sku) h += '<div>🏷️ SiS Part: ' + sanitize(d.sku) + '</div>';
+  if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + sanitize(d.rentalDbNo) + '</div>';
+  h += '<div style="color:var(--text2)">ℹ️ ' + meta.desc + '</div>';
+  if (eff === 'lent' || eff === 'reserved') {
     var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
     h += '<div>👤 ผู้ยืม: ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ใช้งานกับ: ' + sanitize(d.purpose) + '</div>';
-    h += '<div>📅 ยืมตั้งแต่: ' + (d.lentDate || '-') + (d.returnDate ? ' • กำหนดคืน: ' + d.returnDate : '') + '</div>';
+    h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (d.returnDate ? ' • กำหนดคืน: ' + d.returnDate : '') + '</div>';
   }
-  h += '</div></div>';
+  if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
+  h += '</div>';
+  h += demoComplianceBadges(d);
+  h += '</div>';
 
   var history = demoLoansByDemo(d.id);
   h += '<div class="card"><h2>📜 ประวัติการยืม (' + history.length + ')</h2>';
@@ -3061,12 +3125,14 @@ function rDemoDetail(el) {
 
 // ตัวเลือก Model ดึงจากสินค้าหมวด Demo Unit ใน Products module พร้อม SKU
 function demoUnitOptions(selected) {
-  var products = [];
-  try { products = getAllProducts().filter(function(p) { return isDemoProduct(p); }); } catch (e) { products = []; }
+  var units = [];
+  try { units = getAllDemoUnits(); } catch (e) { units = []; }
   var h = '<option value="">-- เลือก Model --</option>';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    h += '<option value="' + sanitize(p.name) + '" data-sku="' + sanitize(p.sku || '') + '"' + (selected === p.name ? ' selected' : '') + '>' + sanitize(p.name) + (p.sku ? ' (' + sanitize(p.sku) + ')' : '') + '</option>';
+  for (var i = 0; i < units.length; i++) {
+    var u = units[i];
+    var name = u.productName || u.name || '';
+    if (!name) continue;
+    h += '<option value="' + sanitize(name) + '" data-sku="' + sanitize(u.sku || '') + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(name) + (u.sku ? ' (' + sanitize(u.sku) + ')' : '') + '</option>';
   }
   return h;
 }
@@ -3077,12 +3143,32 @@ function fillDemoSku(selectEl) {
   if (skuInput) skuInput.value = sku;
 }
 
+function demoComplianceFieldsHtml(d) {
+  d = d || {};
+  var h = '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '"></div>';
+  h += '<div class="fm-group" style="display:flex;gap:14px;flex-wrap:wrap">';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_nbtc"' + (d.nbtcRegistered ? ' checked' : '') + '> ขึ้นทะเบียน กสทช</label>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_insurance"' + (d.droneInsurance ? ' checked' : '') + '> ประกันภัยโดรน</label>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_caat"' + (d.caatRegistered ? ' checked' : '') + '> ขึ้นทะเบียน CAAT</label>';
+  h += '</div>';
+  return h;
+}
+function readDemoComplianceFields() {
+  return {
+    rentalDbNo: (document.getElementById('dm_rentaldb').value || '').trim(),
+    nbtcRegistered: document.getElementById('dm_nbtc').checked,
+    droneInsurance: document.getElementById('dm_insurance').checked,
+    caatRegistered: document.getElementById('dm_caat').checked
+  };
+}
+
 function showAddDemoM() {
   var h = '<div style="max-width:400px">';
   h += '<div class="fm-group"><label>🚁 ชื่ออุปกรณ์ *</label><input type="text" id="dm_name" class="fm-input" placeholder="เช่น L3 Demo Unit #1"></div>';
   h += '<div class="fm-group"><label>🔢 Serial Number</label><input type="text" id="dm_sn" class="fm-input" placeholder="S/N"></div>';
   h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions('') + '</select></div>';
   h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" placeholder="ดึงอัตโนมัติจาก Model"></div>';
+  h += demoComplianceFieldsHtml({});
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveDemo()">💾 บันทึก</button>';
@@ -3095,7 +3181,8 @@ function saveDemo() {
   var name = (document.getElementById('dm_name').value || '').trim();
   if (!name) { toast('กรุณาใส่ชื่อ'); return; }
   var items = getDemoItems();
-  items.push({
+  var compliance = readDemoComplianceFields();
+  items.push(Object.assign({
     id: 'dm_' + Date.now(),
     name: name,
     serialNumber: (document.getElementById('dm_sn').value || '').trim(),
@@ -3107,7 +3194,7 @@ function saveDemo() {
     borrower: '',
     lentDate: '',
     returnDate: ''
-  });
+  }, compliance));
   saveDemoItems(items);
   toast('✅ เพิ่มอุปกรณ์แล้ว');
   closeMForce();
@@ -3124,14 +3211,14 @@ function showLendDemoM(demoId) {
   h += '</select></div>';
   h += '<div class="fm-group"><label>👤 ผู้ยืม (ถ้าไม่ใช่ Dealer)</label><input type="text" id="dm_borrower" class="fm-input" placeholder="ชื่อผู้ยืม"></div>';
   h += '<div class="fm-group"><label>🎯 ใช้งานกับ / End User / วัตถุประสงค์</label><input type="text" id="dm_purpose" class="fm-input" placeholder="เช่น สาธิตให้บริษัท ABC ดู / สำรวจพื้นที่ก่อสร้าง"></div>';
-  h += '<div class="fm-group"><label>📅 วันที่ยืม</label><input type="text" id="dm_lent" class="fm-input dp" value="' + _td() + '"></div>';
+  h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + _td() + '"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
   h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_lnote" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="lendDemo(\'' + demoId + '\')">📤 ให้ยืม</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
-  openM('📤 ให้ยืมอุปกรณ์', h);
+  openM('📤 ให้ยืม / จองล่วงหน้า', h);
 }
 
 function lendDemo(demoId) {
@@ -3215,11 +3302,16 @@ function showEditDemoM(demoId) {
   h += '<div class="fm-group"><label>🔢 S/N</label><input type="text" id="dm_sn" class="fm-input" value="' + sanitize(d.serialNumber || '') + '"></div>';
   h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions(d.model || '') + '</select></div>';
   h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" value="' + sanitize(d.sku || '') + '" placeholder="ดึงอัตโนมัติจาก Model"></div>';
-  h += '<div class="fm-group"><label>📊 สถานะ</label><select id="dm_status" class="fm-input">';
-  h += '<option value="available"' + (d.status === 'available' ? ' selected' : '') + '>✅ ว่าง</option>';
-  h += '<option value="lent"' + (d.status === 'lent' ? ' selected' : '') + '>📤 ให้ยืม</option>';
-  h += '<option value="maintenance"' + (d.status === 'maintenance' ? ' selected' : '') + '>🔧 ซ่อม</option>';
-  h += '</select></div>';
+  h += demoComplianceFieldsHtml(d);
+  if (d.status === 'lent') {
+    h += '<div class="fm-group"><label>📊 สถานะ</label><div class="hint">📤 On Borrowed / Reserved — จัดการผ่านปุ่ม "คืนแล้ว" ในหน้ารายการ ไม่แก้ตรงนี้</div></div>';
+  } else {
+    h += '<div class="fm-group"><label>📊 สถานะ</label><select id="dm_status" class="fm-input">';
+    h += '<option value="available"' + (d.status === 'available' ? ' selected' : '') + '>✅ Available</option>';
+    h += '<option value="unavailable"' + (d.status === 'unavailable' ? ' selected' : '') + '>⛔ Unavailable</option>';
+    h += '<option value="lost"' + (d.status === 'lost' ? ' selected' : '') + '>💔 Lost/Damaged</option>';
+    h += '</select></div>';
+  }
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input">' + sanitize(d.note || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="updateDemo(\'' + demoId + '\')">💾 บันทึก</button>';
@@ -3231,13 +3323,19 @@ function showEditDemoM(demoId) {
 
 function updateDemo(demoId) {
   var items = getDemoItems();
+  var compliance = readDemoComplianceFields();
   for (var i = 0; i < items.length; i++) {
     if (items[i].id === demoId) {
       items[i].name = (document.getElementById('dm_name').value || '').trim();
       items[i].serialNumber = (document.getElementById('dm_sn').value || '').trim();
       items[i].model = document.getElementById('dm_model').value || '';
       items[i].sku = (document.getElementById('dm_sku').value || '').trim();
-      items[i].status = document.getElementById('dm_status').value || 'available';
+      items[i].rentalDbNo = compliance.rentalDbNo;
+      items[i].nbtcRegistered = compliance.nbtcRegistered;
+      items[i].droneInsurance = compliance.droneInsurance;
+      items[i].caatRegistered = compliance.caatRegistered;
+      var statusEl = document.getElementById('dm_status');
+      items[i].status = statusEl ? (statusEl.value || 'available') : items[i].status;
       items[i].note = (document.getElementById('dm_note').value || '').trim();
       break;
     }
