@@ -570,8 +570,9 @@ var R = {
   meetings: rMeetings, 
   meetingDetail: rMeetDet,
   calendar: rCalendar,
-  monthlyGoal: rMonthlyGoal, 
+  monthlyGoal: rMonthlyGoal,
   demoTracker: rDemoTracker,
+  kpiScorecard: rKpiScorecard,
   demoDetail: rDemoDetail,
   quotations: rQuotations,
   visitPlan: rVisitPlan, 
@@ -1436,6 +1437,7 @@ function showEditFavorites() {
     {id: 'customKpi', icon: '🎯', name: 'KPI Dashboard', action: "go('customKpi')"},
     {id: 'monthlyGoal', icon: '🎯', name: 'Monthly Goal', action: "go('monthlyGoal')"},
     {id: 'demoTracker', icon: '🚁', name: 'Demo Equipment', action: "go('demoTracker')"},
+    {id: 'kpiScorecard', icon: '📊', name: 'KPI เซลล์', action: "go('kpiScorecard')"},
     {id: 'quotations', icon: '💰', name: 'Quotation', action: "go('quotations')"},
     {id: 'knowledge', icon: '📚', name: 'Knowledge', action: "go('knowledge')"},
     {id: 'exports', icon: '📤', name: 'Export', action: "go('exports')"},
@@ -1509,6 +1511,7 @@ function renderFavorites() {
     'line': '💬 LINE Message', 'emailDrafts': '📧 Email Draft', 'presentation': '🎬 Presentation',
     'feedback': '💡 Feedback', 'kpi': '🎯 KPI', 'customKpi': '🎯 KPI Dashboard',
     'monthlyGoal': '🎯 Monthly Goal', 'demoTracker': '🚁 Demo Equipment',
+    'kpiScorecard': '📊 KPI เซลล์',
     'quotations': '💰 Quotation', 'knowledge': '📚 Knowledge', 'exports': '📤 Export',
     'health': '🏥 Data Health', 'admin': '⚙️ ตั้งค่า'
   };

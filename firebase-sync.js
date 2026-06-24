@@ -100,7 +100,9 @@ var SYNC_KEY_MAP = {
   'contact_logs': 'contactLogs',
   'pending_followups': 'pendingFollowups',
   'dealer_pins': 'dealerPins',
-  'email_drafts': 'emailDrafts'
+  'email_drafts': 'emailDrafts',
+  'kpiQuarterPlans': 'kpiQuarterPlans',
+  'kpiQuarterLogs': 'kpiQuarterLogs'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
@@ -302,25 +304,27 @@ function initFirebaseListeners() {
     var unsub = ref.onSnapshot(function(snapshot) {
       try {
         var items = [];
-        var isSingleDoc = false;
+        var singleDocVal, hasSingleDoc = false;
         snapshot.forEach(function(doc) {
           if (doc.id === '_data') {
-            var val = normalizeFirestoreValue(doc.data().value);
-            // ✅ กันค่า null/undefined ไม่ให้เก็บเป็นสตริง "null" (ทำให้ getter พังตอน .filter/.map)
-            if (val === null || val === undefined) {
-              localStorage.removeItem(lsKey);
-            } else {
-              localStorage.setItem(lsKey, JSON.stringify(val));
-            }
-            isSingleDoc = true;
+            singleDocVal = normalizeFirestoreValue(doc.data().value);
+            hasSingleDoc = true;
             return;
           }
           var data = normalizeFirestoreValue(doc.data());
           data.id = doc.id;
           items.push(data);
         });
-        if (!isSingleDoc && items.length) {
+        // ✅ ถ้ามี doc รายชิ้นจริง (array-style) ให้ใช้ก่อนเสมอ — กัน doc "_data" เก่าที่ตกค้างมาทับข้อมูลจริง
+        if (items.length) {
           localStorage.setItem(lsKey, JSON.stringify(items));
+        } else if (hasSingleDoc) {
+          // ✅ กันค่า null/undefined ไม่ให้เก็บเป็นสตริง "null" (ทำให้ getter พังตอน .filter/.map)
+          if (singleDocVal === null || singleDocVal === undefined) {
+            localStorage.removeItem(lsKey);
+          } else {
+            localStorage.setItem(lsKey, JSON.stringify(singleDocVal));
+          }
         }
       } catch(e) {
         console.warn('Listener error for', collName, e);

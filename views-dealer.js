@@ -583,6 +583,7 @@ function dealerInfoTab(d) {
           <span style="font-size: 12px; color: var(--text2)">🔢 DJI: ${d.djiCode || '-'}</span>
           <span style="font-size: 12px; color: var(--text2)">🏪 DJI Dealer: ${d.djiDealer || '-'}</span>
         </div>
+        ${!['S','A','B'].includes(d.level) ? '<button class="btn bsm bp" style="margin-top:8px" onclick="markDealerAuthorized(\'' + d.id + '\')">🌟 Mark เป็น Authorized Dealer</button>' : ''}
       </div>
       <div style="text-align: right">
         <div style="font-size: 32px; font-weight: 800; color: ${healthColor}">${h.score}/100</div>
@@ -1517,6 +1518,19 @@ function copyDealerSummary() {
     tsv += `${d.sisCode||''}\t${d.djiCode||''}\t${d.name}\t${d.level||''}\t${(d.contact||'').replace(/[\t\n]/g,' ')}\t${d.creditTerm||''}\t${d.creditLimit||''}\t${target}\t${won}\t${pct}%\t${h.score}\t${lcd!==null?lcd+'d':'-'}\t${lvd!==null?lvd+'d':'-'}\t${d.dsecStatus==='pass'?'Y':'N'}\t${d.crmStatus==='yes'?'Y':'N'}\t${d.fh2Status==='pass'?'Y':'N'}\t${d.larkStatus==='added'?'Y':'N'}\n`;
   });
   copyText(tsv, '📋 Copy Dealer Summary');
+}
+
+function markDealerAuthorized(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  if (!confirm('อัปเกรด "' + d.name + '" เป็น Level B และนับเป็น Dealer ใหม่ที่พัฒนาในไตรมาสนี้ ใช่ไหม?')) return;
+  var cfg = getConfig();
+  var today = new Date().toISOString().split('T')[0];
+  var saleName = cfg.saleName || ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email) : '');
+  ST.update('dealers', dealerId, { level: 'B', authorizedDate: today, authorizedBy: saleName });
+  if (typeof addAuditLog === 'function') addAuditLog('mark_dealer_authorized', 'dealer', dealerId, d.name, dealerId, d.name, { newLevel: 'B' });
+  toast('🌟 อัปเกรดเป็น Authorized Dealer แล้ว');
+  render();
 }
 
 function dlDealerCSV() {
