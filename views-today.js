@@ -179,6 +179,142 @@ function quickMarkActionDone(actionId) {
   render();
 }
 // ================================================================
+// DAILY PRIORITY LIST — จัดลำดับสิ่งที่ต้องทำวันนี้
+// ================================================================
+function renderDailyPriorityList() {
+  var items = [];
+
+  ST.getAll('tasks').filter(function(t) { return t.status !== 'completed' && t.dueDate; }).forEach(function(t) {
+    var days = dTo(t.dueDate);
+    if (days <= 0) {
+      items.push({
+        rank: days < 0 ? 0 : 1, pr: t.priority,
+        sub: days < 0 ? ('เลยกำหนด ' + Math.abs(days) + ' วัน') : 'ครบกำหนดวันนี้',
+        icon: '📋', title: t.title, go: "go('taskDetail',{taskId:'" + t.id + "'})"
+      });
+    }
+  });
+  ST.getAll('pipeline').filter(function(p) { return p.biddingDate && dTo(p.biddingDate) <= 0 && ['lost', 'delivered'].indexOf(p.status) === -1; }).forEach(function(p) {
+    items.push({ rank: 2, pr: 'high', sub: 'Bidding ครบกำหนด', icon: '📊', title: p.projectName || '-', go: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
+  });
+  ST.getAll('waiting').filter(function(w) { return !w.resolved && w.dueDate && dTo(w.dueDate) <= 0; }).forEach(function(w) {
+    items.push({ rank: 2, pr: 'medium', sub: 'นัดติดตามครบกำหนด', icon: '⏳', title: w.title || '-', go: "go('reminders')" });
+  });
+  ST.getAll('tasks').filter(function(t) { return t.status !== 'completed' && !t.dueDate && t.priority === 'high'; }).forEach(function(t) {
+    items.push({ rank: 4, pr: 'high', sub: 'สำคัญ — ยังไม่มีกำหนด', icon: '🔴', title: t.title, go: "go('taskDetail',{taskId:'" + t.id + "'})" });
+  });
+
+  var prW = { high: 0, medium: 1, low: 2 };
+  items.sort(function(a, b) {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return (prW[a.pr] || 1) - (prW[b.pr] || 1);
+  });
+
+  if (!items.length) {
+    return '<div class="card" style="text-align:center;padding:20px"><div style="font-size:28px">🎉</div><div style="color:var(--text2)">ไม่มีสิ่งที่ต้องรีบทำวันนี้</div></div>';
+  }
+
+  var h = '<div class="card"><h2>🎯 ลำดับสิ่งที่ต้องทำวันนี้</h2>';
+  items.forEach(function(it, i) {
+    h += '<div class="li" onclick="' + it.go + '" style="cursor:pointer;display:flex;gap:8px;align-items:flex-start">';
+    h += '<div style="font-weight:800;color:var(--accent);min-width:18px">' + (i + 1) + '</div>';
+    h += '<div class="lm"><div class="lt">' + it.icon + ' ' + sanitize(it.title) + '</div><div class="ls">' + it.sub + '</div></div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// ================================================================
+// UNIFIED CALENDAR — Task / Pipeline Bidding+Shipment / Visit / ติดตาม
+// ================================================================
+var calMonthOffset = 0;
+var calFilters = { task: true, bid: true, ship: true, visit: true, wait: true };
+
+function calChangeMonth(delta) { calMonthOffset += delta; render(); }
+function calToggleFilter(key) { calFilters[key] = !calFilters[key]; render(); }
+function calFilterChip(key, label) {
+  return '<button class="btn bsm ' + (calFilters[key] ? 'bp' : 'bo') + '" onclick="calToggleFilter(\'' + key + '\')">' + label + '</button>';
+}
+
+function renderUnifiedCalendar() {
+  var base = new Date();
+  base.setDate(1);
+  base.setMonth(base.getMonth() + calMonthOffset);
+  var year = base.getFullYear(), month = base.getMonth();
+  var monthKey = (month + 1) + '/' + year;
+  var totalDays = getDaysInMonth(monthKey);
+
+  var byDay = {};
+  function pushEv(dateStr, ev) {
+    if (!dateStr) return;
+    var d = new Date(dateStr);
+    if (isNaN(d.getTime()) || d.getFullYear() !== year || d.getMonth() !== month) return;
+    var day = d.getDate();
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(ev);
+  }
+
+  if (calFilters.task) {
+    ST.getAll('tasks').filter(function(t) { return t.status !== 'completed' && t.dueDate; }).forEach(function(t) {
+      pushEv(t.dueDate, { icon: '📋', title: t.title, cls: dTo(t.dueDate) < 0 ? 'timeline-task-overdue' : '', go: "go('taskDetail',{taskId:'" + t.id + "'})" });
+    });
+  }
+  if (calFilters.bid) {
+    ST.getAll('pipeline').filter(function(p) { return p.biddingDate && ['lost', 'delivered'].indexOf(p.status) === -1; }).forEach(function(p) {
+      pushEv(p.biddingDate, { icon: '📊', title: p.projectName || '-', go: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
+    });
+  }
+  if (calFilters.ship) {
+    ST.getAll('pipeline').filter(function(p) { return p.shipmentDate; }).forEach(function(p) {
+      pushEv(p.shipmentDate, { icon: '🚚', title: p.projectName || '-', go: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
+    });
+  }
+  if (calFilters.visit) {
+    ST.getAll('visits').forEach(function(v) {
+      var d = ST.getOne('dealers', v.dealerId);
+      pushEv(v.date, { icon: '🤝', title: d ? d.name : '-', go: d ? "go('dealerDetail',{dealerId:'" + d.id + "'})" : '' });
+    });
+  }
+  if (calFilters.wait) {
+    ST.getAll('waiting').filter(function(w) { return !w.resolved && w.dueDate; }).forEach(function(w) {
+      pushEv(w.dueDate, { icon: '⏳', title: w.title || '-', go: "go('reminders')" });
+    });
+  }
+
+  var monthName = getMonthName(month) + ' ' + year;
+  var h = '<div class="card" style="padding:10px;margin-bottom:10px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h += '<button class="btn bsm bo" onclick="calChangeMonth(-1)">◀</button>';
+  h += '<b>📅 ' + monthName + '</b>';
+  h += '<button class="btn bsm bo" onclick="calChangeMonth(1)">▶</button>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  h += calFilterChip('task', '📋 Task');
+  h += calFilterChip('bid', '📊 Bidding');
+  h += calFilterChip('ship', '🚚 Shipment');
+  h += calFilterChip('visit', '🤝 Visit');
+  h += calFilterChip('wait', '⏳ ติดตาม');
+  h += '</div></div>';
+
+  h += '<div class="timeline-month"><div class="timeline-grid">';
+  for (var d = 1; d <= totalDays; d++) {
+    var evs = byDay[d] || [];
+    var isToday = isTodayDate(d, monthKey);
+    var isPast = isPastDate(d, monthKey);
+    h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? ' timeline-day-past' : '') + '">';
+    h += '<div class="timeline-day-num">' + d + '</div>';
+    evs.slice(0, 4).forEach(function(ev) {
+      h += '<div class="timeline-task ' + (ev.cls || '') + '" onclick="' + ev.go + '" title="' + sanitize(ev.title) + '"><div class="timeline-task-title">' + ev.icon + ' ' + sanitize(ev.title) + '</div></div>';
+    });
+    if (evs.length > 4) h += '<div style="font-size:9px;color:var(--text2)">+' + (evs.length - 4) + ' อื่นๆ</div>';
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+// ================================================================
 // TODAY — Command Center
 // ================================================================
 function rToday(el) {
@@ -223,6 +359,7 @@ function rToday(el) {
   tabHtml += '<div class="today-tab ' + (todayTab === 'urgent' ? 'act' : '') + '" onclick="todayTab=\'urgent\';render()">🔴 ด่วน</div>';
   tabHtml += '<div class="today-tab ' + (todayTab === 'tasks' ? 'act' : '') + '" onclick="todayTab=\'tasks\';render()">📋 งาน</div>';
   tabHtml += '<div class="today-tab ' + (todayTab === 'schedule' ? 'act' : '') + '" onclick="todayTab=\'schedule\';render()">📅 วันนี้</div>';
+  tabHtml += '<div class="today-tab ' + (todayTab === 'calendar' ? 'act' : '') + '" onclick="todayTab=\'calendar\';render()">🗓️ ปฏิทินรวม</div>';
   tabHtml += '<div class="today-tab ' + (todayTab === 'kpi' ? 'act' : '') + '" onclick="todayTab=\'kpi\';render()">🎯 KPI</div>';
   tabHtml += '<div class="today-tab ' + (todayTab === 'other' ? 'act' : '') + '" onclick="todayTab=\'other\';render()">⚙️ อื่นๆ</div>';
   tabHtml += '</div>';
@@ -251,11 +388,16 @@ function rToday(el) {
   var tabContent = '';
 
   if (todayTab === 'summary') {
-    // 📌 สรุป = Briefing + Stats + Pins
+    // 📌 สรุป = Daily Priority + Briefing + Stats + Pins
+    tabContent += renderDailyPriorityList();
     tabContent += briefingHtml;
     tabContent += `
     ${pins.length ? '<div class="pin-bar">' + pins.map(pinHTML).join('') + '</div>' : ''}
     `;
+
+  } else if (todayTab === 'calendar') {
+    // 🗓️ ปฏิทินรวม = Task deadline + Pipeline Bidding/Shipment + Visit + ติดตาม
+    tabContent += renderUnifiedCalendar();
 
   } else if (todayTab === 'urgent') {
     // 🔴 ด่วน = Urgent + Timeline + Notifications + Overdue

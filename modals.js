@@ -153,6 +153,7 @@ function safeModelOptions(selected) {
 function showDealerM(eid) {
   var d = eid ? ST.getOne('dealers', eid) : {};
   var cfg = getConfig();
+  window._dealerAttach = (d.attachments || []).slice();
   openM(eid ? '✏️ Dealer' : '➕ เพิ่ม Dealer', '' +
     '<div class="form-section">🏢 ข้อมูลบริษัท</div>' +
     '<div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fd_name" value="' + sanitize(d.name || '') + '"></div>' +
@@ -170,6 +171,7 @@ function showDealerM(eid) {
     '<div class="fg"><label>รายละเอียดลูกค้า</label><textarea id="fd_detail" rows="2">' + sanitize(d.customerDetail || '') + '</textarea></div>' +
     '<div class="fr"><div class="fg"><label>Shippto</label><input type="text" id="fd_ship" value="' + (d.shippto || 'NO') + '"></div>' +
     '<div class="fg"><label>📍 Google Map</label><input type="url" id="fd_map" value="' + (d.googleMap || '') + '"></div></div>' +
+    attachUploadHtml('_dealerAttach', 'dealers', '📷 รูปหน้าร้าน/ใบรับรอง') +
     '<div class="form-section">📋 Certification</div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fd_appt">' + optionsHTML(cfg.appointmentOptions, d.appointmentLetter, '--') + '</select></div>' +
     dpH('fd_apptdate', d.appointmentDate || '', 'วันแต่งตั้ง') + '</div>' +
@@ -215,7 +217,8 @@ async function saveDealer(eid) {
     customerSegment: document.getElementById('fd_segment').value.trim(),
     dockInterest: document.getElementById('fd_dock').value,
     pipelineStage: document.getElementById('fd_pipe').value,
-    notes: document.getElementById('fd_notes').value.trim()
+    notes: document.getElementById('fd_notes').value.trim(),
+    attachments: window._dealerAttach || []
   };
   
   if (!data.name) return alert('ใส่ชื่อบริษัท');
@@ -265,7 +268,8 @@ var pipeItemMode = 'items';
 function showPipelineM(dealerId, eid) {
   var p = eid ? ST.getOne('pipeline', eid) : {};
   var cfg = getConfig();
-  
+  window._pipeAttach = (p.attachments || []).slice();
+
   // Load existing items
   if (eid && p.items && p.items.length > 0) {
     pipeItemsTemp = JSON.parse(JSON.stringify(p.items));
@@ -318,6 +322,7 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr"><div class="fg"><label>Project Revenue (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_projrev" value="' + nmI(p.projectRevenue || '') + '" placeholder="มูลค่ารวมทั้งโปรเจกต์ (DJI+Service+อื่นๆ)"></div>' +
     '<div class="fg"><label>Sale (ผู้รับผิดชอบ)</label><input type="text" id="fp_sale" value="' + sanitize(eid ? (p.saleName || '') : (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '')) + '"></div></div>' +
     '<div class="fg"><label>แสดงใน Google Sheet</label><div class="radio-g"><label><input type="radio" name="fp_disp" value="Show"' + (p.sheetDisplay !== 'Hide' ? ' checked' : '') + '><span>Show</span></label><label><input type="radio" name="fp_disp" value="Hide"' + (p.sheetDisplay === 'Hide' ? ' checked' : '') + '><span>Hide</span></label></div></div>' +
+    attachUploadHtml('_pipeAttach', 'pipeline', '📷 รูปแนบ (TOR/PO/ใบเสนอราคา/หน้างาน)') +
     '<div class="form-section">🎯 Next Action</div>' +
     '<div class="fr"><div class="fg"><label>ต้องทำอะไรต่อ</label><select id="fp_next"><option value="">-- ไม่ระบุ --</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div>' +
     dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '</div>' +
@@ -689,7 +694,8 @@ function savePipeline(dealerId, eid) {
     budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null,
     projectRevenue: parseNum(document.getElementById('fp_projrev') ? document.getElementById('fp_projrev').value : 0),
     saleName: document.getElementById('fp_sale') ? document.getElementById('fp_sale').value.trim() : '',
-    sheetDisplay: document.querySelector('input[name="fp_disp"]:checked') ? document.querySelector('input[name="fp_disp"]:checked').value : 'Show'
+    sheetDisplay: document.querySelector('input[name="fp_disp"]:checked') ? document.querySelector('input[name="fp_disp"]:checked').value : 'Show',
+    attachments: window._pipeAttach || []
   };
 
   // Handle items based on mode
@@ -852,6 +858,7 @@ function showVisitM(dealerId, eid) {
   var existDealer = dealerId || v.dealerId || '';
   var dealer = existDealer ? ST.getOne('dealers', existDealer) : null;
   var prevVisit = existDealer ? (ST.visitsByDealer(existDealer)[0] || null) : null;
+  window._visitAttach = (v.attachments || []).slice();
 
   // Quick Mode
   if (visitMode === 'quick') {
@@ -861,6 +868,7 @@ function showVisitM(dealerId, eid) {
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
       '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="5" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
+      attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
       '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>' +
       '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</span> <span class="vm-btn full" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</span></div>');
     return;
@@ -900,6 +908,7 @@ function showVisitM(dealerId, eid) {
 
   html += '<div class="form-section">📝 สรุปเพิ่มเติม</div>' +
     '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="3" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
+    attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
     '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
     '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
     '<div class="form-section">📦 Forecast QTY</div><div id="fv_fcs">';
@@ -1129,7 +1138,7 @@ function saveVisitQuick(dealerId, eid) {
   if (!summary) return alert('ใส่สรุป');
   var cfg = getConfig();
   var modeEl = document.querySelector('input[name="fv_mode"]:checked');
-  var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: []};
+  var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || []};
   if (!data.date) return alert('ใส่วันที่');
   if (eid) ST.update('visits', eid, data); else ST.add('visits', data);
   closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
@@ -1194,7 +1203,7 @@ function saveVisit(dealerId, eid) {
     customerSegment: (document.getElementById('vt_segment') || {}).value || '',
     dockInterest: (document.getElementById('vt_dock') || {}).value || '',
     topicData: topicData, pipelineUpdates: pipelineUpdates, forecastNotes: forecastNotes, feedbackItems: feedbackItems,
-    saleName: cfg.saleName, reportMode: visitMode
+    saleName: cfg.saleName, reportMode: visitMode, attachments: window._visitAttach || []
   };
 
   var visitObj;
@@ -1306,9 +1315,11 @@ function saveLineLog() {
 // FEEDBACK MODAL
 // ================================================================
 function showFeedbackM(dealerId) {
+  window._fbAttach = [];
   openM('💡 Feedback', '' +
     dpH('ffb_d', _td(), 'วันที่') +
     '<div class="fg"><label>Feedback *</label><textarea id="ffb_t" rows="3"></textarea></div>' +
+    attachUploadHtml('_fbAttach', 'feedback', '📷 สกรีนช็อต/รูปประกอบ') +
     '<button class="btn bp btn-full" onclick="saveFeedbackM(\'' + dealerId + '\')">💾 บันทึก</button>');
 }
 
@@ -1319,7 +1330,8 @@ function saveFeedbackM(dealerId) {
     dealerId: dealerId,
     text: text.value.trim(),
     date: dpG('ffb_d') || _td(),
-    source: 'manual'
+    source: 'manual',
+    attachments: window._fbAttach || []
   });
   closeMForce();
   toast('💡 บันทึกแล้ว');
@@ -1777,17 +1789,20 @@ function showTaskM(eid, prefillDealerId) {
   }
   
   window._ftDescMode = 'text';
+  window._ftDescAttach = (t.attachments || []).slice();
   var tplOpts = ST.getAll('templates').map(function(tp) {
     return '<option value="' + tp.id + '">' + sanitize(tp.name) + ' (' + (tp.steps || []).length + ')</option>';
   }).join('');
 
   openM(eid ? '✏️ งาน' : '➕ งาน', '' +
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="ft_t" value="' + sanitize(t.title || '') + '"></div>' +
-    '<div class="fg"><label>รายละเอียด</label>' +
+    '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>รายละเอียด</label>' +
+    '<button type="button" class="btn bsm bo" onclick="toggleExpandTextarea(\'ft_d\')">⛶ ขยาย</button></div>' +
     (eid ? '' : '<div style="display:flex;gap:6px;margin-bottom:6px">' +
       '<button type="button" class="btn bsm bp" id="ft_mode_text" onclick="setTaskDescMode(\'text\')">📝 ข้อความยาว</button>' +
       '<button type="button" class="btn bsm bo" id="ft_mode_bullet" onclick="setTaskDescMode(\'bullet\')">☑ Bullet list</button></div>') +
-    '<div id="ft_text_wrap"><textarea id="ft_d">' + sanitize(t.description || '') + '</textarea></div>' +
+    '<div id="ft_text_wrap"><textarea id="ft_d" rows="7" style="min-height:140px" placeholder="พิมพ์รายละเอียด... (วางหรือลากรูปลงในช่องนี้ได้)" onpaste="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondrop="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondragover="event.preventDefault()">' + sanitize(t.description || '') + '</textarea>' +
+    '<div id="_ftDescAttach_thumbs">' + attachThumbsHtml(window._ftDescAttach, '_ftDescAttach') + '</div></div>' +
     (eid ? '' : '<div id="ft_bullet_wrap" style="display:none">' +
       '<div class="fr" style="margin-bottom:6px;gap:6px">' +
       '<select id="ft_tpl" style="flex:1" onchange="applyTaskTplToBullets(this.value)"><option value="">-- เลือกจาก Template --</option>' + tplOpts + '</select>' +
@@ -1801,6 +1816,11 @@ function showTaskM(eid, prefillDealerId) {
     '<div class="fg"><label>📊 Pipeline Project</label><select id="ft_pipe">' + pipeOpts + '</select></div>' +
     '</div>' +
     '<div class="fr">' + dpH('ft_s', t.startDate || _td(), 'วันเริ่ม') + dpH('ft_e', t.dueDate || '', 'Deadline') + '</div>' +
+    '<div style="display:flex;gap:4px;flex-wrap:wrap;margin:-6px 0 10px">' +
+    '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',_td())">วันนี้</button>' +
+    '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',addD(_td(),1))">พรุ่งนี้</button>' +
+    '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',_qdEndOfWeek())">สิ้นสัปดาห์นี้</button>' +
+    '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',_qdThisFriday())">ศุกร์นี้</button></div>' +
     '<div class="fr">' +
     '<div class="fg"><label>สำคัญ</label><select id="ft_p">' +
     '<option value="high"' + (t.priority === 'high' ? ' selected' : '') + '>🔴 มาก</option>' +
@@ -1891,7 +1911,8 @@ function saveTask(eid) {
     sequential: document.getElementById('ft_sq') ? document.getElementById('ft_sq').value === '1' : false,
     url: document.getElementById('ft_url') ? document.getElementById('ft_url').value.trim() : '',
     dealerId: document.getElementById('ft_dealer') ? document.getElementById('ft_dealer').value : '',
-    pipeId: document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : ''
+    pipeId: document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : '',
+    attachments: window._ftDescAttach || []
   };
   if (eid) {
     ST.update('tasks', eid, data);
@@ -1923,11 +1944,13 @@ function delTask(id) {
 // STEP MODAL
 // ================================================================
 function showStepM(tid) {
+  window._stepAttach = [];
   openM('➕ Step', '' +
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="fs_t"></div>' +
     '<div class="fr">' + dpH('fs_s', _td(), 'วันที่ทำ') + dpH('fs_e', '', 'วันที่เสร็จ') + '</div>' +
     '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="fs_url" placeholder="https://..."></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="fs_n" rows="2"></textarea></div>' +
+    attachUploadHtml('_stepAttach', 'tasks', '📷 รูปแนบ (หลักฐาน)') +
     '<button class="btn bp btn-full" onclick="saveStep(\'' + tid + '\')">💾 บันทึก</button>');
 }
 
@@ -1935,11 +1958,13 @@ function editStep(tid, idx) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps[idx]) return;
   var s = t.steps[idx];
+  window._stepAttach = (s.attachments || []).slice();
   openM('✏️ Step', '' +
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="fs_t" value="' + sanitize(s.title) + '"></div>' +
     '<div class="fr">' + dpH('fs_s', s.startDate || '', 'วันที่ทำ') + dpH('fs_e', s.dueDate || '', 'วันที่เสร็จ') + '</div>' +
     '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="fs_url" value="' + sanitize(s.url || '') + '" placeholder="https://..."></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="fs_n" rows="2">' + sanitize(s.notes || '') + '</textarea></div>' +
+    attachUploadHtml('_stepAttach', 'tasks', '📷 รูปแนบ (หลักฐาน)') +
     '<button class="btn bp btn-full" onclick="updateStep(\'' + tid + '\',' + idx + ')">💾 บันทึก</button>');
 }
 
@@ -1955,6 +1980,7 @@ function saveStep(tid) {
     dueDate: dpG('fs_e'),
     url: document.getElementById('fs_url') ? document.getElementById('fs_url').value.trim() : '',
     notes: document.getElementById('fs_n') ? document.getElementById('fs_n').value.trim() : '',
+    attachments: window._stepAttach || [],
     done: false,
     kanban: 'todo'
   };
@@ -1976,6 +2002,7 @@ function updateStep(tid, idx) {
   t.steps[idx].dueDate = dpG('fs_e');
   t.steps[idx].url = document.getElementById('fs_url') ? document.getElementById('fs_url').value.trim() : '';
   t.steps[idx].notes = document.getElementById('fs_n') ? document.getElementById('fs_n').value.trim() : '';
+  t.steps[idx].attachments = window._stepAttach || [];
   ST.update('tasks', tid, {steps: t.steps});
   closeMForce();
   toast('💾 บันทึกแล้ว');
@@ -2280,6 +2307,7 @@ function showNoteM(eid) {
   var cfg = getConfig();
   var cats = cfg.noteCategories || [];
   var dealers = ST.getAll('dealers');
+  window._noteAttach = (n.attachments || []).slice();
   
   // Status options
   var statusOpts = '' +
@@ -2314,7 +2342,9 @@ function showNoteM(eid) {
     
     '<div class="fg"><label>🔗 Links (บรรทัดละ 1 URL)</label>' +
     '<textarea id="fn_links" rows="3" placeholder="https://example.com/doc1&#10;https://example.com/doc2">' + sanitize(n.links || '') + '</textarea></div>' +
-    
+
+    attachUploadHtml('_noteAttach', 'notes', '📷 รูปแนบ') +
+
     '<div class="fg"><label>🏷️ Tags (คั่นด้วย ,)</label>' +
     '<input type="text" id="fn_tags" value="' + sanitize(n.tags || '') + '" placeholder="policy, pricing, dealer, important"></div>' +
     
@@ -2343,7 +2373,8 @@ function saveNote(eid) {
     content: content.value.trim(),
     links: document.getElementById('fn_links') ? document.getElementById('fn_links').value.trim() : '',
     tags: document.getElementById('fn_tags') ? document.getElementById('fn_tags').value.trim() : '',
-    pinned: pinEl ? pinEl.value === '1' : false
+    pinned: pinEl ? pinEl.value === '1' : false,
+    attachments: window._noteAttach || []
   };
   
   if (eid) {

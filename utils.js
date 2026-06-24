@@ -519,6 +519,60 @@ function toast(msg, isError) {
 }
 
 // ================================================================
+// IMAGE ATTACHMENTS — UI ใช้ร่วมกันทุกเมนู (Note/Step/Visit/Pipeline/Dealer/Feedback)
+// stateVarName = ชื่อ global var (string) ที่เก็บ array attachments ของฟอร์มที่เปิดอยู่
+// ================================================================
+function attachUploadHtml(stateVarName, folder, label) {
+  window[stateVarName] = window[stateVarName] || [];
+  return '<div class="fg"><label>' + (label || '📷 รูปแนบ') + '</label>' +
+    '<input type="file" accept="image/*" onchange="_handleAttachUpload(event,\'' + stateVarName + '\',\'' + folder + '\')" style="font-size:.76rem">' +
+    '<div id="' + stateVarName + '_thumbs">' + attachThumbsHtml(window[stateVarName], stateVarName) + '</div></div>';
+}
+
+function attachThumbsHtml(attachments, stateVarName) {
+  if (!attachments || !attachments.length) return '';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' +
+    attachments.map(function(a, i) {
+      return '<div style="position:relative;width:64px;height:64px">' +
+        '<img src="' + a.url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;display:block" onclick="window.open(\'' + a.url + '\',\'_blank\')">' +
+        '<button type="button" onclick="_removeAttachFromState(\'' + stateVarName + '\',' + i + ')" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button></div>';
+    }).join('') + '</div>';
+}
+
+function _handleAttachUpload(event, stateVarName, folder) {
+  var file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  toast('⏳ กำลังอัปโหลดรูป...');
+  uploadAttachment(file, folder, function(att) {
+    if (!att) return;
+    window[stateVarName] = window[stateVarName] || [];
+    window[stateVarName].push(att);
+    var wrap = document.getElementById(stateVarName + '_thumbs');
+    if (wrap) wrap.innerHTML = attachThumbsHtml(window[stateVarName], stateVarName);
+    toast('📷 แนบรูปแล้ว');
+  });
+}
+
+function _removeAttachFromState(stateVarName, idx) {
+  var arr = window[stateVarName];
+  if (!arr || !arr[idx]) return;
+  if (!confirm('ลบรูปนี้?')) return;
+  deleteAttachment(arr[idx].path);
+  arr.splice(idx, 1);
+  var wrap = document.getElementById(stateVarName + '_thumbs');
+  if (wrap) wrap.innerHTML = attachThumbsHtml(arr, stateVarName);
+}
+
+function attachGalleryHtml(attachments) {
+  if (!attachments || !attachments.length) return '';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' +
+    attachments.map(function(a) {
+      return '<img src="' + a.url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="window.open(\'' + a.url + '\',\'_blank\')">';
+    }).join('') + '</div>';
+}
+
+// ================================================================
 // ESCAPE FOR CSV
 // ================================================================
 function esc(s) {
@@ -732,6 +786,62 @@ function dpClr(id) {
 
 function dpG(id) {
   return document.getElementById('dpv_' + id)?.value || '';
+}
+
+// ตั้งค่า date picker ด้วยโค้ด เช่นปุ่ม "วันนี้ / พรุ่งนี้" — iso = 'YYYY-MM-DD'
+function dpSet(id, iso) {
+  var hid = document.getElementById('dpv_' + id);
+  var vis = document.getElementById('dpi_' + id);
+  if (hid) hid.value = iso || '';
+  if (vis) vis.value = iso ? fD(iso) : '';
+  dpUpdBtns(id, !!iso);
+}
+
+// วันอาทิตย์ของสัปดาห์นี้ (ถ้าวันนี้เป็นอาทิตย์อยู่แล้ว = วันนี้)
+function _qdEndOfWeek() {
+  var day = new Date().getDay();
+  return addD(_td(), day === 0 ? 0 : 7 - day);
+}
+// วันศุกร์ของสัปดาห์นี้ (ถ้าเลยศุกร์ไปแล้ว = ศุกร์หน้า)
+function _qdThisFriday() {
+  var day = new Date().getDay();
+  return addD(_td(), (5 - day + 7) % 7);
+}
+
+// ขยาย/ย่อ textarea ด้วยปุ่ม ⛶
+function toggleExpandTextarea(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var expanded = el.dataset.expanded === '1';
+  el.rows = expanded ? 7 : 18;
+  el.dataset.expanded = expanded ? '0' : '1';
+}
+
+// วาง/ลากรูปลงใน textarea (เหมือนอีเมล) — upload แล้วโชว์ thumbnail ใต้ช่อง
+function handlePasteOrDropImage(e, stateVarName, folder) {
+  var file = null;
+  if (e.type === 'paste' && e.clipboardData) {
+    var items = e.clipboardData.items || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image') === 0) { file = items[i].getAsFile(); break; }
+    }
+  } else if (e.type === 'drop' && e.dataTransfer) {
+    var files = e.dataTransfer.files || [];
+    for (var i = 0; i < files.length; i++) {
+      if (files[i].type && files[i].type.indexOf('image') === 0) { file = files[i]; break; }
+    }
+  }
+  if (!file) return;
+  e.preventDefault();
+  toast('⏳ กำลังอัปโหลดรูป...');
+  uploadAttachment(file, folder, function(att) {
+    if (!att) return;
+    window[stateVarName] = window[stateVarName] || [];
+    window[stateVarName].push(att);
+    var wrap = document.getElementById(stateVarName + '_thumbs');
+    if (wrap) wrap.innerHTML = attachThumbsHtml(window[stateVarName], stateVarName);
+    toast('📷 แนบรูปแล้ว');
+  });
 }
 
 // Close date picker when clicking outside

@@ -56,7 +56,11 @@ function rUnifiedTasks(el) {
   h += '<h2 style="font-size:1rem;margin:0">📋 จัดการงาน</h2>';
   h += '<button class="btn bp" onclick="showTaskM()">➕ เพิ่มงาน</button>';
   h += '</div>';
-  
+
+  h += '<div class="fr" style="margin-bottom:8px;gap:6px">';
+  h += '<input type="text" id="qaTaskInput" class="fm-input" placeholder="⚡ พิมพ์ชื่องานแล้วกด Enter เพื่อสร้างทันที..." onkeydown="if(event.key===\'Enter\'){quickAddTask();}" style="flex:1">';
+  h += '</div>';
+
   h += '<div class="today-tabs" style="margin-bottom:12px">';
   h += '<div class="today-tab ' + (tasksView === 'list' ? 'act' : '') + '" onclick="tasksView=\'list\';render()">📋 รายการ</div>';
   h += '<div class="today-tab ' + (tasksView === 'kanban' ? 'act' : '') + '" onclick="tasksView=\'kanban\';render()">📊 Kanban</div>';
@@ -192,51 +196,59 @@ function getDueDateGroup(dueDate) {
 // FILTER BAR
 // ================================================================
 
+var taskFilterCollapsed = localStorage.getItem('taskFilterCollapsed') === '1';
+function toggleTaskFilterBar() {
+  taskFilterCollapsed = !taskFilterCollapsed;
+  localStorage.setItem('taskFilterCollapsed', taskFilterCollapsed ? '1' : '0');
+  render();
+}
+
 function renderTaskFilterBar(dealers, categories, stats) {
   var dealerOpts = '<option value="all">🏪 ทุก Dealer</option>';
   for (var i = 0; i < dealers.length; i++) {
     dealerOpts += '<option value="' + dealers[i].id + '">' + sanitize(dealers[i].name) + '</option>';
   }
-  
+
   var catOpts = '<option value="all">📂 ทุกหมวด</option>';
   for (var i = 0; i < categories.length; i++) {
     if (categories[i] !== 'all') {
       catOpts += '<option value="' + sanitize(categories[i]) + '">' + sanitize(categories[i]) + '</option>';
     }
   }
-  
+
   return `
   <div class="card" style="padding:12px;margin-bottom:12px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <input type="text" id="taskSearch" value="${sanitize(tasksSearch)}" 
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${taskFilterCollapsed ? '0' : '8px'}">
+      <input type="text" id="taskSearch" value="${sanitize(tasksSearch)}"
         placeholder="🔍 ค้นหางาน..." style="flex:1;min-width:150px"
         oninput="tasksSearch=this.value;render()">
+      <button class="btn bsm bo" onclick="toggleTaskFilterBar()">${taskFilterCollapsed ? '▾ ตัวกรอง' : '▴ ซ่อนตัวกรอง'}</button>
       <button class="btn bsm bo" onclick="clearTaskFilters()">✕ ล้างตัวกรอง</button>
     </div>
-    
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+
+    <div style="display:${taskFilterCollapsed ? 'none' : 'flex'};gap:6px;flex-wrap:wrap;align-items:center">
       <select id="taskStatusFilter" onchange="tasksFilterStatus=this.value;render()" style="width:110px">
         <option value="all" ${tasksFilterStatus === 'all' ? 'selected' : ''}>✅ สถานะทั้งหมด</option>
         <option value="active" ${tasksFilterStatus === 'active' ? 'selected' : ''}>🔄 กำลังทำ</option>
         <option value="completed" ${tasksFilterStatus === 'completed' ? 'selected' : ''}>✅ เสร็จ</option>
         <option value="on-hold" ${tasksFilterStatus === 'on-hold' ? 'selected' : ''}>⏸ พัก</option>
       </select>
-      
+
       <select id="taskPriorityFilter" onchange="tasksFilterPriority=this.value;render()" style="width:100px">
         <option value="all" ${tasksFilterPriority === 'all' ? 'selected' : ''}>🎯 ทุกระดับ</option>
         <option value="high" ${tasksFilterPriority === 'high' ? 'selected' : ''}>🔴 สำคัญ</option>
         <option value="medium" ${tasksFilterPriority === 'medium' ? 'selected' : ''}>🟡 กลาง</option>
         <option value="low" ${tasksFilterPriority === 'low' ? 'selected' : ''}>🟢 ทั่วไป</option>
       </select>
-      
+
       <select id="taskDealerFilter" onchange="tasksFilterDealer=this.value;render()" style="min-width:130px">
         ${dealerOpts}
       </select>
-      
+
       <select id="taskCatFilter" onchange="tasksFilterCategory=this.value;render()" style="min-width:120px">
         ${catOpts}
       </select>
-      
+
       <select id="taskGroupBy" onchange="tasksGroupBy=this.value;render()" style="width:130px">
         <option value="none" ${tasksGroupBy === 'none' ? 'selected' : ''}>📌 ไม่จัดกลุ่ม</option>
         <option value="dealer" ${tasksGroupBy === 'dealer' ? 'selected' : ''}>🏪 ตาม Dealer</option>
@@ -680,8 +692,8 @@ function renderTimelineView(tasks) {
   
   for (var i = 0; i < activeTasks.length; i++) {
     var t = activeTasks[i];
-    var dueDate = parseThaiDate(t.dueDate);
-    if (!dueDate) continue;
+    var dueDate = new Date(t.dueDate);
+    if (isNaN(dueDate.getTime())) continue;
     
     var monthKey = (dueDate.getMonth() + 1) + '/' + dueDate.getFullYear();
     var monthName = getMonthName(dueDate.getMonth()) + ' ' + dueDate.getFullYear();
@@ -720,7 +732,7 @@ function renderTimelineView(tasks) {
     
     for (var i = 0; i < monthTasks.length; i++) {
       var t = monthTasks[i];
-      var day = parseInt(t.dueDate.split('/')[0]);
+      var day = new Date(t.dueDate).getDate();
       if (!tasksByDay[day]) tasksByDay[day] = [];
       tasksByDay[day].push(t);
     }
@@ -1089,6 +1101,7 @@ function rTaskDet(el) {
       <div><label style="color:#64748b;font-size:.68rem">สำคัญ</label><div>${pTag(t.priority)}</div></div>
     </div>
     ${t.description ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">รายละเอียด</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(t.description)}</div></div>` : ''}
+    ${t.attachments && t.attachments.length ? attachGalleryHtml(t.attachments) : ''}
     ${t.url ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">🔗 ลิงก์</label><div><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">${sanitize(t.url)}</a></div></div>` : ''}
   </div>
 
@@ -1154,6 +1167,7 @@ function rTaskDet(el) {
           ${renderStepDueDate(s)}
           ${s.notes ? `<div style="font-size:.66rem;color:#94a3b8;margin-top:1px">${sanitize(s.notes)}</div>` : ''}
           ${s.url ? `<div style="font-size:.66rem;margin-top:1px"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
+          ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${attachGalleryHtml(s.attachments)}</div>` : ''}
           ${buildFuTimeline(t.id, i)}
         </div>
         <div style="display:flex;flex-direction:column;gap:3px">

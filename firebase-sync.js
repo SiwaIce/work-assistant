@@ -4,6 +4,58 @@
 var SYNC_ENABLED = false;
 var CURRENT_USER = null;
 
+// ================================================================
+// ATTACHMENTS (Firebase Storage) — ใช้ร่วมกันทุกเมนู (Note/Task/Visit/Pipeline/Dealer/Feedback)
+// ================================================================
+// บีบรูปฝั่ง browser ก่อน upload กันไฟล์ใหญ่เปลืองโควต้า
+function _compressImageFile(file, maxDim, quality, cb) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) { cb(blob); }, 'image/jpeg', quality);
+    };
+    img.onerror = function() { cb(null); };
+    img.src = e.target.result;
+  };
+  reader.onerror = function() { cb(null); };
+  reader.readAsDataURL(file);
+}
+
+// folder เช่น 'notes', 'tasks', 'visits', 'pipeline', 'dealers', 'feedback'
+// onDone(attachment|null) — attachment = {url, name, size, path}
+function uploadAttachment(file, folder, onDone) {
+  if (!file) return onDone(null);
+  if (!SYNC_ENABLED || typeof firebase === 'undefined' || !firebase.storage) {
+    toast('⚠️ ต้องเชื่อมต่อ Cloud (login) ก่อนจึงแนบรูปได้');
+    return onDone(null);
+  }
+  _compressImageFile(file, 1280, 0.75, function(blob) {
+    if (!blob) { toast('❌ ไฟล์รูปไม่ถูกต้อง'); return onDone(null); }
+    var path = 'attachments/' + folder + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.jpg';
+    var ref = firebase.storage().ref(path);
+    ref.put(blob).then(function() { return ref.getDownloadURL(); }).then(function(url) {
+      onDone({ url: url, name: file.name || 'image.jpg', size: blob.size, path: path });
+    }).catch(function(e) {
+      toast('❌ แนบรูปไม่ได้: ' + e.message);
+      onDone(null);
+    });
+  });
+}
+
+function deleteAttachment(path) {
+  if (!path || !SYNC_ENABLED || typeof firebase === 'undefined' || !firebase.storage) return;
+  firebase.storage().ref(path).delete().catch(function(e) { console.warn('deleteAttachment:', e); });
+}
+
 // Key mapping: localStorage key (without v7_) → Firebase collection
 var SYNC_KEY_MAP = {
   'dealers': 'dealers',

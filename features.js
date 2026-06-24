@@ -3947,7 +3947,8 @@ function rNoteDet(el) {
   }
   
   html += '<div class="note-content">' + safeText(n.content || '') + '</div>';
-  
+  html += attachGalleryHtml(n.attachments);
+
   if (n.links) {
     html += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:8px"><div style="font-size:.76rem;color:var(--text2);margin-bottom:4px">🔗 Links:</div>';
     n.links.split('\n').filter(function(l) { return l.trim(); }).forEach(function(l) {

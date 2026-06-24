@@ -654,6 +654,7 @@ function dealerInfoTab(d) {
           <span style="font-size: 18px">🚚</span>
           <div><div style="font-size: 10px; color: var(--text2)">Shippto</div><div style="font-size: 13px; font-weight: 500">${d.shippto || 'NO'}</div></div>
         </div>
+        ${d.attachments && d.attachments.length ? `<div style="display: flex; align-items: flex-start; gap: 12px; padding-top: 8px"><span style="font-size: 18px">📷</span><div>${attachGalleryHtml(d.attachments)}</div></div>` : ''}
       </div>
     </div>
 
@@ -861,6 +862,7 @@ function dealerVisitTab(d) {
     <div style="display:flex;justify-content:space-between"><span style="font-size:.62rem;color:#64748b">${fD(f.date)} • ${f.source||''}</span>
     <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('feedback','${f.id}');render()">✕</button></div>
     <div style="font-size:.74rem;margin-top:1px">${sanitize(f.text)}</div>
+    ${f.attachments && f.attachments.length ? attachGalleryHtml(f.attachments) : ''}
   </div>`).join('') : '<div class="empty"><p>ยังไม่มี Feedback</p></div>'}
   </div>`;
 }
@@ -873,6 +875,7 @@ function visitItemHTML(v) {
     <h4>${fD(v.date)} ${v.time||''} ${modeTag(v.mode)} ${v.djiDealer?`<span class="tag tag-count">${v.djiDealer}</span>`:''}</h4>
     <div class="vmeta">${topicStr ? 'Topics: ' + topicStr : ''} ${v.location?'📍 <a href="'+v.location+'" target="_blank" onclick="event.stopPropagation()">Map</a>':''}</div>
     <div class="vbody">${sanitize((v.summary||'').substr(0,150))}${(v.summary||'').length>150?'...':''}</div>
+    ${v.attachments && v.attachments.length ? `<div onclick="event.stopPropagation()">${attachGalleryHtml(v.attachments)}</div>` : ''}
     ${v.revenue ? `<div style="font-size:.68rem;color:#22c55e;margin-top:2px">💰 ยอดขาย: ${fmtMoney(v.revenue)}</div>` : ''}
   </div>`;
 }

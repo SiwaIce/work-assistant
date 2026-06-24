@@ -617,7 +617,8 @@ function rPipeDet(el) {
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
   
   if (p.remark) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
-  
+  if (p.attachments && p.attachments.length) html += '<div><label>📷 รูปแนบ</label>' + attachGalleryHtml(p.attachments) + '</div>';
+
   if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
   if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div>❌ Loss Reason:</div><div>' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
   
