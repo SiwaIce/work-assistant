@@ -5508,7 +5508,7 @@ function saveEmailDraft(to, cc, subject, body, dealerId) {
   // เก็บแค่ 20 draft ล่าสุด
   if (drafts.length > 20) drafts = drafts.slice(0, 20);
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
-  if (typeof syncToFirebase === 'function') syncToFirebase('email_drafts', drafts);
+  if (typeof syncToFirebase === 'function') syncToFirebase('emailDrafts', drafts);
   console.log('✅ บันทึก Draft แล้ว:', draft.id);
   return draft;
 }
@@ -5560,7 +5560,7 @@ function deleteEmailDraft(draftId) {
   var drafts = getEmailDrafts();
   drafts = drafts.filter(function(d) { return d.id !== draftId; });
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
-  if (typeof syncToFirebase === 'function') syncToFirebase('email_drafts', drafts);
+  if (typeof syncToFirebase === 'function') syncToFirebase('emailDrafts', drafts);
   toast('🗑️ ลบ Draft แล้ว');
   showEmailDraftWithDealer(); // รีเฟรชหน้า
 }

@@ -538,7 +538,9 @@ function forceSyncAll() {
 
     try {
       var parsed = JSON.parse(data);
-      var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
+      // ✅ ใช้ชื่อ collection ตาม SYNC_KEY_MAP ถ้ามี (กันชื่อ collection ไม่ตรงกับฝั่ง pull listener)
+      var collName = SYNC_KEY_MAP[shortKey] || shortKey;
+      var ref = db.collection('users').doc(CURRENT_USER.uid).collection(collName);
 
       if (Array.isArray(parsed)) {
         parsed.forEach(function(item) {

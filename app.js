@@ -2391,7 +2391,7 @@ function showCustomerNotification(dealerId, dealerName, projectName, type, updat
   });
   var _trimmedUpdates = updates.slice(0, 50);
   localStorage.setItem('v7_customer_updates', JSON.stringify(_trimmedUpdates));
-  if (typeof syncToFirebase === 'function') syncToFirebase('customer_updates', _trimmedUpdates);
+  if (typeof syncToFirebase === 'function') syncToFirebase('customerUpdates', _trimmedUpdates);
 
   // Update badge
   updateCustomerUpdateBadge();
@@ -3930,7 +3930,7 @@ function approveForecastUpdate(dealerId, updateId, callback) {
     updateData.approvedBy = CURRENT_USER.uid;
     customerForecasts.push(updateData);
     localStorage.setItem('v7_customer_forecasts', JSON.stringify(customerForecasts));
-    if (typeof syncToFirebase === 'function') syncToFirebase('customer_forecasts', customerForecasts);
+    if (typeof syncToFirebase === 'function') syncToFirebase('customerForecasts', customerForecasts);
     
     // อัพเดทสถานะเป็น approved
     updateRef.update({
