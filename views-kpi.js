@@ -214,7 +214,7 @@ function rKpiScorecard(el) {
     });
     h += '</select>';
   }
-  h += '<button class="btn bsm bo" onclick="kpiSelectedPlanId=kpiCreateQuarterPlan(\'' + member.id + '\',' + JSON.stringify(member.name) + ').id;render()">➕ สร้างไตรมาสใหม่</button>';
+  h += '<button class="btn bsm bo" onclick="kpiSelectedPlanId=kpiCreateQuarterPlan(\'' + member.id + '\',\'' + sanitize(member.name).replace(/'/g, "\\'") + '\').id;render()">➕ สร้างไตรมาสใหม่</button>';
   if (plan) h += '<button class="btn bsm bo" onclick="showKpiConfigM(\'' + plan.id + '\')">⚙️ ตั้งค่าไตรมาสนี้</button>';
   h += '</div>';
 
