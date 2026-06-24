@@ -1221,6 +1221,7 @@ function getPipeActions() {
 
 function savePipeActions(list) {
   localStorage.setItem('v7_pipeActions', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('pipeActions', list);
 }
 
 function getPipeActionsByPipe(pipeId) {

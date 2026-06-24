@@ -2529,6 +2529,7 @@ function saveDealerPin(dealerId) {
   }
   
   localStorage.setItem('v7_dealer_pins', JSON.stringify(pins));
+  if (typeof syncToFirebase === 'function') syncToFirebase('dealer_pins', pins);
   closeModal();
   render();
 }

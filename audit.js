@@ -41,9 +41,9 @@ function addAuditLog(action, targetType, targetId, targetName, dealerId, dealerN
   
   localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(logs));
   
-  // Sync ไป Firebase ถ้ามี login
+  // Sync ไป Firebase ถ้ามี login (ใช้ doc(id).set ไม่ใช่ add — ให้ id ตรงกับ local เพื่อให้ pull listener ทำงานถูก)
   if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
-    db.collection('users').doc(CURRENT_USER.uid).collection('auditLogs').add(log).catch(function(e) {
+    db.collection('users').doc(CURRENT_USER.uid).collection('auditLogs').doc(log.id).set(log).catch(function(e) {
       console.warn('Failed to save audit log to Firebase:', e);
     });
   }
@@ -58,7 +58,9 @@ function getAuditLogs(filter) {
   try {
     logs = JSON.parse(localStorage.getItem(AUDIT_LOG_KEY) || '[]');
   } catch(e) {}
-  
+  // เรียงใหม่สุดก่อนเสมอ — กัน order สับเวลา pull จาก Firebase (ไม่รับประกัน order ใน Firestore)
+  logs.sort(function(a, b) { return (b.performedAt || '').localeCompare(a.performedAt || ''); });
+
   if (filter) {
     if (filter.action) logs = logs.filter(function(l) { return l.action === filter.action; });
     if (filter.targetType) logs = logs.filter(function(l) { return l.targetType === filter.targetType; });

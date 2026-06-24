@@ -1258,6 +1258,7 @@ function getAppearance() {
 
 function saveAppearance(settings) {
   localStorage.setItem('v7_appearance', JSON.stringify(settings));
+  if (typeof syncToFirebase === 'function') syncToFirebase('appearance', settings);
   applyAppearance(settings);
 }
 
@@ -1490,6 +1491,7 @@ function getFavorites() {
 
 function saveFavorites(list) {
   localStorage.setItem('v7_favorites', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('favorites', list);
 }
 
 function renderFavorites() {
@@ -2387,8 +2389,10 @@ function showCustomerNotification(dealerId, dealerName, projectName, type, updat
     timestamp: new Date().toISOString(),
     read: false
   });
-  localStorage.setItem('v7_customer_updates', JSON.stringify(updates.slice(0, 50)));
-  
+  var _trimmedUpdates = updates.slice(0, 50);
+  localStorage.setItem('v7_customer_updates', JSON.stringify(_trimmedUpdates));
+  if (typeof syncToFirebase === 'function') syncToFirebase('customer_updates', _trimmedUpdates);
+
   // Update badge
   updateCustomerUpdateBadge();
 }
@@ -3926,6 +3930,7 @@ function approveForecastUpdate(dealerId, updateId, callback) {
     updateData.approvedBy = CURRENT_USER.uid;
     customerForecasts.push(updateData);
     localStorage.setItem('v7_customer_forecasts', JSON.stringify(customerForecasts));
+    if (typeof syncToFirebase === 'function') syncToFirebase('customer_forecasts', customerForecasts);
     
     // อัพเดทสถานะเป็น approved
     updateRef.update({

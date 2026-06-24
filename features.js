@@ -1635,6 +1635,7 @@ function getPipeActions() {
 
 function savePipeActions(list) {
   localStorage.setItem('v7_pipeActions', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('pipeActions', list);
 }
 
 function getPipeActionsByPipe(pipeId) {
@@ -2818,6 +2819,7 @@ function getDemoItems() {
 function saveDemoItems(list) {
   if (!list || !Array.isArray(list)) list = [];
   localStorage.setItem('v7_demo', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('demo', list);
 }
 
 var DEMO_STATUS_META = {
@@ -2854,6 +2856,7 @@ function getDemoLoans() {
 function saveDemoLoans(list) {
   if (!list || !Array.isArray(list)) list = [];
   localStorage.setItem('v7_demoLoans', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('demoLoans', list);
 }
 function demoLoansByDemo(demoId) {
   return getDemoLoans().filter(function(l) { return l.demoId === demoId; })
@@ -3350,6 +3353,7 @@ function deleteDemo(demoId) {
   if (!confirm('ลบอุปกรณ์นี้?')) return;
   var items = getDemoItems().filter(function(d) { return d.id !== demoId; });
   saveDemoItems(items);
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('demo', demoId);
   toast('🗑️ ลบแล้ว');
   closeMForce();
   render();
@@ -5504,6 +5508,7 @@ function saveEmailDraft(to, cc, subject, body, dealerId) {
   // เก็บแค่ 20 draft ล่าสุด
   if (drafts.length > 20) drafts = drafts.slice(0, 20);
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
+  if (typeof syncToFirebase === 'function') syncToFirebase('email_drafts', drafts);
   console.log('✅ บันทึก Draft แล้ว:', draft.id);
   return draft;
 }
@@ -5555,6 +5560,7 @@ function deleteEmailDraft(draftId) {
   var drafts = getEmailDrafts();
   drafts = drafts.filter(function(d) { return d.id !== draftId; });
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
+  if (typeof syncToFirebase === 'function') syncToFirebase('email_drafts', drafts);
   toast('🗑️ ลบ Draft แล้ว');
   showEmailDraftWithDealer(); // รีเฟรชหน้า
 }

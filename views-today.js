@@ -165,7 +165,8 @@ function quickMarkActionDone(actionId) {
   }
   
   localStorage.setItem('v7_pipeActions', JSON.stringify(pipeActions));
-  
+  if (typeof syncToFirebase === 'function') syncToFirebase('pipeActions', pipeActions);
+
   if (pipeId && typeof ST !== 'undefined' && ST.add) {
     ST.add('pipeLog', {
       pipeId: pipeId,

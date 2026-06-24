@@ -92,7 +92,15 @@ var SYNC_KEY_MAP = {
   'backup': 'backup',
 'products': 'products',  // ✅ เพิ่มบรรทัดนี้
   'bundles': 'bundles',    // ✅ เพิ่ม
-  'demoUnits': 'demoUnits' // ✅ เพิ่ม
+  'demoUnits': 'demoUnits', // ✅ เพิ่ม
+  'audit_logs': 'auditLogs',
+  'salesMembers': 'salesMembers',
+  'customer_updates': 'customerUpdates',
+  'customer_forecasts': 'customerForecasts',
+  'contact_logs': 'contactLogs',
+  'pending_followups': 'pendingFollowups',
+  'dealer_pins': 'dealerPins',
+  'email_drafts': 'emailDrafts'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);

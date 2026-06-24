@@ -1420,6 +1420,7 @@ function saveLinkedContactLog(data) {
   var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
   logs.unshift(log);
   localStorage.setItem('v7_contact_logs', JSON.stringify(logs));
+  if (typeof syncToFirebase === 'function') syncToFirebase('contact_logs', logs);
   
   // บันทึกเพิ่มใน collections ที่เกี่ยวข้อง
   if (data.pipeId) {
@@ -1557,6 +1558,7 @@ function submitUnifiedContact() {
       pendingFu.push({ id: 'fu_' + Date.now(), contactId: log.id, dealerId: data.dealerId,
         pipeId: data.pipeId, note: summary, dueDate: dueDate, channel: data.channel, done: false });
       localStorage.setItem('v7_pending_followups', JSON.stringify(pendingFu));
+      if (typeof syncToFirebase === 'function') syncToFirebase('pending_followups', pendingFu);
       toast('📞 ตั้งค่าเตือนติดตามวันที่ ' + dueDate);
     }
   }

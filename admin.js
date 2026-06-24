@@ -1475,6 +1475,7 @@ function getSalesMembers() {
 
 function saveSalesMembers(members) {
   localStorage.setItem('v7_salesMembers', JSON.stringify(members));
+  if (typeof syncToFirebase === 'function') syncToFirebase('salesMembers', members);
   if (typeof publishTeamConfig === 'function') publishTeamConfig(members);
 }
 

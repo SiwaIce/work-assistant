@@ -1729,6 +1729,7 @@ function markPendingDone(id) {
     if (pending[i].id === id) { pending[i].done = true; break; }
   }
   localStorage.setItem('v7_pending_followups', JSON.stringify(pending));
+  if (typeof syncToFirebase === 'function') syncToFirebase('pending_followups', pending);
   toast('✅ ทำเครื่องหมายเสร็จแล้ว'); render();
 }
 
@@ -1738,6 +1739,7 @@ function deleteContactLog(id) {
   var newLogs = [];
   for (var i = 0; i < logs.length; i++) { if (logs[i].id !== id) newLogs.push(logs[i]); }
   localStorage.setItem('v7_contact_logs', JSON.stringify(newLogs));
+  if (typeof syncToFirebase === 'function') syncToFirebase('contact_logs', newLogs);
   toast('🗑️ ลบแล้ว'); render();
 }
 
@@ -1773,6 +1775,7 @@ function getPipeActions() {
 
 function savePipeActions(list) {
   localStorage.setItem('v7_pipeActions', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('pipeActions', list);
 }
 
 function getPipeActionsByPipe(pipeId) {
