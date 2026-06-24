@@ -179,6 +179,90 @@ function kpiOverallScore(plan) {
 }
 
 // ================================================================
+// Pace tracker — เทียบ % เวลาที่ผ่านไปกับ % ที่ทำได้แล้ว + run-rate ที่ต้องทำต่อ
+// ================================================================
+function kpiQuarterTimeProgress(plan) {
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var start = new Date(plan.startDate + 'T00:00:00');
+  var end = new Date(plan.endDate + 'T00:00:00');
+  var totalDays = Math.max(Math.round((end - start) / 86400000) + 1, 1);
+  var elapsed = Math.round((today - start) / 86400000) + 1;
+  if (elapsed < 0) elapsed = 0;
+  if (elapsed > totalDays) elapsed = totalDays;
+  return { totalDays: totalDays, elapsedDays: elapsed, remainingDays: totalDays - elapsed, expectedPct: elapsed / totalDays * 100 };
+}
+
+var KPI_PACE_META = {
+  ahead: { label: '🚀 ล้ำหน้าเป้า', color: '#22c55e' },
+  onTrack: { label: '🟢 ตามทัน', color: '#3b82f6' },
+  behind: { label: '🔴 ตามหลังเป้า', color: '#ef4444' }
+};
+
+function kpiPaceInfo(plan, cat) {
+  var time = kpiQuarterTimeProgress(plan);
+  var actualPct = kpiAchievementPct(plan, cat);
+  var diff = actualPct - time.expectedPct;
+  var status = diff >= 5 ? 'ahead' : diff <= -10 ? 'behind' : 'onTrack';
+  var actual = kpiComputeActual(plan, cat);
+  var target = Number(cat.target) || 0;
+  var remainTarget = Math.max(target - actual, 0);
+  var perDay = (cat.type !== 'manualScore' && time.remainingDays > 0) ? remainTarget / time.remainingDays : 0;
+  return { time: time, actualPct: actualPct, status: status, remainTarget: remainTarget, perDay: perDay, perWeek: perDay * 7 };
+}
+
+// ================================================================
+// "ดีลที่ยังไม่ปิดแต่มีลุ้น" — pipeline ที่ยัง active ในไตรมาสนี้ ช่วยวางแผนไปต่อ
+// ================================================================
+var KPI_PIPE_ACTIVE_STATUSES = ['prospect', 'tor_review', 'quotation', 'bidding', 'negotiation'];
+
+function kpiPotentialRecords(plan, cat) {
+  if (cat.type !== 'pipelineRevenue' && cat.type !== 'pipelineModelQty') return [];
+  var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
+  return ST.getAll('pipeline').filter(function(p) {
+    if (KPI_PIPE_ACTIVE_STATUSES.indexOf(p.status) === -1) return false;
+    if ((p.saleName || '') !== plan.salesMemberName) return false;
+    var rd = p.registerDate || '';
+    if (rd < plan.startDate || rd > plan.endDate) return false;
+    if (cat.type === 'pipelineModelQty') {
+      return (getPipeItems(p) || []).some(function(it) {
+        var m = (it.model || '').toLowerCase();
+        return keywords.some(function(k) { return m.indexOf(k) !== -1; });
+      });
+    }
+    return true;
+  });
+}
+
+function kpiPotentialAmount(plan, cat) {
+  var records = kpiPotentialRecords(plan, cat);
+  if (cat.type === 'pipelineRevenue') {
+    return records.reduce(function(sum, p) { return sum + (Number(p.forecastAmount) || 0); }, 0);
+  }
+  if (cat.type === 'pipelineModelQty') {
+    var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
+    var qty = 0;
+    records.forEach(function(p) {
+      (getPipeItems(p) || []).forEach(function(it) {
+        var m = (it.model || '').toLowerCase();
+        if (keywords.some(function(k) { return m.indexOf(k) !== -1; })) qty += Number(it.qty) || 0;
+      });
+    });
+    return qty;
+  }
+  return 0;
+}
+
+// ================================================================
+// ลิงก์ไปทำต่อ — กดจาก drill-down ไปหน้าที่เกี่ยวข้องได้ทันที
+// ================================================================
+function kpiCategoryCTA(cat) {
+  if (cat.type === 'visitCount') return { label: '📍 ไปบันทึก Visit Report', action: "go('visits')" };
+  if (cat.type === 'dealerAuthorized') return { label: '🏪 ไปดู Dealer ที่ยังไม่ Authorized', action: "dealerFilter='other';go('dealers')" };
+  if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') return { label: '📊 ไปดู Pipeline ทั้งหมด', action: "go('pipeline')" };
+  return null;
+}
+
+// ================================================================
 // หน้าหลัก: Scorecard
 // ================================================================
 function rKpiScorecard(el) {
@@ -226,9 +310,14 @@ function rKpiScorecard(el) {
 
   var overall = kpiOverallScore(plan);
   var overallColor = overall >= 100 ? '#22c55e' : overall >= 70 ? '#3b82f6' : overall >= 40 ? '#eab308' : '#ef4444';
+  var time = kpiQuarterTimeProgress(plan);
   h += '<div class="card kpi-overall-card">';
-  h += '<div class="kpi-overall-num" style="color:' + overallColor + '">' + overall + '%</div>';
-  h += '<div class="kpi-overall-label">คะแนนรวม KPI ' + sanitize(plan.quarter) + ' — ' + sanitize(member.name) + '</div>';
+  h += '<div class="kpi-overall-row">';
+  h += '<div class="kpi-overall-block"><div class="kpi-overall-num" style="color:' + overallColor + '">' + overall + '%</div><div class="kpi-overall-label">คะแนนรวม KPI</div></div>';
+  h += '<div class="kpi-overall-divider"></div>';
+  h += '<div class="kpi-overall-block"><div class="kpi-overall-num kpi-time-num">' + Math.round(time.expectedPct) + '%</div><div class="kpi-overall-label">เวลาผ่านไป — เหลือ ' + time.remainingDays + ' วัน</div></div>';
+  h += '</div>';
+  h += '<div class="kpi-overall-sub">' + sanitize(plan.quarter) + ' — ' + sanitize(member.name) + '</div>';
   h += '</div>';
 
   h += '<div class="kpi-sc-grid">';
@@ -239,11 +328,20 @@ function rKpiScorecard(el) {
     var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
     var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
     var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
+    var pace = kpiPaceInfo(plan, cat);
+    var paceMeta = KPI_PACE_META[pace.status];
+    var potential = (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') ? kpiPotentialAmount(plan, cat) : 0;
+    var potentialPct = potential ? Math.min((actual + potential) / (Number(cat.target) || 1) * 100, 100) : 0;
+
     h += '<div class="kpi-sc-card" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
     h += '<div class="kpi-sc-top"><span class="kpi-sc-icon">' + cat.icon + '</span><span class="kpi-sc-weight">น้ำหนัก ' + cat.weight + '%</span></div>';
     h += '<div class="kpi-sc-label">' + sanitize(cat.label) + '</div>';
-    h += '<div class="kpi-sc-bar"><div class="kpi-sc-bar-fill" style="width:' + pctShow + '%;background:' + barColor + '"></div></div>';
+    h += '<div class="kpi-sc-bar">';
+    if (potentialPct > pctShow) h += '<div class="kpi-sc-bar-potential" style="width:' + potentialPct + '%"></div>';
+    h += '<div class="kpi-sc-bar-fill" style="width:' + pctShow + '%;background:' + barColor + '"></div>';
+    h += '</div>';
     h += '<div class="kpi-sc-nums"><span>' + actualShow + ' / ' + targetShow + ' ' + (cat.unit || '') + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
+    h += '<div class="kpi-sc-pace" style="color:' + paceMeta.color + '">' + paceMeta.label + '</div>';
     h += '</div>';
   });
   h += '</div>';
@@ -272,6 +370,19 @@ function showKpiDetailM(planId, categoryId) {
   if (cat.type !== 'manualScore') h += '<div style="font-size:12px;color:var(--text2)">เหลืออีก ' + (isMoney ? fmtMoney(remain) : remain) + ' ' + (cat.unit || '') + '</div>';
   h += '</div>';
 
+  var pace = kpiPaceInfo(plan, cat);
+  var paceMeta = KPI_PACE_META[pace.status];
+  h += '<div class="kpi-pace-box" style="border-color:' + paceMeta.color + '">';
+  h += '<div style="color:' + paceMeta.color + ';font-weight:700;font-size:13px">' + paceMeta.label + '</div>';
+  if (cat.type !== 'manualScore' && pace.remainTarget > 0 && pace.time.remainingDays > 0) {
+    var perDayShow = isMoney ? fmtMoney(Math.round(pace.perDay)) : (Math.round(pace.perDay * 10) / 10);
+    var perWeekShow = isMoney ? fmtMoney(Math.round(pace.perWeek)) : (Math.round(pace.perWeek * 10) / 10);
+    h += '<div style="font-size:11px;color:var(--text2);margin-top:4px">เหลือ ' + pace.time.remainingDays + ' วัน — ต้องทำเฉลี่ย <b>' + perDayShow + ' ' + (cat.unit || '') + '/วัน</b> (≈' + perWeekShow + '/สัปดาห์) ถึงจะถึงเป้า</div>';
+  } else if (cat.type !== 'manualScore' && pace.remainTarget <= 0) {
+    h += '<div style="font-size:11px;color:var(--text2);margin-top:4px">ถึงเป้าแล้ว 🎉</div>';
+  }
+  h += '</div>';
+
   if (cat.type === 'manualScore') {
     h += '<div class="fg"><label>กรอกคะแนนที่ได้รับจาก DJI</label><input type="number" id="kpi_manual_val" value="' + (cat.manualValue != null ? cat.manualValue : '') + '"></div>';
     h += '<button class="btn bp btn-full" onclick="kpiSaveManualScore(\'' + planId + '\',\'' + categoryId + '\')">💾 บันทึกคะแนน</button>';
@@ -292,7 +403,23 @@ function showKpiDetailM(planId, categoryId) {
       }
     });
     h += '</div>';
+
+    var potentialRecords = kpiPotentialRecords(plan, cat);
+    if (potentialRecords.length) {
+      var potentialAmt = kpiPotentialAmount(plan, cat);
+      h += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">';
+      h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">🌱 ดีลที่ยังไม่ปิด แต่มีลุ้น (' + potentialRecords.length + ' รายการ — รวม ' + (isMoney ? fmtMoneyShort(potentialAmt) : potentialAmt) + ' ' + (cat.unit || '') + ')</div>';
+      h += '<div style="max-height:200px;overflow-y:auto">';
+      potentialRecords.forEach(function(p) {
+        var dl3 = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+        h += '<div class="kpi-detail-row" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">🌱 ' + sanitize(p.projectName || (dl3 ? dl3.name : '') || '-') + ' — ' + fmtMoneyShort(p.forecastAmount) + '</div>';
+      });
+      h += '</div></div>';
+    }
   }
+
+  var cta = kpiCategoryCTA(cat);
+  if (cta) h += '<button class="btn bp btn-full" style="margin-top:12px" onclick="closeMForce();' + cta.action + '">' + cta.label + '</button>';
 
   h += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">📝 บันทึกเพิ่มเติม</div>';
