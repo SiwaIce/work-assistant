@@ -57,14 +57,21 @@ function kpiGetPlansForSales(salesMemberId) {
     .sort(function(a, b) { return (a.startDate || '').localeCompare(b.startDate || ''); });
 }
 
-function kpiCreateQuarterPlan(salesMemberId, salesMemberName) {
+function kpiCreateQuarterPlan(salesMemberId, salesMemberName, q, year) {
   var cur = kpiGetCurrentQuarter();
-  var range = kpiQuarterRange(cur.q, cur.year);
+  q = q || cur.q;
+  year = year || cur.year;
+  var quarter = 'Q' + q + '-' + year;
+
+  var existing = getKpiQuarterPlans().filter(function(p) { return p.salesMemberId === salesMemberId && p.quarter === quarter; })[0];
+  if (existing) { toast('⚠️ มีแผน ' + quarter + ' ของเซลล์นี้อยู่แล้ว — ใช้อันเดิม'); return existing; }
+
+  var range = kpiQuarterRange(q, year);
   var prevPlans = kpiGetPlansForSales(salesMemberId);
   var template = prevPlans.length ? prevPlans[prevPlans.length - 1].categories : KPI_DEFAULT_CATEGORIES;
   var plan = {
     id: 'kpiq_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-    quarter: cur.quarter, startDate: range.startDate, endDate: range.endDate,
+    quarter: quarter, startDate: range.startDate, endDate: range.endDate,
     salesMemberId: salesMemberId, salesMemberName: salesMemberName,
     categories: JSON.parse(JSON.stringify(template)),
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
@@ -73,6 +80,49 @@ function kpiCreateQuarterPlan(salesMemberId, salesMemberName) {
   plans.push(plan);
   saveKpiQuarterPlans(plans);
   return plan;
+}
+
+function kpiDeleteQuarterPlan(planId) {
+  var plans = getKpiQuarterPlans();
+  var plan = plans.filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  if (!confirm('⚠️ ลบแผน KPI ' + plan.quarter + ' ของ ' + plan.salesMemberName + '?\n(คะแนน manual และบันทึกที่เกี่ยวข้องจะถูกลบด้วย — ตัวเลขที่คำนวณสดจาก Pipeline/Dealer/Visit จะไม่หาย)')) return;
+  saveKpiQuarterPlans(plans.filter(function(p) { return p.id !== planId; }));
+  saveKpiQuarterLogs(getKpiQuarterLogs().filter(function(l) { return l.planId !== planId; }));
+  if (kpiSelectedPlanId === planId) kpiSelectedPlanId = null;
+  toast('🗑️ ลบแผน ' + plan.quarter + ' แล้ว');
+  closeMForce();
+  render();
+}
+
+// ================================================================
+// เลือกไตรมาสที่จะสร้าง (ปัจจุบัน/ไตรมาสหน้า/เลือกเอง) — กันสร้างซ้ำโดยไม่ตั้งใจ
+// ================================================================
+function showKpiNewQuarterM(salesMemberId, salesMemberName) {
+  var cur = kpiGetCurrentQuarter();
+  var nextQ = cur.q === 4 ? 1 : cur.q + 1;
+  var nextYear = cur.q === 4 ? cur.year + 1 : cur.year;
+
+  var h = '<div class="fg"><label>ไตรมาส</label><select id="kpi_new_q" class="fm-input">';
+  for (var qq = 1; qq <= 4; qq++) h += '<option value="' + qq + '">Q' + qq + '</option>';
+  h += '</select></div>';
+  h += '<div class="fg"><label>ปี (ค.ศ.)</label><input type="number" id="kpi_new_year" class="fm-input" value="' + cur.year + '"></div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+  h += '<button class="btn bsm bo" style="flex:1" onclick="document.getElementById(\'kpi_new_q\').value=' + cur.q + ';document.getElementById(\'kpi_new_year\').value=' + cur.year + '">📅 ไตรมาสนี้ (Q' + cur.q + '-' + cur.year + ')</button>';
+  h += '<button class="btn bsm bo" style="flex:1" onclick="document.getElementById(\'kpi_new_q\').value=' + nextQ + ';document.getElementById(\'kpi_new_year\').value=' + nextYear + '">⏭️ ไตรมาสหน้า (Q' + nextQ + '-' + nextYear + ')</button>';
+  h += '</div>';
+  h += '<button class="btn bp btn-full" onclick="kpiConfirmCreateQuarter(\'' + salesMemberId + '\',\'' + sanitize(salesMemberName).replace(/'/g, "\\'") + '\')">➕ สร้างแผนไตรมาสนี้</button>';
+
+  openM('📅 เลือกไตรมาสที่จะสร้างแผน KPI', h);
+}
+
+function kpiConfirmCreateQuarter(salesMemberId, salesMemberName) {
+  var q = Number(document.getElementById('kpi_new_q').value) || 1;
+  var year = Number(document.getElementById('kpi_new_year').value) || new Date().getFullYear();
+  var plan = kpiCreateQuarterPlan(salesMemberId, salesMemberName, q, year);
+  kpiSelectedPlanId = plan.id;
+  closeMForce();
+  render();
 }
 
 // ================================================================
@@ -332,11 +382,12 @@ function kpiTodayBehindBanner() {
   });
   if (!behindItems.length) return '';
   var first = behindItems[0];
-  var h = '<div class="card kpi-today-banner" onclick="kpiSelectedSalesId=\'' + first.member.id + '\';kpiSelectedPlanId=\'' + first.plan.id + '\';go(\'kpiScorecard\')">';
-  h += '<div style="font-size:22px">⚠️</div>';
-  h += '<div style="flex:1"><div class="kpi-today-banner-title">KPI ตามหลังเป้า ' + behindItems.length + ' หัวข้อ</div>';
-  h += '<div class="kpi-today-banner-sub">' + behindItems.slice(0, 3).map(function(b) { return b.cat.icon + ' ' + sanitize(b.cat.label); }).join(' · ') + (behindItems.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div></div>';
-  h += '</div>';
+  var h = '<div class="card kpi-today-banner" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:10px;text-align:left" onclick="kpiSelectedSalesId=\'' + first.member.id + '\';kpiSelectedPlanId=\'' + first.plan.id + '\';go(\'kpiScorecard\')">';
+  h += '<div style="font-size:22px;flex:0 0 auto">⚠️</div>';
+  h += '<div style="flex:1 1 auto;min-width:0;text-align:left">';
+  h += '<div class="kpi-today-banner-title" style="text-align:left">KPI ตามหลังเป้า ' + behindItems.length + ' หัวข้อ</div>';
+  h += '<div class="kpi-today-banner-sub" style="text-align:left">' + behindItems.slice(0, 3).map(function(b) { return b.cat.icon + ' ' + sanitize(b.cat.label); }).join(' · ') + (behindItems.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div>';
+  h += '</div></div>';
   return h;
 }
 
@@ -434,8 +485,9 @@ function rKpiScorecard(el) {
     });
     h += '</select>';
   }
-  h += '<button class="btn bsm bo" onclick="kpiSelectedPlanId=kpiCreateQuarterPlan(\'' + member.id + '\',\'' + sanitize(member.name).replace(/'/g, "\\'") + '\').id;render()">➕ สร้างไตรมาสใหม่</button>';
+  h += '<button class="btn bsm bo" onclick="showKpiNewQuarterM(\'' + member.id + '\',\'' + sanitize(member.name).replace(/'/g, "\\'") + '\')">➕ สร้างไตรมาสใหม่</button>';
   if (plan) h += '<button class="btn bsm bo" onclick="showKpiConfigM(\'' + plan.id + '\')">⚙️ ตั้งค่าไตรมาสนี้</button>';
+  if (plan) h += '<button class="btn bsm bd" onclick="kpiDeleteQuarterPlan(\'' + plan.id + '\')">🗑️ ลบไตรมาสนี้</button>';
   h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
   h += '</div>';
 
