@@ -382,12 +382,10 @@ function kpiTodayBehindBanner() {
   });
   if (!behindItems.length) return '';
   var first = behindItems[0];
-  var h = '<div class="card kpi-today-banner" style="display:flex;flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:10px;text-align:left" onclick="kpiSelectedSalesId=\'' + first.member.id + '\';kpiSelectedPlanId=\'' + first.plan.id + '\';go(\'kpiScorecard\')">';
-  h += '<div style="font-size:22px;flex:0 0 auto">⚠️</div>';
-  h += '<div style="flex:1 1 auto;min-width:0;text-align:left">';
-  h += '<div class="kpi-today-banner-title" style="text-align:left">KPI ตามหลังเป้า ' + behindItems.length + ' หัวข้อ</div>';
-  h += '<div class="kpi-today-banner-sub" style="text-align:left">' + behindItems.slice(0, 3).map(function(b) { return b.cat.icon + ' ' + sanitize(b.cat.label); }).join(' · ') + (behindItems.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div>';
-  h += '</div></div>';
+  var h = '<div class="card kpi-today-banner" onclick="kpiSelectedSalesId=\'' + first.member.id + '\';kpiSelectedPlanId=\'' + first.plan.id + '\';go(\'kpiScorecard\')">';
+  h += '<div class="kpi-today-banner-title">⚠️ KPI ตามหลังเป้า ' + behindItems.length + ' หัวข้อ</div>';
+  h += '<div class="kpi-today-banner-sub">' + behindItems.slice(0, 3).map(function(b) { return b.cat.icon + ' ' + sanitize(b.cat.label); }).join(' · ') + (behindItems.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div>';
+  h += '</div>';
   return h;
 }
 

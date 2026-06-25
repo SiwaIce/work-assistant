@@ -4484,10 +4484,10 @@ function renderUpcomingTimeline() {
 }
 
 /* ---- Today page banner ---- */
-.kpi-today-banner { border: 1px solid #ef4444 !important; background: rgba(239,68,68,.06) !important; cursor: pointer; margin-bottom: 10px; }
+.kpi-today-banner { display: block !important; height: auto !important; min-height: 0 !important; max-height: none; border: 1px solid #ef4444 !important; background: rgba(239,68,68,.06) !important; cursor: pointer; margin-bottom: 10px; }
 .kpi-today-banner:hover { background: rgba(239,68,68,.1) !important; }
-.kpi-today-banner-title { font-weight: 700; color: #ef4444; font-size: 13px; line-height: 1.4; }
-.kpi-today-banner-sub { font-size: 11px; color: var(--text2); margin-top: 2px; line-height: 1.5; }
+.kpi-today-banner-title { display: block; width: auto; font-weight: 700; color: #ef4444; font-size: 13px; line-height: 1.4; text-align: left; }
+.kpi-today-banner-sub { display: block; width: auto; font-size: 11px; color: var(--text2); margin-top: 2px; line-height: 1.5; text-align: left; }
 
 /* ================================================================
    QUOTATION TRACKER
