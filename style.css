@@ -4431,6 +4431,52 @@ function renderUpcomingTimeline() {
 .kpi-detail-row:hover { color: var(--accent); }
 .kpi-cfg-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
 
+/* ---- Hero Dashboard ---- */
+.kpi-hero-card { padding: 20px; margin-bottom: 12px; background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.06) 100%); position: relative; overflow: hidden; }
+.kpi-hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7); }
+.kpi-hero-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.kpi-hero-ring-wrap { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+.kpi-hero-ring-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; }
+.kpi-hero-ring-badge { position: absolute; top: -6px; right: -6px; font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); animation: kpi-bounce 1.4s ease-in-out infinite; }
+@keyframes kpi-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.kpi-hero-info { flex: 1; min-width: 200px; }
+.kpi-hero-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.kpi-hero-stats { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+.kpi-hero-stat { display: flex; flex-direction: column; }
+.kpi-hero-stat b { font-size: 18px; }
+.kpi-hero-stat span { font-size: 11px; color: var(--text2); }
+.kpi-trend { font-size: 12px; font-weight: 600; }
+
+/* ---- Top deals to close ---- */
+.kpi-topdeals-card { border: 1px solid rgba(34,197,94,.3); background: rgba(34,197,94,.04); margin-bottom: 12px; }
+.kpi-topdeals-title { font-size: 13px; font-weight: 700; color: #22c55e; margin-bottom: 4px; }
+.kpi-topdeals-sub { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+
+/* ---- Achievement ribbon + monthly mini line on cards ---- */
+.kpi-sc-card { position: relative; }
+.kpi-sc-card.done { border-color: #22c55e; box-shadow: 0 0 0 1px rgba(34,197,94,.3); }
+.kpi-sc-ribbon { position: absolute; top: 8px; right: 10px; font-size: 16px; animation: kpi-bounce 1.4s ease-in-out infinite; }
+.kpi-sc-month { font-size: 10px; color: var(--text2); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-light); }
+
+/* ---- Monthly breakdown table (drill-down) ---- */
+.kpi-month-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.kpi-month-cell { border: 1px solid var(--border); border-radius: 8px; padding: 8px; text-align: center; }
+.kpi-month-cell.cur { border-color: var(--accent); background: rgba(59,130,246,.08); }
+.kpi-month-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+.kpi-month-val { font-size: 12px; font-weight: 700; }
+
+/* ---- Checklist logs ---- */
+.kpi-log-row { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid var(--border-light); }
+.kpi-log-ck { cursor: pointer; font-size: 14px; flex-shrink: 0; line-height: 1.4; }
+.kpi-log-text { font-size: 11px; flex: 1; }
+.kpi-log-row.done .kpi-log-text { color: var(--text2); text-decoration: line-through; }
+
+/* ---- Today page banner ---- */
+.kpi-today-banner { display: flex; align-items: center; gap: 10px; border: 1px solid #ef4444; background: rgba(239,68,68,.06); cursor: pointer; margin-bottom: 10px; }
+.kpi-today-banner:hover { background: rgba(239,68,68,.1); }
+.kpi-today-banner-title { font-weight: 700; color: #ef4444; font-size: 13px; }
+.kpi-today-banner-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
 /* ================================================================
    QUOTATION TRACKER
    ================================================================ */

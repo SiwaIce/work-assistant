@@ -78,7 +78,7 @@ function kpiCreateQuarterPlan(salesMemberId, salesMemberName) {
 // ================================================================
 // คำนวณ actual ต่อ category type
 // ================================================================
-function kpiComputeActual(plan, cat) {
+function kpiComputeActualInRange(plan, cat, startDate, endDate) {
   if (cat.type === 'manualScore') return Number(cat.manualValue) || 0;
 
   if (cat.type === 'pipelineRevenue') {
@@ -87,7 +87,7 @@ function kpiComputeActual(plan, cat) {
       if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
       var rd = p.registerDate || '';
-      if (rd < plan.startDate || rd > plan.endDate) return;
+      if (rd < startDate || rd > endDate) return;
       sum += Number(p.forecastAmount) || 0;
     });
     return sum;
@@ -100,7 +100,7 @@ function kpiComputeActual(plan, cat) {
       if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
       var rd = p.registerDate || '';
-      if (rd < plan.startDate || rd > plan.endDate) return;
+      if (rd < startDate || rd > endDate) return;
       (getPipeItems(p) || []).forEach(function(it) {
         var m = (it.model || '').toLowerCase();
         if (keywords.some(function(k) { return m.indexOf(k) !== -1; })) qty += Number(it.qty) || 0;
@@ -113,18 +113,55 @@ function kpiComputeActual(plan, cat) {
     return ST.getAll('dealers').filter(function(d) {
       if (!d.authorizedDate) return false;
       if ((d.authorizedBy || '') !== plan.salesMemberName) return false;
-      return d.authorizedDate >= plan.startDate && d.authorizedDate <= plan.endDate;
+      return d.authorizedDate >= startDate && d.authorizedDate <= endDate;
     }).length;
   }
 
   if (cat.type === 'visitCount') {
     return ST.getAll('visits').filter(function(v) {
       var vd = v.date || '';
-      return vd >= plan.startDate && vd <= plan.endDate;
+      return vd >= startDate && vd <= endDate;
     }).length;
   }
 
   return 0;
+}
+function kpiComputeActual(plan, cat) {
+  return kpiComputeActualInRange(plan, cat, plan.startDate, plan.endDate);
+}
+
+// ================================================================
+// Monthly breakdown — แบ่งเป้าไตรมาสเป็นรายเดือน (เป้าคงที่ 1/3 ทุกเดือน)
+// ================================================================
+var KPI_MONTH_NAMES = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function kpiQuarterMonths(plan) {
+  var start = new Date(plan.startDate + 'T00:00:00');
+  var months = [];
+  function iso(d) { return d.toISOString().split('T')[0]; }
+  for (var i = 0; i < 3; i++) {
+    var mStart = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    var mEnd = new Date(start.getFullYear(), start.getMonth() + i + 1, 0);
+    months.push({ label: KPI_MONTH_NAMES[mStart.getMonth()], startDate: iso(mStart), endDate: iso(mEnd), isCurrent: (new Date() >= mStart && new Date() <= mEnd) });
+  }
+  return months;
+}
+function kpiMonthlyBreakdown(plan, cat) {
+  if (cat.type === 'manualScore') return null;
+  var months = kpiQuarterMonths(plan);
+  var monthlyTarget = (Number(cat.target) || 0) / 3;
+  return months.map(function(m) {
+    var actual = kpiComputeActualInRange(plan, cat, m.startDate, m.endDate);
+    return { label: m.label, isCurrent: m.isCurrent, target: monthlyTarget, actual: actual, pct: monthlyTarget ? (actual / monthlyTarget * 100) : 0 };
+  });
+}
+
+// ================================================================
+// เทียบกับไตรมาสก่อน — เห็นแนวโน้มว่าดีขึ้น/แย่ลง
+// ================================================================
+function kpiPrevPlan(salesMemberId, currentPlan) {
+  var plans = kpiGetPlansForSales(salesMemberId);
+  var idx = plans.findIndex(function(p) { return p.id === currentPlan.id; });
+  return idx > 0 ? plans[idx - 1] : null;
 }
 
 function kpiContributingRecords(plan, cat) {
@@ -253,6 +290,57 @@ function kpiPotentialAmount(plan, cat) {
 }
 
 // ================================================================
+// Top deals — ดีลที่ยังไม่ปิดแต่มูลค่าสูงสุด เรียงแล้วเลือกให้พอดีกับเป้าที่เหลือ
+// ================================================================
+function kpiTopPotentialDeals(plan) {
+  var revCat = (plan.categories || []).filter(function(c) { return c.type === 'pipelineRevenue'; })[0];
+  if (!revCat) return null;
+  var actual = kpiComputeActual(plan, revCat);
+  var target = Number(revCat.target) || 0;
+  var remain = Math.max(target - actual, 0);
+  if (remain <= 0) return null;
+  var records = kpiPotentialRecords(plan, revCat).slice().sort(function(a, b) {
+    return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
+  });
+  if (!records.length) return null;
+  var picked = [];
+  var sum = 0;
+  for (var i = 0; i < records.length; i++) {
+    picked.push(records[i]);
+    sum += Number(records[i].forecastAmount) || 0;
+    if (sum >= remain) break;
+  }
+  return { remain: remain, picked: picked, sum: sum, willHitTarget: sum >= remain, totalCandidates: records.length };
+}
+
+// ================================================================
+// Banner เตือนตามหลังเป้า — ใช้แสดงที่หน้า Today (เรียกจาก views-today.js)
+// ================================================================
+function kpiTodayBehindBanner() {
+  if (typeof getSalesMembers !== 'function') return '';
+  var members = getSalesMembers().filter(function(m) { return m.active !== false; });
+  var cur = kpiGetCurrentQuarter();
+  var behindItems = [];
+  members.forEach(function(m) {
+    var plan = kpiGetPlansForSales(m.id).filter(function(p) { return p.quarter === cur.quarter; })[0];
+    if (!plan) return;
+    (plan.categories || []).forEach(function(cat) {
+      if (cat.type === 'manualScore') return;
+      var pace = kpiPaceInfo(plan, cat);
+      if (pace.status === 'behind') behindItems.push({ plan: plan, cat: cat, member: m });
+    });
+  });
+  if (!behindItems.length) return '';
+  var first = behindItems[0];
+  var h = '<div class="card kpi-today-banner" onclick="kpiSelectedSalesId=\'' + first.member.id + '\';kpiSelectedPlanId=\'' + first.plan.id + '\';go(\'kpiScorecard\')">';
+  h += '<div style="font-size:22px">⚠️</div>';
+  h += '<div style="flex:1"><div class="kpi-today-banner-title">KPI ตามหลังเป้า ' + behindItems.length + ' หัวข้อ</div>';
+  h += '<div class="kpi-today-banner-sub">' + behindItems.slice(0, 3).map(function(b) { return b.cat.icon + ' ' + sanitize(b.cat.label); }).join(' · ') + (behindItems.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div></div>';
+  h += '</div>';
+  return h;
+}
+
+// ================================================================
 // ลิงก์ไปทำต่อ — กดจาก drill-down ไปหน้าที่เกี่ยวข้องได้ทันที
 // ================================================================
 function kpiCategoryCTA(cat) {
@@ -260,6 +348,54 @@ function kpiCategoryCTA(cat) {
   if (cat.type === 'dealerAuthorized') return { label: '🏪 ไปดู Dealer ที่ยังไม่ Authorized', action: "dealerFilter='other';go('dealers')" };
   if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') return { label: '📊 ไปดู Pipeline ทั้งหมด', action: "go('pipeline')" };
   return null;
+}
+
+// ================================================================
+// Export สรุป KPI ทุกเซลล์ เป็น Excel ให้หัวหน้าดู
+// ================================================================
+function exportKpiSummaryExcel() {
+  var members = (typeof getSalesMembers === 'function' ? getSalesMembers() : []).filter(function(m) { return m.active !== false; });
+  if (!members.length) return toast('ไม่มีรายชื่อเซลล์');
+
+  var overviewRows = [['เซลล์', 'ไตรมาส', 'คะแนนรวม KPI (%)', 'หัวข้อที่ถึงเป้าแล้ว', 'จำนวนหัวข้อทั้งหมด', 'อัปเดตล่าสุด']];
+  var detailRows = [['เซลล์', 'ไตรมาส', 'หัวข้อ KPI', 'น้ำหนัก (%)', 'เป้า', 'ทำได้แล้ว', 'หน่วย', '% สำเร็จ', 'สถานะ']];
+
+  var hasAny = false;
+  members.forEach(function(m) {
+    var plans = kpiGetPlansForSales(m.id);
+    if (!plans.length) return;
+    hasAny = true;
+    var plan = plans[plans.length - 1];
+    var overall = kpiOverallScore(plan);
+    var doneCount = 0;
+    (plan.categories || []).forEach(function(cat) {
+      var actual = kpiComputeActual(plan, cat);
+      var pct = kpiAchievementPct(plan, cat);
+      if (pct >= 100) doneCount++;
+      var pace = kpiPaceInfo(plan, cat);
+      var paceLabel = KPI_PACE_META[pace.status].label.replace(/[^฀-๿a-zA-Z ]/g, '').trim();
+      detailRows.push([
+        m.name, plan.quarter, cat.label, cat.weight,
+        cat.target, Math.round(actual * 100) / 100, cat.unit || '',
+        Math.round(pct), paceLabel
+      ]);
+    });
+    overviewRows.push([m.name, plan.quarter, overall, doneCount, (plan.categories || []).length, fD(plan.updatedAt)]);
+  });
+
+  if (!hasAny) return toast('ยังไม่มีแผน KPI ของเซลล์คนไหนเลย');
+
+  var wb = XLSX.utils.book_new();
+  var wsOverview = XLSX.utils.aoa_to_sheet(overviewRows);
+  wsOverview['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsOverview, 'ภาพรวม');
+
+  var wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+  wsDetail['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'รายละเอียด');
+
+  XLSX.writeFile(wb, 'kpi-summary-' + _td() + '.xlsx');
+  toast('📊 Export สรุป KPI แล้ว');
 }
 
 // ================================================================
@@ -300,6 +436,7 @@ function rKpiScorecard(el) {
   }
   h += '<button class="btn bsm bo" onclick="kpiSelectedPlanId=kpiCreateQuarterPlan(\'' + member.id + '\',\'' + sanitize(member.name).replace(/'/g, "\\'") + '\').id;render()">➕ สร้างไตรมาสใหม่</button>';
   if (plan) h += '<button class="btn bsm bo" onclick="showKpiConfigM(\'' + plan.id + '\')">⚙️ ตั้งค่าไตรมาสนี้</button>';
+  h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
   h += '</div>';
 
   if (!plan) {
@@ -311,20 +448,63 @@ function rKpiScorecard(el) {
   var overall = kpiOverallScore(plan);
   var overallColor = overall >= 100 ? '#22c55e' : overall >= 70 ? '#3b82f6' : overall >= 40 ? '#eab308' : '#ef4444';
   var time = kpiQuarterTimeProgress(plan);
-  h += '<div class="card kpi-overall-card">';
-  h += '<div class="kpi-overall-row">';
-  h += '<div class="kpi-overall-block"><div class="kpi-overall-num" style="color:' + overallColor + '">' + overall + '%</div><div class="kpi-overall-label">คะแนนรวม KPI</div></div>';
-  h += '<div class="kpi-overall-divider"></div>';
-  h += '<div class="kpi-overall-block"><div class="kpi-overall-num kpi-time-num">' + Math.round(time.expectedPct) + '%</div><div class="kpi-overall-label">เวลาผ่านไป — เหลือ ' + time.remainingDays + ' วัน</div></div>';
+  var doneCount = (plan.categories || []).filter(function(cat) { return kpiAchievementPct(plan, cat) >= 100; }).length;
+
+  // เทียบกับไตรมาสก่อน
+  var prevPlan = kpiPrevPlan(member.id, plan);
+  var trendHtml = '';
+  if (prevPlan) {
+    var prevScore = kpiOverallScore(prevPlan);
+    var delta = Math.round((overall - prevScore) * 10) / 10;
+    var trendColor = delta > 0 ? '#22c55e' : delta < 0 ? '#ef4444' : '#94a3b8';
+    var trendArrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '►';
+    trendHtml = '<div class="kpi-trend" style="color:' + trendColor + '">' + trendArrow + ' ' + Math.abs(delta) + '% จาก ' + sanitize(prevPlan.quarter) + ' (' + prevScore + '%)</div>';
+  }
+
+  // วงแหวน progress (SVG)
+  var ringPct = Math.min(overall, 100);
+  var ringR = 52, ringC = 2 * Math.PI * ringR;
+  var ringOffset = ringC * (1 - ringPct / 100);
+
+  h += '<div class="card kpi-hero-card">';
+  h += '<div class="kpi-hero-row">';
+  h += '<div class="kpi-hero-ring-wrap">';
+  h += '<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="' + ringR + '" fill="none" stroke="var(--border)" stroke-width="10"/>';
+  h += '<circle cx="60" cy="60" r="' + ringR + '" fill="none" stroke="' + overallColor + '" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + ringC + '" stroke-dashoffset="' + ringOffset + '" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .6s ease"/></svg>';
+  h += '<div class="kpi-hero-ring-num" style="color:' + overallColor + '">' + overall + '%</div>';
+  if (overall >= 100) h += '<div class="kpi-hero-ring-badge">🏆</div>';
   h += '</div>';
-  h += '<div class="kpi-overall-sub">' + sanitize(plan.quarter) + ' — ' + sanitize(member.name) + '</div>';
+  h += '<div class="kpi-hero-info">';
+  h += '<div class="kpi-hero-title">' + sanitize(plan.quarter) + ' — ' + sanitize(member.name) + '</div>';
+  h += '<div class="kpi-hero-stats">';
+  h += '<div class="kpi-hero-stat"><b>' + doneCount + '/' + (plan.categories || []).length + '</b><span>หัวข้อถึงเป้า</span></div>';
+  h += '<div class="kpi-hero-stat"><b>' + Math.round(time.expectedPct) + '%</b><span>เวลาผ่านไป</span></div>';
+  h += '<div class="kpi-hero-stat"><b>' + time.remainingDays + ' วัน</b><span>เหลือในไตรมาส</span></div>';
   h += '</div>';
+  h += trendHtml;
+  h += '</div>';
+  h += '</div>';
+  h += '</div>';
+
+  // 🌱 Top deals ที่ควรปิดให้ถึงเป้า
+  var topDeals = kpiTopPotentialDeals(plan);
+  if (topDeals) {
+    h += '<div class="card kpi-topdeals-card">';
+    h += '<div class="kpi-topdeals-title">🌱 ปิด ' + topDeals.picked.length + ' ดีลนี้' + (topDeals.willHitTarget ? ' ก็ถึงเป้ายอดขายไตรมาสนี้!' : ' ช่วยลดระยะห่างจากเป้าได้') + '</div>';
+    h += '<div class="kpi-topdeals-sub">เป้าที่เหลือ ' + fmtMoneyShort(topDeals.remain) + ' — ดีลที่เลือก รวม ' + fmtMoneyShort(topDeals.sum) + (topDeals.totalCandidates > topDeals.picked.length ? ' (จากทั้งหมด ' + topDeals.totalCandidates + ' ดีลที่มีลุ้น)' : '') + '</div>';
+    topDeals.picked.forEach(function(p) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      h += '<div class="kpi-detail-row" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📦 ' + sanitize(p.projectName || (dl ? dl.name : '') || '-') + ' — ' + fmtMoneyShort(p.forecastAmount) + (typeof pipeTag === 'function' ? ' ' + pipeTag(p.status) : '') + '</div>';
+    });
+    h += '</div>';
+  }
 
   h += '<div class="kpi-sc-grid">';
   (plan.categories || []).forEach(function(cat) {
     var actual = kpiComputeActual(plan, cat);
     var pct = kpiAchievementPct(plan, cat);
     var pctShow = Math.min(pct, 100);
+    var isDone = pct >= 100;
     var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
     var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
     var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
@@ -333,7 +513,19 @@ function rKpiScorecard(el) {
     var potential = (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') ? kpiPotentialAmount(plan, cat) : 0;
     var potentialPct = potential ? Math.min((actual + potential) / (Number(cat.target) || 1) * 100, 100) : 0;
 
-    h += '<div class="kpi-sc-card" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
+    // เดือนนี้ — เป้า/ทำได้ (รายเดือน 1/3)
+    var monthHtml = '';
+    var mb = kpiMonthlyBreakdown(plan, cat);
+    if (mb) {
+      var curMonth = mb.filter(function(m) { return m.isCurrent; })[0];
+      if (curMonth) {
+        var mShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(curMonth.actual) + '/' + fmtMoneyShort(curMonth.target) : Math.round(curMonth.actual) + '/' + Math.round(curMonth.target);
+        monthHtml = '<div class="kpi-sc-month">📅 เดือนนี้: ' + mShow + ' ' + (cat.unit || '') + '</div>';
+      }
+    }
+
+    h += '<div class="kpi-sc-card' + (isDone ? ' done' : '') + '" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
+    if (isDone) h += '<div class="kpi-sc-ribbon">🎉</div>';
     h += '<div class="kpi-sc-top"><span class="kpi-sc-icon">' + cat.icon + '</span><span class="kpi-sc-weight">น้ำหนัก ' + cat.weight + '%</span></div>';
     h += '<div class="kpi-sc-label">' + sanitize(cat.label) + '</div>';
     h += '<div class="kpi-sc-bar">';
@@ -342,6 +534,7 @@ function rKpiScorecard(el) {
     h += '</div>';
     h += '<div class="kpi-sc-nums"><span>' + actualShow + ' / ' + targetShow + ' ' + (cat.unit || '') + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
     h += '<div class="kpi-sc-pace" style="color:' + paceMeta.color + '">' + paceMeta.label + '</div>';
+    h += monthHtml;
     h += '</div>';
   });
   h += '</div>';
@@ -387,6 +580,22 @@ function showKpiDetailM(planId, categoryId) {
     h += '<div class="fg"><label>กรอกคะแนนที่ได้รับจาก DJI</label><input type="number" id="kpi_manual_val" value="' + (cat.manualValue != null ? cat.manualValue : '') + '"></div>';
     h += '<button class="btn bp btn-full" onclick="kpiSaveManualScore(\'' + planId + '\',\'' + categoryId + '\')">💾 บันทึกคะแนน</button>';
   } else {
+    // เป้ารายเดือน (แบ่งเป้าไตรมาส 1/3 ทุกเดือน)
+    var mb = kpiMonthlyBreakdown(plan, cat);
+    if (mb) {
+      h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">📅 เป้ารายเดือน (แบ่งเท่ากันทุกเดือน)</div>';
+      h += '<div class="kpi-month-grid">';
+      mb.forEach(function(m) {
+        var mColor = m.pct >= 100 ? '#22c55e' : m.pct >= 50 ? '#3b82f6' : '#ef4444';
+        var mActualShow = isMoney ? fmtMoneyShort(m.actual) : Math.round(m.actual * 10) / 10;
+        var mTargetShow = isMoney ? fmtMoneyShort(m.target) : Math.round(m.target * 10) / 10;
+        h += '<div class="kpi-month-cell' + (m.isCurrent ? ' cur' : '') + '">';
+        h += '<div class="kpi-month-label">' + m.label + (m.isCurrent ? ' (เดือนนี้)' : '') + '</div>';
+        h += '<div class="kpi-month-val" style="color:' + mColor + '">' + mActualShow + ' / ' + mTargetShow + '</div>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
     var records = kpiContributingRecords(plan, cat);
     h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">รายการที่นับเข้า KPI นี้ (' + records.length + ')</div>';
     h += '<div style="max-height:240px;overflow-y:auto">';
@@ -422,11 +631,14 @@ function showKpiDetailM(planId, categoryId) {
   if (cta) h += '<button class="btn bp btn-full" style="margin-top:12px" onclick="closeMForce();' + cta.action + '">' + cta.label + '</button>';
 
   h += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">';
-  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">📝 บันทึกเพิ่มเติม</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">📝 บันทึกเพิ่มเติม / checklist ย่อย (ติ๊กถูกได้)</div>';
   var logs = getKpiQuarterLogs().filter(function(l) { return l.planId === planId && l.categoryId === categoryId; })
     .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
   logs.forEach(function(l) {
-    h += '<div style="font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border-light)">' + fD(l.date) + ' — ' + sanitize(l.note) + '</div>';
+    h += '<div class="kpi-log-row' + (l.done ? ' done' : '') + '">';
+    h += '<div class="kpi-log-ck" onclick="kpiToggleLogDone(\'' + l.id + '\',\'' + planId + '\',\'' + categoryId + '\')">' + (l.done ? '✅' : '⬜') + '</div>';
+    h += '<div class="kpi-log-text"><span style="color:var(--text2)">' + fD(l.date) + '</span> — ' + sanitize(l.note) + '</div>';
+    h += '</div>';
   });
   h += '<textarea id="kpi_log_note" rows="2" placeholder="บันทึกว่าทำอะไรไปแล้ว..." style="width:100%;margin-top:6px"></textarea>';
   h += '<button class="btn bsm bo btn-full" style="margin-top:6px" onclick="kpiAddLog(\'' + planId + '\',\'' + categoryId + '\')">➕ เพิ่มบันทึก</button>';
@@ -458,8 +670,17 @@ function kpiAddLog(planId, categoryId) {
   logs.push({
     id: 'kpilog_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
     planId: planId, categoryId: categoryId, date: new Date().toISOString().split('T')[0],
-    note: note, createdAt: new Date().toISOString()
+    note: note, done: false, createdAt: new Date().toISOString()
   });
+  saveKpiQuarterLogs(logs);
+  showKpiDetailM(planId, categoryId);
+}
+
+function kpiToggleLogDone(logId, planId, categoryId) {
+  var logs = getKpiQuarterLogs();
+  var log = logs.filter(function(l) { return l.id === logId; })[0];
+  if (!log) return;
+  log.done = !log.done;
   saveKpiQuarterLogs(logs);
   showKpiDetailM(planId, categoryId);
 }

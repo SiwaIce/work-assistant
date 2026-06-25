@@ -389,7 +389,8 @@ function rToday(el) {
   var tabContent = '';
 
   if (todayTab === 'summary') {
-    // 📌 สรุป = Daily Priority + Briefing + Stats + Pins
+    // 📌 สรุป = KPI Banner + Daily Priority + Briefing + Stats + Pins
+    if (typeof kpiTodayBehindBanner === 'function') tabContent += kpiTodayBehindBanner();
     tabContent += renderDailyPriorityList();
     tabContent += briefingHtml;
     tabContent += `
