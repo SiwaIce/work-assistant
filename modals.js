@@ -157,6 +157,7 @@ function showDealerM(eid) {
   openM(eid ? '✏️ Dealer' : '➕ เพิ่ม Dealer', '' +
     '<div class="form-section">🏢 ข้อมูลบริษัท</div>' +
     '<div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fd_name" value="' + sanitize(d.name || '') + '"></div>' +
+    '<div class="fg"><label>เลขประจำตัวผู้เสียภาษี (Tax ID)</label><input type="text" id="fd_taxid" value="' + sanitize(d.taxId || '') + '" placeholder="13 หลัก"></div>' +
     '<div class="fr"><div class="fg"><label>SIS Code</label><input type="text" id="fd_sis" value="' + (d.sisCode || '') + '"></div>' +
     '<div class="fg"><label>DJI Code</label><input type="text" id="fd_dji" value="' + (d.djiCode || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Level *</label><select id="fd_level">' + optionsHTML(cfg.dealerLevels, d.level || 'B', '-- เลือก --') + '</select></div>' +
@@ -173,8 +174,6 @@ function showDealerM(eid) {
     '<div class="fg"><label>📍 Google Map</label><input type="url" id="fd_map" value="' + (d.googleMap || '') + '"></div></div>' +
     attachUploadHtml('_dealerAttach', 'dealers', '📷 รูปหน้าร้าน/ใบรับรอง') +
     '<div class="form-section">📋 Certification</div>' +
-    '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fd_appt">' + optionsHTML(cfg.appointmentOptions, d.appointmentLetter, '--') + '</select></div>' +
-    dpH('fd_apptdate', d.appointmentDate || '', 'วันแต่งตั้ง') + '</div>' +
     '<div class="fr"><div class="fg"><label>DSEC</label><select id="fd_dsec"><option value="">--</option><option value="pass"' + (d.dsecStatus === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (d.dsecStatus === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (d.dsecStatus === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div>' +
     '<div class="fg"><label>DSEC cert</label><input type="number" id="fd_dsec_n" value="' + (d.dsecCertCount || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>CRM</label><select id="fd_crm"><option value="">--</option><option value="yes"' + (d.crmStatus === 'yes' ? ' selected' : '') + '>ลงทะเบียนแล้ว</option><option value="no"' + (d.crmStatus === 'no' ? ' selected' : '') + '>ยังไม่ลง</option></select></div>' +
@@ -184,7 +183,6 @@ function showDealerM(eid) {
     '<div class="fr"><div class="fg"><label>Demo Unit</label><input type="text" id="fd_demo" value="' + sanitize(d.demoUnit || '') + '"></div>' +
     '<div class="fg"><label>กลุ่มลูกค้าหลัก</label><input type="text" id="fd_segment" value="' + sanitize(d.customerSegment || '') + '"></div></div>' +
     '<div class="fg"><label>Dock Interest</label><select id="fd_dock"><option value="">--</option><option value="yes"' + (d.dockInterest === 'yes' ? ' selected' : '') + '>มี</option><option value="no"' + (d.dockInterest === 'no' ? ' selected' : '') + '>ไม่มี</option><option value="กำลังดู"' + (d.dockInterest === 'กำลังดู' ? ' selected' : '') + '>กำลังดู</option></select></div>' +
-    '<div class="fg"><label>Pipeline Stage</label><select id="fd_pipe">' + optionsHTML(cfg.pipelineStatuses, d.pipelineStage || 'prospect') + '</select></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="fd_notes" rows="2">' + sanitize(d.notes || '') + '</textarea></div>' +
     '<button class="btn bp btn-full" onclick="saveDealer(\'' + (eid || '') + '\')">💾 บันทึก</button>');
 }
@@ -192,6 +190,7 @@ function showDealerM(eid) {
 async function saveDealer(eid) {
   var data = {
     name: document.getElementById('fd_name').value.trim(),
+    taxId: document.getElementById('fd_taxid').value.trim(),
     sisCode: document.getElementById('fd_sis').value.trim(),
     djiCode: document.getElementById('fd_dji').value.trim(),
     level: document.getElementById('fd_level').value,
@@ -205,8 +204,6 @@ async function saveDealer(eid) {
     customerDetail: document.getElementById('fd_detail').value.trim(),
     shippto: document.getElementById('fd_ship').value.trim(),
     googleMap: document.getElementById('fd_map').value.trim(),
-    appointmentLetter: document.getElementById('fd_appt').value,
-    appointmentDate: dpG('fd_apptdate'),
     dsecStatus: document.getElementById('fd_dsec').value,
     dsecCertCount: document.getElementById('fd_dsec_n').value,
     crmStatus: document.getElementById('fd_crm').value,
@@ -216,7 +213,6 @@ async function saveDealer(eid) {
     demoUnit: document.getElementById('fd_demo').value.trim(),
     customerSegment: document.getElementById('fd_segment').value.trim(),
     dockInterest: document.getElementById('fd_dock').value,
-    pipelineStage: document.getElementById('fd_pipe').value,
     notes: document.getElementById('fd_notes').value.trim(),
     attachments: window._dealerAttach || []
   };

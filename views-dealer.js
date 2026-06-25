@@ -605,6 +605,10 @@ function dealerInfoTab(d) {
       <h2>🏢 ข้อมูลบริษัท</h2>
       <div style="display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+          <span style="font-size: 18px">🧾</span>
+          <div><div style="font-size: 10px; color: var(--text2)">Tax ID</div><div style="font-size: 13px; font-weight: 500">${d.taxId ? qcopyHtml(d.taxId) : '-'}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">📋</span>
           <div><div style="font-size: 10px; color: var(--text2)">SIS Code</div><div style="font-size: 13px; font-weight: 500">${d.sisCode ? qcopyHtml(d.sisCode) : '-'}</div></div>
         </div>
@@ -637,6 +641,15 @@ function dealerInfoTab(d) {
             ${d.sisRevenueNote ? '<div style="font-size: 10px; color: var(--text3); margin-top: 4px">📝 ' + sanitize(d.sisRevenueNote) + '</div>' : ''}
           </div>
         </div>
+        ${d.googleMap ? `<div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 18px">📍</span>
+          <div><div style="font-size: 10px; color: var(--text2)">Location</div>
+            <div style="font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px">
+              <a href="${d.googleMap}" target="_blank" rel="noopener">เปิดแผนที่ ↗</a>
+              <button class="qcopy-btn" style="opacity: 1; position: static" onclick="event.stopPropagation();copyToClip('${d.googleMap.replace(/'/g, "\\'")}')" title="คัดลอกลิงก์">📋</button>
+            </div>
+          </div>
+        </div>` : ''}
       </div>
     </div>
 
@@ -1791,20 +1804,22 @@ function dealerOnboardTab(d) {
 function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {
   var isCurrent = idx === currentIdx;
   var cls = step.done ? 'done' : isCurrent ? 'current' : '';
-  
-  return '<div class="onboard-step ' + cls + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;width:100%;box-sizing:border-box">' +
-    '<div class="ob-num" onclick="toggleOnboardStep(\'' + dealerId + '\',' + idx + ')" style="cursor:pointer;width:28px;height:28px;border-radius:50%;background:var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center;flex-shrink:0">' + 
-    (step.done ? '✓' : (idx + 1)) + '</div>' +
+  var boxBg = step.done ? '#22c55e' : isCurrent ? 'transparent' : 'transparent';
+  var boxBorder = step.done ? '#22c55e' : isCurrent ? '#3b82f6' : 'var(--border)';
+
+  return '<div class="onboard-step ' + cls + '" onclick="toggleOnboardStep(\'' + dealerId + '\',' + idx + ')" style="cursor:pointer;display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;width:100%;box-sizing:border-box">' +
+    '<div class="ob-num" style="width:28px;height:28px;border-radius:8px;background:' + boxBg + ';border:2px solid ' + boxBorder + ';color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;font-weight:700">' +
+    (step.done ? '✓' : '') + '</div>' +
     '<div class="ob-content" style="flex:1;min-width:0">' +
     '<div class="ob-title" style="font-size:.8rem;font-weight:500;margin-bottom:2px">' + sanitize(step.title) + '</div>' +
     '<div class="ob-meta" style="font-size:.66rem;color:var(--text3)">' +
-    (step.done && step.date ? '✅ ' + fD(step.date) : '') +
-    (isCurrent ? '🔄 ขั้นตอนปัจจุบัน' : '') +
-    (!step.done && !isCurrent ? '☐ ยังไม่ได้ทำ' : '') +
+    (step.done && step.date ? '✅ เสร็จแล้ว — ' + fD(step.date) : '') +
+    (!step.done && isCurrent ? '🔄 ขั้นตอนปัจจุบัน — กดเพื่อทำเสร็จ' : '') +
+    (!step.done && !isCurrent ? 'ยังไม่ได้ทำ — กดเพื่อทำเสร็จ' : '') +
     '</div>' +
     (step.note ? '<div class="ob-note" style="font-size:.7rem;color:var(--text2);margin-top:3px;white-space:pre-wrap">' + sanitize(step.note) + '</div>' : '') +
     '</div>' +
-    '<button class="btn bsm bo" onclick="editOnboardStep(\'' + dealerId + '\',' + idx + ')" style="flex-shrink:0">📝</button>' +
+    '<button class="btn bsm bo" onclick="event.stopPropagation();editOnboardStep(\'' + dealerId + '\',' + idx + ')" style="flex-shrink:0" title="แก้ไขวันที่/หมายเหตุ">📝</button>' +
     '</div>';
 }
 

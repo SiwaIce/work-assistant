@@ -138,6 +138,33 @@ function rAdmin(el) {
     '</div>' +
     '<button class="btn bp bsm" onclick="saveH1Period()">💾 บันทึก Period</button></div>' +
 
+    // H2 Period Setting
+    '<div class="card"><h2>📅 H2 Period Setting</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีหลัง (ใช้สำหรับคำนวณยอดขาย)</p>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h2_start_month" class="fm-input">' +
+    '<option value="6"' + (cfg.h2Period?.startMonth === 6 ? ' selected' : '') + '>กรกฎาคม</option>' +
+    '<option value="7"' + (cfg.h2Period?.startMonth === 7 ? ' selected' : '') + '>สิงหาคม</option>' +
+    '<option value="8"' + (cfg.h2Period?.startMonth === 8 ? ' selected' : '') + '>กันยายน</option>' +
+    '<option value="9"' + (cfg.h2Period?.startMonth === 9 ? ' selected' : '') + '>ตุลาคม</option>' +
+    '<option value="10"' + (cfg.h2Period?.startMonth === 10 ? ' selected' : '') + '>พฤศจิกายน</option>' +
+    '<option value="11"' + (cfg.h2Period?.startMonth === 11 ? ' selected' : '') + '>ธันวาคม</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h2_start_day" class="fm-input" value="' + (cfg.h2Period?.startDay || 1) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h2_end_month" class="fm-input">' +
+    '<option value="6"' + (cfg.h2Period?.endMonth === 6 ? ' selected' : '') + '>กรกฎาคม</option>' +
+    '<option value="7"' + (cfg.h2Period?.endMonth === 7 ? ' selected' : '') + '>สิงหาคม</option>' +
+    '<option value="8"' + (cfg.h2Period?.endMonth === 8 ? ' selected' : '') + '>กันยายน</option>' +
+    '<option value="9"' + (cfg.h2Period?.endMonth === 9 ? ' selected' : '') + '>ตุลาคม</option>' +
+    '<option value="10"' + (cfg.h2Period?.endMonth === 10 ? ' selected' : '') + '>พฤศจิกายน</option>' +
+    '<option value="11"' + (cfg.h2Period?.endMonth === 11 ? ' selected' : '') + '>ธันวาคม</option>' +
+    '</select></div>' +
+    '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h2_end_day" class="fm-input" value="' + (cfg.h2Period?.endDay || 31) + '" min="1" max="31"></div>' +
+    '</div>' +
+    '<button class="btn bp bsm" onclick="saveH2Period()">💾 บันทึก Period</button></div>' +
+
     // Notification
     '<div class="card"><h2>🔔 Browser Notification</h2>' +
     '<button class="btn bs" onclick="admReqNotif()">🔔 เปิดการแจ้งเตือน</button>' +
@@ -1190,9 +1217,13 @@ function renderLevelRequirementsEditor(level) {
   var req = cfg.levelRequirements?.[level] || {};
   var demoRequired = req.demoRequired || 'either';
   
-  var h = '<div class="form-section">🎯 เป้าหมาย H1 ' + new Date().getFullYear() + '</div>';
-  h += '<div class="fr"><div class="fg"><label>เป้ายอดขาย H1 (บาท)</label><input type="text" inputmode="decimal" id="req_h1_target" class="fm-input js-money" value="' + nmI(req.h1Target || 0) + '"></div></div>';
-  
+  var h = '<div class="form-section">🎯 เป้าหมายยอดขาย ' + new Date().getFullYear() + '</div>';
+  h += '<div class="fr">';
+  h += '<div class="fg"><label>เป้า H1 (บาท)</label><input type="text" inputmode="decimal" id="req_h1_target" class="fm-input js-money" value="' + nmI(req.h1Target || 0) + '"></div>';
+  h += '<div class="fg"><label>เป้า H2 (บาท)</label><input type="text" inputmode="decimal" id="req_h2_target" class="fm-input js-money" value="' + nmI(req.h2Target || 0) + '"></div>';
+  h += '</div>';
+  h += '<div style="font-size:.68rem;color:var(--text3);margin-bottom:8px">รวมทั้งปี: ' + fmtMoney((Number(req.h1Target) || 0) + (Number(req.h2Target) || 0)) + ' ฿</div>';
+
   h += '<div class="form-section">📋 DSEC Certification</div>';
   h += '<div class="fr"><div class="fg"><label>จำนวนพนักงานที่ต้องผ่าน DSEC</label><input type="number" id="req_dsec_required" class="fm-input" value="' + (req.dsecRequired || 0) + '" min="0"></div></div>';
   
@@ -1289,6 +1320,7 @@ function saveLevelRequirements() {
   if (!cfg.levelRequirements[currentReqLevel]) cfg.levelRequirements[currentReqLevel] = {};
   
   cfg.levelRequirements[currentReqLevel].h1Target = parseNum(document.getElementById('req_h1_target').value);
+  cfg.levelRequirements[currentReqLevel].h2Target = parseNum(document.getElementById('req_h2_target').value);
   cfg.levelRequirements[currentReqLevel].dsecRequired = parseInt(document.getElementById('req_dsec_required').value) || 0;
   cfg.levelRequirements[currentReqLevel].demoRequired = document.getElementById('req_demo_required').value;
   
@@ -1459,6 +1491,19 @@ function saveH1Period() {
   };
   saveConfig(cfg);
   toast('💾 บันทึก H1 Period แล้ว');
+  render();
+}
+
+function saveH2Period() {
+  var cfg = getConfig();
+  cfg.h2Period = {
+    startMonth: parseInt(document.getElementById('h2_start_month').value) || 6,
+    startDay: parseInt(document.getElementById('h2_start_day').value) || 1,
+    endMonth: parseInt(document.getElementById('h2_end_month').value) || 11,
+    endDay: parseInt(document.getElementById('h2_end_day').value) || 31
+  };
+  saveConfig(cfg);
+  toast('💾 บันทึก H2 Period แล้ว');
   render();
 }
 

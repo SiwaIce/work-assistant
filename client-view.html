@@ -4088,16 +4088,16 @@ function getConfig() {
   var defaultConfig = {
     saleName: 'Siwawong',
     levelRequirements: {
-      S: { h1Target: 27000000, dsecRequired: 3, 
-           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
+      S: { h1Target: 27000000, h2Target: 27000000, dsecRequired: 3,
+           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'],
            option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'] },
-      A: { h1Target: 4500000, dsecRequired: 1, 
-           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'], 
+      A: { h1Target: 4500000, h2Target: 4500000, dsecRequired: 1,
+           option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'],
            option2Models: ['DJI Dock 2', 'DJI Matrice 4TD'] },
-      B: { h1Target: 1500000, dsecRequired: 1, 
-           option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'], 
+      B: { h1Target: 1500000, h2Target: 1500000, dsecRequired: 1,
+           option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'],
            option2Models: ['DJI Dock 2'] },
-      Other: { h1Target: 0, dsecRequired: 0, option1Models: [], option2Models: [] }
+      Other: { h1Target: 0, h2Target: 0, dsecRequired: 0, option1Models: [], option2Models: [] }
     },
     newDemoPolicies: [
       {
@@ -4113,6 +4113,12 @@ function getConfig() {
       startDay: 1,
       endMonth: 5,
       endDay: 30
+    },
+    h2Period: {
+      startMonth: 6,
+      startDay: 1,
+      endMonth: 11,
+      endDay: 31
     }
   };
   try {
@@ -4402,16 +4408,16 @@ async function renderComplianceTabContent(dealer) {
   
   var cfg = getConfig();
   var levelRequirements = cfg.levelRequirements || {
-    S: { h1Target: 27000000, dsecRequired: 3, 
-         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'], 
+    S: { h1Target: 27000000, h2Target: 27000000, dsecRequired: 3,
+         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2', 'DJI Zenmuse L3'],
          option2Models: ['DJI Dock 2', 'DJI Dock 3', 'DJI Matrice 4TD'] },
-    A: { h1Target: 4500000, dsecRequired: 1, 
-         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'], 
+    A: { h1Target: 4500000, h2Target: 4500000, dsecRequired: 1,
+         option1Models: ['DJI Matrice 350 RTK', 'DJI Matrice 400', 'DJI Matrice 4E', 'DJI Matrice 4T', 'DJI Zenmuse H30T', 'DJI Zenmuse L2'],
          option2Models: ['DJI Dock 2', 'DJI Matrice 4TD'] },
-    B: { h1Target: 1500000, dsecRequired: 1, 
-         option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'], 
+    B: { h1Target: 1500000, h2Target: 1500000, dsecRequired: 1,
+         option1Models: ['DJI Matrice 4E', 'DJI Matrice 4T'],
          option2Models: ['DJI Dock 2'] },
-    Other: { h1Target: 0, dsecRequired: 0, option1Models: [], option2Models: [] }
+    Other: { h1Target: 0, h2Target: 0, dsecRequired: 0, option1Models: [], option2Models: [] }
   };
   
   var requirements = levelRequirements[level] || levelRequirements.B;
@@ -4422,6 +4428,34 @@ async function renderComplianceTabContent(dealer) {
   
   // ✅ คำนวณ H1 Status (ส่ง pipelines เข้าไป)
   var h1Status = await calculateH1StatusWithOption(dealerId, requirements, h1UseSisRevenue, pipelines, dealer);
+
+  // ✅ คำนวณ H2 Status (ใช้ logic เดียวกัน แต่คนละ period/target/source)
+  var _h2Src = sessionStorage.getItem('h2Source_' + dealerId);
+  var h2UseSisRevenue = _h2Src ? (_h2Src === 'sis') : true;
+  var h2Status = await calculateHalfYearStatus(dealerId, requirements.h2Target || 0, cfg.h2Period, h2UseSisRevenue, pipelines, dealer);
+
+  // ✅ รวมทั้งปี = H1 + H2
+  var totalTarget = (requirements.h1Target || 0) + (requirements.h2Target || 0);
+  var totalActual = h1Status.actual + h2Status.actual;
+  var totalStatus = {
+    target: totalTarget,
+    actual: totalActual,
+    percent: totalTarget > 0 ? Math.min(Math.round(totalActual / totalTarget * 100), 100) : (totalActual > 0 ? 100 : 0),
+    isOk: totalActual >= totalTarget,
+    gap: totalTarget - totalActual
+  };
+
+  // ✅ เลือกแท็บที่จะแสดง — ค่าเริ่มต้นคือครึ่งปีที่ "วันนี้" อยู่ในช่วงนั้น จำค่าที่ผู้ใช้กดเลือกไว้ผ่าน sessionStorage
+  var _nowForTab = new Date();
+  var _h1RangeForTab = { start: new Date(_nowForTab.getFullYear(), cfg.h1Period.startMonth, cfg.h1Period.startDay), end: new Date(_nowForTab.getFullYear(), cfg.h1Period.endMonth, cfg.h1Period.endDay) };
+  var _inH1Now = _nowForTab >= _h1RangeForTab.start && _nowForTab <= _h1RangeForTab.end;
+  var _savedTab = sessionStorage.getItem('cvPeriodTab_' + dealerId);
+  var periodTab = (_savedTab === 'h1' || _savedTab === 'h2' || _savedTab === 'total') ? _savedTab : (_inH1Now ? 'h1' : 'h2');
+  var activeStatus = periodTab === 'h1' ? h1Status : (periodTab === 'h2' ? h2Status : totalStatus);
+  var activeYear = _nowForTab.getFullYear();
+  var activeLabel = periodTab === 'h1' ? ('H1 ' + activeYear) : (periodTab === 'h2' ? ('H2 ' + activeYear) : ('รวมทั้งปี ' + activeYear));
+  var activeShortLabel = periodTab === 'h1' ? 'H1' : (periodTab === 'h2' ? 'H2' : 'รวมทั้งปี');
+
   var dsecStatus = calculateDSECStatus(dealer, requirements);
   var policyAlerts = getNewDemoPolicyAlerts();
   
@@ -4489,23 +4523,23 @@ async function renderComplianceTabContent(dealer) {
   html += '<div style="font-size:18px;font-weight:700;line-height:1.2;color:' + _nextBidColor + '">' + _nextBidTxt + '</div>';
   html += '<div style="font-size:10px;color:var(--text2)">' + (_daysToNextBid !== null ? 'อีก ' + _daysToNextBid + ' วัน' : 'ไม่มีกำหนด') + '</div>';
   html += '</div>';
-  var _qsH1Clr = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
-  var _qsH1Pct = h1Status.target > 0 ? Math.round(h1Status.actual / h1Status.target * 100) : (h1Status.actual > 0 ? 100 : 0);
+  var _qsActClr = activeStatus.isOk ? '#22c55e' : (activeStatus.percent >= 70 ? '#f59e0b' : '#ef4444');
+  var _qsActPct = activeStatus.target > 0 ? Math.round(activeStatus.actual / activeStatus.target * 100) : (activeStatus.actual > 0 ? 100 : 0);
   html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px">';
-  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">🎯 H1 Progress</div>';
-  html += '<div style="font-size:24px;font-weight:800;line-height:1.1;color:' + _qsH1Clr + '">' + _qsH1Pct + '%</div>';
-  html += '<div style="font-size:10px;color:var(--text2)">' + (h1Status.isOk ? '✅ บรรลุเป้า' : 'เป้า ' + fmtMoneyShort(h1Status.target) + ' ฿') + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2);font-weight:600">🎯 ' + activeShortLabel + ' Progress</div>';
+  html += '<div style="font-size:24px;font-weight:800;line-height:1.1;color:' + _qsActClr + '">' + _qsActPct + '%</div>';
+  html += '<div style="font-size:10px;color:var(--text2)">' + (activeStatus.isOk ? '✅ บรรลุเป้า' : 'เป้า ' + fmtMoneyShort(activeStatus.target) + ' ฿') + '</div>';
   html += '</div>';
   html += '</div>';
 
-  // ====== HP BAR H1: คำนวณ percent จริง รวม overflow ======
-  var h1Color = h1Status.isOk ? '#22c55e' : (h1Status.percent >= 70 ? '#f59e0b' : '#ef4444');
-  var h1RawPct = h1Status.target > 0 ? (h1Status.actual / h1Status.target * 100) : (h1Status.actual > 0 ? 999 : 0);
+  // ====== HP BAR (ตามแท็บ H1/H2/รวมทั้งปี ที่เลือก): คำนวณ percent จริง รวม overflow ======
+  var h1Color = activeStatus.isOk ? '#22c55e' : (activeStatus.percent >= 70 ? '#f59e0b' : '#ef4444');
+  var h1RawPct = activeStatus.target > 0 ? (activeStatus.actual / activeStatus.target * 100) : (activeStatus.actual > 0 ? 999 : 0);
   var h1BarPct = Math.min(h1RawPct, 100);
   var h1IsOver = h1RawPct > 100;
   var h1DisplayPct = Math.round(h1RawPct);
-  var h1BarColor = h1IsOver ? 'linear-gradient(90deg,#22c55e,#86efac,#bbf7d0)' : (h1Status.isOk ? 'linear-gradient(90deg,#22c55e,#86efac)' : (h1Status.percent >= 70 ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : 'linear-gradient(90deg,#ef4444,#f87171)'));
-  var h1GlowColor = h1IsOver ? 'rgba(34,197,94,0.5)' : (h1Status.isOk ? 'rgba(34,197,94,0.3)' : (h1Status.percent >= 70 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'));
+  var h1BarColor = h1IsOver ? 'linear-gradient(90deg,#22c55e,#86efac,#bbf7d0)' : (activeStatus.isOk ? 'linear-gradient(90deg,#22c55e,#86efac)' : (activeStatus.percent >= 70 ? 'linear-gradient(90deg,#f59e0b,#fbbf24)' : 'linear-gradient(90deg,#ef4444,#f87171)'));
+  var h1GlowColor = h1IsOver ? 'rgba(34,197,94,0.5)' : (activeStatus.isOk ? 'rgba(34,197,94,0.3)' : (activeStatus.percent >= 70 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'));
 
   // ====== HEADER CARD ======
   html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px 20px 16px;margin-bottom:16px;position:relative;overflow:hidden">';
@@ -4533,10 +4567,17 @@ async function renderComplianceTabContent(dealer) {
   html += '<button onclick="refreshClientData()" style="background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--text2);font-size:18px;line-height:1" title="รีเฟรช">&#x1F504;</button>';
   html += '</div></div>';
 
-  // ====== HP BAR ยอดขาย H1 ======
-  html += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  // ====== TABS: H1 / H2 / รวมทั้งปี ======
+  html += '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border)">';
+  html += '<div onclick="selectPeriodTab(\'h1\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h1' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H1 ' + activeYear + (_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
+  html += '<div onclick="selectPeriodTab(\'h2\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h2' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H2 ' + activeYear + (!_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
+  html += '<div onclick="selectPeriodTab(\'total\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'total' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">รวมทั้งปี ' + activeYear + '</div>';
+  html += '</div>';
+
+  // ====== HP BAR ยอดขาย (ตามแท็บที่เลือก) ======
+  html += '<div style="margin-top:0;padding-top:14px;border-top:1px solid var(--border)">';
   html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--text2)">🎯 ยอดขาย H1 ' + new Date().getFullYear() + '</div>';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--text2)">🎯 ยอดขาย ' + activeLabel + '</div>';
   html += '<div style="font-size:14px;font-weight:800;color:' + h1Color + '">' + h1DisplayPct + '%' + (h1IsOver ? ' 🔥 ทะลุเป้า!' : '') + '</div>';
   html += '</div>';
   // HP Bar track
@@ -4550,23 +4591,33 @@ async function renderComplianceTabContent(dealer) {
   }
   html += '</div>';
   html += '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text2)">';
-  html += '<div>ยอดจริง: <span style="color:var(--text);font-weight:700">' + fmtMoneyShort(h1Status.actual) + ' ฿</span></div>';
-  html += '<div>เป้า: <span style="color:var(--accent);font-weight:700">' + fmtMoneyShort(h1Status.target) + ' ฿</span></div>';
+  html += '<div>ยอดจริง: <span style="color:var(--text);font-weight:700">' + fmtMoneyShort(activeStatus.actual) + ' ฿</span></div>';
+  html += '<div>เป้า: <span style="color:var(--accent);font-weight:700">' + fmtMoneyShort(activeStatus.target) + ' ฿</span></div>';
   html += '</div>';
-  html += '<div style="margin-top:8px;display:flex;gap:14px">';
-  html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="h1Source" value="pipeline" ' + (!h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', false)"> 📊 Pipeline</label>';
-  html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="h1Source" value="sis" ' + (h1UseSisRevenue ? 'checked' : '') + ' onchange="changeH1Source(\'' + dealerId + '\', true)"> 💰 ยอด SIS</label>';
-  html += '</div>';
+  if (periodTab === 'total') {
+    // รวมทั้งปี — โชว์ breakdown ของ H1/H2 แทน source toggle (เพราะยอดรวมมาจาก H1+H2 ที่คำนวณไว้แล้ว ไม่มีแหล่งข้อมูลให้เลือกซ้ำ)
+    html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;font-size:11px">';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2)"><span>H1 ' + activeYear + '</span><span>เป้า ' + fmtMoneyShort(h1Status.target) + ' ฿ · ทำได้ ' + fmtMoneyShort(h1Status.actual) + ' ฿</span></div>';
+    html += '<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2)"><span>H2 ' + activeYear + '</span><span>เป้า ' + fmtMoneyShort(h2Status.target) + ' ฿ · ทำได้ ' + fmtMoneyShort(h2Status.actual) + ' ฿</span></div>';
+    html += '</div>';
+  } else {
+    var _curUseSis = periodTab === 'h1' ? h1UseSisRevenue : h2UseSisRevenue;
+    var _curChangeFn = periodTab === 'h1' ? 'changeH1Source' : 'changeH2Source';
+    html += '<div style="margin-top:8px;display:flex;gap:14px">';
+    html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="periodSource" value="pipeline" ' + (!_curUseSis ? 'checked' : '') + ' onchange="' + _curChangeFn + '(\'' + dealerId + '\', false)"> 📊 Pipeline</label>';
+    html += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text2)"><input type="radio" name="periodSource" value="sis" ' + (_curUseSis ? 'checked' : '') + ' onchange="' + _curChangeFn + '(\'' + dealerId + '\', true)"> 💰 ยอด SIS</label>';
+    html += '</div>';
+  }
   html += '</div></div>';
 
   // ====== 3 SUMMARY CARDS ======
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">';
 
-  // H1 Card
-  html += '<div style="background:var(--card);border:1px solid ' + (h1Status.isOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
-  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">H1 TARGET</div>';
+  // Sales Target Card (ตามแท็บ H1/H2/รวมทั้งปี ที่เลือก)
+  html += '<div style="background:var(--card);border:1px solid ' + (activeStatus.isOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
+  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">' + activeShortLabel.toUpperCase() + ' TARGET</div>';
   html += '<div style="font-size:22px;font-weight:800;color:' + h1Color + ';line-height:1">' + h1DisplayPct + '%</div>';
-  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (h1Status.isOk ? '✅ สำเร็จ' : (h1Status.percent >= 70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (activeStatus.isOk ? '✅ สำเร็จ' : (activeStatus.percent >= 70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</div>';
   html += '</div>';
 
   // DSEC Card
@@ -4608,7 +4659,7 @@ async function renderComplianceTabContent(dealer) {
     html += '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#a855f7,#60a5fa)"></div>';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">';
     html += '<span style="font-size:18px">🚀</span>';
-    html += '<div><div style="font-size:13px;font-weight:800;color:var(--text)">เส้นทางสู่ระดับถัดไป</div>';
+    html += '<div><div style="font-size:13px;font-weight:800;color:var(--text)">To be next Level</div>';
     html += '<div style="font-size:11px;color:var(--text2)">เป้าหมาย: <span style="color:#a855f7;font-weight:700">' + _nextLevel + ' — ' + _nextLevelName + '</span></div></div>';
     html += '</div>';
     if (_nextH1 > 0) {
@@ -4631,11 +4682,11 @@ async function renderComplianceTabContent(dealer) {
     html += '</div>';
   }
 
-  // ====== H1 TARGET DETAIL CARD ======
+  // ====== SALES TARGET DETAIL CARD (ตามแท็บ H1/H2/รวมทั้งปี ที่เลือก) ======
   html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:12px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">';
-  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🎯</span><div><div style="font-size:15px;font-weight:800">เป้าหมายยอดขาย H1 ' + new Date().getFullYear() + '</div><div style="font-size:11px;color:var(--text2)">Half Year Target</div></div></div>';
-  html += '<span style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:' + (h1Status.isOk ? 'rgba(34,197,94,0.15)' : (h1Status.percent>=70 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)')) + ';color:' + h1Color + '">' + (h1Status.isOk ? '✅ สำเร็จ' : (h1Status.percent>=70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</span>';
+  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🎯</span><div><div style="font-size:15px;font-weight:800">เป้าหมายยอดขาย ' + activeLabel + '</div><div style="font-size:11px;color:var(--text2)">' + (periodTab === 'total' ? 'Full Year Target' : 'Half Year Target') + '</div></div></div>';
+  html += '<span style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:' + (activeStatus.isOk ? 'rgba(34,197,94,0.15)' : (activeStatus.percent>=70 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)')) + ';color:' + h1Color + '">' + (activeStatus.isOk ? '✅ สำเร็จ' : (activeStatus.percent>=70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</span>';
   html += '</div>';
   // HP Bar detail version
   html += '<div style="position:relative;height:22px;background:var(--bg);border-radius:99px;border:1px solid var(--border);margin-bottom:10px">';
@@ -4648,8 +4699,8 @@ async function renderComplianceTabContent(dealer) {
   }
   html += '</div>';
   html += '<div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px">';
-  html += '<div style="color:var(--text2)">เป้าหมาย: <strong style="color:var(--accent)">' + fmtMoneyShort(h1Status.target) + ' ฿</strong></div>';
-  html += '<div style="color:var(--text2)">ยอดขายจริง: <strong style="color:#22c55e">' + fmtMoneyShort(h1Status.actual) + ' ฿</strong></div>';
+  html += '<div style="color:var(--text2)">เป้าหมาย: <strong style="color:var(--accent)">' + fmtMoneyShort(activeStatus.target) + ' ฿</strong></div>';
+  html += '<div style="color:var(--text2)">ยอดขายจริง: <strong style="color:#22c55e">' + fmtMoneyShort(activeStatus.actual) + ' ฿</strong></div>';
   html += '<div style="color:var(--text2)">ความคืบหน้า: <strong style="color:' + h1Color + '">' + h1DisplayPct + '%</strong></div>';
   html += '</div>';
   html += '</div>';
@@ -4727,15 +4778,99 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
   var percent = target > 0 ? Math.round(actualAmount / target * 100) : 100;
   var isOk = actualAmount >= target;
   
-  return { 
-    target: target, 
-    actual: actualAmount, 
-    percent: Math.min(percent, 100), 
-    isOk: isOk, 
+  return {
+    target: target,
+    actual: actualAmount,
+    percent: Math.min(percent, 100),
+    isOk: isOk,
     gap: target - actualAmount,
     sourceText: sourceText,
     useSisRevenue: useSisRevenue
   };
+}
+
+// ================================================================
+// HALF-YEAR STATUS (ใช้ร่วมกันได้ทั้ง H1/H2 — ส่ง period config + target เข้ามาเอง)
+// ================================================================
+async function calculateHalfYearStatus(dealerId, target, periodCfg, useSisRevenue, customPipelines, passedDealer) {
+  var dealer = passedDealer || null;
+  if (!dealer) {
+    try {
+      var dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      for (var i = 0; i < dealers.length; i++) {
+        if (dealers[i] && dealers[i].id === dealerId) { dealer = dealers[i]; break; }
+      }
+    } catch(e) {}
+  }
+
+  var actualAmount = 0;
+  var sourceText = '';
+
+  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
+    actualAmount = dealer.sisRevenue || 0;
+    sourceText = '(ยอด SIS)';
+  } else {
+    var pipelines = (customPipelines && customPipelines.length > 0) ? customPipelines : (pipelinesData || []);
+    var now = new Date();
+    var startDate = new Date(now.getFullYear(), periodCfg.startMonth, periodCfg.startDay);
+    var endDate = new Date(now.getFullYear(), periodCfg.endMonth, periodCfg.endDay);
+
+    for (var i = 0; i < pipelines.length; i++) {
+      var p = pipelines[i];
+      if (!p || p.dealerId !== dealerId) continue;
+      if (['win', 'ordered', 'delivered'].indexOf(p.status) === -1) continue;
+      var shipDate = p.shipmentDate ? new Date(p.shipmentDate) : null;
+      if (shipDate && shipDate >= startDate && shipDate <= endDate) {
+        actualAmount += (Number(p.forecastAmount) || 0);
+      }
+    }
+    sourceText = '(จาก Pipeline)';
+  }
+
+  var percent = target > 0 ? Math.round(actualAmount / target * 100) : 100;
+  var isOk = actualAmount >= target;
+
+  return {
+    target: target,
+    actual: actualAmount,
+    percent: Math.min(percent, 100),
+    isOk: isOk,
+    gap: target - actualAmount,
+    sourceText: sourceText,
+    useSisRevenue: useSisRevenue
+  };
+}
+
+// เปลี่ยนแหล่งข้อมูล H2 (Pipeline/SIS) — เหมือน changeH1Source แต่คนละ sessionStorage key
+async function changeH2Source(dealerId, useSisRevenue) {
+  sessionStorage.setItem('h2Source_' + dealerId, useSisRevenue ? 'sis' : 'pipeline');
+
+  let dealer = null;
+  try {
+    const dealerDoc = await db.collection('dealerUpdates').doc(dealerId).get();
+    if (dealerDoc.exists) {
+      dealer = dealerDoc.data();
+      dealer.id = dealerDoc.id;
+    }
+  } catch(e) {
+    console.warn('Error reloading dealer:', e);
+  }
+  if (!dealer) {
+    try {
+      const dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]');
+      dealer = dealers.find(d => d.id === dealerId);
+    } catch(e) {}
+  }
+  if (!dealer) { toast('ไม่พบข้อมูล Dealer'); return; }
+
+  toast('เปลี่ยนแหล่งข้อมูลเป็น ' + (useSisRevenue ? 'ยอด SIS' : 'Pipeline') + ' แล้ว');
+  await renderComplianceTabContent(dealer);
+}
+
+// สลับแท็บ H1 / H2 / รวมทั้งปี — จำค่าไว้ผ่าน sessionStorage แล้ว render ใหม่
+function selectPeriodTab(tab) {
+  sessionStorage.setItem('cvPeriodTab_' + dealerId, tab);
+  renderComplianceTabContent();
 }
 
 async function changeH1Source(dealerId, useSisRevenue) {
