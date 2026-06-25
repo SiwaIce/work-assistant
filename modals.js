@@ -852,7 +852,28 @@ function saveLossReason(pipeId) {
 // ================================================================
 var visitMode = 'full';
 
+// เปิด Visit Report เป็นแท็บแยก — แบ่งซ้าย/ขวา ฟอร์ม + สมุดโน้ตเร็ว เผื่อสลับไปทำเมนูอื่นในแท็บเดิมได้
+function openVisitWindow(dealerId, eid) {
+  var url = location.pathname + '?visitWindow=1&dealerId=' + encodeURIComponent(dealerId || '') + (eid ? '&eid=' + encodeURIComponent(eid) : '');
+  window.open(url, '_blank');
+}
+
 function showVisitM(dealerId, eid) {
+  var existDealer = dealerId || (eid ? (ST.getOne('visits', eid) || {}).dealerId : '') || '';
+  var rerender = "showVisitM('" + existDealer + "','" + (eid || '') + "')";
+  var html = buildVisitFormHtml(existDealer, eid, rerender);
+  var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : '📝 Standard Visit');
+  openM(title, html);
+}
+
+// เตือนถ่ายรูป — โชว์เฉพาะตอนยังไม่มีรูปแนบเลย (เช็คจาก window._visitAttach ที่ตั้งไว้ก่อนเรียกฟังก์ชันนี้)
+function visitPhotoReminderHtml() {
+  if ((window._visitAttach || []).length) return '';
+  return '<div style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.1);border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#f59e0b"><span style="font-size:16px">📷</span><span>อย่าลืมถ่ายรูปหน้าร้าน/หลักฐานการเข้าพบด้วย!</span></div>';
+}
+
+// สร้าง HTML ของฟอร์ม Visit (ใช้ทั้งใน modal ปกติ และหน้าแท็บแยก) — rerenderCall คือคำสั่งที่เรียกตอนสลับโหมด Quick/Standard/Full
+function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   var v = eid ? ST.getOne('visits', eid) : {};
   var cfg = getConfig();
   var existDealer = dealerId || v.dealerId || '';
@@ -862,7 +883,8 @@ function showVisitM(dealerId, eid) {
 
   // Quick Mode
   if (visitMode === 'quick') {
-    openM('⚡ Quick Visit', '' +
+    return '' +
+      visitPhotoReminderHtml() +
       '<div class="fg"><label>Dealer *</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div>' +
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
@@ -870,16 +892,16 @@ function showVisitM(dealerId, eid) {
       '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="5" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
       attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
       '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>' +
-      '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</span> <span class="vm-btn full" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</span></div>');
-    return;
+      '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="visitMode=\'standard\';' + rerenderCall + '">📝 Standard</span> <span class="vm-btn full" onclick="visitMode=\'full\';' + rerenderCall + '">📋 Full</span></div>';
   }
 
   // Standard / Full
   var html = '' +
+    visitPhotoReminderHtml() +
     '<div class="visit-mode">' +
-    '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="visitMode=\'quick\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">⚡ Quick</div>' +
-    '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="visitMode=\'standard\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📝 Standard</div>' +
-    '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="visitMode=\'full\';showVisitM(\'' + existDealer + '\',\'' + (eid || '') + '\')">📋 Full</div></div>' +
+    '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="visitMode=\'quick\';' + rerenderCall + '">⚡ Quick</div>' +
+    '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
+    '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
     '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
     '<div class="fg"><label>Dealer *</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div>' +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
@@ -921,7 +943,7 @@ function showVisitM(dealerId, eid) {
   html += '</div><button type="button" class="btn bsm bo" onclick="addFbRow()">➕ เพิ่ม</button>';
   html += '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button></div>';
 
-  openM(visitMode === 'full' ? '📋 Full Visit Report' : '📝 Standard Visit', html);
+  return html;
 }
 
 async function aiCleanVisitNote() {
@@ -1140,8 +1162,10 @@ function saveVisitQuick(dealerId, eid) {
   var modeEl = document.querySelector('input[name="fv_mode"]:checked');
   var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || []};
   if (!data.date) return alert('ใส่วันที่');
+  if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
   if (eid) ST.update('visits', eid, data); else ST.add('visits', data);
   closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
+  notifyVisitSavedAcrossTabs(did);
 }
 
 // Save Visit (Standard/Full)
@@ -1206,6 +1230,8 @@ function saveVisit(dealerId, eid) {
     saleName: cfg.saleName, reportMode: visitMode, attachments: window._visitAttach || []
   };
 
+  if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
+
   var visitObj;
   if (eid) { ST.update('visits', eid, data); visitObj = ST.getOne('visits', eid); }
   else { visitObj = ST.add('visits', data); }
@@ -1238,10 +1264,21 @@ function saveVisit(dealerId, eid) {
   feedbackItems.forEach(function(f) { ST.add('feedback', {dealerId: did, text: f, date: data.date, source: 'visit'}); });
 
   closeMForce(); toast('💾 บันทึก Visit แล้ว');
+  notifyVisitSavedAcrossTabs(did);
   if (visitMode !== 'quick') {
     setTimeout(function() { if (confirm('📧 สร้าง Draft Email?')) showVisitDraft(visitObj.id); }, 500);
   }
   go('visitDetail', {visitId: visitObj.id});
+}
+
+// แจ้งแท็บอื่นของแอปเดียวกัน (เช่นแท็บหลักที่เปิดหน้า Dealer ค้างไว้) ให้รีเฟรชอัตโนมัติหลังบันทึก Visit จากแท็บแยก
+function notifyVisitSavedAcrossTabs(dealerId) {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    var ch = new BroadcastChannel('djisales_sync');
+    ch.postMessage({ type: 'visitSaved', dealerId: dealerId });
+    ch.close();
+  } catch (e) {}
 }
 // ================================================================
 // FOLLOW-UP MODAL

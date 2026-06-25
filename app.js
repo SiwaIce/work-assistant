@@ -505,6 +505,30 @@ function initRoutines() {
 // NAVIGATION
 // ================================================================
 var S = {view: 'today'};
+
+// เปิดจากแท็บแยก (openVisitWindow) — ?visitWindow=1&dealerId=...&eid=... → เด้งไปหน้า Visit แบบแยกซ้าย/ขวาทันทีตอนเปิด
+(function() {
+  var qp = new URLSearchParams(location.search);
+  if (qp.get('visitWindow') === '1') {
+    window._vwDealerId = qp.get('dealerId') || '';
+    window._vwEid = qp.get('eid') || '';
+    S.view = 'visitWindow';
+  }
+})();
+
+// แท็บอื่นบันทึก Visit แล้ว ให้แท็บนี้รีเฟรชข้อมูลอัตโนมัติ (ไม่ต้องกดรีเฟรชเอง)
+if (typeof BroadcastChannel !== 'undefined') {
+  try {
+    var _djiSyncChannel = new BroadcastChannel('djisales_sync');
+    _djiSyncChannel.onmessage = function(e) {
+      if (e.data && e.data.type === 'visitSaved') {
+        if (typeof render === 'function') render();
+        if (typeof toast === 'function') toast('🔄 มี Visit ใหม่จากแท็บอื่น — อัปเดตแล้ว');
+      }
+    };
+  } catch (e) {}
+}
+
 var calY = new Date().getFullYear();
 var calM = new Date().getMonth();
 var taskFlt = 'all';
@@ -562,8 +586,9 @@ var R = {
   pipeDetail: rPipeDet,
   forecastComparison: rForecastComparison, 
   forecast: rForecast,
-  visits: rVisits, 
+  visits: rVisits,
   visitDetail: rVisitDet,
+  visitWindow: rVisitWindow,
   followup: rFollowup, 
   feedback: rFeedback,
   kanban: rKanban, 

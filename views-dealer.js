@@ -843,6 +843,7 @@ function dealerVisitTab(d) {
       <button class="btn bsm bo" onclick="copyDealerVisits('${d.id}')">📋 Copy</button>
       <button class="btn bsm bo" onclick="dlDealerVisitsCSV('${d.id}')">📤 CSV</button>
       <button class="btn bsm bp" onclick="showVisitM('${d.id}')">➕ Visit</button>
+      <button class="btn bsm bo" onclick="openVisitWindow('${d.id}')" title="เปิดเป็นแท็บแยก เต็มจอ มีสมุดโน้ตเร็วด้านขวา">🪟</button>
     </span></h2>
   ${vts.length ? vts.slice(0, 20).map(v => visitItemHTML(v)).join('') : '<div class="empty"><p>ยังไม่มี Visit</p></div>'}
   ${vts.length > 20 ? `<div style="text-align:center;padding:6px"><button class="btn bo" onclick="go('visits',{filterDealer:'${d.id}'})">ดูทั้งหมด (${vts.length}) →</button></div>` : ''}

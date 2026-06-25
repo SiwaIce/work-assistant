@@ -16,6 +16,7 @@ function rVisits(el) {
   el.innerHTML = `
   <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
     <button class="btn bp" onclick="showVisitM()">➕ Visit Report</button>
+    <button class="btn bo" onclick="openVisitWindow(S.filterDealer||'')" title="เปิดเป็นแท็บแยก เต็มจอ มีสมุดโน้ตเร็วด้านขวา">🪟 เปิดแท็บแยก</button>
     <button class="btn bo" onclick="copyAllVisits()">📋 Copy</button>
     <button class="btn bo" onclick="dlAllVisitsCSV()">📤 CSV</button>
     ${S.filterDealer?`<button class="btn bo" onclick="go('visits')">✕ ล้าง Filter</button>`:''}
@@ -192,4 +193,35 @@ function dlAllVisitsCSV() {
     csv += `"${fD(v.date)}","${v.saleName||cfg.saleName}","${d?.name||''}","${v.mode==='offline'?'Offline':'Online'}","${v.djiDealer||''}","${esc(buildVisitUpdateText(v))}","${v.location||''}"\n`;
   });
   dlBlob(csv, `visit-report-${_td()}.csv`);
+}
+
+// ================================================================
+// VISIT — แท็บแยก (เปิดด้วย openVisitWindow ใน modals.js)
+// ซ้าย = ฟอร์ม Visit ปกติ (Quick/Standard/Full), ขวา = สมุดโน้ตเร็วเต็มความสูง
+// ================================================================
+function rVisitWindow(el) {
+  document.getElementById('pgT').textContent = '🤝 Visit Report — แท็บแยก';
+  var dealerId = window._vwDealerId || '';
+  var eid = window._vwEid || '';
+  var formHtml = buildVisitFormHtml(dealerId, eid, 'rVisitWindowRerender()');
+
+  var h = '<div class="vw-layout">';
+  h += '<div class="vw-left">' + formHtml + '</div>';
+  h += '<div class="vw-right">';
+  h += '<div class="vw-scratch-header"><span style="font-weight:700;font-size:13px">📝 สมุดโน้ตเร็ว</span>';
+  h += '<button type="button" class="btn bsm bo" onclick="vwMoveScratchToSummary()">➡️ ส่งเข้าสรุปการคุย</button></div>';
+  h += '<textarea id="vw_scratch" class="vw-scratch-textarea" placeholder="พิมพ์อะไรก็ได้ที่คุยกับลูกค้าไว้ตรงนี้ก่อน ยังไม่รู้จะลงหัวข้อไหนก็พิมพ์ไว้ก่อนได้ แล้วกด ➡️ ส่งเข้าสรุปการคุย ไปใช้ ✨ AI จัดระเบียบ ฝั่งซ้ายต่อได้เลย"></textarea>';
+  h += '<p style="font-size:11px;color:var(--text2);margin-top:6px">ข้อความในกล่องนี้ยังไม่ผูกกับหัวข้อไหน — กดบันทึก Visit ก่อนปิดแท็บนี้ ไม่งั้นข้อความจะหายไป</p>';
+  h += '</div></div>';
+
+  el.innerHTML = h;
+}
+function rVisitWindowRerender() { render(); }
+function vwMoveScratchToSummary() {
+  var t = document.getElementById('vw_scratch');
+  var s = document.getElementById('fv_summary');
+  if (!t || !s || !t.value.trim()) return;
+  s.value = (s.value.trim() ? s.value.trim() + '\n\n' : '') + t.value.trim();
+  t.value = '';
+  toast('➡️ ย้ายเข้าสรุปการคุยแล้ว');
 }

@@ -4471,6 +4471,18 @@ function renderUpcomingTimeline() {
 .kpi-log-text { font-size: 11px; flex: 1; }
 .kpi-log-row.done .kpi-log-text { color: var(--text2); text-decoration: line-through; }
 
+/* ---- Visit Report แท็บแยก: ซ้าย=ฟอร์ม ขวา=สมุดโน้ตเร็ว ---- */
+.vw-layout { display: flex; gap: 18px; align-items: flex-start; min-height: 70vh; }
+.vw-left { flex: 1.15; min-width: 0; }
+.vw-right { flex: 1; min-width: 0; display: flex; flex-direction: column; position: sticky; top: 12px; height: calc(100vh - 100px); }
+.vw-scratch-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.vw-scratch-textarea { flex: 1; resize: none; font-size: 13px; line-height: 1.6; min-height: 300px; }
+@media (max-width: 900px) {
+  .vw-layout { flex-direction: column; min-height: 0; }
+  .vw-right { position: static; height: auto; }
+  .vw-scratch-textarea { min-height: 200px; }
+}
+
 /* ---- Today page banner ---- */
 .kpi-today-banner { border: 1px solid #ef4444 !important; background: rgba(239,68,68,.06) !important; cursor: pointer; margin-bottom: 10px; }
 .kpi-today-banner:hover { background: rgba(239,68,68,.1) !important; }
