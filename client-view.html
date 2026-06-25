@@ -11,6 +11,12 @@
 <script src="utils.js"></script>
 <script src="products.js"></script>
 <style>
+/* Quick Copy — ปุ่ม copy เล็กๆ ท้ายข้อความ โผล่ตอน hover (มือถือโชว์ถาวร) */
+.qcopy { position: relative; }
+.qcopy-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; border: none; border-radius: 4px; background: var(--accent, #3b82f6); color: #fff; font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; vertical-align: middle; padding: 0; }
+.qcopy:hover .qcopy-btn { opacity: 1; }
+@media (hover: none) { .qcopy-btn { opacity: .6; } }
+
 /* ===== BASE THEME ===== */
 :root {
   --bg: #0a0c10;
@@ -2289,8 +2295,8 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
 }
     html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
-    html += '<td><strong>' + esc(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
-  html += '<td>' + esc(p.endUserTH || p.endUser || '-') + '</td>';
+    html += '<td><strong>' + qcopyHtml(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
+  html += '<td>' + (p.endUserTH || p.endUser ? qcopyHtml(p.endUserTH || p.endUser) : '-') + '</td>';
   var _fyRow = pipeFYStatus(p);
   html += '<td>' + statusText + (_fyRow ? '<div style="font-size:10px;color:' + _fyRow.c + ';margin-top:3px;white-space:nowrap">' + _fyRow.e + ' ' + _fyRow.t + '</div>' : '') + '</td>';
   html += '<td>' + biddingHtml + '</td>';

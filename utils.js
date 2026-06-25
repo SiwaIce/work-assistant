@@ -890,6 +890,43 @@ function sanitize(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ================================================================
+// HELPER: Quick Copy — โชว์ปุ่ม 📋 ตอน hover (มือถือโชว์ถาวร) กดแล้ว copy เข้าคลิปบอร์ด
+// ใช้: qcopyHtml(text) แทนที่ sanitize(text) ตรงๆ ในจุดที่อยากให้ copy ได้
+// ================================================================
+function qcopyHtml(text) {
+  if (text === null || text === undefined || text === '') return '';
+  return '<span class="qcopy" data-copy="' + sanitize(String(text)) + '">' + sanitize(String(text)) +
+    '<button class="qcopy-btn" onclick="event.stopPropagation();copyToClip(this.parentElement.dataset.copy)" title="คัดลอก">📋</button></span>';
+}
+
+function copyToClip(text) {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      if (typeof toast === 'function') toast('📋 คัดลอกแล้ว: ' + text);
+    }).catch(function() { copyToClipFallback(text); });
+  } else {
+    copyToClipFallback(text);
+  }
+}
+
+function copyToClipFallback(text) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (typeof toast === 'function') toast('📋 คัดลอกแล้ว: ' + text);
+  } catch (e) {
+    if (typeof toast === 'function') toast('❌ คัดลอกไม่สำเร็จ');
+  }
+}
+
 // Safe render (allow basic HTML but escape user content)
 function safeText(str) {
   return sanitize(str).replace(/\n/g, '<br>');

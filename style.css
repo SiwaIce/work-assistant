@@ -1836,6 +1836,12 @@ body { background: var(--bg); color: var(--text); font-size: var(--font-base); }
 #sidebar { width: var(--sidebar-w); }
 #main { margin-left: var(--sidebar-w); }
 #ct { padding: var(--spacing-lg); }
+/* Quick Copy — ปุ่ม copy เล็กๆ ท้ายข้อความ โผล่ตอน hover (มือถือโชว์ถาวร) */
+.qcopy { position: relative; }
+.qcopy-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; border: none; border-radius: 4px; background: var(--accent); color: #fff; font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; vertical-align: middle; padding: 0; }
+.qcopy:hover .qcopy-btn { opacity: 1; }
+@media (hover: none) { .qcopy-btn { opacity: .6; } }
+
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--spacing); box-shadow: var(--shadow); }
 .card h2 { font-size: var(--font-title); }
 .sc { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }

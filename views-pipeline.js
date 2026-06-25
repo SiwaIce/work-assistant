@@ -583,7 +583,7 @@ function rPipeDet(el) {
   html += '<button class="btn bsm bd" onclick="delPipe(\'' + p.id + '\')">🗑️</button>';
   html += '</span></h2>';
   
-  html += '<div class="fr"><div><label>Project Name</label><div>' + sanitize(p.projectName || '-') + '</div></div>';
+  html += '<div class="fr"><div><label>Project Name</label><div>' + (p.projectName ? qcopyHtml(p.projectName) : '-') + '</div></div>';
   html += '<div><label>Status</label><div>' + pipeTag(p.status) + '</div></div></div>';
   
   html += '<div class="fr"><div><label>End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';

@@ -606,11 +606,11 @@ function dealerInfoTab(d) {
       <div style="display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">📋</span>
-          <div><div style="font-size: 10px; color: var(--text2)">SIS Code</div><div style="font-size: 13px; font-weight: 500">${d.sisCode || '-'}</div></div>
+          <div><div style="font-size: 10px; color: var(--text2)">SIS Code</div><div style="font-size: 13px; font-weight: 500">${d.sisCode ? qcopyHtml(d.sisCode) : '-'}</div></div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">🔢</span>
-          <div><div style="font-size: 10px; color: var(--text2)">DJI Code</div><div style="font-size: 13px; font-weight: 500">${d.djiCode || '-'}</div></div>
+          <div><div style="font-size: 10px; color: var(--text2)">DJI Code</div><div style="font-size: 13px; font-weight: 500">${d.djiCode ? qcopyHtml(d.djiCode) : '-'}</div></div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">🏪</span>
@@ -645,7 +645,7 @@ function dealerInfoTab(d) {
       <div style="display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">📞</span>
-          <div><div style="font-size: 10px; color: var(--text2)">เบอร์ติดต่อ</div><div style="font-size: 13px; font-weight: 500">${d.contact ? sanitize(d.contact) : '-'}</div></div>
+          <div><div style="font-size: 10px; color: var(--text2)">เบอร์ติดต่อ</div><div style="font-size: 13px; font-weight: 500">${d.contact ? qcopyHtml(d.contact) : '-'}</div></div>
         </div>
         <div style="display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">📝</span>

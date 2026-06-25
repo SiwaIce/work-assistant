@@ -1280,15 +1280,15 @@ function renderProductsTable(products) {
     
     html += '<tr>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
-    html += '<td>' + sanitize(p.sku || '-') + '</td>';
+    html += '<td>' + (p.sku ? qcopyHtml(p.sku) : '-') + '</td>';
     html += '<td>' + sanitize(p.ean || '-') + '</td>';
-    html += '<td><strong>' + sanitize(p.name) + '</strong></td>';
+    html += '<td><strong>' + qcopyHtml(p.name) + '</strong></td>';
     html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.B) + '</td>';
+    html += '<td style="text-align:right">' + (p.typePrices?.B != null ? qcopyHtml(p.typePrices.B) : fmtMoney(p.typePrices?.B)) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';

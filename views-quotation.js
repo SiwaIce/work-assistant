@@ -451,7 +451,7 @@ function rQuotationV2(el) {
       
       html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">';
       html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
-      html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + sanitize(q.quoteNo) + '</div>';
+      html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + '</div>';
       html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
       html += '<span class="tag" style="background:' + statusColor + '20;color:' + statusColor + ';border:1px solid ' + statusColor + '40">' + statusLabel + '</span>';
       html += '</div>';
@@ -505,7 +505,7 @@ function filterQuoteList() {
     
     html += '<div class="quote-card" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;transition:all 0.2s;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
-    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + sanitize(q.quoteNo) + '</div>';
+    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
     html += '<span class="tag" style="background:' + statusColor + '20;color:' + statusColor + ';border:1px solid ' + statusColor + '40">' + statusLabel + '</span>';
     html += '</div>';

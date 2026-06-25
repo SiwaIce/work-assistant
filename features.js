@@ -2979,13 +2979,13 @@ function rDemoTracker(el) {
     h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">🚁</div>';
     h += '<div>';
     h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">' + sanitize(d.name) + '</div>';
-    if (d.serialNumber) h += '<span class="demo-sn-chip" style="background:' + mColor + '22;color:' + mColor + '">S/N ' + sanitize(d.serialNumber) + '</span>';
+    if (d.serialNumber) h += '<span class="demo-sn-chip" style="background:' + mColor + '22;color:' + mColor + '">S/N ' + qcopyHtml(d.serialNumber) + '</span>';
     h += '</div></div>';
     h += '<span class="demo-status ' + meta.cls + '">' + meta.label + '</span>';
     h += '</div>';
     h += '<div class="demo-card2-info">';
-    if (d.sku) h += '<div>🏷️ SiS Part: ' + sanitize(d.sku) + '</div>';
-    if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + sanitize(d.rentalDbNo) + '</div>';
+    if (d.sku) h += '<div>🏷️ SiS Part: ' + qcopyHtml(d.sku) + '</div>';
+    if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(d.rentalDbNo) + '</div>';
     if (eff === 'lent' || eff === 'reserved') {
       h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
       if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
