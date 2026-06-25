@@ -1090,14 +1090,15 @@ function buildDlrFcModel(modelList, totalFc, totalQty, d) {
     h += '<td style="text-align:center">' + m.qty + '</td>';
     h += '<td style="text-align:right">' + fmtMoneyStyled(m.amount) + '</td>';
     h += '<td style="font-size:.64rem">' + projNames + '</td>';
-    h += '</table>';
+    h += '</tr>';
   });
 
   h += '<tr style="font-weight:700;border-top:2px solid var(--border)">';
-  h += '<td><td>รวม</td>';
+  h += '<td></td><td>รวม</td>';
   h += '<td style="text-align:center">' + totalQty + '</td>';
   h += '<td style="text-align:right">' + fmtMoneyStyled(totalFc) + '</td>';
-  h += '</tr></td>';
+  h += '<td></td>';
+  h += '</tr>';
   h += '</tbody></table></div>';
   return h;
 }
@@ -1206,7 +1207,7 @@ function buildDlrFcMonthly(pipes, d) {
     var tQty = 0;
     var tAmt = 0;
     h += '<tr>';
-    h += '<td><strong>' + sanitize(model) + '</strong></tr>';
+    h += '<td><strong>' + sanitize(model) + '</strong></td>';
     for (var mc = 0; mc < 12; mc++) {
       var cell = models[model][mc];
       var isCur = mc === now.getMonth();
@@ -1245,7 +1246,7 @@ function buildDlrFcMonthly(pipes, d) {
   }
   h += '<td style="text-align:right">' + fmtMoneyShort(grand) + '</td>';
   h += '</tr>';
-  h += '</tbody></tr></div>';
+  h += '</tbody></table></div>';
   return h;
 }
 
