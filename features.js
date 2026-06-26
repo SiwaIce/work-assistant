@@ -4037,8 +4037,18 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   h += '<div id="vp_dealer_preview" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>';
   h += '</div>';
 
-  // โซน Lead (กรอกเอง)
+  // โซน Lead (กรอกเอง หรือดึงจาก Prospect ที่บันทึกไว้ก่อนแล้ว)
   h += '<div id="vp_lead_zone" style="' + (sourceType === 'lead' ? '' : 'display:none') + '">';
+  if (typeof getProspects === 'function') {
+    var openProspects = getProspects().filter(function(pr) { return pr.stage !== 'converted' && pr.stage !== 'closed'; });
+    h += '<div class="fm-group"><label>📋 ดึงจาก Lead ที่บันทึกไว้ (ไม่บังคับ)</label><select id="vp_prospect_select" class="fm-input" onchange="vpProspectPicked()"><option value="">-- พิมพ์เอง --</option>';
+    openProspects.forEach(function(pr) {
+      var st = _prospectStageInfo(pr.stage);
+      h += '<option value="' + pr.id + '"' + (plan && plan.prospectId === pr.id ? ' selected' : '') + '>' + sanitize(pr.companyName) + ' (' + st.icon + ' ' + st.label + ')</option>';
+    });
+    h += '</select></div>';
+    h += '<input type="hidden" id="vp_prospect_id" value="' + sanitize(plan ? (plan.prospectId || '') : '') + '">';
+  }
   h += '<div class="fm-group"><label>🏢 ชื่อบริษัท</label><input type="text" id="vp_company" class="fm-input" value="' + sanitize(plan ? (plan.companyName || '') : '') + '"></div>';
   h += '<div class="fr"><div class="fg"><label>👤 ผู้ติดต่อ</label><input type="text" id="vp_contact" class="fm-input" value="' + sanitize(plan ? (plan.contactName || '') : '') + '"></div>';
   h += '<div class="fg"><label>📞 เบอร์</label><input type="text" id="vp_phone" class="fm-input" value="' + sanitize(plan ? (plan.phone || '') : '') + '"></div></div>';
@@ -4091,6 +4101,22 @@ function vpCheckTimeConflict(date, editId) {
     conflicts.map(function(c) { return sanitize(_vpPlanLabel(c)) + ' (' + c.timeStart + (c.timeEnd ? '–' + c.timeEnd : '') + ')'; }).join(', ') + '</div>';
 }
 
+// เลือก Prospect ที่บันทึกไว้ก่อน → ดึงข้อมูลผู้ติดต่อมาเติมให้อัตโนมัติ
+function vpProspectPicked() {
+  var sel = document.getElementById('vp_prospect_select');
+  var idEl = document.getElementById('vp_prospect_id');
+  if (!sel || !idEl) return;
+  idEl.value = sel.value || '';
+  if (!sel.value || typeof getProspect !== 'function') return;
+  var pr = getProspect(sel.value);
+  if (!pr) return;
+  if (document.getElementById('vp_company')) document.getElementById('vp_company').value = pr.companyName || '';
+  if (document.getElementById('vp_contact')) document.getElementById('vp_contact').value = pr.contactName || '';
+  if (document.getElementById('vp_phone')) document.getElementById('vp_phone').value = pr.phone || '';
+  if (document.getElementById('vp_email')) document.getElementById('vp_email').value = pr.email || '';
+  if (document.getElementById('vp_location')) document.getElementById('vp_location').value = pr.location || '';
+}
+
 function vpSetSourceType(type) {
   document.getElementById('vp_source_type').value = type;
   document.getElementById('vp_src_dealer_btn').className = 'btn bsm ' + (type === 'dealer' ? 'bp' : 'bo');
@@ -4138,6 +4164,7 @@ function saveVisitPlan(date, editId) {
     data.phone = (document.getElementById('vp_phone').value || '').trim();
     data.email = (document.getElementById('vp_email').value || '').trim();
     data.location = (document.getElementById('vp_location').value || '').trim();
+    data.prospectId = document.getElementById('vp_prospect_id') ? document.getElementById('vp_prospect_id').value : '';
   }
 
   var plans = getVisitPlans();
@@ -4156,9 +4183,34 @@ function saveVisitPlan(date, editId) {
   }
 
   saveVisitPlans(plans);
+  if (data.prospectId && typeof advanceProspectStage === 'function') _vpAdvanceProspectIfBehind(data.prospectId, 'scheduled', 'นัดเข้าพบวันที่ ' + fDShort(date));
   toast(editId ? '💾 แก้ไขแล้ว' : '📅 วางแผนแล้ว');
   closeMForce();
   render();
+}
+
+// เลื่อน stage ของ Prospect ให้ทันกับนัดที่ผูกไว้ — เลื่อนไปข้างหน้าเท่านั้น ไม่ดึงกลับถ้า stage ปัจจุบันไปไกลกว่าแล้ว
+// (แก้ list ตรงๆ ไม่เรียก advanceProspectStage เพราะฟังก์ชันนั้นมี closeM/render สำหรับ flow จากปุ่มในโมดัลโดยเฉพาะ)
+function _vpAdvanceProspectIfBehind(prospectId, targetStage, note) {
+  if (typeof getProspects !== 'function') return;
+  var order = PROSPECT_STAGES.map(function(s) { return s.k; });
+  var list = getProspects();
+  var changed = false;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === prospectId) {
+      var pr = list[i];
+      if (pr.stage === 'closed' || pr.stage === 'converted') break;
+      if (order.indexOf(targetStage) > order.indexOf(pr.stage)) {
+        pr.stage = targetStage;
+        pr.updatedAt = new Date().toISOString();
+        pr.history = pr.history || [];
+        pr.history.push({ stage: targetStage, date: _td(), note: note || '' });
+        changed = true;
+      }
+      break;
+    }
+  }
+  if (changed) saveProspects(list);
 }
 
 function removeVisitPlan(planId) {
@@ -4217,11 +4269,13 @@ function showVpLeadActualM(planId) {
 
 function saveVpLeadActual(planId, status) {
   var note = (document.getElementById('vp_actual_note').value || '').trim();
+  var plan = ST.getOne('visitPlans', planId);
   ST.update('visitPlans', planId, {
     status: status === 'attended' ? 'done' : status,
     actual: { status: status, note: note, date: _td() }
   });
   if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  if (status === 'attended' && plan && plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', note || 'เข้าพบตามนัดแล้ว');
   closeMForce();
   toast('💾 บันทึกผลแล้ว');
   render();

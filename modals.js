@@ -247,11 +247,13 @@ async function saveDealer(eid) {
     if (typeof syncDealerToFirebase === 'function') {
       await syncDealerToFirebase(c.id);
     }
-    
+
+    if (typeof prospectMarkConvertedFromDealer === 'function') prospectMarkConvertedFromDealer(c.id);
+
     closeMForce();
     go('dealerDetail', {dealerId: c.id});
   }
-  
+
   toast('💾 บันทึกแล้ว');
 }
 

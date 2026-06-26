@@ -105,7 +105,8 @@ var SYNC_KEY_MAP = {
   'email_drafts': 'emailDrafts',
   'kpiQuarterPlans': 'kpiQuarterPlans',
   'kpiQuarterLogs': 'kpiQuarterLogs',
-  'solutionPresets': 'solutionPresets'
+  'solutionPresets': 'solutionPresets',
+  'prospects': 'prospects'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);

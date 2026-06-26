@@ -628,7 +628,10 @@ var R = {
   announcements: rAnnouncements,
 
   // ✅ Lead Forms
-  leads: rLeads
+  leads: rLeads,
+
+  // ✅ Lead/Prospect Tracker
+  prospectList: rProspectList
 };
 
 // เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)

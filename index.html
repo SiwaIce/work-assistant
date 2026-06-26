@@ -62,6 +62,7 @@
 <div class="sg-items" id="sgi-work">
   <div class="nl" data-v="tasks" onclick="go('tasks')">📋 Tasks</div>
   <div class="nl" onclick="tasksView='kanban';go('tasks')">📋 Kanban</div>
+  <div class="nl" data-v="prospectList" onclick="go('prospectList')">🆕 Lead ที่ติดตาม</div>
   <div class="nl" data-v="visitPlan" onclick="go('visitPlan')">📅 Visit Plan</div>
   <div class="nl" data-v="meetings" onclick="go('meetings')">📅 ประชุม</div>
   <div class="nl" data-v="calendar" onclick="go('calendar')">📆 ปฏิทิน</div>
@@ -262,6 +263,7 @@ var auth = firebase.auth();
 <script src="views-work.js"></script>
 <script src="views-announcements.js"></script>
 <script src="views-leads.js"></script>
+<script src="views-prospects.js"></script>
 <script src="views-quotation.js"></script>
 <script src="kanban.js"></script>
 <script src="export.js"></script>

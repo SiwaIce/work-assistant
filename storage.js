@@ -41,7 +41,8 @@ const ST = {
     kpiEntries: 'v7_kpiEntries',
     dealerPins: 'v7_dealer_pins',
     appearance: 'v7_appearance',
-    solutionPresets: 'v7_solutionPresets'
+    solutionPresets: 'v7_solutionPresets',
+    prospects: 'v7_prospects'
   },
 
   _get(key) {
