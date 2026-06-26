@@ -1159,9 +1159,10 @@ function saveVisitQuick(dealerId, eid) {
   var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || []};
   if (!data.date) return alert('ใส่วันที่');
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
-  if (eid) ST.update('visits', eid, data); else ST.add('visits', data);
+  var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
   notifyVisitSavedAcrossTabs(did);
+  if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id);
 }
 
 // Save Visit (Standard/Full)
@@ -1261,6 +1262,7 @@ function saveVisit(dealerId, eid) {
 
   closeMForce(); toast('💾 บันทึก Visit แล้ว');
   notifyVisitSavedAcrossTabs(did);
+  if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id);
   if (visitMode !== 'quick') {
     setTimeout(function() { if (confirm('📧 สร้าง Draft Email?')) showVisitDraft(visitObj.id); }, 500);
   }

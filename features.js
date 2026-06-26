@@ -3663,18 +3663,43 @@ function deleteQuote(quoteId) {
 // VISIT PLANNING
 // ================================================================
 var vpWeekOffset = 0;
+var vpViewMode = 'month'; // 'month' | 'week'
+var vpMonthOffset = 0;
+var vpSelectedDay = null;
+
+// แปลงวันที่เก่ารูปแบบ DD/MM/YYYY (ของ fmtDateKey เดิม) ให้เป็น ISO YYYY-MM-DD
+// กันพังกับ plan ที่บันทึกไว้ก่อนเปลี่ยนรูปแบบ
+function _vpNormalizeDate(s) {
+  if (!s) return s;
+  var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (m) return m[3] + '-' + m[2] + '-' + m[1];
+  return s;
+}
 
 function rVisitPlan(el) {
   document.getElementById('pgT').textContent = '📅 Visit Planning';
+
+  var toolbar = '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">' +
+    '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+    '<button class="btn-xs" style="border-radius:0;' + (vpViewMode === 'month' ? 'background:var(--accent);color:#fff' : '') + '" onclick="vpViewMode=\'month\';render()">🗓 ปฏิทินเดือน</button>' +
+    '<button class="btn-xs" style="border-radius:0;' + (vpViewMode === 'week' ? 'background:var(--accent);color:#fff' : '') + '" onclick="vpViewMode=\'week\';render()">📋 รายสัปดาห์</button>' +
+    '</div>' +
+    '<div style="flex:1"></div>' +
+    '<button class="btn bo" onclick="copyVisitPlan()">📋 Copy</button>' +
+    '</div>';
+
+  el.innerHTML = toolbar + (vpViewMode === 'week' ? renderVpWeekView() : renderVpMonthView());
+}
+
+function renderVpWeekView() {
   var dealers = [];
   var visits = [];
   var plans = getVisitPlans();
-  
+
   try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
-  
-  var now = new Date();
 
+  var now = new Date();
   var weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay() + 1 + (vpWeekOffset * 7));
   weekStart.setHours(0, 0, 0, 0);
@@ -3684,9 +3709,7 @@ function rVisitPlan(el) {
 
   var dayNames = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
 
-  var h = '';
-
-  h += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
+  var h = '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
   h += '<button class="btn bsm bo" onclick="vpWeekOffset--;render()">◀</button>';
   h += '<span style="font-weight:700;font-size:14px;min-width:180px;text-align:center">';
   h += fmtDateKey(weekStart) + ' — ' + fmtDateKey(weekEnd);
@@ -3695,8 +3718,6 @@ function rVisitPlan(el) {
   h += '<button class="btn bsm bo" onclick="vpWeekOffset++;render()">▶</button>';
   h += '<button class="btn bsm ' + (vpWeekOffset === 0 ? 'bp' : 'bo') + '" onclick="vpWeekOffset=0;render()">สัปดาห์นี้</button>';
   h += '<button class="btn bsm ' + (vpWeekOffset === 1 ? 'bp' : 'bo') + '" onclick="vpWeekOffset=1;render()">สัปดาห์หน้า</button>';
-  h += '<div style="flex:1"></div>';
-  h += '<button class="btn bo" onclick="copyVisitPlan()">📋 Copy</button>';
   h += '</div>';
 
   for (var di = 0; di < 7; di++) {
@@ -3736,23 +3757,7 @@ function rVisitPlan(el) {
     h += '<button class="btn-xs" onclick="showAddVisitPlanM(\'' + dayKey + '\')">➕</button>';
     h += '</div>';
 
-    dayPlans.forEach(function(p) {
-      var dd = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-      var taskLinked = p.taskId ? ST.getOne('tasks', p.taskId) : null;
-
-      h += '<div class="vp-item">';
-      h += '<span class="vp-item-icon">' + (p.mode === 'offline' ? '🤝' : '📞') + '</span>';
-      h += '<div class="vp-item-info">';
-      h += '<div class="vp-item-dealer">' + (dd ? sanitize(dd.name) : sanitize(p.note || '-')) + '</div>';
-      if (p.note && dd) h += '<div class="vp-item-note">' + sanitize(p.note) + '</div>';
-      if (taskLinked) h += '<div class="vp-item-note">📋 ' + sanitize(taskLinked.title) + '</div>';
-      h += '</div>';
-      h += '<div class="vp-item-actions">';
-      if (dd) h += '<button class="btn-xs" onclick="event.stopPropagation();vpGoVisit(\'' + p.id + '\')" title="บันทึก Visit">📍</button>';
-      h += '<button class="btn-xs" onclick="event.stopPropagation();showAddVisitPlanM(\'' + p.date + '\',\'\',\'' + p.id + '\')" title="แก้ไข">✏️</button>';
-      h += '<button class="btn-xs btn-red" onclick="event.stopPropagation();removeVisitPlan(\'' + p.id + '\')" title="ลบ">✕</button>';
-      h += '</div></div>';
-    });
+    dayPlans.forEach(function(p) { h += vpPlanCardHtml(p); });
 
     dayVisits.forEach(function(v) {
       var dd = v.dealerId ? ST.getOne('dealers', v.dealerId) : null;
@@ -3788,19 +3793,155 @@ function rVisitPlan(el) {
     h += '</div>';
   }
 
-  el.innerHTML = h;
+  return h;
+}
+
+// ปฏิทินรายเดือน — เห็นทั้งเดือนในจอเดียว กดวันไหนดูรายละเอียดนัดวันนั้นด้านล่าง
+function renderVpMonthView() {
+  var plans = getVisitPlans();
+  var now = new Date();
+  var viewDate = new Date(now.getFullYear(), now.getMonth() + vpMonthOffset, 1);
+  var year = viewDate.getFullYear(), month = viewDate.getMonth();
+  var monthNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var dowShort = ['จ','อ','พ','พฤ','ศ','ส','อา'];
+
+  var firstDay = new Date(year, month, 1);
+  var startOffset = (firstDay.getDay() + 6) % 7; // จันทร์เป็นวันแรก
+  var daysInMonth = new Date(year, month + 1, 0).getDate();
+  var todayKey = _td();
+
+  var h = '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
+  h += '<button class="btn bsm bo" onclick="vpMonthOffset--;render()">◀</button>';
+  h += '<span style="font-weight:700;font-size:14px;min-width:140px;text-align:center">' + monthNames[month] + ' ' + year + '</span>';
+  h += '<button class="btn bsm bo" onclick="vpMonthOffset++;render()">▶</button>';
+  h += '<button class="btn bsm ' + (vpMonthOffset === 0 ? 'bp' : 'bo') + '" onclick="vpMonthOffset=0;vpSelectedDay=null;render()">เดือนนี้</button>';
+  h += '<button class="btn bp" style="background:#22c55e" onclick="showAddVisitPlanM(\'' + (vpSelectedDay || todayKey) + '\')">➕ นัดใหม่</button>';
+  h += '</div>';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">';
+  dowShort.forEach(function(dn) { h += '<div style="font-size:10px;color:var(--text2);text-align:center;padding:4px 0">' + dn + '</div>'; });
+
+  for (var i = 0; i < startOffset; i++) h += '<div></div>';
+
+  for (var day = 1; day <= daysInMonth; day++) {
+    var dKey = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    var dayPlans = plans.filter(function(p) { return p.date === dKey; });
+    var offCount = dayPlans.filter(function(p) { return p.mode === 'offline'; }).length;
+    var onCount = dayPlans.filter(function(p) { return p.mode === 'online'; }).length;
+    var isToday = dKey === todayKey;
+    var isSelected = dKey === vpSelectedDay;
+
+    h += '<div onclick="vpSelectedDay=\'' + dKey + '\';render()" style="background:var(--card,#1e293b);border-radius:8px;padding:6px;min-height:54px;font-size:10px;cursor:pointer;' +
+      (isSelected ? 'border:1px solid var(--accent)' : (isToday ? 'border:1px solid #f59e0b' : 'border:1px solid transparent')) + '">';
+    h += '<div style="color:' + (isToday ? '#f59e0b' : 'var(--text)') + ';font-weight:' + (isToday ? '700' : '400') + '">' + day + '</div>';
+    if (offCount) h += '<div style="margin-top:3px;font-size:9px;color:#f59e0b">🤝 ' + offCount + '</div>';
+    if (onCount) h += '<div style="font-size:9px;color:#3b82f6">📞 ' + onCount + '</div>';
+    h += '</div>';
+  }
+  h += '</div>';
+
+  var selKey = vpSelectedDay || todayKey;
+  var selDate = new Date(selKey);
+  var selDayName = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'][selDate.getDay()];
+  var selPlans = plans.filter(function(p) { return p.date === selKey; });
+
+  h += '<div style="font-size:12px;font-weight:700;margin-bottom:8px">📅 ' + selDayName + ' ' + fDShort(selKey) + (selKey === todayKey ? ' (วันนี้)' : '') + ' — ' + selPlans.length + ' นัด</div>';
+
+  if (!selPlans.length) {
+    h += '<div class="vp-empty">ยังไม่มีนัดวันนี้ — กด "➕ นัดใหม่" ด้านบนได้เลย</div>';
+  } else {
+    selPlans.forEach(function(p) { h += vpPlanCardHtml(p, true); });
+  }
+
+  return h;
+}
+
+// การ์ดนัด 1 รายการ — ใช้ทั้งใน week view (ย่อ) และ month-day-detail (เต็ม fullDetail=true)
+function vpPlanCardHtml(p, fullDetail) {
+  var isLead = p.sourceType === 'lead';
+  var dd = (!isLead && p.dealerId) ? ST.getOne('dealers', p.dealerId) : null;
+  var company = isLead ? (p.companyName || '-') : (dd ? dd.name : (p.note || '-'));
+  var contact = isLead ? p.contactName : (dd ? (dd.contact || '') : '');
+  var phone = isLead ? p.phone : (dd ? (dd.phone || '') : '');
+  var email = isLead ? p.email : (dd ? (dd.email || '') : '');
+  var location = isLead ? p.location : (dd ? (dd.googleMap || '') : '');
+
+  if (!fullDetail) {
+    // week view — แบบย่อเหมือนเดิม แต่เพิ่มหัวข้อนัด/badge สถานะ
+    var h = '<div class="vp-item' + (p.status === 'done' ? ' vp-actual' : '') + '">';
+    h += '<span class="vp-item-icon">' + (p.mode === 'offline' ? '🤝' : '📞') + '</span>';
+    h += '<div class="vp-item-info">';
+    h += '<div class="vp-item-dealer">' + sanitize(p.title || company) + '</div>';
+    h += '<div class="vp-item-note">🏢 ' + sanitize(company) + (isLead ? ' 🆕' : '') + '</div>';
+    if (p.status === 'done') h += '<div class="vp-item-note" style="color:#22c55e">✅ บันทึกผลแล้ว</div>';
+    h += '</div>';
+    h += '<div class="vp-item-actions">';
+    if (!isLead && dd) h += '<button class="btn-xs" onclick="event.stopPropagation();vpGoVisit(\'' + p.id + '\')" title="บันทึก Visit Report">📍</button>';
+    if (isLead && p.status !== 'done') h += '<button class="btn-xs" onclick="event.stopPropagation();showVpLeadActualM(\'' + p.id + '\')" title="บันทึกผล">📍</button>';
+    h += '<button class="btn-xs" onclick="event.stopPropagation();showAddVisitPlanM(\'' + p.date + '\',\'\',\'' + p.id + '\')" title="แก้ไข">✏️</button>';
+    h += '<button class="btn-xs btn-red" onclick="event.stopPropagation();removeVisitPlan(\'' + p.id + '\')" title="ลบ">✕</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  // month view day-detail — เต็มรูปแบบ มีก็อปปี้
+  var modeBadge = p.mode === 'offline' ?
+    '<span style="background:rgba(245,158,11,.18);color:#fbbf24;font-size:10px;padding:2px 8px;border-radius:6px">🤝 Offline</span>' :
+    '<span style="background:rgba(59,130,246,.18);color:#60a5fa;font-size:10px;padding:2px 8px;border-radius:6px">📞 Online</span>';
+  var statusBadge = p.status === 'done' ?
+    '<span style="background:rgba(34,197,94,.18);color:#4ade80;font-size:10px;padding:2px 8px;border-radius:6px;margin-left:4px">✅ บันทึกผลแล้ว</span>' : '';
+  var sourceBadge = isLead ?
+    '<span style="background:rgba(239,68,68,.15);color:#f87171;padding:1px 6px;border-radius:5px;font-size:9px">🆕 Lead ใหม่</span>' :
+    '<span style="background:rgba(59,130,246,.15);color:#60a5fa;padding:1px 6px;border-radius:5px;font-size:9px">Dealer ปัจจุบัน</span>';
+
+  var borderColor = p.status === 'done' ? 'rgba(34,197,94,.4)' : (p.mode === 'offline' ? '#f59e0b' : '#3b82f6');
+
+  var h2 = '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-left:3px solid ' + borderColor + ';border-radius:10px;padding:12px;margin-bottom:8px">';
+  h2 += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">';
+  h2 += '<span style="font-size:13px;font-weight:700">' + sanitize(p.title || company) + '</span>';
+  h2 += '<span>' + modeBadge + statusBadge + '</span>';
+  h2 += '</div>';
+  h2 += '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text2);margin-bottom:8px">';
+  h2 += '<span>🏢 <span style="color:var(--text)">' + sanitize(company) + '</span> ' + sourceBadge + '</span>';
+  if (contact) h2 += '<span>👤 <span style="color:var(--text)">' + sanitize(contact) + '</span></span>';
+  h2 += '</div>';
+  if (phone || email || location) {
+    h2 += '<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;margin-bottom:8px">';
+    if (phone) h2 += '<span style="display:flex;align-items:center;gap:4px">📞 ' + sanitize(phone) + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0" onclick="copyToClip(\'' + sanitize(phone).replace(/'/g, "\\'") + '\')">📋</button></span>';
+    if (email) h2 += '<span style="display:flex;align-items:center;gap:4px">✉️ ' + sanitize(email) + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0" onclick="copyToClip(\'' + sanitize(email).replace(/'/g, "\\'") + '\')">📋</button></span>';
+    if (location) h2 += '<span style="display:flex;align-items:center;gap:4px">📍 ' + sanitize(location) + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0" onclick="copyToClip(\'' + sanitize(location).replace(/'/g, "\\'") + '\')">📋</button>' + (/^https?:\/\//.test(location) ? ' <a href="' + sanitize(location) + '" target="_blank" style="color:var(--accent)">เปิดแผนที่↗</a>' : '') + '</span>';
+    h2 += '</div>';
+  }
+  if (p.note) h2 += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;font-size:11px;color:var(--text2);margin-bottom:8px">' + sanitize(p.note) + '</div>';
+  if (p.actual && p.actual.note) h2 += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px"><strong style="color:#4ade80">ผลการนัด:</strong> ' + sanitize(p.actual.note) + '</div>';
+
+  h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
+  if (!isLead && p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report เต็ม →</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด</button>';
+  if (isLead) h2 += '<button class="btn bsm bo" onclick="vpConvertLeadToDealer(\'' + p.id + '\')">➕ แปลงเป็น Dealer</button>';
+  h2 += '<button class="btn bsm bo" onclick="showAddVisitPlanM(\'' + p.date + '\',\'\',\'' + p.id + '\')">✏️ แก้ไข</button>';
+  h2 += '<button class="btn bsm bd" onclick="removeVisitPlan(\'' + p.id + '\')">🗑️ ลบ</button>';
+  h2 += '</div></div>';
+  return h2;
 }
 
 function getVisitPlans() {
   var saved = localStorage.getItem('v7_visitPlans');
-  if (saved) { try { return JSON.parse(saved); } catch(e) {} }
-  return [];
+  if (!saved) return [];
+  try {
+    var plans = JSON.parse(saved) || [];
+    plans.forEach(function(p) { if (p.date) p.date = _vpNormalizeDate(p.date); });
+    return plans;
+  } catch(e) { return []; }
 }
 
 function saveVisitPlans(list) {
   localStorage.setItem('v7_visitPlans', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', list);
 }
 
+// ฟอร์มเพิ่ม/แก้ไขนัด — เลือกได้ว่าผูกกับ Dealer ที่มีอยู่ (autofill ผู้ติดต่อ/เบอร์/อีเมล/location) หรือ Lead ใหม่ (กรอกเอง)
 function showAddVisitPlanM(date, prefillDealerId, editId) {
   var dealers = [];
   try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
@@ -3813,18 +3954,45 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   }
 
   var selDealer = prefillDealerId || (plan ? plan.dealerId : '') || '';
+  var sourceType = plan ? (plan.sourceType || 'dealer') : (selDealer ? 'dealer' : 'dealer');
   var selMode = plan ? plan.mode : 'offline';
-  var selNote = plan ? plan.note : '';
+  var selTitle = plan ? (plan.title || '') : '';
+  var selNote = plan ? (plan.note || '') : '';
 
-  var h = '<div style="max-width:400px">';
-  h += '<div style="text-align:center;font-weight:700;margin-bottom:10px">📅 ' + date + '</div>';
-  h += '<div class="fm-group"><label>🏪 Dealer</label><select id="vp_dealer" class="fm-input">';
+  var h = '<div style="max-width:440px">';
+  h += '<div style="text-align:center;font-weight:700;margin-bottom:10px">📅 ' + fDShort(date) + '</div>';
+
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+  h += '<button type="button" id="vp_src_dealer_btn" class="btn bsm ' + (sourceType === 'dealer' ? 'bp' : 'bo') + '" style="flex:1" onclick="vpSetSourceType(\'dealer\')">🏢 Dealer ที่มีอยู่</button>';
+  h += '<button type="button" id="vp_src_lead_btn" class="btn bsm ' + (sourceType === 'lead' ? 'bp' : 'bo') + '" style="flex:1" onclick="vpSetSourceType(\'lead\')">🆕 Lead ใหม่</button>';
+  h += '</div>';
+  h += '<input type="hidden" id="vp_source_type" value="' + sourceType + '">';
+
+  h += '<div class="fm-group"><label>📝 หัวข้อนัด</label><input type="text" id="vp_title" class="fm-input" value="' + sanitize(selTitle) + '" placeholder="เช่น เสนอราคา Matrice 4E"></div>';
+
+  // โซน Dealer
+  h += '<div id="vp_dealer_zone" style="' + (sourceType === 'dealer' ? '' : 'display:none') + '">';
+  h += '<div class="fm-group"><label>🏪 Dealer</label><select id="vp_dealer" class="fm-input" onchange="vpDealerPicked()">';
   h += '<option value="">-- เลือก --</option>';
   dealers.forEach(function(d) {
-    h += '<option value="' + d.id + '"' + (selDealer === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>';
+    h += '<option value="' + d.id + '"' +
+      ' data-contact="' + sanitize(d.contact || '') + '" data-phone="' + sanitize(d.phone || '') + '" data-email="' + sanitize(d.email || '') + '" data-map="' + sanitize(d.googleMap || '') + '"' +
+      (selDealer === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>';
   });
   h += '</select></div>';
-  h += '<div class="fm-group"><label>📍 Mode</label><select id="vp_mode" class="fm-input">';
+  h += '<div id="vp_dealer_preview" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>';
+  h += '</div>';
+
+  // โซน Lead (กรอกเอง)
+  h += '<div id="vp_lead_zone" style="' + (sourceType === 'lead' ? '' : 'display:none') + '">';
+  h += '<div class="fm-group"><label>🏢 ชื่อบริษัท</label><input type="text" id="vp_company" class="fm-input" value="' + sanitize(plan ? (plan.companyName || '') : '') + '"></div>';
+  h += '<div class="fr"><div class="fg"><label>👤 ผู้ติดต่อ</label><input type="text" id="vp_contact" class="fm-input" value="' + sanitize(plan ? (plan.contactName || '') : '') + '"></div>';
+  h += '<div class="fg"><label>📞 เบอร์</label><input type="text" id="vp_phone" class="fm-input" value="' + sanitize(plan ? (plan.phone || '') : '') + '"></div></div>';
+  h += '<div class="fr"><div class="fg"><label>✉️ อีเมล</label><input type="email" id="vp_email" class="fm-input" value="' + sanitize(plan ? (plan.email || '') : '') + '"></div>';
+  h += '<div class="fg"><label>📍 Location</label><input type="text" id="vp_location" class="fm-input" value="' + sanitize(plan ? (plan.location || '') : '') + '" placeholder="ที่อยู่ หรือลิงก์ Google Map"></div></div>';
+  h += '</div>';
+
+  h += '<div class="fm-group"><label>📍 รูปแบบนัด</label><select id="vp_mode" class="fm-input">';
   h += '<option value="offline"' + (selMode === 'offline' ? ' selected' : '') + '>🤝 Offline (เข้าพบ)</option>';
   h += '<option value="online"' + (selMode === 'online' ? ' selected' : '') + '>📞 Online (โทร/VDO Call)</option>';
   h += '</select></div>';
@@ -3846,39 +4014,71 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   if (editId) h += '<button class="btn bd" onclick="removeVisitPlan(\'' + editId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
-  openM(editId ? '✏️ แก้ไขแผน Visit' : '➕ วางแผน Visit', h);
+  openM(editId ? '✏️ แก้ไขแผนนัด' : '➕ วางแผนนัดใหม่', h);
+
+  setTimeout(vpDealerPicked, 50);
+}
+
+function vpSetSourceType(type) {
+  document.getElementById('vp_source_type').value = type;
+  document.getElementById('vp_src_dealer_btn').className = 'btn bsm ' + (type === 'dealer' ? 'bp' : 'bo');
+  document.getElementById('vp_src_lead_btn').className = 'btn bsm ' + (type === 'lead' ? 'bp' : 'bo');
+  document.getElementById('vp_dealer_zone').style.display = type === 'dealer' ? '' : 'none';
+  document.getElementById('vp_lead_zone').style.display = type === 'lead' ? '' : 'none';
+}
+
+// โชว์ preview ข้อมูลผู้ติดต่อของ Dealer ที่เลือก (ดึงสดจากข้อมูล Dealer เสมอ ไม่ copy ลงแผน)
+function vpDealerPicked() {
+  var sel = document.getElementById('vp_dealer');
+  var prev = document.getElementById('vp_dealer_preview');
+  if (!sel || !prev) return;
+  if (!sel.value) { prev.innerHTML = ''; return; }
+  var opt = sel.options[sel.selectedIndex];
+  var lines = [];
+  if (opt.getAttribute('data-contact')) lines.push('👤 ' + opt.getAttribute('data-contact'));
+  if (opt.getAttribute('data-phone')) lines.push('📞 ' + opt.getAttribute('data-phone'));
+  if (opt.getAttribute('data-email')) lines.push('✉️ ' + opt.getAttribute('data-email'));
+  if (opt.getAttribute('data-map')) lines.push('📍 ' + opt.getAttribute('data-map'));
+  prev.innerHTML = lines.length ? ('💡 ดึงจากข้อมูล Dealer: ' + lines.join(' · ')) : '<span style="color:#f59e0b">⚠️ Dealer นี้ยังไม่มีข้อมูลผู้ติดต่อ — แก้ไขเพิ่มได้ที่หน้า Dealer</span>';
 }
 
 function saveVisitPlan(date, editId) {
-  var dealerId = document.getElementById('vp_dealer').value || '';
+  var sourceType = document.getElementById('vp_source_type').value || 'dealer';
+  var title = (document.getElementById('vp_title').value || '').trim();
   var mode = document.getElementById('vp_mode').value || 'offline';
   var taskId = document.getElementById('vp_task') ? document.getElementById('vp_task').value : '';
   var note = (document.getElementById('vp_note').value || '').trim();
 
-  if (!dealerId && !note) { toast('เลือก Dealer หรือใส่หมายเหตุ'); return; }
+  var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note };
+
+  if (sourceType === 'dealer') {
+    var dealerId = document.getElementById('vp_dealer').value || '';
+    if (!dealerId && !note && !title) { toast('เลือก Dealer หรือใส่หัวข้อนัด/หมายเหตุ'); return; }
+    data.dealerId = dealerId;
+  } else {
+    var company = (document.getElementById('vp_company').value || '').trim();
+    if (!company) { toast('กรุณาใส่ชื่อบริษัท (Lead)'); return; }
+    data.dealerId = '';
+    data.companyName = company;
+    data.contactName = (document.getElementById('vp_contact').value || '').trim();
+    data.phone = (document.getElementById('vp_phone').value || '').trim();
+    data.email = (document.getElementById('vp_email').value || '').trim();
+    data.location = (document.getElementById('vp_location').value || '').trim();
+  }
 
   var plans = getVisitPlans();
 
   if (editId) {
     for (var i = 0; i < plans.length; i++) {
       if (plans[i].id === editId) {
-        plans[i].date = date;
-        plans[i].dealerId = dealerId;
-        plans[i].mode = mode;
-        plans[i].taskId = taskId;
-        plans[i].note = note;
+        plans[i] = Object.assign({}, plans[i], data);
         break;
       }
     }
   } else {
-    plans.push({
-      id: 'vp_' + Date.now(),
-      date: date,
-      dealerId: dealerId,
-      mode: mode,
-      taskId: taskId,
-      note: note
-    });
+    data.id = 'vp_' + Date.now();
+    data.status = 'planned';
+    plans.push(data);
   }
 
   saveVisitPlans(plans);
@@ -3890,17 +4090,19 @@ function saveVisitPlan(date, editId) {
 function removeVisitPlan(planId) {
   var plans = getVisitPlans().filter(function(p) { return p.id !== planId; });
   saveVisitPlans(plans);
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('visitPlans', planId);
   toast('🗑️ ลบแล้ว');
   render();
 }
 
+// เปิด Visit Report เต็มรูปแบบสำหรับนัดที่ผูกกับ Dealer — ตั้ง flag ไว้ก่อน พอบันทึก Visit สำเร็จจะ
+// ผูกผลกลับมาที่แผนนัดนี้อัตโนมัติ (ดู vpMarkPlanActualFromVisit ที่ถูกเรียกจาก modals.js)
 function vpGoVisit(planId) {
-  var plans = getVisitPlans();
-  var plan = null;
-  for (var i = 0; i < plans.length; i++) {
-    if (plans[i].id === planId) { plan = plans[i]; break; }
-  }
+  var plan = ST.getOne('visitPlans', planId);
   if (!plan) return;
+  if (!plan.dealerId) { toast('นัดนี้ไม่มี Dealer ผูกอยู่ — ใช้ปุ่ม "บันทึกผลการนัด" แทน'); return; }
+
+  window._vpLinkPlanId = planId;
 
   if (typeof showVisitM === 'function') {
     showVisitM(plan.dealerId || '');
@@ -3911,6 +4113,66 @@ function vpGoVisit(planId) {
   } else {
     toast('ฟังก์ชัน Visit Form ไม่พบ');
   }
+}
+
+// เรียกจาก modals.js หลังบันทึก Visit สำเร็จ — ผูกผล Visit กลับเข้าแผนนัดที่เปิดมาจาก vpGoVisit
+function vpMarkPlanActualFromVisit(visitId) {
+  if (!window._vpLinkPlanId) return;
+  var planId = window._vpLinkPlanId;
+  window._vpLinkPlanId = null;
+  ST.update('visitPlans', planId, { status: 'done', visitId: visitId });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+}
+
+// บันทึกผลการนัดแบบย่อสำหรับ Lead (ไม่มี Dealer ให้ผูก Visit Report เต็มรูปแบบ)
+function showVpLeadActualM(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  var h = '<div style="max-width:380px">';
+  h += '<div style="font-weight:700;margin-bottom:10px">' + sanitize(plan.title || plan.companyName || '-') + '</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+  h += '<button class="btn bsm" style="flex:1;background:#22c55e;color:#fff" onclick="saveVpLeadActual(\'' + planId + '\',\'attended\')">✅ ไปตามนัด</button>';
+  h += '<button class="btn bsm bo" style="flex:1" onclick="saveVpLeadActual(\'' + planId + '\',\'rescheduled\')">📅 เลื่อนนัด</button>';
+  h += '<button class="btn bsm bo" style="flex:1" onclick="saveVpLeadActual(\'' + planId + '\',\'cancelled\')">❌ ยกเลิก</button>';
+  h += '</div>';
+  h += '<div class="fm-group"><label>📝 บันทึกผลคุย</label><textarea id="vp_actual_note" rows="3" class="fm-input" placeholder="เช่น สนใจ ขอใบเสนอราคา นัดรอบ 2 สัปดาห์หน้า">' + sanitize((plan.actual && plan.actual.note) || '') + '</textarea></div>';
+  h += '<div class="fm-actions"><button class="btn" onclick="closeM()">ปิด</button></div>';
+  h += '</div>';
+  openM('📍 บันทึกผลการนัด (Lead)', h);
+}
+
+function saveVpLeadActual(planId, status) {
+  var note = (document.getElementById('vp_actual_note').value || '').trim();
+  ST.update('visitPlans', planId, {
+    status: status === 'attended' ? 'done' : status,
+    actual: { status: status, note: note, date: _td() }
+  });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  closeMForce();
+  toast('💾 บันทึกผลแล้ว');
+  render();
+}
+
+// แปลง Lead ในแผนนัดให้เป็น Dealer จริงในระบบ — เปิดฟอร์ม Dealer เปล่าแล้ว prefill ข้อมูลจาก Lead ให้
+function vpConvertLeadToDealer(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan || plan.sourceType !== 'lead') return;
+  if (typeof showDealerM !== 'function') { toast('ฟังก์ชันเพิ่ม Dealer ไม่พบ'); return; }
+  showDealerM();
+  setTimeout(function() {
+    var nameEl = document.getElementById('fd_name');
+    var contactEl = document.getElementById('fd_contact');
+    var mapEl = document.getElementById('fd_map');
+    if (nameEl) nameEl.value = plan.companyName || '';
+    if (contactEl) {
+      var lines = [];
+      if (plan.contactName) lines.push(plan.contactName);
+      if (plan.phone) lines.push('โทร ' + plan.phone);
+      if (plan.email) lines.push('อีเมล ' + plan.email);
+      contactEl.value = lines.join(' / ');
+    }
+    if (mapEl && /^https?:\/\//.test(plan.location || '')) mapEl.value = plan.location;
+  }, 80);
 }
 
 function copyVisitPlan() {
@@ -3932,9 +4194,12 @@ function copyVisitPlan() {
     t += dayNames[di] + ' (' + dayKey + '):\n';
     if (dayPlans.length) {
       dayPlans.forEach(function(p) {
-        var dd = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-        t += '  ' + (p.mode === 'offline' ? '🤝' : '📞') + ' ' + (dd ? dd.name : (p.note || '-'));
-        if (p.note && dd) t += ' — ' + p.note;
+        var isLead = p.sourceType === 'lead';
+        var dd = (!isLead && p.dealerId) ? ST.getOne('dealers', p.dealerId) : null;
+        var company = isLead ? (p.companyName || '-') : (dd ? dd.name : (p.note || '-'));
+        t += '  ' + (p.mode === 'offline' ? '🤝' : '📞') + ' ' + (p.title || company);
+        if (p.title) t += ' (' + company + ')';
+        if (p.note) t += ' — ' + p.note;
         t += '\n';
       });
     } else {
@@ -3951,7 +4216,7 @@ function fmtDateKey(date) {
   var d = date.getDate();
   var m = date.getMonth() + 1;
   var y = date.getFullYear();
-  return (d < 10 ? '0' + d : d) + '/' + (m < 10 ? '0' + m : m) + '/' + y;
+  return y + '-' + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d);
 }
 // ================================================================
 // SMART FILTER PAGE
