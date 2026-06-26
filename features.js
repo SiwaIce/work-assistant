@@ -3676,6 +3676,34 @@ function _vpNormalizeDate(s) {
   return s;
 }
 
+// แปลง "HH:MM" เป็นนาที — ไว้เทียบช่วงเวลาว่าทับซ้อนกันไหม
+function _vpTimeToMin(t) {
+  if (!t) return null;
+  var p = t.split(':');
+  return parseInt(p[0], 10) * 60 + (parseInt(p[1], 10) || 0);
+}
+// ถ้าไม่ได้ระบุเวลาสิ้นสุด ใช้ default เริ่ม+30 นาทีสำหรับเช็คชนเวลา
+function _vpEffEndMin(start, end) {
+  var s = _vpTimeToMin(start), e = _vpTimeToMin(end);
+  return e == null ? (s == null ? null : s + 30) : e;
+}
+// หานัดอื่นในวันเดียวกันที่เวลาทับซ้อนกัน (ข้ามนัดที่ไม่ได้ระบุเวลา)
+function vpFindConflicts(date, timeStart, timeEnd, excludeId) {
+  var s1 = _vpTimeToMin(timeStart);
+  if (s1 == null) return [];
+  var e1 = _vpEffEndMin(timeStart, timeEnd);
+  return getVisitPlans().filter(function(p) {
+    if (p.date !== date || p.id === excludeId || !p.timeStart) return false;
+    var s2 = _vpTimeToMin(p.timeStart), e2 = _vpEffEndMin(p.timeStart, p.timeEnd);
+    return s1 < e2 && s2 < e1;
+  });
+}
+function _vpPlanLabel(p) {
+  var isLead = p.sourceType === 'lead';
+  var dd = (!isLead && p.dealerId) ? ST.getOne('dealers', p.dealerId) : null;
+  return p.title || (isLead ? p.companyName : (dd ? dd.name : '')) || '-';
+}
+
 function rVisitPlan(el) {
   document.getElementById('pgT').textContent = '📅 Visit Planning';
 
@@ -3825,17 +3853,27 @@ function renderVpMonthView() {
 
   for (var day = 1; day <= daysInMonth; day++) {
     var dKey = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-    var dayPlans = plans.filter(function(p) { return p.date === dKey; });
-    var offCount = dayPlans.filter(function(p) { return p.mode === 'offline'; }).length;
-    var onCount = dayPlans.filter(function(p) { return p.mode === 'online'; }).length;
+    var dayPlans = plans.filter(function(p) { return p.date === dKey; }).sort(function(a, b) {
+      var ta = _vpTimeToMin(a.timeStart), tb = _vpTimeToMin(b.timeStart);
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return ta - tb;
+    });
     var isToday = dKey === todayKey;
     var isSelected = dKey === vpSelectedDay;
 
     h += '<div onclick="vpSelectedDay=\'' + dKey + '\';render()" style="background:var(--card,#1e293b);border-radius:8px;padding:6px;min-height:54px;font-size:10px;cursor:pointer;' +
       (isSelected ? 'border:1px solid var(--accent)' : (isToday ? 'border:1px solid #f59e0b' : 'border:1px solid transparent')) + '">';
     h += '<div style="color:' + (isToday ? '#f59e0b' : 'var(--text)') + ';font-weight:' + (isToday ? '700' : '400') + '">' + day + '</div>';
-    if (offCount) h += '<div style="margin-top:3px;font-size:9px;color:#f59e0b">🤝 ' + offCount + '</div>';
-    if (onCount) h += '<div style="font-size:9px;color:#3b82f6">📞 ' + onCount + '</div>';
+    var maxShow = 2;
+    dayPlans.slice(0, maxShow).forEach(function(p) {
+      var hasConflict = vpFindConflicts(p.date, p.timeStart, p.timeEnd, p.id).length > 0;
+      var c = hasConflict ? '#ef4444' : (p.mode === 'offline' ? '#f59e0b' : '#3b82f6');
+      h += '<div style="margin-top:2px;font-size:9px;color:' + c + ';border-left:2px solid ' + c + ';padding-left:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        (p.mode === 'offline' ? '🤝' : '📞') + (p.timeStart ? ' ' + p.timeStart : '') + ' ' + sanitize(_vpPlanLabel(p)) + (hasConflict ? ' ⚠️' : '') + '</div>';
+    });
+    if (dayPlans.length > maxShow) h += '<div style="font-size:9px;color:var(--text2);margin-top:2px">+' + (dayPlans.length - maxShow) + ' เพิ่มเติม</div>';
     h += '</div>';
   }
   h += '</div>';
@@ -3843,21 +3881,31 @@ function renderVpMonthView() {
   var selKey = vpSelectedDay || todayKey;
   var selDate = new Date(selKey);
   var selDayName = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'][selDate.getDay()];
-  var selPlans = plans.filter(function(p) { return p.date === selKey; });
+  var selPlans = plans.filter(function(p) { return p.date === selKey; }).sort(function(a, b) {
+    var ta = _vpTimeToMin(a.timeStart), tb = _vpTimeToMin(b.timeStart);
+    if (ta == null && tb == null) return 0;
+    if (ta == null) return 1;
+    if (tb == null) return -1;
+    return ta - tb;
+  });
 
   h += '<div style="font-size:12px;font-weight:700;margin-bottom:8px">📅 ' + selDayName + ' ' + fDShort(selKey) + (selKey === todayKey ? ' (วันนี้)' : '') + ' — ' + selPlans.length + ' นัด</div>';
 
   if (!selPlans.length) {
     h += '<div class="vp-empty">ยังไม่มีนัดวันนี้ — กด "➕ นัดใหม่" ด้านบนได้เลย</div>';
   } else {
-    selPlans.forEach(function(p) { h += vpPlanCardHtml(p, true); });
+    selPlans.forEach(function(p) {
+      var conflicts = vpFindConflicts(p.date, p.timeStart, p.timeEnd, p.id);
+      h += vpPlanCardHtml(p, true, conflicts);
+    });
   }
 
   return h;
 }
 
 // การ์ดนัด 1 รายการ — ใช้ทั้งใน week view (ย่อ) และ month-day-detail (เต็ม fullDetail=true)
-function vpPlanCardHtml(p, fullDetail) {
+// conflicts: array ของนัดอื่นที่เวลาทับซ้อนกัน (คำนวณจาก vpFindConflicts ก่อนเรียก)
+function vpPlanCardHtml(p, fullDetail, conflicts) {
   var isLead = p.sourceType === 'lead';
   var dd = (!isLead && p.dealerId) ? ST.getOne('dealers', p.dealerId) : null;
   var company = isLead ? (p.companyName || '-') : (dd ? dd.name : (p.note || '-'));
@@ -3865,13 +3913,15 @@ function vpPlanCardHtml(p, fullDetail) {
   var phone = isLead ? p.phone : (dd ? (dd.phone || '') : '');
   var email = isLead ? p.email : (dd ? (dd.email || '') : '');
   var location = isLead ? p.location : (dd ? (dd.googleMap || '') : '');
+  var timeLabel = p.timeStart ? (p.timeStart + (p.timeEnd ? '–' + p.timeEnd : '')) : '';
+  var hasConflict = conflicts && conflicts.length > 0;
 
   if (!fullDetail) {
-    // week view — แบบย่อเหมือนเดิม แต่เพิ่มหัวข้อนัด/badge สถานะ
-    var h = '<div class="vp-item' + (p.status === 'done' ? ' vp-actual' : '') + '">';
+    // week view — แบบย่อเหมือนเดิม แต่เพิ่มเวลา/หัวข้อนัด/badge สถานะ
+    var h = '<div class="vp-item' + (p.status === 'done' ? ' vp-actual' : '') + '"' + (hasConflict ? ' style="border-left:2px solid #ef4444"' : '') + '>';
     h += '<span class="vp-item-icon">' + (p.mode === 'offline' ? '🤝' : '📞') + '</span>';
     h += '<div class="vp-item-info">';
-    h += '<div class="vp-item-dealer">' + sanitize(p.title || company) + '</div>';
+    h += '<div class="vp-item-dealer">' + (timeLabel ? '<span style="color:var(--text2)">' + timeLabel + '</span> ' : '') + sanitize(p.title || company) + (hasConflict ? ' ⚠️' : '') + '</div>';
     h += '<div class="vp-item-note">🏢 ' + sanitize(company) + (isLead ? ' 🆕' : '') + '</div>';
     if (p.status === 'done') h += '<div class="vp-item-note" style="color:#22c55e">✅ บันทึกผลแล้ว</div>';
     h += '</div>';
@@ -3894,13 +3944,17 @@ function vpPlanCardHtml(p, fullDetail) {
     '<span style="background:rgba(239,68,68,.15);color:#f87171;padding:1px 6px;border-radius:5px;font-size:9px">🆕 Lead ใหม่</span>' :
     '<span style="background:rgba(59,130,246,.15);color:#60a5fa;padding:1px 6px;border-radius:5px;font-size:9px">Dealer ปัจจุบัน</span>';
 
-  var borderColor = p.status === 'done' ? 'rgba(34,197,94,.4)' : (p.mode === 'offline' ? '#f59e0b' : '#3b82f6');
+  var borderColor = hasConflict ? '#ef4444' : (p.status === 'done' ? 'rgba(34,197,94,.4)' : (p.mode === 'offline' ? '#f59e0b' : '#3b82f6'));
 
   var h2 = '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-left:3px solid ' + borderColor + ';border-radius:10px;padding:12px;margin-bottom:8px">';
   h2 += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">';
-  h2 += '<span style="font-size:13px;font-weight:700">' + sanitize(p.title || company) + '</span>';
+  h2 += '<span style="font-size:13px;font-weight:700">' + (timeLabel ? '🕐 ' + timeLabel + ' · ' : '') + sanitize(p.title || company) + '</span>';
   h2 += '<span>' + modeBadge + statusBadge + '</span>';
   h2 += '</div>';
+  if (hasConflict) {
+    h2 += '<div style="background:rgba(239,68,68,.15);border-left:3px solid #ef4444;border-radius:0;padding:6px 8px;font-size:11px;color:#f87171;margin-bottom:8px">⚠️ ชนเวลากับ: ' +
+      conflicts.map(function(c) { return sanitize(_vpPlanLabel(c)) + ' (' + c.timeStart + (c.timeEnd ? '–' + c.timeEnd : '') + ')'; }).join(', ') + '</div>';
+  }
   h2 += '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text2);margin-bottom:8px">';
   h2 += '<span>🏢 <span style="color:var(--text)">' + sanitize(company) + '</span> ' + sourceBadge + '</span>';
   if (contact) h2 += '<span>👤 <span style="color:var(--text)">' + sanitize(contact) + '</span></span>';
@@ -3997,6 +4051,10 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   h += '<option value="online"' + (selMode === 'online' ? ' selected' : '') + '>📞 Online (โทร/VDO Call)</option>';
   h += '</select></div>';
 
+  h += '<div class="fr"><div class="fg"><label>🕐 เวลาเริ่ม</label><input type="time" id="vp_time_start" class="fm-input" value="' + sanitize(plan ? (plan.timeStart || '') : '') + '" oninput="vpCheckTimeConflict(\'' + date + '\',\'' + (editId || '') + '\')"></div>';
+  h += '<div class="fg"><label>🕐 เวลาสิ้นสุด</label><input type="time" id="vp_time_end" class="fm-input" value="' + sanitize(plan ? (plan.timeEnd || '') : '') + '" oninput="vpCheckTimeConflict(\'' + date + '\',\'' + (editId || '') + '\')"></div></div>';
+  h += '<div id="vp_time_conflict_warning"></div>';
+
   h += '<div class="fm-group"><label>📋 งานที่เกี่ยวข้อง (ถ้ามี)</label><select id="vp_task" class="fm-input">';
   h += '<option value="">-- ไม่ระบุ --</option>';
   var tasks = [];
@@ -4017,6 +4075,20 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   openM(editId ? '✏️ แก้ไขแผนนัด' : '➕ วางแผนนัดใหม่', h);
 
   setTimeout(vpDealerPicked, 50);
+  setTimeout(function() { vpCheckTimeConflict(date, editId || ''); }, 50);
+}
+
+// เช็คชนเวลาแบบสด — เรียกตอนแก้ช่องเวลาเริ่ม/สิ้นสุดในฟอร์ม
+function vpCheckTimeConflict(date, editId) {
+  var box = document.getElementById('vp_time_conflict_warning');
+  var startEl = document.getElementById('vp_time_start');
+  if (!box || !startEl) return;
+  var timeStart = startEl.value || '';
+  var timeEnd = document.getElementById('vp_time_end') ? document.getElementById('vp_time_end').value : '';
+  var conflicts = vpFindConflicts(date, timeStart, timeEnd, editId);
+  if (!conflicts.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="background:rgba(239,68,68,.15);border-left:3px solid #ef4444;border-radius:0;padding:6px 8px;font-size:11px;color:#f87171;margin-bottom:8px">⚠️ ชนกับ: ' +
+    conflicts.map(function(c) { return sanitize(_vpPlanLabel(c)) + ' (' + c.timeStart + (c.timeEnd ? '–' + c.timeEnd : '') + ')'; }).join(', ') + '</div>';
 }
 
 function vpSetSourceType(type) {
@@ -4048,8 +4120,10 @@ function saveVisitPlan(date, editId) {
   var mode = document.getElementById('vp_mode').value || 'offline';
   var taskId = document.getElementById('vp_task') ? document.getElementById('vp_task').value : '';
   var note = (document.getElementById('vp_note').value || '').trim();
+  var timeStart = document.getElementById('vp_time_start') ? document.getElementById('vp_time_start').value : '';
+  var timeEnd = document.getElementById('vp_time_end') ? document.getElementById('vp_time_end').value : '';
 
-  var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note };
+  var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note, timeStart: timeStart, timeEnd: timeEnd };
 
   if (sourceType === 'dealer') {
     var dealerId = document.getElementById('vp_dealer').value || '';
@@ -4197,7 +4271,7 @@ function copyVisitPlan() {
         var isLead = p.sourceType === 'lead';
         var dd = (!isLead && p.dealerId) ? ST.getOne('dealers', p.dealerId) : null;
         var company = isLead ? (p.companyName || '-') : (dd ? dd.name : (p.note || '-'));
-        t += '  ' + (p.mode === 'offline' ? '🤝' : '📞') + ' ' + (p.title || company);
+        t += '  ' + (p.mode === 'offline' ? '🤝' : '📞') + (p.timeStart ? ' ' + p.timeStart + (p.timeEnd ? '–' + p.timeEnd : '') : '') + ' ' + (p.title || company);
         if (p.title) t += ' (' + company + ')';
         if (p.note) t += ' — ' + p.note;
         t += '\n';
