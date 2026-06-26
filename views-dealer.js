@@ -1773,7 +1773,9 @@ function dealerOnboardTab(d) {
     ' <span class="ml">' +
     '<button class="btn bsm bo" onclick="resetOnboarding(\'' + d.id + '\')">🔄 Reset</button>' +
     '</span></h2>' +
-    
+
+    renderOnboardSummaryStrip(onboardSteps, currentIdx) +
+
     '<div class="ob-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;width:100%">' +
     '<div class="ob-summary-card" style="width:100%"><div class="val c2">' + done + '</div><div class="lbl">เสร็จแล้ว</div></div>' +
     '<div class="ob-summary-card" style="width:100%"><div class="val c3">' + (total - done) + '</div><div class="lbl">เหลือ</div></div>' +
@@ -1800,6 +1802,27 @@ function dealerOnboardTab(d) {
   
   html += '</div>';
   return html;
+}
+
+// summary strip แนวนอน — ดูภาพรวมเฉยๆ กดไม่ได้ (เช็คลิสต์จริงกดติ๊ก/ใส่วันที่/โน้ตอยู่ด้านล่างเหมือนเดิม)
+// ใช้แค่ steps กลุ่ม "onboard" (ไม่รวม "after") เพื่อให้ strip กระชับ ไม่ปนกับขั้นตอนหลัง Onboard
+function renderOnboardSummaryStrip(onboardSteps, currentIdx) {
+  if (!onboardSteps.length) return '';
+  var h = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 12px;margin-bottom:4px">';
+  for (var i = 0; i < onboardSteps.length; i++) {
+    var idx = onboardSteps[i].idx;
+    var step = onboardSteps[i].step;
+    var state = step.done ? 'done' : (idx === currentIdx ? 'current' : 'todo');
+    var bg = state === 'done' ? '#22c55e' : state === 'current' ? 'var(--accent,#3b82f6)' : 'var(--border,#334155)';
+    var fg = state === 'done' ? '#06210f' : state === 'current' ? '#fff' : 'var(--text2,#94a3b8)';
+    h += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:64px" title="' + sanitize(step.title) + '">';
+    h += '<div style="width:24px;height:24px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">' + (state === 'done' ? '✓' : (i + 1)) + '</div>';
+    h += '<div style="font-size:8.5px;color:' + (state === 'current' ? 'var(--text)' : 'var(--text2)') + ';font-weight:' + (state === 'current' ? '700' : '400') + ';margin-top:3px;text-align:center;white-space:nowrap;max-width:64px;overflow:hidden;text-overflow:ellipsis">' + sanitize(step.title) + '</div>';
+    h += '</div>';
+    if (i < onboardSteps.length - 1) h += '<div style="flex:1;min-width:14px;height:2px;background:' + (step.done ? '#22c55e' : 'var(--border,#334155)') + ';margin-top:11px"></div>';
+  }
+  h += '</div>';
+  return h;
 }
 
 function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {

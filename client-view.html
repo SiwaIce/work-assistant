@@ -2594,6 +2594,38 @@ function getPipeStatusName(statusId) {
   return s ? s.name : (statusId || '-');
 }
 
+// step tracker แนวนอน แทน dropdown สถานะเดิม — กดจุดไหนก็เปลี่ยนสถานะ (เขียนค่าลง #editStatus ที่ซ่อนไว้)
+// on_hold/lost ไม่ใช่ progression ปกติ แยกเป็น pill มุมขวาเหมือน "ปิด Lead" ในหน้า Prospect ของแอปหลัก
+function pipeStatusTrackerHtml(currentStatus) {
+  var mainFlow = STATUS_LIST.filter(function(s) { return s.id !== 'on_hold' && s.id !== 'lost'; });
+  var idx = mainFlow.findIndex(function(s) { return s.id === currentStatus; });
+  var h = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 8px">';
+  mainFlow.forEach(function(s, i) {
+    var state = idx < 0 ? 'todo' : (i < idx ? 'done' : (i === idx ? 'current' : 'todo'));
+    var bg = state === 'done' ? '#22c55e' : state === 'current' ? 'var(--accent,#3b82f6)' : 'var(--border,#334155)';
+    var fg = state === 'done' ? '#06210f' : state === 'current' ? '#fff' : 'var(--text2,#94a3b8)';
+    h += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:56px;cursor:pointer" onclick="setEditStatus(\'' + s.id + '\')" title="' + esc(s.name) + '">';
+    h += '<div style="width:24px;height:24px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">' + (state === 'done' ? '✓' : (i + 1)) + '</div>';
+    h += '<div style="font-size:8.5px;color:' + (state === 'current' ? 'var(--text)' : 'var(--text2)') + ';font-weight:' + (state === 'current' ? '700' : '400') + ';margin-top:3px;text-align:center;white-space:nowrap">' + esc(s.name) + '</div>';
+    h += '</div>';
+    if (i < mainFlow.length - 1) h += '<div style="flex:1;min-width:14px;height:2px;background:' + (idx >= 0 && i < idx ? '#22c55e' : 'var(--border,#334155)') + ';margin-top:11px"></div>';
+  });
+  h += '</div>';
+  var isOnHold = currentStatus === 'on_hold', isLost = currentStatus === 'lost';
+  h += '<div style="display:flex;gap:6px;justify-content:flex-end">';
+  h += '<span onclick="setEditStatus(\'on_hold\')" style="cursor:pointer;background:' + (isOnHold ? 'rgba(148,163,184,.35)' : 'rgba(148,163,184,.15)') + ';color:#94a3b8;font-size:10px;padding:3px 9px;border-radius:6px">⏸️ On Hold</span>';
+  h += '<span onclick="setEditStatus(\'lost\')" style="cursor:pointer;background:' + (isLost ? 'rgba(239,68,68,.35)' : 'rgba(239,68,68,.15)') + ';color:#f87171;font-size:10px;padding:3px 9px;border-radius:6px">❌ Lost</span>';
+  h += '</div>';
+  return h;
+}
+
+function setEditStatus(statusId) {
+  var sel = document.getElementById('editStatus');
+  if (sel) sel.value = statusId;
+  var wrap = document.getElementById('pipeStatusTrackerWrap');
+  if (wrap) wrap.innerHTML = pipeStatusTrackerHtml(statusId);
+}
+
 function renderPipeTimeline(container, events, currentData) {
   if (!events.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div style="margin-top:8px">ยังไม่มีประวัติการอัพเดท</div><div class="hint" style="margin-top:4px">เมื่อคุณหรือพนักงานขายอัพเดทโครงการ ประวัติจะแสดงที่นี่</div></div>';
@@ -2809,7 +2841,7 @@ function showUpdateModal(pipeId) {
     '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>' +
     '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="editAgencyMain" class="form-control" value="' + esc(p.agencyMain || '') + '" placeholder="กรม/กระทรวง"></div>' +
     '<div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="editAgencySub" class="form-control" value="' + esc(p.agencySub || '') + '" placeholder="กอง/สำนัก"></div></div>' +
-    '<div class="form-group"><label>📊 สถานะ</label><select id="editStatus" class="form-control">' + statusOptions + '</select></div>' +
+    '<div class="form-group"><label>📊 สถานะ</label><div id="pipeStatusTrackerWrap">' + pipeStatusTrackerHtml(p.status) + '</div><select id="editStatus" class="form-control" style="display:none">' + statusOptions + '</select></div>' +
     '<div class="form-row">' +
     '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editBiddingDate" class="form-control" value="' + (biddingDateVal ? fD(biddingDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editBiddingDate\',\'editBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'editBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
     '<div class="form-group"><label>🚚 Shipment Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editShipmentDate" class="form-control" value="' + (shipmentDateVal ? fD(shipmentDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editShipmentDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editShipmentDate\',\'editShipmentDatePicker\')"><button type="button" onclick="document.getElementById(\'editShipmentDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
