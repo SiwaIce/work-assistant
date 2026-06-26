@@ -20,6 +20,7 @@ var selectedForecastUpdates = {};
 var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
 var pipeCompareMode = false;
 var pipeCompareSelected = [];
+var pipeCompareThreshold = 40;
 
 // ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
 var PIPE_ACTIVE_STATUSES = ['prospect', 'tor_review', 'quotation', 'bidding', 'negotiation'];
@@ -242,6 +243,78 @@ function pipeCompareBestMatch(p) {
   return best;
 }
 
+// แผงแนะนำคู่/โครงการที่น่าจะชนกัน — ก่อนเลือกโชว์ Top คู่ทั้งระบบ, หลังเลือกแล้วโชว์โครงการที่เข้ากับที่เลือกไว้
+function renderPipeCompareSuggestPanel() {
+  var active = ST.getAll('pipeline').filter(function(p) { return ['lost', 'delivered'].indexOf(p.status) === -1; });
+  var sliderHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.72rem;color:var(--text2)">' +
+    '<span>เกณฑ์คะแนนขั้นต่ำ</span>' +
+    '<input type="range" min="20" max="80" step="10" value="' + pipeCompareThreshold + '" style="width:100px" oninput="pipeCompareThreshold=parseInt(this.value);render()">' +
+    '<strong style="color:var(--text)">' + pipeCompareThreshold + '%</strong></div>';
+
+  var html = '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:10px 12px;margin-bottom:8px">';
+
+  if (pipeCompareSelected.length === 0) {
+    html += '<div style="font-size:.78rem;font-weight:700;margin-bottom:6px">🔥 คู่ที่น่าจะชนกันที่สุด (ทั้งระบบ)</div>' + sliderHtml;
+    var pairs = [];
+    for (var i = 0; i < active.length; i++) {
+      for (var j = i + 1; j < active.length; j++) {
+        if (active[i].dealerId === active[j].dealerId) continue;
+        var sc = pipeMatchScore(active[i], active[j]);
+        if (sc >= pipeCompareThreshold) pairs.push({ a: active[i], b: active[j], score: sc });
+      }
+    }
+    pairs.sort(function(x, y) { return y.score - x.score; });
+    pairs = pairs.slice(0, 8);
+    if (!pairs.length) {
+      html += '<div style="font-size:.72rem;color:var(--text2)">ไม่พบคู่ที่คะแนน ≥ ' + pipeCompareThreshold + '% — ลองลดเกณฑ์ดู</div>';
+    } else {
+      pairs.forEach(function(pr) {
+        var da = ST.getOne('dealers', pr.a.dealerId), db = ST.getOne('dealers', pr.b.dealerId);
+        var color = pr.score >= 60 ? '#ef4444' : '#f59e0b';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border,#334155);font-size:.72rem">' +
+          '<span style="background:' + color + '22;color:' + color + ';font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap">' + pr.score + '%</span>' +
+          '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize((pr.a.projectName || '-').substr(0, 22)) + ' (' + sanitize(da ? da.name : '?') + ') ↔ ' + sanitize((pr.b.projectName || '-').substr(0, 22)) + ' (' + sanitize(db ? db.name : '?') + ')</span>' +
+          '<button class="btn bsm bp" onclick="pipeCompareQuickPick(\'' + pr.a.id + '\',\'' + pr.b.id + '\')">เลือกคู่นี้</button>' +
+          '</div>';
+      });
+    }
+  } else {
+    html += '<div style="font-size:.78rem;font-weight:700;margin-bottom:6px">💡 แนะนำโครงการที่น่าจะเข้ากับที่เลือกไว้</div>' + sliderHtml;
+    var selectedPipes = pipeCompareSelected.map(function(id) { return ST.getOne('pipeline', id); }).filter(Boolean);
+    var candidates = [];
+    active.forEach(function(p) {
+      if (pipeCompareSelected.indexOf(p.id) !== -1) return;
+      var best = null;
+      selectedPipes.forEach(function(sp) {
+        if (sp.dealerId === p.dealerId) return;
+        var sc = pipeMatchScore(sp, p);
+        if (!best || sc > best.score) best = { score: sc, vs: sp };
+      });
+      if (best && best.score >= pipeCompareThreshold) candidates.push({ p: p, score: best.score, vs: best.vs });
+    });
+    candidates.sort(function(x, y) { return y.score - x.score; });
+    candidates = candidates.slice(0, 8);
+    if (pipeCompareSelected.length >= 3) {
+      html += '<div style="font-size:.72rem;color:var(--text2)">เลือกครบ 3 โปรเจคแล้ว — กด "เทียบเลย" ด้านล่างได้เลย</div>';
+    } else if (!candidates.length) {
+      html += '<div style="font-size:.72rem;color:var(--text2)">ไม่พบโครงการที่คะแนน ≥ ' + pipeCompareThreshold + '% กับที่เลือกไว้ — ลองลดเกณฑ์ดู</div>';
+    } else {
+      candidates.forEach(function(c) {
+        var dc = ST.getOne('dealers', c.p.dealerId);
+        var color = c.score >= 60 ? '#ef4444' : '#f59e0b';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border,#334155);font-size:.72rem">' +
+          '<span style="background:' + color + '22;color:' + color + ';font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap">' + c.score + '%</span>' +
+          '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize((c.p.projectName || '-').substr(0, 26)) + ' (' + sanitize(dc ? dc.name : '?') + ')</span>' +
+          '<button class="btn bsm bp" onclick="togglePipeCompareSelect(\'' + c.p.id + '\')">+ เพิ่มเข้าเทียบ</button>' +
+          '</div>';
+      });
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
 function renderPipeCompareBar() {
   var n = pipeCompareSelected.length;
   return '<div style="position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;background:var(--card,#1e293b);border:1px solid #3b82f6;border-radius:10px;padding:10px 14px;margin-top:10px">' +
@@ -441,6 +514,8 @@ function rPipeline(el) {
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()">🃏</button>' +
     '</div>' +
+
+    (pipeCompareMode ? renderPipeCompareSuggestPanel() : '') +
 
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">' +
     '<input type="text" id="pipeSrc" value="' + sanitize(pipeSearch) + '" placeholder="🔍 ค้นหา Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeSearch=this.value;render()" autocomplete="off">' +
