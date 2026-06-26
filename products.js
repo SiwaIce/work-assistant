@@ -444,10 +444,21 @@ function showEditProductModal(productId) {
   
   html += '<div class="fm-actions" style="margin-top:16px">';
   html += '<button class="btn btn-blue" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
+  html += '<button class="btn bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️ ลบสินค้า</button>';
   html += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   html += '</div></div>';
-  
+
   openM('✏️ แก้ไขสินค้า: ' + sanitize(p.name), html);
+}
+
+function deleteProductConfirm(productId) {
+  var p = getProductById(productId);
+  if (!p) return;
+  if (!confirm('🗑️ ลบสินค้า "' + p.name + '" ถาวร?\nถ้าสินค้านี้ถูกใช้อ้างอิงในที่อื่น (เช่น Demo Unit, Pipeline) ข้อมูลเดิมจะยังอยู่แต่จะไม่เชื่อมกับสินค้านี้อีก')) return;
+  deleteProduct(productId);
+  closeMForce();
+  toast('🗑️ ลบสินค้าแล้ว');
+  render();
 }
 
 function saveProductEdit(productId) {
@@ -1291,7 +1302,8 @@ function renderProductsTable(products) {
     html += '<td style="text-align:right">' + (p.typePrices?.B != null ? qcopyHtml(p.typePrices.B) : fmtMoney(p.typePrices?.B)) + '</td>';
     html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
     html += '<td>' + badge + '</td>';
-    html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button></td>';
+    html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button> ' +
+      '<button class="btn bsm bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️</button></td>';
     html += '</tr>';
   }
   tbody.innerHTML = html;
@@ -2135,20 +2147,12 @@ function updateBundle(id) {
 }
 function deleteBundleConfirm(id) { if (confirm('ลบ Bundle นี้?')) { deleteBundle(id); toast('🗑️ ลบแล้ว'); render(); } }
 function showAddDemoUnitM() {
-  // ดึงรายการสินค้าทั้งหมด (ที่ไม่ใช่ Demo) มาให้เลือก
-  var products = getAllProducts();
-  var productOptions = '<option value="">-- เลือกสินค้า (หรือพิมพ์ค้นหา) --</option>';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    // ไม่เลือกสินค้าที่เป็น Demo อยู่แล้ว
-    if (isDemoProduct(p)) continue;
-    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '">' + 
-      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
-  }
-  
   var html = '<div style="max-width:500px">' +
-    '<div class="fg"><label>🔍 เลือกสินค้า</label>' +
-    '<select id="demo_product_id" class="fm-input" onchange="updateDemoPriceFromSelect()">' + productOptions + '</select>' +
+    '<div class="fg"><label>📝 ชื่อสินค้า Demo *</label>' +
+    '<input type="text" id="demo_name" class="fm-input" placeholder="เช่น DJI Matrice 4E (Demo)"></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>🔢 SKU</label><input type="text" id="demo_sku" class="fm-input" placeholder="(ถ้ามี)"></div>' +
+    '<div class="fg"><label>🔢 EAN</label><input type="text" id="demo_ean" class="fm-input" placeholder="(ถ้ามี)"></div>' +
     '</div>' +
     '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
     '<input type="text" inputmode="decimal" id="demo_price" class="fm-input js-money" value="0.00">' +
@@ -2160,53 +2164,29 @@ function showAddDemoUnitM() {
     '<button class="btn btn-blue" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
-  
+
   openM('➕ เพิ่ม Demo Unit', html);
 }
 
-function updateDemoPriceFromSelect() {
-  var select = document.getElementById('demo_product_id');
-  var priceInput = document.getElementById('demo_price');
-  if (select && select.selectedIndex > 0) {
-    var selectedOption = select.options[select.selectedIndex];
-    var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
-    priceInput.value = nmI(price);
-  }
-}
-
 function saveNewDemoUnit() {
-  var productId = document.getElementById('demo_product_id').value;
-  if (!productId) { toast('กรุณาเลือกสินค้า'); return; }
-  
-  var product = getProductById(productId);
-  if (!product) { toast('ไม่พบสินค้า'); return; }
-  
-  var price = parseNum(document.getElementById('demo_price').value) || product.price || 0;
+  var name = document.getElementById('demo_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+
+  var sku = document.getElementById('demo_sku').value.trim();
+  var ean = document.getElementById('demo_ean').value.trim();
+  var price = parseNum(document.getElementById('demo_price').value) || 0;
   var note = document.getElementById('demo_note').value.trim();
-  
-  // ตรวจสอบว่ามี Demo Unit นี้อยู่แล้วหรือไม่
-  var existing = getDemoUnitByProductId(productId);
-  if (existing) {
-    if (!confirm('สินค้านี้มี Demo Unit อยู่แล้ว ต้องการอัปเดตหรือไม่?')) return;
-    updateDemoUnit(existing.id, {
-      price: price,
-      note: note,
-      enabled: true
-    });
-    toast('💾 อัปเดต Demo Unit แล้ว');
-  } else {
-    addDemoUnit({
-      productId: productId,
-      productName: product.name,
-      sku: product.sku || '',
-      ean: product.ean || '',
-      price: price,
-      note: note,
-      enabled: true
-    });
-    toast('✅ เพิ่ม Demo Unit แล้ว');
-  }
-  
+
+  addDemoUnit({
+    productName: name,
+    sku: sku,
+    ean: ean,
+    price: price,
+    note: note,
+    enabled: true
+  });
+  toast('✅ เพิ่ม Demo Unit แล้ว');
+
   closeMForce();
   render();
 }
@@ -2214,20 +2194,13 @@ function saveNewDemoUnit() {
 function editDemoUnit(id) {
   var demo = getDemoUnitById(id);
   if (!demo) { toast('ไม่พบ Demo Unit'); return; }
-  
-  // ดึงรายการสินค้าทั้งหมด
-  var products = getAllProducts();
-  var productOptions = '<option value="">-- เลือกสินค้า --</option>';
-  for (var i = 0; i < products.length; i++) {
-    var p = products[i];
-    var selected = (demo.productId === p.id) ? 'selected' : '';
-    productOptions += '<option value="' + p.id + '" data-name="' + sanitize(p.name) + '" data-price="' + (p.price || 0) + '" ' + selected + '>' + 
-      sanitize(p.name) + ' (' + fmtMoney(p.price) + ')</option>';
-  }
-  
+
   var html = '<div style="max-width:500px">' +
-    '<div class="fg"><label>🔍 สินค้า</label>' +
-    '<select id="edit_demo_product_id" class="fm-input" onchange="editDemoUpdatePrice()">' + productOptions + '</select>' +
+    '<div class="fg"><label>📝 ชื่อสินค้า Demo *</label>' +
+    '<input type="text" id="edit_demo_name" class="fm-input" value="' + sanitize(demo.productName || '') + '"></div>' +
+    '<div class="fr">' +
+    '<div class="fg"><label>🔢 SKU</label><input type="text" id="edit_demo_sku" class="fm-input" value="' + sanitize(demo.sku || '') + '"></div>' +
+    '<div class="fg"><label>🔢 EAN</label><input type="text" id="edit_demo_ean" class="fm-input" value="' + sanitize(demo.ean || '') + '"></div>' +
     '</div>' +
     '<div class="fg"><label>💰 ราคา Demo (฿)</label>' +
     '<input type="text" inputmode="decimal" id="edit_demo_price" class="fm-input js-money" value="' + nmI(demo.price || 0) + '">' +
@@ -2246,43 +2219,29 @@ function editDemoUnit(id) {
     '<button class="btn bd" onclick="deleteDemoUnitConfirm(\'' + id + '\')">🗑️ ลบ</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
-  
+
   openM('✏️ แก้ไข Demo Unit', html);
 }
 
-function editDemoUpdatePrice() {
-  var select = document.getElementById('edit_demo_product_id');
-  var priceInput = document.getElementById('edit_demo_price');
-  if (select && select.selectedIndex > 0) {
-    var selectedOption = select.options[select.selectedIndex];
-    var price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
-    if (parseNum(priceInput.value) === 0) {
-      priceInput.value = nmI(price);
-    }
-  }
-}
-
 function updateDemoUnitFromModal(id) {
-  var productId = document.getElementById('edit_demo_product_id').value;
+  var name = document.getElementById('edit_demo_name').value.trim();
+  if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+
+  var sku = document.getElementById('edit_demo_sku').value.trim();
+  var ean = document.getElementById('edit_demo_ean').value.trim();
   var price = parseNum(document.getElementById('edit_demo_price').value);
   var note = document.getElementById('edit_demo_note').value.trim();
   var enabled = document.getElementById('edit_demo_status').value === 'true';
-  
-  if (!productId) { toast('กรุณาเลือกสินค้า'); return; }
-  
-  var product = getProductById(productId);
-  if (!product) { toast('ไม่พบสินค้า'); return; }
-  
+
   updateDemoUnit(id, {
-    productId: productId,
-    productName: product.name,
-    sku: product.sku || '',
-    ean: product.ean || '',
+    productName: name,
+    sku: sku,
+    ean: ean,
     price: price,
     note: note,
     enabled: enabled
   });
-  
+
   closeMForce();
   toast('💾 อัปเดต Demo Unit แล้ว');
   render();

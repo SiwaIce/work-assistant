@@ -209,6 +209,14 @@ function compareConflict(idA, idB) {
 // ================================================================
 // เทียบ Project แบบเลือกเอง (สูงสุด 3 รายการ) — ไม่พึ่ง auto-detect อย่างเดียว
 // ================================================================
+function pipeCompareSetThreshold(val) {
+  pipeCompareThreshold = Math.max(20, Math.min(80, val));
+  render();
+}
+function pipeCompareStepThreshold(delta) {
+  pipeCompareSetThreshold(pipeCompareThreshold + delta);
+}
+
 function togglePipeCompareMode() {
   pipeCompareMode = !pipeCompareMode;
   if (!pipeCompareMode) pipeCompareSelected = [];
@@ -246,10 +254,17 @@ function pipeCompareBestMatch(p) {
 // แผงแนะนำคู่/โครงการที่น่าจะชนกัน — ก่อนเลือกโชว์ Top คู่ทั้งระบบ, หลังเลือกแล้วโชว์โครงการที่เข้ากับที่เลือกไว้
 function renderPipeCompareSuggestPanel() {
   var active = ST.getAll('pipeline').filter(function(p) { return ['lost', 'delivered'].indexOf(p.status) === -1; });
-  var sliderHtml = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:.72rem;color:var(--text2)">' +
+  var sliderHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:.72rem;color:var(--text2);flex-wrap:wrap">' +
     '<span>เกณฑ์คะแนนขั้นต่ำ</span>' +
-    '<input type="range" min="20" max="80" step="10" value="' + pipeCompareThreshold + '" style="width:100px" oninput="pipeCompareThreshold=parseInt(this.value);render()">' +
-    '<strong style="color:var(--text)">' + pipeCompareThreshold + '%</strong></div>';
+    '<button class="btn bsm bo" style="padding:1px 8px" onclick="pipeCompareStepThreshold(-10)">−</button>' +
+    '<input type="range" min="20" max="80" step="10" value="' + pipeCompareThreshold + '" list="pipeCompareTicks" style="width:100px" oninput="pipeCompareSetThreshold(parseInt(this.value))">' +
+    '<datalist id="pipeCompareTicks"><option value="20"></option><option value="30"></option><option value="40"></option><option value="50"></option><option value="60"></option><option value="70"></option><option value="80"></option></datalist>' +
+    '<button class="btn bsm bo" style="padding:1px 8px" onclick="pipeCompareStepThreshold(10)">+</button>' +
+    '<strong style="color:var(--text);min-width:32px">' + pipeCompareThreshold + '%</strong>' +
+    [20, 40, 60, 80].map(function(v) {
+      return '<button class="btn bsm ' + (pipeCompareThreshold === v ? 'bp' : 'bo') + '" onclick="pipeCompareSetThreshold(' + v + ')">' + v + '%</button>';
+    }).join('') +
+    '</div>';
 
   var html = '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:10px 12px;margin-bottom:8px">';
 

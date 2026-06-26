@@ -139,7 +139,7 @@ function pipeMatchScore(a, b) {
   var bid = 0;
   var da = fcParseDate(a.biddingDate), db = fcParseDate(b.biddingDate);
   if (da && db) { var diff = Math.abs(da - db) / 86400000; bid = diff <= 30 ? 1 : (diff >= 90 ? 0 : 1 - (diff - 30) / 60); }
-  var score = name * 0.35 + eu * 0.25 + am * 0.15 + asb * 0.10 + model * 0.10 + bid * 0.05;
+  var score = name * 0.35 + eu * 0.25 + am * 0.10 + asb * 0.10 + model * 0.15 + bid * 0.05;
   return Math.round(score * 100);
 }
 function getDismissedConflicts() {
