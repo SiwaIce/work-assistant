@@ -18,6 +18,8 @@ var forecastTab = 'pending';
 var selectedForecastUpdates = {};
 
 var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
+var pipeCompareMode = false;
+var pipeCompareSelected = [];
 
 // ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
 var PIPE_ACTIVE_STATUSES = ['prospect', 'tor_review', 'quotation', 'bidding', 'negotiation'];
@@ -203,6 +205,173 @@ function compareConflict(idA, idB) {
   openM('🔍 เทียบงานที่อาจชนกัน', html);
 }
 
+// ================================================================
+// เทียบ Project แบบเลือกเอง (สูงสุด 3 รายการ) — ไม่พึ่ง auto-detect อย่างเดียว
+// ================================================================
+function togglePipeCompareMode() {
+  pipeCompareMode = !pipeCompareMode;
+  if (!pipeCompareMode) pipeCompareSelected = [];
+  render();
+}
+
+function togglePipeCompareSelect(pipeId) {
+  var idx = pipeCompareSelected.indexOf(pipeId);
+  if (idx !== -1) { pipeCompareSelected.splice(idx, 1); }
+  else {
+    if (pipeCompareSelected.length >= 3) { toast('⚠️ เลือกได้สูงสุด 3 โปรเจค'); return; }
+    pipeCompareSelected.push(pipeId);
+  }
+  render();
+}
+
+function pipeCompareQuickPick(idA, idB) {
+  pipeCompareSelected = [idA, idB];
+  render();
+}
+
+// หาคู่ที่คล้ายที่สุด (เจ้าอื่น, ยัง active) ให้แต่ละแถวเป็น guide ตอนเลือก
+function pipeCompareBestMatch(p) {
+  var all = ST.getAll('pipeline').filter(function(x) {
+    return x.id !== p.id && x.dealerId !== p.dealerId && ['lost', 'delivered'].indexOf(x.status) === -1;
+  });
+  var best = null;
+  all.forEach(function(x) {
+    var sc = pipeMatchScore(p, x);
+    if (!best || sc > best.score) best = { score: sc, other: x };
+  });
+  return best;
+}
+
+function renderPipeCompareBar() {
+  var n = pipeCompareSelected.length;
+  return '<div style="position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;background:var(--card,#1e293b);border:1px solid #3b82f6;border-radius:10px;padding:10px 14px;margin-top:10px">' +
+    '<span style="font-size:.78rem">เลือกแล้ว <strong>' + n + '/3</strong> โปรเจค</span>' +
+    '<button class="btn bsm bp" ' + (n < 2 ? 'disabled' : '') + ' onclick="openPipeCompareModal()">🔍 เทียบเลย</button>' +
+    '</div>';
+}
+
+// คำนวณสถิติความเคลื่อนไหว (จำนวน log, ความถี่เฉลี่ย, ล่าสุดกี่วันที่แล้ว)
+function pipeActivityStats(pipeId) {
+  var logs = ST.pipeLogsByPipe(pipeId); // เรียงใหม่สุดก่อนแล้ว
+  if (!logs.length) return { count: 0, recency: 9999, avgGap: null, logs: logs };
+  var lastDate = logs[0].date ? logs[0].date.split('T')[0] : null;
+  var recency = lastDate ? Math.max(0, Math.round((new Date() - new Date(lastDate)) / 864e5)) : 9999;
+  var avgGap = null;
+  if (logs.length >= 2) {
+    var oldest = logs[logs.length - 1].date ? logs[logs.length - 1].date.split('T')[0] : null;
+    if (oldest && lastDate) {
+      var span = Math.max(1, Math.round((new Date(lastDate) - new Date(oldest)) / 864e5));
+      avgGap = Math.round(span / (logs.length - 1));
+    }
+  }
+  return { count: logs.length, recency: recency, avgGap: avgGap, logs: logs };
+}
+
+function openPipeCompareModal() {
+  var ids = pipeCompareSelected.slice();
+  if (ids.length < 2) { toast('⚠️ เลือกอย่างน้อย 2 โปรเจค'); return; }
+  var pipes = ids.map(function(id) { return ST.getOne('pipeline', id); }).filter(Boolean);
+  if (pipes.length < 2) return;
+
+  // คะแนนความเหมือนทุกคู่
+  var pairBadges = '';
+  var colHasMatch = pipes.map(function() { return false; });
+  for (var i = 0; i < pipes.length; i++) {
+    for (var j = i + 1; j < pipes.length; j++) {
+      var sc = pipeMatchScore(pipes[i], pipes[j]);
+      if (sc >= 60) { colHasMatch[i] = true; colHasMatch[j] = true; }
+      var color = sc >= 60 ? '#ef4444' : (sc >= 40 ? '#f59e0b' : '#64748b');
+      var bg = sc >= 60 ? 'rgba(239,68,68,.18)' : (sc >= 40 ? 'rgba(245,158,11,.18)' : 'rgba(100,116,139,.2)');
+      pairBadges += '<span style="background:' + bg + ';color:' + color + ';font-size:11px;padding:4px 10px;border-radius:8px;font-weight:600;margin-right:6px;display:inline-block;margin-bottom:6px">' +
+        String.fromCharCode(65 + i) + '↔' + String.fromCharCode(65 + j) + ' เหมือน ' + sc + '%</span>';
+    }
+  }
+
+  function fieldMatchFlags(getter) {
+    var vals = pipes.map(getter);
+    var flags = vals.map(function() { return false; });
+    for (var a = 0; a < vals.length; a++) {
+      for (var b = a + 1; b < vals.length; b++) {
+        if (fcStrSim(vals[a], vals[b]) >= 0.55) { flags[a] = true; flags[b] = true; }
+      }
+    }
+    return flags;
+  }
+  var nameFlags = fieldMatchFlags(function(p) { return p.projectName || ''; });
+  var euFlags = fieldMatchFlags(function(p) { return p.endUserTH || p.endUserEN || ''; });
+  var bidFlags = pipes.map(function() { return false; });
+  for (var a2 = 0; a2 < pipes.length; a2++) {
+    for (var b2 = a2 + 1; b2 < pipes.length; b2++) {
+      var da = fcParseDate(pipes[a2].biddingDate), db2 = fcParseDate(pipes[b2].biddingDate);
+      if (da && db2 && Math.abs(da - db2) / 86400000 <= 30) { bidFlags[a2] = true; bidFlags[b2] = true; }
+    }
+  }
+
+  // หาเจ้าที่อัพเดทถี่ที่สุด (recency น้อยสุด) ใช้เป็นฐานเทียบ "นิ่งนานกว่ามาก"
+  var actStats = pipes.map(function(p) { return pipeActivityStats(p.id); });
+  var minRecency = Math.min.apply(null, actStats.map(function(s) { return s.recency; }));
+  var mostActiveIdx = actStats.findIndex(function(s) { return s.recency === minRecency; });
+
+  var html = '<div style="margin-bottom:10px">' + pairBadges + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(' + pipes.length + ',1fr);gap:10px">';
+  pipes.forEach(function(p, idx) {
+    var d = ST.getOne('dealers', p.dealerId);
+    var items = (getPipeItems(p) || []).map(function(it) { return sanitize(it.model) + ' x' + (it.qty || 1); }).join(', ');
+    var border = colHasMatch[idx] ? 'border:2px solid #ef4444' : 'border:1px solid var(--border,#334155)';
+    var stat = actStats[idx];
+
+    html += '<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;' + border + '">';
+    html += '<div style="font-weight:700;font-size:13px">' + sanitize(d ? d.name : '?') + '</div>';
+    html += '<div style="font-size:10px;color:var(--text2);margin-bottom:8px">' + String.fromCharCode(65 + idx) + ' · ' + getPipeName(p.status) + '</div>';
+
+    function row(label, val, hl) {
+      return '<div style="font-size:11px;color:var(--text2);margin-bottom:2px">' + label + '</div>' +
+        '<div style="font-size:12px;' + (hl ? 'background:rgba(239,68,68,.15);border-radius:6px;padding:4px 6px;' : '') + 'margin-bottom:8px">' + (val || '-') + '</div>';
+    }
+    html += row('โครงการ', sanitize(p.projectName || '-'), nameFlags[idx]);
+    html += row('End User', sanitize(p.endUserTH || p.endUserEN || '-'), euFlags[idx]);
+    html += row('หน่วยงาน', sanitize((p.agencyMain || '-') + ' / ' + (p.agencySub || '-')), false);
+    html += row('สินค้า', items || '-', false);
+    html += row('มูลค่า', fmtMoney(p.forecastAmount), false);
+    html += row('Bidding', p.biddingDate ? fD(p.biddingDate) : '-', bidFlags[idx]);
+
+    // สรุปความเคลื่อนไหว
+    if (stat.count > 0) {
+      html += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">' +
+        '<span style="color:var(--text2)">📅 ความเคลื่อนไหว</span>' +
+        '<span style="font-weight:700;color:' + (stat.recency <= 14 ? '#22c55e' : '#f59e0b') + '">' + (stat.avgGap ? ('ทุก ~' + stat.avgGap + ' วัน') : '-') + '</span></div>' +
+        '<div style="font-size:10px;color:var(--text2)">อัพเดท ' + stat.count + ' ครั้ง · ล่าสุด ' + (stat.recency === 0 ? 'วันนี้' : stat.recency + ' วันที่แล้ว') + '</div></div>';
+    } else {
+      html += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;margin-bottom:8px;font-size:11px;color:var(--text2)">📅 ยังไม่มีบันทึกความเคลื่อนไหว</div>';
+    }
+
+    // เตือนถ้านิ่งนานกว่าเจ้าที่ active สุด ≥2 เท่า (และต่างกัน ≥14 วัน กันสัญญาณรบกวนตัวเลขเล็ก)
+    if (idx !== mostActiveIdx && stat.recency >= minRecency * 2 && (stat.recency - minRecency) >= 14) {
+      var ownerDealer = ST.getOne('dealers', pipes[mostActiveIdx].dealerId);
+      html += '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10px;color:#f87171">⚠️ นิ่งนานกว่า ' + sanitize(ownerDealer ? ownerDealer.name : '-') + ' มาก — น่าจะไม่ใช่เจ้าของงานจริง</div>';
+    }
+
+    var logId = 'pcmpLog_' + p.id;
+    html += '<div style="font-size:11px;color:var(--accent,#3b82f6);cursor:pointer;margin-bottom:6px" onclick="var e=document.getElementById(\'' + logId + '\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">▾ ดู Timeline ทั้งหมด (' + stat.count + ')</div>';
+    html += '<div id="' + logId + '" style="display:none;border-left:2px solid var(--border,#334155);padding-left:10px;margin-left:4px;margin-bottom:8px">';
+    stat.logs.forEach(function(l, li) {
+      var ld = l.date ? l.date.split('T')[0] : '';
+      var ldays = ld ? Math.max(0, Math.round((new Date() - new Date(ld)) / 864e5)) : null;
+      html += '<div style="margin-bottom:8px;position:relative"><div style="position:absolute;left:-15px;top:3px;width:7px;height:7px;border-radius:50%;background:' + (li === 0 ? '#22c55e' : 'var(--text2)') + '"></div>' +
+        '<div style="font-size:10px;color:var(--text2)">' + (ldays === 0 ? 'วันนี้' : (ldays !== null ? ldays + ' วันที่แล้ว' : '')) + '</div>' +
+        '<div style="font-size:11px">' + sanitize((l.content || '').substr(0, 80)) + '</div></div>';
+    });
+    html += '</div>';
+
+    html += '<button class="btn bsm bo" style="width:100%" onclick="closeM();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">เปิดโปรเจคนี้ →</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  openM('🔍 เทียบ Project (' + pipes.length + ')', html);
+}
+
 function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
   var cfg = getConfig();
@@ -267,6 +436,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="dlPipeCSV()">📤 CSV</button>' +
     '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' +
+    '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<div style="flex:1"></div>' +
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()">🃏</button>' +
@@ -310,7 +480,9 @@ function rPipeline(el) {
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
     (pipeSearch ? ' (ค้นหา: "' + sanitize(pipeSearch) + '")' : '') +
-    '</div>';
+    '</div>' +
+
+    (pipeCompareMode ? renderPipeCompareBar() : '');
   
   var srcEl = document.getElementById('pipeSrc');
   if (srcEl && pipeSearch) {
@@ -413,6 +585,7 @@ function renderPipeTable(pipes) {
   pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
 
   var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead>' +
+    (pipeCompareMode ? '<th style="width:30px">เทียบ</th><th>แนวโน้มชนงาน</th>' : '') +
     '<th style="width:32px">#</th>' +
     '<th>Register</th>' +
     '<th>Project</th>' +
@@ -471,8 +644,24 @@ function renderPipeTable(pipes) {
       (p.pinned ? ' pipe-pinned' : '') +
       (bidUrgency === 'urgent' ? ' pipe-bid-urgent' : (bidUrgency === 'soon' ? ' pipe-bid-soon' : ''));
 
+    var compareCells = '';
+    if (pipeCompareMode) {
+      var isSel = pipeCompareSelected.indexOf(p.id) !== -1;
+      var best = pipeCompareBestMatch(p);
+      var matchBadge = '<span style="color:var(--text3);font-size:10px">— ไม่พบโครงการใกล้เคียง</span>';
+      if (best) {
+        var bColor = best.score >= 60 ? '#ef4444' : (best.score >= 40 ? '#f59e0b' : '#64748b');
+        var bBg = best.score >= 60 ? 'rgba(239,68,68,.18)' : (best.score >= 40 ? 'rgba(245,158,11,.18)' : 'rgba(100,116,139,.2)');
+        var bDealer = ST.getOne('dealers', best.other.dealerId);
+        matchBadge = '<span style="background:' + bBg + ';color:' + bColor + ';font-size:10px;padding:2px 6px;border-radius:6px;font-weight:700;cursor:pointer" title="กดเพื่อเลือกคู่นี้เข้าเทียบ" onclick="event.stopPropagation();pipeCompareQuickPick(\'' + p.id + '\',\'' + best.other.id + '\')">' + best.score + '% กับ ' + sanitize((bDealer ? bDealer.name : '?').substr(0, 16)) + '</span>';
+      }
+      compareCells = '<td onclick="event.stopPropagation();togglePipeCompareSelect(\'' + p.id + '\')"><input type="checkbox" ' + (isSel ? 'checked' : '') + ' onclick="event.stopPropagation();togglePipeCompareSelect(\'' + p.id + '\')"></td>' +
+        '<td onclick="event.stopPropagation()">' + matchBadge + '</td>';
+    }
+
     html += '<tr class="' + rowClass + '"' +
       ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
+      compareCells +
       '<td class="pipe-row-num">' + (i + 1) + '</td>' +
       '<td style="white-space:nowrap">' + fDShort(p.registerDate) + '</td>' +
       '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="' + sanitize(p.projectName) + '">' + sanitize((p.projectName || '').substr(0, 45)) + '</td>' +
