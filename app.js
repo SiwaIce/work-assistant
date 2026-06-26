@@ -622,6 +622,7 @@ var R = {
   
   // ✅ เพิ่ม Quotation V2
   quotationV2: rQuotationV2,
+  quoteEstimator: rQuoteEstimator,
 
   // ✅ Announcement & Policy
   announcements: rAnnouncements,

@@ -40,7 +40,8 @@ const ST = {
     kpiConfig: 'v7_kpiConfig',
     kpiEntries: 'v7_kpiEntries',
     dealerPins: 'v7_dealer_pins',
-    appearance: 'v7_appearance'
+    appearance: 'v7_appearance',
+    solutionPresets: 'v7_solutionPresets'
   },
 
   _get(key) {

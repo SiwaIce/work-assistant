@@ -104,7 +104,8 @@ var SYNC_KEY_MAP = {
   'dealer_pins': 'dealerPins',
   'email_drafts': 'emailDrafts',
   'kpiQuarterPlans': 'kpiQuarterPlans',
-  'kpiQuarterLogs': 'kpiQuarterLogs'
+  'kpiQuarterLogs': 'kpiQuarterLogs',
+  'solutionPresets': 'solutionPresets'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);

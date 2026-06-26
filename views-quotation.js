@@ -401,6 +401,204 @@ function addQuotationItemFromInput() {
 }
 
 // ================================================================
+// QUICK PRICE ESTIMATOR — ดูยอดรวมคร่าวๆ ไม่ผูก Dealer ไม่ใช่ใบเสนอราคาจริง
+// บันทึกชุดสินค้าที่ใช้บ่อยเป็น "Solution" เรียกซ้ำได้ (เก็บแค่ model+qty ราคาคำนวณสดเสมอ)
+// ================================================================
+var estimatorItems = [];
+
+function getSolutionPresets() { return ST.getAll('solutionPresets'); }
+function saveSolutionPresets(list) {
+  localStorage.setItem('v7_solutionPresets', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('solutionPresets', list);
+}
+
+function rQuoteEstimator(el) {
+  document.getElementById('pgT').textContent = '💡 ประเมินราคาคร่าวๆ';
+  estimatorItems = [];
+
+  var html = '<div style="max-width:640px;margin:0 auto">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+  html += '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">ไม่ผูก Dealer · ไม่ใช่ใบเสนอราคาจริง — แค่ดูยอดรวมเร็วๆ</div>';
+
+  html += '<div id="estPresetZone"></div>';
+
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px" id="estAddRow">';
+  html += '<input type="text" id="estNewModel" list="estProdList" class="fm-input" placeholder="🔍 ค้นหาสินค้า..." style="flex:1" autocomplete="off">';
+  html += '<datalist id="estProdList">' + getAllModelsWithPriceForQuote().map(function(p) { return '<option value="' + sanitize(p.name) + '">'; }).join('') + '</datalist>';
+  html += '<input type="number" id="estNewQty" class="fm-input" value="1" min="1" style="width:70px;text-align:center">';
+  html += '<button class="btn bp" onclick="addEstimatorItemFromInput()">➕ เพิ่ม</button>';
+  html += '</div>';
+
+  html += '<div id="estItemsZone"></div>';
+  html += '<div id="estTotalZone"></div>';
+
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
+  html += '<button class="btn bp" style="flex:1;background:#22c55e" onclick="showSaveSolutionM()">💾 บันทึกเป็น Solution</button>';
+  html += '<button class="btn bo" style="flex:1" onclick="estimatorItems=[];renderEstimatorItemsTable();">🗑️ ล้างทั้งหมด</button>';
+  html += '</div>';
+  html += '<button class="btn bo" style="width:100%;margin-top:6px" onclick="estimatorToQuotation()">➡️ แปลงเป็นใบเสนอราคาจริง (ผูก Dealer)</button>';
+  html += '</div>';
+
+  el.innerHTML = html;
+  renderEstimatorPresetChips();
+  renderEstimatorItemsTable();
+}
+
+function renderEstimatorPresetChips() {
+  var zone = document.getElementById('estPresetZone');
+  if (!zone) return;
+  var presets = getSolutionPresets();
+  if (!presets.length) { zone.innerHTML = ''; return; }
+  var h = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">📂 Solution ที่บันทึกไว้ (กดเพื่อโหลด)</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+  presets.forEach(function(p) {
+    h += '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 6px 4px 12px">' +
+      '<span style="cursor:pointer;font-size:12px" onclick="loadSolutionPreset(\'' + p.id + '\')">' + sanitize(p.name) + ' <span style="color:var(--text2)">(' + (p.items || []).length + ' รายการ)</span></span>' +
+      '<button class="btn-xs btn-red" title="ลบ Solution นี้" onclick="deleteSolutionPreset(\'' + p.id + '\')">✕</button>' +
+      '</span>';
+  });
+  h += '</div>';
+  zone.innerHTML = h;
+}
+
+function renderEstimatorItemsTable() {
+  var zone = document.getElementById('estItemsZone');
+  if (!zone) return;
+  if (!estimatorItems.length) {
+    zone.innerHTML = '<div class="empty" style="padding:20px;text-align:center"><div class="icon">📦</div><p>ยังไม่มีสินค้า — ค้นหาแล้วกด ➕ เพิ่ม หรือโหลด Solution ที่บันทึกไว้</p></div>';
+    recalcEstimatorTotal();
+    return;
+  }
+  var h = '<div class="export-wrap" style="overflow-x:auto;margin-bottom:10px"><table class="export-table" style="width:100%">';
+  h += '<thead><tr><th style="width:40px">#</th><th>สินค้า</th><th style="width:80px;text-align:center">จำนวน</th><th style="width:120px;text-align:right">ราคาต่อหน่วย</th><th style="width:120px;text-align:right">รวม</th><th style="width:40px"></th></tr></thead><tbody>';
+  estimatorItems.forEach(function(item, i) {
+    h += '<tr>';
+    h += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
+    h += '<td>' + sanitize(item.name) + '</td>';
+    h += '<td style="text-align:center"><input type="number" value="' + (item.quantity || 1) + '" min="1" style="width:60px;text-align:center;padding:4px" onchange="updateEstimatorItemQty(' + i + ', this.value)"></td>';
+    h += '<td style="text-align:right"><input type="text" inputmode="decimal" class="js-money" value="' + nmI(item.unitPrice || 0) + '" style="width:100px;text-align:right;padding:4px" onchange="updateEstimatorItemPrice(' + i + ', this.value)"></td>';
+    h += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
+    h += '<td style="text-align:center"><button class="btn bsm bd" onclick="removeEstimatorItem(' + i + ')">🗑️</button></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  zone.innerHTML = h;
+  recalcEstimatorTotal();
+}
+
+function recalcEstimatorTotal() {
+  var sub = estimatorItems.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0);
+  var vat = sub * 0.07;
+  var zone = document.getElementById('estTotalZone');
+  if (!zone) return;
+  zone.innerHTML = '<div style="background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:14px;text-align:center">' +
+    '<div style="font-size:10px;color:var(--text2)">รวมประมาณ (ก่อน VAT)</div>' +
+    '<div style="font-size:24px;font-weight:700;color:var(--accent)">' + formatNumber(sub) + ' ฿</div>' +
+    '<div style="font-size:10px;color:var(--text2);margin-top:2px">รวม VAT 7%: ' + formatNumber(sub + vat) + ' ฿</div>' +
+    '</div>';
+}
+
+function addEstimatorItemFromInput() {
+  var modelInput = document.getElementById('estNewModel');
+  var modelName = modelInput ? modelInput.value.trim() : '';
+  var qty = parseInt(document.getElementById('estNewQty').value) || 1;
+  if (!modelName) { toast('กรุณาเลือกสินค้า'); return; }
+
+  var products = getAllModelsWithPriceForQuote();
+  var product = products.find(function(p) { return p.name === modelName; });
+  if (!product) { toast('ไม่พบสินค้าในระบบ'); return; }
+
+  var unitPrice = getModelPriceByLevelForQuote(modelName, 'RRP');
+
+  var existing = estimatorItems.find(function(it) { return it.name === modelName; });
+  if (existing) {
+    existing.quantity += qty;
+    existing.amount = existing.quantity * existing.unitPrice;
+  } else {
+    estimatorItems.push({ sku: product.sku || '', name: modelName, quantity: qty, unitPrice: unitPrice, amount: qty * unitPrice });
+  }
+
+  modelInput.value = '';
+  document.getElementById('estNewQty').value = '1';
+  renderEstimatorItemsTable();
+}
+
+function updateEstimatorItemQty(idx, qty) {
+  qty = parseInt(qty) || 1;
+  if (qty < 1) qty = 1;
+  estimatorItems[idx].quantity = qty;
+  estimatorItems[idx].amount = qty * (estimatorItems[idx].unitPrice || 0);
+  renderEstimatorItemsTable();
+}
+
+function updateEstimatorItemPrice(idx, price) {
+  price = parseNum(price);
+  estimatorItems[idx].unitPrice = price;
+  estimatorItems[idx].amount = (estimatorItems[idx].quantity || 1) * price;
+  renderEstimatorItemsTable();
+}
+
+function removeEstimatorItem(idx) {
+  estimatorItems.splice(idx, 1);
+  renderEstimatorItemsTable();
+}
+
+// โหลด Solution ที่บันทึกไว้ — ดึงแค่ model+qty แล้วคำนวณราคาสดจากสินค้าปัจจุบันเสมอ (ไม่ใช้ราคาแช่แข็งตอนบันทึก)
+function loadSolutionPreset(presetId) {
+  var preset = getSolutionPresets().find(function(p) { return p.id === presetId; });
+  if (!preset) return;
+  estimatorItems = (preset.items || []).map(function(it) {
+    var unitPrice = getModelPriceByLevelForQuote(it.name, 'RRP');
+    return { sku: it.sku || '', name: it.name, quantity: it.quantity || 1, unitPrice: unitPrice, amount: (it.quantity || 1) * unitPrice };
+  });
+  renderEstimatorItemsTable();
+  toast('📂 โหลด "' + preset.name + '" แล้ว');
+}
+
+function showSaveSolutionM() {
+  if (!estimatorItems.length) { toast('⚠️ ยังไม่มีสินค้าให้บันทึก'); return; }
+  var h = '<div style="max-width:360px">' +
+    '<div class="fg"><label>📝 ชื่อ Solution</label><input type="text" id="estSolName" class="fm-input" placeholder="เช่น ชุดทำแผนที่"></div>' +
+    '<div class="hint">เก็บแค่รายการสินค้า+จำนวน ไม่เก็บราคา (ราคาจะคำนวณสดทุกครั้งที่โหลด)</div>' +
+    '<div class="fm-actions"><button class="btn btn-blue" onclick="saveSolutionPreset()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>' +
+    '</div>';
+  openM('💾 บันทึกเป็น Solution', h);
+}
+
+function saveSolutionPreset() {
+  var name = (document.getElementById('estSolName').value || '').trim();
+  if (!name) { toast('กรุณาใส่ชื่อ Solution'); return; }
+  var presets = getSolutionPresets();
+  presets.push({
+    id: 'sol_' + Date.now(),
+    name: name,
+    items: estimatorItems.map(function(it) { return { name: it.name, sku: it.sku || '', quantity: it.quantity }; }),
+    createdAt: new Date().toISOString()
+  });
+  saveSolutionPresets(presets);
+  closeMForce();
+  toast('💾 บันทึก Solution "' + name + '" แล้ว');
+  renderEstimatorPresetChips();
+}
+
+function deleteSolutionPreset(presetId) {
+  if (!confirm('🗑️ ลบ Solution นี้?')) return;
+  var presets = getSolutionPresets().filter(function(p) { return p.id !== presetId; });
+  saveSolutionPresets(presets);
+  renderEstimatorPresetChips();
+}
+
+// ส่งรายการที่ประเมินไว้ไปสร้างใบเสนอราคาจริง — เปิด modal สร้างใบเสนอราคาเดิม แล้วฝัง items
+// ผ่าน window._pendingEstimatorItems ให้ createNewQuotation() อ่านไปเติมให้หลังสร้างใบเสร็จ
+function estimatorToQuotation() {
+  if (!estimatorItems.length) { toast('⚠️ ยังไม่มีสินค้าให้แปลง'); return; }
+  window._pendingEstimatorItems = JSON.parse(JSON.stringify(estimatorItems));
+  showCreateQuotationModal();
+}
+
+// ================================================================
 // RENDER QUOTATION LIST PAGE (HOME)
 // ================================================================
 
@@ -425,7 +623,10 @@ function rQuotationV2(el) {
   // Header with create button
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
   html += '<h2 style="font-size:1rem;margin:0">📋 รายการใบเสนอราคา</h2>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button class="btn bo" onclick="go(\'quoteEstimator\')">💡 ประเมินราคาคร่าวๆ</button>';
   html += '<button class="btn bp" onclick="showCreateQuotationModal()" style="background:#22c55e">➕ สร้างใบเสนอราคา</button>';
+  html += '</div>';
   html += '</div>';
   
   // Filter bar
@@ -686,6 +887,14 @@ function createNewQuotation() {
   
   // ไปที่หน้าแก้ไขทันที
   renderEditQuotationPage(newQuote);
+
+  // ถ้ามารายการจาก "ประเมินราคาคร่าวๆ" ให้เติมเข้าใบเสนอราคาที่สร้างใหม่ทันที
+  if (window._pendingEstimatorItems && window._pendingEstimatorItems.length) {
+    quotationItems = window._pendingEstimatorItems;
+    window._pendingEstimatorItems = null;
+    renderQuotationItemsTable();
+    recalculateQuotationTotal();
+  }
 }
 // ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
 function renderEditQuotationPage(quote) {
