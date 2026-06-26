@@ -2183,6 +2183,7 @@ function buildPipeSummaryHtml() {
 
 function renderPipelineTab() {
   var filtered = filterAndSortPipelines(pipelinesData);
+  filtered = filtered.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
   var hasData = filtered.length > 0;
   var html = '<div class="section"><div class="section-title">📋 โครงการของท่าน (' + pipelinesData.length + ')</div>';
   html += buildPipeSummaryHtml();
@@ -2293,7 +2294,11 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
     staleBadge = '<span class="stale-badge" style="background:#f59e0b; color:white; padding:2px 8px; border-radius:12px; font-size:10px; margin-left:8px">🟡 ไม่ได้อัพเดท ' + lastUpdateDays + ' วัน</span>';
   }
 }
-    html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer" onclick="showPipelineDetail(\'' + p.id + '\')">';
+  var bidUrgency = pipeBidUrgency(p);
+  var rowStyle = p.pinned ? 'border-left:3px solid #3b82f6;background:rgba(59,130,246,.07)' :
+    (bidUrgency === 'urgent' ? 'border-left:3px solid #ef4444;background:rgba(239,68,68,.07)' :
+    (bidUrgency === 'soon' ? 'border-left:3px solid #f59e0b;background:rgba(245,158,11,.06)' : ''));
+    html += '<tr data-pipe-id="' + p.id + '" style="cursor:pointer;' + rowStyle + '" onclick="showPipelineDetail(\'' + p.id + '\')">';
   html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td><strong>' + qcopyHtml(p.projectName) + '</strong>' + pendingBadge + rejectedBadge + staleBadge + '</td>';
   html += '<td>' + (p.endUserTH || p.endUser ? qcopyHtml(p.endUserTH || p.endUser) : '-') + '</td>';
@@ -2310,7 +2315,7 @@ if (lastUpdateDays !== null && lastUpdateDays >= 8) {
               '<span style="font-size:10px;color:var(--text2);display:block;margin-top:1px">' + (_days === 0 ? 'วันนี้' : _days + ' วันที่แล้ว') + '</span>';
   }
   html += '<td style="max-width:140px;font-size:11px;color:var(--text1)">' + logCell + '</td>';
-  html += '<td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
+  html += '<td onclick="event.stopPropagation()"><button class="btn btn-sm" style="opacity:' + (p.pinned ? '1' : '.45') + '" title="ปักหมุด" onclick="togglePipePin(\'' + p.id + '\')">📌</button> <button class="btn btn-sm btn-primary" onclick="showUpdateModal(\'' + p.id + '\')">✏️ อัพเดท</button></td>';
   html += '</tr>';
 }
     html += '</tbody></table></div>';
@@ -2371,6 +2376,31 @@ function dTo(dateStr) {
   var d1 = new Date(today);
   var d2 = new Date(dateStr);
   return Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+var PIPE_ACTIVE_STATUSES = ['prospect', 'tor_review', 'quotation', 'bidding', 'negotiation'];
+function pipeBidUrgency(p) {
+  if (!p || !p.biddingDate) return null;
+  if (PIPE_ACTIVE_STATUSES.indexOf(p.status) === -1) return null;
+  var d = dTo(p.biddingDate);
+  if (d < 0) return null;
+  if (d <= 7) return 'urgent';
+  if (d <= 30) return 'soon';
+  return null;
+}
+
+async function togglePipePin(pipeId) {
+  var p = pipelinesData.find(function(x) { return x.id === pipeId; });
+  if (!p) return;
+  var newVal = !p.pinned;
+  p.pinned = newVal;
+  try {
+    await db.collection('dealerUpdates').doc(dealerId).collection('pipeline').doc(pipeId).set({ pinned: newVal }, { merge: true });
+    showToast(newVal ? '📌 ปักหมุดแล้ว' : '❌ เอาออกจากหมุดแล้ว');
+  } catch(e) {
+    console.error('Toggle pin failed:', e);
+  }
+  renderPipelineTab();
 }
 function fD(iso) {
   if (!iso) return '-';
@@ -4621,10 +4651,11 @@ async function renderComplianceTabContent(dealer) {
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">';
 
   // Sales Target Card (ตามแท็บ H1/H2/รวมทั้งปี ที่เลือก)
+  // ✅ เปลี่ยนจาก % ตัวเลข (ซ้ำกับบาร์ด้านบน) เป็นไอคอนสถานะอย่างเดียว ให้คนละบทบาทกับบาร์
   html += '<div style="background:var(--card);border:1px solid ' + (activeStatus.isOk ? 'rgba(34,197,94,0.35)' : 'var(--border)') + ';border-radius:14px;padding:14px 10px;text-align:center">';
-  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">' + activeShortLabel.toUpperCase() + ' TARGET</div>';
-  html += '<div style="font-size:22px;font-weight:800;color:' + h1Color + ';line-height:1">' + h1DisplayPct + '%</div>';
-  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (activeStatus.isOk ? '✅ สำเร็จ' : (activeStatus.percent >= 70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2);margin-bottom:5px;letter-spacing:0.5px;font-weight:600">' + activeShortLabel.toUpperCase() + ' STATUS</div>';
+  html += '<div style="font-size:22px;line-height:1">' + (activeStatus.isOk ? '✅' : (activeStatus.percent >= 70 ? '🔶' : '🔴')) + '</div>';
+  html += '<div style="font-size:10px;color:var(--text2);margin-top:4px">' + (activeStatus.isOk ? 'สำเร็จ' : (activeStatus.percent >= 70 ? 'ใกล้สำเร็จ' : 'ต้องเร่ง')) + '</div>';
   html += '</div>';
 
   // DSEC Card
@@ -4695,21 +4726,12 @@ async function renderComplianceTabContent(dealer) {
   html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🎯</span><div><div style="font-size:15px;font-weight:800">เป้าหมายยอดขาย ' + activeLabel + '</div><div style="font-size:11px;color:var(--text2)">' + (periodTab === 'total' ? 'Full Year Target' : 'Half Year Target') + '</div></div></div>';
   html += '<span style="font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:' + (activeStatus.isOk ? 'rgba(34,197,94,0.15)' : (activeStatus.percent>=70 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)')) + ';color:' + h1Color + '">' + (activeStatus.isOk ? '✅ สำเร็จ' : (activeStatus.percent>=70 ? '🔶 ใกล้สำเร็จ' : '🔴 ต้องเร่ง')) + '</span>';
   html += '</div>';
-  // HP Bar detail version
-  html += '<div style="position:relative;height:22px;background:var(--bg);border-radius:99px;border:1px solid var(--border);margin-bottom:10px">';
-  html += '<div style="position:absolute;left:0;top:0;height:100%;width:' + h1BarPct + '%;background:' + h1BarColor + ';border-radius:99px;box-shadow:0 0 12px ' + h1GlowColor + ';overflow:hidden">';
-  html += '<div style="position:absolute;right:0;top:0;width:32px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.2));border-radius:99px"></div>';
-  html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(0,0,0,0.5);' + (h1BarPct < 25 ? 'display:none!important' : '') + '">' + h1DisplayPct + '%</div>';
-  html += '</div>';
-  if (h1IsOver) {
-    html += '<div style="position:absolute;right:-5px;top:-4px;width:10px;height:30px;background:linear-gradient(180deg,#bbf7d0,#22c55e);border-radius:5px;box-shadow:0 0 12px rgba(34,197,94,0.9)"></div>';
-  }
-  html += '</div>';
-  html += '<div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px">';
-  html += '<div style="color:var(--text2)">เป้าหมาย: <strong style="color:var(--accent)">' + fmtMoneyShort(activeStatus.target) + ' ฿</strong></div>';
-  html += '<div style="color:var(--text2)">ยอดขายจริง: <strong style="color:#22c55e">' + fmtMoneyShort(activeStatus.actual) + ' ฿</strong></div>';
-  html += '<div style="color:var(--text2)">ความคืบหน้า: <strong style="color:' + h1Color + '">' + h1DisplayPct + '%</strong></div>';
-  html += '</div>';
+  // ✅ เปลี่ยนจากบาร์ (ซ้ำกับบาร์ภาพรวมด้านบน) เป็นตาราง 3 ช่อง เป้า/ทำได้/ขาดอีก — คนละบทบาท: บาร์บน = ภาพรวมเร็ว, ตรงนี้ = รายละเอียดตัวเลข
+  var _detailGap = Math.max(0, activeStatus.target - activeStatus.actual);
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+  html += '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text2)">เป้า</div><div style="font-size:14px;font-weight:700;color:var(--accent)">' + fmtMoneyShort(activeStatus.target) + ' ฿</div></div>';
+  html += '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text2)">ทำได้</div><div style="font-size:14px;font-weight:700;color:#22c55e">' + fmtMoneyShort(activeStatus.actual) + ' ฿</div></div>';
+  html += '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--text2)">' + (activeStatus.isOk ? 'ทะลุเป้า' : 'ขาดอีก') + '</div><div style="font-size:14px;font-weight:700;color:' + (activeStatus.isOk ? '#22c55e' : '#f59e0b') + '">' + (activeStatus.isOk ? '+' + fmtMoneyShort(activeStatus.actual - activeStatus.target) : fmtMoneyShort(_detailGap)) + ' ฿</div></div>';
   html += '</div>';
 
   // ====== DEMO STATUS DETAIL (ไม่ตัด) ======

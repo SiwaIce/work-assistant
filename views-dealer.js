@@ -3700,6 +3700,7 @@ async function syncAllPipelinesToFirebase(dealerId) {
       items: pipe.items || [],
       biddingDate: pipe.biddingDate,
       shipmentDate: pipe.shipmentDate,
+      pinned: pipe.pinned || false,
       _status: pipe._status || 'approved',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -3787,6 +3788,7 @@ async function syncAllPipelinesToFirebase(dealerId) {
         shipmentDate: pipe.shipmentDate || '',
         endUserTH: pipe.endUserTH || '',
         endUserEN: pipe.endUserEN || '',
+        pinned: pipe.pinned || false,
         _status: pipe._status || 'approved',
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };

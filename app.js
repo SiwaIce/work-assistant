@@ -3133,6 +3133,7 @@ function syncDealerPipelineToCustomer(dealerId) {
       tor: p.tor || '',
       nextAction: p.nextAction || '',
       registerDate: p.registerDate || '',
+      pinned: p.pinned || false,
       latestLog: latestLog,
       _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
       _status: 'approved',

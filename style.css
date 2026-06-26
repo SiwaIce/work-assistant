@@ -208,6 +208,14 @@ textarea{min-height:50px;resize:vertical}
 .pipe-table tr:hover td{background:#1e293b}
 .pipe-table tr.pipe-win{border-left:3px solid #22c55e}
 .pipe-table tr.pipe-lost{border-left:3px solid #ef4444;opacity:.5}
+.pipe-table tr.pipe-bid-urgent td{background:rgba(239,68,68,.1)}
+.pipe-table tr.pipe-bid-urgent{border-left:3px solid #ef4444}
+.pipe-table tr.pipe-bid-soon td{background:rgba(245,158,11,.08)}
+.pipe-table tr.pipe-bid-soon{border-left:3px solid #f59e0b}
+.pipe-table tr.pipe-pinned{border-left:3px solid #3b82f6}
+.pipe-table tr.pipe-pinned td{background:rgba(59,130,246,.08)}
+.pipe-pin-btn{background:transparent;border:none;cursor:pointer;font-size:13px;opacity:.45;padding:2px}
+.pipe-pin-btn.on{opacity:1}
 .pipe-wrap{overflow:auto;border:1px solid #334155;border-radius:8px;max-height:500px}
 
 .pipe-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-bottom:12px}

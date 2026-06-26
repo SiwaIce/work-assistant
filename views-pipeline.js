@@ -19,6 +19,28 @@ var selectedForecastUpdates = {};
 
 var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
 
+// ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
+var PIPE_ACTIVE_STATUSES = ['prospect', 'tor_review', 'quotation', 'bidding', 'negotiation'];
+function pipeBidUrgency(p) {
+  if (!p || !p.biddingDate) return null;
+  if (PIPE_ACTIVE_STATUSES.indexOf(p.status) === -1) return null;
+  var d = dTo(p.biddingDate);
+  if (d < 0) return null;
+  if (d <= 7) return 'urgent';
+  if (d <= 30) return 'soon';
+  return null;
+}
+
+// ✅ ปักหมุด Pipeline — เก็บเป็น field บน record เอง ไม่พึ่งระบบ pins กลาง
+// เพื่อให้ sync ไป client-view ผ่าน path เดิม (syncAllPipelinesToFirebase) ได้ตรงๆ
+function togglePipePin(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  ST.update('pipeline', pipeId, { pinned: !p.pinned });
+  toast(p.pinned ? '❌ เอาออกจากหมุดแล้ว' : '📌 ปักหมุดแล้ว');
+  render();
+}
+
 // ================================================================
 // PIPELINE LIST
 // ================================================================
@@ -349,14 +371,17 @@ function sortPipes(pipes, sortBy) {
 
 function renderPipeCards(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
-  
+  pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
+
   var html = '<div class="card-grid">';
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
     var d = ST.getOne('dealers', p.dealerId);
     var amt = Number(p.forecastAmount) || 0;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
-    
+    var bidUrgency = pipeBidUrgency(p);
+    var cardBorder = p.pinned ? 'border-left:3px solid #3b82f6' : (bidUrgency === 'urgent' ? 'border-left:3px solid #ef4444' : (bidUrgency === 'soon' ? 'border-left:3px solid #f59e0b' : ''));
+
     var cCard = _conflictMap[p.id];
     var cCardTag = '';
     if (cCard && cCard.length === 1) {
@@ -367,9 +392,10 @@ function renderPipeCards(pipes) {
     } else if (cCard && cCard.length > 1) {
       cCardTag = '<span style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 6px;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cCard.length + ' เจ้า</span>';
     }
-    html += '<div class="dealer-card" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
+    html += '<div class="dealer-card" style="' + cardBorder + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
     html += '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>';
-    html += '<h3 style="font-size:.78rem;margin:0">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3></div>';
+    html += '<h3 style="font-size:.78rem;margin:0;flex:1">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3>';
+    html += '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="event.stopPropagation();togglePipePin(\'' + p.id + '\')">📌</button></div>';
     html += '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') + '</div>';
     var _fyCard = pipeFYStatus(p);
     html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + (_fyCard ? ' <span class="tag" style="background:' + _fyCard.c + '18;color:' + _fyCard.c + '">' + _fyCard.e + ' ' + _fyCard.t + '</span>' : '') + '</div>';
@@ -384,7 +410,8 @@ function renderPipeCards(pipes) {
 
 function renderPipeTable(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
-  
+  pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
+
   var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead>' +
     '<th style="width:32px">#</th>' +
     '<th>Register</th>' +
@@ -439,7 +466,12 @@ function renderPipeTable(pipes) {
       cRowTag = '<div style="font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430;padding:1px 5px;border-radius:4px;margin-top:3px;cursor:pointer;display:inline-block" onclick="event.stopPropagation();showConflictListM(\'' + p.id + '\')">⚠️ ชน ' + cRow.length + ' เจ้า</div>';
     }
 
-    html += '<tr class="' + (isWon ? 'pipe-win' : '') + (isLost ? 'pipe-lost' : '') + '"' +
+    var bidUrgency = pipeBidUrgency(p);
+    var rowClass = (isWon ? 'pipe-win' : '') + (isLost ? 'pipe-lost' : '') +
+      (p.pinned ? ' pipe-pinned' : '') +
+      (bidUrgency === 'urgent' ? ' pipe-bid-urgent' : (bidUrgency === 'soon' ? ' pipe-bid-soon' : ''));
+
+    html += '<tr class="' + rowClass + '"' +
       ' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
       '<td class="pipe-row-num">' + (i + 1) + '</td>' +
       '<td style="white-space:nowrap">' + fDShort(p.registerDate) + '</td>' +
@@ -456,7 +488,10 @@ function renderPipeTable(pipes) {
       '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem">' +
         (lastLog ? fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) : '-') +
       '</td>' +
-      '<td onclick="event.stopPropagation()"><button class="quick-update-btn" onclick="showQuickUpdateM(\'' + p.id + '\')">📝</button></td>' +
+      '<td onclick="event.stopPropagation()">' +
+        '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="togglePipePin(\'' + p.id + '\')">📌</button>' +
+        '<button class="quick-update-btn" onclick="showQuickUpdateM(\'' + p.id + '\')">📝</button>' +
+      '</td>' +
       '</tr>';
   }
   
