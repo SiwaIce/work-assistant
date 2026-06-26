@@ -3155,6 +3155,8 @@ function syncDealerPipelineToCustomer(dealerId) {
       dsecCertCount: dealer.dsecCertCount || 0,
       dsecStatus: dealer.dsecStatus || '',
       sisRevenue: dealer.sisRevenue || 0,
+      sisRevenueH2: dealer.sisRevenueH2 || 0,
+      sisRevenueByYear: dealer.sisRevenueByYear || {},
       customDemoRequirements: dealer.customDemoRequirements || { enabled: false },
       _dealerSyncedAt: firebase.firestore.FieldValue.serverTimestamp()
     };

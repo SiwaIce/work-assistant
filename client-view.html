@@ -4119,7 +4119,8 @@ function getConfig() {
       startDay: 1,
       endMonth: 11,
       endDay: 31
-    }
+    },
+    showH2InClientView: true
   };
   try {
     var saved = localStorage.getItem('v7_config');
@@ -4226,6 +4227,8 @@ async function renderComplianceTab() {
             dsecCertCount: dealer.dsecCertCount || 0,
             dsecStatus: dealer.dsecStatus || '',
             sisRevenue: dealer.sisRevenue !== undefined ? dealer.sisRevenue : null,
+            sisRevenueH2: dealer.sisRevenueH2 !== undefined ? dealer.sisRevenueH2 : null,
+            sisRevenueByYear: dealer.sisRevenueByYear || {},
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
           console.log('🔄 Synced dealer from v7_dealers to Firebase');
@@ -4449,8 +4452,10 @@ async function renderComplianceTabContent(dealer) {
   var _nowForTab = new Date();
   var _h1RangeForTab = { start: new Date(_nowForTab.getFullYear(), cfg.h1Period.startMonth, cfg.h1Period.startDay), end: new Date(_nowForTab.getFullYear(), cfg.h1Period.endMonth, cfg.h1Period.endDay) };
   var _inH1Now = _nowForTab >= _h1RangeForTab.start && _nowForTab <= _h1RangeForTab.end;
+  var _showH2 = cfg.showH2InClientView !== false;
   var _savedTab = sessionStorage.getItem('cvPeriodTab_' + dealerId);
   var periodTab = (_savedTab === 'h1' || _savedTab === 'h2' || _savedTab === 'total') ? _savedTab : (_inH1Now ? 'h1' : 'h2');
+  if (!_showH2) periodTab = 'h1';
   var activeStatus = periodTab === 'h1' ? h1Status : (periodTab === 'h2' ? h2Status : totalStatus);
   var activeYear = _nowForTab.getFullYear();
   var activeLabel = periodTab === 'h1' ? ('H1 ' + activeYear) : (periodTab === 'h2' ? ('H2 ' + activeYear) : ('รวมทั้งปี ' + activeYear));
@@ -4567,12 +4572,14 @@ async function renderComplianceTabContent(dealer) {
   html += '<button onclick="refreshClientData()" style="background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--text2);font-size:18px;line-height:1" title="รีเฟรช">&#x1F504;</button>';
   html += '</div></div>';
 
-  // ====== TABS: H1 / H2 / รวมทั้งปี ======
-  html += '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border)">';
-  html += '<div onclick="selectPeriodTab(\'h1\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h1' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H1 ' + activeYear + (_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
-  html += '<div onclick="selectPeriodTab(\'h2\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h2' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H2 ' + activeYear + (!_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
-  html += '<div onclick="selectPeriodTab(\'total\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'total' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">รวมทั้งปี ' + activeYear + '</div>';
-  html += '</div>';
+  // ====== TABS: H1 / H2 / รวมทั้งปี (H2 ซ่อนได้จาก Admin Setting) ======
+  if (_showH2) {
+    html += '<div style="display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border)">';
+    html += '<div onclick="selectPeriodTab(\'h1\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h1' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H1 ' + activeYear + (_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
+    html += '<div onclick="selectPeriodTab(\'h2\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'h2' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">H2 ' + activeYear + (!_inH1Now ? ' (ปัจจุบัน)' : '') + '</div>';
+    html += '<div onclick="selectPeriodTab(\'total\')" style="padding:8px 14px;font-size:13px;cursor:pointer;' + (periodTab === 'total' ? 'font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)' : 'color:var(--text2)') + '">รวมทั้งปี ' + activeYear + '</div>';
+    html += '</div>';
+  }
 
   // ====== HP BAR ยอดขาย (ตามแท็บที่เลือก) ======
   html += '<div style="margin-top:0;padding-top:14px;border-top:1px solid var(--border)">';
@@ -4735,6 +4742,17 @@ async function renderComplianceTabContent(dealer) {
 // H1 STATUS WITH SIS REVENUE OPTION (Position H - ต้องมีในไฟล์)
 // ================================================================
 
+// อ่านยอดขาย SIS ของปีปัจจุบันเท่านั้น (ปีอื่นที่ยังไม่ตั้งค่า ไม่ถูกนำมาแสดง/คำนวณใน client-view)
+// fallback ไปฟิลด์เดิม sisRevenue/sisRevenueH2 เฉพาะปีปัจจุบัน เผื่อยังไม่เคยบันทึกแบบแยกปี
+function getCurrentYearSisRevenue(dealer, half) {
+  if (!dealer) return 0;
+  var year = String(new Date().getFullYear());
+  if (dealer.sisRevenueByYear && dealer.sisRevenueByYear[year]) {
+    return dealer.sisRevenueByYear[year][half] || 0;
+  }
+  return (half === 'h2' ? dealer.sisRevenueH2 : dealer.sisRevenue) || 0;
+}
+
 // ✅ แก้ไข: เพิ่ม parameter customPipelines
 async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue, customPipelines, passedDealer) {
   var dealer = passedDealer || null;
@@ -4752,8 +4770,8 @@ async function calculateH1StatusWithOption(dealerId, requirements, useSisRevenue
   var actualAmount = 0;
   var sourceText = '';
   
-  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
-    actualAmount = dealer.sisRevenue || 0;
+  if (useSisRevenue && dealer) {
+    actualAmount = getCurrentYearSisRevenue(dealer, 'h1');
     sourceText = '(ยอด SIS)';
   } else {
     // ✅ ใช้ pipelines ที่ส่งเข้ามา หรือ fallback ไปใช้ global pipelinesData
@@ -4806,8 +4824,8 @@ async function calculateHalfYearStatus(dealerId, target, periodCfg, useSisRevenu
   var actualAmount = 0;
   var sourceText = '';
 
-  if (useSisRevenue && dealer && dealer.sisRevenue !== undefined) {
-    actualAmount = dealer.sisRevenue || 0;
+  if (useSisRevenue && dealer) {
+    actualAmount = getCurrentYearSisRevenue(dealer, 'h2');
     sourceText = '(ยอด SIS)';
   } else {
     var pipelines = (customPipelines && customPipelines.length > 0) ? customPipelines : (pipelinesData || []);

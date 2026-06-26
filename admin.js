@@ -163,7 +163,12 @@ function rAdmin(el) {
     '</select></div>' +
     '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h2_end_day" class="fm-input" value="' + (cfg.h2Period?.endDay || 31) + '" min="1" max="31"></div>' +
     '</div>' +
-    '<button class="btn bp bsm" onclick="saveH2Period()">💾 บันทึก Period</button></div>' +
+    '<button class="btn bp bsm" onclick="saveH2Period()">💾 บันทึก Period</button>' +
+    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+    '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem">' +
+    '<input type="checkbox" id="h2_show_clientview" ' + (cfg.showH2InClientView !== false ? 'checked' : '') + ' onchange="toggleShowH2InClientView()">' +
+    '👁️ แสดงแท็บ H2 / รวมทั้งปี ใน Client-view (ปิดถ้ายังไม่พร้อมโชว์ข้อมูล H2)</label>' +
+    '</div></div>' +
 
     // Notification
     '<div class="card"><h2>🔔 Browser Notification</h2>' +
@@ -1505,6 +1510,13 @@ function saveH2Period() {
   saveConfig(cfg);
   toast('💾 บันทึก H2 Period แล้ว');
   render();
+}
+
+function toggleShowH2InClientView() {
+  var cfg = getConfig();
+  cfg.showH2InClientView = document.getElementById('h2_show_clientview').checked;
+  saveConfig(cfg);
+  toast(cfg.showH2InClientView ? '👁️ เปิดแสดง H2 ใน Client-view แล้ว' : '🙈 ปิดการแสดง H2 ใน Client-view แล้ว');
 }
 
 function initNewDemoPolicies() {
