@@ -784,7 +784,7 @@ function dlPipeCSV() {
   var pipes = ST.getAll('pipeline').sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
   var UP_COLS = 6;
 
-  var csv = '﻿"Register Date","Project Name","End User Name","End User Name Eng","Unit type","Dealer Name","DJI Dealer","Project revenue","Model","M4T Qty.","M4E Qty.","Dock 3 Qty.","M4TD Qty.","M400 Qty.","Forecast Amount","Real Amount","TOR","Bidding Date","Forecast Month","Shipment date","Remark","Letter of Authorized หนังสือแต่งตั้ง","Status","Duplicate งานซ้ำ"';
+  var csv = '﻿"Register Date","Project Name","End User Name","End User Name Eng","Unit type","Dealer Name","DJI Dealer","Project revenue","Model","M3M Qty.","M4T Qty.","M4E Qty.","Dock 3 Qty.","M4TD Qty.","M400 Qty.","Forecast Amount","Real Amount","TOR","Bidding Date","Forecast Month","Shipment date","Remark","Letter of Authorized หนังสือแต่งตั้ง","Status","Duplicate งานซ้ำ"';
   for (var u = 1; u <= UP_COLS; u++) csv += ',"Update ' + u + '"';
   csv += ',"Sale","DISPLAY (Hide/Show)"\n';
 
@@ -794,7 +794,7 @@ function dlPipeCSV() {
     var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
     var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
     var g = _pipeModelQtyByGroup(items);
-    csv += '"' + fD(p.registerDate) + '","' + esc(p.projectName) + '","' + esc(p.endUserTH) + '","' + esc(p.endUserEN) + '","' + (p.unitType || '') + '","' + (d ? d.name : '') + '","' + (p.djiDealer || '') + '","' + (p.projectRevenue || '') + '","' + _csvKeepNL(modelCell) + '","' + (g.m4t || '') + '","' + (g.m4e || '') + '","' + (g.dock3 || '') + '","' + (g.m4td || '') + '","' + (g.m400 || '') + '","' + (p.forecastAmount || '') + '","' + (p.realAmount || '') + '","' + (p.tor || '') + '","' + fD(p.biddingDate) + '","' + _fmtForecastMonth(p.biddingDate) + '","' + fD(p.shipmentDate) + '","' + esc(p.remark) + '","' + (p.appointmentLetter || '') + '","' + getPipeName(p.status) + '","' + (p.recurring ? 'Yes' : '') + '"';
+    csv += '"' + fD(p.registerDate) + '","' + esc(p.projectName) + '","' + esc(p.endUserTH) + '","' + esc(p.endUserEN) + '","' + (p.unitType || '') + '","' + (d ? d.name : '') + '","' + (p.djiDealer || '') + '","' + (p.projectRevenue || '') + '","' + _csvKeepNL(modelCell) + '","' + (g.m3m || '') + '","' + (g.m4t || '') + '","' + (g.m4e || '') + '","' + (g.dock3 || '') + '","' + (g.m4td || '') + '","' + (g.m400 || '') + '","' + (p.forecastAmount || '') + '","' + (p.realAmount || '') + '","' + (p.tor || '') + '","' + fD(p.biddingDate) + '","' + _fmtForecastMonth(p.biddingDate) + '","' + fD(p.shipmentDate) + '","' + esc(p.remark) + '","' + (p.appointmentLetter || '') + '","' + getPipeName(p.status) + '","' + (p.recurring ? 'Yes' : '') + '"';
     for (var li = 0; li < UP_COLS; li++) {
       csv += ',"' + (logs[li] ? esc(fDShort(logs[li].date ? logs[li].date.split('T')[0] : '') + ' ' + logs[li].content) : '') + '"';
     }
@@ -806,14 +806,16 @@ function dlPipeCSV() {
 // เก็บ \n ไว้ (สำหรับเซลล์ Model หลายบรรทัด) แค่ escape "
 function _csvKeepNL(s) { return String(s || '').replace(/"/g, '""').replace(/\r/g, ''); }
 
-// แตก qty ตามกลุ่มสินค้าหลัก (M4T/M4E/M4TD/M400/Dock 3) — เช็คเฉพาะเจาะจงก่อนกว้าง กัน M4TD หลุดไป M4T
+// แตก qty ตามกลุ่มสินค้าหลัก (M3M/M4T/M4E/M4TD/M400/Dock 3) — เช็คเฉพาะเจาะจงก่อนกว้าง กัน M4TD หลุดไป M4T
 // สินค้าที่ไม่ใช่ main drone product (battery, RC, accessory ฯลฯ) ไม่นับ
+// M3M = Mavic 3 Multispectral Universal Edition — เช็คทั้งคำย่อ "M3M" และชื่อเต็ม "MULTISPECTRAL" เพราะข้อมูลจริงมีทั้ง 2 แบบ
 function _pipeModelQtyByGroup(items) {
-  var g = { m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0 };
+  var g = { m3m: 0, m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0 };
   (items || []).forEach(function(it) {
     var name = (it.model || '').toUpperCase();
     var qty = Number(it.qty) || 0;
-    if (name.indexOf('M4TD') !== -1) g.m4td += qty;
+    if (name.indexOf('M3M') !== -1 || name.indexOf('MULTISPECTRAL') !== -1) g.m3m += qty;
+    else if (name.indexOf('M4TD') !== -1) g.m4td += qty;
     else if (name.indexOf('M4T') !== -1) g.m4t += qty;
     else if (name.indexOf('M4E') !== -1) g.m4e += qty;
     else if (name.indexOf('M400') !== -1) g.m400 += qty;
