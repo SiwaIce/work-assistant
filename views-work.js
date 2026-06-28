@@ -1240,11 +1240,19 @@ function addQuickComment(taskId) {
   render();
 }
 
+// รวม 2 prompt() (ชื่อ Step + วันกำหนดเสร็จ) เป็น modal เดียว เห็นทั้ง 2 ช่องพร้อมกัน
 function addQuickStep(taskId) {
-  var title = prompt('📋 ชื่อ Step:', '');
-  if (!title) return;
-  var dueDate = prompt('📅 กำหนดเสร็จ (DD/MM/YYYY):', addD(_td(), 3));
-  
+  openM('📋 เพิ่ม Step', '' +
+    '<div class="fg"><label>📋 ชื่อ Step *</label><input type="text" id="qst_title" class="fm-input"></div>' +
+    dpH('qst_date', addD(_td(), 3), 'กำหนดเสร็จ') +
+    '<button class="btn bp btn-full" onclick="saveQuickStep(\'' + taskId + '\')">💾 บันทึก</button>');
+}
+
+function saveQuickStep(taskId) {
+  var title = document.getElementById('qst_title').value.trim();
+  if (!title) return alert('ใส่ชื่อ Step');
+  var dueDate = dpG('qst_date');
+
   ST.add('taskLogs', {
     tid: taskId,
     type: 'step',
@@ -1253,16 +1261,25 @@ function addQuickStep(taskId) {
     done: false,
     date: _nw()
   });
-  
+
+  closeMForce();
   toast('✅ เพิ่ม Step แล้ว');
   render();
 }
 
+// รวม 2 prompt() (รายละเอียด + วันนัดติดตาม) เป็น modal เดียว เห็นทั้ง 2 ช่องพร้อมกัน
 function addQuickFollowup(taskId) {
-  var note = prompt('📞 รายละเอียดการติดตาม:', '');
-  if (!note) return;
-  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
-  
+  openM('📞 ตั้งนัดติดตาม', '' +
+    '<div class="fg"><label>📞 รายละเอียดการติดตาม *</label><textarea id="qfu2_note" rows="3"></textarea></div>' +
+    dpH('qfu2_date', addD(_td(), 3), 'นัดติดตามอีกครั้ง') +
+    '<button class="btn bp btn-full" onclick="saveQuickFollowup(\'' + taskId + '\')">💾 บันทึก</button>');
+}
+
+function saveQuickFollowup(taskId) {
+  var note = document.getElementById('qfu2_note').value.trim();
+  if (!note) return alert('ใส่รายละเอียดการติดตาม');
+  var dueDate = dpG('qfu2_date');
+
   // บันทึกเป็น taskLog
   ST.add('taskLogs', {
     tid: taskId,
@@ -1272,10 +1289,11 @@ function addQuickFollowup(taskId) {
     status: 'waiting',
     date: _nw()
   });
-  
+
   // ตั้ง followupDate ใน task
   ST.update('tasks', taskId, { followupDate: dueDate, followupNote: note });
-  
+
+  closeMForce();
   toast(`📞 ตั้งนัดติดตามวันที่ ${dueDate}`);
   render();
 }

@@ -769,7 +769,7 @@ function renderPipeTable(pipes) {
       '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="togglePipePin(\'' + p.id + '\')">📌</button>' +
-        '<button class="quick-update-btn" onclick="showQuickUpdateM(\'' + p.id + '\')">📝</button>' +
+        '<button class="quick-update-btn" onclick="showPipeUpdateM(\'' + p.id + '\')">📝</button>' +
       '</td>' +
       '</tr>';
   }
@@ -951,7 +951,7 @@ function rPipeDet(el) {
   html += '</div></div>';
 
   // Updates Timeline
-  html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml"><button class="btn bsm bp" onclick="showPipeLogM(\'' + p.id + '\')">➕ Update</button></span></h2>';
+  html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml"><button class="btn bsm bp" onclick="showPipeUpdateM(\'' + p.id + '\')">➕ Update</button></span></h2>';
   if (logs.length) {
     html += '<div class="tl">';
     for (var li = 0; li < logs.length; li++) {
@@ -1339,12 +1339,21 @@ function addQuickPipeComment(pipeId) {
   render();
 }
 
+// รวม 2 prompt() (รายละเอียด + วันนัดติดตาม) เป็น modal เดียว เห็นทั้ง 2 ช่องพร้อมกัน
 function addQuickPipeFollowup(pipeId) {
-  var note = prompt('📞 รายละเอียดการติดตาม:', '');
-  if (!note) return;
-  var dueDate = prompt('📅 นัดติดตามอีกครั้ง (DD/MM/YYYY):', addD(_td(), 3));
+  openM('📞 ตั้งนัดติดตาม', '' +
+    '<div class="fg"><label>📞 รายละเอียดการติดตาม *</label><textarea id="qfu_note" rows="3"></textarea></div>' +
+    dpH('qfu_date', addD(_td(), 3), 'นัดติดตามอีกครั้ง') +
+    '<button class="btn bp btn-full" onclick="saveQuickPipeFollowup(\'' + pipeId + '\')">💾 บันทึก</button>');
+}
+
+function saveQuickPipeFollowup(pipeId) {
+  var note = document.getElementById('qfu_note').value.trim();
+  if (!note) return alert('ใส่รายละเอียดการติดตาม');
+  var dueDate = dpG('qfu_date');
   ST.add('pipeLog', { pipeId: pipeId, type: 'followup', content: note + (dueDate ? ' (นัดติดตาม ' + dueDate + ')' : ''), date: _nw() });
   if (dueDate) ST.update('pipeline', pipeId, { followupDate: dueDate });
+  closeMForce();
   toast('📞 บันทึกนัดติดตามแล้ว');
   render();
 }

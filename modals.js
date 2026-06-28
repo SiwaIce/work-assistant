@@ -744,58 +744,47 @@ function savePipeline(dealerId, eid) {
   pipeItemsTemp = [];
 }
 
-// Pipeline Log
-function showPipeLogM(pipeId) {
-  openM('➕ Update Pipeline', '' +
-    '<div class="fg"><label>ประเภท</label><select id="fpl_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
-    '<div class="fg"><label>รายละเอียด *</label><textarea id="fpl_c" rows="4"></textarea></div>' +
-    dpH('fpl_d', _td(), 'วันที่') +
-    '<button class="btn bp btn-full" onclick="savePipeLog(\'' + pipeId + '\')">💾 บันทึก</button>');
-}
-
-function savePipeLog(pipeId) {
-  var content = document.getElementById('fpl_c').value.trim();
-  if (!content) return alert('ใส่รายละเอียด');
-  ST.add('pipeLog', {pipeId: pipeId, type: document.getElementById('fpl_t').value, content: content, date: (dpG('fpl_d') || _td()) + 'T' + new Date().toTimeString().slice(0, 8)});
-  closeMForce(); toast('📝 บันทึกแล้ว'); render();
-}
-
-// Quick Update Modal (NEW)
-function showQuickUpdateM(pipeId) {
+// Pipeline Update — รวม "📝 Quick Update" (เปลี่ยน status/next action ได้) กับ "➕ Update" (log อย่างเดียว)
+// เป็น modal เดียว ใช้ได้ทั้งจากปุ่มย่อในตาราง list และปุ่มในการ์ด Updates ของหน้า detail
+function showPipeUpdateM(pipeId) {
   var p = ST.getOne('pipeline', pipeId);
   if (!p) return;
   var cfg = getConfig();
-  openM('📝 Quick Update — ' + (p.projectName || '').substr(0, 30), '' +
+  openM('📝 อัพเดท Pipeline — ' + (p.projectName || '').substr(0, 30), '' +
     '<div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
-    '<div class="fg"><label>อัพเดท *</label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
+    '<div class="fg"><label>ประเภท</label><select id="qu_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
+    '<div class="fg"><label>รายละเอียด <small style="color:#64748b">(ไม่บังคับ ถ้าแค่เปลี่ยน Status/Next Action)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
     '<div class="fr"><div class="fg"><label>เปลี่ยน Status</label><select id="qu_st"><option value="">-- ไม่เปลี่ยน --</option>' + cfg.pipelineStatuses.map(function(s) { return '<option value="' + s.id + '"' + (p.status === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select></div>' +
     '<div class="fg"><label>🎯 Next Action</label><select id="qu_na"><option value="">--</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div></div>' +
     dpH('qu_fu', p.followupDate || '', 'Follow-up Date') +
-    '<button class="btn bp btn-full" onclick="saveQuickUpdate(\'' + pipeId + '\')">💾 บันทึก</button>');
+    dpH('qu_d', _td(), 'วันที่บันทึก') +
+    '<button class="btn bp btn-full" onclick="savePipeUpdate(\'' + pipeId + '\')">💾 บันทึก</button>');
 }
 
-function saveQuickUpdate(pipeId) {
+function savePipeUpdate(pipeId) {
   var content = document.getElementById('qu_c').value.trim();
-  if (!content) return alert('ใส่อัพเดท');
+  var logType = document.getElementById('qu_t').value;
   var newStatus = document.getElementById('qu_st').value;
   var nextAction = document.getElementById('qu_na').value;
   var followupDate = dpG('qu_fu');
-  
-  // Add log
-  var logType = 'update';
-  if (newStatus && newStatus !== ST.getOne('pipeline', pipeId).status) {
+  var p = ST.getOne('pipeline', pipeId);
+
+  var hasChange = content || newStatus || nextAction || followupDate;
+  if (!hasChange) return alert('ใส่รายละเอียดอัพเดท หรือเปลี่ยน Status/Next Action อย่างน้อยหนึ่งอย่าง');
+  if (!content && !confirm('ยังไม่ได้ใส่รายละเอียด ต้องการบันทึกการเปลี่ยนแปลงนี้ต่อไหม?')) return;
+
+  if (newStatus && p && newStatus !== p.status) {
     logType = 'status_change';
-    content = getPipeName(newStatus) + ' — ' + content;
+    content = getPipeName(newStatus) + (content ? ' — ' + content : '');
   }
-  ST.add('pipeLog', {pipeId: pipeId, type: logType, content: content, date: _nw()});
-  
-  // Update pipeline
+  ST.add('pipeLog', {pipeId: pipeId, type: logType, content: content || getPipeName(newStatus) || '(ไม่มีรายละเอียด)', date: (dpG('qu_d') || _td()) + 'T' + new Date().toTimeString().slice(0, 8)});
+
   var updates = {};
   if (newStatus) updates.status = newStatus;
   if (nextAction !== undefined) updates.nextAction = nextAction;
   if (followupDate !== undefined) updates.followupDate = followupDate;
   if (Object.keys(updates).length) ST.update('pipeline', pipeId, updates);
-  
+
   closeMForce(); toast('📝 อัพเดทแล้ว'); render();
 }
 

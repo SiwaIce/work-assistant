@@ -173,21 +173,22 @@ function showProspectDetailM(id) {
   h += bits.join(' · ') + '</div>';
 
   if (!isClosed) {
-    h += '<div style="display:flex;align-items:center;margin-bottom:14px">';
+    h += '<div style="display:flex;align-items:center;margin-bottom:6px">';
     PROSPECT_STAGES.forEach(function(s, i) {
       var done = i <= stageIdx;
       var current = i === stageIdx;
       var bg = done ? (current ? '#3b82f6' : '#22c55e') : '#334155';
       var fg = done ? (current ? '#fff' : '#06210f') : '#94a3b8';
-      h += '<div style="text-align:center;flex:1">';
+      h += '<div style="text-align:center;flex:1;cursor:pointer" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + s.k + '\')" title="กดเพื่อเปลี่ยนเป็น ' + sanitize(s.label) + '">';
       h += '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 4px">' + (done && !current ? '✓' : (i + 1)) + '</div>';
       h += '<div style="font-size:9px;color:' + (current ? 'var(--text)' : 'var(--text2)') + ';font-weight:' + (current ? '700' : '400') + '">' + s.label + '</div>';
       h += '</div>';
       if (i < PROSPECT_STAGES.length - 1) h += '<div style="flex:1;height:2px;background:' + (i < stageIdx ? '#22c55e' : '#334155') + '"></div>';
     });
     h += '</div>';
+    h += '<div style="font-size:9.5px;color:var(--text2);margin-bottom:14px">💡 กดที่จุดไหนก็ได้เพื่อเปลี่ยน stage — ย้อนกลับได้ ไม่จำเป็นต้องเรียงตามลำดับ</div>';
   } else {
-    h += '<div style="background:rgba(148,163,184,.15);border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:14px">✕ Lead นี้ปิดแล้ว (ไม่สนใจ)</div>';
+    h += '<div style="background:rgba(148,163,184,.15);border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">✕ Lead นี้ปิดแล้ว (ไม่สนใจ)<button class="btn bsm bo" onclick="reopenProspect(\'' + p.id + '\')">↩️ เปิดกลับมาใหม่</button></div>';
   }
 
   h += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;margin-bottom:12px">';
@@ -201,7 +202,11 @@ function showProspectDetailM(id) {
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isClosed && !isConverted) {
     h += '<button class="btn bsm bp" onclick="closeM();showAddVisitPlanFromProspect(\'' + p.id + '\')">📅 สร้างนัด Visit Plan</button>';
-    if (stageIdx < PROSPECT_STAGES.length - 1) {
+    if (stageIdx > 0) {
+      var prev = PROSPECT_STAGES[stageIdx - 1];
+      h += '<button class="btn bsm bo" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + prev.k + '\')">⬅️ ย้อนกลับเป็น "' + prev.label + '"</button>';
+    }
+    if (stageIdx >= 0 && stageIdx < PROSPECT_STAGES.length - 1) {
       var next = PROSPECT_STAGES[stageIdx + 1];
       h += '<button class="btn bsm bo" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + next.k + '\')">➡️ เลื่อนเป็น "' + next.label + '"</button>';
     }
@@ -215,13 +220,19 @@ function showProspectDetailM(id) {
   openM('🆕 รายละเอียด Lead', h);
 }
 
+// ใช้เปลี่ยน stage ได้ทั้งสองทาง (เลื่อนไปข้างหน้า หรือย้อนกลับ) — กดจุดไหนใน tracker หรือปุ่มลัดก็เรียกอันนี้เหมือนกัน
 function showProspectAdvanceM(id, newStage) {
+  var p = getProspect(id);
+  if (!p || p.stage === newStage) return; // กดจุดเดิม — ไม่ต้องทำอะไร
+  var order = PROSPECT_STAGES.map(function(s) { return s.k; });
+  var isBack = order.indexOf(newStage) < order.indexOf(p.stage);
   var info = _prospectStageInfo(newStage);
   var h = '<div style="max-width:360px">';
-  h += '<div class="fm-group"><label>📝 บันทึกหมายเหตุ (ไม่บังคับ)</label><textarea id="pr_advance_note" rows="3" class="fm-input" placeholder="เช่น คุยแล้วสนใจ Dock 3"></textarea></div>';
-  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="advanceProspectStage(\'' + id + '\',\'' + newStage + '\',document.getElementById(\'pr_advance_note\').value)">' + info.icon + ' เลื่อนเป็น ' + info.label + '</button>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">จาก "' + _prospectStageInfo(p.stage).label + '" → "' + info.label + '"' + (isBack ? ' (ย้อนกลับ)' : '') + '</div>';
+  h += '<div class="fm-group"><label>📝 บันทึกหมายเหตุ (ไม่บังคับ)</label><textarea id="pr_advance_note" rows="3" class="fm-input" placeholder="เช่น กดผิด ขอย้อนกลับ"></textarea></div>';
+  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="advanceProspectStage(\'' + id + '\',\'' + newStage + '\',document.getElementById(\'pr_advance_note\').value)">' + info.icon + ' เปลี่ยนเป็น ' + info.label + '</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
-  openM('➡️ เลื่อน Stage', h);
+  openM((isBack ? '⬅️' : '➡️') + ' เปลี่ยน Stage', h);
 }
 
 function advanceProspectStage(id, newStage, note) {
@@ -237,7 +248,31 @@ function advanceProspectStage(id, newStage, note) {
   }
   saveProspects(list);
   closeMForce();
-  toast('➡️ เลื่อน stage แล้ว');
+  toast('💾 เปลี่ยน stage แล้ว');
+  render();
+}
+
+// เปิด Lead ที่ปิดไปแล้วกลับมาใหม่ — ย้อนไปยัง stage ล่าสุดก่อนปิด (ถ้าหาไม่เจอ กลับไป "ใหม่")
+function reopenProspect(id) {
+  var list = getProspects();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      var pr = list[i];
+      var hist = pr.history || [];
+      var lastStage = 'new';
+      for (var j = hist.length - 1; j >= 0; j--) {
+        if (hist[j].stage !== 'closed') { lastStage = hist[j].stage; break; }
+      }
+      pr.stage = lastStage;
+      pr.updatedAt = new Date().toISOString();
+      pr.history = hist;
+      pr.history.push({ stage: lastStage, date: _td(), note: 'เปิด Lead กลับมาใหม่' });
+      break;
+    }
+  }
+  saveProspects(list);
+  closeMForce();
+  toast('↩️ เปิด Lead กลับมาแล้ว');
   render();
 }
 

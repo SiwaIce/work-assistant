@@ -211,17 +211,8 @@ function recalculateQuotationTotal() {
     grossTotal += (Number(quotationItems[i].amount) || 0);
   }
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
-  var discountAmount = 0;
-  if (discountPercentElem && discountPercentElem.value && parseFloat(discountPercentElem.value) > 0) {
-    var discountPct = parseFloat(discountPercentElem.value) || 0;
-    discountAmount = grossTotal * discountPct / 100;
-    var discountRow = document.getElementById('quoteDiscountRow');
-    if (discountRow) discountRow.style.display = 'flex';
-  } else {
-    var discountRow = document.getElementById('quoteDiscountRow');
-    if (discountRow) discountRow.style.display = 'none';
-    if (discountPercentElem) discountPercentElem.value = '0';
-  }
+  var discountPct = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
+  var discountAmount = grossTotal * discountPct / 100;
   var netAmount = grossTotal - discountAmount;
   var vatPercent = 7;
   var vatAmount = netAmount * vatPercent / 100;
@@ -555,6 +546,40 @@ function loadSolutionPreset(presetId) {
   });
   renderEstimatorItemsTable();
   toast('📂 โหลด "' + preset.name + '" แล้ว');
+}
+
+// chip "Solution ที่บันทึกไว้" ในใบเสนอราคาจริง — กดทีเดียวเพิ่มหลายรายการพร้อมราคาตาม Level ของใบนี้ (ไม่ใช่ราคา RRP แช่แข็งแบบ Estimator)
+function renderQuoteSolutionChips() {
+  var zone = document.getElementById('quoteSolutionChipZone');
+  if (!zone) return;
+  var presets = getSolutionPresets();
+  if (!presets.length) { zone.innerHTML = ''; return; }
+  var h = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">📂 Solution ที่บันทึกไว้ (กดเพื่อเพิ่มเข้าใบเสนอราคา)</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+  presets.forEach(function(p) {
+    h += '<span style="display:inline-flex;align-items:center;cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px" onclick="loadSolutionPresetIntoQuotation(\'' + p.id + '\')">' +
+      sanitize(p.name) + ' <span style="color:var(--text2);margin-left:4px">(' + (p.items || []).length + ' รายการ)</span></span>';
+  });
+  h += '</div>';
+  zone.innerHTML = h;
+}
+
+function loadSolutionPresetIntoQuotation(presetId) {
+  var preset = getSolutionPresets().find(function(p) { return p.id === presetId; });
+  if (!preset) return;
+  (preset.items || []).forEach(function(it) {
+    var unitPrice = getModelPriceByLevelForQuote(it.name, selectedLevelForPrice);
+    var existing = quotationItems.find(function(qi) { return qi.name === it.name; });
+    if (existing) {
+      existing.quantity += (it.quantity || 1);
+      existing.amount = existing.quantity * existing.unitPrice;
+    } else {
+      quotationItems.push({ sku: it.sku || '', name: it.name, quantity: it.quantity || 1, unitPrice: unitPrice, amount: (it.quantity || 1) * unitPrice });
+    }
+  });
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+  toast('📂 เพิ่ม "' + preset.name + '" แล้ว');
 }
 
 function showSaveSolutionM() {
@@ -964,7 +989,10 @@ function renderEditQuotationPage(quote) {
   // Products Section
   html += '<div class="card" style="margin-bottom:16px">';
   html += '<h2>📦 รายการสินค้า</h2>';
-  
+
+  // Solution preset chips — เอา pattern จาก Quick Price Estimator มาใช้ซ้ำ กดทีเดียวเพิ่มได้หลายรายการพร้อมราคาตาม Level ของใบนี้
+  html += '<div id="quoteSolutionChipZone"></div>';
+
   // Add product row with autocomplete
   html += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end">';
   html += '<div class="fg" style="flex:3"><label>🔍 เลือกสินค้า (พิมพ์ค้นหา)</label>';
@@ -988,11 +1016,10 @@ function renderEditQuotationPage(quote) {
   html += '<h2>💰 สรุป</h2>';
   html += '<div style="max-width:400px;margin-left:auto">';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
-  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0;display:none"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:6px 0;border-top:2px solid var(--accent);margin-top:4px;padding-top:8px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
-  html += '<div class="fr" style="justify-content:flex-end;padding:4px 0"><button class="btn bsm bo" onclick="toggleDiscountField()">➕ เพิ่มส่วนลด</button></div>';
   html += '</div></div>';
   
   // Contacts Card
@@ -1021,10 +1048,11 @@ function renderEditQuotationPage(quote) {
   html += '</div></div>';
   
   document.getElementById('ct').innerHTML = html;
-  
+
   renderQuotationItemsTable();
+  renderQuoteSolutionChips();
   recalculateQuotationTotal();
-  
+
   setTimeout(function() {
     var levelSelect = document.getElementById('editQuoteLevel');
     if (levelSelect) {
@@ -1075,11 +1103,6 @@ function editQuotation(quoteId) {
   }
   renderEditQuotationPage(quote);
 }
-function toggleDiscountField() {
-  var row = document.getElementById('quoteDiscountRow');
-  if (row) row.style.display = 'flex';
-}
-
 function editQuoteDealerChanged() {
   var dealerId = document.getElementById('editQuoteDealer').value;
   if (!dealerId) return;

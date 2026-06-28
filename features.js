@@ -3972,8 +3972,10 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
   h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
   if (!isLead && p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report เต็ม →</button>';
-  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm" style="background:#22c55e;color:#fff" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
   if (isLead) h2 += '<button class="btn bsm bo" onclick="vpConvertLeadToDealer(\'' + p.id + '\')">➕ แปลงเป็น Dealer</button>';
+  if (p.status && p.status !== 'planned') h2 += '<button class="btn bsm bo" onclick="resetVisitPlanStatus(\'' + p.id + '\')" title="กดผลผิด / อยากย้อนกลับเป็นวางแผนไว้">↩️ ยกเลิกผล</button>';
   h2 += '<button class="btn bsm bo" onclick="showAddVisitPlanM(\'' + p.date + '\',\'\',\'' + p.id + '\')">✏️ แก้ไข</button>';
   h2 += '<button class="btn bsm bd" onclick="removeVisitPlan(\'' + p.id + '\')">🗑️ ลบ</button>';
   h2 += '</div></div>';
@@ -4007,9 +4009,13 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
     }
   }
 
+  // จำ source-type/mode ที่เลือกล่าสุดไว้เป็นค่าเริ่มต้นของนัดใหม่ — ลดการเลือกซ้ำถ้าทำนัดประเภทเดียวกันต่อกันหลายอัน
+  var lastDefaults = {};
+  try { lastDefaults = JSON.parse(localStorage.getItem('v7_vpLastDefaults') || '{}') || {}; } catch(e) { lastDefaults = {}; }
+
   var selDealer = prefillDealerId || (plan ? plan.dealerId : '') || '';
-  var sourceType = plan ? (plan.sourceType || 'dealer') : (selDealer ? 'dealer' : 'dealer');
-  var selMode = plan ? plan.mode : 'offline';
+  var sourceType = plan ? (plan.sourceType || 'dealer') : (selDealer ? 'dealer' : (lastDefaults.sourceType || 'dealer'));
+  var selMode = plan ? plan.mode : (lastDefaults.mode || 'offline');
   var selTitle = plan ? (plan.title || '') : '';
   var selNote = plan ? (plan.note || '') : '';
 
@@ -4151,6 +4157,8 @@ function saveVisitPlan(date, editId) {
 
   var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note, timeStart: timeStart, timeEnd: timeEnd };
 
+  if (!editId) { try { localStorage.setItem('v7_vpLastDefaults', JSON.stringify({ sourceType: sourceType, mode: mode })); } catch(e) {} }
+
   if (sourceType === 'dealer') {
     var dealerId = document.getElementById('vp_dealer').value || '';
     if (!dealerId && !note && !title) { toast('เลือก Dealer หรือใส่หัวข้อนัด/หมายเหตุ'); return; }
@@ -4267,6 +4275,21 @@ function showVpLeadActualM(planId) {
   openM('📍 บันทึกผลการนัด (Lead)', h);
 }
 
+// ปุ่มลัด — ไปตามนัดแล้วไม่มีโน้ตเพิ่ม กดทีเดียวจบเหมือนฝั่ง Dealer (ของเดิม Lead ต้องเปิด modal เสมอ)
+// ยังเปิด modal ปกติได้ถ้าต้องการใส่โน้ต/เลื่อนนัด/ยกเลิก ผ่านปุ่ม "📍 บันทึกผลการนัด" คู่กัน — ไม่ได้ตัดความสามารถนั้นออก
+function vpQuickMarkAttended(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  ST.update('visitPlans', planId, {
+    status: 'done',
+    actual: { status: 'attended', note: (plan.actual && plan.actual.note) || '', date: _td() }
+  });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  if (plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', 'เข้าพบตามนัดแล้ว');
+  toast('✅ บันทึกแล้ว — ไปตามนัด');
+  render();
+}
+
 function saveVpLeadActual(planId, status) {
   var note = (document.getElementById('vp_actual_note').value || '').trim();
   var plan = ST.getOne('visitPlans', planId);
@@ -4278,6 +4301,16 @@ function saveVpLeadActual(planId, status) {
   if (status === 'attended' && plan && plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', note || 'เข้าพบตามนัดแล้ว');
   closeMForce();
   toast('💾 บันทึกผลแล้ว');
+  render();
+}
+
+// กดผลผิด / อยากย้อนกลับ — เคลียร์ผลนัด กลับเป็น "วางแผนไว้" เหมือนยังไม่ได้บันทึกผล
+// (ไม่ลบ Visit Report ที่ผูกไว้ถ้ามี แค่ปลดสถานะนัดนี้กลับ — ถ้าผูก Prospect ไว้ ต้องไปกดแก้ stage ที่หน้า Lead เอง เพราะระบบเลื่อน stage ไปข้างหน้าอัตโนมัติเท่านั้น ไม่ดึงกลับอัตโนมัติ)
+function resetVisitPlanStatus(planId) {
+  if (!confirm('ยกเลิกผลของนัดนี้ กลับเป็น "วางแผนไว้"?')) return;
+  ST.update('visitPlans', planId, { status: 'planned', actual: null });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  toast('↩️ ยกเลิกผลแล้ว');
   render();
 }
 

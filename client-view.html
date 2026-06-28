@@ -2583,6 +2583,14 @@ function loadPipeTimeline(pipeId, currentData) {
       if (JSON.stringify(bf.items||[]) !== JSON.stringify(af.items||[])) cf.push({ field: 'items', label: 'สินค้า', before: (bf.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||bf.model||'-', after: (af.items||[]).map(function(x){return x.model+' x'+x.qty;}).join(', ')||af.model||'-' });
       if ((bf.biddingDate||'') !== (af.biddingDate||'')) cf.push({ field: 'biddingDate', label: 'Bidding Date', before: bf.biddingDate||'-', after: af.biddingDate||'-' });
       if ((bf.endUserTH||bf.endUser||'') !== (af.endUserTH||'')) cf.push({ field: 'endUser', label: 'End User', before: bf.endUserTH||bf.endUser||'-', after: af.endUserTH||'-' });
+      if ((bf.agencyMain||'') !== (af.agencyMain||'')) cf.push({ field: 'agencyMain', label: 'หน่วยงานใหญ่', before: bf.agencyMain||'-', after: af.agencyMain||'-' });
+      if ((bf.agencySub||'') !== (af.agencySub||'')) cf.push({ field: 'agencySub', label: 'หน่วยงานย่อย', before: bf.agencySub||'-', after: af.agencySub||'-' });
+      if ((bf.shipmentDate||'') !== (af.shipmentDate||'')) cf.push({ field: 'shipmentDate', label: 'Shipment Date', before: bf.shipmentDate||'-', after: af.shipmentDate||'-' });
+      if (!!bf.djiCrmRegistered !== !!af.djiCrmRegistered) cf.push({ field: 'djiCrmRegistered', label: 'ลงทะเบียน CRM', before: bf.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง', after: af.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง' });
+      if (!!bf.hasCompetitor !== !!af.hasCompetitor) cf.push({ field: 'hasCompetitor', label: 'มีคู่แข่ง', before: bf.hasCompetitor ? 'มี' : 'ไม่มี', after: af.hasCompetitor ? 'มี' : 'ไม่มี' });
+      if ((bf.budgetFiscalYear||'') !== (af.budgetFiscalYear||'')) cf.push({ field: 'budgetFiscalYear', label: 'ปีงบประมาณ', before: bf.budgetFiscalYear||'-', after: af.budgetFiscalYear||'-' });
+      if ((bf.tor||'') !== (af.tor||'')) cf.push({ field: 'tor', label: 'TOR', before: bf.tor||'-', after: af.tor||'-' });
+      if ((bf.nextAction||'') !== (af.nextAction||'')) cf.push({ field: 'nextAction', label: 'Next Action', before: bf.nextAction||'-', after: af.nextAction||'-' });
       allEvents[0].changedFields = cf;
     }
     renderPipeTimeline(container, allEvents, currentData);
@@ -2596,10 +2604,14 @@ function getPipeStatusName(statusId) {
 
 // step tracker แนวนอน แทน dropdown สถานะเดิม — กดจุดไหนก็เปลี่ยนสถานะ (เขียนค่าลง #editStatus ที่ซ่อนไว้)
 // on_hold/lost ไม่ใช่ progression ปกติ แยกเป็น pill มุมขวาเหมือน "ปิด Lead" ในหน้า Prospect ของแอปหลัก
-function pipeStatusTrackerHtml(currentStatus) {
+// lastMainStatus = stage ล่าสุดก่อนเข้า on_hold/lost (ดู submitPipelineUpdate ที่คำนวณ/เก็บ field นี้)
+// ใช้แทน currentStatus ตอนคำนวณ idx เมื่อสถานะปัจจุบันเป็น on_hold/lost เพื่อให้เห็นว่าก่อนหยุด/แพ้ ไปถึงไหนแล้ว
+function pipeStatusTrackerHtml(currentStatus, lastMainStatus) {
   var mainFlow = STATUS_LIST.filter(function(s) { return s.id !== 'on_hold' && s.id !== 'lost'; });
-  var idx = mainFlow.findIndex(function(s) { return s.id === currentStatus; });
-  var h = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 8px">';
+  var isStalled = currentStatus === 'on_hold' || currentStatus === 'lost';
+  var refStatus = isStalled ? (lastMainStatus || currentStatus) : currentStatus;
+  var idx = mainFlow.findIndex(function(s) { return s.id === refStatus; });
+  var h = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 8px' + (isStalled ? ';opacity:.6' : '') + '">';
   mainFlow.forEach(function(s, i) {
     var state = idx < 0 ? 'todo' : (i < idx ? 'done' : (i === idx ? 'current' : 'todo'));
     var bg = state === 'done' ? '#22c55e' : state === 'current' ? 'var(--accent,#3b82f6)' : 'var(--border,#334155)';
@@ -2611,6 +2623,7 @@ function pipeStatusTrackerHtml(currentStatus) {
     if (i < mainFlow.length - 1) h += '<div style="flex:1;min-width:14px;height:2px;background:' + (idx >= 0 && i < idx ? '#22c55e' : 'var(--border,#334155)') + ';margin-top:11px"></div>';
   });
   h += '</div>';
+  if (isStalled && idx >= 0) h += '<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">📍 อยู่ที่ "' + esc(mainFlow[idx].name) + '" ก่อนหยุด/แพ้</div>';
   var isOnHold = currentStatus === 'on_hold', isLost = currentStatus === 'lost';
   h += '<div style="display:flex;gap:6px;justify-content:flex-end">';
   h += '<span onclick="setEditStatus(\'on_hold\')" style="cursor:pointer;background:' + (isOnHold ? 'rgba(148,163,184,.35)' : 'rgba(148,163,184,.15)') + ';color:#94a3b8;font-size:10px;padding:3px 9px;border-radius:6px">⏸️ On Hold</span>';
@@ -2622,8 +2635,10 @@ function pipeStatusTrackerHtml(currentStatus) {
 function setEditStatus(statusId) {
   var sel = document.getElementById('editStatus');
   if (sel) sel.value = statusId;
+  var lastEl = document.getElementById('editLastMainStatus');
+  if (lastEl && statusId !== 'on_hold' && statusId !== 'lost') lastEl.value = statusId;
   var wrap = document.getElementById('pipeStatusTrackerWrap');
-  if (wrap) wrap.innerHTML = pipeStatusTrackerHtml(statusId);
+  if (wrap) wrap.innerHTML = pipeStatusTrackerHtml(statusId, lastEl ? lastEl.value : '');
 }
 
 function renderPipeTimeline(container, events, currentData) {
@@ -2841,7 +2856,7 @@ function showUpdateModal(pipeId) {
     '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>' +
     '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="editAgencyMain" class="form-control" value="' + esc(p.agencyMain || '') + '" placeholder="กรม/กระทรวง"></div>' +
     '<div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="editAgencySub" class="form-control" value="' + esc(p.agencySub || '') + '" placeholder="กอง/สำนัก"></div></div>' +
-    '<div class="form-group"><label>📊 สถานะ</label><div id="pipeStatusTrackerWrap">' + pipeStatusTrackerHtml(p.status) + '</div><select id="editStatus" class="form-control" style="display:none">' + statusOptions + '</select></div>' +
+    '<div class="form-group"><label>📊 สถานะ</label><div id="pipeStatusTrackerWrap">' + pipeStatusTrackerHtml(p.status, p.lastMainStatus || p.status) + '</div><select id="editStatus" class="form-control" style="display:none">' + statusOptions + '</select><input type="hidden" id="editLastMainStatus" value="' + esc(p.lastMainStatus || p.status || '') + '"></div>' +
     '<div class="form-row">' +
     '<div class="form-group"><label>📅 Bidding Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editBiddingDate" class="form-control" value="' + (biddingDateVal ? fD(biddingDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editBiddingDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editBiddingDate\',\'editBiddingDatePicker\')"><button type="button" onclick="document.getElementById(\'editBiddingDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
     '<div class="form-group"><label>🚚 Shipment Date</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editShipmentDate" class="form-control" value="' + (shipmentDateVal ? fD(shipmentDateVal) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editShipmentDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editShipmentDate\',\'editShipmentDatePicker\')"><button type="button" onclick="document.getElementById(\'editShipmentDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div>' +
@@ -2852,6 +2867,8 @@ function showUpdateModal(pipeId) {
     '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="editProjCrm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'editProjCrmDateWrap\').style.display=this.checked?\'block\':\'none\'"> 🗂️ ลงทะเบียนใน CRM ของ DJI แล้ว</label>' +
     '<div id="editProjCrmDateWrap" style="' + (p.djiCrmRegistered ? 'display:block' : 'display:none') + ';margin-top:8px"><label style="font-size:12px;color:var(--text2)">📅 วันที่ลงทะเบียน</label><div style="display:flex;gap:6px;align-items:center"><input type="text" id="editProjCrmDate" class="form-control" value="' + (p.djiCrmDate ? fD(p.djiCrmDate) : '') + '" placeholder="DD/MM/YYYY" autocomplete="off" style="flex:1"><input type="date" id="editProjCrmDatePicker" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" onchange="syncDateFromPicker(\'editProjCrmDate\',\'editProjCrmDatePicker\')"><button type="button" onclick="document.getElementById(\'editProjCrmDatePicker\').showPicker()" style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;flex-shrink:0">📅</button></div></div></div>' +
     '<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="editProjComp"' + (p.hasCompetitor ? ' checked' : '') + '> ⚔️ คาดว่ามีคู่แข่งในโครงการนี้</label></div>' +
+    '<div class="form-row"><div class="form-group"><label>📋 TOR <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="editProjTor" class="form-control" value="' + esc(p.tor || '') + '" placeholder="เช่น ออก TOR แล้ว, รอ TOR"></div>' +
+    '<div class="form-group"><label>🎯 Next Action <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="editProjNextAction" class="form-control" value="' + esc(p.nextAction || '') + '" placeholder="เช่น รอเซ็นสัญญา, นัดพรีเซนต์"></div></div>' +
     '<div class="form-group"><label>📝 รายละเอียดอัพเดท (จะแจ้งพนักงานขาย)</label><textarea id="updateContent" rows="3" class="form-control" placeholder="เช่น ได้รับ PO แล้ว, เปลี่ยน Spec..."></textarea></div>' +
     '</div><div class="modal-footer"><button class="btn" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="submitPipelineUpdate(\'' + pipeId + '\')">💾 ส่งอัพเดท</button></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -2917,6 +2934,8 @@ function submitPipelineUpdate(pipeId) {
     agencyMain: document.getElementById('editAgencyMain') ? document.getElementById('editAgencyMain').value.trim() : '',
     agencySub: document.getElementById('editAgencySub') ? document.getElementById('editAgencySub').value.trim() : '',
     status: newStatus,
+    lastMainStatus: (newStatus === 'on_hold' || newStatus === 'lost') ?
+      (document.getElementById('editLastMainStatus') ? document.getElementById('editLastMainStatus').value : newStatus) : newStatus,
     items: items, 
     model: items[0].model, 
     modelQty: totalQty, 
@@ -2926,6 +2945,8 @@ function submitPipelineUpdate(pipeId) {
     djiCrmRegistered: document.getElementById('editProjCrm') ? document.getElementById('editProjCrm').checked : false,
     djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : ''),
     hasCompetitor: document.getElementById('editProjComp') ? document.getElementById('editProjComp').checked : false,
+    tor: document.getElementById('editProjTor') ? document.getElementById('editProjTor').value.trim() : '',
+    nextAction: document.getElementById('editProjNextAction') ? document.getElementById('editProjNextAction').value.trim() : '',
     budgetFiscalYear: document.getElementById('editProjFY') && document.getElementById('editProjFY').value ? parseInt(document.getElementById('editProjFY').value, 10) : null,
     dealerId: dealerId,
     updateNote: updateContent || 'อัพเดทข้อมูลทั่วไป',
@@ -2966,6 +2987,14 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
       if (JSON.stringify(beforeSnap.items||[]) !== JSON.stringify(data.items||[])) changedFields.push({ field: 'items', label: 'สินค้า', before: (beforeSnap.items||[]).map(function(i){return i.model+' x'+i.qty;}).join(', ')||beforeSnap.model||'-', after: (data.items||[]).map(function(i){return i.model+' x'+i.qty;}).join(', ')||data.model||'-' });
       if ((beforeSnap.biddingDate||'') !== (data.biddingDate||'')) changedFields.push({ field: 'biddingDate', label: 'Bidding Date', before: beforeSnap.biddingDate||'-', after: data.biddingDate||'-' });
       if ((beforeSnap.endUserTH||beforeSnap.endUser||'') !== (data.endUserTH||'')) changedFields.push({ field: 'endUser', label: 'End User', before: beforeSnap.endUserTH||beforeSnap.endUser||'-', after: data.endUserTH||'-' });
+      if ((beforeSnap.agencyMain||'') !== (data.agencyMain||'')) changedFields.push({ field: 'agencyMain', label: 'หน่วยงานใหญ่', before: beforeSnap.agencyMain||'-', after: data.agencyMain||'-' });
+      if ((beforeSnap.agencySub||'') !== (data.agencySub||'')) changedFields.push({ field: 'agencySub', label: 'หน่วยงานย่อย', before: beforeSnap.agencySub||'-', after: data.agencySub||'-' });
+      if ((beforeSnap.shipmentDate||'') !== (data.shipmentDate||'')) changedFields.push({ field: 'shipmentDate', label: 'Shipment Date', before: beforeSnap.shipmentDate||'-', after: data.shipmentDate||'-' });
+      if (!!beforeSnap.djiCrmRegistered !== !!data.djiCrmRegistered) changedFields.push({ field: 'djiCrmRegistered', label: 'ลงทะเบียน CRM', before: beforeSnap.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง', after: data.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง' });
+      if (!!beforeSnap.hasCompetitor !== !!data.hasCompetitor) changedFields.push({ field: 'hasCompetitor', label: 'มีคู่แข่ง', before: beforeSnap.hasCompetitor ? 'มี' : 'ไม่มี', after: data.hasCompetitor ? 'มี' : 'ไม่มี' });
+      if ((beforeSnap.budgetFiscalYear||'') !== (data.budgetFiscalYear||'')) changedFields.push({ field: 'budgetFiscalYear', label: 'ปีงบประมาณ', before: beforeSnap.budgetFiscalYear||'-', after: data.budgetFiscalYear||'-' });
+      if ((beforeSnap.tor||'') !== (data.tor||'')) changedFields.push({ field: 'tor', label: 'TOR', before: beforeSnap.tor||'-', after: data.tor||'-' });
+      if ((beforeSnap.nextAction||'') !== (data.nextAction||'')) changedFields.push({ field: 'nextAction', label: 'Next Action', before: beforeSnap.nextAction||'-', after: data.nextAction||'-' });
     }
     return existingRef.set(updateData, { merge: true }).then(function() {
       return getCustomerTimelineRef(dealerId).doc('tl_' + Date.now() + '_' + Math.random().toString(36).substr(2,4)).set({
@@ -3826,7 +3855,7 @@ function buildBeforeAfterPipeline(oldData, newData) {
   if (hasSnapshot) html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid var(--border)">ก่อน</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">หลัง</th><tr></thead>';
   else html += '<thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2);border-bottom:2px solid var(--border)">ฟิลด์</th><th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--accent);border-bottom:2px solid var(--border)">ค่า</th></tr></thead>';
   html += '<tbody>';
-  var fields = [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUserTH', label:'End User (TH)' },{ key:'status', label:'สถานะ' },{ key:'model', label:'Model หลัก' },{ key:'modelQty', label:'จำนวนรวม' },{ key:'forecastAmount', label:'มูลค่า (฿)' },{ key:'biddingDate', label:'Bidding Date' },{ key:'shipmentDate', label:'Shipment Date' },{ key:'tor', label:'TOR' },{ key:'nextAction', label:'Next Action' }];
+  var fields = [{ key:'projectName', label:'ชื่อโครงการ' },{ key:'endUserTH', label:'End User (TH)' },{ key:'agencyMain', label:'หน่วยงานใหญ่' },{ key:'agencySub', label:'หน่วยงานย่อย' },{ key:'status', label:'สถานะ' },{ key:'model', label:'Model หลัก' },{ key:'modelQty', label:'จำนวนรวม' },{ key:'forecastAmount', label:'มูลค่า (฿)' },{ key:'biddingDate', label:'Bidding Date' },{ key:'shipmentDate', label:'Shipment Date' },{ key:'djiCrmRegistered', label:'ลงทะเบียน CRM' },{ key:'hasCompetitor', label:'มีคู่แข่ง' },{ key:'budgetFiscalYear', label:'ปีงบประมาณ' },{ key:'tor', label:'TOR' },{ key:'nextAction', label:'Next Action' }];
   for (var i=0;i<fields.length;i++) {
     var f = fields[i];
     var newVal = (newData[f.key] !== undefined && newData[f.key] !== null) ? String(newData[f.key]) : '';

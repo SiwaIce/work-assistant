@@ -512,8 +512,7 @@ function rDealerDet(el) {
   <button class="btn bsm bs" onclick="startTimer('dealer','${d.id}','${sanitize(d.name)}')">⏱️</button>
   <button class="btn bsm ${isPinned?'bw':'bo'}" onclick="ST.togglePin('dealer','${d.id}','${sanitize(d.name)}','');render()">📌</button>
 <button class="btn bsm bo" onclick="showDealerTokenModal('${d.id}')">🔗 สร้างลิงก์</button>
-<button class="btn bsm bo" onclick="showChangePinModal('${d.id}')">🔒 PIN</button>
-  <button class="btn bsm bo" onclick="showCurrentLinkModal('${d.id}')">🔗 ลิงก์ปัจจุบัน</button>
+<button class="btn bsm bo" onclick="showDealerAccessModal('${d.id}')">🔗🔒 ลิงก์ & PIN</button>
   <button class="btn bsm bo" onclick="showPreVisitBrief('${d.id}')">📋 เตรียม Visit</button>
 <button class="btn bsm bp" onclick="syncDealerPipelineToCustomer('${d.id}')" title="Sync Pipeline ให้ลูกค้า">🔄 Sync</button>
   <button class="btn bsm bo" onclick="showDealerM('${d.id}')">✏️</button>
@@ -1841,10 +1840,24 @@ function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {
     (!step.done && isCurrent ? '🔄 ขั้นตอนปัจจุบัน — กดเพื่อทำเสร็จ' : '') +
     (!step.done && !isCurrent ? 'ยังไม่ได้ทำ — กดเพื่อทำเสร็จ' : '') +
     '</div>' +
-    (step.note ? '<div class="ob-note" style="font-size:.7rem;color:var(--text2);margin-top:3px;white-space:pre-wrap">' + sanitize(step.note) + '</div>' : '') +
+    '<input type="text" class="ob-note-inline" value="' + sanitize(step.note || '') + '" placeholder="+ พิมพ์โน้ตตรงนี้ได้เลย" style="font-size:.7rem;color:var(--text2);margin-top:4px;width:100%;background:transparent;border:none;border-bottom:1px dashed var(--border);padding:2px 0" ' +
+    'onclick="event.stopPropagation()" onblur="saveOnboardStepNoteInline(\'' + dealerId + '\',' + idx + ',this.value)" onkeydown="if(event.key===\'Enter\'){this.blur();}">' +
     '</div>' +
-    '<button class="btn bsm bo" onclick="event.stopPropagation();editOnboardStep(\'' + dealerId + '\',' + idx + ')" style="flex-shrink:0" title="แก้ไขวันที่/หมายเหตุ">📝</button>' +
+    '<button class="btn bsm bo" onclick="event.stopPropagation();editOnboardStep(\'' + dealerId + '\',' + idx + ')" style="flex-shrink:0" title="แก้ไขวันที่เสร็จ (เปลี่ยนสถานะ/วันที่)">📅</button>' +
     '</div>';
+}
+
+// แก้โน้ตอย่างเดียวแบบ inline — เซฟทันทีตอนคลิกออกจากช่อง ไม่ต้องเปิด modal (ของเดิมต้องเปิด-แก้-เซฟ-ปิด 4 จังหวะ)
+// ส่วนวันที่เสร็จ/สถานะ done ยังแก้ผ่านปุ่ม 📅 (editOnboardStep) เหมือนเดิม เพราะมีผลข้างเคียงต่อ level/สถานะอื่นของ Dealer
+function saveOnboardStepNoteInline(dealerId, stepIdx, noteValue) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.onboarding || !d.onboarding.steps || !d.onboarding.steps[stepIdx]) return;
+  var trimmed = (noteValue || '').trim();
+  if ((d.onboarding.steps[stepIdx].note || '') === trimmed) return; // ไม่มีอะไรเปลี่ยน ไม่ต้องเซฟ
+  d.onboarding.steps[stepIdx].note = trimmed;
+  ST.update('dealers', dealerId, d);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  toast('💾 บันทึกโน้ตแล้ว');
 }
 
 // ================================================================
@@ -2615,54 +2628,61 @@ function closeModal() {
   if (modal) modal.remove();
 }
 // ================================================================
-// MANAGE PIN ONLY
+// ลิงก์ปัจจุบัน + PIN — รวมเป็น panel เดียว (เดิมแยก showChangePinModal/showCurrentLinkModal คนละปุ่ม
+// ข้อมูลชุดเดียวกันจาก dealerUpdates/{dealerId} เลยรวมได้โดยไม่เสียอะไร)
 // ================================================================
 
-async function showChangePinModal(dealerId) {
+async function showDealerAccessModal(dealerId) {
   var dealer = ST.getOne('dealers', dealerId);
   if (!dealer) return;
-  
+
+  var baseUrl = window.location.href.split('?')[0].split('#')[0];
+  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+  var currentUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
+
   var currentPin = '';
   try {
     var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-    if (pinDoc.exists && pinDoc.data().pin) {
-      currentPin = pinDoc.data().pin;
-    }
+    if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
   } catch(e) {}
-  
+
   var html = `
-    <div style="max-width:400px">
-      <div class="form-group">
-        <label>🏪 Dealer</label>
-        <div><strong>${sanitize(dealer.name)}</strong></div>
+    <div style="max-width:480px">
+      <div class="form-group"><label>🏪 Dealer</label><div><strong>${sanitize(dealer.name)}</strong></div></div>
+      <div class="form-group"><label>🔗 ลิงก์ปัจจุบัน</label>
+        <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${currentUrl}</div>
       </div>
-      <div class="form-group">
-        <label>🔒 ตั้งรหัสผ่าน (PIN)</label>
+      <div class="bg" style="margin-bottom:14px">
+        <button class="btn bp" onclick="copyToClipboard('${currentUrl.replace(/'/g, "\\'")}')">📋 คัดลอกลิงก์</button>
+        <button class="btn bo" onclick="window.open('${currentUrl}', '_blank')">🔗 ทดสอบเปิด</button>
+      </div>
+      <div class="form-group" style="border-top:1px solid var(--border);padding-top:12px">
+        <label>🔒 PIN ของลูกค้า</label>
         <input type="password" id="changePinInput" class="form-control" value="${currentPin}" placeholder="ใส่รหัส 4-6 หลัก" maxlength="6">
-        <div class="hint">💡 ถ้าเว้นว่าง จะลบ PIN (ลูกค้าไม่ต้องใส่รหัส)</div>
+        <div class="hint">💡 ถ้าเว้นว่าง จะลบ PIN (ลูกค้าเข้าได้เลยไม่ต้องใส่รหัส) — PIN จะไม่ติดไปในลิงก์ ต้องแจ้งลูกค้าแยกช่องทาง</div>
       </div>
-      <div class="bg" style="margin-top:8px">
+      <div class="bg">
         <button class="btn bp" onclick="savePinOnly('${dealerId}')">💾 บันทึก PIN</button>
-        <button class="btn bo" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn bo" onclick="closeModal()">ปิด</button>
       </div>
     </div>
   `;
-  
-  openM('🔒 ตั้งรหัสผ่านสำหรับ ' + dealer.name, html);
+
+  openM('🔗🔒 ลิงก์ & PIN — ' + dealer.name, html);
 }
 
 async function savePinOnly(dealerId) {
   var pin = document.getElementById('changePinInput').value.trim();
-  
+
   try {
     var oldDoc = await db.collection('dealerUpdates').doc(dealerId).get();
     var oldPin = oldDoc.exists ? oldDoc.data().pin : '';
-    
-    await db.collection('dealerUpdates').doc(dealerId).set({ 
+
+    await db.collection('dealerUpdates').doc(dealerId).set({
       pin: pin || '',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-    
+
     // ✅ Audit Log
     var dealer = ST.getOne('dealers', dealerId);
     addAuditLog(
@@ -2674,54 +2694,12 @@ async function savePinOnly(dealerId) {
       dealer ? dealer.name : '',
       { oldValue: oldPin || '(ไม่มี)', newValue: pin || '(ไม่มี)' }
     );
-    
+
     toast(pin ? '✅ บันทึก PIN เรียบร้อย' : '🗑️ ลบ PIN แล้ว');
-    closeModal();
+    showDealerAccessModal(dealerId);
   } catch(e) {
     toast('❌ เกิดข้อผิดพลาด: ' + e.message);
   }
-}
-// ✅ แสดงลิงก์ปัจจุบัน (แทนที่ showTokenList เดิม)
-async function showCurrentLinkModal(dealerId) {
-  var dealer = ST.getOne('dealers', dealerId);
-  if (!dealer) return;
-  
-  var baseUrl = window.location.href.split('?')[0].split('#')[0];
-  var basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
-  
-  // ดึง PIN ปัจจุบันจาก Firebase
-  var currentPin = '';
-  try {
-    var pinDoc = await db.collection('dealerUpdates').doc(dealerId).get();
-    if (pinDoc.exists && pinDoc.data().pin) currentPin = pinDoc.data().pin;
-  } catch(e) {}
-  
-  // ลิงก์ปัจจุบัน (ไม่มี PIN ในลิงก์)
-  var currentUrl = basePath + 'client-view.html?dealerId=' + encodeURIComponent(dealerId);
-  
-  var pinStatus = currentPin ? '🔒 มี PIN (ลูกค้าต้องใส่รหัส)' : '🔓 ไม่มี PIN (เข้าได้เลย)';
-  var pinWarning = currentPin ? `<div class="hint" style="margin-top:8px;padding:8px;background:#f59e0b20;border-radius:8px;border-left:3px solid #f59e0b">
-    🔑 <strong>PIN สำหรับลูกค้า:</strong> ${currentPin}
-    <div class="hint">⚠️ แจ้ง PIN แยกช่องทาง ห้ามใส่ในลิงก์</div>
-  </div>` : '';
-  
-  var html = `
-    <div style="max-width:500px">
-      <div class="form-group"><label>🏪 Dealer</label><div><strong>${sanitize(dealer.name)}</strong></div></div>
-      <div class="form-group"><label>🔗 ลิงก์ปัจจุบัน</label>
-        <div style="background:var(--bg);padding:12px;border-radius:8px;word-break:break-all;font-family:monospace;font-size:11px">${currentUrl}</div>
-        <div class="hint" style="margin-top:4px">${pinStatus}</div>
-      </div>
-      ${pinWarning}
-      <div class="bg" style="margin-top:12px">
-        <button class="btn bp" onclick="copyToClipboard('${currentUrl.replace(/'/g, "\\'")}')">📋 คัดลอกลิงก์</button>
-        <button class="btn bd" onclick="window.open('${currentUrl}', '_blank')">🔗 ทดสอบเปิด</button>
-      </div>
-      <div class="hint" style="margin-top:12px;font-size:11px">💡 ต้องการเปลี่ยน PIN? กดปุ่ม "🔒 PIN" ด้านบน</div>
-    </div>
-  `;
-  
-  openM('🔗 ลิงก์ปัจจุบัน', html);
 }
 // ================================================================
 // DEALER DEMO TAB (กำหนด Demo Option และรายการอุปกรณ์)

@@ -2897,6 +2897,7 @@ function approvePipelineUpdate(dealerId, updateId, callback) {
         endUserEN: cleanData.endUserEN || '',
         unitType: cleanData.unitType || '',
         status: cleanData.status || 'prospect',
+        lastMainStatus: cleanData.lastMainStatus || cleanData.status || 'prospect',
         model: cleanData.model || '',
         modelQty: cleanData.modelQty || 1,
         items: cleanData.items || [],
