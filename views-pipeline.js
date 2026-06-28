@@ -526,8 +526,9 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<div style="flex:1"></div>' +
-    '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()">📋</button>' +
-    '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()">🃏</button>' +
+    '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()" title="ตาราง">📋</button>' +
+    '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()" title="การ์ด">🃏</button>' +
+    '<button class="btn bsm ' + (pipeView === 'sheet' ? 'bp' : 'bo') + '" onclick="pipeView=\'sheet\';render()" title="Sheet เต็มคอลัมน์">📊</button>' +
     '</div>' +
 
     (pipeCompareMode ? renderPipeCompareSuggestPanel() : '') +
@@ -566,7 +567,7 @@ function rPipeline(el) {
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
     '</div>' +
 
-    (pipeView === 'card' ? renderPipeCards(pipes) : renderPipeTable(pipes)) +
+    (pipeView === 'card' ? renderPipeCards(pipes) : pipeView === 'sheet' ? renderPipeSheetTable(pipes) : renderPipeTable(pipes)) +
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
     (pipeSearch ? ' (ค้นหา: "' + sanitize(pipeSearch) + '")' : '') +
@@ -780,27 +781,59 @@ function renderPipeTable(pipes) {
 
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
-function dlPipeCSV() {
-  var pipes = ST.getAll('pipeline').sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
-  var UP_COLS = 6;
+// คอลัมน์มาตรฐานของตาราง Pipeline แบบเต็ม — ใช้ร่วมกันทั้ง CSV export และมุมมอง Sheet บนจอ
+var PIPE_SHEET_HEADERS = ['Register Date','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
-  var csv = '﻿"Register Date","Project Name","End User Name","End User Name Eng","Unit type","Dealer Name","DJI Dealer","Project revenue","Model","M3M Qty.","M4T Qty.","M4E Qty.","Dock 3 Qty.","M4TD Qty.","M400 Qty.","Forecast Amount","Real Amount","TOR","Bidding Date","Forecast Month","Shipment date","Remark","Letter of Authorized หนังสือแต่งตั้ง","Status","Duplicate งานซ้ำ"';
-  for (var u = 1; u <= UP_COLS; u++) csv += ',"Update ' + u + '"';
-  csv += ',"Sale","DISPLAY (Hide/Show)"\n';
+// ดึงค่าดิบของแต่ละ pipeline ตามลำดับ PIPE_SHEET_HEADERS (ยังไม่ escape) ให้ CSV/HTML เอาไป escape ตามบริบทของตัวเอง
+function _pipeRowFields(p) {
+  var d = ST.getOne('dealers', p.dealerId);
+  var logs = ST.pipeLogsByPipe(p.id).reverse();
+  var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+  var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
+  var g = _pipeModelQtyByGroup(items);
+  var fields = [
+    fD(p.registerDate), p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', p.projectRevenue || '', modelCell,
+    g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
+    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
+  ];
+  for (var li = 0; li < 6; li++) fields.push(logs[li] ? (fDShort(logs[li].date ? logs[li].date.split('T')[0] : '') + ' ' + logs[li].content) : '');
+  fields.push(p.saleName || '', p.sheetDisplay || 'Show');
+  return fields;
+}
 
+function dlPipeCSV() { _exportPipeCSV(ST.getAll('pipeline'), 'pipeline-' + _td() + '.csv'); }
+
+function dlPipeCSVForDealer(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  var safeName = (d ? d.name : 'dealer').replace(/[^a-zA-Z0-9ก-๙_\-]/g, '_');
+  _exportPipeCSV(ST.pipelineByDealer(dealerId), 'pipeline-' + safeName + '-' + _td() + '.csv');
+}
+
+function _exportPipeCSV(pipes, filename) {
+  pipes = pipes.slice().sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
+  var csv = '﻿"' + PIPE_SHEET_HEADERS.join('","') + '"\n';
   pipes.forEach(function(p) {
-    var d = ST.getOne('dealers', p.dealerId);
-    var logs = ST.pipeLogsByPipe(p.id).reverse();
-    var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
-    var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
-    var g = _pipeModelQtyByGroup(items);
-    csv += '"' + fD(p.registerDate) + '","' + esc(p.projectName) + '","' + esc(p.endUserTH) + '","' + esc(p.endUserEN) + '","' + (p.unitType || '') + '","' + (d ? d.name : '') + '","' + (p.djiDealer || '') + '","' + (p.projectRevenue || '') + '","' + _csvKeepNL(modelCell) + '","' + (g.m3m || '') + '","' + (g.m4t || '') + '","' + (g.m4e || '') + '","' + (g.dock3 || '') + '","' + (g.m4td || '') + '","' + (g.m400 || '') + '","' + (p.forecastAmount || '') + '","' + (p.realAmount || '') + '","' + (p.tor || '') + '","' + fD(p.biddingDate) + '","' + _fmtForecastMonth(p.biddingDate) + '","' + fD(p.shipmentDate) + '","' + esc(p.remark) + '","' + (p.appointmentLetter || '') + '","' + getPipeName(p.status) + '","' + (p.recurring ? 'Yes' : '') + '"';
-    for (var li = 0; li < UP_COLS; li++) {
-      csv += ',"' + (logs[li] ? esc(fDShort(logs[li].date ? logs[li].date.split('T')[0] : '') + ' ' + logs[li].content) : '') + '"';
-    }
-    csv += ',"' + esc(p.saleName) + '","' + (p.sheetDisplay || 'Show') + '"\n';
+    var f = _pipeRowFields(p);
+    csv += f.map(function(v, idx) {
+      // Model cell (idx 8) เก็บ \n ไว้สำหรับสินค้าหลายบรรทัด ส่วนฟิลด์อื่น strip \n ตามมาตรฐาน CSV
+      return '"' + (idx === 8 ? _csvKeepNL(v) : esc(v)) + '"';
+    }).join(',') + '\n';
   });
-  dlBlob(csv, 'pipeline-' + _td() + '.csv');
+  dlBlob(csv, filename);
+}
+
+// มุมมอง Sheet — ตารางเต็มคอลัมน์ตรงกับ CSV export ใช้ทั้งหน้า Pipeline หลักและ Pipeline tab ของ Dealer
+function renderPipeSheetTable(pipes) {
+  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
+  h += '<thead><tr>' + PIPE_SHEET_HEADERS.map(function(hd) { return '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0">' + sanitize(hd) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  pipes.forEach(function(p) {
+    var f = _pipeRowFields(p);
+    h += '<tr style="cursor:pointer;border-bottom:1px solid var(--border)" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" onmouseover="this.style.background=\'rgba(59,130,246,.06)\'" onmouseout="this.style.background=\'\'">';
+    h += f.map(function(v) { return '<td style="padding:5px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + sanitize(String(v == null ? '' : v).replace(/\n/g, ' / ')) + '</td>'; }).join('');
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
 }
 
 // เก็บ \n ไว้ (สำหรับเซลล์ Model หลายบรรทัด) แค่ escape "

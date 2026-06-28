@@ -1,3 +1,5 @@
+var dealerPipeViewMode = 'list'; // 'list' หรือ 'sheet' — สลับมุมมอง Pipeline tab ของ Dealer
+
 // ================================================================
 // JWT TOKEN FUNCTIONS (แบบไม่ต้องใช้ library)
 // ================================================================
@@ -795,7 +797,9 @@ function dealerPipelineTab(d) {
 
   var h = '<div class="card"><h2>📊 Pipeline (' + activeCount + ' active / ' + pipes.length + ' total)';
   h += '<span class="ml">';
-  h += '<button class="btn bsm bo" onclick="copyDealerPipeline(\'' + d.id + '\')">📋</button>';
+  h += '<button class="btn bsm bo" onclick="copyDealerPipeline(\'' + d.id + '\')" title="Copy">📋</button>';
+  h += '<button class="btn bsm bo" onclick="dlPipeCSVForDealer(\'' + d.id + '\')" title="Export CSV">📤</button>';
+  h += '<button class="btn bsm ' + (dealerPipeViewMode === 'sheet' ? 'bp' : 'bo') + '" onclick="dealerPipeViewMode=dealerPipeViewMode===\'sheet\'?\'list\':\'sheet\';render()" title="มุมมอง Sheet เต็มคอลัมน์">📊</button>';
   h += '<button class="btn bsm bp" onclick="showPipelineM(\'' + d.id + '\')">➕</button>';
   h += '</span></h2>';
 
@@ -807,7 +811,9 @@ function dealerPipelineTab(d) {
   h += '<div class="sc"><div class="sn c4">' + fmtMoneyShort(lostAmt) + '</div><div class="sl">Lost (' + lostCount + ')</div></div>';
   h += '</div>';
 
-  if (pipes.length) {
+  if (pipes.length && dealerPipeViewMode === 'sheet') {
+    h += renderPipeSheetTable(pipes);
+  } else if (pipes.length) {
     pipes.forEach(function(p, idx) {
       var lastLog = ST.pipeLogsByPipe(p.id)[0];
       var isEnd = ['delivered','lost'].indexOf(p.status) !== -1;
