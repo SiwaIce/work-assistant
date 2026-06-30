@@ -16,6 +16,7 @@ var PROSPECT_STAGE_COLOR = {
   visited: '#fb923c', interested: '#c084fc', converted: '#4ade80', closed: '#94a3b8'
 };
 var prospectFilterStage = 'all';
+var prospectViewMode = 'card'; // 'card' | 'table' | 'dash'
 
 function _prospectStageInfo(k) {
   return PROSPECT_STAGES.find(function(s) { return s.k === k; }) ||
@@ -51,21 +52,38 @@ function rProspectList(el) {
     else if (counts[p.stage] !== undefined) counts[p.stage]++;
   });
 
-  var h = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
-  h += '<div class="btn bsm ' + (prospectFilterStage === 'all' ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'all\';render()">ทั้งหมด (' + counts.all + ')</div>';
-  PROSPECT_STAGES.forEach(function(s) {
-    h += '<div class="btn bsm ' + (prospectFilterStage === s.k ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'' + s.k + '\';render()">' + s.icon + ' ' + s.label + ' (' + counts[s.k] + ')</div>';
-  });
-  h += '<div class="btn bsm ' + (prospectFilterStage === 'closed' ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'closed\';render()">✕ ปิด (' + counts.closed + ')</div>';
+  // toolbar row: stage filters + view toggle + add button
+  var h = '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">';
+  if (prospectViewMode !== 'dash') {
+    h += '<div class="btn bsm ' + (prospectFilterStage === 'all' ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'all\';render()">ทั้งหมด (' + counts.all + ')</div>';
+    PROSPECT_STAGES.forEach(function(s) {
+      h += '<div class="btn bsm ' + (prospectFilterStage === s.k ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'' + s.k + '\';render()">' + s.icon + ' ' + s.label + ' (' + counts[s.k] + ')</div>';
+    });
+    h += '<div class="btn bsm ' + (prospectFilterStage === 'closed' ? 'bp' : 'bo') + '" onclick="prospectFilterStage=\'closed\';render()">✕ ปิด (' + counts.closed + ')</div>';
+  }
   h += '<div style="flex:1"></div>';
+  // view mode toggle
+  h += '<div style="display:flex;gap:4px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:3px">';
+  h += '<div class="btn bsm ' + (prospectViewMode === 'card' ? 'bp' : '') + '" style="padding:4px 10px" onclick="prospectViewMode=\'card\';render()" title="Card View">🗂️</div>';
+  h += '<div class="btn bsm ' + (prospectViewMode === 'table' ? 'bp' : '') + '" style="padding:4px 10px" onclick="prospectViewMode=\'table\';render()" title="Table View">📋</div>';
+  h += '<div class="btn bsm ' + (prospectViewMode === 'dash' ? 'bp' : '') + '" style="padding:4px 10px" onclick="prospectViewMode=\'dash\';render()" title="Dashboard">📊</div>';
+  h += '</div>';
   h += '<button class="btn" style="background:#22c55e" onclick="showAddProspectM()">➕ เพิ่ม Lead</button>';
   h += '</div>';
+
+  if (prospectViewMode === 'dash') {
+    h += _prospectDashboardHtml(prospects, counts);
+    el.innerHTML = h;
+    return;
+  }
 
   var shown = prospectFilterStage === 'all' ? prospects : prospects.filter(function(p) { return p.stage === prospectFilterStage; });
   shown = shown.slice().sort(function(a, b) { return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''); });
 
   if (!shown.length) {
     h += '<div class="vp-empty">ยังไม่มี Lead ในกลุ่มนี้ — กด "➕ เพิ่ม Lead" เพื่อเริ่มบันทึก</div>';
+  } else if (prospectViewMode === 'table') {
+    h += _prospectTableHtml(shown);
   } else {
     shown.forEach(function(p) { h += _prospectCardHtml(p); });
   }
@@ -90,6 +108,199 @@ function _prospectCardHtml(p) {
   h += '<span style="background:' + color + '22;color:' + color + ';font-size:10px;padding:3px 9px;border-radius:6px;white-space:nowrap">' + info.icon + ' ' + info.label + '</span>';
   h += '<span style="color:var(--text2)">›</span>';
   h += '</div></div>';
+  return h;
+}
+
+// ---------------- Table View ----------------
+function _prospectTableHtml(shown) {
+  var h = '<div style="overflow-x:auto;border:1px solid var(--border,#334155);border-radius:10px">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+  h += '<thead><tr style="background:var(--card,#1e293b);border-bottom:1px solid var(--border,#334155)">';
+  h += '<th style="padding:8px 10px;text-align:center;color:var(--text2);font-weight:500;font-size:11px;width:36px">#</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">บริษัท</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">ผู้ติดต่อ</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">เบอร์</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">ที่มา</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">Stage</th>';
+  h += '<th style="padding:8px 10px;text-align:left;color:var(--text2);font-weight:500;font-size:11px">อัปเดต</th>';
+  h += '</tr></thead><tbody>';
+  shown.forEach(function(p, idx) {
+    var info = _prospectStageInfo(p.stage);
+    var color = PROSPECT_STAGE_COLOR[p.stage] || '#60a5fa';
+    var updStr = p.updatedAt ? _prospectDaysAgo(p.updatedAt) : '-';
+    h += '<tr onclick="showProspectDetailM(\'' + p.id + '\')" style="border-bottom:1px solid var(--border,#334155);cursor:pointer" onmouseover="this.style.background=\'var(--hover,rgba(255,255,255,.04))\'" onmouseout="this.style.background=\'\'">';
+    h += '<td style="padding:8px 10px;text-align:center;color:var(--text2);font-size:11px">' + (idx + 1) + '</td>';
+    h += '<td style="padding:8px 10px;font-weight:600;font-size:13px">' + sanitize(p.companyName || '-') + '</td>';
+    h += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + sanitize(p.contactName || '-') + '</td>';
+    h += '<td style="padding:8px 10px;font-size:12px">';
+    if (p.phone) {
+      h += sanitize(p.phone) + ' <button onclick="event.stopPropagation();copyToClip(\'' + sanitize(p.phone).replace(/'/g,"\\'") + '\')" style="background:transparent;border:none;cursor:pointer;color:var(--accent,#60a5fa);font-size:11px;padding:0 2px">📋</button>';
+    } else { h += '<span style="color:var(--text2)">-</span>'; }
+    h += '</td>';
+    h += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + sanitize(p.source || '-') + '</td>';
+    h += '<td style="padding:8px 10px"><span style="background:' + color + '22;color:' + color + ';font-size:10px;padding:3px 8px;border-radius:6px;white-space:nowrap">' + info.icon + ' ' + info.label + '</span></td>';
+    h += '<td style="padding:8px 10px;font-size:11px;color:var(--text2)">' + updStr + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div style="padding:6px 12px;font-size:11px;color:var(--text2);border-top:1px solid var(--border,#334155)">' + shown.length + ' รายการ · คลิกแถวเพื่อดูรายละเอียด</div>';
+  h += '</div>';
+  return h;
+}
+
+function _prospectDaysAgo(iso) {
+  if (!iso) return '-';
+  var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (diff === 0) return 'วันนี้';
+  if (diff === 1) return 'เมื่อวาน';
+  if (diff < 30) return diff + ' วันที่แล้ว';
+  if (diff < 365) return Math.floor(diff / 30) + ' เดือนที่แล้ว';
+  return Math.floor(diff / 365) + ' ปีที่แล้ว';
+}
+
+// ---------------- Dashboard ----------------
+function _prospectDashboardHtml(prospects, counts) {
+  var active = prospects.filter(function(p) { return p.stage !== 'closed' && p.stage !== 'converted'; });
+  var converted = counts['converted'] || 0;
+  var closed = counts['closed'] || 0;
+  var total = prospects.length;
+
+  // source breakdown
+  var srcMap = {};
+  prospects.forEach(function(p) {
+    var s = p.source || 'ไม่ระบุ';
+    srcMap[s] = (srcMap[s] || 0) + 1;
+  });
+  var srcArr = Object.keys(srcMap).map(function(k) { return { label: k, n: srcMap[k] }; });
+  srcArr.sort(function(a, b) { return b.n - a.n; });
+
+  // recent activity (last 6 updates)
+  var recent = prospects.slice().sort(function(a, b) {
+    return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
+  }).slice(0, 6);
+
+  // funnel — count per ordered stage
+  var stageOrder = PROSPECT_STAGES.map(function(s) { return s.k; });
+  var maxFunnel = Math.max.apply(null, PROSPECT_STAGES.map(function(s) { return counts[s.k] || 0; })) || 1;
+
+  // conversion step-to-step
+  var convRates = [];
+  for (var i = 0; i < PROSPECT_STAGES.length - 1; i++) {
+    var fromN = counts[PROSPECT_STAGES[i].k] || 0;
+    var toN = counts[PROSPECT_STAGES[i + 1].k] || 0;
+    // cumulative: how many reached "to" out of those that reached "from"
+    var fromCum = 0, toCum = 0;
+    for (var j = i; j < PROSPECT_STAGES.length; j++) fromCum += (counts[PROSPECT_STAGES[j].k] || 0);
+    for (var j2 = i + 1; j2 < PROSPECT_STAGES.length; j2++) toCum += (counts[PROSPECT_STAGES[j2].k] || 0);
+    toCum += converted;
+    fromCum += converted;
+    var rate = fromCum > 0 ? Math.round(toCum / fromCum * 100) : 0;
+    convRates.push({ from: PROSPECT_STAGES[i].label, to: PROSPECT_STAGES[i + 1].label, rate: rate });
+  }
+
+  var srcColors = ['#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ec4899','#94a3b8'];
+
+  var h = '';
+
+  // metric summary row
+  h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">';
+  var metrics = [
+    { label: 'Lead ทั้งหมด', val: total, sub: '' },
+    { label: 'กำลังติดตาม', val: active.length, sub: 'ยังไม่ปิด', color: '#60a5fa' },
+    { label: 'แปลงเป็น Dealer', val: converted, sub: total > 0 ? Math.round(converted / total * 100) + '% conversion' : '', color: '#4ade80' },
+    { label: 'ปิด / ไม่สนใจ', val: closed, sub: total > 0 ? Math.round(closed / total * 100) + '% lost' : '', color: '#fb923c' }
+  ];
+  metrics.forEach(function(m) {
+    h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:12px 14px">';
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + m.label + '</div>';
+    h += '<div style="font-size:24px;font-weight:700;color:' + (m.color || 'var(--text)') + ';line-height:1">' + m.val + '</div>';
+    if (m.sub) h += '<div style="font-size:11px;color:var(--text2);margin-top:3px">' + m.sub + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
+
+  // funnel
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;letter-spacing:.3px">LEAD FUNNEL</div>';
+  PROSPECT_STAGES.forEach(function(s) {
+    var n = counts[s.k] || 0;
+    var barW = Math.max(4, Math.round(n / maxFunnel * 100));
+    var color = PROSPECT_STAGE_COLOR[s.k] || '#60a5fa';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">';
+    h += '<div style="font-size:11px;color:var(--text2);width:100px;flex-shrink:0;white-space:nowrap">' + s.icon + ' ' + s.label + '</div>';
+    h += '<div style="flex:1;background:rgba(255,255,255,.06);border-radius:4px;height:18px;overflow:hidden">';
+    h += '<div style="width:' + barW + '%;height:100%;background:' + color + '33;border-right:2px solid ' + color + ';display:flex;align-items:center;padding-left:6px;font-size:10px;color:' + color + ';font-weight:600">' + (n > 0 ? n : '') + '</div>';
+    h += '</div>';
+    h += '<div style="font-size:11px;color:var(--text2);width:20px;text-align:right">' + n + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+
+  // source breakdown
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;letter-spacing:.3px">ที่มาของ LEAD</div>';
+  if (srcArr.length === 0) {
+    h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีข้อมูล</div>';
+  } else {
+    var maxSrc = srcArr[0].n;
+    srcArr.slice(0, 6).forEach(function(s, i) {
+      var pct = total > 0 ? Math.round(s.n / total * 100) : 0;
+      var barW = Math.max(4, Math.round(s.n / maxSrc * 100));
+      var color = srcColors[i % srcColors.length];
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">';
+      h += '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0"></div>';
+      h += '<div style="font-size:11px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(s.label) + '</div>';
+      h += '<div style="width:70px;background:rgba(255,255,255,.06);border-radius:4px;height:6px;flex-shrink:0"><div style="width:' + barW + '%;height:6px;border-radius:4px;background:' + color + '"></div></div>';
+      h += '<div style="font-size:11px;color:var(--text2);width:26px;text-align:right">' + pct + '%</div>';
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+  h += '</div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  // conversion rate
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;letter-spacing:.3px">STAGE CONVERSION</div>';
+  convRates.forEach(function(c) {
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border,#334155)">';
+    h += '<div style="font-size:11px;color:var(--text2)">' + c.from + ' → ' + c.to + '</div>';
+    var rcolor = c.rate >= 70 ? '#4ade80' : c.rate >= 40 ? '#fbbf24' : '#fb923c';
+    h += '<div style="font-size:13px;font-weight:700;color:' + rcolor + '">' + c.rate + '%</div>';
+    h += '</div>';
+  });
+  if (total > 0) {
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">';
+    h += '<div style="font-size:11px;color:var(--text2)">Overall (→ Dealer)</div>';
+    h += '<div style="font-size:13px;font-weight:700;color:#4ade80">' + Math.round(converted / total * 100) + '%</div>';
+    h += '</div>';
+  }
+  h += '</div>';
+
+  // recent activity
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:12px;letter-spacing:.3px">อัปเดตล่าสุด</div>';
+  if (recent.length === 0) {
+    h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีข้อมูล</div>';
+  } else {
+    recent.forEach(function(p) {
+      var info = _prospectStageInfo(p.stage);
+      var color = PROSPECT_STAGE_COLOR[p.stage] || '#60a5fa';
+      var ago = _prospectDaysAgo(p.updatedAt || p.createdAt);
+      h += '<div onclick="showProspectDetailM(\'' + p.id + '\')" style="display:flex;gap:8px;margin-bottom:8px;cursor:pointer;align-items:flex-start">';
+      h += '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';margin-top:4px;flex-shrink:0"></div>';
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.companyName || '-') + '</div>';
+      h += '<div style="font-size:11px;color:var(--text2)">' + info.icon + ' ' + info.label + ' · ' + ago + '</div>';
+      h += '</div></div>';
+    });
+  }
+  h += '</div>';
+  h += '</div>';
+
   return h;
 }
 
