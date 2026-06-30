@@ -108,6 +108,7 @@ function _noteCard(n) {
   h += '<div style="font-weight:700;font-size:12px;flex:1;word-break:break-word">' + sanitize(n.title || (n.type === 'fields' ? '📋 Fields Note' : '📝 Note')) + (n.pinned ? ' 📌' : '') + '</div>';
   h += '<div style="display:flex;gap:3px;flex-shrink:0">';
   h += '<button class="btn bsm bo" style="padding:2px 5px;font-size:10px" onclick="_openNoteEdit(\'' + n.id + '\')">✏️</button>';
+  h += '<button class="btn bsm bo" style="padding:2px 5px;font-size:10px" onclick="dupNote(\'' + n.id + '\')" title="Duplicate">⧉</button>';
   h += '<button class="btn bsm bd" style="padding:2px 5px;font-size:10px" onclick="trashNote(\'' + n.id + '\')">🗑️</button>';
   h += '</div></div>';
 
@@ -220,8 +221,8 @@ function _renderFieldsModal(id, color, pinned, title) {
 }
 
 function _sfAdd(id, color, pinned) {
-  _structFields.push({ label: '', value: '' });
   _syncSFFromDOM();
+  _structFields.push({ label: '', value: '' });
   _renderFieldsModal(id, _getCurrentColor('sf_color') || color, pinned, (document.getElementById('sf_title') || {}).value || '');
 }
 
@@ -232,8 +233,9 @@ function _sfDel(idx, id, color, pinned) {
 }
 
 function _syncSFFromDOM() {
-  var labels = document.querySelectorAll('input[oninput^="_structFields"][oninput*=".label"]');
-  var values = document.querySelectorAll('input[oninput^="_structFields"][oninput*=".value"]');
+  // ใช้ ].label= และ ].value= เพื่อกัน this.value ปนกัน
+  var labels = document.querySelectorAll('input[oninput*="].label="]');
+  var values = document.querySelectorAll('input[oninput*="].value="]');
   labels.forEach(function(el, i) { if (_structFields[i]) _structFields[i].label = el.value; });
   values.forEach(function(el, i) { if (_structFields[i]) _structFields[i].value = el.value; });
 }
@@ -303,6 +305,24 @@ function cpNote(noteId) {
 // ================================================================
 // DELETE / TRASH
 // ================================================================
+function dupNote(id) {
+  var n = ST.getOne('postit', id);
+  if (!n) return;
+  var now = new Date().toISOString();
+  var copy = {};
+  Object.keys(n).forEach(function(k) { copy[k] = n[k]; });
+  delete copy.id;
+  copy.title = (n.title ? n.title + ' (copy)' : 'Copy');
+  copy.pinned = false;
+  copy.created = now;
+  copy.updated = now;
+  copy.status = 'active';
+  if (copy.fields) copy.fields = copy.fields.map(function(f) { return { label: f.label, value: f.value }; });
+  ST.add('postit', copy);
+  toast('⧉ Duplicate แล้ว');
+  render();
+}
+
 function trashNote(id) {
   ST.update('postit', id, { status: 'trash', deletedAt: new Date().toISOString() });
   toast('🗑️ ย้ายไปถังขยะแล้ว — เปิดถังขยะเพื่อกู้คืน');
