@@ -1543,8 +1543,8 @@ function renderFavorites() {
     'feedback': '💡 Feedback', 'kpi': '🎯 KPI', 'customKpi': '🎯 KPI Dashboard',
     'monthlyGoal': '🎯 Monthly Goal', 'demoTracker': '🚁 Demo Equipment',
     'kpiScorecard': '📊 KPI เซลล์',
-    'quotations': '💰 Quotation', 'knowledge': '📚 Knowledge', 'exports': '📤 Export',
-    'health': '🏥 Data Health', 'admin': '⚙️ ตั้งค่า'
+    'quotations': '💰 Quotation', 'knowledge': '📚 Knowledge', 'notes': '📓 Note',
+    'exports': '📤 Export', 'health': '🏥 Data Health', 'admin': '⚙️ ตั้งค่า'
   };
   
   for (var i = 0; i < favs.length; i++) {
@@ -1557,6 +1557,96 @@ function renderFavorites() {
   }
   
   el.innerHTML = h;
+}
+
+// ================================================================
+// QUICK MENU — home page action buttons (configurable)
+// ================================================================
+var ALL_QUICK_ITEMS = [
+  {id:'addVisit',    icon:'🤝', name:'เพิ่ม Visit',    action:'showVisitM()'},
+  {id:'addTask',     icon:'📋', name:'เพิ่มงาน',       action:'showTaskM()'},
+  {id:'addPipe',     icon:'📊', name:'เพิ่ม Pipeline', action:'showPipelineM()'},
+  {id:'quickNote',   icon:'📝', name:'Quick Note',      action:'showQNote()'},
+  {id:'addNote',     icon:'📓', name:'เพิ่ม Note',      action:"showAddNoteM()"},
+  {id:'line',        icon:'💬', name:'LINE Message',    action:'openLineTemplates()'},
+  {id:'visitPlan',   icon:'📅', name:'Visit Plan',      action:"go('visitPlan')"},
+  {id:'notes',       icon:'📓', name:'Note',            action:"go('notes')"},
+  {id:'pipeline',    icon:'📊', name:'Pipeline',        action:"go('pipeline')"},
+  {id:'dealers',     icon:'🏪', name:'Dealers',         action:"go('dealers')"},
+  {id:'tasks',       icon:'📋', name:'Tasks',           action:"go('tasks')"},
+  {id:'visits',      icon:'🤝', name:'Visit Report',    action:"go('visits')"},
+  {id:'followup',    icon:'📞', name:'Follow-up',       action:"go('followup')"},
+  {id:'report',      icon:'📊', name:'Weekly Report',   action:"go('report')"},
+  {id:'dashboard',   icon:'📈', name:'Dashboard',       action:"go('dashboard')"},
+  {id:'calendar',    icon:'📆', name:'ปฏิทิน',         action:"go('calendar')"},
+  {id:'customKpi',   icon:'🎯', name:'KPI',             action:"go('customKpi')"},
+  {id:'kpiScorecard',icon:'📊', name:'KPI เซลล์',      action:"go('kpiScorecard')"},
+  {id:'demoTracker', icon:'🚁', name:'Demo',            action:"go('demoTracker')"},
+  {id:'quotations',  icon:'💰', name:'Quotation',       action:"go('quotations')"},
+  {id:'knowledge',   icon:'📚', name:'Knowledge',       action:"go('knowledge')"},
+  {id:'emailDrafts', icon:'📧', name:'Email Draft',     action:"go('emailDrafts')"},
+  {id:'forecast',    icon:'📦', name:'Forecast',        action:"go('forecast')"},
+  {id:'exports',     icon:'📤', name:'Export',          action:"go('exports')"},
+  {id:'admin',       icon:'⚙️', name:'ตั้งค่า',        action:"go('admin')"}
+];
+
+function getQuickMenu() {
+  var saved = localStorage.getItem('v7_quickMenu');
+  if (saved) { try { return JSON.parse(saved); } catch(e) {} }
+  return ['addVisit','addTask','addPipe','quickNote','line','visitPlan'];
+}
+
+function saveQuickMenu(list) {
+  localStorage.setItem('v7_quickMenu', JSON.stringify(list));
+}
+
+function showEditQuickMenu() {
+  var cur = getQuickMenu();
+  var h = '<div style="max-width:400px">';
+  h += '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">กดเลือกปุ่มที่ต้องการในหน้าหลัก (แนะนำ 4-8 ปุ่ม)</div>';
+  ALL_QUICK_ITEMS.forEach(function(item) {
+    var on = cur.indexOf(item.id) !== -1;
+    h += '<div class="fav-edit-item" onclick="toggleQMItem(\'' + item.id + '\',this)">';
+    h += '<input type="checkbox"' + (on ? ' checked' : '') + ' onclick="event.stopPropagation();toggleQMItem(\'' + item.id + '\',this.parentElement)">';
+    h += '<span>' + item.icon + ' ' + item.name + '</span>';
+    h += '</div>';
+  });
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn btn-blue" onclick="saveQMFromModal()">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('⚡ ตั้งค่า Quick Menu', h);
+}
+
+function toggleQMItem(itemId, el) {
+  var chk = el.querySelector('input[type=checkbox]');
+  if (chk) chk.checked = !chk.checked;
+}
+
+function saveQMFromModal() {
+  var checks = document.querySelectorAll('.fav-edit-item input[type=checkbox]:checked');
+  var list = [];
+  for (var i = 0; i < checks.length; i++) {
+    var parent = checks[i].parentElement;
+    var onclick = parent.getAttribute('onclick') || '';
+    var match = onclick.match(/toggleQMItem\('([^']+)'/);
+    if (match) list.push(match[1]);
+  }
+  saveQuickMenu(list);
+  toast('⚡ บันทึก Quick Menu แล้ว');
+  closeMForce();
+  render();
+}
+
+function renderQuickMenuButtons() {
+  var cur = getQuickMenu();
+  var map = {};
+  ALL_QUICK_ITEMS.forEach(function(x) { map[x.id] = x; });
+  return cur.map(function(id) {
+    var item = map[id];
+    if (!item) return '';
+    return '<div class="mb-action-btn" onclick="' + item.action + '"><span class="mb-action-icon">' + item.icon + '</span>' + item.name + '</div>';
+  }).join('');
 }
 
 // ================================================================
@@ -1870,15 +1960,12 @@ function renderMbHome() {
     h += '</div>';
   }
 
-  // Quick Actions
-  h += '<div class="mb-actions">';
-  h += '<div class="mb-action-btn" onclick="showVisitM()"><span class="mb-action-icon">🤝</span>เพิ่ม Visit</div>';
-  h += '<div class="mb-action-btn" onclick="showTaskM()"><span class="mb-action-icon">📋</span>เพิ่มงาน</div>';
-  h += '<div class="mb-action-btn" onclick="showPipelineM()"><span class="mb-action-icon">📊</span>เพิ่ม Pipeline</div>';
-  h += '<div class="mb-action-btn" onclick="showQNote()"><span class="mb-action-icon">📝</span>Quick Note</div>';
-  h += '<div class="mb-action-btn" onclick="openLineTemplates()"><span class="mb-action-icon">💬</span>LINE</div>';
-  h += '<div class="mb-action-btn" onclick="go(\'visitPlan\')"><span class="mb-action-icon">📅</span>Visit Plan</div>';
+  // Quick Actions (configurable)
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+  h += '<div style="font-size:11px;color:var(--text2);font-weight:600">⚡ QUICK MENU</div>';
+  h += '<button class="btn bsm bo" style="font-size:10px;padding:2px 6px" onclick="showEditQuickMenu()">✏️ ตั้งค่า</button>';
   h += '</div>';
+  h += '<div class="mb-actions">' + renderQuickMenuButtons() + '</div>';
 
   // Stats Grid
   h += '<div class="mb-grid">';
