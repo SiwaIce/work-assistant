@@ -85,6 +85,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .mci span{font-size:.93em;line-height:1.3;flex:1;color:var(--text)}
 .mchk-hint{font-size:.75em;color:var(--muted);margin-top:5px;padding-left:2px}
 
+/* ── Multicheck image cards ── */
+.mchk-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.mchk-img-card{border:1.5px solid var(--border);border-radius:12px;cursor:pointer;position:relative;overflow:hidden;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none;background:#fff}
+.mchk-img-card:active{transform:scale(.97)}
+.mchk-img-card.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.mchk-img-card img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.mchk-img-card-ph{width:100%;aspect-ratio:4/3;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:2em}
+.mchk-img-card-lbl{padding:7px 8px;font-size:.8em;font-weight:600;color:var(--text);line-height:1.3}
+.mchk-img-card-ck{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--blue);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s}
+.mchk-img-card.sel .mchk-img-card-ck{opacity:1}
+
 /* ── Checkbox single ── */
 .cbs{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;cursor:pointer}
 .cbs input{width:18px!important;height:18px!important;accent-color:var(--blue);flex-shrink:0}
@@ -170,6 +181,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 /* ── Conditional hidden ── */
 .fld-cond-hidden{display:none!important}
+
+/* ── Review panel ── */
+.rv-list{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:6px}
+.rv-row{display:flex;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.rv-row:last-child{border-bottom:none}
+.rv-row:nth-child(even){background:var(--surface)}
+.rv-lbl{font-size:.78em;color:var(--muted);font-weight:600;flex:0 0 38%;line-height:1.4}
+.rv-val{font-size:.88em;color:var(--text);flex:1;word-break:break-word;line-height:1.4}
+.btn-back{flex:0 0 auto;padding:15px 18px;border-radius:12px;border:1.5px solid var(--border);background:none;cursor:pointer;font-size:.92em;color:var(--text2);font-family:inherit;transition:.15s}
+.btn-back:hover{border-color:var(--blue);color:var(--blue)}
 </style>
 </head>
 <body>
@@ -194,6 +215,7 @@ firebase.initializeApp({
 });
 var db = firebase.firestore();
 var _form = null, _cType = null, _ratingVals = {}, _activeFlds = {};
+var _pendingAnswers = null, _pendingActive = null;
 
 function _p(k){ return new URLSearchParams(window.location.search).get(k); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -313,8 +335,9 @@ function renderForm(){
   if(f.countdownEnd) initCountdown(f.countdownEnd);
   initConditional();
   updateProgress();
-  document.getElementById('app').addEventListener('input', updateProgress);
-  document.getElementById('app').addEventListener('change', function(){ _updateConditional(); updateProgress(); });
+  document.getElementById('app').addEventListener('input', function(){ updateProgress(); _saveDraft(); });
+  document.getElementById('app').addEventListener('change', function(){ _updateConditional(); updateProgress(); _saveDraft(); });
+  _restoreDraft();
 
   if(!f.useTypeToggle){
     setTimeout(function(){
@@ -375,17 +398,38 @@ function rField(f){
       });
       inp+='</div>'; break;
     case 'multicheck':
-      inp='<div class="mchk-group" id="'+id+'">';
-      (f.options||[]).forEach(function(o){
-        inp+='<label class="mci" onclick="hlMCI(this)"><input type="checkbox" name="mc_'+id+'" value="'+esc(o)+'"><span>'+esc(o)+'</span></label>';
-      });
-      inp+='</div><div class="mchk-hint">เลือกได้มากกว่า 1 ข้อ</div>'; break;
+      var _mco=f.options||[];
+      var _mcHasImg=_mco.some(function(o){return typeof o==='object'&&o.img;});
+      if(_mcHasImg){
+        inp='<div class="mchk-img-grid" id="'+id+'">';
+        _mco.forEach(function(o){
+          var lbl=typeof o==='string'?o:(o.label||'');
+          var img=typeof o==='object'?(o.img||''):'';
+          inp+='<div class="mchk-img-card" onclick="hlMCImg(this)">';
+          inp+='<input type="checkbox" name="mc_'+id+'" value="'+esc(lbl)+'" style="display:none">';
+          inp+='<div class="mchk-img-card-ck">✓</div>';
+          if(img) inp+='<img src="'+esc(img)+'" alt="'+esc(lbl)+'" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+          inp+='<div class="mchk-img-card-ph" style="display:'+(img?'none':'flex')+'">🖼️</div>';
+          inp+='<div class="mchk-img-card-lbl">'+esc(lbl)+'</div>';
+          inp+='</div>';
+        });
+        inp+='</div><div class="mchk-hint">เลือกได้มากกว่า 1 ข้อ</div>';
+      } else {
+        inp='<div class="mchk-group" id="'+id+'">';
+        _mco.forEach(function(o){
+          var lbl=typeof o==='string'?o:(o.label||'');
+          inp+='<label class="mci" onclick="hlMCI(this)"><input type="checkbox" name="mc_'+id+'" value="'+esc(lbl)+'"><span>'+esc(lbl)+'</span></label>';
+        });
+        inp+='</div><div class="mchk-hint">เลือกได้มากกว่า 1 ข้อ</div>';
+      }
+      break;
     case 'checkbox':
       inp='<label class="cbs"><input type="checkbox" id="'+id+'"><span>ใช่ / Yes</span></label>'; break;
     case 'rating':
       _ratingVals[f.id]=0;
       inp='<div class="rating-wrap" id="'+id+'">';
-      for(var i=1;i<=5;i++) inp+='<button type="button" class="star-btn" data-fid="'+f.id+'" data-v="'+i+'" onclick="setRating(\''+f.id+'\','+i+')">★</button>';
+      var rMax=f.ratingMax||5;
+      for(var i=1;i<=rMax;i++) inp+='<button type="button" class="star-btn" data-fid="'+f.id+'" data-v="'+i+'" onclick="setRating(\''+f.id+'\','+i+')">★</button>';
       inp+='</div>'; break;
     default:
       inp='<input type="text" id="'+id+'" placeholder="พิมพ์ที่นี่..." '+blur+'>'; break;
@@ -413,6 +457,12 @@ function hlRI(el){
 function hlMCI(el){
   var cb=el.querySelector('input[type=checkbox]');
   setTimeout(function(){ el.classList.toggle('sel',cb.checked); },0);
+}
+function hlMCImg(el){
+  el.classList.toggle('sel');
+  var cb=el.querySelector('input[type=checkbox]');
+  if(cb) cb.checked=el.classList.contains('sel');
+  updateProgress();
 }
 function setRating(fid,v){
   _ratingVals[fid]=v;
@@ -486,14 +536,55 @@ function submitForm(){
     return;
   }
 
-  var btn=document.getElementById('sub-btn');
-  btn.disabled=true; btn.textContent='⏳ กำลังส่ง...';
+  _saveDraft();
+  _pendingAnswers = answers;
+  _pendingActive  = active;
+  showReview(answers, active);
+}
 
+/* ── Review before submit ── */
+function showReview(answers, active){
+  var f=_form;
+  var h='<div>';
+  h+='<div style="text-align:center;margin-bottom:18px"><div style="font-size:2.2em;margin-bottom:6px">📋</div>';
+  h+='<div style="font-weight:700;font-size:1.06em;color:var(--text)">ตรวจสอบข้อมูลก่อนส่ง</div>';
+  h+='<div style="font-size:.8em;color:var(--muted);margin-top:4px">กรุณาตรวจสอบข้อมูลให้ครบถ้วนก่อนยืนยัน</div></div>';
+  if(f.useTypeToggle) h+='<div style="font-size:.82em;color:var(--muted);margin-bottom:12px">ประเภท: '+(_cType==='personal'?'👤 บุคคล':'🏢 บริษัท / องค์กร')+'</div>';
+  h+='<div class="rv-list">';
+  active.forEach(function(fld){
+    var v=answers[fld.id];
+    var display;
+    if(v===''||v===null||v===undefined||v===0||v===false) display='—';
+    else if(fld.type==='rating') display='★'.repeat(parseInt(v)||0)+' ('+v+' ดาว)';
+    else if(fld.type==='checkbox') display=v?'✓ ใช่':'✗ ไม่ใช่';
+    else display=String(v);
+    h+='<div class="rv-row"><div class="rv-lbl">'+esc(fld.label)+'</div><div class="rv-val">'+esc(display)+'</div></div>';
+  });
+  h+='</div>';
+  h+='<div style="display:flex;gap:10px;margin-top:20px;">';
+  h+='<button class="btn-sub" id="confirm-btn" onclick="_doSubmit(this)">✅ ยืนยันส่งข้อมูล</button>';
+  h+='<button onclick="_backToForm()" class="btn-back">✏️ แก้ไข</button>';
+  h+='</div></div>';
+  document.getElementById('app').innerHTML=h;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function _backToForm(){
+  renderForm();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── Actual submit to Firestore ── */
+function _doSubmit(btn){
+  var f=_form, answers=_pendingAnswers;
+  if(!answers||!f) return;
+  btn.disabled=true; btn.textContent='⏳ กำลังส่ง...';
   db.collection('leadSubmissions').add({
     formId:f.id, formTitle:f.title,
     contactType:_cType||null, answers:answers,
     createdAt:firebase.firestore.FieldValue.serverTimestamp(), emailSent:false,
   }).then(function(ref){
+    _clearDraft();
     db.collection('leadForms').doc(f.id).update({
       submissionsCount:firebase.firestore.FieldValue.increment(1)
     }).catch(function(){});
@@ -515,14 +606,58 @@ function submitForm(){
       showThankyou('กำลังพาคุณไปที่หน้าถัดไป...', true);
       setTimeout(function(){ window.location.href=f.redirectUrl; },1600);
     } else {
-      var msg = f.submitAction==='email' ? 'เราจะส่งข้อมูลที่ท่านต้องการไปยังอีเมลเร็วๆ นี้' : '';
+      var msg=f.submitAction==='email'?'เราจะส่งข้อมูลที่ท่านต้องการไปยังอีเมลเร็วๆ นี้':'';
       showThankyou(msg, false);
     }
   }).catch(function(e){
-    btn.disabled=false; btn.textContent='ส่งข้อมูล →';
+    btn.disabled=false; btn.textContent='✅ ยืนยันส่งข้อมูล';
     alert('เกิดข้อผิดพลาด: '+e.message);
   });
 }
+
+/* ── Draft (auto-save) ── */
+function _draftKey(){ return 'lf_draft_'+(_form?_form.id:''); }
+function _saveDraft(){
+  if(!_form) return;
+  var snap={cType:_cType, vals:{}};
+  var allFlds=(_form.commonFields||_form.fields||[]).concat(_form.personalFields||[]).concat(_form.companyFields||[]);
+  allFlds.forEach(function(f){
+    if(f.type==='section'||f.type==='image'||f.type==='video') return;
+    snap.vals[f.id]=getVal(f);
+  });
+  try{ localStorage.setItem(_draftKey(), JSON.stringify(snap)); } catch(e){}
+}
+function _restoreDraft(){
+  if(!_form) return;
+  var raw; try{ raw=localStorage.getItem(_draftKey()); } catch(e){ return; }
+  if(!raw) return;
+  var snap; try{ snap=JSON.parse(raw); } catch(e){ return; }
+  if(snap.cType && _form.useTypeToggle) selType(snap.cType);
+  var allFlds=(_form.commonFields||_form.fields||[]).concat(_form.personalFields||[]).concat(_form.companyFields||[]);
+  allFlds.forEach(function(f){
+    if(f.type==='section'||f.type==='image'||f.type==='video') return;
+    var v=snap.vals[f.id];
+    if(v===undefined||v===null) return;
+    var id='fld_'+f.id;
+    if(f.type==='radio'){
+      var rb=document.querySelector('[name="rg_'+id+'"][value="'+v+'"]');
+      if(rb){ rb.checked=true; var lbl=rb.closest('.ri'); if(lbl) hlRI(lbl); }
+    } else if(f.type==='checkbox'){
+      var cb=document.getElementById(id); if(cb) cb.checked=!!v;
+    } else if(f.type==='multicheck'){
+      String(v).split(',').forEach(function(p){ p=p.trim(); if(!p) return;
+        var mc=document.querySelector('[name="mc_'+id+'"][value="'+p+'"]');
+        if(mc){ mc.checked=true; var lbl=mc.closest('.mci')||mc.closest('.mchk-img-card'); if(lbl) lbl.classList.add('sel'); }
+      });
+    } else if(f.type==='rating'){
+      var n=parseInt(v)||0; if(n>0) setRating(f.id,n);
+    } else {
+      var el=document.getElementById(id); if(el) el.value=v;
+    }
+  });
+  _updateConditional(); updateProgress();
+}
+function _clearDraft(){ try{ localStorage.removeItem(_draftKey()); } catch(e){} }
 
 /* ── Thank-you page ── */
 function showThankyou(msg, isRedirect){
@@ -541,7 +676,7 @@ function showThankyou(msg, isRedirect){
 
 /* ── Reset form ── */
 function resetForm(){
-  _cType=null; _ratingVals={};
+  _cType=null; _ratingVals={}; _clearDraft();
   renderForm();
   window.scrollTo({top:0, behavior:'smooth'});
 }
