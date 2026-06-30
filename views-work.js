@@ -1439,99 +1439,173 @@ function delMeeting(id) {
 }
 
 // ================================================================
-// MEETING WINDOW — แท็บแยก บันทึกการประชุมแบบเต็มรูปแบบ
+// MEETING WINDOW — แท็บแยก บันทึกการประชุมแบบเต็มรูปแบบ (v2)
 // ================================================================
 
+// --- Custom Templates (stored in localStorage) ---
+function getMeetingTemplates() {
+  var DEFAULT_TPL = [
+    {name:'มติที่ประชุม', text:'ที่ประชุมมีมติ: '},
+    {name:'รอเอกสาร', text:'รอเอกสารจาก: ... ภายใน '},
+    {name:'รับทราบ', text:'ที่ประชุมรับทราบ'},
+    {name:'เลื่อนพิจารณา', text:'เลื่อนพิจารณาในครั้งถัดไป'},
+    {name:'ผู้รับผิดชอบ', text:'ผู้รับผิดชอบ: [ชื่อ] / กำหนดเสร็จ: '},
+    {name:'นัดครั้งถัดไป', text:'นัดประชุมครั้งถัดไป: '},
+    {name:'ระหว่างพิจารณา', text:'อยู่ระหว่างพิจารณา'},
+    {name:'ติดตามผล', text:'ติดตามผลภายใน: '}
+  ];
+  try {
+    var saved = JSON.parse(localStorage.getItem('v7_meetingTemplates') || 'null');
+    return saved || DEFAULT_TPL;
+  } catch(e) { return DEFAULT_TPL; }
+}
+function saveMeetingTemplates(list) {
+  localStorage.setItem('v7_meetingTemplates', JSON.stringify(list));
+}
+
+// --- Meeting Type Quick-start Templates ---
+var MEETING_TYPE_TEMPLATES = {
+  'ประชุมลูกค้า': {
+    agenda: ['แนะนำตัวและบริษัท', 'รับฟังความต้องการลูกค้า', 'นำเสนอ DJI Solution', 'ราคาและเงื่อนไข', 'สรุปและ Next Steps'],
+    notesTemplate: 'ความต้องการลูกค้า:\n\nโซลูชันที่นำเสนอ:\n\nข้อสงสัย/คำถาม:\n\nข้อตกลงเบื้องต้น:\n'
+  },
+  'Team Sales': {
+    agenda: ['รายงานยอดขายสัปดาห์ที่ผ่านมา', 'Pipeline Review', 'ปัญหาและอุปสรรค', 'แชร์ Best Practice', 'แผนและเป้าสัปดาห์หน้า'],
+    notesTemplate: 'ยอดขายสัปดาห์นี้:\n\nPipeline ที่น่าจับตา:\n\nปัญหา:\n\nแผนถัดไป:\n'
+  },
+  'อบรม/Training': {
+    agenda: ['วัตถุประสงค์การอบรม', 'เนื้อหาส่วนที่ 1', 'เนื้อหาส่วนที่ 2', 'Workshop/ทดลองปฏิบัติ', 'Q&A', 'สรุปและ Action Items'],
+    notesTemplate: 'ประเด็นสำคัญที่เรียนรู้:\n\nคำถามที่ถาม:\n\nสิ่งที่ต้องนำไปปฏิบัติ:\n'
+  },
+  'Demo Product': {
+    agenda: ['เตรียมอุปกรณ์ก่อน Demo', 'แนะนำ Feature หลัก', 'Demo สด / ทดลองใช้', 'ตอบข้อสงสัย', 'สรุปข้อดีและ ROI'],
+    notesTemplate: 'Feedback จากลูกค้า:\n\nคำถาม/ข้อสงสัย:\n\nความประทับใจ:\n\nNext Steps:\n'
+  }
+};
+
+// --- Timer state ---
 var _mwTimerSec = 0;
 var _mwTimerRunning = false;
 var _mwTimerInterval = null;
 var _mwAutoSaveInterval = null;
+var _mwAgendaTimers = {};
+
+function _mwFormatSec(sec) {
+  var m = Math.floor(sec / 60), s = sec % 60;
+  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
 
 function rMeetingWindow(el) {
   var mid = window._mwId || '';
   var m = mid ? ST.getOne('meetings', mid) : null;
-  if (!m) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">ไม่พบข้อมูลประชุม — ปิดแท็บนี้ได้เลย</div>';
-    return;
-  }
+  if (!m) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">ไม่พบข้อมูลประชุม — ปิดแท็บนี้ได้เลย</div>'; return; }
   document.title = '📅 ' + m.title;
   document.getElementById('pgT').textContent = '📅 ' + m.title;
 
-  // แปลง agenda string → array ถ้ายังไม่มี agendaItems
-  if (!m.agendaItems) {
-    m.agendaItems = (m.agenda || '').split('\n').map(function(t) { return { text: t.trim(), done: false }; }).filter(function(x) { return x.text; });
+  // Init agenda items
+  if (!m.agendaItems || !m.agendaItems.length) {
+    m.agendaItems = (m.agenda || '').split('\n').map(function(t) { return {text: t.trim(), done: false, timerSec: 0}; }).filter(function(x) { return x.text; });
   }
-  window._mwAgenda = m.agendaItems.map(function(a) { return { text: a.text, done: !!a.done }; });
+  window._mwAgenda = m.agendaItems.map(function(a) { return {text: a.text, done: !!a.done, timerSec: a.timerSec || 0}; });
+
+  // Init attendance
+  if (!m.attendanceList && m.attendees) {
+    var names = m.attendees.split(/[,\/\n]/).map(function(n) { return n.trim(); }).filter(Boolean);
+    m.attendanceList = names.map(function(n) { return {name: n, attended: true}; });
+  }
+  window._mwAttendance = (m.attendanceList || []).map(function(a) { return {name: a.name, attended: !!a.attended}; });
+  _mwAgendaTimers = {};
+
+  // Find pending actions from most recent previous meeting
+  var allMtgs = ST.getAll('meetings').filter(function(x) { return x.id !== mid && x.date <= m.date && (x.actions||[]).some(function(a) { return !a.done; }); });
+  allMtgs.sort(function(a, b) { return b.date.localeCompare(a.date); });
+  window._mwPrevMeeting = allMtgs[0] || null;
+  var pendingFromPrev = window._mwPrevMeeting ? (window._mwPrevMeeting.actions||[]).filter(function(a) { return !a.done; }) : [];
 
   var h = '<div class="vw-layout" style="gap:16px">';
 
-  // ===================== LEFT PANEL =====================
+  // ===== LEFT PANEL =====
   h += '<div class="vw-left">';
 
-  // header info
+  // Header
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">';
-  h += '<div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div>';
   h += '<div style="font-size:16px;font-weight:700">' + sanitize(m.title) + '</div>';
   h += '<div style="font-size:12px;color:var(--text2);margin-top:3px">';
-  var bits = ['📅 ' + fD(m.date)];
-  if (m.time) bits.push('⏰ ' + m.time + (m.endTime ? ' – ' + m.endTime : ''));
-  if (m.location) bits.push('📍 ' + sanitize(m.location));
-  if (m.type) bits.push('🏷️ ' + sanitize(m.type));
-  h += bits.join(' &nbsp;·&nbsp; ') + '</div>';
-  if (m.attendees) h += '<div style="font-size:12px;color:var(--text2);margin-top:2px">👥 ' + sanitize(m.attendees) + '</div>';
+  var hbits = ['📅 ' + fD(m.date)];
+  if (m.time) hbits.push('⏰ ' + m.time + (m.endTime ? ' – ' + m.endTime : ''));
+  if (m.location) hbits.push('📍 ' + sanitize(m.location));
+  if (m.type) hbits.push('<span style="background:#3b82f622;color:#60a5fa;padding:2px 7px;border-radius:4px;font-size:10px">' + sanitize(m.type) + '</span>');
+  if (m.recurrence) hbits.push('<span style="background:#8b5cf622;color:#a78bfa;padding:2px 7px;border-radius:4px;font-size:10px">🔁 ' + sanitize(m.recurrence) + '</span>');
+  h += hbits.join(' · ') + '</div>';
+  if (m.linkedDealerId) { var ld = ST.getOne('dealers', m.linkedDealerId); if (ld) h += '<div style="font-size:11px;color:#4ade80;margin-top:2px">🏪 ' + sanitize(ld.name || ld.shopName || '') + '</div>'; }
+  if (m.linkedPipelineId) { var lp = ST.getOne('pipeline', m.linkedPipelineId); if (lp) h += '<div style="font-size:11px;color:#fbbf24;margin-top:2px">📊 ' + sanitize(lp.projectName || lp.title || '') + '</div>'; }
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-  h += '<button class="btn bsm bp" onclick="mwSave()" id="mw-save-btn">💾 บันทึก</button>';
+  h += '<button class="btn bsm bp" onclick="mwSave()">💾 บันทึก</button>';
   h += '<button class="btn bsm bo" onclick="mwCopySummary()">📋 Copy สรุป</button>';
+  h += '<button class="btn bsm bo" onclick="mwCopyLine()">💬 LINE</button>';
+  h += '<button class="btn bsm bo" onclick="window.print()" title="Print/Export PDF">🖨️</button>';
+  h += '<button class="btn bsm bo" onclick="mwScheduleNext()" title="นัดครั้งถัดไป">📅+</button>';
   h += '</div></div></div>';
 
-  // Agenda checklist
+  // Attendance
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h += '<div style="font-weight:600;font-size:13px">👥 ผู้เข้าร่วมประชุม</div>';
+  h += '<button class="btn bsm bo" onclick="mwAddAttendee()">+ เพิ่ม</button></div>';
+  if (window._mwAttendance.length === 0) {
+    h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีรายชื่อ — กด "+ เพิ่ม" หรือเพิ่มจากแผงขวา</div>';
+  } else {
+    h += '<div id="mw-attend-list" style="display:flex;flex-wrap:wrap;gap:8px">';
+    window._mwAttendance.forEach(function(a, i) { h += _mwAttendChipHtml(a, i); });
+    h += '</div>';
+  }
+  h += '<div style="font-size:10px;color:var(--text2);margin-top:5px">กดชื่อ → สลับ ✓ มาร่วม / ✕ ขาด</div></div>';
+
+  // Agenda
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   h += '<div style="font-weight:600;font-size:13px">📋 วาระการประชุม</div>';
-  h += '<div style="display:flex;gap:6px"><button class="btn bsm bo" onclick="mwAgendaAdd()">+ เพิ่มวาระ</button></div>';
-  h += '</div>';
+  h += '<button class="btn bsm bo" onclick="mwAgendaAdd()">+ เพิ่มวาระ</button></div>';
   h += '<div id="mw-agenda-list">';
-  if (window._mwAgenda.length === 0) {
-    h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีวาระ — กด "+ เพิ่มวาระ" หรือพิมพ์ในบันทึกได้เลย</div>';
-  } else {
-    window._mwAgenda.forEach(function(a, i) {
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px" id="mw-ag-' + i + '">';
-      h += '<div onclick="mwAgendaToggle(' + i + ')" style="width:18px;height:18px;border-radius:50%;border:2px solid ' + (a.done ? '#4ade80' : 'var(--border,#334155)') + ';background:' + (a.done ? '#4ade80' : 'transparent') + ';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111">' + (a.done ? '✓' : '') + '</div>';
-      h += '<div style="font-size:13px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + ';flex:1">' + sanitize(a.text) + '</div>';
-      h += '<button onclick="mwAgendaAddToNotes(' + i + ')" title="เพิ่มวาระนี้เข้าบันทึก" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:2px 4px">→ โน้ต</button>';
-      h += '</div>';
-    });
-  }
+  if (window._mwAgenda.length === 0) h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีวาระ — กด "+ เพิ่มวาระ" หรือโหลด Quick-start ด้านขวา</div>';
+  else window._mwAgenda.forEach(function(a, i) { h += _mwAgendaRowHtml(a, i); });
   h += '</div></div>';
 
-  // Notes textarea
+  // Notes
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
   h += '<div style="font-weight:600;font-size:13px">📝 บันทึกการประชุม</div>';
-  h += '<div style="display:flex;gap:6px">';
-  h += '<button class="btn bsm bo" onclick="mwInsertTimestamp()" title="แทรกเวลาปัจจุบันลงโน้ต">⏱️ แทรกเวลา</button>';
-  h += '</div></div>';
-  h += '<textarea id="mw-notes" style="width:100%;min-height:220px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="พิมพ์โน้ตระหว่างประชุมได้เลย...\n\n[เวลา] ใช้ปุ่ม ⏱️ แทรกเวลา เพื่อ timestamp แต่ละช่วง">' + sanitize(m.notes || '') + '</textarea>';
-  h += '</div>';
+  h += '<button class="btn bsm bo" onclick="mwInsertTimestamp()">⏱️ แทรกเวลา</button></div>';
+  h += '<textarea id="mw-notes" style="width:100%;min-height:220px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="พิมพ์โน้ตระหว่างประชุมได้เลย&#10;&#10;กด ⏱️ แทรกเวลา เพื่อใส่ [HH:MM] timestamp">' + sanitize(m.notes || '') + '</textarea></div>';
+
+  // Parking Lot
+  h += '<div style="background:var(--card,#1e293b);border:1px dashed #475569;border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
+  h += '<div style="font-weight:600;font-size:13px">🅿️ Parking Lot</div>';
+  h += '<div style="font-size:11px;color:var(--text2)">— หัวข้อนอกวาระที่ต้องติดตาม</div></div>';
+  h += '<textarea id="mw-parking" style="width:100%;min-height:70px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="หัวข้อที่พูดถึงแต่ไม่อยู่ในวาระ...&#10;จะนำไปต่อในประชุมครั้งหน้า">' + sanitize(m.parkingLot || '') + '</textarea></div>';
 
   // Decisions
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
   h += '<div style="font-weight:600;font-size:13px;margin-bottom:8px">✅ มติที่ประชุม</div>';
-  h += '<textarea id="mw-decisions" style="width:100%;min-height:80px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="บันทึกมติหรือข้อสรุปที่ตกลงกันในที่ประชุม...">' + sanitize(m.decisions || '') + '</textarea>';
-  h += '</div>';
+  h += '<textarea id="mw-decisions" style="width:100%;min-height:80px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="บันทึกมติหรือข้อสรุปที่ตกลงกันในที่ประชุม...">' + sanitize(m.decisions || '') + '</textarea></div>';
 
   // Action Items
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
-  h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px">📌 Action Items <span style="font-size:11px;color:var(--text2);font-weight:400" id="mw-action-count">(' + (m.actions || []).length + ')</span></div>';
+  h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px">📌 Action Items <span style="font-size:11px;color:var(--text2);font-weight:400" id="mw-action-count">(' + (m.actions||[]).length + ')</span></div>';
+  if (pendingFromPrev.length) {
+    h += '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px;margin-bottom:10px">';
+    h += '<div style="font-size:11px;font-weight:600;color:#fbbf24;margin-bottom:5px">⚠️ ค้างจากประชุมก่อน: ' + sanitize(window._mwPrevMeeting.title) + ' (' + fD(window._mwPrevMeeting.date) + ')</div>';
+    pendingFromPrev.forEach(function(a) { h += '<div style="font-size:12px;color:var(--text2);padding:1px 0">• ' + sanitize(a.title) + (a.assignee ? ' — ' + sanitize(a.assignee) : '') + '</div>'; });
+    h += '<button class="btn bsm bo" style="margin-top:6px;font-size:11px" onclick="mwImportPendingActions()">⬇️ นำเข้าทั้งหมด</button></div>';
+  }
   h += '<div id="mw-action-list">';
-  (m.actions || []).forEach(function(a, i) {
-    h += _mwActionRowHtml(a, i);
-  });
+  (m.actions||[]).forEach(function(a, i) { h += _mwActionRowHtml(a, i); });
   h += '</div>';
   h += '<div style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;margin-top:8px">';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">➕ Quick Add Action</div>';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">➕ Quick Add (Enter เพื่อเพิ่ม)</div>';
   h += '<input id="mw-qa-text" placeholder="ต้องทำ..." style="width:100%;font-size:13px;margin-bottom:6px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:6px 10px;color:var(--text)" onkeydown="if(event.key===\'Enter\')mwAddAction()">';
   h += '<div style="display:flex;gap:6px">';
   h += '<input id="mw-qa-who" placeholder="👤 ผู้รับผิดชอบ" style="flex:1;font-size:12px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 10px;color:var(--text)">';
@@ -1539,125 +1613,135 @@ function rMeetingWindow(el) {
   h += '<button class="btn bsm bp" onclick="mwAddAction()">➕</button>';
   h += '</div></div></div>';
 
-  h += '<div style="text-align:center;padding:4px 0 16px">';
-  h += '<button class="btn bp" onclick="mwSave()" style="min-width:200px">💾 บันทึกทั้งหมด</button>';
-  h += '<div id="mw-save-status" style="font-size:11px;color:var(--text2);margin-top:6px"></div>';
-  h += '</div>';
+  h += '<div style="text-align:center;padding:4px 0 16px"><button class="btn bp" onclick="mwSave()" style="min-width:200px">💾 บันทึกทั้งหมด</button>';
+  h += '<div id="mw-save-status" style="font-size:11px;color:var(--text2);margin-top:6px"></div></div>';
   h += '</div>'; // vw-left
 
-  // ===================== RIGHT PANEL — TOOLS =====================
+  // ===== RIGHT PANEL =====
   h += '<div class="vw-right" style="gap:12px;overflow-y:auto">';
 
-  // Timer
+  // Overall Timer
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">⏱️ นาฬิกาจับเวลา</div>';
-  h += '<div id="mw-timer-display" style="font-size:36px;font-weight:700;text-align:center;letter-spacing:2px;margin-bottom:10px;font-family:monospace">00:00</div>';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600">⏱️ เวลาประชุมรวม</div>';
+  h += '<div id="mw-timer-display" style="font-size:36px;font-weight:700;text-align:center;letter-spacing:2px;margin-bottom:8px;font-family:monospace">00:00</div>';
   h += '<div style="display:flex;gap:6px;justify-content:center">';
   h += '<button class="btn bsm bp" id="mw-timer-btn" onclick="mwTimerToggle()">▶️ เริ่ม</button>';
   h += '<button class="btn bsm bo" onclick="mwTimerReset()">↺ รีเซ็ต</button>';
   h += '</div></div>';
 
-  // Template snippets
+  // Custom Templates
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">📝 Template ด่วน</div>';
-  var templates = [
-    { label: 'มติที่ประชุม', text: 'ที่ประชุมมีมติ: ' },
-    { label: 'รอเอกสาร', text: 'รอเอกสารจาก: ... ภายใน ' },
-    { label: 'รับทราบ', text: 'ที่ประชุมรับทราบ' },
-    { label: 'เลื่อนพิจารณา', text: 'เลื่อนพิจารณาในครั้งถัดไป' },
-    { label: 'ผู้รับผิดชอบ', text: 'ผู้รับผิดชอบ: [ชื่อ] / กำหนดเสร็จ: ' },
-    { label: 'นัดครั้งถัดไป', text: 'นัดประชุมครั้งถัดไป: ' },
-    { label: 'อยู่ระหว่างพิจารณา', text: 'อยู่ระหว่างพิจารณา' },
-    { label: 'ติดตามผล', text: 'ติดตามผลภายใน: ' }
-  ];
-  h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-  templates.forEach(function(t) {
-    h += '<div onclick="mwInsertTemplate(\'' + t.text.replace(/'/g, "\\'") + '\')" style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text2)" onmouseover="this.style.borderColor=\'#60a5fa\';this.style.color=\'#60a5fa\'" onmouseout="this.style.borderColor=\'\';this.style.color=\'\'">' + t.label + '</div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h += '<div style="font-size:11px;color:var(--text2);font-weight:600">📝 Template ด่วน</div>';
+  h += '<button class="btn bsm bo" onclick="mwManageTemplates()" style="font-size:10px;padding:2px 8px">✏️ จัดการ</button></div>';
+  h += '<div id="mw-template-list" style="display:flex;flex-wrap:wrap;gap:6px">';
+  getMeetingTemplates().forEach(function(t) {
+    var txt = t.text;
+    h += '<div onclick="mwInsertTemplate(\'' + txt.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n') + '\')" style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text2)" onmouseover="this.style.borderColor=\'#60a5fa\';this.style.color=\'#60a5fa\'" onmouseout="this.style.borderColor=\'\';this.style.color=\'\'">' + sanitize(t.name) + '</div>';
   });
   h += '</div></div>';
 
-  // Attendees quick list
+  // Meeting type quick-start
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">👥 ผู้เข้าร่วม</div>';
-  h += '<textarea id="mw-attendees" style="width:100%;font-size:12px;line-height:1.6;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:8px;color:var(--text);resize:none;min-height:60px" placeholder="ชื่อผู้เข้าร่วมประชุม...">' + sanitize(m.attendees || '') + '</textarea>';
+  h += '<div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:8px">🚀 Quick-start ตามประเภท</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  Object.keys(MEETING_TYPE_TEMPLATES).forEach(function(type) {
+    h += '<div onclick="mwApplyTypeTemplate(\'' + type.replace(/'/g,"\\'") + '\')" style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text2)" onmouseover="this.style.borderColor=\'#a78bfa\';this.style.color=\'#a78bfa\'" onmouseout="this.style.borderColor=\'\';this.style.color=\'\'">' + sanitize(type) + '</div>';
+  });
+  h += '</div></div>';
+
+  // Link Dealer/Pipeline
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
+  h += '<div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:8px">🔗 เชื่อมกับ Dealer / Pipeline</div>';
+  var dOpts = '<option value="">— ไม่เชื่อม —</option>';
+  try { ST.getAll('dealers').forEach(function(d) { dOpts += '<option value="' + d.id + '"' + (m.linkedDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name || d.shopName || d.id) + '</option>'; }); } catch(e) {}
+  h += '<div style="margin-bottom:6px"><label style="font-size:11px;color:var(--text2)">🏪 Dealer</label><select id="mw-link-dealer" onchange="mwLinkDealer(this.value)" style="width:100%;font-size:12px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 8px;color:var(--text);margin-top:3px">' + dOpts + '</select></div>';
+  var pOpts = '<option value="">— ไม่เชื่อม —</option>';
+  try { ST.getAll('pipeline').forEach(function(p) { pOpts += '<option value="' + p.id + '"' + (m.linkedPipelineId === p.id ? ' selected' : '') + '>' + sanitize(p.projectName || p.title || p.id) + '</option>'; }); } catch(e) {}
+  h += '<div><label style="font-size:11px;color:var(--text2)">📊 Pipeline Deal</label><select id="mw-link-pipe" onchange="mwLinkPipeline(this.value)" style="width:100%;font-size:12px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 8px;color:var(--text);margin-top:3px">' + pOpts + '</select></div>';
   h += '</div>';
 
   // Auto-save status
   h += '<div id="mw-autosave-info" style="font-size:11px;color:var(--text2);text-align:center;padding:4px"></div>';
-
   h += '</div>'; // vw-right
   h += '</div>'; // vw-layout
 
   el.innerHTML = h;
 
-  // start auto-save every 45s
   if (_mwAutoSaveInterval) clearInterval(_mwAutoSaveInterval);
   _mwAutoSaveInterval = setInterval(function() { mwAutoSave(); }, 45000);
+}
+
+// --- Row renderers ---
+function _mwAttendChipHtml(a, i) {
+  var color = a.attended ? '#4ade80' : '#f87171';
+  var icon = a.attended ? '✓' : '✕';
+  return '<div onclick="mwToggleAttend(' + i + ')" id="mw-att-' + i + '" style="background:' + color + '22;border:1px solid ' + color + '55;border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer;color:' + color + ';display:flex;align-items:center;gap:4px">' + icon + ' ' + sanitize(a.name) + '</div>';
+}
+
+function _mwAgendaRowHtml(a, i) {
+  var timerSec = (window._mwAgendaTimers && window._mwAgendaTimers[i]) ? window._mwAgendaTimers[i].sec : (a.timerSec || 0);
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px" id="mw-ag-' + i + '">' +
+    '<div onclick="mwAgendaToggle(' + i + ')" style="width:18px;height:18px;border-radius:50%;border:2px solid ' + (a.done ? '#4ade80' : 'var(--border,#334155)') + ';background:' + (a.done ? '#4ade80' : 'transparent') + ';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111">' + (a.done ? '✓' : '') + '</div>' +
+    '<div style="flex:1;font-size:13px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(a.text) + '</div>' +
+    '<div id="mw-ag-timer-' + i + '" style="font-size:10px;color:var(--text2);font-family:monospace;min-width:34px">' + _mwFormatSec(timerSec) + '</div>' +
+    '<button onclick="mwAgendaTimerToggle(' + i + ')" id="mw-ag-tbtn-' + i + '" style="background:transparent;border:1px solid var(--border,#334155);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 5px" title="จับเวลาวาระนี้">▶</button>' +
+    '<button onclick="mwAgendaAddToNotes(' + i + ')" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:11px;padding:2px 4px" title="เพิ่มวาระนี้เข้าโน้ต">→</button>' +
+    '</div>';
 }
 
 function _mwActionRowHtml(a, i) {
   return '<div id="mw-act-' + i + '" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#334155)">' +
     '<div onclick="mwToggleAction(' + i + ')" style="width:18px;height:18px;border-radius:4px;border:2px solid ' + (a.done ? '#4ade80' : 'var(--border,#334155)') + ';background:' + (a.done ? '#4ade80' : 'transparent') + ';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111">' + (a.done ? '✓' : '') + '</div>' +
-    '<div style="flex:1;min-width:0">' +
-    '<div style="font-size:12px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(a.title) + '</div>' +
-    (a.assignee || a.dueDate ? '<div style="font-size:11px;color:var(--text2)">' + (a.assignee ? '👤 ' + sanitize(a.assignee) : '') + (a.dueDate ? ' 📅 ' + fD(a.dueDate) : '') + '</div>' : '') +
-    '</div>' +
-    '<button onclick="mwDeleteAction(' + i + ')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0">✕</button>' +
-    '</div>';
+    '<div style="flex:1;min-width:0"><div style="font-size:12px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(a.title) + '</div>' +
+    (a.assignee || a.dueDate ? '<div style="font-size:11px;color:var(--text2)">' + (a.assignee ? '👤 ' + sanitize(a.assignee) : '') + (a.dueDate ? ' 📅 ' + fD(a.dueDate) : '') + '</div>' : '') + '</div>' +
+    '<button onclick="mwDeleteAction(' + i + ')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0">✕</button></div>';
 }
 
-function _mwGetData() {
-  var m = ST.getOne('meetings', window._mwId);
-  return m || null;
-}
+// --- Data helper ---
+function _mwGetData() { return window._mwId ? ST.getOne('meetings', window._mwId) : null; }
 
+// --- Save ---
 function mwSave() {
   var mid = window._mwId;
   var m = _mwGetData();
   if (!m) return;
-  var notes = document.getElementById('mw-notes');
-  var decisions = document.getElementById('mw-decisions');
-  var attendees = document.getElementById('mw-attendees');
+  Object.keys(_mwAgendaTimers).forEach(function(k) { if (window._mwAgenda[k]) window._mwAgenda[k].timerSec = _mwAgendaTimers[k].sec; });
   ST.update('meetings', mid, {
-    notes: notes ? notes.value.trim() : (m.notes || ''),
-    decisions: decisions ? decisions.value.trim() : (m.decisions || ''),
-    attendees: attendees ? attendees.value.trim() : (m.attendees || ''),
+    notes: ((document.getElementById('mw-notes') || {}).value || '').trim(),
+    decisions: ((document.getElementById('mw-decisions') || {}).value || '').trim(),
+    parkingLot: ((document.getElementById('mw-parking') || {}).value || '').trim(),
     agendaItems: window._mwAgenda,
+    attendanceList: window._mwAttendance,
     actions: m.actions || []
   });
-  var st = document.getElementById('mw-save-status');
-  if (st) st.textContent = '💾 บันทึกแล้ว ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
-  var info = document.getElementById('mw-autosave-info');
-  if (info) info.textContent = '💾 บันทึกล่าสุด ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  var now = new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  var st = document.getElementById('mw-save-status'); if (st) st.textContent = '💾 บันทึกแล้ว ' + now;
+  var info = document.getElementById('mw-autosave-info'); if (info) info.textContent = '💾 ' + now;
   toast('💾 บันทึกแล้ว');
 }
 
 function mwAutoSave() {
   var mid = window._mwId;
   var m = _mwGetData();
-  if (!m) return;
-  var notes = document.getElementById('mw-notes');
-  var decisions = document.getElementById('mw-decisions');
-  var attendees = document.getElementById('mw-attendees');
-  if (!notes) return;
+  if (!m || !document.getElementById('mw-notes')) return;
+  Object.keys(_mwAgendaTimers).forEach(function(k) { if (window._mwAgenda[k]) window._mwAgenda[k].timerSec = _mwAgendaTimers[k].sec; });
   ST.update('meetings', mid, {
-    notes: notes.value.trim(),
-    decisions: decisions ? decisions.value.trim() : (m.decisions || ''),
-    attendees: attendees ? attendees.value.trim() : (m.attendees || ''),
-    agendaItems: window._mwAgenda
+    notes: ((document.getElementById('mw-notes') || {}).value || '').trim(),
+    decisions: ((document.getElementById('mw-decisions') || {}).value || '').trim(),
+    parkingLot: ((document.getElementById('mw-parking') || {}).value || '').trim(),
+    agendaItems: window._mwAgenda,
+    attendanceList: window._mwAttendance
   });
   var info = document.getElementById('mw-autosave-info');
   if (info) info.textContent = '💾 auto-save ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
 }
 
+// --- Timestamp & Template ---
 function mwInsertTimestamp() {
-  var t = document.getElementById('mw-notes');
-  if (!t) return;
-  var now = new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
-  var stamp = '[' + now + '] ';
-  var pos = t.selectionStart;
-  var val = t.value;
-  // insert on new line if not at start of line
+  var t = document.getElementById('mw-notes'); if (!t) return;
+  var stamp = '[' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'}) + '] ';
+  var pos = t.selectionStart, val = t.value;
   var prefix = (pos > 0 && val[pos-1] !== '\n') ? '\n' : '';
   t.value = val.slice(0, pos) + prefix + stamp + val.slice(pos);
   t.selectionStart = t.selectionEnd = pos + prefix.length + stamp.length;
@@ -1665,26 +1749,73 @@ function mwInsertTimestamp() {
 }
 
 function mwInsertTemplate(text) {
-  var t = document.getElementById('mw-notes');
-  if (!t) return;
-  var pos = t.selectionStart;
-  var val = t.value;
+  var t = document.getElementById('mw-notes'); if (!t) return;
+  var pos = t.selectionStart, val = t.value;
   var prefix = (pos > 0 && val[pos-1] !== '\n') ? '\n' : '';
   t.value = val.slice(0, pos) + prefix + text + val.slice(pos);
   t.selectionStart = t.selectionEnd = pos + prefix.length + text.length;
   t.focus();
 }
 
+// --- Custom Template Management ---
+function mwManageTemplates() {
+  var list = getMeetingTemplates();
+  var h = '<div style="max-width:420px"><div id="mw-tpl-list">';
+  list.forEach(function(t, i) {
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px;background:var(--bg,#0f172a);border-radius:6px">';
+    h += '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + sanitize(t.name) + '</div>';
+    h += '<div style="font-size:11px;color:var(--text2)">' + sanitize(t.text.slice(0, 50)) + (t.text.length > 50 ? '...' : '') + '</div></div>';
+    h += '<button class="btn bsm bd" onclick="mwDeleteTemplate(' + i + ')">✕</button></div>';
+  });
+  if (!list.length) h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มี template</div>';
+  h += '</div>';
+  h += '<div style="margin-top:12px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:12px">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">➕ เพิ่ม Template ใหม่</div>';
+  h += '<input id="mw-tpl-name" placeholder="ชื่อ เช่น รอการอนุมัติ" class="fm-input" style="margin-bottom:6px">';
+  h += '<textarea id="mw-tpl-text" rows="2" placeholder="ข้อความ..." class="fm-input" style="resize:none"></textarea>';
+  h += '<button class="btn bsm bp btn-full" style="margin-top:6px" onclick="mwSaveNewTemplate()">💾 บันทึก Template</button>';
+  h += '</div></div>';
+  openM('📝 จัดการ Template', h);
+}
+
+function mwDeleteTemplate(i) {
+  var list = getMeetingTemplates(); list.splice(i, 1); saveMeetingTemplates(list); mwManageTemplates();
+}
+
+function mwSaveNewTemplate() {
+  var name = ((document.getElementById('mw-tpl-name') || {}).value || '').trim();
+  var text = ((document.getElementById('mw-tpl-text') || {}).value || '').trim();
+  if (!name || !text) { toast('ใส่ชื่อและข้อความด้วย'); return; }
+  var list = getMeetingTemplates(); list.push({name: name, text: text}); saveMeetingTemplates(list);
+  var tl = document.getElementById('mw-template-list');
+  if (tl) {
+    var div = document.createElement('div');
+    div.textContent = name; div.style.cssText = 'background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text2)';
+    var t2 = text; div.onclick = function() { mwInsertTemplate(t2); }; tl.appendChild(div);
+  }
+  closeMForce(); toast('💾 บันทึก Template แล้ว');
+}
+
+// --- Quick-start Type Template ---
+function mwApplyTypeTemplate(type) {
+  var tpl = MEETING_TYPE_TEMPLATES[type]; if (!tpl) return;
+  if (!confirm('โหลด template "' + type + '"?\nวาระและโน้ตปัจจุบัน (ถ้าว่าง) จะถูกแทนที่')) return;
+  window._mwAgenda = tpl.agenda.map(function(t) { return {text: t, done: false, timerSec: 0}; });
+  var al = document.getElementById('mw-agenda-list');
+  if (al) al.innerHTML = window._mwAgenda.map(function(a, i) { return _mwAgendaRowHtml(a, i); }).join('');
+  var notes = document.getElementById('mw-notes');
+  if (notes && !notes.value.trim()) notes.value = tpl.notesTemplate;
+  toast('🚀 โหลด template "' + type + '" แล้ว');
+}
+
+// --- Agenda ---
 function mwAgendaToggle(i) {
   if (!window._mwAgenda || !window._mwAgenda[i]) return;
   window._mwAgenda[i].done = !window._mwAgenda[i].done;
-  var row = document.getElementById('mw-ag-' + i);
-  if (!row) return;
+  var row = document.getElementById('mw-ag-' + i); if (!row) return;
   var a = window._mwAgenda[i];
-  var dot = row.querySelector('div');
-  if (dot) { dot.style.borderColor = a.done ? '#4ade80' : 'var(--border,#334155)'; dot.style.background = a.done ? '#4ade80' : 'transparent'; dot.textContent = a.done ? '✓' : ''; }
-  var label = row.querySelectorAll('div')[1];
-  if (label) { label.style.textDecoration = a.done ? 'line-through' : ''; label.style.color = a.done ? 'var(--text2)' : ''; }
+  var dot = row.querySelector('div'); if (dot) { dot.style.borderColor = a.done ? '#4ade80' : 'var(--border,#334155)'; dot.style.background = a.done ? '#4ade80' : 'transparent'; dot.textContent = a.done ? '✓' : ''; }
+  var lbl = row.querySelectorAll('div')[1]; if (lbl) { lbl.style.textDecoration = a.done ? 'line-through' : ''; lbl.style.color = a.done ? 'var(--text2)' : ''; }
 }
 
 function mwAgendaAddToNotes(i) {
@@ -1693,138 +1824,196 @@ function mwAgendaAddToNotes(i) {
 }
 
 function mwAgendaAdd() {
-  var text = prompt('หัวข้อวาระ:');
-  if (!text || !text.trim()) return;
+  var text = prompt('หัวข้อวาระ:'); if (!text || !text.trim()) return;
   window._mwAgenda = window._mwAgenda || [];
-  window._mwAgenda.push({ text: text.trim(), done: false });
+  window._mwAgenda.push({text: text.trim(), done: false, timerSec: 0});
   var i = window._mwAgenda.length - 1;
-  var list = document.getElementById('mw-agenda-list');
-  if (!list) return;
-  var div = document.createElement('div');
-  div.id = 'mw-ag-' + i;
-  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
-  div.innerHTML = '<div onclick="mwAgendaToggle(' + i + ')" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border,#334155);background:transparent;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111"></div>' +
-    '<div style="font-size:13px;flex:1">' + sanitize(text.trim()) + '</div>' +
-    '<button onclick="mwAgendaAddToNotes(' + i + ')" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:2px 4px">→ โน้ต</button>';
-  if (list.querySelector('.vp-empty, div[style*="ยังไม่มีวาระ"]')) list.innerHTML = '';
-  list.appendChild(div);
+  var list = document.getElementById('mw-agenda-list'); if (!list) return;
+  var emptyMsg = list.querySelector('div[style*="ยังไม่มีวาระ"]'); if (emptyMsg) list.innerHTML = '';
+  var div = document.createElement('div'); div.innerHTML = _mwAgendaRowHtml({text: text.trim(), done: false, timerSec: 0}, i); list.appendChild(div.firstChild);
 }
 
-function mwAddAction() {
-  var mid = window._mwId;
-  var m = _mwGetData();
-  if (!m) return;
-  var txt = (document.getElementById('mw-qa-text') || {}).value || '';
-  if (!txt.trim()) { toast('ใส่ชื่อ Action ด้วย'); return; }
-  var a = {
-    id: 'act_' + Date.now(),
-    title: txt.trim(),
-    assignee: ((document.getElementById('mw-qa-who') || {}).value || '').trim(),
-    dueDate: ((document.getElementById('mw-qa-due') || {}).value || ''),
-    done: false
-  };
-  m.actions = m.actions || [];
-  m.actions.push(a);
-  ST.update('meetings', mid, { actions: m.actions });
-  var list = document.getElementById('mw-action-list');
-  if (list) { var div = document.createElement('div'); div.innerHTML = _mwActionRowHtml(a, m.actions.length - 1); list.appendChild(div.firstChild); }
-  var cnt = document.getElementById('mw-action-count');
-  if (cnt) cnt.textContent = '(' + m.actions.length + ')';
-  document.getElementById('mw-qa-text').value = '';
-  document.getElementById('mw-qa-who').value = '';
-  document.getElementById('mw-qa-due').value = '';
-  document.getElementById('mw-qa-text').focus();
+// --- Per-agenda timer ---
+function mwAgendaTimerToggle(i) {
+  if (!_mwAgendaTimers[i]) _mwAgendaTimers[i] = {sec: (window._mwAgenda[i] ? window._mwAgenda[i].timerSec || 0 : 0), running: false, interval: null};
+  var t = _mwAgendaTimers[i];
+  if (t.running) {
+    clearInterval(t.interval); t.running = false;
+    if (window._mwAgenda[i]) window._mwAgenda[i].timerSec = t.sec;
+    var btn = document.getElementById('mw-ag-tbtn-' + i); if (btn) btn.textContent = '▶';
+  } else {
+    // stop any other running agenda timer
+    Object.keys(_mwAgendaTimers).forEach(function(k) { if (parseInt(k) !== i && _mwAgendaTimers[k].running) mwAgendaTimerToggle(parseInt(k)); });
+    t.running = true;
+    var btn2 = document.getElementById('mw-ag-tbtn-' + i); if (btn2) btn2.textContent = '⏸';
+    t.interval = setInterval(function() {
+      t.sec++;
+      if (window._mwAgenda[i]) window._mwAgenda[i].timerSec = t.sec;
+      var d = document.getElementById('mw-ag-timer-' + i); if (d) d.textContent = _mwFormatSec(t.sec);
+    }, 1000);
+  }
 }
 
-function mwToggleAction(i) {
-  var mid = window._mwId;
-  var m = _mwGetData();
-  if (!m || !m.actions || !m.actions[i]) return;
-  m.actions[i].done = !m.actions[i].done;
-  ST.update('meetings', mid, { actions: m.actions });
-  var row = document.getElementById('mw-act-' + i);
-  if (!row) return;
-  var a = m.actions[i];
-  row.outerHTML = _mwActionRowHtml(a, i);
-}
-
-function mwDeleteAction(i) {
-  var mid = window._mwId;
-  var m = _mwGetData();
-  if (!m || !m.actions) return;
-  if (!confirm('ลบ Action นี้?')) return;
-  m.actions.splice(i, 1);
-  ST.update('meetings', mid, { actions: m.actions });
-  // rebuild action list
-  var list = document.getElementById('mw-action-list');
-  if (list) { list.innerHTML = m.actions.map(function(a, idx) { return _mwActionRowHtml(a, idx); }).join(''); }
-  var cnt = document.getElementById('mw-action-count');
-  if (cnt) cnt.textContent = '(' + m.actions.length + ')';
-}
-
+// --- Overall Timer ---
 function mwTimerToggle() {
   if (_mwTimerRunning) {
-    clearInterval(_mwTimerInterval);
-    _mwTimerRunning = false;
-    var btn = document.getElementById('mw-timer-btn');
-    if (btn) btn.textContent = '▶️ ต่อ';
+    clearInterval(_mwTimerInterval); _mwTimerRunning = false;
+    var btn = document.getElementById('mw-timer-btn'); if (btn) btn.textContent = '▶️ ต่อ';
   } else {
     _mwTimerRunning = true;
-    var btn2 = document.getElementById('mw-timer-btn');
-    if (btn2) btn2.textContent = '⏸️ หยุด';
+    var btn2 = document.getElementById('mw-timer-btn'); if (btn2) btn2.textContent = '⏸️ หยุด';
     _mwTimerInterval = setInterval(function() {
       _mwTimerSec++;
-      var d = document.getElementById('mw-timer-display');
-      if (!d) { clearInterval(_mwTimerInterval); return; }
-      var m = Math.floor(_mwTimerSec / 60);
-      var s = _mwTimerSec % 60;
-      d.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+      var d = document.getElementById('mw-timer-display'); if (!d) { clearInterval(_mwTimerInterval); return; }
+      d.textContent = _mwFormatSec(_mwTimerSec);
     }, 1000);
   }
 }
 
 function mwTimerReset() {
-  clearInterval(_mwTimerInterval);
-  _mwTimerRunning = false;
-  _mwTimerSec = 0;
-  var d = document.getElementById('mw-timer-display');
-  if (d) d.textContent = '00:00';
-  var btn = document.getElementById('mw-timer-btn');
-  if (btn) btn.textContent = '▶️ เริ่ม';
+  clearInterval(_mwTimerInterval); _mwTimerRunning = false; _mwTimerSec = 0;
+  var d = document.getElementById('mw-timer-display'); if (d) d.textContent = '00:00';
+  var btn = document.getElementById('mw-timer-btn'); if (btn) btn.textContent = '▶️ เริ่ม';
+}
+
+// --- Attendance ---
+function mwToggleAttend(i) {
+  if (!window._mwAttendance || !window._mwAttendance[i]) return;
+  window._mwAttendance[i].attended = !window._mwAttendance[i].attended;
+  var old = document.getElementById('mw-att-' + i); if (!old) return;
+  var tmp = document.createElement('div'); tmp.innerHTML = _mwAttendChipHtml(window._mwAttendance[i], i); old.replaceWith(tmp.firstChild);
+}
+
+function mwAddAttendee() {
+  var name = prompt('ชื่อผู้เข้าร่วม:'); if (!name || !name.trim()) return;
+  window._mwAttendance = window._mwAttendance || [];
+  window._mwAttendance.push({name: name.trim(), attended: true});
+  var i = window._mwAttendance.length - 1;
+  var list = document.getElementById('mw-attend-list');
+  if (!list) { render(); return; }
+  var tmp = document.createElement('div'); tmp.innerHTML = _mwAttendChipHtml({name: name.trim(), attended: true}, i); list.appendChild(tmp.firstChild);
+}
+
+// --- Action Items ---
+function mwAddAction() {
+  var mid = window._mwId; var m = _mwGetData(); if (!m) return;
+  var txt = ((document.getElementById('mw-qa-text') || {}).value || '').trim(); if (!txt) { toast('ใส่ชื่อ Action ด้วย'); return; }
+  var a = {id: 'act_' + Date.now(), title: txt, assignee: ((document.getElementById('mw-qa-who') || {}).value || '').trim(), dueDate: ((document.getElementById('mw-qa-due') || {}).value || ''), done: false};
+  m.actions = m.actions || []; m.actions.push(a); ST.update('meetings', mid, {actions: m.actions});
+  var list = document.getElementById('mw-action-list'); if (list) { var tmp = document.createElement('div'); tmp.innerHTML = _mwActionRowHtml(a, m.actions.length - 1); list.appendChild(tmp.firstChild); }
+  var cnt = document.getElementById('mw-action-count'); if (cnt) cnt.textContent = '(' + m.actions.length + ')';
+  document.getElementById('mw-qa-text').value = ''; document.getElementById('mw-qa-who').value = ''; document.getElementById('mw-qa-due').value = '';
+  document.getElementById('mw-qa-text').focus();
+}
+
+function mwToggleAction(i) {
+  var mid = window._mwId; var m = _mwGetData(); if (!m || !m.actions || !m.actions[i]) return;
+  m.actions[i].done = !m.actions[i].done; ST.update('meetings', mid, {actions: m.actions});
+  var old = document.getElementById('mw-act-' + i); if (!old) return;
+  var tmp = document.createElement('div'); tmp.innerHTML = _mwActionRowHtml(m.actions[i], i); old.replaceWith(tmp.firstChild);
+}
+
+function mwDeleteAction(i) {
+  var mid = window._mwId; var m = _mwGetData(); if (!m || !m.actions) return;
+  if (!confirm('ลบ Action นี้?')) return;
+  m.actions.splice(i, 1); ST.update('meetings', mid, {actions: m.actions});
+  var list = document.getElementById('mw-action-list'); if (list) list.innerHTML = m.actions.map(function(a, idx) { return _mwActionRowHtml(a, idx); }).join('');
+  var cnt = document.getElementById('mw-action-count'); if (cnt) cnt.textContent = '(' + m.actions.length + ')';
+}
+
+function mwImportPendingActions() {
+  var mid = window._mwId; var m = _mwGetData(); if (!m || !window._mwPrevMeeting) return;
+  var pending = (window._mwPrevMeeting.actions || []).filter(function(a) { return !a.done; });
+  if (!pending.length) return;
+  m.actions = m.actions || [];
+  pending.forEach(function(a) {
+    m.actions.push({id: 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2), title: a.title + ' [ค้างจาก: ' + window._mwPrevMeeting.title + ']', assignee: a.assignee || '', dueDate: a.dueDate || '', done: false});
+  });
+  ST.update('meetings', mid, {actions: m.actions});
+  var list = document.getElementById('mw-action-list'); if (list) list.innerHTML = m.actions.map(function(a, i) { return _mwActionRowHtml(a, i); }).join('');
+  var cnt = document.getElementById('mw-action-count'); if (cnt) cnt.textContent = '(' + m.actions.length + ')';
+  toast('⬇️ นำเข้า ' + pending.length + ' actions แล้ว');
+}
+
+// --- Link Dealer/Pipeline ---
+function mwLinkDealer(dealerId) {
+  ST.update('meetings', window._mwId, {linkedDealerId: dealerId || null});
+  toast(dealerId ? '🏪 เชื่อม Dealer แล้ว' : 'ยกเลิกการเชื่อม Dealer');
+}
+function mwLinkPipeline(pipeId) {
+  ST.update('meetings', window._mwId, {linkedPipelineId: pipeId || null});
+  toast(pipeId ? '📊 เชื่อม Pipeline แล้ว' : 'ยกเลิกการเชื่อม Pipeline');
+}
+
+// --- Schedule Next Meeting ---
+function mwScheduleNext() {
+  var m = _mwGetData(); if (!m) return;
+  var nextDate = new Date(m.date);
+  if (m.recurrence === 'weekly') nextDate.setDate(nextDate.getDate() + 7);
+  else if (m.recurrence === 'biweekly') nextDate.setDate(nextDate.getDate() + 14);
+  else if (m.recurrence === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1);
+  else nextDate.setDate(nextDate.getDate() + 7);
+  var parking = ((document.getElementById('mw-parking') || {}).value || '').trim();
+  showMeetingM();
+  setTimeout(function() {
+    var f = function(id) { return document.getElementById(id); };
+    if (f('fm_t')) f('fm_t').value = m.title;
+    if (f('fm_tp')) f('fm_tp').value = m.type || '';
+    if (f('fm_loc')) f('fm_loc').value = m.location || '';
+    if (f('fm_att')) f('fm_att').value = m.attendees || '';
+    if (f('fm_s') && m.time) f('fm_s').value = m.time;
+    if (f('fm_e') && m.endTime) f('fm_e').value = m.endTime;
+    if (f('fm_ag') && parking) f('fm_ag').value = parking;
+  }, 120);
+  toast('📅 เปิดฟอร์มสำหรับประชุมครั้งถัดไป — กรอกวันที่และบันทึก');
+}
+
+// --- Copy Functions ---
+function mwCopyLine() {
+  var m = _mwGetData(); if (!m) return;
+  var decisions = ((document.getElementById('mw-decisions') || {}).value || m.decisions || '').trim();
+  var lines = ['📋 สรุปประชุม: ' + (m.title || ''), '📅 ' + fD(m.date) + (m.time ? ' เวลา ' + m.time : ''), ''];
+  if (decisions) { lines.push('✅ มติ:'); lines.push(decisions); lines.push(''); }
+  var acts = (m.actions || []).filter(function(a) { return !a.done; });
+  if (acts.length) {
+    lines.push('📌 Action Items:');
+    acts.forEach(function(a) { var r = '• ' + a.title; if (a.assignee) r += ' (' + a.assignee + ')'; if (a.dueDate) r += ' ภายใน ' + fD(a.dueDate); lines.push(r); });
+  }
+  copyToClip(lines.join('\n')); toast('💬 Copy สำหรับ LINE แล้ว');
 }
 
 function mwCopySummary() {
-  var m = _mwGetData();
-  if (!m) return;
-  var notes = (document.getElementById('mw-notes') || {}).value || m.notes || '';
-  var decisions = (document.getElementById('mw-decisions') || {}).value || m.decisions || '';
-  var attendees = (document.getElementById('mw-attendees') || {}).value || m.attendees || '';
-  var lines = [];
-  lines.push('=== สรุปการประชุม ===');
-  lines.push('หัวข้อ: ' + (m.title || ''));
-  lines.push('วันที่: ' + fD(m.date) + (m.time ? ' เวลา ' + m.time + (m.endTime ? '-' + m.endTime : '') : ''));
+  var m = _mwGetData(); if (!m) return;
+  var notes = ((document.getElementById('mw-notes') || {}).value || m.notes || '').trim();
+  var decisions = ((document.getElementById('mw-decisions') || {}).value || m.decisions || '').trim();
+  var parking = ((document.getElementById('mw-parking') || {}).value || m.parkingLot || '').trim();
+  var lines = ['=== สรุปการประชุม ===', 'หัวข้อ: ' + (m.title || ''), 'วันที่: ' + fD(m.date) + (m.time ? ' เวลา ' + m.time + (m.endTime ? '-' + m.endTime : '') : '')];
   if (m.location) lines.push('สถานที่: ' + m.location);
-  if (attendees) lines.push('ผู้เข้าร่วม: ' + attendees);
+  var attList = window._mwAttendance || [];
+  if (attList.length) {
+    var came = attList.filter(function(a) { return a.attended; }).map(function(a) { return a.name; });
+    var absent = attList.filter(function(a) { return !a.attended; }).map(function(a) { return a.name; });
+    if (came.length) lines.push('ผู้เข้าร่วม: ' + came.join(', '));
+    if (absent.length) lines.push('ขาด: ' + absent.join(', '));
+  } else if (m.attendees) lines.push('ผู้เข้าร่วม: ' + m.attendees);
   lines.push('');
   if (window._mwAgenda && window._mwAgenda.length) {
     lines.push('วาระ:');
-    window._mwAgenda.forEach(function(a, i) { lines.push((a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.text); });
+    window._mwAgenda.forEach(function(a, i) {
+      var timeStr = a.timerSec ? ' [' + _mwFormatSec(a.timerSec) + ']' : '';
+      lines.push((a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.text + timeStr);
+    });
     lines.push('');
   }
   if (notes) { lines.push('บันทึก:'); lines.push(notes); lines.push(''); }
   if (decisions) { lines.push('มติที่ประชุม:'); lines.push(decisions); lines.push(''); }
+  if (parking) { lines.push('Parking Lot:'); lines.push(parking); lines.push(''); }
   var acts = m.actions || [];
   if (acts.length) {
     lines.push('Action Items:');
-    acts.forEach(function(a, i) {
-      var row = (a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.title;
-      if (a.assignee) row += ' — ผู้รับผิดชอบ: ' + a.assignee;
-      if (a.dueDate) row += ' (กำหนด ' + fD(a.dueDate) + ')';
-      lines.push(row);
-    });
+    acts.forEach(function(a, i) { var r = (a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.title; if (a.assignee) r += ' — ' + a.assignee; if (a.dueDate) r += ' (' + fD(a.dueDate) + ')'; lines.push(r); });
   }
-  copyToClip(lines.join('\n'));
-  toast('📋 Copy สรุปการประชุมแล้ว');
+  copyToClip(lines.join('\n')); toast('📋 Copy สรุปการประชุมแล้ว');
 }
 
 // ================================================================

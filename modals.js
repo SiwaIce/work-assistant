@@ -2090,6 +2090,7 @@ function showMeetingM(eid) {
     '<div class="fg"><label>วาระ</label><textarea id="fm_ag">' + sanitize(m.agenda || '') + '</textarea></div>' +
     '<div class="fg"><label>บันทึก</label><textarea id="fm_n">' + sanitize(m.notes || '') + '</textarea></div>' +
     '<div class="fg"><label>มติ</label><textarea id="fm_dec">' + sanitize(m.decisions || '') + '</textarea></div>' +
+    '<div class="fg"><label>🔁 ประชุมประจำ (Recurring)</label><select id="fm_rec"><option value="">ไม่กำหนด</option><option value="weekly"' + (m.recurrence === 'weekly' ? ' selected' : '') + '>ทุกสัปดาห์</option><option value="biweekly"' + (m.recurrence === 'biweekly' ? ' selected' : '') + '>ทุก 2 สัปดาห์</option><option value="monthly"' + (m.recurrence === 'monthly' ? ' selected' : '') + '>ทุกเดือน</option></select></div>' +
     '<button class="btn bp btn-full" onclick="saveMeeting(\'' + (eid || '') + '\')">💾 บันทึก</button>');
 }
 
@@ -2107,7 +2108,8 @@ function saveMeeting(eid) {
     attendees: document.getElementById('fm_att') ? document.getElementById('fm_att').value.trim() : '',
     agenda: document.getElementById('fm_ag') ? document.getElementById('fm_ag').value.trim() : '',
     notes: document.getElementById('fm_n') ? document.getElementById('fm_n').value.trim() : '',
-    decisions: document.getElementById('fm_dec') ? document.getElementById('fm_dec').value.trim() : ''
+    decisions: document.getElementById('fm_dec') ? document.getElementById('fm_dec').value.trim() : '',
+    recurrence: document.getElementById('fm_rec') ? (document.getElementById('fm_rec').value || null) : null
   };
   if (eid) {
     ST.update('meetings', eid, data);

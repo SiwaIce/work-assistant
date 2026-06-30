@@ -9165,3 +9165,18 @@ input:focus, select:focus, textarea:focus {
 @media(max-width:640px){
   .ai-panel{width:100%;right:-100%}
 }
+
+/* ===== PRINT / PDF EXPORT (Meeting Window) ===== */
+@media print{
+  #sidebar,#top-bar,.ai-panel,.ai-chat-btn,button,.btn,#mw-timer-btn,
+  #mw-autosave-info,.vw-right,
+  [onclick]{display:none!important}
+  body,html{background:#fff!important;color:#000!important;font-size:12pt}
+  .vw-layout{display:block!important}
+  .vw-left{width:100%!important;max-width:100%!important}
+  textarea,input{border:1px solid #ccc!important;background:#fff!important;color:#000!important}
+  textarea{resize:none!important;overflow:visible!important;height:auto!important}
+  *{box-shadow:none!important}
+  a[href]:after{content:none}
+  @page{margin:20mm}
+}
