@@ -1524,7 +1524,12 @@ function getFavorites() {
 
 function saveFavorites(list) {
   localStorage.setItem('v7_favorites', JSON.stringify(list));
-  if (typeof syncToFirebase === 'function') syncToFirebase('favorites', list);
+  // favorites เป็น plain array ไม่ใช่ array-of-objects — ต้องเซฟแบบ _data doc เท่านั้น
+  try {
+    if (typeof db !== 'undefined' && CURRENT_USER && SYNC_ENABLED) {
+      db.collection('users').doc(CURRENT_USER.uid).collection('favorites').doc('_data').set({ value: list });
+    }
+  } catch(e) {}
 }
 
 function renderFavorites() {

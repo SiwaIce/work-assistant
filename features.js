@@ -4452,8 +4452,14 @@ function rKnowledge(el) {
   try { allNotes = ST.getAll('notes'); } catch(e) { allNotes = []; }
   var notes = allNotes.slice();
 
-  if (noteStatusFilter !== 'all') notes = notes.filter(function(n) { return (n.status || 'active') === noteStatusFilter; });
-  if (noteFilter !== 'all') notes = notes.filter(function(n) { return n.category === noteFilter; });
+  // ไม่โชว์ trash ใน view ปกติ — โชว์เฉพาะเมื่อ filter = 'trash'
+  if (noteStatusFilter === 'trash') {
+    notes = notes.filter(function(n) { return n.status === 'trash'; });
+  } else {
+    notes = notes.filter(function(n) { return (n.status || 'active') !== 'trash'; });
+    if (noteStatusFilter !== 'all') notes = notes.filter(function(n) { return (n.status || 'active') === noteStatusFilter; });
+  }
+  if (noteStatusFilter !== 'trash' && noteFilter !== 'all') notes = notes.filter(function(n) { return n.category === noteFilter; });
   if (noteSearch) {
     var q = noteSearch.toLowerCase();
     notes = notes.filter(function(n) {
@@ -4470,7 +4476,7 @@ function rKnowledge(el) {
     return (b.created || '').localeCompare(a.created || '');
   });
 
-  var statusCounts = {active: 0, expired: 0, cancelled: 0, draft: 0};
+  var statusCounts = {active: 0, expired: 0, cancelled: 0, draft: 0, trash: 0};
   var catCounts = {};
   var expireSoon = 0;
   allNotes.forEach(function(n) {
@@ -4525,6 +4531,7 @@ function rKnowledge(el) {
     '<div class="note-cpill ' + (noteStatusFilter==='expired'?'act':'') + '" onclick="noteStatusFilter=\'expired\';render()">⏰ หมดอายุ <span class="cpill-cnt">' + statusCounts.expired + '</span></div>' +
     (statusCounts.cancelled ? '<div class="note-cpill ' + (noteStatusFilter==='cancelled'?'act':'') + '" onclick="noteStatusFilter=\'cancelled\';render()">❌ ยกเลิก <span class="cpill-cnt">' + statusCounts.cancelled + '</span></div>' : '') +
     (statusCounts.draft ? '<div class="note-cpill ' + (noteStatusFilter==='draft'?'act':'') + '" onclick="noteStatusFilter=\'draft\';render()">📝 Draft <span class="cpill-cnt">' + statusCounts.draft + '</span></div>' : '') +
+    (statusCounts.trash ? '<div class="note-cpill ' + (noteStatusFilter==='trash'?'act':'') + '" onclick="noteStatusFilter=\'trash\';render()">🗑️ ถังขยะ <span class="cpill-cnt">' + statusCounts.trash + '</span></div>' : '') +
     '</div>';
 
   // Category filter pills
@@ -4538,7 +4545,25 @@ function rKnowledge(el) {
   }
 
   // Notes content
-  if (!notes.length) {
+  if (noteStatusFilter === 'trash') {
+    if (!notes.length) {
+      h += '<div class="empty"><div class="icon">🗑️</div><p>ถังขยะว่างเปล่า</p></div>';
+    } else {
+      h += '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">';
+      h += '<span style="font-size:12px;color:var(--text2)">📌 กู้คืนหรือลบถาวรได้</span>';
+      h += '<button class="btn bsm bd" onclick="emptyKBTrash()">🗑️ ล้างถังขยะ</button>';
+      h += '</div>';
+      h += '<div class="note-grid">' + notes.map(function(n) {
+        return '<div class="note-grid-card" style="opacity:.8">' +
+          '<div style="font-weight:700;font-size:12px;margin-bottom:4px">' + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;max-height:40px;overflow:hidden">' + sanitize((n.content || '').substr(0, 80)) + '</div>' +
+          '<div style="display:flex;gap:5px">' +
+          '<button class="btn bsm bp btn-full" style="font-size:10px" onclick="restoreKBNote(\'' + n.id + '\')">♻️ กู้คืน</button>' +
+          '<button class="btn bsm bd" style="font-size:10px" onclick="hardDelKBNote(\'' + n.id + '\')">🗑️ ลบถาวร</button>' +
+          '</div></div>';
+      }).join('') + '</div>';
+    }
+  } else if (!notes.length) {
     h += '<div class="empty"><div class="icon">📚</div><p>ไม่มี Note' + (noteSearch ? ' ที่ตรงกับ "' + sanitize(noteSearch) + '"' : '') + '</p></div>';
   } else if (noteView === 'grid') {
     h += noteGridHTML(notes, cats);
@@ -4638,7 +4663,7 @@ function noteCardHTML(n, cats) {
     '<div class="note-lc-qs">' +
       '<button class="qs-btn" onclick="event.stopPropagation();showNoteM(\'' + n.id + '\')" title="แก้ไข">✏️</button>' +
       '<button class="qs-btn" onclick="event.stopPropagation();ST.update(\'notes\',\'' + n.id + '\',{pinned:' + (!n.pinned) + '});render()" title="' + (n.pinned?'เอาออกจากปัก':'ปักหมุด') + '">' + (n.pinned?'📌':'📍') + '</button>' +
-      '<button class="qs-btn" onclick="event.stopPropagation();if(confirm(\'ลบ Note นี้?\')){ST.delete(\'notes\',\'' + n.id + '\');render();}" title="ลบ">🗑️</button>' +
+      '<button class="qs-btn" onclick="event.stopPropagation();trashKBNote(\'' + n.id + '\')" title="ย้ายไปถังขยะ">🗑️</button>' +
     '</div>' +
   '</div>';
 }
@@ -4686,7 +4711,7 @@ function rNoteDet(el) {
     '<button class="btn bsm ' + (n.pinned ? 'bw' : 'bo') + '" onclick="toggleNotePin(\'' + n.id + '\')">' + (n.pinned ? '📌' : '📌 Pin') + '</button>' +
     '<button class="btn bsm bo" onclick="copyNoteContent(\'' + n.id + '\')">📋</button>' +
     '<button class="btn bsm bo" onclick="showNoteM(\'' + n.id + '\')">✏️</button>' +
-    '<button class="btn bsm bd" onclick="deleteNote(\'' + n.id + '\')">🗑️</button>' +
+    '<button class="btn bsm bd" onclick="trashKBNote(\'' + n.id + '\',true)">🗑️</button>' +
     '</span></h2>';
   html += '<div class="note-meta" style="margin-bottom:10px">' +
     '<span class="note-cat-badge">' + (n.category || 'อื่นๆ') + '</span>' +
@@ -4747,11 +4772,33 @@ function copyNoteContent(noteId) {
   copyText(text, '📋 Copy เนื้อหาแล้ว');
 }
 
-function deleteNote(noteId) {
-  if (!confirm('ลบ Note นี้?')) return;
+function deleteNote(noteId) { trashKBNote(noteId, true); } // backward-compat
+
+function trashKBNote(noteId, navigateBack) {
+  ST.update('notes', noteId, { status: 'trash', deletedAt: new Date().toISOString() });
+  toast('🗑️ ย้ายไปถังขยะแล้ว — กดถังขยะเพื่อกู้คืน');
+  if (navigateBack) go('knowledge'); else render();
+}
+
+function restoreKBNote(noteId) {
+  ST.update('notes', noteId, { status: 'active', deletedAt: null });
+  toast('♻️ กู้คืนแล้ว');
+  render();
+}
+
+function hardDelKBNote(noteId) {
+  if (!confirm('ลบถาวร? ไม่สามารถกู้คืนได้อีก')) return;
   ST.delete('notes', noteId);
-  toast('🗑️ ลบแล้ว');
-  go('knowledge');
+  toast('🗑️ ลบถาวรแล้ว');
+  render();
+}
+
+function emptyKBTrash() {
+  if (!confirm('ล้างถังขยะทั้งหมด? ไม่สามารถกู้คืนได้อีก')) return;
+  ST.getAll('notes').filter(function(n) { return n.status === 'trash'; })
+    .forEach(function(n) { ST.delete('notes', n.id); });
+  toast('🗑️ ล้างถังขยะแล้ว');
+  render();
 }
 
 // ================================================================
