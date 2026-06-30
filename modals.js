@@ -2069,6 +2069,11 @@ function saveTaskLog(tid) {
 // ================================================================
 // MEETING MODAL
 // ================================================================
+function openMeetingWindow(meetingId) {
+  var url = location.pathname + '?meetingWindow=1&meetingId=' + encodeURIComponent(meetingId || '');
+  window.open(url, '_blank');
+}
+
 function showMeetingM(eid) {
   var m = eid ? ST.getOne('meetings', eid) : {};
   openM(eid ? '✏️ ประชุม' : '➕ ประชุม', '' +
@@ -2110,11 +2115,20 @@ function saveMeeting(eid) {
     go('meetingDetail', {meetingId: eid});
   } else {
     data.actions = [];
-    var m = ST.add('meetings', data);
+    var nm = ST.add('meetings', data);
     closeMForce();
-    go('meetingDetail', {meetingId: m.id});
+    go('meetingDetail', {meetingId: nm.id});
+    toast('💾 สร้างประชุมแล้ว');
+    setTimeout(function() {
+      openM('📅 สร้างประชุมสำเร็จ',
+        '<div style="text-align:center;padding:8px 0">' +
+        '<div style="font-size:15px;font-weight:700;margin-bottom:6px">' + sanitize(nm.title) + '</div>' +
+        '<div style="font-size:13px;color:var(--text2);margin-bottom:20px">' + fD(nm.date) + (nm.time ? ' · ' + nm.time : '') + '</div>' +
+        '<button class="btn bp btn-full" onclick="closeMForce();openMeetingWindow(\'' + nm.id + '\')">🪟 เปิดแท็บบันทึกการประชุม</button>' +
+        '<button class="btn bo btn-full" style="margin-top:8px" onclick="closeMForce()">ปิด (ไม่เปิดแท็บ)</button>' +
+        '</div>');
+    }, 150);
   }
-  toast('💾 บันทึกแล้ว');
 }
 
 function delMeeting(id) {

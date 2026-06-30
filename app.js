@@ -514,6 +514,10 @@ var S = {view: 'today'};
     window._vwEid = qp.get('eid') || '';
     S.view = 'visitWindow';
   }
+  if (qp.get('meetingWindow') === '1') {
+    window._mwId = qp.get('meetingId') || '';
+    S.view = 'meetingWindow';
+  }
 })();
 
 // แท็บอื่นบันทึก Visit แล้ว ให้แท็บนี้รีเฟรชข้อมูลอัตโนมัติ (ไม่ต้องกดรีเฟรชเอง)
@@ -592,8 +596,9 @@ var R = {
   followup: rFollowup, 
   feedback: rFeedback,
   kanban: rKanban, 
-  meetings: rMeetings, 
+  meetings: rMeetings,
   meetingDetail: rMeetDet,
+  meetingWindow: rMeetingWindow,
   calendar: rCalendar,
   monthlyGoal: rMonthlyGoal,
   demoTracker: rDemoTracker,

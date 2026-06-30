@@ -1391,6 +1391,7 @@ function rMeetDet(el) {
   <div class="bc"><a onclick="go('meetings')">📅 ประชุม</a><span class="sep">›</span><span class="cur">${sanitize(m.title)}</span></div>
 
   <div class="card"><h2>📅 ข้อมูลประชุม <span class="ml">
+    <button class="btn bsm bo" onclick="openMeetingWindow('${m.id}')" title="เปิดแท็บบันทึกการประชุม">🪟 เปิดแท็บบันทึก</button>
     <button class="btn bsm bo" onclick="showMeetingM('${m.id}')">✏️</button>
     <button class="btn bsm bd" onclick="delMeeting('${m.id}')">🗑️</button>
   </span></h2>
@@ -1435,6 +1436,395 @@ function delMeeting(id) {
   ST.delete('meetings', id);
   go('meetings');
   toast('🗑️ ลบแล้ว');
+}
+
+// ================================================================
+// MEETING WINDOW — แท็บแยก บันทึกการประชุมแบบเต็มรูปแบบ
+// ================================================================
+
+var _mwTimerSec = 0;
+var _mwTimerRunning = false;
+var _mwTimerInterval = null;
+var _mwAutoSaveInterval = null;
+
+function rMeetingWindow(el) {
+  var mid = window._mwId || '';
+  var m = mid ? ST.getOne('meetings', mid) : null;
+  if (!m) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text2)">ไม่พบข้อมูลประชุม — ปิดแท็บนี้ได้เลย</div>';
+    return;
+  }
+  document.title = '📅 ' + m.title;
+  document.getElementById('pgT').textContent = '📅 ' + m.title;
+
+  // แปลง agenda string → array ถ้ายังไม่มี agendaItems
+  if (!m.agendaItems) {
+    m.agendaItems = (m.agenda || '').split('\n').map(function(t) { return { text: t.trim(), done: false }; }).filter(function(x) { return x.text; });
+  }
+  window._mwAgenda = m.agendaItems.map(function(a) { return { text: a.text, done: !!a.done }; });
+
+  var h = '<div class="vw-layout" style="gap:16px">';
+
+  // ===================== LEFT PANEL =====================
+  h += '<div class="vw-left">';
+
+  // header info
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">';
+  h += '<div>';
+  h += '<div style="font-size:16px;font-weight:700">' + sanitize(m.title) + '</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-top:3px">';
+  var bits = ['📅 ' + fD(m.date)];
+  if (m.time) bits.push('⏰ ' + m.time + (m.endTime ? ' – ' + m.endTime : ''));
+  if (m.location) bits.push('📍 ' + sanitize(m.location));
+  if (m.type) bits.push('🏷️ ' + sanitize(m.type));
+  h += bits.join(' &nbsp;·&nbsp; ') + '</div>';
+  if (m.attendees) h += '<div style="font-size:12px;color:var(--text2);margin-top:2px">👥 ' + sanitize(m.attendees) + '</div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  h += '<button class="btn bsm bp" onclick="mwSave()" id="mw-save-btn">💾 บันทึก</button>';
+  h += '<button class="btn bsm bo" onclick="mwCopySummary()">📋 Copy สรุป</button>';
+  h += '</div></div></div>';
+
+  // Agenda checklist
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h += '<div style="font-weight:600;font-size:13px">📋 วาระการประชุม</div>';
+  h += '<div style="display:flex;gap:6px"><button class="btn bsm bo" onclick="mwAgendaAdd()">+ เพิ่มวาระ</button></div>';
+  h += '</div>';
+  h += '<div id="mw-agenda-list">';
+  if (window._mwAgenda.length === 0) {
+    h += '<div style="font-size:12px;color:var(--text2)">ยังไม่มีวาระ — กด "+ เพิ่มวาระ" หรือพิมพ์ในบันทึกได้เลย</div>';
+  } else {
+    window._mwAgenda.forEach(function(a, i) {
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px" id="mw-ag-' + i + '">';
+      h += '<div onclick="mwAgendaToggle(' + i + ')" style="width:18px;height:18px;border-radius:50%;border:2px solid ' + (a.done ? '#4ade80' : 'var(--border,#334155)') + ';background:' + (a.done ? '#4ade80' : 'transparent') + ';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111">' + (a.done ? '✓' : '') + '</div>';
+      h += '<div style="font-size:13px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + ';flex:1">' + sanitize(a.text) + '</div>';
+      h += '<button onclick="mwAgendaAddToNotes(' + i + ')" title="เพิ่มวาระนี้เข้าบันทึก" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:2px 4px">→ โน้ต</button>';
+      h += '</div>';
+    });
+  }
+  h += '</div></div>';
+
+  // Notes textarea
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h += '<div style="font-weight:600;font-size:13px">📝 บันทึกการประชุม</div>';
+  h += '<div style="display:flex;gap:6px">';
+  h += '<button class="btn bsm bo" onclick="mwInsertTimestamp()" title="แทรกเวลาปัจจุบันลงโน้ต">⏱️ แทรกเวลา</button>';
+  h += '</div></div>';
+  h += '<textarea id="mw-notes" style="width:100%;min-height:220px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="พิมพ์โน้ตระหว่างประชุมได้เลย...\n\n[เวลา] ใช้ปุ่ม ⏱️ แทรกเวลา เพื่อ timestamp แต่ละช่วง">' + sanitize(m.notes || '') + '</textarea>';
+  h += '</div>';
+
+  // Decisions
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="font-weight:600;font-size:13px;margin-bottom:8px">✅ มติที่ประชุม</div>';
+  h += '<textarea id="mw-decisions" style="width:100%;min-height:80px;resize:vertical;font-size:13px;line-height:1.7;font-family:inherit;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;color:var(--text)" placeholder="บันทึกมติหรือข้อสรุปที่ตกลงกันในที่ประชุม...">' + sanitize(m.decisions || '') + '</textarea>';
+  h += '</div>';
+
+  // Action Items
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
+  h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px">📌 Action Items <span style="font-size:11px;color:var(--text2);font-weight:400" id="mw-action-count">(' + (m.actions || []).length + ')</span></div>';
+  h += '<div id="mw-action-list">';
+  (m.actions || []).forEach(function(a, i) {
+    h += _mwActionRowHtml(a, i);
+  });
+  h += '</div>';
+  h += '<div style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:8px;padding:10px;margin-top:8px">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">➕ Quick Add Action</div>';
+  h += '<input id="mw-qa-text" placeholder="ต้องทำ..." style="width:100%;font-size:13px;margin-bottom:6px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:6px 10px;color:var(--text)" onkeydown="if(event.key===\'Enter\')mwAddAction()">';
+  h += '<div style="display:flex;gap:6px">';
+  h += '<input id="mw-qa-who" placeholder="👤 ผู้รับผิดชอบ" style="flex:1;font-size:12px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 10px;color:var(--text)">';
+  h += '<input id="mw-qa-due" type="date" style="font-size:12px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 10px;color:var(--text)">';
+  h += '<button class="btn bsm bp" onclick="mwAddAction()">➕</button>';
+  h += '</div></div></div>';
+
+  h += '<div style="text-align:center;padding:4px 0 16px">';
+  h += '<button class="btn bp" onclick="mwSave()" style="min-width:200px">💾 บันทึกทั้งหมด</button>';
+  h += '<div id="mw-save-status" style="font-size:11px;color:var(--text2);margin-top:6px"></div>';
+  h += '</div>';
+  h += '</div>'; // vw-left
+
+  // ===================== RIGHT PANEL — TOOLS =====================
+  h += '<div class="vw-right" style="gap:12px;overflow-y:auto">';
+
+  // Timer
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">⏱️ นาฬิกาจับเวลา</div>';
+  h += '<div id="mw-timer-display" style="font-size:36px;font-weight:700;text-align:center;letter-spacing:2px;margin-bottom:10px;font-family:monospace">00:00</div>';
+  h += '<div style="display:flex;gap:6px;justify-content:center">';
+  h += '<button class="btn bsm bp" id="mw-timer-btn" onclick="mwTimerToggle()">▶️ เริ่ม</button>';
+  h += '<button class="btn bsm bo" onclick="mwTimerReset()">↺ รีเซ็ต</button>';
+  h += '</div></div>';
+
+  // Template snippets
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">📝 Template ด่วน</div>';
+  var templates = [
+    { label: 'มติที่ประชุม', text: 'ที่ประชุมมีมติ: ' },
+    { label: 'รอเอกสาร', text: 'รอเอกสารจาก: ... ภายใน ' },
+    { label: 'รับทราบ', text: 'ที่ประชุมรับทราบ' },
+    { label: 'เลื่อนพิจารณา', text: 'เลื่อนพิจารณาในครั้งถัดไป' },
+    { label: 'ผู้รับผิดชอบ', text: 'ผู้รับผิดชอบ: [ชื่อ] / กำหนดเสร็จ: ' },
+    { label: 'นัดครั้งถัดไป', text: 'นัดประชุมครั้งถัดไป: ' },
+    { label: 'อยู่ระหว่างพิจารณา', text: 'อยู่ระหว่างพิจารณา' },
+    { label: 'ติดตามผล', text: 'ติดตามผลภายใน: ' }
+  ];
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  templates.forEach(function(t) {
+    h += '<div onclick="mwInsertTemplate(\'' + t.text.replace(/'/g, "\\'") + '\')" style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--text2)" onmouseover="this.style.borderColor=\'#60a5fa\';this.style.color=\'#60a5fa\'" onmouseout="this.style.borderColor=\'\';this.style.color=\'\'">' + t.label + '</div>';
+  });
+  h += '</div></div>';
+
+  // Attendees quick list
+  h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">👥 ผู้เข้าร่วม</div>';
+  h += '<textarea id="mw-attendees" style="width:100%;font-size:12px;line-height:1.6;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:8px;color:var(--text);resize:none;min-height:60px" placeholder="ชื่อผู้เข้าร่วมประชุม...">' + sanitize(m.attendees || '') + '</textarea>';
+  h += '</div>';
+
+  // Auto-save status
+  h += '<div id="mw-autosave-info" style="font-size:11px;color:var(--text2);text-align:center;padding:4px"></div>';
+
+  h += '</div>'; // vw-right
+  h += '</div>'; // vw-layout
+
+  el.innerHTML = h;
+
+  // start auto-save every 45s
+  if (_mwAutoSaveInterval) clearInterval(_mwAutoSaveInterval);
+  _mwAutoSaveInterval = setInterval(function() { mwAutoSave(); }, 45000);
+}
+
+function _mwActionRowHtml(a, i) {
+  return '<div id="mw-act-' + i + '" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#334155)">' +
+    '<div onclick="mwToggleAction(' + i + ')" style="width:18px;height:18px;border-radius:4px;border:2px solid ' + (a.done ? '#4ade80' : 'var(--border,#334155)') + ';background:' + (a.done ? '#4ade80' : 'transparent') + ';cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111">' + (a.done ? '✓' : '') + '</div>' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-size:12px;' + (a.done ? 'text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(a.title) + '</div>' +
+    (a.assignee || a.dueDate ? '<div style="font-size:11px;color:var(--text2)">' + (a.assignee ? '👤 ' + sanitize(a.assignee) : '') + (a.dueDate ? ' 📅 ' + fD(a.dueDate) : '') + '</div>' : '') +
+    '</div>' +
+    '<button onclick="mwDeleteAction(' + i + ')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:2px 4px;flex-shrink:0">✕</button>' +
+    '</div>';
+}
+
+function _mwGetData() {
+  var m = ST.getOne('meetings', window._mwId);
+  return m || null;
+}
+
+function mwSave() {
+  var mid = window._mwId;
+  var m = _mwGetData();
+  if (!m) return;
+  var notes = document.getElementById('mw-notes');
+  var decisions = document.getElementById('mw-decisions');
+  var attendees = document.getElementById('mw-attendees');
+  ST.update('meetings', mid, {
+    notes: notes ? notes.value.trim() : (m.notes || ''),
+    decisions: decisions ? decisions.value.trim() : (m.decisions || ''),
+    attendees: attendees ? attendees.value.trim() : (m.attendees || ''),
+    agendaItems: window._mwAgenda,
+    actions: m.actions || []
+  });
+  var st = document.getElementById('mw-save-status');
+  if (st) st.textContent = '💾 บันทึกแล้ว ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  var info = document.getElementById('mw-autosave-info');
+  if (info) info.textContent = '💾 บันทึกล่าสุด ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  toast('💾 บันทึกแล้ว');
+}
+
+function mwAutoSave() {
+  var mid = window._mwId;
+  var m = _mwGetData();
+  if (!m) return;
+  var notes = document.getElementById('mw-notes');
+  var decisions = document.getElementById('mw-decisions');
+  var attendees = document.getElementById('mw-attendees');
+  if (!notes) return;
+  ST.update('meetings', mid, {
+    notes: notes.value.trim(),
+    decisions: decisions ? decisions.value.trim() : (m.decisions || ''),
+    attendees: attendees ? attendees.value.trim() : (m.attendees || ''),
+    agendaItems: window._mwAgenda
+  });
+  var info = document.getElementById('mw-autosave-info');
+  if (info) info.textContent = '💾 auto-save ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+}
+
+function mwInsertTimestamp() {
+  var t = document.getElementById('mw-notes');
+  if (!t) return;
+  var now = new Date().toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  var stamp = '[' + now + '] ';
+  var pos = t.selectionStart;
+  var val = t.value;
+  // insert on new line if not at start of line
+  var prefix = (pos > 0 && val[pos-1] !== '\n') ? '\n' : '';
+  t.value = val.slice(0, pos) + prefix + stamp + val.slice(pos);
+  t.selectionStart = t.selectionEnd = pos + prefix.length + stamp.length;
+  t.focus();
+}
+
+function mwInsertTemplate(text) {
+  var t = document.getElementById('mw-notes');
+  if (!t) return;
+  var pos = t.selectionStart;
+  var val = t.value;
+  var prefix = (pos > 0 && val[pos-1] !== '\n') ? '\n' : '';
+  t.value = val.slice(0, pos) + prefix + text + val.slice(pos);
+  t.selectionStart = t.selectionEnd = pos + prefix.length + text.length;
+  t.focus();
+}
+
+function mwAgendaToggle(i) {
+  if (!window._mwAgenda || !window._mwAgenda[i]) return;
+  window._mwAgenda[i].done = !window._mwAgenda[i].done;
+  var row = document.getElementById('mw-ag-' + i);
+  if (!row) return;
+  var a = window._mwAgenda[i];
+  var dot = row.querySelector('div');
+  if (dot) { dot.style.borderColor = a.done ? '#4ade80' : 'var(--border,#334155)'; dot.style.background = a.done ? '#4ade80' : 'transparent'; dot.textContent = a.done ? '✓' : ''; }
+  var label = row.querySelectorAll('div')[1];
+  if (label) { label.style.textDecoration = a.done ? 'line-through' : ''; label.style.color = a.done ? 'var(--text2)' : ''; }
+}
+
+function mwAgendaAddToNotes(i) {
+  if (!window._mwAgenda || !window._mwAgenda[i]) return;
+  mwInsertTemplate('[วาระ ' + (i+1) + '] ' + window._mwAgenda[i].text + '\n');
+}
+
+function mwAgendaAdd() {
+  var text = prompt('หัวข้อวาระ:');
+  if (!text || !text.trim()) return;
+  window._mwAgenda = window._mwAgenda || [];
+  window._mwAgenda.push({ text: text.trim(), done: false });
+  var i = window._mwAgenda.length - 1;
+  var list = document.getElementById('mw-agenda-list');
+  if (!list) return;
+  var div = document.createElement('div');
+  div.id = 'mw-ag-' + i;
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
+  div.innerHTML = '<div onclick="mwAgendaToggle(' + i + ')" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border,#334155);background:transparent;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#111"></div>' +
+    '<div style="font-size:13px;flex:1">' + sanitize(text.trim()) + '</div>' +
+    '<button onclick="mwAgendaAddToNotes(' + i + ')" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:2px 4px">→ โน้ต</button>';
+  if (list.querySelector('.vp-empty, div[style*="ยังไม่มีวาระ"]')) list.innerHTML = '';
+  list.appendChild(div);
+}
+
+function mwAddAction() {
+  var mid = window._mwId;
+  var m = _mwGetData();
+  if (!m) return;
+  var txt = (document.getElementById('mw-qa-text') || {}).value || '';
+  if (!txt.trim()) { toast('ใส่ชื่อ Action ด้วย'); return; }
+  var a = {
+    id: 'act_' + Date.now(),
+    title: txt.trim(),
+    assignee: ((document.getElementById('mw-qa-who') || {}).value || '').trim(),
+    dueDate: ((document.getElementById('mw-qa-due') || {}).value || ''),
+    done: false
+  };
+  m.actions = m.actions || [];
+  m.actions.push(a);
+  ST.update('meetings', mid, { actions: m.actions });
+  var list = document.getElementById('mw-action-list');
+  if (list) { var div = document.createElement('div'); div.innerHTML = _mwActionRowHtml(a, m.actions.length - 1); list.appendChild(div.firstChild); }
+  var cnt = document.getElementById('mw-action-count');
+  if (cnt) cnt.textContent = '(' + m.actions.length + ')';
+  document.getElementById('mw-qa-text').value = '';
+  document.getElementById('mw-qa-who').value = '';
+  document.getElementById('mw-qa-due').value = '';
+  document.getElementById('mw-qa-text').focus();
+}
+
+function mwToggleAction(i) {
+  var mid = window._mwId;
+  var m = _mwGetData();
+  if (!m || !m.actions || !m.actions[i]) return;
+  m.actions[i].done = !m.actions[i].done;
+  ST.update('meetings', mid, { actions: m.actions });
+  var row = document.getElementById('mw-act-' + i);
+  if (!row) return;
+  var a = m.actions[i];
+  row.outerHTML = _mwActionRowHtml(a, i);
+}
+
+function mwDeleteAction(i) {
+  var mid = window._mwId;
+  var m = _mwGetData();
+  if (!m || !m.actions) return;
+  if (!confirm('ลบ Action นี้?')) return;
+  m.actions.splice(i, 1);
+  ST.update('meetings', mid, { actions: m.actions });
+  // rebuild action list
+  var list = document.getElementById('mw-action-list');
+  if (list) { list.innerHTML = m.actions.map(function(a, idx) { return _mwActionRowHtml(a, idx); }).join(''); }
+  var cnt = document.getElementById('mw-action-count');
+  if (cnt) cnt.textContent = '(' + m.actions.length + ')';
+}
+
+function mwTimerToggle() {
+  if (_mwTimerRunning) {
+    clearInterval(_mwTimerInterval);
+    _mwTimerRunning = false;
+    var btn = document.getElementById('mw-timer-btn');
+    if (btn) btn.textContent = '▶️ ต่อ';
+  } else {
+    _mwTimerRunning = true;
+    var btn2 = document.getElementById('mw-timer-btn');
+    if (btn2) btn2.textContent = '⏸️ หยุด';
+    _mwTimerInterval = setInterval(function() {
+      _mwTimerSec++;
+      var d = document.getElementById('mw-timer-display');
+      if (!d) { clearInterval(_mwTimerInterval); return; }
+      var m = Math.floor(_mwTimerSec / 60);
+      var s = _mwTimerSec % 60;
+      d.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }, 1000);
+  }
+}
+
+function mwTimerReset() {
+  clearInterval(_mwTimerInterval);
+  _mwTimerRunning = false;
+  _mwTimerSec = 0;
+  var d = document.getElementById('mw-timer-display');
+  if (d) d.textContent = '00:00';
+  var btn = document.getElementById('mw-timer-btn');
+  if (btn) btn.textContent = '▶️ เริ่ม';
+}
+
+function mwCopySummary() {
+  var m = _mwGetData();
+  if (!m) return;
+  var notes = (document.getElementById('mw-notes') || {}).value || m.notes || '';
+  var decisions = (document.getElementById('mw-decisions') || {}).value || m.decisions || '';
+  var attendees = (document.getElementById('mw-attendees') || {}).value || m.attendees || '';
+  var lines = [];
+  lines.push('=== สรุปการประชุม ===');
+  lines.push('หัวข้อ: ' + (m.title || ''));
+  lines.push('วันที่: ' + fD(m.date) + (m.time ? ' เวลา ' + m.time + (m.endTime ? '-' + m.endTime : '') : ''));
+  if (m.location) lines.push('สถานที่: ' + m.location);
+  if (attendees) lines.push('ผู้เข้าร่วม: ' + attendees);
+  lines.push('');
+  if (window._mwAgenda && window._mwAgenda.length) {
+    lines.push('วาระ:');
+    window._mwAgenda.forEach(function(a, i) { lines.push((a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.text); });
+    lines.push('');
+  }
+  if (notes) { lines.push('บันทึก:'); lines.push(notes); lines.push(''); }
+  if (decisions) { lines.push('มติที่ประชุม:'); lines.push(decisions); lines.push(''); }
+  var acts = m.actions || [];
+  if (acts.length) {
+    lines.push('Action Items:');
+    acts.forEach(function(a, i) {
+      var row = (a.done ? '[✓] ' : '[ ] ') + (i+1) + '. ' + a.title;
+      if (a.assignee) row += ' — ผู้รับผิดชอบ: ' + a.assignee;
+      if (a.dueDate) row += ' (กำหนด ' + fD(a.dueDate) + ')';
+      lines.push(row);
+    });
+  }
+  copyToClip(lines.join('\n'));
+  toast('📋 Copy สรุปการประชุมแล้ว');
 }
 
 // ================================================================
