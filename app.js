@@ -610,7 +610,8 @@ var R = {
   tasks: rUnifiedTasks, 
   taskDetail: rTaskDet,
   smartFilter: rSmartFilter,
-  knowledge: rKnowledge, 
+  notes: rNotes,
+  knowledge: rKnowledge,
   noteDetail: rNoteDet,
   
   // ✅ เพิ่มตรงนี้
@@ -1451,6 +1452,7 @@ function showEditFavorites() {
     {id: 'tasks', icon: '📋', name: 'Tasks', action: "go('tasks')"},
     {id: 'kanban', icon: '📋', name: 'Kanban', action: "go('kanban')"},
     {id: 'visitPlan', icon: '📅', name: 'Visit Plan', action: "go('visitPlan')"},
+    {id: 'notes', icon: '📓', name: 'Note', action: "go('notes')"},
     {id: 'meetings', icon: '📅', name: 'ประชุม', action: "go('meetings')"},
     {id: 'calendar', icon: '📆', name: 'ปฏิทิน', action: "go('calendar')"},
     {id: 'visits', icon: '🤝', name: 'Visit Report', action: "go('visits')"},

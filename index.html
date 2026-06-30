@@ -230,7 +230,8 @@
   <div class="draft-meta" id="draftMeta"></div>
   <div class="draft-body" id="draftBody"></div>
   <div class="draft-ft">
-    <button class="btn bp" onclick="copyDraft()">📋 Copy ทั้งหมด</button>
+    <button class="btn bp" onclick="copyDraft()">📋 Copy (มี Emoji)</button>
+    <button class="btn bo" onclick="copyDraftSAP()">📄 Copy SAP (ไม่มี Emoji)</button>
     <button class="btn bo" onclick="openMailto()">📧 เปิด Email</button>
     <button class="btn bo" onclick="closeDraft()">ปิด</button>
   </div>
@@ -265,6 +266,7 @@ var auth = firebase.auth();
 <script src="views-leads.js"></script>
 <script src="views-prospects.js"></script>
 <script src="views-quotation.js"></script>
+<script src="views-notes.js"></script>
 <script src="kanban.js"></script>
 <script src="export.js"></script>
 <script src="admin.js"></script>

@@ -55,6 +55,7 @@ function rVisitDet(el) {
   <div class="card"><h2>🤝 Visit Report <span class="ml">
     <button class="btn bsm bp" onclick="showVisitDraft('${v.id}')">📧 Draft Email</button>
     <button class="btn bsm bo" onclick="copyVisitRow('${v.id}')">📋 Copy Row</button>
+    <button class="btn bsm bo" onclick="copyVisitSAP('${v.id}')">📄 SAP</button>
     <button class="btn bsm bo" onclick="showVisitM('${v.dealerId||''}','${v.id}')">✏️</button>
     <button class="btn bsm bd" onclick="ST.delete('visits','${v.id}');toast('🗑️');go('visits')">🗑️</button>
   </span></h2>
@@ -160,6 +161,24 @@ function showVisitDraft(visitId) {
     recipients: recipients.join(', '), sent: false,
     visitId: v.id, dealerId: v.dealerId
   });
+}
+
+function _stripEmoji(str) {
+  return str
+    .replace(/[\p{Extended_Pictographic}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/━+/g, '---')
+    .replace(/ {2,}/g, ' ')
+    .replace(/^ /gm, '')
+    .trim();
+}
+
+function copyDraftSAP() {
+  if (typeof _draftData !== 'undefined' && _draftData) copyText(_stripEmoji(_draftData.body), '📄 Copy SAP แล้ว');
+}
+
+function copyVisitSAP(visitId) {
+  var v = ST.getOne('visits', visitId); if (!v) return;
+  copyText(_stripEmoji(buildVisitUpdateText(v)), '📄 Copy SAP แล้ว');
 }
 
 function copyVisitRow(visitId) {
