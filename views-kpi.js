@@ -87,8 +87,14 @@ function kpiDeleteQuarterPlan(planId) {
   var plan = plans.filter(function(p) { return p.id === planId; })[0];
   if (!plan) return;
   if (!confirm('⚠️ ลบแผน KPI ' + plan.quarter + ' ของ ' + plan.salesMemberName + '?\n(คะแนน manual และบันทึกที่เกี่ยวข้องจะถูกลบด้วย — ตัวเลขที่คำนวณสดจาก Pipeline/Dealer/Visit จะไม่หาย)')) return;
+  var logsToDelete = getKpiQuarterLogs().filter(function(l) { return l.planId === planId; });
   saveKpiQuarterPlans(plans.filter(function(p) { return p.id !== planId; }));
   saveKpiQuarterLogs(getKpiQuarterLogs().filter(function(l) { return l.planId !== planId; }));
+  // ลบออกจาก Firestore จริงๆ ด้วย ไม่งั้น listener ดึงกลับมาทุก refresh
+  if (typeof syncDeleteFromFirebase === 'function') {
+    syncDeleteFromFirebase('kpiQuarterPlans', planId);
+    logsToDelete.forEach(function(l) { syncDeleteFromFirebase('kpiQuarterLogs', l.id); });
+  }
   if (kpiSelectedPlanId === planId) kpiSelectedPlanId = null;
   toast('🗑️ ลบแผน ' + plan.quarter + ' แล้ว');
   closeMForce();
