@@ -149,7 +149,7 @@ function _openLeadModal(f) {
   var countdownEnd = (f && f.countdownEnd) || '';
   var totalF = _lfSec.common.length + _lfSec.personal.length + _lfSec.company.length;
 
-  var h = '<div style="max-width:700px;width:100%;display:grid;grid-template-columns:1fr 200px;border-radius:0;min-height:520px">';
+  var h = '<div style="width:100%;display:grid;grid-template-columns:1fr 220px;border-radius:0;min-height:560px">';
 
   // ─── LEFT PANEL ───
   h += '<div style="display:flex;flex-direction:column;border-right:1px solid var(--border,#334155)">';
@@ -221,6 +221,8 @@ function _openLeadModal(f) {
   document.head.appendChild(sty);
 
   openM((isEdit ? '✏️ แก้ไข' : '➕ สร้าง') + ' Lead Form', h);
+  var _mlb = document.querySelector('.mlb');
+  if (_mlb) { _mlb.style.maxWidth = '900px'; _mlb.style.maxHeight = '96vh'; }
   setTimeout(_lfSyncEmailDdl, 60);
 }
 
