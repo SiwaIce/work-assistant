@@ -307,6 +307,12 @@ function _prospectDashboardHtml(prospects, counts) {
 // ---------------- เพิ่ม / แก้ไข ----------------
 function showAddProspectM(editId) {
   var p = editId ? getProspect(editId) : null;
+  // init selections from existing data
+  window._lffSel = {};
+  var saved = p && p.customFields ? p.customFields : {};
+  getLeadFormFields().forEach(function(f) {
+    window._lffSel[f.id] = (saved[f.id] || []).slice();
+  });
   var h = '<div style="max-width:420px">';
   h += '<div class="fm-group"><label>🏢 ชื่อบริษัท *</label><input type="text" id="pr_company" class="fm-input" value="' + sanitize(p ? p.companyName : '') + '"></div>';
   h += '<div class="fr"><div class="fg"><label>👤 ผู้ติดต่อ</label><input type="text" id="pr_contact" class="fm-input" value="' + sanitize(p ? (p.contactName || '') : '') + '"></div>';
@@ -314,6 +320,8 @@ function showAddProspectM(editId) {
   h += '<div class="fr"><div class="fg"><label>✉️ อีเมล</label><input type="email" id="pr_email" class="fm-input" value="' + sanitize(p ? (p.email || '') : '') + '"></div>';
   h += '<div class="fg"><label>📍 Location</label><input type="text" id="pr_location" class="fm-input" value="' + sanitize(p ? (p.location || '') : '') + '" placeholder="ที่อยู่ หรือลิงก์ Google Map"></div></div>';
   h += '<div class="fm-group"><label>🌐 ที่มา (ไม่บังคับ)</label><input type="text" id="pr_source" class="fm-input" value="' + sanitize(p ? (p.source || '') : '') + '" placeholder="เช่น Facebook Ads, Roadshow, Referral"></div>';
+  // custom checkbox field groups
+  h += _lffRenderFormFields(editId || '');
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="pr_note" rows="2" class="fm-input" placeholder="เช่น สนใจ Dock 3 พื้นที่เกษตร">' + sanitize(p ? (p.note || '') : '') + '</textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveProspect(\'' + (editId || '') + '\')">💾 บันทึก</button>';
@@ -334,6 +342,7 @@ function saveProspect(editId) {
     location: (document.getElementById('pr_location').value || '').trim(),
     source: (document.getElementById('pr_source').value || '').trim(),
     note: (document.getElementById('pr_note').value || '').trim(),
+    customFields: _lffCollectSelections(),
     updatedAt: new Date().toISOString()
   };
 
@@ -533,6 +542,347 @@ function prospectMarkConvertedFromDealer(dealerId) {
     }
   }
   saveProspects(list);
+}
+
+// ================================================================
+// LEAD FORM CUSTOM CHECKBOX FIELDS
+// ================================================================
+
+function getLeadFormFields() {
+  try { return JSON.parse(localStorage.getItem('v7_leadFormFields') || '[]'); } catch(e) { return []; }
+}
+function saveLeadFormFields(list) {
+  localStorage.setItem('v7_leadFormFields', JSON.stringify(list));
+}
+
+// collect selections from global state
+function _lffCollectSelections() {
+  var out = {};
+  getLeadFormFields().forEach(function(f) { out[f.id] = (window._lffSel && window._lffSel[f.id]) ? window._lffSel[f.id] : []; });
+  return out;
+}
+
+// render all field groups inside the form
+function _lffRenderFormFields(editId) {
+  var fields = getLeadFormFields();
+  if (!fields.length) {
+    return '<div style="margin-bottom:10px">' +
+      '<div onclick="showLffAddGroup(\''+editId+'\')" style="border:1px dashed var(--border,#334155);border-radius:8px;padding:8px 12px;text-align:center;cursor:pointer;font-size:12px;color:var(--text2,#94a3b8)">+ เพิ่มหัวข้อ Checkbox พร้อมรูป</div></div>';
+  }
+  var h = '';
+  fields.forEach(function(f) {
+    h += '<div class="fm-group" id="lff-wrap-' + f.id + '">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">';
+    h += '<label style="margin-bottom:0">' + sanitize(f.label) + '</label>';
+    h += '<button type="button" onclick="showLffMgr(\'' + f.id + '\',\'' + editId + '\')" style="background:transparent;border:1px solid var(--border,#334155);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--text2,#94a3b8);cursor:pointer">⚙️ จัดการ</button>';
+    h += '</div>';
+    h += _lffGridHtml(f, editId);
+    h += '</div>';
+  });
+  h += '<div style="margin-bottom:14px"><div onclick="showLffAddGroup(\'' + editId + '\')" style="border:1px dashed var(--border,#334155);border-radius:8px;padding:7px 12px;text-align:center;cursor:pointer;font-size:11px;color:var(--text2,#94a3b8)">+ เพิ่มหัวข้อ Checkbox ใหม่</div></div>';
+  return h;
+}
+
+function _lffGridHtml(f, editId) {
+  if (!f.items || !f.items.length) {
+    return '<div style="font-size:11px;color:var(--text2,#94a3b8);padding:6px 0">ยังไม่มี item — กด ⚙️ จัดการ เพื่อเพิ่ม</div>';
+  }
+  var cols = f.cols || 3;
+  var sel = (window._lffSel && window._lffSel[f.id]) ? window._lffSel[f.id] : [];
+  var h = '<div style="display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:7px">';
+  f.items.forEach(function(it) {
+    var on = sel.indexOf(it.id) !== -1;
+    h += '<div id="lff-item-' + f.id + '-' + it.id + '" onclick="lffToggle(\'' + f.id + '\',\'' + it.id + '\',\'' + editId + '\')" style="border:1.5px solid ' + (on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)') + ';border-radius:10px;padding:6px 6px 5px;cursor:pointer;text-align:center;background:' + (on ? 'rgba(59,130,246,.08)' : 'transparent') + ';position:relative">';
+    // image box with ✓ overlaid on top of image
+    h += '<div style="width:100%;aspect-ratio:4/3;border-radius:6px;background:var(--bg,#0f172a);margin-bottom:5px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">';
+    if (it.img) {
+      h += '<img src="' + it.img + '" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display=\'none\'">';
+    } else {
+      h += '<span style="font-size:22px">🖼️</span>';
+    }
+    // ✓ badge ซ้อนบนรูป
+    h += '<div style="position:absolute;top:5px;right:5px;width:16px;height:16px;border-radius:50%;background:var(--blue,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;opacity:' + (on ? '1' : '0') + ';transition:opacity .15s" id="lff-ck-' + f.id + '-' + it.id + '">✓</div>';
+    h += '</div>';
+    h += '<div style="font-size:11px;font-weight:600;line-height:1.3">' + sanitize(it.label) + '</div>';
+    if (it.sub) h += '<div style="font-size:10px;color:var(--text2,#94a3b8);margin-top:1px">' + sanitize(it.sub) + '</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function lffToggle(fieldId, itemId, editId) {
+  window._lffSel = window._lffSel || {};
+  window._lffSel[fieldId] = window._lffSel[fieldId] || [];
+  var arr = window._lffSel[fieldId];
+  var idx = arr.indexOf(itemId);
+  var on;
+  if (idx === -1) { arr.push(itemId); on = true; }
+  else { arr.splice(idx, 1); on = false; }
+  // update DOM without re-render
+  var card = document.getElementById('lff-item-' + fieldId + '-' + itemId);
+  if (card) {
+    card.style.borderColor = on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)';
+    card.style.background = on ? 'rgba(59,130,246,.08)' : 'transparent';
+  }
+  var ck = document.getElementById('lff-ck-' + fieldId + '-' + itemId);
+  if (ck) ck.style.opacity = on ? '1' : '0';
+}
+
+// ── จัดการ field group ──
+function showLffMgr(fieldId, editId) {
+  var fields = getLeadFormFields();
+  var f = fields.find(function(x) { return x.id === fieldId; });
+  if (!f) return;
+  var h = '<div style="max-width:400px">';
+  // ชื่อ + cols
+  h += '<div class="fr" style="margin-bottom:12px">';
+  h += '<div class="fg"><label>ชื่อหัวข้อ</label><input id="lff-mgr-label" class="fm-input" value="' + sanitize(f.label) + '"></div>';
+  h += '<div class="fg" style="max-width:100px"><label>คอลัมน์</label><select id="lff-mgr-cols" class="fm-input">';
+  [2,3,4,5].forEach(function(n) { h += '<option value="'+n+'"'+(f.cols===n?' selected':'')+'>'+n+'</option>'; });
+  h += '</select></div></div>';
+  // items list
+  h += '<div style="font-size:11px;font-weight:600;margin-bottom:6px">รายการ (' + (f.items||[]).length + ')</div>';
+  h += '<div id="lff-mgr-items" style="max-height:220px;overflow-y:auto;margin-bottom:10px">';
+  (f.items || []).forEach(function(it, i) {
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#334155)">';
+    if (it.img) h += '<img src="'+it.img+'" style="width:36px;height:27px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display=\'none\'">';
+    else h += '<div style="width:36px;height:27px;background:var(--bg,#0f172a);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px">🖼️</div>';
+    h += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(it.label) + '</div>';
+    if (it.sub) h += '<div style="font-size:10px;color:var(--text2,#94a3b8)">' + sanitize(it.sub) + '</div>';
+    h += '</div>';
+    h += '<button type="button" onclick="showLffItemEdit(\'' + fieldId + '\',\'' + it.id + '\',\'' + editId + '\')" style="background:transparent;border:none;font-size:12px;cursor:pointer;color:var(--text2)">✏️</button>';
+    h += '<button type="button" onclick="lffDeleteItem(\'' + fieldId + '\',\'' + it.id + '\',\'' + editId + '\')" style="background:transparent;border:none;font-size:12px;cursor:pointer;color:#f87171">✕</button>';
+    h += '</div>';
+  });
+  if (!f.items || !f.items.length) h += '<div style="font-size:11px;color:var(--text2,#94a3b8);padding:8px 0">ยังไม่มี item</div>';
+  h += '</div>';
+  // add buttons
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  h += '<button type="button" class="btn bsm bp" onclick="showLffItemAdd(\'' + fieldId + '\',\'' + editId + '\')">+ เพิ่ม item เอง</button>';
+  h += '<button type="button" class="btn bsm bo" onclick="showLffDjiPicker(\'' + fieldId + '\',\'' + editId + '\')">🚁 เลือกจาก DJI Products</button>';
+  h += '</div>';
+  h += '<div class="fm-actions">';
+  h += '<button type="button" class="btn btn-blue" onclick="lffSaveMgr(\'' + fieldId + '\',\'' + editId + '\')">💾 บันทึกหัวข้อ</button>';
+  h += '<button type="button" class="btn bd" onclick="lffDeleteGroup(\'' + fieldId + '\',\'' + editId + '\')">🗑️ ลบหัวข้อนี้</button>';
+  h += '<button type="button" class="btn" onclick="closeM()">ปิด</button>';
+  h += '</div></div>';
+  openM('⚙️ จัดการ: ' + sanitize(f.label), h);
+}
+
+function lffSaveMgr(fieldId, editId) {
+  var lbl = ((document.getElementById('lff-mgr-label') || {}).value || '').trim();
+  var cols = parseInt((document.getElementById('lff-mgr-cols') || {}).value || '3');
+  if (!lbl) { toast('ใส่ชื่อหัวข้อด้วย'); return; }
+  var fields = getLeadFormFields();
+  fields.forEach(function(f) { if (f.id === fieldId) { f.label = lbl; f.cols = cols; } });
+  saveLeadFormFields(fields);
+  closeMForce();
+  showAddProspectM(editId || undefined);
+}
+
+function lffDeleteGroup(fieldId, editId) {
+  if (!confirm('ลบหัวข้อนี้ทั้งหมด?')) return;
+  saveLeadFormFields(getLeadFormFields().filter(function(f) { return f.id !== fieldId; }));
+  closeMForce();
+  showAddProspectM(editId || undefined);
+}
+
+function lffDeleteItem(fieldId, itemId, editId) {
+  if (!confirm('ลบ item นี้?')) return;
+  var fields = getLeadFormFields();
+  fields.forEach(function(f) { if (f.id === fieldId) f.items = (f.items||[]).filter(function(it) { return it.id !== itemId; }); });
+  saveLeadFormFields(fields);
+  closeMForce();
+  // re-open mgr
+  setTimeout(function() { showLffMgr(fieldId, editId); }, 60);
+}
+
+// ── เพิ่มหัวข้อใหม่ ──
+function showLffAddGroup(editId) {
+  var h = '<div style="max-width:360px">';
+  h += '<div class="fm-group"><label>ชื่อหัวข้อ *</label><input id="lff-new-label" class="fm-input" placeholder="เช่น สินค้าที่สนใจ, Use Case"></div>';
+  h += '<div class="fm-group"><label>จำนวนคอลัมน์</label><select id="lff-new-cols" class="fm-input">';
+  [2,3,4,5].forEach(function(n) { h += '<option value="'+n+'"'+(n===3?' selected':'')+'>'+n+'</option>'; });
+  h += '</select></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="lffCreateGroup(\'' + (editId||'') + '\')">สร้างหัวข้อ</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('➕ เพิ่มหัวข้อ Checkbox', h);
+}
+
+function lffCreateGroup(editId) {
+  var lbl = ((document.getElementById('lff-new-label') || {}).value || '').trim();
+  if (!lbl) { toast('ใส่ชื่อหัวข้อด้วย'); return; }
+  var cols = parseInt((document.getElementById('lff-new-cols') || {}).value || '3');
+  var fields = getLeadFormFields();
+  var newId = 'lff_' + Date.now();
+  fields.push({ id: newId, label: lbl, cols: cols, items: [] });
+  saveLeadFormFields(fields);
+  closeMForce();
+  showAddProspectM(editId || undefined);
+}
+
+// ── เพิ่ม item เอง ──
+function showLffItemAdd(fieldId, editId) {
+  _lffItemForm(fieldId, null, editId);
+}
+function showLffItemEdit(fieldId, itemId, editId) {
+  _lffItemForm(fieldId, itemId, editId);
+}
+
+function _lffItemForm(fieldId, itemId, editId) {
+  var fields = getLeadFormFields();
+  var f = fields.find(function(x) { return x.id === fieldId; });
+  var it = itemId ? (f && (f.items||[]).find(function(x) { return x.id === itemId; })) : null;
+  var h = '<div style="max-width:380px">';
+  h += '<div class="fm-group"><label>ชื่อ *</label><input id="lff-it-label" class="fm-input" value="' + sanitize(it ? it.label : '') + '"></div>';
+  h += '<div class="fm-group"><label>คำอธิบาย (ไม่บังคับ)</label><input id="lff-it-sub" class="fm-input" value="' + sanitize(it ? (it.sub||'') : '') + '" placeholder="เช่น Survey / Inspect"></div>';
+  h += '<div class="fm-group"><label>รูปภาพ</label>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:7px" id="lff-img-tabs">';
+  h += '<button type="button" class="btn bsm bo lff-itab active" onclick="lffImgTab(\'url\')">URL รูป</button>';
+  h += '<button type="button" class="btn bsm bo lff-itab" onclick="lffImgTab(\'file\')">แนบไฟล์</button>';
+  h += '<button type="button" class="btn bsm bo lff-itab" onclick="lffImgTab(\'none\')">ไม่ใส่รูป</button>';
+  h += '</div>';
+  h += '<div id="lff-tab-url">';
+  h += '<div style="display:flex;gap:8px;align-items:center"><input id="lff-it-url" class="fm-input" style="flex:1" placeholder="https://..." value="' + sanitize(it && it.img && !it.img.startsWith('data:') ? it.img : '') + '" oninput="lffPreviewUrl()">';
+  h += '<img id="lff-url-prev" src="' + (it && it.img && !it.img.startsWith('data:') ? it.img : '') + '" style="width:48px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#334155);' + (it && it.img && !it.img.startsWith('data:') ? '' : 'display:none') + '" onerror="this.style.display=\'none\'"></div>';
+  h += '</div>';
+  h += '<div id="lff-tab-file" style="display:none"><div style="display:flex;gap:8px;align-items:center">';
+  h += '<input type="file" accept="image/*" id="lff-it-file" style="flex:1;font-size:12px" onchange="lffPreviewFile()">';
+  h += '<img id="lff-file-prev" src="" style="width:48px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#334155);display:none"></div></div>';
+  h += '<div id="lff-tab-none" style="display:none;font-size:11px;color:var(--text2,#94a3b8);padding:4px 0">จะแสดง icon ทั่วไปแทนรูป</div>';
+  h += '</div>';
+  h += '<div class="fm-actions">';
+  h += '<button type="button" class="btn btn-blue" onclick="lffSaveItem(\'' + fieldId + '\',\'' + (itemId||'') + '\',\'' + (editId||'') + '\')">💾 บันทึก</button>';
+  h += '<button type="button" class="btn" onclick="showLffMgr(\'' + fieldId + '\',\'' + (editId||'') + '\')">← กลับ</button>';
+  h += '</div></div>';
+  openM(itemId ? '✏️ แก้ไข item' : '➕ เพิ่ม item', h);
+  // init tab state
+  if (it && it.img && it.img.startsWith('data:')) { lffImgTab('file'); var pi = document.getElementById('lff-file-prev'); if (pi) { pi.src = it.img; pi.style.display = 'block'; } }
+  window._lffImgTab = 'url';
+  window._lffFileB64 = (it && it.img && it.img.startsWith('data:')) ? it.img : null;
+}
+
+function lffImgTab(t) {
+  window._lffImgTab = t;
+  document.querySelectorAll('.lff-itab').forEach(function(b, i) { b.classList.toggle('active', ['url','file','none'][i] === t); });
+  document.getElementById('lff-tab-url').style.display = t==='url' ? 'block' : 'none';
+  document.getElementById('lff-tab-file').style.display = t==='file' ? 'block' : 'none';
+  document.getElementById('lff-tab-none').style.display = t==='none' ? 'block' : 'none';
+}
+
+function lffPreviewUrl() {
+  var v = (document.getElementById('lff-it-url') || {}).value || '';
+  var prev = document.getElementById('lff-url-prev');
+  if (!prev) return;
+  if (v.trim()) { prev.src = v.trim(); prev.style.display = 'block'; }
+  else prev.style.display = 'none';
+}
+
+function lffPreviewFile() {
+  var f = (document.getElementById('lff-it-file') || {}).files;
+  if (!f || !f[0]) return;
+  var r = new FileReader();
+  r.onload = function(e) {
+    window._lffFileB64 = e.target.result;
+    var prev = document.getElementById('lff-file-prev');
+    if (prev) { prev.src = e.target.result; prev.style.display = 'block'; }
+  };
+  r.readAsDataURL(f[0]);
+}
+
+function lffSaveItem(fieldId, itemId, editId) {
+  var lbl = ((document.getElementById('lff-it-label') || {}).value || '').trim();
+  if (!lbl) { toast('ใส่ชื่อด้วย'); return; }
+  var sub = ((document.getElementById('lff-it-sub') || {}).value || '').trim();
+  var img = '';
+  var tab = window._lffImgTab || 'url';
+  if (tab === 'url') img = ((document.getElementById('lff-it-url') || {}).value || '').trim();
+  else if (tab === 'file') img = window._lffFileB64 || '';
+  var fields = getLeadFormFields();
+  fields.forEach(function(f) {
+    if (f.id !== fieldId) return;
+    f.items = f.items || [];
+    if (itemId) {
+      f.items.forEach(function(it) { if (it.id === itemId) { it.label = lbl; it.sub = sub; it.img = img; } });
+    } else {
+      f.items.push({ id: 'lfi_' + Date.now(), label: lbl, sub: sub, img: img });
+    }
+  });
+  saveLeadFormFields(fields);
+  closeMForce();
+  setTimeout(function() { showLffMgr(fieldId, editId); }, 60);
+}
+
+// ── เลือกจาก DJI Products ──
+function showLffDjiPicker(fieldId, editId) {
+  var prods = [];
+  try { prods = ST.getAll('products'); } catch(e) {}
+  if (!prods.length) {
+    // fallback: try window.PRODUCTS
+    try { prods = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []); } catch(e) {}
+  }
+  if (!prods.length) { toast('ไม่พบข้อมูลสินค้า'); return; }
+  window._lffPickSel = {};
+  var h = '<div style="max-width:420px">';
+  h += '<input id="lff-pick-search" class="fm-input" placeholder="ค้นหาชื่อสินค้า..." style="margin-bottom:10px" oninput="lffPickerFilter()">';
+  h += '<div id="lff-picker-list" style="max-height:280px;overflow-y:auto">';
+  prods.forEach(function(pr, i) {
+    var name = pr.name || pr.model || pr.id || '';
+    var img = pr.img || pr.imageUrl || pr.image || '';
+    h += '<div id="lff-pr-' + i + '" onclick="lffPickerToggle(' + i + ')" data-name="' + sanitize(name).toLowerCase() + '" style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;margin-bottom:4px">';
+    if (img) h += '<img src="'+img+'" style="width:40px;height:30px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display=\'none\'">';
+    else h += '<div style="width:40px;height:30px;background:var(--bg,#0f172a);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">🚁</div>';
+    h += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">' + sanitize(name) + '</div>';
+    if (pr.category) h += '<div style="font-size:10px;color:var(--text2,#94a3b8)">' + sanitize(pr.category) + '</div>';
+    h += '</div>';
+    h += '<div id="lff-pr-ck-' + i + '" style="width:16px;height:16px;border-radius:50%;background:transparent;border:1.5px solid var(--border,#334155);flex-shrink:0"></div>';
+    h += '</div>';
+    window._lffPickSel[i] = { name: name, img: img, cat: pr.category || '' };
+    window._lffPickSel[i].on = false;
+  });
+  h += '</div>';
+  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="lffPickerAdd(\'' + fieldId + '\',\'' + editId + '\')">➕ เพิ่มที่เลือก</button><button class="btn" onclick="showLffMgr(\'' + fieldId + '\',\'' + editId + '\')">← กลับ</button></div>';
+  h += '</div>';
+  openM('🚁 เลือกจาก DJI Products', h);
+}
+
+function lffPickerFilter() {
+  var q = ((document.getElementById('lff-pick-search') || {}).value || '').toLowerCase();
+  document.querySelectorAll('#lff-picker-list > div[data-name]').forEach(function(el) {
+    el.style.display = (!q || el.getAttribute('data-name').indexOf(q) !== -1) ? 'flex' : 'none';
+  });
+}
+
+function lffPickerToggle(i) {
+  if (!window._lffPickSel || !window._lffPickSel[i]) return;
+  window._lffPickSel[i].on = !window._lffPickSel[i].on;
+  var ck = document.getElementById('lff-pr-ck-' + i);
+  var row = document.getElementById('lff-pr-' + i);
+  if (ck) { ck.style.background = window._lffPickSel[i].on ? 'var(--blue,#3b82f6)' : 'transparent'; ck.style.borderColor = window._lffPickSel[i].on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)'; ck.textContent = window._lffPickSel[i].on ? '✓' : ''; ck.style.color = '#fff'; ck.style.fontSize = '9px'; ck.style.display = 'flex'; ck.style.alignItems = 'center'; ck.style.justifyContent = 'center'; }
+  if (row) row.style.background = window._lffPickSel[i].on ? 'rgba(59,130,246,.08)' : 'transparent';
+}
+
+function lffPickerAdd(fieldId, editId) {
+  var toAdd = Object.values(window._lffPickSel || {}).filter(function(x) { return x.on; });
+  if (!toAdd.length) { toast('เลือกสินค้าก่อน'); return; }
+  var fields = getLeadFormFields();
+  fields.forEach(function(f) {
+    if (f.id !== fieldId) return;
+    f.items = f.items || [];
+    var existing = f.items.map(function(it) { return it.label.toLowerCase(); });
+    toAdd.forEach(function(pr) {
+      if (existing.indexOf(pr.name.toLowerCase()) === -1) {
+        f.items.push({ id: 'lfi_' + Date.now() + '_' + Math.random().toString(36).slice(2), label: pr.name, sub: pr.cat, img: pr.img });
+      }
+    });
+  });
+  saveLeadFormFields(fields);
+  toast('➕ เพิ่ม ' + toAdd.length + ' สินค้าแล้ว');
+  closeMForce();
+  setTimeout(function() { showLffMgr(fieldId, editId); }, 60);
 }
 
 // เปิดฟอร์ม Visit Plan โดยเลือก source "Lead" และดึงข้อมูลจาก Prospect นี้มาให้อัตโนมัติ
