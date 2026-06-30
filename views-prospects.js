@@ -574,7 +574,7 @@ function _lffRenderFormFields(editId) {
     h += '<div class="fm-group" id="lff-wrap-' + f.id + '">';
     h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">';
     h += '<label style="margin-bottom:0">' + sanitize(f.label) + '</label>';
-    h += '<button type="button" onclick="showLffMgr(\'' + f.id + '\',\'' + editId + '\')" style="background:transparent;border:1px solid var(--border,#334155);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--text2,#94a3b8);cursor:pointer">⚙️ จัดการ</button>';
+    h += '<button type="button" onclick="showLffMgr(\'' + f.id + '\',\'' + editId + '\')" style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:6px;padding:3px 10px;font-size:11px;color:var(--text,#f1f5f9);cursor:pointer">⚙️ เพิ่ม/แก้ไข</button>';
     h += '</div>';
     h += _lffGridHtml(f, editId);
     h += '</div>';
@@ -721,7 +721,8 @@ function lffCreateGroup(editId) {
   fields.push({ id: newId, label: lbl, cols: cols, items: [] });
   saveLeadFormFields(fields);
   closeMForce();
-  showAddProspectM(editId || undefined);
+  // เปิด modal เพิ่ม item แรกทันที ไม่ต้องกลับไปหาปุ่ม
+  setTimeout(function() { showLffMgr(newId, editId || ''); }, 60);
 }
 
 // ── เพิ่ม item เอง ──
