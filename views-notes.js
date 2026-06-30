@@ -1,9 +1,10 @@
 // views-notes.js — Post-it Note พร้อม Copy ทีละ Field
-// ใช้ collection 'notes' ร่วมกับ Knowledge Base (v7_notes)
+// ใช้ collection 'postit' (v7_postit) แยกจาก Knowledge Base (v7_notes)
 // type: 'text' = freetext | type: 'fields' = structured (copy ทีละ field ได้)
 
 var notesQ = '';
-var _structFields = []; // temp state สำหรับ modal Structured Note
+var notesShowTrash = false;
+var _structFields = [];
 
 var _noteColors = [
   { id: 'yellow', bg: 'rgba(253,224,71,.13)', border: 'rgba(253,224,71,.35)', dot: '#fef08a' },
@@ -30,62 +31,87 @@ function _noteColorPicker(radioName, selected) {
 // ================================================================
 function rNotes(el) {
   document.getElementById('pgT').textContent = '📓 Note';
-  var all = ST.getAll('notes').filter(function(n) { return (n.status || 'active') === 'active'; });
+  var all = ST.getAll('postit');
 
-  if (notesQ) {
+  var trashItems = all.filter(function(n) { return n.status === 'trash'; });
+  var activeItems = all.filter(function(n) { return (n.status || 'active') === 'active'; });
+
+  var viewList = notesShowTrash ? trashItems : activeItems;
+
+  if (notesQ && !notesShowTrash) {
     var q = notesQ.toLowerCase();
-    all = all.filter(function(n) {
+    viewList = viewList.filter(function(n) {
       return (n.title || '').toLowerCase().indexOf(q) !== -1 ||
              (n.content || '').toLowerCase().indexOf(q) !== -1 ||
              ((n.fields || []).some(function(f) { return ((f.label || '') + ' ' + (f.value || '')).toLowerCase().indexOf(q) !== -1; }));
     });
   }
 
-  all.sort(function(a, b) {
-    if (a.pinned && !b.pinned) return -1;
-    if (!a.pinned && b.pinned) return 1;
+  viewList.sort(function(a, b) {
+    if (!notesShowTrash) {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+    }
     return (b.updated || b.created || '').localeCompare(a.updated || a.created || '');
   });
 
-  var h = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">' +
-    '<button class="btn bp" onclick="showAddNoteM()">📝 Note ใหม่</button>' +
-    '<button class="btn bo" onclick="showAddFieldsNoteM()">📋 Note แบบ Fields</button>' +
-    '<input type="text" id="notesQ_el" placeholder="🔍 ค้นหา..." style="flex:1;min-width:120px" oninput="notesQ=this.value;render()" autocomplete="off" value="' + sanitize(notesQ) + '">' +
-    '</div>';
+  // Toolbar
+  var h = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
+  if (!notesShowTrash) {
+    h += '<button class="btn bp" onclick="showAddNoteM()">📝 Note ใหม่</button>';
+    h += '<button class="btn bo" onclick="showAddFieldsNoteM()">📋 Note แบบ Fields</button>';
+    h += '<input type="text" id="notesQ_el" placeholder="🔍 ค้นหา..." style="flex:1;min-width:100px" oninput="notesQ=this.value;render()" autocomplete="off" value="' + sanitize(notesQ) + '">';
+  }
+  var trashLabel = '🗑️ ถังขยะ' + (trashItems.length ? ' (' + trashItems.length + ')' : '');
+  h += '<button class="btn ' + (notesShowTrash ? 'bd' : 'bo') + '" onclick="notesShowTrash=!notesShowTrash;notesQ=\'\';render()">' + (notesShowTrash ? '← กลับ' : trashLabel) + '</button>';
+  h += '</div>';
 
-  if (!all.length) {
-    h += '<div style="text-align:center;padding:48px 20px;color:var(--text2)">' +
-      '<div style="font-size:3.5rem;margin-bottom:12px">📓</div>' +
-      '<div style="font-size:15px;font-weight:700;margin-bottom:6px">' + (notesQ ? 'ไม่พบ Note ที่ค้นหา' : 'ยังไม่มี Note') + '</div>' +
-      (notesQ ? '' : '<div style="font-size:12px;margin-bottom:16px">เพิ่ม Note ข้อความ หรือ Note แบบ Fields สำหรับ copy ทีละช่อง</div>' +
-      '<button class="btn bp" onclick="showAddNoteM()">📝 เพิ่ม Note แรก</button>') +
-      '</div>';
+  if (notesShowTrash) {
+    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">📌 Note ในถังขยะ — กู้คืนหรือลบถาวรได้</div>';
+    if (trashItems.length > 1) {
+      h += '<button class="btn bd" style="margin-bottom:10px;font-size:11px" onclick="emptyNoteTrash()">🗑️ ล้างถังขยะทั้งหมด</button>';
+    }
+  }
+
+  if (!viewList.length) {
+    h += '<div style="text-align:center;padding:40px 20px;color:var(--text2)">';
+    if (notesShowTrash) {
+      h += '<div style="font-size:2.5rem;margin-bottom:10px">🗑️</div><div>ถังขยะว่างเปล่า</div>';
+    } else {
+      h += '<div style="font-size:3.5rem;margin-bottom:12px">📓</div>';
+      h += '<div style="font-size:15px;font-weight:700;margin-bottom:6px">' + (notesQ ? 'ไม่พบ Note ที่ค้นหา' : 'ยังไม่มี Note') + '</div>';
+      if (!notesQ) h += '<div style="font-size:12px;margin-bottom:16px">เพิ่ม Note ข้อความ หรือ Note แบบ Fields สำหรับ copy ทีละช่อง</div><button class="btn bp" onclick="showAddNoteM()">📝 เพิ่ม Note แรก</button>';
+    }
+    h += '</div>';
   } else {
     h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">';
-    all.forEach(function(n) {
-      h += _noteCard(n);
+    viewList.forEach(function(n) {
+      h += notesShowTrash ? _noteTrashCard(n) : _noteCard(n);
     });
     h += '</div>';
   }
 
   el.innerHTML = h;
-  var qEl = document.getElementById('notesQ_el');
-  if (qEl && notesQ) { qEl.focus(); qEl.setSelectionRange(notesQ.length, notesQ.length); }
+  if (!notesShowTrash) {
+    var qEl = document.getElementById('notesQ_el');
+    if (qEl && notesQ) { qEl.focus(); qEl.setSelectionRange(notesQ.length, notesQ.length); }
+  }
 }
 
+// ================================================================
+// NOTE CARDS
+// ================================================================
 function _noteCard(n) {
   var cs = _noteCS(n.color);
   var h = '<div style="' + cs + 'border-radius:10px;padding:12px;position:relative;min-height:110px">';
-  // Header row
   h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px">';
   h += '<div style="font-weight:700;font-size:12px;flex:1;word-break:break-word">' + sanitize(n.title || (n.type === 'fields' ? '📋 Fields Note' : '📝 Note')) + (n.pinned ? ' 📌' : '') + '</div>';
   h += '<div style="display:flex;gap:3px;flex-shrink:0">';
   h += '<button class="btn bsm bo" style="padding:2px 5px;font-size:10px" onclick="_openNoteEdit(\'' + n.id + '\')">✏️</button>';
-  h += '<button class="btn bsm bd" style="padding:2px 5px;font-size:10px" onclick="delNote(\'' + n.id + '\')">🗑️</button>';
+  h += '<button class="btn bsm bd" style="padding:2px 5px;font-size:10px" onclick="trashNote(\'' + n.id + '\')">🗑️</button>';
   h += '</div></div>';
 
   if (n.type === 'fields' && n.fields && n.fields.length) {
-    // Structured — show each field with its own copy button
     n.fields.forEach(function(f, fi) {
       h += '<div style="margin-bottom:6px">';
       if (f.label) h += '<div style="font-size:9px;color:var(--text2);margin-bottom:2px;text-transform:uppercase;letter-spacing:.4px">' + sanitize(f.label) + '</div>';
@@ -96,12 +122,26 @@ function _noteCard(n) {
     });
     h += '<button class="btn bsm bo" style="margin-top:6px;font-size:10px;width:100%;text-align:center" onclick="cpAllNoteFields(\'' + n.id + '\')">📋 Copy ทั้งหมด</button>';
   } else {
-    // Freetext
     var preview = (n.content || '').substr(0, 180);
     h += '<div style="font-size:11.5px;white-space:pre-wrap;word-break:break-word;max-height:110px;overflow:hidden;color:var(--text)">' + sanitize(preview) + (n.content && n.content.length > 180 ? '…' : '') + '</div>';
     h += '<button class="btn bsm bo" style="margin-top:8px;font-size:10px;width:100%;text-align:center" onclick="cpNote(\'' + n.id + '\')">📋 Copy</button>';
   }
   h += '</div>';
+  return h;
+}
+
+function _noteTrashCard(n) {
+  var cs = _noteCS(n.color);
+  var preview = n.type === 'fields'
+    ? (n.fields || []).map(function(f) { return (f.label ? f.label + ': ' : '') + f.value; }).join(' | ').substr(0, 80)
+    : (n.content || '').substr(0, 80);
+  var h = '<div style="' + cs + 'border-radius:10px;padding:12px;opacity:.8">';
+  h += '<div style="font-weight:700;font-size:12px;margin-bottom:4px;word-break:break-word">' + sanitize(n.title || (n.type === 'fields' ? 'Fields Note' : 'Note')) + '</div>';
+  if (preview) h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;word-break:break-word">' + sanitize(preview) + (preview.length >= 80 ? '…' : '') + '</div>';
+  h += '<div style="display:flex;gap:6px;margin-top:4px">';
+  h += '<button class="btn bsm bp btn-full" style="font-size:10px" onclick="restoreNote(\'' + n.id + '\')">♻️ กู้คืน</button>';
+  h += '<button class="btn bsm bd" style="font-size:10px" onclick="hardDelNote(\'' + n.id + '\')">🗑️ ลบถาวร</button>';
+  h += '</div></div>';
   return h;
 }
 
@@ -135,9 +175,9 @@ function saveNoteText(id) {
   if (id) {
     var upd = { title: title, content: body, color: color, updated: now };
     if (pinEl) upd.pinned = pinEl.checked;
-    ST.update('notes', id, upd);
+    ST.update('postit', id, upd);
   } else {
-    ST.add('notes', { title: title, content: body, type: 'text', color: color, pinned: false, status: 'active', created: now, updated: now });
+    ST.add('postit', { title: title, content: body, type: 'text', color: color, pinned: false, status: 'active', created: now, updated: now });
   }
   closeMForce(); toast('💾 บันทึกแล้ว'); render();
 }
@@ -192,7 +232,6 @@ function _sfDel(idx, id, color, pinned) {
 }
 
 function _syncSFFromDOM() {
-  // ดึงค่าล่าสุดจาก input ก่อน re-render (oninput อาจไม่ทัน ถ้า browser ยังไม่ fire)
   var labels = document.querySelectorAll('input[oninput^="_structFields"][oninput*=".label"]');
   var values = document.querySelectorAll('input[oninput^="_structFields"][oninput*=".value"]');
   labels.forEach(function(el, i) { if (_structFields[i]) _structFields[i].label = el.value; });
@@ -216,9 +255,9 @@ function saveFieldsNote(id) {
   if (id) {
     var upd = { title: title, fields: fields, color: color, updated: now };
     if (pinEl) upd.pinned = pinEl.checked;
-    ST.update('notes', id, upd);
+    ST.update('postit', id, upd);
   } else {
-    ST.add('notes', { title: title, type: 'fields', fields: fields, color: color, pinned: false, status: 'active', created: now, updated: now });
+    ST.add('postit', { title: title, type: 'fields', fields: fields, color: color, pinned: false, status: 'active', created: now, updated: now });
   }
   _structFields = [];
   closeMForce(); toast('💾 บันทึกแล้ว'); render();
@@ -228,7 +267,7 @@ function saveFieldsNote(id) {
 // EDIT DISPATCHER
 // ================================================================
 function _openNoteEdit(id) {
-  var n = ST.getOne('notes', id);
+  var n = ST.getOne('postit', id);
   if (!n) return;
   if (n.type === 'fields') _openFieldsNoteEditM(n);
   else _openNoteTextM(n);
@@ -238,14 +277,14 @@ function _openNoteEdit(id) {
 // COPY FUNCTIONS
 // ================================================================
 function cpNoteField(noteId, fieldIdx) {
-  var n = ST.getOne('notes', noteId);
+  var n = ST.getOne('postit', noteId);
   if (!n || !n.fields || !n.fields[fieldIdx]) return;
   var f = n.fields[fieldIdx];
   copyText(f.value || '', '📋 Copy "' + (f.label || 'field') + '" แล้ว');
 }
 
 function cpAllNoteFields(noteId) {
-  var n = ST.getOne('notes', noteId);
+  var n = ST.getOne('postit', noteId);
   if (!n || !n.fields) return;
   var lines = n.fields
     .filter(function(f) { return f.value; })
@@ -255,18 +294,38 @@ function cpAllNoteFields(noteId) {
 }
 
 function cpNote(noteId) {
-  var n = ST.getOne('notes', noteId);
+  var n = ST.getOne('postit', noteId);
   if (!n) return;
   var text = (n.title ? n.title + '\n\n' : '') + (n.content || '');
   copyText(text, '📋 Copy แล้ว');
 }
 
 // ================================================================
-// DELETE
+// DELETE / TRASH
 // ================================================================
-function delNote(id) {
-  if (!confirm('ลบ Note นี้?')) return;
-  ST.delete('notes', id);
-  toast('🗑️ ลบแล้ว');
+function trashNote(id) {
+  ST.update('postit', id, { status: 'trash', deletedAt: new Date().toISOString() });
+  toast('🗑️ ย้ายไปถังขยะแล้ว — เปิดถังขยะเพื่อกู้คืน');
+  render();
+}
+
+function restoreNote(id) {
+  ST.update('postit', id, { status: 'active', deletedAt: null });
+  toast('♻️ กู้คืนแล้ว');
+  render();
+}
+
+function hardDelNote(id) {
+  if (!confirm('ลบถาวร? ไม่สามารถกู้คืนได้อีก')) return;
+  ST.delete('postit', id);
+  toast('🗑️ ลบถาวรแล้ว');
+  render();
+}
+
+function emptyNoteTrash() {
+  if (!confirm('ล้างถังขยะทั้งหมด? ไม่สามารถกู้คืนได้อีก')) return;
+  var trash = ST.getAll('postit').filter(function(n) { return n.status === 'trash'; });
+  trash.forEach(function(n) { ST.delete('postit', n.id); });
+  toast('🗑️ ล้างถังขยะแล้ว');
   render();
 }
