@@ -9182,3 +9182,16 @@ input:focus, select:focus, textarea:focus {
 .prod-price-s span:last-child{color:#3b82f6}
 .prod-price-a span:last-child{color:#8b5cf6}
 .prod-price-b span:last-child{color:var(--accent)}
+
+/* ===== JSPREADSHEET THEME OVERRIDES ===== */
+.jexcel_container{border:1px solid var(--border)!important;border-radius:8px;overflow:hidden;margin-bottom:4px}
+.jexcel_content{background:var(--card)!important}
+.jexcel{border-collapse:collapse!important;font-size:12px!important;font-family:inherit!important}
+.jexcel thead th,.jexcel .jexcel_row{background:var(--bg2,#1e2023)!important;color:var(--text2)!important;border-color:var(--border)!important;font-size:11px!important}
+.jexcel tbody td{background:var(--card)!important;color:var(--text)!important;border-color:var(--border)!important}
+.jexcel tbody td.readonly{background:var(--bg2,#1e2023)!important;color:var(--text3)!important}
+.jexcel tbody td.highlight,.jexcel tbody td.highlight-top,.jexcel tbody td.highlight-bottom,.jexcel tbody td.highlight-left,.jexcel tbody td.highlight-right{background:color-mix(in srgb,var(--accent) 20%,transparent)!important}
+.jexcel tbody td.selected{background:color-mix(in srgb,var(--accent) 30%,transparent)!important}
+.jexcel_corner{background:var(--bg2,#1e2023)!important;border-color:var(--border)!important}
+.jdropdown-container,.jdropdown-header{background:var(--card)!important;color:var(--text)!important;border-color:var(--border)!important}
+.jdropdown-item:hover{background:var(--bg2)!important}

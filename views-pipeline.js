@@ -530,6 +530,7 @@ function rPipeline(el) {
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()" title="ตาราง">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()" title="การ์ด">🃏</button>' +
     '<button class="btn bsm ' + (pipeView === 'sheet' ? 'bp' : 'bo') + '" onclick="pipeView=\'sheet\';render()" title="Sheet เต็มคอลัมน์">📊</button>' +
+    '<button class="btn bsm ' + (pipeView === 'sheetedit' ? 'bp' : 'bo') + '" onclick="pipeView=\'sheetedit\';render()" title="แก้ไขแบบตาราง">🗂️</button>' +
     '</div>' +
 
     (pipeCompareMode ? renderPipeCompareSuggestPanel() : '') +
@@ -568,14 +569,21 @@ function rPipeline(el) {
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
     '</div>' +
 
-    (pipeView === 'card' ? renderPipeCards(pipes) : pipeView === 'sheet' ? renderPipeSheetTable(pipes) : renderPipeTable(pipes)) +
+    (pipeView === 'card' ? renderPipeCards(pipes) :
+     pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
+     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
+     renderPipeTable(pipes)) +
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
     (pipeSearch ? ' (ค้นหา: "' + sanitize(pipeSearch) + '")' : '') +
     '</div>' +
 
     (pipeCompareMode ? renderPipeCompareBar() : '');
-  
+
+  if (pipeView === 'sheetedit') {
+    setTimeout(function() { initPipeSheet(pipes); }, 0);
+  }
+
   var srcEl = document.getElementById('pipeSrc');
   if (srcEl && pipeSearch) {
     srcEl.focus();
@@ -2273,6 +2281,113 @@ function viewForecastDetail(dealerId, updateId) {
     console.error('View forecast detail error:', err);
     toast('❌ ไม่สามารถโหลดรายละเอียดได้');
   });
+}
+
+// ================================================================
+// SHEET EDIT (jspreadsheet — Pipeline)
+// ================================================================
+var _pipeSheetInstance = null;
+var _pipeSheetIds = [];
+
+function initPipeSheet(pipes) {
+  if (typeof jspreadsheet === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
+  var el = document.getElementById('pipeSheetEl');
+  if (!el) return;
+  if (el.jspreadsheet) { el.jspreadsheet.destroy(); el.innerHTML = ''; }
+
+  var cfg = getConfig();
+  var statusNames = (cfg.pipelineStatuses || []).map(function(s) { return s.name; });
+  if (!statusNames.length) statusNames = ['Prospect','TOR Review','Quotation','Bidding','Negotiation','Win','Lost'];
+
+  var dealers = ST.getAll('dealers');
+  var dealerById = {};
+  dealers.forEach(function(d) { dealerById[d.id] = d.name || ''; });
+
+  function fmtDate(s) {
+    if (!s) return '';
+    var p = (s || '').slice(0,10).split('-');
+    if (p.length === 3) return p[2] + '/' + p[1] + '/' + p[0];
+    return s;
+  }
+
+  _pipeSheetIds = pipes.map(function(p) { return p.id; });
+  var data = pipes.map(function(p) {
+    var statusObj = (cfg.pipelineStatuses || []).find(function(s) { return s.id === p.status; });
+    return [
+      fmtDate(p.registerDate), p.projectName||'', p.endUserTH||'', p.endUserEN||'',
+      p.unitType||'', dealerById[p.dealerId]||'', p.djiDealer||'',
+      p.forecastAmount||0, p.realAmount||0,
+      fmtDate(p.biddingDate), fmtDate(p.shipmentDate),
+      statusObj ? statusObj.name : (p.status||''),
+      p.saleName||'', p.remark||''
+    ];
+  });
+
+  _pipeSheetInstance = jspreadsheet(el, {
+    data: data,
+    columns: [
+      { title: 'Register Date', type: 'text', width: 95 },
+      { title: 'Project Name', type: 'text', width: 220 },
+      { title: 'End User TH', type: 'text', width: 150 },
+      { title: 'End User EN', type: 'text', width: 130 },
+      { title: 'Unit type', type: 'text', width: 80 },
+      { title: 'Dealer', type: 'text', width: 130 },
+      { title: 'DJI Dealer', type: 'text', width: 110 },
+      { title: 'Forecast', type: 'numeric', width: 100 },
+      { title: 'Real Amount', type: 'numeric', width: 100 },
+      { title: 'Bidding Date', type: 'text', width: 95 },
+      { title: 'Shipment Date', type: 'text', width: 100 },
+      { title: 'Status', type: 'dropdown', source: statusNames, width: 110 },
+      { title: 'Sale', type: 'text', width: 80 },
+      { title: 'Remark', type: 'text', width: 180 }
+    ],
+    minDimensions: [14, Math.max(data.length, 5)],
+    allowInsertRow: false,
+    allowDeleteRow: false,
+    contextMenu: false
+  });
+}
+
+function savePipeSheet() {
+  if (!_pipeSheetInstance) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  var rows = _pipeSheetInstance.getData();
+  var cfg = getConfig();
+  var dealers = ST.getAll('dealers');
+  var dealerByName = {};
+  dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
+
+  var saved = 0;
+  rows.forEach(function(r, idx) {
+    var id = _pipeSheetIds[idx];
+    if (!id) return;
+    var dealerName = (r[5]||'').trim();
+    var dealer = dealerByName[dealerName.toLowerCase()];
+    var statusName = (r[11]||'').trim();
+    var statusObj = (cfg.pipelineStatuses||[]).find(function(s){ return s.name === statusName; });
+
+    ST.update('pipeline', id, {
+      registerDate: _pipeDateFromPaste(r[0]),
+      projectName: (r[1]||'').trim(),
+      endUserTH: (r[2]||'').trim(),
+      endUserEN: (r[3]||'').trim(),
+      unitType: (r[4]||'').trim(),
+      dealerId: dealer ? dealer.id : (ST.getOne('pipeline', id)||{}).dealerId || '',
+      djiDealer: (r[6]||'').trim(),
+      forecastAmount: parseFloat(r[7])||0,
+      realAmount: parseFloat(r[8])||0,
+      biddingDate: _pipeDateFromPaste(r[9]),
+      shipmentDate: _pipeDateFromPaste(r[10]),
+      status: statusObj ? statusObj.id : (r[11]||'prospect'),
+      saleName: (r[12]||'').trim(),
+      remark: (r[13]||'').trim(),
+      updatedAt: new Date().toISOString()
+    });
+    saved++;
+  });
+
+  var st = document.getElementById('pipeSheetStatus');
+  if (st) st.textContent = '✅ บันทึก ' + saved + ' รายการ';
+  toast('💾 บันทึก Pipeline ' + saved + ' รายการ');
 }
 
 // ================================================================

@@ -1148,6 +1148,8 @@ var productSearch = '';
 var productCategoryFilter = 'all';
 var productTypeFilter = 'all';     // ✅ เพิ่ม: 'all', 'main', 'demo'
 var productViewMode = 'table';
+var _prodSheetInstance = null;
+var _prodSheetIds = [];
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
@@ -1203,10 +1205,11 @@ function rProducts(el) {
   html += '<span style="margin-left:auto;display:flex;gap:4px">';
   html += '<button id="btnProdTable" class="btn bsm' + (productViewMode==='table'?' bp':'') + '" onclick="setProductView(\'table\')">📋 Table</button>';
   html += '<button id="btnProdCatalog" class="btn bsm' + (productViewMode==='catalog'?' bp':'') + '" onclick="setProductView(\'catalog\')">🖼️ Catalog</button>';
+  html += '<button id="btnProdSheet" class="btn bsm' + (productViewMode==='sheet'?' bp':'') + '" onclick="setProductView(\'sheet\')">🗂️ Sheet</button>';
   html += '</span>';
   html += '</div>';
 
-  html += '<div id="productsTableWrap"' + (productViewMode==='catalog' ? ' style="display:none"' : '') + '>';
+  html += '<div id="productsTableWrap"' + (productViewMode!=='table' ? ' style="display:none"' : '') + '>';
   html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>';
   html += '<th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th>';
   html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
@@ -1214,14 +1217,26 @@ function rProducts(el) {
   html += '<th>สถานะ</th><th></th>';
   html += '</thead><tbody id="productsTableBody"></tbody></table></div>';
   html += '</div>';
-  html += '<div id="productsCatalogWrap"' + (productViewMode==='table' ? ' style="display:none"' : '') + '>';
+  html += '<div id="productsCatalogWrap"' + (productViewMode!=='catalog' ? ' style="display:none"' : '') + '>';
   html += '<div class="prod-catalog-grid" id="productsCatalogGrid"></div>';
   html += '</div>';
+  html += '<div id="productsSheetWrap"' + (productViewMode!=='sheet' ? ' style="display:none"' : '') + '>';
+  html += '<div id="productsSheetEl"></div>';
+  html += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center">';
+  html += '<button class="btn bp" onclick="saveProductsSheet()">💾 บันทึกทั้งหมด</button>';
+  html += '<span id="sheetSaveStatus" style="font-size:.8rem;color:var(--text2)"></span>';
+  html += '</div></div>';
   html += '<div class="hint" style="margin-top:6px;text-align:right" id="productsCount">พบ ' + products.length + ' รายการ</div>';
   html += '</div>';
 
   el.innerHTML = html;
-  if (productViewMode === 'catalog') { renderProductsCatalog(products); } else { renderProductsTable(products); }
+  if (productViewMode === 'sheet') {
+    setTimeout(function() { initProductsSheet(products); }, 0);
+  } else if (productViewMode === 'catalog') {
+    renderProductsCatalog(products);
+  } else {
+    renderProductsTable(products);
+  }
   
   // ✅ ฟังก์ชัน renderProductsList (อัปเดตให้รองรับ type filter)
   window.renderProductsList = function() {
@@ -1252,7 +1267,9 @@ function rProducts(el) {
     productTypeFilter = type;
     var cnt = document.getElementById('productsCount');
     if (cnt) cnt.textContent = 'พบ ' + newProducts.length + ' รายการ';
-    if (productViewMode === 'catalog') { renderProductsCatalog(newProducts); } else { renderProductsTable(newProducts); }
+    if (productViewMode === 'sheet') { initProductsSheet(newProducts); }
+    else if (productViewMode === 'catalog') { renderProductsCatalog(newProducts); }
+    else { renderProductsTable(newProducts); }
   };
 }
 
@@ -1278,13 +1295,27 @@ function setProductView(mode) {
   productViewMode = mode;
   var tw = document.getElementById('productsTableWrap');
   var cw = document.getElementById('productsCatalogWrap');
+  var sw = document.getElementById('productsSheetWrap');
   var bt = document.getElementById('btnProdTable');
   var bc = document.getElementById('btnProdCatalog');
+  var bs = document.getElementById('btnProdSheet');
   if (tw) tw.style.display = mode === 'table' ? '' : 'none';
   if (cw) cw.style.display = mode === 'catalog' ? '' : 'none';
+  if (sw) sw.style.display = mode === 'sheet' ? '' : 'none';
   if (bt) bt.className = 'btn bsm' + (mode === 'table' ? ' bp' : '');
   if (bc) bc.className = 'btn bsm' + (mode === 'catalog' ? ' bp' : '');
-  if (typeof renderProductsList === 'function') renderProductsList();
+  if (bs) bs.className = 'btn bsm' + (mode === 'sheet' ? ' bp' : '');
+  if (mode === 'sheet') {
+    var prods = getAllProducts();
+    var q = productSearch, cat = productCategoryFilter, typ = productTypeFilter;
+    if (q) prods = prods.filter(function(p) { return (p.name||'').toLowerCase().indexOf(q)!==-1||(p.sku||'').toLowerCase().indexOf(q)!==-1||(p.ean||'').toLowerCase().indexOf(q)!==-1; });
+    if (cat !== 'all') prods = prods.filter(function(p) { return p.category === cat; });
+    if (typ === 'main') prods = prods.filter(function(p) { return !isDemoProduct(p); });
+    else if (typ === 'demo') prods = prods.filter(function(p) { return isDemoProduct(p); });
+    initProductsSheet(prods);
+  } else {
+    if (typeof renderProductsList === 'function') renderProductsList();
+  }
 }
 
 function renderProductsCatalog(products) {
@@ -2423,6 +2454,76 @@ window.Products = {
   exportMain: exportMainProductsToExcel,
   exportDemo: exportDemoProductsToExcel
 };
+
+// ================================================================
+// SHEET EDIT (jspreadsheet)
+// ================================================================
+function initProductsSheet(products) {
+  if (typeof jspreadsheet === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
+  var el = document.getElementById('productsSheetEl');
+  if (!el) return;
+  if (el.jspreadsheet) { el.jspreadsheet.destroy(); el.innerHTML = ''; }
+
+  _prodSheetIds = products.map(function(p) { return p.id; });
+  var data = products.map(function(p) {
+    var tp = p.typePrices || {};
+    return [p.sku||'', p.ean||'', p.name||'', p.category||'other',
+            p.rrpInVat||0, p.rrpExVat||0,
+            tp.S||0, tp.A||0, tp.B||p.price||0, tp.Other||0,
+            p.eol ? 'EOL' : 'Active'];
+  });
+
+  _prodSheetInstance = jspreadsheet(el, {
+    data: data,
+    columns: [
+      { title: 'SKU', type: 'text', width: 100 },
+      { title: 'EAN', type: 'text', width: 110 },
+      { title: 'ชื่อสินค้า', type: 'text', width: 260 },
+      { title: 'หมวดหมู่', type: 'dropdown', source: ['drone','payload','battery','charger','software','service','bundle','other'], width: 90 },
+      { title: 'RRP InVAT', type: 'numeric', width: 90 },
+      { title: 'RRP ExVAT', type: 'numeric', width: 90 },
+      { title: 'S', type: 'numeric', width: 80 },
+      { title: 'A', type: 'numeric', width: 80 },
+      { title: 'B', type: 'numeric', width: 80 },
+      { title: 'Other', type: 'numeric', width: 80 },
+      { title: 'สถานะ', type: 'dropdown', source: ['Active','EOL'], width: 70 }
+    ],
+    minDimensions: [11, Math.max(data.length, 5)],
+    allowInsertRow: true,
+    allowDeleteRow: true,
+    contextMenu: false
+  });
+}
+
+function saveProductsSheet() {
+  if (!_prodSheetInstance) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  var rows = _prodSheetInstance.getData();
+  var saved = 0, added = 0;
+
+  rows.forEach(function(r, idx) {
+    var name = (r[2] || '').toString().trim();
+    if (!name) return;
+    var data = {
+      sku: (r[0]||'').toString().trim(),
+      ean: (r[1]||'').toString().trim(),
+      name: name,
+      category: r[3] || 'other',
+      rrpInVat: parseFloat(r[4]) || 0,
+      rrpExVat: parseFloat(r[5]) || 0,
+      typePrices: { S: parseFloat(r[6])||0, A: parseFloat(r[7])||0, B: parseFloat(r[8])||0, Other: parseFloat(r[9])||0 },
+      price: parseFloat(r[8]) || 0,
+      eol: r[10] === 'EOL',
+      updatedAt: new Date().toISOString()
+    };
+    var id = _prodSheetIds[idx];
+    if (id) { updateProduct(id, data); saved++; }
+    else { data.createdAt = new Date().toISOString(); addProduct(data); added++; }
+  });
+
+  var st = document.getElementById('sheetSaveStatus');
+  if (st) st.textContent = '✅ บันทึก ' + saved + (added ? ', เพิ่ม ' + added : '') + ' รายการ';
+  toast('💾 บันทึก ' + (saved + added) + ' รายการ');
+}
 
 // ================================================================
 // PASTE FROM EXCEL
