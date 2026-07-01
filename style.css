@@ -1671,11 +1671,14 @@ input:focus, select:focus, textarea:focus {
 .theme-light input[type=text], .theme-light input[type=tel],
 .theme-light input[type=email], .theme-light input[type=time],
 .theme-light input[type=number], .theme-light input[type=url],
+.theme-light input[type=date], .theme-light input[type=month],
+.theme-light input[type=week], .theme-light input[type=search],
 .theme-light select, .theme-light textarea,
 .theme-light input {
   background: #ffffff !important;
   border: 1px solid #d1d5cf !important;
   color: #0e0f0c !important;
+  color-scheme: light;
 }
 .theme-light input:focus, .theme-light select:focus, .theme-light textarea:focus {
   border-color: #9fe870 !important;
@@ -1759,6 +1762,18 @@ input:focus, select:focus, textarea:focus {
 
 .theme-light .wait-card { background: #ffffff; border-color: #d1d5cf; }
 .theme-light .wait-title { color: #0e0f0c; }
+
+.theme-light .kpi-dealer { background: #f0f3ee !important; border-radius: 6px; }
+.theme-light .kpi-dealer.done { color: #2ead4b; }
+.theme-light .kpi-dealer.pending { color: #92400e; }
+.theme-light .kpi-dealer.overdue { color: #d03238; }
+.theme-light .kpi-dealer .dealer-act { border-color: #d1d5cf !important; color: #454745; }
+.theme-light .kpi-dealer .dealer-act:hover { border-color: #054d28 !important; color: #054d28; }
+
+.theme-light .monthly-item { background: #ffffff !important; border-color: #d1d5cf !important; }
+.theme-light .monthly-title { color: #0e0f0c; }
+
+.theme-light .visit-sub { background: #f0f3ee !important; border-color: #d1d5cf !important; color: #0e0f0c; }
 
 .theme-light .admin-row { background: #ffffff; border-color: #d1d5cf; }
 .theme-light .admin-row label { color: #454745; }
