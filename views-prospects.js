@@ -457,6 +457,7 @@ function showProspectDetailM(id) {
   // ── Action buttons ──
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isClosed && !isConverted) {
+    if (p.email) h += '<button class="btn bsm bo" onclick="showProspectEmailM(\'' + p.id + '\')">📧 ส่ง Email</button>';
     h += '<button class="btn bsm bp" onclick="closeM();showAddVisitPlanFromProspect(\'' + p.id + '\')">📅 สร้างนัด Visit Plan</button>';
     if (stageIdx >= 0 && stageIdx < PROSPECT_STAGES.length - 1) {
       var next = PROSPECT_STAGES[stageIdx + 1];
@@ -486,6 +487,33 @@ function addProspectNote(id) {
   saveProspects(list);
   toast('💬 บันทึกแล้ว');
   showProspectDetailM(id);
+}
+
+function showProspectEmailM(id) {
+  var p = getProspect(id);
+  if (!p) return;
+  var stageInfo = _prospectStageInfo(p.stage);
+  var subject = 'นัดพบ — ' + (p.companyName || '');
+  var body = 'เรียน ' + (p.contactName ? 'คุณ' + p.contactName : 'ทีมงาน') + '\n\n'
+    + 'ผมขอนัดพบเพื่อนำเสนอสินค้าและบริการจาก SIS Distribution\n'
+    + (p.interest ? 'สินค้าที่สนใจ: ' + p.interest + '\n' : '')
+    + '\nวันที่นัด: \nเวลา: \nสถานที่: \n\n'
+    + 'กรุณายืนยันการนัดด้วยนะครับ/ค่ะ\n'
+    + 'หากมีข้อสงสัยประการใด กรุณาติดต่อกลับได้เลย\n\n'
+    + 'ขอบคุณครับ\n'
+    + 'SIS Distribution (Thailand) Public Company Limited';
+
+  var h = '<div style="max-width:520px">';
+  h += '<div class="fm-group"><label>📨 ถึง (To)</label><input type="email" id="vp_email_to" class="fm-input" value="' + sanitize(p.email || '') + '" placeholder="email@example.com"></div>';
+  h += '<div class="fm-group"><label>📌 หัวข้อ (Subject)</label><input type="text" id="vp_email_subj" class="fm-input" value="' + sanitize(subject) + '"></div>';
+  h += '<div class="fm-group"><label>📝 เนื้อหา (แก้ไขได้)</label><textarea id="vp_email_body" class="fm-input" rows="10" style="font-size:13px;line-height:1.6">' + sanitize(body) + '</textarea></div>';
+  h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">💡 Stage ปัจจุบัน: ' + stageInfo.icon + ' ' + stageInfo.label + '</div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn btn-blue" onclick="vpOpenMailto()">📬 เปิด Email Client</button>';
+  h += '<button class="btn bo" onclick="vpCopyEmailBody()">📋 คัดลอกเนื้อหา</button>';
+  h += '<button class="btn" onclick="closeM()">ปิด</button>';
+  h += '</div></div>';
+  openM('📧 ส่ง Email — ' + sanitize(p.companyName || ''), h);
 }
 
 // ใช้เปลี่ยน stage ได้ทั้งสองทาง (เลื่อนไปข้างหน้า หรือย้อนกลับ) — กดจุดไหนใน tracker หรือปุ่มลัดก็เรียกอันนี้เหมือนกัน
