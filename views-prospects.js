@@ -4,16 +4,25 @@
 // ================================================================
 
 var PROSPECT_STAGES = [
-  { k: 'new',        icon: '🆕', label: 'ใหม่' },
-  { k: 'contacted',  icon: '📧', label: 'ติดต่อแล้ว' },
-  { k: 'scheduled',  icon: '📅', label: 'นัดวันเข้าพบ' },
-  { k: 'visited',    icon: '🤝', label: 'เข้าพบแล้ว' },
-  { k: 'interested', icon: '⭐', label: 'สนใจเป็น Partner' },
-  { k: 'converted',  icon: '🏪', label: 'แปลงเป็น Dealer' }
+  { k: 'new',          icon: '🆕', label: 'ใหม่' },
+  { k: 'contacted',    icon: '📞', label: 'ติดต่อแล้ว' },
+  { k: 'scheduled',    icon: '📅', label: 'นัดวันเข้าพบ' },
+  { k: 'visited',      icon: '🤝', label: 'เข้าพบแล้ว' },
+  { k: 'interested',   icon: '⭐', label: 'สนใจเป็น Partner' },
+  { k: 'docs_sent',    icon: '📄', label: 'ส่งเอกสารเบื้องต้น' },
+  { k: 'dji_review1',  icon: '⏳', label: 'รอ DJI พิจารณา ครั้งที่ 1' },
+  { k: 'visited_dji',  icon: '🤝', label: 'เข้าพบพร้อม DJI' },
+  { k: 'docs_dji',     icon: '📋', label: 'ส่ง DJI Forms' },
+  { k: 'dji_review2',  icon: '⏳', label: 'รอ DJI พิจารณา ครั้งที่ 2' },
+  { k: 'waiting_result', icon: '🔔', label: 'รอผล' },
+  { k: 'converted',    icon: '🏪', label: 'แปลงเป็น Dealer' }
 ];
 var PROSPECT_STAGE_COLOR = {
   new: '#60a5fa', contacted: '#60a5fa', scheduled: '#fbbf24',
-  visited: '#fb923c', interested: '#c084fc', converted: '#4ade80', closed: '#94a3b8'
+  visited: '#fb923c', interested: '#c084fc',
+  docs_sent: '#f472b6', dji_review1: '#fb923c', visited_dji: '#fb923c',
+  docs_dji: '#a78bfa', dji_review2: '#fb923c', waiting_result: '#facc15',
+  converted: '#4ade80', closed: '#94a3b8'
 };
 var prospectFilterStage = 'all';
 var prospectViewMode = 'card'; // 'card' | 'table' | 'dash'
@@ -453,7 +462,7 @@ function showProspectDetailM(id) {
       var next = PROSPECT_STAGES[stageIdx + 1];
       h += '<button class="btn bsm bo" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + next.k + '\')">➡️ เลื่อนเป็น "' + next.label + '"</button>';
     }
-    if (p.stage === 'interested') h += '<button class="btn bsm bs" onclick="convertProspectToDealer(\'' + p.id + '\')">🏪 แปลงเป็น Dealer</button>';
+    if (p.stage === 'waiting_result') h += '<button class="btn bsm bs" onclick="convertProspectToDealer(\'' + p.id + '\')">🏪 แปลงเป็น Dealer</button>';
   }
   if (isConverted && p.dealerId) h += '<button class="btn bsm bo" onclick="closeM();go(\'dealerDetail\',{dealerId:\'' + p.dealerId + '\'})">🏪 ดู Dealer →</button>';
   h += '<button class="btn bsm bo" onclick="closeM();showAddProspectM(\'' + p.id + '\')">✏️ แก้ไขข้อมูล</button>';
