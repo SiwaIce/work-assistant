@@ -1601,6 +1601,21 @@ input:focus, select:focus, textarea:focus {
 .theme-light {
   background: #e8ebe6 !important;
   color: #0e0f0c !important;
+  --bg: #e8ebe6;
+  --bg2: #f0f3ee;
+  --bg3: #ffffff;
+  --card: #ffffff;
+  --border: #d1d5cf;
+  --border-light: rgba(0,0,0,.05);
+  --text: #0e0f0c;
+  --text2: #454745;
+  --text3: #868685;
+  --text4: #454745;
+  --accent: #9fe870;
+  --accent-light: #e2f6d5;
+  --accent-glow: rgba(159,232,112,.3);
+  --shadow: 0 1px 3px rgba(0,0,0,.06);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
 }
 .theme-light #sidebar {
   background: #ffffff;
