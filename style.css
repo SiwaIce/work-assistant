@@ -1618,26 +1618,26 @@ input:focus, select:focus, textarea:focus {
   --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
 }
 .theme-light #sidebar {
-  background: #ffffff;
-  border-right: 1px solid #d1d5cf;
+  background: #ffffff !important;
+  border-right: 1px solid #d1d5cf !important;
 }
-.theme-light .nh { border-bottom-color: #d1d5cf; color: #0e0f0c; }
-.theme-light .nh span { color: #054d28; }
-.theme-light .nl { color: #454745; }
-.theme-light .nl:hover { background: #e8ebe6; color: #0e0f0c; }
-.theme-light .nl.act { background: #e2f6d5; color: #054d28; border-left-color: #9fe870; }
-.theme-light .nl-label { color: #868685; }
-.theme-light .nl-label.sg-toggle:hover { color: #454745; }
+.theme-light .nh { border-bottom-color: #d1d5cf !important; color: #0e0f0c !important; background: transparent !important; }
+.theme-light .nh span { color: #054d28 !important; }
+.theme-light .nl { color: #454745 !important; background: transparent !important; }
+.theme-light .nl:hover { background: #e8ebe6 !important; color: #0e0f0c !important; }
+.theme-light .nl.act { background: #e2f6d5 !important; color: #054d28 !important; border-left-color: #9fe870 !important; }
+.theme-light .nl-label { color: #868685 !important; }
+.theme-light .nl-label.sg-toggle:hover { color: #454745 !important; }
 .theme-light .sg-chev { color: #868685; }
 .theme-light .admin-tabs { border-bottom-color: #d1d5cf; }
 .theme-light .admin-tab { color: #454745; }
 .theme-light .admin-tab:hover { color: #0e0f0c; }
 .theme-light .admin-tab.act { color: #054d28; border-bottom-color: #9fe870; }
-.theme-light .ns { background: #d1d5cf; }
+.theme-light .ns { background: #d1d5cf !important; }
 .theme-light .nb { background: #d03238; }
 
-.theme-light .topbar { background: #ffffff; border-bottom-color: #d1d5cf; }
-.theme-light .tt { color: #0e0f0c; }
+.theme-light .topbar { background: #ffffff !important; border-bottom: 1px solid #d1d5cf !important; backdrop-filter: none !important; }
+.theme-light .tt { color: #0e0f0c !important; }
 .theme-light #clock { color: #454745; }
 .theme-light .strig { background: #e8ebe6; border-color: #d1d5cf; color: #454745; }
 .theme-light .theme-btn { border-color: #d1d5cf; color: #454745; }
@@ -1671,15 +1671,16 @@ input:focus, select:focus, textarea:focus {
 .theme-light input[type=text], .theme-light input[type=tel],
 .theme-light input[type=email], .theme-light input[type=time],
 .theme-light input[type=number], .theme-light input[type=url],
-.theme-light select, .theme-light textarea {
-  background: #ffffff;
-  border: 1px solid #d1d5cf;
-  color: #0e0f0c;
-  border-radius: 10px;
+.theme-light select, .theme-light textarea,
+.theme-light input {
+  background: #ffffff !important;
+  border: 1px solid #d1d5cf !important;
+  color: #0e0f0c !important;
 }
 .theme-light input:focus, .theme-light select:focus, .theme-light textarea:focus {
-  border-color: #9fe870;
-  box-shadow: 0 0 0 3px rgba(159,232,112,.2);
+  border-color: #9fe870 !important;
+  box-shadow: 0 0 0 3px rgba(159,232,112,.2) !important;
+  background: #ffffff !important;
 }
 .theme-light .fg > label { color: #454745; }
 
@@ -1687,6 +1688,10 @@ input:focus, select:focus, textarea:focus {
 .theme-light .li:hover { background: #f0f3ee; border-color: #c4c8c2; }
 .theme-light .lt { color: #0e0f0c; }
 .theme-light .ls { color: #454745; }
+.theme-light .si { background: #ffffff !important; border-color: #d1d5cf !important; }
+.theme-light .stt { color: #0e0f0c; }
+.theme-light .stt:hover { color: #054d28; }
+.theme-light .sd { color: #868685; }
 
 .theme-light .dealer-card { background: #ffffff; border-color: #d1d5cf; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-radius: 16px; }
 .theme-light .dealer-card:hover { border-color: #a5d88e; box-shadow: 0 6px 16px rgba(0,0,0,.08); }
@@ -7809,84 +7814,12 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
-/* === Light Theme (Notion Style) === */
+/* === Light Theme — Raycast ray-* variables only (main overrides in theme-light block above) === */
 .theme-light {
-  --ray-bg: #f8fafc;
+  --ray-bg: #e8ebe6;
   --ray-card: #ffffff;
-  --ray-border: #e9ecef;
-  --ray-hover: #f1f5f9;
-  background: #f8fafc !important;
-}
-
-.theme-light .card {
-  background: #ffffff;
-  border-color: #e9ecef;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-
-.theme-light .card:hover {
-  box-shadow: 0 8px 30px rgba(0,0,0,0.06);
-}
-
-.theme-light .sc {
-  background: #ffffff;
-  border-color: #e9ecef;
-}
-
-.theme-light .li {
-  background: #ffffff;
-  border-color: #e9ecef;
-}
-
-.theme-light .li:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.theme-light .lt {
-  color: #1e293b;
-}
-
-.theme-light .ls {
-  color: #64748b;
-}
-
-.theme-light input,
-.theme-light select,
-.theme-light textarea {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  color: #1e293b;
-}
-
-.theme-light .tab-btn {
-  color: #64748b;
-}
-
-.theme-light .tab-btn.act {
-  color: #3b82f6;
-}
-
-.theme-light .ftab {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  color: #64748b;
-}
-
-.theme-light .ftab.act {
-  background: #3b82f6;
-  color: white;
-}
-
-.theme-light .pipe-table th,
-.theme-light .export-table th {
-  background: #f8fafc;
-  color: #64748b;
-}
-
-.theme-light .pipe-table tr:hover td,
-.theme-light .export-table tr:hover td {
-  background: #f8fafc;
+  --ray-border: #d1d5cf;
+  --ray-hover: #f0f3ee;
 }
 
 /* === Animation for cards === */
