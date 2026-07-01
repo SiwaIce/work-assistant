@@ -19,6 +19,7 @@ var prospectFilterStage = 'all';
 var prospectViewMode = 'card'; // 'card' | 'table' | 'dash'
 
 function _prospectStageInfo(k) {
+  if (k === '__note__') return { k: '__note__', icon: '💬', label: 'อัพเดท' };
   return PROSPECT_STAGES.find(function(s) { return s.k === k; }) ||
     (k === 'closed' ? { k: 'closed', icon: '✕', label: 'ปิด (ไม่สนใจ)' } : PROSPECT_STAGES[0]);
 }
@@ -382,62 +383,100 @@ function showProspectDetailM(id) {
   var isClosed = p.stage === 'closed';
   var isConverted = p.stage === 'converted';
 
-  var h = '<div style="max-width:460px">';
-  h += '<div style="font-weight:700;font-size:15px">' + sanitize(p.companyName) + '</div>';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:14px">';
+  var h = '';
+
+  // ── Header: company + contact info ──
+  h += '<div style="font-weight:700;font-size:15px;margin-bottom:4px">' + sanitize(p.companyName) + '</div>';
   var bits = [];
   if (p.contactName) bits.push('👤 ' + sanitize(p.contactName));
-  if (p.phone) bits.push('📞 ' + sanitize(p.phone) + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer" onclick="copyToClip(\'' + sanitize(p.phone).replace(/'/g, "\\'") + '\')">📋</button>');
+  if (p.phone) bits.push('📞 ' + sanitize(p.phone) + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0 2px" onclick="copyToClip(\'' + sanitize(p.phone).replace(/'/g, "\\'") + '\')">📋</button>');
   if (p.email) bits.push('✉️ ' + sanitize(p.email));
   if (p.location) bits.push('📍 ' + sanitize(p.location));
-  h += bits.join(' · ') + '</div>';
+  if (p.interest) bits.push('🎯 ' + sanitize(p.interest));
+  if (bits.length) h += '<div style="font-size:11px;color:var(--text2);margin-bottom:14px">' + bits.join(' · ') + '</div>';
 
-  if (!isClosed) {
+  // ── Stage tracker ──
+  if (!isClosed && !isConverted) {
     h += '<div style="display:flex;align-items:center;margin-bottom:6px">';
     PROSPECT_STAGES.forEach(function(s, i) {
       var done = i <= stageIdx;
       var current = i === stageIdx;
-      var bg = done ? (current ? '#3b82f6' : '#22c55e') : '#334155';
-      var fg = done ? (current ? '#fff' : '#06210f') : '#94a3b8';
-      h += '<div style="text-align:center;flex:1;cursor:pointer" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + s.k + '\')" title="กดเพื่อเปลี่ยนเป็น ' + sanitize(s.label) + '">';
-      h += '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 4px">' + (done && !current ? '✓' : (i + 1)) + '</div>';
-      h += '<div style="font-size:9px;color:' + (current ? 'var(--text)' : 'var(--text2)') + ';font-weight:' + (current ? '700' : '400') + '">' + s.label + '</div>';
+      var bg = done ? (current ? '#3b82f6' : '#22c55e') : 'var(--border,#334155)';
+      var fg = done ? (current ? '#fff' : '#052e16') : 'var(--text3,#64748b)';
+      h += '<div style="text-align:center;flex:1;cursor:pointer" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + s.k + '\')" title="เปลี่ยนเป็น ' + sanitize(s.label) + '">';
+      h += '<div style="width:24px;height:24px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 4px">' + (done && !current ? '✓' : (i + 1)) + '</div>';
+      h += '<div style="font-size:9px;color:' + (current ? 'var(--text)' : 'var(--text2)') + ';font-weight:' + (current ? '700' : '400') + ';line-height:1.3">' + s.label + '</div>';
       h += '</div>';
-      if (i < PROSPECT_STAGES.length - 1) h += '<div style="flex:1;height:2px;background:' + (i < stageIdx ? '#22c55e' : '#334155') + '"></div>';
+      if (i < PROSPECT_STAGES.length - 1) h += '<div style="flex:1;height:2px;background:' + (i < stageIdx ? '#22c55e' : 'var(--border,#334155)') + ';margin-bottom:14px"></div>';
     });
     h += '</div>';
     h += '<div style="font-size:9.5px;color:var(--text2);margin-bottom:14px">💡 กดที่จุดไหนก็ได้เพื่อเปลี่ยน stage — ย้อนกลับได้ ไม่จำเป็นต้องเรียงตามลำดับ</div>';
-  } else {
-    h += '<div style="background:rgba(148,163,184,.15);border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">✕ Lead นี้ปิดแล้ว (ไม่สนใจ)<button class="btn bsm bo" onclick="reopenProspect(\'' + p.id + '\')">↩️ เปิดกลับมาใหม่</button></div>';
+  } else if (isClosed) {
+    h += '<div style="background:rgba(148,163,184,.12);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">✕ Lead นี้ปิดแล้ว (ไม่สนใจ)<button class="btn bsm bo" onclick="reopenProspect(\'' + p.id + '\')">↩️ เปิดใหม่</button></div>';
   }
 
-  h += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;margin-bottom:12px">';
-  h += '<div style="font-size:10px;color:var(--text2);margin-bottom:6px">ประวัติ</div>';
-  (p.history || []).slice().reverse().forEach(function(hist) {
-    var hi = _prospectStageInfo(hist.stage);
-    h += '<div style="font-size:11px;margin-bottom:3px">' + hi.icon + ' ' + fDShort(hist.date) + ' — ' + (hist.note ? sanitize(hist.note) : hi.label) + '</div>';
-  });
+  // ── ประวัติ & อัพเดท ──
+  var histList = (p.history || []).slice().reverse();
+  h += '<div style="background:var(--bg2,#1e293b);border-radius:10px;padding:12px 14px;margin-bottom:14px">';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:10px">📋 ประวัติ & อัพเดท</div>';
+
+  if (histList.length) {
+    h += '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px">';
+    histList.forEach(function(ent) {
+      var isNote = ent.stage === '__note__';
+      var hi = _prospectStageInfo(ent.stage);
+      h += '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start">';
+      h += '<div style="font-size:16px;line-height:1;margin-top:1px;flex-shrink:0">' + (isNote ? '💬' : hi.icon) + '</div>';
+      h += '<div style="flex:1;min-width:0">';
+      if (!isNote) h += '<div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:1px">' + hi.label + '</div>';
+      if (ent.note) h += '<div style="font-size:11.5px;line-height:1.45;word-break:break-word">' + sanitize(ent.note) + '</div>';
+      h += '<div style="font-size:9px;color:var(--text3);margin-top:2px">' + fDShort(ent.date) + '</div>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">ยังไม่มีประวัติ</div>';
+  }
+
+  // Add note input
+  h += '<div style="display:flex;gap:6px;align-items:center">';
+  h += '<input type="text" id="prospect_note_inp" placeholder="✏️ เพิ่ม comment / อัพเดทสถานะ..." style="flex:1;font-size:12px" onkeydown="if(event.key===\'Enter\')addProspectNote(\'' + id + '\')">';
+  h += '<button class="btn bsm bp" onclick="addProspectNote(\'' + id + '\')">บันทึก</button>';
+  h += '</div>';
   h += '</div>';
 
+  // ── Action buttons ──
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isClosed && !isConverted) {
     h += '<button class="btn bsm bp" onclick="closeM();showAddVisitPlanFromProspect(\'' + p.id + '\')">📅 สร้างนัด Visit Plan</button>';
-    if (stageIdx > 0) {
-      var prev = PROSPECT_STAGES[stageIdx - 1];
-      h += '<button class="btn bsm bo" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + prev.k + '\')">⬅️ ย้อนกลับเป็น "' + prev.label + '"</button>';
-    }
     if (stageIdx >= 0 && stageIdx < PROSPECT_STAGES.length - 1) {
       var next = PROSPECT_STAGES[stageIdx + 1];
       h += '<button class="btn bsm bo" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + next.k + '\')">➡️ เลื่อนเป็น "' + next.label + '"</button>';
     }
-    if (p.stage === 'interested') h += '<button class="btn bsm" style="background:#22c55e" onclick="convertProspectToDealer(\'' + p.id + '\')">🏪 แปลงเป็น Dealer</button>';
+    if (p.stage === 'interested') h += '<button class="btn bsm bs" onclick="convertProspectToDealer(\'' + p.id + '\')">🏪 แปลงเป็น Dealer</button>';
   }
   if (isConverted && p.dealerId) h += '<button class="btn bsm bo" onclick="closeM();go(\'dealerDetail\',{dealerId:\'' + p.dealerId + '\'})">🏪 ดู Dealer →</button>';
   h += '<button class="btn bsm bo" onclick="closeM();showAddProspectM(\'' + p.id + '\')">✏️ แก้ไขข้อมูล</button>';
-  if (!isClosed && !isConverted) h += '<button class="btn bsm" style="border:1px solid #ef4444;color:#f87171;background:transparent" onclick="closeProspectLost(\'' + p.id + '\')">✕ ปิด Lead (ไม่สนใจ)</button>';
-  h += '</div></div>';
+  if (!isClosed && !isConverted) h += '<button class="btn bsm bd" style="background:transparent;border:1px solid #ef4444;color:#ef4444" onclick="closeProspectLost(\'' + p.id + '\')">✕ ปิด Lead (ไม่สนใจ)</button>';
+  h += '</div>';
 
   openM('🆕 รายละเอียด Lead', h);
+  // focus note input
+  setTimeout(function() { var el = document.getElementById('prospect_note_inp'); if (el) el.focus(); }, 80);
+}
+
+function addProspectNote(id) {
+  var inp = document.getElementById('prospect_note_inp');
+  var note = inp ? inp.value.trim() : '';
+  if (!note) { if (inp) inp.focus(); return; }
+  var list = getProspects();
+  var p = list.find(function(x) { return x.id === id; });
+  if (!p) return;
+  if (!p.history) p.history = [];
+  p.history.push({ stage: '__note__', note: note, date: new Date().toISOString().slice(0, 10) });
+  saveProspects(list);
+  toast('💬 บันทึกแล้ว');
+  showProspectDetailM(id);
 }
 
 // ใช้เปลี่ยน stage ได้ทั้งสองทาง (เลื่อนไปข้างหน้า หรือย้อนกลับ) — กดจุดไหนใน tracker หรือปุ่มลัดก็เรียกอันนี้เหมือนกัน
