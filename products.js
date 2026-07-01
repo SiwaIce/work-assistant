@@ -1177,7 +1177,7 @@ function rProducts(el) {
     products = products.filter(function(p) { return isDemoProduct(p); });
   }
   
-  var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button></span></h2>';
+  var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button></span></h2>';
   
   // ✅ แถบกรอง (เพิ่ม Select สำหรับประเภทสินค้า)
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
@@ -2423,6 +2423,90 @@ window.Products = {
   exportMain: exportMainProductsToExcel,
   exportDemo: exportDemoProductsToExcel
 };
+
+// ================================================================
+// PASTE FROM EXCEL
+// ================================================================
+function _parseTSVText(text) {
+  var rows = [], row = [], field = '', inQ = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === '\t') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(function(r) { return r.length > 1 || (r[0] && r[0].trim()); });
+}
+
+function showPasteProductsM() {
+  var h = '<div style="max-width:620px">';
+  h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปช่วงข้อมูลจาก Excel แล้ววางที่นี่ — UPSERT โดยจับคู่ SKU → EAN → ชื่อ (ID คงเดิม)</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ลำดับคอลัมน์: <strong>SKU | EAN | Product Name | RRP InVAT | RRP ExVAT | Type1(S) | Type2(A) | Type3(B) | Type4</strong></p>';
+  h += '<textarea id="pasteProdTa" style="width:100%;height:200px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
+  h += '<div style="display:flex;gap:8px;margin-top:10px">';
+  h += '<button class="btn bp" style="flex:1" onclick="doPasteProducts()">📥 นำเข้า</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('📋 วางข้อมูลสินค้าจาก Excel', h);
+}
+
+function doPasteProducts() {
+  var ta = document.getElementById('pasteProdTa');
+  if (!ta) return;
+  var rows = _parseTSVText(ta.value.trim());
+  if (!rows.length) { toast('⚠️ ไม่พบข้อมูล'); return; }
+
+  var existing = getAllProducts();
+  var byKey = {};
+  existing.forEach(function(p) {
+    if (p.sku) byKey['sku_' + p.sku.trim()] = p;
+    if (p.ean) byKey['ean_' + p.ean.trim()] = p;
+    if (p.name) byKey['name_' + p.name.trim()] = p;
+  });
+
+  var imported = 0, updated = 0, skipped = 0;
+  rows.forEach(function(c) {
+    var sku = (c[0] || '').trim();
+    var ean = (c[1] || '').trim();
+    var name = (c[2] || '').trim();
+    if (!name) { skipped++; return; }
+
+    var rrpInVat = parseFloat(c[3]) || 0;
+    var rrpExVat = parseFloat(c[4]) || 0;
+    var priceS = parseFloat(c[5]) || 0;
+    var priceA = parseFloat(c[6]) || 0;
+    var priceB = parseFloat(c[7]) || 0;
+    var priceOther = parseFloat(c[8]) || 0;
+    if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
+
+    var data = { name: name, sku: sku, ean: ean, rrpInVat: rrpInVat, rrpExVat: rrpExVat,
+      price: priceB, typePrices: { S: priceS, A: priceA, B: priceB, Other: priceOther },
+      updatedAt: new Date().toISOString() };
+
+    var found = (sku && byKey['sku_' + sku]) || (ean && byKey['ean_' + ean]) || byKey['name_' + name];
+    if (found) {
+      updateProduct(found.id, data);
+      updated++;
+    } else {
+      data.createdAt = new Date().toISOString();
+      data.eol = false;
+      addProduct(data);
+      imported++;
+    }
+  });
+
+  closeMForce();
+  toast('✅ เพิ่ม ' + imported + ', อัปเดต ' + updated + (skipped ? ', ข้าม ' + skipped : ''));
+  render();
+}
 
 // ฟังก์ชัน global สำหรับใช้ในระบบอื่น
 window.getModelPrice = getModelPrice;

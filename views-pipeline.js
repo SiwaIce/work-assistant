@@ -521,6 +521,7 @@ function rPipeline(el) {
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
     '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +
     '<button class="btn bo" onclick="showImportPipelineM()">📥 Import</button>' +
+    '<button class="btn bo" onclick="showPastePipelineM()">📋 วาง Excel</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="dlPipeCSV()">📤 CSV</button>' +
     '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' +
@@ -2272,4 +2273,129 @@ function viewForecastDetail(dealerId, updateId) {
     console.error('View forecast detail error:', err);
     toast('❌ ไม่สามารถโหลดรายละเอียดได้');
   });
+}
+
+// ================================================================
+// PASTE FROM EXCEL (Pipeline)
+// ================================================================
+function _pipeParseTSV(text) {
+  var rows = [], row = [], field = '', inQ = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === '\t') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(function(r) { return r.length > 1 || (r[0] && r[0].trim()); });
+}
+
+function _pipeDateFromPaste(s) {
+  s = (s || '').toString().trim();
+  if (!s || s === '-') return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  var p = s.split('/');
+  if (p.length === 3) {
+    var y = p[2].length === 2 ? '20' + p[2] : p[2];
+    return y + '-' + ('' + p[1]).padStart(2, '0') + '-' + ('' + p[0]).padStart(2, '0');
+  }
+  return '';
+}
+
+function showPastePipelineM() {
+  var h = '<div style="max-width:640px">';
+  h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปช่วงข้อมูลจาก Excel แล้ววางที่นี่ — เพิ่มใหม่ทุก row (ไม่ UPSERT)</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ลำดับคอลัมน์: <strong>Register Date | Project Name | End User TH | End User EN | Unit type | Dealer Name | DJI Dealer | Project Revenue | Model | M3M Qty | M4T Qty | M4E Qty | Dock3 Qty | M4TD Qty | M400 Qty | Forecast Amount | Real Amount | TOR | Bidding Date | Forecast Month | Shipment Date | Remark | Letter | Status | Duplicate | Update 1–6 | Sale | DISPLAY</strong></p>';
+  h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
+  h += '<div style="display:flex;gap:8px;margin-top:10px">';
+  h += '<button class="btn bp" style="flex:1" onclick="doPastePipeline()">📥 นำเข้า</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('📋 วางข้อมูล Pipeline จาก Excel', h);
+}
+
+function doPastePipeline() {
+  var ta = document.getElementById('pastePipeTa');
+  if (!ta) return;
+  var rows = _pipeParseTSV(ta.value.trim());
+  if (!rows.length) { toast('⚠️ ไม่พบข้อมูล'); return; }
+
+  var dealers = ST.getAll('dealers');
+  var dealerByName = {};
+  dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
+
+  // col 9-14: M3M, M4T, M4E, Dock3, M4TD, M400
+  var modelCols = [
+    { idx: 9,  model: 'Matrice 3M' },
+    { idx: 10, model: 'Matrice 4T' },
+    { idx: 11, model: 'Matrice 4E' },
+    { idx: 12, model: 'Dock 3' },
+    { idx: 13, model: 'Matrice 4TD' },
+    { idx: 14, model: 'Matrice 400' }
+  ];
+
+  var added = 0, skipped = 0;
+  rows.forEach(function(c) {
+    var projectName = (c[1] || '').trim();
+    if (!projectName) { skipped++; return; }
+
+    var dealerName = (c[5] || '').trim();
+    var dealer = dealerByName[dealerName.toLowerCase()];
+
+    var items = [];
+    modelCols.forEach(function(m) {
+      var qty = parseInt(c[m.idx]) || 0;
+      if (qty > 0) items.push({ model: m.model, qty: qty });
+    });
+
+    var statusRaw = (c[23] || '').trim();
+    var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'prospect';
+    if (!status) status = 'prospect';
+
+    var pipeData = {
+      registerDate: _pipeDateFromPaste(c[0]),
+      projectName: projectName,
+      endUserTH: (c[2] || '').trim(),
+      endUserEN: (c[3] || '').trim(),
+      unitType: (c[4] || '').trim(),
+      dealerId: dealer ? dealer.id : '',
+      djiDealer: (c[6] || '').trim(),
+      projectRevenue: parseFloat(c[7]) || 0,
+      items: items,
+      model: items[0] ? items[0].model : '',
+      modelQty: items[0] ? items[0].qty : 1,
+      forecastAmount: parseFloat(c[15]) || 0,
+      realAmount: parseFloat(c[16]) || 0,
+      tor: (c[17] || '').trim(),
+      biddingDate: _pipeDateFromPaste(c[18]),
+      // c[19] = Forecast Month (calculated, skip)
+      shipmentDate: _pipeDateFromPaste(c[20]),
+      remark: (c[21] || '').trim(),
+      appointmentLetter: (c[22] || '').trim(),
+      status: status,
+      recurring: (c[24] || '').trim().toLowerCase() === 'yes',
+      saleName: (c[31] || '').trim(),
+      sheetDisplay: (c[32] || 'Show').trim() || 'Show',
+      nextAction: '', followupDate: ''
+    };
+
+    var pipe = ST.add('pipeline', pipeData);
+    added++;
+
+    for (var u = 0; u < 6; u++) {
+      var upd = (c[25 + u] || '').trim();
+      if (upd) ST.add('pipeLog', { pipeId: pipe.id, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString() });
+    }
+  });
+
+  closeMForce();
+  toast('✅ นำเข้าแล้ว: ' + added + ' โครงการ' + (skipped ? ' (ข้าม ' + skipped + ')' : ''));
+  render();
 }
