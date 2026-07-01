@@ -2290,10 +2290,10 @@ var _pipeSheetInstance = null;
 var _pipeSheetIds = [];
 
 function initPipeSheet(pipes) {
-  if (typeof jspreadsheet === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
+  if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
   var el = document.getElementById('pipeSheetEl');
   if (!el) return;
-  if (el.jspreadsheet) { el.jspreadsheet.destroy(); el.innerHTML = ''; }
+  if (el.jexcel) { jexcel.destroy(el); el.innerHTML = ''; }
 
   var cfg = getConfig();
   var statusNames = (cfg.pipelineStatuses || []).map(function(s) { return s.name; });
@@ -2323,7 +2323,7 @@ function initPipeSheet(pipes) {
     ];
   });
 
-  _pipeSheetInstance = jspreadsheet(el, {
+  _pipeSheetInstance = jexcel(el, {
     data: data,
     columns: [
       { title: 'Register Date', type: 'text', width: 95 },

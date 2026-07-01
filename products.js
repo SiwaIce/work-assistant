@@ -2459,10 +2459,10 @@ window.Products = {
 // SHEET EDIT (jspreadsheet)
 // ================================================================
 function initProductsSheet(products) {
-  if (typeof jspreadsheet === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
+  if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
   var el = document.getElementById('productsSheetEl');
   if (!el) return;
-  if (el.jspreadsheet) { el.jspreadsheet.destroy(); el.innerHTML = ''; }
+  if (el.jexcel) { jexcel.destroy(el); el.innerHTML = ''; }
 
   _prodSheetIds = products.map(function(p) { return p.id; });
   var data = products.map(function(p) {
@@ -2473,7 +2473,7 @@ function initProductsSheet(products) {
             p.eol ? 'EOL' : 'Active'];
   });
 
-  _prodSheetInstance = jspreadsheet(el, {
+  _prodSheetInstance = jexcel(el, {
     data: data,
     columns: [
       { title: 'SKU', type: 'text', width: 100 },
