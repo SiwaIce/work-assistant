@@ -668,87 +668,86 @@ function _ldAnalyticsHtml(form, subs) {
     .concat(form.companyFields  || [])
     .filter(function(f) { return f.type !== 'section'; });
 
-  var todayStr  = new Date().toISOString().split('T')[0];
-  var todayCnt  = subs.filter(function(s) {
+  var todayStr = new Date().toISOString().split('T')[0];
+  var todayCnt = subs.filter(function(s) {
     if (!s.createdAt) return false;
     var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
     return d.toISOString().split('T')[0] === todayStr;
   }).length;
   var pCnt = subs.filter(function(s) { return s.contactType === 'personal'; }).length;
   var cCnt = subs.filter(function(s) { return s.contactType === 'company'; }).length;
+  var base = window.location.href.replace(/[^/]*$/, '');
+  var previewUrl = base + 'lead-form.html?form=' + form.id;
 
   var h = '<div class="ld-wrap">';
 
   // Header
   h += '<div class="ld-top">';
   h += '<button onclick="rLeads()" class="btn bo bsm">← กลับ</button>';
-  h += '<h2 class="ld-title" style="flex:1;margin:0 12px;font-size:1.05em;">' + esc(form.title) + '</h2>';
-  h += '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">';
+  h += '<h2 class="ld-title">' + esc(form.title) + '</h2>';
+  h += '<div class="ld-view-tabs">';
+  h += '<button class="ld-view-tab act" data-view="analytics" onclick="ldToggleView(\'analytics\')">📊 ข้อมูล</button>';
+  h += '<button class="ld-view-tab" data-view="preview" onclick="ldToggleView(\'preview\')">👁 ตัวอย่าง</button>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">';
   h += '<button onclick="showLeadQR(\'' + form.id + '\')" class="btn bsm bo">📱 QR</button>';
   h += '<button onclick="showEditLeadFormM(\'' + form.id + '\')" class="btn bsm bo">✏️</button>';
   if (subs.length) h += '<button onclick="exportLeadSubs()" class="btn bsm bp">📎 Export</button>';
   if (subs.length) h += '<button id="ldAiBtn" onclick="aiAnalyzeLeads(this)" class="btn bsm bo">🤖 AI</button>';
   h += '</div></div>';
 
-  // Stat cards
-  h += '<div class="ld-stats-row">';
-  h += _ldStatCard(subs.length, 'ทั้งหมด', '🙋', '#3b82f6');
-  h += _ldStatCard(todayCnt,    'วันนี้',   '📅', '#22c55e');
+  // Preview pane (hidden by default — iframe lazy-loaded)
+  h += '<div id="ld-view-preview" style="display:none;padding-top:10px">';
+  h += '<iframe src="' + esc(previewUrl) + '" style="width:100%;height:calc(100vh - 120px);border:none;border-radius:12px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.3)"></iframe>';
+  h += '</div>';
+
+  // Analytics pane
+  h += '<div id="ld-view-analytics">';
+
+  // Compact stat strip
+  h += '<div class="ld-stats-strip">';
+  h += _ldStatChip(subs.length, 'ทั้งหมด', '#3b82f6');
+  h += _ldStatChip(todayCnt, 'วันนี้', '#22c55e');
   if (form.useTypeToggle) {
-    h += _ldStatCard(pCnt, 'บุคคล',  '👤', '#a855f7');
-    h += _ldStatCard(cCnt, 'บริษัท', '🏢', '#f97316');
+    h += _ldStatChip(pCnt, 'บุคคล', '#a855f7');
+    h += _ldStatChip(cCnt, 'บริษัท', '#f97316');
   }
   h += '</div>';
 
   if (!subs.length) {
-    h += '<div style="text-align:center;padding:48px;color:var(--text2);">ยังไม่มีใครกรอกฟอร์มนี้</div>';
-    return h + '</div>';
+    h += '<div style="text-align:center;padding:60px;color:var(--text2)">ยังไม่มีใครกรอกฟอร์มนี้</div>';
+    return h + '</div></div>';
   }
 
   // Charts
   h += '<div class="ld-charts-row">';
 
-  // Bar chart: submissions per day
   var dayData = _ldDayData(subs, 7);
-  h += '<div class="ld-chart-card"><div class="ld-chart-title">📊 Submissions รายวัน (7 วัน)</div>';
-  h += _ldBarChartSvg(dayData);
-  h += '</div>';
+  h += '<div class="ld-chart-card"><div class="ld-chart-title">📊 Submissions รายวัน (7 วัน)</div>' + _ldBarChartSvg(dayData) + '</div>';
 
-  // Type breakdown
   if (form.useTypeToggle && (pCnt + cCnt > 0)) {
-    h += '<div class="ld-chart-card"><div class="ld-chart-title">👥 ประเภทผู้ลงทะเบียน</div>';
-    h += _ldTypeBarSvg(pCnt, cCnt);
-    h += '</div>';
+    h += '<div class="ld-chart-card"><div class="ld-chart-title">👥 ประเภทผู้ลงทะเบียน</div>' + _ldTypeBarSvg(pCnt, cCnt) + '</div>';
   }
 
-  // Field insights (select/radio/multicheck)
-  var insFields = allFields.filter(function(f) { return f.type === 'select' || f.type === 'radio' || f.type === 'multicheck'; }).slice(0, 3);
+  var insFields = allFields.filter(function(f) { return f.type === 'select' || f.type === 'radio' || f.type === 'multicheck'; }).slice(0, 4);
   insFields.forEach(function(f) {
     var counts = {};
     subs.forEach(function(s) {
       var v = s.answers && s.answers[f.id];
       if (!v) return;
-      // multicheck stores comma-separated values — count each option individually
       if (f.type === 'multicheck') {
-        String(v).split(',').forEach(function(part) {
-          var p = part.trim(); if (p) counts[p] = (counts[p] || 0) + 1;
-        });
-      } else {
-        counts[v] = (counts[v] || 0) + 1;
-      }
+        String(v).split(',').forEach(function(part) { var p = part.trim(); if (p) counts[p] = (counts[p] || 0) + 1; });
+      } else { counts[v] = (counts[v] || 0) + 1; }
     });
-    var keys = [];
-    for (var k in counts) { if (counts.hasOwnProperty(k)) keys.push(k); }
+    var keys = Object.keys(counts);
     if (keys.length) {
-      h += '<div class="ld-chart-card"><div class="ld-chart-title">📋 ' + esc(f.label) + '</div>';
-      h += _ldFieldBarSvg(counts);
-      h += '</div>';
+      h += '<div class="ld-chart-card"><div class="ld-chart-title">📋 ' + esc(f.label) + '</div>' + _ldFieldBarSvg(counts) + '</div>';
     }
   });
 
-  h += '</div>'; // end charts row
+  h += '</div>'; // charts row
 
-  // Filter + search
+  // Filter
   _ldFilter = {type: 'all', date: 'all'};
   h += '<div class="ld-filter-wrap">';
   if (form.useTypeToggle) {
@@ -763,25 +762,39 @@ function _ldAnalyticsHtml(form, subs) {
   h += '<button onclick="ldSetFilter(\'date\',\'today\')" class="ld-fbtn">วันนี้</button>';
   h += '<button onclick="ldSetFilter(\'date\',\'week\')" class="ld-fbtn">สัปดาห์นี้</button>';
   h += '<button onclick="ldSetFilter(\'date\',\'month\')" class="ld-fbtn">เดือนนี้</button>';
-  h += '</div></div>';
-  h += '</div>';
+  h += '</div></div></div>';
 
   h += '<div class="ld-search-row">';
   h += '<div class="ld-count-lbl">แสดง <span class="ld-count-num" id="ld_filtered_count">' + subs.length + '</span> จาก ' + subs.length + ' รายการ</div>';
-  h += '<div class="ld-search-box"><span style="color:var(--text2,#64748b);font-size:.88em;">🔍</span>';
+  h += '<div class="ld-search-box"><span style="color:var(--text2,#64748b);font-size:.88em">🔍</span>';
   h += '<input id="ld_search" class="ld-search-inp" placeholder="ค้นหา..." oninput="ldApplyFilters()"></div>';
   h += '</div>';
-  h += '<div id="ld_table_wrap" style="overflow-x:auto;border-radius:10px;border:1px solid var(--border,#334155);">' + _ldTableHtml(form, subs, allFields) + '</div>';
-  h += '</div>';
+  h += '<div id="ld_table_wrap" style="overflow-x:auto;border-radius:10px;border:1px solid var(--border,#334155)">' + _ldTableHtml(form, subs, allFields) + '</div>';
+  h += '</div>'; // ld-view-analytics
+  h += '</div>'; // ld-wrap
   return h;
 }
 
+function _ldStatChip(n, label, color) {
+  return '<div class="ld-stat2"><div class="ld-stat2-dot" style="background:' + color + '"></div>' +
+    '<div><div class="ld-stat2-num" style="color:' + color + '">' + n + '</div>' +
+    '<div class="ld-stat2-lbl">' + label + '</div></div></div>';
+}
 function _ldStatCard(n, label, icon, color) {
   var c = color || '#3b82f6';
   return '<div class="ld-stat" style="border-top:3px solid ' + c + ';">' +
     '<div class="ld-stat-icon">' + icon + '</div>' +
     '<div class="ld-stat-num" style="color:' + c + ';">' + n + '</div>' +
     '<div class="ld-stat-lbl">' + label + '</div></div>';
+}
+function ldToggleView(v) {
+  ['analytics','preview'].forEach(function(k) {
+    var el = document.getElementById('ld-view-' + k);
+    if (el) el.style.display = k === v ? '' : 'none';
+  });
+  document.querySelectorAll('.ld-view-tab').forEach(function(b) {
+    b.classList.toggle('act', b.getAttribute('data-view') === v);
+  });
 }
 
 function ldSetFilter(key, val) {
