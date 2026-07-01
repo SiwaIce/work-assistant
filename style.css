@@ -9161,3 +9161,24 @@ input:focus, select:focus, textarea:focus {
   a[href]:after{content:none}
   @page{margin:20mm}
 }
+
+/* ===== PRODUCT CATALOG GRID VIEW ===== */
+.prod-catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px;padding:4px 0}
+.prod-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .1s}
+.prod-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.prod-card-img{width:100%;aspect-ratio:1/1;background:var(--bg2);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.prod-card-nopic{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text3)}
+.prod-card-body{padding:9px 10px 11px}
+.prod-card-name{font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.prod-card-sku{font-size:11px;color:var(--text3);font-family:monospace;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-card-price{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.prod-card-levels{display:flex;gap:4px;flex-wrap:wrap}
+.prod-card-levels span{font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:2px 5px;color:var(--text2);white-space:nowrap}
+.prod-card-levels small{display:block;font-size:9px;color:var(--text3);line-height:1;margin-bottom:1px}
+.prod-detail-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:13px}
+.prod-detail-row span:first-child{color:var(--text3)}
+.prod-detail-row span:last-child{font-weight:500}
+.prod-detail-section{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
+.prod-price-s span:last-child{color:#3b82f6}
+.prod-price-a span:last-child{color:#8b5cf6}
+.prod-price-b span:last-child{color:var(--accent)}

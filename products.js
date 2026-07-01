@@ -442,6 +442,9 @@ function showEditProductModal(productId) {
   html += '<div class="fg"><label><input type="checkbox" id="edit_is_service"' + (p.isService ? ' checked' : '') + '> 🛠️ Service</label></div>';
   html += '</div>';
   
+  html += '<div class="form-section">🖼️ รูปภาพสินค้า</div>';
+  html += '<div class="fg"><label>URL รูปภาพ (Direct link)</label><input type="url" id="edit_image_url" class="fm-input" value="' + sanitize(p.imageUrl || '') + '" placeholder="https://..."></div>';
+  if (p.imageUrl) html += '<div class="fg" style="margin-top:4px"><img src="' + sanitize(p.imageUrl) + '" style="max-height:80px;border-radius:6px;border:1px solid var(--border)" onerror="this.style.display=\'none\'"></div>';
   html += '<div class="fm-actions" style="margin-top:16px">';
   html += '<button class="btn btn-blue" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
   html += '<button class="btn bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️ ลบสินค้า</button>';
@@ -476,6 +479,7 @@ function saveProductEdit(productId) {
     isBundle: document.getElementById('edit_is_bundle').checked,
     isSoftware: document.getElementById('edit_is_software').checked,
     isService: document.getElementById('edit_is_service').checked,
+    imageUrl: (document.getElementById('edit_image_url') ? document.getElementById('edit_image_url').value.trim() : '') || '',
     price: parseNum(document.getElementById('edit_price_b').value),
     typePrices: {
       S: parseNum(document.getElementById('edit_price_s').value),
@@ -1143,6 +1147,7 @@ function clearAllProductsData() {
 var productSearch = '';
 var productCategoryFilter = 'all';
 var productTypeFilter = 'all';     // ✅ เพิ่ม: 'all', 'main', 'demo'
+var productViewMode = 'table';
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
@@ -1195,19 +1200,28 @@ function rProducts(el) {
   html += '</select>';
   
   html += '<button class="btn bsm bo" onclick="resetProductFilters()">✖️ ล้าง</button>';
+  html += '<span style="margin-left:auto;display:flex;gap:4px">';
+  html += '<button id="btnProdTable" class="btn bsm' + (productViewMode==='table'?' bp':'') + '" onclick="setProductView(\'table\')">📋 Table</button>';
+  html += '<button id="btnProdCatalog" class="btn bsm' + (productViewMode==='catalog'?' bp':'') + '" onclick="setProductView(\'catalog\')">🖼️ Catalog</button>';
+  html += '</span>';
   html += '</div>';
-  
+
+  html += '<div id="productsTableWrap"' + (productViewMode==='catalog' ? ' style="display:none"' : '') + '>';
   html += '<div class="export-wrap"><table class="export-table" id="productsTable"><thead><tr>';
   html += '<th>#</th><th>SKU</th><th>EAN</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th>';
   html += '<th>RRP in Vat</th><th>RRP Ex Vat</th>';
   html += '<th>S</th><th>A</th><th>B</th><th>Other</th>';
   html += '<th>สถานะ</th><th></th>';
   html += '</thead><tbody id="productsTableBody"></tbody></table></div>';
-  html += '<div class="hint" style="margin-top:6px;text-align:right">พบ ' + products.length + ' รายการ</div>';
   html += '</div>';
-  
+  html += '<div id="productsCatalogWrap"' + (productViewMode==='table' ? ' style="display:none"' : '') + '>';
+  html += '<div class="prod-catalog-grid" id="productsCatalogGrid"></div>';
+  html += '</div>';
+  html += '<div class="hint" style="margin-top:6px;text-align:right" id="productsCount">พบ ' + products.length + ' รายการ</div>';
+  html += '</div>';
+
   el.innerHTML = html;
-  renderProductsTable(products);
+  if (productViewMode === 'catalog') { renderProductsCatalog(products); } else { renderProductsTable(products); }
   
   // ✅ ฟังก์ชัน renderProductsList (อัปเดตให้รองรับ type filter)
   window.renderProductsList = function() {
@@ -1236,7 +1250,9 @@ function rProducts(el) {
     productSearch = q;
     productCategoryFilter = cat;
     productTypeFilter = type;
-    renderProductsTable(newProducts);
+    var cnt = document.getElementById('productsCount');
+    if (cnt) cnt.textContent = 'พบ ' + newProducts.length + ' รายการ';
+    if (productViewMode === 'catalog') { renderProductsCatalog(newProducts); } else { renderProductsTable(newProducts); }
   };
 }
 
@@ -1256,6 +1272,96 @@ function resetProductFilters() {
   if (typeSelect) typeSelect.value = 'all';
   
   renderProductsList();
+}
+
+function setProductView(mode) {
+  productViewMode = mode;
+  var tw = document.getElementById('productsTableWrap');
+  var cw = document.getElementById('productsCatalogWrap');
+  var bt = document.getElementById('btnProdTable');
+  var bc = document.getElementById('btnProdCatalog');
+  if (tw) tw.style.display = mode === 'table' ? '' : 'none';
+  if (cw) cw.style.display = mode === 'catalog' ? '' : 'none';
+  if (bt) bt.className = 'btn bsm' + (mode === 'table' ? ' bp' : '');
+  if (bc) bc.className = 'btn bsm' + (mode === 'catalog' ? ' bp' : '');
+  if (typeof renderProductsList === 'function') renderProductsList();
+}
+
+function renderProductsCatalog(products) {
+  var grid = document.getElementById('productsCatalogGrid');
+  if (!grid) return;
+  var html = '';
+  for (var i = 0; i < products.length; i++) {
+    var p = products[i];
+    var catIcon = getCategoryIcon(p.category) || '📦';
+    var imgContent;
+    if (p.imageUrl) {
+      imgContent = '<img src="' + sanitize(p.imageUrl) + '" alt="' + sanitize(p.name) + '" style="width:100%;height:100%;object-fit:contain;padding:10px" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">' +
+                   '<div class="prod-card-nopic" style="display:none"><span style="font-size:28px">' + catIcon + '</span></div>';
+    } else {
+      imgContent = '<div class="prod-card-nopic"><span style="font-size:28px">' + catIcon + '</span></div>';
+    }
+    var statusTag = p.eol ? '<span class="tag tag-cancelled" style="position:absolute;top:5px;right:5px;font-size:10px;padding:2px 5px">EOL</span>' : '';
+    var tp = p.typePrices || {};
+    html += '<div class="prod-card" onclick="showProductDetailM(\'' + p.id + '\')">';
+    html += '<div class="prod-card-img">' + imgContent + statusTag + '</div>';
+    html += '<div class="prod-card-body">';
+    html += '<div class="prod-card-name">' + sanitize(p.name) + '</div>';
+    if (p.sku) html += '<div class="prod-card-sku">' + sanitize(p.sku) + '</div>';
+    html += '<div class="prod-card-price">RRP ฿' + fmtMoney(p.rrpInVat || p.rrpExVat || p.price || 0) + '</div>';
+    html += '<div class="prod-card-levels">';
+    html += '<span><small>S</small>฿' + fmtMoney(tp.S || 0) + '</span>';
+    html += '<span><small>A</small>฿' + fmtMoney(tp.A || 0) + '</span>';
+    html += '<span><small>B</small>฿' + fmtMoney(tp.B || p.price || 0) + '</span>';
+    html += '</div>';
+    html += '</div></div>';
+  }
+  grid.innerHTML = html || '<div class="empty">ไม่พบสินค้า</div>';
+}
+
+function showProductDetailM(productId) {
+  var p = getProductById(productId);
+  if (!p) return;
+  var catIcon = getCategoryIcon(p.category) || '📦';
+  var catName = getCategoryName(p.category);
+  var tp = p.typePrices || {};
+  var statusBadge = p.eol
+    ? '<span class="tag tag-cancelled">⏰ EOL</span>'
+    : '<span class="tag tag-completed">✅ มีขาย</span>';
+  if (isDemoProduct(p)) statusBadge += ' <span class="tag" style="background:#f59e0b;color:#fff">🎪 Demo</span>';
+
+  var imgSection = '';
+  if (p.imageUrl) {
+    imgSection = '<div style="text-align:center;margin-bottom:14px"><img src="' + sanitize(p.imageUrl) + '" alt="' + sanitize(p.name) + '" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:8px;border:1px solid var(--border)" onerror="this.style.display=\'none\'"></div>';
+  } else {
+    imgSection = '<div style="text-align:center;font-size:48px;margin-bottom:12px">' + catIcon + '</div>';
+  }
+
+  var html = '<div style="max-width:420px">';
+  html += imgSection;
+  html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">';
+  html += '<div><strong style="font-size:15px">' + sanitize(p.name) + '</strong></div>';
+  html += '<div style="white-space:nowrap">' + statusBadge + '</div>';
+  html += '</div>';
+
+  html += '<div class="prod-detail-row"><span>หมวดหมู่</span><span>' + catIcon + ' ' + sanitize(catName) + '</span></div>';
+  if (p.sku) html += '<div class="prod-detail-row"><span>SKU</span><span style="font-family:monospace">' + sanitize(p.sku) + '</span></div>';
+  if (p.ean) html += '<div class="prod-detail-row"><span>EAN</span><span style="font-family:monospace">' + sanitize(p.ean) + '</span></div>';
+
+  html += '<div class="prod-detail-section">ราคา</div>';
+  html += '<div class="prod-detail-row"><span>RRP in Vat</span><span>฿' + fmtMoney(p.rrpInVat || 0) + '</span></div>';
+  html += '<div class="prod-detail-row"><span>RRP Ex Vat</span><span>฿' + fmtMoney(p.rrpExVat || 0) + '</span></div>';
+  html += '<div class="prod-detail-row prod-price-s"><span>S (Type 1)</span><span>฿' + fmtMoney(tp.S || 0) + '</span></div>';
+  html += '<div class="prod-detail-row prod-price-a"><span>A (Type 2)</span><span>฿' + fmtMoney(tp.A || 0) + '</span></div>';
+  html += '<div class="prod-detail-row prod-price-b"><span>B (Type 3)</span><span>฿' + fmtMoney(tp.B || p.price || 0) + '</span></div>';
+  html += '<div class="prod-detail-row"><span>Other (Type 4)</span><span>฿' + fmtMoney(tp.Other || 0) + '</span></div>';
+
+  html += '<div class="fm-actions" style="margin-top:14px">';
+  html += '<button class="btn btn-blue" onclick="closeMForce();showEditProductModal(\'' + p.id + '\')">✏️ แก้ไข</button>';
+  html += '<button class="btn" onclick="closeM()">ปิด</button>';
+  html += '</div></div>';
+
+  openM(catIcon + ' ' + sanitize(p.name), html);
 }
 
 // ✅ ฟังก์ชัน isDemoProduct (ใช้สำหรับกรอง)
@@ -1883,11 +1989,13 @@ function showAddProductM() {
     '<div class="fg"><label><input type="checkbox" id="new_is_demo"> 🎪 Demo Unit</label></div>' +  // ✅ เพิ่ม checkbox Demo
     '</div>' +
     
+    '<div class="form-section">🖼️ รูปภาพสินค้า</div>' +
+    '<div class="fg"><label>URL รูปภาพ (Direct link)</label><input type="url" id="new_image_url" class="fm-input" placeholder="https://..."></div>' +
     '<div class="fm-actions" style="margin-top:16px">' +
     '<button class="btn btn-blue" onclick="addProductFromModal()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
-  
+
   openM('➕ เพิ่มสินค้า', html);
 }
 
@@ -1923,6 +2031,7 @@ function addProductFromModal() {
     isSoftware: document.getElementById('new_is_software').checked,
     isService: document.getElementById('new_is_service').checked,
     isDemo: isDemo,
+    imageUrl: document.getElementById('new_image_url') ? document.getElementById('new_image_url').value.trim() : '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
