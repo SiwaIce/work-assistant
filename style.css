@@ -9190,6 +9190,7 @@ input:focus, select:focus, textarea:focus {
 .jexcel_container{border:1px solid var(--border)!important;border-radius:8px;overflow:auto;margin-bottom:4px}
 #productsSheetEl .jexcel_container{width:100%}
 #productsSheetEl table.jexcel{width:100%}
+#pipeSheetEl .jexcel_container{overflow:auto;max-height:calc(100vh - 200px);width:100%}
 .jexcel_content{background:var(--card)!important}
 .jexcel{border-collapse:collapse!important;font-size:12px!important;font-family:inherit!important}
 .jexcel thead th,.jexcel .jexcel_row{background:var(--bg2,#1e2023)!important;color:var(--text2)!important;border-color:var(--border)!important;font-size:11px!important}
