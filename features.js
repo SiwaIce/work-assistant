@@ -3928,6 +3928,7 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
     h += '<div class="vp-item-actions">';
     if (!isLead && dd) h += '<button class="btn-xs" onclick="event.stopPropagation();vpGoVisit(\'' + p.id + '\')" title="บันทึก Visit Report">📍</button>';
     if (isLead && p.status !== 'done') h += '<button class="btn-xs" onclick="event.stopPropagation();showVpLeadActualM(\'' + p.id + '\')" title="บันทึกผล">📍</button>';
+    if (isLead && p.status === 'done' && p.visitId) h += '<button class="btn-xs" onclick="event.stopPropagation();go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})" title="ดู Visit Report">📝</button>';
     h += '<button class="btn-xs" onclick="event.stopPropagation();showVpEmailM(\'' + p.id + '\')" title="ส่ง Email นัด">📧</button>';
     h += '<button class="btn-xs" onclick="event.stopPropagation();showAddVisitPlanM(\'' + p.date + '\',\'\',\'' + p.id + '\')" title="แก้ไข">✏️</button>';
     h += '<button class="btn-xs btn-red" onclick="event.stopPropagation();removeVisitPlan(\'' + p.id + '\')" title="ลบ">✕</button>';
@@ -3972,7 +3973,7 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
 
   h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
-  if (!isLead && p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report เต็ม →</button>';
+  if (p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report →</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm" style="background:#22c55e;color:#fff" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
   if (isLead) h2 += '<button class="btn bsm bo" onclick="vpConvertLeadToDealer(\'' + p.id + '\')">➕ แปลงเป็น Dealer</button>';
@@ -4338,6 +4339,34 @@ function showVpLeadActualM(planId) {
 
 // ปุ่มลัด — ไปตามนัดแล้วไม่มีโน้ตเพิ่ม กดทีเดียวจบเหมือนฝั่ง Dealer (ของเดิม Lead ต้องเปิด modal เสมอ)
 // ยังเปิด modal ปกติได้ถ้าต้องการใส่โน้ต/เลื่อนนัด/ยกเลิก ผ่านปุ่ม "📍 บันทึกผลการนัด" คู่กัน — ไม่ได้ตัดความสามารถนั้นออก
+function _createVisitFromPlan(planId, note) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan || plan.visitId) return; // already linked
+  var cfg = getConfig();
+  var company = plan.companyName || '';
+  if (plan.prospectId) {
+    var pr = typeof getProspect === 'function' ? getProspect(plan.prospectId) : ST.getOne('prospects', plan.prospectId);
+    if (pr && pr.companyName) company = pr.companyName;
+  }
+  var summaryText = (company ? '[' + company + '] ' : '') + (note || '');
+  var visitObj = ST.add('visits', {
+    date: plan.date || _td(),
+    time: plan.timeStart || '',
+    dealerId: '',
+    company: company,
+    contact: plan.contactName || '',
+    mode: plan.mode || 'offline',
+    summary: summaryText.trim(),
+    saleName: (cfg.saleName || ''),
+    reportMode: 'quick',
+    topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: [],
+    visitPlanId: planId
+  });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visits', ST.getAll('visits'));
+  ST.update('visitPlans', planId, { visitId: visitObj.id });
+  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+}
+
 function vpQuickMarkAttended(planId) {
   var plan = ST.getOne('visitPlans', planId);
   if (!plan) return;
@@ -4346,8 +4375,9 @@ function vpQuickMarkAttended(planId) {
     actual: { status: 'attended', note: (plan.actual && plan.actual.note) || '', date: _td() }
   });
   if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  _createVisitFromPlan(planId, (plan.actual && plan.actual.note) || '');
   if (plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', 'เข้าพบตามนัดแล้ว');
-  toast('✅ บันทึกแล้ว — ไปตามนัด');
+  toast('✅ บันทึกแล้ว · สร้าง Visit Report แล้ว');
   render();
 }
 
@@ -4359,9 +4389,12 @@ function saveVpLeadActual(planId, status) {
     actual: { status: status, note: note, date: _td() }
   });
   if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
-  if (status === 'attended' && plan && plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', note || 'เข้าพบตามนัดแล้ว');
+  if (status === 'attended') {
+    _createVisitFromPlan(planId, note);
+    if (plan && plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', note || 'เข้าพบตามนัดแล้ว');
+  }
   closeMForce();
-  toast('💾 บันทึกผลแล้ว');
+  toast('💾 บันทึกผลแล้ว' + (status === 'attended' ? ' · สร้าง Visit Report แล้ว' : ''));
   render();
 }
 
