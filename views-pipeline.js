@@ -571,7 +571,7 @@ function rPipeline(el) {
 
     (pipeView === 'card' ? renderPipeCards(pipes) :
      pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
-     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
+     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><button class="btn bo" onclick="recalcAllPipeQty()" title="คำนวณ Qty ทั้งหมดจากช่อง Model">🔄 Qty</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
      renderPipeTable(pipes)) +
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
@@ -2284,10 +2284,44 @@ function viewForecastDetail(dealerId, updateId) {
 }
 
 // ================================================================
-// SHEET EDIT (jspreadsheet — Pipeline)
+// SHEET EDIT (jexcel — Pipeline)
 // ================================================================
 var _pipeSheetInstance = null;
 var _pipeSheetIds = [];
+
+// cols: 0=RegDate,1=ProjName,2=EUTH,3=EUEN,4=Unit,5=Dealer,6=DJI,7=Revenue,
+//       8=Model,9=M3M,10=M4T,11=M4E,12=Dock3,13=M4TD,14=M400,
+//       15=Forecast,16=Real,17=BidDate,18=ShipDate,19=Status,20=Sale,21=Remark
+
+// Parses "Name*qty\n..." Model cell text → fills 6 qty cells via jexcel
+function _autoCalcPipeQty(el, rowIdx, modelText, qtyStartCol) {
+  var g = { m3m: 0, m4t: 0, m4e: 0, dock3: 0, m4td: 0, m400: 0 };
+  (modelText || '').split('\n').filter(Boolean).forEach(function(line) {
+    var parts = line.split('*');
+    var name = (parts[0] || '').trim().toUpperCase();
+    var qty = parseInt(parts[1]) || 1;
+    if (name.indexOf('M3M') !== -1 || name.indexOf('MULTISPECTRAL') !== -1) g.m3m += qty;
+    else if (name.indexOf('M4TD') !== -1) g.m4td += qty;
+    else if (name.indexOf('M4T') !== -1) g.m4t += qty;
+    else if (name.indexOf('M4E') !== -1) g.m4e += qty;
+    else if (name.indexOf('M400') !== -1) g.m400 += qty;
+    else if (name.indexOf('DOCK') !== -1) g.dock3 += qty;
+  });
+  var sheet = el.jexcel;
+  if (!sheet) return;
+  [g.m3m, g.m4t, g.m4e, g.dock3, g.m4td, g.m400].forEach(function(qty, i) {
+    sheet.setValueFromCoords(qtyStartCol + i, rowIdx, qty || '', true);
+  });
+}
+
+function recalcAllPipeQty() {
+  var el = document.getElementById('pipeSheetEl');
+  if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  el.jexcel.getData().forEach(function(row, idx) {
+    if (row[8]) _autoCalcPipeQty(el, idx, row[8], 9);
+  });
+  toast('🔄 คำนวณ Qty จาก Model แล้ว');
+}
 
 function initPipeSheet(pipes) {
   if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
@@ -2313,9 +2347,14 @@ function initPipeSheet(pipes) {
   _pipeSheetIds = pipes.map(function(p) { return p.id; });
   var data = pipes.map(function(p) {
     var statusObj = (cfg.pipelineStatuses || []).find(function(s) { return s.id === p.status; });
+    var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+    var g = _pipeModelQtyByGroup(items);
+    var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
     return [
       fmtDate(p.registerDate), p.projectName||'', p.endUserTH||'', p.endUserEN||'',
       p.unitType||'', dealerById[p.dealerId]||'', p.djiDealer||'',
+      p.projectRevenue||0, modelCell,
+      g.m3m||0, g.m4t||0, g.m4e||0, g.dock3||0, g.m4td||0, g.m400||0,
       p.forecastAmount||0, p.realAmount||0,
       fmtDate(p.biddingDate), fmtDate(p.shipmentDate),
       statusObj ? statusObj.name : (p.status||''),
@@ -2326,25 +2365,36 @@ function initPipeSheet(pipes) {
   _pipeSheetInstance = jexcel(el, {
     data: data,
     columns: [
-      { title: 'Register Date', type: 'text', width: 95 },
-      { title: 'Project Name', type: 'text', width: 220 },
-      { title: 'End User TH', type: 'text', width: 150 },
-      { title: 'End User EN', type: 'text', width: 130 },
-      { title: 'Unit type', type: 'text', width: 80 },
-      { title: 'Dealer', type: 'text', width: 130 },
-      { title: 'DJI Dealer', type: 'text', width: 110 },
-      { title: 'Forecast', type: 'numeric', width: 100 },
-      { title: 'Real Amount', type: 'numeric', width: 100 },
-      { title: 'Bidding Date', type: 'text', width: 95 },
-      { title: 'Shipment Date', type: 'text', width: 100 },
-      { title: 'Status', type: 'dropdown', source: statusNames, width: 110 },
-      { title: 'Sale', type: 'text', width: 80 },
-      { title: 'Remark', type: 'text', width: 180 }
+      { title: 'Register Date',  type: 'text',     width: 95  },
+      { title: 'Project Name',   type: 'text',     width: 200 },
+      { title: 'End User TH',    type: 'text',     width: 140 },
+      { title: 'End User EN',    type: 'text',     width: 120 },
+      { title: 'Unit type',      type: 'text',     width: 70  },
+      { title: 'Dealer',         type: 'text',     width: 120 },
+      { title: 'DJI Dealer',     type: 'text',     width: 100 },
+      { title: 'Revenue',        type: 'numeric',  width: 90  },
+      { title: 'Model',          type: 'text',     width: 160 },
+      { title: 'M3M',            type: 'numeric',  width: 50  },
+      { title: 'M4T',            type: 'numeric',  width: 50  },
+      { title: 'M4E',            type: 'numeric',  width: 50  },
+      { title: 'Dock3',          type: 'numeric',  width: 50  },
+      { title: 'M4TD',           type: 'numeric',  width: 50  },
+      { title: 'M400',           type: 'numeric',  width: 50  },
+      { title: 'Forecast',       type: 'numeric',  width: 95  },
+      { title: 'Real Amount',    type: 'numeric',  width: 95  },
+      { title: 'Bidding Date',   type: 'text',     width: 95  },
+      { title: 'Shipment Date',  type: 'text',     width: 95  },
+      { title: 'Status',         type: 'dropdown', source: statusNames, width: 110 },
+      { title: 'Sale',           type: 'text',     width: 80  },
+      { title: 'Remark',         type: 'text',     width: 160 }
     ],
-    minDimensions: [14, Math.max(data.length, 5)],
+    minDimensions: [22, Math.max(data.length, 5)],
     allowInsertRow: false,
     allowDeleteRow: false,
-    contextMenu: false
+    contextMenu: false,
+    onchange: function(el, cell, x, y, value) {
+      if (parseInt(x) === 8) _autoCalcPipeQty(el, parseInt(y), value, 9);
+    }
   });
 }
 
@@ -2356,14 +2406,33 @@ function savePipeSheet() {
   var dealerByName = {};
   dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
 
+  var qtyDefs = [
+    {col:9,  model:'M3M'},   {col:10, model:'M4T'},
+    {col:11, model:'M4E'},   {col:12, model:'Dock 3'},
+    {col:13, model:'M4TD'},  {col:14, model:'M400'}
+  ];
+
   var saved = 0;
   rows.forEach(function(r, idx) {
     var id = _pipeSheetIds[idx];
     if (!id) return;
     var dealerName = (r[5]||'').trim();
     var dealer = dealerByName[dealerName.toLowerCase()];
-    var statusName = (r[11]||'').trim();
+    var statusName = (r[19]||'').trim();
     var statusObj = (cfg.pipelineStatuses||[]).find(function(s){ return s.name === statusName; });
+
+    var items = [];
+    qtyDefs.forEach(function(def) {
+      var qty = parseInt(r[def.col]) || 0;
+      if (qty > 0) items.push({ model: def.model, qty: qty });
+    });
+    // fallback: parse Model text column if no qty cells filled
+    if (!items.length && r[8]) {
+      (r[8]||'').split('\n').filter(Boolean).forEach(function(line) {
+        var p = line.split('*'); var m = (p[0]||'').trim(); var q = parseInt(p[1])||1;
+        if (m) items.push({ model: m, qty: q });
+      });
+    }
 
     ST.update('pipeline', id, {
       registerDate: _pipeDateFromPaste(r[0]),
@@ -2373,13 +2442,15 @@ function savePipeSheet() {
       unitType: (r[4]||'').trim(),
       dealerId: dealer ? dealer.id : (ST.getOne('pipeline', id)||{}).dealerId || '',
       djiDealer: (r[6]||'').trim(),
-      forecastAmount: parseFloat(r[7])||0,
-      realAmount: parseFloat(r[8])||0,
-      biddingDate: _pipeDateFromPaste(r[9]),
-      shipmentDate: _pipeDateFromPaste(r[10]),
-      status: statusObj ? statusObj.id : (r[11]||'prospect'),
-      saleName: (r[12]||'').trim(),
-      remark: (r[13]||'').trim(),
+      projectRevenue: parseFloat(r[7])||0,
+      items: items,
+      forecastAmount: parseFloat(r[15])||0,
+      realAmount: parseFloat(r[16])||0,
+      biddingDate: _pipeDateFromPaste(r[17]),
+      shipmentDate: _pipeDateFromPaste(r[18]),
+      status: statusObj ? statusObj.id : (r[19]||'prospect'),
+      saleName: (r[20]||'').trim(),
+      remark: (r[21]||'').trim(),
       updatedAt: new Date().toISOString()
     });
     saved++;

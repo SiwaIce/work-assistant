@@ -534,6 +534,11 @@ function rDealerDet(el) {
   </div>
 
   <div id="dealerTabContent">${renderDealerTab(d)}</div>`;
+
+  if (dealerTab === 'pipeline' && dealerPipeViewMode === 'sheetedit') {
+    var _d = d;
+    setTimeout(function() { initDealerPipeSheet(ST.pipelineByDealer(_d.id)); }, 0);
+  }
 }
 
 function renderDealerTab(d) {
@@ -800,6 +805,7 @@ function dealerPipelineTab(d) {
   h += '<button class="btn bsm bo" onclick="copyDealerPipeline(\'' + d.id + '\')" title="Copy">📋</button>';
   h += '<button class="btn bsm bo" onclick="dlPipeCSVForDealer(\'' + d.id + '\')" title="Export CSV">📤</button>';
   h += '<button class="btn bsm ' + (dealerPipeViewMode === 'sheet' ? 'bp' : 'bo') + '" onclick="dealerPipeViewMode=dealerPipeViewMode===\'sheet\'?\'list\':\'sheet\';render()" title="มุมมอง Sheet เต็มคอลัมน์">📊</button>';
+  h += '<button class="btn bsm ' + (dealerPipeViewMode === 'sheetedit' ? 'bp' : 'bo') + '" onclick="dealerPipeViewMode=dealerPipeViewMode===\'sheetedit\'?\'list\':\'sheetedit\';render()" title="แก้ไขแบบตาราง">🗂️</button>';
   h += '<button class="btn bsm bp" onclick="showPipelineM(\'' + d.id + '\')">➕</button>';
   h += '</span></h2>';
 
@@ -811,7 +817,14 @@ function dealerPipelineTab(d) {
   h += '<div class="sc"><div class="sn c4">' + fmtMoneyShort(lostAmt) + '</div><div class="sl">Lost (' + lostCount + ')</div></div>';
   h += '</div>';
 
-  if (pipes.length && dealerPipeViewMode === 'sheet') {
+  if (pipes.length && dealerPipeViewMode === 'sheetedit') {
+    h += '<div id="dealerPipeSheetEl" style="overflow-x:auto"></div>';
+    h += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center">';
+    h += '<button class="btn bp" onclick="saveDealerPipeSheet()">💾 บันทึกทั้งหมด</button>';
+    h += '<button class="btn bo" onclick="recalcAllDealerPipeQty()" title="คำนวณ Qty จาก Model">🔄 Qty</button>';
+    h += '<span id="dealerPipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span>';
+    h += '</div>';
+  } else if (pipes.length && dealerPipeViewMode === 'sheet') {
     h += renderPipeSheetTable(pipes);
   } else if (pipes.length) {
     pipes.forEach(function(p, idx) {
@@ -3809,4 +3822,147 @@ async function syncAllPipelinesToFirebase(dealerId) {
     console.error('Sync pipelines error:', e);
     return false;
   }
+}
+
+// ================================================================
+// DEALER PIPELINE SHEET EDIT (jexcel)
+// ================================================================
+// cols: 0=RegDate,1=ProjName,2=EUTH,3=EUEN,4=Unit,5=DJI,6=Revenue,
+//       7=Model,8=M3M,9=M4T,10=M4E,11=Dock3,12=M4TD,13=M400,
+//       14=Forecast,15=Real,16=BidDate,17=ShipDate,18=Status,19=Sale,20=Remark
+var _dealerPipeSheetInstance = null;
+var _dealerPipeSheetIds = [];
+
+function recalcAllDealerPipeQty() {
+  var el = document.getElementById('dealerPipeSheetEl');
+  if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  el.jexcel.getData().forEach(function(row, idx) {
+    if (row[7]) _autoCalcPipeQty(el, idx, row[7], 8);
+  });
+  toast('🔄 คำนวณ Qty จาก Model แล้ว');
+}
+
+function initDealerPipeSheet(pipes) {
+  if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
+  var el = document.getElementById('dealerPipeSheetEl');
+  if (!el) return;
+  if (el.jexcel) { jexcel.destroy(el); el.innerHTML = ''; }
+
+  var cfg = getConfig();
+  var statusNames = (cfg.pipelineStatuses || []).map(function(s) { return s.name; });
+  if (!statusNames.length) statusNames = ['Prospect','TOR Review','Quotation','Bidding','Negotiation','Win','Lost'];
+
+  function fmtDate(s) {
+    if (!s) return '';
+    var p = (s||'').slice(0,10).split('-');
+    return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : s;
+  }
+
+  _dealerPipeSheetIds = pipes.map(function(p) { return p.id; });
+  var data = pipes.map(function(p) {
+    var statusObj = (cfg.pipelineStatuses||[]).find(function(s){ return s.id === p.status; });
+    var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+    var g = _pipeModelQtyByGroup(items);
+    var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
+    return [
+      fmtDate(p.registerDate), p.projectName||'', p.endUserTH||'', p.endUserEN||'',
+      p.unitType||'', p.djiDealer||'',
+      p.projectRevenue||0, modelCell,
+      g.m3m||0, g.m4t||0, g.m4e||0, g.dock3||0, g.m4td||0, g.m400||0,
+      p.forecastAmount||0, p.realAmount||0,
+      fmtDate(p.biddingDate), fmtDate(p.shipmentDate),
+      statusObj ? statusObj.name : (p.status||''),
+      p.saleName||'', p.remark||''
+    ];
+  });
+
+  _dealerPipeSheetInstance = jexcel(el, {
+    data: data,
+    columns: [
+      { title: 'Register Date',  type: 'text',     width: 95  },
+      { title: 'Project Name',   type: 'text',     width: 200 },
+      { title: 'End User TH',    type: 'text',     width: 140 },
+      { title: 'End User EN',    type: 'text',     width: 120 },
+      { title: 'Unit type',      type: 'text',     width: 70  },
+      { title: 'DJI Dealer',     type: 'text',     width: 110 },
+      { title: 'Revenue',        type: 'numeric',  width: 90  },
+      { title: 'Model',          type: 'text',     width: 160 },
+      { title: 'M3M',            type: 'numeric',  width: 50  },
+      { title: 'M4T',            type: 'numeric',  width: 50  },
+      { title: 'M4E',            type: 'numeric',  width: 50  },
+      { title: 'Dock3',          type: 'numeric',  width: 50  },
+      { title: 'M4TD',           type: 'numeric',  width: 50  },
+      { title: 'M400',           type: 'numeric',  width: 50  },
+      { title: 'Forecast',       type: 'numeric',  width: 95  },
+      { title: 'Real Amount',    type: 'numeric',  width: 95  },
+      { title: 'Bidding Date',   type: 'text',     width: 95  },
+      { title: 'Shipment Date',  type: 'text',     width: 95  },
+      { title: 'Status',         type: 'dropdown', source: statusNames, width: 110 },
+      { title: 'Sale',           type: 'text',     width: 80  },
+      { title: 'Remark',         type: 'text',     width: 160 }
+    ],
+    minDimensions: [21, Math.max(data.length, 5)],
+    allowInsertRow: false,
+    allowDeleteRow: false,
+    contextMenu: false,
+    onchange: function(el, cell, x, y, value) {
+      if (parseInt(x) === 7) _autoCalcPipeQty(el, parseInt(y), value, 8);
+    }
+  });
+}
+
+function saveDealerPipeSheet() {
+  if (!_dealerPipeSheetInstance) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  var rows = _dealerPipeSheetInstance.getData();
+  var cfg = getConfig();
+
+  var qtyDefs = [
+    {col:8,  model:'M3M'},   {col:9,  model:'M4T'},
+    {col:10, model:'M4E'},   {col:11, model:'Dock 3'},
+    {col:12, model:'M4TD'},  {col:13, model:'M400'}
+  ];
+
+  var saved = 0;
+  rows.forEach(function(r, idx) {
+    var id = _dealerPipeSheetIds[idx];
+    if (!id) return;
+    var statusName = (r[18]||'').trim();
+    var statusObj = (cfg.pipelineStatuses||[]).find(function(s){ return s.name===statusName; });
+
+    var items = [];
+    qtyDefs.forEach(function(def) {
+      var qty = parseInt(r[def.col]) || 0;
+      if (qty > 0) items.push({ model: def.model, qty: qty });
+    });
+    if (!items.length && r[7]) {
+      (r[7]||'').split('\n').filter(Boolean).forEach(function(line) {
+        var p = line.split('*'); var m = (p[0]||'').trim(); var q = parseInt(p[1])||1;
+        if (m) items.push({ model: m, qty: q });
+      });
+    }
+
+    ST.update('pipeline', id, {
+      registerDate: _pipeDateFromPaste(r[0]),
+      projectName: (r[1]||'').trim(),
+      endUserTH: (r[2]||'').trim(),
+      endUserEN: (r[3]||'').trim(),
+      unitType: (r[4]||'').trim(),
+      djiDealer: (r[5]||'').trim(),
+      projectRevenue: parseFloat(r[6])||0,
+      items: items,
+      forecastAmount: parseFloat(r[14])||0,
+      realAmount: parseFloat(r[15])||0,
+      biddingDate: _pipeDateFromPaste(r[16]),
+      shipmentDate: _pipeDateFromPaste(r[17]),
+      status: statusObj ? statusObj.id : (r[18]||'prospect'),
+      saleName: (r[19]||'').trim(),
+      remark: (r[20]||'').trim(),
+      updatedAt: new Date().toISOString()
+    });
+    saved++;
+  });
+
+  var st = document.getElementById('dealerPipeSheetStatus');
+  if (st) st.textContent = '✅ บันทึก ' + saved + ' รายการ';
+  toast('💾 บันทึก ' + saved + ' รายการ');
 }
