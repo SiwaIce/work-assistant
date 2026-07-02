@@ -644,6 +644,7 @@ function sortPipes(pipes, sortBy) {
 function renderPipeCards(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
   pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
+  var _qtMap = _buildQtMap();
 
   var html = '<div class="card-grid">';
   for (var i = 0; i < pipes.length; i++) {
@@ -667,7 +668,8 @@ function renderPipeCards(pipes) {
     html += '<div class="dealer-card" style="' + cardBorder + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
     html += '<div style="display:flex;align-items:center;gap:6px"><span class="pipe-row-num">#' + (i + 1) + '</span>';
     html += '<h3 style="font-size:.78rem;margin:0;flex:1">' + sanitize((p.projectName || '').substr(0, 45)) + '</h3>';
-    html += '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="event.stopPropagation();togglePipePin(\'' + p.id + '\')">📌</button></div>';
+    html += '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="event.stopPropagation();togglePipePin(\'' + p.id + '\')">📌</button>';
+    html += '<button class="quick-update-btn" title="ใบเสนอราคา" onclick="event.stopPropagation();showPipelineQuotesM(\'' + p.id + '\')">' + (_qtMap[p.id] ? '📄 ' + _qtMap[p.id] : '📄') + '</button></div>';
     html += '<div class="meta">' + (d ? d.name : '-') + ' • ' + (p.unitType || '') + '</div>';
     var _fyCard = pipeFYStatus(p);
     html += '<div class="tr">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + (_fyCard ? ' <span class="tag" style="background:' + _fyCard.c + '18;color:' + _fyCard.c + '">' + _fyCard.e + ' ' + _fyCard.t + '</span>' : '') + '</div>';
@@ -680,9 +682,19 @@ function renderPipeCards(pipes) {
   return html;
 }
 
+function _buildQtMap() {
+  var m = {};
+  try {
+    var qs = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+    qs.forEach(function(q) { if (q.pipelineId) m[q.pipelineId] = (m[q.pipelineId]||0)+1; });
+  } catch(e) {}
+  return m;
+}
+
 function renderPipeTable(pipes) {
   if (!pipes.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
   pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
+  var _qtMap = _buildQtMap();
 
   var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead>' +
     (pipeCompareMode ? '<th style="width:30px">เทียบ</th><th>แนวโน้มชนงาน</th>' : '') +
@@ -779,6 +791,7 @@ function renderPipeTable(pipes) {
       '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="togglePipePin(\'' + p.id + '\')">📌</button>' +
+        '<button class="quick-update-btn" title="ใบเสนอราคา" onclick="showPipelineQuotesM(\'' + p.id + '\')">' + (_qtMap[p.id] ? '📄 ' + _qtMap[p.id] : '📄') + '</button>' +
         '<button class="quick-update-btn" onclick="showPipeUpdateM(\'' + p.id + '\')">📝</button>' +
       '</td>' +
       '</tr>';

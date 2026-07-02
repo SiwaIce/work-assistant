@@ -164,7 +164,7 @@ function loadProductsFromFirebase() {
   }).catch(function() { return false; });
 }
 function ensureProductStructure(p) {
-  if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 }, category: 'other', eol: false };
+  if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 }, category: 'other', eol: false, cost: 0 };
   if (p.rrpInVat === undefined) p.rrpInVat = 0;
   if (p.rrpExVat === undefined) p.rrpExVat = 0;
   if (!p.typePrices) {
@@ -183,6 +183,7 @@ function ensureProductStructure(p) {
     else p.category = 'other';
   }
   if (p.eol === undefined) p.eol = false;
+  if (p.cost === undefined) p.cost = 0;
   return p;
 }
 
@@ -453,6 +454,9 @@ function showEditProductModal(productId) {
   html += '<div class="fg"><label>B (Type 3)</label><input type="text" inputmode="decimal" id="edit_price_b" class="fm-input js-money" value="' + nmI(p.price || 0) + '"></div>';
   html += '<div class="fg"><label>Other (Type 4)</label><input type="text" inputmode="decimal" id="edit_price_o" class="fm-input js-money" value="' + nmI(p.typePrices?.Other || 0) + '"></div></div>';
   
+  html += '<div class="form-section">💸 ต้นทุน</div>';
+  html += '<div class="fr"><div class="fg"><label>ต้นทุนสินค้า (฿)</label><input type="text" inputmode="decimal" id="edit_cost" class="fm-input js-money" value="' + nmI(p.cost || 0) + '"></div><div class="fg"></div></div>';
+
   html += '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>';
   html += '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="edit_category" class="fm-input">' + categoryOptions + '</select></div>';
   html += '<div class="fg"><label>⚡ สถานะ EOL</label><div class="radio-g"><label><input type="radio" name="edit_eol" value="1"' + (p.eol ? ' checked' : '') + '><span>⏰ EOL (หมดอายุ)</span></label><label><input type="radio" name="edit_eol" value="0"' + (!p.eol ? ' checked' : '') + '><span>✅ ปกติ</span></label></div></div></div>';
@@ -508,12 +512,42 @@ function saveProductEdit(productId) {
       A: parseNum(document.getElementById('edit_price_a').value),
       B: parseNum(document.getElementById('edit_price_b').value),
       Other: parseNum(document.getElementById('edit_price_o').value)
-    }
+    },
+    cost: parseNum(document.getElementById('edit_cost').value)
   };
   
   updateProduct(productId, updates);
   closeMForce();
   toast('💾 บันทึกสินค้าเรียบร้อย');
+  render();
+}
+
+function showImportCostM() {
+  var html = '<div style="max-width:480px">';
+  html += '<div class="hint" style="margin-bottom:12px">วางข้อมูล 2 คอลัมน์จาก Excel: <b>SKU</b> | <b>ต้นทุน (฿)</b><br>ระบบจะ UPSERT ต้นทุนตาม SKU โดยไม่แตะราคาอื่น</div>';
+  html += '<textarea id="costImportTa" class="fm-input" rows="10" placeholder="SKU&#9;ต้นทุน&#10;DRONE-001&#9;150000&#10;..."></textarea>';
+  html += '<div class="fm-actions" style="margin-top:12px"><button class="btn bp" onclick="doImportCost()">📥 นำเข้า</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>';
+  html += '</div>';
+  openM('💸 นำเข้าต้นทุนสินค้า', html);
+}
+
+function doImportCost() {
+  var raw = (document.getElementById('costImportTa').value || '').trim();
+  if (!raw) { toast('ไม่มีข้อมูล'); return; }
+  var lines = raw.split('\n');
+  var updated = 0, skipped = 0;
+  lines.forEach(function(line) {
+    var parts = line.split('\t');
+    var sku = (parts[0] || '').trim();
+    var cost = parseFloat((parts[1] || '').replace(/,/g, '')) || 0;
+    if (!sku || !cost) { skipped++; return; }
+    var prod = getProductBySku(sku);
+    if (!prod) { skipped++; return; }
+    updateProduct(prod.id, { cost: cost, updatedAt: new Date().toISOString() });
+    updated++;
+  });
+  closeMForce();
+  toast('💸 อัปเดตต้นทุน ' + updated + ' รายการ' + (skipped ? ' (ข้าม ' + skipped + ')' : ''));
   render();
 }
 
@@ -1201,7 +1235,7 @@ function rProducts(el) {
     products = products.filter(function(p) { return isDemoProduct(p); });
   }
   
-  var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button></span></h2>';
+  var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button></span></h2>';
   
   // ✅ แถบกรอง (เพิ่ม Select สำหรับประเภทสินค้า)
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
@@ -2492,7 +2526,7 @@ function initProductsSheet(products) {
     return [p.sku||'', p.ean||'', p.name||'', p.category||'other',
             p.rrpInVat||0, p.rrpExVat||0,
             tp.S||0, tp.A||0, tp.B||p.price||0, tp.Other||0,
-            p.eol ? 'EOL' : 'Active'];
+            p.eol ? 'EOL' : 'Active', p.cost||0];
   });
 
   _prodSheetInstance = jexcel(el, {
@@ -2508,9 +2542,10 @@ function initProductsSheet(products) {
       { title: 'A', type: 'numeric', width: 80 },
       { title: 'B', type: 'numeric', width: 80 },
       { title: 'Other', type: 'numeric', width: 80 },
-      { title: 'สถานะ', type: 'dropdown', source: ['Active','EOL'], width: 70 }
+      { title: 'สถานะ', type: 'dropdown', source: ['Active','EOL'], width: 70 },
+      { title: 'ต้นทุน', type: 'numeric', width: 80 }
     ],
-    minDimensions: [11, Math.max(data.length, 5)],
+    minDimensions: [12, Math.max(data.length, 5)],
     allowInsertRow: true,
     allowDeleteRow: true,
     contextMenu: false
@@ -2535,6 +2570,7 @@ function saveProductsSheet() {
       typePrices: { S: parseFloat(r[6])||0, A: parseFloat(r[7])||0, B: parseFloat(r[8])||0, Other: parseFloat(r[9])||0 },
       price: parseFloat(r[8]) || 0,
       eol: r[10] === 'EOL',
+      cost: parseFloat(r[11]) || 0,
       updatedAt: new Date().toISOString()
     };
     var id = _prodSheetIds[idx];

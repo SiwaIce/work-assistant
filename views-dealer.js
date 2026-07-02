@@ -828,6 +828,8 @@ function dealerPipelineTab(d) {
   } else if (pipes.length && dealerPipeViewMode === 'sheet') {
     h += renderPipeSheetTable(pipes);
   } else if (pipes.length) {
+    var _dealerQtMap = {};
+    try { var _dqts = JSON.parse(localStorage.getItem('v7_quotations_v2')||'[]'); _dqts.forEach(function(q){ if(q.pipelineId) _dealerQtMap[q.pipelineId]=(_dealerQtMap[q.pipelineId]||0)+1; }); } catch(e) {}
     pipes.forEach(function(p, idx) {
       var lastLog = ST.pipeLogsByPipe(p.id)[0];
       var isEnd = ['delivered','lost'].indexOf(p.status) !== -1;
@@ -835,7 +837,8 @@ function dealerPipelineTab(d) {
 
       h += '<div class="li ' + dlC(p.biddingDate, isEnd) + (p.status === 'lost' ? ' dlo' : '') + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
       h += '<div class="lm">';
-      h += '<div class="lt"><span class="pipe-row-num">#' + (idx + 1) + '</span> ' + sanitize(p.projectName) + ' ' + pipeTag(p.status) + '</div>';
+      h += '<div class="lt"><span class="pipe-row-num">#' + (idx + 1) + '</span> ' + sanitize(p.projectName) + ' ' + pipeTag(p.status);
+      h += '<button class="quick-update-btn" style="float:right;margin-left:4px" title="ใบเสนอราคา" onclick="event.stopPropagation();showPipelineQuotesM(\'' + p.id + '\')">' + (_dealerQtMap[p.id] ? '📄 ' + _dealerQtMap[p.id] : '📄') + '</button></div>';
       h += '<div class="ls">';
       h += (p.endUserTH || '') + ' • ' + (p.model || '') + (p.modelQty > 1 ? 'x' + p.modelQty : '') + ' • ';
       h += fmtMoneyStyled(amt);

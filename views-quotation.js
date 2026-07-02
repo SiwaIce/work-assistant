@@ -921,6 +921,95 @@ function createNewQuotation() {
     recalculateQuotationTotal();
   }
 }
+function getQuoteById(id) {
+  var qs = [];
+  try { qs = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+  for (var i = 0; i < qs.length; i++) { if (qs[i].id === id) return qs[i]; }
+  return null;
+}
+
+function showPipelineQuotesM(pipelineId) {
+  var allQuotes = [];
+  try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+  var quotes = allQuotes.filter(function(q) { return q.pipelineId === pipelineId; });
+
+  var html = '<div style="min-width:320px">';
+  if (!quotes.length) {
+    html += '<div style="padding:12px;opacity:.6;text-align:center">ยังไม่มีใบเสนอราคา</div>';
+  } else {
+    quotes.forEach(function(q) {
+      var statusLabel = (typeof quoteStatusLabels !== 'undefined' ? quoteStatusLabels[q.status] : '') || q.status;
+      html += '<div onclick="closeM();renderEditQuotationPage(getQuoteById(\'' + q.id + '\'))" style="cursor:pointer;padding:10px 12px;border-bottom:1px solid var(--border)">';
+      html += '<div style="font-weight:600">' + sanitize(q.quoteNo) + ' <span style="font-size:.75rem;opacity:.6">' + statusLabel + '</span></div>';
+      html += '<div style="font-size:.78rem;opacity:.65">' + (q.validFrom||'') + (q.totalAmount ? ' • ' + fmtMoneyShort(q.totalAmount) : '') + '</div>';
+      html += '</div>';
+    });
+  }
+  html += '<div class="fm-actions" style="margin-top:12px">';
+  html += '<button class="btn bp" onclick="closeM();createQuoteFromPipeline(\'' + pipelineId + '\')">➕ สร้างใบเสนอราคา</button>';
+  html += '<button class="btn" onclick="closeM()">ปิด</button>';
+  html += '</div></div>';
+
+  openM('📄 ใบเสนอราคา Project', html);
+}
+
+function createQuoteFromPipeline(pipelineId) {
+  var p = ST.getOne('pipeline', pipelineId);
+  if (!p) { toast('ไม่พบ Pipeline'); return; }
+  var dealer = ST.getOne('dealers', p.dealerId);
+  var dealerLevel = dealer ? (dealer.level || 'B') : 'B';
+
+  var groupKeys = [
+    { keys: ['M3M','MULTISPECTRAL'], group: 'm3m' },
+    { keys: ['M4TD'],               group: 'm4td' },
+    { keys: ['M4T'],                group: 'm4t' },
+    { keys: ['M4E'],                group: 'm4e' },
+    { keys: ['M400'],               group: 'm400' },
+    { keys: ['DOCK'],               group: 'dock3' }
+  ];
+
+  var pipeItems = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+  var items = [];
+  pipeItems.forEach(function(it) {
+    var mu = (it.model || '').toUpperCase();
+    var group = null;
+    for (var i = 0; i < groupKeys.length; i++) {
+      var spec = groupKeys[i];
+      if (spec.keys.some(function(k) { return mu.indexOf(k) !== -1; })) { group = spec.group; break; }
+    }
+    var prod = (group && typeof getProductForModelGroup === 'function') ? getProductForModelGroup(group) : null;
+    var unitPrice = prod ? (typeof getModelPriceByLevel === 'function' ? getModelPriceByLevel(prod.name, dealerLevel) : (prod.price || 0)) : 0;
+    var qty = it.qty || 1;
+    items.push({ sku: prod ? (prod.sku||'') : '', name: prod ? prod.name : it.model, quantity: qty, unitPrice: unitPrice, amount: unitPrice * qty });
+  });
+
+  var newId = 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  var newQuoteNo = getNextQuoteNumber();
+  var newQuote = {
+    id: newId, quoteNo: newQuoteNo,
+    dealerId: p.dealerId || '', dealerName: dealer ? dealer.name : (p.dealerName||''),
+    dealerLevel: dealerLevel, levelUsed: dealerLevel,
+    pipelineId: pipelineId, projectName: p.projectName||'', endUserTH: p.endUserTH||'',
+    createdAt: new Date().toISOString(), validFrom: _td(), validTo: addD(_td(), 30),
+    paymentTerm: 'Net due 30 days',
+    quotedBy: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : (getConfig().saleName || ''),
+    poNo: '', items: items,
+    grossTotal: 0, discountPercent: 0, discountAmount: 0,
+    netAmount: 0, vatPercent: 7, vatAmount: 0, totalAmount: 0,
+    remark: '', contacts: [], status: 'draft',
+    sentDate: null, approvedDate: null, updatedAt: new Date().toISOString()
+  };
+
+  var existingQuotes = [];
+  try { existingQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+  existingQuotes.push(newQuote);
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
+  quotations = existingQuotes;
+
+  toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
+  renderEditQuotationPage(newQuote);
+}
+
 // ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
 function renderEditQuotationPage(quote) {
   if (!quote) {
