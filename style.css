@@ -252,11 +252,11 @@ textarea{min-height:50px;resize:vertical}
 .wl-bar-item .wl-lbl{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:.52rem;color:#64748b;white-space:nowrap}
 
 /* === VISIT === */
-.visit-item{padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;margin-bottom:6px;cursor:pointer;transition:.15s}
-.visit-item:hover{border-color:#475569}
-.visit-item h4{font-size:.78rem;margin-bottom:3px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.visit-item .vmeta{font-size:.66rem;color:#64748b;margin-bottom:3px}
-.visit-item .vbody{font-size:.74rem;white-space:pre-wrap;color:#94a3b8;max-height:60px;overflow:hidden}
+.visit-item{padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:.15s}
+.visit-item:hover{border-color:var(--accent)}
+.visit-item h4{font-size:.78rem;margin-bottom:3px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;color:var(--text)}
+.visit-item .vmeta{font-size:.66rem;color:var(--text2);margin-bottom:3px}
+.visit-item .vbody{font-size:.74rem;white-space:pre-wrap;color:var(--text2);max-height:60px;overflow:hidden}
 .visit-sub{font-size:.72rem;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;margin:3px 0}
 .visit-mode{display:flex;gap:3px;margin-bottom:10px}
 .vm-btn{padding:5px 12px;border-radius:20px;font-size:.72rem;cursor:pointer;border:1px solid #475569;background:none;color:#94a3b8;transition:.15s}
@@ -9187,7 +9187,9 @@ input:focus, select:focus, textarea:focus {
 .prod-price-b span:last-child{color:var(--accent)}
 
 /* ===== JSPREADSHEET THEME OVERRIDES ===== */
-.jexcel_container{border:1px solid var(--border)!important;border-radius:8px;overflow:hidden;margin-bottom:4px}
+.jexcel_container{border:1px solid var(--border)!important;border-radius:8px;overflow:auto;margin-bottom:4px}
+#productsSheetEl .jexcel_container{width:100%}
+#productsSheetEl table.jexcel{width:100%}
 .jexcel_content{background:var(--card)!important}
 .jexcel{border-collapse:collapse!important;font-size:12px!important;font-family:inherit!important}
 .jexcel thead th,.jexcel .jexcel_row{background:var(--bg2,#1e2023)!important;color:var(--text2)!important;border-color:var(--border)!important;font-size:11px!important}

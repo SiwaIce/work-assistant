@@ -594,8 +594,11 @@ function ppPick(idx) {
   var qel = document.getElementById('ppq_' + idx);
   ppDoAdd(model, qel ? (parseInt(qel.value, 10) || 1) : 1);
 }
-function _ppChip(model, bg, color) {
-  return '<span onclick="ppPickModel(\'' + ppEsc(model) + '\')" style="cursor:pointer;font-size:12px;background:' + bg + ';color:' + color + ';padding:5px 10px;border-radius:8px">+ ' + sanitize(model) + '</span>';
+function _ppChip(model, isRec) {
+  var bg = isRec ? 'rgba(251,191,36,.15)' : 'var(--bg2)';
+  var color = isRec ? '#fbbf24' : 'var(--text2)';
+  var border = isRec ? '1px solid rgba(251,191,36,.3)' : '1px solid var(--border)';
+  return '<span onclick="ppPickModel(\'' + ppEsc(model) + '\')" style="cursor:pointer;font-size:12px;background:' + bg + ';color:' + color + ';border:' + border + ';padding:5px 10px;border-radius:8px">+ ' + sanitize(model) + '</span>';
 }
 function pickerRender() {
   var ov = document.getElementById('productPickerOv');
@@ -606,22 +609,22 @@ function pickerRender() {
   var chips = '';
   if (rec.length) {
     chips += '<div style="font-size:12px;color:#fbbf24;margin:2px 0 5px">⭐ รายการที่แนะนำ</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
-    rec.forEach(function (m) { chips += _ppChip(m, '#3b2f0b', '#fbbf24'); });
+    rec.forEach(function (m) { chips += _ppChip(m, true); });
     chips += '</div>';
   }
   if (recent.length) {
-    chips += '<div style="font-size:12px;color:#8892b0;margin:2px 0 5px">🕘 เพิ่งใช้</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
-    recent.forEach(function (m) { chips += _ppChip(m, '#1e293b', '#cbd5e1'); });
+    chips += '<div style="font-size:12px;color:var(--text2);margin:2px 0 5px">🕘 เพิ่งใช้</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+    recent.forEach(function (m) { chips += _ppChip(m, false); });
     chips += '</div>';
   }
   ov.innerHTML =
-    '<div style="width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;background:#0f172a;border:1px solid #334155;border-radius:14px;overflow:hidden">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1e293b">' +
-        '<span style="font-size:15px;font-weight:700;color:#e0e6f0">📦 เลือกสินค้า</span>' +
-        '<button onclick="closeProductPicker()" style="background:none;border:none;color:#8892b0;font-size:18px;cursor:pointer">✕</button>' +
+    '<div style="width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:15px;font-weight:700;color:var(--text)">📦 เลือกสินค้า</span>' +
+        '<button onclick="closeProductPicker()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer">✕</button>' +
       '</div>' +
       '<div style="padding:12px 16px;overflow-y:auto">' +
-        '<input id="ppSearch" type="text" oninput="ppSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / SKU / M350..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e0e6f0;margin-bottom:10px">' +
+        '<input id="ppSearch" type="text" oninput="ppSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / SKU / M350..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);margin-bottom:10px">' +
         chips +
         '<div id="ppListWrap"></div>' +
       '</div>' +
@@ -642,20 +645,20 @@ function pickerRenderList() {
   cats.forEach(function (cat) {
     var items = all.filter(function (pr) { return pr && !pr.eol && (pr.category || 'other') === cat.id && ppMatch(pr, q); });
     if (!items.length) return;
-    html += '<div style="font-size:12px;color:#8892b0;margin:10px 0 6px">' + sanitize(cat.name) + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin:10px 0 6px">' + sanitize(cat.name) + '</div>';
     items.forEach(function (pr) {
       shown++;
       var idx = _ppRefs.push(pr.name) - 1;
       var price = _ppState.showPrice ? ppModelPrice(pr.name) : 0;
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #1e293b;border-radius:8px;margin-bottom:5px">' +
-        '<span style="font-size:14px;color:#e0e6f0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(pr.name) + '</span>' +
-        ((_ppState.showPrice && price) ? '<span style="font-size:12px;color:#8892b0;white-space:nowrap">฿' + fmtMoneyShort(price) + '</span>' : '') +
-        '<input id="ppq_' + idx + '" type="number" value="1" min="1" style="width:46px;padding:4px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e0e6f0">' +
-        '<button onclick="ppPick(' + idx + ')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap">+ เพิ่ม</button>' +
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px">' +
+        '<span style="font-size:14px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">' + sanitize(pr.name) + '</span>' +
+        ((_ppState.showPrice && price) ? '<span style="font-size:12px;color:var(--text2);white-space:nowrap">฿' + fmtMoneyShort(price) + '</span>' : '') +
+        '<input id="ppq_' + idx + '" type="number" value="1" min="1" style="width:46px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text)">' +
+        '<button onclick="ppPick(' + idx + ')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap">+ เพิ่ม</button>' +
         '</div>';
     });
   });
-  if (!shown) html = '<div style="text-align:center;color:#8892b0;padding:24px">ไม่พบสินค้า' + (q ? ' "' + sanitize(q) + '"' : '') + '</div>';
+  if (!shown) html = '<div style="text-align:center;color:var(--text2);padding:24px">ไม่พบสินค้า' + (q ? ' "' + sanitize(q) + '"' : '') + '</div>';
   wrap.innerHTML = html;
 }
 

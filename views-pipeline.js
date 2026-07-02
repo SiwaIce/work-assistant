@@ -571,7 +571,7 @@ function rPipeline(el) {
 
     (pipeView === 'card' ? renderPipeCards(pipes) :
      pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
-     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><button class="btn bo" onclick="recalcAllPipeQty()" title="คำนวณ Qty ทั้งหมดจากช่อง Model">🔄 Qty</button><button class="btn bo" onclick="calcAllPipeRevenue()" title="คำนวณ Revenue จาก Qty × ราคาตาม Dealer Level">💰 Revenue</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
+     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><button class="btn bo" onclick="recalcAllPipeQty()" title="คำนวณ Qty ทั้งหมดจากช่อง Model">🔄 Qty</button><button class="btn bo" onclick="calcAllPipeRevenue()" title="คำนวณ Revenue จาก Qty × ราคาตาม Dealer Level">💰 Revenue</button><button id="btnPipeUndo" class="btn bo" style="display:none" onclick="undoPipeSheet()" title="คืนค่าก่อน recalc ครั้งล่าสุด">↩️ Undo</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
      renderPipeTable(pipes)) +
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
@@ -2327,19 +2327,45 @@ function _autoCalcPipeQty(el, rowIdx, modelText, qtyStartCol) {
   });
 }
 
+var _pipeSheetUndo = null;
+
+function _snapPipeSheet() {
+  var el = document.getElementById('pipeSheetEl');
+  if (!el || !el.jexcel) return;
+  _pipeSheetUndo = el.jexcel.getData().map(function(r) { return r.slice(); });
+  var btn = document.getElementById('btnPipeUndo');
+  if (btn) btn.style.display = '';
+}
+
+function undoPipeSheet() {
+  if (!_pipeSheetUndo) return;
+  var el = document.getElementById('pipeSheetEl');
+  if (!el || !el.jexcel) return;
+  var sheet = el.jexcel;
+  _pipeSheetUndo.forEach(function(row, r) {
+    row.forEach(function(val, c) { sheet.setValueFromCoords(c, r, val, true); });
+  });
+  _pipeSheetUndo = null;
+  var btn = document.getElementById('btnPipeUndo');
+  if (btn) btn.style.display = 'none';
+  toast('↩️ คืนค่าเดิมแล้ว');
+}
+
 function recalcAllPipeQty() {
   var el = document.getElementById('pipeSheetEl');
   if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  _snapPipeSheet();
   el.jexcel.getData().forEach(function(row, idx) {
     if (row[8]) _autoCalcPipeQty(el, idx, row[8], 9);
   });
-  toast('🔄 คำนวณ Qty จาก Model แล้ว');
+  toast('🔄 คำนวณ Qty จาก Model แล้ว — กด ↩️ Undo เพื่อคืนค่า');
 }
 
 function calcAllPipeRevenue() {
   var el = document.getElementById('pipeSheetEl');
   if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
   if (typeof window.getProductForModelGroup === 'undefined') { toast('⚠️ โหลดข้อมูลสินค้าไม่สำเร็จ'); return; }
+  _snapPipeSheet();
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
   dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
@@ -2365,7 +2391,7 @@ function calcAllPipeRevenue() {
       filled++;
     }
   });
-  toast('💰 คำนวณ Revenue ' + filled + ' รายการ (ตาม Dealer Level)');
+  toast('💰 คำนวณ Revenue ' + filled + ' รายการ — กด ↩️ Undo เพื่อคืนค่า');
 }
 
 function initPipeSheet(pipes) {

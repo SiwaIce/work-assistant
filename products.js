@@ -1276,7 +1276,7 @@ function rProducts(el) {
   html += '<div id="productsCatalogWrap"' + (productViewMode!=='catalog' ? ' style="display:none"' : '') + '>';
   html += '<div class="prod-catalog-grid" id="productsCatalogGrid"></div>';
   html += '</div>';
-  html += '<div id="productsSheetWrap"' + (productViewMode!=='sheet' ? ' style="display:none"' : '') + '>';
+  html += '<div id="productsSheetWrap"' + (productViewMode!=='sheet' ? ' style="display:none;overflow-x:auto"' : ' style="overflow-x:auto"') + '>';
   html += '<div id="productsSheetEl"></div>';
   html += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center">';
   html += '<button class="btn bp" onclick="saveProductsSheet()">💾 บันทึกทั้งหมด</button>';
@@ -2550,6 +2550,18 @@ function initProductsSheet(products) {
     allowDeleteRow: true,
     contextMenu: false
   });
+  // stretch ชื่อสินค้า column to fill available width
+  requestAnimationFrame(function() { _fitProductSheet(); });
+}
+
+function _fitProductSheet() {
+  var wrap = document.getElementById('productsSheetWrap');
+  if (!wrap || !_prodSheetInstance) return;
+  // fixed cols total: SKU100+EAN110+หมวด90+RRPin90+RRPex90+S80+A80+B80+Other80+สถานะ70+ต้นทุน80 = 950, row-num ~40
+  var fixedW = 950 + 40;
+  var avail = wrap.clientWidth - 4; // 4 for borders/scrollbar
+  var nameW = Math.max(200, avail - fixedW);
+  _prodSheetInstance.setWidth(2, nameW);
 }
 
 function saveProductsSheet() {
