@@ -774,6 +774,13 @@ document.getElementById('searchOv').addEventListener('click', function(e) { if (
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') { closeSearch(); closeDraft(); }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
+  // \ = toggle sidebar (skip when typing in input/textarea)
+  if (e.key === '\\' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+      e.preventDefault(); toggleSidebarCollapse();
+    }
+  }
 });
 
 function doSearch() {

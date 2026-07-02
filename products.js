@@ -370,6 +370,28 @@ window.getModelPriceByLevel = function(modelName, level) {
   return (p.typePrices && p.typePrices[target] !== undefined) ? p.typePrices[target] : (p.rrpExVat || p.price || 0);
 };
 
+// หาสินค้าจาก model group (m3m/m4t/m4e/dock3/m4td/m400) ด้วย pattern เดียวกับ _pipeModelQtyByGroup
+window.getProductForModelGroup = function(group) {
+  var products = getAllProducts();
+  var specs = {
+    m3m:   { inc: ['M3M', 'MULTISPECTRAL'], exc: [] },
+    m4td:  { inc: ['M4TD'],                 exc: [] },
+    m4t:   { inc: ['M4T'],                  exc: ['M4TD', 'M4TE'] },
+    m4e:   { inc: ['M4E'],                  exc: [] },
+    m400:  { inc: ['M400'],                 exc: [] },
+    dock3: { inc: ['DOCK 3', 'DOCK3'],      exc: [] }
+  };
+  var spec = specs[group];
+  if (!spec) return null;
+  for (var i = 0; i < products.length; i++) {
+    var name = (products[i].name || '').toUpperCase();
+    var match = spec.inc.some(function(p) { return name.indexOf(p) !== -1; });
+    var excl  = spec.exc.some(function(e) { return name.indexOf(e) !== -1; });
+    if (match && !excl) return products[i];
+  }
+  return null;
+};
+
 // ฟังก์ชันดึงราคา RRP Ex Vat โดยตรง
 window.getModelRrpExVat = function(modelName) {
   var p = getProductByName(modelName);

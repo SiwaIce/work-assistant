@@ -822,6 +822,7 @@ function dealerPipelineTab(d) {
     h += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center">';
     h += '<button class="btn bp" onclick="saveDealerPipeSheet()">💾 บันทึกทั้งหมด</button>';
     h += '<button class="btn bo" onclick="recalcAllDealerPipeQty()" title="คำนวณ Qty จาก Model">🔄 Qty</button>';
+    h += '<button class="btn bo" onclick="calcAllDealerPipeRevenue()" title="คำนวณ Revenue จาก Qty × ราคาตาม Dealer Level">💰 Revenue</button>';
     h += '<span id="dealerPipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span>';
     h += '</div>';
   } else if (pipes.length && dealerPipeViewMode === 'sheet') {
@@ -3840,6 +3841,33 @@ function recalcAllDealerPipeQty() {
     if (row[7]) _autoCalcPipeQty(el, idx, row[7], 8);
   });
   toast('🔄 คำนวณ Qty จาก Model แล้ว');
+}
+
+function calcAllDealerPipeRevenue() {
+  var el = document.getElementById('dealerPipeSheetEl');
+  if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  if (typeof window.getProductForModelGroup === 'undefined') { toast('⚠️ โหลดข้อมูลสินค้าไม่สำเร็จ'); return; }
+  var dealer = ST.getOne('dealers', S.dealerId);
+  var level = (dealer && dealer.level) || 'Other';
+
+  var groups = ['m3m', 'm4t', 'm4e', 'dock3', 'm4td', 'm400'];
+  var filled = 0;
+  el.jexcel.getData().forEach(function(row, idx) {
+    var total = 0;
+    groups.forEach(function(group, i) {
+      var qty = parseInt(row[8 + i]) || 0; // col 8 = M3M for dealer sheet
+      if (!qty) return;
+      var product = window.getProductForModelGroup(group);
+      if (!product) return;
+      total += qty * (window.getModelPriceByLevel(product.name, level) || 0);
+    });
+
+    if (total > 0) {
+      el.jexcel.setValueFromCoords(6, idx, total, true); // col 6 = Revenue for dealer sheet
+      filled++;
+    }
+  });
+  toast('💰 Revenue ' + filled + ' รายการ (Level: ' + level + ')');
 }
 
 function initDealerPipeSheet(pipes) {

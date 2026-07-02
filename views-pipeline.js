@@ -571,7 +571,7 @@ function rPipeline(el) {
 
     (pipeView === 'card' ? renderPipeCards(pipes) :
      pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
-     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><button class="btn bo" onclick="recalcAllPipeQty()" title="คำนวณ Qty ทั้งหมดจากช่อง Model">🔄 Qty</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
+     pipeView === 'sheetedit' ? '<div id="pipeSheetWrap"><div id="pipeSheetEl" style="overflow-x:auto"></div><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn bp" onclick="savePipeSheet()">💾 บันทึกทั้งหมด</button><button class="btn bo" onclick="recalcAllPipeQty()" title="คำนวณ Qty ทั้งหมดจากช่อง Model">🔄 Qty</button><button class="btn bo" onclick="calcAllPipeRevenue()" title="คำนวณ Revenue จาก Qty × ราคาตาม Dealer Level">💰 Revenue</button><span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
      renderPipeTable(pipes)) +
 
     '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
@@ -2321,6 +2321,38 @@ function recalcAllPipeQty() {
     if (row[8]) _autoCalcPipeQty(el, idx, row[8], 9);
   });
   toast('🔄 คำนวณ Qty จาก Model แล้ว');
+}
+
+function calcAllPipeRevenue() {
+  var el = document.getElementById('pipeSheetEl');
+  if (!el || !el.jexcel) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
+  if (typeof window.getProductForModelGroup === 'undefined') { toast('⚠️ โหลดข้อมูลสินค้าไม่สำเร็จ'); return; }
+  var dealers = ST.getAll('dealers');
+  var dealerByName = {};
+  dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
+
+  var groups = ['m3m', 'm4t', 'm4e', 'dock3', 'm4td', 'm400'];
+  var filled = 0;
+  el.jexcel.getData().forEach(function(row, idx) {
+    var dealerName = (row[5] || '').trim();
+    var dealer = dealerByName[dealerName.toLowerCase()] || null;
+    var level = (dealer && dealer.level) || 'Other';
+
+    var total = 0;
+    groups.forEach(function(group, i) {
+      var qty = parseInt(row[9 + i]) || 0;
+      if (!qty) return;
+      var product = window.getProductForModelGroup(group);
+      if (!product) return;
+      total += qty * (window.getModelPriceByLevel(product.name, level) || 0);
+    });
+
+    if (total > 0) {
+      el.jexcel.setValueFromCoords(7, idx, total, true); // col 7 = Revenue
+      filled++;
+    }
+  });
+  toast('💰 คำนวณ Revenue ' + filled + ' รายการ (ตาม Dealer Level)');
 }
 
 function initPipeSheet(pipes) {

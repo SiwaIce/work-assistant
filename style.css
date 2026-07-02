@@ -43,10 +43,13 @@ a{color:#3b82f6;text-decoration:none}
 .topbar-l{display:flex;align-items:center;gap:8px;min-width:0}
 .topbar-r{display:flex;align-items:center;gap:8px}
 .menu-btn{display:none;background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px}
-.collapse-btn{background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px}
-.collapse-btn:hover{color:#e2e8f0}
+.collapse-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#94a3b8;font-size:.85rem;cursor:pointer;padding:3px 7px;transition:.15s}
+.collapse-btn:hover{background:rgba(255,255,255,.14);color:#e2e8f0}
 body.sb-collapsed #sidebar{transform:translateX(-200px)}
 body.sb-collapsed #main{margin-left:0}
+#sb-tab{display:none;position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:200;background:#1e293b;border:1px solid #334155;border-left:none;border-radius:0 6px 6px 0;padding:10px 5px;cursor:pointer;color:#94a3b8;font-size:.85rem;transition:.15s;box-shadow:2px 0 8px rgba(0,0,0,.3)}
+#sb-tab:hover{background:#334155;color:#e2e8f0}
+body.sb-collapsed #sb-tab{display:flex;align-items:center}
 .tt{font-size:.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #clock{color:#64748b;font-size:.72rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 .strig{background:#0f172a;border:1px solid #334155;color:#64748b;padding:4px 10px;border-radius:7px;font-size:.7rem;cursor:pointer;transition:.15s;white-space:nowrap}
