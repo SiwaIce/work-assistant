@@ -9,6 +9,7 @@ var quotations = [];
 var currentQuoteId = null;
 var quotationItems = [];
 var selectedLevelForPrice = 'B';
+var showQuotationCost = false;
 var quoteStatusList = ['draft', 'sent', 'approved', 'rejected', 'expired'];
 var quoteStatusLabels = {
   draft: '📝 Draft',
@@ -207,8 +208,10 @@ function formatNumber(n) {
 
 function recalculateQuotationTotal() {
   var grossTotal = 0;
+  var totalCost = 0;
   for (var i = 0; i < quotationItems.length; i++) {
     grossTotal += (Number(quotationItems[i].amount) || 0);
+    totalCost += (Number(quotationItems[i].cost) || 0) * (Number(quotationItems[i].quantity) || 1);
   }
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPct = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
@@ -228,8 +231,23 @@ function recalculateQuotationTotal() {
   if (vatEl) vatEl.textContent = formatNumber(vatAmount) + ' ฿';
   var totalEl = document.getElementById('quoteTotalAmount');
   if (totalEl) totalEl.textContent = formatNumber(totalAmount) + ' ฿';
-  
-  return { grossTotal: grossTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount };
+
+  var costSummaryEl = document.getElementById('quoteCostSummary');
+  if (costSummaryEl) {
+    costSummaryEl.style.display = showQuotationCost ? '' : 'none';
+    if (showQuotationCost) {
+      var grossProfit = netAmount - totalCost;
+      var marginPct = netAmount > 0 ? (grossProfit / netAmount * 100) : 0;
+      var costEl = document.getElementById('quoteTotalCost');
+      var profitEl = document.getElementById('quoteGrossProfit');
+      var mPctEl = document.getElementById('quoteMarginPct');
+      if (costEl) costEl.textContent = formatNumber(Math.round(totalCost)) + ' ฿';
+      if (profitEl) { profitEl.textContent = formatNumber(Math.round(grossProfit)) + ' ฿'; profitEl.style.color = grossProfit >= 0 ? '#22c55e' : '#ef4444'; }
+      if (mPctEl) { mPctEl.textContent = marginPct.toFixed(2) + '%'; mPctEl.style.color = marginPct >= 10 ? '#22c55e' : (marginPct >= 5 ? '#f59e0b' : '#ef4444'); }
+    }
+  }
+
+  return { grossTotal: grossTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount, totalCost: totalCost };
 }
 
 // ================================================================
@@ -257,20 +275,34 @@ function renderQuotationItemsTable() {
   html += '<th>SKU</th>';
   html += '<th>ชื่อสินค้า</th>';
   html += '<th style="width:80px;text-align:center">จำนวน</th>';
-  html += '<th style="width:120px;text-align:right">ราคาต่อหน่วย</th>';
+  html += '<th style="width:120px;text-align:right">ราคา/หน่วย</th>';
   html += '<th style="width:120px;text-align:right">รวม</th>';
+  if (showQuotationCost) {
+    html += '<th style="width:110px;text-align:right">ต้นทุน/หน่วย</th>';
+    html += '<th style="width:110px;text-align:right">ต้นทุนรวม</th>';
+    html += '<th style="width:70px;text-align:right">Margin</th>';
+  }
   html += '<th style="width:50px"></th>';
   html += '</tr></thead><tbody>';
 
   for (var i = 0; i < quotationItems.length; i++) {
     var item = quotationItems[i];
+    var itemCost = Number(item.cost) || 0;
+    var itemQty = Number(item.quantity) || 1;
+    var itemTotalCost = itemCost * itemQty;
+    var itemMargin = item.unitPrice > 0 ? ((item.unitPrice - itemCost) / item.unitPrice * 100) : 0;
     html += '<tr>';
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + sanitize(item.sku || '-') + '</td>';
     html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)"></td>';
-    html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + (item.quantity || 1) + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
+    html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
+    if (showQuotationCost) {
+      html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="js-money" value="' + nmI(itemCost) + '" style="width:100px;text-align:right;padding:4px;background:var(--bg2)" onchange="updateQuotationItemCost(' + i + ', this.value)"></td>';
+      html += '<td style="text-align:right;color:#f59e0b">' + formatNumber(Math.round(itemTotalCost)) + ' ฿</td>';
+      html += '<td style="text-align:right;font-weight:700;color:' + (itemMargin >= 10 ? '#22c55e' : (itemMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + (item.unitPrice > 0 ? itemMargin.toFixed(1) + '%' : '-') + '</td>';
+    }
     html += '<td style="text-align:center"><button class="btn bsm bd" onclick="removeQuotationItem(' + i + ')">🗑️</button></td>';
     html += '</tr>';
   }
@@ -303,6 +335,7 @@ function updateQuotationItemName(idx, newName) {
   var found = prods.find(function(p) { return p.name === newName; });
   if (found) {
     if (found.sku) quotationItems[idx].sku = found.sku;
+    if (found.cost !== undefined) quotationItems[idx].cost = found.cost;
     var selectedLevel = document.getElementById('editQuoteLevel');
     var level = selectedLevel ? selectedLevel.value : null;
     var newPrice = level && typeof getModelPriceByLevelForQuote === 'function'
@@ -313,6 +346,20 @@ function updateQuotationItemName(idx, newName) {
       quotationItems[idx].amount = (quotationItems[idx].quantity || 1) * newPrice;
     }
   }
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+}
+
+function updateQuotationItemCost(idx, val) {
+  quotationItems[idx].cost = parseNum(val);
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+}
+
+function toggleQuotationCostView() {
+  showQuotationCost = !showQuotationCost;
+  var btn = document.getElementById('btnToggleCost');
+  if (btn) { btn.classList.toggle('bp', showQuotationCost); btn.classList.toggle('bo', !showQuotationCost); }
   renderQuotationItemsTable();
   recalculateQuotationTotal();
 }
@@ -379,7 +426,8 @@ function addQuotationItemFromInput() {
       name: modelName,
       quantity: qty,
       unitPrice: unitPrice,
-      amount: qty * unitPrice
+      amount: qty * unitPrice,
+      cost: selectedProduct.cost || 0
     });
   }
   
@@ -1077,7 +1125,7 @@ function renderEditQuotationPage(quote) {
   
   // Products Section
   html += '<div class="card" style="margin-bottom:16px">';
-  html += '<h2>📦 รายการสินค้า</h2>';
+  html += '<h2>📦 รายการสินค้า <span class="ml"><button id="btnToggleCost" class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button></span></h2>';
 
   // Solution preset chips — เอา pattern จาก Quick Price Estimator มาใช้ซ้ำ กดทีเดียวเพิ่มได้หลายรายการพร้อมราคาตาม Level ของใบนี้
   html += '<div id="quoteSolutionChipZone"></div>';
@@ -1109,6 +1157,11 @@ function renderEditQuotationPage(quote) {
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:6px 0;border-top:2px solid var(--accent);margin-top:4px;padding-top:8px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
+  html += '<div id="quoteCostSummary" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span style="opacity:.7">ต้นทุนรวม (Ex VAT):</span><span id="quoteTotalCost" style="color:#f59e0b;font-weight:700">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span style="opacity:.7">กำไรขั้นต้น:</span><span id="quoteGrossProfit" style="color:#22c55e;font-weight:700">0 ฿</span></div>';
+  html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span style="opacity:.7">Gross Margin %:</span><span id="quoteMarginPct" style="font-weight:800;font-size:16px">0%</span></div>';
+  html += '</div>';
   html += '</div></div>';
   
   // Contacts Card
@@ -1483,6 +1536,111 @@ function sendQuotationEmail(quoteId) {
     }
     saveQuotations();
   }
+}
+
+// ================================================================
+// MARGIN ANALYSIS PAGE (B)
+// ================================================================
+
+var _maFilter = { status: 'all', dealerId: '', dateFrom: '', dateTo: '' };
+
+function rMarginAnalysis(el) {
+  document.getElementById('pgT').textContent = '📊 Margin Analysis';
+  var allQuotes = [];
+  try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+
+  // Filter
+  var filtered = allQuotes.filter(function(q) {
+    if (_maFilter.status !== 'all' && q.status !== _maFilter.status) return false;
+    if (_maFilter.dealerId && q.dealerId !== _maFilter.dealerId) return false;
+    if (_maFilter.dateFrom && (q.validFrom || '') < _maFilter.dateFrom) return false;
+    if (_maFilter.dateTo && (q.validFrom || '') > _maFilter.dateTo) return false;
+    return true;
+  });
+
+  // Compute per-quote cost/margin
+  var rows = filtered.map(function(q) {
+    var totalCost = 0;
+    (q.items || []).forEach(function(it) { totalCost += (Number(it.cost) || 0) * (Number(it.quantity) || 1); });
+    var revenue = Number(q.netAmount) || 0;
+    var grossProfit = revenue - totalCost;
+    var margin = revenue > 0 ? (grossProfit / revenue * 100) : 0;
+    return { q: q, totalCost: totalCost, revenue: revenue, grossProfit: grossProfit, margin: margin };
+  });
+
+  // Totals
+  var sumRev = 0, sumCost = 0;
+  rows.forEach(function(r) { sumRev += r.revenue; sumCost += r.totalCost; });
+  var sumProfit = sumRev - sumCost;
+  var avgMargin = sumRev > 0 ? (sumProfit / sumRev * 100) : 0;
+
+  var dealers = ST.getAll('dealers');
+  var dealerOptions = '<option value="">ทุก Dealer</option>';
+  dealers.forEach(function(d) { dealerOptions += '<option value="' + d.id + '"' + (_maFilter.dealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; });
+
+  var statusOptions = '<option value="all"' + (_maFilter.status==='all'?' selected':'') + '>ทุก Status</option>';
+  var sLabels = { draft:'Draft', sent:'Sent', approved:'Approved', rejected:'Rejected', expired:'Expired' };
+  Object.keys(sLabels).forEach(function(s) { statusOptions += '<option value="' + s + '"' + (_maFilter.status===s?' selected':'') + '>' + sLabels[s] + '</option>'; });
+
+  var marColor = avgMargin >= 10 ? '#22c55e' : (avgMargin >= 5 ? '#f59e0b' : '#ef4444');
+
+  var html = '<div style="max-width:1200px;margin:0 auto">';
+
+  // Summary cards
+  html += '<div class="sr" style="margin-bottom:16px">';
+  html += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(sumRev) + '</div><div class="sl">Revenue (Net ExVAT)</div></div>';
+  html += '<div class="sc"><div class="sn" style="color:#f59e0b">' + fmtMoneyShort(sumCost) + '</div><div class="sl">ต้นทุนรวม</div></div>';
+  html += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(sumProfit) + '</div><div class="sl">กำไรขั้นต้น</div></div>';
+  html += '<div class="sc"><div class="sn" style="color:' + marColor + ';font-size:1.4rem">' + avgMargin.toFixed(1) + '%</div><div class="sl">Avg Gross Margin</div></div>';
+  html += '<div class="sc"><div class="sn">' + rows.length + '</div><div class="sl">ใบเสนอราคา</div></div>';
+  html += '</div>';
+
+  // Filters
+  html += '<div class="card" style="margin-bottom:16px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div class="fg"><label>Status</label><select class="fm-input" onchange="_maFilter.status=this.value;render()">' + statusOptions + '</select></div>';
+  html += '<div class="fg"><label>Dealer</label><select class="fm-input" onchange="_maFilter.dealerId=this.value;render()">' + dealerOptions + '</select></div>';
+  html += '<div class="fg"><label>จาก</label><input type="text" class="fm-input dp" value="' + (_maFilter.dateFrom||'') + '" placeholder="YYYY-MM-DD" onchange="_maFilter.dateFrom=this.value;render()"></div>';
+  html += '<div class="fg"><label>ถึง</label><input type="text" class="fm-input dp" value="' + (_maFilter.dateTo||'') + '" placeholder="YYYY-MM-DD" onchange="_maFilter.dateTo=this.value;render()"></div>';
+  html += '<button class="btn bo" onclick="_maFilter={status:\'all\',dealerId:\'\',dateFrom:\'\',dateTo:\'\'};render()">✖️ ล้าง</button>';
+  html += '</div></div>';
+
+  // Table
+  html += '<div class="card"><div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
+  html += '<thead><tr><th>#</th><th>เลขที่</th><th>Dealer</th><th>Project</th><th>Status</th><th>วันที่</th><th style="text-align:right">Revenue (ExVAT)</th><th style="text-align:right">ต้นทุน</th><th style="text-align:right">กำไร</th><th style="text-align:right">Margin%</th></tr></thead><tbody>';
+
+  if (!rows.length) {
+    html += '<tr><td colspan="10" style="text-align:center;padding:24px;opacity:.5">ไม่พบข้อมูล</td></tr>';
+  } else {
+    rows.forEach(function(r, idx) {
+      var q = r.q;
+      var mColor = r.margin >= 10 ? '#22c55e' : (r.margin >= 5 ? '#f59e0b' : '#ef4444');
+      var hasCost = r.totalCost > 0;
+      html += '<tr style="cursor:pointer" onclick="renderEditQuotationPage(getQuoteById(\'' + q.id + '\'))">';
+      html += '<td class="pipe-row-num">' + (idx+1) + '</td>';
+      html += '<td style="font-weight:600">' + sanitize(q.quoteNo) + '</td>';
+      html += '<td>' + sanitize(q.dealerName || '-') + '</td>';
+      html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis">' + sanitize(q.projectName || '-') + '</td>';
+      html += '<td>' + (sLabels[q.status] || q.status) + '</td>';
+      html += '<td style="white-space:nowrap">' + (q.validFrom || '-') + '</td>';
+      html += '<td style="text-align:right">' + formatNumber(Math.round(r.revenue)) + '</td>';
+      html += '<td style="text-align:right;color:#f59e0b">' + (hasCost ? formatNumber(Math.round(r.totalCost)) : '<span style="opacity:.3">-</span>') + '</td>';
+      html += '<td style="text-align:right;color:' + (r.grossProfit >= 0 ? '#22c55e' : '#ef4444') + '">' + (hasCost ? formatNumber(Math.round(r.grossProfit)) : '<span style="opacity:.3">-</span>') + '</td>';
+      html += '<td style="text-align:right;font-weight:700;color:' + mColor + '">' + (hasCost ? r.margin.toFixed(1) + '%' : '<span style="opacity:.3">-</span>') + '</td>';
+      html += '</tr>';
+    });
+    // Totals row
+    html += '<tr style="font-weight:800;border-top:2px solid var(--accent)">';
+    html += '<td colspan="6">รวม</td>';
+    html += '<td style="text-align:right">' + formatNumber(Math.round(sumRev)) + '</td>';
+    html += '<td style="text-align:right;color:#f59e0b">' + formatNumber(Math.round(sumCost)) + '</td>';
+    html += '<td style="text-align:right;color:' + (sumProfit >= 0 ? '#22c55e' : '#ef4444') + '">' + formatNumber(Math.round(sumProfit)) + '</td>';
+    html += '<td style="text-align:right;color:' + marColor + '">' + avgMargin.toFixed(1) + '%</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div></div></div>';
+
+  el.innerHTML = html;
+  if (typeof initDatePickers === 'function') initDatePickers();
 }
 
 // ================================================================
