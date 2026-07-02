@@ -3973,9 +3973,10 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
 
   h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisitLead(\'' + p.id + '\')">📝 สร้าง Visit Report</button>';
   if (p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report →</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm" style="background:#22c55e;color:#fff" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
-  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bo" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
   if (isLead) h2 += '<button class="btn bsm bo" onclick="vpConvertLeadToDealer(\'' + p.id + '\')">➕ แปลงเป็น Dealer</button>';
   if (p.status && p.status !== 'planned') h2 += '<button class="btn bsm bo" onclick="resetVisitPlanStatus(\'' + p.id + '\')" title="กดผลผิด / อยากย้อนกลับเป็นวางแผนไว้">↩️ ยกเลิกผล</button>';
   h2 += '<button class="btn bsm bo" onclick="showVpEmailM(\'' + p.id + '\')">📧 ส่ง Email นัด</button>';
@@ -4312,12 +4313,30 @@ function vpGoVisit(planId) {
 }
 
 // เรียกจาก modals.js หลังบันทึก Visit สำเร็จ — ผูกผล Visit กลับเข้าแผนนัดที่เปิดมาจาก vpGoVisit
-function vpMarkPlanActualFromVisit(visitId) {
+function vpMarkPlanActualFromVisit(visitId, prospectId) {
   if (!window._vpLinkPlanId) return;
   var planId = window._vpLinkPlanId;
   window._vpLinkPlanId = null;
+  var plan = ST.getOne('visitPlans', planId);
   ST.update('visitPlans', planId, { status: 'done', visitId: visitId });
   if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  var pid = prospectId || (plan && plan.prospectId) || '';
+  if (pid && typeof _vpAdvanceProspectIfBehind === 'function') _vpAdvanceProspectIfBehind(pid, 'visited', 'เข้าพบตามนัดแล้ว');
+}
+
+function vpGoVisitLead(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  window._vpLinkPlanId = planId;
+  window._visitSourceType = 'lead';
+  window._vpPrefillProspectId = plan.prospectId || '';
+  if (typeof showVisitM === 'function') {
+    showVisitM('');
+    setTimeout(function() {
+      var modeEl = document.querySelector('input[name="fv_mode"][value="' + (plan.mode || 'offline') + '"]');
+      if (modeEl) modeEl.checked = true;
+    }, 200);
+  }
 }
 
 // บันทึกผลการนัดแบบย่อสำหรับ Lead (ไม่มี Dealer ให้ผูก Visit Report เต็มรูปแบบ)

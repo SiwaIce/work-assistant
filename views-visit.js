@@ -29,7 +29,7 @@ function rVisits(el) {
   ${vts.length ? vts.slice(0,50).map(v => {
     const d = ST.getOne('dealers', v.dealerId);
     return `<div class="visit-item" onclick="go('visitDetail',{visitId:'${v.id}'})">
-      <h4>${fD(v.date)} ${v.time||''} — ${sanitize(d?.name||'?')} ${modeTag(v.mode)} ${v.djiDealer?`<span class="tag tag-count">${v.djiDealer}</span>`:''}</h4>
+      <h4>${fD(v.date)} ${v.time||''} — ${sanitize(d?.name || v.company || (v.prospectId ? '🆕 Lead' : '?'))} ${modeTag(v.mode)} ${v.djiDealer?`<span class="tag tag-count">${v.djiDealer}</span>`:''}</h4>
       <div class="vmeta">${(v.topicData||[]).filter(t=>t.answered).map(t=>t.topicId).join(', ')||''}</div>
       <div class="vbody">${sanitize((v.summary||'').substr(0,180))}${(v.summary||'').length>180?'...':''}</div>
       ${v.revenue?`<div style="font-size:.68rem;color:#22c55e;margin-top:2px">💰 ${fmtMoney(v.revenue)}</div>`:''}
@@ -62,7 +62,7 @@ function rVisitDet(el) {
   
   <div class="fr"><div><label style="color:#64748b;font-size:.68rem">วันที่</label><div>${fD(v.date)}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">เวลา</label><div>${v.time||'-'}</div></div></div>
-  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">Dealer</label><div>${d?.name||'-'} ${d?levelTag(d.level):''}</div></div>
+  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">${v.prospectId ? 'Lead' : 'Dealer'}</label><div>${d?.name || v.company || '-'} ${d?levelTag(d.level):''}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">Mode</label><div>${modeTag(v.mode)}</div></div></div>
   <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">DJI Dealer</label><div>${v.djiDealer||'-'}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">Sale</label><div>${v.saleName||cfg.saleName}</div></div></div>

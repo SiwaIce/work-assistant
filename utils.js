@@ -877,6 +877,23 @@ function dealerOptions(selectedId) {
   );
 }
 
+function prospectOptions(selectedId) {
+  var list = ST.getAll('prospects').filter(function(p) { return p.stage !== 'closed' && p.stage !== 'converted'; });
+  var opts = '<option value="">-- เลือก Lead --</option>';
+  list.forEach(function(p) {
+    opts += '<option value="' + p.id + '"' + (p.id === selectedId ? ' selected' : '') + '>' + sanitize(p.companyName || '-') + '</option>';
+  });
+  return opts;
+}
+
+function toggleVisitSource(val) {
+  window._visitSourceType = val;
+  var dr = document.getElementById('fv_dealer_row');
+  var lr = document.getElementById('fv_lead_row');
+  if (dr) dr.style.display = val === 'lead' ? 'none' : '';
+  if (lr) lr.style.display = val === 'lead' ? '' : 'none';
+}
+
 // Model dropdown (backward compatible with Object models)
 function modelOptions(selected) {
   return modelOptionsNew(selected);
