@@ -53,42 +53,80 @@ function rPipelineTeam(el) {
   list.forEach(function(p) { if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName); });
   owners.sort();
 
+  if (pipeTeamSearch) {
+    var q = pipeTeamSearch.toLowerCase();
+    list = list.filter(function(p) {
+      return (p.projectName || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.endUserTH || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.dealerName || '').toLowerCase().indexOf(q) !== -1 ||
+             (p.model || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
   if (pipeTeamOwnerFlt !== 'all') list = list.filter(function(p) { return p.ownerName === pipeTeamOwnerFlt; });
 
   var totalAmt = list.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
+  var mineCount = list.filter(function(p) { return p._mine; }).length;
 
-  var h = '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — รวม Pipeline ของทุกคนในทีม แก้ไขต้องไปที่ Pipeline ของตัวเอง</div>';
-  h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">';
+  // แถบสรุป — หน้าตาเหมือนหัวเมนู Pipeline หลัก (การ์ด .sr/.sc)
+  var h = '<div class="sr" style="margin-bottom:10px">';
+  h += '<div class="sc"><div class="sn c1">' + list.length + '</div><div class="sl">ทั้งหมด (ทีม)</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalAmt) + '</div><div class="sl">มูลค่ารวม</div></div>';
+  h += '<div class="sc"><div class="sn c3">' + mineCount + '</div><div class="sl">ของฉัน</div></div>';
+  h += '<div class="sc"><div class="sn c5">' + owners.length + '</div><div class="sl">จำนวนคน</div></div>';
+  h += '</div>';
+
+  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง</div>';
+
+  // แถบตัวกรอง — หน้าตาเหมือนแถบค้นหา/filter ของเมนู Pipeline หลัก
+  h += '<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">';
+  h += '<input type="text" id="pipeTeamSrc" value="' + sanitize(pipeTeamSearch) + '" placeholder="🔍 ค้นหา Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeTeamSearchInput(this.value)" autocomplete="off">';
   h += '<select onchange="pipeTeamOwnerFlt=this.value;render()" style="min-width:140px">';
-  h += '<option value="all"' + (pipeTeamOwnerFlt === 'all' ? ' selected' : '') + '>👤 ทุกคน (' + owners.length + ')</option>';
+  h += '<option value="all"' + (pipeTeamOwnerFlt === 'all' ? ' selected' : '') + '>👤 ทุกคน</option>';
   owners.forEach(function(o) { h += '<option value="' + sanitize(o) + '"' + (pipeTeamOwnerFlt === o ? ' selected' : '') + '>' + sanitize(o) + '</option>'; });
   h += '</select>';
   h += '<button class="btn bo bsm" onclick="_pipeTeamRefresh()">🔄 รีเฟรช</button>';
-  h += '<div style="margin-left:auto;font-size:.8rem;color:var(--text2)">รวม ' + list.length + ' โครงการ · ' + fmtMoneyShort(totalAmt) + '</div>';
   h += '</div>';
 
-  if (!list.length) {
-    h += '<div class="empty"><div class="icon">📊</div><p>ยังไม่มี Pipeline จากทีม</p></div>';
-    el.innerHTML = h;
-    return;
-  }
+  el.innerHTML = h + _renderPipeTeamCards(list);
 
-  h += '<div class="pipe-wrap"><table class="pipe-table"><thead><tr>' +
-    '<th>เจ้าของ</th><th>Project</th><th>End User</th><th>Dealer</th><th>Model</th>' +
-    '<th style="text-align:right">Forecast</th><th>Status</th></tr></thead><tbody>';
+  var srcEl = document.getElementById('pipeTeamSrc');
+  if (srcEl && pipeTeamSearch) { srcEl.focus(); srcEl.setSelectionRange(pipeTeamSearch.length, pipeTeamSearch.length); }
+}
+
+var pipeTeamSearch = '';
+var _pipeTeamSearchTimer = null;
+function pipeTeamSearchInput(v) {
+  pipeTeamSearch = v;
+  clearTimeout(_pipeTeamSearchTimer);
+  _pipeTeamSearchTimer = setTimeout(function() { render(); }, 350);
+}
+
+// การ์ด Pipeline รวมทีม — เลียนแบบหน้าตา/โครงสร้าง 4 แถวของ renderPipeCards (การ์ดเมนู Pipeline หลัก)
+// แต่ไม่พึ่ง ST.getOne('dealers',...)/ST.pipeLogsByPipe(...) เพราะข้อมูลของคนอื่นเป็นสรุปที่ sync มาจาก
+// teamPipeline เท่านั้น ไม่ใช่ record เต็มในเครื่องเรา — เลยแยกฟังก์ชันต่างหาก ไม่ไปแก้ renderPipeCards เดิม
+function _renderPipeTeamCards(list) {
+  if (!list.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
+  var html = '<div class="pipe-card-grid">';
   list.forEach(function(p) {
-    h += '<tr' + (p._mine ? ' style="background:var(--bg2)"' : '') + '>' +
-      '<td style="white-space:nowrap">' + (p._mine ? '⭐ ' : '') + sanitize(p.ownerName) + '</td>' +
-      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.projectName) + '">' + sanitize(p.projectName || '-') + '</td>' +
-      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.endUserTH) + '">' + sanitize(p.endUserTH || '-') + '</td>' +
-      '<td style="white-space:nowrap">' + sanitize(p.dealerName || '-') + '</td>' +
-      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem" title="' + sanitize(p.model) + '">' + sanitize(p.model || '-') + '</td>' +
-      '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(p.forecastAmount) + '</td>' +
-      '<td>' + pipeTag(p.status) + '</td>' +
-      '</tr>';
+    var amt = p.forecastAmount;
+    var cardOnclick = p._mine ? ('go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})') : '';
+    html += '<div class="dealer-card"' + (cardOnclick ? ' onclick="' + cardOnclick + '"' : ' style="cursor:default"') + '>';
+    html += '<div style="display:flex;align-items:baseline;gap:8px">';
+    html += '<span style="font-size:.85rem;font-weight:600;flex:1;min-width:0;color:var(--text,#e2e8f0)">' + sanitize((p.projectName || '-').substr(0, 80)) + '</span>';
+    if (p.endUserTH) html += '<span style="font-size:.72rem;font-weight:600;color:var(--text2,#94a3b8);flex-shrink:0;white-space:nowrap">' + sanitize(p.endUserTH.substr(0, 30)) + '</span>';
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:6px">';
+    html += '<span class="meta" style="margin:0">🏪 ' + sanitize(p.dealerName || '-') + '</span>';
+    if (p.model) html += '<span class="meta" style="margin:0;font-weight:600;text-align:right;white-space:nowrap">📦 ' + sanitize(p.model.substr(0, 45)) + '</span>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border,#334155)">';
+    html += '<span style="font-size:.72rem;color:var(--text2,#94a3b8)">' + (p._mine ? '⭐ ' : '👤 ') + sanitize(p.ownerName) + '</span>';
+    html += '<span style="font-size:.92rem;font-weight:700;color:#22c55e">' + fmtMoneyStyled(amt) + '</span>';
+    html += '</div></div>';
   });
-  h += '</tbody></table></div>';
-  el.innerHTML = h;
+  html += '</div>';
+  return html;
 }
 
 function _pipeTeamRefresh() {
