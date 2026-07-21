@@ -247,6 +247,8 @@ var _conflictMap = {}; // pipeId → [{otherId, dealerName, score, key}]
 var pipeCompareMode = false;
 var pipeCompareSelected = [];
 var pipeCompareThreshold = 40;
+var _pipeCompareAllPairsCacheKey = null; // แคชผลลัพธ์คู่ Pipeline ทั้งระบบ ดู renderPipeCompareSuggestPanel
+var _pipeCompareAllPairsCache = null;
 
 // ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
 function PIPE_ACTIVE_STATUSES() { return getStatusIdsByCategory('active'); }
@@ -550,16 +552,27 @@ function renderPipeCompareSuggestPanel() {
 
   if (pipeCompareSelected.length === 0) {
     html += '<div style="font-size:.78rem;font-weight:700;margin-bottom:6px">🔥 คู่ที่น่าจะชนกันที่สุด (ทั้งระบบ)</div>' + sliderHtml;
-    var pairs = [];
-    for (var i = 0; i < active.length; i++) {
-      for (var j = i + 1; j < active.length; j++) {
-        if (active[i].dealerId === active[j].dealerId) continue;
-        var sc = pipeMatchScore(active[i], active[j]);
-        if (sc >= pipeCompareThreshold) pairs.push({ a: active[i], b: active[j], score: sc });
+    // เช็คทุกคู่เป็น O(n²) — แคชผลลัพธ์ไว้ด้วย key จาก id+เวลาแก้ไขล่าสุดของทุก pipeline + threshold
+    // ที่ใช้ กัน render() ซ้ำๆ (เช่นลากแถบ threshold, สลับหน้า) คำนวณ O(n²) ใหม่ทั้งหมดทุกครั้งโดยไม่จำเป็น
+    // ถ้าไม่มีอะไรเปลี่ยนจริง (ข้อมูล pipeline เดิม, threshold เดิม) key จะตรงกัน ใช้ผลลัพธ์เดิมได้เลย
+    var cacheKey = active.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::' + pipeCompareThreshold;
+    var pairs;
+    if (_pipeCompareAllPairsCacheKey === cacheKey) {
+      pairs = _pipeCompareAllPairsCache;
+    } else {
+      pairs = [];
+      for (var i = 0; i < active.length; i++) {
+        for (var j = i + 1; j < active.length; j++) {
+          if (active[i].dealerId === active[j].dealerId) continue;
+          var sc = pipeMatchScore(active[i], active[j]);
+          if (sc >= pipeCompareThreshold) pairs.push({ a: active[i], b: active[j], score: sc });
+        }
       }
+      pairs.sort(function(x, y) { return y.score - x.score; });
+      pairs = pairs.slice(0, 8);
+      _pipeCompareAllPairsCacheKey = cacheKey;
+      _pipeCompareAllPairsCache = pairs;
     }
-    pairs.sort(function(x, y) { return y.score - x.score; });
-    pairs = pairs.slice(0, 8);
     if (!pairs.length) {
       html += '<div style="font-size:.72rem;color:var(--text2)">ไม่พบคู่ที่คะแนน ≥ ' + pipeCompareThreshold + '% — ลองลดเกณฑ์ดู</div>';
     } else {

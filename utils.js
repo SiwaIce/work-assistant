@@ -358,10 +358,28 @@ var _PIPE_ORG_AFFIXES = [
   /มหาวิทยาลัย/g, /สำนักงาน/g, /สถาบัน/g, /องค์การ/g, /กรม/g, /กระทรวง/g,
   /public\s*company\s*limited/gi, /company\s*limited/gi, /co\.,?\s*ltd\.?/gi, /pcl\.?/gi, /ltd\.?/gi, /inc\.?/gi, /corp\.?/gi
 ];
+// แคชผลลัพธ์ไว้ด้วยตัว string เดิมเป็น key — ฟังก์ชันนี้ถูกเรียกซ้ำมหาศาลตอนเทียบโครงการทีละคู่แบบ
+// O(n²) (ทุกคู่ทุก pipeline) ถ้าไม่แคช ชื่อเดิมจะถูกตัดคำนำหน้าซ้ำๆ หลายพันครั้งโดยไม่จำเป็น ทำให้
+// หน้า "เทียบ Project"/ตรวจโครงการชนกันหน่วงเวลาโหลดนานผิดปกติเมื่อมี Pipeline เยอะ (พบว่าเป็นสาเหตุ)
+var _pipeOrgNormCache = {};
 function _pipeNormOrgName(s) {
   s = (s || '').toString();
-  _PIPE_ORG_AFFIXES.forEach(function(re) { s = s.replace(re, ''); });
-  return s;
+  if (_pipeOrgNormCache.hasOwnProperty(s)) return _pipeOrgNormCache[s];
+  var out = s;
+  _PIPE_ORG_AFFIXES.forEach(function(re) { out = out.replace(re, ''); });
+  _pipeOrgNormCache[s] = out;
+  return out;
+}
+// แคช bigram map ด้วย string เดิมเป็น key — เหตุผลเดียวกับแคชด้านบน: ตอนเทียบ Pipeline ทีละคู่แบบ
+// O(n²) ชื่อเดิมของ pipeline แต่ละอันจะถูกส่งเข้า fcStrSim ซ้ำเป็นร้อยครั้ง (เทียบกับทุกอันที่เหลือ)
+// ถ้าไม่แคชจะ build bigram map ของสตริงเดิมซ้ำๆ โดยไม่จำเป็น เป็นส่วนที่กินเวลามากที่สุดของฟังก์ชันนี้
+var _fcGramsCache = {};
+function _fcGrams(s) {
+  if (_fcGramsCache.hasOwnProperty(s)) return _fcGramsCache[s];
+  var m = {};
+  for (var i = 0; i < s.length - 1; i++) { var g = s.substr(i, 2); m[g] = (m[g] || 0) + 1; }
+  _fcGramsCache[s] = m;
+  return m;
 }
 function fcStrSim(a, b) {
   a = (a || '').toString().toLowerCase().replace(/\s+/g, '');
@@ -369,8 +387,7 @@ function fcStrSim(a, b) {
   if (!a || !b) return 0;
   if (a === b) return 1;
   if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
-  function grams(s) { var m = {}; for (var i = 0; i < s.length - 1; i++) { var g = s.substr(i, 2); m[g] = (m[g] || 0) + 1; } return m; }
-  var ba = grams(a), bb = grams(b), inter = 0, total = 0;
+  var ba = _fcGrams(a), bb = _fcGrams(b), inter = 0, total = 0;
   for (var g in ba) { total += ba[g]; if (bb[g]) inter += Math.min(ba[g], bb[g]); }
   for (var g2 in bb) { total += bb[g2]; }
   return total ? (2 * inter / total) : 0;
@@ -396,7 +413,13 @@ function _pipeModelGroupKey(modelName) {
   }
   return null;
 }
+// แคชด้วย id+updated (invalidate อัตโนมัติเมื่อ pipeline ถูกแก้ไข) — เหตุผลเดียวกับ _pipeOrgNormCache
+// ข้างบน ฟังก์ชันนี้ถูกเรียกซ้ำ O(n²) ตอนเทียบโครงการทีละคู่ ถ้าไม่แคชจะคำนวณรายการสินค้าเดิมซ้ำ
+// หลายพันครั้งโดยไม่จำเป็นเมื่อมี Pipeline เยอะ
+var _pipeModelsSetCache = {};
 function pipeModelsSet(p) {
+  var cacheKey = p && p.id ? (p.id + ':' + (p.updated || p.created || '')) : null;
+  if (cacheKey && _pipeModelsSetCache.hasOwnProperty(cacheKey)) return _pipeModelsSetCache[cacheKey];
   var s = {};
   var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : (p.items || []);
   function addModel(m) {
@@ -407,6 +430,7 @@ function pipeModelsSet(p) {
   }
   (items || []).forEach(function (it) { if (it && it.model) addModel(it.model); });
   if (p.model) addModel(p.model);
+  if (cacheKey) _pipeModelsSetCache[cacheKey] = s;
   return s;
 }
 function pipeMatchScore(a, b) {
