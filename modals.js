@@ -229,7 +229,13 @@ async function saveDealer(eid) {
     if (typeof addAuditLog === 'function') {
       addAuditLog('update_dealer', 'dealer', eid, data.name, eid, data.name, {});
     }
-    
+
+    // ✅ เซลที่ดูแล Dealer เปลี่ยน → ทับ Sale ของทุก Pipeline ใต้ Dealer นี้ให้ตรงกันเสมอ
+    // (ตกลงกันไว้ว่าให้ทับทั้งหมด ไม่เช็คว่า Pipeline เคยตั้ง Sale ไว้ต่างจาก Dealer หรือไม่)
+    if (typeof cascadeDealerSaleNameToPipelines === 'function') {
+      cascadeDealerSaleNameToPipelines(eid, data.saleName);
+    }
+
     // ✅ เพิ่ม sync ไป Firebase (ให้ client-view ดึงไปใช้)
     if (typeof syncDealerToFirebase === 'function') {
       await syncDealerToFirebase(eid);

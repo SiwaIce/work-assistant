@@ -1795,6 +1795,15 @@ function _dealerInlineSaveLevel(dealerId, newLevel) {
   render();
 }
 
+// ทับ Sale ของทุก Pipeline ใต้ Dealer นี้ให้ตรงกับ "เซลที่ดูแล" ของ Dealer เสมอ (ตกลงกันไว้ว่าทับทั้งหมด
+// ไม่เช็คว่า Pipeline นั้นเคยตั้ง Sale ไว้ต่างจาก Dealer หรือเปล่า)
+function cascadeDealerSaleNameToPipelines(dealerId, saleName) {
+  var pipes = ST.pipelineByDealer(dealerId);
+  pipes.forEach(function(p) {
+    if (p.saleName !== saleName) ST.update('pipeline', p.id, { saleName: saleName });
+  });
+}
+
 function markDealerAuthorized(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
