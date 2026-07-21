@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes">
+<title>DJI Enterprise — Dealer Portal</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0c10;--bg2:#15171c;--border:rgba(255,255,255,0.07);--text:#e4e6eb;--text2:#787c85;--accent:#3b82f6;--green:#22c55e;--orange:#f97316;--red:#ef4444;--purple:#a855f7;--yellow:#eab308;--radius:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans Thai',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:40px}
+.theme-light{--bg:#f8fafc;--bg2:#ffffff;--border:#e2e8f0;--text:#1e293b;--text2:#64748b}
+
+/* PIN */
+#pinScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.pin-box{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:36px 28px;max-width:360px;width:100%;text-align:center}
+.pin-logo{font-size:52px;margin-bottom:12px}
+.pin-brand{font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:6px;font-weight:700}
+.pin-name{font-size:22px;font-weight:800;margin-bottom:4px}
+.pin-sub{font-size:12px;color:var(--text2);margin-bottom:28px}
+.pin-input{width:100%;padding:16px;font-size:24px;letter-spacing:10px;text-align:center;background:var(--bg);border:2px solid var(--border);border-radius:12px;color:var(--text);outline:none;margin-bottom:12px}
+.pin-input:focus{border-color:var(--accent)}
+.pin-btn{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer}
+.pin-btn:active{opacity:.85}
+.pin-err{color:var(--red);font-size:12px;margin-top:10px;min-height:18px}
+
+/* MAIN */
+#mainApp{display:none}
+.cv-wrap{max-width:900px;margin:0 auto;padding:20px 16px}
+
+/* HEADER */
+.cv-header{text-align:center;padding:32px 20px 28px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;margin-bottom:20px}
+.cv-brand{font-size:11px;letter-spacing:2px;color:var(--accent);font-weight:700;margin-bottom:8px}
+.cv-name{font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent),#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.cv-meta{font-size:12px;color:var(--text2);line-height:1.7}
+.cv-badges{display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.cv-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.cb-tier-S{background:#a855f720;color:#a855f7;border:1px solid #a855f740}
+.cb-tier-A{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
+.cb-tier-B{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
+.cb-type{background:rgba(255,255,255,0.05);color:var(--text2);border:1px solid var(--border)}
+.cb-sales{background:rgba(59,130,246,0.08);color:var(--accent);border:1px solid rgba(59,130,246,0.2)}
+
+/* TABS */
+.tab-bar{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:5px;margin-bottom:20px;overflow-x:auto;scrollbar-width:none;position:sticky;top:10px;z-index:40}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);border-radius:10px;white-space:nowrap;flex-shrink:0;transition:.15s}
+.tab-btn:hover{color:var(--accent);background:rgba(59,130,246,0.07)}
+.tab-btn.act{background:var(--accent);color:#fff}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px}
+.stat-c{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center}
+.stat-n{font-size:24px;font-weight:800;color:var(--accent)}
+.stat-l{font-size:10px;color:var(--text2);margin-top:3px}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);white-space:nowrap}
+.tbl td{padding:12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(59,130,246,0.03)}
+
+/* CARDS */
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px}
+.section-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.item-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.item-title{font-size:13px;font-weight:700;margin-bottom:4px}
+.item-sub{font-size:11px;color:var(--text2);line-height:1.6}
+
+/* STATUS BADGES */
+.st{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.st-prospect{background:rgba(148,163,184,.15);color:#94a3b8}
+.st-tor_review{background:rgba(249,115,22,.12);color:#f97316}
+.st-quotation{background:rgba(234,179,8,.12);color:#eab308}
+.st-bidding{background:rgba(59,130,246,.12);color:#3b82f6}
+.st-negotiation{background:rgba(168,85,247,.12);color:#a855f7}
+.st-win{background:rgba(34,197,94,.12);color:#22c55e}
+.st-ordered{background:rgba(16,185,129,.12);color:#10b981}
+.st-delivered{background:rgba(16,185,129,.15);color:#10b981}
+.st-lost{background:rgba(239,68,68,.1);color:#ef4444}
+
+/* DEMO */
+.demo-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.dm-lend{background:rgba(249,115,22,.15);color:#f97316;border:1px solid rgba(249,115,22,.3)}
+.dm-ready{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3)}
+.dm-other{background:rgba(148,163,184,.12);color:#94a3b8;border:1px solid rgba(148,163,184,.2)}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--text2);font-size:13px;line-height:1.8}
+
+/* FOOTER */
+.cv-footer{text-align:center;padding:28px 0 8px;margin-top:24px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.8}
+
+/* THEME TOGGLE */
+.theme-btn{position:fixed;top:16px;right:16px;width:38px;height:38px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;z-index:100}
+.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* RESPONSIVE */
+@media(max-width:600px){
+  .cv-wrap{padding:12px 10px}
+  .cv-name{font-size:22px}
+  .tab-btn{padding:8px 14px;font-size:12px}
+  .tbl th,.tbl td{padding:8px}
+  .tbl .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- PIN Screen -->
+<div id="pinScreen">
+  <div class="pin-box">
+    <div class="pin-logo">🏪</div>
+    <div class="pin-brand">DJI ENTERPRISE</div>
+    <div class="pin-name" id="pinName">กำลังโหลด...</div>
+    <div class="pin-sub" id="pinSub">ใส่ PIN เพื่อดูข้อมูล</div>
+    <input type="password" class="pin-input" id="pinInput" maxlength="6" placeholder="••••" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="pin-btn" onclick="doLogin()">🔓 เข้าดูข้อมูล</button>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp">
+  <div class="cv-wrap">
+    <!-- Header -->
+    <div class="cv-header">
+      <div class="cv-brand">🚁 DJI ENTERPRISE</div>
+      <div class="cv-name" id="cvName">—</div>
+      <div class="cv-meta" id="cvMeta"></div>
+      <div class="cv-badges" id="cvBadges"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <div class="tab-btn act" onclick="switchTab('pipeline')">📊 Pipeline</div>
+      <div class="tab-btn" onclick="switchTab('forecast')">📦 Forecast</div>
+      <div class="tab-btn" onclick="switchTab('demo')">🚁 Demo Unit</div>
+    </div>
+
+    <!-- Content -->
+    <div id="tabContent"></div>
+
+    <div class="cv-footer">
+      Powered by SIS Distribution (Thailand) PLC — DJI Authorized Distributor<br>
+      <span id="footerTs"></span>
+    </div>
+  </div>
+</div>
+
+<button class="theme-btn" onclick="toggleTheme()" title="เปลี่ยน theme">🌙</button>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain:"work-assistant-9e024.firebaseapp.com",
+  projectId:"work-assistant-9e024",
+  storageBucket:"work-assistant-9e024.firebasestorage.app",
+  messagingSenderId:"796607223436",
+  appId:"1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+
+// ── STATE ──────────────────────────────────────────────
+var SALES_ID = '', DEALER_ID = '';
+var dealerDoc = null, salesProfile = null;
+var pipelineData = [], forecastData = [], demoData = [];
+var currentTab = 'pipeline';
+
+var PIPE_STATUSES = {
+  prospect:'Prospect', tor_review:'TOR Review', quotation:'Quotation',
+  bidding:'Bidding', negotiation:'Negotiation', win:'Win',
+  ordered:'Ordered', delivered:'Delivered', lost:'Lost'
+};
+
+// ── INIT ───────────────────────────────────────────────
+(function init(){
+  var p = new URLSearchParams(location.search);
+  SALES_ID  = p.get('salesId')  || '';
+  DEALER_ID = p.get('dealerId') || '';
+
+  if (!SALES_ID || !DEALER_ID) {
+    showPinError('❌ ลิงก์ไม่ถูกต้อง');
+    return;
+  }
+
+  document.getElementById('pinSub').textContent = '🔄 กำลังโหลด...';
+  document.getElementById('pinInput').style.display = 'none';
+  document.querySelector('.pin-btn').style.display = 'none';
+
+  Promise.all([
+    db.collection('salesMembers').doc(SALES_ID).get(),
+    db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(DEALER_ID).get()
+  ]).then(function(results){
+    var salesSnap  = results[0];
+    var dealerSnap = results[1];
+
+    if (!salesSnap.exists)  { showPinError('❌ ไม่พบข้อมูล Sales'); return; }
+    if (!dealerSnap.exists) { showPinError('❌ ไม่พบข้อมูล Dealer'); return; }
+
+    salesProfile = salesSnap.data();
+    dealerDoc    = dealerSnap.data();
+
+    document.getElementById('pinName').textContent = dealerDoc.name || 'Dealer';
+
+    if (dealerDoc.clientPin) {
+      // PIN required
+      document.getElementById('pinSub').textContent = 'ใส่ PIN เพื่อดูข้อมูล';
+      document.getElementById('pinInput').style.display = '';
+      document.querySelector('.pin-btn').style.display = '';
+      document.getElementById('pinInput').focus();
+    } else {
+      // No PIN — go straight in
+      enterApp();
+    }
+  }).catch(function(e){
+    document.getElementById('pinSub').textContent = '⚠️ โหลดไม่ได้ — ตรวจสอบการเชื่อมต่อ';
+    console.error(e);
+  });
+})();
+
+function showPinError(msg){
+  var box = document.querySelector('.pin-box');
+  box.innerHTML = '<div class="pin-logo">⚠️</div>' +
+    '<div class="pin-brand">DJI ENTERPRISE</div>' +
+    '<div class="pin-name" style="color:var(--red)">เข้าไม่ได้</div>' +
+    '<div class="pin-sub" style="color:var(--red);margin-top:8px">'+msg+'</div>';
+}
+
+function doLogin(){
+  var pin = document.getElementById('pinInput').value.trim();
+  var err = document.getElementById('pinErr');
+  if (!pin) { err.textContent = 'กรุณาใส่ PIN'; return; }
+  if (!dealerDoc) { err.textContent = 'กำลังโหลด...'; return; }
+  if (pin !== String(dealerDoc.clientPin)) { err.textContent = '❌ PIN ไม่ถูกต้อง'; return; }
+  enterApp();
+}
+
+// ── ENTER APP ──────────────────────────────────────────
+function enterApp(){
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = '';
+  renderHeader();
+  loadData();
+  document.getElementById('footerTs').textContent = 'ข้อมูล ณ ' + new Date().toLocaleString('th-TH');
+}
+
+function renderHeader(){
+  var d = dealerDoc;
+  document.getElementById('cvName').textContent = d.name || '—';
+  var meta = [];
+  if (d.province) meta.push('📍 ' + d.province);
+  if (d.phone)    meta.push('📞 ' + d.phone);
+  if (salesProfile) meta.push('Sales: ' + salesProfile.name);
+  document.getElementById('cvMeta').innerHTML = meta.join('  &nbsp;·&nbsp;  ');
+  var badges = '';
+  if (d.tier)  badges += '<span class="cv-badge cb-tier-'+(d.tier==='S'||d.tier==='A'||d.tier==='B'?d.tier:'other')+'">Tier '+esc(d.tier)+'</span>';
+  if (d.type)  badges += '<span class="cv-badge cb-type">'+esc(d.type)+'</span>';
+  if (salesProfile) badges += '<span class="cv-badge cb-sales">👤 '+esc(salesProfile.name)+'</span>';
+  document.getElementById('cvBadges').innerHTML = badges;
+}
+
+// ── LOAD DATA ──────────────────────────────────────────
+function loadData(){
+  var base = db.collection('salesMembers').doc(SALES_ID);
+  Promise.all([
+    base.collection('pipeline').where('dealerId','==',DEALER_ID).get(),
+    base.collection('forecastItems').where('dealerId','==',DEALER_ID).get(),
+    base.collection('demoUnits').where('dealerId','==',DEALER_ID).get()
+  ]).then(function(results){
+    pipelineData = [];
+    results[0].forEach(function(d){ pipelineData.push(d.data()); });
+    pipelineData.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+
+    forecastData = [];
+    results[1].forEach(function(d){ forecastData.push(d.data()); });
+    forecastData.sort(function(a,b){ return (a.expectedDate||'').localeCompare(b.expectedDate||''); });
+
+    demoData = [];
+    results[2].forEach(function(d){ demoData.push(d.data()); });
+
+    renderTab();
+  }).catch(function(e){
+    document.getElementById('tabContent').innerHTML =
+      '<div class="empty">⚠️ โหลดข้อมูลไม่สำเร็จ<br><small>'+e.message+'</small></div>';
+  });
+}
+
+// ── TABS ───────────────────────────────────────────────
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(function(t){ t.classList.remove('act'); });
+  event.currentTarget.classList.add('act');
+  renderTab();
+}
+
+function renderTab(){
+  if      (currentTab === 'pipeline') renderPipeline();
+  else if (currentTab === 'forecast') renderForecast();
+  else if (currentTab === 'demo')     renderDemo();
+}
+
+// ── PIPELINE ───────────────────────────────────────────
+function renderPipeline(){
+  var active = pipelineData.filter(function(p){ return ['lost','delivered'].indexOf(p.status) === -1; });
+  var totalAmt = active.reduce(function(s,p){ return s+(Number(p.forecastAmount)||0); },0);
+  var won = pipelineData.filter(function(p){ return ['win','ordered','delivered'].indexOf(p.status) >= 0; });
+
+  var h = '<div class="stats-grid">';
+  h += '<div class="stat-c"><div class="stat-n">'+pipelineData.length+'</div><div class="stat-l">ทั้งหมด</div></div>';
+  h += '<div class="stat-c"><div class="stat-n">'+active.length+'</div><div class="stat-l">กำลังดำเนินการ</div></div>';
+  h += '<div class="stat-c"><div class="stat-n" style="color:var(--green)">'+won.length+'</div><div class="stat-l">ชนะแล้ว</div></div>';
+  if(totalAmt>0) h += '<div class="stat-c"><div class="stat-n">'+fmtAmt(totalAmt)+'</div><div class="stat-l">Active ฿</div></div>';
+  h += '</div>';
+
+  if(!pipelineData.length){
+    h += '<div class="empty">📊 ยังไม่มีโครงการ</div>';
+  } else {
+    h += '<div class="section">';
+    h += '<div class="section-title">📊 โครงการทั้งหมด</div>';
+    h += '<div style="overflow-x:auto"><table class="tbl">';
+    h += '<thead><tr><th>โครงการ</th><th>End User</th><th>สถานะ</th><th class="hide-sm">มูลค่า</th><th class="hide-sm">สินค้า</th></tr></thead><tbody>';
+    pipelineData.forEach(function(p){
+      var stCls = 'st-'+(p.status||'prospect');
+      var stName = PIPE_STATUSES[p.status] || p.status || '—';
+      h += '<tr>';
+      h += '<td><strong>'+esc(p.projectName||'—')+'</strong></td>';
+      h += '<td style="color:var(--text2)">'+esc(p.endUserTH||'—')+'</td>';
+      h += '<td><span class="st '+stCls+'">'+stName+'</span></td>';
+      h += '<td class="hide-sm" style="color:var(--accent)">'+(p.forecastAmount?'฿'+Number(p.forecastAmount).toLocaleString():'—')+'</td>';
+      h += '<td class="hide-sm" style="color:var(--text2)">'+esc(p.model||'—')+'</td>';
+      h += '</tr>';
+    });
+    h += '</tbody></table></div></div>';
+
+    if(won.length){
+      h += '<div class="section">';
+      h += '<div class="section-title" style="color:var(--green)">✅ โครงการที่ชนะแล้ว</div>';
+      won.forEach(function(p){
+        h += '<div class="item-card">';
+        h += '<div class="item-title">'+esc(p.projectName||'—')+'</div>';
+        h += '<div class="item-sub">';
+        if(p.endUserTH) h += 'End User: '+esc(p.endUserTH)+'<br>';
+        if(p.model)     h += 'สินค้า: '+esc(p.model)+'<br>';
+        if(p.forecastAmount) h += 'มูลค่า: ฿'+Number(p.forecastAmount).toLocaleString();
+        h += '</div></div>';
+      });
+      h += '</div>';
+    }
+  }
+  document.getElementById('tabContent').innerHTML = h;
+}
+
+// ── FORECAST ───────────────────────────────────────────
+function renderForecast(){
+  var totalQty = forecastData.reduce(function(s,f){ return s+(Number(f.qty)||0); },0);
+  var conf = forecastData.filter(function(f){ return f.confirmed; });
+
+  var h = '<div class="stats-grid">';
+  h += '<div class="stat-c"><div class="stat-n">'+forecastData.length+'</div><div class="stat-l">รายการ</div></div>';
+  h += '<div class="stat-c"><div class="stat-n">'+totalQty+'</div><div class="stat-l">จำนวนรวม (ชิ้น)</div></div>';
+  h += '<div class="stat-c"><div class="stat-n" style="color:var(--green)">'+conf.length+'</div><div class="stat-l">Confirmed</div></div>';
+  h += '</div>';
+
+  if(!forecastData.length){
+    h += '<div class="empty">📦 ยังไม่มีแผนการสั่งซื้อ</div>';
+  } else {
+    h += '<div class="section">';
+    h += '<div class="section-title">📦 แผนการสั่งซื้อ</div>';
+    h += '<div style="overflow-x:auto"><table class="tbl">';
+    h += '<thead><tr><th>รุ่น</th><th>จำนวน</th><th class="hide-sm">กำหนดซื้อ</th><th class="hide-sm">ระดับราคา</th><th>สถานะ</th></tr></thead><tbody>';
+    forecastData.forEach(function(f){
+      h += '<tr>';
+      h += '<td><strong>'+esc(f.model||'—')+'</strong>'+(f.notes?'<div style="font-size:11px;color:var(--text2)">'+esc(f.notes)+'</div>':'')+'</td>';
+      h += '<td style="font-weight:700;color:var(--accent)">'+(f.qty||'—')+'</td>';
+      h += '<td class="hide-sm" style="color:var(--text2)">'+(f.expectedDate||'—')+'</td>';
+      h += '<td class="hide-sm" style="color:var(--text2)">'+esc(f.priceLevel||'—')+'</td>';
+      h += '<td><span style="font-size:11px;font-weight:600;color:'+(f.confirmed?'var(--green)':'var(--text2)')+'">'+(f.confirmed?'✅ Confirmed':'Draft')+'</span></td>';
+      h += '</tr>';
+    });
+    h += '</tbody></table></div></div>';
+  }
+  document.getElementById('tabContent').innerHTML = h;
+}
+
+// ── DEMO ───────────────────────────────────────────────
+function renderDemo(){
+  var lent  = demoData.filter(function(d){ return d.status === 'ให้ยืมแล้ว'; });
+  var ready = demoData.filter(function(d){ return d.status === 'พร้อมให้ยืม'; });
+
+  var h = '<div class="stats-grid">';
+  h += '<div class="stat-c"><div class="stat-n">'+demoData.length+'</div><div class="stat-l">ทั้งหมด</div></div>';
+  h += '<div class="stat-c"><div class="stat-n" style="color:var(--orange)">'+lent.length+'</div><div class="stat-l">กำลังยืมอยู่</div></div>';
+  h += '<div class="stat-c"><div class="stat-n" style="color:var(--green)">'+ready.length+'</div><div class="stat-l">พร้อมให้ยืม</div></div>';
+  h += '</div>';
+
+  if(!demoData.length){
+    h += '<div class="empty">🚁 ยังไม่มี Demo Unit</div>';
+  } else {
+    h += '<div class="section">';
+    h += '<div class="section-title">🚁 Demo Unit</div>';
+    demoData.forEach(function(dm){
+      var isCls = dm.status==='ให้ยืมแล้ว'?'dm-lend':dm.status==='พร้อมให้ยืม'?'dm-ready':'dm-other';
+      h += '<div class="item-card" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">';
+      h += '<div><div class="item-title">'+esc(dm.model||'—')+'</div>';
+      h += '<div class="item-sub">';
+      if(dm.serialNo)   h += 'S/N: '+esc(dm.serialNo)+'<br>';
+      if(dm.lendDate)   h += 'วันที่ยืม: '+esc(dm.lendDate)+'<br>';
+      if(dm.returnDate) h += 'กำหนดคืน: '+esc(dm.returnDate)+'<br>';
+      if(dm.notes)      h += esc(dm.notes);
+      h += '</div></div>';
+      h += '<span class="demo-badge '+isCls+'">'+esc(dm.status||'—')+'</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  document.getElementById('tabContent').innerHTML = h;
+}
+
+// ── THEME ──────────────────────────────────────────────
+(function initTheme(){
+  var saved = localStorage.getItem('cvs_theme');
+  if(saved==='light') document.body.classList.add('theme-light');
+})();
+function toggleTheme(){
+  var isLight = document.body.classList.toggle('theme-light');
+  localStorage.setItem('cvs_theme', isLight?'light':'dark');
+  document.querySelector('.theme-btn').textContent = isLight?'🌑':'🌙';
+}
+
+// ── UTILS ──────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtAmt(n){ n=Number(n)||0; if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return(n/1e3).toFixed(0)+'K'; return n.toString(); }
+</script>
+</body>
+</html>

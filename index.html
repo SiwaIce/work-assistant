@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DJI Sales Assistant</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
+<link rel="stylesheet" href="style.css">
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<!-- jexcel CE v4 — spreadsheet edit mode -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.js"></script>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+<!-- Login Screen -->
+<div id="loginScreen" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;z-index:99999;align-items:center;justify-content:center">
+  <div style="text-align:center;max-width:360px;padding:24px">
+    <div style="font-size:48px;margin-bottom:16px">🛠️</div>
+    <h1 style="font-size:24px;font-weight:800;color:#e0e6f0;margin-bottom:4px">DJI Sales Assistant</h1>
+    <p style="color:#8892b0;margin-bottom:24px">SIS Distribution (Thailand) PLC</p>
+    <button onclick="loginWithGoogle()" style="display:flex;align-items:center;gap:10px;margin:0 auto;padding:12px 24px;border-radius:12px;border:1px solid #334155;background:#1e293b;color:#e0e6f0;font-size:15px;cursor:pointer;transition:0.2s">
+      <img src="https://www.google.com/favicon.ico" width="20" height="20"> Login with Google
+    </button>
+    <div id="loginError" style="color:#ff5252;margin-top:12px;font-size:13px"></div>
+    <div style="margin-top:20px;font-size:12px;color:#475569">
+      <label><input type="checkbox" id="offlineMode" style="width:auto"> ใช้แบบ Offline (ไม่ sync)</label>
+    </div>
+    <button onclick="useOffline()" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1px solid #334155;background:transparent;color:#8892b0;font-size:12px;cursor:pointer">เข้าใช้แบบ Offline</button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+<div class="nh" onclick="go('today')">🛠️ <span>DJI</span> Sales</div>
+
+<!-- Favorites — always open -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('fav')">⭐ Favorites <span class="sb-edit" onclick="event.stopPropagation();showEditFavorites()">✏️</span><span class="sg-chev" id="sgc-fav">▾</span></div>
+<div class="sg-items" id="sgi-fav">
+  <div id="sbFavorites"></div>
+</div>
+
+<!-- หลัก — always open -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('main')">📌 หลัก <span class="sg-chev" id="sgc-main">▾</span></div>
+<div class="sg-items" id="sgi-main">
+  <div class="nl" data-v="today" onclick="go('today')">📌 วันนี้</div>
+  <div class="nl" data-v="dealers" onclick="go('dealers')">🏪 Dealers</div>
+  <div class="nl" data-v="pipeline" onclick="go('pipeline')">📊 Pipeline</div>
+  <div class="nl" data-v="pipeBoard" onclick="go('pipeBoard')">📋 Board</div>
+  <div class="nl" data-v="pipeDash" onclick="go('pipeDash')">📊 Overview</div>
+  <div class="nl" data-v="salesOrders" onclick="go('salesOrders')">📦 Sales Order</div>
+  <div class="nl" data-v="serialSearch" onclick="go('serialSearch')">🔍 ค้นหา Serial</div>
+</div>
+
+<!-- งาน -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('work')">📋 งาน <span class="sg-chev" id="sgc-work">▾</span></div>
+<div class="sg-items" id="sgi-work">
+  <div class="nl" data-v="tasks" onclick="go('tasks')">📋 Tasks</div>
+  <div class="nl" onclick="tasksView='kanban';go('tasks')">📋 Kanban</div>
+  <div class="nl" data-v="prospectList" onclick="go('prospectList')">🆕 Lead ที่ติดตาม</div>
+  <div class="nl" data-v="visitPlan" onclick="go('visitPlan')">📅 Visit Plan</div>
+  <div class="nl" data-v="notes" onclick="go('notes')">📓 Note</div>
+  <div class="nl" data-v="meetings" onclick="go('meetings')">📅 ประชุม</div>
+  <div class="nl" data-v="calendar" onclick="go('calendar')">📆 ปฏิทิน</div>
+  <div class="nl" data-v="announcements" onclick="go('announcements')">📢 ประกาศ</div>
+</div>
+
+<!-- ข้อมูล -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('data')">📊 ข้อมูล <span class="sg-chev" id="sgc-data">▾</span></div>
+<div class="sg-items" id="sgi-data">
+  <div class="nl" data-v="forecastComparison" onclick="go('forecastComparison')">📊 เปรียบเทียบ Forecast</div>
+  <div class="nl" data-v="visits" onclick="go('visits')">🤝 Visit Report</div>
+  <div class="nl" data-v="followup" onclick="go('followup')">📞 Follow-up</div>
+  <div class="nl" data-v="forecast" onclick="go('forecast')">📦 Forecast</div>
+  <div class="nl" data-v="report" onclick="go('report')">📊 Weekly Report</div>
+  <div class="nl" data-v="dashboard" onclick="go('dashboard')">📈 Dashboard</div>
+</div>
+
+<!-- เครื่องมือ -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('tools')">🔧 เครื่องมือ <span class="sg-chev" id="sgc-tools">▾</span></div>
+<div class="sg-items" id="sgi-tools">
+  <div class="nl" data-v="leads" onclick="go('leads')">📋 Lead Forms</div>
+  <div class="nl" onclick="go('contactLogs')">📞 ศูนย์ติดต่อ</div>
+  <div class="nl" onclick="openLineTemplates()">💬 LINE Message</div>
+  <div class="nl" onclick="openEmailDraft()">📧 ส่งอีเมล (เลือก Dealer)</div>
+  <div class="nl" data-v="emailDrafts" onclick="go('emailDrafts')">📧 Email Draft</div>
+  <div class="nl" onclick="openPresentation()">🎬 Presentation</div>
+  <div class="nl" data-v="feedback" onclick="go('feedback')">💡 Feedback</div>
+</div>
+
+<!-- สินค้าและราคา -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('products')">📦 สินค้าและราคา <span class="sg-chev" id="sgc-products">▾</span></div>
+<div class="sg-items" id="sgi-products">
+  <div class="nl" data-v="products" onclick="go('products')">📋 สินค้าทั้งหมด</div>
+  <div class="nl" data-v="productPrices" onclick="go('productPrices')">💰 ราคาตาม Level</div>
+  <div class="nl" data-v="productBundles" onclick="go('productBundles')">🎁 Bundle/Combo</div>
+  <div class="nl" data-v="productDemo" onclick="go('productDemo')">🚁 Demo Unit</div>
+  <div class="nl" data-v="productImport" onclick="go('productImport')">📥 Import/Export</div>
+</div>
+
+<!-- ติดตาม -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('track')">🎯 ติดตาม <span class="sg-chev" id="sgc-track">▾</span></div>
+<div class="sg-items" id="sgi-track">
+  <div class="nl" data-v="kpi" onclick="go('kpi')">🎯 KPI</div>
+  <div class="nl" data-v="customKpi" onclick="go('customKpi')">🎯 KPI Dashboard</div>
+  <div class="nl" data-v="monthlyGoal" onclick="go('monthlyGoal')">🎯 Monthly Goal</div>
+  <div class="nl" data-v="demoTracker" onclick="go('demoTracker')">🚁 Demo Equipment</div>
+  <div class="nl" data-v="kpiScorecard" onclick="go('kpiScorecard')">📊 KPI เซลล์</div>
+  <div class="nl" data-v="quotationV2" onclick="go('quotationV2')">💰 Quotation V2</div>
+  <div class="nl" data-v="marginAnalysis" onclick="go('marginAnalysis')">📊 Margin Analysis</div>
+  <div class="nl" data-v="knowledge" onclick="go('knowledge')">📚 Knowledge</div>
+</div>
+
+<!-- ระบบ -->
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('system')">⚙️ ระบบ <span class="sg-chev" id="sgc-system">▾</span></div>
+<div class="sg-items" id="sgi-system">
+  <div class="nl" data-v="exports" onclick="go('exports')">📤 Export</div>
+  <div class="nl" data-v="health" onclick="go('health')">🏥 Data Health</div>
+  <div class="nl" data-v="reminders" onclick="go('reminders')">🔔 แจ้งเตือน<span class="nb" id="nBdg" style="display:none">0</span></div>
+  <div class="nl" data-v="insights" onclick="go('insights')">🤖 Insights</div>
+  <div class="nl" data-v="customerUpdateHistory" onclick="go('customerUpdateHistory')">📜 ประวัติอัพเดท</div>
+  <div class="nl" data-v="customerForecastUpdates" onclick="go('customerForecastUpdates')">📦 แผนซื้อลูกค้า</div>
+  <div class="nl" data-v="customerForecastSummary" onclick="go('customerForecastSummary')">📊 สรุป Forecast ลูกค้า</div>
+  <div class="nl" onclick="go('auditLog')">📜 Audit Log</div>
+  <div class="nl" data-v="admin" onclick="go('admin')">⚙️ ตั้งค่า</div>
+</div>
+</nav>
+<!-- Tab ขอบซ้าย — โชว์เมื่อ sidebar ซ่อน -->
+<div id="sb-tab" onclick="toggleSidebarCollapse()" title="เปิด Sidebar (\\)">▶</div>
+
+<!-- MAIN -->
+<div id="main">
+<div class="topbar">
+  <div class="topbar-l">
+    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+    <button class="collapse-btn" onclick="toggleSidebarCollapse()" title="พับ/แสดง Sidebar">◀</button>
+    <div class="tt" id="pgT">📌 วันนี้</div>
+  </div>
+  <div class="topbar-r">
+  <div class="strig" onclick="openQCmd()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
+  <button class="mode-toggle" onclick="toggleViewMode()" title="สลับ Desktop/Mobile">
+    <span id="modeIcon">📱</span>
+  </button>
+  <button class="ai-chat-btn" onclick="toggleAiChat()" title="AI Assistant">🤖</button>
+  <button class="theme-btn" onclick="switchTheme()" title="สลับ Theme">🎨</button>
+  <button class="refresh-btn" onclick="softRefresh()" title="รีเฟรชข้อมูล (อยู่หน้าเดิม)">🔄</button>
+  <div id="clock"></div>
+</div>
+</div>
+<div id="ct"></div>
+</div>
+
+<!-- BOTTOM NAV (Mobile) -->
+<div id="bnav"><div class="bn">
+<div class="bi act" data-v="today" onclick="go('today')"><span class="bic">📌</span>วันนี้</div>
+<div class="bi" data-v="dealers" onclick="go('dealers')"><span class="bic">🏪</span>Dealer</div>
+<div class="bi" data-v="pipeline" onclick="go('pipeline')"><span class="bic">📊</span>Pipeline</div>
+<div class="bi" data-v="visits" onclick="go('visits')"><span class="bic">🤝</span>Visit</div>
+<div class="bi" data-v="exports" onclick="go('exports')"><span class="bic">📤</span>Export</div>
+</div></div>
+
+<!-- FAB -->
+<div class="fab">
+<div class="fab-menu" id="fabMenu">
+  <div class="fab-item" onclick="fabAct('visit')">🤝 Visit Report</div>
+  <div class="fab-item" onclick="fabAct('contact')">📞 บันทึกติดต่อ</div>
+  <div class="fab-item" onclick="fabAct('followup')">📞 Follow-up</div>
+  <div class="fab-item" onclick="fabAct('pipeline')">📊 Pipeline</div>
+  <div class="fab-item" onclick="fabAct('line')">💬 LINE Support</div>
+  <div class="fab-item" onclick="fabAct('task')">📋 งาน</div>
+  <div class="fab-item" onclick="fabAct('meeting')">📅 ประชุม</div>
+  <div class="fab-item" onclick="fabAct('note')">📝 โน้ตด่วน</div>
+</div>
+<button class="fab-btn" id="fabBtn" onclick="toggleFab()">＋</button>
+</div>
+
+<!-- MODAL -->
+<div class="mo" id="modal">
+<div class="mlb">
+  <div class="mh"><h3 id="mTi"></h3><button onclick="closeM()">✕</button></div>
+  <div class="mb" id="mBd"></div>
+</div>
+</div>
+
+<!-- SEARCH OVERLAY -->
+<div class="search-ov" id="searchOv">
+<div class="search-box">
+  <input type="text" id="searchInp" placeholder="🔍 ค้นหา Dealer, Pipeline, Visit..." oninput="doSearch()" autocomplete="off">
+  <div class="search-results" id="searchRes"></div>
+</div>
+</div>
+
+<!-- AI CHAT PANEL -->
+<div id="aiChatPanel" class="ai-panel">
+  <div class="ai-panel-header">
+    <span>🤖 AI Assistant</span>
+    <div style="display:flex;gap:6px">
+      <button class="btn bo bsm" onclick="clearAiChat()" title="ล้างแชท">🗑</button>
+      <button class="btn bo bsm" onclick="toggleAiChat()">✕</button>
+    </div>
+  </div>
+  <div id="aiChatMsgs" class="ai-msgs"></div>
+  <div class="ai-input-row">
+    <input type="text" id="aiChatInput" class="ai-input" placeholder="ถามหรือสั่งงาน AI..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){sendAiMsg();event.preventDefault()}" autocomplete="off">
+    <button class="btn bp bsm" onclick="sendAiMsg()">ส่ง</button>
+  </div>
+</div>
+
+<!-- TIMER BAR -->
+<div class="timer-bar" id="timerBar" style="display:none">
+<span id="timerInfo"></span>
+<span class="timer-time" id="timerTime">00:00:00</span>
+<button class="btn bsm bd" onclick="stopTimer()">⏹ หยุด</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- BACKUP REMINDER -->
+<div class="backup-bar" id="backupBar" style="display:none">
+<span>⚠️ ยังไม่ได้ Backup <span id="backupDays"></span> วัน</span>
+<button class="btn bsm bp" onclick="goExport()">📤 Backup เลย</button>
+<button class="btn bsm bo" onclick="dismissBackup()">ไว้ทีหลัง</button>
+</div>
+
+<!-- EMAIL DRAFT OVERLAY -->
+<div class="draft-ov" id="draftOv" style="display:none">
+<div class="draft-box">
+  <div class="draft-hd"><h3 id="draftTi">📧 Draft Report</h3><button onclick="closeDraft()">✕</button></div>
+  <div class="draft-meta" id="draftMeta"></div>
+  <div class="draft-body" id="draftBody"></div>
+  <div class="draft-ft">
+    <button class="btn bp" onclick="copyDraft()">📋 Copy (มี Emoji)</button>
+    <button class="btn bo" onclick="copyDraftSAP()">📄 Copy SAP (ไม่มี Emoji)</button>
+    <button class="btn bo" onclick="openMailto()">📧 เปิด Email</button>
+    <button class="btn bo" onclick="closeDraft()">ปิด</button>
+  </div>
+</div>
+</div>
+
+<!-- SCRIPTS -->
+<!-- Firebase Init -->
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+var auth = firebase.auth();
+</script>
+<script src="utils.js"></script>
+<script src="storage.js"></script>
+<script src="products.js"></script>
+<script src="firebase-sync.js"></script>
+<script src="views-today.js"></script>
+<script src="modals.js"></script>
+<script src="views-dealer.js"></script>
+<script src="views-pipeline.js"></script>
+<script src="views-visit.js"></script>
+<script src="views-work.js"></script>
+<script src="views-announcements.js"></script>
+<script src="views-leads.js"></script>
+<script src="views-prospects.js"></script>
+<script src="views-quotation.js"></script>
+<script src="views-notes.js"></script>
+<script src="kanban.js"></script>
+<script src="export.js"></script>
+<script src="admin.js"></script>
+<script src="features.js"></script>
+<script src="audit.js"></script>
+<script src="views-kpi.js"></script>
+<script src="views-so.js"></script>
+<script src="app.js"></script>
+<div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
+  <div class="qcmd-box">
+    <div class="qcmd-input-wrap">
+      <span>🔍</span>
+      <input type="text" id="qcmdInput" class="qcmd-input" placeholder="พิมพ์คำสั่ง... (ชื่อ Dealer, Pipeline, เมนู)" oninput="qCmdSearch(this.value)" onkeydown="qCmdKeydown(event)">
+      <span class="qcmd-kbd">ESC</span>
+    </div>
+    <div class="qcmd-results" id="qcmdResults"></div>
+  </div>
+</div>
+<!-- Mobile Bottom Nav -->
+<div class="mb-bottom-nav" id="mbNav">
+  <div class="mb-nav-item" onclick="mbGo('today')"><span class="mb-nav-icon">📌</span><span class="mb-nav-label">วันนี้</span></div>
+  <div class="mb-nav-item" onclick="mbGo('dealers')"><span class="mb-nav-icon">🏪</span><span class="mb-nav-label">Dealer</span></div>
+  <div class="mb-nav-item" onclick="mbGo('mbHome')"><span class="mb-nav-icon">🏠</span><span class="mb-nav-label">Home</span></div>
+  <div class="mb-nav-item" onclick="mbGo('pipeline')"><span class="mb-nav-icon">📊</span><span class="mb-nav-label">Pipeline</span></div>
+  <div class="mb-nav-item" onclick="mbGo('tasks')"><span class="mb-nav-icon">📋</span><span class="mb-nav-label">Tasks</span></div>
+</div>
+<!-- Service Worker (PWA / offline) -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./sw.js')
+        .then(function(reg) { console.log('✅ SW registered:', reg.scope); })
+        .catch(function(err) { console.warn('SW register failed:', err); });
+    });
+  }
+</script>
+</body>
+</html>

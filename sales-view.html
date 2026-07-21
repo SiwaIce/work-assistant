@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Sales View — DJI Assistant</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--accent:#3b82f6;--red:#ef4444;--green:#22c55e;--orange:#f97316;--yellow:#eab308;--purple:#a855f7}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100vh}
+
+/* PIN */
+#pinScreen{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.pin-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:340px;width:90%;text-align:center}
+.pin-logo{font-size:48px;margin-bottom:8px}
+.pin-title{font-size:18px;font-weight:700;margin-bottom:4px}
+.pin-sub{font-size:12px;color:var(--text3);margin-bottom:24px}
+.pin-input{width:100%;padding:14px;font-size:22px;letter-spacing:8px;text-align:center;background:var(--bg);border:2px solid var(--border);border-radius:10px;color:var(--text);outline:none;margin-bottom:12px}
+.pin-input:focus{border-color:var(--accent)}
+.pin-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+.pin-err{color:var(--red);font-size:12px;margin-top:8px;min-height:20px}
+
+/* LAYOUT */
+#mainApp{display:none;flex-direction:column;height:100vh;overflow:hidden}
+
+/* TOPBAR */
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:9px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0;min-height:50px}
+.tb-back{background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0}
+.tb-info{flex:1;min-width:0}
+.tb-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-sub{font-size:10px;color:var(--text3)}
+.tb-action{background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0}
+
+/* DEALER TABS */
+.dtab-bar{display:none;overflow-x:auto;background:var(--bg2);border-bottom:1px solid var(--border);scrollbar-width:none;flex-shrink:0}
+.dtab-bar::-webkit-scrollbar{display:none}
+.dtab-bar-inner{display:flex;padding:0 4px;min-width:max-content}
+.dtab{padding:8px 10px;font-size:11px;color:var(--text3);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent}
+.dtab.act{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* CONTENT */
+.view-wrap{flex:1;overflow-y:auto;overflow-x:hidden}
+.view-inner{padding:10px 12px 80px;max-width:700px;margin:0 auto}
+
+/* BOTTOM NAV */
+.bnav{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);display:flex;z-index:90}
+.bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 6px;color:var(--text3);font-size:9.5px;cursor:pointer;user-select:none}
+.bni.act{color:var(--accent)}
+.bni-ic{font-size:18px;line-height:1.2}
+
+/* FAB */
+.fab{position:fixed;bottom:68px;right:16px;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;border:none;cursor:pointer;box-shadow:0 4px 16px #0008;display:flex;align-items:center;justify-content:center;z-index:80}
+.fab:active{transform:scale(.92)}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px}
+
+/* LIST ITEM */
+.li{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
+.li:active{background:var(--bg2)}
+.lt{font-weight:600;font-size:13px}
+.ls{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* EMPTY */
+.empty{text-align:center;padding:36px 16px;color:var(--text3);font-size:13px;line-height:1.8}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700}
+.bd-blue{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
+.bd-green{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
+.bd-red{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
+.bd-orange{background:#f9731620;color:#f97316;border:1px solid #f9731640}
+.bd-yellow{background:#eab30820;color:#eab308;border:1px solid #eab30840}
+.bd-grey{background:#33415520;color:#94a3b8;border:1px solid #33415540}
+.bd-purple{background:#a855f720;color:#a855f7;border:1px solid #a855f740}
+.conflict-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#ef444418;color:#ef4444;border:1px solid #ef444430}
+
+/* STATS */
+.srow{display:grid;gap:8px;margin-bottom:10px}
+.srow-2{grid-template-columns:repeat(2,1fr)}
+.srow-3{grid-template-columns:repeat(3,1fr)}
+.sc{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 8px;text-align:center}
+.sn{font-size:18px;font-weight:700;color:var(--accent)}
+.sl{font-size:9.5px;color:var(--text3);margin-top:2px}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:#0009;z-index:200;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px 16px 0 0;width:100%;max-width:540px;max-height:92vh;overflow-y:auto;padding:16px}
+.modal-hd{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.modal-x{background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer}
+
+/* FORM */
+.fg{margin-bottom:10px}
+.fg label{display:block;font-size:11px;color:var(--text2);margin-bottom:3px}
+.fi{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none}
+.fi:focus{border-color:var(--accent)}
+.fi-row{display:flex;gap:8px}
+.fi-row .fg{flex:1}
+textarea.fi{resize:vertical;min-height:70px}
+select.fi option{background:var(--bg2)}
+.fa{display:flex;gap:8px;margin-top:14px}
+.btn{padding:9px 14px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.btn-p{background:var(--accent);color:#fff}
+.btn-o{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-d{background:var(--red);color:#fff}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* PIPE STATUS */
+.s-prospect{color:#94a3b8}.s-tor_review{color:#f97316}.s-quotation{color:#eab308}.s-bidding{color:#3b82f6}.s-negotiation{color:#a855f7}.s-win{color:#22c55e}.s-ordered{color:#10b981}.s-delivered{color:#10b981}.s-lost{color:#ef4444}
+
+/* VISIT LOG */
+.log-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
+.log-meta{font-size:10px;color:var(--text3);margin-bottom:4px;display:flex;gap:8px;flex-wrap:wrap}
+.log-body{font-size:12px;color:var(--text2);line-height:1.5}
+
+/* TASKS */
+.task-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:5px;display:flex;align-items:flex-start;gap:10px}
+.task-chk{width:17px;height:17px;border-radius:4px;border:2px solid var(--border);cursor:pointer;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.task-chk.done{background:var(--green);border-color:var(--green)}
+.task-done{text-decoration:line-through;color:var(--text3)}
+.task-due{font-size:10px;color:var(--text3)}
+.task-due.ov{color:var(--red)}
+
+/* TIMELINE */
+.tl-wrap{padding-left:8px}
+.tl-item{padding-left:16px;padding-bottom:14px;border-left:2px solid var(--border);margin-left:5px;position:relative}
+.tl-item:last-child{border-left-color:transparent}
+.tl-dot{width:10px;height:10px;border-radius:50%;background:var(--border);position:absolute;left:-6px;top:3px}
+.tl-dot.v{background:var(--accent)}.tl-dot.p{background:var(--purple)}.tl-dot.t{background:var(--green)}.tl-dot.d{background:var(--orange)}
+.tl-date{font-size:10px;color:var(--text3)}
+.tl-text{font-size:12px;color:var(--text);margin-top:2px}
+
+/* DEMO / FORECAST ITEMS */
+.df-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;cursor:pointer}
+.df-main{flex:1;min-width:0}
+
+/* ONBOARD */
+.ob-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:5px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.ob-chk{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px}
+.ob-chk.done{background:var(--green);border-color:var(--green)}
+
+/* SECTION LABEL */
+.slbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
+.slbl:first-child{margin-top:0}
+
+/* DEALER INFO ROWS */
+.drow{padding:7px 0;border-bottom:1px solid var(--border);display:flex;gap:10px}
+.drow-k{font-size:11px;color:var(--text3);width:80px;flex-shrink:0}
+.drow-v{font-size:12px}
+
+/* TOAST */
+#toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:9px 18px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="pinScreen">
+  <div class="pin-box">
+    <div class="pin-logo">👤</div>
+    <div class="pin-title" id="pinTitle">Sales View</div>
+    <div class="pin-sub" id="pinSub">กรุณาใส่ PIN เพื่อเข้าใช้งาน</div>
+    <input type="password" class="pin-input" id="pinInput" maxlength="6" placeholder="••••" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="pin-btn" onclick="doLogin()">🔓 เข้าสู่ระบบ</button>
+    <div class="pin-err" id="pinErr"></div>
+  </div>
+</div>
+
+<div id="mainApp">
+  <div class="topbar">
+    <button class="tb-back" id="tbBack" onclick="goBack()" style="display:none">‹</button>
+    <div class="tb-info">
+      <div class="tb-name" id="tbName">Sales View</div>
+      <div class="tb-sub" id="tbSub">DJI Sales Assistant</div>
+    </div>
+    <div id="tbConflict"></div>
+    <button class="tb-action" id="tbEdit" onclick="editCurrentDealer()" style="display:none">แก้ไข</button>
+  </div>
+
+  <div class="dtab-bar" id="dtabBar">
+    <div class="dtab-bar-inner">
+      <div class="dtab act" id="dt-info" onclick="setDtab('info')">📋 ข้อมูล</div>
+      <div class="dtab" id="dt-pipeline" onclick="setDtab('pipeline')">📊 Pipeline</div>
+      <div class="dtab" id="dt-visit" onclick="setDtab('visit')">🤝 Visit</div>
+      <div class="dtab" id="dt-timeline" onclick="setDtab('timeline')">📝 Timeline</div>
+      <div class="dtab" id="dt-demo" onclick="setDtab('demo')">🚁 Demo</div>
+      <div class="dtab" id="dt-forecast" onclick="setDtab('forecast')">📦 Forecast</div>
+      <div class="dtab" id="dt-tasks" onclick="setDtab('tasks')">📋 งาน</div>
+      <div class="dtab" id="dt-onboard" onclick="setDtab('onboard')">🔄 Onboard</div>
+    </div>
+  </div>
+
+  <div class="view-wrap"><div class="view-inner" id="vi"></div></div>
+
+  <button class="fab" id="fabBtn" onclick="handleFab()">＋</button>
+
+  <div class="bnav">
+    <div class="bni act" id="bni-home" onclick="goView('home')"><span class="bni-ic">🏠</span>หน้าหลัก</div>
+    <div class="bni" id="bni-dealers" onclick="goView('dealers')"><span class="bni-ic">🏪</span>Dealer</div>
+    <div class="bni" id="bni-pipeline" onclick="goView('pipeline')"><span class="bni-ic">📊</span>Pipeline</div>
+    <div class="bni" id="bni-tasks" onclick="goView('tasks')"><span class="bni-ic">📋</span>งาน</div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-hd"><span id="modalTitle"></span><button class="modal-x" onclick="closeModal()">✕</button></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain:"work-assistant-9e024.firebaseapp.com",
+  projectId:"work-assistant-9e024",
+  storageBucket:"work-assistant-9e024.firebasestorage.app",
+  messagingSenderId:"796607223436",
+  appId:"1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+
+// ── STATE ──────────────────────────────────────────────
+var SALES_ID='', SALES_PROFILE=null;
+var dealers=[], pipeline=[], visits=[], tasks=[], demoUnits=[], forecastItems=[], teamPipeline=[];
+var currentView='home', currentDealer=null, currentDtab='info', editId=null;
+var _toastT=null, _snapUnsubs=[], _rPending=false;
+
+var PIPE_STATUSES=[
+  {id:'prospect',name:'Prospect',cls:'s-prospect'},
+  {id:'tor_review',name:'TOR Review',cls:'s-tor_review'},
+  {id:'quotation',name:'Quotation',cls:'s-quotation'},
+  {id:'bidding',name:'Bidding',cls:'s-bidding'},
+  {id:'negotiation',name:'Negotiation',cls:'s-negotiation'},
+  {id:'win',name:'Win',cls:'s-win'},
+  {id:'ordered',name:'Ordered',cls:'s-ordered'},
+  {id:'delivered',name:'Delivered',cls:'s-delivered'},
+  {id:'lost',name:'Lost',cls:'s-lost'}
+];
+var DEALER_TYPES=['DJI Authorized Dealer','DJI Retail Partner','Corporate Reseller','System Integrator','Education Partner','Other'];
+var DEALER_TIERS=['S','A','B','Other'];
+var CREDIT_TERMS=['Cash','30 วัน','45 วัน','60 วัน','90 วัน','Other'];
+var VISIT_TYPES=['เยี่ยมชม (On-site)','โทรศัพท์','Online / Video Call','งาน Event','อื่นๆ'];
+var VISIT_TOPICS=['Product Demo','ติดตามสต็อก','ติดตาม Pipeline','การฝึกอบรม','แก้ปัญหา','ประชุมธุรกิจ','อื่นๆ'];
+var PRIORITY=['สูง','กลาง','ต่ำ'];
+var DEMO_STATUS=['พร้อมให้ยืม','ให้ยืมแล้ว','คืนแล้ว','ส่งซ่อม'];
+var ONBOARD_STEPS=[
+  {id:'register',label:'ลงทะเบียน DJI Authorized Dealer'},
+  {id:'display',label:'ติดตั้ง Display / ป้ายร้าน'},
+  {id:'training',label:'อบรมผลิตภัณฑ์เบื้องต้น'},
+  {id:'online',label:'เปิดช่องทางขาย Online'},
+  {id:'pricelist',label:'จัดทำ Price List'},
+  {id:'firstorder',label:'First Order เสร็จสิ้น'},
+  {id:'followup',label:'Follow Up 30 วันหลัง Launch'},
+  {id:'review',label:'Review ประจำไตรมาส'}
+];
+
+// ── PIN INIT ───────────────────────────────────────────
+(function init(){
+  var p=new URLSearchParams(location.search);
+  SALES_ID=p.get('id')||'';
+  if(!SALES_ID){showPinError('❌ ลิงก์ไม่ถูกต้อง — ขอลิงก์ใหม่จาก Admin');return;}
+  document.getElementById('pinSub').textContent='🔄 กำลังโหลด...';
+  db.collection('salesMembers').doc(SALES_ID).get().then(function(doc){
+    if(!doc.exists){showPinError('❌ ไม่พบบัญชีนี้ในระบบ — กรุณาขอลิงก์ใหม่จาก Admin');return;}
+    SALES_PROFILE=doc.data();
+    if(SALES_PROFILE.active===false){showPinError('⛔ บัญชีนี้ถูกปิดใช้งาน — ติดต่อ Admin');return;}
+    document.getElementById('pinTitle').textContent='👤 '+(SALES_PROFILE.name||'Sales');
+    document.getElementById('pinSub').textContent='กรุณาใส่ PIN เพื่อเข้าใช้งาน';
+    document.getElementById('pinInput').focus();
+  }).catch(function(e){
+    document.getElementById('pinSub').textContent='⚠️ โหลดข้อมูลไม่ได้ — ตรวจสอบการเชื่อมต่อแล้วรีเฟรช';
+    console.error(e);
+  });
+})();
+
+function showPinError(msg){
+  document.querySelector('.pin-box').innerHTML='<div class="pin-logo">⚠️</div>'+
+    '<div class="pin-title" style="color:#ef4444">เข้าไม่ได้</div>'+
+    '<div class="pin-sub" style="color:#ef4444;margin-top:8px">'+msg+'</div>';
+}
+
+function doLogin(){
+  var pin=document.getElementById('pinInput').value.trim();
+  var err=document.getElementById('pinErr');
+  if(!pin){err.textContent='กรุณาใส่ PIN';return;}
+  if(!SALES_PROFILE){err.textContent='กำลังโหลด...';return;}
+  if(SALES_PROFILE.active===false){err.textContent='⛔ บัญชีนี้ถูกปิดใช้งาน';return;}
+  if(pin!==String(SALES_PROFILE.pin)){err.textContent='❌ PIN ไม่ถูกต้อง';return;}
+  document.getElementById('pinScreen').style.display='none';
+  document.getElementById('mainApp').style.display='flex';
+  loadData();
+  render();
+}
+
+// ── DATA ───────────────────────────────────────────────
+function loadData(){
+  var base=db.collection('salesMembers').doc(SALES_ID);
+  _snapUnsubs.forEach(function(u){try{u();}catch(e){}});
+  _snapUnsubs=[];
+
+  function snap(col,arr,sortFn){
+    return base.collection(col).onSnapshot(function(s){
+      arr.length=0;
+      s.forEach(function(d){arr.push(d.data());});
+      if(sortFn)arr.sort(sortFn);
+      if(col==='dealers'&&currentDealer){
+        var up=dealers.find(function(d){return d.id===currentDealer.id;});
+        if(up)currentDealer=up;
+      }
+      safeRender();
+    });
+  }
+
+  _snapUnsubs.push(snap('dealers',dealers,function(a,b){return(a.name||'').localeCompare(b.name||'');}));
+  _snapUnsubs.push(base.collection('pipeline').onSnapshot(function(s){
+    pipeline.length=0;
+    s.forEach(function(d){pipeline.push(d.data());});
+    pipeline.sort(function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');});
+    loadTeamPipeline();
+  }));
+  _snapUnsubs.push(snap('visits',visits,function(a,b){return(b.date||'').localeCompare(a.date||'');}));
+  _snapUnsubs.push(snap('tasks',tasks,function(a,b){
+    if(a.done!==b.done)return a.done?1:-1;
+    return(a.dueDate||'').localeCompare(b.dueDate||'');
+  }));
+  _snapUnsubs.push(snap('demoUnits',demoUnits,function(a,b){return(b.createdAt||'').localeCompare(a.createdAt||'');}));
+  _snapUnsubs.push(snap('forecastItems',forecastItems,function(a,b){return(a.expectedDate||'').localeCompare(b.expectedDate||'');}));
+}
+
+function loadTeamPipeline(){
+  db.collection('teamPipeline').get().then(function(s){
+    teamPipeline=[];
+    s.forEach(function(d){var x=d.data();if(x.ownerId!==SALES_ID){x._isTeam=true;teamPipeline.push(x);}});
+    safeRender();
+  }).catch(function(){safeRender();});
+}
+
+function safeRender(){
+  if(_rPending)return;
+  _rPending=true;
+  setTimeout(function(){_rPending=false;render();},60);
+}
+
+// ── NAVIGATION ─────────────────────────────────────────
+function goView(v){currentView=v;currentDealer=null;render();}
+
+function goDealer(id){
+  var d=dealers.find(function(x){return x.id===id;});
+  if(!d)return;
+  currentDealer=d;currentView='dealer';currentDtab='info';render();
+}
+
+function goBack(){
+  if(currentView==='dealer'){currentView='dealers';currentDealer=null;}
+  render();
+}
+
+function setDtab(tab){
+  currentDtab=tab;
+  document.querySelectorAll('.dtab').forEach(function(t){t.classList.remove('act');});
+  var el=document.getElementById('dt-'+tab);
+  if(el)el.classList.add('act');
+  renderDealerTab();
+  updateFab();
+}
+
+function editCurrentDealer(){if(currentDealer)showEditDealer(currentDealer.id);}
+
+// ── RENDER ─────────────────────────────────────────────
+function render(){
+  updateTopbar();updateBnav();updateDtabBar();
+  var el=document.getElementById('vi');
+  if(currentView==='home')renderHome(el);
+  else if(currentView==='dealers')renderDealerList(el);
+  else if(currentView==='pipeline')renderGlobalPipeline(el);
+  else if(currentView==='tasks')renderGlobalTasks(el);
+  else if(currentView==='dealer')renderDealerDetail(el);
+  updateFab();
+}
+
+function updateTopbar(){
+  var back=document.getElementById('tbBack'),name=document.getElementById('tbName');
+  var sub=document.getElementById('tbSub'),edit=document.getElementById('tbEdit');
+  var conf=document.getElementById('tbConflict');
+  if(currentView==='dealer'&&currentDealer){
+    back.style.display='';name.textContent=currentDealer.name||'—';
+    var meta=[currentDealer.tier,currentDealer.type,currentDealer.province].filter(Boolean).join(' · ');
+    sub.textContent=meta||'Dealer';edit.style.display='';conf.innerHTML='';
+  } else {
+    back.style.display='none';
+    name.textContent='👤 '+(SALES_PROFILE?SALES_PROFILE.name:'Sales View');
+    sub.textContent='DJI Sales Assistant';edit.style.display='none';
+    var cnt=Object.keys(buildConflictMap()).length;
+    conf.innerHTML=cnt>0?'<span class="conflict-tag">⚠️ '+cnt+' ชน</span>':'';
+  }
+}
+
+function updateBnav(){
+  ['home','dealers','pipeline','tasks'].forEach(function(v){
+    var el=document.getElementById('bni-'+v);
+    if(el)el.classList.toggle('act',currentView===v||(currentView==='dealer'&&v==='dealers'));
+  });
+}
+
+function updateDtabBar(){
+  var bar=document.getElementById('dtabBar');
+  if(currentView==='dealer'){
+    bar.style.display='';
+    document.querySelectorAll('.dtab').forEach(function(t){t.classList.remove('act');});
+    var a=document.getElementById('dt-'+currentDtab);if(a)a.classList.add('act');
+  } else {
+    bar.style.display='none';
+  }
+}
+
+// ── HOME ───────────────────────────────────────────────
+function renderHome(el){
+  var today=new Date().toISOString().slice(0,10);
+  var activePipe=pipeline.filter(function(p){return['lost','delivered'].indexOf(p.status)===-1;});
+  var totalAmt=activePipe.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var pending=tasks.filter(function(t){return!t.done;});
+  var overdue=pending.filter(function(t){return t.dueDate&&t.dueDate<today;});
+  var cMap=buildConflictMap();
+
+  var h='<div class="srow srow-2">';
+  h+='<div class="sc"><div class="sn">'+dealers.length+'</div><div class="sl">🏪 Dealer</div></div>';
+  h+='<div class="sc"><div class="sn">'+activePipe.length+'</div><div class="sl">📊 Active Pipeline</div></div>';
+  h+='<div class="sc"><div class="sn" style="color:'+(overdue.length>0?'var(--red)':'var(--green)')+'">'+pending.length+'</div><div class="sl">📋 งานค้าง</div></div>';
+  h+='<div class="sc"><div class="sn">'+fmtShort(totalAmt)+'</div><div class="sl">💰 Forecast ฿</div></div>';
+  h+='</div>';
+
+  if(Object.keys(cMap).length>0){
+    h+='<div class="card" style="border-color:#ef444440;background:#ef444408;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Pipeline อาจชน</div>';
+    pipeline.filter(function(p){return cMap[p.id];}).slice(0,3).forEach(function(p){
+      var cc=cMap[p.id][0];
+      h+='<div style="font-size:11px;padding:4px 0;border-bottom:1px solid #ef444420;color:var(--text2)">'+esc(p.projectName)+
+        ' <span style="color:var(--red)">← ชน '+esc(cc.dealerName)+(cc.ownerName?' ('+esc(cc.ownerName)+')':(cc.isTeam?' (ทีมอื่น)':''))+'</span></div>';
+    });
+    h+='</div>';
+  }
+
+  if(overdue.length){
+    h+='<div class="slbl" style="color:var(--red)">งานเกินกำหนด</div>';
+    overdue.slice(0,3).forEach(function(t){
+      var d=dealers.find(function(x){return x.id===t.dealerId;});
+      h+='<div class="task-item" onclick="goDealer(\''+t.dealerId+'\')">';
+      h+='<div class="task-chk"></div>';
+      h+='<div style="flex:1"><div style="font-size:12px">'+esc(t.title)+'</div>';
+      h+='<div class="task-due ov">📅 '+t.dueDate+(d?' · '+esc(d.name):'')+'</div></div></div>';
+    });
+  }
+
+  var upcoming=pending.filter(function(t){return!t.dueDate||t.dueDate>=today;});
+  if(upcoming.length){
+    h+='<div class="slbl">งานที่ต้องทำ</div>';
+    upcoming.slice(0,4).forEach(function(t){
+      var d=dealers.find(function(x){return x.id===t.dealerId;});
+      h+='<div class="task-item" onclick="goDealer(\''+t.dealerId+'\')">';
+      h+='<div class="task-chk"></div>';
+      h+='<div style="flex:1"><div style="font-size:12px">'+esc(t.title)+'</div>';
+      if(t.dueDate)h+='<div class="task-due">📅 '+t.dueDate+'</div>';
+      if(d)h+='<div class="task-due">'+esc(d.name)+'</div>';
+      h+='</div></div>';
+    });
+  }
+
+  var recentV=visits.slice(0,3);
+  if(recentV.length){
+    h+='<div class="slbl">Visit ล่าสุด</div>';
+    recentV.forEach(function(v){
+      var d=dealers.find(function(x){return x.id===v.dealerId;});
+      h+='<div class="log-item" onclick="goDealer(\''+v.dealerId+'\')">';
+      h+='<div class="log-meta"><span>'+esc(v.date||'—')+'</span><span>'+esc(v.type||'')+'</span>'+(d?'<span>'+esc(d.name)+'</span>':'')+'</div>';
+      h+='<div class="log-body">'+esc(v.notes||'(ไม่มีหมายเหตุ)')+'</div></div>';
+    });
+  }
+
+  if(!dealers.length&&!pipeline.length)
+    h='<div class="empty">👋 ยินดีต้อนรับ!<br><small>เริ่มที่แท็บ "Dealer" เพื่อเพิ่ม Dealer แรก</small></div>';
+
+  el.innerHTML=h;
+}
+
+// ── DEALER LIST ────────────────────────────────────────
+function renderDealerList(el){
+  var h='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+  h+='<button class="btn btn-o btn-sm" onclick="exportSalesDealersExcel()">📊 Export Excel</button>';
+  h+='<button class="btn btn-o btn-sm" onclick="document.getElementById(\'sv_import_file\').click()">📥 Import Excel</button>';
+  h+='<input type="file" id="sv_import_file" accept=".xlsx,.xls" style="display:none" onchange="importSalesDealersExcel(this)">';
+  h+='</div>';
+  if(!dealers.length){
+    h+='<div class="empty">🏪 ยังไม่มี Dealer<br><small>กด ＋ เพื่อเพิ่ม</small></div>';
+  } else {
+    dealers.forEach(function(d){
+      var ap=pipeline.filter(function(p){return p.dealerId===d.id&&['lost','delivered'].indexOf(p.status)===-1;});
+      var pt=tasks.filter(function(t){return t.dealerId===d.id&&!t.done;});
+      var tier=d.tier?'<span class="badge bd-'+tierColor(d.tier)+'" style="margin-right:4px">'+d.tier+'</span>':'';
+      h+='<div class="li" onclick="goDealer(\''+d.id+'\')">';
+      h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
+      h+='<div style="flex:1;min-width:0"><div class="lt">'+tier+esc(d.name||'—')+'</div>';
+      h+='<div class="ls">'+[d.type,d.province].filter(Boolean).map(esc).join(' · ')+'</div></div>';
+      h+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">';
+      if(ap.length)h+='<span class="badge bd-blue">'+ap.length+' งาน</span>';
+      if(pt.length)h+='<span class="badge bd-orange">'+pt.length+' task</span>';
+      h+='</div></div></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+function tierColor(t){return t==='S'?'purple':t==='A'?'blue':t==='B'?'green':'grey';}
+
+// ── DEALER EXCEL EXPORT / IMPORT ───────────────────────
+var DEALER_XLS_COLS = ['id','ชื่อ Dealer','ประเภท','Tier','จังหวัด','ที่อยู่','ผู้ติดต่อ','เบอร์โทร','อีเมล','เครดิต','หมายเหตุ'];
+var DEALER_XLS_FIELDS = ['id','name','type','tier','province','address','contact','phone','email','creditTerms','remark'];
+
+function exportSalesDealersExcel(){
+  if(!dealers.length){showToast('ไม่มีข้อมูล Dealer');return;}
+  var rows=[DEALER_XLS_COLS];
+  dealers.forEach(function(d){
+    rows.push(DEALER_XLS_FIELDS.map(function(f){return d[f]||'';}));
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:22},{wch:35},{wch:14},{wch:8},{wch:16},{wch:35},{wch:20},{wch:14},{wch:28},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Dealers');
+  XLSX.writeFile(wb,'dealers-'+SALES_ID+'-'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('📊 Export '+dealers.length+' Dealer สำเร็จ');
+}
+
+function importSalesDealersExcel(input){
+  var file=input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var wb=XLSX.read(e.target.result,{type:'array'});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){showToast('ไม่พบข้อมูลในไฟล์');return;}
+    var added=0,updated=0,skipped=0;
+    var base=db.collection('salesMembers').doc(SALES_ID).collection('dealers');
+    var batch=db.batch();
+    rows.forEach(function(r){
+      var name=String(r['ชื่อ Dealer']||r['name']||'').trim();
+      if(!name){skipped++;return;}
+      var id=String(r['id']||'').trim();
+      var data={
+        name:name,
+        type:String(r['ประเภท']||r['type']||'').trim(),
+        tier:String(r['Tier']||r['tier']||'').trim(),
+        province:String(r['จังหวัด']||r['province']||'').trim(),
+        address:String(r['ที่อยู่']||r['address']||'').trim(),
+        contact:String(r['ผู้ติดต่อ']||r['contact']||'').trim(),
+        phone:String(r['เบอร์โทร']||r['phone']||'').trim(),
+        email:String(r['อีเมล']||r['email']||'').trim(),
+        creditTerms:String(r['เครดิต']||r['creditTerms']||'').trim(),
+        remark:String(r['หมายเหตุ']||r['remark']||'').trim(),
+        updatedAt:new Date().toISOString()
+      };
+      var existing=id&&dealers.find(function(d){return d.id===id;});
+      if(existing){
+        batch.update(base.doc(id),data);updated++;
+      } else {
+        var ref=base.doc();
+        data.createdAt=new Date().toISOString();
+        batch.set(ref,data);added++;
+      }
+    });
+    batch.commit().then(function(){
+      showToast('📥 เพิ่ม '+added+' อัปเดต '+updated+(skipped?' ข้าม '+skipped:'')+' Dealer');
+      input.value='';
+    }).catch(function(err){showToast('❌ '+err.message);});
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── DEALER FORM ────────────────────────────────────────
+function showAddDealer(){editId=null;openModal('➕ เพิ่ม Dealer',buildDealerForm(null));}
+function showEditDealer(id){
+  var d=dealers.find(function(x){return x.id===id;});
+  if(!d)return;editId=id;openModal('✏️ แก้ไข Dealer',buildDealerForm(d));
+}
+
+function buildDealerForm(d){
+  function opts(arr,val){return arr.map(function(t){return'<option value="'+t+'"'+(val===t?' selected':'')+'>'+t+'</option>';}).join('');}
+  var h='<div class="fg"><label>ชื่อ Dealer *</label><input id="fd_name" class="fi" value="'+esc(d?d.name||'':'')+'" placeholder="ชื่อบริษัท/ร้าน"></div>';
+  h+='<div class="fi-row"><div class="fg"><label>ประเภท</label><select id="fd_type" class="fi"><option value="">—</option>'+opts(DEALER_TYPES,d&&d.type)+'</select></div>';
+  h+='<div class="fg"><label>Tier</label><select id="fd_tier" class="fi"><option value="">—</option>'+opts(DEALER_TIERS,d&&d.tier)+'</select></div></div>';
+  h+='<div class="fi-row"><div class="fg"><label>จังหวัด</label><input id="fd_province" class="fi" value="'+esc(d?d.province||'':'')+'" placeholder="กรุงเทพฯ"></div>';
+  h+='<div class="fg"><label>Credit Terms</label><select id="fd_credit" class="fi"><option value="">—</option>'+opts(CREDIT_TERMS,d&&d.creditTerms)+'</select></div></div>';
+  h+='<div class="fg"><label>ที่อยู่</label><input id="fd_address" class="fi" value="'+esc(d?d.address||'':'')+'" placeholder="ที่อยู่ร้าน/บริษัท"></div>';
+  h+='<div class="fi-row"><div class="fg"><label>ผู้ติดต่อ</label><input id="fd_contact" class="fi" value="'+esc(d?d.contact||'':'')+'" placeholder="ชื่อผู้ติดต่อ"></div>';
+  h+='<div class="fg"><label>เบอร์โทร</label><input id="fd_phone" class="fi" value="'+esc(d?d.phone||'':'')+'" placeholder="08x-xxx" inputmode="tel"></div></div>';
+  h+='<div class="fg"><label>อีเมล</label><input id="fd_email" class="fi" value="'+esc(d?d.email||'':'')+'" placeholder="contact@dealer.com"></div>';
+  h+='<div class="fg"><label>หมายเหตุ</label><textarea id="fd_remark" class="fi" rows="2">'+esc(d?d.remark||'':'')+'</textarea></div>';
+  h+='<div class="fg"><label>PIN สำหรับ Client View</label><input id="fd_cpin" class="fi" value="'+esc(d?d.clientPin||'':'')+'" placeholder="4-6 หลัก (เว้นว่างถ้าไม่ต้อง PIN)" inputmode="numeric" maxlength="6"><div style="font-size:10px;color:var(--text3);margin-top:3px">ลิงก์: client-view-sales.html?salesId='+SALES_ID+'&amp;dealerId='+(d?d.id:'[id]')+'</div></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveDealer()">💾 บันทึก</button>';
+  if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteDealer(\''+editId+'\')">🗑️</button>';
+  h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function saveDealer(){
+  var name=document.getElementById('fd_name').value.trim();
+  if(!name){showToast('กรุณาใส่ชื่อ Dealer');return;}
+  var data={
+    id:editId||('dealer_'+Date.now().toString(36)),name:name,
+    type:document.getElementById('fd_type').value,
+    tier:document.getElementById('fd_tier').value,
+    province:document.getElementById('fd_province').value.trim(),
+    creditTerms:document.getElementById('fd_credit').value,
+    address:document.getElementById('fd_address').value.trim(),
+    contact:document.getElementById('fd_contact').value.trim(),
+    phone:document.getElementById('fd_phone').value.trim(),
+    email:document.getElementById('fd_email').value.trim(),
+    remark:document.getElementById('fd_remark').value.trim(),
+    clientPin:document.getElementById('fd_cpin').value.trim()||null,
+    updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(data.id).set(data,{merge:true}).then(function(){
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deleteDealer(id){
+  if(!confirm('ลบ Dealer นี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(id).delete().then(function(){
+    closeModal();
+    if(currentDealer&&currentDealer.id===id){currentView='dealers';currentDealer=null;}
+    showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── DEALER DETAIL ──────────────────────────────────────
+function renderDealerDetail(el){if(!currentDealer){el.innerHTML='';return;}renderDealerTab();}
+
+function renderDealerTab(){
+  var el=document.getElementById('vi');
+  if(!currentDealer||!el)return;
+  var fn={info:rdInfo,pipeline:rdPipeline,visit:rdVisit,timeline:rdTimeline,
+          demo:rdDemo,forecast:rdForecast,tasks:rdTasks,onboard:rdOnboard};
+  if(fn[currentDtab])fn[currentDtab](el);
+}
+
+function dHero(d){
+  var tier=d.tier?'<span class="badge bd-'+tierColor(d.tier)+'" style="margin-right:4px">'+d.tier+'</span>':'';
+  var h='<div style="background:var(--bg2);margin:-10px -12px 12px;padding:10px 12px;border-bottom:1px solid var(--border)">';
+  h+='<div style="font-size:14px;font-weight:700">'+tier+esc(d.name||'—')+'</div>';
+  var meta=[d.type,d.province?'📍 '+d.province:'',d.phone?'📞 '+d.phone:''].filter(Boolean);
+  if(meta.length)h+='<div style="font-size:11px;color:var(--text3);margin-top:3px">'+meta.map(esc).join('  ')+'</div>';
+  h+='</div>';return h;
+}
+
+// TAB: ข้อมูล
+function rdInfo(el){
+  var d=currentDealer;
+  var h=dHero(d);
+  var rows=[['ประเภท',d.type],['Tier',d.tier],['จังหวัด',d.province],['ที่อยู่',d.address],
+    ['ผู้ติดต่อ',d.contact],['เบอร์โทร',d.phone],['อีเมล',d.email],['Credit Terms',d.creditTerms],['หมายเหตุ',d.remark]];
+  h+='<div class="card">';
+  rows.forEach(function(r){
+    if(!r[1])return;
+    h+='<div class="drow"><span class="drow-k">'+r[0]+'</span><span class="drow-v">'+esc(r[1])+'</span></div>';
+  });
+  h+='</div>';
+  var ap=pipeline.filter(function(p){return p.dealerId===d.id&&['lost','delivered'].indexOf(p.status)===-1;});
+  var vl=visits.filter(function(v){return v.dealerId===d.id;});
+  var pt=tasks.filter(function(t){return t.dealerId===d.id&&!t.done;});
+  h+='<div class="srow srow-3"><div class="sc"><div class="sn">'+ap.length+'</div><div class="sl">Pipeline</div></div>';
+  h+='<div class="sc"><div class="sn">'+vl.length+'</div><div class="sl">Visit</div></div>';
+  h+='<div class="sc"><div class="sn">'+pt.length+'</div><div class="sl">งานค้าง</div></div></div>';
+  if(d.createdAt)h+='<div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px">เพิ่มเมื่อ: '+d.createdAt.slice(0,10)+'</div>';
+  el.innerHTML=h;
+}
+
+// TAB: Pipeline
+function rdPipeline(el){
+  var did=currentDealer.id;
+  var dp=pipeline.filter(function(p){return p.dealerId===did;});
+  var cMap=buildConflictMap();
+  var h=dHero(currentDealer);
+  if(!dp.length){h+='<div class="empty">📊 ยังไม่มี Pipeline<br><small>กด ＋ เพื่อเพิ่มโครงการ</small></div>';}
+  else{
+    dp.forEach(function(p){
+      var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{name:p.status,cls:'s-prospect'};
+      var cc=cMap[p.id];
+      h+='<div class="li" onclick="showPipeDetail(\''+p.id+'\')">';
+      h+='<div style="display:flex;justify-content:space-between;gap:8px">';
+      h+='<div style="flex:1;min-width:0"><div class="lt">'+esc(p.projectName||'—')+'</div>';
+      h+='<div class="ls">'+esc(p.endUserTH||'—')+'</div></div>';
+      h+='<div style="text-align:right;flex-shrink:0"><span class="'+st.cls+'" style="font-size:10px;font-weight:600">'+st.name+'</span>';
+      if(p.forecastAmount)h+='<div style="font-size:11px;color:var(--accent)">'+fmtShort(p.forecastAmount)+'</div>';
+      h+='</div></div>';
+      if(cc)h+='<div style="margin-top:4px"><span class="conflict-tag">⚠️ ชน '+cc.length+' รายการ</span></div>';
+      h+='</div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+// TAB: Visit
+function rdVisit(el){
+  var dv=visits.filter(function(v){return v.dealerId===currentDealer.id;});
+  var h=dHero(currentDealer);
+  if(!dv.length){h+='<div class="empty">🤝 ยังไม่มีบันทึก Visit<br><small>กด ＋ เพื่อบันทึก</small></div>';}
+  else{
+    dv.forEach(function(v){
+      h+='<div class="log-item" onclick="showEditVisit(\''+v.id+'\')">';
+      h+='<div class="log-meta"><span>📅 '+esc(v.date||'—')+'</span><span>'+esc(v.type||'')+'</span>';
+      if(v.topics&&v.topics.length)h+='<span>'+v.topics.slice(0,2).map(esc).join(', ')+'</span>';
+      h+='</div><div class="log-body">'+esc(v.notes||'(ไม่มีหมายเหตุ)')+'</div></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+// TAB: Timeline
+function rdTimeline(el){
+  var did=currentDealer.id;
+  var evs=[];
+  visits.filter(function(v){return v.dealerId===did;}).forEach(function(v){
+    evs.push({date:v.date||v.createdAt||'',cls:'v',icon:'🤝',text:'Visit: '+esc(v.type||'')+(v.notes?' — '+esc(v.notes.slice(0,60)):'')+''});
+  });
+  pipeline.filter(function(p){return p.dealerId===did;}).forEach(function(p){
+    evs.push({date:p.updatedAt||p.createdAt||'',cls:'p',icon:'📊',text:'Pipeline: '+esc(p.projectName||'—')+' ['+esc(p.status||'')+']'});
+  });
+  tasks.filter(function(t){return t.dealerId===did&&t.done;}).forEach(function(t){
+    evs.push({date:t.doneAt||t.updatedAt||'',cls:'t',icon:'✅',text:'งาน: '+esc(t.title||'—')});
+  });
+  demoUnits.filter(function(dm){return dm.dealerId===did;}).forEach(function(dm){
+    evs.push({date:dm.lendDate||dm.createdAt||'',cls:'d',icon:'🚁',text:'Demo: '+esc(dm.model||'—')+' ['+esc(dm.status||'')+']'});
+  });
+  evs.sort(function(a,b){return b.date.localeCompare(a.date);});
+  var h=dHero(currentDealer);
+  if(!evs.length){h+='<div class="empty">📝 ยังไม่มีกิจกรรม</div>';}
+  else{
+    h+='<div class="tl-wrap">';
+    evs.forEach(function(ev){
+      h+='<div class="tl-item"><div class="tl-dot '+ev.cls+'"></div>';
+      h+='<div class="tl-date">'+(ev.date?ev.date.slice(0,10):'—')+'</div>';
+      h+='<div class="tl-text">'+ev.icon+' '+ev.text+'</div></div>';
+    });
+    h+='</div>';
+  }
+  el.innerHTML=h;
+}
+
+// TAB: Demo
+function rdDemo(el){
+  var dd=demoUnits.filter(function(dm){return dm.dealerId===currentDealer.id;});
+  var h=dHero(currentDealer);
+  if(!dd.length){h+='<div class="empty">🚁 ยังไม่มี Demo Unit<br><small>กด ＋ เพื่อเพิ่ม</small></div>';}
+  else{
+    dd.forEach(function(dm){
+      var sc=dm.status==='ให้ยืมแล้ว'?'bd-orange':dm.status==='พร้อมให้ยืม'?'bd-green':'bd-grey';
+      h+='<div class="df-item" onclick="showEditDemo(\''+dm.id+'\')">';
+      h+='<div class="df-main"><div class="lt">'+esc(dm.model||'—')+'</div>';
+      if(dm.serialNo)h+='<div class="ls">S/N: '+esc(dm.serialNo)+'</div>';
+      if(dm.lendDate)h+='<div class="ls">ยืม: '+esc(dm.lendDate)+(dm.returnDate?' → '+esc(dm.returnDate):'')+'</div>';
+      if(dm.notes)h+='<div class="ls">'+esc(dm.notes)+'</div>';
+      h+='</div><span class="badge '+sc+'">'+esc(dm.status||'—')+'</span></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+// TAB: Forecast
+function rdForecast(el){
+  var df=forecastItems.filter(function(f){return f.dealerId===currentDealer.id;});
+  var h=dHero(currentDealer);
+  if(!df.length){h+='<div class="empty">📦 ยังไม่มี Forecast<br><small>กด ＋ เพื่อเพิ่มรายการ</small></div>';}
+  else{
+    var totalQty=df.reduce(function(s,f){return s+(Number(f.qty)||0);},0);
+    var conf=df.filter(function(f){return f.confirmed;}).length;
+    h+='<div class="srow srow-3"><div class="sc"><div class="sn">'+df.length+'</div><div class="sl">รายการ</div></div>';
+    h+='<div class="sc"><div class="sn">'+totalQty+'</div><div class="sl">ชิ้น</div></div>';
+    h+='<div class="sc"><div class="sn" style="color:var(--green)">'+conf+'</div><div class="sl">Confirmed</div></div></div>';
+    df.forEach(function(f){
+      h+='<div class="df-item" onclick="showEditForecast(\''+f.id+'\')">';
+      h+='<div class="df-main"><div class="lt">'+esc(f.model||'—')+'</div>';
+      h+='<div class="ls">จำนวน: '+(f.qty||'—')+(f.expectedDate?' · '+esc(f.expectedDate):'')+'</div>';
+      if(f.priceLevel)h+='<div class="ls">'+esc(f.priceLevel)+'</div>';
+      if(f.notes)h+='<div class="ls">'+esc(f.notes)+'</div>';
+      h+='</div><span class="badge '+(f.confirmed?'bd-green':'bd-grey')+'">'+(f.confirmed?'Confirmed':'Draft')+'</span></div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+// TAB: งาน
+function rdTasks(el){
+  var today=new Date().toISOString().slice(0,10);
+  var dt=tasks.filter(function(t){return t.dealerId===currentDealer.id;});
+  var pend=dt.filter(function(t){return!t.done;}),done=dt.filter(function(t){return t.done;});
+  var h=dHero(currentDealer);
+  if(!dt.length){h+='<div class="empty">📋 ยังไม่มี Task<br><small>กด ＋ เพื่อเพิ่ม</small></div>';}
+  else{
+    if(pend.length){
+      h+='<div class="slbl">ยังไม่เสร็จ ('+pend.length+')</div>';
+      pend.forEach(function(t){h+=taskHtml(t,t.dueDate&&t.dueDate<today);});
+    }
+    if(done.length){
+      h+='<div class="slbl" style="margin-top:14px">เสร็จแล้ว ('+done.length+')</div>';
+      done.forEach(function(t){h+=taskHtml(t,false);});
+    }
+  }
+  el.innerHTML=h;
+}
+
+function taskHtml(t,ov){
+  var pc=t.priority==='สูง'?'var(--red)':t.priority==='กลาง'?'var(--orange)':'var(--text3)';
+  return '<div class="task-item">'+
+    '<div class="task-chk '+(t.done?'done':'')+'" onclick="toggleTask(\''+t.id+'\')">'+
+    (t.done?'✓':'')+'</div>'+
+    '<div style="flex:1;min-width:0;cursor:pointer" onclick="showEditTask(\''+t.id+'\')">'+
+    '<div style="font-size:12px'+(t.done?';text-decoration:line-through;color:var(--text3)':'')+'">'
+    +esc(t.title||'—')+'</div>'+
+    (t.dueDate?'<div class="task-due'+(ov?' ov':'')+'">📅 '+t.dueDate+'</div>':'')+
+    (t.priority?'<span style="font-size:9px;color:'+pc+'">'+t.priority+'</span>':'')+
+    '</div></div>';
+}
+
+// TAB: Onboard
+function rdOnboard(el){
+  var d=currentDealer;
+  var steps=d.onboardSteps||{};
+  var done=ONBOARD_STEPS.filter(function(s){return steps[s.id];}).length;
+  var pct=Math.round(done/ONBOARD_STEPS.length*100);
+  var h=dHero(d);
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h+='<span style="font-size:12px;color:var(--text2)">ความคืบหน้า</span>';
+  h+='<span style="font-size:13px;font-weight:700;color:var(--accent)">'+done+' / '+ONBOARD_STEPS.length+'</span></div>';
+  h+='<div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:12px"><div style="background:var(--accent);border-radius:4px;height:6px;width:'+pct+'%"></div></div>';
+  ONBOARD_STEPS.forEach(function(s){
+    var ck=!!steps[s.id];
+    h+='<div class="ob-item" onclick="toggleOnboard(\''+s.id+'\')">';
+    h+='<div class="ob-chk '+(ck?'done':'')+'">'+( ck?'✓':'')+'</div>';
+    h+='<div style="font-size:12px'+(ck?';text-decoration:line-through;color:var(--text3)':'')+'">'+ esc(s.label)+'</div></div>';
+  });
+  el.innerHTML=h;
+}
+
+function toggleOnboard(stepId){
+  if(!currentDealer)return;
+  var steps=Object.assign({},currentDealer.onboardSteps||{});
+  steps[stepId]=!steps[stepId];
+  db.collection('salesMembers').doc(SALES_ID).collection('dealers').doc(currentDealer.id)
+    .update({onboardSteps:steps,updatedAt:new Date().toISOString()})
+    .catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── GLOBAL PIPELINE ────────────────────────────────────
+function renderGlobalPipeline(el){
+  var cMap=buildConflictMap();
+  var active=pipeline.filter(function(p){return['lost','delivered'].indexOf(p.status)===-1;});
+  var amt=active.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
+  var h='<div class="srow srow-3"><div class="sc"><div class="sn">'+pipeline.length+'</div><div class="sl">ทั้งหมด</div></div>';
+  h+='<div class="sc"><div class="sn" style="color:var(--green)">'+fmtShort(amt)+'</div><div class="sl">Active ฿</div></div>';
+  h+='<div class="sc"><div class="sn" style="color:'+(Object.keys(cMap).length?'var(--red)':'var(--text3)')+'">'+Object.keys(cMap).length+'</div><div class="sl">⚠️ ชน</div></div></div>';
+  if(!pipeline.length){h+='<div class="empty">📊 ยังไม่มี Pipeline</div>';}
+  else{
+    pipeline.forEach(function(p){
+      var d=dealers.find(function(x){return x.id===p.dealerId;});
+      var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{name:p.status,cls:'s-prospect'};
+      var cc=cMap[p.id];
+      h+='<div class="li" onclick="showPipeDetail(\''+p.id+'\')">';
+      h+='<div style="display:flex;justify-content:space-between;gap:8px">';
+      h+='<div style="flex:1;min-width:0"><div class="lt">'+esc(p.projectName||'—')+'</div>';
+      h+='<div class="ls">'+(d?esc(d.name):esc(p.dealerName||'—'))+' · '+esc(p.endUserTH||'—')+'</div></div>';
+      h+='<div style="text-align:right;flex-shrink:0"><span class="'+st.cls+'" style="font-size:10px;font-weight:600">'+st.name+'</span>';
+      if(p.forecastAmount)h+='<div style="font-size:11px;color:var(--accent)">'+fmtShort(p.forecastAmount)+'</div>';
+      h+='</div></div>';
+      if(cc)h+='<div style="margin-top:4px"><span class="conflict-tag">⚠️ ชน '+cc.length+'</span></div>';
+      h+='</div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+// ── GLOBAL TASKS ───────────────────────────────────────
+function renderGlobalTasks(el){
+  var today=new Date().toISOString().slice(0,10);
+  var pend=tasks.filter(function(t){return!t.done;});
+  var done=tasks.filter(function(t){return t.done;});
+  var ov=pend.filter(function(t){return t.dueDate&&t.dueDate<today;});
+  var up=pend.filter(function(t){return!t.dueDate||t.dueDate>=today;});
+  var h='<div class="srow srow-3"><div class="sc"><div class="sn">'+pend.length+'</div><div class="sl">ค้างอยู่</div></div>';
+  h+='<div class="sc"><div class="sn" style="color:var(--red)">'+ov.length+'</div><div class="sl">เกินกำหนด</div></div>';
+  h+='<div class="sc"><div class="sn" style="color:var(--green)">'+done.length+'</div><div class="sl">เสร็จแล้ว</div></div></div>';
+  if(!tasks.length){h+='<div class="empty">📋 ยังไม่มี Task<br><small>เพิ่ม Task ในหน้า Dealer</small></div>';}
+  else{
+    function taskRow(t){
+      var d=dealers.find(function(x){return x.id===t.dealerId;});
+      var isov=t.dueDate&&t.dueDate<today&&!t.done;
+      return '<div class="task-item"><div class="task-chk '+(t.done?'done':'')+'" onclick="toggleTask(\''+t.id+'\')">'+
+        (t.done?'✓':'')+'</div>'+
+        '<div style="flex:1;cursor:pointer" onclick="goDealer(\''+t.dealerId+'\')">'+
+        '<div style="font-size:12px'+(t.done?';text-decoration:line-through;color:var(--text3)':'')+'">'
+        +esc(t.title||'—')+'</div>'+
+        (t.dueDate?'<div class="task-due'+(isov?' ov':'')+'">📅 '+t.dueDate+'</div>':'')+
+        (d?'<div class="task-due">'+esc(d.name)+'</div>':'')+
+        '</div></div>';
+    }
+    if(ov.length){h+='<div class="slbl" style="color:var(--red)">เกินกำหนด</div>';ov.forEach(function(t){h+=taskRow(t);});}
+    if(up.length){h+='<div class="slbl">กำลังดำเนินการ</div>';up.forEach(function(t){h+=taskRow(t);});}
+    if(done.length){
+      h+='<div class="slbl">เสร็จแล้ว ('+done.length+')</div>';
+      done.slice(0,5).forEach(function(t){h+=taskRow(t);});
+      if(done.length>5)h+='<div style="text-align:center;font-size:11px;color:var(--text3);padding:8px">... อีก '+(done.length-5)+' รายการ</div>';
+    }
+  }
+  el.innerHTML=h;
+}
+
+// ── PIPELINE CRUD ──────────────────────────────────────
+function showPipeDetail(id){
+  var p=pipeline.find(function(x){return x.id===id;});if(!p)return;
+  var d=dealers.find(function(x){return x.id===p.dealerId;});
+  var st=PIPE_STATUSES.find(function(s){return s.id===p.status;})||{name:p.status,cls:'s-prospect'};
+  var h='<div style="padding:10px;background:var(--bg);border-radius:8px;margin-bottom:12px">';
+  h+='<div style="font-size:13px;font-weight:700;margin-bottom:4px">'+esc(p.projectName||'—')+'</div>';
+  if(d)h+='<div style="font-size:11px;color:var(--text2)">Dealer: '+esc(d.name)+'</div>';
+  if(p.endUserTH)h+='<div style="font-size:11px;color:var(--text2)">End User: '+esc(p.endUserTH)+'</div>';
+  if(p.forecastAmount)h+='<div style="font-size:14px;color:var(--accent);font-weight:700;margin-top:6px">฿'+Number(p.forecastAmount).toLocaleString()+'</div>';
+  h+='<div style="margin-top:6px"><span class="'+st.cls+'" style="font-size:11px;font-weight:600">'+st.name+'</span></div>';
+  if(p.model)h+='<div style="font-size:11px;color:var(--text2);margin-top:4px">🚁 '+esc(p.model)+'</div>';
+  if(p.remark)h+='<div style="font-size:11px;color:var(--text2);margin-top:6px;padding:6px;background:var(--bg2);border-radius:6px">'+esc(p.remark)+'</div>';
+  h+='</div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="closeModal();showEditPipe(\''+id+'\')">✏️ แก้ไข</button>';
+  h+='<button class="btn btn-d btn-sm" onclick="deletePipe(\''+id+'\')">🗑️</button></div>';
+  openModal('📋 '+esc(p.projectName||'Pipeline'),h);
+}
+
+function showAddPipe(dealerId){
+  editId=null;
+  openModal('➕ เพิ่ม Pipeline',buildPipeForm(null,dealerId||(currentDealer?currentDealer.id:'')));
+}
+
+function showEditPipe(id){
+  var p=pipeline.find(function(x){return x.id===id;});if(!p)return;
+  editId=id;openModal('✏️ แก้ไข Pipeline',buildPipeForm(p,p.dealerId));
+}
+
+function buildPipeForm(p,prefill){
+  var dealerOpts='<option value="">— เลือก Dealer —</option>'+dealers.map(function(d){
+    return'<option value="'+d.id+'"'+(d.id===(p?p.dealerId:prefill)?' selected':'')+'>'+esc(d.name)+'</option>';
+  }).join('');
+  var statusOpts=PIPE_STATUSES.map(function(s){
+    return'<option value="'+s.id+'"'+(p?p.status===s.id?' selected':'':s.id==='prospect'?' selected':'')+'>'+s.name+'</option>';
+  }).join('');
+  var h='<div class="fg"><label>ชื่อโครงการ *</label><input id="fp_proj" class="fi" value="'+esc(p?p.projectName||'':'')+'" placeholder="ชื่อโครงการ"></div>';
+  h+='<div class="fg"><label>Dealer</label><select id="fp_dealer" class="fi">'+dealerOpts+'</select></div>';
+  h+='<div class="fg"><label>End User (TH)</label><input id="fp_eu" class="fi" value="'+esc(p?p.endUserTH||'':'')+'" placeholder="ชื่อองค์กร"></div>';
+  h+='<div class="fi-row"><div class="fg"><label>Status</label><select id="fp_status" class="fi">'+statusOpts+'</select></div>';
+  h+='<div class="fg"><label>มูลค่า (฿)</label><input id="fp_amt" class="fi js-money" type="text" inputmode="decimal" value="'+nmI(p?p.forecastAmount||'':'')+'"></div></div>';
+  h+='<div class="fg"><label>สินค้า/รุ่น</label><input id="fp_model" class="fi" value="'+esc(p?p.model||'':'')+'" placeholder="DJI Matrice 350 RTK"></div>';
+  h+='<div class="fg"><label>หมายเหตุ</label><textarea id="fp_remark" class="fi" rows="2">'+esc(p?p.remark||'':'')+'</textarea></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="savePipe()">💾 บันทึก</button><button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function savePipe(){
+  var proj=document.getElementById('fp_proj').value.trim();
+  if(!proj){showToast('กรุณาใส่ชื่อโครงการ');return;}
+  var dealerId=document.getElementById('fp_dealer').value;
+  var d=dealers.find(function(x){return x.id===dealerId;});
+  var data={
+    id:editId||('pipe_'+Date.now().toString(36)),
+    projectName:proj,dealerId:dealerId,dealerName:d?d.name:'',
+    endUserTH:document.getElementById('fp_eu').value.trim(),
+    status:document.getElementById('fp_status').value,
+    forecastAmount:parseNum(document.getElementById('fp_amt').value),
+    model:document.getElementById('fp_model').value.trim(),
+    remark:document.getElementById('fp_remark').value.trim(),
+    ownerId:SALES_ID,ownerName:SALES_PROFILE?SALES_PROFILE.name:'',ownerType:'sales',
+    updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('pipeline').doc(data.id).set(data).then(function(){
+    var isActive=['lost','delivered'].indexOf(data.status)===-1;
+    var tpRef=db.collection('teamPipeline').doc(data.id);
+    if(isActive){
+      tpRef.set({id:data.id,dealerId:data.dealerId,dealerName:data.dealerName,
+        projectName:data.projectName,endUserTH:data.endUserTH,endUserEN:'',
+        forecastAmount:data.forecastAmount,status:data.status,
+        model:data.model||'',totalQty:1,
+        ownerName:data.ownerName,ownerId:SALES_ID,ownerType:'sales',updatedAt:data.updatedAt});
+    } else {tpRef.delete().catch(function(){});}
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deletePipe(id){
+  if(!confirm('ลบโครงการนี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('pipeline').doc(id).delete().then(function(){
+    db.collection('teamPipeline').doc(id).delete().catch(function(){});
+    closeModal();showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── VISIT CRUD ─────────────────────────────────────────
+function showAddVisit(){editId=null;openModal('➕ บันทึก Visit',buildVisitForm(null));}
+function showEditVisit(id){
+  var v=visits.find(function(x){return x.id===id;});if(!v)return;
+  editId=id;openModal('✏️ แก้ไข Visit',buildVisitForm(v));
+}
+
+function buildVisitForm(v){
+  var today=new Date().toISOString().slice(0,10);
+  var typeOpts=VISIT_TYPES.map(function(t){return'<option value="'+t+'"'+(v&&v.type===t?' selected':'')+'>'+t+'</option>';}).join('');
+  var topicHtml=VISIT_TOPICS.map(function(t){
+    var ck=v&&v.topics&&v.topics.indexOf(t)>=0?' checked':'';
+    return'<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px"><input type="checkbox" value="'+t+'"'+ck+'> '+t+'</label>';
+  }).join('');
+  var h='<div class="fg"><label>วันที่</label><input id="fv_date" class="fi" type="date" value="'+(v?v.date||today:today)+'"></div>';
+  h+='<div class="fg"><label>ประเภท</label><select id="fv_type" class="fi"><option value="">—</option>'+typeOpts+'</select></div>';
+  h+='<div class="fg"><label>หัวข้อ</label><div id="fv_topics" style="padding:4px 0">'+topicHtml+'</div></div>';
+  h+='<div class="fg"><label>บันทึก / หมายเหตุ</label><textarea id="fv_notes" class="fi" rows="3">'+esc(v?v.notes||'':'')+'</textarea></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveVisit()">💾 บันทึก</button>';
+  if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteVisit(\''+editId+'\')">🗑️</button>';
+  h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function saveVisit(){
+  if(!currentDealer)return;
+  var topics=[];
+  document.querySelectorAll('#fv_topics input:checked').forEach(function(cb){topics.push(cb.value);});
+  var data={
+    id:editId||('visit_'+Date.now().toString(36)),
+    dealerId:currentDealer.id,dealerName:currentDealer.name,
+    date:document.getElementById('fv_date').value,
+    type:document.getElementById('fv_type').value,
+    topics:topics,
+    notes:document.getElementById('fv_notes').value.trim(),
+    ownerId:SALES_ID,updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('visits').doc(data.id).set(data).then(function(){
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deleteVisit(id){
+  if(!confirm('ลบบันทึก Visit นี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('visits').doc(id).delete().then(function(){
+    closeModal();showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── TASK CRUD ──────────────────────────────────────────
+function showAddTask(){editId=null;openModal('➕ เพิ่ม Task',buildTaskForm(null));}
+function showEditTask(id){
+  var t=tasks.find(function(x){return x.id===id;});if(!t)return;
+  editId=id;openModal('✏️ แก้ไข Task',buildTaskForm(t));
+}
+
+function buildTaskForm(t){
+  var prioOpts=PRIORITY.map(function(p){return'<option value="'+p+'"'+(t?t.priority===p?' selected':'':p==='กลาง'?' selected':'')+'>'+p+'</option>';}).join('');
+  var h='<div class="fg"><label>ชื่อ Task *</label><input id="ft_title" class="fi" value="'+esc(t?t.title||'':'')+'" placeholder="สิ่งที่ต้องทำ"></div>';
+  h+='<div class="fi-row"><div class="fg"><label>กำหนดส่ง</label><input id="ft_due" class="fi" type="date" value="'+(t?t.dueDate||'':'')+'"></div>';
+  h+='<div class="fg"><label>ความสำคัญ</label><select id="ft_prio" class="fi">'+prioOpts+'</select></div></div>';
+  h+='<div class="fg"><label>หมายเหตุ</label><textarea id="ft_notes" class="fi" rows="2">'+esc(t?t.notes||'':'')+'</textarea></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveTask()">💾 บันทึก</button>';
+  if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteTask(\''+editId+'\')">🗑️</button>';
+  h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function saveTask(){
+  if(!currentDealer)return;
+  var title=document.getElementById('ft_title').value.trim();
+  if(!title){showToast('กรุณาใส่ชื่อ Task');return;}
+  var existing=editId?tasks.find(function(x){return x.id===editId;}):null;
+  var data={
+    id:editId||('task_'+Date.now().toString(36)),
+    dealerId:currentDealer.id,dealerName:currentDealer.name,
+    title:title,dueDate:document.getElementById('ft_due').value,
+    priority:document.getElementById('ft_prio').value,
+    notes:document.getElementById('ft_notes').value.trim(),
+    done:existing?existing.done||false:false,
+    ownerId:SALES_ID,updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('tasks').doc(data.id).set(data).then(function(){
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function toggleTask(id){
+  var t=tasks.find(function(x){return x.id===id;});if(!t)return;
+  var now=!t.done;
+  var upd={done:now,updatedAt:new Date().toISOString()};
+  if(now)upd.doneAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('tasks').doc(id).update(upd)
+    .catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deleteTask(id){
+  if(!confirm('ลบ Task นี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('tasks').doc(id).delete().then(function(){
+    closeModal();showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── DEMO CRUD ──────────────────────────────────────────
+function showAddDemo(){editId=null;openModal('➕ เพิ่ม Demo Unit',buildDemoForm(null));}
+function showEditDemo(id){
+  var dm=demoUnits.find(function(x){return x.id===id;});if(!dm)return;
+  editId=id;openModal('✏️ แก้ไข Demo Unit',buildDemoForm(dm));
+}
+
+function buildDemoForm(dm){
+  var statusOpts=DEMO_STATUS.map(function(s){return'<option value="'+s+'"'+(dm?dm.status===s?' selected':'':s==='พร้อมให้ยืม'?' selected':'')+'>'+s+'</option>';}).join('');
+  var h='<div class="fg"><label>รุ่น / Model *</label><input id="fdm_model" class="fi" value="'+esc(dm?dm.model||'':'')+'" placeholder="DJI Matrice 350 RTK"></div>';
+  h+='<div class="fg"><label>Serial Number</label><input id="fdm_sn" class="fi" value="'+esc(dm?dm.serialNo||'':'')+'" placeholder="หมายเลขเครื่อง"></div>';
+  h+='<div class="fg"><label>สถานะ</label><select id="fdm_status" class="fi">'+statusOpts+'</select></div>';
+  h+='<div class="fi-row"><div class="fg"><label>วันที่ให้ยืม</label><input id="fdm_lend" class="fi" type="date" value="'+(dm?dm.lendDate||'':'')+'"></div>';
+  h+='<div class="fg"><label>วันที่คืน</label><input id="fdm_ret" class="fi" type="date" value="'+(dm?dm.returnDate||'':'')+'"></div></div>';
+  h+='<div class="fg"><label>หมายเหตุ</label><textarea id="fdm_notes" class="fi" rows="2">'+esc(dm?dm.notes||'':'')+'</textarea></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveDemo()">💾 บันทึก</button>';
+  if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteDemo(\''+editId+'\')">🗑️</button>';
+  h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function saveDemo(){
+  if(!currentDealer)return;
+  var model=document.getElementById('fdm_model').value.trim();
+  if(!model){showToast('กรุณาใส่รุ่น');return;}
+  var data={
+    id:editId||('demo_'+Date.now().toString(36)),
+    dealerId:currentDealer.id,dealerName:currentDealer.name,
+    model:model,serialNo:document.getElementById('fdm_sn').value.trim(),
+    status:document.getElementById('fdm_status').value,
+    lendDate:document.getElementById('fdm_lend').value,
+    returnDate:document.getElementById('fdm_ret').value,
+    notes:document.getElementById('fdm_notes').value.trim(),
+    ownerId:SALES_ID,updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('demoUnits').doc(data.id).set(data).then(function(){
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deleteDemo(id){
+  if(!confirm('ลบ Demo Unit นี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('demoUnits').doc(id).delete().then(function(){
+    closeModal();showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── FORECAST CRUD ──────────────────────────────────────
+function showAddForecast(){editId=null;openModal('➕ เพิ่ม Forecast',buildForecastForm(null));}
+function showEditForecast(id){
+  var f=forecastItems.find(function(x){return x.id===id;});if(!f)return;
+  editId=id;openModal('✏️ แก้ไข Forecast',buildForecastForm(f));
+}
+
+function buildForecastForm(f){
+  var h='<div class="fg"><label>รุ่น / Model *</label><input id="ff_model" class="fi" value="'+esc(f?f.model||'':'')+'" placeholder="DJI Agras T50"></div>';
+  h+='<div class="fi-row"><div class="fg"><label>จำนวน</label><input id="ff_qty" class="fi" type="number" value="'+(f?f.qty||'':'')+'" inputmode="numeric" placeholder="1"></div>';
+  h+='<div class="fg"><label>กำหนดซื้อ</label><input id="ff_date" class="fi" type="date" value="'+(f?f.expectedDate||'':'')+'"></div></div>';
+  h+='<div class="fg"><label>ระดับราคา</label><input id="ff_price" class="fi" value="'+esc(f?f.priceLevel||'':'')+'" placeholder="Tier 1 / ราคาพิเศษ"></div>';
+  h+='<div class="fg"><label>หมายเหตุ</label><textarea id="ff_notes" class="fi" rows="2">'+esc(f?f.notes||'':'')+'</textarea></div>';
+  h+='<div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="ff_conf"'+(f&&f.confirmed?' checked':'')+'>  Confirmed Order</label></div>';
+  h+='<div class="fa"><button class="btn btn-p" style="flex:1" onclick="saveForecast()">💾 บันทึก</button>';
+  if(editId)h+='<button class="btn btn-d btn-sm" onclick="deleteForecast(\''+editId+'\')">🗑️</button>';
+  h+='<button class="btn btn-o" onclick="closeModal()">ยกเลิก</button></div>';
+  return h;
+}
+
+function saveForecast(){
+  if(!currentDealer)return;
+  var model=document.getElementById('ff_model').value.trim();
+  if(!model){showToast('กรุณาใส่รุ่น');return;}
+  var data={
+    id:editId||('fc_'+Date.now().toString(36)),
+    dealerId:currentDealer.id,dealerName:currentDealer.name,
+    model:model,qty:parseInt(document.getElementById('ff_qty').value)||1,
+    expectedDate:document.getElementById('ff_date').value,
+    priceLevel:document.getElementById('ff_price').value.trim(),
+    notes:document.getElementById('ff_notes').value.trim(),
+    confirmed:document.getElementById('ff_conf').checked,
+    ownerId:SALES_ID,updatedAt:new Date().toISOString()
+  };
+  if(!editId)data.createdAt=new Date().toISOString();
+  db.collection('salesMembers').doc(SALES_ID).collection('forecastItems').doc(data.id).set(data).then(function(){
+    closeModal();showToast('✅ บันทึกแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+function deleteForecast(id){
+  if(!confirm('ลบรายการ Forecast นี้?'))return;
+  db.collection('salesMembers').doc(SALES_ID).collection('forecastItems').doc(id).delete().then(function(){
+    closeModal();showToast('🗑️ ลบแล้ว');
+  }).catch(function(e){showToast('❌ '+e.message);});
+}
+
+// ── FAB ────────────────────────────────────────────────
+var _fabHandler=null;
+function handleFab(){if(_fabHandler)_fabHandler();}
+
+function updateFab(){
+  var fab=document.getElementById('fabBtn');
+  _fabHandler=null;
+  if(currentView==='home'||currentView==='tasks'){fab.style.display='none';return;}
+  fab.style.display='';
+  if(currentView==='pipeline'){_fabHandler=function(){showAddPipe(null);};}
+  else if(currentView==='dealers'){_fabHandler=function(){showAddDealer();};}
+  else if(currentView==='dealer'){
+    var map={pipeline:function(){showAddPipe(currentDealer?currentDealer.id:null);},
+             visit:function(){showAddVisit();},
+             demo:function(){showAddDemo();},
+             forecast:function(){showAddForecast();},
+             tasks:function(){showAddTask();}};
+    if(map[currentDtab]){_fabHandler=map[currentDtab];}
+    else{fab.style.display='none';}
+  }
+}
+
+// ── CONFLICT DETECTION ─────────────────────────────────
+function bigrams(str){
+  var s=(str||'').toLowerCase().replace(/\s+/g,''),set={};
+  for(var i=0;i<s.length-1;i++)set[s[i]+s[i+1]]=true;
+  return set;
+}
+function bigramSim(a,b){
+  var ba=bigrams(a),bb=bigrams(b),inter=0,ua=Object.keys(ba).length,ub=Object.keys(bb).length;
+  Object.keys(ba).forEach(function(k){if(bb[k])inter++;});
+  return(ua+ub)===0?0:Math.round((2*inter/(ua+ub))*100);
+}
+function pipeScore(a,b){
+  return Math.round(bigramSim(a.projectName,b.projectName)*0.5+bigramSim(a.endUserTH,b.endUserTH)*0.35+bigramSim(a.endUserEN,b.endUserEN)*0.15);
+}
+function buildConflictMap(){
+  var map={},all=pipeline.concat(teamPipeline);
+  var active=all.filter(function(p){return p&&['lost','delivered'].indexOf(p.status)===-1;});
+  for(var i=0;i<active.length;i++){
+    for(var j=i+1;j<active.length;j++){
+      var a=active[i],b=active[j];
+      if(a._isTeam&&b._isTeam)continue;
+      var sc=pipeScore(a,b);if(sc<60)continue;
+      if(!a._isTeam){if(!map[a.id])map[a.id]=[];map[a.id].push({dealerName:b._dealerName||b.dealerName||'?',score:sc,ownerName:b._ownerName||b.ownerName||null,isTeam:!!b._isTeam});}
+      if(!b._isTeam){if(!map[b.id])map[b.id]=[];map[b.id].push({dealerName:a._dealerName||a.dealerName||'?',score:sc,ownerName:a._ownerName||a.ownerName||null,isTeam:!!a._isTeam});}
+    }
+  }
+  return map;
+}
+
+// ── MODAL ──────────────────────────────────────────────
+function openModal(title,body){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=body;
+  document.getElementById('modalBg').classList.add('open');
+}
+function closeModal(){document.getElementById('modalBg').classList.remove('open');editId=null;}
+
+// ── UTILS ──────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function parseNum(v){if(v==null)return 0;var n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?0:n;}
+function nmI(v){if(v===''||v==null)return'';var n=parseFloat(String(v).replace(/,/g,''));if(isNaN(n))return'';return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _moneyLiveFmt(el){var sel=el.selectionStart||0;var db=el.value.slice(0,sel).replace(/[^0-9]/g,'').length;var raw=el.value.replace(/[^0-9.]/g,'');var p=raw.split('.');var ip=p[0]||'';var dc=p.length>1?'.'+p.slice(1).join('').slice(0,2):'';el.value=ip.replace(/\B(?=(\d{3})+(?!\d))/g,',')+dc;var pos=0,c=0;while(pos<el.value.length&&c<db){if(/[0-9]/.test(el.value[pos]))c++;pos++;}try{el.setSelectionRange(pos,pos);}catch(_){}}
+function _moneyBlurFmt(el){var raw=el.value.replace(/,/g,'').trim();if(raw===''||raw==='.'){el.value='';return;}var n=parseFloat(raw);el.value=isNaN(n)?'':n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+document.addEventListener('input',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyLiveFmt(t);});
+document.addEventListener('focusout',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('js-money'))_moneyBlurFmt(t);});
+function fmtShort(n){n=Number(n)||0;if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'K';return n.toString();}
+function showToast(msg){
+  var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
+  clearTimeout(_toastT);_toastT=setTimeout(function(){el.classList.remove('show');},2500);
+}
+</script>
+</body>
+</html>
