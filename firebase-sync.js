@@ -66,6 +66,14 @@ function doSalesLinkLogin() {
   toast('✅ เข้าสู่ระบบในนาม: ' + SALES_PROFILE.name);
   initFirebaseListeners();
   if (typeof render === 'function') render();
+  // ต้องเรียกหลัง render() เสมอ เพราะ sidebar ถูกวาดใหม่จาก render — ถ้าเรียกก่อนจะซ่อนแล้วโดนเขียนทับ
+  if (typeof applySalesLinkMenuGating === 'function') applySalesLinkMenuGating();
+  // ถ้าหน้าปัจจุบัน (default 'today') ดันไม่อยู่ในสิทธิ์ ให้พาไปเมนูแรกที่อนุญาต
+  if (_salesLinkMenuBlocked(S.view)) {
+    var cfg = getConfig();
+    var allowed = (cfg.salesLinkPermissions && cfg.salesLinkPermissions.allowedMenus) || [];
+    if (allowed.length) go(allowed[0]);
+  }
 }
 
 // ================================================================

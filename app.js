@@ -546,8 +546,43 @@ function softRefresh() {
   if (typeof toast === 'function') toast('🔄 รีเฟรชแล้ว');
 }
 
+// รวม id เมนูหลักทั้งหมดที่มี checkbox ในหน้า "สิทธิ์ลิงก์เซล" (SALES_LINK_MENU_GROUPS ใน admin.js)
+// ใช้แยกว่า view ไหนต้องเช็คสิทธิ์ (เมนูหลักจริงๆ) กับ view ไหนเป็นหน้ารายละเอียดย่อยที่ปล่อยผ่านเสมอ
+// (เข้าถึงได้ก็ต่อเมื่อเปิดจากเมนูหลักที่อนุญาตอยู่แล้ว เช่น dealerDetail มาจาก dealers)
+function _salesLinkAllMenuIds() {
+  var ids = [];
+  (typeof SALES_LINK_MENU_GROUPS !== 'undefined' ? SALES_LINK_MENU_GROUPS : []).forEach(function(g) {
+    g.items.forEach(function(it) { ids.push(it.id); });
+  });
+  return ids;
+}
+
+function _salesLinkMenuBlocked(view) {
+  if (typeof SALES_MODE === 'undefined' || !SALES_MODE) return false;
+  if (_salesLinkAllMenuIds().indexOf(view) === -1) return false;
+  var cfg = getConfig();
+  var allowed = (cfg.salesLinkPermissions && cfg.salesLinkPermissions.allowedMenus) || [];
+  return allowed.indexOf(view) === -1;
+}
+
+// ซ่อนรายการเมนูใน sidebar ที่ไม่ได้อยู่ใน allowedMenus — เรียกครั้งเดียวหลัง login สำเร็จในโหมดลิงก์เซล
+function applySalesLinkMenuGating() {
+  if (typeof SALES_MODE === 'undefined' || !SALES_MODE) return;
+  var cfg = getConfig();
+  var allowed = (cfg.salesLinkPermissions && cfg.salesLinkPermissions.allowedMenus) || [];
+  var allIds = _salesLinkAllMenuIds();
+  document.querySelectorAll('.nl[data-v]').forEach(function(el) {
+    var v = el.dataset.v;
+    if (allIds.indexOf(v) !== -1 && allowed.indexOf(v) === -1) el.style.display = 'none';
+  });
+}
+
 function go(v, p) {
   if (!p) p = {};
+  if (_salesLinkMenuBlocked(v)) {
+    if (typeof toast === 'function') toast('⛔ ไม่มีสิทธิ์เข้าเมนูนี้');
+    return;
+  }
   if (S && S.view) {
     navHistory.push(JSON.parse(JSON.stringify(S)));
     if (navHistory.length > 30) navHistory.shift();
@@ -2610,11 +2645,16 @@ function rCustomerUpdates(el) {
   }
   
   var dealers = ST.getAll('dealers');
+  // โหมดลิงก์เซล (PIN) — เห็นเฉพาะคำขออัพเดทของ Dealer ที่ตัวเองดูแล (เทียบจาก saleName)
+  // ไม่ใช่ของ Dealer ทั้งทีมปนกัน (ตกลงกันไว้ตอนวางแผน)
+  if (typeof SALES_MODE !== 'undefined' && SALES_MODE && SALES_PROFILE) {
+    dealers = dealers.filter(function(d) { return d.saleName === SALES_PROFILE.name; });
+  }
   if (!dealers.length) {
     el.innerHTML = '<div class="card"><div class="empty"><p>ไม่มี Dealer ในระบบ</p></div></div>';
     return;
   }
-  
+
   selectedUpdates = {};
   
   var allUpdates = [];
