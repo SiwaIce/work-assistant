@@ -25,6 +25,9 @@ var pipeSelectMode = false;
 // แก้ไขไม่ได้จากหน้านี้ — ใครจะแก้ต้องไปแก้ที่ Pipeline ของตัวเอง แล้วมันจะ sync ขึ้นมาที่นี่เอง
 // ================================================================
 var pipeTeamOwnerFlt = 'all';
+var pipeTeamStatusFlt = 'all';
+var pipeTeamSort = 'amount_desc';
+var pipeTeamView = 'card';
 
 function _pipeTeamMergedList() {
   var mine = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p); }).map(function(p) {
@@ -45,14 +48,42 @@ function _pipeTeamMergedList() {
   return mine.concat(others);
 }
 
+function _pipeTeamStatusSummary(list) {
+  var cfg = getConfig();
+  var summary = {};
+  cfg.pipelineStatuses.forEach(function(s) {
+    var items = list.filter(function(p) { return p.status === s.id; });
+    summary[s.id] = { count: items.length, amount: items.reduce(function(a, p) { return a + p.forecastAmount; }, 0), name: s.name, color: s.color };
+  });
+  return summary;
+}
+
+function _sortPipeTeamList(list, sortBy) {
+  var sorted = list.slice();
+  switch (sortBy) {
+    case 'amount_asc': sorted.sort(function(a, b) { return a.forecastAmount - b.forecastAmount; }); break;
+    case 'project': sorted.sort(function(a, b) { return (a.projectName || '').localeCompare(b.projectName || ''); }); break;
+    case 'dealer': sorted.sort(function(a, b) { return (a.dealerName || '').localeCompare(b.dealerName || ''); }); break;
+    case 'owner': sorted.sort(function(a, b) { return (a.ownerName || '').localeCompare(b.ownerName || ''); }); break;
+    case 'status':
+      var order = ['bidding', 'on_process', 'draft_tor', 'initial', 'win', 'contracting', 'deliver', 'fail_lost'];
+      sorted.sort(function(a, b) { var ia = order.indexOf(a.status); var ib = order.indexOf(b.status); if (ia === -1) ia = 99; if (ib === -1) ib = 99; return ia - ib; });
+      break;
+    default: sorted.sort(function(a, b) { return b.forecastAmount - a.forecastAmount; }); // amount_desc
+  }
+  return sorted;
+}
+
 function rPipelineTeam(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline รวมทีม';
-  var list = _pipeTeamMergedList();
+  var fullList = _pipeTeamMergedList();
+  var ps = _pipeTeamStatusSummary(fullList);
 
   var owners = [];
-  list.forEach(function(p) { if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName); });
+  fullList.forEach(function(p) { if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName); });
   owners.sort();
 
+  var list = fullList;
   if (pipeTeamSearch) {
     var q = pipeTeamSearch.toLowerCase();
     list = list.filter(function(p) {
@@ -63,34 +94,81 @@ function rPipelineTeam(el) {
     });
   }
   if (pipeTeamOwnerFlt !== 'all') list = list.filter(function(p) { return p.ownerName === pipeTeamOwnerFlt; });
+  if (pipeTeamStatusFlt !== 'all') list = list.filter(function(p) { return p.status === pipeTeamStatusFlt; });
+  list = _sortPipeTeamList(list, pipeTeamSort);
 
-  var totalAmt = list.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
-  var mineCount = list.filter(function(p) { return p._mine; }).length;
+  var totalAmt = fullList.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
+  var mineCount = fullList.filter(function(p) { return p._mine; }).length;
 
   // แถบสรุป — หน้าตาเหมือนหัวเมนู Pipeline หลัก (การ์ด .sr/.sc)
   var h = '<div class="sr" style="margin-bottom:10px">';
-  h += '<div class="sc"><div class="sn c1">' + list.length + '</div><div class="sl">ทั้งหมด (ทีม)</div></div>';
+  h += '<div class="sc"><div class="sn c1">' + fullList.length + '</div><div class="sl">ทั้งหมด (ทีม)</div></div>';
   h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalAmt) + '</div><div class="sl">มูลค่ารวม</div></div>';
   h += '<div class="sc"><div class="sn c3">' + mineCount + '</div><div class="sl">ของฉัน</div></div>';
   h += '<div class="sc"><div class="sn c5">' + owners.length + '</div><div class="sl">จำนวนคน</div></div>';
   h += '</div>';
 
-  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง</div>';
+  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง (ข้อมูลของคนอื่นเป็นสรุปย่อ ไม่มี Bidding Date/TOR/Board)</div>';
 
   // แถบตัวกรอง — หน้าตาเหมือนแถบค้นหา/filter ของเมนู Pipeline หลัก
-  h += '<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">';
+  h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">';
   h += '<input type="text" id="pipeTeamSrc" value="' + sanitize(pipeTeamSearch) + '" placeholder="🔍 ค้นหา Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeTeamSearchInput(this.value)" autocomplete="off">';
-  h += '<select onchange="pipeTeamOwnerFlt=this.value;render()" style="min-width:140px">';
+  h += '<select onchange="pipeTeamSort=this.value;render()" style="min-width:130px">';
+  h += '<option value="amount_desc"' + (pipeTeamSort === 'amount_desc' ? ' selected' : '') + '>มูลค่า มากสุด</option>';
+  h += '<option value="amount_asc"' + (pipeTeamSort === 'amount_asc' ? ' selected' : '') + '>มูลค่า น้อยสุด</option>';
+  h += '<option value="project"' + (pipeTeamSort === 'project' ? ' selected' : '') + '>ชื่อโครงการ</option>';
+  h += '<option value="dealer"' + (pipeTeamSort === 'dealer' ? ' selected' : '') + '>ตาม Dealer</option>';
+  h += '<option value="owner"' + (pipeTeamSort === 'owner' ? ' selected' : '') + '>ตามเจ้าของ</option>';
+  h += '<option value="status"' + (pipeTeamSort === 'status' ? ' selected' : '') + '>ตาม Status</option>';
+  h += '</select>';
+  h += '<select onchange="pipeTeamOwnerFlt=this.value;render()" style="min-width:120px">';
   h += '<option value="all"' + (pipeTeamOwnerFlt === 'all' ? ' selected' : '') + '>👤 ทุกคน</option>';
   owners.forEach(function(o) { h += '<option value="' + sanitize(o) + '"' + (pipeTeamOwnerFlt === o ? ' selected' : '') + '>' + sanitize(o) + '</option>'; });
   h += '</select>';
   h += '<button class="btn bo bsm" onclick="_pipeTeamRefresh()">🔄 รีเฟรช</button>';
+  h += '<div style="flex:1"></div>';
+  h += '<button class="btn bsm ' + (pipeTeamView === 'table' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'table\';render()" title="ตาราง">📋</button>';
+  h += '<button class="btn bsm ' + (pipeTeamView === 'card' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'card\';render()" title="การ์ด">🃏</button>';
   h += '</div>';
 
-  el.innerHTML = h + _renderPipeTeamCards(list);
+  // แถบสถานะ — คลิกกรอง เหมือน .pipe-sum-card ของเมนู Pipeline หลัก
+  h += '<div class="pipe-sum">';
+  Object.entries(ps).filter(function(e) { return e[1].count > 0; }).forEach(function(e) {
+    var k = e[0], v = e[1];
+    h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt === k ? 'act' : '') + '" onclick="pipeTeamStatusFlt=\'' + (pipeTeamStatusFlt === k ? 'all' : k) + '\';render()">' +
+      '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
+      '<div class="count">' + v.count + '</div>' +
+      '<div class="amount">' + fmtMoneyShort(v.amount) + '</div></div>';
+  });
+  h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt === 'all' ? 'act' : '') + '" onclick="pipeTeamStatusFlt=\'all\';render()">' +
+    '<div class="stage">📊 ทั้งหมด</div><div class="count">' + fullList.length + '</div><div class="amount">' + fmtMoneyShort(totalAmt) + '</div></div>';
+  h += '</div>';
+
+  el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list));
 
   var srcEl = document.getElementById('pipeTeamSrc');
   if (srcEl && pipeTeamSearch) { srcEl.focus(); srcEl.setSelectionRange(pipeTeamSearch.length, pipeTeamSearch.length); }
+}
+
+function _renderPipeTeamTable(list) {
+  if (!list.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
+  var h = '<div class="pipe-wrap"><table class="pipe-table"><thead><tr>' +
+    '<th>เจ้าของ</th><th>Project</th><th>End User</th><th>Dealer</th><th>Model</th>' +
+    '<th style="text-align:right">Forecast</th><th>Status</th></tr></thead><tbody>';
+  list.forEach(function(p) {
+    var rowAttrs = p._mine ? (' onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"') : '';
+    h += '<tr' + rowAttrs + '>' +
+      '<td style="white-space:nowrap">' + (p._mine ? '⭐ ' : '👤 ') + sanitize(p.ownerName) + '</td>' +
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.projectName) + '">' + sanitize(p.projectName || '-') + '</td>' +
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.endUserTH) + '">' + sanitize(p.endUserTH || '-') + '</td>' +
+      '<td style="white-space:nowrap">' + sanitize(p.dealerName || '-') + '</td>' +
+      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem" title="' + sanitize(p.model) + '">' + sanitize(p.model || '-') + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(p.forecastAmount) + '</td>' +
+      '<td>' + pipeTag(p.status) + '</td>' +
+      '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
 }
 
 var pipeTeamSearch = '';
