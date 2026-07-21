@@ -413,6 +413,12 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="copyGMLink()">🔗 Copy GM Link</button>' +
     '</div></div>' +
 
+    // Sales Link Permissions — แยกการ์ดต่างหากจากทีม Sales ด้านบน ให้หาง่าย
+    '<div class="card"><h2>🔗 สิทธิ์ลิงก์เซล</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดว่าลิงก์เซล (login ด้วย PIN ผ่าน sales-view) เข้าเมนูไหนได้บ้าง และแต่ละประเภทข้อมูลเป็นแบบส่วนตัว/ใช้ร่วมกัน/อ่านอย่างเดียวจากแอปหลัก</p>' +
+    renderSalesLinkPermissionsHTML() +
+    '</div>' +
+
     // Email Recipients
     '<div class="card"><h2>📧 Email Recipients</h2>' +
     '<div class="fg"><label>Visit Plan</label>' +
@@ -1679,6 +1685,119 @@ function copyTeamLink(salesId) {
     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
     document.body.removeChild(ta); toast('📋 Copy Link แล้ว!');
   }
+}
+
+// ================================================================
+// SALES LINK PERMISSIONS — เมนู + แหล่งข้อมูลที่ลิงก์เซล (sales-view PIN) เข้าถึงได้
+// รายชื่อ id ตรงกับ data-v ของ .nl ใน index.html sidebar จริง (เช็คแล้ว 2026-07-21)
+// ================================================================
+var SALES_LINK_MENU_GROUPS = [
+  { label: 'หลัก', items: [
+    {id:'today', name:'📌 วันนี้'}, {id:'dealers', name:'🏪 Dealers'}, {id:'pipeline', name:'📊 Pipeline'},
+    {id:'pipeBoard', name:'📋 Board'}, {id:'pipeDash', name:'📊 Overview'}, {id:'salesOrders', name:'📦 Sales Order'},
+    {id:'serialSearch', name:'🔍 ค้นหา Serial'}
+  ]},
+  { label: 'งาน', items: [
+    {id:'tasks', name:'📋 Tasks'}, {id:'kanban', name:'📋 Kanban'}, {id:'prospectList', name:'🆕 Lead ที่ติดตาม'},
+    {id:'visitPlan', name:'📅 Visit Plan'}, {id:'notes', name:'📓 Note'}, {id:'meetings', name:'📅 ประชุม'},
+    {id:'calendar', name:'📆 ปฏิทิน'}, {id:'announcements', name:'📢 ประกาศ'}
+  ]},
+  { label: 'ข้อมูล', items: [
+    {id:'forecastComparison', name:'📊 เปรียบเทียบ Forecast'}, {id:'visits', name:'🤝 Visit Report'},
+    {id:'followup', name:'📞 Follow-up'}, {id:'forecast', name:'📦 Forecast'},
+    {id:'report', name:'📊 Weekly Report'}, {id:'dashboard', name:'📈 Dashboard'}
+  ]},
+  { label: 'เครื่องมือ', items: [
+    {id:'leads', name:'📋 Lead Forms'}, {id:'contactLogs', name:'📞 ศูนย์ติดต่อ'}, {id:'lineMessage', name:'💬 LINE Message'},
+    {id:'emailDraftQuick', name:'📧 ส่งอีเมล (เลือก Dealer)'}, {id:'emailDrafts', name:'📧 Email Draft'},
+    {id:'presentation', name:'🎬 Presentation'}, {id:'feedback', name:'💡 Feedback'}
+  ]},
+  { label: 'สินค้าและราคา', items: [
+    {id:'products', name:'📋 สินค้าทั้งหมด'}, {id:'productPrices', name:'💰 ราคาตาม Level'},
+    {id:'productBundles', name:'🎁 Bundle/Combo'}, {id:'productDemo', name:'🚁 Demo Unit'},
+    {id:'productImport', name:'📥 Import/Export'}
+  ]},
+  { label: 'ติดตาม', items: [
+    {id:'kpi', name:'🎯 KPI'}, {id:'customKpi', name:'🎯 KPI Dashboard'}, {id:'monthlyGoal', name:'🎯 Monthly Goal'},
+    {id:'demoTracker', name:'🚁 Demo Equipment'}, {id:'kpiScorecard', name:'📊 KPI เซลล์'},
+    {id:'quotationV2', name:'💰 Quotation V2'}, {id:'marginAnalysis', name:'📊 Margin Analysis'}, {id:'knowledge', name:'📚 Knowledge'}
+  ]},
+  { label: 'ระบบ', items: [
+    {id:'exports', name:'📤 Export'}, {id:'health', name:'🏥 Data Health'}, {id:'reminders', name:'🔔 แจ้งเตือน'},
+    {id:'insights', name:'🤖 Insights'}, {id:'customerUpdates', name:'📥 คำขออัพเดท (เฉพาะของ Dealer ตัวเอง)'},
+    {id:'customerUpdateHistory', name:'📜 ประวัติอัพเดท'},
+    {id:'customerForecastUpdates', name:'📦 แผนซื้อลูกค้า'}, {id:'customerForecastSummary', name:'📊 สรุป Forecast ลูกค้า'},
+    {id:'auditLog', name:'📜 Audit Log'}, {id:'admin', name:'⚙️ ตั้งค่า (Admin)'}
+  ]}
+];
+
+var SALES_LINK_DATA_TYPES = [
+  {id:'dealers', name:'🏪 Dealers'},
+  {id:'pipeline', name:'📊 Pipeline'},
+  {id:'products', name:'📦 สินค้าและราคา'},
+  {id:'levelRequirements', name:'🚁 เกณฑ์ Demo (Level requirement)'},
+  {id:'visits', name:'🤝 Visit Report'},
+  {id:'tasks', name:'📋 Tasks'},
+  {id:'quotations', name:'💰 Quotation'},
+  {id:'notes', name:'📓 Note'}
+];
+var SALES_LINK_DATA_MODE_OPTIONS = [
+  {v:'shared', name:'ใช้ร่วมกันทั้งทีม'},
+  {v:'readonly', name:'อ่านอย่างเดียวจากแอปหลัก'},
+  {v:'private', name:'ส่วนตัว'}
+];
+
+function renderSalesLinkPermissionsHTML() {
+  var cfg = getConfig();
+  var perm = cfg.salesLinkPermissions || { allowedMenus: [], dataMode: {} };
+  var allowed = perm.allowedMenus || [];
+
+  var html = '<div style="max-height:420px;overflow-y:auto;margin-bottom:14px">';
+  html += '<div class="form-section" style="margin-top:0">📋 เมนูที่เข้าถึงได้</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px">';
+  SALES_LINK_MENU_GROUPS.forEach(function(g) {
+    html += '<div style="background:var(--bg2);border-radius:8px;padding:10px 12px">';
+    html += '<div style="font-size:.68rem;font-weight:700;color:var(--text2);margin-bottom:6px">' + sanitize(g.label) + '</div>';
+    g.items.forEach(function(it) {
+      html += '<label style="display:flex;gap:6px;align-items:center;font-size:.72rem;padding:2px 0">' +
+        '<input type="checkbox" class="slp-menu-chk" value="' + it.id + '" style="width:auto" ' + (allowed.indexOf(it.id) !== -1 ? 'checked' : '') + '>' +
+        sanitize(it.name) + '</label>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="form-section">🗂️ แหล่งข้อมูลแต่ละประเภท</div>';
+  html += '<div style="display:flex;flex-direction:column">';
+  SALES_LINK_DATA_TYPES.forEach(function(dt) {
+    var curMode = (perm.dataMode || {})[dt.id] || 'private';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border)">';
+    html += '<span style="font-size:.76rem">' + sanitize(dt.name) + '</span>';
+    html += '<select class="slp-datamode-sel" data-type="' + dt.id + '" style="font-size:.72rem;width:auto">';
+    SALES_LINK_DATA_MODE_OPTIONS.forEach(function(o) {
+      html += '<option value="' + o.v + '"' + (o.v === curMode ? ' selected' : '') + '>' + o.name + '</option>';
+    });
+    html += '</select></div>';
+  });
+  html += '</div>';
+
+  html += '<button class="btn bp bsm" style="margin-top:12px" onclick="saveSalesLinkPermissions()">💾 บันทึกสิทธิ์ลิงก์เซล</button>';
+  return html;
+}
+
+function saveSalesLinkPermissions() {
+  var checks = document.querySelectorAll('.slp-menu-chk');
+  var allowed = [];
+  for (var i = 0; i < checks.length; i++) if (checks[i].checked) allowed.push(checks[i].value);
+
+  var dataMode = {};
+  var sels = document.querySelectorAll('.slp-datamode-sel');
+  for (var i = 0; i < sels.length; i++) dataMode[sels[i].getAttribute('data-type')] = sels[i].value;
+
+  var cfg = getConfig();
+  cfg.salesLinkPermissions = { allowedMenus: allowed, dataMode: dataMode };
+  saveConfig(cfg);
+  toast('💾 บันทึกสิทธิ์ลิงก์เซลเรียบร้อย (' + allowed.length + ' เมนู)');
 }
 
 function copyGMLink() {

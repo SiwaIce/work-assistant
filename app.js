@@ -270,6 +270,22 @@ var DEF_CONFIG = {
   // ===== NEW DEMO POLICIES (รองรับหลายรายการ) =====
   newDemoPolicies: [],
 
+  // ===== SALES LINK PERMISSIONS (เมนู/แหล่งข้อมูลที่ลิงก์เซล PIN เข้าถึงได้ — ดู SALES_LINK_MENU_GROUPS) =====
+  salesLinkPermissions: {
+    allowedMenus: ['today','dealers','pipeline','pipeBoard','pipeDash','salesOrders','serialSearch',
+      'tasks','kanban','prospectList','visitPlan','notes','meetings','calendar','announcements',
+      'forecastComparison','visits','followup','forecast','report','dashboard',
+      'leads','contactLogs','lineMessage','emailDraftQuick','emailDrafts','presentation','feedback',
+      'products','productPrices','productBundles','productDemo',
+      'kpi','customKpi','monthlyGoal','demoTracker','kpiScorecard','quotationV2','knowledge',
+      'reminders'],
+    dataMode: {
+      dealers: 'shared', pipeline: 'shared',
+      products: 'readonly', levelRequirements: 'readonly',
+      visits: 'private', tasks: 'private', quotations: 'private', notes: 'private'
+    }
+  },
+
   // ===== H1 PERIOD =====
   h1Period: {
     startMonth: 0,

@@ -163,6 +163,8 @@ function showDealerM(eid) {
     '<div class="fg"><label>DJI Code</label><input type="text" id="fd_dji" value="' + (d.djiCode || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Level *</label><select id="fd_level">' + optionsHTML(cfg.dealerLevels, d.level || 'B', '-- เลือก --') + '</select></div>' +
     '<div class="fg"><label>โชว์ซีเรียล</label><select id="fd_serial"><option value="Y"' + ((d.showSerial || 'Y') === 'Y' ? ' selected' : '') + '>Y</option><option value="N"' + (d.showSerial === 'N' ? ' selected' : '') + '>N</option></select></div></div>' +
+    '<div class="fg"><label>👤 เซลที่ดูแล</label><input type="text" id="fd_salename" list="dealerSaleNameList" value="' + sanitize(d.saleName || (eid ? '' : (cfg.saleName || ''))) + '" placeholder="ชื่อเซลที่ดูแล Dealer นี้..."></div>' +
+    '<datalist id="dealerSaleNameList">' + (typeof getSalesMembers === 'function' ? getSalesMembers().map(function(m) { return '<option value="' + sanitize(m.name) + '">'; }).join('') : '') + '<option value="' + sanitize(cfg.saleName || '') + '"></datalist>' +
     '<div class="fr"><div class="fg"><label>DJI Dealer</label><select id="fd_djid">' + optionsHTML(cfg.djiDealerTypes, d.djiDealer, '--') + '</select></div>' +
     '<div class="fg"><label>Term</label><select id="fd_term">' + optionsHTML(cfg.creditTerms, d.creditTerm, '--') + '</select></div></div>' +
     '<div class="fr"><div class="fg"><label>วงเงินเครดิต (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fd_credit" value="' + nmI(d.creditLimit || '') + '"></div>' +
@@ -195,6 +197,7 @@ async function saveDealer(eid) {
     sisCode: document.getElementById('fd_sis').value.trim(),
     djiCode: document.getElementById('fd_dji').value.trim(),
     level: document.getElementById('fd_level').value,
+    saleName: document.getElementById('fd_salename').value.trim(),
     showSerial: document.getElementById('fd_serial').value,
     djiDealer: document.getElementById('fd_djid').value,
     creditTerm: document.getElementById('fd_term').value,

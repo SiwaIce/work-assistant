@@ -27,7 +27,7 @@
 <body>
 <!-- Login Screen -->
 <div id="loginScreen" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;z-index:99999;align-items:center;justify-content:center">
-  <div style="text-align:center;max-width:360px;padding:24px">
+  <div class="login-google-box" style="text-align:center;max-width:360px;padding:24px">
     <div style="font-size:48px;margin-bottom:16px">🛠️</div>
     <h1 style="font-size:24px;font-weight:800;color:#e0e6f0;margin-bottom:4px">DJI Sales Assistant</h1>
     <p style="color:#8892b0;margin-bottom:24px">SIS Distribution (Thailand) PLC</p>
@@ -39,6 +39,13 @@
       <label><input type="checkbox" id="offlineMode" style="width:auto"> ใช้แบบ Offline (ไม่ sync)</label>
     </div>
     <button onclick="useOffline()" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1px solid #334155;background:transparent;color:#8892b0;font-size:12px;cursor:pointer">เข้าใช้แบบ Offline</button>
+  </div>
+  <div id="salesPinScreen" style="display:none;text-align:center;max-width:340px;padding:24px">
+    <div style="font-size:48px;margin-bottom:16px">🔒</div>
+    <h1 id="salesPinTitle" style="font-size:22px;font-weight:800;color:#e0e6f0;margin-bottom:4px">👤 Sales</h1>
+    <p id="salesPinMsg" style="color:#8892b0;margin-bottom:20px;min-height:18px">🔄 กำลังโหลด...</p>
+    <input type="password" id="salesPinInput" maxlength="6" placeholder="PIN" style="width:100%;padding:14px;font-size:22px;letter-spacing:8px;text-align:center;background:#0f172a;border:2px solid #334155;border-radius:10px;color:#e0e6f0;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter'){doSalesLinkLogin();}">
+    <button onclick="doSalesLinkLogin()" style="width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer">เข้าใช้งาน</button>
   </div>
 </div>
 

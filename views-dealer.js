@@ -479,7 +479,7 @@ function dealerCardHTML(d, health) {
 
   return `<div class="dealer-card" onclick="go('dealerDetail',{dealerId:'${d.id}'})">
     <h3><span id="dlvl_${d.id}" onclick="event.stopPropagation();_dealerInlineEditLevel('${d.id}')" style="cursor:text" title="คลิกเพื่อแก้ไข Level">${levelTag(d.level)}</span> ${sanitize(d.name)}</h3>
-    <div class="meta">${d.contact ? '👤 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• SIS: ' + d.sisCode : ''}</div>
+    <div class="meta">${d.contact ? '👤 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• SIS: ' + d.sisCode : ''} ${d.saleName ? '• 🧑‍💼 ' + sanitize(d.saleName) : ''}</div>
     
     <div class="dealer-stats">
       <div class="dealer-stat"><div class="val c2">${fmtMoneyShort(wonAmt)}</div><div class="lbl">ยอดขาย</div></div>

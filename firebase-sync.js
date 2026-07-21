@@ -5,6 +5,70 @@ var SYNC_ENABLED = false;
 var CURRENT_USER = null;
 
 // ================================================================
+// SALES LINK (PIN login) — เปิดผ่าน index.html?sales=<salesMemberId> แทน Google login
+// ตอนนี้ยัง route ข้อมูลไป salesMembers/{id}/... แบบ "ส่วนตัวทั้งหมด" เหมือนกันทุกประเภทไปก่อน
+// (ยังไม่แยกใช้ร่วมกัน/อ่านอย่างเดียวตาม cfg.salesLinkPermissions.dataMode — เป็นงานขั้นต่อไป)
+var SALES_MODE = false;
+var SALES_ID = null;
+var SALES_PROFILE = null;
+
+(function() {
+  var p = new URLSearchParams(location.search);
+  var salesId = p.get('sales');
+  if (!salesId) return;
+  SALES_ID = salesId;
+  document.addEventListener('DOMContentLoaded', function() { showSalesPinScreen(); });
+})();
+
+function showSalesPinScreen() {
+  var loginScreen = document.getElementById('loginScreen');
+  var pinScreen = document.getElementById('salesPinScreen');
+  if (!loginScreen || !pinScreen) return;
+  loginScreen.querySelector('.login-google-box').style.display = 'none';
+  pinScreen.style.display = 'block';
+  loginScreen.style.display = 'flex';
+
+  db.collection('salesMembers').doc(SALES_ID).get().then(function(doc) {
+    if (!doc.exists) { document.getElementById('salesPinMsg').textContent = '❌ ไม่พบบัญชีนี้ — ขอลิงก์ใหม่จาก Admin'; return; }
+    var profile = doc.data();
+    if (profile.active === false) { document.getElementById('salesPinMsg').textContent = '⛔ บัญชีนี้ถูกปิดใช้งาน'; return; }
+    SALES_PROFILE = profile;
+    document.getElementById('salesPinTitle').textContent = '👤 ' + (profile.name || 'Sales');
+    document.getElementById('salesPinMsg').textContent = 'กรุณาใส่ PIN เพื่อเข้าใช้งาน';
+    var input = document.getElementById('salesPinInput');
+    if (input) input.focus();
+  }).catch(function(e) {
+    document.getElementById('salesPinMsg').textContent = '⚠️ โหลดข้อมูลไม่ได้ — ตรวจสอบการเชื่อมต่อแล้วรีเฟรช';
+    console.error('showSalesPinScreen:', e);
+  });
+}
+
+function doSalesLinkLogin() {
+  var input = document.getElementById('salesPinInput');
+  var pin = input ? input.value.trim() : '';
+  var msg = document.getElementById('salesPinMsg');
+  if (!SALES_PROFILE) { msg.textContent = 'กำลังโหลด...'; return; }
+  if (!pin) { msg.textContent = 'กรุณาใส่ PIN'; return; }
+  if (pin !== String(SALES_PROFILE.pin)) { msg.textContent = '❌ PIN ไม่ถูกต้อง'; return; }
+
+  // ไม่ใช้ Firebase Auth เลย (เหมือน sales-view.html ที่ทำงานแบบนี้อยู่แล้ว) — ลองใช้ signInAnonymously()
+  // ไปก่อนหน้านี้แล้วเจอ auth/admin-restricted-operation เพราะ Anonymous Auth ยังไม่ได้เปิดใน Firebase
+  // Console ของโปรเจกต์นี้ — เลี่ยงปัญหาด้วยการพึ่ง Firestore rules ที่เปิดกว้างอยู่แล้วแทน (ดู
+  // security-deferred memory) ไม่ต้อง sign-in จริงก็ยิง Firestore ได้ปกติ
+  SALES_MODE = true;
+  CURRENT_USER = { uid: 'sales_' + SALES_ID, displayName: SALES_PROFILE.name, email: null, isAnonymous: true };
+  SYNC_ENABLED = true;
+
+  var loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  var main = document.getElementById('main');
+  if (main) main.style.display = 'flex';
+  toast('✅ เข้าสู่ระบบในนาม: ' + SALES_PROFILE.name);
+  initFirebaseListeners();
+  if (typeof render === 'function') render();
+}
+
+// ================================================================
 // ATTACHMENTS (Firebase Storage) — ใช้ร่วมกันทุกเมนู (Note/Task/Visit/Pipeline/Dealer/Feedback)
 // ================================================================
 // บีบรูปฝั่ง browser ก่อน upload กันไฟล์ใหญ่เปลืองโควต้า
@@ -255,8 +319,8 @@ auth.onAuthStateChanged(function(user) {
     var main = document.getElementById('main');
     if (main) main.style.display = 'flex';
     
-    // Toast แจ้งเตือน
-    toast('✅ เข้าสู่ระบบ: ' + (user.displayName || user.email));
+    // Toast แจ้งเตือน — โหมดลิงก์เซล (PIN, ใช้ anonymous auth) ไม่มี displayName/email ให้ใช้ชื่อจาก SALES_PROFILE แทน
+    toast('✅ เข้าสู่ระบบ: ' + (SALES_MODE && SALES_PROFILE ? SALES_PROFILE.name : (user.displayName || user.email)));
     
     // Migrate และ sync
     migrateLocalToFirebase();
@@ -313,6 +377,9 @@ function getUserDocPath() {
 
 function getCollectionRef(collName) {
   if (!CURRENT_USER) return null;
+  // โหมดลิงก์เซล (PIN login) — เก็บข้อมูลแยกใต้ salesMembers/{id}/... แทน users/{uid}/...
+  // (ยังไม่แยกใช้ร่วมกัน/อ่านอย่างเดียวตาม cfg.salesLinkPermissions.dataMode — งานขั้นต่อไป)
+  if (SALES_MODE && SALES_ID) return db.collection('salesMembers').doc(SALES_ID).collection(collName);
   return db.collection('users').doc(CURRENT_USER.uid).collection(collName);
 }
 
@@ -409,8 +476,11 @@ function initFirebaseListeners() {
     activeListeners.push(unsub);
   });
 
-  // Config sync
-  if (CURRENT_USER) {
+  // Config sync — ข้ามในโหมดลิงก์เซล (PIN) เสมอ: users/{uid} ต้องมี real Firebase Auth session
+  // จริง (request.auth.uid==userId) ซึ่งโหมดนี้ไม่มี (ไม่ signInAnonymously แล้ว ดู doSalesLinkLogin)
+  // ต่อให้ชี้ไปที่ SALES_PROFILE.mainUid ของเจ้าของก็ยัง permission-denied อยู่ดี — รอทำเป็นระบบ
+  // "อ่านอย่างเดียวจากแอปหลัก" ผ่าน teamConfig ในงานขั้นต่อไปแทน
+  if (CURRENT_USER && !SALES_MODE) {
     var configRef = db.collection('users').doc(CURRENT_USER.uid).collection('_config');
     var unsub2 = configRef.doc('main').onSnapshot(function(doc) {
       try {
@@ -430,6 +500,10 @@ function initFirebaseListeners() {
 // ================================================================
 function migrateLocalToFirebase() {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
+  // โหมดลิงก์เซล (PIN) ห้าม migrate ข้อมูล local ขึ้นคลาวด์เด็ดขาด — localStorage เป็นของ origin
+  // เดียวกันทั้งเบราว์เซอร์ ถ้าเครื่องนี้เคยมีข้อมูลของเจ้าของ/เซลคนอื่นค้างอยู่ จะหลุดไปปนกับ
+  // salesMembers/{id} ของคนละคนได้ทันที ให้พึ่ง initFirebaseListeners() ดึงจากคลาวด์ลงมาแทนเสมอ
+  if (SALES_MODE) return;
 
   var migrated = localStorage.getItem('v7_migrated_' + CURRENT_USER.uid);
   if (migrated) {
@@ -506,8 +580,8 @@ function fixProductsStructureBeforeSync() {
         
         try {
           var collName = SYNC_KEY_MAP[shortKey];
-          var ref = db.collection('users').doc(CURRENT_USER.uid).collection(collName);
-          _syncPushValue(ref, data);
+          var ref = getCollectionRef(collName);
+          if (ref) _syncPushValue(ref, data);
         } catch(e) {
           console.warn('Sync error:', key, e);
         }
@@ -525,16 +599,17 @@ function fixProductsStructureBeforeSync() {
         if (!key) return;
         var shortKey = key.replace('v7_', '');
         
-        if (id) {
-          db.collection('users').doc(CURRENT_USER.uid).collection(shortKey).doc(id).delete().catch(function(e) {
+        var _delRef = getCollectionRef(shortKey);
+        if (id && _delRef) {
+          _delRef.doc(id).delete().catch(function(e) {
             console.warn('Delete sync error:', coll, id, e);
           });
         }
-        
+
         try {
           var items = JSON.parse(localStorage.getItem(key) || '[]');
-          var ref = db.collection('users').doc(CURRENT_USER.uid).collection(shortKey);
-          if (Array.isArray(items)) {
+          var ref = getCollectionRef(shortKey);
+          if (ref && Array.isArray(items)) {
             items.forEach(function(item) {
               if (item && item.id) {
                 ref.doc(item.id).set(item).catch(function(e) { console.warn('Re-sync error after delete:', shortKey, item.id, e); });
@@ -562,7 +637,9 @@ function fixProductsStructureBeforeSync() {
     ST.setObj = function(key, data) {
       _origSetObj(key, data);
       
-      if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key === 'config') {
+      // โหมดลิงก์เซล (PIN) ไม่ให้บันทึก config ทับ — config (Level requirement ฯลฯ) ควรอิงจากแอปหลัก
+      // เท่านั้น (ดูหมายเหตุใน initFirebaseListeners ส่วน config listener)
+      if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key === 'config' && !SALES_MODE) {
         db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(data).catch(function(e) {
           console.warn('Config sync error:', e);
         });
@@ -605,8 +682,8 @@ function forceSyncAll() {
       var parsed = JSON.parse(data);
       // ✅ ใช้ชื่อ collection ตาม SYNC_KEY_MAP ถ้ามี (กันชื่อ collection ไม่ตรงกับฝั่ง pull listener)
       var collName = SYNC_KEY_MAP[shortKey] || shortKey;
-      var ref = db.collection('users').doc(CURRENT_USER.uid).collection(collName);
-      _syncPushValue(ref, parsed);
+      var ref = getCollectionRef(collName);
+      if (ref) _syncPushValue(ref, parsed);
       count++;
     } catch(e) {
       console.warn('Parse error:', key, e);
@@ -614,7 +691,7 @@ function forceSyncAll() {
   });
 
   var cfg = localStorage.getItem('v7_config');
-  if (cfg) {
+  if (cfg && !SALES_MODE) {
     try {
       db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg));
     } catch(e) { console.warn('Config sync error in forceSyncAll:', e); }
