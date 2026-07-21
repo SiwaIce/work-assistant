@@ -351,6 +351,18 @@ function tasksSearchInput(v) {
 // ================================================================
 // ตรวจ "งานชนกัน" ระหว่าง Dealer (similarity ภาษาไทยด้วย bigram)
 // ================================================================
+// ตัดคำนำหน้า/ต่อท้ายประเภทองค์กรออกก่อนเทียบชื่อ กัน "บริษัท ABC จำกัด" กับ "ABC Co.,Ltd." ได้คะแนน
+// ต่ำเกินจริงทั้งที่เป็นหน่วยงานเดียวกัน — ตัดแค่คำที่พบบ่อย ไม่ครอบคลุมทุกกรณี แต่ช่วยกรณีทั่วไปได้เยอะ
+var _PIPE_ORG_AFFIXES = [
+  /บริษัท/g, /ห้างหุ้นส่วนจำกัด/g, /ห้างหุ้นส่วนสามัญ/g, /จำกัด\s*\(มหาชน\)/g, /จำกัด/g,
+  /มหาวิทยาลัย/g, /สำนักงาน/g, /สถาบัน/g, /องค์การ/g, /กรม/g, /กระทรวง/g,
+  /public\s*company\s*limited/gi, /company\s*limited/gi, /co\.,?\s*ltd\.?/gi, /pcl\.?/gi, /ltd\.?/gi, /inc\.?/gi, /corp\.?/gi
+];
+function _pipeNormOrgName(s) {
+  s = (s || '').toString();
+  _PIPE_ORG_AFFIXES.forEach(function(re) { s = s.replace(re, ''); });
+  return s;
+}
 function fcStrSim(a, b) {
   a = (a || '').toString().toLowerCase().replace(/\s+/g, '');
   b = (b || '').toString().toLowerCase().replace(/\s+/g, '');
@@ -363,18 +375,45 @@ function fcStrSim(a, b) {
   for (var g2 in bb) { total += bb[g2]; }
   return total ? (2 * inter / total) : 0;
 }
+// จับกลุ่มรุ่นโดรน/อุปกรณ์หลัก กัน "Matrice 4T" กับ "M4T" ไม่ถูกนับว่าตรงกันเพราะสะกดคนละแบบ — ใช้ชุด
+// keyword เดียวกับที่ _qResolveItem (views-quotation.js) ใช้จับคู่สินค้าตอนสร้างใบเสนอราคาจาก Pipeline
+// keys เก็บทั้งแบบย่อ (M4T) และแบบเต็ม (MATRICE 4T) — เทียบแบบตัด space ออกทั้งคู่ก่อน กัน "Matrice 4T"
+// (ชื่อเต็มที่มีเว้นวรรค) ไม่ถูกจับกลุ่มเพราะไม่มี substring "M4T" ตรงๆ (M กับ 4T ไม่ติดกันในชื่อเต็ม)
+// ลำดับสำคัญ: M4TD ต้องมาก่อน M4T เสมอ เพราะ "MATRICE4T" เป็น substring ของ "MATRICE4TD" ด้วย
+var _PIPE_MODEL_GROUP_KEYS = [
+  { keys: ['M3M', 'MULTISPECTRAL', 'MATRICE 3M'], group: 'm3m' },
+  { keys: ['M4TD', 'MATRICE 4TD'], group: 'm4td' },
+  { keys: ['M4T', 'MATRICE 4T'], group: 'm4t' },
+  { keys: ['M4E', 'MATRICE 4E'], group: 'm4e' },
+  { keys: ['M400', 'MATRICE 400'], group: 'm400' },
+  { keys: ['DOCK'], group: 'dock3' }
+];
+function _pipeModelGroupKey(modelName) {
+  var mu = (modelName || '').toUpperCase().replace(/\s+/g, '');
+  for (var i = 0; i < _PIPE_MODEL_GROUP_KEYS.length; i++) {
+    var spec = _PIPE_MODEL_GROUP_KEYS[i];
+    if (spec.keys.some(function(k) { return mu.indexOf(k.replace(/\s+/g, '')) !== -1; })) return spec.group;
+  }
+  return null;
+}
 function pipeModelsSet(p) {
   var s = {};
   var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : (p.items || []);
-  (items || []).forEach(function (it) { if (it && it.model) s[(it.model + '').toLowerCase().replace(/\s+/g, '')] = true; });
-  if (p.model) s[(p.model + '').toLowerCase().replace(/\s+/g, '')] = true;
+  function addModel(m) {
+    if (!m) return;
+    s[(m + '').toLowerCase().replace(/\s+/g, '')] = true;
+    var grp = _pipeModelGroupKey(m);
+    if (grp) s['group:' + grp] = true; // token กลุ่ม ให้รุ่นที่สะกดต่างกันแต่กลุ่มเดียวกันนับว่าตรงกันได้ด้วย
+  }
+  (items || []).forEach(function (it) { if (it && it.model) addModel(it.model); });
+  if (p.model) addModel(p.model);
   return s;
 }
 function pipeMatchScore(a, b) {
-  var name = fcStrSim(a.projectName, b.projectName);
-  var eu = fcStrSim(a.endUserTH || a.endUserEN || '', b.endUserTH || b.endUserEN || '');
-  var am = fcStrSim(a.agencyMain, b.agencyMain);
-  var asb = fcStrSim(a.agencySub, b.agencySub);
+  var name = fcStrSim(_pipeNormOrgName(a.projectName), _pipeNormOrgName(b.projectName));
+  var eu = fcStrSim(_pipeNormOrgName(a.endUserTH || a.endUserEN || ''), _pipeNormOrgName(b.endUserTH || b.endUserEN || ''));
+  var am = fcStrSim(_pipeNormOrgName(a.agencyMain), _pipeNormOrgName(b.agencyMain));
+  var asb = fcStrSim(_pipeNormOrgName(a.agencySub), _pipeNormOrgName(b.agencySub));
   var sa = pipeModelsSet(a), sb = pipeModelsSet(b), inter = 0, uni = {};
   for (var k in sa) { uni[k] = true; if (sb[k]) inter++; }
   for (var k2 in sb) uni[k2] = true;

@@ -813,6 +813,11 @@ function syncMainPipelineToShared() {
         projectName: p.projectName || '',
         endUserTH: p.endUserTH || '',
         endUserEN: p.endUserEN || '',
+        // ✅ เพิ่มไว้ให้ pipeMatchScore() เทียบ "โครงการชนกัน" ข้ามทีมได้แม่นขึ้น — เดิมไม่มี 3 ฟิลด์นี้
+        // เลยได้คะแนน agencyMain/agencySub/bidding เป็น 0 เสมอเวลาเทียบกับของทีม (รวม 25% ของสูตร)
+        agencyMain: p.agencyMain || '',
+        agencySub: p.agencySub || '',
+        biddingDate: p.biddingDate || '',
         forecastAmount: Number(p.forecastAmount) || 0,
         status: p.status || 'initial',
         model: modelSummary,
