@@ -18,6 +18,98 @@ function pipeSearchInput(v) {
 var pipeSort = 'updated_desc';
 var pipeView = 'table';
 var pipeSelectMode = false;
+
+// ================================================================
+// PIPELINE รวมทีม — หน้าดูอย่างเดียว รวม Pipeline ของทุกคน (เจ้าของแอปหลัก + เซลทุกลิงก์) จาก
+// teamPipeline (collection กลางเดิมที่ใช้เช็ค "โครงการชนกัน" อยู่แล้ว และ gm-view.html ก็อ่านตัวนี้)
+// แก้ไขไม่ได้จากหน้านี้ — ใครจะแก้ต้องไปแก้ที่ Pipeline ของตัวเอง แล้วมันจะ sync ขึ้นมาที่นี่เอง
+// ================================================================
+var pipeTeamOwnerFlt = 'all';
+
+function _pipeTeamMergedList() {
+  var mine = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p); }).map(function(p) {
+    var d = ST.getOne('dealers', p.dealerId);
+    return {
+      id: p.id, dealerName: d ? d.name : '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
+      forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial',
+      model: getPipeModelSummary(p),
+      ownerName: (typeof SALES_MODE !== 'undefined' && SALES_MODE && typeof SALES_PROFILE !== 'undefined' && SALES_PROFILE) ? SALES_PROFILE.name : (getConfig().saleName || 'Main'),
+      _mine: true
+    };
+  });
+  var others = (typeof _teamPipelineData !== 'undefined' ? _teamPipelineData : []).map(function(p) {
+    return { id: p.id, dealerName: p.dealerName || p._dealerName || '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
+      forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial', model: p.model || '',
+      ownerName: p.ownerName || p._ownerName || '?', _mine: false };
+  });
+  return mine.concat(others);
+}
+
+function rPipelineTeam(el) {
+  document.getElementById('pgT').textContent = '📊 Pipeline รวมทีม';
+  var list = _pipeTeamMergedList();
+
+  var owners = [];
+  list.forEach(function(p) { if (p.ownerName && owners.indexOf(p.ownerName) === -1) owners.push(p.ownerName); });
+  owners.sort();
+
+  if (pipeTeamOwnerFlt !== 'all') list = list.filter(function(p) { return p.ownerName === pipeTeamOwnerFlt; });
+
+  var totalAmt = list.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
+
+  var h = '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — รวม Pipeline ของทุกคนในทีม แก้ไขต้องไปที่ Pipeline ของตัวเอง</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">';
+  h += '<select onchange="pipeTeamOwnerFlt=this.value;render()" style="min-width:140px">';
+  h += '<option value="all"' + (pipeTeamOwnerFlt === 'all' ? ' selected' : '') + '>👤 ทุกคน (' + owners.length + ')</option>';
+  owners.forEach(function(o) { h += '<option value="' + sanitize(o) + '"' + (pipeTeamOwnerFlt === o ? ' selected' : '') + '>' + sanitize(o) + '</option>'; });
+  h += '</select>';
+  h += '<button class="btn bo bsm" onclick="_pipeTeamRefresh()">🔄 รีเฟรช</button>';
+  h += '<div style="margin-left:auto;font-size:.8rem;color:var(--text2)">รวม ' + list.length + ' โครงการ · ' + fmtMoneyShort(totalAmt) + '</div>';
+  h += '</div>';
+
+  if (!list.length) {
+    h += '<div class="empty"><div class="icon">📊</div><p>ยังไม่มี Pipeline จากทีม</p></div>';
+    el.innerHTML = h;
+    return;
+  }
+
+  h += '<div class="pipe-wrap"><table class="pipe-table"><thead><tr>' +
+    '<th>เจ้าของ</th><th>Project</th><th>End User</th><th>Dealer</th><th>Model</th>' +
+    '<th style="text-align:right">Forecast</th><th>Status</th></tr></thead><tbody>';
+  list.forEach(function(p) {
+    h += '<tr' + (p._mine ? ' style="background:var(--bg2)"' : '') + '>' +
+      '<td style="white-space:nowrap">' + (p._mine ? '⭐ ' : '') + sanitize(p.ownerName) + '</td>' +
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.projectName) + '">' + sanitize(p.projectName || '-') + '</td>' +
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.endUserTH) + '">' + sanitize(p.endUserTH || '-') + '</td>' +
+      '<td style="white-space:nowrap">' + sanitize(p.dealerName || '-') + '</td>' +
+      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem" title="' + sanitize(p.model) + '">' + sanitize(p.model || '-') + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(p.forecastAmount) + '</td>' +
+      '<td>' + pipeTag(p.status) + '</td>' +
+      '</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+}
+
+function _pipeTeamRefresh() {
+  if (typeof syncMainPipelineToShared === 'function') syncMainPipelineToShared();
+  toast('🔄 กำลังรีเฟรช...');
+  if (typeof loadSharedTeamPipeline === 'function') {
+    db.collection('teamPipeline').get().then(function(snapshot) {
+      var myUid = CURRENT_USER ? CURRENT_USER.uid : null;
+      var items = [];
+      snapshot.forEach(function(doc) {
+        var d = doc.data();
+        if (!d || d.ownerId === myUid) return;
+        d._isTeam = true; d._ownerName = d.ownerName || ''; d._dealerName = d.dealerName || '';
+        items.push(d);
+      });
+      _teamPipelineData = items;
+      render();
+      toast('✅ รีเฟรชแล้ว');
+    }).catch(function(e) { toast('❌ รีเฟรชไม่สำเร็จ: ' + e.message); });
+  }
+}
 var pipeSelected = {};
 var _pipeVisibleIds = [];
 var pipeGroup = 'none';

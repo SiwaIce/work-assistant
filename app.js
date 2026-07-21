@@ -272,7 +272,7 @@ var DEF_CONFIG = {
 
   // ===== SALES LINK PERMISSIONS (เมนู/แหล่งข้อมูลที่ลิงก์เซล PIN เข้าถึงได้ — ดู SALES_LINK_MENU_GROUPS) =====
   salesLinkPermissions: {
-    allowedMenus: ['today','dealers','pipeline','pipeBoard','pipeDash','salesOrders','serialSearch',
+    allowedMenus: ['today','dealers','pipeline','pipelineTeam','pipeBoard','pipeDash','salesOrders','serialSearch',
       'tasks','kanban','prospectList','visitPlan','notes','meetings','calendar','announcements',
       'forecastComparison','visits','followup','forecast','report','dashboard',
       'leads','contactLogs','lineMessage','emailDraftQuick','emailDrafts','presentation','feedback',
@@ -631,8 +631,9 @@ var R = {
   dealerDetail: rDealerDet,
   pipeDash: rPipeDashboard,
   contactLogs: rContactLogs,
-  pipeline: rPipeline, 
-  pipeBoard: rPipeBoard, 
+  pipeline: rPipeline,
+  pipelineTeam: rPipelineTeam,
+  pipeBoard: rPipeBoard,
   pipeDetail: rPipeDet,
   forecastComparison: rForecastComparison, 
   forecast: rForecast,

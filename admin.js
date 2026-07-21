@@ -1694,6 +1694,7 @@ function copyTeamLink(salesId) {
 var SALES_LINK_MENU_GROUPS = [
   { label: 'หลัก', items: [
     {id:'today', name:'📌 วันนี้'}, {id:'dealers', name:'🏪 Dealers'}, {id:'pipeline', name:'📊 Pipeline'},
+    {id:'pipelineTeam', name:'📊 Pipeline รวมทีม (ดูอย่างเดียว)'},
     {id:'pipeBoard', name:'📋 Board'}, {id:'pipeDash', name:'📊 Overview'}, {id:'salesOrders', name:'📦 Sales Order'},
     {id:'serialSearch', name:'🔍 ค้นหา Serial'}
   ]},

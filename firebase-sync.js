@@ -66,6 +66,12 @@ function doSalesLinkLogin() {
   toast('✅ เข้าสู่ระบบในนาม: ' + SALES_PROFILE.name);
   initFirebaseListeners();
   if (typeof render === 'function') render();
+  // sync Pipeline ของเซลคนนี้ขึ้น teamPipeline กลาง (collection เดิมที่แอปหลักใช้อยู่แล้วสำหรับเช็ค
+  // "โครงการชนกัน" และ gm-view.html) ให้เมนู "Pipeline รวมทีม" กับ Manager view เห็นครบทุกคน
+  setTimeout(function() {
+    if (typeof syncMainPipelineToShared === 'function') syncMainPipelineToShared();
+    if (typeof loadSharedTeamPipeline === 'function') loadSharedTeamPipeline();
+  }, 2000);
   // ต้องเรียกหลัง render() เสมอ เพราะ sidebar ถูกวาดใหม่จาก render — ถ้าเรียกก่อนจะซ่อนแล้วโดนเขียนทับ
   if (typeof applySalesLinkMenuGating === 'function') applySalesLinkMenuGating();
   // ถ้าหน้าปัจจุบัน (default 'today') ดันไม่อยู่ในสิทธิ์ ให้พาไปเมนูแรกที่อนุญาต
