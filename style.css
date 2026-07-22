@@ -8359,18 +8359,18 @@ input:focus, select:focus, textarea:focus {
     padding: 4px 6px;
     gap: 3px;
   }
-  
+
   .menu-btn {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
   }
-  
+
   .strig,
   .theme-btn,
   .refresh-btn,
   .mode-toggle {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     font-size: 11px;
   }
   

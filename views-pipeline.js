@@ -16,7 +16,7 @@ function pipeSearchInput(v) {
   _pipeSearchTimer = setTimeout(function() { render(); }, 350);
 }
 var pipeSort = 'updated_desc';
-var pipeView = 'table';
+var pipeView = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'card' : 'table'; // มือถือ: ตารางกว้าง 1245px ต้องเลื่อนแนวนอนในกล่อง 335px ใช้งานยาก เริ่มด้วยการ์ดแทน
 var pipeSelectMode = false;
 
 // ================================================================
