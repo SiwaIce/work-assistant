@@ -64,9 +64,9 @@
 <div class="sg-items" id="sgi-main">
   <div class="nl" data-v="today" onclick="go('today')">📌 วันนี้</div>
   <div class="nl" data-v="dealers" onclick="go('dealers')">🏪 Dealers</div>
-  <div class="nl" data-v="pipeline" onclick="go('pipeline')">📊 Pipeline</div>
-  <div class="nl" data-v="pipelineTeam" onclick="go('pipelineTeam')">📊 Pipeline รวมทีม</div>
-  <div class="nl" data-v="pipeBoard" onclick="go('pipeBoard')">📋 Board</div>
+  <div class="nl" data-v="pipeline" onclick="go('pipeline')" title="Pipeline ของตัวเอง — จัดการโปรเจกต์ที่ตัวเองดูแล">📊 Pipeline</div>
+  <div class="nl" data-v="pipelineTeam" onclick="go('pipelineTeam')" title="ดูอย่างเดียว — รวม Pipeline ของทุกคนในทีมมาแสดงด้วยกัน">📊 Pipeline รวมทีม</div>
+  <div class="nl" data-v="pipeBoard" onclick="go('pipeBoard')" title="Pipeline ของตัวเอง มุมมอง Kanban — ลากการ์ดเปลี่ยนสถานะได้">📋 Board</div>
   <div class="nl" data-v="pipeDash" onclick="go('pipeDash')">📊 Overview</div>
   <div class="nl" data-v="salesOrders" onclick="go('salesOrders')">📦 Sales Order</div>
   <div class="nl" data-v="serialSearch" onclick="go('serialSearch')">🔍 ค้นหา Serial</div>
@@ -121,11 +121,11 @@
 <!-- ติดตาม -->
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('track')">🎯 ติดตาม <span class="sg-chev" id="sgc-track">▾</span></div>
 <div class="sg-items" id="sgi-track">
-  <div class="nl" data-v="kpi" onclick="go('kpi')">🎯 KPI</div>
-  <div class="nl" data-v="customKpi" onclick="go('customKpi')">🎯 KPI Dashboard</div>
+  <div class="nl" data-v="kpi" onclick="go('kpi')" title="ตั้ง/ติ๊ก KPI แบบ habit รายสัปดาห์-เดือน-ไตรมาสของตัวเอง">🎯 KPI</div>
+  <div class="nl" data-v="customKpi" onclick="go('customKpi')" title="แดชบอร์ดสรุปภาพรวม KPI ที่ตั้งไว้ในเมนู KPI">🎯 KPI Dashboard</div>
   <div class="nl" data-v="monthlyGoal" onclick="go('monthlyGoal')">🎯 Monthly Goal</div>
   <div class="nl" data-v="demoTracker" onclick="go('demoTracker')">🚁 Demo Equipment</div>
-  <div class="nl" data-v="kpiScorecard" onclick="go('kpiScorecard')">📊 KPI เซลล์</div>
+  <div class="nl" data-v="kpiScorecard" onclick="go('kpiScorecard')" title="Scorecard เป้าหมายรายไตรมาส ถ่วงน้ำหนักตามหัวข้อ (ยอดขาย/Dock/Dealer ใหม่ ฯลฯ)">📊 KPI เซลล์</div>
   <div class="nl" data-v="quotationV2" onclick="go('quotationV2')">💰 Quotation V2</div>
   <div class="nl" data-v="marginAnalysis" onclick="go('marginAnalysis')">📊 Margin Analysis</div>
   <div class="nl" data-v="knowledge" onclick="go('knowledge')">📚 Knowledge</div>

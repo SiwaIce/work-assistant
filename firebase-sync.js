@@ -397,6 +397,19 @@ function getCollectionRef(collName) {
   return db.collection('users').doc(CURRENT_USER.uid).collection(collName);
 }
 
+// แจ้งเตือนผู้ใช้เมื่อ sync ขึ้น Firestore ล้มเหลว (เดิมแค่ console.warn ทำให้ข้อมูลหายไปเงียบๆ
+// โดยผู้ใช้ไม่รู้ตัว) — กันสแปม toast ด้วย debounce 8 วิ เผื่อพังพร้อมกันหลายรายการรวด (เช่นตอนออฟไลน์)
+var _lastSyncFailToast = 0;
+function _notifySyncFail(e) {
+  console.warn('Sync error:', e);
+  var now = Date.now();
+  if (now - _lastSyncFailToast < 8000) return;
+  _lastSyncFailToast = now;
+  if (typeof toast === 'function') {
+    toast('⚠️ บันทึกขึ้น Cloud ไม่สำเร็จ (เน็ตหลุด?) ข้อมูลยังอยู่ในเครื่องนี้ ลองเช็คอินเทอร์เน็ตแล้วรีเฟรชอีกที', true);
+  }
+}
+
 // ================================================================
 // SYNC: localStorage → Firebase
 // ================================================================
@@ -408,12 +421,12 @@ function _syncPushValue(ref, data) {
     var hasIds = data.length > 0 && data.every(function(item) { return item && item.id; });
     if (hasIds) {
       data.forEach(function(item) {
-        ref.doc(item.id).set(item).catch(function(e) { console.warn('Sync error:', e); });
+        ref.doc(item.id).set(item).catch(_notifySyncFail);
       });
       return;
     }
   }
-  ref.doc('_data').set({ value: data }).catch(function(e) { console.warn('Sync error:', e); });
+  ref.doc('_data').set({ value: data }).catch(_notifySyncFail);
 }
 
 function syncToFirebase(collName, data) {
@@ -427,9 +440,7 @@ function syncDeleteFromFirebase(collName, docId) {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
   var ref = getCollectionRef(collName);
   if (!ref || !docId) return;
-  ref.doc(docId).delete().catch(function(e) {
-    console.warn('Delete sync error:', e);
-  });
+  ref.doc(docId).delete().catch(_notifySyncFail);
 }
 
 // ================================================================
@@ -654,9 +665,7 @@ function fixProductsStructureBeforeSync() {
       // โหมดลิงก์เซล (PIN) ไม่ให้บันทึก config ทับ — config (Level requirement ฯลฯ) ควรอิงจากแอปหลัก
       // เท่านั้น (ดูหมายเหตุใน initFirebaseListeners ส่วน config listener)
       if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER && key === 'config' && !SALES_MODE) {
-        db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(data).catch(function(e) {
-          console.warn('Config sync error:', e);
-        });
+        db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(data).catch(_notifySyncFail);
       }
     };
     

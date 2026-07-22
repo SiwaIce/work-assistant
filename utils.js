@@ -824,11 +824,23 @@ function logL(t) {
 // ================================================================
 // TOAST
 // ================================================================
+var _toastQueue = [];
+var _toastBusy = false;
 function toast(msg, isError) {
+  _toastQueue.push({ msg: msg, isError: isError });
+  _toastShowNext();
+}
+function _toastShowNext() {
+  if (_toastBusy || !_toastQueue.length) return;
+  _toastBusy = true;
+  var item = _toastQueue.shift();
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (isError ? ' error' : '');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  t.textContent = item.msg;
+  t.className = 'toast show' + (item.isError ? ' error' : '');
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => { _toastBusy = false; _toastShowNext(); }, 250);
+  }, 2500);
 }
 
 // ================================================================

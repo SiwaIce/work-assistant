@@ -5724,8 +5724,7 @@ function rCustomKPI(el) {
   }
   
   var h = '<div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap">' +
-    '<button class="btn bp" onclick="showAddKpiM()">➕ เพิ่ม KPI</button>' +
-    '<button class="btn bo" onclick="manageKpiConfigs()">⚙️ จัดการ KPI</button>' +
+    '<button class="btn bo" onclick="resetKpiDefaults()">🔄 ใช้ค่าเริ่มต้น</button>' +
     '</div>';
   
   // แยกตาม period
@@ -5881,13 +5880,6 @@ function resetKpiDefaults() {
   render();
 }
 
-function showAddKpiM() {
-  toast('🚧 ฟังก์ชันกำลังพัฒนา');
-}
-
-function manageKpiConfigs() {
-  toast('🚧 ฟังก์ชันกำลังพัฒนา');
-}
 // ================================================================
 // EMAIL DRAFT WITH DEALER SELECTION
 // ================================================================

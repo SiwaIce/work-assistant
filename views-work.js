@@ -389,7 +389,6 @@ function renderTaskCard(t) {
       <button class="task-action-btn" onclick="showQuickUpdateTaskM('${t.id}')" title="อัพเดทด่วน">📝</button>
       <button class="task-action-btn" onclick="showStepFuM('${t.id}', -1)" title="ติดตาม">📞</button>
       <button class="task-action-btn" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,15)}')" title="จับเวลา">⏱️</button>
-      <button class="task-action-btn" onclick="toast('🚧 กำลังพัฒนา')" title="ส่งไปปฏิทิน">📅</button>
     </div>
   </div>
   `;
