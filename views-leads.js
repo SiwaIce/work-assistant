@@ -575,6 +575,8 @@ function _lfImgLinkOptsHtml(sec, f) {
     h += '<input class="fm-input" style="flex:1;min-width:100px" placeholder="ชื่อรายการ *" value="' + esc(lbl) + '" oninput="_lfIlSetLbl(\'' + sec + '\',\'' + f.id + '\',' + i + ',this.value)">';
     h += '<input class="fm-input" style="flex:2;min-width:140px;font-size:11px" placeholder="URL รูปภาพ" value="' + esc(img) + '" oninput="_lfIlSetImg(\'' + sec + '\',\'' + f.id + '\',' + i + ',this.value)">';
     h += '<input class="fm-input" style="flex:2;min-width:140px;font-size:11px" placeholder="ลิงก์ปลายทางเมื่อกด *" value="' + esc(link) + '" oninput="_lfIlSetLink(\'' + sec + '\',\'' + f.id + '\',' + i + ',this.value)">';
+    h += '<input type="file" accept="application/pdf,image/*" style="display:none" id="lfIlFile_' + sec + '_' + f.id + '_' + i + '" onchange="_lfIlAttachFile(\'' + sec + '\',\'' + f.id + '\',' + i + ',this)">';
+    h += '<button type="button" class="btn bsm bo" title="แนบไฟล์ (PDF/รูป) แทนกรอกลิงก์ — กดรูปแล้วเปิดดูได้เลย" onclick="document.getElementById(\'lfIlFile_' + sec + '_' + f.id + '_' + i + '\').click()">📎</button>';
     h += '<button type="button" class="btn bsm bo" onclick="_lfOptDup(\'' + sec + '\',\'' + f.id + '\',' + i + ')" title="คัดลอกรายการนี้">📋</button>';
     h += '<button type="button" class="btn bsm bd" onclick="_lfIlDel(\'' + sec + '\',\'' + f.id + '\',' + i + ')">✕</button>';
     h += '</div>';
@@ -704,6 +706,18 @@ function _lfIlDel(s, id, i) {
   var f = _lfGet(s, id); if (!f) return;
   f.options.splice(i, 1);
   _lfRerenderFields(s);
+}
+function _lfIlAttachFile(s, id, i, inputEl) {
+  var file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  inputEl.value = '';
+  toast('⏳ กำลังอัปโหลด...');
+  uploadAttachment(file, 'leadform', function(att) {
+    if (!att) return;
+    _lfIlSetLink(s, id, i, att.url);
+    _lfRerenderFields(s);
+    toast('✅ แนบไฟล์แล้ว กดรูปในฟอร์มจะเปิดไฟล์นี้');
+  });
 }
 function _lfSetType(s, id, v) {
   var f = _lfGet(s, id); if (!f) return;
