@@ -1845,7 +1845,7 @@ function clearAllProductsData() {
 var productSearch = '';
 var productCategoryFilter = 'all';
 var productTypeFilter = 'all';     // ✅ เพิ่ม: 'all', 'main', 'demo'
-var productViewMode = 'table';
+var productViewMode = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'catalog' : 'table'; // มือถือ: ตาราง 13 คอลัมน์กว้าง ~1160px เลื่อนดูยาก เริ่มด้วย Catalog (grid รูปสินค้า) แทน
 var _marginWhatIf = 0; // จำลองส่วนลด % ในมุมมอง Margin (0 = ราคาเต็ม)
 var _prodSheetInstance = null;
 var _prodSheetIds = [];

@@ -8354,6 +8354,12 @@ input:focus, select:focus, textarea:focus {
 /* ================================================================
    VERY SMALL (iPhone SE, 320px)
    ================================================================ */
+@media (max-width: 480px) {
+  /* ช่องค้นหาสินค้าถูก select ข้างๆ บีบเหลือ ~150px บนมือถือ — ให้ขึ้นบรรทัดของตัวเอง
+     (ต้อง !important เพราะ element มี inline style="flex:1" ติดมาจาก products.js) */
+  #productSearchInput { flex: 1 1 100% !important; }
+}
+
 @media (max-width: 380px) {
   .topbar {
     padding: 4px 6px;
