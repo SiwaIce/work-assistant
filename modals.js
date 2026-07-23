@@ -2003,7 +2003,12 @@ function showTaskM(eid, prefillDealerId) {
     (eid ? '' : '<div style="display:flex;gap:6px;margin-bottom:6px">' +
       '<button type="button" class="btn bsm bp" id="ft_mode_text" onclick="setTaskDescMode(\'text\')">📝 ข้อความยาว</button>' +
       '<button type="button" class="btn bsm bo" id="ft_mode_bullet" onclick="setTaskDescMode(\'bullet\')">☑ Bullet list</button></div>') +
-    '<div id="ft_text_wrap"><textarea id="ft_d" rows="7" style="min-height:140px" placeholder="พิมพ์รายละเอียด... (วางหรือลากรูปลงในช่องนี้ได้)" onpaste="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondrop="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondragover="event.preventDefault()">' + sanitize(t.description || '') + '</textarea>' +
+    '<div id="ft_text_wrap">' +
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
+    '<input type="file" accept="image/*" onchange="_handleAttachUpload(event,\'_ftDescAttach\',\'tasks\')" style="flex:1;font-size:.72rem" title="แนบรูปจากไฟล์ในเครื่อง">' +
+    '<span class="hint" style="white-space:nowrap">หรือ Ctrl+V วางรูป</span>' +
+    '</div>' +
+    '<textarea id="ft_d" rows="7" style="min-height:140px" placeholder="พิมพ์รายละเอียด... (วางหรือลากรูปลงในช่องนี้ได้)" onpaste="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondrop="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondragover="event.preventDefault()">' + sanitize(t.description || '') + '</textarea>' +
     '<div id="_ftDescAttach_thumbs">' + attachThumbsHtml(window._ftDescAttach, '_ftDescAttach') + '</div></div>' +
     (eid ? '' : '<div id="ft_bullet_wrap" style="display:none">' +
       '<div class="fr" style="margin-bottom:6px;gap:6px">' +
@@ -2101,9 +2106,13 @@ function saveBulletsAsTemplate() {
 
 function saveTask(eid) {
   var title = document.getElementById('ft_t');
-  if (!title || !title.value.trim()) return alert('ใส่ชื่อ');
+  var titleVal = title ? title.value.trim() : '';
+  var hasAttach = (window._ftDescAttach || []).length > 0;
+  // ไม่บังคับชื่อถ้ามีรูปแนบแล้ว (เช่นแคปหน้าจอมาวางแล้วรีบบันทึกโดยไม่มีเวลาพิม) — ตั้งชื่อให้อัตโนมัติแทน
+  if (!titleVal && hasAttach) titleVal = '📷 บันทึกด่วน (' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}) + ')';
+  if (!titleVal) return alert('ใส่ชื่อ');
   var data = {
-    title: title.value.trim(),
+    title: titleVal,
     description: document.getElementById('ft_d') ? document.getElementById('ft_d').value.trim() : '',
     startDate: dpG('ft_s'),
     dueDate: dpG('ft_e'),
