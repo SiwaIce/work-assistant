@@ -458,9 +458,10 @@ function renderTaskCard(t) {
       <div class="task-card-actions" onclick="event.stopPropagation()">
         ${actionsHtml}
       </div>
-      <input type="text" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์แล้วกด Enter..."
+      <textarea rows="1" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์... (Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"
         onclick="event.stopPropagation()"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();addQuickTaskComment('${t.id}',this)}">
+        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+        onkeydown="event.stopPropagation();if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addQuickTaskComment('${t.id}',this)}"></textarea>
     </div>
     ${stepBarHtml}
   </div>
@@ -474,6 +475,7 @@ function addQuickTaskComment(taskId, inputEl) {
   if (!val) return;
   ST.add('taskLogs', { tid: taskId, type: 'update', content: val, date: _nw() });
   inputEl.value = '';
+  inputEl.style.height = 'auto'; // ยุบกลับ 1 บรรทัดหลังส่ง (เผื่อพิมพ์หลายบรรทัดมาก่อน)
   toast('💬 บันทึกคอมเมนต์แล้ว');
 }
 
