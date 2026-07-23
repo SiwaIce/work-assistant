@@ -61,6 +61,11 @@ const ST = {
     } catch(e) {}
   },
 
+  // ลองเพิ่มแคชตรงนี้มาก่อน (parse ครั้งเดียวแล้ว clone ทุกครั้งที่อ่าน) แต่วัดผลจริงแล้วพบว่า structuredClone
+  // เองก็มีต้นทุนใกล้เคียง JSON.parse เดิม เลยช้าลงกว่าเดิมสำหรับหน้าที่เรียกไม่ถี่มาก (เช่นหน้า Dealers/วันนี้
+  // จาก ~450ms กลายเป็น ~1300ms) ช่วยแค่เคสเรียกรัวมากๆ ในลูป ซึ่งแก้ตรงจุดเรียก (ทำ index ล่วงหน้าแทนเรียก
+  // getOne ในลูป — ดู buildConflictMap/buildConflictClusterHtml ใน views-pipeline.js) ได้ผลดีกว่าและปลอดภัยกว่า
+  // เยอะ เลยถอนออก คง _get/_set แบบเดิมไว้
   _get(key) {
     try { return JSON.parse(localStorage.getItem(key)); }
     catch(e) { return null; }

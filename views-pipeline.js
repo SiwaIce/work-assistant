@@ -249,6 +249,8 @@ var pipeCompareSelected = [];
 var pipeCompareThreshold = 40;
 var _pipeCompareAllPairsCacheKey = null; // แคชผลลัพธ์คู่ Pipeline ทั้งระบบ ดู renderPipeCompareSuggestPanel
 var _pipeCompareAllPairsCache = null;
+var _pipeDashConflictsCacheKey = null; // แคช badge "⚠️ อาจชนกัน" บน Dashboard — เดิมคำนวณ O(n²) ใหม่ทุกครั้งที่เข้าหน้า Pipeline (300 โครงการ ~11 วิ) ดู rPipeline
+var _pipeDashConflictsCache = null;
 
 // ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
 function PIPE_ACTIVE_STATUSES() { return getStatusIdsByCategory('active'); }
@@ -335,11 +337,16 @@ function _pipeInlineSave(pipeId, field, value) {
 // สร้าง lookup map: pipeId → [{otherId, dealerName, score, key, ownerName, isTeam}]
 function buildConflictMap(conflicts) {
   var map = {};
+  // เดิมเรียก ST.getOne('dealers', id) ต่อคู่ (×2) — getOne อ่าน+parse localStorage ทั้งก้อนแล้วไล่หาทีละตัว
+  // ทุกครั้ง ถ้ามีคู่ที่ชนกันเยอะ (หลักพัน) จะกลายเป็นคอขวดหนักกว่าตัวคำนวณคะแนนเองอีก — สร้าง index
+  // ครั้งเดียวไว้ล่วงหน้าแทน
+  var dealerNameById = {};
+  ST.getAll('dealers').forEach(function(d) { dealerNameById[d.id] = d.name; });
   (conflicts || []).forEach(function(c) {
     var aIsTeam = !!c.a._isTeam;
     var bIsTeam = !!c.b._isTeam;
-    var aDealer = aIsTeam ? (c.a._dealerName || '?') : (function() { var d = ST.getOne('dealers', c.a.dealerId); return d ? d.name : '?'; })();
-    var bDealer = bIsTeam ? (c.b._dealerName || '?') : (function() { var d = ST.getOne('dealers', c.b.dealerId); return d ? d.name : '?'; })();
+    var aDealer = aIsTeam ? (c.a._dealerName || '?') : (dealerNameById[c.a.dealerId] || '?');
+    var bDealer = bIsTeam ? (c.b._dealerName || '?') : (dealerNameById[c.b.dealerId] || '?');
     if (!aIsTeam) {
       if (!map[c.a.id]) map[c.a.id] = [];
       map[c.a.id].push({ otherId: c.b.id, dealerName: bDealer, score: c.score, key: c.key, ownerName: c.b._ownerName || null, isTeam: bIsTeam });
@@ -394,6 +401,10 @@ function buildConflictClusters(conflicts) {
 function buildConflictClusterHtml(conflicts) {
   if (!conflicts || !conflicts.length) return '';
   var clusters = buildConflictClusters(conflicts);
+  // เดิมเรียก ST.getOne('dealers', id) ในลูปซ้อน (ทั้งต่อ pipe และต่อคู่ conflict ภายใน cluster) — ถ้ามี
+  // cluster ใหญ่ (หลายร้อย pipe ชนกันเป็นกลุ่มเดียว) จะเรียกซ้ำเป็นหมื่นครั้งต่อการ render 1 รอบ สร้าง index ไว้ล่วงหน้า
+  var dealerNameById = {};
+  ST.getAll('dealers').forEach(function(d) { dealerNameById[d.id] = d.name; });
   var h = '<div class="card" style="border:1px solid #f59e0b;margin-bottom:10px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
   h += '<div style="font-weight:700;color:#f59e0b">⚠️ End User ที่มี Dealer หลายเจ้า (' + clusters.length + ' กลุ่ม)</div>';
@@ -409,12 +420,12 @@ function buildConflictClusterHtml(conflicts) {
     h += '<span style="background:' + scColor + '22;color:' + scColor + ';padding:2px 10px;border-radius:8px;font-size:11px;font-weight:700">ตรงกัน ' + cluster.maxScore + '%</span>';
     h += '</div>';
     cluster.pipes.forEach(function(p) {
-      var d = ST.getOne('dealers', p.dealerId);
+      var dName = dealerNameById[p.dealerId];
       var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
       var modelText = items.slice(0, 2).map(function(it) { return (it.model || '') + (it.qty > 1 ? '×' + it.qty : ''); }).filter(Boolean).join(', ') || p.model || '-';
       h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg2,rgba(0,0,0,.15));border-radius:6px;margin-bottom:4px;flex-wrap:wrap">';
       h += '<div style="width:8px;height:8px;border-radius:50%;background:' + scColor + ';flex-shrink:0"></div>';
-      h += '<div style="font-size:12px;font-weight:600;min-width:80px">' + sanitize(d ? d.name : '?') + '</div>';
+      h += '<div style="font-size:12px;font-weight:600;min-width:80px">' + sanitize(dName || '?') + '</div>';
       h += '<div style="font-size:11px;color:var(--text2);flex:1;min-width:80px">' + sanitize(modelText.substr(0, 30)) + '</div>';
       h += pipeTag(p.status);
       h += '<div style="font-size:11px;color:var(--text2)">' + (p.biddingDate ? 'Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
@@ -422,11 +433,15 @@ function buildConflictClusterHtml(conflicts) {
       h += '</div>';
     });
     h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
-    cluster.conflicts.forEach(function(c) {
-      var da2 = ST.getOne('dealers', c.a.dealerId), db2 = ST.getOne('dealers', c.b.dealerId);
-      var na = da2 ? da2.name.split(' ')[0] : '?', nb = db2 ? db2.name.split(' ')[0] : '?';
+    // จำกัดปุ่มที่โชว์ กัน cluster ใหญ่ผิดปกติ (คู่ชนกันเป็นร้อย) render ปุ่มเป็นพันจนหน้าเว็บอืด/ล้น
+    cluster.conflicts.slice(0, 30).forEach(function(c) {
+      var na2 = dealerNameById[c.a.dealerId], nb2 = dealerNameById[c.b.dealerId];
+      var na = na2 ? na2.split(' ')[0] : '?', nb = nb2 ? nb2.split(' ')[0] : '?';
       h += '<button class="btn bsm bp" onclick="compareConflict(\'' + c.a.id + '\',\'' + c.b.id + '\')">🔍 ' + sanitize(na) + ' ↔ ' + sanitize(nb) + '</button>';
     });
+    if (cluster.conflicts.length > 30) {
+      h += '<span style="font-size:11px;color:var(--text2);align-self:center">+' + (cluster.conflicts.length - 30) + ' คู่</span>';
+    }
     h += '<button class="btn bsm bo" onclick="dismissCluster([' + cluster.conflicts.map(function(c) { return '\'' + c.key + '\''; }).join(',') + '])">✓ ไม่ใช่งานเดียวกัน</button>';
     h += '</div></div>';
   });
@@ -817,8 +832,18 @@ function rPipeline(el) {
   });
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && pipeIsActive(p); });
   var teamPipes = (typeof _teamPipelineData !== 'undefined' && Array.isArray(_teamPipelineData)) ? _teamPipelineData : [];
-  var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(allPipes.concat(teamPipes), 60) : [];
-  _conflictMap = buildConflictMap(conflicts);
+  var _dashConflictPool = allPipes.concat(teamPipes);
+  var _dashConflictKey = _dashConflictPool.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::60';
+  var conflicts;
+  if (_pipeDashConflictsCacheKey === _dashConflictKey) {
+    conflicts = _pipeDashConflictsCache.conflicts;
+    _conflictMap = _pipeDashConflictsCache.map;
+  } else {
+    conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(_dashConflictPool, 60) : [];
+    _conflictMap = buildConflictMap(conflicts);
+    _pipeDashConflictsCacheKey = _dashConflictKey;
+    _pipeDashConflictsCache = { conflicts: conflicts, map: _conflictMap };
+  }
 
   el.innerHTML = '' +
     _pipeSectionHeader('📊 Dashboard', 'pipeDash', pipeDashOpen,
