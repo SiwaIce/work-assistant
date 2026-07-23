@@ -236,6 +236,12 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- UNDO TOAST — toast ปกติเป็น textContent ล้วน ใส่ปุ่มไม่ได้ เลยแยกกล่องนี้ต่างหากสำหรับ action ที่ต้องมี Undo -->
+<div class="undo-toast" id="undoToast" style="display:none">
+  <span id="undoToastMsg"></span>
+  <button type="button" onclick="_undoToastAction()">↩️ Undo</button>
+</div>
+
 <!-- IMAGE LIGHTBOX — ดูรูปแนบแบบเต็มจอ แยกจาก #modal เพื่อไม่ให้ไปทับ/ล้างฟอร์มที่เปิดค้างอยู่เวลากดดูรูปในโมดัลอื่น -->
 <div class="img-lightbox" id="imgLightbox" onclick="if(event.target===this)closeImageLightbox()">
   <div class="img-lightbox-inner">

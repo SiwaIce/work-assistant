@@ -304,40 +304,53 @@ function renderTaskListView(groupedTasks, totalCount) {
   return h;
 }
 
+// ตัวเดียวที่ activate ได้ทีละอัน (การ์ดไหนกำลังอยู่โหมดเลื่อนวัน / เลือกสถานะด่วน) — เก็บเป็น global เดียว
+// พอง่ายกว่าเก็บต่อการ์ด และ render() ถูกเรียกซ้ำได้เสมอโดยไม่หลุดโหมดที่เปิดค้างไว้
+var _taskDateShiftId = null;
+var _taskStatusPickId = null;
+
+function closeTaskDateShift() { _taskDateShiftId = null; render(); }
+function openTaskDateShift(tid, ev) { if (ev) ev.stopPropagation(); _taskDateShiftId = tid; _taskStatusPickId = null; render(); }
+function shiftTaskDate(tid, delta, ev) {
+  if (ev) ev.stopPropagation();
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.dueDate) return;
+  ST.update('tasks', tid, { dueDate: addD(t.dueDate, delta) });
+  render();
+}
+function closeTaskStatusPick(ev) { if (ev) ev.stopPropagation(); _taskStatusPickId = null; render(); }
+function openTaskStatusPick(tid, ev) { if (ev) ev.stopPropagation(); _taskStatusPickId = tid; _taskDateShiftId = null; render(); }
+function quickSetTaskStatus(tid, status, ev) {
+  if (ev) ev.stopPropagation();
+  ST.update('tasks', tid, { status: status });
+  _taskStatusPickId = null;
+  toast(status === 'completed' ? '✅ เสร็จแล้ว' : status === 'on-hold' ? '⏸ พักงานนี้ไว้ก่อน' : '🔄 กลับมาทำต่อ');
+  render();
+}
+
 function renderTaskCard(t) {
   var isCompleted = t.status === 'completed';
   var daysLeft = t.dueDate ? dTo(t.dueDate) : null;
-  var urgencyClass = '';
-  var urgencyLabel = '';
-  
+
+  // tier: red (เกิน/วันนี้) / amber (พรุ่งนี้ หรือ <=3 วัน) / gray (ปกติ) — ใช้ทั้งพื้นหลังไล่สีการ์ด และสีป้ายวันที่
+  var tier = 'gray';
+  var dayLabel = '';
   if (!isCompleted && daysLeft !== null) {
-    if (daysLeft < 0) {
-      urgencyClass = 'task-overdue';
-      urgencyLabel = '<span class="task-urgent-badge task-badge-red">🔴 เกิน ' + Math.abs(daysLeft) + ' วัน</span>';
-    } else if (daysLeft === 0) {
-      urgencyClass = 'task-today';
-      urgencyLabel = '<span class="task-urgent-badge task-badge-orange">🟠 วันนี้!</span>';
-    } else if (daysLeft === 1) {
-      urgencyClass = 'task-tomorrow';
-      urgencyLabel = '<span class="task-urgent-badge task-badge-yellow">🟡 พรุ่งนี้</span>';
-    } else if (daysLeft <= 3) {
-      urgencyLabel = '<span class="task-urgent-badge task-badge-yellow">🟡 อีก ' + daysLeft + ' วัน</span>';
-    }
+    if (daysLeft < 0) { tier = 'red'; dayLabel = 'เกิน ' + Math.abs(daysLeft) + ' วัน'; }
+    else if (daysLeft === 0) { tier = 'red'; dayLabel = 'วันนี้!'; }
+    else if (daysLeft === 1) { tier = 'amber'; dayLabel = 'พรุ่งนี้'; }
+    else if (daysLeft <= 3) { tier = 'amber'; dayLabel = 'อีก ' + daysLeft + ' วัน'; }
+    else { dayLabel = 'อีก ' + daysLeft + ' วัน'; }
   }
-  
+
   var priorityIcon = '';
   if (t.priority === 'high') priorityIcon = '🔴';
   else if (t.priority === 'medium') priorityIcon = '🟡';
   else priorityIcon = '🟢';
-  
-  var statusIcon = '';
-  if (t.status === 'active') statusIcon = '🔄';
-  else if (t.status === 'completed') statusIcon = '✅';
-  else if (t.status === 'on-hold') statusIcon = '⏸';
-  
+
   var dealer = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
   var dealerHtml = dealer ? '<span class="task-dealer">🏪 ' + sanitize(dealer.name) + '</span>' : '';
-  
+
   var pipelineHtml = '';
   if (t.pipeId) {
     var pipe = ST.getOne('pipeline', t.pipeId);
@@ -345,51 +358,96 @@ function renderTaskCard(t) {
       pipelineHtml = '<span class="task-pipeline">📊 ' + sanitize((pipe.projectName || '').substr(0, 25)) + '</span>';
     }
   }
-  
-  var pg = prog(t);
-  var progressHtml = '';
-  if (pg > 0 && pg < 100) {
-    progressHtml = '<div class="pb" style="height:4px;margin:6px 0 0 0"><div class="pf pf-blue" style="width:' + pg + '%"></div></div>';
-  }
-  
+
   var fuCount = countTaskFollowups(t);
   var fuHtml = '';
   if (fuCount > 0) {
     fuHtml = '<span class="task-fu-badge" title="ติดตาม ' + fuCount + ' ครั้ง">📞' + fuCount + '</span>';
   }
-  
-  var cardClass = 'task-card';
-  if (urgencyClass) cardClass += ' ' + urgencyClass;
+
+  // Progress ring — แทน progress bar เดิม วงกลม r=16 เส้นรอบวง ~100.5
+  var pg = prog(t);
+  var ringColor = isCompleted ? '#22c55e' : (tier === 'gray' ? 'var(--accent)' : '#fff');
+  var ringTrack = tier === 'gray' ? 'var(--border)' : 'rgba(255,255,255,.18)';
+  var ringDash = (pg / 100 * 100.5).toFixed(1) + ' 100.5';
+  var ringCenter = isCompleted ? '✅' : priorityIcon;
+  var ringHtml = '<div class="task-ring">' +
+    '<svg width="38" height="38" style="transform:rotate(-90deg)">' +
+    '<circle cx="19" cy="19" r="16" fill="none" stroke="' + ringTrack + '" stroke-width="4"></circle>' +
+    '<circle cx="19" cy="19" r="16" fill="none" stroke="' + ringColor + '" stroke-width="4" stroke-dasharray="' + ringDash + '" stroke-linecap="round"></circle>' +
+    '</svg><span>' + ringCenter + '</span></div>';
+
+  // step ปัจจุบัน = step แรกที่ยังไม่ done (ตามลำดับ) — ถ้าไม่มี step หรือทำครบแล้วไม่ต้องโชว์แถวนี้
+  var steps = t.steps || [];
+  var curStep = steps.find(function(s) { return !s.done; });
+  var stepNameHtml = curStep ? '<div class="task-step-name">🔸 ' + sanitize(curStep.title || '') + '</div>' : '';
+  var stepBarHtml = '';
+  if (steps.length > 1) {
+    stepBarHtml = '<div class="task-step-bar">' + steps.map(function(s) {
+      return '<span class="' + (s.done ? 'on' : '') + '"></span>';
+    }).join('') + '</div>';
+  }
+
+  // ป้ายวันครบกำหนด — กดแล้วสลับเป็นลูกศรเลื่อนวันตรงจุดเดิม (โหมดเดียวเปิดได้ทีละการ์ด ดู _taskDateShiftId)
+  var dateBadgeHtml = '';
+  if (t.dueDate) {
+    if (_taskDateShiftId === t.id) {
+      dateBadgeHtml = '<div class="task-date-badge task-date-shift" onclick="event.stopPropagation()">' +
+        '<div class="tdb-arrows">' +
+        '<button type="button" onclick="shiftTaskDate(\'' + t.id + '\',-1,event)">◀</button>' +
+        '<span onclick="closeTaskDateShift(event)">' + fDShort(t.dueDate) + '</span>' +
+        '<button type="button" onclick="shiftTaskDate(\'' + t.id + '\',1,event)">▶</button>' +
+        '</div></div>';
+    } else {
+      dateBadgeHtml = '<div class="task-date-badge tier-' + tier + '" onclick="openTaskDateShift(\'' + t.id + '\',event)">' +
+        (dayLabel ? '<span class="task-date-pill">' + dayLabel + '</span>' : '') +
+        '<div class="task-date-num">' + fDShort(t.dueDate) + '</div></div>';
+    }
+  }
+
+  // ปุ่มด้านล่าง — ปกติ 3 ปุ่ม, กด "📝 อัพเดท" แล้วสลับเป็นชิปเปลี่ยนสถานะด่วนแทน (ดู _taskStatusPickId)
+  var actionsHtml;
+  if (_taskStatusPickId === t.id) {
+    actionsHtml =
+      '<span class="task-status-chip' + (t.status === 'active' ? ' cur' : '') + '" onclick="quickSetTaskStatus(\'' + t.id + '\',\'active\',event)">🔄 กำลังทำ</span>' +
+      '<span class="task-status-chip chip-done' + (t.status === 'completed' ? ' cur' : '') + '" onclick="quickSetTaskStatus(\'' + t.id + '\',\'completed\',event)">✅ เสร็จ</span>' +
+      '<span class="task-status-chip' + (t.status === 'on-hold' ? ' cur' : '') + '" onclick="quickSetTaskStatus(\'' + t.id + '\',\'on-hold\',event)">⏸ พัก</span>' +
+      '<span class="task-status-chip-close" onclick="closeTaskStatusPick(event)">✕</span>';
+  } else {
+    actionsHtml =
+      '<button class="task-action-btn" onclick="openTaskStatusPick(\'' + t.id + '\',event)" title="อัพเดทด่วน">📝</button>' +
+      '<button class="task-action-btn" onclick="showStepFuM(\'' + t.id + '\', -1)" title="ติดตาม">📞</button>' +
+      '<button class="task-action-btn" onclick="startTimer(\'task\',\'' + t.id + '\',\'' + sanitize(t.title).substr(0, 15) + '\')" title="จับเวลา">⏱️</button>';
+  }
+
+  var cardClass = 'task-card task-card-v2 tier-' + tier;
   if (isCompleted) cardClass += ' task-completed';
-  
   var checkedAttr = isCompleted ? 'checked' : '';
-  
+
   return `
   <div class="${cardClass}" data-task-id="${t.id}">
-    <div class="task-card-left">
-      <input type="checkbox" class="task-complete-chk" ${checkedAttr} 
-        onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">
-    </div>
+    ${dateBadgeHtml}
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
-      <div class="task-card-header">
-        <span class="task-title">${priorityIcon} ${sanitize(t.title)}</span>
-        <span class="task-status">${statusIcon} ${t.status === 'active' ? 'กำลังทำ' : t.status === 'completed' ? 'เสร็จ' : 'พัก'}</span>
-        ${urgencyLabel}
+      <div class="task-card-main-row">
+        <input type="checkbox" class="task-complete-chk" ${checkedAttr}
+          onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">
+        ${ringHtml}
+        <div style="flex:1;min-width:0">
+          <div class="task-title">${sanitize(t.title)}</div>
+          <div class="task-card-meta">
+            ${dealerHtml}
+            ${pipelineHtml}
+            ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
+            ${fuHtml}
+          </div>
+        </div>
       </div>
-      <div class="task-card-meta">
-        ${dealerHtml}
-        ${pipelineHtml}
-        ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
-        ${t.dueDate ? '<span class="task-due">📅 ' + fDShort(t.dueDate) + '</span>' : ''}
-        ${fuHtml}
+      ${stepNameHtml}
+      <div class="task-card-actions" onclick="event.stopPropagation()">
+        ${actionsHtml}
       </div>
-      ${progressHtml}
     </div>
-    <div class="task-card-actions" onclick="event.stopPropagation()">
-      <button class="task-action-btn" onclick="showQuickUpdateTaskM('${t.id}')" title="อัพเดทด่วน">📝</button>
-      <button class="task-action-btn" onclick="showStepFuM('${t.id}', -1)" title="ติดตาม">📞</button>
-      <button class="task-action-btn" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,15)}')" title="จับเวลา">⏱️</button>
-    </div>
+    ${stepBarHtml}
   </div>
   `;
 }
@@ -406,15 +464,26 @@ function countTaskFollowups(t) {
 }
 
 function toggleTaskComplete(taskId, isChecked) {
+  var prevStatus = (ST.getOne('tasks', taskId) || {}).status || 'active';
   var newStatus = isChecked ? 'completed' : 'active';
   ST.update('tasks', taskId, {status: newStatus});
-  
+
   if (isChecked) {
     ST.add('taskLogs', {tid: taskId, type: 'completed', content: '✅ งานเสร็จสิ้น', date: _nw()});
   }
-  
-  toast(isChecked ? '✅ ทำเครื่องหมายเสร็จ' : '🔄 กลับเป็นกำลังทำ');
+
   render();
+
+  if (isChecked) {
+    // กันเผลอกดติ๊กถูกพลาด — ย้อนกลับสถานะเดิมได้ภายในไม่กี่วิ (ดู showUndoToast ใน utils.js)
+    showUndoToast('✅ ทำเครื่องหมายเสร็จ', function() {
+      ST.update('tasks', taskId, { status: prevStatus });
+      toast('↩️ ย้อนกลับแล้ว');
+      render();
+    });
+  } else {
+    toast('🔄 กลับเป็นกำลังทำ');
+  }
 }
 
 function showQuickUpdateTaskM(taskId) {

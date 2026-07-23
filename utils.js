@@ -843,6 +843,28 @@ function _toastShowNext() {
   }, 2500);
 }
 
+// toast ปกติเป็น textContent ล้วนใส่ปุ่มไม่ได้ — ใช้กล่องแยก #undoToast (ดู index.html) สำหรับ action ที่
+// เผลอกดพลาดแล้วอยากย้อนกลับได้ (เช่น ติ๊กถูกว่างานเสร็จ) undoFn ถูกเรียกครั้งเดียวตอนกด Undo เท่านั้น
+var _undoToastFn = null;
+var _undoToastTimer = null;
+function showUndoToast(msg, undoFn) {
+  var box = document.getElementById('undoToast');
+  if (!box) { toast(msg); return; }
+  document.getElementById('undoToastMsg').textContent = msg;
+  _undoToastFn = undoFn;
+  box.style.display = 'flex';
+  clearTimeout(_undoToastTimer);
+  _undoToastTimer = setTimeout(function() { box.style.display = 'none'; _undoToastFn = null; }, 5000);
+}
+function _undoToastAction() {
+  var box = document.getElementById('undoToast');
+  if (box) box.style.display = 'none';
+  clearTimeout(_undoToastTimer);
+  var fn = _undoToastFn;
+  _undoToastFn = null;
+  if (fn) fn();
+}
+
 // ================================================================
 // FILE ATTACHMENTS — UI ใช้ร่วมกันทุกเมนู (Note/Task/Visit/Pipeline/Dealer/Feedback/Quotation/Sales Order)
 // รองรับรูป (บีบอัดอัตโนมัติ) + PDF/Word/Excel (อัปโหลดตรง ไม่เกิน 10MB) + ลิงก์ (ไม่ต้องอัปโหลด)
