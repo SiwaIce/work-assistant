@@ -236,6 +236,18 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- IMAGE LIGHTBOX — ดูรูปแนบแบบเต็มจอ แยกจาก #modal เพื่อไม่ให้ไปทับ/ล้างฟอร์มที่เปิดค้างอยู่เวลากดดูรูปในโมดัลอื่น -->
+<div class="img-lightbox" id="imgLightbox" onclick="if(event.target===this)closeImageLightbox()">
+  <div class="img-lightbox-inner">
+    <img id="imgLightboxImg" src="" alt="">
+    <div class="img-lightbox-bar">
+      <a id="imgLightboxDownload" href="" download="">📥 ดาวน์โหลด</a>
+      <a id="imgLightboxOpen" href="" target="_blank" rel="noopener">🔗 เปิดเต็มขนาดในแท็บใหม่</a>
+      <button type="button" onclick="closeImageLightbox()">✕ ปิด</button>
+    </div>
+  </div>
+</div>
+
 <!-- BACKUP REMINDER -->
 <div class="backup-bar" id="backupBar" style="display:none">
 <span>⚠️ ยังไม่ได้ Backup <span id="backupDays"></span> วัน</span>

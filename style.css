@@ -499,6 +499,15 @@ textarea{min-height:50px;resize:vertical}
 .search-item .si-title{font-size:.78rem;margin:1px 0}
 .search-item .si-sub{font-size:.64rem;color:#64748b}
 
+/* === IMAGE LIGHTBOX === */
+.img-lightbox{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:260;align-items:center;justify-content:center;padding:16px}
+.img-lightbox.show{display:flex}
+.img-lightbox-inner{max-width:92vw;max-height:92vh;display:flex;flex-direction:column;align-items:center;gap:10px}
+.img-lightbox-inner img{max-width:92vw;max-height:78vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.img-lightbox-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.img-lightbox-bar a,.img-lightbox-bar button{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:7px 14px;border-radius:8px;font-size:.78rem;cursor:pointer;text-decoration:none}
+.img-lightbox-bar a:hover,.img-lightbox-bar button:hover{background:#334155}
+
 /* === TOAST === */
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:10px;font-size:.8rem;z-index:300;display:none;box-shadow:0 4px 16px rgba(0,0,0,.3);white-space:nowrap;max-width:90vw}
 .toast.show{display:block;animation:toastIn .25s}

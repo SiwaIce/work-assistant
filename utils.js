@@ -866,7 +866,11 @@ function _attachIcon(a) {
 function _attachItemHtml(a, onClick) {
   var icon = _attachIcon(a);
   if (icon === null) {
-    return '<img src="' + a.url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;display:block" onclick="' + onClick + '">';
+    // รูปภาพ — เปิด lightbox แทน tab ใหม่ (ไฟล์อื่นๆ เช่น PDF ยังใช้ onClick เดิม = window.open)
+    var lbUrl = String(a.url || '').replace(/'/g, "\\'");
+    var lbName = String(a.name || 'image.jpg').replace(/'/g, "\\'");
+    var lbClick = "showImageLightbox('" + lbUrl + "','" + lbName + "')";
+    return '<img src="' + a.url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;display:block" onclick="' + lbClick + '">';
   }
   var label = a.name || a.url || '';
   if (label.length > 14) label = label.substr(0, 12) + '…';
@@ -885,6 +889,42 @@ function attachUploadHtml(stateVarName, folder, label) {
     '<button type="button" class="btn bo bsm" onclick="_addAttachLink(\'' + stateVarName + '\')">เพิ่มลิงก์</button>' +
     '</div>' +
     '<div id="' + stateVarName + '_thumbs">' + attachThumbsHtml(window[stateVarName], stateVarName) + '</div></div>';
+}
+
+// ================================================================
+// IMAGE LIGHTBOX — ดูรูปแนบเต็มจอ แยกจาก #modal เดิม (ดู #imgLightbox ใน index.html) กันปัญหา
+// modal เดียวใช้ซ้ำทั้งแอพ เปิด lightbox ทับแล้วไปล้างฟอร์มที่กรอกค้างอยู่ในโมดัลอื่น
+// ================================================================
+function showImageLightbox(url, name) {
+  var box = document.getElementById('imgLightbox');
+  if (!box) return;
+  document.getElementById('imgLightboxImg').src = url;
+  document.getElementById('imgLightboxOpen').href = url;
+  var dl = document.getElementById('imgLightboxDownload');
+  dl.href = url;
+  dl.download = name || 'image.jpg';
+  dl.onclick = function(e) {
+    // รูปอยู่คนละ origin (Firebase Storage) — attribute download เฉยๆ เบราว์เซอร์จะไม่ยอมโหลดให้ (แค่เปิดแท็บใหม่)
+    // ต้อง fetch เป็น blob ก่อนแล้วโหลดจาก blob: URL (same-origin) ถึงจะบังคับดาวน์โหลดได้จริง
+    e.preventDefault();
+    toast('⏳ กำลังเตรียมไฟล์...');
+    fetch(url).then(function(r) { return r.blob(); }).then(function(blob) {
+      var blobUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = blobUrl; a.download = name || 'image.jpg';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 4000);
+    }).catch(function() {
+      toast('❌ ดาวน์โหลดไม่ได้ กำลังเปิดแท็บใหม่แทน', true);
+      window.open(url, '_blank');
+    });
+  };
+  box.classList.add('show');
+}
+
+function closeImageLightbox() {
+  var box = document.getElementById('imgLightbox');
+  if (box) box.classList.remove('show');
 }
 
 function attachThumbsHtml(attachments, stateVarName) {
