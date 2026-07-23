@@ -5936,6 +5936,9 @@ body.mobile-mode .card {
 .task-step-name { text-align: center; font-size: 12px; font-weight: 600; margin-top: 9px; color: var(--text); }
 .task-card-v2.tier-red .task-step-name, .task-card-v2.tier-amber .task-step-name { color: #fff; }
 
+.task-latest-update { text-align: center; font-size: 11px; margin-top: 5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-v2.tier-red .task-latest-update, .task-card-v2.tier-amber .task-latest-update { color: rgba(255,255,255,.75); }
+
 .task-card-v2 .task-card-actions { display: flex; gap: 6px; margin-top: 9px; align-items: center; }
 
 .task-status-chip { font-size: 11px; padding: 4px 11px; border-radius: 20px; font-weight: 500; cursor: pointer; background: var(--bg2); color: var(--text2); }

@@ -411,6 +411,15 @@ function renderTaskCard(t) {
   var steps = t.steps || [];
   var curStep = steps.find(function(s) { return !s.done; });
   var stepNameHtml = curStep ? '<div class="task-step-name">🔸 ' + sanitize(curStep.title || '') + '</div>' : '';
+
+  // อัพเดทล่าสุดจากไทม์ไลน์ (taskLogs) — โชว์แค่บรรทัดเดียวสรุปย่อ ไม่ใช่ไทม์ไลน์เต็ม กันการ์ดรก
+  // ดูรายละเอียดทั้งหมดต้องเปิดหน้า Task detail เอง
+  var latestLog = ST.filter('taskLogs', function(l) { return l.tid === t.id; }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); })[0];
+  var latestUpdateHtml = '';
+  if (latestLog && latestLog.content) {
+    var luText = latestLog.content.length > 40 ? latestLog.content.substr(0, 40) + '…' : latestLog.content;
+    latestUpdateHtml = '<div class="task-latest-update">💬 "' + sanitize(luText) + '" · ' + fDRelative(latestLog.date) + '</div>';
+  }
   var stepBarHtml = '';
   if (steps.length > 1) {
     stepBarHtml = '<div class="task-step-bar">' + steps.map(function(s) {
@@ -479,6 +488,7 @@ function renderTaskCard(t) {
         </div>
       </div>
       ${stepNameHtml}
+      ${latestUpdateHtml}
       <div class="task-card-actions" onclick="event.stopPropagation()">
         ${actionsHtml}
       </div>
@@ -498,9 +508,17 @@ function addQuickTaskComment(taskId, inputEl) {
   var val = inputEl.value.trim();
   if (!val) return;
   ST.add('taskLogs', { tid: taskId, type: 'update', content: val, date: _nw() });
-  inputEl.value = '';
-  inputEl.style.height = 'auto'; // ยุบกลับ 1 บรรทัดหลังส่ง (เผื่อพิมพ์หลายบรรทัดมาก่อน)
   toast('💬 บันทึกคอมเมนต์แล้ว');
+  // อัพเดทเฉพาะการ์ดนี้ (ไม่เรียก render() เต็มหน้า) กันเลื่อนตำแหน่ง/ตัดโฟกัสจากช่องพิมพ์ในการ์ดอื่นที่อาจ
+  // กำลังพิมพ์ค้างอยู่พร้อมกัน — แทนที่ DOM การ์ดเดิมด้วยผลลัพธ์ renderTaskCard() ที่คำนวณใหม่ (มี latestUpdateHtml
+  // ล่าสุดแล้ว) โดยตรง
+  var t = ST.getOne('tasks', taskId);
+  var cardEl = document.querySelector('[data-task-id="' + taskId + '"]');
+  if (t && cardEl) {
+    var wrap = document.createElement('div');
+    wrap.innerHTML = renderTaskCard(t).trim();
+    cardEl.replaceWith(wrap.firstElementChild);
+  }
 }
 
 function countTaskFollowups(t) {
