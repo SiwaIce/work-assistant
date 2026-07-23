@@ -299,12 +299,10 @@ function renderTaskListView(groupedTasks, totalCount) {
       h += '</div>';
     }
     
-    // 2 คอลัมน์ใช้ auto-fit minmax(280px,1fr) ตั้งใจ — จอแคบกว่า 280px*2 จะยุบเหลือคอลัมน์เดียวเองอัตโนมัติ
-    // กันการ์ดที่มีป้ายวันที่/ปุ่มเยอะไปบีบจนล้นบนมือถือ ไม่ต้องคอยเช็ค breakpoint เอง
-    var gridStyle = taskCardCols === 2
-      ? 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:16px'
-      : 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px';
-    h += '<div class="task-grid" style="' + gridStyle + '">';
+    // เดิมใช้ auto-fit minmax(280px,1fr) ตั้งใจให้ยุบคอลัมน์เองบนจอแคบ แต่ auto-fit ก็ยัดคอลัมน์เพิ่มเรื่อยๆ
+    // บนจอกว้างด้วยเหมือนกัน (จอกว้างพอ 280px*5 กลายเป็น 5 คอลัมน์ ทั้งที่ตั้งใจแค่ 2) เปลี่ยนเป็น repeat(2,...)
+    // ตายตัวจริง แล้วให้ media query ใน style.css คุม breakpoint แทน (ต่ำกว่า 700px ยุบเป็น 1 คอลัมน์เสมอ)
+    h += '<div class="task-grid' + (taskCardCols === 2 ? ' task-grid-2col' : '') + '">';
     
     for (var i = 0; i < tasks.length; i++) {
       h += renderTaskCard(tasks[i]);
