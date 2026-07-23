@@ -5942,6 +5942,11 @@ body.mobile-mode .card {
 .task-card-v2.tier-red .task-status-chip.cur, .task-card-v2.tier-amber .task-status-chip.cur { background: #fff; color: #166534; }
 .task-status-chip-close { margin-left: auto; font-size: 14px; color: var(--text2); cursor: pointer; }
 
+.task-comment-input { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); font-size: 12px; }
+.task-comment-input:focus { outline: none; border-color: var(--accent); }
+.task-card-v2.tier-red .task-comment-input, .task-card-v2.tier-amber .task-comment-input { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.25); color: #fff; }
+.task-card-v2.tier-red .task-comment-input::placeholder, .task-card-v2.tier-amber .task-comment-input::placeholder { color: rgba(255,255,255,.6); }
+
 .task-step-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; display: flex; gap: 2px; }
 .task-step-bar span { flex: 1; background: var(--border); }
 .task-step-bar span.on { background: var(--accent); }

@@ -19,6 +19,7 @@ function parseThaiDate(str) {
 // UNIFIED TASKS PAGE (List + Kanban + Timeline)
 // ================================================================
 var tasksView = 'list';      // 'list', 'kanban', 'timeline'
+var taskCardCols = 1;         // 1 หรือ 2 — จำนวนคอลัมน์การ์ดตอนดูแบบรายการ (list)
 var tasksGroupBy = 'none';   // 'none', 'dealer', 'status', 'dueDate'
 var tasksFilterStatus = 'all';   // 'all', 'active', 'completed', 'on-hold'
 var tasksFilterPriority = 'all'; // 'all', 'high', 'medium', 'low'
@@ -65,6 +66,12 @@ function rUnifiedTasks(el) {
   h += '<div class="today-tab ' + (tasksView === 'list' ? 'act' : '') + '" onclick="tasksView=\'list\';render()">📋 รายการ</div>';
   h += '<div class="today-tab ' + (tasksView === 'kanban' ? 'act' : '') + '" onclick="tasksView=\'kanban\';render()">📊 Kanban</div>';
   h += '<div class="today-tab ' + (tasksView === 'timeline' ? 'act' : '') + '" onclick="tasksView=\'timeline\';render()">⏰ เส้นเวลา</div>';
+  if (tasksView === 'list') {
+    h += '<div style="margin-left:auto;display:flex;gap:2px">';
+    h += '<div class="today-tab ' + (taskCardCols === 1 ? 'act' : '') + '" title="1 การ์ดต่อแถว" onclick="taskCardCols=1;render()">🔲 1</div>';
+    h += '<div class="today-tab ' + (taskCardCols === 2 ? 'act' : '') + '" title="2 การ์ดต่อแถว" onclick="taskCardCols=2;render()">⚏ 2</div>';
+    h += '</div>';
+  }
   h += '</div>';
   
   h += renderTaskFilterBar(dealers, categories, stats);
@@ -292,7 +299,12 @@ function renderTaskListView(groupedTasks, totalCount) {
       h += '</div>';
     }
     
-    h += '<div class="task-grid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">';
+    // 2 คอลัมน์ใช้ auto-fit minmax(280px,1fr) ตั้งใจ — จอแคบกว่า 280px*2 จะยุบเหลือคอลัมน์เดียวเองอัตโนมัติ
+    // กันการ์ดที่มีป้ายวันที่/ปุ่มเยอะไปบีบจนล้นบนมือถือ ไม่ต้องคอยเช็ค breakpoint เอง
+    var gridStyle = taskCardCols === 2
+      ? 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:16px'
+      : 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px';
+    h += '<div class="task-grid" style="' + gridStyle + '">';
     
     for (var i = 0; i < tasks.length; i++) {
       h += renderTaskCard(tasks[i]);
@@ -446,10 +458,23 @@ function renderTaskCard(t) {
       <div class="task-card-actions" onclick="event.stopPropagation()">
         ${actionsHtml}
       </div>
+      <input type="text" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์แล้วกด Enter..."
+        onclick="event.stopPropagation()"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();addQuickTaskComment('${t.id}',this)}">
     </div>
     ${stepBarHtml}
   </div>
   `;
+}
+
+// บันทึกคอมเมนต์ด่วนจากหน้าการ์ด — ไม่เปิดโมดัลอัพเดทเต็ม แค่พิมพ์แล้ว Enter (เก็บใน taskLogs เหมือนโน้ตใน
+// โมดัล "อัพเดทด่วน" เดิมทุกอย่าง จะไปโผล่ในไทม์ไลน์ของงานที่หน้ารายละเอียดด้วย)
+function addQuickTaskComment(taskId, inputEl) {
+  var val = inputEl.value.trim();
+  if (!val) return;
+  ST.add('taskLogs', { tid: taskId, type: 'update', content: val, date: _nw() });
+  inputEl.value = '';
+  toast('💬 บันทึกคอมเมนต์แล้ว');
 }
 
 function countTaskFollowups(t) {
