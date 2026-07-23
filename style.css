@@ -5926,9 +5926,12 @@ body.mobile-mode .card {
 .task-date-badge.tier-amber .task-date-pill { background: #f59e0b; color: #422006; }
 .task-date-badge.tier-amber .task-date-num { color: #fde68a; }
 
-.tdb-arrows { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.3); padding: 4px 6px; border-radius: 20px; }
-.tdb-arrows button { background: rgba(255,255,255,.2); border: none; color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; }
-.tdb-arrows span { font-size: 11px; font-weight: 600; color: #fff; min-width: 44px; text-align: center; cursor: pointer; }
+.task-date-shift-bar { display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0,0,0,.25); padding: 6px; border-radius: 10px; margin-bottom: 9px; }
+.task-date-shift-bar button { background: rgba(255,255,255,.18); border: none; color: var(--text); width: 26px; height: 26px; border-radius: 50%; font-size: 12px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.task-date-shift-bar span { font-size: 12px; font-weight: 600; color: var(--text); min-width: 84px; text-align: center; cursor: pointer; }
+.task-card-v2.tier-red .task-date-shift-bar, .task-card-v2.tier-amber .task-date-shift-bar { background: rgba(0,0,0,.3); }
+.task-card-v2.tier-red .task-date-shift-bar button, .task-card-v2.tier-amber .task-date-shift-bar button,
+.task-card-v2.tier-red .task-date-shift-bar span, .task-card-v2.tier-amber .task-date-shift-bar span { color: #fff; }
 
 .task-step-name { text-align: center; font-size: 12px; font-weight: 600; margin-top: 9px; color: var(--text); }
 .task-card-v2.tier-red .task-step-name, .task-card-v2.tier-amber .task-step-name { color: #fff; }

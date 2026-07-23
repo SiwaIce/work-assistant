@@ -21,11 +21,12 @@ function parseThaiDate(str) {
 var tasksView = 'list';      // 'list', 'kanban', 'timeline'
 var taskCardCols = 1;         // 1 หรือ 2 — จำนวนคอลัมน์การ์ดตอนดูแบบรายการ (list)
 var tasksGroupBy = 'none';   // 'none', 'dealer', 'status', 'dueDate'
-var tasksFilterStatus = 'all';   // 'all', 'active', 'completed', 'on-hold'
+var tasksFilterStatus = 'active';   // 'all', 'active', 'completed', 'on-hold' — default โฟกัสงานที่ยังต้องทำก่อน กด "ทั้งหมด" เองได้ถ้าอยากดูรวม
 var tasksFilterPriority = 'all'; // 'all', 'high', 'medium', 'low'
 var tasksFilterDealer = 'all';
 var tasksFilterCategory = 'all';
 var tasksSearch = '';
+var tasksSortDate = 'asc'; // 'asc' = เก่าสุด→ใหม่สุด (ใกล้ครบกำหนดก่อน, ค่าเริ่มต้นเดิม), 'desc' = ใหม่สุด→เก่าสุด
 
 // ตัวแปรสำหรับ Kanban drag & drop
 var dragSourceTaskId = null;
@@ -42,9 +43,14 @@ function rUnifiedTasks(el) {
   filteredTasks.sort(function(a, b) {
     if (a.status === 'active' && b.status !== 'active') return -1;
     if (a.status !== 'active' && b.status === 'active') return 1;
-    if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-    if (a.dueDate) return -1;
-    if (b.dueDate) return 1;
+    // ระหว่างกำลังเลื่อนวันที่การ์ดไหนอยู่ (ดู openTaskDateShift) ใช้วันที่ ณ ตอนเปิดโหมด ไม่ใช่ค่าล่าสุด —
+    // กันการ์ดกระโดดตำแหน่งในลิสต์ทุกครั้งที่กด ◀ ▶ (จัดเรียงตามวันที่ใหม่ทันที ทำให้กดต่อเนื่องไม่ได้
+    // ต้องเปิดโหมดใหม่ทุกรอบ) พอกดปิดโหมดแล้วค่อยจัดเรียงตามวันที่จริงตามปกติ
+    var aDate = (a.id === _taskDateShiftId && _taskDateShiftOrigDate) ? _taskDateShiftOrigDate : a.dueDate;
+    var bDate = (b.id === _taskDateShiftId && _taskDateShiftOrigDate) ? _taskDateShiftOrigDate : b.dueDate;
+    if (aDate && bDate) return tasksSortDate === 'desc' ? bDate.localeCompare(aDate) : aDate.localeCompare(bDate);
+    if (aDate) return -1;
+    if (bDate) return 1;
     return 0;
   });
   
@@ -262,6 +268,11 @@ function renderTaskFilterBar(dealers, categories, stats) {
         <option value="status" ${tasksGroupBy === 'status' ? 'selected' : ''}>📊 ตามสถานะ</option>
         <option value="dueDate" ${tasksGroupBy === 'dueDate' ? 'selected' : ''}>📅 ตามกำหนด</option>
       </select>
+
+      <select id="taskSortDate" onchange="tasksSortDate=this.value;render()" style="width:150px">
+        <option value="asc" ${tasksSortDate === 'asc' ? 'selected' : ''}>🔃 วันที่: เก่าสุด→ใหม่สุด</option>
+        <option value="desc" ${tasksSortDate === 'desc' ? 'selected' : ''}>🔃 วันที่: ใหม่สุด→เก่าสุด</option>
+      </select>
     </div>
   </div>
   `;
@@ -274,6 +285,7 @@ function clearTaskFilters() {
   tasksFilterDealer = 'all';
   tasksFilterCategory = 'all';
   tasksGroupBy = 'none';
+  tasksSortDate = 'asc';
   render();
 }
 
@@ -317,10 +329,18 @@ function renderTaskListView(groupedTasks, totalCount) {
 // ตัวเดียวที่ activate ได้ทีละอัน (การ์ดไหนกำลังอยู่โหมดเลื่อนวัน / เลือกสถานะด่วน) — เก็บเป็น global เดียว
 // พอง่ายกว่าเก็บต่อการ์ด และ render() ถูกเรียกซ้ำได้เสมอโดยไม่หลุดโหมดที่เปิดค้างไว้
 var _taskDateShiftId = null;
+var _taskDateShiftOrigDate = null; // วันที่ ณ ตอนเปิดโหมด — ใช้ตรึงตำแหน่งการ์ดในลิสต์ไม่ให้กระโดดระหว่างเลื่อน (ดู sort ใน rUnifiedTasks)
 var _taskStatusPickId = null;
 
-function closeTaskDateShift() { _taskDateShiftId = null; render(); }
-function openTaskDateShift(tid, ev) { if (ev) ev.stopPropagation(); _taskDateShiftId = tid; _taskStatusPickId = null; render(); }
+function closeTaskDateShift() { _taskDateShiftId = null; _taskDateShiftOrigDate = null; render(); }
+function openTaskDateShift(tid, ev) {
+  if (ev) ev.stopPropagation();
+  var t = ST.getOne('tasks', tid);
+  _taskDateShiftId = tid;
+  _taskDateShiftOrigDate = t ? t.dueDate : null;
+  _taskStatusPickId = null;
+  render();
+}
 function shiftTaskDate(tid, delta, ev) {
   if (ev) ev.stopPropagation();
   var t = ST.getOne('tasks', tid);
@@ -329,7 +349,7 @@ function shiftTaskDate(tid, delta, ev) {
   render();
 }
 function closeTaskStatusPick(ev) { if (ev) ev.stopPropagation(); _taskStatusPickId = null; render(); }
-function openTaskStatusPick(tid, ev) { if (ev) ev.stopPropagation(); _taskStatusPickId = tid; _taskDateShiftId = null; render(); }
+function openTaskStatusPick(tid, ev) { if (ev) ev.stopPropagation(); _taskStatusPickId = tid; _taskDateShiftId = null; _taskDateShiftOrigDate = null; render(); }
 function quickSetTaskStatus(tid, status, ev) {
   if (ev) ev.stopPropagation();
   ST.update('tasks', tid, { status: status });
@@ -398,20 +418,25 @@ function renderTaskCard(t) {
     }).join('') + '</div>';
   }
 
-  // ป้ายวันครบกำหนด — กดแล้วสลับเป็นลูกศรเลื่อนวันตรงจุดเดิม (โหมดเดียวเปิดได้ทีละการ์ด ดู _taskDateShiftId)
+  // ป้ายวันครบกำหนด — กดแล้วสลับเป็นแถบลูกศรเลื่อนวัน (โหมดเดียวเปิดได้ทีละการ์ด ดู _taskDateShiftId)
+  // มีทั้งลูกศรทีละวัน (◀▶) และทีละสัปดาห์ (««»») เผื่ออยากเลื่อนไปไกลๆ ไม่ต้องกดทีละวันหลายครั้ง — ตอนเปิด
+  // โหมดนี้ทำเป็นแถบเต็มความกว้างแยกต่างหาก (ไม่ใช่มุมขวาบนแบบปกติ) กันปุ่มเยอะขึ้นจนทับข้อความชื่องานบนการ์ดแคบๆ
   var dateBadgeHtml = '';
+  var dateShiftBarHtml = '';
   if (t.dueDate) {
+    var dow = DAYS_S[new Date(t.dueDate).getDay()];
     if (_taskDateShiftId === t.id) {
-      dateBadgeHtml = '<div class="task-date-badge task-date-shift" onclick="event.stopPropagation()">' +
-        '<div class="tdb-arrows">' +
-        '<button type="button" onclick="shiftTaskDate(\'' + t.id + '\',-1,event)">◀</button>' +
-        '<span onclick="closeTaskDateShift(event)">' + fDShort(t.dueDate) + '</span>' +
-        '<button type="button" onclick="shiftTaskDate(\'' + t.id + '\',1,event)">▶</button>' +
-        '</div></div>';
+      dateShiftBarHtml = '<div class="task-date-shift-bar" onclick="event.stopPropagation()">' +
+        '<button type="button" title="ถอย 1 สัปดาห์" onclick="shiftTaskDate(\'' + t.id + '\',-7,event)">«</button>' +
+        '<button type="button" title="ถอย 1 วัน" onclick="shiftTaskDate(\'' + t.id + '\',-1,event)">◀</button>' +
+        '<span onclick="closeTaskDateShift(event)">' + fDShort(t.dueDate) + ' (' + dow + ')</span>' +
+        '<button type="button" title="ไป 1 วัน" onclick="shiftTaskDate(\'' + t.id + '\',1,event)">▶</button>' +
+        '<button type="button" title="ไป 1 สัปดาห์" onclick="shiftTaskDate(\'' + t.id + '\',7,event)">»</button>' +
+        '</div>';
     } else {
       dateBadgeHtml = '<div class="task-date-badge tier-' + tier + '" onclick="openTaskDateShift(\'' + t.id + '\',event)">' +
         (dayLabel ? '<span class="task-date-pill">' + dayLabel + '</span>' : '') +
-        '<div class="task-date-num">' + fDShort(t.dueDate) + '</div></div>';
+        '<div class="task-date-num">' + fDShort(t.dueDate) + ' (' + dow + ')</div></div>';
     }
   }
 
@@ -438,7 +463,8 @@ function renderTaskCard(t) {
   <div class="${cardClass}" data-task-id="${t.id}">
     ${dateBadgeHtml}
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
-      <div class="task-card-main-row">
+      ${dateShiftBarHtml}
+      <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:80px' : ''}">
         <input type="checkbox" class="task-complete-chk" ${checkedAttr}
           onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">
         ${ringHtml}
