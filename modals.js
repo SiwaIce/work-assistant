@@ -2776,9 +2776,25 @@ function processPipelineImport(items) {
       skipped++;
       continue;
     }
-    
-   // No duplicate check — import ทุกรายการ
-    
+
+    // ข้ามถ้าเจอ Pipeline ของ Dealer เดิม วันที่ลงทะเบียน+ยอด forecast ตรงกันเป๊ะ (กัน import ซ้ำ)
+    var existingPipes = ST.pipelineByDealer(dealerId);
+    var isDuplicate = false;
+    var regDate = (item.registerDate || '').trim();
+    var fcAmt = parseFloat(item.forecastAmount) || 0;
+    for (var k = 0; k < existingPipes.length; k++) {
+      var ep = existingPipes[k];
+      if (regDate && ep.registerDate === regDate && (parseFloat(ep.forecastAmount) || 0) === fcAmt && fcAmt > 0) {
+        isDuplicate = true;
+        break;
+      }
+    }
+    if (isDuplicate) {
+      console.log('⚠️ Skip duplicate: ' + regDate + ' ' + fcAmt + ' - ' + (item.projectName || '').substr(0, 40));
+      skipped++;
+      continue;
+    }
+
     // Create pipeline
     var pipeData = {
       registerDate: item.registerDate || '',

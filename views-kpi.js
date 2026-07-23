@@ -198,8 +198,11 @@ function kpiQuarterMonths(plan) {
   function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   for (var i = 0; i < 3; i++) {
     var mStart = new Date(start.getFullYear(), start.getMonth() + i, 1);
-    var mEnd = new Date(start.getFullYear(), start.getMonth() + i + 1, 0);
-    months.push({ label: KPI_MONTH_NAMES[mStart.getMonth()], startDate: iso(mStart), endDate: iso(mEnd), isCurrent: (new Date() >= mStart && new Date() <= mEnd) });
+    // mEnd ใช้ iso() แค่บอกวันที่ (เที่ยงคืน) แต่เทียบ isCurrent ต้องรวมทั้งวันสุดท้ายของเดือนด้วย
+    // ไม่งั้นพอเข้าวันสุดท้ายเกิน 00:00 จะหลุดจาก "เดือนนี้" ทันที
+    var mEndDay = new Date(start.getFullYear(), start.getMonth() + i + 1, 0);
+    var mEnd = new Date(mEndDay.getFullYear(), mEndDay.getMonth(), mEndDay.getDate(), 23, 59, 59, 999);
+    months.push({ label: KPI_MONTH_NAMES[mStart.getMonth()], startDate: iso(mStart), endDate: iso(mEndDay), isCurrent: (new Date() >= mStart && new Date() <= mEnd) });
   }
   return months;
 }

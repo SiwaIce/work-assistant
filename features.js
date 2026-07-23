@@ -397,10 +397,8 @@ function presKpiCard(icon, value, label) {
   return '<div class="ps-kpi-card"><div class="ps-kpi-icon">' + icon + '</div><div class="ps-kpi-val">' + value + '</div><div class="ps-kpi-label">' + label + '</div></div>';
 }
 
-function sanitize(s) {
-  if (!s) return '';
-  return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// sanitize() อยู่ใน utils.js เท่านั้น (เดิมมีก๊อปปี้ซ้ำที่นี่ซึ่งโหลดทีหลังเลยชนะ
+// แต่ไม่ escape " กับ & ทำให้ค่าที่มี " หลุดออกจาก attribute value="..." ได้ — เอาออก)
 
 // ================================================================
 // B) LINE MESSAGE TEMPLATES
@@ -5957,6 +5955,7 @@ function loadDealerEmailContacts() {
   if (!dealerId) return;
   
   var dealer = ST.getOne('dealers', dealerId);
+  if (!dealer) { toast('❌ ไม่พบ Dealer นี้แล้ว (อาจถูกลบไปแล้ว)', true); return; }
   var contacts = dealer.contacts || [];
   var emails = [];
   

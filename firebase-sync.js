@@ -219,7 +219,11 @@ var SYNC_KEY_MAP = {
   'tpl': 'templates',
   'leadFormFields': 'leadFormFields',
   'meetingTemplates': 'meetingTemplates',
-  'recent_models': 'recentModels'
+  'recent_models': 'recentModels',
+  // ✅ เพิ่ม — ประวัติจับเวลางาน (app.js startTimer/stopTimer) ไม่เคยลงทะเบียนตรงนี้มาก่อน
+  // ไม่เคย sync ขึ้น cloud เลย เสี่ยงหายถ้าเปลี่ยนเครื่อง/ล้างแคช
+  'timerState': 'timerState',
+  'timerLogs': 'timerLogs'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
@@ -416,17 +420,19 @@ function _notifySyncFail(e) {
 // ดัน array/ค่าเดี่ยวขึ้น Firestore — array ที่ทุกรายการมี .id เก็บเป็น doc แยก (sync ละเอียด/ลบทีละรายการได้)
 // ส่วน array ที่ไม่มี .id (เช่น recent_models เป็น string[], meetingTemplates ไม่มี id) หรือไม่ใช่ array
 // เลย เก็บทั้งก้อนเป็น doc เดียว '_data' — เดิมโค้ดนี้ข้าม array ไม่มี id ไปเงียบๆ ทำให้ไม่เคย sync เลย
+// คืน array ของ Promise การเขียนแต่ละ doc ไว้ด้วย (เดิม fire-and-forget ไม่คืนอะไรเลย ทำให้
+// importFullBackup() ไม่มีทางรู้ว่า push เสร็จจริงหรือยังก่อน reload หน้า) — ผู้เรียกเดิมที่ไม่สนใจ
+// ค่าที่คืนมา (syncToFirebase) ยังทำงานแบบ fire-and-forget เหมือนเดิมทุกอย่าง
 function _syncPushValue(ref, data) {
   if (Array.isArray(data)) {
     var hasIds = data.length > 0 && data.every(function(item) { return item && item.id; });
     if (hasIds) {
-      data.forEach(function(item) {
-        ref.doc(item.id).set(item).catch(_notifySyncFail);
+      return data.map(function(item) {
+        return ref.doc(item.id).set(item).catch(_notifySyncFail);
       });
-      return;
     }
   }
-  ref.doc('_data').set({ value: data }).catch(_notifySyncFail);
+  return [ref.doc('_data').set({ value: data }).catch(_notifySyncFail)];
 }
 
 function syncToFirebase(collName, data) {
@@ -511,6 +517,10 @@ function initFirebaseListeners() {
       try {
         if (doc.exists) {
           localStorage.setItem('v7_config', JSON.stringify(doc.data()));
+          // เขียนตรงลง localStorage ไม่ผ่าน saveConfig() (จะได้ไม่ push กลับขึ้น Firestore ซ้ำ) แต่ต้อง
+          // เรียก refreshPipeNames() เองไม่งั้น cache ชื่อสถานะ (PIPE_NAMES) ค้างจนกว่าจะโหลดหน้าใหม่
+          if (typeof refreshPipeNames === 'function') refreshPipeNames();
+          if (typeof render === 'function') render();
         }
       } catch(e) {
         console.warn('Config listener error:', e);
@@ -685,7 +695,16 @@ function forceSyncAll() {
   if (!confirm('⚠️ Sync ข้อมูลทั้งหมดไป Firebase?\nข้อมูลบน Cloud จะถูกเขียนทับ')) return;
 
   toast('🔄 กำลัง Sync ทั้งหมด...');
-  var count = 0;
+  _pushAllLocalToFirebase().then(function(results) {
+    toast('✅ Sync เสร็จ! ' + results.length + ' รายการ');
+  });
+}
+
+// แยกออกจาก forceSyncAll() เพื่อให้ importFullBackup() เรียกใช้ push จริงได้โดยไม่โดน confirm()
+// ของ forceSyncAll() ผุดซ้ำ (ผู้ใช้กด import ไฟล์แล้วคือ consent อยู่แล้ว) และคืน Promise ที่ resolve
+// เมื่อ push ขึ้น Firestore เสร็จจริง (สำเร็จหรือพังก็ตาม) ให้ importFullBackup() รอก่อน reload หน้า
+function _pushAllLocalToFirebase() {
+  var promises = [];
 
   Object.keys(localStorage).forEach(function(key) {
     if (!key || typeof key !== 'string') return;
@@ -706,8 +725,7 @@ function forceSyncAll() {
       // ✅ ใช้ชื่อ collection ตาม SYNC_KEY_MAP ถ้ามี (กันชื่อ collection ไม่ตรงกับฝั่ง pull listener)
       var collName = SYNC_KEY_MAP[shortKey] || shortKey;
       var ref = getCollectionRef(collName);
-      if (ref) _syncPushValue(ref, parsed);
-      count++;
+      if (ref) promises = promises.concat(_syncPushValue(ref, parsed));
     } catch(e) {
       console.warn('Parse error:', key, e);
     }
@@ -716,13 +734,11 @@ function forceSyncAll() {
   var cfg = localStorage.getItem('v7_config');
   if (cfg && !SALES_MODE) {
     try {
-      db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg));
+      promises.push(db.collection('users').doc(CURRENT_USER.uid).collection('_config').doc('main').set(JSON.parse(cfg)));
     } catch(e) { console.warn('Config sync error in forceSyncAll:', e); }
   }
 
-  setTimeout(function() {
-    toast('✅ Sync เสร็จ! ' + count + ' collections');
-  }, 2000);
+  return Promise.allSettled(promises);
 }
 
 // ================================================================
@@ -746,14 +762,17 @@ function importFullBackup() {
 
         if (SYNC_ENABLED && CURRENT_USER) {
           localStorage.removeItem('v7_migrated_' + CURRENT_USER.uid);
+          toast('🔄 กำลัง sync ขึ้น Cloud ก่อนโหลดหน้าใหม่...');
+          // เดิม reload หน้าตายตัวที่ 3 วิ โดยไม่รอว่า push ขึ้น Firestore เสร็จจริงหรือยัง — backup
+          // ไฟล์ใหญ่ push ไม่ทันแล้วโดน reload ตัดตอนกลางคัน ข้อมูลบางส่วนไม่ขึ้น cloud
+          _pushAllLocalToFirebase().then(function() {
+            location.reload();
+          });
+        } else {
           setTimeout(function() {
-            forceSyncAll();
-          }, 1000);
+            location.reload();
+          }, 1500);
         }
-
-        setTimeout(function() {
-          location.reload();
-        }, 3000);
       } catch(err) {
         toast('❌ Error: ' + err.message);
       }
