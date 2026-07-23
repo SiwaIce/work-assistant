@@ -1071,7 +1071,12 @@ function dpH(id, val, label, req) {
   </div>
   <input type="hidden" id="dpv_${id}" value="${val || ''}">
   <div class="dpp" id="dpp_${id}"></div>
-</div></div>`;
+</div>
+<div class="dp-ft" style="justify-content:flex-start;margin-top:5px">
+  <button type="button" onclick="dpSet('${id}',_td())">วันนี้</button>
+  <button type="button" onclick="dpSet('${id}',addD(_td(),1))">พรุ่งนี้</button>
+</div>
+</div>`;
 }
 
 function dpType(id) {
