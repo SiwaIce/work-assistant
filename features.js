@@ -3896,17 +3896,18 @@ function renderVpMonthView() {
     var isToday = dKey === todayKey;
     var isSelected = dKey === vpSelectedDay;
 
-    h += '<div onclick="vpSelectedDay=\'' + dKey + '\';render()" style="background:var(--card,#1e293b);border-radius:8px;padding:6px;min-height:54px;font-size:10px;cursor:pointer;' +
-      (isSelected ? 'border:1px solid var(--accent)' : (isToday ? 'border:1px solid #f59e0b' : 'border:1px solid transparent')) + '">';
-    h += '<div style="color:' + (isToday ? '#f59e0b' : 'var(--text)') + ';font-weight:' + (isToday ? '700' : '400') + '">' + day + '</div>';
+    // กล่องวันที่ — สูงคงที่ทุกช่อง (vp-day-cell, ดู style.css) กันแถวเตี้ย/สูงไม่เท่ากันตอนบางวันมีนัดเยอะ
+    // ข้อความแต่ละนัดตัดด้วย ellipsis พอดีช่อง ต้องการดูเต็มให้ hover เอา (title=) หรือคลิกกล่องเพื่อดูรายละเอียดด้านล่าง
+    h += '<div class="vp-day-cell' + (isSelected ? ' sel' : (isToday ? ' today' : '')) + '" onclick="vpSelectedDay=\'' + dKey + '\';render()">';
+    h += '<div class="vp-day-cell-num' + (isToday ? ' today' : '') + '">' + day + '</div>';
     var maxShow = 2;
     dayPlans.slice(0, maxShow).forEach(function(p) {
       var hasConflict = vpFindConflicts(p.date, p.timeStart, p.timeEnd, p.id).length > 0;
       var c = hasConflict ? '#ef4444' : (p.mode === 'offline' ? '#f59e0b' : '#3b82f6');
-      h += '<div style="margin-top:2px;font-size:9px;color:' + c + ';border-left:2px solid ' + c + ';padding-left:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
-        (p.mode === 'offline' ? '🤝' : '📞') + (p.timeStart ? ' ' + p.timeStart : '') + ' ' + sanitize(_vpPlanLabel(p)) + (hasConflict ? ' ⚠️' : '') + '</div>';
+      var fullLabel = (p.mode === 'offline' ? '🤝' : '📞') + (p.timeStart ? ' ' + p.timeStart : '') + ' ' + (_vpPlanLabel(p) || '') + (hasConflict ? ' ⚠️ ชนเวลา' : '');
+      h += '<div class="vp-day-cell-item" style="color:' + c + ';border-left-color:' + c + '" title="' + sanitize(fullLabel) + '">' + sanitize(fullLabel) + '</div>';
     });
-    if (dayPlans.length > maxShow) h += '<div style="font-size:9px;color:var(--text2);margin-top:2px">+' + (dayPlans.length - maxShow) + ' เพิ่มเติม</div>';
+    if (dayPlans.length > maxShow) h += '<div class="vp-day-cell-more">+' + (dayPlans.length - maxShow) + ' เพิ่มเติม</div>';
     h += '</div>';
   }
   h += '</div>';

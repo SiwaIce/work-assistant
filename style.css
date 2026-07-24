@@ -4681,6 +4681,16 @@ function renderUpcomingTimeline() {
 }
 .vp-suggest-item:hover { background: rgba(59,130,246,0.1); }
 
+/* Month-view day cell — สูงคงที่ทุกช่อง (ก่อนหน้านี้ min-height ทำให้แถวที่มีนัดเยอะสูงไม่เท่ากับแถวว่าง) */
+.vp-day-cell { background: var(--card); border: 1px solid transparent; border-radius: 10px; padding: 6px; height: 92px; overflow: hidden; cursor: pointer; transition: border-color .15s; }
+.vp-day-cell:hover { border-color: var(--border); }
+.vp-day-cell.today { border-color: #f59e0b; }
+.vp-day-cell.sel { border-color: var(--accent); }
+.vp-day-cell-num { font-size: 11px; color: var(--text); }
+.vp-day-cell-num.today { color: #f59e0b; font-weight: 700; }
+.vp-day-cell-item { margin-top: 3px; font-size: 9px; border-left: 2px solid; padding-left: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vp-day-cell-more { font-size: 9px; color: var(--text2); margin-top: 2px; }
+
 /* ================================================================
    EMAIL DRAFT
    ================================================================ */
