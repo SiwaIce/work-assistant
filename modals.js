@@ -1016,6 +1016,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   if (visitMode === 'quick') {
     var srcType = window._visitSourceType || 'dealer';
     return '' +
+      ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
       visitPhotoReminderHtml() +
       '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType !== 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label></div></div>' +
       '<div id="fv_dealer_row"' + (srcType === 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' +
@@ -1031,6 +1032,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
 
   // Standard / Full
   var html = '' +
+    ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
     visitPhotoReminderHtml() +
     '<div class="visit-mode">' +
     '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'quick\';' + rerenderCall + '">⚡ Quick</div>' +
@@ -1313,6 +1315,7 @@ function saveVisitQuick(dealerId, eid) {
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
   window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
+  if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
   closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
@@ -1395,7 +1398,10 @@ function saveVisit(dealerId, eid) {
 
   var visitObj;
   if (eid) { ST.update('visits', eid, data); visitObj = ST.getOne('visits', eid); }
-  else { visitObj = ST.add('visits', data); }
+  else {
+    visitObj = ST.add('visits', data);
+    if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
+  }
 
   // Auto-sync Dealer
   var dealerUpdates = {};
@@ -2075,13 +2081,21 @@ function _taskLinksFieldHtml(t) {
     '<select id="ft_link_type" style="flex:1" onchange="_ftLinkTypeChanged()">' + typeOpts + '</select>' +
     '<select id="ft_link_item" style="flex:2" disabled><option value="">-- เลือกประเภทก่อน --</option></select>' +
     '<button type="button" class="btn bsm bo" onclick="_ftAddLink()">+ เพิ่ม</button>' +
-    '</div></div>';
+    '</div>' +
+    '<div style="margin-top:4px"><button type="button" class="btn bsm bo" onclick="_ftAddPendingLink()">+ ยังไม่มี บันทึกเป็นรายการรอสร้างไว้ก่อน</button></div>' +
+    '<div class="hint">💡 เลือกประเภทด้านบนก่อน แล้วกดปุ่มนี้ถ้ายังไม่มีรายการจริงให้เลือก (เช่น ยังไม่ได้ทำใบเสนอราคา) — พอกดสร้างจริงทีหลัง ระบบจะผูกให้อัตโนมัติ</div>' +
+    '</div>';
 }
 
 function _taskLinksChipsHtml(links) {
   if (!links || !links.length) return '<div class="hint">ยังไม่มีลิงก์</div>';
   return '<div style="display:flex;gap:6px;flex-wrap:wrap">' + links.map(function(l, i) {
     var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗' };
+    if (l.pending) {
+      return '<span class="tag" style="background:var(--bg2);color:var(--text2);border:1px dashed var(--border);display:inline-flex;align-items:center;gap:5px;padding:4px 9px">' +
+        '⏳ ' + lt.icon + ' ' + sanitize(lt.name) + ' (รอสร้าง)' +
+        ' <span style="cursor:pointer;color:#ef4444;font-weight:700" onclick="_ftRemoveLink(' + i + ')">✕</span></span>';
+    }
     return '<span class="tag" style="background:var(--bg2);color:var(--text);display:inline-flex;align-items:center;gap:5px;padding:4px 9px">' +
       lt.icon + ' ' + sanitize(l.label) +
       ' <span style="cursor:pointer;color:#ef4444;font-weight:700" onclick="_ftRemoveLink(' + i + ')">✕</span></span>';
@@ -2107,6 +2121,19 @@ function _ftAddLink() {
   window._ftLinks = window._ftLinks || [];
   if (window._ftLinks.some(function(l) { return l.type === type && l.id === id; })) { toast('มีลิงก์นี้อยู่แล้ว'); return; }
   window._ftLinks.push({ type: type, id: id, label: label });
+  document.getElementById('ft_links_wrap').innerHTML = _taskLinksChipsHtml(window._ftLinks);
+  document.getElementById('ft_link_type').value = '';
+  _ftLinkTypeChanged();
+}
+
+// ผูกลิงก์แบบ "รอสร้าง" — ยังไม่มี id จริง (ดู openTaskLinkCreate/resolveTaskPendingLink ใน utils.js
+// สำหรับตอนกดเปิดสร้างจริง + ผูก id กลับอัตโนมัติหลังบันทึกสำเร็จ)
+function _ftAddPendingLink() {
+  var type = document.getElementById('ft_link_type').value;
+  if (!type) return toast('เลือกประเภทก่อน');
+  window._ftLinks = window._ftLinks || [];
+  if (window._ftLinks.some(function(l) { return l.type === type && l.pending; })) { toast('มีรายการรอสร้างประเภทนี้อยู่แล้ว'); return; }
+  window._ftLinks.push({ type: type, id: null, pending: true, label: (TASK_LINK_TYPES[type] || {}).name + ' (รอสร้าง)' });
   document.getElementById('ft_links_wrap').innerHTML = _taskLinksChipsHtml(window._ftLinks);
   document.getElementById('ft_link_type').value = '';
   _ftLinkTypeChanged();
@@ -2369,8 +2396,16 @@ function openMeetingWindow(meetingId) {
 
 function showMeetingM(eid) {
   var m = eid ? ST.getOne('meetings', eid) : {};
+  // เปิดมาจากลิงก์ "รอสร้าง" ของ Task (ดู openTaskLinkCreate) — ประชุมไม่มี field ผูก Dealer โดยตรง
+  // เลยเติมชื่องานเป็นหัวข้อประชุมให้ตั้งต้นแทน แก้ต่อได้
+  var _prefillTitle = m.title || '';
+  if (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) {
+    var _pt = ST.getOne('tasks', _pendingLinkTaskId);
+    if (_pt) _prefillTitle = _pt.title;
+  }
   openM(eid ? '✏️ ประชุม' : '➕ ประชุม', '' +
-    '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fm_t" value="' + sanitize(m.title || '') + '"></div>' +
+    ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
+    '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fm_t" value="' + sanitize(_prefillTitle) + '"></div>' +
     '<div class="fr">' +
     '<div class="fg"><label>ประเภท</label><input type="text" id="fm_tp" value="' + sanitize(m.type || '') + '" list="mtL"><datalist id="mtL"><option value="ประชุม Team Sales Drone"><option value="ประชุมลูกค้า"><option value="อบรม"></datalist></div>' +
     '<div class="fg"><label>สถานที่</label><input type="text" id="fm_loc" value="' + sanitize(m.location || '') + '"></div>' +
@@ -2411,6 +2446,7 @@ function saveMeeting(eid) {
   } else {
     data.actions = [];
     var nm = ST.add('meetings', data);
+    if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('meeting', nm.id, nm.title);
     closeMForce();
     go('meetingDetail', {meetingId: nm.id});
     toast('💾 สร้างประชุมแล้ว');

@@ -4116,6 +4116,7 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   var selNote = plan ? (plan.note || '') : '';
 
   var h = '<div style="max-width:440px">';
+  h += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
   h += '<div class="fm-group"><label>📅 วันที่นัด</label><input type="date" id="vp_date" class="fm-input" value="' + sanitize(date) + '"></div>';
 
   h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
@@ -4284,6 +4285,7 @@ function saveVisitPlan(date, editId) {
     data.id = 'vp_' + Date.now();
     data.status = 'planned';
     plans.push(data);
+    if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visitPlan', data.id, fDShort(date) + ' Visit Plan');
   }
 
   saveVisitPlans(plans);

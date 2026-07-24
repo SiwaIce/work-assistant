@@ -392,7 +392,12 @@ function renderTaskCard(t) {
   }
   (t.links || []).forEach(function(l) {
     var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗' };
-    connections.push({ icon: lt.icon, label: l.label, onclick: "event.stopPropagation();openTaskLink('" + l.type + "','" + l.id + "')" });
+    if (l.pending) {
+      // ลิงก์ "รอสร้าง" — ยังไม่มี id จริง กดแล้วพาไปหน้าสร้างใหม่ของเมนูนั้นเลย (ดู openTaskLinkCreate)
+      connections.push({ icon: '⏳', label: lt.name + ' (รอสร้าง)', onclick: "event.stopPropagation();openTaskLinkCreate('" + l.type + "','" + t.id + "')", pending: true });
+    } else {
+      connections.push({ icon: lt.icon, label: l.label, onclick: "event.stopPropagation();openTaskLink('" + l.type + "','" + l.id + "')" });
+    }
   });
   var linkRowHtml = '';
   if (connections.length) {
@@ -400,7 +405,7 @@ function renderTaskCard(t) {
     var extraConn = connections.length - shownConn.length;
     linkRowHtml = '<div class="task-link-row">' +
       shownConn.map(function(c) {
-        return '<span class="task-link-badge" onclick="' + c.onclick + '" title="' + sanitize(c.label) + '">' + c.icon + ' ' + sanitize((c.label || '').substr(0, 14)) + '</span>';
+        return '<span class="task-link-badge' + (c.pending ? ' pending' : '') + '" onclick="' + c.onclick + '" title="' + sanitize(c.label) + '">' + c.icon + ' ' + sanitize((c.label || '').substr(0, 14)) + '</span>';
       }).join('') +
       (extraConn > 0 ? '<span class="task-link-badge" onclick="event.stopPropagation();go(\'taskDetail\',{taskId:\'' + t.id + '\'})">+' + extraConn + '</span>' : '') +
       '</div>';
@@ -1261,13 +1266,36 @@ function rTaskDet(el) {
   <!-- Linked Records -->
   <div class="card">
     <h2>🔗 เชื่อมโยงกับ</h2>
-    ${(t.links || []).length ? (t.links.map(function(l, i) {
-      var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗', name: l.type };
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-        <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="openTaskLink('${l.type}','${l.id}')">${lt.icon} ${sanitize(l.label)}</span>
-        <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
-      </div>`;
-    }).join('')) : '<div class="hint">ยังไม่มีลิงก์เชื่อมโยง — กด ✏️ แก้ไขงานเพื่อเพิ่ม</div>'}
+    ${(function() {
+      var rows = [];
+      if (t.dealerId) {
+        var _dd = ST.getOne('dealers', t.dealerId);
+        if (_dd) rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="go('dealerDetail',{dealerId:'${t.dealerId}'})">🏪 ${sanitize(_dd.name)}</span>
+        </div>`);
+      }
+      if (t.pipeId) {
+        var _dp = ST.getOne('pipeline', t.pipeId);
+        if (_dp) rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="go('pipeDetail',{pipeId:'${t.pipeId}'})">📊 ${sanitize(_dp.projectName || _dp.name || '-')}</span>
+        </div>`);
+      }
+      (t.links || []).forEach(function(l, i) {
+        var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗', name: l.type };
+        if (l.pending) {
+          rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border)">
+            <span style="cursor:pointer;color:var(--text2);font-size:.82rem" onclick="openTaskLinkCreate('${l.type}','${t.id}')">⏳ ${lt.icon} ${sanitize(lt.name)} (รอสร้าง — กดเพื่อสร้างเลย)</span>
+            <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
+          </div>`);
+        } else {
+          rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="openTaskLink('${l.type}','${l.id}')">${lt.icon} ${sanitize(l.label)}</span>
+            <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
+          </div>`);
+        }
+      });
+      return rows.length ? rows.join('') : '<div class="hint">ยังไม่มีลิงก์เชื่อมโยง — กด ✏️ แก้ไขงานเพื่อเพิ่ม</div>';
+    })()}
   </div>
 
   <!-- Date Section -->

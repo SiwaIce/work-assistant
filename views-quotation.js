@@ -1140,7 +1140,17 @@ function resetQuoteFilters() {
 
 function showCreateQuotationModal() {
   var dealers = ST.getAll('dealers');
-  
+
+  // ถ้าเปิดมาจากลิงก์ "รอสร้าง" ของ Task (ดู openTaskLinkCreate ใน utils.js) เติมชื่อ Dealer ของงานนั้นให้เลย
+  var _prefillDealerName = '', _prefillDealerId = '';
+  if (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) {
+    var _pt = ST.getOne('tasks', _pendingLinkTaskId);
+    if (_pt && _pt.dealerId) {
+      var _ptd = ST.getOne('dealers', _pt.dealerId);
+      if (_ptd) { _prefillDealerName = _ptd.name; _prefillDealerId = _ptd.id; }
+    }
+  }
+
   // สร้าง datalist สำหรับ Dealer ให้พิมพ์ค้นหาได้
   var dealerDatalistId = 'dealerList_' + Date.now();
   var dealerOptionsHtml = '';
@@ -1161,12 +1171,13 @@ function showCreateQuotationModal() {
   html += '<button class="modal-close" onclick="closeModal()" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer">✕</button>';
   html += '</div>';
   html += '<div class="modal-body" style="padding:20px">';
-  
+  html += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
+
   // Dealer - เปลี่ยนเป็น input + datalist ให้พิมพ์เองได้
   html += '<div class="fg"><label>🏪 ชื่อ Dealer <span style="color:#ef4444">*</span></label>';
-  html += '<input type="text" id="newQuoteDealerName" list="' + dealerDatalistId + '" class="fm-input" placeholder="พิมพ์ชื่อ Dealer หรือเลือกจากรายการ..." autocomplete="off" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)">';
+  html += '<input type="text" id="newQuoteDealerName" list="' + dealerDatalistId + '" class="fm-input" value="' + sanitize(_prefillDealerName) + '" placeholder="พิมพ์ชื่อ Dealer หรือเลือกจากรายการ..." autocomplete="off" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)">';
   html += '<datalist id="' + dealerDatalistId + '">' + dealerOptionsHtml + '</datalist>';
-  html += '<input type="hidden" id="newQuoteDealerId">';
+  html += '<input type="hidden" id="newQuoteDealerId" value="' + _prefillDealerId + '">';
   html += '<input type="hidden" id="newQuoteDealerLevel">';
   html += '</div>';
   
@@ -1281,7 +1292,8 @@ function createNewQuotation() {
   existingQuotes.push(newQuote);
   localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
   quotations = existingQuotes;
-  
+  if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('quotation', newQuote.id, newQuote.quoteNo);
+
   closeModal();
   toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   

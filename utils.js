@@ -699,6 +699,54 @@ function removeTaskLink(taskId, idx) {
 }
 
 // ================================================================
+// TASK LINKS — "รอสร้าง" (pending): ผูก Task กับเมนูอื่นได้ล่วงหน้าแม้ยังไม่มีข้อมูลจริง (เช่น อยากผูก
+// ใบเสนอราคาแต่ยังไม่ได้ทำ) กด badge แล้วพาไปหน้า "สร้างใหม่" ของเมนูนั้นตรงๆ พร้อมโชว์บริบทงานเป็น
+// guideline และผูก id จริงกลับให้อัตโนมัติหลังบันทึกสำเร็จ (ดู resolveTaskPendingLink)
+// ================================================================
+var _pendingLinkTaskId = null;
+
+function openTaskLinkCreate(type, taskId) {
+  _pendingLinkTaskId = taskId;
+  var t = ST.getOne('tasks', taskId);
+  var dealerId = t ? (t.dealerId || '') : '';
+  if (type === 'quotation') showCreateQuotationModal();
+  else if (type === 'visitPlan') showAddVisitPlanM(_td(), dealerId, null);
+  else if (type === 'so') showCreateSOModal({ dealerId: dealerId });
+  else if (type === 'meeting') showMeetingM();
+  else if (type === 'visit') showVisitM(dealerId, null);
+}
+
+// แบนเนอร์บริบทงาน — แปะบนสุดของฟอร์ม "สร้างใหม่" เมื่อเปิดมาจาก openTaskLinkCreate เท่านั้น
+function _pendingLinkGuidelineHtml() {
+  if (!_pendingLinkTaskId) return '';
+  var t = ST.getOne('tasks', _pendingLinkTaskId);
+  if (!t) return '';
+  return '<div style="background:var(--bg2);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:12px">' +
+    '<div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:2px">📋 กำลังสร้างให้กับงาน</div>' +
+    '<div style="font-size:13px;font-weight:600">' + sanitize(t.title) + '</div>' +
+    (t.description ? '<div style="font-size:12px;color:var(--text2);margin-top:3px;white-space:pre-wrap">' + sanitize(t.description) + '</div>' : '') +
+    '</div>';
+}
+
+// เรียกตอนบันทึก "สร้างใหม่" สำเร็จของแต่ละเมนู (เฉพาะ record ใหม่ ไม่ใช่แก้ไขของเดิม) — ถ้ามี pending
+// task ค้างอยู่ (เปิดมาจาก openTaskLinkCreate) จะแทนที่ลิงก์ pending ด้วย id จริง แล้วเคลียร์ตัวแปรทิ้ง
+function resolveTaskPendingLink(type, newId, newLabel) {
+  var taskId = _pendingLinkTaskId;
+  if (!taskId) return;
+  _pendingLinkTaskId = null;
+  var t = ST.getOne('tasks', taskId);
+  if (!t || !t.links) return;
+  var idx = -1;
+  for (var i = 0; i < t.links.length; i++) {
+    if (t.links[i].type === type && t.links[i].pending) { idx = i; break; }
+  }
+  if (idx === -1) return;
+  t.links[idx] = { type: type, id: newId, label: newLabel };
+  ST.update('tasks', taskId, { links: t.links });
+  toast('🔗 ผูกกับงาน "' + t.title + '" ให้แล้ว');
+}
+
+// ================================================================
 // DATE CALCULATIONS
 // ================================================================
 function dTo(ds) {

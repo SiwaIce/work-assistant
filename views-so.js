@@ -512,6 +512,7 @@ function showCreateSOModal(opts) {
   var initType = opts.pipelineId ? 'project' : 'runrate';
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
+  html += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
 
   // SO number + type
   html += '<div style="display:flex;gap:8px">';
@@ -640,6 +641,7 @@ function saveCreateSO() {
   var saved = ST.add('salesOrders', obj);
   if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
   if (typeof addAuditLog === 'function') addAuditLog('create_so', 'salesOrder', saved.id, soNumber, dealerId, obj.dealerName);
+  if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('so', saved.id, saved.soNumber);
   closeMForce();
   toast('✅ สร้าง SO เรียบร้อย');
   go('soDetail', { soId: saved.id });

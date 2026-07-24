@@ -5838,6 +5838,13 @@ body.mobile-mode .card {
   border-color: rgba(255,255,255,.25);
   color: #fff;
 }
+.task-link-badge.pending {
+  border-style: dashed;
+  color: var(--text2);
+}
+.task-card-v2.tier-red .task-link-badge.pending, .task-card-v2.tier-amber .task-link-badge.pending {
+  color: rgba(255,255,255,.75);
+}
 
 .task-link-row {
   display: flex;
