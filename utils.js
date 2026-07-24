@@ -633,6 +633,72 @@ function fDRelative(iso) {
 }
 
 // ================================================================
+// TASK LINKS — เชื่อม Task กับเมนูอื่น (Dealer/Pipeline/Visit/Visit Plan/SO/Meeting/ใบเสนอราคา)
+// เก็บเป็น task.links = [{type, id, label}] — label แช่แข็งไว้ตอนเพิ่ม กันต้อง query ชื่อใหม่ทุกครั้งที่ render
+// ================================================================
+var TASK_LINK_TYPES = {
+  dealer:    { icon: '🏪', name: 'Dealer' },
+  pipeline:  { icon: '📊', name: 'Pipeline' },
+  visit:     { icon: '🤝', name: 'Visit' },
+  visitPlan: { icon: '📅', name: 'Visit Plan' },
+  so:        { icon: '📦', name: 'Sales Order' },
+  meeting:   { icon: '🗓️', name: 'Meeting' },
+  quotation: { icon: '💰', name: 'ใบเสนอราคา' }
+};
+
+// คืน [{id,label}] ของประเภทที่เลือก ไว้ใช้สร้าง dropdown ตอนเพิ่มลิงก์
+function taskLinkList(type) {
+  var out = [];
+  if (type === 'dealer') {
+    ST.getAll('dealers').forEach(function(d) { out.push({ id: d.id, label: d.name || '-' }); });
+  } else if (type === 'pipeline') {
+    ST.getAll('pipeline').forEach(function(p) {
+      var d = ST.getOne('dealers', p.dealerId);
+      out.push({ id: p.id, label: (p.projectName || '-') + (d ? ' — ' + d.name : '') });
+    });
+  } else if (type === 'visit') {
+    ST.getAll('visits').forEach(function(v) {
+      var d = ST.getOne('dealers', v.dealerId);
+      out.push({ id: v.id, label: fD(v.date) + ' — ' + (d ? d.name : (v.company || '?')) });
+    });
+  } else if (type === 'visitPlan') {
+    getVisitPlans().forEach(function(p) {
+      var d = ST.getOne('dealers', p.dealerId);
+      out.push({ id: p.id, label: fD(p.date) + ' — ' + (d ? d.name : (p.company || '?')) });
+    });
+  } else if (type === 'so') {
+    ST.getAll('salesOrders').forEach(function(s) { out.push({ id: s.id, label: (s.soNumber || '-') + (s.dealerName ? ' — ' + s.dealerName : '') }); });
+  } else if (type === 'meeting') {
+    ST.getAll('meetings').forEach(function(m) { out.push({ id: m.id, label: m.title || '-' }); });
+  } else if (type === 'quotation') {
+    var qs = [];
+    try { qs = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+    qs.forEach(function(q) { out.push({ id: q.id, label: (q.quoteNo || '-') + (q.dealerName ? ' — ' + q.dealerName : '') }); });
+  }
+  return out;
+}
+
+// เปิดหน้า detail ของสิ่งที่ลิงก์ไว้ — quotation/visitPlan ไม่มี route ตรงๆ ใช้ S.focusQuoteId/S.focusPlanId
+// แทน (ดู hook ใน rQuotationV2/rVisitPlan) ให้ render เสร็จก่อนแล้วค่อยเปิดโมดัล/หน้าแก้ไขต่อ
+function openTaskLink(type, id) {
+  if (type === 'dealer') go('dealerDetail', { dealerId: id });
+  else if (type === 'pipeline') go('pipeDetail', { pipeId: id });
+  else if (type === 'visit') go('visitDetail', { visitId: id });
+  else if (type === 'visitPlan') go('visitPlan', { focusPlanId: id });
+  else if (type === 'so') go('soDetail', { soId: id });
+  else if (type === 'meeting') go('meetingDetail', { meetingId: id });
+  else if (type === 'quotation') go('quotationV2', { focusQuoteId: id });
+}
+
+function removeTaskLink(taskId, idx) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t || !t.links) return;
+  t.links.splice(idx, 1);
+  ST.update('tasks', taskId, { links: t.links });
+  render();
+}
+
+// ================================================================
 // DATE CALCULATIONS
 // ================================================================
 function dTo(ds) {

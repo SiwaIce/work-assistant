@@ -3742,6 +3742,14 @@ function rVisitPlan(el) {
     '</div>';
 
   el.innerHTML = toolbar + (vpViewMode === 'week' ? renderVpWeekView() : renderVpMonthView());
+
+  // Deep link จาก task.links (ดู openTaskLink ใน utils.js) — เปิดโมดัลแก้ไข plan นี้ต่อทันทีหลัง render เสร็จ
+  if (S.focusPlanId) {
+    var _fp = S.focusPlanId;
+    S.focusPlanId = null;
+    var _p = getVisitPlans().filter(function(p) { return p.id === _fp; })[0];
+    if (_p) setTimeout(function() { showAddVisitPlanM(_p.date, '', _fp); }, 0);
+  }
 }
 
 function renderVpWeekView() {

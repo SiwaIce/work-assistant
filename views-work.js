@@ -389,6 +389,13 @@ function renderTaskCard(t) {
     }
   }
 
+  // ลิงก์เชื่อมโยงกับเมนูอื่น (ดู TASK_LINK_TYPES/openTaskLink ใน utils.js) — โชว์บนการ์ดแค่ 2 อันแรก
+  // กันรก ดูครบทุกอันได้ที่หน้ารายละเอียดงาน
+  var linksHtml = (t.links || []).slice(0, 2).map(function(l) {
+    var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗' };
+    return '<span class="task-link-badge" onclick="event.stopPropagation();openTaskLink(\'' + l.type + '\',\'' + l.id + '\')" title="' + sanitize(l.label) + '">' + lt.icon + ' ' + sanitize((l.label || '').substr(0, 14)) + '</span>';
+  }).join('');
+
   var fuCount = countTaskFollowups(t);
   var fuHtml = '';
   if (fuCount > 0) {
@@ -484,6 +491,7 @@ function renderTaskCard(t) {
             ${pipelineHtml}
             ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
             ${fuHtml}
+            ${linksHtml}
           </div>
         </div>
       </div>
@@ -1240,6 +1248,18 @@ function rTaskDet(el) {
     ${t.description ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">รายละเอียด</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(t.description)}</div></div>` : ''}
     ${t.attachments && t.attachments.length ? attachGalleryHtml(t.attachments) : ''}
     ${t.url ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">🔗 ลิงก์</label><div><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">${sanitize(t.url)}</a></div></div>` : ''}
+  </div>
+
+  <!-- Linked Records -->
+  <div class="card">
+    <h2>🔗 เชื่อมโยงกับ</h2>
+    ${(t.links || []).length ? (t.links.map(function(l, i) {
+      var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗', name: l.type };
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="openTaskLink('${l.type}','${l.id}')">${lt.icon} ${sanitize(l.label)}</span>
+        <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
+      </div>`;
+    }).join('')) : '<div class="hint">ยังไม่มีลิงก์เชื่อมโยง — กด ✏️ แก้ไขงานเพื่อเพิ่ม</div>'}
   </div>
 
   <!-- Date Section -->

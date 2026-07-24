@@ -902,6 +902,13 @@ function rQuotationV2(el) {
   html += '<div id="quoteViewContainer"></div>';
   el.innerHTML = html;
   refreshQuoteView();
+
+  // Deep link จาก task.links (ดู openTaskLink ใน utils.js) — เปิดใบเสนอราคานี้ต่อทันทีหลัง render เสร็จ
+  if (S.focusQuoteId) {
+    var _fq = S.focusQuoteId;
+    S.focusQuoteId = null;
+    setTimeout(function() { editQuotation(_fq); }, 0);
+  }
 }
 
 // กรอง + เรียง ตาม input ปัจจุบัน — ใช้ร่วมทั้ง Card และ Table

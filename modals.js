@@ -1992,6 +1992,7 @@ function showTaskM(eid, prefillDealerId) {
   
   window._ftDescMode = 'text';
   window._ftDescAttach = (t.attachments || []).slice();
+  window._ftLinks = (t.links || []).slice();
   var tplOpts = ST.getAll('templates').map(function(tp) {
     return '<option value="' + tp.id + '">' + sanitize(tp.name) + ' (' + (tp.steps || []).length + ')</option>';
   }).join('');
@@ -2018,6 +2019,7 @@ function showTaskM(eid, prefillDealerId) {
       '<div class="hint">💡 แต่ละบรรทัดจะกลายเป็น Step ในงานนี้ — แก้ไขรายละเอียด/วันที่/link ของแต่ละ bullet ได้ทีหลังในหน้า Task</div></div>') +
     '</div>' +
     '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
+    _taskLinksFieldHtml(t) +
     '<div class="fr">' +
     '<div class="fg"><label>🏪 Dealer</label><select id="ft_dealer" onchange="taskDealerChanged()">' + dealerOpts + '</select></div>' +
     '<div class="fg"><label>📊 Pipeline Project</label><select id="ft_pipe">' + pipeOpts + '</select></div>' +
@@ -2048,6 +2050,63 @@ function showTaskM(eid, prefillDealerId) {
     '</select></div>' +
     '</div>' +
     '<button class="btn bp btn-full" onclick="saveTask(\'' + (eid || '') + '\')">💾 บันทึก</button>');
+}
+
+// ================================================================
+// TASK LINKS — เพิ่ม/ลบลิงก์เชื่อมกับเมนูอื่นในโมดัล Task (เก็บชั่วคราวใน window._ftLinks จน saveTask())
+// รูปแบบเดียวกับ window._ftDescAttach (แนบไฟล์) — เลือกประเภทก่อนแล้วค่อยเลือกรายการ กันเลือกผิดชนิด
+// ================================================================
+function _taskLinksFieldHtml(t) {
+  var typeOpts = '<option value="">-- เลือกประเภท --</option>';
+  Object.keys(TASK_LINK_TYPES).forEach(function(k) {
+    typeOpts += '<option value="' + k + '">' + TASK_LINK_TYPES[k].icon + ' ' + TASK_LINK_TYPES[k].name + '</option>';
+  });
+  return '<div class="fg"><label>🔗 เชื่อมโยงกับ</label>' +
+    '<div id="ft_links_wrap">' + _taskLinksChipsHtml(window._ftLinks) + '</div>' +
+    '<div style="display:flex;gap:6px;margin-top:6px">' +
+    '<select id="ft_link_type" style="flex:1" onchange="_ftLinkTypeChanged()">' + typeOpts + '</select>' +
+    '<select id="ft_link_item" style="flex:2" disabled><option value="">-- เลือกประเภทก่อน --</option></select>' +
+    '<button type="button" class="btn bsm bo" onclick="_ftAddLink()">+ เพิ่ม</button>' +
+    '</div></div>';
+}
+
+function _taskLinksChipsHtml(links) {
+  if (!links || !links.length) return '<div class="hint">ยังไม่มีลิงก์</div>';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap">' + links.map(function(l, i) {
+    var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗' };
+    return '<span class="tag" style="background:var(--bg2);color:var(--text);display:inline-flex;align-items:center;gap:5px;padding:4px 9px">' +
+      lt.icon + ' ' + sanitize(l.label) +
+      ' <span style="cursor:pointer;color:#ef4444;font-weight:700" onclick="_ftRemoveLink(' + i + ')">✕</span></span>';
+  }).join('') + '</div>';
+}
+
+function _ftLinkTypeChanged() {
+  var type = document.getElementById('ft_link_type').value;
+  var sel = document.getElementById('ft_link_item');
+  if (!type) { sel.innerHTML = '<option value="">-- เลือกประเภทก่อน --</option>'; sel.disabled = true; return; }
+  var items = taskLinkList(type);
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">-- เลือกรายการ (' + items.length + ') --</option>' +
+    items.map(function(it) { return '<option value="' + it.id + '">' + sanitize(it.label) + '</option>'; }).join('');
+}
+
+function _ftAddLink() {
+  var type = document.getElementById('ft_link_type').value;
+  var sel = document.getElementById('ft_link_item');
+  var id = sel ? sel.value : '';
+  if (!type || !id) return toast('เลือกประเภทกับรายการก่อน');
+  var label = sel.options[sel.selectedIndex].textContent;
+  window._ftLinks = window._ftLinks || [];
+  if (window._ftLinks.some(function(l) { return l.type === type && l.id === id; })) { toast('มีลิงก์นี้อยู่แล้ว'); return; }
+  window._ftLinks.push({ type: type, id: id, label: label });
+  document.getElementById('ft_links_wrap').innerHTML = _taskLinksChipsHtml(window._ftLinks);
+  document.getElementById('ft_link_type').value = '';
+  _ftLinkTypeChanged();
+}
+
+function _ftRemoveLink(idx) {
+  window._ftLinks.splice(idx, 1);
+  document.getElementById('ft_links_wrap').innerHTML = _taskLinksChipsHtml(window._ftLinks);
 }
 
 // Update pipeline dropdown when dealer changes
@@ -2123,7 +2182,8 @@ function saveTask(eid) {
     url: document.getElementById('ft_url') ? document.getElementById('ft_url').value.trim() : '',
     dealerId: document.getElementById('ft_dealer') ? document.getElementById('ft_dealer').value : '',
     pipeId: document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : '',
-    attachments: window._ftDescAttach || []
+    attachments: window._ftDescAttach || [],
+    links: window._ftLinks || []
   };
   if (eid) {
     ST.update('tasks', eid, data);
