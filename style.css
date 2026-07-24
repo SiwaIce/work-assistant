@@ -6005,6 +6005,73 @@ body.mobile-mode .card {
 .task-card-v2.tier-red .task-step-bar span, .task-card-v2.tier-amber .task-step-bar span { background: rgba(255,255,255,.2); }
 .task-card-v2.tier-red .task-step-bar span.on, .task-card-v2.tier-amber .task-step-bar span.on { background: #fff; }
 
+/* ================================================================
+   TASK DETAIL v2 (Apple-inspired redesign) — scoped under .td2 so it
+   never touches the shared .card/.tag/.ti/.si styles other pages use
+   ================================================================ */
+.td2 { display: flex; flex-direction: column; gap: 14px; }
+.td2-card { background: var(--card); border: 1px solid var(--border-light); border-radius: 20px; padding: 18px 20px; box-shadow: var(--shadow); }
+.td2-card .td2-h { font-size: .78rem; font-weight: 600; color: var(--text2); margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+.td2-topbar { display: flex; justify-content: space-between; align-items: center; }
+.td2-back { font-size: .74rem; color: var(--text3); cursor: pointer; }
+.td2-back:hover { color: var(--accent); }
+.td2-icons { display: flex; gap: 6px; }
+.td2-icon-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--bg2); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: .8rem; transition: .15s; }
+.td2-icon-btn:hover { background: var(--accent-light); }
+.td2-icon-btn.on { background: var(--accent-light); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+.td2-hero { display: flex; gap: 16px; align-items: center; }
+.td2-ring { position: relative; width: 60px; height: 60px; flex-shrink: 0; }
+.td2-ring span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .68rem; font-weight: 700; }
+.td2-title { font-size: 1rem; font-weight: 600; line-height: 1.35; margin-bottom: 8px; }
+.td2-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.td2-desc { font-size: .8rem; color: var(--text2); line-height: 1.6; white-space: pre-wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-light); }
+
+.td2-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.td2-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; background: var(--bg2); padding: 6px 12px; border-radius: 20px; cursor: pointer; transition: .15s; }
+.td2-chip:hover { background: var(--accent-light); color: var(--accent); }
+.td2-chip .rm { color: var(--text3); }
+.td2-chip .rm:hover { color: #ef4444; }
+.td2-chip.pending { border: 1px dashed var(--border); color: var(--text3); background: transparent; }
+
+.td2-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border-light); flex-wrap: wrap; }
+.td2-row:last-child { border-bottom: none; }
+.td2-row-label { font-size: .72rem; color: var(--text3); min-width: 110px; }
+.td2-row-value { font-size: .8rem; font-weight: 500; display: flex; align-items: center; gap: 6px; flex: 1; }
+
+.td2-progress-track { height: 5px; background: var(--bg2); border-radius: 4px; overflow: hidden; margin-bottom: 14px; }
+.td2-progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+
+.td2-step { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border-light); }
+.td2-step:last-child { border-bottom: none; }
+.td2-step-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: .65rem; color: #fff; margin-top: 1px; }
+.td2-step-check.done { background: var(--accent); border-color: var(--accent); }
+.td2-step-check.locked { opacity: .4; cursor: not-allowed; }
+.td2-step-title { font-size: .8rem; font-weight: 500; cursor: pointer; }
+.td2-step.done .td2-step-title { text-decoration: line-through; color: var(--text3); }
+.td2-step-meta { font-size: .68rem; color: var(--text3); margin-top: 3px; }
+.td2-step-actions { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+
+.td2-tl-item { display: flex; gap: 10px; }
+.td2-tl-dotcol { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 8px; }
+.td2-tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 5px; flex-shrink: 0; }
+.td2-tl-dot.warn { background: #ef4444; }
+.td2-tl-line { width: 1px; flex: 1; background: var(--border-light); margin-top: 4px; min-height: 16px; }
+.td2-tl-body { flex: 1; padding-bottom: 16px; min-width: 0; }
+.td2-tl-date { font-size: .68rem; color: var(--text3); margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.td2-tl-type { font-size: .68rem; color: var(--text2); font-weight: 600; margin-bottom: 2px; }
+.td2-tl-content { font-size: .78rem; }
+
+.td2-comment-bar textarea { width: 100%; box-sizing: border-box; border: none; background: var(--bg2); border-radius: 16px; padding: 10px 14px; font-size: .78rem; resize: none; color: var(--text); font-family: inherit; }
+.td2-comment-bar textarea:focus { outline: 2px solid var(--accent-light); }
+
+/* soften the shared .tag/.dlb/.badge-* pills only within this page, keep them untouched elsewhere */
+.td2 .tag { border-radius: 20px; padding: 3px 11px; font-size: .66rem; }
+.td2 .dlb { border-radius: 20px; padding: 3px 10px; }
+.td2 .badge-red, .td2 .badge-yellow, .td2 .badge-green { border-radius: 20px; }
+
 /* Timeline View */
 .timeline-view {
   display: flex;

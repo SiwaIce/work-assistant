@@ -1261,79 +1261,88 @@ function rTaskDet(el) {
   const dealer = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
   const isTaskOverdue = isOverdue(t.dueDate, t.status);
   const isTaskSoon = isDueSoon(t.dueDate, t.status);
-  
+
   document.getElementById('pgT').textContent = '📋 ' + t.title;
 
+  // วงแหวนความคืบหน้า — r=24 เส้นรอบวง ~150.8 (ตามดีไซน์การ์ดงานย่อ/ขยาย ใน renderTaskCard)
+  var ringColor = t.status === 'completed' ? '#22c55e' : 'var(--accent)';
+  var ringDash = (pg / 100 * 150.8).toFixed(1) + ' 150.8';
+  var ringHtml = '<div class="td2-ring"><svg width="60" height="60" style="transform:rotate(-90deg)">' +
+    '<circle cx="30" cy="30" r="24" fill="none" stroke="var(--bg2)" stroke-width="5"></circle>' +
+    '<circle cx="30" cy="30" r="24" fill="none" stroke="' + ringColor + '" stroke-width="5" stroke-dasharray="' + ringDash + '" stroke-linecap="round"></circle>' +
+    '</svg><span>' + pg + '%</span></div>';
+
+  var doneSteps = (t.steps || []).filter(function(s) { return s.done; }).length;
+
   var html = `
-  <div class="bc"><a onclick="go('tasks')">📋 งาน</a><span class="sep">›</span><span class="cur">${sanitize(t.title)}</span></div>
+  <div class="td2">
 
-  <!-- Task Header -->
-  <div class="card">
-    <h2>📋 ข้อมูลงาน <span class="ml">
-      <button class="btn bsm bs" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,18)}')">⏱️</button>
-      <button class="btn bsm ${isPinned ? 'bw' : 'bo'}" onclick="ST.togglePin('task','${t.id}','${sanitize(t.title)}','');render()">📌</button>
-      <button class="btn bsm bo" onclick="showTaskM('${t.id}')">✏️</button>
-      <button class="btn bsm bd" onclick="delTask('${t.id}')">🗑️</button>
-    </span></h2>
-    <div class="fr">
-      <div><label style="color:#64748b;font-size:.68rem">สถานะ</label><div>${sTag(t.status)} ${t.sequential ? '<span class="tag tag-count">⚡ Flow</span>' : ''}</div></div>
-      <div><label style="color:#64748b;font-size:.68rem">สำคัญ</label><div>${pTag(t.priority)}</div></div>
+    <div class="td2-topbar">
+      <span class="td2-back" onclick="go('tasks')">‹ งานทั้งหมด</span>
+      <div class="td2-icons">
+        <button class="td2-icon-btn" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,18)}')" title="จับเวลา">⏱️</button>
+        <button class="td2-icon-btn ${isPinned ? 'on' : ''}" onclick="ST.togglePin('task','${t.id}','${sanitize(t.title)}','');render()" title="ปักหมุด">📌</button>
+        <button class="td2-icon-btn" onclick="showTaskM('${t.id}')" title="แก้ไข">✏️</button>
+        <button class="td2-icon-btn" onclick="delTask('${t.id}')" title="ลบ">🗑️</button>
+      </div>
     </div>
-    ${t.description ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">รายละเอียด</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(t.description)}</div></div>` : ''}
-    ${t.attachments && t.attachments.length ? attachGalleryHtml(t.attachments) : ''}
-    ${t.url ? `<div style="margin-top:8px"><label style="color:#64748b;font-size:.68rem">🔗 ลิงก์</label><div><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">${sanitize(t.url)}</a></div></div>` : ''}
-  </div>
 
-  <!-- Linked Records -->
-  <div class="card">
-    <h2>🔗 เชื่อมโยงกับ</h2>
-    ${(function() {
-      var rows = [];
-      if (t.dealerId) {
-        var _dd = ST.getOne('dealers', t.dealerId);
-        if (_dd) rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="go('dealerDetail',{dealerId:'${t.dealerId}'})">🏪 ${sanitize(_dd.name)}</span>
-        </div>`);
-      }
-      if (t.pipeId) {
-        var _dp = ST.getOne('pipeline', t.pipeId);
-        if (_dp) rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="go('pipeDetail',{pipeId:'${t.pipeId}'})">📊 ${sanitize(_dp.projectName || _dp.name || '-')}</span>
-        </div>`);
-      }
-      (t.links || []).forEach(function(l, i) {
-        var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗', name: l.type };
-        if (l.pending) {
-          rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border)">
-            <span style="cursor:pointer;color:var(--text2);font-size:.82rem" onclick="openTaskLinkCreate('${l.type}','${t.id}')">⏳ ${lt.icon} ${sanitize(lt.name)} (รอสร้าง — กดเพื่อสร้างเลย)</span>
-            <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
-          </div>`);
-        } else {
-          rows.push(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-            <span style="cursor:pointer;color:var(--accent);font-size:.82rem" onclick="openTaskLink('${l.type}','${l.id}')">${lt.icon} ${sanitize(l.label)}</span>
-            <button class="btn bsm bd" onclick="removeTaskLink('${t.id}',${i})">✕</button>
-          </div>`);
+    <!-- Task Header -->
+    <div class="td2-card">
+      <div class="td2-hero">
+        ${ringHtml}
+        <div style="flex:1;min-width:0">
+          <div class="td2-title">${sanitize(t.title)}</div>
+          <div class="td2-badges">
+            ${sTag(t.status)}
+            ${t.sequential ? '<span class="tag tag-count">⚡ Flow</span>' : ''}
+            ${pTag(t.priority)}
+          </div>
+        </div>
+      </div>
+      ${t.description ? `<div class="td2-desc">${sanitize(t.description)}</div>` : ''}
+      ${t.attachments && t.attachments.length ? attachGalleryHtml(t.attachments) : ''}
+      ${t.url ? `<div style="margin-top:10px"><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(t.url)}</a></div>` : ''}
+    </div>
+
+    <!-- Linked Records -->
+    <div class="td2-card">
+      <h3 class="td2-h">เชื่อมโยงกับ</h3>
+      <div class="td2-chips">
+      ${(function() {
+        var chips = [];
+        if (t.dealerId) {
+          var _dd = ST.getOne('dealers', t.dealerId);
+          if (_dd) chips.push(`<span class="td2-chip" onclick="go('dealerDetail',{dealerId:'${t.dealerId}'})">🏪 ${sanitize(_dd.name)}</span>`);
         }
-      });
-      return rows.length ? rows.join('') : '<div class="hint">ยังไม่มีลิงก์เชื่อมโยง — กด ✏️ แก้ไขงานเพื่อเพิ่ม</div>';
-    })()}
-  </div>
+        if (t.pipeId) {
+          var _dp = ST.getOne('pipeline', t.pipeId);
+          if (_dp) chips.push(`<span class="td2-chip" onclick="go('pipeDetail',{pipeId:'${t.pipeId}'})">📊 ${sanitize(_dp.projectName || _dp.name || '-')}</span>`);
+        }
+        (t.links || []).forEach(function(l, i) {
+          var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗', name: l.type };
+          if (l.pending) {
+            chips.push(`<span class="td2-chip pending" onclick="openTaskLinkCreate('${l.type}','${t.id}')">⏳ ${lt.icon} ${sanitize(lt.name)} (รอสร้าง)<span class="rm" onclick="event.stopPropagation();removeTaskLink('${t.id}',${i})">✕</span></span>`);
+          } else {
+            chips.push(`<span class="td2-chip" onclick="openTaskLink('${l.type}','${l.id}')">${lt.icon} ${sanitize(l.label)}<span class="rm" onclick="event.stopPropagation();removeTaskLink('${t.id}',${i})">✕</span></span>`);
+          }
+        });
+        return chips.length ? chips.join('') : '<div class="hint">ยังไม่มีลิงก์เชื่อมโยง — กด ✏️ แก้ไขงานเพื่อเพิ่ม</div>';
+      })()}
+      </div>
+    </div>
 
-  <!-- Date Section -->
-  <div class="card">
-    <h2>📅 กำหนดการ</h2>
-    <div class="date-section">
-<div class="date-row ${isTaskOverdue ? 'overdue' : isTaskSoon ? 'soon' : ''}">
-  <div class="date-label">📅 กำหนดเสร็จ (Deadline)</div>
-  <div class="date-value">
-    <strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong>
-    ${formatDueDateStatus(t.dueDate, t.status)}
-  </div>
-  <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>  <!-- ✅ ปุ่มนี้ -->
-</div>      
-      <div class="date-row">
-        <div class="date-label">📞 นัดติดตาม (Follow-up)</div>
-        <div class="date-value">
+    <!-- Date Section -->
+    <div class="td2-card">
+      <h3 class="td2-h">กำหนดการ</h3>
+      <div class="td2-row">
+        <div class="td2-row-label">📅 กำหนดเสร็จ</div>
+        <div class="td2-row-value"><strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong> ${formatDueDateStatus(t.dueDate, t.status)}</div>
+        <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>
+      </div>
+      <div class="td2-row">
+        <div class="td2-row-label">📞 นัดติดตาม</div>
+        <div class="td2-row-value">
           ${t.followupDate ? fD(t.followupDate) : 'ไม่ได้ตั้ง'}
           ${t.followupDate && dTo(t.followupDate) <= 0 ? '<span class="badge-red">⚠️ ต้องติดตามวันนี้!</span>' : ''}
         </div>
@@ -1341,94 +1350,99 @@ function rTaskDet(el) {
         ${t.followupDate ? `<button class="btn bsm bs" onclick="markFollowupDone('${t.id}')">✅ ติดตามแล้ว</button>` : ''}
         <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">➕ เพิ่มนัด</button>
       </div>
-      
-      <div class="date-row">
-        <div class="date-label">🚀 วันที่เริ่ม</div>
-        <div class="date-value">${fD(t.startDate) || 'ไม่ได้ตั้ง'}</div>
+      <div class="td2-row">
+        <div class="td2-row-label">🚀 วันที่เริ่ม</div>
+        <div class="td2-row-value">${fD(t.startDate) || 'ไม่ได้ตั้ง'}</div>
         <button class="btn bsm bo" onclick="setStartDate('${t.id}')">✏️ แก้ไข</button>
       </div>
-    </div>
-    
-    ${t.dueDateHistory && t.dueDateHistory.length ? `
-    <div class="due-history">
-      <div class="history-title">📝 ประวัติการเลื่อนกำหนด</div>
-      ${t.dueDateHistory.map(function(h, i) {
-        return `<div class="history-item">
-          <span class="history-date">${h.changedAt}</span>
-          <span class="history-change">${h.oldDate || '-'} → ${h.newDate}</span>
-          <span class="history-reason">${h.reason}</span>
-          <span class="history-by">(${h.changedBy})</span>
-        </div>`;
-      }).join('')}
-    </div>
-    ` : ''}
-  </div>
 
-  <!-- Steps Section (แสดง Due Date ของแต่ละ Step) -->
-  <div class="card">
-    <h2>✅ Steps ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''} <span class="ml"><button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></span></h2>
-    ${(t.steps || []).length ? t.steps.map(function(s, i) {
-      var lk = isStepLocked(t, i);
-      checkStepFuOverdue(s);
-      return `<div class="si ${s.done ? 'done' : ''} ${lk ? 'locked-step' : ''} ${dlC(s.dueDate, s.done)}" draggable="true" ondragstart="stepDragStart(event,'${t.id}',${i})" ondragover="stepDragOver(event)" ondrop="stepDrop(event,'${t.id}',${i})">
-        <div style="cursor:grab;color:#475569;padding:0 2px;align-self:center" title="ลากเพื่อจัดลำดับ">⠿</div>
-        <div class="ck ${s.done ? 'chk' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? '' : `togStep('${t.id}',${i})`}"></div>
-        <div style="flex:1">
-          <div class="stt" onclick="${lk ? '' : `editStep('${t.id}',${i})`}">
-            ${i + 1}. ${sanitize(s.title)} ${lk ? '🔒' : ''} ${fuBadge(s)}
-          </div>
-          <div class="sd">${s.startDate ? fD(s.startDate) : ''} ${s.dueDate ? '→ ' + fD(s.dueDate) : ''} ${dlB(s.dueDate, s.done)}</div>
-          ${renderStepDueDate(s)}
-          ${s.notes ? `<div style="font-size:.66rem;color:#94a3b8;margin-top:1px">${sanitize(s.notes)}</div>` : ''}
-          ${s.url ? `<div style="font-size:.66rem;margin-top:1px"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
-          ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${attachGalleryHtml(s.attachments)}</div>` : ''}
-          ${buildFuTimeline(t.id, i)}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:3px">
-          <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
-          ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
-          <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
-          <button class="btn bsm bd" onclick="event.stopPropagation();delStep('${t.id}',${i})">✕</button>
-        </div>
-      </div>`;
-    }).join('') : '<div class="empty"><p>ยังไม่มี Steps</p></div>'}
-  </div>
+      ${t.dueDateHistory && t.dueDateHistory.length ? `
+      <div class="due-history">
+        <div class="history-title">📝 ประวัติการเลื่อนกำหนด</div>
+        ${t.dueDateHistory.map(function(h) {
+          return `<div class="history-item">
+            <span class="history-date">${h.changedAt}</span>
+            <span class="history-change">${h.oldDate || '-'} → ${h.newDate}</span>
+            <span class="history-reason">${h.reason}</span>
+            <span class="history-by">(${h.changedBy})</span>
+          </div>`;
+        }).join('')}
+      </div>
+      ` : ''}
+    </div>
 
-  <!-- Timeline / Logs (พร้อม Edit) -->
-  <div class="card">
-    <h2>📝 ไทม์ไลน์ <span class="ml">
-      <button class="btn bsm bp" onclick="showTaskLogM('${t.id}')">➕</button>
-      <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">📞 + นัด</button>
-    </span></h2>
-    <div id="timelineList">
-      ${logs.length ? `<div class="tl">${logs.map(function(l) {
-        var isFollowupOverdue = l.type === 'followup_set' && l.dueDate && dTo(l.dueDate) < 0;
-        return `<div class="ti tl-${l.type} ${isFollowupOverdue ? 'tl-overdue' : ''}">
-          <div style="display:flex;justify-content:space-between">
-            <div class="td2">${fDT(l.date)}</div>
-            <div style="display:flex;gap:4px">
-              <button class="btn bsm bo" onclick="event.stopPropagation();editTimelineLog('${l.id}', '${sanitize(l.content).replace(/'/g, "\\'")}', '${l.type}', '${l.date}')" style="padding:1px 6px">✏️</button>
-              <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('taskLogs','${l.id}');render()" style="padding:1px 4px">✕</button>
+    <!-- Steps Section -->
+    <div class="td2-card">
+      <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''} <button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></h3>
+      ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
+      ${(t.steps || []).length ? t.steps.map(function(s, i) {
+        var lk = isStepLocked(t, i);
+        checkStepFuOverdue(s);
+        return `<div class="td2-step ${s.done ? 'done' : ''}" draggable="true" ondragstart="stepDragStart(event,'${t.id}',${i})" ondragover="stepDragOver(event)" ondrop="stepDrop(event,'${t.id}',${i})">
+          <div style="cursor:grab;color:var(--text3);padding:2px 2px 0 0;align-self:flex-start" title="ลากเพื่อจัดลำดับ">⠿</div>
+          <div class="td2-step-check ${s.done ? 'done' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? '' : `togStep('${t.id}',${i})`}">${s.done ? '✓' : ''}</div>
+          <div style="flex:1;min-width:0">
+            <div class="td2-step-title" onclick="${lk ? '' : `editStep('${t.id}',${i})`}">
+              ${i + 1}. ${sanitize(s.title)} ${lk ? '🔒' : ''} ${fuBadge(s)}
             </div>
+            <div class="td2-step-meta">${s.startDate ? fD(s.startDate) : ''} ${s.dueDate ? '→ ' + fD(s.dueDate) : ''} ${dlB(s.dueDate, s.done)}</div>
+            ${renderStepDueDate(s)}
+            ${s.notes ? `<div class="td2-step-meta">${sanitize(s.notes)}</div>` : ''}
+            ${s.url ? `<div class="td2-step-meta"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
+            ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${attachGalleryHtml(s.attachments)}</div>` : ''}
+            ${buildFuTimeline(t.id, i)}
           </div>
-          <div class="tt2">${logL(l.type)}</div>
-          <div class="tc2">${sanitize(l.content)}</div>
-          ${l.dueDate ? `<div class="td2" style="margin-top:2px">📅 กำหนด: ${fD(l.dueDate)} ${dlB(l.dueDate, false)}</div>` : ''}
+          <div class="td2-step-actions">
+            <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
+            ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
+            <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
+            <button class="btn bsm bd" onclick="event.stopPropagation();delStep('${t.id}',${i})">✕</button>
+          </div>
+        </div>`;
+      }).join('') : '<div class="empty"><p>ยังไม่มี Steps</p></div>'}
+    </div>
+
+    <!-- Timeline / Logs -->
+    <div class="td2-card">
+      <h3 class="td2-h">ไทม์ไลน์
+        <span>
+          <button class="btn bsm bp" onclick="showTaskLogM('${t.id}')">➕</button>
+          <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">📞 + นัด</button>
+        </span>
+      </h3>
+      ${logs.length ? `<div class="td2-tl">${logs.map(function(l, i) {
+        var isFollowupOverdue = l.type === 'followup_set' && l.dueDate && dTo(l.dueDate) < 0;
+        var isLast = i === logs.length - 1;
+        return `<div class="td2-tl-item">
+          <div class="td2-tl-dotcol"><div class="td2-tl-dot ${isFollowupOverdue ? 'warn' : ''}"></div>${isLast ? '' : '<div class="td2-tl-line"></div>'}</div>
+          <div class="td2-tl-body">
+            <div class="td2-tl-date">
+              <span>${fDT(l.date)}</span>
+              <span style="display:flex;gap:4px">
+                <button class="btn bsm bo" onclick="event.stopPropagation();editTimelineLog('${l.id}', '${sanitize(l.content).replace(/'/g, "\\'")}', '${l.type}', '${l.date}')" style="padding:1px 6px">✏️</button>
+                <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('taskLogs','${l.id}');render()" style="padding:1px 4px">✕</button>
+              </span>
+            </div>
+            <div class="td2-tl-type">${logL(l.type)}</div>
+            <div class="td2-tl-content">${sanitize(l.content)}</div>
+            ${l.dueDate ? `<div class="td2-tl-type" style="margin-top:2px">📅 กำหนด: ${fD(l.dueDate)} ${dlB(l.dueDate, false)}</div>` : ''}
+          </div>
         </div>`;
       }).join('')}</div>` : '<div class="empty"><p>ยังไม่มี Log</p></div>'}
     </div>
-  </div>
-  
-  <!-- Quick Add Comment (Inline) -->
-  <div class="card">
-    <div class="inline-comment">
-      <textarea id="quickComment" rows="2" placeholder="พิมพ์ comment ด่วน... (เช่น โทรติดตามแล้ว, ได้รับเอกสารแล้ว)"></textarea>
-      <div class="inline-comment-actions" style="display:flex;gap:6px;margin-top:6px">
+
+    <!-- Quick Add Comment (Inline) -->
+    <div class="td2-card">
+      <div class="td2-comment-bar">
+        <textarea id="quickComment" rows="2" placeholder="พิมพ์ comment ด่วน... (เช่น โทรติดตามแล้ว, ได้รับเอกสารแล้ว)"></textarea>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px">
         <button class="btn bsm bp" onclick="addQuickComment('${t.id}')">💬 เพิ่ม Comment</button>
         <button class="btn bsm bs" onclick="addQuickStep('${t.id}')">✅ + Step</button>
         <button class="btn bsm bo" onclick="addQuickFollowup('${t.id}')">📞 + นัดติดตาม</button>
       </div>
     </div>
+
   </div>`;
 
   el.innerHTML = html;
