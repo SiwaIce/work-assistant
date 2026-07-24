@@ -6260,14 +6260,33 @@ body.mobile-mode .card {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  cursor: pointer;
+  transition: background .15s;
 }
+.timeline-day:hover { background: var(--accent-light); }
 
 .timeline-day-num {
   font-size: 12px;
   font-weight: 600;
   color: var(--text2);
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+
+.timeline-day-add {
+  display: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+.timeline-day:hover .timeline-day-add { display: inline-block; }
 
 .timeline-day-today {
   background: rgba(59,130,246,0.08);

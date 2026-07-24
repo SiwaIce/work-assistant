@@ -1969,7 +1969,7 @@ function saveStartDate(taskId) {
   render();
 }
 
-function showTaskM(eid, prefillDealerId) {
+function showTaskM(eid, prefillDealerId, prefillDueDate) {
   var t = eid ? ST.getOne('tasks', eid) : {};
   var cats = [];
   var allTasks = ST.getAll('tasks');
@@ -2039,7 +2039,7 @@ function showTaskM(eid, prefillDealerId) {
     '<datalist id="ft_pipe_dl">' + pipeListOpts + '</datalist>' +
     '<input type="hidden" id="ft_pipe" value="' + selPipeId + '"></div>' +
     '</div>' +
-    '<div class="fr">' + dpH('ft_s', t.startDate || _td(), 'วันเริ่ม') + dpH('ft_e', t.dueDate || '', 'Deadline') + '</div>' +
+    '<div class="fr">' + dpH('ft_s', t.startDate || _td(), 'วันเริ่ม') + dpH('ft_e', t.dueDate || prefillDueDate || '', 'Deadline') + '</div>' +
     '<div style="display:flex;gap:4px;flex-wrap:wrap;margin:-6px 0 10px">' +
     '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',_td())">วันนี้</button>' +
     '<button type="button" class="btn bsm bo" onclick="dpSet(\'ft_e\',addD(_td(),1))">พรุ่งนี้</button>' +

@@ -918,20 +918,26 @@ function renderTimelineView(tasks) {
     
     h += '<div class="timeline-grid">';
     
+    var monthParts = monthKey.split('/');
+    var dayCellMonth = monthParts[0], dayCellYear = monthParts[1];
+
     for (var d = 1; d <= totalDays; d++) {
       var dayTasks = tasksByDay[d] || [];
       var isToday = isTodayDate(d, monthKey);
       var isPast = isPastDate(d, monthKey);
-      
-      h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? 'timeline-day-past' : '') + '">';
-      h += '<div class="timeline-day-num">' + d + '</div>';
-      
+      var dayIso = dayCellYear + '-' + String(dayCellMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+
+      // คลิกพื้นที่ว่างของวันไหน (ไม่ใช่ตัวการ์ดงาน) เปิดฟอร์ม "เพิ่มงาน" ทันที ตั้ง Deadline เป็นวันนั้นให้เลย
+      // ตัวการ์ดงานแต่ละอันมี stopPropagation กันไม่ให้ทริกเกอร์การเพิ่มงานซ้อนตอนแค่จะดูรายละเอียด
+      h += '<div class="timeline-day ' + (isToday ? 'timeline-day-today' : '') + (isPast ? 'timeline-day-past' : '') + '" onclick="showTaskM(null,\'\',\'' + dayIso + '\')" title="คลิกเพื่อเพิ่มงาน กำหนดส่งวันนี้">';
+      h += '<div class="timeline-day-num">' + d + '<span class="timeline-day-add">+</span></div>';
+
       for (var i = 0; i < dayTasks.length; i++) {
         var t = dayTasks[i];
         var daysLeft = dTo(t.dueDate);
         var isOverdue = daysLeft < 0;
-        
-        h += '<div class="timeline-task ' + (isOverdue ? 'timeline-task-overdue' : '') + '" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
+
+        h += '<div class="timeline-task ' + (isOverdue ? 'timeline-task-overdue' : '') + '" onclick="event.stopPropagation();go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
         h += '<div class="timeline-task-title">';
         if (t.priority === 'high') h += '🔴 ';
         else if (t.priority === 'medium') h += '🟡 ';
@@ -945,7 +951,7 @@ function renderTimelineView(tasks) {
         }
         h += '</div>';
       }
-      
+
       h += '</div>';
     }
     
