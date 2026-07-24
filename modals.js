@@ -1310,7 +1310,7 @@ function saveVisitQuick(dealerId, eid) {
   if (!summary) return alert('ใส่สรุป');
   var cfg = getConfig();
   var modeEl = document.querySelector('input[name="fv_mode"]:checked');
-  var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || []};
+  var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || [], sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''};
   if (!data.date) return alert('ใส่วันที่');
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
   window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
@@ -1391,7 +1391,8 @@ function saveVisit(dealerId, eid) {
     customerSegment: (document.getElementById('vt_segment') || {}).value || '',
     dockInterest: (document.getElementById('vt_dock') || {}).value || '',
     topicData: topicData, pipelineUpdates: pipelineUpdates, forecastNotes: forecastNotes, feedbackItems: feedbackItems,
-    saleName: cfg.saleName, reportMode: visitMode, attachments: window._visitAttach || []
+    saleName: cfg.saleName, reportMode: visitMode, attachments: window._visitAttach || [],
+    sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
 
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
@@ -2445,6 +2446,7 @@ function saveMeeting(eid) {
     go('meetingDetail', {meetingId: eid});
   } else {
     data.actions = [];
+    data.sourceTaskId = (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || '';
     var nm = ST.add('meetings', data);
     if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('meeting', nm.id, nm.title);
     closeMForce();

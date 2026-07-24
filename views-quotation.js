@@ -1280,7 +1280,10 @@ function createNewQuotation() {
     status: 'draft',
     sentDate: null,
     approvedDate: null,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    // ถ้าสร้างผ่านลิงก์ "รอสร้าง" ของ Task (ดู openTaskLinkCreate ใน utils.js) จำไว้ว่ามาจากงานไหน เพื่อ
+    // โชว์ลิงก์ย้อนกลับตอนเปิดใบเสนอราคานี้ตรงๆ ทีหลัง (ดู _sourceTaskBackLinkHtml)
+    sourceTaskId: (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
   
   // โหลดข้อมูลเดิม
@@ -1594,6 +1597,7 @@ function renderEditQuotationPage(quote) {
   
   var html = '<div style="max-width:1200px;margin:0 auto;padding:16px">';
   html += '<div class="bc"><a onclick="go(\'quotationV2\')">💰 Quotation</a><span class="sep">›</span><span class="cur">' + qcopyHtml(quote.quoteNo) + '</span></div>';
+  html += (typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(quote.sourceTaskId) : '';
   
   // Form Card
   html += '<div class="card" style="margin-bottom:16px">';

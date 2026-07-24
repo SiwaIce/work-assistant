@@ -347,6 +347,7 @@ function rSODetail(el) {
   var cfg    = getConfig();
 
   var html = '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
+  html += (typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(s.sourceTaskId) : '';
 
   // ---- header card
   html += '<div class="card" style="margin-bottom:12px;padding:18px">';
@@ -635,7 +636,8 @@ function saveCreateSO() {
     prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', expectedDelivery: '',
     status: 'po_received', items: items, saleName: cfg.saleName||'',
     logs: [{ date: _td(), action: '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],
-    createdAt: now, updatedAt: now
+    createdAt: now, updatedAt: now,
+    sourceTaskId: (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
 
   var saved = ST.add('salesOrders', obj);

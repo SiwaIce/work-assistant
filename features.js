@@ -4117,6 +4117,8 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
 
   var h = '<div style="max-width:440px">';
   h += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
+  // นัดเก่าที่มาจาก Task (สร้างผ่าน "รอสร้าง") — โชว์ลิงก์ย้อนกลับตอนเปิดแก้ไขนัดนี้ทีหลัง
+  if (plan && plan.sourceTaskId && typeof _sourceTaskBackLinkHtml === 'function') h += _sourceTaskBackLinkHtml(plan.sourceTaskId);
   h += '<div class="fm-group"><label>📅 วันที่นัด</label><input type="date" id="vp_date" class="fm-input" value="' + sanitize(date) + '"></div>';
 
   h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
@@ -4284,6 +4286,7 @@ function saveVisitPlan(date, editId) {
   } else {
     data.id = 'vp_' + Date.now();
     data.status = 'planned';
+    data.sourceTaskId = (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || '';
     plans.push(data);
     if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visitPlan', data.id, fDShort(date) + ' Visit Plan');
   }

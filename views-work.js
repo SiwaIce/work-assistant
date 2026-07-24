@@ -31,6 +31,21 @@ var tasksSortDate = 'asc'; // 'asc' = เก่าสุด→ใหม่สุ
 // ตัวแปรสำหรับ Kanban drag & drop
 var dragSourceTaskId = null;
 
+// สถานะย่อ/ขยายการ์ดงาน ต่อ task id (true = ขยายเต็ม) — ไม่มี key = ย่อ (ค่าเริ่มต้น)
+// จำไว้ระหว่างใช้งาน (session) ไม่ reset ตอน render() ซ้ำ กันต้องกดขยายใหม่ทุกครั้งที่มีการอัพเดทหน้า
+var _taskCardExpanded = {};
+function toggleTaskCardExpand(tid, ev) {
+  if (ev) ev.stopPropagation();
+  _taskCardExpanded[tid] = !_taskCardExpanded[tid];
+  var t = ST.getOne('tasks', tid);
+  var cardEl = document.querySelector('[data-task-id="' + tid + '"]');
+  if (t && cardEl) {
+    var wrap = document.createElement('div');
+    wrap.innerHTML = renderTaskCard(t).trim();
+    cardEl.replaceWith(wrap.firstElementChild);
+  }
+}
+
 function rUnifiedTasks(el) {
   document.getElementById('pgT').textContent = '📋 งานทั้งหมด';
   
@@ -490,6 +505,11 @@ function renderTaskCard(t) {
   if (isCompleted) cardClass += ' task-completed';
   var checkedAttr = isCompleted ? 'checked' : '';
 
+  // ย่อ/ขยาย — ค่าเริ่มต้นย่อ แสดงแค่หัวข้องาน/ป้ายวันที่/แถวลิงก์ กันการ์ดกินพื้นที่เยอะตอนดูรายการยาวๆ
+  // กด ▾/▴ (หรือทั้งแถวหัวข้อ) เพื่อขยายดู ring/ขั้นตอน/อัพเดทล่าสุด/ปุ่ม/คอมเมนต์แบบเดิมทั้งหมด
+  var expanded = !!_taskCardExpanded[t.id];
+  var expandToggleHtml = '<span class="task-expand-toggle" onclick="toggleTaskCardExpand(\'' + t.id + '\',event)" title="' + (expanded ? 'ย่อการ์ด' : 'ขยายการ์ด') + '">' + (expanded ? '▴' : '▾') + '</span>';
+
   return `
   <div class="${cardClass}" data-task-id="${t.id}">
     ${dateBadgeHtml}
@@ -498,27 +518,28 @@ function renderTaskCard(t) {
       <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:80px' : ''}">
         <input type="checkbox" class="task-complete-chk" ${checkedAttr}
           onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">
-        ${ringHtml}
+        ${expanded ? ringHtml : ''}
         <div style="flex:1;min-width:0">
           <div class="task-title">${sanitize(t.title)}</div>
-          <div class="task-card-meta">
+          ${expanded ? `<div class="task-card-meta">
             ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
             ${fuHtml}
-          </div>
+          </div>` : ''}
         </div>
+        ${expandToggleHtml}
       </div>
-      ${stepNameHtml}
-      ${latestUpdateHtml}
-      <div class="task-card-actions" onclick="event.stopPropagation()">
+      ${expanded ? stepNameHtml : ''}
+      ${expanded ? latestUpdateHtml : ''}
+      ${expanded ? `<div class="task-card-actions" onclick="event.stopPropagation()">
         ${actionsHtml}
       </div>
       <textarea rows="2" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์... (Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"
         onclick="event.stopPropagation()"
         oninput="this.classList.toggle('overflowing', this.scrollHeight > this.clientHeight)"
-        onkeydown="event.stopPropagation();if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addQuickTaskComment('${t.id}',this)}"></textarea>
+        onkeydown="event.stopPropagation();if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addQuickTaskComment('${t.id}',this)}"></textarea>` : ''}
       ${linkRowHtml}
     </div>
-    ${stepBarHtml}
+    ${expanded ? stepBarHtml : ''}
   </div>
   `;
 }
@@ -1582,6 +1603,7 @@ function rMeetDet(el) {
 
   el.innerHTML = `
   <div class="bc"><a onclick="go('meetings')">📅 ประชุม</a><span class="sep">›</span><span class="cur">${sanitize(m.title)}</span></div>
+  ${(typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(m.sourceTaskId) : ''}
 
   <div class="card"><h2>📅 ข้อมูลประชุม <span class="ml">
     <button class="btn bsm bo" onclick="openMeetingWindow('${m.id}')" title="เปิดแท็บบันทึกการประชุม">🪟 เปิดแท็บบันทึก</button>

@@ -51,6 +51,7 @@ function rVisitDet(el) {
   <div class="bc"><a onclick="go('visits')">🤝 Visit</a><span class="sep">›</span>
   ${d?`<a onclick="go('dealerDetail',{dealerId:'${d.id}'})">${sanitize(d.name)}</a><span class="sep">›</span>`:''}
   <span class="cur">${fD(v.date)}</span></div>
+  ${(typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(v.sourceTaskId) : ''}
 
   <div class="card"><h2>🤝 Visit Report <span class="ml">
     <button class="btn bsm bp" onclick="showVisitDraft('${v.id}')">📧 Draft Email</button>

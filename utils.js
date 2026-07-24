@@ -716,6 +716,17 @@ function openTaskLinkCreate(type, taskId) {
   else if (type === 'visit') showVisitM(dealerId, null);
 }
 
+// แบนเนอร์ลิงก์ย้อนกลับ — แปะบนหน้ารายละเอียดของ record ที่มี sourceTaskId (สร้างผ่าน "รอสร้าง" มา)
+// ใช้ได้เฉพาะ 5 เมนูที่สร้างจาก pending link เท่านั้น (quotation/so/meeting/visit/visitPlan) — Dealer/Pipeline
+// ไม่มีแบบนี้เพราะ 1 Dealer ผูกกับหลาย Task พร้อมกันได้ ไม่มีทาง "งานต้นทาง" เดียวที่ถูกต้องแน่นอน
+function _sourceTaskBackLinkHtml(sourceTaskId) {
+  if (!sourceTaskId) return '';
+  var t = ST.getOne('tasks', sourceTaskId);
+  if (!t) return '';
+  return '<div style="background:var(--bg2);border:1px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:12px;cursor:pointer" onclick="go(\'taskDetail\',{taskId:\'' + sourceTaskId + '\'})">' +
+    '<span style="color:var(--accent);font-size:12px;font-weight:600">◀ มาจากงาน: ' + sanitize(t.title) + '</span></div>';
+}
+
 // แบนเนอร์บริบทงาน — แปะบนสุดของฟอร์ม "สร้างใหม่" เมื่อเปิดมาจาก openTaskLinkCreate เท่านั้น
 function _pendingLinkGuidelineHtml() {
   if (!_pendingLinkTaskId) return '';
