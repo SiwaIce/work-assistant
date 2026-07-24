@@ -500,9 +500,9 @@ function renderTaskCard(t) {
       <div class="task-card-actions" onclick="event.stopPropagation()">
         ${actionsHtml}
       </div>
-      <textarea rows="1" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์... (Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"
+      <textarea rows="2" class="task-comment-input" placeholder="💬 พิมพ์คอมเมนต์... (Enter ส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"
         onclick="event.stopPropagation()"
-        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+        oninput="this.classList.toggle('overflowing', this.scrollHeight > this.clientHeight)"
         onkeydown="event.stopPropagation();if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addQuickTaskComment('${t.id}',this)}"></textarea>
     </div>
     ${stepBarHtml}
