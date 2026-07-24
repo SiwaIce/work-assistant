@@ -5839,6 +5839,18 @@ body.mobile-mode .card {
   color: #fff;
 }
 
+.task-link-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.task-card-v2.tier-red .task-link-row, .task-card-v2.tier-amber .task-link-row {
+  border-top-color: rgba(255,255,255,.15);
+}
+
 .task-fu-badge {
   background: rgba(245,158,11,0.15);
   padding: 2px 6px;

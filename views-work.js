@@ -378,23 +378,33 @@ function renderTaskCard(t) {
   else if (t.priority === 'medium') priorityIcon = '🟡';
   else priorityIcon = '🟢';
 
-  var dealer = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
-  var dealerHtml = dealer ? '<span class="task-dealer">🏪 ' + sanitize(dealer.name) + '</span>' : '';
-
-  var pipelineHtml = '';
-  if (t.pipeId) {
-    var pipe = ST.getOne('pipeline', t.pipeId);
-    if (pipe) {
-      pipelineHtml = '<span class="task-pipeline">📊 ' + sanitize((pipe.projectName || '').substr(0, 25)) + '</span>';
-    }
+  // แถว "เชื่อมโยง" รวม Dealer/Pipeline (dealerId/pipeId แบบเดิม) + t.links (ดู TASK_LINK_TYPES/
+  // openTaskLink ใน utils.js) เป็นรายการเดียวกัน กดเปิดปลายทางตรงได้ทุกอัน — โชว์แค่ 4 อันแรกกันรก
+  // เกินนั้นย่อเป็น "+N" กดแล้วไปหน้ารายละเอียดงานเพื่อดูครบ
+  var connections = [];
+  if (t.dealerId) {
+    var _cd = ST.getOne('dealers', t.dealerId);
+    if (_cd) connections.push({ icon: '🏪', label: _cd.name || '-', onclick: "event.stopPropagation();go('dealerDetail',{dealerId:'" + t.dealerId + "'})" });
   }
-
-  // ลิงก์เชื่อมโยงกับเมนูอื่น (ดู TASK_LINK_TYPES/openTaskLink ใน utils.js) — โชว์บนการ์ดแค่ 2 อันแรก
-  // กันรก ดูครบทุกอันได้ที่หน้ารายละเอียดงาน
-  var linksHtml = (t.links || []).slice(0, 2).map(function(l) {
+  if (t.pipeId) {
+    var _cp = ST.getOne('pipeline', t.pipeId);
+    if (_cp) connections.push({ icon: '📊', label: _cp.projectName || _cp.name || '-', onclick: "event.stopPropagation();go('pipeDetail',{pipeId:'" + t.pipeId + "'})" });
+  }
+  (t.links || []).forEach(function(l) {
     var lt = TASK_LINK_TYPES[l.type] || { icon: '🔗' };
-    return '<span class="task-link-badge" onclick="event.stopPropagation();openTaskLink(\'' + l.type + '\',\'' + l.id + '\')" title="' + sanitize(l.label) + '">' + lt.icon + ' ' + sanitize((l.label || '').substr(0, 14)) + '</span>';
-  }).join('');
+    connections.push({ icon: lt.icon, label: l.label, onclick: "event.stopPropagation();openTaskLink('" + l.type + "','" + l.id + "')" });
+  });
+  var linkRowHtml = '';
+  if (connections.length) {
+    var shownConn = connections.slice(0, 4);
+    var extraConn = connections.length - shownConn.length;
+    linkRowHtml = '<div class="task-link-row">' +
+      shownConn.map(function(c) {
+        return '<span class="task-link-badge" onclick="' + c.onclick + '" title="' + sanitize(c.label) + '">' + c.icon + ' ' + sanitize((c.label || '').substr(0, 14)) + '</span>';
+      }).join('') +
+      (extraConn > 0 ? '<span class="task-link-badge" onclick="event.stopPropagation();go(\'taskDetail\',{taskId:\'' + t.id + '\'})">+' + extraConn + '</span>' : '') +
+      '</div>';
+  }
 
   var fuCount = countTaskFollowups(t);
   var fuHtml = '';
@@ -487,11 +497,8 @@ function renderTaskCard(t) {
         <div style="flex:1;min-width:0">
           <div class="task-title">${sanitize(t.title)}</div>
           <div class="task-card-meta">
-            ${dealerHtml}
-            ${pipelineHtml}
             ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
             ${fuHtml}
-            ${linksHtml}
           </div>
         </div>
       </div>
@@ -504,6 +511,7 @@ function renderTaskCard(t) {
         onclick="event.stopPropagation()"
         oninput="this.classList.toggle('overflowing', this.scrollHeight > this.clientHeight)"
         onkeydown="event.stopPropagation();if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addQuickTaskComment('${t.id}',this)}"></textarea>
+      ${linkRowHtml}
     </div>
     ${stepBarHtml}
   </div>
