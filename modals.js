@@ -1972,21 +1972,23 @@ function showTaskM(eid, prefillDealerId) {
   
   var dealers = ST.getAll('dealers');
   var selDealerId = prefillDealerId || t.dealerId || '';
-  
-  // Build dealer options
-  var dealerOpts = '<option value="">-- ไม่ระบุ --</option>';
-  for (var di = 0; di < dealers.length; di++) {
-    dealerOpts += '<option value="' + dealers[di].id + '"' + (selDealerId === dealers[di].id ? ' selected' : '') + '>' + sanitize(dealers[di].name || '') + '</option>';
-  }
-  
-  // Build pipeline options (will update via onchange)
-  var pipeOpts = '<option value="">-- ไม่ระบุ --</option>';
+  var selDealerName = '';
+  if (selDealerId) { var _sd0 = ST.getOne('dealers', selDealerId); selDealerName = _sd0 ? (_sd0.name || '') : ''; }
+
+  // ช่อง Dealer/Pipeline เป็น text + datalist (พิมพ์ค้นได้) แทน select เดิม — ค่าจริงเก็บใน hidden input
+  // (ft_dealer/ft_pipe) resolve จากข้อความที่พิมพ์ตอน save (ดู _resolveTaskDealerPipeForSave) ถ้าพิมพ์ชื่อ
+  // ที่ยังไม่มีในระบบจะถามสร้างใหม่ให้เลย ไม่ต้องออกไปสร้างที่เมนู Dealer/Pipeline ก่อน
+  var dealerListOpts = dealers.map(function(d) { return '<option value="' + sanitize(d.name || '') + '">'; }).join('');
+
+  var selPipeId = t.pipeId || '';
+  var selPipeName = '';
+  var pipeListOpts = '';
   if (selDealerId) {
-    var pipes = ST.pipelineByDealer(selDealerId);
-    for (var pi = 0; pi < pipes.length; pi++) {
-      var pp = pipes[pi];
-      if (!pipeIsOpen(pp)) continue;
-      pipeOpts += '<option value="' + pp.id + '"' + (t.pipeId === pp.id ? ' selected' : '') + '>' + sanitize(pp.projectName || pp.name || '-') + '</option>';
+    var pipes = ST.pipelineByDealer(selDealerId).filter(pipeIsOpen);
+    pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || p.name || '-') + '">'; }).join('');
+    if (selPipeId) {
+      var _sp0 = pipes.filter(function(p) { return p.id === selPipeId; })[0] || ST.getOne('pipeline', selPipeId);
+      selPipeName = _sp0 ? (_sp0.projectName || _sp0.name || '') : '';
     }
   }
   
@@ -2021,8 +2023,14 @@ function showTaskM(eid, prefillDealerId) {
     '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
     _taskLinksFieldHtml(t) +
     '<div class="fr">' +
-    '<div class="fg"><label>🏪 Dealer</label><select id="ft_dealer" onchange="taskDealerChanged()">' + dealerOpts + '</select></div>' +
-    '<div class="fg"><label>📊 Pipeline Project</label><select id="ft_pipe">' + pipeOpts + '</select></div>' +
+    '<div class="fg"><label>🏪 Dealer</label>' +
+    '<input type="text" id="ft_dealer_txt" list="ft_dealer_dl" value="' + sanitize(selDealerName) + '" placeholder="พิมพ์ชื่อ Dealer..." autocomplete="off" oninput="taskDealerTextChanged()">' +
+    '<datalist id="ft_dealer_dl">' + dealerListOpts + '</datalist>' +
+    '<input type="hidden" id="ft_dealer" value="' + selDealerId + '"></div>' +
+    '<div class="fg"><label>📊 Pipeline Project</label>' +
+    '<input type="text" id="ft_pipe_txt" list="ft_pipe_dl" value="' + sanitize(selPipeName) + '" placeholder="พิมพ์ชื่อโครงการ..." autocomplete="off" oninput="taskPipeTextChanged()">' +
+    '<datalist id="ft_pipe_dl">' + pipeListOpts + '</datalist>' +
+    '<input type="hidden" id="ft_pipe" value="' + selPipeId + '"></div>' +
     '</div>' +
     '<div class="fr">' + dpH('ft_s', t.startDate || _td(), 'วันเริ่ม') + dpH('ft_e', t.dueDate || '', 'Deadline') + '</div>' +
     '<div style="display:flex;gap:4px;flex-wrap:wrap;margin:-6px 0 10px">' +
@@ -2109,22 +2117,62 @@ function _ftRemoveLink(idx) {
   document.getElementById('ft_links_wrap').innerHTML = _taskLinksChipsHtml(window._ftLinks);
 }
 
-// Update pipeline dropdown when dealer changes
-function taskDealerChanged() {
-  var dId = document.getElementById('ft_dealer').value;
-  var sel = document.getElementById('ft_pipe');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">-- ไม่ระบุ --</option>';
-  if (!dId) return;
-  var pipes = ST.pipelineByDealer(dId);
-  for (var i = 0; i < pipes.length; i++) {
-    var p = pipes[i];
-    if (!pipeIsOpen(p)) continue;
-    var opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.projectName || p.name || '-';
-    sel.appendChild(opt);
+// พิมพ์ในช่อง Dealer — ถ้าตรงชื่อ Dealer ที่มีอยู่แล้ว (ไม่สนตัวพิมพ์เล็ก/ใหญ่) resolve เป็น id ทันที แล้ว
+// รีเฟรช datalist โครงการ Pipeline ให้ตรงกับ Dealer นั้น (ถ้ายังไม่ match ก็ปล่อยว่างไว้ก่อน — resolve
+// จริงจัง/ถามสร้างใหม่ทำตอนกด "บันทึก" ใน _resolveTaskDealerPipeForSave กันถามสร้างขณะพิมพ์ยังไม่จบ)
+function taskDealerTextChanged() {
+  var txt = document.getElementById('ft_dealer_txt').value.trim();
+  var hid = document.getElementById('ft_dealer');
+  var match = ST.getAll('dealers').filter(function(d) { return (d.name || '').trim().toLowerCase() === txt.toLowerCase(); })[0];
+  hid.value = match ? match.id : '';
+
+  var pipeDl = document.getElementById('ft_pipe_dl');
+  var pipeHid = document.getElementById('ft_pipe');
+  pipeHid.value = ''; // เปลี่ยน Dealer แล้ว โครงการที่เคย resolve ไว้ (ถ้ามี) ผูกกับ Dealer เก่า ต้อง resolve ใหม่
+  if (match) {
+    var pipes = ST.pipelineByDealer(match.id).filter(pipeIsOpen);
+    pipeDl.innerHTML = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || p.name || '-') + '">'; }).join('');
+  } else {
+    pipeDl.innerHTML = '';
   }
+}
+
+// พิมพ์ในช่อง Pipeline Project — resolve เป็น pipeId ถ้าตรงชื่อโครงการที่มีอยู่แล้วของ Dealer ที่เลือกไว้
+function taskPipeTextChanged() {
+  var dealerId = document.getElementById('ft_dealer').value;
+  var txt = document.getElementById('ft_pipe_txt').value.trim();
+  var hid = document.getElementById('ft_pipe');
+  if (!dealerId || !txt) { hid.value = ''; return; }
+  var match = ST.pipelineByDealer(dealerId).filter(function(p) { return (p.projectName || p.name || '').trim().toLowerCase() === txt.toLowerCase(); })[0];
+  hid.value = match ? match.id : '';
+}
+
+// เรียกตอนกด "บันทึก" เท่านั้น — resolve ข้อความที่พิมพ์ในช่อง Dealer/Pipeline เป็น id จริง ถ้าพิมพ์ชื่อที่ยัง
+// ไม่มีในระบบจะถามสร้างใหม่ให้เลย (Dealer ก่อน แล้วค่อย Pipeline ผูกกับ Dealer ที่ resolve/สร้างได้แล้ว —
+// กรณีพิมพ์ชื่อใหม่ทั้งคู่จะโดนถามสร้างทั้ง 2 อย่างตามลำดับ) คืน null ถ้าผู้ใช้ยกเลิกตอนถาม (ให้ยกเลิก save ด้วย)
+function _resolveTaskDealerPipeForSave() {
+  var dealerTxt = (document.getElementById('ft_dealer_txt') || {}).value || '';
+  dealerTxt = dealerTxt.trim();
+  var dealerId = document.getElementById('ft_dealer') ? document.getElementById('ft_dealer').value : '';
+
+  if (dealerTxt && !dealerId) {
+    if (!confirm('ยังไม่มี Dealer "' + dealerTxt + '" ในระบบ\nต้องการสร้าง Dealer ใหม่นี้เลยไหม?')) return null;
+    var newDealer = ST.add('dealers', { name: dealerTxt, level: 'Other', showSerial: 'Y' });
+    dealerId = newDealer.id;
+  }
+
+  var pipeTxt = (document.getElementById('ft_pipe_txt') || {}).value || '';
+  pipeTxt = pipeTxt.trim();
+  var pipeId = document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : '';
+
+  if (pipeTxt && !pipeId) {
+    if (!dealerId) { alert('กรุณาระบุ Dealer ก่อนสร้างโครงการ Pipeline ใหม่'); return null; }
+    if (!confirm('ยังไม่มีโครงการ "' + pipeTxt + '" ของ Dealer นี้ในระบบ\nต้องการสร้างโครงการ Pipeline ใหม่นี้เลยไหม?')) return null;
+    var newPipe = ST.add('pipeline', { dealerId: dealerId, projectName: pipeTxt, status: 'initial' });
+    pipeId = newPipe.id;
+  }
+
+  return { dealerId: dealerId, pipeId: pipeId };
 }
 
 function setTaskDescMode(mode) {
@@ -2170,6 +2218,8 @@ function saveTask(eid) {
   // ไม่บังคับชื่อถ้ามีรูปแนบแล้ว (เช่นแคปหน้าจอมาวางแล้วรีบบันทึกโดยไม่มีเวลาพิม) — ตั้งชื่อให้อัตโนมัติแทน
   if (!titleVal && hasAttach) titleVal = '📷 บันทึกด่วน (' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}) + ')';
   if (!titleVal) return alert('ใส่ชื่อ');
+  var dp = _resolveTaskDealerPipeForSave();
+  if (dp === null) return; // ผู้ใช้ยกเลิกตอนถูกถามให้สร้าง Dealer/Pipeline ใหม่ — หยุด save ให้ไปแก้ช่องเอง
   var data = {
     title: titleVal,
     description: document.getElementById('ft_d') ? document.getElementById('ft_d').value.trim() : '',
@@ -2180,8 +2230,8 @@ function saveTask(eid) {
     status: document.getElementById('ft_st') ? document.getElementById('ft_st').value : 'active',
     sequential: document.getElementById('ft_sq') ? document.getElementById('ft_sq').value === '1' : false,
     url: document.getElementById('ft_url') ? document.getElementById('ft_url').value.trim() : '',
-    dealerId: document.getElementById('ft_dealer') ? document.getElementById('ft_dealer').value : '',
-    pipeId: document.getElementById('ft_pipe') ? document.getElementById('ft_pipe').value : '',
+    dealerId: dp.dealerId,
+    pipeId: dp.pipeId,
     attachments: window._ftDescAttach || [],
     links: window._ftLinks || []
   };
