@@ -212,7 +212,6 @@ var SYNC_KEY_MAP = {
   'prospects': 'prospects',
   'postit': 'postit',
   'salesOrders': 'salesOrders',
-  'salesForecast': 'salesForecast',
   // ✅ เพิ่ม 2026-07-18 — พบว่าไม่เคย sync ขึ้น cloud มาก่อนเลย (เสี่ยงหายถ้าเครื่องพัง) ตรวจสอบพบตอนไล่ทวน
   // ทุก collection ในระบบ — shortKey ต้องตรงกับ ST._keys (v7_meetings→'meetings', v7_wait→'wait', v7_tpl→'tpl')
   'meetings': 'meetings',
