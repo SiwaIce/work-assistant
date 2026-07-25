@@ -625,15 +625,28 @@ function fixProductsStructureBeforeSync() {
     
     // Override ST.delete for sync
     var _origDelete = ST.delete.bind(ST);
-    
+
     ST.delete = function(coll, id) {
+      // ✅ ต้องอ่าน dealerId ก่อนลบจริง (หลัง _origDelete ตัว record จะหายจาก local แล้ว หา dealerId ไม่ได้)
+      // เอาไว้ลบ doc ฝั่ง client-view (dealerUpdates/{dealerId}/pipeline) คู่กันด้วย ดู autoSyncPipelineToCustomer
+      var _pipeDealerIdForSync = null;
+      if (coll === 'pipeline') {
+        var _p = ST.getOne('pipeline', id);
+        _pipeDealerIdForSync = _p ? _p.dealerId : null;
+      }
+
       _origDelete(coll, id);
-      
+
+      if (coll === 'pipeline' && _pipeDealerIdForSync && typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER) {
+        db.collection('dealerUpdates').doc(_pipeDealerIdForSync).collection('pipeline').doc(id).delete()
+          .catch(function(e) { console.warn('autoSyncPipelineToCustomer delete error:', e); });
+      }
+
       if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED && CURRENT_USER) {
         var key = ST._keys[coll];
         if (!key) return;
         var shortKey = key.replace('v7_', '');
-        
+
         var _delRef = getCollectionRef(shortKey);
         if (id && _delRef) {
           _delRef.doc(id).delete().catch(function(e) {
@@ -655,7 +668,26 @@ function fixProductsStructureBeforeSync() {
       }
     };
 
-    console.log('✅ ST._set and ST.delete override ready');
+    // ✅ Pipeline เท่านั้น — เสริมจาก ST._set ด้านบน (sync ก้อนข้อมูลทั้งหมดขึ้น users/{uid}/pipeline ของเซล
+    // เอง ที่ client-view อ่านไม่ถึง) อันนี้ sync เฉพาะ record ที่เพิ่งแก้ ไปที่ path ที่ client-view อ่านจริง
+    // (dealerUpdates/{dealerId}/pipeline) ทุกครั้งที่บันทึกจากแอปหลัก ไม่ต้องรอกดปุ่ม "🔄 Sync" (ปุ่มเดิมยังใช้ได้
+    // ตามปกติ ไม่ชนกัน เพราะเขียนทับด้วย merge:true) ครอบคลุมทุกจุดที่เรียก ST.add/ST.update('pipeline',...)
+    // เพราะ wrap ที่ตัว method เอง ไม่ต้องไปแก้ทีละจุดเรียกใช้ (มีมากกว่า 20 จุดทั่วแอป)
+    var _origAdd = ST.add.bind(ST);
+    ST.add = function(coll, data) {
+      var saved = _origAdd(coll, data);
+      if (coll === 'pipeline') autoSyncPipelineToCustomer(saved.id);
+      return saved;
+    };
+
+    var _origUpdate = ST.update.bind(ST);
+    ST.update = function(coll, id, updates) {
+      var result = _origUpdate(coll, id, updates);
+      if (coll === 'pipeline') autoSyncPipelineToCustomer(id);
+      return result;
+    };
+
+    console.log('✅ ST._set / ST.add / ST.update / ST.delete override ready');
   }, 100);
 })();
 

@@ -3415,6 +3415,54 @@ function syncDealerPipelineToCustomer(dealerId) {
   });
 }
 
+// sync pipeline record เดียวไปที่ dealerUpdates/{dealerId}/pipeline — เรียกอัตโนมัติทุกครั้งที่ ST.add/
+// ST.update/ST.delete('pipeline',...) จาก override ใน firebase-sync.js (ไม่ต้องกดปุ่ม "🔄 Sync" เอง)
+// โครงสร้างข้อมูลเหมือน syncDealerPipelineToCustomer() ด้านบนทุกอย่าง เพื่อให้ client-view อ่านได้แบบเดียวกัน
+function autoSyncPipelineToCustomer(pipeId) {
+  if (typeof SYNC_ENABLED === 'undefined' || !SYNC_ENABLED || !CURRENT_USER) return;
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p || !p.dealerId) return;
+
+  var ref = db.collection('dealerUpdates').doc(p.dealerId).collection('pipeline').doc(pipeId);
+
+  if (!pipeIsOpen(p)) {
+    // ไม่ active แล้ว (win/lost/deliver ฯลฯ) — ลบออกจากที่ลูกค้าเห็น เหมือนพฤติกรรมปุ่ม Sync เดิม
+    ref.delete().catch(function(e) { console.warn('autoSyncPipelineToCustomer delete error:', e); });
+    return;
+  }
+
+  var latestLog = null;
+  var logs = ST.pipeLogsByPipe(pipeId);
+  if (logs && logs.length) {
+    latestLog = { date: logs[0].date ? logs[0].date.split('T')[0] : '', content: logs[0].content || '' };
+  }
+
+  var customerData = {
+    id: p.id,
+    projectName: p.projectName || '',
+    endUserTH: p.endUserTH || '',
+    endUserEN: p.endUserEN || '',
+    unitType: p.unitType || '',
+    status: p.status || 'initial',
+    model: p.model || '',
+    modelQty: p.modelQty || 1,
+    items: p.items || [],
+    forecastAmount: p.forecastAmount || 0,
+    biddingDate: p.biddingDate || '',
+    shipmentDate: p.shipmentDate || '',
+    tor: p.tor || '',
+    nextAction: p.nextAction || '',
+    registerDate: p.registerDate || '',
+    pinned: p.pinned || false,
+    latestLog: latestLog,
+    _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    _status: 'approved',
+    _source: 'sales_sync'
+  };
+
+  ref.set(customerData, { merge: true }).catch(function(e) { console.warn('autoSyncPipelineToCustomer error:', e); });
+}
+
 // ================================================================
 // CUSTOMER UPDATE HISTORY - ดูประวัติการอัพเดทของลูกค้า
 // ================================================================
