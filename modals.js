@@ -1018,9 +1018,10 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     return '' +
       ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
       visitPhotoReminderHtml() +
-      '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType !== 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label></div></div>' +
-      '<div id="fv_dealer_row"' + (srcType === 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' +
+      '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
+      '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' +
       '<div id="fv_lead_row"' + (srcType !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' +
+      '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(srcType === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>' +
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
@@ -1039,7 +1040,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
     '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
     '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
-    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st !== 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label></div></div>' + '<div id="fv_dealer_row"' + (st === 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>'; })() +
+    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
     '<div class="fg"><label>DJI Dealer</label><select id="fv_djid">' + optionsHTML(cfg.djiDealerTypes, v.djiDealer || (dealer ? dealer.djiDealer : '') || '', '--') + '</select></div></div>' +
@@ -1294,14 +1295,18 @@ function addFbRow() { var c = document.getElementById('fv_fbs'); if (c) c.insert
 // Save Visit Quick
 function saveVisitQuick(dealerId, eid) {
   var srcEl = document.querySelector('input[name="fv_source"]:checked');
-  var isLeadSrc = srcEl && srcEl.value === 'lead';
+  var srcType = srcEl ? srcEl.value : 'dealer';
   var did = '', prospectId = '', company = '';
-  if (isLeadSrc) {
+  if (srcType === 'lead') {
     var selPr = document.getElementById('fv_lead_prospect');
     prospectId = selPr ? selPr.value : '';
     if (!prospectId) return alert('เลือก Lead ที่ติดตาม');
     var pr = ST.getOne('prospects', prospectId);
     company = pr ? (pr.companyName || '') : '';
+  } else if (srcType === 'other') {
+    var companyEl = document.getElementById('fv_company_txt');
+    company = companyEl ? companyEl.value.trim() : '';
+    if (!company) return alert('พิมพ์ชื่อบริษัท');
   } else {
     did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
     if (!did) return alert('เลือก Dealer');
@@ -1325,14 +1330,18 @@ function saveVisitQuick(dealerId, eid) {
 function saveVisit(dealerId, eid) {
   var cfg = getConfig();
   var srcEl = document.querySelector('input[name="fv_source"]:checked');
-  var isLeadSrc = srcEl && srcEl.value === 'lead';
+  var srcType = srcEl ? srcEl.value : 'dealer';
   var did = '', prospectId = '', company = '';
-  if (isLeadSrc) {
+  if (srcType === 'lead') {
     var selPr = document.getElementById('fv_lead_prospect');
     prospectId = selPr ? selPr.value : '';
     if (!prospectId) return alert('เลือก Lead ที่ติดตาม');
     var pr = ST.getOne('prospects', prospectId);
     company = pr ? (pr.companyName || '') : '';
+  } else if (srcType === 'other') {
+    var companyEl = document.getElementById('fv_company_txt');
+    company = companyEl ? companyEl.value.trim() : '';
+    if (!company) return alert('พิมพ์ชื่อบริษัท');
   } else {
     did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
     if (!did) return alert('เลือก Dealer');

@@ -63,7 +63,7 @@ function rVisitDet(el) {
   
   <div class="fr"><div><label style="color:#64748b;font-size:.68rem">วันที่</label><div>${fD(v.date)}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">เวลา</label><div>${v.time||'-'}</div></div></div>
-  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">${v.prospectId ? 'Lead' : 'Dealer'}</label><div>${d?.name || v.company || '-'} ${d?levelTag(d.level):''}</div></div>
+  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">${d ? 'Dealer' : (v.prospectId ? 'Lead' : 'บริษัท (ไม่ใช่ Dealer)')}</label><div>${d?.name || v.company || '-'} ${d?levelTag(d.level):''}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">Mode</label><div>${modeTag(v.mode)}</div></div></div>
   <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">DJI Dealer</label><div>${v.djiDealer||'-'}</div></div>
   <div><label style="color:#64748b;font-size:.68rem">Sale</label><div>${v.saleName||cfg.saleName}</div></div></div>

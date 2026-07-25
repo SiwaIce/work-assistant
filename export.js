@@ -65,7 +65,7 @@ function xVisit() {
   const vts = ST.filter('visits', v => isInRange(v.date, f, t)).sort((a,b) => a.date.localeCompare(b.date));
   _xVisitRows = vts.map(v => {
     const d = ST.getOne('dealers', v.dealerId);
-    return { id: v.id, cells: [_xv2Date(v.date), '', '', v.saleName||cfg.saleName, d?.name||'', v.mode==='offline'?'Offline':'Online', v.djiDealer||'', v.summary||'', v.location||''] };
+    return { id: v.id, cells: [_xv2Date(v.date), '', '', v.saleName||cfg.saleName, d?.name||v.company||'', v.mode==='offline'?'Offline':'Online', v.djiDealer||'', v.summary||'', v.location||''] };
   });
   if (!_xVisitRows.length) { document.getElementById('xv_area').innerHTML = '<div class="empty"><p>ไม่มีข้อมูล</p></div>'; return; }
   xRenderVisit();
@@ -77,7 +77,10 @@ function xVisit() {
 function xRenderVisit() {
   var el = document.getElementById('xv_area'); if (!el) return;
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
+  html += '<div style="display:flex;gap:14px;flex-wrap:wrap">';
   html += '<label style="display:flex;align-items:center;gap:5px;font-size:.72rem;cursor:pointer"><input type="checkbox" id="xv_noloc" style="width:auto"> ไม่รวมคอลัมน์ Location ตอน copy</label>';
+  html += '<label style="display:flex;align-items:center;gap:5px;font-size:.72rem;cursor:pointer"><input type="checkbox" id="xv_incHeader" style="width:auto"> รวมหัวตารางตอน copy</label>';
+  html += '</div>';
   html += '<div class="bg" style="gap:6px">';
   html += '<button class="btn bsm bo" onclick="copyVisitExport(true)">📋 Copy ที่เลือก (<span id="xv_selCount">0</span>)</button>';
   html += '<button class="btn bsm bp" onclick="copyVisitExport(false)">📋 Copy ทั้งหมด</button>';
@@ -88,9 +91,15 @@ function xRenderVisit() {
   html += '<th style="width:26px"><input type="checkbox" id="xv_selAll" style="width:auto" onchange="xvToggleAll(this.checked)"></th>';
   XV_HEADERS.forEach(function(h) { html += '<th>' + sanitize(h).replace(/\n/g, '<br>') + '</th>'; });
   html += '</tr></thead><tbody>';
+  // Update (index 7) ตัดเหลือบรรทัดเดียวเป็นค่าเริ่มต้น (กันแถวสูงไม่เท่ากันตอนบางรายการมีสรุปยาวหลายย่อหน้า —
+  // เลือก/copy ทั้งแถวยากตอนแถวสูงๆ ต่ำๆ ปนกัน) คลิกที่ช่องนั้นเพื่อขยายดูเต็มทีละแถวได้ ไม่กระทบข้อมูลที่ copy จริง
+  // (copyVisitExport ใช้ _xVisitRows ตรงๆ ไม่ได้อ่านจาก DOM ที่ตัดบรรทัดไว้)
   _xVisitRows.forEach(function(r, i) {
     html += '<tr><td><input type="checkbox" class="xv-row-chk" style="width:auto" data-idx="' + i + '" onchange="xvUpdSelCount()"></td>';
-    r.cells.forEach(function(c) { html += '<td>' + sanitize(String(c)).replace(/\n/g, '<br>') + '</td>'; });
+    r.cells.forEach(function(c, ci) {
+      if (ci === 7) html += '<td class="xv-cell-trunc" onclick="this.classList.toggle(\'expanded\')" title="คลิกเพื่อขยาย/ย่อ">' + sanitize(String(c)) + '</td>';
+      else html += '<td>' + sanitize(String(c)).replace(/\n/g, ' ') + '</td>';
+    });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
@@ -118,6 +127,7 @@ function _csvQuote(v) {
 
 function copyVisitExport(onlySelected) {
   var noLoc = document.getElementById('xv_noloc') && document.getElementById('xv_noloc').checked;
+  var incHeader = document.getElementById('xv_incHeader') && document.getElementById('xv_incHeader').checked;
   var idxs;
   if (onlySelected) {
     idxs = Array.from(document.querySelectorAll('.xv-row-chk:checked')).map(function(c) { return parseInt(c.dataset.idx, 10); });
@@ -127,7 +137,7 @@ function copyVisitExport(onlySelected) {
   }
   var headers = XV_HEADERS.slice();
   if (noLoc) headers.pop();
-  var lines = [headers.map(_csvQuote).join('\t')];
+  var lines = incHeader ? [headers.map(_csvQuote).join('\t')] : [];
   idxs.forEach(function(i) {
     var cells = _xVisitRows[i].cells.slice();
     if (noLoc) cells.pop();

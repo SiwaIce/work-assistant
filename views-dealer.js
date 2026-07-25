@@ -1888,7 +1888,7 @@ function buildVisitUpdateText(v) {
 
   txt += '📍 Visit Report\n';
   txt += '━━━━━━━━━━━━━━━━━━━━\n\n';
-  txt += 'Dealer: ' + (d ? d.name : '-') + '\n';
+  txt += 'Dealer: ' + (d ? d.name : (v.company || '-')) + '\n';
   txt += 'Date: ' + (v.date || '-') + '\n';
   if (v.time) txt += 'Time: ' + v.time + '\n';
   txt += 'Mode: ' + (v.mode === 'offline' ? 'Onsite' : 'Online') + '\n';

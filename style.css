@@ -418,6 +418,13 @@ textarea{min-height:50px;resize:vertical}
 .export-table tr:hover td{background:#1e293b}
 .export-wrap{max-height:400px;overflow:auto;border:1px solid #334155;border-radius:8px}
 
+/* ตาราง Visit Report export — ทุกคอลัมน์ตัดเหลือบรรทัดเดียวเป็นค่าเริ่มต้น (กันแถวสูงไม่เท่ากันเวลาบางช่อง
+   เช่น Dealer Name ยาวจนตัวหนังสือขึ้นบรรทัดใหม่เอง) คอลัมน์ Update คลิกเพื่อขยายดูเต็มทีละแถวได้ (.expanded)
+   ไม่กระทบตารางอื่นที่ใช้ .export-table เหมือนกัน เพราะ scope ด้วย #xv_tbl */
+#xv_tbl td{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#xv_tbl td.xv-cell-trunc{max-width:280px;cursor:pointer}
+#xv_tbl td.xv-cell-trunc.expanded{max-width:420px;white-space:pre-wrap;cursor:pointer}
+
 /* === SUMMARY === */
 .sum-copy{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;font-size:.74rem;white-space:pre-wrap;color:#94a3b8;max-height:400px;overflow-y:auto;font-family:'Courier New',monospace}
 

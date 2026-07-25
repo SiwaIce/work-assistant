@@ -1528,8 +1528,10 @@ function toggleVisitSource(val) {
   window._visitSourceType = val;
   var dr = document.getElementById('fv_dealer_row');
   var lr = document.getElementById('fv_lead_row');
-  if (dr) dr.style.display = val === 'lead' ? 'none' : '';
+  var or = document.getElementById('fv_other_row');
+  if (dr) dr.style.display = val === 'dealer' ? '' : 'none';
   if (lr) lr.style.display = val === 'lead' ? '' : 'none';
+  if (or) or.style.display = val === 'other' ? '' : 'none';
 }
 
 // Model dropdown (backward compatible with Object models)
