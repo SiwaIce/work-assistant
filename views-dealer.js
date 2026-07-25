@@ -1168,6 +1168,8 @@ function copyDealerTimeline(dealerId) {
 var dlrFcView = 'model';
 var dlrFcStatus = 'active';
 var dlrFcCatFilter = {}; // หมวดที่ปิดอยู่จากการคลิกการ์ดสรุปตามหมวดหมู่ (แท็บ Forecast ของ Dealer) — ว่าง = แสดงทั้งหมด
+var dlrFcMode = 'auto'; // 'auto' = สรุปจาก Pipeline จริง (เดิม), 'manual' = เซลกรอก Sales Forecast เอง (runrate/project)
+var dlrFcSelMonth = ''; // เดือนที่เลือกดูใน Sales Forecast (manual mode) — ว่าง = ใช้เดือนล่าสุดที่มีข้อมูล
 
 // สร้าง pipes ของ Dealer นี้ที่ผ่านตัวกรอง status ปัจจุบันของแท็บ แล้ว export เป็น Excel
 function exportDlrFcExcel(dealerId) {
@@ -1182,6 +1184,14 @@ function exportDlrFcExcel(dealerId) {
 }
 
 function dealerForecastTab(d) {
+  // สลับ สรุปอัตโนมัติ (จาก Pipeline จริง เดิม) / Sales Forecast (เซลกรอกเอง runrate+project แบบเดียวกับ
+  // client-view) — ผูก mode ไว้ที่ระดับบนสุดของแท็บ กันโค้ดเดิมด้านล่างต้องแก้เยอะ
+  var fcModeBar = '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px">' +
+    '<button class="btn-xs" style="flex:1;border-radius:0;' + (dlrFcMode === 'auto' ? 'background:var(--accent);color:#fff' : '') + '" onclick="dlrFcMode=\'auto\';render()">📊 สรุปอัตโนมัติ</button>' +
+    '<button class="btn-xs" style="flex:1;border-radius:0;' + (dlrFcMode === 'manual' ? 'background:var(--accent);color:#fff' : '') + '" onclick="dlrFcMode=\'manual\';render()">✍️ Sales Forecast</button>' +
+    '</div>';
+  if (dlrFcMode === 'manual') return fcModeBar + dealerSalesForecastTab(d);
+
   var allPipes = ST.pipelineByDealer(d.id);
   
   var pipes;
@@ -1313,7 +1323,187 @@ function dealerForecastTab(d) {
   }
   h += '</div>';
 
+  return fcModeBar + h;
+}
+
+// ================================================================
+// DEALER SALES FORECAST (Manual) — เซลกรอกเอง runrate + project แยกจาก Pipeline จริง (สรุปอัตโนมัติด้านบน)
+// project ผูกกับ Pipeline จริงได้ (pipeId) — ถ้าผูกไว้ ดึง model/qty/shipment สดจาก Pipeline เสมอ ไม่เก็บซ้ำ
+// ================================================================
+function dealerSalesForecastTab(d) {
+  var entries = ST.filter('salesForecast', function(f) { return f.dealerId === d.id; });
+  var runrate = entries.filter(function(e) { return e.type === 'runrate'; });
+  var projects = entries.filter(function(e) { return e.type === 'project'; });
+
+  var monthTotals = {};
+  function addMonth(month, qty, isProject) {
+    var key = month || 'ไม่ระบุเดือน';
+    if (!monthTotals[key]) monthTotals[key] = { total: 0, runrate: 0, project: 0 };
+    monthTotals[key].total += qty;
+    if (isProject) monthTotals[key].project += qty; else monthTotals[key].runrate += qty;
+  }
+  runrate.forEach(function(r) { addMonth(r.month, Number(r.qty) || 0, false); });
+  projects.forEach(function(p) {
+    var pipe = p.pipeId ? ST.getOne('pipeline', p.pipeId) : null;
+    var qty = pipe ? getPipeTotalQty(pipe) : (Number(p.qty) || 0);
+    addMonth(p.month, qty, true);
+  });
+
+  var months = Object.keys(monthTotals).sort();
+  var curMonth = (dlrFcSelMonth && monthTotals[dlrFcSelMonth]) ? dlrFcSelMonth : (months[months.length - 1] || '');
+  var curTotals = monthTotals[curMonth] || { total: 0, runrate: 0, project: 0 };
+
+  var h = '<div class="card"><h2>✍️ Sales Forecast — ' + sanitize(d.name) + '</h2>';
+
+  if (!months.length) {
+    h += '<div class="empty"><p>ยังไม่มี Sales Forecast — กด "+ เพิ่ม" ด้านล่างเพื่อเริ่ม</p></div>';
+  } else {
+    h += '<div class="sr" style="margin-bottom:10px">' +
+      '<div class="sc"><div class="sn c1">' + curTotals.total + '</div><div class="sl">' + sanitize(curMonth) + ' รวม</div></div>' +
+      '<div class="sc"><div class="sn c2">' + curTotals.runrate + '</div><div class="sl">Runrate</div></div>' +
+      '<div class="sc"><div class="sn c5">' + curTotals.project + '</div><div class="sl">Project</div></div>' +
+      '</div>';
+    if (months.length > 1) {
+      h += '<div class="fg" style="margin-bottom:10px"><select onchange="dlrFcSelMonth=this.value;render()">' +
+        months.map(function(m) { return '<option value="' + sanitize(m) + '"' + (m === curMonth ? ' selected' : '') + '>' + sanitize(m) + '</option>'; }).join('') +
+        '</select></div>';
+    }
+  }
+
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+    '<span style="font-weight:700;font-size:13px">🔁 Runrate</span>' +
+    '<button class="btn bsm bp" onclick="showSalesForecastM(\'' + d.id + '\',\'runrate\')">+ เพิ่ม</button></div>';
+  var rrInMonth = runrate.filter(function(r) { return (r.month || 'ไม่ระบุเดือน') === curMonth; });
+  if (rrInMonth.length) {
+    rrInMonth.forEach(function(r) {
+      h += '<div class="li" style="display:flex;justify-content:space-between;align-items:center;cursor:default">' +
+        '<div><div class="lt">' + sanitize(r.model || '-') + '</div><div class="ls">' + sanitize(r.month || '') + '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:8px"><b>×' + (r.qty || 0) + '</b>' +
+        '<button class="btn bsm bo" onclick="showSalesForecastM(\'' + d.id + '\',\'runrate\',\'' + r.id + '\')">✏️</button>' +
+        '<button class="btn bsm bd" onclick="delSalesForecast(\'' + r.id + '\')">🗑️</button></div></div>';
+    });
+  } else {
+    h += '<div class="empty"><p>ยังไม่มี Runrate เดือนนี้</p></div>';
+  }
+
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px">' +
+    '<span style="font-weight:700;font-size:13px">📁 Project</span>' +
+    '<button class="btn bsm bp" onclick="showSalesForecastM(\'' + d.id + '\',\'project\')">+ เพิ่ม</button></div>';
+  var projInMonth = projects.filter(function(p) { return (p.month || 'ไม่ระบุเดือน') === curMonth; });
+  if (projInMonth.length) {
+    projInMonth.forEach(function(p) {
+      var pipe = p.pipeId ? ST.getOne('pipeline', p.pipeId) : null;
+      var title = pipe ? (pipe.projectName || '-') : (p.projectName || '-');
+      var modelText = pipe ? getPipeModelSummary(pipe) : (p.note || '');
+      var qty = pipe ? getPipeTotalQty(pipe) : (Number(p.qty) || 0);
+      h += '<div class="li" style="cursor:default">';
+      h += '<div class="lm"><div class="lt">' + sanitize(title) + (pipe ? ' <span class="tag tag-count">🔗 Pipeline</span>' : '') + '</div>';
+      h += '<div class="ls">' + sanitize(modelText) + (qty ? ' — x' + qty : '') + '</div>';
+      if (pipe) {
+        h += '<div class="ls" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
+          '<span>📦 Shipment: <b>' + (pipe.shipmentDate ? fDShort(pipe.shipmentDate) : 'ยังไม่กำหนด') + '</b></span>' +
+          '<span style="color:var(--accent);cursor:pointer" onclick="event.stopPropagation();jumpToPipeShipment(\'' + d.id + '\',\'' + pipe.id + '\')">✏️ แก้ไข Shipment →</span></div>';
+      }
+      h += '</div>';
+      h += '<div style="display:flex;gap:6px;margin-top:6px">' +
+        '<button class="btn bsm bo" onclick="showSalesForecastM(\'' + d.id + '\',\'project\',\'' + p.id + '\')">✏️</button>' +
+        '<button class="btn bsm bd" onclick="delSalesForecast(\'' + p.id + '\')">🗑️</button></div>';
+      h += '</div>';
+    });
+  } else {
+    h += '<div class="empty"><p>ยังไม่มี Project เดือนนี้</p></div>';
+  }
+
+  h += '</div>';
   return h;
+}
+
+function showSalesForecastM(dealerId, type, eid) {
+  var e = eid ? ST.getOne('salesForecast', eid) : {};
+  var isProject = type === 'project';
+  var title = (eid ? '✏️ แก้ไข ' : '➕ เพิ่ม ') + (isProject ? 'Project Forecast' : 'Runrate Forecast');
+
+  var html = '';
+  if (isProject) {
+    var pipes = ST.pipelineByDealer(dealerId).filter(pipeIsOpen);
+    var linkedPipe = e.pipeId ? ST.getOne('pipeline', e.pipeId) : null;
+    var pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || '-') + '" data-id="' + p.id + '">'; }).join('');
+    html += '<div class="fg"><label>🔗 ผูกกับ Pipeline (ถ้ามี)</label>' +
+      '<input type="text" id="sf_pipe_txt" list="sf_pipe_dl" placeholder="พิมพ์ค้นหาชื่อโครงการ..." autocomplete="off" value="' + sanitize(linkedPipe ? (linkedPipe.projectName || '') : '') + '" oninput="sfPipeTextChanged()">' +
+      '<datalist id="sf_pipe_dl">' + pipeListOpts + '</datalist>' +
+      '<input type="hidden" id="sf_pipe_id" value="' + (e.pipeId || '') + '"></div>' +
+      '<div class="hint">💡 ไม่มีก็พิมพ์ชื่อโครงการอิสระด้านล่างได้เลย ไม่ต้องผูกกับ Pipeline จริงก็ได้</div>' +
+      '<div id="sf_freetext_wrap" style="' + (linkedPipe ? 'display:none' : '') + '">' +
+      '<div class="fg"><label>ชื่อโครงการ (ถ้าไม่ผูก Pipeline)</label><input type="text" id="sf_projname" value="' + sanitize(e.projectName || '') + '"></div>' +
+      '<div class="fg"><label>จำนวน (หน่วย)</label><input type="number" id="sf_qty" value="' + (e.qty || '') + '"></div>' +
+      '</div>' +
+      '<div class="fg"><label>หมายเหตุ</label><input type="text" id="sf_note" value="' + sanitize(e.note || '') + '"></div>';
+  } else {
+    html += '<div class="fg"><label>Model *</label><select id="sf_model">' + modelOptionsNew(e.model || '') + '</select></div>' +
+      '<div class="fg"><label>จำนวน (หน่วย) *</label><input type="number" id="sf_qty" value="' + (e.qty || '') + '"></div>';
+  }
+  html += '<div class="fg"><label>เดือน *</label><input type="month" id="sf_month" value="' + (e.month || '') + '"></div>';
+  html += '<button class="btn bp btn-full" onclick="saveSalesForecast(\'' + dealerId + '\',\'' + type + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>';
+
+  openM(title, html);
+}
+
+function sfPipeTextChanged() {
+  var txtEl = document.getElementById('sf_pipe_txt');
+  var dl = document.getElementById('sf_pipe_dl');
+  var idEl = document.getElementById('sf_pipe_id');
+  if (!txtEl || !dl || !idEl) return;
+  var txt = txtEl.value.trim();
+  var match = null;
+  Array.from(dl.options).forEach(function(o) { if (o.value === txt) match = o; });
+  idEl.value = match ? match.getAttribute('data-id') : '';
+  var freeWrap = document.getElementById('sf_freetext_wrap');
+  if (freeWrap) freeWrap.style.display = match ? 'none' : '';
+}
+
+function saveSalesForecast(dealerId, type, eid) {
+  var month = document.getElementById('sf_month').value;
+  if (!month) return alert('เลือกเดือน');
+  var data = { dealerId: dealerId, type: type, month: month };
+  if (type === 'project') {
+    var pipeId = document.getElementById('sf_pipe_id').value;
+    data.pipeId = pipeId || '';
+    if (!pipeId) {
+      var projName = document.getElementById('sf_projname').value.trim();
+      if (!projName) return alert('ใส่ชื่อโครงการ หรือผูก Pipeline');
+      data.projectName = projName;
+      data.qty = Number(document.getElementById('sf_qty').value) || 0;
+    }
+    data.note = document.getElementById('sf_note').value.trim();
+  } else {
+    var model = document.getElementById('sf_model').value;
+    if (!model) return alert('เลือก Model');
+    data.model = model;
+    data.qty = Number(document.getElementById('sf_qty').value) || 0;
+  }
+  if (eid) { ST.update('salesForecast', eid, data); }
+  else { data.createdAt = _nw(); ST.add('salesForecast', data); }
+  dlrFcSelMonth = month;
+  closeMForce(); toast('💾 บันทึกแล้ว'); render();
+}
+
+function delSalesForecast(id) {
+  if (!confirm('ลบรายการนี้?')) return;
+  ST.delete('salesForecast', id);
+  toast('🗑️ ลบแล้ว'); render();
+}
+
+// เปิดฟอร์มแก้ไข Pipeline ตรงไปที่ช่อง Shipment Date เลย (เลื่อนจอ + ไฮไลท์ชั่วคราว) — กดจากการ์ด Project
+// forecast ที่ผูก Pipeline ไว้ ไม่ต้องไปหาช่อง Shipment เองในฟอร์มยาวๆ
+function jumpToPipeShipment(dealerId, pipeId) {
+  showPipelineM(dealerId, pipeId);
+  setTimeout(function() {
+    var wrap = document.getElementById('dpw_fp_ship');
+    if (!wrap) return;
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    wrap.classList.add('sf-ship-highlight');
+    setTimeout(function() { wrap.classList.remove('sf-ship-highlight'); }, 2000);
+  }, 50);
 }
 
 // ================================================================

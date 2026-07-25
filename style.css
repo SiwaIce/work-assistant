@@ -446,6 +446,7 @@ textarea{min-height:50px;resize:vertical}
 
 /* === DATE PICKER === */
 .dpw{position:relative}
+.sf-ship-highlight{outline:2px solid var(--accent);border-radius:8px;transition:outline-color .3s}
 .dpi{padding-right:55px!important;cursor:text;background:#0f172a!important}
 .dpw .dpbs{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;gap:1px}
 .dpw .dpb{background:none;border:none;color:#64748b;cursor:pointer;font-size:.78rem;padding:2px;border-radius:4px;transition:.15s}

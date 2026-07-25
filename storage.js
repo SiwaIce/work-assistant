@@ -44,6 +44,7 @@ const ST = {
     solutionPresets: 'v7_solutionPresets',
     prospects: 'v7_prospects',
     salesOrders: 'v7_salesOrders',
+    salesForecast: 'v7_salesForecast',
     postit: 'v7_postit'
   },
 
