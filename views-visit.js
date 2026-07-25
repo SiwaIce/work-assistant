@@ -14,19 +14,21 @@ function rVisits(el) {
   else if (visitFlt === 'online') vts = vts.filter(v => v.mode === 'online');
 
   el.innerHTML = `
-  <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
+  <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <button class="btn bp" onclick="showVisitM()">➕ Visit Report</button>
     <button class="btn bo" onclick="openVisitWindow(S.filterDealer||'')" title="เปิดเป็นแท็บแยก เต็มจอ มีสมุดโน้ตเร็วด้านขวา">🪟 เปิดแท็บแยก</button>
-    <button class="btn bo" onclick="copyAllVisits()">📋 Copy</button>
-    <button class="btn bo" onclick="dlAllVisitsCSV()">📤 CSV</button>
     ${S.filterDealer?`<button class="btn bo" onclick="go('visits')">✕ ล้าง Filter</button>`:''}
+    <div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-left:auto">
+      <button class="btn-xs" style="border-radius:0;${visitListView==='card'?'background:var(--accent);color:#fff':''}" onclick="visitListView='card';render()">🗂 การ์ด</button>
+      <button class="btn-xs" style="border-radius:0;${visitListView==='table'?'background:var(--accent);color:#fff':''}" onclick="visitListView='table';render()">📊 ตาราง</button>
+    </div>
   </div>
   <div class="ftabs">
     <div class="ftab ${visitFlt==='all'?'act':''}" onclick="visitFlt='all';render()">ทั้งหมด (${ST.count('visits')})</div>
     <div class="ftab ${visitFlt==='offline'?'act':''}" onclick="visitFlt='offline';render()">🤝 Offline</div>
     <div class="ftab ${visitFlt==='online'?'act':''}" onclick="visitFlt='online';render()">📞 Online</div>
   </div>
-  ${vts.length ? vts.slice(0,50).map(v => {
+  ${visitListView === 'table' ? '<div id="xv_area"></div>' : (vts.length ? vts.slice(0,50).map(v => {
     const d = ST.getOne('dealers', v.dealerId);
     return `<div class="visit-item" onclick="go('visitDetail',{visitId:'${v.id}'})">
       <h4>${fD(v.date)} ${v.time||''} — ${sanitize(d?.name || v.company || (v.prospectId ? '🆕 Lead' : '?'))} ${modeTag(v.mode)} ${v.djiDealer?`<span class="tag tag-count">${v.djiDealer}</span>`:''}</h4>
@@ -34,7 +36,18 @@ function rVisits(el) {
       <div class="vbody">${sanitize((v.summary||'').substr(0,180))}${(v.summary||'').length>180?'...':''}</div>
       ${v.revenue?`<div style="font-size:.68rem;color:#22c55e;margin-top:2px">💰 ${fmtMoney(v.revenue)}</div>`:''}
     </div>`;
-  }).join('') : '<div class="empty"><div class="icon">🤝</div><p>ยังไม่มี Visit Report</p></div>'}`;
+  }).join('') : '<div class="empty"><div class="icon">🤝</div><p>ยังไม่มี Visit Report</p></div>')}`;
+
+  // มุมมองตาราง — ใช้ตัว render/copy ชุดเดียวกับ Export > Visit Report (xRenderVisit/copyVisitExport ใน
+  // export.js) กันโค้ดตารางซ้ำสองที่ ต่างกันแค่ที่มาของรายการ (ที่นี่กรองตาม filter ของหน้านี้เอง ไม่ใช่ช่วงวันที่)
+  if (visitListView === 'table') {
+    if (!vts.length) {
+      document.getElementById('xv_area').innerHTML = '<div class="empty"><div class="icon">🤝</div><p>ยังไม่มี Visit Report</p></div>';
+    } else {
+      _xVisitRows = buildXVisitRows(vts.slice(0, 200));
+      xRenderVisit();
+    }
+  }
 }
 
 // ================================================================
@@ -189,30 +202,6 @@ function copyVisitRow(visitId) {
   const body = buildVisitUpdateText(v);
   const tsv = `${fD(v.date)}\t${v.saleName||cfg.saleName}\t${d?.name||''}\t${v.mode==='offline'?'Offline':'Online'}\t${v.djiDealer||''}\t${body.replace(/[\t]/g,' ')}\t${v.location||''}`;
   copyText(tsv, '📋 Copy Visit Row');
-}
-
-function copyAllVisits() {
-  const cfg = getConfig();
-  let vts = ST.sort('visits', (a,b) => (a.date||'').localeCompare(b.date||''));
-  if (S.filterDealer) vts = vts.filter(v => v.dealerId === S.filterDealer);
-  let tsv = 'Date\tSale\tDealer Name\tOffline/Online\tDJI Dealer\tUpdate\tLocation\n';
-  vts.forEach(v => {
-    const d = ST.getOne('dealers', v.dealerId);
-    tsv += `${fD(v.date)}\t${v.saleName||cfg.saleName}\t${d?.name||''}\t${v.mode==='offline'?'Offline':'Online'}\t${v.djiDealer||''}\t${buildVisitUpdateText(v).replace(/[\t]/g,' ')}\t${v.location||''}\n`;
-  });
-  copyText(tsv, '📋 Copy Visit Report');
-}
-
-function dlAllVisitsCSV() {
-  const cfg = getConfig();
-  let vts = ST.sort('visits', (a,b) => (a.date||'').localeCompare(b.date||''));
-  if (S.filterDealer) vts = vts.filter(v => v.dealerId === S.filterDealer);
-  let csv = '\uFEFF"Date","Sale","Dealer Name","Offline/Online","DJI Dealer (SAB/Other)","Update","Location"\n';
-  vts.forEach(v => {
-    const d = ST.getOne('dealers', v.dealerId);
-    csv += `"${fD(v.date)}","${v.saleName||cfg.saleName}","${d?.name||''}","${v.mode==='offline'?'Offline':'Online'}","${v.djiDealer||''}","${esc(buildVisitUpdateText(v))}","${v.location||''}"\n`;
-  });
-  dlBlob(csv, `visit-report-${_td()}.csv`);
 }
 
 // ================================================================

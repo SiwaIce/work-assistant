@@ -534,6 +534,7 @@ var mtFlt = 'all';
 var kbFilter = 'all';
 var pipeFlt = 'all';
 var visitFlt = 'all';
+var visitListView = 'card'; // 'card' หรือ 'table' — มุมมองหน้า Visit Report (ตารางแบบเดียวกับ Export > Visit Report)
 
 // Soft refresh: re-render หน้าเดิม + ดึงข้อมูลล่าสุด (ไม่รีโหลดทั้งหน้า ไม่เสีย state)
 function softRefresh() {

@@ -59,14 +59,20 @@ function _xv2Date(iso) {
   return p[2] + '/' + p[1] + '/' + p[0].slice(2);
 }
 
-function xVisit() {
-  const f = dpG('xv_f'), t = dpG('xv_t'); if (!f||!t) return alert('เลือกวันที่');
+// แปลง visit records ดิบเป็นแถวตาราง XV_HEADERS — ใช้ร่วมกันทั้ง Export > Visit Report (xVisit, กรองตามช่วงวันที่)
+// และมุมมองตารางในหน้า Visit Report หลัก (rVisits, กรองตาม filter ของหน้านั้นเอง) กันโค้ดซ้ำ
+function buildXVisitRows(vts) {
   const cfg = getConfig();
-  const vts = ST.filter('visits', v => isInRange(v.date, f, t)).sort((a,b) => a.date.localeCompare(b.date));
-  _xVisitRows = vts.map(v => {
+  return vts.map(function(v) {
     const d = ST.getOne('dealers', v.dealerId);
     return { id: v.id, cells: [_xv2Date(v.date), '', '', v.saleName||cfg.saleName, d?.name||v.company||'', v.mode==='offline'?'Offline':'Online', v.djiDealer||'', v.summary||'', v.location||''] };
   });
+}
+
+function xVisit() {
+  const f = dpG('xv_f'), t = dpG('xv_t'); if (!f||!t) return alert('เลือกวันที่');
+  const vts = ST.filter('visits', v => isInRange(v.date, f, t)).sort((a,b) => a.date.localeCompare(b.date));
+  _xVisitRows = buildXVisitRows(vts);
   if (!_xVisitRows.length) { document.getElementById('xv_area').innerHTML = '<div class="empty"><p>ไม่มีข้อมูล</p></div>'; return; }
   xRenderVisit();
 }
