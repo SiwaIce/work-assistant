@@ -47,14 +47,104 @@ function xRender(areaId, headers, rows, filename) {
   <div style="font-size:.62rem;color:#64748b;margin-top:3px">${rows.length} รายการ</div>`;
 }
 
+// รูปแบบคอลัมน์ตรงตามชีตปลายทางที่ทีมใช้อยู่แล้ว: Date เป็น DD/MM/YY, Year/Month เว้นว่าง (ฝั่งชีตมีสูตรคำนวณ
+// จาก Date เอง), Update = ข้อความ "สรุปการคุย" ตัวจริงจากหน้า Visit Report (v.summary) ไม่ใช่ข้อความสรุปสำหรับอีเมล
+var XV_HEADERS = ['Date','Year','Month','Sale','Dealer Name','Offline/Online','DJI Dealer\n(SAB / Other)','Update','Location'];
+var _xVisitRows = [];
+
+function _xv2Date(iso) {
+  if (!iso) return '';
+  var p = iso.split('T')[0].split('-');
+  if (p.length !== 3) return '';
+  return p[2] + '/' + p[1] + '/' + p[0].slice(2);
+}
+
 function xVisit() {
   const f = dpG('xv_f'), t = dpG('xv_t'); if (!f||!t) return alert('เลือกวันที่');
   const cfg = getConfig();
   const vts = ST.filter('visits', v => isInRange(v.date, f, t)).sort((a,b) => a.date.localeCompare(b.date));
-  if (!vts.length) { document.getElementById('xv_area').innerHTML = '<div class="empty"><p>ไม่มีข้อมูล</p></div>'; return; }
-  const headers = ['Date','Sale','Dealer Name','Offline/Online','DJI Dealer','Update','Location'];
-  const rows = vts.map(v => { const d = ST.getOne('dealers', v.dealerId); return [fD(v.date), v.saleName||cfg.saleName, d?.name||'', v.mode==='offline'?'Offline':'Online', v.djiDealer||'', buildVisitUpdateText(v), v.location||'']; });
-  xRender('xv_area', headers, rows, 'visit-report');
+  _xVisitRows = vts.map(v => {
+    const d = ST.getOne('dealers', v.dealerId);
+    return { id: v.id, cells: [_xv2Date(v.date), '', '', v.saleName||cfg.saleName, d?.name||'', v.mode==='offline'?'Offline':'Online', v.djiDealer||'', v.summary||'', v.location||''] };
+  });
+  if (!_xVisitRows.length) { document.getElementById('xv_area').innerHTML = '<div class="empty"><p>ไม่มีข้อมูล</p></div>'; return; }
+  xRenderVisit();
+}
+
+// ตารางเฉพาะ Visit Report — มี checkbox เลือกแถว (copy ได้ทีละแถว/หลายแถว/ทั้งหมด) และตัวเลือกไม่รวมคอลัมน์
+// Location ตอน copy (คอลัมน์ยังโชว์บนตารางปกติ แค่ไม่ติดไปตอนวาง) แยกจาก xRender() ทั่วไปเพราะ interaction
+// เฉพาะตัวนี้ ไม่อยากทำให้ export อื่นๆ ที่ใช้ xRender() ร่วมซับซ้อนตามไปด้วย
+function xRenderVisit() {
+  var el = document.getElementById('xv_area'); if (!el) return;
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
+  html += '<label style="display:flex;align-items:center;gap:5px;font-size:.72rem;cursor:pointer"><input type="checkbox" id="xv_noloc" style="width:auto"> ไม่รวมคอลัมน์ Location ตอน copy</label>';
+  html += '<div class="bg" style="gap:6px">';
+  html += '<button class="btn bsm bo" onclick="copyVisitExport(true)">📋 Copy ที่เลือก (<span id="xv_selCount">0</span>)</button>';
+  html += '<button class="btn bsm bp" onclick="copyVisitExport(false)">📋 Copy ทั้งหมด</button>';
+  html += '<button class="btn bsm bs" onclick="dlVisitExportCSV()">📤 CSV</button>';
+  html += '</div></div>';
+
+  html += '<div class="export-wrap"><table class="export-table" id="xv_tbl"><thead><tr>';
+  html += '<th style="width:26px"><input type="checkbox" id="xv_selAll" style="width:auto" onchange="xvToggleAll(this.checked)"></th>';
+  XV_HEADERS.forEach(function(h) { html += '<th>' + sanitize(h).replace(/\n/g, '<br>') + '</th>'; });
+  html += '</tr></thead><tbody>';
+  _xVisitRows.forEach(function(r, i) {
+    html += '<tr><td><input type="checkbox" class="xv-row-chk" style="width:auto" data-idx="' + i + '" onchange="xvUpdSelCount()"></td>';
+    r.cells.forEach(function(c) { html += '<td>' + sanitize(String(c)).replace(/\n/g, '<br>') + '</td>'; });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="font-size:.62rem;color:#64748b;margin-top:3px">' + _xVisitRows.length + ' รายการ</div>';
+  el.innerHTML = html;
+}
+
+function xvToggleAll(checked) {
+  document.querySelectorAll('.xv-row-chk').forEach(function(c) { c.checked = checked; });
+  xvUpdSelCount();
+}
+
+function xvUpdSelCount() {
+  var n = document.querySelectorAll('.xv-row-chk:checked').length;
+  var el = document.getElementById('xv_selCount'); if (el) el.textContent = n;
+}
+
+// CSV-style quoting สำหรับ copy ลง clipboard — คงบรรทัดใหม่ในเซลล์ไว้ (ห่อด้วย "..." ตาม convention ที่
+// Google Sheets/Excel เข้าใจตอนวาง) ต่างจาก copyTable() เดิมที่ตัดบรรทัดใหม่ทิ้งเป็นบรรทัดเดียวเสมอ
+function _csvQuote(v) {
+  v = String(v == null ? '' : v).replace(/\r\n/g, '\n');
+  if (/[\t\n"]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+  return v;
+}
+
+function copyVisitExport(onlySelected) {
+  var noLoc = document.getElementById('xv_noloc') && document.getElementById('xv_noloc').checked;
+  var idxs;
+  if (onlySelected) {
+    idxs = Array.from(document.querySelectorAll('.xv-row-chk:checked')).map(function(c) { return parseInt(c.dataset.idx, 10); });
+    if (!idxs.length) return toast('❌ ยังไม่ได้เลือกแถวไหนเลย', true);
+  } else {
+    idxs = _xVisitRows.map(function(_, i) { return i; });
+  }
+  var headers = XV_HEADERS.slice();
+  if (noLoc) headers.pop();
+  var lines = [headers.map(_csvQuote).join('\t')];
+  idxs.forEach(function(i) {
+    var cells = _xVisitRows[i].cells.slice();
+    if (noLoc) cells.pop();
+    lines.push(cells.map(_csvQuote).join('\t'));
+  });
+  copyText(lines.join('\n'), '📋 Copy แล้ว! วาง Google Sheets ได้ (' + idxs.length + ' แถว)');
+}
+
+function dlVisitExportCSV() {
+  var noLoc = document.getElementById('xv_noloc') && document.getElementById('xv_noloc').checked;
+  var headers = XV_HEADERS.slice(); if (noLoc) headers.pop();
+  var csv = '﻿' + headers.map(function(h) { return '"' + esc(h.replace(/\n/g, ' ')) + '"'; }).join(',') + '\n';
+  _xVisitRows.forEach(function(r) {
+    var cells = r.cells.slice(); if (noLoc) cells.pop();
+    csv += cells.map(function(c) { return '"' + esc(String(c)) + '"'; }).join(',') + '\n';
+  });
+  dlBlob(csv, 'visit-report-' + _td() + '.csv');
 }
 
 function xPipe() {
