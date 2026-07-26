@@ -403,6 +403,17 @@ var DEF_CONFIG = {
     achievement: 20,
     certification: 15,
     forecast: 15
+  },
+
+  // น้ำหนัก % ของแต่ละปัจจัยใน pipeMatchScore() (utils.js) — ใช้เทียบว่า 2 โปรเจคน่าจะเป็นงานเดียวกันไหม
+  // (โชว์ตอน "เทียบ Project" / แถบเตือนงานชนกัน) ต้องรวมกันได้ 100 — ตั้งค่าเองได้ที่ showPipeMatchWeightsM()
+  pipeMatchWeights: {
+    eu: 35,          // End User — มักรู้ก่อน/นิ่งกว่าชื่อโปรเจค
+    name: 25,        // ชื่อโปรเจค
+    model: 15,       // สินค้าที่ขายตรงกัน
+    agencyMain: 10,  // หน่วยงานใหญ่
+    agencySub: 10,   // หน่วยงานย่อย
+    bidding: 5       // วันที่ประมูลใกล้กัน
   }
 };
 function getConfig() {
@@ -419,6 +430,16 @@ function getConfig() {
       } else if (k === 'healthWeights') {
         var hw = saved.healthWeights || {};
         cfg.healthWeights = {contact: hw.contact || cfg.healthWeights.contact, pipelineUpdate: hw.pipelineUpdate || cfg.healthWeights.pipelineUpdate, achievement: hw.achievement || cfg.healthWeights.achievement, certification: hw.certification || cfg.healthWeights.certification, forecast: hw.forecast || cfg.healthWeights.forecast};
+      } else if (k === 'pipeMatchWeights') {
+        var pmw = saved.pipeMatchWeights || {};
+        cfg.pipeMatchWeights = {
+          eu: pmw.eu != null ? pmw.eu : cfg.pipeMatchWeights.eu,
+          name: pmw.name != null ? pmw.name : cfg.pipeMatchWeights.name,
+          model: pmw.model != null ? pmw.model : cfg.pipeMatchWeights.model,
+          agencyMain: pmw.agencyMain != null ? pmw.agencyMain : cfg.pipeMatchWeights.agencyMain,
+          agencySub: pmw.agencySub != null ? pmw.agencySub : cfg.pipeMatchWeights.agencySub,
+          bidding: pmw.bidding != null ? pmw.bidding : cfg.pipeMatchWeights.bidding
+        };
       } else if (saved[k] !== undefined) {
         cfg[k] = saved[k];
       }

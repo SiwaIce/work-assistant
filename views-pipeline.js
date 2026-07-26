@@ -504,6 +504,74 @@ function compareConflict(idA, idB) {
 }
 
 // ================================================================
+// ตั้งน้ำหนัก % ของแต่ละปัจจัยใน pipeMatchScore() เอง (ค่า default อยู่ที่ DEF_CONFIG.pipeMatchWeights
+// ใน app.js) — บันทึกลง cfg แล้วมีผลทันทีทั้งแถบ "งานที่อาจชนกัน" และ modal เทียบ Project
+var PIPE_MATCH_WEIGHT_FIELDS = [
+  { key: 'eu', label: '👤 End User' },
+  { key: 'name', label: '📋 ชื่อโครงการ' },
+  { key: 'model', label: '📦 สินค้าตรงกัน' },
+  { key: 'agencyMain', label: '🏛️ หน่วยงานใหญ่' },
+  { key: 'agencySub', label: '🏢 หน่วยงานย่อย' },
+  { key: 'bidding', label: '📅 วันประมูลใกล้กัน' }
+];
+
+function showPipeMatchWeightsM() {
+  var w = getConfig().pipeMatchWeights;
+  var total = 0;
+  var html = '<div style="max-width:420px">';
+  html += '<div class="hint" style="margin-bottom:10px">กำหนดน้ำหนัก % ของแต่ละปัจจัยที่ใช้เทียบว่า 2 โปรเจคน่าจะเป็นงานเดียวกันไหม (ต้องรวมกันได้ 100%)</div>';
+  PIPE_MATCH_WEIGHT_FIELDS.forEach(function(f) {
+    var v = Number(w[f.key]) || 0;
+    total += v;
+    html += '<div class="fg" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">' +
+      '<label style="flex:1">' + f.label + '</label>' +
+      '<input type="number" id="pmw_' + f.key + '" value="' + v + '" min="0" max="100" style="width:70px;text-align:right" oninput="updatePmwTotal()"> %' +
+      '</div>';
+  });
+  html += '<div style="display:flex;justify-content:space-between;font-weight:700;margin:10px 0;padding-top:8px;border-top:1px solid var(--border)">' +
+    '<span>รวม</span><span id="pmwTotal" style="color:' + (total === 100 ? '' : '#ef4444') + '">' + total + '%</span></div>';
+  html += '<div style="display:flex;gap:6px">' +
+    '<button class="btn bp" style="flex:1" onclick="savePipeMatchWeights()">💾 บันทึก</button>' +
+    '<button class="btn bo" onclick="resetPipeMatchWeights()">↩️ ค่าเริ่มต้น</button>' +
+    '</div>';
+  html += '</div>';
+  openM('⚙️ ตั้งน้ำหนักการเทียบ Project', html);
+}
+
+function updatePmwTotal() {
+  var total = 0;
+  PIPE_MATCH_WEIGHT_FIELDS.forEach(function(f) { total += Number(document.getElementById('pmw_' + f.key).value) || 0; });
+  var el = document.getElementById('pmwTotal');
+  el.textContent = total + '%';
+  el.style.color = total === 100 ? '' : '#ef4444';
+}
+
+function savePipeMatchWeights() {
+  var w = {};
+  var total = 0;
+  PIPE_MATCH_WEIGHT_FIELDS.forEach(function(f) {
+    var v = Number(document.getElementById('pmw_' + f.key).value) || 0;
+    w[f.key] = v;
+    total += v;
+  });
+  if (total !== 100) { alert('รวมต้องได้ 100% (ตอนนี้ ' + total + '%)'); return; }
+  var cfg = getConfig();
+  cfg.pipeMatchWeights = w;
+  saveConfig(cfg);
+  closeMForce();
+  toast('💾 บันทึกน้ำหนักแล้ว');
+  render();
+}
+
+function resetPipeMatchWeights() {
+  var cfg = getConfig();
+  cfg.pipeMatchWeights = { eu: 35, name: 25, model: 15, agencyMain: 10, agencySub: 10, bidding: 5 };
+  saveConfig(cfg);
+  toast('↩️ กลับเป็นค่าเริ่มต้นแล้ว');
+  showPipeMatchWeightsM();
+}
+
+// ================================================================
 // เทียบ Project แบบเลือกเอง (สูงสุด 3 รายการ) — ไม่พึ่ง auto-detect อย่างเดียว
 // ================================================================
 function pipeCompareSetThreshold(val) {
@@ -917,6 +985,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
+    '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
     '<button class="btn ' + (pipeSelectMode ? 'bd' : 'bo') + '" onclick="togglePipeSelectMode()">☑️ ' + (pipeSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>' +
     '<div style="flex:1"></div>' +
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()" title="ตาราง">📋</button>' +

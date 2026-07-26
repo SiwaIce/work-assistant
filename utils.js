@@ -446,8 +446,11 @@ function pipeMatchScore(a, b) {
   var bid = 0;
   var da = fcParseDate(a.biddingDate), db = fcParseDate(b.biddingDate);
   if (da && db) { var diff = Math.abs(da - db) / 86400000; bid = diff <= 30 ? 1 : (diff >= 90 ? 0 : 1 - (diff - 30) / 60); }
-  // End User หนักสุด — มักเป็นจุดแรกที่เทียบได้ก่อน (ชื่อโปรเจคมักตั้งทีหลัง/เปลี่ยนคำพูดกันคนละแบบ)
-  var score = eu * 0.35 + name * 0.25 + model * 0.15 + am * 0.10 + asb * 0.10 + bid * 0.05;
+  // น้ำหนักตั้งค่าเองได้ (cfg.pipeMatchWeights ดูค่า default ที่ DEF_CONFIG ใน app.js, แก้ได้ที่
+  // showPipeMatchWeightsM() ใน views-pipeline.js) — End User หนักสุดโดย default เพราะมักเป็นจุดแรกที่
+  // เทียบได้ก่อน (ชื่อโปรเจคมักตั้งทีหลัง/เปลี่ยนคำพูดกันคนละแบบ)
+  var w = (typeof getConfig === 'function' && getConfig().pipeMatchWeights) || { eu: 35, name: 25, model: 15, agencyMain: 10, agencySub: 10, bidding: 5 };
+  var score = eu * (w.eu / 100) + name * (w.name / 100) + model * (w.model / 100) + am * (w.agencyMain / 100) + asb * (w.agencySub / 100) + bid * (w.bidding / 100);
   return Math.round(score * 100);
 }
 function getDismissedConflicts() {
