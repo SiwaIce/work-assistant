@@ -1621,6 +1621,10 @@ function rPipeDet(el) {
     }
   }
 
+  // สรุปรายการสินค้า — ชิปตามหมวดหมู่ + ตาราง Model/QTY/มูลค่า หน้าตาเดียวกับการ์ด Forecast ตาม Dealer
+  // (ดู buildFcDealerSummary ใน views-today.js) แต่สโคปแค่รายการของโครงการนี้โครงการเดียว
+  html += pipeModelSummaryCardHtml(p);
+
   // Action Items
   html += buildPipeActionsHTML(p.id);
 
@@ -2456,6 +2460,50 @@ function getPipeModelSummary(p) {
     }).join(', ');
   }
   return (p.model || '') + (p.modelQty > 1 ? ' x' + p.modelQty : '');
+}
+
+// สรุปรายการสินค้าของโครงการนี้ — ชิปตามหมวดหมู่ (Drone/Payload/...) + ตาราง Model/QTY/มูลค่า
+// หน้าตาเดียวกับการ์ด Forecast ตาม Dealer (buildFcDealerSummary ใน views-today.js) แต่ดึงจาก getPipeItems(p)
+// ของโครงการเดียวแทนที่จะรวมทั้ง dealer
+function pipeModelSummaryCardHtml(p) {
+  var items = getPipeItems(p);
+  if (!items.length) return '';
+
+  var catTotals = {};
+  var byModel = {};
+  var totalQty = 0, totalAmt = 0;
+  items.forEach(function(it) {
+    var model = it.model || 'ไม่ระบุ';
+    var qty = Number(it.qty) || 1;
+    var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+    var cat = getModelCategory(model);
+    catTotals[cat] = (catTotals[cat] || 0) + qty;
+    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0 };
+    byModel[model].qty += qty;
+    byModel[model].amount += amt;
+    totalQty += qty;
+    totalAmt += amt;
+  });
+
+  var catOrder = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : Object.keys(catTotals);
+  var catIds = Object.keys(catTotals).sort(function(a, b) { return catOrder.indexOf(a) - catOrder.indexOf(b); });
+  var catChipsHtml = catIds.map(function(cid) {
+    var name = (typeof getCategoryName === 'function') ? getCategoryName(cid) : cid;
+    return '<div class="fcd-cat-chip"><span class="fcd-cat-chip-name">' + sanitize(name) + '</span><span class="fcd-cat-chip-qty">' + catTotals[cid] + ' ชิ้น</span></div>';
+  }).join('');
+
+  var modelList = Object.values(byModel);
+
+  var h = '<div class="card"><h2>📦 สรุปรายการสินค้า</h2>';
+  h += '<div class="fcd-cats" style="margin-bottom:12px">' + catChipsHtml + '</div>';
+  h += '<table class="fcd-table">';
+  h += '<thead><tr><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th></tr></thead><tbody>';
+  modelList.forEach(function(m) {
+    h += '<tr><td>' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtMoneyShort(m.amount) + '</td></tr>';
+  });
+  h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td>รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtMoneyShort(totalAmt) + '</td></tr>';
+  h += '</tbody></table></div>';
+  return h;
 }
 
 function showAddPipeActionM(pipeId) {
