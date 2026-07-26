@@ -1168,6 +1168,12 @@ function copyDealerTimeline(dealerId) {
 var dlrFcView = 'model';
 var dlrFcStatus = 'active';
 var dlrFcCatFilter = {}; // หมวดที่ปิดอยู่จากการคลิกการ์ดสรุปตามหมวดหมู่ (แท็บ Forecast ของ Dealer) — ว่าง = แสดงทั้งหมด
+var dlrFcModelMonthFilter = {}; // เดือน (0-11) ที่ "เลือก" ไว้สำหรับตาราง Forecast ตาม Model ในแท็บ Dealer — ว่าง = ทุกเดือน (แบบเดียวกับ fcModelMonthFilter ในเมนู Forecast หลัก)
+function dlrFcToggleModelMonth(idx) {
+  if (dlrFcModelMonthFilter[idx]) delete dlrFcModelMonthFilter[idx]; else dlrFcModelMonthFilter[idx] = true;
+  render();
+}
+function dlrFcClearModelMonthFilter() { dlrFcModelMonthFilter = {}; render(); }
 var dlrFcMode = 'auto'; // 'auto' = สรุปจาก Pipeline จริง (เดิม), 'manual' = เซลกรอก Sales Forecast เอง (runrate/project)
 var dlrFcSelMonth = ''; // เดือนที่เลือกดูใน Sales Forecast (manual mode) — ว่าง = ใช้เดือนล่าสุดที่มีข้อมูล
 
@@ -1210,22 +1216,39 @@ function dealerForecastTab(d) {
     totalQty += getPipeTotalQty(p);
   });
   
+  // เคารพทั้งตัวกรองหมวดหมู่ (dlrFcCatFilter เดิม ที่ก่อนหน้านี้ไม่มีผลกับตารางนี้เลย เหมือนบั๊กเดียวกับ
+  // เมนู Forecast หลักก่อนแก้) และตัวกรองเดือน (dlrFcModelMonthFilter ใหม่) — เก็บ breakdown ทีละโครงการ
+  // (label/endUser/qty) ไว้ทำคอลัมน์ "สรุป" แบบเดียวกับเมนู Forecast หลัก (สโคปเดียวคือ dealer นี้ ไม่ต้องมี
+  // คอลัมน์ Dealer แยก เพราะทั้งตารางเป็นของ dealer เดียวอยู่แล้ว)
+  var hasDlrModelMonthFilter = Object.keys(dlrFcModelMonthFilter).length > 0;
   var byModel = {};
   pipes.forEach(function(p) {
+    if (hasDlrModelMonthFilter) {
+      var ship = getPipeShipDate(p);
+      if (!ship) return;
+      if (fcHideTentative && ship.est) return;
+      if (!dlrFcModelMonthFilter[ship.date.getMonth()]) return;
+    }
     var items = getPipeItems(p);
     if (!items.length) return;
+    var lineLabel = p.projectName || '-';
+    var endUser = p.endUserTH || p.agencyMain || '';
+
     items.forEach(function(it) {
       var model = it.model || 'ไม่ระบุ';
+      if (!fcCatIsVisible('dlrFcCatFilter', getModelCategory(model))) return;
       var qty = Number(it.qty) || 1;
       var amt = Number(it.total) || (qty * (Number(it.price) || 0));
-      if (!byModel[model]) byModel[model] = {model: model, qty: 0, amount: 0, projects: []};
+      if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0, lines: [] };
       byModel[model].qty += qty;
       byModel[model].amount += amt;
-      var found = false;
-      for (var fi = 0; fi < byModel[model].projects.length; fi++) {
-        if (byModel[model].projects[fi].id === p.id) { found = true; break; }
+
+      var existingLine = null;
+      for (var li = 0; li < byModel[model].lines.length; li++) {
+        if (byModel[model].lines[li].pipeId === p.id) { existingLine = byModel[model].lines[li]; break; }
       }
-      if (!found) byModel[model].projects.push(p);
+      if (existingLine) existingLine.qty += qty;
+      else byModel[model].lines.push({ pipeId: p.id, label: lineLabel, endUser: endUser, qty: qty });
     });
   });
   var modelList = Object.values(byModel).sort(function(a, b) { return b.amount - a.amount; });
@@ -1613,21 +1636,52 @@ function jumpToPipeShipment(dealerId, pipeId) {
 // ================================================================
 // DEALER FORECAST — MODEL VIEW
 // ================================================================
-function buildDlrFcModel(modelList, totalFc, totalQty, d) {
-  if (!modelList.length) return '<div class="empty"><p>ไม่มีข้อมูล</p></div>';
+// ตัวกรองเดือนสำหรับตาราง Forecast ตาม Model ในแท็บ Dealer — เหมือนแบบในเมนู Forecast หลักทุกอย่าง
+// (เลือกได้หลายเดือน ไม่เลือก = ทุกเดือน) ต่างกันแค่ผูกกับ dlrFcModelMonthFilter คนละตัวแปร
+function dlrFcModelMonthFilterHtml() {
+  var monthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var hasFilter = Object.keys(dlrFcModelMonthFilter).length > 0;
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">';
+  h += '<span style="font-size:.72rem;color:var(--text2)">📅 เลือกเดือน (ไม่เลือก = ทุกเดือน):</span>';
+  monthNames.forEach(function(mn, idx) {
+    var on = !!dlrFcModelMonthFilter[idx];
+    h += '<span onclick="dlrFcToggleModelMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+      (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+  });
+  if (hasFilter) h += '<button class="btn bsm bo" onclick="dlrFcClearModelMonthFilter()">✕ ล้าง</button>';
+  h += '</div>';
+  return h;
+}
 
-  var h = '<div class="export-wrap"><table class="export-table" id="fcDlr_' + d.id + '">';
-  h += '<thead><tr><th>#</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th><th>Project</th></tr></thead>';
+function buildDlrFcModel(modelList, totalFc, totalQty, d) {
+  window._dlrFcSummaryTexts = []; // reset ทุกครั้งที่ render ใหม่ กันสะสมค้างจากรอบก่อน (ดู copyDlrFcSummaryCell)
+  var h = dlrFcModelMonthFilterHtml();
+
+  if (!modelList.length) return h + '<div class="empty"><p>ไม่มีข้อมูลตามตัวกรองที่เลือก</p></div>';
+
+  h += '<div class="export-wrap"><table class="export-table" id="fcDlr_' + d.id + '">';
+  h += '<thead><tr><th>#</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th><th>สรุป</th></tr></thead>';
   h += '<tbody>';
 
   modelList.forEach(function(m, idx) {
-    var projNames = m.projects.map(function(p) { return sanitize((p.projectName || '').substr(0, 20)); }).join(', ');
+    var summaryLines = [];
+    var summaryPlainLines = [];
+    m.lines.forEach(function(ln) {
+      var eu = ln.endUser ? ' (' + sanitize(ln.endUser) + ')' : '';
+      var euPlain = ln.endUser ? ' (' + ln.endUser + ')' : '';
+      summaryLines.push(sanitize(ln.label) + eu + ' x' + ln.qty);
+      summaryPlainLines.push(ln.label + euPlain + ' x' + ln.qty);
+    });
+    var sIdx = window._dlrFcSummaryTexts.push(summaryPlainLines.join('\n')) - 1;
+
     h += '<tr>';
     h += '<td class="pipe-row-num">' + (idx + 1) + '</td>';
     h += '<td><strong>' + sanitize(m.model) + '</strong></td>';
     h += '<td style="text-align:center">' + m.qty + '</td>';
     h += '<td style="text-align:right">' + fmtMoneyStyled(m.amount) + '</td>';
-    h += '<td style="font-size:.64rem">' + projNames + '</td>';
+    h += '<td style="font-size:.64rem;line-height:1.6"><div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start">' +
+      '<span>' + summaryLines.join('<br>') + '</span>' +
+      '<button class="btn-xs" style="flex-shrink:0" onclick="copyDlrFcSummaryCell(' + sIdx + ')" title="Copy สรุปช่องนี้">📋</button></div></td>';
     h += '</tr>';
   });
 
@@ -1639,6 +1693,12 @@ function buildDlrFcModel(modelList, totalFc, totalQty, d) {
   h += '</tr>';
   h += '</tbody></table></div>';
   return h;
+}
+
+function copyDlrFcSummaryCell(idx) {
+  var text = (window._dlrFcSummaryTexts || [])[idx];
+  if (!text) return;
+  copyText(text, '📋 Copy สรุปแล้ว');
 }
 
 // คลิกช่องเดือนในตาราง forecast → เด้ง modal รายละเอียดโปรเจค + แก้ Shipment Date ได้
