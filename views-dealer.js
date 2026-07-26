@@ -1715,8 +1715,10 @@ function fcCellDetail(idx) {
     var estNote = (ship && ship.est) ? ' <span style="color:#f59e0b">(ตอนนี้ประมาณจาก Bidding +2 เดือน)</span>' : '';
     var itemsTxt = (getPipeItems(p) || []).map(function(it){ return sanitize(it.model) + ' x' + (it.qty || 1); }).join(', ');
     var shipVal = p.shipmentDate ? String(p.shipmentDate).slice(0, 10) : '';
+    var dealer = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
     html += '<div style="border:1px solid var(--border,#334155);border-radius:10px;padding:10px;margin-bottom:8px">';
     html += '<div style="font-weight:700">' + sanitize(p.projectName || '-') + '</div>';
+    html += '<div style="font-size:12px;color:var(--accent);font-weight:600;margin:2px 0">🏪 ' + sanitize(dealer ? dealer.name : 'ไม่ระบุ Dealer') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin:2px 0">👤 ' + sanitize(p.endUserTH || p.endUserEN || '-') + ' · ' + (typeof pipeTag === 'function' ? pipeTag(p.status) : (p.status || '')) + '</div>';
     html += '<div style="font-size:12px;margin:2px 0">📦 ' + itemsTxt + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">';
