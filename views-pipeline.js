@@ -2,6 +2,7 @@
 // views-pipeline.js - PIPELINE MANAGEMENT
 // ================================================================
 
+var pipeCardCols = 1; // 1 หรือ 2 — จำนวนคอลัมน์การ์ดในเมนู Pipeline หลัก (เหมือน pipeTeamCardCols ของ Pipeline รวมทีม)
 var pipeFlt = {}; // multi-select: {statusId: true, ...} — ว่าง = แสดงทุกสถานะ (เดิมเป็น string เดี่ยว)
 var pipeBidMonthFilter = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน กรองจาก biddingDate
 function togglePipeStatus(k) { if (pipeFlt[k]) delete pipeFlt[k]; else pipeFlt[k] = true; render(); }
@@ -1043,6 +1044,12 @@ function rPipeline(el) {
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()" title="การ์ด">🃏</button>' +
     '<button class="btn bsm ' + (pipeView === 'sheet' ? 'bp' : 'bo') + '" onclick="pipeView=\'sheet\';render()" title="Sheet เต็มคอลัมน์">📊</button>' +
     '<button class="btn bsm ' + (pipeView === 'sheetedit' ? 'bp' : 'bo') + '" onclick="pipeView=\'sheetedit\';render()" title="แก้ไขแบบตาราง">🗂️</button>' +
+    (pipeView === 'card' ? (
+      '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+      '<button class="btn-xs" style="border-radius:0;' + (pipeCardCols === 1 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeCardCols=1;render()" title="1 การ์ดต่อแถว">⚏1</button>' +
+      '<button class="btn-xs" style="border-radius:0;' + (pipeCardCols === 2 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeCardCols=2;render()" title="2 การ์ดต่อแถว">⚏2</button>' +
+      '</div>'
+    ) : '') +
     '</div>' +
 
     _pipeUrgentBarHtml(allPipes) +
@@ -1115,7 +1122,7 @@ function rPipeline(el) {
     '</div>' +
     '</div>' +
 
-    (pipeView === 'card' ? renderPipeCards(pipes) :
+    (pipeView === 'card' ? renderPipeCards(pipes, { cardCols: pipeCardCols }) :
      pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
      pipeView === 'sheetedit' ? '<div id="pipeSheetWrap">' +
        '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center">' +
@@ -1245,11 +1252,12 @@ function renderPipeCards(pipes, opts) {
   var selectMode = !!opts.selectMode;
   var selectedMap = opts.selectedMap || {};
   var toggleFn = opts.toggleFn || 'togglePipeSelectInCard';
+  var gridClass = opts.cardCols === 2 ? ' pcg-2col' : ' pcg-1col'; // 1/2 การ์ดต่อแถว — ดู .pcg-1col/.pcg-2col ใน style.css
   if (!selectMode) pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
   var _qtMap = _buildQtMap();
   var shortMap = _pipeShortNameMap();
 
-  var html = '<div class="pipe-card-grid">';
+  var html = '<div class="pipe-card-grid' + gridClass + '">';
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
     var d = ST.getOne('dealers', p.dealerId);

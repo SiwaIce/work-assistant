@@ -12,6 +12,7 @@ var dealerPipeDisplayFlt = 'all'; // 'all' | 'show' | 'hide' — กรองต
 var dealerPipeSelectMode = false;
 var dealerPipeSelected = {};
 var _dealerPipeVisibleIds = [];
+var dealerPipeCardCols = 1; // 1 หรือ 2 — จำนวนคอลัมน์การ์ดในแท็บ Pipeline ของ Dealer (เหมือน pipeCardCols เมนู Pipeline หลัก)
 var dealerPipeStatusFlt = {}; // multi-select: {statusId: true, ...} — ว่าง = แสดงทุกสถานะ (เหมือน pipeFlt เมนู Pipeline หลัก)
 var dealerPipeBidMonthFlt = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน กรองจาก biddingDate
 function toggleDealerPipeStatus(k) { if (dealerPipeStatusFlt[k]) delete dealerPipeStatusFlt[k]; else dealerPipeStatusFlt[k] = true; render(); }
@@ -924,6 +925,10 @@ function dealerPipelineTab(d) {
     h += '</select>';
     if (dealerPipeViewMode !== 'table') {
       h += '<button class="btn bsm ' + (dealerPipeSelectMode ? 'bd' : 'bo') + '" onclick="toggleDealerPipeSelectMode()">☑️ ' + (dealerPipeSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
+      h += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+        '<button class="btn-xs" style="border-radius:0;' + (dealerPipeCardCols === 1 ? 'background:var(--accent);color:#fff' : '') + '" onclick="dealerPipeCardCols=1;render()" title="1 การ์ดต่อแถว">⚏1</button>' +
+        '<button class="btn-xs" style="border-radius:0;' + (dealerPipeCardCols === 2 ? 'background:var(--accent);color:#fff' : '') + '" onclick="dealerPipeCardCols=2;render()" title="2 การ์ดต่อแถว">⚏2</button>' +
+        '</div>';
     }
     h += '</div>';
 
@@ -1026,7 +1031,7 @@ function dealerPipelineTab(d) {
       h += renderPipeTable(listPipes);
     } else {
       // ใช้การ์ดชุดเดียวกับเมนู Pipeline หลัก (renderPipeCards) ให้หน้าตาตรงกันเป๊ะ — ไม่ต้องดูแล 2 ดีไซน์แยกกัน
-      h += renderPipeCards(listPipes, { selectMode: dealerPipeSelectMode, selectedMap: dealerPipeSelected, toggleFn: 'toggleDealerPipeSelect' });
+      h += renderPipeCards(listPipes, { selectMode: dealerPipeSelectMode, selectedMap: dealerPipeSelected, toggleFn: 'toggleDealerPipeSelect', cardCols: dealerPipeCardCols });
 
       if (dealerPipeSelectMode) {
         var selCnt = Object.keys(dealerPipeSelected).length;
