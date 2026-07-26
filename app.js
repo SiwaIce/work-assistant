@@ -553,7 +553,8 @@ var calM = new Date().getMonth();
 var taskFlt = 'all';
 var mtFlt = 'all';
 var kbFilter = 'all';
-var pipeFlt = 'all';
+// pipeFlt ย้ายไปประกาศที่ views-pipeline.js แล้ว (เปลี่ยนจาก string เดี่ยวเป็น multi-select object) — ลบ
+// declaration ซ้ำตรงนี้ทิ้ง เพราะ app.js โหลดทีหลัง views-pipeline.js จะไปทับค่าเป็น string เดิมทุกครั้ง
 var visitFlt = 'all';
 var visitListView = 'card'; // 'card' หรือ 'table' — มุมมองหน้า Visit Report (ตารางแบบเดียวกับ Export > Visit Report)
 

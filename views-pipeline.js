@@ -2,7 +2,12 @@
 // views-pipeline.js - PIPELINE MANAGEMENT
 // ================================================================
 
-var pipeFlt = 'all';
+var pipeFlt = {}; // multi-select: {statusId: true, ...} — ว่าง = แสดงทุกสถานะ (เดิมเป็น string เดี่ยว)
+var pipeBidMonthFilter = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน กรองจาก biddingDate
+function togglePipeStatus(k) { if (pipeFlt[k]) delete pipeFlt[k]; else pipeFlt[k] = true; render(); }
+function clearPipeStatusFlt() { pipeFlt = {}; render(); }
+function togglePipeBidMonth(idx) { if (pipeBidMonthFilter[idx]) delete pipeBidMonthFilter[idx]; else pipeBidMonthFilter[idx] = true; render(); }
+function clearPipeBidMonthFilter() { pipeBidMonthFilter = {}; render(); }
 var pipeFY = 'all';
 var pipeSale = 'all';
 var pipeDisplayFlt = 'all';
@@ -928,7 +933,13 @@ function rPipeline(el) {
   var allPipes = ST.getAll('pipeline');
   
   var pipes = allPipes;
-  if (pipeFlt !== 'all') pipes = pipes.filter(function(p) { return p.status === pipeFlt; });
+  if (Object.keys(pipeFlt).length) pipes = pipes.filter(function(p) { return pipeFlt[p.status]; });
+  if (Object.keys(pipeBidMonthFilter).length) {
+    pipes = pipes.filter(function(p) {
+      var bd = fcParseDate(p.biddingDate);
+      return bd && pipeBidMonthFilter[bd.getMonth()];
+    });
+  }
   if (pipeFY !== 'all') pipes = pipes.filter(function(p) {
     var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
     return String(fy || '') === String(pipeFY);
@@ -1039,7 +1050,7 @@ function rPipeline(el) {
     (pipeCompareMode ? renderPipeCompareSuggestPanel() : '') +
 
     _pipeSectionHeader('🔍 ตัวกรอง', 'pipeFilter', pipeFilterOpen,
-      !pipeFilterOpen ? [(pipeFlt !== 'all' ? '● ' + pipeFlt : ''), (pipeSearch ? '"' + sanitize(pipeSearch) + '"' : '')].filter(Boolean).join(' ') : '') +
+      !pipeFilterOpen ? [(Object.keys(pipeFlt).length ? '● ' + Object.keys(pipeFlt).length + ' สถานะ' : ''), (pipeSearch ? '"' + sanitize(pipeSearch) + '"' : '')].filter(Boolean).join(' ') : '') +
 
     '<div id="pipeFilterWrap"' + (!pipeFilterOpen ? ' style="display:none"' : '') + '>' +
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">' +
@@ -1081,16 +1092,26 @@ function rPipeline(el) {
     '</select>' +
     '</div>' +
 
+    '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>' +
     '<div class="pipe-sum">' +
     Object.entries(ps.summary).filter(function(e) { return e[1].count > 0; }).map(function(e) {
       var k = e[0], v = e[1];
-      return '<div class="pipe-sum-card ' + (pipeFlt === k ? 'act' : '') + '" onclick="pipeFlt=\'' + (pipeFlt === k ? 'all' : k) + '\';render()">' +
+      return '<div class="pipe-sum-card ' + (pipeFlt[k] ? 'act' : '') + '" onclick="togglePipeStatus(\'' + k + '\')">' +
         '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
         '<div class="count">' + v.count + '</div>' +
         '<div class="amount">' + fmtMoneyShort(v.amount) + '</div></div>';
     }).join('') +
-    '<div class="pipe-sum-card ' + (pipeFlt === 'all' ? 'act' : '') + '" onclick="pipeFlt=\'all\';render()">' +
+    '<div class="pipe-sum-card ' + (Object.keys(pipeFlt).length === 0 ? 'act' : '') + '" onclick="clearPipeStatusFlt()">' +
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
+    '</div>' +
+    '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
+    ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map(function(mn, idx) {
+      var on = !!pipeBidMonthFilter[idx];
+      return '<span onclick="togglePipeBidMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+        (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+    }).join('') +
+    (Object.keys(pipeBidMonthFilter).length ? '<button class="btn bsm bo" onclick="clearPipeBidMonthFilter()">✕ ล้าง</button>' : '') +
     '</div>' +
     '</div>' +
 
@@ -1277,10 +1298,37 @@ function renderPipeCards(pipes, opts) {
     html += '<span style="font-size:10.5px;color:var(--text3,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (lastLog ? '📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' · ' + sanitize((lastLog.content || '').substr(0, 45)) : '') + '</span>';
     html += '<span style="text-align:right;font-size:.92rem;font-weight:700;color:#22c55e">' + fmtMoneyStyled(amt) + '</span>';
     html += '</div>';
+
+    // ลิงก์ขยายดูรายละเอียดสินค้า (Next Action + สรุปรายการสินค้า) ในตัวการ์ดเลย ไม่ต้องเข้าไปหน้ารายละเอียด
+    // — คลิกแยกจากตัวการ์ด (stopPropagation) กันชนกับ cardOnclick ที่พาไปหน้า pipeDetail
+    var _pcExpanded = !!_pipeCardExpanded[p.id];
+    html += '<div style="display:flex;justify-content:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border,#334155)">' +
+      '<span style="cursor:pointer;color:var(--accent,#3b82f6);font-size:11px" onclick="event.stopPropagation();togglePipeCardExpand(\'' + p.id + '\')">' +
+      (_pcExpanded ? '▴ ย่อกลับ' : '▾ ดูรายละเอียดสินค้า') + '</span></div>';
+    if (_pcExpanded) html += _pipeCardExpandedDetailHtml(p);
+
     html += '</div>';
   }
   html += '</div>';
   return html;
+}
+
+var _pipeCardExpanded = {}; // {pipeId: true} — การ์ดไหนกำลังขยายดูรายละเอียดสินค้าอยู่ (renderPipeCards)
+function togglePipeCardExpand(id, ev) {
+  if (ev) ev.stopPropagation();
+  _pipeCardExpanded[id] = !_pipeCardExpanded[id];
+  render();
+}
+
+// Next Action + สรุปรายการสินค้า (ชิปหมวดหมู่ + ตาราง Model/QTY/มูลค่า) แบบเดียวกับที่ใช้ใน modal เทียบ
+// Project — ใช้ _pipeCompareProductBreakdownHtml() ร่วมกัน (คุมด้วย pipeSummaryFullValue ตัวเดียวกัน)
+function _pipeCardExpandedDetailHtml(p) {
+  var h = '<div style="border-top:1px dashed var(--border,#334155);padding-top:10px;margin-top:2px">';
+  h += '<div style="font-size:11px;color:var(--text2,#94a3b8);margin-bottom:8px">🎯 Next Action: ' +
+    (p.nextAction ? '<b style="color:var(--text,#e2e8f0)">' + sanitize(p.nextAction) + '</b>' : '<span style="color:var(--text3,#64748b)">ไม่ได้ตั้ง</span>') + '</div>';
+  h += _pipeCompareProductBreakdownHtml(p);
+  h += '</div>';
+  return h;
 }
 
 function _buildQtMap() {

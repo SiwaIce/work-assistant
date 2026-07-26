@@ -12,6 +12,12 @@ var dealerPipeDisplayFlt = 'all'; // 'all' | 'show' | 'hide' — กรองต
 var dealerPipeSelectMode = false;
 var dealerPipeSelected = {};
 var _dealerPipeVisibleIds = [];
+var dealerPipeStatusFlt = {}; // multi-select: {statusId: true, ...} — ว่าง = แสดงทุกสถานะ (เหมือน pipeFlt เมนู Pipeline หลัก)
+var dealerPipeBidMonthFlt = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน กรองจาก biddingDate
+function toggleDealerPipeStatus(k) { if (dealerPipeStatusFlt[k]) delete dealerPipeStatusFlt[k]; else dealerPipeStatusFlt[k] = true; render(); }
+function clearDealerPipeStatusFlt() { dealerPipeStatusFlt = {}; render(); }
+function toggleDealerPipeBidMonth(idx) { if (dealerPipeBidMonthFlt[idx]) delete dealerPipeBidMonthFlt[idx]; else dealerPipeBidMonthFlt[idx] = true; render(); }
+function clearDealerPipeBidMonthFlt() { dealerPipeBidMonthFlt = {}; render(); }
 
 // ================================================================
 // JWT TOKEN FUNCTIONS (แบบไม่ต้องใช้ library)
@@ -921,8 +927,46 @@ function dealerPipelineTab(d) {
     }
     h += '</div>';
 
+    // แถบสถานะเลือกได้หลายช่อง + แถบเดือน Bidding Date — แบบเดียวกับเมนู Pipeline หลัก/Pipeline รวมทีม
+    (function() {
+      var statusSummary = {};
+      getConfig().pipelineStatuses.forEach(function(s) {
+        var items = pipes.filter(function(p) { return p.status === s.id; });
+        if (items.length) statusSummary[s.id] = { count: items.length, amount: items.reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0), name: s.name, color: s.color };
+      });
+      var totalAmtAll = pipes.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+      h += '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>';
+      h += '<div class="pipe-sum">';
+      Object.entries(statusSummary).forEach(function(e) {
+        var k = e[0], v = e[1];
+        h += '<div class="pipe-sum-card ' + (dealerPipeStatusFlt[k] ? 'act' : '') + '" onclick="toggleDealerPipeStatus(\'' + k + '\')">' +
+          '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
+          '<div class="count">' + v.count + '</div>' +
+          '<div class="amount">' + fmtMoneyShort(v.amount) + '</div></div>';
+      });
+      h += '<div class="pipe-sum-card ' + (Object.keys(dealerPipeStatusFlt).length === 0 ? 'act' : '') + '" onclick="clearDealerPipeStatusFlt()">' +
+        '<div class="stage">📊 ทั้งหมด</div><div class="count">' + pipes.length + '</div><div class="amount">' + fmtMoneyShort(totalAmtAll) + '</div></div>';
+      h += '</div>';
+      h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+      h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">';
+      ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].forEach(function(mn, idx) {
+        var on = !!dealerPipeBidMonthFlt[idx];
+        h += '<span onclick="toggleDealerPipeBidMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+          (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+      });
+      if (Object.keys(dealerPipeBidMonthFlt).length) h += '<button class="btn bsm bo" onclick="clearDealerPipeBidMonthFlt()">✕ ล้าง</button>';
+      h += '</div>';
+    })();
+
     // apply search + display filter + sort
     var listPipes = pipes.slice();
+    if (Object.keys(dealerPipeStatusFlt).length) listPipes = listPipes.filter(function(p) { return dealerPipeStatusFlt[p.status]; });
+    if (Object.keys(dealerPipeBidMonthFlt).length) {
+      listPipes = listPipes.filter(function(p) {
+        var bd = fcParseDate(p.biddingDate);
+        return bd && dealerPipeBidMonthFlt[bd.getMonth()];
+      });
+    }
     if (dealerPipeDisplayFlt === 'show') listPipes = listPipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
     else if (dealerPipeDisplayFlt === 'hide') listPipes = listPipes.filter(function(p) { return (p.sheetDisplay || 'Show') === 'Hide'; });
     if (dealerPipeSearch) {
