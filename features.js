@@ -3825,7 +3825,8 @@ function renderVpWeekView() {
       h += '<div class="vp-item vp-actual">';
       h += '<span class="vp-item-icon">✅</span>';
       h += '<div class="vp-item-info">';
-      h += '<div class="vp-item-dealer">' + (dd ? sanitize(dd.name) : '-') + ' <span style="font-size:10px;color:var(--text2)">(visited)</span></div>';
+      h += '<div class="vp-item-dealer">' + (dd ? sanitize(dd.name) : '-') + ' <span style="font-size:10px;color:var(--text2)">(visited)</span>' +
+        (dd ? ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:10px" onclick="event.stopPropagation();copyToClip(\'' + sanitize(dd.name).replace(/'/g, "\\'") + '\')" title="คัดลอกชื่อบริษัท">📋</button>' : '') + '</div>';
       h += '</div></div>';
     });
 
@@ -3956,7 +3957,7 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
     h += '<span class="vp-item-icon">' + (p.mode === 'offline' ? '🤝' : '📞') + '</span>';
     h += '<div class="vp-item-info">';
     h += '<div class="vp-item-dealer">' + (timeLabel ? '<span style="color:var(--text2)">' + timeLabel + '</span> ' : '') + sanitize(p.title || company) + (hasConflict ? ' ⚠️' : '') + '</div>';
-    h += '<div class="vp-item-note">🏢 ' + sanitize(company) + (isLead ? ' 🆕' : '') + '</div>';
+    h += '<div class="vp-item-note">🏢 ' + sanitize(company) + (isLead ? ' 🆕' : '') + ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:10px" onclick="event.stopPropagation();copyToClip(\'' + sanitize(company).replace(/'/g, "\\'") + '\')" title="คัดลอกชื่อบริษัท">📋</button></div>';
     if (p.status === 'done') h += '<div class="vp-item-note" style="color:#22c55e">✅ บันทึกผลแล้ว</div>';
     h += '</div>';
     h += '<div class="vp-item-actions">';
@@ -3992,7 +3993,7 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
       conflicts.map(function(c) { return sanitize(_vpPlanLabel(c)) + ' (' + c.timeStart + (c.timeEnd ? '–' + c.timeEnd : '') + ')'; }).join(', ') + '</div>';
   }
   h2 += '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text2);margin-bottom:8px">';
-  h2 += '<span>🏢 <span style="color:var(--text)">' + sanitize(company) + '</span> ' + sourceBadge + '</span>';
+  h2 += '<span style="display:flex;align-items:center;gap:4px">🏢 <span style="color:var(--text)">' + sanitize(company) + '</span> <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0" onclick="copyToClip(\'' + sanitize(company).replace(/'/g, "\\'") + '\')" title="คัดลอกชื่อบริษัท">📋</button> ' + sourceBadge + '</span>';
   if (contact) h2 += '<span>👤 <span style="color:var(--text)">' + sanitize(contact) + '</span></span>';
   h2 += '</div>';
   if (phone || email || location) {
