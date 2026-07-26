@@ -1598,9 +1598,17 @@ function buildFcDealerSummary(pipes, dealers) {
 
   dealerData.forEach(function(dd, idx) {
     var isOpen = fcDealerExpanded[dd.dealer.id] === true;
-    var modelSummary = Object.keys(dd.models).map(function(m) {
-      return m + ' x' + dd.models[m];
-    }).join(', ');
+    var catTotals = {};
+    Object.keys(dd.models).forEach(function(m) {
+      var cat = getModelCategory(m);
+      catTotals[cat] = (catTotals[cat] || 0) + dd.models[m];
+    });
+    var catOrder = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : Object.keys(catTotals);
+    var catIds = Object.keys(catTotals).sort(function(a, b) { return catOrder.indexOf(a) - catOrder.indexOf(b); });
+    var catChipsHtml = catIds.map(function(cid) {
+      var name = (typeof getCategoryName === 'function') ? getCategoryName(cid) : cid;
+      return '<div class="fcd-cat-chip"><span class="fcd-cat-chip-name">' + sanitize(name) + '</span><span class="fcd-cat-chip-qty">' + catTotals[cid] + ' ชิ้น</span></div>';
+    }).join('');
 
     h += '<div class="fcd-card' + (isOpen ? ' fcd-open' : '') + '">';
     h += '<div class="fcd-header" onclick="toggleFcDealer(\'' + dd.dealer.id + '\')">';
@@ -1619,7 +1627,7 @@ function buildFcDealerSummary(pipes, dealers) {
     h += '<span class="fcd-stat">📊 ' + dd.pipes.length + ' โครงการ</span>';
     h += '</div>';
 
-    h += '<div class="fcd-models">📦 ' + sanitize(modelSummary) + '</div>';
+    h += '<div class="fcd-cats">' + catChipsHtml + '</div>';
     h += '</div>';
 
     if (isOpen) {

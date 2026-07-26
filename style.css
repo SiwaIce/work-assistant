@@ -3936,6 +3936,13 @@ div[style*="color:#475569"], span[style*="color:#475569"] {
   line-height: 1.4;
 }
 
+/* สรุปตามหมวดหมู่แทนรายชื่อ model ยาวๆ ในการ์ด Forecast ตาม Dealer (ตอนยังไม่กดขยาย) — อ่านง่ายกว่าเดิมมาก
+   ตอนมีหลายสิบ model ปนกัน รายละเอียดเต็มยังอยู่ในตาราง .fcd-table เดิมตอนกดขยาย ไม่ได้ตัดออก */
+.fcd-cats { display: flex; gap: 8px; flex-wrap: wrap; }
+.fcd-cat-chip { background: var(--bg2); border-radius: 10px; padding: 6px 12px; min-width: 84px; }
+.fcd-cat-chip-name { display: block; font-size: 10px; color: var(--text2, #94a3b8); }
+.fcd-cat-chip-qty { display: block; font-weight: 700; font-size: 14px; }
+
 .fcd-detail {
   padding: 12px 14px;
   border-top: 1px solid var(--border, #334155);
