@@ -1031,6 +1031,13 @@ var fcDealerFilter = 'all';
 var fcDealerExpanded = {};
 var fcCatFilter = {}; // หมวดที่ปิดอยู่ (ไม่เลือก) จากการคลิกการ์ดสรุปตามหมวดหมู่ — ว่าง = แสดงทั้งหมด
 var fcSourceFilter = 'project'; // 'project' | 'runrate' | 'both' — เลือกแหล่งข้อมูล Forecast (ค่าเริ่มต้น 'project' กันเลขเดิมเปลี่ยนโดยไม่ตั้งใจ)
+var fcModelMonthFilter = {}; // เดือน (0-11) ที่ "เลือก" ไว้สำหรับตาราง Forecast ตาม Model โดยเฉพาะ — ว่าง = ทุกเดือน (ตรงข้ามกับ fcCatFilter ที่เป็นแบบ "ปิด")
+
+function fcToggleModelMonth(idx) {
+  if (fcModelMonthFilter[idx]) delete fcModelMonthFilter[idx]; else fcModelMonthFilter[idx] = true;
+  render();
+}
+function fcClearModelMonthFilter() { fcModelMonthFilter = {}; render(); }
 
 // รวม Run Rate ที่อนุมัติแล้ว (แปลงเป็น pipe จำลอง) เข้ากับ pipes ตาม fcSourceFilter ปัจจุบัน
 function _fcMergeBySource(pipes, dealerFilter) {
@@ -1084,26 +1091,47 @@ function rForecast(el) {
     totalQty += getPipeTotalQty(p);
   });
 
-  // Group by model (support multi-model items)
+  // Group by model (support multi-model items) — เคารพทั้งตัวกรองหมวดหมู่ (fcCatFilter ของเดิม ที่ก่อนหน้านี้
+  // ไม่มีผลกับตารางนี้เลย) และตัวกรองเดือน (fcModelMonthFilter ใหม่ เฉพาะตาราง Forecast ตาม Model)
+  // เก็บ breakdown ต่อ dealer (qty/amount รวม + รายการทีละโครงการ/Runrate) ไว้ทำคอลัมน์ Dealer/สรุป
+  var hasModelMonthFilter = Object.keys(fcModelMonthFilter).length > 0;
   var byModel = {};
   displayPipes.forEach(function(p) {
+    if (hasModelMonthFilter) {
+      var ship = getPipeShipDate(p);
+      if (!ship) return;
+      if (fcHideTentative && ship.est) return;
+      if (!fcModelMonthFilter[ship.date.getMonth()]) return;
+    }
     var items = getPipeItems(p);
     if (!items.length) return;
+    var dealerObj = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var dealerId = p.dealerId || '_none';
+    var dealerName = dealerObj ? dealerObj.name : (p.dealerName || 'ไม่ระบุ Dealer');
+    var lineLabel = p._isRunrate ? 'Runrate' : (p.projectName || '-');
+    var endUser = p._isRunrate ? '' : (p.endUserTH || p.agencyMain || '');
+
     items.forEach(function(it) {
       var model = it.model || 'ไม่ระบุ';
-      if (!byModel[model]) byModel[model] = {model: model, qty: 0, amount: 0, projects: [], dealers: {}};
-      byModel[model].qty += (Number(it.qty) || 1);
-      byModel[model].amount += (Number(it.total) || (Number(it.qty) || 1) * (Number(it.price) || 0));
-      // Add project if not already
-      var found = false;
-      for (var pi = 0; pi < byModel[model].projects.length; pi++) {
-        if (byModel[model].projects[pi].id === p.id) { found = true; break; }
+      if (!fcCatIsVisible('fcCatFilter', getModelCategory(model))) return;
+      var qty = Number(it.qty) || 1;
+      var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+
+      if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0, dealers: {} };
+      byModel[model].qty += qty;
+      byModel[model].amount += amt;
+
+      if (!byModel[model].dealers[dealerId]) byModel[model].dealers[dealerId] = { name: dealerName, qty: 0, amount: 0, lines: [] };
+      var dEntry = byModel[model].dealers[dealerId];
+      dEntry.qty += qty;
+      dEntry.amount += amt;
+
+      var existingLine = null;
+      for (var li = 0; li < dEntry.lines.length; li++) {
+        if (dEntry.lines[li].pipeId === p.id) { existingLine = dEntry.lines[li]; break; }
       }
-      if (!found) byModel[model].projects.push(p);
-      if (p.dealerId) {
-        var dd = ST.getOne('dealers', p.dealerId);
-        if (dd) byModel[model].dealers[dd.name] = true;
-      }
+      if (existingLine) existingLine.qty += qty;
+      else dEntry.lines.push({ pipeId: p.id, label: lineLabel, endUser: endUser, qty: qty });
     });
   });
 
@@ -1207,25 +1235,72 @@ function rForecast(el) {
 // ================================================================
 // MODEL VIEW
 // ================================================================
+// ตัวกรองเดือน (multi-select แบบ "เลือกเพื่อรวม" ตรงข้าม fcCatFilter ที่เป็นแบบ "ปิด") เฉพาะตาราง Forecast
+// ตาม Model — ไม่กระทบมุมมองรายเดือน/รายไตรมาสที่โชว์ทั้ง 12 เดือนอยู่แล้ว
+function fcModelMonthFilterHtml() {
+  var monthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var hasFilter = Object.keys(fcModelMonthFilter).length > 0;
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">';
+  h += '<span style="font-size:.72rem;color:var(--text2)">📅 เลือกเดือน (ไม่เลือก = ทุกเดือน):</span>';
+  monthNames.forEach(function(mn, idx) {
+    var on = !!fcModelMonthFilter[idx];
+    h += '<span onclick="fcToggleModelMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+      (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+  });
+  if (hasFilter) h += '<button class="btn bsm bo" onclick="fcClearModelMonthFilter()">✕ ล้าง</button>';
+  h += '</div>';
+  return h;
+}
+
 function buildFcModel(modelList, totalFc) {
+  window._fcSummaryTexts = []; // reset ทุกครั้งที่ render ใหม่ กันสะสมค้างจากรอบก่อน (ดู copyFcSummaryCell)
+  var monthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var selectedMonths = Object.keys(fcModelMonthFilter).map(function(k) { return monthNames[k]; });
+  var closedCats = fcCatFilter && Object.keys(fcCatFilter).length ? Object.keys(fcCatFilter).length : 0;
+
   var h = '<div class="card"><h2>📦 Forecast ตาม Model';
   h += '<span class="ml"><button class="btn bsm bo" onclick="copyTable(\'fcTable\')">📋</button>';
   h += '<button class="btn bsm bo" onclick="dlTableCSV(\'fcTable\',\'forecast\')">📤</button></span></h2>';
+  h += fcModelMonthFilterHtml();
+  if (selectedMonths.length || closedCats) {
+    h += '<div style="font-size:.68rem;color:var(--text2);margin-bottom:8px">กำลังกรอง: ' +
+      (selectedMonths.length ? sanitize(selectedMonths.join(', ')) : 'ทุกเดือน') +
+      (closedCats ? ' · ซ่อน ' + closedCats + ' หมวดหมู่' : '') + '</div>';
+  }
   h += '<div class="export-wrap"><table class="export-table" id="fcTable">';
-  h += '<thead><tr><th>#</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่ารวม (฿)</th><th>Dealer</th><th>โครงการ</th></tr></thead>';
+  h += '<thead><tr><th>#</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่ารวม (฿)</th><th>Dealer</th><th>สรุป</th></tr></thead>';
   h += '<tbody>';
 
+  if (!modelList.length) {
+    h += '<tr><td colspan="6"><div class="empty"><p>ไม่มีข้อมูลตามตัวกรองที่เลือก</p></div></td></tr>';
+  }
+
   modelList.forEach(function(m, idx) {
-    var dealerNames = Object.keys(m.dealers).join(', ');
-    var projNames = m.projects.map(function(p) { return sanitize((p.projectName || '').substr(0, 20)); }).join(', ');
-    
+    var dealerEntries = Object.keys(m.dealers).map(function(did) { return m.dealers[did]; });
+    var dealerLines = dealerEntries.map(function(dl) {
+      return sanitize(dl.name) + ' x' + dl.qty + ' x' + fmtMoney(dl.amount);
+    }).join('<br>');
+    var summaryLines = [];
+    var summaryPlainLines = [];
+    dealerEntries.forEach(function(dl) {
+      dl.lines.forEach(function(ln) {
+        var eu = ln.endUser ? ' (' + sanitize(ln.endUser) + ')' : '';
+        var euPlain = ln.endUser ? ' (' + ln.endUser + ')' : '';
+        summaryLines.push(sanitize(dl.name) + ' - ' + sanitize(ln.label) + eu + ' x' + ln.qty);
+        summaryPlainLines.push(dl.name + ' - ' + ln.label + euPlain + ' x' + ln.qty);
+      });
+    });
+    var sIdx = window._fcSummaryTexts.push(summaryPlainLines.join('\n')) - 1;
+
     h += '<tr>';
     h += '<td class="pipe-row-num">' + (idx + 1) + '</td>';
     h += '<td><strong>' + sanitize(m.model) + '</strong></td>';
     h += '<td style="text-align:center">' + m.qty + '</td>';
     h += '<td style="text-align:right">' + fmtMoneyStyled(m.amount) + '</td>';
-    h += '<td style="font-size:.68rem">' + sanitize(dealerNames) + '</td>';
-    h += '<td style="font-size:.64rem">' + projNames + '</td>';
+    h += '<td style="font-size:.66rem;line-height:1.6">' + dealerLines + '</td>';
+    h += '<td style="font-size:.62rem;line-height:1.6"><div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start">' +
+      '<span>' + summaryLines.join('<br>') + '</span>' +
+      '<button class="btn-xs" style="flex-shrink:0" onclick="copyFcSummaryCell(' + sIdx + ')" title="Copy สรุปช่องนี้">📋</button></div></td>';
     h += '</tr>';
   });
 
@@ -1235,6 +1310,12 @@ function buildFcModel(modelList, totalFc) {
   h += '<td></td><td></td></tr>';
   h += '</tbody></table></div></div>';
   return h;
+}
+
+function copyFcSummaryCell(idx) {
+  var text = (window._fcSummaryTexts || [])[idx];
+  if (!text) return;
+  copyText(text, '📋 Copy สรุปแล้ว');
 }
 
 // ================================================================
