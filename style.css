@@ -71,6 +71,10 @@ body.sb-collapsed #sb-tab{display:flex;align-items:center}
    จอแคบ/มือถือ auto-fit ยุบเหลือ 1 ใบต่อแถวเองโดยไม่ต้องมี media query แยก ใช้ร่วมกันทั้งเมนู Pipeline หลัก
    และแท็บ Dealer > Pipeline */
 .pipe-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(480px,100%),1fr));gap:12px;align-items:start}
+/* ตัวเลือกคอลัมน์การ์ดแบบเจาะจง (Pipeline รวมทีม) — ต่างจาก auto-fit เดิมด้านบนตรงที่ผู้ใช้กำหนดเอง
+   ว่าจะเอา 1 หรือ 2 การ์ดต่อแถวแน่นอน ไม่ขึ้นกับความกว้างจอ (มือถือยุบเหลือ 1 เสมอผ่าน media query) */
+.pipe-card-grid.pcg-1col{grid-template-columns:1fr}
+@media (min-width:700px){.pipe-card-grid.pcg-2col{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* === STATS ROW === */
 .sr{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:14px}

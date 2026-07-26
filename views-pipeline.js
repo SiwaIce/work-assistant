@@ -25,9 +25,23 @@ var pipeSelectMode = false;
 // แก้ไขไม่ได้จากหน้านี้ — ใครจะแก้ต้องไปแก้ที่ Pipeline ของตัวเอง แล้วมันจะ sync ขึ้นมาที่นี่เอง
 // ================================================================
 var pipeTeamOwnerFlt = 'all';
-var pipeTeamStatusFlt = 'all';
+var pipeTeamStatusFlt = {}; // multi-select: {statusId: true, ...} — ว่าง = แสดงทุกสถานะ
+var pipeTeamBidMonthFilter = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน (กรองจาก biddingDate)
+var pipeTeamCardCols = 1; // 1 หรือ 2 — จำนวนคอลัมน์การ์ดตอนดูมุมมองการ์ด (เหมือน taskCardCols ของหน้า Task)
 var pipeTeamSort = 'amount_desc';
 var pipeTeamView = 'card';
+
+function togglePipeTeamStatus(k) {
+  if (pipeTeamStatusFlt[k]) delete pipeTeamStatusFlt[k]; else pipeTeamStatusFlt[k] = true;
+  render();
+}
+function clearPipeTeamStatusFlt() { pipeTeamStatusFlt = {}; render(); }
+
+function togglePipeTeamBidMonth(idx) {
+  if (pipeTeamBidMonthFilter[idx]) delete pipeTeamBidMonthFilter[idx]; else pipeTeamBidMonthFilter[idx] = true;
+  render();
+}
+function clearPipeTeamBidMonthFilter() { pipeTeamBidMonthFilter = {}; render(); }
 
 function _pipeTeamMergedList() {
   var mine = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p); }).map(function(p) {
@@ -35,14 +49,14 @@ function _pipeTeamMergedList() {
     return {
       id: p.id, dealerName: d ? d.name : '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
       forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial',
-      model: getPipeModelSummary(p),
+      model: getPipeModelSummary(p), biddingDate: p.biddingDate || '',
       ownerName: (typeof SALES_MODE !== 'undefined' && SALES_MODE && typeof SALES_PROFILE !== 'undefined' && SALES_PROFILE) ? SALES_PROFILE.name : (getConfig().saleName || 'Main'),
       _mine: true
     };
   });
   var others = (typeof _teamPipelineData !== 'undefined' ? _teamPipelineData : []).map(function(p) {
     return { id: p.id, dealerName: p.dealerName || p._dealerName || '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
-      forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial', model: p.model || '',
+      forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial', model: p.model || '', biddingDate: p.biddingDate || '',
       ownerName: p.ownerName || p._ownerName || '?', _mine: false };
   });
   return mine.concat(others);
@@ -94,7 +108,13 @@ function rPipelineTeam(el) {
     });
   }
   if (pipeTeamOwnerFlt !== 'all') list = list.filter(function(p) { return p.ownerName === pipeTeamOwnerFlt; });
-  if (pipeTeamStatusFlt !== 'all') list = list.filter(function(p) { return p.status === pipeTeamStatusFlt; });
+  if (Object.keys(pipeTeamStatusFlt).length) list = list.filter(function(p) { return pipeTeamStatusFlt[p.status]; });
+  if (Object.keys(pipeTeamBidMonthFilter).length) {
+    list = list.filter(function(p) {
+      var d = fcParseDate(p.biddingDate);
+      return d && pipeTeamBidMonthFilter[d.getMonth()];
+    });
+  }
   list = _sortPipeTeamList(list, pipeTeamSort);
 
   var totalAmt = fullList.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
@@ -108,7 +128,7 @@ function rPipelineTeam(el) {
   h += '<div class="sc"><div class="sn c5">' + owners.length + '</div><div class="sl">จำนวนคน</div></div>';
   h += '</div>';
 
-  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง (ข้อมูลของคนอื่นเป็นสรุปย่อ ไม่มี Bidding Date/TOR/Board)</div>';
+  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง (ข้อมูลของคนอื่นเป็นสรุปย่อ ไม่มี TOR/Board)</div>';
 
   // แถบตัวกรอง — หน้าตาเหมือนแถบค้นหา/filter ของเมนู Pipeline หลัก
   h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">';
@@ -129,22 +149,42 @@ function rPipelineTeam(el) {
   h += '<div style="flex:1"></div>';
   h += '<button class="btn bsm ' + (pipeTeamView === 'table' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'table\';render()" title="ตาราง">📋</button>';
   h += '<button class="btn bsm ' + (pipeTeamView === 'card' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'card\';render()" title="การ์ด">🃏</button>';
+  if (pipeTeamView === 'card') {
+    h += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 1 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=1;render()" title="1 การ์ดต่อแถว">⚏1</button>';
+    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 2 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=2;render()" title="2 การ์ดต่อแถว">⚏2</button>';
+    h += '</div>';
+  }
   h += '</div>';
 
-  // แถบสถานะ — คลิกกรอง เหมือน .pipe-sum-card ของเมนู Pipeline หลัก
+  // แถบสถานะ — เลือกได้หลายช่อง (ไม่เลือกเลย = แสดงทุกสถานะ) กดที่ช่องเดิมซ้ำเพื่อยกเลิกเฉพาะช่องนั้น
+  h += '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>';
   h += '<div class="pipe-sum">';
   Object.entries(ps).filter(function(e) { return e[1].count > 0; }).forEach(function(e) {
     var k = e[0], v = e[1];
-    h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt === k ? 'act' : '') + '" onclick="pipeTeamStatusFlt=\'' + (pipeTeamStatusFlt === k ? 'all' : k) + '\';render()">' +
+    h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt[k] ? 'act' : '') + '" onclick="togglePipeTeamStatus(\'' + k + '\')">' +
       '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
       '<div class="count">' + v.count + '</div>' +
       '<div class="amount">' + fmtMoneyShort(v.amount) + '</div></div>';
   });
-  h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt === 'all' ? 'act' : '') + '" onclick="pipeTeamStatusFlt=\'all\';render()">' +
+  h += '<div class="pipe-sum-card ' + (Object.keys(pipeTeamStatusFlt).length === 0 ? 'act' : '') + '" onclick="clearPipeTeamStatusFlt()">' +
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + fullList.length + '</div><div class="amount">' + fmtMoneyShort(totalAmt) + '</div></div>';
   h += '</div>';
 
-  el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list));
+  // แถบเดือน — กรองจาก Bidding Date (เลือกได้หลายเดือน ไม่เลือกเลย = ทุกเดือน) เหมือนแพทเทิร์นที่ใช้ใน Forecast ตาม Model
+  h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">';
+  var _pipeTeamMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  _pipeTeamMonthNames.forEach(function(mn, idx) {
+    var on = !!pipeTeamBidMonthFilter[idx];
+    h += '<span onclick="togglePipeTeamBidMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+      (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+  });
+  if (Object.keys(pipeTeamBidMonthFilter).length) h += '<button class="btn bsm bo" onclick="clearPipeTeamBidMonthFilter()">✕ ล้าง</button>';
+  h += '</div>';
+
+  var pipeTeamCardGridClass = pipeTeamCardCols === 2 ? ' pcg-2col' : ' pcg-1col';
+  el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list, pipeTeamCardGridClass));
 
   var srcEl = document.getElementById('pipeTeamSrc');
   if (srcEl && pipeTeamSearch) { srcEl.focus(); srcEl.setSelectionRange(pipeTeamSearch.length, pipeTeamSearch.length); }
@@ -182,9 +222,9 @@ function pipeTeamSearchInput(v) {
 // การ์ด Pipeline รวมทีม — เลียนแบบหน้าตา/โครงสร้าง 4 แถวของ renderPipeCards (การ์ดเมนู Pipeline หลัก)
 // แต่ไม่พึ่ง ST.getOne('dealers',...)/ST.pipeLogsByPipe(...) เพราะข้อมูลของคนอื่นเป็นสรุปที่ sync มาจาก
 // teamPipeline เท่านั้น ไม่ใช่ record เต็มในเครื่องเรา — เลยแยกฟังก์ชันต่างหาก ไม่ไปแก้ renderPipeCards เดิม
-function _renderPipeTeamCards(list) {
+function _renderPipeTeamCards(list, gridClass) {
   if (!list.length) return '<div class="empty"><div class="icon">📊</div><p>ไม่พบ Pipeline</p></div>';
-  var html = '<div class="pipe-card-grid">';
+  var html = '<div class="pipe-card-grid' + (gridClass || '') + '">';
   list.forEach(function(p) {
     var amt = p.forecastAmount;
     var cardOnclick = p._mine ? ('go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})') : '';
