@@ -708,28 +708,32 @@ function openPipeCompareModal() {
   var minRecency = Math.min.apply(null, actStats.map(function(s) { return s.recency; }));
   var mostActiveIdx = actStats.findIndex(function(s) { return s.recency === minRecency; });
 
-  var html = '<div style="margin-bottom:10px">' + pairBadges + '</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(' + pipes.length + ',1fr);gap:10px">';
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
+  html += '<div>' + pairBadges + '</div>';
+  html += '<button class="btn bsm bo" onclick="togglePipeSummaryFullValue()">' + (pipeSummaryFullValue ? '🔍 แสดงแบบย่อ' : '🔍 แสดงมูลค่าเต็ม') + '</button>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(' + pipes.length + ',1fr);gap:16px">';
   pipes.forEach(function(p, idx) {
     var d = ST.getOne('dealers', p.dealerId);
-    var items = (getPipeItems(p) || []).map(function(it) { return sanitize(it.model) + ' x' + (it.qty || 1); }).join(', ');
     var border = colHasMatch[idx] ? 'border:2px solid #ef4444' : 'border:1px solid var(--border,#334155)';
     var stat = actStats[idx];
 
-    html += '<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;' + border + '">';
-    html += '<div style="font-weight:700;font-size:13px">' + sanitize(d ? d.name : '?') + '</div>';
-    html += '<div style="font-size:10px;color:var(--text2);margin-bottom:8px">' + String.fromCharCode(65 + idx) + ' · ' + getPipeName(p.status) + '</div>';
+    html += '<div style="background:var(--card,#1e293b);border-radius:12px;padding:16px;' + border + '">';
+    html += '<div style="font-weight:700;font-size:14px">' + sanitize(d ? d.name : '?') + '</div>';
+    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">' + String.fromCharCode(65 + idx) + ' · ' + getPipeName(p.status) + '</div>';
 
     function row(label, val, hl) {
       return '<div style="font-size:11px;color:var(--text2);margin-bottom:2px">' + label + '</div>' +
         '<div style="font-size:12px;' + (hl ? 'background:rgba(239,68,68,.15);border-radius:6px;padding:4px 6px;' : '') + 'margin-bottom:8px">' + (val || '-') + '</div>';
     }
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
     html += row('โครงการ', sanitize(p.projectName || '-'), nameFlags[idx]);
     html += row('End User', sanitize(p.endUserTH || p.endUserEN || '-'), euFlags[idx]);
     html += row('หน่วยงาน', sanitize((p.agencyMain || '-') + ' / ' + (p.agencySub || '-')), false);
-    html += row('สินค้า', items || '-', false);
     html += row('มูลค่า', fmtMoney(p.forecastAmount), false);
     html += row('Bidding', p.biddingDate ? fD(p.biddingDate) : '-', bidFlags[idx]);
+    html += '</div>';
+    html += _pipeCompareProductBreakdownHtml(p);
 
     // สรุปความเคลื่อนไหว
     if (stat.count > 0) {
@@ -766,6 +770,48 @@ function openPipeCompareModal() {
   html += '</div>';
 
   openM('🔍 เทียบ Project (' + pipes.length + ')', html);
+  setMWide(pipes.length >= 3 ? 1300 : 1000); // ขยาย modal กว้างขึ้นสำหรับ desktop กันตารางสินค้า/ฟิลด์ต่างๆ บีบแคบเกินไป
+}
+
+// สรุปรายการสินค้าแบบย่อ (ชิปหมวดหมู่ + ตาราง Model/QTY/มูลค่า) สำหรับใช้ในคอลัมน์ modal เทียบ Project —
+// เวอร์ชันกระชับกว่า pipeModelSummaryCardHtml() (ไม่มี card wrapper/หัวข้อ) เพราะอยู่ในคอลัมน์แคบอยู่แล้ว
+// ใช้ pipeSummaryFullValue ตัวเดียวกับหน้ารายละเอียดโครงการ ควบคุมจากปุ่มเดียวที่หัว modal
+function _pipeCompareProductBreakdownHtml(p) {
+  var items = getPipeItems(p);
+  if (!items.length) return '';
+
+  var catTotals = {};
+  var byModel = {};
+  items.forEach(function(it) {
+    var model = it.model || 'ไม่ระบุ';
+    var qty = Number(it.qty) || 1;
+    var amt = Number(it.total) || (qty * (Number(it.price) || 0));
+    var cat = getModelCategory(model);
+    catTotals[cat] = (catTotals[cat] || 0) + qty;
+    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0 };
+    byModel[model].qty += qty;
+    byModel[model].amount += amt;
+  });
+
+  var catOrder = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : Object.keys(catTotals);
+  var catIds = Object.keys(catTotals).sort(function(a, b) { return catOrder.indexOf(a) - catOrder.indexOf(b); });
+  var catChipsHtml = catIds.map(function(cid) {
+    var name = (typeof getCategoryName === 'function') ? getCategoryName(cid) : cid;
+    return '<span style="background:var(--bg2);border-radius:8px;padding:4px 10px;font-size:11px;margin-right:6px;display:inline-block;margin-bottom:6px"><span style="color:var(--text2)">' + sanitize(name) + '</span> <b>' + catTotals[cid] + '</b></span>';
+  }).join('');
+
+  var fmtAmt = pipeSummaryFullValue ? function(v) { return fmtMoney(v) + ' ฿'; } : fmtMoneyShort;
+  var modelList = Object.values(byModel);
+
+  var h = '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">📦 สรุปรายการสินค้า</div>';
+  h += '<div style="margin-bottom:8px">' + catChipsHtml + '</div>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">';
+  h += '<tr style="color:var(--text2)"><td style="padding:3px 0">Model</td><td style="text-align:center">QTY</td><td style="text-align:right">มูลค่า</td></tr>';
+  modelList.forEach(function(m) {
+    h += '<tr style="border-top:1px solid var(--border,#334155)"><td style="padding:3px 0">' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtAmt(m.amount) + '</td></tr>';
+  });
+  h += '</table>';
+  return h;
 }
 
 function rPipeline(el) {
@@ -2462,8 +2508,18 @@ function getPipeModelSummary(p) {
   return (p.model || '') + (p.modelQty > 1 ? ' x' + p.modelQty : '');
 }
 
-var pipeSummaryFullValue = false; // toggle: มูลค่าเต็ม (มีคอมมา) หรือแบบย่อ (K/M) ในการ์ด "สรุปรายการสินค้า"
-function togglePipeSummaryFullValue() { pipeSummaryFullValue = !pipeSummaryFullValue; render(); }
+var pipeSummaryFullValue = false; // toggle: มูลค่าเต็ม (มีคอมมา) หรือแบบย่อ (K/M) — ใช้ร่วมกันทั้งการ์ด
+// "สรุปรายการสินค้า" ในหน้ารายละเอียดโครงการ และ modal เทียบ Project (คุมด้วยปุ่มเดียว)
+function togglePipeSummaryFullValue() {
+  pipeSummaryFullValue = !pipeSummaryFullValue;
+  // ถ้า modal เทียบ Project เปิดอยู่ ให้ re-render modal นั้นแทนหน้าเดิม (openM() แค่เขียนทับ innerHTML
+  // ไม่มี re-render อัตโนมัติแบบหน้าเพจปกติ)
+  if (pipeCompareSelected.length >= 2 && document.getElementById('modal').classList.contains('show')) {
+    openPipeCompareModal();
+  } else {
+    render();
+  }
+}
 
 // สรุปรายการสินค้าของโครงการนี้ — ชิปตามหมวดหมู่ (Drone/Payload/...) + ตาราง Model/QTY/มูลค่า
 // หน้าตาเดียวกับการ์ด Forecast ตาม Dealer (buildFcDealerSummary ใน views-today.js) แต่ดึงจาก getPipeItems(p)

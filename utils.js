@@ -446,7 +446,8 @@ function pipeMatchScore(a, b) {
   var bid = 0;
   var da = fcParseDate(a.biddingDate), db = fcParseDate(b.biddingDate);
   if (da && db) { var diff = Math.abs(da - db) / 86400000; bid = diff <= 30 ? 1 : (diff >= 90 ? 0 : 1 - (diff - 30) / 60); }
-  var score = name * 0.35 + eu * 0.25 + am * 0.10 + asb * 0.10 + model * 0.15 + bid * 0.05;
+  // End User หนักสุด — มักเป็นจุดแรกที่เทียบได้ก่อน (ชื่อโปรเจคมักตั้งทีหลัง/เปลี่ยนคำพูดกันคนละแบบ)
+  var score = eu * 0.35 + name * 0.25 + model * 0.15 + am * 0.10 + asb * 0.10 + bid * 0.05;
   return Math.round(score * 100);
 }
 function getDismissedConflicts() {
