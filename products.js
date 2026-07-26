@@ -2237,12 +2237,12 @@ function renderProductsTable(products) {
     html += '<td>' + sanitize(p.ean || '-') + '</td>';
     html += '<td><strong>' + qcopyHtml(p.name) + '</strong></td>';
     html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.rrpInVat) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.rrpExVat) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.S) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.A) + '</td>';
-    html += '<td style="text-align:right">' + (p.typePrices?.B != null ? qcopyHtml(p.typePrices.B) : fmtMoney(p.typePrices?.B)) + '</td>';
-    html += '<td style="text-align:right">' + fmtMoney(p.typePrices?.Other) + '</td>';
+    html += '<td style="text-align:right">' + (p.rrpInVat != null ? qcopyHtml(fmtMoney(p.rrpInVat)) : fmtMoney(p.rrpInVat)) + '</td>';
+    html += '<td style="text-align:right">' + (p.rrpExVat != null ? qcopyHtml(fmtMoney(p.rrpExVat)) : fmtMoney(p.rrpExVat)) + '</td>';
+    html += '<td style="text-align:right">' + (p.typePrices?.S != null ? qcopyHtml(fmtMoney(p.typePrices.S)) : fmtMoney(p.typePrices?.S)) + '</td>';
+    html += '<td style="text-align:right">' + (p.typePrices?.A != null ? qcopyHtml(fmtMoney(p.typePrices.A)) : fmtMoney(p.typePrices?.A)) + '</td>';
+    html += '<td style="text-align:right">' + (p.typePrices?.B != null ? qcopyHtml(fmtMoney(p.typePrices.B)) : fmtMoney(p.typePrices?.B)) + '</td>';
+    html += '<td style="text-align:right">' + (p.typePrices?.Other != null ? qcopyHtml(fmtMoney(p.typePrices.Other)) : fmtMoney(p.typePrices?.Other)) + '</td>';
     html += '<td>' + badge + '</td>';
     html += '<td><button class="btn bsm bo" onclick="showEditProductModal(\'' + p.id + '\')">✏️</button> ' +
       '<button class="btn bsm bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️</button></td>';
