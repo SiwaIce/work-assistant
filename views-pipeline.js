@@ -2462,6 +2462,9 @@ function getPipeModelSummary(p) {
   return (p.model || '') + (p.modelQty > 1 ? ' x' + p.modelQty : '');
 }
 
+var pipeSummaryFullValue = false; // toggle: มูลค่าเต็ม (มีคอมมา) หรือแบบย่อ (K/M) ในการ์ด "สรุปรายการสินค้า"
+function togglePipeSummaryFullValue() { pipeSummaryFullValue = !pipeSummaryFullValue; render(); }
+
 // สรุปรายการสินค้าของโครงการนี้ — ชิปตามหมวดหมู่ (Drone/Payload/...) + ตาราง Model/QTY/มูลค่า
 // หน้าตาเดียวกับการ์ด Forecast ตาม Dealer (buildFcDealerSummary ใน views-today.js) แต่ดึงจาก getPipeItems(p)
 // ของโครงการเดียวแทนที่จะรวมทั้ง dealer
@@ -2493,15 +2496,17 @@ function pipeModelSummaryCardHtml(p) {
   }).join('');
 
   var modelList = Object.values(byModel);
+  var fmtAmt = pipeSummaryFullValue ? function(v) { return fmtMoney(v) + ' ฿'; } : fmtMoneyShort;
 
-  var h = '<div class="card"><h2>📦 สรุปรายการสินค้า</h2>';
+  var h = '<div class="card"><h2>📦 สรุปรายการสินค้า <span class="ml">' +
+    '<button class="btn bsm bo" onclick="togglePipeSummaryFullValue()">' + (pipeSummaryFullValue ? '🔍 แสดงแบบย่อ' : '🔍 แสดงมูลค่าเต็ม') + '</button></span></h2>';
   h += '<div class="fcd-cats" style="margin-bottom:12px">' + catChipsHtml + '</div>';
   h += '<table class="fcd-table">';
   h += '<thead><tr><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th></tr></thead><tbody>';
   modelList.forEach(function(m) {
-    h += '<tr><td>' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtMoneyShort(m.amount) + '</td></tr>';
+    h += '<tr><td>' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtAmt(m.amount) + '</td></tr>';
   });
-  h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td>รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtMoneyShort(totalAmt) + '</td></tr>';
+  h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td>รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtAmt(totalAmt) + '</td></tr>';
   h += '</tbody></table></div>';
   return h;
 }
