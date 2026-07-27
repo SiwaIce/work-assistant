@@ -1631,9 +1631,9 @@ function rMeetDet(el) {
     <button class="btn bsm bd" onclick="delMeeting('${m.id}')">🗑️</button>
   </span></h2>
   <div class="fr"><div>📅 ${fD(m.date)} ${m.time||''} ${m.endTime?'→ '+m.endTime:''}</div>
-  <div>${m.location?'📍 '+sanitize(m.location):''}</div></div>
+  <div>${m.location?'📍 '+qcopyHtml(m.location):''}</div></div>
   ${m.type?`<div style="margin-top:3px"><span class="tag tag-active">${sanitize(m.type)}</span></div>`:''}
-  ${m.attendees?`<div style="margin-top:3px">👥 ${sanitize(m.attendees)}</div>`:''}</div>
+  ${m.attendees?`<div style="margin-top:3px">👥 ${qcopyHtml(m.attendees)}</div>`:''}</div>
 
   ${m.agenda?`<div class="card"><h2>📋 วาระ</h2><div style="white-space:pre-wrap;font-size:.76rem">${sanitize(m.agenda)}</div></div>`:''}
   ${m.notes?`<div class="card"><h2>📝 บันทึก</h2><div style="white-space:pre-wrap;font-size:.76rem">${sanitize(m.notes)}</div></div>`:''}
@@ -1642,7 +1642,7 @@ function rMeetDet(el) {
   ${(m.actions||[]).length ? m.actions.map((a,i) => `<div class="si ${a.done?'done':''}">
     <div class="ck ${a.done?'chk':''}" onclick="togAction('${m.id}',${i})"></div>
     <div style="flex:1"><div class="stt">${sanitize(a.title)}</div>
-    <div class="sd">${a.assignee?'👤 '+sanitize(a.assignee):''} ${a.dueDate?'📅 '+fD(a.dueDate)+' '+dlB(a.dueDate,a.done):''}</div></div>
+    <div class="sd">${a.assignee?'👤 '+qcopyHtml(a.assignee):''} ${a.dueDate?'📅 '+fD(a.dueDate)+' '+dlB(a.dueDate,a.done):''}</div></div>
     <button class="btn bsm bd" onclick="event.stopPropagation();delAction('${m.id}',${i})">✕</button>
   </div>`).join('') : '<div class="empty"><p>ยังไม่มี Action Items</p></div>'}
   </div>
