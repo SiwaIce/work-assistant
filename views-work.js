@@ -2049,9 +2049,12 @@ function mwAgendaToggle(i) {
   if (!window._mwAgenda || !window._mwAgenda[i]) return;
   window._mwAgenda[i].done = !window._mwAgenda[i].done;
   var row = document.getElementById('mw-ag-' + i); if (!row) return;
-  var a = window._mwAgenda[i];
-  var dot = row.querySelector('div'); if (dot) { dot.style.borderColor = a.done ? '#4ade80' : 'var(--border,#334155)'; dot.style.background = a.done ? '#4ade80' : 'transparent'; dot.textContent = a.done ? '✓' : ''; }
-  var lbl = row.querySelectorAll('div')[1]; if (lbl) { lbl.style.textDecoration = a.done ? 'line-through' : ''; lbl.style.color = a.done ? 'var(--text2)' : ''; }
+  // เขียนทั้งแถวใหม่แทนการ patch style ทีละ property — dot.style.borderColor = ... เคยทำให้ browser
+  // แยก shorthand "border:2px solid var(--border,...)" เป็น longhand ไม่ได้ (มี var() อยู่ใน shorthand)
+  // แล้วเคลียร์ border-width/style ทิ้งจนกล่องเช็คบวมเต็มแถว (bug ที่ผู้ใช้เจอ)
+  var tmp = document.createElement('div');
+  tmp.innerHTML = _mwAgendaRowHtml(window._mwAgenda[i], i);
+  row.parentNode.replaceChild(tmp.firstChild, row);
 }
 
 function mwAgendaAddToNotes(i) {
