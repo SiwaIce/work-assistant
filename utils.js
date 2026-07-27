@@ -1053,10 +1053,13 @@ function _attachItemHtml(a, onClick) {
 
 function attachUploadHtml(stateVarName, folder, label) {
   window[stateVarName] = window[stateVarName] || [];
+  // จำ widget แนบไฟล์ล่าสุดที่ถูก render ไว้ — ให้ global paste listener (ดู _bindGlobalAttachPaste ท้ายไฟล์นี้)
+  // รู้ว่า Ctrl+V ตอนนี้ควรอัปโหลดเข้า stateVarName/folder ไหน โดยไม่ต้องผูก onpaste ทีละจุด
+  window._activeAttachTarget = { stateVarName: stateVarName, folder: folder };
   var linkInputId = stateVarName + '_linkInput';
   return '<div class="fg"><label>' + (label || '📎 ไฟล์แนบ') + '</label>' +
     '<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="_handleAttachUpload(event,\'' + stateVarName + '\',\'' + folder + '\')" style="font-size:.76rem">' +
-    '<div class="hint" style="margin:2px 0 0">รูป/PDF/Word/Excel ไม่เกิน 10MB — รูปจะถูกบีบอัดให้เล็กลงอัตโนมัติ</div>' +
+    '<div class="hint" style="margin:2px 0 0">รูป/PDF/Word/Excel ไม่เกิน 10MB — รูปจะถูกบีบอัดให้เล็กลงอัตโนมัติ · หรือ Ctrl+V วางรูปที่คัดลอกไว้ได้เลย</div>' +
     '<div style="display:flex;gap:4px;margin-top:6px">' +
     '<input type="text" id="' + linkInputId + '" placeholder="🔗 วางลิงก์ (เว็บ หรือ path ไฟล์ในเครื่อง)" style="flex:1;font-size:.76rem" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_addAttachLink(\'' + stateVarName + '\')}">' +
     '<button type="button" class="btn bo bsm" onclick="_addAttachLink(\'' + stateVarName + '\')">เพิ่มลิงก์</button>' +
@@ -1435,6 +1438,32 @@ function handlePasteOrDropImage(e, stateVarName, folder) {
     toast('📷 แนบรูปแล้ว');
   });
 }
+
+// Ctrl+V วางรูปได้ทุกจุดที่ใช้ attachUploadHtml() — โดยไม่ต้องผูก onpaste ทีละ widget เอง
+// attachUploadHtml() จะเซ็ต window._activeAttachTarget ไว้ทุกครั้งที่ widget นั้น render ล่าสุด
+// เช็ค e.defaultPrevented กัน double-upload กับจุดที่ผูก handlePasteOrDropImage ไว้เองแล้ว (เช่น textarea รายละเอียดงาน)
+document.addEventListener('paste', function(e) {
+  if (e.defaultPrevented) return;
+  var target = window._activeAttachTarget;
+  if (!target) return;
+  if (!document.getElementById(target.stateVarName + '_thumbs')) return; // widget ไม่อยู่บนจอแล้ว (ปิด modal/เปลี่ยนหน้าไปแล้ว)
+  var items = (e.clipboardData && e.clipboardData.items) || [];
+  var file = null;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type && items[i].type.indexOf('image') === 0) { file = items[i].getAsFile(); break; }
+  }
+  if (!file) return;
+  e.preventDefault();
+  toast('⏳ กำลังอัปโหลดรูป...');
+  uploadAttachment(file, target.folder, function(att) {
+    if (!att) return;
+    window[target.stateVarName] = window[target.stateVarName] || [];
+    window[target.stateVarName].push(att);
+    var wrap = document.getElementById(target.stateVarName + '_thumbs');
+    if (wrap) wrap.innerHTML = attachThumbsHtml(window[target.stateVarName], target.stateVarName);
+    toast('📷 แนบรูปแล้ว');
+  });
+});
 
 // Close date picker when clicking outside
 document.addEventListener('click', e => {
