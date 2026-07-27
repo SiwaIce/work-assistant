@@ -484,16 +484,38 @@ function fcMonthlyBarsHtml(pipes, year) {
   var data = [];
   for (var i = 0; i < 12; i++) data.push({ conf: 0, est: 0 });
   (pipes || []).forEach(function (p) {
+    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
+    // item ที่แบ่งส่งไว้ (shipBatches) — แยกยอดไปตามเดือนของแต่ละล็อตเอง ไม่รวมกับ shipDate เดียวของโปรเจค
+    // ที่เหลือ (item ไม่ได้แบ่งส่ง / ไม่มี items เลย) ยังใช้ getPipeShipDate เดิมเป็น bucket เดียว
+    var itemsNoBatch = [];
+    items.forEach(function (it) {
+      if (it.shipBatches && it.shipBatches.length) {
+        var amt = (Number(it.qty) || 1) * (Number(it.price) || 0);
+        var totalBatchQty = it.shipBatches.reduce(function (s, b) { return s + (Number(b.qty) || 0); }, 0) || (Number(it.qty) || 1);
+        it.shipBatches.forEach(function (b) {
+          if (!b.month) return;
+          var parts = b.month.split('-');
+          var by = parseInt(parts[0], 10), bm = parseInt(parts[1], 10) - 1;
+          if (isNaN(by) || isNaN(bm) || bm < 0 || bm > 11) return;
+          if (year && by !== year) return;
+          var bamt = totalBatchQty ? amt * ((Number(b.qty) || 0) / totalBatchQty) : 0;
+          data[bm].conf += bamt; // วันที่ระบุเองถือเป็นค่ายืนยัน ไม่ใช่ค่าประมาณ
+        });
+      } else {
+        itemsNoBatch.push(it);
+      }
+    });
+
     var ship = getPipeShipDate(p);
     if (!ship) return;
     if (fcHideTentative && ship.est) return;
     if (year && ship.date.getFullYear() !== year) return;
     var m = ship.date.getMonth();
-    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
-    var amt = 0;
-    items.forEach(function (it) { amt += (Number(it.qty) || 1) * (Number(it.price) || 0); });
-    if (!amt) amt = Number(p.forecastAmount) || 0;
-    if (ship.est) data[m].est += amt; else data[m].conf += amt;
+    var amt2 = 0;
+    if (items.length) itemsNoBatch.forEach(function (it) { amt2 += (Number(it.qty) || 1) * (Number(it.price) || 0); });
+    else amt2 = Number(p.forecastAmount) || 0;
+    if (!amt2) return;
+    if (ship.est) data[m].est += amt2; else data[m].conf += amt2;
   });
   var max = 1, hasData = false;
   data.forEach(function (d) { var t = d.conf + d.est; if (t > max) max = t; if (t > 0) hasData = true; });

@@ -1339,7 +1339,7 @@ function showPipelineQuotesM(pipelineId) {
     });
   }
   html += '<div class="fm-actions" style="margin-top:12px">';
-  html += '<button class="btn bp" onclick="closeM();createQuoteFromPipeline(\'' + pipelineId + '\')">➕ สร้างใบเสนอราคา</button>';
+  html += '<button class="btn bp" onclick="closeM();showPipelineQuoteBuilderM(\'' + pipelineId + '\')">➕ สร้างใบเสนอราคา</button>';
   html += '<button class="btn" onclick="closeM()">ปิด</button>';
   html += '</div></div>';
 
@@ -1394,13 +1394,101 @@ function _qResolveItem(model, qty, sku, dealerLevel, fallbackPrice) {
   return { sku: prod ? (prod.sku||'') : '', name: prod ? prod.name : model, quantity: qty, unitPrice: unitPrice, amount: unitPrice * qty, cost: prod ? (Number(prod.cost) || 0) : 0, priceLevel: resolvedLevel };
 }
 
-function createQuoteFromPipeline(pipelineId) {
+// ================================================================
+// เลือกจำนวนก่อนออกใบเสนอราคาจาก Pipeline — เติม "เหลือที่ยังไม่เคยออกใบ" ให้อัตโนมัติ
+// (เทียบจากใบเสนอราคาเก่าที่ผูก pipelineId เดียวกัน สถานะ draft/sent/approved) กันออกใบซ้ำ/เกินตอนแบ่งส่งหลายรอบ
+// ================================================================
+function _pqNormKey(s) { return (s || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+
+function showPipelineQuoteBuilderM(pipelineId) {
+  var p = ST.getOne('pipeline', pipelineId);
+  if (!p) { toast('ไม่พบ Pipeline'); return; }
+  var pipeItems = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1, price: 0 }] : []);
+  if (!pipeItems.length) { toast('⚠️ โปรเจคนี้ยังไม่มีรายการสินค้า'); return; }
+
+  var allQuotes = [];
+  try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+  var priorQuotes = allQuotes.filter(function(q) { return q.pipelineId === pipelineId && q.status !== 'rejected' && q.status !== 'expired'; });
+  var quotedQtyByKey = {};
+  priorQuotes.forEach(function(q) {
+    (q.items || []).forEach(function(it) {
+      var key = _pqNormKey(it.sku || it.name);
+      quotedQtyByKey[key] = (quotedQtyByKey[key] || 0) + (Number(it.quantity) || 0);
+    });
+  });
+
+  var lines = pipeItems.map(function(it) {
+    var key = _pqNormKey(it.sku || it.model);
+    var fullQty = Number(it.qty) || 1;
+    var quotedQty = quotedQtyByKey[key] || 0;
+    var remainingQty = Math.max(0, fullQty - quotedQty);
+    return { model: it.model, sku: it.sku || '', price: it.price || 0, fullQty: fullQty, quotedQty: quotedQty, remainingQty: remainingQty };
+  });
+
+  window._pqBuilderLines = lines;
+  window._pqBuilderPipelineId = pipelineId;
+  window._pqBuilderPicked = {};
+  lines.forEach(function(l, i) { window._pqBuilderPicked[i] = l.remainingQty; });
+
+  var h = '<div>';
+  h += '<div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">' +
+    (priorQuotes.length ? 'มีใบเสนอราคาก่อนหน้าแล้ว ' + priorQuotes.length + ' ใบ — ระบบเติมจำนวนที่ยังไม่เคยออกใบให้อัตโนมัติ ปรับเองได้' : 'เลือกจำนวนที่จะออกในใบเสนอราคานี้') +
+    '</div>';
+  h += '<div id="pqBuilderList"></div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bp" onclick="_pqBuilderCreate()">📄 สร้างใบเสนอราคา</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('📄 สร้างใบเสนอราคาจาก Pipeline', h);
+  _pqBuilderRenderList();
+}
+
+function _pqBuilderRenderList() {
+  var wrap = document.getElementById('pqBuilderList');
+  if (!wrap) return;
+  var h = '';
+  window._pqBuilderLines.forEach(function(l, i) {
+    var val = window._pqBuilderPicked[i] || 0;
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">';
+    h += '<input type="checkbox" ' + (val > 0 ? 'checked' : '') + ' onchange="_pqBuilderToggle(' + i + ',this.checked)">';
+    h += '<div style="flex:1;min-width:0"><b>' + sanitize(l.model) + '</b><div style="font-size:.68rem;color:var(--text2)">ทั้งหมด ' + l.fullQty + ' — ออกใบไปแล้ว ' + l.quotedQty + ' — เหลือ ' + l.remainingQty + '</div></div>';
+    h += '<input type="number" min="0" max="' + l.fullQty + '" value="' + val + '" style="width:60px" onchange="_pqBuilderSetQty(' + i + ',this.value)">';
+    h += '</div>';
+  });
+  wrap.innerHTML = h;
+}
+function _pqBuilderSetQty(i, v) {
+  var l = window._pqBuilderLines[i];
+  var val = Math.max(0, Math.min(l.fullQty, parseInt(v, 10) || 0));
+  window._pqBuilderPicked[i] = val;
+  _pqBuilderRenderList();
+}
+function _pqBuilderToggle(i, checked) {
+  var l = window._pqBuilderLines[i];
+  window._pqBuilderPicked[i] = checked ? l.remainingQty : 0;
+  _pqBuilderRenderList();
+}
+function _pqBuilderCreate() {
+  var selections = [];
+  window._pqBuilderLines.forEach(function(l, i) {
+    var qty = window._pqBuilderPicked[i] || 0;
+    if (qty > 0) selections.push({ model: l.model, sku: l.sku, qty: qty, price: l.price });
+  });
+  if (!selections.length) { toast('⚠️ เลือกอย่างน้อย 1 รายการ'); return; }
+  var pipelineId = window._pqBuilderPipelineId;
+  closeMForce();
+  createQuoteFromPipeline(pipelineId, selections);
+}
+
+// selections (ถ้ามี) — [{model, sku, qty, price}] ที่เลือกไว้จาก showPipelineQuoteBuilderM (เช่น เฉพาะล็อตที่ยังไม่เคยออกใบ)
+// ไม่ส่งมา = เอา item เต็มทั้งหมดของ pipeline เหมือนพฤติกรรมเดิม
+function createQuoteFromPipeline(pipelineId, selections) {
   var p = ST.getOne('pipeline', pipelineId);
   if (!p) { toast('ไม่พบ Pipeline'); return; }
   var dealer = ST.getOne('dealers', p.dealerId);
   var dealerLevel = dealer ? (dealer.level || 'B') : 'B';
 
-  var pipeItems = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
+  var pipeItems = selections || ((p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []));
   var items = pipeItems.map(function(it) {
     return _qResolveItem(it.model, it.qty, it.sku, dealerLevel, it.price);
   });

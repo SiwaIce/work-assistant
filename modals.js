@@ -370,12 +370,15 @@ function buildPipeItemsSection(p) {
       for (var ii = 0; ii < pipeItemsTemp.length; ii++) {
         var it = pipeItemsTemp[ii];
         var lineTotal = (Number(it.qty) || 1) * (Number(it.price) || 0);
-        h += '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
+        var hasSplit = !!(it.shipBatches && it.shipBatches.length);
+        h += '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:' + (hasSplit ? 'none' : '1px solid rgba(127,127,127,0.2)') + '">';
         h += '<input type="text" list="' + itemModelListId + '" value="' + sanitize(it.model) + '" onchange="pqaUpdateModel(' + ii + ', this.value)" style="flex:1;min-width:0;font-size:.82rem" title="แก้สินค้า" autocomplete="off">';
         h += '<input type="number" min="1" value="' + (Number(it.qty) || 1) + '" onchange="pqaUpdateQty(' + ii + ', this.value)" style="width:56px" title="แก้จำนวน">';
         h += '<span id="pqitot_' + ii + '" style="width:84px;text-align:right;opacity:.65;font-size:12px;flex-shrink:0">฿' + fmtMoneyShort(lineTotal) + '</span>';
+        h += '<button class="btn bsm ' + (hasSplit ? 'bp' : 'bo') + '" onclick="pqaToggleSplit(' + ii + ')" title="แบ่งส่งเป็นหลายรอบ">🚚</button>';
         h += '<button class="btn bd bsm" onclick="pqaRemove(' + ii + ')" title="ลบ">🗑️</button>';
         h += '</div>';
+        if (hasSplit) h += _pqaBatchEditorHtml(ii);
       }
       h += '</div>';
     } else {
@@ -530,6 +533,67 @@ function pqaAdd() {
   
   toast('➕ เพิ่ม ' + model + ' x' + qty);
 }
+// ================================================================
+// แบ่งส่งสินค้าเป็นหลายรอบ (shipBatches) — ต่อ 1 item ใน pipeItemsTemp แบ่งเป็นหลายล็อต
+// {month:'YYYY-MM', qty} กันงงตอน forecast/ใบเสนอราคาโปรเจคที่ส่งของไม่พร้อมกันทีเดียว
+// ================================================================
+function pqaToggleSplit(idx) {
+  var it = pipeItemsTemp[idx];
+  if (!it) return;
+  if (it.shipBatches && it.shipBatches.length) {
+    delete it.shipBatches;
+  } else {
+    it.shipBatches = [{ month: '', qty: Number(it.qty) || 1 }];
+  }
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+}
+function pqaAddBatch(idx) {
+  var it = pipeItemsTemp[idx];
+  if (!it || !it.shipBatches) return;
+  it.shipBatches.push({ month: '', qty: 0 });
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+}
+function pqaRemoveBatch(idx, bi) {
+  var it = pipeItemsTemp[idx];
+  if (!it || !it.shipBatches) return;
+  it.shipBatches.splice(bi, 1);
+  if (!it.shipBatches.length) delete it.shipBatches;
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+}
+function pqaUpdateBatch(idx, bi, field, val) {
+  var it = pipeItemsTemp[idx];
+  if (!it || !it.shipBatches || !it.shipBatches[bi]) return;
+  if (field === 'qty') it.shipBatches[bi].qty = Math.max(0, parseInt(val, 10) || 0);
+  else it.shipBatches[bi].month = val;
+  var el = document.getElementById('pipeItemsSection');
+  if (el) el.innerHTML = buildPipeItemsSection({});
+}
+function _pqaBatchEditorHtml(idx) {
+  var it = pipeItemsTemp[idx];
+  var batches = it.shipBatches || [];
+  var sum = batches.reduce(function(s, b) { return s + (Number(b.qty) || 0); }, 0);
+  var target = Number(it.qty) || 1;
+  var ok = sum === target;
+  var h = '<div style="padding:6px 0 10px 0;border-bottom:1px solid rgba(127,127,127,0.2)">';
+  batches.forEach(function(b, bi) {
+    h += '<div style="display:flex;align-items:center;gap:6px;background:var(--bg2,rgba(127,127,127,.08));border-radius:6px;padding:5px 8px;margin-bottom:5px">';
+    h += '<span style="font-size:11px;opacity:.6;width:14px">' + (bi + 1) + '</span>';
+    h += '<input type="month" value="' + sanitize(b.month || '') + '" onchange="pqaUpdateBatch(' + idx + ',' + bi + ',\'month\',this.value)" style="flex:1;font-size:.78rem">';
+    h += '<input type="number" min="0" value="' + (Number(b.qty) || 0) + '" onchange="pqaUpdateBatch(' + idx + ',' + bi + ',\'qty\',this.value)" style="width:56px;font-size:.78rem" title="จำนวน">';
+    h += '<span style="font-size:11px;opacity:.55">ชิ้น</span>';
+    h += '<button class="btn bsm" style="padding:2px 6px" onclick="pqaRemoveBatch(' + idx + ',' + bi + ')" title="ลบล็อต">✕</button>';
+    h += '</div>';
+  });
+  h += '<button class="btn bsm bo" style="font-size:.74rem" onclick="pqaAddBatch(' + idx + ')">➕ เพิ่มล็อตส่งของ</button>';
+  h += '<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-top:4px;color:' + (ok ? '#22c55e' : '#ef4444') + '">' +
+    '<span>รวมที่แบ่งไว้</span><span>' + sum + ' / ' + target + ' ชิ้น' + (ok ? ' ตรงกับยอดสั่งซื้อ' : ' — ยังไม่ตรง') + '</span></div>';
+  h += '</div>';
+  return h;
+}
+
 function pqaRemove(idx) {
   pipeItemsTemp.splice(idx, 1);
   var el = document.getElementById('pipeItemsSection');

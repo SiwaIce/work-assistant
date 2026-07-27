@@ -1006,9 +1006,10 @@ function _pipeCompareProductBreakdownHtml(p) {
     var amt = Number(it.total) || (qty * (Number(it.price) || 0));
     var cat = getModelCategory(model);
     catTotals[cat] = (catTotals[cat] || 0) + qty;
-    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0 };
+    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0, batches: [] };
     byModel[model].qty += qty;
     byModel[model].amount += amt;
+    if (it.shipBatches && it.shipBatches.length) byModel[model].batches = byModel[model].batches.concat(it.shipBatches);
   });
 
   var catOrder = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : Object.keys(catTotals);
@@ -1025,8 +1026,17 @@ function _pipeCompareProductBreakdownHtml(p) {
   h += '<div style="margin-bottom:8px">' + catChipsHtml + '</div>';
   h += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">';
   h += '<tr style="color:var(--text2)"><td style="padding:3px 0">Model</td><td style="text-align:center">QTY</td><td style="text-align:right">มูลค่า</td></tr>';
+  var _batchMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   modelList.forEach(function(m) {
     h += '<tr style="border-top:1px solid var(--border,#334155)"><td style="padding:3px 0">' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtAmt(m.amount) + '</td></tr>';
+    if (m.batches && m.batches.length) {
+      var batchLabel = m.batches.map(function(b) {
+        var parts = (b.month || '').split('-');
+        var mLabel = (parts.length === 2) ? (_batchMonthNames[parseInt(parts[1], 10) - 1] + ' ' + (parseInt(parts[0], 10) + 543 - 2500)) : '?';
+        return mLabel + ' x' + (Number(b.qty) || 0);
+      }).join(', ');
+      h += '<tr><td colspan="3" style="padding:0 0 4px 0;font-size:10px;color:var(--text2)">🚚 แบ่งส่ง: ' + sanitize(batchLabel) + '</td></tr>';
+    }
   });
   h += '</table>';
   return h;
@@ -2806,9 +2816,10 @@ function pipeModelSummaryCardHtml(p) {
     var amt = Number(it.total) || (qty * (Number(it.price) || 0));
     var cat = getModelCategory(model);
     catTotals[cat] = (catTotals[cat] || 0) + qty;
-    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0 };
+    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0, batches: [] };
     byModel[model].qty += qty;
     byModel[model].amount += amt;
+    if (it.shipBatches && it.shipBatches.length) byModel[model].batches = byModel[model].batches.concat(it.shipBatches);
     totalQty += qty;
     totalAmt += amt;
   });
@@ -2828,8 +2839,17 @@ function pipeModelSummaryCardHtml(p) {
   h += '<div class="fcd-cats" style="margin-bottom:12px">' + catChipsHtml + '</div>';
   h += '<table class="fcd-table">';
   h += '<thead><tr><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th></tr></thead><tbody>';
+  var _pmMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   modelList.forEach(function(m) {
     h += '<tr><td>' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtAmt(m.amount) + '</td></tr>';
+    if (m.batches && m.batches.length) {
+      var batchLabel = m.batches.map(function(b) {
+        var parts = (b.month || '').split('-');
+        var mLabel = (parts.length === 2) ? (_pmMonthNames[parseInt(parts[1], 10) - 1] + ' ' + (parseInt(parts[0], 10) + 543 - 2500)) : '?';
+        return mLabel + ' x' + (Number(b.qty) || 0);
+      }).join(', ');
+      h += '<tr><td colspan="3" style="font-size:10px;color:var(--text2);padding-top:0">🚚 แบ่งส่ง: ' + sanitize(batchLabel) + '</td></tr>';
+    }
   });
   h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td>รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtAmt(totalAmt) + '</td></tr>';
   h += '</tbody></table></div>';
