@@ -4829,7 +4829,8 @@ function noteCardHTML(n, cats) {
 
 // รูปแนบขึ้นก่อนแบบใหญ่ (grid tile 1:1 + ไอคอนขยายมุมล่างขวา) กดแล้วเปิด lightbox เดิม — ไฟล์ที่ไม่ใช่รูป
 // (PDF/Word/Excel/ลิงก์) ยังใช้ attachGalleryHtml() แบบ chip เล็กเหมือนเดิมด้านล่าง แยกจากกัน
-function noteAttachGalleryHtml(attachments) {
+// ใช้ร่วมกันได้ทุกเมนูที่มี attachments array (Knowledge Base, Task, ...) ไม่ผูกกับ note โดยเฉพาะ
+function bigAttachGalleryHtml(attachments) {
   if (!attachments || !attachments.length) return '';
   var images = attachments.filter(function(a) { return _attachIcon(a) === null; });
   var files = attachments.filter(function(a) { return _attachIcon(a) !== null; });
@@ -4914,7 +4915,7 @@ function rNoteDet(el) {
   }
   
   html += '<div class="note-content">' + safeText(n.content || '') + '</div>';
-  html += noteAttachGalleryHtml(n.attachments);
+  html += bigAttachGalleryHtml(n.attachments);
 
   if (n.links) {
     html += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:8px"><div style="font-size:.76rem;color:var(--text2);margin-bottom:4px">🔗 Links:</div>';

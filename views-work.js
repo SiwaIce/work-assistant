@@ -1307,7 +1307,7 @@ function rTaskDet(el) {
         </div>
       </div>
       ${t.description ? `<div class="td2-desc">${sanitize(t.description)}</div>` : ''}
-      ${t.attachments && t.attachments.length ? attachGalleryHtml(t.attachments) : ''}
+      ${t.attachments && t.attachments.length ? bigAttachGalleryHtml(t.attachments) : ''}
       ${t.url ? `<div style="margin-top:10px"><a href="${sanitize(t.url)}" target="_blank" style="color:var(--accent);font-size:.78rem;word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(t.url)}</a></div>` : ''}
     </div>
 
@@ -1395,7 +1395,7 @@ function rTaskDet(el) {
             ${renderStepDueDate(s)}
             ${s.notes ? `<div class="td2-step-meta">${sanitize(s.notes)}</div>` : ''}
             ${s.url ? `<div class="td2-step-meta"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
-            ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${attachGalleryHtml(s.attachments)}</div>` : ''}
+            ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${bigAttachGalleryHtml(s.attachments)}</div>` : ''}
             ${buildFuTimeline(t.id, i)}
           </div>
           <div class="td2-step-actions">
