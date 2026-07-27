@@ -4591,6 +4591,16 @@ function noteCatColor(cat, cats) {
   return idx !== -1 ? _noteCatColors[idx % _noteCatColors.length] : '#64748b';
 }
 
+// emoji นำหน้าชื่อหมวด (เช่น "📋 Policy" → "📋") ใช้เป็นไอคอน avatar ของการ์ด — cfg.noteCategories ทุกตัวมี emoji นำหน้าอยู่แล้ว
+function _noteCatIcon(cat) {
+  var first = (cat || '📌').split(' ')[0];
+  return first || '📌';
+}
+
+function _noteHasImage(n) {
+  return (n.attachments || []).some(function(a) { return _attachIcon(a) === null; });
+}
+
 function rKnowledge(el) {
   document.getElementById('pgT').textContent = '📚 Knowledge Base';
   var cfg = getConfig();
@@ -4772,7 +4782,7 @@ function noteGridCardHTML(n, cats) {
     '<div style="padding:10px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
         '<span class="note-badge" style="background:' + color + '22;color:' + color + '">' + sanitize(n.category || '📌 อื่นๆ') + '</span>' +
-        badge +
+        '<span style="display:flex;gap:4px;align-items:center">' + (_noteHasImage(n) ? '<span class="note-badge" style="background:rgba(59,130,246,.15);color:#3b82f6" title="มีรูปแนบ">🖼️</span>' : '') + badge + '</span>' +
       '</div>' +
       '<div class="note-gc-title">' + (n.pinned?'📌 ':'') + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
       '<div class="note-gc-preview">' + sanitize((n.content||'').substr(0, 100)) + '</div>' +
@@ -4793,11 +4803,13 @@ function noteCardHTML(n, cats) {
     : (n.remindDate && dTo(n.remindDate) >= 0 && dTo(n.remindDate) <= 3) ? '<span class="note-badge warn">🔔 ' + fDShort(n.remindDate) + '</span>'
     : '';
   var tags = n.tags ? n.tags.split(',').filter(function(t){return t.trim();}) : [];
+  var hasImg = _noteHasImage(n);
   return '<div class="note-list-card' + (n.pinned?' pinned':'') + '" style="' + (isInactive?'opacity:.5;':'') + '">' +
-    '<div class="note-lc-bar" style="background:' + color + '"></div>' +
+    '<div class="note-lc-icon" style="background:' + color + '22;color:' + color + '">' + _noteCatIcon(n.category) + '</div>' +
     '<div class="note-lc-body" onclick="go(\'noteDetail\',{noteId:\'' + n.id + '\'})">' +
       '<div class="note-lc-top">' +
         '<div class="note-lc-title">' + (n.pinned?'📌 ':'') + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
+        (hasImg ? '<span class="note-badge" style="background:rgba(59,130,246,.15);color:#3b82f6" title="มีรูปแนบ">🖼️</span>' : '') +
         badge +
       '</div>' +
       '<div class="note-lc-preview">' + sanitize((n.content||'').substr(0,130)) + '</div>' +
@@ -4813,6 +4825,27 @@ function noteCardHTML(n, cats) {
       '<button class="qs-btn" onclick="event.stopPropagation();trashKBNote(\'' + n.id + '\')" title="ย้ายไปถังขยะ">🗑️</button>' +
     '</div>' +
   '</div>';
+}
+
+// รูปแนบขึ้นก่อนแบบใหญ่ (grid tile 1:1 + ไอคอนขยายมุมล่างขวา) กดแล้วเปิด lightbox เดิม — ไฟล์ที่ไม่ใช่รูป
+// (PDF/Word/Excel/ลิงก์) ยังใช้ attachGalleryHtml() แบบ chip เล็กเหมือนเดิมด้านล่าง แยกจากกัน
+function noteAttachGalleryHtml(attachments) {
+  if (!attachments || !attachments.length) return '';
+  var images = attachments.filter(function(a) { return _attachIcon(a) === null; });
+  var files = attachments.filter(function(a) { return _attachIcon(a) !== null; });
+  var h = '';
+  if (images.length) {
+    h += '<div style="font-size:11px;color:var(--text2);margin:12px 0 6px">🖼️ รูปแนบ (' + images.length + ')</div>';
+    h += '<div class="note-gallery">';
+    images.forEach(function(a) {
+      var lbUrl = String(a.url || '').replace(/'/g, "\\'");
+      var lbName = String(a.name || 'image.jpg').replace(/'/g, "\\'");
+      h += '<div class="note-gallery-tile" style="background-image:url(\'' + a.url + '\')" onclick="showImageLightbox(\'' + lbUrl + '\',\'' + lbName + '\')" title="' + sanitize(a.name || '') + '"><span class="note-gallery-zoom">🔍</span></div>';
+    });
+    h += '</div>';
+  }
+  if (files.length) h += '<div style="margin-top:10px">' + attachGalleryHtml(files) + '</div>';
+  return h;
 }
 
 function markNoteExpired(noteId) {
@@ -4881,7 +4914,7 @@ function rNoteDet(el) {
   }
   
   html += '<div class="note-content">' + safeText(n.content || '') + '</div>';
-  html += attachGalleryHtml(n.attachments);
+  html += noteAttachGalleryHtml(n.attachments);
 
   if (n.links) {
     html += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:8px"><div style="font-size:.76rem;color:var(--text2);margin-bottom:4px">🔗 Links:</div>';
