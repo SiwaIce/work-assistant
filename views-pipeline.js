@@ -36,6 +36,12 @@ var pipeTeamBidMonthFilter = {}; // multi-select: {monthIdx(0-11): true, ...} �
 var pipeTeamCardCols = 1; // 1 หรือ 2 — จำนวนคอลัมน์การ์ดตอนดูมุมมองการ์ด (เหมือน taskCardCols ของหน้า Task)
 var pipeTeamSort = 'amount_desc';
 var pipeTeamView = 'card';
+var pipeTeamFY = 'all';
+// ✅ collapsible sections + urgent bar — เลียนแบบโครงหน้า Pipeline หลัก (pipeDash/pipeFilter/pipeUrgent)
+var pipeTeamDashOpen = localStorage.getItem('pipeTeamDashOpen') !== '0';
+var pipeTeamFilterOpen = localStorage.getItem('pipeTeamFilterOpen') !== '0';
+var pipeTeamUrgentOpen = localStorage.getItem('pipeTeamUrgentOpen') !== '0';
+var pipeTeamUrgentFlt = ''; // '', 'bid7', 'bid30'
 
 function togglePipeTeamStatus(k) {
   if (pipeTeamStatusFlt[k]) delete pipeTeamStatusFlt[k]; else pipeTeamStatusFlt[k] = true;
@@ -56,6 +62,7 @@ function _pipeTeamMergedList() {
       id: p.id, dealerName: d ? d.name : '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
       forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial',
       model: getPipeModelSummary(p), biddingDate: p.biddingDate || '',
+      budgetFiscalYear: p.budgetFiscalYear || '', expectedCloseDate: p.expectedCloseDate || '',
       ownerName: (typeof SALES_MODE !== 'undefined' && SALES_MODE && typeof SALES_PROFILE !== 'undefined' && SALES_PROFILE) ? SALES_PROFILE.name : (getConfig().saleName || 'Main'),
       _mine: true
     };
@@ -121,22 +128,82 @@ function rPipelineTeam(el) {
       return d && pipeTeamBidMonthFilter[d.getMonth()];
     });
   }
+  if (pipeTeamFY !== 'all') {
+    list = list.filter(function(p) {
+      var fy = p.budgetFiscalYear || thaiFYFromISO(p.expectedCloseDate || p.biddingDate);
+      return String(fy || '') === String(pipeTeamFY);
+    });
+  }
+  if (pipeTeamUrgentFlt) {
+    list = list.filter(function(p) {
+      if (!pipeIsActive(p) || !p.biddingDate) return false;
+      var bd = dTo(p.biddingDate);
+      return pipeTeamUrgentFlt === 'bid7' ? (bd >= 0 && bd <= 7) : (bd > 7 && bd <= 30);
+    });
+  }
   list = _sortPipeTeamList(list, pipeTeamSort);
 
   var totalAmt = fullList.reduce(function(s, p) { return s + p.forecastAmount; }, 0);
   var mineCount = fullList.filter(function(p) { return p._mine; }).length;
+  var activeAmt = 0, wonAmt = 0;
+  fullList.forEach(function(p) { if (pipeIsWon(p)) wonAmt += p.forecastAmount; else if (pipeIsOpen(p)) activeAmt += p.forecastAmount; });
+  var biddingSoon = fullList.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && pipeIsActive(p); });
 
-  // แถบสรุป — หน้าตาเหมือนหัวเมนู Pipeline หลัก (การ์ด .sr/.sc)
-  var h = '<div class="sr" style="margin-bottom:10px">';
+  // ⚠️ ตรวจโครงการชนกัน — ใช้ pool + cache เดียวกับ Dashboard ของ Pipeline หลัก (allPipes ของตัวเอง + teamPipes)
+  var allPipesRaw = ST.getAll('pipeline');
+  var teamPipesRaw = (typeof _teamPipelineData !== 'undefined' && Array.isArray(_teamPipelineData)) ? _teamPipelineData : [];
+  var _dashPool = allPipesRaw.concat(teamPipesRaw);
+  var _dashKey = _dashPool.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::60';
+  var conflicts;
+  if (_pipeDashConflictsCacheKey === _dashKey) {
+    conflicts = _pipeDashConflictsCache.conflicts;
+    _conflictMap = _pipeDashConflictsCache.map;
+  } else {
+    conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(_dashPool, 60) : [];
+    _conflictMap = buildConflictMap(conflicts);
+    _pipeDashConflictsCacheKey = _dashKey;
+    _pipeDashConflictsCache = { conflicts: conflicts, map: _conflictMap };
+  }
+
+  // Dashboard — collapsible เหมือนเมนู Pipeline หลัก
+  var h = _pipeSectionHeader('📊 Dashboard', 'pipeTeamDash', pipeTeamDashOpen,
+    !pipeTeamDashOpen ? (fullList.length + ' รายการ · ' + fmtMoneyShort(activeAmt) + ' active') : '');
+  h += '<div id="pipeTeamDashWrap"' + (!pipeTeamDashOpen ? ' style="display:none"' : '') + '>';
+  h += '<div class="sr">';
   h += '<div class="sc"><div class="sn c1">' + fullList.length + '</div><div class="sl">ทั้งหมด (ทีม)</div></div>';
-  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(totalAmt) + '</div><div class="sl">มูลค่ารวม</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(activeAmt) + '</div><div class="sl">Active</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + fmtMoneyShort(wonAmt) + '</div><div class="sl">Won</div></div>';
+  h += '<div class="sc"><div class="sn c3">' + biddingSoon.length + '</div><div class="sl">Bidding 30d</div></div>';
   h += '<div class="sc"><div class="sn c3">' + mineCount + '</div><div class="sl">ของฉัน</div></div>';
   h += '<div class="sc"><div class="sn c5">' + owners.length + '</div><div class="sl">จำนวนคน</div></div>';
+  if (conflicts.length) h += '<div class="sc"><div class="sn c4">' + conflicts.length + '</div><div class="sl">⚠️ อาจชนกัน</div></div>';
+  h += '</div>';
+  h += buildConflictClusterHtml(conflicts);
   h += '</div>';
 
-  h += '<div class="hint" style="margin-bottom:8px">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง (ข้อมูลของคนอื่นเป็นสรุปย่อ ไม่มี TOR/Board)</div>';
+  h += '<div class="hint" style="margin:8px 0">👁 ดูอย่างเดียว — แก้ไขต้องไปที่ Pipeline ของตัวเอง แล้วจะ sync กลับมาที่นี่เอง (ข้อมูลของคนอื่นเป็นสรุปย่อ ไม่มี TOR/Board)</div>';
 
-  // แถบตัวกรอง — หน้าตาเหมือนแถบค้นหา/filter ของเมนู Pipeline หลัก
+  // ปุ่มมุมมอง + รีเฟรช — แถบเดียวกับ toolbar บนสุดของ Pipeline หลัก
+  h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">';
+  h += '<button class="btn bo bsm" onclick="_pipeTeamRefresh()">🔄 รีเฟรช</button>';
+  h += '<div style="flex:1"></div>';
+  h += '<button class="btn bsm ' + (pipeTeamView === 'table' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'table\';render()" title="ตาราง">📋</button>';
+  h += '<button class="btn bsm ' + (pipeTeamView === 'card' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'card\';render()" title="การ์ด">🃏</button>';
+  if (pipeTeamView === 'card') {
+    h += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 1 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=1;render()" title="1 การ์ดต่อแถว">⚏1</button>';
+    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 2 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=2;render()" title="2 การ์ดต่อแถว">⚏2</button>';
+    h += '</div>';
+  }
+  h += '</div>';
+
+  h += _pipeTeamUrgentBarHtml(fullList);
+
+  // ตัวกรอง — collapsible เหมือนเมนู Pipeline หลัก
+  h += _pipeSectionHeader('🔍 ตัวกรอง', 'pipeTeamFilter', pipeTeamFilterOpen,
+    !pipeTeamFilterOpen ? [(Object.keys(pipeTeamStatusFlt).length ? '● ' + Object.keys(pipeTeamStatusFlt).length + ' สถานะ' : ''), (pipeTeamSearch ? '"' + sanitize(pipeTeamSearch) + '"' : '')].filter(Boolean).join(' ') : '');
+  h += '<div id="pipeTeamFilterWrap"' + (!pipeTeamFilterOpen ? ' style="display:none"' : '') + '>';
+
   h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">';
   h += '<input type="text" id="pipeTeamSrc" value="' + sanitize(pipeTeamSearch) + '" placeholder="🔍 ค้นหา Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeTeamSearchInput(this.value)" autocomplete="off">';
   h += '<select onchange="pipeTeamSort=this.value;render()" style="min-width:130px">';
@@ -151,16 +218,13 @@ function rPipelineTeam(el) {
   h += '<option value="all"' + (pipeTeamOwnerFlt === 'all' ? ' selected' : '') + '>👤 ทุกคน</option>';
   owners.forEach(function(o) { h += '<option value="' + sanitize(o) + '"' + (pipeTeamOwnerFlt === o ? ' selected' : '') + '>' + sanitize(o) + '</option>'; });
   h += '</select>';
-  h += '<button class="btn bo bsm" onclick="_pipeTeamRefresh()">🔄 รีเฟรช</button>';
-  h += '<div style="flex:1"></div>';
-  h += '<button class="btn bsm ' + (pipeTeamView === 'table' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'table\';render()" title="ตาราง">📋</button>';
-  h += '<button class="btn bsm ' + (pipeTeamView === 'card' ? 'bp' : 'bo') + '" onclick="pipeTeamView=\'card\';render()" title="การ์ด">🃏</button>';
-  if (pipeTeamView === 'card') {
-    h += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
-    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 1 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=1;render()" title="1 การ์ดต่อแถว">⚏1</button>';
-    h += '<button class="btn-xs" style="border-radius:0;' + (pipeTeamCardCols === 2 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipeTeamCardCols=2;render()" title="2 การ์ดต่อแถว">⚏2</button>';
-    h += '</div>';
-  }
+  h += '<select onchange="pipeTeamFY=this.value;render()" style="min-width:120px">';
+  h += '<option value="all"' + (pipeTeamFY === 'all' ? ' selected' : '') + '>🏛️ ทุกปีงบ</option>';
+  (function() {
+    var cur = currentThaiFY();
+    for (var fy = cur + 2; fy >= cur - 2; fy--) h += '<option value="' + fy + '"' + (String(pipeTeamFY) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + (fy === cur ? ' (ปีนี้)' : '') + '</option>';
+  })();
+  h += '</select>';
   h += '</div>';
 
   // แถบสถานะ — เลือกได้หลายช่อง (ไม่เลือกเลย = แสดงทุกสถานะ) กดที่ช่องเดิมซ้ำเพื่อยกเลิกเฉพาะช่องนั้น
@@ -179,7 +243,7 @@ function rPipelineTeam(el) {
 
   // แถบเดือน — กรองจาก Bidding Date (เลือกได้หลายเดือน ไม่เลือกเลย = ทุกเดือน) เหมือนแพทเทิร์นที่ใช้ใน Forecast ตาม Model
   h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
-  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">';
   var _pipeTeamMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   _pipeTeamMonthNames.forEach(function(mn, idx) {
     var on = !!pipeTeamBidMonthFilter[idx];
@@ -188,9 +252,12 @@ function rPipelineTeam(el) {
   });
   if (Object.keys(pipeTeamBidMonthFilter).length) h += '<button class="btn bsm bo" onclick="clearPipeTeamBidMonthFilter()">✕ ล้าง</button>';
   h += '</div>';
+  h += '</div>'; // end pipeTeamFilterWrap
 
   var pipeTeamCardGridClass = pipeTeamCardCols === 2 ? ' pcg-2col' : ' pcg-1col';
-  el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list, pipeTeamCardGridClass));
+  el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list, pipeTeamCardGridClass)) +
+    '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + list.length + ' รายการ' +
+    (pipeTeamSearch ? ' (ค้นหา: "' + sanitize(pipeTeamSearch) + '")' : '') + '</div>';
 
   var srcEl = document.getElementById('pipeTeamSrc');
   if (srcEl && pipeTeamSearch) { srcEl.focus(); srcEl.setSelectionRange(pipeTeamSearch.length, pipeTeamSearch.length); }
@@ -251,6 +318,43 @@ function _renderPipeTeamCards(list, gridClass) {
   });
   html += '</div>';
   return html;
+}
+
+// ⏰ แถบ "ต้องรีบทำวันนี้" ของ Pipeline รวมทีม — เฉพาะ Bid ใกล้ครบ (bid7/bid30) เพราะข้อมูลของคนอื่นที่ sync
+// มาไม่มี registerDate/log กิจกรรม เลยคำนวณ "ค้างนาน >90 วัน" (stale90) แบบเดียวกับ Pipeline หลักไม่ได้
+function _pipeTeamUrgentCounts(list) {
+  var bid7 = 0, bid30 = 0;
+  list.forEach(function(p) {
+    if (!pipeIsActive(p) || !p.biddingDate) return;
+    var bd = dTo(p.biddingDate);
+    if (bd >= 0 && bd <= 7) bid7++;
+    else if (bd > 7 && bd <= 30) bid30++;
+  });
+  return { bid7: bid7, bid30: bid30 };
+}
+
+function _pipeTeamUrgentBarHtml(list) {
+  var c = _pipeTeamUrgentCounts(list);
+  if (!c.bid7 && !c.bid30) return '';
+  function card(key, count, label, bg, color) {
+    if (!count) return '';
+    var act = pipeTeamUrgentFlt === key;
+    return '<div onclick="_pipeTeamToggleUrgentFlt(\'' + key + '\')" style="cursor:pointer;flex:1;min-width:130px;background:' + bg + ';border:1px solid ' + (act ? color : 'transparent') + ';border-radius:8px;padding:8px 10px">' +
+      '<div style="font-size:11px;color:' + color + '">' + label + '</div>' +
+      '<div style="font-size:20px;font-weight:700;color:' + color + '">' + count + ' รายการ</div></div>';
+  }
+  return _pipeSectionHeader('⏰ ต้องรีบทำวันนี้ (ทีม)', 'pipeTeamUrgent', pipeTeamUrgentOpen,
+    !pipeTeamUrgentOpen ? [c.bid7 && (c.bid7 + ' ด่วน')].filter(Boolean).join(' · ') : '') +
+    '<div id="pipeTeamUrgentWrap"' + (!pipeTeamUrgentOpen ? ' style="display:none"' : '') + '>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+    card('bid7', c.bid7, 'Bid ภายใน 7 วัน', '#ef444418', '#ef4444') +
+    card('bid30', c.bid30, 'Bid ใน 8-30 วัน', '#f59e0b18', '#f59e0b') +
+    '</div></div>';
+}
+
+function _pipeTeamToggleUrgentFlt(key) {
+  pipeTeamUrgentFlt = pipeTeamUrgentFlt === key ? '' : key;
+  render();
 }
 
 function _pipeTeamRefresh() {
@@ -3578,6 +3682,12 @@ function _togglePipeSection(key) {
     pipeDashOpen = !pipeDashOpen; isOpen = pipeDashOpen; wrapId = 'pipeDashWrap'; lsKey = 'pipeDashOpen';
   } else if (key === 'pipeUrgent') {
     pipeUrgentOpen = !pipeUrgentOpen; isOpen = pipeUrgentOpen; wrapId = 'pipeUrgentWrap'; lsKey = 'pipeUrgentOpen';
+  } else if (key === 'pipeTeamDash') {
+    pipeTeamDashOpen = !pipeTeamDashOpen; isOpen = pipeTeamDashOpen; wrapId = 'pipeTeamDashWrap'; lsKey = 'pipeTeamDashOpen';
+  } else if (key === 'pipeTeamUrgent') {
+    pipeTeamUrgentOpen = !pipeTeamUrgentOpen; isOpen = pipeTeamUrgentOpen; wrapId = 'pipeTeamUrgentWrap'; lsKey = 'pipeTeamUrgentOpen';
+  } else if (key === 'pipeTeamFilter') {
+    pipeTeamFilterOpen = !pipeTeamFilterOpen; isOpen = pipeTeamFilterOpen; wrapId = 'pipeTeamFilterWrap'; lsKey = 'pipeTeamFilterOpen';
   } else {
     pipeFilterOpen = !pipeFilterOpen; isOpen = pipeFilterOpen; wrapId = 'pipeFilterWrap'; lsKey = 'pipeFilterOpen';
   }
