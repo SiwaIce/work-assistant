@@ -1566,8 +1566,26 @@ function buildFcQuarterly(pipes, dealers, catFilterVarName) {
 // DEALER SUMMARY (Expandable Cards)
 // ================================================================
 var fcDealerExpanded = {};
+var fcDealerMonthFilter = {}; // multi-select: {monthIdx(0-11): true, ...} — ว่าง = ทุกเดือน กรองจาก getPipeShipDate ของแต่ละโครงการ
+function toggleFcDealerMonth(idx) {
+  if (fcDealerMonthFilter[idx]) delete fcDealerMonthFilter[idx]; else fcDealerMonthFilter[idx] = true;
+  render();
+}
+function clearFcDealerMonthFilter() { fcDealerMonthFilter = {}; render(); }
 
 function buildFcDealerSummary(pipes, dealers) {
+  // ตัวกรองเดือน — เฉพาะหัวข้อนี้ (คนละตัวกับ fcModelMonthFilter ของตาราง Forecast ตาม Model) กรองจาก
+  // Shipment Date จริง/ประมาณของแต่ละโครงการ ก่อนจะไปคำนวณสรุปรายเดือนต่อ
+  var hasMonthFilter = Object.keys(fcDealerMonthFilter).length > 0;
+  if (hasMonthFilter) {
+    pipes = pipes.filter(function(p) {
+      var ship = getPipeShipDate(p);
+      if (!ship) return false;
+      if (fcHideTentative && ship.est) return false;
+      return fcDealerMonthFilter[ship.date.getMonth()];
+    });
+  }
+
   var dealerData = [];
   dealers.forEach(function(d) {
     var dPipes = pipes.filter(function(p) { return p.dealerId === d.id; });
@@ -1576,17 +1594,20 @@ function buildFcDealerSummary(pipes, dealers) {
     var dTotalQty = 0;
     var dModels = {};
     dPipes.forEach(function(p) {
-      dAmt += (Number(p.forecastAmount) || 0);
       var items = getPipeItems(p);
-      items.forEach(function(it) {
+      var visibleItems = items.filter(function(it) { return fcCatIsVisible('fcCatFilter', getModelCategory(it.model)); });
+      visibleItems.forEach(function(it) {
         var qty = Number(it.qty) || 1;
+        var amt = Number(it.total) || (qty * (Number(it.price) || 0));
         dTotalQty += qty;
+        dAmt += amt;
         var model = it.model || 'ไม่ระบุ';
         if (!dModels[model]) dModels[model] = 0;
         dModels[model] += qty;
       });
-      if (!items.length) dTotalQty += (Number(p.modelQty) || 1);
+      if (!items.length) { dTotalQty += (Number(p.modelQty) || 1); dAmt += (Number(p.forecastAmount) || 0); }
     });
+    if (!dTotalQty && !dAmt) return; // ตัวกรองหมวดหมู่ตัดรายการของ dealer นี้ออกหมด
     dealerData.push({dealer: d, pipes: dPipes, amount: dAmt, totalQty: dTotalQty, models: dModels});
   });
 
@@ -1595,6 +1616,16 @@ function buildFcDealerSummary(pipes, dealers) {
   if (!dealerData.length) return '';
 
   var h = '<div class="card"><h2>🏪 Forecast ตาม Dealer (' + dealerData.length + ')</h2>';
+  var _fcdMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  h += '<div class="hint" style="margin:6px 0 4px">📅 Shipment เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน — หมวดหมู่สินค้าใช้ filter ด้านบนของหน้า)</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">';
+  _fcdMonthNames.forEach(function(mn, idx) {
+    var on = !!fcDealerMonthFilter[idx];
+    h += '<span onclick="toggleFcDealerMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+      (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+  });
+  if (hasMonthFilter) h += '<button class="btn bsm bo" onclick="clearFcDealerMonthFilter()">✕ ล้าง</button>';
+  h += '</div>';
 
   dealerData.forEach(function(dd, idx) {
     var isOpen = fcDealerExpanded[dd.dealer.id] === true;
@@ -1633,7 +1664,7 @@ function buildFcDealerSummary(pipes, dealers) {
     if (isOpen) {
       var dByModel = {};
       dd.pipes.forEach(function(p) {
-        var items = getPipeItems(p);
+        var items = getPipeItems(p).filter(function(it) { return fcCatIsVisible('fcCatFilter', getModelCategory(it.model)); });
         items.forEach(function(it) {
           var model = it.model || 'ไม่ระบุ';
           var qty = Number(it.qty) || 1;
