@@ -1877,6 +1877,7 @@ function rPipeDet(el) {
   html += '<button class="btn bsm ' + (isPinned ? 'bw' : 'bo') + '" onclick="ST.togglePin(\'pipeline\',\'' + p.id + '\',\'' + sanitize((p.projectName || '').substr(0, 20)) + '\',\'' + (d ? d.name : '') + '\');render()">📌</button>';
   html += '<button class="btn bsm bo" onclick="showPipeExportLogFilterM(\'copyRow\',\'' + p.id + '\')">📋 Row</button>';
   html += '<button class="btn bsm bp" onclick="showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">✏️ แก้ไข</button>';
+  html += '<button class="btn bsm bo" onclick="showTaskM(null,\'' + (p.dealerId || '') + '\',null,\'' + p.id + '\')" title="สร้าง Task ผูกกับโครงการนี้">📋 เพิ่ม Task</button>';
   html += '<button class="btn bsm bd" onclick="delPipe(\'' + p.id + '\')">🗑️</button>';
   html += '</span></h2>';
   
@@ -1944,6 +1945,23 @@ function rPipeDet(el) {
       html += '<div style="margin-top:8px"><a href="#" onclick="go(\'soDetail\',{soId:\'' + linkedSOs[0].id + '\'});return false" style="font-size:12px">📄 ไปหน้า Sales Order →</a></div>';
       html += '</div>';
     }
+  }
+
+  // Task ที่ผูกกับ Pipeline นี้ — ทั้งที่พิมพ์ผูกเอง และที่ auto-สร้างตอนตั้ง Next Action (ดู _createTaskFromPipeNextAction)
+  var linkedTasks = ST.getAll('tasks').filter(function(t) { return t.pipeId === p.id; });
+  if (linkedTasks.length) {
+    linkedTasks.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+    html += '<div class="card"><h2>📋 Task ที่เกี่ยวข้อง (' + linkedTasks.length + ')</h2>';
+    linkedTasks.forEach(function(t) {
+      var doneSteps = (t.steps || []).filter(function(s) { return s.done; }).length;
+      var totalSteps = (t.steps || []).length;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#334155);cursor:pointer" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
+      html += '<span style="flex:1;font-size:13px">' + sanitize(t.title) + '</span>';
+      if (totalSteps) html += '<span style="font-size:11px;color:var(--text2)">' + doneSteps + '/' + totalSteps + ' step</span>';
+      html += sTag(t.status);
+      html += '</div>';
+    });
+    html += '</div>';
   }
 
   // สรุปรายการสินค้า — ชิปตามหมวดหมู่ + ตาราง Model/QTY/มูลค่า หน้าตาเดียวกับการ์ด Forecast ตาม Dealer

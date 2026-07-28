@@ -911,17 +911,36 @@ function _finishSavePipeline(dealerId, eid) {
   if (!data.dealerId) return alert('เลือก Dealer');
 
   if (eid) {
+    var oldP = ST.getOne('pipeline', eid);
+    var oldNextAction = oldP ? (oldP.nextAction || '') : '';
     ST.update('pipeline', eid, data);
+    if (data.nextAction && data.nextAction !== oldNextAction) _createTaskFromPipeNextAction(eid, dealerId, data.nextAction);
     closeMForce();
     go('pipeDetail', {pipeId: eid});
   } else {
     var p = ST.add('pipeline', data);
     ST.add('pipeLog', {pipeId: p.id, type: 'note', content: 'ลงทะเบียนโครงการ', date: _nw()});
+    if (data.nextAction) _createTaskFromPipeNextAction(p.id, dealerId, data.nextAction);
     closeMForce();
     go('pipeDetail', {pipeId: p.id});
   }
   toast('💾 บันทึกแล้ว');
   pipeItemsTemp = [];
+}
+
+// ตั้ง/เปลี่ยน Next Action ของ Pipeline แล้วสร้าง Task ให้อัตโนมัติ — ผูก dealerId/pipeId ให้ ผู้ใช้ไปเพิ่ม
+// Step ต่อในหน้า Task เอง ไม่ตั้ง due date ให้ (ผู้ใช้กำหนดเอง) ไม่แตะ Task เก่าที่ยังไม่เสร็จของ pipeline นี้
+// เรียกจากทั้งฟอร์มแก้ไข Pipeline หลัก (_finishSavePipeline) และ Modal อัปเดตด่วน (savePipeUpdate)
+function _createTaskFromPipeNextAction(pipeId, dealerId, nextActionText) {
+  var t = ST.add('tasks', {
+    title: nextActionText, description: '', startDate: '', dueDate: '',
+    priority: 'medium', category: '', status: 'active', sequential: false, url: '',
+    dealerId: dealerId || '', pipeId: pipeId,
+    attachments: [], links: [], steps: []
+  });
+  ST.add('pipeLog', {pipeId: pipeId, type: 'note', content: '🎯 Next Action ใหม่ — สร้าง Task ให้แล้ว: ' + nextActionText, date: _nw()});
+  toast('📋 สร้าง Task จาก Next Action แล้ว: ' + nextActionText);
+  return t;
 }
 
 // Pipeline Update — รวม "📝 Quick Update" (เปลี่ยน status/next action ได้) กับ "➕ Update" (log อย่างเดียว)
@@ -964,6 +983,8 @@ function savePipeUpdate(pipeId) {
   if (nextAction !== undefined) updates.nextAction = nextAction;
   if (followupDate !== undefined) updates.followupDate = followupDate;
   if (Object.keys(updates).length) ST.update('pipeline', pipeId, updates);
+
+  if (nextAction && nextAction !== (p ? (p.nextAction || '') : '')) _createTaskFromPipeNextAction(pipeId, p ? p.dealerId : '', nextAction);
 
   closeMForce(); toast('📝 อัพเดทแล้ว'); render();
 }
@@ -2042,7 +2063,7 @@ function saveStartDate(taskId) {
   render();
 }
 
-function showTaskM(eid, prefillDealerId, prefillDueDate) {
+function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
   var t = eid ? ST.getOne('tasks', eid) : {};
   var cats = [];
   var allTasks = ST.getAll('tasks');
@@ -2060,7 +2081,7 @@ function showTaskM(eid, prefillDealerId, prefillDueDate) {
   // ที่ยังไม่มีในระบบจะถามสร้างใหม่ให้เลย ไม่ต้องออกไปสร้างที่เมนู Dealer/Pipeline ก่อน
   var dealerListOpts = dealers.map(function(d) { return '<option value="' + sanitize(d.name || '') + '">'; }).join('');
 
-  var selPipeId = t.pipeId || '';
+  var selPipeId = t.pipeId || prefillPipeId || '';
   var selPipeName = '';
   var pipeListOpts = '';
   if (selDealerId) {
