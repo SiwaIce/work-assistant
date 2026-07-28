@@ -1447,7 +1447,7 @@ function togglePipeCardExpand(id, ev) {
 function _pipeCardExpandedDetailHtml(p) {
   var h = '<div style="border-top:1px dashed var(--border,#334155);padding-top:10px;margin-top:2px">';
   h += '<div style="font-size:11px;color:var(--text2,#94a3b8);margin-bottom:8px">🎯 Next Action: ' +
-    (p.nextAction ? '<b style="color:var(--text,#e2e8f0)">' + sanitize(p.nextAction) + '</b>' : '<span style="color:var(--text3,#64748b)">ไม่ได้ตั้ง</span>') + '</div>';
+    (pipeNextActionHtml(p, true) || '<span style="color:var(--text3,#64748b)">ไม่ได้ตั้ง</span>') + '</div>';
   h += _pipeCompareProductBreakdownHtml(p);
   h += '</div>';
   return h;
@@ -1911,7 +1911,7 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>🗂️ ลงทะเบียน CRM ของ DJI</label><div>' + (p.djiCrmRegistered ? '✅ ลงแล้ว' + (p.djiCrmDate ? ' (' + fD(p.djiCrmDate) + ')' : '') : '⬜ ยังไม่ลง') + '</div></div>';
   html += '<div><label>⚔️ คู่แข่ง</label><div>' + (p.hasCompetitor ? '⚠️ คาดว่ามี' + (p.competitorName ? ' — <span style="color:#f59e0b">' + sanitize(p.competitorName) + '</span> <span style="font-size:10px;color:#475569">🔒 ภายใน</span>' : '') : '— ไม่ระบุ') + '</div></div></div>';
   
-  html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + (p.nextAction ? '<span class="next-action">' + sanitize(p.nextAction) + '</span>' : '<span style="color:#475569">ไม่ได้ตั้ง</span>') + '</div></div>';
+  html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + pipeNextActionHtml(p, false) + '</div></div>';
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
   
   if (p.remark) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
@@ -1947,9 +1947,9 @@ function rPipeDet(el) {
     }
   }
 
-  // Task ที่ผูกกับ Pipeline นี้ — ทั้งที่พิมพ์ผูกเอง และที่ auto-สร้างตอนตั้ง Next Action (ดู _createTaskFromPipeNextAction)
-  // การ์ดนี้ทำหน้าที่เป็น "ประวัติ Next Action" ไปในตัว (วันที่สร้าง = วันที่ตั้ง Next Action นั้น) — ตั้งใจไม่ log ลง
-  // pipeLog/Updates เพราะ export CSV/xlsx ดึง Update ได้แค่ 6 รายการล่าสุด ไม่อยากแย่งที่ Update จริงที่เซลพิมพ์เอง
+  // Task ที่ผูกกับ Pipeline นี้ — คือตัว "Next Action" ในตัวเอง (ดู pipeNextActionHtml/pipeOpenTasks ใน app.js)
+  // Task ที่ยังไม่เสร็จ = โชว์เป็น Next Action ด้านบน, การ์ดนี้ list ครบทุกอัน (รวมที่เสร็จแล้ว) ไว้ดูประวัติ
+  // ตั้งใจไม่ log อะไรลง pipeLog/Updates เพราะ export CSV/xlsx ดึง Update ได้แค่ 6 รายการล่าสุด ไม่อยากแย่งที่ Update จริง
   var linkedTasks = ST.getAll('tasks').filter(function(t) { return t.pipeId === p.id; });
   if (linkedTasks.length) {
     linkedTasks.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
@@ -2236,14 +2236,15 @@ function pipeBoardCardV2(p, st, idx) {
   h += '<div class="pb2-card-amt">' + fmtMoneyStyled(amt) + '</div>';
   h += bidHTML;
   if (fyHTML || staleHTML) h += '<div class="pb2-chips">' + fyHTML + staleHTML + '</div>';
-  if (p.nextAction) {
+  var _naHtml = pipeNextActionHtml(p, true);
+  if (_naHtml) {
     var naClass = '';
     if (p.followupDate) {
       var fd = dTo(p.followupDate);
       if (fd < 0) naClass = ' na-overdue';
       else if (fd <= 3) naClass = ' na-soon';
     }
-    h += '<div class="pb2-card-na' + naClass + '">🎯 ' + sanitize((p.nextAction || '').substr(0, 20)) + '</div>';
+    h += '<div class="pb2-card-na' + naClass + '" onclick="event.stopPropagation()">🎯 ' + _naHtml + '</div>';
   }
   if (lastLog) h += '<div class="pb2-card-log">📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) + '</div>';
   h += '</div>';
@@ -2513,7 +2514,8 @@ function rPipeDashboard(el) {
       h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">';
       h += '<div class="lm">';
       h += '<div class="lt">' + sanitize((p.projectName || '').substr(0, 45)) + '</div>';
-      h += '<div class="ls">' + (dealer ? dealer.name : '-') + (p.nextAction ? ' • ' + sanitize(p.nextAction) : '') + '</div>';
+      var _naC = pipeNextActionHtml(p, true);
+      h += '<div class="ls">' + (dealer ? dealer.name : '-') + (_naC ? ' • ' + _naC : '') + '</div>';
       h += '<div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">';
       if (fd !== null) h += dlB(p.followupDate, false);
       if (bd !== null && bd >= 0 && bd <= 14) h += '<span style="font-size:.62rem;background:rgba(124,58,237,.15);color:#a78bfa;padding:1px 6px;border-radius:4px">🎯 Bid ' + fDShort(p.biddingDate) + '</span>';

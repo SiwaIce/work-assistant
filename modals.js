@@ -332,9 +332,8 @@ function showPipelineM(dealerId, eid) {
     '<div class="fg"><label>Sale (ผู้รับผิดชอบ)</label><input type="text" id="fp_sale" value="' + sanitize(eid ? (p.saleName || '') : (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '')) + '"></div></div>' +
     '<div class="fg"><label>แสดงใน Google Sheet</label><div class="radio-g"><label><input type="radio" name="fp_disp" value="Show"' + (p.sheetDisplay !== 'Hide' ? ' checked' : '') + '><span>Show</span></label><label><input type="radio" name="fp_disp" value="Hide"' + (p.sheetDisplay === 'Hide' ? ' checked' : '') + '><span>Hide</span></label></div></div>' +
     attachUploadHtml('_pipeAttach', 'pipeline', '📷 รูปแนบ (TOR/PO/ใบเสนอราคา/หน้างาน)') +
-    '<div class="form-section">🎯 Next Action</div>' +
-    '<div class="fr"><div class="fg"><label>ต้องทำอะไรต่อ</label><select id="fp_next"><option value="">-- ไม่ระบุ --</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div>' +
-    dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '</div>' +
+    '<div class="form-section">📅 Follow-up <span style="font-weight:400;font-size:.7rem;color:var(--text2)">— ขั้นตอนต่อไปตอนนี้ใช้ Task แทนแล้ว ไปเพิ่มที่ปุ่ม "📋 เพิ่ม Task" ในหน้ารายละเอียดโครงการ</span></div>' +
+    '<div class="fr">' + dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '<div class="fg"></div></div>' +
     '<div class="fg"><label>งานซ้ำ</label><div class="radio-g"><label><input type="radio" name="fp_rec" value="0"' + (!p.recurring ? ' checked' : '') + '><span>ไม่ใช่</span></label><label><input type="radio" name="fp_rec" value="1"' + (p.recurring ? ' checked' : '') + '><span>ใช่</span></label></div></div>' +
     '<div class="fg"><label>Remark</label><textarea id="fp_remark" rows="2">' + sanitize(p.remark || '') + '</textarea></div>' +
     '<button class="btn bp btn-full" onclick="savePipeline(\'' + (dealerId || '') + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>');
@@ -861,7 +860,6 @@ function _finishSavePipeline(dealerId, eid) {
     expectedCloseDate: dpG('fp_close'),
     appointmentLetter: document.getElementById('fp_appt').value,
     status: document.getElementById('fp_status').value,
-    nextAction: document.getElementById('fp_next').value,
     followupDate: dpG('fp_fudate'),
     recurring: document.querySelector('input[name="fp_rec"]:checked') ? document.querySelector('input[name="fp_rec"]:checked').value === '1' : false,
     remark: document.getElementById('fp_remark').value.trim(),
@@ -911,38 +909,17 @@ function _finishSavePipeline(dealerId, eid) {
   if (!data.dealerId) return alert('เลือก Dealer');
 
   if (eid) {
-    var oldP = ST.getOne('pipeline', eid);
-    var oldNextAction = oldP ? (oldP.nextAction || '') : '';
     ST.update('pipeline', eid, data);
-    if (data.nextAction && data.nextAction !== oldNextAction) _createTaskFromPipeNextAction(eid, dealerId, data.nextAction);
     closeMForce();
     go('pipeDetail', {pipeId: eid});
   } else {
     var p = ST.add('pipeline', data);
     ST.add('pipeLog', {pipeId: p.id, type: 'note', content: 'ลงทะเบียนโครงการ', date: _nw()});
-    if (data.nextAction) _createTaskFromPipeNextAction(p.id, dealerId, data.nextAction);
     closeMForce();
     go('pipeDetail', {pipeId: p.id});
   }
   toast('💾 บันทึกแล้ว');
   pipeItemsTemp = [];
-}
-
-// ตั้ง/เปลี่ยน Next Action ของ Pipeline แล้วสร้าง Task ให้อัตโนมัติ — ผูก dealerId/pipeId ให้ ผู้ใช้ไปเพิ่ม
-// Step ต่อในหน้า Task เอง ไม่ตั้ง due date ให้ (ผู้ใช้กำหนดเอง) ไม่แตะ Task เก่าที่ยังไม่เสร็จของ pipeline นี้
-// เรียกจากทั้งฟอร์มแก้ไข Pipeline หลัก (_finishSavePipeline) และ Modal อัปเดตด่วน (savePipeUpdate)
-// ⚠️ ไม่ log ลง pipeLog — การ์ด "Update 1-6" ตอน export CSV/xlsx/Copy Row ดึงจาก pipeLog แค่ 6 รายการล่าสุด
-// (ดูคอมเมนต์ showMergePipeLogsM ใน views-pipeline.js) ถ้า log next-action ปนเข้าไปจะแย่งที่ Update จริงที่เซลพิมพ์เอง
-// ใช้การ์ด "Task ที่เกี่ยวข้อง" ในหน้า Pipeline detail (คนละแหล่งข้อมูล) เป็นประวัติ Next Action แทน
-function _createTaskFromPipeNextAction(pipeId, dealerId, nextActionText) {
-  var t = ST.add('tasks', {
-    title: nextActionText, description: '', startDate: '', dueDate: '',
-    priority: 'medium', category: '', status: 'active', sequential: false, url: '',
-    dealerId: dealerId || '', pipeId: pipeId,
-    attachments: [], links: [], steps: []
-  });
-  toast('📋 สร้าง Task จาก Next Action แล้ว: ' + nextActionText);
-  return t;
 }
 
 // Pipeline Update — รวม "📝 Quick Update" (เปลี่ยน status/next action ได้) กับ "➕ Update" (log อย่างเดียว)
@@ -954,9 +931,9 @@ function showPipeUpdateM(pipeId) {
   openM('📝 อัพเดท Pipeline — ' + (p.projectName || '').substr(0, 30), '' +
     '<div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
     '<div class="fg"><label>ประเภท</label><select id="qu_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
-    '<div class="fg"><label>รายละเอียด <small style="color:#64748b">(ไม่บังคับ ถ้าแค่เปลี่ยน Status/Next Action)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
+    '<div class="fg"><label>รายละเอียด <small style="color:#64748b">(ไม่บังคับ ถ้าแค่เปลี่ยน Status)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
     '<div class="fr"><div class="fg"><label>เปลี่ยน Status</label><select id="qu_st"><option value="">-- ไม่เปลี่ยน --</option>' + cfg.pipelineStatuses.map(function(s) { return '<option value="' + s.id + '"' + (p.status === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select></div>' +
-    '<div class="fg"><label>🎯 Next Action</label><select id="qu_na"><option value="">--</option>' + cfg.pipelineNextActions.map(function(a) { return '<option value="' + a + '"' + (p.nextAction === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></div></div>' +
+    '<div class="fg"></div></div>' +
     dpH('qu_fu', p.followupDate || '', 'Follow-up Date') +
     dpH('qu_d', _td(), 'วันที่บันทึก') +
     '<button class="btn bp btn-full" onclick="savePipeUpdate(\'' + pipeId + '\')">💾 บันทึก</button>');
@@ -966,12 +943,11 @@ function savePipeUpdate(pipeId) {
   var content = document.getElementById('qu_c').value.trim();
   var logType = document.getElementById('qu_t').value;
   var newStatus = document.getElementById('qu_st').value;
-  var nextAction = document.getElementById('qu_na').value;
   var followupDate = dpG('qu_fu');
   var p = ST.getOne('pipeline', pipeId);
 
-  var hasChange = content || newStatus || nextAction || followupDate;
-  if (!hasChange) return alert('ใส่รายละเอียดอัพเดท หรือเปลี่ยน Status/Next Action อย่างน้อยหนึ่งอย่าง');
+  var hasChange = content || newStatus || followupDate;
+  if (!hasChange) return alert('ใส่รายละเอียดอัพเดท หรือเปลี่ยน Status อย่างน้อยหนึ่งอย่าง');
   if (!content && !confirm('ยังไม่ได้ใส่รายละเอียด ต้องการบันทึกการเปลี่ยนแปลงนี้ต่อไหม?')) return;
 
   if (newStatus && p && newStatus !== p.status) {
@@ -982,11 +958,8 @@ function savePipeUpdate(pipeId) {
 
   var updates = {};
   if (newStatus) updates.status = newStatus;
-  if (nextAction !== undefined) updates.nextAction = nextAction;
   if (followupDate !== undefined) updates.followupDate = followupDate;
   if (Object.keys(updates).length) ST.update('pipeline', pipeId, updates);
-
-  if (nextAction && nextAction !== (p ? (p.nextAction || '') : '')) _createTaskFromPipeNextAction(pipeId, p ? p.dealerId : '', nextAction);
 
   closeMForce(); toast('📝 อัพเดทแล้ว'); render();
 }
@@ -1333,7 +1306,8 @@ pipes.sort(function(a, b) {
     html += '<div class="psi-row">📦 ' + sanitize(modelText || '-') + ' <span style="color:var(--text2)">(' + totalQty + ' ชิ้น)</span></div>';
     if (p.biddingDate) html += '<div class="psi-row">📅 Bidding: ' + fDShort(p.biddingDate) + ' ' + dlB(p.biddingDate, false) + '</div>';
     if (p.shipmentDate) html += '<div class="psi-row">🚚 Shipment: ' + fDShort(p.shipmentDate) + '</div>';
-    if (p.nextAction) html += '<div class="psi-row">🎯 Next: ' + sanitize((p.nextAction || '').substr(0, 30)) + '</div>';
+    var _psiNa = pipeNextActionHtml(p, true);
+    if (_psiNa) html += '<div class="psi-row">🎯 Next: ' + _psiNa + '</div>';
     if (lastLogText) html += '<div class="psi-row">📝 ล่าสุด: ' + sanitize(lastLogText) + '</div>';
     if (pendingActions.length) {
       html += '<div class="psi-row" style="color:#f59e0b">⏳ Action ค้าง: ' + pendingActions.length + ' รายการ</div>';

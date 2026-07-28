@@ -481,6 +481,34 @@ refreshPipeNames();
 function getPipeName(statusId) { return PIPE_NAMES[statusId] || statusId; }
 
 // ================================================================
+// PIPELINE "NEXT ACTION" — มาจาก Task ที่ผูกกับ pipeline นี้แล้ว ไม่ใช่ field ข้อความแยกต่างหากอีกต่อไป
+// (p.nextAction เดิมยังอยู่ในข้อมูลเก่า ใช้เป็น fallback อ่านอย่างเดียวถ้ายังไม่มี Task เปิดค้าง)
+// ================================================================
+function pipeOpenTasks(pipeId) {
+  return ST.getAll('tasks').filter(function(t) { return t.pipeId === pipeId && t.status !== 'completed'; })
+    .sort(function(a, b) { return (a.created || '').localeCompare(b.created || ''); });
+}
+
+// compact=true → เอาไว้ในที่แคบ (การ์ด/แถวลิสต์) โชว์แค่ Task แรก + จำนวนที่เหลือ
+// compact=false → หน้ารายละเอียด โชว์ทุก Task เปิดค้างเป็นลิสต์
+function pipeNextActionHtml(p, compact) {
+  var open = pipeOpenTasks(p.id);
+  if (open.length) {
+    if (compact) {
+      var extra = open.length - 1;
+      var titleShort = (open[0].title || '').substr(0, 24);
+      return '<span class="next-action" style="cursor:pointer" onclick="event.stopPropagation();go(\'taskDetail\',{taskId:\'' + open[0].id + '\'})">' + sanitize(titleShort) + '</span>' +
+        (extra > 0 ? ' <span style="opacity:.7">+' + extra + '</span>' : '');
+    }
+    return open.map(function(t) {
+      return '<div style="margin-bottom:3px"><span class="next-action" style="cursor:pointer" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">' + sanitize(t.title) + '</span> ' + sTag(t.status) + '</div>';
+    }).join('');
+  }
+  if (p.nextAction) return '<span style="color:var(--text2,#94a3b8)" title="ข้อความเก่าจากก่อนเปลี่ยนมาใช้ Task — อ่านอย่างเดียว แก้ไม่ได้">' + sanitize(p.nextAction) + '</span>';
+  return compact ? '' : '<span style="color:#475569">ไม่ได้ตั้ง</span>';
+}
+
+// ================================================================
 // DEFAULT ROUTINES
 // ================================================================
 var DEF_ROUTINES = [

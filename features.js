@@ -891,9 +891,9 @@ function getSmartNotifications() {
   (pipeline || []).forEach(function (p) {
     if (!pipeIsOpen(p)) return;
     var val = parseFloat(p.value) || 0;
-    if (val >= 1000000 && !p.nextAction) {
+    if (val >= 1000000 && !pipeOpenTasks(p.id).length) {
       notifs.push({ icon: '💎', type: 'pipeline', priority: 2,
-        text: 'Deal มูลค่าสูง "' + (p.project || p.name || '') + '" (฿' + ftFmtVal(val) + ') ยังไม่มี Next Action' });
+        text: 'Deal มูลค่าสูง "' + (p.project || p.name || '') + '" (฿' + ftFmtVal(val) + ') ยังไม่มี Task ติดตาม' });
     }
   });
 
@@ -1480,7 +1480,7 @@ function renderUpcomingTimeline() {
             dateObj: fd,
             icon: '📊',
             text: 'Follow-up: ' + sanitize((p.projectName || '').substr(0, 30)),
-            sub: (dealer ? '🏪 ' + sanitize(dealer.name) : '') + (p.nextAction ? ' • 🎯 ' + sanitize(p.nextAction) : ''),
+            sub: (dealer ? '🏪 ' + sanitize(dealer.name) : '') + (pipeOpenTasks(p.id)[0] ? ' • 🎯 ' + sanitize(pipeOpenTasks(p.id)[0].title) : ''),
             type: 'pipeline',
             link: "go('pipeDetail',{pipeId:'" + p.id + "'})"
           });
@@ -2502,14 +2502,14 @@ function getOverallHealth() {
     max += 10; if (p.dealerId) score += 10;
     max += 10; if (p.value && parseFloat(p.value) > 0) score += 10;
     max += 8; if (p.model) score += 8;
-    max += 8; if (p.nextAction) score += 8;
+    max += 8; if (pipeOpenTasks(p.id).length) score += 8;
     max += 8; if (p.followupDate || p.nextFollowup) score += 8;
     max += 5; if (p.contactName || p.contact) score += 5;
     var pScore = max > 0 ? Math.round(score / max * 100) : 100;
     pipeTotal += pScore;
 
-    if (!p.nextAction && (parseFloat(p.value) || 0) >= 500000) {
-      issues.push({ level: 'warning', icon: '📋', text: (p.project || p.name || 'Unknown') + ' — ไม่มี Next Action (฿' + ftFmtVal(p.value) + ')', action: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
+    if (!pipeOpenTasks(p.id).length && (parseFloat(p.value) || 0) >= 500000) {
+      issues.push({ level: 'warning', icon: '📋', text: (p.project || p.name || 'Unknown') + ' — ไม่มี Task ติดตาม (฿' + ftFmtVal(p.value) + ')', action: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
     }
     if (!p.followupDate && !p.nextFollowup) {
       issues.push({ level: 'info', icon: '📋', text: (p.project || p.name || 'Unknown') + ' — ไม่มี Follow-up Date' });
