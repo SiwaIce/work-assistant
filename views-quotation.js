@@ -246,12 +246,35 @@ function _qiLevelChips(item, idx) {
   return html;
 }
 
+// ขยายเต็มจอ — เผื่อกรณีชื่อสินค้ายาวแล้วโดนบีบตอนเปิดคอลัมน์ต้นทุน/กำไร (ตาราง export-table ปกติ
+// มีแค่ overflow-x:auto ในกรอบการ์ดแคบๆ) overlay กว้างเต็มจอให้เห็นทุกคอลัมน์พร้อมกันโดยไม่ต้องเลื่อน
+var quotationItemsFullscreen = false;
+function toggleQuotationItemsFullscreen() {
+  quotationItemsFullscreen = !quotationItemsFullscreen;
+  var overlay = document.getElementById('qiFullscreenOverlay');
+  if (quotationItemsFullscreen) {
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'qiFullscreenOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg,#0f172a);overflow:auto;padding:20px';
+      document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'block';
+  } else if (overlay) {
+    overlay.style.display = 'none';
+  }
+  renderQuotationItemsTable();
+}
+
 function renderQuotationItemsTable() {
   var container = document.getElementById('quotationItemsContainer');
   if (!container) return;
 
   if (quotationItems.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center"><div class="empty-state-icon">📦</div><p>ยังไม่มีสินค้า — เลือกสินค้าด้านล่าง แล้วกด ➕ เพิ่ม</p></div>';
+    var emptyHtml = '<div class="empty-state" style="padding:20px;text-align:center"><div class="empty-state-icon">📦</div><p>ยังไม่มีสินค้า — เลือกสินค้าด้านล่าง แล้วกด ➕ เพิ่ม</p></div>';
+    container.innerHTML = quotationItemsFullscreen ? _qiFullscreenPlaceholderHtml() : emptyHtml;
+    var ovEmpty = document.getElementById('qiFullscreenOverlay');
+    if (quotationItemsFullscreen && ovEmpty) ovEmpty.innerHTML = _qiFullscreenWrapHtml(emptyHtml);
     return;
   }
 
@@ -316,7 +339,28 @@ function renderQuotationItemsTable() {
     html += '<td style="text-align:right;padding:8px;color:' + (totalMargin >= 10 ? '#22c55e' : (totalMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + totalMargin.toFixed(1) + '%</td>';
   }
   html += '<td></td></tr></tfoot></table></div>';
-  container.innerHTML = html;
+
+  if (quotationItemsFullscreen) {
+    container.innerHTML = _qiFullscreenPlaceholderHtml();
+    var overlay = document.getElementById('qiFullscreenOverlay');
+    if (overlay) overlay.innerHTML = _qiFullscreenWrapHtml(html);
+  } else {
+    container.innerHTML = html;
+  }
+}
+
+function _qiFullscreenPlaceholderHtml() {
+  return '<div style="padding:24px;text-align:center;color:var(--text2)">⛶ กำลังแสดงแบบเต็มจอ — <button class="btn bsm bo" onclick="toggleQuotationItemsFullscreen()">↙ กลับมาปกติ</button></div>';
+}
+
+function _qiFullscreenWrapHtml(tableHtml) {
+  return '<div style="max-width:1400px;margin:0 auto">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<h2 style="margin:0">📦 รายการสินค้า</h2>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button>' +
+    '<button class="btn bsm bo" onclick="toggleQuotationItemsFullscreen()">✕ ปิด</button>' +
+    '</div></div>' + tableHtml + '</div>';
 }
 
 function updateQuotationItemQty(idx, qty) {
@@ -1645,6 +1689,9 @@ function renderEditQuotationPage(quote) {
   quotationItems = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
   selectedLevelForPrice = quote.levelUsed || 'B';
   window._quoteAttach = (quote.attachments || []).slice();
+  quotationItemsFullscreen = false; // เข้าเพจใหม่/เปิดใบอื่น เริ่มมุมมองปกติเสมอ กัน overlay ค้างจากใบก่อนหน้า
+  var _qiOv = document.getElementById('qiFullscreenOverlay');
+  if (_qiOv) _qiOv.style.display = 'none';
 
   // ซ่อมค่าที่เป็น 0 อัตโนมัติตอนเปิด — เติมราคา + ต้นทุนจากแคตตาล็อกให้แถวที่ยังว่าง (ใบเก่าที่บันทึกก่อนแก้จะเติมให้เอง)
   quotationItems.forEach(function(it) {
@@ -1717,7 +1764,8 @@ function renderEditQuotationPage(quote) {
   
   // Products Section
   html += '<div class="card" style="margin-bottom:16px">';
-  html += '<h2>📦 รายการสินค้า <span class="ml"><button id="btnToggleCost" class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button></span></h2>';
+  html += '<h2>📦 รายการสินค้า <span class="ml"><button id="btnToggleCost" class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button>' +
+    '<button class="btn bsm bo" onclick="toggleQuotationItemsFullscreen()" title="ขยายเต็มจอ — เห็นทุกคอลัมน์โดยไม่ต้องเลื่อน">⛶ ขยายเต็มจอ</button></span></h2>';
 
   // Solution preset chips — เอา pattern จาก Quick Price Estimator มาใช้ซ้ำ กดทีเดียวเพิ่มได้หลายรายการพร้อมราคาตาม Level ของใบนี้
   html += '<div id="quoteSolutionChipZone"></div>';
