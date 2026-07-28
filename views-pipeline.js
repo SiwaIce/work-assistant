@@ -1395,8 +1395,12 @@ function renderPipeCards(pipes, opts) {
     var _fyCard = pipeFYStatus(p);
     var modelSummary = _pipeModelSummaryShort(p, shortMap);
     var cardOnclick = selectMode ? (toggleFn + '(\'' + p.id + '\')') : ('go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})');
+    var _openTaskCnt = pipeOpenTasks(p.id).length;
 
-    html += '<div class="dealer-card" style="' + cardBorder + '" onclick="' + cardOnclick + '">';
+    html += '<div class="dealer-card" style="position:relative;' + cardBorder + '" onclick="' + cardOnclick + '">';
+    if (_openTaskCnt) {
+      html += '<span title="' + _openTaskCnt + ' Task ค้างอยู่" style="position:absolute;top:-7px;right:-7px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:19px;height:19px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 4px;box-shadow:0 0 0 2px var(--bg,#0f172a)">' + _openTaskCnt + '</span>';
+    }
     if (selectMode) {
       html += '<div style="margin-bottom:6px"><input type="checkbox" id="dpChk_' + p.id + '" ' + (selectedMap[p.id] ? 'checked' : '') + ' onclick="event.stopPropagation();' + toggleFn + '(\'' + p.id + '\')" style="width:auto"></div>';
     }
