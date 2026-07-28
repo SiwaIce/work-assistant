@@ -1948,15 +1948,18 @@ function rPipeDet(el) {
   }
 
   // Task ที่ผูกกับ Pipeline นี้ — ทั้งที่พิมพ์ผูกเอง และที่ auto-สร้างตอนตั้ง Next Action (ดู _createTaskFromPipeNextAction)
+  // การ์ดนี้ทำหน้าที่เป็น "ประวัติ Next Action" ไปในตัว (วันที่สร้าง = วันที่ตั้ง Next Action นั้น) — ตั้งใจไม่ log ลง
+  // pipeLog/Updates เพราะ export CSV/xlsx ดึง Update ได้แค่ 6 รายการล่าสุด ไม่อยากแย่งที่ Update จริงที่เซลพิมพ์เอง
   var linkedTasks = ST.getAll('tasks').filter(function(t) { return t.pipeId === p.id; });
   if (linkedTasks.length) {
     linkedTasks.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-    html += '<div class="card"><h2>📋 Task ที่เกี่ยวข้อง (' + linkedTasks.length + ')</h2>';
+    html += '<div class="card"><h2>📋 Task ที่เกี่ยวข้อง / ประวัติ Next Action (' + linkedTasks.length + ')</h2>';
     linkedTasks.forEach(function(t) {
       var doneSteps = (t.steps || []).filter(function(s) { return s.done; }).length;
       var totalSteps = (t.steps || []).length;
       html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#334155);cursor:pointer" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
-      html += '<span style="flex:1;font-size:13px">' + sanitize(t.title) + '</span>';
+      html += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(t.title) + '</div>' +
+        '<div style="font-size:10px;color:var(--text2)">' + fDT(t.created) + '</div></div>';
       if (totalSteps) html += '<span style="font-size:11px;color:var(--text2)">' + doneSteps + '/' + totalSteps + ' step</span>';
       html += sTag(t.status);
       html += '</div>';

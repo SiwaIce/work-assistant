@@ -931,6 +931,9 @@ function _finishSavePipeline(dealerId, eid) {
 // ตั้ง/เปลี่ยน Next Action ของ Pipeline แล้วสร้าง Task ให้อัตโนมัติ — ผูก dealerId/pipeId ให้ ผู้ใช้ไปเพิ่ม
 // Step ต่อในหน้า Task เอง ไม่ตั้ง due date ให้ (ผู้ใช้กำหนดเอง) ไม่แตะ Task เก่าที่ยังไม่เสร็จของ pipeline นี้
 // เรียกจากทั้งฟอร์มแก้ไข Pipeline หลัก (_finishSavePipeline) และ Modal อัปเดตด่วน (savePipeUpdate)
+// ⚠️ ไม่ log ลง pipeLog — การ์ด "Update 1-6" ตอน export CSV/xlsx/Copy Row ดึงจาก pipeLog แค่ 6 รายการล่าสุด
+// (ดูคอมเมนต์ showMergePipeLogsM ใน views-pipeline.js) ถ้า log next-action ปนเข้าไปจะแย่งที่ Update จริงที่เซลพิมพ์เอง
+// ใช้การ์ด "Task ที่เกี่ยวข้อง" ในหน้า Pipeline detail (คนละแหล่งข้อมูล) เป็นประวัติ Next Action แทน
 function _createTaskFromPipeNextAction(pipeId, dealerId, nextActionText) {
   var t = ST.add('tasks', {
     title: nextActionText, description: '', startDate: '', dueDate: '',
@@ -938,7 +941,6 @@ function _createTaskFromPipeNextAction(pipeId, dealerId, nextActionText) {
     dealerId: dealerId || '', pipeId: pipeId,
     attachments: [], links: [], steps: []
   });
-  ST.add('pipeLog', {pipeId: pipeId, type: 'note', content: '🎯 Next Action ใหม่ — สร้าง Task ให้แล้ว: ' + nextActionText, date: _nw()});
   toast('📋 สร้าง Task จาก Next Action แล้ว: ' + nextActionText);
   return t;
 }
