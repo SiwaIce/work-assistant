@@ -1962,7 +1962,8 @@ function rPipeDet(el) {
       var doneSteps = (t.steps || []).filter(function(s) { return s.done; }).length;
       var totalSteps = (t.steps || []).length;
       html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border,#334155);cursor:pointer" onclick="go(\'taskDetail\',{taskId:\'' + t.id + '\'})">';
-      html += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(t.title) + '</div>' +
+      html += '<input type="checkbox" class="task-complete-chk" ' + (t.status === 'completed' ? 'checked' : '') + ' onclick="event.stopPropagation();toggleTaskComplete(\'' + t.id + '\', this.checked)" title="ทำเครื่องหมายเสร็จ">';
+      html += '<div style="flex:1;min-width:0"><div style="font-size:13px' + (t.status === 'completed' ? ';text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(t.title) + '</div>' +
         '<div style="font-size:10px;color:var(--text2)">' + fDT(t.created) + '</div></div>';
       if (totalSteps) html += '<span style="font-size:11px;color:var(--text2)">' + doneSteps + '/' + totalSteps + ' step</span>';
       html += sTag(t.status);
