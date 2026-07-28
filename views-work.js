@@ -1284,7 +1284,7 @@ function rTaskDet(el) {
   <div class="td2">
 
     <div class="td2-topbar">
-      <span class="td2-back" onclick="go('tasks')">‹ งานทั้งหมด</span>
+      <span class="td2-back" onclick="${navHistory.length ? 'goBack()' : "go('tasks')"}">${navHistory.length ? '‹ กลับ' : '‹ งานทั้งหมด'}</span>
       <div class="td2-icons">
         <button class="td2-icon-btn" onclick="startTimer('task','${t.id}','${sanitize(t.title).substr(0,18)}')" title="จับเวลา">⏱️</button>
         <button class="td2-icon-btn ${isPinned ? 'on' : ''}" onclick="ST.togglePin('task','${t.id}','${sanitize(t.title)}','');render()" title="ปักหมุด">📌</button>
