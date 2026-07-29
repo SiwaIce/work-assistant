@@ -68,6 +68,38 @@ function stockSellableQty(lots) {
   return lots.filter(function(l) { return sellableCodes.indexOf(l.location) !== -1; }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
 }
 
+// เฟส 1: badge สถานะสต็อกแบบ read-only ให้หน้าอื่น (ใบเสนอราคา/SO ฯลฯ) เรียกใช้ตรง — ยังไม่มีปุ่มจองลอยๆ (เฟส 2)
+// ไล่ใช้ 0001 (พร้อมส่ง) ก่อน ถ้าไม่พอค่อยดึงจาก QI (รอขึ้นทะเบียน) ที่เหลือหลังจากนั้นคือส่วนที่ต้อง PR/PO
+function stockAvailabilityHtml(sku, qty) {
+  if (!sku) return '';
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (qty <= 0) return '';
+  var lots = stockGetLots(sku);
+  var sellableTotal = stockLocTotal(lots, '0001');
+  var qiTotal = stockLocTotal(lots, 'QI');
+  var usedSellable = Math.min(qty, sellableTotal);
+  var remaining = qty - usedSellable;
+  var usedQI = Math.min(remaining, qiTotal);
+  var shortfall = remaining - usedQI;
+  var qiLeftover = qiTotal - usedQI;
+
+  var h = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;font-weight:400">';
+  if (usedSellable > 0) {
+    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">✓ พร้อมส่ง ' + usedSellable + '</span>';
+  }
+  if (usedQI > 0) {
+    h += '<a href="#" onclick="event.stopPropagation();go(\'stockDetail\',{sku:\'' + sku + '\'});return false" style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(245,158,11,.15);color:#b45309;text-decoration:none" title="กดดูรายละเอียด QI">⏳ จาก QI ' + usedQI + '</a>';
+  }
+  if (shortfall > 0) {
+    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + shortfall + ' ต้อง PR/PO</span>';
+  }
+  h += '</div>';
+  if (qiLeftover > 0 && usedQI > 0) {
+    h += '<div style="font-size:10px;color:var(--text2);margin-top:2px;font-weight:400">QI เหลืออีก ' + qiLeftover + ' สำรองไว้</div>';
+  }
+  return h;
+}
+
 function _stockSaveLots(sku, productName, lots) {
   var rec = _stockRec(sku);
   var payload = { sku: sku, productName: productName, lots: lots, source: 'app', updatedBy: _stockCurrentUserName() };
