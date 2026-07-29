@@ -11,7 +11,45 @@ var stockFavOnly = false;
 var stockLowFilter = 'all'; // all | low | out
 var stockTypeFilter = 'all'; // all | stock | order
 var stockShowLog = false;
+var stockExpanded = {}; // sku -> เปิด/ปิดแถวรายละเอียดคลังย่อย
 var STOCK_LOW_THRESHOLD = 5;
+
+// คลังย่อยของ 1001 SiS Main Warehouse — ชุดเดียวกันทุก SKU (ตามที่กำหนดไว้ก่อน)
+// sellable:true = นับเป็น "พร้อมขาย" (ของปกติ) — ที่เหลือ (ติดจอง/ดาเมจ) ไม่นับว่าขายได้จริง
+var STOCK_LOCATIONS = [
+  { code: '0001', name: 'Normal Good', sellable: true },
+  { code: '1021', name: 'Sales Booking', sellable: false },
+  { code: '1027', name: 'Damaged Boxes', sellable: false }
+];
+
+function stockLocationName(code) {
+  var loc = STOCK_LOCATIONS.filter(function(l) { return l.code === code; })[0];
+  return loc ? loc.name : code;
+}
+
+// รองรับ record เก่าที่มี qty แบบตัวเลขเดียว (ก่อนมีคลังย่อย) — ยกไปไว้ที่ 0001 Normal Good ให้อัตโนมัติ
+function stockGetLocations(sku) {
+  if (!sku) return {};
+  var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
+  if (!rec) return {};
+  if (rec.locations) return rec.locations;
+  if (rec.qty) return { '0001': Number(rec.qty) || 0 };
+  return {};
+}
+
+function stockTotalQty(locs) {
+  return Object.keys(locs).reduce(function(sum, k) { return sum + (Number(locs[k]) || 0); }, 0);
+}
+
+function stockSellableQty(locs) {
+  return STOCK_LOCATIONS.filter(function(l) { return l.sellable; })
+    .reduce(function(sum, l) { return sum + (Number(locs[l.code]) || 0); }, 0);
+}
+
+function stockToggleExpand(sku) {
+  stockExpanded[sku] = !stockExpanded[sku];
+  render();
+}
 
 // ประเภทสินค้า: 'stock' = นับ/ติดตามจำนวนคงเหลือจริง, 'order' = สั่งตามออเดอร์ (default — ยังไม่ตั้งค่าไว้)
 function getStockOrderType(sku) {
@@ -25,7 +63,7 @@ function toggleStockOrderType(sku, productName) {
   var newType = getStockOrderType(sku) === 'stock' ? 'order' : 'stock';
   var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
   if (rec) ST.update('stockLevels', rec.id, { orderType: newType });
-  else ST.add('stockLevels', { sku: sku, productName: productName, qty: 0, orderType: newType });
+  else ST.add('stockLevels', { sku: sku, productName: productName, locations: {}, orderType: newType });
   render();
 }
 
@@ -45,18 +83,54 @@ function _stockCurrentUserName() {
   return (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '';
 }
 
-// ตั้งจำนวนคงเหลือใหม่ + log ส่วนต่างอัตโนมัติ (ถ้าจำนวนเปลี่ยนจริง) — ใช้จุดเดียวทั้งแก้เองในแอปและ Import Excel
-function setStockQty(sku, productName, newQty, source, note) {
+// ตั้งจำนวนคงเหลือของคลังย่อยหนึ่งอัน + log ส่วนต่างอัตโนมัติ (ถ้าจำนวนเปลี่ยนจริง)
+function setStockLocationQty(sku, productName, code, newQty, source, note) {
   if (!sku) return;
   newQty = Math.max(0, Math.round(Number(newQty) || 0));
   var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
-  var before = rec ? (Number(rec.qty) || 0) : 0;
-  var payload = { sku: sku, productName: productName, qty: newQty, source: source || 'app', updatedBy: _stockCurrentUserName() };
+  var locs = {};
+  if (rec) {
+    if (rec.locations) { for (var k in rec.locations) locs[k] = rec.locations[k]; }
+    else if (rec.qty) locs['0001'] = Number(rec.qty) || 0;
+  }
+  var before = Number(locs[code]) || 0;
+  locs[code] = newQty;
+  var payload = { sku: sku, productName: productName, locations: locs, source: source || 'app', updatedBy: _stockCurrentUserName() };
   if (rec) ST.update('stockLevels', rec.id, payload);
   else ST.add('stockLevels', payload);
   if (newQty !== before) {
-    ST.add('stockLog', { sku: sku, productName: productName, before: before, after: newQty, delta: newQty - before, source: source || 'app', note: note || '', date: _nw() });
+    ST.add('stockLog', {
+      sku: sku, productName: productName, locationCode: code, locationName: stockLocationName(code),
+      before: before, after: newQty, delta: newQty - before, source: source || 'app', note: note || '', date: _nw()
+    });
   }
+}
+
+// เข้ากันได้กับของเดิม (Import Excel) — ตั้งจำนวนที่คลัง 0001 Normal Good (ของปกติ พร้อมขาย) เป็นค่าเริ่มต้น
+function setStockQty(sku, productName, newQty, source, note) {
+  setStockLocationQty(sku, productName, '0001', newQty, source, note);
+}
+
+function stockEditLocationInline(el, sku, code, productName) {
+  if (el.tagName === 'INPUT') return;
+  var cur = parseInt(el.textContent, 10) || 0;
+  var input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.value = cur;
+  input.style.width = '64px';
+  input.onclick = function(e) { e.stopPropagation(); };
+  input.onblur = function() {
+    setStockLocationQty(sku, productName, code, input.value, 'app', '');
+    render();
+  };
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') render();
+  };
+  el.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 function stockToggleCategory(catId) {
@@ -80,9 +154,12 @@ function rStock(el) {
 
   var rows = products.map(function(p) {
     var lvl = p.sku ? levelMap[p.sku] : null;
+    var locs = p.sku ? stockGetLocations(p.sku) : {};
     return {
       product: p,
-      qty: lvl ? (Number(lvl.qty) || 0) : 0,
+      locations: locs,
+      qty: stockTotalQty(locs), // คงเหลือรวมทุกคลังย่อย
+      sellable: stockSellableQty(locs), // พร้อมขายจริง (เฉพาะคลังที่ flag sellable)
       hasLevel: !!lvl,
       orderType: (lvl && lvl.orderType) || 'order',
       updatedAt: lvl ? (lvl.updated || lvl.created) : null,
@@ -91,11 +168,11 @@ function rStock(el) {
     };
   });
 
-  // นับใกล้หมด/หมดสต็อก เฉพาะสินค้าประเภท Stock — By order ไม่มีแนวคิดคงเหลือ ไม่ควรถูกนับว่า "หมด"
+  // นับใกล้หมด/หมดสต็อก จากจำนวน "พร้อมขาย" เท่านั้น (ไม่รวมของติดจอง/ดาเมจ) และเฉพาะสินค้าประเภท Stock
   var stockRows = rows.filter(function(r) { return r.orderType === 'stock'; });
   var totalCount = rows.length;
-  var lowCount = stockRows.filter(function(r) { return r.qty > 0 && r.qty < STOCK_LOW_THRESHOLD; }).length;
-  var outCount = stockRows.filter(function(r) { return r.qty <= 0; }).length;
+  var lowCount = stockRows.filter(function(r) { return r.sellable > 0 && r.sellable < STOCK_LOW_THRESHOLD; }).length;
+  var outCount = stockRows.filter(function(r) { return r.sellable <= 0; }).length;
 
   if (stockSearch) {
     var q = stockSearch.toLowerCase();
@@ -106,8 +183,8 @@ function rStock(el) {
   if (stockCategoryFilters.length) rows = rows.filter(function(r) { return stockCategoryFilters.indexOf(r.product.category) !== -1; });
   if (stockFavOnly) rows = rows.filter(function(r) { return isStockFav(r.product.sku); });
   if (stockTypeFilter !== 'all') rows = rows.filter(function(r) { return r.orderType === stockTypeFilter; });
-  if (stockLowFilter === 'low') rows = rows.filter(function(r) { return r.orderType === 'stock' && r.qty > 0 && r.qty < STOCK_LOW_THRESHOLD; });
-  else if (stockLowFilter === 'out') rows = rows.filter(function(r) { return r.orderType === 'stock' && r.qty <= 0; });
+  if (stockLowFilter === 'low') rows = rows.filter(function(r) { return r.orderType === 'stock' && r.sellable > 0 && r.sellable < STOCK_LOW_THRESHOLD; });
+  else if (stockLowFilter === 'out') rows = rows.filter(function(r) { return r.orderType === 'stock' && r.sellable <= 0; });
 
   rows.sort(function(a, b) { return (a.product.name || '').localeCompare(b.product.name || ''); });
 
@@ -150,14 +227,18 @@ function rStock(el) {
     h += '<div class="empty"><div class="icon">📦</div><p>ไม่พบสินค้า' + (stockSearch ? ' ที่ตรงกับ "' + sanitize(stockSearch) + '"' : '') + '</p></div>';
   } else {
     h += '<div class="export-wrap"><table class="export-table" style="width:100%"><thead><tr>' +
-      '<th></th><th>SKU</th><th>สินค้า</th><th>หมวดหมู่</th><th>ประเภท</th><th style="text-align:center">คงเหลือ</th><th>อัปเดตล่าสุด</th><th></th>' +
+      '<th></th><th></th><th>SKU</th><th>สินค้า</th><th>หมวดหมู่</th><th>ประเภท</th><th style="text-align:center">คงเหลือรวม</th><th style="text-align:center">พร้อมขาย</th><th>อัปเดตล่าสุด</th>' +
       '</tr></thead><tbody>';
     rows.forEach(function(r) {
       var p = r.product;
       var fav = isStockFav(p.sku);
       var isStockType = r.orderType === 'stock';
-      var rowStyle = isStockType ? (r.qty <= 0 ? 'background:rgba(239,68,68,.08)' : (r.qty < STOCK_LOW_THRESHOLD ? 'background:rgba(245,158,11,.08)' : '')) : '';
+      var expanded = !!stockExpanded[p.sku];
+      var rowStyle = isStockType ? (r.sellable <= 0 ? 'background:rgba(239,68,68,.08)' : (r.sellable < STOCK_LOW_THRESHOLD ? 'background:rgba(245,158,11,.08)' : '')) : '';
       h += '<tr style="' + rowStyle + '">';
+      h += '<td style="text-align:center">' + (isStockType && p.sku ?
+        '<span style="cursor:pointer;color:var(--text2)" onclick="stockToggleExpand(\'' + p.sku + '\')" title="ดูรายละเอียดคลังย่อย">' + (expanded ? '▾' : '▸') + '</span>' :
+        '') + '</td>';
       h += '<td style="text-align:center">' + (p.sku ?
         '<span style="cursor:pointer;font-size:15px" onclick="toggleStockFav(\'' + p.sku + '\',\'' + sanitize(p.name || '').replace(/'/g, "\\'") + '\')" title="' + (fav ? 'เอาออกจาก Favorite' : 'เพิ่มเป็น Favorite') + '">' + (fav ? '⭐' : '☆') + '</span>' :
         '') + '</td>';
@@ -169,14 +250,15 @@ function rStock(el) {
           (isStockType ? 'background:rgba(34,197,94,.15);color:#16a34a' : 'background:rgba(245,158,11,.15);color:#b45309') +
           '" onclick="toggleStockOrderType(\'' + p.sku + '\',\'' + sanitize(p.name || '').replace(/'/g, "\\'") + '\')" title="กดเพื่อสลับประเภท">' +
           (isStockType ? '📦 Stock' : '🛒 By order') + '</span>' : '') + '</td>';
-      h += '<td style="text-align:center">' + (!isStockType ?
-        '<span style="color:var(--text2)">-</span>' :
-        (p.sku ?
-          '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="showEditStockQtyM(\'' + p.id + '\')" title="กดเพื่อแก้ไขจำนวน">' + r.qty + '</span>' :
-          '<span style="font-weight:700">' + r.qty + '</span>')) + '</td>';
+      h += '<td style="text-align:center">' + (isStockType ? r.qty : '<span style="color:var(--text2)">-</span>') + '</td>';
+      h += '<td style="text-align:center">' + (isStockType ?
+        '<span style="font-weight:700;color:' + (r.sellable <= 0 ? '#ef4444' : (r.sellable < STOCK_LOW_THRESHOLD ? '#b45309' : '#16a34a')) + '">' + r.sellable + '</span>' :
+        '<span style="color:var(--text2)">-</span>') + '</td>';
       h += '<td style="font-size:11px;color:var(--text2)">' + (r.updatedAt ? fDT(r.updatedAt) + (r.updatedBy ? ' · ' + sanitize(r.updatedBy) : '') : '-') + '</td>';
-      h += '<td>' + (p.sku && isStockType ? '<button class="btn bsm bo" onclick="showEditStockQtyM(\'' + p.id + '\')">✏️</button>' : '') + '</td>';
       h += '</tr>';
+      if (isStockType && expanded) {
+        h += '<tr><td></td><td colspan="8" style="padding:0">' + stockLocationBreakdownHtml(p) + '</td></tr>';
+      }
     });
     h += '</tbody></table></div>';
     h += '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + rows.length + ' รายการ</div>';
@@ -193,7 +275,7 @@ function rStock(el) {
         var up = l.delta > 0;
         h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#334155)">';
         h += '<span style="font-size:16px;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '▲' : '▼') + '</span>';
-        h += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(l.productName || l.sku) + ' <span style="color:var(--text2);font-size:11px">(' + sanitize(l.sku) + ')</span></div>';
+        h += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(l.productName || l.sku) + ' <span style="color:var(--text2);font-size:11px">(' + sanitize(l.sku) + (l.locationName ? ' · ' + sanitize(l.locationCode) + ' ' + sanitize(l.locationName) : '') + ')</span></div>';
         h += '<div style="font-size:11px;color:var(--text2)">' + fDT(l.date) + ' · ' + _stockSourceLabel(l.source) + (l.note ? ' · ' + sanitize(l.note) : '') + '</div></div>';
         h += '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '+' : '') + l.delta + '</div>';
         h += '<div style="font-size:11px;color:var(--text2)">' + l.before + ' → ' + l.after + '</div></div>';
@@ -210,29 +292,27 @@ function rStock(el) {
   if (srcEl && stockSearch) { srcEl.focus(); srcEl.setSelectionRange(stockSearch.length, stockSearch.length); }
 }
 
-function showEditStockQtyM(productId) {
-  var p = getProductById(productId);
-  if (!p || !p.sku) { toast('⚠️ สินค้านี้ไม่มี SKU ตั้งค่า Stock ไม่ได้'); return; }
-  var lvl = ST.getAll('stockLevels').find(function(s) { return s.sku === p.sku; });
-  var qty = lvl ? (Number(lvl.qty) || 0) : 0;
-  openM('✏️ แก้ไขจำนวนคงเหลือ',
-    '<div class="fg"><label>' + sanitize(p.name) + ' <span style="color:var(--text2);font-size:.8rem">(' + sanitize(p.sku) + ')</span></label>' +
-    '<input type="number" id="stk_qty" value="' + qty + '" min="0"></div>' +
-    '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="stk_note" placeholder="เช่น รับของเข้าคลัง, ขายออก"></div>' +
-    '<button class="btn bp btn-full" onclick="saveStockQty(\'' + productId + '\')">💾 บันทึก</button>'
-  );
-  setTimeout(function() { var el = document.getElementById('stk_qty'); if (el) { el.focus(); el.select(); } }, 50);
-}
-
-function saveStockQty(productId) {
-  var p = getProductById(productId);
-  if (!p || !p.sku) return;
-  var qty = document.getElementById('stk_qty').value;
-  var note = document.getElementById('stk_note').value.trim();
-  setStockQty(p.sku, p.name, qty, 'app', note);
-  closeMForce();
-  toast('💾 บันทึกแล้ว');
-  render();
+function stockLocationBreakdownHtml(p) {
+  var locs = stockGetLocations(p.sku);
+  var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 8px">';
+  h += '<thead><tr>' +
+    '<th style="text-align:left;padding:4px 4px 4px 30px;font-weight:400;color:var(--text2)">คลังย่อย (1001 SiS Main Warehouse)</th>' +
+    '<th style="text-align:center;padding:4px;font-weight:400;color:var(--text2)">จำนวน</th>' +
+    '<th style="text-align:left;padding:4px;font-weight:400;color:var(--text2)">นับพร้อมขาย</th>' +
+    '</tr></thead><tbody>';
+  STOCK_LOCATIONS.forEach(function(loc) {
+    var v = Number(locs[loc.code]) || 0;
+    h += '<tr>';
+    h += '<td style="padding:4px 4px 4px 30px">' + loc.code + ' ' + sanitize(loc.name) + '</td>';
+    h += '<td style="text-align:center;padding:4px"><span style="display:inline-block;padding:2px 10px;border:1px dashed var(--border,#475569);border-radius:6px;cursor:pointer" title="ดับเบิ้ลคลิกเพื่อแก้ไข" ondblclick="stockEditLocationInline(this,\'' + p.sku + '\',\'' + loc.code + '\',\'' + nameEsc + '\')">' + v + '</span></td>';
+    h += '<td style="padding:4px">' + (loc.sellable ?
+      '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">ใช่</span>' :
+      '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280">ไม่</span>') + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  return h;
 }
 
 // Import Excel — sheet แรก, หา column SKU/จำนวน จาก header (รองรับทั้งไทย/อังกฤษ) fallback คอลัมน์ 0/1
