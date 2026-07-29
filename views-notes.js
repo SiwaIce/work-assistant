@@ -101,8 +101,17 @@ function rNotes(el) {
 // ================================================================
 // NOTE CARDS
 // ================================================================
+// การ์ดเนื้อหายาว/มี field เยอะ กินจอเยอะเกินไป — พับเก็บไว้ก่อน (max-height + gradient) เกิน threshold
+// ค่อยโชว์ปุ่มขยาย/ย่อ เก็บสถานะขยายไว้ต่อการ์ด (id) กันย่อกลับเองตอน re-render
+var _postitExpanded = {};
+function togglePostitExpand(id) {
+  _postitExpanded[id] = !_postitExpanded[id];
+  render();
+}
+
 function _noteCard(n) {
   var cs = _noteCS(n.color);
+  var expanded = !!_postitExpanded[n.id];
   var h = '<div style="' + cs + 'border-radius:10px;padding:12px;position:relative;min-height:110px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:4px">';
   h += '<div style="font-weight:700;font-size:12px;flex:1;word-break:break-word">' + sanitize(n.title || (n.type === 'fields' ? '📋 Fields Note' : '📝 Note')) + (n.pinned ? ' 📌' : '') + '</div>';
@@ -113,6 +122,9 @@ function _noteCard(n) {
   h += '</div></div>';
 
   if (n.type === 'fields' && n.fields && n.fields.length) {
+    var totalLen = n.fields.reduce(function(s, f) { return s + (f.value || '').length; }, 0);
+    var isLong = totalLen > 300 || n.fields.length > 5;
+    if (isLong && !expanded) h += '<div style="position:relative;max-height:230px;overflow:hidden">';
     n.fields.forEach(function(f, fi) {
       h += '<div style="margin-bottom:6px">';
       if (f.label) h += '<div style="font-size:9px;color:var(--text2);margin-bottom:2px;text-transform:uppercase;letter-spacing:.4px">' + sanitize(f.label) + '</div>';
@@ -121,10 +133,20 @@ function _noteCard(n) {
       if (f.value) h += '<button class="btn bsm bo" style="flex-shrink:0;padding:3px 6px;font-size:10px" onclick="cpNoteField(\'' + n.id + '\',' + fi + ')" title="Copy ' + sanitize(f.label || 'field') + '">📋</button>';
       h += '</div></div>';
     });
+    if (isLong && !expanded) {
+      h += '<div style="position:absolute;left:0;right:0;bottom:0;height:44px;background:linear-gradient(transparent,' + (_noteColors.find(function(c){return c.id===(n.color||'yellow');}) || _noteColors[0]).bg.replace('.13', '.9') + ')"></div>';
+      h += '</div>';
+      h += '<div style="text-align:center;margin-bottom:6px"><span onclick="togglePostitExpand(\'' + n.id + '\')" style="cursor:pointer;color:var(--accent,#3b82f6);font-size:11px">▾ ดูเพิ่มเติม</span></div>';
+    } else if (isLong) {
+      h += '<div style="text-align:center;margin-bottom:6px"><span onclick="togglePostitExpand(\'' + n.id + '\')" style="cursor:pointer;color:var(--accent,#3b82f6);font-size:11px">▴ ย่อกลับ</span></div>';
+    }
     h += '<button class="btn bsm bo" style="margin-top:6px;font-size:10px;width:100%;text-align:center" onclick="cpAllNoteFields(\'' + n.id + '\')">📋 Copy ทั้งหมด</button>';
   } else {
-    var preview = (n.content || '').substr(0, 180);
-    h += '<div style="font-size:11.5px;white-space:pre-wrap;word-break:break-word;max-height:110px;overflow:hidden;color:var(--text)">' + sanitize(preview) + (n.content && n.content.length > 180 ? '…' : '') + '</div>';
+    var content = n.content || '';
+    var isLongText = content.length > 180;
+    var shown = (isLongText && !expanded) ? content.substr(0, 180) + '…' : content;
+    h += '<div style="font-size:11.5px;white-space:pre-wrap;word-break:break-word;' + (isLongText && !expanded ? 'max-height:110px;overflow:hidden' : '') + ';color:var(--text)">' + sanitize(shown) + '</div>';
+    if (isLongText) h += '<div style="text-align:center;margin:4px 0"><span onclick="togglePostitExpand(\'' + n.id + '\')" style="cursor:pointer;color:var(--accent,#3b82f6);font-size:11px">' + (expanded ? '▴ ย่อกลับ' : '▾ ดูเพิ่มเติม') + '</span></div>';
     h += '<button class="btn bsm bo" style="margin-top:8px;font-size:10px;width:100%;text-align:center" onclick="cpNote(\'' + n.id + '\')">📋 Copy</button>';
   }
   h += '</div>';
