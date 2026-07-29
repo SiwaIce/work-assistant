@@ -47,7 +47,8 @@ const ST = {
     postit: 'v7_postit',
     // Stock สินค้า — เก็บแยกจาก v7_products โดยตั้งใจ (products มี guard กันข้อมูล sync ทับ ไม่อยากไปแตะ)
     stockLevels: 'v7_stockLevels',
-    stockLog: 'v7_stockLog'
+    stockLog: 'v7_stockLog',
+    stockFavs: 'v7_stockFavs'
   },
 
   // ✅ Migration ครั้งเดียว: 'postit' เคยไม่มีอยู่ใน _keys เลย ทำให้ ST.add/update/delete('postit', ...)

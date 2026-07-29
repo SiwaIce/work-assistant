@@ -227,7 +227,8 @@ var SYNC_KEY_MAP = {
   // ✅ Stock สินค้า (Phase 1) — คนละ collection กับ 'products' เดิม (ดูคอมเมนต์ด้านบน) เก็บเป็น array ปกติ
   // sync ผ่าน listener ทั่วไปได้เลย ไม่ต้องมี loader พิเศษแบบ products
   'stockLevels': 'stockLevels',
-  'stockLog': 'stockLog'
+  'stockLog': 'stockLog',
+  'stockFavs': 'stockFavs'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
