@@ -83,15 +83,16 @@ function rStock(el) {
   h += '<div class="sc" style="cursor:pointer' + (stockLowFilter === 'out' ? ';border-color:var(--accent)' : '') + '" onclick="stockLowFilter=\'out\';render()"><div class="sn c4">' + outCount + '</div><div class="sl">หมดสต็อก</div></div>';
   h += '</div>';
 
-  h += '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
-  h += '<input type="text" id="stockSrc" value="' + sanitize(stockSearch) + '" placeholder="🔍 ค้นหาสินค้า/SKU" style="flex:1;min-width:150px" oninput="stockSearch=this.value;render()" autocomplete="off">';
-  h += '<select onchange="stockCategoryFilter=this.value;render()" style="min-width:140px">';
-  h += '<option value="all"' + (stockCategoryFilter === 'all' ? ' selected' : '') + '>📂 ทุกหมวด</option>';
+  h += '<div style="margin-bottom:10px">';
+  h += '<input type="text" id="stockSrc" value="' + sanitize(stockSearch) + '" placeholder="🔍 ค้นหาสินค้า/SKU" style="width:100%" oninput="stockSearch=this.value;render()" autocomplete="off">';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+  h += '<button class="btn bsm ' + (stockCategoryFilter === 'all' ? 'bp' : 'bo') + '" onclick="stockCategoryFilter=\'all\';render()">📂 ทุกหมวด</button>';
   (typeof PRODUCT_CATEGORIES !== 'undefined' ? PRODUCT_CATEGORIES : []).forEach(function(c) {
-    h += '<option value="' + c.id + '"' + (stockCategoryFilter === c.id ? ' selected' : '') + '>' + c.name + '</option>';
+    h += '<button class="btn bsm ' + (stockCategoryFilter === c.id ? 'bp' : 'bo') + '" onclick="stockCategoryFilter=\'' + c.id + '\';render()">' + sanitize(c.name) + '</button>';
   });
-  h += '</select>';
-  if (stockLowFilter !== 'all') h += '<button class="btn bsm bo" onclick="stockLowFilter=\'all\';render()">✕ ล้างตัวกรอง</button>';
+  if (stockLowFilter !== 'all') h += '<button class="btn bsm bo" onclick="stockLowFilter=\'all\';render()">✕ ล้างตัวกรองสถานะ</button>';
   h += '</div>';
 
   if (!rows.length) {
