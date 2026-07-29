@@ -6,7 +6,7 @@
 // ================================================================
 
 var stockSearch = '';
-var stockCategoryFilter = 'all';
+var stockCategoryFilters = []; // ว่าง = ทุกหมวด, เลือกได้หลายอัน เช่น Drone + Payload
 var stockLowFilter = 'all'; // all | low | out
 var stockShowLog = false;
 var STOCK_LOW_THRESHOLD = 5;
@@ -27,6 +27,13 @@ function setStockQty(sku, productName, newQty, source, note) {
   if (newQty !== before) {
     ST.add('stockLog', { sku: sku, productName: productName, before: before, after: newQty, delta: newQty - before, source: source || 'app', note: note || '', date: _nw() });
   }
+}
+
+function stockToggleCategory(catId) {
+  var i = stockCategoryFilters.indexOf(catId);
+  if (i === -1) stockCategoryFilters.push(catId);
+  else stockCategoryFilters.splice(i, 1);
+  render();
 }
 
 function _stockSourceLabel(s) {
@@ -63,7 +70,7 @@ function rStock(el) {
       return (r.product.name || '').toLowerCase().indexOf(q) !== -1 || (r.product.sku || '').toLowerCase().indexOf(q) !== -1;
     });
   }
-  if (stockCategoryFilter !== 'all') rows = rows.filter(function(r) { return r.product.category === stockCategoryFilter; });
+  if (stockCategoryFilters.length) rows = rows.filter(function(r) { return stockCategoryFilters.indexOf(r.product.category) !== -1; });
   if (stockLowFilter === 'low') rows = rows.filter(function(r) { return r.qty > 0 && r.qty < STOCK_LOW_THRESHOLD; });
   else if (stockLowFilter === 'out') rows = rows.filter(function(r) { return r.qty <= 0; });
 
@@ -88,9 +95,9 @@ function rStock(el) {
   h += '</div>';
 
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
-  h += '<button class="btn bsm ' + (stockCategoryFilter === 'all' ? 'bp' : 'bo') + '" onclick="stockCategoryFilter=\'all\';render()">📂 ทุกหมวด</button>';
+  h += '<button class="btn bsm ' + (!stockCategoryFilters.length ? 'bp' : 'bo') + '" onclick="stockCategoryFilters=[];render()">📂 ทุกหมวด</button>';
   (typeof PRODUCT_CATEGORIES !== 'undefined' ? PRODUCT_CATEGORIES : []).forEach(function(c) {
-    h += '<button class="btn bsm ' + (stockCategoryFilter === c.id ? 'bp' : 'bo') + '" onclick="stockCategoryFilter=\'' + c.id + '\';render()">' + sanitize(c.name) + '</button>';
+    h += '<button class="btn bsm ' + (stockCategoryFilters.indexOf(c.id) !== -1 ? 'bp' : 'bo') + '" onclick="stockToggleCategory(\'' + c.id + '\')">' + sanitize(c.name) + '</button>';
   });
   if (stockLowFilter !== 'all') h += '<button class="btn bsm bo" onclick="stockLowFilter=\'all\';render()">✕ ล้างตัวกรองสถานะ</button>';
   h += '</div>';
@@ -108,7 +115,9 @@ function rStock(el) {
       h += '<td style="font-size:11px">' + (p.sku ? qcopyHtml(p.sku) : '<span style="color:var(--text2)" title="ไม่มี SKU ตั้งค่า Stock ไม่ได้">-</span>') + '</td>';
       h += '<td>' + sanitize(p.name || '-') + '</td>';
       h += '<td>' + sanitize((typeof getCategoryName === 'function' ? getCategoryName(p.category) : p.category) || '-') + '</td>';
-      h += '<td style="text-align:center;font-weight:700">' + r.qty + '</td>';
+      h += '<td style="text-align:center">' + (p.sku ?
+        '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="showEditStockQtyM(\'' + p.id + '\')" title="กดเพื่อแก้ไขจำนวน">' + r.qty + '</span>' :
+        '<span style="font-weight:700">' + r.qty + '</span>') + '</td>';
       h += '<td style="font-size:11px;color:var(--text2)">' + (r.updatedAt ? fDT(r.updatedAt) + (r.updatedBy ? ' · ' + sanitize(r.updatedBy) : '') : '-') + '</td>';
       h += '<td>' + (p.sku ? '<button class="btn bsm bo" onclick="showEditStockQtyM(\'' + p.id + '\')">✏️</button>' : '') + '</td>';
       h += '</tr>';
