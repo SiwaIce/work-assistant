@@ -284,6 +284,8 @@ function renderQuotationItemsTable() {
   for (var pi = 0; pi < prods.length; pi++) dlHtml += '<option value="' + sanitize(prods[pi].name) + '">';
   dlHtml += '</datalist>';
 
+  var _curQuote = (currentQuoteId && typeof getQuoteById === 'function') ? getQuoteById(currentQuoteId) : null;
+
   var html = dlHtml + '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
   html += '<thead><tr>';
   html += '<th style="width:40px">#</th>';
@@ -310,7 +312,7 @@ function renderQuotationItemsTable() {
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + (item.sku ? qcopyHtml(item.sku) : '-') + '</td>';
     html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)">' +
-      (typeof stockAvailabilityHtml === 'function' ? stockAvailabilityHtml(item.sku, itemQty) : '') + '</td>';
+      (typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';

@@ -411,7 +411,8 @@ function rSODetail(el) {
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">จำนวน</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">ราคา/หน่วย</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">รวม</th>' +
-    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">Serial</th></tr></thead><tbody>';
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">Serial</th>' +
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความพร้อมส่ง</th></tr></thead><tbody>';
   (s.items||[]).forEach(function(it,idx){
     var lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
     var sns = _soItemSerials(it);
@@ -423,10 +424,11 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:right">' + fmtMoney(Number(it.unitPrice)||0) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + fmtMoney(lineTotal) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
+    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s) : '') + '</td>';
     html += '</tr>';
   });
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
-  html += '<td style="padding:10px;text-align:right">' + fmtMoney(total) + '</td><td colspan="2"></td></tr>';
+  html += '<td style="padding:10px;text-align:right">' + fmtMoney(total) + '</td><td colspan="3"></td></tr>';
   html += '</tbody></table></div></div>';
 
   // timeline — กดรายการเพื่อขยายดูรายละเอียด/แก้ไขในหน้าเดียวกัน (ไม่ใช้ modal)
@@ -544,7 +546,7 @@ function showCreateSOModal(opts) {
     : (pipe && pipe.model
       ? [{ model: pipe.model, qty: 1, unitPrice: Number(pipe.forecastAmount)||0 }]
       : [{ model: '', qty: 1, unitPrice: 0 }]);
-  initItems.forEach(function(it, idx){ html += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice); });
+  initItems.forEach(function(it, idx){ html += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
   html += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin-top:4px">+ เพิ่มสินค้า</button></div>';
 
   html += '<div><label class="lbl">หมายเหตุ</label><textarea id="soN_note" class="inp" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea></div>';
@@ -584,11 +586,12 @@ function _soFillFromPipe(pipeId) {
   } else {
     items.push({ model: '', qty: 1, unitPrice: 0 });
   }
-  items.forEach(function(it, idx){ wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice); });
+  items.forEach(function(it, idx){ wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
 }
 
-function _soItemRowHtml(idx, model, qty, price) {
+function _soItemRowHtml(idx, model, qty, price, sku) {
   return '<div style="display:flex;gap:6px;margin-bottom:4px;align-items:center" id="soIR_' + idx + '">' +
+    '<input type="hidden" id="soI_sku_' + idx + '" value="' + sanitize(sku || '') + '">' +
     '<input class="inp" style="flex:2" placeholder="Model / สินค้า" value="' + sanitize(model||'') + '" id="soI_m_' + idx + '">' +
     '<input class="inp" type="number" style="width:58px" placeholder="จำนวน" value="' + (qty||1) + '" id="soI_q_' + idx + '" min="1">' +
     '<input class="inp" type="number" style="width:95px" placeholder="ราคา/หน่วย" value="' + (price||0) + '" id="soI_p_' + idx + '">' +
@@ -601,7 +604,7 @@ function _soAddItemRow() {
   if (!wrap) return;
   var id = 'n' + (++_soIC);
   var d = document.createElement('div');
-  d.innerHTML = _soItemRowHtml(id, '', 1, 0);
+  d.innerHTML = _soItemRowHtml(id, '', 1, 0, '');
   wrap.appendChild(d.firstChild);
 }
 
@@ -621,8 +624,9 @@ function saveCreateSO() {
     var mEl = row.querySelector('[id^="soI_m_"]');
     var qEl = row.querySelector('[id^="soI_q_"]');
     var pEl = row.querySelector('[id^="soI_p_"]');
+    var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push({ model: mEl.value.trim(), qty: Number(qEl.value)||1, unitPrice: Number(pEl.value)||0, serials:[] });
+    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value)||1, unitPrice: Number(pEl.value)||0, serials:[] });
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
@@ -983,7 +987,7 @@ function createSOFromQuotation(quoteId) {
   var q = quotes.filter(function(x){ return x.id === quoteId; })[0];
   if (!q) { toast('❌ ไม่พบใบเสนอราคา'); return; }
   var presetItems = (q.items || []).map(function(it){
-    return { model: it.name || it.model || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [] };
+    return { model: it.name || it.model || '', sku: it.sku || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [] };
   });
   showCreateSOModal({ pipelineId: q.pipelineId || '', quotationId: q.id, dealerId: q.dealerId || '', customerPO: q.poNo || '', presetItems: presetItems });
 }

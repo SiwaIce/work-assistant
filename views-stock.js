@@ -18,9 +18,9 @@ var stockShowLog = false;
 var stockExpanded = {}; // sku -> เปิด/ปิดแถวสรุปคลังย่อยในหน้ารายการ
 var STOCK_LOW_THRESHOLD = 5;
 
-// คลังย่อยทั้งหมด — ชุดเดียวกันทุก SKU (ตามที่กำหนดไว้ก่อน)
-// sellable:true = นับเป็น "พร้อมขาย" — ที่เหลือ (ติดจอง/ดาเมจ/รอขึ้นทะเบียน) ไม่นับว่าขายได้จริง
-var STOCK_LOCATIONS = [
+// คลังย่อยทั้งหมด — ชุดเดียวกันทุก SKU ตั้งค่าได้ (เก็บใน ST 'stockLocations' เพิ่มคลังใหม่ได้จากปุ่ม "+ เพิ่มคลัง" ในเมนู Stock)
+// sellable:true = นับเป็น "พร้อมขาย" — ที่เหลือ (ติดจอง/ดาเมจ/รอขึ้นทะเบียน ฯลฯ) ไม่นับว่าขายได้จริง
+var STOCK_DEFAULT_LOCATIONS = [
   { code: '0001', name: 'Normal Good', sellable: true, warehouse: '1001 SiS Main Warehouse' },
   { code: '1021', name: 'Sales Booking', sellable: false, warehouse: '1001 SiS Main Warehouse' },
   { code: '1027', name: 'Damaged Boxes', sellable: false, warehouse: '1001 SiS Main Warehouse' },
@@ -28,8 +28,27 @@ var STOCK_LOCATIONS = [
 ];
 var STOCK_BOOKING_STATUSES = ['รอส่งมอบ', 'เตรียมส่งมอบ', 'ส่งมอบแล้ว', 'ยกเลิก'];
 
+// เซ็ตค่าเริ่มต้นครั้งแรกถ้ายังไม่เคยมีคลังเก็บไว้ — หลังจากนั้นแก้/เพิ่มได้จากในแอป ไม่ต้องแก้โค้ด
+function getStockLocations() {
+  var saved = ST.getAll('stockLocations');
+  if (saved.length) return saved;
+  STOCK_DEFAULT_LOCATIONS.forEach(function(l) { ST.add('stockLocations', l); });
+  return ST.getAll('stockLocations');
+}
+
+function stockAddLocationDef(code, name, sellable, warehouse) {
+  code = (code || '').trim();
+  name = (name || '').trim();
+  warehouse = (warehouse || '').trim();
+  if (!code || !name || !warehouse) { toast('⚠️ กรอกให้ครบทุกช่อง'); return false; }
+  var exists = getStockLocations().some(function(l) { return l.code === code; });
+  if (exists) { toast('⚠️ มีโค้ดคลัง ' + code + ' อยู่แล้ว'); return false; }
+  ST.add('stockLocations', { code: code, name: name, sellable: !!sellable, warehouse: warehouse });
+  return true;
+}
+
 function stockLocationName(code) {
-  var loc = STOCK_LOCATIONS.filter(function(l) { return l.code === code; })[0];
+  var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
   return loc ? loc.name : code;
 }
 
@@ -64,38 +83,219 @@ function stockTotalQty(lots) {
 }
 
 function stockSellableQty(lots) {
-  var sellableCodes = STOCK_LOCATIONS.filter(function(l) { return l.sellable; }).map(function(l) { return l.code; });
+  var sellableCodes = getStockLocations().filter(function(l) { return l.sellable; }).map(function(l) { return l.code; });
   return lots.filter(function(l) { return sellableCodes.indexOf(l.location) !== -1; }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
 }
 
-// เฟส 1: badge สถานะสต็อกแบบ read-only ให้หน้าอื่น (ใบเสนอราคา/SO ฯลฯ) เรียกใช้ตรง — ยังไม่มีปุ่มจองลอยๆ (เฟส 2)
-// ไล่ใช้ 0001 (พร้อมส่ง) ก่อน ถ้าไม่พอค่อยดึงจาก QI (รอขึ้นทะเบียน) ที่เหลือหลังจากนั้นคือส่วนที่ต้อง PR/PO
+// ================================================================
+// เฟส 2/3: จองลอยๆ แบบคิว FIFO — หลาย quotation จองสินค้าตัวเดียวกันพร้อมกันได้
+// จองก่อนได้ก่อน: คำนวณจากสต็อกจริง (0001 ก่อน แล้ว QI) ลบด้วยรายการจองที่มาก่อนหน้าตามลำดับเวลา
+// ================================================================
+
+function stockGetReservations(sku) {
+  return ST.getAll('stockReservations')
+    .filter(function(r) { return r.sku === sku && r.status === 'active'; })
+    .sort(function(a, b) { return (a.createdAt || '').localeCompare(b.createdAt || ''); });
+}
+
+function stockGetReservationFor(sku, quotationId) {
+  if (!quotationId) return null;
+  return ST.getAll('stockReservations').filter(function(r) {
+    return r.sku === sku && r.quotationId === quotationId && r.status === 'active';
+  })[0] || null;
+}
+
+// ไล่จัดสรรสต็อกจริงให้แต่ละรายการจองตามลำดับคิว (มาก่อนได้ก่อน) — ใช้ทั้งแสดงผลและตอนย้าย stock จริงตอนสร้าง SO
+function stockComputeQueue(sku) {
+  var lots = stockGetLots(sku);
+  var pool0001 = stockLocTotal(lots, '0001');
+  var poolQI = stockLocTotal(lots, 'QI');
+  return stockGetReservations(sku).map(function(r) {
+    var need = Number(r.qty) || 0;
+    var from0001 = Math.min(need, pool0001); pool0001 -= from0001; need -= from0001;
+    var fromQI = Math.min(need, poolQI); poolQI -= fromQI; need -= fromQI;
+    return { reservation: r, from0001: from0001, fromQI: fromQI, allocated: from0001 + fromQI, shortfall: need };
+  });
+}
+
+// พรีวิว: ถ้าจะจองจำนวนนี้ตอนนี้ (ยังไม่กดจองจริง) จะได้เท่าไหร่ — หักรายการจองที่มีอยู่ก่อนแล้วออกจาก pool ก่อนเสมอ
+function stockPreviewAllocation(sku, qty) {
+  var lots = stockGetLots(sku);
+  var pool0001 = stockLocTotal(lots, '0001');
+  var poolQI = stockLocTotal(lots, 'QI');
+  stockGetReservations(sku).forEach(function(r) {
+    var need = Number(r.qty) || 0;
+    var from0001 = Math.min(need, pool0001); pool0001 -= from0001; need -= from0001;
+    var fromQI = Math.min(need, poolQI); poolQI -= fromQI; need -= fromQI;
+  });
+  var need = Math.max(0, Math.round(Number(qty) || 0));
+  var from0001 = Math.min(need, pool0001); pool0001 -= from0001; need -= from0001;
+  var fromQI = Math.min(need, poolQI); poolQI -= fromQI; need -= fromQI;
+  return { from0001: from0001, fromQI: fromQI, shortfall: need, qiLeftover: poolQI };
+}
+
+function stockCreateReservation(sku, productName, qty, opts) {
+  opts = opts || {};
+  return ST.add('stockReservations', {
+    sku: sku, productName: productName, qty: Math.max(0, Math.round(Number(qty) || 0)),
+    quotationId: opts.quotationId || '', quoteNo: opts.quoteNo || '',
+    dealerName: opts.dealerName || '', salesperson: opts.salesperson || _stockCurrentUserName(),
+    projectName: opts.projectName || '', soId: '', soNumber: '',
+    status: 'active', createdAt: _nw()
+  });
+}
+
+function stockCancelReservation(id) {
+  ST.update('stockReservations', id, { status: 'cancelled' });
+}
+
+function _stockAllocBadgesHtml(sku, alloc) {
+  var h = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;font-weight:400">';
+  if (alloc.from0001 > 0) {
+    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">✓ พร้อมส่ง ' + alloc.from0001 + '</span>';
+  }
+  if (alloc.fromQI > 0) {
+    h += '<a href="#" onclick="event.stopPropagation();go(\'stockDetail\',{sku:\'' + sku + '\'});return false" style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(245,158,11,.15);color:#b45309;text-decoration:none" title="กดดูรายละเอียด QI">⏳ จาก QI ' + alloc.fromQI + '</a>';
+  }
+  if (alloc.shortfall > 0) {
+    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + alloc.shortfall + ' ต้อง PR/PO</span>';
+  }
+  h += '</div>';
+  if (alloc.qiLeftover > 0 && alloc.fromQI > 0) {
+    h += '<div style="font-size:10px;color:var(--text2);margin-top:2px;font-weight:400">QI เหลืออีก ' + alloc.qiLeftover + ' สำรองไว้</div>';
+  }
+  return h;
+}
+
+// เฟส 1: badge สถานะสต็อกแบบ read-only (ไม่มีปุ่ม) ให้หน้าอื่นเรียกใช้ตรงๆ — คิดรวมรายการจองที่มีอยู่แล้วด้วย
 function stockAvailabilityHtml(sku, qty) {
   if (!sku) return '';
   qty = Math.max(0, Math.round(Number(qty) || 0));
   if (qty <= 0) return '';
-  var lots = stockGetLots(sku);
-  var sellableTotal = stockLocTotal(lots, '0001');
-  var qiTotal = stockLocTotal(lots, 'QI');
-  var usedSellable = Math.min(qty, sellableTotal);
-  var remaining = qty - usedSellable;
-  var usedQI = Math.min(remaining, qiTotal);
-  var shortfall = remaining - usedQI;
-  var qiLeftover = qiTotal - usedQI;
+  return _stockAllocBadgesHtml(sku, stockPreviewAllocation(sku, qty));
+}
 
-  var h = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;font-weight:400">';
-  if (usedSellable > 0) {
-    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">✓ พร้อมส่ง ' + usedSellable + '</span>';
+// เฟส 2: badge + ปุ่มจองลอยๆ/ยกเลิกจอง สำหรับหน้าใบเสนอราคาโดยเฉพาะ (ผูกกับ quotationId)
+function stockQuoteAvailabilityHtml(sku, qty, quote) {
+  if (!sku) return '';
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (qty <= 0) return '';
+  var quotationId = quote ? quote.id : '';
+  var existing = quotationId ? stockGetReservationFor(sku, quotationId) : null;
+
+  if (existing) {
+    if (existing.qty !== qty) { ST.update('stockReservations', existing.id, { qty: qty }); existing.qty = qty; }
+    var queue = stockComputeQueue(sku);
+    var idx = -1;
+    for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === existing.id) { idx = i; break; } }
+    var entry = idx !== -1 ? queue[idx] : { from0001: 0, fromQI: 0, shortfall: qty };
+    var h = _stockAllocBadgesHtml(sku, { from0001: entry.from0001, fromQI: entry.fromQI, shortfall: entry.shortfall, qiLeftover: 0 });
+    h += '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(59,130,246,.15);color:#2563eb">🔒 จองแล้ว (คิวที่ ' + (idx + 1) + ')</span>';
+    h += '<button class="btn bsm bd" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();stockCancelReservationAndRefresh(\'' + existing.id + '\')">✕ ยกเลิกจอง</button>';
+    h += '</div>';
+    return h;
   }
-  if (usedQI > 0) {
-    h += '<a href="#" onclick="event.stopPropagation();go(\'stockDetail\',{sku:\'' + sku + '\'});return false" style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(245,158,11,.15);color:#b45309;text-decoration:none" title="กดดูรายละเอียด QI">⏳ จาก QI ' + usedQI + '</a>';
+
+  var alloc = stockPreviewAllocation(sku, qty);
+  var h2 = _stockAllocBadgesHtml(sku, alloc);
+  h2 += '<button class="btn bsm bo" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="event.stopPropagation();stockReserveFromQuote(\'' + sku + '\',' + qty + (quotationId ? ",'" + quotationId + "'" : ',null') + ')">🔒 จองลอยๆ</button>';
+  return h2;
+}
+
+function stockReserveFromQuote(sku, qty, quotationId) {
+  var p = getProductBySku(sku);
+  var quote = quotationId ? getQuoteById(quotationId) : null;
+  stockCreateReservation(sku, p ? p.name : '', qty, {
+    quotationId: quotationId || '', quoteNo: quote ? quote.quoteNo : '',
+    dealerName: quote ? quote.dealerName : '', salesperson: quote ? quote.quotedBy : _stockCurrentUserName(),
+    projectName: quote ? quote.projectName : ''
+  });
+  toast('🔒 จองลอยๆ แล้ว');
+  if (typeof renderQuotationItemsTable === 'function') renderQuotationItemsTable();
+}
+
+function stockCancelReservationAndRefresh(id) {
+  stockCancelReservation(id);
+  toast('✕ ยกเลิกจองแล้ว');
+  if (typeof renderQuotationItemsTable === 'function') renderQuotationItemsTable();
+}
+
+// เฟส 3: ย้ายส่วนที่ "พร้อมส่ง" (จาก 0001) ของรายการจองนี้เข้า 1021 จริง ผูกกับเลข SO
+// ส่วนที่ยังติด QI (รอขึ้นทะเบียน) จะไม่ย้าย รอ admin ย้าย QI -> 0001 เองก่อน แล้วค่อยกดยืนยันซ้ำ
+function stockFulfillReservationToSO(sku, so) {
+  var p = getProductBySku(sku);
+  var productName = p ? p.name : sku;
+  var reservation = stockGetReservationFor(sku, so.quotationId);
+  if (!reservation) { toast('⚠️ ไม่พบรายการจองของสินค้านี้'); return; }
+  var queue = stockComputeQueue(sku);
+  var entry = null;
+  for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === reservation.id) { entry = queue[i]; break; } }
+  if (!entry || entry.from0001 <= 0) { toast('⚠️ ยังไม่มีของพร้อมส่งจาก 0001 ให้ย้าย'); return; }
+
+  var moveQty = entry.from0001;
+  var lots = stockGetLots(sku).slice();
+  var sourceLots = lots.filter(function(l) { return l.location === '0001'; })
+    .sort(function(a, b) { return (a.dateIn || '').localeCompare(b.dateIn || ''); });
+  var remaining = moveQty;
+  for (var j = 0; j < sourceLots.length && remaining > 0; j++) {
+    var lot = sourceLots[j];
+    var idx = lots.findIndex(function(l) { return l.id === lot.id; });
+    var take = Math.min(remaining, Number(lot.qty) || 0);
+    if (take <= 0) continue;
+    remaining -= take;
+    if (take >= (Number(lot.qty) || 0)) lots.splice(idx, 1);
+    else lots[idx] = Object.assign({}, lot, { qty: lot.qty - take });
   }
-  if (shortfall > 0) {
-    h += '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + shortfall + ' ต้อง PR/PO</span>';
+  var actuallyMoved = moveQty - remaining;
+  if (actuallyMoved <= 0) { toast('⚠️ ของใน 0001 ไม่พออีกแล้ว'); return; }
+
+  lots.push({
+    id: _stockLotId(), location: '1021', ref: so.soNumber, qty: actuallyMoved, dateIn: _nw(),
+    note: 'ยืนยันจาก SO', fromLocation: '0001',
+    soNumber: so.soNumber, bookedDate: _nw(),
+    salesperson: reservation.salesperson || '', dealerName: reservation.dealerName || so.dealerName || '',
+    projectName: reservation.projectName || '', status: 'เตรียมส่งมอบ'
+  });
+  _stockSaveLots(sku, productName, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: productName, locationCode: '0001', locationName: stockLocationName('0001'),
+    toLocationCode: '1021', toLocationName: stockLocationName('1021'),
+    qty: actuallyMoved, note: 'ยืนยันจาก SO ' + (so.soNumber || ''), date: _nw(), type: 'transfer'
+  });
+
+  // ส่วนที่ย้ายแล้วตัดออกจากรายการจอง — ถ้าเหลือ 0 ถือว่าจองนี้สำเร็จสมบูรณ์ ถ้ายังเหลือ (ติด QI) คงไว้ในคิวต่อ
+  var newQty = (Number(reservation.qty) || 0) - actuallyMoved;
+  if (newQty <= 0) ST.update('stockReservations', reservation.id, { status: 'confirmed', soId: so.id, soNumber: so.soNumber, qty: 0 });
+  else ST.update('stockReservations', reservation.id, { qty: newQty, soId: so.id, soNumber: so.soNumber });
+
+  toast('📦 ย้ายเข้า 1021 แล้ว ' + actuallyMoved + ' หน่วย');
+  if (typeof rSODetail === 'function') rSODetail(document.getElementById('ct'));
+}
+
+// เฟส 3: badge ความพร้อมส่งต่อรายการใน SO — ใช้รายการจองของ quotation ต้นทาง (ถ้ามี) ไม่งั้น fallback เป็นสถานะสต็อกสดทั่วไป
+// มีปุ่ม "ยืนยัน & ย้ายเข้า 1021" เมื่อมีส่วนที่พร้อมส่งจาก 0001 ให้ย้ายจริง
+function stockSOItemReadinessHtml(sku, qty, so) {
+  if (!sku) return '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้</span>';
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  var reservation = so.quotationId ? stockGetReservationFor(sku, so.quotationId) : null;
+
+  var from0001, fromQI, shortfall;
+  if (reservation) {
+    var queue = stockComputeQueue(sku);
+    var entry = null;
+    for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === reservation.id) { entry = queue[i]; break; } }
+    from0001 = entry ? entry.from0001 : 0;
+    fromQI = entry ? entry.fromQI : 0;
+    shortfall = entry ? entry.shortfall : qty;
+  } else {
+    var alloc = stockPreviewAllocation(sku, qty);
+    from0001 = alloc.from0001; fromQI = alloc.fromQI; shortfall = alloc.shortfall;
   }
-  h += '</div>';
-  if (qiLeftover > 0 && usedQI > 0) {
-    h += '<div style="font-size:10px;color:var(--text2);margin-top:2px;font-weight:400">QI เหลืออีก ' + qiLeftover + ' สำรองไว้</div>';
+
+  var h = _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
+  if (reservation && from0001 > 0) {
+    h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button>';
   }
   return h;
 }
@@ -215,6 +415,132 @@ function stockSetLotStatus(sku, productName, lotId, status) {
   render();
 }
 
+// แก้ไขจำนวน/รายละเอียดของ lot ที่กรอกผิด (ไม่ใช่การย้ายคลัง) — log เป็น adjust ถ้าจำนวนเปลี่ยน
+function stockUpdateLot(sku, productName, lotId, fields) {
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === lotId; });
+  if (idx === -1) return;
+  var before = Number(lots[idx].qty) || 0;
+  var after = fields.qty !== undefined ? Math.max(0, Math.round(Number(fields.qty) || 0)) : before;
+  lots[idx] = Object.assign({}, lots[idx], fields, { qty: after });
+  _stockSaveLots(sku, productName, lots);
+  if (after !== before) {
+    ST.add('stockLog', {
+      sku: sku, productName: productName, locationCode: lots[idx].location, locationName: stockLocationName(lots[idx].location),
+      before: before, after: after, delta: after - before, source: 'app', note: 'แก้ไขรายการ', date: _nw(), type: 'adjust'
+    });
+  }
+}
+
+// ลบ lot ที่เผลอกรอกผิดทิ้งทั้งรายการ
+function stockDeleteLot(sku, lotId) {
+  if (!confirm('ลบรายการนี้ทิ้ง?\nใช้ตอนกรอกผิดเท่านั้น ไม่สามารถกู้คืนได้')) return;
+  var p = getProductBySku(sku);
+  var productName = p ? p.name : sku;
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === lotId; });
+  if (idx === -1) return;
+  var removed = lots[idx];
+  lots.splice(idx, 1);
+  _stockSaveLots(sku, productName, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: productName, locationCode: removed.location, locationName: stockLocationName(removed.location),
+    before: Number(removed.qty) || 0, after: 0, delta: -(Number(removed.qty) || 0), source: 'app', note: 'ลบรายการที่กรอกผิด', date: _nw(), type: 'adjust'
+  });
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
+function showStockEditLotM(sku, lotId) {
+  var p = getProductBySku(sku);
+  var lots = stockGetLots(sku);
+  var lot = lots.filter(function(l) { return l.id === lotId; })[0];
+  if (!p || !lot) return;
+  var isBooking = lot.location === '1021';
+  var body = '<div class="fg"><label>จำนวน</label><input type="number" id="elot_qty" min="0" value="' + lot.qty + '"></div>';
+  if (isBooking) {
+    body += '<div class="fg"><label>SO No.</label><input type="text" id="elot_so" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
+    body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="elot_sales" value="' + sanitize(lot.salesperson || '') + '"></div>';
+    body += '<div class="fg"><label>Dealer</label><input type="text" id="elot_dealer" value="' + sanitize(lot.dealerName || '') + '"></div>';
+    body += '<div class="fg"><label>โครงการ</label><input type="text" id="elot_project" value="' + sanitize(lot.projectName || '') + '"></div>';
+    body += '<div class="fg"><label>สถานะ</label><select id="elot_status">' + STOCK_BOOKING_STATUSES.map(function(st) { return '<option' + (st === lot.status ? ' selected' : '') + '>' + st + '</option>'; }).join('') + '</select></div>';
+  } else {
+    body += '<div class="fg"><label>อ้างอิง (PR/PO)</label><input type="text" id="elot_ref" value="' + sanitize(lot.ref || '') + '"></div>';
+    body += '<div class="fg"><label>หมายเหตุ</label><input type="text" id="elot_note" value="' + sanitize(lot.note || '') + '"></div>';
+  }
+  body += '<div style="display:flex;gap:8px;margin-top:8px">';
+  body += '<button class="btn bp" style="flex:1" onclick="saveStockEditLot(\'' + sku + '\',\'' + lotId + '\')">💾 บันทึก</button>';
+  body += '<button class="btn bd" onclick="closeMForce();stockDeleteLot(\'' + sku + '\',\'' + lotId + '\')">🗑️ ลบรายการนี้</button>';
+  body += '</div>';
+  openM('✏️ แก้ไขรายการ', body);
+}
+
+function saveStockEditLot(sku, lotId) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var lots = stockGetLots(sku);
+  var lot = lots.filter(function(l) { return l.id === lotId; })[0];
+  if (!lot) return;
+  var qty = document.getElementById('elot_qty').value;
+  var fields = { qty: qty };
+  if (lot.location === '1021') {
+    var so = document.getElementById('elot_so').value.trim();
+    fields.soNumber = so; fields.ref = so;
+    fields.salesperson = document.getElementById('elot_sales').value.trim();
+    fields.dealerName = document.getElementById('elot_dealer').value.trim();
+    fields.projectName = document.getElementById('elot_project').value.trim();
+    fields.status = document.getElementById('elot_status').value;
+  } else {
+    fields.ref = document.getElementById('elot_ref').value.trim();
+    fields.note = document.getElementById('elot_note').value.trim();
+  }
+  stockUpdateLot(sku, p.name, lotId, fields);
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+// สีเน้นต่อคลังหลัก — เดาจากชื่อให้ดูสอดคล้อง (Main Warehouse = ฟ้า, QI = ม่วง) คลังใหม่ที่เพิ่มเองจะวนสีจากพาเลตนี้
+function _stockWarehouseColor(name) {
+  if (/main warehouse/i.test(name)) return '#2563eb';
+  if (/^QI/i.test(name)) return '#7c3aed';
+  var palette = ['#0d9488', '#db2777', '#d97706', '#059669', '#dc2626'];
+  var hash = 0;
+  for (var i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+function _stockLocationIcon(code) {
+  if (code === '0001') return '📦';
+  if (code === '1021') return '🔖';
+  if (code === '1027') return '🗑️';
+  if (code === 'QI') return '🛂';
+  return '📍';
+}
+
+function showStockAddLocationM() {
+  var existingWarehouses = getStockLocations().map(function(l) { return l.warehouse; })
+    .filter(function(v, i, arr) { return arr.indexOf(v) === i; });
+  var body = '<div class="fg"><label>รหัสคลัง (โค้ด)</label><input type="text" id="loc_code" placeholder="เช่น 1030"></div>';
+  body += '<div class="fg"><label>ชื่อคลัง</label><input type="text" id="loc_name" placeholder="เช่น Returned Goods"></div>';
+  body += '<div class="fg"><label>อยู่ภายใต้คลังหลัก</label><input type="text" id="loc_warehouse" list="loc_wh_dl" placeholder="เช่น 1001 SiS Main Warehouse">' +
+    '<datalist id="loc_wh_dl">' + existingWarehouses.map(function(w) { return '<option value="' + sanitize(w) + '">'; }).join('') + '</datalist></div>';
+  body += '<div class="fg"><label><input type="checkbox" id="loc_sellable"> นับเป็น "พร้อมขาย"</label></div>';
+  body += '<button class="btn bp btn-full" onclick="saveStockAddLocation()">💾 บันทึก</button>';
+  openM('🏢 เพิ่มคลังย่อยใหม่', body);
+}
+
+function saveStockAddLocation() {
+  var code = document.getElementById('loc_code').value;
+  var name = document.getElementById('loc_name').value;
+  var warehouse = document.getElementById('loc_warehouse').value;
+  var sellable = document.getElementById('loc_sellable').checked;
+  if (!stockAddLocationDef(code, name, sellable, warehouse)) return;
+  closeMForce();
+  toast('🏢 เพิ่มคลังแล้ว');
+  render();
+}
+
 // เข้ากันได้กับของเดิม (Import Excel) — ใช้ lot คงที่ id 'import_0001' อัปเดตซ้ำได้ทุกครั้งที่ import ไม่สร้าง lot ซ้ำ
 function setStockQty(sku, productName, newQty, source, note) {
   if (!sku) return;
@@ -293,6 +619,7 @@ function rStock(el) {
   rows.sort(function(a, b) { return (a.product.name || '').localeCompare(b.product.name || ''); });
 
   var h = '<div class="card"><h2>📦 Stock สินค้า <span class="ml">' +
+    '<button class="btn bsm bo" onclick="showStockAddLocationM()" title="เพิ่มโค้ดคลังย่อยใหม่ (ใช้ร่วมกันทุก SKU)">🏢 เพิ่มคลัง</button>' +
     '<button class="btn bsm bo" onclick="document.getElementById(\'stockImportFile\').click()">📤 Import Excel</button>' +
     '<input type="file" id="stockImportFile" accept=".xlsx,.xls" style="display:none" onchange="importStockFromExcel(event)">' +
     '<button class="btn bsm ' + (stockShowLog ? 'bp' : 'bo') + '" onclick="stockShowLog=!stockShowLog;render()">📜 ประวัติ</button>' +
@@ -415,7 +742,7 @@ function stockLocationSummaryHtml(p) {
     '<th style="text-align:center;padding:4px;font-weight:400;color:var(--text2)">จำนวน</th>' +
     '<th style="text-align:left;padding:4px;font-weight:400;color:var(--text2)">นับพร้อมขาย</th>' +
     '</tr></thead><tbody>';
-  STOCK_LOCATIONS.forEach(function(loc) {
+  getStockLocations().forEach(function(loc) {
     var v = stockLocTotal(lots, loc.code);
     h += '<tr>';
     h += '<td style="padding:4px 4px 4px 30px">' + loc.code + ' ' + sanitize(loc.name) + '</td>';
@@ -462,29 +789,70 @@ function rStockDetail(el) {
   h += '<div class="sc"><div class="sn c2">' + sellable + '</div><div class="sl">พร้อมขาย</div></div>';
   h += '</div>';
 
+  var queue = stockComputeQueue(sku);
+  if (queue.length) {
+    h += '<div class="card" style="margin-bottom:12px">';
+    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:2px">คิวจองลอยๆ (มีทั้งหมด ' + totalAll + ')</div>';
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:10px">เรียงตามเวลาที่กดจอง (มาก่อนได้ก่อน)</div>';
+    h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    h += '<thead><tr>' +
+      '<th style="text-align:left;padding:4px">#</th><th style="text-align:left;padding:4px">บริษัท</th><th style="text-align:left;padding:4px">เซล</th>' +
+      '<th style="text-align:center;padding:4px">ต้องการ</th><th style="text-align:center;padding:4px">จัดสรร</th><th style="text-align:center;padding:4px">ขาด</th>' +
+      '<th style="text-align:left;padding:4px">สถานะ</th><th></th>' +
+      '</tr></thead><tbody>';
+    queue.forEach(function(qe, qi) {
+      var r = qe.reservation;
+      var fullyOk = qe.shortfall <= 0;
+      var partialOk = qe.allocated > 0 && qe.shortfall > 0;
+      var noneOk = qe.allocated <= 0;
+      var statusHtml = fullyOk ?
+        '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">ได้เต็ม</span>' :
+        (partialOk ?
+          '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(245,158,11,.15);color:#b45309">ได้บางส่วน</span><div style="font-size:11px;color:#ef4444;margin-top:3px">แนะนำ PR/PO ' + qe.shortfall + '</div>' :
+          '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">ต้อง PR/PO</span><div style="font-size:11px;color:#ef4444;margin-top:3px">แนะนำ PR/PO ' + qe.shortfall + '</div>');
+      h += '<tr style="border-top:1px solid var(--border,#334155)">';
+      h += '<td style="padding:5px 4px">' + (qi + 1) + '</td>';
+      h += '<td style="padding:5px 4px">' + sanitize(r.dealerName || '-') + (r.quoteNo ? ' <span style="font-size:10px;color:var(--text2)">(' + sanitize(r.quoteNo) + ')</span>' : '') + '</td>';
+      h += '<td style="padding:5px 4px">' + sanitize(r.salesperson || '-') + '</td>';
+      h += '<td style="text-align:center;padding:5px 4px">' + r.qty + '</td>';
+      h += '<td style="text-align:center;padding:5px 4px;font-weight:700;color:' + (noneOk ? 'var(--text2)' : (fullyOk ? '#16a34a' : '#b45309')) + '">' + qe.allocated + '</td>';
+      h += '<td style="text-align:center;padding:5px 4px;font-weight:700;color:' + (qe.shortfall > 0 ? '#ef4444' : 'var(--text2)') + '">' + (qe.shortfall > 0 ? qe.shortfall : '-') + '</td>';
+      h += '<td style="padding:5px 4px">' + statusHtml + '</td>';
+      h += '<td style="padding:5px 4px;text-align:right"><button class="btn bsm bd" onclick="stockCancelReservationAndRefresh(\'' + r.id + '\');rStockDetail(document.getElementById(\'ct\'))">✕</button></td>';
+      h += '</tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '</div>';
+  }
+
+  var allLocs = getStockLocations();
   var warehouses = [];
-  STOCK_LOCATIONS.forEach(function(l) {
+  allLocs.forEach(function(l) {
     var wh = warehouses.filter(function(w) { return w.name === l.warehouse; })[0];
     if (!wh) { wh = { name: l.warehouse, locs: [] }; warehouses.push(wh); }
     wh.locs.push(l);
   });
 
   warehouses.forEach(function(wh) {
-    h += '<div class="card" style="margin-bottom:12px">';
-    h += '<h3 style="margin:0 0 10px;font-size:14px">' + sanitize(wh.name) + '</h3>';
+    var whColor = _stockWarehouseColor(wh.name);
+    h += '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + whColor + '">';
+    h += '<h3 style="margin:0 0 10px;font-size:14px;color:' + whColor + '">🏢 ' + sanitize(wh.name) + '</h3>';
     wh.locs.forEach(function(loc) {
       var locLots = lots.filter(function(l) { return l.location === loc.code; });
       var locTotal = locLots.reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
       var isBooking = loc.code === '1021';
-      h += '<div style="margin-bottom:14px">';
-      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-      h += '<span style="font-size:12px;font-weight:500">' + loc.code + ' ' + sanitize(loc.name) + ' · รวม ' + locTotal + (loc.sellable ? ' <span style="color:#16a34a">(พร้อมขาย)</span>' : '') + '</span>';
+      var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
+      var accentC = loc.sellable ? '#16a34a' : '#64748b';
+      h += '<div style="margin-bottom:14px;background:' + tint + ';border-radius:8px;padding:10px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
+      h += '<span style="font-size:13px;font-weight:700;color:' + accentC + '">' + _stockLocationIcon(loc.code) + ' ' + loc.code + ' ' + sanitize(loc.name) + '</span>';
+      h += '<span style="font-size:16px;font-weight:700;color:' + accentC + '">' + locTotal + (loc.sellable ? ' <span style="font-size:10px;font-weight:400;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">พร้อมขาย</span>' : '') + '</span>';
       h += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
       h += '</div>';
       if (!locLots.length) {
         h += '<div style="font-size:12px;color:var(--text2);padding:4px 0">ไม่มีสินค้าในคลังนี้</div>';
       } else {
-        h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+        h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--card,transparent)">';
         h += '<thead><tr>';
         h += isBooking ?
           '<th style="text-align:left;padding:4px">SO No.</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
@@ -507,7 +875,11 @@ function rStockDetail(el) {
             h += '<td style="text-align:center;padding:5px 4px;font-weight:700">' + lot.qty + '</td>';
             h += '<td style="padding:5px 4px;font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</td>';
           }
-          h += '<td style="padding:5px 4px;text-align:right"><button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\')">→ ย้ายคลัง</button></td>';
+          h += '<td style="padding:5px 4px;text-align:right;white-space:nowrap">' +
+            '<button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\')">→ ย้ายคลัง</button> ' +
+            '<button class="btn bsm bo" onclick="showStockEditLotM(\'' + sku + '\',\'' + lot.id + '\')" title="แก้ไข">✏️</button> ' +
+            '<button class="btn bsm bd" onclick="stockDeleteLot(\'' + sku + '\',\'' + lot.id + '\')" title="ลบรายการนี้">🗑️</button>' +
+            '</td>';
           h += '</tr>';
         });
         h += '</tbody></table></div>';
@@ -523,7 +895,7 @@ function rStockDetail(el) {
 function showStockAddLotM(sku, code) {
   var p = getProductBySku(sku);
   if (!p) return;
-  var loc = STOCK_LOCATIONS.filter(function(l) { return l.code === code; })[0];
+  var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
   var isBooking = code === '1021';
   var today = _nw().substring(0, 10);
   var body = '<div class="fg"><label>จำนวน</label><input type="number" id="lot_qty" min="1" value="1"></div>';
@@ -572,7 +944,7 @@ function showStockMoveLotM(sku, lotId) {
   var lots = stockGetLots(sku);
   var lot = lots.filter(function(l) { return l.id === lotId; })[0];
   if (!lot) return;
-  var otherLocs = STOCK_LOCATIONS.filter(function(l) { return l.code !== lot.location; });
+  var otherLocs = getStockLocations().filter(function(l) { return l.code !== lot.location; });
   var today = _nw().substring(0, 10);
 
   var body = '<div class="fg"><label>' + sanitize(lot.ref || stockLocationName(lot.location)) + ' — เหลือ ' + lot.qty + '</label></div>';

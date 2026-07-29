@@ -228,7 +228,9 @@ var SYNC_KEY_MAP = {
   // sync ผ่าน listener ทั่วไปได้เลย ไม่ต้องมี loader พิเศษแบบ products
   'stockLevels': 'stockLevels',
   'stockLog': 'stockLog',
-  'stockFavs': 'stockFavs'
+  'stockFavs': 'stockFavs',
+  'stockReservations': 'stockReservations',
+  'stockLocations': 'stockLocations'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
