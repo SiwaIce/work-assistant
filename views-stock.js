@@ -74,12 +74,15 @@ function stockGetLots(sku) {
   return lots;
 }
 
+// lot ที่สถานะ "ส่งมอบแล้ว" ถือว่าออกจากคลังไปแล้วจริง — ไม่นับรวมในยอดคงเหลือ (แต่ยัง็บไว้ในรายการเพื่อดูประวัติ)
+function _stockIsActiveLot(l) { return l.status !== 'ส่งมอบแล้ว'; }
+
 function stockLocTotal(lots, code) {
-  return lots.filter(function(l) { return l.location === code; }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+  return lots.filter(function(l) { return l.location === code && _stockIsActiveLot(l); }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
 }
 
 function stockTotalQty(lots) {
-  return lots.reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+  return lots.filter(_stockIsActiveLot).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
 }
 
 function stockSellableQty(lots) {
@@ -281,9 +284,12 @@ function stockSOItemReadinessHtml(sku, qty, so) {
 
   // ส่วนที่ถูกจองเข้า 1021 ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก reservation หรือกดจอง/ลากเข้า 1021 เองแล้วเลือก SO นี้)
   var lots = stockGetLots(sku);
-  var bookedForThisSO = lots.filter(function(l) { return l.location === '1021' && l.soId === so.id; })
+  var soLots = lots.filter(function(l) { return l.location === '1021' && l.soId === so.id; });
+  var deliveredForThisSO = soLots.filter(function(l) { return l.status === 'ส่งมอบแล้ว'; })
     .reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
-  var remainingQty = Math.max(0, qty - bookedForThisSO);
+  var bookedForThisSO = soLots.filter(_stockIsActiveLot)
+    .reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+  var remainingQty = Math.max(0, qty - bookedForThisSO - deliveredForThisSO);
 
   var reservation = so.quotationId ? stockGetReservationFor(sku, so.quotationId) : null;
   var from0001 = 0, fromQI = 0, shortfall = 0;
@@ -302,6 +308,9 @@ function stockSOItemReadinessHtml(sku, qty, so) {
   }
 
   var h = '';
+  if (deliveredForThisSO > 0) {
+    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280;display:inline-block;margin-bottom:3px">✔ ส่งมอบแล้ว ' + deliveredForThisSO + '</div><br>';
+  }
   if (bookedForThisSO > 0) {
     h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a;display:inline-block;margin-bottom:3px">✓ พร้อมส่ง ' + bookedForThisSO + ' (จองใน 1021 แล้ว)</div><br>';
   }
@@ -424,9 +433,41 @@ function stockSetLotStatus(sku, productName, lotId, status) {
   var lots = stockGetLots(sku).slice();
   var idx = lots.findIndex(function(l) { return l.id === lotId; });
   if (idx === -1) return;
-  lots[idx] = Object.assign({}, lots[idx], { status: status });
+  var lot = lots[idx];
+  lots[idx] = Object.assign({}, lot, { status: status });
   _stockSaveLots(sku, productName, lots);
+  if (status === 'ส่งมอบแล้ว' && lot.soId) _stockCheckSOFullyDelivered(lot.soId);
   render();
+}
+
+// เมื่อทุกบรรทัดสินค้าของ SO นี้ถูกจอง+ส่งมอบครบตามจำนวนแล้ว ถามก่อนว่าจะอัปเดตสถานะ SO (และ Pipeline ถ้าผูกไว้) เป็นส่งมอบแล้วไหม
+// ไม่ auto เงียบๆ — ให้ผู้ใช้กดยืนยันเอง เพราะ SO มีหลายบรรทัด ต้องครบทุกบรรทัดถึงจะถือว่า SO นี้ส่งมอบเสร็จจริง
+function _stockCheckSOFullyDelivered(soId) {
+  var so = ST.getOne('salesOrders', soId);
+  if (!so || !so.items || !so.items.length) return;
+  var allDelivered = so.items.every(function(it) {
+    if (!it.sku) return false;
+    var deliveredQty = stockGetLots(it.sku).filter(function(l) {
+      return l.location === '1021' && l.soId === soId && l.status === 'ส่งมอบแล้ว';
+    }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+    return deliveredQty >= (Number(it.qty) || 0);
+  });
+  if (!allDelivered) return;
+
+  var pipe = so.pipelineId ? ST.getOne('pipeline', so.pipelineId) : null;
+  var msg = 'ทุกรายการของ SO ' + (so.soNumber || '') + ' ส่งมอบครบแล้ว\nต้องการอัปเดตสถานะ SO' + (pipe ? ' และ Pipeline' : '') + ' เป็นส่งมอบแล้วไหม?';
+  if (!confirm(msg)) return;
+
+  if (typeof showSOStatusModal === 'function') showSOStatusModal(soId);
+
+  if (pipe) {
+    var cfg = getConfig();
+    var deliverStatus = (cfg.pipelineStatuses || []).filter(function(s) {
+      return /deliver|ส่งมอบ/i.test(s.name || '') || /deliver/i.test(s.id || '');
+    })[0];
+    if (deliverStatus && typeof changePipeStatus === 'function') changePipeStatus(pipe.id, deliverStatus.id);
+    else if (!deliverStatus) toast('⚠️ ไม่พบสถานะ Pipeline "Deliver" ในระบบ ข้ามการอัปเดต Pipeline');
+  }
 }
 
 // แก้ไขจำนวน/รายละเอียดของ lot ที่กรอกผิด (ไม่ใช่การย้ายคลัง) — log เป็น adjust ถ้าจำนวนเปลี่ยน
@@ -856,7 +897,7 @@ function rStockDetail(el) {
     h += '<h3 style="margin:0 0 10px;font-size:14px;color:' + whColor + '">🏢 ' + sanitize(wh.name) + '</h3>';
     wh.locs.forEach(function(loc) {
       var locLots = lots.filter(function(l) { return l.location === loc.code; });
-      var locTotal = locLots.reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
+      var locTotal = locLots.filter(_stockIsActiveLot).reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
       var isBooking = loc.code === '1021';
       var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
       var accentC = loc.sellable ? '#16a34a' : '#64748b';
@@ -878,8 +919,9 @@ function rStockDetail(el) {
           '<th></th><th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>';
         h += '</tr></thead><tbody>';
         locLots.forEach(function(lot) {
+          var delivered = !_stockIsActiveLot(lot);
           var qtyCellHtml = '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="กดเพื่อแก้ไขจำนวน" onclick="stockEditLotQtyInline(this,\'' + sku + '\',\'' + lot.id + '\',\'' + nameEsc + '\')">' + lot.qty + '</span>';
-          h += '<tr style="border-top:1px solid var(--border,#334155);cursor:grab" draggable="true" ondragstart="stockLotDragStart(event,\'' + sku + '\',\'' + lot.id + '\')" title="ลากไปวางที่คลังอื่นเพื่อย้าย">';
+          h += '<tr style="border-top:1px solid var(--border,#334155);cursor:grab' + (delivered ? ';opacity:.55' : '') + '" draggable="true" ondragstart="stockLotDragStart(event,\'' + sku + '\',\'' + lot.id + '\')" title="' + (delivered ? 'ส่งมอบแล้ว — ไม่นับรวมในยอดคงเหลือ' : 'ลากไปวางที่คลังอื่นเพื่อย้าย') + '">';
           h += '<td style="padding:5px 4px;color:var(--text2)">⠿</td>';
           if (isBooking) {
             h += '<td style="padding:5px 4px">' + sanitize(lot.soNumber || lot.ref || '-') + '</td>';
