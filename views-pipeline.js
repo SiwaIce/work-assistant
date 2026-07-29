@@ -10,6 +10,8 @@ function clearPipeStatusFlt() { pipeFlt = {}; render(); }
 function togglePipeBidMonth(idx) { if (pipeBidMonthFilter[idx]) delete pipeBidMonthFilter[idx]; else pipeBidMonthFilter[idx] = true; render(); }
 function clearPipeBidMonthFilter() { pipeBidMonthFilter = {}; render(); }
 var pipeFY = 'all';
+var pipeTaskFlt = false; // true = แสดงเฉพาะโครงการที่มี Task เปิดค้างอยู่ (ดู pipeOpenTasks ใน app.js)
+function togglePipeTaskFlt() { pipeTaskFlt = !pipeTaskFlt; render(); }
 var pipeSale = 'all';
 var pipeDisplayFlt = 'all';
 var pipeSearch = '';
@@ -1062,6 +1064,7 @@ function rPipeline(el) {
   if (pipeSale !== 'all') pipes = pipes.filter(function(p) { return (p.saleName || '') === pipeSale; });
   if (pipeDisplayFlt === 'show') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
   else if (pipeDisplayFlt === 'hide') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') === 'Hide'; });
+  if (pipeTaskFlt) pipes = pipes.filter(function(p) { return pipeOpenTasks(p.id).length > 0; });
 
   if (pipeUrgentFlt) {
     var _todayISO2 = _td();
@@ -1225,6 +1228,14 @@ function rPipeline(el) {
     '<div class="pipe-sum-card ' + (Object.keys(pipeFlt).length === 0 ? 'act' : '') + '" onclick="clearPipeStatusFlt()">' +
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
     '</div>' +
+    (function() {
+      var taskCnt = allPipes.filter(function(p) { return pipeOpenTasks(p.id).length > 0; }).length;
+      if (!taskCnt) return '';
+      return '<div class="hint" style="margin:8px 0 4px">งานค้าง</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
+        '<span onclick="togglePipeTaskFlt()" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;display:inline-flex;align-items:center;gap:4px;' +
+        (pipeTaskFlt ? 'background:#ef4444;color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">📋 มีงานค้าง (' + taskCnt + ')</span></div>';
+    })() +
     '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>' +
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
     ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map(function(mn, idx) {
@@ -2828,9 +2839,39 @@ function togglePipeSummaryFullValue() {
   }
 }
 
-// สรุปรายการสินค้าของโครงการนี้ — ชิปตามหมวดหมู่ (Drone/Payload/...) + ตาราง Model/QTY/มูลค่า
+// เทียบราคา — เปิด/ปิดทั้งชุด + เลือกเป็นคอลัมน์ (ประหยัดที่ ไม่ต้องโชว์ทุก Level พร้อมกัน)
+// default เปิดแค่ B (Level ที่ใช้บ่อยสุด) กับ "เสนอราคาจริง" — คุมด้วยปุ่มเดียวกันทุกโครงการที่เปิดดู
+var pipeCompareOn = false;
+var pipeCompareCols = { rrp: false, s: false, a: false, b: true, other: false, quoted: true };
+function togglePipeCompare() { pipeCompareOn = !pipeCompareOn; render(); }
+function togglePipeCompareCol(key) { pipeCompareCols[key] = !pipeCompareCols[key]; render(); }
+
+// ใบเสนอราคาล่าสุดที่ผูกกับ pipeline นี้ (ถ้ามีหลายใบ เอาใบล่าสุดตาม createdAt)
+function _pipeLatestQuote(pipeId) {
+  var allQuotes = [];
+  try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
+  var quotes = allQuotes.filter(function(q) { return q.pipelineId === pipeId; });
+  if (!quotes.length) return null;
+  quotes.sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  return quotes[0];
+}
+// ราคา/หน่วยที่เสนอจริงในใบนั้น จับคู่ด้วย SKU ก่อน ไม่เจอค่อย fallback ไปจับคู่ด้วยชื่อ model
+function _pipeQuotedUnitPrice(quote, sku, model) {
+  if (!quote || !quote.items) return null;
+  var skuKey = (sku || '').toLowerCase();
+  var nameKey = (model || '').trim().toLowerCase();
+  var byName = null;
+  for (var i = 0; i < quote.items.length; i++) {
+    var it = quote.items[i];
+    if (skuKey && (it.sku || '').toLowerCase() === skuKey) return Number(it.unitPrice) || 0;
+    if (!byName && (it.name || '').trim().toLowerCase() === nameKey) byName = Number(it.unitPrice) || 0;
+  }
+  return byName;
+}
+
+// สรุปรายการสินค้าของโครงการนี้ — ชิปตามหมวดหมู่ (Drone/Payload/...) + ตาราง SKU/Model/QTY/มูลค่า
 // หน้าตาเดียวกับการ์ด Forecast ตาม Dealer (buildFcDealerSummary ใน views-today.js) แต่ดึงจาก getPipeItems(p)
-// ของโครงการเดียวแทนที่จะรวมทั้ง dealer
+// ของโครงการเดียวแทนที่จะรวมทั้ง dealer — ต่อยอดเพิ่มโหมด "เทียบราคา" (RRP/S/A/B/Other + ราคาที่เสนอจริง)
 function pipeModelSummaryCardHtml(p) {
   var items = getPipeItems(p);
   if (!items.length) return '';
@@ -2844,7 +2885,7 @@ function pipeModelSummaryCardHtml(p) {
     var amt = Number(it.total) || (qty * (Number(it.price) || 0));
     var cat = getModelCategory(model);
     catTotals[cat] = (catTotals[cat] || 0) + qty;
-    if (!byModel[model]) byModel[model] = { model: model, qty: 0, amount: 0, batches: [] };
+    if (!byModel[model]) byModel[model] = { model: model, sku: it.sku || '', qty: 0, amount: 0, unitPrice: Number(it.price) || 0, batches: [] };
     byModel[model].qty += qty;
     byModel[model].amount += amt;
     if (it.shipBatches && it.shipBatches.length) byModel[model].batches = byModel[model].batches.concat(it.shipBatches);
@@ -2862,25 +2903,91 @@ function pipeModelSummaryCardHtml(p) {
   var modelList = Object.values(byModel);
   var fmtAmt = pipeSummaryFullValue ? function(v) { return fmtMoney(v) + ' ฿'; } : fmtMoneyShort;
 
+  var latestQuote = _pipeLatestQuote(p.id);
+
   var h = '<div class="card"><h2>📦 สรุปรายการสินค้า <span class="ml">' +
-    '<button class="btn bsm bo" onclick="togglePipeSummaryFullValue()">' + (pipeSummaryFullValue ? '🔍 แสดงแบบย่อ' : '🔍 แสดงมูลค่าเต็ม') + '</button></span></h2>';
+    '<button class="btn bsm bo" onclick="togglePipeSummaryFullValue()">' + (pipeSummaryFullValue ? '🔍 แสดงแบบย่อ' : '🔍 แสดงมูลค่าเต็ม') + '</button>' +
+    '<button class="btn bsm ' + (pipeCompareOn ? 'bp' : 'bo') + '" onclick="togglePipeCompare()">⚖️ เทียบราคา</button>' +
+    (latestQuote ? '<button class="btn bsm bo" onclick="renderEditQuotationPage(getQuoteById(\'' + latestQuote.id + '\'))">📄 ' + sanitize(latestQuote.quoteNo) + ' ↗</button>' : '') +
+    '</span></h2>';
   h += '<div class="fcd-cats" style="margin-bottom:12px">' + catChipsHtml + '</div>';
-  h += '<table class="fcd-table">';
-  h += '<thead><tr><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th></tr></thead><tbody>';
+
+  var CMP_COLS = [
+    { key: 'rrp', label: 'RRP ex VAT' }, { key: 's', label: 'S' }, { key: 'a', label: 'A' },
+    { key: 'b', label: 'B' }, { key: 'other', label: 'Other' }, { key: 'quoted', label: 'เสนอราคาจริง' }
+  ];
+  if (pipeCompareOn) {
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--border,#334155)">';
+    h += '<span style="font-size:11px;color:var(--text2);align-self:center;margin-right:2px">เทียบ:</span>';
+    CMP_COLS.forEach(function(c) {
+      var on = !!pipeCompareCols[c.key];
+      h += '<span onclick="togglePipeCompareCol(\'' + c.key + '\')" style="cursor:pointer;padding:3px 10px;border-radius:14px;font-size:11px;' +
+        (on ? 'border:2px solid var(--accent,#3b82f6);background:var(--accent,#3b82f6)22;color:var(--accent,#3b82f6)' : 'border:1px solid var(--border);color:var(--text2)') + '">' + c.label + '</span>';
+    });
+    h += '</div>';
+  }
+
+  var showCol = function(key) { return pipeCompareOn && pipeCompareCols[key]; };
+
+  h += '<div style="overflow-x:auto"><table class="fcd-table" style="min-width:100%">';
+  h += '<thead><tr><th>SKU</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th>';
+  CMP_COLS.forEach(function(c) { if (showCol(c.key)) h += '<th style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)18' : '') + '">' + c.label + '</th>'; });
+  h += '</tr></thead><tbody>';
+
   var _pmMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var cmpTotals = { rrp: 0, s: 0, a: 0, b: 0, other: 0, quoted: 0 };
+  var cmpHasAny = { rrp: false, s: false, a: false, b: false, other: false, quoted: false };
+
   modelList.forEach(function(m) {
-    h += '<tr><td>' + sanitize(m.model) + '</td><td style="text-align:center">' + m.qty + '</td><td style="text-align:right">' + fmtAmt(m.amount) + '</td></tr>';
+    var prod = pipeCompareOn ? _pipeResolveProduct(m.sku || m.model) : null;
+    var tp = prod ? (prod.typePrices || {}) : null;
+
+    h += '<tr>';
+    h += '<td style="font-size:11px">' + (m.sku ? qcopyHtml(m.sku) : '-') + '</td>';
+    h += '<td>' + sanitize(m.model) + '</td>';
+    h += '<td style="text-align:center">' + m.qty + '</td>';
+    h += '<td style="text-align:right">' + fmtAmt(m.amount) + '</td>';
+
+    if (pipeCompareOn) {
+      if (!prod) {
+        var colCount = CMP_COLS.filter(function(c) { return showCol(c.key); }).length;
+        if (colCount) h += '<td colspan="' + colCount + '" style="text-align:center;color:var(--text2);font-size:11px">ไม่พบในแคตตาล็อก</td>';
+      } else {
+        CMP_COLS.forEach(function(c) {
+          if (!showCol(c.key)) return;
+          var unitVal, cellAmt;
+          if (c.key === 'rrp') unitVal = Number(prod.rrpExVat) || 0;
+          else if (c.key === 'quoted') unitVal = _pipeQuotedUnitPrice(latestQuote, m.sku, m.model);
+          else unitVal = Number(tp[c.key === 's' ? 'S' : c.key === 'a' ? 'A' : c.key === 'b' ? 'B' : 'Other']) || 0;
+          if (unitVal == null) { h += '<td style="text-align:center;color:var(--text2)">-</td>'; return; }
+          cellAmt = unitVal * m.qty;
+          cmpTotals[c.key] += cellAmt;
+          cmpHasAny[c.key] = true;
+          var isCurLevel = c.key !== 'rrp' && c.key !== 'quoted' && Math.round(unitVal) === Math.round(m.unitPrice);
+          h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)10' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + (isCurLevel ? ';font-weight:700' : '') + '" title="' + (isCurLevel ? 'ตรงกับราคาที่ใช้อยู่ในโครงการนี้' : '') + '">' + fmtAmt(cellAmt) + '</td>';
+        });
+      }
+    }
+    h += '</tr>';
+
     if (m.batches && m.batches.length) {
       var batchLabel = m.batches.map(function(b) {
         var parts = (b.month || '').split('-');
         var mLabel = (parts.length === 2) ? (_pmMonthNames[parseInt(parts[1], 10) - 1] + ' ' + (parseInt(parts[0], 10) + 543 - 2500)) : '?';
         return mLabel + ' x' + (Number(b.qty) || 0);
       }).join(', ');
-      h += '<tr><td colspan="3" style="font-size:10px;color:var(--text2);padding-top:0">🚚 แบ่งส่ง: ' + sanitize(batchLabel) + '</td></tr>';
+      var _colspanAll = 4 + CMP_COLS.filter(function(c) { return showCol(c.key); }).length;
+      h += '<tr><td colspan="' + _colspanAll + '" style="font-size:10px;color:var(--text2);padding-top:0">🚚 แบ่งส่ง: ' + sanitize(batchLabel) + '</td></tr>';
     }
   });
-  h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td>รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtAmt(totalAmt) + '</td></tr>';
-  h += '</tbody></table></div>';
+
+  h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="2">รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtAmt(totalAmt) + '</td>';
+  CMP_COLS.forEach(function(c) {
+    if (!showCol(c.key)) return;
+    h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)18' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + '">' + (cmpHasAny[c.key] ? fmtAmt(cmpTotals[c.key]) : '-') + '</td>';
+  });
+  h += '</tr>';
+  h += '</tbody></table></div></div>';
   return h;
 }
 
