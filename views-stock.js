@@ -44,7 +44,7 @@ function _stockSourceLabel(s) {
 
 function rStock(el) {
   document.getElementById('pgT').textContent = '📦 Stock สินค้า';
-  var products = getAllProducts().filter(function(p) { return p && !p.isBundle; }); // bundle ไม่มี stock ของตัวเอง ประกอบจาก item ย่อย
+  var products = getAllProducts().filter(function(p) { return !!p; }); // รวมทุกสินค้ารวมถึง Bundle — Bundle บางตัว (เช่น Extended Warranty) มี SKU ของตัวเองและต้องนับ stock แยก
   var levelMap = {};
   ST.getAll('stockLevels').forEach(function(l) { levelMap[l.sku] = l; });
 
