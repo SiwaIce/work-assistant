@@ -112,6 +112,7 @@
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('products')">📦 สินค้าและราคา <span class="sg-chev" id="sgc-products">▾</span></div>
 <div class="sg-items" id="sgi-products">
   <div class="nl" data-v="products" onclick="go('products')">📋 สินค้าทั้งหมด</div>
+  <div class="nl" data-v="stock" onclick="go('stock')">📦 Stock สินค้า</div>
   <div class="nl" data-v="productPrices" onclick="go('productPrices')">💰 ราคาตาม Level</div>
   <div class="nl" data-v="productBundles" onclick="go('productBundles')">🎁 Bundle/Combo</div>
   <div class="nl" data-v="productDemo" onclick="go('productDemo')">🚁 Demo Unit</div>
@@ -312,6 +313,7 @@ var auth = firebase.auth();
 <script src="audit.js"></script>
 <script src="views-kpi.js"></script>
 <script src="views-so.js"></script>
+<script src="views-stock.js"></script>
 <script src="app.js"></script>
 <div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
   <div class="qcmd-box">

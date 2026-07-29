@@ -223,7 +223,11 @@ var SYNC_KEY_MAP = {
   // ✅ เพิ่ม — ประวัติจับเวลางาน (app.js startTimer/stopTimer) ไม่เคยลงทะเบียนตรงนี้มาก่อน
   // ไม่เคย sync ขึ้น cloud เลย เสี่ยงหายถ้าเปลี่ยนเครื่อง/ล้างแคช
   'timerState': 'timerState',
-  'timerLogs': 'timerLogs'
+  'timerLogs': 'timerLogs',
+  // ✅ Stock สินค้า (Phase 1) — คนละ collection กับ 'products' เดิม (ดูคอมเมนต์ด้านบน) เก็บเป็น array ปกติ
+  // sync ผ่าน listener ทั่วไปได้เลย ไม่ต้องมี loader พิเศษแบบ products
+  'stockLevels': 'stockLevels',
+  'stockLog': 'stockLog'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);

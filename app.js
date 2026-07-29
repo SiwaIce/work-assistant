@@ -719,6 +719,7 @@ var R = {
   
   // ✅ เพิ่มตรงนี้
   products: rProducts,
+  stock: rStock,
   productPrices: rProductPrices,
   productBundles: rProductBundles,
   productDemo: rProductDemo,

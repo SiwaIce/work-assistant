@@ -44,7 +44,10 @@ const ST = {
     solutionPresets: 'v7_solutionPresets',
     prospects: 'v7_prospects',
     salesOrders: 'v7_salesOrders',
-    postit: 'v7_postit'
+    postit: 'v7_postit',
+    // Stock สินค้า — เก็บแยกจาก v7_products โดยตั้งใจ (products มี guard กันข้อมูล sync ทับ ไม่อยากไปแตะ)
+    stockLevels: 'v7_stockLevels',
+    stockLog: 'v7_stockLog'
   },
 
   // ✅ Migration ครั้งเดียว: 'postit' เคยไม่มีอยู่ใน _keys เลย ทำให้ ST.add/update/delete('postit', ...)
