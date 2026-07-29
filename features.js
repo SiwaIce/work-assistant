@@ -4849,6 +4849,12 @@ function bigAttachGalleryHtml(attachments) {
   return h;
 }
 
+var _noteContentExpanded = {}; // {noteId: true} — เนื้อหายาวที่กดขยายดูเต็มแล้ว (ดู rNoteDet)
+function toggleNoteContentExpand(id) {
+  _noteContentExpanded[id] = !_noteContentExpanded[id];
+  render();
+}
+
 function markNoteExpired(noteId) {
   ST.update('notes', noteId, {status: 'expired'});
   toast('⏰ ทำเครื่องหมายหมดอายุแล้ว');
@@ -4914,7 +4920,19 @@ function rNoteDet(el) {
     html += '<div class="note-tags" style="margin-bottom:10px">' + tags.map(function(t) { return '<span class="note-tag">' + sanitize(t.trim()) + '</span>'; }).join('') + '</div>';
   }
   
-  html += '<div class="note-content">' + safeText(n.content || '') + '</div>';
+  // เนื้อหายาวมากๆ กินหน้าจอทั้งหมด — พับเก็บไว้ก่อน (max-height + gradient fade) เกิน 500 ตัวอักษรค่อยโชว์ปุ่มขยาย/ย่อ
+  var _noteIsLong = (n.content || '').length > 500;
+  var _noteExpanded = !!_noteContentExpanded[n.id];
+  if (_noteIsLong && !_noteExpanded) {
+    html += '<div style="position:relative;max-height:220px;overflow:hidden">' +
+      '<div class="note-content">' + safeText(n.content || '') + '</div>' +
+      '<div style="position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(transparent,var(--card,#1e293b))"></div>' +
+      '</div>';
+    html += '<div style="text-align:center;margin-top:4px"><button class="btn bsm bo" onclick="toggleNoteContentExpand(\'' + n.id + '\')">▾ ดูเพิ่มเติม</button></div>';
+  } else {
+    html += '<div class="note-content">' + safeText(n.content || '') + '</div>';
+    if (_noteIsLong) html += '<div style="text-align:center;margin-top:4px"><button class="btn bsm bo" onclick="toggleNoteContentExpand(\'' + n.id + '\')">▴ ย่อกลับ</button></div>';
+  }
   html += bigAttachGalleryHtml(n.attachments);
 
   if (n.links) {
