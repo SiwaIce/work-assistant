@@ -253,7 +253,7 @@ function stockFulfillReservationToSO(sku, so) {
   lots.push({
     id: _stockLotId(), location: '1021', ref: so.soNumber, qty: actuallyMoved, dateIn: _nw(),
     note: 'ยืนยันจาก SO', fromLocation: '0001',
-    soNumber: so.soNumber, bookedDate: _nw(),
+    soNumber: so.soNumber, soId: so.id, bookedDate: _nw(),
     salesperson: reservation.salesperson || '', dealerName: reservation.dealerName || so.dealerName || '',
     projectName: reservation.projectName || '', status: 'เตรียมส่งมอบ'
   });
@@ -278,22 +278,34 @@ function stockFulfillReservationToSO(sku, so) {
 function stockSOItemReadinessHtml(sku, qty, so) {
   if (!sku) return '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้</span>';
   qty = Math.max(0, Math.round(Number(qty) || 0));
-  var reservation = so.quotationId ? stockGetReservationFor(sku, so.quotationId) : null;
 
-  var from0001, fromQI, shortfall;
-  if (reservation) {
-    var queue = stockComputeQueue(sku);
-    var entry = null;
-    for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === reservation.id) { entry = queue[i]; break; } }
-    from0001 = entry ? entry.from0001 : 0;
-    fromQI = entry ? entry.fromQI : 0;
-    shortfall = entry ? entry.shortfall : qty;
-  } else {
-    var alloc = stockPreviewAllocation(sku, qty);
-    from0001 = alloc.from0001; fromQI = alloc.fromQI; shortfall = alloc.shortfall;
+  // ส่วนที่ถูกจองเข้า 1021 ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก reservation หรือกดจอง/ลากเข้า 1021 เองแล้วเลือก SO นี้)
+  var lots = stockGetLots(sku);
+  var bookedForThisSO = lots.filter(function(l) { return l.location === '1021' && l.soId === so.id; })
+    .reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+  var remainingQty = Math.max(0, qty - bookedForThisSO);
+
+  var reservation = so.quotationId ? stockGetReservationFor(sku, so.quotationId) : null;
+  var from0001 = 0, fromQI = 0, shortfall = 0;
+  if (remainingQty > 0) {
+    if (reservation) {
+      var queue = stockComputeQueue(sku);
+      var entry = null;
+      for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === reservation.id) { entry = queue[i]; break; } }
+      from0001 = entry ? entry.from0001 : 0;
+      fromQI = entry ? entry.fromQI : 0;
+      shortfall = entry ? entry.shortfall : remainingQty;
+    } else {
+      var alloc = stockPreviewAllocation(sku, remainingQty);
+      from0001 = alloc.from0001; fromQI = alloc.fromQI; shortfall = alloc.shortfall;
+    }
   }
 
-  var h = _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
+  var h = '';
+  if (bookedForThisSO > 0) {
+    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a;display:inline-block;margin-bottom:3px">✓ พร้อมส่ง ' + bookedForThisSO + ' (จองใน 1021 แล้ว)</div><br>';
+  }
+  h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
   if (reservation && from0001 > 0) {
     h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button>';
   }
@@ -354,6 +366,7 @@ function stockAddLot(sku, productName, code, qty, ref, note, extra) {
   if (code === '1021' && extra) {
     lot.soNumber = extra.ref || ref || '';
     lot.ref = lot.soNumber;
+    lot.soId = extra.soId || '';
     lot.bookedDate = extra.bookedDate || _nw();
     lot.salesperson = extra.salesperson || '';
     lot.dealerName = extra.dealerName || '';
@@ -389,6 +402,7 @@ function stockMoveLot(sku, productName, lotId, moveQty, destCode, extra) {
   if (destCode === '1021') {
     newLot.soNumber = extra.ref || lot.ref || '';
     newLot.ref = newLot.soNumber;
+    newLot.soId = extra.soId || '';
     newLot.bookedDate = extra.bookedDate || _nw();
     newLot.salesperson = extra.salesperson || '';
     newLot.dealerName = extra.dealerName || '';
@@ -459,7 +473,8 @@ function showStockEditLotM(sku, lotId) {
   var isBooking = lot.location === '1021';
   var body = '<div class="fg"><label>จำนวน</label><input type="number" id="elot_qty" min="0" value="' + lot.qty + '"></div>';
   if (isBooking) {
-    body += '<div class="fg"><label>SO No.</label><input type="text" id="elot_so" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
+    body += _stockSODatalistHtml();
+    body += '<div class="fg"><label>SO No.</label><input type="text" id="elot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'elot\')" data-so-id="' + sanitize(lot.soId || '') + '" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="elot_sales" value="' + sanitize(lot.salesperson || '') + '"></div>';
     body += '<div class="fg"><label>Dealer</label><input type="text" id="elot_dealer" value="' + sanitize(lot.dealerName || '') + '"></div>';
     body += '<div class="fg"><label>โครงการ</label><input type="text" id="elot_project" value="' + sanitize(lot.projectName || '') + '"></div>';
@@ -484,8 +499,10 @@ function saveStockEditLot(sku, lotId) {
   var qty = document.getElementById('elot_qty').value;
   var fields = { qty: qty };
   if (lot.location === '1021') {
-    var so = document.getElementById('elot_so').value.trim();
+    var soEl = document.getElementById('elot_so');
+    var so = soEl.value.trim();
     fields.soNumber = so; fields.ref = so;
+    fields.soId = soEl.dataset.soId || '';
     fields.salesperson = document.getElementById('elot_sales').value.trim();
     fields.dealerName = document.getElementById('elot_dealer').value.trim();
     fields.projectName = document.getElementById('elot_project').value.trim();
@@ -896,6 +913,37 @@ function rStockDetail(el) {
   el.innerHTML = h;
 }
 
+// SO No. ผูกกับ SO จริงในระบบได้ (พิมพ์แล้วเลือกจาก dropdown) หรือพิมพ์ free text เองถ้ายังไม่มี SO
+// เลือก SO จริงแล้วจะดึง Dealer/โครงการมาเติมให้อัตโนมัติ + เก็บ soId ไว้ผูกกับ SO นั้น เพื่อให้หน้า SO ขึ้นสถานะ "พร้อมส่ง" ได้ถูกต้อง
+function _stockSODatalistHtml() {
+  var list = ST.getAll('salesOrders');
+  var h = '<datalist id="stockSODL">';
+  list.forEach(function(s) {
+    h += '<option value="' + sanitize(s.soNumber || '') + '" data-so-id="' + s.id + '">';
+  });
+  h += '</datalist>';
+  return h;
+}
+
+function stockSOInputChanged(el, prefix) {
+  var dl = document.getElementById('stockSODL');
+  el.dataset.soId = '';
+  if (!dl) return;
+  var opts = Array.prototype.slice.call(dl.options);
+  var match = opts.filter(function(o) { return o.value === el.value; })[0];
+  if (!match) return;
+  var so = ST.getOne('salesOrders', match.dataset.soId);
+  if (!so) return;
+  el.dataset.soId = so.id;
+  var dealerEl = document.getElementById(prefix + '_dealer');
+  if (dealerEl && !dealerEl.value) dealerEl.value = so.dealerName || '';
+  var projEl = document.getElementById(prefix + '_project');
+  if (projEl && !projEl.value && so.pipelineId) {
+    var pipe = ST.getOne('pipeline', so.pipelineId);
+    if (pipe) projEl.value = pipe.projectName || '';
+  }
+}
+
 function showStockAddLotM(sku, code) {
   var p = getProductBySku(sku);
   if (!p) return;
@@ -904,7 +952,8 @@ function showStockAddLotM(sku, code) {
   var today = _nw().substring(0, 10);
   var body = '<div class="fg"><label>จำนวน</label><input type="number" id="lot_qty" min="1" value="1"></div>';
   if (isBooking) {
-    body += '<div class="fg"><label>SO No.</label><input type="text" id="lot_so"></div>';
+    body += _stockSODatalistHtml();
+    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
     body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="lot_date" value="' + today + '"></div>';
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="lot_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
     body += '<div class="fg"><label>Dealer</label><input type="text" id="lot_dealer"></div>';
@@ -923,8 +972,10 @@ function saveStockAddLot(sku, code) {
   if (!p) return;
   var qty = document.getElementById('lot_qty').value;
   if (code === '1021') {
+    var soEl = document.getElementById('lot_so');
     var extra = {
-      ref: document.getElementById('lot_so').value.trim(),
+      ref: soEl.value.trim(),
+      soId: soEl.dataset.soId || '',
       bookedDate: document.getElementById('lot_date').value,
       salesperson: document.getElementById('lot_sales').value.trim(),
       dealerName: document.getElementById('lot_dealer').value.trim(),
@@ -957,7 +1008,8 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   body += '</select></div>';
   body += '<div class="fg"><label>จำนวนที่ย้าย</label><input type="number" id="mv_qty" min="1" max="' + lot.qty + '" value="' + lot.qty + '"></div>';
   body += '<div id="mv_booking_fields" style="display:none">';
-  body += '<div class="fg"><label>SO No.</label><input type="text" id="mv_so" value="' + sanitize(lot.ref || '') + '"></div>';
+  body += _stockSODatalistHtml();
+  body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv\')" value="' + sanitize(lot.ref || '') + '"></div>';
   body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="mv_date" value="' + today + '"></div>';
   body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="mv_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
   body += '<div class="fg"><label>Dealer</label><input type="text" id="mv_dealer"></div>';
@@ -984,7 +1036,9 @@ function saveStockMoveLot(sku, lotId) {
   var note = document.getElementById('mv_note').value.trim();
   var extra = { note: note };
   if (dest === '1021') {
-    extra.ref = document.getElementById('mv_so').value.trim();
+    var mvSoEl = document.getElementById('mv_so');
+    extra.ref = mvSoEl.value.trim();
+    extra.soId = mvSoEl.dataset.soId || '';
     extra.bookedDate = document.getElementById('mv_date').value;
     extra.salesperson = document.getElementById('mv_sales').value.trim();
     extra.dealerName = document.getElementById('mv_dealer').value.trim();
