@@ -720,6 +720,7 @@ var R = {
   // ✅ เพิ่มตรงนี้
   products: rProducts,
   stock: rStock,
+  stockDetail: rStockDetail,
   productPrices: rProductPrices,
   productBundles: rProductBundles,
   productDemo: rProductDemo,

@@ -3,6 +3,10 @@
 // เก็บจำนวนคงเหลือแยกจาก v7_products โดยตั้งใจ — products มี guard กันข้อมูล sync ทับ/โดนทับอยู่แล้ว
 // (เคยเกิดเหตุข้อมูลหาย 2026-07-18) ไม่อยากไปแตะระบบนั้น เลยจับคู่กับ product ด้วย SKU แทน
 // Phase 2 (ยังไม่ทำ): ลิงก์ stock-view.html ให้ Admin ภายนอกกรอก/Import เอง
+//
+// โมเดลข้อมูล: แต่ละ SKU เก็บเป็น "lot" หลายก้อน (rec.lots[]) แทนตัวเลขเดียว — แต่ละ lot มี location
+// (โค้ดคลังย่อย), จำนวน, และอ้างอิง (PR/PO หรือ SO No.) การย้าย lot ระหว่างคลัง (เช่น QI → 0001 → 1021)
+// จะหักจาก lot ต้นทางแล้วสร้าง lot ใหม่ที่ปลายทาง เก็บ fromLocation/fromLotId ไว้สืบย้อนได้
 // ================================================================
 
 var stockSearch = '';
@@ -11,39 +15,64 @@ var stockFavOnly = false;
 var stockLowFilter = 'all'; // all | low | out
 var stockTypeFilter = 'all'; // all | stock | order
 var stockShowLog = false;
-var stockExpanded = {}; // sku -> เปิด/ปิดแถวรายละเอียดคลังย่อย
+var stockExpanded = {}; // sku -> เปิด/ปิดแถวสรุปคลังย่อยในหน้ารายการ
 var STOCK_LOW_THRESHOLD = 5;
 
-// คลังย่อยของ 1001 SiS Main Warehouse — ชุดเดียวกันทุก SKU (ตามที่กำหนดไว้ก่อน)
-// sellable:true = นับเป็น "พร้อมขาย" (ของปกติ) — ที่เหลือ (ติดจอง/ดาเมจ) ไม่นับว่าขายได้จริง
+// คลังย่อยทั้งหมด — ชุดเดียวกันทุก SKU (ตามที่กำหนดไว้ก่อน)
+// sellable:true = นับเป็น "พร้อมขาย" — ที่เหลือ (ติดจอง/ดาเมจ/รอขึ้นทะเบียน) ไม่นับว่าขายได้จริง
 var STOCK_LOCATIONS = [
-  { code: '0001', name: 'Normal Good', sellable: true },
-  { code: '1021', name: 'Sales Booking', sellable: false },
-  { code: '1027', name: 'Damaged Boxes', sellable: false }
+  { code: '0001', name: 'Normal Good', sellable: true, warehouse: '1001 SiS Main Warehouse' },
+  { code: '1021', name: 'Sales Booking', sellable: false, warehouse: '1001 SiS Main Warehouse' },
+  { code: '1027', name: 'Damaged Boxes', sellable: false, warehouse: '1001 SiS Main Warehouse' },
+  { code: 'QI', name: 'Pending Registration (กสทช. ฯลฯ)', sellable: false, warehouse: 'QI — รอขึ้นทะเบียน' }
 ];
+var STOCK_BOOKING_STATUSES = ['รอส่งมอบ', 'เตรียมส่งมอบ', 'ส่งมอบแล้ว', 'ยกเลิก'];
 
 function stockLocationName(code) {
   var loc = STOCK_LOCATIONS.filter(function(l) { return l.code === code; })[0];
   return loc ? loc.name : code;
 }
 
-// รองรับ record เก่าที่มี qty แบบตัวเลขเดียว (ก่อนมีคลังย่อย) — ยกไปไว้ที่ 0001 Normal Good ให้อัตโนมัติ
-function stockGetLocations(sku) {
-  if (!sku) return {};
-  var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
-  if (!rec) return {};
-  if (rec.locations) return rec.locations;
-  if (rec.qty) return { '0001': Number(rec.qty) || 0 };
-  return {};
+function _stockLotId() { return 'lot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+
+function _stockRec(sku) {
+  return ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
 }
 
-function stockTotalQty(locs) {
-  return Object.keys(locs).reduce(function(sum, k) { return sum + (Number(locs[k]) || 0); }, 0);
+// รองรับ record เก่า: ก่อนมี lot เคยเก็บเป็น locations{code:qty} แล้วก่อนหน้านั้นเคยเก็บ qty ตัวเดียว
+// แปลงเป็น lot เดียวต่อคลัง ชื่ออ้างอิง "(ยอดเดิม)" ให้อัตโนมัติ ไม่มีข้อมูลหาย
+function stockGetLots(sku) {
+  if (!sku) return [];
+  var rec = _stockRec(sku);
+  if (!rec) return [];
+  if (rec.lots) return rec.lots;
+  var locs = rec.locations || (rec.qty ? { '0001': Number(rec.qty) || 0 } : {});
+  var lots = [];
+  Object.keys(locs).forEach(function(code) {
+    var q = Number(locs[code]) || 0;
+    if (q > 0) lots.push({ id: 'legacy_' + code, location: code, ref: '(ยอดเดิม)', qty: q, dateIn: rec.updated || rec.created || _nw() });
+  });
+  return lots;
 }
 
-function stockSellableQty(locs) {
-  return STOCK_LOCATIONS.filter(function(l) { return l.sellable; })
-    .reduce(function(sum, l) { return sum + (Number(locs[l.code]) || 0); }, 0);
+function stockLocTotal(lots, code) {
+  return lots.filter(function(l) { return l.location === code; }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+}
+
+function stockTotalQty(lots) {
+  return lots.reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+}
+
+function stockSellableQty(lots) {
+  var sellableCodes = STOCK_LOCATIONS.filter(function(l) { return l.sellable; }).map(function(l) { return l.code; });
+  return lots.filter(function(l) { return sellableCodes.indexOf(l.location) !== -1; }).reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
+}
+
+function _stockSaveLots(sku, productName, lots) {
+  var rec = _stockRec(sku);
+  var payload = { sku: sku, productName: productName, lots: lots, source: 'app', updatedBy: _stockCurrentUserName() };
+  if (rec) ST.update('stockLevels', rec.id, payload);
+  else ST.add('stockLevels', payload);
 }
 
 function stockToggleExpand(sku) {
@@ -54,16 +83,16 @@ function stockToggleExpand(sku) {
 // ประเภทสินค้า: 'stock' = นับ/ติดตามจำนวนคงเหลือจริง, 'order' = สั่งตามออเดอร์ (default — ยังไม่ตั้งค่าไว้)
 function getStockOrderType(sku) {
   if (!sku) return 'order';
-  var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
+  var rec = _stockRec(sku);
   return (rec && rec.orderType) || 'order';
 }
 
 function toggleStockOrderType(sku, productName) {
   if (!sku) return;
   var newType = getStockOrderType(sku) === 'stock' ? 'order' : 'stock';
-  var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
+  var rec = _stockRec(sku);
   if (rec) ST.update('stockLevels', rec.id, { orderType: newType });
-  else ST.add('stockLevels', { sku: sku, productName: productName, locations: {}, orderType: newType });
+  else ST.add('stockLevels', { sku: sku, productName: productName, lots: [], orderType: newType });
   render();
 }
 
@@ -83,54 +112,97 @@ function _stockCurrentUserName() {
   return (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '';
 }
 
-// ตั้งจำนวนคงเหลือของคลังย่อยหนึ่งอัน + log ส่วนต่างอัตโนมัติ (ถ้าจำนวนเปลี่ยนจริง)
-function setStockLocationQty(sku, productName, code, newQty, source, note) {
+// เพิ่ม lot ใหม่เข้าคลังหนึ่ง (รับของเข้า / จองใหม่โดยตรง) — extra ใช้เฉพาะปลายทางเป็น 1021 Sales Booking
+function stockAddLot(sku, productName, code, qty, ref, note, extra) {
+  if (!sku) return;
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (qty <= 0) return;
+  var lots = stockGetLots(sku).slice();
+  var lot = { id: _stockLotId(), location: code, ref: ref || '', qty: qty, dateIn: _nw(), note: note || '' };
+  if (code === '1021' && extra) {
+    lot.soNumber = extra.ref || ref || '';
+    lot.ref = lot.soNumber;
+    lot.bookedDate = extra.bookedDate || _nw();
+    lot.salesperson = extra.salesperson || '';
+    lot.dealerName = extra.dealerName || '';
+    lot.projectName = extra.projectName || '';
+    lot.status = extra.status || STOCK_BOOKING_STATUSES[0];
+  }
+  lots.push(lot);
+  _stockSaveLots(sku, productName, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: productName, locationCode: code, locationName: stockLocationName(code),
+    before: 0, after: qty, delta: qty, source: 'app', note: note || '', date: _nw(), type: 'in'
+  });
+}
+
+// ย้าย lot (บางส่วนหรือทั้งหมด) จากคลังหนึ่งไปอีกคลัง — ถ้าปลายทางคือ 1021 ต้องมี extra (รายละเอียดการจอง)
+function stockMoveLot(sku, productName, lotId, moveQty, destCode, extra) {
+  if (!sku) return;
+  extra = extra || {};
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === lotId; });
+  if (idx === -1) return;
+  var lot = lots[idx];
+  moveQty = Math.max(0, Math.min(Math.round(Number(moveQty) || 0), Number(lot.qty) || 0));
+  if (moveQty <= 0) return;
+  var remaining = (Number(lot.qty) || 0) - moveQty;
+  if (remaining > 0) lots[idx] = Object.assign({}, lot, { qty: remaining });
+  else lots.splice(idx, 1);
+
+  var newLot = {
+    id: _stockLotId(), location: destCode, ref: extra.ref || lot.ref, qty: moveQty, dateIn: _nw(),
+    note: extra.note || '', fromLocation: lot.location, fromLotId: lot.id
+  };
+  if (destCode === '1021') {
+    newLot.soNumber = extra.ref || lot.ref || '';
+    newLot.ref = newLot.soNumber;
+    newLot.bookedDate = extra.bookedDate || _nw();
+    newLot.salesperson = extra.salesperson || '';
+    newLot.dealerName = extra.dealerName || '';
+    newLot.projectName = extra.projectName || '';
+    newLot.status = extra.status || STOCK_BOOKING_STATUSES[0];
+  }
+  lots.push(newLot);
+  _stockSaveLots(sku, productName, lots);
+
+  ST.add('stockLog', {
+    sku: sku, productName: productName,
+    locationCode: lot.location, locationName: stockLocationName(lot.location),
+    toLocationCode: destCode, toLocationName: stockLocationName(destCode),
+    qty: moveQty, note: extra.note || '', date: _nw(), type: 'transfer'
+  });
+}
+
+function stockSetLotStatus(sku, productName, lotId, status) {
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === lotId; });
+  if (idx === -1) return;
+  lots[idx] = Object.assign({}, lots[idx], { status: status });
+  _stockSaveLots(sku, productName, lots);
+  render();
+}
+
+// เข้ากันได้กับของเดิม (Import Excel) — ใช้ lot คงที่ id 'import_0001' อัปเดตซ้ำได้ทุกครั้งที่ import ไม่สร้าง lot ซ้ำ
+function setStockQty(sku, productName, newQty, source, note) {
   if (!sku) return;
   newQty = Math.max(0, Math.round(Number(newQty) || 0));
-  var rec = ST.getAll('stockLevels').find(function(s) { return s.sku === sku; });
-  var locs = {};
-  if (rec) {
-    if (rec.locations) { for (var k in rec.locations) locs[k] = rec.locations[k]; }
-    else if (rec.qty) locs['0001'] = Number(rec.qty) || 0;
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === 'import_0001'; });
+  var before = idx !== -1 ? (Number(lots[idx].qty) || 0) : 0;
+  if (idx !== -1) {
+    if (newQty > 0) lots[idx] = Object.assign({}, lots[idx], { qty: newQty, dateIn: _nw() });
+    else lots.splice(idx, 1);
+  } else if (newQty > 0) {
+    lots.push({ id: 'import_0001', location: '0001', ref: '(Import Excel)', qty: newQty, dateIn: _nw(), note: note || '' });
   }
-  var before = Number(locs[code]) || 0;
-  locs[code] = newQty;
-  var payload = { sku: sku, productName: productName, locations: locs, source: source || 'app', updatedBy: _stockCurrentUserName() };
-  if (rec) ST.update('stockLevels', rec.id, payload);
-  else ST.add('stockLevels', payload);
+  _stockSaveLots(sku, productName, lots);
   if (newQty !== before) {
     ST.add('stockLog', {
-      sku: sku, productName: productName, locationCode: code, locationName: stockLocationName(code),
-      before: before, after: newQty, delta: newQty - before, source: source || 'app', note: note || '', date: _nw()
+      sku: sku, productName: productName, locationCode: '0001', locationName: stockLocationName('0001'),
+      before: before, after: newQty, delta: newQty - before, source: source || 'app', note: note || '', date: _nw(), type: 'adjust'
     });
   }
-}
-
-// เข้ากันได้กับของเดิม (Import Excel) — ตั้งจำนวนที่คลัง 0001 Normal Good (ของปกติ พร้อมขาย) เป็นค่าเริ่มต้น
-function setStockQty(sku, productName, newQty, source, note) {
-  setStockLocationQty(sku, productName, '0001', newQty, source, note);
-}
-
-function stockEditLocationInline(el, sku, code, productName) {
-  if (el.tagName === 'INPUT') return;
-  var cur = parseInt(el.textContent, 10) || 0;
-  var input = document.createElement('input');
-  input.type = 'number';
-  input.min = '0';
-  input.value = cur;
-  input.style.width = '64px';
-  input.onclick = function(e) { e.stopPropagation(); };
-  input.onblur = function() {
-    setStockLocationQty(sku, productName, code, input.value, 'app', '');
-    render();
-  };
-  input.onkeydown = function(e) {
-    if (e.key === 'Enter') input.blur();
-    if (e.key === 'Escape') render();
-  };
-  el.replaceWith(input);
-  input.focus();
-  input.select();
 }
 
 function stockToggleCategory(catId) {
@@ -154,12 +226,12 @@ function rStock(el) {
 
   var rows = products.map(function(p) {
     var lvl = p.sku ? levelMap[p.sku] : null;
-    var locs = p.sku ? stockGetLocations(p.sku) : {};
+    var lots = p.sku ? stockGetLots(p.sku) : [];
     return {
       product: p,
-      locations: locs,
-      qty: stockTotalQty(locs), // คงเหลือรวมทุกคลังย่อย
-      sellable: stockSellableQty(locs), // พร้อมขายจริง (เฉพาะคลังที่ flag sellable)
+      lots: lots,
+      qty: stockTotalQty(lots), // คงเหลือรวมทุกคลังย่อย
+      sellable: stockSellableQty(lots), // พร้อมขายจริง (เฉพาะคลังที่ flag sellable)
       hasLevel: !!lvl,
       orderType: (lvl && lvl.orderType) || 'order',
       updatedAt: lvl ? (lvl.updated || lvl.created) : null,
@@ -168,7 +240,7 @@ function rStock(el) {
     };
   });
 
-  // นับใกล้หมด/หมดสต็อก จากจำนวน "พร้อมขาย" เท่านั้น (ไม่รวมของติดจอง/ดาเมจ) และเฉพาะสินค้าประเภท Stock
+  // นับใกล้หมด/หมดสต็อก จากจำนวน "พร้อมขาย" เท่านั้น (ไม่รวมของติดจอง/ดาเมจ/รอขึ้นทะเบียน) และเฉพาะสินค้าประเภท Stock
   var stockRows = rows.filter(function(r) { return r.orderType === 'stock'; });
   var totalCount = rows.length;
   var lowCount = stockRows.filter(function(r) { return r.sellable > 0 && r.sellable < STOCK_LOW_THRESHOLD; }).length;
@@ -237,13 +309,15 @@ function rStock(el) {
       var rowStyle = isStockType ? (r.sellable <= 0 ? 'background:rgba(239,68,68,.08)' : (r.sellable < STOCK_LOW_THRESHOLD ? 'background:rgba(245,158,11,.08)' : '')) : '';
       h += '<tr style="' + rowStyle + '">';
       h += '<td style="text-align:center">' + (isStockType && p.sku ?
-        '<span style="cursor:pointer;color:var(--text2)" onclick="stockToggleExpand(\'' + p.sku + '\')" title="ดูรายละเอียดคลังย่อย">' + (expanded ? '▾' : '▸') + '</span>' :
+        '<span style="cursor:pointer;color:var(--text2)" onclick="stockToggleExpand(\'' + p.sku + '\')" title="ดูสรุปคลังย่อย">' + (expanded ? '▾' : '▸') + '</span>' :
         '') + '</td>';
       h += '<td style="text-align:center">' + (p.sku ?
         '<span style="cursor:pointer;font-size:15px" onclick="toggleStockFav(\'' + p.sku + '\',\'' + sanitize(p.name || '').replace(/'/g, "\\'") + '\')" title="' + (fav ? 'เอาออกจาก Favorite' : 'เพิ่มเป็น Favorite') + '">' + (fav ? '⭐' : '☆') + '</span>' :
         '') + '</td>';
       h += '<td style="font-size:11px">' + (p.sku ? qcopyHtml(p.sku) : '<span style="color:var(--text2)" title="ไม่มี SKU ตั้งค่า Stock ไม่ได้">-</span>') + '</td>';
-      h += '<td>' + sanitize(p.name || '-') + '</td>';
+      h += '<td>' + (p.sku ?
+        '<a href="#" onclick="go(\'stockDetail\',{sku:\'' + p.sku + '\'});return false">' + sanitize(p.name || '-') + '</a>' :
+        sanitize(p.name || '-')) + '</td>';
       h += '<td>' + sanitize((typeof getCategoryName === 'function' ? getCategoryName(p.category) : p.category) || '-') + '</td>';
       h += '<td>' + (p.sku ?
         '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:999px;cursor:pointer;' +
@@ -257,7 +331,7 @@ function rStock(el) {
       h += '<td style="font-size:11px;color:var(--text2)">' + (r.updatedAt ? fDT(r.updatedAt) + (r.updatedBy ? ' · ' + sanitize(r.updatedBy) : '') : '-') + '</td>';
       h += '</tr>';
       if (isStockType && expanded) {
-        h += '<tr><td></td><td colspan="8" style="padding:0">' + stockLocationBreakdownHtml(p) + '</td></tr>';
+        h += '<tr><td></td><td colspan="8" style="padding:0">' + stockLocationSummaryHtml(p) + '</td></tr>';
       }
     });
     h += '</tbody></table></div>';
@@ -272,13 +346,21 @@ function rStock(el) {
       h += '<div class="empty"><p>ยังไม่มีประวัติการเปลี่ยนแปลง</p></div>';
     } else {
       logs.forEach(function(l) {
-        var up = l.delta > 0;
+        var isTransfer = l.type === 'transfer';
         h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#334155)">';
-        h += '<span style="font-size:16px;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '▲' : '▼') + '</span>';
-        h += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(l.productName || l.sku) + ' <span style="color:var(--text2);font-size:11px">(' + sanitize(l.sku) + (l.locationName ? ' · ' + sanitize(l.locationCode) + ' ' + sanitize(l.locationName) : '') + ')</span></div>';
-        h += '<div style="font-size:11px;color:var(--text2)">' + fDT(l.date) + ' · ' + _stockSourceLabel(l.source) + (l.note ? ' · ' + sanitize(l.note) : '') + '</div></div>';
-        h += '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '+' : '') + l.delta + '</div>';
-        h += '<div style="font-size:11px;color:var(--text2)">' + l.before + ' → ' + l.after + '</div></div>';
+        if (isTransfer) {
+          h += '<span style="font-size:16px;color:#3b82f6">↔</span>';
+          h += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(l.productName || l.sku) + ' <span style="color:var(--text2);font-size:11px">(' + sanitize(l.sku) + ')</span></div>';
+          h += '<div style="font-size:11px;color:var(--text2)">' + fDT(l.date) + ' · ย้าย ' + sanitize(l.locationName) + ' → ' + sanitize(l.toLocationName) + (l.note ? ' · ' + sanitize(l.note) : '') + '</div></div>';
+          h += '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:#3b82f6">' + l.qty + '</div></div>';
+        } else {
+          var up = l.delta > 0;
+          h += '<span style="font-size:16px;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '▲' : '▼') + '</span>';
+          h += '<div style="flex:1;min-width:0"><div style="font-size:13px">' + sanitize(l.productName || l.sku) + ' <span style="color:var(--text2);font-size:11px">(' + sanitize(l.sku) + (l.locationName ? ' · ' + sanitize(l.locationCode) + ' ' + sanitize(l.locationName) : '') + ')</span></div>';
+          h += '<div style="font-size:11px;color:var(--text2)">' + fDT(l.date) + ' · ' + _stockSourceLabel(l.source) + (l.note ? ' · ' + sanitize(l.note) : '') + '</div></div>';
+          h += '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:' + (up ? '#22c55e' : '#ef4444') + '">' + (up ? '+' : '') + l.delta + '</div>';
+          h += '<div style="font-size:11px;color:var(--text2)">' + l.before + ' → ' + l.after + '</div></div>';
+        }
         h += '</div>';
       });
     }
@@ -292,30 +374,223 @@ function rStock(el) {
   if (srcEl && stockSearch) { srcEl.focus(); srcEl.setSelectionRange(stockSearch.length, stockSearch.length); }
 }
 
-function stockLocationBreakdownHtml(p) {
-  var locs = stockGetLocations(p.sku);
-  var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
-  var h = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 8px">';
+// สรุปย่อคลังย่อยในหน้ารายการ (อ่านอย่างเดียว) — จัดการจริง (เพิ่ม/ย้าย lot) ทำในหน้ารายละเอียด
+function stockLocationSummaryHtml(p) {
+  var lots = stockGetLots(p.sku);
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 4px">';
   h += '<thead><tr>' +
-    '<th style="text-align:left;padding:4px 4px 4px 30px;font-weight:400;color:var(--text2)">คลังย่อย (1001 SiS Main Warehouse)</th>' +
+    '<th style="text-align:left;padding:4px 4px 4px 30px;font-weight:400;color:var(--text2)">คลังย่อย</th>' +
     '<th style="text-align:center;padding:4px;font-weight:400;color:var(--text2)">จำนวน</th>' +
     '<th style="text-align:left;padding:4px;font-weight:400;color:var(--text2)">นับพร้อมขาย</th>' +
     '</tr></thead><tbody>';
   STOCK_LOCATIONS.forEach(function(loc) {
-    var v = Number(locs[loc.code]) || 0;
+    var v = stockLocTotal(lots, loc.code);
     h += '<tr>';
     h += '<td style="padding:4px 4px 4px 30px">' + loc.code + ' ' + sanitize(loc.name) + '</td>';
-    h += '<td style="text-align:center;padding:4px"><span style="display:inline-block;padding:2px 10px;border:1px dashed var(--border,#475569);border-radius:6px;cursor:pointer" title="ดับเบิ้ลคลิกเพื่อแก้ไข" ondblclick="stockEditLocationInline(this,\'' + p.sku + '\',\'' + loc.code + '\',\'' + nameEsc + '\')">' + v + '</span></td>';
+    h += '<td style="text-align:center;padding:4px;font-weight:700">' + v + '</td>';
     h += '<td style="padding:4px">' + (loc.sellable ?
       '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">ใช่</span>' :
       '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280">ไม่</span>') + '</td>';
     h += '</tr>';
   });
   h += '</tbody></table>';
+  h += '<div style="padding:0 4px 10px 30px"><a href="#" onclick="go(\'stockDetail\',{sku:\'' + p.sku + '\'});return false" style="font-size:12px">📋 ดูรายละเอียด/จัดการคลัง →</a></div>';
   return h;
 }
 
+// ================================================================
+// หน้ารายละเอียดสินค้า — ราคาแต่ละ Level + คลังย่อยแยกตาม warehouse + จัดการ lot (เพิ่ม/ย้าย)
+// ================================================================
+function rStockDetail(el) {
+  var sku = S.sku;
+  var p = sku ? getProductBySku(sku) : null;
+  if (!p) { el.innerHTML = '<div class="card"><button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button><div>ไม่พบสินค้านี้</div></div>'; return; }
+  document.getElementById('pgT').textContent = '📦 ' + (p.name || 'สินค้า');
+
+  var lots = stockGetLots(sku);
+  var totalAll = stockTotalQty(lots);
+  var sellable = stockSellableQty(lots);
+
+  var h = '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+
+  h += '<div class="card" style="margin-bottom:12px">';
+  h += '<h2 style="margin:0 0 2px">' + sanitize(p.name || '-') + '</h2>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">' + (p.sku ? qcopyHtml(p.sku) : '-') + ' · ' + sanitize((typeof getCategoryName === 'function' ? getCategoryName(p.category) : p.category) || '-') + '</div>';
+  h += '<table style="width:100%;font-size:13px;border-collapse:collapse">';
+  h += '<tr><td style="padding:6px 4px;color:var(--text2)">RRP</td><td style="padding:6px 4px;text-align:right;font-weight:700">฿' + fmtMoney(p.rrpInVat || 0) + '</td>' +
+       '<td style="padding:6px 4px;color:var(--text2)">Level S</td><td style="padding:6px 4px;text-align:right">฿' + fmtMoney((p.typePrices && p.typePrices.S) || 0) + '</td></tr>';
+  h += '<tr><td style="padding:6px 4px;color:var(--text2)">Level A</td><td style="padding:6px 4px;text-align:right">฿' + fmtMoney((p.typePrices && p.typePrices.A) || 0) + '</td>' +
+       '<td style="padding:6px 4px;color:var(--text2)">Level B</td><td style="padding:6px 4px;text-align:right">฿' + fmtMoney((p.typePrices && p.typePrices.B) || 0) + '</td></tr>';
+  h += '<tr><td style="padding:6px 4px;color:var(--text2)">Other</td><td style="padding:6px 4px;text-align:right">฿' + fmtMoney((p.typePrices && p.typePrices.Other) || 0) + '</td><td></td><td></td></tr>';
+  h += '</table>';
+  h += '</div>';
+
+  h += '<div class="sr" style="margin-bottom:12px">';
+  h += '<div class="sc"><div class="sn c1">' + totalAll + '</div><div class="sl">คงเหลือรวม</div></div>';
+  h += '<div class="sc"><div class="sn c2">' + sellable + '</div><div class="sl">พร้อมขาย</div></div>';
+  h += '</div>';
+
+  var warehouses = [];
+  STOCK_LOCATIONS.forEach(function(l) {
+    var wh = warehouses.filter(function(w) { return w.name === l.warehouse; })[0];
+    if (!wh) { wh = { name: l.warehouse, locs: [] }; warehouses.push(wh); }
+    wh.locs.push(l);
+  });
+
+  warehouses.forEach(function(wh) {
+    h += '<div class="card" style="margin-bottom:12px">';
+    h += '<h3 style="margin:0 0 10px;font-size:14px">' + sanitize(wh.name) + '</h3>';
+    wh.locs.forEach(function(loc) {
+      var locLots = lots.filter(function(l) { return l.location === loc.code; });
+      var locTotal = locLots.reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
+      var isBooking = loc.code === '1021';
+      h += '<div style="margin-bottom:14px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      h += '<span style="font-size:12px;font-weight:500">' + loc.code + ' ' + sanitize(loc.name) + ' · รวม ' + locTotal + (loc.sellable ? ' <span style="color:#16a34a">(พร้อมขาย)</span>' : '') + '</span>';
+      h += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
+      h += '</div>';
+      if (!locLots.length) {
+        h += '<div style="font-size:12px;color:var(--text2);padding:4px 0">ไม่มีสินค้าในคลังนี้</div>';
+      } else {
+        h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+        h += '<thead><tr>';
+        h += isBooking ?
+          '<th style="text-align:left;padding:4px">SO No.</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
+          '<th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>';
+        h += '</tr></thead><tbody>';
+        locLots.forEach(function(lot) {
+          h += '<tr style="border-top:1px solid var(--border,#334155)">';
+          if (isBooking) {
+            h += '<td style="padding:5px 4px">' + sanitize(lot.soNumber || lot.ref || '-') + '</td>';
+            h += '<td style="text-align:center;padding:5px 4px;font-weight:700">' + lot.qty + '</td>';
+            h += '<td style="padding:5px 4px">' + sanitize(lot.salesperson || '-') + '</td>';
+            h += '<td style="padding:5px 4px">' + sanitize(lot.dealerName || '-') + '</td>';
+            h += '<td style="padding:5px 4px">' + sanitize(lot.projectName || '-') + '</td>';
+            h += '<td style="padding:5px 4px">' +
+              '<select style="font-size:11px;padding:2px 4px" onchange="stockSetLotStatus(\'' + sku + '\',\'' + sanitize(p.name || '').replace(/'/g, "\\'") + '\',\'' + lot.id + '\',this.value)">' +
+              STOCK_BOOKING_STATUSES.map(function(st) { return '<option' + (st === lot.status ? ' selected' : '') + '>' + st + '</option>'; }).join('') +
+              '</select></td>';
+          } else {
+            h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
+            h += '<td style="text-align:center;padding:5px 4px;font-weight:700">' + lot.qty + '</td>';
+            h += '<td style="padding:5px 4px;font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</td>';
+          }
+          h += '<td style="padding:5px 4px;text-align:right"><button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\')">→ ย้ายคลัง</button></td>';
+          h += '</tr>';
+        });
+        h += '</tbody></table></div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  });
+
+  el.innerHTML = h;
+}
+
+function showStockAddLotM(sku, code) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var loc = STOCK_LOCATIONS.filter(function(l) { return l.code === code; })[0];
+  var isBooking = code === '1021';
+  var today = _nw().substring(0, 10);
+  var body = '<div class="fg"><label>จำนวน</label><input type="number" id="lot_qty" min="1" value="1"></div>';
+  if (isBooking) {
+    body += '<div class="fg"><label>SO No.</label><input type="text" id="lot_so"></div>';
+    body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="lot_date" value="' + today + '"></div>';
+    body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="lot_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
+    body += '<div class="fg"><label>Dealer</label><input type="text" id="lot_dealer"></div>';
+    body += '<div class="fg"><label>โครงการ</label><input type="text" id="lot_project"></div>';
+    body += '<div class="fg"><label>สถานะ</label><select id="lot_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
+  } else {
+    body += '<div class="fg"><label>อ้างอิง (PR/PO)</label><input type="text" id="lot_ref"></div>';
+    body += '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="lot_note"></div>';
+  }
+  body += '<button class="btn bp btn-full" onclick="saveStockAddLot(\'' + sku + '\',\'' + code + '\')">💾 บันทึก</button>';
+  openM('+ เพิ่มสินค้าเข้าคลัง ' + code + ' ' + sanitize(loc ? loc.name : ''), body);
+}
+
+function saveStockAddLot(sku, code) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var qty = document.getElementById('lot_qty').value;
+  if (code === '1021') {
+    var extra = {
+      ref: document.getElementById('lot_so').value.trim(),
+      bookedDate: document.getElementById('lot_date').value,
+      salesperson: document.getElementById('lot_sales').value.trim(),
+      dealerName: document.getElementById('lot_dealer').value.trim(),
+      projectName: document.getElementById('lot_project').value.trim(),
+      status: document.getElementById('lot_status').value
+    };
+    stockAddLot(sku, p.name, code, qty, extra.ref, '', extra);
+  } else {
+    var ref = document.getElementById('lot_ref').value.trim();
+    var note = document.getElementById('lot_note').value.trim();
+    stockAddLot(sku, p.name, code, qty, ref, note);
+  }
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function showStockMoveLotM(sku, lotId) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var lots = stockGetLots(sku);
+  var lot = lots.filter(function(l) { return l.id === lotId; })[0];
+  if (!lot) return;
+  var otherLocs = STOCK_LOCATIONS.filter(function(l) { return l.code !== lot.location; });
+  var today = _nw().substring(0, 10);
+
+  var body = '<div class="fg"><label>' + sanitize(lot.ref || stockLocationName(lot.location)) + ' — เหลือ ' + lot.qty + '</label></div>';
+  body += '<div class="fg"><label>ย้ายไปคลัง</label><select id="mv_dest" onchange="stockMoveDestChanged()">';
+  otherLocs.forEach(function(l) { body += '<option value="' + l.code + '">' + l.code + ' ' + sanitize(l.name) + '</option>'; });
+  body += '</select></div>';
+  body += '<div class="fg"><label>จำนวนที่ย้าย</label><input type="number" id="mv_qty" min="1" max="' + lot.qty + '" value="' + lot.qty + '"></div>';
+  body += '<div id="mv_booking_fields" style="display:none">';
+  body += '<div class="fg"><label>SO No.</label><input type="text" id="mv_so" value="' + sanitize(lot.ref || '') + '"></div>';
+  body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="mv_date" value="' + today + '"></div>';
+  body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="mv_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
+  body += '<div class="fg"><label>Dealer</label><input type="text" id="mv_dealer"></div>';
+  body += '<div class="fg"><label>โครงการ</label><input type="text" id="mv_project"></div>';
+  body += '<div class="fg"><label>สถานะ</label><select id="mv_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
+  body += '</div>';
+  body += '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="mv_note"></div>';
+  body += '<button class="btn bp btn-full" onclick="saveStockMoveLot(\'' + sku + '\',\'' + lotId + '\')">→ ยืนยันย้าย</button>';
+  openM('ย้ายคลัง', body);
+  setTimeout(stockMoveDestChanged, 30);
+}
+
+function stockMoveDestChanged() {
+  var dest = document.getElementById('mv_dest');
+  var fields = document.getElementById('mv_booking_fields');
+  if (dest && fields) fields.style.display = dest.value === '1021' ? 'block' : 'none';
+}
+
+function saveStockMoveLot(sku, lotId) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var dest = document.getElementById('mv_dest').value;
+  var qty = document.getElementById('mv_qty').value;
+  var note = document.getElementById('mv_note').value.trim();
+  var extra = { note: note };
+  if (dest === '1021') {
+    extra.ref = document.getElementById('mv_so').value.trim();
+    extra.bookedDate = document.getElementById('mv_date').value;
+    extra.salesperson = document.getElementById('mv_sales').value.trim();
+    extra.dealerName = document.getElementById('mv_dealer').value.trim();
+    extra.projectName = document.getElementById('mv_project').value.trim();
+    extra.status = document.getElementById('mv_status').value;
+  }
+  stockMoveLot(sku, p.name, lotId, qty, dest, extra);
+  closeMForce();
+  toast('→ ย้ายแล้ว');
+  render();
+}
+
 // Import Excel — sheet แรก, หา column SKU/จำนวน จาก header (รองรับทั้งไทย/อังกฤษ) fallback คอลัมน์ 0/1
+// นำเข้าเป็น lot คงที่ id 'import_0001' ในคลัง 0001 Normal Good — import ซ้ำจะอัปเดต lot เดิม ไม่สร้างซ้ำ
 function importStockFromExcel(event) {
   var file = event.target.files[0];
   if (!file) return;
