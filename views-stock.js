@@ -843,36 +843,40 @@ function rStockDetail(el) {
       var isBooking = loc.code === '1021';
       var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
       var accentC = loc.sellable ? '#16a34a' : '#64748b';
-      h += '<div style="margin-bottom:14px;background:' + tint + ';border-radius:8px;padding:10px">';
+      var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
+      h += '<div style="margin-bottom:14px;background:' + tint + ';border-radius:8px;padding:10px" ' +
+        'ondragover="stockLotDragOver(event,\'' + accentC + '\')" ondragleave="stockLotDragLeave(event)" ondrop="stockLotDrop(event,\'' + loc.code + '\')">';
       h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
       h += '<span style="font-size:13px;font-weight:700;color:' + accentC + '">' + _stockLocationIcon(loc.code) + ' ' + loc.code + ' ' + sanitize(loc.name) + '</span>';
       h += '<span style="font-size:16px;font-weight:700;color:' + accentC + '">' + locTotal + (loc.sellable ? ' <span style="font-size:10px;font-weight:400;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">พร้อมขาย</span>' : '') + '</span>';
       h += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
       h += '</div>';
       if (!locLots.length) {
-        h += '<div style="font-size:12px;color:var(--text2);padding:4px 0">ไม่มีสินค้าในคลังนี้</div>';
+        h += '<div style="font-size:12px;color:var(--text2);padding:8px 4px;text-align:center;border:1px dashed var(--border,#475569);border-radius:6px">ไม่มีสินค้าในคลังนี้ — ลากรายการมาวางที่นี่ได้</div>';
       } else {
         h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--card,transparent)">';
         h += '<thead><tr>';
         h += isBooking ?
-          '<th style="text-align:left;padding:4px">SO No.</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
-          '<th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>';
+          '<th></th><th style="text-align:left;padding:4px">SO No.</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
+          '<th></th><th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>';
         h += '</tr></thead><tbody>';
         locLots.forEach(function(lot) {
-          h += '<tr style="border-top:1px solid var(--border,#334155)">';
+          var qtyCellHtml = '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="กดเพื่อแก้ไขจำนวน" onclick="stockEditLotQtyInline(this,\'' + sku + '\',\'' + lot.id + '\',\'' + nameEsc + '\')">' + lot.qty + '</span>';
+          h += '<tr style="border-top:1px solid var(--border,#334155);cursor:grab" draggable="true" ondragstart="stockLotDragStart(event,\'' + sku + '\',\'' + lot.id + '\')" title="ลากไปวางที่คลังอื่นเพื่อย้าย">';
+          h += '<td style="padding:5px 4px;color:var(--text2)">⠿</td>';
           if (isBooking) {
             h += '<td style="padding:5px 4px">' + sanitize(lot.soNumber || lot.ref || '-') + '</td>';
-            h += '<td style="text-align:center;padding:5px 4px;font-weight:700">' + lot.qty + '</td>';
+            h += '<td style="text-align:center;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.salesperson || '-') + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.dealerName || '-') + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.projectName || '-') + '</td>';
             h += '<td style="padding:5px 4px">' +
-              '<select style="font-size:11px;padding:2px 4px" onchange="stockSetLotStatus(\'' + sku + '\',\'' + sanitize(p.name || '').replace(/'/g, "\\'") + '\',\'' + lot.id + '\',this.value)">' +
+              '<select style="font-size:11px;padding:2px 4px" onchange="stockSetLotStatus(\'' + sku + '\',\'' + nameEsc + '\',\'' + lot.id + '\',this.value)" onclick="event.stopPropagation()">' +
               STOCK_BOOKING_STATUSES.map(function(st) { return '<option' + (st === lot.status ? ' selected' : '') + '>' + st + '</option>'; }).join('') +
               '</select></td>';
           } else {
             h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
-            h += '<td style="text-align:center;padding:5px 4px;font-weight:700">' + lot.qty + '</td>';
+            h += '<td style="text-align:center;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px;font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</td>';
           }
           h += '<td style="padding:5px 4px;text-align:right;white-space:nowrap">' +
@@ -938,7 +942,7 @@ function saveStockAddLot(sku, code) {
   render();
 }
 
-function showStockMoveLotM(sku, lotId) {
+function showStockMoveLotM(sku, lotId, presetDest) {
   var p = getProductBySku(sku);
   if (!p) return;
   var lots = stockGetLots(sku);
@@ -949,7 +953,7 @@ function showStockMoveLotM(sku, lotId) {
 
   var body = '<div class="fg"><label>' + sanitize(lot.ref || stockLocationName(lot.location)) + ' — เหลือ ' + lot.qty + '</label></div>';
   body += '<div class="fg"><label>ย้ายไปคลัง</label><select id="mv_dest" onchange="stockMoveDestChanged()">';
-  otherLocs.forEach(function(l) { body += '<option value="' + l.code + '">' + l.code + ' ' + sanitize(l.name) + '</option>'; });
+  otherLocs.forEach(function(l) { body += '<option value="' + l.code + '"' + (presetDest === l.code ? ' selected' : '') + '>' + l.code + ' ' + sanitize(l.name) + '</option>'; });
   body += '</select></div>';
   body += '<div class="fg"><label>จำนวนที่ย้าย</label><input type="number" id="mv_qty" min="1" max="' + lot.qty + '" value="' + lot.qty + '"></div>';
   body += '<div id="mv_booking_fields" style="display:none">';
@@ -991,6 +995,91 @@ function saveStockMoveLot(sku, lotId) {
   closeMForce();
   toast('→ ย้ายแล้ว');
   render();
+}
+
+// ================================================================
+// ลาก lot ไปวางบนคลังปลายทางได้เลย — ปลายทางธรรมดา (ไม่ใช่ 1021) เปิด popup เล็กแค่จำนวน+หมายเหตุ
+// ปลายทางเป็น 1021 Sales Booking ยังต้องกรอกรายละเอียดจอง เลยเปิดฟอร์มเต็มแบบเดิม (พรีเซ็ตปลายทางไว้ให้)
+// ================================================================
+
+function stockLotDragStart(ev, sku, lotId) {
+  ev.dataTransfer.setData('text/plain', JSON.stringify({ sku: sku, lotId: lotId }));
+  ev.dataTransfer.effectAllowed = 'move';
+}
+
+function stockLotDragOver(ev, accentColor) {
+  ev.preventDefault();
+  ev.currentTarget.style.outline = '2px dashed ' + (accentColor || '#2563eb');
+  ev.currentTarget.style.outlineOffset = '-2px';
+}
+
+function stockLotDragLeave(ev) {
+  ev.currentTarget.style.outline = '';
+}
+
+function stockLotDrop(ev, destCode) {
+  ev.preventDefault();
+  ev.currentTarget.style.outline = '';
+  var data;
+  try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch (e) { return; }
+  if (!data || !data.sku || !data.lotId) return;
+  var lot = stockGetLots(data.sku).filter(function(l) { return l.id === data.lotId; })[0];
+  if (!lot || lot.location === destCode) return;
+  if (destCode === '1021') {
+    showStockMoveLotM(data.sku, data.lotId, destCode);
+  } else {
+    showStockQuickMoveM(data.sku, data.lotId, destCode);
+  }
+}
+
+// popup ย้ายแบบเบาๆ สำหรับปลายทางที่ไม่ต้องกรอกรายละเอียดจอง — จำนวน (ปุ่ม "ทั้งหมด" เติมให้) + หมายเหตุ
+function showStockQuickMoveM(sku, lotId, destCode) {
+  var p = getProductBySku(sku);
+  var lot = stockGetLots(sku).filter(function(l) { return l.id === lotId; })[0];
+  if (!p || !lot) return;
+  var body = '<div class="fg"><label>' + sanitize(lot.ref || stockLocationName(lot.location)) + ' → ' + sanitize(stockLocationName(destCode)) + ' (เหลือ ' + lot.qty + ')</label></div>';
+  body += '<div style="display:flex;gap:8px;margin-bottom:8px">';
+  body += '<input type="number" id="qmv_qty" min="1" max="' + lot.qty + '" value="' + lot.qty + '" style="flex:1">';
+  body += '<button class="btn bo" type="button" onclick="document.getElementById(\'qmv_qty\').value=' + lot.qty + '">ทั้งหมด</button>';
+  body += '</div>';
+  body += '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="qmv_note"></div>';
+  body += '<button class="btn bp btn-full" onclick="saveStockQuickMove(\'' + sku + '\',\'' + lotId + '\',\'' + destCode + '\')">→ ยืนยันย้าย</button>';
+  openM('ย้ายคลัง', body);
+  setTimeout(function() { var el = document.getElementById('qmv_qty'); if (el) { el.focus(); el.select(); } }, 50);
+}
+
+function saveStockQuickMove(sku, lotId, destCode) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var qty = document.getElementById('qmv_qty').value;
+  var note = document.getElementById('qmv_note').value.trim();
+  stockMoveLot(sku, p.name, lotId, qty, destCode, { note: note });
+  closeMForce();
+  toast('→ ย้ายแล้ว');
+  render();
+}
+
+// กดตัวเลขจำนวนของ lot แก้ไขได้ทันที ไม่ต้องเปิด modal (แก้ฟิลด์อื่น เช่น อ้างอิง/รายละเอียดจอง ยังใช้ปุ่ม ✏️ เหมือนเดิม)
+function stockEditLotQtyInline(el, sku, lotId, productName) {
+  if (el.tagName === 'INPUT') return;
+  var cur = parseInt(el.textContent, 10) || 0;
+  var input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.value = cur;
+  input.style.width = '70px';
+  input.onclick = function(e) { e.stopPropagation(); };
+  input.onblur = function() {
+    stockUpdateLot(sku, productName, lotId, { qty: input.value });
+    render();
+  };
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') render();
+  };
+  el.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 // Import Excel — sheet แรก, หา column SKU/จำนวน จาก header (รองรับทั้งไทย/อังกฤษ) fallback คอลัมน์ 0/1
