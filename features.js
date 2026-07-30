@@ -5073,7 +5073,7 @@ function rRemind(el) {
   try { stockRem = stockGetReminders(); } catch(e) {}
   if (stockRem.length) {
     h += '<div class="card"><h2>📦 Stock ต้องติดตาม (' + stockRem.length + ')</h2>' + stockRem.map(function(i) {
-      return '<div class="li ' + dlC(i.date, false) + '" onclick="go(\'stockDetail\',{sku:\'' + i.sku + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">' + fD(i.date) + ' ' + dlB(i.date, false) + '</div></div></div>';
+      return '<div class="li ' + dlC(i.date, false) + '" onclick="go(\'stockDetail\',{sku:\'' + i.sku + '\',lotId:\'' + i.lotId + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">' + fD(i.date) + ' ' + dlB(i.date, false) + '</div></div></div>';
     }).join('') + '</div>';
   }
   
