@@ -57,6 +57,17 @@ function stockAddLocationDef(code, name, sellable, warehouse) {
   return true;
 }
 
+// แก้ไขคลังที่มีอยู่แล้ว (ชื่อ/สังกัดคลังหลัก/นับพร้อมขาย) — แก้โค้ดคลังไม่ได้ เพราะ lot เดิมผูก location ด้วยโค้ดนี้อยู่
+function stockUpdateLocationDef(code, name, sellable, warehouse) {
+  name = (name || '').trim();
+  warehouse = (warehouse || '').trim();
+  if (!name || !warehouse) { toast('⚠️ กรอกให้ครบทุกช่อง'); return false; }
+  var rec = ST.getAll('stockLocations').filter(function(l) { return l.code === code; })[0];
+  if (!rec) return false;
+  ST.update('stockLocations', rec.id, { name: name, sellable: !!sellable, warehouse: warehouse });
+  return true;
+}
+
 function stockLocationName(code) {
   var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
   return loc ? loc.name : code;
@@ -646,6 +657,30 @@ function saveStockAddLocation() {
   render();
 }
 
+function showStockEditLocationM(code) {
+  var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
+  if (!loc) return;
+  var existingWarehouses = getStockLocations().map(function(l) { return l.warehouse; })
+    .filter(function(v, i, arr) { return arr.indexOf(v) === i; });
+  var body = '<div class="fg"><label>รหัสคลัง (โค้ด)</label><input type="text" value="' + sanitize(code) + '" disabled></div>';
+  body += '<div class="fg"><label>ชื่อคลัง</label><input type="text" id="eloc_name" value="' + sanitize(loc.name) + '"></div>';
+  body += '<div class="fg"><label>อยู่ภายใต้คลังหลัก</label><input type="text" id="eloc_warehouse" list="loc_wh_dl" value="' + sanitize(loc.warehouse) + '">' +
+    '<datalist id="loc_wh_dl">' + existingWarehouses.map(function(w) { return '<option value="' + sanitize(w) + '">'; }).join('') + '</datalist></div>';
+  body += '<div class="fg"><label><input type="checkbox" id="eloc_sellable"' + (loc.sellable ? ' checked' : '') + '> นับเป็น "พร้อมขาย"</label></div>';
+  body += '<button class="btn bp btn-full" onclick="saveStockEditLocation(\'' + code + '\')">💾 บันทึก</button>';
+  openM('✏️ แก้ไขคลัง ' + sanitize(code), body);
+}
+
+function saveStockEditLocation(code) {
+  var name = document.getElementById('eloc_name').value;
+  var warehouse = document.getElementById('eloc_warehouse').value;
+  var sellable = document.getElementById('eloc_sellable').checked;
+  if (!stockUpdateLocationDef(code, name, sellable, warehouse)) return;
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
 // เข้ากันได้กับของเดิม (Import Excel) — ใช้ lot คงที่ id 'import_0001' อัปเดตซ้ำได้ทุกครั้งที่ import ไม่สร้าง lot ซ้ำ
 function setStockQty(sku, productName, newQty, source, note) {
   if (!sku) return;
@@ -996,6 +1031,22 @@ function rStockDetail(el) {
     wh.locs.push(l);
   });
 
+  // สรุปคลัง — กดเพื่อเลื่อนไปหัวข้อคลังนั้น เกิดขึ้นอัตโนมัติตามคลังที่มีจริง (เพิ่มคลังใหม่ก็ขึ้นกล่องเพิ่มเอง)
+  h += '<div class="card" style="margin-bottom:12px">';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">สรุปคลัง — กดเพื่อไปที่หัวข้อ</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">';
+  allLocs.forEach(function(loc) {
+    var locTotal = lots.filter(function(l) { return l.location === loc.code && _stockIsActiveLot(l); }).reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
+    var accentC = loc.sellable ? '#16a34a' : '#64748b';
+    var tintBg = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
+    h += '<div style="background:' + tintBg + ';border-radius:8px;padding:10px;cursor:pointer;border-left:3px solid ' + accentC + '" ' +
+      'onclick="var el=document.getElementById(\'stockloc-' + loc.code + '\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'center\'})">' +
+      '<div style="font-size:11px;color:' + accentC + ';font-weight:500">' + _stockLocationIcon(loc.code) + ' ' + loc.code + '</div>' +
+      '<div style="font-size:20px;font-weight:500;color:' + accentC + '">' + locTotal + '</div>' +
+      '</div>';
+  });
+  h += '</div></div>';
+
   warehouses.forEach(function(wh) {
     var whColor = _stockWarehouseColor(wh.name);
     h += '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + whColor + '">';
@@ -1008,32 +1059,36 @@ function rStockDetail(el) {
       var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
       var accentC = loc.sellable ? '#16a34a' : '#64748b';
       var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
-      h += '<div style="margin-bottom:14px;background:' + tint + ';border-radius:8px;padding:10px" ' +
+      h += '<div id="stockloc-' + loc.code + '" style="margin-bottom:14px;background:' + tint + ';border-radius:8px;padding:10px;scroll-margin-top:12px" ' +
         'ondragover="stockLotDragOver(event,\'' + accentC + '\')" ondragleave="stockLotDragLeave(event)" ondrop="stockLotDrop(event,\'' + loc.code + '\')">';
       h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
       h += '<span style="font-size:13px;font-weight:700;color:' + accentC + '">' + _stockLocationIcon(loc.code) + ' ' + loc.code + ' ' + sanitize(loc.name) + '</span>';
       h += '<span style="font-size:16px;font-weight:700;color:' + accentC + '">' + locTotal + (loc.sellable ? ' <span style="font-size:10px;font-weight:400;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">พร้อมขาย</span>' : '') + '</span>';
-      h += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
+      h += '<span>' +
+        '<button class="btn bsm bo" onclick="showStockEditLocationM(\'' + loc.code + '\')" title="แก้ไขคลังนี้">✏️ คลัง</button> ' +
+        '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>' +
+        '</span>';
       h += '</div>';
       if (!locLots.length) {
         h += '<div style="font-size:12px;color:var(--text2);padding:8px 4px;text-align:center;border:1px dashed var(--border,#475569);border-radius:6px">ไม่มีสินค้าในคลังนี้ — ลากรายการมาวางที่นี่ได้</div>';
       } else {
         h += '<div class="export-wrap"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--card,transparent)">';
+        h += '<colgroup><col style="width:22px"><col><col style="width:64px">' + (isBooking ? '<col><col><col><col>' : (isPRPO ? '<col><col>' : '<col>')) + '<col style="width:96px"></colgroup>';
         h += '<thead><tr>';
         h += isBooking ?
-          '<th></th><th style="text-align:left;padding:4px">SO No.</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
+          '<th></th><th style="text-align:left;padding:4px">SO No.</th><th style="text-align:right;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">เซล</th><th style="text-align:left;padding:4px">Dealer</th><th style="text-align:left;padding:4px">โครงการ</th><th style="text-align:left;padding:4px">สถานะ</th><th></th>' :
           (isPRPO ?
-            '<th></th><th style="text-align:left;padding:4px">อ้างอิง (PO)</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">ผูก SO</th><th style="text-align:left;padding:4px">คาดว่าจะถึง</th><th></th>' :
-            '<th></th><th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:center;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>');
+            '<th></th><th style="text-align:left;padding:4px">อ้างอิง (PO)</th><th style="text-align:right;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">ผูก SO</th><th style="text-align:left;padding:4px">คาดว่าจะถึง</th><th></th>' :
+            '<th></th><th style="text-align:left;padding:4px">อ้างอิง</th><th style="text-align:right;padding:4px">จำนวน</th><th style="text-align:left;padding:4px">วันที่</th><th></th>');
         h += '</tr></thead><tbody>';
         locLots.forEach(function(lot) {
           var delivered = !_stockIsActiveLot(lot);
-          var qtyCellHtml = '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="กดเพื่อแก้ไขจำนวน" onclick="stockEditLotQtyInline(this,\'' + sku + '\',\'' + lot.id + '\',\'' + nameEsc + '\')">' + lot.qty + '</span>';
+          var qtyCellHtml = '<span style="font-weight:700;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;font-variant-numeric:tabular-nums" title="กดเพื่อแก้ไขจำนวน" onclick="stockEditLotQtyInline(this,\'' + sku + '\',\'' + lot.id + '\',\'' + nameEsc + '\')">' + lot.qty + '</span>';
           h += '<tr style="border-top:1px solid var(--border,#334155);cursor:grab' + (delivered ? ';opacity:.55' : '') + '" draggable="true" ondragstart="stockLotDragStart(event,\'' + sku + '\',\'' + lot.id + '\')" title="' + (delivered ? 'ส่งมอบแล้ว — ไม่นับรวมในยอดคงเหลือ' : 'ลากไปวางที่คลังอื่นเพื่อย้าย') + '">';
           h += '<td style="padding:5px 4px;color:var(--text2)">⠿</td>';
           if (isBooking) {
             h += '<td style="padding:5px 4px">' + sanitize(lot.soNumber || lot.ref || '-') + '</td>';
-            h += '<td style="text-align:center;padding:5px 4px">' + qtyCellHtml + '</td>';
+            h += '<td style="text-align:right;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.salesperson || '-') + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.dealerName || '-') + '</td>';
             h += '<td style="padding:5px 4px">' + sanitize(lot.projectName || '-') + '</td>';
@@ -1043,12 +1098,12 @@ function rStockDetail(el) {
               '</select></td>';
           } else if (isPRPO) {
             h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
-            h += '<td style="text-align:center;padding:5px 4px">' + qtyCellHtml + '</td>';
+            h += '<td style="text-align:right;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px">' + (lot.soNumber ? sanitize(lot.soNumber) : '<span style="color:var(--text2)">-</span>') + '</td>';
             h += '<td style="padding:5px 4px;' + (lot.expectedDate ? '' : 'color:var(--text2)') + '">' + (lot.expectedDate ? fD(lot.expectedDate) : '-') + '</td>';
           } else {
             h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
-            h += '<td style="text-align:center;padding:5px 4px">' + qtyCellHtml + '</td>';
+            h += '<td style="text-align:right;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px;font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</td>';
           }
           h += '<td style="padding:5px 4px;text-align:right;white-space:nowrap">' +
