@@ -528,13 +528,29 @@ function stockMarkRegistrationComplete(sku, productName, lotId) {
   var idx = lots.findIndex(function(l) { return l.id === lotId; });
   if (idx === -1) return;
   var regId = lots[idx].qiRegId;
+  // เก็บสถานะเดิมของทุกก้อนที่จะโดนแก้ไว้ก่อน เผื่อกด Undo ต้องคืนค่าที่ถูกต้องของแต่ละก้อน (ไม่ใช่ตั้งค่าตายตัว)
+  var snapshot = lots.filter(function(l) { return regId ? l.qiRegId === regId : l.id === lotId; })
+    .map(function(l) { return { id: l.id, registrationComplete: l.registrationComplete, qiPending: l.qiPending }; });
   var updated = lots.map(function(l) {
     var match = regId ? l.qiRegId === regId : l.id === lotId;
     return match ? Object.assign({}, l, { registrationComplete: true, qiPending: false }) : l;
   });
   _stockSaveLots(sku, productName, updated);
-  var count = updated.filter(function(l) { return regId && l.qiRegId === regId; }).length;
-  toast('✅ ขึ้นทะเบียนสำเร็จแล้ว' + (count > 1 ? ' (ปลดป้าย ' + count + ' รายการ)' : ''));
+  var count = snapshot.length;
+  showUndoToast('✅ ขึ้นทะเบียนสำเร็จแล้ว' + (count > 1 ? ' (ปลดป้าย ' + count + ' รายการ)' : ''), function() {
+    stockUndoMarkRegistrationComplete(sku, productName, snapshot);
+  });
+  render();
+}
+
+function stockUndoMarkRegistrationComplete(sku, productName, snapshot) {
+  var lots = stockGetLots(sku).slice();
+  var updated = lots.map(function(l) {
+    var snap = snapshot.filter(function(s) { return s.id === l.id; })[0];
+    return snap ? Object.assign({}, l, { registrationComplete: snap.registrationComplete, qiPending: snap.qiPending }) : l;
+  });
+  _stockSaveLots(sku, productName, updated);
+  toast('↩️ ยกเลิกแล้ว');
   render();
 }
 
