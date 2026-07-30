@@ -1341,13 +1341,17 @@ function rStockDetail(el) {
             h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
             h += '<td style="text-align:right;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px;font-size:11px;color:var(--text2)">' + (lot.submittedDate ? fD(lot.submittedDate) : '-') + '</td>';
-            h += '<td style="padding:5px 4px;font-size:11px;' + (overdue ? 'color:#ef4444' : 'color:var(--text2)') + '">' + (lot.expectedCompleteDate ? fD(lot.expectedCompleteDate) : '-') + (overdue ? ' (เลยกำหนด)' : '') + '</td>';
+            h += '<td style="padding:5px 4px;font-size:11px">' + (lot.registrationComplete ?
+              '<span style="color:#16a34a;font-weight:500">✅ ลงทะเบียนสำเร็จแล้ว</span>' :
+              '<span style="' + (overdue ? 'color:#ef4444' : 'color:var(--text2)') + '">' + (lot.expectedCompleteDate ? fD(lot.expectedCompleteDate) : '-') + (overdue ? ' (เลยกำหนด)' : '') + '</span>') + '</td>';
           } else {
             h += '<td style="padding:5px 4px">' + sanitize(lot.ref || '-') + '</td>';
             h += '<td style="text-align:right;padding:5px 4px">' + qtyCellHtml + '</td>';
             h += '<td style="padding:5px 4px">' + (lot.qiPending && !lot.registrationComplete ?
               '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444" title="ลูกค้ารับสินค้าก่อนขึ้นทะเบียนเสร็จ">⚠️ ยังบินไม่ได้ — รอขึ้นทะเบียน</span>' :
-              '<span style="font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</span>') + '</td>';
+              (lot.qiRegId && lot.registrationComplete ?
+                '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a" title="ขึ้นทะเบียนสำเร็จแล้ว">✅ ลงทะเบียนแล้ว</span>' :
+                '<span style="font-size:11px;color:var(--text2)">' + fDT(lot.dateIn) + (lot.fromLocation ? ' · ย้ายจาก ' + sanitize(stockLocationName(lot.fromLocation)) : '') + '</span>')) + '</td>';
           }
           var bexpHtml = '';
           if (lot.bookingExpiryDate && loc.bookingExpiry && loc.bookingExpiry !== 'none') {
