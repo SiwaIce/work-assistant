@@ -721,6 +721,7 @@ var R = {
   products: rProducts,
   stock: rStock,
   stockDetail: rStockDetail,
+  stockBatchReceive: rStockBatchReceive,
   productPrices: rProductPrices,
   productBundles: rProductBundles,
   productDemo: rProductDemo,

@@ -409,7 +409,7 @@ function stockAddLot(sku, productName, code, qty, ref, note, extra) {
   qty = Math.max(0, Math.round(Number(qty) || 0));
   if (qty <= 0) return;
   var lots = stockGetLots(sku).slice();
-  var lot = { id: _stockLotId(), location: code, ref: ref || '', qty: qty, dateIn: _nw(), note: note || '' };
+  var lot = { id: _stockLotId(), location: code, ref: ref || '', qty: qty, dateIn: (extra && extra.dateIn) || _nw(), note: note || '', batchRef: (extra && extra.batchRef) || '' };
   if (code === '1021' && extra) {
     lot.soNumber = extra.ref || ref || '';
     lot.ref = lot.soNumber;
@@ -441,7 +441,8 @@ function stockAddLot(sku, productName, code, qty, ref, note, extra) {
   _stockSaveLots(sku, productName, lots);
   ST.add('stockLog', {
     sku: sku, productName: productName, locationCode: code, locationName: stockLocationName(code),
-    before: 0, after: qty, delta: qty, source: 'app', note: note || '', date: _nw(), type: 'in'
+    before: 0, after: qty, delta: qty, source: 'app', note: note || '', date: _nw(), type: 'in',
+    lotId: lot.id, fromLotId: '', batchRef: lot.batchRef || ''
   });
 }
 
@@ -461,7 +462,7 @@ function stockMoveLot(sku, productName, lotId, moveQty, destCode, extra) {
 
   var newLot = {
     id: _stockLotId(), location: destCode, ref: extra.ref || lot.ref, qty: moveQty, dateIn: _nw(),
-    note: extra.note || '', fromLocation: lot.location, fromLotId: lot.id
+    note: extra.note || '', fromLocation: lot.location, fromLotId: lot.id, batchRef: lot.batchRef || ''
   };
   if (destCode === '1021') {
     newLot.soNumber = extra.ref || lot.ref || '';
@@ -506,7 +507,8 @@ function stockMoveLot(sku, productName, lotId, moveQty, destCode, extra) {
     sku: sku, productName: productName,
     locationCode: lot.location, locationName: stockLocationName(lot.location),
     toLocationCode: destCode, toLocationName: stockLocationName(destCode),
-    qty: moveQty, note: extra.note || '', date: _nw(), type: 'transfer'
+    qty: moveQty, note: extra.note || '', date: _nw(), type: 'transfer',
+    lotId: newLot.id, fromLotId: lot.id, batchRef: newLot.batchRef || ''
   });
 }
 
@@ -537,6 +539,13 @@ function stockMarkRegistrationComplete(sku, productName, lotId) {
   });
   _stockSaveLots(sku, productName, updated);
   var count = snapshot.length;
+  snapshot.forEach(function(s) {
+    var l = lots.filter(function(x) { return x.id === s.id; })[0];
+    ST.add('stockLog', {
+      sku: sku, productName: productName, locationCode: l ? l.location : '', locationName: l ? stockLocationName(l.location) : '',
+      date: _nw(), type: 'register', lotId: s.id, fromLotId: '', batchRef: l ? (l.batchRef || '') : ''
+    });
+  });
   showUndoToast('✅ ขึ้นทะเบียนสำเร็จแล้ว' + (count > 1 ? ' (ปลดป้าย ' + count + ' รายการ)' : ''), function() {
     stockUndoMarkRegistrationComplete(sku, productName, snapshot);
   });
@@ -919,6 +928,44 @@ function stockGetReminders() {
   });
   result.sort(function(a, b) { return dTo(a.date) - dTo(b.date); });
   return result;
+}
+
+// ไล่ประวัติของ lot ปัจจุบันย้อนขึ้นไปตามสายพ่อ-แม่ (fromLotId) — ทุกครั้งที่ย้ายคลัง lot จะได้ id ใหม่ ต้องเดินย้อนจาก log
+// เฉพาะ log ที่มี lotId เท่านั้น (เพิ่มมาทีหลัง) — lot เก่าก่อนหน้าที่ไม่มี lotId ผูกไว้จะเห็นประวัติได้ไม่ครบ
+function stockGetLotTimeline(sku, lotId) {
+  var logs = ST.getAll('stockLog').filter(function(l) { return l.sku === sku && l.lotId; });
+  var chainIds = {};
+  var cur = lotId;
+  var guard = 0;
+  while (cur && !chainIds[cur] && guard++ < 50) {
+    chainIds[cur] = true;
+    var entry = logs.filter(function(l) { return l.lotId === cur && (l.type === 'in' || l.type === 'transfer'); })[0];
+    cur = entry && entry.fromLotId ? entry.fromLotId : null;
+  }
+  var events = logs.filter(function(l) { return chainIds[l.lotId]; });
+  events.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  return events;
+}
+
+function _stockTimelineEventHtml(e) {
+  var icon = e.type === 'in' ? '📥' : (e.type === 'transfer' ? '➡️' : (e.type === 'register' ? '✅' : '📝'));
+  var text = '';
+  if (e.type === 'in') text = 'รับเข้า ' + sanitize(e.locationName || e.locationCode) + (e.after ? ' +' + e.after : '');
+  else if (e.type === 'transfer') text = 'ย้าย ' + sanitize(e.locationName || e.locationCode) + ' → ' + sanitize(e.toLocationName || e.toLocationCode) + (e.qty ? ' (' + e.qty + ')' : '');
+  else if (e.type === 'register') text = 'ลงทะเบียนสำเร็จ (' + sanitize(e.locationName || e.locationCode) + ')';
+  else text = sanitize(e.note || e.type || '-');
+  return '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border,#334155)">' +
+    '<div style="font-size:14px">' + icon + '</div>' +
+    '<div style="flex:1"><div style="font-size:12px">' + text + '</div>' +
+    '<div style="font-size:10px;color:var(--text2)">' + fDT(e.date) + (e.batchRef ? ' · 📦 ' + sanitize(e.batchRef) : '') + (e.note && e.type !== 'transfer' && e.type !== 'in' ? ' · ' + sanitize(e.note) : '') + '</div></div></div>';
+}
+
+function showStockLotTimelineM(sku, lotId) {
+  var p = getProductBySku(sku);
+  var events = stockGetLotTimeline(sku, lotId);
+  var body = events.length ? events.map(_stockTimelineEventHtml).join('') :
+    '<div class="empty"><p>ไม่มีประวัติก่อนหน้า (lot นี้อาจถูกสร้างก่อนที่ระบบจะเริ่มบันทึกประวัติแบบละเอียด)</p></div>';
+  openM('📜 ประวัติ lot — ' + sanitize(p ? p.name : sku), body);
 }
 
 // null = ยังไม่เคยกดเองรอบนี้ — auto เปิดถ้ามีรายการเลยกำหนด, ถ้าผู้ใช้กดเองแล้วจะจำสถานะนั้นไว้ตลอด session
@@ -1380,6 +1427,7 @@ function rStockDetail(el) {
             '<details class="stock-more" style="display:inline-block;position:relative" onclick="event.stopPropagation()">' +
               '<summary class="btn bsm bo" style="display:inline-flex;padding:3px 8px" title="เพิ่มเติม">⋮</summary>' +
               '<div style="position:absolute;right:0;top:100%;margin-top:4px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:4px;z-index:20;display:flex;flex-direction:column;gap:2px;min-width:100px;box-shadow:0 4px 16px rgba(0,0,0,.3)">' +
+                '<button class="btn bsm bo" style="text-align:left" onclick="showStockLotTimelineM(\'' + sku + '\',\'' + lot.id + '\')">📜 ดูประวัติ</button>' +
                 '<button class="btn bsm bo" style="text-align:left" onclick="showStockEditLotM(\'' + sku + '\',\'' + lot.id + '\')">✏️ แก้ไข</button>' +
                 '<button class="btn bsm bd" style="text-align:left" onclick="stockDeleteLot(\'' + sku + '\',\'' + lot.id + '\')">🗑️ ลบ</button>' +
               '</div>' +
@@ -1781,4 +1829,134 @@ function importStockFromExcel(event) {
   };
   reader.readAsArrayBuffer(file);
   event.target.value = '';
+}
+
+// ================================================================
+// BATCH RECEIVE — คีย์รับของเข้าคลังหลาย SKU พร้อมกันในหน้าเดียว แทนที่จะไล่เข้าไปทีละ SKU
+// ทุก lot ที่เกิดจากการคีย์ครั้งเดียวกันแชร์ batchRef เดียวกัน (ดูรวมได้ทีหลังด้วย stockGetBatchLots)
+// ================================================================
+function _stockBatchDefaultRef() {
+  var d = new Date();
+  return 'BATCH-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
+}
+
+function rStockBatchReceive(el) {
+  document.getElementById('pgT').textContent = '📥 รับของเข้าคลัง (Batch)';
+  var locs = getStockLocations().filter(function(l) { return l.code !== '1021'; }); // 1021 ต้องกรอกรายละเอียดจอง/SO เฉพาะเจาะจง ไม่เหมาะกับการคีย์เป็นชุด
+  var today = _nw().substring(0, 10);
+
+  var h = '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+  h += '<div class="card" style="margin-bottom:12px">';
+  h += '<h2 style="margin:0 0 4px">📥 รับของเข้าคลัง (Batch Receive)</h2>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">คีย์รับของหลาย SKU พร้อมกันในครั้งเดียว — ทุกรายการที่เพิ่มด้านล่างจะผูกเลขอ้างอิงเดียวกันไว้ ดูย้อนหลังทั้ง shipment ได้ในหน้าเดียว</div>';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">';
+  h += '<div class="fg"><label>เลขอ้างอิง/Shipment</label><input type="text" id="batch_ref" value="' + sanitize(_stockBatchDefaultRef()) + '"></div>';
+  h += '<div class="fg"><label>วันที่รับ</label><input type="date" id="batch_date" value="' + today + '"></div>';
+  h += '<div class="fg"><label>ปลายทาง</label><select id="batch_dest" onchange="stockBatchDestChanged()">' +
+    locs.map(function(l) { return '<option value="' + l.code + '">' + _stockLocationIcon(l.code) + ' ' + l.code + ' ' + sanitize(l.name) + '</option>'; }).join('') + '</select></div>';
+  h += '</div>';
+
+  h += '<div id="batch_qi_fields" style="display:none" class="fg"><label>คาดว่าจะลงทะเบียนเสร็จ <small style="color:var(--text2)">(ใช้ค่าเดียวกันทุกแถว ไม่บังคับ)</small></label><input type="date" id="batch_qi_expected"></div>';
+  h += '<div id="batch_prpo_fields" style="display:none" class="fg"><label>คาดว่าจะถึง <small style="color:var(--text2)">(ใช้ค่าเดียวกันทุกแถว ไม่บังคับ)</small></label><input type="date" id="batch_prpo_expected"></div>';
+
+  h += '<datalist id="batchSkuDL">' + getAllProducts().filter(function(p) { return p && p.sku; }).map(function(p) {
+    return '<option value="' + sanitize(p.sku) + '">' + sanitize(p.name || '') + '</option>';
+  }).join('') + '</datalist>';
+
+  h += '<div style="font-size:11px;color:var(--text2);margin:10px 0 4px">รายการสินค้า</div>';
+  h += '<div id="batchRows">' + _stockBatchRowHtml() + '</div>';
+  h += '<button class="btn bsm bo" style="margin:8px 0" onclick="stockBatchAddRow()">➕ เพิ่มแถว</button>';
+
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="saveStockBatchReceive()">✅ บันทึกทั้งหมด</button>';
+  h += '</div>';
+
+  h += '<div class="card">';
+  h += '<h2 style="margin:0 0 8px;font-size:13px">🔍 ดู shipment ที่เคยรับ</h2>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<input type="text" id="batch_lookup_ref" placeholder="พิมพ์เลขอ้างอิง/Shipment" style="flex:1">';
+  h += '<button class="btn bo bsm" onclick="showStockBatchViewM(document.getElementById(\'batch_lookup_ref\').value.trim())">ดู</button>';
+  h += '</div></div>';
+
+  el.innerHTML = h;
+}
+
+function _stockBatchRowHtml() {
+  return '<div class="batch-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
+    '<input type="text" list="batchSkuDL" placeholder="SKU" class="batch-sku" style="flex:2">' +
+    '<input type="number" min="1" placeholder="จำนวน" class="batch-qty" style="flex:1">' +
+    '<button class="btn bsm bd" type="button" onclick="this.closest(\'.batch-row\').remove()">🗑️</button>' +
+    '</div>';
+}
+
+function stockBatchAddRow() {
+  var container = document.getElementById('batchRows');
+  if (!container) return;
+  container.insertAdjacentHTML('beforeend', _stockBatchRowHtml());
+}
+
+function stockBatchDestChanged() {
+  var dest = document.getElementById('batch_dest').value;
+  document.getElementById('batch_qi_fields').style.display = dest === 'QI' ? 'block' : 'none';
+  document.getElementById('batch_prpo_fields').style.display = dest === 'PRPO' ? 'block' : 'none';
+}
+
+function saveStockBatchReceive() {
+  var batchRef = document.getElementById('batch_ref').value.trim();
+  var date = document.getElementById('batch_date').value;
+  var dest = document.getElementById('batch_dest').value;
+  var qiExpected = document.getElementById('batch_qi_expected').value;
+  var prpoExpected = document.getElementById('batch_prpo_expected').value;
+  var rows = document.querySelectorAll('#batchRows .batch-row');
+
+  var bySku = {};
+  getAllProducts().forEach(function(p) { if (p.sku) bySku[p.sku.toLowerCase()] = p; });
+
+  var added = 0, skipped = 0;
+  rows.forEach(function(row) {
+    var sku = row.querySelector('.batch-sku').value.trim();
+    var qty = Number(row.querySelector('.batch-qty').value) || 0;
+    if (!sku || qty <= 0) return;
+    var p = bySku[sku.toLowerCase()];
+    if (!p) { skipped++; return; }
+    var extra = { batchRef: batchRef, dateIn: date ? date + 'T00:00:00.000Z' : '' };
+    if (dest === 'QI') extra.expectedCompleteDate = qiExpected;
+    if (dest === 'PRPO') extra.expectedDate = prpoExpected;
+    stockAddLot(p.sku, p.name, dest, qty, batchRef, '', extra);
+    added++;
+  });
+
+  if (!added) { toast('⚠️ ยังไม่มีรายการที่กรอกครบ (ต้องมี SKU และจำนวน)', true); return; }
+  toast('✅ บันทึกแล้ว ' + added + ' รายการ' + (skipped ? ' (ข้าม ' + skipped + ' รายการที่หา SKU ไม่เจอ)' : ''));
+  showStockBatchViewM(batchRef);
+}
+
+// รวม lot ทุกตัว (ทุก SKU) ที่เกิดจากการคีย์ batch เดียวกัน — ไล่ทุกสินค้าเพราะ batchRef ผูกกับ lot ไม่ใช่กับ SKU เดียว
+function stockGetBatchLots(batchRef) {
+  if (!batchRef) return [];
+  var result = [];
+  getAllProducts().filter(function(p) { return p && p.sku; }).forEach(function(p) {
+    stockGetLots(p.sku).filter(function(l) { return l.batchRef === batchRef; }).forEach(function(l) {
+      result.push({ sku: p.sku, productName: p.name, lot: l });
+    });
+  });
+  return result;
+}
+
+function showStockBatchViewM(batchRef) {
+  if (!batchRef) { toast('⚠️ กรอกเลขอ้างอิงก่อน', true); return; }
+  var items = stockGetBatchLots(batchRef);
+  var body = '';
+  if (!items.length) {
+    body = '<div class="empty"><p>ไม่พบ lot ที่ผูกกับเลขอ้างอิงนี้</p></div>';
+  } else {
+    var totalQty = items.reduce(function(s, i) { return s + (Number(i.lot.qty) || 0); }, 0);
+    body += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + items.length + ' รายการ · รวม ' + totalQty + ' ชิ้น</div>';
+    body += items.map(function(i) {
+      return '<div class="li" onclick="closeMForce();go(\'stockDetail\',{sku:\'' + i.sku + '\',lotId:\'' + i.lot.id + '\'})">' +
+        '<div class="lm"><div class="lt">' + sanitize(i.productName) + '</div>' +
+        '<div class="ls">' + _stockLocationIcon(i.lot.location) + ' ' + sanitize(stockLocationName(i.lot.location)) + ' · จำนวน ' + i.lot.qty + '</div></div></div>';
+    }).join('');
+  }
+  openM('📦 Shipment: ' + sanitize(batchRef), body);
 }
