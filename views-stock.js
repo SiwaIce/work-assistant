@@ -968,6 +968,36 @@ function showStockLotTimelineM(sku, lotId) {
   openM('📜 ประวัติ lot — ' + sanitize(p ? p.name : sku), body);
 }
 
+// เมนู "⋮" ของแต่ละ lot — วางเป็น position:fixed แปะที่ document.body แทนที่จะ absolute ในเซลล์ตาราง
+// เพราะตารางอยู่ใน .export-wrap ที่มี overflow-x:auto ครอบอยู่ ถ้า absolute จะโดนเซลล์ตัด/บีบจนใช้ไม่ได้ตามที่เจอ
+function stockShowLotMenu(ev, sku, lotId) {
+  ev.stopPropagation();
+  var old = document.getElementById('stockLotMenu');
+  if (old) old.remove();
+  var btn = ev.currentTarget;
+  var rect = btn.getBoundingClientRect();
+  var menu = document.createElement('div');
+  menu.id = 'stockLotMenu';
+  menu.style.cssText = 'position:fixed;z-index:500;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+  var menuH = 100; // ประมาณความสูงเมนู 3 ปุ่ม ใช้ตัดสินใจว่าจะกางลงหรือกางขึ้น
+  var top = (rect.bottom + menuH > window.innerHeight) ? Math.max(4, rect.top - menuH) : rect.bottom + 4;
+  var left = Math.min(Math.max(4, rect.right - 120), window.innerWidth - 124);
+  menu.style.top = top + 'px';
+  menu.style.left = left + 'px';
+  menu.innerHTML =
+    '<button class="btn bsm bo" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();showStockLotTimelineM(\'' + sku + '\',\'' + lotId + '\')">📜 ดูประวัติ</button>' +
+    '<button class="btn bsm bo" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();showStockEditLotM(\'' + sku + '\',\'' + lotId + '\')">✏️ แก้ไข</button>' +
+    '<button class="btn bsm bd" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();stockDeleteLot(\'' + sku + '\',\'' + lotId + '\')">🗑️ ลบ</button>';
+  document.body.appendChild(menu);
+  setTimeout(function() {
+    document.addEventListener('click', function closeOnce() {
+      var m = document.getElementById('stockLotMenu');
+      if (m) m.remove();
+      document.removeEventListener('click', closeOnce);
+    }, { once: true });
+  }, 0);
+}
+
 // null = ยังไม่เคยกดเองรอบนี้ — auto เปิดถ้ามีรายการเลยกำหนด, ถ้าผู้ใช้กดเองแล้วจะจำสถานะนั้นไว้ตลอด session
 var stockRemindersOpen = null;
 function toggleStockReminders() {
@@ -1424,14 +1454,7 @@ function rStockDetail(el) {
             (isQI && !lot.registrationComplete ? '<button class="btn bsm bp" onclick="stockMarkRegistrationComplete(\'' + sku + '\',\'' + nameEsc + '\',\'' + lot.id + '\')" title="ขึ้นทะเบียนสำเร็จแล้ว">✅ สำเร็จ</button> ' : '') +
             (!isQI && lot.qiPending && !lot.registrationComplete ? '<button class="btn bsm bp" onclick="stockMarkRegistrationComplete(\'' + sku + '\',\'' + nameEsc + '\',\'' + lot.id + '\')" title="ขึ้นทะเบียนสำเร็จแล้ว">✅ สำเร็จ</button> ' : '') +
             '<button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\')">→ ย้ายคลัง</button> ' +
-            '<details class="stock-more" style="display:inline-block;position:relative" onclick="event.stopPropagation()">' +
-              '<summary class="btn bsm bo" style="display:inline-flex;padding:3px 8px" title="เพิ่มเติม">⋮</summary>' +
-              '<div style="position:absolute;right:0;top:100%;margin-top:4px;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:4px;z-index:20;display:flex;flex-direction:column;gap:2px;min-width:100px;box-shadow:0 4px 16px rgba(0,0,0,.3)">' +
-                '<button class="btn bsm bo" style="text-align:left" onclick="showStockLotTimelineM(\'' + sku + '\',\'' + lot.id + '\')">📜 ดูประวัติ</button>' +
-                '<button class="btn bsm bo" style="text-align:left" onclick="showStockEditLotM(\'' + sku + '\',\'' + lot.id + '\')">✏️ แก้ไข</button>' +
-                '<button class="btn bsm bd" style="text-align:left" onclick="stockDeleteLot(\'' + sku + '\',\'' + lot.id + '\')">🗑️ ลบ</button>' +
-              '</div>' +
-            '</details>' +
+            '<button class="btn bsm bo" onclick="stockShowLotMenu(event,\'' + sku + '\',\'' + lot.id + '\')" title="เพิ่มเติม">⋮</button>' +
             '</td>';
           h += '</tr>';
         });

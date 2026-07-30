@@ -128,9 +128,6 @@ textarea{min-height:50px;resize:vertical}
 .bsm{padding:3px 7px;font-size:.66rem}
 .bg{display:flex;gap:5px;flex-wrap:wrap}
 .btn-full{width:100%;justify-content:center}
-.stock-more summary{list-style:none;cursor:pointer}
-.stock-more summary::-webkit-details-marker{display:none}
-.stock-more summary::marker{content:''}
 
 /* === TAGS === */
 .tag{padding:2px 7px;border-radius:20px;font-size:.58rem;font-weight:600;display:inline-block;white-space:nowrap;line-height:1.4}
