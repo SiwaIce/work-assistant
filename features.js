@@ -5068,6 +5068,14 @@ function rRemind(el) {
       return '<div class="li" onclick="go(\'meetingDetail\',{meetingId:\'' + m.id + '\'})"><div class="lm"><div class="lt">' + sanitize(m.title) + '</div><div class="ls">' + fD(m.date) + ' ' + (m.time || '') + ' ' + dlB(m.date, false) + '</div></div></div>';
     }).join('') + '</div>';
   }
+
+  var stockRem = [];
+  try { stockRem = stockGetReminders(); } catch(e) {}
+  if (stockRem.length) {
+    h += '<div class="card"><h2>📦 Stock ต้องติดตาม (' + stockRem.length + ')</h2>' + stockRem.map(function(i) {
+      return '<div class="li ' + dlC(i.date, false) + '" onclick="go(\'stockDetail\',{sku:\'' + i.sku + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">' + fD(i.date) + ' ' + dlB(i.date, false) + '</div></div></div>';
+    }).join('') + '</div>';
+  }
   
   h += '<div class="card"><h2>🔔 Browser Notification</h2>' +
     '<button class="btn bs" onclick="if(\'Notification\' in window)Notification.requestPermission().then(p=>toast(p===\'granted\'?\'✅ เปิดแล้ว\':\'❌\'));else toast(\'ไม่รองรับ\',true)">🔔 เปิดการแจ้งเตือน</button>' +

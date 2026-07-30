@@ -892,6 +892,55 @@ function stockAgingLots(thresholdDays) {
   return result;
 }
 
+// รวมรายการที่ต้องติดตาม (เลยกำหนด/ใกล้ถึงภายใน 3 วัน) จาก 3 แหล่ง: QI ลงทะเบียน, PRPO คาดว่าจะถึง, และจองหมดอายุ
+// ใช้ทั้งในหน้า Stock เองและหน้า 🔔 แจ้งเตือนกลาง — dTo<=3 ให้ตรงกับ threshold ที่ dlB/dlC ใช้ทั่วแอป
+function stockGetReminders() {
+  var result = [];
+  var locs = getStockLocations();
+  var locMap = {};
+  locs.forEach(function(l) { locMap[l.code] = l; });
+  getAllProducts().filter(function(p) { return p && p.sku; }).forEach(function(p) {
+    stockGetLots(p.sku).forEach(function(l) {
+      if (!_stockIsActiveLot(l)) return;
+      if (!l.registrationComplete && l.expectedCompleteDate && dTo(l.expectedCompleteDate) <= 3) {
+        result.push({ kind: 'qi', sku: p.sku, productName: p.name, lotId: l.id, location: l.location, date: l.expectedCompleteDate,
+          label: 'รอลงทะเบียน QI: ' + p.name });
+      }
+      if (l.location === 'PRPO' && l.expectedDate && dTo(l.expectedDate) <= 3) {
+        result.push({ kind: 'prpo', sku: p.sku, productName: p.name, lotId: l.id, location: l.location, date: l.expectedDate,
+          label: 'PR/PO คาดว่าจะถึง: ' + p.name });
+      }
+      var loc = locMap[l.location];
+      if (l.bookingExpiryDate && loc && loc.bookingExpiry && loc.bookingExpiry !== 'none' && dTo(l.bookingExpiryDate) <= 3) {
+        result.push({ kind: 'booking', sku: p.sku, productName: p.name, lotId: l.id, location: l.location, date: l.bookingExpiryDate,
+          label: 'จองใกล้หมดอายุ (' + loc.name + '): ' + p.name + (loc.bookingExpiry === 'penalty' ? ' — ถ้าไม่เลื่อนจะโดนหักและดีดเข้า 0001' : ' — จะดีดเข้า 0001 อัตโนมัติ') });
+      }
+    });
+  });
+  result.sort(function(a, b) { return dTo(a.date) - dTo(b.date); });
+  return result;
+}
+
+var stockRemindersOpen = false;
+function toggleStockReminders() { stockRemindersOpen = !stockRemindersOpen; render(); }
+
+function stockRemindersBarHtml() {
+  var items = stockGetReminders();
+  if (!items.length) return '';
+  var overdueCount = items.filter(function(i) { return dTo(i.date) < 0; }).length;
+  var h = '<div class="card" style="border-color:' + (overdueCount ? '#ef4444' : '#f59e0b') + '">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleStockReminders()">' +
+    '<div style="font-weight:700;font-size:13px">🔔 ต้องติดตาม (' + items.length + ')' + (overdueCount ? ' <span style="color:#ef4444">— เลยกำหนด ' + overdueCount + '</span>' : '') + '</div>' +
+    '<div>' + (stockRemindersOpen ? '▾' : '▸') + '</div></div>';
+  if (stockRemindersOpen) {
+    h += '<div style="margin-top:8px">' + items.map(function(i) {
+      return '<div class="li ' + dlC(i.date, false) + '" onclick="go(\'stockDetail\',{sku:\'' + i.sku + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">' + fD(i.date) + ' ' + dlB(i.date, false) + '</div></div></div>';
+    }).join('') + '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 function rStock(el) {
   stockProcessExpiredBookings();
   document.getElementById('pgT').textContent = '📦 Stock สินค้า';
@@ -944,6 +993,8 @@ function rStock(el) {
     '</span></h2>';
 
   h += '<div class="hint" style="margin-bottom:10px">📌 Phase 1 — แก้จำนวนเองในแอป หรือ Import Excel เท่านั้น (ยังไม่มีลิงก์ให้ Admin ภายนอกกรอกเอง)</div>';
+
+  h += stockRemindersBarHtml();
 
   h += '<div class="sr" style="margin-bottom:10px">';
   h += '<div class="sc" style="cursor:pointer' + (stockLowFilter === 'all' ? ';border-color:var(--accent)' : '') + '" onclick="stockLowFilter=\'all\';render()"><div class="sn c1">' + totalCount + '</div><div class="sl">สินค้าทั้งหมด</div></div>';
