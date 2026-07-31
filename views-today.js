@@ -385,6 +385,17 @@ function rToday(el) {
     overdueFuHtml += '</div>';
   }
 
+  var soReadyHtml = '';
+  var soReady = [];
+  try { soReady = (typeof soGetReadyReminders === 'function') ? soGetReadyReminders() : []; } catch (e) {}
+  if (soReady.length) {
+    soReadyHtml += '<div class="card" style="border-color:#22c55e"><h2 style="color:#22c55e">📦 SO พร้อมส่งแล้ว (' + soReady.length + ')</h2>';
+    soReady.forEach(function(i) {
+      soReadyHtml += '<div class="li" onclick="go(\'soDetail\',{soId:\'' + i.soId + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">รอกดเปลี่ยนสถานะเป็นส่งแล้ว</div></div></div>';
+    });
+    soReadyHtml += '</div>';
+  }
+
   // Build tab content
   var tabContent = '';
 
@@ -413,6 +424,7 @@ function rToday(el) {
     tabContent += timelineHtml;
     tabContent += notifHtml;
     tabContent += overdueFuHtml;
+    tabContent += soReadyHtml;
 
   } else if (todayTab === 'tasks') {
     // 📋 งาน = Pipeline Actions + Suggestions

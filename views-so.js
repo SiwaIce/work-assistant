@@ -457,7 +457,10 @@ function rSODetail(el) {
   html += '<div class="card" style="margin-bottom:12px;padding:18px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
   html += '<h3 style="margin:0;font-size:15px">📦 รายการสินค้า</h3>';
+  html += '<span class="ml">';
+  if (!_soIsDone(s.status)) html += '<button class="btn bo bsm" onclick="showSOEditItemsModal(\'' + s.id + '\')" title="แก้ไข/เพิ่ม/ลบรายการสินค้า">✏️ แก้ไขรายการ</button>';
   html += '<button class="btn bo bsm" onclick="showSOEditSerialsModal(\'' + s.id + '\')" title="แก้ไข Serial ได้ทุกเมื่อ ไม่ต้องรอเปลี่ยนสถานะ">🔢 แก้ไข Serial</button>';
+  html += '</span>';
   html += '</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   html += '<thead><tr style="background:var(--bg2);text-align:left">' +
@@ -667,6 +670,19 @@ function _soItemsChangedFromQuote(currentItems) {
   return false;
 }
 
+// เหมือน _soItemsChangedFromQuote แต่เทียบกับ quote.items ตรงๆ (ฟิลด์ name/quantity แทน model/qty) — ใช้ตอนแก้ไข SO ที่มีอยู่แล้ว
+// ไม่มี snapshot ตอนเปิดฟอร์มให้เทียบ (ต่างจากตอนสร้างใหม่) เลยเทียบกับใบเสนอราคาที่ผูกไว้ตรงๆ แทน
+function _soItemsDifferFromQuoteItems(currentItems, quoteItems) {
+  quoteItems = quoteItems || [];
+  if (currentItems.length !== quoteItems.length) return true;
+  for (var i = 0; i < currentItems.length; i++) {
+    var a = currentItems[i], b = quoteItems[i];
+    if ((a.model || '') !== (b.name || b.model || '') || Number(a.qty) !== Number(b.quantity || b.qty) ||
+        Number(a.unitPrice) !== Number(b.unitPrice) || (a.sku || '') !== (b.sku || '')) return true;
+  }
+  return false;
+}
+
 function _soNextQuoteNo() {
   var all = [];
   try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
@@ -827,6 +843,59 @@ function saveCreateSO() {
   closeMForce();
   toast('✅ สร้าง SO เรียบร้อย');
   go('soDetail', { soId: saved.id });
+}
+
+// แก้ไข/เพิ่ม/ลบรายการสินค้าของ SO ที่มีอยู่แล้ว (ก่อนหน้านี้แก้ได้แค่ตอนสร้างเท่านั้น)
+// รียูสแถวรายการสินค้า+ปุ่มเพิ่มแถวจากฟอร์มสร้าง SO (id="soN_items" เดิม) เพราะ modal เปิดได้ทีละอัน ไม่ชนกัน
+function showSOEditItemsModal(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var body = '<div class="hint" style="margin-bottom:8px">แก้ไข/เพิ่ม/ลบรายการสินค้าได้อิสระ — ถ้าไม่ตรงกับใบเสนอราคาที่ผูกไว้ ตอนบันทึกจะถามว่าจะแก้ใบเสนอราคาด้วยไหม</div>';
+  body += '<div id="soN_items">';
+  (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  body += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin:8px 0">+ เพิ่มสินค้า</button>';
+  body += '<button class="btn bp btn-full" style="margin-top:6px" onclick="saveSOItemsEdit(\'' + soId + '\')">💾 บันทึกรายการสินค้า</button>';
+  openM('✏️ แก้ไขรายการสินค้า — ' + sanitize(s.soNumber || ''), body);
+  _soIC = (s.items || []).length;
+}
+
+function saveSOItemsEdit(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var items = [];
+  document.querySelectorAll('#soN_items > div[id^="soIR_"]').forEach(function(row) {
+    var mEl = row.querySelector('[id^="soI_m_"]');
+    var qEl = row.querySelector('[id^="soI_q_"]');
+    var pEl = row.querySelector('[id^="soI_p_"]');
+    var skuEl = row.querySelector('[id^="soI_sku_"]');
+    if (!mEl || !mEl.value.trim()) return;
+    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: Number(pEl.value) || 0, serials: [] });
+  });
+  if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
+
+  var quotationId = s.quotationId;
+  if (quotationId) {
+    var allQuotes = [];
+    try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+    var quote = allQuotes.filter(function(q) { return q.id === quotationId; })[0];
+    if (quote && _soItemsDifferFromQuoteItems(items, quote.items) &&
+        confirm('รายการสินค้าที่แก้ไม่ตรงกับใบเสนอราคาที่ผูกไว้ (' + quote.quoteNo + ')\nต้องการบันทึกเป็นฉบับแก้ไข (revision) ของใบเสนอราคานั้นไหม?\n\nตกลง = สร้างฉบับแก้ไขใหม่ผูกกับ SO นี้\nยกเลิก = บันทึก SO โดยไม่แก้ใบเสนอราคาเดิม')) {
+      if (typeof createQuoteRevision === 'function') {
+        var revItems = items.map(function(it) { return { name: it.model, sku: it.sku, quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty) || 0) * (Number(it.unitPrice) || 0) }; });
+        var rev = createQuoteRevision(quotationId, { items: revItems });
+        if (rev) { quotationId = rev.id; toast('🆕 สร้างฉบับแก้ไขใบเสนอราคา ' + rev.quoteNo); }
+      }
+    }
+  }
+
+  var cfg = getConfig();
+  var logs = (s.logs || []).slice();
+  logs.push({ date: _td(), action: '✏️ แก้ไขรายการสินค้า', note: '', by: cfg.saleName || '' });
+  ST.update('salesOrders', soId, { items: items, quotationId: quotationId, updatedAt: new Date().toISOString(), logs: logs });
+  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  closeMForce();
+  toast('💾 บันทึกรายการสินค้าแล้ว');
+  go('soDetail', { soId: soId });
 }
 
 function deleteSalesOrder(soId) {
