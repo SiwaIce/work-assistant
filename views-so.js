@@ -537,7 +537,9 @@ function showCreateSOModal(opts) {
   html += '<select id="soN_pipelineId" class="inp" onchange="_soFillFromPipe(this.value)">' + pipeOpts + '</select>';
   html += '</div>';
 
-  // quotation link
+  // ใบเสนอราคา — กรองตาม dealer/project ที่เลือก เลือกแล้วดึงรายการสินค้ามาเติมให้ ไม่เลือกก็สร้าง SO ตรงได้ (จะสร้างใบเสนอราคาใหม่ให้อัตโนมัติตอนบันทึก)
+  html += '<div><label class="lbl">ใบเสนอราคา <span style="font-size:10px;color:var(--text2)">(เลือกเพื่อดึงรายการมา หรือไม่เลือกก็สร้าง SO ตรงได้)</span></label>';
+  html += '<select id="soN_quoteSel" class="inp" onchange="_soFillFromQuote(this.value)">' + _soQuotationOptionsHtml(preDealerId, opts.pipelineId) + '</select></div>';
   html += '<input type="hidden" id="soN_quotationId" value="' + sanitize(opts.quotationId||'') + '">';
 
   html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
@@ -555,6 +557,100 @@ function showCreateSOModal(opts) {
   html += '<button class="btn bp" onclick="saveCreateSO()">💾 สร้าง SO</button></div>';
 
   openM('➕ สร้าง Sales Order', html);
+  // ถ้ามาจาก "สร้าง SO จากใบเสนอราคา" อยู่แล้ว รายการเริ่มต้น = รายการของใบเสนอราคานั้น เก็บไว้เทียบตอนบันทึกว่าแก้ไปไหม
+  window._soQuoteItemsSnapshot = opts.quotationId ? JSON.stringify(initItems) : null;
+}
+
+// รายชื่อใบเสนอราคาที่ตรงกับ dealer/project ที่เลือกในฟอร์มสร้าง SO — มี pipelineId ก็กรองด้วย pipeline ก่อน (แม่นกว่า) ไม่งั้นกรองแค่ dealer
+function _soQuotationOptionsHtml(dealerId, pipelineId) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var matches = all.filter(function(q) {
+    if (pipelineId) return q.pipelineId === pipelineId;
+    return dealerId && q.dealerId === dealerId;
+  }).sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  var h = '<option value="">-- ไม่ระบุ / สร้าง SO ตรง --</option>';
+  matches.forEach(function(q) {
+    h += '<option value="' + q.id + '">' + sanitize(q.quoteNo) + ' · ' + (q.items || []).length + ' รายการ · ฿' + fmtMoney(q.totalAmount || 0) + '</option>';
+  });
+  return h;
+}
+
+function _soFillFromQuote(quoteId) {
+  var hidden = document.getElementById('soN_quotationId');
+  if (hidden) hidden.value = quoteId || '';
+  window._soQuoteItemsSnapshot = null;
+  if (!quoteId) return;
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var q = all.filter(function(x) { return x.id === quoteId; })[0];
+  if (!q) return;
+  var wrap = document.getElementById('soN_items');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  _soIC = 0;
+  var items = (q.items && q.items.length) ? q.items.map(function(it) {
+    return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '' };
+  }) : [{ model: '', qty: 1, unitPrice: 0 }];
+  items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  window._soQuoteItemsSnapshot = JSON.stringify(items);
+  var poEl = document.getElementById('soN_customerPO');
+  if (poEl && !poEl.value && q.poNo) poEl.value = q.poNo;
+}
+
+// เทียบแบบ normalize เฉพาะฟิลด์ที่มีความหมาย (ไม่ใช่ JSON.stringify ตรงๆ) กัน false positive จาก field เกิน/ลำดับต่าง
+function _soItemsChangedFromQuote(currentItems) {
+  if (!window._soQuoteItemsSnapshot) return false;
+  var snap;
+  try { snap = JSON.parse(window._soQuoteItemsSnapshot); } catch (e) { return false; }
+  if (snap.length !== currentItems.length) return true;
+  for (var i = 0; i < snap.length; i++) {
+    var a = snap[i], b = currentItems[i];
+    if ((a.model || '') !== (b.model || '') || Number(a.qty) !== Number(b.qty) ||
+        Number(a.unitPrice) !== Number(b.unitPrice) || (a.sku || '') !== (b.sku || '')) return true;
+  }
+  return false;
+}
+
+function _soNextQuoteNo() {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var today = new Date();
+  var prefix = 'QT-' + today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0') + '-';
+  var maxSeq = 0;
+  all.forEach(function(q) {
+    if (q.quoteNo && q.quoteNo.startsWith(prefix)) {
+      var seq = parseInt(q.quoteNo.split('-').pop()) || 0;
+      if (seq > maxSeq) maxSeq = seq;
+    }
+  });
+  return prefix + String(maxSeq + 1).padStart(3, '0');
+}
+
+// สร้างใบเสนอราคาใหม่ให้อัตโนมัติตอนสร้าง SO โดยไม่ได้เลือกใบเสนอราคาไว้ — ทุก SO จะมีใบเสนอราคาผูกอยู่เสมอ
+function _soAutoCreateQuotation(fields, items) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var quoteItems = items.map(function(it) {
+    return { name: it.model, sku: it.sku || '', quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty) || 0) * (Number(it.unitPrice) || 0) };
+  });
+  var gross = quoteItems.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0);
+  var vat = gross * 7 / 100;
+  var cfg = getConfig();
+  var newQuote = {
+    id: 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    quoteNo: _soNextQuoteNo(), dealerId: fields.dealerId || '', dealerName: fields.dealerName || '',
+    dealerLevel: 'B', levelUsed: 'B', createdAt: new Date().toISOString(),
+    validFrom: _td(), validTo: addD(_td(), 30), paymentTerm: '', quotedBy: cfg.saleName || '',
+    poNo: fields.poNo || '', items: quoteItems, grossTotal: gross, discountPercent: 0, discountAmount: 0,
+    netAmount: gross, vatPercent: 7, vatAmount: vat, totalAmount: gross + vat, remark: 'สร้างอัตโนมัติจาก SO',
+    contacts: [], status: 'approved', sentDate: null, approvedDate: null, updatedAt: new Date().toISOString(),
+    pipelineId: fields.pipelineId || '', projectName: fields.projectName || '', sourceTaskId: ''
+  };
+  all.push(newQuote);
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
+  if (typeof quotations !== 'undefined') quotations = all;
+  return newQuote;
 }
 
 function _soTypeToggle(type) {
@@ -589,6 +685,13 @@ function _soFillFromPipe(pipeId) {
     items.push({ model: '', qty: 1, unitPrice: 0 });
   }
   items.forEach(function(it, idx){ wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+
+  // เปลี่ยนโครงการแล้ว ใบเสนอราคาที่เคยเลือกไว้ (ถ้ามี) ไม่เกี่ยวข้องแล้ว รีเฟรชตัวเลือกกรองตาม pipeline นี้แทน
+  var quoteSel = document.getElementById('soN_quoteSel');
+  var quoteHidden = document.getElementById('soN_quotationId');
+  if (quoteSel) quoteSel.innerHTML = _soQuotationOptionsHtml(dSel ? dSel.value : '', pipeId);
+  if (quoteHidden) quoteHidden.value = '';
+  window._soQuoteItemsSnapshot = null;
 }
 
 function _soItemRowHtml(idx, model, qty, price, sku) {
@@ -635,6 +738,22 @@ function saveCreateSO() {
   var dealer = ST.getOne('dealers', dealerId);
   var cfg    = getConfig();
   var now    = new Date().toISOString();
+
+  // ผูกใบเสนอราคาให้ SO นี้เสมอ — ถ้าเลือกไว้แล้วรายการไม่ตรง ถามว่าจะแก้เป็น revision ไหม, ถ้าไม่ได้เลือกไว้เลยก็สร้างใหม่ให้อัตโนมัติ
+  if (quotationId) {
+    if (typeof _soItemsChangedFromQuote === 'function' && _soItemsChangedFromQuote(items) &&
+        confirm('รายการสินค้าที่กรอกไม่ตรงกับใบเสนอราคาที่เลือกไว้\nต้องการบันทึกเป็นฉบับแก้ไข (revision) ของใบเสนอราคานั้นไหม?\n\nตกลง = สร้างฉบับแก้ไขใหม่ผูกกับ SO นี้\nยกเลิก = สร้าง SO โดยไม่แก้ใบเสนอราคาเดิม')) {
+      if (typeof createQuoteRevision === 'function') {
+        var revItems = items.map(function(it) { return { name: it.model, sku: it.sku, quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty)||0)*(Number(it.unitPrice)||0) }; });
+        var rev = createQuoteRevision(quotationId, { items: revItems });
+        if (rev) { quotationId = rev.id; toast('🆕 สร้างฉบับแก้ไขใบเสนอราคา ' + rev.quoteNo); }
+      }
+    }
+  } else if (typeof _soAutoCreateQuotation === 'function') {
+    var pipe2 = pipelineId ? ST.getOne('pipeline', pipelineId) : null;
+    var newQ = _soAutoCreateQuotation({ dealerId: dealerId, dealerName: dealer ? dealer.name : '', pipelineId: pipelineId, poNo: customerPO, projectName: pipe2 ? pipe2.projectName : '' }, items);
+    if (newQ) quotationId = newQ.id;
+  }
 
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
@@ -993,6 +1112,15 @@ function _soFilterProjectsByDealer(dealerId) {
     opts += '<option value="' + p.id + '"' + (keep===p.id?' selected':'') + '>' + sanitize((p.projectName||'').substr(0,50)) + (d && !dealerId ? ' [' + sanitize(d.name) + ']' : '') + '</option>';
   });
   sel.innerHTML = opts;
+
+  // ยังไม่ได้เลือกโครงการ (หรือเปลี่ยน dealer) — กรองใบเสนอราคาตาม dealer อย่างเดียวไปก่อน
+  var quoteSel = document.getElementById('soN_quoteSel');
+  if (quoteSel && !keep) {
+    quoteSel.innerHTML = _soQuotationOptionsHtml(dealerId, '');
+    var quoteHidden = document.getElementById('soN_quotationId');
+    if (quoteHidden) quoteHidden.value = '';
+    window._soQuoteItemsSnapshot = null;
+  }
 }
 
 // สร้าง SO จากใบเสนอราคา — ดึง dealer / PO / รายการสินค้า+ราคา ไปเลย

@@ -1071,7 +1071,7 @@ function renderQuoteCardsHTML(list) {
     html += '<div class="quote-card" style="position:relative;background:var(--card);border:1px solid ' + (quoteSelected[q.id] ? 'var(--accent)' : 'var(--border)') + ';border-radius:16px;padding:16px;cursor:pointer" onclick="' + cardClick + '">';
     if (quoteSelectMode) html += '<input type="checkbox" id="quoteChk_' + q.id + '" ' + (quoteSelected[q.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleQuoteSelect(\'' + q.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
-    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + '</div>';
+    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640">rev ' + q.revisionNum + '</span>' : '') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
     html += '<span class="tag" style="background:' + statusColor + '20;color:' + statusColor + ';border:1px solid ' + statusColor + '40">' + statusLabel + '</span>';
     html += '</div>';
@@ -1124,7 +1124,7 @@ function renderQuoteTableHTML(list) {
     if (quoteSelectMode) h += '<td style="text-align:center" onclick="toggleQuoteSelect(\'' + q.id + '\')"><input type="checkbox" id="quoteChk_' + q.id + '" ' + (quoteSelected[q.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleQuoteSelect(\'' + q.id + '\')"></td>';
     h += '<td style="color:var(--text2)">' + (i + 1) + '</td>';
     h += '<td>' + (q.validFrom || '-') + '</td>';
-    h += '<td style="color:var(--accent);font-weight:600;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">' + qcopyHtml(q.quoteNo || '-') + '</td>';
+    h += '<td style="color:var(--accent);font-weight:600;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">' + qcopyHtml(q.quoteNo || '-') + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640">rev ' + q.revisionNum + '</span>' : '') + '</td>';
     h += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')" title="' + sanitize(q.projectName || '') + '">' + (q.projectName ? sanitize(q.projectName) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td>' + (q.poNo ? qcopyHtml(q.poNo) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td style="color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(_quoteItemsSummaryFull(q.items)) + '">' + _quoteItemsSummary(q.items) + '</td>';
@@ -1690,6 +1690,8 @@ function renderEditQuotationPage(quote) {
   
   currentQuoteId = quote.id;
   quotationItems = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
+  // จำสภาพรายการสินค้าตอนเปิดฟอร์ม ไว้เทียบตอนกดบันทึกว่าเปลี่ยนไปไหม (ใช้ตัดสินใจว่าจะถามสร้าง revision)
+  window._quoteItemsSnapshot = JSON.stringify(quotationItems);
   selectedLevelForPrice = quote.levelUsed || 'B';
   window._quoteAttach = (quote.attachments || []).slice();
   quotationItemsFullscreen = false; // เข้าเพจใหม่/เปิดใบอื่น เริ่มมุมมองปกติเสมอ กัน overlay ค้างจากใบก่อนหน้า
@@ -1736,6 +1738,15 @@ function renderEditQuotationPage(quote) {
   var html = '<div style="max-width:1200px;margin:0 auto;padding:16px">';
   html += '<div class="bc"><a onclick="go(\'quotationV2\')">💰 Quotation</a><span class="sep">›</span><span class="cur">' + qcopyHtml(quote.quoteNo) + '</span></div>';
   html += (typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(quote.sourceTaskId) : '';
+  if (quote.revisionNum) {
+    html += '<div class="hint" style="margin-bottom:10px">🔀 ฉบับแก้ไข #' + quote.revisionNum + ' จาก <a onclick="editQuotation(\'' + quote.revisionOf + '\')" style="color:var(--accent)">' + sanitize(quote.baseQuoteNo || '-') + '</a></div>';
+  } else {
+    var revs = _quoteRevisionsOf(quote.id);
+    if (revs.length) {
+      var latest = revs[revs.length - 1];
+      html += '<div class="hint" style="margin-bottom:10px">🔀 มีฉบับแก้ไข ' + revs.length + ' ฉบับ — ล่าสุด <a onclick="editQuotation(\'' + latest.id + '\')" style="color:var(--accent)">' + sanitize(latest.quoteNo) + '</a></div>';
+    }
+  }
   
   // Form Card
   html += '<div class="card" style="margin-bottom:16px">';
@@ -1898,6 +1909,39 @@ function editQuoteLevelChanged() {
   recalculateQuotationTotal();
 }
 
+// สร้างใบเสนอราคาฉบับแก้ไข (revision) ใหม่ — ไม่ทับต้นฉบับ เลขที่ = เลขฐานเดิม + #N (revision ล่าสุด+1)
+// อ่าน/เขียน localStorage ตรงๆ (ไม่พึ่ง global `quotations`) เพื่อให้เรียกข้ามไฟล์ได้ปลอดภัย เช่นจาก views-so.js ตอนสร้าง SO
+function createQuoteRevision(originalId, fields) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var original = all.filter(function(q) { return q.id === originalId; })[0];
+  if (!original) return null;
+  var baseNo = original.baseQuoteNo || original.quoteNo;
+  var maxRev = all.filter(function(q) { return (q.baseQuoteNo || q.quoteNo) === baseNo; })
+    .reduce(function(m, q) { return Math.max(m, Number(q.revisionNum) || 0); }, 0);
+  var nextRev = maxRev + 1;
+  var clone = JSON.parse(JSON.stringify(original));
+  if (fields) Object.assign(clone, fields);
+  clone.id = 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  clone.quoteNo = baseNo + '#' + nextRev;
+  clone.baseQuoteNo = baseNo;
+  clone.revisionOf = originalId;
+  clone.revisionNum = nextRev;
+  clone.createdAt = new Date().toISOString();
+  clone.updatedAt = clone.createdAt;
+  all.push(clone);
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
+  if (typeof quotations !== 'undefined') quotations = all;
+  return clone;
+}
+
+function _quoteRevisionsOf(originalId) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  return all.filter(function(q) { return q.revisionOf === originalId; })
+    .sort(function(a, b) { return (Number(a.revisionNum) || 0) - (Number(b.revisionNum) || 0); });
+}
+
 function saveCurrentQuotation() {
   // อ่านค่าจากฟอร์ม
   var quoteNo = document.getElementById('editQuoteNo')?.value.trim();
@@ -1929,41 +1973,40 @@ function saveCurrentQuotation() {
   var netAmount = grossTotal - discountAmount;
   var vatAmount = netAmount * 7 / 100;
   var totalAmount = netAmount + vatAmount;
-  
-  // ✅ อัปเดต quote ใน array
+
+  var updatedFields = {
+    quoteNo: quoteNo, dealerId: dealerId, dealerName: dealerName, levelUsed: levelUsed,
+    validFrom: validFrom, validTo: validTo, paymentTerm: paymentTerm, quotedBy: quotedBy,
+    poNo: poNo, soNo: soNo, invoiceNo: invoiceNo, projectName: projectName,
+    items: JSON.parse(JSON.stringify(quotationItems)),
+    grossTotal: grossTotal, discountPercent: discountPercent, discountAmount: discountAmount,
+    netAmount: netAmount, vatPercent: 7, vatAmount: vatAmount, totalAmount: totalAmount,
+    remark: remark, status: status, attachments: window._quoteAttach || [],
+    updatedAt: new Date().toISOString()
+  };
+
+  // รายการสินค้าเปลี่ยนไปจากตอนเปิดฟอร์ม — ถามว่าจะเก็บเป็นฉบับแก้ไข (revision) ใหม่ไหม แทนที่จะทับต้นฉบับเงียบๆ
+  var itemsChanged = JSON.stringify(quotationItems) !== (window._quoteItemsSnapshot || '[]');
+  if (itemsChanged && confirm('รายการสินค้าเปลี่ยนไปจากต้นฉบับ\nต้องการบันทึกเป็นฉบับแก้ไข (revision) ใหม่ไหม?\n\nตกลง = สร้างฉบับแก้ไขใหม่ (เก็บต้นฉบับไว้)\nยกเลิก = บันทึกทับฉบับเดิมตามปกติ')) {
+    var rev = createQuoteRevision(currentQuoteId, updatedFields);
+    if (rev) {
+      toast('🆕 สร้างฉบับแก้ไข ' + rev.quoteNo);
+      editQuotation(rev.id);
+      return;
+    }
+  }
+
+  // ✅ อัปเดต quote ใน array (บันทึกทับฉบับเดิม)
   for (var i = 0; i < quotations.length; i++) {
     if (quotations[i].id === currentQuoteId) {
-      quotations[i].quoteNo = quoteNo;
-      quotations[i].dealerId = dealerId;
-      quotations[i].dealerName = dealerName;
-      quotations[i].levelUsed = levelUsed;
-      quotations[i].validFrom = validFrom;
-      quotations[i].validTo = validTo;
-      quotations[i].paymentTerm = paymentTerm;
-      quotations[i].quotedBy = quotedBy;
-      quotations[i].poNo = poNo;
-      quotations[i].soNo = soNo;
-      quotations[i].invoiceNo = invoiceNo;
-      quotations[i].projectName = projectName;
-      quotations[i].items = JSON.parse(JSON.stringify(quotationItems));
-      quotations[i].grossTotal = grossTotal;
-      quotations[i].discountPercent = discountPercent;
-      quotations[i].discountAmount = discountAmount;
-      quotations[i].netAmount = netAmount;
-      quotations[i].vatPercent = 7;
-      quotations[i].vatAmount = vatAmount;
-      quotations[i].totalAmount = totalAmount;
-      quotations[i].remark = remark;
-      quotations[i].status = status;
-      quotations[i].attachments = window._quoteAttach || [];
-      quotations[i].updatedAt = new Date().toISOString();
+      Object.assign(quotations[i], updatedFields);
       break;
     }
   }
-  
+
   // ✅ บันทึก
   localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
-  
+
   toast('💾 บันทึกใบเสนอราคาแล้ว');
   go('quotationV2');
 }
