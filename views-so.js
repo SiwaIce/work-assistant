@@ -412,7 +412,8 @@ function rSODetail(el) {
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">ราคา/หน่วย</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">รวม</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">Serial</th>' +
-    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความพร้อมส่ง</th></tr></thead><tbody>';
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความพร้อมส่ง</th>' +
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">คอมเมนต์</th></tr></thead><tbody>';
   (s.items||[]).forEach(function(it,idx){
     var lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
     var sns = _soItemSerials(it);
@@ -425,6 +426,7 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:right">' + fmtMoney(lineTotal) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
     html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s) : '') + '</td>';
+    html += '<td style="padding:10px;min-width:140px"><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onblur="saveSOItemComment(\'' + s.id + '\',' + idx + ',this.value)"></td>';
     html += '</tr>';
   });
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
@@ -905,6 +907,16 @@ function saveSOEditSerials(soId) {
   go('soDetail', { soId: soId });
 }
 
+// โน้ตอิสระต่อรายการสินค้าใน SO (เช่น "แจ้งลูกค้าว่าช้า 3 วัน") — เซฟทันทีตอนออกจากช่อง ไม่ต้องกดปุ่มบันทึกแยก
+function saveSOItemComment(soId, idx, value) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var items = s.items.slice();
+  items[idx] = Object.assign({}, items[idx], { comment: value });
+  ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
+  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+}
+
 // ---------------------------------------------------------------- edit modal
 
 function showSOEditModal(soId) {
@@ -944,8 +956,9 @@ function saveSOEdit(soId) {
   if (!s) return;
   var dealerId = (document.getElementById('soE_dealer')||{}).value || s.dealerId;
   var dealer   = ST.getOne('dealers', dealerId);
+  var newSoNumber = (document.getElementById('soE_soNum')||{}).value || s.soNumber;
   ST.update('salesOrders', soId, {
-    soNumber:         (document.getElementById('soE_soNum') ||{}).value || s.soNumber,
+    soNumber:         newSoNumber,
     invoiceNumber:    (document.getElementById('soE_invNum')||{}).value || '',
     invoiceDate:      (document.getElementById('soE_invDate')||{}).value || '',
     dealerId:         dealerId,
@@ -957,6 +970,8 @@ function saveSOEdit(soId) {
     attachments:      window._soAttach || [],
     updatedAt:        new Date().toISOString()
   });
+  // เลข SO เปลี่ยน — sync ไปยัง lot ที่จองไว้ใน 1021/PRPO ทุก SKU และ stockReservations ที่ผูก soId นี้ ไม่งั้นจะค้างเลขเก่า
+  if (newSoNumber !== s.soNumber && typeof stockSyncSONumber === 'function') stockSyncSONumber(soId, newSoNumber);
   if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
   closeMForce();
   toast('✅ บันทึกแล้ว');

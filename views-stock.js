@@ -354,9 +354,37 @@ function stockSOItemReadinessHtml(sku, qty, so) {
   }
   h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
   if (reservation && from0001 > 0) {
-    h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button>';
+    h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button><br>';
   }
+  h += '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showStockQuickManageM(\'' + sku + '\')">📦 จัดการคลัง</button> ' +
+    '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="go(\'stockDetail\',{sku:\'' + sku + '\'})">📋 ดูสต็อก</button>';
   return h;
+}
+
+// เปิด modal จัดการคลังแบบย่อ ให้เพิ่ม/ย้าย lot ได้ทันทีจากหน้า SO โดยไม่ต้องออกจากหน้า — รียูส _stockLotRowHtml เดียวกับหน้า Stock หลัก
+function showStockQuickManageM(sku) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var lots = stockGetLots(sku);
+  var allLocs = getStockLocations();
+  var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
+  var body = '';
+  allLocs.forEach(function(loc) {
+    var locLots = lots.filter(function(l) { return l.location === loc.code; });
+    var locTotal = locLots.filter(_stockIsActiveLot).reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
+    var accentC = loc.sellable ? '#16a34a' : '#64748b';
+    var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
+    body += '<div style="margin-bottom:10px;background:' + tint + ';border-radius:8px;padding:8px">';
+    body += '<div style="display:flex;align-items:center;gap:8px">';
+    body += '<span style="font-size:12px;font-weight:700;color:' + accentC + '">' + _stockLocationIcon(loc.code) + ' ' + loc.code + ' ' + sanitize(loc.name) + '</span>';
+    body += '<span style="margin-left:auto;font-size:15px;font-weight:700;color:' + accentC + '">' + locTotal + '</span>';
+    body += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
+    body += '</div>';
+    if (locLots.length) locLots.forEach(function(lot) { body += _stockLotRowHtml(sku, nameEsc, loc, lot, false); });
+    body += '</div>';
+  });
+  body += '<a href="#" onclick="closeMForce();go(\'stockDetail\',{sku:\'' + sku + '\'});return false" style="font-size:12px">📋 ดูรายละเอียด/จัดการคลังแบบเต็ม →</a>';
+  openM('📦 จัดการคลัง — ' + sanitize(p.name || sku), body);
 }
 
 function _stockSaveLots(sku, productName, lots) {
@@ -636,6 +664,26 @@ function _stockCheckSOFullyDelivered(soId) {
     if (deliverStatus && typeof changePipeStatus === 'function') changePipeStatus(pipe.id, deliverStatus.id);
     else if (!deliverStatus) toast('⚠️ ไม่พบสถานะ Pipeline "Deliver" ในระบบ ข้ามการอัปเดต Pipeline');
   }
+}
+
+// เลข SO ถูก "จด" ไว้เป็นค่า snapshot (soNumber) ในหลายที่ ผูกกับ soId — lot ที่จองใน 1021/PRPO ทุก SKU + stockReservations
+// ถ้าแก้เลข SO ในหน้า SO แล้วไม่ sync ที่นี่ด้วย ของเก่าจะค้างเลขเดิมและหาไม่เจอเวลาค้นหาเลข SO ใหม่
+function stockSyncSONumber(soId, newSoNumber) {
+  if (!soId) return;
+  ST.getAll('stockLevels').forEach(function(rec) {
+    var changed = false;
+    var lots = (rec.lots || []).map(function(l) {
+      if (l.soId !== soId) return l;
+      changed = true;
+      var upd = Object.assign({}, l, { soNumber: newSoNumber });
+      if (l.location === '1021') upd.ref = newSoNumber; // ref ของ 1021 คือเลข SO เอง (ต่างจาก PRPO ที่ ref คือเลข PO)
+      return upd;
+    });
+    if (changed) ST.update('stockLevels', rec.id, { lots: lots });
+  });
+  ST.getAll('stockReservations').forEach(function(r) {
+    if (r.soId === soId) ST.update('stockReservations', r.id, { soNumber: newSoNumber });
+  });
 }
 
 // แก้ไขจำนวน/รายละเอียดของ lot ที่กรอกผิด (ไม่ใช่การย้ายคลัง) — log เป็น adjust ถ้าจำนวนเปลี่ยน
