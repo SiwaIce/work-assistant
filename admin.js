@@ -1654,7 +1654,7 @@ function renderGuestViewMenuChecklistHTML() {
   var cfg = getConfig();
   var allowed = cfg.guestViewMenus || ['stock', 'salesOrders'];
   var html = '<div class="form-section" style="margin-top:10px">📋 เมนูที่อนุญาตให้ดู</div>';
-  html += '<div class="hint" style="margin-bottom:8px">มีข้อมูลจริงพร้อมใช้ทันทีแค่ Stock / Sales Order / Dealers — เมนูอื่นถ้าเลือกจะเข้าได้แต่อาจยังไม่มีข้อมูลให้ดู (ต้องเชื่อมข้อมูลเพิ่มทีหลัง)</div>';
+  html += '<div class="hint" style="margin-bottom:8px">มีข้อมูลจริงพร้อมใช้ทันทีแค่ Stock / Sales Order / Dealers / Pipeline / สินค้าทั้งหมด — เมนูอื่นถ้าเลือกจะเข้าได้แต่อาจยังไม่มีข้อมูลให้ดู (ต้องเชื่อมข้อมูลเพิ่มทีหลัง)</div>';
   html += '<div style="max-height:320px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:8px">';
   SALES_LINK_MENU_GROUPS.forEach(function(g) {
     html += '<div style="background:var(--bg2);border-radius:8px;padding:8px 10px">';

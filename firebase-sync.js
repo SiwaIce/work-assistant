@@ -95,7 +95,7 @@ var GUEST_VIEW_READONLY = false;
 var GUEST_VIEW_ALLOWED_MENUS = ['stock', 'salesOrders']; // ค่าเริ่มต้น ถูกแทนที่ด้วยค่าจริงจาก guestViewData ตอน login
 // เฉพาะ collection ที่หน้า Stock/SO ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน (listener ด้านล่าง)
 // ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Dealer/Pipeline/Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
-var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers'];
+var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers', 'pipeline', 'pipeLog'];
 
 (function() {
   var p = new URLSearchParams(location.search);

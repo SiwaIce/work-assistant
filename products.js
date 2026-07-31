@@ -100,19 +100,16 @@ function saveProductsData(data) {
   }
 }
 
-// เผยแพร่สำเนาสินค้า (เฉพาะฟิลด์ที่หน้า Stock ใช้จริง — ไม่เอาราคาทุก level ไปด้วย) ให้ลิงก์ Guest View
-// (ดู firebase-sync.js) อ่านได้ — เก็บเป็น doc เดียว '_data' ง่ายกว่า products/bundles/demoUnits ของจริงที่
-// ต้อง track การลบแบบละเอียด เพราะ guest มองเห็นแค่ชื่อ/SKU ไม่ใช่ระบบจัดการสินค้าเต็มรูปแบบ
+// เผยแพร่สำเนาสินค้าเต็มรูปแบบ (รวมราคาทุก level) ให้ลิงก์ Guest View (ดู firebase-sync.js) อ่านได้ — ใช้ทั้งหน้า
+// Stock และหน้า "สินค้าทั้งหมด" ซึ่งต้องโชว์ราคา RRP/S/A/B/Other เต็มๆ — เก็บเป็น doc เดียว '_data' ง่ายกว่า
+// products/bundles/demoUnits ของจริงที่ต้อง track การลบแบบละเอียด เพราะ guest ไม่ได้แก้ไขอะไรอยู่แล้ว
 function _publishGuestViewProducts(data) {
   if (typeof db === 'undefined' || typeof CURRENT_USER === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) return;
   if (typeof SALES_MODE !== 'undefined' && SALES_MODE) return;
   if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY) return;
   try {
-    var slim = (data.models || []).map(function(p) {
-      return { id: p.id, sku: p.sku, name: p.name, category: p.category, cost: p.cost, eol: p.eol };
-    });
     db.collection('guestViewData').doc(CURRENT_USER.uid).collection('products').doc('_data')
-      .set({ value: slim }).catch(function(e) { console.warn('publish guest products error:', e); });
+      .set({ value: data.models || [] }).catch(function(e) { console.warn('publish guest products error:', e); });
   } catch (e) { console.warn('publish guest products error:', e); }
 }
 
