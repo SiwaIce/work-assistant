@@ -421,10 +421,11 @@ function rAdmin(el) {
 
     // Guest View — ลิงก์ PIN ให้ทีมดู Stock/SO อย่างเดียว (Step 1 — ยังแก้ไขไม่ได้)
     '<div class="card"><h2>👁️ ลิงก์ทีมดู Stock/SO</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดู Stock สินค้า + Sales Order ได้ (อ่านอย่างเดียว ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก</p>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดูเมนูที่เลือกไว้ได้ (อ่านอย่างเดียวทุกเมนู ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก</p>' +
     '<div class="fg"><label>PIN</label><input type="text" id="adm_guestPin" value="' + sanitize(cfg.guestViewPin || '') + '" placeholder="ตั้ง PIN เช่น 1234" maxlength="10"></div>' +
+    renderGuestViewMenuChecklistHTML() +
     '<div class="bg" style="flex-wrap:wrap">' +
-    '<button class="btn bp bsm" onclick="saveGuestViewPin()">💾 บันทึก PIN</button>' +
+    '<button class="btn bp bsm" onclick="saveGuestViewPin()">💾 บันทึก</button>' +
     '<button class="btn bo bsm" onclick="copyGuestViewLink()">🔗 คัดลอกลิงก์</button>' +
     '</div></div>' +
 
@@ -1574,7 +1575,8 @@ var SALES_LINK_MENU_GROUPS = [
     {id:'presentation', name:'🎬 Presentation'}, {id:'feedback', name:'💡 Feedback'}
   ]},
   { label: 'สินค้าและราคา', items: [
-    {id:'products', name:'📋 สินค้าทั้งหมด'}, {id:'productPrices', name:'💰 ราคาตาม Level'},
+    {id:'products', name:'📋 สินค้าทั้งหมด'}, {id:'stock', name:'📦 Stock สินค้า'},
+    {id:'stockBatchReceive', name:'📥 รับของเข้าคลัง (Batch)'}, {id:'productPrices', name:'💰 ราคาตาม Level'},
     {id:'productBundles', name:'🎁 Bundle/Combo'}, {id:'productDemo', name:'🚁 Demo Unit'},
     {id:'productImport', name:'📥 Import/Export'}
   ]},
@@ -1646,6 +1648,28 @@ function renderSalesLinkPermissionsHTML() {
   return html;
 }
 
+// ใช้ SALES_LINK_MENU_GROUPS ชุดเดียวกับลิงก์เซลด้านบน (รายชื่อเมนูครบทั้งแอปอยู่แล้ว ไม่ต้องคีย์ซ้ำ)
+// แต่คนละ checkbox class / คนละ key ใน config เพราะเป็นคนละสิทธิ์กัน (Guest View ดูอย่างเดียวทุกเมนูเสมอ)
+function renderGuestViewMenuChecklistHTML() {
+  var cfg = getConfig();
+  var allowed = cfg.guestViewMenus || ['stock', 'salesOrders'];
+  var html = '<div class="form-section" style="margin-top:10px">📋 เมนูที่อนุญาตให้ดู</div>';
+  html += '<div class="hint" style="margin-bottom:8px">มีข้อมูลจริงพร้อมใช้ทันทีแค่ Stock / Sales Order / Dealers — เมนูอื่นถ้าเลือกจะเข้าได้แต่อาจยังไม่มีข้อมูลให้ดู (ต้องเชื่อมข้อมูลเพิ่มทีหลัง)</div>';
+  html += '<div style="max-height:320px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:8px">';
+  SALES_LINK_MENU_GROUPS.forEach(function(g) {
+    html += '<div style="background:var(--bg2);border-radius:8px;padding:8px 10px">';
+    html += '<div style="font-size:.66rem;font-weight:700;color:var(--text2);margin-bottom:4px">' + sanitize(g.label) + '</div>';
+    g.items.forEach(function(it) {
+      html += '<label style="display:flex;gap:6px;align-items:center;font-size:.7rem;padding:2px 0">' +
+        '<input type="checkbox" class="gv-menu-chk" value="' + it.id + '" style="width:auto" ' + (allowed.indexOf(it.id) !== -1 ? 'checked' : '') + '>' +
+        sanitize(it.name) + '</label>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function saveSalesLinkPermissions() {
   var checks = document.querySelectorAll('.slp-menu-chk');
   var allowed = [];
@@ -1664,24 +1688,30 @@ function saveSalesLinkPermissions() {
 function saveGuestViewPin() {
   var pin = (document.getElementById('adm_guestPin') || {}).value.trim();
   if (!pin) { toast('⚠️ กรอก PIN ก่อน', true); return; }
+  var checks = document.querySelectorAll('.gv-menu-chk');
+  var allowedMenus = [];
+  for (var i = 0; i < checks.length; i++) if (checks[i].checked) allowedMenus.push(checks[i].value);
+  if (!allowedMenus.length) allowedMenus = ['stock', 'salesOrders'];
+
   var cfg = getConfig();
   cfg.guestViewPin = pin;
+  cfg.guestViewMenus = allowedMenus;
   saveConfig(cfg);
   if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
-    toast('💾 บันทึก PIN แล้ว (เฉพาะเครื่องนี้ — login ก่อนถึงจะใช้ลิงก์ได้จริง)');
+    toast('💾 บันทึกแล้ว (เฉพาะเครื่องนี้ — login ก่อนถึงจะใช้ลิงก์ได้จริง)');
     return;
   }
-  // เก็บ PIN ไว้ที่ doc guestViewData/{uid} เอง (ไม่ใช่ users/{uid}/_config) เพราะ path นี้เปิดอ่านได้ทุกคน
-  // ตามที่ตั้ง Firestore rules ไว้ — ลิงก์ Guest View อ่าน PIN จากตรงนี้ตอนเช็คว่าใส่ถูกไหม
-  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: pin }, { merge: true })
+  // เก็บ PIN + เมนูที่อนุญาตไว้ที่ doc guestViewData/{uid} เอง (ไม่ใช่ users/{uid}/_config) เพราะ path นี้
+  // เปิดอ่านได้ทุกคนตามที่ตั้ง Firestore rules ไว้ — ลิงก์ Guest View อ่านทั้งสองค่านี้จากตรงนี้ตอน login
+  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: pin, guestViewMenus: allowedMenus }, { merge: true })
     .then(function() {
       // seed ข้อมูลชุดแรกทันที ไม่ต้องรอให้มีใครแก้ Stock/SO ก่อนถึงจะ publish
       if (typeof publishAllGuestViewData === 'function') publishAllGuestViewData();
-      toast('💾 บันทึก PIN แล้ว');
+      toast('💾 บันทึกแล้ว (' + allowedMenus.length + ' เมนู)');
     })
     .catch(function(e) {
       console.warn('saveGuestViewPin publish error:', e);
-      toast('⚠️ บันทึก PIN ไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true);
+      toast('⚠️ บันทึกไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true);
     });
 }
 

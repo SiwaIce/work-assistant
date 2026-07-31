@@ -628,19 +628,32 @@ function applySalesLinkMenuGating() {
   });
 }
 
-// ซ่อนรายการเมนูใน sidebar/bottom nav ทั้งหมด เหลือแค่ Stock + Sales Order — เรียกครั้งเดียวหลัง login โหมด Guest
+// ซ่อนรายการเมนูใน sidebar/bottom nav ที่ไม่ได้อยู่ใน GUEST_VIEW_ALLOWED_MENUS — เรียกครั้งเดียวหลัง login โหมด Guest
+// ใช้ _salesLinkAllMenuIds() (รายชื่อเมนูหลักทั้งแอป) ชุดเดียวกับลิงก์เซล เมนูที่ไม่มี data-v (Kanban ฯลฯ)
+// ซ่อนหมดตรงๆ ไปเลยเพื่อความปลอดภัย (ลิงก์นี้เปิดให้คนนอกทีมด้วย เข้มงวดกว่าลิงก์เซลภายในทีมได้)
 function applyGuestViewMenuGating() {
   if (typeof GUEST_VIEW_READONLY === 'undefined' || !GUEST_VIEW_READONLY) return;
-  var allowed = ['stock', 'salesOrders'];
+  var allowed = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
+  var allIds = _salesLinkAllMenuIds();
   document.querySelectorAll('.nl').forEach(function(el) {
-    if (allowed.indexOf(el.dataset.v) === -1) el.style.display = 'none';
+    var v = el.dataset.v;
+    if (!v || (allIds.indexOf(v) !== -1 && allowed.indexOf(v) === -1)) el.style.display = 'none';
   });
   document.querySelectorAll('.bi[data-v]').forEach(function(el) {
-    if (allowed.indexOf(el.dataset.v) === -1) el.style.display = 'none';
+    if (allIds.indexOf(el.dataset.v) !== -1 && allowed.indexOf(el.dataset.v) === -1) el.style.display = 'none';
   });
   document.querySelectorAll('.mb-nav-item').forEach(function(el) { el.style.display = 'none'; });
   var aiBtn = document.querySelector('.ai-chat-btn'); if (aiBtn) aiBtn.style.display = 'none';
   var fab = document.querySelector('.fab'); if (fab) fab.style.display = 'none';
+}
+
+// sub-view/detail page (เช่น dealerDetail, soDetail) ปล่อยผ่านเสมอ ไม่ได้อยู่ใน _salesLinkAllMenuIds() —
+// เข้าถึงได้ก็ต่อเมื่อเปิดจากเมนูหลักที่อนุญาตอยู่แล้ว (ตามแพทเทิร์นเดียวกับ _salesLinkMenuBlocked)
+function _guestViewMenuBlocked(view) {
+  if (typeof GUEST_VIEW_READONLY === 'undefined' || !GUEST_VIEW_READONLY) return false;
+  if (_salesLinkAllMenuIds().indexOf(view) === -1) return false;
+  var allowed = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
+  return allowed.indexOf(view) === -1;
 }
 
 function go(v, p) {
@@ -649,7 +662,7 @@ function go(v, p) {
     if (typeof toast === 'function') toast('⛔ ไม่มีสิทธิ์เข้าเมนูนี้');
     return;
   }
-  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY && GUEST_VIEW_MENUS.indexOf(v) === -1) {
+  if (_guestViewMenuBlocked(v)) {
     if (typeof toast === 'function') toast('⛔ โหมดดูอย่างเดียว ไม่มีสิทธิ์เข้าเมนูนี้');
     return;
   }

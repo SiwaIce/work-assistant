@@ -88,10 +88,11 @@ function doSalesLinkLogin() {
 // path นี้) เลยอ่านไม่ได้ตรงๆ แบบไม่ login — ใช้วิธีเดียวกับ publishCatalogToClientView(): เจ้าของ publish
 // สำเนา Stock/SO ไปที่ guestViewData/{ownerUid}/{collection} (collection เปิดใหม่ อ่านได้ทุกคน เขียนได้แค่
 // เจ้าของจริง — ดู Firestore rules ส่วน "8. GUEST VIEW") แล้วลิงก์นี้อ่านจากสำเนานั้นแทน ไม่ใช่ของจริงตรงๆ
-// จำกัดแค่เมนู Stock + Sales Order เท่านั้น และห้ามเขียนข้อมูลเด็ดขาด (ดู ST._guestBlocked ใน storage.js
-// เป็นด่านหลัก, SYNC_ENABLED=false ที่นี่เป็นด่านรอง กัน syncToFirebase ตรงๆ ที่ไม่ผ่าน ST เช่นใน quotation)
+// เมนูที่เห็นเลือกได้จาก Admin (คนละสิทธิ์กับ SALES_LINK_MENU_GROUPS แต่ใช้รายชื่อเมนูชุดเดียวกัน) แต่ทุกเมนู
+// เป็นแบบดูอย่างเดียวเสมอ ห้ามเขียนข้อมูลเด็ดขาด (ดู ST._guestBlocked ใน storage.js เป็นด่านหลัก,
+// SYNC_ENABLED=false ที่นี่เป็นด่านรอง กัน syncToFirebase ตรงๆ ที่ไม่ผ่าน ST เช่นใน quotation)
 var GUEST_VIEW_READONLY = false;
-var GUEST_VIEW_MENUS = ['stock', 'stockDetail', 'salesOrders', 'soDetail'];
+var GUEST_VIEW_ALLOWED_MENUS = ['stock', 'salesOrders']; // ค่าเริ่มต้น ถูกแทนที่ด้วยค่าจริงจาก guestViewData ตอน login
 // เฉพาะ collection ที่หน้า Stock/SO ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน (listener ด้านล่าง)
 // ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Dealer/Pipeline/Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
 var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers'];
@@ -119,6 +120,7 @@ function showGuestPinScreen(ownerUid) {
       return;
     }
     window._guestViewPin = String(realPin);
+    window._guestViewAllowedMenus = (doc.data().guestViewMenus && doc.data().guestViewMenus.length) ? doc.data().guestViewMenus : ['stock', 'salesOrders'];
     // ลอง auto-login จาก PIN ที่ซ่อนไว้ใน hash ก่อน (#pin=...) — ถ้าตรงเข้าได้เลยไม่ต้องพิมพ์เอง
     var hashMatch = location.hash.match(/pin=([^&]+)/);
     var hashPin = hashMatch ? decodeURIComponent(hashMatch[1]) : '';
@@ -141,6 +143,7 @@ function doGuestViewLogin(presetPin) {
   if (pin !== window._guestViewPin) { if (msg) msg.textContent = '❌ PIN ไม่ถูกต้อง'; return; }
 
   GUEST_VIEW_READONLY = true;
+  GUEST_VIEW_ALLOWED_MENUS = window._guestViewAllowedMenus || ['stock', 'salesOrders'];
   CURRENT_USER = { uid: window._guestOwnerUid, displayName: 'ทีม (ดูอย่างเดียว)', email: null, isAnonymous: true };
   SYNC_ENABLED = false; // ด่านรอง — กันการ push ขึ้นคลาวด์ทุกทาง แม้จากโค้ดที่ไม่ผ่าน ST (เช่น quotation)
 
@@ -156,7 +159,7 @@ function doGuestViewLogin(presetPin) {
   _loadGuestViewProducts(window._guestOwnerUid);
   if (typeof render === 'function') render();
   if (typeof applyGuestViewMenuGating === 'function') applyGuestViewMenuGating();
-  if (typeof go === 'function') go('stock');
+  if (typeof go === 'function') go(GUEST_VIEW_ALLOWED_MENUS[0] || 'stock');
 }
 
 function initGuestViewListeners() {
