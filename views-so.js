@@ -9,48 +9,49 @@ var soSelected = {};
 var _soVisibleIds = [];
 var _soTimelineExpandedIdx = null;
 
+// สถานะนี้คือสถานะ "เอกสาร/งานธุรการ" ล้วนๆ — คุมด้วยมือตามปกติ ไม่ผูกกับว่าสินค้าพร้อมส่งจริงหรือยัง
+// ความพร้อมส่งจริง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกัน) คำนวณแยกต่างหากแบบ real-time ต่อรายการ ดู soComputeReadiness()
+// เดิมมี 14 สถานะไล่ทีละสเต็ปตาม 1 เส้นทางเดียว (ต้องผ่าน QI เสมอ) ใช้ไม่ได้จริงกับ SO ที่มีทั้งสินค้าต้อง QI และไม่ต้อง QI ปนกัน — ยุบเหลือสถานะเอกสารกว้างๆ แทน
 var SO_STATUS = {
-  po_received:      { label:'ได้รับ PO',         color:'#94a3b8', icon:'📄' },
-  so_open:          { label:'เปิด SO',            color:'#3b82f6', icon:'📋' },
-  stock_ok:         { label:'มีสต็อค',            color:'#10b981', icon:'✅' },
-  pr_po_open:       { label:'เปิด PR/PO',         color:'#f59e0b', icon:'📝' },
-  pm_ordered:       { label:'PM สั่งแล้ว',        color:'#8b5cf6', icon:'📧' },
-  waiting_vendor:   { label:'รอ Vendor',           color:'#f97316', icon:'⏳' },
-  goods_arrived_qi: { label:'มาถึง – QI',         color:'#ef4444', icon:'🔬' },
-  goods_arrived_wh: { label:'มาถึง – WH',         color:'#22c55e', icon:'📬' },
-  qi_passed:        { label:'QI ผ่าน',            color:'#10b981', icon:'✅' },
-  reserved:         { label:'จองแล้ว',            color:'#3b82f6', icon:'🔒' },
-  ready_ship:       { label:'พร้อมส่ง',           color:'#22c55e', icon:'🚚' },
-  shipped:          { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
-  invoiced:         { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
-  closed:           { label:'ปิด',                 color:'#64748b', icon:'✓'  }
+  po_received: { label:'ได้รับ PO',          color:'#94a3b8', icon:'📄' },
+  so_open:     { label:'เปิด SO / รอของ',    color:'#3b82f6', icon:'📋' },
+  shipped:     { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
+  invoiced:    { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
+  closed:      { label:'ปิด',                 color:'#64748b', icon:'✓'  }
 };
 
 var _SO_NEXT = {
-  po_received:      ['so_open'],
-  so_open:          ['stock_ok','pr_po_open'],
-  stock_ok:         ['reserved','ready_ship'],
-  pr_po_open:       ['pm_ordered'],
-  pm_ordered:       ['waiting_vendor'],
-  waiting_vendor:   ['goods_arrived_qi','goods_arrived_wh'],
-  goods_arrived_qi: ['qi_passed'],
-  goods_arrived_wh: ['reserved','ready_ship'],
-  qi_passed:        ['reserved','ready_ship'],
-  reserved:         ['ready_ship'],
-  ready_ship:       ['shipped'],
-  shipped:          ['invoiced'],
-  invoiced:         ['closed'],
-  closed:           []
+  po_received: ['so_open'],
+  so_open:     ['shipped'],
+  shipped:     ['invoiced'],
+  invoiced:    ['closed'],
+  closed:      []
 };
 
-// จับ 14 สถานะเป็น 6 ขั้นใหญ่สำหรับแถบ progress ในตาราง
+// สถานะเก่าที่ถูกยุบทิ้ง — map ไปสถานะใหม่ที่ใกล้เคียงที่สุด ใช้ตอน migrate ข้อมูลเก่าครั้งเดียว (ดู _soMigrateStatuses)
+var _SO_STATUS_MIGRATE_MAP = {
+  stock_ok:'so_open', pr_po_open:'so_open', pm_ordered:'so_open', waiting_vendor:'so_open',
+  goods_arrived_qi:'so_open', goods_arrived_wh:'so_open', qi_passed:'so_open', reserved:'so_open', ready_ship:'so_open'
+};
+
+function _soMigrateStatuses() {
+  if (localStorage.getItem('v7_so_status_migrated_v1')) return;
+  var changed = false;
+  ST.getAll('salesOrders').forEach(function(s) {
+    var mapped = _SO_STATUS_MIGRATE_MAP[s.status];
+    if (mapped) { ST.update('salesOrders', s.id, { status: mapped }); changed = true; }
+  });
+  localStorage.setItem('v7_so_status_migrated_v1', '1');
+  if (changed && typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+}
+
+// จับ 5 สถานะเอกสารเป็นขั้นสำหรับแถบ progress ในตาราง (1 สถานะ = 1 ขั้นพอดี ตอนนี้ไม่ต้องยุบรวมแล้ว)
 var _SO_STAGES = [
-  { key:'wait_pr',   label:'รอ PR/PO',       statuses:['po_received','so_open','stock_ok','pr_po_open'] },
-  { key:'ordered',   label:'สั่งแล้วรอของ',   statuses:['pm_ordered','waiting_vendor'] },
-  { key:'arrived',   label:'มาถึง/QI',        statuses:['goods_arrived_qi'] },
-  { key:'warehouse', label:'เข้าคลัง',        statuses:['goods_arrived_wh','qi_passed','reserved'] },
-  { key:'ready',     label:'พร้อมส่ง',        statuses:['ready_ship'] },
-  { key:'shipped',   label:'ส่งแล้ว',         statuses:['shipped','invoiced','closed'] }
+  { key:'po_received', label:'ได้รับ PO',       statuses:['po_received'] },
+  { key:'so_open',      label:'เปิด SO/รอของ',   statuses:['so_open'] },
+  { key:'shipped',      label:'ส่งแล้ว',         statuses:['shipped'] },
+  { key:'invoiced',     label:'Invoice',         statuses:['invoiced'] },
+  { key:'closed',       label:'ปิด',              statuses:['closed'] }
 ];
 function _soStageIndex(status) {
   for (var i = 0; i < _SO_STAGES.length; i++) if (_SO_STAGES[i].statuses.indexOf(status) !== -1) return i;
@@ -67,13 +68,26 @@ function _soDaysInStage(s) {
   return Math.max(0, Math.round((new Date(_td()) - new Date(d)) / 864e5));
 }
 
-// แถบ 6 ขั้น ระบายสีถึงขั้นปัจจุบัน
+// แถบขั้น ระบายสีถึงขั้นปัจจุบัน (จำนวนขั้น = _SO_STAGES.length)
 function _soProgressBar(status) {
   var cur = _soStageIndex(status);
   var color = _soIsDone(status) ? '#22c55e' : (cur <= 0 ? '#f59e0b' : '#3b82f6');
   var h = '<div style="display:flex;gap:3px;margin-bottom:3px;min-width:120px">';
-  for (var i = 0; i < 6; i++) h += '<span style="flex:1;height:6px;border-radius:3px;background:' + (i <= cur ? color : 'var(--border)') + '"></span>';
+  for (var i = 0; i < _SO_STAGES.length; i++) h += '<span style="flex:1;height:6px;border-radius:3px;background:' + (i <= cur ? color : 'var(--border)') + '"></span>';
   return h + '</div>';
+}
+
+// สรุปความพร้อมส่งของทั้ง SO จากรายการต่อรายการ (real-time จากสต็อกจริง ไม่ใช่ค่าที่ต้องกดตั้งเอง)
+// รายการที่ไม่มี SKU (สินค้า by-order ที่ไม่ track ในคลัง) ไม่นับรวม ไม่ถือเป็นตัวบล็อกความพร้อมส่ง
+function soComputeReadiness(so) {
+  var items = (so.items || []).filter(function(it) { return it.sku; });
+  if (!items.length) return { total: 0, readyCount: 0, allReady: true, items: [] };
+  var perItem = items.map(function(it) {
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, so) : { ready: true };
+    return { model: it.model, ready: info.ready };
+  });
+  var readyCount = perItem.filter(function(x) { return x.ready; }).length;
+  return { total: perItem.length, readyCount: readyCount, allReady: readyCount === perItem.length, items: perItem };
 }
 
 // ป้ายเตือน: เลย due date หรือค้างในขั้นนานเกิน (ยกเว้นส่งแล้ว)
@@ -159,12 +173,15 @@ function _addSOSerial(idx) {
 // ---------------------------------------------------------------- list
 
 function rSalesOrders(el) {
+  _soMigrateStatuses();
   document.getElementById('pgT').textContent = '📦 Sales Order';
   var all = ST.getAll('salesOrders');
 
+  // "พร้อมส่ง"/"รอของ" ไม่ใช่สถานะที่ตั้งเอง — คำนวณสดจากความพร้อมส่งจริงของ SO ที่ยังเปิดอยู่ (so_open)
+  var openSOs   = all.filter(function(s){ return s.status==='so_open'; });
   var activeCnt = all.filter(function(s){ return ['closed','invoiced'].indexOf(s.status)===-1; }).length;
-  var readyCnt  = all.filter(function(s){ return s.status==='ready_ship'; }).length;
-  var waitCnt   = all.filter(function(s){ return s.status==='waiting_vendor'; }).length;
+  var readyCnt  = openSOs.filter(function(s){ return soComputeReadiness(s).allReady; }).length;
+  var waitCnt   = openSOs.filter(function(s){ return !soComputeReadiness(s).allReady; }).length;
   var invCnt    = all.filter(function(s){ return s.status==='invoiced'; }).length;
   var attnCnt   = all.filter(_soNeedsAttention).length;
 
@@ -172,8 +189,8 @@ function rSalesOrders(el) {
   if (soFlt === 'project')    list = list.filter(function(s){ return s.type==='project'; });
   if (soFlt === 'runrate')    list = list.filter(function(s){ return s.type==='runrate'; });
   if (soFlt === 'active')     list = list.filter(function(s){ return ['closed','invoiced'].indexOf(s.status)===-1; });
-  if (soFlt === 'ready_ship') list = list.filter(function(s){ return s.status==='ready_ship'; });
-  if (soFlt === 'waiting')    list = list.filter(function(s){ return ['waiting_vendor','pr_po_open','pm_ordered'].indexOf(s.status)!==-1; });
+  if (soFlt === 'ready_ship') list = list.filter(function(s){ return s.status==='so_open' && soComputeReadiness(s).allReady; });
+  if (soFlt === 'waiting')    list = list.filter(function(s){ return s.status==='so_open' && !soComputeReadiness(s).allReady; });
   if (soFlt === 'attention')  list = list.filter(_soNeedsAttention);
   if (soSearch) {
     var q = soSearch.toLowerCase();
@@ -199,7 +216,7 @@ function rSalesOrders(el) {
     { label:'ทั้งหมด',      val: all.length,  bg:'var(--bg2)',    fg:'var(--text)'  },
     { label:'Active',       val: activeCnt,   bg:'#3b82f622',     fg:'#3b82f6'      },
     { label:'พร้อมส่ง',     val: readyCnt,    bg:'#22c55e22',     fg:'#22c55e'      },
-    { label:'รอ Vendor',    val: waitCnt,     bg:'#f59e0b22',     fg:'#f59e0b'      },
+    { label:'รอสินค้า',     val: waitCnt,     bg:'#f59e0b22',     fg:'#f59e0b'      },
     { label:'ต้องตาม',      val: attnCnt,     bg:'#ef444422',     fg:'#ef4444'      }
   ];
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px">';
@@ -365,6 +382,28 @@ function rSODetail(el) {
   if (nexts.length) html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
   html += '<button class="btn bd bsm" onclick="deleteSalesOrder(\'' + s.id + '\')" title="ลบ SO">🗑️</button>';
   html += '</div></div>';
+
+  // ความพร้อมส่ง — คำนวณสดจากสต็อกจริงต่อรายการ ไม่ใช่สถานะที่ตั้งเอง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกันได้)
+  if (s.status === 'so_open') {
+    var readiness = soComputeReadiness(s);
+    if (readiness.total) {
+      var pct = Math.round(readiness.readyCount / readiness.total * 100);
+      html += '<div class="card" style="margin-bottom:12px;padding:14px">';
+      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+      html += '<div style="flex:1;height:8px;background:var(--bg2);border-radius:999px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + (readiness.allReady ? '#22c55e' : '#f59e0b') + '"></div></div>';
+      html += '<span style="font-size:12px;font-weight:600;color:' + (readiness.allReady ? '#22c55e' : '#f59e0b') + ';white-space:nowrap">' + readiness.readyCount + '/' + readiness.total + ' พร้อมส่ง</span>';
+      html += '</div>';
+      if (readiness.allReady) {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px 10px">';
+        html += '<span style="font-size:12px;color:#22c55e">✅ พร้อมส่งครบทุกรายการแล้ว</span>';
+        html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">เปลี่ยนสถานะเป็นส่งแล้ว →</button>';
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:11px;color:var(--text2)">รอ: ' + readiness.items.filter(function(x) { return !x.ready; }).map(function(x) { return sanitize(x.model || '-'); }).join(' · ') + '</div>';
+      }
+      html += '</div>';
+    }
+  }
 
   // info grid — เฉพาะช่องที่มีข้อมูล
   var _soDays = _soDaysInStage(s);
@@ -840,6 +879,14 @@ function showSOStatusModal(soId) {
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   html += '<div style="font-size:12px;color:var(--text2)">สถานะปัจจุบัน: ' + _soStatusBadge(s.status) + '</div>';
 
+  // เตือนถ้ายังมีสินค้าไม่พร้อมส่ง — ไม่บล็อก แค่เตือนก่อนกดยืนยันเปลี่ยนเป็น "ส่งแล้ว" (มี confirm ซ้ำอีกชั้นตอนบันทึกจริง)
+  if (s.status === 'so_open') {
+    var readiness = soComputeReadiness(s);
+    if (!readiness.allReady) {
+      html += '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;font-size:11px;color:#f59e0b">⚠️ ยังไม่พร้อมส่ง ' + readiness.readyCount + '/' + readiness.total + ' รายการ</div>';
+    }
+  }
+
   html += '<div><label class="lbl">เปลี่ยนเป็น *</label><select id="soSt_next" class="inp" onchange="_toggleSOFields(\'' + soId + '\',this.value)">';
   nexts.forEach(function(st){
     var info = SO_STATUS[st]||{label:st,icon:'?'};
@@ -847,7 +894,7 @@ function showSOStatusModal(soId) {
   });
   html += '</select></div>';
 
-  // PR/PO section
+  // PR/PO section — โชว์ตอนเปิด SO/รอของ (ไม่บังคับกรอก เผื่อต้องออก PR ภายในหรือมี ETA จาก Vendor)
   html += '<div id="soSt_prSec" style="display:none"><div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">เลข PR ภายใน</label><input id="soSt_prNum" class="inp" placeholder="PR-2026-XXX" value="' + sanitize(s.prNumber||'') + '"></div>';
   html += '<div style="flex:1"><label class="lbl">ETA จาก Vendor</label><input id="soSt_eta" class="inp" type="date" value="' + (s.expectedDelivery||'') + '"></div>';
@@ -888,11 +935,10 @@ function showSOStatusModal(soId) {
 }
 
 function _toggleSOFields(soId, nextSt) {
-  var isPR      = nextSt === 'pr_po_open';
-  var isArrived = ['goods_arrived_qi','goods_arrived_wh'].indexOf(nextSt) !== -1;
-  var isShip    = ['shipped'].indexOf(nextSt) !== -1;
-  var isInv     = nextSt === 'invoiced';
-  var showSer   = isArrived || isShip || isInv;
+  var isPR   = nextSt === 'so_open'; // เปิด SO/รอของ — จุดที่มักต้องออก PR ภายใน หรือมี ETA จาก Vendor
+  var isShip = nextSt === 'shipped';
+  var isInv  = nextSt === 'invoiced';
+  var showSer = isShip || isInv;
 
   var prSec  = document.getElementById('soSt_prSec');
   var serSec = document.getElementById('soSt_serSec');
@@ -911,11 +957,17 @@ function saveSOStatus(soId) {
   var info   = SO_STATUS[nextSt] || { label: nextSt, icon:'?' };
   var cfg    = getConfig();
 
+  // ยังมีสินค้าไม่พร้อมส่งอยู่ แต่จะเปลี่ยนเป็น "ส่งแล้ว" — เตือนอีกชั้น ไม่บล็อก (บางทีส่งบางส่วนก่อนจริงๆ ก็มี)
+  if (nextSt === 'shipped') {
+    var readiness = soComputeReadiness(s);
+    if (!readiness.allReady && !confirm('ยังมีสินค้าไม่พร้อมส่ง ' + (readiness.total - readiness.readyCount) + ' รายการ\nยืนยันจะเปลี่ยนสถานะเป็น "ส่งแล้ว" ไหม?')) return;
+  }
+
   var update = { status: nextSt, updatedAt: new Date().toISOString() };
   var logEntry = { date: _td(), action: info.icon + ' ' + info.label, note: note, by: cfg.saleName||'' };
 
   // PR/PO fields
-  if (nextSt === 'pr_po_open') {
+  if (nextSt === 'so_open') {
     var prNum = (document.getElementById('soSt_prNum')||{}).value;
     var eta   = (document.getElementById('soSt_eta') ||{}).value;
     if (prNum) update.prNumber = prNum;
@@ -932,8 +984,7 @@ function saveSOStatus(soId) {
   }
 
   // Serials
-  var isArrived = ['goods_arrived_qi','goods_arrived_wh'].indexOf(nextSt) !== -1;
-  var showSer = isArrived || isShip || nextSt === 'invoiced';
+  var showSer = isShip || nextSt === 'invoiced';
   var allSerials = [];
   var newItems = (s.items||[]).map(function(it, idx){
     var clone = JSON.parse(JSON.stringify(it));

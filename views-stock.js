@@ -316,9 +316,10 @@ function stockFulfillReservationToSO(sku, so) {
 
 // เฟส 3: badge ความพร้อมส่งต่อรายการใน SO — ใช้รายการจองของ quotation ต้นทาง (ถ้ามี) ไม่งั้น fallback เป็นสถานะสต็อกสดทั่วไป
 // มีปุ่ม "ยืนยัน & ย้ายเข้า 1021" เมื่อมีส่วนที่พร้อมส่งจาก 0001 ให้ย้ายจริง
-function stockSOItemReadinessHtml(sku, qty, so) {
-  if (!sku) return '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้</span>';
+// คำนวณความพร้อมส่งของ 1 รายการใน SO — แยกจาก HTML rendering เพื่อให้ soComputeReadiness (views-so.js) เอาไปสรุปรวมทั้ง SO ได้โดยไม่ต้องพาร์ส HTML
+function stockSOItemReadyInfo(sku, qty, so) {
   qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (!sku) return { ready: true, tracked: false, deliveredForThisSO: 0, bookedForThisSO: 0, from0001: 0, fromQI: 0, shortfall: 0, reservation: null };
 
   // ส่วนที่ถูกจองเข้า 1021 ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก reservation หรือกดจอง/ลากเข้า 1021 เองแล้วเลือก SO นี้)
   var lots = stockGetLots(sku);
@@ -344,6 +345,19 @@ function stockSOItemReadinessHtml(sku, qty, so) {
       from0001 = alloc.from0001; fromQI = alloc.fromQI; shortfall = alloc.shortfall;
     }
   }
+  return {
+    ready: (bookedForThisSO + deliveredForThisSO) >= qty, tracked: true,
+    deliveredForThisSO: deliveredForThisSO, bookedForThisSO: bookedForThisSO,
+    from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation
+  };
+}
+
+function stockSOItemReadinessHtml(sku, qty, so) {
+  if (!sku) return '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้</span>';
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  var info = stockSOItemReadyInfo(sku, qty, so);
+  var deliveredForThisSO = info.deliveredForThisSO, bookedForThisSO = info.bookedForThisSO;
+  var from0001 = info.from0001, fromQI = info.fromQI, shortfall = info.shortfall, reservation = info.reservation;
 
   var h = '';
   if (deliveredForThisSO > 0) {
