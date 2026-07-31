@@ -1043,13 +1043,16 @@ function stockShowLotMenu(ev, sku, lotId) {
   var menu = document.createElement('div');
   menu.id = 'stockLotMenu';
   menu.style.cssText = 'position:fixed;z-index:500;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
-  var menuH = 100; // ประมาณความสูงเมนู 3 ปุ่ม ใช้ตัดสินใจว่าจะกางลงหรือกางขึ้น
+  var lot = stockGetLots(sku).filter(function(l) { return l.id === lotId; })[0];
+  var isPRPO = lot && lot.location === 'PRPO';
+  var menuH = isPRPO ? 130 : 100; // ประมาณความสูงเมนู ใช้ตัดสินใจว่าจะกางลงหรือกางขึ้น (PRPO มีปุ่มเพิ่ม)
   var top = (rect.bottom + menuH > window.innerHeight) ? Math.max(4, rect.top - menuH) : rect.bottom + 4;
   var left = Math.min(Math.max(4, rect.right - 120), window.innerWidth - 124);
   menu.style.top = top + 'px';
   menu.style.left = left + 'px';
   menu.innerHTML =
     '<button class="btn bsm bo" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();showStockLotTimelineM(\'' + sku + '\',\'' + lotId + '\')">📜 ดูประวัติ</button>' +
+    (isPRPO ? '<button class="btn bsm bo" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();showStockSplitBySOM(\'' + sku + '\',\'' + lotId + '\')">🔀 แยกตาม SO</button>' : '') +
     '<button class="btn bsm bo" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();showStockEditLotM(\'' + sku + '\',\'' + lotId + '\')">✏️ แก้ไข</button>' +
     '<button class="btn bsm bd" style="text-align:left" onclick="document.getElementById(\'stockLotMenu\').remove();stockDeleteLot(\'' + sku + '\',\'' + lotId + '\')">🗑️ ลบ</button>';
   document.body.appendChild(menu);
@@ -2176,4 +2179,88 @@ function showStockBatchViewM(batchRef) {
     }).join('');
   }
   openM('📦 Shipment: ' + sanitize(batchRef), body);
+}
+
+// แยก lot เดียวใน PRPO ออกเป็นหลายก้อนตาม SO ในคลิกเดียว (แทนที่จะลดจำนวน+เพิ่ม lot ใหม่เองทีละ SO)
+// ใช้เวลา PO เดียวคลุมหลาย SO หรือคีย์รับของแบบ batch มาโดยยังไม่รู้ SO ตอนรับของ
+function showStockSplitBySOM(sku, lotId) {
+  var p = getProductBySku(sku);
+  var lot = stockGetLots(sku).filter(function(l) { return l.id === lotId; })[0];
+  if (!p || !lot || lot.location !== 'PRPO') return;
+  var body = '<div class="fg"><label>' + sanitize(lot.ref || '-') + ' — ' + sanitize(p.name) + ' — รวม ' + lot.qty + ' ชิ้น</label></div>';
+  body += _stockSODatalistHtml();
+  body += '<div id="splitSoRows">' + _stockSplitSoRowHtml(0) + '</div>';
+  body += '<button class="btn bsm bo" type="button" onclick="stockSplitSoAddRow()" style="margin:6px 0">+ เพิ่มแถว</button>';
+  body += '<div id="splitSoRemain" style="font-size:12px;color:var(--text2);margin-bottom:8px"></div>';
+  body += '<button class="btn bp btn-full" onclick="saveStockSplitBySO(\'' + sku + '\',\'' + lotId + '\')">🔀 ยืนยันแยก</button>';
+  openM('🔀 แยก ' + sanitize(lot.ref || '-') + ' ตาม SO', body);
+  window._splitSoTotalQty = lot.qty;
+  window._splitSoIC = 0;
+  setTimeout(stockSplitSoUpdateRemain, 30);
+}
+
+function _stockSplitSoRowHtml(idx) {
+  return '<div class="split-so-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center" id="splitSoRow_' + idx + '">' +
+    '<input type="text" list="stockSODL" placeholder="เลข SO" class="split-so-num" style="flex:2" oninput="stockSOInputChanged(this,\'splitso\');stockSplitSoUpdateRemain()">' +
+    '<input type="number" min="1" placeholder="จำนวน" class="split-so-qty" style="flex:1" oninput="stockSplitSoUpdateRemain()">' +
+    '<button class="btn bsm bd" type="button" onclick="this.closest(\'.split-so-row\').remove();stockSplitSoUpdateRemain()">🗑️</button>' +
+    '</div>';
+}
+
+function stockSplitSoAddRow() {
+  var wrap = document.getElementById('splitSoRows');
+  if (!wrap) return;
+  window._splitSoIC = (window._splitSoIC || 0) + 1;
+  wrap.insertAdjacentHTML('beforeend', _stockSplitSoRowHtml(window._splitSoIC));
+}
+
+function stockSplitSoUpdateRemain() {
+  var rows = document.querySelectorAll('#splitSoRows .split-so-row');
+  var sum = 0;
+  rows.forEach(function(r) { sum += Number(r.querySelector('.split-so-qty').value) || 0; });
+  var remain = (window._splitSoTotalQty || 0) - sum;
+  var el = document.getElementById('splitSoRemain');
+  if (el) el.innerHTML = 'คงเหลือไม่ได้แบ่ง: ' + remain + (remain < 0 ? ' <span style="color:#ef4444">(เกินจำนวนรวม)</span>' : (remain === 0 ? ' ✅' : ''));
+}
+
+function saveStockSplitBySO(sku, lotId) {
+  var p = getProductBySku(sku);
+  if (!p) return;
+  var lots = stockGetLots(sku).slice();
+  var idx = lots.findIndex(function(l) { return l.id === lotId; });
+  if (idx === -1) return;
+  var lot = lots[idx];
+
+  var rows = document.querySelectorAll('#splitSoRows .split-so-row');
+  var splits = [];
+  rows.forEach(function(r) {
+    var soEl = r.querySelector('.split-so-num');
+    var qty = Number(r.querySelector('.split-so-qty').value) || 0;
+    var soNum = soEl.value.trim();
+    if (qty > 0 && soNum) splits.push({ soNumber: soNum, soId: soEl.dataset.soId || '', qty: qty });
+  });
+  if (!splits.length) return toast('⚠️ กรอกอย่างน้อย 1 แถว (เลข SO + จำนวน)', true);
+  var sum = splits.reduce(function(s, x) { return s + x.qty; }, 0);
+  if (sum > lot.qty) return toast('⚠️ จำนวนรวมเกินกว่าที่มี (' + lot.qty + ')', true);
+
+  var remaining = lot.qty - sum;
+  if (remaining > 0) lots[idx] = Object.assign({}, lot, { qty: remaining });
+  else lots.splice(idx, 1);
+
+  splits.forEach(function(sp) {
+    lots.push({
+      id: _stockLotId(), location: 'PRPO', ref: lot.ref, qty: sp.qty, dateIn: lot.dateIn, note: lot.note || '',
+      soNumber: sp.soNumber, soId: sp.soId, expectedDate: lot.expectedDate || ''
+    });
+  });
+
+  _stockSaveLots(sku, p.name, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: p.name, locationCode: 'PRPO', locationName: stockLocationName('PRPO'),
+    before: lot.qty, after: lot.qty, delta: 0, source: 'app',
+    note: 'แยกตาม SO: ' + splits.map(function(s) { return s.soNumber + '×' + s.qty; }).join(', '), date: _nw(), type: 'split'
+  });
+  closeMForce();
+  toast('🔀 แยกแล้ว ' + splits.length + ' รายการ');
+  render();
 }

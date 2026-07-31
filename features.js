@@ -5076,6 +5076,14 @@ function rRemind(el) {
       return '<div class="li ' + dlC(i.date, false) + '" onclick="go(\'stockDetail\',{sku:\'' + i.sku + '\',lotId:\'' + i.lotId + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">' + fD(i.date) + ' ' + dlB(i.date, false) + '</div></div></div>';
     }).join('') + '</div>';
   }
+
+  var soReadyRem = [];
+  try { soReadyRem = soGetReadyReminders(); } catch(e) {}
+  if (soReadyRem.length) {
+    h += '<div class="card"><h2>📦 SO พร้อมส่งแล้ว (' + soReadyRem.length + ')</h2>' + soReadyRem.map(function(i) {
+      return '<div class="li" onclick="go(\'soDetail\',{soId:\'' + i.soId + '\'})"><div class="lm"><div class="lt">' + sanitize(i.label) + '</div><div class="ls">รอกดเปลี่ยนสถานะเป็นส่งแล้ว</div></div></div>';
+    }).join('') + '</div>';
+  }
   
   h += '<div class="card"><h2>🔔 Browser Notification</h2>' +
     '<button class="btn bs" onclick="if(\'Notification\' in window)Notification.requestPermission().then(p=>toast(p===\'granted\'?\'✅ เปิดแล้ว\':\'❌\'));else toast(\'ไม่รองรับ\',true)">🔔 เปิดการแจ้งเตือน</button>' +

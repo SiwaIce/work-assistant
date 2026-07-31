@@ -90,6 +90,18 @@ function soComputeReadiness(so) {
   return { total: perItem.length, readyCount: readyCount, allReady: readyCount === perItem.length, items: perItem };
 }
 
+// SO ที่เปิดอยู่ (so_open) และพร้อมส่งครบทุกรายการแล้ว แต่ยังไม่มีใครกดเปลี่ยนสถานะเป็น "ส่งแล้ว" — ใช้ต่อยอดในแถบ 🔔 ต้องติดตาม
+function soGetReadyReminders() {
+  return ST.getAll('salesOrders')
+    .filter(function(s) { return s.status === 'so_open'; })
+    .map(function(s) { return { so: s, readiness: soComputeReadiness(s) }; })
+    .filter(function(x) { return x.readiness.total > 0 && x.readiness.allReady; })
+    .map(function(x) {
+      return { soId: x.so.id, soNumber: x.so.soNumber, dealerName: x.so.dealerName,
+        label: 'พร้อมส่งแล้ว: ' + (x.so.soNumber || '-') + ' (' + (x.so.dealerName || '-') + ')' };
+    });
+}
+
 // ป้ายเตือน: เลย due date หรือค้างในขั้นนานเกิน (ยกเว้นส่งแล้ว)
 function _soWarnBadge(s) {
   if (_soIsDone(s.status)) return '';
@@ -280,7 +292,11 @@ function rSalesOrders(el) {
         '<td style="padding:12px;text-align:right">' + (total ? fmtMoneyShort(total) : '-') + '</td>' +
         '<td style="padding:12px">' + _soProgressBar(s.status) +
           '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">' + _soStatusBadge(s.status) +
-          (!_soIsDone(s.status) && days != null ? '<span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? warn : '') + '</div></td>' +
+          (!_soIsDone(s.status) && days != null ? '<span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? warn : '') + '</div>' +
+          // เดิมสถานะ pr_po_open โชว์ข้อมูลนี้อยู่ในตัว พอยุบรวมเป็น so_open แล้วต้องมีบรรทัดนี้แทน ไม่งั้นเลข PR/ETA หายไปจากมุมมอง list เลย
+          (s.status === 'so_open' && (s.prNumber || s.expectedDelivery) ?
+            '<div style="font-size:10px;color:var(--text2);margin-top:2px">' + (s.prNumber ? 'PR: ' + sanitize(s.prNumber) : '') + (s.prNumber && s.expectedDelivery ? ' · ' : '') + (s.expectedDelivery ? 'ETA: ' + fD(s.expectedDelivery) : '') + '</div>' : '') +
+          '</td>' +
         '<td style="padding:12px;text-align:right;color:var(--text2)">' + (soSelectMode ? '' : '›') + '</td>' +
         '</tr>';
     });
