@@ -687,8 +687,10 @@ function showStockEditLotM(sku, lotId) {
     body += _stockSODatalistHtml();
     body += '<div class="fg"><label>SO No.</label><input type="text" id="elot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'elot\')" data-so-id="' + sanitize(lot.soId || '') + '" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="elot_sales" value="' + sanitize(lot.salesperson || '') + '"></div>';
-    body += '<div class="fg"><label>Dealer</label><input type="text" id="elot_dealer" value="' + sanitize(lot.dealerName || '') + '"></div>';
-    body += '<div class="fg"><label>โครงการ</label><input type="text" id="elot_project" value="' + sanitize(lot.projectName || '') + '"></div>';
+    body += _stockDealerDatalistHtml();
+    body += '<div class="fg"><label>Dealer</label><input type="text" id="elot_dealer" list="stockDealerDL" value="' + sanitize(lot.dealerName || '') + '"></div>';
+    body += _stockProjectDatalistHtml();
+    body += '<div class="fg"><label>โครงการ</label><input type="text" id="elot_project" list="stockProjectDL" value="' + sanitize(lot.projectName || '') + '"></div>';
     body += '<div class="fg"><label>สถานะ</label><select id="elot_status">' + STOCK_BOOKING_STATUSES.map(function(st) { return '<option' + (st === lot.status ? ' selected' : '') + '>' + st + '</option>'; }).join('') + '</select></div>';
   } else if (isPRPO) {
     body += '<div class="fg"><label>อ้างอิง (PO)</label><input type="text" id="elot_ref" value="' + sanitize(lot.ref || '') + '"></div>';
@@ -1485,6 +1487,24 @@ function _stockSODatalistHtml() {
   return h;
 }
 
+// Dealer/โครงการ — เหมือน SO ด้านบน: เลือกจาก dropdown ที่มีอยู่จริงได้ หรือพิมพ์ free text เองก็ได้ (ยังไม่มีในระบบก็บันทึกได้ปกติ)
+function _stockDealerDatalistHtml() {
+  var list = ST.getAll('dealers');
+  var h = '<datalist id="stockDealerDL">';
+  list.forEach(function(d) { h += '<option value="' + sanitize(d.name || '') + '">'; });
+  h += '</datalist>';
+  return h;
+}
+
+function _stockProjectDatalistHtml() {
+  var names = {};
+  ST.getAll('pipeline').forEach(function(p) { if (p.projectName) names[p.projectName] = true; });
+  var h = '<datalist id="stockProjectDL">';
+  Object.keys(names).forEach(function(n) { h += '<option value="' + sanitize(n) + '">'; });
+  h += '</datalist>';
+  return h;
+}
+
 function stockSOInputChanged(el, prefix) {
   var dl = document.getElementById('stockSODL');
   el.dataset.soId = '';
@@ -1546,10 +1566,12 @@ function showStockAddLotM(sku, code) {
   if (isBooking) {
     body += _stockSODatalistHtml();
     body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
-    body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="lot_date" value="' + today + '"></div>';
+    body += dpH('lot_date', today, 'วันที่จอง', false);
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="lot_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
-    body += '<div class="fg"><label>Dealer</label><input type="text" id="lot_dealer"></div>';
-    body += '<div class="fg"><label>โครงการ</label><input type="text" id="lot_project"></div>';
+    body += _stockDealerDatalistHtml();
+    body += '<div class="fg"><label>Dealer <small style="color:var(--text2)">(เลือกจาก Dealer ในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_dealer" list="stockDealerDL"></div>';
+    body += _stockProjectDatalistHtml();
+    body += '<div class="fg"><label>โครงการ <small style="color:var(--text2)">(เลือกจากโครงการใน Pipeline หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_project" list="stockProjectDL"></div>';
     body += '<div class="fg"><label>สถานะ</label><select id="lot_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
   } else if (isPRPO) {
     body += '<div class="fg"><label>อ้างอิง (PO)</label><input type="text" id="lot_ref"></div>';
@@ -1583,7 +1605,7 @@ function saveStockAddLot(sku, code) {
     var extra = {
       ref: soEl.value.trim(),
       soId: soEl.dataset.soId || '',
-      bookedDate: document.getElementById('lot_date').value,
+      bookedDate: document.getElementById('dpv_lot_date').value,
       salesperson: document.getElementById('lot_sales').value.trim(),
       dealerName: document.getElementById('lot_dealer').value.trim(),
       projectName: document.getElementById('lot_project').value.trim(),
@@ -1639,10 +1661,12 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   body += '<div id="mv_booking_fields" style="display:none">';
   body += _stockSODatalistHtml();
   body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv\')" value="' + sanitize(lot.ref || '') + '"></div>';
-  body += '<div class="fg"><label>วันที่จอง</label><input type="date" id="mv_date" value="' + today + '"></div>';
+  body += dpH('mv_date', today, 'วันที่จอง', false);
   body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="mv_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
-  body += '<div class="fg"><label>Dealer</label><input type="text" id="mv_dealer"></div>';
-  body += '<div class="fg"><label>โครงการ</label><input type="text" id="mv_project"></div>';
+  body += _stockDealerDatalistHtml();
+  body += '<div class="fg"><label>Dealer <small style="color:var(--text2)">(เลือกจาก Dealer ในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_dealer" list="stockDealerDL"></div>';
+  body += _stockProjectDatalistHtml();
+  body += '<div class="fg"><label>โครงการ <small style="color:var(--text2)">(เลือกจากโครงการใน Pipeline หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_project" list="stockProjectDL"></div>';
   body += '<div class="fg"><label>สถานะ</label><select id="mv_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
   body += '</div>';
   body += '<div id="mv_prpo_fields" style="display:none">';
@@ -1690,7 +1714,7 @@ function saveStockMoveLot(sku, lotId) {
     var mvSoEl = document.getElementById('mv_so');
     extra.ref = mvSoEl.value.trim();
     extra.soId = mvSoEl.dataset.soId || '';
-    extra.bookedDate = document.getElementById('mv_date').value;
+    extra.bookedDate = document.getElementById('dpv_mv_date').value;
     extra.salesperson = document.getElementById('mv_sales').value.trim();
     extra.dealerName = document.getElementById('mv_dealer').value.trim();
     extra.projectName = document.getElementById('mv_project').value.trim();
