@@ -83,6 +83,136 @@ function doSalesLinkLogin() {
 }
 
 // ================================================================
+// GUEST VIEW (PIN, อ่านอย่างเดียว) — เปิดผ่าน index.html?guest=1&uid=<ownerUid> แทน Google login
+// users/{uid}/... เขียน/อ่านได้เฉพาะ auth ตรง uid จริงเท่านั้น (พิสูจน์แล้วว่า "rules เปิดกว้าง" ไม่ใช้กับ
+// path นี้) เลยอ่านไม่ได้ตรงๆ แบบไม่ login — ใช้วิธีเดียวกับ publishCatalogToClientView(): เจ้าของ publish
+// สำเนา Stock/SO ไปที่ guestViewData/{ownerUid}/{collection} (collection เปิดใหม่ อ่านได้ทุกคน เขียนได้แค่
+// เจ้าของจริง — ดู Firestore rules ส่วน "8. GUEST VIEW") แล้วลิงก์นี้อ่านจากสำเนานั้นแทน ไม่ใช่ของจริงตรงๆ
+// จำกัดแค่เมนู Stock + Sales Order เท่านั้น และห้ามเขียนข้อมูลเด็ดขาด (ดู ST._guestBlocked ใน storage.js
+// เป็นด่านหลัก, SYNC_ENABLED=false ที่นี่เป็นด่านรอง กัน syncToFirebase ตรงๆ ที่ไม่ผ่าน ST เช่นใน quotation)
+var GUEST_VIEW_READONLY = false;
+var GUEST_VIEW_MENUS = ['stock', 'stockDetail', 'salesOrders', 'soDetail'];
+// เฉพาะ collection ที่หน้า Stock/SO ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน (listener ด้านล่าง)
+// ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Dealer/Pipeline/Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
+var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers'];
+
+(function() {
+  var p = new URLSearchParams(location.search);
+  var ownerUid = p.get('uid');
+  if (!p.has('guest') || !ownerUid) return;
+  document.addEventListener('DOMContentLoaded', function() { showGuestPinScreen(ownerUid); });
+})();
+
+function showGuestPinScreen(ownerUid) {
+  var loginScreen = document.getElementById('loginScreen');
+  var pinScreen = document.getElementById('guestPinScreen');
+  if (!loginScreen || !pinScreen) return;
+  loginScreen.querySelector('.login-google-box').style.display = 'none';
+  pinScreen.style.display = 'block';
+  loginScreen.style.display = 'flex';
+  window._guestOwnerUid = ownerUid;
+
+  db.collection('guestViewData').doc(ownerUid).get().then(function(doc) {
+    var realPin = doc.exists ? doc.data().guestViewPin : null;
+    if (!realPin) {
+      document.getElementById('guestPinMsg').textContent = '❌ ลิงก์นี้ยังไม่เปิดใช้งาน — ขอลิงก์ใหม่จาก Admin';
+      return;
+    }
+    window._guestViewPin = String(realPin);
+    // ลอง auto-login จาก PIN ที่ซ่อนไว้ใน hash ก่อน (#pin=...) — ถ้าตรงเข้าได้เลยไม่ต้องพิมพ์เอง
+    var hashMatch = location.hash.match(/pin=([^&]+)/);
+    var hashPin = hashMatch ? decodeURIComponent(hashMatch[1]) : '';
+    if (hashPin && hashPin === window._guestViewPin) { doGuestViewLogin(hashPin); return; }
+    document.getElementById('guestPinMsg').textContent = 'กรุณาใส่ PIN เพื่อดู Stock/Sales Order';
+    var input = document.getElementById('guestPinInput');
+    if (input) input.focus();
+  }).catch(function(e) {
+    document.getElementById('guestPinMsg').textContent = '⚠️ โหลดข้อมูลไม่ได้ — ตรวจสอบการเชื่อมต่อแล้วรีเฟรช';
+    console.error('showGuestPinScreen:', e);
+  });
+}
+
+function doGuestViewLogin(presetPin) {
+  var input = document.getElementById('guestPinInput');
+  var pin = presetPin || (input ? input.value.trim() : '');
+  var msg = document.getElementById('guestPinMsg');
+  if (!window._guestViewPin) { if (msg) msg.textContent = 'กำลังโหลด...'; return; }
+  if (!pin) { if (msg) msg.textContent = 'กรุณาใส่ PIN'; return; }
+  if (pin !== window._guestViewPin) { if (msg) msg.textContent = '❌ PIN ไม่ถูกต้อง'; return; }
+
+  GUEST_VIEW_READONLY = true;
+  CURRENT_USER = { uid: window._guestOwnerUid, displayName: 'ทีม (ดูอย่างเดียว)', email: null, isAnonymous: true };
+  SYNC_ENABLED = false; // ด่านรอง — กันการ push ขึ้นคลาวด์ทุกทาง แม้จากโค้ดที่ไม่ผ่าน ST (เช่น quotation)
+
+  var loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  var main = document.getElementById('main');
+  if (main) main.style.display = 'flex';
+  var banner = document.getElementById('guestViewBanner');
+  if (banner) banner.style.display = 'flex';
+  toast('👁️ เข้าดูแบบอ่านอย่างเดียว');
+
+  initGuestViewListeners();
+  _loadGuestViewProducts(window._guestOwnerUid);
+  if (typeof render === 'function') render();
+  if (typeof applyGuestViewMenuGating === 'function') applyGuestViewMenuGating();
+  if (typeof go === 'function') go('stock');
+}
+
+function initGuestViewListeners() {
+  activeListeners.forEach(function(unsub) { if (typeof unsub === 'function') unsub(); });
+  activeListeners = [];
+  var ownerUid = window._guestOwnerUid;
+  GUEST_VIEW_COLLECTIONS.forEach(function(key) {
+    var lsKey = 'v7_' + key;
+    var ref = db.collection('guestViewData').doc(ownerUid).collection(key);
+    var unsub = ref.onSnapshot(function(snapshot) {
+      try {
+        var items = [];
+        snapshot.forEach(function(doc) {
+          if (doc.id === '_data') return;
+          var data = normalizeFirestoreValue(doc.data());
+          data.id = doc.id;
+          items.push(data);
+        });
+        localStorage.setItem(lsKey, JSON.stringify(items));
+        if (typeof render === 'function') render();
+      } catch (e) { console.warn('Guest listener error for', key, e); }
+    }, function(error) { console.warn('Guest listener error:', key, error); });
+    activeListeners.push(unsub);
+  });
+}
+
+// สินค้า (v7_products) มี sync path พิเศษของตัวเองแยกจาก SYNC_KEY_MAP เสมอ (ดู products.js) — ฝั่ง publish
+// อยู่ที่ _publishGuestViewProducts() ในไฟล์เดียวกัน เก็บเฉพาะฟิลด์ที่หน้า Stock ใช้จริง ไม่เอาราคาทุก level ไปด้วย
+function _loadGuestViewProducts(ownerUid) {
+  db.collection('guestViewData').doc(ownerUid).collection('products').doc('_data').get().then(function(doc) {
+    var models = doc.exists ? (doc.data().value || []) : [];
+    localStorage.setItem('v7_products', JSON.stringify({ models: models, bundles: [], demoUnits: [], lastUpdated: new Date().toISOString() }));
+    if (typeof render === 'function') render();
+  }).catch(function(e) { console.warn('load guest products error:', e); });
+}
+
+// เผยแพร่สำเนา Stock/SO/Dealers ทั้งชุดครั้งเดียว ให้ลิงก์ Guest View ใช้ได้ทันทีตั้งแต่ตั้ง PIN ครั้งแรก
+// ไม่ต้องรอให้มีใครแก้ไขข้อมูลก่อนถึงจะ publish (เรียกจาก saveGuestViewPin() ใน admin.js)
+function publishAllGuestViewData() {
+  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid || SALES_MODE || GUEST_VIEW_READONLY) return;
+  var uid = CURRENT_USER.uid;
+  GUEST_VIEW_COLLECTIONS.forEach(function(collName) {
+    try {
+      var ref = db.collection('guestViewData').doc(uid).collection(collName);
+      _syncPushValue(ref, ST.getAll(collName));
+    } catch (e) { console.warn('publishAllGuestViewData error:', collName, e); }
+  });
+  if (typeof _publishGuestViewProducts === 'function') {
+    try {
+      var raw = JSON.parse(localStorage.getItem('v7_products') || '{}');
+      _publishGuestViewProducts(raw);
+    } catch (e) { console.warn('publishAllGuestViewData products error:', e); }
+  }
+}
+
+// ================================================================
 // ATTACHMENTS (Firebase Storage) — ใช้ร่วมกันทุกเมนู (Note/Task/Visit/Pipeline/Dealer/Feedback)
 // ================================================================
 // บีบรูปฝั่ง browser ก่อน upload กันไฟล์ใหญ่เปลืองโควต้า
@@ -624,6 +754,12 @@ function fixProductsStructureBeforeSync() {
           var collName = SYNC_KEY_MAP[shortKey];
           var ref = getCollectionRef(collName);
           if (ref) _syncPushValue(ref, data);
+          // เผยแพร่สำเนาให้ลิงก์ Guest View (Stock/SO อ่านอย่างเดียว) อ่านได้ — เฉพาะตอนเป็นเจ้าของบัญชีจริง
+          // เท่านั้น (ข้ามตอนอยู่ใน SALES_MODE/GUEST_VIEW_READONLY เอง กันข้อมูลที่ไม่ครบ/ไม่ใช่ของจริงหลุดไปทับ)
+          if (!SALES_MODE && !GUEST_VIEW_READONLY && typeof GUEST_VIEW_COLLECTIONS !== 'undefined' && GUEST_VIEW_COLLECTIONS.indexOf(collName) !== -1) {
+            var gRef = db.collection('guestViewData').doc(CURRENT_USER.uid).collection(collName);
+            _syncPushValue(gRef, data);
+          }
         } catch(e) {
           console.warn('Sync error:', key, e);
         }
@@ -653,12 +789,17 @@ function fixProductsStructureBeforeSync() {
         var key = ST._keys[coll];
         if (!key) return;
         var shortKey = key.replace('v7_', '');
+        var _isGuestColl = !SALES_MODE && !GUEST_VIEW_READONLY && typeof GUEST_VIEW_COLLECTIONS !== 'undefined' && GUEST_VIEW_COLLECTIONS.indexOf(shortKey) !== -1;
 
         var _delRef = getCollectionRef(shortKey);
         if (id && _delRef) {
           _delRef.doc(id).delete().catch(function(e) {
             console.warn('Delete sync error:', coll, id, e);
           });
+        }
+        if (id && _isGuestColl) {
+          db.collection('guestViewData').doc(CURRENT_USER.uid).collection(shortKey).doc(id).delete()
+            .catch(function(e) { console.warn('Guest mirror delete error:', coll, id, e); });
         }
 
         try {
@@ -668,6 +809,14 @@ function fixProductsStructureBeforeSync() {
             items.forEach(function(item) {
               if (item && item.id) {
                 ref.doc(item.id).set(item).catch(function(e) { console.warn('Re-sync error after delete:', shortKey, item.id, e); });
+              }
+            });
+          }
+          if (_isGuestColl && Array.isArray(items)) {
+            var gRef2 = db.collection('guestViewData').doc(CURRENT_USER.uid).collection(shortKey);
+            items.forEach(function(item) {
+              if (item && item.id) {
+                gRef2.doc(item.id).set(item).catch(function(e) { console.warn('Guest mirror re-sync error:', shortKey, item.id, e); });
               }
             });
           }

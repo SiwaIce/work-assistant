@@ -419,6 +419,15 @@ function rAdmin(el) {
     renderSalesLinkPermissionsHTML() +
     '</div>' +
 
+    // Guest View — ลิงก์ PIN ให้ทีมดู Stock/SO อย่างเดียว (Step 1 — ยังแก้ไขไม่ได้)
+    '<div class="card"><h2>👁️ ลิงก์ทีมดู Stock/SO</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดู Stock สินค้า + Sales Order ได้ (อ่านอย่างเดียว ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก</p>' +
+    '<div class="fg"><label>PIN</label><input type="text" id="adm_guestPin" value="' + sanitize(cfg.guestViewPin || '') + '" placeholder="ตั้ง PIN เช่น 1234" maxlength="10"></div>' +
+    '<div class="bg" style="flex-wrap:wrap">' +
+    '<button class="btn bp bsm" onclick="saveGuestViewPin()">💾 บันทึก PIN</button>' +
+    '<button class="btn bo bsm" onclick="copyGuestViewLink()">🔗 คัดลอกลิงก์</button>' +
+    '</div></div>' +
+
     // Email Recipients
     '<div class="card"><h2>📧 Email Recipients</h2>' +
     '<div class="fg"><label>Visit Plan</label>' +
@@ -1650,6 +1659,45 @@ function saveSalesLinkPermissions() {
   cfg.salesLinkPermissions = { allowedMenus: allowed, dataMode: dataMode };
   saveConfig(cfg);
   toast('💾 บันทึกสิทธิ์ลิงก์เซลเรียบร้อย (' + allowed.length + ' เมนู)');
+}
+
+function saveGuestViewPin() {
+  var pin = (document.getElementById('adm_guestPin') || {}).value.trim();
+  if (!pin) { toast('⚠️ กรอก PIN ก่อน', true); return; }
+  var cfg = getConfig();
+  cfg.guestViewPin = pin;
+  saveConfig(cfg);
+  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
+    toast('💾 บันทึก PIN แล้ว (เฉพาะเครื่องนี้ — login ก่อนถึงจะใช้ลิงก์ได้จริง)');
+    return;
+  }
+  // เก็บ PIN ไว้ที่ doc guestViewData/{uid} เอง (ไม่ใช่ users/{uid}/_config) เพราะ path นี้เปิดอ่านได้ทุกคน
+  // ตามที่ตั้ง Firestore rules ไว้ — ลิงก์ Guest View อ่าน PIN จากตรงนี้ตอนเช็คว่าใส่ถูกไหม
+  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: pin }, { merge: true })
+    .then(function() {
+      // seed ข้อมูลชุดแรกทันที ไม่ต้องรอให้มีใครแก้ Stock/SO ก่อนถึงจะ publish
+      if (typeof publishAllGuestViewData === 'function') publishAllGuestViewData();
+      toast('💾 บันทึก PIN แล้ว');
+    })
+    .catch(function(e) {
+      console.warn('saveGuestViewPin publish error:', e);
+      toast('⚠️ บันทึก PIN ไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true);
+    });
+}
+
+function copyGuestViewLink() {
+  if (!CURRENT_USER || !CURRENT_USER.uid) { toast('⚠️ ต้อง login ก่อนถึงจะสร้างลิงก์ได้', true); return; }
+  var cfg = getConfig();
+  if (!cfg.guestViewPin) { toast('⚠️ ตั้ง PIN แล้วกด "บันทึก PIN" ก่อนคัดลอกลิงก์', true); return; }
+  var base = location.href.replace(/[^/]*(\?.*)?(#.*)?$/, '') + 'index.html';
+  var link = base + '?guest=1&uid=' + CURRENT_USER.uid + '#pin=' + encodeURIComponent(cfg.guestViewPin);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function() { toast('📋 คัดลอกลิงก์แล้ว!'); });
+  } else {
+    var ta = document.createElement('textarea'); ta.value = link;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('📋 คัดลอกลิงก์แล้ว!');
+  }
 }
 
 function copyGMLink() {

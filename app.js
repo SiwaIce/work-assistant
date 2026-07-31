@@ -628,10 +628,29 @@ function applySalesLinkMenuGating() {
   });
 }
 
+// ซ่อนรายการเมนูใน sidebar/bottom nav ทั้งหมด เหลือแค่ Stock + Sales Order — เรียกครั้งเดียวหลัง login โหมด Guest
+function applyGuestViewMenuGating() {
+  if (typeof GUEST_VIEW_READONLY === 'undefined' || !GUEST_VIEW_READONLY) return;
+  var allowed = ['stock', 'salesOrders'];
+  document.querySelectorAll('.nl').forEach(function(el) {
+    if (allowed.indexOf(el.dataset.v) === -1) el.style.display = 'none';
+  });
+  document.querySelectorAll('.bi[data-v]').forEach(function(el) {
+    if (allowed.indexOf(el.dataset.v) === -1) el.style.display = 'none';
+  });
+  document.querySelectorAll('.mb-nav-item').forEach(function(el) { el.style.display = 'none'; });
+  var aiBtn = document.querySelector('.ai-chat-btn'); if (aiBtn) aiBtn.style.display = 'none';
+  var fab = document.querySelector('.fab'); if (fab) fab.style.display = 'none';
+}
+
 function go(v, p) {
   if (!p) p = {};
   if (_salesLinkMenuBlocked(v)) {
     if (typeof toast === 'function') toast('⛔ ไม่มีสิทธิ์เข้าเมนูนี้');
+    return;
+  }
+  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY && GUEST_VIEW_MENUS.indexOf(v) === -1) {
+    if (typeof toast === 'function') toast('⛔ โหมดดูอย่างเดียว ไม่มีสิทธิ์เข้าเมนูนี้');
     return;
   }
   if (S && S.view) {

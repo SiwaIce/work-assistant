@@ -47,6 +47,18 @@
     <input type="password" id="salesPinInput" maxlength="6" placeholder="PIN" style="width:100%;padding:14px;font-size:22px;letter-spacing:8px;text-align:center;background:#0f172a;border:2px solid #334155;border-radius:10px;color:#e0e6f0;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter'){doSalesLinkLogin();}">
     <button onclick="doSalesLinkLogin()" style="width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer">เข้าใช้งาน</button>
   </div>
+  <div id="guestPinScreen" style="display:none;text-align:center;max-width:340px;padding:24px">
+    <div style="font-size:48px;margin-bottom:16px">👁️</div>
+    <h1 style="font-size:22px;font-weight:800;color:#e0e6f0;margin-bottom:4px">📦 ดู Stock / Sales Order</h1>
+    <p id="guestPinMsg" style="color:#8892b0;margin-bottom:20px;min-height:18px">🔄 กำลังโหลด...</p>
+    <input type="password" id="guestPinInput" maxlength="10" placeholder="PIN" style="width:100%;padding:14px;font-size:22px;letter-spacing:8px;text-align:center;background:#0f172a;border:2px solid #334155;border-radius:10px;color:#e0e6f0;outline:none;margin-bottom:12px" onkeydown="if(event.key==='Enter'){doGuestViewLogin();}">
+    <button onclick="doGuestViewLogin()" style="width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer">เข้าดู</button>
+  </div>
+</div>
+
+<!-- GUEST VIEW BANNER — โชว์ตลอดตอนอยู่ในโหมดดูอย่างเดียว (ลิงก์ PIN) -->
+<div id="guestViewBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:150;background:#1e3a5f;border-bottom:2px solid #3b82f6;padding:6px 16px;align-items:center;justify-content:center;gap:8px;font-size:.78rem;color:#93c5fd">
+👁️ โหมดดูอย่างเดียว — แก้ไขไม่ได้
 </div>
 
 <!-- SIDEBAR -->
