@@ -420,13 +420,14 @@ function rAdmin(el) {
     '</div>' +
 
     // Guest View — ลิงก์ PIN ให้ทีมดู Stock/SO อย่างเดียว (Step 1 — ยังแก้ไขไม่ได้)
-    '<div class="card"><h2>👁️ ลิงก์ทีมดู Stock/SO</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดูเมนูที่เลือกไว้ได้ (อ่านอย่างเดียวทุกเมนู ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก</p>' +
+    '<div class="card"><h2>👁️ ลิงก์ทีมดู Stock/SO' + (cfg.guestViewPin ? ' <span class="tag" style="background:#22c55e20;color:#22c55e;font-size:10px">เปิดใช้งานอยู่</span>' : ' <span class="tag" style="background:#64748b20;color:#64748b;font-size:10px">ปิดอยู่</span>') + '</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดูเมนูที่เลือกไว้ได้ (อ่านอย่างเดียวทุกเมนู ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก ลิงก์ที่คัดลอกไม่มี PIN ติดไปด้วย ต้องบอก PIN แยกให้คนที่จะใช้เอง</p>' +
     '<div class="fg"><label>PIN</label><input type="text" id="adm_guestPin" value="' + sanitize(cfg.guestViewPin || '') + '" placeholder="ตั้ง PIN เช่น 1234" maxlength="10"></div>' +
     renderGuestViewMenuChecklistHTML() +
     '<div class="bg" style="flex-wrap:wrap">' +
     '<button class="btn bp bsm" onclick="saveGuestViewPin()">💾 บันทึก</button>' +
     '<button class="btn bo bsm" onclick="copyGuestViewLink()">🔗 คัดลอกลิงก์</button>' +
+    '<button class="btn bd bsm" onclick="disableGuestView()">🚫 ปิดใช้งานลิงก์</button>' +
     '</div></div>' +
 
     // Email Recipients
@@ -1715,19 +1716,40 @@ function saveGuestViewPin() {
     });
 }
 
+// ลิงก์ไม่มี PIN ติดท้ายแล้ว (ตัด #pin=... ออก) — คนที่ได้ลิงก์ต้องพิมพ์ PIN เองตอนเปิด ไม่ให้ PIN
+// หลุดไปพร้อมลิงก์ (เช่น ใน chat history/browser history) ต้องบอก PIN แยกให้คนที่จะใช้เอง
 function copyGuestViewLink() {
   if (!CURRENT_USER || !CURRENT_USER.uid) { toast('⚠️ ต้อง login ก่อนถึงจะสร้างลิงก์ได้', true); return; }
   var cfg = getConfig();
-  if (!cfg.guestViewPin) { toast('⚠️ ตั้ง PIN แล้วกด "บันทึก PIN" ก่อนคัดลอกลิงก์', true); return; }
+  if (!cfg.guestViewPin) { toast('⚠️ ตั้ง PIN แล้วกด "บันทึก" ก่อนคัดลอกลิงก์', true); return; }
   var base = location.href.replace(/[^/]*(\?.*)?(#.*)?$/, '') + 'index.html';
-  var link = base + '?guest=1&uid=' + CURRENT_USER.uid + '#pin=' + encodeURIComponent(cfg.guestViewPin);
+  var link = base + '?guest=1&uid=' + CURRENT_USER.uid;
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(link).then(function() { toast('📋 คัดลอกลิงก์แล้ว!'); });
+    navigator.clipboard.writeText(link).then(function() { toast('📋 คัดลอกลิงก์แล้ว! (ไม่มี PIN ติดไป — บอก PIN แยกด้วย)'); });
   } else {
     var ta = document.createElement('textarea'); ta.value = link;
     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); toast('📋 คัดลอกลิงก์แล้ว!');
+    document.body.removeChild(ta); toast('📋 คัดลอกลิงก์แล้ว! (ไม่มี PIN ติดไป — บอก PIN แยกด้วย)');
   }
+}
+
+// ปิดใช้งานลิงก์ทันที โดยไม่ต้องตั้ง PIN ใหม่ — ล้าง PIN ทิ้งทั้งฝั่ง config เครื่องนี้และ guestViewData ที่
+// เปิดอ่านได้สาธารณะ ลิงก์เก่าที่แจกไปแล้ว (ไม่ว่าใครถือ PIN เดิมอยู่) จะเข้าไม่ได้ทันทีเพราะหา PIN ไม่เจอ
+// เมนูที่เคยติ๊กไว้ยังจำอยู่ (cfg.guestViewMenus ไม่ถูกล้าง) กด "บันทึก" ใหม่ทีหลังก็เปิดกลับมาได้เลยไม่ต้องติ๊กใหม่
+function disableGuestView() {
+  if (!confirm('ปิดใช้งานลิงก์ Guest View ตอนนี้เลยไหม?\nลิงก์/PIN เดิมที่เคยแจกไปจะใช้ไม่ได้ทันที')) return;
+  var cfg = getConfig();
+  delete cfg.guestViewPin;
+  saveConfig(cfg);
+  var pinInput = document.getElementById('adm_guestPin');
+  if (pinInput) pinInput.value = '';
+  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
+    toast('🚫 ปิดใช้งานแล้ว (เฉพาะเครื่องนี้)');
+    return;
+  }
+  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: '' }, { merge: true })
+    .then(function() { toast('🚫 ปิดใช้งานลิงก์แล้ว'); if (typeof render === 'function') render(); })
+    .catch(function(e) { console.warn('disableGuestView error:', e); toast('⚠️ ปิดใช้งานไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true); });
 }
 
 function copyGMLink() {
