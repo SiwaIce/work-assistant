@@ -1723,6 +1723,14 @@ function renderFavorites() {
   var el = document.getElementById('sbFavorites');
   if (!el) return;
 
+  // แถบ Favorites วาดใหม่ทุกครั้งที่ render() (คนละ element/class จาก .nl ใน sidebar หลัก) — ไม่ผ่าน
+  // applyGuestViewMenuGating() ที่ hide ครั้งเดียวตอน login เลย ต้องกรองตรงนี้เองทุกครั้งที่วาด ไม่งั้น
+  // เมนูโปรดที่ปักไว้ก่อนหน้า (รวมถึง action ที่ไม่ผ่าน go() เช่นเปิด modal ตรงๆ) จะโผล่มาให้ guest เห็น/กดได้
+  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY) {
+    var allowedFav = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
+    favs = favs.filter(function(f) { return allowedFav.indexOf(f) !== -1; });
+  }
+
   var h = '';
   var byId = {};
   APP_MENU_REGISTRY.concat(APP_MENU_ACTIONS).forEach(function(m) { byId[m.id] = m; });
@@ -1910,7 +1918,16 @@ function qCmdSearch(q) {
     { icon: '💬', name: 'LINE Message', cmd: 'act:openLineTemplates' },
     { icon: '🎬', name: 'Presentation', cmd: 'act:openPresentation' }
   ];
-  
+
+  // Ctrl+K ค้นหาเมนู/action ได้จากทุกหน้า ไม่ผ่าน .nl sidebar ที่ applyGuestViewMenuGating() ซ่อนไว้ — ต้องกรอง
+  // ตรงนี้เองด้วย ไม่งั้นพิมพ์หาเมนูอื่นเจอ แถม action ทั้งหมด (เพิ่ม Dealer ฯลฯ) เปิด modal ตรงๆ ไม่ผ่าน go()
+  // เลยไม่โดนบล็อกจาก _guestViewMenuBlocked() ด้วย — ตัดทิ้งให้หมดในโหมด Guest ไปเลย ไม่เกี่ยวกับ Stock/SO
+  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY) {
+    var allowedCmd = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
+    navs = navs.filter(function(n) { return allowedCmd.indexOf(n.cmd.replace('go:', '')) !== -1; });
+    acts = [];
+  }
+
   for (var i = 0; i < navs.length; i++) {
     var n = navs[i];
     if (!q || n.name.toLowerCase().indexOf(q) !== -1) {
@@ -1924,21 +1941,29 @@ function qCmdSearch(q) {
     }
   }
   
+  var _gvBlocked = typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY;
+  var _gvAllowed = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || [];
   if (q.length >= 1) {
-    var dealers = ST.getAll('dealers');
-    for (var i = 0; i < dealers.length; i++) {
-      var d = dealers[i];
-      if ((d.name || '').toLowerCase().indexOf(q) !== -1) {
-        results.push({ type: 'dealer', icon: '🏪', name: d.name, cmd: 'dealer:' + d.id });
+    // ค้นหา Dealer พาไปหน้า dealerDetail ซึ่งเป็น sub-view ที่ปล่อยผ่านเสมอ (ไม่เช็คสิทธิ์เหมือนเมนูหลัก) —
+    // ต้องกันตั้งแต่ผลค้นหาเลย ไม่งั้นแม้เมนู Dealers จะถูกซ่อนไว้ ก็ยังพิมพ์ค้นหาแล้วกดเข้าไปดูได้อยู่ดี
+    if (!_gvBlocked || _gvAllowed.indexOf('dealers') !== -1) {
+      var dealers = ST.getAll('dealers');
+      for (var i = 0; i < dealers.length; i++) {
+        var d = dealers[i];
+        if ((d.name || '').toLowerCase().indexOf(q) !== -1) {
+          results.push({ type: 'dealer', icon: '🏪', name: d.name, cmd: 'dealer:' + d.id });
+        }
       }
     }
-    
-    var pipeline = ST.getAll('pipeline');
-    for (var i = 0; i < pipeline.length; i++) {
-      var p = pipeline[i];
-      var pname = p.projectName || p.name || '';
-      if (pname.toLowerCase().indexOf(q) !== -1) {
-        results.push({ type: 'pipeline', icon: '📋', name: pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
+
+    if (!_gvBlocked || _gvAllowed.indexOf('pipeline') !== -1) {
+      var pipeline = ST.getAll('pipeline');
+      for (var i = 0; i < pipeline.length; i++) {
+        var p = pipeline[i];
+        var pname = p.projectName || p.name || '';
+        if (pname.toLowerCase().indexOf(q) !== -1) {
+          results.push({ type: 'pipeline', icon: '📋', name: pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
+        }
       }
     }
   }
