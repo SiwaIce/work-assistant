@@ -249,7 +249,7 @@ function renderTaskFilterBar(dealers, categories, stats) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${taskFilterCollapsed ? '0' : '8px'}">
       <input type="text" id="taskSearch" value="${sanitize(tasksSearch)}"
         placeholder="🔍 ค้นหางาน..." style="flex:1;min-width:150px"
-        oninput="tasksSearchInput(this.value)">
+        oninput="tasksSearchInput(this.value)" autocomplete="off">
       <button class="btn bsm bo" onclick="toggleTaskFilterBar()">${taskFilterCollapsed ? '▾ ตัวกรอง' : '▴ ซ่อนตัวกรอง'}</button>
       <button class="btn bsm bo" onclick="clearTaskFilters()">✕ ล้างตัวกรอง</button>
     </div>

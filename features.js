@@ -2955,7 +2955,7 @@ function rDemoTracker(el) {
   items.forEach(function(d) { if (d.name && uniqueModels.indexOf(d.name) === -1) uniqueModels.push(d.name); });
   uniqueModels.sort();
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
-  h += '<input type="text" class="fm-input" style="flex:1;min-width:200px" placeholder="🔍 ค้นหา (ชื่อ, SKU, S/N, เลขเครื่องเช่า)" value="' + sanitize(demoSearch) + '" oninput="demoSearchInput(this.value)">';
+  h += '<input type="text" class="fm-input" style="flex:1;min-width:200px" placeholder="🔍 ค้นหา (ชื่อ, SKU, S/N, เลขเครื่องเช่า)" value="' + sanitize(demoSearch) + '" oninput="demoSearchInput(this.value)" autocomplete="off">';
   h += '<select class="fm-input" style="min-width:200px" onchange="demoModelFilter=this.value;render()">';
   h += '<option value="all"' + (demoModelFilter === 'all' ? ' selected' : '') + '>📦 ทุกรุ่น (' + uniqueModels.length + ')</option>';
   uniqueModels.forEach(function(m) {

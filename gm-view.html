@@ -449,7 +449,7 @@ function renderPipelineTab() {
   var stOpts='<option value="all">ทุก Status</option>'+PIPE_STATUSES.map(function(s){return'<option value="'+s.id+'"'+(filterStatus===s.id?' selected':'')+'>'+s.name+'</option>';}).join('');
 
   var h='<div class="fbar">';
-  h+='<input class="fsearch" placeholder="🔍 ค้นหาโครงการ / End User / Dealer" value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderPipelineTab()">';
+  h+='<input class="fsearch" placeholder="🔍 ค้นหาโครงการ / End User / Dealer" value="'+esc(searchQ)+'" oninput="searchQ=this.value;renderPipelineTab()" autocomplete="off">';
   h+='<select class="fsel" onchange="filterOwner=this.value;renderPipelineTab()">'+ownerOpts+'</select>';
   h+='<select class="fsel" onchange="filterStatus=this.value;renderPipelineTab()">'+stOpts+'</select>';
   h+='<span class="fcount">'+filtered.length+' รายการ · '+fmtShort(activeAmt)+' ฿</span>';

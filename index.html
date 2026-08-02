@@ -332,7 +332,7 @@ var auth = firebase.auth();
   <div class="qcmd-box">
     <div class="qcmd-input-wrap">
       <span>🔍</span>
-      <input type="text" id="qcmdInput" class="qcmd-input" placeholder="พิมพ์คำสั่ง... (ชื่อ Dealer, Pipeline, เมนู)" oninput="qCmdSearch(this.value)" onkeydown="qCmdKeydown(event)">
+      <input type="text" id="qcmdInput" class="qcmd-input" placeholder="พิมพ์คำสั่ง... (ชื่อ Dealer, Pipeline, เมนู)" oninput="qCmdSearch(this.value)" onkeydown="qCmdKeydown(event)" autocomplete="off">
       <span class="qcmd-kbd">ESC</span>
     </div>
     <div class="qcmd-results" id="qcmdResults"></div>

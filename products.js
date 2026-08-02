@@ -1896,7 +1896,7 @@ function rProducts(el) {
   
   // ✅ แถบกรอง (เพิ่ม Select สำหรับประเภทสินค้า)
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-  html += '<input type="text" id="productSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(productSearch) + '" oninput="productSearch=this.value;renderProductsList()">';
+  html += '<input type="text" id="productSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(productSearch) + '" oninput="productSearch=this.value;renderProductsList()" autocomplete="off">';
   
   // Filter หมวดหมู่
   html += '<select id="productCategorySelect" class="fm-input" style="width:150px" onchange="productCategoryFilter=this.value;renderProductsList()">';
@@ -2283,7 +2283,7 @@ function rProductPrices(el) {
   var html = '<div class="card"><h2>💰 ราคาสินค้าแยกตาม Level</h2>';
   
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
-  html += '<input type="text" id="priceSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(priceSearch) + '" oninput="priceSearch=this.value;renderPriceList()">';
+  html += '<input type="text" id="priceSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(priceSearch) + '" oninput="priceSearch=this.value;renderPriceList()" autocomplete="off">';
   html += '<select id="priceCategorySelect" class="fm-input" style="width:150px" onchange="priceCategoryFilter=this.value;renderPriceList()">';
   html += '<option value="all" ' + (priceCategoryFilter === 'all' ? 'selected' : '') + '>📂 ทุกหมวด</option>';
   for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
@@ -2473,7 +2473,7 @@ function rProductDemo(el) {
   
   // ปุ่มล้าง filter และค้นหา
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
-    '<input type="text" id="demoSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า..." style="flex:1;min-width:150px" oninput="filterDemoList()">' +
+    '<input type="text" id="demoSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า..." style="flex:1;min-width:150px" oninput="filterDemoList()" autocomplete="off">' +
     '<button class="btn bsm bo" onclick="resetDemoFilter()">✖️ ล้าง</button>' +
     '</div>';
   

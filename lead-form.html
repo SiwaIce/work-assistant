@@ -429,7 +429,7 @@ function rField(f){
     if(!_ilo.length) return '';
     var gridId='ilgrid_'+f.id;
     var ih=f.label?'<div class="fld-sec-sub" style="margin:14px 0 6px">'+esc(f.label)+'</div>':'';
-    if(_ilo.length>6) ih+='<input type="text" placeholder="🔍 ค้นหาสินค้า..." style="margin-bottom:8px" oninput="_ilFilter(\''+gridId+'\',this.value)">';
+    if(_ilo.length>6) ih+='<input type="text" placeholder="🔍 ค้นหาสินค้า..." style="margin-bottom:8px" oninput="_ilFilter(\''+gridId+'\',this.value)" autocomplete="off">';
     ih+='<div class="mchk-img-grid" id="'+gridId+'">';
     _ilo.forEach(function(o){
       var lbl=o.label||'', img=o.img||'';

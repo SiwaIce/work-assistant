@@ -1251,7 +1251,7 @@ function rPipeline(el) {
      pipeView === 'sheet' ? renderPipeSheetTable(pipes) :
      pipeView === 'sheetedit' ? '<div id="pipeSheetWrap">' +
        '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center">' +
-       '<input id="pipeSheetSearch" type="text" placeholder="🔍 ค้นหาในชีท..." style="flex:1;min-width:150px;font-size:12px" oninput="searchPipeSheet()">' +
+       '<input id="pipeSheetSearch" type="text" placeholder="🔍 ค้นหาในชีท..." style="flex:1;min-width:150px;font-size:12px" oninput="searchPipeSheet()" autocomplete="off">' +
        '<select id="pipeSheetSortSel" style="font-size:12px" onchange="sortPipeSheetBy(this.value)">' +
        '<option value="">⇅ Multi-sort...</option>' +
        '<option value="forecast_desc">💰 Forecast มากสุด</option>' +

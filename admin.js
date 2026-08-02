@@ -438,7 +438,7 @@ function rAdmin(el) {
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ใส่ Apps Script Proxy URL (แนะนำ) หรือ Gemini API Key ตรง</p>' +
     '<div id="adm_gemini_status" style="font-size:.72rem;margin-bottom:8px;color:var(--text2)">⏳ กำลังโหลด...</div>' +
     '<div class="fg"><label style="font-size:.75rem">Proxy URL (Apps Script) — แนะนำ</label>' +
-    '<input type="url" id="adm_gemini_proxy" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:.78rem"></div>' +
+    '<input type="url" id="adm_gemini_proxy" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:.78rem" autocomplete="off"></div>' +
     '<div class="fg" style="margin-top:6px"><label style="font-size:.75rem">หรือ Gemini API Key ตรง (AIzaSy...)</label>' +
     '<div style="display:flex;gap:6px">' +
     '<input type="password" id="adm_gemini_key" placeholder="AIzaSy..." style="flex:1;font-family:monospace;font-size:.8rem">' +

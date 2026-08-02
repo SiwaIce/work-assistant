@@ -240,7 +240,7 @@ function rSalesOrders(el) {
   html += '</div>';
 
   html += '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
-    '<input type="text" placeholder="🔍 ค้นหา SO / Dealer / PO / Invoice / Model..." style="flex:1;min-width:200px" oninput="soSearchInput(this.value)" value="' + sanitize(soSearch) + '">' +
+    '<input type="text" placeholder="🔍 ค้นหา SO / Dealer / PO / Invoice / Model..." style="flex:1;min-width:200px" oninput="soSearchInput(this.value)" value="' + sanitize(soSearch) + '" autocomplete="off">' +
     '</div>';
 
   var chips = [

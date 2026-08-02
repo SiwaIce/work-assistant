@@ -3847,7 +3847,7 @@ function renderForecastTab() {
   
   // ตัวกรองสินค้า
   var filterHtml = '<div class="product-filter-bar">' +
-    '<input type="text" id="productSearchInput" class="product-filter-input" placeholder="🔍 ค้นหาสินค้า..." value="' + esc(productSearchTerm) + '" oninput="filterProductList();">' +
+    '<input type="text" id="productSearchInput" class="product-filter-input" placeholder="🔍 ค้นหาสินค้า..." value="' + esc(productSearchTerm) + '" oninput="filterProductList();" autocomplete="off">' +
     '<select id="productCategorySelect" class="product-filter-select" onchange="filterProductList();">' +
     '<option value="all" ' + (productCategoryFilter === 'all' ? 'selected' : '') + '>📂 ทุกหมวด</option>';
   for (var ci = 0; ci < productCategories.length; ci++) {
