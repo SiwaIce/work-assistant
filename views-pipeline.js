@@ -1606,7 +1606,7 @@ function renderPipeTable(pipes) {
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 // คอลัมน์มาตรฐานของตาราง Pipeline แบบเต็ม — ใช้ร่วมกันทั้ง CSV export และมุมมอง Sheet บนจอ
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project ID','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แปลง ROW NO. (คอลัมน์แรก) เป็นชนิดตัวเลขจริงก่อนเขียนไฟล์ xlsx เฉพาะที่เป็นตัวเลขล้วนๆ
 // เหตุผล: aoa_to_sheet เดา cell type จาก JS type ของค่า — p.rowNo เก็บเป็น string เสมอ ถ้าไม่แปลง
@@ -1630,7 +1630,7 @@ function _pipeRowFields(p, excludeTypes) {
   var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
   var g = _pipeModelQtyByGroup(items);
   var fields = [
-    p.rowNo || '', fD(p.registerDate), p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', p.projectRevenue || '', modelCell,
+    p.rowNo || '', fD(p.registerDate), p.projectId || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', p.projectRevenue || '', modelCell,
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
   ];
@@ -1898,6 +1898,9 @@ function rPipeDet(el) {
   
   html += '<div class="fr"><div><label>Project Name</label><div>' + (p.projectName ? qcopyHtml(p.projectName) : '-') + '</div></div>';
   html += '<div><label>Status</label><div>' + pipeTag(p.status) + '</div></div></div>';
+
+  html += '<div class="fr"><div><label>Project ID</label><div>' + (p.projectId ? qcopyHtml(p.projectId) : '<span style="color:var(--text2)">— ยังไม่ลงทะเบียน CRM</span>') + '</div></div>';
+  html += '<div><label></label><div></div></div></div>';
   
   html += '<div class="fr"><div><label>End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';
   html += '<div><label>End User (EN)</label><div>' + sanitize(p.endUserEN || '-') + '</div></div></div>';
@@ -4123,7 +4126,7 @@ function showPastePipelineM(lockDealerId) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
   h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปช่วงข้อมูลจาก Excel แล้ววางที่นี่ — เพิ่มใหม่ทุก row · แถว header จะถูกข้ามอัตโนมัติ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ลำดับคอลัมน์: <strong>Register Date | Project Name | End User TH | End User EN | Unit type | Dealer Name | DJI Dealer | Project Revenue | Model | M3M Qty | M4T Qty | M4E Qty | Dock3 Qty | M4TD Qty | M400 Qty | Forecast Amount | Real Amount | TOR | Bidding Date | Forecast Month | Shipment Date | Remark | Letter | Status | Duplicate | Update 1–6 | Sale | DISPLAY</strong></p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ลำดับคอลัมน์: <strong>Register Date | Project ID | Project Name | End User TH | End User EN | Unit type | Dealer Name | DJI Dealer | Project Revenue | Model | M3M Qty | M4T Qty | M4E Qty | Dock3 Qty | M4TD Qty | M400 Qty | Forecast Amount | Real Amount | TOR | Bidding Date | Forecast Month | Shipment Date | Remark | Letter | Status | Duplicate | Update 1–6 | Sale | DISPLAY</strong></p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';
@@ -4139,7 +4142,7 @@ function doPastePipeline() {
   var lockDealerId = (document.getElementById('pastePipeLockDealer') || {}).value || '';
   var rows = _pipeParseTSV(ta.value.trim());
   if (!rows.length) { toast('⚠️ ไม่พบข้อมูล'); return; }
-  if (/project/i.test(rows[0][2] || '')) rows = rows.slice(1);
+  if (/project/i.test(rows[0][3] || '')) rows = rows.slice(1);
   if (!rows.length) { toast('⚠️ ไม่พบข้อมูลหลัง skip header'); return; }
   closeMForce();
   _processPipeImportRows(rows, lockDealerId);
@@ -4178,9 +4181,9 @@ function importPipelineXlsx(dealerId) {
         var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
         rows = rows.map(function(r) { return r.map(_pipeXlsxCellToStr); });
         // skip header
-        if (rows.length && /project/i.test(rows[0][2] || '')) rows = rows.slice(1);
+        if (rows.length && /project/i.test(rows[0][3] || '')) rows = rows.slice(1);
         // drop rows with no projectName AND no endUserTH (truly empty)
-        rows = rows.filter(function(r) { return (r[2] || '').trim() || (r[3] || '').trim(); });
+        rows = rows.filter(function(r) { return (r[3] || '').trim() || (r[4] || '').trim(); });
         if (!rows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
         _showPipeXlsxPreview(rows, dealerId || '');
       } catch(err) {
@@ -4192,14 +4195,15 @@ function importPipelineXlsx(dealerId) {
   input.click();
 }
 
-// idx เลื่อน +1 ทั้งหมดจากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต
+// idx เลื่อน +1 จากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต, แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID
+// เข้าไประหว่าง Register Date กับ Project Name
 var _PIPE_MODEL_COLS = [
-  { idx: 10, model: 'Matrice 3M',  gKey: 'm3m'   },
-  { idx: 11, model: 'Matrice 4T',  gKey: 'm4t'   },
-  { idx: 12, model: 'Matrice 4E',  gKey: 'm4e'   },
-  { idx: 13, model: 'Dock 3',      gKey: 'dock3'  },
-  { idx: 14, model: 'Matrice 4TD', gKey: 'm4td'  },
-  { idx: 15, model: 'Matrice 400', gKey: 'm400'  },
+  { idx: 11, model: 'Matrice 3M',  gKey: 'm3m'   },
+  { idx: 12, model: 'Matrice 4T',  gKey: 'm4t'   },
+  { idx: 13, model: 'Matrice 4E',  gKey: 'm4e'   },
+  { idx: 14, model: 'Dock 3',      gKey: 'dock3'  },
+  { idx: 15, model: 'Matrice 4TD', gKey: 'm4td'  },
+  { idx: 16, model: 'Matrice 400', gKey: 'm400'  },
 ];
 
 // คอลัมน์ Model ไม่มีราคาติดมาตอน export (ตั้งใจ) — ตอน import ต้องหาราคาคืนเอง กันราคาโดนล้างเป็น 0
@@ -4248,22 +4252,23 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 
 // เปรียบเทียบ field สำคัญระหว่าง existing record กับ import row
 // returns 'same' | 'changed'
-// index ทุกตัวใน c[...] เลื่อน +1 ทั้งหมดจากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต
+// index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO., แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
 function _pipeImportState(existing, c, dealer) {
-  var statusRaw = (c[24] || '').trim();
+  var statusRaw = (c[25] || '').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
   var textPairs = [
-    [(existing.projectName || ''),       (c[2]  || '')],
-    [(existing.endUserTH || ''),          (c[3]  || '')],
-    [(existing.endUserEN || ''),          (c[4]  || '')],
-    [(existing.unitType || ''),           (c[5]  || '')],
-    [(existing.djiDealer || ''),          (c[7]  || '')],
-    [(existing.tor || ''),                (c[18] || '')],
-    [(existing.remark || ''),             (c[22] || '')],
-    [(existing.appointmentLetter || ''),  (c[23] || '')],
-    [(existing.saleName || ''),           (c[32] || '')],
-    [(existing.sheetDisplay || 'Show'),   (c[33] || 'Show') || 'Show'],
+    [(existing.projectId || ''),          (c[2]  || '')],
+    [(existing.projectName || ''),       (c[3]  || '')],
+    [(existing.endUserTH || ''),          (c[4]  || '')],
+    [(existing.endUserEN || ''),          (c[5]  || '')],
+    [(existing.unitType || ''),           (c[6]  || '')],
+    [(existing.djiDealer || ''),          (c[8]  || '')],
+    [(existing.tor || ''),                (c[19] || '')],
+    [(existing.remark || ''),             (c[23] || '')],
+    [(existing.appointmentLetter || ''),  (c[24] || '')],
+    [(existing.saleName || ''),           (c[33] || '')],
+    [(existing.sheetDisplay || 'Show'),   (c[34] || 'Show') || 'Show'],
     [(existing.rowNo || ''),               (c[0]  || '')],
   ];
   for (var i = 0; i < textPairs.length; i++) {
@@ -4271,12 +4276,12 @@ function _pipeImportState(existing, c, dealer) {
   }
   if ((existing.dealerId || '') !== (dealer ? dealer.id : '')) return 'changed';
   if ((existing.status || '') !== status) return 'changed';
-  if (!!existing.recurring !== ((c[25] || '').trim().toLowerCase() === 'yes')) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(c[8]))  > 0.001) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(c[16])) > 0.001) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(c[17])) > 0.001) return 'changed';
-  if ((existing.biddingDate || '') !== _pipeDateFromPaste(c[19] || '')) return 'changed';
-  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[21] || '')) return 'changed';
+  if (!!existing.recurring !== ((c[26] || '').trim().toLowerCase() === 'yes')) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(c[9]))  > 0.001) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(c[17])) > 0.001) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(c[18])) > 0.001) return 'changed';
+  if ((existing.biddingDate || '') !== _pipeDateFromPaste(c[20] || '')) return 'changed';
+  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[22] || '')) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
@@ -4290,38 +4295,39 @@ function _pipeImportState(existing, c, dealer) {
 }
 
 // คืน array ของ field ที่เปลี่ยน [{label, old, newVal}]
-// index ทุกตัวใน c[...] เลื่อน +1 ทั้งหมดจากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต
+// index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO., แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
 function _pipeImportDiff(existing, c, dealer) {
-  var statusRaw = (c[24] || '').trim();
+  var statusRaw = (c[25] || '').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
   var pairs = [
     { label: 'Row No.',         old: _pipeNormText(existing.rowNo),             newVal: _pipeNormText(c[0]) },
-    { label: 'Project Name',    old: _pipeNormText(existing.projectName),      newVal: _pipeNormText(c[2]) },
-    { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(c[3]) },
-    { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(c[4]) },
-    { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(c[5]) },
-    { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(c[7]) },
-    { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(c[18]) },
-    { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(c[22]) },
-    { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(c[23]) },
-    { label: 'Sale Name',       old: _pipeNormText(existing.saleName),          newVal: _pipeNormText(c[32]) },
-    { label: 'Sheet Display',   old: _pipeNormText(existing.sheetDisplay) || 'Show', newVal: _pipeNormText(c[33]) || 'Show' },
+    { label: 'Project ID',      old: _pipeNormText(existing.projectId),         newVal: _pipeNormText(c[2]) },
+    { label: 'Project Name',    old: _pipeNormText(existing.projectName),      newVal: _pipeNormText(c[3]) },
+    { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(c[4]) },
+    { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(c[5]) },
+    { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(c[6]) },
+    { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(c[8]) },
+    { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(c[19]) },
+    { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(c[23]) },
+    { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(c[24]) },
+    { label: 'Sale Name',       old: _pipeNormText(existing.saleName),          newVal: _pipeNormText(c[33]) },
+    { label: 'Sheet Display',   old: _pipeNormText(existing.sheetDisplay) || 'Show', newVal: _pipeNormText(c[34]) || 'Show' },
     { label: 'Status',          old: (existing.status || ''),                   newVal: status },
-    { label: 'Recurring',       old: String(!!existing.recurring),              newVal: String((c[25] || '').trim().toLowerCase() === 'yes') },
+    { label: 'Recurring',       old: String(!!existing.recurring),              newVal: String((c[26] || '').trim().toLowerCase() === 'yes') },
   ];
   var numPairs = [
-    { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(c[8]) },
-    { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(c[16]) },
-    { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(c[17]) },
+    { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(c[9]) },
+    { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(c[17]) },
+    { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(c[18]) },
   ];
   var diffs = pairs.filter(function(p) { return p.old !== p.newVal; });
   numPairs.forEach(function(p) {
     if (Math.abs(p.oldN - p.newN) > 0.001) diffs.push({ label: p.label, old: fmtMoney(p.oldN) || '0', newVal: fmtMoney(p.newN) || '0' });
   });
   var datePairs = [
-    { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: _pipeDateFromPaste(c[19] || '') },
-    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[21] || '') }
+    { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: _pipeDateFromPaste(c[20] || '') },
+    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[22] || '') }
   ];
   datePairs.forEach(function(p) {
     if (p.oldISO !== p.newISO) diffs.push({ label: p.label, old: p.oldISO ? fD(p.oldISO) : '', newVal: p.newISO ? fD(p.newISO) : '' });
@@ -4355,8 +4361,8 @@ function _showPipeXlsxPreview(rows, dealerId) {
   var counts = { 'new': 0, changed: 0, same: 0 };
   var matchedIds = {};
   var rowMeta = rows.map(function(r) {
-    var d = dealer || dealerByName[((r[6] || '').trim()).toLowerCase()];
-    var existing = _pipeFindExistingForImport(r[0], r[2], r[3], d ? d.id : '', pipeByRowNo, pipeByKey);
+    var d = dealer || dealerByName[((r[7] || '').trim()).toLowerCase()];
+    var existing = _pipeFindExistingForImport(r[0], r[3], r[4], d ? d.id : '', pipeByRowNo, pipeByKey);
     var state = existing ? _pipeImportState(existing, r, d) : 'new';
     var diff = state === 'changed' ? _pipeImportDiff(existing, r, d) : [];
     if (existing) matchedIds[existing.id] = true;
@@ -4375,7 +4381,7 @@ function _showPipeXlsxPreview(rows, dealerId) {
   // เช็คว่ามี model ในช่อง "Model" ที่ไม่ตรงกับ 6 กลุ่มหลัก (จะสูญหายหลัง import)
   var unknownModelRows = [];
   rowMeta.forEach(function(m, i) {
-    var modelCell = (m.row[9] || '').trim();
+    var modelCell = (m.row[10] || '').trim();
     if (!modelCell) return;
     var hasUnknown = modelCell.split('\n').some(function(line) {
       var n = (line.split('*')[0] || '').trim().toUpperCase();
@@ -4432,14 +4438,14 @@ function _showPipeXlsxPreview(rows, dealerId) {
     '</tr></thead><tbody>';
   rowMeta.forEach(function(m, i) {
     var r = m.row;
-    var fc = parseFloat((r[16] || '').replace(/,/g, '')) || 0;
+    var fc = parseFloat((r[17] || '').replace(/,/g, '')) || 0;
     var badge, defAct;
     if (m.state === 'new')          { badge = '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>';       defAct = 'add'; }
     else if (m.state === 'changed') { badge = '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>';  defAct = 'update'; }
     else                            { badge = '<span style="color:var(--text2);font-size:11px;font-weight:700">⏭ เดิม</span>'; defAct = 'skip'; }
-    var nameDisplay = (r[2] || '').trim()
-      ? sanitize(r[2])
-      : '<i style="color:var(--text2)">' + sanitize(r[3] || '-') + '</i>';
+    var nameDisplay = (r[3] || '').trim()
+      ? sanitize(r[3])
+      : '<i style="color:var(--text2)">' + sanitize(r[4] || '-') + '</i>';
     var diffBtn = m.state === 'changed'
       ? ' <button onclick="_pipeToggleDiff(' + i + ')" id="pipeDiffBtn_' + i + '" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2)" title="ดูการเปลี่ยนแปลง">🔍 ' + m.diff.length + '</button>'
       : '';
@@ -4452,8 +4458,8 @@ function _showPipeXlsxPreview(rows, dealerId) {
     h += '<tr data-pstate="' + m.state + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
       '<td style="padding:5px 10px;text-align:center;white-space:nowrap">' + badge + diffBtn + '</td>' +
       '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(r[0] || '-') + '</td>' +
-      '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((r[2] || r[3] || '')) + '">' + nameDisplay + '</td>' +
-      '<td style="padding:5px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + sanitize(m.dealer ? m.dealer.name : (r[6]||'-')) + '</td>' +
+      '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((r[3] || r[4] || '')) + '">' + nameDisplay + '</td>' +
+      '<td style="padding:5px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + sanitize(m.dealer ? m.dealer.name : (r[7]||'-')) + '</td>' +
       '<td style="padding:5px 10px;text-align:right;font-size:12px;white-space:nowrap">' + (fc ? fmtMoneyShort(fc) : '-') + '</td>' +
       '<td style="padding:5px 10px">' + sel +
         '<button onclick="_pipeXlsxOpenDetail(' + i + ')" style="display:block;margin-top:3px;font-size:10px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2);width:100%" title="ดู/แก้ไขทุกคอลัมน์">📝 รายละเอียด</button>' +
@@ -4583,30 +4589,31 @@ function _pipeXlsxDetailFields() {
   return [
     {idx:0,  label:'Row No.'},
     {idx:1,  label:'Register Date', date:true},
-    {idx:2,  label:'Project Name', wide:true},
-    {idx:3,  label:'End User TH'},
-    {idx:4,  label:'End User EN'},
-    {idx:5,  label:'Unit type'},
-    {idx:6,  label:'Dealer Name'},
-    {idx:7,  label:'DJI Dealer'},
-    {idx:8,  label:'Project Revenue'},
-    {idx:9,  label:'Model', wide:true},
-    {idx:10, label:'M3M Qty'},
-    {idx:11, label:'M4T Qty'},
-    {idx:12, label:'M4E Qty'},
-    {idx:13, label:'Dock3 Qty'},
-    {idx:14, label:'M4TD Qty'},
-    {idx:15, label:'M400 Qty'},
-    {idx:16, label:'Forecast Amount'},
-    {idx:17, label:'Real Amount'},
-    {idx:18, label:'TOR'},
-    {idx:19, label:'Bidding Date', date:true},
-    {idx:20, label:'Forecast Month'},
-    {idx:21, label:'Shipment Date', date:true},
-    {idx:22, label:'Remark', wide:true},
-    {idx:23, label:'Letter'},
-    {idx:24, label:'Status'},
-    {idx:32, label:'Sale'}
+    {idx:2,  label:'Project ID'},
+    {idx:3,  label:'Project Name', wide:true},
+    {idx:4,  label:'End User TH'},
+    {idx:5,  label:'End User EN'},
+    {idx:6,  label:'Unit type'},
+    {idx:7,  label:'Dealer Name'},
+    {idx:8,  label:'DJI Dealer'},
+    {idx:9,  label:'Project Revenue'},
+    {idx:10, label:'Model', wide:true},
+    {idx:11, label:'M3M Qty'},
+    {idx:12, label:'M4T Qty'},
+    {idx:13, label:'M4E Qty'},
+    {idx:14, label:'Dock3 Qty'},
+    {idx:15, label:'M4TD Qty'},
+    {idx:16, label:'M400 Qty'},
+    {idx:17, label:'Forecast Amount'},
+    {idx:18, label:'Real Amount'},
+    {idx:19, label:'TOR'},
+    {idx:20, label:'Bidding Date', date:true},
+    {idx:21, label:'Forecast Month'},
+    {idx:22, label:'Shipment Date', date:true},
+    {idx:23, label:'Remark', wide:true},
+    {idx:24, label:'Letter'},
+    {idx:25, label:'Status'},
+    {idx:33, label:'Sale'}
   ];
 }
 
@@ -4703,21 +4710,22 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
     if (p.rowNo && String(p.rowNo).trim()) pipeByRowNo[String(p.rowNo).trim()] = p;
   });
 
-  // index ทุกตัวใน c[...] เลื่อน +1 ทั้งหมดจากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต (c[0])
+  // index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO. (c[0]), แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
   var added = 0, updated = 0, skipped = 0;
   rows.forEach(function(c, idx) {
-    var projectName = (c[2] || '').trim();
-    var endUserTH   = (c[3] || '').trim();
+    var projectId   = (c[2] || '').trim();
+    var projectName = (c[3] || '').trim();
+    var endUserTH   = (c[4] || '').trim();
     if (!projectName && !endUserTH) { skipped++; return; }
 
-    var dealer = lockDealer || dealerByName[((c[6] || '').trim()).toLowerCase()];
+    var dealer = lockDealer || dealerByName[((c[7] || '').trim()).toLowerCase()];
     var existing = _pipeFindExistingForImport(c[0], projectName, endUserTH, dealer ? dealer.id : '', pipeByRowNo, pipeByKey);
     var existingItems = existing ? existing.items : null;
 
-    // คอลัมน์ Model (c[9]) เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
+    // คอลัมน์ Model (c[10]) เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
     // fallback ไปอ่าน 6 คอลัมน์ Qty สรุปกลุ่ม (ชื่อกลุ่มทั่วไป) เฉพาะกรณีคอลัมน์ Model ว่าง เช่น ไฟล์เก่า/ทีมแก้แต่ตัวเลขสรุปในชีต
     var items = [];
-    var modelCellText = (c[9] || '').trim();
+    var modelCellText = (c[10] || '').trim();
     if (modelCellText) {
       modelCellText.split('\n').forEach(function(line) {
         line = line.trim();
@@ -4739,34 +4747,42 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
       });
     }
 
-    var statusRaw = (c[24] || '').trim();
+    var statusRaw = (c[25] || '').trim();
     var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
     if (!status) status = 'initial';
 
+    var regDate = _pipeDateFromPaste(c[1]);
+    // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น) — คงค่า djiCrmDate เดิมไว้ถ้ามีอยู่แล้ว
+    var crmRegistered = projectId ? true : (existing ? !!existing.djiCrmRegistered : false);
+    var crmDate = projectId ? ((existing && existing.djiCrmDate) || regDate || _td()) : (existing ? (existing.djiCrmDate || '') : '');
+
     var pipeData = {
       rowNo: (c[0] || '').trim(),
-      registerDate: _pipeDateFromPaste(c[1]),
+      registerDate: regDate,
+      projectId: projectId,
       projectName: projectName,
-      endUserTH: (c[3] || '').trim(),
-      endUserEN: (c[4] || '').trim(),
-      unitType: (c[5] || '').trim(),
+      endUserTH: (c[4] || '').trim(),
+      endUserEN: (c[5] || '').trim(),
+      unitType: (c[6] || '').trim(),
       dealerId: dealer ? dealer.id : '',
-      djiDealer: (c[7] || '').trim(),
-      projectRevenue: parseFloat((c[8] || '').replace(/,/g, '')) || 0,
+      djiDealer: (c[8] || '').trim(),
+      projectRevenue: parseFloat((c[9] || '').replace(/,/g, '')) || 0,
       items: items,
       model: items[0] ? items[0].model : '',
       modelQty: items[0] ? items[0].qty : 1,
-      forecastAmount: parseFloat((c[16] || '').replace(/,/g, '')) || 0,
-      realAmount: parseFloat((c[17] || '').replace(/,/g, '')) || 0,
-      tor: (c[18] || '').trim(),
-      biddingDate: _pipeDateFromPaste(c[19]),
-      shipmentDate: _pipeDateFromPaste(c[21]),
-      remark: (c[22] || '').trim(),
-      appointmentLetter: (c[23] || '').trim(),
+      forecastAmount: parseFloat((c[17] || '').replace(/,/g, '')) || 0,
+      realAmount: parseFloat((c[18] || '').replace(/,/g, '')) || 0,
+      tor: (c[19] || '').trim(),
+      biddingDate: _pipeDateFromPaste(c[20]),
+      shipmentDate: _pipeDateFromPaste(c[22]),
+      remark: (c[23] || '').trim(),
+      appointmentLetter: (c[24] || '').trim(),
       status: status,
-      recurring: (c[25] || '').trim().toLowerCase() === 'yes',
-      saleName: (c[32] || '').trim(),
-      sheetDisplay: (c[33] || 'Show').trim() || 'Show',
+      recurring: (c[26] || '').trim().toLowerCase() === 'yes',
+      djiCrmRegistered: crmRegistered,
+      djiCrmDate: crmDate,
+      saleName: (c[33] || '').trim(),
+      sheetDisplay: (c[34] || 'Show').trim() || 'Show',
       nextAction: '', followupDate: ''
     };
 
@@ -4780,7 +4796,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
       var pipe = ST.add('pipeline', pipeData);
       added++;
       for (var u = 0; u < 6; u++) {
-        var upd = (c[26 + u] || '').trim();
+        var upd = (c[27 + u] || '').trim();
         if (upd) ST.add('pipeLog', { pipeId: pipe.id, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString() });
       }
     }

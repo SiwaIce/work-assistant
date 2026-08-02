@@ -292,6 +292,7 @@ function showPipelineM(dealerId, eid) {
 
   openM(eid ? '✏️ Pipeline' : '➕ เพิ่ม Pipeline', '' +
     '<div class="fg"><label>ROW NO. <small style="color:var(--text2)">(เลขที่ในชีต — กรอกเองให้ตรงกับ Google Sheet)</small></label><input type="text" id="fp_rowno" value="' + sanitize(p.rowNo || '') + '" placeholder="เช่น 452"></div>' +
+    '<div class="fg"><label>Project ID <small style="color:var(--text2)">(ได้จากตอนลูกค้าลงทะเบียน CRM ของ DJI — มีค่า = ถือว่าลงทะเบียนแล้ว)</small></label><input type="text" id="fp_projectid" value="' + sanitize(p.projectId || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="(function(v){var c=document.getElementById(\'fp_crm\');if(v&&c&&!c.checked){c.checked=true;document.getElementById(\'fp_crmdate_wrap\').style.display=\'\';}})(this.value.trim())"></div>' +
     dpH('fp_reg', p.registerDate || _td(), 'Register Date') +
     '<div class="fg"><label>Project Name *</label><textarea id="fp_name" rows="2">' + sanitize(p.projectName || '') + '</textarea></div>' +
     '<div class="fr"><div class="fg"><label>End User (TH)</label><input type="text" id="fp_eu_th" value="' + sanitize(p.endUserTH || '') + '"></div>' +
@@ -841,8 +842,10 @@ function savePipeline(dealerId, eid) {
 }
 
 function _finishSavePipeline(dealerId, eid) {
+  var typedProjectId = document.getElementById('fp_projectid') ? document.getElementById('fp_projectid').value.trim() : '';
   var data = {
     rowNo: document.getElementById('fp_rowno') ? document.getElementById('fp_rowno').value.trim() : '',
+    projectId: typedProjectId,
     registerDate: dpG('fp_reg'),
     projectName: document.getElementById('fp_name').value.trim(),
     endUserTH: document.getElementById('fp_eu_th').value.trim(),
@@ -863,8 +866,9 @@ function _finishSavePipeline(dealerId, eid) {
     followupDate: dpG('fp_fudate'),
     recurring: document.querySelector('input[name="fp_rec"]:checked') ? document.querySelector('input[name="fp_rec"]:checked').value === '1' : false,
     remark: document.getElementById('fp_remark').value.trim(),
-    djiCrmRegistered: document.getElementById('fp_crm') ? document.getElementById('fp_crm').checked : false,
-    djiCrmDate: dpG('fp_crmdate'),
+    // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น) แม้ user ลืมติ๊ก checkbox เอง
+    djiCrmRegistered: typedProjectId ? true : (document.getElementById('fp_crm') ? document.getElementById('fp_crm').checked : false),
+    djiCrmDate: dpG('fp_crmdate') || (typedProjectId ? _td() : ''),
     hasCompetitor: document.getElementById('fp_comp') ? document.getElementById('fp_comp').checked : false,
     competitorName: document.getElementById('fp_compname') ? document.getElementById('fp_compname').value.trim() : '',
     budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null,
