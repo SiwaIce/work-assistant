@@ -4145,7 +4145,80 @@ function doPastePipeline() {
   if (/project/i.test(rows[0][3] || '')) rows = rows.slice(1);
   if (!rows.length) { toast('⚠️ ไม่พบข้อมูลหลัง skip header'); return; }
   closeMForce();
-  _processPipeImportRows(rows, lockDealerId);
+  _pipeResolveUnknownDealersUI(rows, lockDealerId, function(resolvedRows) {
+    _processPipeImportRows(resolvedRows, lockDealerId);
+  });
+}
+
+// ก่อนนำเข้าจริง เช็คก่อนว่าชื่อ Dealer (คอลัมน์ r[7]) ในไฟล์มีชื่อไหนที่ไม่ตรงกับ Dealer ที่มีอยู่แล้วบ้าง
+// (สะกดเพี้ยน/พิมพ์ไม่ตรง หรือเป็น Dealer ใหม่จริงๆ) ถ้ามี ให้เลือกก่อนว่าจะสร้างใหม่ หรือจับคู่กับของเดิม —
+// กันปัญหา Dealer เพี้ยนแล้ว dealerId ว่างเปล่าไปเงียบๆ ซึ่งทำให้จับคู่โครงการเดิมไม่เจอ (ได้โครงการซ้ำ) ด้วย
+// ถ้าล็อก Dealer ไว้อยู่แล้ว (lockDealerId) ทุกแถวใช้ Dealer เดียวกันหมด ไม่ต้องเช็คชื่อในไฟล์เลย
+function _pipeResolveUnknownDealersUI(rows, lockDealerId, cb) {
+  if (lockDealerId) { cb(rows); return; }
+  var dealers = ST.getAll('dealers');
+  var dealerByName = {};
+  dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
+  var unknownNames = [];
+  var seen = {};
+  rows.forEach(function(r) {
+    var name = (r[7] || '').trim();
+    if (!name) return;
+    var key = name.toLowerCase();
+    if (dealerByName[key] || seen[key]) return;
+    seen[key] = true;
+    unknownNames.push(name);
+  });
+  if (!unknownNames.length) { cb(rows); return; }
+
+  var dealerOptions = dealers.slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); })
+    .map(function(d) { return '<option value="' + sanitize(d.id) + '">' + sanitize(d.name) + '</option>'; }).join('');
+
+  var h = '<div style="max-width:520px">';
+  h += '<div class="hint" style="margin-bottom:10px">พบชื่อ Dealer ' + unknownNames.length + ' ราย ในไฟล์ที่ยังไม่มีในระบบ — เลือกว่าจะสร้างใหม่ หรือจับคู่กับ Dealer ที่มีอยู่แล้ว (เผื่อสะกดเพี้ยน/พิมพ์ไม่ตรงกับของเดิม)</div>';
+  unknownNames.forEach(function(name, i) {
+    h += '<div class="fg" style="margin-bottom:8px"><label>' + sanitize(name) + '</label>';
+    h += '<select id="pipeDealerFix_' + i + '" data-name="' + sanitize(name) + '">';
+    h += '<option value="__new__">➕ สร้าง Dealer ใหม่ชื่อนี้</option>';
+    h += dealerOptions;
+    h += '</select></div>';
+  });
+  h += '<div style="display:flex;gap:8px;margin-top:10px">';
+  h += '<button class="btn bp" style="flex:1" onclick="_pipeApplyDealerFix(' + unknownNames.length + ')">✅ ยืนยันแล้วนำเข้าต่อ</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+
+  window._pipeDealerFixRows = rows;
+  window._pipeDealerFixCb = cb;
+  openM('🏪 Dealer ที่ยังไม่มีในระบบ', h);
+}
+
+function _pipeApplyDealerFix(count) {
+  var rows = window._pipeDealerFixRows;
+  var cb = window._pipeDealerFixCb;
+  if (!rows) return;
+  var nameFix = {}; // ชื่อเดิม (lowercase) → ชื่อจริงที่ควรเขียนกลับเข้าแถว (ของใหม่ที่สร้าง หรือของเดิมที่จับคู่)
+  for (var i = 0; i < count; i++) {
+    var sel = document.getElementById('pipeDealerFix_' + i);
+    if (!sel) continue;
+    var origName = sel.getAttribute('data-name');
+    var val = sel.value;
+    if (val === '__new__') {
+      var created = ST.add('dealers', { name: origName });
+      nameFix[origName.toLowerCase()] = created.name;
+    } else {
+      var existDealer = ST.getOne('dealers', val);
+      if (existDealer) nameFix[origName.toLowerCase()] = existDealer.name;
+    }
+  }
+  rows.forEach(function(r) {
+    var key = (r[7] || '').trim().toLowerCase();
+    if (nameFix[key]) r[7] = nameFix[key];
+  });
+  closeMForce();
+  window._pipeDealerFixRows = null;
+  window._pipeDealerFixCb = null;
+  if (typeof cb === 'function') cb(rows);
 }
 
 // แปลงค่าเซลล์ xlsx เป็นข้อความ — เซลล์ที่เป็น Date object จริง (จาก cellDates:true) จะถูกแปลงเป็น
@@ -4185,7 +4258,9 @@ function importPipelineXlsx(dealerId) {
         // drop rows with no projectName AND no endUserTH (truly empty)
         rows = rows.filter(function(r) { return (r[3] || '').trim() || (r[4] || '').trim(); });
         if (!rows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
-        _showPipeXlsxPreview(rows, dealerId || '');
+        _pipeResolveUnknownDealersUI(rows, dealerId || '', function(resolvedRows) {
+          _showPipeXlsxPreview(resolvedRows, dealerId || '');
+        });
       } catch(err) {
         toast('❌ อ่านไฟล์ไม่ได้: ' + err.message);
       }
