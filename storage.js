@@ -85,17 +85,22 @@ const ST = {
   getAll(collection) { return this._get(this._keys[collection]) || []; },
   getOne(collection, id) { return this.getAll(collection).find(x => x.id === id) || null; },
 
-  // ด่านกันเขียนกลางสำหรับโหมด Guest View (ดูอย่างเดียว ผ่านลิงก์ PIN) — ทุกจุดเขียนข้อมูลของแอป
-  // สุดท้ายจะไหลผ่าน add/update/delete พวกนี้ (หรือ deleteWhere) เกือบทั้งหมด กันไว้จุดเดียวตรงนี้
-  // ปลอดภัยกว่าไล่ปิดปุ่มทีละจุดในทุกหน้า — ดู GUEST_VIEW_READONLY ใน firebase-sync.js
-  _guestBlocked() {
+  // ด่านกันเขียนกลางสำหรับโหมด Guest View (ผ่านลิงก์ PIN) — ทุกจุดเขียนข้อมูลของแอปสุดท้ายจะไหลผ่าน
+  // add/update/delete พวกนี้ (หรือ deleteWhere) เกือบทั้งหมด กันไว้จุดเดียวตรงนี้ ปลอดภัยกว่าไล่ปิดปุ่มทีละจุด
+  // ในทุกหน้า — ค่าเริ่มต้นคือบล็อกทุก collection (อ่านอย่างเดียว) ยกเว้น collection ที่ map ไปเป็นเมนูที่
+  // โปรไฟล์ผู้ใช้คนนั้นได้รับสิทธิ์ "แก้ไขได้" ไว้ชัดเจน (GUEST_VIEW_EDIT_MENUS) — ดู GUEST_VIEW_READONLY /
+  // GUEST_VIEW_EDIT_MENUS / GUEST_VIEW_COLL_TO_MENU ใน firebase-sync.js
+  _guestBlocked(collection) {
     if (typeof GUEST_VIEW_READONLY === 'undefined' || !GUEST_VIEW_READONLY) return false;
+    var menu = (typeof GUEST_VIEW_COLL_TO_MENU !== 'undefined' && GUEST_VIEW_COLL_TO_MENU[collection]) || null;
+    var editMenus = (typeof GUEST_VIEW_EDIT_MENUS !== 'undefined' && GUEST_VIEW_EDIT_MENUS) || [];
+    if (menu && editMenus.indexOf(menu) !== -1) return false;
     if (typeof toast === 'function') toast('👁️ โหมดดูอย่างเดียว — แก้ไขไม่ได้', true);
     return true;
   },
 
   add(collection, data) {
-    if (this._guestBlocked()) { data.id = data.id || 'guest_noop'; return data; }
+    if (this._guestBlocked(collection)) { data.id = data.id || 'guest_noop'; return data; }
     const arr = this.getAll(collection);
     data.id = data.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
     data.created = data.created || new Date().toISOString();
@@ -105,7 +110,7 @@ const ST = {
   },
 
   update(collection, id, updates) {
-    if (this._guestBlocked()) return null;
+    if (this._guestBlocked(collection)) return null;
     const arr = this.getAll(collection);
     const idx = arr.findIndex(x => x.id === id);
     if (idx > -1) {
@@ -117,12 +122,12 @@ const ST = {
   },
 
   delete(collection, id) {
-    if (this._guestBlocked()) return;
+    if (this._guestBlocked(collection)) return;
     this._set(this._keys[collection], this.getAll(collection).filter(x => x.id !== id));
   },
 
   deleteWhere(collection, predicate) {
-    if (this._guestBlocked()) return;
+    if (this._guestBlocked(collection)) return;
     this._set(this._keys[collection], this.getAll(collection).filter(x => !predicate(x)));
   },
 

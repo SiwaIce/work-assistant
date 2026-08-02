@@ -83,24 +83,37 @@ function doSalesLinkLogin() {
 }
 
 // ================================================================
-// GUEST VIEW (PIN, อ่านอย่างเดียว) — เปิดผ่าน index.html?guest=1&uid=<ownerUid> แทน Google login
+// GUEST VIEW (PIN) — เปิดผ่าน index.html?guest=1&uid=<ownerUid>&profile=<profileId> แทน Google login
 // users/{uid}/... เขียน/อ่านได้เฉพาะ auth ตรง uid จริงเท่านั้น (พิสูจน์แล้วว่า "rules เปิดกว้าง" ไม่ใช้กับ
 // path นี้) เลยอ่านไม่ได้ตรงๆ แบบไม่ login — ใช้วิธีเดียวกับ publishCatalogToClientView(): เจ้าของ publish
-// สำเนา Stock/SO ไปที่ guestViewData/{ownerUid}/{collection} (collection เปิดใหม่ อ่านได้ทุกคน เขียนได้แค่
-// เจ้าของจริง — ดู Firestore rules ส่วน "8. GUEST VIEW") แล้วลิงก์นี้อ่านจากสำเนานั้นแทน ไม่ใช่ของจริงตรงๆ
-// เมนูที่เห็นเลือกได้จาก Admin (คนละสิทธิ์กับ SALES_LINK_MENU_GROUPS แต่ใช้รายชื่อเมนูชุดเดียวกัน) แต่ทุกเมนู
-// เป็นแบบดูอย่างเดียวเสมอ ห้ามเขียนข้อมูลเด็ดขาด (ดู ST._guestBlocked ใน storage.js เป็นด่านหลัก,
-// SYNC_ENABLED=false ที่นี่เป็นด่านรอง กัน syncToFirebase ตรงๆ ที่ไม่ผ่าน ST เช่นใน quotation)
+// สำเนา Stock/SO/Dealers/Pipeline ไปที่ guestViewData/{ownerUid}/{collection} (collection เปิดใหม่ อ่านได้
+// ทุกคน เขียนได้แค่เจ้าของจริง — ดู Firestore rules ส่วน "8. GUEST VIEW") แล้วลิงก์นี้อ่านจากสำเนานั้นแทน
+// ไม่ใช่ของจริงตรงๆ — ข้อมูลชุดเดียวกันสำหรับทุกโปรไฟล์ (publishAllGuestViewData ไม่ได้แยกตามโปรไฟล์)
+// รองรับหลายโปรไฟล์ (Tier A: แต่ละคน/แต่ละลิงก์มี PIN+เมนูที่ดูได้ของตัวเอง, Tier B: แต่ละโปรไฟล์เลือกได้ว่า
+// เมนูไหนแก้ไขได้ด้วยไม่ใช่ดูอย่างเดียว) เก็บที่ guestViewData/{uid}.profiles = [{id,name,pin,menus,editMenus}]
+// GUEST_VIEW_EDIT_MENUS ว่างเปล่า = อ่านอย่างเดียวทุกเมนูเสมอ (ค่าเริ่มต้นปลอดภัยสุด) ดู ST._guestBlocked ใน
+// storage.js เป็นด่านหลัก, SYNC_ENABLED=false ที่นี่เป็นด่านรอง กัน syncToFirebase ตรงๆ ที่ไม่ผ่าน ST (เช่น
+// quotation) — เมนูที่ยัง "แก้ไขได้" ไม่รองรับจริงคือเมนูที่ไม่ผ่าน ST เลย (เช่น สินค้าทั้งหมด/products)
 var GUEST_VIEW_READONLY = false;
-var GUEST_VIEW_ALLOWED_MENUS = ['stock', 'salesOrders']; // ค่าเริ่มต้น ถูกแทนที่ด้วยค่าจริงจาก guestViewData ตอน login
-// เฉพาะ collection ที่หน้า Stock/SO ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน (listener ด้านล่าง)
-// ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Dealer/Pipeline/Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
+var GUEST_VIEW_ALLOWED_MENUS = ['stock', 'salesOrders']; // ค่าเริ่มต้น ถูกแทนที่ด้วยค่าจริงจากโปรไฟล์ที่ล็อกอินตอน login
+var GUEST_VIEW_EDIT_MENUS = []; // เมนูที่โปรไฟล์นี้ "แก้ไขได้" ไม่ใช่ดูอย่างเดียว — ว่าง = อ่านอย่างเดียวทุกเมนู
+// เฉพาะ collection ที่หน้า Stock/SO/Dealers/Pipeline ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน
+// (listener ด้านล่าง) ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
 var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers', 'pipeline', 'pipeLog'];
+// collection ST → เมนูที่ใช้กำหนดสิทธิ์แก้ไข (Tier B) — เฉพาะ 4 เมนูนี้ที่เขียนผ่าน ST.add/update/delete จริง
+// (products ไม่ผ่าน ST เลย ดู products.js — "แก้ไขได้" จึงยังไม่มีผลกับเมนูนั้น ต่อให้ติ๊กไว้)
+var GUEST_VIEW_COLL_TO_MENU = {
+  stockLevels: 'stock', stockLog: 'stock', stockFavs: 'stock', stockReservations: 'stock', stockLocations: 'stock',
+  salesOrders: 'salesOrders',
+  dealers: 'dealers',
+  pipeline: 'pipeline', pipeLog: 'pipeline'
+};
 
 (function() {
   var p = new URLSearchParams(location.search);
   var ownerUid = p.get('uid');
   if (!p.has('guest') || !ownerUid) return;
+  window._guestProfileId = p.get('profile') || '';
   document.addEventListener('DOMContentLoaded', function() { showGuestPinScreen(ownerUid); });
 })();
 
@@ -114,18 +127,24 @@ function showGuestPinScreen(ownerUid) {
   window._guestOwnerUid = ownerUid;
 
   db.collection('guestViewData').doc(ownerUid).get().then(function(doc) {
-    var realPin = doc.exists ? doc.data().guestViewPin : null;
-    if (!realPin) {
+    var data = doc.exists ? doc.data() : {};
+    // profiles ใหม่ (multi-profile) — ถ้ายังไม่เคยบันทึกแบบใหม่ (ลิงก์เก่าก่อนอัปเดต ไม่มี &profile= มาด้วย)
+    // fallback ไปใช้ guestViewPin/guestViewMenus แบบเดิมเป็นโปรไฟล์เดียวชื่อ "ทีม" กันลิงก์เก่าใช้ไม่ได้ทันที
+    var profiles = data.profiles && data.profiles.length ? data.profiles : (data.guestViewPin ? [{ id: 'legacy', name: 'ทีม', pin: data.guestViewPin, menus: data.guestViewMenus || ['stock', 'salesOrders'], editMenus: [] }] : []);
+    var profile = window._guestProfileId ? profiles.filter(function(pr) { return pr.id === window._guestProfileId; })[0] : profiles[0];
+    if (!profile || !profile.pin) {
       document.getElementById('guestPinMsg').textContent = '❌ ลิงก์นี้ยังไม่เปิดใช้งาน — ขอลิงก์ใหม่จาก Admin';
       return;
     }
-    window._guestViewPin = String(realPin);
-    window._guestViewAllowedMenus = (doc.data().guestViewMenus && doc.data().guestViewMenus.length) ? doc.data().guestViewMenus : ['stock', 'salesOrders'];
+    window._guestProfile = profile;
+    window._guestViewPin = String(profile.pin);
+    window._guestViewAllowedMenus = (profile.menus && profile.menus.length) ? profile.menus : ['stock', 'salesOrders'];
+    window._guestViewEditMenus = profile.editMenus || [];
     // ลอง auto-login จาก PIN ที่ซ่อนไว้ใน hash ก่อน (#pin=...) — ถ้าตรงเข้าได้เลยไม่ต้องพิมพ์เอง
     var hashMatch = location.hash.match(/pin=([^&]+)/);
     var hashPin = hashMatch ? decodeURIComponent(hashMatch[1]) : '';
     if (hashPin && hashPin === window._guestViewPin) { doGuestViewLogin(hashPin); return; }
-    document.getElementById('guestPinMsg').textContent = 'กรุณาใส่ PIN เพื่อดู Stock/Sales Order';
+    document.getElementById('guestPinMsg').textContent = 'กรุณาใส่ PIN' + (profile.name ? ' (' + profile.name + ')' : '');
     var input = document.getElementById('guestPinInput');
     if (input) input.focus();
   }).catch(function(e) {
@@ -144,7 +163,8 @@ function doGuestViewLogin(presetPin) {
 
   GUEST_VIEW_READONLY = true;
   GUEST_VIEW_ALLOWED_MENUS = window._guestViewAllowedMenus || ['stock', 'salesOrders'];
-  CURRENT_USER = { uid: window._guestOwnerUid, displayName: 'ทีม (ดูอย่างเดียว)', email: null, isAnonymous: true };
+  GUEST_VIEW_EDIT_MENUS = window._guestViewEditMenus || [];
+  CURRENT_USER = { uid: window._guestOwnerUid, displayName: (window._guestProfile && window._guestProfile.name) ? window._guestProfile.name + ' (Guest)' : 'ทีม (Guest)', email: null, isAnonymous: true };
   SYNC_ENABLED = false; // ด่านรอง — กันการ push ขึ้นคลาวด์ทุกทาง แม้จากโค้ดที่ไม่ผ่าน ST (เช่น quotation)
 
   var loginScreen = document.getElementById('loginScreen');
@@ -153,7 +173,17 @@ function doGuestViewLogin(presetPin) {
   if (main) main.style.display = 'flex';
   var banner = document.getElementById('guestViewBanner');
   if (banner) banner.style.display = 'flex';
-  toast('👁️ เข้าดูแบบอ่านอย่างเดียว');
+  var bannerText = document.getElementById('guestViewBannerText');
+  if (bannerText) {
+    var editNames = GUEST_VIEW_EDIT_MENUS.map(function(id) {
+      var m = (typeof GV_EDITABLE_MENUS !== 'undefined' ? GV_EDITABLE_MENUS : []).filter(function(x) { return x.id === id; })[0];
+      return m ? m.name : id;
+    });
+    bannerText.textContent = editNames.length
+      ? '✏️ โหมดทีม — แก้ไขได้เฉพาะ: ' + editNames.join(', ') + ' (เมนูอื่นดูอย่างเดียว)'
+      : '👁️ โหมดดูอย่างเดียว — แก้ไขไม่ได้';
+  }
+  toast(GUEST_VIEW_EDIT_MENUS.length ? '👁️ เข้าดู (แก้ไขได้บางเมนู)' : '👁️ เข้าดูแบบอ่านอย่างเดียว');
 
   initGuestViewListeners();
   _loadGuestViewProducts(window._guestOwnerUid);
@@ -197,7 +227,7 @@ function _loadGuestViewProducts(ownerUid) {
 }
 
 // เผยแพร่สำเนา Stock/SO/Dealers ทั้งชุดครั้งเดียว ให้ลิงก์ Guest View ใช้ได้ทันทีตั้งแต่ตั้ง PIN ครั้งแรก
-// ไม่ต้องรอให้มีใครแก้ไขข้อมูลก่อนถึงจะ publish (เรียกจาก saveGuestViewPin() ใน admin.js)
+// ไม่ต้องรอให้มีใครแก้ไขข้อมูลก่อนถึงจะ publish (เรียกจาก saveGuestViewProfile() ใน admin.js)
 function publishAllGuestViewData() {
   if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid || SALES_MODE || GUEST_VIEW_READONLY) return;
   var uid = CURRENT_USER.uid;

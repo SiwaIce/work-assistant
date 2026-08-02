@@ -419,16 +419,11 @@ function rAdmin(el) {
     renderSalesLinkPermissionsHTML() +
     '</div>' +
 
-    // Guest View — ลิงก์ PIN ให้ทีมดู Stock/SO อย่างเดียว (Step 1 — ยังแก้ไขไม่ได้)
-    '<div class="card"><h2>👁️ ลิงก์ทีมดู Stock/SO' + (cfg.guestViewPin ? ' <span class="tag" style="background:#22c55e20;color:#22c55e;font-size:10px">เปิดใช้งานอยู่</span>' : ' <span class="tag" style="background:#64748b20;color:#64748b;font-size:10px">ปิดอยู่</span>') + '</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ลิงก์ PIN ให้ทีมดูเมนูที่เลือกไว้ได้ (อ่านอย่างเดียวทุกเมนู ไม่ต้อง login Google) — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก ลิงก์ที่คัดลอกไม่มี PIN ติดไปด้วย ต้องบอก PIN แยกให้คนที่จะใช้เอง</p>' +
-    '<div class="fg"><label>PIN</label><input type="text" id="adm_guestPin" value="' + sanitize(cfg.guestViewPin || '') + '" placeholder="ตั้ง PIN เช่น 1234" maxlength="10"></div>' +
-    renderGuestViewMenuChecklistHTML() +
-    '<div class="bg" style="flex-wrap:wrap">' +
-    '<button class="btn bp bsm" onclick="saveGuestViewPin()">💾 บันทึก</button>' +
-    '<button class="btn bo bsm" onclick="copyGuestViewLink()">🔗 คัดลอกลิงก์</button>' +
-    '<button class="btn bd bsm" onclick="disableGuestView()">🚫 ปิดใช้งานลิงก์</button>' +
-    '</div></div>' +
+    // Guest View — ลิงก์ PIN ให้ทีมดู/แก้ไขบางเมนู รองรับหลายโปรไฟล์ (คนละคน คนละ PIN คนละสิทธิ์)
+    '<div class="card"><h2>👁️ ลิงก์ทีมดูข้อมูล</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">สร้างได้หลายโปรไฟล์ แต่ละโปรไฟล์มี PIN/เมนูที่ดูได้/เมนูที่แก้ไขได้ของตัวเอง — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก ลิงก์ที่คัดลอกไม่มี PIN ติดไปด้วย ต้องบอก PIN แยกให้คนที่จะใช้เอง</p>' +
+    renderGuestViewProfilesHTML() +
+    '</div>' +
 
     // Email Recipients
     '<div class="card"><h2>📧 Email Recipients</h2>' +
@@ -1649,26 +1644,175 @@ function renderSalesLinkPermissionsHTML() {
   return html;
 }
 
-// ใช้ SALES_LINK_MENU_GROUPS ชุดเดียวกับลิงก์เซลด้านบน (รายชื่อเมนูครบทั้งแอปอยู่แล้ว ไม่ต้องคีย์ซ้ำ)
-// แต่คนละ checkbox class / คนละ key ใน config เพราะเป็นคนละสิทธิ์กัน (Guest View ดูอย่างเดียวทุกเมนูเสมอ)
-function renderGuestViewMenuChecklistHTML() {
+// เฉพาะ 4 เมนูนี้เขียนผ่าน ST.add/update/delete จริง (ดู GUEST_VIEW_COLL_TO_MENU ใน firebase-sync.js) —
+// "แก้ไขได้" (Tier B) จึงมีผลแค่ 4 เมนูนี้ ต่อให้ profile.menus มีเมนูอื่นด้วยก็ยังดูอย่างเดียวเสมอ
+var GV_EDITABLE_MENUS = [
+  { id: 'stock', name: '📦 Stock' },
+  { id: 'salesOrders', name: '📋 Sales Order' },
+  { id: 'dealers', name: '🏪 Dealers' },
+  { id: 'pipeline', name: '📊 Pipeline' }
+];
+
+// ย้ายค่าจากรูปแบบเดี่ยวเดิม (cfg.guestViewPin/guestViewMenus) มาเป็นโปรไฟล์แรกอัตโนมัติ ครั้งเดียวตอนที่ยัง
+// ไม่มี guestViewProfiles เลย — กันลิงก์เดิมที่เคยแจกไปหายไปเฉยๆ ตอนอัปเดตเป็นระบบหลายโปรไฟล์
+function _gvGetProfiles(cfg) {
+  if (cfg.guestViewProfiles && cfg.guestViewProfiles.length) return cfg.guestViewProfiles;
+  if (cfg.guestViewPin) {
+    return [{ id: 'legacy', name: 'ทีม', pin: cfg.guestViewPin, menus: cfg.guestViewMenus || ['stock', 'salesOrders'], editMenus: [] }];
+  }
+  return [];
+}
+
+function renderGuestViewProfilesHTML() {
   var cfg = getConfig();
-  var allowed = cfg.guestViewMenus || ['stock', 'salesOrders'];
-  var html = '<div class="form-section" style="margin-top:10px">📋 เมนูที่อนุญาตให้ดู</div>';
-  html += '<div class="hint" style="margin-bottom:8px">มีข้อมูลจริงพร้อมใช้ทันทีแค่ Stock / Sales Order / Dealers / Pipeline / สินค้าทั้งหมด — เมนูอื่นถ้าเลือกจะเข้าได้แต่อาจยังไม่มีข้อมูลให้ดู (ต้องเชื่อมข้อมูลเพิ่มทีหลัง)</div>';
-  html += '<div style="max-height:320px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:8px">';
+  var profiles = _gvGetProfiles(cfg);
+  var html = '<div id="gvProfilesWrap">';
+  if (!profiles.length) html += '<div class="hint" style="margin-bottom:8px">ยังไม่มีโปรไฟล์ — กด "เพิ่มโปรไฟล์ใหม่" เพื่อเริ่ม</div>';
+  profiles.forEach(function(pr, idx) { html += _gvProfileRowHTML(pr, idx); });
+  html += '</div>';
+  html += '<button class="btn bo bsm" onclick="addGuestViewProfile()">➕ เพิ่มโปรไฟล์ใหม่</button>';
+  return html;
+}
+
+function _gvProfileRowHTML(pr, idx) {
+  var menus = pr.menus || [];
+  var editMenus = pr.editMenus || [];
+  var active = !!pr.pin;
+  var h = '<div id="gvRow_' + idx + '" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">';
+  h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
+  h += '<span class="tag" style="background:' + (active ? '#22c55e20;color:#22c55e' : '#64748b20;color:#64748b') + ';font-size:10px">' + (active ? 'เปิดใช้งานอยู่' : 'ยังไม่มี PIN') + '</span>';
+  h += '<input type="text" id="gvp_name_' + idx + '" value="' + sanitize(pr.name || '') + '" placeholder="ชื่อโปรไฟล์ เช่น ทีมช่าง" style="flex:1;min-width:120px">';
+  h += '<input type="text" id="gvp_pin_' + idx + '" value="' + sanitize(pr.pin || '') + '" placeholder="PIN" maxlength="10" style="width:90px">';
+  h += '</div>';
+
+  h += '<div class="form-section" style="margin-top:4px">📋 เมนูที่ดูได้</div>';
+  h += '<div style="max-height:220px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px">';
   SALES_LINK_MENU_GROUPS.forEach(function(g) {
-    html += '<div style="background:var(--bg2);border-radius:8px;padding:8px 10px">';
-    html += '<div style="font-size:.66rem;font-weight:700;color:var(--text2);margin-bottom:4px">' + sanitize(g.label) + '</div>';
+    h += '<div style="background:var(--bg2);border-radius:8px;padding:6px 8px">';
+    h += '<div style="font-size:.64rem;font-weight:700;color:var(--text2);margin-bottom:3px">' + sanitize(g.label) + '</div>';
     g.items.forEach(function(it) {
-      html += '<label style="display:flex;gap:6px;align-items:center;font-size:.7rem;padding:2px 0">' +
-        '<input type="checkbox" class="gv-menu-chk" value="' + it.id + '" style="width:auto" ' + (allowed.indexOf(it.id) !== -1 ? 'checked' : '') + '>' +
+      h += '<label style="display:flex;gap:5px;align-items:center;font-size:.68rem;padding:1px 0">' +
+        '<input type="checkbox" class="gv-menu-chk" value="' + it.id + '" style="width:auto" ' + (menus.indexOf(it.id) !== -1 ? 'checked' : '') + '>' +
         sanitize(it.name) + '</label>';
     });
-    html += '</div>';
+    h += '</div>';
   });
-  html += '</div>';
-  return html;
+  h += '</div>';
+
+  h += '<div class="form-section" style="margin-top:4px">✏️ เมนูที่แก้ไขได้ <span style="font-weight:400;font-size:.62rem;color:var(--text2)">(ต้องติ๊ก "ดูได้" ของเมนูนั้นด้วย ไม่งั้นจะยังเป็นดูอย่างเดียว)</span></div>';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+  GV_EDITABLE_MENUS.forEach(function(m) {
+    h += '<label style="display:flex;gap:5px;align-items:center;font-size:.7rem">' +
+      '<input type="checkbox" class="gv-edit-chk" value="' + m.id + '" style="width:auto" ' + (editMenus.indexOf(m.id) !== -1 ? 'checked' : '') + '>' +
+      sanitize(m.name) + '</label>';
+  });
+  h += '</div>';
+
+  h += '<div class="bg" style="flex-wrap:wrap">';
+  h += '<button class="btn bp bsm" onclick="saveGuestViewProfile(' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bo bsm" onclick="copyGuestViewProfileLink(' + idx + ')"' + (active ? '' : ' disabled title="ตั้ง PIN แล้วบันทึกก่อน"') + '>🔗 คัดลอกลิงก์</button>';
+  h += '<button class="btn bd bsm" onclick="removeGuestViewProfile(' + idx + ')">🗑️ ลบโปรไฟล์</button>';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
+// อ่านค่าปัจจุบันจาก DOM ของแถวนั้นกลับเข้า cfg.guestViewProfiles[idx] (ไม่แตะ Firestore) — ใช้ก่อนทำอะไรที่
+// re-render ทั้งการ์ด (เพิ่ม/ลบแถว) กันค่าที่พิมพ์ไว้ในแถวอื่นหายไปเฉยๆ
+function _gvSyncRowToCfg(cfg, profiles, idx) {
+  var row = document.getElementById('gvRow_' + idx);
+  if (!row) return;
+  var nameEl = document.getElementById('gvp_name_' + idx);
+  var pinEl = document.getElementById('gvp_pin_' + idx);
+  var menuChecks = row.querySelectorAll('.gv-menu-chk');
+  var editChecks = row.querySelectorAll('.gv-edit-chk');
+  var menus = [];
+  for (var i = 0; i < menuChecks.length; i++) if (menuChecks[i].checked) menus.push(menuChecks[i].value);
+  var editMenus = [];
+  for (var j = 0; j < editChecks.length; j++) if (editChecks[j].checked) editMenus.push(editChecks[j].value);
+  editMenus = editMenus.filter(function(m) { return menus.indexOf(m) !== -1; }); // แก้ไขได้ต้องดูได้ด้วยเสมอ
+  profiles[idx] = {
+    id: profiles[idx].id,
+    name: nameEl ? nameEl.value.trim() : profiles[idx].name,
+    pin: pinEl ? pinEl.value.trim() : profiles[idx].pin,
+    menus: menus.length ? menus : ['stock'],
+    editMenus: editMenus
+  };
+}
+
+function _gvSyncAllRowsToCfg(cfg, profiles) {
+  for (var i = 0; i < profiles.length; i++) _gvSyncRowToCfg(cfg, profiles, i);
+}
+
+function addGuestViewProfile() {
+  var cfg = getConfig();
+  var profiles = _gvGetProfiles(cfg).slice();
+  _gvSyncAllRowsToCfg(cfg, profiles);
+  profiles.push({ id: 'gv_' + Date.now().toString(36), name: '', pin: '', menus: ['stock'], editMenus: [] });
+  cfg.guestViewProfiles = profiles;
+  saveConfig(cfg);
+  render();
+}
+
+function removeGuestViewProfile(idx) {
+  if (!confirm('ลบโปรไฟล์นี้? ลิงก์/PIN ของโปรไฟล์นี้จะใช้ไม่ได้ทันที')) return;
+  var cfg = getConfig();
+  var profiles = _gvGetProfiles(cfg).slice();
+  _gvSyncAllRowsToCfg(cfg, profiles);
+  var removed = profiles.splice(idx, 1)[0];
+  cfg.guestViewProfiles = profiles;
+  delete cfg.guestViewPin; delete cfg.guestViewMenus; // เลิกใช้ shape เดิมทันทีที่แก้ผ่านระบบโปรไฟล์แล้ว
+  saveConfig(cfg);
+  _gvPersistProfiles(profiles, function() { render(); });
+}
+
+// เขียนทั้ง array กลับไปที่ guestViewData/{uid}.profiles ครั้งเดียว (ง่ายกว่าคิด merge เป็นรายโปรไฟล์ และ
+// จำนวนโปรไฟล์ต่อบัญชีน้อยอยู่แล้วไม่ต้องกังวลเรื่องขนาด doc)
+function _gvPersistProfiles(profiles, cb) {
+  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) { if (cb) cb(); return; }
+  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ profiles: profiles, guestViewPin: '', guestViewMenus: [] }, { merge: true })
+    .then(function() { if (cb) cb(); })
+    .catch(function(e) { console.warn('_gvPersistProfiles error:', e); toast('⚠️ บันทึกไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true); });
+}
+
+function saveGuestViewProfile(idx) {
+  var cfg = getConfig();
+  var profiles = _gvGetProfiles(cfg).slice();
+  _gvSyncRowToCfg(cfg, profiles, idx);
+  if (!profiles[idx].pin) { toast('⚠️ กรอก PIN ก่อน', true); return; }
+  cfg.guestViewProfiles = profiles;
+  delete cfg.guestViewPin; delete cfg.guestViewMenus;
+  saveConfig(cfg);
+  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
+    toast('💾 บันทึกแล้ว (เฉพาะเครื่องนี้ — login ก่อนถึงจะใช้ลิงก์ได้จริง)');
+    render();
+    return;
+  }
+  _gvPersistProfiles(profiles, function() {
+    if (typeof publishAllGuestViewData === 'function') publishAllGuestViewData();
+    toast('💾 บันทึกโปรไฟล์แล้ว (' + profiles[idx].menus.length + ' เมนู)');
+    render();
+  });
+}
+
+// ลิงก์ไม่มี PIN ติดท้าย (คนที่ได้ลิงก์ต้องพิมพ์ PIN เอง บอกแยกกันคนละช่องทาง) แต่มี &profile= ระบุว่าเป็น
+// โปรไฟล์ไหน เพราะแต่ละโปรไฟล์มี PIN/สิทธิ์ต่างกัน
+function copyGuestViewProfileLink(idx) {
+  if (!CURRENT_USER || !CURRENT_USER.uid) { toast('⚠️ ต้อง login ก่อนถึงจะสร้างลิงก์ได้', true); return; }
+  var cfg = getConfig();
+  var profiles = _gvGetProfiles(cfg);
+  var pr = profiles[idx];
+  if (!pr || !pr.pin) { toast('⚠️ ตั้ง PIN แล้วกด "บันทึก" ก่อนคัดลอกลิงก์', true); return; }
+  var base = location.href.replace(/[^/]*(\?.*)?(#.*)?$/, '') + 'index.html';
+  var link = base + '?guest=1&uid=' + CURRENT_USER.uid + '&profile=' + encodeURIComponent(pr.id);
+  var msg = '📋 คัดลอกลิงก์แล้ว! (ไม่มี PIN ติดไป — บอก PIN แยกด้วย)';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function() { toast(msg); });
+  } else {
+    var ta = document.createElement('textarea'); ta.value = link;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast(msg);
+  }
 }
 
 function saveSalesLinkPermissions() {
@@ -1684,72 +1828,6 @@ function saveSalesLinkPermissions() {
   cfg.salesLinkPermissions = { allowedMenus: allowed, dataMode: dataMode };
   saveConfig(cfg);
   toast('💾 บันทึกสิทธิ์ลิงก์เซลเรียบร้อย (' + allowed.length + ' เมนู)');
-}
-
-function saveGuestViewPin() {
-  var pin = (document.getElementById('adm_guestPin') || {}).value.trim();
-  if (!pin) { toast('⚠️ กรอก PIN ก่อน', true); return; }
-  var checks = document.querySelectorAll('.gv-menu-chk');
-  var allowedMenus = [];
-  for (var i = 0; i < checks.length; i++) if (checks[i].checked) allowedMenus.push(checks[i].value);
-  if (!allowedMenus.length) allowedMenus = ['stock', 'salesOrders'];
-
-  var cfg = getConfig();
-  cfg.guestViewPin = pin;
-  cfg.guestViewMenus = allowedMenus;
-  saveConfig(cfg);
-  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
-    toast('💾 บันทึกแล้ว (เฉพาะเครื่องนี้ — login ก่อนถึงจะใช้ลิงก์ได้จริง)');
-    return;
-  }
-  // เก็บ PIN + เมนูที่อนุญาตไว้ที่ doc guestViewData/{uid} เอง (ไม่ใช่ users/{uid}/_config) เพราะ path นี้
-  // เปิดอ่านได้ทุกคนตามที่ตั้ง Firestore rules ไว้ — ลิงก์ Guest View อ่านทั้งสองค่านี้จากตรงนี้ตอน login
-  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: pin, guestViewMenus: allowedMenus }, { merge: true })
-    .then(function() {
-      // seed ข้อมูลชุดแรกทันที ไม่ต้องรอให้มีใครแก้ Stock/SO ก่อนถึงจะ publish
-      if (typeof publishAllGuestViewData === 'function') publishAllGuestViewData();
-      toast('💾 บันทึกแล้ว (' + allowedMenus.length + ' เมนู)');
-    })
-    .catch(function(e) {
-      console.warn('saveGuestViewPin publish error:', e);
-      toast('⚠️ บันทึกไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true);
-    });
-}
-
-// ลิงก์ไม่มี PIN ติดท้ายแล้ว (ตัด #pin=... ออก) — คนที่ได้ลิงก์ต้องพิมพ์ PIN เองตอนเปิด ไม่ให้ PIN
-// หลุดไปพร้อมลิงก์ (เช่น ใน chat history/browser history) ต้องบอก PIN แยกให้คนที่จะใช้เอง
-function copyGuestViewLink() {
-  if (!CURRENT_USER || !CURRENT_USER.uid) { toast('⚠️ ต้อง login ก่อนถึงจะสร้างลิงก์ได้', true); return; }
-  var cfg = getConfig();
-  if (!cfg.guestViewPin) { toast('⚠️ ตั้ง PIN แล้วกด "บันทึก" ก่อนคัดลอกลิงก์', true); return; }
-  var base = location.href.replace(/[^/]*(\?.*)?(#.*)?$/, '') + 'index.html';
-  var link = base + '?guest=1&uid=' + CURRENT_USER.uid;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(link).then(function() { toast('📋 คัดลอกลิงก์แล้ว! (ไม่มี PIN ติดไป — บอก PIN แยกด้วย)'); });
-  } else {
-    var ta = document.createElement('textarea'); ta.value = link;
-    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
-    document.body.removeChild(ta); toast('📋 คัดลอกลิงก์แล้ว! (ไม่มี PIN ติดไป — บอก PIN แยกด้วย)');
-  }
-}
-
-// ปิดใช้งานลิงก์ทันที โดยไม่ต้องตั้ง PIN ใหม่ — ล้าง PIN ทิ้งทั้งฝั่ง config เครื่องนี้และ guestViewData ที่
-// เปิดอ่านได้สาธารณะ ลิงก์เก่าที่แจกไปแล้ว (ไม่ว่าใครถือ PIN เดิมอยู่) จะเข้าไม่ได้ทันทีเพราะหา PIN ไม่เจอ
-// เมนูที่เคยติ๊กไว้ยังจำอยู่ (cfg.guestViewMenus ไม่ถูกล้าง) กด "บันทึก" ใหม่ทีหลังก็เปิดกลับมาได้เลยไม่ต้องติ๊กใหม่
-function disableGuestView() {
-  if (!confirm('ปิดใช้งานลิงก์ Guest View ตอนนี้เลยไหม?\nลิงก์/PIN เดิมที่เคยแจกไปจะใช้ไม่ได้ทันที')) return;
-  var cfg = getConfig();
-  delete cfg.guestViewPin;
-  saveConfig(cfg);
-  var pinInput = document.getElementById('adm_guestPin');
-  if (pinInput) pinInput.value = '';
-  if (typeof db === 'undefined' || !CURRENT_USER || !CURRENT_USER.uid) {
-    toast('🚫 ปิดใช้งานแล้ว (เฉพาะเครื่องนี้)');
-    return;
-  }
-  db.collection('guestViewData').doc(CURRENT_USER.uid).set({ guestViewPin: '' }, { merge: true })
-    .then(function() { toast('🚫 ปิดใช้งานลิงก์แล้ว'); if (typeof render === 'function') render(); })
-    .catch(function(e) { console.warn('disableGuestView error:', e); toast('⚠️ ปิดใช้งานไม่สำเร็จ (เช็คเน็ต/สิทธิ์)', true); });
 }
 
 function copyGMLink() {
