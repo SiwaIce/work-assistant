@@ -4280,6 +4280,7 @@ function _pipeImportState(existing, c, dealer) {
   if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(c[9]))  > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(c[17])) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(c[18])) > 0.001) return 'changed';
+  if ((existing.registerDate || '') !== _pipeDateFromPaste(c[1] || '')) return 'changed';
   if ((existing.biddingDate || '') !== _pipeDateFromPaste(c[20] || '')) return 'changed';
   if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[22] || '')) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
@@ -4307,6 +4308,7 @@ function _pipeImportDiff(existing, c, dealer) {
     { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(c[4]) },
     { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(c[5]) },
     { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(c[6]) },
+    { label: 'Dealer',          old: _pipeNormText((ST.getOne('dealers', existing.dealerId) || {}).name), newVal: _pipeNormText(dealer ? dealer.name : '') },
     { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(c[8]) },
     { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(c[19]) },
     { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(c[23]) },
@@ -4326,6 +4328,7 @@ function _pipeImportDiff(existing, c, dealer) {
     if (Math.abs(p.oldN - p.newN) > 0.001) diffs.push({ label: p.label, old: fmtMoney(p.oldN) || '0', newVal: fmtMoney(p.newN) || '0' });
   });
   var datePairs = [
+    { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(c[1]  || '') },
     { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: _pipeDateFromPaste(c[20] || '') },
     { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[22] || '') }
   ];
@@ -4367,7 +4370,11 @@ function _showPipeXlsxPreview(rows, dealerId) {
     var diff = state === 'changed' ? _pipeImportDiff(existing, r, d) : [];
     if (existing) matchedIds[existing.id] = true;
     counts[state]++;
-    return { row: r, dealer: d, existing: existing, state: state, diff: diff };
+    // แถวที่มีเลข Row No. มาด้วยในไฟล์ แต่จับคู่กับโครงการเดิมไม่ได้เลย (ทั้งด้วย Row No. และด้วยชื่อ/End
+    // User/Dealer) — เสี่ยงเป็นเคส "จับคู่พลาด" มากกว่าโครงการใหม่จริง (เช่น ชื่อ Dealer สะกดไม่ตรงกับที่มี
+    // ในระบบ) ถ้าปล่อยให้ import แบบ "เพิ่มใหม่" ไปเฉยๆ จะได้โครงการซ้ำ ส่วนของเดิมที่ควรถูกอัปเดตจะไม่ขยับเลย
+    var unmatchedRowNo = (!existing && (r[0] || '').trim()) ? (r[0] || '').trim() : '';
+    return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo };
   });
 
   // หา pipeline ที่มีในระบบแต่ไม่มีในไฟล์ (scoped ตาม dealer ถ้าล็อกไว้)
@@ -4443,6 +4450,9 @@ function _showPipeXlsxPreview(rows, dealerId) {
     if (m.state === 'new')          { badge = '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>';       defAct = 'add'; }
     else if (m.state === 'changed') { badge = '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>';  defAct = 'update'; }
     else                            { badge = '<span style="color:var(--text2);font-size:11px;font-weight:700">⏭ เดิม</span>'; defAct = 'skip'; }
+    if (m.unmatchedRowNo) {
+      badge += ' <span style="color:#ef4444;font-size:10px;font-weight:700" title="แถวนี้มี Row No. ' + sanitize(m.unmatchedRowNo) + ' มาในไฟล์ แต่หาโครงการเดิมที่ตรงกันในระบบไม่เจอเลย (เช็ค Row No./ชื่อ Dealer ให้ตรงกัน ไม่งั้นจะได้โครงการซ้ำแทนที่จะอัปเดตของเดิม)">⚠️ Row No. ไม่พบของเดิม</span>';
+    }
     var nameDisplay = (r[3] || '').trim()
       ? sanitize(r[3])
       : '<i style="color:var(--text2)">' + sanitize(r[4] || '-') + '</i>';
