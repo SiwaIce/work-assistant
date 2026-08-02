@@ -4050,7 +4050,7 @@ function savePipeSheet() {
       forecastAmount: parseFloat(r[15])||0,
       realAmount: parseFloat(r[16])||0,
       biddingDate: _pipeDateFromPaste(r[17]),
-      shipmentDate: _pipeDateFromPaste(r[18]),
+      shipmentDate: _pipeDateFromPaste(r[18], _pipeDateFromPaste(r[17])),
       status: statusObj ? statusObj.id : (r[19]||'initial'),
       saleName: (r[20]||'').trim(),
       remark: (r[21]||'').trim(),
@@ -4096,7 +4096,11 @@ function _pipeParseTSV(text) {
   return rows.filter(function(r) { return r.length > 1 || (r[0] && r[0].trim()); });
 }
 
-function _pipeDateFromPaste(s) {
+// refDateISO (ไม่บังคับ) — ใช้เฉพาะตอนเจอค่าที่เป็น "ชื่อเดือนย่อล้วนๆ ไม่มีวัน/ไม่มีปี" (เช่น Shipment date ใน
+// Google Sheet ต้นฉบับที่ทีมกรอกแค่เดือนคาดว่าจะส่งมอบ) เพื่อเดาปีให้: ถ้าเดือนที่เจอ >= เดือนของ refDate ใช้
+// ปีเดียวกับ refDate, ถ้าน้อยกว่า (เดือนผ่านไปแล้วเทียบกับ ref) ให้เลื่อนเป็นปีถัดไป (ref ปกติคือ Bidding Date
+// ของแถวเดียวกัน เพราะ Shipment ต้องอยู่หลัง Bidding เสมอ) ไม่ส่ง ref มา = ใช้วันนี้แทน
+function _pipeDateFromPaste(s, refDateISO) {
   s = (s || '').toString().trim();
   if (!s || s === '-') return '';
   // YYYY-MM-DD
@@ -4115,6 +4119,15 @@ function _pipeDateFromPaste(s) {
     // DD/MM/YYYY or DD/MM/YY
     var y = p[2].length === 2 ? '20' + p[2] : p[2];
     return y + '-' + p[1].padStart(2, '0') + '-' + p[0].padStart(2, '0');
+  }
+  // ชื่อเดือนย่อ/เต็มล้วนๆ ไม่มีวัน ไม่มีปี (เช่น "Sep", "September") — เดาปีจาก refDateISO
+  var bareMon = s.match(/^([A-Za-z]{3,9})\.?$/);
+  if (bareMon && _mon.hasOwnProperty(bareMon[1].slice(0, 3).toLowerCase())) {
+    var mIdx = parseInt(_mon[bareMon[1].slice(0, 3).toLowerCase()], 10) - 1;
+    var ref = refDateISO ? new Date(refDateISO) : new Date();
+    var refYear = ref.getFullYear();
+    var year = mIdx < ref.getMonth() ? refYear + 1 : refYear;
+    return year + '-' + String(mIdx + 1).padStart(2, '0') + '-01';
   }
   return '';
 }
@@ -4357,7 +4370,7 @@ function _pipeImportState(existing, c, dealer) {
   if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(c[18])) > 0.001) return 'changed';
   if ((existing.registerDate || '') !== _pipeDateFromPaste(c[1] || '')) return 'changed';
   if ((existing.biddingDate || '') !== _pipeDateFromPaste(c[20] || '')) return 'changed';
-  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[22] || '')) return 'changed';
+  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[22] || '', _pipeDateFromPaste(c[20] || ''))) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
@@ -4405,7 +4418,7 @@ function _pipeImportDiff(existing, c, dealer) {
   var datePairs = [
     { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(c[1]  || '') },
     { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: _pipeDateFromPaste(c[20] || '') },
-    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[22] || '') }
+    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[22] || '', _pipeDateFromPaste(c[20] || '')) }
   ];
   datePairs.forEach(function(p) {
     if (p.oldISO !== p.newISO) diffs.push({ label: p.label, old: p.oldISO ? fD(p.oldISO) : '', newVal: p.newISO ? fD(p.newISO) : '' });
@@ -4837,6 +4850,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
     if (!status) status = 'initial';
 
     var regDate = _pipeDateFromPaste(c[1]);
+    var pipeBiddingDate = _pipeDateFromPaste(c[20]);
     // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น) — คงค่า djiCrmDate เดิมไว้ถ้ามีอยู่แล้ว
     var crmRegistered = projectId ? true : (existing ? !!existing.djiCrmRegistered : false);
     var crmDate = projectId ? ((existing && existing.djiCrmDate) || regDate || _td()) : (existing ? (existing.djiCrmDate || '') : '');
@@ -4858,8 +4872,8 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
       forecastAmount: parseFloat((c[17] || '').replace(/,/g, '')) || 0,
       realAmount: parseFloat((c[18] || '').replace(/,/g, '')) || 0,
       tor: (c[19] || '').trim(),
-      biddingDate: _pipeDateFromPaste(c[20]),
-      shipmentDate: _pipeDateFromPaste(c[22]),
+      biddingDate: pipeBiddingDate,
+      shipmentDate: _pipeDateFromPaste(c[22], pipeBiddingDate),
       remark: (c[23] || '').trim(),
       appointmentLetter: (c[24] || '').trim(),
       status: status,
