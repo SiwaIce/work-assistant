@@ -2511,6 +2511,7 @@ async function saveSheetPipelineChanges() {
     var updatedPipeline = {
       id: pipeId,
       projectName: nameEl ? nameEl.value.trim() : p.projectName,
+      projectId: p.projectId || '',
       endUserTH: endUserEl ? endUserEl.value.trim() : (p.endUserTH || p.endUser || ''),
       agencyMain: p.agencyMain || '',
       agencySub: p.agencySub || '',
@@ -2701,6 +2702,7 @@ html += '<div class="section-title">📊 ' + esc(p.projectName) + '</div>';
   if (p.followupDate) html += '<div class="form-row"><strong>📞 Follow-up:</strong> ' + fD(p.followupDate) + '</div>';
   var _fyDet = pipeFYStatus(p);
   html += '<div class="form-row"><strong>🏛️ ปีงบประมาณ:</strong> ' + (p.budgetFiscalYear ? 'ปีงบ ' + p.budgetFiscalYear : '— ไม่ระบุ') + (_fyDet ? ' <span style="background:' + _fyDet.c + '22;color:' + _fyDet.c + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + _fyDet.e + ' ' + _fyDet.t + '</span>' : '') + '</div>';
+  html += '<div class="form-row"><strong>🗂️ Project ID:</strong> ' + (p.projectId ? esc(p.projectId) : '— ยังไม่ลงทะเบียน CRM') + '</div>';
   html += '<div class="form-row"><strong>🗂️ CRM ของ DJI:</strong> ' + (p.djiCrmRegistered ? '✅ ลงทะเบียนแล้ว' + (p.djiCrmDate ? ' (' + fD(p.djiCrmDate) + ')' : '') : '⬜ ยังไม่ลงทะเบียน') + '</div>';
   html += '<div class="form-row"><strong>⚔️ คู่แข่ง:</strong> ' + (p.hasCompetitor ? '⚠️ คาดว่ามี' : '— ไม่ระบุ') + '</div>';
   html += '</div>';
@@ -3004,6 +3006,7 @@ function showUpdateModal(pipeId) {
   var forecastAmountVal = p.forecastAmount || 0;
   var modalHtml = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-container" style="max-width:550px"><div class="modal-header"><h3>✏️ แก้ไขโครงการ</h3><button class="modal-close" onclick="closeModal()">✕</button></div><div class="modal-body">' +
     '<div class="form-group"><label>📋 ชื่อโครงการ</label><input type="text" id="editProjectName" class="form-control" value="' + esc(p.projectName) + '"></div>' +
+    '<div class="form-group"><label>🗂️ Project ID <small style="color:var(--text2)">(ได้จากตอนลงทะเบียน CRM ของ DJI — ยังไม่มีก็ปล่อยว่างไว้ได้)</small></label><input type="text" id="editProjId" class="form-control" value="' + esc(p.projectId || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="(function(v){var c=document.getElementById(\'editProjCrm\');if(v&&c&&!c.checked){c.checked=true;document.getElementById(\'editProjCrmDateWrap\').style.display=\'block\';}})(this.value.trim())"></div>' +
     '<div class="form-group"><label>👤 End User</label><input type="text" id="editEndUser" class="form-control" value="' + esc(p.endUserTH || p.endUser || '') + '"></div>' +
     '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="editAgencyMain" class="form-control" value="' + esc(p.agencyMain || '') + '" placeholder="กรม/กระทรวง"></div>' +
     '<div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="editAgencySub" class="form-control" value="' + esc(p.agencySub || '') + '" placeholder="กอง/สำนัก"></div></div>' +
@@ -3078,9 +3081,11 @@ function submitPipelineUpdate(pipeId) {
   }
   if (items.length === 0) { alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return; }
   var totalQty = items.reduce(function(s, it) { return s + it.qty; }, 0);
+  var newProjectId = document.getElementById('editProjId') ? document.getElementById('editProjId').value.trim() : '';
   var updatedPipeline = {
-    id: pipeId, 
+    id: pipeId,
     projectName: newProjectName,
+    projectId: newProjectId,
     endUserTH: newEndUser,
     agencyMain: document.getElementById('editAgencyMain') ? document.getElementById('editAgencyMain').value.trim() : '',
     agencySub: document.getElementById('editAgencySub') ? document.getElementById('editAgencySub').value.trim() : '',
@@ -3092,8 +3097,9 @@ function submitPipelineUpdate(pipeId) {
     forecastAmount: newForecastAmount,
     biddingDate: newBiddingDate,
     shipmentDate: newShipmentDate,
-    djiCrmRegistered: document.getElementById('editProjCrm') ? document.getElementById('editProjCrm').checked : false,
-    djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : ''),
+    // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น)
+    djiCrmRegistered: newProjectId ? true : (document.getElementById('editProjCrm') ? document.getElementById('editProjCrm').checked : false),
+    djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : '') || (newProjectId ? new Date().toISOString().slice(0,10) : ''),
     hasCompetitor: document.getElementById('editProjComp') ? document.getElementById('editProjComp').checked : false,
     tor: document.getElementById('editProjTor') ? document.getElementById('editProjTor').value.trim() : '',
     nextAction: document.getElementById('editProjNextAction') ? document.getElementById('editProjNextAction').value.trim() : '',
@@ -3140,6 +3146,7 @@ function saveCustomerPipelineUpdate(dealerId, pipeId, data) {
       if ((beforeSnap.agencyMain||'') !== (data.agencyMain||'')) changedFields.push({ field: 'agencyMain', label: 'หน่วยงานใหญ่', before: beforeSnap.agencyMain||'-', after: data.agencyMain||'-' });
       if ((beforeSnap.agencySub||'') !== (data.agencySub||'')) changedFields.push({ field: 'agencySub', label: 'หน่วยงานย่อย', before: beforeSnap.agencySub||'-', after: data.agencySub||'-' });
       if ((beforeSnap.shipmentDate||'') !== (data.shipmentDate||'')) changedFields.push({ field: 'shipmentDate', label: 'Shipment Date', before: beforeSnap.shipmentDate||'-', after: data.shipmentDate||'-' });
+      if ((beforeSnap.projectId||'') !== (data.projectId||'')) changedFields.push({ field: 'projectId', label: 'Project ID', before: beforeSnap.projectId||'-', after: data.projectId||'-' });
       if (!!beforeSnap.djiCrmRegistered !== !!data.djiCrmRegistered) changedFields.push({ field: 'djiCrmRegistered', label: 'ลงทะเบียน CRM', before: beforeSnap.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง', after: data.djiCrmRegistered ? 'ลงแล้ว' : 'ยังไม่ลง' });
       if (!!beforeSnap.hasCompetitor !== !!data.hasCompetitor) changedFields.push({ field: 'hasCompetitor', label: 'มีคู่แข่ง', before: beforeSnap.hasCompetitor ? 'มี' : 'ไม่มี', after: data.hasCompetitor ? 'มี' : 'ไม่มี' });
       if ((beforeSnap.budgetFiscalYear||'') !== (data.budgetFiscalYear||'')) changedFields.push({ field: 'budgetFiscalYear', label: 'ปีงบประมาณ', before: beforeSnap.budgetFiscalYear||'-', after: data.budgetFiscalYear||'-' });
@@ -3173,6 +3180,7 @@ function showCreateProjectModal() {
   modalHtml += '<div class="modal-header"><h3>➕ สร้างโครงการใหม่</h3><button class="modal-close" onclick="closeModal()">✕</button></div>';
   modalHtml += '<div class="modal-body">';
   modalHtml += '<div class="form-group"><label>📋 ชื่อโครงการ *</label><input type="text" id="newProjName" class="form-control" placeholder="เช่น โครงการพัฒนาระบบ..."></div>';
+  modalHtml += '<div class="form-group"><label>🗂️ Project ID <small style="color:var(--text2)">(ได้จากตอนลงทะเบียน CRM ของ DJI — ยังไม่มีก็ปล่อยว่างไว้ได้)</small></label><input type="text" id="newProjId" class="form-control" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="(function(v){var c=document.getElementById(\'newProjCrm\');if(v&&c&&!c.checked){c.checked=true;document.getElementById(\'newProjCrmDateWrap\').style.display=\'block\';}})(this.value.trim())"></div>';
   modalHtml += '<div class="form-group"><label>👤 End User</label><input type="text" id="newProjEndUser" class="form-control" placeholder="ชื่อหน่วยงาน"></div>';
   modalHtml += '<div class="form-row"><div class="form-group"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="newProjAgencyMain" class="form-control" placeholder="กรม/กระทรวง"></div><div class="form-group"><label>หน่วยงานย่อย</label><input type="text" id="newProjAgencySub" class="form-control" placeholder="กอง/สำนัก"></div></div>';
   modalHtml += '<div class="form-group"><label>📊 สถานะเริ่มต้น</label><select id="newProjStatus" class="form-control">' + statusOptions + '</select></div>';
@@ -3243,9 +3251,11 @@ function submitNewProject() {
   var note = document.getElementById('newProjNote').value.trim();
   var biddingDate = convertToISODate(document.getElementById('newBiddingDate').value);
   var shipmentDate = convertToISODate(document.getElementById('newShipmentDate').value);
+  var newProjectId = document.getElementById('newProjId') ? document.getElementById('newProjId').value.trim() : '';
   var newPipeline = {
     id: 'pipe_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     projectName: projectName,
+    projectId: newProjectId,
     endUserTH: endUser,
     agencyMain: document.getElementById('newProjAgencyMain') ? document.getElementById('newProjAgencyMain').value.trim() : '',
     agencySub: document.getElementById('newProjAgencySub') ? document.getElementById('newProjAgencySub').value.trim() : '',
@@ -3257,8 +3267,9 @@ function submitNewProject() {
     forecastAmount: amount,
     biddingDate: biddingDate,
     shipmentDate: shipmentDate,
-    djiCrmRegistered: document.getElementById('newProjCrm') ? document.getElementById('newProjCrm').checked : false,
-    djiCrmDate: convertToISODate(document.getElementById('newProjCrmDate') ? document.getElementById('newProjCrmDate').value : ''),
+    // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น)
+    djiCrmRegistered: newProjectId ? true : (document.getElementById('newProjCrm') ? document.getElementById('newProjCrm').checked : false),
+    djiCrmDate: convertToISODate(document.getElementById('newProjCrmDate') ? document.getElementById('newProjCrmDate').value : '') || (newProjectId ? new Date().toISOString().slice(0,10) : ''),
     hasCompetitor: document.getElementById('newProjComp') ? document.getElementById('newProjComp').checked : false,
     budgetFiscalYear: document.getElementById('newProjFY') && document.getElementById('newProjFY').value ? parseInt(document.getElementById('newProjFY').value, 10) : null,
     dealerId: dealerId,

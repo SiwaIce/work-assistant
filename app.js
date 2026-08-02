@@ -3173,7 +3173,7 @@ function _summarizePipelineUpdateChanges(before, after) {
     status: 'สถานะ', forecastAmount: 'มูลค่า', biddingDate: 'วันประมูล', shipmentDate: 'วันส่งมอบ',
     endUserTH: 'End User', agencyMain: 'หน่วยงานใหญ่', agencySub: 'หน่วยงานย่อย',
     tor: 'TOR', nextAction: 'Next Action', budgetFiscalYear: 'ปีงบประมาณ',
-    djiCrmRegistered: 'ลงทะเบียน CRM', hasCompetitor: 'คู่แข่ง'
+    djiCrmRegistered: 'ลงทะเบียน CRM', hasCompetitor: 'คู่แข่ง', projectId: 'Project ID'
   };
   Object.keys(fieldLabels).forEach(function(key) {
     var b = before[key], a = after[key];
@@ -3232,6 +3232,9 @@ function approvePipelineUpdate(dealerId, updateId, callback) {
         tor: cleanData.tor || '',
         nextAction: cleanData.nextAction || '',
         registerDate: cleanData.registerDate || '',
+        projectId: cleanData.projectId || '',
+        djiCrmRegistered: !!cleanData.djiCrmRegistered,
+        djiCrmDate: cleanData.djiCrmDate || '',
         _syncedAt: firebase.firestore.FieldValue.serverTimestamp(),
         // ✅ ต้องตั้ง _updatedAt ใหม่ตอนอนุมัติด้วย ไม่งั้นค่าจะค้างจากตอนลูกค้าส่งครั้งแรก
         // (merge:true ไม่ลบ field เดิม) ทำให้ sort "อัพเดทล่าสุด" ใน client-view ผิดลำดับ
@@ -3340,12 +3343,18 @@ function viewPipelineUpdateDetail(dealerId, updateId) {
       { key: 'biddingDate', label: 'Bidding Date' },
       { key: 'shipmentDate', label: 'Shipment Date' },
       { key: 'tor', label: 'TOR' },
-      { key: 'nextAction', label: 'Next Action' }
+      { key: 'nextAction', label: 'Next Action' },
+      { key: 'projectId', label: 'Project ID' },
+      { key: 'djiCrmRegistered', label: 'ลงทะเบียน CRM', bool: true }
     ];
     
     fields.forEach(function(f) {
       var oldVal = oldPipe ? (oldPipe[f.key] || '-') : '-';
       var newVal = newData[f.key] || '-';
+      if (f.bool) {
+        oldVal = oldPipe && oldPipe[f.key] ? 'ลงแล้ว' : 'ยังไม่ลง';
+        newVal = newData[f.key] ? 'ลงแล้ว' : 'ยังไม่ลง';
+      }
       var isChanged = String(oldVal) !== String(newVal);
       var highlight = isChanged ? 'style="background:rgba(245,158,11,0.15)"' : '';
       
