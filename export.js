@@ -33,7 +33,7 @@ function rExports(el) {
     <button class="btn bo" onclick="showMergeImportM()">🔄 Merge Import (ไม่ซ้ำ)</button>
     <button class="btn bd" onclick="doClearAll()">🗑️ ล้างทั้งหมด</button>
   </div>
-  <input type="file" id="impFile" accept=".json" style="display:none" onchange="doImportJSON(event)">
+  <input type="file" id="impFile" accept=".json" style="display:none" onchange="showRestorePreview(event)">
   <p class="hint" style="margin-top:6px">Export JSON = สำรองครบทุกข้อมูล · Import (วางทับ) = กู้คืนทั้งหมด · Merge = เพิ่มเฉพาะข้อมูลใหม่โดยไม่ลบของเดิม</p>
   </div>`;
 }
@@ -219,14 +219,100 @@ function doExportJSON() {
   toast('📤 Export สำเร็จ! Backup วันที่ ' + fD(_td()));
 }
 
-function doImportJSON(e) {
-  const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader();
+// ป้ายชื่อไทยสำหรับสรุปก่อน restore — ไม่มีในนี้ก็ยัง fallback แสดงชื่อ key ตรงๆ ได้ ไม่หลุดจาก preview
+var _RESTORE_LABELS = {
+  dealers: '🏪 Dealer', pipeline: '📊 Pipeline', pipeLog: '📝 Pipeline History', visits: '🤝 Visit',
+  followups: '📞 Follow-up', feedback: '💡 Feedback', tasks: '📋 Task', notes: '📚 Note',
+  stockLevels: '📦 Stock', stockLog: '📦 Stock Log', stockReservations: '📦 Stock จอง', stockLocations: '📦 Stock ที่เก็บ',
+  salesOrders: '📋 Sales Order', products: '🗂️ สินค้า (Products)', quotations: '📄 Quotation', quotes: '📄 Quote เก่า',
+  meetings: '📅 Meeting', lineLog: '💬 LINE', emails: '📧 Email', timerLogs: '⏱️ Timer Log', notesQ: '📚 Note',
+  waiting: '⏳ Waiting', goals: '🎯 Goal', goalsV2: '🎯 Goal', kpiEntries: '📊 KPI', customerForecasts: '📈 Customer Forecast',
+  prospects: '🔍 Prospect', config: '⚙️ ตั้งค่าแอป (Config)', appearance: '🎨 ธีม/หน้าตา'
+};
+
+// อ่านไฟล์ backup แล้วโชว์ preview ก่อนทับจริงเสมอ (เดิม Restore ทับทันทีไม่มี preview เลย) — เทียบ "จำนวนในไฟล์"
+// กับ "จำนวนปัจจุบันในเครื่อง" ต่อเมนู ไม่ใช่ new/changed/same แบบ Merge เพราะ Restore คือทับทั้งหมดเสมอ ไม่ใช่
+// การผสาน ป้ายที่มีประโยชน์กว่าคือเตือนว่าเมนูไหนจะ "ลดลง" จากปัจจุบัน (เสี่ยงข้อมูลหายถ้ากดยืนยันแบบไม่ทันดู)
+var _restorePendingData = null;
+function showRestorePreview(e) {
+  var f = e.target.files[0]; if (!f) return;
+  var r = new FileReader();
   r.onload = function(ev) {
-    try { const d = JSON.parse(ev.target.result); ST.importAll(d); refreshPipeNames(); toast('✅ นำเข้าสำเร็จ!'); render(); }
-    catch(err) { alert('❌ ไฟล์ไม่ถูกต้อง: ' + err.message); }
+    try {
+      var d = JSON.parse(ev.target.result);
+      if (!d || !d.version) throw new Error('ไฟล์นี้ไม่ใช่ backup ของแอปนี้');
+      _restorePendingData = d;
+      renderRestorePreview(d);
+    } catch (err) {
+      alert('❌ ไฟล์ไม่ถูกต้อง: ' + err.message);
+    }
   };
-  r.readAsText(f); e.target.value = '';
+  r.readAsText(f);
+  e.target.value = '';
+}
+
+function _restoreParseVal(raw) {
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch (e) { return raw; }
+}
+
+function renderRestorePreview(d) {
+  var rows = []; // { name, label, fileCount, curCount, isArray }
+  if (d.raw) {
+    Object.keys(d.raw).forEach(function(k) {
+      var name = k.indexOf('v7_') === 0 ? k.slice(3) : k;
+      var fileVal = _restoreParseVal(d.raw[k]);
+      var curVal = _restoreParseVal(localStorage.getItem(k));
+      rows.push({ name: name, label: _RESTORE_LABELS[name] || name, fileCount: Array.isArray(fileVal) ? fileVal.length : null, curCount: Array.isArray(curVal) ? curVal.length : null, isArray: Array.isArray(fileVal) });
+    });
+  } else {
+    // ไฟล์ backup รุ่นเก่า (version 'v7') — key ตรงกับ ST._keys โดยตรง ไม่ใช่ v7_ prefix
+    Object.keys(ST._keys).forEach(function(name) {
+      if (d[name] === undefined) return;
+      var fileVal = d[name];
+      var curVal = _restoreParseVal(localStorage.getItem(ST._keys[name]));
+      rows.push({ name: name, label: _RESTORE_LABELS[name] || name, fileCount: Array.isArray(fileVal) ? fileVal.length : null, curCount: Array.isArray(curVal) ? curVal.length : null, isArray: Array.isArray(fileVal) });
+    });
+  }
+  rows.sort(function(a, b) { return a.label.localeCompare(b.label); });
+
+  var h = '<div style="max-width:520px">';
+  h += '<div style="background:#ef444418;border:1px solid #ef444440;border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#ef4444">⚠️ Restore จะ<strong>แทนที่ข้อมูลทั้งหมดในเครื่องนี้</strong>ด้วยไฟล์นี้ทันที ไม่ใช่การผสาน — รายการที่มีอยู่แต่ไม่มีในไฟล์จะหายไป ถ้าต้องการแค่เพิ่มข้อมูลใหม่โดยไม่ลบของเดิม ใช้ "🔄 Merge Import" แทน</div>';
+  h += '<div style="max-height:340px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:6px">';
+  h += '<table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:var(--bg2)">' +
+    '<th style="padding:5px 8px;text-align:left;color:var(--text2);border-bottom:1px solid var(--border)">เมนู</th>' +
+    '<th style="padding:5px 8px;text-align:right;color:var(--text2);border-bottom:1px solid var(--border)">ในไฟล์</th>' +
+    '<th style="padding:5px 8px;text-align:right;color:var(--text2);border-bottom:1px solid var(--border)">ตอนนี้</th>' +
+    '</tr></thead><tbody>';
+  rows.forEach(function(r) {
+    var shrink = r.isArray && r.curCount !== null && r.fileCount < r.curCount;
+    h += '<tr style="border-top:1px solid var(--border)' + (shrink ? ';background:#ef444410' : '') + '">';
+    h += '<td style="padding:4px 8px">' + sanitize(r.label) + (shrink ? ' <span style="color:#ef4444;font-size:10px" title="ในไฟล์น้อยกว่าปัจจุบัน — ข้อมูลที่มีอยู่ตอนนี้แต่ไม่มีในไฟล์จะหายหลัง restore">⚠️ น้อยลง</span>' : '') + '</td>';
+    h += '<td style="padding:4px 8px;text-align:right">' + (r.isArray ? r.fileCount : 'จะถูกแทนที่') + '</td>';
+    h += '<td style="padding:4px 8px;text-align:right;color:var(--text2)">' + (r.isArray ? (r.curCount === null ? 0 : r.curCount) : '-') + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="display:flex;gap:8px;margin-top:12px">';
+  h += '<button class="btn bd" style="flex:1" onclick="confirmRestore()">⚠️ ยืนยันแทนที่ข้อมูลทั้งหมด</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('📥 Preview: Restore จาก Backup', h);
+  setMWide(600);
+}
+
+function confirmRestore() {
+  if (!_restorePendingData) return;
+  try {
+    ST.importAll(_restorePendingData);
+    refreshPipeNames();
+    toast('✅ นำเข้าสำเร็จ!');
+    closeMForce();
+    render();
+  } catch (err) {
+    alert('❌ Restore ไม่สำเร็จ: ' + err.message);
+  }
+  _restorePendingData = null;
 }
 
 function doClearAll() {
@@ -240,7 +326,7 @@ function doClearAll() {
 
 function showMergeImportM() {
   openM('📥 Merge Import (ไม่ซ้ำ)', `
-    <div style="max-width:450px">
+    <div style="max-width:640px">
       <div class="fg">
         <label>เลือกไฟล์ JSON (Backup)</label>
         <input type="file" id="mergeFile" accept=".json" onchange="mergeImportFile(event)">
@@ -248,18 +334,18 @@ function showMergeImportM() {
       <div class="fg">
         <label>เลือกประเภทที่ต้องการ Import</label>
         <div class="check-g" id="mergeTypes">
-          <label><input type="checkbox" value="dealers" checked> 🏪 Dealer</label>
-          <label><input type="checkbox" value="pipeline" checked> 📊 Pipeline</label>
-          <label><input type="checkbox" value="visits" checked> 🤝 Visit</label>
-          <label><input type="checkbox" value="followups" checked> 📞 Follow-up</label>
-          <label><input type="checkbox" value="feedback" checked> 💡 Feedback</label>
-          <label><input type="checkbox" value="tasks" checked> 📋 Task</label>
-          <label><input type="checkbox" value="notes" checked> 📚 Note</label>
+          <label><input type="checkbox" value="dealers" checked onchange="showMergePreview()"> 🏪 Dealer</label>
+          <label><input type="checkbox" value="pipeline" checked onchange="showMergePreview()"> 📊 Pipeline</label>
+          <label><input type="checkbox" value="visits" checked onchange="showMergePreview()"> 🤝 Visit</label>
+          <label><input type="checkbox" value="followups" checked onchange="showMergePreview()"> 📞 Follow-up</label>
+          <label><input type="checkbox" value="feedback" checked onchange="showMergePreview()"> 💡 Feedback</label>
+          <label><input type="checkbox" value="tasks" checked onchange="showMergePreview()"> 📋 Task</label>
+          <label><input type="checkbox" value="notes" checked onchange="showMergePreview()"> 📚 Note</label>
         </div>
       </div>
       <div class="fg">
         <label>📌 วิธีจัดการข้อมูลซ้ำ</label>
-        <select id="mergeDupAction" class="fm-input">
+        <select id="mergeDupAction" class="fm-input" onchange="showMergePreview()">
           <option value="skip">⏭️ ข้าม (ไม่เพิ่มถ้ามีชื่อซ้ำ)</option>
           <option value="overwrite">📝 ทับ (อัพเดทข้อมูลเดิม)</option>
           <option value="rename">📌 เปลี่ยนชื่อ (เพิ่ม _v2)</option>
@@ -279,7 +365,7 @@ var mergeData = null;
 function mergeImportFile(event) {
   var file = event.target.files[0];
   if (!file) return;
-  
+
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
@@ -292,22 +378,240 @@ function mergeImportFile(event) {
   reader.readAsText(file);
 }
 
+// เทียบ 2 record แบบทั่วไป ไม่ต้องเขียน diff เฉพาะทีละประเภท (ต่างจาก Pipeline ที่ field ตายตัว ที่นี่มี 7
+// ประเภท shape ไม่เหมือนกันเลย) — ข้าม key ที่เป็น metadata ไม่มีความหมายให้ดู เทียบด้วย JSON.stringify กันเคส
+// เป็น array/object ซ้อนอยู่ข้างใน (เช่น items ของ pipeline)
+var _MERGE_DIFF_SKIP_KEYS = ['id', 'created', 'updated', 'createdAt', 'updatedAt'];
+function _genericDiffFields(oldObj, newObj) {
+  var diffs = [];
+  var keys = Object.keys(newObj || {}).filter(function(k) { return _MERGE_DIFF_SKIP_KEYS.indexOf(k) === -1; });
+  keys.forEach(function(k) {
+    var oldV = oldObj ? oldObj[k] : undefined;
+    var newV = newObj[k];
+    var oldStr = JSON.stringify(oldV === undefined ? null : oldV);
+    var newStr = JSON.stringify(newV === undefined ? null : newV);
+    if (oldStr !== newStr) diffs.push({ field: k, old: oldV, newVal: newV });
+  });
+  return diffs;
+}
+
+// คำนวณ "แผน" ก่อนเขียนจริง (dry-run) — จับคู่ fingerprint แบบเดียวกับ doMergeImport() เป๊ะๆ ทุกตัว (ถ้าแก้
+// fingerprint ต้องแก้ทั้ง 2 จุดให้ตรงกัน ไม่งั้น preview กับผลจริงจะไม่ตรงกัน) แต่ที่นี่แค่ "ดู" ไม่เขียนอะไรเลย
+function _buildMergePlan(mergeData, checkedTypes, dupAction) {
+  var plan = {};
+  var has = function(t) { return checkedTypes.indexOf(t) !== -1; };
+
+  var existingDealers = ST.getAll('dealers');
+  var existingDealerNameMap = {};
+  existingDealers.forEach(function(d) { existingDealerNameMap[d.name] = d; });
+
+  // ── Dealers (fingerprint = name) ──
+  plan.dealers = [];
+  if (has('dealers') && mergeData.v7_dealers) {
+    mergeData.v7_dealers.forEach(function(newD) {
+      if (!newD.name) return;
+      var ex = existingDealerNameMap[newD.name];
+      if (ex) {
+        var action = dupAction === 'overwrite' ? 'overwrite' : (dupAction === 'rename' ? 'rename' : 'skip');
+        plan.dealers.push({ label: newD.name, action: action, diffs: action === 'overwrite' ? _genericDiffFields(ex, newD) : [] });
+      } else {
+        plan.dealers.push({ label: newD.name, action: 'new', diffs: [] });
+      }
+    });
+  }
+
+  // ── Pipeline (fingerprint = projectName + registerDate) ──
+  plan.pipeline = [];
+  if (has('pipeline') && mergeData.v7_pipeline) {
+    var existingPipes = ST.getAll('pipeline');
+    var existingPipeFP = {};
+    existingPipes.forEach(function(p) {
+      var fp = (p.projectName || '') + '|' + (p.registerDate || (p.created || '').split('T')[0]);
+      existingPipeFP[fp] = p;
+    });
+    mergeData.v7_pipeline.forEach(function(newP) {
+      var fp = (newP.projectName || '') + '|' + (newP.registerDate || (newP.created || '').split('T')[0]);
+      var ex = existingPipeFP[fp];
+      var label = newP.projectName || newP.endUserTH || '(ไม่มีชื่อ)';
+      if (ex) {
+        var action = dupAction === 'overwrite' ? 'overwrite' : 'skip'; // pipeline ไม่รองรับ rename เหมือน dealers
+        plan.pipeline.push({ label: label, action: action, diffs: action === 'overwrite' ? _genericDiffFields(ex, newP) : [] });
+      } else if (newP.dealerId) {
+        plan.pipeline.push({ label: label, action: 'new', diffs: [] });
+      } else {
+        // doMergeImport ข้ามแถวใหม่ที่ไม่มี dealerId ติดมาเลยเงียบๆ (ไม่รู้จะผูกกับ Dealer ไหน) — ต้องเตือนไว้ก่อน
+        // ไม่งั้น preview จะบอกว่า "ใหม่" ทั้งที่จริงจะไม่ถูกเพิ่มเลย
+        plan.pipeline.push({ label: label, action: 'skip-no-dealer', diffs: [] });
+      }
+    });
+  }
+
+  // ── pipeLog (นับรวมเฉยๆ ไม่โชว์ทีละแถว เพราะเยอะเกินไปและไม่มีความหมายให้ดูทีละอัน) ──
+  var pipeLogNew = 0, pipeLogSkip = 0;
+  if (has('pipeline') && mergeData.v7_pipelog) {
+    var exLogSet = {};
+    ST.getAll('pipeLog').forEach(function(l) { exLogSet[(l.pipeId || '') + '|' + (l.date || '') + '|' + (l.content || '').substr(0, 20)] = true; });
+    mergeData.v7_pipelog.forEach(function(newL) {
+      var lk = (newL.pipeId || '') + '|' + (newL.date || '') + '|' + (newL.content || '').substr(0, 20);
+      if (exLogSet[lk]) pipeLogSkip++; else { pipeLogNew++; exLogSet[lk] = true; }
+    });
+  }
+  plan.pipeLog = { newCount: pipeLogNew, skipCount: pipeLogSkip };
+
+  // ── Visits (fingerprint = dealerId + date) ──
+  plan.visits = [];
+  if (has('visits') && mergeData.v7_visits) {
+    var exVSet = {};
+    ST.getAll('visits').forEach(function(v) { exVSet[(v.dealerId || '') + '|' + (v.date || '')] = v; });
+    mergeData.v7_visits.forEach(function(newV) {
+      var vk = (newV.dealerId || '') + '|' + (newV.date || '');
+      var ex = exVSet[vk];
+      var label = fD(newV.date);
+      if (ex) {
+        var action = dupAction === 'overwrite' ? 'overwrite' : 'skip';
+        plan.visits.push({ label: label, action: action, diffs: action === 'overwrite' ? _genericDiffFields(ex, newV) : [] });
+      } else if (newV.dealerId) {
+        plan.visits.push({ label: label, action: 'new', diffs: [] });
+      } else {
+        plan.visits.push({ label: label, action: 'skip-no-dealer', diffs: [] });
+      }
+    });
+  }
+
+  // ── Follow-ups (fingerprint = dealerId + date) ──
+  plan.followups = [];
+  if (has('followups') && mergeData.v7_followups) {
+    var exFUSet = {};
+    ST.getAll('followups').forEach(function(fu) { exFUSet[(fu.dealerId || '') + '|' + (fu.date || '')] = fu; });
+    mergeData.v7_followups.forEach(function(newFu) {
+      var fuk = (newFu.dealerId || '') + '|' + (newFu.date || '');
+      var ex = exFUSet[fuk];
+      var label = fD(newFu.date);
+      if (ex) {
+        var action = dupAction === 'overwrite' ? 'overwrite' : 'skip';
+        plan.followups.push({ label: label, action: action, diffs: action === 'overwrite' ? _genericDiffFields(ex, newFu) : [] });
+      } else if (newFu.dealerId) {
+        plan.followups.push({ label: label, action: 'new', diffs: [] });
+      } else {
+        plan.followups.push({ label: label, action: 'skip-no-dealer', diffs: [] });
+      }
+    });
+  }
+
+  // ── Feedback (fingerprint = dealerId + ข้อความ 30 ตัวแรก) — ไม่รองรับ overwrite เสมอ (ตาม doMergeImport) ──
+  plan.feedback = [];
+  if (has('feedback') && mergeData.v7_feedback) {
+    var exFBSet = {};
+    ST.getAll('feedback').forEach(function(f) { exFBSet[(f.dealerId || '') + '|' + (f.text || '').substr(0, 30)] = true; });
+    mergeData.v7_feedback.forEach(function(newFb) {
+      var fbk = (newFb.dealerId || '') + '|' + (newFb.text || '').substr(0, 30);
+      var action = exFBSet[fbk] ? 'skip' : (newFb.dealerId ? 'new' : 'skip-no-dealer');
+      plan.feedback.push({ label: (newFb.text || '').substr(0, 40), action: action, diffs: [] });
+    });
+  }
+
+  // ── Tasks (fingerprint = title) — ไม่รองรับ overwrite เสมอ ──
+  plan.tasks = [];
+  if (has('tasks') && mergeData.v7_tasks) {
+    var exTaskT = {};
+    ST.getAll('tasks').forEach(function(t) { exTaskT[t.title || ''] = true; });
+    mergeData.v7_tasks.forEach(function(newT) {
+      plan.tasks.push({ label: newT.title || '(ไม่มีชื่อ)', action: exTaskT[newT.title || ''] ? 'skip' : 'new', diffs: [] });
+    });
+  }
+
+  // ── Notes (fingerprint = dealerId + ข้อความ 30 ตัวแรก) — ไม่รองรับ overwrite เสมอ ──
+  plan.notes = [];
+  if (has('notes') && mergeData.v7_notes) {
+    var exNoteSet = {};
+    ST.getAll('notes').forEach(function(n) { exNoteSet[(n.dealerId || '') + '|' + (n.text || '').substr(0, 30)] = true; });
+    mergeData.v7_notes.forEach(function(newN) {
+      var nk = (newN.dealerId || '') + '|' + (newN.text || '').substr(0, 30);
+      plan.notes.push({ label: (newN.text || '').substr(0, 40), action: exNoteSet[nk] ? 'skip' : 'new', diffs: [] });
+    });
+  }
+
+  return plan;
+}
+
+var _MERGE_TYPE_META = {
+  dealers:   { label: '🏪 Dealer',     canOverwrite: true  },
+  pipeline:  { label: '📊 Pipeline',   canOverwrite: true  },
+  visits:    { label: '🤝 Visit',      canOverwrite: true  },
+  followups: { label: '📞 Follow-up',  canOverwrite: true  },
+  feedback:  { label: '💡 Feedback',   canOverwrite: false },
+  tasks:     { label: '📋 Task',       canOverwrite: false },
+  notes:     { label: '📚 Note',       canOverwrite: false }
+};
+var _mergeActionBadge = {
+  new:            { text: '➕ ใหม่',        bg: '#22c55e18', color: '#22c55e' },
+  overwrite:      { text: '📝 ซ้ำ — จะทับ', bg: '#f59e0b18', color: '#f59e0b' },
+  skip:           { text: '⏭ ซ้ำ — ข้าม',  bg: 'var(--bg2)', color: 'var(--text2)' },
+  rename:         { text: '📌 ซ้ำ — เปลี่ยนชื่อ', bg: '#3b82f618', color: '#3b82f6' },
+  'skip-no-dealer': { text: '⚠️ ข้าม — หา Dealer ไม่เจอ', bg: '#ef444418', color: '#ef4444' }
+};
+
+// dry-run แล้วโชว์ตารางแบบเดียวกับ Pipeline import preview — ต่อรายการมี badge ว่าใหม่/ซ้ำ (จะทับ/ข้าม/
+// เปลี่ยนชื่อ ตาม dupAction ที่เลือกไว้ตอนนี้) พร้อมปุ่มดู diff รายฟิลด์เฉพาะรายการที่จะถูกทับจริง
 function showMergePreview() {
   var preview = document.getElementById('mergePreview');
   if (!preview || !mergeData) return;
-  
-  var types = ['dealers', 'pipeline', 'visits', 'followups', 'feedback', 'tasks', 'notes'];
-  var html = '<div style="border-top:1px solid var(--border);padding-top:8px">📄 ไฟล์มีข้อมูล:<br>';
-  
-  types.forEach(function(t) {
-    var key = 'v7_' + t;
-    if (mergeData[key] && mergeData[key].length) {
-      html += ' • ' + t + ': ' + mergeData[key].length + ' รายการ<br>';
-    }
+
+  var checked = [];
+  document.querySelectorAll('#mergeTypes input:checked').forEach(function(el) { checked.push(el.value); });
+  var dupAction = (document.getElementById('mergeDupAction') || {}).value || 'skip';
+  var plan = _buildMergePlan(mergeData, checked, dupAction);
+
+  var html = '';
+  var diffIdx = 0;
+  Object.keys(_MERGE_TYPE_META).forEach(function(type) {
+    var items = plan[type] || [];
+    if (!items.length) return;
+    var meta = _MERGE_TYPE_META[type];
+    var counts = { new: 0, overwrite: 0, skip: 0, rename: 0, 'skip-no-dealer': 0 };
+    items.forEach(function(it) { counts[it.action]++; });
+    var summary = ['new', 'overwrite', 'skip', 'rename', 'skip-no-dealer'].filter(function(k) { return counts[k]; })
+      .map(function(k) { return _mergeActionBadge[k].text.replace(/^\S+\s/, '') + ' ' + counts[k]; }).join(' · ');
+    html += '<div style="margin-top:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden">';
+    html += '<div style="padding:6px 10px;background:var(--bg2);font-weight:700;color:var(--text)">' + meta.label + ' — ' + items.length + ' รายการในไฟล์ <span style="font-weight:400;color:var(--text2)">(' + summary + ')</span></div>';
+    html += '<div style="max-height:160px;overflow-y:auto">';
+    items.forEach(function(it) {
+      var badge = _mergeActionBadge[it.action];
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 10px;border-top:1px solid var(--border);font-size:11px">';
+      html += '<span style="background:' + badge.bg + ';color:' + badge.color + ';padding:1px 7px;border-radius:8px;white-space:nowrap">' + badge.text + '</span>';
+      html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="' + sanitize(it.label) + '">' + sanitize(it.label) + '</span>';
+      if (it.action === 'overwrite' && it.diffs.length) {
+        var thisIdx = diffIdx++;
+        window['_mergeDiff_' + thisIdx] = it.diffs;
+        html += '<button onclick="_toggleMergeDiff(' + thisIdx + ')" id="mergeDiffBtn_' + thisIdx + '" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2)">🔍 ' + it.diffs.length + '</button>';
+      }
+      html += '</div>';
+      if (it.action === 'overwrite' && it.diffs.length) {
+        html += '<div id="mergeDiffRow_' + (diffIdx - 1) + '" style="display:none;padding:4px 10px 6px 30px;border-top:1px dashed var(--border);font-size:10px;color:var(--text2)">';
+        it.diffs.forEach(function(d) {
+          html += '<div>' + sanitize(d.field) + ': <span style="color:#ef4444">' + sanitize(String(d.old == null ? '(ว่าง)' : d.old)) + '</span> → <span style="color:#22c55e">' + sanitize(String(d.newVal == null ? '(ว่าง)' : d.newVal)) + '</span></div>';
+        });
+        html += '</div>';
+      }
+    });
+    html += '</div></div>';
   });
-  
-  html += '</div>';
+
+  if (plan.pipeLog && (plan.pipeLog.newCount || plan.pipeLog.skipCount)) {
+    html += '<div style="margin-top:8px;font-size:11px;color:var(--text2)">📝 Pipeline History: ใหม่ ' + plan.pipeLog.newCount + ' · ซ้ำ-ข้าม ' + plan.pipeLog.skipCount + ' (รวมไปกับ Pipeline อัตโนมัติ ไม่แยกโชว์ทีละรายการ)</div>';
+  }
+
+  if (!html) html = '<div style="color:var(--text2)">ไม่พบข้อมูลที่เลือกในไฟล์นี้</div>';
   preview.innerHTML = html;
+}
+
+function _toggleMergeDiff(idx) {
+  var row = document.getElementById('mergeDiffRow_' + idx);
+  var btn = document.getElementById('mergeDiffBtn_' + idx);
+  if (!row) return;
+  var open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'block';
+  if (btn) btn.style.background = open ? '' : 'var(--accent)';
 }
 
 function doMergeImport() {
