@@ -4546,6 +4546,9 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
 
   var counts = { 'new': 0, changed: 0, same: 0 };
   var matchedIds = {};
+  // เตือน "Row No. ไม่พบของเดิม" มีความหมายก็ต่อเมื่อระบบมีโครงการที่เคยผูก Row No. ไว้อยู่แล้วบ้าง — ถ้ายังไม่
+  // มีเลยสักโครงการ (เช่น import ทั้งชีตครั้งแรกสุด) ทุกแถวก็จะเป็น "ใหม่" จริงๆ ทั้งหมด ไม่ใช่เคสจับคู่พลาด
+  var hasAnyRowNoInSystem = Object.keys(pipeByRowNo).length > 0;
   var rowMeta = rows.map(function(r) {
     var d = dealer || dealerByName[(_pipeCol(r, colMap, 'dealerName').trim()).toLowerCase()];
     var existing = _pipeFindExistingForImport(_pipeCol(r, colMap, 'rowNo'), _pipeCol(r, colMap, 'projectName'), _pipeCol(r, colMap, 'endUserTH'), d ? d.id : '', pipeByRowNo, pipeByKey);
@@ -4556,7 +4559,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     // แถวที่มีเลข Row No. มาด้วยในไฟล์ แต่จับคู่กับโครงการเดิมไม่ได้เลย (ทั้งด้วย Row No. และด้วยชื่อ/End
     // User/Dealer) — เสี่ยงเป็นเคส "จับคู่พลาด" มากกว่าโครงการใหม่จริง (เช่น ชื่อ Dealer สะกดไม่ตรงกับที่มี
     // ในระบบ) ถ้าปล่อยให้ import แบบ "เพิ่มใหม่" ไปเฉยๆ จะได้โครงการซ้ำ ส่วนของเดิมที่ควรถูกอัปเดตจะไม่ขยับเลย
-    var unmatchedRowNo = (!existing && _pipeCol(r, colMap, 'rowNo').trim()) ? _pipeCol(r, colMap, 'rowNo').trim() : '';
+    var unmatchedRowNo = (hasAnyRowNoInSystem && !existing && _pipeCol(r, colMap, 'rowNo').trim()) ? _pipeCol(r, colMap, 'rowNo').trim() : '';
     return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo };
   });
 
@@ -4572,18 +4575,34 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   var unknownModelRows = [];
   rowMeta.forEach(function(m, i) {
     var modelCell = _pipeCol(m.row, colMap, 'model').trim();
-    if (!modelCell) return;
-    var hasUnknown = modelCell.split('\n').some(function(line) {
-      var n = (line.split('*')[0] || '').trim().toUpperCase();
-      if (!n) return false;
-      return !(n.indexOf('M3M') !== -1 || n.indexOf('MULTISPECTRAL') !== -1 || n.indexOf('MATRICE 3M') !== -1 ||
-               n.indexOf('M4TD') !== -1 || n.indexOf('MATRICE 4TD') !== -1 ||
-               n.indexOf('M4T') !== -1  || n.indexOf('MATRICE 4T') !== -1 ||
-               n.indexOf('M4E') !== -1  || n.indexOf('MATRICE 4E') !== -1 ||
-               n.indexOf('M400') !== -1 || n.indexOf('MATRICE 400') !== -1 ||
-               n.indexOf('DOCK') !== -1);
-    });
+    var hasUnknown = false;
+    if (modelCell) {
+      hasUnknown = modelCell.split('\n').some(function(line) {
+        var n = (line.split('*')[0] || '').trim().toUpperCase();
+        if (!n) return false;
+        return !(n.indexOf('M3M') !== -1 || n.indexOf('MULTISPECTRAL') !== -1 || n.indexOf('MATRICE 3M') !== -1 ||
+                 n.indexOf('M4TD') !== -1 || n.indexOf('MATRICE 4TD') !== -1 ||
+                 n.indexOf('M4T') !== -1  || n.indexOf('MATRICE 4T') !== -1 ||
+                 n.indexOf('M4E') !== -1  || n.indexOf('MATRICE 4E') !== -1 ||
+                 n.indexOf('M400') !== -1 || n.indexOf('MATRICE 400') !== -1 ||
+                 n.indexOf('DOCK') !== -1);
+      });
+    }
+    m.hasIssue = hasUnknown || !!m.unmatchedRowNo;
     if (hasUnknown) unknownModelRows.push(i + 1);
+  });
+
+  // กลุ่ม Dealer ที่พบในไฟล์นี้ (รวมแถวที่จับคู่ Dealer ไม่ได้เลยเป็นกลุ่ม "(ไม่มี Dealer)") — ใช้สร้าง chip กรอง
+  var dealerBuckets = {};
+  var dealerBucketOrder = [];
+  rowMeta.forEach(function(m) {
+    var key = m.dealer ? m.dealer.id : '__none__';
+    if (!dealerBuckets[key]) {
+      dealerBuckets[key] = { label: m.dealer ? m.dealer.name : '(ไม่มี Dealer)', count: 0 };
+      dealerBucketOrder.push(key);
+    }
+    dealerBuckets[key].count++;
+    m.dealerKey = key;
   });
 
   var h = '<div>';
@@ -4606,15 +4625,49 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   });
   h += '</div>';
 
+  // ── กรองตาม Dealer (chip เลือกได้หลายอัน) — โชว์เฉพาะตอนมีมากกว่า 1 Dealer ในไฟล์ ไม่งั้นไม่มีอะไรให้กรอง ──
+  if (dealerBucketOrder.length > 1) {
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:5px">🏪 กรองตาม Dealer</div>';
+    h += '<div id="pipeDealerChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:5px">';
+    dealerBucketOrder.forEach(function(key) {
+      var b = dealerBuckets[key];
+      h += '<button class="pipe-dealer-chip" data-key="' + sanitize(key) + '" onclick="_pipeToggleDealerFilterChip(\'' + key.replace(/'/g, "\\'") + '\')" style="padding:4px 10px;border-radius:999px;font-size:11px;border:1px solid var(--border-strong,var(--border));background:var(--accent,#3b82f6);color:#fff;cursor:pointer">' + sanitize(b.label) + ' (' + b.count + ')</button>';
+    });
+    h += '</div>';
+    h += '<div style="display:flex;gap:10px;margin-bottom:10px">';
+    h += '<button onclick="_pipeDealerFilterAll()" style="font-size:11px;background:none;border:none;color:var(--accent,#3b82f6);cursor:pointer;padding:0">เลือกทั้งหมด</button>';
+    h += '<button onclick="_pipeDealerFilterNone()" style="font-size:11px;background:none;border:none;color:var(--accent,#3b82f6);cursor:pointer;padding:0">ล้างทั้งหมด</button>';
+    h += '</div>';
+  }
+
+  // ── ตัวกรอง/ค้นหา/เรียงเพิ่มเติม ──────────────────────────────────
+  h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">';
+  h += '<input type="text" id="pipeImportSearch" placeholder="🔍 ค้นหา Project Name / Row No." oninput="_pipeImportSearchInput(this.value)" style="flex:1;min-width:160px;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">';
+  h += '<select id="pipeImportSort" onchange="_pipeImportSortChange(this.value)" style="font-size:12px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">';
+  h += '<option value="rowno">เรียง: Row No.</option>';
+  h += '<option value="fc_desc">เรียง: Forecast มาก→น้อย</option>';
+  h += '<option value="fc_asc">เรียง: Forecast น้อย→มาก</option>';
+  h += '</select>';
+  h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" id="pipeImportIssuesOnly" onchange="_pipeApplyImportFilters()" style="width:auto">แสดงเฉพาะแถวที่มีปัญหา</label>';
+  h += '</div>';
+
+  // ── การ์ดสรุปตามตัวกรองปัจจุบัน (อัปเดตสดทุกครั้งที่กรอง) ──────────
+  h += '<div id="pipeImportSummary" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px"></div>';
+
   if (counts['changed'] || counts['same']) {
-    h += '<div style="font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px">';
+    h += '<div style="font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
     h += '<span style="color:var(--text2)">ปรับทั้งหมด:</span>';
     h += '<select onchange="_pipeImportBulkAct(this.value)" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">';
     h += '<option value="">— เลือก —</option>';
     h += '<option value="update">✏️ อัปเดตทุกรายการ</option>';
     h += '<option value="add">➕ เพิ่มใหม่ทุกรายการ (ยอมซ้ำ)</option>';
     h += '<option value="skip">⏭ ข้ามทุกรายการ</option>';
-    h += '</select></div>';
+    h += '</select>';
+    h += '<select id="pipeBulkScope" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">';
+    h += '<option value="filtered">เฉพาะแถวที่กรองอยู่</option>';
+    h += '<option value="all">ทั้งไฟล์</option>';
+    h += '</select>';
+    h += '</div>';
   }
 
   h += '<div style="max-height:420px;overflow-y:auto;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">';
@@ -4625,7 +4678,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     '<th style="padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);text-align:left">Dealer</th>' +
     '<th style="padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);text-align:right">Forecast</th>' +
     '<th style="padding:6px 10px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);text-align:left">การดำเนินการ</th>' +
-    '</tr></thead><tbody>';
+    '</tr></thead><tbody id="pipeImportRowsBody">';
   rowMeta.forEach(function(m, i) {
     var r = m.row;
     var fc = parseFloat((_pipeCol(r, colMap, 'forecastAmount') || '').replace(/,/g, '')) || 0;
@@ -4650,7 +4703,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
         '<option value="update"' + (defAct === 'update' ? ' selected' : '') + '>✏️ อัปเดต</option>' +
         '<option value="skip"'   + (defAct === 'skip'   ? ' selected' : '') + '>⏭ ข้าม</option>' +
       '</select>';
-    h += '<tr data-pstate="' + m.state + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
+    h += '<tr data-pstate="' + m.state + '" data-idx="' + i + '" data-dealer="' + sanitize(m.dealerKey) + '" data-issue="' + (m.hasIssue ? '1' : '0') + '" data-name="' + sanitize((rProjectName || rEndUserTH || '').toLowerCase()) + '" data-rowno="' + sanitize(_pipeCol(r, colMap, 'rowNo') || '') + '" data-forecast="' + fc + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
       '<td style="padding:5px 10px;text-align:center;white-space:nowrap">' + badge + diffBtn + '</td>' +
       '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(_pipeCol(r, colMap, 'rowNo') || '-') + '</td>' +
       '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((rProjectName || rEndUserTH || '')) + '">' + nameDisplay + '</td>' +
@@ -4728,26 +4781,113 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, colMap: colMap };
   openM('📂 Preview: Import Pipeline จาก Excel', h);
   setMWide(960);
+  _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '' }; // dealers: null = ทุกตัวถูกเลือก
   _pipeImportSetFilter('all');
 }
 
-// สลับ tab กรองสถานะในตาราง preview import — 'all' โชว์ทุกแถว รวม missing block ด้วย
+// สถานะตัวกรองปัจจุบันของ preview import — reset ใหม่ทุกครั้งที่เปิด preview (ดู _showPipeXlsxPreview)
+// dealers: null = ทุก Dealer ถูกเลือกอยู่ (ค่าเริ่มต้น), object {key: false} = ตัวที่ถูกเอาออกจากตัวกรอง
+var _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '' };
+
+// สลับ tab กรองสถานะ — ยังทำงานร่วมกับตัวกรองอื่น (Dealer/ค้นหา/มีปัญหา) ผ่าน _pipeApplyImportFilters
 function _pipeImportSetFilter(state) {
-  var trs = document.querySelectorAll('#mBd tr[data-pstate]');
-  trs.forEach(function(tr) {
-    var match = state === 'all' || tr.getAttribute('data-pstate') === state;
-    if (tr.id && tr.id.indexOf('pipeDiffRow_') === 0) {
-      tr.style.display = 'none'; // พับ diff กลับทุกครั้งที่สลับแท็บ
-    } else {
-      tr.style.display = match ? '' : 'none';
-    }
-  });
+  _pipeImportFilter.status = state;
   var missingBlock = document.getElementById('pipeMissingBlock');
   if (missingBlock) missingBlock.style.display = (state === 'all' || state === 'missing') ? '' : 'none';
   ['all', 'new', 'changed', 'same', 'missing'].forEach(function(k) {
     var btn = document.getElementById('pipeFTab_' + k);
     if (btn) btn.style.border = (k === state) ? '1px solid var(--border-strong,var(--border))' : '1px solid transparent';
   });
+  _pipeApplyImportFilters();
+}
+
+function _pipeRenderDealerChips() {
+  document.querySelectorAll('.pipe-dealer-chip').forEach(function(el) {
+    var key = el.getAttribute('data-key');
+    var on = !_pipeImportFilter.dealers || _pipeImportFilter.dealers[key] !== false;
+    el.style.background = on ? 'var(--accent,#3b82f6)' : 'var(--bg)';
+    el.style.color = on ? '#fff' : 'var(--text2)';
+    el.style.borderColor = on ? 'var(--accent,#3b82f6)' : 'var(--border-strong,var(--border))';
+  });
+}
+
+function _pipeToggleDealerFilterChip(key) {
+  if (!_pipeImportFilter.dealers) {
+    var all = {};
+    document.querySelectorAll('.pipe-dealer-chip').forEach(function(el) { all[el.getAttribute('data-key')] = true; });
+    _pipeImportFilter.dealers = all;
+  }
+  _pipeImportFilter.dealers[key] = !_pipeImportFilter.dealers[key];
+  _pipeRenderDealerChips();
+  _pipeApplyImportFilters();
+}
+
+function _pipeDealerFilterAll() {
+  _pipeImportFilter.dealers = null;
+  _pipeRenderDealerChips();
+  _pipeApplyImportFilters();
+}
+
+function _pipeDealerFilterNone() {
+  var none = {};
+  document.querySelectorAll('.pipe-dealer-chip').forEach(function(el) { none[el.getAttribute('data-key')] = false; });
+  _pipeImportFilter.dealers = none;
+  _pipeRenderDealerChips();
+  _pipeApplyImportFilters();
+}
+
+function _pipeImportSearchInput(v) {
+  _pipeImportFilter.search = (v || '').trim().toLowerCase();
+  _pipeApplyImportFilters();
+}
+
+function _pipeImportSortChange(v) {
+  _pipeImportFilter.sort = v;
+  _pipeApplyImportFilters();
+}
+
+// ตัวกรองรวม (สถานะ/Dealer/ค้นหา/เฉพาะแถวมีปัญหา) + เรียงลำดับ + อัปเดตการ์ดสรุป — เรียกทุกครั้งที่ตัวกรองไหนเปลี่ยน
+// พับ diff row (🔍 ดูการเปลี่ยนแปลง) กลับเสมอทุกครั้งที่กรองใหม่ เหมือนพฤติกรรมเดิม ไม่ได้ตัดปุ่มนี้ออก
+function _pipeApplyImportFilters() {
+  var st = _pipeImportFilter;
+  var tbody = document.getElementById('pipeImportRowsBody');
+  if (!tbody) return;
+  var mainRows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-pstate]')).filter(function(tr) {
+    return tr.id.indexOf('pipeDiffRow_') !== 0;
+  });
+
+  // เรียงลำดับก่อน (ย้ายทั้งแถวหลัก + แถว diff คู่กันไปด้วย)
+  var sorted = mainRows.slice();
+  if (st.sort === 'fc_desc') sorted.sort(function(a, b) { return (parseFloat(b.getAttribute('data-forecast')) || 0) - (parseFloat(a.getAttribute('data-forecast')) || 0); });
+  else if (st.sort === 'fc_asc') sorted.sort(function(a, b) { return (parseFloat(a.getAttribute('data-forecast')) || 0) - (parseFloat(b.getAttribute('data-forecast')) || 0); });
+  else sorted.sort(function(a, b) { return (a.getAttribute('data-rowno') || '').localeCompare(b.getAttribute('data-rowno') || '', undefined, { numeric: true }); });
+  sorted.forEach(function(tr) {
+    tbody.appendChild(tr);
+    var diffTr = document.getElementById('pipeDiffRow_' + tr.getAttribute('data-idx'));
+    if (diffTr) tbody.appendChild(diffTr);
+  });
+
+  var issuesOnlyEl = document.getElementById('pipeImportIssuesOnly');
+  var issuesOnly = issuesOnlyEl && issuesOnlyEl.checked;
+  var visibleCount = 0, visibleForecast = 0;
+  mainRows.forEach(function(tr) {
+    var dealerOk = !st.dealers || st.dealers[tr.getAttribute('data-dealer')] !== false;
+    var statusOk = st.status === 'all' || tr.getAttribute('data-pstate') === st.status;
+    var issueOk = !issuesOnly || tr.getAttribute('data-issue') === '1';
+    var searchOk = !st.search || tr.getAttribute('data-name').indexOf(st.search) !== -1 || tr.getAttribute('data-rowno').toLowerCase().indexOf(st.search) !== -1;
+    var show = dealerOk && statusOk && issueOk && searchOk;
+    tr.style.display = show ? '' : 'none';
+    if (show) { visibleCount++; visibleForecast += parseFloat(tr.getAttribute('data-forecast')) || 0; }
+    var diffTr = document.getElementById('pipeDiffRow_' + tr.getAttribute('data-idx'));
+    if (diffTr) diffTr.style.display = 'none'; // พับกลับทุกครั้งที่กรองใหม่
+  });
+
+  var summaryEl = document.getElementById('pipeImportSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML =
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:var(--text2)">โครงการที่กรองอยู่</div><div style="font-size:18px;font-weight:700">' + visibleCount + '</div></div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:var(--text2)">รวม Forecast</div><div style="font-size:18px;font-weight:700">' + fmtMoneyShort(visibleForecast) + '</div></div>';
+  }
 }
 
 function _pipeMissingChkAll(checked) {
@@ -4761,9 +4901,14 @@ function _pipeMissingChkAll(checked) {
 
 function _pipeImportBulkAct(val) {
   if (!val) return;
+  var scopeEl = document.getElementById('pipeBulkScope');
+  var scope = scopeEl ? scopeEl.value : 'filtered';
   var i = 0;
   while (document.getElementById('pipeRowAct_' + i)) {
-    document.getElementById('pipeRowAct_' + i).value = val;
+    var sel = document.getElementById('pipeRowAct_' + i);
+    var tr = sel.closest('tr');
+    var visible = !tr || tr.style.display !== 'none';
+    if (scope === 'all' || visible) sel.value = val;
     i++;
   }
 }
