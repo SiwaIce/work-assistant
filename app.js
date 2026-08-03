@@ -1038,11 +1038,15 @@ function updBdg() {
 // ================================================================
 // BACKUP REMINDER
 // ================================================================
+// กด "ไว้ทีหลัง" แล้วเงียบไป 1 วัน กันไม่ให้เด้งซ้ำทุกครั้งที่มีการ sync/export (ก่อนหน้านี้ dismissBackup()
+// แค่ซ่อนแถบของ render รอบนั้น พอฟังก์ชันนี้ถูกเรียกใหม่ (เช่นหลัง sync ขึ้น cloud) วันยังไม่ครบ 7 ก็เลยเด้งกลับ
+// มาทันทีอีกรอบ — ตอนนี้เก็บเวลาที่กด "ไว้ทีหลัง" ไว้ ถ้ายังไม่ครบ 1 วันนับจากนั้นจะไม่โชว์ซ้ำ
 function checkBackupReminder() {
   var days = ST.getDaysSinceBackup();
   var bar = document.getElementById('backupBar');
   if (!bar) return;
-  if (days >= 7) {
+  var snoozeUntil = localStorage.getItem('v7_backupSnoozeUntil');
+  if (days >= 7 && (!snoozeUntil || new Date() >= new Date(snoozeUntil))) {
     bar.style.display = 'flex';
     var el = document.getElementById('backupDays');
     if (el) el.textContent = days;
@@ -1050,7 +1054,11 @@ function checkBackupReminder() {
 }
 
 function goExport() { document.getElementById('backupBar').style.display = 'none'; go('exports'); }
-function dismissBackup() { document.getElementById('backupBar').style.display = 'none'; }
+function dismissBackup() {
+  document.getElementById('backupBar').style.display = 'none';
+  var snoozeUntil = new Date(Date.now() + 86400000); // เงียบไป 1 วัน
+  localStorage.setItem('v7_backupSnoozeUntil', snoozeUntil.toISOString());
+}
 
 // ================================================================
 // EMAIL DRAFT

@@ -172,7 +172,15 @@ function doGuestViewLogin(presetPin) {
   var main = document.getElementById('main');
   if (main) main.style.display = 'flex';
   var banner = document.getElementById('guestViewBanner');
-  if (banner) banner.style.display = 'flex';
+  if (banner) {
+    banner.style.display = 'flex';
+    // วัดความสูงจริงของแถบแล้วเผื่อที่ให้ sidebar/topbar/เนื้อหาไม่โดนทับ (เดิม banner เป็น position:fixed
+    // ลอยทับ sidebar/topbar อยู่ตรงๆ ไม่มีการเผื่อที่เลย) — รอ 1 frame ให้ display:flex มีผลก่อนค่อยวัด offsetHeight
+    requestAnimationFrame(function() {
+      document.documentElement.style.setProperty('--top-banner-h', banner.offsetHeight + 'px');
+      document.body.classList.add('top-banner-active');
+    });
+  }
   var bannerText = document.getElementById('guestViewBannerText');
   if (bannerText) {
     var editNames = GUEST_VIEW_EDIT_MENUS.map(function(id) {
