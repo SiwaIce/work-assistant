@@ -4132,14 +4132,100 @@ function _pipeDateFromPaste(s, refDateISO) {
   return '';
 }
 
+// ================================================================
+// COLUMN MAPPING (จับคู่ตามชื่อหัวข้อ แทนตำแหน่งคงที่) — แก้ปัญหาเดิมที่ทุกครั้งที่ Google Sheet ต้นฉบับ
+// สลับ/แทรก/ลบคอลัมน์ ต้องไล่แก้เลข index เองทุกจุดในไฟล์นี้ (เสี่ยงพลาดจุดใดจุดหนึ่งแล้วข้อมูลเงียบๆ ไม่อัปเดต)
+// ตอนนี้ import จะอ่านแถวหัวตารางจริงจากไฟล์ก่อนเสมอ จับคู่ชื่อหัวข้อ (exact/startsWith แบบ normalize
+// เท่านั้น ไม่มีการเดา/fuzzy) กับรายชื่อที่รู้จัก แล้วค่อยไปหยิบค่าตามตำแหน่งที่จับคู่ได้จริง — สลับ/แทรก/ลบ
+// คอลัมน์ที่ไม่ได้ track ในชีตแล้วไม่ต้องแก้โค้ดจุดไหนเลย ส่วน export (PIPE_SHEET_HEADERS/_pipeRowFields)
+// ยังคงสร้างหัวตารางตามลำดับคงที่เหมือนเดิม (ไม่จำเป็นต้องยืดหยุ่นฝั่ง export เพราะแอปเป็นคนสร้างเองทุกครั้ง)
+// ================================================================
+var _PIPE_IMPORT_COLS = [
+  { key: 'rowNo',             label: 'ROW NO.' },
+  { key: 'registerDate',      label: 'Register Date' },
+  { key: 'projectId',         label: 'Project ID' },
+  { key: 'projectName',       label: 'Project Name', required: true },
+  { key: 'endUserTH',         label: 'End User Name' },
+  { key: 'endUserEN',         label: 'End User Name Eng' },
+  { key: 'unitType',          label: 'Unit type' },
+  { key: 'dealerName',        label: 'Dealer Name' },
+  { key: 'djiDealer',         label: 'DJI Dealer' },
+  { key: 'projectRevenue',    label: 'Project revenue' },
+  { key: 'model',             label: 'Model' },
+  { key: 'm3m',                label: 'M3M Qty.' },
+  { key: 'm4t',                label: 'M4T Qty.' },
+  { key: 'm4e',                label: 'M4E Qty.' },
+  { key: 'dock3',              label: 'Dock 3 Qty.' },
+  { key: 'm4td',               label: 'M4TD Qty.' },
+  { key: 'm400',               label: 'M400 Qty.' },
+  { key: 'forecastAmount',    label: 'Forecast Amount' },
+  { key: 'realAmount',        label: 'Real Amount' },
+  { key: 'tor',                label: 'TOR' },
+  { key: 'biddingDate',       label: 'Bidding Date' },
+  { key: 'forecastMonth',     label: 'Forecast Month' },
+  { key: 'shipmentDate',      label: 'Shipment date' },
+  { key: 'remark',             label: 'Remark' },
+  { key: 'appointmentLetter', label: 'Letter of Authorized' },
+  { key: 'status',             label: 'Status' },
+  { key: 'recurring',          label: 'Duplicate' },
+  { key: 'update1',            label: 'Update 1' },
+  { key: 'update2',            label: 'Update 2' },
+  { key: 'update3',            label: 'Update 3' },
+  { key: 'update4',            label: 'Update 4' },
+  { key: 'update5',            label: 'Update 5' },
+  { key: 'update6',            label: 'Update 6' },
+  { key: 'saleName',           label: 'Sale' },
+  { key: 'sheetDisplay',       label: 'DISPLAY' }
+];
+
+// 6 คอลัมน์ Qty ต่อรุ่นโดรน — แยกจาก _PIPE_IMPORT_COLS เพื่อผูก model name/gKey ไว้ใช้ต่อง่ายๆ
+var _PIPE_MODEL_KEYS = [
+  { key: 'm3m',   model: 'Matrice 3M',  gKey: 'm3m'   },
+  { key: 'm4t',   model: 'Matrice 4T',  gKey: 'm4t'   },
+  { key: 'm4e',   model: 'Matrice 4E',  gKey: 'm4e'   },
+  { key: 'dock3', model: 'Dock 3',      gKey: 'dock3' },
+  { key: 'm4td',  model: 'Matrice 4TD', gKey: 'm4td'  },
+  { key: 'm400',  model: 'Matrice 400', gKey: 'm400'  }
+];
+
+function _pipeNormHeader(s) {
+  return (s || '').toString().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+// สร้าง { map: {key: colIndex}, missingRequired: [label,...] } จากแถวหัวตารางจริงในไฟล์
+// จับคู่แบบ exact หรือ startsWith เท่านั้น (หลัง normalize ตัด \n/เว้นวรรคซ้ำ/ตัวพิมพ์) ไม่มีการเดาข้าม
+function _pipeBuildColMap(headerRow) {
+  var map = {};
+  var used = {};
+  var missingRequired = [];
+  _PIPE_IMPORT_COLS.forEach(function(def) {
+    var want = _pipeNormHeader(def.label);
+    var foundIdx = -1;
+    for (var i = 0; i < headerRow.length; i++) {
+      if (used[i]) continue;
+      var cell = _pipeNormHeader(headerRow[i]);
+      if (cell && (cell === want || cell.indexOf(want) === 0)) { foundIdx = i; break; }
+    }
+    if (foundIdx !== -1) { map[def.key] = foundIdx; used[foundIdx] = true; }
+    else if (def.required) missingRequired.push(def.label);
+  });
+  return { map: map, missingRequired: missingRequired };
+}
+
+// อ่านค่าจากแถวข้อมูลตาม key ที่จับคู่ไว้แล้วใน colMap — คืน '' เสมอถ้าคอลัมน์นั้นไม่พบในไฟล์ (ไม่ throw)
+function _pipeCol(row, colMap, key) {
+  var idx = colMap ? colMap[key] : undefined;
+  return (idx === undefined || idx === -1) ? '' : (row[idx] || '');
+}
+
 function showPastePipelineM(lockDealerId) {
   var lockDealer = lockDealerId ? ST.getOne('dealers', lockDealerId) : null;
   var h = '<div style="max-width:640px">';
   if (lockDealer) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
-  h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปช่วงข้อมูลจาก Excel แล้ววางที่นี่ — เพิ่มใหม่ทุก row · แถว header จะถูกข้ามอัตโนมัติ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ลำดับคอลัมน์: <strong>Register Date | Project ID | Project Name | End User TH | End User EN | Unit type | Dealer Name | DJI Dealer | Project Revenue | Model | M3M Qty | M4T Qty | M4E Qty | Dock3 Qty | M4TD Qty | M400 Qty | Forecast Amount | Real Amount | TOR | Bidding Date | Forecast Month | Shipment Date | Remark | Letter | Status | Duplicate | Update 1–6 | Sale | DISPLAY</strong></p>';
+  h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปมาแบบ "รวมแถวหัวตาราง" ด้วยเสมอ แล้ววางที่นี่ — ระบบจับคู่คอลัมน์จากชื่อหัวข้อ ไม่สนลำดับ/ตำแหน่ง สลับหรือแทรกคอลัมน์อื่นในชีตได้อิสระ</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';
@@ -4155,19 +4241,25 @@ function doPastePipeline() {
   var lockDealerId = (document.getElementById('pastePipeLockDealer') || {}).value || '';
   var rows = _pipeParseTSV(ta.value.trim());
   if (!rows.length) { toast('⚠️ ไม่พบข้อมูล'); return; }
-  if (/project/i.test(rows[0][3] || '')) rows = rows.slice(1);
-  if (!rows.length) { toast('⚠️ ไม่พบข้อมูลหลัง skip header'); return; }
+  var headerRow = rows[0];
+  var dataRows = rows.slice(1);
+  if (!dataRows.length) { toast('⚠️ ไม่พบข้อมูลหลังแถวหัวตาราง'); return; }
+  var colRes = _pipeBuildColMap(headerRow);
+  if (colRes.missingRequired.length) {
+    toast('❌ ไม่พบคอลัมน์ที่จำเป็น: ' + colRes.missingRequired.join(', ') + ' — เช็คว่าวางแถวหัวตารางมาด้วยไหม');
+    return;
+  }
   closeMForce();
-  _pipeResolveUnknownDealersUI(rows, lockDealerId, function(resolvedRows) {
-    _processPipeImportRows(resolvedRows, lockDealerId);
+  _pipeResolveUnknownDealersUI(dataRows, lockDealerId, colRes.map, function(resolvedRows) {
+    _processPipeImportRows(resolvedRows, lockDealerId, null, null, colRes.map);
   });
 }
 
-// ก่อนนำเข้าจริง เช็คก่อนว่าชื่อ Dealer (คอลัมน์ r[7]) ในไฟล์มีชื่อไหนที่ไม่ตรงกับ Dealer ที่มีอยู่แล้วบ้าง
+// ก่อนนำเข้าจริง เช็คก่อนว่าชื่อ Dealer ในไฟล์มีชื่อไหนที่ไม่ตรงกับ Dealer ที่มีอยู่แล้วบ้าง
 // (สะกดเพี้ยน/พิมพ์ไม่ตรง หรือเป็น Dealer ใหม่จริงๆ) ถ้ามี ให้เลือกก่อนว่าจะสร้างใหม่ หรือจับคู่กับของเดิม —
 // กันปัญหา Dealer เพี้ยนแล้ว dealerId ว่างเปล่าไปเงียบๆ ซึ่งทำให้จับคู่โครงการเดิมไม่เจอ (ได้โครงการซ้ำ) ด้วย
 // ถ้าล็อก Dealer ไว้อยู่แล้ว (lockDealerId) ทุกแถวใช้ Dealer เดียวกันหมด ไม่ต้องเช็คชื่อในไฟล์เลย
-function _pipeResolveUnknownDealersUI(rows, lockDealerId, cb) {
+function _pipeResolveUnknownDealersUI(rows, lockDealerId, colMap, cb) {
   if (lockDealerId) { cb(rows); return; }
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
@@ -4175,7 +4267,7 @@ function _pipeResolveUnknownDealersUI(rows, lockDealerId, cb) {
   var unknownNames = [];
   var seen = {};
   rows.forEach(function(r) {
-    var name = (r[7] || '').trim();
+    var name = _pipeCol(r, colMap, 'dealerName').trim();
     if (!name) return;
     var key = name.toLowerCase();
     if (dealerByName[key] || seen[key]) return;
@@ -4202,14 +4294,17 @@ function _pipeResolveUnknownDealersUI(rows, lockDealerId, cb) {
   h += '</div></div>';
 
   window._pipeDealerFixRows = rows;
+  window._pipeDealerFixColMap = colMap;
   window._pipeDealerFixCb = cb;
   openM('🏪 Dealer ที่ยังไม่มีในระบบ', h);
 }
 
 function _pipeApplyDealerFix(count) {
   var rows = window._pipeDealerFixRows;
+  var colMap = window._pipeDealerFixColMap;
   var cb = window._pipeDealerFixCb;
   if (!rows) return;
+  var dealerColIdx = colMap ? colMap.dealerName : undefined;
   var nameFix = {}; // ชื่อเดิม (lowercase) → ชื่อจริงที่ควรเขียนกลับเข้าแถว (ของใหม่ที่สร้าง หรือของเดิมที่จับคู่)
   for (var i = 0; i < count; i++) {
     var sel = document.getElementById('pipeDealerFix_' + i);
@@ -4224,12 +4319,15 @@ function _pipeApplyDealerFix(count) {
       if (existDealer) nameFix[origName.toLowerCase()] = existDealer.name;
     }
   }
-  rows.forEach(function(r) {
-    var key = (r[7] || '').trim().toLowerCase();
-    if (nameFix[key]) r[7] = nameFix[key];
-  });
+  if (dealerColIdx !== undefined) {
+    rows.forEach(function(r) {
+      var key = (r[dealerColIdx] || '').trim().toLowerCase();
+      if (nameFix[key]) r[dealerColIdx] = nameFix[key];
+    });
+  }
   closeMForce();
   window._pipeDealerFixRows = null;
+  window._pipeDealerFixColMap = null;
   window._pipeDealerFixCb = null;
   if (typeof cb === 'function') cb(rows);
 }
@@ -4266,13 +4364,19 @@ function importPipelineXlsx(dealerId) {
         // YYYY-MM-DD เองแทน ไม่ผ่านขั้นตอนแปลงเป็นข้อความที่กำกวมเลย
         var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
         rows = rows.map(function(r) { return r.map(_pipeXlsxCellToStr); });
-        // skip header
-        if (rows.length && /project/i.test(rows[0][3] || '')) rows = rows.slice(1);
-        // drop rows with no projectName AND no endUserTH (truly empty)
-        rows = rows.filter(function(r) { return (r[3] || '').trim() || (r[4] || '').trim(); });
         if (!rows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
-        _pipeResolveUnknownDealersUI(rows, dealerId || '', function(resolvedRows) {
-          _showPipeXlsxPreview(resolvedRows, dealerId || '');
+        var headerRow = rows[0];
+        var dataRows = rows.slice(1);
+        var colRes = _pipeBuildColMap(headerRow);
+        if (colRes.missingRequired.length) {
+          toast('❌ ไม่พบคอลัมน์ที่จำเป็น: ' + colRes.missingRequired.join(', ') + ' — เช็คหัวตารางแถวแรกของไฟล์');
+          return;
+        }
+        // drop rows with no projectName AND no endUserTH (truly empty)
+        dataRows = dataRows.filter(function(r) { return _pipeCol(r, colRes.map, 'projectName').trim() || _pipeCol(r, colRes.map, 'endUserTH').trim(); });
+        if (!dataRows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
+        _pipeResolveUnknownDealersUI(dataRows, dealerId || '', colRes.map, function(resolvedRows) {
+          _showPipeXlsxPreview(resolvedRows, dealerId || '', colRes.map);
         });
       } catch(err) {
         toast('❌ อ่านไฟล์ไม่ได้: ' + err.message);
@@ -4282,17 +4386,6 @@ function importPipelineXlsx(dealerId) {
   };
   input.click();
 }
-
-// idx เลื่อน +1 จากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เป็นคอลัมน์แรกสุดของชีต, แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID
-// เข้าไประหว่าง Register Date กับ Project Name
-var _PIPE_MODEL_COLS = [
-  { idx: 11, model: 'Matrice 3M',  gKey: 'm3m'   },
-  { idx: 12, model: 'Matrice 4T',  gKey: 'm4t'   },
-  { idx: 13, model: 'Matrice 4E',  gKey: 'm4e'   },
-  { idx: 14, model: 'Dock 3',      gKey: 'dock3'  },
-  { idx: 15, model: 'Matrice 4TD', gKey: 'm4td'  },
-  { idx: 16, model: 'Matrice 400', gKey: 'm400'  },
-];
 
 // คอลัมน์ Model ไม่มีราคาติดมาตอน export (ตั้งใจ) — ตอน import ต้องหาราคาคืนเอง กันราคาโดนล้างเป็น 0
 // ลำดับหา: 1) item เดิมของ pipeline นี้ที่ชื่อโมเดลตรงกัน (คงราคาที่เคยตั้งไว้เป๊ะ) 2) แคตตาล็อกสินค้า (โมเดลใหม่ที่ไม่เคยมีมาก่อน)
@@ -4340,43 +4433,44 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 
 // เปรียบเทียบ field สำคัญระหว่าง existing record กับ import row
 // returns 'same' | 'changed'
-// index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO., แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
-function _pipeImportState(existing, c, dealer) {
-  var statusRaw = (c[25] || '').trim();
+// colMap: {key: colIndex} จาก _pipeBuildColMap — อ่านค่าผ่าน _pipeCol(c, colMap, key) เสมอ ไม่ใช้ index ตรงๆ
+function _pipeImportState(existing, c, dealer, colMap) {
+  var statusRaw = _pipeCol(c, colMap, 'status').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
   var textPairs = [
-    [(existing.projectId || ''),          (c[2]  || '')],
-    [(existing.projectName || ''),       (c[3]  || '')],
-    [(existing.endUserTH || ''),          (c[4]  || '')],
-    [(existing.endUserEN || ''),          (c[5]  || '')],
-    [(existing.unitType || ''),           (c[6]  || '')],
-    [(existing.djiDealer || ''),          (c[8]  || '')],
-    [(existing.tor || ''),                (c[19] || '')],
-    [(existing.remark || ''),             (c[23] || '')],
-    [(existing.appointmentLetter || ''),  (c[24] || '')],
-    [(existing.saleName || ''),           (c[33] || '')],
-    [(existing.sheetDisplay || 'Show'),   (c[34] || 'Show') || 'Show'],
-    [(existing.rowNo || ''),               (c[0]  || '')],
+    [(existing.projectId || ''),          _pipeCol(c, colMap, 'projectId')],
+    [(existing.projectName || ''),        _pipeCol(c, colMap, 'projectName')],
+    [(existing.endUserTH || ''),          _pipeCol(c, colMap, 'endUserTH')],
+    [(existing.endUserEN || ''),          _pipeCol(c, colMap, 'endUserEN')],
+    [(existing.unitType || ''),           _pipeCol(c, colMap, 'unitType')],
+    [(existing.djiDealer || ''),          _pipeCol(c, colMap, 'djiDealer')],
+    [(existing.tor || ''),                _pipeCol(c, colMap, 'tor')],
+    [(existing.remark || ''),             _pipeCol(c, colMap, 'remark')],
+    [(existing.appointmentLetter || ''),  _pipeCol(c, colMap, 'appointmentLetter')],
+    [(existing.saleName || ''),           _pipeCol(c, colMap, 'saleName')],
+    [(existing.sheetDisplay || 'Show'),   _pipeCol(c, colMap, 'sheetDisplay') || 'Show'],
+    [(existing.rowNo || ''),              _pipeCol(c, colMap, 'rowNo')],
   ];
   for (var i = 0; i < textPairs.length; i++) {
     if (_pipeNormText(textPairs[i][0]) !== _pipeNormText(textPairs[i][1])) return 'changed';
   }
   if ((existing.dealerId || '') !== (dealer ? dealer.id : '')) return 'changed';
   if ((existing.status || '') !== status) return 'changed';
-  if (!!existing.recurring !== ((c[26] || '').trim().toLowerCase() === 'yes')) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(c[9]))  > 0.001) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(c[17])) > 0.001) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(c[18])) > 0.001) return 'changed';
-  if ((existing.registerDate || '') !== _pipeDateFromPaste(c[1] || '')) return 'changed';
-  if ((existing.biddingDate || '') !== _pipeDateFromPaste(c[20] || '')) return 'changed';
-  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(c[22] || '', _pipeDateFromPaste(c[20] || ''))) return 'changed';
+  if (!!existing.recurring !== (_pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes')) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue')))  > 0.001) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount'))) > 0.001) return 'changed';
+  if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(_pipeCol(c, colMap, 'realAmount'))) > 0.001) return 'changed';
+  var impBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
+  if ((existing.registerDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate'))) return 'changed';
+  if ((existing.biddingDate || '') !== impBiddingDate) return 'changed';
+  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate)) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
-  for (var mi = 0; mi < _PIPE_MODEL_COLS.length; mi++) {
-    var mc = _PIPE_MODEL_COLS[mi];
-    var importQty = parseInt(c[mc.idx]) || 0;
+  for (var mi = 0; mi < _PIPE_MODEL_KEYS.length; mi++) {
+    var mc = _PIPE_MODEL_KEYS[mi];
+    var importQty = parseInt(_pipeCol(c, colMap, mc.key)) || 0;
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) return 'changed';
   }
@@ -4384,49 +4478,50 @@ function _pipeImportState(existing, c, dealer) {
 }
 
 // คืน array ของ field ที่เปลี่ยน [{label, old, newVal}]
-// index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO., แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
-function _pipeImportDiff(existing, c, dealer) {
-  var statusRaw = (c[25] || '').trim();
+// colMap: {key: colIndex} จาก _pipeBuildColMap — อ่านค่าผ่าน _pipeCol(c, colMap, key) เสมอ ไม่ใช้ index ตรงๆ
+function _pipeImportDiff(existing, c, dealer, colMap) {
+  var statusRaw = _pipeCol(c, colMap, 'status').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
   var pairs = [
-    { label: 'Row No.',         old: _pipeNormText(existing.rowNo),             newVal: _pipeNormText(c[0]) },
-    { label: 'Project ID',      old: _pipeNormText(existing.projectId),         newVal: _pipeNormText(c[2]) },
-    { label: 'Project Name',    old: _pipeNormText(existing.projectName),      newVal: _pipeNormText(c[3]) },
-    { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(c[4]) },
-    { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(c[5]) },
-    { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(c[6]) },
+    { label: 'Row No.',         old: _pipeNormText(existing.rowNo),             newVal: _pipeNormText(_pipeCol(c, colMap, 'rowNo')) },
+    { label: 'Project ID',      old: _pipeNormText(existing.projectId),         newVal: _pipeNormText(_pipeCol(c, colMap, 'projectId')) },
+    { label: 'Project Name',    old: _pipeNormText(existing.projectName),      newVal: _pipeNormText(_pipeCol(c, colMap, 'projectName')) },
+    { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserTH')) },
+    { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserEN')) },
+    { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(_pipeCol(c, colMap, 'unitType')) },
     { label: 'Dealer',          old: _pipeNormText((ST.getOne('dealers', existing.dealerId) || {}).name), newVal: _pipeNormText(dealer ? dealer.name : '') },
-    { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(c[8]) },
-    { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(c[19]) },
-    { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(c[23]) },
-    { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(c[24]) },
-    { label: 'Sale Name',       old: _pipeNormText(existing.saleName),          newVal: _pipeNormText(c[33]) },
-    { label: 'Sheet Display',   old: _pipeNormText(existing.sheetDisplay) || 'Show', newVal: _pipeNormText(c[34]) || 'Show' },
+    { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(_pipeCol(c, colMap, 'djiDealer')) },
+    { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(_pipeCol(c, colMap, 'tor')) },
+    { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(_pipeCol(c, colMap, 'remark')) },
+    { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(_pipeCol(c, colMap, 'appointmentLetter')) },
+    { label: 'Sale Name',       old: _pipeNormText(existing.saleName),          newVal: _pipeNormText(_pipeCol(c, colMap, 'saleName')) },
+    { label: 'Sheet Display',   old: _pipeNormText(existing.sheetDisplay) || 'Show', newVal: _pipeNormText(_pipeCol(c, colMap, 'sheetDisplay')) || 'Show' },
     { label: 'Status',          old: (existing.status || ''),                   newVal: status },
-    { label: 'Recurring',       old: String(!!existing.recurring),              newVal: String((c[26] || '').trim().toLowerCase() === 'yes') },
+    { label: 'Recurring',       old: String(!!existing.recurring),              newVal: String(_pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes') },
   ];
   var numPairs = [
-    { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(c[9]) },
-    { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(c[17]) },
-    { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(c[18]) },
+    { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue')) },
+    { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount')) },
+    { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(_pipeCol(c, colMap, 'realAmount')) },
   ];
   var diffs = pairs.filter(function(p) { return p.old !== p.newVal; });
   numPairs.forEach(function(p) {
     if (Math.abs(p.oldN - p.newN) > 0.001) diffs.push({ label: p.label, old: fmtMoney(p.oldN) || '0', newVal: fmtMoney(p.newN) || '0' });
   });
+  var impBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
   var datePairs = [
-    { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(c[1]  || '') },
-    { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: _pipeDateFromPaste(c[20] || '') },
-    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(c[22] || '', _pipeDateFromPaste(c[20] || '')) }
+    { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate')) },
+    { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: impBiddingDate },
+    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate) }
   ];
   datePairs.forEach(function(p) {
     if (p.oldISO !== p.newISO) diffs.push({ label: p.label, old: p.oldISO ? fD(p.oldISO) : '', newVal: p.newISO ? fD(p.newISO) : '' });
   });
   var _ei2 = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei2);
-  _PIPE_MODEL_COLS.forEach(function(mc) {
-    var importQty = parseInt(c[mc.idx]) || 0;
+  _PIPE_MODEL_KEYS.forEach(function(mc) {
+    var importQty = parseInt(_pipeCol(c, colMap, mc.key)) || 0;
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) diffs.push({ label: mc.model + ' (qty)', old: String(existQty), newVal: String(importQty) });
   });
@@ -4434,7 +4529,7 @@ function _pipeImportDiff(existing, c, dealer) {
 }
 
 
-function _showPipeXlsxPreview(rows, dealerId) {
+function _showPipeXlsxPreview(rows, dealerId, colMap) {
   var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
@@ -4452,16 +4547,16 @@ function _showPipeXlsxPreview(rows, dealerId) {
   var counts = { 'new': 0, changed: 0, same: 0 };
   var matchedIds = {};
   var rowMeta = rows.map(function(r) {
-    var d = dealer || dealerByName[((r[7] || '').trim()).toLowerCase()];
-    var existing = _pipeFindExistingForImport(r[0], r[3], r[4], d ? d.id : '', pipeByRowNo, pipeByKey);
-    var state = existing ? _pipeImportState(existing, r, d) : 'new';
-    var diff = state === 'changed' ? _pipeImportDiff(existing, r, d) : [];
+    var d = dealer || dealerByName[(_pipeCol(r, colMap, 'dealerName').trim()).toLowerCase()];
+    var existing = _pipeFindExistingForImport(_pipeCol(r, colMap, 'rowNo'), _pipeCol(r, colMap, 'projectName'), _pipeCol(r, colMap, 'endUserTH'), d ? d.id : '', pipeByRowNo, pipeByKey);
+    var state = existing ? _pipeImportState(existing, r, d, colMap) : 'new';
+    var diff = state === 'changed' ? _pipeImportDiff(existing, r, d, colMap) : [];
     if (existing) matchedIds[existing.id] = true;
     counts[state]++;
     // แถวที่มีเลข Row No. มาด้วยในไฟล์ แต่จับคู่กับโครงการเดิมไม่ได้เลย (ทั้งด้วย Row No. และด้วยชื่อ/End
     // User/Dealer) — เสี่ยงเป็นเคส "จับคู่พลาด" มากกว่าโครงการใหม่จริง (เช่น ชื่อ Dealer สะกดไม่ตรงกับที่มี
     // ในระบบ) ถ้าปล่อยให้ import แบบ "เพิ่มใหม่" ไปเฉยๆ จะได้โครงการซ้ำ ส่วนของเดิมที่ควรถูกอัปเดตจะไม่ขยับเลย
-    var unmatchedRowNo = (!existing && (r[0] || '').trim()) ? (r[0] || '').trim() : '';
+    var unmatchedRowNo = (!existing && _pipeCol(r, colMap, 'rowNo').trim()) ? _pipeCol(r, colMap, 'rowNo').trim() : '';
     return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo };
   });
 
@@ -4476,7 +4571,7 @@ function _showPipeXlsxPreview(rows, dealerId) {
   // เช็คว่ามี model ในช่อง "Model" ที่ไม่ตรงกับ 6 กลุ่มหลัก (จะสูญหายหลัง import)
   var unknownModelRows = [];
   rowMeta.forEach(function(m, i) {
-    var modelCell = (m.row[10] || '').trim();
+    var modelCell = _pipeCol(m.row, colMap, 'model').trim();
     if (!modelCell) return;
     var hasUnknown = modelCell.split('\n').some(function(line) {
       var n = (line.split('*')[0] || '').trim().toUpperCase();
@@ -4533,7 +4628,7 @@ function _showPipeXlsxPreview(rows, dealerId) {
     '</tr></thead><tbody>';
   rowMeta.forEach(function(m, i) {
     var r = m.row;
-    var fc = parseFloat((r[17] || '').replace(/,/g, '')) || 0;
+    var fc = parseFloat((_pipeCol(r, colMap, 'forecastAmount') || '').replace(/,/g, '')) || 0;
     var badge, defAct;
     if (m.state === 'new')          { badge = '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>';       defAct = 'add'; }
     else if (m.state === 'changed') { badge = '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>';  defAct = 'update'; }
@@ -4541,9 +4636,11 @@ function _showPipeXlsxPreview(rows, dealerId) {
     if (m.unmatchedRowNo) {
       badge += ' <span style="color:#ef4444;font-size:10px;font-weight:700" title="แถวนี้มี Row No. ' + sanitize(m.unmatchedRowNo) + ' มาในไฟล์ แต่หาโครงการเดิมที่ตรงกันในระบบไม่เจอเลย (เช็ค Row No./ชื่อ Dealer ให้ตรงกัน ไม่งั้นจะได้โครงการซ้ำแทนที่จะอัปเดตของเดิม)">⚠️ Row No. ไม่พบของเดิม</span>';
     }
-    var nameDisplay = (r[3] || '').trim()
-      ? sanitize(r[3])
-      : '<i style="color:var(--text2)">' + sanitize(r[4] || '-') + '</i>';
+    var rProjectName = _pipeCol(r, colMap, 'projectName');
+    var rEndUserTH = _pipeCol(r, colMap, 'endUserTH');
+    var nameDisplay = rProjectName.trim()
+      ? sanitize(rProjectName)
+      : '<i style="color:var(--text2)">' + sanitize(rEndUserTH || '-') + '</i>';
     var diffBtn = m.state === 'changed'
       ? ' <button onclick="_pipeToggleDiff(' + i + ')" id="pipeDiffBtn_' + i + '" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2)" title="ดูการเปลี่ยนแปลง">🔍 ' + m.diff.length + '</button>'
       : '';
@@ -4555,9 +4652,9 @@ function _showPipeXlsxPreview(rows, dealerId) {
       '</select>';
     h += '<tr data-pstate="' + m.state + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
       '<td style="padding:5px 10px;text-align:center;white-space:nowrap">' + badge + diffBtn + '</td>' +
-      '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(r[0] || '-') + '</td>' +
-      '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((r[3] || r[4] || '')) + '">' + nameDisplay + '</td>' +
-      '<td style="padding:5px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + sanitize(m.dealer ? m.dealer.name : (r[7]||'-')) + '</td>' +
+      '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(_pipeCol(r, colMap, 'rowNo') || '-') + '</td>' +
+      '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((rProjectName || rEndUserTH || '')) + '">' + nameDisplay + '</td>' +
+      '<td style="padding:5px 10px;font-size:12px;color:var(--text2);white-space:nowrap">' + sanitize(m.dealer ? m.dealer.name : (_pipeCol(r, colMap, 'dealerName')||'-')) + '</td>' +
       '<td style="padding:5px 10px;text-align:right;font-size:12px;white-space:nowrap">' + (fc ? fmtMoneyShort(fc) : '-') + '</td>' +
       '<td style="padding:5px 10px">' + sel +
         '<button onclick="_pipeXlsxOpenDetail(' + i + ')" style="display:block;margin-top:3px;font-size:10px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2);width:100%" title="ดู/แก้ไขทุกคอลัมน์">📝 รายละเอียด</button>' +
@@ -4628,7 +4725,7 @@ function _showPipeXlsxPreview(rows, dealerId) {
   h += '<button class="btn bp" style="flex:1" onclick="_doPipeXlsxImport()">📥 นำเข้า ' + rows.length + ' โครงการ</button>';
   h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
   h += '</div></div>';
-  window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes };
+  window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, colMap: colMap };
   openM('📂 Preview: Import Pipeline จาก Excel', h);
   setMWide(960);
   _pipeImportSetFilter('all');
@@ -4681,38 +4778,46 @@ function _pipeToggleDiff(i) {
 }
 
 // ── Detail panel: ดู/แก้ไขทุกคอลัมน์ของแถว xlsx preview ──────────
-// idx ตรงกับ column ในไฟล์ import (มี ROW NO. เป็น col 0) — ดู _processPipeImportRows สำหรับ mapping เต็ม
+// idx ต่อ field ได้จาก colMap ของไฟล์ที่กำลัง import อยู่ (ไม่ใช่ตำแหน่งคงที่) — field ไหนไม่มีคอลัมน์ในไฟล์
+// (colMap ไม่มี key นั้น) จะถูกข้าม ไม่มีให้แก้ในหน้านี้ เพราะไม่รู้จะเขียนกลับตำแหน่งไหน
 var _pipeXlsxDetailIdx = 0;
-function _pipeXlsxDetailFields() {
-  return [
-    {idx:0,  label:'Row No.'},
-    {idx:1,  label:'Register Date', date:true},
-    {idx:2,  label:'Project ID'},
-    {idx:3,  label:'Project Name', wide:true},
-    {idx:4,  label:'End User TH'},
-    {idx:5,  label:'End User EN'},
-    {idx:6,  label:'Unit type'},
-    {idx:7,  label:'Dealer Name'},
-    {idx:8,  label:'DJI Dealer'},
-    {idx:9,  label:'Project Revenue'},
-    {idx:10, label:'Model', wide:true},
-    {idx:11, label:'M3M Qty'},
-    {idx:12, label:'M4T Qty'},
-    {idx:13, label:'M4E Qty'},
-    {idx:14, label:'Dock3 Qty'},
-    {idx:15, label:'M4TD Qty'},
-    {idx:16, label:'M400 Qty'},
-    {idx:17, label:'Forecast Amount'},
-    {idx:18, label:'Real Amount'},
-    {idx:19, label:'TOR'},
-    {idx:20, label:'Bidding Date', date:true},
-    {idx:21, label:'Forecast Month'},
-    {idx:22, label:'Shipment Date', date:true},
-    {idx:23, label:'Remark', wide:true},
-    {idx:24, label:'Letter'},
-    {idx:25, label:'Status'},
-    {idx:33, label:'Sale'}
-  ];
+var _PIPE_DETAIL_FIELD_DEFS = [
+  { key: 'rowNo',             label: 'Row No.' },
+  { key: 'registerDate',      label: 'Register Date', date: true },
+  { key: 'projectId',         label: 'Project ID' },
+  { key: 'projectName',       label: 'Project Name', wide: true },
+  { key: 'endUserTH',         label: 'End User TH' },
+  { key: 'endUserEN',         label: 'End User EN' },
+  { key: 'unitType',          label: 'Unit type' },
+  { key: 'dealerName',        label: 'Dealer Name' },
+  { key: 'djiDealer',         label: 'DJI Dealer' },
+  { key: 'projectRevenue',    label: 'Project Revenue' },
+  { key: 'model',             label: 'Model', wide: true },
+  { key: 'm3m',                label: 'M3M Qty' },
+  { key: 'm4t',                label: 'M4T Qty' },
+  { key: 'm4e',                label: 'M4E Qty' },
+  { key: 'dock3',              label: 'Dock3 Qty' },
+  { key: 'm4td',               label: 'M4TD Qty' },
+  { key: 'm400',               label: 'M400 Qty' },
+  { key: 'forecastAmount',    label: 'Forecast Amount' },
+  { key: 'realAmount',        label: 'Real Amount' },
+  { key: 'tor',                label: 'TOR' },
+  { key: 'biddingDate',       label: 'Bidding Date', date: true },
+  { key: 'forecastMonth',     label: 'Forecast Month' },
+  { key: 'shipmentDate',      label: 'Shipment Date', date: true },
+  { key: 'remark',             label: 'Remark', wide: true },
+  { key: 'appointmentLetter', label: 'Letter' },
+  { key: 'status',             label: 'Status' },
+  { key: 'saleName',           label: 'Sale' }
+];
+function _pipeXlsxDetailFields(colMap) {
+  var out = [];
+  _PIPE_DETAIL_FIELD_DEFS.forEach(function(def) {
+    var idx = colMap ? colMap[def.key] : undefined;
+    if (idx === undefined) return;
+    out.push({ idx: idx, label: def.label, date: def.date, wide: def.wide });
+  });
+  return out;
 }
 
 function _pipeXlsxOpenDetail(i) {
@@ -4756,7 +4861,7 @@ function _pipeXlsxRenderDetail() {
   var grid = document.getElementById('pipeXlsxDetailFields');
   if (!grid) return;
   var h = '';
-  _pipeXlsxDetailFields().forEach(function(f) {
+  _pipeXlsxDetailFields(p.colMap).forEach(function(f) {
     var raw = row[f.idx] || '';
     var inputHtml;
     if (f.date) {
@@ -4787,13 +4892,14 @@ function _doPipeXlsxImport() {
     return el && el.checked;
   }).map(function(mp) { return mp.id; });
   closeMForce();
-  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds);
+  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap);
 }
 
 // ---- core row processor (shared by paste + xlsx) ----
 // actions[i]: null=auto, 'update'=อัปเดตทับ, 'add'=เพิ่มใหม่ยอมซ้ำ, 'skip'=ข้าม
 // deleteIds: array of pipeline IDs to delete (missing from Excel, user-selected)
-function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
+// colMap: {key: colIndex} จาก _pipeBuildColMap
+function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) {
   var lockDealer = lockDealerId ? ST.getOne('dealers', lockDealerId) : null;
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
@@ -4808,22 +4914,21 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
     if (p.rowNo && String(p.rowNo).trim()) pipeByRowNo[String(p.rowNo).trim()] = p;
   });
 
-  // index ทุกตัวใน c[...] เลื่อน +1 จากเดิมเพราะ ROW NO. (c[0]), แล้ว +1 อีกครั้งเพราะเพิ่ม Project ID (c[2])
   var added = 0, updated = 0, skipped = 0;
   rows.forEach(function(c, idx) {
-    var projectId   = (c[2] || '').trim();
-    var projectName = (c[3] || '').trim();
-    var endUserTH   = (c[4] || '').trim();
+    var projectId   = _pipeCol(c, colMap, 'projectId').trim();
+    var projectName = _pipeCol(c, colMap, 'projectName').trim();
+    var endUserTH   = _pipeCol(c, colMap, 'endUserTH').trim();
     if (!projectName && !endUserTH) { skipped++; return; }
 
-    var dealer = lockDealer || dealerByName[((c[7] || '').trim()).toLowerCase()];
-    var existing = _pipeFindExistingForImport(c[0], projectName, endUserTH, dealer ? dealer.id : '', pipeByRowNo, pipeByKey);
+    var dealer = lockDealer || dealerByName[(_pipeCol(c, colMap, 'dealerName').trim()).toLowerCase()];
+    var existing = _pipeFindExistingForImport(_pipeCol(c, colMap, 'rowNo'), projectName, endUserTH, dealer ? dealer.id : '', pipeByRowNo, pipeByKey);
     var existingItems = existing ? existing.items : null;
 
-    // คอลัมน์ Model (c[10]) เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
+    // คอลัมน์ Model เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
     // fallback ไปอ่าน 6 คอลัมน์ Qty สรุปกลุ่ม (ชื่อกลุ่มทั่วไป) เฉพาะกรณีคอลัมน์ Model ว่าง เช่น ไฟล์เก่า/ทีมแก้แต่ตัวเลขสรุปในชีต
     var items = [];
-    var modelCellText = (c[10] || '').trim();
+    var modelCellText = _pipeCol(c, colMap, 'model').trim();
     if (modelCellText) {
       modelCellText.split('\n').forEach(function(line) {
         line = line.trim();
@@ -4836,8 +4941,8 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
         items.push({ model: model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
       });
     } else {
-      _PIPE_MODEL_COLS.forEach(function(m) {
-        var qty = parseInt(c[m.idx]) || 0;
+      _PIPE_MODEL_KEYS.forEach(function(m) {
+        var qty = parseInt(_pipeCol(c, colMap, m.key)) || 0;
         if (qty > 0) {
           var pr = _pipeImportLookupPrice(m.model, existingItems);
           items.push({ model: m.model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
@@ -4845,43 +4950,43 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
       });
     }
 
-    var statusRaw = (c[25] || '').trim();
+    var statusRaw = _pipeCol(c, colMap, 'status').trim();
     var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
     if (!status) status = 'initial';
 
-    var regDate = _pipeDateFromPaste(c[1]);
-    var pipeBiddingDate = _pipeDateFromPaste(c[20]);
+    var regDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate'));
+    var pipeBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
     // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น) — คงค่า djiCrmDate เดิมไว้ถ้ามีอยู่แล้ว
     var crmRegistered = projectId ? true : (existing ? !!existing.djiCrmRegistered : false);
     var crmDate = projectId ? ((existing && existing.djiCrmDate) || regDate || _td()) : (existing ? (existing.djiCrmDate || '') : '');
 
     var pipeData = {
-      rowNo: (c[0] || '').trim(),
+      rowNo: _pipeCol(c, colMap, 'rowNo').trim(),
       registerDate: regDate,
       projectId: projectId,
       projectName: projectName,
-      endUserTH: (c[4] || '').trim(),
-      endUserEN: (c[5] || '').trim(),
-      unitType: (c[6] || '').trim(),
+      endUserTH: endUserTH,
+      endUserEN: _pipeCol(c, colMap, 'endUserEN').trim(),
+      unitType: _pipeCol(c, colMap, 'unitType').trim(),
       dealerId: dealer ? dealer.id : '',
-      djiDealer: (c[8] || '').trim(),
-      projectRevenue: parseFloat((c[9] || '').replace(/,/g, '')) || 0,
+      djiDealer: _pipeCol(c, colMap, 'djiDealer').trim(),
+      projectRevenue: parseFloat(_pipeCol(c, colMap, 'projectRevenue').replace(/,/g, '')) || 0,
       items: items,
       model: items[0] ? items[0].model : '',
       modelQty: items[0] ? items[0].qty : 1,
-      forecastAmount: parseFloat((c[17] || '').replace(/,/g, '')) || 0,
-      realAmount: parseFloat((c[18] || '').replace(/,/g, '')) || 0,
-      tor: (c[19] || '').trim(),
+      forecastAmount: parseFloat(_pipeCol(c, colMap, 'forecastAmount').replace(/,/g, '')) || 0,
+      realAmount: parseFloat(_pipeCol(c, colMap, 'realAmount').replace(/,/g, '')) || 0,
+      tor: _pipeCol(c, colMap, 'tor').trim(),
       biddingDate: pipeBiddingDate,
-      shipmentDate: _pipeDateFromPaste(c[22], pipeBiddingDate),
-      remark: (c[23] || '').trim(),
-      appointmentLetter: (c[24] || '').trim(),
+      shipmentDate: _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), pipeBiddingDate),
+      remark: _pipeCol(c, colMap, 'remark').trim(),
+      appointmentLetter: _pipeCol(c, colMap, 'appointmentLetter').trim(),
       status: status,
-      recurring: (c[26] || '').trim().toLowerCase() === 'yes',
+      recurring: _pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes',
       djiCrmRegistered: crmRegistered,
       djiCrmDate: crmDate,
-      saleName: (c[33] || '').trim(),
-      sheetDisplay: (c[34] || 'Show').trim() || 'Show',
+      saleName: _pipeCol(c, colMap, 'saleName').trim(),
+      sheetDisplay: _pipeCol(c, colMap, 'sheetDisplay').trim() || 'Show',
       nextAction: '', followupDate: ''
     };
 
@@ -4894,8 +4999,8 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds) {
     } else {
       var pipe = ST.add('pipeline', pipeData);
       added++;
-      for (var u = 0; u < 6; u++) {
-        var upd = (c[27 + u] || '').trim();
+      for (var u = 1; u <= 6; u++) {
+        var upd = _pipeCol(c, colMap, 'update' + u).trim();
         if (upd) ST.add('pipeLog', { pipeId: pipe.id, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString() });
       }
     }
