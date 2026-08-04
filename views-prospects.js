@@ -115,7 +115,10 @@ function _prospectCardHtml(p) {
   h += bits.join(' · ');
   h += '</div></div>';
   h += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">';
+  h += '<div style="text-align:right">';
   h += '<span style="background:' + color + '22;color:' + color + ';font-size:10px;padding:3px 9px;border-radius:6px;white-space:nowrap">' + info.icon + ' ' + info.label + '</span>';
+  if (p.stage === 'scheduled' && _prospectNextVisitDate(p.id)) h += '<div style="font-size:10px;color:var(--text2);margin-top:3px">🗓️ ' + fDShort(_prospectNextVisitDate(p.id)) + '</div>';
+  h += '</div>';
   h += '<span style="color:var(--text2)">›</span>';
   h += '</div></div>';
   return h;
@@ -148,7 +151,10 @@ function _prospectTableHtml(shown) {
     } else { h += '<span style="color:var(--text2)">-</span>'; }
     h += '</td>';
     h += '<td style="padding:8px 10px;font-size:12px;color:var(--text2)">' + sanitize(p.source || '-') + '</td>';
-    h += '<td style="padding:8px 10px"><span style="background:' + color + '22;color:' + color + ';font-size:10px;padding:3px 8px;border-radius:6px;white-space:nowrap">' + info.icon + ' ' + info.label + '</span></td>';
+    h += '<td style="padding:8px 10px">' +
+      '<span style="background:' + color + '22;color:' + color + ';font-size:10px;padding:3px 8px;border-radius:6px;white-space:nowrap">' + info.icon + ' ' + info.label + '</span>' +
+      (p.stage === 'scheduled' && _prospectNextVisitDate(p.id) ? '<div style="font-size:10px;color:var(--text2);margin-top:3px;white-space:nowrap">🗓️ ' + fDShort(_prospectNextVisitDate(p.id)) + '</div>' : '') +
+      '</td>';
     h += '<td style="padding:8px 10px;font-size:11px;color:var(--text2)">' + updStr + '</td>';
     h += '</tr>';
   });
@@ -156,6 +162,19 @@ function _prospectTableHtml(shown) {
   h += '<div style="padding:6px 12px;font-size:11px;color:var(--text2);border-top:1px solid var(--border,#334155)">' + shown.length + ' รายการ · คลิกแถวเพื่อดูรายละเอียด</div>';
   h += '</div>';
   return h;
+}
+
+// วันที่นัดเข้าพบล่าสุดที่ยังไม่เสร็จ (status='planned') ของ Lead นี้ — ดึงจาก Visit Plan ที่ผูก prospectId ไว้
+// ใช้กับ Stage "นัดวันเข้าพบ" ให้เห็นวันนัดเลยไม่ต้องเปิดเข้าไปดูรายละเอียด — ถ้ามีหลายนัดเลือกนัดที่ใกล้วันนี้สุด
+// (นัดในอนาคตมาก่อนเสมอ ถ้าไม่มีอนาคตเลยค่อย fallback ไปนัดล่าสุดในอดีต)
+function _prospectNextVisitDate(prospectId) {
+  if (typeof getVisitPlans !== 'function' || !prospectId) return '';
+  var plans = getVisitPlans().filter(function(pl) { return pl.prospectId === prospectId && pl.status === 'planned' && pl.date; });
+  if (!plans.length) return '';
+  plans.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  var today = _td();
+  var upcoming = plans.filter(function(pl) { return pl.date >= today; });
+  return (upcoming[0] || plans[plans.length - 1]).date || '';
 }
 
 function _prospectDaysAgo(iso) {
