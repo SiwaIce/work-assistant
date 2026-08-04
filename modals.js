@@ -1272,6 +1272,9 @@ pipes.sort(function(a, b) {
   return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
 });
   var html = '';
+  if (pipes.length > 4) {
+    html += '<input type="text" placeholder="🔍 ค้นหา Row No. / ชื่อโครงการ..." autocomplete="off" style="margin-bottom:6px" oninput="pipePickerFilterInput(this.value)">';
+  }
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
     var existing = null;
@@ -1295,12 +1298,13 @@ pipes.sort(function(a, b) {
     // Get pending actions
     var pendingActions = getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === 'pending'; });
 
-    html += '<div class="pipe-select-item' + (isSel ? ' selected' : '') + '" id="psi_' + p.id + '">';
-    
+    var pSearchKey = ((p.rowNo || '') + ' ' + (p.projectName || '')).toLowerCase();
+    html += '<div class="pipe-select-item' + (isSel ? ' selected' : '') + '" id="psi_' + p.id + '" data-search="' + sanitize(pSearchKey) + '">';
+
     // Header (clickable)
     html += '<div class="pipe-select-header" onclick="togglePipePickerSelect(\'' + p.id + '\')">';
     html += '<input type="checkbox" class="pipe_chk" value="' + p.id + '"' + (isSel ? ' checked' : '') + ' onclick="event.stopPropagation();togglePipePickerSelect(\'' + p.id + '\')" style="display:inline;width:auto;margin:0">';
-    html += '<span class="pipe-name">' + sanitize((p.projectName || '').substr(0, 35)) + '</span>';
+    html += '<span class="pipe-name">' + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || '').substr(0, 35)) + '</span>';
     html += pipeTag(p.status);
     html += '<span class="pipe-amount">' + fmtMoneyStyled(amt) + '</span>';
     html += '</div>';
@@ -1337,6 +1341,14 @@ pipes.sort(function(a, b) {
 // ⚠️ เคยชื่อ togglePipeSelect ซ้ำกับฟังก์ชันเลือกหลายรายการในตาราง Pipeline (views-pipeline.js) คนละ
 // feature กันเลย — โหลดทีหลังเลยบัง ทำให้ modal เลือกโครงการนี้กดแล้วไม่ทำงาน เปลี่ยนชื่อกันชนกัน
 // (พบ 2026-07-19 ตอนไล่ตรวจฟังก์ชันชื่อซ้ำ)
+function pipePickerFilterInput(v) {
+  var q = (v || '').trim().toLowerCase();
+  document.querySelectorAll('.pipe-select-item').forEach(function(el) {
+    var hit = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+    el.style.display = hit ? '' : 'none';
+  });
+}
+
 function togglePipePickerSelect(pipeId) {
   var item = document.getElementById('psi_' + pipeId);
   var detail = document.getElementById('psd_' + pipeId);
@@ -2066,7 +2078,7 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
   var pipeListOpts = '';
   if (selDealerId) {
     var pipes = ST.pipelineByDealer(selDealerId).filter(pipeIsOpen);
-    pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || p.name || '-') + '">'; }).join('');
+    pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || p.name || '-')) + '">'; }).join('');
     if (selPipeId) {
       var _sp0 = pipes.filter(function(p) { return p.id === selPipeId; })[0] || ST.getOne('pipeline', selPipeId);
       selPipeName = _sp0 ? (_sp0.projectName || _sp0.name || '') : '';
@@ -2233,7 +2245,7 @@ function taskDealerTextChanged() {
   pipeHid.value = ''; // เปลี่ยน Dealer แล้ว โครงการที่เคย resolve ไว้ (ถ้ามี) ผูกกับ Dealer เก่า ต้อง resolve ใหม่
   if (match) {
     var pipes = ST.pipelineByDealer(match.id).filter(pipeIsOpen);
-    pipeDl.innerHTML = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || p.name || '-') + '">'; }).join('');
+    pipeDl.innerHTML = pipes.map(function(p) { return '<option value="' + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || p.name || '-')) + '">'; }).join('');
   } else {
     pipeDl.innerHTML = '';
   }
@@ -2245,7 +2257,12 @@ function taskPipeTextChanged() {
   var txt = document.getElementById('ft_pipe_txt').value.trim();
   var hid = document.getElementById('ft_pipe');
   if (!dealerId || !txt) { hid.value = ''; return; }
-  var match = ST.pipelineByDealer(dealerId).filter(function(p) { return (p.projectName || p.name || '').trim().toLowerCase() === txt.toLowerCase(); })[0];
+  var t = txt.toLowerCase();
+  var match = ST.pipelineByDealer(dealerId).filter(function(p) {
+    var nm = (p.projectName || p.name || '').trim().toLowerCase();
+    var withRowNo = (p.rowNo ? String(p.rowNo).toLowerCase() + ' · ' : '') + nm;
+    return nm === t || withRowNo === t;
+  })[0];
   hid.value = match ? match.id : '';
 }
 
@@ -2269,8 +2286,9 @@ function _resolveTaskDealerPipeForSave() {
 
   if (pipeTxt && !pipeId) {
     if (!dealerId) { alert('กรุณาระบุ Dealer ก่อนสร้างโครงการ Pipeline ใหม่'); return null; }
-    if (!confirm('ยังไม่มีโครงการ "' + pipeTxt + '" ของ Dealer นี้ในระบบ\nต้องการสร้างโครงการ Pipeline ใหม่นี้เลยไหม?')) return null;
-    var newPipe = ST.add('pipeline', { dealerId: dealerId, projectName: pipeTxt, status: 'initial' });
+    var newPipeName = pipeTxt.replace(/^\S+\s*·\s*/, '');
+    if (!confirm('ยังไม่มีโครงการ "' + newPipeName + '" ของ Dealer นี้ในระบบ\nต้องการสร้างโครงการ Pipeline ใหม่นี้เลยไหม?')) return null;
+    var newPipe = ST.add('pipeline', { dealerId: dealerId, projectName: newPipeName, status: 'initial' });
     pipeId = newPipe.id;
   }
 

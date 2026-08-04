@@ -1969,8 +1969,12 @@ function qCmdSearch(q) {
       for (var i = 0; i < pipeline.length; i++) {
         var p = pipeline[i];
         var pname = p.projectName || p.name || '';
-        if (pname.toLowerCase().indexOf(q) !== -1) {
-          results.push({ type: 'pipeline', icon: '📋', name: pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
+        var pd = ST.getOne('dealers', p.dealerId);
+        var pMatch = pname.toLowerCase().indexOf(q) !== -1 ||
+          String(p.rowNo || '').toLowerCase().indexOf(q) !== -1 ||
+          (pd && pd.name || '').toLowerCase().indexOf(q) !== -1;
+        if (pMatch) {
+          results.push({ type: 'pipeline', icon: '📋', name: (p.rowNo ? p.rowNo + ' · ' : '') + pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
         }
       }
     }

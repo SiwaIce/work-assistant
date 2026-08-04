@@ -62,6 +62,7 @@ function _pipeTeamMergedList() {
     var d = ST.getOne('dealers', p.dealerId);
     return {
       id: p.id, dealerName: d ? d.name : '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
+      rowNo: p.rowNo || '',
       forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial',
       model: getPipeModelSummary(p), biddingDate: p.biddingDate || '',
       budgetFiscalYear: p.budgetFiscalYear || '', expectedCloseDate: p.expectedCloseDate || '',
@@ -70,7 +71,7 @@ function _pipeTeamMergedList() {
     };
   });
   var others = (typeof _teamPipelineData !== 'undefined' ? _teamPipelineData : []).map(function(p) {
-    return { id: p.id, dealerName: p.dealerName || p._dealerName || '', projectName: p.projectName || '', endUserTH: p.endUserTH || '',
+    return { id: p.id, dealerName: p.dealerName || p._dealerName || '', projectName: p.projectName || '', rowNo: p.rowNo || '', endUserTH: p.endUserTH || '',
       forecastAmount: Number(p.forecastAmount) || 0, status: p.status || 'initial', model: p.model || '', biddingDate: p.biddingDate || '',
       ownerName: p.ownerName || p._ownerName || '?', _mine: false };
   });
@@ -119,7 +120,8 @@ function rPipelineTeam(el) {
       return (p.projectName || '').toLowerCase().indexOf(q) !== -1 ||
              (p.endUserTH || '').toLowerCase().indexOf(q) !== -1 ||
              (p.dealerName || '').toLowerCase().indexOf(q) !== -1 ||
-             (p.model || '').toLowerCase().indexOf(q) !== -1;
+             (p.model || '').toLowerCase().indexOf(q) !== -1 ||
+             String(p.rowNo || '').toLowerCase().indexOf(q) !== -1;
     });
   }
   if (pipeTeamOwnerFlt !== 'all') list = list.filter(function(p) { return p.ownerName === pipeTeamOwnerFlt; });
@@ -207,7 +209,7 @@ function rPipelineTeam(el) {
   h += '<div id="pipeTeamFilterWrap"' + (!pipeTeamFilterOpen ? ' style="display:none"' : '') + '>';
 
   h += '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">';
-  h += '<input type="text" id="pipeTeamSrc" value="' + sanitize(pipeTeamSearch) + '" placeholder="🔍 ค้นหา Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeTeamSearchInput(this.value)" autocomplete="off">';
+  h += '<input type="text" id="pipeTeamSrc" value="' + sanitize(pipeTeamSearch) + '" placeholder="🔍 ค้นหา Row No. / Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeTeamSearchInput(this.value)" autocomplete="off">';
   h += '<select onchange="pipeTeamSort=this.value;render()" style="min-width:130px">';
   h += '<option value="amount_desc"' + (pipeTeamSort === 'amount_desc' ? ' selected' : '') + '>มูลค่า มากสุด</option>';
   h += '<option value="amount_asc"' + (pipeTeamSort === 'amount_asc' ? ' selected' : '') + '>มูลค่า น้อยสุด</option>';

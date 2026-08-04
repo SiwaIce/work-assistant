@@ -1079,6 +1079,7 @@ function syncMainPipelineToShared() {
         dealerId: p.dealerId || '',
         dealerName: dealerMap[p.dealerId] || '',
         projectName: p.projectName || '',
+        rowNo: p.rowNo || '',
         endUserTH: p.endUserTH || '',
         endUserEN: p.endUserEN || '',
         // ✅ เพิ่มไว้ให้ pipeMatchScore() เทียบ "โครงการชนกัน" ข้ามทีมได้แม่นขึ้น — เดิมไม่มี 3 ฟิลด์นี้

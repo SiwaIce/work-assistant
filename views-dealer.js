@@ -1556,7 +1556,7 @@ function _sfPRFormHtml(d) {
   var e = sfPREditId ? (ST.filter('customerForecasts', function(f) { return f.id === sfPREditId; })[0] || {}) : {};
   var pipes = ST.pipelineByDealer(d.id).filter(pipeIsOpen);
   var linkedPipe = e.pipeId ? ST.getOne('pipeline', e.pipeId) : null;
-  var pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize(p.projectName || '-') + '" data-id="' + p.id + '">'; }).join('');
+  var pipeListOpts = pipes.map(function(p) { return '<option value="' + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || '-')) + '" data-id="' + p.id + '">'; }).join('');
 
   var html = '<div class="li" style="background:var(--bg2);border:1px dashed var(--border)">' +
     '<div class="fg" style="margin-bottom:6px"><label style="font-size:.64rem">🔗 ชื่อโครงการ (พิมพ์ค้นหา — ตรงชื่อ Pipeline ที่มีอยู่จะผูกให้อัตโนมัติ)</label>' +
@@ -1610,7 +1610,7 @@ function saveSalesForecastPR(dealerId) {
   var pipeId = document.getElementById('sf_pr_pipeid').value;
   data.pipeId = pipeId || '';
   if (!pipeId) {
-    var projName = document.getElementById('sf_pr_pipetxt').value.trim();
+    var projName = document.getElementById('sf_pr_pipetxt').value.trim().replace(/^\S+\s*·\s*/, '');
     if (!projName) return alert('ใส่ชื่อโครงการ หรือผูก Pipeline');
     data.projectName = projName;
     data.totalQty = Number(document.getElementById('sf_pr_qty').value) || 0;
