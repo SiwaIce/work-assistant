@@ -334,7 +334,7 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
-    '<div class="fg"></div></div>' +
+    '<div class="fg"><label>🎯 Project POS (%) <small style="color:var(--text2)">(โอกาสได้งาน)</small></label><input type="number" id="fp_pos" min="0" max="100" value="' + (p.projectPOS || '') + '" placeholder="0-100"></div></div>' +
     (function() {
       var hasAdvData = !!(p.budgetFiscalYear || p.djiCrmRegistered || p.hasCompetitor || p.projectRevenue || p.sheetDisplay === 'Hide');
       return '<div class="form-section" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="_toggleFormSection(\'fp_adv_wrap\',this)">⚙️ ปีงบประมาณ / CRM / ข้อมูลภายใน <span style="font-size:11px;font-weight:400;color:var(--text2)">' + (hasAdvData ? '▲ ซ่อน' : '▼ แสดง') + '</span></div>' +
@@ -883,6 +883,7 @@ function _finishSavePipeline(dealerId, eid) {
     shipmentDate: dpG('fp_ship'),
     expectedCloseDate: dpG('fp_close'),
     appointmentLetter: document.getElementById('fp_appt').value,
+    projectPOS: document.getElementById('fp_pos') ? (parseInt(document.getElementById('fp_pos').value) || 0) : 0,
     status: document.getElementById('fp_status').value,
     followupDate: dpG('fp_fudate'),
     recurring: document.querySelector('input[name="fp_rec"]:checked') ? document.querySelector('input[name="fp_rec"]:checked').value === '1' : false,

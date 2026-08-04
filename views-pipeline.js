@@ -1610,7 +1610,7 @@ function renderPipeTable(pipes) {
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 // คอลัมน์มาตรฐานของตาราง Pipeline แบบเต็ม — ใช้ร่วมกันทั้ง CSV export และมุมมอง Sheet บนจอ
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project ID','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project ID','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แปลง ROW NO. (คอลัมน์แรก) เป็นชนิดตัวเลขจริงก่อนเขียนไฟล์ xlsx เฉพาะที่เป็นตัวเลขล้วนๆ
 // เหตุผล: aoa_to_sheet เดา cell type จาก JS type ของค่า — p.rowNo เก็บเป็น string เสมอ ถ้าไม่แปลง
@@ -1636,7 +1636,7 @@ function _pipeRowFields(p, excludeTypes) {
   var fields = [
     p.rowNo || '', fD(p.registerDate), p.projectId || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', p.projectRevenue || '', modelCell,
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
-    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
+    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
   ];
   // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
   // คำนวณสดทุกครั้งตอน export เท่านั้น (ไม่แตะ ST.pipeLog จริง) — timeline ในแอปยังเห็นทุก log แยกรายการปกติ
@@ -4173,6 +4173,7 @@ var _PIPE_IMPORT_COLS = [
   { key: 'shipmentDate',      label: 'Shipment date' },
   { key: 'remark',             label: 'Remark' },
   { key: 'appointmentLetter', label: 'Letter of Authorized' },
+  { key: 'projectPOS',         label: 'Project POS' },
   { key: 'status',             label: 'Status' },
   { key: 'recurring',          label: 'Duplicate' },
   { key: 'update1',            label: 'Update 1' },
@@ -4232,7 +4233,7 @@ function showPastePipelineM(lockDealerId) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
   h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปมาแบบ "รวมแถวหัวตาราง" ด้วยเสมอ แล้ววางที่นี่ — ระบบจับคู่คอลัมน์จากชื่อหัวข้อ ไม่สนลำดับ/ตำแหน่ง สลับหรือแทรกคอลัมน์อื่นในชีตได้อิสระ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';
@@ -4511,6 +4512,7 @@ function _pipeImportDiff(existing, c, dealer, colMap) {
     { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue')) },
     { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount')) },
     { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(_pipeCol(c, colMap, 'realAmount')) },
+    { label: 'Project POS',     oldN: _pipeNormNum(existing.projectPOS),      newN: _pipeNormNum(_pipeCol(c, colMap, 'projectPOS')) },
   ];
   var diffs = pairs.filter(function(p) { return p.old !== p.newVal; });
   numPairs.forEach(function(p) {
@@ -4959,6 +4961,7 @@ var _PIPE_DETAIL_FIELD_DEFS = [
   { key: 'shipmentDate',      label: 'Shipment Date', date: true },
   { key: 'remark',             label: 'Remark', wide: true },
   { key: 'appointmentLetter', label: 'Letter' },
+  { key: 'projectPOS',         label: 'Project POS' },
   { key: 'status',             label: 'Status' },
   { key: 'saleName',           label: 'Sale' }
 ];
@@ -5133,6 +5136,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       shipmentDate: _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), pipeBiddingDate),
       remark: _pipeCol(c, colMap, 'remark').trim(),
       appointmentLetter: _pipeCol(c, colMap, 'appointmentLetter').trim(),
+      projectPOS: parseInt(_pipeCol(c, colMap, 'projectPOS')) || 0,
       status: status,
       recurring: _pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes',
       djiCrmRegistered: crmRegistered,
