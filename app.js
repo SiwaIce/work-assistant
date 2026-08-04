@@ -213,6 +213,17 @@ if (typeof document !== 'undefined') {
     var t = e.target;
     if (t && t.classList && t.classList.contains('js-money')) _moneyBlurFmt(t);
   });
+  // Ctrl/Cmd+Enter บันทึกฟอร์มใน modal ได้เลย ไม่ต้องเอื้อมไปกดปุ่ม — ใช้ได้กับทุก modal ที่มีปุ่ม
+  // submit หลักเป็น .btn-full อยู่แล้ว (ไม่ต้องแก้ทีละฟอร์ม)
+  document.addEventListener('keydown', function(e) {
+    if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
+    var mBd = document.getElementById('mBd');
+    var modal = document.getElementById('modal');
+    if (!mBd || !modal || !modal.classList.contains('show')) return;
+    if (!mBd.contains(document.activeElement)) return;
+    var btn = mBd.querySelector('button.btn-full');
+    if (btn) { e.preventDefault(); btn.click(); }
+  });
 }
 // ================================================================
 // DEFAULT CONFIG

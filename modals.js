@@ -151,10 +151,23 @@ function safeModelOptions(selected) {
 // ================================================================
 // DEALER MODAL
 // ================================================================
+// Toggle เปิด/ปิดส่วนที่ยุบไว้ในฟอร์ม (progressive disclosure) — ใช้ร่วมกันได้ทุกฟอร์ม แค่ส่ง id ของ wrapper
+// และ element ของ header เข้ามา (เอาไว้สลับข้อความปุ่ม ▲/▼) ไม่ต้องพึ่ง state ระดับหน้า/re-render ทั้งฟอร์ม
+function _toggleFormSection(wrapId, headerEl) {
+  var wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  var willShow = wrap.style.display === 'none';
+  wrap.style.display = willShow ? '' : 'none';
+  var btn = headerEl ? headerEl.querySelector('span') : null;
+  if (btn) btn.textContent = willShow ? '▲ ซ่อน' : '▼ แสดง';
+}
+
 function showDealerM(eid) {
   var d = eid ? ST.getOne('dealers', eid) : {};
   var cfg = getConfig();
   window._dealerAttach = (d.attachments || []).slice();
+  // Certification มักไม่กรอกตอนสร้าง Dealer ใหม่ — ยุบไว้เป็นค่าเริ่มต้น ถ้าเป็นการแก้ไข Dealer ที่มีข้อมูลอยู่แล้วถึงเปิดโชว์ให้เลย
+  var certHasData = !!(d.dsecStatus || d.crmStatus || d.fh2Status || d.larkStatus || d.dsecCertCount || d.fh2CertCount);
   openM(eid ? '✏️ Dealer' : '➕ เพิ่ม Dealer', '' +
     '<div class="form-section">🏢 ข้อมูลบริษัท</div>' +
     '<div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fd_name" value="' + sanitize(d.name || '') + '"></div>' +
@@ -176,13 +189,15 @@ function showDealerM(eid) {
     '<div class="fr"><div class="fg"><label>Shippto</label><input type="text" id="fd_ship" value="' + (d.shippto || 'NO') + '"></div>' +
     '<div class="fg"><label>📍 Google Map</label><input type="url" id="fd_map" value="' + (d.googleMap || '') + '"></div></div>' +
     attachUploadHtml('_dealerAttach', 'dealers', '📷 รูปหน้าร้าน/ใบรับรอง') +
-    '<div class="form-section">📋 Certification</div>' +
+    '<div class="form-section" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="_toggleFormSection(\'fd_cert_wrap\',this)">📋 Certification <span style="font-size:11px;font-weight:400;color:var(--text2)">' + (certHasData ? '▲ ซ่อน' : '▼ แสดง') + '</span></div>' +
+    '<div id="fd_cert_wrap"' + (certHasData ? '' : ' style="display:none"') + '>' +
     '<div class="fr"><div class="fg"><label>DSEC</label><select id="fd_dsec"><option value="">--</option><option value="pass"' + (d.dsecStatus === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (d.dsecStatus === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (d.dsecStatus === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div>' +
     '<div class="fg"><label>DSEC cert</label><input type="number" id="fd_dsec_n" value="' + (d.dsecCertCount || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>CRM</label><select id="fd_crm"><option value="">--</option><option value="yes"' + (d.crmStatus === 'yes' ? ' selected' : '') + '>ลงทะเบียนแล้ว</option><option value="no"' + (d.crmStatus === 'no' ? ' selected' : '') + '>ยังไม่ลง</option></select></div>' +
     '<div class="fg"><label>FH2</label><select id="fd_fh2"><option value="">--</option><option value="pass"' + (d.fh2Status === 'pass' ? ' selected' : '') + '>ผ่าน</option><option value="fail"' + (d.fh2Status === 'fail' ? ' selected' : '') + '>ไม่ผ่าน</option><option value="pending"' + (d.fh2Status === 'pending' ? ' selected' : '') + '>ยังไม่ทำ</option></select></div></div>' +
     '<div class="fr"><div class="fg"><label>FH2 cert</label><input type="number" id="fd_fh2_n" value="' + (d.fh2CertCount || '') + '"></div>' +
     '<div class="fg"><label>Lark</label><select id="fd_lark"><option value="">--</option><option value="added"' + (d.larkStatus === 'added' ? ' selected' : '') + '>Add แล้ว</option><option value="no"' + (d.larkStatus === 'no' ? ' selected' : '') + '>ยังไม่ Add</option></select></div></div>' +
+    '</div>' +
     '<div class="fr"><div class="fg"><label>Demo Unit</label><input type="text" id="fd_demo" value="' + sanitize(d.demoUnit || '') + '"></div>' +
     '<div class="fg"><label>กลุ่มลูกค้าหลัก</label><input type="text" id="fd_segment" value="' + sanitize(d.customerSegment || '') + '"></div></div>' +
     '<div class="fg"><label>Dock Interest</label><select id="fd_dock"><option value="">--</option><option value="yes"' + (d.dockInterest === 'yes' ? ' selected' : '') + '>มี</option><option value="no"' + (d.dockInterest === 'no' ? ' selected' : '') + '>ไม่มี</option><option value="กำลังดู"' + (d.dockInterest === 'กำลังดู' ? ' selected' : '') + '>กำลังดู</option></select></div>' +
@@ -320,18 +335,24 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"></div></div>' +
-    '<div class="form-section">🏛️ ปีงบประมาณ</div>' +
-    '<div class="fr"><div class="fg"><label>ปีงบประมาณของโครงการ</label><select id="fp_fy">' + fyOptionsHTML(p.budgetFiscalYear, thaiFYFromISO(p.expectedCloseDate || p.biddingDate)) + '</select></div>' +
-    '<div class="fg"></div></div>' +
-    '<div class="form-section">🗂️ CRM & คู่แข่ง</div>' +
-    '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_crm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'fp_crmdate_wrap\').style.display=this.checked?\'\':\'none\'"> ลงทะเบียน CRM ของ DJI แล้ว</label></div>' +
-    '<div id="fp_crmdate_wrap" style="flex:1;' + (p.djiCrmRegistered ? '' : 'display:none') + '">' + dpH('fp_crmdate', p.djiCrmDate || '', 'วันที่ลงทะเบียน') + '</div></div>' +
-    '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_comp"' + (p.hasCompetitor ? ' checked' : '') + ' onchange="document.getElementById(\'fp_compname_wrap\').style.display=this.checked?\'\':\'none\'"> คาดว่ามีคู่แข่ง</label></div>' +
-    '<div class="fg" id="fp_compname_wrap" style="' + (p.hasCompetitor ? '' : 'display:none') + '"><label>ชื่อคู่แข่ง 🔒 (ภายใน — dealer ไม่เห็น)</label><input type="text" id="fp_compname" value="' + sanitize(p.competitorName || '') + '" placeholder="ชื่อคู่แข่ง / รายละเอียด"></div></div>' +
-    '<div class="form-section">📊 ข้อมูลสำหรับ Google Sheet 🔒 (ภายใน — dealer ไม่เห็น)</div>' +
-    '<div class="fr"><div class="fg"><label>Project Revenue (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_projrev" value="' + nmI(p.projectRevenue || '') + '" placeholder="มูลค่ารวมทั้งโปรเจกต์ (DJI+Service+อื่นๆ)"></div>' +
-    '<div class="fg"><label>Sale (ผู้รับผิดชอบ)</label><input type="text" id="fp_sale" value="' + sanitize(eid ? (p.saleName || '') : (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '')) + '"></div></div>' +
-    '<div class="fg"><label>แสดงใน Google Sheet</label><div class="radio-g"><label><input type="radio" name="fp_disp" value="Show"' + (p.sheetDisplay !== 'Hide' ? ' checked' : '') + '><span>Show</span></label><label><input type="radio" name="fp_disp" value="Hide"' + (p.sheetDisplay === 'Hide' ? ' checked' : '') + '><span>Hide</span></label></div></div>' +
+    (function() {
+      var hasAdvData = !!(p.budgetFiscalYear || p.djiCrmRegistered || p.hasCompetitor || p.projectRevenue || p.sheetDisplay === 'Hide');
+      return '<div class="form-section" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="_toggleFormSection(\'fp_adv_wrap\',this)">⚙️ ปีงบประมาณ / CRM / ข้อมูลภายใน <span style="font-size:11px;font-weight:400;color:var(--text2)">' + (hasAdvData ? '▲ ซ่อน' : '▼ แสดง') + '</span></div>' +
+      '<div id="fp_adv_wrap"' + (hasAdvData ? '' : ' style="display:none"') + '>' +
+      '<div class="form-section">🏛️ ปีงบประมาณ</div>' +
+      '<div class="fr"><div class="fg"><label>ปีงบประมาณของโครงการ</label><select id="fp_fy">' + fyOptionsHTML(p.budgetFiscalYear, thaiFYFromISO(p.expectedCloseDate || p.biddingDate)) + '</select></div>' +
+      '<div class="fg"></div></div>' +
+      '<div class="form-section">🗂️ CRM & คู่แข่ง</div>' +
+      '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_crm"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="document.getElementById(\'fp_crmdate_wrap\').style.display=this.checked?\'\':\'none\'"> ลงทะเบียน CRM ของ DJI แล้ว</label></div>' +
+      '<div id="fp_crmdate_wrap" style="flex:1;' + (p.djiCrmRegistered ? '' : 'display:none') + '">' + dpH('fp_crmdate', p.djiCrmDate || '', 'วันที่ลงทะเบียน') + '</div></div>' +
+      '<div class="fr"><div class="fg"><label><input type="checkbox" id="fp_comp"' + (p.hasCompetitor ? ' checked' : '') + ' onchange="document.getElementById(\'fp_compname_wrap\').style.display=this.checked?\'\':\'none\'"> คาดว่ามีคู่แข่ง</label></div>' +
+      '<div class="fg" id="fp_compname_wrap" style="' + (p.hasCompetitor ? '' : 'display:none') + '"><label>ชื่อคู่แข่ง 🔒 (ภายใน — dealer ไม่เห็น)</label><input type="text" id="fp_compname" value="' + sanitize(p.competitorName || '') + '" placeholder="ชื่อคู่แข่ง / รายละเอียด"></div></div>' +
+      '<div class="form-section">📊 ข้อมูลสำหรับ Google Sheet 🔒 (ภายใน — dealer ไม่เห็น)</div>' +
+      '<div class="fr"><div class="fg"><label>Project Revenue (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_projrev" value="' + nmI(p.projectRevenue || '') + '" placeholder="มูลค่ารวมทั้งโปรเจกต์ (DJI+Service+อื่นๆ)"></div>' +
+      '<div class="fg"><label>Sale (ผู้รับผิดชอบ)</label><input type="text" id="fp_sale" value="' + sanitize(eid ? (p.saleName || '') : (typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? (CURRENT_USER.displayName || CURRENT_USER.email || '') : '')) + '"></div></div>' +
+      '<div class="fg"><label>แสดงใน Google Sheet</label><div class="radio-g"><label><input type="radio" name="fp_disp" value="Show"' + (p.sheetDisplay !== 'Hide' ? ' checked' : '') + '><span>Show</span></label><label><input type="radio" name="fp_disp" value="Hide"' + (p.sheetDisplay === 'Hide' ? ' checked' : '') + '><span>Hide</span></label></div></div>' +
+      '</div>';
+    })() +
     attachUploadHtml('_pipeAttach', 'pipeline', '📷 รูปแนบ (TOR/PO/ใบเสนอราคา/หน้างาน)') +
     '<div class="form-section">📅 Follow-up <span style="font-weight:400;font-size:.7rem;color:var(--text2)">— ขั้นตอนต่อไปตอนนี้ใช้ Task แทนแล้ว ไปเพิ่มที่ปุ่ม "📋 เพิ่ม Task" ในหน้ารายละเอียดโครงการ</span></div>' +
     '<div class="fr">' + dpH('fp_fudate', p.followupDate || '', 'Follow-up Date') + '<div class="fg"></div></div>' +
@@ -1619,7 +1640,7 @@ function showLineLogM(dealerId) {
     dpH('fl_d', _td(), 'วันที่') +
     _dealerPickerHtml('fl_dlr', dealerId) +
     '<div class="fg"><label>ประเภท</label><select id="fl_t">' + optionsHTML(cfg.lineLogTypes, '', '--') + '</select></div>' +
-    '<div class="fg"><label>เวลา</label><input type="time" id="fl_time"></div>' +
+    '<div class="fg"><label>เวลา</label><div style="display:flex;gap:6px"><input type="time" id="fl_time" style="flex:1"><button type="button" class="btn bsm bo" onclick="document.getElementById(\'fl_time\').value=new Date().toTimeString().slice(0,5)">⏱️ ตอนนี้</button></div></div>' +
     '<div class="fg"><label>สรุป *</label><textarea id="fl_s" rows="3"></textarea></div>' +
     '<button class="btn bp btn-full" onclick="saveLineLog()">💾 บันทึก</button>');
 }
@@ -2129,6 +2150,10 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
     return '<option value="' + tp.id + '">' + sanitize(tp.name) + ' (' + (tp.steps || []).length + ')</option>';
   }).join('');
 
+  // ฟอร์มยาว — ย้ายฟิลด์ที่ไม่ค่อยได้ใช้ตอนสร้าง Task ใหม่ (URL/Linked items/หมวด/Flow) ไปไว้ใต้ส่วนที่ยุบได้
+  // เปิดให้อัตโนมัติถ้าเป็นการแก้ไข Task ที่มีข้อมูลพวกนี้อยู่แล้ว จะได้ไม่ต้องกดเปิดเองทุกครั้งตอนแก้ไข
+  var ftAdvHasData = !!(t.url || (t.links && t.links.length) || t.category || t.sequential);
+
   openM(eid ? '✏️ งาน' : '➕ งาน', '' +
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="ft_t" value="' + sanitize(t.title || '') + '"></div>' +
     '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>รายละเอียด</label>' +
@@ -2150,8 +2175,6 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
       '<textarea id="ft_bullets" rows="6" placeholder="พิมพ์ 1 บรรทัด = 1 bullet เช่น&#10;โทรลูกค้า A&#10;ส่งใบเสนอราคา B&#10;เช็คสต็อก C"></textarea>' +
       '<div class="hint">💡 แต่ละบรรทัดจะกลายเป็น Step ในงานนี้ — แก้ไขรายละเอียด/วันที่/link ของแต่ละ bullet ได้ทีหลังในหน้า Task</div></div>') +
     '</div>' +
-    '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
-    _taskLinksFieldHtml(t) +
     '<div class="fr">' +
     '<div class="fg"><label>🏪 Dealer</label>' +
     '<input type="text" id="ft_dealer_txt" list="ft_dealer_dl" value="' + sanitize(selDealerName) + '" placeholder="พิมพ์ชื่อ Dealer..." autocomplete="off" oninput="taskDealerTextChanged()">' +
@@ -2174,14 +2197,17 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
     '<option value="medium"' + ((t.priority || 'medium') === 'medium' ? ' selected' : '') + '>🟡 กลาง</option>' +
     '<option value="low"' + (t.priority === 'low' ? ' selected' : '') + '>🟢 ทั่วไป</option>' +
     '</select></div>' +
-    '<div class="fg"><label>หมวด</label><input type="text" id="ft_c" value="' + sanitize(t.category || '') + '" list="catL"><datalist id="catL">' + cats.map(function(c) { return '<option value="' + c + '">'; }).join('') + '</datalist></div>' +
-    '</div>' +
-    '<div class="fr">' +
     '<div class="fg"><label>สถานะ</label><select id="ft_st">' +
     '<option value="active"' + ((t.status || 'active') === 'active' ? ' selected' : '') + '>🔄 ทำ</option>' +
     '<option value="completed"' + (t.status === 'completed' ? ' selected' : '') + '>✅ เสร็จ</option>' +
     '<option value="on-hold"' + (t.status === 'on-hold' ? ' selected' : '') + '>⏸️ พัก</option>' +
     '</select></div>' +
+    '</div>' +
+    '<div class="form-section" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="_toggleFormSection(\'ft_adv_wrap\',this)">⚙️ รายละเอียดเพิ่มเติม <span style="font-size:11px;font-weight:400;color:var(--text2)">' + (ftAdvHasData ? '▲ ซ่อน' : '▼ แสดง') + '</span></div>' +
+    '<div id="ft_adv_wrap"' + (ftAdvHasData ? '' : ' style="display:none"') + '>' +
+    '<div class="fg"><label>🔗 Link (URL)</label><input type="url" id="ft_url" value="' + sanitize(t.url || '') + '" placeholder="https://..."></div>' +
+    _taskLinksFieldHtml(t) +
+    '<div class="fg"><label>หมวด</label><input type="text" id="ft_c" value="' + sanitize(t.category || '') + '" list="catL"><datalist id="catL">' + cats.map(function(c) { return '<option value="' + c + '">'; }).join('') + '</datalist></div>' +
     '<div class="fg"><label>⚡ Flow</label><select id="ft_sq">' +
     '<option value="0"' + (t.sequential ? '' : ' selected') + '>ปิด</option>' +
     '<option value="1"' + (t.sequential ? ' selected' : '') + '>เปิด</option>' +

@@ -603,6 +603,7 @@ function showCreateSOModal(opts) {
   html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
 
   // items
+  html += buildAdminModelDatalist('soItemModelDL');
   html += '<div><label class="lbl">รายการสินค้า *</label><div id="soN_items">';
   var initItems = (opts.presetItems && opts.presetItems.length) ? opts.presetItems
     : (pipe && pipe.model
@@ -768,10 +769,29 @@ function _soFillFromPipe(pipeId) {
 function _soItemRowHtml(idx, model, qty, price, sku) {
   return '<div style="display:flex;gap:6px;margin-bottom:4px;align-items:center" id="soIR_' + idx + '">' +
     '<input type="hidden" id="soI_sku_' + idx + '" value="' + sanitize(sku || '') + '">' +
-    '<input class="inp" style="flex:2" placeholder="Model / สินค้า" value="' + sanitize(model||'') + '" id="soI_m_' + idx + '">' +
+    '<input class="inp" style="flex:2" placeholder="Model / สินค้า" value="' + sanitize(model||'') + '" id="soI_m_' + idx + '" list="soItemModelDL" autocomplete="off" onchange="_soItemModelChanged(\'' + idx + '\')">' +
     '<input class="inp" type="number" style="width:58px" placeholder="จำนวน" value="' + (qty||1) + '" id="soI_q_' + idx + '" min="1">' +
-    '<input class="inp" type="number" style="width:95px" placeholder="ราคา/หน่วย" value="' + (price||0) + '" id="soI_p_' + idx + '">' +
+    '<input class="inp js-money" type="text" inputmode="decimal" style="width:95px" placeholder="ราคา/หน่วย" value="' + (price ? nmI(price) : '') + '" id="soI_p_' + idx + '">' +
     '<button class="btn bd bsm" onclick="this.parentElement.remove()">✕</button></div>';
+}
+
+// พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคา RRP ให้อัตโนมัติถ้าช่องราคายังว่าง
+function _soItemModelChanged(idx) {
+  var mEl = document.getElementById('soI_m_' + idx);
+  var pEl = document.getElementById('soI_p_' + idx);
+  var skuEl = document.getElementById('soI_sku_' + idx);
+  if (!mEl) return;
+  var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(mEl.value.trim()) : null;
+  if (prod) {
+    mEl.value = prod.name;
+    if (skuEl) skuEl.value = prod.sku || '';
+    if (pEl && !pEl.value) {
+      var price = Number(prod.rrpExVat) || Number(prod.price) || 0;
+      if (price > 0) pEl.value = nmI(price);
+    }
+  } else if (skuEl) {
+    skuEl.value = '';
+  }
 }
 
 var _soIC = 0;
@@ -802,7 +822,7 @@ function saveCreateSO() {
     var pEl = row.querySelector('[id^="soI_p_"]');
     var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value)||1, unitPrice: Number(pEl.value)||0, serials:[] });
+    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value)||1, unitPrice: parseNum(pEl.value)||0, serials:[] });
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
@@ -851,6 +871,7 @@ function showSOEditItemsModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var body = '<div class="hint" style="margin-bottom:8px">แก้ไข/เพิ่ม/ลบรายการสินค้าได้อิสระ — ถ้าไม่ตรงกับใบเสนอราคาที่ผูกไว้ ตอนบันทึกจะถามว่าจะแก้ใบเสนอราคาด้วยไหม</div>';
+  body += buildAdminModelDatalist('soItemModelDL');
   body += '<div id="soN_items">';
   (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
   body += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin:8px 0">+ เพิ่มสินค้า</button>';
@@ -869,7 +890,7 @@ function saveSOItemsEdit(soId) {
     var pEl = row.querySelector('[id^="soI_p_"]');
     var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: Number(pEl.value) || 0, serials: [] });
+    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0, serials: [] });
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 

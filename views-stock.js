@@ -1748,7 +1748,11 @@ function showStockAddLotM(sku, code) {
   var isPRPO = code === 'PRPO';
   var isQI = code === 'QI';
   var today = _nw().substring(0, 10);
-  var body = '<div class="fg"><label>จำนวน</label><input type="number" id="lot_qty" min="1" value="1"></div>';
+  var body = '<div class="fg"><label>จำนวน</label>' +
+    '<input type="number" id="lot_qty" min="1" value="1">' +
+    '<div style="display:flex;gap:6px;margin-top:4px">' +
+    [5, 10, 20, 50].map(function(n) { return '<button type="button" class="btn bsm bo" onclick="document.getElementById(\'lot_qty\').value=' + n + '">' + n + '</button>'; }).join('') +
+    '</div></div>';
   if (isBooking) {
     body += _stockSODatalistHtml();
     body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
