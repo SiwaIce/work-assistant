@@ -935,12 +935,27 @@ function showPipeUpdateM(pipeId) {
   openM('📝 อัพเดท Pipeline — ' + (p.projectName || '').substr(0, 30), '' +
     '<div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
     '<div class="fg"><label>ประเภท</label><select id="qu_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
+    '<div class="fg"><label>⚡ Quick Fill</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'ลูกค้ากำลังพิจารณา\')">🤔 กำลังพิจารณา</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'รอ Approve งบประมาณ\')">💰 รอ Approve งบ</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'ส่ง Quote แล้ว รอลูกค้าตอบ\')">📄 ส่ง Quote แล้ว</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'นัดพรีเซนต์/Demo ให้ลูกค้า\')">🎯 นัด Demo</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'แข่งราคากับคู่แข่ง\')">⚔️ แข่งราคา</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'ลูกค้าขอข้อมูล/Spec เพิ่มเติม\')">🚁 ขอ Spec เพิ่ม</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'เลื่อนกำหนดตัดสินใจ\')">📅 เลื่อนตัดสินใจ</button>' +
+    '<button type="button" class="btn-sm" onclick="puQuickFill(\'ติดตามลูกค้า ยังไม่มีความคืบหน้าใหม่\')">🔄 Follow-up</button>' +
+    '</div></div>' +
     '<div class="fg"><label>รายละเอียด <small style="color:#64748b">(ไม่บังคับ ถ้าแค่เปลี่ยน Status)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
     '<div class="fr"><div class="fg"><label>เปลี่ยน Status</label><select id="qu_st"><option value="">-- ไม่เปลี่ยน --</option>' + cfg.pipelineStatuses.map(function(s) { return '<option value="' + s.id + '"' + (p.status === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select></div>' +
     '<div class="fg"></div></div>' +
     dpH('qu_fu', p.followupDate || '', 'Follow-up Date') +
     dpH('qu_d', _td(), 'วันที่บันทึก') +
     '<button class="btn bp btn-full" onclick="savePipeUpdate(\'' + pipeId + '\')">💾 บันทึก</button>');
+}
+
+function puQuickFill(text) {
+  var el = document.getElementById('qu_c');
+  if (el) el.value = text;
 }
 
 function savePipeUpdate(pipeId) {
@@ -1083,7 +1098,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
       ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
       visitPhotoReminderHtml() +
       '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
-      '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' +
+      '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
       '<div id="fv_lead_row"' + (srcType !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' +
       '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(srcType === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>' +
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
@@ -1104,7 +1119,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
     '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
     '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
-    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '><div class="fg"><label>Dealer</label><select id="fv_dealer" onchange="onVisitDealerChanged()">' + dealerOptions(existDealer) + '</select></div></div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
+    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
     '<div class="fg"><label>DJI Dealer</label><select id="fv_djid">' + optionsHTML(cfg.djiDealerTypes, v.djiDealer || (dealer ? dealer.djiDealer : '') || '', '--') + '</select></div></div>' +
@@ -1245,6 +1260,30 @@ function toggleTopicCheck(topicId) {
 }
 
 // Visit Dealer Changed
+// Dealer picker แบบพิมพ์ค้นหา + datalist ใช้ร่วมกันทุกฟอร์ม (Follow-up/LINE Log/Visit ฯลฯ) แทน select ยาวๆ
+// ค่าจริงเก็บใน hidden input #idPrefix (id เดิมเป๊ะ) — โค้ดที่อ่านค่าด้วย document.getElementById(idPrefix).value
+// ที่มีอยู่แล้วทำงานต่อได้เลยไม่ต้องแก้ ไม่รองรับสร้าง Dealer ใหม่จากช่องนี้ (ต่างจาก Task/Pipeline form)
+// ต้องเป็น Dealer ที่มีอยู่แล้วในระบบเท่านั้น — ฟังก์ชันฝั่ง save เดิมเช็ค !did อยู่แล้วถ้าพิมพ์ชื่อไม่ตรง
+function _dealerPickerHtml(idPrefix, dealerId, opts) {
+  opts = opts || {};
+  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var dlOpts = ST.getAll('dealers').map(function(x) { return '<option value="' + sanitize(x.name || '') + '">'; }).join('');
+  var extraOninput = opts.onChange ? (';' + opts.onChange + '()') : '';
+  return '<div class="fg"><label>' + (opts.label || 'Dealer *') + '</label>' +
+    '<input type="text" id="' + idPrefix + '_txt" list="' + idPrefix + '_dl" value="' + sanitize(d ? d.name : '') + '" placeholder="พิมพ์ชื่อ Dealer..." autocomplete="off" oninput="_dealerPickerResolve(\'' + idPrefix + '\')' + extraOninput + '">' +
+    '<datalist id="' + idPrefix + '_dl">' + dlOpts + '</datalist>' +
+    '<input type="hidden" id="' + idPrefix + '" value="' + (dealerId || '') + '"></div>';
+}
+
+function _dealerPickerResolve(idPrefix) {
+  var txtEl = document.getElementById(idPrefix + '_txt');
+  var hid = document.getElementById(idPrefix);
+  if (!txtEl || !hid) return;
+  var txt = txtEl.value.trim().toLowerCase();
+  var match = txt ? ST.getAll('dealers').filter(function(d) { return (d.name || '').trim().toLowerCase() === txt; })[0] : null;
+  hid.value = match ? match.id : '';
+}
+
 function onVisitDealerChanged() {
   var did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : '';
   if (!did) return;
@@ -1542,7 +1581,7 @@ function notifyVisitSavedAcrossTabs(dealerId) {
 function showFollowupM(dealerId) {
   openM('📞 Follow-up', '' +
     dpH('ff_d', _td(), 'วันที่ *') +
-    '<div class="fg"><label>Dealer *</label><select id="ff_dlr">' + dealerOptions(dealerId) + '</select></div>' +
+    _dealerPickerHtml('ff_dlr', dealerId) +
     '<div class="fg"><label>ช่องทาง</label><div class="radio-g">' +
     '<label><input type="radio" name="ff_m" value="line" checked><span>💬 LINE</span></label>' +
     '<label><input type="radio" name="ff_m" value="call"><span>📞 โทร</span></label>' +
@@ -1578,10 +1617,8 @@ function showLineLogM(dealerId) {
   var cfg = getConfig();
   openM('💬 LINE Support', '' +
     dpH('fl_d', _td(), 'วันที่') +
-    '<div class="fr">' +
-    '<div class="fg"><label>Dealer *</label><select id="fl_dlr">' + dealerOptions(dealerId) + '</select></div>' +
+    _dealerPickerHtml('fl_dlr', dealerId) +
     '<div class="fg"><label>ประเภท</label><select id="fl_t">' + optionsHTML(cfg.lineLogTypes, '', '--') + '</select></div>' +
-    '</div>' +
     '<div class="fg"><label>เวลา</label><input type="time" id="fl_time"></div>' +
     '<div class="fg"><label>สรุป *</label><textarea id="fl_s" rows="3"></textarea></div>' +
     '<button class="btn bp btn-full" onclick="saveLineLog()">💾 บันทึก</button>');
