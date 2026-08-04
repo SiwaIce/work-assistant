@@ -287,9 +287,9 @@ function rSalesOrders(el) {
       html += '<tr style="cursor:pointer;border-top:1px solid var(--border)"' + trOnclick + '">' +
         selectCell +
         '<td style="padding:12px">' + qcopyHtml(s.soNumber||'-') + ' ' + typeTag + '</td>' +
-        '<td style="padding:12px">' + sanitize(s.dealerName||'-') + (s.customerPO ? '<div style="color:var(--text2);font-size:11px">' + qcopyHtml(s.customerPO) + '</div>' : '') + '</td>' +
+        '<td style="padding:12px">' + (_gvHidden('so_dealerInfo') ? '-' : (sanitize(s.dealerName||'-') + (s.customerPO ? '<div style="color:var(--text2);font-size:11px">' + qcopyHtml(s.customerPO) + '</div>' : ''))) + '</td>' +
         '<td style="padding:12px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(models.join(', ')) + '">' + sanitize(modelsTxt) + '</td>' +
-        '<td style="padding:12px;text-align:right">' + (total ? fmtMoneyShort(total) : '-') + '</td>' +
+        '<td style="padding:12px;text-align:right">' + (_gvHidden('so_price') ? '-' : (total ? fmtMoneyShort(total) : '-')) + '</td>' +
         '<td style="padding:12px">' + _soProgressBar(s.status) +
           '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">' + _soStatusBadge(s.status) +
           (!_soIsDone(s.status) && days != null ? '<span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? warn : '') + '</div>' +
@@ -391,7 +391,7 @@ function rSODetail(el) {
   html += '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:var(--bg2);color:var(--text2)">' + (s.type==='project'?'📋 Project':'🏪 Run rate') + '</span>';
   html += _soStatusBadge(s.status);
   html += '</div>';
-  html += '<div style="font-size:13px;color:var(--text2)">🏪 ' + sanitize(dealer ? dealer.name : (s.dealerName||'-')) + '</div>';
+  if (!_gvHidden('so_dealerInfo')) html += '<div style="font-size:13px;color:var(--text2)">🏪 ' + sanitize(dealer ? dealer.name : (s.dealerName||'-')) + '</div>';
   html += '</div>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
@@ -424,7 +424,7 @@ function rSODetail(el) {
   // info grid — เฉพาะช่องที่มีข้อมูล
   var _soDays = _soDaysInStage(s);
   var infoCells = [];
-  if (s.customerPO)      infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
+  if (s.customerPO && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
   if (pipe)               infoCells.push({ label:'Pipeline',      val: '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + s.pipelineId + '\'});return false" style="color:var(--accent)">' + sanitize((pipe.projectName||s.pipelineId).substr(0,26)) + '</a>' });
   if (s.quotationId)      infoCells.push({ label:'Quotation',     val: '<span style="color:var(--accent)">' + sanitize(s.quotationId) + '</span>' });
@@ -480,15 +480,15 @@ function rSODetail(el) {
     html += '<td style="padding:10px">' + (idx+1) + '</td>';
     html += '<td style="padding:10px"><b>' + sanitize(it.model||'-') + '</b></td>';
     html += '<td style="padding:10px;text-align:center">' + (it.qty||0) + '</td>';
-    html += '<td style="padding:10px;text-align:right">' + fmtMoney(Number(it.unitPrice)||0) + '</td>';
-    html += '<td style="padding:10px;text-align:right">' + fmtMoney(lineTotal) + '</td>';
+    html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
+    html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
     html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s) : '') + '</td>';
     html += '<td style="padding:10px;min-width:140px"><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onblur="saveSOItemComment(\'' + s.id + '\',' + idx + ',this.value)"></td>';
     html += '</tr>';
   });
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
-  html += '<td style="padding:10px;text-align:right">' + fmtMoney(total) + '</td><td colspan="3"></td></tr>';
+  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="3"></td></tr>';
   html += '</tbody></table></div></div>';
 
   // timeline — กดรายการเพื่อขยายดูรายละเอียด/แก้ไขในหน้าเดียวกัน (ไม่ใช้ modal)
@@ -1336,7 +1336,7 @@ function runSerialSearch() {
     html += '<table style="width:100%;font-size:12px">';
     html += '<tr><td style="color:var(--text2);padding:3px 0;width:35%">📋 โครงการ</td><td style="text-align:right">' + sanitize(pipe ? pipe.projectName : '-') + '</td></tr>';
     html += '<tr><td style="color:var(--text2);padding:3px 0">🏢 End user</td><td style="text-align:right">' + sanitize(pipe ? (pipe.endUserTH || '-') : '-') + '</td></tr>';
-    html += '<tr><td style="color:var(--text2);padding:3px 0">🏪 Dealer</td><td style="text-align:right">' + sanitize(dealer ? dealer.name : (so.dealerName || '-')) + '</td></tr>';
+    if (!_gvHidden('so_dealerInfo')) html += '<tr><td style="color:var(--text2);padding:3px 0">🏪 Dealer</td><td style="text-align:right">' + sanitize(dealer ? dealer.name : (so.dealerName || '-')) + '</td></tr>';
     html += '<tr><td style="color:var(--text2);padding:3px 0">📅 วันที่ขาย</td><td style="text-align:right">' + sanitize(soldDate || '-') + '</td></tr>';
     html += '<tr><td style="color:var(--text2);padding:3px 0">📄 Sales Order</td><td style="text-align:right"><a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false">' + sanitize(so.soNumber || '-') + '</a></td></tr>';
     html += '</table></div>';

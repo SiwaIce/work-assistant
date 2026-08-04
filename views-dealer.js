@@ -484,15 +484,16 @@ function dealerCardHTML(d, health) {
     return v === 'pass' || v === 'yes' || v === 'added';
   }).length;
 
+  var _gvHideLvlHealth = _gvHidden('dealers_levelHealth');
   return `<div class="dealer-card" onclick="go('dealerDetail',{dealerId:'${d.id}'})">
-    <h3><span id="dlvl_${d.id}" onclick="event.stopPropagation();_dealerInlineEditLevel('${d.id}')" style="cursor:text" title="คลิกเพื่อแก้ไข Level">${levelTag(d.level)}</span> ${sanitize(d.name)}</h3>
+    <h3>${_gvHideLvlHealth ? '' : `<span id="dlvl_${d.id}" onclick="event.stopPropagation();_dealerInlineEditLevel('${d.id}')" style="cursor:text" title="คลิกเพื่อแก้ไข Level">${levelTag(d.level)}</span>`} ${sanitize(d.name)}</h3>
     <div class="meta">${d.contact ? '👤 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• SIS: ' + d.sisCode : ''} ${d.saleName ? '• 🧑‍💼 ' + sanitize(d.saleName) : ''}</div>
-    
+
     <div class="dealer-stats">
       <div class="dealer-stat"><div class="val c2">${fmtMoneyShort(wonAmt)}</div><div class="lbl">ยอดขาย</div></div>
       <div class="dealer-stat"><div class="val c3">${fmtMoneyShort(targetAmt)}</div><div class="lbl">เป้า</div></div>
       <div class="dealer-stat"><div class="val ${pct>=70?'c2':pct>=40?'c3':'c4'}">${pct}%</div><div class="lbl">Achieve</div></div>
-      <div class="dealer-stat"><div class="val" style="color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">${h.score}</div><div class="lbl">Health</div></div>
+      ${_gvHideLvlHealth ? '' : `<div class="dealer-stat"><div class="val" style="color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">${h.score}</div><div class="lbl">Health</div></div>`}
     </div>
     
     ${targetAmt ? `<div class="pb"><div class="pf ${pct>=70?'pf-green':pct>=40?'pf-yellow':'pf-red'}" style="width:${Math.min(pct,100)}%"></div></div>` : ''}
@@ -576,8 +577,8 @@ function rDealerDet(el) {
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
     <div style="display:flex;align-items:center;gap:6px">
-      ${levelTag(d.level)}
-      <span style="font-size:.72rem;font-weight:700;color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">Health: ${h.score}/100</span>
+      ${_gvHidden('dealers_levelHealth') ? '' : `${levelTag(d.level)}
+      <span style="font-size:.72rem;font-weight:700;color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">Health: ${h.score}/100</span>`}
     </div>
 
 <div class="bg">
@@ -654,17 +655,17 @@ function dealerInfoTab(d) {
       <div>
         <div style="font-size: 24px; font-weight: 700; margin-bottom: 4px">🏢 ${sanitize(d.name)}</div>
         <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px">
-          ${levelTag(d.level)}
+          ${_gvHidden('dealers_levelHealth') ? '' : levelTag(d.level)}
           <span style="font-size: 12px; color: var(--text2)">📋 SIS: ${d.sisCode || '-'}</span>
           <span style="font-size: 12px; color: var(--text2)">🔢 DJI: ${d.djiCode || '-'}</span>
           <span style="font-size: 12px; color: var(--text2)">🏪 DJI Dealer: ${d.djiDealer || '-'}</span>
         </div>
         ${!['S','A','B'].includes(d.level) ? '<button class="btn bsm bp" style="margin-top:8px" onclick="markDealerAuthorized(\'' + d.id + '\')">🌟 Mark เป็น Authorized Dealer</button>' : ''}
       </div>
-      <div style="text-align: right">
+      ${_gvHidden('dealers_levelHealth') ? '' : `<div style="text-align: right">
         <div style="font-size: 32px; font-weight: 800; color: ${healthColor}">${h.score}/100</div>
         <div style="font-size: 11px; color: var(--text2)">Health Score</div>
-      </div>
+      </div>`}
     </div>
   </div>
 
@@ -696,10 +697,10 @@ function dealerInfoTab(d) {
           <span style="font-size: 18px">🏪</span>
           <div><div style="font-size: 10px; color: var(--text2)">DJI Dealer Type</div><div style="font-size: 13px; font-weight: 500">${d.djiDealer || '-'}</div></div>
         </div>
-        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
+        ${(_gvHidden('dealers_levelHealth') && _gvHidden('dealers_creditTerm')) ? '' : `<div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">🏷️</span>
-          <div><div style="font-size: 10px; color: var(--text2)">Level / Term</div><div style="font-size: 13px; font-weight: 500">${levelTag(d.level)} / ${d.creditTerm || '-'}</div></div>
-        </div>
+          <div><div style="font-size: 10px; color: var(--text2)">Level / Term</div><div style="font-size: 13px; font-weight: 500">${_gvHidden('dealers_levelHealth') ? '' : levelTag(d.level)}${(_gvHidden('dealers_levelHealth') || _gvHidden('dealers_creditTerm')) ? '' : ' / '}${_gvHidden('dealers_creditTerm') ? '' : (d.creditTerm || '-')}</div></div>
+        </div>`}
         <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border)">
           <span style="font-size: 18px">💳</span>
           <div><div style="font-size: 10px; color: var(--text2)">วงเงินเครดิต</div><div style="font-size: 13px; font-weight: 500">${d.creditLimit ? fmtMoney(d.creditLimit) + ' ฿' : '-'}</div></div>

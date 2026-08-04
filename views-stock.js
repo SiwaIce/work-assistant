@@ -1234,7 +1234,7 @@ function rStock(el) {
     h += '</select>';
     h += '</div>';
     h += '<div class="sr" style="margin-bottom:10px">';
-    h += '<div class="sc"><div class="sn c3">฿' + fmtMoney(Math.round(agingValue)) + '</div><div class="sl">มูลค่ารวม (lot ที่ค้าง)</div></div>';
+    if (!_gvHidden('stock_cost')) h += '<div class="sc"><div class="sn c3">฿' + fmtMoney(Math.round(agingValue)) + '</div><div class="sl">มูลค่ารวม (lot ที่ค้าง)</div></div>';
     h += '<div class="sc"><div class="sn c4">' + agingLots.length + '</div><div class="sl">จำนวน lot ที่ค้าง</div></div>';
     h += '</div>';
     if (!agingLots.length) {
@@ -1329,7 +1329,8 @@ function _stockLotRowHtml(sku, nameEsc, loc, lot, showCheckbox) {
   var primary, secondary;
   if (isBooking) {
     primary = sanitize(lot.soNumber || lot.ref || '-');
-    secondary = '👤 ' + sanitize(lot.salesperson || '-') + ' · 🏢 ' + sanitize(lot.dealerName || '-') + (lot.projectName ? ' · 📁 ' + sanitize(lot.projectName) : '');
+    secondary = _gvHidden('stock_bookingInfo') ? '' :
+      '👤 ' + sanitize(lot.salesperson || '-') + ' · 🏢 ' + sanitize(lot.dealerName || '-') + (lot.projectName ? ' · 📁 ' + sanitize(lot.projectName) : '');
   } else if (isPRPO) {
     primary = sanitize(lot.ref || '-');
     secondary = 'ผูก SO: ' + (lot.soNumber ? sanitize(lot.soNumber) : '-') + ' · คาดว่าจะถึง: ' + (lot.expectedDate ? fD(lot.expectedDate) : '-');
@@ -1489,22 +1490,25 @@ function rStockDetail(el) {
       ' <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(245,158,11,.15);color:#b45309;vertical-align:middle" title="เลิกผลิตแล้ว แต่ยังมีของเหลือขายได้">EOL</span>' :
       ' <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(107,114,128,.2);color:#6b7280;vertical-align:middle" title="เลิกผลิตแล้วและหมดสต็อก">⛔ EOL หมด</span>') : '') + '</h2>';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (p.sku ? qcopyHtml(p.sku) : '-') + ' · ' + sanitize((typeof getCategoryName === 'function' ? getCategoryName(p.category) : p.category) || '-') + '</div>';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">ราคาตามเลเวล</div>';
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px">';
-  [
-    { label: 'RRP', value: p.rrpInVat || 0, accent: '#2563eb' },
-    { label: 'Level S', value: (p.typePrices && p.typePrices.S) || 0, accent: '#16a34a' },
-    { label: 'Level A', value: (p.typePrices && p.typePrices.A) || 0, accent: '#16a34a' },
-    { label: 'Level B', value: (p.typePrices && p.typePrices.B) || 0, accent: '#16a34a' },
-    { label: 'Other', value: (p.typePrices && p.typePrices.Other) || 0, accent: '#64748b' }
-  ].forEach(function(lv) {
-    h += '<div style="background:rgba(148,163,184,.08);border-left:3px solid ' + lv.accent + ';border-radius:8px;padding:8px 10px;position:relative">';
-    h += '<div style="font-size:10px;color:' + lv.accent + ';font-weight:500">' + lv.label + '</div>';
-    h += '<div style="font-size:15px;font-weight:700;margin-top:2px">฿' + fmtMoney(lv.value) + '</div>';
-    h += '<button class="btn bsm bo" style="position:absolute;top:6px;right:6px;padding:1px 5px;font-size:10px;line-height:1.4" onclick="copyToClip(\'' + lv.value + '\')" title="คัดลอกราคา">📋</button>';
+  if (!_gvHidden('stock_priceLevels')) {
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">ราคาตามเลเวล</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px">';
+    [
+      { label: 'RRP', value: p.rrpInVat || 0, accent: '#2563eb' },
+      { label: 'Level S', value: (p.typePrices && p.typePrices.S) || 0, accent: '#16a34a' },
+      { label: 'Level A', value: (p.typePrices && p.typePrices.A) || 0, accent: '#16a34a' },
+      { label: 'Level B', value: (p.typePrices && p.typePrices.B) || 0, accent: '#16a34a' },
+      { label: 'Other', value: (p.typePrices && p.typePrices.Other) || 0, accent: '#64748b' }
+    ].forEach(function(lv) {
+      h += '<div style="background:rgba(148,163,184,.08);border-left:3px solid ' + lv.accent + ';border-radius:8px;padding:8px 10px;position:relative">';
+      h += '<div style="font-size:10px;color:' + lv.accent + ';font-weight:500">' + lv.label + '</div>';
+      h += '<div style="font-size:15px;font-weight:700;margin-top:2px">฿' + fmtMoney(lv.value) + '</div>';
+      h += '<button class="btn bsm bo" style="position:absolute;top:6px;right:6px;padding:1px 5px;font-size:10px;line-height:1.4" onclick="copyToClip(\'' + lv.value + '\')" title="คัดลอกราคา">📋</button>';
+      h += '</div>';
+    });
     h += '</div>';
-  });
-  h += '</div></div>';
+  }
+  h += '</div>';
 
   h += '<div class="sr" style="margin-bottom:12px">';
   h += '<div class="sc"><div class="sn c1">' + totalAll + '</div><div class="sl">คงเหลือรวม</div></div>';
@@ -1534,8 +1538,8 @@ function rStockDetail(el) {
           '<span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">ต้อง PR/PO</span><div style="font-size:11px;color:#ef4444;margin-top:3px">แนะนำ PR/PO ' + qe.shortfall + '</div>');
       h += '<tr style="border-top:1px solid var(--border,#334155)">';
       h += '<td style="padding:5px 4px">' + (qi + 1) + '</td>';
-      h += '<td style="padding:5px 4px">' + sanitize(r.dealerName || '-') + (r.quoteNo ? ' <span style="font-size:10px;color:var(--text2)">(' + sanitize(r.quoteNo) + ')</span>' : '') + '</td>';
-      h += '<td style="padding:5px 4px">' + sanitize(r.salesperson || '-') + '</td>';
+      h += '<td style="padding:5px 4px">' + (_gvHidden('stock_bookingInfo') ? '-' : (sanitize(r.dealerName || '-') + (r.quoteNo ? ' <span style="font-size:10px;color:var(--text2)">(' + sanitize(r.quoteNo) + ')</span>' : ''))) + '</td>';
+      h += '<td style="padding:5px 4px">' + (_gvHidden('stock_bookingInfo') ? '-' : sanitize(r.salesperson || '-')) + '</td>';
       h += '<td style="text-align:center;padding:5px 4px">' + r.qty + '</td>';
       h += '<td style="text-align:center;padding:5px 4px;font-weight:700;color:' + (noneOk ? 'var(--text2)' : (fullyOk ? '#16a34a' : '#b45309')) + '">' + qe.allocated + '</td>';
       h += '<td style="text-align:center;padding:5px 4px;font-weight:700;color:' + (qe.shortfall > 0 ? '#ef4444' : 'var(--text2)') + '">' + (qe.shortfall > 0 ? qe.shortfall : '-') + '</td>';

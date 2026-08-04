@@ -536,8 +536,12 @@ function showEditProductModal(productId) {
   html += '<div class="fg"><label>B (Type 3)</label><input type="text" inputmode="decimal" id="edit_price_b" class="fm-input js-money" value="' + nmI(p.price || 0) + '"></div>';
   html += '<div class="fg"><label>Other (Type 4)</label><input type="text" inputmode="decimal" id="edit_price_o" class="fm-input js-money" value="' + nmI(p.typePrices?.Other || 0) + '"></div></div>';
   
-  html += '<div class="form-section">💸 ต้นทุน</div>';
-  html += '<div class="fr"><div class="fg"><label>ต้นทุนสินค้า (฿)</label><input type="text" inputmode="decimal" id="edit_cost" class="fm-input js-money" value="' + nmI(p.cost || 0) + '"></div><div class="fg"></div></div>';
+  // ซ่อนแค่ที่จอ (display:none) แต่ input ยังอยู่ใน DOM พร้อมค่าจริง — ไม่ใช่ล้างค่าเป็น 0 เพราะถ้า guest กด
+  // บันทึกฟอร์มนี้ (products ไม่ผ่าน ST._guestBlocked เลย แก้ไขได้จริงแม้เป็น guest — คนละปัญหาที่ยังไม่ได้แก้)
+  // จะทำให้ต้นทุนจริงถูกเขียนทับเป็น 0 ไปด้วย ซ่อนแค่สายตาปลอดภัยกว่า
+  var _gvHideCost = _gvHidden('products_cost');
+  html += '<div class="form-section"' + (_gvHideCost ? ' style="display:none"' : '') + '>💸 ต้นทุน</div>';
+  html += '<div class="fr"' + (_gvHideCost ? ' style="display:none"' : '') + '><div class="fg"><label>ต้นทุนสินค้า (฿)</label><input type="text" inputmode="decimal" id="edit_cost" class="fm-input js-money" value="' + nmI(p.cost || 0) + '"></div><div class="fg"></div></div>';
 
   html += '<div class="form-section">🏷️ หมวดหมู่และสถานะ</div>';
   html += '<div class="fr"><div class="fg"><label>หมวดหมู่</label><select id="edit_category" class="fm-input">' + categoryOptions + '</select></div>';
@@ -1919,7 +1923,7 @@ function rProducts(el) {
   html += '<button id="btnProdTable" class="btn bsm' + (productViewMode==='table'?' bp':'') + '" onclick="setProductView(\'table\')">📋 Table</button>';
   html += '<button id="btnProdCatalog" class="btn bsm' + (productViewMode==='catalog'?' bp':'') + '" onclick="setProductView(\'catalog\')">🖼️ Catalog</button>';
   html += '<button id="btnProdSheet" class="btn bsm' + (productViewMode==='sheet'?' bp':'') + '" onclick="setProductView(\'sheet\')">🗂️ Sheet</button>';
-  html += '<button id="btnProdMargin" class="btn bsm' + (productViewMode==='margin'?' bp':'') + '" onclick="setProductView(\'margin\')">💰 Margin</button>';
+  if (!_gvHidden('products_margin')) html += '<button id="btnProdMargin" class="btn bsm' + (productViewMode==='margin'?' bp':'') + '" onclick="setProductView(\'margin\')">💰 Margin</button>';
   html += '</span>';
   html += '</div>';
 
@@ -2009,6 +2013,7 @@ function resetProductFilters() {
 }
 
 function setProductView(mode) {
+  if (mode === 'margin' && _gvHidden('products_margin')) mode = 'table'; // ปุ่มถูกซ่อนไปแล้ว แต่กันไว้เผื่อเรียกตรงๆ
   productViewMode = mode;
   var tw = document.getElementById('productsTableWrap');
   var cw = document.getElementById('productsCatalogWrap');
@@ -2070,8 +2075,9 @@ function renderProductsMargin(products) {
   h += '<span style="font-size:12px;color:var(--text2)">มีต้นทุน ' + withCost + '/' + products.length + ' • กำไรเฉลี่ย' + (disc ? ' (หลังลด ' + disc + '%)' : '') + ': ' +
     levels.map(function(lv) { var a = sum[lv].n ? (sum[lv].t / sum[lv].n) : 0; return lv + ' ' + a.toFixed(1) + '%'; }).join(' | ') + '</span></div>';
 
+  var _gvHideMarginCost = _gvHidden('products_cost');
   h += '<table class="export-table" id="productsMarginTable" style="width:100%;font-size:12px"><thead><tr>';
-  h += '<th>#</th><th>ชื่อสินค้า</th><th style="text-align:right">ต้นทุน</th>';
+  h += '<th>#</th><th>ชื่อสินค้า</th>' + (_gvHideMarginCost ? '' : '<th style="text-align:right">ต้นทุน</th>');
   levels.forEach(function(lv) { h += '<th style="text-align:right">' + lv + '</th>'; });
   h += '<th style="text-align:right">RRP</th></tr></thead><tbody>';
 
@@ -2081,7 +2087,7 @@ function renderProductsMargin(products) {
     h += '<tr' + (noCost ? ' style="background:rgba(127,127,127,.06)"' : '') + '>';
     h += '<td style="text-align:center">' + (i + 1) + '</td>';
     h += '<td style="font-weight:600">' + sanitize(p.name) + (noCost ? ' <span style="font-size:10px;color:#f59e0b">⚠️ ยังไม่มีต้นทุน</span>' : '') + '</td>';
-    h += '<td style="text-align:right;color:#f59e0b">' + (cost ? fmtMoney(cost) : '-') + '</td>';
+    if (!_gvHideMarginCost) h += '<td style="text-align:right;color:#f59e0b">' + (cost ? fmtMoney(cost) : '-') + '</td>';
     levels.forEach(function(lv) {
       var listPrice = (p.typePrices && Number(p.typePrices[lv])) || 0;
       var price = eff(listPrice); // ราคาหลังส่วนลดจำลอง

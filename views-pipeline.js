@@ -278,7 +278,7 @@ function _renderPipeTeamTable(list) {
       '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.endUserTH) + '">' + sanitize(p.endUserTH || '-') + '</td>' +
       '<td style="white-space:nowrap">' + sanitize(p.dealerName || '-') + '</td>' +
       '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem" title="' + sanitize(p.model) + '">' + sanitize(p.model || '-') + '</td>' +
-      '<td style="text-align:right;white-space:nowrap">' + fmtMoneyStyled(p.forecastAmount) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' + (_gvHidden('pipeline_forecast') ? '-' : fmtMoneyStyled(p.forecastAmount)) + '</td>' +
       '<td>' + pipeTag(p.status) + '</td>' +
       '</tr>';
   });
@@ -581,7 +581,7 @@ function buildConflictClusterHtml(conflicts) {
       h += '<div style="font-size:11px;color:var(--text2);flex:1;min-width:80px">' + sanitize(modelText.substr(0, 30)) + '</div>';
       h += pipeTag(p.status);
       h += '<div style="font-size:11px;color:var(--text2)">' + (p.biddingDate ? 'Bid: ' + fDShort(p.biddingDate) : '') + '</div>';
-      h += '<div style="font-size:11px;font-weight:600">' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div>';
+      if (!_gvHidden('pipeline_forecast')) h += '<div style="font-size:11px;font-weight:600">' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div>';
       h += '</div>';
     });
     h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
@@ -643,7 +643,7 @@ function compareConflict(idA, idB) {
     x += '<div style="font-size:12px;margin:2px 0"><strong>End User:</strong> ' + sanitize(p.endUserTH || p.endUserEN || '-') + '</div>';
     x += '<div style="font-size:12px;margin:2px 0"><strong>หน่วยงาน:</strong> ' + sanitize((p.agencyMain || '-') + ' / ' + (p.agencySub || '-')) + '</div>';
     x += '<div style="font-size:12px;margin:2px 0"><strong>สินค้า:</strong> ' + (items || '-') + '</div>';
-    x += '<div style="font-size:12px;margin:2px 0"><strong>มูลค่า:</strong> ' + fmtMoney(p.forecastAmount) + '</div>';
+    if (!_gvHidden('pipeline_forecast')) x += '<div style="font-size:12px;margin:2px 0"><strong>มูลค่า:</strong> ' + fmtMoney(p.forecastAmount) + '</div>';
     x += '<div style="font-size:12px;margin:2px 0"><strong>Bidding:</strong> ' + (p.biddingDate ? fD(p.biddingDate) : '-') + '</div>';
     x += '<div style="font-size:12px;margin:2px 0"><strong>อัปเดตล่าสุด:</strong> ' + (upd ? fD(upd) : '-') + '</div>';
     x += '<div style="margin-top:8px"><button class="btn bsm bo" onclick="closeM();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">เปิดโปรเจค</button></div>';
@@ -1432,8 +1432,8 @@ function renderPipeCards(pipes, opts) {
     // แถว 4: Bid badge (ซ้าย) + อัปเดตล่าสุด (กลาง) + มูลค่า (ขวา) คั่นเส้นบน
     html += '<div style="display:grid;grid-template-columns:150px 1fr 130px;gap:10px;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border,#334155)">';
     html += '<span style="justify-self:start">' + (p.biddingDate ? _pipeBidDateBadge(p, cardIsWon || cardIsLost) : '') + '</span>';
-    html += '<span style="font-size:10.5px;color:var(--text3,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (lastLog ? '📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' · ' + sanitize((lastLog.content || '').substr(0, 45)) : '') + '</span>';
-    html += '<span style="text-align:right;font-size:.92rem;font-weight:700;color:#22c55e">' + fmtMoneyStyled(amt) + '</span>';
+    html += '<span style="font-size:10.5px;color:var(--text3,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (lastLog && !_gvHidden('pipeline_notes') ? '📝 ' + fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' · ' + sanitize((lastLog.content || '').substr(0, 45)) : '') + '</span>';
+    html += '<span style="text-align:right;font-size:.92rem;font-weight:700;color:#22c55e">' + (_gvHidden('pipeline_forecast') ? '-' : fmtMoneyStyled(amt)) + '</span>';
     html += '</div>';
 
     // ลิงก์ขยายดูรายละเอียดสินค้า (Next Action + สรุปรายการสินค้า) ในตัวการ์ดเลย ไม่ต้องเข้าไปหน้ารายละเอียด
@@ -1565,13 +1565,15 @@ function renderPipeTable(pipes) {
       '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis" title="' + sanitize(p.endUserTH || '') + '">' + sanitize((p.endUserTH || '').substr(0, 25)) + '</td>' +
       '<td style="white-space:nowrap" title="' + sanitize(d ? d.name : '') + '"><strong>' + (d ? sanitize(d.name) : '-') + '</strong></td>' +
       '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.72rem" title="' + sanitize(modelText) + '">' + sanitize(modelText) + '</td>' +
-      '<td id="pfc_' + p.id + '" onclick="event.stopPropagation();_pipeInlineEdit(\'' + p.id + '\',\'forecastAmount\')" style="text-align:right;white-space:nowrap;cursor:text" title="คลิกเพื่อแก้ไข">' + fmtMoneyStyled(amt) + '</td>' +
+      (_gvHidden('pipeline_forecast')
+        ? '<td style="text-align:right;white-space:nowrap">-</td>'
+        : '<td id="pfc_' + p.id + '" onclick="event.stopPropagation();_pipeInlineEdit(\'' + p.id + '\',\'forecastAmount\')" style="text-align:right;white-space:nowrap;cursor:text" title="คลิกเพื่อแก้ไข">' + fmtMoneyStyled(amt) + '</td>') +
       '<td style="white-space:nowrap" title="' + sanitize(p.tor || '') + '">' + (p.tor || '-') + '</td>' +
       '<td id="pbd_' + p.id + '" onclick="event.stopPropagation();_pipeInlineEdit(\'' + p.id + '\',\'biddingDate\')" style="white-space:nowrap;cursor:text" title="คลิกเพื่อแก้ไข">' + (p.biddingDate ? _pipeBidDateBadge(p, isWon || isLost) : '-') + '</td>' +
       '<td id="pst_' + p.id + '" onclick="event.stopPropagation();_pipeInlineEdit(\'' + p.id + '\',\'status\')" style="cursor:text" title="คลิกเพื่อแก้ไข">' + pipeTag(p.status) + cRowTag + (function() { var f = pipeFYStatus(p); return f ? '<div style="font-size:10px;color:' + f.c + ';margin-top:3px;white-space:nowrap">' + f.e + ' ' + f.t + '</div>' : ''; })() + '</td>' +
       '<td style="white-space:nowrap"><span class="pipe-age ' + ageClass + '">' + ageDays + 'd</span></td>' +
-      '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem" title="' + sanitize(lastLog ? (lastLog.content || '') : '') + '">' +
-        (lastLog ? fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) : '-') +
+      '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:.62rem" title="' + (_gvHidden('pipeline_notes') ? '' : sanitize(lastLog ? (lastLog.content || '') : '')) + '">' +
+        (_gvHidden('pipeline_notes') ? '-' : (lastLog ? fDShort(lastLog.date ? lastLog.date.split('T')[0] : '') + ' ' + sanitize((lastLog.content || '').substr(0, 25)) : '-')) +
       '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<button class="pipe-pin-btn' + (p.pinned ? ' on' : '') + '" title="ปักหมุด" onclick="togglePipePin(\'' + p.id + '\')">📌</button>' +
@@ -1911,7 +1913,7 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>DJI Dealer</label><div>' + (p.djiDealer || '-') + '</div></div>';
   html += '<div><label>Model</label><div>' + getPipeModelSummary(p) + '</div></div></div>';
   
-  html += '<div class="fr"><div><label>Forecast Amount</label><div>' + fmtMoneyStyled(p.forecastAmount) + '</div></div>';
+  html += '<div class="fr"><div><label>Forecast Amount</label><div>' + (_gvHidden('pipeline_forecast') ? '-' : fmtMoneyStyled(p.forecastAmount)) + '</div></div>';
   html += '<div><label>Real Amount</label><div>' + (p.realAmount ? fmtMoney(p.realAmount) + ' ฿' : '-') + '</div></div></div>';
   
   html += '<div class="fr"><div><label>Register Date</label><div>' + fD(p.registerDate) + '</div></div>';
@@ -1932,11 +1934,11 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + pipeNextActionHtml(p, false) + '</div></div>';
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
   
-  if (p.remark) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
+  if (p.remark && !_gvHidden('pipeline_notes')) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
   if (p.attachments && p.attachments.length) html += '<div><label>📷 รูปแนบ</label>' + attachGalleryHtml(p.attachments) + '</div>';
 
-  if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
-  if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div>❌ Loss Reason:</div><div>' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
+  if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote && !_gvHidden('pipeline_notes') ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
+  if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div>❌ Loss Reason:</div><div>' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote && !_gvHidden('pipeline_notes') ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
 
   if (isWon) html += '<div style="margin-top:10px"><button class="btn bp" onclick="createSOFromPipeline(\'' + p.id + '\')">📦 สร้าง Sales Order จาก Project นี้</button></div>';
 
@@ -2002,7 +2004,9 @@ function rPipeDet(el) {
   }
   html += '</div></div>';
 
-  // Updates Timeline
+  // Updates Timeline — ซ่อนทั้งการ์ดเลยถ้า pipeline_notes ถูกซ่อน (ปุ่มแก้ไขแต่ละรายการมี content เดิมฝัง
+  // อยู่ใน onclick ด้วย ถ้าซ่อนแค่ข้อความที่โชว์แต่ยังเปิดปุ่มแก้ไขไว้ เนื้อหาจริงก็ยังหลุดออกมาทาง onclick อยู่ดี)
+  if (!_gvHidden('pipeline_notes')) {
   html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml">' +
     (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showMergePipeLogsM(\'' + p.id + '\')" title="รวม Update เก่าให้เหลือรายการเดียว กันไม่ให้หลุดจากช่อง Update 1-6 ตอน export">🔗 รวม Update เก่า</button> ' : '') +
     '<button class="btn bsm bp" onclick="showPipeUpdateM(\'' + p.id + '\')">➕ Update</button></span></h2>';
@@ -2034,7 +2038,8 @@ function rPipeDet(el) {
     html += '<div class="empty"><p>ยังไม่มี Update — กด ➕ เพื่อบันทึก</p></div>';
   }
   html += '</div>';
-  
+  }
+
   // Inline Comment
   html += '<div class="card"><div class="inline-comment"><textarea id="quickPipeComment" rows="2" placeholder="พิมพ์ comment ด่วน... (เช่น โทรติดตามแล้ว, ได้รับเอกสารแล้ว)"></textarea>';
   html += '<div class="inline-comment-actions" style="display:flex;gap:6px;margin-top:6px">';
@@ -2162,7 +2167,7 @@ function rPipeBoard(el) {
       h += '<div class="pb2-focus-card" style="border-left-color:' + f.color + '" onclick="go(\'pipeDetail\',{pipeId:\'' + f.p.id + '\'})">';
       h += '<div class="pb2-focus-reason" style="color:' + f.color + '">' + f.reason + '</div>';
       h += '<div class="pb2-focus-name">' + sanitize((f.p.projectName || '').substr(0, 34)) + '</div>';
-      h += '<div class="pb2-focus-dealer">' + (fd ? sanitize(fd.name) : '-') + ' • ' + fmtMoneyShort(Number(f.p.forecastAmount) || 0) + '</div>';
+      h += '<div class="pb2-focus-dealer">' + (fd ? sanitize(fd.name) : '-') + (_gvHidden('pipeline_forecast') ? '' : (' • ' + fmtMoneyShort(Number(f.p.forecastAmount) || 0))) + '</div>';
       h += '</div>';
     });
     h += '</div></div>';
@@ -2579,7 +2584,7 @@ function showPipeMonthM(ym) {
       '<div class="lt">' + sanitize(p.projectName || '') + '</div>' +
       '<div class="ls">' + (dealer ? dealer.name : '-') + ' • ' + sanitize(p.endUserTH || '-') + '</div>' +
       '<div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap">' +
-      pipeTag(p.status) + ' ' + fmtMoneyStyled(Number(p.forecastAmount)||0) +
+      pipeTag(p.status) + (_gvHidden('pipeline_forecast') ? '' : (' ' + fmtMoneyStyled(Number(p.forecastAmount)||0))) +
       (hasClose ? ' <span style="font-size:.62rem;background:rgba(34,197,94,.12);color:#22c55e;padding:1px 6px;border-radius:4px">🎯 ' + fDShort(p.expectedCloseDate) + '</span>' : '') +
       '</div>' +
       '</div></div>';

@@ -97,6 +97,15 @@ function doSalesLinkLogin() {
 var GUEST_VIEW_READONLY = false;
 var GUEST_VIEW_ALLOWED_MENUS = ['stock', 'salesOrders']; // ค่าเริ่มต้น ถูกแทนที่ด้วยค่าจริงจากโปรไฟล์ที่ล็อกอินตอน login
 var GUEST_VIEW_EDIT_MENUS = []; // เมนูที่โปรไฟล์นี้ "แก้ไขได้" ไม่ใช่ดูอย่างเดียว — ว่าง = อ่านอย่างเดียวทุกเมนู
+// ฟิลด์ย่อยที่โปรไฟล์นี้ถูกซ่อน (Tier ต่อจาก A/B — ซ่อนแค่บางจุดในเมนูที่ยังดูได้ปกติ เช่น ดู Stock ได้แต่ไม่เห็น
+// ต้นทุน) ว่างเปล่า = เห็นทุกฟิลด์ปกติ ดู _gvHidden() ด้านล่าง — ใช้ตรวจก่อน render ทุกจุดที่เกี่ยวข้อง
+// สำคัญ: นี่คือการซ่อนที่ "หน้าจอ UI" เท่านั้น ข้อมูลจริงยัง sync ลงเครื่อง Guest เต็มชุดเหมือนเดิม (คนที่เปิด
+// DevTools ดู localStorage/Network ยังเห็นค่าจริงได้) ไม่ใช่การป้องกันข้อมูลระดับ data-layer — ตกลงกับ user แล้ว
+var GUEST_VIEW_HIDE_FIELDS = [];
+function _gvHidden(key) {
+  return !!(typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY &&
+    typeof GUEST_VIEW_HIDE_FIELDS !== 'undefined' && GUEST_VIEW_HIDE_FIELDS.indexOf(key) !== -1);
+}
 // เฉพาะ collection ที่หน้า Stock/SO/Dealers/Pipeline ใช้จริง — ทั้งฝั่ง publish (ST._set override) และฝั่งอ่าน
 // (listener ด้านล่าง) ใช้ list เดียวกัน ไม่ publish ทุก collection ของเจ้าของ (Visit ฯลฯ) ซึ่งรั่วเกินความจำเป็น
 var GUEST_VIEW_COLLECTIONS = ['stockLevels', 'stockLog', 'stockFavs', 'stockReservations', 'stockLocations', 'salesOrders', 'dealers', 'pipeline', 'pipeLog'];
@@ -140,6 +149,7 @@ function showGuestPinScreen(ownerUid) {
     window._guestViewPin = String(profile.pin);
     window._guestViewAllowedMenus = (profile.menus && profile.menus.length) ? profile.menus : ['stock', 'salesOrders'];
     window._guestViewEditMenus = profile.editMenus || [];
+    window._guestViewHideFields = profile.hideFields || [];
     // ลอง auto-login จาก PIN ที่ซ่อนไว้ใน hash ก่อน (#pin=...) — ถ้าตรงเข้าได้เลยไม่ต้องพิมพ์เอง
     var hashMatch = location.hash.match(/pin=([^&]+)/);
     var hashPin = hashMatch ? decodeURIComponent(hashMatch[1]) : '';
@@ -163,6 +173,7 @@ function doGuestViewLogin(presetPin) {
 
   GUEST_VIEW_READONLY = true;
   GUEST_VIEW_ALLOWED_MENUS = window._guestViewAllowedMenus || ['stock', 'salesOrders'];
+  GUEST_VIEW_HIDE_FIELDS = window._guestViewHideFields || [];
   GUEST_VIEW_EDIT_MENUS = window._guestViewEditMenus || [];
   CURRENT_USER = { uid: window._guestOwnerUid, displayName: (window._guestProfile && window._guestProfile.name) ? window._guestProfile.name + ' (Guest)' : 'ทีม (Guest)', email: null, isAnonymous: true };
   SYNC_ENABLED = false; // ด่านรอง — กันการ push ขึ้นคลาวด์ทุกทาง แม้จากโค้ดที่ไม่ผ่าน ST (เช่น quotation)

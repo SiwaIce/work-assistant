@@ -1653,6 +1653,32 @@ var GV_EDITABLE_MENUS = [
   { id: 'pipeline', name: '📊 Pipeline' }
 ];
 
+// ฟิลด์ย่อยที่ซ่อนได้ต่อโปรไฟล์ (คนละเรื่องกับ "เมนูที่ดูได้" — นี่คือซ่อนบางจุดในเมนูที่ยังดูได้ปกติ) จัดกลุ่ม
+// ตามเมนูให้ดูง่าย — การซ่อนคือลบ element ออกจาก DOM เลย ไม่ใช่แค่ disable/มาสก์ค่า (ดู _gvHidden ใน firebase-sync.js)
+var GV_HIDE_FIELD_GROUPS = [
+  { label: '📦 Stock', items: [
+    { id: 'stock_cost', name: 'มูลค่ารวม/ต้นทุน (การ์ดสรุปค้างนาน)' },
+    { id: 'stock_priceLevels', name: 'ราคาทุกเลเวล (RRP/S/A/B/Other)' },
+    { id: 'stock_bookingInfo', name: 'ชื่อ Dealer/โครงการ/เซลที่จอง' }
+  ]},
+  { label: '📋 Sales Order', items: [
+    { id: 'so_price', name: 'ราคา/หน่วย และยอดรวม' },
+    { id: 'so_dealerInfo', name: 'ชื่อ Dealer และเลข PO ลูกค้า' }
+  ]},
+  { label: '🏪 Dealers', items: [
+    { id: 'dealers_levelHealth', name: 'Level และ Health score' },
+    { id: 'dealers_creditTerm', name: 'เครดิตเทอม' }
+  ]},
+  { label: '📊 Pipeline', items: [
+    { id: 'pipeline_forecast', name: 'มูลค่าโครงการ (Forecast Amount)' },
+    { id: 'pipeline_notes', name: 'บันทึกการเจรจา (Timeline/Remark/Win-Loss note)' }
+  ]},
+  { label: '📋 สินค้าทั้งหมด', items: [
+    { id: 'products_margin', name: 'หน้า Margin ทั้งหมด (ซ่อนทั้งปุ่ม)' },
+    { id: 'products_cost', name: 'ต้นทุนในฟอร์มแก้ไขสินค้า' }
+  ]}
+];
+
 // ย้ายค่าจากรูปแบบเดี่ยวเดิม (cfg.guestViewPin/guestViewMenus) มาเป็นโปรไฟล์แรกอัตโนมัติ ครั้งเดียวตอนที่ยัง
 // ไม่มี guestViewProfiles เลย — กันลิงก์เดิมที่เคยแจกไปหายไปเฉยๆ ตอนอัปเดตเป็นระบบหลายโปรไฟล์
 function _gvGetProfiles(cfg) {
@@ -1677,6 +1703,7 @@ function renderGuestViewProfilesHTML() {
 function _gvProfileRowHTML(pr, idx) {
   var menus = pr.menus || [];
   var editMenus = pr.editMenus || [];
+  var hideFields = pr.hideFields || [];
   var active = !!pr.pin;
   var h = '<div id="gvRow_' + idx + '" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">';
   h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
@@ -1708,6 +1735,20 @@ function _gvProfileRowHTML(pr, idx) {
   });
   h += '</div>';
 
+  h += '<div class="form-section" style="margin-top:4px">🙈 ซ่อนฟิลด์ย่อย <span style="font-weight:400;font-size:.62rem;color:var(--text2)">(ซ่อนแค่หน้าจอ — ข้อมูลจริงยัง sync ลงเครื่อง Guest เต็มชุด ไม่ใช่การป้องกันข้อมูลระดับลึก)</span></div>';
+  h += '<div style="max-height:220px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:10px">';
+  GV_HIDE_FIELD_GROUPS.forEach(function(g) {
+    h += '<div style="background:var(--bg2);border-radius:8px;padding:6px 8px">';
+    h += '<div style="font-size:.64rem;font-weight:700;color:var(--text2);margin-bottom:3px">' + sanitize(g.label) + '</div>';
+    g.items.forEach(function(it) {
+      h += '<label style="display:flex;gap:5px;align-items:center;font-size:.68rem;padding:1px 0">' +
+        '<input type="checkbox" class="gv-hide-chk" value="' + it.id + '" style="width:auto" ' + (hideFields.indexOf(it.id) !== -1 ? 'checked' : '') + '>' +
+        sanitize(it.name) + '</label>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+
   h += '<div class="bg" style="flex-wrap:wrap">';
   h += '<button class="btn bp bsm" onclick="saveGuestViewProfile(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn bo bsm" onclick="copyGuestViewProfileLink(' + idx + ')"' + (active ? '' : ' disabled title="ตั้ง PIN แล้วบันทึกก่อน"') + '>🔗 คัดลอกลิงก์</button>';
@@ -1726,17 +1767,21 @@ function _gvSyncRowToCfg(cfg, profiles, idx) {
   var pinEl = document.getElementById('gvp_pin_' + idx);
   var menuChecks = row.querySelectorAll('.gv-menu-chk');
   var editChecks = row.querySelectorAll('.gv-edit-chk');
+  var hideChecks = row.querySelectorAll('.gv-hide-chk');
   var menus = [];
   for (var i = 0; i < menuChecks.length; i++) if (menuChecks[i].checked) menus.push(menuChecks[i].value);
   var editMenus = [];
   for (var j = 0; j < editChecks.length; j++) if (editChecks[j].checked) editMenus.push(editChecks[j].value);
   editMenus = editMenus.filter(function(m) { return menus.indexOf(m) !== -1; }); // แก้ไขได้ต้องดูได้ด้วยเสมอ
+  var hideFields = [];
+  for (var k = 0; k < hideChecks.length; k++) if (hideChecks[k].checked) hideFields.push(hideChecks[k].value);
   profiles[idx] = {
     id: profiles[idx].id,
     name: nameEl ? nameEl.value.trim() : profiles[idx].name,
     pin: pinEl ? pinEl.value.trim() : profiles[idx].pin,
     menus: menus.length ? menus : ['stock'],
-    editMenus: editMenus
+    editMenus: editMenus,
+    hideFields: hideFields
   };
 }
 
@@ -1748,7 +1793,7 @@ function addGuestViewProfile() {
   var cfg = getConfig();
   var profiles = _gvGetProfiles(cfg).slice();
   _gvSyncAllRowsToCfg(cfg, profiles);
-  profiles.push({ id: 'gv_' + Date.now().toString(36), name: '', pin: '', menus: ['stock'], editMenus: [] });
+  profiles.push({ id: 'gv_' + Date.now().toString(36), name: '', pin: '', menus: ['stock'], editMenus: [], hideFields: [] });
   cfg.guestViewProfiles = profiles;
   saveConfig(cfg);
   render();
