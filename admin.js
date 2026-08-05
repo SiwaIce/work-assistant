@@ -392,17 +392,19 @@ function rAdmin(el) {
       '<button class="btn bo" onclick="importFullBackup()">📤 Import Full</button>') +
     '</div></div>' +
 
-    // Google Sheets Sync
-    '<div class="card"><h2>☁️ Google Sheets Sync</h2>' +
-    '<div class="bg" style="flex-wrap:wrap; gap:8px">' +
-    '<button class="btn bp" onclick="syncFirebaseToSheets()" style="background:#3b82f6">📤 Sync to Sheets</button>' +
-    '<button class="btn bs" onclick="pullSheetsToFirebase()" style="background:#22c55e">📥 Pull from Sheets</button>' +
-    '</div>' +
-    '<div class="hint" style="margin-top:8px; font-size:11px; color:var(--text2)">' +
-    '💡 <strong>Sync to Sheets</strong> = ส่งข้อมูล Firebase ไปยัง Google Sheets<br>' +
-    '💡 <strong>Pull from Sheets</strong> = ดึงข้อมูลจาก Google Sheets กลับมา Firebase<br>' +
-    '📌 ใช้เมื่อต้องการให้ลูกค้าเห็นข้อมูล หรือดึงข้อมูลที่ลูกค้าแก้ไขกลับมา' +
+    // Google Sheet Sync (แอป → Sheet ทางเดียว, auto ทุกครั้งที่บันทึก Pipeline ที่มี Row No. แล้ว)
+    '<div class="card"><h2>📊 Google Sheet Sync</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">Sync ทางเดียว: แอป → Sheet อัตโนมัติทุกครั้งที่บันทึก Pipeline (ต้องมี Row No. แล้วเท่านั้น) — ทาง Sheet → แอป ยังใช้ปุ่ม Import แบบเดิม (มี preview ก่อนนำเข้า) ต้อง deploy Google Apps Script Web App ก่อนใช้งาน</p>' +
+    '<div id="adm_sheetsync_status" style="font-size:.72rem;margin-bottom:8px;color:var(--text2)">⏳ กำลังโหลด...</div>' +
+    '<div class="fg"><label style="font-size:.75rem">Apps Script Web App URL</label>' +
+    '<input type="url" id="adm_sheetsync_url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:.78rem" autocomplete="off"></div>' +
+    '<div class="fg" style="margin-top:6px"><label style="font-size:.75rem">Secret (ต้องตรงกับที่ตั้งในสคริปต์)</label>' +
+    '<div style="display:flex;gap:6px">' +
+    '<input type="password" id="adm_sheetsync_secret" placeholder="ตั้งรหัสอะไรก็ได้" style="flex:1;font-family:monospace;font-size:.8rem">' +
+    '<button class="btn bo bsm" onclick="var i=document.getElementById(\'adm_sheetsync_secret\');i.type=i.type===\'password\'?\'text\':\'password\'">👁</button>' +
     '</div></div>' +
+    '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.75rem"><input type="checkbox" id="adm_sheetsync_enabled"> เปิดใช้งาน Sync</label>' +
+    '<button class="btn bp bsm" style="margin-top:8px" onclick="saveSheetSyncConfig()">💾 บันทึก</button></div>' +
 
     // Team Management
     '<div class="card"><h2>👥 ทีม Sales</h2>' +
@@ -485,6 +487,7 @@ function rAdmin(el) {
   setTimeout(function() {
     initNewDemoPolicies();
     initLevelRequirementTabs();
+    loadSheetSyncConfigToAdmin();
   }, 100);
 }
 
@@ -865,6 +868,43 @@ function loadGeminiKeyToAdmin() {
       else { st.textContent = '⚠️ ยังไม่ได้ตั้งค่า'; }
     } else {
       st.textContent = '⚠️ ยังไม่ได้ตั้งค่า — ใส่ Proxy URL แล้วกด บันทึก';
+    }
+  }).catch(function() {});
+}
+
+function saveSheetSyncConfig() {
+  if (!SYNC_ENABLED) { toast('❌ ต้อง Login Google ก่อน'); return; }
+  var url = (document.getElementById('adm_sheetsync_url').value || '').trim();
+  var secret = (document.getElementById('adm_sheetsync_secret').value || '').trim();
+  var enabled = document.getElementById('adm_sheetsync_enabled').checked;
+  if (enabled && !url) { toast('❌ กรุณาใส่ Apps Script Web App URL ก่อนเปิดใช้งาน'); return; }
+  var data = { url: url, secret: secret, enabled: enabled };
+  db.collection('appConfig').doc('sheetSync').set(data, { merge: true })
+    .then(function() {
+      SHEET_SYNC_URL = url; SHEET_SYNC_SECRET = secret; SHEET_SYNC_ENABLED = enabled;
+      toast('✅ บันทึก Sheet Sync config แล้ว');
+      var st = document.getElementById('adm_sheetsync_status');
+      if (st) st.textContent = enabled ? '✅ เปิดใช้งานอยู่' : '⚪ ปิดใช้งานอยู่';
+    })
+    .catch(function(e) { toast('❌ บันทึกไม่ได้: ' + e.message); });
+}
+
+function loadSheetSyncConfigToAdmin() {
+  if (!SYNC_ENABLED) return;
+  db.collection('appConfig').doc('sheetSync').get().then(function(doc) {
+    var st = document.getElementById('adm_sheetsync_status');
+    if (!st) return;
+    var urlEl = document.getElementById('adm_sheetsync_url');
+    var secretEl = document.getElementById('adm_sheetsync_secret');
+    var enEl = document.getElementById('adm_sheetsync_enabled');
+    if (doc.exists) {
+      var d = doc.data();
+      if (urlEl) urlEl.value = d.url || '';
+      if (secretEl) secretEl.value = d.secret || '';
+      if (enEl) enEl.checked = !!d.enabled;
+      st.textContent = d.enabled ? '✅ เปิดใช้งานอยู่' : '⚪ ปิดใช้งานอยู่ (ตั้งค่าไว้แล้วแต่ยังไม่เปิด)';
+    } else {
+      st.textContent = '⚠️ ยังไม่ได้ตั้งค่า — ใส่ Web App URL แล้วกด บันทึก';
     }
   }).catch(function() {});
 }

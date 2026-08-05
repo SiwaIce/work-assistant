@@ -561,6 +561,15 @@ auth.onAuthStateChanged(function(user) {
       }).catch(function() {});
     }
 
+    // โหลด Google Sheet Sync config จาก Firestore (แอป → Sheet ทางเดียว ดู sheet-sync.js)
+    db.collection('appConfig').doc('sheetSync').get().then(function(doc) {
+      if (!doc.exists) return;
+      var d = doc.data();
+      SHEET_SYNC_URL = d.url || '';
+      SHEET_SYNC_SECRET = d.secret || '';
+      SHEET_SYNC_ENABLED = !!d.enabled;
+    }).catch(function() {});
+
     // รีเฟรช UI
     if (typeof render === 'function') render();
     
