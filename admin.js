@@ -404,7 +404,11 @@ function rAdmin(el) {
     '<button class="btn bo bsm" onclick="var i=document.getElementById(\'adm_sheetsync_secret\');i.type=i.type===\'password\'?\'text\':\'password\'">👁</button>' +
     '</div></div>' +
     '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.75rem"><input type="checkbox" id="adm_sheetsync_enabled"> เปิดใช้งาน Sync</label>' +
-    '<button class="btn bp bsm" style="margin-top:8px" onclick="saveSheetSyncConfig()">💾 บันทึก</button></div>' +
+    '<div style="display:flex;gap:6px;margin-top:8px">' +
+    '<button class="btn bp bsm" onclick="saveSheetSyncConfig()">💾 บันทึก</button>' +
+    '<button class="btn bo bsm" onclick="testSheetSyncConnection()">🧪 ทดสอบการเชื่อมต่อ</button>' +
+    '</div>' +
+    '<div id="adm_sheetsync_test_result" style="font-size:.72rem;margin-top:6px"></div></div>' +
 
     // Team Management
     '<div class="card"><h2>👥 ทีม Sales</h2>' +

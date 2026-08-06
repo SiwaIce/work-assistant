@@ -33,6 +33,39 @@ function sheetSyncPushPipeline(pipeId) {
     .catch(function(e) { console.warn('Sheet Sync network error:', e); });
 }
 
+// ปุ่ม "🧪 ทดสอบการเชื่อมต่อ" ใน Admin — ใช้ค่า URL/Secret ที่พิมพ์ในช่อง (ยังไม่ต้องกดบันทึกก่อนก็ทดสอบได้)
+// ยิงแถวทดสอบจริงเข้าไปต่อท้ายชีท (ROW NO. = __TEST__ ไม่ตรงกับใครแน่นอน เลย append แถวใหม่เสมอ) แล้วโชว์
+// ผลลัพธ์/ข้อความ error ตรงๆ ในหน้า Admin แทนที่จะไปดูใน console เฉยๆ เหมือนตอน sync ปกติ (fire-and-forget)
+function testSheetSyncConnection() {
+  var url = (document.getElementById('adm_sheetsync_url').value || '').trim();
+  var secret = (document.getElementById('adm_sheetsync_secret').value || '').trim();
+  var resultEl = document.getElementById('adm_sheetsync_test_result');
+  if (!url) { if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">❌ ใส่ URL ก่อน</span>'; return; }
+  if (resultEl) resultEl.innerHTML = '⏳ กำลังทดสอบ...';
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      secret: secret,
+      rowNo: '__TEST__',
+      fields: { 'ROW NO.': '__TEST__', 'Project Name': '(ทดสอบการเชื่อมต่อจากแอป — ลบแถวนี้ทิ้งได้)' }
+    })
+  })
+    .then(function(res) { return res.json(); })
+    .then(function(json) {
+      if (!resultEl) return;
+      if (json && json.ok) {
+        resultEl.innerHTML = '<span style="color:#22c55e">✅ เชื่อมต่อสำเร็จ! เพิ่มแถวทดสอบที่แถว ' + json.row + ' ในชีท (เช็คแล้วลบทิ้งได้เลย)</span>';
+      } else {
+        resultEl.innerHTML = '<span style="color:#ef4444">❌ ' + sanitize((json && json.error) || 'ไม่ทราบสาเหตุ') + '</span>';
+      }
+    })
+    .catch(function(e) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:#ef4444">❌ เชื่อมต่อไม่ได้: ' + sanitize(e.message) + ' (เช็ค URL ให้ถูก หรือลองเปิด URL ตรงๆ ใน browser ดูว่า deploy สำเร็จไหม)</span>';
+    });
+}
+
 (function() {
   var checkST = setInterval(function() {
     if (typeof ST === 'undefined' || !ST.add || !ST.update) return;
