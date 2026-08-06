@@ -214,6 +214,13 @@ function rVisitWindow(el) {
   var eid = window._vwEid || '';
   // มาจากนัดใน Visit Plan (openVisitWindow ส่ง planId มา) — ผูกผล Visit กลับเข้าแผนนัดนี้อัตโนมัติหลังบันทึก
   if (window._vwPlanId) window._vpLinkPlanId = window._vwPlanId;
+  // วันที่เริ่มต้นของ Visit Report ควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ — ใส่ผ่าน _visitDraftOverride (กลไกเดิม
+  // ที่ buildVisitFormHtml ใช้ prefill ค่า) เฉพาะตอน render ครั้งแรกเท่านั้น (!_visitDraftOverride) กันไม่ให้
+  // ไปทับวันที่ที่ผู้ใช้พิมพ์แก้เองแล้วตอนสลับโหมด Quick/Standard/Full (ซึ่ง capture ค่าปัจจุบันไว้ก่อนสลับ)
+  if (window._vwPlanId && !eid && !window._visitDraftOverride) {
+    var _vwPlan = ST.getOne('visitPlans', window._vwPlanId);
+    if (_vwPlan && _vwPlan.date) window._visitDraftOverride = { date: _vwPlan.date };
+  }
   var formHtml = buildVisitFormHtml(dealerId, eid, 'rVisitWindowRerender()');
 
   var h = '<div class="vw-layout">';

@@ -1087,8 +1087,9 @@ function _visitCaptureDraft() {
   var d = window._visitDraftOverride || {};
   var summaryEl = document.getElementById('fv_summary');
   if (summaryEl) d.summary = summaryEl.value;
-  var dateEl = document.getElementById('fv_date');
-  if (dateEl) d.date = dateEl.value;
+  // fv_date เป็น custom date picker (dpH) ไม่มี element id 'fv_date' ตรงๆ ค่าจริงอยู่ที่ dpv_fv_date — ใช้ dpG()
+  var dateVal = dpG('fv_date');
+  if (dateVal) d.date = dateVal;
   var timeEl = document.getElementById('fv_time');
   if (timeEl) d.time = timeEl.value;
   var locEl = document.getElementById('fv_loc');

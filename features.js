@@ -4364,6 +4364,8 @@ function vpGoVisitLead(planId) {
   window._vpLinkPlanId = planId;
   window._visitSourceType = 'lead';
   window._vpPrefillProspectId = plan.prospectId || '';
+  // วันที่เริ่มต้นควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ (เหมือน rVisitWindow ฝั่ง Dealer) — ผ่าน _visitDraftOverride
+  if (plan.date) window._visitDraftOverride = { date: plan.date };
   if (typeof showVisitM === 'function') {
     showVisitM('');
     setTimeout(function() {
