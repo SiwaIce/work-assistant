@@ -1386,7 +1386,7 @@ function rTaskDet(el) {
         checkStepFuOverdue(s);
         return `<div class="td2-step ${s.done ? 'done' : ''}" draggable="true" ondragstart="stepDragStart(event,'${t.id}',${i})" ondragover="stepDragOver(event)" ondrop="stepDrop(event,'${t.id}',${i})">
           <div style="cursor:grab;color:var(--text3);padding:2px 2px 0 0;align-self:flex-start" title="ลากเพื่อจัดลำดับ">⠿</div>
-          <div class="td2-step-check ${s.done ? 'done' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? '' : `togStep('${t.id}',${i})`}">${s.done ? '✓' : ''}</div>
+          <div class="td2-step-check ${s.done ? 'done' : ''} ${lk ? 'locked' : ''}" onclick="${lk ? 'stepLockedToast()' : `togStep('${t.id}',${i})`}">${s.done ? '✓' : ''}</div>
           <div style="flex:1;min-width:0">
             <div class="td2-step-title" onclick="${lk ? '' : `editStep('${t.id}',${i})`}">
               ${i + 1}. ${sanitize(s.title)} ${lk ? '🔒' : ''} ${fuBadge(s)}
@@ -1556,6 +1556,12 @@ function stepDrop(e, tid, toIdx) {
 // ================================================================
 // STEP ACTIONS (KEEP ORIGINAL)
 // ================================================================
+
+// คลิก step ที่ถูกล็อกไว้ (Flow เปิด + step ก่อนหน้ายังไม่เสร็จ) — เดิมคลิกแล้วไม่มีอะไรเกิดขึ้นเลยเงียบๆ
+// จนงงว่าทำไมติ๊กไม่ติด บอกเหตุผลชัดๆ แทน
+function stepLockedToast() {
+  toast('🔒 ต้องทำขั้นตอนก่อนหน้าให้เสร็จก่อน (หรือปิด "⚡ Flow" ถ้าอยากติ๊กข้ามลำดับได้อิสระ)');
+}
 
 function togStep(tid, idx) {
   const t = ST.getOne('tasks', tid);
