@@ -908,7 +908,7 @@ function dealerPipelineTab(d) {
   } else {
     // search + sort controls
     h += '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">';
-    h += '<input type="text" placeholder="🔍 ค้นหา Row No. / Project / End User..." style="flex:1;min-width:140px;font-size:12px" value="' + sanitize(dealerPipeSearch) + '" oninput="dealerPipeSearchInput(this.value)" autocomplete="off">';
+    h += '<input type="text" id="dealerPipeSrc" placeholder="🔍 ค้นหา Row No. / Project / End User..." style="flex:1;min-width:140px;font-size:12px" value="' + sanitize(dealerPipeSearch) + '" oninput="dealerPipeSearchInput(this.value)" autocomplete="off">';
     h += '<select style="font-size:12px" onchange="dealerPipeSort=this.value;render()">';
     h += '<option value="updated_desc"' + (dealerPipeSort==='updated_desc'?' selected':'') + '>🔄 อัพเดทล่าสุด</option>';
     h += '<option value="date_desc"' + (dealerPipeSort==='date_desc'?' selected':'') + '>วันที่ลงทะเบียน ใหม่สุด</option>';

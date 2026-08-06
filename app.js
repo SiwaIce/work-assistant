@@ -714,6 +714,16 @@ function goBack() {
 
 function render() {
   var el = document.getElementById('ct');
+  // เก็บ focus + ตำแหน่ง cursor ของช่อง input/textarea ที่กำลังพิมพ์อยู่ไว้ก่อน (ถ้ามี id) แล้วคืนกลับให้หลัง
+  // render — ทุก view build เป็น innerHTML string ใหม่ทั้งก้อนเสมอ ถ้าไม่ทำแบบนี้ el ตัวเดิมจะถูกทำลาย/สร้างใหม่
+  // ทุกครั้งที่พิมพ์ (แม้จะ debounce ไว้ก็ตาม) ทำให้ focus หลุดต้องคลิกช่อง search ใหม่ทุกครั้งที่พิมพ์
+  var _focusId = null, _selStart = null, _selEnd = null;
+  var _active = document.activeElement;
+  if (_active && el && el.contains(_active) && _active.id &&
+      (_active.tagName === 'INPUT' || _active.tagName === 'TEXTAREA')) {
+    _focusId = _active.id;
+    try { _selStart = _active.selectionStart; _selEnd = _active.selectionEnd; } catch (e) {}
+  }
 var R = {
   customKpi: rCustomKPI,
   today: rToday, 
@@ -811,6 +821,14 @@ if (fn) {
   updBdg();
     if (typeof renderFavorites === 'function') renderFavorites();
   checkBackupReminder();
+
+  if (_focusId) {
+    var _restored = document.getElementById(_focusId);
+    if (_restored && (_restored.tagName === 'INPUT' || _restored.tagName === 'TEXTAREA')) {
+      _restored.focus();
+      if (_selStart !== null) { try { _restored.setSelectionRange(_selStart, _selEnd); } catch (e) {} }
+    }
+  }
 }
 
 function toggleSidebar() {
