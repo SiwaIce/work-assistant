@@ -208,10 +208,18 @@ function copyVisitRow(visitId) {
 // VISIT — แท็บแยก (เปิดด้วย openVisitWindow ใน modals.js)
 // ซ้าย = ฟอร์ม Visit ปกติ (Quick/Standard/Full), ขวา = สมุดโน้ตเร็วเต็มความสูง
 // ================================================================
+var _visitWindowLastOpenKey = null;
 function rVisitWindow(el) {
   document.getElementById('pgT').textContent = '🤝 Visit Report — แท็บแยก';
   var dealerId = window._vwDealerId || '';
   var eid = window._vwEid || '';
+  // ถามกู้คืนร่างแค่ครั้งเดียวตอนเปิดแท็บนี้จริงๆ ไม่ถามซ้ำตอนสลับโหมด Quick/Standard/Full (rVisitWindowRerender
+  // เรียก rVisitWindow ซ้ำด้วย dealerId/eid ชุดเดิม)
+  var _openKey = dealerId + '|' + eid;
+  if (_openKey !== _visitWindowLastOpenKey) {
+    _visitWindowLastOpenKey = _openKey;
+    if (!eid) _visitOfferDraftRestore();
+  }
   // มาจากนัดใน Visit Plan (openVisitWindow ส่ง planId มา) — ผูกผล Visit กลับเข้าแผนนัดนี้อัตโนมัติหลังบันทึก
   if (window._vwPlanId) window._vpLinkPlanId = window._vwPlanId;
   // วันที่เริ่มต้นของ Visit Report ควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ — ใส่ผ่าน _visitDraftOverride (กลไกเดิม

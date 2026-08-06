@@ -1067,8 +1067,17 @@ function openVisitWindow(dealerId, eid, planId, mode) {
   window.open(url, '_blank');
 }
 
+var _visitLastOpenKey = null;
 function showVisitM(dealerId, eid) {
   var existDealer = dealerId || (eid ? (ST.getOne('visits', eid) || {}).dealerId : '') || '';
+  // ถามกู้คืนร่างแค่ครั้งเดียวตอนเปิดฟอร์มนี้จริงๆ (ไม่ถามซ้ำตอนสลับโหมด Quick/Standard/Full ที่เรียก
+  // showVisitM ซ้ำด้วย dealerId/eid ชุดเดิม — เทียบ key กันไว้)
+  var _openKey = existDealer + '|' + (eid || '');
+  if (_openKey !== _visitLastOpenKey) {
+    _visitLastOpenKey = _openKey;
+    window._visitDraftOverride = null;
+    if (!eid) _visitOfferDraftRestore();
+  }
   var rerender = "showVisitM('" + existDealer + "','" + (eid || '') + "')";
   var html = buildVisitFormHtml(existDealer, eid, rerender);
   var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : '📝 Standard Visit');
@@ -1103,6 +1112,7 @@ function _visitCaptureDraft() {
 
 // สร้าง HTML ของฟอร์ม Visit (ใช้ทั้งใน modal ปกติ และหน้าแท็บแยก) — rerenderCall คือคำสั่งที่เรียกตอนสลับโหมด Quick/Standard/Full
 function buildVisitFormHtml(dealerId, eid, rerenderCall) {
+  window._visitCurrentEid = eid || ''; // ให้ระบบ draft autosave รู้ว่ากำลังแก้ของเดิมอยู่ไหม (ดู _visitScheduleDraftSave)
   var v = eid ? ST.getOne('visits', eid) : {};
   if (window._visitDraftOverride) {
     v = Object.assign({}, v, window._visitDraftOverride);
@@ -1423,6 +1433,129 @@ function togglePipePickerSelect(pipeId) {
   }
 }
 
+// ================================================================
+// VISIT REPORT — DRAFT AUTOSAVE (กันข้อมูลหายถ้าเผลอปิด/ลืมกดบันทึก)
+// เก็บ 1 ร่างล่าสุดลง localStorage ทุกครั้งที่พิมพ์/เปลี่ยนค่าในฟอร์ม (debounce 1.5s ทับของเก่าเสมอ) —
+// เฉพาะตอนสร้าง Visit ใหม่เท่านั้น (ไม่มี eid) ไม่ยุ่งกับตอนแก้ไข Visit ที่มีอยู่แล้ว กันความเสี่ยงกู้ร่างผิดตัว
+// ลบทิ้งทันทีที่กดบันทึกสำเร็จจริง — เป็นแค่กันชนกรณีไม่ได้ตั้งใจปิด ไม่ใช่ที่เก็บถาวร
+// ================================================================
+var VISIT_DRAFT_KEY = 'v7_visitDraft';
+
+function _visitDraftSnapshot() {
+  if (!document.getElementById('fv_summary')) return null; // ฟอร์มไม่ได้เปิดอยู่จริง
+  var cfg = getConfig();
+  var srcEl = document.querySelector('input[name="fv_source"]:checked');
+  var srcType = srcEl ? srcEl.value : (window._visitSourceType || 'dealer');
+  var did = '', prospectId = '', company = '';
+  if (srcType === 'lead') {
+    prospectId = (document.getElementById('fv_lead_prospect') || {}).value || '';
+  } else if (srcType === 'other') {
+    company = (document.getElementById('fv_company_txt') || {}).value || '';
+  } else {
+    did = (document.getElementById('fv_dealer') || {}).value || '';
+  }
+
+  var topicData = [];
+  (cfg.visitTopics || []).forEach(function(topic) {
+    var chk = document.getElementById('tc_chk_' + topic.id);
+    if (!chk) return;
+    var td = { topicId: topic.id, answered: chk.checked };
+    if (chk.checked) {
+      var sumEl = document.getElementById('vt_' + topic.id);
+      if (sumEl) td.summary = sumEl.value.trim();
+      if (topic.id === 'dsec' || topic.id === 'fh2') { td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || ''; td.certCount = (document.getElementById('vt_' + topic.id + '_n') || {}).value || ''; }
+      if (topic.id === 'crm' || topic.id === 'lark') td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || '';
+    }
+    topicData.push(td);
+  });
+
+  var forecastNotes = [];
+  var fcCnt = document.getElementById('fv_fcs') ? document.getElementById('fv_fcs').children.length : 0;
+  for (var i = 0; i < fcCnt; i++) {
+    var m = (document.getElementById('fc_m_' + i) || {}).value || '';
+    var a = (document.getElementById('fc_a_' + i) || {}).value || '';
+    var it = (document.getElementById('fc_i_' + i) || {}).value || '';
+    if (m.trim() || a || it.trim()) forecastNotes.push({ month: m.trim(), amount: parseNum(a), items: it.trim() });
+  }
+
+  var feedbackItems = [];
+  var fbCnt = document.getElementById('fv_fbs') ? document.getElementById('fv_fbs').children.length : 0;
+  for (var i = 0; i < fbCnt; i++) { var f = (document.getElementById('fb_' + i) || {}).value || ''; if (f.trim()) feedbackItems.push(f.trim()); }
+
+  var modeEl = document.querySelector('input[name="fv_mode"]:checked');
+  var data = {
+    date: dpG('fv_date'), time: (document.getElementById('fv_time') || {}).value || '',
+    dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'offline',
+    djiDealer: (document.getElementById('fv_djid') || {}).value || '',
+    location: (document.getElementById('fv_loc') || {}).value || '',
+    summary: (document.getElementById('fv_summary') || {}).value || '',
+    revenue: (document.getElementById('vt_revenue') || {}).value || '',
+    expectedRevenue: (document.getElementById('vt_expected') || {}).value || '',
+    customerSegment: (document.getElementById('vt_segment') || {}).value || '',
+    dockInterest: (document.getElementById('vt_dock') || {}).value || '',
+    topicData: topicData, forecastNotes: forecastNotes, feedbackItems: feedbackItems,
+    reportMode: visitMode
+  };
+
+  // ว่างทั้งหมดจริงๆ (ยังไม่ได้พิมพ์อะไรเลย) ไม่ต้องเก็บร่าง กันเด้งถามตอนเปิดฟอร์มเปล่าๆ
+  var hasContent = data.summary.trim() || data.location || topicData.some(function(t) { return t.answered; }) || forecastNotes.length || feedbackItems.length || company || did || prospectId;
+  if (!hasContent) return null;
+
+  return {
+    savedAt: Date.now(),
+    sourceType: srcType,
+    dealerName: did ? ((ST.getOne('dealers', did) || {}).name || '') : (company || ''),
+    data: data
+  };
+}
+
+var _visitDraftSaveTimer = null;
+function _visitScheduleDraftSave() {
+  if (window._visitCurrentEid) return; // แก้ไข Visit เดิมอยู่ — ไม่เก็บร่าง กันกู้ผิดตัวทีหลัง
+  clearTimeout(_visitDraftSaveTimer);
+  _visitDraftSaveTimer = setTimeout(function() {
+    var snap = _visitDraftSnapshot();
+    if (snap) localStorage.setItem(VISIT_DRAFT_KEY, JSON.stringify(snap));
+  }, 1500);
+}
+
+// ผูก listener ครั้งเดียวตลอด session (delegation) — เช็คจาก id ของ element ที่ถูกแก้ ว่าอยู่ในฟอร์ม Visit
+// Report ไหม (ครอบคลุมทั้ง modal ปกติและแท็บแยก rVisitWindow เพราะเช็คจาก id ไม่ใช่ container)
+(function() {
+  function isVisitFormField(el) {
+    return !!(el && el.id && /^(fv_|vt_|tc_|fc_|fb_)/.test(el.id));
+  }
+  document.addEventListener('input', function(e) { if (isVisitFormField(e.target)) _visitScheduleDraftSave(); });
+  document.addEventListener('change', function(e) { if (isVisitFormField(e.target)) _visitScheduleDraftSave(); });
+})();
+
+function _visitClearDraft() { localStorage.removeItem(VISIT_DRAFT_KEY); }
+
+// เรียกตอนเปิดฟอร์ม Visit Report ใหม่ (ยังไม่มี eid) — ถ้าเจอร่างเก่าที่ยังไม่ได้บันทึก ถามก่อนเสมอว่าจะ
+// กู้คืนไหม (ไม่ auto-restore เงียบๆ) ถามแค่ครั้งเดียวต่อการเปิดฟอร์ม 1 ครั้ง ไม่ถามซ้ำตอนสลับโหมด Quick/
+// Standard/Full ในฟอร์มเดียวกัน (ดู _visitDraftOfferShown + key เช็คใน showVisitM/rVisitWindow)
+// ทิ้งร่างที่เก่าเกิน 48 ชม. ไปเลยกันมาถามซ้ำไม่จบ
+function _visitOfferDraftRestore() {
+  var raw = localStorage.getItem(VISIT_DRAFT_KEY);
+  if (!raw) return false;
+  var draft;
+  try { draft = JSON.parse(raw); } catch (e) { localStorage.removeItem(VISIT_DRAFT_KEY); return false; }
+  if (!draft || !draft.data || (Date.now() - draft.savedAt) > 48 * 3600000) { localStorage.removeItem(VISIT_DRAFT_KEY); return false; }
+
+  var mins = Math.round((Date.now() - draft.savedAt) / 60000);
+  var whenText = mins < 1 ? 'เมื่อสักครู่' : (mins < 60 ? mins + ' นาทีที่แล้ว' : Math.round(mins / 60) + ' ชม.ที่แล้ว');
+  var who = draft.dealerName ? ' (' + draft.dealerName + ')' : '';
+  if (!confirm('📝 พบร่าง Visit Report ที่ยังไม่ได้บันทึก' + who + ' — บันทึกไว้ ' + whenText + '\nต้องการกู้คืนร่างนี้ไหม?')) {
+    localStorage.removeItem(VISIT_DRAFT_KEY);
+    return false;
+  }
+  window._visitDraftOverride = draft.data;
+  window._visitSourceType = draft.sourceType || 'dealer';
+  if (draft.sourceType === 'lead') window._vpPrefillProspectId = draft.data.prospectId || '';
+  visitMode = draft.data.reportMode || 'quick';
+  return true;
+}
+
 // Forecast & Feedback rows
 function fcRow(i, fn) {
   return '<div class="fr" style="margin-bottom:4px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:6px"><input type="text" id="fc_m_' + i + '" value="' + sanitize(fn.month || '') + '" placeholder="เดือน"><input type="text" inputmode="decimal" class="js-money" id="fc_a_' + i + '" value="' + nmI(fn.amount || '') + '" placeholder="มูลค่า (฿)"><textarea id="fc_i_' + i + '" rows="2" style="margin-top:3px;grid-column:1/-1" placeholder="รายการสินค้า...">' + sanitize(fn.items || '') + '</textarea></div>';
@@ -1460,6 +1593,7 @@ function saveVisitQuick(dealerId, eid) {
   window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
+  if (!eid) _visitClearDraft();
   closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
@@ -1550,6 +1684,7 @@ function saveVisit(dealerId, eid) {
   else {
     visitObj = ST.add('visits', data);
     if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
+    _visitClearDraft();
   }
 
   // Auto-sync Dealer
