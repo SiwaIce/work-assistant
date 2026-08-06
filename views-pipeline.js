@@ -4442,6 +4442,28 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 // เปรียบเทียบ field สำคัญระหว่าง existing record กับ import row
 // returns 'same' | 'changed'
 // colMap: {key: colIndex} จาก _pipeBuildColMap — อ่านค่าผ่าน _pipeCol(c, colMap, key) เสมอ ไม่ใช้ index ตรงๆ
+// หาข้อความในคอลัมน์ Update 1-6 ของแถว import ที่ "ยังไม่มี" อยู่ในประวัติ log ของ pipeline เดิมเลย — ใช้ทั้งเช็ค
+// ว่า state ควรเป็น 'changed' ไหม, โชว์ diff preview, และตอน import จริงค่อยเพิ่มเป็น pipeLog ใหม่ (ดู
+// _processPipeImportRows) เกิดจากเคส: ระบบ export แบบ "รวบ" log เก่าเข้า Update 1/2 (ดู _pipeRowFields) แต่
+// ถ้าในชีทที่เอามา import ยังเป็น log แยกทีละอันไม่ได้รวบ (เช่นแก้ในชีทเอง/ไฟล์เก่า) ให้ import ตามที่ชีทมี
+// เข้าไปเป็น log ใหม่เลย ไม่ต้องพยายามจับคู่กับตัวรวบเดิม — ถ้าจะรวบให้ตรงกันอีกทีก็แค่ export จากแอปใหม่
+// ตัดวันที่นำหน้าออกก่อนเทียบ (export ใส่ dd/mm/yy ไว้หน้าข้อความเสมอ ดู logFmt ใน _pipeRowFields)
+function _pipeImportNewUpdateLines(existing, c, colMap) {
+  var existingContents = ST.pipeLogsByPipe(existing.id).map(function(l) { return (l.content || '').trim(); });
+  var out = [];
+  for (var u = 1; u <= 6; u++) {
+    var raw = _pipeCol(c, colMap, 'update' + u).trim();
+    if (!raw) continue;
+    raw.split('\n').forEach(function(line) {
+      line = line.trim();
+      if (!line) return;
+      var content = line.replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s*/, '');
+      if (existingContents.indexOf(content) === -1 && out.indexOf(content) === -1) out.push(content);
+    });
+  }
+  return out;
+}
+
 function _pipeImportState(existing, c, dealer, colMap) {
   var statusRaw = _pipeCol(c, colMap, 'status').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
@@ -4482,6 +4504,7 @@ function _pipeImportState(existing, c, dealer, colMap) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) return 'changed';
   }
+  if (_pipeImportNewUpdateLines(existing, c, colMap).length) return 'changed';
   return 'same';
 }
 
@@ -4534,6 +4557,10 @@ function _pipeImportDiff(existing, c, dealer, colMap) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) diffs.push({ label: mc.model + ' (qty)', old: String(existQty), newVal: String(importQty) });
   });
+  var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap);
+  if (newUpdateLines.length) {
+    diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: newUpdateLines.join(' | ') });
+  }
   return diffs;
 }
 
@@ -5150,8 +5177,14 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
 
     if (action === 'skip') { skipped++; return; }
     if (action === 'update' && existing) {
+      // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
+      // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
+      var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap);
       ST.update('pipeline', existing.id, pipeData);
       updated++;
+      newUpdateLines.forEach(function(line) {
+        ST.add('pipeLog', { pipeId: existing.id, type: 'note', content: line, date: pipeData.registerDate || new Date().toISOString() });
+      });
     } else {
       var pipe = ST.add('pipeline', pipeData);
       added++;
