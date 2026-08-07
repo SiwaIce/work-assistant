@@ -449,6 +449,49 @@ function togglePipePin(pipeId) {
   render();
 }
 
+// ================================================================
+// PROJECT POS % — โอกาสได้งาน แก้ไขเร็วได้จากการ์ด/หน้ารายละเอียดเลย ไม่ต้องเปิดฟอร์มทั้งใบ
+// สีไล่ตามช่วง (แดง <50 / ส้ม 50-75 / เขียว ≥75) ให้กวาดตาเห็นภาพรวมได้ไวตอนดูลิสต์
+// ================================================================
+function _pipePosColor(v) {
+  v = v || 0;
+  return v >= 75 ? '#22c55e' : (v >= 50 ? '#f59e0b' : '#ef4444');
+}
+function _pipePosBadgeHtml(p) {
+  var v = p.projectPOS || 0;
+  var c = _pipePosColor(v);
+  return '<span class="pipe-pos-badge" style="font-size:10.5px;padding:2px 8px;border-radius:20px;font-weight:700;cursor:pointer;background:' + c + '18;color:' + c + '" onclick="event.stopPropagation();togglePipePosPicker(\'' + p.id + '\')" title="กดเพื่อแก้ไข">🎯 POS ' + v + '%</span>';
+}
+// ตัวเลือกเร็ว 25/50/75/100 (เกณฑ์ที่ตกลงกันไว้) + ช่องกำหนดเองเผื่อค่ากลางๆ — ซ่อนไว้ก่อน กดที่ badge ถึงโผล่
+function _pipePosPickerHtml(p) {
+  var cur = p.projectPOS || 0;
+  var h = '<div class="pipe-pos-picker" id="pipePosPicker_' + p.id + '" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border,#334155)" onclick="event.stopPropagation()">';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+  [25, 50, 75, 100].forEach(function(v) {
+    h += '<button type="button" class="btn bsm ' + (cur === v ? 'bp' : 'bo') + '" onclick="setPipePos(\'' + p.id + '\',' + v + ')">' + v + '%</button>';
+  });
+  h += '<input type="number" min="0" max="100" placeholder="อื่นๆ" style="width:56px;font-size:11px" onkeydown="if(event.key===\'Enter\')setPipePos(\'' + p.id + '\',this.value)">';
+  h += '</div></div>';
+  return h;
+}
+function togglePipePosPicker(pipeId) {
+  var el = document.getElementById('pipePosPicker_' + pipeId);
+  if (!el) return;
+  var willOpen = el.style.display === 'none';
+  document.querySelectorAll('.pipe-pos-picker').forEach(function(e) { e.style.display = 'none'; });
+  el.style.display = willOpen ? 'block' : 'none';
+}
+function setPipePos(pipeId, val) {
+  val = Math.max(0, Math.min(100, parseInt(val) || 0));
+  ST.update('pipeline', pipeId, { projectPOS: val });
+  toast('🎯 อัปเดต POS เป็น ' + val + '% แล้ว');
+  render();
+}
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.pipe-pos-badge') || e.target.closest('.pipe-pos-picker')) return;
+  document.querySelectorAll('.pipe-pos-picker').forEach(function(el) { el.style.display = 'none'; });
+});
+
 // แก้ไข Forecast / Bidding Date / Status ตรงในตารางแบบไม่ต้องเปิดหน้ารายละเอียด (คลิกที่ cell — มี
 // event.stopPropagation() ที่ตัว cell กันไม่ให้ไปกระตุ้น onclick ของทั้งแถวที่พาไปหน้า detail)
 function _pipeInlineEdit(pipeId, field) {
@@ -1429,8 +1472,9 @@ function renderPipeCards(pipes, opts) {
     html += '<span class="meta" style="margin:0">🏪 ' + sanitize(d ? d.name : '-') + '</span>';
     if (modelSummary) html += '<span class="meta" style="margin:0;font-weight:600;text-align:right;white-space:nowrap">📦 ' + sanitize(modelSummary.substr(0, 45)) + '</span>';
     html += '</div>';
-    // แถว 3: แท็กสถานะ/หมวดต่างๆ
-    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + (_fyCard ? ' <span class="tag" style="background:' + _fyCard.c + '18;color:' + _fyCard.c + '">' + _fyCard.e + ' ' + _fyCard.t + '</span>' : '') + '</div>';
+    // แถว 3: แท็กสถานะ/หมวดต่างๆ + POS% (กดแล้วเลือกเปอร์เซ็นต์ได้ทันทีไม่ต้องเปิดฟอร์ม)
+    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px">' + pipeTag(p.status) + (amt >= 1500000 ? ' <span class="tag tag-high">💰 Big</span>' : '') + (cCardTag ? ' ' + cCardTag : '') + (_fyCard ? ' <span class="tag" style="background:' + _fyCard.c + '18;color:' + _fyCard.c + '">' + _fyCard.e + ' ' + _fyCard.t + '</span>' : '') + ' ' + _pipePosBadgeHtml(p) + '</div>';
+    html += _pipePosPickerHtml(p);
     // แถว 4: Bid badge (ซ้าย) + อัปเดตล่าสุด (กลาง) + มูลค่า (ขวา) คั่นเส้นบน
     html += '<div style="display:grid;grid-template-columns:150px 1fr 130px;gap:10px;align-items:center;padding-top:8px;margin-top:8px;border-top:1px solid var(--border,#334155)">';
     html += '<span style="justify-self:start">' + (p.biddingDate ? _pipeBidDateBadge(p, cardIsWon || cardIsLost) : '') + '</span>';
@@ -1902,6 +1946,10 @@ function rPipeDet(el) {
   
   html += '<div class="fr"><div><label>Project Name</label><div>' + (p.projectName ? qcopyHtml(p.projectName) : '-') + '</div></div>';
   html += '<div><label>Status</label><div>' + pipeTag(p.status) + '</div></div></div>';
+
+  html += '<div class="fr"><div><label>🎯 Project POS (โอกาสได้งาน)</label><div>' + _pipePosBadgeHtml(p) + '</div></div>';
+  html += '<div><label></label><div></div></div></div>';
+  html += _pipePosPickerHtml(p);
 
   html += '<div class="fr"><div><label>Project ID</label><div>' + (p.projectId ? qcopyHtml(p.projectId) : '<span style="color:var(--text2)">— ยังไม่ลงทะเบียน CRM</span>') + '</div></div>';
   html += '<div><label></label><div></div></div></div>';
