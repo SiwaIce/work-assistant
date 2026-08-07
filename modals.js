@@ -1496,6 +1496,13 @@ function buildTopicInput(topic, td, v, dealer, prevVisit) {
     case 'lark':
       var prevLark = td.status || (dealer ? dealer.larkStatus : '') || '';
       return '<div class="fg"><label>Status</label><select id="vt_' + id + '_st"><option value="">--</option><option value="added"' + (prevLark === 'added' ? ' selected' : '') + '>Add แล้ว</option><option value="no"' + (prevLark === 'no' ? ' selected' : '') + '>ยังไม่ Add</option></select></div>';
+    case 'anti_drone':
+      // เดิมเป็น textarea ล้วน ทั้งที่คำถามจริงคือ มี/ไม่มี — เปลี่ยนเป็น pill กดเดียวจบ
+      // รายละเอียดเพิ่มเติมโผล่เฉพาะตอนเลือก "มี" (ช่อง textarea เดิม id="vt_anti_drone" ยังอยู่ใน DOM
+      // เสมอแม้ถูกซ่อน — saveVisit() อ่าน td.summary จากช่องนี้ตรงๆ เหมือนหัวข้ออื่นอยู่แล้ว ไม่ต้องแก้ตรงนั้น)
+      var prevAnti = td.status || '';
+      return _pillGroupHtml('vt_anti_drone_pill', [{val: 'มี', label: 'มี', cls: 'sel-yes'}, {val: 'ไม่มี', label: 'ไม่มี', cls: 'sel-no'}], prevAnti) +
+        '<div id="fu_vt_anti_drone_pill" data-show-when="มี" style="margin-top:8px' + (prevAnti === 'มี' ? '' : ';display:none') + '"><div class="fg"><label>รายละเอียด</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div></div>';
     default:
       return '<div class="fg"><label>สรุป</label><textarea id="vt_' + id + '" rows="2">' + sanitize(td.summary || '') + '</textarea></div>';
   }
@@ -1703,6 +1710,7 @@ function _visitDraftSnapshot() {
       if (sumEl) td.summary = sumEl.value.trim();
       if (topic.id === 'dsec' || topic.id === 'fh2') { td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || ''; td.certCount = (document.getElementById('vt_' + topic.id + '_n') || {}).value || ''; }
       if (topic.id === 'crm' || topic.id === 'lark') td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || '';
+      if (topic.id === 'anti_drone') td.status = _pillGetValue('vt_anti_drone_pill');
     }
     topicData.push(td);
   });
@@ -1872,6 +1880,7 @@ function saveVisit(dealerId, eid) {
       if (sumEl) td.summary = sumEl.value.trim();
       if (topic.id === 'dsec' || topic.id === 'fh2') { td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || ''; td.certCount = (document.getElementById('vt_' + topic.id + '_n') || {}).value || ''; }
       if (topic.id === 'crm' || topic.id === 'lark') td.status = (document.getElementById('vt_' + topic.id + '_st') || {}).value || '';
+      if (topic.id === 'anti_drone') td.status = _pillGetValue('vt_anti_drone_pill');
     }
     topicData.push(td);
   }

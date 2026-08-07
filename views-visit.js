@@ -179,6 +179,9 @@ function renderTopicDetail(t, v) {
   if (t.topicId === 'dock_projects') {
     html += `<div style="font-size:.74rem;margin-top:3px">Interest: <b>${v.dockInterest||t.interest||'-'}</b></div>`;
   }
+  if (t.topicId === 'anti_drone') {
+    html += `<div style="font-size:.74rem;margin-top:3px">สนใจ Anti-drone: <b>${t.status||'-'}</b></div>`;
+  }
   
   return html || '<div style="font-size:.74rem;color:#475569">ไม่มีรายละเอียดเพิ่มเติม</div>';
 }
