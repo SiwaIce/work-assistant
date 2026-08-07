@@ -206,6 +206,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
 <script>
 var LEAD_EMAIL_API_URL = '';
 
@@ -218,14 +219,30 @@ firebase.initializeApp({
   appId:"1:796607223436:web:1455abe90b141104678da9"
 });
 var db = firebase.firestore();
+var storage = firebase.storage();
+// field types ที่เป็นแค่เนื้อหาแสดงผล ไม่ใช่คำตอบจริง — ไม่นับใน validate/progress/draft/review
+var DISPLAY_TYPES=['section','image','video','imageLink','richtext','button','pagebreak','__sdiv__'];
 var _form = null, _cType = null, _ratingVals = {}, _activeFlds = {};
 var _pendingAnswers = null, _pendingActive = null;
+// เก็บคำตอบของฟิลด์ที่ "เคยกรอกแล้วแต่ตอนนี้ไม่ได้อยู่หน้าปัจจุบัน" (ฟอร์มแบบแบ่งหน้า/pagebreak) — getVal()
+// อ่านจาก DOM ก่อนเสมอถ้าฟิลด์นั้นยังอยู่ในหน้าที่กำลังโชว์ ถ้าไม่อยู่ (เปลี่ยนหน้าไปแล้ว) จะ fallback มาที่นี่แทน
+// จำเป็นเพราะตอนกด "ส่งข้อมูล" ที่หน้าสุดท้าย submitForm() ต้อง validate ฟิลด์ทุกหน้ารวมกัน ไม่ใช่แค่หน้าปัจจุบัน
+var _answerCache = {};
+var _draftRestored = false;
+// Preview mode: เปิดจาก builder ผ่าน ?preview=1 ใน iframe — ไม่ยิง Firestore เลย รอรับข้อมูลฟอร์มปัจจุบัน
+// (ที่ยังไม่ได้ save) ผ่าน postMessage แทน ทำให้ preview เห็นการแก้ไขสดๆ ระหว่างพิมพ์ในหน้าสร้าง Form
+var _previewMode = _p('preview') === '1';
+var _pageIdx = 0; // หน้าปัจจุบันของฟอร์มแบบแบ่งหน้า (pagebreak field) — reset ทุกครั้งที่ renderForm ใหม่จาก type เปลี่ยน
 
 function _p(k){ return new URLSearchParams(window.location.search).get(k); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ── Init ── */
 (function init(){
+  if(_previewMode){
+    document.getElementById('app').innerHTML='<div class="loading-wrap">👁 รอตัวอย่างฟอร์ม...</div>';
+    return;
+  }
   var fid = _p('form');
   if(!fid){ showErr('ไม่พบ Form ID ใน URL'); return; }
   db.collection('leadForms').doc(fid).get()
@@ -238,6 +255,15 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
     })
     .catch(function(){ showErr('โหลด Form ไม่ได้ กรุณาตรวจสอบการเชื่อมต่อ'); });
 })();
+
+/* ── รับ state ฟอร์มสดจาก builder (postMessage) — ใช้เฉพาะตอน preview ── */
+window.addEventListener('message', function(e){
+  if(!e.data || e.data.type!=='lf-preview') return;
+  _form = e.data.form;
+  _pageIdx = 0;
+  document.title = _form.title||'Form';
+  renderForm();
+});
 
 /* ── Enter → next field ── */
 function initKeyNav(){
@@ -306,7 +332,7 @@ function renderForm(){
 
   _activeFlds = {};
   var allFld=(f.commonFields||f.fields||[]).concat(f.personalFields||[]).concat(f.companyFields||[]);
-  allFld.filter(function(x){ return x.type!=='section'&&x.type!=='image'&&x.type!=='video'&&x.type!=='imageLink'; }).forEach(function(x){ _activeFlds[x.id]=x; });
+  allFld.filter(function(x){ return DISPLAY_TYPES.indexOf(x.type)===-1; }).forEach(function(x){ _activeFlds[x.id]=x; });
 
   // Header
   var h='<div class="fh">';
@@ -329,36 +355,44 @@ function renderForm(){
     h+='</div><div class="type-err" id="type_err">⚠ กรุณาเลือกประเภท</div>';
   }
 
-  var common=f.commonFields||f.fields||[];
-  if(common.length){
-    if(f.useTypeToggle) h+='<div class="sdiv">ข้อมูลทั่วไป</div>';
-    common.forEach(function(fld){ h+=rField(fld); });
-  }
-
-  if(f.useTypeToggle){
-    h+='<div id="sec_p" style="display:none;">';
-    if((f.personalFields||[]).length){
-      h+='<div class="sdiv">ข้อมูลส่วนตัว</div>';
-      f.personalFields.forEach(function(fld){ h+=rField(fld); });
-    }
-    h+='</div>';
-    h+='<div id="sec_c" style="display:none;">';
-    if((f.companyFields||[]).length){
-      h+='<div class="sdiv">ข้อมูลบริษัท / องค์กร</div>';
-      f.companyFields.forEach(function(fld){ h+=rField(fld); });
-    }
+  // แบ่งหน้า (pagebreak field) — ถ้าฟอร์มไม่มี pagebreak เลย ก็เท่ากับ 1 หน้าเดียว หน้าตาเหมือนเดิมทุกอย่าง
+  var flatItems = _buildFlatItems();
+  // catalog mode ไม่มีปุ่มส่ง/ปุ่มถัดไปเลย — ถ้าแบ่งหน้าไว้ด้วยจะไปหน้าถัดไปไม่ได้ เลยรวมทุกหน้าเป็นหน้าเดียวเสมอ
+  // (ตัด pagebreak ออกด้วย ไม่งั้น rField ไม่มี case นี้ จะ fallback ไปเรนเดอร์เป็นช่องข้อความเปล่าๆ)
+  var pages=f.formMode==='catalog'?[flatItems.filter(function(x){return x.type!=='pagebreak';})]:_splitPages(flatItems);
+  if(_pageIdx>=pages.length) _pageIdx=pages.length-1;
+  if(_pageIdx<0) _pageIdx=0;
+  var isLastPage=(_pageIdx===pages.length-1);
+  if(pages.length>1) h+='<div style="text-align:center;font-size:.72em;color:var(--muted);margin-bottom:10px">หน้า '+(_pageIdx+1)+' / '+pages.length+'</div>';
+  pages[_pageIdx].forEach(function(fld){ h+=rField(fld); });
+  if(f.formMode!=='catalog'){
+    h+='<div style="display:flex;gap:10px;margin-top:12px">';
+    if(_pageIdx>0) h+='<button type="button" class="btn-back" onclick="_lfPageNav(-1)">◀ ย้อนกลับ</button>';
+    if(!isLastPage) h+='<button type="button" class="btn-sub" style="margin-top:0" onclick="_lfPageNav(1)">ถัดไป →</button>';
+    else h+='<button class="btn-sub" style="margin-top:0" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
     h+='</div>';
   }
 
-  if(f.formMode!=='catalog') h+='<button class="btn-sub" id="sub-btn" onclick="submitForm()">ส่งข้อมูล →</button>';
   document.getElementById('app').innerHTML=h;
+  if(f.useTypeToggle&&_cType){
+    var tcEl=document.getElementById(_cType==='personal'?'tc_p':'tc_c');
+    if(tcEl) tcEl.classList.add('sel');
+  }
 
+  // เติมค่าที่เคยกรอกไว้แล้วกลับเข้า DOM ที่เพิ่งสร้างใหม่ — จำเป็นเพราะฟอร์มแบบแบ่งหน้า/เปลี่ยนประเภทตอนนี้
+  // เรียก renderForm() ซ้ำได้เรื่อยๆ (ไม่ใช่แค่ตอน init เหมือนเดิม) ทุกครั้งที่ DOM ถูกสร้างใหม่ ค่าที่พิมพ์ไว้ก่อน
+  // หน้านี้จะหายไปเฉยๆ ถ้าไม่ดึงจาก _answerCache กลับมาใส่คืน (ครั้งแรกสุดก่อน restore draft cache ยังว่าง
+  // อยู่ ไม่มีผลอะไร)
+  _applyAnswers(_answerCache);
   if(f.countdownEnd) initCountdown(f.countdownEnd);
   initConditional();
   updateProgress();
   document.getElementById('app').addEventListener('input', function(){ updateProgress(); _saveDraft(); });
   document.getElementById('app').addEventListener('change', function(){ _updateConditional(); updateProgress(); _saveDraft(); });
-  _restoreDraft();
+  // เรียกครั้งเดียวตอนโหลดหน้าจริงๆ เท่านั้น — ตัว _restoreDraft() เองแค่โหลดค่าเข้า _answerCache/_cType
+  // แล้วสั่ง renderForm() ใหม่ 1 ครั้ง (ไม่ยุ่งกับ DOM ตรงๆ แล้ว กัน renderForm()→_restoreDraft()→renderForm()
+  // วนไม่รู้จบเหมือนตอนที่เคยให้มันเรียก selType() ตรงๆ)
+  if(!_draftRestored){ _draftRestored=true; _restoreDraft(); }
 
   if(!f.useTypeToggle){
     setTimeout(function(){
@@ -407,11 +441,57 @@ function _ytEmbed(url){
   return m?'https://www.youtube.com/embed/'+m[1]:null;
 }
 
+/* ── Markdown เบาๆ สำหรับข้อความประชาสัมพันธ์ (richtext) — **หนา**, *เอียง*, บรรทัดขึ้นต้น "- " เป็นบูลเล็ต,
+   บรรทัดว่างคั่นย่อหน้า, ลิงก์ (http...) แปลงเป็น <a> อัตโนมัติ — ทำงานบน esc() แล้วเท่านั้น กัน XSS ── */
+function _mdLite(raw){
+  var lines=esc(raw||'').split('\n');
+  var html='', inList=false;
+  lines.forEach(function(line){
+    var isBullet=/^-\s+/.test(line);
+    if(isBullet && !inList){ html+='<ul style="margin:6px 0 6px 1.2em;padding:0">'; inList=true; }
+    if(!isBullet && inList){ html+='</ul>'; inList=false; }
+    var t=line.replace(/^-\s+/,'');
+    t=t.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>');
+    t=t.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:var(--blue)">$1</a>');
+    if(isBullet) html+='<li>'+t+'</li>';
+    else if(t.trim()) html+='<p style="margin:0 0 8px">'+t+'</p>';
+    else html+='<div style="height:6px"></div>';
+  });
+  if(inList) html+='</ul>';
+  return html;
+}
+
 /* ── Render field ── */
 function rField(f){
+  if(f.type==='__sdiv__'){
+    return '<div class="sdiv">'+esc(f.label||'')+'</div>';
+  }
   if(f.type==='section'){
     return '<div class="fld-sec"><span class="fld-sec-title"'+_txtStyleAttr(f.style)+'>'+esc(f.label||'')+'</span></div>'+
       (f.hint?'<div class="fld-sec-sub">'+esc(f.hint)+'</div>':'');
+  }
+  if(f.type==='richtext'){
+    if(!(f.content||'').trim()) return '';
+    return (f.label?'<div class="fld-sec-sub" style="margin:14px 0 6px;font-weight:700;color:var(--text)">'+esc(f.label)+'</div>':'')+
+      '<div style="font-size:.86em;line-height:1.7;color:var(--text2);margin-bottom:10px"'+_txtStyleAttr(f.style)+'>'+_mdLite(f.content)+'</div>';
+  }
+  if(f.type==='button'){
+    if(!f.label||!f.url) return '';
+    return '<a href="'+esc(f.url)+'" target="_blank" rel="noopener" class="btn-sub" style="text-decoration:none;box-sizing:border-box" onclick="_logImgLinkClick(\''+f.id+'\',\'CTA\',\''+esc(f.label).replace(/'/g,"\\'")+'\',\''+esc(f.url).replace(/'/g,"\\'")+'\')">'+esc(f.label)+'</a>';
+  }
+  if(f.type==='fileupload'){
+    var id='fld_'+f.id;
+    var lbl='<span class="lbl">'+esc(f.label)+(f.required?'<span class="req"> *</span>':'<span class="opt-tag">ไม่บังคับ</span>')+'</span>';
+    var hint=f.hint?'<div class="fld-hint">'+esc(f.hint)+'</div>':'';
+    var body;
+    if(_previewMode){
+      body='<input type="file" disabled style="opacity:.5;cursor:not-allowed"><div class="fld-hint">📎 อัปโหลดไฟล์จริงได้เมื่อเผยแพร่ฟอร์มแล้ว</div>';
+    } else {
+      body='<input type="file" id="'+id+'_file" onchange="_lfUploadFile(\''+f.id+'\',this)" accept="image/*,.pdf,.doc,.docx">'+
+        '<input type="hidden" id="'+id+'">'+
+        '<div id="'+id+'_status" style="font-size:.78em;color:var(--muted);margin-top:5px"></div>';
+    }
+    return '<div class="fg" id="fg_'+f.id+'">'+lbl+hint+body+'<div class="ferr" id="err_'+f.id+'">กรุณาแนบไฟล์ในช่องนี้</div></div>';
   }
   if(f.type==='image'){
     if(!f.url) return '';
@@ -543,31 +623,117 @@ function setRating(fid,v){
 }
 function selType(t){
   _cType=t;
-  document.getElementById('tc_p').classList.toggle('sel',t==='personal');
-  document.getElementById('tc_c').classList.toggle('sel',t==='company');
-  document.getElementById('type_err').style.display='none';
-  document.getElementById('sec_p').style.display=t==='personal'?'':'none';
-  document.getElementById('sec_c').style.display=t==='company'?'':'none';
-  _updateConditional(); updateProgress();
+  _pageIdx=0;
+  renderForm();
   // Autofocus first field after type selection
   setTimeout(function(){
-    var first = document.querySelector('#sec_'+(t==='personal'?'p':'c')+' input[type=text],#sec_'+(t==='personal'?'p':'c')+' input[type=email],#sec_'+(t==='personal'?'p':'c')+' input[type=tel]');
-    if(!first) first = document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel]');
+    var first = document.querySelector('#app input[type=text],#app input[type=email],#app input[type=tel]');
     if(first) first.focus();
   }, 80);
+}
+
+/* ── หน้าแบบแบ่งหน้า (pagebreak field) ── */
+// รวม common + (personal/company ที่เลือกแล้ว ถ้าเปิด useTypeToggle) เป็น array เดียว แทรก sdiv หัวข้อคั่น
+// ให้เหมือนของเดิมเป๊ะ (ก่อนหน้านี้ render 2 บล็อกแยกกัน) — common fields โชว์เสมอไม่ว่าจะเลือกประเภทหรือยัง
+// (เหมือนพฤติกรรมเดิม) ส่วน personal/company จะถูกเติมเข้ามาต่อท้ายก็ต่อเมื่อเลือกประเภทแล้วเท่านั้น
+function _buildFlatItems(){
+  var f=_form;
+  var common=(f.commonFields||f.fields||[]).slice();
+  var items=[];
+  if(f.useTypeToggle && common.length) items.push({type:'__sdiv__', label:'ข้อมูลทั่วไป', id:'__sdiv_common__'});
+  items=items.concat(common);
+  if(f.useTypeToggle && _cType){
+    var chosen=_cType==='personal'?(f.personalFields||[]):(f.companyFields||[]);
+    if(chosen.length){
+      items.push({type:'__sdiv__', label: _cType==='personal'?'ข้อมูลส่วนตัว':'ข้อมูลบริษัท / องค์กร', id:'__sdiv_type__'});
+      items=items.concat(chosen);
+    }
+  }
+  return items;
+}
+// แบ่ง array ที่ pagebreak field — ไม่มี pagebreak เลย = หน้าเดียว (pages.length===1) เหมือนพฤติกรรมเดิมทุกอย่าง
+function _splitPages(items){
+  var pages=[[]];
+  items.forEach(function(it){
+    if(it.type==='pagebreak') pages.push([]);
+    else pages[pages.length-1].push(it);
+  });
+  return pages;
+}
+function _lfPageNav(dir){
+  if(dir>0){
+    // ไปหน้าถัดไป — validate เฉพาะฟิลด์บังคับของหน้าปัจจุบันก่อน (validate ครบทุกฟิลด์อีกทีตอนกด "ส่งข้อมูล" อยู่แล้ว)
+    var flat=_buildFlatItems();
+    if(flat===null) return;
+    var pages=_splitPages(flat);
+    var curItems=pages[_pageIdx]||[];
+    var ok=true;
+    curItems.forEach(function(fld){
+      if(!_activeFlds[fld.id]) return;
+      var el=document.getElementById('fg_'+fld.id);
+      if(el&&el.classList.contains('fld-cond-hidden')) return;
+      validateFld(fld.id);
+      var errEl=document.getElementById('err_'+fld.id);
+      if(errEl&&errEl.style.display==='block') ok=false;
+    });
+    if(!ok){
+      var firstErr=document.querySelector('.ferr[style*="block"]');
+      if(firstErr) firstErr.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+  }
+  _pageIdx+=dir;
+  renderForm();
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 /* ── Get value ── */
 function getVal(f){
   var id='fld_'+f.id;
-  if(f.type==='radio'){ var r=document.querySelector('[name="rg_'+id+'"]:checked'); return r?r.value:''; }
-  if(f.type==='checkbox'){ var c=document.getElementById(id); return c?c.checked:false; }
-  if(f.type==='rating') return _ratingVals[f.id]||0;
-  if(f.type==='multicheck'){
+  if(f.type==='rating') return _ratingVals[f.id]||0; // เก็บใน memory อยู่แล้ว ไม่ผูกกับ DOM เลยไม่ต้องพึ่ง cache
+  // ฟิลด์นี้ไม่ได้อยู่ในหน้าปัจจุบัน (ฟอร์มแบบแบ่งหน้า เปลี่ยนหน้าไปแล้ว DOM ของหน้าเก่าถูกแทนที่) —
+  // ใช้ค่าที่เคยแคชไว้ตอนยังอยู่หน้านั้นแทน ไม่งั้นจะเข้าใจผิดว่า "ยังไม่กรอก" ทุกครั้งที่ validate ตอนกดส่ง
+  var onPage = !!document.getElementById('fg_'+f.id);
+  if(!onPage) return _answerCache[f.id]!==undefined?_answerCache[f.id]:(f.type==='checkbox'?false:'');
+  var v;
+  if(f.type==='radio'){ var r=document.querySelector('[name="rg_'+id+'"]:checked'); v=r?r.value:''; }
+  else if(f.type==='checkbox'){ var c=document.getElementById(id); v=c?c.checked:false; }
+  else if(f.type==='multicheck'){
     var cbs=document.querySelectorAll('[name="mc_'+id+'"]:checked');
-    var vals=[]; cbs.forEach(function(c){ vals.push(c.value); }); return vals.join(', ');
+    var vals=[]; cbs.forEach(function(c){ vals.push(c.value); }); v=vals.join(', ');
+  } else {
+    var el=document.getElementById(id); v=el?el.value.trim():'';
   }
-  var el=document.getElementById(id); return el?el.value.trim():'';
+  _answerCache[f.id]=v;
+  return v;
+}
+
+/* ── อัปโหลดไฟล์ที่ลูกค้าแนบ (fileupload field) ขึ้น Firebase Storage — เก็บ URL ไว้ใน hidden input
+   ให้ getVal() อ่านเหมือน field ข้อความทั่วไป ต้องมี Storage rules อนุญาตให้ผู้ไม่ login เขียนที่
+   path 'leadFormUploads/**' ไม่งั้นจะ error (หน้านี้เป็นหน้าสาธารณะ ไม่มี Firebase Auth เลย) ── */
+function _lfUploadFile(fieldId,inputEl){
+  var file=inputEl.files&&inputEl.files[0];
+  if(!file) return;
+  var statusEl=document.getElementById('fld_'+fieldId+'_status');
+  var hiddenEl=document.getElementById('fld_'+fieldId);
+  if(file.size>10*1024*1024){
+    if(statusEl) statusEl.innerHTML='<span style="color:var(--err)">⚠️ ไฟล์ใหญ่เกิน 10MB</span>';
+    inputEl.value='';
+    return;
+  }
+  if(statusEl) statusEl.textContent='⏳ กำลังอัปโหลด...';
+  var path='leadFormUploads/'+(_form?_form.id:'unknown')+'/'+Date.now()+'_'+file.name;
+  var ref=storage.ref(path);
+  ref.put(file).then(function(snap){ return snap.ref.getDownloadURL(); })
+    .then(function(url){
+      if(hiddenEl) hiddenEl.value=url;
+      if(statusEl) statusEl.innerHTML='✅ แนบไฟล์แล้ว: '+esc(file.name);
+      validateFld(fieldId); updateProgress(); _saveDraft();
+    })
+    .catch(function(e){
+      if(statusEl) statusEl.innerHTML='<span style="color:var(--err)">❌ อัปโหลดไม่สำเร็จ ('+esc(e.code||e.message||'')+')</span>';
+      inputEl.value='';
+    });
 }
 
 /* ── Submit ── */
@@ -582,7 +748,7 @@ function submitForm(){
   if(_cType==='personal') active=active.concat(f.personalFields||[]);
   if(_cType==='company')  active=active.concat(f.companyFields||[]);
   active=active.filter(function(fld){
-    if(fld.type==='section'||fld.type==='image'||fld.type==='video'||fld.type==='imageLink') return false;
+    if(DISPLAY_TYPES.indexOf(fld.type)!==-1) return false;
     var el=document.getElementById('fg_'+fld.id);
     return !el||!el.classList.contains('fld-cond-hidden');
   });
@@ -691,26 +857,24 @@ function _doSubmit(btn){
 /* ── Draft (auto-save) ── */
 function _draftKey(){ return 'lf_draft_'+(_form?_form.id:''); }
 function _saveDraft(){
-  if(!_form) return;
+  if(!_form||_previewMode) return;
   var snap={cType:_cType, vals:{}};
   var allFlds=(_form.commonFields||_form.fields||[]).concat(_form.personalFields||[]).concat(_form.companyFields||[]);
   allFlds.forEach(function(f){
-    if(f.type==='section'||f.type==='image'||f.type==='video'||f.type==='imageLink') return;
+    if(DISPLAY_TYPES.indexOf(f.type)!==-1) return;
     snap.vals[f.id]=getVal(f);
   });
   try{ localStorage.setItem(_draftKey(), JSON.stringify(snap)); } catch(e){}
 }
-function _restoreDraft(){
-  if(!_form) return;
-  var raw; try{ raw=localStorage.getItem(_draftKey()); } catch(e){ return; }
-  if(!raw) return;
-  var snap; try{ snap=JSON.parse(raw); } catch(e){ return; }
-  if(snap.cType && _form.useTypeToggle) selType(snap.cType);
-  var allFlds=(_form.commonFields||_form.fields||[]).concat(_form.personalFields||[]).concat(_form.companyFields||[]);
-  allFlds.forEach(function(f){
-    if(f.type==='section'||f.type==='image'||f.type==='video'||f.type==='imageLink') return;
-    var v=snap.vals[f.id];
-    if(v===undefined||v===null) return;
+// เติมค่าที่มีอยู่ (จาก draft หรือจาก _answerCache ตอน re-render ข้ามหน้า) กลับเข้า DOM ที่เพิ่งสร้างใหม่ —
+// ใช้ร่วมกันทั้ง _restoreDraft() (ครั้งเดียวตอนโหลดหน้า) และท้าย renderForm() (ทุกครั้งที่ re-render)
+function _applyAnswers(vals){
+  if(!_form||!vals) return;
+  Object.keys(_activeFlds).forEach(function(fid){
+    var f=_activeFlds[fid];
+    var v=vals[fid];
+    if(v===undefined||v===null||v==='') return;
+    if(!document.getElementById('fg_'+f.id)) return; // ฟิลด์นี้ไม่ได้อยู่หน้าปัจจุบัน ข้ามไปก่อน
     var id='fld_'+f.id;
     if(f.type==='radio'){
       var rb=document.querySelector('[name="rg_'+id+'"][value="'+v+'"]');
@@ -728,7 +892,15 @@ function _restoreDraft(){
       var el=document.getElementById(id); if(el) el.value=v;
     }
   });
-  _updateConditional(); updateProgress();
+}
+function _restoreDraft(){
+  if(!_form||_previewMode) return;
+  var raw; try{ raw=localStorage.getItem(_draftKey()); } catch(e){ return; }
+  if(!raw) return;
+  var snap; try{ snap=JSON.parse(raw); } catch(e){ return; }
+  _answerCache=Object.assign({}, snap.vals||{});
+  if(snap.cType && _form.useTypeToggle) _cType=snap.cType;
+  renderForm();
 }
 function _clearDraft(){ try{ localStorage.removeItem(_draftKey()); } catch(e){} }
 
@@ -749,7 +921,7 @@ function showThankyou(msg, isRedirect){
 
 /* ── Reset form ── */
 function resetForm(){
-  _cType=null; _ratingVals={}; _clearDraft();
+  _cType=null; _ratingVals={}; _answerCache={}; _pageIdx=0; _draftRestored=false; _clearDraft();
   renderForm();
   window.scrollTo({top:0, behavior:'smooth'});
 }
