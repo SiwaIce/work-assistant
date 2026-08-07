@@ -469,6 +469,9 @@ function rDealers(el) {
   </div>`;
 }
 
+// สี accent ต่อ Level — ใช้ชุดสีเดียวกับ levelTag()/.tag-s/.tag-a/.tag-b ใน style.css ให้ตรงกับที่อื่นในแอพ
+const DEALER_LEVEL_COLOR = { S: '#7c3aed', A: '#3b82f6', B: '#64748b' };
+
 function dealerCardHTML(d, health) {
   const h = health || calcHealthScore(d.id);
   const pipes = ST.pipelineByDealer(d.id);
@@ -478,38 +481,59 @@ function dealerCardHTML(d, health) {
   const pct = targetAmt ? Math.round(wonAmt / targetAmt * 100) : 0;
   const lcd = ST.getLastContactDays(d.id);
   const lvd = ST.getLastVisitDays(d.id);
-  
-  const certCount = ['dsec','crm','fh2','lark'].filter(c => {
-    const v = d[c + 'Status'];
-    return v === 'pass' || v === 'yes' || v === 'added';
-  }).length;
+  const isAuthorized = ['S','A','B'].includes(d.level);
+  const isOverdue = lvd === null || lvd > DEALER_VISIT_OVERDUE_DAYS;
 
-  var _gvHideLvlHealth = _gvHidden('dealers_levelHealth');
-  return `<div class="dealer-card" onclick="go('dealerDetail',{dealerId:'${d.id}'})">
-    <h3>${_gvHideLvlHealth ? '' : `<span id="dlvl_${d.id}" onclick="event.stopPropagation();_dealerInlineEditLevel('${d.id}')" style="cursor:text" title="คลิกเพื่อแก้ไข Level">${levelTag(d.level)}</span>`} ${sanitize(d.name)}</h3>
-    <div class="meta">${d.contact ? '👤 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• SIS: ' + d.sisCode : ''} ${d.saleName ? '• 🧑‍💼 ' + sanitize(d.saleName) : ''}</div>
+  const _gvHideLvlHealth = _gvHidden('dealers_levelHealth');
+  const lvlColor = DEALER_LEVEL_COLOR[d.level] || '#475569';
+  const healthColor = h.level === 'good' ? '#22c55e' : h.level === 'warn' ? '#f59e0b' : '#ef4444';
 
-    <div class="dealer-stats">
-      <div class="dealer-stat"><div class="val c2">${fmtMoneyShort(wonAmt)}</div><div class="lbl">ยอดขาย</div></div>
-      <div class="dealer-stat"><div class="val c3">${fmtMoneyShort(targetAmt)}</div><div class="lbl">เป้า</div></div>
-      <div class="dealer-stat"><div class="val ${pct>=70?'c2':pct>=40?'c3':'c4'}">${pct}%</div><div class="lbl">Achieve</div></div>
-      ${_gvHideLvlHealth ? '' : `<div class="dealer-stat"><div class="val" style="color:${h.level==='good'?'#22c55e':h.level==='warn'?'#f59e0b':'#ef4444'}">${h.score}</div><div class="lbl">Health</div></div>`}
-    </div>
-    
-    ${targetAmt ? `<div class="pb"><div class="pf ${pct>=70?'pf-green':pct>=40?'pf-yellow':'pf-red'}" style="width:${Math.min(pct,100)}%"></div></div>` : ''}
-    
-    <div class="dealer-health">
-      <span class="health-dot ${contactColor(lcd)}"></span>
-      <span style="font-size:.62rem;color:#64748b">ติดต่อ: ${lcd !== null ? lcd + 'd' : '-'}</span>
-      <span style="font-size:.62rem;color:#64748b">Visit: ${lvd !== null ? lvd + 'd' : '-'}</span>
-      <span style="font-size:.62rem;color:#64748b">📊 ${activePipes.length}</span>
-    </div>
-    
-    <div class="cert-row">
-      <span class="cert-item ${d.dsecStatus==='pass'?'pass':'fail'}">DSEC ${d.dsecStatus==='pass'?'✅':'❌'}</span>
-      <span class="cert-item ${d.crmStatus==='yes'?'pass':'fail'}">CRM ${d.crmStatus==='yes'?'✅':'❌'}</span>
-      <span class="cert-item ${d.fh2Status==='pass'?'pass':'fail'}">FH2 ${d.fh2Status==='pass'?'✅':'❌'}</span>
-      <span class="cert-item ${d.larkStatus==='added'?'pass':'fail'}">Lark ${d.larkStatus==='added'?'✅':'❌'}</span>
+  // แถวยอดขาย/เป้า — ถ้ายังไม่ตั้งเป้าเลย (พบบ่อยกับ Dealer ที่ยัง Level Other) ไม่โชว์ "เป้า ฿0 / Achieve 0%"
+  // ให้ดูรกเปล่าประโยชน์ เอาแค่ยอดขายพอ + hint สั้นๆ แทน
+  const statsHtml = targetAmt
+    ? `<div class="dc-stats">
+        <div class="dc-stat"><div class="v c2">${fmtMoneyShort(wonAmt)}</div><div class="l">ยอดขาย</div></div>
+        <div class="dc-stat"><div class="v c3">${fmtMoneyShort(targetAmt)}</div><div class="l">เป้า</div></div>
+        <div class="dc-stat"><div class="v ${pct>=70?'c2':pct>=40?'c3':'c4'}">${pct}%</div><div class="l">Achieve</div></div>
+      </div>
+      <div class="pb"><div class="pf ${pct>=70?'pf-green':pct>=40?'pf-yellow':'pf-red'}" style="width:${Math.min(pct,100)}%"></div></div>`
+    : `<div class="dc-stats"><div class="dc-stat"><div class="v c2">${fmtMoneyShort(wonAmt)}</div><div class="l">ยอดขาย</div></div>
+        <div class="dc-stat" style="opacity:.5"><div class="v">—</div><div class="l">ยังไม่ตั้งเป้า</div></div></div>`;
+
+  // แถว Certification — มีความหมายเฉพาะ Dealer ที่ Authorized แล้ว (S/A/B) เท่านั้น เดิมโชว์ ❌ ทั้งแถวให้ทุกใบ
+  // แม้แต่ Dealer ที่ยัง Level Other (ส่วนใหญ่ของลิสต์) กลายเป็น noise ซ้ำๆ ไม่ได้บอกอะไรใหม่
+  const certHtml = isAuthorized
+    ? `<div class="dc-certs">
+        <span class="cert-item ${d.dsecStatus==='pass'?'pass':'fail'}">DSEC ${d.dsecStatus==='pass'?'✅':'❌'}</span>
+        <span class="cert-item ${d.crmStatus==='yes'?'pass':'fail'}">CRM ${d.crmStatus==='yes'?'✅':'❌'}</span>
+        <span class="cert-item ${d.fh2Status==='pass'?'pass':'fail'}">FH2 ${d.fh2Status==='pass'?'✅':'❌'}</span>
+        <span class="cert-item ${d.larkStatus==='added'?'pass':'fail'}">Lark ${d.larkStatus==='added'?'✅':'❌'}</span>
+      </div>`
+    : `<div class="dc-empty-hint">🔒 ยังไม่เป็น Authorized Dealer</div>`;
+
+  return `<div class="dealer-card dc2" onclick="go('dealerDetail',{dealerId:'${d.id}'})">
+    ${_gvHideLvlHealth ? '' : `<div class="dc-accent" style="background:${lvlColor}"></div>`}
+    <div class="dc-body">
+      <div class="dc-top">
+        <div style="min-width:0">
+          ${_gvHideLvlHealth ? '' : `<span id="dlvl_${d.id}" class="dc-lvl" style="background:${lvlColor}22;color:${lvlColor}" onclick="event.stopPropagation();_dealerInlineEditLevel('${d.id}')" title="คลิกเพื่อแก้ไข Level">${d.level || 'OTHER'}</span>`}
+          ${isOverdue ? '<span class="dc-lvl" style="background:#ef444422;color:#ef4444" title="เกินกำหนด Visit">⚠️ เกินกำหนดเยี่ยม</span>' : ''}
+          <h3>${sanitize(d.name)}</h3>
+          <div class="meta">${d.contact ? '🧑‍💼 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• 📋 ' + d.sisCode : ''} ${d.saleName ? '• 👤 ' + sanitize(d.saleName) : ''}</div>
+        </div>
+        ${_gvHideLvlHealth ? '' : `<div class="dc-health" style="border-color:${healthColor};color:${healthColor}" title="Health Score">${h.score}</div>`}
+      </div>
+
+      ${statsHtml}
+
+      <div class="dealer-health">
+        <span class="health-dot ${contactColor(lcd)}"></span>
+        <span style="font-size:.62rem;color:#64748b">ติดต่อ: ${lcd !== null ? lcd + 'd' : '-'}</span>
+        <span style="font-size:.62rem;color:#64748b">Visit: ${lvd !== null ? lvd + 'd' : '-'}</span>
+        <span style="font-size:.62rem;color:#64748b;margin-left:auto">📊 ${activePipes.length}</span>
+      </div>
+
+      ${certHtml}
     </div>
   </div>`;
 }
@@ -2160,7 +2184,7 @@ function delDealer(id) {
 // ================================================================
 function copyDealerSummary() {
   const dealers = ST.getAll('dealers');
-  let tsv = 'SIS Code\tDJI Code\tName\tLevel\tContact\tTerm\tCredit Limit\tTarget\tWon\tAchieve%\tHealth\tLast Contact\tLast Visit\tDSEC\tCRM\tFH2\tLark\n';
+  let tsv = 'SIS Code\tDJI Code\tName\tLevel\tContact\tเซลที่ดูแล\tTerm\tCredit Limit\tTarget\tWon\tAchieve%\tHealth\tLast Contact\tLast Visit\tDSEC\tCRM\tFH2\tLark\n';
   dealers.forEach(d => {
     const won = ST.pipelineByDealer(d.id).filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
     const target = Number(d.targetRevenue) || 0;
@@ -2168,7 +2192,7 @@ function copyDealerSummary() {
     const h = calcHealthScore(d.id);
     const lcd = ST.getLastContactDays(d.id);
     const lvd = ST.getLastVisitDays(d.id);
-    tsv += `${d.sisCode||''}\t${d.djiCode||''}\t${d.name}\t${d.level||''}\t${(d.contact||'').replace(/[\t\n]/g,' ')}\t${d.creditTerm||''}\t${d.creditLimit||''}\t${target}\t${won}\t${pct}%\t${h.score}\t${lcd!==null?lcd+'d':'-'}\t${lvd!==null?lvd+'d':'-'}\t${d.dsecStatus==='pass'?'Y':'N'}\t${d.crmStatus==='yes'?'Y':'N'}\t${d.fh2Status==='pass'?'Y':'N'}\t${d.larkStatus==='added'?'Y':'N'}\n`;
+    tsv += `${d.sisCode||''}\t${d.djiCode||''}\t${d.name}\t${d.level||''}\t${(d.contact||'').replace(/[\t\n]/g,' ')}\t${(d.saleName||'').replace(/[\t\n]/g,' ')}\t${d.creditTerm||''}\t${d.creditLimit||''}\t${target}\t${won}\t${pct}%\t${h.score}\t${lcd!==null?lcd+'d':'-'}\t${lvd!==null?lvd+'d':'-'}\t${d.dsecStatus==='pass'?'Y':'N'}\t${d.crmStatus==='yes'?'Y':'N'}\t${d.fh2Status==='pass'?'Y':'N'}\t${d.larkStatus==='added'?'Y':'N'}\n`;
   });
   copyText(tsv, '📋 Copy Dealer Summary');
 }
@@ -2225,11 +2249,11 @@ function markDealerAuthorized(dealerId) {
 
 function dlDealerCSV() {
   const dealers = ST.getAll('dealers');
-  let csv = '\uFEFF"SIS Code","DJI Code","Name","Level","Contact","Phone","Email","Term","Credit Limit","Target Revenue","Won Revenue","Achieve%","DSEC","CRM","FH2","Lark","Google Map"\n';
+  let csv = '\uFEFF"SIS Code","DJI Code","Name","Level","Contact","\u0E40\u0E0B\u0E25\u0E17\u0E35\u0E48\u0E14\u0E39\u0E41\u0E25","Phone","Email","Term","Credit Limit","Target Revenue","Won Revenue","Achieve%","DSEC","CRM","FH2","Lark","Google Map"\n';
   dealers.forEach(d => {
     const won = ST.pipelineByDealer(d.id).filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
     const target = Number(d.targetRevenue) || 0;
-    csv += `"${d.sisCode||''}","${d.djiCode||''}","${esc(d.name)}","${d.level||''}","${esc(d.contact)}","${d.phone||''}","${d.email||''}","${d.creditTerm||''}","${d.creditLimit||''}","${target}","${won}","${target?Math.round(won/target*100):0}%","${d.dsecStatus||''}","${d.crmStatus||''}","${d.fh2Status||''}","${d.larkStatus||''}","${d.googleMap||''}"\n`;
+    csv += `"${d.sisCode||''}","${d.djiCode||''}","${esc(d.name)}","${d.level||''}","${esc(d.contact)}","${esc(d.saleName)}","${d.phone||''}","${d.email||''}","${d.creditTerm||''}","${d.creditLimit||''}","${target}","${won}","${target?Math.round(won/target*100):0}%","${d.dsecStatus||''}","${d.crmStatus||''}","${d.fh2Status||''}","${d.larkStatus||''}","${d.googleMap||''}"\n`;
   });
   dlBlob(csv, `dealers-${_td()}.csv`);
 }
@@ -2237,7 +2261,7 @@ function dlDealerCSV() {
 function exportDealersExcel() {
   var dealers = ST.getAll('dealers');
   if (!dealers.length) return toast('\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Dealer');
-  var headers = ['id','\u0E0A\u0E37\u0E48\u0E2D\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17','SIS Code','DJI Code','Level','DJI Dealer','Credit Term','Credit Limit','Target Revenue','\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D','Google Map','\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38','Payment Condition'];
+  var headers = ['id','\u0E0A\u0E37\u0E48\u0E2D\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17','SIS Code','DJI Code','Level','DJI Dealer','\u0E40\u0E0B\u0E25\u0E17\u0E35\u0E48\u0E14\u0E39\u0E41\u0E25','Credit Term','Credit Limit','Target Revenue','\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D','Google Map','\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38','Payment Condition'];
   var rows = [headers];
   dealers.forEach(function(d) {
     rows.push([
@@ -2247,6 +2271,7 @@ function exportDealersExcel() {
       d.djiCode||'',
       d.level||'',
       d.djiDealer||'',
+      d.saleName||'',
       d.creditTerm||'',
       d.creditLimit||'',
       d.targetRevenue||'',
@@ -2259,7 +2284,7 @@ function exportDealersExcel() {
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(rows);
   // \u0E04\u0E2D\u0E25\u0E31\u0E21\u0E19\u0E4C id \u0E17\u0E33 read-only hint \u0E14\u0E49\u0E27\u0E22\u0E2A\u0E35
-  ws['!cols'] = [{wch:20},{wch:35},{wch:12},{wch:12},{wch:8},{wch:15},{wch:12},{wch:14},{wch:14},{wch:30},{wch:40},{wch:30},{wch:30}];
+  ws['!cols'] = [{wch:20},{wch:35},{wch:12},{wch:12},{wch:8},{wch:15},{wch:16},{wch:12},{wch:14},{wch:14},{wch:30},{wch:40},{wch:30},{wch:30}];
   XLSX.utils.book_append_sheet(wb, ws, 'Dealers');
   XLSX.writeFile(wb, 'dealers-export-' + _td() + '.xlsx');
   toast('\uD83D\uDCCA Export ' + dealers.length + ' Dealer \u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08');
