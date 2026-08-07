@@ -576,6 +576,13 @@ var navHistory = [];
     window._mwId = qp.get('meetingId') || '';
     S.view = 'meetingWindow';
   }
+  // เอา query string ออกจาก URL ทันทีหลังอ่านค่าเก็บไว้แล้ว — go() ของแอปนี้ไม่ทำ pushState/replaceState เลย
+  // (เปลี่ยนหน้าด้วยการ set S.view ในหน่วยความจำอย่างเดียว ไม่แตะ URL) ถ้าไม่ล้างตรงนี้ URL จะค้างเป็น
+  // ?visitWindow=1&... ตลอดไปในแท็บนี้ ต่อให้ผู้ใช้กดเมนูไปหน้าอื่นในแอปแล้วก็ตาม พอกด Ctrl+Shift+R (hard
+  // refresh) จะอ่าน URL เดิมนี้ซ้ำแล้วเด้งกลับมาหน้า Visit แยกแท็บทุกครั้ง ไม่ว่าจะกำลังดูหน้าไหนอยู่ก็ตาม
+  if (qp.get('visitWindow') === '1' || qp.get('meetingWindow') === '1') {
+    history.replaceState(null, '', location.pathname);
+  }
 })();
 
 // แท็บอื่นบันทึก Visit แล้ว ให้แท็บนี้รีเฟรชข้อมูลอัตโนมัติ (ไม่ต้องกดรีเฟรชเอง)
