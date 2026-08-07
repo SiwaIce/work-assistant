@@ -1111,6 +1111,119 @@ function _visitCaptureDraft() {
 }
 
 // สร้าง HTML ของฟอร์ม Visit (ใช้ทั้งใน modal ปกติ และหน้าแท็บแยก) — rerenderCall คือคำสั่งที่เรียกตอนสลับโหมด Quick/Standard/Full
+// ================================================================
+// MULTI-SELECT CHIP PICKER — เลือกได้หลายรายการจากลิสต์ หรือพิมพ์เพิ่มเอง (ใช้ใน New Partner form)
+// ค่าที่เลือกเก็บเป็น data-val บน .ms-chip ตรงๆ ใน DOM ไม่ sync state แยก อ่านตอน save ผ่าน _msGetValues(id)
+// ================================================================
+function _msPickerHtml(id, options, selected, placeholder) {
+  selected = selected || [];
+  var chips = selected.map(function(v) {
+    return '<span class="ms-chip" data-val="' + sanitize(v) + '">' + sanitize(v) + '<button type="button" onclick="_msRemove(event,\'' + id + '\',this)">✕</button></span>';
+  }).join('');
+  var opts = options.map(function(o) {
+    var checked = selected.indexOf(o) !== -1;
+    return '<div class="ms-opt" onclick="_msToggle(\'' + id + '\',\'' + o.replace(/'/g, "\\'") + '\')">' + (checked ? '☑ ' : '☐ ') + sanitize(o) + '</div>';
+  }).join('');
+  return '<div class="ms-picker" id="ms_' + id + '">' +
+    '<div class="ms-box" onclick="_msBoxClick(event,\'' + id + '\')">' + chips +
+    '<input type="text" class="ms-input" id="ms_input_' + id + '" placeholder="' + sanitize(placeholder || 'พิมพ์เพื่อค้นหาหรือเพิ่มรายการใหม่...') + '" oninput="_msFilter(\'' + id + '\')" onkeydown="_msKeydown(event,\'' + id + '\')" autocomplete="off"></div>' +
+    '<div class="ms-dropdown" id="ms_dd_' + id + '">' + opts + '<div class="ms-hint">พิมพ์แล้วกด Enter เพื่อเพิ่มรายการที่ไม่มีในลิสต์</div></div>' +
+    '</div>';
+}
+function _msBoxClick(e, id) {
+  if (e.target.closest('.ms-chip')) return;
+  document.querySelectorAll('.ms-dropdown').forEach(function(d) { if (d.id !== 'ms_dd_' + id) d.classList.remove('open'); });
+  document.getElementById('ms_dd_' + id).classList.add('open');
+  var inp = document.getElementById('ms_input_' + id);
+  if (inp) inp.focus();
+}
+function _msFilter(id) {
+  var q = (document.getElementById('ms_input_' + id).value || '').toLowerCase();
+  document.querySelectorAll('#ms_dd_' + id + ' .ms-opt').forEach(function(o) {
+    o.style.display = o.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+  });
+}
+function _msAddChip(id, label) {
+  label = (label || '').trim();
+  if (!label) return;
+  var box = document.querySelector('#ms_' + id + ' .ms-box');
+  var input = document.getElementById('ms_input_' + id);
+  if (!box || !input) return;
+  var exists = Array.prototype.some.call(box.querySelectorAll('.ms-chip'), function(c) { return c.getAttribute('data-val') === label; });
+  if (exists) { input.value = ''; return; }
+  var chip = document.createElement('span');
+  chip.className = 'ms-chip';
+  chip.setAttribute('data-val', label);
+  chip.innerHTML = sanitize(label) + '<button type="button" onclick="_msRemove(event,\'' + id + '\',this)">✕</button>';
+  box.insertBefore(chip, input);
+  input.value = '';
+  _msFilter(id);
+}
+function _msToggle(id, label) {
+  var box = document.querySelector('#ms_' + id + ' .ms-box');
+  var existingChip = box ? Array.prototype.filter.call(box.querySelectorAll('.ms-chip'), function(c) { return c.getAttribute('data-val') === label; })[0] : null;
+  if (existingChip) existingChip.remove();
+  else _msAddChip(id, label);
+  var dd = document.getElementById('ms_dd_' + id);
+  if (!dd) return;
+  dd.querySelectorAll('.ms-opt').forEach(function(o) {
+    if (o.textContent.trim().replace(/^[☑☐]\s*/, '') === label) {
+      var stillSelected = !!(box && box.querySelector('.ms-chip[data-val="' + label.replace(/"/g, '\\"') + '"]'));
+      o.textContent = (stillSelected ? '☑ ' : '☐ ') + label;
+    }
+  });
+}
+function _msRemove(e, id, btn) {
+  e.stopPropagation();
+  var chip = btn.parentElement;
+  var label = chip.getAttribute('data-val');
+  chip.remove();
+  var dd = document.getElementById('ms_dd_' + id);
+  if (dd) dd.querySelectorAll('.ms-opt').forEach(function(o) {
+    if (o.textContent.trim().replace(/^[☑☐]\s*/, '') === label) o.textContent = '☐ ' + label;
+  });
+}
+function _msKeydown(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); _msAddChip(id, document.getElementById('ms_input_' + id).value); }
+}
+function _msGetValues(id) {
+  var box = document.querySelector('#ms_' + id + ' .ms-box');
+  if (!box) return [];
+  return Array.prototype.map.call(box.querySelectorAll('.ms-chip'), function(c) { return c.getAttribute('data-val'); });
+}
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.ms-picker')) return;
+  document.querySelectorAll('.ms-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+});
+
+// ================================================================
+// PILL PICKER — เลือกคำตอบสั้นๆ แบบกดปุ่ม (เคย/ไม่เคย, มี/พร้อมที่จะมี/ยังไม่มี, ยินดี/ไม่สะดวก ฯลฯ)
+// options: [{val,label,cls}] cls คือสี sel-yes/sel-mid/sel-no — ใส่ follow-up ได้ผ่าน div id="fu_"+groupId
+// + attribute data-show-when="ค่าที่จะให้โผล่"
+// ================================================================
+function _pillGroupHtml(id, options, selected) {
+  return '<div class="pill-g" id="pg_' + id + '">' + options.map(function(o) {
+    var sel = o.val === selected;
+    return '<div class="pill-opt' + (sel ? ' ' + o.cls : '') + '" data-val="' + sanitize(o.val) + '" onclick="_pillPick(\'' + id + '\',\'' + o.val.replace(/'/g, "\\'") + '\',\'' + o.cls + '\')">' + sanitize(o.label) + '</div>';
+  }).join('') + '</div>';
+}
+function _pillPick(id, val, cls) {
+  var g = document.getElementById('pg_' + id);
+  if (!g) return;
+  g.querySelectorAll('.pill-opt').forEach(function(p) {
+    p.classList.remove('sel-yes', 'sel-mid', 'sel-no');
+    if (p.getAttribute('data-val') === val) p.classList.add(cls);
+  });
+  var fu = document.getElementById('fu_' + id);
+  if (fu) fu.style.display = (fu.getAttribute('data-show-when') === val) ? '' : 'none';
+}
+function _pillGetValue(id) {
+  var g = document.getElementById('pg_' + id);
+  if (!g) return '';
+  var sel = g.querySelector('.pill-opt.sel-yes,.pill-opt.sel-mid,.pill-opt.sel-no');
+  return sel ? sel.getAttribute('data-val') : '';
+}
+
 function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   window._visitCurrentEid = eid || ''; // ให้ระบบ draft autosave รู้ว่ากำลังแก้ของเดิมอยู่ไหม (ดู _visitScheduleDraftSave)
   var v = eid ? ST.getOne('visits', eid) : {};
@@ -1129,6 +1242,12 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     var srcType = window._visitSourceType || 'dealer';
     return '' +
       ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
+      // ปุ่มสลับโหมดไว้บนสุดเหมือน Standard/Full — เดิมอยู่ล่างสุดใต้ปุ่มบันทึก ตกขอบจอล่างได้ง่ายเวลาฟอร์มยาว
+      // (มีไฟล์แนบ/สรุปยาว) ทำให้ดูเหมือนปุ่มหายไปถ้าไม่เลื่อนจอลงไปสุด
+      '<div class="visit-mode">' +
+      '<div class="vm-btn quick act">⚡ Quick</div>' +
+      '<div class="vm-btn standard" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
+      '<div class="vm-btn full" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
       visitPhotoReminderHtml() +
       '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
       '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
@@ -1139,8 +1258,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
       '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label>' + (AI_FEATURES_ENABLED ? '<button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button>' : '') + '</div><textarea id="fv_summary" rows="5" placeholder="พิมพ์โน้ตคร่าวๆ' + (AI_FEATURES_ENABLED ? ' แล้วกด ✨ AI จัดระเบียบ' : '') + '">' + sanitize(v.summary || '') + '</textarea></div>' +
       attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
-      '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>' +
-      '<div style="margin-top:6px;text-align:center"><span class="vm-btn standard" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</span> <span class="vm-btn full" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</span></div>';
+      '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>';
   }
 
   // Standard / Full
