@@ -5096,6 +5096,9 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     if (p.rowNo && String(p.rowNo).trim()) pipeByRowNo[String(p.rowNo).trim()] = p;
   });
 
+  // เก็บ Sale ล่าสุดที่เจอต่อ Dealer ระหว่าง import — เอาไว้ผูกกลับเข้า "เซลที่ดูแล" ของ Dealer หลัง loop จบ
+  // (แถวหลังสุดของ dealer เดียวกันชนะ ถ้าชีทมีหลายแถวค่าไม่ตรงกัน)
+  var dealerSaleSync = {};
   var added = 0, updated = 0, skipped = 0;
   rows.forEach(function(c, idx) {
     var projectId   = _pipeCol(c, colMap, 'projectId').trim();
@@ -5176,6 +5179,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     var action = actions ? actions[idx] : (existing ? 'update' : 'add');
 
     if (action === 'skip') { skipped++; return; }
+    if (dealer && pipeData.saleName) dealerSaleSync[dealer.id] = { dealer: dealer, saleName: pipeData.saleName };
     if (action === 'update' && existing) {
       // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
       // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
@@ -5204,10 +5208,23 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     });
   }
 
+  // ผูกช่อง Sale ใน Excel กลับเข้า "เซลที่ดูแล" ของ Dealer — ถ้าไม่ตรงกับที่มีอยู่ ให้ import ทับ (ถือ Excel
+  // เป็น source of truth) แล้วทับ Sale ของ Pipeline อื่นๆ ที่เหลือของ Dealer เดียวกันให้ตรงกันด้วย (เหมือน
+  // ตอนแก้ "เซลที่ดูแล" จากฟอร์ม Dealer ตรงๆ — ดู cascadeDealerSaleNameToPipelines ใน views-dealer.js)
+  var dealersSynced = 0;
+  Object.keys(dealerSaleSync).forEach(function(dealerId) {
+    var s = dealerSaleSync[dealerId];
+    if (s.dealer.saleName === s.saleName) return;
+    ST.update('dealers', dealerId, { saleName: s.saleName });
+    if (typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(dealerId, s.saleName);
+    dealersSynced++;
+  });
+
   var msg = '✅ นำเข้าแล้ว';
   if (added)   msg += ' ➕' + added + ' ใหม่';
   if (updated) msg += ' ✏️' + updated + ' อัปเดต';
   if (deleted) msg += ' 🗑️' + deleted + ' ลบ';
+  if (dealersSynced) msg += ' 👤' + dealersSynced + ' Dealer อัปเดตเซลที่ดูแล';
   if (skipped) msg += ' (ข้าม ' + skipped + ')';
   toast(msg);
   render();
