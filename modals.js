@@ -1347,14 +1347,18 @@ function buildPartnerVisitFormHtml(existDealer, eid, rerenderCall, v, dealer) {
   window._npAttach3 = (pd.attach3 || []).slice();
 
   var bar = _visitModeBarHtml(dealer, rerenderCall);
-  if (!existDealer) {
-    return bar + '<div class="hint" style="margin-top:10px">⚠️ โหมด New Partner ต้องเปิดจากหน้า Dealer ที่ต้องการ (ยังไม่เป็น SAB Authorized Dealer) — กรุณากลับไปเปิดจากหน้า Dealer</div>';
-  }
-  var companyName = dealer ? dealer.name : '';
+  // ส่วนใหญ่ New Partner คุยกับคนที่ "ยังไม่เป็น Dealer เลย" (Lead/บริษัทที่พึ่งรู้จัก) ไม่ใช่แค่ Dealer เดิมที่ยัง
+  // ไม่ได้ SAB — เลยต้องมีตัวเลือกที่มาแบบเดียวกับ Quick/Standard (Dealer/Lead/อื่นๆ) ไม่ใช่บังคับต้องมี Dealer อยู่แล้ว
+  var srcType = window._visitSourceType || (existDealer ? 'dealer' : 'lead');
+  var prevCompanyName = dealer ? dealer.name : (v.company || '');
+  var sourceBlock = '<div class="form-section">📋 ข้อมูลลูกค้า</div>' +
+    '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer (ยังไม่ SAB)</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
+    '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
+    '<div id="fv_lead_row"' + (srcType !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' +
+    '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปคุย..." value="' + sanitize(srcType === 'other' ? prevCompanyName : '') + '"></div></div>';
 
-  var html = bar +
+  var html = bar + sourceBlock +
     '<div class="form-section">1. ข้อมูลบริษัท</div>' +
-    '<div class="fg"><label>ชื่อบริษัท <span class="np-prefill-badge">ดึงจาก Dealer อัตโนมัติ</span></label><input type="text" value="' + sanitize(companyName) + '" disabled style="opacity:.7"></div>' +
     '<div class="fr"><div class="fg"><label>ยอดขายรวมต่อปี (฿)</label><input type="text" id="np_revenue" value="' + sanitize(pd.annualRevenue || '') + '" placeholder="0"></div>' +
     '<div class="fg"><label>จำนวนพนักงาน</label><input type="text" id="np_headcount" value="' + sanitize(pd.employeeCount || '') + '" placeholder="อย่างน้อย 10 คน"><div class="hint">ต้องไม่น้อยกว่า 10 คน</div></div></div>' +
     '<div class="fg"><label>สัดส่วนพนักงานแบ่งตามแผนก</label><input type="text" id="np_deptmix" value="' + sanitize(pd.deptBreakdown || '') + '" placeholder="ฝ่ายขาย .. คน, ช่างเทคนิค .. คน, อื่นๆ .. คน"></div>' +
@@ -1397,8 +1401,26 @@ function buildPartnerVisitFormHtml(existDealer, eid, rerenderCall, v, dealer) {
 }
 
 function savePartnerVisit(dealerId, eid) {
-  if (!dealerId) return alert('ไม่พบ Dealer');
   var cfg = getConfig();
+  var srcEl = document.querySelector('input[name="fv_source"]:checked');
+  var srcType = srcEl ? srcEl.value : (window._visitSourceType || 'dealer');
+  var did = '', prospectId = '', company = '';
+  if (srcType === 'lead') {
+    var selPr = document.getElementById('fv_lead_prospect');
+    prospectId = selPr ? selPr.value : '';
+    if (!prospectId) return alert('เลือก Lead ที่ติดตาม');
+    var pr = ST.getOne('prospects', prospectId);
+    company = pr ? (pr.companyName || '') : '';
+  } else if (srcType === 'other') {
+    var companyEl = document.getElementById('fv_company_txt');
+    company = companyEl ? companyEl.value.trim() : '';
+    if (!company) return alert('พิมพ์ชื่อบริษัท');
+  } else {
+    did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
+    if (!did) return alert('เลือก Dealer');
+    var pickedDealer = ST.getOne('dealers', did);
+    if (pickedDealer && pickedDealer.djiDealer === 'SAB') return alert('Dealer นี้เป็น SAB Authorized Dealer แล้ว — ใช้โหมด Standard/Full แทน');
+  }
   var partnerData = {
     annualRevenue: (document.getElementById('np_revenue') || {}).value || '',
     employeeCount: (document.getElementById('np_headcount') || {}).value || '',
@@ -1422,18 +1444,19 @@ function savePartnerVisit(dealerId, eid) {
     note: (document.getElementById('np_note') || {}).value || ''
   };
   var data = {
-    date: _td(), dealerId: dealerId, mode: 'offline',
+    date: _td(), dealerId: did, prospectId: prospectId, company: company, mode: 'offline',
     summary: 'New Partner: ' + (partnerData.note || (partnerData.mainCustomer ? 'ลูกค้าหลัก ' + partnerData.mainCustomer : '')),
     saleName: cfg.saleName, reportMode: 'partner', partnerData: partnerData,
     topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [],
     attachments: [].concat(partnerData.attach1, partnerData.attach2, partnerData.attach3),
     sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
+  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' New Partner Visit');
   if (!eid) _visitClearDraft();
   closeMForce(); toast('💾 บันทึก New Partner Report แล้ว'); render();
-  notifyVisitSavedAcrossTabs(dealerId);
+  notifyVisitSavedAcrossTabs(did);
 }
 
 async function aiCleanVisitNote() {
