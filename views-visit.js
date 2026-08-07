@@ -98,6 +98,9 @@ function rVisitDet(el) {
   }).join('')}
   </div>` : ''}
 
+  <!-- New Partner data — ยังต้องโชว์ได้แม้ Dealer จะเป็น SAB Authorized Dealer ไปแล้ว (ดูประวัติย้อนหลัง) -->
+  ${v.reportMode === 'partner' && v.partnerData ? renderPartnerDataCard(v.partnerData) : ''}
+
   <!-- Revenue -->
   ${v.revenue||v.expectedRevenue?`<div class="card"><h2>💰 ยอดขาย</h2>
   <div class="fr"><div><label style="color:#64748b;font-size:.68rem">ยอดขายปัจจุบัน</label><div style="font-weight:700;color:#22c55e">${v.revenue?fmtMoney(v.revenue)+' ฿':'-'}</div></div>
@@ -129,6 +132,37 @@ function rVisitDet(el) {
   ${v.feedbackItems?.length?`<div class="card"><h2>💡 Feedback</h2>
   ${v.feedbackItems.map((f,i) => `<div class="visit-sub">${i+1}. ${sanitize(f)}</div>`).join('')}</div>`:''}
   `;
+}
+
+// ================================================================
+// NEW PARTNER — สรุปข้อมูลนัดคุยเป็น Partner/Authorized Dealer (ดู savePartnerVisit ใน modals.js)
+// โชว์เฉพาะฟิลด์ที่กรอกไว้จริง กันการ์ดยาวว่างเปล่า
+// ================================================================
+function renderPartnerDataCard(pd) {
+  const row = (label, val) => val ? `<div style="margin-top:5px"><label style="color:#64748b;font-size:.68rem">${label}</label><div style="font-size:.78rem">${sanitize(String(val))}</div></div>` : '';
+  const attachRow = (label, atts) => (atts||[]).length ? `<div style="margin-top:5px"><label style="color:#64748b;font-size:.68rem">${label}</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${atts.map(a => _attachItemHtml(a, `window.open('${a.url}','_blank')`)).join('')}</div></div>` : '';
+  return `<div class="card"><h2>🆕 New Partner — ข้อมูลนัดคุยเป็น Authorized Dealer</h2>
+    ${row('ยอดขายรวมต่อปี (฿)', pd.annualRevenue)}
+    ${row('จำนวนพนักงาน', pd.employeeCount)}
+    ${row('สัดส่วนพนักงานแบ่งตามแผนก', pd.deptBreakdown)}
+    ${row('อุตสาหกรรม/กลุ่มลูกค้าที่โฟกัส', (pd.focusIndustries||[]).join(', '))}
+    ${row('ลูกค้าหลัก', pd.mainCustomer)}
+    ${row('ปัจจุบันจำหน่ายแบรนด์', pd.currentBrands)}
+    ${row('เคยจำหน่ายสินค้า DJI Enterprise มาก่อนหรือไม่', pd.prevDjiExp)}
+    ${row('ซื้อกับดีลเลอร์เจ้าไหนมาก่อน', pd.prevDealerName)}
+    ${row('มีประสบการณ์ขายงานโปรเจค (รัฐ/เอกชน)', pd.projectExp)}
+    ${row('เคยขายให้กลุ่มเป้าหมายของ DJI', (pd.djiTargetSegments||[]).join(', '))}
+    ${row('มีทีมงานดูแลงานขาย DJI Enterprise โดยเฉพาะ', pd.teamReady)}
+    ${row('พนักงานขาย (ชื่อ/เบอร์)', pd.salesContact)}
+    ${row('ช่างเทคนิค (ชื่อ/เบอร์)', pd.techContact)}
+    ${row('ยินดีลงทุนซื้อสินค้าเดโม่', pd.demoInvest)}
+    ${row('ยินดีรับเป้ายอดขาย', pd.acceptTarget)}
+    ${row('ยินดีประชาสัมพันธ์ DJI', pd.acceptPromo)}
+    ${attachRow('📎 หนังสือรับรองบริษัท', pd.attach1)}
+    ${attachRow('📎 ใบทะเบียน ภ.พ.20', pd.attach2)}
+    ${attachRow('📎 สัญญาซื้อ-ขายกับหน่วยงาน', pd.attach3)}
+    ${row('📝 สรุปการพูดคุยเพิ่มเติม', pd.note)}
+  </div>`;
 }
 
 function renderTopicDetail(t, v) {
@@ -219,6 +253,7 @@ function rVisitWindow(el) {
   if (_openKey !== _visitWindowLastOpenKey) {
     _visitWindowLastOpenKey = _openKey;
     if (!eid) _visitOfferDraftRestore();
+    if (eid) { var _ev = ST.getOne('visits', eid); if (_ev && _ev.reportMode) visitMode = _ev.reportMode; }
   }
   // มาจากนัดใน Visit Plan (openVisitWindow ส่ง planId มา) — ผูกผล Visit กลับเข้าแผนนัดนี้อัตโนมัติหลังบันทึก
   if (window._vwPlanId) window._vpLinkPlanId = window._vwPlanId;

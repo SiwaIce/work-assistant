@@ -1077,10 +1077,12 @@ function showVisitM(dealerId, eid) {
     _visitLastOpenKey = _openKey;
     window._visitDraftOverride = null;
     if (!eid) _visitOfferDraftRestore();
+    // เปิดแก้ไข Visit เดิม — ให้ฟอร์มเปิดโหมดเดียวกับตอนบันทึกไว้ (เช่น New Partner) ไม่ใช่โหมดที่ใช้อยู่ก่อนหน้า
+    if (eid) { var _ev = ST.getOne('visits', eid); if (_ev && _ev.reportMode) visitMode = _ev.reportMode; }
   }
   var rerender = "showVisitM('" + existDealer + "','" + (eid || '') + "')";
   var html = buildVisitFormHtml(existDealer, eid, rerender);
-  var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : '📝 Standard Visit');
+  var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : (visitMode === 'partner' ? '🆕 New Partner Report' : '📝 Standard Visit'));
   openM(title, html);
 }
 
@@ -1224,6 +1226,19 @@ function _pillGetValue(id) {
   return sel ? sel.getAttribute('data-val') : '';
 }
 
+// ปุ่มสลับโหมด Quick/Standard/Full/(New Partner) — ใช้ร่วมกันทั้ง 3 branch (Quick, Standard/Full, Partner)
+// New Partner โชว์เฉพาะ dealer ที่ยังไม่เป็น SAB Authorized Dealer (หรือยังไม่มี dealer ผูกไว้เลย) — ถ้าเป็น SAB แล้วซ่อนปุ่ม
+// แต่รายงานเก่าที่เคยกรอกไว้ (reportMode==='partner') ยังเปิดดู/แก้ไขได้ตามปกติผ่าน rVisitDet
+function _visitModeBarHtml(dealer, rerenderCall) {
+  var showPartner = !dealer || dealer.djiDealer !== 'SAB';
+  return '<div class="visit-mode">' +
+    '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'quick\';' + rerenderCall + '">⚡ Quick</div>' +
+    '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
+    '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div>' +
+    (showPartner ? '<div class="vm-btn partner' + (visitMode === 'partner' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'partner\';' + rerenderCall + '">🆕 New Partner</div>' : '') +
+    '</div>';
+}
+
 function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   window._visitCurrentEid = eid || ''; // ให้ระบบ draft autosave รู้ว่ากำลังแก้ของเดิมอยู่ไหม (ดู _visitScheduleDraftSave)
   var v = eid ? ST.getOne('visits', eid) : {};
@@ -1237,6 +1252,13 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   var prevVisit = existDealer ? (ST.visitsByDealer(existDealer)[0] || null) : null;
   window._visitAttach = (v.attachments || []).slice();
 
+  if (visitMode === 'partner' && dealer && dealer.djiDealer === 'SAB') visitMode = 'standard';
+
+  // New Partner Mode
+  if (visitMode === 'partner') {
+    return buildPartnerVisitFormHtml(existDealer, eid, rerenderCall, v, dealer);
+  }
+
   // Quick Mode
   if (visitMode === 'quick') {
     var srcType = window._visitSourceType || 'dealer';
@@ -1244,10 +1266,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
       ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
       // ปุ่มสลับโหมดไว้บนสุดเหมือน Standard/Full — เดิมอยู่ล่างสุดใต้ปุ่มบันทึก ตกขอบจอล่างได้ง่ายเวลาฟอร์มยาว
       // (มีไฟล์แนบ/สรุปยาว) ทำให้ดูเหมือนปุ่มหายไปถ้าไม่เลื่อนจอลงไปสุด
-      '<div class="visit-mode">' +
-      '<div class="vm-btn quick act">⚡ Quick</div>' +
-      '<div class="vm-btn standard" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
-      '<div class="vm-btn full" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
+      _visitModeBarHtml(dealer, rerenderCall) +
       visitPhotoReminderHtml() +
       '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
       '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
@@ -1265,10 +1284,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   var html = '' +
     ((typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '') +
     visitPhotoReminderHtml() +
-    '<div class="visit-mode">' +
-    '<div class="vm-btn quick' + (visitMode === 'quick' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'quick\';' + rerenderCall + '">⚡ Quick</div>' +
-    '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
-    '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div></div>' +
+    _visitModeBarHtml(dealer, rerenderCall) +
     '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
     (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
@@ -1311,6 +1327,110 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   html += '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button></div>';
 
   return html;
+}
+
+// ================================================================
+// NEW PARTNER VISIT MODE — นัดคุยการเป็น Partner/Authorized Dealer (ยังไม่เป็น SAB)
+// หัวข้อตามแบบสอบถามความต้องการเป็น Authorize Dealer ของ DJI — เก็บลง visits.partnerData
+// ================================================================
+var NP_INDUSTRY_OPTS = ['ทหาร/ตำรวจ', 'การไฟฟ้า/พลังงาน', 'กรมป่าไม้/อุทยาน', 'โซลาร์เซลล์', 'เกษตรกรรม', 'บรรเทาสาธารณภัย', 'ก่อสร้าง/สำรวจ'];
+var NP_TARGET_SEG_OPTS = ['ทหาร', 'ตำรวจ', 'กรมป่าไม้', 'กรมที่ดิน', 'อุทยาน', 'บรรเทาสาธารณภัย', 'การไฟฟ้า', 'โรงกลั่นน้ำมัน', 'โซลาร์เซลล์'];
+var NP_YN_OPTS = [{val: 'ยินดี', label: 'ยินดี', cls: 'sel-yes'}, {val: 'ไม่สะดวก', label: 'ไม่สะดวก', cls: 'sel-no'}];
+
+function buildPartnerVisitFormHtml(existDealer, eid, rerenderCall, v, dealer) {
+  var pd = v.partnerData || {};
+  window._npAttach1 = (pd.attach1 || []).slice();
+  window._npAttach2 = (pd.attach2 || []).slice();
+  window._npAttach3 = (pd.attach3 || []).slice();
+
+  var bar = _visitModeBarHtml(dealer, rerenderCall);
+  if (!existDealer) {
+    return bar + '<div class="hint" style="margin-top:10px">⚠️ โหมด New Partner ต้องเปิดจากหน้า Dealer ที่ต้องการ (ยังไม่เป็น SAB Authorized Dealer) — กรุณากลับไปเปิดจากหน้า Dealer</div>';
+  }
+  var companyName = dealer ? dealer.name : '';
+
+  var html = bar +
+    '<div class="form-section">1. ข้อมูลบริษัท</div>' +
+    '<div class="fg"><label>ชื่อบริษัท <span class="np-prefill-badge">ดึงจาก Dealer อัตโนมัติ</span></label><input type="text" value="' + sanitize(companyName) + '" disabled style="opacity:.7"></div>' +
+    '<div class="fr"><div class="fg"><label>ยอดขายรวมต่อปี (฿)</label><input type="text" id="np_revenue" value="' + sanitize(pd.annualRevenue || '') + '" placeholder="0"></div>' +
+    '<div class="fg"><label>จำนวนพนักงาน</label><input type="text" id="np_headcount" value="' + sanitize(pd.employeeCount || '') + '" placeholder="อย่างน้อย 10 คน"><div class="hint">ต้องไม่น้อยกว่า 10 คน</div></div></div>' +
+    '<div class="fg"><label>สัดส่วนพนักงานแบ่งตามแผนก</label><input type="text" id="np_deptmix" value="' + sanitize(pd.deptBreakdown || '') + '" placeholder="ฝ่ายขาย .. คน, ช่างเทคนิค .. คน, อื่นๆ .. คน"></div>' +
+
+    '<div class="form-section">2. ข้อมูลธุรกิจ</div>' +
+    '<div class="fg"><label>อุตสาหกรรม/กลุ่มลูกค้าที่โฟกัสปัจจุบัน <span class="hint" style="display:inline">(เลือกได้หลายรายการ หรือพิมพ์เพิ่มเอง)</span></label>' + _msPickerHtml('np_focus', NP_INDUSTRY_OPTS, pd.focusIndustries || []) + '</div>' +
+    '<div class="fg"><label>ลูกค้าหลักคือใคร</label><input type="text" id="np_mainclient" value="' + sanitize(pd.mainCustomer || '') + '" placeholder="ระบุลูกค้าหลัก..."></div>' +
+    '<div class="fg"><label>ปัจจุบันจำหน่ายแบรนด์ไหนบ้าง</label><input type="text" id="np_brands" value="' + sanitize(pd.currentBrands || '') + '" placeholder="เช่น DJI, Autel, ..."></div>' +
+
+    '<div class="form-section">3. ประสบการณ์</div>' +
+    '<div class="fg"><label>เคยจำหน่ายสินค้า DJI Enterprise มาก่อนหรือไม่?</label>' +
+    _pillGroupHtml('np_exp', [{val: 'เคย', label: 'เคย', cls: 'sel-yes'}, {val: 'ไม่เคย', label: 'ไม่เคย', cls: 'sel-no'}], pd.prevDjiExp || '') +
+    '<div id="fu_np_exp" data-show-when="เคย" style="margin-top:8px' + (pd.prevDjiExp === 'เคย' ? '' : ';display:none') + '"><div class="fg"><label>ซื้อกับดีลเลอร์เจ้าไหนมาก่อน?</label><input type="text" id="np_prevdealer" value="' + sanitize(pd.prevDealerName || '') + '" placeholder="ชื่อดีลเลอร์..."></div></div>' +
+    '</div>' +
+    '<div class="fg"><label>มีประสบการณ์ขายงานโปรเจค (รัฐ/เอกชน) หรือไม่?</label>' + _pillGroupHtml('np_proj', [{val: 'มี', label: 'มี', cls: 'sel-yes'}, {val: 'ไม่มี', label: 'ไม่มี', cls: 'sel-no'}], pd.projectExp || '') + '</div>' +
+    '<div class="fg"><label>เคยขายให้กลุ่มเป้าหมายของ DJI หรือไม่? <span class="hint" style="display:inline">(เลือกได้หลายรายการ)</span></label>' + _msPickerHtml('np_targetseg', NP_TARGET_SEG_OPTS, pd.djiTargetSegments || []) + '</div>' +
+
+    '<div class="form-section">4. ความพร้อม</div>' +
+    '<div class="fg"><label>มีทีมงานดูแลงานขาย DJI Enterprise โดยเฉพาะหรือไม่?</label><div class="hint">จำเป็นต้องมี Sales และ Technical อย่างน้อยตำแหน่งละ 1 คน</div>' +
+    _pillGroupHtml('np_team', [{val: 'มี', label: 'มี', cls: 'sel-yes'}, {val: 'พร้อมที่จะมี', label: 'พร้อมที่จะมี', cls: 'sel-mid'}, {val: 'ยังไม่มี', label: 'ยังไม่มี', cls: 'sel-no'}], pd.teamReady || '') +
+    '<div id="fu_np_team" data-show-when="มี" style="margin-top:8px' + (pd.teamReady === 'มี' ? '' : ';display:none') + '"><div class="fr"><div class="fg"><label>พนักงานขาย (ชื่อ/เบอร์)</label><input type="text" id="np_salescontact" value="' + sanitize(pd.salesContact || '') + '" placeholder="ชื่อ - เบอร์โทร"></div><div class="fg"><label>ช่างเทคนิค (ชื่อ/เบอร์)</label><input type="text" id="np_techcontact" value="' + sanitize(pd.techContact || '') + '" placeholder="ชื่อ - เบอร์โทร"></div></div></div>' +
+    '</div>' +
+
+    '<div class="form-section">5. การยอมรับเงื่อนไข DJI</div>' +
+    '<div class="fg"><label>ยินดีลงทุนซื้อสินค้าเดโม่ตามที่ DJI กำหนด</label>' + _pillGroupHtml('np_demo', NP_YN_OPTS, pd.demoInvest || '') + '</div>' +
+    '<div class="fg"><label>ยินดีรับเป้ายอดขายตามที่ DJI กำหนด</label>' + _pillGroupHtml('np_target', NP_YN_OPTS, pd.acceptTarget || '') + '</div>' +
+    '<div class="fg"><label>ยินดีประชาสัมพันธ์ DJI บน Website/Social ตามที่กำหนด</label>' + _pillGroupHtml('np_promo', NP_YN_OPTS, pd.acceptPromo || '') + '</div>' +
+
+    '<div class="form-section">6. เอกสารแนบ</div>' +
+    attachUploadHtml('_npAttach1', 'visits', '📎 หนังสือรับรองบริษัท') +
+    attachUploadHtml('_npAttach2', 'visits', '📎 ใบทะเบียน ภ.พ.20') +
+    attachUploadHtml('_npAttach3', 'visits', '📎 สัญญาซื้อ-ขายกับหน่วยงาน (ปิดข้อมูลสำคัญได้)') +
+
+    '<div class="form-section">📝 สรุปการพูดคุยเพิ่มเติม</div>' +
+    '<div class="fg"><textarea id="np_note" rows="4" placeholder="พิมพ์อะไรก็ได้ที่คุยกันแต่ไม่มีในฟอร์มด้านบน เช่น รายละเอียดเพิ่มเติมของบริษัท ความกังวลของลูกค้า ข้อตกลงพิเศษ ฯลฯ">' + sanitize(pd.note || '') + '</textarea></div>' +
+
+    '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="savePartnerVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก New Partner Report</button></div>';
+
+  return html;
+}
+
+function savePartnerVisit(dealerId, eid) {
+  if (!dealerId) return alert('ไม่พบ Dealer');
+  var cfg = getConfig();
+  var partnerData = {
+    annualRevenue: (document.getElementById('np_revenue') || {}).value || '',
+    employeeCount: (document.getElementById('np_headcount') || {}).value || '',
+    deptBreakdown: (document.getElementById('np_deptmix') || {}).value || '',
+    focusIndustries: _msGetValues('np_focus'),
+    mainCustomer: (document.getElementById('np_mainclient') || {}).value || '',
+    currentBrands: (document.getElementById('np_brands') || {}).value || '',
+    prevDjiExp: _pillGetValue('np_exp'),
+    prevDealerName: (document.getElementById('np_prevdealer') || {}).value || '',
+    projectExp: _pillGetValue('np_proj'),
+    djiTargetSegments: _msGetValues('np_targetseg'),
+    teamReady: _pillGetValue('np_team'),
+    salesContact: (document.getElementById('np_salescontact') || {}).value || '',
+    techContact: (document.getElementById('np_techcontact') || {}).value || '',
+    demoInvest: _pillGetValue('np_demo'),
+    acceptTarget: _pillGetValue('np_target'),
+    acceptPromo: _pillGetValue('np_promo'),
+    attach1: window._npAttach1 || [],
+    attach2: window._npAttach2 || [],
+    attach3: window._npAttach3 || [],
+    note: (document.getElementById('np_note') || {}).value || ''
+  };
+  var data = {
+    date: _td(), dealerId: dealerId, mode: 'offline',
+    summary: 'New Partner: ' + (partnerData.note || (partnerData.mainCustomer ? 'ลูกค้าหลัก ' + partnerData.mainCustomer : '')),
+    saleName: cfg.saleName, reportMode: 'partner', partnerData: partnerData,
+    topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [],
+    attachments: [].concat(partnerData.attach1, partnerData.attach2, partnerData.attach3),
+    sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
+  };
+  var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
+  if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' New Partner Visit');
+  if (!eid) _visitClearDraft();
+  closeMForce(); toast('💾 บันทึก New Partner Report แล้ว'); render();
+  notifyVisitSavedAcrossTabs(dealerId);
 }
 
 async function aiCleanVisitNote() {

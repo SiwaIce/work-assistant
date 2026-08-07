@@ -693,6 +693,9 @@ textarea{min-height:50px;resize:vertical}
 .vm-btn.standard.act { background: #3b82f6; }
 .vm-btn.full { border-color: #f59e0b; }
 .vm-btn.full.act { background: #f59e0b; color: #000; }
+.vm-btn.partner { border-color: #a855f7; }
+.vm-btn.partner.act { background: #a855f7; color: #fff; }
+.np-prefill-badge { font-size: .68rem; padding: 2px 7px; border-radius: 999px; background: rgba(168,85,247,.15); color: #a855f7; margin-left: 6px; }
 
 /* Previous data hint */
 .prev-data { font-size: .62rem; color: #64748b; font-style: italic; margin-top: 1px; }
