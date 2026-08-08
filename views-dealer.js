@@ -539,7 +539,7 @@ function _dealerTableHtml(dealers) {
     h += '<td>' + (isAuthorized ? _dealerCertCellHtml(d) : '<span style="font-size:10px;color:var(--text2)">🔒 ไม่ Authorized</span>') + '</td>';
     h += '<td style="white-space:nowrap">' + sanitize(d.creditTerm || '-') + '</td>';
     h += '<td style="white-space:nowrap">' + sanitize(d.creditLimit || '-') + '</td>';
-    h += '<td style="white-space:nowrap">' + qcopyHtml(d.contact) + '</td>';
+    h += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(d.contact || '') + '">' + sanitize(d.contact || '-') + '</td>';
     h += '</tr>';
   });
   h += '</tbody></table></div>';
