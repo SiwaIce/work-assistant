@@ -515,21 +515,23 @@ function _dealerCertCellHtml(d) {
 // เรียงตามหัวตารางที่กด — ค่าว่าง/ไม่มีข้อมูลตกท้ายสุดเสมอไม่ว่าจะเรียงทิศไหน (กันโดดขึ้นบนสุดตอนเรียงน้อย→มาก)
 var dealerTableSort = { col: null, dir: 'desc' };
 var _LEVEL_RANK = { S: 0, A: 1, B: 2 };
+// width: % ของความกว้างตาราง รวมกันต้องได้ 100 — ใช้กับ table-layout:fixed กันปัญหาคอลัมน์สั้นๆ (Level/Achieve/
+// Cert ฯลฯ) เบียดกันซ้ายสุดแล้วเหลือพื้นที่ว่างขวาสุด (auto layout เดิมให้แต่ละคอลัมน์แค่กว้างเท่าเนื้อหา)
 var DEALER_TABLE_COLS = [
-  { id: 'name',   label: 'Dealer',       sortable: true },
-  { id: 'sis',    label: 'SIS Code',     sortable: true },
-  { id: 'dji',    label: 'DJI Code',     sortable: true },
-  { id: 'level',  label: 'Level',        sortable: true },
-  { id: 'sale',   label: 'เซลที่ดูแล',    sortable: true },
-  { id: 'won',    label: 'ยอดขาย',       sortable: true },
-  { id: 'target', label: 'เป้า',         sortable: true },
-  { id: 'pct',    label: 'Achieve',      sortable: true },
-  { id: 'visit',  label: 'Visit',        sortable: true },
-  { id: 'demo',   label: 'Demo',         sortable: true },
-  { id: 'cert',   label: 'Cert',         sortable: false },
-  { id: 'cterm',  label: 'Credit Term',  sortable: true },
-  { id: 'climit', label: 'Credit Limit', sortable: true },
-  { id: 'contact',label: 'ผู้ติดต่อ',     sortable: true }
+  { id: 'name',   label: 'Dealer',       sortable: true,  width: 14 },
+  { id: 'sis',    label: 'SIS Code',     sortable: true,  width: 7 },
+  { id: 'dji',    label: 'DJI Code',     sortable: true,  width: 7 },
+  { id: 'level',  label: 'Level',        sortable: true,  width: 5 },
+  { id: 'sale',   label: 'เซลที่ดูแล',    sortable: true,  width: 8 },
+  { id: 'won',    label: 'ยอดขาย',       sortable: true,  width: 7 },
+  { id: 'target', label: 'เป้า',         sortable: true,  width: 7 },
+  { id: 'pct',    label: 'Achieve',      sortable: true,  width: 6 },
+  { id: 'visit',  label: 'Visit',        sortable: true,  width: 5 },
+  { id: 'demo',   label: 'Demo',         sortable: true,  width: 7 },
+  { id: 'cert',   label: 'Cert',         sortable: false, width: 7 },
+  { id: 'cterm',  label: 'Credit Term',  sortable: true,  width: 6 },
+  { id: 'climit', label: 'Credit Limit', sortable: true,  width: 7 },
+  { id: 'contact',label: 'ผู้ติดต่อ',     sortable: true,  width: 7 }
 ];
 
 function sortDealerTable(col) {
@@ -583,29 +585,35 @@ function _dealerTableHtml(dealers) {
     rows = withVal.concat(withoutVal);
   }
 
-  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px"><table class="tbl" id="dealerTbl" style="min-width:1000px"><thead><tr>' +
+  // ellipsis (ไม่ nowrap เฉยๆ) ทุกช่อง — จำเป็นเพราะ table-layout:fixed ล็อกความกว้างตาม colgroup แล้ว
+  // เนื้อหาที่ยาวเกินคอลัมน์ต้องตัดด้วย ... ไม่งั้นจะดันคอลัมน์ข้างๆ เพี้ยนหรือล้นออกนอกตาราง
+  var TD = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">' +
+    '<table class="tbl" id="dealerTbl" style="width:100%;min-width:1100px;table-layout:fixed">' +
+    '<colgroup>' + DEALER_TABLE_COLS.map(function(c) { return '<col style="width:' + c.width + '%">'; }).join('') + '</colgroup>' +
+    '<thead><tr>' +
     DEALER_TABLE_COLS.map(function(c) {
       var arrow = dealerTableSort.col === c.id ? (dealerTableSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-      return '<th style="white-space:nowrap' + (c.sortable ? ';cursor:pointer;user-select:none' : '') + '"' +
+      return '<th style="' + TD + (c.sortable ? ';cursor:pointer;user-select:none' : '') + '"' +
         (c.sortable ? ' onclick="sortDealerTable(\'' + c.id + '\')" title="คลิกเพื่อเรียง"' : '') + '>' + c.label + arrow + '</th>';
     }).join('') + '</tr></thead><tbody>';
   rows.forEach(function(r) {
     var d = r.d, wonAmt = r.wonAmt, targetAmt = r.targetAmt, pct = r.pct, lvd = r.lvd, demo = r.demo, isAuthorized = r.isAuthorized, lvlColor = r.lvlColor;
     h += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
-    h += '<td style="font-weight:600;white-space:nowrap">' + qcopyHtml(d.name) + '</td>';
-    h += '<td style="white-space:nowrap">' + qcopyHtml(d.sisCode) + '</td>';
-    h += '<td style="white-space:nowrap">' + qcopyHtml(d.djiCode) + '</td>';
-    h += '<td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + lvlColor + '22;color:' + lvlColor + '">' + (d.level || 'OTHER') + '</span></td>';
-    h += '<td style="white-space:nowrap">' + qcopyHtml(d.saleName) + '</td>';
-    h += '<td style="white-space:nowrap">' + fmtMoneyShort(wonAmt) + '</td>';
-    h += '<td style="white-space:nowrap">' + (targetAmt ? fmtMoneyShort(targetAmt) : '<span style="color:var(--text2)">—</span>') + '</td>';
-    h += '<td style="white-space:nowrap' + (pct !== null ? ';font-weight:700;color:' + (pct>=70?'#22c55e':pct>=40?'#f59e0b':'#ef4444') : ';color:var(--text2)') + '">' + (pct !== null ? pct + '%' : '—') + '</td>';
-    h += '<td style="white-space:nowrap">' + (lvd !== null ? lvd + 'd' : '<span style="color:var(--text2)">—</span>') + '</td>';
-    h += '<td style="white-space:nowrap' + (demo ? ';font-weight:600;color:' + (demo.ok ? '#22c55e' : '#ef4444') : ';color:var(--text2)') + '">' + (demo ? (demo.ok ? '✅ ครบ' : '🔴 ขาด ' + demo.missingCount) : '—') + '</td>';
-    h += '<td>' + (isAuthorized ? _dealerCertCellHtml(d) : '<span style="font-size:10px;color:var(--text2)">🔒 ไม่ Authorized</span>') + '</td>';
-    h += '<td style="white-space:nowrap">' + sanitize(d.creditTerm || '-') + '</td>';
-    h += '<td style="white-space:nowrap">' + sanitize(d.creditLimit || '-') + '</td>';
-    h += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(d.contact || '') + '">' + sanitize(d.contact || '-') + '</td>';
+    h += '<td style="font-weight:600;' + TD + '" title="' + sanitize(d.name || '') + '">' + qcopyHtml(d.name) + '</td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.sisCode || '') + '">' + qcopyHtml(d.sisCode) + '</td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.djiCode || '') + '">' + qcopyHtml(d.djiCode) + '</td>';
+    h += '<td style="' + TD + '"><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + lvlColor + '22;color:' + lvlColor + '">' + (d.level || 'OTHER') + '</span></td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.saleName || '') + '">' + qcopyHtml(d.saleName) + '</td>';
+    h += '<td style="' + TD + '">' + fmtMoneyShort(wonAmt) + '</td>';
+    h += '<td style="' + TD + '">' + (targetAmt ? fmtMoneyShort(targetAmt) : '<span style="color:var(--text2)">—</span>') + '</td>';
+    h += '<td style="' + TD + (pct !== null ? ';font-weight:700;color:' + (pct>=70?'#22c55e':pct>=40?'#f59e0b':'#ef4444') : ';color:var(--text2)') + '">' + (pct !== null ? pct + '%' : '—') + '</td>';
+    h += '<td style="' + TD + '">' + (lvd !== null ? lvd + 'd' : '<span style="color:var(--text2)">—</span>') + '</td>';
+    h += '<td style="' + TD + (demo ? ';font-weight:600;color:' + (demo.ok ? '#22c55e' : '#ef4444') : ';color:var(--text2)') + '">' + (demo ? (demo.ok ? '✅ ครบ' : '🔴 ขาด ' + demo.missingCount) : '—') + '</td>';
+    h += '<td style="' + TD + '">' + (isAuthorized ? _dealerCertCellHtml(d) : '<span style="font-size:10px;color:var(--text2)">🔒 ไม่ Authorized</span>') + '</td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.creditTerm || '') + '">' + sanitize(d.creditTerm || '-') + '</td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.creditLimit || '') + '">' + sanitize(d.creditLimit || '-') + '</td>';
+    h += '<td style="' + TD + '" title="' + sanitize(d.contact || '') + '">' + sanitize(d.contact || '-') + '</td>';
     h += '</tr>';
   });
   h += '</tbody></table></div>';
