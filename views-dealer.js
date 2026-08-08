@@ -689,22 +689,37 @@ function _dealerEmail(d) {
   if (withEmail) return withEmail.email;
   return d.email || '';
 }
-function _dealerPrimaryContactName(d) {
+function _dealerPrimaryContact(d) {
   var contacts = d.contacts || [];
-  var primary = contacts.find(function(c) { return c.primary; });
-  if (primary) return primary.name || '';
-  if (contacts.length) return contacts[0].name || '';
-  return d.contact || '';
+  return contacts.find(function(c) { return c.primary; }) || contacts[0] || null;
+}
+function _dealerPrimaryContactName(d) {
+  var c = _dealerPrimaryContact(d);
+  return (c && c.name) || d.contact || '';
 }
 function fillDealerEmailTemplate(tmpl, d) {
   var cfg = getConfig();
+  var c = _dealerPrimaryContact(d);
+  var pipes = ST.pipelineByDealer(d.id);
+  var wonAmt = pipes.filter(function(p) { return pipeIsWon(p); }).reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0);
+  var targetAmt = Number(d.targetRevenue) || 0;
+  var achieve = targetAmt ? Math.round(wonAmt / targetAmt * 100) + '%' : '-';
   function fill(s) {
     return (s || '')
       .replace(/\{dealer\}/g, d.name || '')
       .replace(/\{contact\}/g, _dealerPrimaryContactName(d))
+      .replace(/\{contactPhone\}/g, (c && c.phone) || '')
+      .replace(/\{contactEmail\}/g, (c && c.email) || '')
       .replace(/\{sisCode\}/g, d.sisCode || '')
       .replace(/\{djiCode\}/g, d.djiCode || '')
+      .replace(/\{level\}/g, d.level || '')
       .replace(/\{saleName\}/g, d.saleName || '')
+      .replace(/\{creditTerm\}/g, d.creditTerm || '')
+      .replace(/\{creditLimit\}/g, d.creditLimit || '')
+      .replace(/\{targetRevenue\}/g, targetAmt ? fmtMoney(targetAmt) : '')
+      .replace(/\{achieve\}/g, achieve)
+      .replace(/\{googleMap\}/g, d.googleMap || '')
+      .replace(/\{notes\}/g, d.notes || '')
       .replace(/\{sale\}/g, cfg.saleName || 'Siwawong')
       .replace(/\{date\}/g, _td());
   }

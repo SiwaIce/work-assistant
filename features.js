@@ -5709,7 +5709,7 @@ function _etToggleDealerHint() {
   var toGroup = document.getElementById('etToGroup');
   if (!chk || !hint) return;
   if (chk.checked) {
-    hint.innerHTML = '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To';
+    hint.innerHTML = '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{contactPhone}</code>, <code>{contactEmail}</code>, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{level}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{creditTerm}</code>, <code>{creditLimit}</code>, <code>{targetRevenue}</code>, <code>{achieve}</code> Achieve%, <code>{googleMap}</code>, <code>{notes}</code>, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To';
     if (toGroup) toGroup.style.display = 'none';
   } else {
     hint.innerHTML = '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้';
@@ -5759,7 +5759,7 @@ function showEditEmailTmplM(idx) {
   h += '<div class="fm-group"><label>📝 Body</label>';
   h += '<textarea id="etBody" rows="8" class="fm-input">' + sanitize(t.body || '') + '</textarea></div>';
   h += '<div id="etHint" style="font-size:11px;color:var(--text2);margin:-8px 0 12px">' + (t.forDealer ?
-    '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To' :
+    '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{contactPhone}</code>, <code>{contactEmail}</code>, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{level}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{creditTerm}</code>, <code>{creditLimit}</code>, <code>{targetRevenue}</code>, <code>{achieve}</code> Achieve%, <code>{googleMap}</code>, <code>{notes}</code>, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To' :
     '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้') + '</div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
