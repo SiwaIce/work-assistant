@@ -3336,7 +3336,7 @@ function showImportDealerM() {
   openM('📥 Import Dealer (.xlsx)',
     '<div class="fg"><label>เลือกไฟล์ Excel</label>' +
     '<input type="file" id="imp_dl_file" accept=".xlsx,.xls" class="fi" onchange="previewDealerImport(this)">' +
-    '<div class="hint" style="margin-top:5px">คอลัมน์ที่รองรับ: id, ชื่อบริษัท, SIS Code, DJI Code, Level, DJI Dealer, Credit Term, Credit Limit, Target Revenue, ผู้ติดต่อ, Google Map, หมายเหตุ<br>ถ้ามี id และตรงกับข้อมูลเดิม → อัปเดต, ถ้าไม่มี id → เพิ่มใหม่</div></div>' +
+    '<div class="hint" style="margin-top:5px">คอลัมน์ที่รองรับ: id, ชื่อบริษัท, SIS Code, DJI Code, Level, DJI Dealer, เซลที่ดูแล, Credit Term, Credit Limit, Target Revenue, ผู้ติดต่อ, Google Map, หมายเหตุ<br>ถ้ามี id และตรงกับข้อมูลเดิม → อัปเดต, ถ้าไม่มี id → เพิ่มใหม่</div></div>' +
     '<div id="imp_dl_preview"></div>' +
     '<button class="btn bp btn-full" onclick="importDealersExcel()" style="margin-top:8px">📥 Import</button>');
 }
@@ -3383,6 +3383,7 @@ function importDealersExcel() {
         djiCode:        String(r['DJI Code']        || r['djiCode']        || '').trim(),
         level:          String(r['Level']           || r['level']          || 'B').trim(),
         djiDealer:      String(r['DJI Dealer']      || r['djiDealer']      || '').trim(),
+        saleName:       String(r['เซลที่ดูแล']       || r['saleName']       || r['Sale'] || '').trim(),
         creditTerm:     String(r['Credit Term']     || r['creditTerm']     || '').trim(),
         creditLimit:    String(r['Credit Limit']    || r['creditLimit']    || '').trim(),
         targetRevenue:  String(r['Target Revenue']  || r['targetRevenue']  || '').trim(),
@@ -3391,13 +3392,18 @@ function importDealersExcel() {
         notes:          String(r['หมายเหตุ']        || r['notes']          || '').trim(),
         paymentCondition: String(r['Payment Condition'] || r['paymentCondition'] || '').trim()
       };
+      var dealerId;
       if (id && ST.getOne('dealers', id)) {
         ST.update('dealers', id, data);
+        dealerId = id;
         updated++;
       } else {
-        ST.add('dealers', data);
+        dealerId = ST.add('dealers', data).id;
         added++;
       }
+      // ผูก "เซลที่ดูแล" จาก Excel กลับเข้า Pipeline ของ Dealer นี้ทุกโครงการเหมือนตอนแก้จากฟอร์ม Dealer ตรงๆ
+      // (ดู cascadeDealerSaleNameToPipelines ใน views-dealer.js) — ข้ามถ้าแถวนี้ไม่ได้ระบุเซลมาเลย กัน blank ทับของเดิม
+      if (data.saleName && typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(dealerId, data.saleName);
     });
     closeMForce();
     toast('📥 เพิ่ม ' + added + ' อัปเดต ' + updated + (skipped ? ' ข้าม ' + skipped : '') + ' Dealer');
