@@ -518,7 +518,8 @@ var _LEVEL_RANK = { S: 0, A: 1, B: 2 };
 // width: % ของความกว้างตาราง รวมกันต้องได้ 100 — ใช้กับ table-layout:fixed กันปัญหาคอลัมน์สั้นๆ (Level/Achieve/
 // Cert ฯลฯ) เบียดกันซ้ายสุดแล้วเหลือพื้นที่ว่างขวาสุด (auto layout เดิมให้แต่ละคอลัมน์แค่กว้างเท่าเนื้อหา)
 var DEALER_TABLE_COLS = [
-  { id: 'name',   label: 'Dealer',       sortable: true,  width: 14 },
+  { id: '_idx',   label: '#',            sortable: false, width: 3 },
+  { id: 'name',   label: 'Dealer',       sortable: true,  width: 11 },
   { id: 'sis',    label: 'SIS Code',     sortable: true,  width: 7 },
   { id: 'dji',    label: 'DJI Code',     sortable: true,  width: 7 },
   { id: 'level',  label: 'Level',        sortable: true,  width: 5 },
@@ -597,9 +598,10 @@ function _dealerTableHtml(dealers) {
       return '<th style="' + TD + (c.sortable ? ';cursor:pointer;user-select:none' : '') + '"' +
         (c.sortable ? ' onclick="sortDealerTable(\'' + c.id + '\')" title="คลิกเพื่อเรียง"' : '') + '>' + c.label + arrow + '</th>';
     }).join('') + '</tr></thead><tbody>';
-  rows.forEach(function(r) {
+  rows.forEach(function(r, idx) {
     var d = r.d, wonAmt = r.wonAmt, targetAmt = r.targetAmt, pct = r.pct, lvd = r.lvd, demo = r.demo, isAuthorized = r.isAuthorized, lvlColor = r.lvlColor;
     h += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
+    h += '<td style="' + TD + ';color:var(--text2)">' + (idx + 1) + '</td>';
     h += '<td style="font-weight:600;' + TD + '" title="' + sanitize(d.name || '') + '">' + qcopyHtml(d.name) + '</td>';
     h += '<td style="' + TD + '" title="' + sanitize(d.sisCode || '') + '">' + qcopyHtml(d.sisCode) + '</td>';
     h += '<td style="' + TD + '" title="' + sanitize(d.djiCode || '') + '">' + qcopyHtml(d.djiCode) + '</td>';
