@@ -3341,6 +3341,44 @@ function showImportDealerM() {
     '<button class="btn bp btn-full" onclick="importDealersExcel()" style="margin-top:8px">📥 Import</button>');
 }
 
+// field ที่ import รองรับ — ใช้ร่วมกันทั้ง preview (คำนวณ diff) และตอน import จริง กันโค้ด mapping ซ้ำสองที่
+// แล้วเพิ่ม field ใหม่แล้วลืมอัปเดตอีกจุด (เคยเกิดกับ "เซลที่ดูแล" มาแล้ว — ไม่เคยอยู่ใน list นี้เลย)
+var _DEALER_IMPORT_FIELDS = [
+  { key: 'name',           label: 'ชื่อบริษัท',    cols: ['ชื่อบริษัท', 'name'] },
+  { key: 'sisCode',        label: 'SIS Code',      cols: ['SIS Code', 'sisCode'] },
+  { key: 'djiCode',        label: 'DJI Code',      cols: ['DJI Code', 'djiCode'] },
+  { key: 'level',          label: 'Level',         cols: ['Level', 'level'], def: 'B' },
+  { key: 'djiDealer',      label: 'DJI Dealer',    cols: ['DJI Dealer', 'djiDealer'] },
+  { key: 'saleName',       label: 'เซลที่ดูแล',     cols: ['เซลที่ดูแล', 'saleName', 'Sale'] },
+  { key: 'creditTerm',     label: 'Credit Term',   cols: ['Credit Term', 'creditTerm'] },
+  { key: 'creditLimit',    label: 'Credit Limit',  cols: ['Credit Limit', 'creditLimit'] },
+  { key: 'targetRevenue',  label: 'Target Revenue',cols: ['Target Revenue', 'targetRevenue'] },
+  { key: 'contact',        label: 'ผู้ติดต่อ',      cols: ['ผู้ติดต่อ', 'contact'] },
+  { key: 'googleMap',      label: 'Google Map',    cols: ['Google Map', 'googleMap'] },
+  { key: 'notes',          label: 'หมายเหตุ',       cols: ['หมายเหตุ', 'notes'] },
+  { key: 'paymentCondition', label: 'Payment Condition', cols: ['Payment Condition', 'paymentCondition'] }
+];
+function _dealerRowToData(r) {
+  var data = {};
+  _DEALER_IMPORT_FIELDS.forEach(function(f) {
+    var v = '';
+    for (var i = 0; i < f.cols.length; i++) { if (r[f.cols[i]]) { v = r[f.cols[i]]; break; } }
+    data[f.key] = String(v || f.def || '').trim();
+  });
+  return data;
+}
+// เทียบค่าเดิม vs ค่าใหม่จากไฟล์ ทีละ field — คืนเฉพาะ field ที่ต่างกันจริง (สำหรับโชว์ diff ใน preview)
+function _dealerImportDiff(existing, data) {
+  var diffs = [];
+  _DEALER_IMPORT_FIELDS.forEach(function(f) {
+    var oldV = (existing[f.key] || '').toString().trim();
+    var newV = data[f.key] || '';
+    if (f.key === 'level' && !newV) return; // ไม่ได้ใส่ Level มา ไม่นับเป็นการเปลี่ยน (data.level default เป็น B เสมอ)
+    if (oldV !== newV) diffs.push({ label: f.label, old: oldV, newVal: newV });
+  });
+  return diffs;
+}
+
 function previewDealerImport(input) {
   var file = input.files[0];
   if (!file) return;
@@ -3352,64 +3390,98 @@ function previewDealerImport(input) {
     var prev = document.getElementById('imp_dl_preview');
     if (!prev) return;
     if (!rows.length) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไม่พบข้อมูลในไฟล์</div>'; return; }
-    var add = 0, upd = 0;
-    rows.forEach(function(r) {
-      var id = String(r['id']||'').trim();
-      if (id && ST.getOne('dealers', id)) upd++; else add++;
+
+    var rowMeta = rows.map(function(r) {
+      var data = _dealerRowToData(r);
+      if (!data.name) return { skip: true, data: data };
+      var id = String(r['id'] || '').trim();
+      var existing = id ? ST.getOne('dealers', id) : null;
+      var diff = existing ? _dealerImportDiff(existing, data) : [];
+      var state = !existing ? 'new' : (diff.length ? 'changed' : 'same');
+      return { data: data, id: id, existing: existing, state: state, diff: diff };
     });
-    prev.innerHTML = '<div style="font-size:12px;color:#94a3b8;background:#0f172a;border-radius:6px;padding:8px;margin-top:6px">' +
-      '✅ พบข้อมูล <strong>' + rows.length + '</strong> แถว — เพิ่มใหม่ <strong style="color:#22c55e">' + add + '</strong> อัปเดต <strong style="color:#3b82f6">' + upd + '</strong></div>';
+    window._dealerImportPending = rowMeta;
+
+    var h = '<div style="margin-top:8px">';
+    var counts = { new: 0, changed: 0, same: 0, skip: 0 };
+    rowMeta.forEach(function(m) { counts[m.skip ? 'skip' : m.state]++; });
+    h += '<div style="font-size:12px;color:#94a3b8;background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">' +
+      '✅ พบข้อมูล <strong>' + rows.length + '</strong> แถว — ' +
+      '<strong style="color:#22c55e">➕ ' + counts.new + ' ใหม่</strong> · ' +
+      '<strong style="color:#f59e0b">✏️ ' + counts.changed + ' เปลี่ยน</strong> · ' +
+      '<span style="color:#64748b">⏭ ' + counts.same + ' เหมือนเดิม</span>' +
+      (counts.skip ? ' · <span style="color:#ef4444">⚠️ ' + counts.skip + ' ไม่มีชื่อบริษัท (ข้าม)</span>' : '') +
+      '</div>';
+
+    h += '<div style="max-height:340px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+    rowMeta.forEach(function(m, i) {
+      if (m.skip) {
+        h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11px;color:#ef4444">แถวที่ ' + (i + 1) + ': ไม่มีชื่อบริษัท — จะถูกข้าม</div>';
+        return;
+      }
+      var badge = m.state === 'new' ? '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>' :
+        m.state === 'changed' ? '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>' :
+        '<span style="color:#64748b;font-size:11px;font-weight:700">⏭ เหมือนเดิม</span>';
+      var defAct = m.state === 'same' ? 'skip' : (m.state === 'new' ? 'add' : 'update');
+      h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b">';
+      h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+      h += '<span style="flex:1;min-width:120px;font-size:12px;font-weight:600">' + sanitize(m.data.name) + '</span>';
+      h += badge;
+      if (m.state === 'changed') h += ' <button type="button" onclick="_dealerImpToggleDiff(' + i + ')" id="dImpDiffBtn_' + i + '" style="font-size:10px;padding:1px 6px;border:1px solid #334155;border-radius:4px;background:#0f172a;cursor:pointer;color:#94a3b8">🔍 ' + m.diff.length + '</button>';
+      h += '<select id="dImpAct_' + i + '" style="font-size:11px;padding:2px 5px;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#e2e8f0">' +
+        '<option value="add"' + (defAct === 'add' ? ' selected' : '') + '>➕ เพิ่มใหม่</option>' +
+        (m.existing ? '<option value="update"' + (defAct === 'update' ? ' selected' : '') + '>✏️ อัปเดต</option>' : '') +
+        '<option value="skip"' + (defAct === 'skip' ? ' selected' : '') + '>⏭ ข้าม</option>' +
+        '</select>';
+      h += '</div>';
+      if (m.state === 'changed' && m.diff.length) {
+        h += '<table id="dImpDiffRow_' + i + '" style="display:none;width:100%;margin-top:6px;font-size:10.5px;border-collapse:collapse">';
+        m.diff.forEach(function(d) {
+          h += '<tr><td style="padding:2px 6px;color:#64748b;white-space:nowrap">' + sanitize(d.label) + '</td>' +
+            '<td style="padding:2px 6px;color:#ef4444">' + sanitize(d.old || '(ว่าง)') + '</td>' +
+            '<td style="padding:2px 6px;color:#94a3b8">→</td>' +
+            '<td style="padding:2px 6px;color:#22c55e">' + sanitize(d.newVal || '(ว่าง)') + '</td></tr>';
+        });
+        h += '</table>';
+      }
+      h += '</div>';
+    });
+    h += '</div></div>';
+    prev.innerHTML = h;
   };
   reader.readAsArrayBuffer(file);
 }
+function _dealerImpToggleDiff(i) {
+  var row = document.getElementById('dImpDiffRow_' + i);
+  if (row) row.style.display = row.style.display === 'none' ? 'table' : 'none';
+}
 
 function importDealersExcel() {
-  var file = document.getElementById('imp_dl_file') && document.getElementById('imp_dl_file').files[0];
-  if (!file) return alert('เลือกไฟล์ก่อน');
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var wb = XLSX.read(e.target.result, {type:'array'});
-    var ws = wb.Sheets[wb.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-    if (!rows.length) return alert('ไม่พบข้อมูลในไฟล์');
-    var added = 0, updated = 0, skipped = 0;
-    rows.forEach(function(r) {
-      var name = String(r['ชื่อบริษัท'] || r['name'] || '').trim();
-      if (!name) { skipped++; return; }
-      var id = String(r['id'] || '').trim();
-      var data = {
-        name: name,
-        sisCode:        String(r['SIS Code']       || r['sisCode']        || '').trim(),
-        djiCode:        String(r['DJI Code']        || r['djiCode']        || '').trim(),
-        level:          String(r['Level']           || r['level']          || 'B').trim(),
-        djiDealer:      String(r['DJI Dealer']      || r['djiDealer']      || '').trim(),
-        saleName:       String(r['เซลที่ดูแล']       || r['saleName']       || r['Sale'] || '').trim(),
-        creditTerm:     String(r['Credit Term']     || r['creditTerm']     || '').trim(),
-        creditLimit:    String(r['Credit Limit']    || r['creditLimit']    || '').trim(),
-        targetRevenue:  String(r['Target Revenue']  || r['targetRevenue']  || '').trim(),
-        contact:        String(r['ผู้ติดต่อ']       || r['contact']        || '').trim(),
-        googleMap:      String(r['Google Map']      || r['googleMap']      || '').trim(),
-        notes:          String(r['หมายเหตุ']        || r['notes']          || '').trim(),
-        paymentCondition: String(r['Payment Condition'] || r['paymentCondition'] || '').trim()
-      };
-      var dealerId;
-      if (id && ST.getOne('dealers', id)) {
-        ST.update('dealers', id, data);
-        dealerId = id;
-        updated++;
-      } else {
-        dealerId = ST.add('dealers', data).id;
-        added++;
-      }
-      // ผูก "เซลที่ดูแล" จาก Excel กลับเข้า Pipeline ของ Dealer นี้ทุกโครงการเหมือนตอนแก้จากฟอร์ม Dealer ตรงๆ
-      // (ดู cascadeDealerSaleNameToPipelines ใน views-dealer.js) — ข้ามถ้าแถวนี้ไม่ได้ระบุเซลมาเลย กัน blank ทับของเดิม
-      if (data.saleName && typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(dealerId, data.saleName);
-    });
-    closeMForce();
-    toast('📥 เพิ่ม ' + added + ' อัปเดต ' + updated + (skipped ? ' ข้าม ' + skipped : '') + ' Dealer');
-    render();
-  };
-  reader.readAsArrayBuffer(file);
+  var rowMeta = window._dealerImportPending;
+  if (!rowMeta) return alert('เลือกไฟล์ก่อน (รอ preview ขึ้นก่อนกด Import)');
+  var added = 0, updated = 0, skipped = 0;
+  rowMeta.forEach(function(m, i) {
+    if (m.skip) { skipped++; return; }
+    var actEl = document.getElementById('dImpAct_' + i);
+    var action = actEl ? actEl.value : (m.state === 'same' ? 'skip' : (m.state === 'new' ? 'add' : 'update'));
+    if (action === 'skip') { skipped++; return; }
+    var dealerId;
+    if (action === 'update' && m.existing) {
+      ST.update('dealers', m.id, m.data);
+      dealerId = m.id;
+      updated++;
+    } else {
+      dealerId = ST.add('dealers', m.data).id;
+      added++;
+    }
+    // ผูก "เซลที่ดูแล" จาก Excel กลับเข้า Pipeline ของ Dealer นี้ทุกโครงการเหมือนตอนแก้จากฟอร์ม Dealer ตรงๆ
+    // (ดู cascadeDealerSaleNameToPipelines ใน views-dealer.js) — ข้ามถ้าแถวนี้ไม่ได้ระบุเซลมาเลย กัน blank ทับของเดิม
+    if (m.data.saleName && typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(dealerId, m.data.saleName);
+  });
+  window._dealerImportPending = null;
+  closeMForce();
+  toast('📥 เพิ่ม ' + added + ' อัปเดต ' + updated + (skipped ? ' ข้าม ' + skipped : '') + ' Dealer');
+  render();
 }
 
 // ================================================================
