@@ -371,6 +371,7 @@ function copyToClipboard(text) {
 // DEALER LIST
 // ================================================================
 let dealerFilter = 'all';
+let dealerListView = 'card'; // 'card' หรือ 'table' — เหมือน pipeView ของเมนู Pipeline หลัก
 let dealerUrgentOpen = localStorage.getItem('dealerUrgentOpen') !== '0';
 let dealerVisitOverdueFlt = false; // true = กรองเฉพาะ Dealer ที่ยังไม่ได้ Visit นานเกินกำหนด
 const DEALER_VISIT_OVERDUE_DAYS = 60;
@@ -458,15 +459,112 @@ function rDealers(el) {
     <div class="ftab ${dealerFilter==='other'?'act':''}" onclick="dealerFilter='other';render()">Other (${counts.other})</div>
   </div>
 
-  <div class="bg" style="margin-bottom:8px">
-    <button class="btn bsm bo" onclick="copyDealerSummary()">📋 Copy ตาราง</button>
+  <div class="bg" style="margin-bottom:8px;align-items:center">
+    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <button class="btn-xs" style="border-radius:0;${dealerListView==='card'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='card';render()">🗂 การ์ด</button>
+      <button class="btn-xs" style="border-radius:0;${dealerListView==='table'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='table';render()">📊 ตาราง</button>
+    </div>
+    <button class="btn bsm bo" onclick="copyDealerSummary()">📋 Copy TSV</button>
+    ${dealerListView==='table' ? '<button class="btn bsm bo" onclick="copyDealerTableAsWord()">📋 Copy (วางลง Word)</button>' : ''}
     <button class="btn bsm bo" onclick="dlDealerCSV()">📤 CSV</button>
     <button class="btn bsm bo" onclick="exportDealersExcel()">📊 Excel</button>
   </div>
 
-  <div class="card-grid" id="dGrid">
-    ${dealers.length ? dealers.map(d => dealerCardHTML(d, d._health)).join('') : '<div class="empty" style="grid-column:1/-1"><div class="icon">🏪</div><p>ยังไม่มี Dealer<br><button class="btn bp" onclick="showDealerM()" style="margin-top:6px">➕ เพิ่ม Dealer</button></p></div>'}
-  </div>`;
+  ${dealers.length ? '' : '<div class="empty"><div class="icon">🏪</div><p>ยังไม่มี Dealer<br><button class="btn bp" onclick="showDealerM()" style="margin-top:6px">➕ เพิ่ม Dealer</button></p></div>'}
+  ${dealers.length && dealerListView === 'table' ? '<div id="dTableWrap">' + _dealerTableHtml(dealers) + '</div>' :
+    dealers.length ? '<div class="card-grid" id="dGrid">' + dealers.map(d => dealerCardHTML(d, d._health)).join('') + '</div>' : ''}`;
+}
+
+// ================================================================
+// DEALER — มุมมองตาราง (ทางเลือกจากการ์ด) — คอลัมน์ตามที่ตกลงกันไว้:
+// Dealer, SIS Code, DJI Code, Level, เซลที่ดูแล, ยอดขาย, เป้า, Achieve, Visit, Demo, Cert, Credit Term, Credit Limit, ผู้ติดต่อ
+// ================================================================
+function _dealerDemoStatus(d) {
+  var demoOption = d.demoOption || 'none';
+  if (demoOption === 'none') return null; // ไม่มีข้อกำหนด Demo — ไม่ต้องโชว์อะไร
+  var demoItems = (d.demoItems && Array.isArray(d.demoItems)) ? d.demoItems : [];
+  var level = d.level || 'Other';
+  var cfg = getConfig();
+  var levelReq = (cfg && cfg.levelRequirements && cfg.levelRequirements[level]) || (cfg && cfg.levelRequirements && cfg.levelRequirements.B) || { option1Models: [], option2Models: [] };
+  var customReq = d.customDemoRequirements || {};
+  var useCustom = customReq.enabled === true;
+  var requiredOption1 = useCustom ? (customReq.option1Models || levelReq.option1Models || []) : (levelReq.option1Models || []);
+  var requiredOption2 = useCustom ? (customReq.option2Models || levelReq.option2Models || []) : (levelReq.option2Models || []);
+  var ownedModels = {};
+  demoItems.forEach(function(it) { if (it && it.model) ownedModels[it.model] = true; });
+  var requiredModels = demoOption === 'option1' ? requiredOption1 : demoOption === 'option2' ? requiredOption2 :
+    demoOption === 'both' ? requiredOption1.concat(requiredOption2) : [];
+  var missing = requiredModels.filter(function(m) { return !ownedModels[m]; });
+  return { ok: missing.length === 0, missingCount: missing.length };
+}
+
+function _dealerCertCellHtml(d) {
+  var certs = [
+    { k: 'D', name: 'DSEC', ok: d.dsecStatus === 'pass', okTxt: 'ผ่านแล้ว', noTxt: 'ยังไม่ผ่าน' },
+    { k: 'C', name: 'CRM', ok: d.crmStatus === 'yes', okTxt: 'ลงทะเบียนแล้ว', noTxt: 'ยังไม่ลงทะเบียน' },
+    { k: 'F', name: 'FlightHub 2', ok: d.fh2Status === 'pass', okTxt: 'ผ่านแล้ว', noTxt: 'ยังไม่ผ่าน' },
+    { k: 'L', name: 'Lark', ok: d.larkStatus === 'added', okTxt: 'Add เพื่อนแล้ว', noTxt: 'ยังไม่ Add' }
+  ];
+  return '<div style="display:flex;gap:3px">' + certs.map(function(c) {
+    var bg = c.ok ? 'rgba(34,197,94,.13)' : 'rgba(239,68,68,.13)';
+    var fg = c.ok ? '#22c55e' : '#ef4444';
+    return '<span style="width:20px;height:16px;border-radius:3px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;background:' + bg + ';color:' + fg + '" title="' + c.name + ': ' + (c.ok ? c.okTxt : c.noTxt) + '">' + c.k + '</span>';
+  }).join('') + '</div>';
+}
+
+function _dealerTableHtml(dealers) {
+  var cols = ['Dealer','SIS Code','DJI Code','Level','เซลที่ดูแล','ยอดขาย','เป้า','Achieve','Visit','Demo','Cert','Credit Term','Credit Limit','ผู้ติดต่อ'];
+  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px"><table class="tbl" id="dealerTbl" style="min-width:1000px"><thead><tr>' +
+    cols.map(function(c) { return '<th style="white-space:nowrap">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
+  dealers.forEach(function(d) {
+    var pipes = ST.pipelineByDealer(d.id);
+    var wonAmt = pipes.filter(function(p) { return pipeIsWon(p); }).reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0);
+    var targetAmt = Number(d.targetRevenue) || 0;
+    var pct = targetAmt ? Math.round(wonAmt / targetAmt * 100) : null;
+    var lvd = ST.getLastVisitDays(d.id);
+    var demo = _dealerDemoStatus(d);
+    var isAuthorized = ['S','A','B'].includes(d.level);
+    var lvlColor = DEALER_LEVEL_COLOR[d.level] || '#475569';
+    h += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
+    h += '<td style="font-weight:600;white-space:nowrap">' + qcopyHtml(d.name) + '</td>';
+    h += '<td style="white-space:nowrap">' + qcopyHtml(d.sisCode) + '</td>';
+    h += '<td style="white-space:nowrap">' + qcopyHtml(d.djiCode) + '</td>';
+    h += '<td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:' + lvlColor + '22;color:' + lvlColor + '">' + (d.level || 'OTHER') + '</span></td>';
+    h += '<td style="white-space:nowrap">' + qcopyHtml(d.saleName) + '</td>';
+    h += '<td style="white-space:nowrap">' + fmtMoneyShort(wonAmt) + '</td>';
+    h += '<td style="white-space:nowrap">' + (targetAmt ? fmtMoneyShort(targetAmt) : '<span style="color:var(--text2)">—</span>') + '</td>';
+    h += '<td style="white-space:nowrap' + (pct !== null ? ';font-weight:700;color:' + (pct>=70?'#22c55e':pct>=40?'#f59e0b':'#ef4444') : ';color:var(--text2)') + '">' + (pct !== null ? pct + '%' : '—') + '</td>';
+    h += '<td style="white-space:nowrap">' + (lvd !== null ? lvd + 'd' : '<span style="color:var(--text2)">—</span>') + '</td>';
+    h += '<td style="white-space:nowrap' + (demo ? ';font-weight:600;color:' + (demo.ok ? '#22c55e' : '#ef4444') : ';color:var(--text2)') + '">' + (demo ? (demo.ok ? '✅ ครบ' : '🔴 ขาด ' + demo.missingCount) : '—') + '</td>';
+    h += '<td>' + (isAuthorized ? _dealerCertCellHtml(d) : '<span style="font-size:10px;color:var(--text2)">🔒 ไม่ Authorized</span>') + '</td>';
+    h += '<td style="white-space:nowrap">' + sanitize(d.creditTerm || '-') + '</td>';
+    h += '<td style="white-space:nowrap">' + sanitize(d.creditLimit || '-') + '</td>';
+    h += '<td style="white-space:nowrap">' + qcopyHtml(d.contact) + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// Copy ตารางเป็น HTML จริง (ไม่ใช่แค่ tab-separated) — วางลง Word/Email ได้ตารางมีเส้นขอบ/หัวตารางเลย
+// ต่างจาก copyDealerSummary() ที่ copy เป็น TSV (เหมาะกับวางลง Excel/Sheets มากกว่า)
+function copyDealerTableAsWord() {
+  var table = document.getElementById('dealerTbl');
+  if (!table) return;
+  var html = table.outerHTML;
+  var text = table.innerText;
+  function done() { toast('📋 คัดลอกตารางแล้ว วางลง Word ได้เลย'); }
+  if (navigator.clipboard && window.ClipboardItem) {
+    var item = new ClipboardItem({
+      'text/html': new Blob([html], {type: 'text/html'}),
+      'text/plain': new Blob([text], {type: 'text/plain'})
+    });
+    navigator.clipboard.write([item]).then(done).catch(function() {
+      navigator.clipboard.writeText(text).then(done);
+    });
+  } else {
+    navigator.clipboard.writeText(text).then(done);
+  }
 }
 
 // สี accent ต่อ Level — ใช้ชุดสีเดียวกับ levelTag()/.tag-s/.tag-a/.tag-b ใน style.css ให้ตรงกับที่อื่นในแอพ
@@ -547,7 +645,13 @@ function filterDealerList() {
     else dealers = dealers.filter(d => d.level === dealerFilter);
   }
   if (q) dealers = dealers.filter(d => d.name?.toLowerCase().includes(q) || d.contact?.toLowerCase().includes(q) || d.sisCode?.toLowerCase().includes(q));
-  
+
+  if (dealerListView === 'table') {
+    const wrap = document.getElementById('dTableWrap');
+    if (wrap) wrap.innerHTML = dealers.length ? _dealerTableHtml(dealers) : '<div class="empty"><p>ไม่พบ Dealer</p></div>';
+    return;
+  }
+
   const grid = document.getElementById('dGrid');
   if (grid) grid.innerHTML = dealers.length
     ? dealers.map(d => dealerCardHTML(d)).join('')
