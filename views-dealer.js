@@ -372,6 +372,16 @@ function copyToClipboard(text) {
 // ================================================================
 let dealerFilter = 'all';
 let dealerListView = 'card'; // 'card' หรือ 'table' — เหมือน pipeView ของเมนู Pipeline หลัก
+// กรองตาม "เซลที่ดูแล" — multi-select ({saleName: true, ...}) ว่าง = ไม่กรอง (โชว์ทุกคน) แยกจาก dealerFilter
+// (Level) เดิม ใช้ร่วมกันได้ (AND) ไม่ทับกัน — dealer ที่ยังไม่มี saleName เลยถูกจัดเข้ากลุ่ม "(ไม่ระบุ)"
+let dealerSaleFilter = {};
+const DEALER_SALE_UNSET = '(ไม่ระบุ)';
+function toggleDealerSaleFilter(name) {
+  if (dealerSaleFilter[name]) delete dealerSaleFilter[name];
+  else dealerSaleFilter[name] = true;
+  render();
+}
+function clearDealerSaleFilter() { dealerSaleFilter = {}; render(); }
 let dealerUrgentOpen = localStorage.getItem('dealerUrgentOpen') !== '0';
 let dealerVisitOverdueFlt = false; // true = กรองเฉพาะ Dealer ที่ยังไม่ได้ Visit นานเกินกำหนด
 const DEALER_VISIT_OVERDUE_DAYS = 60;
@@ -413,6 +423,16 @@ function rDealers(el) {
     else if (dealerFilter === 'other') dealers = dealers.filter(d => !['S','A','B'].includes(d.level));
     else dealers = dealers.filter(d => d.level === dealerFilter);
   }
+
+  // ตัวเลือก "เซลที่ดูแล" คำนวณจาก Dealer ทั้งหมด (ไม่ใช่แค่หลังกรอง Level) กันตัวเลือกหายไปตอนสลับ Level filter
+  const saleNameCounts = {};
+  ST.getAll('dealers').forEach(d => {
+    const key = d.saleName || DEALER_SALE_UNSET;
+    saleNameCounts[key] = (saleNameCounts[key] || 0) + 1;
+  });
+  const saleNameOptions = Object.keys(saleNameCounts).sort((a, b) => a === DEALER_SALE_UNSET ? 1 : b === DEALER_SALE_UNSET ? -1 : a.localeCompare(b, 'th'));
+  const saleFilterActive = Object.keys(dealerSaleFilter).length > 0;
+  if (saleFilterActive) dealers = dealers.filter(d => dealerSaleFilter[d.saleName || DEALER_SALE_UNSET]);
 
   const overdueCount = ST.getAll('dealers').filter(d => {
     const lvd = ST.getLastVisitDays(d.id);
@@ -458,6 +478,13 @@ function rDealers(el) {
     <div class="ftab ${dealerFilter==='B'?'act':''}" onclick="dealerFilter='B';render()">B (${counts.B})</div>
     <div class="ftab ${dealerFilter==='other'?'act':''}" onclick="dealerFilter='other';render()">Other (${counts.other})</div>
   </div>
+
+  ${saleNameOptions.length > 1 ? `
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+    <span style="font-size:11px;color:var(--text2);flex-shrink:0">🧑‍💼 เซลที่ดูแล</span>
+    ${saleNameOptions.map(name => `<span onclick="toggleDealerSaleFilter('${name.replace(/'/g,"\\'")}')" style="font-size:11px;padding:4px 10px;border-radius:999px;cursor:pointer;border:1px solid ${dealerSaleFilter[name] ? 'var(--accent)' : 'var(--border)'};background:${dealerSaleFilter[name] ? 'var(--accent)' : 'var(--bg2)'};color:${dealerSaleFilter[name] ? '#fff' : 'var(--text2)'}">${sanitize(name)} (${saleNameCounts[name]})</span>`).join('')}
+    ${saleFilterActive ? `<span onclick="clearDealerSaleFilter()" style="font-size:11px;color:var(--accent);cursor:pointer">✕ ล้างตัวกรอง</span>` : ''}
+  </div>` : ''}
 
   <div class="bg" style="margin-bottom:8px;align-items:center">
     <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
@@ -545,6 +572,7 @@ function sortDealerTable(col) {
     else if (dealerFilter === 'other') dealers = dealers.filter(function(d) { return !['S','A','B'].includes(d.level); });
     else dealers = dealers.filter(function(d) { return d.level === dealerFilter; });
   }
+  if (Object.keys(dealerSaleFilter).length) dealers = dealers.filter(function(d) { return dealerSaleFilter[d.saleName || DEALER_SALE_UNSET]; });
   var q = (document.getElementById('dSrc') || {}).value || '';
   q = q.toLowerCase();
   if (q) dealers = dealers.filter(function(d) { return (d.name||'').toLowerCase().includes(q) || (d.contact||'').toLowerCase().includes(q) || (d.sisCode||'').toLowerCase().includes(q); });
@@ -720,6 +748,7 @@ function filterDealerList() {
     else if (dealerFilter === 'other') dealers = dealers.filter(d => !['S','A','B'].includes(d.level));
     else dealers = dealers.filter(d => d.level === dealerFilter);
   }
+  if (Object.keys(dealerSaleFilter).length) dealers = dealers.filter(d => dealerSaleFilter[d.saleName || DEALER_SALE_UNSET]);
   if (q) dealers = dealers.filter(d => d.name?.toLowerCase().includes(q) || d.contact?.toLowerCase().includes(q) || d.sisCode?.toLowerCase().includes(q));
 
   if (dealerListView === 'table') {
