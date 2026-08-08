@@ -512,19 +512,85 @@ function _dealerCertCellHtml(d) {
   }).join('') + '</div>';
 }
 
+// เรียงตามหัวตารางที่กด — ค่าว่าง/ไม่มีข้อมูลตกท้ายสุดเสมอไม่ว่าจะเรียงทิศไหน (กันโดดขึ้นบนสุดตอนเรียงน้อย→มาก)
+var dealerTableSort = { col: null, dir: 'desc' };
+var _LEVEL_RANK = { S: 0, A: 1, B: 2 };
+var DEALER_TABLE_COLS = [
+  { id: 'name',   label: 'Dealer',       sortable: true },
+  { id: 'sis',    label: 'SIS Code',     sortable: true },
+  { id: 'dji',    label: 'DJI Code',     sortable: true },
+  { id: 'level',  label: 'Level',        sortable: true },
+  { id: 'sale',   label: 'เซลที่ดูแล',    sortable: true },
+  { id: 'won',    label: 'ยอดขาย',       sortable: true },
+  { id: 'target', label: 'เป้า',         sortable: true },
+  { id: 'pct',    label: 'Achieve',      sortable: true },
+  { id: 'visit',  label: 'Visit',        sortable: true },
+  { id: 'demo',   label: 'Demo',         sortable: true },
+  { id: 'cert',   label: 'Cert',         sortable: false },
+  { id: 'cterm',  label: 'Credit Term',  sortable: true },
+  { id: 'climit', label: 'Credit Limit', sortable: true },
+  { id: 'contact',label: 'ผู้ติดต่อ',     sortable: true }
+];
+
+function sortDealerTable(col) {
+  if (dealerTableSort.col === col) dealerTableSort.dir = dealerTableSort.dir === 'desc' ? 'asc' : 'desc';
+  else { dealerTableSort.col = col; dealerTableSort.dir = 'desc'; }
+  var wrap = document.getElementById('dTableWrap');
+  var dealers = ST.getAll('dealers');
+  if (dealerFilter !== 'all') {
+    if (dealerFilter === 'authorized') dealers = dealers.filter(function(d) { return ['S','A','B'].includes(d.level); });
+    else if (dealerFilter === 'other') dealers = dealers.filter(function(d) { return !['S','A','B'].includes(d.level); });
+    else dealers = dealers.filter(function(d) { return d.level === dealerFilter; });
+  }
+  var q = (document.getElementById('dSrc') || {}).value || '';
+  q = q.toLowerCase();
+  if (q) dealers = dealers.filter(function(d) { return (d.name||'').toLowerCase().includes(q) || (d.contact||'').toLowerCase().includes(q) || (d.sisCode||'').toLowerCase().includes(q); });
+  if (wrap) wrap.innerHTML = dealers.length ? _dealerTableHtml(dealers) : '<div class="empty"><p>ไม่พบ Dealer</p></div>';
+}
+
 function _dealerTableHtml(dealers) {
-  var cols = ['Dealer','SIS Code','DJI Code','Level','เซลที่ดูแล','ยอดขาย','เป้า','Achieve','Visit','Demo','Cert','Credit Term','Credit Limit','ผู้ติดต่อ'];
-  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px"><table class="tbl" id="dealerTbl" style="min-width:1000px"><thead><tr>' +
-    cols.map(function(c) { return '<th style="white-space:nowrap">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
-  dealers.forEach(function(d) {
+  var rows = dealers.map(function(d) {
     var pipes = ST.pipelineByDealer(d.id);
     var wonAmt = pipes.filter(function(p) { return pipeIsWon(p); }).reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0);
     var targetAmt = Number(d.targetRevenue) || 0;
     var pct = targetAmt ? Math.round(wonAmt / targetAmt * 100) : null;
     var lvd = ST.getLastVisitDays(d.id);
     var demo = _dealerDemoStatus(d);
-    var isAuthorized = ['S','A','B'].includes(d.level);
-    var lvlColor = DEALER_LEVEL_COLOR[d.level] || '#475569';
+    var climitNum = parseFloat(String(d.creditLimit || '').replace(/,/g, ''));
+    return {
+      d: d, wonAmt: wonAmt, targetAmt: targetAmt, pct: pct, lvd: lvd, demo: demo,
+      isAuthorized: ['S','A','B'].includes(d.level),
+      lvlColor: DEALER_LEVEL_COLOR[d.level] || '#475569',
+      sortVal: {
+        name: d.name || null, sis: d.sisCode || null, dji: d.djiCode || null,
+        level: d.level && _LEVEL_RANK.hasOwnProperty(d.level) ? _LEVEL_RANK[d.level] : null,
+        sale: d.saleName || null, won: wonAmt || null, target: targetAmt || null, pct: pct,
+        visit: lvd, demo: demo ? (demo.ok ? 9999 : -demo.missingCount) : null,
+        cterm: d.creditTerm || null, climit: isNaN(climitNum) ? null : climitNum, contact: d.contact || null
+      }
+    };
+  });
+
+  if (dealerTableSort.col) {
+    var col = dealerTableSort.col, dir = dealerTableSort.dir;
+    var withVal = rows.filter(function(r) { return r.sortVal[col] !== null && r.sortVal[col] !== undefined; });
+    var withoutVal = rows.filter(function(r) { return r.sortVal[col] === null || r.sortVal[col] === undefined; });
+    withVal.sort(function(a, b) {
+      var va = a.sortVal[col], vb = b.sortVal[col];
+      var cmp = (typeof va === 'number' && typeof vb === 'number') ? (va - vb) : String(va).localeCompare(String(vb), 'th');
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    rows = withVal.concat(withoutVal);
+  }
+
+  var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px"><table class="tbl" id="dealerTbl" style="min-width:1000px"><thead><tr>' +
+    DEALER_TABLE_COLS.map(function(c) {
+      var arrow = dealerTableSort.col === c.id ? (dealerTableSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+      return '<th style="white-space:nowrap' + (c.sortable ? ';cursor:pointer;user-select:none' : '') + '"' +
+        (c.sortable ? ' onclick="sortDealerTable(\'' + c.id + '\')" title="คลิกเพื่อเรียง"' : '') + '>' + c.label + arrow + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+  rows.forEach(function(r) {
+    var d = r.d, wonAmt = r.wonAmt, targetAmt = r.targetAmt, pct = r.pct, lvd = r.lvd, demo = r.demo, isAuthorized = r.isAuthorized, lvlColor = r.lvlColor;
     h += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
     h += '<td style="font-weight:600;white-space:nowrap">' + qcopyHtml(d.name) + '</td>';
     h += '<td style="white-space:nowrap">' + qcopyHtml(d.sisCode) + '</td>';
