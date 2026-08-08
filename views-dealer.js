@@ -495,6 +495,7 @@ function rDealers(el) {
     ${dealerListView==='table' ? '<button class="btn bsm bo" onclick="copyDealerTableAsWord()">📋 Copy (วางลง Word)</button>' : ''}
     <button class="btn bsm bo" onclick="dlDealerCSV()">📤 CSV</button>
     <button class="btn bsm bo" onclick="exportDealersExcel()">📊 Excel</button>
+    <button class="btn bsm bo" onclick="showDealerEmailPickerM()">📧 Email</button>
   </div>
 
   ${dealers.length ? '' : '<div class="empty"><div class="icon">🏪</div><p>ยังไม่มี Dealer<br><button class="btn bp" onclick="showDealerM()" style="margin-top:6px">➕ เพิ่ม Dealer</button></p></div>'}
@@ -673,6 +674,119 @@ function copyDealerTableAsWord() {
 
 // สี accent ต่อ Level — ใช้ชุดสีเดียวกับ levelTag()/.tag-s/.tag-a/.tag-b ใน style.css ให้ตรงกับที่อื่นในแอพ
 const DEALER_LEVEL_COLOR = { S: '#7c3aed', A: '#3b82f6', B: '#64748b' };
+
+// ================================================================
+// DEALER EMAIL — เลือกหลาย Dealer แล้วสร้าง mailto: ทีละฉบับจาก template
+// (ตั้งค่า template ที่ "ส่งแยกทีละ Dealer" ได้จากหน้า Email Draft → ⚙️ จัดการ, ดู features.js)
+// ================================================================
+// อีเมลของ Dealer ไม่มีช่องกรอกตรงๆ ในฟอร์ม Dealer (d.email เป็น field เก่าที่ฟอร์มไม่ได้ใช้แล้ว) —
+// ดึงจากผู้ติดต่อแทน: primary contact ก่อน ถ้าไม่มีใช้คนแรกที่มีอีเมล
+function _dealerEmail(d) {
+  var contacts = d.contacts || [];
+  var primary = contacts.find(function(c) { return c.primary && c.email; });
+  if (primary) return primary.email;
+  var withEmail = contacts.find(function(c) { return c.email; });
+  if (withEmail) return withEmail.email;
+  return d.email || '';
+}
+function _dealerPrimaryContactName(d) {
+  var contacts = d.contacts || [];
+  var primary = contacts.find(function(c) { return c.primary; });
+  if (primary) return primary.name || '';
+  if (contacts.length) return contacts[0].name || '';
+  return d.contact || '';
+}
+function fillDealerEmailTemplate(tmpl, d) {
+  var cfg = getConfig();
+  function fill(s) {
+    return (s || '')
+      .replace(/\{dealer\}/g, d.name || '')
+      .replace(/\{contact\}/g, _dealerPrimaryContactName(d))
+      .replace(/\{sisCode\}/g, d.sisCode || '')
+      .replace(/\{djiCode\}/g, d.djiCode || '')
+      .replace(/\{saleName\}/g, d.saleName || '')
+      .replace(/\{sale\}/g, cfg.saleName || 'Siwawong')
+      .replace(/\{date\}/g, _td());
+  }
+  return { subject: fill(tmpl.subject || tmpl.name), body: fill(tmpl.body) };
+}
+
+function showDealerEmailPickerM(tmplId) {
+  var templates = getEmailTemplates().filter(function(t) { return t.type === 'custom' && t.forDealer; });
+  if (!tmplId && templates.length === 1) tmplId = templates[0].id;
+
+  if (!templates.length) {
+    openM('📧 Email Dealer', '<div style="padding:8px 0">ยังไม่มี Template สำหรับส่งแยกทีละ Dealer<br>' +
+      '<button class="btn btn-blue" style="margin-top:10px" onclick="showAddEmailTmplM()">➕ สร้าง Template</button></div>');
+    return;
+  }
+
+  var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var h = '<div style="max-width:520px">';
+  h += '<div class="fm-group"><label>📋 Template</label><select id="deTmpl" class="fm-input" onchange="_deRenderList()">' +
+    templates.map(function(t) { return '<option value="' + t.id + '"' + (t.id === tmplId ? ' selected' : '') + '>' + (t.icon || '📧') + ' ' + sanitize(t.name) + '</option>'; }).join('') +
+    '</select></div>';
+  h += '<input type="text" id="deSearch" class="fm-input" placeholder="🔍 ค้นหา Dealer..." style="margin-bottom:8px" oninput="_deRenderList()">';
+  h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+    '<button class="btn-xs" onclick="_deSelectAll(true)">☑ เลือกทั้งหมดที่มีอีเมล</button>' +
+    '<button class="btn-xs" onclick="_deSelectAll(false)">☐ ล้างที่เลือก</button></div>';
+  h += '<div id="deList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px"></div>';
+  h += '<div id="deGenArea" style="margin-top:10px"></div>';
+  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_dealerEmailGenerate()">📧 สร้างอีเมล</button>';
+  h += '</div>';
+  openM('📧 Email Dealer', h);
+  window._deDealers = dealers;
+  _deRenderList();
+}
+
+function _deRenderList() {
+  var listEl = document.getElementById('deList');
+  if (!listEl) return;
+  var q = (document.getElementById('deSearch').value || '').trim().toLowerCase();
+  var dealers = window._deDealers || [];
+  var prevChecked = {};
+  Array.prototype.forEach.call(listEl.querySelectorAll('input[type=checkbox]'), function(c) { prevChecked[c.value] = c.checked; });
+  var rows = dealers.filter(function(d) {
+    return !q || (d.name || '').toLowerCase().indexOf(q) !== -1 || (d.sisCode || '').toLowerCase().indexOf(q) !== -1;
+  }).map(function(d) {
+    var email = _dealerEmail(d);
+    var checked = prevChecked[d.id] ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (email ? '' : 'opacity:.5') + '">' +
+      '<input type="checkbox" value="' + d.id + '" style="width:auto"' + (email ? checked : ' disabled') + '>' +
+      '<span style="flex:1">' + sanitize(d.name || '') + '</span>' +
+      '<span style="color:var(--text2)">' + (email ? sanitize(email) : '⚠️ ไม่มีอีเมล') + '</span></label>';
+  });
+  listEl.innerHTML = rows.length ? rows.join('') : '<div style="padding:8px;color:var(--text2);font-size:12px">ไม่พบ Dealer</div>';
+}
+
+function _deSelectAll(on) {
+  var listEl = document.getElementById('deList');
+  if (!listEl) return;
+  Array.prototype.forEach.call(listEl.querySelectorAll('input[type=checkbox]:not(:disabled)'), function(c) { c.checked = on; });
+}
+
+function _dealerEmailGenerate() {
+  var tmplSel = document.getElementById('deTmpl');
+  var tmpl = tmplSel && getEmailTemplates().find(function(t) { return t.id === tmplSel.value; });
+  if (!tmpl) return;
+  var listEl = document.getElementById('deList');
+  var ids = Array.prototype.filter.call(listEl.querySelectorAll('input[type=checkbox]'), function(c) { return c.checked; }).map(function(c) { return c.value; });
+  if (!ids.length) return toast('เลือก Dealer อย่างน้อย 1 ราย');
+  var dealers = window._deDealers || [];
+  var area = document.getElementById('deGenArea');
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — กดปุ่มเพื่อเปิด Outlook/Mail ทีละฉบับ</div>';
+  ids.forEach(function(id) {
+    var d = dealers.find(function(x) { return x.id === id; });
+    if (!d) return;
+    var email = _dealerEmail(d);
+    var filled = fillDealerEmailTemplate(tmpl, d);
+    var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(filled.subject) + '&body=' + encodeURIComponent(filled.body);
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<span style="flex:1">' + sanitize(d.name || '') + '<br><span style="color:var(--text2)">' + sanitize(email) + '</span></span>' +
+      '<a class="btn-xs btn-blue" href="' + mailto + '" target="_blank" rel="noopener">📧 เปิด</a></div>';
+  });
+  area.innerHTML = h;
+}
 
 function dealerCardHTML(d, health) {
   const h = health || calcHealthScore(d.id);

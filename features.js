@@ -5248,6 +5248,8 @@ function rEmailDrafts(el) {
   templates.forEach(function(t) {
     if (t.type === 'visit') {
       h += '<div class="email-tmpl-card" onclick="showVisitReportEmailM()">';
+    } else if (t.type === 'custom' && t.forDealer) {
+      h += '<div class="email-tmpl-card" onclick="showDealerEmailPickerM(\'' + t.id + '\')">';
     } else if (t.type === 'custom') {
       h += '<div class="email-tmpl-card" onclick="generateCustomEmailDraft(\'' + t.id + '\')">';
     } else {
@@ -5661,7 +5663,7 @@ function manageEmailTemplates() {
       h += '<div class="ltm-item">';
       h += '<div class="ltm-left"><span class="ltm-icon">' + (t.icon || '📧') + '</span>';
       h += '<div><div class="ltm-name">' + sanitize(t.name || '') + '</div>';
-      h += '<div class="ltm-preview">' + sanitize(t.desc || '') + ' • ' + (t.type === 'auto' ? 'Auto' : t.type === 'visit' ? 'Visit Report' : 'Custom') + '</div>';
+      h += '<div class="ltm-preview">' + sanitize(t.desc || '') + ' • ' + (t.type === 'auto' ? 'Auto' : t.type === 'visit' ? 'Visit Report' : t.forDealer ? '📧 Dealer (loop)' : 'Custom') + '</div>';
       h += '</div></div>';
       h += '<div class="ltm-actions">';
       if (t.type === 'custom') h += '<button class="btn-xs" onclick="showEditEmailTmplM(' + i + ')">✏️</button>';
@@ -5685,18 +5687,34 @@ function showAddEmailTmplM() {
   h += '<input type="text" id="etName" class="fm-input" placeholder="เช่น Monthly Report"></div>';
   h += '<div class="fm-group"><label>📝 คำอธิบาย</label>';
   h += '<input type="text" id="etDesc" class="fm-input" placeholder="รายละเอียดสั้นๆ"></div>';
-  h += '<div class="fm-group"><label>📧 To (default)</label>';
+  h += '<div class="fm-group"><label style="display:flex;align-items:center;gap:6px;font-weight:400">';
+  h += '<input type="checkbox" id="etForDealer" style="width:auto" onchange="_etToggleDealerHint()"> ส่งแยกทีละ Dealer (เลือกได้จากหน้า Dealer)</label></div>';
+  h += '<div class="fm-group" id="etToGroup"><label>📧 To (default)</label>';
   h += '<input type="email" id="etTo" class="fm-input" placeholder="email@company.com"></div>';
   h += '<div class="fm-group"><label>📋 Subject</label>';
   h += '<input type="text" id="etSubject" class="fm-input" placeholder="ใช้ {sale} = ชื่อ Sales, {date} = วันนี้"></div>';
   h += '<div class="fm-group"><label>📝 Body</label>';
   h += '<textarea id="etBody" rows="8" class="fm-input" placeholder="เนื้อหา Email...\n\nใช้ {sale} = ชื่อ Sales\n{date} = วันนี้"></textarea></div>';
-  h += '<div style="font-size:11px;color:var(--text2);margin:-8px 0 12px">💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้</div>';
+  h += '<div id="etHint" style="font-size:11px;color:var(--text2);margin:-8px 0 12px">💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้</div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveNewEmailTmpl()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';
   h += '</div></div>';
   openM('➕ เพิ่ม Email Template', h);
+}
+
+function _etToggleDealerHint() {
+  var chk = document.getElementById('etForDealer');
+  var hint = document.getElementById('etHint');
+  var toGroup = document.getElementById('etToGroup');
+  if (!chk || !hint) return;
+  if (chk.checked) {
+    hint.innerHTML = '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To';
+    if (toGroup) toGroup.style.display = 'none';
+  } else {
+    hint.innerHTML = '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้';
+    if (toGroup) toGroup.style.display = '';
+  }
 }
 
 function saveNewEmailTmpl() {
@@ -5712,6 +5730,7 @@ function saveNewEmailTmpl() {
     to: (document.getElementById('etTo').value || '').trim(),
     subject: (document.getElementById('etSubject').value || '').trim(),
     body: (document.getElementById('etBody').value || '').trim(),
+    forDealer: !!(document.getElementById('etForDealer') && document.getElementById('etForDealer').checked),
     type: 'custom'
   });
   saveEmailTemplates(templates);
@@ -5731,12 +5750,17 @@ function showEditEmailTmplM(idx) {
   h += '<input type="text" id="etName" class="fm-input" value="' + sanitize(t.name || '') + '"></div>';
   h += '<div class="fm-group"><label>📝 คำอธิบาย</label>';
   h += '<input type="text" id="etDesc" class="fm-input" value="' + sanitize(t.desc || '') + '"></div>';
-  h += '<div class="fm-group"><label>📧 To</label>';
+  h += '<div class="fm-group"><label style="display:flex;align-items:center;gap:6px;font-weight:400">';
+  h += '<input type="checkbox" id="etForDealer" style="width:auto"' + (t.forDealer ? ' checked' : '') + ' onchange="_etToggleDealerHint()"> ส่งแยกทีละ Dealer (เลือกได้จากหน้า Dealer)</label></div>';
+  h += '<div class="fm-group" id="etToGroup" style="display:' + (t.forDealer ? 'none' : '') + '"><label>📧 To</label>';
   h += '<input type="email" id="etTo" class="fm-input" value="' + sanitize(t.to || '') + '"></div>';
   h += '<div class="fm-group"><label>📋 Subject</label>';
   h += '<input type="text" id="etSubject" class="fm-input" value="' + sanitize(t.subject || '') + '"></div>';
   h += '<div class="fm-group"><label>📝 Body</label>';
   h += '<textarea id="etBody" rows="8" class="fm-input">' + sanitize(t.body || '') + '</textarea></div>';
+  h += '<div id="etHint" style="font-size:11px;color:var(--text2);margin:-8px 0 12px">' + (t.forDealer ?
+    '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To' :
+    '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้') + '</div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';
@@ -5753,6 +5777,7 @@ function saveEditEmailTmpl(idx) {
   templates[idx].to = (document.getElementById('etTo').value || '').trim();
   templates[idx].subject = (document.getElementById('etSubject').value || '').trim();
   templates[idx].body = (document.getElementById('etBody').value || '').trim();
+  templates[idx].forDealer = !!(document.getElementById('etForDealer') && document.getElementById('etForDealer').checked);
   saveEmailTemplates(templates);
   toast('💾 บันทึกแล้ว');
   manageEmailTemplates();
