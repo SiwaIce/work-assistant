@@ -699,6 +699,23 @@ function _dealerMailLoop(d) {
   var cc = withEmail.filter(function(c) { return c !== primary; }).map(function(c) { return c.email; }).join(', ');
   return { to: to, cc: cc };
 }
+// การ์ด Loop Email ในหน้า Dealer Detail — แก้ d.mailLoop ตัวเดียวกับที่หน้า Email Dealer ใช้
+// (ข้อมูลชุดเดียวกัน ไม่แยกเก็บซ้ำ) จะแก้จากที่นี่หรือจากปุ่ม ⚙️ ในหน้า Email Dealer ก็ได้
+function renderDealerLoopEmailCard(d) {
+  var loop = _dealerMailLoop(d);
+  return '<div class="card"><h2>📧 Loop Email (To / CC)</h2>' +
+    '<p style="font-size:11px;color:var(--text2);margin-bottom:8px">ใช้ตอนส่ง Email หา Dealer นี้จากหน้า Email Dealer — ไม่ตั้งไว้ก็ใช้ค่าจากผู้ติดต่อด้านบนแทน</p>' +
+    '<div class="fg"><label>To</label><input type="text" id="ddlTo_' + d.id + '" value="' + sanitize(loop.to) + '" placeholder="เช่น a@company.com"></div>' +
+    '<div class="fg"><label>CC</label><input type="text" id="ddlCc_' + d.id + '" value="' + sanitize(loop.cc) + '" placeholder="คั่นด้วย , ถ้าหลายคน"></div>' +
+    '<button class="btn bp bsm" onclick="saveDealerLoopEmail(\'' + d.id + '\')">💾 บันทึก</button></div>';
+}
+function saveDealerLoopEmail(id) {
+  var toEl = document.getElementById('ddlTo_' + id);
+  var ccEl = document.getElementById('ddlCc_' + id);
+  if (!toEl) return;
+  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
+  toast('💾 บันทึก Loop Email แล้ว');
+}
 function _deSaveLoop(id) {
   var toEl = document.getElementById('deTo_' + id);
   var ccEl = document.getElementById('deCc_' + id);
@@ -840,12 +857,21 @@ function _deRenderList() {
     var loop = _dealerMailLoop(d);
     var hasEmail = !!loop.to;
     var ccCount = loop.cc ? loop.cc.split(',').filter(function(s) { return s.trim(); }).length : 0;
-    var emailLabel = hasEmail ? sanitize(loop.to) + (ccCount ? ' +' + ccCount + ' CC' : '') : '⚠️ ไม่มีอีเมล';
+    var emailLabel = hasEmail ? sanitize(loop.to) + (ccCount ? ' +' + ccCount + ' CC' : '') : '⚠️ ยังไม่มีอีเมล';
     var checked = prevChecked[d.id] ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (hasEmail ? '' : 'opacity:.5') + '">' +
+    var expanded = (window._deExpanded || {})[d.id];
+    var row = '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (hasEmail ? '' : 'opacity:.65') + '">' +
       '<input type="checkbox" value="' + d.id + '" style="width:auto"' + (hasEmail ? checked : ' disabled') + '>' +
-      '<span style="flex:1">' + sanitize(d.name || '') + '</span>' +
-      '<span style="color:var(--text2)">' + emailLabel + '</span></label>';
+      '<span style="flex:1;cursor:pointer" onclick="this.previousElementSibling.click()">' + sanitize(d.name || '') + '</span>' +
+      '<span style="color:var(--text2)">' + emailLabel + '</span>' +
+      '<button type="button" class="btn-xs" onclick="_deToggleGear(\'' + d.id + '\')" title="ตั้งค่า Loop Email">⚙️</button></div>';
+    if (expanded) {
+      row += '<div style="display:flex;flex-direction:column;gap:4px;padding:0 4px 8px 30px">' +
+        '<input type="text" id="deGearTo_' + d.id + '" class="fm-input" style="font-size:11px" placeholder="To" value="' + sanitize(loop.to) + '">' +
+        '<input type="text" id="deGearCc_' + d.id + '" class="fm-input" style="font-size:11px" placeholder="CC (คั่นด้วย ,)" value="' + sanitize(loop.cc) + '">' +
+        '<button type="button" class="btn-xs btn-blue" style="align-self:flex-end" onclick="_deGearSave(\'' + d.id + '\')">💾 บันทึก</button></div>';
+    }
+    return row;
   });
   listEl.innerHTML = rows.length ? rows.join('') : '<div style="padding:8px;color:var(--text2);font-size:12px">ไม่พบ Dealer</div>';
 }
@@ -854,6 +880,26 @@ function _deSelectAll(on) {
   var listEl = document.getElementById('deList');
   if (!listEl) return;
   Array.prototype.forEach.call(listEl.querySelectorAll('input[type=checkbox]:not(:disabled)'), function(c) { c.checked = on; });
+}
+
+// ⚙️ ต่อท้ายแต่ละแถวในหน้าเลือก Dealer — แก้ Loop Email ได้ตรงนั้นเลยโดยไม่ต้องรอถึงขั้นตอน "สร้างอีเมล"
+// (เดิม To/CC แก้ได้แค่หลังกดสร้างแล้ว — Dealer ที่ยังไม่มีอีเมลเลยเลือกไม่ได้ตั้งแต่แรก)
+function _deToggleGear(id) {
+  window._deExpanded = window._deExpanded || {};
+  window._deExpanded[id] = !window._deExpanded[id];
+  _deRenderList();
+}
+function _deGearSave(id) {
+  var toEl = document.getElementById('deGearTo_' + id);
+  var ccEl = document.getElementById('deGearCc_' + id);
+  if (!toEl) return;
+  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
+  var d = ST.getOne('dealers', id);
+  var idx = (window._deDealers || []).findIndex(function(x) { return x.id === id; });
+  if (idx !== -1) window._deDealers[idx] = d;
+  window._deExpanded[id] = false;
+  toast('💾 บันทึก Loop Email แล้ว');
+  _deRenderList();
 }
 
 function _dealerEmailGenerate() {
@@ -1253,6 +1299,8 @@ function dealerInfoTab(d) {
   ` : ''}
 
   ${renderDealerContacts(d)}
+
+  ${renderDealerLoopEmailCard(d)}
 
   <div class="card">
     <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
