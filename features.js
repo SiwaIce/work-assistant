@@ -5638,10 +5638,65 @@ function generateCustomEmailDraft(tmplId) {
   if (!tmpl) return;
 
   var cfg = getConfig();
-  var subject = (tmpl.subject || tmpl.name || '').replace(/\{sale\}/g, cfg.saleName || 'Siwawong').replace(/\{date\}/g, _td());
-  var body = (tmpl.body || '').replace(/\{sale\}/g, cfg.saleName || 'Siwawong').replace(/\{date\}/g, _td());
+  var subject = _applyCustomVars((tmpl.subject || tmpl.name || '').replace(/\{sale\}/g, cfg.saleName || 'Siwawong').replace(/\{date\}/g, _td()));
+  var body = _applyCustomVars((tmpl.body || '').replace(/\{sale\}/g, cfg.saleName || 'Siwawong').replace(/\{date\}/g, _td()));
 
   showEmailPreview(tmpl.to || '', subject, body);
+}
+
+// ตัวแปรที่ผู้ใช้ตั้งเอง เช่น {signature} — ข้อความคงที่ที่ใช้ซ้ำได้ทั้ง Template ปกติและ Template Dealer
+// เก็บแยกจาก getEmailTemplates() เพราะเป็นคนละ concern (นี่คือ "คำ" ไม่ใช่ "จดหมาย")
+function getEmailCustomVars() {
+  try { return JSON.parse(localStorage.getItem('v7_emailCustomVars') || '[]'); } catch(e) { return []; }
+}
+function saveEmailCustomVars(list) { localStorage.setItem('v7_emailCustomVars', JSON.stringify(list)); }
+function _applyCustomVars(s) {
+  var vars = getEmailCustomVars();
+  s = s || '';
+  for (var i = 0; i < vars.length; i++) {
+    var re = new RegExp('\\{' + vars[i].key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\}', 'g');
+    s = s.replace(re, vars[i].value);
+  }
+  return s;
+}
+
+function manageEmailCustomVarsM() {
+  var vars = getEmailCustomVars();
+  var h = '<div style="max-width:420px">';
+  h += '<p style="font-size:12px;color:var(--text2);margin-bottom:10px">ตัวแปรของคุณเอง เช่น <code>{signature}</code> — แทรกในหัวเรื่อง/เนื้อหา Template ไหนก็ได้เหมือนตัวแปรทั่วไป</p>';
+  h += '<div id="ecvList">';
+  if (!vars.length) h += '<div style="font-size:12px;color:var(--text2);padding:6px 0">ยังไม่มีตัวแปรของฉัน</div>';
+  vars.forEach(function(v, i) {
+    h += '<div class="link-item"><span style="font-family:monospace;font-size:12px;width:110px;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">{' + sanitize(v.key) + '}</span>' +
+      '<span style="flex:1;font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(v.value) + '</span>' +
+      '<button class="btn bsm bd" onclick="_ecvRemove(' + i + ')">✕</button></div>';
+  });
+  h += '</div>';
+  h += '<div style="display:flex;gap:3px;margin-top:6px">' +
+    '<input type="text" id="ecv_new_k" placeholder="ชื่อ เช่น signature" style="width:110px">' +
+    '<input type="text" id="ecv_new_v" placeholder="ข้อความแทน" style="flex:1">' +
+    '<button class="btn bsm bp" onclick="_ecvAdd()">➕</button></div>';
+  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="manageEmailTemplates()">↩️ กลับไปจัดการ Template</button>';
+  h += '</div>';
+  openM('🧩 ตัวแปรของฉัน', h);
+}
+function _ecvAdd() {
+  var kEl = document.getElementById('ecv_new_k');
+  var vEl = document.getElementById('ecv_new_v');
+  var k = (kEl.value || '').trim().replace(/[^a-zA-Z0-9_ก-๙]/g, '');
+  var val = (vEl.value || '').trim();
+  if (!k || !val) return alert('ใส่ชื่อตัวแปรและข้อความแทน');
+  var vars = getEmailCustomVars();
+  if (vars.some(function(v) { return v.key === k; })) return alert('มีตัวแปรชื่อนี้อยู่แล้ว');
+  vars.push({ key: k, value: val });
+  saveEmailCustomVars(vars);
+  manageEmailCustomVarsM();
+}
+function _ecvRemove(idx) {
+  var vars = getEmailCustomVars();
+  vars.splice(idx, 1);
+  saveEmailCustomVars(vars);
+  manageEmailCustomVarsM();
 }
 
 function manageEmailTemplates() {
@@ -5652,6 +5707,7 @@ function manageEmailTemplates() {
   h += '<span style="color:var(--text2);font-size:13px">' + templates.length + ' templates</span>';
   h += '<div style="display:flex;gap:6px">';
   h += '<button class="btn-sm btn-blue" onclick="showAddEmailTmplM()">➕ เพิ่ม</button>';
+  h += '<button class="btn-sm" onclick="manageEmailCustomVarsM()">🧩 ตัวแปร</button>';
   h += '<button class="btn-sm" onclick="resetEmailTemplates()">🔄 Reset</button>';
   h += '</div></div>';
 
@@ -5679,6 +5735,38 @@ function manageEmailTemplates() {
   openM('⚙️ จัดการ Email Template', h);
 }
 
+// แผงตัวแปรแบบพับ/ขยายได้ (native <details>, ไม่ต้องเขียน JS toggle เอง) ใช้ร่วมกันทั้งฟอร์ม
+// เพิ่ม/แก้ Template — กดชิปเพื่อแทรกตัวแปรที่ตำแหน่งเคอร์เซอร์ของช่องที่โฟกัสล่าสุด (etSubject/etBody)
+var _etLastFocused = 'etBody';
+function _etTrackFocus(id) { _etLastFocused = id; }
+function _etInsertVar(v) {
+  var el = document.getElementById(_etLastFocused) || document.getElementById('etBody');
+  if (!el) return;
+  var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+  var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+  el.value = el.value.slice(0, start) + v + el.value.slice(end);
+  el.focus();
+  el.selectionStart = el.selectionEnd = start + v.length;
+}
+var EMAIL_DEALER_VARS = ['{dealer}', '{contact}', '{contactPhone}', '{contactEmail}', '{sisCode}', '{djiCode}', '{level}', '{saleName}', '{creditTerm}', '{creditLimit}', '{targetRevenue}', '{achieve}', '{googleMap}', '{notes}'];
+function _etVarPanelHtml() {
+  var customVars = getEmailCustomVars();
+  function chip(v) { return '<button type="button" class="btn-xs" onclick="_etInsertVar(\'' + v + '\')" style="font-family:monospace">' + v + '</button>'; }
+  var h = '<details style="margin:-4px 0 12px"><summary style="cursor:pointer;font-size:12px;color:var(--text2)">🧩 แทรกตัวแปร (กดเพื่อขยาย)</summary>';
+  h += '<div style="margin-top:8px">';
+  h += '<div style="font-size:10px;color:var(--text2);margin-bottom:4px">ทั่วไป</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + ['{sale}', '{date}'].map(chip).join('') + '</div>';
+  h += '<div style="font-size:10px;color:var(--text2);margin-bottom:4px">Dealer (ใช้ได้เฉพาะ Template ที่ติ๊ก "ส่งแยกทีละ Dealer")</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + EMAIL_DEALER_VARS.map(chip).join('') + '</div>';
+  if (customVars.length) {
+    h += '<div style="font-size:10px;color:var(--text2);margin-bottom:4px">ของฉัน</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + customVars.map(function(v) { return chip('{' + v.key + '}'); }).join('') + '</div>';
+  }
+  h += '<button type="button" class="btn-xs" onclick="manageEmailCustomVarsM()">⚙️ ตั้งค่าตัวแปรของฉัน</button>';
+  h += '</div></details>';
+  return h;
+}
+
 function showAddEmailTmplM() {
   var h = '<div style="max-width:450px">';
   h += '<div class="fm-group"><label>😊 Icon (Emoji)</label>';
@@ -5691,11 +5779,11 @@ function showAddEmailTmplM() {
   h += '<input type="checkbox" id="etForDealer" style="width:auto" onchange="_etToggleDealerHint()"> ส่งแยกทีละ Dealer (เลือกได้จากหน้า Dealer)</label></div>';
   h += '<div class="fm-group" id="etToGroup"><label>📧 To (default)</label>';
   h += '<input type="email" id="etTo" class="fm-input" placeholder="email@company.com"></div>';
+  h += _etVarPanelHtml();
   h += '<div class="fm-group"><label>📋 Subject</label>';
-  h += '<input type="text" id="etSubject" class="fm-input" placeholder="ใช้ {sale} = ชื่อ Sales, {date} = วันนี้"></div>';
+  h += '<input type="text" id="etSubject" class="fm-input" placeholder="เช่น Dear {dealer}" onfocus="_etTrackFocus(\'etSubject\')"></div>';
   h += '<div class="fm-group"><label>📝 Body</label>';
-  h += '<textarea id="etBody" rows="8" class="fm-input" placeholder="เนื้อหา Email...\n\nใช้ {sale} = ชื่อ Sales\n{date} = วันนี้"></textarea></div>';
-  h += '<div id="etHint" style="font-size:11px;color:var(--text2);margin:-8px 0 12px">💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้</div>';
+  h += '<textarea id="etBody" rows="8" class="fm-input" placeholder="เนื้อหา Email..." onfocus="_etTrackFocus(\'etBody\')"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveNewEmailTmpl()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';
@@ -5705,16 +5793,9 @@ function showAddEmailTmplM() {
 
 function _etToggleDealerHint() {
   var chk = document.getElementById('etForDealer');
-  var hint = document.getElementById('etHint');
   var toGroup = document.getElementById('etToGroup');
-  if (!chk || !hint) return;
-  if (chk.checked) {
-    hint.innerHTML = '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{contactPhone}</code>, <code>{contactEmail}</code>, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{level}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{creditTerm}</code>, <code>{creditLimit}</code>, <code>{targetRevenue}</code>, <code>{achieve}</code> Achieve%, <code>{googleMap}</code>, <code>{notes}</code>, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To';
-    if (toGroup) toGroup.style.display = 'none';
-  } else {
-    hint.innerHTML = '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้';
-    if (toGroup) toGroup.style.display = '';
-  }
+  if (!chk) return;
+  if (toGroup) toGroup.style.display = chk.checked ? 'none' : '';
 }
 
 function saveNewEmailTmpl() {
@@ -5754,13 +5835,11 @@ function showEditEmailTmplM(idx) {
   h += '<input type="checkbox" id="etForDealer" style="width:auto"' + (t.forDealer ? ' checked' : '') + ' onchange="_etToggleDealerHint()"> ส่งแยกทีละ Dealer (เลือกได้จากหน้า Dealer)</label></div>';
   h += '<div class="fm-group" id="etToGroup" style="display:' + (t.forDealer ? 'none' : '') + '"><label>📧 To</label>';
   h += '<input type="email" id="etTo" class="fm-input" value="' + sanitize(t.to || '') + '"></div>';
+  h += _etVarPanelHtml();
   h += '<div class="fm-group"><label>📋 Subject</label>';
-  h += '<input type="text" id="etSubject" class="fm-input" value="' + sanitize(t.subject || '') + '"></div>';
+  h += '<input type="text" id="etSubject" class="fm-input" value="' + sanitize(t.subject || '') + '" onfocus="_etTrackFocus(\'etSubject\')"></div>';
   h += '<div class="fm-group"><label>📝 Body</label>';
-  h += '<textarea id="etBody" rows="8" class="fm-input">' + sanitize(t.body || '') + '</textarea></div>';
-  h += '<div id="etHint" style="font-size:11px;color:var(--text2);margin:-8px 0 12px">' + (t.forDealer ?
-    '💡 ตัวแปร: <code>{dealer}</code> ชื่อบริษัท, <code>{contact}</code> ผู้ติดต่อ, <code>{contactPhone}</code>, <code>{contactEmail}</code>, <code>{sisCode}</code>, <code>{djiCode}</code>, <code>{level}</code>, <code>{saleName}</code> เซลที่ดูแล, <code>{creditTerm}</code>, <code>{creditLimit}</code>, <code>{targetRevenue}</code>, <code>{achieve}</code> Achieve%, <code>{googleMap}</code>, <code>{notes}</code>, <code>{sale}</code> ชื่อ Sales (คุณ), <code>{date}</code> วันนี้ — อีเมลจะดึงจากผู้ติดต่อของ Dealer อัตโนมัติ ไม่ต้องใส่ To' :
-    '💡 ตัวแปร: <code>{sale}</code> ชื่อ Sales, <code>{date}</code> วันนี้') + '</div>';
+  h += '<textarea id="etBody" rows="8" class="fm-input" onfocus="_etTrackFocus(\'etBody\')">' + sanitize(t.body || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';

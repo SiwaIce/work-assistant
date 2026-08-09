@@ -759,7 +759,7 @@ function fillDealerEmailTemplate(tmpl, d) {
       .replace(/\{sale\}/g, cfg.saleName || 'Siwawong')
       .replace(/\{date\}/g, _td());
   }
-  return { subject: fill(tmpl.subject || tmpl.name), body: fill(tmpl.body) };
+  return { subject: _applyCustomVars(fill(tmpl.subject || tmpl.name)), body: _applyCustomVars(fill(tmpl.body)) };
 }
 
 function showDealerEmailPickerM(tmplId) {
