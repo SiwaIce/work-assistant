@@ -1,10 +1,16 @@
 // ================================================================
 // VISIT LIST
 // ================================================================
+// multi-select เดือน (0-11) แบบเดียวกับ pipeBidMonthFilter/fcModelMonthFilter — ว่าง = ทุกเดือน
+// ดูจาก v.date เฉพาะเดือน ไม่สนปี (ถ้าอยากแยกปีค่อยกรองด้วยปีเพิ่มทีหลัง)
+var visitMonthFilter = {};
+function toggleVisitMonth(idx) { if (visitMonthFilter[idx]) delete visitMonthFilter[idx]; else visitMonthFilter[idx] = true; render(); }
+function clearVisitMonthFilter() { visitMonthFilter = {}; render(); }
+
 function rVisits(el) {
   document.getElementById('pgT').textContent = '🤝 Visit Report';
   let vts = ST.sort('visits', (a,b) => (b.date||'').localeCompare(a.date||''));
-  
+
   if (S.filterDealer) {
     vts = vts.filter(v => v.dealerId === S.filterDealer);
     const fd = ST.getOne('dealers', S.filterDealer);
@@ -12,6 +18,13 @@ function rVisits(el) {
   }
   if (visitFlt === 'offline') vts = vts.filter(v => v.mode === 'offline');
   else if (visitFlt === 'online') vts = vts.filter(v => v.mode === 'online');
+  if (Object.keys(visitMonthFilter).length) {
+    vts = vts.filter(v => {
+      if (!v.date) return false;
+      var vd = new Date(v.date + 'T00:00:00');
+      return visitMonthFilter[vd.getMonth()];
+    });
+  }
 
   el.innerHTML = `
   <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
@@ -28,6 +41,15 @@ function rVisits(el) {
     <div class="ftab ${visitFlt==='all'?'act':''}" onclick="visitFlt='all';render()">ทั้งหมด (${ST.count('visits')})</div>
     <div class="ftab ${visitFlt==='offline'?'act':''}" onclick="visitFlt='offline';render()">🤝 Offline</div>
     <div class="ftab ${visitFlt==='online'?'act':''}" onclick="visitFlt='online';render()">📞 Online</div>
+  </div>
+  <div class="hint" style="margin:8px 0 4px">📅 เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+    ${['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map((mn, idx) => {
+      var on = !!visitMonthFilter[idx];
+      return '<span onclick="toggleVisitMonth(' + idx + ')" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;' +
+        (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+    }).join('')}
+    ${Object.keys(visitMonthFilter).length ? `<button class="btn bsm bo" onclick="clearVisitMonthFilter()">✕ ล้าง</button>` : ''}
   </div>
   ${visitListView === 'table' ? '<div id="xv_area"></div>' : (vts.length ? vts.slice(0,50).map(v => {
     const d = ST.getOne('dealers', v.dealerId);
