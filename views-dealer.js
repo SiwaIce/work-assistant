@@ -773,10 +773,19 @@ function showDealerEmailPickerM(tmplId) {
   }
 
   var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var saleNames = Array.from(new Set(dealers.map(function(d) { return d.saleName || ''; }).filter(Boolean))).sort();
+
   var h = '<div style="max-width:520px">';
   h += '<div class="fm-group"><label>📋 Template</label><select id="deTmpl" class="fm-input" onchange="_deRenderList()">' +
     templates.map(function(t) { return '<option value="' + t.id + '"' + (t.id === tmplId ? ' selected' : '') + '>' + (t.icon || '📧') + ' ' + sanitize(t.name) + '</option>'; }).join('') +
     '</select></div>';
+  if (saleNames.length > 1) {
+    h += '<div class="fm-group"><label>🧑‍💼 เซลที่ดูแล</label><select id="deSaleSel" class="fm-input" onchange="_deRenderList()">' +
+      '<option value="">ทั้งหมด (ทุกเซล)</option>' +
+      saleNames.map(function(n) { return '<option value="' + sanitize(n) + '">' + sanitize(n) + '</option>'; }).join('') +
+      '</select></div>';
+  }
+  h += '<div id="deLevelBar" style="margin-bottom:8px"></div>';
   h += '<input type="text" id="deSearch" class="fm-input" placeholder="🔍 ค้นหา Dealer..." style="margin-bottom:8px" oninput="_deRenderList()">';
   h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
     '<button class="btn-xs" onclick="_deSelectAll(true)">☑ เลือกทั้งหมดที่มีอีเมล</button>' +
@@ -787,6 +796,25 @@ function showDealerEmailPickerM(tmplId) {
   h += '</div>';
   openM('📧 Email Dealer', h);
   window._deDealers = dealers;
+  window._deLevelFilter = 'all';
+  _deRenderLevelBar();
+  _deRenderList();
+}
+
+function _deRenderLevelBar() {
+  var bar = document.getElementById('deLevelBar');
+  if (!bar) return;
+  var opts = [['all', 'ทั้งหมด'], ['auth', 'Authorized (S/A/B)'], ['S', 'S'], ['A', 'A'], ['B', 'B'], ['other', 'Other']];
+  var cur = window._deLevelFilter || 'all';
+  bar.innerHTML = opts.map(function(o) {
+    var active = cur === o[0];
+    return '<button type="button" class="btn-xs" onclick="_deSetLevelFilter(\'' + o[0] + '\')" style="' +
+      (active ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') + '">' + o[1] + '</button>';
+  }).join(' ');
+}
+function _deSetLevelFilter(v) {
+  window._deLevelFilter = v;
+  _deRenderLevelBar();
   _deRenderList();
 }
 
@@ -794,11 +822,20 @@ function _deRenderList() {
   var listEl = document.getElementById('deList');
   if (!listEl) return;
   var q = (document.getElementById('deSearch').value || '').trim().toLowerCase();
+  var saleSel = document.getElementById('deSaleSel');
+  var saleVal = saleSel ? saleSel.value : '';
+  var levelFilter = window._deLevelFilter || 'all';
   var dealers = window._deDealers || [];
   var prevChecked = {};
   Array.prototype.forEach.call(listEl.querySelectorAll('input[type=checkbox]'), function(c) { prevChecked[c.value] = c.checked; });
   var rows = dealers.filter(function(d) {
-    return !q || (d.name || '').toLowerCase().indexOf(q) !== -1 || (d.sisCode || '').toLowerCase().indexOf(q) !== -1;
+    if (q && (d.name || '').toLowerCase().indexOf(q) === -1 && (d.sisCode || '').toLowerCase().indexOf(q) === -1) return false;
+    if (saleVal && (d.saleName || '') !== saleVal) return false;
+    var isAuth = ['S', 'A', 'B'].indexOf(d.level) !== -1;
+    if (levelFilter === 'auth' && !isAuth) return false;
+    if ((levelFilter === 'S' || levelFilter === 'A' || levelFilter === 'B') && d.level !== levelFilter) return false;
+    if (levelFilter === 'other' && isAuth) return false;
+    return true;
   }).map(function(d) {
     var loop = _dealerMailLoop(d);
     var hasEmail = !!loop.to;
