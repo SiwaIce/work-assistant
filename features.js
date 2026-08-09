@@ -5739,6 +5739,18 @@ function manageEmailTemplates() {
 // เพิ่ม/แก้ Template — กดชิปเพื่อแทรกตัวแปรที่ตำแหน่งเคอร์เซอร์ของช่องที่โฟกัสล่าสุด (etSubject/etBody)
 var _etLastFocused = 'etBody';
 function _etTrackFocus(id) { _etLastFocused = id; }
+// เมื่อเปิดฟอร์มเพิ่ม/แก้ Template จากปุ่ม ✏️/➕ ในหน้า Email Dealer (views-dealer.js: _dePickerNewTmpl/
+// _dePickerEditTmpl ตั้งค่านี้ไว้ก่อนเปิดฟอร์ม) ให้บันทึกเสร็จ/กดกลับแล้วเด้งกลับไปหน้า Email Dealer
+// ต่อเลย แทนที่จะไปหน้าจัดการ Template — seamless ไม่ต้องออกจากหน้าที่กำลังส่งอีเมลอยู่
+var _etReturnTo = null;
+function _etGoBack(tmplId) {
+  if (_etReturnTo === 'picker') {
+    _etReturnTo = null;
+    showDealerEmailPickerM(tmplId || null);
+  } else {
+    manageEmailTemplates();
+  }
+}
 function _etInsertVar(v) {
   var el = document.getElementById(_etLastFocused) || document.getElementById('etBody');
   if (!el) return;
@@ -5786,7 +5798,7 @@ function showAddEmailTmplM() {
   h += '<textarea id="etBody" rows="8" class="fm-input" placeholder="เนื้อหา Email..." onfocus="_etTrackFocus(\'etBody\')"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveNewEmailTmpl()">💾 บันทึก</button>';
-  h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';
+  h += '<button class="btn" onclick="_etGoBack()">↩️ กลับ</button>';
   h += '</div></div>';
   openM('➕ เพิ่ม Email Template', h);
 }
@@ -5802,9 +5814,10 @@ function saveNewEmailTmpl() {
   var name = (document.getElementById('etName').value || '').trim();
   if (!name) { toast('กรุณาใส่ชื่อ'); return; }
 
+  var newId = 'et_' + Date.now();
   var templates = getEmailTemplates();
   templates.push({
-    id: 'et_' + Date.now(),
+    id: newId,
     icon: (document.getElementById('etIcon').value || '📧').trim(),
     name: name,
     desc: (document.getElementById('etDesc').value || '').trim(),
@@ -5816,7 +5829,7 @@ function saveNewEmailTmpl() {
   });
   saveEmailTemplates(templates);
   toast('✅ เพิ่ม Template แล้ว');
-  manageEmailTemplates();
+  _etGoBack(newId);
 }
 
 function showEditEmailTmplM(idx) {
@@ -5842,7 +5855,7 @@ function showEditEmailTmplM(idx) {
   h += '<textarea id="etBody" rows="8" class="fm-input" onfocus="_etTrackFocus(\'etBody\')">' + sanitize(t.body || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn btn-blue" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
-  h += '<button class="btn" onclick="manageEmailTemplates()">↩️ กลับ</button>';
+  h += '<button class="btn" onclick="_etGoBack(\'' + t.id + '\')">↩️ กลับ</button>';
   h += '</div></div>';
   openM('✏️ แก้ไข Email Template', h);
 }
@@ -5859,7 +5872,7 @@ function saveEditEmailTmpl(idx) {
   templates[idx].forDealer = !!(document.getElementById('etForDealer') && document.getElementById('etForDealer').checked);
   saveEmailTemplates(templates);
   toast('💾 บันทึกแล้ว');
-  manageEmailTemplates();
+  _etGoBack(templates[idx].id);
 }
 
 function deleteEmailTmpl(idx) {

@@ -679,54 +679,93 @@ const DEALER_LEVEL_COLOR = { S: '#7c3aed', A: '#3b82f6', B: '#64748b' };
 // DEALER EMAIL — เลือกหลาย Dealer แล้วสร้าง mailto: ทีละฉบับจาก template
 // (ตั้งค่า template ที่ "ส่งแยกทีละ Dealer" ได้จากหน้า Email Draft → ⚙️ จัดการ, ดู features.js)
 // ================================================================
-// อีเมลของ Dealer ไม่มีช่องกรอกตรงๆ ในฟอร์ม Dealer (d.email เป็น field เก่าที่ฟอร์มไม่ได้ใช้แล้ว) —
-// ดึงจากผู้ติดต่อแทน: primary contact ก่อน ถ้าไม่มีใช้คนแรกที่มีอีเมล
-function _dealerEmail(d) {
-  var contacts = d.contacts || [];
-  var primary = contacts.find(function(c) { return c.primary && c.email; });
-  if (primary) return primary.email;
-  var withEmail = contacts.find(function(c) { return c.email; });
-  if (withEmail) return withEmail.email;
-  return d.email || '';
-}
-// "Loop mail" ต่อ Dealer — To/CC ที่ตั้งเองได้และจำไว้ใช้ซ้ำ (บันทึกลง d.mailLoop) ถ้ายังไม่เคยตั้ง
-// ให้ default To = ผู้ติดต่อหลัก, CC = ผู้ติดต่อที่เหลือที่มีอีเมล (ไม่ต้องกรอกเองทุกครั้ง)
-function _dealerMailLoop(d) {
-  if (d.mailLoop && (d.mailLoop.to || d.mailLoop.cc)) return { to: d.mailLoop.to || '', cc: d.mailLoop.cc || '' };
+// "Loop mail" ต่อ Dealer เก็บเป็นหลาย "กลุ่ม" (d.mailLoops) เพราะบางบริษัทมี loop แยก
+// ทั่วไป/เทคนิค ต่างคนกัน บางบริษัทรวมกลุ่มเดียว — แต่ละ Dealer เลือกได้อิสระว่าจะมีกี่กลุ่ม
+// รองรับข้อมูลเก่า d.mailLoop (ครั้งเดียว ก่อนมีหลายกลุ่ม) โดยตีความเป็นกลุ่ม "ทั่วไป" กลุ่มเดียว
+// ถ้ายังไม่เคยตั้งอะไรเลย ให้ default To = ผู้ติดต่อหลัก, CC = ผู้ติดต่อที่เหลือที่มีอีเมล
+function _dealerLoopGroups(d) {
+  if (d.mailLoops && d.mailLoops.length) return d.mailLoops;
+  if (d.mailLoop && (d.mailLoop.to || d.mailLoop.cc)) return [{ name: 'ทั่วไป', to: d.mailLoop.to || '', cc: d.mailLoop.cc || '' }];
   var withEmail = (d.contacts || []).filter(function(c) { return c.email; });
   var primary = withEmail.find(function(c) { return c.primary; }) || withEmail[0] || null;
   var to = primary ? primary.email : (d.email || '');
   var cc = withEmail.filter(function(c) { return c !== primary; }).map(function(c) { return c.email; }).join(', ');
-  return { to: to, cc: cc };
+  return [{ name: 'ทั่วไป', to: to, cc: cc }];
 }
-// การ์ด Loop Email ในหน้า Dealer Detail — แก้ d.mailLoop ตัวเดียวกับที่หน้า Email Dealer ใช้
+// หากลุ่มตามชื่อ — ถ้า Dealer นี้ไม่มีกลุ่มชื่อนั้น (เช่นเลือกส่ง "เทคนิค" แต่บริษัทนี้ไม่มีแยก)
+// ให้ fallback ไปกลุ่มแรกของ Dealer นั้นแทนโดยอัตโนมัติ พร้อม flag บอกว่าใช้ fallback
+function _dealerLoopByName(d, groupName) {
+  var groups = _dealerLoopGroups(d);
+  var match = groups.find(function(g) { return g.name === groupName; });
+  if (match) return { to: match.to || '', cc: match.cc || '', name: match.name, fallback: false };
+  var fb = groups[0];
+  return { to: fb.to || '', cc: fb.cc || '', name: fb.name, fallback: true };
+}
+// รวมชื่อกลุ่มทั้งหมดที่มีอยู่ในรายชื่อ Dealer ที่ให้มา (สำหรับ dropdown "กลุ่มที่ส่ง")
+function _allLoopGroupNames(dealers) {
+  var names = {};
+  (dealers || []).forEach(function(d) { _dealerLoopGroups(d).forEach(function(g) { if (g.name) names[g.name] = true; }); });
+  if (!Object.keys(names).length) names['ทั่วไป'] = true;
+  return Object.keys(names).sort(function(a, b) { return a === 'ทั่วไป' ? -1 : (b === 'ทั่วไป' ? 1 : a.localeCompare(b)); });
+}
+
+// ตัวแก้ไขกลุ่ม Loop Email แบบ reusable — ใช้ทั้งใน ⚙️ ของหน้า Email Dealer และการ์ดหน้า Dealer Detail
+// แต่ละกลุ่มแก้ชื่อ/To/CC เองได้อิสระ ลบกลุ่มได้ (เหลืออย่างน้อย 1 กลุ่มเสมอ — ลบจนหมดจะเติมกลุ่มว่างกลับให้)
+function _loopGroupBlockHtml(idPrefix, g) {
+  return '<div class="loopgroup-block" style="background:var(--bg2);border-radius:8px;padding:8px;margin-bottom:6px">' +
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">' +
+    '<input type="text" class="' + idPrefix + '_name" value="' + sanitize(g.name || '') + '" placeholder="ชื่อกลุ่ม เช่น ทั่วไป" style="flex:1;font-size:12px;font-weight:600">' +
+    '<button type="button" class="btn-xs btn-red" onclick="_loopGroupRemove(\'' + idPrefix + '\', this)">✕</button>' +
+    '</div>' +
+    '<input type="text" class="' + idPrefix + '_to fm-input" value="' + sanitize(g.to || '') + '" placeholder="To" style="width:100%;font-size:11px;margin-bottom:4px">' +
+    '<input type="text" class="' + idPrefix + '_cc fm-input" value="' + sanitize(g.cc || '') + '" placeholder="CC (คั่นด้วย , ถ้าหลายคน)" style="width:100%;font-size:11px">' +
+    '</div>';
+}
+function _loopGroupsEditorHtml(idPrefix, groups) {
+  var h = '<div id="' + idPrefix + '_wrap">';
+  groups.forEach(function(g) { h += _loopGroupBlockHtml(idPrefix, g); });
+  h += '</div><button type="button" class="btn-xs" onclick="_loopGroupAdd(\'' + idPrefix + '\')">➕ เพิ่มกลุ่ม</button>';
+  return h;
+}
+function _loopGroupAdd(idPrefix) {
+  var wrap = document.getElementById(idPrefix + '_wrap');
+  if (!wrap) return;
+  wrap.insertAdjacentHTML('beforeend', _loopGroupBlockHtml(idPrefix, { name: '', to: '', cc: '' }));
+}
+function _loopGroupRemove(idPrefix, btnEl) {
+  var wrap = document.getElementById(idPrefix + '_wrap');
+  var block = btnEl.closest('.loopgroup-block');
+  if (block) block.remove();
+  if (wrap && !wrap.children.length) _loopGroupAdd(idPrefix);
+}
+function _loopGroupsCollect(idPrefix) {
+  var wrap = document.getElementById(idPrefix + '_wrap');
+  if (!wrap) return [{ name: 'ทั่วไป', to: '', cc: '' }];
+  var blocks = Array.prototype.slice.call(wrap.querySelectorAll('.loopgroup-block'));
+  var groups = blocks.map(function(b) {
+    return {
+      name: (b.querySelector('.' + idPrefix + '_name').value || '').trim(),
+      to: (b.querySelector('.' + idPrefix + '_to').value || '').trim(),
+      cc: (b.querySelector('.' + idPrefix + '_cc').value || '').trim()
+    };
+  }).filter(function(g) { return g.name || g.to || g.cc; });
+  return groups.length ? groups : [{ name: 'ทั่วไป', to: '', cc: '' }];
+}
+
+// การ์ด Loop Email ในหน้า Dealer Detail — แก้ d.mailLoops ตัวเดียวกับที่หน้า Email Dealer ใช้
 // (ข้อมูลชุดเดียวกัน ไม่แยกเก็บซ้ำ) จะแก้จากที่นี่หรือจากปุ่ม ⚙️ ในหน้า Email Dealer ก็ได้
 function renderDealerLoopEmailCard(d) {
-  var loop = _dealerMailLoop(d);
+  var groups = _dealerLoopGroups(d);
+  var prefix = 'ddl_' + d.id;
   return '<div class="card"><h2>📧 Loop Email (To / CC)</h2>' +
-    '<p style="font-size:11px;color:var(--text2);margin-bottom:8px">ใช้ตอนส่ง Email หา Dealer นี้จากหน้า Email Dealer — ไม่ตั้งไว้ก็ใช้ค่าจากผู้ติดต่อด้านบนแทน</p>' +
-    '<div class="fg"><label>To</label><input type="text" id="ddlTo_' + d.id + '" value="' + sanitize(loop.to) + '" placeholder="เช่น a@company.com"></div>' +
-    '<div class="fg"><label>CC</label><input type="text" id="ddlCc_' + d.id + '" value="' + sanitize(loop.cc) + '" placeholder="คั่นด้วย , ถ้าหลายคน"></div>' +
-    '<button class="btn bp bsm" onclick="saveDealerLoopEmail(\'' + d.id + '\')">💾 บันทึก</button></div>';
+    '<p style="font-size:11px;color:var(--text2);margin-bottom:8px">ตั้งได้หลายกลุ่ม เช่น "ทั่วไป" กับ "เทคนิค" — ตอนส่งจากหน้า Email Dealer ถ้า Dealer นี้ไม่มีกลุ่มที่เลือก จะใช้กลุ่มแรกแทนอัตโนมัติ</p>' +
+    _loopGroupsEditorHtml(prefix, groups) +
+    '<button class="btn bp bsm" style="margin-top:6px" onclick="saveDealerLoopGroups(\'' + d.id + '\')">💾 บันทึกทั้งหมด</button></div>';
 }
-function saveDealerLoopEmail(id) {
-  var toEl = document.getElementById('ddlTo_' + id);
-  var ccEl = document.getElementById('ddlCc_' + id);
-  if (!toEl) return;
-  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
+function saveDealerLoopGroups(id) {
+  var groups = _loopGroupsCollect('ddl_' + id);
+  ST.update('dealers', id, { mailLoops: groups });
   toast('💾 บันทึก Loop Email แล้ว');
-}
-function _deSaveLoop(id) {
-  var toEl = document.getElementById('deTo_' + id);
-  var ccEl = document.getElementById('deCc_' + id);
-  if (!toEl) return;
-  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
-  var d = ST.getOne('dealers', id);
-  if (d && typeof window._deDealers !== 'undefined') {
-    var idx = window._deDealers.findIndex(function(x) { return x.id === id; });
-    if (idx !== -1) window._deDealers[idx] = d;
-  }
-  toast('💾 บันทึก Loop Mail ของ ' + (d ? d.name : '') + ' แล้ว');
 }
 function _buildMailto(to, cc, subject, body) {
   var toEnc = (to || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean).map(encodeURIComponent).join(',');
@@ -791,10 +830,15 @@ function showDealerEmailPickerM(tmplId) {
 
   var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
   var saleNames = Array.from(new Set(dealers.map(function(d) { return d.saleName || ''; }).filter(Boolean))).sort();
+  var groupNames = _allLoopGroupNames(dealers);
 
   var h = '<div style="max-width:520px">';
-  h += '<div class="fm-group"><label>📋 Template</label><select id="deTmpl" class="fm-input" onchange="_deRenderList()">' +
+  h += '<div class="fm-group"><label>📋 Template <span class="ml"><button type="button" class="btn-xs" onclick="_dePickerEditTmpl()">✏️ แก้ไข</button> <button type="button" class="btn-xs" onclick="_dePickerNewTmpl()">➕ ใหม่</button></span></label>' +
+    '<select id="deTmpl" class="fm-input" onchange="_deRenderList()">' +
     templates.map(function(t) { return '<option value="' + t.id + '"' + (t.id === tmplId ? ' selected' : '') + '>' + (t.icon || '📧') + ' ' + sanitize(t.name) + '</option>'; }).join('') +
+    '</select></div>';
+  h += '<div class="fm-group"><label>📂 กลุ่มที่ส่ง</label><select id="deGroupSel" class="fm-input" onchange="_deRenderList()">' +
+    groupNames.map(function(n) { return '<option value="' + sanitize(n) + '">' + sanitize(n) + '</option>'; }).join('') +
     '</select></div>';
   if (saleNames.length > 1) {
     h += '<div class="fm-group"><label>🧑‍💼 เซลที่ดูแล</label><select id="deSaleSel" class="fm-input" onchange="_deRenderList()">' +
@@ -841,6 +885,8 @@ function _deRenderList() {
   var q = (document.getElementById('deSearch').value || '').trim().toLowerCase();
   var saleSel = document.getElementById('deSaleSel');
   var saleVal = saleSel ? saleSel.value : '';
+  var groupSel = document.getElementById('deGroupSel');
+  var groupName = groupSel ? groupSel.value : 'ทั่วไป';
   var levelFilter = window._deLevelFilter || 'all';
   var dealers = window._deDealers || [];
   var prevChecked = {};
@@ -854,23 +900,22 @@ function _deRenderList() {
     if (levelFilter === 'other' && isAuth) return false;
     return true;
   }).map(function(d) {
-    var loop = _dealerMailLoop(d);
+    var loop = _dealerLoopByName(d, groupName);
     var hasEmail = !!loop.to;
     var ccCount = loop.cc ? loop.cc.split(',').filter(function(s) { return s.trim(); }).length : 0;
     var emailLabel = hasEmail ? sanitize(loop.to) + (ccCount ? ' +' + ccCount + ' CC' : '') : '⚠️ ยังไม่มีอีเมล';
+    if (hasEmail && loop.fallback) emailLabel = '<span style="color:#f59e0b">ใช้ "' + sanitize(loop.name) + '" แทน</span> · ' + emailLabel;
     var emailTitle = hasEmail ? sanitize(loop.to + (loop.cc ? '; CC: ' + loop.cc : '')) : '';
     var checked = prevChecked[d.id] ? ' checked' : '';
     var expanded = (window._deExpanded || {})[d.id];
     var row = '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (hasEmail ? '' : 'opacity:.65') + '">' +
       '<input type="checkbox" value="' + d.id + '" style="width:auto;flex-shrink:0"' + (hasEmail ? checked : ' disabled') + '>' +
       '<span style="flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="' + sanitize(d.name || '') + '" onclick="this.previousElementSibling.click()">' + sanitize(d.name || '') + '</span>' +
-      '<span style="flex:0 0 150px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)" title="' + emailTitle + '">' + emailLabel + '</span>' +
+      '<span style="flex:0 0 190px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)" title="' + emailTitle + '">' + emailLabel + '</span>' +
       '<button type="button" class="btn-xs" style="flex-shrink:0" onclick="_deToggleGear(\'' + d.id + '\')" title="ตั้งค่า Loop Email">⚙️</button></div>';
     if (expanded) {
-      row += '<div style="display:flex;flex-direction:column;gap:4px;padding:0 4px 8px 30px">' +
-        '<input type="text" id="deGearTo_' + d.id + '" class="fm-input" style="font-size:11px" placeholder="To" value="' + sanitize(loop.to) + '">' +
-        '<input type="text" id="deGearCc_' + d.id + '" class="fm-input" style="font-size:11px" placeholder="CC (คั่นด้วย ,)" value="' + sanitize(loop.cc) + '">' +
-        '<button type="button" class="btn-xs btn-blue" style="align-self:flex-end" onclick="_deGearSave(\'' + d.id + '\')">💾 บันทึก</button></div>';
+      row += '<div style="padding:0 4px 8px 30px">' + _loopGroupsEditorHtml('deGear_' + d.id, _dealerLoopGroups(d)) +
+        '<button type="button" class="btn-xs btn-blue" style="margin-top:4px" onclick="_deGearSaveGroups(\'' + d.id + '\')">💾 บันทึก</button></div>';
     }
     return row;
   });
@@ -890,11 +935,9 @@ function _deToggleGear(id) {
   window._deExpanded[id] = !window._deExpanded[id];
   _deRenderList();
 }
-function _deGearSave(id) {
-  var toEl = document.getElementById('deGearTo_' + id);
-  var ccEl = document.getElementById('deGearCc_' + id);
-  if (!toEl) return;
-  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
+function _deGearSaveGroups(id) {
+  var groups = _loopGroupsCollect('deGear_' + id);
+  ST.update('dealers', id, { mailLoops: groups });
   var d = ST.getOne('dealers', id);
   var idx = (window._deDealers || []).findIndex(function(x) { return x.id === id; });
   if (idx !== -1) window._deDealers[idx] = d;
@@ -903,32 +946,69 @@ function _deGearSave(id) {
   _deRenderList();
 }
 
+// เพิ่ม/แก้ Template แบบไม่ต้องออกจากหน้า Email Dealer — ใช้ _etReturnTo (features.js) บอก
+// saveNewEmailTmpl/saveEditEmailTmpl ว่าบันทึกเสร็จแล้วให้กลับมาเปิดหน้านี้ต่อ ไม่ใช่กลับไปหน้าจัดการ Template
+function _dePickerNewTmpl() {
+  _etReturnTo = 'picker';
+  showAddEmailTmplM();
+  var chk = document.getElementById('etForDealer');
+  if (chk) { chk.checked = true; _etToggleDealerHint(); }
+}
+function _dePickerEditTmpl() {
+  var sel = document.getElementById('deTmpl');
+  if (!sel || !sel.value) return;
+  var idx = getEmailTemplates().findIndex(function(t) { return t.id === sel.value; });
+  if (idx === -1) return;
+  _etReturnTo = 'picker';
+  showEditEmailTmplM(idx);
+}
+
 function _dealerEmailGenerate() {
   var tmplSel = document.getElementById('deTmpl');
   var tmpl = tmplSel && getEmailTemplates().find(function(t) { return t.id === tmplSel.value; });
   if (!tmpl) return;
+  var groupSel = document.getElementById('deGroupSel');
+  var groupName = groupSel ? groupSel.value : 'ทั่วไป';
   var listEl = document.getElementById('deList');
   var ids = Array.prototype.filter.call(listEl.querySelectorAll('input[type=checkbox]'), function(c) { return c.checked; }).map(function(c) { return c.value; });
   if (!ids.length) return toast('เลือก Dealer อย่างน้อย 1 ราย');
   var dealers = window._deDealers || [];
   var area = document.getElementById('deGenArea');
   window._deFilled = {};
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — แก้ To/CC ได้ก่อนเปิด, กด 💾 เพื่อจำไว้ใช้ครั้งหน้า</div>';
+  window._deGenGroup = groupName;
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — แก้ To/CC ได้ก่อนเปิด, กด 💾 เพื่อจำกลุ่ม "' + sanitize(groupName) + '" นี้ไว้ใช้ครั้งหน้า</div>';
   ids.forEach(function(id) {
     var d = dealers.find(function(x) { return x.id === id; });
     if (!d) return;
-    var loop = _dealerMailLoop(d);
+    var loop = _dealerLoopByName(d, groupName);
     var filled = fillDealerEmailTemplate(tmpl, d);
     window._deFilled[id] = filled;
     h += '<div style="padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">' + sanitize(d.name || '') + '</b>' +
       '<button class="btn-xs btn-blue" onclick="_deOpenMail(\'' + id + '\')">📧 เปิด</button>' +
-      '<button class="btn-xs" onclick="_deSaveLoop(\'' + id + '\')" title="จำ To/CC นี้ไว้ใช้ครั้งหน้า">💾</button></div>' +
+      '<button class="btn-xs" onclick="_deSaveLoop(\'' + id + '\')" title="จำ To/CC นี้ไว้ที่กลุ่ม' + sanitize(groupName) + '">💾</button></div>' +
+      (loop.fallback ? '<div style="font-size:10px;color:#f59e0b;margin-bottom:2px">⚠️ Dealer นี้ไม่มีกลุ่ม "' + sanitize(groupName) + '" — ใช้ "' + sanitize(loop.name) + '" แทน กด 💾 เพื่อสร้างกลุ่มนี้ให้ Dealer นี้</div>' : '') +
       '<input type="text" id="deTo_' + id + '" class="fm-input" style="font-size:11px;margin-bottom:3px" placeholder="To" value="' + sanitize(loop.to) + '">' +
       '<input type="text" id="deCc_' + id + '" class="fm-input" style="font-size:11px" placeholder="CC (คั่นด้วย , ถ้าหลายคน)" value="' + sanitize(loop.cc) + '">' +
       '</div>';
   });
   area.innerHTML = h;
+}
+function _deSaveLoop(id) {
+  var toEl = document.getElementById('deTo_' + id);
+  var ccEl = document.getElementById('deCc_' + id);
+  if (!toEl) return;
+  var groupName = window._deGenGroup || 'ทั่วไป';
+  var d = ST.getOne('dealers', id);
+  var groups = _dealerLoopGroups(d).slice();
+  var gIdx = groups.findIndex(function(g) { return g.name === groupName; });
+  var newGroup = { name: groupName, to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') };
+  if (gIdx !== -1) groups[gIdx] = newGroup; else groups.push(newGroup);
+  ST.update('dealers', id, { mailLoops: groups });
+  d = ST.getOne('dealers', id);
+  var idx = (window._deDealers || []).findIndex(function(x) { return x.id === id; });
+  if (idx !== -1) window._deDealers[idx] = d;
+  toast('💾 บันทึกกลุ่ม "' + groupName + '" ของ ' + (d ? d.name : '') + ' แล้ว');
 }
 
 function dealerCardHTML(d, health) {
