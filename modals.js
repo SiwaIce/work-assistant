@@ -2,6 +2,112 @@
 // MODALS.JS - ALL MODAL DIALOGS (UPDATED TO USE Products MODULE)
 // ================================================================
 // ================================================================
+// GENERIC CONFIG LIST EDITOR — จัดการ list ตัวเลือกแบบ string ธรรมดาที่แต่เดิมไม่มีหน้าแก้ไข
+// (unitTypes, torOptions, appointmentOptions, winReasons, lossReasons, noteCategories ฯลฯ)
+// เปิดจากปุ่ม ⚙️ ข้างตัวเลือกในฟอร์มได้เลย ไม่ต้องออกจากฟอร์มไปแก้ config ที่อื่น — เสร็จแล้วกลับมา
+// ฟอร์มเดิมต่อทันที (reopenFn) ผ่าน pattern เดียวกับ _etReturnTo ของ Email Template (features.js)
+// ================================================================
+function showCfgListEditorM(cfgKey, title, reopenFn) {
+  window._cfgListKey = cfgKey;
+  window._cfgListTitle = title;
+  window._cfgListReopen = reopenFn;
+  window._cfgListJustAdded = null;
+  _cfgListRenderM();
+}
+function _cfgListRenderM() {
+  var cfg = getConfig();
+  var list = cfg[window._cfgListKey] || [];
+  var h = '<div style="max-width:380px">';
+  h += '<div id="cfgListWrap">' + (list.length ? list.map(function(v, i) {
+    return '<div class="link-item"><span style="flex:1;font-size:13px">' + sanitize(v) + '</span>' +
+      '<button class="btn bsm bd" onclick="_cfgListRemove(' + i + ')">✕</button></div>';
+  }).join('') : '<div style="font-size:12px;color:var(--text2);padding:6px 0">ยังไม่มีรายการ</div>') + '</div>';
+  h += '<div style="display:flex;gap:4px;margin-top:6px">' +
+    '<input type="text" id="cfgListNew" placeholder="เพิ่มรายการใหม่" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_cfgListAdd();}">' +
+    '<button class="btn bsm bp" onclick="_cfgListAdd()">➕</button></div>';
+  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_cfgListDone()">✅ เสร็จสิ้น</button>';
+  h += '</div>';
+  openM(window._cfgListTitle, h);
+}
+function _cfgListAdd() {
+  var el = document.getElementById('cfgListNew');
+  var v = (el.value || '').trim();
+  if (!v) return;
+  var cfg = getConfig();
+  cfg[window._cfgListKey] = cfg[window._cfgListKey] || [];
+  if (cfg[window._cfgListKey].indexOf(v) !== -1) return toast('มีอยู่แล้ว');
+  cfg[window._cfgListKey].push(v);
+  saveConfig(cfg);
+  window._cfgListJustAdded = v;
+  _cfgListRenderM();
+}
+function _cfgListRemove(idx) {
+  var cfg = getConfig();
+  cfg[window._cfgListKey].splice(idx, 1);
+  saveConfig(cfg);
+  _cfgListRenderM();
+}
+function _cfgListDone() {
+  var fn = window._cfgListReopen;
+  var added = window._cfgListJustAdded;
+  window._cfgListReopen = null;
+  if (fn) fn(added); else closeMForce();
+}
+
+// ================================================================
+// PIPELINE STATUS EDITOR (ย่อจาก Admin) — เพิ่ม/ลบ Status ได้จากในฟอร์ม Pipeline เลย
+// ================================================================
+function showPipeStatusEditorM(reopenFn) {
+  window._pstReopen = reopenFn;
+  window._pstJustAdded = null;
+  _pstRenderM();
+}
+function _pstRenderM() {
+  var cfg = getConfig();
+  var list = cfg.pipelineStatuses || [];
+  var h = '<div style="max-width:420px">';
+  h += '<div id="pstWrap">' + list.map(function(s, i) {
+    var catLabel = s.category === 'won' ? '🟢 Win' : s.category === 'lost' ? '🔴 Lost' : '🔵 Active';
+    return '<div class="link-item"><span style="width:12px;height:12px;border-radius:50%;background:' + (s.color || '#888') + ';flex-shrink:0"></span>' +
+      '<span style="flex:1;font-size:13px">' + sanitize(s.name) + '</span>' +
+      '<span style="font-size:11px;color:var(--text2);white-space:nowrap">' + catLabel + '</span>' +
+      '<button class="btn bsm bd" onclick="_pstRemove(' + i + ')">✕</button></div>';
+  }).join('') + '</div>';
+  h += '<div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;align-items:center">' +
+    '<input type="text" id="pstNewName" placeholder="ชื่อ Status ใหม่" style="flex:1;min-width:110px">' +
+    '<input type="color" id="pstNewColor" value="#3b82f6" style="width:34px;padding:1px">' +
+    '<select id="pstNewCat" style="font-size:12px;padding:4px"><option value="active">🔵 Active</option><option value="won">🟢 Win</option><option value="lost">🔴 Lost</option></select>' +
+    '<button class="btn bsm bp" onclick="_pstAdd()">➕</button></div>';
+  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_pstDone()">✅ เสร็จสิ้น</button>';
+  h += '</div>';
+  openM('⚙️ จัดการ Pipeline Status', h);
+}
+function _pstAdd() {
+  var nameEl = document.getElementById('pstNewName');
+  var name = (nameEl.value || '').trim();
+  if (!name) return alert('ใส่ชื่อ Status');
+  var cfg = getConfig();
+  var id = 'st_' + Date.now().toString(36);
+  cfg.pipelineStatuses = cfg.pipelineStatuses || [];
+  cfg.pipelineStatuses.push({ id: id, name: name, color: document.getElementById('pstNewColor').value, category: document.getElementById('pstNewCat').value });
+  saveConfig(cfg);
+  window._pstJustAdded = id;
+  _pstRenderM();
+}
+function _pstRemove(idx) {
+  var cfg = getConfig();
+  cfg.pipelineStatuses.splice(idx, 1);
+  saveConfig(cfg);
+  _pstRenderM();
+}
+function _pstDone() {
+  var fn = window._pstReopen;
+  var added = window._pstJustAdded;
+  window._pstReopen = null;
+  if (fn) fn(added); else closeMForce();
+}
+
+// ================================================================
 // GET ALL MODELS WITH PRICES (เฉพาะ Admin - สำหรับแสดงราคาใน dropdown)
 // ================================================================
 function getAllModelsWithPricesForAdmin() {
@@ -292,6 +398,9 @@ function showPipelineM(dealerId, eid) {
   var p = eid ? ST.getOne('pipeline', eid) : {};
   var cfg = getConfig();
   window._pipeAttach = (p.attachments || []).slice();
+  // ใช้ reopen หลังแก้ config แบบ inline (⚙️ ข้าง Unit Type/Status/TOR/หนังสือแต่งตั้ง) — reopen จะ build ฟอร์มใหม่
+  // จากข้อมูลที่บันทึกไว้ ไม่ใช่จาก DOM ปัจจุบัน ดังนั้นถ้ามีช่องอื่นที่แก้ค้างไว้ยังไม่บันทึกจะหายไปด้วย
+  var _pipeReopenArgs = "'" + (dealerId || '') + "','" + (eid || '') + "'";
 
   // Load existing items
   if (eid && p.items && p.items.length > 0) {
@@ -314,10 +423,10 @@ function showPipelineM(dealerId, eid) {
     '<div class="fg"><label>End User (EN)</label><input type="text" id="fp_eu_en" value="' + sanitize(p.endUserEN || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="fp_agency_main" value="' + sanitize(p.agencyMain || '') + '" placeholder="เช่น กรม/กระทรวง/บริษัทแม่"></div>' +
     '<div class="fg"><label>หน่วยงานย่อย</label><input type="text" id="fp_agency_sub" value="' + sanitize(p.agencySub || '') + '" placeholder="เช่น กอง/สำนัก/สาขา"></div></div>' +
-    '<div class="fr"><div class="fg"><label>Unit Type</label><select id="fp_unit">' + optionsHTML(cfg.unitTypes, p.unitType, '--') + '</select></div>' +
+    '<div class="fr"><div class="fg"><label>Unit Type <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'unitTypes\',\'⚙️ จัดการ Unit Type\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_unit\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_unit">' + optionsHTML(cfg.unitTypes, p.unitType, '--') + '</select></div>' +
     '<div class="fg"><label>Dealer Name *</label><input type="text" id="fp_dealer" list="fp_dealer_list" value="' + sanitize((ST.getOne('dealers', dealerId || p.dealerId) || {}).name || '') + '" placeholder="บริษัทที่เข้าประมูล พิมพ์อิสระ หรือเลือกจาก suggest" autocomplete="off">' + _dealerNameDatalistHtml('fp_dealer_list') + '</div></div>' +
     '<div class="fr"><div class="fg"><label>DJI Dealer</label><input type="text" id="fp_djid" list="fp_djid_list" value="' + sanitize(p.djiDealer || '') + '" placeholder="พิมพ์อิสระ หรือเลือกจาก suggest" autocomplete="off">' + _djiDealerDatalistHtml('fp_djid_list') + '</div>' +
-    '<div class="fg"><label>Status</label><select id="fp_status">' + optionsHTML(cfg.pipelineStatuses, p.status || 'initial') + '</select></div></div>' +
+    '<div class="fg"><label>Status <button type="button" class="btn-xs" onclick="showPipeStatusEditorM(function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_status\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_status">' + optionsHTML(cfg.pipelineStatuses, p.status || 'initial') + '</select></div></div>' +
 
     // ---- Model & Forecast Section ----
     '<div class="form-section">📦 สินค้าและมูลค่า</div>' +
@@ -330,10 +439,10 @@ function showPipelineM(dealerId, eid) {
 
     // ---- Other Fields ----
     '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_real" value="' + nmI(p.realAmount || '') + '"></div>' +
-    '<div class="fg"><label>TOR</label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
+    '<div class="fg"><label>TOR <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'torOptions\',\'⚙️ จัดการ TOR\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_tor\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
     '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
-    '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง</label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
+    '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'appointmentOptions\',\'⚙️ จัดการหนังสือแต่งตั้ง\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_appt\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"><label>🎯 Project POS (%) <small style="color:var(--text2)">(โอกาสได้งาน)</small></label><input type="number" id="fp_pos" min="0" max="100" value="' + (p.projectPOS || '') + '" placeholder="0-100"></div></div>' +
     (function() {
       var hasAdvData = !!(p.budgetFiscalYear || p.djiCrmRegistered || p.hasCompetitor || p.projectRevenue || p.sheetDisplay === 'Hide');
@@ -813,7 +922,14 @@ function pickerRender() {
         '<button onclick="closeProductPicker()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer">✕</button>' +
       '</div>' +
       '<div style="padding:12px 16px;overflow-y:auto">' +
-        '<input id="ppSearch" type="text" oninput="ppSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / SKU / M350..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);margin-bottom:10px">' +
+        '<div style="display:flex;gap:6px;margin-bottom:10px">' +
+        '<input id="ppSearch" type="text" oninput="ppSearch(this.value)" placeholder="🔍 พิมพ์ชื่อ / SKU / M350..." autocomplete="off" style="flex:1;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);color:var(--text)">' +
+        '<button type="button" class="btn bo bsm" onclick="_ppToggleNew()" title="สินค้านี้ไม่มีในแคตตาล็อก — เพิ่มใหม่ได้เลย">➕ ใหม่</button>' +
+        '</div>' +
+        '<div id="ppNewWrap" style="display:none;background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:10px">' +
+        '<div style="display:flex;gap:6px;margin-bottom:6px"><input type="text" id="ppNewName" placeholder="ชื่อสินค้า" style="flex:1"><input type="text" inputmode="decimal" id="ppNewPrice" placeholder="ราคา RRP Ex Vat" style="width:130px"></div>' +
+        '<button type="button" class="btn bp bsm" onclick="_ppSaveNew()">💾 บันทึกและเลือก</button>' +
+        '</div>' +
         chips +
         '<div id="ppListWrap"></div>' +
       '</div>' +
@@ -821,6 +937,30 @@ function pickerRender() {
   pickerRenderList();
   var s = document.getElementById('ppSearch');
   if (s) s.focus();
+}
+// เพิ่มสินค้าใหม่ตรงจาก Product Picker เลย — ไม่ต้องปิด picker ไปหน้า "สินค้าทั้งหมด" แยก แล้วต้องพิมพ์ชื่อ
+// ใหม่กลับมาเลือกอีกที เพราะ picker เป็น overlay ลอยอยู่แล้ว ไม่ได้แย่งช่อง modal กับฟอร์มที่เปิด picker อยู่
+// (ใส่เฉพาะชื่อ+ราคาเบื้องต้น รายละเอียดเต็มๆ เช่น SKU/หมวดหมู่ยังแก้เพิ่มได้ทีหลังจากหน้า "สินค้าทั้งหมด")
+function _ppToggleNew() {
+  var w = document.getElementById('ppNewWrap');
+  if (!w) return;
+  var show = w.style.display === 'none';
+  w.style.display = show ? '' : 'none';
+  if (show) { var n = document.getElementById('ppNewName'); if (n) n.focus(); }
+}
+function _ppSaveNew() {
+  var nameEl = document.getElementById('ppNewName');
+  var priceEl = document.getElementById('ppNewPrice');
+  var name = (nameEl.value || '').trim();
+  if (!name) return alert('ใส่ชื่อสินค้า');
+  var price = parseNum(priceEl.value);
+  Products.add({
+    name: name, sku: '', category: 'other', rrpExVat: price, price: price,
+    typePrices: { S: price, A: price, B: price, Other: price },
+    eol: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  });
+  toast('✅ เพิ่มสินค้าใหม่แล้ว');
+  ppDoAdd(name, 1);
 }
 function pickerRenderList() {
   var wrap = document.getElementById('ppListWrap');
@@ -1010,7 +1150,7 @@ function showWinReasonM(pipeId, newStatus) {
   var cfg = getConfig();
   var p = ST.getOne('pipeline', pipeId);
   openM('✅ Win — สาเหตุที่ได้งาน', '' +
-    '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.winReasons.map(function(r) { return '<label><input type="checkbox" name="wr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
+    '<div class="fg"><label>สาเหตุ <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'winReasons\',\'⚙️ จัดการเหตุผล Win\', function(){ showWinReasonM(\'' + pipeId + '\',\'' + newStatus + '\'); })">⚙️</button></label><div class="check-g">' + cfg.winReasons.map(function(r) { return '<label><input type="checkbox" name="wr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="wr_note" rows="2"></textarea></div>' +
     '<div class="fg"><label>Real Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="wr_amt" value="' + nmI(p ? p.forecastAmount || '' : '') + '"></div>' +
     '<button class="btn bp btn-full" onclick="saveWinReason(\'' + pipeId + '\',\'' + newStatus + '\')">💾 บันทึก</button>');
@@ -1032,7 +1172,7 @@ function saveWinReason(pipeId, newStatus) {
 function showLossReasonM(pipeId) {
   var cfg = getConfig();
   openM('❌ Lost — สาเหตุที่ไม่ได้งาน', '' +
-    '<div class="fg"><label>สาเหตุ</label><div class="check-g">' + cfg.lossReasons.map(function(r) { return '<label><input type="checkbox" name="lr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
+    '<div class="fg"><label>สาเหตุ <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'lossReasons\',\'⚙️ จัดการเหตุผล Lost\', function(){ showLossReasonM(\'' + pipeId + '\'); })">⚙️</button></label><div class="check-g">' + cfg.lossReasons.map(function(r) { return '<label><input type="checkbox" name="lr" value="' + r + '"><span>' + r + '</span></label>'; }).join('') + '</div></div>' +
     '<div class="fg"><label>คู่แข่งที่ชนะ</label><input type="text" id="lr_comp"></div>' +
     '<div class="fg"><label>ราคาคู่แข่ง (฿)</label><input type="text" inputmode="decimal" class="js-money" id="lr_price"></div>' +
     '<div class="fg"><label>บทเรียน</label><textarea id="lr_note" rows="2"></textarea></div>' +
@@ -3260,7 +3400,7 @@ function showNoteM(eid) {
     '<div class="fg"><label>หัวข้อ *</label><input type="text" id="fn_title" value="' + sanitize(n.title || '') + '"></div>' +
     
     '<div class="fr">' +
-    '<div class="fg"><label>หมวดหมู่</label><select id="fn_cat">' + optionsHTML(cats, n.category || '', '-- เลือก --') + '</select></div>' +
+    '<div class="fg"><label>หมวดหมู่ <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'noteCategories\',\'⚙️ จัดการหมวดหมู่ Note\', function(added){ showNoteM(\'' + (eid || '') + '\'); if(added) setTimeout(function(){var s=document.getElementById(\'fn_cat\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fn_cat">' + optionsHTML(cats, n.category || '', '-- เลือก --') + '</select></div>' +
     '<div class="fg"><label>สถานะ</label><select id="fn_status">' + statusOpts + '</select></div>' +
     '</div>' +
     
