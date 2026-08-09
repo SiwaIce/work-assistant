@@ -152,6 +152,20 @@ function copyVisitExport(onlySelected) {
   copyText(lines.join('\n'), '📋 Copy แล้ว! วาง Google Sheets ได้ (' + idxs.length + ' แถว)');
 }
 
+// ปุ่มลัดบนหน้า Visit List — copy Visit เดือนนี้เป็น TSV วางลง Sheet ได้เลยโดยไม่ต้องสลับไปมุมมองตาราง
+// แล้วเลือกแถวเอง (มุมมองตาราง + copyVisitExport ยังอยู่เหมือนเดิม อันนี้เป็นทางลัดเสริม ไม่ได้แทนที่)
+function copyVisitsThisMonthTSV() {
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  var vts = ST.getAll('visits').filter(function(v) { return (v.date || '').indexOf(ym) === 0; })
+    .sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  if (!vts.length) return toast('ไม่มี Visit เดือนนี้', true);
+  var rows = buildXVisitRows(vts);
+  var lines = [XV_HEADERS.map(_csvQuote).join('\t')];
+  rows.forEach(function(r) { lines.push(r.cells.map(_csvQuote).join('\t')); });
+  copyText(lines.join('\n'), '📋 Copy แล้ว! วาง Google Sheets ได้ (' + vts.length + ' แถว — เดือนนี้)');
+}
+
 function dlVisitExportCSV() {
   var noLoc = document.getElementById('xv_noloc') && document.getElementById('xv_noloc').checked;
   var headers = XV_HEADERS.slice(); if (noLoc) headers.pop();

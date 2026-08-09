@@ -2468,6 +2468,55 @@ function saveQuickPipeFollowup(pipeId) {
   render();
 }
 
+// ================================================================
+// MONDAY MEETING — Pipeline แยกตาม Dealer + Forecast/Win สรุปเดือนนี้ ไว้ไล่คุยกับหัวหน้าทีละบริษัท
+// ================================================================
+function rMondayMeeting(el) {
+  document.getElementById('pgT').textContent = '🗓️ ประชุมจันทร์';
+  var cfg = getConfig();
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  var pipes = ST.getAll('pipeline');
+  var openPipes = pipes.filter(pipeIsOpen);
+  var wonThisMonth = pipes.filter(function(p) { return pipeIsWon(p) && (p.registerDate || '').indexOf(ym) === 0; });
+  var forecastTotal = openPipes.reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0);
+  var wonTotal = wonThisMonth.reduce(function(a, p) { return a + (Number(p.realAmount || p.forecastAmount) || 0); }, 0);
+
+  var byDealer = {};
+  openPipes.forEach(function(p) {
+    var key = p.dealerId || ('_noDealer_' + (p.dealerName || ''));
+    if (!byDealer[key]) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      byDealer[key] = { name: (dl && dl.name) || p.dealerName || '(ไม่ระบุ Dealer)', pipes: [] };
+    }
+    byDealer[key].pipes.push(p);
+  });
+  var groups = Object.keys(byDealer).map(function(k) { return byDealer[k]; }).sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+  var h = '<div class="card"><div style="display:flex;gap:10px">' +
+    '<div style="flex:1;background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Forecast (Pipeline เปิดอยู่ทั้งหมด)</div><div style="font-size:18px;font-weight:700">฿' + fmtMoney(forecastTotal) + '</div></div>' +
+    '<div style="flex:1;background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Win เดือนนี้ (' + ym + ')</div><div style="font-size:18px;font-weight:700;color:#22c55e">฿' + fmtMoney(wonTotal) + '</div></div>' +
+    '</div></div>';
+
+  if (!groups.length) {
+    h += '<div class="empty"><p>ไม่มี Pipeline ที่เปิดอยู่</p></div>';
+  } else {
+    groups.forEach(function(g) {
+      h += '<div class="card"><h2>🏪 ' + sanitize(g.name) + ' <span class="ml" style="font-size:11px;color:var(--text2);font-weight:400">' + g.pipes.length + ' โครงการเปิดอยู่</span></h2>';
+      g.pipes.forEach(function(p) {
+        var statusName = ((cfg.pipelineStatuses || []).find(function(s) { return s.id === p.status; }) || {}).name || p.status || '-';
+        var models = getPipeModelSummary(p);
+        h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">' +
+          '<div class="lm"><div class="lt">' + sanitize(p.projectName || '(ไม่มีชื่อ)') + '</div>' +
+          '<div class="ls">' + sanitize(models || '-') + ' • ฿' + fmtMoney(Number(p.forecastAmount) || 0) + ' • ' + sanitize(statusName) + '</div></div></div>';
+      });
+      h += '</div>';
+    });
+  }
+
+  el.innerHTML = h;
+}
+
 function rPipeDashboard(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
   var allPipes = ST.getAll('pipeline');

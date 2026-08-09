@@ -188,6 +188,71 @@ function kpiComputeActual(plan, cat) {
 }
 
 // ================================================================
+// สถานะ Visit เดือนนี้ — แยก Partner (S/A/B ต้อง Offline อย่างน้อยเดือนละครั้ง) กับ
+// Non-Partner (Meeting online/offline ไม่บังคับจำนวน) แล้วรวมเทียบเป้า Visit ทั้งไตรมาส
+// เป็นแค่การแสดงผล ไม่ได้บังคับ/บล็อกอะไร — ตามที่คุยกันว่าขอแค่ให้เห็นว่าทันจังหวะไหม
+// ================================================================
+function kpiVisitStatusThisMonth() {
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  var visitsThisMonth = ST.getAll('visits').filter(function(v) { return (v.date || '').indexOf(ym) === 0; });
+  var partnerDealers = ST.getAll('dealers').filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
+  var partnerVisitedIds = {};
+  var nonPartnerCount = 0;
+  visitsThisMonth.forEach(function(v) {
+    var d = v.dealerId ? ST.getOne('dealers', v.dealerId) : null;
+    var isPartner = d && ['S', 'A', 'B'].indexOf(d.level) !== -1;
+    if (isPartner) { if (v.mode === 'offline') partnerVisitedIds[d.id] = true; }
+    else nonPartnerCount++;
+  });
+
+  var q = kpiGetCurrentQuarter();
+  var plans = getKpiQuarterPlans().filter(function(p) { return p.quarter === q.quarter; });
+  var target = 40, startDate, endDate;
+  if (plans.length) {
+    var cat = (plans[0].categories || []).find(function(c) { return c.type === 'visitCount'; });
+    if (cat) target = cat.target;
+    startDate = plans[0].startDate; endDate = plans[0].endDate;
+  } else {
+    var range = kpiQuarterRange(q.q, q.year);
+    startDate = range.startDate; endDate = range.endDate;
+  }
+  var actualQ = ST.getAll('visits').filter(function(v) { var vd = v.date || ''; return vd >= startDate && vd <= endDate; }).length;
+
+  var qStart = new Date(startDate + 'T00:00:00'), qEnd = new Date(endDate + 'T23:59:59');
+  var totalDays = (qEnd - qStart) / 86400000;
+  var elapsedDays = Math.min(totalDays, Math.max(0, (now - qStart) / 86400000));
+  var expectedByNow = target * (totalDays ? elapsedDays / totalDays : 0);
+  var onPace = actualQ >= expectedByNow;
+
+  return {
+    partnerDone: Object.keys(partnerVisitedIds).length, partnerTotal: partnerDealers.length,
+    nonPartnerCount: nonPartnerCount, actualQ: actualQ, target: target, onPace: onPace, quarter: q.quarter
+  };
+}
+function renderVisitTypeStatusCard() {
+  var s = kpiVisitStatusThisMonth();
+  var partnerMissing = s.partnerTotal - s.partnerDone;
+  var pct = s.target ? Math.min(100, Math.round(s.actualQ / s.target * 100)) : 0;
+  var h = '<div class="card"><h2>📍 สถานะ Visit เดือนนี้</h2>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Partner (SAB) Offline</div>' +
+    '<div style="font-size:20px;font-weight:700">' + s.partnerDone + ' <span style="font-size:12px;color:var(--text2);font-weight:400">/ ' + s.partnerTotal + ' ราย ครบแล้ว</span></div>' +
+    (partnerMissing > 0 ? '<div style="font-size:11px;color:#f59e0b;margin-top:3px">⚠️ เหลือ ' + partnerMissing + ' ราย ยังไม่ Visit เดือนนี้</div>' : '<div style="font-size:11px;color:#22c55e;margin-top:3px">✅ ครบทุกราย</div>') +
+    '</div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Non-Partner Meeting</div>' +
+    '<div style="font-size:20px;font-weight:700">' + s.nonPartnerCount + ' <span style="font-size:12px;color:var(--text2);font-weight:400">ครั้งเดือนนี้</span></div>' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:3px">ไม่บังคับจำนวนต่อราย</div></div>';
+  h += '</div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:10px">' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:5px"><span>รวมทุก Visit เทียบเป้า ' + s.quarter + '</span><span style="font-weight:700;color:var(--text)">' + s.actualQ + ' / ' + s.target + ' ครั้ง</span></div>' +
+    '<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden"><div style="background:' + (s.onPace ? '#22c55e' : '#ef4444') + ';width:' + pct + '%;height:100%"></div></div>' +
+    '<div style="font-size:11px;color:' + (s.onPace ? '#22c55e' : '#ef4444') + ';margin-top:5px">' + (s.onPace ? '✅ ตามจังหวะ ทันเป้าไตรมาสนี้' : '⚠️ ตามหลังจังหวะที่ควรถึง') + '</div>' +
+    '</div></div>';
+  return h;
+}
+
+// ================================================================
 // Monthly breakdown — แบ่งเป้าไตรมาสเป็นรายเดือน (เป้าคงที่ 1/3 ทุกเดือน)
 // ================================================================
 var KPI_MONTH_NAMES = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];

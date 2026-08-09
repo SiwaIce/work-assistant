@@ -17,6 +17,7 @@ function rVisits(el) {
   <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <button class="btn bp" onclick="showVisitM()">➕ Visit Report</button>
     <button class="btn bo" onclick="openVisitWindow(S.filterDealer||'')" title="เปิดเป็นแท็บแยก เต็มจอ มีสมุดโน้ตเร็วด้านขวา">🪟 เปิดแท็บแยก</button>
+    <button class="btn bo" onclick="copyVisitsThisMonthTSV()" title="Copy Visit เดือนนี้ทั้งหมดเป็น TSV วางลง Google Sheet ได้เลย (ถ้าอยากเลือกเองเป็นแถวๆ สลับไปมุมมองตารางแทน)">📋 Copy TSV (เดือนนี้)</button>
     ${S.filterDealer?`<button class="btn bo" onclick="go('visits')">✕ ล้าง Filter</button>`:''}
     <div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-left:auto">
       <button class="btn-xs" style="border-radius:0;${visitListView==='card'?'background:var(--accent);color:#fff':''}" onclick="visitListView='card';render()">🗂 การ์ด</button>

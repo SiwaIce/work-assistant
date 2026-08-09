@@ -453,6 +453,7 @@ function rToday(el) {
 
   } else if (todayTab === 'kpi') {
     // 🎯 KPI = KPI + Monthly + Streak
+    tabContent += (typeof renderVisitTypeStatusCard === 'function' ? renderVisitTypeStatusCard() : '');
     tabContent += `
     <div class="card"><h2>🎯 KPI สัปดาห์ (${fDShort(kpi.weekRange.start)}—${fDShort(kpi.weekRange.end)}) <span class="ml"><button class="btn bsm bo" onclick="go('kpi')">ดูเต็ม →</button></span></h2>
     <div class="kpi-row">
