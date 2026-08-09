@@ -689,6 +689,42 @@ function _dealerEmail(d) {
   if (withEmail) return withEmail.email;
   return d.email || '';
 }
+// "Loop mail" ต่อ Dealer — To/CC ที่ตั้งเองได้และจำไว้ใช้ซ้ำ (บันทึกลง d.mailLoop) ถ้ายังไม่เคยตั้ง
+// ให้ default To = ผู้ติดต่อหลัก, CC = ผู้ติดต่อที่เหลือที่มีอีเมล (ไม่ต้องกรอกเองทุกครั้ง)
+function _dealerMailLoop(d) {
+  if (d.mailLoop && (d.mailLoop.to || d.mailLoop.cc)) return { to: d.mailLoop.to || '', cc: d.mailLoop.cc || '' };
+  var withEmail = (d.contacts || []).filter(function(c) { return c.email; });
+  var primary = withEmail.find(function(c) { return c.primary; }) || withEmail[0] || null;
+  var to = primary ? primary.email : (d.email || '');
+  var cc = withEmail.filter(function(c) { return c !== primary; }).map(function(c) { return c.email; }).join(', ');
+  return { to: to, cc: cc };
+}
+function _deSaveLoop(id) {
+  var toEl = document.getElementById('deTo_' + id);
+  var ccEl = document.getElementById('deCc_' + id);
+  if (!toEl) return;
+  ST.update('dealers', id, { mailLoop: { to: toEl.value.trim(), cc: (ccEl ? ccEl.value.trim() : '') } });
+  var d = ST.getOne('dealers', id);
+  if (d && typeof window._deDealers !== 'undefined') {
+    var idx = window._deDealers.findIndex(function(x) { return x.id === id; });
+    if (idx !== -1) window._deDealers[idx] = d;
+  }
+  toast('💾 บันทึก Loop Mail ของ ' + (d ? d.name : '') + ' แล้ว');
+}
+function _buildMailto(to, cc, subject, body) {
+  var toEnc = (to || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean).map(encodeURIComponent).join(',');
+  var ccEnc = (cc || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean).map(encodeURIComponent).join(',');
+  var params = ['subject=' + encodeURIComponent(subject), 'body=' + encodeURIComponent(body)];
+  if (ccEnc) params.push('cc=' + ccEnc);
+  return 'mailto:' + toEnc + '?' + params.join('&');
+}
+function _deOpenMail(id) {
+  var f = (window._deFilled || {})[id];
+  var toEl = document.getElementById('deTo_' + id);
+  var ccEl = document.getElementById('deCc_' + id);
+  if (!f || !toEl || !toEl.value.trim()) return toast('⚠️ ใส่ To ก่อน');
+  window.open(_buildMailto(toEl.value, ccEl ? ccEl.value : '', f.subject, f.body), '_blank');
+}
 function _dealerPrimaryContact(d) {
   var contacts = d.contacts || [];
   return contacts.find(function(c) { return c.primary; }) || contacts[0] || null;
@@ -764,12 +800,15 @@ function _deRenderList() {
   var rows = dealers.filter(function(d) {
     return !q || (d.name || '').toLowerCase().indexOf(q) !== -1 || (d.sisCode || '').toLowerCase().indexOf(q) !== -1;
   }).map(function(d) {
-    var email = _dealerEmail(d);
+    var loop = _dealerMailLoop(d);
+    var hasEmail = !!loop.to;
+    var ccCount = loop.cc ? loop.cc.split(',').filter(function(s) { return s.trim(); }).length : 0;
+    var emailLabel = hasEmail ? sanitize(loop.to) + (ccCount ? ' +' + ccCount + ' CC' : '') : '⚠️ ไม่มีอีเมล';
     var checked = prevChecked[d.id] ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (email ? '' : 'opacity:.5') + '">' +
-      '<input type="checkbox" value="' + d.id + '" style="width:auto"' + (email ? checked : ' disabled') + '>' +
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (hasEmail ? '' : 'opacity:.5') + '">' +
+      '<input type="checkbox" value="' + d.id + '" style="width:auto"' + (hasEmail ? checked : ' disabled') + '>' +
       '<span style="flex:1">' + sanitize(d.name || '') + '</span>' +
-      '<span style="color:var(--text2)">' + (email ? sanitize(email) : '⚠️ ไม่มีอีเมล') + '</span></label>';
+      '<span style="color:var(--text2)">' + emailLabel + '</span></label>';
   });
   listEl.innerHTML = rows.length ? rows.join('') : '<div style="padding:8px;color:var(--text2);font-size:12px">ไม่พบ Dealer</div>';
 }
@@ -789,16 +828,21 @@ function _dealerEmailGenerate() {
   if (!ids.length) return toast('เลือก Dealer อย่างน้อย 1 ราย');
   var dealers = window._deDealers || [];
   var area = document.getElementById('deGenArea');
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — กดปุ่มเพื่อเปิด Outlook/Mail ทีละฉบับ</div>';
+  window._deFilled = {};
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — แก้ To/CC ได้ก่อนเปิด, กด 💾 เพื่อจำไว้ใช้ครั้งหน้า</div>';
   ids.forEach(function(id) {
     var d = dealers.find(function(x) { return x.id === id; });
     if (!d) return;
-    var email = _dealerEmail(d);
+    var loop = _dealerMailLoop(d);
     var filled = fillDealerEmailTemplate(tmpl, d);
-    var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(filled.subject) + '&body=' + encodeURIComponent(filled.body);
-    h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
-      '<span style="flex:1">' + sanitize(d.name || '') + '<br><span style="color:var(--text2)">' + sanitize(email) + '</span></span>' +
-      '<a class="btn-xs btn-blue" href="' + mailto + '" target="_blank" rel="noopener">📧 เปิด</a></div>';
+    window._deFilled[id] = filled;
+    h += '<div style="padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">' + sanitize(d.name || '') + '</b>' +
+      '<button class="btn-xs btn-blue" onclick="_deOpenMail(\'' + id + '\')">📧 เปิด</button>' +
+      '<button class="btn-xs" onclick="_deSaveLoop(\'' + id + '\')" title="จำ To/CC นี้ไว้ใช้ครั้งหน้า">💾</button></div>' +
+      '<input type="text" id="deTo_' + id + '" class="fm-input" style="font-size:11px;margin-bottom:3px" placeholder="To" value="' + sanitize(loop.to) + '">' +
+      '<input type="text" id="deCc_' + id + '" class="fm-input" style="font-size:11px" placeholder="CC (คั่นด้วย , ถ้าหลายคน)" value="' + sanitize(loop.cc) + '">' +
+      '</div>';
   });
   area.innerHTML = h;
 }
