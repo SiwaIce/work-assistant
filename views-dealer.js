@@ -783,6 +783,25 @@ function _deOpenMail(id) {
   window.open(_buildMailto(to, cc, f.subject, f.body), '_blank');
   logDealerEmail(id, f.subject, f.body, to, cc);
 }
+// เปิดทุกฉบับพร้อมกัน — ต้องเรียก window.open() วนแบบ synchronous ในการคลิกครั้งเดียว (ไม่ผ่าน setTimeout)
+// เพราะเบราว์เซอร์ส่วนใหญ่อนุญาตหลาย popup ได้เฉพาะตอนยังอยู่ใน event handler ของการคลิกจริงเท่านั้น
+// ถ้าหน่วง async ไว้แม้แค่ tick เดียว popup ถัดไปจะถูกบล็อกเป็น "popup ที่ไม่ได้มาจาก user gesture"
+function _deOpenMailAll() {
+  var ids = window._deGenIds || [];
+  if (!ids.length) return;
+  var opened = 0, skipped = 0;
+  ids.forEach(function(id) {
+    var f = (window._deFilled || {})[id];
+    var toEl = document.getElementById('deTo_' + id);
+    var ccEl = document.getElementById('deCc_' + id);
+    if (!f || !toEl || !toEl.value.trim()) { skipped++; return; }
+    var to = toEl.value, cc = ccEl ? ccEl.value : '';
+    window.open(_buildMailto(to, cc, f.subject, f.body), '_blank');
+    logDealerEmail(id, f.subject, f.body, to, cc);
+    opened++;
+  });
+  toast('📧 เปิดแล้ว ' + opened + ' ฉบับ' + (skipped ? ' (ข้าม ' + skipped + ' รายที่ไม่มี To)' : '') + ' — ถ้าเบราว์เซอร์ถามเรื่อง popup กด "อนุญาต"');
+}
 // บันทึกประวัติทุกครั้งที่กด "เปิด" ไป Outlook — เราไม่รู้ว่าลูกค้ากดส่งจริงในนั้นไหม เลยเก็บเป็น
 // "เปิดแล้ว" (openedDate) ไว้ก่อน ผู้ใช้ค่อยกด "มาร์คว่าส่งแล้ว" เองทีหลังถ้าส่งจริง — เก็บใน collection
 // 'emails' เดียวกับ Email Log ทั่วไป (showEmailM/modals.js) แค่เพิ่ม dealerId/body/cc/openedDate ให้แยกได้
@@ -1044,7 +1063,9 @@ function _dealerEmailGenerate() {
   var area = document.getElementById('deGenArea');
   window._deFilled = {};
   window._deGenGroup = groupName;
+  window._deGenIds = ids.slice();
   var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + ids.length + ' ราย — แก้ To/CC ได้ก่อนเปิด, กด 💾 เพื่อจำกลุ่ม "' + sanitize(groupName) + '" นี้ไว้ใช้ครั้งหน้า</div>';
+  h += '<button type="button" class="btn bp btn-full" style="margin-bottom:8px" onclick="_deOpenMailAll()">📧 เปิดทั้งหมด (' + ids.length + ' ฉบับ)</button>';
   ids.forEach(function(id) {
     var d = dealers.find(function(x) { return x.id === id; });
     if (!d) return;
