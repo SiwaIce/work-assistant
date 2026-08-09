@@ -858,13 +858,14 @@ function _deRenderList() {
     var hasEmail = !!loop.to;
     var ccCount = loop.cc ? loop.cc.split(',').filter(function(s) { return s.trim(); }).length : 0;
     var emailLabel = hasEmail ? sanitize(loop.to) + (ccCount ? ' +' + ccCount + ' CC' : '') : '⚠️ ยังไม่มีอีเมล';
+    var emailTitle = hasEmail ? sanitize(loop.to + (loop.cc ? '; CC: ' + loop.cc : '')) : '';
     var checked = prevChecked[d.id] ? ' checked' : '';
     var expanded = (window._deExpanded || {})[d.id];
     var row = '<div style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;' + (hasEmail ? '' : 'opacity:.65') + '">' +
-      '<input type="checkbox" value="' + d.id + '" style="width:auto"' + (hasEmail ? checked : ' disabled') + '>' +
-      '<span style="flex:1;cursor:pointer" onclick="this.previousElementSibling.click()">' + sanitize(d.name || '') + '</span>' +
-      '<span style="color:var(--text2)">' + emailLabel + '</span>' +
-      '<button type="button" class="btn-xs" onclick="_deToggleGear(\'' + d.id + '\')" title="ตั้งค่า Loop Email">⚙️</button></div>';
+      '<input type="checkbox" value="' + d.id + '" style="width:auto;flex-shrink:0"' + (hasEmail ? checked : ' disabled') + '>' +
+      '<span style="flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="' + sanitize(d.name || '') + '" onclick="this.previousElementSibling.click()">' + sanitize(d.name || '') + '</span>' +
+      '<span style="flex:0 0 150px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)" title="' + emailTitle + '">' + emailLabel + '</span>' +
+      '<button type="button" class="btn-xs" style="flex-shrink:0" onclick="_deToggleGear(\'' + d.id + '\')" title="ตั้งค่า Loop Email">⚙️</button></div>';
     if (expanded) {
       row += '<div style="display:flex;flex-direction:column;gap:4px;padding:0 4px 8px 30px">' +
         '<input type="text" id="deGearTo_' + d.id + '" class="fm-input" style="font-size:11px" placeholder="To" value="' + sanitize(loop.to) + '">' +
