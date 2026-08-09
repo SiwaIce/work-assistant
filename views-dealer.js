@@ -779,7 +779,75 @@ function _deOpenMail(id) {
   var toEl = document.getElementById('deTo_' + id);
   var ccEl = document.getElementById('deCc_' + id);
   if (!f || !toEl || !toEl.value.trim()) return toast('⚠️ ใส่ To ก่อน');
-  window.open(_buildMailto(toEl.value, ccEl ? ccEl.value : '', f.subject, f.body), '_blank');
+  var to = toEl.value, cc = ccEl ? ccEl.value : '';
+  window.open(_buildMailto(to, cc, f.subject, f.body), '_blank');
+  logDealerEmail(id, f.subject, f.body, to, cc);
+}
+// บันทึกประวัติทุกครั้งที่กด "เปิด" ไป Outlook — เราไม่รู้ว่าลูกค้ากดส่งจริงในนั้นไหม เลยเก็บเป็น
+// "เปิดแล้ว" (openedDate) ไว้ก่อน ผู้ใช้ค่อยกด "มาร์คว่าส่งแล้ว" เองทีหลังถ้าส่งจริง — เก็บใน collection
+// 'emails' เดียวกับ Email Log ทั่วไป (showEmailM/modals.js) แค่เพิ่ม dealerId/body/cc/openedDate ให้แยกได้
+function logDealerEmail(dealerId, subject, body, to, cc) {
+  ST.add('emails', { dealerId: dealerId, subject: subject, body: body, recipients: to, cc: cc, sent: false, openedDate: _nw(), type: 'dealer' });
+}
+function renderDealerEmailHistoryCard(d) {
+  var emails = ST.getAll('emails').filter(function(e) { return e.dealerId === d.id; })
+    .sort(function(a, b) { return (b.openedDate || b.created || '').localeCompare(a.openedDate || a.created || ''); });
+  var h = '<div class="card"><h2>📧 ประวัติอีเมล (' + emails.length + ')</h2>';
+  if (!emails.length) { h += '<div class="empty"><p>ยังไม่เคยส่งอีเมลถึง Dealer นี้จากแอป</p></div></div>'; return h; }
+  emails.forEach(function(e) {
+    h += '<div class="contact-card">' +
+      '<div class="contact-header"><div class="contact-name">' + sanitize(e.subject || '(ไม่มีหัวข้อ)') + '</div>' +
+      '<button class="btn-xs" onclick="showEditEmailLogM(\'' + e.id + '\')">✏️</button></div>' +
+      '<div style="font-size:11px;color:var(--text2)">To: ' + sanitize(e.recipients || '') + (e.cc ? ' • CC: ' + sanitize(e.cc) : '') + '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + fD((e.openedDate || e.created || '').slice(0, 10)) + (e.sent ? ' • ✅ ส่งแล้ว' : ' • ⏳ ยังไม่ยืนยันว่าส่ง') + '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
+      '<button class="btn-xs btn-blue" onclick="resendEmailLog(\'' + e.id + '\')">📧 ส่งใหม่</button>' +
+      '<button class="btn-xs" onclick="toggleEmailSent(\'' + e.id + '\')">' + (e.sent ? '↩️ ยังไม่ส่ง' : '✅ มาร์คว่าส่งแล้ว') + '</button>' +
+      '<button class="btn-xs btn-red" onclick="deleteEmailLog(\'' + e.id + '\')">🗑</button>' +
+      '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+function showEditEmailLogM(id) {
+  var e = ST.getOne('emails', id);
+  if (!e) return;
+  openM('✏️ แก้ไข Email Log', '<div style="max-width:450px">' +
+    '<div class="fg"><label>หัวข้อ</label><input type="text" id="eel_subj" value="' + sanitize(e.subject || '') + '"></div>' +
+    '<div class="fg"><label>To</label><input type="text" id="eel_to" value="' + sanitize(e.recipients || '') + '"></div>' +
+    '<div class="fg"><label>CC</label><input type="text" id="eel_cc" value="' + sanitize(e.cc || '') + '"></div>' +
+    '<div class="fg"><label>เนื้อหา</label><textarea id="eel_body" rows="8">' + sanitize(e.body || '') + '</textarea></div>' +
+    '<button class="btn bp btn-full" onclick="saveEmailLogEdit(\'' + id + '\')">💾 บันทึก</button></div>');
+}
+function saveEmailLogEdit(id) {
+  ST.update('emails', id, {
+    subject: document.getElementById('eel_subj').value.trim(),
+    recipients: document.getElementById('eel_to').value.trim(),
+    cc: document.getElementById('eel_cc').value.trim(),
+    body: document.getElementById('eel_body').value
+  });
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+function resendEmailLog(id) {
+  var e = ST.getOne('emails', id);
+  if (!e) return;
+  window.open(_buildMailto(e.recipients, e.cc || '', e.subject, e.body || ''), '_blank');
+  ST.update('emails', id, { lastResentDate: _nw() });
+  toast('📧 เปิด Outlook แล้ว');
+  render();
+}
+function toggleEmailSent(id) {
+  var e = ST.getOne('emails', id);
+  if (!e) return;
+  ST.update('emails', id, { sent: !e.sent, sentDate: !e.sent ? _nw() : null });
+  render();
+}
+function deleteEmailLog(id) {
+  if (!confirm('ลบประวัติอีเมลนี้?')) return;
+  ST.delete('emails', id);
+  render();
 }
 function _dealerPrimaryContact(d) {
   var contacts = d.contacts || [];
@@ -1382,6 +1450,8 @@ function dealerInfoTab(d) {
   ${renderDealerContacts(d)}
 
   ${renderDealerLoopEmailCard(d)}
+
+  ${renderDealerEmailHistoryCard(d)}
 
   <div class="card">
     <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
