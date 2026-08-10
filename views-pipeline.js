@@ -5206,20 +5206,33 @@ function _doPipeXlsxImport() {
 // actions[i]: null=auto, 'update'=อัปเดตทับ, 'add'=เพิ่มใหม่ยอมซ้ำ, 'skip'=ข้าม
 // deleteIds: array of pipeline IDs to delete (missing from Excel, user-selected)
 // colMap: {key: colIndex} จาก _pipeBuildColMap
+// สร้าง id แบบเดียวกับ ST.add() ทุกประการ — ใช้ตอน batch เขียนเองแทนเรียก ST.add ทีละแถว (ดูเหตุผลด้านล่าง)
+function _pipeGenId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+}
 function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) {
+  if (typeof ST._guestBlocked === 'function' && ST._guestBlocked('pipeline')) return;
   var lockDealer = lockDealerId ? ST.getOne('dealers', lockDealerId) : null;
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
   dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
 
+  // เขียนลง array ในหน่วยความจำระหว่าง loop แล้ว ST._set() แค่ครั้งเดียวตอนจบ (ดูคอมเมนต์ล่างสุดของ
+  // ฟังก์ชันนี้ตรง "เขียนครั้งเดียว") แทนที่จะเรียก ST.add/ST.update ทีละแถวเหมือนเดิม — ของเดิม ST._set()
+  // ถูกเรียกทุกแถว และ firebase-sync.js override ไว้ให้ push "ทั้ง collection" ขึ้น Firestore ใหม่ทุกครั้ง
+  // ที่ _set() ถูกเรียก ไม่ใช่แค่ record ที่เปลี่ยน — import 500 แถวเข้า Pipeline ที่มี 2000 รายการอยู่แล้ว
+  // เลยกลายเป็นดัน Firestore ~2000 doc ซ้ำ 500 รอบ (~1,000,000 ครั้ง) ทำให้ import ค้างนานเวลาข้อมูลเยอะ
   var allPipes = ST.getAll('pipeline');
   var pipeByKey = {};
   var pipeByRowNo = {};
-  allPipes.forEach(function(p) {
+  var pipeIndexById = {};
+  allPipes.forEach(function(p, idx) {
     var k = _pipeImportKey(p.projectName, p.endUserTH, p.dealerId);
     if (k) pipeByKey[k] = p;
     if (p.rowNo && String(p.rowNo).trim()) pipeByRowNo[String(p.rowNo).trim()] = p;
+    pipeIndexById[p.id] = idx;
   });
+  var pipeLogs = ST.getAll('pipeLog');
 
   // เก็บ Sale ล่าสุดที่เจอต่อ Dealer ระหว่าง import — เอาไว้ผูกกลับเข้า "เซลที่ดูแล" ของ Dealer หลัง loop จบ
   // (แถวหลังสุดของ dealer เดียวกันชนะ ถ้าชีทมีหลายแถวค่าไม่ตรงกัน)
@@ -5309,20 +5322,32 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
       // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
       var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap);
-      ST.update('pipeline', existing.id, pipeData);
+      var pIdx = pipeIndexById[existing.id];
+      allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
       updated++;
       newUpdateLines.forEach(function(line) {
-        ST.add('pipeLog', { pipeId: existing.id, type: 'note', content: line, date: pipeData.registerDate || new Date().toISOString() });
+        pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line, date: pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
       });
     } else {
-      var pipe = ST.add('pipeline', pipeData);
+      var newPipeId = _pipeGenId();
+      var newPipe = Object.assign({ id: newPipeId, created: new Date().toISOString() }, pipeData);
+      allPipes.push(newPipe);
+      pipeIndexById[newPipeId] = allPipes.length - 1;
       added++;
       for (var u = 1; u <= 6; u++) {
         var upd = _pipeCol(c, colMap, 'update' + u).trim();
-        if (upd) ST.add('pipeLog', { pipeId: pipe.id, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString() });
+        if (upd) pipeLogs.push({ id: _pipeGenId(), pipeId: newPipeId, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
       }
     }
   });
+
+  // เขียนครั้งเดียว — ดูคอมเมนต์ที่ต้นฟังก์ชัน (แทนที่จะเขียนทีละแถว ลด Firestore full-collection push
+  // จาก N ครั้งเหลือครั้งเดียว) ต้องเขียนก่อน deleteIds loop ด้านล่าง เพราะ ST.delete() อ่านจาก
+  // localStorage ปัจจุบัน ถ้ายังไม่เขียน batch นี้ลงไปก่อน การลบจะไปอ่านข้อมูลเก่าที่ยังไม่รวมแถวที่เพิ่ง import
+  if (added || updated) {
+    ST._set(ST._keys.pipeline, allPipes);
+    ST._set(ST._keys.pipeLog, pipeLogs);
+  }
 
   var deleted = 0;
   if (deleteIds && deleteIds.length) {
