@@ -888,10 +888,14 @@ function getSmartNotifications() {
   });
 
   // ---- 9. High value deal without next action ----
+  // index งานค้างต่อ pipe ครั้งเดียว — เดิม pipeOpenTasks(p.id) เรียก ST.getAll('tasks') (parse ใหม่ทั้ง
+  // collection ไม่มีแคช) ต่อ Pipeline ทุกรายการ ซึ่ง pipeline มีเป็นพันรายการได้ทำให้หน่วงเวลา
+  var _snOpenTaskIdx = {};
+  ST.getAll('tasks').forEach(function(t) { if (t.status !== 'completed' && t.pipeId) _snOpenTaskIdx[t.pipeId] = true; });
   (pipeline || []).forEach(function (p) {
     if (!pipeIsOpen(p)) return;
     var val = parseFloat(p.value) || 0;
-    if (val >= 1000000 && !pipeOpenTasks(p.id).length) {
+    if (val >= 1000000 && !_snOpenTaskIdx[p.id]) {
       notifs.push({ icon: '💎', type: 'pipeline', priority: 2,
         text: 'Deal มูลค่าสูง "' + (p.project || p.name || '') + '" (฿' + ftFmtVal(val) + ') ยังไม่มี Task ติดตาม' });
     }
@@ -2493,6 +2497,10 @@ function getOverallHealth() {
   var dealerScore = dealers.length ? Math.round(dealerTotal / dealers.length) : 100;
 
   // Pipeline health
+  // index งานค้างต่อ pipe ครั้งเดียว — เดิม pipeOpenTasks(p.id) (→ ST.getAll('tasks') parse ใหม่ทั้ง
+  // collection ไม่มีแคช) ถูกเรียก 2 รอบต่อ Pipeline ที่ active ทุกรายการ
+  var _ohOpenTaskIdx = {};
+  ST.getAll('tasks').forEach(function(t) { if (t.status !== 'completed' && t.pipeId) _ohOpenTaskIdx[t.pipeId] = true; });
   var pipeTotal = 0;
   var activePipe = (pipeline || []).filter(function(p) { return pipeIsOpen(p); });
   (activePipe || []).forEach(function(p) {
@@ -2502,13 +2510,13 @@ function getOverallHealth() {
     max += 10; if (p.dealerId) score += 10;
     max += 10; if (p.value && parseFloat(p.value) > 0) score += 10;
     max += 8; if (p.model) score += 8;
-    max += 8; if (pipeOpenTasks(p.id).length) score += 8;
+    max += 8; if (_ohOpenTaskIdx[p.id]) score += 8;
     max += 8; if (p.followupDate || p.nextFollowup) score += 8;
     max += 5; if (p.contactName || p.contact) score += 5;
     var pScore = max > 0 ? Math.round(score / max * 100) : 100;
     pipeTotal += pScore;
 
-    if (!pipeOpenTasks(p.id).length && (parseFloat(p.value) || 0) >= 500000) {
+    if (!_ohOpenTaskIdx[p.id] && (parseFloat(p.value) || 0) >= 500000) {
       issues.push({ level: 'warning', icon: '📋', text: (p.project || p.name || 'Unknown') + ' — ไม่มี Task ติดตาม (฿' + ftFmtVal(p.value) + ')', action: "go('pipeDetail',{pipeId:'" + p.id + "'})" });
     }
     if (!p.followupDate && !p.nextFollowup) {
@@ -4565,10 +4573,38 @@ function rSmartFilter(el) {
       }).join('') || '<div class="empty"><p>✅ ติดต่อครบทุก Dealer</p></div>';
       break;
     }
+    case 'low_health': {
+      var _lhCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer
+      var items = ST.getAll('dealers').map(function(d) { return Object.assign({}, d, {health: calcHealthScore(d.id, _lhCfg)}); }).filter(function(d) { return d.health.score < 40; });
+      html = items.map(function(d) {
+        return '<div class="li" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})"><div class="lm"><div class="lt">' + sanitize(d.name) + ' ' + levelTag(d.level) + ' <span style="color:#ef4444;font-weight:700">' + d.health.score + '/100</span></div><div class="ls">' + d.health.details.filter(function(x) { return x.status === 'bad'; }).map(function(x) { return x.label; }).join(' • ') + '</div></div></div>';
+      }).join('') || '<div class="empty"><p>✅ Dealer Health ดีทุกราย</p></div>';
+      break;
+    }
+    case 'stale_pipeline': {
+      var items = getStalePipelines();
+      html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>✅ ไม่มี Pipeline ค้าง</p></div>';
+      break;
+    }
+    case 'big_projects': {
+      var items = [];
+      try { items = ST.filter('pipeline', function(p) { return Number(p.forecastAmount) >= 1500000 && pipeIsOpen(p); }); } catch(e) {}
+      html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>ไม่มี</p></div>';
+      break;
+    }
+    case 'need_action': {
+      var items = [];
+      try { items = ST.filter('pipeline', function(p) { return p.followupDate && dTo(p.followupDate) <= 3 && pipeIsOpen(p); }); } catch(e) {}
+      html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>✅ ไม่มีที่ต้องทำ</p></div>';
+      break;
+    }
+    case 'waiting_overdue': {
+      go('reminders'); return;
+    }
     default:
       html = '<div class="empty"><p>ไม่พบข้อมูล</p></div>';
   }
-  
+
   el.innerHTML = '<div class="card"><h2>' + (f ? f.icon + ' ' + f.name : '') + '</h2>' + html + '</div>';
 }
 
@@ -5181,7 +5217,8 @@ function generateInsights() {
     insights.push({icon: pct >= 70 ? '🎯' : '⚠️', title: 'Achievement: ' + pct + '%', desc: fmtMoney(ps.totalWon || 0) + ' / ' + fmtMoney(totalTarget), priority: pct < 50 ? 'high' : 'low'});
   }
   
-  var badHealth = (dealers || []).filter(function(d) { return calcHealthScore(d.id).score < 40; });
+  var _giCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer
+  var badHealth = (dealers || []).filter(function(d) { return calcHealthScore(d.id, _giCfg).score < 40; });
   if (badHealth.length) insights.push({icon: '🏥', title: badHealth.length + ' Dealer ต้องดูแลด่วน', desc: badHealth.map(function(d) { return d.name; }).join(', '), priority: 'high'});
   
   var bids = (pipes || []).filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 14 && pipeIsOpen(p); });

@@ -1158,10 +1158,15 @@ function getDealerContactStatus() {
 // ================================================================
 // DEALER HEALTH SCORE
 // ================================================================
-function calcHealthScore(dealerId) {
-  var cfg = getConfig(); var w = cfg.healthWeights; var score = 0; var details = [];
+// cfg/allPipes: ส่งเข้ามาได้ (ไม่บังคับ) — เลี่ยงเรียก getConfig()/ST.pipelineByDealer() ซ้ำตอนถูกเรียก
+// วนทุก Dealer (rDealerList, generateInsights, getSmartFilters ฯลฯ) ไม่ส่งมาก็ยังทำงานได้เหมือนเดิม
+// (ดึงเองตามปกติ) — ของเดิมยังเรียก ST.pipelineByDealer() ซ้ำ 2 รอบในฟังก์ชันเดียวด้วย (บรรทัด Pipeline
+// กับ Achievement) รวบเหลือรอบเดียวแล้วแยกกรอง open/won จาก allPipes ตัวเดียวกัน
+function calcHealthScore(dealerId, cfg, allPipes) {
+  cfg = cfg || getConfig(); var w = cfg.healthWeights; var score = 0; var details = [];
   var dealer = ST.getOne('dealers', dealerId);
   var contactDays = ST.getLastContactDays(dealerId);
+  allPipes = allPipes || ST.pipelineByDealer(dealerId);
 
   // Contact (30 pts)
   if (contactDays === null) { details.push({label:'ไม่เคยติดต่อ', score:0, max:w.contact, status:'bad'}); }
@@ -1170,7 +1175,7 @@ function calcHealthScore(dealerId) {
   else { details.push({label:'ไม่ติดต่อ '+contactDays+' วัน', score:0, max:w.contact, status:'bad'}); }
 
   // Pipeline (20 pts)
-  var pipes = ST.pipelineByDealer(dealerId).filter(function(p) { return pipeIsOpen(p); });
+  var pipes = allPipes.filter(function(p) { return pipeIsOpen(p); });
   var allLogs = [];
   pipes.forEach(function(p) { ST.pipeLogsByPipe(p.id).forEach(function(l) { allLogs.push(l); }); });
   allLogs.sort(function(a,b) { return (b.date||'').localeCompare(a.date||''); });
@@ -1183,7 +1188,7 @@ function calcHealthScore(dealerId) {
 
   // Achievement (20 pts)
   var target = Number(dealer ? dealer.targetRevenue : 0) || 0;
-  var won = ST.pipelineByDealer(dealerId).filter(function(p) { return pipeIsWon(p); }).reduce(function(a,p) { return a + (Number(p.forecastAmount)||0); }, 0);
+  var won = allPipes.filter(function(p) { return pipeIsWon(p); }).reduce(function(a,p) { return a + (Number(p.forecastAmount)||0); }, 0);
   if (target > 0) { var pct = won/target; var p3 = Math.round(w.achievement*Math.min(pct,1)); score += p3; details.push({label:'Achievement '+Math.round(pct*100)+'%', score:p3, max:w.achievement, status:pct>=0.7?'good':pct>=0.4?'warn':'bad'}); }
   else { var p4 = Math.round(w.achievement*0.3); score += p4; details.push({label:'ไม่ได้ตั้งเป้า', score:p4, max:w.achievement, status:'warn'}); }
 
@@ -1256,6 +1261,7 @@ function getStalePipelines() {
 // ================================================================
 function getSmartFilters() {
   var w = getWeekRange();
+  var _sfCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer ใน low_health ด้านล่าง
   return [
     {id:'overdue_tasks', icon:'🔴', name:'งานเลย Deadline', count:getUrgentItems().filter(function(i){return dTo(i.dueDate)<0;}).length, color:'#ef4444'},
     {id:'bidding_soon', icon:'⏳', name:'Bidding สัปดาห์นี้', count:ST.filter('pipeline',function(p){return p.biddingDate&&isInRange(p.biddingDate,w.start,w.end)&&pipeIsOpen(p);}).length, color:'#f59e0b'},
@@ -1264,7 +1270,7 @@ function getSmartFilters() {
     {id:'waiting_overdue', icon:'📭', name:'รอคนอื่น (เลยกำหนด)', count:ST.filter('waiting',function(w2){return !w2.resolved&&w2.dueDate&&dTo(w2.dueDate)<0;}).length, color:'#ef4444'},
     {id:'no_contact_14d', icon:'📞', name:'ไม่ติดต่อ > 14d', count:ST.getAll('dealers').filter(function(d){var days=ST.getLastContactDays(d.id);return days===null||days>14;}).length, color:'#ef4444'},
     {id:'need_action', icon:'🎯', name:'ต้องทำ Next Action', count:ST.filter('pipeline',function(p){return p.followupDate&&dTo(p.followupDate)<=3&&pipeIsOpen(p);}).length, color:'#3b82f6'},
-    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:ST.getAll('dealers').filter(function(d){return calcHealthScore(d.id).score<40;}).length, color:'#ef4444'}
+    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:ST.getAll('dealers').filter(function(d){return calcHealthScore(d.id,_sfCfg).score<40;}).length, color:'#ef4444'}
   ];
 }
 

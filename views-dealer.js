@@ -446,7 +446,10 @@ function rDealers(el) {
     });
   }
 
-  dealers = dealers.map(d => ({...d, _health: calcHealthScore(d.id)}))
+  // getConfig() ครั้งเดียวก่อน map — calcHealthScore() เดิมเรียก getConfig() (deep-clone config ทั้งก้อน)
+  // เองข้างในทุก Dealer พบว่าเป็นคอขวดหลักของหน้านี้เมื่อมี Dealer เยอะ (pattern เดียวกับที่แก้ใน Pipeline)
+  const _dlCfg = getConfig();
+  dealers = dealers.map(d => ({...d, _health: calcHealthScore(d.id, _dlCfg)}))
     .sort((a, b) => {
       const lOrder = {S:0, A:1, B:2};
       const la = lOrder[a.level] ?? 3, lb = lOrder[b.level] ?? 3;
@@ -2823,12 +2826,14 @@ function delDealer(id) {
 // ================================================================
 function copyDealerSummary() {
   const dealers = ST.getAll('dealers');
+  const _cdsCfg = getConfig(); // ครั้งเดียวก่อนลูป — เหตุผลเดียวกับ rDealers()
   let tsv = 'SIS Code\tDJI Code\tName\tLevel\tContact\tเซลที่ดูแล\tTerm\tCredit Limit\tTarget\tWon\tAchieve%\tHealth\tLast Contact\tLast Visit\tDSEC\tCRM\tFH2\tLark\n';
   dealers.forEach(d => {
-    const won = ST.pipelineByDealer(d.id).filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
+    const dPipes = ST.pipelineByDealer(d.id);
+    const won = dPipes.filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
     const target = Number(d.targetRevenue) || 0;
     const pct = target ? Math.round(won/target*100) : 0;
-    const h = calcHealthScore(d.id);
+    const h = calcHealthScore(d.id, _cdsCfg, dPipes);
     const lcd = ST.getLastContactDays(d.id);
     const lvd = ST.getLastVisitDays(d.id);
     tsv += `${d.sisCode||''}\t${d.djiCode||''}\t${d.name}\t${d.level||''}\t${(d.contact||'').replace(/[\t\n]/g,' ')}\t${(d.saleName||'').replace(/[\t\n]/g,' ')}\t${d.creditTerm||''}\t${d.creditLimit||''}\t${target}\t${won}\t${pct}%\t${h.score}\t${lcd!==null?lcd+'d':'-'}\t${lvd!==null?lvd+'d':'-'}\t${d.dsecStatus==='pass'?'Y':'N'}\t${d.crmStatus==='yes'?'Y':'N'}\t${d.fh2Status==='pass'?'Y':'N'}\t${d.larkStatus==='added'?'Y':'N'}\n`;

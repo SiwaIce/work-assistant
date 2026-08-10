@@ -586,11 +586,13 @@ function rKPI(el) {
   <div class="card"><h2>🏥 Dealer Health Score <span class="ml"><button class="btn bsm bo" onclick="copyDealerHealth()">📋 Copy</button></span></h2>
   <div style="overflow-x:auto"><table class="export-table" id="healthTable">
     <thead><tr><th>Dealer</th><th>Level</th><th>Score</th><th>ติดต่อ</th><th>Visit</th><th>Pipeline</th><th>Achievement</th><th>Cert</th></tr></thead>
-    <tbody>${ST.getAll('dealers').filter(d => d.level && d.level !== 'Other').map(d => {
-      const h = calcHealthScore(d.id);
+    <tbody>${(function() {
+      const _hbCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer
+      return ST.getAll('dealers').filter(d => d.level && d.level !== 'Other').map(d => {
+      const pipes = ST.pipelineByDealer(d.id);
+      const h = calcHealthScore(d.id, _hbCfg, pipes);
       const lcd = ST.getLastContactDays(d.id);
       const lvd = ST.getLastVisitDays(d.id);
-      const pipes = ST.pipelineByDealer(d.id);
       const won = pipes.filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
       const target = Number(d.targetRevenue) || 0;
       const pct = target ? Math.round(won/target*100) : 0;
@@ -605,7 +607,8 @@ function rKPI(el) {
         <td>${target ? pct + '%' : '-'}</td>
         <td>${certCount}/4</td>
       </tr>`;
-    }).join('')}</tbody>
+    }).join('');
+    })()}</tbody>
   </table></div></div>
 
   <!-- Goal Setting -->
@@ -670,7 +673,8 @@ function rSmartFilter(el) {
     case 'fu_remaining': {
       go('kpi'); return; }
     case 'low_health': {
-      const items = ST.getAll('dealers').filter(d => calcHealthScore(d.id).score < 40).map(d => ({...d, health: calcHealthScore(d.id)}));
+      const _lhCfg = getConfig(); // ครั้งเดียว — เดิมเรียก calcHealthScore (และ getConfig ข้างใน) 2 รอบต่อ Dealer (filter+map)
+      const items = ST.getAll('dealers').map(d => ({...d, health: calcHealthScore(d.id, _lhCfg)})).filter(d => d.health.score < 40);
       html = items.map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt">${sanitize(d.name)} ${levelTag(d.level)} <span style="color:#ef4444;font-weight:700">${d.health.score}/100</span></div><div class="ls">${d.health.details.filter(x => x.status === 'bad').map(x => x.label).join(' • ')}</div></div></div>`).join('') || emp('ไม่มี');
       break; }
   }
