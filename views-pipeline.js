@@ -1093,7 +1093,11 @@ function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
   var cfg = getConfig();
   var allPipes = ST.getAll('pipeline');
-  
+  // index งานค้างต่อ pipe ครั้งเดียวตรงนี้ — เดิม taskCnt/pipeTaskFlt เรียก pipeOpenTasks(p.id) ต่อ pipe
+  // (แปลง JSON ทั้ง collection ทาสก์ใหม่ทุกครั้ง ไม่มีแคช) วนทุกโปรเจกต์ = O(n²) ตอนข้อมูลเยอะ
+  var _pipeOpenTaskIdx = {};
+  ST.getAll('tasks').forEach(function(t) { if (t.status !== 'completed' && t.pipeId) _pipeOpenTaskIdx[t.pipeId] = true; });
+
   var pipes = allPipes;
   if (Object.keys(pipeFlt).length) pipes = pipes.filter(function(p) { return pipeFlt[p.status]; });
   if (Object.keys(pipeBidMonthFilter).length) {
@@ -1109,7 +1113,7 @@ function rPipeline(el) {
   if (pipeSale !== 'all') pipes = pipes.filter(function(p) { return (p.saleName || '') === pipeSale; });
   if (pipeDisplayFlt === 'show') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
   else if (pipeDisplayFlt === 'hide') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') === 'Hide'; });
-  if (pipeTaskFlt) pipes = pipes.filter(function(p) { return pipeOpenTasks(p.id).length > 0; });
+  if (pipeTaskFlt) pipes = pipes.filter(function(p) { return _pipeOpenTaskIdx[p.id]; });
 
   if (pipeUrgentFlt) {
     var _todayISO2 = _td();
@@ -1274,7 +1278,7 @@ function rPipeline(el) {
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
     '</div>' +
     (function() {
-      var taskCnt = allPipes.filter(function(p) { return pipeOpenTasks(p.id).length > 0; }).length;
+      var taskCnt = allPipes.filter(function(p) { return _pipeOpenTaskIdx[p.id]; }).length;
       if (!taskCnt) return '';
       return '<div class="hint" style="margin:8px 0 4px">งานค้าง</div>' +
         '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
@@ -1426,13 +1430,28 @@ function renderPipeCards(pipes, opts) {
   if (!selectMode) pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
   var _qtMap = _buildQtMap();
   var shortMap = _pipeShortNameMap();
+  // Index Dealer/Log/Task ล่วงหน้าครั้งเดียวก่อนเข้าลูป แทนเรียก ST.getOne/getAll ต่อการ์ด — ST.getAll()
+  // แปลง JSON ทั้ง collection ใหม่ทุกครั้งที่เรียก ไม่มีแคช เรียกซ้ำในลูป N การ์ด = O(n²) ค้างตอนข้อมูลเยอะ
+  // (ตาม pattern เดียวกับ _conflictMap ด้านล่างที่ทำ index ไว้ก่อนอยู่แล้ว)
+  var _dealerMap = {};
+  ST.getAll('dealers').forEach(function(dl) { _dealerMap[dl.id] = dl; });
+  var _lastLogMap = {};
+  ST.getAll('pipeLog').forEach(function(l) {
+    var cur = _lastLogMap[l.pipeId];
+    if (!cur || (l.date || '') > (cur.date || '')) _lastLogMap[l.pipeId] = l;
+  });
+  var _openTaskCountMap = {};
+  ST.getAll('tasks').forEach(function(t) {
+    if (t.status === 'completed') return;
+    _openTaskCountMap[t.pipeId] = (_openTaskCountMap[t.pipeId] || 0) + 1;
+  });
 
   var html = '<div class="pipe-card-grid' + gridClass + '">';
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
-    var d = ST.getOne('dealers', p.dealerId);
+    var d = _dealerMap[p.dealerId];
     var amt = Number(p.forecastAmount) || 0;
-    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var lastLog = _lastLogMap[p.id];
     var bidUrgency = pipeBidUrgency(p);
     var cardBorder = p.pinned ? 'border-left:3px solid #3b82f6' : (bidUrgency === 'urgent' ? 'border-left:3px solid #ef4444' : (bidUrgency === 'soon' ? 'border-left:3px solid #f59e0b' : ''));
     var cardIsWon = pipeIsWon(p);
@@ -1451,7 +1470,7 @@ function renderPipeCards(pipes, opts) {
     var _fyCard = pipeFYStatus(p);
     var modelSummary = _pipeModelSummaryShort(p, shortMap);
     var cardOnclick = selectMode ? (toggleFn + '(\'' + p.id + '\')') : ('go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})');
-    var _openTaskCnt = pipeOpenTasks(p.id).length;
+    var _openTaskCnt = _openTaskCountMap[p.id] || 0;
 
     html += '<div class="dealer-card" style="position:relative;' + cardBorder + '" onclick="' + cardOnclick + '">';
     if (_openTaskCnt) {
