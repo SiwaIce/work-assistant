@@ -433,7 +433,11 @@ function pipeModelsSet(p) {
   if (cacheKey) _pipeModelsSetCache[cacheKey] = s;
   return s;
 }
-function pipeMatchScore(a, b) {
+// weights: ส่งเข้ามาได้ (ไม่บังคับ) — ตอนเทียบทีละคู่แบบ O(n²) (detectPipelineConflicts, renderPipeCompareSuggestPanel)
+// ต้อง hoist getConfig() ออกมาเรียกครั้งเดียวก่อนเข้าลูป ไม่ใช่เรียกในนี้ทุกคู่ เพราะ getConfig() เป็นฟังก์ชัน
+// หนัก (deep-clone DEF_CONFIG ทั้งก้อนด้วย JSON.parse(JSON.stringify(...)) ทุกครั้ง) เรียกซ้ำหลายหมื่นครั้ง
+// ตอนมี Pipeline เยอะกลายเป็นคอขวดที่แท้จริง (พบว่าหนักกว่าการคำนวณ similarity เองด้วยซ้ำ)
+function pipeMatchScore(a, b, weights) {
   var name = fcStrSim(_pipeNormOrgName(a.projectName), _pipeNormOrgName(b.projectName));
   var eu = fcStrSim(_pipeNormOrgName(a.endUserTH || a.endUserEN || ''), _pipeNormOrgName(b.endUserTH || b.endUserEN || ''));
   var am = fcStrSim(_pipeNormOrgName(a.agencyMain), _pipeNormOrgName(b.agencyMain));
@@ -449,7 +453,7 @@ function pipeMatchScore(a, b) {
   // น้ำหนักตั้งค่าเองได้ (cfg.pipeMatchWeights ดูค่า default ที่ DEF_CONFIG ใน app.js, แก้ได้ที่
   // showPipeMatchWeightsM() ใน views-pipeline.js) — End User หนักสุดโดย default เพราะมักเป็นจุดแรกที่
   // เทียบได้ก่อน (ชื่อโปรเจคมักตั้งทีหลัง/เปลี่ยนคำพูดกันคนละแบบ)
-  var w = (typeof getConfig === 'function' && getConfig().pipeMatchWeights) || { eu: 35, name: 25, model: 15, agencyMain: 10, agencySub: 10, bidding: 5 };
+  var w = weights || (typeof getConfig === 'function' && getConfig().pipeMatchWeights) || { eu: 35, name: 25, model: 15, agencyMain: 10, agencySub: 10, bidding: 5 };
   var score = eu * (w.eu / 100) + name * (w.name / 100) + model * (w.model / 100) + am * (w.agencyMain / 100) + asb * (w.agencySub / 100) + bid * (w.bidding / 100);
   return Math.round(score * 100);
 }
@@ -494,13 +498,14 @@ function detectPipelineConflicts(pipes, threshold) {
   threshold = threshold || 60;
   var active = (pipes || []).filter(function (p) { return p && pipeIsOpen(p); });
   var dismissed = getDismissedConflicts();
+  var weights = (typeof getConfig === 'function' && getConfig().pipeMatchWeights) || null; // เรียก getConfig() ครั้งเดียวก่อนลูป ไม่ใช่ต่อคู่
   var pairs = [];
   for (var i = 0; i < active.length; i++) {
     for (var j = i + 1; j < active.length; j++) {
       if (active[i].dealerId && active[i].dealerId === active[j].dealerId) continue; // ข้าม dealer เดียวกัน
       var key = [active[i].id, active[j].id].sort().join('__');
       if (dismissed[key]) continue;
-      var sc = pipeMatchScore(active[i], active[j]);
+      var sc = pipeMatchScore(active[i], active[j], weights);
       if (sc >= threshold) pairs.push({ a: active[i], b: active[j], score: sc, key: key });
     }
   }

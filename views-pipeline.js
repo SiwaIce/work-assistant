@@ -794,14 +794,19 @@ function pipeCompareQuickPick(idA, idB) {
   render();
 }
 
-// หาคู่ที่คล้ายที่สุด (เจ้าอื่น, ยัง active) ให้แต่ละแถวเป็น guide ตอนเลือก
-function pipeCompareBestMatch(p) {
-  var all = ST.getAll('pipeline').filter(function(x) {
-    return x.id !== p.id && x.dealerId !== p.dealerId && pipeIsOpen(x);
-  });
+// หาคู่ที่คล้ายที่สุด (เจ้าอื่น, ยัง active) ให้แต่ละแถวเป็น guide ตอนเลือก — ถูกเรียกต่อแถวในตาราง
+// sheet ตอนอยู่ในโหมดเทียบ (O(n) ต่อครั้ง วนทุกแถว = O(n²) รวม)
+// activePool: ส่งลิสต์ Pipeline ที่ยัง active (กรอง pipeIsOpen ไว้แล้ว) เข้ามาได้ — ถ้าไม่ส่งจะไปดึง+กรองเอง
+// (ค่า default นี้เผื่อโค้ดที่อื่นเรียกแบบเดิม) แต่ตอนเรียกต่อแถวควรส่งมาเสมอ เพราะ pipeIsOpen() เรียก
+// getConfig() ข้างในทุกครั้ง (deep-clone config ทั้งก้อน) กรองใหม่ทุกแถว 300 แถว = getConfig() เกือบแสน
+// ครั้งจนหน้าค้าง — ต้องกรองแค่ครั้งเดียวข้างนอกลูปแล้วส่ง pool เดิมมาใช้ซ้ำทุกแถว
+// weights: ส่งเข้ามาได้เพื่อเลี่ยงเรียก getConfig() ซ้ำต่อคู่เช่นกัน — ดูคอมเมนต์ pipeMatchScore() ใน utils.js
+function pipeCompareBestMatch(p, weights, activePool) {
+  var pool = activePool || ST.getAll('pipeline').filter(function(x) { return pipeIsOpen(x); });
   var best = null;
-  all.forEach(function(x) {
-    var sc = pipeMatchScore(p, x);
+  pool.forEach(function(x) {
+    if (x.id === p.id || x.dealerId === p.dealerId) return;
+    var sc = pipeMatchScore(p, x, weights);
     if (!best || sc > best.score) best = { score: sc, other: x };
   });
   return best;
@@ -810,6 +815,9 @@ function pipeCompareBestMatch(p) {
 // แผงแนะนำคู่/โครงการที่น่าจะชนกัน — ก่อนเลือกโชว์ Top คู่ทั้งระบบ, หลังเลือกแล้วโชว์โครงการที่เข้ากับที่เลือกไว้
 function renderPipeCompareSuggestPanel() {
   var active = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p); });
+  // เรียก getConfig() ครั้งเดียวก่อนเข้าลูปเทียบคู่ — เดิม pipeMatchScore() เรียก getConfig() (deep-clone
+  // config ทั้งก้อน) เองทุกคู่ พบว่าเป็นคอขวดหลักที่ทำให้ "เทียบ Project" ค้างตอนมี Pipeline เยอะ
+  var _cmpWeights = (typeof getConfig === 'function' && getConfig().pipeMatchWeights) || null;
   var sliderHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:.72rem;color:var(--text2);flex-wrap:wrap">' +
     '<span>เกณฑ์คะแนนขั้นต่ำ</span>' +
     '<button class="btn bsm bo" style="padding:1px 8px" onclick="pipeCompareStepThreshold(-10)">−</button>' +
@@ -838,7 +846,7 @@ function renderPipeCompareSuggestPanel() {
       for (var i = 0; i < active.length; i++) {
         for (var j = i + 1; j < active.length; j++) {
           if (active[i].dealerId === active[j].dealerId) continue;
-          var sc = pipeMatchScore(active[i], active[j]);
+          var sc = pipeMatchScore(active[i], active[j], _cmpWeights);
           if (sc >= pipeCompareThreshold) pairs.push({ a: active[i], b: active[j], score: sc });
         }
       }
@@ -869,7 +877,7 @@ function renderPipeCompareSuggestPanel() {
       var best = null;
       selectedPipes.forEach(function(sp) {
         if (sp.dealerId === p.dealerId) return;
-        var sc = pipeMatchScore(sp, p);
+        var sc = pipeMatchScore(sp, p, _cmpWeights);
         if (!best || sc > best.score) best = { score: sc, vs: sp };
       });
       if (best && best.score >= pipeCompareThreshold) candidates.push({ p: p, score: best.score, vs: best.vs });
@@ -1536,6 +1544,18 @@ function renderPipeTable(pipes) {
   pipes = pipes.slice().sort(function(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
   var _qtMap = _buildQtMap();
   var _tblShortMap = _pipeShortNameMap();
+  // index Dealer/Log ล่วงหน้าครั้งเดียว — เหตุผลเดียวกับ renderPipeCards() ด้านล่าง (ST.getOne/getAll
+  // ไม่แคช เรียกต่อแถวกลายเป็น O(n²)) และ hoist น้ำหนัก pipeMatchScore ออกมาก่อนลูปด้วย เพราะโหมด
+  // "เทียบ Project" เรียก pipeCompareBestMatch ต่อแถว (O(n) ต่อแถว) ซึ่งเดิมเรียก getConfig() ในนั้นอีกที
+  var _tblDealerMap = {};
+  ST.getAll('dealers').forEach(function(dl) { _tblDealerMap[dl.id] = dl; });
+  var _tblLastLogMap = {};
+  ST.getAll('pipeLog').forEach(function(l) {
+    var cur = _tblLastLogMap[l.pipeId];
+    if (!cur || (l.date || '') > (cur.date || '')) _tblLastLogMap[l.pipeId] = l;
+  });
+  var _tblCmpWeights = pipeCompareMode ? ((typeof getConfig === 'function' && getConfig().pipeMatchWeights) || null) : null;
+  var _tblCmpActivePool = pipeCompareMode ? ST.getAll('pipeline').filter(function(x) { return pipeIsOpen(x); }) : null;
 
   _pipeVisibleIds = pipes.map(function(p) { return p.id; });
   var html = '<div class="pipe-wrap"><table class="pipe-table" id="pipeTable"><thead>' +
@@ -1558,8 +1578,8 @@ function renderPipeTable(pipes) {
   
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
-    var d = ST.getOne('dealers', p.dealerId);
-    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var d = _tblDealerMap[p.dealerId];
+    var lastLog = _tblLastLogMap[p.id];
     var amt = Number(p.forecastAmount) || 0;
     var isWon = pipeIsWon(p);
     var isLost = (p.status === 'fail_lost');
@@ -1590,7 +1610,7 @@ function renderPipeTable(pipes) {
     var compareCells = '';
     if (pipeCompareMode) {
       var isSel = pipeCompareSelected.indexOf(p.id) !== -1;
-      var best = pipeCompareBestMatch(p);
+      var best = pipeCompareBestMatch(p, _tblCmpWeights, _tblCmpActivePool);
       var matchBadge = '<span style="color:var(--text3);font-size:10px">— ไม่พบโครงการใกล้เคียง</span>';
       if (best) {
         var bColor = best.score >= 60 ? '#ef4444' : (best.score >= 40 ? '#f59e0b' : '#64748b');
