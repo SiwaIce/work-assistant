@@ -1152,7 +1152,7 @@ function dealerCardHTML(d, health) {
           <h3>${sanitize(d.name)}</h3>
           <div class="meta">${d.contact ? '🧑‍💼 ' + sanitize(d.contact).substr(0,30) : ''} ${d.sisCode ? '• 📋 ' + d.sisCode : ''} ${d.saleName ? '• 👤 ' + sanitize(d.saleName) : ''}</div>
         </div>
-        ${_gvHideLvlHealth ? '' : `<div class="dc-health" style="border-color:${healthColor};color:${healthColor}" title="Health Score">${h.score}</div>`}
+        ${_gvHideLvlHealth ? '' : `<div title="Health Score">${progressRingHtml(h.score, {size:36, strokeW:4, color:healthColor, label:h.score})}</div>`}
       </div>
 
       ${statsHtml}

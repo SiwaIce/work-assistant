@@ -234,21 +234,23 @@ function renderVisitTypeStatusCard() {
   var s = kpiVisitStatusThisMonth();
   var partnerMissing = s.partnerTotal - s.partnerDone;
   var pct = s.target ? Math.min(100, Math.round(s.actualQ / s.target * 100)) : 0;
+  var ringColor = s.onPace ? '#22c55e' : '#ef4444';
   var h = '<div class="card"><h2>📍 สถานะ Visit เดือนนี้</h2>';
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
   h += '<div style="background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Partner (SAB) Offline</div>' +
     '<div style="font-size:20px;font-weight:700">' + s.partnerDone + ' <span style="font-size:12px;color:var(--text2);font-weight:400">/ ' + s.partnerTotal + ' ราย ครบแล้ว</span></div>' +
-    (partnerMissing > 0 ? '<div style="font-size:11px;color:#f59e0b;margin-top:3px">⚠️ เหลือ ' + partnerMissing + ' ราย ยังไม่ Visit เดือนนี้</div>' : '<div style="font-size:11px;color:#22c55e;margin-top:3px">✅ ครบทุกราย</div>') +
+    (partnerMissing > 0 ? '<div class="stat-warn-t" style="font-size:11px;margin-top:3px">⚠️ เหลือ ' + partnerMissing + ' ราย ยังไม่ Visit เดือนนี้</div>' : '<div class="stat-good-t" style="font-size:11px;margin-top:3px">✅ ครบทุกราย</div>') +
     '</div>';
   h += '<div style="background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Non-Partner Meeting</div>' +
     '<div style="font-size:20px;font-weight:700">' + s.nonPartnerCount + ' <span style="font-size:12px;color:var(--text2);font-weight:400">ครั้งเดือนนี้</span></div>' +
     '<div style="font-size:11px;color:var(--text2);margin-top:3px">ไม่บังคับจำนวนต่อราย</div></div>';
   h += '</div>';
-  h += '<div style="background:var(--bg2);border-radius:10px;padding:10px">' +
-    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:5px"><span>รวมทุก Visit เทียบเป้า ' + s.quarter + '</span><span style="font-weight:700;color:var(--text)">' + s.actualQ + ' / ' + s.target + ' ครั้ง</span></div>' +
-    '<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden"><div style="background:' + (s.onPace ? '#22c55e' : '#ef4444') + ';width:' + pct + '%;height:100%"></div></div>' +
-    '<div style="font-size:11px;color:' + (s.onPace ? '#22c55e' : '#ef4444') + ';margin-top:5px">' + (s.onPace ? '✅ ตามจังหวะ ทันเป้าไตรมาสนี้' : '⚠️ ตามหลังจังหวะที่ควรถึง') + '</div>' +
-    '</div></div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:10px;display:flex;align-items:center;gap:12px">' +
+    progressRingHtml(pct, { size: 48, strokeW: 5, color: ringColor }) +
+    '<div style="flex:1">' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:2px"><span>รวมทุก Visit เทียบเป้า ' + s.quarter + '</span><span style="font-weight:700;color:var(--text)">' + s.actualQ + ' / ' + s.target + ' ครั้ง</span></div>' +
+    '<div class="' + (s.onPace ? 'stat-good-t' : 'stat-bad-t') + '" style="font-size:11px">' + (s.onPace ? '✅ ตามจังหวะ ทันเป้าไตรมาสนี้' : '⚠️ ตามหลังจังหวะที่ควรถึง') + '</div>' +
+    '</div></div></div>';
   return h;
 }
 

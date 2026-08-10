@@ -492,11 +492,11 @@ function rToday(el) {
 function kpiCardHTML(label, current, target, dealerIds) {
   const pct = target ? Math.round(current / target * 100) : 0;
   const ok = current >= target;
+  const ringColor = ok ? '#22c55e' : '#ef4444';
   return `<div class="kpi-card ${ok?'kpi-ok':'kpi-bad'}">
-    <h4>${label} <span class="kpi-score" style="color:${ok?'#22c55e':'#ef4444'}">${current}/${target}</span></h4>
-    <div class="kpi-bar"><div class="pb" style="flex:1;height:8px"><div class="pf ${ok?'pf-green':'pf-red'}" style="width:${Math.min(pct,100)}%"></div></div>
-    <div class="kpi-pct">${pct}%</div></div>
-    <div class="kpi-dots">${Array.from({length:target},(_,i) => `<div class="kpi-dot ${i<current?'filled':''}"></div>`).join('')}</div>
+    <h4>${label} <span class="kpi-score" style="color:${ringColor}">${current}/${target}</span></h4>
+    <div class="kpi-bar" style="align-items:center">${progressRingHtml(pct, {size:32, strokeW:4, color:ringColor})}
+    <div class="kpi-dots" style="margin:0">${Array.from({length:target},(_,i) => `<div class="kpi-dot ${i<current?'filled':''}"></div>`).join('')}</div></div>
     ${dealerIds ? `<div style="margin-top:4px">${dealerIds.map(did => { const d = ST.getOne('dealers', did); return d ? `<span class="kpi-dealer done">✅ ${sanitize(d.name)}</span>` : ''; }).join('')}</div>` : ''}
   </div>`;
 }

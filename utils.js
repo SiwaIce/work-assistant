@@ -976,6 +976,23 @@ function pipeTag(s) {
   return `<span class="tag ${cls[s]||'tag-count'}">${st?.name||s}</span>`;
 }
 
+// วงแหวน progress แบบ SVG — ใช้แทน progress bar ธรรมดาในจุดที่อยากให้ดูเป็นเกมมากขึ้น (ดู .progress-ring
+// ใน style.css) color ใช้ hex ตรงๆ ได้เลย เพราะเป็นเส้นกราฟิกวาดทับพื้นการ์ด ไม่ใช่ text-on-fill ที่ต้อง
+// คำนึง contrast ต่างกันตาม theme เหมือน .stat-* — สีเดียวใช้ได้ทั้ง Light/Dark
+function progressRingHtml(pct, opts) {
+  opts = opts || {};
+  var size = opts.size || 40, strokeW = opts.strokeW || 4, color = opts.color || '#3b82f6', label = opts.label;
+  pct = Math.max(0, Math.min(100, Number(pct) || 0));
+  var r = (size - strokeW) / 2, c = 2 * Math.PI * r, offset = c * (1 - pct / 100), cx = size / 2;
+  return '<div class="progress-ring" style="width:' + size + 'px;height:' + size + 'px">' +
+    '<svg width="' + size + '" height="' + size + '">' +
+    '<circle class="ring-bg" cx="' + cx + '" cy="' + cx + '" r="' + r + '" stroke-width="' + strokeW + '"></circle>' +
+    '<circle class="ring-fg" cx="' + cx + '" cy="' + cx + '" r="' + r + '" stroke-width="' + strokeW + '" stroke="' + color + '" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) + '"></circle>' +
+    '</svg>' +
+    '<div class="ring-label" style="font-size:' + Math.round(size * 0.26) + 'px;color:' + color + '">' + (label != null ? label : pct + '%') + '</div>' +
+    '</div>';
+}
+
 function modeTag(m) {
   return `<span class="tag tag-${m==='offline'?'offline':'online'}">${m==='offline'?'Onsite':'Online'}</span>`;
 }

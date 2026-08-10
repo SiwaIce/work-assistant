@@ -370,9 +370,28 @@ textarea{min-height:50px;resize:vertical}
 .si{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:#0f172a;border:1px solid #334155;border-radius:7px;margin-bottom:4px}
 .ck{width:18px;height:18px;border-radius:50%;border:2px solid #475569;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;transition:.15s}
 .ck:hover{border-color:#3b82f6}
-.ck.chk{background:#22c55e;border-color:#22c55e}
+.ck.chk{background:#22c55e;border-color:#22c55e;animation:ckPop .32s cubic-bezier(.34,1.56,.64,1)}
 .ck.chk::after{content:'✓';color:#fff;font-size:.58rem}
 .ck.locked{opacity:.3;cursor:not-allowed}
+@keyframes ckPop{0%{transform:scale(1)}45%{transform:scale(1.3)}100%{transform:scale(1)}}
+
+/* === สีสถานะกลาง (good/warn/bad/info) — แบบเดียวกับ .tag-win/.tag-lost มี Light Theme ในตัว
+   ใช้แทนการเขียน hex ตรงๆ ในโค้ด JS เพื่อให้ขึ้น Light Theme ถูกต้องด้วย === */
+.stat-good{color:#86efac;background:#14532d}
+.stat-warn{color:#fcd34d;background:#78350f}
+.stat-bad{color:#fca5a5;background:#7f1d1d}
+.stat-info{color:#60a5fa;background:#1e3a5f}
+.stat-good-t{color:#4ade80}
+.stat-warn-t{color:#fbbf24}
+.stat-bad-t{color:#f87171}
+.stat-info-t{color:#60a5fa}
+
+/* === Progress Ring (SVG conic) — ใช้แทน progress bar ในจุดที่อยากให้ดูเป็นเกมมากขึ้น === */
+.progress-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.progress-ring svg{transform:rotate(-90deg)}
+.progress-ring .ring-bg{fill:none;stroke:#334155;}
+.progress-ring .ring-fg{fill:none;stroke-linecap:round;transition:stroke-dashoffset .4s ease}
+.progress-ring .ring-label{position:absolute;font-weight:700;text-align:center}
 .si.done{opacity:.5}.si.done .stt{text-decoration:line-through}
 .si.locked-step{opacity:.35}
 .stt{font-size:.76rem;cursor:pointer}.stt:hover{color:#3b82f6}
@@ -1928,6 +1947,16 @@ input:focus, select:focus, textarea:focus {
 .theme-light .export-table th { background: #e8ebe6; color: #454745; }
 .theme-light .export-table td { color: #0e0f0c; border-bottom-color: #f0f3ee; }
 .theme-light .export-wrap { border-color: #d1d5cf; }
+
+.theme-light .stat-good { background: #dcfce7 !important; color: #15803d !important; }
+.theme-light .stat-warn { background: #fef3c7 !important; color: #92400e !important; }
+.theme-light .stat-bad { background: #fee2e2 !important; color: #b91c1c !important; }
+.theme-light .stat-info { background: #dbeafe !important; color: #1d4ed8 !important; }
+.theme-light .stat-good-t { color: #16a34a !important; }
+.theme-light .stat-warn-t { color: #d97706 !important; }
+.theme-light .stat-bad-t { color: #dc2626 !important; }
+.theme-light .stat-info-t { color: #1d4ed8 !important; }
+.theme-light .progress-ring .ring-bg { stroke: #e2e5df; }
 
 .theme-light .tag { font-weight: 600; }
 .theme-light .tag-active { background: #dbeafe; color: #1d4ed8; }
