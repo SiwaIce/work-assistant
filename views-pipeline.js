@@ -154,20 +154,15 @@ function rPipelineTeam(el) {
   var biddingSoon = fullList.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && pipeIsActive(p); });
 
   // ⚠️ ตรวจโครงการชนกัน — ใช้ pool + cache เดียวกับ Dashboard ของ Pipeline หลัก (allPipes ของตัวเอง + teamPipes)
+  // กดตรวจเอง ไม่รันอัตโนมัติ (O(n²) หนักเมื่อข้อมูลเยอะ ดู pipeConflictLookup/runPipeConflictCheck ใน utils.js)
   var allPipesRaw = ST.getAll('pipeline');
   var teamPipesRaw = (typeof _teamPipelineData !== 'undefined' && Array.isArray(_teamPipelineData)) ? _teamPipelineData : [];
   var _dashPool = allPipesRaw.concat(teamPipesRaw);
-  var _dashKey = _dashPool.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::60';
-  var conflicts;
-  if (_pipeDashConflictsCacheKey === _dashKey) {
-    conflicts = _pipeDashConflictsCache.conflicts;
-    _conflictMap = _pipeDashConflictsCache.map;
-  } else {
-    conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(_dashPool, 60) : [];
-    _conflictMap = buildConflictMap(conflicts);
-    _pipeDashConflictsCacheKey = _dashKey;
-    _pipeDashConflictsCache = { conflicts: conflicts, map: _conflictMap };
-  }
+  var _teamConflictLookup = pipeConflictLookup(_dashPool, 60);
+  var conflicts = _teamConflictLookup.conflicts;
+  _conflictMap = _teamConflictLookup.map;
+  var conflictCheckBtn = '<button class="btn bsm bo" onclick="runPipeConflictCheck(ST.getAll(\'pipeline\').concat(typeof _teamPipelineData!==\'undefined\'&&Array.isArray(_teamPipelineData)?_teamPipelineData:[]),60)">' +
+    (!_teamConflictLookup.checked ? '🔍 ตรวจโครงการชนกัน' : (_teamConflictLookup.stale ? '🔄 ตรวจใหม่ (ข้อมูลเปลี่ยนไปแล้ว)' : '🔄 ตรวจใหม่')) + '</button>';
 
   // Dashboard — collapsible เหมือนเมนู Pipeline หลัก
   var h = _pipeSectionHeader('📊 Dashboard', 'pipeTeamDash', pipeTeamDashOpen,
@@ -182,6 +177,7 @@ function rPipelineTeam(el) {
   h += '<div class="sc"><div class="sn c5">' + owners.length + '</div><div class="sl">จำนวนคน</div></div>';
   if (conflicts.length) h += '<div class="sc"><div class="sn c4">' + conflicts.length + '</div><div class="sl">⚠️ อาจชนกัน</div></div>';
   h += '</div>';
+  h += '<div style="margin-bottom:6px">' + conflictCheckBtn + '</div>';
   h += buildConflictClusterHtml(conflicts);
   h += '</div>';
 
@@ -403,8 +399,6 @@ var pipeCompareSelected = [];
 var pipeCompareThreshold = 40;
 var _pipeCompareAllPairsCacheKey = null; // แคชผลลัพธ์คู่ Pipeline ทั้งระบบ ดู renderPipeCompareSuggestPanel
 var _pipeCompareAllPairsCache = null;
-var _pipeDashConflictsCacheKey = null; // แคช badge "⚠️ อาจชนกัน" บน Dashboard — เดิมคำนวณ O(n²) ใหม่ทุกครั้งที่เข้าหน้า Pipeline (300 โครงการ ~11 วิ) ดู rPipeline
-var _pipeDashConflictsCache = null;
 
 // ✅ ไฮไลท์แถวที่ bidding ใกล้ถึง — เฉพาะ project ที่ยังไม่จบ (active status)
 function PIPE_ACTIVE_STATUSES() { return getStatusIdsByCategory('active'); }
@@ -1165,17 +1159,11 @@ function rPipeline(el) {
   var biddingSoon = allPipes.filter(function(p) { return p.biddingDate && dTo(p.biddingDate) >= 0 && dTo(p.biddingDate) <= 30 && pipeIsActive(p); });
   var teamPipes = (typeof _teamPipelineData !== 'undefined' && Array.isArray(_teamPipelineData)) ? _teamPipelineData : [];
   var _dashConflictPool = allPipes.concat(teamPipes);
-  var _dashConflictKey = _dashConflictPool.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::60';
-  var conflicts;
-  if (_pipeDashConflictsCacheKey === _dashConflictKey) {
-    conflicts = _pipeDashConflictsCache.conflicts;
-    _conflictMap = _pipeDashConflictsCache.map;
-  } else {
-    conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(_dashConflictPool, 60) : [];
-    _conflictMap = buildConflictMap(conflicts);
-    _pipeDashConflictsCacheKey = _dashConflictKey;
-    _pipeDashConflictsCache = { conflicts: conflicts, map: _conflictMap };
-  }
+  var _conflictLookup = pipeConflictLookup(_dashConflictPool, 60);
+  var conflicts = _conflictLookup.conflicts;
+  _conflictMap = _conflictLookup.map;
+  var conflictCheckBtn = '<button class="btn bsm bo" onclick="runPipeConflictCheck(ST.getAll(\'pipeline\').concat(typeof _teamPipelineData!==\'undefined\'&&Array.isArray(_teamPipelineData)?_teamPipelineData:[]),60)">' +
+    (!_conflictLookup.checked ? '🔍 ตรวจโครงการชนกัน' : (_conflictLookup.stale ? '🔄 ตรวจใหม่ (ข้อมูลเปลี่ยนไปแล้ว)' : '🔄 ตรวจใหม่')) + '</button>';
 
   el.innerHTML = '' +
     _pipeSectionHeader('📊 Dashboard', 'pipeDash', pipeDashOpen,
@@ -1190,6 +1178,7 @@ function rPipeline(el) {
     '<div class="sc"><div class="sn c3">' + biddingSoon.length + '</div><div class="sl">Bidding 30d</div></div>' +
     (conflicts.length ? '<div class="sc"><div class="sn c4">' + conflicts.length + '</div><div class="sl">⚠️ อาจชนกัน</div></div>' : '') +
     '</div>' +
+    '<div style="margin-bottom:6px">' + conflictCheckBtn + '</div>' +
     buildConflictClusterHtml(conflicts) +
     '</div>' +
 

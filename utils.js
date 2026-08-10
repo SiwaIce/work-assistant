@@ -453,6 +453,36 @@ function pipeMatchScore(a, b) {
   var score = eu * (w.eu / 100) + name * (w.name / 100) + model * (w.model / 100) + am * (w.agencyMain / 100) + asb * (w.agencySub / 100) + bid * (w.bidding / 100);
   return Math.round(score * 100);
 }
+// ตรวจโครงการชนกันแบบ "กดเอง" แทนรันอัตโนมัติทุกครั้งที่เปิดหน้า — detectPipelineConflicts() เป็น O(n²)
+// เทียบทุกคู่ Pipeline ใช้เวลาหลายวินาทีเมื่อข้อมูลเยอะ (วัดได้ ~12 วิ ที่ 301 Pipeline) เดิมรันอัตโนมัติ
+// ทุก render แล้ว cache หลุดทันทีที่มีการแก้ Pipeline ไหนก็ตาม (key ผูกกับ updated ของทุกตัว) ทำให้หน้า
+// Pipeline ค้างบ่อย — ย้ายมาเป็นปุ่มกดเอง หน้าโหลดไวเสมอ ไม่ต้องรอผลตรวจ
+var _pipeConflictCacheKey = null;
+var _pipeConflictCache = { conflicts: [], map: {} };
+function _pipeConflictPoolKey(pool, threshold) {
+  return pool.map(function(p) { return p.id + '@' + (p.updated || p.created || ''); }).join('|') + '::' + threshold;
+}
+// อ่านผลที่เคยตรวจไว้ (ถ้ามีและยังตรงกับข้อมูลปัจจุบัน) — ไม่คำนวณใหม่ตรงนี้เด็ดขาด แค่บอกว่ามีผลอยู่ไหม/
+// เก่าหรือเปล่า ให้หน้าตัดสินใจว่าจะโชว์ปุ่ม "ตรวจ" หรือ "ตรวจใหม่"
+function pipeConflictLookup(pool, threshold) {
+  var key = _pipeConflictPoolKey(pool, threshold);
+  var hasCache = !!_pipeConflictCacheKey;
+  var stale = _pipeConflictCacheKey !== key;
+  return {
+    conflicts: hasCache ? _pipeConflictCache.conflicts : [],
+    map: hasCache ? _pipeConflictCache.map : {},
+    checked: hasCache,
+    stale: stale
+  };
+}
+// คำนวณจริง (หนัก) — เรียกเฉพาะตอนผู้ใช้กดปุ่มเท่านั้น
+function runPipeConflictCheck(pool, threshold) {
+  var conflicts = (typeof detectPipelineConflicts === 'function') ? detectPipelineConflicts(pool, threshold) : [];
+  var map = buildConflictMap(conflicts);
+  _pipeConflictCacheKey = _pipeConflictPoolKey(pool, threshold);
+  _pipeConflictCache = { conflicts: conflicts, map: map };
+  render();
+}
 function getDismissedConflicts() {
   try { return JSON.parse(localStorage.getItem('v7_conflict_dismissed') || '{}') || {}; } catch (e) { return {}; }
 }
