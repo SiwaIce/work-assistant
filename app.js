@@ -764,6 +764,7 @@ var R = {
   dealerDetail: rDealerDet,
   pipeDash: rPipeDashboard,
   mondayMeeting: rMondayMeeting,
+  mondayCompany: rMondayCompany,
   contactLogs: rContactLogs,
   pipeline: rPipeline,
   pipelineTeam: rPipelineTeam,

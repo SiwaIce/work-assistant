@@ -751,6 +751,91 @@ function posReasonsText(result) {
 }
 
 // ================================================================
+// MONDAY MEETING — สรุป H1/H2 ต่อบริษัท (ใช้ทั้งหน้าสรุปรวม rMondayMeeting และหน้ารายบริษัท
+// rMondayCompany ใน views-pipeline.js) ดึงจากข้อมูลจริงทั้งหมด ไม่มีตัวเลขสมมติ:
+//   - Won (H1/H2 · Project) = Pipeline สถานะ Won จริง แบ่งครึ่งปีตาม expectedCloseDate (fallback registerDate)
+//   - Won/คาดไว้ (H1/H2 · Runrate) = customerForecasts type:'runrate' แบ่งครึ่งปีตาม month, เดือนที่ผ่านไปแล้ว
+//     ถือว่า "ปิดแล้ว" เดือนที่ยังไม่ถึงถือว่า "คาดไว้ที่เหลือ" (ยังไม่มี field อนุมัติแยกต่างหากในระบบตอนนี้)
+//   - Pipeline เปิดอยู่ = สถานะยังไม่ Won/Lost ถ่วงด้วย POS (computeSuggestedPOS) แยก bucket สูง/กลาง/ต่ำ
+// ================================================================
+var MONDAY_STALE_DAYS = 30; // Pipeline เปิดอยู่ที่ไม่มี Log อัพเดตเกินกี่วัน ถือว่า "เงียบ"
+function _mondayHalf(dateStr) {
+  if (!dateStr) return null;
+  var y = parseInt(dateStr.substr(0, 4), 10);
+  if (y !== new Date().getFullYear()) return null;
+  var m = parseInt(dateStr.substr(5, 2), 10);
+  return m >= 1 && m <= 6 ? 'H1' : (m >= 7 && m <= 12 ? 'H2' : null);
+}
+function mondayCompanyStats(dealerId, cfg) {
+  cfg = cfg || getConfig();
+  var d = ST.getOne('dealers', dealerId);
+  var allPipes = ST.pipelineByDealer(dealerId);
+  var activePipes = allPipes.filter(function(p) { return !pipeIsWon(p) && !pipeIsLost(p); });
+  var wonPipes = allPipes.filter(pipeIsWon);
+  var curMonthKey = fcMonthKey(0);
+
+  var wonH1Project = 0, wonH2Project = 0;
+  var wonProjectsH1 = [], wonProjectsH2 = [];
+  wonPipes.forEach(function(p) {
+    var half = _mondayHalf(p.expectedCloseDate || p.registerDate);
+    var amt = Number(p.realAmount || p.forecastAmount) || 0;
+    if (half === 'H1') { wonH1Project += amt; wonProjectsH1.push(p); }
+    else if (half === 'H2') { wonH2Project += amt; wonProjectsH2.push(p); }
+  });
+
+  var rrEntries = ST.filter('customerForecasts', function(f) { return f.dealerId === dealerId && f.type === 'runrate'; });
+  var wonH1Runrate = 0, wonH2RunrateWon = 0, h2RunrateRemaining = 0;
+  var rrWonH1 = [], rrWonH2 = [], rrRemainH2 = [];
+  rrEntries.forEach(function(r) {
+    var half = _mondayHalf((r.month || '') + '-01');
+    if (!half) return;
+    var val = (getModelPrice(r.model) || 0) * (Number(r.qty) || 0);
+    var isPast = r.month && r.month <= curMonthKey;
+    if (half === 'H1') { wonH1Runrate += val; rrWonH1.push(r); }
+    else if (isPast) { wonH2RunrateWon += val; rrWonH2.push(r); }
+    else { h2RunrateRemaining += val; rrRemainH2.push(r); }
+  });
+
+  var high = [], mid = [], low = [];
+  var openPipelineTotal = 0, openPipelineWeighted = 0;
+  // ตั้ง p._pos ลง object เดิมตรงๆ (ST.pipelineByDealer คืน object ที่ parse ใหม่จาก localStorage ทุกครั้งอยู่
+  // แล้ว ไม่ใช่ reference ที่ใครแชร์กัน) กัน activePipes/high/mid/low ชี้คนละชุดกันแล้ว ._pos หายตอนใช้ต่อ
+  activePipes.forEach(function(p) {
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var pos = computeSuggestedPOS(p, cfg, lastLog ? lastLog.date : null).score;
+    if (typeof p.projectPOS === 'number' && p.projectPOS) pos = p.projectPOS; // ค่าที่ sale กรอกเองมาก่อนเสมอ ถ้ามี
+    p._pos = pos;
+    var amt = Number(p.forecastAmount) || 0;
+    openPipelineTotal += amt;
+    openPipelineWeighted += amt * pos / 100;
+    if (pos >= 70) high.push(p); else if (pos >= 40) mid.push(p); else low.push(p);
+  });
+  var commitAmt = high.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+  var bestAmt = commitAmt + mid.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+
+  var staleThreshold = new Date(); staleThreshold.setDate(staleThreshold.getDate() - MONDAY_STALE_DAYS);
+  var staleThresholdIso = staleThreshold.toISOString().slice(0, 10);
+  var stalePipes = activePipes.filter(function(p) {
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var lastDate = lastLog ? lastLog.date.split('T')[0] : (p.registerDate || '');
+    return !lastDate || lastDate < staleThresholdIso;
+  });
+
+  var lastVisitDays = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(dealerId) : null;
+
+  return {
+    dealer: d, activePipes: activePipes, wonPipes: wonPipes,
+    targetH1: Number(d && d.targetH1) || 0, targetH2: Number(d && d.targetH2) || 0,
+    wonH1Project: wonH1Project, wonH2Project: wonH2Project, wonProjectsH1: wonProjectsH1, wonProjectsH2: wonProjectsH2,
+    wonH1Runrate: wonH1Runrate, wonH2RunrateWon: wonH2RunrateWon, h2RunrateRemaining: h2RunrateRemaining,
+    rrWonH1: rrWonH1, rrWonH2: rrWonH2, rrRemainH2: rrRemainH2,
+    high: high, mid: mid, low: low, commitAmt: commitAmt, bestAmt: bestAmt,
+    openPipelineTotal: openPipelineTotal, openPipelineWeighted: openPipelineWeighted,
+    stalePipes: stalePipes, lastVisitDays: lastVisitDays
+  };
+}
+
+// ================================================================
 // DATE FORMATTING
 // ================================================================
 function fD(iso) {
