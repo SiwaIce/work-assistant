@@ -2538,6 +2538,14 @@ function rMondayMeeting(el) {
     '<button class="btn bo" onclick="copyMondaySummary()">📋 คัดลอกสรุปทั้งหมด</button>' +
     '</div>';
 
+  // Sticky quick-nav — ข้อมูลยาวเลื่อนหาลำบาก กดชิพกระโดดตรงไปแต่ละส่วนได้เลย ไม่ต้องเลื่อนเอง (top:50px กัน
+  // ทับกับ .topbar ของแอปที่ sticky top:0 อยู่แล้ว)
+  h += '<div style="position:sticky;top:50px;z-index:20;background:var(--bg);margin:0 -12px 10px;padding:8px 12px;border-bottom:1px solid var(--border)">' +
+    '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px" id="mondayQuickNav">' +
+    [['sec-tier', '📐 พยากรณ์'], ['sec-pos', '🎯 POS'], ['sec-model', '📦 Model'], ['sec-quarter', '📆 ไตรมาสนี้'], ['sec-delay', '🐢 ดีเลย์'], ['sec-waiting', '📌 สถานะ'], ['sec-company', '🏢 บริษัท'], ['sec-insight', '💡 Insight']].map(function(n) {
+      return '<div onclick="document.getElementById(\'' + n[0] + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'})" style="flex-shrink:0;cursor:pointer;font-size:12px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);white-space:nowrap">' + n[1] + '</div>';
+    }).join('') + '</div></div>';
+
   h += '<div class="card" style="padding:10px 14px"><div style="font-size:11px;color:var(--text2);margin-bottom:6px">🔎 ดูสรุปแยกรายบริษัท</div><div style="display:flex;gap:6px;flex-wrap:wrap">' +
     dealers.slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); }).map(function(d) {
       return '<span onclick="go(\'mondayCompany\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);font-weight:600">' + sanitize(d.name) + '</span>';
@@ -2553,7 +2561,7 @@ function rMondayMeeting(el) {
 
   // 3-tier forecast
   var rangeMax = Math.max(bestAmt, openTotal, 1) * 1.05;
-  h += '<div class="card"><h2>📐 พยากรณ์ยอดขาย 3 ระดับ</h2>' +
+  h += '<div class="card" id="sec-tier"><h2>📐 พยากรณ์ยอดขาย 3 ระดับ</h2>' +
     '<div style="font-size:11px;color:var(--text2);margin-bottom:10px">แทนตัวเลขเดียวที่เหวี่ยงง่าย — แต่ละโครงการได้ทั้งหมดหรือ 0 จริงๆ ไม่มีทางได้ตามเปอร์เซ็นต์ Commit/Best Case เลยนับมูลค่าเต็มของกลุ่มความเชื่อมั่นแทน กดแต่ละกล่องดูรายชื่อโครงการได้</div>';
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">' +
     '<div style="cursor:pointer;border-radius:11px;padding:12px;background:var(--good-bg,rgba(34,197,94,.12));border:1px solid #22c55e" onclick="showPosBucketM(\'high\')"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#22c55e">🎯 Commit</div><div style="font-size:20px;font-weight:800;color:#22c55e">฿' + fmtMoneyShort(commitAmt) + '</div><div style="font-size:10.5px;color:#22c55e">' + allHigh.length + ' โครงการ POS ≥70%</div></div>' +
@@ -2567,7 +2575,7 @@ function rMondayMeeting(el) {
     '</div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2)"><span>฿0</span><span>◆ Weighted</span><span>฿' + fmtMoneyShort(rangeMax) + '</span></div></div>';
 
   // POS bucket detail
-  h += '<div class="card"><h2>🎯 โอกาสได้งาน แบ่งตามระดับ POS</h2>';
+  h += '<div class="card" id="sec-pos"><h2>🎯 โอกาสได้งาน แบ่งตามระดับ POS</h2>';
   [['high', allHigh, 'สูง (≥70%)', '#22c55e'], ['mid', allMid, 'กลาง (40-69%)', '#f59e0b'], ['low', allLow, 'ต่ำ (<40%)', '#ef4444']].forEach(function(b) {
     var amt = b[1].reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
     var pct = openTotal ? Math.round(amt / openTotal * 100) : 0;
@@ -2584,19 +2592,22 @@ function rMondayMeeting(el) {
   h += rMondayWaitingHtml(allInProgress);
 
   // company table
-  h += '<div class="card"><h2>🏢 สรุปรายบริษัท</h2><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
-    '<tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">บริษัท</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">ระดับ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">โครงการ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">มูลค่ารวม</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">Weighted</th></tr>';
-  dealers.slice().sort(function(a, b) { return window._mondayStats[b.id].openPipelineTotal - window._mondayStats[a.id].openPipelineTotal; }).forEach(function(d) {
+  var companyRows = dealers.filter(function(d) { var s = window._mondayStats[d.id]; return s.activePipes.length || s.wonPipes.length; });
+  h += '<div class="card" id="sec-company"><h2>🏢 สรุปรายบริษัท' +
+    (companyRows.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayCompanyBody\',this.value)"><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option><option value="weighted_desc">เรียง: Weighted มาก→น้อย</option><option value="name_asc">เรียง: ชื่อ ก-ฮ</option></select></span>' : '') +
+    '</h2><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
+    '<tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">บริษัท</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">ระดับ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">โครงการ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">มูลค่ารวม</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">Weighted</th></tr>' +
+    '<tbody id="mondayCompanyBody">';
+  companyRows.sort(function(a, b) { return window._mondayStats[b.id].openPipelineTotal - window._mondayStats[a.id].openPipelineTotal; }).forEach(function(d) {
     var s = window._mondayStats[d.id];
-    if (!s.activePipes.length && !s.wonPipes.length) return;
-    h += '<tr style="cursor:pointer" onclick="go(\'mondayCompany\',{dealerId:\'' + d.id + '\'})">' +
+    h += '<tr style="cursor:pointer" data-amt="' + s.openPipelineTotal + '" data-weighted="' + s.openPipelineWeighted + '" data-name="' + sanitize(d.name).toLowerCase() + '" onclick="go(\'mondayCompany\',{dealerId:\'' + d.id + '\'})">' +
       '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light)">' + sanitize(d.name) + '</td>' +
       '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light)">' + levelTag(d.level) + '</td>' +
       '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right">' + s.activePipes.length + '</td>' +
       '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right">฿' + fmtMoneyShort(s.openPipelineTotal) + '</td>' +
       '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right;color:var(--accent)">฿' + fmtMoneyShort(s.openPipelineWeighted) + '</td></tr>';
   });
-  h += '</table></div></div>';
+  h += '</tbody></table></div></div>';
 
   h += rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overdueDays);
 
@@ -2621,8 +2632,8 @@ function rMondayForecastByModelHtml(pipes) {
   var curModels = Object.keys(buckets[curKey]);
   var curProjects = {}; curModels.forEach(function(m) { Object.keys(buckets[curKey][m].pipes).forEach(function(pid) { curProjects[pid] = true; }); });
   var curQty = curModels.reduce(function(s, m) { return s + buckets[curKey][m].qty; }, 0);
-  var h = '<div class="card"><h2>📦 สินค้าที่คาดว่าจะออกเดือนนี้/เดือนหน้า</h2>' +
-    '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">รวมจาก Shipment Date จริง (หรือประมาณจาก Bidding Date +2 เดือนถ้ายังไม่กำหนด)</div>' +
+  var h = '<div class="card" id="sec-model"><h2>📦 สินค้าที่คาดว่าจะออกเดือนนี้/เดือนหน้า <span class="ml"><button class="btn bsm bo" onclick="go(\'forecast\')">🔗 ดู Forecast แบบเต็ม</button></span></h2>' +
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">สรุปสั้นๆ เฉพาะเดือนนี้/เดือนหน้า — อยากกรอง/เรียง/ดูรายเดือน-รายไตรมาสเต็มรูปแบบ กดปุ่มด้านบนไปเมนู Forecast โดยตรง</div>' +
     '<div style="font-size:12.5px;font-weight:600;background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:10px">เดือนนี้: ' + Object.keys(curProjects).length + ' โครงการ · ' + curModels.length + ' รุ่นสินค้า · รวม ' + curQty + ' ชิ้น</div>';
   [[curKey, 'เดือนนี้'], [nextKey, 'เดือนหน้า']].forEach(function(mk) {
     var key = mk[0], label = fcMonthLabel(key) + ' (' + mk[1] + ')';
@@ -2656,13 +2667,16 @@ function rMondayQuarterHtml(pipes) {
     return d && d >= q.start && d <= q.end;
   });
   list.sort(function(a, b) { return (a.expectedCloseDate || a.biddingDate || '').localeCompare(b.expectedCloseDate || b.biddingDate || ''); });
-  var h = '<div class="card"><h2>📆 โครงการในไตรมาสนี้ (' + q.label + ')</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">กรองจาก Expected Close Date (หรือ Bidding Date ถ้ายังไม่กำหนด) — ' + list.length + ' โครงการ</div>';
+  var h = '<div class="card" id="sec-quarter"><h2>📆 โครงการในไตรมาสนี้ (' + q.label + ')' +
+    (list.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayQuarterList\',this.value)"><option value="date_asc">เรียง: วันที่ใกล้สุด</option><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option></select></span>' : '') +
+    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">กรองจาก Expected Close Date (หรือ Bidding Date ถ้ายังไม่กำหนด) — ' + list.length + ' โครงการ</div><div id="mondayQuarterList">';
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
     var statusName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
     var dateShown = p.expectedCloseDate || p.biddingDate;
-    h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ' + sanitize(statusName) + ' · ' + fDShort(dateShown) + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    h += '<div class="li" data-amt="' + (Number(p.forecastAmount) || 0) + '" data-date="' + (dateShown || '') + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ' + sanitize(statusName) + ' · ' + fDShort(dateShown) + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
+  h += '</div>';
   if (!list.length) h += '<div class="empty"><p>ไม่มีโครงการคาดว่าจะปิดในไตรมาสนี้</p></div>';
   h += '</div>';
   return h;
@@ -2682,16 +2696,20 @@ function rMondayDelayHtml(pipes) {
     var maxB = Math.max.apply(null, b.delays.map(function(x) { return x.days; }));
     return maxB - maxA;
   });
-  var h = '<div class="card"><h2>🐢 โครงการดีเลย์</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">วันที่ตั้งไว้ผ่านมาแล้วแต่ยังไม่ Win/Lost — ' + rows.length + ' โครงการ</div>';
+  var h = '<div class="card" id="sec-delay"><h2>🐢 โครงการดีเลย์' +
+    (rows.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayDelayList\',this.value)"><option value="days_desc">เรียง: ดีเลย์นานสุด</option><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option></select></span>' : '') +
+    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">วันที่ตั้งไว้ผ่านมาแล้วแต่ยังไม่ Win/Lost — ' + rows.length + ' โครงการ</div><div id="mondayDelayList">';
   rows.forEach(function(r) {
     var p = r.p;
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
     var delayText = r.delays.map(function(x) { return x.label + ' ล่าช้า ' + x.days + ' วัน'; }).join(', ');
-    h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>' +
+    var maxDays = Math.max.apply(null, r.delays.map(function(x) { return x.days; }));
+    h += '<div class="li" data-amt="' + (Number(p.forecastAmount) || 0) + '" data-days="' + maxDays + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>' +
       '<div class="ls" style="color:#ef4444">⏰ ' + delayText + '</div>' +
       '<div class="ls">' + sanitize(d ? d.name : '-') + (lastLog ? ' · เหตุผลล่าสุด: ' + sanitize((lastLog.content || '').substr(0, 60)) : ' · ยังไม่มีบันทึกเหตุผล') + '</div></div></div>';
   });
+  h += '</div>';
   if (!rows.length) h += '<div class="empty"><p>ไม่มีโครงการดีเลย์ ✅</p></div>';
   h += '</div>';
   return h;
@@ -2707,7 +2725,7 @@ function rMondayWaitingHtml(pipes) {
   var groups = {};
   pipes.forEach(function(p) { if (!groups[p.status]) groups[p.status] = []; groups[p.status].push(p); });
   var statusOrder = (cfg.pipelineStatuses || []).map(function(s) { return s.id; });
-  var h = '<div class="card"><h2>📌 สถานะโครงการ — กำลังรออะไรอยู่</h2>';
+  var h = '<div class="card" id="sec-waiting"><h2>📌 สถานะโครงการ — กำลังรออะไรอยู่</h2>';
   var any = false;
   statusOrder.forEach(function(sid) {
     var list = groups[sid];
@@ -2737,8 +2755,26 @@ function showMondayStatusM(statusId) {
   openM('📌 ' + name, h);
 }
 
+// เรียงลำดับ list/table ยาวๆ ในหน้าประชุมจันทร์ — จัดเรียง DOM node ที่มีอยู่แล้วตรงๆ (data-amt/data-date/
+// data-days/data-weighted/data-name บนแต่ละแถว) ไม่ rebuild HTML ใหม่ ใช้ pattern เดียวกับ pipePickerSort
+// ในฟอร์ม Visit — containerId เป็นได้ทั้ง <div> (list การ์ด) หรือ <tbody> (ตารางบริษัท)
+function mondaySortList(containerId, mode) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var items = Array.prototype.slice.call(container.children);
+  items.sort(function(a, b) {
+    if (mode === 'amt_desc') return (Number(b.dataset.amt) || 0) - (Number(a.dataset.amt) || 0);
+    if (mode === 'weighted_desc') return (Number(b.dataset.weighted) || 0) - (Number(a.dataset.weighted) || 0);
+    if (mode === 'date_asc') return (a.dataset.date || '').localeCompare(b.dataset.date || '');
+    if (mode === 'days_desc') return (Number(b.dataset.days) || 0) - (Number(a.dataset.days) || 0);
+    if (mode === 'name_asc') return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+    return 0;
+  });
+  items.forEach(function(el) { container.appendChild(el); });
+}
+
 function rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overdueDays) {
-  var h = '<div class="card"><h2>💡 Insight สำหรับพูดคุย</h2>';
+  var h = '<div class="card" id="sec-insight"><h2>💡 Insight สำหรับพูดคุย</h2>';
   var rows = [];
   var top = allActive.slice().sort(function(a, b) { return ((b._pos || 0) / 100 * (Number(b.forecastAmount) || 0)) - ((a._pos || 0) / 100 * (Number(a.forecastAmount) || 0)); })[0];
   if (top) {
