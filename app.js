@@ -324,6 +324,24 @@ var DEF_CONFIG = {
 
   torOptions: ['Open','Lock','N/A'],
   appointmentOptions: ['ออกแล้ว','ยังไม่ออก','ไม่ต้องใช้'],
+
+  // น้ำหนักคำนวณ "POS แนะนำ" (utils.js computeSuggestedPOS) — แก้ได้จากปุ่ม ⚙️ ข้าง POS แนะนำเลย
+  // ไม่ต้องเข้า Admin (showPosWeightsEditorM ใน modals.js) ตัวเลขพวกนี้เป็นแค่ค่าเริ่มต้นที่ประเมินเอง ปรับได้ตลอด
+  posWeights: {
+    stageBase: { initial: 15, on_process: 25, draft_tor: 35, bidding: 50, contracting: 80, deliver: 90, win: 100, fail_lost: 0 },
+    stageBaseWon: 95, stageBaseLost: 5, stageBaseActiveDefault: 30, // fallback เผื่อ status ที่ admin เพิ่มเองไม่อยู่ใน stageBase
+    appointmentIssued: 10,
+    torLock: 5,
+    crmRegistered: 8,
+    hasCompetitor: -15,
+    pocDone: 7,
+    presentedDone: 5,
+    torDraftDone: 8,
+    followupUpcoming: 5,
+    followupOverdue: -10,
+    logFresh: 5,
+    logStale: -10
+  },
   winReasons: ['ราคาดีกว่า','Spec ตรง TOR','ได้หนังสือแต่งตั้ง','ความสัมพันธ์กับ End User','Service / Support ดี','อื่นๆ'],
   lossReasons: ['ราคาสูงกว่าคู่แข่ง','Spec ไม่ตรง TOR','ไม่มีหนังสือแต่งตั้ง','คู่แข่ง Lock Spec','ลูกค้าเปลี่ยนใจ','งบถูกตัด','อื่นๆ'],
 

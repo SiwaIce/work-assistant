@@ -108,6 +108,82 @@ function _pstDone() {
 }
 
 // ================================================================
+// POS WEIGHTS EDITOR — แก้น้ำหนักที่ใช้คำนวณ "POS แนะนำ" (computeSuggestedPOS ใน utils.js) ได้ตรงจากปุ่ม ⚙️
+// ข้าง POS แนะนำเลย ไม่ต้องออกไปหน้า Admin แยก (เหมือน showCfgListEditorM/showPipeStatusEditorM) — reopenFn
+// พากลับไปฟอร์มเดิม (Visit หรือ Pipeline) ที่เปิดอยู่ก่อนกดเข้ามาแก้
+// ================================================================
+var POS_WEIGHT_FIELDS = [
+  { key: 'appointmentIssued', label: '✅ ออกหนังสือแต่งตั้งแล้ว' },
+  { key: 'torLock', label: '📋 TOR Lock แล้ว' },
+  { key: 'crmRegistered', label: '✅ ลงทะเบียน CRM DJI แล้ว' },
+  { key: 'hasCompetitor', label: '⚠️ มีคู่แข่ง' },
+  { key: 'pocDone', label: '🛠 ไป POC แล้ว' },
+  { key: 'presentedDone', label: '🛠 พรีเซนต์งานให้หน่วยงานแล้ว' },
+  { key: 'torDraftDone', label: '🛠 ร่าง TOR ให้หน่วยงานแล้ว' },
+  { key: 'followupUpcoming', label: '✅ Follow-up ยังไม่ถึงกำหนด' },
+  { key: 'followupOverdue', label: '⚠️ Follow-up ค้างเกินกำหนด' },
+  { key: 'logFresh', label: '⏱ อัพเดตล่าสุด ≤14 วัน' },
+  { key: 'logStale', label: '⏱ เงียบมา >60 วัน (หรือไม่เคยมี Log)' }
+];
+function showPosWeightsEditorM(reopenFn) {
+  window._pwReopen = reopenFn;
+  _pwRenderM();
+}
+function _pwRenderM() {
+  var cfg = getConfig();
+  var w = cfg.posWeights || {};
+  var statuses = cfg.pipelineStatuses || [];
+  var h = '<div style="max-width:440px;max-height:70vh;overflow-y:auto">';
+  h += '<div style="font-size:.68rem;color:var(--text2);margin-bottom:10px">ตัวเลขพวกนี้เป็นแค่ "แนะนำ" ไม่บังคับใช้ — sale ยังกรอก POS เองได้ตามเดิมเสมอ</div>';
+
+  h += '<div class="form-section">📊 ฐานตาม Stage (%)</div>';
+  h += statuses.map(function(s) {
+    var v = (w.stageBase || {})[s.id];
+    return '<div class="fr" style="align-items:center;margin-bottom:4px"><span style="flex:1;font-size:12.5px">' + sanitize(s.name) + '</span>' +
+      '<input type="number" min="0" max="100" style="width:70px" value="' + (v === undefined ? '' : v) + '" onchange="_pwSetStageBase(\'' + s.id + '\', this.value)"></div>';
+  }).join('');
+  h += '<div style="font-size:.62rem;color:var(--text2);margin:4px 0 8px">Stage ที่เพิ่มเองใหม่ (ไม่มีเลขตั้งไว้) จะ fallback ตามหมวด: Won ' + (w.stageBaseWon || 95) + '% / Lost ' + (w.stageBaseLost || 5) + '% / Active ' + (w.stageBaseActiveDefault || 30) + '%</div>';
+
+  h += '<div class="form-section">🎯 น้ำหนักปัจจัยเสริม (บวก/ลบได้)</div>';
+  h += POS_WEIGHT_FIELDS.map(function(f) {
+    return '<div class="fr" style="align-items:center;margin-bottom:4px"><span style="flex:1;font-size:12.5px">' + f.label + '</span>' +
+      '<input type="number" style="width:70px" value="' + (w[f.key] === undefined ? 0 : w[f.key]) + '" onchange="_pwSetField(\'' + f.key + '\', this.value)"></div>';
+  }).join('');
+
+  h += '<div style="display:flex;gap:6px;margin-top:10px">';
+  h += '<button class="btn bo" style="flex:1" onclick="_pwResetDefault()">↻ Reset เป็นค่าเริ่มต้น</button>';
+  h += '<button class="btn btn-blue" style="flex:1" onclick="_pwDone()">✅ เสร็จสิ้น</button>';
+  h += '</div></div>';
+  openM('⚙️ น้ำหนัก POS แนะนำ', h);
+}
+function _pwSetStageBase(statusId, val) {
+  var cfg = getConfig();
+  cfg.posWeights = cfg.posWeights || {};
+  cfg.posWeights.stageBase = cfg.posWeights.stageBase || {};
+  cfg.posWeights.stageBase[statusId] = val === '' ? undefined : Number(val);
+  saveConfig(cfg);
+}
+function _pwSetField(key, val) {
+  var cfg = getConfig();
+  cfg.posWeights = cfg.posWeights || {};
+  cfg.posWeights[key] = Number(val) || 0;
+  saveConfig(cfg);
+}
+function _pwResetDefault() {
+  if (!confirm('รีเซ็ตน้ำหนัก POS ทั้งหมดกลับเป็นค่าเริ่มต้นไหม?')) return;
+  var cfg = getConfig();
+  delete cfg.posWeights;
+  cfg.posWeights = JSON.parse(JSON.stringify(DEF_CONFIG.posWeights));
+  saveConfig(cfg);
+  _pwRenderM();
+}
+function _pwDone() {
+  var fn = window._pwReopen;
+  window._pwReopen = null;
+  if (fn) fn(); else closeMForce();
+}
+
+// ================================================================
 // GET ALL MODELS WITH PRICES (เฉพาะ Admin - สำหรับแสดงราคาใน dropdown)
 // ================================================================
 function getAllModelsWithPricesForAdmin() {
@@ -401,6 +477,7 @@ function showPipelineM(dealerId, eid) {
   // ใช้ reopen หลังแก้ config แบบ inline (⚙️ ข้าง Unit Type/Status/TOR/หนังสือแต่งตั้ง) — reopen จะ build ฟอร์มใหม่
   // จากข้อมูลที่บันทึกไว้ ไม่ใช่จาก DOM ปัจจุบัน ดังนั้นถ้ามีช่องอื่นที่แก้ค้างไว้ยังไม่บันทึกจะหายไปด้วย
   var _pipeReopenArgs = "'" + (dealerId || '') + "','" + (eid || '') + "'";
+  var _posLastLog = eid ? ST.pipeLogsByPipe(eid)[0] : null;
 
   // Load existing items
   if (eid && p.items && p.items.length > 0) {
@@ -444,6 +521,7 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'appointmentOptions\',\'⚙️ จัดการหนังสือแต่งตั้ง\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_appt\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"><label>🎯 Project POS (%) <small style="color:var(--text2)">(โอกาสได้งาน)</small></label><input type="number" id="fp_pos" min="0" max="100" value="' + (p.projectPOS || '') + '" placeholder="0-100"></div></div>' +
+    posChecklistHtml(p, 'fp_', '', _posLastLog, 'showPipelineM(' + _pipeReopenArgs + ')', true) +
     (function() {
       var hasAdvData = !!(p.budgetFiscalYear || p.djiCrmRegistered || p.hasCompetitor || p.projectRevenue || p.sheetDisplay === 'Hide');
       return '<div class="form-section" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="_toggleFormSection(\'fp_adv_wrap\',this)">⚙️ ปีงบประมาณ / CRM / ข้อมูลภายใน <span style="font-size:11px;font-weight:400;color:var(--text2)">' + (hasAdvData ? '▲ ซ่อน' : '▼ แสดง') + '</span></div>' +
@@ -1033,12 +1111,22 @@ function _finishSavePipeline(dealerId, eid) {
     djiCrmDate: dpG('fp_crmdate') || (typedProjectId ? _td() : ''),
     hasCompetitor: document.getElementById('fp_comp') ? document.getElementById('fp_comp').checked : false,
     competitorName: document.getElementById('fp_compname') ? document.getElementById('fp_compname').value.trim() : '',
+    pocDone: document.getElementById('fpc_poc') ? document.getElementById('fpc_poc').checked : false,
+    presentedDone: document.getElementById('fpc_present') ? document.getElementById('fpc_present').checked : false,
+    torDraftDone: document.getElementById('fpc_drafttor') ? document.getElementById('fpc_drafttor').checked : false,
     budgetFiscalYear: document.getElementById('fp_fy') && document.getElementById('fp_fy').value ? parseInt(document.getElementById('fp_fy').value, 10) : null,
     projectRevenue: parseNum(document.getElementById('fp_projrev') ? document.getElementById('fp_projrev').value : 0),
     saleName: document.getElementById('fp_sale') ? document.getElementById('fp_sale').value.trim() : '',
     sheetDisplay: document.querySelector('input[name="fp_disp"]:checked') ? document.querySelector('input[name="fp_disp"]:checked').value : 'Show',
     attachments: window._pipeAttach || []
   };
+
+  // ติ๊ก "ใช้ค่านี้แทน X%" ไว้ — เซ็ต POS เป็นค่าแนะนำ (คำนวณสดจากค่าที่กรอกในฟอร์มตอนนี้ ไม่ใช่ตอน render ครั้งแรก)
+  var fpPosApplyEl = document.getElementById('fp_posapply_');
+  if (fpPosApplyEl && fpPosApplyEl.checked) {
+    var _posRes = posChkCompute('fp_', '');
+    if (_posRes) data.projectPOS = _posRes.score;
+  }
 
   // Handle items based on mode
   if (pipeItemMode === 'items' && pipeItemsTemp.length > 0) {
@@ -1875,11 +1963,137 @@ pipes.sort(function(a, b) {
     html += '<div style="font-size:.58rem;color:var(--text2);margin-top:2px">แก้ตรงนี้แล้วบันทึก Visit จะอัพเดตรายการสินค้าของโครงการให้ตรง พร้อมบันทึกการเปลี่ยนแปลงลง Pipeline Log</div>';
     html += '</div>';
 
+    // ข้อมูลประกอบ POS + POS แนะนำ — ดึง/แก้ฟิลด์ pipeline ที่มีอยู่แล้วตรงนี้เลย ไม่ต้องเปิดฟอร์มแก้ Pipeline แยก
+    // window._visitCurrentEid ตั้งไว้แล้วตอนต้น buildVisitFormHtml — ใช้ต่อ reopenCall ให้ปุ่ม ⚙️ น้ำหนัก POS
+    // พากลับมาฟอร์ม Visit เดิม (ทั้งกรณีสร้างใหม่และแก้ของเก่า)
+    var _posReopenCall = "showVisitM('" + dealerId + "','" + (window._visitCurrentEid || '') + "')";
+    html += posChecklistHtml(p, 'pu_', p.id, lastLog, _posReopenCall);
+
     html += '</div>';
 
     html += '</div>';
   }
   return html;
+}
+
+// field id ของแต่ละปัจจัยที่ใช้คำนวณ POS — สองบริบทใช้ id คนละชุด: Visit picker (idPrefix='pu_') เรนเดอร์ช่อง
+// ของตัวเองใหม่ทั้งหมด (ต่อโครงการ), ฟอร์มแก้ไข Pipeline (idPrefix='fp_') มีช่อง หนังสือแต่งตั้ง/TOR/CRM/คู่แข่ง/
+// สถานะ อยู่แล้วในฟอร์ม เลยชี้ไปที่ id เดิมตรงๆ แทนที่จะเรนเดอร์ซ้ำ (fpc_* คือ 3 ช่องใหม่ที่ยังไม่เคยมีในฟอร์มนี้)
+function posChkFieldIds(idPrefix, id) {
+  if (idPrefix === 'pu_') {
+    return { status: 'pu_st_' + id, appt: 'pu_appt_' + id, tor: 'pu_tor_' + id, crm: 'pu_crm_' + id, comp: 'pu_comp_' + id, poc: 'pu_poc_' + id, present: 'pu_present_' + id, draftTor: 'pu_drafttor_' + id };
+  }
+  return { status: 'fp_status', appt: 'fp_appt', tor: 'fp_tor', crm: 'fp_crm', comp: 'fp_comp', poc: 'fpc_poc', present: 'fpc_present', draftTor: 'fpc_drafttor' };
+}
+// Checklist ข้อมูลประกอบ POS — คืนทั้งกล่อง POS แนะนำ (เหตุผล + ปุ่ม copy + checkbox "ใช้ค่านี้") และ
+// (เฉพาะ Visit picker) ช่องหนังสือแต่งตั้ง/TOR/CRM/คู่แข่ง ที่ยังไม่มีในฟอร์มนั้น — ฟอร์มแก้ไข Pipeline มีช่อง
+// พวกนี้อยู่แล้วที่อื่นในฟอร์ม เลยข้าม (skipFields=true) เหลือแค่ 3 ช่อง "หลักฐานการทำงาน" ที่เพิ่มใหม่จริงๆ
+// reopenCall: expression JS ที่เรียกฟอร์มเดิมกลับมาใหม่หลังแก้น้ำหนักเสร็จ (เช่น "showVisitM('id','')")
+function posChecklistHtml(p, idPrefix, id, lastLog, reopenCall, skipFields) {
+  var cfg = getConfig();
+  var fid = posChkFieldIds(idPrefix, id);
+  var res = computeSuggestedPOS(p, cfg, lastLog ? lastLog.date : null);
+  var curPos = p.projectPOS || 0;
+  var h = '';
+  h += '<div class="items-toggle" id="' + idPrefix + 'poschk_toggle_' + id + '" onclick="posChkToggle(\'' + idPrefix + '\',\'' + id + '\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 0 2px;border-top:1px dashed var(--border);margin-top:6px">';
+  h += '<span style="font-size:.68rem;font-weight:700">🎯 ข้อมูลประกอบ POS</span>';
+  h += '<span style="font-size:.62rem;color:var(--text2)" id="' + idPrefix + 'poschk_chev_' + id + '">▸</span>';
+  h += '</div>';
+  h += '<div id="' + idPrefix + 'poschk_wrap_' + id + '" data-followup="' + (p.followupDate || '') + '" data-lastlog="' + (lastLog ? lastLog.date : '') + '" style="display:none;margin-top:4px">';
+
+  if (!skipFields) {
+    h += '<div class="fr" style="align-items:center"><span style="flex:1;font-size:.72rem">📄 หนังสือแต่งตั้ง</span><select id="' + fid.appt + '" onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')" style="width:auto">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>';
+    h += '<div class="fr" style="align-items:center"><span style="flex:1;font-size:.72rem">📋 TOR</span><select id="' + fid.tor + '" onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')" style="width:auto">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div>';
+    h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer"><input type="checkbox" id="' + fid.crm + '"' + (p.djiCrmRegistered ? ' checked' : '') + ' onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')"> ลงทะเบียน CRM ของ DJI แล้ว</label>';
+    h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer"><input type="checkbox" id="' + fid.comp + '"' + (p.hasCompetitor ? ' checked' : '') + ' onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')"> มีคู่แข่ง</label>';
+  }
+  h += '<div style="font-size:.6rem;color:var(--text3);margin:4px 0 2px">🛠 หลักฐานการทำงาน (เช็คได้หลายข้อ)</div>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer"><input type="checkbox" id="' + fid.poc + '"' + (p.pocDone ? ' checked' : '') + ' onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')"> ไป POC (สาธิต/ทดสอบให้หน่วยงานดู)</label>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer"><input type="checkbox" id="' + fid.present + '"' + (p.presentedDone ? ' checked' : '') + ' onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')"> พรีเซนต์งานให้หน่วยงานแล้ว</label>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer"><input type="checkbox" id="' + fid.draftTor + '"' + (p.torDraftDone ? ' checked' : '') + ' onchange="posChkRecalc(\'' + idPrefix + '\',\'' + id + '\')"> ร่าง TOR ให้หน่วยงานแล้ว</label>';
+
+  h += '<div style="margin-top:8px;border:1px dashed var(--accent);border-radius:8px;padding:8px 10px;background:var(--accent-light,rgba(59,130,246,.08))">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+  h += '<div style="font-size:.72rem">💡 POS แนะนำ: <b id="' + idPrefix + 'posnum_' + id + '" style="font-size:.85rem;color:var(--accent)">' + res.score + '%</b> ' +
+    '<button type="button" onclick="posChkToggleReason(\'' + idPrefix + '\',\'' + id + '\')" style="background:none;border:none;color:var(--accent);font-size:.68rem;text-decoration:underline dotted;cursor:pointer;padding:0" id="' + idPrefix + 'reasonlink_' + id + '">ดูเหตุผล ▾</button> ' +
+    (reopenCall ? '<button type="button" class="btn-xs" title="แก้น้ำหนักคำนวณ POS" onclick="showPosWeightsEditorM(function(){' + reopenCall.replace(/"/g, '&quot;') + '})">⚙️</button>' : '') +
+    '</div>';
+  h += '<label style="display:flex;align-items:center;gap:5px;font-size:.68rem;font-weight:600;white-space:nowrap;cursor:pointer"><input type="checkbox" id="' + idPrefix + 'posapply_' + id + '"> ใช้ค่านี้แทน ' + curPos + '%</label>';
+  h += '</div>';
+  h += '<div id="' + idPrefix + 'reasonbody_' + id + '" style="display:none;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">';
+  h += '<div id="' + idPrefix + 'reasonrows_' + id + '">' + posReasonRowsHtml(res.reasons) + '</div>';
+  h += '<div style="display:flex;justify-content:space-between;font-size:.7rem;font-weight:700;margin-top:4px;padding-top:4px;border-top:1px solid var(--border)"><span>รวม</span><span id="' + idPrefix + 'reasontotal_' + id + '">' + res.score + '%</span></div>';
+  h += '<button type="button" class="btn bsm bo" style="width:100%;margin-top:6px" onclick="posChkCopyReason(\'' + idPrefix + '\',\'' + id + '\',this)">📋 คัดลอกเหตุผล</button>';
+  h += '</div>';
+  h += '</div>';
+
+  h += '</div>';
+  return h;
+}
+function posReasonRowsHtml(reasons) {
+  return reasons.map(function(r) {
+    var deltaHtml = r.delta === null ? '<b style="color:var(--text2)">' + r.text + '</b>' :
+      '<b style="color:' + (r.delta >= 0 ? '#22c55e' : '#ef4444') + '">' + (r.delta >= 0 ? '+' : '') + r.delta + '%</b>';
+    return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:.68rem;padding:2px 0;color:var(--text2)"><span>' + r.label + '</span>' + deltaHtml + '</div>';
+  }).join('');
+}
+function posChkToggle(idPrefix, id) {
+  var wrap = document.getElementById(idPrefix + 'poschk_wrap_' + id);
+  var chev = document.getElementById(idPrefix + 'poschk_chev_' + id);
+  if (!wrap) return;
+  var open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▸' : '▾';
+}
+function posChkToggleReason(idPrefix, id) {
+  var body = document.getElementById(idPrefix + 'reasonbody_' + id);
+  var link = document.getElementById(idPrefix + 'reasonlink_' + id);
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (link) link.textContent = open ? 'ซ่อนเหตุผล ▴' : 'ดูเหตุผล ▾';
+}
+// อ่านค่าปัจจุบันจาก checklist ในฟอร์ม (ไม่ใช่ค่าที่ save ไว้เดิม) มาคำนวณ POS แนะนำใหม่แบบ live — ใช้
+// computeSuggestedPOS ตัวเดียวกับตอน render ครั้งแรก ส่ง object ชั่วคราวเข้าไปแทน ไม่มี logic ซ้ำสองที่
+// อ่านค่าปัจจุบันจาก checklist ในฟอร์ม (DOM ตรงๆ ไม่ใช่ค่าที่ save ไว้เดิม) มาคำนวณ — ใช้ทั้งตอน live-recalc
+// (posChkRecalc) และตอน save จริง (savePipeline/saveVisit อ่านค่า "ใช้ค่านี้" ตรงจุดที่จะเซ็ต POS) กันคำนวณ
+// ค้างจากครั้งก่อนถ้า user ติ๊ก "ใช้ค่านี้" โดยไม่เคยแตะ checklist เลยสักครั้ง (ไม่เคยเกิด live-recalc มาก่อน)
+function posChkCompute(idPrefix, id) {
+  var wrap = document.getElementById(idPrefix + 'poschk_wrap_' + id);
+  if (!wrap) return null;
+  var fid = posChkFieldIds(idPrefix, id);
+  var statusEl = document.getElementById(fid.status);
+  var tempP = {
+    status: statusEl ? statusEl.value : '',
+    appointmentLetter: document.getElementById(fid.appt).value,
+    tor: document.getElementById(fid.tor).value,
+    djiCrmRegistered: document.getElementById(fid.crm).checked,
+    hasCompetitor: document.getElementById(fid.comp).checked,
+    pocDone: document.getElementById(fid.poc).checked,
+    presentedDone: document.getElementById(fid.present).checked,
+    torDraftDone: document.getElementById(fid.draftTor).checked,
+    followupDate: wrap.dataset.followup || ''
+  };
+  return computeSuggestedPOS(tempP, getConfig(), wrap.dataset.lastlog || null);
+}
+function posChkRecalc(idPrefix, id) {
+  var res = posChkCompute(idPrefix, id);
+  if (!res) return;
+  document.getElementById(idPrefix + 'posnum_' + id).textContent = res.score + '%';
+  document.getElementById(idPrefix + 'reasontotal_' + id).textContent = res.score + '%';
+  document.getElementById(idPrefix + 'reasonrows_' + id).innerHTML = posReasonRowsHtml(res.reasons);
+  window['_posLastReason_' + idPrefix + id] = res;
+}
+function posChkCopyReason(idPrefix, id, btn) {
+  var res = window['_posLastReason_' + idPrefix + id] || posChkCompute(idPrefix, id);
+  var text = res ? posReasonsText(res) : document.getElementById(idPrefix + 'reasonrows_' + id).innerText;
+  var doCopy = function() {
+    var orig = btn.textContent;
+    btn.textContent = '✅ คัดลอกแล้ว';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(doCopy).catch(function() { toast('❌ คัดลอกไม่ได้'); });
+  else toast('❌ เบราว์เซอร์ไม่รองรับการคัดลอกอัตโนมัติ');
 }
 
 // รายการสินค้าในการ์ด "✏️ Update โครงการนี้" — เก็บ state ที่ DOM ตรงๆ (แถวละ .pu-item-row) เหมือน pattern
@@ -2251,7 +2465,19 @@ function saveVisit(dealerId, eid) {
   for (var i = 0; i < pipeChks.length; i++) {
     var pid = pipeChks[i].value;
     var puItems = puCollectItems(pid); // ช่องรายการ render ไว้เสมอ (แค่ซ่อนถ้ายังไม่กดเปิด) เลยอ่านค่าปัจจุบันได้ตรงๆ — ถ้าไม่แตะเลยค่าจะเท่าของเดิมพอดี ไม่เกิด diff ปลอมตอน save
-    pipelineUpdates.push({pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || '', items: puItems});
+    // เช็คลิสต์ข้อมูลประกอบ POS — ช่องเหล่านี้ก็ render ไว้เสมอเหมือนกัน (ซ่อนไว้เฉยๆ) อ่านตรงๆ ได้เลย
+    var posApplyEl = document.getElementById('pu_posapply_' + pid);
+    pipelineUpdates.push({
+      pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || '', items: puItems,
+      appointmentLetter: (document.getElementById('pu_appt_' + pid) || {}).value || '',
+      tor: (document.getElementById('pu_tor_' + pid) || {}).value || '',
+      djiCrmRegistered: !!(document.getElementById('pu_crm_' + pid) || {}).checked,
+      hasCompetitor: !!(document.getElementById('pu_comp_' + pid) || {}).checked,
+      pocDone: !!(document.getElementById('pu_poc_' + pid) || {}).checked,
+      presentedDone: !!(document.getElementById('pu_present_' + pid) || {}).checked,
+      torDraftDone: !!(document.getElementById('pu_drafttor_' + pid) || {}).checked,
+      applySuggestedPOS: !!(posApplyEl && posApplyEl.checked)
+    });
   }
 
   // Forecast
@@ -2331,8 +2557,35 @@ function saveVisit(dealerId, eid) {
             : '(ลบรายการสินค้าทั้งหมด)';
         }
       }
+      // เช็คลิสต์ข้อมูลประกอบ POS — sync เข้า pipeline ตรงๆ เฉพาะช่องที่เปลี่ยนจริง (เทียบกับ oldPipe) กัน log
+      // รกด้วยข้อความ "ไม่มีอะไรเปลี่ยน" ทุกครั้งที่บันทึก Visit ทั้งที่ไม่ได้แตะ checklist นี้เลย
+      var chkUpdates = {}; var chkDiff = [];
+      if (oldPipe) {
+        if (pu.appointmentLetter !== (oldPipe.appointmentLetter || '')) { chkUpdates.appointmentLetter = pu.appointmentLetter; if (pu.appointmentLetter) chkDiff.push('หนังสือแต่งตั้ง→' + pu.appointmentLetter); }
+        if (pu.tor !== (oldPipe.tor || '')) { chkUpdates.tor = pu.tor; if (pu.tor) chkDiff.push('TOR→' + pu.tor); }
+        if (!!pu.djiCrmRegistered !== !!oldPipe.djiCrmRegistered) { chkUpdates.djiCrmRegistered = pu.djiCrmRegistered; if (pu.djiCrmRegistered) chkUpdates.djiCrmDate = _td(); chkDiff.push(pu.djiCrmRegistered ? 'ลงทะเบียน CRM แล้ว' : 'ยกเลิกลงทะเบียน CRM'); }
+        if (!!pu.hasCompetitor !== !!oldPipe.hasCompetitor) { chkUpdates.hasCompetitor = pu.hasCompetitor; chkDiff.push(pu.hasCompetitor ? 'พบว่ามีคู่แข่ง' : 'ไม่มีคู่แข่งแล้ว'); }
+        if (!!pu.pocDone !== !!oldPipe.pocDone) { chkUpdates.pocDone = pu.pocDone; if (pu.pocDone) chkDiff.push('ไป POC แล้ว'); }
+        if (!!pu.presentedDone !== !!oldPipe.presentedDone) { chkUpdates.presentedDone = pu.presentedDone; if (pu.presentedDone) chkDiff.push('พรีเซนต์งานให้หน่วยงานแล้ว'); }
+        if (!!pu.torDraftDone !== !!oldPipe.torDraftDone) { chkUpdates.torDraftDone = pu.torDraftDone; if (pu.torDraftDone) chkDiff.push('ร่าง TOR ให้หน่วยงานแล้ว'); }
+        if (Object.keys(chkUpdates).length) ST.update('pipeline', pu.pipeId, chkUpdates);
+      }
+
+      // ติ๊ก "ใช้ POS แนะนำ" ไว้ — คำนวณใหม่จากค่าล่าสุด (รวม items/checklist ที่เพิ่งแก้ในรอบนี้) แล้วเซ็ตทับ POS เดิม
+      var posDiff = '';
+      if (pu.applySuggestedPOS && oldPipe) {
+        var pipeForPos = Object.assign({}, oldPipe, chkUpdates, { status: pu.newStatus || oldPipe.status });
+        var suggested = computeSuggestedPOS(pipeForPos, cfg, ST.pipeLogsByPipe(pu.pipeId)[0] ? ST.pipeLogsByPipe(pu.pipeId)[0].date : null);
+        if (suggested.score !== (oldPipe.projectPOS || 0)) {
+          ST.update('pipeline', pu.pipeId, { projectPOS: suggested.score });
+          posDiff = 'POS ' + (oldPipe.projectPOS || 0) + '%→' + suggested.score + '% (ใช้ค่าแนะนำ)';
+        }
+      }
+
       var logContent = '🤝 ' + fDShort(data.date) + ' Visit: ' + (pu.note || 'อัพเดตจาก Visit');
       if (itemsDiff) logContent += ' — 📦 แก้ไขรายการสินค้าเป็น: ' + itemsDiff;
+      if (chkDiff.length) logContent += ' — 🎯 ' + chkDiff.join(', ');
+      if (posDiff) logContent += ' — ' + posDiff;
       ST.add('pipeLog', {pipeId: pu.pipeId, type: 'visit', content: logContent, date: data.date + 'T00:00:00', visitId: visitObj.id});
     }
   });

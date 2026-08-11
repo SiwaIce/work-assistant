@@ -696,6 +696,61 @@ function visitCarryForecast(dealerId) {
 }
 
 // ================================================================
+// PROJECT POS แนะนำ — ไม่บังคับใช้ (sale ยังกรอกเองได้ตามเดิม) คำนวณจากฟิลด์ pipeline ที่มีอยู่แล้วเท่านั้น
+// น้ำหนักแต่ละปัจจัยอยู่ใน cfg.posWeights (app.js) แก้ได้จากปุ่ม ⚙️ ข้าง POS แนะนำ ไม่ต้องเข้า Admin
+// (ดู showPosWeightsEditorM ใน modals.js) — คืนทั้งคะแนนรวมและ breakdown เพื่อโชว์เหตุผลทีละข้อ/copy ไปแปะ Sheet
+// ================================================================
+function computeSuggestedPOS(p, cfg, latestLogDate) {
+  cfg = cfg || getConfig();
+  var w = cfg.posWeights || {};
+  var reasons = [];
+  var total = 0;
+
+  var stName = (cfg.pipelineStatuses || []).find(function(s) { return s.id === p.status; });
+  var base = (w.stageBase || {})[p.status];
+  if (base === undefined) {
+    base = !stName ? (w.stageBaseActiveDefault || 30)
+      : stName.category === 'won' ? (w.stageBaseWon || 95)
+      : stName.category === 'lost' ? (w.stageBaseLost || 5)
+      : (w.stageBaseActiveDefault || 30);
+  }
+  total += base;
+  reasons.push({ label: 'Stage "' + (stName ? stName.name : p.status) + '"', delta: null, text: 'ฐาน ' + base + '%' });
+
+  if (p.appointmentLetter === 'ออกแล้ว' && w.appointmentIssued) { total += w.appointmentIssued; reasons.push({ label: '✅ ออกหนังสือแต่งตั้งแล้ว', delta: w.appointmentIssued }); }
+  if (p.tor === 'Lock' && w.torLock) { total += w.torLock; reasons.push({ label: '📋 TOR Lock แล้ว', delta: w.torLock }); }
+  if (p.djiCrmRegistered && w.crmRegistered) { total += w.crmRegistered; reasons.push({ label: '✅ ลงทะเบียน CRM DJI แล้ว', delta: w.crmRegistered }); }
+  if (p.hasCompetitor && w.hasCompetitor) { total += w.hasCompetitor; reasons.push({ label: '⚠️ มีคู่แข่ง', delta: w.hasCompetitor }); }
+  if (p.pocDone && w.pocDone) { total += w.pocDone; reasons.push({ label: '🛠 ไป POC แล้ว', delta: w.pocDone }); }
+  if (p.presentedDone && w.presentedDone) { total += w.presentedDone; reasons.push({ label: '🛠 พรีเซนต์งานให้หน่วยงานแล้ว', delta: w.presentedDone }); }
+  if (p.torDraftDone && w.torDraftDone) { total += w.torDraftDone; reasons.push({ label: '🛠 ร่าง TOR ให้หน่วยงานแล้ว', delta: w.torDraftDone }); }
+
+  if (p.followupDate) {
+    var fdDays = dTo(p.followupDate);
+    if (fdDays < 0 && w.followupOverdue) { total += w.followupOverdue; reasons.push({ label: '⚠️ Follow-up ค้างเกินกำหนด', delta: w.followupOverdue }); }
+    else if (fdDays >= 0 && w.followupUpcoming) { total += w.followupUpcoming; reasons.push({ label: '✅ Follow-up ยังไม่ถึงกำหนด', delta: w.followupUpcoming }); }
+  }
+
+  if (latestLogDate) {
+    var logDays = daysBetween(latestLogDate.split('T')[0], _td());
+    if (logDays <= 14 && w.logFresh) { total += w.logFresh; reasons.push({ label: '⏱ อัพเดตล่าสุด ' + logDays + ' วันก่อน', delta: w.logFresh }); }
+    else if (logDays > 60 && w.logStale) { total += w.logStale; reasons.push({ label: '⏱ ไม่มีการอัพเดตมา ' + logDays + ' วัน', delta: w.logStale }); }
+  } else if (w.logStale) {
+    total += w.logStale; reasons.push({ label: '⏱ ไม่เคยมี Log เลย', delta: w.logStale });
+  }
+
+  total = Math.max(0, Math.min(100, Math.round(total)));
+  return { score: total, reasons: reasons };
+}
+// แปลง breakdown จาก computeSuggestedPOS() เป็นข้อความ copy ไปวางเป็น comment ใน Google Sheet ได้เลย
+function posReasonsText(result) {
+  var lines = result.reasons.map(function(r) {
+    return '• ' + r.label + ' → ' + (r.delta === null ? r.text : (r.delta >= 0 ? '+' : '') + r.delta + '%');
+  });
+  return '🎯 POS แนะนำ ' + result.score + '% — เหตุผล:\n' + lines.join('\n') + '\nรวม = ' + result.score + '%';
+}
+
+// ================================================================
 // DATE FORMATTING
 // ================================================================
 function fD(iso) {
