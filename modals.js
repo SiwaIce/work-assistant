@@ -1770,8 +1770,10 @@ pipes.sort(function(a, b) {
     var modelText = items.map(function(it) { return (it.model || '-') + (it.qty > 1 ? ' x' + it.qty : ''); }).join(', ');
     var totalQty = getPipeTotalQty(p);
     
-    // Get last log
-    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    // Get last log (+ full log list ไว้โชว์ตอนขยาย "ดูรายละเอียด" — ไม่ไปหน้า pipeDetail แยกเพราะ modal
+    // ของแอปนี้ซ้อนกันไม่ได้ กด go() แล้วหน้าพื้นหลังเปลี่ยนแต่ modal Visit ยังทับอยู่ ต้องปิด modal ก่อนถึงจะเห็น)
+    var pipeLogs = ST.pipeLogsByPipe(p.id);
+    var lastLog = pipeLogs[0];
     var lastLogText = '';
     if (lastLog) {
       var logDate = lastLog.date ? lastLog.date.split('T')[0] : '';
@@ -1803,9 +1805,25 @@ pipes.sort(function(a, b) {
     if (pendingActions.length) {
       html += '<div class="psi-row" style="color:#f59e0b">⏳ Action ค้าง: ' + pendingActions.length + ' รายการ</div>';
     }
-    html += '<div class="psi-link" onclick="event.stopPropagation();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">🔗 ดูรายละเอียด →</div>';
+    html += '<div class="psi-link" onclick="event.stopPropagation();_psiToggleFullDetail(\'' + p.id + '\')" id="psi_fulltoggle_' + p.id + '">▾ ดูรายละเอียด/Timeline เต็ม</div>';
+    html += '<div id="psi_full_' + p.id + '" style="display:none;margin-top:4px;padding-top:4px;border-top:1px dashed var(--border)">';
+    if (items.length) {
+      html += '<div class="psi-row" style="font-weight:600">📦 รายการสินค้า</div>';
+      items.forEach(function(it) { html += '<div class="psi-row">• ' + sanitize(it.model || '-') + (it.qty > 1 ? ' x' + it.qty : '') + '</div>'; });
+    }
+    html += '<div class="psi-row" style="font-weight:600;margin-top:4px">🕐 Timeline (' + pipeLogs.length + ' รายการ)</div>';
+    if (pipeLogs.length) {
+      html += pipeLogs.slice(0, 20).map(function(lg) {
+        var ld = lg.date ? lg.date.split('T')[0] : '';
+        return '<div class="psi-row">' + (ld ? fDShort(ld) + ' — ' : '') + sanitize(lg.content || '') + '</div>';
+      }).join('');
+      if (pipeLogs.length > 20) html += '<div class="psi-row" style="color:var(--text2)">…และอีก ' + (pipeLogs.length - 20) + ' รายการ</div>';
+    } else {
+      html += '<div class="psi-row" style="color:var(--text2)">— ยังไม่มี Log —</div>';
+    }
     html += '</div>';
-    
+    html += '</div>';
+
     // Update Detail (show when selected)
     html += '<div class="pipe-select-detail" id="psd_' + p.id + '"' + (isSel ? ' style="display:block"' : '') + '>';
     html += '<div class="psi-update-header">✏️ Update โครงการนี้</div>';
@@ -1830,6 +1848,15 @@ function pipePickerFilterInput(v) {
     var hit = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
     el.style.display = hit ? '' : 'none';
   });
+}
+
+function _psiToggleFullDetail(pipeId) {
+  var box = document.getElementById('psi_full_' + pipeId);
+  var btn = document.getElementById('psi_fulltoggle_' + pipeId);
+  if (!box) return;
+  var open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '▾ ดูรายละเอียด/Timeline เต็ม' : '▴ ซ่อนรายละเอียด';
 }
 
 function togglePipePickerSelect(pipeId) {

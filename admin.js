@@ -1086,6 +1086,130 @@ function admSaveDjiTypes() {
   toast('💾 บันทึก DJI Dealer Types แล้ว');
 }
 
+// ================================================================
+// VISIT TOPICS EDITOR — เพิ่ม/แก้/ลบ/จัดลำดับหัวข้อคุยที่ใช้ใน Visit Report (Standard/Full ใช้ config
+// ชุดเดียวกัน — Standard กรองเอาเฉพาะกลุ่มที่ group.alwaysAsk ตอน render ในฟอร์ม ดู modals.js buildVisitFormHtml)
+// ================================================================
+function showAdminVisitTopics() { _vtRenderM(); }
+
+function _vtRenderM() {
+  var cfg = getConfig();
+  var groups = cfg.visitTopicGroups || [];
+  var topics = cfg.visitTopics || [];
+  var h = '<div style="max-width:520px;max-height:70vh;overflow-y:auto">';
+
+  h += '<div style="font-size:.68rem;color:var(--text2);margin-bottom:10px">📝 หัวข้อในนี้จะโผล่ในฟอร์ม Visit Report ทั้งโหมด Standard และ Full — กลุ่มที่ตั้ง "ถามเสมอ" จะโผล่ใน Standard ด้วย ไม่งั้นโผล่เฉพาะ Full</div>';
+
+  // Groups
+  h += '<div class="form-section">📂 กลุ่มหัวข้อ</div>';
+  h += '<div id="vtGroupWrap">' + groups.map(function(g) {
+    return '<div class="link-item"><input type="text" value="' + sanitize(g.name) + '" style="flex:1;font-size:13px" onchange="_vtGroupField(\'' + g.id + '\',\'name\',this.value)">' +
+      '<label style="font-size:11px;white-space:nowrap;display:flex;align-items:center;gap:3px"><input type="checkbox"' + (g.alwaysAsk ? ' checked' : '') + ' onchange="_vtGroupField(\'' + g.id + '\',\'alwaysAsk\',this.checked)">ถามเสมอ</label>' +
+      '<button class="btn bsm bd" onclick="_vtGroupRemove(\'' + g.id + '\')">✕</button></div>';
+  }).join('') + '</div>';
+  h += '<div style="display:flex;gap:4px;margin-top:6px"><input type="text" id="vtNewGroupName" placeholder="ชื่อกลุ่มใหม่" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_vtGroupAdd();}"><button class="btn bsm bp" onclick="_vtGroupAdd()">➕ กลุ่ม</button></div>';
+
+  // Topics (grouped)
+  h += '<div class="form-section" style="margin-top:14px">📋 หัวข้อ</div>';
+  for (var gi = 0; gi < groups.length; gi++) {
+    var grp = groups[gi];
+    var grpTopics = topics.filter(function(t) { return t.group === grp.id; });
+    h += '<div style="font-size:.72rem;font-weight:700;color:var(--text2);margin:8px 0 4px">' + sanitize(grp.name) + '</div>';
+    h += grpTopics.map(function(t, ti) {
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:5px">' +
+        '<div style="display:flex;gap:4px;align-items:center">' +
+        '<input type="text" value="' + sanitize(t.name) + '" placeholder="ชื่อหัวข้อ" style="flex:1;font-size:12px;font-weight:600" onchange="_vtTopicField(\'' + t.id + '\',\'name\',this.value)">' +
+        '<label style="font-size:10px;white-space:nowrap;display:flex;align-items:center;gap:2px"><input type="checkbox"' + (t.required ? ' checked' : '') + ' onchange="_vtTopicField(\'' + t.id + '\',\'required\',this.checked)">บังคับ</label>' +
+        '<select style="font-size:11px;padding:2px" onchange="_vtTopicField(\'' + t.id + '\',\'group\',this.value)">' + groups.map(function(g2) { return '<option value="' + g2.id + '"' + (g2.id === t.group ? ' selected' : '') + '>' + sanitize(g2.name) + '</option>'; }).join('') + '</select>' +
+        '<button class="btn bsm bo" title="เลื่อนขึ้น" onclick="_vtMoveTopic(\'' + t.id + '\',-1)"' + (ti === 0 ? ' disabled' : '') + '>▲</button>' +
+        '<button class="btn bsm bo" title="เลื่อนลง" onclick="_vtMoveTopic(\'' + t.id + '\',1)"' + (ti === grpTopics.length - 1 ? ' disabled' : '') + '>▼</button>' +
+        '<button class="btn bsm bd" onclick="_vtTopicRemove(\'' + t.id + '\')">✕</button>' +
+        '</div>' +
+        '<input type="text" value="' + sanitize(t.prompt || '') + '" placeholder="คำถาม/prompt ที่จะโชว์ในฟอร์ม" style="width:100%;font-size:11px;margin-top:4px;box-sizing:border-box" onchange="_vtTopicField(\'' + t.id + '\',\'prompt\',this.value)">' +
+        '</div>';
+    }).join('') || '<div style="font-size:11px;color:var(--text2);padding:2px 0 4px">— ยังไม่มีหัวข้อในกลุ่มนี้ —</div>';
+  }
+
+  h += '<div class="form-section" style="margin-top:10px">➕ เพิ่มหัวข้อใหม่</div>';
+  h += '<div class="fr"><input type="text" id="vtNewTopicName" placeholder="ชื่อหัวข้อ" style="flex:1">' +
+    '<select id="vtNewTopicGroup">' + groups.map(function(g) { return '<option value="' + g.id + '">' + sanitize(g.name) + '</option>'; }).join('') + '</select></div>';
+  h += '<input type="text" id="vtNewTopicPrompt" placeholder="คำถาม/prompt" style="width:100%;box-sizing:border-box;margin-top:4px">';
+  h += '<button class="btn bsm bp btn-full" style="margin-top:6px" onclick="_vtTopicAdd()">➕ เพิ่มหัวข้อ</button>';
+
+  h += '<button class="btn btn-blue btn-full" style="margin-top:12px" onclick="closeMForce();render();">✅ เสร็จสิ้น</button>';
+  h += '</div>';
+  openM('⚙️ จัดการ Visit Topics', h);
+}
+
+function _vtGroupField(id, field, val) {
+  var cfg = getConfig();
+  var g = (cfg.visitTopicGroups || []).find(function(x) { return x.id === id; });
+  if (!g) return;
+  g[field] = val;
+  saveConfig(cfg);
+}
+function _vtGroupAdd() {
+  var el = document.getElementById('vtNewGroupName');
+  var name = (el.value || '').trim();
+  if (!name) return;
+  var cfg = getConfig();
+  cfg.visitTopicGroups = cfg.visitTopicGroups || [];
+  cfg.visitTopicGroups.push({ id: 'cg_' + Date.now().toString(36), name: name, alwaysAsk: false });
+  saveConfig(cfg);
+  _vtRenderM();
+}
+function _vtGroupRemove(id) {
+  var cfg = getConfig();
+  var hasTopics = (cfg.visitTopics || []).some(function(t) { return t.group === id; });
+  if (hasTopics && !confirm('กลุ่มนี้ยังมีหัวข้ออยู่ — ลบกลุ่มจะลบหัวข้อในกลุ่มนี้ทั้งหมดด้วย ยืนยัน?')) return;
+  cfg.visitTopicGroups = (cfg.visitTopicGroups || []).filter(function(g) { return g.id !== id; });
+  cfg.visitTopics = (cfg.visitTopics || []).filter(function(t) { return t.group !== id; });
+  saveConfig(cfg);
+  _vtRenderM();
+}
+function _vtTopicField(id, field, val) {
+  var cfg = getConfig();
+  var t = (cfg.visitTopics || []).find(function(x) { return x.id === id; });
+  if (!t) return;
+  t[field] = val;
+  saveConfig(cfg);
+  if (field === 'group') _vtRenderM();
+}
+function _vtTopicAdd() {
+  var nameEl = document.getElementById('vtNewTopicName');
+  var name = (nameEl.value || '').trim();
+  if (!name) return alert('ใส่ชื่อหัวข้อ');
+  var cfg = getConfig();
+  cfg.visitTopics = cfg.visitTopics || [];
+  cfg.visitTopics.push({
+    id: 'ct_' + Date.now().toString(36), name: name,
+    prompt: (document.getElementById('vtNewTopicPrompt').value || '').trim(),
+    required: false, group: document.getElementById('vtNewTopicGroup').value
+  });
+  saveConfig(cfg);
+  _vtRenderM();
+}
+function _vtTopicRemove(id) {
+  var cfg = getConfig();
+  cfg.visitTopics = (cfg.visitTopics || []).filter(function(t) { return t.id !== id; });
+  saveConfig(cfg);
+  _vtRenderM();
+}
+function _vtMoveTopic(id, dir) {
+  var cfg = getConfig();
+  var arr = cfg.visitTopics || [];
+  var idx = arr.findIndex(function(t) { return t.id === id; });
+  if (idx === -1) return;
+  var grp = arr[idx].group;
+  var swapIdx = -1;
+  if (dir < 0) { for (var i = idx - 1; i >= 0; i--) { if (arr[i].group === grp) { swapIdx = i; break; } } }
+  else { for (var i = idx + 1; i < arr.length; i++) { if (arr[i].group === grp) { swapIdx = i; break; } } }
+  if (swapIdx === -1) return;
+  var tmp = arr[idx]; arr[idx] = arr[swapIdx]; arr[swapIdx] = tmp;
+  saveConfig(cfg);
+  _vtRenderM();
+}
+
 function admSaveTiers() {
   var cfg = getConfig();
   var el = document.getElementById('adm_tiers');
