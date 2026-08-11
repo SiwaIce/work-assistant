@@ -2604,9 +2604,8 @@ function saveVisit(dealerId, eid) {
   closeMForce(); toast('💾 บันทึก Visit แล้ว');
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
-  if (visitMode !== 'quick') {
-    setTimeout(function() { if (confirm('📧 สร้าง Draft Email?')) showVisitDraft(visitObj.id); }, 500);
-  }
+  // เดิมเด้ง confirm() ถาม "สร้าง Draft Email?" ทุกครั้งหลังบันทึก — ตัดออกแล้ว กดปุ่ม "📧 Draft Email" เองจาก
+  // หน้ารายละเอียด Visit ตอนต้องการแทน (ดู rVisitDet ใน views-visit.js)
   go('visitDetail', {visitId: visitObj.id});
 }
 
