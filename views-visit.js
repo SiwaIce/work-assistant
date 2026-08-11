@@ -138,7 +138,7 @@ function rVisitDet(el) {
   ${v.pipelineUpdates.map(pu => {
     const pipe = ST.getOne('pipeline', pu.pipeId);
     return `<div class="visit-sub" ${pipe?`onclick="go('pipeDetail',{pipeId:'${pipe.id}'})" style="cursor:pointer"`:''}>
-      <div style="display:flex;justify-content:space-between"><b>${pipe?sanitize(pipe.projectName):sanitize(pu.name||'')}</b>${pipe?pipeTag(pipe.status):''}</div>
+      <div style="display:flex;justify-content:space-between"><b>${pipe?sanitize((pipe.rowNo?pipe.rowNo+' · ':'')+pipe.projectName):sanitize(pu.name||'')}</b>${pipe?pipeTag(pipe.status):''}</div>
       <div style="font-size:.72rem;color:#94a3b8">${pu.model?'Model: '+pu.model:''} ${pu.newStatus?'→ '+getPipeName(pu.newStatus):''}</div>
       ${pu.note?`<div style="font-size:.72rem;color:#94a3b8">${sanitize(pu.note)}</div>`:''}
       ${Array.isArray(pu.items)&&pu.items.length?`<div style="font-size:.7rem;color:#94a3b8;margin-top:2px">📦 ${pu.items.map(it=>sanitize(it.model+(Number(it.qty)>1?' x'+it.qty:''))).join(', ')}</div>`:''}
