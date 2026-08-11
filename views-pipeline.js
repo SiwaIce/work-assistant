@@ -2552,11 +2552,11 @@ function rMondayMeeting(el) {
     }).join('') + '</div></div>';
 
   h += '<div class="sr" style="margin-bottom:12px">' +
-    '<div class="sc"><div class="sn c1">' + dealers.length + '</div><div class="sl">บริษัทที่ดูแล</div></div>' +
-    '<div class="sc"><div class="sn c1">' + allActive.length + '</div><div class="sl">โครงการเปิดอยู่</div></div>' +
-    '<div class="sc"><div class="sn c2">฿' + fmtMoneyShort(openTotal) + '</div><div class="sl">มูลค่า Pipeline รวม</div></div>' +
-    '<div class="sc"><div class="sn c5">' + allHigh.length + '</div><div class="sl">โครงการมั่นใจสูง</div></div>' +
-    '<div class="sc"><div class="sn c2">~' + expWins.toFixed(1) + '</div><div class="sl">คาดว่าจะปิดได้ (โครงการ)</div></div>' +
+    '<div class="sc"><div class="sn c1" id="mondayCnt1">0</div><div class="sl">บริษัทที่ดูแล</div></div>' +
+    '<div class="sc"><div class="sn c1" id="mondayCnt2">0</div><div class="sl">โครงการเปิดอยู่</div></div>' +
+    '<div class="sc"><div class="sn c2" id="mondayCnt3">฿0</div><div class="sl">มูลค่า Pipeline รวม</div></div>' +
+    '<div class="sc"><div class="sn c5" id="mondayCnt4">0</div><div class="sl">โครงการมั่นใจสูง</div></div>' +
+    '<div class="sc"><div class="sn c2" id="mondayCnt5">~0</div><div class="sl">คาดว่าจะปิดได้ (โครงการ)</div></div>' +
     '</div>';
 
   // 3-tier forecast
@@ -2593,25 +2593,43 @@ function rMondayMeeting(el) {
 
   // company table
   var companyRows = dealers.filter(function(d) { var s = window._mondayStats[d.id]; return s.activePipes.length || s.wonPipes.length; });
+  var LONG_LIST_THRESHOLD = 10;
   h += '<div class="card" id="sec-company"><h2>🏢 สรุปรายบริษัท' +
-    (companyRows.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayCompanyBody\',this.value)"><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option><option value="weighted_desc">เรียง: Weighted มาก→น้อย</option><option value="name_asc">เรียง: ชื่อ ก-ฮ</option></select></span>' : '') +
-    '</h2><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
-    '<tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">บริษัท</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">ระดับ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">โครงการ</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">มูลค่ารวม</th><th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text2)">Weighted</th></tr>' +
-    '<tbody id="mondayCompanyBody">';
+    (companyRows.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayCompanyList\',this.value)"><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option><option value="weighted_desc">เรียง: Weighted มาก→น้อย</option><option value="name_asc">เรียง: ชื่อ ก-ฮ</option></select></span>' : '') +
+    '</h2>';
+  if (companyRows.length > LONG_LIST_THRESHOLD) {
+    h += '<input type="text" placeholder="🔍 ค้นหาชื่อบริษัท..." style="margin-bottom:8px" oninput="mondayListSearch(\'mondayCompanyList\',this.value)">' +
+      '<div style="font-size:11px;color:var(--text2);margin-bottom:8px" id="mondayCompanyListMeta"></div>';
+  }
+  h += '<div id="mondayCompanyList">';
   companyRows.sort(function(a, b) { return window._mondayStats[b.id].openPipelineTotal - window._mondayStats[a.id].openPipelineTotal; }).forEach(function(d) {
     var s = window._mondayStats[d.id];
-    h += '<tr style="cursor:pointer" data-amt="' + s.openPipelineTotal + '" data-weighted="' + s.openPipelineWeighted + '" data-name="' + sanitize(d.name).toLowerCase() + '" onclick="go(\'mondayCompany\',{dealerId:\'' + d.id + '\'})">' +
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light)">' + sanitize(d.name) + '</td>' +
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light)">' + levelTag(d.level) + '</td>' +
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right">' + s.activePipes.length + '</td>' +
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right">฿' + fmtMoneyShort(s.openPipelineTotal) + '</td>' +
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border-light);text-align:right;color:var(--accent)">฿' + fmtMoneyShort(s.openPipelineWeighted) + '</td></tr>';
+    var lvlCls = d.level === 'SAB' ? 'good' : (d.level === 'Authorized' || d.level === 'A' || d.level === 'B') ? 'accent' : 'text3';
+    var initials = (d.name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase() || '?';
+    h += '<div class="li" data-amt="' + s.openPipelineTotal + '" data-weighted="' + s.openPipelineWeighted + '" data-name="' + sanitize(d.name).toLowerCase() + '" onclick="go(\'mondayCompany\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;border-left:4px solid var(--' + lvlCls + ',var(--accent))">' +
+      '<div style="width:34px;height:34px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent);flex-shrink:0">' + sanitize(initials) + '</div>' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(d.name) + '</div><div style="font-size:11px;color:var(--text2)">' + levelTag(d.level) + ' · ' + s.activePipes.length + ' โครงการ</div></div>' +
+      '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:13px">฿' + fmtMoneyShort(s.openPipelineTotal) + '</div><div style="font-size:10.5px;color:var(--accent)">Weighted ฿' + fmtMoneyShort(s.openPipelineWeighted) + '</div></div>' +
+      '</div>';
   });
-  h += '</tbody></table></div></div>';
+  h += '</div>';
+  if (companyRows.length > LONG_LIST_THRESHOLD) h += '<button type="button" class="btn bo btn-full" id="mondayCompanyListMore" onclick="mondayListMore(\'mondayCompanyList\')" style="margin-top:6px">⬇️ แสดงเพิ่ม</button>';
+  h += '</div>';
 
   h += rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overdueDays);
 
   el.innerHTML = h;
+
+  // ตัวเลข stat tile นับขึ้น + เปิดใช้ค้นหา/แสดงเพิ่มสำหรับ list ที่อาจยาว (เรียกหลัง innerHTML เซ็ตแล้วเท่านั้น
+  // element ถึงจะมีอยู่จริงใน DOM)
+  mondayCountUp('mondayCnt1', dealers.length);
+  mondayCountUp('mondayCnt2', allActive.length);
+  mondayCountUp('mondayCnt3', openTotal, function(v) { return '฿' + fmtMoneyShort(v); });
+  mondayCountUp('mondayCnt4', allHigh.length);
+  mondayCountUp('mondayCnt5', expWins, function(v) { return '~' + v.toFixed(1); });
+  mondayListSetup('mondayQuarterList', 10);
+  mondayListSetup('mondayDelayList', 10);
+  mondayListSetup('mondayCompanyList', 10);
 }
 
 // Forecast by Model (this month / next month) — ใช้ร่วมกันทั้งหน้าสรุปรวม (pipes = ทุกบริษัท) และหน้ารายบริษัท
@@ -2669,7 +2687,9 @@ function rMondayQuarterHtml(pipes) {
   list.sort(function(a, b) { return (a.expectedCloseDate || a.biddingDate || '').localeCompare(b.expectedCloseDate || b.biddingDate || ''); });
   var h = '<div class="card" id="sec-quarter"><h2>📆 โครงการในไตรมาสนี้ (' + q.label + ')' +
     (list.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayQuarterList\',this.value)"><option value="date_asc">เรียง: วันที่ใกล้สุด</option><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option></select></span>' : '') +
-    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">กรองจาก Expected Close Date (หรือ Bidding Date ถ้ายังไม่กำหนด) — ' + list.length + ' โครงการ</div><div id="mondayQuarterList">';
+    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">กรองจาก Expected Close Date (หรือ Bidding Date ถ้ายังไม่กำหนด) — ' + list.length + ' โครงการ</div>';
+  if (list.length > 10) h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ/บริษัท..." style="margin-bottom:8px" oninput="mondayListSearch(\'mondayQuarterList\',this.value)"><div style="font-size:11px;color:var(--text2);margin-bottom:8px" id="mondayQuarterListMeta"></div>';
+  h += '<div id="mondayQuarterList">';
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
     var statusName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
@@ -2677,6 +2697,7 @@ function rMondayQuarterHtml(pipes) {
     h += '<div class="li" data-amt="' + (Number(p.forecastAmount) || 0) + '" data-date="' + (dateShown || '') + '" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ' + sanitize(statusName) + ' · ' + fDShort(dateShown) + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
   h += '</div>';
+  if (list.length > 10) h += '<button type="button" class="btn bo btn-full" id="mondayQuarterListMore" onclick="mondayListMore(\'mondayQuarterList\')" style="margin-top:6px">⬇️ แสดงเพิ่ม</button>';
   if (!list.length) h += '<div class="empty"><p>ไม่มีโครงการคาดว่าจะปิดในไตรมาสนี้</p></div>';
   h += '</div>';
   return h;
@@ -2698,7 +2719,9 @@ function rMondayDelayHtml(pipes) {
   });
   var h = '<div class="card" id="sec-delay"><h2>🐢 โครงการดีเลย์' +
     (rows.length > 4 ? '<span class="ml"><select style="width:auto;font-size:11px;padding:3px 6px" onchange="mondaySortList(\'mondayDelayList\',this.value)"><option value="days_desc">เรียง: ดีเลย์นานสุด</option><option value="amt_desc">เรียง: มูลค่ามาก→น้อย</option></select></span>' : '') +
-    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">วันที่ตั้งไว้ผ่านมาแล้วแต่ยังไม่ Win/Lost — ' + rows.length + ' โครงการ</div><div id="mondayDelayList">';
+    '</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">วันที่ตั้งไว้ผ่านมาแล้วแต่ยังไม่ Win/Lost — ' + rows.length + ' โครงการ</div>';
+  if (rows.length > 10) h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ/บริษัท..." style="margin-bottom:8px" oninput="mondayListSearch(\'mondayDelayList\',this.value)"><div style="font-size:11px;color:var(--text2);margin-bottom:8px" id="mondayDelayListMeta"></div>';
+  h += '<div id="mondayDelayList">';
   rows.forEach(function(r) {
     var p = r.p;
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
@@ -2710,6 +2733,7 @@ function rMondayDelayHtml(pipes) {
       '<div class="ls">' + sanitize(d ? d.name : '-') + (lastLog ? ' · เหตุผลล่าสุด: ' + sanitize((lastLog.content || '').substr(0, 60)) : ' · ยังไม่มีบันทึกเหตุผล') + '</div></div></div>';
   });
   h += '</div>';
+  if (rows.length > 10) h += '<button type="button" class="btn bo btn-full" id="mondayDelayListMore" onclick="mondayListMore(\'mondayDelayList\')" style="margin-top:6px">⬇️ แสดงเพิ่ม</button>';
   if (!rows.length) h += '<div class="empty"><p>ไม่มีโครงการดีเลย์ ✅</p></div>';
   h += '</div>';
   return h;
@@ -2771,6 +2795,81 @@ function mondaySortList(containerId, mode) {
     return 0;
   });
   items.forEach(function(el) { container.appendChild(el); });
+  // เรียงใหม่แล้วเริ่มแบ่งหน้าใหม่ตามลำดับล่าสุด (ล้างช่องค้นหาที่พิมพ์ค้างไว้ด้วย กันสับสนว่าทำไม list ไม่ตรง)
+  if (container.dataset.pageSize) {
+    var searchEl = document.getElementById(containerId + 'Search');
+    if (searchEl) searchEl.value = '';
+    mondayListSetup(containerId, parseInt(container.dataset.pageSize, 10));
+  }
+}
+
+// ================================================================
+// LIST ยาว (ไตรมาสนี้/ดีเลย์/บริษัท อาจมีเป็นสิบๆ ร้อยรายการ) — ค้นหา + "แสดงเพิ่ม" ทีละหน้า แทนที่จะโชว์
+// ทั้งหมดพร้อมกันแล้วต้องเลื่อนหาเอง ทำงานบน DOM ตรงๆ (เหมือน mondaySortList) ไม่ต้องเก็บ array แยกต่างหาก
+// เรียก mondayListSetup() ครั้งเดียวหลัง render เสร็จ (เฉพาะ container ที่แถวเกิน threshold ถึงจะมีช่องค้นหา/
+// ปุ่มแสดงเพิ่มโผล่ในโค้ด HTML อยู่แล้ว — ฟังก์ชันนี้แค่ทำให้มันทำงานจริง)
+// ================================================================
+function mondayListSetup(containerId, pageSize) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.dataset.pageSize = pageSize;
+  container.dataset.shown = pageSize;
+  container.dataset.query = '';
+  var rows = Array.prototype.slice.call(container.children);
+  rows.forEach(function(r, i) { r.style.display = i < pageSize ? '' : 'none'; });
+  mondayListUpdateMeta(containerId, rows.length, Math.min(pageSize, rows.length));
+}
+function mondayListMatched(containerId) {
+  var container = document.getElementById(containerId);
+  var query = (container.dataset.query || '').toLowerCase();
+  return Array.prototype.filter.call(container.children, function(r) {
+    return !query || (r.textContent || '').toLowerCase().indexOf(query) !== -1;
+  });
+}
+function mondayListSearch(containerId, query) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.dataset.query = query || '';
+  var pageSize = parseInt(container.dataset.pageSize, 10) || 10;
+  var all = Array.prototype.slice.call(container.children);
+  var matched = mondayListMatched(containerId);
+  all.forEach(function(r) { r.style.display = 'none'; });
+  matched.slice(0, pageSize).forEach(function(r) { r.style.display = ''; });
+  container.dataset.shown = Math.min(pageSize, matched.length);
+  mondayListUpdateMeta(containerId, matched.length, Math.min(pageSize, matched.length));
+}
+function mondayListMore(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var pageSize = parseInt(container.dataset.pageSize, 10) || 10;
+  var shown = parseInt(container.dataset.shown, 10) || pageSize;
+  var matched = mondayListMatched(containerId);
+  matched.slice(shown, shown + pageSize).forEach(function(r) { r.style.display = ''; });
+  var newShown = Math.min(shown + pageSize, matched.length);
+  container.dataset.shown = newShown;
+  mondayListUpdateMeta(containerId, matched.length, newShown);
+}
+function mondayListUpdateMeta(containerId, total, shown) {
+  var metaEl = document.getElementById(containerId + 'Meta');
+  if (metaEl) metaEl.textContent = total ? ('แสดง ' + shown + ' จาก ' + total + ' รายการ') : 'ไม่พบรายการที่ค้นหา';
+  var btn = document.getElementById(containerId + 'More');
+  if (btn) btn.style.display = shown >= total ? 'none' : '';
+}
+// ตัวเลข stat tile นับขึ้นจาก 0 ตอนโหลดหน้า (เอฟเฟกต์เล็กๆ ให้ dashboard ดูมีชีวิตขึ้น) — fmt(v) ถ้าใส่มาจะ
+// เรียกทุกเฟรมเพื่อจัดรูปแบบ (เช่น ใส่ ฿/fmtMoneyShort/ทศนิยม), ไม่ใส่ = จำนวนเต็มธรรมดา
+function mondayCountUp(id, target, fmt) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var t0 = null, dur = 800;
+  function tick(t) {
+    if (!t0) t0 = t;
+    var p = Math.min(1, (t - t0) / dur);
+    var ease = 1 - Math.pow(1 - p, 3);
+    var v = target * ease;
+    el.textContent = fmt ? fmt(v) : Math.round(v);
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
 }
 
 function rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overdueDays) {
@@ -2896,18 +2995,20 @@ function rMondayCompany(el) {
 
   h += '<div class="card"><h2>📊 เป้ายอดขาย H1 / H2</h2>';
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  var h1RingColor = h1Pct >= 100 ? '#22c55e' : '#ef4444';
+  var h2RingColor = h2Pct >= 100 ? '#22c55e' : h2Pct >= 70 ? '#f59e0b' : '#ef4444';
   h += '<div style="border:1px solid var(--border);border-radius:11px;padding:13px">' +
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><b style="font-size:13px">H1 (ม.ค.–มิ.ย.)</b><span style="font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--bg2);color:var(--text2)">ปิดรอบแล้ว</span></div>' +
-    '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text2);margin-bottom:4px"><span>Won จริง</span><b style="color:var(--text)">฿' + fmtMoneyShort(h1Won) + ' / ฿' + fmtMoneyShort(s.targetH1) + '</b></div>' +
-    '<div style="height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;margin-bottom:6px"><div style="height:100%;border-radius:5px;width:' + Math.min(h1Pct, 100) + '%;background:' + (h1Pct >= 100 ? 'var(--good)' : 'var(--bad)') + '"></div></div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' + progressRingHtml(h1Pct, { size: 44, strokeW: 5, color: h1RingColor }) +
+    '<div style="flex:1;font-size:11.5px;color:var(--text2)"><span>Won จริง</span><br><b style="color:var(--text);font-size:12.5px">฿' + fmtMoneyShort(h1Won) + ' / ฿' + fmtMoneyShort(s.targetH1) + '</b></div></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H1\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(s.wonH1Project) + '</b></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H1\',\'runrate\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>🔁 Runrate ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(s.wonH1Runrate) + '</b></div>' +
     '<div style="font-size:11.5px;font-weight:700;margin-top:6px;padding:6px 8px;border-radius:7px;background:' + v1.bg + ';color:' + v1.fg + '">' + v1.label + '</div>' +
     '</div>';
   h += '<div style="border:1px solid var(--accent);border-radius:11px;padding:13px;background:var(--accent-light)">' +
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><b style="font-size:13px">H2 (ก.ค.–ธ.ค.)</b><span style="font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff">กำลังดำเนินอยู่</span></div>' +
-    '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text2);margin-bottom:4px"><span>Won + คาดว่าจะได้</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2Projected) + ' / ฿' + fmtMoneyShort(s.targetH2) + '</b></div>' +
-    '<div style="height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;margin-bottom:6px"><div style="height:100%;border-radius:5px;width:' + Math.min(h2Pct, 100) + '%;background:' + (h2Pct >= 100 ? 'var(--good)' : h2Pct >= 70 ? 'var(--warn)' : 'var(--bad)') + '"></div></div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' + progressRingHtml(h2Pct, { size: 44, strokeW: 5, color: h2RingColor }) +
+    '<div style="flex:1;font-size:11.5px;color:var(--text2)"><span>Won + คาดว่าจะได้</span><br><b style="color:var(--text);font-size:12.5px">฿' + fmtMoneyShort(h2Projected) + ' / ฿' + fmtMoneyShort(s.targetH2) + '</b></div></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project (Won ฿' + fmtMoneyShort(s.wonH2Project) + ' + Pipeline ฿' + fmtMoneyShort(s.openPipelineWeighted) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2ProjectTotal) + '</b></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'runrate\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>🔁 Runrate (Won ฿' + fmtMoneyShort(s.wonH2RunrateWon) + ' + คาดไว้ ฿' + fmtMoneyShort(s.h2RunrateRemaining) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2RunrateTotal) + '</b></div>' +
     '<div style="font-size:11.5px;font-weight:700;margin-top:6px;padding:6px 8px;border-radius:7px;background:' + v2.bg + ';color:' + v2.fg + '">' + v2.label + (h2Pct < 100 ? ' — ขาดอีก ฿' + fmtMoneyShort(s.targetH2 - h2Projected) : '') + '</div>' +
@@ -2934,13 +3035,18 @@ function rMondayCompany(el) {
   h += rMondayForecastByModelHtml(s.activePipes);
 
   h += '<div class="card"><h2>📋 โครงการทั้งหมด (' + s.activePipes.length + ')</h2>';
+  if (s.activePipes.length > 10) h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ..." style="margin-bottom:8px" oninput="mondayListSearch(\'mondayCoProjectList\',this.value)"><div style="font-size:11px;color:var(--text2);margin-bottom:8px" id="mondayCoProjectListMeta"></div>';
+  h += '<div id="mondayCoProjectList">';
   s.activePipes.slice().sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); }).forEach(function(p) {
     h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status || '') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
+  h += '</div>';
+  if (s.activePipes.length > 10) h += '<button type="button" class="btn bo btn-full" id="mondayCoProjectListMore" onclick="mondayListMore(\'mondayCoProjectList\')" style="margin-top:6px">⬇️ แสดงเพิ่ม</button>';
   if (!s.activePipes.length) h += '<div class="empty"><p>ไม่มีโครงการเปิดอยู่</p></div>';
   h += '</div>';
 
   el.innerHTML = h;
+  mondayListSetup('mondayCoProjectList', 10);
 }
 
 function showMondayHalfM(dealerId, half, source) {
