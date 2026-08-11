@@ -639,54 +639,9 @@ function copyDealerHealth() { copyTable('healthTable', '📋 Copy Health Score')
 // ================================================================
 // SMART FILTER VIEW
 // ================================================================
-function rSmartFilter(el) {
-  const fid = S.filterId;
-  const f = getSmartFilters().find(x => x.id === fid);
-  document.getElementById('pgT').textContent = f ? f.icon + ' ' + f.name : '🔍';
-  
-  let html = '';
-
-  switch(fid) {
-    case 'overdue_tasks': {
-      const items = getUrgentItems().filter(i => dTo(i.dueDate) < 0);
-      html = items.map(i => `<div class="li dlo" onclick="go('taskDetail',{taskId:'${i.refId}'})"><div class="lm"><div class="lt">${sanitize(i.title)}</div><div class="ls">${i.parent?sanitize(i.parent)+' • ':''}${dlB(i.dueDate,false)}</div></div></div>`).join('') || emp('ไม่มี');
-      break; }
-    case 'bidding_soon': {
-      const w = getWeekRange();
-      const items = ST.filter('pipeline', p => p.biddingDate && isInRange(p.biddingDate, w.start, w.end) && pipeIsOpen(p));
-      html = items.map(p => pipeListItem(p)).join('') || emp('ไม่มี');
-      break; }
-    case 'stale_pipeline': {
-      html = getStalePipelines().map(p => pipeListItem(p)).join('') || emp('ไม่มี');
-      break; }
-    case 'big_projects': {
-      const items = ST.filter('pipeline', p => Number(p.forecastAmount) >= 1500000 && pipeIsOpen(p));
-      html = items.map(p => pipeListItem(p)).join('') || emp('ไม่มี');
-      break; }
-    case 'waiting_overdue': {
-      go('reminders'); return; }
-    case 'no_contact_14d': {
-      const items = getDealerContactStatus().filter(d => d.lastContactDays === null || d.lastContactDays > 14);
-      html = items.map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt"><span class="health-dot ${d.contactStatus}"></span> ${sanitize(d.name)} ${levelTag(d.level)}</div><div class="ls">${d.lastContactDate ? contactLabel(d.lastContactDays) : '⚪ ไม่เคยติดต่อ'}</div></div>
-      <span class="dealer-act" onclick="event.stopPropagation();showFollowupM('${d.id}')">📞</span></div>`).join('') || emp('ไม่มี');
-      break; }
-    case 'fu_remaining': {
-      go('kpi'); return; }
-    case 'low_health': {
-      const _lhCfg = getConfig(); // ครั้งเดียว — เดิมเรียก calcHealthScore (และ getConfig ข้างใน) 2 รอบต่อ Dealer (filter+map)
-      const items = ST.getAll('dealers').map(d => ({...d, health: calcHealthScore(d.id, _lhCfg)})).filter(d => d.health.score < 40);
-      html = items.map(d => `<div class="li" onclick="go('dealerDetail',{dealerId:'${d.id}'})"><div class="lm"><div class="lt">${sanitize(d.name)} ${levelTag(d.level)} <span style="color:#ef4444;font-weight:700">${d.health.score}/100</span></div><div class="ls">${d.health.details.filter(x => x.status === 'bad').map(x => x.label).join(' • ')}</div></div></div>`).join('') || emp('ไม่มี');
-      break; }
-  }
-  el.innerHTML = `<div class="card"><h2>${f ? f.icon + ' ' + f.name : ''}</h2>${html}</div>`;
-}
-
+// ⚠️ rSmartFilter/pipeListItem จริงที่ใช้งานอยู่คือ copy ใน features.js (โหลดทีหลังไฟล์นี้ เลยบังตัวนี้เสมอ
+// แม้ตอน dead code ยังอยู่) — ลบ copy ที่นี่ทิ้งเพราะไม่มีผลต่อพฤติกรรมจริงเลย (ดู memory task ที่ flag ไว้)
 function emp(msg) { return `<div class="empty"><p>✅ ${msg}</p></div>`; }
-
-function pipeListItem(p) {
-  const d = ST.getOne('dealers', p.dealerId);
-  return `<div class="li ${dlC(p.biddingDate, !pipeIsOpen(p))}" onclick="go('pipeDetail',{pipeId:'${p.id}'})"><div class="lm"><div class="lt">${sanitize(p.projectName)} ${pipeTag(p.status)}</div><div class="ls">${d?.name||''} • ${p.model||''} • 💰 ${fmtMoney(p.forecastAmount)} ${p.biddingDate?'• Bid: '+fDShort(p.biddingDate)+' '+dlB(p.biddingDate,!pipeIsOpen(p)):''}</div></div></div>`;
-}
 
 // ================================================================
 // CALENDAR

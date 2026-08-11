@@ -835,6 +835,29 @@ function mondayCompanyStats(dealerId, cfg) {
   };
 }
 
+// ไตรมาสปฏิทินปัจจุบัน (Q1=ม.ค.-มี.ค. ฯลฯ) — ต่างจาก Thai Fiscal Year (thaiFYFromISO) ที่ใช้ที่อื่นในแอป
+// ใช้เฉพาะจุด "โครงการในไตรมาสนี้" ของ Monday Meeting ที่ Ryan ถามถึงตรงๆ เป็นปฏิทินสากล ไม่ใช่ปีงบ
+function mondayQuarterRange() {
+  var now = new Date();
+  var q = Math.floor(now.getMonth() / 3);
+  var start = new Date(now.getFullYear(), q * 3, 1);
+  var end = new Date(now.getFullYear(), q * 3 + 3, 0);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), label: 'Q' + (q + 1) + '/' + now.getFullYear() };
+}
+
+// ดีเลย์ = วันที่ตั้งไว้ (Bidding/Expected Close/Shipment) ผ่านมาแล้วแต่โครงการยังไม่ Win/Lost — คืน array
+// เผื่อโครงการเดียวดีเลย์หลายจุดพร้อมกัน (เช่น ทั้ง Bidding และ Shipment ผ่านมาแล้ว)
+function mondayDelayInfo(p) {
+  var today = _td();
+  var checks = [{ field: 'biddingDate', label: 'Bidding' }, { field: 'expectedCloseDate', label: 'Expected Close' }, { field: 'shipmentDate', label: 'Shipment' }];
+  var delays = [];
+  checks.forEach(function(c) {
+    var v = p[c.field];
+    if (v && v < today) delays.push({ label: c.label, date: v, days: daysBetween(v, today) });
+  });
+  return delays;
+}
+
 // ================================================================
 // DATE FORMATTING
 // ================================================================

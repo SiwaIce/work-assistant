@@ -2527,6 +2527,12 @@ function rMondayMeeting(el) {
   var overdueDays = (typeof DEALER_VISIT_OVERDUE_DAYS !== 'undefined') ? DEALER_VISIT_OVERDUE_DAYS : 60;
   var overdueDealers = dealers.filter(function(d) { var lv = window._mondayStats[d.id].lastVisitDays; return lv === null || lv > overdueDays; });
 
+  // allActive = เฉพาะโครงการที่ยังไม่ตัดสิน (ไม่ใช่ won-category) ใช้กับ POS/3-tier เท่านั้น — แต่ Quarter/Delay/
+  // Waiting ต้องเห็น "รอเซ็นสัญญา" (contracting) / "รอดำเนินการหลังชนะ" (win) ด้วย เลยต้องใช้ชุดกว้างกว่านั้น
+  // (pipeIsOpen = ยังไม่ Lost และยังไม่ Deliver) แยกต่างหาก
+  var allInProgress = [];
+  dealers.forEach(function(d) { allInProgress = allInProgress.concat(ST.pipelineByDealer(d.id).filter(pipeIsOpen)); });
+
   var h = '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">' +
     '<div><h2 style="margin:0">🗓️ ประชุมจันทร์ — สรุป Pipeline</h2><div style="font-size:12px;color:var(--text2)">ข้อมูล ณ ' + fD(_td()) + (cfg.saleName ? ' · ' + sanitize(cfg.saleName) : '') + '</div></div>' +
     '<button class="btn bo" onclick="copyMondaySummary()">📋 คัดลอกสรุปทั้งหมด</button>' +
@@ -2573,6 +2579,9 @@ function rMondayMeeting(el) {
   h += '</div>';
 
   h += rMondayForecastByModelHtml(allActive);
+  h += rMondayQuarterHtml(allInProgress);
+  h += rMondayDelayHtml(allInProgress);
+  h += rMondayWaitingHtml(allInProgress);
 
   // company table
   h += '<div class="card"><h2>🏢 สรุปรายบริษัท</h2><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
@@ -2609,7 +2618,12 @@ function rMondayForecastByModelHtml(pipes) {
       buckets[key][it.model].pipes[p.id] = p;
     });
   });
-  var h = '<div class="card"><h2>📦 สินค้าที่คาดว่าจะออกเดือนนี้/เดือนหน้า</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">รวมจาก Shipment Date จริง (หรือประมาณจาก Bidding Date +2 เดือนถ้ายังไม่กำหนด)</div>';
+  var curModels = Object.keys(buckets[curKey]);
+  var curProjects = {}; curModels.forEach(function(m) { Object.keys(buckets[curKey][m].pipes).forEach(function(pid) { curProjects[pid] = true; }); });
+  var curQty = curModels.reduce(function(s, m) { return s + buckets[curKey][m].qty; }, 0);
+  var h = '<div class="card"><h2>📦 สินค้าที่คาดว่าจะออกเดือนนี้/เดือนหน้า</h2>' +
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">รวมจาก Shipment Date จริง (หรือประมาณจาก Bidding Date +2 เดือนถ้ายังไม่กำหนด)</div>' +
+    '<div style="font-size:12.5px;font-weight:600;background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:10px">เดือนนี้: ' + Object.keys(curProjects).length + ' โครงการ · ' + curModels.length + ' รุ่นสินค้า · รวม ' + curQty + ' ชิ้น</div>';
   [[curKey, 'เดือนนี้'], [nextKey, 'เดือนหน้า']].forEach(function(mk) {
     var key = mk[0], label = fcMonthLabel(key) + ' (' + mk[1] + ')';
     var models = Object.keys(buckets[key]);
@@ -2630,6 +2644,97 @@ function rMondayForecastByModelHtml(pipes) {
   });
   h += '</div>';
   return h;
+}
+
+// โครงการที่คาดว่าจะปิด (Expected Close หรือ Bidding ถ้ายังไม่กำหนด) อยู่ในไตรมาสปฏิทินนี้ — "which project,
+// check status, progress within this quarter" ที่ Ryan ถามตรงๆ
+function rMondayQuarterHtml(pipes) {
+  var q = mondayQuarterRange();
+  var cfg = getConfig();
+  var list = pipes.filter(function(p) {
+    var d = p.expectedCloseDate || p.biddingDate;
+    return d && d >= q.start && d <= q.end;
+  });
+  list.sort(function(a, b) { return (a.expectedCloseDate || a.biddingDate || '').localeCompare(b.expectedCloseDate || b.biddingDate || ''); });
+  var h = '<div class="card"><h2>📆 โครงการในไตรมาสนี้ (' + q.label + ')</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">กรองจาก Expected Close Date (หรือ Bidding Date ถ้ายังไม่กำหนด) — ' + list.length + ' โครงการ</div>';
+  list.forEach(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var statusName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
+    var dateShown = p.expectedCloseDate || p.biddingDate;
+    h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ' + sanitize(statusName) + ' · ' + fDShort(dateShown) + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+  });
+  if (!list.length) h += '<div class="empty"><p>ไม่มีโครงการคาดว่าจะปิดในไตรมาสนี้</p></div>';
+  h += '</div>';
+  return h;
+}
+
+// โครงการที่วันที่ตั้งไว้ (Bidding/Expected Close/Shipment) ผ่านมาแล้วแต่ยังไม่ Win/Lost — "delay, why delay"
+// เหตุผล: ระบบไม่มีฟิลด์ "เหตุผลดีเลย์" แยกต่างหาก ใช้บันทึกล่าสุดใน Pipeline Log แทนไปก่อน (ถ้า sale เคยพิมพ์
+// เหตุผลไว้ตอนอัพเดตแล้วจะเห็นตรงนี้อัตโนมัติ)
+function rMondayDelayHtml(pipes) {
+  var rows = [];
+  pipes.forEach(function(p) {
+    var delays = mondayDelayInfo(p);
+    if (delays.length) rows.push({ p: p, delays: delays });
+  });
+  rows.sort(function(a, b) {
+    var maxA = Math.max.apply(null, a.delays.map(function(x) { return x.days; }));
+    var maxB = Math.max.apply(null, b.delays.map(function(x) { return x.days; }));
+    return maxB - maxA;
+  });
+  var h = '<div class="card"><h2>🐢 โครงการดีเลย์</h2><div style="font-size:11px;color:var(--text2);margin-bottom:8px">วันที่ตั้งไว้ผ่านมาแล้วแต่ยังไม่ Win/Lost — ' + rows.length + ' โครงการ</div>';
+  rows.forEach(function(r) {
+    var p = r.p;
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var delayText = r.delays.map(function(x) { return x.label + ' ล่าช้า ' + x.days + ' วัน'; }).join(', ');
+    h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>' +
+      '<div class="ls" style="color:#ef4444">⏰ ' + delayText + '</div>' +
+      '<div class="ls">' + sanitize(d ? d.name : '-') + (lastLog ? ' · เหตุผลล่าสุด: ' + sanitize((lastLog.content || '').substr(0, 60)) : ' · ยังไม่มีบันทึกเหตุผล') + '</div></div></div>';
+  });
+  if (!rows.length) h += '<div class="empty"><p>ไม่มีโครงการดีเลย์ ✅</p></div>';
+  h += '</div>';
+  return h;
+}
+
+// สถานะโครงการ — กำลังรออะไรอยู่ (ต่อยอดจาก status จริงของ pipeline ไม่ได้เพิ่มฟิลด์ใหม่)
+var MONDAY_STATUS_WAIT_LABEL = {
+  initial: 'รอยืนยันงบ/ความสนใจเบื้องต้น', on_process: 'รอเจรจา/ปรับสเปค', draft_tor: 'รอ TOR ประกาศ/ยืนยันงบ',
+  bidding: 'รอผลประมูล', win: 'รอดำเนินการหลังชนะ', contracting: 'รอเซ็นสัญญา', deliver: 'รอส่งมอบ'
+};
+function rMondayWaitingHtml(pipes) {
+  var cfg = getConfig();
+  var groups = {};
+  pipes.forEach(function(p) { if (!groups[p.status]) groups[p.status] = []; groups[p.status].push(p); });
+  var statusOrder = (cfg.pipelineStatuses || []).map(function(s) { return s.id; });
+  var h = '<div class="card"><h2>📌 สถานะโครงการ — กำลังรออะไรอยู่</h2>';
+  var any = false;
+  statusOrder.forEach(function(sid) {
+    var list = groups[sid];
+    if (!list || !list.length) return;
+    any = true;
+    var name = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === sid; }) || {}).name || sid;
+    var waitLabel = MONDAY_STATUS_WAIT_LABEL[sid] || 'รอดำเนินการขั้นถัดไป';
+    var amt = list.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+    h += '<div onclick="showMondayStatusM(\'' + sid + '\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border-light)">' +
+      '<div><b style="font-size:12.5px">' + sanitize(name) + '</b><div style="font-size:11px;color:var(--text2)">' + waitLabel + '</div></div>' +
+      '<div style="text-align:right"><div style="font-weight:700;font-size:13px">' + list.length + ' โครงการ</div><div style="font-size:11px;color:var(--text2)">฿' + fmtMoneyShort(amt) + '</div></div></div>';
+  });
+  if (!any) h += '<div class="empty"><p>ไม่มีโครงการเปิดอยู่</p></div>';
+  h += '</div>';
+  return h;
+}
+function showMondayStatusM(statusId) {
+  var list = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p) && p.status === statusId; });
+  var cfg = getConfig();
+  var name = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === statusId; }) || {}).name || statusId;
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ</div>';
+  list.forEach(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+  });
+  if (!list.length) h += '<div class="empty"><p>ไม่มี</p></div>';
+  openM('📌 ' + name, h);
 }
 
 function rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overdueDays) {
