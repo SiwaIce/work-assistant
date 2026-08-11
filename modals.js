@@ -1547,7 +1547,11 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
     '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
     '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
-    '<div class="form-section">📦 Forecast QTY</div><div id="fv_fcs">';
+    '<div class="form-section">📦 Forecast QTY</div>';
+  // Datalist สินค้าจากแคตตาล็อกจริง — เหมือนช่องแก้ไขรายการสินค้าใน Pipeline ที่อัพเดตด้านบน ไม่ต้องพิมพ์เอง
+  window._fcModelDatalistId = 'fcModelList_' + Date.now();
+  html += buildAdminModelDatalist(window._fcModelDatalistId);
+  html += '<div id="fv_fcs">';
   // Visit ใหม่ (ไม่มี eid) → ดึง Forecast เดือนที่ยังไม่ผ่านจาก Visit ก่อนหน้าของ dealer นี้มาให้แก้ต่อ แทนที่จะ
   // เริ่มกรอกใหม่จากศูนย์ทุกครั้ง (เช่น เดือนก่อน forecast ก.ย.+ต.ค.ไว้ พอมา Visit จริงเดือน ต.ค. ก็ควรเห็น ต.ค.
   // ที่เคยประเมินไว้ ปรับเพิ่ม/ลดได้เลย) — ดูรายละเอียดที่ visitCarryForecast() ใน utils.js
@@ -1850,7 +1854,10 @@ pipes.sort(function(a, b) {
   return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
 });
   window._psiSearchQ = ''; window._psiStatusFilter = {};
-  var html = '';
+  // Datalist สินค้าจากแคตตาล็อกจริง (สินค้าทั้งหมด) ใช้ร่วมกันทุกช่องแก้ไขรายการสินค้าในตัวเลือกนี้ — สร้าง
+  // ครั้งเดียวพอ ไม่ต้องต่อ pipeline (ตัวเลือกใน datalist เหมือนกันหมดไม่ว่าจะกำลังแก้โครงการไหน)
+  window._visitModelDatalistId = 'visitModelList_' + Date.now();
+  var html = buildAdminModelDatalist(window._visitModelDatalistId);
   if (pipes.length > 1) {
     html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">';
     if (pipes.length > 4) {
@@ -1956,7 +1963,7 @@ pipes.sort(function(a, b) {
     html += '<div id="pu_itemswrap_' + p.id + '" style="display:none;margin-top:4px">';
     html += '<div id="pu_itemslist_' + p.id + '">' + items.map(function(it) { return puItemRowHtml(it.model, it.qty); }).join('') + '</div>';
     html += '<div style="display:flex;gap:4px;margin-top:4px">';
-    html += '<input type="text" id="pu_newmodel_' + p.id + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem">';
+    html += '<input type="text" id="pu_newmodel_' + p.id + '" list="' + window._visitModelDatalistId + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem" autocomplete="off">';
     html += '<input type="number" id="pu_newqty_' + p.id + '" min="1" value="1" style="width:56px;font-size:.78rem">';
     html += '<button type="button" class="btn bsm bp" onclick="puAddItem(\'' + p.id + '\')">➕</button>';
     html += '</div>';
@@ -2100,7 +2107,7 @@ function posChkCopyReason(idPrefix, id, btn) {
 // fc-item-row ของ Forecast QTY ด้านล่าง กัน rebuild ทั้งฟอร์มแล้วข้อมูลอื่นที่พิมพ์ไว้หาย
 function puItemRowHtml(model, qty) {
   return '<div class="item-row pu-item-row" style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid rgba(127,127,127,.15)">' +
-    '<input type="text" class="pu-it-model" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem">' +
+    '<input type="text" class="pu-it-model" list="' + (window._visitModelDatalistId || '') + '" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem" autocomplete="off">' +
     '<input type="number" class="pu-it-qty" min="1" value="' + (Number(qty) || 1) + '" style="width:56px;font-size:.78rem">' +
     '<button type="button" class="btn bsm bd" onclick="this.closest(\'.pu-item-row\').remove()" title="ลบ">✕</button>' +
     '</div>';
@@ -2344,7 +2351,7 @@ function fcMonthOptionsHtml(selected) {
 }
 function fcItemRowHtml(model, qty) {
   return '<div class="item-row fc-item-row" style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid rgba(127,127,127,.15)">' +
-    '<input type="text" class="fc-it-model" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem">' +
+    '<input type="text" class="fc-it-model" list="' + (window._fcModelDatalistId || '') + '" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem" autocomplete="off">' +
     '<input type="number" class="fc-it-qty" min="1" value="' + (Number(qty) || 1) + '" style="width:56px;font-size:.78rem">' +
     '<button type="button" class="btn bsm bd" onclick="this.closest(\'.fc-item-row\').remove()" title="ลบ">✕</button>' +
     '</div>';
@@ -2359,7 +2366,7 @@ function fcRow(i, fn) {
     '<input type="text" inputmode="decimal" class="js-money" id="fc_a_' + i + '" value="' + nmI(fn.amount || '') + '" placeholder="มูลค่า (฿) — ไม่บังคับ" style="flex:1"></div>' +
     '<div id="fc_items_' + i + '" style="margin-top:5px">' + itemsHtml + '</div>' +
     '<div style="display:flex;gap:4px;margin-top:4px">' +
-    '<input type="text" id="fc_newmodel_' + i + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem">' +
+    '<input type="text" id="fc_newmodel_' + i + '" list="' + (window._fcModelDatalistId || '') + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem" autocomplete="off">' +
     '<input type="number" id="fc_newqty_' + i + '" min="1" value="1" style="width:56px;font-size:.78rem">' +
     '<button type="button" class="btn bsm bp" onclick="fcAddItem(' + i + ')">➕</button>' +
     '</div></div>';
