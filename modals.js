@@ -1460,7 +1460,14 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
     '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
     '<div class="form-section">📦 Forecast QTY</div><div id="fv_fcs">';
-  var fcs = v.forecastNotes || [{month: '', amount: '', items: ''}];
+  // Visit ใหม่ (ไม่มี eid) → ดึง Forecast เดือนที่ยังไม่ผ่านจาก Visit ก่อนหน้าของ dealer นี้มาให้แก้ต่อ แทนที่จะ
+  // เริ่มกรอกใหม่จากศูนย์ทุกครั้ง (เช่น เดือนก่อน forecast ก.ย.+ต.ค.ไว้ พอมา Visit จริงเดือน ต.ค. ก็ควรเห็น ต.ค.
+  // ที่เคยประเมินไว้ ปรับเพิ่ม/ลดได้เลย) — ดูรายละเอียดที่ visitCarryForecast() ใน utils.js
+  var fcs = v.forecastNotes;
+  if (!fcs) {
+    var carried = (!eid && existDealer && typeof visitCarryForecast === 'function') ? visitCarryForecast(existDealer) : null;
+    fcs = carried ? carried.items.map(function(f) { return Object.assign({}, f, { _carried: carried.fromDate }); }) : [{month: '', amount: '', items: []}];
+  }
   for (var i = 0; i < fcs.length; i++) html += fcRow(i, fcs[i]);
   html += '</div><button type="button" class="btn bsm bo" onclick="addFcRow()">➕ เพิ่มเดือน</button>';
   html += '<div class="form-section">💡 Feedback</div><div id="fv_fbs">';
@@ -1852,11 +1859,63 @@ pipes.sort(function(a, b) {
     html += '<div class="fg"><label style="font-size:.6rem">หมายเหตุ / Update</label><input type="text" id="pu_note_' + p.id + '" value="' + sanitize(existing ? existing.note : '') + '" placeholder="เช่น ลูกค้าอนุมัติ Spec แล้ว..."></div>';
     html += '</div>';
     html += '<div style="font-size:.58rem;color:var(--text2);margin-top:2px">💡 ข้อมูลจะ sync ไปที่ Pipeline Log อัตโนมัติเมื่อ Save Visit</div>';
+
+    // แก้ไขรายการสินค้า/จำนวน — พับเก็บโดย default กันฟอร์มรก เปิดเฉพาะตอนมีการเปลี่ยนจำนวน/รายการจริงระหว่าง visit
+    html += '<div class="items-toggle" id="pu_toggle_' + p.id + '" onclick="puToggleItems(\'' + p.id + '\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 0 2px;border-top:1px dashed var(--border);margin-top:6px">';
+    html += '<span style="font-size:.68rem;font-weight:700" id="pu_toggle_label_' + p.id + '">📦 แก้ไขรายการสินค้า (' + items.length + ' รายการ)</span>';
+    html += '<span style="font-size:.62rem;color:var(--text2)" id="pu_toggle_chev_' + p.id + '">▸</span>';
     html += '</div>';
-    
+    html += '<div id="pu_itemswrap_' + p.id + '" style="display:none;margin-top:4px">';
+    html += '<div id="pu_itemslist_' + p.id + '">' + items.map(function(it) { return puItemRowHtml(it.model, it.qty); }).join('') + '</div>';
+    html += '<div style="display:flex;gap:4px;margin-top:4px">';
+    html += '<input type="text" id="pu_newmodel_' + p.id + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem">';
+    html += '<input type="number" id="pu_newqty_' + p.id + '" min="1" value="1" style="width:56px;font-size:.78rem">';
+    html += '<button type="button" class="btn bsm bp" onclick="puAddItem(\'' + p.id + '\')">➕</button>';
+    html += '</div>';
+    html += '<div style="font-size:.58rem;color:var(--text2);margin-top:2px">แก้ตรงนี้แล้วบันทึก Visit จะอัพเดตรายการสินค้าของโครงการให้ตรง พร้อมบันทึกการเปลี่ยนแปลงลง Pipeline Log</div>';
+    html += '</div>';
+
+    html += '</div>';
+
     html += '</div>';
   }
   return html;
+}
+
+// รายการสินค้าในการ์ด "✏️ Update โครงการนี้" — เก็บ state ที่ DOM ตรงๆ (แถวละ .pu-item-row) เหมือน pattern
+// fc-item-row ของ Forecast QTY ด้านล่าง กัน rebuild ทั้งฟอร์มแล้วข้อมูลอื่นที่พิมพ์ไว้หาย
+function puItemRowHtml(model, qty) {
+  return '<div class="item-row pu-item-row" style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid rgba(127,127,127,.15)">' +
+    '<input type="text" class="pu-it-model" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem">' +
+    '<input type="number" class="pu-it-qty" min="1" value="' + (Number(qty) || 1) + '" style="width:56px;font-size:.78rem">' +
+    '<button type="button" class="btn bsm bd" onclick="this.closest(\'.pu-item-row\').remove()" title="ลบ">✕</button>' +
+    '</div>';
+}
+function puToggleItems(pipeId) {
+  var wrap = document.getElementById('pu_itemswrap_' + pipeId);
+  var chev = document.getElementById('pu_toggle_chev_' + pipeId);
+  if (!wrap) return;
+  var open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▸' : '▾';
+}
+function puAddItem(pipeId) {
+  var modelEl = document.getElementById('pu_newmodel_' + pipeId);
+  var qtyEl = document.getElementById('pu_newqty_' + pipeId);
+  var model = (modelEl.value || '').trim();
+  if (!model) { modelEl.focus(); return; }
+  var wrap = document.getElementById('pu_itemslist_' + pipeId);
+  if (wrap) wrap.insertAdjacentHTML('beforeend', puItemRowHtml(model, qtyEl.value));
+  modelEl.value = ''; qtyEl.value = '1'; modelEl.focus();
+  var label = document.getElementById('pu_toggle_label_' + pipeId);
+  if (label) label.textContent = '📦 แก้ไขรายการสินค้า (' + wrap.children.length + ' รายการ)';
+}
+function puCollectItems(pipeId) {
+  var wrap = document.getElementById('pu_itemslist_' + pipeId);
+  if (!wrap) return null; // picker ไม่ได้ render (dealer ยังไม่ถูกเลือก ฯลฯ) — แยกจาก "เปิดแล้วแต่ไม่มีรายการ" ([])
+  return Array.prototype.map.call(wrap.querySelectorAll('.pu-item-row'), function(row) {
+    return { model: row.querySelector('.pu-it-model').value.trim(), qty: Number(row.querySelector('.pu-it-qty').value) || 1 };
+  }).filter(function(it) { return it.model; });
 }
 
 // ⚠️ เคยชื่อ togglePipeSelect ซ้ำกับฟังก์ชันเลือกหลายรายการในตาราง Pipeline (views-pipeline.js) คนละ
@@ -1973,8 +2032,8 @@ function _visitDraftSnapshot() {
   for (var i = 0; i < fcCnt; i++) {
     var m = (document.getElementById('fc_m_' + i) || {}).value || '';
     var a = (document.getElementById('fc_a_' + i) || {}).value || '';
-    var it = (document.getElementById('fc_i_' + i) || {}).value || '';
-    if (m.trim() || a || it.trim()) forecastNotes.push({ month: m.trim(), amount: parseNum(a), items: it.trim() });
+    var fcItems = (typeof fcCollectItems === 'function') ? fcCollectItems(i) : [];
+    if (m.trim() || a || fcItems.length) forecastNotes.push({ month: m.trim(), amount: parseNum(a), items: fcItems });
   }
 
   var feedbackItems = [];
@@ -2056,8 +2115,56 @@ function _visitOfferDraftRestore() {
 }
 
 // Forecast & Feedback rows
+// รายการสินค้าต่อเดือน (model+qty แบบมีโครงสร้าง เหมือน Forecast ในหน้า client-view — เดิมเป็น textarea
+// อิสระ เทียบ/รวมยอดข้ามเดือนไม่ได้จริง) — เก็บ state ไว้ที่ DOM ตรงๆ (แถวละ .fc-item-row) ไม่ใช้ array แยก
+// ต่างหาก ตาม pattern เดิมของฟอร์มนี้ (fcRow/fbRow ก็อ่านค่าจาก DOM ตอน save เหมือนกัน)
+function fcMonthOptionsHtml(selected) {
+  var h = '<option value="">-- เลือกเดือน --</option>';
+  for (var off = -1; off <= 8; off++) {
+    var key = fcMonthKey(off);
+    h += '<option value="' + key + '"' + (key === selected ? ' selected' : '') + '>' + fcMonthLabel(key) + '</option>';
+  }
+  // เผื่อ carry-over หรือ Visit เก่ามาจากเดือนที่ไม่อยู่ในช่วง -1..+8 เดือนนี้ (ไม่ควรเกิดปกติ แต่กันข้อมูลหาย)
+  if (selected && h.indexOf('value="' + selected + '"') === -1) h += '<option value="' + selected + '" selected>' + fcMonthLabel(selected) + '</option>';
+  return h;
+}
+function fcItemRowHtml(model, qty) {
+  return '<div class="item-row fc-item-row" style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid rgba(127,127,127,.15)">' +
+    '<input type="text" class="fc-it-model" value="' + sanitize(model || '') + '" placeholder="ชื่อสินค้า" style="flex:1;font-size:.78rem">' +
+    '<input type="number" class="fc-it-qty" min="1" value="' + (Number(qty) || 1) + '" style="width:56px;font-size:.78rem">' +
+    '<button type="button" class="btn bsm bd" onclick="this.closest(\'.fc-item-row\').remove()" title="ลบ">✕</button>' +
+    '</div>';
+}
 function fcRow(i, fn) {
-  return '<div class="fr" style="margin-bottom:4px;padding:5px;background:#0f172a;border:1px solid #334155;border-radius:6px"><input type="text" id="fc_m_' + i + '" value="' + sanitize(fn.month || '') + '" placeholder="เดือน"><input type="text" inputmode="decimal" class="js-money" id="fc_a_' + i + '" value="' + nmI(fn.amount || '') + '" placeholder="มูลค่า (฿)"><textarea id="fc_i_' + i + '" rows="2" style="margin-top:3px;grid-column:1/-1" placeholder="รายการสินค้า...">' + sanitize(fn.items || '') + '</textarea></div>';
+  fn = fn || {};
+  var items = Array.isArray(fn.items) ? fn.items : (fn.items ? [{model: fn.items, qty: 1}] : []); // legacy string → 1 แถว กันข้อมูลเก่าหาย
+  var itemsHtml = items.map(function(it) { return fcItemRowHtml(it.model, it.qty); }).join('');
+  return '<div style="margin-bottom:6px;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:8px">' +
+    (fn._carried ? '<div style="font-size:.62rem;color:#60a5fa;margin-bottom:4px">📥 ดึงมาจาก Visit ' + fDShort(fn._carried) + ' — แก้ไข/ปรับเพิ่มลดได้เลย</div>' : '') +
+    '<div class="fr"><select id="fc_m_' + i + '" style="flex:1">' + fcMonthOptionsHtml(fn.month || '') + '</select>' +
+    '<input type="text" inputmode="decimal" class="js-money" id="fc_a_' + i + '" value="' + nmI(fn.amount || '') + '" placeholder="มูลค่า (฿) — ไม่บังคับ" style="flex:1"></div>' +
+    '<div id="fc_items_' + i + '" style="margin-top:5px">' + itemsHtml + '</div>' +
+    '<div style="display:flex;gap:4px;margin-top:4px">' +
+    '<input type="text" id="fc_newmodel_' + i + '" placeholder="พิมพ์ชื่อสินค้า..." style="flex:1;font-size:.78rem">' +
+    '<input type="number" id="fc_newqty_' + i + '" min="1" value="1" style="width:56px;font-size:.78rem">' +
+    '<button type="button" class="btn bsm bp" onclick="fcAddItem(' + i + ')">➕</button>' +
+    '</div></div>';
+}
+function fcAddItem(i) {
+  var modelEl = document.getElementById('fc_newmodel_' + i);
+  var qtyEl = document.getElementById('fc_newqty_' + i);
+  var model = (modelEl.value || '').trim();
+  if (!model) { modelEl.focus(); return; }
+  var wrap = document.getElementById('fc_items_' + i);
+  if (wrap) wrap.insertAdjacentHTML('beforeend', fcItemRowHtml(model, qtyEl.value));
+  modelEl.value = ''; qtyEl.value = '1'; modelEl.focus();
+}
+function fcCollectItems(i) {
+  var wrap = document.getElementById('fc_items_' + i);
+  if (!wrap) return [];
+  return Array.prototype.map.call(wrap.querySelectorAll('.fc-item-row'), function(row) {
+    return { model: row.querySelector('.fc-it-model').value.trim(), qty: Number(row.querySelector('.fc-it-qty').value) || 1 };
+  }).filter(function(it) { return it.model; });
 }
 function addFcRow() { var c = document.getElementById('fv_fcs'); if (c) c.insertAdjacentHTML('beforeend', fcRow(c.children.length, {})); }
 function fbRow(i, f) { return '<div style="margin-bottom:3px"><input type="text" id="fb_' + i + '" value="' + sanitize(f || '') + '" placeholder="Feedback ' + (i + 1) + '..."></div>'; }
@@ -2143,7 +2250,8 @@ function saveVisit(dealerId, eid) {
   var pipeChks = document.querySelectorAll('.pipe_chk:checked');
   for (var i = 0; i < pipeChks.length; i++) {
     var pid = pipeChks[i].value;
-    pipelineUpdates.push({pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || ''});
+    var puItems = puCollectItems(pid); // ช่องรายการ render ไว้เสมอ (แค่ซ่อนถ้ายังไม่กดเปิด) เลยอ่านค่าปัจจุบันได้ตรงๆ — ถ้าไม่แตะเลยค่าจะเท่าของเดิมพอดี ไม่เกิด diff ปลอมตอน save
+    pipelineUpdates.push({pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || '', items: puItems});
   }
 
   // Forecast
@@ -2152,8 +2260,8 @@ function saveVisit(dealerId, eid) {
   for (var i = 0; i < fcCnt; i++) {
     var m = (document.getElementById('fc_m_' + i) || {}).value || '';
     var a = (document.getElementById('fc_a_' + i) || {}).value || '';
-    var it = (document.getElementById('fc_i_' + i) || {}).value || '';
-    if (m.trim() || a || it.trim()) forecastNotes.push({month: m.trim(), amount: parseNum(a), items: it.trim()});
+    var fcItems = fcCollectItems(i);
+    if (m.trim() || a || fcItems.length) forecastNotes.push({month: m.trim(), amount: parseNum(a), items: fcItems});
   }
 
   // Feedback
@@ -2207,7 +2315,25 @@ function saveVisit(dealerId, eid) {
     if (pu.pipeId) {
       var oldPipe = ST.getOne('pipeline', pu.pipeId);
       if (pu.newStatus && oldPipe && pu.newStatus !== oldPipe.status) ST.update('pipeline', pu.pipeId, {status: pu.newStatus});
-      ST.add('pipeLog', {pipeId: pu.pipeId, type: 'visit', content: '🤝 ' + fDShort(data.date) + ' Visit: ' + (pu.note || 'อัพเดตจาก Visit'), date: data.date + 'T00:00:00', visitId: visitObj.id});
+      // แก้ไขรายการสินค้า/จำนวนจาก Visit — เทียบกับของเดิมก่อน sync เข้า pipeline.items จริง (ตั้ง model/modelQty
+      // legacy field คู่กันด้วยเผื่อจุดอื่นยังอ่านจากฟิลด์เก่า ดู getPipeItems() ใน views-pipeline.js) แล้ว log ว่า
+      // เปลี่ยนอะไรไป ไม่ใช่แค่ "อัพเดตจาก Visit" เฉยๆ กันไม่รู้ว่าจริงๆ แก้อะไรตอนย้อนดู Timeline ทีหลัง
+      var itemsDiff = '';
+      if (oldPipe && Array.isArray(pu.items)) {
+        var oldItems = getPipeItems(oldPipe);
+        var oldKey = JSON.stringify(oldItems.map(function(it) { return [it.model, Number(it.qty) || 1]; }));
+        var newKey = JSON.stringify(pu.items.map(function(it) { return [it.model, Number(it.qty) || 1]; }));
+        if (oldKey !== newKey) {
+          var totalQty = pu.items.reduce(function(s, it) { return s + (Number(it.qty) || 1); }, 0);
+          ST.update('pipeline', pu.pipeId, { items: pu.items, model: pu.items.length ? pu.items[0].model : '', modelQty: totalQty });
+          itemsDiff = pu.items.length
+            ? pu.items.map(function(it) { return it.model + ' x' + (Number(it.qty) || 1); }).join(', ')
+            : '(ลบรายการสินค้าทั้งหมด)';
+        }
+      }
+      var logContent = '🤝 ' + fDShort(data.date) + ' Visit: ' + (pu.note || 'อัพเดตจาก Visit');
+      if (itemsDiff) logContent += ' — 📦 แก้ไขรายการสินค้าเป็น: ' + itemsDiff;
+      ST.add('pipeLog', {pipeId: pu.pipeId, type: 'visit', content: logContent, date: data.date + 'T00:00:00', visitId: visitObj.id});
     }
   });
 

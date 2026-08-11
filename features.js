@@ -5584,14 +5584,14 @@ function generateVisitReportEmail() {
 
   if (visit.forecastNotes && visit.forecastNotes.length) {
     var hasFc = false;
-    visit.forecastNotes.forEach(function(fn) { if (fn.month || fn.amount || fn.items) hasFc = true; });
+    visit.forecastNotes.forEach(function(fn) { if (fn.month || fn.amount || fcHasItems(fn)) hasFc = true; });
     if (hasFc) {
       body += '📦 Forecast:\n';
       visit.forecastNotes.forEach(function(fn) {
-        if (!fn.month && !fn.amount && !fn.items) return;
-        body += '• ' + (fn.month || '-');
+        if (!fn.month && !fn.amount && !fcHasItems(fn)) return;
+        body += '• ' + (typeof fcMonthLabel === 'function' ? fcMonthLabel(fn.month) : (fn.month || '-'));
         if (fn.amount) body += ' — ฿' + fmtMoney(fn.amount);
-        if (fn.items) body += ' — ' + fn.items;
+        if (fcHasItems(fn)) body += ' — ' + fcItemsText(fn);
         body += '\n';
       });
       body += '\n';

@@ -660,6 +660,42 @@ function getCurQuarter() {
 }
 
 // ================================================================
+// VISIT FORECAST QTY — เดือน key 'YYYY-MM' + รายการสินค้าแบบ {model,qty}[] (utils.js เพราะ
+// features.js/views-dealer.js/views-visit.js/modals.js ใช้ร่วมกันหมด)
+// ================================================================
+var THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function fcMonthKey(offset) {
+  var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + (offset || 0));
+  return d.getFullYear() + '-' + (d.getMonth() + 1 < 10 ? '0' : '') + (d.getMonth() + 1);
+}
+function fcMonthLabel(key) {
+  var parts = (key || '').split('-');
+  if (parts.length !== 2) return key || '';
+  var mi = parseInt(parts[1], 10) - 1;
+  return (THAI_MONTHS_SHORT[mi] || '?') + ' ' + (parseInt(parts[0], 10) + 543);
+}
+// items เดิมเคยเป็น string อิสระ (ก่อนเปลี่ยนเป็นรายการ model+qty แบบมีโครงสร้าง) — เก็บ backward-compat
+// ไว้เผื่อ Visit เก่าที่บันทึกไปแล้วยังมีข้อมูลเป็น string อยู่
+function fcHasItems(fn) { return Array.isArray(fn.items) ? fn.items.length > 0 : !!fn.items; }
+function fcItemsText(fn) {
+  if (Array.isArray(fn.items)) return fn.items.map(function(it) { return (it.model || '') + (Number(it.qty) > 1 ? ' x' + it.qty : ''); }).join(', ');
+  return fn.items || '';
+}
+// ดึง Forecast ที่เคย "ยังไม่ถึงเดือน" ไว้จาก Visit ล่าสุดของ Dealer นี้ มาเป็นค่าเริ่มต้นให้ Visit ใหม่ —
+// กันต้องพิมพ์ใหม่ทุกครั้งที่ไป Visit ต่อเนื่อง เช่น เดือนนี้ forecast ก.ย.+ต.ค. ไว้ พอเดือนหน้าไป Visit จริง
+// (ต.ค.) ก็ควรเห็น forecast ต.ค. ที่เคยประเมินไว้มาปรับเพิ่ม/ลดต่อ ไม่ใช่กรอกใหม่จากศูนย์
+function visitCarryForecast(dealerId) {
+  if (!dealerId || typeof ST === 'undefined') return null;
+  var curKey = fcMonthKey(0);
+  var visits = ST.visitsByDealer(dealerId);
+  for (var i = 0; i < visits.length; i++) {
+    var fcs = (visits[i].forecastNotes || []).filter(function(f) { return f.month && f.month >= curKey; });
+    if (fcs.length) return { fromDate: visits[i].date, items: fcs };
+  }
+  return null;
+}
+
+// ================================================================
 // DATE FORMATTING
 // ================================================================
 function fD(iso) {

@@ -141,14 +141,15 @@ function rVisitDet(el) {
       <div style="display:flex;justify-content:space-between"><b>${pipe?sanitize(pipe.projectName):sanitize(pu.name||'')}</b>${pipe?pipeTag(pipe.status):''}</div>
       <div style="font-size:.72rem;color:#94a3b8">${pu.model?'Model: '+pu.model:''} ${pu.newStatus?'→ '+getPipeName(pu.newStatus):''}</div>
       ${pu.note?`<div style="font-size:.72rem;color:#94a3b8">${sanitize(pu.note)}</div>`:''}
+      ${Array.isArray(pu.items)&&pu.items.length?`<div style="font-size:.7rem;color:#94a3b8;margin-top:2px">📦 ${pu.items.map(it=>sanitize(it.model+(Number(it.qty)>1?' x'+it.qty:''))).join(', ')}</div>`:''}
     </div>`;
   }).join('')}</div>`:''}
 
   <!-- Forecast -->
   ${v.forecastNotes?.length?`<div class="card"><h2>📦 Forecast QTY</h2>
   ${v.forecastNotes.map(fn => `<div class="visit-sub">
-    <div style="display:flex;justify-content:space-between"><b>${sanitize(fn.month||'')}</b><span style="color:#22c55e">${fn.amount?fmtMoney(fn.amount)+' ฿':''}</span></div>
-    ${fn.items?`<div style="font-size:.72rem;white-space:pre-wrap;color:#94a3b8">${sanitize(fn.items)}</div>`:''}
+    <div style="display:flex;justify-content:space-between"><b>${sanitize(typeof fcMonthLabel==='function'?fcMonthLabel(fn.month):(fn.month||''))}</b><span style="color:#22c55e">${fn.amount?fmtMoney(fn.amount)+' ฿':''}</span></div>
+    ${fcHasItems(fn)?`<div style="font-size:.72rem;white-space:pre-wrap;color:#94a3b8">${sanitize(fcItemsText(fn))}</div>`:''}
   </div>`).join('')}</div>`:''}
 
   <!-- Feedback -->

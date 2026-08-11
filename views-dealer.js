@@ -3038,14 +3038,14 @@ function buildVisitUpdateText(v) {
 
   if (v.forecastNotes && v.forecastNotes.length) {
     var hasFc = false;
-    v.forecastNotes.forEach(function(fn) { if (fn.month || fn.amount || fn.items) hasFc = true; });
+    v.forecastNotes.forEach(function(fn) { if (fn.month || fn.amount || fcHasItems(fn)) hasFc = true; });
     if (hasFc) {
       txt += '📦 Forecast:\n';
       v.forecastNotes.forEach(function(fn) {
-        if (!fn.month && !fn.amount && !fn.items) return;
-        txt += '• ' + (fn.month || '-');
+        if (!fn.month && !fn.amount && !fcHasItems(fn)) return;
+        txt += '• ' + (typeof fcMonthLabel === 'function' ? fcMonthLabel(fn.month) : (fn.month || '-'));
         if (fn.amount) txt += ' — ฿' + fmtMoney(fn.amount);
-        if (fn.items) txt += ' — ' + fn.items;
+        if (fcHasItems(fn)) txt += ' — ' + fcItemsText(fn);
         txt += '\n';
       });
       txt += '\n';
