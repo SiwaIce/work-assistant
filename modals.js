@@ -1754,9 +1754,28 @@ pipes.sort(function(a, b) {
   if (ia !== ib) return ia - ib;
   return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0);
 });
+  window._psiSearchQ = ''; window._psiStatusFilter = {};
   var html = '';
+  if (pipes.length > 1) {
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">';
+    if (pipes.length > 4) {
+      html += '<input type="text" placeholder="🔍 ค้นหา Row No. / ชื่อโครงการ..." autocomplete="off" style="flex:1;min-width:140px;margin:0" oninput="pipePickerFilterInput(this.value)">';
+    }
+    html += '<select style="width:auto;font-size:11px;padding:4px" onchange="pipePickerSort(this.value)">' +
+      '<option value="default">เรียง: สถานะ + ยอด</option>' +
+      '<option value="rowno">เรียง: Row No.</option>' +
+      '<option value="amt_desc">เรียง: ยอด Forecast (มาก→น้อย)</option>' +
+      '<option value="bid_asc">เรียง: Bidding Date (ใกล้→ไกล)</option>' +
+      '</select>';
+    html += '</div>';
+  }
   if (pipes.length > 4) {
-    html += '<input type="text" placeholder="🔍 ค้นหา Row No. / ชื่อโครงการ..." autocomplete="off" style="margin-bottom:6px" oninput="pipePickerFilterInput(this.value)">';
+    var statusesPresent = [];
+    pipes.forEach(function(p) { if (statusesPresent.indexOf(p.status) === -1) statusesPresent.push(p.status); });
+    html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px" id="psiStatusChips">' +
+      statusesPresent.map(function(st) {
+        return '<span class="psi-status-chip" data-status="' + sanitize(st) + '" onclick="pipePickerToggleStatusFilter(\'' + st + '\')" style="cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);color:var(--text2)">' + sanitize(getPipeName(st) || st) + '</span>';
+      }).join('') + '</div>';
   }
   for (var i = 0; i < pipes.length; i++) {
     var p = pipes[i];
@@ -1784,7 +1803,8 @@ pipes.sort(function(a, b) {
     var pendingActions = getPipeActions().filter(function(a) { return a.pipeId === p.id && a.status === 'pending'; });
 
     var pSearchKey = ((p.rowNo || '') + ' ' + (p.projectName || '')).toLowerCase();
-    html += '<div class="pipe-select-item' + (isSel ? ' selected' : '') + '" id="psi_' + p.id + '" data-search="' + sanitize(pSearchKey) + '">';
+    html += '<div class="pipe-select-item' + (isSel ? ' selected' : '') + '" id="psi_' + p.id + '" data-search="' + sanitize(pSearchKey) + '" data-status="' + sanitize(p.status || '') + '"' +
+      ' data-rowno="' + sanitize((p.rowNo || '').toLowerCase()) + '" data-amt="' + amt + '" data-bid="' + (p.biddingDate || '') + '" data-order="' + i + '">';
 
     // Header (clickable)
     html += '<div class="pipe-select-header" onclick="togglePipePickerSelect(\'' + p.id + '\')">';
@@ -1842,12 +1862,52 @@ pipes.sort(function(a, b) {
 // ⚠️ เคยชื่อ togglePipeSelect ซ้ำกับฟังก์ชันเลือกหลายรายการในตาราง Pipeline (views-pipeline.js) คนละ
 // feature กันเลย — โหลดทีหลังเลยบัง ทำให้ modal เลือกโครงการนี้กดแล้วไม่ทำงาน เปลี่ยนชื่อกันชนกัน
 // (พบ 2026-07-19 ตอนไล่ตรวจฟังก์ชันชื่อซ้ำ)
+// ค้นหา + filter สถานะ ทำงานร่วมกัน (AND) — เก็บ state ไว้ที่ window._psiSearchQ/_psiStatusFilter
+// (ตั้งค่าเริ่มต้นตอน renderPipelineSelectEnhanced) กันโครงการเยอะแล้วหายาก ดูยาก
 function pipePickerFilterInput(v) {
-  var q = (v || '').trim().toLowerCase();
+  window._psiSearchQ = (v || '').trim().toLowerCase();
+  _psiApplyFilters();
+}
+function pipePickerToggleStatusFilter(status) {
+  window._psiStatusFilter = window._psiStatusFilter || {};
+  if (window._psiStatusFilter[status]) delete window._psiStatusFilter[status];
+  else window._psiStatusFilter[status] = true;
+  var chip = document.querySelector('#psiStatusChips .psi-status-chip[data-status="' + status + '"]');
+  if (chip) {
+    var on = !!window._psiStatusFilter[status];
+    chip.style.background = on ? 'var(--accent)' : 'var(--bg2)';
+    chip.style.color = on ? '#fff' : 'var(--text2)';
+  }
+  _psiApplyFilters();
+}
+function _psiApplyFilters() {
+  var q = window._psiSearchQ || '';
+  var stFilter = window._psiStatusFilter || {};
+  var hasStFilter = Object.keys(stFilter).length > 0;
   document.querySelectorAll('.pipe-select-item').forEach(function(el) {
-    var hit = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
-    el.style.display = hit ? '' : 'none';
+    var hitSearch = !q || (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+    var hitStatus = !hasStFilter || stFilter[el.getAttribute('data-status')];
+    el.style.display = (hitSearch && hitStatus) ? '' : 'none';
   });
+}
+// เรียงลำดับการ์ดโครงการในตัวเลือก — จัดเรียง DOM node ที่มีอยู่แล้วตรงๆ (ไม่ rebuild HTML ใหม่) กัน
+// ค่าที่พิมพ์ไว้ในช่อง "✏️ Update โครงการนี้" ของโครงการที่ติ๊กเลือกอยู่หายระหว่างเปลี่ยนการเรียง
+function pipePickerSort(mode) {
+  var container = document.getElementById('fv_pipes');
+  if (!container) return;
+  var items = Array.prototype.slice.call(container.querySelectorAll('.pipe-select-item'));
+  items.sort(function(a, b) {
+    if (mode === 'rowno') return (a.getAttribute('data-rowno') || '').localeCompare(b.getAttribute('data-rowno') || '');
+    if (mode === 'amt_desc') return (Number(b.getAttribute('data-amt')) || 0) - (Number(a.getAttribute('data-amt')) || 0);
+    if (mode === 'bid_asc') {
+      var da = a.getAttribute('data-bid') || '', db = b.getAttribute('data-bid') || '';
+      if (!da && !db) return 0;
+      if (!da) return 1; if (!db) return -1;
+      return da.localeCompare(db);
+    }
+    return Number(a.getAttribute('data-order')) - Number(b.getAttribute('data-order')); // default = ลำดับเดิม (สถานะ + ยอด)
+  });
+  items.forEach(function(el) { container.appendChild(el); });
 }
 
 function _psiToggleFullDetail(pipeId) {
