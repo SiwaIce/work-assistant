@@ -4836,6 +4836,73 @@ function saveSisRevenue(dealerId, year) {
 }
 
 // ================================================================
+// SALES REP DASHBOARD — รวมยอด Dealer แต่ละคนเข้าเป็นภาพรวมรายเซล (จัดกลุ่มตาม d.saleName เดียวกับตัวกรอง
+// "เซลที่ดูแล" ในหน้า Dealers) เป้า = targetH1/targetH2 ที่ตั้งไว้ต่อ Dealer, ยอดจริง = ยอดขาย SIS ปีปัจจุบัน
+// (H1+H2 จาก getSisRevenueForYear — ตัวเดียวกับที่โชว์ในหน้า Dealer), Weighted Pipeline = จาก
+// mondayCompanyStats (POS-ถ่วงน้ำหนัก) ให้เห็นทั้งผลงานจริงและแนวโน้มที่กำลังจะมาในหน้าเดียว
+// ================================================================
+function rSalesRepDashboard(el) {
+  document.getElementById('pgT').textContent = '👤 Dashboard รายเซล';
+  var dealers = ST.getAll('dealers');
+  var curYear = new Date().getFullYear();
+  var cfg = getConfig();
+  var repsMap = {};
+  dealers.forEach(function(d) {
+    var name = d.saleName || DEALER_SALE_UNSET;
+    if (!repsMap[name]) repsMap[name] = { name: name, dealers: [], targetH1: 0, targetH2: 0, sisH1: 0, sisH2: 0, wonAmt: 0, weightedOpen: 0, openTotal: 0, activeCount: 0 };
+    var r = repsMap[name];
+    r.dealers.push(d);
+    r.targetH1 += Number(d.targetH1) || 0;
+    r.targetH2 += Number(d.targetH2) || 0;
+    var sis = getSisRevenueForYear(d, curYear);
+    r.sisH1 += sis.h1 || 0;
+    r.sisH2 += sis.h2 || 0;
+    var s = mondayCompanyStats(d.id, cfg);
+    r.wonAmt += (s.wonH1Project + s.wonH2Project);
+    r.weightedOpen += s.openPipelineWeighted;
+    r.openTotal += s.openPipelineTotal;
+    r.activeCount += s.activePipes.length;
+  });
+  var reps = Object.keys(repsMap).map(function(k) { return repsMap[k]; });
+  reps.sort(function(a, b) { return (b.sisH1 + b.sisH2) - (a.sisH1 + a.sisH2); });
+
+  var totalTarget = reps.reduce(function(s, r) { return s + r.targetH1 + r.targetH2; }, 0);
+  var totalActual = reps.reduce(function(s, r) { return s + r.sisH1 + r.sisH2; }, 0);
+  var totalWeighted = reps.reduce(function(s, r) { return s + r.weightedOpen; }, 0);
+  var totalPct = totalTarget ? Math.round(totalActual / totalTarget * 100) : 0;
+
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  h += '<div class="pg-head"><h2 style="margin:0">👤 Dashboard รายเซล</h2><div style="font-size:12px;color:var(--text2)">รวมยอด Dealer ตามเซลที่ดูแล — ยอดจริง = ยอดขาย SIS ปี ' + curYear + '</div></div>';
+  h += '<div class="sr" style="margin-bottom:14px">' +
+    '<div class="sc"><div class="sn c1">' + reps.length + '</div><div class="sl">เซล</div></div>' +
+    '<div class="sc"><div class="sn c2">฿' + fmtMoneyShort(totalActual) + '</div><div class="sl">ยอดขาย SIS รวม</div></div>' +
+    '<div class="sc"><div class="sn c3">฿' + fmtMoneyShort(totalTarget) + '</div><div class="sl">เป้ารวม</div></div>' +
+    '<div class="sc"><div class="sn" style="color:' + (totalPct >= 70 ? 'var(--good,#22c55e)' : totalPct >= 40 ? 'var(--warn,#f59e0b)' : 'var(--bad,#ef4444)') + '">' + totalPct + '%</div><div class="sl">Achieve รวม</div></div>' +
+    '<div class="sc"><div class="sn" style="color:var(--accent)">฿' + fmtMoneyShort(totalWeighted) + '</div><div class="sl">Weighted Pipeline</div></div>' +
+    '</div>';
+
+  h += '<div class="card"><h2>รายชื่อเซล</h2>';
+  reps.forEach(function(r) {
+    var target = r.targetH1 + r.targetH2;
+    var actual = r.sisH1 + r.sisH2;
+    var pct = target ? Math.round(actual / target * 100) : null;
+    var pctColor = pct === null ? 'var(--text3)' : pct >= 70 ? 'var(--good,#22c55e)' : pct >= 40 ? 'var(--warn,#f59e0b)' : 'var(--bad,#ef4444)';
+    var initials = (r.name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase() || '?';
+    h += '<div class="li" style="cursor:pointer;display:flex;align-items:center;gap:10px" onclick="clearDealerSaleFilter();toggleDealerSaleFilter(\'' + sanitize(r.name).replace(/'/g, "\\'") + '\');go(\'dealers\')">' +
+      '<div style="width:34px;height:34px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent);flex-shrink:0">' + sanitize(initials) + '</div>' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(r.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + r.dealers.length + ' Dealer · ' + r.activeCount + ' โครงการเปิดอยู่ · Weighted ฿' + fmtMoneyShort(r.weightedOpen) + '</div></div>' +
+      '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:13px">฿' + fmtMoneyShort(actual) + (target ? ' / ฿' + fmtMoneyShort(target) : '') + '</div>' +
+      '<div style="font-size:11px;font-weight:700;color:' + pctColor + '">' + (pct === null ? 'ยังไม่ตั้งเป้า' : pct + '%') + '</div></div>' +
+      '</div>';
+  });
+  if (!reps.length) h += '<div class="empty"><p>ยังไม่มี Dealer</p></div>';
+  h += '</div>';
+
+  el.innerHTML = h;
+}
+
+// ================================================================
 // PART: CUSTOM DEMO REQUIREMENTS
 // ================================================================
 

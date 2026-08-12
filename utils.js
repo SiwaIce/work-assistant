@@ -742,12 +742,61 @@ function computeSuggestedPOS(p, cfg, latestLogDate) {
   total = Math.max(0, Math.min(100, Math.round(total)));
   return { score: total, reasons: reasons };
 }
+// เก็บประวัติ POS ทุกครั้งที่มีการเซ็ต/เปลี่ยนค่าจริง (ไม่ใช่แค่ suggested ที่คำนวณสดแล้วไม่ได้บันทึก) — ใช้เป็น
+// "ค่าที่เชื่อ ณ เวลานั้น" สำหรับเทียบกับผลจริงตอนปิดโครงการ (ดู computePosCalibration) เรียกจากทุกจุดที่เขียน
+// projectPOS จริง: _finishSavePipeline (modals.js), apply-suggested-POS ใน Visit form (modals.js), setPipePos
+// (views-pipeline.js) — ไม่ log จาก bulk import เพราะเป็นข้อมูลย้อนหลัง ไม่ใช่การรีวิวจริงตอนนั้น
+function appendPosHistory(existingPipe, newPos) {
+  var hist = (existingPipe && Array.isArray(existingPipe.posHistory)) ? existingPipe.posHistory.slice() : [];
+  var lastPos = hist.length ? hist[hist.length - 1].pos : (existingPipe ? (existingPipe.projectPOS || 0) : undefined);
+  if (lastPos !== newPos) {
+    hist.push({ date: _nw(), pos: newPos });
+    if (hist.length > 50) hist = hist.slice(hist.length - 50);
+  }
+  return hist;
+}
 // แปลง breakdown จาก computeSuggestedPOS() เป็นข้อความ copy ไปวางเป็น comment ใน Google Sheet ได้เลย
 function posReasonsText(result) {
   var lines = result.reasons.map(function(r) {
     return '• ' + r.label + ' → ' + (r.delta === null ? r.text : (r.delta >= 0 ? '+' : '') + r.delta + '%');
   });
   return '🎯 POS แนะนำ ' + result.score + '% — เหตุผล:\n' + lines.join('\n') + '\nรวม = ' + result.score + '%';
+}
+
+// ================================================================
+// POS CALIBRATION — เทียบ POS ที่ "เชื่อ ณ ตอนนั้น" (ค่าสุดท้ายใน posHistory ก่อนโครงการปิด) กับผลจริงว่า
+// Win กี่ % ของแต่ละช่วง — โครงการเก่าก่อนเริ่มเก็บ posHistory จะ fallback ไปใช้ projectPOS ปัจจุบันตรงๆ (คร่าวๆ
+// แต่ดีกว่าไม่มีข้อมูลเลย) ยิ่ง POS ช่วงไหนมี actualRate ใกล้ predictedMid มาก แปลว่า weight ที่ตั้งไว้แม่นดีแล้ว
+// ================================================================
+var POS_CAL_BUCKETS = [
+  { id: 'b0', min: 0,  max: 19,  label: '0-19%' },
+  { id: 'b1', min: 20, max: 39,  label: '20-39%' },
+  { id: 'b2', min: 40, max: 59,  label: '40-59%' },
+  { id: 'b3', min: 60, max: 79,  label: '60-79%' },
+  { id: 'b4', min: 80, max: 100, label: '80-100%' }
+];
+function _posLastKnownBeforeClose(p) {
+  if (Array.isArray(p.posHistory) && p.posHistory.length) return p.posHistory[p.posHistory.length - 1].pos;
+  return typeof p.projectPOS === 'number' ? p.projectPOS : 0;
+}
+function computePosCalibration() {
+  var closed = ST.getAll('pipeline').filter(function(p) { return pipeIsWon(p) || pipeIsLost(p); });
+  var buckets = POS_CAL_BUCKETS.map(function(b) {
+    return { id: b.id, min: b.min, max: b.max, label: b.label, predictedMid: Math.round((b.min + b.max) / 2), total: 0, won: 0, pipes: [] };
+  });
+  closed.forEach(function(p) {
+    var pos = _posLastKnownBeforeClose(p);
+    var bucket = buckets.filter(function(b) { return pos >= b.min && pos <= b.max; })[0];
+    if (!bucket) return;
+    bucket.total++;
+    if (pipeIsWon(p)) bucket.won++;
+    bucket.pipes.push(p);
+  });
+  buckets.forEach(function(b) { b.actualRate = b.total ? Math.round(b.won / b.total * 100) : null; });
+  var withData = buckets.filter(function(b) { return b.total > 0; });
+  var totalClosed = closed.length;
+  var totalWithHistory = closed.filter(function(p) { return Array.isArray(p.posHistory) && p.posHistory.length; }).length;
+  return { buckets: buckets, totalClosed: totalClosed, totalWithHistory: totalWithHistory, hasEnoughData: withData.length > 0 };
 }
 
 // ================================================================

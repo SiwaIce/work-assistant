@@ -1175,10 +1175,13 @@ function _finishSavePipeline(dealerId, eid) {
   if (!data.dealerId) return alert('เลือก Dealer');
 
   if (eid) {
+    var _oldPForPos = ST.getOne('pipeline', eid);
+    data.posHistory = appendPosHistory(_oldPForPos, data.projectPOS);
     ST.update('pipeline', eid, data);
     closeMForce();
     go('pipeDetail', {pipeId: eid});
   } else {
+    data.posHistory = appendPosHistory(null, data.projectPOS);
     var p = ST.add('pipeline', data);
     ST.add('pipeLog', {pipeId: p.id, type: 'note', content: 'ลงทะเบียนโครงการ', date: _nw()});
     closeMForce();
@@ -2596,7 +2599,7 @@ function saveVisit(dealerId, eid) {
         var pipeForPos = Object.assign({}, oldPipe, chkUpdates, { status: pu.newStatus || oldPipe.status });
         var suggested = computeSuggestedPOS(pipeForPos, cfg, ST.pipeLogsByPipe(pu.pipeId)[0] ? ST.pipeLogsByPipe(pu.pipeId)[0].date : null);
         if (suggested.score !== (oldPipe.projectPOS || 0)) {
-          ST.update('pipeline', pu.pipeId, { projectPOS: suggested.score });
+          ST.update('pipeline', pu.pipeId, { projectPOS: suggested.score, posHistory: appendPosHistory(oldPipe, suggested.score) });
           posDiff = 'POS ' + (oldPipe.projectPOS || 0) + '%→' + suggested.score + '% (ใช้ค่าแนะนำ)';
         }
       }

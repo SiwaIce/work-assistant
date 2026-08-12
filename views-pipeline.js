@@ -477,7 +477,8 @@ function togglePipePosPicker(pipeId) {
 }
 function setPipePos(pipeId, val) {
   val = Math.max(0, Math.min(100, parseInt(val) || 0));
-  ST.update('pipeline', pipeId, { projectPOS: val });
+  var oldP = ST.getOne('pipeline', pipeId);
+  ST.update('pipeline', pipeId, { projectPOS: val, posHistory: appendPosHistory(oldP, val) });
   toast('🎯 อัปเดต POS เป็น ' + val + '% แล้ว');
   render();
 }
@@ -2535,7 +2536,7 @@ function rMondayMeeting(el) {
 
   var h = '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">' +
     '<div><h2 style="margin:0">🗓️ ประชุมจันทร์ — สรุป Pipeline</h2><div style="font-size:12px;color:var(--text2)">ข้อมูล ณ ' + fD(_td()) + (cfg.saleName ? ' · ' + sanitize(cfg.saleName) : '') + '</div></div>' +
-    '<button class="btn bo" onclick="copyMondaySummary()">📋 คัดลอกสรุปทั้งหมด</button>' +
+    '<div style="display:flex;gap:6px"><button class="btn bo" onclick="go(\'posCalibration\')">🎯 POS Calibration</button><button class="btn bo" onclick="copyMondaySummary()">📋 คัดลอกสรุปทั้งหมด</button></div>' +
     '</div>';
 
   // Sticky quick-nav — ข้อมูลยาวเลื่อนหาลำบาก กดชิพกระโดดตรงไปแต่ละส่วนได้เลย ไม่ต้องเลื่อนเอง (top:50px กัน
@@ -2953,6 +2954,58 @@ function copyMondaySummary() {
     lines.push('🏢 ' + d.name + ' (' + s.activePipes.length + ' โครงการ, ฿' + fmtMoneyShort(s.openPipelineTotal) + ')');
   });
   copyText(lines.join('\n'), '📋 คัดลอกสรุปประชุมแล้ว');
+}
+
+// ================================================================
+// POS CALIBRATION — เพจแยก (go('posCalibration')) โชว์ผล computePosCalibration() เป็นแท่งเทียบ "ทำนาย" vs
+// "ผลจริง" ต่อช่วง POS — เป้าหมายคือช่วยตัดสินใจว่าน้ำหนัก posWeights (⚙️) ที่ตั้งไว้แม่นพอหรือยัง
+// ================================================================
+function rPosCalibration(el) {
+  document.getElementById('pgT').textContent = '🎯 POS Calibration';
+  var cal = computePosCalibration();
+  window._posCal = cal;
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  h += '<div class="card"><h2>🎯 POS Calibration — ทำนายแม่นแค่ไหน</h2>' +
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">เทียบ POS ที่บันทึกไว้ล่าสุดก่อนโครงการปิด กับผลจริงว่า Win กี่ % ของแต่ละช่วง — เช่นช่วง 60-79% ถ้าตั้งไว้แม่น ควรจะ Win จริงประมาณ 70% ถ้าห่างกันมาก ลองปรับน้ำหนักใน ⚙️ POS Weights ดู</div>' +
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">โครงการปิดแล้วทั้งหมด (Won/Lost): ' + cal.totalClosed + ' · มีประวัติ POS เก็บไว้จริง: ' + cal.totalWithHistory +
+    (cal.totalClosed > cal.totalWithHistory ? ' <span title="โครงการที่ปิดไปก่อนเริ่มเก็บ posHistory ใช้ POS ปัจจุบันแทนแบบคร่าวๆ">(ที่เหลือใช้ POS ปัจจุบันแทน ⓘ)</span>' : '') + '</div>';
+  if (!cal.hasEnoughData) {
+    h += '<div class="empty"><p>ยังไม่มีโครงการที่ปิด (Won/Lost) พอให้วิเคราะห์ — ต้องรอให้มีโครงการปิดจริงสักพักก่อนถึงจะเห็นผล</p></div></div>';
+    el.innerHTML = h;
+    return;
+  }
+  h += '<div style="display:flex;flex-direction:column;gap:10px">';
+  cal.buckets.forEach(function(b) {
+    if (!b.total) { h += '<div style="opacity:.4;font-size:12px;padding:6px 4px">' + b.label + ' — ไม่มีข้อมูล</div>'; return; }
+    var diff = b.actualRate - b.predictedMid;
+    var diffColor = Math.abs(diff) <= 15 ? 'var(--good,#22c55e)' : Math.abs(diff) <= 30 ? 'var(--warn,#f59e0b)' : 'var(--bad,#ef4444)';
+    var lowN = b.total < 5;
+    h += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px;cursor:pointer" onclick="showPosCalBucketM(\'' + b.id + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+      '<b style="font-size:13px">ทำนาย ' + b.label + ' <span style="color:var(--text2);font-weight:400">(กึ่งกลาง ' + b.predictedMid + '%)</span></b>' +
+      '<span style="font-size:11px;color:var(--text2)">' + b.total + ' โครงการ' + (lowN ? ' ⚠️ ตัวอย่างน้อย' : '') + '</span></div>' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+      '<div style="flex:1;height:10px;background:var(--bg2);border-radius:6px;overflow:hidden;position:relative">' +
+      '<div style="position:absolute;left:' + b.predictedMid + '%;top:-3px;width:2px;height:16px;background:var(--text3)"></div>' +
+      '<div style="height:100%;width:' + b.actualRate + '%;background:' + diffColor + '"></div>' +
+      '</div><b style="font-size:14px;color:' + diffColor + '">' + b.actualRate + '%</b></div>' +
+      '<div style="font-size:10.5px;color:var(--text2);margin-top:4px">Win จริง ' + b.won + '/' + b.total + ' · ห่างจากทำนาย ' + (diff >= 0 ? '+' : '') + diff + 'pt</div>' +
+      '</div>';
+  });
+  h += '</div></div>';
+  el.innerHTML = h;
+}
+function showPosCalBucketM(bucketId) {
+  var cal = window._posCal || computePosCalibration();
+  var b = cal.buckets.filter(function(x) { return x.id === bucketId; })[0];
+  if (!b) return;
+  var rows = '';
+  b.pipes.slice().sort(function(a, c) { return (Number(c.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); }).forEach(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var won = pipeIsWon(p);
+    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + _posLastKnownBeforeClose(p) + '% · ' + (won ? '✅ Won' : '❌ Lost') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+  });
+  openM('🎯 ' + b.label + ' — รายละเอียด', '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Win จริง ' + b.won + '/' + b.total + ' (' + b.actualRate + '%)</div>' + rows);
 }
 
 // ---- Drill-down modals (เลือกกลุ่ม POS / โครงการเงียบ / Dealer ยังไม่ได้ Visit) ----
