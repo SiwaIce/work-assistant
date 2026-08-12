@@ -1378,6 +1378,9 @@ function dealerInfoTab(d) {
               <button class="btn bsm bo" onclick="showEditSisRevenueModal('${d.id}')" style="padding: 2px 8px; font-size: 10px">✏️ แก้ไข / ดูปีอื่น</button>
               <span style="font-size: 10px; color: var(--text3)">${d.sisRevenueUpdatedAt ? 'อัพเดท ' + fD(d.sisRevenueUpdatedAt) : ''}</span>
             </div>
+            <div style="font-size: 10.5px; color: var(--text3); margin-top: 4px; display:flex; gap:10px; flex-wrap:wrap">
+              ${['q1','q2','q3','q4'].map(function(qk,i){ var v=getSisRevenueForYear(d,new Date().getFullYear())[qk]||0; return 'Q'+(i+1)+': '+fmtMoneyShort(v); }).join(' · ')}
+            </div>
             ${d.sisRevenueNote ? '<div style="font-size: 10px; color: var(--text3); margin-top: 4px">📝 ' + sanitize(d.sisRevenueNote) + '</div>' : ''}
           </div>
         </div>
@@ -4730,17 +4733,28 @@ function getDealerDemoItems(dealer) {
 // PART: SIS REVENUE MANAGEMENT
 // ================================================================
 
-// อ่านยอดขาย SIS (H1/H2) ของปีที่ระบุ — ปีที่ไม่เคยตั้งจะได้ 0 เสมอ (ไม่ทับข้อมูลปีก่อน)
-// ปีปัจจุบันที่ยังไม่มี sisRevenueByYear จะ fallback ไปอ่านฟิลด์เดิม (สมัยก่อนมีปีเดียว) ให้อัตโนมัติ
+// อ่านยอดขาย SIS (H1/H2 + Q1-Q4) ของปีที่ระบุ — ปีที่ไม่เคยตั้งจะได้ 0 เสมอ (ไม่ทับข้อมูลปีก่อน)
+// ปีปัจจุบันที่ยังไม่มี sisRevenueByYear จะ fallback ไปอ่านฟิลด์เดิม (สมัยก่อนมีปีเดียว ไม่มี Quarter) ให้อัตโนมัติ
 function getSisRevenueForYear(dealer, year) {
   year = String(year);
   if (dealer && dealer.sisRevenueByYear && dealer.sisRevenueByYear[year]) {
-    return dealer.sisRevenueByYear[year];
+    var r = dealer.sisRevenueByYear[year];
+    return { h1: r.h1 || 0, h2: r.h2 || 0, q1: r.q1 || 0, q2: r.q2 || 0, q3: r.q3 || 0, q4: r.q4 || 0, note: r.note, updatedAt: r.updatedAt };
   }
   if (dealer && year === String(new Date().getFullYear())) {
-    return { h1: dealer.sisRevenue || 0, h2: dealer.sisRevenueH2 || 0 };
+    return { h1: dealer.sisRevenue || 0, h2: dealer.sisRevenueH2 || 0, q1: 0, q2: 0, q3: 0, q4: 0 };
   }
-  return { h1: 0, h2: 0 };
+  return { h1: 0, h2: 0, q1: 0, q2: 0, q3: 0, q4: 0 };
+}
+
+// H1 = Q1+Q2, H2 = Q3+Q4 คำนวณสดตอนกรอก Quarter (Quarter คือตัวเลขที่กรอกจริง H1/H2 เป็นผลรวมที่คำนวณให้)
+function _sisSyncHalfTotals() {
+  var q1 = parseNum(document.getElementById('sisQ1Input').value);
+  var q2 = parseNum(document.getElementById('sisQ2Input').value);
+  var q3 = parseNum(document.getElementById('sisQ3Input').value);
+  var q4 = parseNum(document.getElementById('sisQ4Input').value);
+  document.getElementById('sisRevenueInput').value = nmI(q1 + q2);
+  document.getElementById('sisRevenueH2Input').value = nmI(q3 + q4);
 }
 
 function showEditSisRevenueModal(dealerId, year) {
@@ -4751,23 +4765,29 @@ function showEditSisRevenueModal(dealerId, year) {
   var rev = getSisRevenueForYear(dealer, year);
 
   var yearOpts = '';
-  for (var y = curYear + 1; y >= curYear - 2; y--) {
-    yearOpts += '<option value="' + y + '"' + (y === year ? ' selected' : '') + '>' + y + '</option>';
+  for (var y = curYear + 2; y >= curYear - 2; y--) {
+    yearOpts += '<option value="' + y + '"' + (y === year ? ' selected' : '') + '>' + y + (y > curYear ? ' (ปีถัดไป)' : '') + '</option>';
   }
 
-  var html = '<div style="max-width:400px">' +
+  var html = '<div style="max-width:420px">' +
     '<div class="fg"><label>📅 ปี</label>' +
     '<select id="sisYearSelect" class="fm-input" onchange="showEditSisRevenueModal(\'' + dealerId + '\', this.value)">' + yearOpts + '</select>' +
-    '<div class="hint">💡 เลือกปีอื่นเพื่อกรอก/ดูยอดขาย SIS ของปีนั้นแยกกัน ไม่ทับปีปัจจุบัน</div>' +
+    '<div class="hint">💡 เลือกปีอื่นเพื่อกรอก/ดูยอดขาย SIS ของปีนั้นแยกกัน ไม่ทับปีปัจจุบัน — กรอกปีถัดไปล่วงหน้าได้เลย จะยังไม่โชว์ในหน้า Dealer จนกว่าจะถึงปีนั้น</div>' +
     '</div>' +
-    '<div class="fg"><label>💰 ยอดขาย SIS — H1 (บาท)</label>' +
-    '<input type="text" inputmode="decimal" id="sisRevenueInput" class="fm-input js-money" value="' + nmI(rev.h1 || 0) + '" placeholder="0.00">' +
-    '<div class="hint">💡 ยอดขายจริงครึ่งปีแรก (ม.ค.-มิ.ย.) ที่ Dealer สั่งซื้อจาก SIS</div>' +
+    '<div class="fg"><label>💰 ยอดขาย SIS — แยกรายไตรมาส (บาท)</label>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+    '<div><small style="color:var(--text2)">Q1 (ม.ค.-มี.ค.)</small><input type="text" inputmode="decimal" id="sisQ1Input" class="fm-input js-money" oninput="_sisSyncHalfTotals()" value="' + nmI(rev.q1 || 0) + '" placeholder="0.00"></div>' +
+    '<div><small style="color:var(--text2)">Q2 (เม.ย.-มิ.ย.)</small><input type="text" inputmode="decimal" id="sisQ2Input" class="fm-input js-money" oninput="_sisSyncHalfTotals()" value="' + nmI(rev.q2 || 0) + '" placeholder="0.00"></div>' +
+    '<div><small style="color:var(--text2)">Q3 (ก.ค.-ก.ย.)</small><input type="text" inputmode="decimal" id="sisQ3Input" class="fm-input js-money" oninput="_sisSyncHalfTotals()" value="' + nmI(rev.q3 || 0) + '" placeholder="0.00"></div>' +
+    '<div><small style="color:var(--text2)">Q4 (ต.ค.-ธ.ค.)</small><input type="text" inputmode="decimal" id="sisQ4Input" class="fm-input js-money" oninput="_sisSyncHalfTotals()" value="' + nmI(rev.q4 || 0) + '" placeholder="0.00"></div>' +
     '</div>' +
-    '<div class="fg"><label>💰 ยอดขาย SIS — H2 (บาท)</label>' +
-    '<input type="text" inputmode="decimal" id="sisRevenueH2Input" class="fm-input js-money" value="' + nmI(rev.h2 || 0) + '" placeholder="0.00">' +
-    '<div class="hint">💡 ยอดขายจริงครึ่งปีหลัง (ก.ค.-ธ.ค.) ที่ Dealer สั่งซื้อจาก SIS</div>' +
+    '<div class="hint">💡 กรอกรายไตรมาส — H1/H2 ด้านล่างรวมให้อัตโนมัติ</div>' +
     '</div>' +
+    '<div class="fg"><label>💰 รวม H1 / H2 (บาท) <small style="color:var(--text2)">= Q1+Q2 / Q3+Q4 อัตโนมัติ</small></label>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+    '<input type="text" id="sisRevenueInput" class="fm-input" disabled value="' + nmI(rev.h1 || 0) + '">' +
+    '<input type="text" id="sisRevenueH2Input" class="fm-input" disabled value="' + nmI(rev.h2 || 0) + '">' +
+    '</div></div>' +
     '<div class="fg"><label>📝 หมายเหตุ (ถ้ามี)</label>' +
     '<textarea id="sisRevenueNote" rows="2" class="fm-input" placeholder="เช่น อัพเดทตามใบแจ้งหนี้ ประจำเดือน มิ.ย.">' + (rev.note ? sanitize(rev.note) : '') + '</textarea>' +
     '</div>' +
@@ -4781,8 +4801,12 @@ function showEditSisRevenueModal(dealerId, year) {
 
 function saveSisRevenue(dealerId, year) {
   year = String(year || new Date().getFullYear());
-  var newRevenue = parseNum(document.getElementById('sisRevenueInput').value);
-  var newRevenueH2 = parseNum(document.getElementById('sisRevenueH2Input').value);
+  var q1 = parseNum(document.getElementById('sisQ1Input').value);
+  var q2 = parseNum(document.getElementById('sisQ2Input').value);
+  var q3 = parseNum(document.getElementById('sisQ3Input').value);
+  var q4 = parseNum(document.getElementById('sisQ4Input').value);
+  var newRevenue = q1 + q2;
+  var newRevenueH2 = q3 + q4;
   var note = document.getElementById('sisRevenueNote') ? document.getElementById('sisRevenueNote').value.trim() : '';
 
   var dealer = ST.getOne('dealers', dealerId);
@@ -4790,7 +4814,7 @@ function saveSisRevenue(dealerId, year) {
 
   var oldRev = getSisRevenueForYear(dealer, year);
   var byYear = dealer.sisRevenueByYear || {};
-  byYear[year] = { h1: newRevenue, h2: newRevenueH2, note: note || '', updatedAt: new Date().toISOString() };
+  byYear[year] = { h1: newRevenue, h2: newRevenueH2, q1: q1, q2: q2, q3: q3, q4: q4, note: note || '', updatedAt: new Date().toISOString() };
 
   var updateData = { sisRevenueByYear: byYear };
   // ปีปัจจุบัน: อัปเดตฟิลด์เดิมด้วยเพื่อ backward-compat กับโค้ด/รายงานที่ยังอ่าน sisRevenue ตรง ๆ
