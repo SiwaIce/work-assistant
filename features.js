@@ -3737,6 +3737,55 @@ function _vpPlanLabel(p) {
   return p.title || (isLead ? p.companyName : (dd ? dd.name : '')) || '-';
 }
 
+// การ์ด "Offline Visit เดือนนี้" ตรวจครบตามข้อกำหนดบริษัท (S/A/B ต้อง Visit อย่างน้อย 1 ครั้ง/เดือน) — ใช้
+// visitCoverageForMonth (utils.js) แยก 3 กลุ่ม: ยังไม่ได้นัด (แดง ต้องรีบ) / นัดแล้วรอไป (เหลือง) / ไปแล้ว
+// (เขียว) กดชื่อ Dealer ไปหน้า Dealer ได้เลย ปุ่มข้างๆ ลัดไปนัด/บันทึก Visit ทันทีไม่ต้องหา Dealer เอง
+function rVisitCoverageCardHtml(vcCollapsed) {
+  var monthKey = _td().substr(0, 7);
+  var cov = (typeof visitCoverageForMonth === 'function') ? visitCoverageForMonth(monthKey) : [];
+  if (!cov.length) return '';
+  var none = cov.filter(function(c) { return c.state === 'none'; });
+  var planned = cov.filter(function(c) { return c.state === 'planned'; });
+  var visited = cov.filter(function(c) { return c.state === 'visited'; });
+  var pct = Math.round(visited.length / cov.length * 100);
+  var monthLabel = (typeof fcMonthLabel === 'function') ? fcMonthLabel(monthKey) : monthKey;
+
+  function rowHtml(c) {
+    var d = c.dealer;
+    var sub = c.state === 'visited' ? ('✅ ไปเมื่อ ' + fDShort(c.lastVisit.date) + (c.visitCount > 1 ? (' (' + c.visitCount + ' ครั้ง)') : '')) :
+      c.state === 'planned' ? ('📅 นัดไว้วันที่ ' + fDShort(c.nextPlan.date)) : '⚠️ ยังไม่มีแผนเลย';
+    var actionBtn = c.state === 'none' ? '<button class="btn bsm bp" onclick="event.stopPropagation();showAddVisitPlanM(_td(),\'' + d.id + '\')">📅 นัดเลย</button>' :
+      c.state === 'planned' ? '<button class="btn bsm bo" onclick="event.stopPropagation();showVisitM(\'' + d.id + '\')">🤝 บันทึก Visit</button>' : '';
+    return '<div class="li" data-name="' + sanitize(d.name).toLowerCase() + '" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(d.name) + ' ' + levelTag(d.level) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + sub + '</div></div>' + actionBtn + '</div>';
+  }
+  function section(containerId, label, icon, list) {
+    if (!list.length) return '';
+    var rows = list.map(rowHtml).join('');
+    var s = '<div style="margin-bottom:10px"><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">' + icon + ' ' + label + ' (' + list.length + ')</div>';
+    s += mondayModalListWrapHtml(containerId, rows, list.length);
+    s += '</div>';
+    return s;
+  }
+
+  var h = '<div class="card" id="visitCoverageCard"><h2>🏪 Offline Visit เดือนนี้ — SAB/Authorized Dealer' +
+    '<span class="ml"><small style="color:var(--text2);font-weight:400">' + monthLabel + '</small></span></h2>' +
+    '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">ทุก Dealer ระดับ S/A/B ต้องมี Offline Visit อย่างน้อย 1 ครั้ง/เดือน — ' + visited.length + '/' + cov.length + ' บริษัท (' + pct + '%) ทำแล้ว</div>' +
+    '<div class="pb" style="margin-bottom:12px"><div class="pf ' + (pct >= 70 ? 'pf-green' : pct >= 40 ? 'pf-yellow' : 'pf-red') + '" style="width:' + pct + '%"></div></div>' +
+    section('vcNoneList', 'ยังไม่ได้นัด', '🔴', none) +
+    section('vcPlannedList', 'นัดแล้ว รอไป', '🟡', planned) +
+    section('vcVisitedList', 'ไปแล้ว', '🟢', visited) +
+    '</div>';
+
+  setTimeout(function() {
+    if (none.length > 10) mondayListSetup('vcNoneList', 10);
+    if (planned.length > 10) mondayListSetup('vcPlannedList', 10);
+    if (visited.length > 10) mondayListSetup('vcVisitedList', 10);
+  }, 0);
+  return h;
+}
+
 function rVisitPlan(el) {
   document.getElementById('pgT').textContent = '📅 Visit Planning';
 
@@ -3749,7 +3798,7 @@ function rVisitPlan(el) {
     '<button class="btn bo" onclick="copyVisitPlan()">📋 Copy</button>' +
     '</div>';
 
-  el.innerHTML = toolbar + (vpViewMode === 'week' ? renderVpWeekView() : renderVpMonthView());
+  el.innerHTML = rVisitCoverageCardHtml() + toolbar + (vpViewMode === 'week' ? renderVpWeekView() : renderVpMonthView());
 
   // Deep link จาก task.links (ดู openTaskLink ใน utils.js) — เปิดโมดัลแก้ไข plan นี้ต่อทันทีหลัง render เสร็จ
   if (S.focusPlanId) {

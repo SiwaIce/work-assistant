@@ -26,7 +26,11 @@ function rVisits(el) {
     });
   }
 
-  el.innerHTML = `
+  var vcCov = (typeof visitCoverageForMonth === 'function') ? visitCoverageForMonth() : [];
+  var vcNoneCount = vcCov.filter(function(c) { return c.state === 'none'; }).length;
+  var vcBanner = vcNoneCount ? '<div style="cursor:pointer;background:var(--bad-bg,#fef2f2);color:var(--bad-fg,#b91c1c);border:1px solid var(--bad,#ef4444);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:8px" onclick="go(\'visitPlan\')">⚠️ ' + vcNoneCount + ' บริษัท SAB/Authorized ยังไม่ได้นัด Offline Visit เดือนนี้ — กดดูรายชื่อ →</div>' : '';
+
+  el.innerHTML = vcBanner + `
   <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
     <button class="btn bp" onclick="showVisitM()">➕ Visit Report</button>
     <button class="btn bo" onclick="openVisitWindow(S.filterDealer||'')" title="เปิดเป็นแท็บแยก เต็มจอ มีสมุดโน้ตเร็วด้านขวา">🪟 เปิดแท็บแยก</button>

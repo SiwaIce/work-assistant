@@ -800,6 +800,28 @@ function computePosCalibration() {
 }
 
 // ================================================================
+// VISIT COVERAGE — ข้อกำหนดบริษัท: Dealer ระดับ S/A/B (Authorized) ต้องมี Offline Visit อย่างน้อย 1 ครั้ง/เดือน
+// เช็คสถานะแต่ละ Dealer ต่อเดือนที่ระบุ (default เดือนปัจจุบัน): 'visited' (มี Visit Report offline เดือนนี้
+// แล้ว) > 'planned' (มีนัด Visit Plan offline เดือนนี้ที่ยังไม่ได้ไป) > 'none' (ยังไม่มีทั้งนัดและ Visit เลย)
+// ใช้ร่วมกันทั้งหน้า Visit Plan (การ์ดหลัก) และหน้า Visit Report (badge เตือนสั้นๆ)
+// ================================================================
+function visitCoverageForMonth(monthKey) {
+  monthKey = monthKey || _td().substr(0, 7);
+  var dealers = ST.getAll('dealers').filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
+  var visits = ST.getAll('visits');
+  var plans = (typeof getVisitPlans === 'function') ? getVisitPlans() : [];
+  var rows = dealers.map(function(d) {
+    var visited = visits.filter(function(v) { return v.dealerId === d.id && v.mode === 'offline' && (v.date || '').substr(0, 7) === monthKey; });
+    var planned = plans.filter(function(p) { return p.dealerId === d.id && p.mode === 'offline' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
+    visited.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    planned.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    var state = visited.length ? 'visited' : (planned.length ? 'planned' : 'none');
+    return { dealer: d, state: state, visitCount: visited.length, lastVisit: visited[0] || null, nextPlan: planned[0] || null };
+  });
+  return rows;
+}
+
+// ================================================================
 // MONDAY MEETING — สรุป H1/H2 ต่อบริษัท (ใช้ทั้งหน้าสรุปรวม rMondayMeeting และหน้ารายบริษัท
 // rMondayCompany ใน views-pipeline.js) ดึงจากข้อมูลจริงทั้งหมด ไม่มีตัวเลขสมมติ:
 //   - Won (H1/H2 · Project) = Pipeline สถานะ Won จริง แบ่งครึ่งปีตาม expectedCloseDate (fallback registerDate)

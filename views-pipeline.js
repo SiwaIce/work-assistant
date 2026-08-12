@@ -2803,12 +2803,15 @@ function showMondayStatusM(statusId) {
   var cfg = getConfig();
   var name = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === statusId; }) || {}).name || statusId;
   var rows = '';
+  var dealerOpts = {};
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    if (d) dealerOpts[d.id] = d.name;
+    rows += '<div class="li" data-dealer="' + (p.dealerId || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
   if (!list.length) rows = '<div class="empty"><p>ไม่มี</p></div>';
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayStatusList', rows, list.length);
+  var facets = _mondayFacetSelectHtml('mondayStatusList', 'mondayListFilterDealer', '🏢 บริษัท', Object.keys(dealerOpts).map(function(id) { return { value: id, text: dealerOpts[id] }; }).sort(function(a, b) { return a.text.localeCompare(b.text, 'th'); }));
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayStatusList', rows, list.length, facets);
   openM('📌 ' + name, h);
   if (list.length > 10) mondayListSetup('mondayStatusList', 10);
 }
@@ -2849,21 +2852,30 @@ function mondayListSetup(containerId, pageSize) {
   container.dataset.pageSize = pageSize;
   container.dataset.shown = pageSize;
   container.dataset.query = '';
+  container.dataset.dealerFilter = '';
+  container.dataset.statusFilter = '';
   var rows = Array.prototype.slice.call(container.children);
   rows.forEach(function(r, i) { r.style.display = i < pageSize ? '' : 'none'; });
   mondayListUpdateMeta(containerId, rows.length, Math.min(pageSize, rows.length));
 }
+// รองรับ "กรองซ้อน" (dealer + status + คำค้น พร้อมกันได้) — data-dealer/data-status เป็น attribute ที่แต่ละแถว
+// ต้องใส่ไว้เอง (ดู showPosBucketM/showStalePipesM/showMondayStatusM) ถ้าไม่ใส่ก็แค่ไม่กรองมิตินั้น ไม่พัง
 function mondayListMatched(containerId) {
   var container = document.getElementById(containerId);
   var query = (container.dataset.query || '').toLowerCase();
+  var dealerF = container.dataset.dealerFilter || '';
+  var statusF = container.dataset.statusFilter || '';
   return Array.prototype.filter.call(container.children, function(r) {
+    if (dealerF && r.dataset.dealer !== dealerF) return false;
+    if (statusF && r.dataset.status !== statusF) return false;
     return !query || (r.textContent || '').toLowerCase().indexOf(query) !== -1;
   });
 }
-function mondayListSearch(containerId, query) {
+// ใช้ร่วมกันหลังเปลี่ยนตัวกรองมิติไหนก็ตาม (คำค้น/dealer/status) — รีเซ็ตกลับไปหน้า 1 เสมอกันโชว์ผลลัพธ์
+// เพี้ยนจากรายการหน้าก่อนที่ยังค้างโชว์อยู่
+function _mondayListApplyFilter(containerId) {
   var container = document.getElementById(containerId);
   if (!container) return;
-  container.dataset.query = query || '';
   var pageSize = parseInt(container.dataset.pageSize, 10) || 10;
   var all = Array.prototype.slice.call(container.children);
   var matched = mondayListMatched(containerId);
@@ -2871,6 +2883,33 @@ function mondayListSearch(containerId, query) {
   matched.slice(0, pageSize).forEach(function(r) { r.style.display = ''; });
   container.dataset.shown = Math.min(pageSize, matched.length);
   mondayListUpdateMeta(containerId, matched.length, Math.min(pageSize, matched.length));
+}
+function mondayListSearch(containerId, query) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.dataset.query = query || '';
+  _mondayListApplyFilter(containerId);
+}
+function mondayListFilterDealer(containerId, dealerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.dataset.dealerFilter = dealerId || '';
+  _mondayListApplyFilter(containerId);
+}
+function mondayListFilterStatus(containerId, status) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.dataset.statusFilter = status || '';
+  _mondayListApplyFilter(containerId);
+}
+// สร้าง <select> กรองแยกตาม Dealer/Status จากค่าจริงที่มีอยู่ใน list เท่านั้น (ไม่ใช่ทุก Dealer/Status ในระบบ)
+// กันตัวเลือกที่กดแล้วไม่มีผลลัพธ์เลยโผล่ปนอยู่ในดรอปดาวน์
+function _mondayFacetSelectHtml(containerId, fn, label, options) {
+  if (options.length < 2) return '';
+  var h = '<select style="font-size:11px;padding:4px 6px;width:auto" onchange="' + fn + '(\'' + containerId + '\',this.value)"><option value="">' + label + ': ทั้งหมด</option>';
+  options.forEach(function(o) { h += '<option value="' + sanitize(o.value) + '">' + sanitize(o.text) + '</option>'; });
+  h += '</select>';
+  return h;
 }
 function mondayListMore(containerId) {
   var container = document.getElementById(containerId);
@@ -2892,8 +2931,9 @@ function mondayListUpdateMeta(containerId, total, shown) {
 // ครอบ list ยาวๆ ในหน้า modal (POS bucket / โครงการเงียบ / Dealer ยังไม่ได้ Visit ฯลฯ) ด้วยช่องค้นหา +
 // "แสดงเพิ่ม" ถ้ารายการเกิน 10 — ใช้ mondayListSetup(containerId,10) ต่อทันทีหลัง openM() เพราะ innerHTML
 // set เป็น sync อยู่แล้ว (ดู mondayListSetup ด้านบน)
-function mondayModalListWrapHtml(containerId, rowsHtml, count) {
+function mondayModalListWrapHtml(containerId, rowsHtml, count, facetsHtml) {
   var h = '';
+  if (count > 10 && facetsHtml) h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' + facetsHtml + '</div>';
   if (count > 10) h += '<div style="margin-bottom:8px"><input type="text" id="' + containerId + 'Search" placeholder="🔍 ค้นหา..." oninput="mondayListSearch(\'' + containerId + '\',this.value)" style="width:100%"></div>';
   h += '<div id="' + containerId + '">' + rowsHtml + '</div>';
   if (count > 10) {
@@ -3011,6 +3051,7 @@ function showPosCalBucketM(bucketId) {
 // ---- Drill-down modals (เลือกกลุ่ม POS / โครงการเงียบ / Dealer ยังไม่ได้ Visit) ----
 function showPosBucketM(level) {
   var dealers = ST.getAll('dealers');
+  var cfg = getConfig();
   var list = [];
   dealers.forEach(function(d) {
     var s = window._mondayStats[d.id];
@@ -3021,27 +3062,40 @@ function showPosBucketM(level) {
   var label = level === 'high' ? 'สูง (≥70%)' : level === 'mid' ? 'กลาง (40-69%)' : level === 'low' ? 'ต่ำ (<40%)' : level === 'bestcase' ? 'Best Case (POS ≥40%)' : 'ทั้งหมด (Weighted)';
   list.sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); });
   var rows = '';
+  var dealerOpts = {}, statusOpts = {};
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    if (d) dealerOpts[d.id] = d.name;
+    var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
+    statusOpts[p.status] = stName;
+    rows += '<div class="li" data-dealer="' + (p.dealerId || '') + '" data-status="' + sanitize(p.status || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
   if (!list.length) rows = '<div class="empty"><p>ไม่มีโครงการในกลุ่มนี้</p></div>';
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ · รวม ฿' + fmtMoney(list.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0)) + '</div>' + mondayModalListWrapHtml('mondayPosBucketList', rows, list.length);
+  var facets = _mondayFacetSelectHtml('mondayPosBucketList', 'mondayListFilterDealer', '🏢 บริษัท', Object.keys(dealerOpts).map(function(id) { return { value: id, text: dealerOpts[id] }; }).sort(function(a, b) { return a.text.localeCompare(b.text, 'th'); })) +
+    _mondayFacetSelectHtml('mondayPosBucketList', 'mondayListFilterStatus', '📌 สถานะ', Object.keys(statusOpts).map(function(id) { return { value: id, text: statusOpts[id] }; }));
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ · รวม ฿' + fmtMoney(list.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0)) + '</div>' + mondayModalListWrapHtml('mondayPosBucketList', rows, list.length, facets);
   openM('🎯 โอกาส ' + label, h);
   if (list.length > 10) mondayListSetup('mondayPosBucketList', 10);
 }
 function showStalePipesM() {
   var dealers = ST.getAll('dealers');
+  var cfg = getConfig();
   var list = [];
   dealers.forEach(function(d) { var s = window._mondayStats[d.id]; if (s) list = list.concat(s.stalePipes); });
   var rows = '';
+  var dealerOpts = {}, statusOpts = {};
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    if (d) dealerOpts[d.id] = d.name;
+    var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
+    statusOpts[p.status] = stName;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
-    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · อัพเดตล่าสุด: ' + (lastLog ? fDShort(lastLog.date) : 'ไม่เคยมี Log') + '</div></div></div>';
+    rows += '<div class="li" data-dealer="' + (p.dealerId || '') + '" data-status="' + sanitize(p.status || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · อัพเดตล่าสุด: ' + (lastLog ? fDShort(lastLog.date) : 'ไม่เคยมี Log') + '</div></div></div>';
   });
   if (!list.length) rows = '<div class="empty"><p>ไม่มีโครงการเงียบ</p></div>';
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ ไม่มีอัพเดตเกิน ' + MONDAY_STALE_DAYS + ' วัน</div>' + mondayModalListWrapHtml('mondayStaleList', rows, list.length);
+  var facets = _mondayFacetSelectHtml('mondayStaleList', 'mondayListFilterDealer', '🏢 บริษัท', Object.keys(dealerOpts).map(function(id) { return { value: id, text: dealerOpts[id] }; }).sort(function(a, b) { return a.text.localeCompare(b.text, 'th'); })) +
+    _mondayFacetSelectHtml('mondayStaleList', 'mondayListFilterStatus', '📌 สถานะ', Object.keys(statusOpts).map(function(id) { return { value: id, text: statusOpts[id] }; }));
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ ไม่มีอัพเดตเกิน ' + MONDAY_STALE_DAYS + ' วัน</div>' + mondayModalListWrapHtml('mondayStaleList', rows, list.length, facets);
   openM('⚠️ โครงการเงียบ', h);
   if (list.length > 10) mondayListSetup('mondayStaleList', 10);
 }
@@ -3167,9 +3221,16 @@ function showMondayHalfM(dealerId, half, source) {
     if (won.length > 10) setupIds.push('mondayHalfWonList');
     if (half === 'H2') {
       var openRows = '';
-      s.activePipes.forEach(function(p) { openRows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>'; });
+      var cfg = getConfig();
+      var statusOpts = {};
+      s.activePipes.forEach(function(p) {
+        var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
+        statusOpts[p.status] = stName;
+        openRows += '<div class="li" data-status="' + sanitize(p.status || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+      });
       if (!s.activePipes.length) openRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
-      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ (ยังไม่ปิด — ถ่วง POS) — ' + s.activePipes.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfOpenList', openRows, s.activePipes.length);
+      var openFacets = _mondayFacetSelectHtml('mondayHalfOpenList', 'mondayListFilterStatus', '📌 สถานะ', Object.keys(statusOpts).map(function(id) { return { value: id, text: statusOpts[id] }; }));
+      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ (ยังไม่ปิด — ถ่วง POS) — ' + s.activePipes.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfOpenList', openRows, s.activePipes.length, openFacets);
       if (s.activePipes.length > 10) setupIds.push('mondayHalfOpenList');
     }
   } else {
