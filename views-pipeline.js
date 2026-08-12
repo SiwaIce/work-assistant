@@ -2633,6 +2633,35 @@ function rMondayMeeting(el) {
 }
 
 // Forecast by Model (this month / next month) — ใช้ร่วมกันทั้งหน้าสรุปรวม (pipes = ทุกบริษัท) และหน้ารายบริษัท
+// chip กรองหมวดสินค้า (🚁 Drone ฯลฯ) เฉพาะการ์ด Forecast by Model ของหน้าประชุมจันทร์ — คำนวณจาก buckets
+// เดือนนี้/เดือนหน้าที่มีอยู่แล้ว ไม่ query ซ้ำ, ใช้ fcCatIsVisible/fcToggleCatFilter/fcResetCatFilter ตัวเดียวกับ
+// หน้า Forecast เต็ม (window.mondayFcCatFilter) เพื่อไม่ให้มีกลไกกรองซ้ำซ้อนสองระบบ
+function _mondayFcCatChipsHtml(buckets, curKey, nextKey) {
+  var cats = {};
+  [curKey, nextKey].forEach(function(key) {
+    Object.keys(buckets[key]).forEach(function(m) {
+      var cat = getModelCategory(m);
+      if (!cats[cat]) cats[cat] = 0;
+      cats[cat] += buckets[key][m].qty;
+    });
+  });
+  var ids = Object.keys(cats);
+  if (!ids.length) return '';
+  var order = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : ids;
+  ids.sort(function(a, b) { return order.indexOf(a) - order.indexOf(b); });
+  var hasFilter = window.mondayFcCatFilter && Object.keys(window.mondayFcCatFilter).length > 0;
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center">';
+  ids.forEach(function(id) {
+    var name = (typeof getCategoryName === 'function') ? getCategoryName(id) : id;
+    var isOn = fcCatIsVisible('mondayFcCatFilter', id);
+    h += '<div style="border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer' +
+      (isOn ? ';border:2px solid var(--accent,#3b82f6);color:var(--accent)' : ';border:1px solid var(--border);color:var(--text2);opacity:.5') +
+      '" onclick="fcToggleCatFilter(\'mondayFcCatFilter\',\'' + id + '\')">' + name + ' <span style="opacity:.7">(' + cats[id] + ')</span></div>';
+  });
+  if (hasFilter) h += '<button class="btn bsm bo" onclick="fcResetCatFilter(\'mondayFcCatFilter\')">✕ แสดงทั้งหมด</button>';
+  h += '</div>';
+  return h;
+}
 function rMondayForecastByModelHtml(pipes) {
   var curKey = fcMonthKey(0), nextKey = fcMonthKey(1);
   var buckets = {}; buckets[curKey] = {}; buckets[nextKey] = {};
@@ -2647,15 +2676,17 @@ function rMondayForecastByModelHtml(pipes) {
       buckets[key][it.model].pipes[p.id] = p;
     });
   });
-  var curModels = Object.keys(buckets[curKey]);
+  var curModelsAll = Object.keys(buckets[curKey]);
+  var curModels = curModelsAll.filter(function(m) { return fcCatIsVisible('mondayFcCatFilter', getModelCategory(m)); });
   var curProjects = {}; curModels.forEach(function(m) { Object.keys(buckets[curKey][m].pipes).forEach(function(pid) { curProjects[pid] = true; }); });
   var curQty = curModels.reduce(function(s, m) { return s + buckets[curKey][m].qty; }, 0);
   var h = '<div class="card" id="sec-model"><h2>📦 สินค้าที่คาดว่าจะออกเดือนนี้/เดือนหน้า <span class="ml"><button class="btn bsm bo" onclick="go(\'forecast\')">🔗 ดู Forecast แบบเต็ม</button></span></h2>' +
     '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">สรุปสั้นๆ เฉพาะเดือนนี้/เดือนหน้า — อยากกรอง/เรียง/ดูรายเดือน-รายไตรมาสเต็มรูปแบบ กดปุ่มด้านบนไปเมนู Forecast โดยตรง</div>' +
+    _mondayFcCatChipsHtml(buckets, curKey, nextKey) +
     '<div style="font-size:12.5px;font-weight:600;background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:10px">เดือนนี้: ' + Object.keys(curProjects).length + ' โครงการ · ' + curModels.length + ' รุ่นสินค้า · รวม ' + curQty + ' ชิ้น</div>';
   [[curKey, 'เดือนนี้'], [nextKey, 'เดือนหน้า']].forEach(function(mk) {
     var key = mk[0], label = fcMonthLabel(key) + ' (' + mk[1] + ')';
-    var models = Object.keys(buckets[key]);
+    var models = Object.keys(buckets[key]).filter(function(m) { return fcCatIsVisible('mondayFcCatFilter', getModelCategory(m)); });
     h += '<div style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-light);color:var(--accent);display:inline-block;margin-bottom:6px">' + label + '</div>';
     if (!models.length) { h += '<div style="font-size:12px;color:var(--text2);padding:6px 0 10px">ยังไม่มีกำหนดส่งมอบเดือนนี้</div>'; return; }
     h += '<div style="overflow-x:auto;margin-bottom:10px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
@@ -2770,13 +2801,15 @@ function showMondayStatusM(statusId) {
   var list = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p) && p.status === statusId; });
   var cfg = getConfig();
   var name = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === statusId; }) || {}).name || statusId;
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ</div>';
+  var rows = '';
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
-  if (!list.length) h += '<div class="empty"><p>ไม่มี</p></div>';
+  if (!list.length) rows = '<div class="empty"><p>ไม่มี</p></div>';
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayStatusList', rows, list.length);
   openM('📌 ' + name, h);
+  if (list.length > 10) mondayListSetup('mondayStatusList', 10);
 }
 
 // เรียงลำดับ list/table ยาวๆ ในหน้าประชุมจันทร์ — จัดเรียง DOM node ที่มีอยู่แล้วตรงๆ (data-amt/data-date/
@@ -2855,6 +2888,19 @@ function mondayListUpdateMeta(containerId, total, shown) {
   var btn = document.getElementById(containerId + 'More');
   if (btn) btn.style.display = shown >= total ? 'none' : '';
 }
+// ครอบ list ยาวๆ ในหน้า modal (POS bucket / โครงการเงียบ / Dealer ยังไม่ได้ Visit ฯลฯ) ด้วยช่องค้นหา +
+// "แสดงเพิ่ม" ถ้ารายการเกิน 10 — ใช้ mondayListSetup(containerId,10) ต่อทันทีหลัง openM() เพราะ innerHTML
+// set เป็น sync อยู่แล้ว (ดู mondayListSetup ด้านบน)
+function mondayModalListWrapHtml(containerId, rowsHtml, count) {
+  var h = '';
+  if (count > 10) h += '<div style="margin-bottom:8px"><input type="text" id="' + containerId + 'Search" placeholder="🔍 ค้นหา..." oninput="mondayListSearch(\'' + containerId + '\',this.value)" style="width:100%"></div>';
+  h += '<div id="' + containerId + '">' + rowsHtml + '</div>';
+  if (count > 10) {
+    h += '<div id="' + containerId + 'Meta" style="font-size:11px;color:var(--text2);margin:8px 0 4px"></div>';
+    h += '<button class="btn bsm bo" id="' + containerId + 'More" onclick="mondayListMore(\'' + containerId + '\')" style="width:100%">แสดงเพิ่ม</button>';
+  }
+  return h;
+}
 // ตัวเลข stat tile นับขึ้นจาก 0 ตอนโหลดหน้า (เอฟเฟกต์เล็กๆ ให้ dashboard ดูมีชีวิตขึ้น) — fmt(v) ถ้าใส่มาจะ
 // เรียกทุกเฟรมเพื่อจัดรูปแบบ (เช่น ใส่ ฿/fmtMoneyShort/ทศนิยม), ไม่ใส่ = จำนวนเต็มธรรมดา
 function mondayCountUp(id, target, fmt) {
@@ -2921,37 +2967,43 @@ function showPosBucketM(level) {
   });
   var label = level === 'high' ? 'สูง (≥70%)' : level === 'mid' ? 'กลาง (40-69%)' : level === 'low' ? 'ต่ำ (<40%)' : level === 'bestcase' ? 'Best Case (POS ≥40%)' : 'ทั้งหมด (Weighted)';
   list.sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); });
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ · รวม ฿' + fmtMoney(list.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0)) + '</div>';
+  var rows = '';
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
   });
-  if (!list.length) h += '<div class="empty"><p>ไม่มีโครงการในกลุ่มนี้</p></div>';
+  if (!list.length) rows = '<div class="empty"><p>ไม่มีโครงการในกลุ่มนี้</p></div>';
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ · รวม ฿' + fmtMoney(list.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0)) + '</div>' + mondayModalListWrapHtml('mondayPosBucketList', rows, list.length);
   openM('🎯 โอกาส ' + label, h);
+  if (list.length > 10) mondayListSetup('mondayPosBucketList', 10);
 }
 function showStalePipesM() {
   var dealers = ST.getAll('dealers');
   var list = [];
   dealers.forEach(function(d) { var s = window._mondayStats[d.id]; if (s) list = list.concat(s.stalePipes); });
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ ไม่มีอัพเดตเกิน ' + MONDAY_STALE_DAYS + ' วัน</div>';
+  var rows = '';
   list.forEach(function(p) {
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
-    h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · อัพเดตล่าสุด: ' + (lastLog ? fDShort(lastLog.date) : 'ไม่เคยมี Log') + '</div></div></div>';
+    rows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · อัพเดตล่าสุด: ' + (lastLog ? fDShort(lastLog.date) : 'ไม่เคยมี Log') + '</div></div></div>';
   });
-  if (!list.length) h += '<div class="empty"><p>ไม่มีโครงการเงียบ</p></div>';
+  if (!list.length) rows = '<div class="empty"><p>ไม่มีโครงการเงียบ</p></div>';
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' โครงการ ไม่มีอัพเดตเกิน ' + MONDAY_STALE_DAYS + ' วัน</div>' + mondayModalListWrapHtml('mondayStaleList', rows, list.length);
   openM('⚠️ โครงการเงียบ', h);
+  if (list.length > 10) mondayListSetup('mondayStaleList', 10);
 }
 function showOverdueDealersM() {
   var overdueDays = (typeof DEALER_VISIT_OVERDUE_DAYS !== 'undefined') ? DEALER_VISIT_OVERDUE_DAYS : 60;
   var list = ST.getAll('dealers').filter(function(d) { var lv = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null; return lv === null || lv > overdueDays; });
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' บริษัท ยังไม่ได้ Visit เกิน ' + overdueDays + ' วัน</div>';
+  var rows = '';
   list.forEach(function(d) {
     var lv = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null;
-    h += '<div class="li" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(d.name) + '</div><div class="ls">' + (lv === null ? 'ยังไม่เคย Visit' : 'Visit ล่าสุด ' + lv + ' วันก่อน') + '</div></div></div>';
+    rows += '<div class="li" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(d.name) + '</div><div class="ls">' + (lv === null ? 'ยังไม่เคย Visit' : 'Visit ล่าสุด ' + lv + ' วันก่อน') + '</div></div></div>';
   });
-  if (!list.length) h += '<div class="empty"><p>ไม่มี</p></div>';
+  if (!list.length) rows = '<div class="empty"><p>ไม่มี</p></div>';
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + list.length + ' บริษัท ยังไม่ได้ Visit เกิน ' + overdueDays + ' วัน</div>' + mondayModalListWrapHtml('mondayOverdueList', rows, list.length);
   openM('📅 ยังไม่ได้ Visit', h);
+  if (list.length > 10) mondayListSetup('mondayOverdueList', 10);
 }
 
 // ================================================================
@@ -3052,30 +3104,40 @@ function rMondayCompany(el) {
 function showMondayHalfM(dealerId, half, source) {
   var s = window._mondayCompanyStat || mondayCompanyStats(dealerId, getConfig());
   var h = '';
+  var setupIds = [];
   if (source === 'project') {
     var won = half === 'H1' ? s.wonProjectsH1 : s.wonProjectsH2;
-    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">✅ ปิดแล้ว (Won) — ' + won.length + ' โครงการ</div>';
-    won.forEach(function(p) { h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">฿' + fmtMoneyShort(Number(p.realAmount || p.forecastAmount) || 0) + '</div></div></div>'; });
-    if (!won.length) h += '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+    var wonRows = '';
+    won.forEach(function(p) { wonRows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">฿' + fmtMoneyShort(Number(p.realAmount || p.forecastAmount) || 0) + '</div></div></div>'; });
+    if (!won.length) wonRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">✅ ปิดแล้ว (Won) — ' + won.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfWonList', wonRows, won.length);
+    if (won.length > 10) setupIds.push('mondayHalfWonList');
     if (half === 'H2') {
-      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ (ยังไม่ปิด — ถ่วง POS) — ' + s.activePipes.length + ' โครงการ</div>';
-      s.activePipes.forEach(function(p) { h += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>'; });
-      if (!s.activePipes.length) h += '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+      var openRows = '';
+      s.activePipes.forEach(function(p) { openRows += '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>'; });
+      if (!s.activePipes.length) openRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ (ยังไม่ปิด — ถ่วง POS) — ' + s.activePipes.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfOpenList', openRows, s.activePipes.length);
+      if (s.activePipes.length > 10) setupIds.push('mondayHalfOpenList');
     }
   } else {
     var wonRR = half === 'H1' ? s.rrWonH1 : s.rrWonH2;
     var remain = half === 'H2' ? s.rrRemainH2 : [];
-    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">✅ ปิดแล้ว — ' + wonRR.length + ' รายการ</div>';
-    wonRR.forEach(function(r) { h += _mondayRunrateRowHtml(r); });
-    if (!wonRR.length) h += '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+    var wonRRRows = '';
+    wonRR.forEach(function(r) { wonRRRows += _mondayRunrateRowHtml(r); });
+    if (!wonRR.length) wonRRRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">✅ ปิดแล้ว — ' + wonRR.length + ' รายการ</div>' + mondayModalListWrapHtml('mondayHalfRRWonList', wonRRRows, wonRR.length);
+    if (wonRR.length > 10) setupIds.push('mondayHalfRRWonList');
     if (half === 'H2') {
-      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📅 คาดไว้ (ยังไม่ปิด) — ' + remain.length + ' รายการ</div>';
-      remain.forEach(function(r) { h += _mondayRunrateRowHtml(r); });
-      if (!remain.length) h += '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+      var remainRows = '';
+      remain.forEach(function(r) { remainRows += _mondayRunrateRowHtml(r); });
+      if (!remain.length) remainRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📅 คาดไว้ (ยังไม่ปิด) — ' + remain.length + ' รายการ</div>' + mondayModalListWrapHtml('mondayHalfRRRemainList', remainRows, remain.length);
+      if (remain.length > 10) setupIds.push('mondayHalfRRRemainList');
     }
   }
   h += '<div style="font-size:.62rem;color:var(--text2);margin-top:10px;text-align:center">— ในของจริงแต่ละแถวกดต่อได้: โครงการ → หน้า Pipeline เต็ม, Runrate → รายการ Sales Forecast ในหน้า Dealer แก้ไข/ลบได้เลย —</div>';
   openM((source === 'project' ? '📁 Project' : '🔁 Runrate') + ' — ' + half, h);
+  setupIds.forEach(function(id) { mondayListSetup(id, 10); });
 }
 function _mondayRunrateRowHtml(r) {
   var price = getModelPrice(r.model) || 0;
