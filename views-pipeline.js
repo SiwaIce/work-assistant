@@ -3207,8 +3207,10 @@ function rPipeDashboard(el) {
   var activeAmt = 0, wonAmt = 0;
   allPipes.forEach(function(p) {
     var amt = Number(p.forecastAmount) || 0;
-    if (pipeIsWon(p)) { won.push(p); wonAmt += amt; }
-    else if (p.status === 'fail_lost') { lost.push(p); }
+    // เช็ค status === 'deliver' ตรงๆ ควบคู่กับ pipeIsWon — งานที่ส่งมอบแล้วจบแล้วจริงๆ ไม่ควรไปนับเป็น
+    // "Active" แม้ config category ของ Deliver จะถูกแก้จน pipeIsWon คืน false ก็ตาม (กันเปอร์เซ็นต์เพี้ยน)
+    if (pipeIsWon(p) || p.status === 'deliver') { won.push(p); wonAmt += amt; }
+    else if (p.status === 'fail_lost' || pipeIsLost(p)) { lost.push(p); }
     else { active.push(p); activeAmt += amt; }
   });
   var closedCount = won.length + lost.length;
@@ -3342,7 +3344,7 @@ function rPipeDashboard(el) {
 function showPipeMonthM(ym) {
   var allPipes = ST.getAll('pipeline');
   var pipes = allPipes.filter(function(p) {
-    if (pipeIsWon(p) || pipeIsLost(p)) return false;
+    if (pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver') return false;
     var cd = p.expectedCloseDate || p.biddingDate;
     return cd && cd.substr(0, 7) === ym;
   });

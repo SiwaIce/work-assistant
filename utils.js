@@ -819,7 +819,11 @@ function mondayCompanyStats(dealerId, cfg) {
   cfg = cfg || getConfig();
   var d = ST.getOne('dealers', dealerId);
   var allPipes = ST.pipelineByDealer(dealerId);
-  var activePipes = allPipes.filter(function(p) { return !pipeIsWon(p) && !pipeIsLost(p); });
+  // ตัด p.status !== 'deliver' ทิ้งตรงๆ ไว้เผื่อ config pipelineStatuses ที่ Admin แก้เองไม่ได้ตั้ง category
+  // ของ Deliver เป็น 'won' (ปกติ pipeIsWon ควรจะ true ให้ deliver อยู่แล้วจาก DEF_CONFIG แต่ config ที่บันทึก
+  // ทับใน localStorage มา replace ทั้งก้อนตอน getConfig() ไม่ merge — เผื่อพลาดจุดนี้ไว้ กันงานที่ส่งมอบแล้ว
+  // จริงๆ (จบงานแล้ว ไม่ใช่ "โอกาส" อีกต่อไป) หลุดเข้ามานับเป็น opportunity/POS bucket ทำให้ % เพี้ยน
+  var activePipes = allPipes.filter(function(p) { return !pipeIsWon(p) && !pipeIsLost(p) && p.status !== 'deliver'; });
   var wonPipes = allPipes.filter(pipeIsWon);
   var curMonthKey = fcMonthKey(0);
 
