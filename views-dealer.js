@@ -4851,7 +4851,7 @@ function rSalesRepDashboard(el) {
   var repsMap = {};
   dealers.forEach(function(d) {
     var name = d.saleName || DEALER_SALE_UNSET;
-    if (!repsMap[name]) repsMap[name] = { name: name, dealers: [], targetH1: 0, targetH2: 0, sisH1: 0, sisH2: 0, wonAmt: 0, weightedOpen: 0, openTotal: 0, activeCount: 0 };
+    if (!repsMap[name]) repsMap[name] = { name: name, dealers: [], targetH1: 0, targetH2: 0, sisH1: 0, sisH2: 0, sisQ1: 0, sisQ2: 0, sisQ3: 0, sisQ4: 0, wonAmt: 0, weightedOpen: 0, openTotal: 0, activeCount: 0 };
     var r = repsMap[name];
     r.dealers.push(d);
     r.targetH1 += Number(d.targetH1) || 0;
@@ -4859,6 +4859,7 @@ function rSalesRepDashboard(el) {
     var sis = getSisRevenueForYear(d, curYear);
     r.sisH1 += sis.h1 || 0;
     r.sisH2 += sis.h2 || 0;
+    r.sisQ1 += sis.q1 || 0; r.sisQ2 += sis.q2 || 0; r.sisQ3 += sis.q3 || 0; r.sisQ4 += sis.q4 || 0;
     var s = mondayCompanyStats(d.id, cfg);
     r.wonAmt += (s.wonH1Project + s.wonH2Project);
     r.weightedOpen += s.openPipelineWeighted;
@@ -4893,7 +4894,8 @@ function rSalesRepDashboard(el) {
     h += '<div class="li" style="cursor:pointer;display:flex;align-items:center;gap:10px" onclick="clearDealerSaleFilter();toggleDealerSaleFilter(\'' + sanitize(r.name).replace(/'/g, "\\'") + '\');go(\'dealers\')">' +
       '<div style="width:34px;height:34px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--accent);flex-shrink:0">' + sanitize(initials) + '</div>' +
       '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(r.name) + '</div>' +
-      '<div style="font-size:11px;color:var(--text2)">' + r.dealers.length + ' Dealer · ' + r.activeCount + ' โครงการเปิดอยู่ · Weighted ฿' + fmtMoneyShort(r.weightedOpen) + '</div></div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + r.dealers.length + ' Dealer · ' + r.activeCount + ' โครงการเปิดอยู่ · Weighted ฿' + fmtMoneyShort(r.weightedOpen) + '</div>' +
+      '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">Q1 ' + fmtMoneyShort(r.sisQ1) + ' · Q2 ' + fmtMoneyShort(r.sisQ2) + ' · Q3 ' + fmtMoneyShort(r.sisQ3) + ' · Q4 ' + fmtMoneyShort(r.sisQ4) + '</div></div>' +
       '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:13px">฿' + fmtMoneyShort(actual) + (target ? ' / ฿' + fmtMoneyShort(target) : '') + '</div>' +
       '<div style="font-size:11px;font-weight:700;color:' + pctColor + '">' + (pct === null ? 'ยังไม่ตั้งเป้า' : pct + '%') + '</div></div>' +
       '</div>';

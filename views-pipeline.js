@@ -3156,6 +3156,9 @@ function rMondayCompany(el) {
     return pct >= 90 ? { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)', label: '🔶 เกือบถึงเป้า (ปิดรอบแล้ว)' } : { bg: 'var(--bad-bg)', fg: 'var(--bad-fg)', label: '❌ ไม่ถึงเป้า (ปิดรอบแล้ว)' };
   }
   var v1 = _mondayVerdict(h1Pct, false), v2 = _mondayVerdict(h2Pct, true);
+  // ยอดขาย SIS จริงรายไตรมาส (Q1-Q4) — คนละชุดกับเป้า H1/H2 ข้างบน (เป้ามีแค่ระดับครึ่งปี ไม่มี breakdown
+  // รายไตรมาส) เอามาโชว์เสริมให้เห็นจังหวะการมาของยอดขายในแต่ละครึ่งปีละเอียดขึ้น กดแล้วไปหน้าแก้ไขได้เลย
+  var _sisRev = (typeof getSisRevenueForYear === 'function') ? getSisRevenueForYear(d, new Date().getFullYear()) : { q1: 0, q2: 0, q3: 0, q4: 0 };
 
   h += '<div class="card"><h2>📊 เป้ายอดขาย H1 / H2</h2>';
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
@@ -3168,6 +3171,7 @@ function rMondayCompany(el) {
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H1\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(s.wonH1Project) + '</b></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H1\',\'runrate\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>🔁 Runrate ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(s.wonH1Runrate) + '</b></div>' +
     '<div style="font-size:11.5px;font-weight:700;margin-top:6px;padding:6px 8px;border-radius:7px;background:' + v1.bg + ';color:' + v1.fg + '">' + v1.label + '</div>' +
+    '<div onclick="showEditSisRevenueModal(\'' + d.id + '\')" style="cursor:pointer;font-size:10.5px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)">💰 ยอดขาย SIS จริง — Q1: ' + fmtMoneyShort(_sisRev.q1 || 0) + ' · Q2: ' + fmtMoneyShort(_sisRev.q2 || 0) + ' <span style="color:var(--accent)">✏️</span></div>' +
     '</div>';
   h += '<div style="border:1px solid var(--accent);border-radius:11px;padding:13px;background:var(--accent-light)">' +
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><b style="font-size:13px">H2 (ก.ค.–ธ.ค.)</b><span style="font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff">กำลังดำเนินอยู่</span></div>' +
@@ -3176,6 +3180,7 @@ function rMondayCompany(el) {
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project (Won ฿' + fmtMoneyShort(s.wonH2Project) + ' + Pipeline ฿' + fmtMoneyShort(s.openPipelineWeighted) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2ProjectTotal) + '</b></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'runrate\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>🔁 Runrate (Won ฿' + fmtMoneyShort(s.wonH2RunrateWon) + ' + คาดไว้ ฿' + fmtMoneyShort(s.h2RunrateRemaining) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2RunrateTotal) + '</b></div>' +
     '<div style="font-size:11.5px;font-weight:700;margin-top:6px;padding:6px 8px;border-radius:7px;background:' + v2.bg + ';color:' + v2.fg + '">' + v2.label + (h2Pct < 100 ? ' — ขาดอีก ฿' + fmtMoneyShort(s.targetH2 - h2Projected) : '') + '</div>' +
+    '<div onclick="showEditSisRevenueModal(\'' + d.id + '\')" style="cursor:pointer;font-size:10.5px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)">💰 ยอดขาย SIS จริง — Q3: ' + fmtMoneyShort(_sisRev.q3 || 0) + ' · Q4: ' + fmtMoneyShort(_sisRev.q4 || 0) + ' <span style="color:var(--accent)">✏️</span></div>' +
     '</div>';
   h += '</div></div>';
 
