@@ -5799,22 +5799,25 @@ body.mobile-mode #clock { display: none; }
   line-height: 1.5;
 }
 
-/* Mobile Bottom Nav */
+/* Mobile Bottom Nav — สไตล์ iOS Tab Bar (กระจกฝ้า/blur, ปุ่ม active เปลี่ยนสีอย่างเดียวตามธรรมเนียม iOS
+   เพราะไอคอนเป็น emoji ไม่ใช่ SF Symbols เลยไม่มีเวอร์ชัน filled/outline แยกให้สลับ) */
 .mb-bottom-nav {
   display: none;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--card);
-  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  border-top: 0.5px solid var(--border);
   z-index: 9999;
-  padding: 6px 0;
+  padding: 7px 0 6px;
   padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
 }
 body.mobile-mode .mb-bottom-nav { display: flex; }
 body.mobile-mode #bnav { display: none !important; }
-body.mobile-mode #ct { padding-bottom: 80px; }
+body.mobile-mode #ct { padding-bottom: 84px; }
 
 .mb-nav-item {
   flex: 1;
@@ -5824,21 +5827,24 @@ body.mobile-mode #ct { padding-bottom: 80px; }
   gap: 2px;
   padding: 6px 0;
   cursor: pointer;
-  color: var(--text2);
+  color: var(--text3, var(--text2));
   font-size: 10px;
+  font-weight: 500;
   transition: 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
 .mb-nav-item.act { color: var(--accent); }
 .mb-nav-item:active { transform: scale(0.9); }
-.mb-nav-icon { font-size: 22px; }
+.mb-nav-icon { font-size: 21px; line-height: 1; }
 .mb-nav-label { font-weight: 600; }
 
-/* Mobile List Items */
+/* Mobile List Items — การ์ดขอบมนแยกแถวสไตล์ iOS (กรอบ + เงาอ่อนๆ ต่อ 1 รายการ แทนลิสต์คั่นเส้นบาง) */
 body.mobile-mode .li {
   padding: 12px !important;
-  margin-bottom: 6px;
-  border-radius: 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 body.mobile-mode .lt { font-size: 15px !important; }
 body.mobile-mode .ls { font-size: 13px !important; }
@@ -5847,6 +5853,47 @@ body.mobile-mode .ls { font-size: 13px !important; }
 body.mobile-mode .card {
   border-radius: 14px;
   margin-bottom: 10px;
+}
+
+/* การ์ด/แถวอื่นๆ ที่มีกรอบอยู่แล้ว (Dealer, Pipeline ใช้ .dealer-card ร่วมกัน / Visit Report ใช้ .visit-item)
+   แค่ปรับ radius+spacing ให้เท่ากับ .li/.card ด้านบน ให้เป็นภาษาเดียวกันทั้งแอปตอนอยู่ในโหมดมือถือ */
+body.mobile-mode .visit-item {
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+body.mobile-mode .dealer-card { border-radius: 14px; }
+body.mobile-mode .task-card, body.mobile-mode .task-card-v2 { border-radius: 14px; }
+
+/* ftabs (ตัวกรอง chip ที่ใช้ซ้ำทั่วแอปอยู่แล้ว — Dealers Level, Visit Offline/Online ฯลฯ) ภายใต้ mobile-mode
+   เปลี่ยนหน้าตาเป็น Segmented Control สไตล์ iOS ล้วนๆ ด้วย CSS ไม่ต้องแก้ markup ที่เรียกใช้ .ftabs ที่มีอยู่
+   เดิมสักจุดเดียว — อัพเกรดทุกตัวกรองทั้งแอปพร้อมกันอัตโนมัติ */
+body.mobile-mode .ftabs {
+  flex-wrap: nowrap;
+  background: rgba(120,120,128,.16);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+  overflow-x: auto;
+}
+body.mobile-mode .ftab {
+  flex: 1;
+  text-align: center;
+  padding: 6px 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  white-space: nowrap;
+}
+body.mobile-mode .ftab.act {
+  background: var(--card);
+  color: var(--text);
+  border: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
 }
 
 /* Light theme mobile */

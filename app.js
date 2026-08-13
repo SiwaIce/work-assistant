@@ -852,6 +852,9 @@ if (fn) {
     if (typeof renderFavorites === 'function') renderFavorites();
   checkBackupReminder();
   if (typeof updateDealerScopeBadge === 'function') updateDealerScopeBadge();
+  // ซิงก์ไฮไลท์แถบล่างมือถือทุกครั้งที่ render() จบ ไม่ใช่แค่ตอนกดผ่าน mbGo() — กันแถบล่างค้างจุดเดิมตอน
+  // นำทางผ่าน go() ตรงๆ (เช่น กดการ์ด Dealer ในลิสต์ที่เรียก go('dealerDetail',...) ไม่ผ่าน mbGo)
+  if (typeof updateMbNav === 'function') updateMbNav();
 
   if (_focusId) {
     var _restored = document.getElementById(_focusId);
@@ -2014,24 +2017,6 @@ function applyViewMode() {
   updateMbNav();
 }
 
-function updateMbNav() {
-  var items = document.querySelectorAll('.mb-nav-item');
-  for (var i = 0; i < items.length; i++) {
-    items[i].classList.remove('act');
-  }
-  var current = S ? S.view : 'today';
-  var navItems = document.querySelectorAll('.mb-nav-item');
-  for (var j = 0; j < navItems.length; j++) {
-    var onclick = navItems[j].getAttribute('onclick') || '';
-    if (onclick.indexOf(current) !== -1) {
-      navItems[j].classList.add('act');
-    }
-    if (current === 'mbHome' && onclick.indexOf('mbHome') !== -1) {
-      navItems[j].classList.add('act');
-    }
-  }
-}
-
 // ================================================================
 // OPEN QUICK COMMAND (Ctrl+K)
 // ================================================================
@@ -2346,21 +2331,28 @@ function renderMbHome() {
   updateMbNav();
 }
 
+// ผูก route (S.view) ปัจจุบันเข้ากับแท็บที่ควรไฮไลท์ในแถบล่างมือถือ — ครอบคลุมหน้าย่อย/drill-down ด้วย ไม่ใช่
+// แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
+// แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
+var MB_NAV_ROUTE_GROUPS = {
+  today: ['today'],
+  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'forecast', 'forecastComparison'],
+  tasks: ['tasks', 'taskDetail']
+};
 function updateMbNav() {
   var items = document.querySelectorAll('.mb-nav-item');
-  for (var i = 0; i < items.length; i++) {
-    items[i].classList.remove('act');
-  }
+  for (var i = 0; i < items.length; i++) items[i].classList.remove('act');
+
   var current = S ? S.view : 'today';
   var navItems = document.querySelectorAll('.mb-nav-item');
   for (var j = 0; j < navItems.length; j++) {
     var onclick = navItems[j].getAttribute('onclick') || '';
-    if (onclick.indexOf(current) !== -1) {
-      navItems[j].classList.add('act');
-    }
-    if (current === 'mbHome' && onclick.indexOf('mbHome') !== -1) {
-      navItems[j].classList.add('act');
-    }
+    var m = onclick.match(/mbGo\('([^']+)'\)/);
+    var tabKey = m ? m[1] : '';
+    var group = MB_NAV_ROUTE_GROUPS[tabKey] || [tabKey];
+    if (group.indexOf(current) !== -1) navItems[j].classList.add('act');
+    if (current === 'mbHome' && tabKey === 'mbHome') navItems[j].classList.add('act');
   }
 }
 window.addEventListener('message', function(event) {
