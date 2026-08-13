@@ -50,7 +50,7 @@ function rUnifiedTasks(el) {
   document.getElementById('pgT').textContent = '📋 งานทั้งหมด';
   
   var allTasks = ST.getAll('tasks');
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var categories = getUniqueCategories(allTasks);
   
   var filteredTasks = filterTasks(allTasks);

@@ -93,8 +93,9 @@ async function sendAiMsg() {
   // สร้าง context จากข้อมูลในแอป
   var ctx = '';
   try {
-    var pipes = ST.getAll('pipeline');
-    var dealers = ST.getAll('dealers');
+    var _scopedIds = scopedDealerIdSet();
+    var pipes = ST.getAll('pipeline').filter(function(p) { return !p.dealerId || _scopedIds[p.dealerId]; });
+    var dealers = scopedDealers();
     if (pipes.length) {
       var statusCnt = {};
       pipes.forEach(function(p) { statusCnt[p.status] = (statusCnt[p.status] || 0) + 1; });
@@ -850,6 +851,7 @@ if (fn) {
   updBdg();
     if (typeof renderFavorites === 'function') renderFavorites();
   checkBackupReminder();
+  if (typeof updateDealerScopeBadge === 'function') updateDealerScopeBadge();
 
   if (_focusId) {
     var _restored = document.getElementById(_focusId);
@@ -859,6 +861,71 @@ if (fn) {
     }
   }
 }
+
+// ================================================================
+// DEALER SCOPE PICKER (topbar) — ตัวเลือก "ของฉัน / +คนอื่น / ทั้งหมด" ใช้ scopedDealers()/dealerInScope()
+// (utils.js) กรอง Dealer ทั้งแอพ อยู่นอก #ct (ไม่ถูกลบทิ้งตอน render() วาดหน้าใหม่) — sync label ทุกครั้งที่
+// render() จบ (ดู updateDealerScopeBadge เรียกท้าย render())
+// ================================================================
+function toggleDealerScopeMenu() {
+  var menu = document.getElementById('dealerScopeMenu');
+  if (!menu) return;
+  var willOpen = menu.style.display === 'none';
+  if (willOpen) renderDealerScopeMenu();
+  menu.style.display = willOpen ? 'block' : 'none';
+}
+function updateDealerScopeBadge() {
+  var btn = document.getElementById('dealerScopeBtn');
+  if (btn) btn.textContent = (typeof dealerScopeLabel === 'function') ? dealerScopeLabel() : '👤 ของฉัน';
+}
+function renderDealerScopeMenu() {
+  var menu = document.getElementById('dealerScopeMenu');
+  if (!menu) return;
+  var scope = getDealerScope();
+  var mine = myDealerScopeName();
+  var members = (typeof getSalesMembers === 'function') ? getSalesMembers().filter(function(m) { return m.active !== false; }) : [];
+  var otherNames = members.map(function(m) { return m.name; }).filter(function(n) { return n && n !== mine; });
+  // ผสาน saleName ที่มีอยู่จริงในข้อมูล Dealer ด้วย เผื่อบางคนกรอกชื่อเซลเป็น free text ไม่ได้อยู่ใน Team Members
+  var seen = {};
+  ST.getAll('dealers').forEach(function(d) { if (d.saleName && d.saleName !== mine) seen[d.saleName] = true; });
+  Object.keys(seen).forEach(function(n) { if (otherNames.indexOf(n) === -1) otherNames.push(n); });
+  otherNames.sort(function(a, b) { return a.localeCompare(b, 'th'); });
+
+  var h = '<div style="font-size:11px;color:var(--text2,#94a3b8);margin-bottom:8px">แสดง Dealer ของใครบ้าง</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
+  h += '<button class="btn bsm ' + (scope.mode === 'mine' ? 'bp' : 'bo') + '" style="width:100%;justify-content:flex-start" onclick="setDealerScope(\'mine\',[]);toggleDealerScopeMenu()">👤 เฉพาะของฉัน' + (mine ? ' (' + sanitize(mine) + ')' : '') + '</button>';
+  h += '<button class="btn bsm ' + (scope.mode === 'all' ? 'bp' : 'bo') + '" style="width:100%;justify-content:flex-start" onclick="setDealerScope(\'all\',[]);toggleDealerScopeMenu()">🌐 ดูทั้งหมด</button>';
+  h += '</div>';
+  if (otherNames.length) {
+    h += '<div style="font-size:11px;color:var(--text2,#94a3b8);margin-bottom:6px;border-top:1px solid var(--border,#334155);padding-top:8px">+ เพิ่มของคนอื่น</div>';
+    var activeNames = dealerScopeActiveNames() || [];
+    otherNames.forEach(function(n) {
+      var checked = scope.mode === 'custom' && activeNames.indexOf(n) !== -1;
+      h += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 2px;cursor:pointer"><input type="checkbox" style="width:auto" ' + (checked ? 'checked' : '') + ' onchange="_dealerScopeToggleName(\'' + sanitize(n).replace(/'/g, "\\'") + '\',this.checked)">' + sanitize(n) + '</label>';
+    });
+  } else {
+    h += '<div style="font-size:11px;color:var(--text3,#64748b)">ไม่มีเซลอื่นในระบบ</div>';
+  }
+  menu.innerHTML = h;
+}
+function _dealerScopeToggleName(name, on) {
+  var scope = getDealerScope();
+  var mine = myDealerScopeName();
+  var names = (scope.mode === 'custom' ? scope.names.slice() : [mine]);
+  if (names.indexOf(mine) === -1) names.push(mine);
+  if (on) { if (names.indexOf(name) === -1) names.push(name); }
+  else { names = names.filter(function(n) { return n !== name; }); }
+  setDealerScope('custom', names);
+  renderDealerScopeMenu();
+}
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('dealerScopeMenu');
+  var btn = document.getElementById('dealerScopeBtn');
+  if (!menu || menu.style.display === 'none') return;
+  if (btn && (e.target === btn || btn.contains(e.target))) return;
+  if (menu.contains(e.target)) return;
+  menu.style.display = 'none';
+});
 
 function toggleSidebar() {
   var sidebar = document.getElementById('sidebar');
@@ -1166,7 +1233,7 @@ function getKPIData(weekRange) {
 }
 
 function getDealerContactStatus() {
-  return ST.getAll('dealers').map(function(d) {
+  return scopedDealers().map(function(d) {
     var lcd = ST.getLastContactDays(d.id);
     return {id:d.id, name:d.name, level:d.level, contact:d.contact, lastContactDays:lcd, lastContactDate:ST.getLastContactDate(d.id), lastVisitDays:ST.getLastVisitDays(d.id), lastVisitDate:ST.getLastVisitDate(d.id), contactStatus:contactColor(lcd), contactLabel:contactLabel(lcd)};
   }).sort(function(a, b) {
@@ -1269,8 +1336,10 @@ function getUrgentItems() {
 
 function getStalePipelines() {
   var cutoff = addD(_td(), -14);
+  var _scopedIds = scopedDealerIdSet();
   return ST.filter('pipeline', function(p) {
     if (!pipeIsOpen(p)) return false;
+    if (p.dealerId && !_scopedIds[p.dealerId]) return false;
     var logs = ST.pipeLogsByPipe(p.id);
     if (!logs.length) return (p.created || '') < cutoff;
     return logs[0].date.split('T')[0] < cutoff;
@@ -1283,15 +1352,16 @@ function getStalePipelines() {
 function getSmartFilters() {
   var w = getWeekRange();
   var _sfCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer ใน low_health ด้านล่าง
+  var _scopedIds = scopedDealerIdSet();
   return [
     {id:'overdue_tasks', icon:'🔴', name:'งานเลย Deadline', count:getUrgentItems().filter(function(i){return dTo(i.dueDate)<0;}).length, color:'#ef4444'},
-    {id:'bidding_soon', icon:'⏳', name:'Bidding สัปดาห์นี้', count:ST.filter('pipeline',function(p){return p.biddingDate&&isInRange(p.biddingDate,w.start,w.end)&&pipeIsOpen(p);}).length, color:'#f59e0b'},
+    {id:'bidding_soon', icon:'⏳', name:'Bidding สัปดาห์นี้', count:ST.filter('pipeline',function(p){return p.biddingDate&&isInRange(p.biddingDate,w.start,w.end)&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#f59e0b'},
     {id:'stale_pipeline', icon:'🔄', name:'Pipeline ไม่อัพเดต 14d', count:getStalePipelines().length, color:'#94a3b8'},
-    {id:'big_projects', icon:'💰', name:'Project ≥ 1.5M', count:ST.filter('pipeline',function(p){return Number(p.forecastAmount)>=1500000&&pipeIsOpen(p);}).length, color:'#22c55e'},
+    {id:'big_projects', icon:'💰', name:'Project ≥ 1.5M', count:ST.filter('pipeline',function(p){return Number(p.forecastAmount)>=1500000&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#22c55e'},
     {id:'waiting_overdue', icon:'📭', name:'รอคนอื่น (เลยกำหนด)', count:ST.filter('waiting',function(w2){return !w2.resolved&&w2.dueDate&&dTo(w2.dueDate)<0;}).length, color:'#ef4444'},
-    {id:'no_contact_14d', icon:'📞', name:'ไม่ติดต่อ > 14d', count:ST.getAll('dealers').filter(function(d){var days=ST.getLastContactDays(d.id);return days===null||days>14;}).length, color:'#ef4444'},
-    {id:'need_action', icon:'🎯', name:'ต้องทำ Next Action', count:ST.filter('pipeline',function(p){return p.followupDate&&dTo(p.followupDate)<=3&&pipeIsOpen(p);}).length, color:'#3b82f6'},
-    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:ST.getAll('dealers').filter(function(d){return calcHealthScore(d.id,_sfCfg).score<40;}).length, color:'#ef4444'}
+    {id:'no_contact_14d', icon:'📞', name:'ไม่ติดต่อ > 14d', count:scopedDealers().filter(function(d){var days=ST.getLastContactDays(d.id);return days===null||days>14;}).length, color:'#ef4444'},
+    {id:'need_action', icon:'🎯', name:'ต้องทำ Next Action', count:ST.filter('pipeline',function(p){return p.followupDate&&dTo(p.followupDate)<=3&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#3b82f6'},
+    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:scopedDealers().filter(function(d){return calcHealthScore(d.id,_sfCfg).score<40;}).length, color:'#ef4444'}
   ];
 }
 
@@ -1299,22 +1369,26 @@ function getSmartFilters() {
 // SMART INSIGHTS
 // ================================================================
 function generateInsights() {
-  var insights = []; var pipes = ST.getAll('pipeline'); var dealers = ST.getAll('dealers'); var m = getMonthRange();
+  var insights = [];
+  var dealers = scopedDealers();
+  var _scopedIds = scopedDealerIdSet();
+  var pipes = ST.getAll('pipeline').filter(function(p){return !p.dealerId||_scopedIds[p.dealerId];});
+  var m = getMonthRange();
   var totalClosed = pipes.filter(function(p){return pipeIsWon(p) || pipeIsLost(p);}).length;
   var totalWon = pipes.filter(function(p){return pipeIsWon(p);}).length;
   if (totalClosed >= 3) {
     var winRate = Math.round(totalWon/totalClosed*100);
     insights.push({icon:winRate>=60?'📈':'📉', title:'Win Rate: '+winRate+'%', desc:totalWon+' ชนะ จาก '+totalClosed+' ที่จบ', priority:winRate<50?'high':'low'});
   }
-  var ps = getPipeSummary();
+  var wonAmt = pipes.filter(function(p){return pipeIsWon(p);}).reduce(function(a,p){return a+(Number(p.forecastAmount)||0);},0);
   var totalTarget = dealers.reduce(function(a,d){return a+(Number(d.targetRevenue)||0);},0);
   if (totalTarget > 0) {
-    var pct = Math.round(ps.totalWon/totalTarget*100);
-    insights.push({icon:pct>=70?'🎯':'⚠️', title:'Achievement: '+pct+'%', desc:fmtMoney(ps.totalWon)+' / '+fmtMoney(totalTarget), priority:pct<50?'high':'low'});
+    var pct = Math.round(wonAmt/totalTarget*100);
+    insights.push({icon:pct>=70?'🎯':'⚠️', title:'Achievement: '+pct+'%', desc:fmtMoney(wonAmt)+' / '+fmtMoney(totalTarget), priority:pct<50?'high':'low'});
   }
   var badHealth = dealers.filter(function(d){return calcHealthScore(d.id).score<40;});
   if (badHealth.length) insights.push({icon:'🏥', title:badHealth.length+' Dealer ต้องดูแลด่วน', desc:badHealth.map(function(d){return d.name;}).join(', '), priority:'high'});
-  var bids = ST.filter('pipeline',function(p){return p.biddingDate&&dTo(p.biddingDate)>=0&&dTo(p.biddingDate)<=14&&pipeIsOpen(p);});
+  var bids = pipes.filter(function(p){return p.biddingDate&&dTo(p.biddingDate)>=0&&dTo(p.biddingDate)<=14&&pipeIsOpen(p);});
   if (bids.length) { var bidAmt = bids.reduce(function(a,p){return a+(Number(p.forecastAmount)||0);},0); insights.push({icon:'⏳', title:bids.length+' Bidding ใน 2 สัปดาห์', desc:'มูลค่า '+fmtMoney(bidAmt), priority:'medium'}); }
   insights.sort(function(a,b){var o={high:0,medium:1,low:2};return (o[a.priority]||2)-(o[b.priority]||2);});
   return insights;
@@ -1345,7 +1419,7 @@ function getSmartSuggestions() {
 // GOAL SETTING
 // ================================================================
 function getGoalData() {
-  var q = getQuarterRange(); var dealers = ST.getAll('dealers');
+  var q = getQuarterRange(); var dealers = scopedDealers();
   var totalTarget = 0, totalWon = 0;
   var dealerGoals = dealers.filter(function(d){return Number(d.targetRevenue)>0;}).map(function(d) {
     var target = Number(d.targetRevenue)||0;
@@ -2204,14 +2278,15 @@ function renderMbHome() {
   var now = new Date();
   var dayNames = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
   
-  var dealers = ST.getAll('dealers');
-  var pipeline = ST.getAll('pipeline');
-  var activePipe = pipeline.filter(function(p) { 
-    return pipeIsOpen(p); 
+  var dealers = scopedDealers();
+  var _scopedIds = scopedDealerIdSet();
+  var pipeline = ST.getAll('pipeline').filter(function(p) { return !p.dealerId || _scopedIds[p.dealerId]; });
+  var activePipe = pipeline.filter(function(p) {
+    return pipeIsOpen(p);
   });
   var tasks = ST.filter('tasks', function(t) { return t.status === 'active'; });
   var visits = JSON.parse(localStorage.getItem('v7_visits') || '[]');
-  var todayVisits = visits.filter(function(v) { return v.date === _td(); });
+  var todayVisits = visits.filter(function(v) { return v.date === _td() && (!v.dealerId || _scopedIds[v.dealerId]); });
   
   var pendingActions = [];
   try { pendingActions = getAllPendingPipeActions(); } catch(e) { pendingActions = []; }
@@ -2438,8 +2513,8 @@ function rForecastComparison(el) {
   document.getElementById('pgT').textContent = '📊 เปรียบเทียบ Forecast';
   
   var monthOptions = getMonthOptionsForCompare();
-  var dealers = ST.getAll('dealers');
-  
+  var dealers = scopedDealers();
+
   var h = '<div class="card">';
   h += '<h2>📊 เปรียบเทียบ Forecast ลูกค้า vs Pipeline</h2>';
   h += '<div class="fr" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">';
@@ -2502,7 +2577,7 @@ function refreshForecastComparison() {
   if (modeSelect) fcCompareMode = modeSelect.value;
   if (dealerSelect) fcCompareDealer = dealerSelect.value;
   
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var monthLabel = formatMonthKeyToLabel(fcCompareMonth);
   
   // Filter dealer if needed
@@ -2610,7 +2685,7 @@ function updateSummaryCards(dealerDetails, totalClient, totalPipeline, totalDiff
 function exportForecastComparison() {
   var month = fcCompareMonth;
   var mode = fcCompareMode;
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var monthLabel = formatMonthKeyToLabel(month);
   var modeLabel = mode === 'shipment' ? 'Shipment Date' : (mode === 'bidding' ? 'Bidding Date' : 'Register Date');
   

@@ -1,4 +1,64 @@
 // ================================================================
+// DEALER SCOPE — ตัวกรอง "Dealer ที่ดูแล" แบบ global ใช้ร่วมกันทั้งแอพ (แทนที่ dealerSaleFilter เดิมที่เคย
+// เป็น local variable เฉพาะหน้า Dealers) ค่าเริ่มต้น (mode 'mine') = เห็นเฉพาะ Dealer ที่ d.saleName ตรงกับ
+// cfg.saleName (ชื่อผู้ใช้เอง ตั้งใน Admin) — เลือกดูของคนอื่นเพิ่มได้ (mode 'custom') หรือดูทั้งหมด (mode 'all')
+// เก็บ persist ไว้ที่ localStorage ตรงๆ (ไม่ผ่าน ST/sync — เป็นการตั้งค่าส่วนตัวของเบราว์เซอร์นี้ ไม่ต้องแชร์ทีม)
+// ================================================================
+var DEALER_SCOPE_KEY = 'v7_dealerScope';
+function getDealerScope() {
+  var raw = null;
+  try { raw = JSON.parse(localStorage.getItem(DEALER_SCOPE_KEY)); } catch(e) {}
+  if (!raw || !raw.mode) return { mode: 'mine', names: [] };
+  return { mode: raw.mode, names: Array.isArray(raw.names) ? raw.names : [] };
+}
+function setDealerScope(mode, names) {
+  localStorage.setItem(DEALER_SCOPE_KEY, JSON.stringify({ mode: mode, names: names || [] }));
+  if (typeof render === 'function') render();
+}
+// ชื่อของฉันเอง (ตั้งใน Admin > ชื่อผู้ใช้) — ใช้เป็นค่าเริ่มต้นของ mode 'mine' เสมอ
+function myDealerScopeName() {
+  var cfg = (typeof getConfig === 'function') ? getConfig() : {};
+  return cfg.saleName || '';
+}
+// รายชื่อ saleName ที่ "เห็นได้ตอนนี้" ตาม mode ปัจจุบัน — mode 'all' คืน null (แปลว่าไม่กรอง)
+function dealerScopeActiveNames() {
+  var scope = getDealerScope();
+  if (scope.mode === 'all') return null;
+  if (scope.mode === 'custom') return scope.names.length ? scope.names : [myDealerScopeName()];
+  return [myDealerScopeName()];
+}
+function dealerInScope(d) {
+  var names = dealerScopeActiveNames();
+  if (!names) return true;
+  return names.indexOf((d && d.saleName) || '') !== -1;
+}
+// Dealer ทั้งหมดที่อยู่ในขอบเขตที่เลือกไว้ตอนนี้ — ใช้แทน ST.getAll('dealers') ตรงๆ ในหน้า dashboard/browsing
+// (ไม่ใช้ในจุดที่ต้อง pick Dealer ของใครก็ได้ เช่น dropdown ตอนบันทึก Follow-up/LINE Log/Visit ให้คนอื่น)
+function scopedDealers() {
+  var all = ST.getAll('dealers');
+  var names = dealerScopeActiveNames();
+  if (!names) return all;
+  return all.filter(function(d) { return names.indexOf(d.saleName || '') !== -1; });
+}
+// {dealerId: true} ของ Dealer ในขอบเขตปัจจุบัน — ใช้กรอง record อื่น (pipeline/task ฯลฯ) ผ่าน .dealerId โดย
+// เร็วกว่าเรียก dealerInScope() (lookup ST.getOne) ในลูปยาวๆ — record ที่ไม่มี dealerId เลย (งานทั่วไป ไม่ผูก
+// Dealer) ควรโชว์เสมอ ไม่กรองออก เช็คแยกเองที่จุดเรียกด้วย pattern "!x.dealerId || scopedDealerIdSet()[x.dealerId]"
+function scopedDealerIdSet() {
+  var set = {};
+  scopedDealers().forEach(function(d) { set[d.id] = true; });
+  return set;
+}
+// ข้อความสั้นๆ โชว์บน badge ตัวเลือก scope บน topbar
+function dealerScopeLabel() {
+  var scope = getDealerScope();
+  if (scope.mode === 'all') return '🌐 ทั้งหมด';
+  var names = dealerScopeActiveNames() || [];
+  var mine = myDealerScopeName();
+  if (scope.mode === 'mine' || (names.length === 1 && names[0] === mine)) return '👤 ของฉัน';
+  return '👥 ' + names.length + ' คน';
+}
+
+// ================================================================
 // FORECAST HELPERS — เดือนส่งมอบ (tentative) + หมวดหมู่สินค้า
 // ================================================================
 var fcHideTentative = false;  // toggle: ซ่อนค่าประมาณการ (Bidding + 2 เดือน)
@@ -803,11 +863,13 @@ function computePosCalibration() {
 // VISIT COVERAGE — ข้อกำหนดบริษัท: Dealer ระดับ S/A/B (Authorized) ต้องมี Offline Visit อย่างน้อย 1 ครั้ง/เดือน
 // เช็คสถานะแต่ละ Dealer ต่อเดือนที่ระบุ (default เดือนปัจจุบัน): 'visited' (มี Visit Report offline เดือนนี้
 // แล้ว) > 'planned' (มีนัด Visit Plan offline เดือนนี้ที่ยังไม่ได้ไป) > 'none' (ยังไม่มีทั้งนัดและ Visit เลย)
-// ใช้ร่วมกันทั้งหน้า Visit Plan (การ์ดหลัก) และหน้า Visit Report (badge เตือนสั้นๆ)
+// ใช้ร่วมกันทั้งหน้า Visit Plan (การ์ดหลัก) และหน้า Visit Report (badge เตือนสั้นๆ) — จำกัดตาม dealer scope
+// (scopedDealers, utils.js) เหมือนหน้าอื่นๆ ทั้งแอพ ค่าเริ่มต้นเห็นเฉพาะ Dealer ของตัวเอง
 // ================================================================
 function visitCoverageForMonth(monthKey) {
   monthKey = monthKey || _td().substr(0, 7);
-  var dealers = ST.getAll('dealers').filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
+  var base = (typeof scopedDealers === 'function') ? scopedDealers() : ST.getAll('dealers');
+  var dealers = base.filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
   var visits = ST.getAll('visits');
   var plans = (typeof getVisitPlans === 'function') ? getVisitPlans() : [];
   var rows = dealers.map(function(d) {

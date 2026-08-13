@@ -2171,9 +2171,12 @@ function copyPipeRow(pipeId, excludeTypes) {
 function rPipeBoard(el) {
   document.getElementById('pgT').textContent = '📋 Pipeline Board';
   var cfg = getConfig();
-  var allPipes = ST.getAll('pipeline');
-  var dealers = ST.getAll('dealers');
-  
+  // จำกัดตาม dealer scope (topbar picker) — โครงการที่ไม่มี dealerId (เคสหายาก) โชว์เสมอไม่กรองออก
+  var dealers = scopedDealers();
+  var _scopedIds = {};
+  dealers.forEach(function(d) { _scopedIds[d.id] = true; });
+  var allPipes = ST.getAll('pipeline').filter(function(p) { return !p.dealerId || _scopedIds[p.dealerId]; });
+
   var pipes = allPipes;
   if (pipeBoardDealer !== 'all') {
     pipes = pipes.filter(function(p) { return p.dealerId === pipeBoardDealer; });
@@ -2506,7 +2509,7 @@ function saveQuickPipeFollowup(pipeId) {
 function rMondayMeeting(el) {
   document.getElementById('pgT').textContent = '🗓️ ประชุมจันทร์';
   var cfg = getConfig();
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   window._mondayStats = {};
   dealers.forEach(function(d) { window._mondayStats[d.id] = mondayCompanyStats(d.id, cfg); });
 
@@ -2799,7 +2802,9 @@ function rMondayWaitingHtml(pipes) {
   return h;
 }
 function showMondayStatusM(statusId) {
-  var list = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p) && p.status === statusId; });
+  var _scopedIds = {};
+  scopedDealers().forEach(function(d) { _scopedIds[d.id] = true; });
+  var list = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p) && p.status === statusId && (!p.dealerId || _scopedIds[p.dealerId]); });
   var cfg = getConfig();
   var name = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === statusId; }) || {}).name || statusId;
   var rows = '';
@@ -2982,7 +2987,7 @@ function rMondayInsightsHtml(dealers, allActive, allStale, overdueDealers, overd
 }
 
 function copyMondaySummary() {
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var lines = ['🗓️ ประชุมจันทร์ — สรุป Pipeline (' + fD(_td()) + ')', ''];
   var openTotal = 0, weightedTotal = 0, count = 0;
   dealers.forEach(function(d) { var s = window._mondayStats[d.id]; if (!s) return; count += s.activePipes.length; openTotal += s.openPipelineTotal; weightedTotal += s.openPipelineWeighted; });
@@ -3050,7 +3055,7 @@ function showPosCalBucketM(bucketId) {
 
 // ---- Drill-down modals (เลือกกลุ่ม POS / โครงการเงียบ / Dealer ยังไม่ได้ Visit) ----
 function showPosBucketM(level) {
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var cfg = getConfig();
   var list = [];
   dealers.forEach(function(d) {
@@ -3078,7 +3083,7 @@ function showPosBucketM(level) {
   if (list.length > 10) mondayListSetup('mondayPosBucketList', 10);
 }
 function showStalePipesM() {
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var cfg = getConfig();
   var list = [];
   dealers.forEach(function(d) { var s = window._mondayStats[d.id]; if (s) list = list.concat(s.stalePipes); });
@@ -3101,7 +3106,7 @@ function showStalePipesM() {
 }
 function showOverdueDealersM() {
   var overdueDays = (typeof DEALER_VISIT_OVERDUE_DAYS !== 'undefined') ? DEALER_VISIT_OVERDUE_DAYS : 60;
-  var list = ST.getAll('dealers').filter(function(d) { var lv = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null; return lv === null || lv > overdueDays; });
+  var list = scopedDealers().filter(function(d) { var lv = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null; return lv === null || lv > overdueDays; });
   var rows = '';
   list.forEach(function(d) {
     var lv = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null;

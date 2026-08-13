@@ -416,7 +416,9 @@ function toggleDealerUrgentBar() {
 
 function rDealers(el) {
   document.getElementById('pgT').textContent = '🏪 Dealer';
-  let dealers = ST.getAll('dealers');
+  // scopedDealers() = ขอบเขตที่เลือกไว้จาก picker บน topbar (default: เฉพาะของฉัน) — chip "เซลที่ดูแล" ด้านล่าง
+  // เป็นตัวกรองซ้อนอีกชั้นภายในขอบเขตนี้ (เผื่อเลือก scope เป็นทั้งหมด/หลายคน แล้วอยากเจาะแค่บางคนชั่วคราว)
+  let dealers = scopedDealers();
 
   if (dealerFilter !== 'all') {
     if (dealerFilter === 'authorized') dealers = dealers.filter(d => ['S','A','B'].includes(d.level));
@@ -424,9 +426,9 @@ function rDealers(el) {
     else dealers = dealers.filter(d => d.level === dealerFilter);
   }
 
-  // ตัวเลือก "เซลที่ดูแล" คำนวณจาก Dealer ทั้งหมด (ไม่ใช่แค่หลังกรอง Level) กันตัวเลือกหายไปตอนสลับ Level filter
+  // ตัวเลือก "เซลที่ดูแล" คำนวณจาก Dealer ในขอบเขตปัจจุบัน (ไม่ใช่แค่หลังกรอง Level) กันตัวเลือกหายไปตอนสลับ Level filter
   const saleNameCounts = {};
-  ST.getAll('dealers').forEach(d => {
+  scopedDealers().forEach(d => {
     const key = d.saleName || DEALER_SALE_UNSET;
     saleNameCounts[key] = (saleNameCounts[key] || 0) + 1;
   });
@@ -434,7 +436,7 @@ function rDealers(el) {
   const saleFilterActive = Object.keys(dealerSaleFilter).length > 0;
   if (saleFilterActive) dealers = dealers.filter(d => dealerSaleFilter[d.saleName || DEALER_SALE_UNSET]);
 
-  const overdueCount = ST.getAll('dealers').filter(d => {
+  const overdueCount = scopedDealers().filter(d => {
     const lvd = ST.getLastVisitDays(d.id);
     return lvd === null || lvd > DEALER_VISIT_OVERDUE_DAYS;
   }).length;
@@ -570,7 +572,7 @@ function sortDealerTable(col) {
   if (dealerTableSort.col === col) dealerTableSort.dir = dealerTableSort.dir === 'desc' ? 'asc' : 'desc';
   else { dealerTableSort.col = col; dealerTableSort.dir = 'desc'; }
   var wrap = document.getElementById('dTableWrap');
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   if (dealerFilter !== 'all') {
     if (dealerFilter === 'authorized') dealers = dealers.filter(function(d) { return ['S','A','B'].includes(d.level); });
     else if (dealerFilter === 'other') dealers = dealers.filter(function(d) { return !['S','A','B'].includes(d.level); });
@@ -1171,7 +1173,7 @@ function dealerCardHTML(d, health) {
 
 function filterDealerList() {
   const q = document.getElementById('dSrc')?.value.toLowerCase() || '';
-  let dealers = ST.getAll('dealers');
+  let dealers = scopedDealers();
   if (dealerFilter !== 'all') {
     if (dealerFilter === 'authorized') dealers = dealers.filter(d => ['S','A','B'].includes(d.level));
     else if (dealerFilter === 'other') dealers = dealers.filter(d => !['S','A','B'].includes(d.level));

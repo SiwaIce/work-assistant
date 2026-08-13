@@ -59,7 +59,8 @@ function renderPendingActionsToday() {
     if (!pipeIsOpen(pipe)) continue;
     
     var dealer = dealerMap[pipe.dealerId];
-    
+    if (dealer && typeof dealerInScope === 'function' && !dealerInScope(dealer)) continue;
+
     var daysLeft = 999;
     if (a.dueDate) {
       var parts = a.dueDate.split('/');
@@ -588,7 +589,7 @@ function rKPI(el) {
     <thead><tr><th>Dealer</th><th>Level</th><th>Score</th><th>ติดต่อ</th><th>Visit</th><th>Pipeline</th><th>Achievement</th><th>Cert</th></tr></thead>
     <tbody>${(function() {
       const _hbCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer
-      return ST.getAll('dealers').filter(d => d.level && d.level !== 'Other').map(d => {
+      return scopedDealers().filter(d => d.level && d.level !== 'Other').map(d => {
       const pipes = ST.pipelineByDealer(d.id);
       const h = calcHealthScore(d.id, _hbCfg, pipes);
       const lcd = ST.getLastContactDays(d.id);
@@ -1022,7 +1023,9 @@ function _fcMergeBySource(pipes, dealerFilter) {
 
 // สร้าง pipes ที่ผ่านตัวกรองปัจจุบันของหน้า Forecast ใหม่ (status + dealer + แหล่งข้อมูล) แล้ว export เป็น Excel
 function exportFcExcel() {
-  var allPipes = ST.getAll('pipeline');
+  var _scopedIds = {};
+  scopedDealers().forEach(function(d) { _scopedIds[d.id] = true; });
+  var allPipes = ST.getAll('pipeline').filter(function(p) { return !p.dealerId || _scopedIds[p.dealerId]; });
   var pipes;
   if (fcStatusFilter === 'all') pipes = allPipes;
   else if (fcStatusFilter === 'won') pipes = allPipes.filter(function(p) { return pipeIsWon(p); });
@@ -1034,9 +1037,12 @@ function exportFcExcel() {
 
 function rForecast(el) {
   document.getElementById('pgT').textContent = '📦 Forecast';
-  var allPipes = ST.getAll('pipeline');
-  var dealers = ST.getAll('dealers');
-  
+  // จำกัดตาม dealer scope (topbar picker) — โครงการที่ไม่มี dealerId (เคสหายาก) โชว์เสมอไม่กรองออก
+  var dealers = scopedDealers();
+  var _scopedIds = {};
+  dealers.forEach(function(d) { _scopedIds[d.id] = true; });
+  var allPipes = ST.getAll('pipeline').filter(function(p) { return !p.dealerId || _scopedIds[p.dealerId]; });
+
   // Status filter
   var pipes;
   if (fcStatusFilter === 'all') {

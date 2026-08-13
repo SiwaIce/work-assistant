@@ -196,7 +196,7 @@ function kpiVisitStatusThisMonth() {
   var now = new Date();
   var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   var visitsThisMonth = ST.getAll('visits').filter(function(v) { return (v.date || '').indexOf(ym) === 0; });
-  var partnerDealers = ST.getAll('dealers').filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
+  var partnerDealers = scopedDealers().filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
   var partnerVisitedIds = {};
   var nonPartnerCount = 0;
   visitsThisMonth.forEach(function(v) {

@@ -3464,10 +3464,12 @@ function rQuotations(el) {
   document.getElementById('pgT').textContent = '💰 Quotation Tracker';
   var quotes = getQuotations();
   var dealers = [];
-  try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
-  
+  try { dealers = scopedDealers(); } catch(e) { dealers = []; }
+
   if (!quotes || !Array.isArray(quotes)) quotes = [];
-  
+  var _scopedIds = scopedDealerIdSet();
+  quotes = quotes.filter(function(q) { return !q.dealerId || _scopedIds[q.dealerId]; });
+
   var pending = (quotes || []).filter(function(q) { return q && q.status === 'pending'; });
   var approved = (quotes || []).filter(function(q) { return q && q.status === 'approved'; });
   var rejected = (quotes || []).filter(function(q) { return q && q.status === 'rejected'; });
@@ -3814,7 +3816,7 @@ function renderVpWeekView() {
   var visits = [];
   var plans = getVisitPlans();
 
-  try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
+  try { dealers = scopedDealers(); } catch(e) { dealers = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
 
   var now = new Date();
@@ -4598,6 +4600,7 @@ function rSmartFilter(el) {
   document.getElementById('pgT').textContent = f ? f.icon + ' ' + f.name : '🔍 Smart Filter';
   
   var html = '';
+  var _sfScopedIds = scopedDealerIdSet();
 
   switch(fid) {
     case 'overdue_tasks': {
@@ -4610,7 +4613,7 @@ function rSmartFilter(el) {
     case 'bidding_soon': {
       var w = getWeekRange();
       var items = [];
-      try { items = ST.filter('pipeline', function(p) { return p.biddingDate && isInRange(p.biddingDate, w.start, w.end) && pipeIsOpen(p); }); } catch(e) {}
+      try { items = ST.filter('pipeline', function(p) { return p.biddingDate && isInRange(p.biddingDate, w.start, w.end) && pipeIsOpen(p) && (!p.dealerId || _sfScopedIds[p.dealerId]); }); } catch(e) {}
       html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>✅ ไม่มี Bidding ในสัปดาห์นี้</p></div>';
       break;
     }
@@ -4624,7 +4627,7 @@ function rSmartFilter(el) {
     }
     case 'low_health': {
       var _lhCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer
-      var items = ST.getAll('dealers').map(function(d) { return Object.assign({}, d, {health: calcHealthScore(d.id, _lhCfg)}); }).filter(function(d) { return d.health.score < 40; });
+      var items = scopedDealers().map(function(d) { return Object.assign({}, d, {health: calcHealthScore(d.id, _lhCfg)}); }).filter(function(d) { return d.health.score < 40; });
       html = items.map(function(d) {
         return '<div class="li" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})"><div class="lm"><div class="lt">' + sanitize(d.name) + ' ' + levelTag(d.level) + ' <span style="color:#ef4444;font-weight:700">' + d.health.score + '/100</span></div><div class="ls">' + d.health.details.filter(function(x) { return x.status === 'bad'; }).map(function(x) { return x.label; }).join(' • ') + '</div></div></div>';
       }).join('') || '<div class="empty"><p>✅ Dealer Health ดีทุกราย</p></div>';
@@ -4637,13 +4640,13 @@ function rSmartFilter(el) {
     }
     case 'big_projects': {
       var items = [];
-      try { items = ST.filter('pipeline', function(p) { return Number(p.forecastAmount) >= 1500000 && pipeIsOpen(p); }); } catch(e) {}
+      try { items = ST.filter('pipeline', function(p) { return Number(p.forecastAmount) >= 1500000 && pipeIsOpen(p) && (!p.dealerId || _sfScopedIds[p.dealerId]); }); } catch(e) {}
       html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>ไม่มี</p></div>';
       break;
     }
     case 'need_action': {
       var items = [];
-      try { items = ST.filter('pipeline', function(p) { return p.followupDate && dTo(p.followupDate) <= 3 && pipeIsOpen(p); }); } catch(e) {}
+      try { items = ST.filter('pipeline', function(p) { return p.followupDate && dTo(p.followupDate) <= 3 && pipeIsOpen(p) && (!p.dealerId || _sfScopedIds[p.dealerId]); }); } catch(e) {}
       html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>✅ ไม่มีที่ต้องทำ</p></div>';
       break;
     }

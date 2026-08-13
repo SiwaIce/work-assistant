@@ -2231,7 +2231,9 @@ function rMarginAnalysis(el) {
   try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
 
   // Filter
+  var _maScopedIds = scopedDealerIdSet();
   var filtered = allQuotes.filter(function(q) {
+    if (q.dealerId && !_maScopedIds[q.dealerId]) return false;
     if (_maFilter.status !== 'all' && q.status !== _maFilter.status) return false;
     if (_maFilter.dealerId && q.dealerId !== _maFilter.dealerId) return false;
     if (_maFilter.dateFrom && (q.validFrom || '') < _maFilter.dateFrom) return false;
@@ -2255,7 +2257,7 @@ function rMarginAnalysis(el) {
   var sumProfit = sumRev - sumCost;
   var avgMargin = sumRev > 0 ? (sumProfit / sumRev * 100) : 0;
 
-  var dealers = ST.getAll('dealers');
+  var dealers = scopedDealers();
   var dealerOptions = '<option value="">ทุก Dealer</option>';
   dealers.forEach(function(d) { dealerOptions += '<option value="' + d.id + '"' + (_maFilter.dealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; });
 
