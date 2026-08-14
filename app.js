@@ -1261,11 +1261,36 @@ function getDealerContactStatus() {
 // ================================================================
 // DEALER HEALTH SCORE
 // ================================================================
+// index ล่วงหน้า: {dealerId: [pipes]} / {pipeId: [logs เรียงใหม่สุดก่อนแล้ว]} — สร้างครั้งเดียวด้วยการวน
+// ST.getAll('pipeline')/ST.getAll('pipeLog') รอบเดียว (O(n)) แทนที่ calcHealthScore จะเรียก
+// ST.pipelineByDealer()/ST.pipeLogsByPipe() เอง (แต่ละตัว filter() ทั้ง array ใหม่ทุกครั้ง) วนซ้ำต่อ Dealer/
+// Pipe กลายเป็น O(dealers×pipelines) — ที่มาของอาการหน่วง/ค้างตอนข้อมูลเยอะ (หน้า "วันนี้" วัดได้ 500-800ms
+// ตอน Dealer 150 + Pipeline 300 ก่อนแก้) ใช้กับ getSmartFilters/generateInsights/rDealers
+function buildHealthScoreIndexes() {
+  var pipesByDealer = {};
+  ST.getAll('pipeline').forEach(function(p) {
+    if (!p.dealerId) return;
+    if (!pipesByDealer[p.dealerId]) pipesByDealer[p.dealerId] = [];
+    pipesByDealer[p.dealerId].push(p);
+  });
+  var logsByPipe = {};
+  ST.getAll('pipeLog').forEach(function(l) {
+    if (!l.pipeId) return;
+    if (!logsByPipe[l.pipeId]) logsByPipe[l.pipeId] = [];
+    logsByPipe[l.pipeId].push(l);
+  });
+  Object.keys(logsByPipe).forEach(function(pid) {
+    logsByPipe[pid].sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  });
+  return { pipesByDealer: pipesByDealer, logsByPipe: logsByPipe };
+}
+
 // cfg/allPipes: ส่งเข้ามาได้ (ไม่บังคับ) — เลี่ยงเรียก getConfig()/ST.pipelineByDealer() ซ้ำตอนถูกเรียก
 // วนทุก Dealer (rDealerList, generateInsights, getSmartFilters ฯลฯ) ไม่ส่งมาก็ยังทำงานได้เหมือนเดิม
 // (ดึงเองตามปกติ) — ของเดิมยังเรียก ST.pipelineByDealer() ซ้ำ 2 รอบในฟังก์ชันเดียวด้วย (บรรทัด Pipeline
-// กับ Achievement) รวบเหลือรอบเดียวแล้วแยกกรอง open/won จาก allPipes ตัวเดียวกัน
-function calcHealthScore(dealerId, cfg, allPipes) {
+// กับ Achievement) รวบเหลือรอบเดียวแล้วแยกกรอง open/won จาก allPipes ตัวเดียวกัน — logsIndex (ไม่บังคับ) คือ
+// ผลจาก buildHealthScoreIndexes().logsByPipe เลี่ยงเรียก ST.pipeLogsByPipe() ต่อ Pipe อีกที
+function calcHealthScore(dealerId, cfg, allPipes, logsIndex) {
   cfg = cfg || getConfig(); var w = cfg.healthWeights; var score = 0; var details = [];
   var dealer = ST.getOne('dealers', dealerId);
   var contactDays = ST.getLastContactDays(dealerId);
@@ -1280,7 +1305,10 @@ function calcHealthScore(dealerId, cfg, allPipes) {
   // Pipeline (20 pts)
   var pipes = allPipes.filter(function(p) { return pipeIsOpen(p); });
   var allLogs = [];
-  pipes.forEach(function(p) { ST.pipeLogsByPipe(p.id).forEach(function(l) { allLogs.push(l); }); });
+  pipes.forEach(function(p) {
+    var logs = logsIndex ? (logsIndex[p.id] || []) : ST.pipeLogsByPipe(p.id);
+    logs.forEach(function(l) { allLogs.push(l); });
+  });
   allLogs.sort(function(a,b) { return (b.date||'').localeCompare(a.date||''); });
   var logDays = allLogs.length ? daysBetween(allLogs[0].date.split('T')[0], _td()) : 999;
 
@@ -1349,9 +1377,9 @@ function getUrgentItems() {
   return items;
 }
 
-function getStalePipelines() {
+function getStalePipelines(_precomputedScopedIds) {
   var cutoff = addD(_td(), -14);
-  var _scopedIds = scopedDealerIdSet();
+  var _scopedIds = _precomputedScopedIds || scopedDealerIdSet();
   return ST.filter('pipeline', function(p) {
     if (!pipeIsOpen(p)) return false;
     if (p.dealerId && !_scopedIds[p.dealerId]) return false;
@@ -1367,16 +1395,23 @@ function getStalePipelines() {
 function getSmartFilters() {
   var w = getWeekRange();
   var _sfCfg = getConfig(); // ครั้งเดียว — calcHealthScore เดิมเรียก getConfig() เองต่อ Dealer ใน low_health ด้านล่าง
-  var _scopedIds = scopedDealerIdSet();
+  var _sfIdx = buildHealthScoreIndexes(); // O(n) ครั้งเดียว กัน low_health เรียก ST.pipelineByDealer()/ST.pipeLogsByPipe() ต่อ Dealer/Pipe (O(dealers×pipelines) เดิม — สาเหตุหลักที่หน้าวันนี้หน่วง)
+  // เรียก scopedDealers()/scopedDealerIdSet() ครั้งเดียวแล้วส่งต่อ (ทั้งสองตัวเรียก getConfig() deep-clone
+  // ข้างในทุกครั้ง) — เดิมเรียกซ้ำ 4 รอบในฟังก์ชันนี้ (รวมที่ getStalePipelines() เรียกเองข้างในด้วย) ทำให้
+  // หน้าวันนี้ (เรียกฟังก์ชันนี้ทุก render) หน่วงเกินจำเป็น ส่ง _scopedDealersCache เข้า getStalePipelines()
+  // แทนให้มันคำนวณเองซ้ำ
+  var _scopedDealersOnce = scopedDealers();
+  var _scopedIds = {};
+  _scopedDealersOnce.forEach(function(d) { _scopedIds[d.id] = true; });
   return [
     {id:'overdue_tasks', icon:'🔴', name:'งานเลย Deadline', count:getUrgentItems().filter(function(i){return dTo(i.dueDate)<0;}).length, color:'#ef4444'},
     {id:'bidding_soon', icon:'⏳', name:'Bidding สัปดาห์นี้', count:ST.filter('pipeline',function(p){return p.biddingDate&&isInRange(p.biddingDate,w.start,w.end)&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#f59e0b'},
-    {id:'stale_pipeline', icon:'🔄', name:'Pipeline ไม่อัพเดต 14d', count:getStalePipelines().length, color:'#94a3b8'},
+    {id:'stale_pipeline', icon:'🔄', name:'Pipeline ไม่อัพเดต 14d', count:getStalePipelines(_scopedIds).length, color:'#94a3b8'},
     {id:'big_projects', icon:'💰', name:'Project ≥ 1.5M', count:ST.filter('pipeline',function(p){return Number(p.forecastAmount)>=1500000&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#22c55e'},
     {id:'waiting_overdue', icon:'📭', name:'รอคนอื่น (เลยกำหนด)', count:ST.filter('waiting',function(w2){return !w2.resolved&&w2.dueDate&&dTo(w2.dueDate)<0;}).length, color:'#ef4444'},
-    {id:'no_contact_14d', icon:'📞', name:'ไม่ติดต่อ > 14d', count:scopedDealers().filter(function(d){var days=ST.getLastContactDays(d.id);return days===null||days>14;}).length, color:'#ef4444'},
+    {id:'no_contact_14d', icon:'📞', name:'ไม่ติดต่อ > 14d', count:_scopedDealersOnce.filter(function(d){var days=ST.getLastContactDays(d.id);return days===null||days>14;}).length, color:'#ef4444'},
     {id:'need_action', icon:'🎯', name:'ต้องทำ Next Action', count:ST.filter('pipeline',function(p){return p.followupDate&&dTo(p.followupDate)<=3&&pipeIsOpen(p)&&(!p.dealerId||_scopedIds[p.dealerId]);}).length, color:'#3b82f6'},
-    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:scopedDealers().filter(function(d){return calcHealthScore(d.id,_sfCfg).score<40;}).length, color:'#ef4444'}
+    {id:'low_health', icon:'🏥', name:'Dealer Health ต่ำ', count:_scopedDealersOnce.filter(function(d){return calcHealthScore(d.id,_sfCfg,_sfIdx.pipesByDealer[d.id]||[],_sfIdx.logsByPipe).score<40;}).length, color:'#ef4444'}
   ];
 }
 
@@ -1386,7 +1421,9 @@ function getSmartFilters() {
 function generateInsights() {
   var insights = [];
   var dealers = scopedDealers();
-  var _scopedIds = scopedDealerIdSet();
+  var _scopedIds = {};
+  dealers.forEach(function(d) { _scopedIds[d.id] = true; });
+  var _giIdx = buildHealthScoreIndexes(); // ดู getSmartFilters — กัน badHealth ด้านล่างวน O(dealers×pipelines)
   var pipes = ST.getAll('pipeline').filter(function(p){return !p.dealerId||_scopedIds[p.dealerId];});
   var m = getMonthRange();
   var totalClosed = pipes.filter(function(p){return pipeIsWon(p) || pipeIsLost(p);}).length;
@@ -1401,7 +1438,7 @@ function generateInsights() {
     var pct = Math.round(wonAmt/totalTarget*100);
     insights.push({icon:pct>=70?'🎯':'⚠️', title:'Achievement: '+pct+'%', desc:fmtMoney(wonAmt)+' / '+fmtMoney(totalTarget), priority:pct<50?'high':'low'});
   }
-  var badHealth = dealers.filter(function(d){return calcHealthScore(d.id).score<40;});
+  var badHealth = dealers.filter(function(d){return calcHealthScore(d.id, null, _giIdx.pipesByDealer[d.id]||[], _giIdx.logsByPipe).score<40;});
   if (badHealth.length) insights.push({icon:'🏥', title:badHealth.length+' Dealer ต้องดูแลด่วน', desc:badHealth.map(function(d){return d.name;}).join(', '), priority:'high'});
   var bids = pipes.filter(function(p){return p.biddingDate&&dTo(p.biddingDate)>=0&&dTo(p.biddingDate)<=14&&pipeIsOpen(p);});
   if (bids.length) { var bidAmt = bids.reduce(function(a,p){return a+(Number(p.forecastAmount)||0);},0); insights.push({icon:'⏳', title:bids.length+' Bidding ใน 2 สัปดาห์', desc:'มูลค่า '+fmtMoney(bidAmt), priority:'medium'}); }

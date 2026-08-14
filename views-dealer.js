@@ -418,7 +418,10 @@ function rDealers(el) {
   document.getElementById('pgT').textContent = '🏪 Dealer';
   // scopedDealers() = ขอบเขตที่เลือกไว้จาก picker บน topbar (default: เฉพาะของฉัน) — chip "เซลที่ดูแล" ด้านล่าง
   // เป็นตัวกรองซ้อนอีกชั้นภายในขอบเขตนี้ (เผื่อเลือก scope เป็นทั้งหมด/หลายคน แล้วอยากเจาะแค่บางคนชั่วคราว)
-  let dealers = scopedDealers();
+  // เรียกครั้งเดียวเก็บไว้ — scopedDealers() ข้างในเรียก getConfig() (deep-clone) ทุกครั้ง เดิมเรียกซ้ำ 3 รอบ
+  // ในฟังก์ชันนี้ทำให้หน้า Dealers ช้าลงชัดเจนเวลามี Dealer เยอะ
+  const _scopedDealersOnce = scopedDealers();
+  let dealers = _scopedDealersOnce;
 
   if (dealerFilter !== 'all') {
     if (dealerFilter === 'authorized') dealers = dealers.filter(d => ['S','A','B'].includes(d.level));
@@ -428,7 +431,7 @@ function rDealers(el) {
 
   // ตัวเลือก "เซลที่ดูแล" คำนวณจาก Dealer ในขอบเขตปัจจุบัน (ไม่ใช่แค่หลังกรอง Level) กันตัวเลือกหายไปตอนสลับ Level filter
   const saleNameCounts = {};
-  scopedDealers().forEach(d => {
+  _scopedDealersOnce.forEach(d => {
     const key = d.saleName || DEALER_SALE_UNSET;
     saleNameCounts[key] = (saleNameCounts[key] || 0) + 1;
   });
@@ -436,7 +439,7 @@ function rDealers(el) {
   const saleFilterActive = Object.keys(dealerSaleFilter).length > 0;
   if (saleFilterActive) dealers = dealers.filter(d => dealerSaleFilter[d.saleName || DEALER_SALE_UNSET]);
 
-  const overdueCount = scopedDealers().filter(d => {
+  const overdueCount = _scopedDealersOnce.filter(d => {
     const lvd = ST.getLastVisitDays(d.id);
     return lvd === null || lvd > DEALER_VISIT_OVERDUE_DAYS;
   }).length;
@@ -451,7 +454,11 @@ function rDealers(el) {
   // getConfig() ครั้งเดียวก่อน map — calcHealthScore() เดิมเรียก getConfig() (deep-clone config ทั้งก้อน)
   // เองข้างในทุก Dealer พบว่าเป็นคอขวดหลักของหน้านี้เมื่อมี Dealer เยอะ (pattern เดียวกับที่แก้ใน Pipeline)
   const _dlCfg = getConfig();
-  dealers = dealers.map(d => ({...d, _health: calcHealthScore(d.id, _dlCfg)}))
+  // buildHealthScoreIndexes() (app.js) — index pipelines-by-dealer/logs-by-pipe ล่วงหน้ารอบเดียว กัน
+  // calcHealthScore เรียก ST.pipelineByDealer()/ST.pipeLogsByPipe() (filter() ทั้ง array ใหม่ทุกครั้ง) ซ้ำ
+  // ต่อ Dealer/Pipe — O(dealers×pipelines) เดิม คือคอขวดหลักที่ทำให้หน้านี้ช้าตอน Dealer เยอะ
+  const _dlIdx = buildHealthScoreIndexes();
+  dealers = dealers.map(d => ({...d, _health: calcHealthScore(d.id, _dlCfg, _dlIdx.pipesByDealer[d.id]||[], _dlIdx.logsByPipe)}))
     .sort((a, b) => {
       const lOrder = {S:0, A:1, B:2};
       const la = lOrder[a.level] ?? 3, lb = lOrder[b.level] ?? 3;

@@ -832,9 +832,17 @@ function getSmartNotifications() {
   }
 
   // ---- 6. Dealers not visited 30+ days ----
+  // index visits by dealerId ครั้งเดียว — เดิม (visits||[]).filter() ต่อ Dealer ทุกราย กลายเป็น
+  // O(dealers×visits) เป็นหนึ่งในคอขวดของ renderSmartNotifPanel
+  var _snVisitsByDealer = {};
+  (visits || []).forEach(function (v) {
+    if (!v.dealerId) return;
+    if (!_snVisitsByDealer[v.dealerId]) _snVisitsByDealer[v.dealerId] = [];
+    _snVisitsByDealer[v.dealerId].push(v);
+  });
   var neglected = [];
   (dealers || []).forEach(function (d) {
-    var dVisits = (visits || []).filter(function (v) { return v.dealerId === d.id; });
+    var dVisits = _snVisitsByDealer[d.id] || [];
     if (dVisits.length === 0) { neglected.push(d.name); return; }
     var latest = null;
     dVisits.forEach(function (v) {
@@ -1400,6 +1408,13 @@ function renderUpcomingTimeline() {
 
   var allItems = [];
 
+  // ST.getOne(collection,id) = ST.getAll(collection).find(...) ทุกครั้ง (parse array ใหม่ทั้งก้อน ไม่มี cache)
+  // — ฟังก์ชันนี้เรียก ST.getOne('dealers', ...) ในลูปหลายจุด (task/action/pipeline follow-up/bidding/
+  // follow-up) รวมกันหลายร้อยครั้งตามจำนวน record กลายเป็น O(records × dealers) พบว่าเป็นคอขวดตัวจริง (ST.getAll
+  // ถูกเรียกซ้ำ 300 ครั้งตอนทดสอบ Pipeline 300 รายการ) ทำ map ไว้ครั้งเดียวแทน
+  var _rutDealerMap = {};
+  ST.getAll('dealers').forEach(function(d) { _rutDealerMap[d.id] = d; });
+
   // Tasks
   var tasks = [];
   try { tasks = ST.getAll('tasks'); } catch(e) { tasks = []; }
@@ -1408,7 +1423,7 @@ function renderUpcomingTimeline() {
     if (t.dueDate) {
       var d = ftParseDate(t.dueDate);
       if (d) {
-        var dd = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
+        var dd = t.dealerId ? (_rutDealerMap[t.dealerId] || null) : null;
         allItems.push({
           date: t.dueDate,
           dateObj: d,
@@ -1453,7 +1468,7 @@ function renderUpcomingTimeline() {
     try { pipe = ST.getOne('pipeline', a.pipeId); } catch(e) { pipe = null; }
     if (!pipe) return;
     if (!pipeIsOpen(pipe)) return;
-    var dealer = pipe.dealerId ? ST.getOne('dealers', pipe.dealerId) : null;
+    var dealer = pipe.dealerId ? (_rutDealerMap[pipe.dealerId] || null) : null;
     allItems.push({
       date: a.dueDate,
       dateObj: d,
@@ -1468,23 +1483,37 @@ function renderUpcomingTimeline() {
   // Pipeline Follow-up Dates
   var pipeline = [];
   try { pipeline = ST.getAll('pipeline'); } catch(e) { pipeline = []; }
+  // index ล่วงหน้าก่อนเข้าลูป — เดิมเรียก pipeOpenTasks(p.id) (ST.getAll('tasks').filter() ใหม่ทุกครั้ง, 2 รอบ
+  // ต่อรายการด้วย) และวน pipeActions ซ้อนในลูป pipeline อีกที ทั้งคู่กลายเป็น O(pipelines × tasks/actions) —
+  // คือคอขวดหลักของ renderUpcomingTimeline (วัดได้ ~190ms ตอน pipeline 300 รายการ)
+  var _rutOpenTaskByPipe = {};
+  ST.getAll('tasks').forEach(function(t) {
+    if (t.status === 'completed' || !t.pipeId) return;
+    if (!_rutOpenTaskByPipe[t.pipeId]) _rutOpenTaskByPipe[t.pipeId] = [];
+    _rutOpenTaskByPipe[t.pipeId].push(t);
+  });
+  Object.keys(_rutOpenTaskByPipe).forEach(function(pid) {
+    _rutOpenTaskByPipe[pid].sort(function(a, b) { return (a.created || '').localeCompare(b.created || ''); });
+  });
+  var _rutCoveredKeys = {};
+  (pipeActions || []).forEach(function(a) {
+    if (a.status === 'pending') _rutCoveredKeys[a.pipeId + '|' + a.dueDate] = true;
+  });
   (pipeline || []).forEach(function(p) {
     if (!pipeIsOpen(p)) return;
     if (p.followupDate) {
       var fd = ftParseDate(p.followupDate);
       if (fd) {
-        var dealer = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-        var covered = false;
-        (pipeActions || []).forEach(function(a) {
-          if (a.pipeId === p.id && a.status === 'pending' && a.dueDate === p.followupDate) covered = true;
-        });
+        var dealer = p.dealerId ? (_rutDealerMap[p.dealerId] || null) : null;
+        var covered = !!_rutCoveredKeys[p.id + '|' + p.followupDate];
         if (!covered) {
+          var _firstOpenTask = _rutOpenTaskByPipe[p.id] && _rutOpenTaskByPipe[p.id][0];
           allItems.push({
             date: p.followupDate,
             dateObj: fd,
             icon: '📊',
             text: 'Follow-up: ' + sanitize((p.projectName || '').substr(0, 30)),
-            sub: (dealer ? '🏪 ' + sanitize(dealer.name) : '') + (pipeOpenTasks(p.id)[0] ? ' • 🎯 ' + sanitize(pipeOpenTasks(p.id)[0].title) : ''),
+            sub: (dealer ? '🏪 ' + sanitize(dealer.name) : '') + (_firstOpenTask ? ' • 🎯 ' + sanitize(_firstOpenTask.title) : ''),
             type: 'pipeline',
             link: "go('pipeDetail',{pipeId:'" + p.id + "'})"
           });
@@ -1494,7 +1523,7 @@ function renderUpcomingTimeline() {
     if (p.biddingDate && pipeIsActive(p)) {
       var bd = ftParseDate(p.biddingDate);
       if (bd) {
-        var dealer2 = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+        var dealer2 = p.dealerId ? (_rutDealerMap[p.dealerId] || null) : null;
         allItems.push({
           date: p.biddingDate,
           dateObj: bd,
@@ -1517,7 +1546,7 @@ function renderUpcomingTimeline() {
     if (!fDate) return;
     var fd = ftParseDate(fDate);
     if (!fd) return;
-    var dealer = f.dealerId ? ST.getOne('dealers', f.dealerId) : null;
+    var dealer = f.dealerId ? (_rutDealerMap[f.dealerId] || null) : null;
     allItems.push({
       date: fDate,
       dateObj: fd,
@@ -3467,7 +3496,8 @@ function rQuotations(el) {
   try { dealers = scopedDealers(); } catch(e) { dealers = []; }
 
   if (!quotes || !Array.isArray(quotes)) quotes = [];
-  var _scopedIds = scopedDealerIdSet();
+  var _scopedIds = {};
+  dealers.forEach(function(d) { _scopedIds[d.id] = true; });
   quotes = quotes.filter(function(q) { return !q.dealerId || _scopedIds[q.dealerId]; });
 
   var pending = (quotes || []).filter(function(q) { return q && q.status === 'pending'; });

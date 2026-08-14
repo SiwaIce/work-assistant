@@ -2230,8 +2230,11 @@ function rMarginAnalysis(el) {
   var allQuotes = [];
   try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
 
-  // Filter
-  var _maScopedIds = scopedDealerIdSet();
+  // Filter — เรียก scopedDealers() ครั้งเดียวแล้วทำ id-set เอง (ไม่เรียก scopedDealerIdSet() แยก กัน
+  // getConfig() deep-clone ซ้ำสองรอบในฟังก์ชันเดียว)
+  var _maDealersOnce = scopedDealers();
+  var _maScopedIds = {};
+  _maDealersOnce.forEach(function(d) { _maScopedIds[d.id] = true; });
   var filtered = allQuotes.filter(function(q) {
     if (q.dealerId && !_maScopedIds[q.dealerId]) return false;
     if (_maFilter.status !== 'all' && q.status !== _maFilter.status) return false;
@@ -2257,7 +2260,7 @@ function rMarginAnalysis(el) {
   var sumProfit = sumRev - sumCost;
   var avgMargin = sumRev > 0 ? (sumProfit / sumRev * 100) : 0;
 
-  var dealers = scopedDealers();
+  var dealers = _maDealersOnce;
   var dealerOptions = '<option value="">ทุก Dealer</option>';
   dealers.forEach(function(d) { dealerOptions += '<option value="' + d.id + '"' + (_maFilter.dealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; });
 

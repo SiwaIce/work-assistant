@@ -15,10 +15,17 @@ function setDealerScope(mode, names) {
   localStorage.setItem(DEALER_SCOPE_KEY, JSON.stringify({ mode: mode, names: names || [] }));
   if (typeof render === 'function') render();
 }
-// ชื่อของฉันเอง (ตั้งใน Admin > ชื่อผู้ใช้) — ใช้เป็นค่าเริ่มต้นของ mode 'mine' เสมอ
+// ชื่อของฉันเอง (ตั้งใน Admin > ชื่อผู้ใช้) — ใช้เป็นค่าเริ่มต้นของ mode 'mine' เสมอ — อ่านตรงจาก config ที่
+// เซฟไว้ ไม่เรียก getConfig() เต็มรูปแบบ (deep-clone DEF_CONFIG ทั้งก้อน + merge ทุก field) เพราะฟังก์ชันนี้
+// ถูกเรียกทุก render() (ผ่าน updateDealerScopeBadge/scopedDealers) ทั่วทั้งแอพ ถ้า deep-clone ทุกครั้งจะหน่วง
+// สะสมชัดเจนบนมือถือ — saleName เป็น field ธรรมดาไม่มี merge logic พิเศษ (ดู getConfig ใน app.js) ปลอดภัยที่
+// จะอ่านลัดแบบนี้
 function myDealerScopeName() {
-  var cfg = (typeof getConfig === 'function') ? getConfig() : {};
-  return cfg.saleName || '';
+  try {
+    var saved = ST.getObj('config');
+    if (saved && saved.saleName) return saved.saleName;
+  } catch (e) {}
+  return 'Siwawong';
 }
 // รายชื่อ saleName ที่ "เห็นได้ตอนนี้" ตาม mode ปัจจุบัน — mode 'all' คืน null (แปลว่าไม่กรอง)
 function dealerScopeActiveNames() {
