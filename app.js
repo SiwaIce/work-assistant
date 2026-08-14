@@ -769,6 +769,7 @@ var R = {
   mondayCompany: rMondayCompany,
   posCalibration: rPosCalibration,
   pipelineCompare: rPipelineCompare,
+  kpiCompanyPlan: rKpiCompanyPlan,
   contactLogs: rContactLogs,
   pipeline: rPipeline,
   pipelineTeam: rPipelineTeam,
@@ -1734,6 +1735,7 @@ var APP_MENU_REGISTRY = [
   {id: 'pipeBoard', icon: '📋', name: 'Pipeline Board'},
   {id: 'pipeDash', icon: '📊', name: 'Pipeline Overview'},
   {id: 'mondayMeeting', icon: '🗓️', name: 'ประชุมจันทร์'},
+  {id: 'kpiCompanyPlan', icon: '🎯', name: 'แผนบรรลุเป้า KPI'},
   {id: 'pipelineCompare', icon: '📊', name: 'เปรียบเทียบโครงการ/คู่แข่ง'},
   {id: 'salesOrders', icon: '📦', name: 'Sales Order'},
   {id: 'serialSearch', icon: '🔍', name: 'ค้นหา Serial'},
@@ -2387,7 +2389,7 @@ function renderMbHome() {
 var MB_NAV_ROUTE_GROUPS = {
   today: ['today'],
   dealers: ['dealers', 'dealerDetail', 'salesRepDashboard'],
-  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'forecast', 'forecastComparison'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
   tasks: ['tasks', 'taskDetail']
 };
 function updateMbNav() {

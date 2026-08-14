@@ -1010,6 +1010,87 @@ function mondayCompanyStats(dealerId, cfg) {
   };
 }
 
+// ================================================================
+// KPI COMPANY PLAN — แผนบรรลุเป้ารายบริษัท (SAB Partner) รายเดือน แยก Project/Runrate
+// ต่อยอดจาก mondayCompanyStats: เดือนที่ผ่านไปแล้ว/เดือนนี้ = ยอดจริง (ล็อก แก้ไม่ได้)
+// เดือนอนาคต = ค่าแนะนำอัตโนมัติจาก Pipeline เปิดอยู่ (ถ่วง POS ตาม expectedCloseDate) +
+// customerForecasts type:runrate เดือนนั้น หรือถ้า sale พิมพ์ทับเอง (v7_kpiMonthlyPlan) ใช้ค่านั้นแทน
+// ================================================================
+function getKpiMonthlyPlan(dealerId, month) {
+  return ST.getAll('kpiMonthlyPlan').find(function(x) { return x.dealerId === dealerId && x.month === month; }) || null;
+}
+function saveKpiMonthlyPlan(dealerId, month, project, runrate) {
+  var existing = getKpiMonthlyPlan(dealerId, month);
+  if (existing) return ST.update('kpiMonthlyPlan', existing.id, { project: project, runrate: runrate });
+  return ST.add('kpiMonthlyPlan', { dealerId: dealerId, month: month, project: project, runrate: runrate });
+}
+function kpiCompanyPlanMonths() {
+  var curMonth = new Date().getMonth() + 1; // 1-12
+  var half = curMonth <= 6 ? 'H1' : 'H2';
+  var startOffset = half === 'H1' ? (1 - curMonth) : (7 - curMonth);
+  var months = [];
+  for (var i = 0; i < 6; i++) months.push(fcMonthKey(startOffset + i));
+  return { half: half, months: months };
+}
+function computeKpiCompanyPlan(dealerId, cfg) {
+  cfg = cfg || getConfig();
+  var stats = mondayCompanyStats(dealerId, cfg);
+  var mm = kpiCompanyPlanMonths();
+  var curKey = fcMonthKey(0);
+  var target = mm.half === 'H1' ? stats.targetH1 : stats.targetH2;
+
+  var projectActualByMonth = {};
+  stats.wonPipes.forEach(function(p) {
+    var key = (p.expectedCloseDate || p.registerDate || '').slice(0, 7);
+    if (!key) return;
+    projectActualByMonth[key] = (projectActualByMonth[key] || 0) + (Number(p.realAmount || p.forecastAmount) || 0);
+  });
+  var projectForecastByMonth = {};
+  stats.activePipes.forEach(function(p) {
+    var key = (p.expectedCloseDate || '').slice(0, 7);
+    if (!key) return;
+    var amt = (Number(p.forecastAmount) || 0) * (p._pos || 0) / 100;
+    projectForecastByMonth[key] = (projectForecastByMonth[key] || 0) + amt;
+  });
+  var runrateByMonth = {};
+  ST.filter('customerForecasts', function(f) { return f.dealerId === dealerId && f.type === 'runrate'; }).forEach(function(r) {
+    if (!r.month) return;
+    var val = (getModelPrice(r.model) || 0) * (Number(r.qty) || 0);
+    runrateByMonth[r.month] = (runrateByMonth[r.month] || 0) + val;
+  });
+
+  var monthly = mm.months.map(function(key) {
+    var isPast = key < curKey, isCurrent = key === curKey, isFuture = key > curKey;
+    var project, runrate, isManual = false;
+    if (!isFuture) {
+      project = projectActualByMonth[key] || 0;
+      runrate = runrateByMonth[key] || 0;
+    } else {
+      var override = getKpiMonthlyPlan(dealerId, key);
+      if (override) { project = Number(override.project) || 0; runrate = Number(override.runrate) || 0; isManual = true; }
+      else { project = projectForecastByMonth[key] || 0; runrate = runrateByMonth[key] || 0; }
+    }
+    return { month: key, label: fcMonthLabel(key).split(' ')[0], isPast: isPast, isCurrent: isCurrent, isFuture: isFuture, project: project, runrate: runrate, isManual: isManual };
+  });
+
+  var forecastTotal = monthly.reduce(function(s, m) { return s + m.project + m.runrate; }, 0);
+  var actualSoFar = monthly.filter(function(m) { return !m.isFuture; }).reduce(function(s, m) { return s + m.project + m.runrate; }, 0);
+  var gap = target - forecastTotal;
+
+  return {
+    dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
+    actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, forecastTotal: forecastTotal, gap: gap,
+    stalePipes: stats.stalePipes, lastVisitDays: stats.lastVisitDays
+  };
+}
+// รวมทุกบริษัท SAB Partner (level S/A/B) ที่อยู่ในขอบเขต dealer scope ปัจจุบัน — ใช้หน้า rKpiCompanyPlan
+function computeKpiCompanyPlanAll(cfg) {
+  cfg = cfg || getConfig();
+  var dealers = scopedDealers().filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
+  return dealers.map(function(d) { return computeKpiCompanyPlan(d.id, cfg); })
+    .sort(function(a, b) { return (b.gap) - (a.gap); });
+}
+
 // ไตรมาสปฏิทินปัจจุบัน (Q1=ม.ค.-มี.ค. ฯลฯ) — ต่างจาก Thai Fiscal Year (thaiFYFromISO) ที่ใช้ที่อื่นในแอป
 // ใช้เฉพาะจุด "โครงการในไตรมาสนี้" ของ Monday Meeting ที่ Ryan ถามถึงตรงๆ เป็นปฏิทินสากล ไม่ใช่ปีงบ
 function mondayQuarterRange() {
