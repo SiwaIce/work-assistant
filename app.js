@@ -872,9 +872,20 @@ if (fn) {
 // ================================================================
 function toggleDealerScopeMenu() {
   var menu = document.getElementById('dealerScopeMenu');
-  if (!menu) return;
+  var btn = document.getElementById('dealerScopeBtn');
+  if (!menu || !btn) return;
   var willOpen = menu.style.display === 'none';
-  if (willOpen) renderDealerScopeMenu();
+  if (willOpen) {
+    renderDealerScopeMenu();
+    // menu ตอนนี้อยู่นอก .topbar (position:fixed) ตั้งใจ กัน .topbar ที่มี overflow-x:auto บนจอแคบ clip
+    // dropdown จนกดไม่ได้ — คำนวณตำแหน่งเองจาก rect ของปุ่มทุกครั้งที่เปิด แทนอิง CSS top/right ตายตัว
+    var r = btn.getBoundingClientRect();
+    var menuW = 220;
+    var left = Math.min(r.right - menuW, window.innerWidth - menuW - 8);
+    left = Math.max(8, left);
+    menu.style.left = left + 'px';
+    menu.style.top = (r.bottom + 6) + 'px';
+  }
   menu.style.display = willOpen ? 'block' : 'none';
 }
 function updateDealerScopeBadge() {

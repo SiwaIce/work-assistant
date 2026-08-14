@@ -172,10 +172,7 @@
     <div class="tt" id="pgT">📌 วันนี้</div>
   </div>
   <div class="topbar-r">
-  <div style="position:relative">
-    <div class="strig" id="dealerScopeBtn" onclick="toggleDealerScopeMenu()" title="เลือก Dealer ที่จะแสดงทั้งแอพ">👤 ของฉัน</div>
-    <div id="dealerScopeMenu" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:60;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:10px;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
-  </div>
+  <div class="strig" id="dealerScopeBtn" onclick="toggleDealerScopeMenu()" title="เลือก Dealer ที่จะแสดงทั้งแอพ">👤 ของฉัน</div>
   <div class="strig" onclick="openQCmd()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
   <button class="mode-toggle" onclick="toggleViewMode()" title="สลับ Desktop/Mobile">
     <span id="modeIcon">📱</span>
@@ -188,6 +185,11 @@
 </div>
 <div id="ct"></div>
 </div>
+
+<!-- อยู่นอก .topbar ตั้งใจ — .topbar มี overflow-x:auto (เลื่อนปุ่มแนวนอนบนจอแคบ) ซึ่ง clip dropdown แบบ
+     position:absolute ที่วางไว้ข้างในจนโผล่ไม่ขึ้นมาให้กดได้ ย้ายมาไว้ตรงนี้ + ใช้ position:fixed คำนวณตำแหน่ง
+     ด้วย JS (toggleDealerScopeMenu ใน app.js) แทน กัน clip ทุกกรณี -->
+<div id="dealerScopeMenu" style="display:none;position:fixed;z-index:9000;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:10px;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
 
 <!-- BOTTOM NAV (Mobile) -->
 <div id="bnav"><div class="bn">
