@@ -860,6 +860,37 @@ function computePosCalibration() {
 }
 
 // ================================================================
+// COMPETITOR ROLLUP — รวม p.competitorName (กรอกไว้แล้วในแต่ละ Pipeline ตอน hasCompetitor=true) เป็นภาพรวม
+// รายคู่แข่ง: เจอกี่โครงการ มูลค่ารวมเท่าไหร่ ผลแพ้/ชนะกับคู่แข่งรายนั้นกี่ครั้ง — ไม่มีฟิลด์ใหม่ ดึงจากข้อมูล
+// เดิมล้วนๆ จำกัดตาม dealer scope (topbar picker) เหมือนหน้าอื่นๆ ทั้งแอพ
+// ================================================================
+function computeCompetitorStats() {
+  var _scopedIds = scopedDealerIdSet();
+  var pipes = ST.getAll('pipeline').filter(function(p) {
+    return p.hasCompetitor && (p.competitorName || '').trim() && (!p.dealerId || _scopedIds[p.dealerId]);
+  });
+  var groups = {};
+  pipes.forEach(function(p) {
+    var name = p.competitorName.trim();
+    if (!groups[name]) groups[name] = { name: name, count: 0, totalValue: 0, won: 0, lost: 0, pipes: [] };
+    var g = groups[name];
+    g.count++;
+    g.totalValue += Number(p.forecastAmount) || 0;
+    if (pipeIsWon(p)) g.won++;
+    else if (pipeIsLost(p)) g.lost++;
+    g.pipes.push(p);
+  });
+  var list = Object.keys(groups).map(function(k) {
+    var g = groups[k];
+    var closed = g.won + g.lost;
+    g.winRate = closed ? Math.round(g.won / closed * 100) : null;
+    return g;
+  });
+  list.sort(function(a, b) { return b.count - a.count; });
+  return list;
+}
+
+// ================================================================
 // VISIT COVERAGE — ข้อกำหนดบริษัท: Dealer ระดับ S/A/B (Authorized) ต้องมี Offline Visit อย่างน้อย 1 ครั้ง/เดือน
 // เช็คสถานะแต่ละ Dealer ต่อเดือนที่ระบุ (default เดือนปัจจุบัน): 'visited' (มี Visit Report offline เดือนนี้
 // แล้ว) > 'planned' (มีนัด Visit Plan offline เดือนนี้ที่ยังไม่ได้ไป) > 'none' (ยังไม่มีทั้งนัดและ Visit เลย)

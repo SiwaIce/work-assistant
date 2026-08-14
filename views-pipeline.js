@@ -3268,6 +3268,189 @@ function _mondayRunrateRowHtml(r) {
   return '<div class="li" style="cursor:default"><div class="lm"><div class="lt">' + sanitize(r.model || '-') + ' ×' + (r.qty || 0) + '</div><div class="ls">' + sanitize(r.month || '') + (price ? ' · ฿' + fmtMoneyShort(price * (r.qty || 0)) : '') + '</div></div></div>';
 }
 
+// ================================================================
+// PIPELINE COMPARE — เปรียบเทียบโครงการที่แข่งกัน/คล้ายกันแบบเคียงข้างกัน (สูงสุด 4) + สรุปคู่แข่งที่เจอบ่อย
+// (go('pipelineCompare')) ทั้งสองการ์ดดึงจากข้อมูล Pipeline เดิมล้วนๆ ไม่มีฟิลด์ใหม่
+// ================================================================
+var pcSelected = []; // array ของ pipeId ที่เลือกมาเทียบ (สูงสุด 4)
+var pcQuery = '';
+
+function rPipelineCompare(el) {
+  document.getElementById('pgT').textContent = '📊 เปรียบเทียบโครงการ';
+  var cfg = getConfig();
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+
+  h += '<div class="card"><h2>🆚 เปรียบเทียบโครงการ</h2>';
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">เลือกโครงการที่จะเทียบ (สูงสุด 4 โครงการ)</div>';
+
+  // ---- picker ----
+  h += '<input type="text" id="pcSearchInput" placeholder="🔍 พิมพ์ชื่อโครงการ/Row No./บริษัท..." style="margin-bottom:8px" value="' + sanitize(pcQuery) + '" oninput="pcSearch(this.value)">';
+  h += '<div id="pcSearchResults" style="margin-bottom:10px"></div>';
+
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px" id="pcChips">' + pcChipsHtml() + '</div>';
+
+  h += '<div id="pcTableArea">' + pcTableHtml(cfg) + '</div>';
+  h += '</div>';
+
+  h += rCompetitorOverviewHtml();
+
+  el.innerHTML = h;
+}
+
+function pcChipsHtml() {
+  if (!pcSelected.length) return '<div style="font-size:11.5px;color:var(--text3)">ยังไม่ได้เลือกโครงการ</div>';
+  return pcSelected.map(function(id) {
+    var p = ST.getOne('pipeline', id);
+    if (!p) return '';
+    return '<div style="font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;gap:6px">' +
+      sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || '-')) +
+      '<span style="cursor:pointer" onclick="pcRemove(\'' + id + '\')">✕</span></div>';
+  }).join('');
+}
+
+function pcSearch(q) {
+  pcQuery = q || '';
+  var el = document.getElementById('pcSearchResults');
+  if (!el) return;
+  if (!pcQuery.trim()) { el.innerHTML = ''; return; }
+  var qlc = pcQuery.toLowerCase();
+  var results = ST.getAll('pipeline').filter(function(p) {
+    if (pcSelected.indexOf(p.id) !== -1) return false;
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    return (p.projectName || '').toLowerCase().indexOf(qlc) !== -1 ||
+      String(p.rowNo || '').toLowerCase().indexOf(qlc) !== -1 ||
+      (d && d.name || '').toLowerCase().indexOf(qlc) !== -1;
+  }).slice(0, 8);
+  if (!results.length) { el.innerHTML = '<div style="font-size:11.5px;color:var(--text3);padding:6px 0">ไม่พบโครงการ</div>'; return; }
+  el.innerHTML = results.map(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    return '<div class="li" style="cursor:pointer" onclick="pcAdd(\'' + p.id + '\')"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || '-')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + '</div></div></div>';
+  }).join('');
+}
+
+function pcAdd(pipeId) {
+  if (pcSelected.indexOf(pipeId) !== -1) return;
+  if (pcSelected.length >= 4) { toast('เทียบได้สูงสุด 4 โครงการ'); return; }
+  pcSelected.push(pipeId);
+  pcQuery = '';
+  render();
+}
+function pcRemove(pipeId) {
+  pcSelected = pcSelected.filter(function(id) { return id !== pipeId; });
+  render();
+}
+
+function pcTableHtml(cfg) {
+  if (pcSelected.length < 2) return '<div class="empty"><p>เลือกอย่างน้อย 2 โครงการเพื่อเปรียบเทียบ</p></div>';
+  var pipes = pcSelected.map(function(id) { return ST.getOne('pipeline', id); }).filter(Boolean);
+  if (pipes.length < 2) return '<div class="empty"><p>เลือกอย่างน้อย 2 โครงการเพื่อเปรียบเทียบ</p></div>';
+
+  var maxAmt = Math.max.apply(null, pipes.map(function(p) { return Number(p.forecastAmount) || 0; }));
+  var bestId = null, bestPos = -1;
+  pipes.forEach(function(p) {
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    var pos = computeSuggestedPOS(p, cfg, lastLog ? lastLog.date : null).score;
+    if (typeof p.projectPOS === 'number' && p.projectPOS) pos = p.projectPOS;
+    p._pcPos = pos;
+    if (pos > bestPos) { bestPos = pos; bestId = p.id; }
+  });
+
+  function td(fn) { return pipes.map(function(p) { return '<td>' + fn(p) + '</td>'; }).join(''); }
+
+  var h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:' + (140 + pipes.length * 190) + 'px">';
+  h += '<thead><tr><th style="text-align:left;padding:9px 12px;font-size:10.5px;color:var(--text2);background:var(--bg2);width:130px"></th>';
+  h += pipes.map(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var crown = p.id === bestId ? '🏆 ' : '';
+    return '<th style="text-align:left;padding:9px 12px;background:var(--bg2);min-width:190px;cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
+      '<div style="font-weight:700;font-size:13px">' + crown + sanitize((p.rowNo ? p.rowNo + ' · ' : '') + (p.projectName || '-')) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2);font-weight:400">🏪 ' + sanitize(d ? d.name : '-') + '</div></th>';
+  }).join('');
+  h += '</tr></thead><tbody>';
+
+  function row(label, fn) {
+    return '<tr><td style="padding:9px 12px;border-bottom:1px solid var(--border-light);color:var(--text2);font-weight:600;font-size:12px;background:var(--bg3,var(--bg2));white-space:nowrap">' + label + '</td>' +
+      pipes.map(function(p) { return '<td style="padding:9px 12px;border-bottom:1px solid var(--border-light);font-size:12.5px;vertical-align:top">' + fn(p) + '</td>'; }).join('') + '</tr>';
+  }
+
+  h += row('สถานะ', function(p) { return pipeTag(p.status); });
+  h += row('มูลค่า', function(p) { var amt = Number(p.forecastAmount) || 0; return '<b>฿' + fmtMoney(amt) + '</b>'; });
+  h += row('POS (โอกาสได้งาน)', function(p) {
+    var pos = p._pcPos || 0;
+    var c = pos >= 70 ? '#22c55e' : pos >= 40 ? '#f59e0b' : '#ef4444';
+    return pos + '%<div style="height:6px;background:var(--bg2);border-radius:4px;overflow:hidden;margin-top:4px;width:70px"><div style="height:100%;width:' + pos + '%;background:' + c + '"></div></div>';
+  });
+  h += row('วันยื่นซอง (Bidding)', function(p) { return p.biddingDate ? fDShort(p.biddingDate) : '<span style="color:var(--text3)">ยังไม่กำหนด</span>'; });
+  h += row('รุ่นสินค้าที่เสนอ', function(p) {
+    var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : [];
+    if (items.length) return sanitize(items.map(function(it) { return it.model; }).join(', '));
+    return sanitize(p.model || '-');
+  });
+  h += row('⚠️ คู่แข่ง', function(p) {
+    if (!p.hasCompetitor || !p.competitorName) return '<span style="color:var(--text3)">— ไม่มี —</span>';
+    return sanitize(p.competitorName);
+  });
+  h += row('หนังสือแต่งตั้ง', function(p) { return p.appointmentLetter === 'ออกแล้ว' ? '✅ ออกแล้ว' : '❌ ยังไม่ออก'; });
+  h += row('ลงทะเบียน CRM DJI', function(p) { return p.djiCrmRegistered ? '✅ แล้ว' : '❌ ยังไม่ได้'; });
+  h += row('อัพเดตล่าสุด', function(p) {
+    var lastLog = ST.pipeLogsByPipe(p.id)[0];
+    if (!lastLog) return '<span style="color:var(--text3)">ไม่เคยมี Log</span>';
+    var days = daysBetween(lastLog.date.split('T')[0], _td());
+    return days + ' วันก่อน' + (days > 14 ? ' ⚠️' : '');
+  });
+
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// รวม p.competitorName เป็นภาพรวมรายคู่แข่ง — ใช้ computeCompetitorStats() (utils.js)
+function rCompetitorOverviewHtml() {
+  var list = computeCompetitorStats();
+  var h = '<div class="card"><h2>🎯 คู่แข่งที่เจอบ่อย</h2>';
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">รวมจากช่อง "คู่แข่ง" ที่กรอกไว้ในแต่ละโครงการ</div>';
+  if (!list.length) { h += '<div class="empty"><p>ยังไม่มีโครงการที่ระบุคู่แข่งไว้</p></div></div>'; return h; }
+
+  h += '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
+  h += '<thead><tr>' +
+    '<th style="text-align:left;padding:8px 10px;font-size:10.5px;color:var(--text2);text-transform:uppercase">คู่แข่ง</th>' +
+    '<th style="text-align:right;padding:8px 10px;font-size:10.5px;color:var(--text2);text-transform:uppercase">เจอกี่โครงการ</th>' +
+    '<th style="text-align:right;padding:8px 10px;font-size:10.5px;color:var(--text2);text-transform:uppercase">มูลค่ารวม</th>' +
+    '<th style="text-align:left;padding:8px 10px;font-size:10.5px;color:var(--text2);text-transform:uppercase">ผลแพ้/ชนะ</th>' +
+    '<th style="text-align:right;padding:8px 10px;font-size:10.5px;color:var(--text2);text-transform:uppercase">Win Rate</th>' +
+    '</tr></thead><tbody>';
+  list.forEach(function(g) {
+    var closed = g.won + g.lost;
+    var wPct = closed ? Math.round(g.won / closed * 100) : 0;
+    var rateColor = g.winRate === null ? 'var(--text3)' : g.winRate >= 60 ? '#22c55e' : g.winRate >= 40 ? '#f59e0b' : '#ef4444';
+    h += '<tr style="cursor:pointer" onclick="showCompetitorPipesM(\'' + sanitize(g.name).replace(/'/g, "\\'") + '\')">' +
+      '<td style="padding:8px 10px;border-bottom:1px solid var(--border-light);font-weight:600">' + sanitize(g.name) + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid var(--border-light);text-align:right">' + g.count + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid var(--border-light);text-align:right">฿' + fmtMoneyShort(g.totalValue) + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid var(--border-light)">' + (closed ? '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;width:90px;background:var(--bg2)"><div style="background:#22c55e;width:' + wPct + '%"></div><div style="background:#ef4444;width:' + (100 - wPct) + '%"></div></div>' : '<span style="color:var(--text3);font-size:11px">ยังไม่ปิด</span>') + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid var(--border-light);text-align:right;color:' + rateColor + ';font-weight:700">' + (g.winRate === null ? '—' : g.winRate + '%') + '</td>' +
+      '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  var worst = list.filter(function(g) { return g.winRate !== null; }).sort(function(a, b) { return a.winRate - b.winRate; })[0];
+  if (worst && worst.winRate < 50) {
+    h += '<div style="font-size:10.5px;color:var(--text3);margin-top:10px">⚠️ ' + sanitize(worst.name) + ' แพ้บ่อยสุด (' + (100 - worst.winRate) + '%) — ลองดูโครงการที่เจอคู่นี้ว่าติดปัญหาอะไรร่วมกันไหม (เช่น ราคา/สเปก)</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function showCompetitorPipesM(name) {
+  var list = computeCompetitorStats().filter(function(g) { return g.name === name; })[0];
+  if (!list) return;
+  var rows = list.pipes.map(function(p) {
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var outcome = pipeIsWon(p) ? '✅ Won' : pipeIsLost(p) ? '❌ Lost' : '⏳ ' + (p.status || '');
+    return '<div class="li" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · ' + outcome + ' · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+  }).join('');
+  openM('🎯 ' + name + ' — โครงการที่เจอ', rows || '<div class="empty"><p>ไม่มี</p></div>');
+}
+
 function rPipeDashboard(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline Dashboard';
   var allPipes = ST.getAll('pipeline');
