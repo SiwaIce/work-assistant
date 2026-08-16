@@ -3274,6 +3274,7 @@ function _mondayRunrateRowHtml(r) {
 // ================================================================
 var pcSelected = []; // array ของ pipeId ที่เลือกมาเทียบ (สูงสุด 4)
 var pcQuery = '';
+var pcSearchMode = 'all'; // 'all'|'rowno'|'project'|'dealer' — เลือกฟิลด์ที่จะค้นหา กันพิมพ์ Row No. แล้วขึ้นทุกอย่างเพราะไปแมตช์ชื่อ/บริษัทด้วย
 
 function rPipelineCompare(el) {
   document.getElementById('pgT').textContent = '📊 เปรียบเทียบโครงการ';
@@ -3284,7 +3285,11 @@ function rPipelineCompare(el) {
   h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">เลือกโครงการที่จะเทียบ (สูงสุด 4 โครงการ)</div>';
 
   // ---- picker ----
-  h += '<input type="text" id="pcSearchInput" placeholder="🔍 พิมพ์ชื่อโครงการ/Row No./บริษัท..." style="margin-bottom:8px" value="' + sanitize(pcQuery) + '" oninput="pcSearch(this.value)">';
+  var pcModeLabels = { all: 'ทั้งหมด', rowno: 'Row No.', project: 'ชื่อโครงการ', dealer: 'บริษัท' };
+  h += '<div class="ftabs" style="margin-bottom:8px">' + Object.keys(pcModeLabels).map(function(mk) {
+    return '<div class="ftab ' + (pcSearchMode === mk ? 'act' : '') + '" onclick="pcSetSearchMode(\'' + mk + '\')">' + pcModeLabels[mk] + '</div>';
+  }).join('') + '</div>';
+  h += '<input type="text" id="pcSearchInput" placeholder="🔍 ค้นหาจาก' + pcModeLabels[pcSearchMode] + '..." style="margin-bottom:8px" value="' + sanitize(pcQuery) + '" oninput="pcSearch(this.value)">';
   h += '<div id="pcSearchResults" style="margin-bottom:10px"></div>';
 
   h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px" id="pcChips">' + pcChipsHtml() + '</div>';
@@ -3308,6 +3313,10 @@ function pcChipsHtml() {
   }).join('');
 }
 
+function pcSetSearchMode(mode) {
+  pcSearchMode = mode;
+  render();
+}
 function pcSearch(q) {
   pcQuery = q || '';
   var el = document.getElementById('pcSearchResults');
@@ -3317,6 +3326,9 @@ function pcSearch(q) {
   var results = ST.getAll('pipeline').filter(function(p) {
     if (pcSelected.indexOf(p.id) !== -1) return false;
     var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    if (pcSearchMode === 'rowno') return String(p.rowNo || '').toLowerCase().indexOf(qlc) !== -1;
+    if (pcSearchMode === 'project') return (p.projectName || '').toLowerCase().indexOf(qlc) !== -1;
+    if (pcSearchMode === 'dealer') return ((d && d.name) || '').toLowerCase().indexOf(qlc) !== -1;
     return (p.projectName || '').toLowerCase().indexOf(qlc) !== -1 ||
       String(p.rowNo || '').toLowerCase().indexOf(qlc) !== -1 ||
       (d && d.name || '').toLowerCase().indexOf(qlc) !== -1;
