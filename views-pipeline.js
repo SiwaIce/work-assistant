@@ -15,6 +15,7 @@ function togglePipeTaskFlt() { pipeTaskFlt = !pipeTaskFlt; render(); }
 var pipeSale = 'all';
 var pipeDisplayFlt = 'all';
 var pipeSearch = '';
+var pipeSearchMode = 'all'; // 'all'|'rowno'|'project'|'dealer' — เลือกฟิลด์ที่จะค้นหา กันพิมพ์ Row No. แล้วขึ้นทุกอย่างเพราะไปแมตช์ endUser/model/remark ด้วย (เหมือน pcSearchMode ในหน้าเปรียบเทียบโครงการ)
 var _pipeSearchTimer = null;
 // หน่วงเวลาก่อน re-render — render() วาด #pipeSrc ใหม่ทุกครั้ง (สร้าง input element ใหม่แทนที่ตัวเดิม)
 // ถ้า re-render ทุกตัวอักษรที่พิมพ์ จะรบกวนการพิมพ์ต่อเนื่อง (คีย์บอร์ดมือถือกระพริบ/โฟกัสหลุด) ต้องรอให้พิมพ์หยุดก่อนค่อย render
@@ -23,6 +24,7 @@ function pipeSearchInput(v) {
   clearTimeout(_pipeSearchTimer);
   _pipeSearchTimer = setTimeout(function() { render(); }, 350);
 }
+function pipeSearchSetMode(mode) { pipeSearchMode = mode; render(); }
 var pipeSort = 'updated_desc';
 var pipeView = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'card' : 'table'; // มือถือ: ตารางกว้าง 1245px ต้องเลื่อนแนวนอนในกล่อง 335px ใช้งานยาก เริ่มด้วยการ์ดแทน
 var pipeSelectMode = false;
@@ -1140,6 +1142,9 @@ function rPipeline(el) {
     var q = pipeSearch.toLowerCase();
     pipes = pipes.filter(function(p) {
       var d = ST.getOne('dealers', p.dealerId);
+      if (pipeSearchMode === 'rowno') return String(p.rowNo || '').toLowerCase().indexOf(q) !== -1;
+      if (pipeSearchMode === 'project') return (p.projectName || '').toLowerCase().indexOf(q) !== -1;
+      if (pipeSearchMode === 'dealer') return ((d && d.name) || '').toLowerCase().indexOf(q) !== -1;
       return (p.projectName || '').toLowerCase().indexOf(q) !== -1 ||
              (p.endUserTH || '').toLowerCase().indexOf(q) !== -1 ||
              (p.endUserEN || '').toLowerCase().indexOf(q) !== -1 ||
@@ -1224,8 +1229,14 @@ function rPipeline(el) {
       !pipeFilterOpen ? [(Object.keys(pipeFlt).length ? '● ' + Object.keys(pipeFlt).length + ' สถานะ' : ''), (pipeSearch ? '"' + sanitize(pipeSearch) + '"' : '')].filter(Boolean).join(' ') : '') +
 
     '<div id="pipeFilterWrap"' + (!pipeFilterOpen ? ' style="display:none"' : '') + '>' +
+    (function() {
+      var pipeSearchModeLabels = { all: 'ทั้งหมด', rowno: 'Row No.', project: 'ชื่อโครงการ', dealer: 'บริษัท' };
+      return '<div class="ftabs" style="margin-bottom:6px">' + Object.keys(pipeSearchModeLabels).map(function(mk) {
+        return '<div class="ftab ' + (pipeSearchMode === mk ? 'act' : '') + '" onclick="pipeSearchSetMode(\'' + mk + '\')">' + pipeSearchModeLabels[mk] + '</div>';
+      }).join('') + '</div>';
+    })() +
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">' +
-    '<input type="text" id="pipeSrc" value="' + sanitize(pipeSearch) + '" placeholder="🔍 ค้นหา Row No. / Project / End User / Dealer / Model..." style="flex:1;min-width:150px" oninput="pipeSearchInput(this.value)" autocomplete="off">' +
+    '<input type="text" id="pipeSrc" value="' + sanitize(pipeSearch) + '" placeholder="🔍 ค้นหาจาก' + ({ all: 'Row No./ชื่อโครงการ/End User/Dealer/Model', rowno: 'Row No.', project: 'ชื่อโครงการ', dealer: 'บริษัท' }[pipeSearchMode]) + '..." style="flex:1;min-width:150px" oninput="pipeSearchInput(this.value)" autocomplete="off">' +
     '<select id="pipeSortSel" onchange="pipeSort=this.value;render()" style="min-width:120px">' +
     '<option value="updated_desc"' + (pipeSort === 'updated_desc' ? ' selected' : '') + '>🔄 อัพเดทล่าสุด</option>' +
     '<option value="date_desc"' + (pipeSort === 'date_desc' ? ' selected' : '') + '>วันที่ลงทะเบียน ใหม่สุด</option>' +

@@ -63,23 +63,55 @@ function kpiPlanSumCard(label, val, colorCls, onclick) {
 function showKpiPlanTargetsM(focusDealerId) {
   var plans = computeKpiCompanyPlanAll(getConfig());
   if (!plans.length) return toast('ยังไม่มีบริษัทระดับ S/A/B ในขอบเขตนี้');
-  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">แก้ตรงนี้จะบันทึกไปที่ข้อมูลบริษัท (ต้นทาง) โดยตรง — กด 🔗 เพื่อเปิดฟอร์มบริษัทเต็มถ้าต้องแก้ข้อมูลอื่นด้วย</div>';
+  var cfg = getConfig();
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">แก้ตรงนี้จะบันทึกไปที่ข้อมูลบริษัท (ต้นทาง) โดยตรง — กด 🔗 เพื่อเปิดฟอร์มบริษัทเต็มถ้าต้องแก้ข้อมูลอื่นด้วย</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">แถวไหนมีเป้าตาม Level (S/A/B) ตั้งไว้ กดปุ่ม "↺ ใช้เป้า Level" เพื่อดึงมาใส่ให้เลย — จะไปแก้ตัวเลขเป้าตาม Level เอง กด "⚙️ ตั้งค่าเป้าตาม Level (ต้นทาง)" ด้านล่าง</div>';
   h += '<div style="display:flex;font-size:10.5px;color:var(--text2);padding:0 0 4px;gap:8px"><div style="flex:1">บริษัท</div><div style="width:100px">H1 (฿)</div><div style="width:100px">H2 (฿)</div></div>';
   h += plans.map(function(p) {
     var d = p.dealer;
+    var lvlReq = cfg.levelRequirements && cfg.levelRequirements[d.level];
+    var lvlLine = '';
+    if (lvlReq && (lvlReq.h1Target || lvlReq.h2Target)) {
+      lvlLine = '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">เป้า Level ' + sanitize(d.level) + ': ฿' + fmtMoneyShort(lvlReq.h1Target || 0) + ' / ฿' + fmtMoneyShort(lvlReq.h2Target || 0) +
+        ' <a style="color:var(--accent);cursor:pointer;font-weight:600" onclick="kpiPlanApplyLevelTarget(\'' + d.id + '\',' + (Number(lvlReq.h1Target) || 0) + ',' + (Number(lvlReq.h2Target) || 0) + ')">↺ ใช้เป้า Level</a></div>';
+    }
     return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)" id="kpitgt_row_' + d.id + '">' +
       '<div style="flex:1;font-size:12.5px;font-weight:600;min-width:0">' + sanitize(d.name) +
-      ' <a style="font-size:11px;font-weight:400;color:var(--accent);cursor:pointer;white-space:nowrap" onclick="closeMForce();showDealerM(\'' + d.id + '\')">🔗 ไปหน้าบริษัท</a></div>' +
+      ' <a style="font-size:11px;font-weight:400;color:var(--accent);cursor:pointer;white-space:nowrap" onclick="closeMForce();showDealerM(\'' + d.id + '\')">🔗 ไปหน้าบริษัท</a>' + lvlLine + '</div>' +
       '<input type="text" inputmode="decimal" class="js-money" style="width:100px" id="kpitgt_h1_' + d.id + '" value="' + nmI(d.targetH1 || 0) + '">' +
       '<input type="text" inputmode="decimal" class="js-money" style="width:100px" id="kpitgt_h2_' + d.id + '" value="' + nmI(d.targetH2 || 0) + '">' +
       '</div>';
   }).join('');
   h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="saveKpiPlanTargets()">💾 บันทึกเป้าทั้งหมด</button>';
+  h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="kpiPlanGotoLevelSource()">⚙️ ตั้งค่าเป้าตาม Level (ต้นทาง)</button>';
   openM('🎯 ตั้งเป้ายอดขาย H1/H2 รายบริษัท', h);
   if (focusDealerId) {
     var row = document.getElementById('kpitgt_row_' + focusDealerId);
     if (row) { row.style.background = 'var(--accent-light)'; row.scrollIntoView({ block: 'center' }); }
   }
+}
+
+function kpiPlanApplyLevelTarget(dealerId, h1, h2) {
+  var h1El = document.getElementById('kpitgt_h1_' + dealerId);
+  var h2El = document.getElementById('kpitgt_h2_' + dealerId);
+  if (h1El) h1El.value = nmI(h1);
+  if (h2El) h2El.value = nmI(h2);
+  toast('↺ ใส่เป้าตาม Level แล้ว — อย่าลืมกด "บันทึกเป้าทั้งหมด"');
+}
+
+// เปิด Admin > แท็บข้อมูล > การ์ด Partner Level Requirements (ต้นทางจริงของเป้าตาม Level) พร้อมสลับไปแท็บ level ที่ระบุ
+function kpiPlanGotoLevelSource(level) {
+  closeMForce();
+  localStorage.setItem('v7_admin_tab', 'data');
+  go('admin');
+  setTimeout(function() {
+    if (level) {
+      var tab = document.querySelector('#reqLevelTabs .ftab[data-level="' + level + '"]');
+      if (tab) tab.click();
+    }
+    var anchor = document.getElementById('reqLevelTabs');
+    if (anchor) anchor.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 150);
 }
 
 function saveKpiPlanTargets() {
