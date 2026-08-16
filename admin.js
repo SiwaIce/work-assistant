@@ -121,27 +121,17 @@ function rAdmin(el) {
     '<button class="btn bp bsm" onclick="admSaveKPI()">💾 บันทึก</button></div>' +
 
     // H1 Period Setting
-    '<div class="card"><h2>📅 H1 Period Setting</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย)</p>' +
+    '<div class="card" id="periodSettingCard"><h2>📅 H1 Period Setting</h2>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีแรก (ใช้สำหรับคำนวณยอดขาย SIS รายเดือน — ไม่ต้องจบภายใน มิ.ย. แล้ว เลือกได้ทั้งปี เช่น ก.พ.-ก.ค.)</p>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h1_start_month" class="fm-input">' +
-    '<option value="0"' + (cfg.h1Period?.startMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
-    '<option value="1"' + (cfg.h1Period?.startMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
-    '<option value="2"' + (cfg.h1Period?.startMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
-    '<option value="3"' + (cfg.h1Period?.startMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
-    '<option value="4"' + (cfg.h1Period?.startMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
-    '<option value="5"' + (cfg.h1Period?.startMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
+    THAI_MONTHS_SHORT.map(function(m, i) { return '<option value="' + i + '"' + (cfg.h1Period?.startMonth === i ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h1_start_day" class="fm-input" value="' + (cfg.h1Period?.startDay || 1) + '" min="1" max="31"></div>' +
     '</div>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h1_end_month" class="fm-input">' +
-    '<option value="0"' + (cfg.h1Period?.endMonth === 0 ? ' selected' : '') + '>มกราคม</option>' +
-    '<option value="1"' + (cfg.h1Period?.endMonth === 1 ? ' selected' : '') + '>กุมภาพันธ์</option>' +
-    '<option value="2"' + (cfg.h1Period?.endMonth === 2 ? ' selected' : '') + '>มีนาคม</option>' +
-    '<option value="3"' + (cfg.h1Period?.endMonth === 3 ? ' selected' : '') + '>เมษายน</option>' +
-    '<option value="4"' + (cfg.h1Period?.endMonth === 4 ? ' selected' : '') + '>พฤษภาคม</option>' +
-    '<option value="5"' + (cfg.h1Period?.endMonth === 5 ? ' selected' : '') + '>มิถุนายน</option>' +
+    THAI_MONTHS_SHORT.map(function(m, i) { return '<option value="' + i + '"' + (cfg.h1Period?.endMonth === i ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h1_end_day" class="fm-input" value="' + (cfg.h1Period?.endDay || 30) + '" min="1" max="31"></div>' +
     '</div>' +
@@ -149,26 +139,16 @@ function rAdmin(el) {
 
     // H2 Period Setting
     '<div class="card"><h2>📅 H2 Period Setting</h2>' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีหลัง (ใช้สำหรับคำนวณยอดขาย)</p>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดช่วงเวลาครึ่งปีหลัง (ใช้สำหรับคำนวณยอดขาย SIS รายเดือน — เลือกได้ทั้งปี ไม่ต้องเริ่ม ก.ค.)</p>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 เริ่มต้นเดือน</label><select id="h2_start_month" class="fm-input">' +
-    '<option value="6"' + (cfg.h2Period?.startMonth === 6 ? ' selected' : '') + '>กรกฎาคม</option>' +
-    '<option value="7"' + (cfg.h2Period?.startMonth === 7 ? ' selected' : '') + '>สิงหาคม</option>' +
-    '<option value="8"' + (cfg.h2Period?.startMonth === 8 ? ' selected' : '') + '>กันยายน</option>' +
-    '<option value="9"' + (cfg.h2Period?.startMonth === 9 ? ' selected' : '') + '>ตุลาคม</option>' +
-    '<option value="10"' + (cfg.h2Period?.startMonth === 10 ? ' selected' : '') + '>พฤศจิกายน</option>' +
-    '<option value="11"' + (cfg.h2Period?.startMonth === 11 ? ' selected' : '') + '>ธันวาคม</option>' +
+    THAI_MONTHS_SHORT.map(function(m, i) { return '<option value="' + i + '"' + (cfg.h2Period?.startMonth === i ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="fg"><label>📅 เริ่มต้นวันที่</label><input type="number" id="h2_start_day" class="fm-input" value="' + (cfg.h2Period?.startDay || 1) + '" min="1" max="31"></div>' +
     '</div>' +
     '<div class="fr">' +
     '<div class="fg"><label>📆 สิ้นสุดเดือน</label><select id="h2_end_month" class="fm-input">' +
-    '<option value="6"' + (cfg.h2Period?.endMonth === 6 ? ' selected' : '') + '>กรกฎาคม</option>' +
-    '<option value="7"' + (cfg.h2Period?.endMonth === 7 ? ' selected' : '') + '>สิงหาคม</option>' +
-    '<option value="8"' + (cfg.h2Period?.endMonth === 8 ? ' selected' : '') + '>กันยายน</option>' +
-    '<option value="9"' + (cfg.h2Period?.endMonth === 9 ? ' selected' : '') + '>ตุลาคม</option>' +
-    '<option value="10"' + (cfg.h2Period?.endMonth === 10 ? ' selected' : '') + '>พฤศจิกายน</option>' +
-    '<option value="11"' + (cfg.h2Period?.endMonth === 11 ? ' selected' : '') + '>ธันวาคม</option>' +
+    THAI_MONTHS_SHORT.map(function(m, i) { return '<option value="' + i + '"' + (cfg.h2Period?.endMonth === i ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="fg"><label>📅 สิ้นสุดวันที่</label><input type="number" id="h2_end_day" class="fm-input" value="' + (cfg.h2Period?.endDay || 31) + '" min="1" max="31"></div>' +
     '</div>' +
