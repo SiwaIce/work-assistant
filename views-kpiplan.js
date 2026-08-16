@@ -36,7 +36,7 @@ function rKpiCompanyPlan(el) {
   h += '<div class="card"><h2>🎯 แผนบรรลุเป้า KPI — SAB Partner (' + half + ')</h2>';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">เป้า/ยอดจริง/Pipeline ในมือ (ถ่วง POS) ของแต่ละบริษัท พร้อมแผนรายเดือนแยก Project/Runrate — สำหรับสรุปให้ Ryan</div>';
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">';
-  h += kpiPlanSumCard('เป้ารวม ' + half, fmtMoneyShort(totalTarget));
+  h += kpiPlanSumCard('เป้ารวม ' + half + ' ✏️', fmtMoneyShort(totalTarget), '', 'showKpiPlanTargetsM()');
   h += kpiPlanSumCard('ทำได้แล้ว', fmtMoneyShort(totalActual), 'stat-good-t');
   h += kpiPlanSumCard('Pipeline ในมือ', fmtMoneyShort(totalPipe));
   h += kpiPlanSumCard('ยังขาดอีก', totalGap > 0 ? fmtMoneyShort(totalGap) : 'ถึงเป้าแล้ว', totalGap > 0 ? 'stat-bad-t' : 'stat-good-t');
@@ -50,10 +50,55 @@ function rKpiCompanyPlan(el) {
   el.innerHTML = h;
 }
 
-function kpiPlanSumCard(label, val, colorCls) {
-  return '<div style="background:var(--bg2);border-radius:10px;padding:10px 12px">' +
+function kpiPlanSumCard(label, val, colorCls, onclick) {
+  return '<div style="background:var(--bg2);border-radius:10px;padding:10px 12px' + (onclick ? ';cursor:pointer' : '') + '"' + (onclick ? ' onclick="' + onclick + '"' : '') + '>' +
     '<div style="font-size:10.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.02em">' + label + '</div>' +
     '<div style="font-size:17px;font-weight:700;margin-top:2px" class="' + (colorCls || '') + '">' + val + '</div></div>';
+}
+
+// ================================================================
+// ตั้ง/แก้ไขเป้ายอดขาย H1/H2 รายบริษัท — แก้ตรงนี้เขียนกลับไปที่ dealer.targetH1/targetH2 โดยตรง
+// (ต้นทางเดียวกับฟอร์ม Dealer เต็ม ⁠— ดู showDealerM ใน modals.js) ไม่ได้เก็บซ้ำที่อื่น
+// ================================================================
+function showKpiPlanTargetsM(focusDealerId) {
+  var plans = computeKpiCompanyPlanAll(getConfig());
+  if (!plans.length) return toast('ยังไม่มีบริษัทระดับ S/A/B ในขอบเขตนี้');
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">แก้ตรงนี้จะบันทึกไปที่ข้อมูลบริษัท (ต้นทาง) โดยตรง — กด 🔗 เพื่อเปิดฟอร์มบริษัทเต็มถ้าต้องแก้ข้อมูลอื่นด้วย</div>';
+  h += '<div style="display:flex;font-size:10.5px;color:var(--text2);padding:0 0 4px;gap:8px"><div style="flex:1">บริษัท</div><div style="width:100px">H1 (฿)</div><div style="width:100px">H2 (฿)</div></div>';
+  h += plans.map(function(p) {
+    var d = p.dealer;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)" id="kpitgt_row_' + d.id + '">' +
+      '<div style="flex:1;font-size:12.5px;font-weight:600;min-width:0">' + sanitize(d.name) +
+      ' <a style="font-size:11px;font-weight:400;color:var(--accent);cursor:pointer;white-space:nowrap" onclick="closeMForce();showDealerM(\'' + d.id + '\')">🔗 ไปหน้าบริษัท</a></div>' +
+      '<input type="text" inputmode="decimal" class="js-money" style="width:100px" id="kpitgt_h1_' + d.id + '" value="' + nmI(d.targetH1 || 0) + '">' +
+      '<input type="text" inputmode="decimal" class="js-money" style="width:100px" id="kpitgt_h2_' + d.id + '" value="' + nmI(d.targetH2 || 0) + '">' +
+      '</div>';
+  }).join('');
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="saveKpiPlanTargets()">💾 บันทึกเป้าทั้งหมด</button>';
+  openM('🎯 ตั้งเป้ายอดขาย H1/H2 รายบริษัท', h);
+  if (focusDealerId) {
+    var row = document.getElementById('kpitgt_row_' + focusDealerId);
+    if (row) { row.style.background = 'var(--accent-light)'; row.scrollIntoView({ block: 'center' }); }
+  }
+}
+
+function saveKpiPlanTargets() {
+  var plans = computeKpiCompanyPlanAll(getConfig());
+  var changed = 0;
+  plans.forEach(function(p) {
+    var d = p.dealer;
+    var h1El = document.getElementById('kpitgt_h1_' + d.id);
+    var h2El = document.getElementById('kpitgt_h2_' + d.id);
+    if (!h1El || !h2El) return;
+    var h1 = parseNum(h1El.value), h2 = parseNum(h2El.value);
+    if (h1 !== (Number(d.targetH1) || 0) || h2 !== (Number(d.targetH2) || 0)) {
+      ST.update('dealers', d.id, { targetH1: h1, targetH2: h2, targetRevenue: h1 + h2 });
+      changed++;
+    }
+  });
+  toast(changed ? '💾 บันทึกเป้า ' + changed + ' บริษัทแล้ว' : 'ไม่มีอะไรเปลี่ยนแปลง');
+  closeMForce();
+  render();
 }
 
 function kpiPlanRowHtml(p) {
@@ -66,7 +111,7 @@ function kpiPlanRowHtml(p) {
   h += '<div style="flex:1;min-width:160px"><div style="font-weight:700;font-size:14px">' + sanitize(p.dealer.name) + '</div>' +
     '<div style="font-size:11px;color:var(--text2)">' + sanitize(p.dealer.level || '') + '</div></div>';
   h += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + st.bg + '" class="' + st.cls + '">' + st.label + '</span>';
-  h += '<div style="text-align:right;min-width:80px"><div style="font-size:10px;color:var(--text2)">เป้า</div><div style="font-weight:600">' + fmtMoneyShort(p.target) + '</div></div>';
+  h += '<div style="text-align:right;min-width:80px;cursor:pointer" onclick="event.stopPropagation();showKpiPlanTargetsM(\'' + p.dealer.id + '\')" title="กดเพื่อแก้ไขเป้า"><div style="font-size:10px;color:var(--text2)">เป้า ✏️</div><div style="font-weight:600">' + fmtMoneyShort(p.target) + '</div></div>';
   h += '<div style="text-align:right;min-width:80px"><div style="font-size:10px;color:var(--text2)">ทำได้+Pipeline</div><div style="font-weight:600">' + fmtMoneyShort(p.actualSoFar + p.pipeWeighted) + ' (' + pct + '%)</div></div>';
   h += '<div style="text-align:right;min-width:90px"><div style="font-size:10px;color:var(--text2)">ยังขาด</div><div style="font-weight:700" class="' + (gap > 0 ? 'stat-bad-t' : 'stat-good-t') + '">' + (gap > 0 ? fmtMoneyShort(gap) : 'เกินเป้า ✓') + '</div></div>';
   h += '<span style="font-size:11px;color:var(--text2)">' + (isOpen ? '▼' : '▶') + '</span>';
