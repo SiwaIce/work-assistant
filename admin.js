@@ -274,10 +274,10 @@ function rAdmin(el) {
     '<div class="card"><h2>📋 Partner Level Requirements</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดเป้าหมายและเงื่อนไขตามระดับ Dealer (S/A/B/Other)</p>' +
     '<div class="ftabs" style="margin-bottom:10px" id="reqLevelTabs">' +
-    '<div class="ftab act" data-level="S">S (Strategic)</div>' +
-    '<div class="ftab" data-level="A">A (Authorized)</div>' +
-    '<div class="ftab" data-level="B">B (Basic)</div>' +
-    '<div class="ftab" data-level="Other">Other (Trial)</div>' +
+    '<div class="ftab' + (currentReqLevel === 'S' ? ' act' : '') + '" data-level="S">S (Strategic)</div>' +
+    '<div class="ftab' + (currentReqLevel === 'A' ? ' act' : '') + '" data-level="A">A (Authorized)</div>' +
+    '<div class="ftab' + (currentReqLevel === 'B' ? ' act' : '') + '" data-level="B">B (Basic)</div>' +
+    '<div class="ftab' + (currentReqLevel === 'Other' ? ' act' : '') + '" data-level="Other">Other (Trial)</div>' +
     '</div>' +
     '<div id="reqEditor"></div>' +
     '<div class="bg" style="margin-top:12px">' +

@@ -4913,6 +4913,7 @@ function importSisRevenueXlsx() {
         if (headerIdx === -1) { toast('❌ หาแถวหัวตาราง "Customer Code" ไม่เจอในไฟล์นี้ — เช็คว่าเป็นไฟล์ template เดียวกันไหม'); return; }
         var dataRows = rows.slice(headerIdx + 1);
         _sisImportGroups = _sisParseImportRows(dataRows);
+        _sisImportScrollTop = 0;
         if (!_sisImportGroups.length) { toast('⚠️ ไม่พบข้อมูลหลังแถวหัวตาราง (แถวที่ ' + (headerIdx + 1) + ')'); return; }
         _showSisImportPreviewM();
       } catch (err) {
@@ -4986,7 +4987,7 @@ function _showSisImportPreviewM() {
     '<div style="background:var(--bg2);border-radius:9px;padding:9px;text-align:center"><div style="font-size:14px;font-weight:800">฿' + fmtMoneyShort(totalSales) + '</div><div style="font-size:9.5px;color:var(--text2)">ยอดรวมในไฟล์</div></div>' +
     '</div>';
 
-  h += '<div style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto">';
+  h += '<div id="sisImportRowsList" style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto">';
   groups.forEach(function(g, i) {
     var months = Object.keys(g.monthly).sort();
     var monthsLabel = months.length ? (months.length + ' เดือน (' + months[0] + (months.length > 1 ? ' – ' + months[months.length - 1] : '') + ')') : 'ไม่พบเดือนที่อ่านได้';
@@ -5030,16 +5031,28 @@ function _showSisImportPreviewM() {
   h += '</div>';
 
   openM('📥 ตรวจสอบการจับคู่ก่อน Import (' + groups.length + ' บริษัท)', h);
+
+  // rebuild ทั้งโมดัลทุกครั้งที่เลือก/ข้าม/สร้างใหม่ ทำให้ scroll ของรายการเด้งกลับบนสุด — จำตำแหน่งที่เลื่อนไว้
+  // (เก็บผ่าน _sisImportScrollTop ก่อนหน้าเรียกฟังก์ชันนี้) แล้ว restore กลับให้หลัง render เสร็จ
+  var listEl = document.getElementById('sisImportRowsList');
+  if (listEl && _sisImportScrollTop) listEl.scrollTop = _sisImportScrollTop;
+}
+var _sisImportScrollTop = 0;
+function _sisImportSaveScroll() {
+  var listEl = document.getElementById('sisImportRowsList');
+  _sisImportScrollTop = listEl ? listEl.scrollTop : 0;
 }
 
 function _sisImportSetDealer(idx, dealerId) {
   if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportSaveScroll();
   _sisImportGroups[idx].matchedDealerId = dealerId || null;
   _showSisImportPreviewM();
 }
 function _sisImportCreateDealer(idx) {
   var g = _sisImportGroups && _sisImportGroups[idx];
   if (!g) return;
+  _sisImportSaveScroll();
   var created = ST.add('dealers', { name: g.name, sisCode: g.code || '' });
   g.matchedDealerId = created.id;
   toast('➕ สร้าง Dealer "' + g.name + '" แล้ว');
@@ -5047,11 +5060,13 @@ function _sisImportCreateDealer(idx) {
 }
 function _sisImportSkip(idx) {
   if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportSaveScroll();
   _sisImportGroups[idx].skip = true;
   _showSisImportPreviewM();
 }
 function _sisImportUnskip(idx) {
   if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportSaveScroll();
   _sisImportGroups[idx].skip = false;
   _showSisImportPreviewM();
 }
