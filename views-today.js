@@ -403,6 +403,7 @@ function rToday(el) {
   if (todayTab === 'summary') {
     // 📌 สรุป = KPI Banner + Daily Priority + Briefing + Stats + Pins
     if (typeof kpiTodayBehindBanner === 'function') tabContent += kpiTodayBehindBanner();
+    if (typeof kpiPlanTodayBanner === 'function') tabContent += kpiPlanTodayBanner();
     tabContent += renderDailyPriorityList();
     tabContent += briefingHtml;
     tabContent += `

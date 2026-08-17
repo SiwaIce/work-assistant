@@ -20,6 +20,42 @@ function kpiPlanStatus(p) {
   return { cls: 'stat-bad-t', bg: 'rgba(248,113,113,.12)', label: 'เสี่ยงสูง' };
 }
 
+// ================================================================
+// แถบเตือนที่หน้า "วันนี้" — เรียกจาก views-today.js (rToday, แท็บสรุป) แบบเดียวกับ kpiTodayBehindBanner
+// ของระบบ KPI เซล ใช้ style class .kpi-today-banner ตัวเดียวกัน ไม่ต้องเพิ่ม CSS ใหม่
+// แจ้ง 2 เรื่อง: บริษัทเสี่ยงไม่ถึงเป้า (SIS จริง) และบริษัทที่ยอด DJI(Pipeline)/SIS ต่างกันเกิน 10%
+// ================================================================
+function kpiPlanTodayBanner() {
+  if (typeof computeKpiCompanyPlanAll !== 'function') return '';
+  var plans;
+  try { plans = computeKpiCompanyPlanAll(getConfig()); } catch (e) { return ''; }
+  if (!plans.length) return '';
+
+  var riskItems = [], mismatchItems = [];
+  plans.forEach(function(p) {
+    if (kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว') riskItems.push(p);
+    var sisActual = kpiPlanSisActual(p);
+    var hasProjectData = p.djiActual > 0 || p.pipeWeighted > 0;
+    if (hasProjectData && sisActual > 0) {
+      var deltaPct = Math.round(Math.abs(p.djiActual - sisActual) / sisActual * 100);
+      if (deltaPct > 10) mismatchItems.push(p);
+    }
+  });
+  if (!riskItems.length && !mismatchItems.length) return '';
+
+  var titleParts = [];
+  if (riskItems.length) titleParts.push(riskItems.length + ' บริษัทเสี่ยงไม่ถึงเป้า');
+  if (mismatchItems.length) titleParts.push(mismatchItems.length + ' บริษัท DJI/SIS ไม่ตรงกัน');
+  var subList = riskItems.length ? riskItems : mismatchItems;
+  var subNames = subList.slice(0, 3).map(function(p) { return sanitize(p.dealer.name); });
+
+  var h = '<div class="card kpi-today-banner" onclick="go(\'kpiCompanyPlan\')">';
+  h += '<div class="kpi-today-banner-title">⚠️ แผนบรรลุเป้า KPI — ' + titleParts.join(' · ') + '</div>';
+  h += '<div class="kpi-today-banner-sub">' + subNames.join(' · ') + (subList.length > 3 ? ' ...' : '') + ' — กดดูรายละเอียด →</div>';
+  h += '</div>';
+  return h;
+}
+
 function rKpiCompanyPlan(el) {
   document.getElementById('pgT').textContent = '🎯 แผนบรรลุเป้า KPI';
   var cfg = getConfig();
