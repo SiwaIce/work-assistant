@@ -1366,6 +1366,22 @@ function fmtMoneyShort(n) {
   return n.toLocaleString('th-TH');
 }
 
+// รวมยอด/จำนวนของ "สถานะที่เลือกไว้" ตอนติ๊กหลายช่องพร้อมกันบนแถบสถานะ (pipe-sum-card) — ใช้ร่วมกันทั้ง
+// เมนู Pipeline หลัก, Pipeline รวมทีม, และ Pipeline ในหน้า Dealer (ดูตัวอย่างการเรียกที่ views-pipeline.js/views-dealer.js)
+// โชว์เฉพาะตอนเลือกตั้งแต่ 2 สถานะขึ้นไป — เลือก 0 ช่อง = การ์ด "ทั้งหมด" มีให้อยู่แล้ว, เลือก 1 ช่อง = ซ้ำกับตัวการ์ดนั้นเอง
+function pipeSelectedSubtotalHtml(fltObj, statusSummary) {
+  var keys = Object.keys(fltObj || {});
+  if (keys.length < 2) return '';
+  var count = 0, amount = 0, names = [];
+  keys.forEach(function(k) {
+    var v = statusSummary && statusSummary[k];
+    if (!v) return;
+    count += v.count || 0; amount += v.amount || 0; names.push(v.name || k);
+  });
+  return '<div style="margin-top:6px;padding:8px 12px;background:rgba(59,111,214,.08);border:1px solid var(--accent);border-radius:9px;font-size:12.5px;font-weight:700;color:var(--accent)">' +
+    '✓ รวม ' + keys.length + ' สถานะที่เลือก (' + sanitize(names.join(' + ')) + '): ' + count + ' รายการ · ฿' + fmtMoney(amount) + '</div>';
+}
+
 // ================================================================
 // SIS REVENUE (H1/H2/Quarter/รายเดือน) — อยู่ที่นี่ (ไม่ใช่ views-dealer.js) เพราะ client-view.html
 // (หน้าลูกค้าดูเอง — ไม่โหลด views-dealer.js) ต้องใช้ตัวเดียวกับหน้า Dealer แก้ยอดขาย SIS ในแอปหลัก

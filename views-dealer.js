@@ -1631,6 +1631,7 @@ function dealerPipelineTab(d) {
       h += '<div class="pipe-sum-card ' + (Object.keys(dealerPipeStatusFlt).length === 0 ? 'act' : '') + '" onclick="clearDealerPipeStatusFlt()">' +
         '<div class="stage">📊 ทั้งหมด</div><div class="count">' + pipes.length + '</div><div class="amount">' + fmtMoneyShort(totalAmtAll) + '</div></div>';
       h += '</div>';
+      h += pipeSelectedSubtotalHtml(dealerPipeStatusFlt, statusSummary);
       h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
       h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">';
       ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].forEach(function(mn, idx) {

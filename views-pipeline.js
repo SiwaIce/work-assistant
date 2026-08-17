@@ -242,6 +242,7 @@ function rPipelineTeam(el) {
   h += '<div class="pipe-sum-card ' + (Object.keys(pipeTeamStatusFlt).length === 0 ? 'act' : '') + '" onclick="clearPipeTeamStatusFlt()">' +
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + fullList.length + '</div><div class="amount">' + fmtMoneyShort(totalAmt) + '</div></div>';
   h += '</div>';
+  h += pipeSelectedSubtotalHtml(pipeTeamStatusFlt, ps);
 
   // แถบเดือน — กรองจาก Bidding Date (เลือกได้หลายเดือน ไม่เลือกเลย = ทุกเดือน) เหมือนแพทเทิร์นที่ใช้ใน Forecast ตาม Model
   h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
@@ -1286,6 +1287,7 @@ function rPipeline(el) {
     '<div class="pipe-sum-card ' + (Object.keys(pipeFlt).length === 0 ? 'act' : '') + '" onclick="clearPipeStatusFlt()">' +
     '<div class="stage">📊 ทั้งหมด</div><div class="count">' + ps.totalCount + '</div><div class="amount">' + fmtMoneyShort(ps.totalPipeline) + '</div></div>' +
     '</div>' +
+    pipeSelectedSubtotalHtml(pipeFlt, ps.summary) +
     (function() {
       var taskCnt = allPipes.filter(function(p) { return _pipeOpenTaskIdx[p.id]; }).length;
       if (!taskCnt) return '';
