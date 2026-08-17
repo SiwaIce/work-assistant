@@ -4874,12 +4874,26 @@ function saveSisRevenue(dealerId, year) {
 
 // ================================================================
 // SIS REVENUE IMPORT/EXPORT — อ่านไฟล์ Excel "Total_Sales_By_Drone" (template จริงที่ทีมใช้อยู่แล้ว)
-// header อยู่แถว 5, ข้อมูลเริ่ม A6: Customer Code | Customer Name | Month(Billing Date) | Total Sales | Total Adj Profit
+// คอลัมน์: Customer Code | Customer Name | Month(Billing Date) | Total Sales | Total Adj Profit
+// หาแถวหัวตารางเอง (ค้นคำว่า "Customer Code") แล้วเริ่มอ่านข้อมูลแถวถัดไป — ไม่ผูกกับเลขแถวตายตัว
+// เผื่อไฟล์แต่ละรุ่น/แต่ละคนวางหัวตารางไว้คนละแถวกัน (ที่มา: เจอไฟล์จริงหัวตารางอยู่ A6 ไม่ใช่ A5 ตามที่กะไว้แรก)
 // จับคู่บริษัทด้วย Customer Code = SIS Code เท่านั้น (ชื่อในไฟล์เป็นภาษาไทย สะกด/เว้นวรรคไม่ตรงกับระบบได้ง่าย
 // ไม่เดาจากชื่อ) แถวที่จับคู่ไม่ได้ให้เลือกเอง/สร้างใหม่/ข้ามได้ทีละบริษัทในหน้า preview ก่อน import จริง
 // ================================================================
-var SIS_IMPORT_START_ROW = 5; // 0-based index ของแถวข้อมูลแรก = แถว A6 (แถว 1-5 เป็น title/header ของไฟล์เดิม)
+var SIS_IMPORT_HEADER_SCAN_ROWS = 20; // ค้นหาแถวหัวตารางในกี่แถวแรกของไฟล์ ก่อนจะยอมแพ้แล้ว fallback
 var _sisImportGroups = null; // array ของ {code,name,monthly:{'YYYY-MM':amt},totalSales,totalAdjProfit,matchedDealerId,skip}
+
+// หาแถวที่มีคำว่า "Customer Code" อยู่ในคอลัมน์ไหนก็ได้ของแถวนั้น (case-insensitive) คืน index (0-based) หรือ -1 ถ้าไม่เจอ
+function _sisFindHeaderRowIdx(rows) {
+  var limit = Math.min(rows.length, SIS_IMPORT_HEADER_SCAN_ROWS);
+  for (var i = 0; i < limit; i++) {
+    var row = rows[i] || [];
+    for (var c = 0; c < row.length; c++) {
+      if (String(row[c] || '').trim().toLowerCase() === 'customer code') return i;
+    }
+  }
+  return -1;
+}
 
 function importSisRevenueXlsx() {
   var input = document.createElement('input');
@@ -4895,9 +4909,11 @@ function importSisRevenueXlsx() {
         var ws = wb.Sheets[wb.SheetNames[0]];
         var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
         rows = rows.map(function(r) { return r.map(_pipeXlsxCellToStr); });
-        var dataRows = rows.slice(SIS_IMPORT_START_ROW);
+        var headerIdx = _sisFindHeaderRowIdx(rows);
+        if (headerIdx === -1) { toast('❌ หาแถวหัวตาราง "Customer Code" ไม่เจอในไฟล์นี้ — เช็คว่าเป็นไฟล์ template เดียวกันไหม'); return; }
+        var dataRows = rows.slice(headerIdx + 1);
         _sisImportGroups = _sisParseImportRows(dataRows);
-        if (!_sisImportGroups.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์ — เช็คว่าข้อมูลเริ่มที่ A6 จริงไหม'); return; }
+        if (!_sisImportGroups.length) { toast('⚠️ ไม่พบข้อมูลหลังแถวหัวตาราง (แถวที่ ' + (headerIdx + 1) + ')'); return; }
         _showSisImportPreviewM();
       } catch (err) {
         toast('❌ อ่านไฟล์ไม่ได้: ' + err.message);
@@ -5093,7 +5109,8 @@ function exportSisRevenueXlsx() {
   });
   if (!rows.length) return toast('ไม่มีข้อมูลยอดขาย SIS ให้ export');
 
-  var aoa = [[], [], [], [], ['Customer Code', 'Customer Name', 'Month(Billing Date)', 'Total Sales', 'Total Adj Profit']].concat(rows);
+  // หัวตารางวางไว้ที่ A6 ให้ตรงกับ template จริงที่ทีมใช้อยู่ (5 แถวว่างด้านบน + หัวตารางแถว 6 + ข้อมูลแถว 7 เป็นต้นไป)
+  var aoa = [[], [], [], [], [], ['Customer Code', 'Customer Name', 'Month(Billing Date)', 'Total Sales', 'Total Adj Profit']].concat(rows);
   var ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
   var wb = XLSX.utils.book_new();

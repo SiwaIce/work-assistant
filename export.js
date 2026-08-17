@@ -22,7 +22,7 @@ function rExports(el) {
   <div class="bg" style="margin-bottom:6px"><button class="btn bp" onclick="xDealer()">📊 แสดง</button></div><div id="xd_area"></div></div>
 
   <div class="card"><h2>💰 ยอดขาย SIS</h2>
-  <p class="hint" style="margin-bottom:6px">Import ไฟล์ Excel รูปแบบเดียวกับที่ทีมใช้อยู่แล้ว (Customer Code/Customer Name/Month(Billing Date)/Total Sales/Total Adj Profit เริ่มที่ A6) — จับคู่บริษัทด้วย Customer Code = SIS Code แล้วมี preview ให้ตรวจสอบก่อน import จริง</p>
+  <p class="hint" style="margin-bottom:6px">Import ไฟล์ Excel รูปแบบเดียวกับที่ทีมใช้อยู่แล้ว (คอลัมน์ Customer Code/Customer Name/Month(Billing Date)/Total Sales/Total Adj Profit — ระบบหาแถวหัวตารางเองอัตโนมัติ ไม่ต้องตรงเลขแถวเป๊ะ) — จับคู่บริษัทด้วย Customer Code = SIS Code แล้วมี preview ให้ตรวจสอบก่อน import จริง</p>
   <div class="bg" style="gap:6px;flex-wrap:wrap">
     <button class="btn bp" onclick="importSisRevenueXlsx()">📥 Import จาก Excel</button>
     <button class="btn bo" onclick="exportSisRevenueXlsx()">📤 Export เป็น Excel</button>
