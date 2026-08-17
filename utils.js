@@ -1346,6 +1346,61 @@ function fmtMoneyShort(n) {
 }
 
 // ================================================================
+// SIS REVENUE (H1/H2/Quarter/รายเดือน) — อยู่ที่นี่ (ไม่ใช่ views-dealer.js) เพราะ client-view.html
+// (หน้าลูกค้าดูเอง — ไม่โหลด views-dealer.js) ต้องใช้ตัวเดียวกับหน้า Dealer แก้ยอดขาย SIS ในแอปหลัก
+// ================================================================
+
+// อ่านยอดขาย SIS (H1/H2 + Q1-Q4 + รายเดือน) ของปีที่ระบุ — ปีที่ไม่เคยตั้งจะได้ 0 เสมอ (ไม่ทับข้อมูลปีก่อน)
+// ปีปัจจุบันที่ยังไม่มี sisRevenueByYear จะ fallback ไปอ่านฟิลด์เดิม (สมัยก่อนมีปีเดียว ไม่มี Quarter) ให้อัตโนมัติ
+function getSisRevenueForYear(dealer, year) {
+  year = String(year);
+  if (dealer && dealer.sisRevenueByYear && dealer.sisRevenueByYear[year]) {
+    var r = dealer.sisRevenueByYear[year];
+    return { h1: r.h1 || 0, h2: r.h2 || 0, q1: r.q1 || 0, q2: r.q2 || 0, q3: r.q3 || 0, q4: r.q4 || 0,
+      monthly: r.monthly || _sisEstimateMonthlyFromQuarters(r), hasMonthly: !!r.monthly, note: r.note, updatedAt: r.updatedAt };
+  }
+  if (dealer && year === String(new Date().getFullYear())) {
+    return { h1: dealer.sisRevenue || 0, h2: dealer.sisRevenueH2 || 0, q1: 0, q2: 0, q3: 0, q4: 0, monthly: {}, hasMonthly: false };
+  }
+  return { h1: 0, h2: 0, q1: 0, q2: 0, q3: 0, q4: 0, monthly: {}, hasMonthly: false };
+}
+
+// ยังไม่เคยกรอกรายเดือน — ประมาณให้จาก Quarter เดิม (หารเฉลี่ย 3 เดือน) กันหน้าจอว่างเปล่าตอน migrate จากของเก่า
+function _sisEstimateMonthlyFromQuarters(r) {
+  var q = [Number(r.q1) || 0, Number(r.q2) || 0, Number(r.q3) || 0, Number(r.q4) || 0];
+  var monthly = {};
+  for (var qi = 0; qi < 4; qi++) {
+    var per = q[qi] / 3;
+    for (var mi = 0; mi < 3; mi++) monthly[qi * 3 + mi + 1] = per;
+  }
+  return monthly;
+}
+
+// เดือนไหน (0-11) อยู่ใน H1/H2 ตามช่วงที่ Admin ตั้งไว้จริง (cfg.h1Period/h2Period) — ไม่ผูกกับ Quarter ปฏิทินอีกต่อไป
+// รองรับเฉพาะช่วงที่ไม่ข้ามปี (startMonth<=endMonth) — ยังไม่รองรับ H2 ที่ยาวข้ามไปปีถัดไป (เคสส่วนใหญ่ไม่ต้องใช้)
+function sisComputeHalfMonths(cfg) {
+  var h1 = (cfg && cfg.h1Period) || { startMonth: 0, endMonth: 5 };
+  var h2 = (cfg && cfg.h2Period) || { startMonth: (h1.endMonth + 1) % 12, endMonth: 11 };
+  var h1Months = [], h2Months = [];
+  for (var m = 0; m <= 11; m++) {
+    if (m >= h1.startMonth && m <= h1.endMonth) h1Months.push(m);
+    else if (m >= h2.startMonth && m <= h2.endMonth) h2Months.push(m);
+  }
+  return { h1: h1Months, h2: h2Months, h1Period: h1, h2Period: h2 };
+}
+
+// รวมยอดรายเดือน (key '1'-'12') เป็น Q1-Q4 (ปฏิทินคงที่) + H1/H2 (ตามช่วงที่ตั้งไว้จริง)
+function sisSummarizeMonthly(monthly, cfg) {
+  var v = function(mIdx) { return Number(monthly[mIdx + 1]) || 0; }; // mIdx 0-11 → key 1-12
+  var q = [0, 0, 0, 0];
+  for (var m = 0; m <= 11; m++) q[Math.floor(m / 3)] += v(m);
+  var half = sisComputeHalfMonths(cfg);
+  var h1 = half.h1.reduce(function(s, m) { return s + v(m); }, 0);
+  var h2 = half.h2.reduce(function(s, m) { return s + v(m); }, 0);
+  return { q1: q[0], q2: q[1], q3: q[2], q4: q[3], h1: h1, h2: h2, halfMeta: half };
+}
+
+// ================================================================
 // TIMER FORMATTING
 // ================================================================
 function fmtTimer(seconds) {

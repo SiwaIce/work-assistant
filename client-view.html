@@ -87,6 +87,13 @@ body {
   margin-bottom: 4px;
 }
 .cv-dealer-sub { font-size: 14px; color: var(--text2); }
+.cv-chart-wrap { display: flex; align-items: flex-end; gap: 4px; height: 100px; padding: 4px 2px 0; }
+.cv-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+.cv-bar-h1, .cv-bar-h2, .cv-bar-future { width: 100%; border-radius: 5px 5px 2px 2px; min-height: 3px; }
+.cv-bar-h1 { background: linear-gradient(180deg, #60a5fa, var(--accent)); }
+.cv-bar-h2 { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+.cv-bar-future { background: var(--bg2); border: 1.5px dashed var(--border); }
+.cv-bar-mlabel { font-size: 9px; color: var(--text2); font-weight: 600; }
 .cv-notice {
   background: rgba(34,197,94,0.1);
   border: 1px solid rgba(34,197,94,0.3);
@@ -4820,6 +4827,7 @@ async function renderComplianceTabContent(dealer) {
   html += '<div style="font-size:15px;font-weight:800;color:' + overallColor + ';line-height:1">' + overallScore + '%</div>';
   html += '<div style="font-size:8px;color:var(--text2);margin-top:1px">SCORE</div>';
   html += '</div></div>';
+  html += '<button onclick="toggleClientPresentMode()" style="background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--text2);font-size:18px;line-height:1" title="โหมดนำเสนอ — เต็มจอเผื่อแชร์ให้ลูกค้าดู">&#x1F5A5;&#xFE0F;</button>';
   html += '<button onclick="refreshClientData()" style="background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--text2);font-size:18px;line-height:1" title="รีเฟรช">&#x1F504;</button>';
   html += '</div></div>';
 
@@ -4867,6 +4875,55 @@ async function renderComplianceTabContent(dealer) {
     html += '</div>';
   }
   html += '</div></div>';
+
+  // ====== NEW: ประโยคพร้อมพูด + กราฟแนวโน้มรายเดือน + YoY (เผื่อเปิดคุยกับลูกค้า/ขึ้นจอ) ======
+  var _yoyHalf = periodTab === 'h2' ? 'h2' : 'h1'; // รวมทั้งปียังไม่มี YoY เดี่ยว ใช้ H1 เป็นตัวแทน
+  var _yoy = getSisYoy(dealer, activeYear, _yoyHalf);
+  var _nextLevelInfoForTalk = null;
+  (function() {
+    var _levelOrder2 = ['Other', 'B', 'A', 'S'];
+    var _idx2 = _levelOrder2.indexOf(level);
+    if (_idx2 < _levelOrder2.length - 1) {
+      var _nl = _levelOrder2[_idx2 + 1];
+      var _nlTarget = (levelRequirements[_nl] || {}).h1Target || 0;
+      _nextLevelInfoForTalk = { nextLevel: _nl, gap: Math.max(0, _nlTarget - h1Status.actual) };
+    }
+  })();
+  window._cvPresentData = { name: dealer.name || '', pct: activeStatus.percent, actual: activeStatus.actual, target: activeStatus.target, label: activeLabel };
+
+  html += '<div style="background:linear-gradient(135deg, rgba(59,130,246,0.14), transparent);border:1px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text2)"><span style="font-size:16px">&#x1F5E3;&#xFE0F;</span>ประโยคพร้อมพูดกับลูกค้า</div>';
+  html += '<p style="font-size:13.5px;line-height:1.6;margin:8px 0 0;color:var(--text)">' + buildClientTalkingPoint(activeStatus, activeLabel, _yoy, _nextLevelInfoForTalk) + '</p>';
+  html += '</div>';
+
+  if (periodTab !== 'total') {
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:13.5px;font-weight:800">&#x1F4C8; แนวโน้มยอดขายรายเดือน</div><div style="font-size:11px;color:var(--text2)">' + activeYear + '</div></div>';
+    html += '<div class="cv-chart-wrap">' + buildClientTrendChartHtml(dealer, activeYear) + '</div>';
+    html += '<div style="display:flex;gap:14px;margin-top:10px;font-size:10.5px;color:var(--text2)">' +
+      '<span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:var(--accent)"></i>H1</span>' +
+      '<span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:#f59e0b"></i>H2</span>' +
+      '<span style="display:flex;align-items:center;gap:5px"><i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:var(--bg2);border:1.5px dashed var(--border)"></i>ยังไม่ถึงเดือน</span>' +
+      '</div></div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
+    html += '<div style="background:var(--bg2);border-radius:12px;padding:11px 12px">' +
+      '<div style="font-size:10px;color:var(--text2);font-weight:600">เทียบปีที่แล้ว (' + activeShortLabel + ')</div>' +
+      '<div style="font-size:17px;font-weight:800;margin-top:3px;color:' + (_yoy.pct >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + (_yoy.pct >= 0 ? '&#9650; +' : '&#9660; ') + _yoy.pct + '%</div>' +
+      '<div style="font-size:10px;color:var(--text2);margin-top:1px">' + (activeYear - 1) + ': &#3647;' + fmtMoneyShort(_yoy.prev) + ' &rarr; ' + activeYear + ': &#3647;' + fmtMoneyShort(_yoy.cur) + '</div>' +
+      '</div>';
+    var _mo = getSisRevenueForYear(dealer, activeYear).monthly;
+    var _nowM = new Date().getMonth();
+    var _latestVal = Number(_mo[_nowM + 1]) || 0;
+    var _prevVal = Number(_mo[_nowM]) || 0;
+    var _momPct = _prevVal > 0 ? Math.round((_latestVal - _prevVal) / _prevVal * 100) : (_latestVal > 0 ? 100 : 0);
+    html += '<div style="background:var(--bg2);border-radius:12px;padding:11px 12px">' +
+      '<div style="font-size:10px;color:var(--text2);font-weight:600">เดือนล่าสุด (' + THAI_MONTHS_SHORT[_nowM] + ')</div>' +
+      '<div style="font-size:17px;font-weight:800;margin-top:3px;color:' + (_momPct >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + (_momPct >= 0 ? '&#9650; +' : '&#9660; ') + _momPct + '%</div>' +
+      '<div style="font-size:10px;color:var(--text2);margin-top:1px">เทียบเดือนก่อนหน้า</div>' +
+      '</div>';
+    html += '</div>';
+  }
 
   // ====== 3 SUMMARY CARDS ======
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">';
@@ -4994,6 +5051,78 @@ function getCurrentYearSisRevenue(dealer, half) {
     return dealer.sisRevenueByYear[year][half] || 0;
   }
   return (half === 'h2' ? dealer.sisRevenueH2 : dealer.sisRevenue) || 0;
+}
+
+// ================================================================
+// สำหรับคุยกับลูกค้าตรงๆ — ประโยคสรุปพร้อมพูด, กราฟแนวโน้มรายเดือน, YoY, โหมดนำเสนอ
+// ทั้งหมดคำนวณจาก getSisRevenueForYear/sisComputeHalfMonths (utils.js — ตัวเดียวกับหน้า Dealer แก้ยอดขาย SIS)
+// ================================================================
+
+// เทียบยอด H1/H2 ปีนี้ กับปีที่แล้วช่วงเดียวกัน
+function getSisYoy(dealer, year, half) {
+  var curYear = parseInt(year, 10);
+  var cur = getSisRevenueForYear(dealer, curYear)[half] || 0;
+  var prev = getSisRevenueForYear(dealer, curYear - 1)[half] || 0;
+  var pct = prev > 0 ? Math.round((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
+  return { cur: cur, prev: prev, pct: pct };
+}
+
+// ประโยคสรุปพร้อมพูดกับลูกค้า — ประกอบจากตัวเลขจริงที่คำนวณไว้แล้วในหน้านี้ทั้งหมด ไม่มีตัวเลขสมมติ
+function buildClientTalkingPoint(activeStatus, activeLabel, yoy, nextLevelInfo) {
+  var parts = [];
+  parts.push('ตอนนี้บริษัททำยอดได้ <b>' + activeStatus.percent + '%</b> ของเป้า ' + activeLabel + ' แล้ว');
+  if (yoy && yoy.prev > 0) {
+    parts.push((yoy.pct >= 0 ? 'เติบโตขึ้น <b>+' + yoy.pct + '%</b>' : 'ลดลง <b>' + yoy.pct + '%</b>') + ' จากช่วงเดียวกันปีที่แล้ว');
+  }
+  if (nextLevelInfo && nextLevelInfo.nextLevel) {
+    if (nextLevelInfo.gap > 0) parts.push('ยังขาดอีก <b>' + fmtMoneyShort(nextLevelInfo.gap) + ' ฿</b> ถึงจะขึ้น Level ' + nextLevelInfo.nextLevel);
+    else parts.push('ถึงเกณฑ์ยอดขาย Level ' + nextLevelInfo.nextLevel + ' แล้ว 🎉');
+  }
+  return parts.join(' ') + '.';
+}
+
+// กราฟแท่งรายเดือน — 🔵 เดือนใน H1 / 🟠 เดือนใน H2 (ตามช่วงที่ตั้งไว้จริง) / เส้นประ = เดือนที่ยังไม่ถึง
+function buildClientTrendChartHtml(dealer, year) {
+  var rev = getSisRevenueForYear(dealer, year);
+  var now = new Date();
+  var isCurrentYear = String(year) === String(now.getFullYear());
+  var curMonthIdx = isCurrentYear ? now.getMonth() : 11;
+  var halfMeta = sisComputeHalfMonths(getConfig());
+  var vals = [];
+  for (var m = 0; m <= 11; m++) vals.push(Number(rev.monthly[m + 1]) || 0);
+  var maxVal = Math.max.apply(null, vals.concat([1]));
+  var bars = '';
+  for (var mi = 0; mi <= 11; mi++) {
+    var isFuture = isCurrentYear && mi > curMonthIdx;
+    var isH1 = halfMeta.h1.indexOf(mi) !== -1;
+    var hpct = isFuture ? 18 : Math.max(4, Math.round(vals[mi] / maxVal * 100));
+    var cls = isFuture ? 'cv-bar-future' : (isH1 ? 'cv-bar-h1' : 'cv-bar-h2');
+    bars += '<div class="cv-bar-col"><div class="' + cls + '" style="height:' + hpct + '%"></div><div class="cv-bar-mlabel">' + THAI_MONTHS_SHORT[mi] + '</div></div>';
+  }
+  return bars;
+}
+
+// โหมดนำเสนอ — overlay เต็มจอตัวเลขใหญ่ เผื่อแชร์หน้าจอให้ลูกค้าดูตรงๆ ระหว่างคุย
+function toggleClientPresentMode() {
+  var existing = document.getElementById('cvPresentOverlay');
+  if (existing) { existing.remove(); return; }
+  var d = window._cvPresentData || {};
+  var pct = Math.min(d.pct || 0, 100);
+  var overlay = document.createElement('div');
+  overlay.id = 'cvPresentOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px;text-align:center;cursor:pointer';
+  overlay.innerHTML =
+    '<div style="position:absolute;inset:0;background:radial-gradient(circle at 30% 20%, rgba(59,130,246,.25), transparent 60%)"></div>' +
+    '<div style="position:relative;max-width:480px;width:100%">' +
+    '<div style="font-size:14px;color:#94a3b8;font-weight:700;letter-spacing:.03em">' + sanitize((d.name || '').toUpperCase()) + '</div>' +
+    '<div style="font-size:64px;font-weight:900;color:#fff;line-height:1;margin:12px 0 4px;text-shadow:0 0 30px rgba(59,130,246,.6)">' + (d.pct || 0) + '%</div>' +
+    '<div style="font-size:14px;color:#60a5fa;font-weight:700">ของเป้ายอดขาย ' + sanitize(d.label || '') + '</div>' +
+    '<div style="height:16px;background:rgba(255,255,255,.08);border-radius:99px;margin-top:20px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:99px;box-shadow:0 0 16px rgba(59,130,246,.8)"></div></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:#cbd5e1"><span>ยอดจริง <b style="color:#fff">' + fmtMoneyShort(d.actual || 0) + ' ฿</b></span><span>เป้า <b style="color:#fff">' + fmtMoneyShort(d.target || 0) + ' ฿</b></span></div>' +
+    '<div style="font-size:11px;color:#64748b;margin-top:22px">แตะที่ไหนก็ได้เพื่อออกจากโหมดนำเสนอ</div>' +
+    '</div>';
+  overlay.onclick = function() { overlay.remove(); };
+  document.body.appendChild(overlay);
 }
 
 // ✅ แก้ไข: เพิ่ม parameter customPipelines
