@@ -2334,6 +2334,42 @@ function _saveSalesForecastCore(dealerId, eid, data, onDone) {
   });
 }
 
+// ================================================================
+// สร้าง Product Forecast จาก Pipeline ที่ Won แล้วโดยตรง (ปุ่มบนหน้า Pipeline Detail) — ดึง model/qty รวม
+// (getPipeTotalQty/getPipeModelSummary) + ชื่อโครงการ + ผูก pipeId ให้อัตโนมัติ ไม่ต้องพิมพ์ซ้ำที่แท็บ
+// Sales Forecast ของ Dealer เหมือนเดิม เดือนเริ่มต้นเดาจาก Expected Close Date แต่แก้ก่อนบันทึกจริงได้
+// (preview เล็กๆ ก่อนยืนยัน) เหมือนปุ่ม "สร้าง Sales Order จาก Project นี้" ที่มีอยู่แล้ว
+// ================================================================
+function showCreateForecastFromPipelineM(pipelineId) {
+  var p = ST.getOne('pipeline', pipelineId);
+  if (!p) return;
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return toast('❌ ต้อง login ก่อนถึงจะสร้าง Forecast ได้ (ใช้แบบ Offline จะบันทึกไม่ได้)', true);
+  var existing = ST.filter('customerForecasts', function(f) { return f.type === 'project' && f.pipeId === pipelineId; })[0];
+  var totalQty = getPipeTotalQty(p);
+  var modelSummary = getPipeModelSummary(p);
+  var defaultMonth = (existing ? existing.month : '') || (p.expectedCloseDate || p.shipmentDate || p.biddingDate || _td()).slice(0, 7);
+
+  var h = '<div style="max-width:420px">';
+  if (existing) h += '<div class="hint" style="margin-bottom:10px;color:var(--warn,#f59e0b)">⚠️ โครงการนี้มี Forecast อยู่แล้ว (เดือน ' + sanitize(existing.month) + ') — บันทึกใหม่จะปรับปรุงรายการเดิม ไม่สร้างซ้ำ</div>';
+  h += '<div class="fg"><label>โครงการ</label><div style="font-weight:700;font-size:13px">' + sanitize(p.projectName || '-') + '</div></div>';
+  h += '<div class="fg"><label>สินค้า (รวมจาก Pipeline)</label><div style="font-size:12.5px;color:var(--text2)">' + sanitize(modelSummary || '-') + '<br>รวม ' + totalQty + ' หน่วย</div></div>';
+  h += '<div class="fg"><label>เดือนที่คาดว่าจะได้รับ/ปิดงาน</label><input type="month" id="cfp_month" value="' + defaultMonth + '"></div>';
+  h += '<div class="fg"><label>หมายเหตุ (ถ้ามี)</label><input type="text" id="cfp_note" value="' + sanitize(existing ? (existing.note || '') : '') + '"></div>';
+  h += '<button class="btn bp btn-full" onclick="confirmCreateForecastFromPipeline(\'' + pipelineId + '\',\'' + (existing ? existing.id : '') + '\')">✅ ' + (existing ? 'อัปเดต Forecast' : 'สร้าง Forecast') + '</button>';
+  h += '</div>';
+  openM('📊 สร้าง Product Forecast จากโครงการนี้', h);
+}
+
+function confirmCreateForecastFromPipeline(pipelineId, existingId) {
+  var p = ST.getOne('pipeline', pipelineId);
+  if (!p) return;
+  var month = document.getElementById('cfp_month').value;
+  if (!month) return alert('เลือกเดือน');
+  var note = document.getElementById('cfp_note').value.trim();
+  var data = { type: 'project', month: month, pipeId: pipelineId, projectName: p.projectName || '', totalQty: getPipeTotalQty(p), note: note };
+  _saveSalesForecastCore(p.dealerId, existingId || '', data, function() { closeMForce(); });
+}
+
 function delSalesForecast(dealerId, id) {
   if (!confirm('ลบรายการนี้? (จะหายจากฝั่ง client-view ด้วย)')) return;
   db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(id).delete().then(function() {

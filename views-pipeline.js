@@ -2030,7 +2030,10 @@ function rPipeDet(el) {
   if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote && !_gvHidden('pipeline_notes') ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
   if (isLost && p.lossReason) html += '<div style="margin-top:8px;padding:8px;background:#7f1d1d;border-radius:6px"><div>❌ Loss Reason:</div><div>' + sanitize(p.lossReason) + (p.lossCompetitor ? ' — ชนะโดย: ' + sanitize(p.lossCompetitor) : '') + (p.lossNote && !_gvHidden('pipeline_notes') ? ' — ' + sanitize(p.lossNote) : '') + '</div></div>';
 
-  if (isWon) html += '<div style="margin-top:10px"><button class="btn bp" onclick="createSOFromPipeline(\'' + p.id + '\')">📦 สร้าง Sales Order จาก Project นี้</button></div>';
+  if (isWon) html += '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button class="btn bp" onclick="createSOFromPipeline(\'' + p.id + '\')">📦 สร้าง Sales Order จาก Project นี้</button>' +
+    '<button class="btn bo" onclick="showCreateForecastFromPipelineM(\'' + p.id + '\')">📊 สร้าง Product Forecast จากโครงการนี้</button>' +
+    '</div>';
 
   html += '</div>';
 
