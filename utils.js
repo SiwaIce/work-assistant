@@ -1421,6 +1421,15 @@ function sisSummarizeMonthly(monthly, cfg) {
   return { q1: q[0], q2: q[1], q3: q[2], q4: q[3], h1: h1, h2: h2, halfMeta: half };
 }
 
+// เทียบยอด H1/H2 ปีนี้ กับปีที่แล้วช่วงเดียวกัน — ใช้ทั้ง client-view (คุยกับลูกค้า) และหน้าแผน KPI ในแอปหลัก
+function getSisYoy(dealer, year, half) {
+  var curYear = parseInt(year, 10);
+  var cur = getSisRevenueForYear(dealer, curYear)[half] || 0;
+  var prev = getSisRevenueForYear(dealer, curYear - 1)[half] || 0;
+  var pct = prev > 0 ? Math.round((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
+  return { cur: cur, prev: prev, pct: pct };
+}
+
 // ================================================================
 // TIMER FORMATTING
 // ================================================================

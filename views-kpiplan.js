@@ -27,34 +27,47 @@ function rKpiCompanyPlan(el) {
   }
 
   var half = plans[0].half;
-  var totalTarget = 0, totalActual = 0, totalPipe = 0, riskCount = 0;
+  var hKey = half === 'H1' ? 'h1' : 'h2';
+  var totalTarget = 0, totalActual = 0, totalPipe = 0, totalSis = 0, riskCount = 0;
+  var yoyCur = 0, yoyPrev = 0;
   plans.forEach(function(p) {
     totalTarget += p.target; totalActual += p.actualSoFar; totalPipe += p.pipeWeighted;
+    totalSis += (p.sisQuarters && p.sisQuarters[hKey]) || 0;
+    var yoy = getSisYoy(p.dealer, p.sisYear, hKey);
+    yoyCur += yoy.cur; yoyPrev += yoy.prev;
     if (kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว') riskCount++;
   });
   var totalGap = Math.max(0, totalTarget - totalActual - totalPipe);
+  var yoyPct = yoyPrev > 0 ? Math.round((yoyCur - yoyPrev) / yoyPrev * 100) : (yoyCur > 0 ? 100 : 0);
 
   h += '<div class="card"><h2>🎯 แผนบรรลุเป้า KPI — SAB Partner (' + half + ')</h2>';
-  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">เป้า/ยอดจริง/Pipeline ในมือ (ถ่วง POS) ของแต่ละบริษัท พร้อมแผนรายเดือนแยก Project/Runrate — สำหรับสรุปให้ Ryan</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">เป้า/ยอดขาย SIS จริง/Pipeline ในมือ (ถ่วง POS) ของแต่ละบริษัท พร้อมแผนรายเดือนแยก Project/Runrate — สำหรับสรุปให้ Ryan</div>';
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">';
-  h += kpiPlanSumCard('เป้ารวม ' + half + ' ✏️', fmtMoneyShort(totalTarget), '', 'showKpiPlanTargetsM()');
-  h += kpiPlanSumCard('ทำได้แล้ว', fmtMoneyShort(totalActual), 'stat-good-t');
-  h += kpiPlanSumCard('Pipeline ในมือ', fmtMoneyShort(totalPipe));
+  h += kpiPlanSumCard('🎯 เป้ารวม ' + half + ' ✏️', fmtMoneyShort(totalTarget), '', 'showKpiPlanTargetsM()');
+  h += kpiPlanSumCard('💰 ยอดขาย SIS จริง', fmtMoneyShort(totalSis), 'kpi-sum-sis', '', totalTarget ? Math.round(totalSis / totalTarget * 100) + '% ของเป้า' : '');
+  h += kpiPlanSumCard('📊 Pipeline ในมือ', fmtMoneyShort(totalPipe));
   h += kpiPlanSumCard('ยังขาดอีก', totalGap > 0 ? fmtMoneyShort(totalGap) : 'ถึงเป้าแล้ว', totalGap > 0 ? 'stat-bad-t' : 'stat-good-t');
-  h += kpiPlanSumCard('บริษัทเสี่ยงไม่ถึงเป้า', riskCount + ' / ' + plans.length, riskCount ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiPlanSumCard('⚠️ เสี่ยงไม่ถึงเป้า', riskCount + ' / ' + plans.length, riskCount ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiPlanSumCard('📈 YoY', (yoyPct >= 0 ? '+' : '') + yoyPct + '%', yoyPct >= 0 ? 'stat-good-t' : 'stat-bad-t', '', 'เทียบ ' + half + ' ปีที่แล้ว');
   h += '</div>';
   h += '<button class="btn bsm bo" onclick="copyKpiPlanSummary()">📋 คัดลอกสรุปส่ง Ryan</button>';
   h += '</div>';
 
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px">';
   plans.forEach(function(p) { h += kpiPlanRowHtml(p); });
+  h += '</div>';
 
   el.innerHTML = h;
 }
 
-function kpiPlanSumCard(label, val, colorCls, onclick) {
-  return '<div style="background:var(--bg2);border-radius:10px;padding:10px 12px' + (onclick ? ';cursor:pointer' : '') + '"' + (onclick ? ' onclick="' + onclick + '"' : '') + '>' +
+function kpiPlanSumCard(label, val, colorCls, onclick, sub) {
+  var isSis = colorCls === 'kpi-sum-sis';
+  var valStyle = 'font-size:17px;font-weight:700;margin-top:2px' + (isSis ? ';color:#8b5cf6' : '');
+  return '<div style="background:var(--bg2);border-radius:10px;padding:10px 12px' + (onclick ? ';cursor:pointer' : '') + (isSis ? ';background:linear-gradient(135deg,rgba(139,92,246,.12),var(--bg2))' : '') + '"' + (onclick ? ' onclick="' + onclick + '"' : '') + '>' +
     '<div style="font-size:10.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.02em">' + label + '</div>' +
-    '<div style="font-size:17px;font-weight:700;margin-top:2px" class="' + (colorCls || '') + '">' + val + '</div></div>';
+    '<div style="' + valStyle + '" class="' + (isSis ? '' : (colorCls || '')) + '">' + val + '</div>' +
+    (sub ? '<div style="font-size:10px;color:var(--text3);margin-top:1px">' + sub + '</div>' : '') +
+    '</div>';
 }
 
 // ================================================================
@@ -134,20 +147,43 @@ function saveKpiPlanTargets() {
   render();
 }
 
+var KPI_LEVEL_DOT_COLOR = { S: '#c9a227', A: 'var(--accent)', B: 'var(--text3)', Other: 'var(--text3)' };
+
 function kpiPlanRowHtml(p) {
   var st = kpiPlanStatus(p);
-  var gap = p.target - p.actualSoFar - p.pipeWeighted;
-  var pct = p.target ? Math.min(100, Math.round((p.actualSoFar + p.pipeWeighted) / p.target * 100)) : 0;
+  var hKey = p.half === 'H1' ? 'h1' : 'h2';
+  var sisActual = (p.sisQuarters && p.sisQuarters[hKey]) || 0;
+  var gap = p.target - sisActual - p.pipeWeighted;
+  var isOk = gap <= 0;
+  var pct = p.target ? Math.min(100, Math.round((sisActual + p.pipeWeighted) / p.target * 100)) : 100;
   var isOpen = kpiPlanExpandedId === p.dealer.id;
-  var h = '<div class="card" style="padding:0;overflow:hidden">';
-  h += '<div style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap" onclick="kpiPlanToggleRow(\'' + p.dealer.id + '\')">';
-  h += '<div style="flex:1;min-width:160px"><div style="font-weight:700;font-size:14px">' + sanitize(p.dealer.name) + '</div>' +
-    '<div style="font-size:11px;color:var(--text2)">' + sanitize(p.dealer.level || '') + '</div></div>';
-  h += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + st.bg + '" class="' + st.cls + '">' + st.label + '</span>';
-  h += '<div style="text-align:right;min-width:80px;cursor:pointer" onclick="event.stopPropagation();showKpiPlanTargetsM(\'' + p.dealer.id + '\')" title="กดเพื่อแก้ไขเป้า"><div style="font-size:10px;color:var(--text2)">เป้า ✏️</div><div style="font-weight:600">' + fmtMoneyShort(p.target) + '</div></div>';
-  h += '<div style="text-align:right;min-width:80px"><div style="font-size:10px;color:var(--text2)">ทำได้+Pipeline</div><div style="font-weight:600">' + fmtMoneyShort(p.actualSoFar + p.pipeWeighted) + ' (' + pct + '%)</div></div>';
-  h += '<div style="text-align:right;min-width:90px"><div style="font-size:10px;color:var(--text2)">ยังขาด</div><div style="font-weight:700" class="' + (gap > 0 ? 'stat-bad-t' : 'stat-good-t') + '">' + (gap > 0 ? fmtMoneyShort(gap) : 'เกินเป้า ✓') + '</div></div>';
-  h += '<span style="font-size:11px;color:var(--text2)">' + (isOpen ? '▼' : '▶') + '</span>';
+  var qKeys = p.half === 'H1' ? ['q1', 'q2'] : ['q3', 'q4'];
+  var lvlColor = KPI_LEVEL_DOT_COLOR[p.dealer.level] || 'var(--text3)';
+
+  var h = '<div class="card" style="padding:0;overflow:hidden;grid-column:' + (isOpen ? '1 / -1' : 'auto') + '">';
+  h += '<div style="padding:14px 15px;cursor:pointer" onclick="kpiPlanToggleRow(\'' + p.dealer.id + '\')">';
+
+  h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">';
+  h += '<div style="min-width:0"><div style="font-size:15px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.dealer.name) + '</div>' +
+    '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);margin-top:3px"><span style="width:6px;height:6px;border-radius:50%;background:' + lvlColor + ';display:inline-block"></span>Level ' + sanitize(p.dealer.level || '-') + '</div></div>';
+  h += '<span style="font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;background:' + st.bg + ';white-space:nowrap" class="' + st.cls + '">' + st.label + '</span>';
+  h += '</div>';
+
+  h += '<div style="height:9px;background:var(--bg2);border-radius:99px;overflow:hidden;margin-bottom:3px"><div style="height:100%;width:' + pct + '%;border-radius:99px;background:' + (isOk ? 'linear-gradient(90deg,var(--good,#22c55e),#6ee7a0)' : 'linear-gradient(90deg,#8b5cf6,var(--accent))') + '"></div></div>';
+  h += '<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text2);margin-bottom:12px"><span>SIS จริง + Pipeline</span><b style="color:var(--text)">' + pct + '%</b></div>';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center;cursor:pointer" onclick="event.stopPropagation();showKpiPlanTargetsM(\'' + p.dealer.id + '\')" title="กดเพื่อแก้ไขเป้า"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">เป้า ✏️</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.target) + '</div></div>';
+  h += '<div style="background:rgba(139,92,246,.12);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">SIS จริง</div><div style="font-size:12.5px;font-weight:800;margin-top:3px;color:#8b5cf6">' + fmtMoneyShort(sisActual) + '</div></div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">Pipeline</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">' + (isOk ? 'เกินเป้า' : 'ยังขาด') + '</div><div style="font-size:12.5px;font-weight:800;margin-top:3px" class="' + (isOk ? 'stat-good-t' : 'stat-bad-t') + '">' + (isOk ? '✓' : fmtMoneyShort(gap)) + '</div></div>';
+  h += '</div>';
+
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">';
+  h += '<div style="display:flex;gap:10px;font-size:10.5px;color:var(--text2)"><span>' + qKeys[0].toUpperCase() + ' <b style="color:var(--text)">' + fmtMoneyShort((p.sisQuarters && p.sisQuarters[qKeys[0]]) || 0) + '</b></span><span>' + qKeys[1].toUpperCase() + ' <b style="color:var(--text)">' + fmtMoneyShort((p.sisQuarters && p.sisQuarters[qKeys[1]]) || 0) + '</b></span></div>';
+  h += '<span style="font-size:11px;color:var(--text3)">' + (isOpen ? '▾ ซ่อนรายเดือน' : '▸ ดูรายเดือน') + '</span>';
+  h += '</div>';
+
   h += '</div>';
   if (isOpen) h += kpiPlanDetailHtml(p);
   h += '</div>';

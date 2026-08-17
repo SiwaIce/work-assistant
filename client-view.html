@@ -5055,17 +5055,8 @@ function getCurrentYearSisRevenue(dealer, half) {
 
 // ================================================================
 // สำหรับคุยกับลูกค้าตรงๆ — ประโยคสรุปพร้อมพูด, กราฟแนวโน้มรายเดือน, YoY, โหมดนำเสนอ
-// ทั้งหมดคำนวณจาก getSisRevenueForYear/sisComputeHalfMonths (utils.js — ตัวเดียวกับหน้า Dealer แก้ยอดขาย SIS)
+// ทั้งหมดคำนวณจาก getSisRevenueForYear/sisComputeHalfMonths/getSisYoy (utils.js — ตัวเดียวกับหน้า Dealer แก้ยอดขาย SIS)
 // ================================================================
-
-// เทียบยอด H1/H2 ปีนี้ กับปีที่แล้วช่วงเดียวกัน
-function getSisYoy(dealer, year, half) {
-  var curYear = parseInt(year, 10);
-  var cur = getSisRevenueForYear(dealer, curYear)[half] || 0;
-  var prev = getSisRevenueForYear(dealer, curYear - 1)[half] || 0;
-  var pct = prev > 0 ? Math.round((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
-  return { cur: cur, prev: prev, pct: pct };
-}
 
 // ประโยคสรุปพร้อมพูดกับลูกค้า — ประกอบจากตัวเลขจริงที่คำนวณไว้แล้วในหน้านี้ทั้งหมด ไม่มีตัวเลขสมมติ
 function buildClientTalkingPoint(activeStatus, activeLabel, yoy, nextLevelInfo) {
