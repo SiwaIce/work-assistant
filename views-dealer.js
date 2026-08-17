@@ -5003,6 +5003,12 @@ function _showSisImportPreviewM() {
     }
     h += '</div>';
     h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">' + monthsLabel + ' · รวม ฿' + fmtMoney(g.totalSales) + '</div>';
+    if (g.code && g.matchedDealerId && !g.skip) {
+      var mdForCode = ST.getOne('dealers', g.matchedDealerId);
+      if (mdForCode && !mdForCode.sisCode) {
+        h += '<div style="font-size:10.5px;color:var(--accent);margin-bottom:6px">💾 จะบันทึก Code "' + sanitize(g.code) + '" ลง SIS Code ของบริษัทนี้ด้วย (ยังไม่เคยมี Code มาก่อน)</div>';
+      }
+    }
     if (!g.skip) {
       h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
       h += '<select style="flex:1;min-width:160px;font-size:12px" onchange="_sisImportSetDealer(' + i + ', this.value)">' + dealerOptions.replace('value="' + sanitize(g.matchedDealerId || '') + '"', 'value="' + sanitize(g.matchedDealerId || '') + '" selected') + '</select>';
@@ -5056,7 +5062,7 @@ function _confirmSisImport() {
   var groups = (_sisImportGroups || []).filter(function(g) { return g.matchedDealerId && !g.skip; });
   if (!groups.length) return toast('ยังไม่มีบริษัทที่จับคู่พร้อม import');
   var cfg = getConfig();
-  var dealerCount = 0, monthCount = 0;
+  var dealerCount = 0, monthCount = 0, codeCount = 0;
 
   groups.forEach(function(g) {
     var dealer = ST.getOne('dealers', g.matchedDealerId);
@@ -5080,13 +5086,16 @@ function _confirmSisImport() {
     var updateData = { sisRevenueByYear: byYear };
     var curYear = String(new Date().getFullYear());
     if (byYear[curYear]) { updateData.sisRevenue = byYear[curYear].h1; updateData.sisRevenueH2 = byYear[curYear].h2; }
+    // เลือก Dealer เองให้กับบริษัทที่ไม่เคยมี SIS Code (หรือ Code ไม่ตรง) — บันทึก Customer Code จากไฟล์
+    // ลง sisCode ให้เลย เฉพาะกรณี dealer ยังไม่เคยมี Code อยู่ก่อน (กันทับ Code เดิมที่อาจตั้งใจตั้งไว้ต่างออกไป)
+    if (g.code && !dealer.sisCode) { updateData.sisCode = g.code; codeCount++; }
     ST.update('dealers', dealer.id, updateData);
     dealerCount++;
   });
 
   _sisImportGroups = null;
   closeMForce();
-  toast('✅ Import สำเร็จ ' + dealerCount + ' บริษัท (' + monthCount + ' เดือน)');
+  toast('✅ Import สำเร็จ ' + dealerCount + ' บริษัท (' + monthCount + ' เดือน)' + (codeCount ? ' · บันทึก SIS Code ให้ ' + codeCount + ' บริษัท' : ''));
   render();
 }
 
