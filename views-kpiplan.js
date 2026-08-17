@@ -4,6 +4,7 @@
 // ตัวเลขทั้งหมดคำนวณจาก computeKpiCompanyPlan/computeKpiCompanyPlanAll (utils.js) — ไม่มีตัวเลขสมมติ
 // ================================================================
 var kpiPlanExpandedId = null;
+var kpiPlanClosingOpen = {}; // key = dealerId+'|'+month → true ถ้าขยายดูรายการ "โครงการคาดปิด" ของเดือนนั้นอยู่
 
 function kpiPlanStatus(p) {
   var ratio = p.target ? (p.actualSoFar + p.pipeWeighted) / p.target : 1;
@@ -165,22 +166,37 @@ function kpiPlanDetailHtml(p) {
       '</div>';
   }
 
-  h += '<div style="font-size:11.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px">ยอดรายเดือน — Project / Runrate (จังหวะที่ต้องทำ ' + fmtMoneyShort(reqPerMonth) + '/เดือน)</div>';
-  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">';
+  // ยอดขาย SIS จริง — สรุป Quarter/H ของครึ่งปีนี้ (ตัวเลขจริงจากบัญชี ไม่ใช่ตัวเลขคาดการณ์)
+  var q = p.sisQuarters || {};
+  var qKeys = p.half === 'H1' ? ['q1', 'q2'] : ['q3', 'q4'];
+  var hKey = p.half === 'H1' ? 'h1' : 'h2';
+  h += '<div style="font-size:11.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px">💰 ยอดขาย SIS จริง — ' + p.sisYear + '</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">';
+  qKeys.forEach(function(qk) {
+    h += '<div style="background:var(--card2);border-radius:9px;padding:8px 6px;text-align:center"><div style="font-size:9px;color:var(--text2);font-weight:700;text-transform:uppercase">' + qk.toUpperCase() + '</div><div style="font-size:12.5px;font-weight:800;margin-top:2px">' + fmtMoneyShort(q[qk] || 0) + '</div></div>';
+  });
+  h += '<div style="background:var(--accent-light,var(--bg2));border-radius:9px;padding:8px 6px;text-align:center"><div style="font-size:9px;color:var(--accent);font-weight:700;text-transform:uppercase">' + p.half + ' รวม</div><div style="font-size:12.5px;font-weight:800;color:var(--accent);margin-top:2px">' + fmtMoneyShort(q[hKey] || 0) + '</div></div>';
+  h += '</div>';
+
+  h += '<div style="font-size:11.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px">ยอดรายเดือน — SIS จริง / Project / Runrate (จังหวะที่ต้องทำ ' + fmtMoneyShort(reqPerMonth) + '/เดือน)</div>';
+  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:680px">';
   h += '<thead><tr>' +
     '<th style="text-align:left;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">เดือน</th>' +
-    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">รวม</th>' +
-    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">Project</th>' +
-    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">Runrate</th>' +
+    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">ยอด SIS จริง</th>' +
+    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">Project (แผน)</th>' +
+    '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">Runrate (แผน)</th>' +
+    '<th style="text-align:left;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">โครงการคาดปิด</th>' +
     '<th style="text-align:right;font-size:10px;color:var(--text2);padding:5px 8px;border-bottom:1px solid var(--border)">สถานะ</th></tr></thead><tbody>';
   p.monthly.forEach(function(m) {
     var total = m.project + m.runrate;
+    var ckey = p.dealer.id + '|' + m.month;
+    var isOpen = !!kpiPlanClosingOpen[ckey];
     var tag = m.isCurrent ? '<span style="font-size:9px;border:1px solid var(--border);border-radius:8px;padding:1px 6px;margin-left:6px;color:var(--text2)">เดือนนี้</span>'
       : m.isFuture ? '<span style="font-size:9px;border:1px solid var(--border);border-radius:8px;padding:1px 6px;margin-left:6px;color:var(--text2)">' + (m.isManual ? 'แผน' : 'แนะนำ') + '</span>'
       : '<span style="font-size:9px;border:1px solid var(--border);border-radius:8px;padding:1px 6px;margin-left:6px;color:var(--text2)">จริง</span>';
     h += '<tr' + (m.isCurrent ? ' style="background:rgba(59,111,214,.08)"' : '') + '>';
     h += '<td style="padding:6px 8px;font-weight:600;font-size:12.5px">' + m.label + tag + '</td>';
-    h += '<td style="text-align:right;padding:6px 8px;font-weight:700;font-size:12.5px">' + fmtMoneyShort(total) + '</td>';
+    h += '<td style="text-align:right;padding:6px 8px;font-weight:800;font-size:12.5px">' + fmtMoneyShort(m.sisActual) + '</td>';
     if (m.isFuture) {
       h += '<td style="text-align:right;padding:4px 8px"><input type="number" step="1000" class="fm-input" style="width:90px;text-align:right;padding:4px 6px;font-size:12px" id="kpiplan_p_' + p.dealer.id + '_' + m.month + '" value="' + Math.round(m.project) + '"></td>';
       h += '<td style="text-align:right;padding:4px 8px"><input type="number" step="1000" class="fm-input" style="width:90px;text-align:right;padding:4px 6px;font-size:12px" id="kpiplan_r_' + p.dealer.id + '_' + m.month + '" value="' + Math.round(m.runrate) + '"></td>';
@@ -188,8 +204,30 @@ function kpiPlanDetailHtml(p) {
       h += '<td style="text-align:right;padding:6px 8px;font-size:12.5px">' + fmtMoneyShort(m.project) + '</td>';
       h += '<td style="text-align:right;padding:6px 8px;font-size:12.5px">' + fmtMoneyShort(m.runrate) + '</td>';
     }
+    h += '<td style="padding:6px 8px">';
+    if (m.closingPipes.length) {
+      h += '<button class="btn bsm bo" style="font-size:10.5px;padding:3px 8px" onclick="kpiPlanToggleClosing(\'' + p.dealer.id + '\',\'' + m.month + '\')">📁 ' + m.closingPipes.length + ' โครงการ ' + (isOpen ? '▴' : '▾') + '</button>';
+    } else {
+      h += '<span style="color:var(--text3);font-size:11px">—</span>';
+    }
+    h += '</td>';
     h += '<td style="text-align:right;padding:6px 8px;font-size:11px" class="' + (total >= reqPerMonth ? 'stat-good-t' : 'stat-bad-t') + '">' + (total >= reqPerMonth ? '✓ ทันจังหวะ' : '▼ ต่ำกว่าจังหวะ') + '</td>';
     h += '</tr>';
+    if (isOpen && m.closingPipes.length) {
+      h += '<tr><td colspan="6" style="padding:0;border-bottom:1px solid var(--border)"><div style="padding:8px 12px 10px 28px;background:var(--card2);display:flex;flex-direction:column;gap:6px">';
+      m.closingPipes.forEach(function(cp) {
+        var posColor = cp.pos >= 70 ? 'stat-good-t' : cp.pos >= 40 ? 'stat-warn-t' : 'stat-bad-t';
+        h += '<div style="display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 9px;cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + cp.id + '\'})">';
+        h += '<span style="font-size:10px;color:var(--text3);font-family:monospace;min-width:34px">' + (cp.rowNo ? '#' + sanitize(String(cp.rowNo)) : '—') + '</span>';
+        h += '<span style="flex:1;font-size:12px;font-weight:600">' + sanitize(cp.projectName || '(ไม่มีชื่อ)') + '</span>';
+        h += '<span style="font-size:10.5px;font-weight:700" class="' + posColor + '">POS ' + cp.pos + '%</span>';
+        h += '<span style="font-size:12px;font-weight:700;min-width:64px;text-align:right">' + fmtMoneyShort(cp.forecastAmount) + '</span>';
+        h += '<span style="color:var(--text3)">→</span>';
+        h += '</div>';
+      });
+      h += '<div style="font-size:10.5px;color:var(--text3);font-style:italic">💡 ยังไม่นับเป็นยอดขาย SIS จนกว่าโครงการจะปิดและออกใบแจ้งหนี้จริง — กดที่รายการเพื่อไปหน้า Pipeline</div>';
+      h += '</div></td></tr>';
+    }
   });
   h += '</tbody></table></div>';
 
@@ -232,6 +270,12 @@ function kpiPlanResetMonths(dealerId) {
 
 function kpiPlanToggleRow(dealerId) {
   kpiPlanExpandedId = kpiPlanExpandedId === dealerId ? null : dealerId;
+  render();
+}
+
+function kpiPlanToggleClosing(dealerId, month) {
+  var key = dealerId + '|' + month;
+  kpiPlanClosingOpen[key] = !kpiPlanClosingOpen[key];
   render();
 }
 

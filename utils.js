@@ -1059,6 +1059,25 @@ function computeKpiCompanyPlan(dealerId, cfg) {
     runrateByMonth[r.month] = (runrateByMonth[r.month] || 0) + val;
   });
 
+  // ยอดขาย SIS จริง (ตัวเลขบัญชีจริง จาก getSisRevenueForYear เดียวกับหน้าแก้ยอดขาย SIS) — เดือน/Q/H ทั้งหมด
+  // อยู่ปีเดียวกันเสมอ เพราะ kpiCompanyPlanMonths() ยึด 6 เดือนของ H ปัจจุบัน ไม่ข้ามปี
+  var sisYear = mm.months[0].slice(0, 4);
+  var sisRev = getSisRevenueForYear(stats.dealer, sisYear);
+  var sisQuarters = sisSummarizeMonthly(sisRev.monthly, cfg);
+
+  // โครงการเปิดอยู่ (ยังไม่ Won/Lost) ที่ตั้ง Expected Close Date ไว้ในเดือนนั้น — โชว์ให้เห็นเฉยๆ ว่ามีโอกาส
+  // ได้รายได้เดือนไหนบ้างถ้าปิดตามแผน ไม่เอาไปนับรวมในยอดใดๆ ทั้งสิ้น (ยังไม่ปิดงานจริง)
+  var closingByMonth = {};
+  stats.activePipes.forEach(function(p) {
+    var key = (p.expectedCloseDate || '').slice(0, 7);
+    if (!key) return;
+    if (!closingByMonth[key]) closingByMonth[key] = [];
+    closingByMonth[key].push({ id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', forecastAmount: Number(p.forecastAmount) || 0, pos: p._pos || 0 });
+  });
+  Object.keys(closingByMonth).forEach(function(key) {
+    closingByMonth[key].sort(function(a, b) { return b.forecastAmount - a.forecastAmount; });
+  });
+
   var monthly = mm.months.map(function(key) {
     var isPast = key < curKey, isCurrent = key === curKey, isFuture = key > curKey;
     var project, runrate, isManual = false;
@@ -1070,7 +1089,8 @@ function computeKpiCompanyPlan(dealerId, cfg) {
       if (override) { project = Number(override.project) || 0; runrate = Number(override.runrate) || 0; isManual = true; }
       else { project = projectForecastByMonth[key] || 0; runrate = runrateByMonth[key] || 0; }
     }
-    return { month: key, label: fcMonthLabel(key).split(' ')[0], isPast: isPast, isCurrent: isCurrent, isFuture: isFuture, project: project, runrate: runrate, isManual: isManual };
+    var sisActual = Number(sisRev.monthly[parseInt(key.slice(5, 7), 10)]) || 0;
+    return { month: key, label: fcMonthLabel(key).split(' ')[0], isPast: isPast, isCurrent: isCurrent, isFuture: isFuture, project: project, runrate: runrate, isManual: isManual, sisActual: sisActual, closingPipes: closingByMonth[key] || [] };
   });
 
   var forecastTotal = monthly.reduce(function(s, m) { return s + m.project + m.runrate; }, 0);
@@ -1080,6 +1100,7 @@ function computeKpiCompanyPlan(dealerId, cfg) {
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
     actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, forecastTotal: forecastTotal, gap: gap,
+    sisQuarters: sisQuarters, sisYear: sisYear,
     stalePipes: stats.stalePipes, lastVisitDays: stats.lastVisitDays
   };
 }
