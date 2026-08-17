@@ -21,6 +21,13 @@ function rExports(el) {
   <div class="card"><h2>🏪 Dealer Summary</h2>
   <div class="bg" style="margin-bottom:6px"><button class="btn bp" onclick="xDealer()">📊 แสดง</button></div><div id="xd_area"></div></div>
 
+  <div class="card"><h2>💰 ยอดขาย SIS</h2>
+  <p class="hint" style="margin-bottom:6px">Import ไฟล์ Excel รูปแบบเดียวกับที่ทีมใช้อยู่แล้ว (Customer Code/Customer Name/Month(Billing Date)/Total Sales/Total Adj Profit เริ่มที่ A6) — จับคู่บริษัทด้วย Customer Code = SIS Code แล้วมี preview ให้ตรวจสอบก่อน import จริง</p>
+  <div class="bg" style="gap:6px;flex-wrap:wrap">
+    <button class="btn bp" onclick="importSisRevenueXlsx()">📥 Import จาก Excel</button>
+    <button class="btn bo" onclick="exportSisRevenueXlsx()">📤 Export เป็น Excel</button>
+  </div></div>
+
   <div class="card"><h2>⏱️ Time Tracking</h2>
   <div class="fr" style="margin-bottom:6px">${dpH('xt_f', addD(_td(),-7), 'จาก')}${dpH('xt_t', _td(), 'ถึง')}</div>
   <div class="bg" style="margin-bottom:6px"><button class="btn bp" onclick="xTimer()">📊 แสดง</button></div><div id="xt_area"></div></div>

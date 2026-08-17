@@ -4873,6 +4873,236 @@ function saveSisRevenue(dealerId, year) {
 }
 
 // ================================================================
+// SIS REVENUE IMPORT/EXPORT — อ่านไฟล์ Excel "Total_Sales_By_Drone" (template จริงที่ทีมใช้อยู่แล้ว)
+// header อยู่แถว 5, ข้อมูลเริ่ม A6: Customer Code | Customer Name | Month(Billing Date) | Total Sales | Total Adj Profit
+// จับคู่บริษัทด้วย Customer Code = SIS Code เท่านั้น (ชื่อในไฟล์เป็นภาษาไทย สะกด/เว้นวรรคไม่ตรงกับระบบได้ง่าย
+// ไม่เดาจากชื่อ) แถวที่จับคู่ไม่ได้ให้เลือกเอง/สร้างใหม่/ข้ามได้ทีละบริษัทในหน้า preview ก่อน import จริง
+// ================================================================
+var SIS_IMPORT_START_ROW = 5; // 0-based index ของแถวข้อมูลแรก = แถว A6 (แถว 1-5 เป็น title/header ของไฟล์เดิม)
+var _sisImportGroups = null; // array ของ {code,name,monthly:{'YYYY-MM':amt},totalSales,totalAdjProfit,matchedDealerId,skip}
+
+function importSisRevenueXlsx() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var wb = XLSX.read(ev.target.result, { type: 'binary', cellDates: true });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+        rows = rows.map(function(r) { return r.map(_pipeXlsxCellToStr); });
+        var dataRows = rows.slice(SIS_IMPORT_START_ROW);
+        _sisImportGroups = _sisParseImportRows(dataRows);
+        if (!_sisImportGroups.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์ — เช็คว่าข้อมูลเริ่มที่ A6 จริงไหม'); return; }
+        _showSisImportPreviewM();
+      } catch (err) {
+        toast('❌ อ่านไฟล์ไม่ได้: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+  input.click();
+}
+
+// group แถวดิบเป็นต่อบริษัท (key = Customer Code ถ้ามี ไม่งั้น fallback ไปชื่อ เพื่อไม่ทิ้งแถวที่ไม่มี Code)
+// พร้อมจับคู่ SIS Code กับ dealer ที่มีอยู่แล้วทันที
+function _sisParseImportRows(dataRows) {
+  var dealers = ST.getAll('dealers');
+  var bySisCode = {};
+  dealers.forEach(function(d) { var c = (d.sisCode || '').trim().toLowerCase(); if (c) bySisCode[c] = d; });
+
+  var groups = {}, order = [];
+  dataRows.forEach(function(r) {
+    var code = (r[0] || '').trim();
+    var name = (r[1] || '').trim();
+    var monthRaw = (r[2] || '').trim();
+    var totalSales = parseNum(r[3]);
+    var totalAdjProfit = parseNum(r[4]);
+    if (!code && !name) return; // แถวว่างสุดท้ายของไฟล์
+
+    var monthKey = _sisParseMonthKey(monthRaw);
+    var key = code ? ('C:' + code.toLowerCase()) : ('N:' + name.toLowerCase());
+    if (!groups[key]) {
+      groups[key] = { code: code, name: name, monthly: {}, totalSales: 0, totalAdjProfit: 0 };
+      order.push(key);
+    }
+    if (monthKey) groups[key].monthly[monthKey] = (groups[key].monthly[monthKey] || 0) + totalSales;
+    groups[key].totalSales += totalSales;
+    groups[key].totalAdjProfit += totalAdjProfit;
+  });
+
+  return order.map(function(key) {
+    var g = groups[key];
+    var matched = g.code ? bySisCode[g.code.toLowerCase()] : null;
+    g.matchedDealerId = matched ? matched.id : null;
+    g.skip = false;
+    return g;
+  });
+}
+
+// "Month(Billing Date)" เป็นเซลล์วันที่จริงในไฟล์ต้นฉบับ (_pipeXlsxCellToStr แปลงเป็น YYYY-MM-DD ให้แล้ว) —
+// ตัดเหลือ YYYY-MM เป็น key เดือน เผื่อไฟล์บางแถวเป็นข้อความอื่นที่ Date parse ได้ก็รองรับไว้ด้วย
+function _sisParseMonthKey(raw) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 7);
+  var d = new Date(raw);
+  if (!isNaN(d.getTime())) return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  return null;
+}
+
+function _showSisImportPreviewM() {
+  var groups = _sisImportGroups || [];
+  var matchedCount = groups.filter(function(g) { return g.matchedDealerId && !g.skip; }).length;
+  var pendingCount = groups.filter(function(g) { return !g.matchedDealerId && !g.skip; }).length;
+  var totalSales = groups.reduce(function(s, g) { return s + g.totalSales; }, 0);
+
+  var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var dealerOptions = '<option value="">— เลือกบริษัทที่มีอยู่ในระบบ —</option>' +
+    dealers.map(function(d) { return '<option value="' + sanitize(d.id) + '">' + sanitize(d.name) + '</option>'; }).join('');
+
+  var h = '<div style="max-width:560px">';
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
+    '<div style="background:var(--bg2);border-radius:9px;padding:9px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--good,#22c55e)">' + matchedCount + '</div><div style="font-size:9.5px;color:var(--text2)">จับคู่แล้ว</div></div>' +
+    '<div style="background:var(--bg2);border-radius:9px;padding:9px;text-align:center"><div style="font-size:16px;font-weight:800;color:' + (pendingCount ? 'var(--warn,#f59e0b)' : 'var(--text2)') + '">' + pendingCount + '</div><div style="font-size:9.5px;color:var(--text2)">ต้องเลือกเอง</div></div>' +
+    '<div style="background:var(--bg2);border-radius:9px;padding:9px;text-align:center"><div style="font-size:14px;font-weight:800">฿' + fmtMoneyShort(totalSales) + '</div><div style="font-size:9.5px;color:var(--text2)">ยอดรวมในไฟล์</div></div>' +
+    '</div>';
+
+  h += '<div style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto">';
+  groups.forEach(function(g, i) {
+    var months = Object.keys(g.monthly).sort();
+    var monthsLabel = months.length ? (months.length + ' เดือน (' + months[0] + (months.length > 1 ? ' – ' + months[months.length - 1] : '') + ')') : 'ไม่พบเดือนที่อ่านได้';
+    h += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px' + (g.skip ? ';opacity:.5' : '') + '">';
+    h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">';
+    h += '<div style="flex:1;min-width:160px"><div style="font-size:10px;color:var(--text3);font-family:monospace">' + sanitize(g.code || '(ไม่มี Code)') + '</div><div style="font-size:13px;font-weight:700">' + sanitize(g.name) + '</div></div>';
+    if (g.skip) {
+      h += '<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--bg2);color:var(--text2)">⏭️ ข้าม</span>';
+    } else if (g.matchedDealerId) {
+      var md = ST.getOne('dealers', g.matchedDealerId);
+      h += '<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(34,197,94,.12);color:var(--good,#22c55e)">✅ → ' + sanitize(md ? md.name : '?') + '</span>';
+    } else {
+      h += '<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(245,158,11,.12);color:var(--warn,#f59e0b)">⚠️ ต้องเลือกเอง</span>';
+    }
+    h += '</div>';
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">' + monthsLabel + ' · รวม ฿' + fmtMoney(g.totalSales) + '</div>';
+    if (!g.skip) {
+      h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+      h += '<select style="flex:1;min-width:160px;font-size:12px" onchange="_sisImportSetDealer(' + i + ', this.value)">' + dealerOptions.replace('value="' + sanitize(g.matchedDealerId || '') + '"', 'value="' + sanitize(g.matchedDealerId || '') + '" selected') + '</select>';
+      h += '<button class="btn bsm bo" onclick="_sisImportCreateDealer(' + i + ')">➕ สร้างใหม่</button>';
+      h += '<button class="btn bsm bo" onclick="_sisImportSkip(' + i + ')">⏭️ ข้าม</button>';
+      h += '</div>';
+    } else {
+      h += '<button class="btn bsm bo" onclick="_sisImportUnskip(' + i + ')">↩️ เอากลับมา</button>';
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+
+  h += '<div style="margin-top:12px;display:flex;gap:8px">';
+  h += '<button class="btn bp" style="flex:1" onclick="_confirmSisImport()" ' + (matchedCount ? '' : 'disabled') + '>✅ ยืนยัน Import ' + matchedCount + ' บริษัท</button>';
+  h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div>';
+  h += '<div class="hint" style="margin-top:8px">💡 จับคู่ด้วย Customer Code = SIS Code เท่านั้น — บริษัทที่ยังไม่เลือกจะไม่ถูก import จนกว่าจะเลือกเอง สร้างใหม่ หรือกดข้าม</div>';
+  h += '</div>';
+
+  openM('📥 ตรวจสอบการจับคู่ก่อน Import (' + groups.length + ' บริษัท)', h);
+}
+
+function _sisImportSetDealer(idx, dealerId) {
+  if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportGroups[idx].matchedDealerId = dealerId || null;
+  _showSisImportPreviewM();
+}
+function _sisImportCreateDealer(idx) {
+  var g = _sisImportGroups && _sisImportGroups[idx];
+  if (!g) return;
+  var created = ST.add('dealers', { name: g.name, sisCode: g.code || '' });
+  g.matchedDealerId = created.id;
+  toast('➕ สร้าง Dealer "' + g.name + '" แล้ว');
+  _showSisImportPreviewM();
+}
+function _sisImportSkip(idx) {
+  if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportGroups[idx].skip = true;
+  _showSisImportPreviewM();
+}
+function _sisImportUnskip(idx) {
+  if (!_sisImportGroups || !_sisImportGroups[idx]) return;
+  _sisImportGroups[idx].skip = false;
+  _showSisImportPreviewM();
+}
+
+// เขียนยอดรายเดือนที่ import เข้า sisRevenueByYear จริง — ทับเฉพาะเดือนที่มีอยู่ในไฟล์ (เดือนอื่นที่เคยกรอกไว้
+// ไม่โดนแตะ) แล้วคำนวณ Q1-4/H1-2 ใหม่ด้วย sisSummarizeMonthly เดียวกับหน้าแก้ยอดขาย SIS ปกติ
+function _confirmSisImport() {
+  var groups = (_sisImportGroups || []).filter(function(g) { return g.matchedDealerId && !g.skip; });
+  if (!groups.length) return toast('ยังไม่มีบริษัทที่จับคู่พร้อม import');
+  var cfg = getConfig();
+  var dealerCount = 0, monthCount = 0;
+
+  groups.forEach(function(g) {
+    var dealer = ST.getOne('dealers', g.matchedDealerId);
+    if (!dealer) return;
+    var monthsByYear = {};
+    Object.keys(g.monthly).forEach(function(mk) {
+      var year = mk.slice(0, 4), month = parseInt(mk.slice(5, 7), 10);
+      if (!monthsByYear[year]) monthsByYear[year] = {};
+      monthsByYear[year][month] = g.monthly[mk];
+      monthCount++;
+    });
+    var byYear = dealer.sisRevenueByYear || {};
+    Object.keys(monthsByYear).forEach(function(year) {
+      var existing = getSisRevenueForYear(dealer, year);
+      var monthly = {};
+      for (var i = 1; i <= 12; i++) monthly[i] = existing.monthly[i] || 0;
+      Object.keys(monthsByYear[year]).forEach(function(m) { monthly[m] = monthsByYear[year][m]; });
+      var sum = sisSummarizeMonthly(monthly, cfg);
+      byYear[year] = { h1: sum.h1, h2: sum.h2, q1: sum.q1, q2: sum.q2, q3: sum.q3, q4: sum.q4, monthly: monthly, note: 'Import จาก Excel', updatedAt: new Date().toISOString() };
+    });
+    var updateData = { sisRevenueByYear: byYear };
+    var curYear = String(new Date().getFullYear());
+    if (byYear[curYear]) { updateData.sisRevenue = byYear[curYear].h1; updateData.sisRevenueH2 = byYear[curYear].h2; }
+    ST.update('dealers', dealer.id, updateData);
+    dealerCount++;
+  });
+
+  _sisImportGroups = null;
+  closeMForce();
+  toast('✅ Import สำเร็จ ' + dealerCount + ' บริษัท (' + monthCount + ' เดือน)');
+  render();
+}
+
+// ================================================================
+// EXPORT — ย้อนกลับเป็น template เดียวกัน (Customer Code/Name/Month/Total Sales) จากข้อมูลที่มีในระบบทั้งหมด
+// ================================================================
+function exportSisRevenueXlsx() {
+  var dealers = ST.getAll('dealers');
+  var rows = [];
+  dealers.forEach(function(d) {
+    if (!d.sisRevenueByYear) return;
+    Object.keys(d.sisRevenueByYear).sort().forEach(function(year) {
+      var rev = getSisRevenueForYear(d, year);
+      for (var m = 1; m <= 12; m++) {
+        var val = Number(rev.monthly[m]) || 0;
+        if (!val) continue;
+        rows.push([d.sisCode || '', d.name || '', year + '-' + String(m).padStart(2, '0') + '-01', val, '']);
+      }
+    });
+  });
+  if (!rows.length) return toast('ไม่มีข้อมูลยอดขาย SIS ให้ export');
+
+  var aoa = [[], [], [], [], ['Customer Code', 'Customer Name', 'Month(Billing Date)', 'Total Sales', 'Total Adj Profit']].concat(rows);
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 16 }, { wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'SIS Revenue');
+  XLSX.writeFile(wb, 'sis-revenue-export-' + _td() + '.xlsx');
+  toast('📤 Export ยอดขาย SIS แล้ว (' + rows.length + ' แถว)');
+}
+
+// ================================================================
 // SALES REP DASHBOARD — รวมยอด Dealer แต่ละคนเข้าเป็นภาพรวมรายเซล (จัดกลุ่มตาม d.saleName เดียวกับตัวกรอง
 // "เซลที่ดูแล" ในหน้า Dealers) เป้า = targetH1/targetH2 ที่ตั้งไว้ต่อ Dealer, ยอดจริง = ยอดขาย SIS ปีปัจจุบัน
 // (H1+H2 จาก getSisRevenueForYear — ตัวเดียวกับที่โชว์ในหน้า Dealer), Weighted Pipeline = จาก
