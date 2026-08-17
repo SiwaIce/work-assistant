@@ -1097,9 +1097,15 @@ function computeKpiCompanyPlan(dealerId, cfg) {
   var actualSoFar = monthly.filter(function(m) { return !m.isFuture; }).reduce(function(s, m) { return s + m.project + m.runrate; }, 0);
   var gap = target - forecastTotal;
 
+  // แยกคนละแหล่งข้อมูลให้ชัด — djiActual = ยอด Won จริงที่บันทึกใน Pipeline (คนละระบบกับยอดขาย SIS จากบัญชี
+  // เอาไว้เทียบกันว่าตรงกันไหม), runrateForecast = Runrate ที่ยังไม่ถึงเดือน (โอกาส ยังไม่ใช่ของจริง เหมือน Pipeline เปิดอยู่)
+  var djiActual = monthly.filter(function(m) { return !m.isFuture; }).reduce(function(s, m) { return s + m.project; }, 0);
+  var runrateForecast = monthly.filter(function(m) { return m.isFuture; }).reduce(function(s, m) { return s + m.runrate; }, 0);
+
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
     actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, forecastTotal: forecastTotal, gap: gap,
+    djiActual: djiActual, runrateForecast: runrateForecast,
     sisQuarters: sisQuarters, sisYear: sisYear,
     stalePipes: stats.stalePipes, lastVisitDays: stats.lastVisitDays
   };
