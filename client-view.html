@@ -4892,7 +4892,7 @@ async function renderComplianceTabContent(dealer) {
   window._cvPresentData = { name: dealer.name || '', pct: activeStatus.percent, actual: activeStatus.actual, target: activeStatus.target, label: activeLabel };
 
   html += '<div style="background:linear-gradient(135deg, rgba(59,130,246,0.14), transparent);border:1px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:14px">';
-  html += '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text2)"><span style="font-size:16px">&#x1F5E3;&#xFE0F;</span>ประโยคพร้อมพูดกับลูกค้า</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--text2)"><span style="font-size:16px">&#x1F5E3;&#xFE0F;</span>คำแนะนำ</div>';
   html += '<p style="font-size:13.5px;line-height:1.6;margin:8px 0 0;color:var(--text)">' + buildClientTalkingPoint(activeStatus, activeLabel, _yoy, _nextLevelInfoForTalk) + '</p>';
   html += '</div>';
 
