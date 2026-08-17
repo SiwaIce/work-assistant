@@ -3558,12 +3558,15 @@ function syncDealerPipelineToCustomer(dealerId) {
   toast('🔄 กำลัง Sync...');
   
   var pipes = ST.pipelineByDealer(dealerId);
+  // sync ทุกโครงการที่ไม่ใช่ "แพ้/ยกเลิก" — เดิมกรองด้วย pipeIsOpen(p) ซึ่งตัดสถานะ 'deliver' ทิ้งด้วย
+  // (pipeIsOpen ถูกออกแบบไว้ใช้กับ "ยังเป็นโอกาสอยู่ไหม" คนละความหมายกับ "ควรให้ลูกค้าเห็นไหม") ทำให้โครงการที่
+  // ส่งมอบแล้วหายไปจาก client-view ทั้งที่ยังควรเห็นเป็นประวัติ — Won/Contracting/Deliver ต้อง sync ให้เห็นเสมอ
   var activePipes = pipes.filter(function(p) {
-    return pipeIsOpen(p);
+    return !pipeIsLost(p);
   });
-  
+
   if (activePipes.length === 0) {
-    toast('⚠️ ไม่มี Pipeline ที่ต้อง Sync (active เท่านั้น)');
+    toast('⚠️ ไม่มี Pipeline ที่ต้อง Sync');
     return;
   }
   
@@ -3659,8 +3662,10 @@ function autoSyncPipelineToCustomer(pipeId) {
 
   var ref = db.collection('dealerUpdates').doc(p.dealerId).collection('pipeline').doc(pipeId);
 
-  if (!pipeIsOpen(p)) {
-    // ไม่ active แล้ว (win/lost/deliver ฯลฯ) — ลบออกจากที่ลูกค้าเห็น เหมือนพฤติกรรมปุ่ม Sync เดิม
+  if (pipeIsLost(p)) {
+    // แพ้/ยกเลิกแล้ว — ลบออกจากที่ลูกค้าเห็น (Won/Contracting/Deliver ยังต้องเห็นอยู่ เป็นประวัติโครงการที่ทำสำเร็จ —
+    // เดิมเช็คด้วย pipeIsOpen(p) ซึ่งคืน false ให้ status 'deliver' ด้วย ทำให้โครงการที่ส่งมอบแล้วหายไปจาก client-view
+    // ทันทีที่เปลี่ยนสถานะเป็น deliver ทั้งที่ควรเห็นอยู่)
     ref.delete().catch(function(e) { console.warn('autoSyncPipelineToCustomer delete error:', e); });
     return;
   }
