@@ -84,7 +84,12 @@ function rKpiCompanyPlan(el) {
   var yoyPct = yoyPrev > 0 ? Math.round((yoyCur - yoyPrev) / yoyPrev * 100) : (yoyCur > 0 ? 100 : 0);
 
   h += '<div class="card"><h2>🎯 แผนบรรลุเป้า KPI — SAB Partner (' + half + ')</h2>';
-  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">เป้า/ยอดขาย SIS จริง/Pipeline ในมือ (ถ่วง POS) ของแต่ละบริษัท พร้อมแผนรายเดือนแยก Project/Runrate — สำหรับสรุปให้ Ryan</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">เป้า/ยอดขาย SIS จริง/Pipeline ในมือ (ถ่วง POS) ของแต่ละบริษัท พร้อมแผนรายเดือนแยก Project/Runrate — สำหรับสรุปให้ Ryan</div>';
+  h += '<div style="font-size:11px;color:var(--text3);line-height:1.7;background:var(--bg2);border-radius:9px;padding:8px 12px;margin-bottom:12px">' +
+    '<b style="color:#0891b2">DJI จริง</b> = ยอดในระบบ CRM ของ DJI (Sell-in) &nbsp;·&nbsp; ' +
+    '<b style="color:#8b5cf6">SIS จริง</b> = ยอดขายจริงในระบบ SIS (Sell-out) — ใช้ค่านี้เป็นหลักในการคำนวณ % และเป้า &nbsp;·&nbsp; ' +
+    '<b>Pipeline</b> = โครงการที่มี แต่ยังปิดงานไม่ได้ ยังนับเป็นยอดขายไม่ได้ (มี "Forecast ถ่วง POS" แสดงแยกให้ในแต่ละบริษัท)' +
+    '</div>';
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">';
   h += kpiPlanSumCard('🎯 เป้ารวม ' + half + ' ✏️', fmtMoneyShort(totalTarget), '', 'showKpiPlanTargetsM()');
   h += kpiPlanSumCard('💰 ยอดขาย SIS จริง', fmtMoneyShort(totalSis), 'kpi-sum-sis', '', totalTarget ? Math.round(totalSis / totalTarget * 100) + '% ของเป้า' : '');
@@ -223,16 +228,16 @@ function kpiPlanRowHtml(p) {
   h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">' + (isOk ? 'เกินเป้า' : 'ยังขาด') + '</div><div style="font-size:12.5px;font-weight:800;margin-top:3px" class="' + (isOk ? 'stat-good-t' : 'stat-bad-t') + '">' + (isOk ? '✓' : fmtMoneyShort(gap)) + '</div></div>';
   h += '</div>';
 
-  h += '<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px">🔍 เทียบ DJI (Pipeline) vs SIS (บัญชี)<span style="flex:1;height:1px;background:var(--border)"></span></div>';
+  h += '<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px">🔍 เทียบ DJI จริง (Sell-in) vs SIS จริง (Sell-out)<span style="flex:1;height:1px;background:var(--border)"></span></div>';
   if (hasProjectData) {
     h += '<div style="background:var(--bg2);border-radius:11px;padding:9px 11px;margin-bottom:12px">';
     h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    h += '<span style="font-size:10px;font-weight:700;width:60px;flex:none;color:#0891b2">DJI จริง</span>';
+    h += '<span style="font-size:10px;font-weight:700;width:80px;flex:none;color:#0891b2">DJI (Sell-in)</span>';
     h += '<div style="flex:1;height:7px;background:var(--card);border-radius:99px;overflow:hidden"><div style="width:' + Math.round(p.djiActual / maxCmp * 100) + '%;height:100%;background:#0891b2;border-radius:99px"></div></div>';
     h += '<span style="font-size:10.5px;font-weight:800;width:50px;text-align:right;flex:none">' + fmtMoneyShort(p.djiActual) + '</span>';
     h += '</div>';
     h += '<div style="display:flex;align-items:center;gap:8px">';
-    h += '<span style="font-size:10px;font-weight:700;width:60px;flex:none;color:#8b5cf6">SIS จริง</span>';
+    h += '<span style="font-size:10px;font-weight:700;width:80px;flex:none;color:#8b5cf6">SIS (Sell-out)</span>';
     h += '<div style="flex:1;height:7px;background:var(--card);border-radius:99px;overflow:hidden"><div style="width:' + Math.round(sisActual / maxCmp * 100) + '%;height:100%;background:#8b5cf6;border-radius:99px"></div></div>';
     h += '<span style="font-size:10.5px;font-weight:800;width:50px;text-align:right;flex:none">' + fmtMoneyShort(sisActual) + '</span>';
     h += '</div>';
@@ -244,9 +249,10 @@ function kpiPlanRowHtml(p) {
   }
 
   h += '<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px">💡 โอกาสเพิ่มเติม (ยังไม่นับเป็นยอด)<span style="flex:1;height:1px;background:var(--border)"></span></div>';
-  h += '<div style="display:flex;gap:8px">';
-  h += '<div style="flex:1;background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 10px;text-align:center"><div style="font-size:9px;color:var(--text2);font-weight:700;text-transform:uppercase">📊 Pipeline เปิดอยู่</div><div style="font-size:13px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
-  h += '<div style="flex:1;background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 10px;text-align:center"><div style="font-size:9px;color:var(--text2);font-weight:700;text-transform:uppercase">🔁 Runrate คาดไว้</div><div style="font-size:13px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.runrateForecast) + '</div></div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">📊 Pipeline มูลค่ารวม</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipelineRawTotal) + '</div></div>';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center" title="มูลค่า Pipeline × POS ของแต่ละโครงการ — ยิ่งโครงการมั่นใจสูง (POS สูง) ยิ่งนับน้ำหนักมาก"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🎯 Forecast (ถ่วง POS)</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🔁 Runrate คาดไว้</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.runrateForecast) + '</div></div>';
   h += '</div>';
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">';

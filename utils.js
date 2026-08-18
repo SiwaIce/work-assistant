@@ -1104,7 +1104,7 @@ function computeKpiCompanyPlan(dealerId, cfg) {
 
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
-    actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, forecastTotal: forecastTotal, gap: gap,
+    actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
     djiActual: djiActual, runrateForecast: runrateForecast,
     sisQuarters: sisQuarters, sisYear: sisYear,
     stalePipes: stats.stalePipes, lastVisitDays: stats.lastVisitDays
