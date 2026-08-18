@@ -628,6 +628,77 @@ function kpiImpRollupRow(label, val, colorCls) {
   return '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">' + label + '</span><span style="font-weight:800" class="' + (colorCls || '') + '">' + val + '</span></div>';
 }
 
+// A) Demo/POC ต่อ End User — ผูกกับแถวที่กรอกไว้แล้วในตาราง End User Mapping ตรงๆ (เพิ่มแค่ 2 field ใหม่บน
+// record เดิม demoStatus/demoNote) ไม่ต้องมี collection แยกหรือกรอกชื่อ End User ซ้ำ
+var IMPROVEMENT_DEMO_STATUSES = ['ยังไม่นัด', 'นัดแล้ว', 'ทำแล้ว', 'ปิด Project ได้'];
+function kpiImpDemoSection(dealerId) {
+  var rows = getDealerEndUsers(dealerId);
+  if (!rows.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ยังไม่มี End User — เพิ่มในส่วน "Main End User Mapping" ด้านบนก่อน</div>';
+  var h = '<div style="display:flex;flex-direction:column;gap:7px">';
+  rows.forEach(function(r) {
+    h += '<div style="display:flex;align-items:center;gap:10px;background:var(--bg2);border-radius:10px;padding:8px 10px;flex-wrap:wrap">';
+    h += '<span style="font-size:11.5px;font-weight:700;width:110px;flex:none">' + sanitize(r.name || '(ไม่มีชื่อ)') + '</span>';
+    h += '<select class="fm-input" style="width:130px;flex:none;font-size:11px" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'demoStatus\',this.value)">' +
+      IMPROVEMENT_DEMO_STATUSES.map(function(s) { return '<option' + (r.demoStatus === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>';
+    h += '<input class="fm-input" style="flex:1;min-width:160px;font-size:11px" placeholder="Product / วันนัด / หมายเหตุ" value="' + sanitize(r.demoNote || '') + '" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'demoNote\',this.value)">';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// B) Project Conversion — ดึง Pipeline ที่เปิดอยู่จริงของบริษัทนี้ (p.openPipelinesList จาก
+// computeKpiCompanyPlan) มาให้กดแปลงเป็น Action Plan ทันที (prefill ชื่อโครงการ + มูลค่า, ผูก pipeId กันเพิ่มซ้ำ)
+// ไม่มีตาราง/collection แยกต่างหาก — ใช้ improvementActions ตัวเดียวกับ Action Plan section 6 ตรงๆ
+function kpiImpProjectConversionSection(dealerId, p) {
+  if (!p.openPipelinesList.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ไม่มีโครงการเปิดอยู่ในระบบตอนนี้</div>';
+  var actions = getImprovementActions(dealerId);
+  var h = '<div style="display:flex;flex-direction:column;gap:7px">';
+  p.openPipelinesList.forEach(function(pp) {
+    var pipeObj = ST.getOne('pipeline', pp.id);
+    var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+    var linked = actions.some(function(a) { return a.pipeId === pp.id; });
+    h += '<div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border-radius:10px;padding:8px 10px;flex-wrap:wrap">';
+    h += '<span style="font-size:10px;color:var(--text3);font-family:monospace;min-width:32px">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</span>';
+    h += '<span style="flex:1;min-width:140px;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--accent)" onclick="go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + ' →</span>';
+    h += '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border);color:var(--text2)">' + sanitize(statusLabel) + '</span>';
+    h += '<span style="font-size:11px;font-weight:700;min-width:60px;text-align:right">' + fmtMoneyShort(pp.forecastAmount) + '</span>';
+    h += linked
+      ? '<span style="font-size:10.5px;font-weight:700" class="stat-good-t">✓ อยู่ใน Action Plan แล้ว</span>'
+      : '<button class="btn bsm bo" onclick="kpiImpAddActionFromPipeline(\'' + dealerId + '\',\'' + pp.id + '\',\'' + sanitize(pp.projectName || '').replace(/'/g, "\\'") + '\',' + (Number(pp.forecastAmount) || 0) + ')">+ เพิ่มเป็น Action</button>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+function kpiImpAddActionFromPipeline(dealerId, pipeId, projectName, forecastAmount) {
+  var existing = getImprovementActions(dealerId).filter(function(a) { return a.pipeId === pipeId; });
+  if (existing.length) { toast('มี Action สำหรับโครงการนี้อยู่แล้ว — ดูในตาราง Action Plan ด้านล่าง'); return; }
+  ST.add('improvementActions', { dealerId: dealerId, action: 'แปลง Pipeline: ' + projectName, who: '', what: '', when: '', expectedResult: '', expectedSales: Number(forecastAmount) || 0, pipeId: pipeId });
+  toast('➕ เพิ่ม Action จากโครงการแล้ว — แก้รายละเอียดในตาราง Action Plan ด้านล่าง');
+  render();
+}
+
+// C) New Industry Expansion — ไม่มีข้อมูล Industry ในระบบให้แนะนำอัตโนมัติได้จริง เลยทำเป็นช่องพิมพ์ไอเดียสั้นๆ
+// แล้วดันเข้า Action Plan (collection เดียวกับ B) ทันที ไม่ต้องมีตาราง/collection ที่ 3
+function kpiImpExpansionSection(dealerId) {
+  var inputId = 'kpiImpExpIdea_' + dealerId;
+  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<input id="' + inputId + '" class="fm-input" style="flex:1;min-width:220px;font-size:12px" placeholder="เช่น ขยายจาก Construction ไป Public Safety / เสนอ DJI Dock ให้ลูกค้าเดิม">';
+  h += '<button class="btn bsm bp" onclick="kpiImpQuickAddAction(\'' + dealerId + '\',\'' + inputId + '\')">+ เพิ่มเป็น Action</button>';
+  h += '</div>';
+  h += '<div style="font-size:10.5px;color:var(--text3);margin-top:6px">พิมพ์ไอเดีย Industry/Product ใหม่ที่ Dealer ยังไม่ได้เจาะ แล้วกดเพิ่ม จะไปโผล่ในตาราง Action Plan ด้านล่างให้แก้รายละเอียดต่อ</div>';
+  return h;
+}
+function kpiImpQuickAddAction(dealerId, inputId) {
+  var el = document.getElementById(inputId);
+  var val = el ? el.value.trim() : '';
+  if (!val) return toast('พิมพ์ไอเดียก่อนครับ');
+  ST.add('improvementActions', { dealerId: dealerId, action: val, who: '', what: '', when: '', expectedResult: '', expectedSales: 0 });
+  toast('➕ เพิ่ม Action แล้ว — แก้รายละเอียดในตาราง Action Plan ด้านล่าง');
+  render();
+}
+
 function rKpiImprovementPlan(el) {
   var d = ST.getOne('dealers', S.dealerId);
   if (!d) return go('kpiCompanyPlan');
@@ -671,12 +742,27 @@ function rKpiImprovementPlan(el) {
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Action Plan (Who / What / When / Expected Result)</div>';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Demo / POC (ต่อ End User ด้านบน)</div>';
+  h += kpiImpDemoSection(d.id);
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Project Conversion Plan (จาก Pipeline ที่เปิดอยู่)</div>';
+  h += kpiImpProjectConversionSection(d.id, p);
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">5) New Product / Industry Expansion</div>';
+  h += kpiImpExpansionSection(d.id);
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">6) Action Plan (Who / What / When / Expected Result)</div>';
   h += kpiImpActionTable(d.id);
   h += '</div>';
 
   h += '<div style="padding:16px 18px">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Gap vs Opportunity Rollup</div>';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">7) Gap vs Opportunity Rollup</div>';
   h += '<div style="background:var(--bg2);border-radius:11px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">';
   h += kpiImpRollupRow('H2 Target', fmtMoneyShort(p.target));
   h += kpiImpRollupRow('Current Forecast (SIS จริง + Pipeline ถ่วง POS)', fmtMoneyShort(currentForecast));
