@@ -91,7 +91,7 @@ function rProspectList(el) {
   shown = shown.slice().sort(function(a, b) { return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''); });
 
   if (!shown.length) {
-    h += '<div class="vp-empty">ยังไม่มี Lead ในกลุ่มนี้ — กด "➕ เพิ่ม Lead" เพื่อเริ่มบันทึก</div>';
+    h += '<div class="empty"><div class="icon">🌱</div><p>ยังไม่มี Lead ในกลุ่มนี้ — กด "➕ เพิ่ม Lead" เพื่อเริ่มบันทึก</p></div>';
   } else if (prospectViewMode === 'table') {
     h += _prospectTableHtml(shown);
   } else {
@@ -353,7 +353,7 @@ function showAddProspectM(editId) {
   h += _lffRenderFormFields(editId || '');
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="pr_note" rows="2" class="fm-input" placeholder="เช่น สนใจ Dock 3 พื้นที่เกษตร">' + sanitize(p ? (p.note || '') : '') + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveProspect(\'' + (editId || '') + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveProspect(\'' + (editId || '') + '\')">💾 บันทึก</button>';
   if (editId) h += '<button class="btn bd" onclick="removeProspect(\'' + editId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
@@ -429,7 +429,7 @@ function showProspectDetailM(id) {
     PROSPECT_STAGES.forEach(function(s, i) {
       var done = i <= stageIdx;
       var current = i === stageIdx;
-      var bg = done ? (current ? '#3b82f6' : '#22c55e') : 'var(--border,#334155)';
+      var bg = done ? (current ? 'var(--accent)' : '#22c55e') : 'var(--border,#334155)';
       var fg = done ? (current ? '#fff' : '#052e16') : 'var(--text3,#64748b)';
       h += '<div style="text-align:center;flex:1;cursor:pointer" onclick="showProspectAdvanceM(\'' + p.id + '\',\'' + s.k + '\')" title="เปลี่ยนเป็น ' + sanitize(s.label) + '">';
       h += '<div style="width:24px;height:24px;border-radius:50%;background:' + bg + ';color:' + fg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 4px">' + (done && !current ? '✓' : (i + 1)) + '</div>';
@@ -528,7 +528,7 @@ function showProspectEmailM(id) {
   h += '<div class="fm-group"><label>📝 เนื้อหา (แก้ไขได้)</label><textarea id="vp_email_body" class="fm-input" rows="10" style="font-size:13px;line-height:1.6">' + sanitize(body) + '</textarea></div>';
   h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">💡 Stage ปัจจุบัน: ' + stageInfo.icon + ' ' + stageInfo.label + '</div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="vpOpenMailto()">📬 เปิด Email Client</button>';
+  h += '<button class="btn bp" onclick="vpOpenMailto()">📬 เปิด Email Client</button>';
   h += '<button class="btn bo" onclick="vpCopyEmailBody()">📋 คัดลอกเนื้อหา</button>';
   h += '<button class="btn" onclick="closeM()">ปิด</button>';
   h += '</div></div>';
@@ -545,7 +545,7 @@ function showProspectAdvanceM(id, newStage) {
   var h = '<div style="max-width:360px">';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">จาก "' + _prospectStageInfo(p.stage).label + '" → "' + info.label + '"' + (isBack ? ' (ย้อนกลับ)' : '') + '</div>';
   h += '<div class="fm-group"><label>📝 บันทึกหมายเหตุ (ไม่บังคับ)</label><textarea id="pr_advance_note" rows="3" class="fm-input" placeholder="เช่น กดผิด ขอย้อนกลับ"></textarea></div>';
-  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="advanceProspectStage(\'' + id + '\',\'' + newStage + '\',document.getElementById(\'pr_advance_note\').value)">' + info.icon + ' เปลี่ยนเป็น ' + info.label + '</button>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="advanceProspectStage(\'' + id + '\',\'' + newStage + '\',document.getElementById(\'pr_advance_note\').value)">' + info.icon + ' เปลี่ยนเป็น ' + info.label + '</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   openM((isBack ? '⬅️' : '➡️') + ' เปลี่ยน Stage', h);
 }
@@ -688,7 +688,7 @@ function _lffGridHtml(f, editId) {
   var h = '<div style="display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:7px">';
   f.items.forEach(function(it) {
     var on = sel.indexOf(it.id) !== -1;
-    h += '<div id="lff-item-' + f.id + '-' + it.id + '" onclick="lffToggle(\'' + f.id + '\',\'' + it.id + '\',\'' + editId + '\')" style="border:1.5px solid ' + (on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)') + ';border-radius:10px;padding:6px 6px 5px;cursor:pointer;text-align:center;background:' + (on ? 'rgba(59,130,246,.08)' : 'transparent') + ';position:relative">';
+    h += '<div id="lff-item-' + f.id + '-' + it.id + '" onclick="lffToggle(\'' + f.id + '\',\'' + it.id + '\',\'' + editId + '\')" style="border:1.5px solid ' + (on ? 'var(--accent)' : 'var(--border,#334155)') + ';border-radius:10px;padding:6px 6px 5px;cursor:pointer;text-align:center;background:' + (on ? 'var(--accent-light)' : 'transparent') + ';position:relative">';
     // image box with ✓ overlaid on top of image
     h += '<div style="width:100%;aspect-ratio:4/3;border-radius:6px;background:var(--bg,#0f172a);margin-bottom:5px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">';
     if (it.img) {
@@ -697,7 +697,7 @@ function _lffGridHtml(f, editId) {
       h += '<span style="font-size:22px">🖼️</span>';
     }
     // ✓ badge ซ้อนบนรูป
-    h += '<div style="position:absolute;top:5px;right:5px;width:16px;height:16px;border-radius:50%;background:var(--blue,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;opacity:' + (on ? '1' : '0') + ';transition:opacity .15s" id="lff-ck-' + f.id + '-' + it.id + '">✓</div>';
+    h += '<div style="position:absolute;top:5px;right:5px;width:16px;height:16px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;opacity:' + (on ? '1' : '0') + ';transition:opacity .15s" id="lff-ck-' + f.id + '-' + it.id + '">✓</div>';
     h += '</div>';
     h += '<div style="font-size:11px;font-weight:600;line-height:1.3">' + sanitize(it.label) + '</div>';
     if (it.sub) h += '<div style="font-size:10px;color:var(--text2,#94a3b8);margin-top:1px">' + sanitize(it.sub) + '</div>';
@@ -718,8 +718,8 @@ function lffToggle(fieldId, itemId, editId) {
   // update DOM without re-render
   var card = document.getElementById('lff-item-' + fieldId + '-' + itemId);
   if (card) {
-    card.style.borderColor = on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)';
-    card.style.background = on ? 'rgba(59,130,246,.08)' : 'transparent';
+    card.style.borderColor = on ? 'var(--accent)' : 'var(--border,#334155)';
+    card.style.background = on ? 'var(--accent-light)' : 'transparent';
   }
   var ck = document.getElementById('lff-ck-' + fieldId + '-' + itemId);
   if (ck) ck.style.opacity = on ? '1' : '0';
@@ -759,7 +759,7 @@ function showLffMgr(fieldId, editId) {
   h += '<button type="button" class="btn bsm bo" onclick="showLffDjiPicker(\'' + fieldId + '\',\'' + editId + '\')">🚁 เลือกจาก DJI Products</button>';
   h += '</div>';
   h += '<div class="fm-actions">';
-  h += '<button type="button" class="btn btn-blue" onclick="lffSaveMgr(\'' + fieldId + '\',\'' + editId + '\')">💾 บันทึกหัวข้อ</button>';
+  h += '<button type="button" class="btn bp" onclick="lffSaveMgr(\'' + fieldId + '\',\'' + editId + '\')">💾 บันทึกหัวข้อ</button>';
   h += '<button type="button" class="btn bd" onclick="lffDeleteGroup(\'' + fieldId + '\',\'' + editId + '\')">🗑️ ลบหัวข้อนี้</button>';
   h += '<button type="button" class="btn" onclick="closeM()">ปิด</button>';
   h += '</div></div>';
@@ -802,7 +802,7 @@ function showLffAddGroup(editId) {
   [2,3,4,5].forEach(function(n) { h += '<option value="'+n+'"'+(n===3?' selected':'')+'>'+n+'</option>'; });
   h += '</select></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="lffCreateGroup(\'' + (editId||'') + '\')">สร้างหัวข้อ</button>';
+  h += '<button class="btn bp" onclick="lffCreateGroup(\'' + (editId||'') + '\')">สร้างหัวข้อ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('➕ เพิ่มหัวข้อ Checkbox', h);
@@ -852,7 +852,7 @@ function _lffItemForm(fieldId, itemId, editId) {
   h += '<div id="lff-tab-none" style="display:none;font-size:11px;color:var(--text2,#94a3b8);padding:4px 0">จะแสดง icon ทั่วไปแทนรูป</div>';
   h += '</div>';
   h += '<div class="fm-actions">';
-  h += '<button type="button" class="btn btn-blue" onclick="lffSaveItem(\'' + fieldId + '\',\'' + (itemId||'') + '\',\'' + (editId||'') + '\')">💾 บันทึก</button>';
+  h += '<button type="button" class="btn bp" onclick="lffSaveItem(\'' + fieldId + '\',\'' + (itemId||'') + '\',\'' + (editId||'') + '\')">💾 บันทึก</button>';
   h += '<button type="button" class="btn" onclick="showLffMgr(\'' + fieldId + '\',\'' + (editId||'') + '\')">← กลับ</button>';
   h += '</div></div>';
   openM(itemId ? '✏️ แก้ไข item' : '➕ เพิ่ม item', h);
@@ -941,7 +941,7 @@ function showLffDjiPicker(fieldId, editId) {
     window._lffPickSel[i].on = false;
   });
   h += '</div>';
-  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="lffPickerAdd(\'' + fieldId + '\',\'' + editId + '\')">➕ เพิ่มที่เลือก</button><button class="btn" onclick="showLffMgr(\'' + fieldId + '\',\'' + editId + '\')">← กลับ</button></div>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="lffPickerAdd(\'' + fieldId + '\',\'' + editId + '\')">➕ เพิ่มที่เลือก</button><button class="btn" onclick="showLffMgr(\'' + fieldId + '\',\'' + editId + '\')">← กลับ</button></div>';
   h += '</div>';
   openM('🚁 เลือกจาก DJI Products', h);
 }
@@ -958,8 +958,8 @@ function lffPickerToggle(i) {
   window._lffPickSel[i].on = !window._lffPickSel[i].on;
   var ck = document.getElementById('lff-pr-ck-' + i);
   var row = document.getElementById('lff-pr-' + i);
-  if (ck) { ck.style.background = window._lffPickSel[i].on ? 'var(--blue,#3b82f6)' : 'transparent'; ck.style.borderColor = window._lffPickSel[i].on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)'; ck.textContent = window._lffPickSel[i].on ? '✓' : ''; ck.style.color = '#fff'; ck.style.fontSize = '9px'; ck.style.display = 'flex'; ck.style.alignItems = 'center'; ck.style.justifyContent = 'center'; }
-  if (row) row.style.background = window._lffPickSel[i].on ? 'rgba(59,130,246,.08)' : 'transparent';
+  if (ck) { ck.style.background = window._lffPickSel[i].on ? 'var(--accent)' : 'transparent'; ck.style.borderColor = window._lffPickSel[i].on ? 'var(--accent)' : 'var(--border,#334155)'; ck.textContent = window._lffPickSel[i].on ? '✓' : ''; ck.style.color = '#fff'; ck.style.fontSize = '9px'; ck.style.display = 'flex'; ck.style.alignItems = 'center'; ck.style.justifyContent = 'center'; }
+  if (row) row.style.background = window._lffPickSel[i].on ? 'var(--accent-light)' : 'transparent';
 }
 
 function lffPickerAdd(fieldId, editId) {
@@ -1003,7 +1003,7 @@ function showLffBuilder(fieldId, editId) {
   // body: split layout with position:relative for DJI overlay
   h += '<div style="display:grid;grid-template-columns:1fr 210px;gap:12px;min-height:300px;position:relative">';
   // left: preview
-  h += '<div><div style="font-size:10px;color:var(--text2,#94a3b8);font-weight:600;letter-spacing:.5px;margin-bottom:8px;display:flex;justify-content:space-between"><span>PREVIEW — กดการ์ดเพื่อแก้ไข</span><span id="lffb-cnt" style="color:var(--blue,#60a5fa)">' + b.items.length + ' items</span></div>';
+  h += '<div><div style="font-size:10px;color:var(--text2,#94a3b8);font-weight:600;letter-spacing:.5px;margin-bottom:8px;display:flex;justify-content:space-between"><span>PREVIEW — กดการ์ดเพื่อแก้ไข</span><span id="lffb-cnt" style="color:var(--accent)">' + b.items.length + ' items</span></div>';
   h += '<div id="lffb-grid" style="display:grid;grid-template-columns:repeat(' + b.cols + ',1fr);gap:7px"></div></div>';
   // right: edit panel
   h += '<div style="background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">';
@@ -1014,7 +1014,7 @@ function showLffBuilder(fieldId, editId) {
   h += '<input id="lffb-ed-sub" class="fm-input" placeholder="คำอธิบาย (ไม่บังคับ)" style="font-size:12px">';
   h += '<div style="font-size:10px;color:var(--text2,#94a3b8)">รูปภาพ</div>';
   h += '<div style="display:flex;gap:4px">';
-  h += '<button type="button" id="lffb-itab-url" onclick="lffBImgTab(\'url\')" style="padding:3px 8px;border-radius:20px;font-size:10px;border:1px solid var(--blue,#3b82f6);background:rgba(59,130,246,.15);color:#60a5fa;cursor:pointer">URL</button>';
+  h += '<button type="button" id="lffb-itab-url" onclick="lffBImgTab(\'url\')" style="padding:3px 8px;border-radius:20px;font-size:10px;border:1px solid var(--accent);background:var(--accent-light);color:var(--accent);cursor:pointer">URL</button>';
   h += '<button type="button" id="lffb-itab-file" onclick="lffBImgTab(\'file\')" style="padding:3px 8px;border-radius:20px;font-size:10px;border:1px solid var(--border,#334155);background:transparent;color:var(--text2,#94a3b8);cursor:pointer">ไฟล์</button>';
   h += '<button type="button" id="lffb-itab-none" onclick="lffBImgTab(\'none\')" style="padding:3px 8px;border-radius:20px;font-size:10px;border:1px solid var(--border,#334155);background:transparent;color:var(--text2,#94a3b8);cursor:pointer">ไม่มีรูป</button>';
   h += '</div>';
@@ -1050,14 +1050,14 @@ function _lffBCardHtml(it, i) {
   var b = _lffB;
   var on = b.selIdx === i;
   var dim = b.selIdx >= 0 && !on;
-  var s = 'border:1.5px solid ' + (on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)') + ';border-radius:9px;padding:6px 5px 5px;cursor:pointer;text-align:center;position:relative;transition:border-color .12s;background:' + (on ? 'rgba(59,130,246,.08)' : 'transparent') + ';opacity:' + (dim ? '.45' : '1');
+  var s = 'border:1.5px solid ' + (on ? 'var(--accent)' : 'var(--border,#334155)') + ';border-radius:9px;padding:6px 5px 5px;cursor:pointer;text-align:center;position:relative;transition:border-color .12s;background:' + (on ? 'var(--accent-light)' : 'transparent') + ';opacity:' + (dim ? '.45' : '1');
   var imgContent = it.img
     ? '<img src="' + it.img + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">'
     : '<span style="font-size:20px">🖼️</span>';
   return '<div style="' + s + '" onclick="lffBSelectItem(' + i + ')">' +
     '<div style="width:100%;aspect-ratio:4/3;border-radius:6px;background:var(--bg,#0f172a);margin-bottom:5px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">' +
     imgContent +
-    '<div style="position:absolute;top:4px;right:4px;width:16px;height:16px;border-radius:50%;background:var(--blue,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;opacity:' + (on ? '1' : '0') + '">✓</div>' +
+    '<div style="position:absolute;top:4px;right:4px;width:16px;height:16px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;opacity:' + (on ? '1' : '0') + '">✓</div>' +
     '</div>' +
     '<div style="font-size:11px;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(it.label) + '</div>' +
     (it.sub ? '<div style="font-size:9px;color:var(--text2,#94a3b8);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(it.sub) + '</div>' : '') +
@@ -1068,7 +1068,7 @@ function _lffBRenderGrid() {
   var grid = document.getElementById('lffb-grid'); if (!grid) return;
   var b = _lffB; var h = '';
   b.items.forEach(function(it, i) { h += _lffBCardHtml(it, i); });
-  h += '<div onclick="document.getElementById(\'lffb-quick\').focus()" style="border:1.5px dashed var(--border,#334155);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-height:72px;transition:border-color .12s" onmouseover="this.style.borderColor=\'var(--blue,#3b82f6)\'" onmouseout="this.style.borderColor=\'var(--border,#334155)\'"><span style="font-size:18px;color:var(--text2,#94a3b8)">+</span><span style="font-size:9px;color:var(--text2,#94a3b8)">เพิ่ม</span></div>';
+  h += '<div onclick="document.getElementById(\'lffb-quick\').focus()" style="border:1.5px dashed var(--border,#334155);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-height:72px;transition:border-color .12s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border,#334155)\'"><span style="font-size:18px;color:var(--text2,#94a3b8)">+</span><span style="font-size:9px;color:var(--text2,#94a3b8)">เพิ่ม</span></div>';
   grid.innerHTML = h;
   var cnt = document.getElementById('lffb-cnt'); if (cnt) cnt.textContent = b.items.length + ' items';
 }
@@ -1104,9 +1104,9 @@ function lffBImgTab(t) {
   ['url','file','none'].forEach(function(k) {
     var btn = document.getElementById('lffb-itab-' + k); if (!btn) return;
     var on = k === t;
-    btn.style.background = on ? 'rgba(59,130,246,.15)' : 'transparent';
-    btn.style.color = on ? '#60a5fa' : 'var(--text2,#94a3b8)';
-    btn.style.borderColor = on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)';
+    btn.style.background = on ? 'var(--accent-light)' : 'transparent';
+    btn.style.color = on ? 'var(--accent)' : 'var(--text2,#94a3b8)';
+    btn.style.borderColor = on ? 'var(--accent)' : 'var(--border,#334155)';
     var wrap = document.getElementById('lffb-wrap-' + k); if (wrap) wrap.style.display = on ? 'block' : 'none';
   });
 }
@@ -1181,11 +1181,11 @@ function lffBRenderDji(list) {
     var img = pr.img || pr.imageUrl || pr.image || '';
     var cat = pr.category || pr.type || '';
     var on = !!b.djiSel[pr.id || i];
-    h += '<div id="lffb-djic-' + i + '" onclick="lffBDjiToggle(' + i + ')" style="border:1.5px solid ' + (on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)') + ';border-radius:8px;padding:5px 4px;text-align:center;cursor:pointer;position:relative;background:' + (on ? 'rgba(59,130,246,.08)' : 'transparent') + '">';
+    h += '<div id="lffb-djic-' + i + '" onclick="lffBDjiToggle(' + i + ')" style="border:1.5px solid ' + (on ? 'var(--accent)' : 'var(--border,#334155)') + ';border-radius:8px;padding:5px 4px;text-align:center;cursor:pointer;position:relative;background:' + (on ? 'var(--accent-light)' : 'transparent') + '">';
     h += '<div style="width:100%;aspect-ratio:4/3;border-radius:5px;background:var(--bg,#0f172a);margin-bottom:4px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">';
     if (img) h += '<img src="' + img + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">';
     else h += '<span style="font-size:18px">🚁</span>';
-    h += '<div style="position:absolute;top:3px;right:3px;width:14px;height:14px;border-radius:50%;background:var(--blue,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;opacity:' + (on ? '1' : '0') + '" id="lffb-djick-' + i + '">✓</div>';
+    h += '<div style="position:absolute;top:3px;right:3px;width:14px;height:14px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;opacity:' + (on ? '1' : '0') + '" id="lffb-djick-' + i + '">✓</div>';
     h += '</div>';
     h += '<div style="font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(name) + '</div>';
     if (cat) h += '<div style="font-size:9px;color:var(--text2,#94a3b8)">' + sanitize(cat) + '</div>';
@@ -1214,7 +1214,7 @@ function lffBDjiToggle(i) {
   var card = document.getElementById('lffb-djic-' + i);
   var ck = document.getElementById('lffb-djick-' + i);
   var on = _lffB.djiSel[key];
-  if (card) { card.style.borderColor = on ? 'var(--blue,#3b82f6)' : 'var(--border,#334155)'; card.style.background = on ? 'rgba(59,130,246,.08)' : 'transparent'; }
+  if (card) { card.style.borderColor = on ? 'var(--accent)' : 'var(--border,#334155)'; card.style.background = on ? 'var(--accent-light)' : 'transparent'; }
   if (ck) ck.style.opacity = on ? '1' : '0';
   var cnt = Object.values(_lffB.djiSel).filter(Boolean).length;
   var el = document.getElementById('lffb-dji-cnt'); if (el) el.textContent = cnt ? 'เลือก ' + cnt + ' รายการ' : 'ยังไม่เลือก';

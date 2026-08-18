@@ -923,7 +923,7 @@ function showDealerEmailPickerM(tmplId) {
 
   if (!templates.length) {
     openM('📧 Email Dealer', '<div style="padding:8px 0">ยังไม่มี Template สำหรับส่งแยกทีละ Dealer<br>' +
-      '<button class="btn btn-blue" style="margin-top:10px" onclick="showAddEmailTmplM()">➕ สร้าง Template</button></div>');
+      '<button class="btn bp" style="margin-top:10px" onclick="showAddEmailTmplM()">➕ สร้าง Template</button></div>');
     return;
   }
 
@@ -952,7 +952,7 @@ function showDealerEmailPickerM(tmplId) {
     '<button class="btn-xs" onclick="_deSelectAll(false)">☐ ล้างที่เลือก</button></div>';
   h += '<div id="deList" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px"></div>';
   h += '<div id="deGenArea" style="margin-top:10px"></div>';
-  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_dealerEmailGenerate()">📧 สร้างอีเมล</button>';
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="_dealerEmailGenerate()">📧 สร้างอีเมล</button>';
   h += '</div>';
   openM('📧 Email Dealer', h);
   window._deDealers = dealers;
@@ -3421,7 +3421,7 @@ function showAddContactM(dealerId) {
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="ct_note" rows="2" class="fm-input" placeholder="เช่น ติดต่อเรื่อง Technical ได้ดี"></textarea></div>';
   h += '<div class="fm-group"><label>⭐ ผู้ติดต่อหลัก</label><div class="radio-g"><label><input type="radio" name="ct_primary" value="1"><span>ใช่</span></label><label><input type="radio" name="ct_primary" value="0" checked><span>ไม่</span></label></div></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveContact(\'' + dealerId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveContact(\'' + dealerId + '\')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   
@@ -3469,7 +3469,7 @@ function showEditContactM(dealerId, ctIdx) {
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="ct_note" rows="2" class="fm-input">' + sanitize(c.note || '') + '</textarea></div>';
   h += '<div class="fm-group"><label>⭐ ผู้ติดต่อหลัก</label><div class="radio-g"><label><input type="radio" name="ct_primary" value="1"' + (c.primary ? ' checked' : '') + '><span>ใช่</span></label><label><input type="radio" name="ct_primary" value="0"' + (!c.primary ? ' checked' : '') + '><span>ไม่</span></label></div></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="updateContact(\'' + dealerId + '\',' + ctIdx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="updateContact(\'' + dealerId + '\',' + ctIdx + ')">💾 บันทึก</button>';
   h += '<button class="btn bd" onclick="deleteContact(\'' + dealerId + '\',' + ctIdx + ')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
@@ -4864,7 +4864,7 @@ function showEditSisRevenueModal(dealerId, year) {
     '<textarea id="sisRevenueNote" rows="2" class="fm-input" placeholder="เช่น อัพเดทตามใบแจ้งหนี้ ประจำเดือน มิ.ย.">' + (rev.note ? sanitize(rev.note) : '') + '</textarea>' +
     '</div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="saveSisRevenue(\'' + dealerId + '\', ' + year + ')">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="saveSisRevenue(\'' + dealerId + '\', ' + year + ')">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
 

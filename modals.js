@@ -25,7 +25,7 @@ function _cfgListRenderM() {
   h += '<div style="display:flex;gap:4px;margin-top:6px">' +
     '<input type="text" id="cfgListNew" placeholder="เพิ่มรายการใหม่" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_cfgListAdd();}">' +
     '<button class="btn bsm bp" onclick="_cfgListAdd()">➕</button></div>';
-  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_cfgListDone()">✅ เสร็จสิ้น</button>';
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="_cfgListDone()">✅ เสร็จสิ้น</button>';
   h += '</div>';
   openM(window._cfgListTitle, h);
 }
@@ -78,7 +78,7 @@ function _pstRenderM() {
     '<input type="color" id="pstNewColor" value="#3b82f6" style="width:34px;padding:1px">' +
     '<select id="pstNewCat" style="font-size:12px;padding:4px"><option value="active">🔵 Active</option><option value="won">🟢 Win</option><option value="lost">🔴 Lost</option></select>' +
     '<button class="btn bsm bp" onclick="_pstAdd()">➕</button></div>';
-  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="_pstDone()">✅ เสร็จสิ้น</button>';
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="_pstDone()">✅ เสร็จสิ้น</button>';
   h += '</div>';
   openM('⚙️ จัดการ Pipeline Status', h);
 }
@@ -152,7 +152,7 @@ function _pwRenderM() {
 
   h += '<div style="display:flex;gap:6px;margin-top:10px">';
   h += '<button class="btn bo" style="flex:1" onclick="_pwResetDefault()">↻ Reset เป็นค่าเริ่มต้น</button>';
-  h += '<button class="btn btn-blue" style="flex:1" onclick="_pwDone()">✅ เสร็จสิ้น</button>';
+  h += '<button class="btn bp" style="flex:1" onclick="_pwDone()">✅ เสร็จสิ้น</button>';
   h += '</div></div>';
   openM('⚙️ น้ำหนัก POS แนะนำ', h);
 }
@@ -1332,7 +1332,7 @@ function showVisitM(dealerId, eid) {
 // เตือนถ่ายรูป — โชว์เฉพาะตอนยังไม่มีรูปแนบเลย (เช็คจาก window._visitAttach ที่ตั้งไว้ก่อนเรียกฟังก์ชันนี้)
 function visitPhotoReminderHtml() {
   if ((window._visitAttach || []).length) return '';
-  return '<div style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,.1);border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#f59e0b"><span style="font-size:16px">📷</span><span>อย่าลืมถ่ายรูปหน้าร้าน/หลักฐานการเข้าพบด้วย!</span></div>';
+  return '<div class="warn-box" style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">📷</span><span>อย่าลืมถ่ายรูปหน้าร้าน/หลักฐานการเข้าพบด้วย!</span></div>';
 }
 
 // เก็บค่าที่พิมพ์ค้างไว้ในฟอร์มก่อนสลับโหมด Quick/Standard/Full — กันข้อมูล เช่น "สรุปการคุย" หายตอน
@@ -2875,7 +2875,7 @@ function showUnifiedContactForm(refType, refId) {
     '<div id="uc_pipeline_detail" style="display:none"><div class="fg"><label>📝 อัพเดท</label><textarea id="uc_pipe_update" rows="2" placeholder="ความคืบหน้า..."></textarea></div>' +
     '<div class="fg"><label>🔄 เปลี่ยนสถานะ</label><select id="uc_pipe_status"><option value="">-- ไม่เปลี่ยน --</option>' +
     getConfig().pipelineStatuses.map(function(s) { return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('') +
-    '</select></div></div><div class="fm-actions"><button class="btn btn-blue" onclick="submitUnifiedContact()">💾 บันทึก</button>' +
+    '</select></div></div><div class="fm-actions"><button class="btn bp" onclick="submitUnifiedContact()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   
   openM('📞 บันทึกการติดต่อ', html);
@@ -2993,7 +2993,7 @@ function showRescheduleModal(taskId) {
       </div>
     </div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="saveReschedule('${taskId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="saveReschedule('${taskId}')">💾 บันทึก</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
   `);
@@ -3076,7 +3076,7 @@ function setFollowupDate(taskId) {
       </div>
     </div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="saveFollowupDate('${taskId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="saveFollowupDate('${taskId}')">💾 บันทึก</button>
       <button class="btn bd" onclick="clearFollowupDate('${taskId}')">🗑️ ลบการเตือน</button>
     </div>
   `);
@@ -3138,7 +3138,7 @@ function setStartDate(taskId) {
   var t = ST.getOne('tasks', taskId);
   openM('🚀 ตั้งวันที่เริ่ม', `
     <div class="fg">${dpH('start_date', t.startDate || _td(), 'วันที่เริ่มงาน')}</div>
-    <button class="btn btn-blue" onclick="saveStartDate('${taskId}')">💾 บันทึก</button>
+    <button class="btn bp" onclick="saveStartDate('${taskId}')">💾 บันทึก</button>
   `);
 }
 

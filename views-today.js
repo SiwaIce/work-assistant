@@ -478,7 +478,7 @@ function rToday(el) {
     // ⚙️ อื่นๆ = Quick Notes + Health + Pins
     tabContent += `
     <div class="card"><h2>📝 Quick Notes <span class="ml"><button class="btn bsm bp" onclick="showQNote()">➕</button></span></h2>
-    ${qn.length ? qn.map(function(n) { return '<div style="padding:4px 8px;background:#0f172a;border:1px solid #334155;border-radius:7px;margin-bottom:3px;display:flex;justify-content:space-between;font-size:.76rem"><div style="white-space:pre-wrap;flex:1">' + sanitize(n.text) + '</div><button class="btn bsm bd" onclick="ST.delete(\'qnotes\',\'' + n.id + '\');render()">✕</button></div>'; }).join('') : '<div class="empty"><p>กด ➕ จดโน้ตด่วน</p></div>'}
+    ${qn.length ? qn.map(function(n) { return '<div style="padding:4px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;margin-bottom:3px;display:flex;justify-content:space-between;font-size:.76rem"><div style="white-space:pre-wrap;flex:1">' + sanitize(n.text) + '</div><button class="btn bsm bd" onclick="ST.delete(\'qnotes\',\'' + n.id + '\');render()">✕</button></div>'; }).join('') : '<div class="empty"><p>กด ➕ จดโน้ตด่วน</p></div>'}
     </div>
     `;
     tabContent += healthHtml;
@@ -757,8 +757,8 @@ function rWorkload(el) {
   
   el.innerHTML = `<div class="card"><h2>📊 Workload — ${wks} สัปดาห์</h2>
   ${bars.map(b => { const pct = Math.round(b.count/maxC*100); const cls = b.count > maxC*.8 ? 'wl-overload' : b.count > maxC*.5 ? 'wl-busy' : 'wl-normal';
-  return `<div class="wl-bar"><div class="wl-label">${b.label} ${b.isThis?'← นี้':''}</div><div style="flex:1;background:#334155;border-radius:5px;overflow:hidden"><div class="wl-fill ${cls}" style="width:${Math.max(pct,5)}%">${b.count}</div></div></div>`; }).join('')}
-  <div style="display:flex;gap:8px;margin-top:6px;font-size:.66rem;color:#64748b"><span>🟦 ปกติ</span><span>🟨 เยอะ</span><span>🟥 ล้น</span></div></div>`;
+  return `<div class="wl-bar"><div class="wl-label">${b.label} ${b.isThis?'← นี้':''}</div><div style="flex:1;background:var(--bg2);border-radius:5px;overflow:hidden"><div class="wl-fill ${cls}" style="width:${Math.max(pct,5)}%">${b.count}</div></div></div>`; }).join('')}
+  <div style="display:flex;gap:8px;margin-top:6px;font-size:.66rem;color:var(--text3)"><span>🟦 ปกติ</span><span>🟨 เยอะ</span><span>🟥 ล้น</span></div></div>`;
 }
 
 // ================================================================

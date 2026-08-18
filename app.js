@@ -1883,7 +1883,7 @@ function showEditFavorites() {
   }
   
   h += '<div class="fm-actions" style="margin-top:12px">';
-  h += '<button class="btn btn-blue" onclick="saveFavFromModal()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveFavFromModal()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   
@@ -2010,7 +2010,7 @@ function showEditQuickMenu() {
     h += '</div>';
   });
   h += '<div class="fm-actions" style="margin-top:12px">';
-  h += '<button class="btn btn-blue" onclick="saveQMFromModal()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveQMFromModal()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('⚡ ตั้งค่า Quick Menu', h);
@@ -2940,8 +2940,8 @@ function rCustomerUpdates(el) {
 
       // ✅ ปุ่ม Batch Actions
       html += '<div class="bg" style="margin-bottom:12px; flex-wrap:wrap">';
-      html += '<button class="btn bp" onclick="batchApproveSelected()" style="background:#22c55e">✅ Approve ที่เลือก (' + getSelectedCount() + ')</button>';
-      html += '<button class="btn bs" onclick="batchApproveAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
+      html += '<button class="btn bs" onclick="batchApproveSelected()">✅ Approve ที่เลือก (' + getSelectedCount() + ')</button>';
+      html += '<button class="btn bp" onclick="batchApproveAll()">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
       html += '<button class="btn bsm bo" onclick="toggleSelectAll()">☑️ เลือกทั้งหมด</button>';
       html += '<button class="btn bsm bo" onclick="clearSelection()">✖️ ยกเลิกเลือก</button>';
       html += '<button class="btn bsm bd" onclick="clearAllUpdateHistory()" style="margin-left:auto">🗑️ ล้างประวัติทั้งหมด</button>';
@@ -4432,8 +4432,8 @@ function rCustomerForecastUpdates(el) {
     
     // Batch actions
     html += '<div class="bg" style="margin-bottom:12px">';
-    html += '<button class="btn bp" onclick="batchApproveForecastSelected()" style="background:#22c55e">✅ Approve ที่เลือก</button>';
-    html += '<button class="btn bs" onclick="batchApproveForecastAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
+    html += '<button class="btn bs" onclick="batchApproveForecastSelected()">✅ Approve ที่เลือก</button>';
+    html += '<button class="btn bp" onclick="batchApproveForecastAll()">✅ Approve ทั้งหมด (' + pendingCount + ')</button>';
     html += '<button class="btn bsm bo" onclick="toggleSelectAllForecast()">☑️ เลือกทั้งหมด</button>';
     html += '</div>';
     

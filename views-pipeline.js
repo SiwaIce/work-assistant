@@ -911,7 +911,7 @@ function renderPipeCompareSuggestPanel() {
 
 function renderPipeCompareBar() {
   var n = pipeCompareSelected.length;
-  return '<div style="position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;background:var(--card,#1e293b);border:1px solid #3b82f6;border-radius:10px;padding:10px 14px;margin-top:10px">' +
+  return '<div style="position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-top:10px">' +
     '<span style="font-size:.78rem">เลือกแล้ว <strong>' + n + '/3</strong> โปรเจค</span>' +
     '<button class="btn bsm bp" ' + (n < 2 ? 'disabled' : '') + ' onclick="openPipeCompareModal()">🔍 เทียบเลย</button>' +
     '</div>';
@@ -1464,7 +1464,7 @@ function renderPipeCards(pipes, opts) {
     var amt = Number(p.forecastAmount) || 0;
     var lastLog = _lastLogMap[p.id];
     var bidUrgency = pipeBidUrgency(p);
-    var cardBorder = p.pinned ? 'border-left:3px solid #3b82f6' : (bidUrgency === 'urgent' ? 'border-left:3px solid #ef4444' : (bidUrgency === 'soon' ? 'border-left:3px solid #f59e0b' : ''));
+    var cardBorder = p.pinned ? 'border-left:3px solid var(--accent)' : (bidUrgency === 'urgent' ? 'border-left:3px solid #ef4444' : (bidUrgency === 'soon' ? 'border-left:3px solid #f59e0b' : ''));
     var cardIsWon = pipeIsWon(p);
     var cardIsLost = p.status === 'fail_lost';
 
@@ -1790,7 +1790,7 @@ function showPipeExportLogFilterM(action, arg) {
     <div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">เลือกประเภท Update ที่จะไปโผล่ในคอลัมน์ Update 1-6 ของไฟล์ที่ export/copy ครั้งนี้ (ไม่กระทบ log จริงในระบบ)</div>
     <div style="max-height:280px;overflow-y:auto">${rows}</div>
     <div class="fm-actions" style="margin-top:10px">
-      <button class="btn btn-blue" onclick="runPipeExportWithLogFilter('${action}','${arg || ''}')">📤 Export</button>
+      <button class="btn bp" onclick="runPipeExportWithLogFilter('${action}','${arg || ''}')">📤 Export</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
   `);
@@ -3538,7 +3538,7 @@ function rPipeDashboard(el) {
   h += '<div class="card" style="margin-bottom:10px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   h += '<h2 style="margin:0">📅 Timeline 6 เดือน</h2>';
-  h += '<span style="font-size:.68rem;color:#64748b">Expected Close / Bidding Date</span></div>';
+  h += '<span style="font-size:.68rem;color:var(--text3)">Expected Close / Bidding Date</span></div>';
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
 
   months.forEach(function(mo) {
@@ -3546,20 +3546,20 @@ function rPipeDashboard(el) {
     var label = thMonths[mo.month] + ' ' + thaiYr;
     var isThis = mo.ym === thisYM;
     var barPct = maxAmt > 0 ? Math.round(mo.amt / maxAmt * 100) : 0;
-    var borderCol = isThis ? '#3b82f6' : 'rgba(255,255,255,.06)';
-    var bgCol = isThis ? 'rgba(59,130,246,.1)' : 'rgba(255,255,255,.03)';
+    var borderCol = isThis ? 'var(--accent)' : 'var(--border)';
+    var bgCol = isThis ? 'var(--accent-light)' : 'var(--bg2)';
 
     h += '<div style="background:' + bgCol + ';border:1px solid ' + borderCol + ';border-radius:10px;padding:10px;' + (mo.pipes.length ? 'cursor:pointer' : '') + '"' +
       (mo.pipes.length ? ' onclick="showPipeMonthM(\'' + mo.ym + '\')"' : '') + '>';
-    h += '<div style="font-size:.72rem;font-weight:700;color:' + (isThis ? '#3b82f6' : '#64748b') + ';margin-bottom:4px">' + label + (isThis ? ' ◀' : '') + '</div>';
-    h += '<div style="font-size:1.15rem;font-weight:800;color:' + (mo.pipes.length ? '#e2e8f0' : '#334155') + '">' + mo.pipes.length + ' <span style="font-size:.62rem;font-weight:400;color:#475569">โครงการ</span></div>';
+    h += '<div style="font-size:.72rem;font-weight:700;color:' + (isThis ? 'var(--accent)' : 'var(--text3)') + ';margin-bottom:4px">' + label + (isThis ? ' ◀' : '') + '</div>';
+    h += '<div style="font-size:1.15rem;font-weight:800;color:' + (mo.pipes.length ? 'var(--text)' : 'var(--text3)') + '">' + mo.pipes.length + ' <span style="font-size:.62rem;font-weight:400;color:var(--text3)">โครงการ</span></div>';
     h += '<div style="font-size:.7rem;color:#22c55e;margin:2px 0 4px">' + (mo.amt ? fmtMoneyShort(mo.amt) : '—') + '</div>';
     if (mo.pipes.length) {
-      h += '<div style="height:3px;background:rgba(255,255,255,.06);border-radius:2px;margin-bottom:5px"><div style="height:3px;background:#3b82f6;border-radius:2px;width:' + barPct + '%"></div></div>';
+      h += '<div style="height:3px;background:var(--border);border-radius:2px;margin-bottom:5px"><div style="height:3px;background:var(--accent);border-radius:2px;width:' + barPct + '%"></div></div>';
       mo.pipes.slice(0, 2).forEach(function(p) {
-        h += '<div style="font-size:.6rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ' + sanitize((p.projectName || '').substr(0, 22)) + '</div>';
+        h += '<div style="font-size:.6rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ' + sanitize((p.projectName || '').substr(0, 22)) + '</div>';
       });
-      if (mo.pipes.length > 2) h += '<div style="font-size:.58rem;color:#334155">+' + (mo.pipes.length - 2) + ' เพิ่มเติม</div>';
+      if (mo.pipes.length > 2) h += '<div style="font-size:.58rem;color:var(--text3)">+' + (mo.pipes.length - 2) + ' เพิ่มเติม</div>';
     }
     h += '</div>';
   });
@@ -3993,7 +3993,7 @@ function pipeModelSummaryCardHtml(p) {
     CMP_COLS.forEach(function(c) {
       var on = !!pipeCompareCols[c.key];
       h += '<span onclick="togglePipeCompareCol(\'' + c.key + '\')" style="cursor:pointer;padding:3px 10px;border-radius:14px;font-size:11px;' +
-        (on ? 'border:2px solid var(--accent,#3b82f6);background:var(--accent,#3b82f6)22;color:var(--accent,#3b82f6)' : 'border:1px solid var(--border);color:var(--text2)') + '">' + c.label + '</span>';
+        (on ? 'border:2px solid var(--accent);background:var(--accent-light);color:var(--accent)' : 'border:1px solid var(--border);color:var(--text2)') + '">' + c.label + '</span>';
     });
     h += '</div>';
   }
@@ -4002,7 +4002,7 @@ function pipeModelSummaryCardHtml(p) {
 
   h += '<div style="overflow-x:auto"><table class="fcd-table" style="min-width:100%">';
   h += '<thead><tr><th>SKU</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th>';
-  CMP_COLS.forEach(function(c) { if (showCol(c.key)) h += '<th style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)18' : '') + '">' + c.label + '</th>'; });
+  CMP_COLS.forEach(function(c) { if (showCol(c.key)) h += '<th style="text-align:right' + (c.key === 'b' ? ';background:var(--accent-light)' : '') + '">' + c.label + '</th>'; });
   h += '</tr></thead><tbody>';
 
   var _pmMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -4035,7 +4035,7 @@ function pipeModelSummaryCardHtml(p) {
           cmpTotals[c.key] += cellAmt;
           cmpHasAny[c.key] = true;
           var isCurLevel = c.key !== 'rrp' && c.key !== 'quoted' && Math.round(unitVal) === Math.round(m.unitPrice);
-          h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)10' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + (isCurLevel ? ';font-weight:700' : '') + '" title="' + (isCurLevel ? 'ตรงกับราคาที่ใช้อยู่ในโครงการนี้' : '') + '">' + fmtAmt(cellAmt) + '</td>';
+          h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent-light)' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + (isCurLevel ? ';font-weight:700' : '') + '" title="' + (isCurLevel ? 'ตรงกับราคาที่ใช้อยู่ในโครงการนี้' : '') + '">' + fmtAmt(cellAmt) + '</td>';
         });
       }
     }
@@ -4055,7 +4055,7 @@ function pipeModelSummaryCardHtml(p) {
   h += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="2">รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">' + fmtAmt(totalAmt) + '</td>';
   CMP_COLS.forEach(function(c) {
     if (!showCol(c.key)) return;
-    h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent,#3b82f6)18' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + '">' + (cmpHasAny[c.key] ? fmtAmt(cmpTotals[c.key]) : '-') + '</td>';
+    h += '<td style="text-align:right' + (c.key === 'b' ? ';background:var(--accent-light)' : '') + (c.key === 'quoted' ? ';color:#22c55e' : '') + '">' + (cmpHasAny[c.key] ? fmtAmt(cmpTotals[c.key]) : '-') + '</td>';
   });
   h += '</tr>';
   h += '</tbody></table></div></div>';
@@ -4082,7 +4082,7 @@ function showAddPipeActionM(pipeId) {
   h += '<div class="fm-group"><label>📅 กำหนดวัน</label><input type="text" id="paDueDate" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
   h += '<div class="fm-group"><label>🔴 ความเร่งด่วน</label><select id="paPriority" class="fm-input"><option value="2">ปกติ</option><option value="1">🔴 เร่งด่วน</option></select></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ (ถ้ามี)</label><textarea id="paNote" rows="2" class="fm-input" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>';
-  h += '<div class="fm-actions"><button class="btn btn-blue" onclick="savePipeAction(\'' + pipeId + '\')">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="savePipeAction(\'' + pipeId + '\')">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   openM('➕ Action Item', h);
 }
 
@@ -4165,7 +4165,7 @@ function editPipelineLog(logId, pipeId, currentText, currentType, currentDate) {
       <textarea id="el_content" rows="4" class="fm-input">${sanitize(currentText)}</textarea>
     </div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="savePipelineLogEdit('${logId}', '${pipeId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="savePipelineLogEdit('${logId}', '${pipeId}')">💾 บันทึก</button>
       <button class="btn bd" onclick="deletePipelineLog('${logId}', '${pipeId}')">🗑️ ลบ</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
@@ -4216,7 +4216,7 @@ function showMergePipeLogsM(pipeId) {
     <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Default ติ๊กรวมทุกรายการยกเว้นตัวล่าสุด — กด "รวมที่เลือก" ตรงๆ ได้เลย ก็จะได้ Update ล่าสุดโชว์เดี่ยวๆ อยู่ช่องถัดจากก้อนที่รวม (ปรับติ๊กเองได้ตามต้องการ)</div>
     <div style="max-height:340px;overflow-y:auto">${rows}</div>
     <div class="fm-actions" style="margin-top:10px">
-      <button class="btn btn-blue" onclick="mergeSelectedPipeLogs('${pipeId}')">🔗 รวมที่เลือก</button>
+      <button class="btn bp" onclick="mergeSelectedPipeLogs('${pipeId}')">🔗 รวมที่เลือก</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
   `);
@@ -4358,8 +4358,8 @@ function rCustomerForecastUpdates(el) {
     
     if (forecastTab === 'pending') {
       html += '<div class="bg" style="margin-bottom:12px">';
-      html += '<button class="btn bp" onclick="batchApproveForecastSelected()" style="background:#22c55e">✅ Approve ที่เลือก</button>';
-      html += '<button class="btn bs" onclick="batchApproveForecastAll()" style="background:#3b82f6">✅ Approve ทั้งหมด (' + pendingUpdates.length + ')</button>';
+      html += '<button class="btn bs" onclick="batchApproveForecastSelected()">✅ Approve ที่เลือก</button>';
+      html += '<button class="btn bp" onclick="batchApproveForecastAll()">✅ Approve ทั้งหมด (' + pendingUpdates.length + ')</button>';
       html += '<button class="btn bsm bo" onclick="toggleSelectAllForecast()">☑️ เลือกทั้งหมด</button>';
       html += '</div>';
     }

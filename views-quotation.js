@@ -239,7 +239,7 @@ function _qiLevelChips(item, idx) {
     var isMismatch = isActive && lv !== selectedLevelForPrice;
     var style;
     if (isMismatch) style = 'border:1px solid #ef4444;background:#7f1d1d;color:#fca5a5';
-    else if (isActive) style = 'border:1px solid #3b82f6;background:#1e3a5f;color:#93c5fd';
+    else if (isActive) style = 'border:1px solid var(--accent);background:var(--accent-light);color:var(--accent)';
     else style = 'border:1px solid var(--border);background:transparent;color:var(--text2)';
     html += '<button type="button" title="ตั้งราคาตาม Level ' + lv + '" style="padding:1px 5px;font-size:9px;border-radius:4px;cursor:pointer;line-height:1.6;' + style + '" onclick="_qiSetItemLevel(' + idx + ',\'' + lv + '\')">' + lv + '</button>';
   });
@@ -617,7 +617,7 @@ function rQuoteEstimator(el) {
 
   var html = '<div style="max-width:640px;margin:0 auto">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-  html += '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
+  html += navHistory.length ? '<button class="btn bo" onclick="goBack()">← กลับ</button>' : '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
   html += '</div>';
   html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">ไม่ผูก Dealer · ไม่ใช่ใบเสนอราคาจริง — แค่ดูยอดรวมเร็วๆ</div>';
 
@@ -798,7 +798,7 @@ function showSaveSolutionM() {
     (editing ? '<div class="hint" style="background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:6px 10px;margin-bottom:8px">📝 กำลังแก้ไข Solution เดิม — บันทึกแล้วจะทับของเดิม</div>' : '') +
     '<div class="fg"><label>📝 ชื่อ Solution</label><input type="text" id="estSolName" class="fm-input" value="' + sanitize(editing ? editing.name : '') + '" placeholder="เช่น ชุดทำแผนที่"></div>' +
     '<div class="hint">เก็บแค่รายการสินค้า+จำนวน ไม่เก็บราคา (ราคาจะคำนวณสดทุกครั้งที่โหลด)</div>' +
-    '<div class="fm-actions"><button class="btn btn-blue" onclick="saveSolutionPreset()">💾 บันทึก' + (editing ? 'ทับ' : '') + '</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>' +
+    '<div class="fm-actions"><button class="btn bp" onclick="saveSolutionPreset()">💾 บันทึก' + (editing ? 'ทับ' : '') + '</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>' +
     '</div>';
   openM(editing ? '📝 แก้ไข Solution' : '💾 บันทึกเป็น Solution', h);
 }
@@ -1071,7 +1071,7 @@ function renderQuoteCardsHTML(list) {
     html += '<div class="quote-card" style="position:relative;background:var(--card);border:1px solid ' + (quoteSelected[q.id] ? 'var(--accent)' : 'var(--border)') + ';border-radius:16px;padding:16px;cursor:pointer" onclick="' + cardClick + '">';
     if (quoteSelectMode) html += '<input type="checkbox" id="quoteChk_' + q.id + '" ' + (quoteSelected[q.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleQuoteSelect(\'' + q.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
-    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640">rev ' + q.revisionNum + '</span>' : '') + '</div>';
+    html += '<div><div style="font-weight:800;font-size:16px;color:var(--accent)">' + qcopyHtml(q.quoteNo) + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:var(--accent-light);color:var(--accent);border:1px solid var(--accent)">rev ' + q.revisionNum + '</span>' : '') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + sanitize(dealer.name) + '</div></div>';
     html += '<span class="tag" style="background:' + statusColor + '20;color:' + statusColor + ';border:1px solid ' + statusColor + '40">' + statusLabel + '</span>';
     html += '</div>';
@@ -1124,7 +1124,7 @@ function renderQuoteTableHTML(list) {
     if (quoteSelectMode) h += '<td style="text-align:center" onclick="toggleQuoteSelect(\'' + q.id + '\')"><input type="checkbox" id="quoteChk_' + q.id + '" ' + (quoteSelected[q.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleQuoteSelect(\'' + q.id + '\')"></td>';
     h += '<td style="color:var(--text2)">' + (i + 1) + '</td>';
     h += '<td>' + (q.validFrom || '-') + '</td>';
-    h += '<td style="color:var(--accent);font-weight:600;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">' + qcopyHtml(q.quoteNo || '-') + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640">rev ' + q.revisionNum + '</span>' : '') + '</td>';
+    h += '<td style="color:var(--accent);font-weight:600;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">' + qcopyHtml(q.quoteNo || '-') + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:var(--accent-light);color:var(--accent);border:1px solid var(--accent)">rev ' + q.revisionNum + '</span>' : '') + '</td>';
     h += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')" title="' + sanitize(q.projectName || '') + '">' + (q.projectName ? sanitize(q.projectName) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td>' + (q.poNo ? qcopyHtml(q.poNo) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td style="color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(_quoteItemsSummaryFull(q.items)) + '">' + _quoteItemsSummary(q.items) + '</td>';
@@ -1833,7 +1833,7 @@ function renderEditQuotationPage(quote) {
   
   // Action Buttons
   html += '<div class="bg" style="margin-top:16px;gap:8px;justify-content:center;flex-wrap:wrap">';
-  html += '<button class="btn bp" onclick="saveCurrentQuotation()" style="background:#3b82f6">💾 บันทึก</button>';
+  html += '<button class="btn bp" onclick="saveCurrentQuotation()">💾 บันทึก</button>';
   html += '<button class="btn bo" onclick="previewQuotation(\'' + quote.id + '\')">👁️ Preview</button>';
   html += '<button class="btn bs" onclick="exportQuotationToPDF(\'' + quote.id + '\')">📎 PDF</button>';
   html += '<button class="btn bp" onclick="createSOFromQuotation(\'' + quote.id + '\')" style="background:#8b5cf6">📦 สร้าง SO</button>';

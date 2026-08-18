@@ -374,7 +374,7 @@ function showMergeImportM() {
       </div>
       <div id="mergePreview" style="font-size:12px;color:var(--text2);margin:8px 0"></div>
       <div class="fm-actions">
-        <button class="btn btn-blue" onclick="doMergeImport()">📥 เริ่ม Import (ไม่ซ้ำ)</button>
+        <button class="btn bp" onclick="doMergeImport()">📥 เริ่ม Import (ไม่ซ้ำ)</button>
         <button class="btn" onclick="closeM()">ยกเลิก</button>
       </div>
     </div>

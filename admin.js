@@ -553,7 +553,7 @@ function editProductAdmin(productId) {
     '<label><input type="checkbox" id="edit_is_service"' + (p.isService ? ' checked' : '') + '> 🛠️ Service</label>' +
     '</div></div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="saveProductEditAdmin(\'' + p.id + '\')">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="saveProductEditAdmin(\'' + p.id + '\')">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
   
@@ -600,7 +600,7 @@ function showAddProductAdminModal() {
     '<label><input type="checkbox" id="new_is_service"> 🛠️ Service</label>' +
     '</div></div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="addProductAdmin()">💾 เพิ่มสินค้า</button>' +
+    '<button class="btn bp" onclick="addProductAdmin()">💾 เพิ่มสินค้า</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
   
@@ -1116,7 +1116,7 @@ function _vtRenderM() {
   h += '<input type="text" id="vtNewTopicPrompt" placeholder="คำถาม/prompt" style="width:100%;box-sizing:border-box;margin-top:4px">';
   h += '<button class="btn bsm bp btn-full" style="margin-top:6px" onclick="_vtTopicAdd()">➕ เพิ่มหัวข้อ</button>';
 
-  h += '<button class="btn btn-blue btn-full" style="margin-top:12px" onclick="closeMForce();render();">✅ เสร็จสิ้น</button>';
+  h += '<button class="btn bp btn-full" style="margin-top:12px" onclick="closeMForce();render();">✅ เสร็จสิ้น</button>';
   h += '</div>';
   openM('⚙️ จัดการ Visit Topics', h);
 }
@@ -1450,7 +1450,7 @@ function showAddNewDemoPolicyM() {
   h += '<div class="fm-group"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="60" min="1"></div>';
   h += '<div class="fm-group"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="3" class="fm-input" placeholder="ข้อความเตือนที่จะแสดงให้ Dealer เห็น..."></textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveNewDemoPolicy()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveNewDemoPolicy()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('➕ เพิ่มนโยบายสินค้าใหม่', h);
@@ -1492,7 +1492,7 @@ function editNewDemoPolicy(idx) {
   h += '<div class="fm-group"><label>⏰ ต้องสั่งซื้อภายใน (วัน)</label><input type="number" id="ndp_days" class="fm-input" value="' + p.orderWithinDays + '" min="1"></div>';
   h += '<div class="fm-group"><label>📝 ข้อความแจ้งเตือน</label><textarea id="ndp_message" rows="3" class="fm-input">' + sanitize(p.alertMessage) + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="updateNewDemoPolicy(' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="updateNewDemoPolicy(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('✏️ แก้ไขนโยบายสินค้าใหม่', h);

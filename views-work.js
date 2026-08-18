@@ -612,7 +612,7 @@ function showQuickUpdateTaskM(taskId) {
     </select></div>
     <div class="fr">${dpH('qu_task_date', _td(), 'วันที่')}</div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="saveQuickUpdateTask('${taskId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="saveQuickUpdateTask('${taskId}')">💾 บันทึก</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
   `);
@@ -1105,7 +1105,7 @@ function editTimelineLog(logId, currentText, currentType, currentDate) {
       </div>
     </div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="saveTimelineLog('${logId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="saveTimelineLog('${logId}')">💾 บันทึก</button>
       <button class="btn bd" onclick="deleteTimelineLog('${logId}')">🗑️ ลบ</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
@@ -1204,7 +1204,7 @@ function addFollowupToTimeline(taskId) {
       </div>
     </div>
     <div class="fm-actions">
-      <button class="btn btn-blue" onclick="saveFollowupToTimeline('${taskId}')">💾 บันทึก</button>
+      <button class="btn bp" onclick="saveFollowupToTimeline('${taskId}')">💾 บันทึก</button>
       <button class="btn" onclick="closeM()">ยกเลิก</button>
     </div>
   `);
@@ -1628,6 +1628,7 @@ function rMeetDet(el) {
   document.getElementById('pgT').textContent = '📅 ' + m.title;
 
   el.innerHTML = `
+  ${navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : ''}
   <div class="bc"><a onclick="go('meetings')">📅 ประชุม</a><span class="sep">›</span><span class="cur">${sanitize(m.title)}</span></div>
   ${(typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(m.sourceTaskId) : ''}
 
@@ -1838,7 +1839,7 @@ function rMeetingWindow(el) {
   h += '<div style="background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;margin-bottom:14px">';
   h += '<div style="font-weight:600;font-size:13px;margin-bottom:10px">📌 Action Items <span style="font-size:11px;color:var(--text2);font-weight:400" id="mw-action-count">(' + (m.actions||[]).length + ')</span></div>';
   if (pendingFromPrev.length) {
-    h += '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px;margin-bottom:10px">';
+    h += '<div class="warn-box">';
     h += '<div style="font-size:11px;font-weight:600;color:#fbbf24;margin-bottom:5px">⚠️ ค้างจากประชุมก่อน: ' + sanitize(window._mwPrevMeeting.title) + ' (' + fD(window._mwPrevMeeting.date) + ')</div>';
     pendingFromPrev.forEach(function(a) { h += '<div style="font-size:12px;color:var(--text2);padding:1px 0">• ' + sanitize(a.title) + (a.assignee ? ' — ' + sanitize(a.assignee) : '') + '</div>'; });
     h += '<button class="btn bsm bo" style="margin-top:6px;font-size:11px" onclick="mwImportPendingActions()">⬇️ นำเข้าทั้งหมด</button></div>';
@@ -2398,7 +2399,7 @@ function showStepFuM(taskId, stepIdx) {
   h += '</select></div>';
 
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveStepFu(\'' + taskId + '\',' + stepIdx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveStepFu(\'' + taskId + '\',' + stepIdx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
 
@@ -2890,7 +2891,7 @@ function showRescheduleModal(taskId) {
         </div>
       </div>
       <div class="fm-actions" style="margin-top:16px">
-        <button class="btn btn-blue" onclick="saveRescheduleTask('${taskId}')">💾 บันทึก</button>
+        <button class="btn bp" onclick="saveRescheduleTask('${taskId}')">💾 บันทึก</button>
         <button class="btn" onclick="closeM()">ยกเลิก</button>
       </div>
     </div>

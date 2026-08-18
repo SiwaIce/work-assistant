@@ -1482,7 +1482,7 @@ function rStockDetail(el) {
   var totalAll = stockTotalQty(lots);
   var sellable = stockSellableQty(lots);
 
-  var h = '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
 
   h += '<div class="card" style="margin-bottom:12px">';
   h += '<h2 style="margin:0 0 2px">' + sanitize(p.name || '-') + (p.eol ?
@@ -1584,8 +1584,8 @@ function rStockDetail(el) {
     var whCodes = wh.locs.map(function(l) { return l.code; });
     var hasQiPendingHere = lots.some(function(l) { return whCodes.indexOf(l.location) !== -1 && l.qiPending && !l.registrationComplete && _stockIsActiveLot(l); });
     if (hasQiPendingHere) {
-      h += '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:10px">' +
-        '<div style="font-size:12px;color:#ef4444;font-weight:500">⚠️ มีสินค้าที่ยังขึ้นทะเบียนไม่สำเร็จอยู่ในคลังนี้ — ส่งมอบลูกค้าได้ แต่ยังบินไม่ได้จนกว่าจะขึ้นทะเบียนสำเร็จ</div></div>';
+      h += '<div class="bad-box">' +
+        '<div style="font-weight:500">⚠️ มีสินค้าที่ยังขึ้นทะเบียนไม่สำเร็จอยู่ในคลังนี้ — ส่งมอบลูกค้าได้ แต่ยังบินไม่ได้จนกว่าจะขึ้นทะเบียนสำเร็จ</div></div>';
     }
 
     wh.locs.forEach(function(loc) {
@@ -2073,7 +2073,7 @@ function rStockBatchReceive(el) {
   var locs = getStockLocations().filter(function(l) { return l.code !== '1021'; }); // 1021 ต้องกรอกรายละเอียดจอง/SO เฉพาะเจาะจง ไม่เหมาะกับการคีย์เป็นชุด
   var today = _nw().substring(0, 10);
 
-  var h = '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
   h += '<div class="card" style="margin-bottom:12px">';
   h += '<h2 style="margin:0 0 4px">📥 รับของเข้าคลัง (Batch Receive)</h2>';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">คีย์รับของหลาย SKU พร้อมกันในครั้งเดียว — ทุกรายการที่เพิ่มด้านล่างจะผูกเลขอ้างอิงเดียวกันไว้ ดูย้อนหลังทั้ง shipment ได้ในหน้าเดียว</div>';

@@ -509,7 +509,7 @@ function openLineTemplates(dealerId) {
 
   h += '<div class="fm-actions" style="gap:8px;display:flex;flex-wrap:wrap">';
   h += '<button class="btn btn-green" onclick="sendLineMsg()" style="flex:1;min-width:120px">📱 เปิด LINE</button>';
-  h += '<button class="btn btn-blue" onclick="copyLineMsg()" style="flex:1;min-width:120px">📋 Copy ข้อความ</button>';
+  h += '<button class="btn bp" onclick="copyLineMsg()" style="flex:1;min-width:120px">📋 Copy ข้อความ</button>';
   h += '</div>';
 
   h += '</div>';
@@ -655,7 +655,7 @@ function addLineTmpl() {
   h += '<div style="font-size:11px;color:var(--text2);margin:-8px 0 12px">';
   h += '💡 ตัวแปร: <code>{contact}</code> <code>{dealer}</code> <code>{project}</code> <code>{product}</code></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveNewLineTmpl()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveNewLineTmpl()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="openLineTmplManager()">↩️ กลับ</button>';
   h += '</div></div>';
   openM('➕ เพิ่ม LINE Template', h);
@@ -695,7 +695,7 @@ function editLineTmpl(idx) {
   h += '<div style="font-size:11px;color:var(--text2);margin:-8px 0 12px">';
   h += '💡 ตัวแปร: <code>{contact}</code> <code>{dealer}</code> <code>{project}</code> <code>{product}</code></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveEditLineTmpl(' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveEditLineTmpl(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="openLineTmplManager()">↩️ กลับ</button>';
   h += '</div></div>';
   openM('✏️ แก้ไข Template', h);
@@ -2771,7 +2771,7 @@ function showSetGoalM() {
   h += '<div class="fm-group"><label>🏪 Dealer Coverage Target</label><input type="number" id="gl_dealer" class="fm-input" value="' + (t.dealerCoverage || '') + '"></div>';
   h += '<div class="fm-group"><label>🏆 Win Deal Target</label><input type="number" id="gl_win" class="fm-input" value="' + (t.wins || '') + '"></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveGoalTargets()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveGoalTargets()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('🎯 ตั้งเป้า', h);
@@ -3184,7 +3184,7 @@ function rDemoDetail(el) {
 
   var eff = getDemoEffectiveStatus(d);
   var meta = DEMO_STATUS_META[eff];
-  var h = '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
 
   h += '<div class="card">';
   h += '<h2>🚁 ' + sanitize(d.name) + ' <span class="demo-status ' + meta.cls + '">' + meta.label + '</span></h2>';
@@ -3274,7 +3274,7 @@ function showAddDemoM() {
   h += demoComplianceFieldsHtml({});
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveDemo()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveDemo()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('➕ เพิ่มอุปกรณ์ Demo', h);
@@ -3318,7 +3318,7 @@ function showLendDemoM(demoId) {
   h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_lnote" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="lendDemo(\'' + demoId + '\')">📤 ให้ยืม</button>';
+  h += '<button class="btn bp" onclick="lendDemo(\'' + demoId + '\')">📤 ให้ยืม</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('📤 ให้ยืม / จองล่วงหน้า', h);
@@ -3417,7 +3417,7 @@ function showEditDemoM(demoId) {
   }
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input">' + sanitize(d.note || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="updateDemo(\'' + demoId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="updateDemo(\'' + demoId + '\')">💾 บันทึก</button>';
   h += '<button class="btn bd" onclick="deleteDemo(\'' + demoId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
@@ -3609,7 +3609,7 @@ function showAddQuoteM() {
   h += '<div class="fm-group"><label>📅 วันที่ส่ง</label><input type="text" id="qt_sent" class="fm-input dp" value="' + _td() + '"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="qt_note" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveQuote()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveQuote()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('➕ เพิ่ม Quotation', h);
@@ -3688,7 +3688,7 @@ function showEditQuoteM(quoteId) {
   h += '</select></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="qt_note" rows="2" class="fm-input">' + sanitize(q.note || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="updateQuote(\'' + quoteId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="updateQuote(\'' + quoteId + '\')">💾 บันทึก</button>';
   h += '<button class="btn bd" onclick="deleteQuote(\'' + quoteId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
@@ -3966,7 +3966,7 @@ function renderVpMonthView() {
   h += '<span style="font-weight:700;font-size:14px;min-width:140px;text-align:center">' + monthNames[month] + ' ' + year + '</span>';
   h += '<button class="btn bsm bo" onclick="vpMonthOffset++;render()">▶</button>';
   h += '<button class="btn bsm ' + (vpMonthOffset === 0 ? 'bp' : 'bo') + '" onclick="vpMonthOffset=0;vpSelectedDay=null;render()">เดือนนี้</button>';
-  h += '<button class="btn bp" style="background:#22c55e" onclick="showAddVisitPlanM(\'' + (vpSelectedDay || todayKey) + '\')">➕ นัดใหม่</button>';
+  h += '<button class="btn bs" onclick="showAddVisitPlanM(\'' + (vpSelectedDay || todayKey) + '\')">➕ นัดใหม่</button>';
   h += '</div>';
 
   h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">';
@@ -4099,7 +4099,7 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
   if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisitLead(\'' + p.id + '\')">📝 สร้าง Visit Report</button>';
   if (p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report →</button>';
-  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm" style="background:#22c55e;color:#fff" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bs" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bo" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
   if (isLead) h2 += '<button class="btn bsm bo" onclick="vpConvertLeadToDealer(\'' + p.id + '\')">➕ แปลงเป็น Dealer</button>';
   if (p.status && p.status !== 'planned') h2 += '<button class="btn bsm bo" onclick="resetVisitPlanStatus(\'' + p.id + '\')" title="กดผลผิด / อยากย้อนกลับเป็นวางแผนไว้">↩️ ยกเลิกผล</button>';
@@ -4142,7 +4142,7 @@ function showVpEmailM(planId) {
   h += '<div class="fm-group"><label>📌 หัวข้อ (Subject)</label><input type="text" id="vp_email_subj" class="fm-input" value="' + sanitize(subject) + '"></div>';
   h += '<div class="fm-group"><label>📝 เนื้อหา (แก้ไขได้)</label><textarea id="vp_email_body" class="fm-input" rows="10" style="font-size:13px;line-height:1.6">' + sanitize(body) + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="vpOpenMailto()">📬 เปิด Email Client</button>';
+  h += '<button class="btn bp" onclick="vpOpenMailto()">📬 เปิด Email Client</button>';
   h += '<button class="btn bo" onclick="vpCopyEmailBody()">📋 คัดลอกเนื้อหา</button>';
   h += '<button class="btn" onclick="closeM()">ปิด</button>';
   h += '</div></div>';
@@ -4274,7 +4274,7 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
 
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><input type="text" id="vp_note" class="fm-input" value="' + sanitize(selNote) + '" placeholder="เช่น Follow-up M400, Demo L3"></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveVisitPlan(document.getElementById(\'vp_date\').value||\'' + date + '\',\'' + (editId || '') + '\')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveVisitPlan(document.getElementById(\'vp_date\').value||\'' + date + '\',\'' + (editId || '') + '\')">💾 บันทึก</button>';
   if (editId) h += '<button class="btn bd" onclick="removeVisitPlan(\'' + editId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
@@ -5012,6 +5012,7 @@ function rNoteDet(el) {
   }
 
   var html = '';
+  html += navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
   html += '<div class="bc"><a onclick="go(\'knowledge\')">📚 Knowledge Base</a><span class="sep">›</span><span class="cur">' + sanitize((n.title || '').substr(0, 35)) + '</span></div>';
   html += '<div class="card" style="' + (isInactive ? 'opacity:.6;' : '') + '">';
   html += '<h2>' + sanitize(n.title || 'ไม่มีชื่อ') + ' ' + statusBadge + ' <span class="ml">' +
@@ -5527,7 +5528,7 @@ function showVisitReportEmailM() {
   h += '<div class="fm-group"><label>📧 To</label><input type="text" id="vre_to" class="fm-input" value="" placeholder="email@company.com"></div>';
 
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="generateVisitReportEmail()">📧 สร้าง Email</button>';
+  h += '<button class="btn bp" onclick="generateVisitReportEmail()">📧 สร้าง Email</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
 
@@ -5795,7 +5796,7 @@ function manageEmailCustomVarsM() {
     '<input type="text" id="ecv_new_k" placeholder="ชื่อ เช่น signature" style="width:110px">' +
     '<input type="text" id="ecv_new_v" placeholder="ข้อความแทน" style="flex:1">' +
     '<button class="btn bsm bp" onclick="_ecvAdd()">➕</button></div>';
-  h += '<button class="btn btn-blue btn-full" style="margin-top:10px" onclick="manageEmailTemplates()">↩️ กลับไปจัดการ Template</button>';
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="manageEmailTemplates()">↩️ กลับไปจัดการ Template</button>';
   h += '</div>';
   openM('🧩 ตัวแปรของฉัน', h);
 }
@@ -5916,7 +5917,7 @@ function showAddEmailTmplM() {
   h += '<div class="fm-group"><label>📝 Body</label>';
   h += '<textarea id="etBody" rows="8" class="fm-input" placeholder="เนื้อหา Email..." onfocus="_etTrackFocus(\'etBody\')"></textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveNewEmailTmpl()">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveNewEmailTmpl()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="_etGoBack()">↩️ กลับ</button>';
   h += '</div></div>';
   openM('➕ เพิ่ม Email Template', h);
@@ -5973,7 +5974,7 @@ function showEditEmailTmplM(idx) {
   h += '<div class="fm-group"><label>📝 Body</label>';
   h += '<textarea id="etBody" rows="8" class="fm-input" onfocus="_etTrackFocus(\'etBody\')">' + sanitize(t.body || '') + '</textarea></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn btn-blue" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bp" onclick="saveEditEmailTmpl(' + idx + ')">💾 บันทึก</button>';
   h += '<button class="btn" onclick="_etGoBack(\'' + t.id + '\')">↩️ กลับ</button>';
   h += '</div></div>';
   openM('✏️ แก้ไข Email Template', h);

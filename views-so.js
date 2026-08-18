@@ -379,7 +379,7 @@ function rSODetail(el) {
   var nexts  = _SO_NEXT[s.status] || [];
   var cfg    = getConfig();
 
-  var html = '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
+  var html = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
   html += (typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(s.sourceTaskId) : '';
 
   // ---- header card
@@ -989,7 +989,7 @@ function showSOStatusModal(soId) {
   if (s.status === 'so_open') {
     var readiness = soComputeReadiness(s);
     if (!readiness.allReady) {
-      html += '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;font-size:11px;color:#f59e0b">⚠️ ยังไม่พร้อมส่ง ' + readiness.readyCount + '/' + readiness.total + ' รายการ</div>';
+      html += '<div class="warn-box" style="font-size:11px">⚠️ ยังไม่พร้อมส่ง ' + readiness.readyCount + '/' + readiness.total + ' รายการ</div>';
     }
   }
 

@@ -558,7 +558,7 @@ function showEditProductModal(productId) {
   html += '<div class="fg"><label>URL รูปภาพ (Direct link)</label><input type="url" id="edit_image_url" class="fm-input" value="' + sanitize(p.imageUrl || '') + '" placeholder="https://..."></div>';
   if (p.imageUrl) html += '<div class="fg" style="margin-top:4px"><img src="' + sanitize(p.imageUrl) + '" style="max-height:80px;border-radius:6px;border:1px solid var(--border)" onerror="this.style.display=\'none\'"></div>';
   html += '<div class="fm-actions" style="margin-top:16px">';
-  html += '<button class="btn btn-blue" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
+  html += '<button class="btn bp" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
   html += '<button class="btn bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️ ลบสินค้า</button>';
   html += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   html += '</div></div>';
@@ -2213,7 +2213,7 @@ function showProductDetailM(productId) {
   html += '<div class="prod-detail-row"><span>Other (Type 4)</span><span>฿' + fmtMoney(tp.Other || 0) + '</span></div>';
 
   html += '<div class="fm-actions" style="margin-top:14px">';
-  html += '<button class="btn btn-blue" onclick="closeMForce();showEditProductModal(\'' + p.id + '\')">✏️ แก้ไข</button>';
+  html += '<button class="btn bp" onclick="closeMForce();showEditProductModal(\'' + p.id + '\')">✏️ แก้ไข</button>';
   html += '<button class="btn" onclick="closeM()">ปิด</button>';
   html += '</div></div>';
 
@@ -2472,7 +2472,7 @@ function rProductDemo(el) {
   }
   
   var html = '<div class="card"><h2>🚁 Demo Unit Pricing <span class="ml">' +
-    '<button class="btn bp" onclick="showAddDemoUnitM()" style="background:#22c55e">➕ เพิ่ม Demo Unit</button>' +
+    '<button class="btn bs" onclick="showAddDemoUnitM()">➕ เพิ่ม Demo Unit</button>' +
     '<button class="btn bo" onclick="exportDemoUnitsToExcel()">📥 Export Excel</button>' +
     '<button class="btn bo" onclick="syncDemoFromProducts()">🔄 Sync จาก Products</button>' +
     '</span></h2>';
@@ -2645,7 +2645,7 @@ function showAddDemoUnitM() {
     '<textarea id="newDemoNote" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
     '</div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
   
@@ -2751,7 +2751,7 @@ function editDemoUnit(id) {
     '</select>' +
     '</div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="saveEditDemoUnit(\'' + id + '\')">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="saveEditDemoUnit(\'' + id + '\')">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
   
@@ -2848,7 +2848,7 @@ function showAddProductM() {
     '<div class="form-section">🖼️ รูปภาพสินค้า</div>' +
     '<div class="fg"><label>URL รูปภาพ (Direct link)</label><input type="url" id="new_image_url" class="fm-input" placeholder="https://..."></div>' +
     '<div class="fm-actions" style="margin-top:16px">' +
-    '<button class="btn btn-blue" onclick="addProductFromModal()">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="addProductFromModal()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
 
@@ -2959,7 +2959,7 @@ function showAddBundleM() {
     '<div class="fg"><label>A</label><input type="text" inputmode="decimal" id="bundle_price_a" class="fm-input js-money" value="0.00"></div>' +
     '<div class="fg"><label>B</label><input type="text" inputmode="decimal" id="bundle_price_b" class="fm-input js-money" value="0.00"></div>' +
     '<div class="fg"><label>Other</label><input type="text" inputmode="decimal" id="bundle_price_o" class="fm-input js-money" value="0.00"></div></div>' +
-    '<div class="fm-actions"><button class="btn btn-blue" onclick="saveNewBundle()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+    '<div class="fm-actions"><button class="btn bp" onclick="saveNewBundle()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
   
   openM('🎁 เพิ่ม Bundle/Combo', html);
 }
@@ -3069,7 +3069,7 @@ function editBundle(id) {
     '<div class="fg"><label>A</label><input type="text" inputmode="decimal" id="bundle_price_a" class="fm-input js-money" value="' + nmI(bundle.typePrices?.A || 0) + '"></div>' +
     '<div class="fg"><label>B</label><input type="text" inputmode="decimal" id="bundle_price_b" class="fm-input js-money" value="' + nmI(bundle.typePrices?.B || 0) + '"></div>' +
     '<div class="fg"><label>Other</label><input type="text" inputmode="decimal" id="bundle_price_o" class="fm-input js-money" value="' + nmI(bundle.typePrices?.Other || 0) + '"></div></div>' +
-    '<div class="fm-actions"><button class="btn btn-blue" onclick="updateBundleFromModal(\'' + id + '\')">💾 อัปเดต</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
+    '<div class="fm-actions"><button class="btn bp" onclick="updateBundleFromModal(\'' + id + '\')">💾 อัปเดต</button><button class="btn" onclick="closeM()">ยกเลิก</button></div></div>';
 
   openM('✏️ แก้ไข Bundle', html);
 }
@@ -3129,7 +3129,7 @@ function showAddDemoUnitM() {
     '<textarea id="demo_note" rows="2" class="fm-input" placeholder="หมายเหตุเพิ่มเติม..."></textarea>' +
     '</div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="saveNewDemoUnit()">💾 บันทึก</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
 
@@ -3183,7 +3183,7 @@ function editDemoUnit(id) {
     '</select>' +
     '</div>' +
     '<div class="fm-actions">' +
-    '<button class="btn btn-blue" onclick="updateDemoUnitFromModal(\'' + id + '\')">💾 บันทึก</button>' +
+    '<button class="btn bp" onclick="updateDemoUnitFromModal(\'' + id + '\')">💾 บันทึก</button>' +
     '<button class="btn bd" onclick="deleteDemoUnitConfirm(\'' + id + '\')">🗑️ ลบ</button>' +
     '<button class="btn" onclick="closeM()">ยกเลิก</button>' +
     '</div></div>';
