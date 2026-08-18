@@ -224,19 +224,19 @@ function kpiPlanRowHtml(p) {
 
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">';
   h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center;cursor:pointer" onclick="event.stopPropagation();showKpiPlanTargetsM(\'' + p.dealer.id + '\')" title="กดเพื่อแก้ไขเป้า"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">เป้า ✏️</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.target) + '</div></div>';
-  h += '<div style="background:rgba(139,92,246,.12);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">SIS จริง</div><div style="font-size:12.5px;font-weight:800;margin-top:3px;color:#8b5cf6">' + fmtMoneyShort(sisActual) + '</div></div>';
-  h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">' + (isOk ? 'เกินเป้า' : 'ยังขาด') + '</div><div style="font-size:12.5px;font-weight:800;margin-top:3px" class="' + (isOk ? 'stat-good-t' : 'stat-bad-t') + '">' + (isOk ? '✓' : fmtMoneyShort(gap)) + '</div></div>';
+  h += '<div style="background:rgba(139,92,246,.12);border-radius:10px;padding:7px 4px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'sis\')" title="กดดูรายละเอียดรายเดือน"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">SIS จริง</div><div style="font-size:12.5px;font-weight:800;margin-top:3px;color:#8b5cf6">' + fmtMoneyShort(sisActual) + '</div></div>';
+  h += '<div style="background:var(--bg2);border-radius:10px;padding:7px 4px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'gap\')" title="กดดูรายละเอียด"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">' + (isOk ? 'เกินเป้า' : 'ยังขาด') + '</div><div style="font-size:12.5px;font-weight:800;margin-top:3px" class="' + (isOk ? 'stat-good-t' : 'stat-bad-t') + '">' + (isOk ? '✓' : fmtMoneyShort(gap)) + '</div></div>';
   h += '</div>';
 
   h += '<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px">🔍 เทียบ DJI จริง (Sell-in) vs SIS จริง (Sell-out)<span style="flex:1;height:1px;background:var(--border)"></span></div>';
   if (hasProjectData) {
     h += '<div style="background:var(--bg2);border-radius:11px;padding:9px 11px;margin-bottom:12px">';
-    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'dji\')" title="กดดูรายการโครงการที่ Won">';
     h += '<span style="font-size:10px;font-weight:700;width:80px;flex:none;color:#0891b2">DJI (Sell-in)</span>';
     h += '<div style="flex:1;height:7px;background:var(--card);border-radius:99px;overflow:hidden"><div style="width:' + Math.round(p.djiActual / maxCmp * 100) + '%;height:100%;background:#0891b2;border-radius:99px"></div></div>';
     h += '<span style="font-size:10.5px;font-weight:800;width:50px;text-align:right;flex:none">' + fmtMoneyShort(p.djiActual) + '</span>';
     h += '</div>';
-    h += '<div style="display:flex;align-items:center;gap:8px">';
+    h += '<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'sis\')" title="กดดูรายละเอียดรายเดือน">';
     h += '<span style="font-size:10px;font-weight:700;width:80px;flex:none;color:#8b5cf6">SIS (Sell-out)</span>';
     h += '<div style="flex:1;height:7px;background:var(--card);border-radius:99px;overflow:hidden"><div style="width:' + Math.round(sisActual / maxCmp * 100) + '%;height:100%;background:#8b5cf6;border-radius:99px"></div></div>';
     h += '<span style="font-size:10.5px;font-weight:800;width:50px;text-align:right;flex:none">' + fmtMoneyShort(sisActual) + '</span>';
@@ -250,9 +250,9 @@ function kpiPlanRowHtml(p) {
 
   h += '<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;display:flex;align-items:center;gap:6px">💡 โอกาสเพิ่มเติม (ยังไม่นับเป็นยอด)<span style="flex:1;height:1px;background:var(--border)"></span></div>';
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
-  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">📊 Pipeline มูลค่ารวม</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipelineRawTotal) + '</div></div>';
-  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center" title="มูลค่า Pipeline × POS ของแต่ละโครงการ — ยิ่งโครงการมั่นใจสูง (POS สูง) ยิ่งนับน้ำหนักมาก"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🎯 Forecast (ถ่วง POS)</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
-  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🔁 Runrate คาดไว้</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.runrateForecast) + '</div></div>';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'pipeline\')" title="กดดูรายการโครงการเปิดอยู่ทั้งหมด"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">📊 Pipeline มูลค่ารวม</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipelineRawTotal) + '</div></div>';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'forecast\')" title="มูลค่า Pipeline × POS ของแต่ละโครงการ — กดดูวิธีคำนวณ"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🎯 Forecast (ถ่วง POS)</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
+  h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'runrate\')" title="กดดูรายเดือน"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🔁 Runrate คาดไว้</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.runrateForecast) + '</div></div>';
   h += '</div>';
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">';
@@ -264,6 +264,100 @@ function kpiPlanRowHtml(p) {
   if (isOpen) h += kpiPlanDetailHtml(p);
   h += '</div>';
   return h;
+}
+
+// ================================================================
+// Modal เจาะลึกจากจุดกดในการ์ด — ใช้ข้อมูลจาก computeKpiCompanyPlan ตรงๆ ไม่คำนวณซ้ำ
+// ================================================================
+function kpiPlanPipeRowHtml(pp, showCalc) {
+  var posColor = pp.pos >= 70 ? 'stat-good-t' : pp.pos >= 40 ? 'stat-warn-t' : 'stat-bad-t';
+  var weighted = pp.forecastAmount * pp.pos / 100;
+  return '<div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})">' +
+    '<span style="font-size:10px;color:var(--text3);font-family:monospace;min-width:32px">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</span>' +
+    '<span style="flex:1;font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + '</span>' +
+    '<span style="font-size:10px;font-weight:700" class="' + posColor + '">POS ' + pp.pos + '%</span>' +
+    (showCalc ? '<span style="font-size:10px;color:var(--text3);min-width:100px;text-align:right">' + fmtMoneyShort(pp.forecastAmount) + ' × ' + pp.pos + '%</span>' : '') +
+    '<span style="font-size:12px;font-weight:800;min-width:58px;text-align:right">' + fmtMoneyShort(showCalc ? weighted : pp.forecastAmount) + '</span>' +
+    '<span style="color:var(--text3)">→</span></div>';
+}
+function kpiPlanDrillTotal(label, val) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:13px;font-weight:800"><span>' + label + '</span><span style="color:#8b5cf6">' + fmtMoneyShort(val) + '</span></div>';
+}
+function kpiPlanEmptyNote(text) {
+  return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:16px 0">' + text + '</div>';
+}
+function kpiPlanMonthBarHtml(label, val, maxVal, color, overrideText) {
+  var pct = maxVal ? Math.round(Math.min(100, val / maxVal * 100)) : 0;
+  return '<div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border-radius:10px;padding:8px 10px">' +
+    '<span style="font-size:11.5px;font-weight:700;width:56px;flex:none">' + label + '</span>' +
+    '<div style="flex:1;height:7px;background:var(--card);border-radius:99px;overflow:hidden"><div style="width:' + pct + '%;height:100%;border-radius:99px;background:' + color + '"></div></div>' +
+    '<span style="font-size:11.5px;font-weight:800;min-width:70px;text-align:right">' + (overrideText || fmtMoneyShort(val)) + '</span></div>';
+}
+
+function kpiPlanShowDrilldown(dealerId, kind) {
+  var p = computeKpiCompanyPlan(dealerId, getConfig());
+  var title = '', h = '';
+
+  if (kind === 'forecast') {
+    title = '🎯 Forecast (ถ่วง POS)';
+    h += '<div style="font-size:11.5px;color:var(--text2);line-height:1.6;background:var(--bg2);border-radius:10px;padding:10px 12px;margin-bottom:12px">POS คือความมั่นใจว่าโครงการจะปิดได้ — ยิ่งมั่นใจสูงยิ่งนับน้ำหนักเข้า Forecast มาก เช่น โครงการ 1,000,000 บาท ที่ POS 60% → นับเป็น Forecast <b>600,000</b></div>';
+    if (!p.openPipelinesList.length) { h += kpiPlanEmptyNote('ไม่มีโครงการเปิดอยู่'); }
+    else {
+      h += '<div style="display:flex;flex-direction:column;gap:7px">' + p.openPipelinesList.map(function(pp) { return kpiPlanPipeRowHtml(pp, true); }).join('') + '</div>';
+      h += kpiPlanDrillTotal('รวม Forecast (ถ่วง POS)', p.pipeWeighted);
+    }
+  } else if (kind === 'pipeline') {
+    title = '📊 Pipeline มูลค่ารวม';
+    if (!p.openPipelinesList.length) { h += kpiPlanEmptyNote('ไม่มีโครงการเปิดอยู่'); }
+    else {
+      h += '<div style="display:flex;flex-direction:column;gap:7px">' + p.openPipelinesList.map(function(pp) { return kpiPlanPipeRowHtml(pp, false); }).join('') + '</div>';
+      h += kpiPlanDrillTotal('รวม Pipeline ดิบ (ไม่ถ่วง POS)', p.pipelineRawTotal);
+    }
+  } else if (kind === 'runrate') {
+    title = '🔁 Runrate คาดไว้';
+    h += '<div style="font-size:11.5px;color:var(--text2);line-height:1.6;background:var(--bg2);border-radius:10px;padding:10px 12px;margin-bottom:12px">ยอดขายทั่วไปที่ไม่ผูกกับโครงการ คาดไว้รายเดือนที่เหลือของครึ่งปีนี้ — เป็นค่าแนะนำอัตโนมัติ หรือแผนที่กรอกเอง (แก้ได้ที่ "ดูรายเดือน" ในการ์ด)</div>';
+    var futureMonths = p.monthly.filter(function(m) { return m.isFuture; });
+    if (!futureMonths.length) { h += kpiPlanEmptyNote('ไม่มีเดือนที่เหลือในครึ่งปีนี้'); }
+    else {
+      var maxV = Math.max.apply(null, futureMonths.map(function(m) { return m.runrate; }).concat([1]));
+      h += '<div style="display:flex;flex-direction:column;gap:7px">' + futureMonths.map(function(m) { return kpiPlanMonthBarHtml(m.label, m.runrate, maxV, 'var(--accent)'); }).join('') + '</div>';
+      h += kpiPlanDrillTotal('รวม Runrate คาดไว้', p.runrateForecast);
+    }
+  } else if (kind === 'sis') {
+    title = '💰 SIS จริง (Sell-out)';
+    var maxV2 = Math.max.apply(null, p.monthly.map(function(m) { return m.sisActual; }).concat([1]));
+    h += '<div style="display:flex;flex-direction:column;gap:7px">' + p.monthly.map(function(m) { return kpiPlanMonthBarHtml(m.label, m.sisActual, maxV2, '#8b5cf6'); }).join('') + '</div>';
+    h += kpiPlanDrillTotal('รวม SIS จริง (' + p.half + ')', kpiPlanSisActual(p));
+    h += '<div style="text-align:center;margin-top:12px"><a style="font-size:11px;color:var(--accent);font-weight:700;cursor:pointer" onclick="closeMForce();go(\'exports\')">ไปหน้านำเข้า/แก้ไขยอดขาย SIS →</a></div>';
+  } else if (kind === 'dji') {
+    title = '🏆 DJI จริง (Sell-in)';
+    if (!p.wonPipelinesList.length) { h += kpiPlanEmptyNote('ยังไม่มีโครงการ Won ในครึ่งปีนี้'); }
+    else {
+      h += '<div style="display:flex;flex-direction:column;gap:7px">' + p.wonPipelinesList.map(function(pp) {
+        return '<div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})">' +
+          '<span style="font-size:10px;color:var(--text3);font-family:monospace;min-width:32px">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</span>' +
+          '<span style="flex:1;font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + '</span>' +
+          '<span style="font-size:10px;color:var(--text3)">' + sanitize(pp.closeDate || '') + '</span>' +
+          '<span style="font-size:12px;font-weight:800;min-width:58px;text-align:right">' + fmtMoneyShort(pp.amount) + '</span>' +
+          '<span style="color:var(--text3)">→</span></div>';
+      }).join('') + '</div>';
+      h += kpiPlanDrillTotal('รวม DJI จริง (Sell-in)', p.djiActual);
+    }
+  } else if (kind === 'gap') {
+    title = '📉 ยังขาดอีกเท่าไหร่';
+    var sisActual = kpiPlanSisActual(p);
+    var gapAmt = p.target - sisActual;
+    var remainMonths = p.monthly.filter(function(m) { return m.isFuture || m.isCurrent; });
+    h += '<div style="font-size:11.5px;color:var(--text2);line-height:1.6;background:var(--bg2);border-radius:10px;padding:10px 12px;margin-bottom:12px">เป้า ' + fmtMoneyShort(p.target) + ' − SIS จริงสะสม ' + fmtMoneyShort(sisActual) + ' = ' +
+      (gapAmt > 0 ? 'ขาดอีก <b>' + fmtMoneyShort(gapAmt) + '</b>' : 'เกินเป้าแล้ว <b>' + fmtMoneyShort(-gapAmt) + '</b>') +
+      (gapAmt > 0 && remainMonths.length ? ' ในเดือนที่เหลือของ ' + p.half + ' (เฉลี่ยต้องทำเดือนละ ~' + fmtMoneyShort(gapAmt / remainMonths.length) + ')' : '') + '</div>';
+    if (gapAmt > 0 && remainMonths.length) {
+      var perMonth = gapAmt / remainMonths.length;
+      h += '<div style="display:flex;flex-direction:column;gap:7px">' + remainMonths.map(function(m) { return kpiPlanMonthBarHtml(m.label, perMonth, perMonth, '#f87171', 'ต้อง ' + fmtMoneyShort(perMonth)); }).join('') + '</div>';
+    }
+  }
+
+  openM(title, h);
 }
 
 function kpiPlanDetailHtml(p) {

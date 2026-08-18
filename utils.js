@@ -1102,10 +1102,21 @@ function computeKpiCompanyPlan(dealerId, cfg) {
   var djiActual = monthly.filter(function(m) { return !m.isFuture; }).reduce(function(s, m) { return s + m.project; }, 0);
   var runrateForecast = monthly.filter(function(m) { return m.isFuture; }).reduce(function(s, m) { return s + m.runrate; }, 0);
 
+  // รายละเอียดสำหรับ modal เจาะลึก (กดจาก stat card) — เอามาจาก stats.activePipes/wonPipes ตรงๆ ไม่คำนวณซ้ำ
+  var openPipelinesList = stats.activePipes.map(function(p) {
+    return { id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', forecastAmount: Number(p.forecastAmount) || 0, pos: p._pos || 0 };
+  }).sort(function(a, b) { return b.forecastAmount - a.forecastAmount; });
+  var wonPipelinesList = stats.wonPipes.filter(function(p) {
+    return _mondayHalf(p.expectedCloseDate || p.registerDate) === mm.half;
+  }).map(function(p) {
+    return { id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', amount: Number(p.realAmount || p.forecastAmount) || 0, closeDate: p.expectedCloseDate || p.registerDate || '' };
+  }).sort(function(a, b) { return b.amount - a.amount; });
+
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
     actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
     djiActual: djiActual, runrateForecast: runrateForecast,
+    openPipelinesList: openPipelinesList, wonPipelinesList: wonPipelinesList,
     sisQuarters: sisQuarters, sisYear: sisYear,
     stalePipes: stats.stalePipes, lastVisitDays: stats.lastVisitDays
   };
