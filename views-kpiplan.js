@@ -31,9 +31,11 @@ function kpiPlanTodayBanner() {
   try { plans = computeKpiCompanyPlanAll(getConfig()); } catch (e) { return ''; }
   if (!plans.length) return '';
 
-  var riskItems = [], mismatchItems = [];
+  var riskItems = [], mismatchItems = [], noPlanItems = [];
   plans.forEach(function(p) {
-    if (kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว') riskItems.push(p);
+    var isRisk = kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว';
+    if (isRisk) riskItems.push(p);
+    if (isRisk && typeof getImprovementActions === 'function' && !getImprovementActions(p.dealer.id).length) noPlanItems.push(p);
     var sisActual = kpiPlanSisActual(p);
     var hasProjectData = p.djiActual > 0 || p.pipeWeighted > 0;
     if (hasProjectData && sisActual > 0) {
@@ -45,8 +47,9 @@ function kpiPlanTodayBanner() {
 
   var titleParts = [];
   if (riskItems.length) titleParts.push(riskItems.length + ' บริษัทเสี่ยงไม่ถึงเป้า');
+  if (noPlanItems.length) titleParts.push(noPlanItems.length + ' บริษัทยังไม่มี Improvement Plan');
   if (mismatchItems.length) titleParts.push(mismatchItems.length + ' บริษัท DJI/SIS ไม่ตรงกัน');
-  var subList = riskItems.length ? riskItems : mismatchItems;
+  var subList = noPlanItems.length ? noPlanItems : (riskItems.length ? riskItems : mismatchItems);
   var subNames = subList.slice(0, 3).map(function(p) { return sanitize(p.dealer.name); });
 
   var h = '<div class="card kpi-today-banner" onclick="go(\'kpiCompanyPlan\')">';
@@ -254,6 +257,15 @@ function kpiPlanRowHtml(p) {
   h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'forecast\')" title="มูลค่า Pipeline × POS ของแต่ละโครงการ — กดดูวิธีคำนวณ"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🎯 Forecast (ถ่วง POS)</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.pipeWeighted) + '</div></div>';
   h += '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer" onclick="event.stopPropagation();kpiPlanShowDrilldown(\'' + p.dealer.id + '\',\'runrate\')" title="กดดูรายเดือน"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">🔁 Runrate คาดไว้</div><div style="font-size:12.5px;font-weight:800;margin-top:3px">' + fmtMoneyShort(p.runrateForecast) + '</div></div>';
   h += '</div>';
+
+  if (st.label !== 'ถึงเป้าแล้ว') {
+    var impActions = getImprovementActions(p.dealer.id);
+    var impTotal = improvementActionsTotal(p.dealer.id);
+    h += '<div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(248,113,113,.1);border:1px dashed rgba(248,113,113,.4);border-radius:10px;padding:9px 12px;cursor:pointer" onclick="event.stopPropagation();go(\'kpiImprovementPlan\',{dealerId:\'' + p.dealer.id + '\'})">';
+    h += '<span style="font-size:11.5px;font-weight:700" class="stat-bad-t">🚀 ' + (impActions.length ? impActions.length + ' Action · คาดเพิ่ม ' + fmtMoneyShort(impTotal) : 'ยังไม่มี Improvement Plan') + '</span>';
+    h += '<span style="font-size:11px;font-weight:700" class="stat-bad-t">' + (impActions.length ? 'ดูแผน' : 'สร้างแผน') + ' →</span>';
+    h += '</div>';
+  }
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">';
   h += '<div style="display:flex;gap:10px;font-size:10.5px;color:var(--text2)"><span>' + qKeys[0].toUpperCase() + ' <b style="color:var(--text)">' + fmtMoneyShort((p.sisQuarters && p.sisQuarters[qKeys[0]]) || 0) + '</b></span><span>' + qKeys[1].toUpperCase() + ' <b style="color:var(--text)">' + fmtMoneyShort((p.sisQuarters && p.sisQuarters[qKeys[1]]) || 0) + '</b></span></div>';
@@ -500,5 +512,275 @@ function copyKpiPlanSummary() {
     lines.push((gap > 0 ? '🔴' : '🟢') + ' ' + p.dealer.name + ' — เป้า ฿' + fmtMoney(p.target) + ' · ทำได้+Pipeline ฿' + fmtMoney(p.actualSoFar + p.pipeWeighted) +
       (gap > 0 ? ' · ขาด ฿' + fmtMoney(gap) : ' · เกินเป้า') + ' — ' + st.label);
   });
+
+  var riskPlans = plans.filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
+  if (riskPlans.length) {
+    lines.push('');
+    lines.push('🚀 Improvement Plan — บริษัทเสี่ยง');
+    riskPlans.forEach(function(p) {
+      var actions = getImprovementActions(p.dealer.id);
+      var total = improvementActionsTotal(p.dealer.id);
+      lines.push('');
+      lines.push('■ ' + p.dealer.name + (actions.length ? ' (คาดเพิ่ม ฿' + fmtMoney(total) + ')' : ' — ยังไม่มี Improvement Plan'));
+      actions.forEach(function(a) {
+        lines.push('  · ' + (a.action || '(ไม่มีชื่อ Action)') + ' — ' + (a.who || '-') + ' · ' + (a.when || '-') + ' · คาด ฿' + fmtMoney(Number(a.expectedSales) || 0));
+      });
+    });
+  }
+
   copyText(lines.join('\n'), '📋 คัดลอกสรุปแผน KPI แล้ว');
+}
+
+// ================================================================
+// IMPROVEMENT PLAN — แผนเพิ่มยอดต่อบริษัทเสี่ยง (โจทย์จาก Ryan: Who/What/When/Expected Result ไม่ใช่แค่
+// ติดตาม Pipeline เดิม) เก็บข้อมูล 2 ก้อน: improvementActions (ตาราง Action Plan) + dealerEndUsers
+// (End User Mapping) — สาเหตุหลัก (reason chips) เก็บที่ dealer.improvementReasons ตรงๆ (pattern เดียวกับ
+// sisRevenueByYear ที่ผูกกับ dealer อยู่แล้ว ไม่ต้องเปิด collection แยกสำหรับ field เดียว)
+// Gap/Target/Pipeline ทั้งหมดดึงจาก computeKpiCompanyPlan ตรงๆ ไม่คำนวณซ้ำ/ไม่เก็บสำเนา
+// ================================================================
+var IMPROVEMENT_REASONS = ['Pipeline ยังน้อย', 'Budget ยังไม่มา', 'ยังไม่มี Demo', 'เข้าถึง End User ไม่ได้', 'มีคู่แข่ง', 'ขายแต่ Product เดิม', 'Technical Solution ยังไม่พร้อม', 'ไม่มี New End User'];
+
+function getImprovementActions(dealerId) {
+  return ST.filter('improvementActions', function(a) { return a.dealerId === dealerId; });
+}
+function getDealerEndUsers(dealerId) {
+  return ST.filter('dealerEndUsers', function(a) { return a.dealerId === dealerId; });
+}
+function improvementActionsTotal(dealerId) {
+  return getImprovementActions(dealerId).reduce(function(s, a) { return s + (Number(a.expectedSales) || 0); }, 0);
+}
+
+function kpiImpToggleReason(dealerId, reason) {
+  var d = ST.getOne('dealers', dealerId);
+  var reasons = (d.improvementReasons || []).slice();
+  var idx = reasons.indexOf(reason);
+  if (idx === -1) reasons.push(reason); else reasons.splice(idx, 1);
+  ST.update('dealers', dealerId, { improvementReasons: reasons });
+  render();
+}
+function kpiImpSaveField(coll, id, field, value) {
+  var patch = {};
+  patch[field] = field === 'expectedSales' ? (Number(value) || 0) : value;
+  ST.update(coll, id, patch);
+  render();
+}
+function kpiImpDeleteRow(coll, id) {
+  ST.delete(coll, id);
+  render();
+}
+function kpiImpAddEndUser(dealerId) {
+  ST.add('dealerEndUsers', { dealerId: dealerId, name: '', industry: '', currentApp: '', potentialProduct: '', potential: 'Medium' });
+  render();
+}
+function kpiImpAddAction(dealerId) {
+  ST.add('improvementActions', { dealerId: dealerId, action: '', who: '', what: '', when: '', expectedResult: '', expectedSales: 0 });
+  render();
+}
+
+function kpiImpTh(label, width) {
+  return '<th style="text-align:left;font-size:10px;color:var(--text2);font-weight:700;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border)' + (width ? ';width:' + width + 'px' : '') + '">' + label + '</th>';
+}
+function kpiImpTextCell(coll, id, field, val) {
+  return '<td style="padding:4px 8px"><input class="fm-input" style="font-size:11.5px;width:100%" value="' + sanitize(val || '') + '" onchange="kpiImpSaveField(\'' + coll + '\',\'' + id + '\',\'' + field + '\',this.value)"></td>';
+}
+function kpiImpDelBtn(coll, id) {
+  return '<td style="padding:4px 6px;text-align:center"><button class="btn bsm bo" style="padding:2px 7px" onclick="kpiImpDeleteRow(\'' + coll + '\',\'' + id + '\')">✕</button></td>';
+}
+
+function kpiImpEndUserTable(dealerId) {
+  var rows = getDealerEndUsers(dealerId);
+  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px">';
+  h += '<thead><tr>' + kpiImpTh('End User') + kpiImpTh('Industry') + kpiImpTh('Current App') + kpiImpTh('Potential Product') + kpiImpTh('Potential', 90) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  if (!rows.length) h += '<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มี End User — กด "+ เพิ่ม End User" ด้านล่าง</td></tr>';
+  rows.forEach(function(r) {
+    h += '<tr>' + kpiImpTextCell('dealerEndUsers', r.id, 'name', r.name) + kpiImpTextCell('dealerEndUsers', r.id, 'industry', r.industry) +
+      kpiImpTextCell('dealerEndUsers', r.id, 'currentApp', r.currentApp) + kpiImpTextCell('dealerEndUsers', r.id, 'potentialProduct', r.potentialProduct) +
+      '<td style="padding:4px 8px"><select class="fm-input" style="font-size:11.5px" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'potential\',this.value)">' +
+      ['High', 'Medium', 'Low'].map(function(o) { return '<option' + (r.potential === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></td>' +
+      kpiImpDelBtn('dealerEndUsers', r.id) + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<button class="btn bsm bo" style="margin-top:8px" onclick="kpiImpAddEndUser(\'' + dealerId + '\')">+ เพิ่ม End User</button>';
+  return h;
+}
+
+function kpiImpActionTable(dealerId) {
+  var rows = getImprovementActions(dealerId);
+  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:760px">';
+  h += '<thead><tr>' + kpiImpTh('Action', 130) + kpiImpTh('Who', 90) + kpiImpTh('What', 170) + kpiImpTh('When', 80) + kpiImpTh('Expected Result', 150) + kpiImpTh('Expected Sales', 100) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  if (!rows.length) h += '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มี Action — กด "+ เพิ่ม Action" ด้านล่าง</td></tr>';
+  rows.forEach(function(r) {
+    h += '<tr>' + kpiImpTextCell('improvementActions', r.id, 'action', r.action) + kpiImpTextCell('improvementActions', r.id, 'who', r.who) +
+      kpiImpTextCell('improvementActions', r.id, 'what', r.what) + kpiImpTextCell('improvementActions', r.id, 'when', r.when) +
+      kpiImpTextCell('improvementActions', r.id, 'expectedResult', r.expectedResult) +
+      '<td style="padding:4px 8px"><input type="number" step="10000" class="fm-input" style="font-size:11.5px;width:100%;text-align:right" value="' + (Number(r.expectedSales) || 0) + '" onchange="kpiImpSaveField(\'improvementActions\',\'' + r.id + '\',\'expectedSales\',this.value)"></td>' +
+      kpiImpDelBtn('improvementActions', r.id) + '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<button class="btn bsm bo" style="margin-top:8px" onclick="kpiImpAddAction(\'' + dealerId + '\')">+ เพิ่ม Action</button>';
+  return h;
+}
+
+function kpiImpStat(label, val, colorCls) {
+  return '<div style="background:var(--bg2);border-radius:10px;padding:9px 8px;text-align:center"><div style="font-size:8.5px;color:var(--text2);font-weight:700;text-transform:uppercase">' + label + '</div><div style="font-size:13.5px;font-weight:800;margin-top:3px" class="' + (colorCls || '') + '">' + val + '</div></div>';
+}
+function kpiImpRollupRow(label, val, colorCls) {
+  return '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">' + label + '</span><span style="font-weight:800" class="' + (colorCls || '') + '">' + val + '</span></div>';
+}
+
+function rKpiImprovementPlan(el) {
+  var d = ST.getOne('dealers', S.dealerId);
+  if (!d) return go('kpiCompanyPlan');
+  var p = computeKpiCompanyPlan(d.id, getConfig());
+  document.getElementById('pgT').textContent = '🚀 Improvement Plan — ' + d.name;
+  var st = kpiPlanStatus(p);
+  var sisActual = kpiPlanSisActual(p);
+  var gap = p.target - sisActual;
+  var currentForecast = sisActual + p.pipeWeighted;
+  var opportunityTotal = improvementActionsTotal(d.id);
+  var revised = currentForecast + opportunityTotal;
+  var reasons = d.improvementReasons || [];
+
+  var h = '<div class="bc"><a onclick="go(\'kpiCompanyPlan\')">← กลับแผนบรรลุเป้า KPI</a></div>';
+  h += '<div class="card" style="padding:0;overflow:hidden">';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
+  h += '<div><div style="font-size:16px;font-weight:800">' + sanitize(d.name) + ' — Improvement Plan ' + p.half + '</div><div style="font-size:11px;color:var(--text2);margin-top:3px">Level ' + sanitize(d.level || '-') + '</div></div>';
+  h += '<span style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;background:' + st.bg + '" class="' + st.cls + '">' + st.label + '</span>';
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">1) Sales Gap & Capability (ดึงจากระบบอัตโนมัติ)</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">';
+  h += kpiImpStat('H2 Target', fmtMoneyShort(p.target));
+  h += kpiImpStat('SIS จริง', fmtMoneyShort(sisActual));
+  h += kpiImpStat('Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiImpStat('Pipeline ถ่วง POS', fmtMoneyShort(p.pipeWeighted));
+  h += '</div>';
+  h += '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">สาเหตุหลักที่ Pipeline ปัจจุบันอาจไม่พอ (เลือกได้หลายข้อ)</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  IMPROVEMENT_REASONS.forEach(function(r) {
+    var on = reasons.indexOf(r) !== -1;
+    h += '<span style="cursor:pointer;font-size:10.5px;padding:5px 10px;border-radius:20px;border:1px solid ' + (on ? 'var(--accent)' : 'var(--border)') + ';background:var(--bg2);font-weight:' + (on ? '700' : '400') + '"' + (on ? ' class="stat-good-t"' : '') + ' onclick="kpiImpToggleReason(\'' + d.id + '\',\'' + r.replace(/'/g, "\\'") + '\')">' + (on ? '✓ ' : '') + sanitize(r) + '</span>';
+  });
+  h += '</div></div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">2) Main End User Mapping</div>';
+  h += kpiImpEndUserTable(d.id);
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Action Plan (Who / What / When / Expected Result)</div>';
+  h += kpiImpActionTable(d.id);
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Gap vs Opportunity Rollup</div>';
+  h += '<div style="background:var(--bg2);border-radius:11px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">';
+  h += kpiImpRollupRow('H2 Target', fmtMoneyShort(p.target));
+  h += kpiImpRollupRow('Current Forecast (SIS จริง + Pipeline ถ่วง POS)', fmtMoneyShort(currentForecast));
+  h += kpiImpRollupRow('Sales Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiImpRollupRow('New Opportunity จาก Action Plan (รวม Expected Sales)', fmtMoneyShort(opportunityTotal));
+  h += '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);font-size:13.5px;font-weight:800"><span>Revised Forecast (ถ้าทำตามแผนสำเร็จ)</span><span class="' + (revised >= p.target ? 'stat-good-t' : 'stat-bad-t') + '">' + fmtMoneyShort(revised) + (revised >= p.target ? ' ✓ เกินเป้า' : ' ยังขาด ' + fmtMoneyShort(p.target - revised)) + '</span></div>';
+  h += '</div></div>';
+
+  h += '<div style="padding:16px 18px;background:var(--bg2);display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button class="btn bsm bp" onclick="kpiImpCreateFollowupTasks(\'' + d.id + '\')">🗓️ สร้าง Task ติดตามรายสัปดาห์</button>';
+  h += '<button class="btn bsm bo" onclick="exportImprovementPlanXlsx()">📤 Export Excel (ทุกบริษัทเสี่ยง)</button>';
+  h += '<button class="btn bsm bo" onclick="printImprovementPlan(\'' + d.id + '\')">🖨️ พิมพ์ / บันทึกเป็น PDF</button>';
+  h += '</div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+// สร้าง Task จริงในระบบ Task (v7_tasks) ผูก dealerId จาก Action ที่ยังไม่เคยสร้าง Task มาก่อน (กันสร้างซ้ำด้วย
+// a.taskId) — เจตนาให้ขึ้นในหน้า Tasks/วันนี้ปกติ ไม่ต้องมีระบบติดตามซ้อนอีกอัน
+function kpiImpCreateFollowupTasks(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  var actions = getImprovementActions(dealerId).filter(function(a) { return !a.taskId && a.action; });
+  if (!actions.length) return toast('ไม่มี Action ใหม่ที่ต้องสร้าง Task (ต้องมีชื่อ Action และยังไม่เคยสร้าง Task มาก่อน)');
+  var count = 0;
+  actions.forEach(function(a) {
+    var t = ST.add('tasks', {
+      title: '🚀 ' + a.action + (d ? ' — ' + d.name : ''),
+      description: (a.what || '') + (a.expectedResult ? ' → ' + a.expectedResult : ''),
+      startDate: _td(), dueDate: _td(), priority: 'high', category: 'Improvement Plan',
+      status: 'active', sequential: false, url: '', dealerId: dealerId, pipeId: '', steps: []
+    });
+    ST.update('improvementActions', a.id, { taskId: t.id });
+    count++;
+  });
+  toast('🗓️ สร้าง Task ติดตามแล้ว ' + count + ' รายการ — ปรับวันที่ในหน้า Task ได้ตามจริง');
+  render();
+}
+
+// Export Excel — รวม Action Plan ของทุกบริษัทเสี่ยง (ไม่ใช่แค่บริษัทที่กำลังเปิดอยู่) เพราะ Ryan น่าจะอยาก
+// เห็นภาพรวมทั้งหมดทีเดียวเวลาเปิดไฟล์ ใช้ SheetJS (XLSX) ตัวเดียวกับ Import/Export ยอดขาย SIS
+function exportImprovementPlanXlsx() {
+  var plans = computeKpiCompanyPlanAll(getConfig()).filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
+  if (!plans.length) return toast('ไม่มีบริษัทเสี่ยง');
+  var header = ['Dealer', 'Level', 'Risk', 'H2 Target', 'SIS จริง', 'Sales Gap', 'Action', 'Who', 'What', 'When', 'Expected Result', 'Expected Sales'];
+  var rows = [header];
+  plans.forEach(function(p) {
+    var sisActual = kpiPlanSisActual(p);
+    var gap = Math.max(0, p.target - sisActual);
+    var actions = getImprovementActions(p.dealer.id);
+    if (!actions.length) {
+      rows.push([p.dealer.name, p.dealer.level || '', kpiPlanStatus(p).label, p.target, sisActual, gap, '(ยังไม่มี Improvement Plan)', '', '', '', '', '']);
+    } else {
+      actions.forEach(function(a) {
+        rows.push([p.dealer.name, p.dealer.level || '', kpiPlanStatus(p).label, p.target, sisActual, gap, a.action || '', a.who || '', a.what || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
+      });
+    }
+  });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 10 }, { wch: 22 }, { wch: 14 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Improvement Plan');
+  XLSX.writeFile(wb, 'Improvement_Plan_' + plans[0].half + '_' + _td() + '.xlsx');
+  toast('📤 Export Excel แล้ว');
+}
+
+// หน้าพิมพ์/PDF — เปิดแท็บใหม่ด้วย HTML ธรรมดา + window.print() แทนการเพิ่ม PDF library ใหม่ (เบากว่า และ
+// เบราว์เซอร์ทำ "บันทึกเป็น PDF" ในตัวได้อยู่แล้วจากกล่อง Print)
+function printImprovementPlan(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var p = computeKpiCompanyPlan(dealerId, getConfig());
+  var sisActual = kpiPlanSisActual(p);
+  var gap = Math.max(0, p.target - sisActual);
+  var actions = getImprovementActions(dealerId);
+  var endUsers = getDealerEndUsers(dealerId);
+  var total = improvementActionsTotal(dealerId);
+
+  var html = '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' +
+    '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:18px 0 6px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
+    '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
+    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}</style></head><body>';
+  html += '<h1>🚀 Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' · พิมพ์เมื่อ ' + fD(_td()) + '</div>';
+  html += '<h2>1) Sales Gap</h2><div class="stats">' +
+    '<div class="stat">H2 Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
+    '<div class="stat">SIS จริง<b>' + fmtMoneyShort(sisActual) + '</b></div>' +
+    '<div class="stat">Gap<b>' + fmtMoneyShort(gap) + '</b></div>' +
+    '<div class="stat">Pipeline ถ่วง POS<b>' + fmtMoneyShort(p.pipeWeighted) + '</b></div></div>';
+  if ((d.improvementReasons || []).length) html += '<div class="sub">สาเหตุหลัก: ' + sanitize(d.improvementReasons.join(', ')) + '</div>';
+
+  html += '<h2>2) Main End User Mapping</h2><table><tr><th>End User</th><th>Industry</th><th>Current App</th><th>Potential Product</th><th>Potential</th></tr>' +
+    (endUsers.length ? endUsers.map(function(r) { return '<tr><td>' + sanitize(r.name) + '</td><td>' + sanitize(r.industry) + '</td><td>' + sanitize(r.currentApp) + '</td><td>' + sanitize(r.potentialProduct) + '</td><td>' + sanitize(r.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="5">—</td></tr>') + '</table>';
+
+  html += '<h2>3) Action Plan</h2><table><tr><th>Action</th><th>Who</th><th>What</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>' +
+    (actions.length ? actions.map(function(a) { return '<tr><td>' + sanitize(a.action) + '</td><td>' + sanitize(a.who) + '</td><td>' + sanitize(a.what) + '</td><td>' + sanitize(a.when) + '</td><td>' + sanitize(a.expectedResult) + '</td><td>' + fmtMoneyShort(Number(a.expectedSales) || 0) + '</td></tr>'; }).join('') : '<tr><td colspan="6">—</td></tr>') + '</table>';
+
+  html += '<h2>4) Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
+    '<tr><td>New Opportunity (Action Plan รวม)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
+    '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
+  html += '<script>window.onload=function(){window.print();}</script></body></html>';
+
+  var win = window.open('', '_blank');
+  if (!win) return toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาต popup แล้วลองใหม่');
+  win.document.write(html);
+  win.document.close();
 }

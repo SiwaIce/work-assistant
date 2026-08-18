@@ -770,6 +770,7 @@ var R = {
   posCalibration: rPosCalibration,
   pipelineCompare: rPipelineCompare,
   kpiCompanyPlan: rKpiCompanyPlan,
+  kpiImprovementPlan: rKpiImprovementPlan,
   contactLogs: rContactLogs,
   pipeline: rPipeline,
   pipelineTeam: rPipelineTeam,

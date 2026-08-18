@@ -38,6 +38,8 @@ const ST = {
     goalsV2: 'v7_goals_v2',
     customerForecasts: 'v7_customer_forecasts',
     kpiMonthlyPlan: 'v7_kpiMonthlyPlan',
+    improvementActions: 'v7_improvementActions',
+    dealerEndUsers: 'v7_dealerEndUsers',
     kpiConfig: 'v7_kpiConfig',
     kpiEntries: 'v7_kpiEntries',
     dealerPins: 'v7_dealer_pins',
