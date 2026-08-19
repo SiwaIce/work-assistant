@@ -5563,18 +5563,28 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 // แทนการเรียก ST.pipeLogsByPipe() ต่อแถว — ตัวนั้น filter ทั้ง collection ทุกครั้งที่เรียก พอ preview/import
 // ทีเดียวหลายร้อย-พันแถว (import ทั้งชีต) กลายเป็น O(แถว × log ทั้งระบบ) จนหน้าเว็บค้างได้ (ไม่มี logsIndex
 // ก็ยัง fallback ไปแบบเดิมได้ปกติ สำหรับจุดที่เรียกทีละรายการ ไม่กระทบ)
+// แยกวันที่นำหน้า (dd/mm/yy หรือ dd/mm/yyyy — รูปแบบเดียวกับที่ logFmt ใน _pipeRowFields ใส่ไว้ตอน export)
+// ออกจาก 1 บรรทัดในคอลัมน์ Update — คืน {date, content} — date เป็น ISO ผ่าน _pipeDateFromPaste
+// (parse ไม่ได้ = '' ให้ผู้เรียก fallback เอาเอง เช่น registerDate หรือเวลาปัจจุบัน)
+function _pipeParseUpdateLine(line) {
+  var m = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(.*)$/);
+  if (!m) return { date: '', content: line };
+  return { date: _pipeDateFromPaste(m[1]), content: m[2] };
+}
+
 function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
   var logs = logsIndex ? (logsIndex[existing.id] || []) : ST.pipeLogsByPipe(existing.id);
   var existingContents = logs.map(function(l) { return (l.content || '').trim(); });
   var out = [];
+  var seen = {};
   for (var u = 1; u <= 6; u++) {
     var raw = _pipeCol(c, colMap, 'update' + u).trim();
     if (!raw) continue;
     raw.split('\n').forEach(function(line) {
       line = line.trim();
       if (!line) return;
-      var content = line.replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s*/, '');
-      if (existingContents.indexOf(content) === -1 && out.indexOf(content) === -1) out.push(content);
+      var parsed = _pipeParseUpdateLine(line);
+      if (existingContents.indexOf(parsed.content) === -1 && !seen[parsed.content]) { seen[parsed.content] = true; out.push(parsed); }
     });
   }
   return out;
@@ -5675,7 +5685,7 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   });
   var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
   if (newUpdateLines.length) {
-    diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: newUpdateLines.join(' | ') });
+    diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: newUpdateLines.map(function(l) { return l.content; }).join(' | ') });
   }
   return diffs;
 }
@@ -6329,7 +6339,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
       updated++;
       newUpdateLines.forEach(function(line) {
-        pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line, date: pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+        pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line.content, date: line.date || pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
       });
     } else {
       var newPipeId = _pipeGenId();
@@ -6339,7 +6349,13 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       added++;
       for (var u = 1; u <= 6; u++) {
         var upd = _pipeCol(c, colMap, 'update' + u).trim();
-        if (upd) pipeLogs.push({ id: _pipeGenId(), pipeId: newPipeId, type: 'note', content: upd, date: pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+        if (!upd) continue;
+        upd.split('\n').forEach(function(uline) {
+          uline = uline.trim();
+          if (!uline) return;
+          var parsedU = _pipeParseUpdateLine(uline);
+          pipeLogs.push({ id: _pipeGenId(), pipeId: newPipeId, type: 'note', content: parsedU.content, date: parsedU.date || pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+        });
       }
     }
   });
