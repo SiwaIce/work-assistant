@@ -5613,6 +5613,37 @@ function _pipeImportLookupPrice(model, existingItems) {
   return { price: 0, sku: '' };
 }
 
+// แปลงแถวไฟล์ import → items[] — ใช้จุดเดียวทั้งตอนเทียบ diff/state และตอน commit จริง (สำคัญมาก: ถ้าฝั่ง
+// เทียบกับฝั่งบันทึกจริงใช้วิธีคำนวณคนละแบบกัน จะเจอ "เปลี่ยน" ค้างตลอดไปไม่มีวันหาย เพราะสองฝั่งอ้างอิงคนละ
+// แหล่งข้อมูลในไฟล์เดียวกัน — เจอเคสจริงที่คอลัมน์ Model มีข้อมูลครบ แต่คอลัมน์ Qty สรุป (M3M Qty./M4T Qty./...)
+// ว่างเปล่าเกือบทั้งหมดในชีทจริงของทีม (ไม่ได้กรอกคู่กันเสมอ) — ใช้ Model เป็นหลักเหมือนเดิม (ข้อความ
+// "ชื่อ*จำนวน" ต่อบรรทัด) แล้ว fallback ไปคอลัมน์ Qty สรุปเฉพาะกรณี Model ว่างเปล่าจริงๆ เท่านั้น
+function _pipeResolveItemsFromRow(c, colMap, existingItems) {
+  var items = [];
+  var modelCellText = _pipeCol(c, colMap, 'model').trim();
+  if (modelCellText) {
+    modelCellText.split('\n').forEach(function(line) {
+      line = line.trim();
+      if (!line) return;
+      var parts = line.split('*');
+      var model = (parts[0] || '').trim();
+      var qty = parseInt(parts[1]) || 1;
+      if (!model) return;
+      var pr = _pipeImportLookupPrice(model, existingItems);
+      items.push({ model: model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
+    });
+  } else {
+    _PIPE_MODEL_KEYS.forEach(function(m) {
+      var qty = parseInt(_pipeCol(c, colMap, m.key)) || 0;
+      if (qty > 0) {
+        var pr = _pipeImportLookupPrice(m.model, existingItems);
+        items.push({ model: m.model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
+      }
+    });
+  }
+  return items;
+}
+
 // key สำหรับ match duplicate: projectName + endUserTH composite
 // ใช้ทั้งคู่เพื่อให้โครงการชื่อเดียวกันแต่ endUser ต่างกันไม่ถูก merge กัน
 function _pipeImportKey(projectName, endUserTH, dealerId) {
@@ -5750,9 +5781,13 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
+  // สำคัญ: ต้องแปลงแถวไฟล์เป็น items ผ่าน _pipeResolveItemsFromRow ตัวเดียวกับที่ commit ใช้จริง (ไม่ใช่อ่าน
+  // คอลัมน์ Qty สรุปตรงๆ) — ไม่งั้นถ้าคอลัมน์ Model กับคอลัมน์ Qty สรุปในไฟล์ไม่ตรงกัน (เจอจริง: บางชีทกรอกแค่
+  // Model ไม่กรอกคอลัมน์ Qty สรุปคู่กัน) diff จะเจอ "เปลี่ยน" ค้างไปเรื่อยๆ ทุกครั้งที่ import ไม่มีวันหาย
+  var importG = _pipeModelQtyByGroup(_pipeResolveItemsFromRow(c, colMap, _ei));
   for (var mi = 0; mi < _PIPE_MODEL_KEYS.length; mi++) {
     var mc = _PIPE_MODEL_KEYS[mi];
-    var importQty = parseInt(_pipeCol(c, colMap, mc.key)) || 0;
+    var importQty = importG[mc.gKey] || 0;
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) return 'changed';
   }
@@ -5813,8 +5848,9 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   });
   var _ei2 = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei2);
+  var importG2 = _pipeModelQtyByGroup(_pipeResolveItemsFromRow(c, colMap, _ei2));
   _PIPE_MODEL_KEYS.forEach(function(mc) {
-    var importQty = parseInt(_pipeCol(c, colMap, mc.key)) || 0;
+    var importQty = importG2[mc.gKey] || 0;
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) diffs.push({ label: mc.model + ' (qty)', old: String(existQty), newVal: String(importQty) });
   });
@@ -6407,37 +6443,9 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       ? _pipeCol(c, colMap, 'projectId').trim()
       : (existing ? (existing.projectId || '') : '');
 
-    // ใช้คอลัมน์ Qty สรุปต่อรุ่น (M3M Qty./M4T Qty./.../Dock) เป็นแหล่งหลักเสมอ — คอลัมน์เหล่านี้คือตัวเลขที่
-    // ทีมกรอก/แก้ไขตรงๆ ในชีท เชื่อถือได้กว่าคอลัมน์ Model ซึ่งเป็นแค่ข้อความสรุปรูปแบบ "ชื่อ*จำนวน" ที่แอป
-    // export ออกมาเอง — ถ้าใช้ Model เป็นหลักแล้ว 2 แหล่งนี้ในชีทเดียวกันไม่ตรงกัน (เช่น มีคนแก้ตัวเลขในคอลัมน์
-    // Qty โดยตรงแต่ไม่ได้ไปแก้คอลัมน์ Model ตาม) จะเจอ diff โผล่ซ้ำไปซ้ำมาทุกครั้งที่ import แม้จะเป็นไฟล์
-    // เดิม เพราะรอบ commit ใช้ Model แต่รอบเทียบ diff ใช้ Qty คนละแหล่งกัน — fallback ไปอ่านคอลัมน์ Model
-    // เฉพาะกรณีคอลัมน์ Qty ทั้งหมดว่างเปล่า/เป็น 0 หมดเท่านั้น (ไฟล์เก่าที่ไม่มีคอลัมน์ Qty สรุปเลย)
-    var items = [];
-    var qtyTotal = 0;
-    _PIPE_MODEL_KEYS.forEach(function(m) {
-      var qty = parseInt(_pipeCol(c, colMap, m.key)) || 0;
-      qtyTotal += qty;
-      if (qty > 0) {
-        var pr = _pipeImportLookupPrice(m.model, existingItems);
-        items.push({ model: m.model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
-      }
-    });
-    if (!qtyTotal) {
-      var modelCellText = _pipeCol(c, colMap, 'model').trim();
-      if (modelCellText) {
-        modelCellText.split('\n').forEach(function(line) {
-          line = line.trim();
-          if (!line) return;
-          var parts = line.split('*');
-          var model = (parts[0] || '').trim();
-          var qty = parseInt(parts[1]) || 1;
-          if (!model) return;
-          var pr = _pipeImportLookupPrice(model, existingItems);
-          items.push({ model: model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
-        });
-      }
-    }
+    // ใช้ตัวแปลงเดียวกับที่ diff/state ใช้เทียบ (_pipeResolveItemsFromRow) — ต้องเป็นแหล่งเดียวกันเป๊ะ
+    // ไม่งั้นจะเจอ diff โผล่ซ้ำไปซ้ำมาไม่มีวันหายเหมือนที่เจอมา (ดูคอมเมนต์ที่ตัวฟังก์ชัน)
+    var items = _pipeResolveItemsFromRow(c, colMap, existingItems);
 
     var statusRaw = _pipeCol(c, colMap, 'status').trim();
     var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
