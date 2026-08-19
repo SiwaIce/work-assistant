@@ -1205,6 +1205,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="showPipeExportLogFilterM(\'csv\')">📤 CSV</button>' +
     '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsx\')">📤 xlsx</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
+    '<button class="btn bo" onclick="showPipeImportDateAuditM()" title="หา Log ที่อาจได้วันที่ผิดจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่ log เก่าที่ import ไปแล้วยังค้างวันที่ผิดอยู่)">🔍 เช็ค Log วันที่ผิด</button>' +
     (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
@@ -2201,6 +2202,59 @@ function copyPipeRow(pipeId, excludeTypes) {
   // ใช้คอลัมน์ชุดเดียวกับ CSV/xlsx export (PIPE_SHEET_HEADERS) เพื่อให้วางใน Google Sheets ตรงหัวตารางเป๊ะ
   var tsv = _pipeRowFields(p, excludeTypes).join('\t');
   copyText(tsv, '📋 Copy Pipeline Row');
+}
+
+// ================================================================
+// ตรวจหา pipeLog ที่ "อาจ" ได้วันที่ผิดจากบั๊ก import เดิม (ก่อนแก้ 2026-08-19) — ตอนนั้นถ้าคอลัมน์ Update
+// มีข้อความใหม่ที่ระบบยังไม่เคยเห็น จะตัดวันที่นำหน้า (เช่น "18/08/26") ทิ้งไปเฉยๆ แล้วสร้าง log ใหม่โดยใช้
+// Register Date ของโครงการแทน — เดา pattern จาก: log ประเภทหมายเหตุ (note, ชนิดที่ import สร้างเสมอ) ที่
+// วันที่ตรงกับ Register Date ของโครงการเป๊ะ (เคสบังเอิญพิมพ์โน้ตวันเดียวกับวันลงทะเบียนจริงๆ ก็มีได้แต่น้อย
+// ให้ผู้ใช้ตรวจสอบทีละรายการเอง ไม่ใช่ auto-fix เพราะไม่รู้วันที่ถูกต้องจริงๆ)
+// ================================================================
+var _pipeAuditCandidates = [];
+function showPipeImportDateAuditM() {
+  var allPipes = ST.getAll('pipeline');
+  var candidates = [];
+  allPipes.forEach(function(p) {
+    if (!p.registerDate) return;
+    ST.pipeLogsByPipe(p.id).forEach(function(l) {
+      if (l.type === 'note' && l.date === p.registerDate) candidates.push({ pipe: p, log: l });
+    });
+  });
+  candidates.sort(function(a, b) { return (b.log.created || '').localeCompare(a.log.created || ''); });
+  _pipeAuditCandidates = candidates;
+
+  var h = '<div style="max-width:640px">';
+  h += '<div class="hint" style="margin-bottom:10px">เช็คคร่าวๆ จาก pattern ของบั๊กเดิม — ไม่ใช่ทุกรายการจะผิดจริง (บางอันอาจบังเอิญพิมพ์โน้ตวันเดียวกับวันลงทะเบียนจริงๆ) ต้องเข้าไปดูทีละรายการแล้วแก้วันที่ให้ถูกต้องเอง (ระบบไม่รู้วันที่ที่ถูกต้อง ต้องเทียบกับชีทต้นฉบับเอง)</div>';
+  if (!candidates.length) {
+    h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px;color:var(--accent)">พบ ' + candidates.length + ' รายการที่เข้าข่าย</div>';
+    h += '<div style="max-height:60vh;overflow-y:auto">';
+    candidates.forEach(function(c, idx) {
+      var p = c.pipe, l = c.log;
+      h += '<div class="li" style="display:block;cursor:default">';
+      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+      h += '<div class="ls" style="margin:4px 0">📝 "' + sanitize(l.content || '') + '" — วันที่ที่บันทึกไว้: ' + fD(l.date) + ' (= Register Date ของโครงการ)</div>';
+      h += '<div style="display:flex;gap:6px;margin-top:4px">';
+      h += '<button class="btn btn-xs bo" onclick="_pipeAuditFixDate(' + idx + ')">✏️ แก้วันที่</button>';
+      h += '<button class="btn btn-xs bo" onclick="_pipeAuditGoto(' + idx + ')">📋 ดูโครงการ</button>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  openM('🔍 เช็ค Log ที่อาจได้วันที่ผิดจาก Import', h);
+}
+function _pipeAuditFixDate(idx) {
+  var c = _pipeAuditCandidates[idx]; if (!c) return;
+  closeMForce();
+  editPipelineLog(c.log.id, c.pipe.id, c.log.content || '', c.log.type, c.log.date);
+}
+function _pipeAuditGoto(idx) {
+  var c = _pipeAuditCandidates[idx]; if (!c) return;
+  closeMForce();
+  go('pipeDetail', { pipeId: c.pipe.id });
 }
 
 // ================================================================
