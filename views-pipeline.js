@@ -6407,29 +6407,36 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       ? _pipeCol(c, colMap, 'projectId').trim()
       : (existing ? (existing.projectId || '') : '');
 
-    // คอลัมน์ Model เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
-    // fallback ไปอ่าน 6 คอลัมน์ Qty สรุปกลุ่ม (ชื่อกลุ่มทั่วไป) เฉพาะกรณีคอลัมน์ Model ว่าง เช่น ไฟล์เก่า/ทีมแก้แต่ตัวเลขสรุปในชีต
+    // ใช้คอลัมน์ Qty สรุปต่อรุ่น (M3M Qty./M4T Qty./.../Dock) เป็นแหล่งหลักเสมอ — คอลัมน์เหล่านี้คือตัวเลขที่
+    // ทีมกรอก/แก้ไขตรงๆ ในชีท เชื่อถือได้กว่าคอลัมน์ Model ซึ่งเป็นแค่ข้อความสรุปรูปแบบ "ชื่อ*จำนวน" ที่แอป
+    // export ออกมาเอง — ถ้าใช้ Model เป็นหลักแล้ว 2 แหล่งนี้ในชีทเดียวกันไม่ตรงกัน (เช่น มีคนแก้ตัวเลขในคอลัมน์
+    // Qty โดยตรงแต่ไม่ได้ไปแก้คอลัมน์ Model ตาม) จะเจอ diff โผล่ซ้ำไปซ้ำมาทุกครั้งที่ import แม้จะเป็นไฟล์
+    // เดิม เพราะรอบ commit ใช้ Model แต่รอบเทียบ diff ใช้ Qty คนละแหล่งกัน — fallback ไปอ่านคอลัมน์ Model
+    // เฉพาะกรณีคอลัมน์ Qty ทั้งหมดว่างเปล่า/เป็น 0 หมดเท่านั้น (ไฟล์เก่าที่ไม่มีคอลัมน์ Qty สรุปเลย)
     var items = [];
-    var modelCellText = _pipeCol(c, colMap, 'model').trim();
-    if (modelCellText) {
-      modelCellText.split('\n').forEach(function(line) {
-        line = line.trim();
-        if (!line) return;
-        var parts = line.split('*');
-        var model = (parts[0] || '').trim();
-        var qty = parseInt(parts[1]) || 1;
-        if (!model) return;
-        var pr = _pipeImportLookupPrice(model, existingItems);
-        items.push({ model: model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
-      });
-    } else {
-      _PIPE_MODEL_KEYS.forEach(function(m) {
-        var qty = parseInt(_pipeCol(c, colMap, m.key)) || 0;
-        if (qty > 0) {
-          var pr = _pipeImportLookupPrice(m.model, existingItems);
-          items.push({ model: m.model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
-        }
-      });
+    var qtyTotal = 0;
+    _PIPE_MODEL_KEYS.forEach(function(m) {
+      var qty = parseInt(_pipeCol(c, colMap, m.key)) || 0;
+      qtyTotal += qty;
+      if (qty > 0) {
+        var pr = _pipeImportLookupPrice(m.model, existingItems);
+        items.push({ model: m.model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
+      }
+    });
+    if (!qtyTotal) {
+      var modelCellText = _pipeCol(c, colMap, 'model').trim();
+      if (modelCellText) {
+        modelCellText.split('\n').forEach(function(line) {
+          line = line.trim();
+          if (!line) return;
+          var parts = line.split('*');
+          var model = (parts[0] || '').trim();
+          var qty = parseInt(parts[1]) || 1;
+          if (!model) return;
+          var pr = _pipeImportLookupPrice(model, existingItems);
+          items.push({ model: model, qty: qty, price: pr.price, total: qty * pr.price, sku: pr.sku });
+        });
+      }
     }
 
     var statusRaw = _pipeCol(c, colMap, 'status').trim();
