@@ -5680,7 +5680,6 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
   var textPairs = [
-    [(existing.projectId || ''),          _pipeCol(c, colMap, 'projectId')],
     [(existing.projectName || ''),        _pipeCol(c, colMap, 'projectName')],
     [(existing.endUserTH || ''),          _pipeCol(c, colMap, 'endUserTH')],
     [(existing.endUserEN || ''),          _pipeCol(c, colMap, 'endUserEN')],
@@ -5699,7 +5698,12 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   if ((existing.dealerId || '') !== (dealer ? dealer.id : '')) return 'changed';
   if ((existing.status || '') !== status) return 'changed';
   if (!!existing.recurring !== (_pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes')) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue')))  > 0.001) return 'changed';
+  // Project ID / Project revenue ไม่ได้อยู่ในคอลัมน์ Sheet มาตรฐานแล้ว (ตัดออกจาก export ตั้งแต่ 2026-08-19
+  // แต่ยังเก็บ field ไว้ใช้ในแอปตามปกติ) — ถ้าไฟล์ที่ import ไม่มีคอลัมน์นี้เลย ต้องไม่เทียบ/ไม่แตะค่าเดิม
+  // ไม่งั้นทุกโครงการที่เคยมีค่าจะโดน flag ว่า "เปลี่ยน" (กลายเป็นค่าว่าง/0) ทุกครั้งที่ import ทั้งที่จริงๆ
+  // ไม่มีอะไรเปลี่ยนเลย — เทียบเฉพาะตอนไฟล์มีคอลัมน์นี้จริงๆ เท่านั้น
+  if (colMap && colMap.hasOwnProperty('projectId') && (existing.projectId || '') !== _pipeNormText(_pipeCol(c, colMap, 'projectId'))) return 'changed';
+  if (colMap && colMap.hasOwnProperty('projectRevenue') && Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'))) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount'))) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(_pipeCol(c, colMap, 'realAmount'))) > 0.001) return 'changed';
   var impBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
@@ -5728,7 +5732,6 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   if (!status) status = 'initial';
   var pairs = [
     { label: 'Row No.',         old: _pipeNormText(existing.rowNo),             newVal: _pipeNormText(_pipeCol(c, colMap, 'rowNo')) },
-    { label: 'Project ID',      old: _pipeNormText(existing.projectId),         newVal: _pipeNormText(_pipeCol(c, colMap, 'projectId')) },
     { label: 'Project Name',    old: _pipeNormText(existing.projectName),      newVal: _pipeNormText(_pipeCol(c, colMap, 'projectName')) },
     { label: 'End User (TH)',   old: _pipeNormText(existing.endUserTH),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserTH')) },
     { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserEN')) },
@@ -5744,12 +5747,21 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     { label: 'Recurring',       old: String(!!existing.recurring),              newVal: String(_pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes') },
   ];
   var numPairs = [
-    { label: 'Project Revenue', oldN: _pipeNormNum(existing.projectRevenue), newN: _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue')) },
     { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount')) },
     { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(_pipeCol(c, colMap, 'realAmount')) },
     { label: 'Project POS',     oldN: _pipeNormNum(existing.projectPOS),      newN: _pipeNormNum(_pipeCol(c, colMap, 'projectPOS')) },
   ];
   var diffs = pairs.filter(function(p) { return p.old !== p.newVal; });
+  // Project ID / Project revenue: เทียบเฉพาะตอนไฟล์มีคอลัมน์นี้จริงๆ (ดูคอมเมนต์ที่ _pipeImportState) —
+  // ไม่งั้นทุกโครงการที่เคยมีค่าจะโดน flag "เปลี่ยน" ทุกครั้งเพราะคอลัมน์นี้ไม่อยู่ในชีทมาตรฐานแล้ว
+  if (colMap && colMap.hasOwnProperty('projectId')) {
+    var newPid = _pipeNormText(_pipeCol(c, colMap, 'projectId'));
+    if (_pipeNormText(existing.projectId) !== newPid) diffs.push({ label: 'Project ID', old: _pipeNormText(existing.projectId), newVal: newPid });
+  }
+  if (colMap && colMap.hasOwnProperty('projectRevenue')) {
+    var newRev = _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'));
+    if (Math.abs(_pipeNormNum(existing.projectRevenue) - newRev) > 0.001) diffs.push({ label: 'Project Revenue', old: fmtMoney(_pipeNormNum(existing.projectRevenue)) || '0', newVal: fmtMoney(newRev) || '0' });
+  }
   numPairs.forEach(function(p) {
     if (Math.abs(p.oldN - p.newN) > 0.001) diffs.push({ label: p.label, old: fmtMoney(p.oldN) || '0', newVal: fmtMoney(p.newN) || '0' });
   });
@@ -6345,7 +6357,6 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
   var dealerSaleSync = {};
   var added = 0, updated = 0, skipped = 0;
   rows.forEach(function(c, idx) {
-    var projectId   = _pipeCol(c, colMap, 'projectId').trim();
     var projectName = _pipeCol(c, colMap, 'projectName').trim();
     var endUserTH   = _pipeCol(c, colMap, 'endUserTH').trim();
     if (!projectName && !endUserTH) { skipped++; return; }
@@ -6353,6 +6364,11 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     var dealer = lockDealer || dealerByName[(_pipeCol(c, colMap, 'dealerName').trim()).toLowerCase()];
     var existing = _pipeFindExistingForImport(_pipeCol(c, colMap, 'rowNo'), projectName, endUserTH, dealer ? dealer.id : '', pipeByRowNo, pipeByKey);
     var existingItems = existing ? existing.items : null;
+    // Project ID ไม่ได้อยู่ในคอลัมน์ Sheet มาตรฐานแล้ว (ตัดออกจาก export 2026-08-19 แต่ field ยังใช้ในแอป
+    // ตามปกติ) — ถ้าไฟล์ไม่มีคอลัมน์นี้ ต้องคงค่าเดิมไว้ ไม่ใช่เขียนทับเป็นค่าว่าง (ดูคอมเมนต์ที่ _pipeImportState)
+    var projectId = colMap && colMap.hasOwnProperty('projectId')
+      ? _pipeCol(c, colMap, 'projectId').trim()
+      : (existing ? (existing.projectId || '') : '');
 
     // คอลัมน์ Model เก็บชื่อเต็ม + จำนวนจริง ("ชื่อ*จำนวน" ต่อบรรทัด) — ใช้เป็นแหล่งหลักเสมอถ้ามีข้อมูล
     // fallback ไปอ่าน 6 คอลัมน์ Qty สรุปกลุ่ม (ชื่อกลุ่มทั่วไป) เฉพาะกรณีคอลัมน์ Model ว่าง เช่น ไฟล์เก่า/ทีมแก้แต่ตัวเลขสรุปในชีต
@@ -6399,7 +6415,10 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       unitType: _pipeCol(c, colMap, 'unitType').trim(),
       dealerId: dealer ? dealer.id : '',
       djiDealer: _pipeCol(c, colMap, 'djiDealer').trim(),
-      projectRevenue: parseFloat(_pipeCol(c, colMap, 'projectRevenue').replace(/,/g, '')) || 0,
+      // เหตุผลเดียวกับ projectId ด้านบน — ไฟล์ไม่มีคอลัมน์นี้แล้ว ต้องคงค่าเดิมไว้ ไม่เขียนทับเป็น 0
+      projectRevenue: colMap && colMap.hasOwnProperty('projectRevenue')
+        ? (parseFloat(_pipeCol(c, colMap, 'projectRevenue').replace(/,/g, '')) || 0)
+        : (existing ? (Number(existing.projectRevenue) || 0) : 0),
       items: items,
       model: items[0] ? items[0].model : '',
       modelQty: items[0] ? items[0].qty : 1,
