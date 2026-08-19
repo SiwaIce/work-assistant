@@ -75,6 +75,7 @@
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('main')">📌 หลัก <span class="sg-chev" id="sgc-main">▾</span></div>
 <div class="sg-items" id="sgi-main">
   <div class="nl" data-v="today" onclick="go('today')">📌 วันนี้</div>
+  <div class="nl" data-v="salesOverview" onclick="go('salesOverview')" title="สรุปยอดขายภาพรวม เลือกดูได้ทั้งบริษัท/เฉพาะ Dealer/เฉพาะ Sales รายเดือน/ไตรมาส/ครึ่งปี">📊 ภาพรวมยอดขาย</div>
   <div class="nl" data-v="dealers" onclick="go('dealers')">🏪 Dealers</div>
   <div class="nl" data-v="pipeline" onclick="go('pipeline')" title="Pipeline ของตัวเอง — จัดการโปรเจกต์ที่ตัวเองดูแล">📊 Pipeline</div>
   <div class="nl" data-v="pipelineTeam" onclick="go('pipelineTeam')" title="ดูอย่างเดียว — รวม Pipeline ของทุกคนในทีมมาแสดงด้วยกัน">📊 Pipeline รวมทีม</div>
@@ -334,6 +335,7 @@ var auth = firebase.auth();
 <script src="audit.js"></script>
 <script src="views-kpi.js"></script>
 <script src="views-kpiplan.js"></script>
+<script src="views-salesoverview.js"></script>
 <script src="views-so.js"></script>
 <script src="views-stock.js"></script>
 <script src="app.js"></script>

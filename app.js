@@ -771,6 +771,7 @@ var R = {
   pipelineCompare: rPipelineCompare,
   kpiCompanyPlan: rKpiCompanyPlan,
   kpiImprovementPlan: rKpiImprovementPlan,
+  salesOverview: rSalesOverview,
   contactLogs: rContactLogs,
   pipeline: rPipeline,
   pipelineTeam: rPipelineTeam,
@@ -1730,6 +1731,7 @@ function switchTheme() {
 // ================================================================
 var APP_MENU_REGISTRY = [
   {id: 'today', icon: '📌', name: 'วันนี้'},
+  {id: 'salesOverview', icon: '📊', name: 'ภาพรวมยอดขาย'},
   {id: 'dealers', icon: '🏪', name: 'Dealers'},
   {id: 'salesRepDashboard', icon: '👤', name: 'Dashboard รายเซล'},
   {id: 'pipeline', icon: '📊', name: 'Pipeline'},
@@ -2388,7 +2390,7 @@ function renderMbHome() {
 // แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
 // แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
 var MB_NAV_ROUTE_GROUPS = {
-  today: ['today'],
+  today: ['today', 'salesOverview'],
   dealers: ['dealers', 'dealerDetail', 'salesRepDashboard'],
   pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
   tasks: ['tasks', 'taskDetail']

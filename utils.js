@@ -1104,7 +1104,7 @@ function computeKpiCompanyPlan(dealerId, cfg) {
 
   // รายละเอียดสำหรับ modal เจาะลึก (กดจาก stat card) — เอามาจาก stats.activePipes/wonPipes ตรงๆ ไม่คำนวณซ้ำ
   var openPipelinesList = stats.activePipes.map(function(p) {
-    return { id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', forecastAmount: Number(p.forecastAmount) || 0, pos: p._pos || 0 };
+    return { id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', forecastAmount: Number(p.forecastAmount) || 0, pos: p._pos || 0, expectedCloseDate: p.expectedCloseDate || '' };
   }).sort(function(a, b) { return b.forecastAmount - a.forecastAmount; });
   var wonPipelinesList = stats.wonPipes.filter(function(p) {
     return _mondayHalf(p.expectedCloseDate || p.registerDate) === mm.half;
@@ -1127,6 +1127,171 @@ function computeKpiCompanyPlanAll(cfg) {
   var dealers = scopedDealers().filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
   return dealers.map(function(d) { return computeKpiCompanyPlan(d.id, cfg); })
     .sort(function(a, b) { return (b.gap) - (a.gap); });
+}
+
+// ================================================================
+// SALES OVERVIEW — หน้า "📊 ภาพรวมยอดขาย" ต่อยอดจาก computeKpiCompanyPlan ตรงๆ ไม่คำนวณซ้ำ
+// ต่างจาก computeKpiCompanyPlanAll ตรงที่ไม่กรองแค่ระดับ S/A/B (ภาพรวมทั้งบริษัทต้องเห็นทุก Dealer)
+// และรองรับเลือกดูเป็นรายเดือน/ไตรมาส/ครึ่งปี โดยตัด index จาก monthly[] ของแต่ละบริษัท (ละเอียดสุดที่มีอยู่แล้ว)
+// หมายเหตุ: Pipeline (จำนวน/มูลค่าดิบ/ถ่วง POS) เป็นภาพรวม ณ ตอนนี้เสมอ ไม่ scale ตามช่วงเวลาที่เลือก เพราะเป็น
+// สแนปช็อตปัจจุบัน ไม่ใช่ยอดสะสมของแต่ละช่วง (ต่างจาก SIS/DJI/Project/Runrate ที่เป็นยอดสะสมตามช่วงเวลาจริง)
+// ================================================================
+function salesOverviewScopeDealers(scope, subValue) {
+  var all = scopedDealers();
+  if (scope === 'dealer') return all.filter(function(d) { return d.id === subValue; });
+  if (scope === 'sales') return all.filter(function(d) { return (d.saleName || '') === subValue; });
+  return all;
+}
+
+// คืน index (0-5) ของ monthly[] ที่จะรวม ตาม period — เดือน=เดือนปัจจุบันเดือนเดียว, ไตรมาส=3 เดือนของไตรมาส
+// ปัจจุบัน (Q1/Q2 อยู่ H1, Q3/Q4 อยู่ H2), ครึ่งปี=ทั้ง 6 เดือนของ H ปัจจุบัน
+function salesOverviewMonthIdx(period) {
+  var mm = kpiCompanyPlanMonths();
+  var curIdx = mm.months.indexOf(fcMonthKey(0));
+  if (curIdx === -1) curIdx = 0;
+  if (period === 'month') return [curIdx];
+  if (period === 'quarter') { var qStart = curIdx < 3 ? 0 : 3; return [qStart, qStart + 1, qStart + 2]; }
+  return [0, 1, 2, 3, 4, 5];
+}
+
+function salesOverviewSaleNames() {
+  var members = (typeof getSalesMembers === 'function' ? getSalesMembers() : []).map(function(m) { return m.name; }).filter(Boolean);
+  if (members.length) return members;
+  var set = {};
+  scopedDealers().forEach(function(d) { if (d.saleName) set[d.saleName] = true; });
+  return Object.keys(set).sort();
+}
+
+function computeSalesOverview(scope, subValue, period) {
+  var cfg = getConfig();
+  var dealers = salesOverviewScopeDealers(scope, subValue);
+  var dealerIdSet = {}; dealers.forEach(function(d) { dealerIdSet[d.id] = true; });
+  var plans = dealers.map(function(d) { return computeKpiCompanyPlan(d.id, cfg); });
+  var mm = kpiCompanyPlanMonths();
+  var idxs = salesOverviewMonthIdx(period);
+  var monthKeys = idxs.map(function(i) { return mm.months[i]; });
+  var rangeStart = monthKeys.length ? monthKeys[0] + '-01' : _td();
+
+  var sis = 0, djiActual = 0, projectTotal = 0, runrateTotal = 0, targetTotal = 0;
+  var pipeWeighted = 0, pipelineRawTotal = 0, pipeCount = 0;
+  plans.forEach(function(p) {
+    idxs.forEach(function(i) {
+      var m = p.monthly[i]; if (!m) return;
+      sis += m.sisActual;
+      if (!m.isFuture) djiActual += m.project;
+      projectTotal += m.project; runrateTotal += m.runrate;
+    });
+    targetTotal += p.target * (idxs.length / 6);
+    pipeWeighted += p.pipeWeighted;
+    pipelineRawTotal += p.pipelineRawTotal;
+    pipeCount += p.openPipelinesList.length;
+  });
+  var winrate = pipelineRawTotal > 0 ? Math.round(pipeWeighted / pipelineRawTotal * 100) : 0;
+
+  var soCount = ST.filter('salesOrders', function(s) { return dealerIdSet[s.dealerId] && s.createdAt && s.createdAt.slice(0, 10) >= rangeStart; }).length;
+  var activeDealerCount = plans.filter(function(p) { return idxs.some(function(i) { return p.monthly[i] && p.monthly[i].sisActual > 0; }); }).length;
+  var newDealerCount = dealers.filter(function(d) { return d.created && d.created.slice(0, 10) >= rangeStart; }).length;
+  var riskDealerCount = plans.filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; }).length;
+
+  return {
+    scope: scope, subValue: subValue, period: period, dealers: dealers, plans: plans, mm: mm, idxs: idxs, monthKeys: monthKeys,
+    sis: sis, dji: djiActual, so: soCount, activeDealer: activeDealerCount, newDealer: newDealerCount, riskDealer: riskDealerCount,
+    pipeCount: pipeCount, pipeRaw: pipelineRawTotal, pipeWeighted: pipeWeighted, winrate: winrate,
+    project: projectTotal, runrate: runrateTotal, target: targetTotal
+  };
+}
+
+function _soItemCategory(item) {
+  var p = item.sku && typeof getProductBySku === 'function' ? getProductBySku(item.sku) : null;
+  if (!p && item.model && typeof getAllProducts === 'function') {
+    p = getAllProducts().find(function(x) { return x.model === item.model || x.name === item.model; });
+  }
+  return p ? (p.category || 'other') : 'other';
+}
+
+// สินค้าขายดี — เรียงตามยอดขาย(บาท) หรือจำนวน(เครื่อง) กรองตามกลุ่มสินค้าได้ — จาก Sales Order items ในขอบเขต+ช่วงเวลาที่เลือก
+function salesOverviewTopProducts(ov, mode, category) {
+  var dealerIdSet = {}; ov.dealers.forEach(function(d) { dealerIdSet[d.id] = true; });
+  var byModel = {};
+  ST.getAll('salesOrders').forEach(function(s) {
+    if (!dealerIdSet[s.dealerId]) return;
+    var mk = (s.createdAt || '').slice(0, 7);
+    if (ov.monthKeys.indexOf(mk) === -1) return;
+    (s.items || []).forEach(function(it) {
+      var cat = _soItemCategory(it);
+      if (category !== 'all' && cat !== category) return;
+      var key = it.model || it.sku || '-';
+      if (!byModel[key]) byModel[key] = { nm: key, cat: cat, value: 0, qty: 0 };
+      byModel[key].value += (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+      byModel[key].qty += Number(it.qty) || 0;
+    });
+  });
+  var list = Object.keys(byModel).map(function(k) { return byModel[k]; });
+  list.sort(function(a, b) { return mode === 'qty' ? b.qty - a.qty : b.value - a.value; });
+  return list.slice(0, 5);
+}
+
+// Dealer ยอดขายสูงสุด — แท่งสัดส่วน SIS จริง(ช่วงที่เลือก) / Pipeline ถ่วง POS(สแนปช็อตปัจจุบัน) / เสนอราคาดิบที่เหลือ
+function salesOverviewTopDealers(ov) {
+  var list = ov.plans.map(function(p) {
+    var sisAmt = ov.idxs.reduce(function(s, i) { return s + (p.monthly[i] ? p.monthly[i].sisActual : 0); }, 0);
+    var pipeAmt = p.pipeWeighted;
+    var quoteAmt = Math.max(0, p.pipelineRawTotal - p.pipeWeighted);
+    var tot = sisAmt + pipeAmt + quoteAmt;
+    return {
+      nm: p.dealer.name, id: p.dealer.id, tot: tot,
+      sis: tot ? Math.round(sisAmt / tot * 100) : 0, pipe: tot ? Math.round(pipeAmt / tot * 100) : 0, quote: tot ? Math.round(quoteAmt / tot * 100) : 0
+    };
+  }).filter(function(x) { return x.tot > 0; });
+  list.sort(function(a, b) { return b.tot - a.tot; });
+  return list;
+}
+
+// โครงการเด่น — รวม openPipelinesList ของทุกบริษัทในขอบเขต เรียงตามยอด หรือตามเดือนคาด Bidding/ปิดได้
+function salesOverviewHighlightProjects(ov) {
+  var list = [];
+  ov.plans.forEach(function(p) {
+    p.openPipelinesList.forEach(function(pp) {
+      list.push({ id: pp.id, nm: pp.projectName, dealer: p.dealer.name, amt: pp.forecastAmount, pos: pp.pos, closeDate: pp.expectedCloseDate || '' });
+    });
+  });
+  return list;
+}
+
+// แนวโน้มยอดขาย SIS รายเดือน — ปีนี้เทียบปีก่อน ตามชุดเดือนของครึ่งปีปัจจุบัน (kpiCompanyPlanMonths) รวมทุก Dealer ในขอบเขต
+function salesOverviewTrend(ov) {
+  var curYear = parseInt(ov.mm.months[0].slice(0, 4), 10);
+  var cur = ov.mm.months.map(function() { return 0; });
+  var last = ov.mm.months.map(function() { return 0; });
+  ov.dealers.forEach(function(d) {
+    var revCur = getSisRevenueForYear(d, String(curYear));
+    var revLast = getSisRevenueForYear(d, String(curYear - 1));
+    ov.mm.months.forEach(function(mk, i) {
+      var mo = parseInt(mk.slice(5, 7), 10);
+      cur[i] += Number(revCur.monthly[mo]) || 0;
+      last[i] += Number(revLast.monthly[mo]) || 0;
+    });
+  });
+  var curSum = cur.reduce(function(a, b) { return a + b; }, 0);
+  var lastSum = last.reduce(function(a, b) { return a + b; }, 0);
+  var yoy = lastSum > 0 ? Math.round((curSum - lastSum) / lastSum * 100) : (curSum > 0 ? 100 : 0);
+  return { months: ov.mm.months, cur: cur, last: last, yoy: yoy };
+}
+
+// Sales Performance — จัดกลุ่มตาม saleName ของ Dealer แต่ละบริษัท นับสถานะ (ถึงเป้าแล้ว/ต้องเร่ง/เสี่ยงสูง) จาก kpiPlanStatus เดิม
+function salesOverviewTeamPerf(ov) {
+  var byRep = {};
+  ov.plans.forEach(function(p) {
+    var rep = p.dealer.saleName || '(ไม่ระบุ)';
+    if (!byRep[rep]) byRep[rep] = { nm: rep, good: 0, warn: 0, bad: 0 };
+    var label = kpiPlanStatus(p).label;
+    if (label === 'ถึงเป้าแล้ว') byRep[rep].good++;
+    else if (label === 'ต้องเร่ง') byRep[rep].warn++;
+    else byRep[rep].bad++;
+  });
+  var list = Object.keys(byRep).map(function(k) { return byRep[k]; });
+  list.sort(function(a, b) { return (b.warn + b.bad) - (a.warn + a.bad); });
+  return list;
 }
 
 // ไตรมาสปฏิทินปัจจุบัน (Q1=ม.ค.-มี.ค. ฯลฯ) — ต่างจาก Thai Fiscal Year (thaiFYFromISO) ที่ใช้ที่อื่นในแอป
