@@ -5626,11 +5626,20 @@ function _pipeParseUpdateLine(line) {
   return { date: _pipeDateFromPaste(m[1]), content: m[2] };
 }
 
+// คืน { newLines: [{content,date},...], dateFixes: [{logId,oldDate,newDate,content},...] }
+// newLines = ข้อความที่ยังไม่เคยมี log เดิมเลย (เพิ่มเป็น log ใหม่)
+// dateFixes = ข้อความที่มี log เดิมอยู่แล้ว (เนื้อหาตรงกัน) แต่วันที่ในไฟล์ไม่ตรงกับวันที่ log เดิม — เช่น log
+// เดิมโดนบั๊กเก่า (ก่อนแก้ 2026-08-19) ใส่วันที่ผิดไว้ตอน import ครั้งก่อน — เพราะเดิม dedup เช็คแค่เนื้อหาซ้ำ
+// ไหม พอเนื้อหาตรงกันอยู่แล้วเลยข้ามไปเฉยๆ ไม่เคยแก้วันที่ที่ผิดให้เลย แก้ตรงนี้ให้ปรับวันที่ log เดิมแทนการ
+// สร้างซ้ำ (ไม่สร้าง log ใหม่ซ้อน)
 function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
   var logs = logsIndex ? (logsIndex[existing.id] || []) : ST.pipeLogsByPipe(existing.id);
-  var existingContents = logs.map(function(l) { return (l.content || '').trim(); });
-  var out = [];
-  var seen = {};
+  var byContent = {};
+  logs.forEach(function(l) { var k = (l.content || '').trim(); if (!byContent[k]) byContent[k] = l; });
+  var newLines = [];
+  var dateFixes = [];
+  var seenNew = {};
+  var seenFix = {};
   for (var u = 1; u <= 6; u++) {
     var raw = _pipeCol(c, colMap, 'update' + u).trim();
     if (!raw) continue;
@@ -5638,10 +5647,19 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
       line = line.trim();
       if (!line) return;
       var parsed = _pipeParseUpdateLine(line);
-      if (existingContents.indexOf(parsed.content) === -1 && !seen[parsed.content]) { seen[parsed.content] = true; out.push(parsed); }
+      var matchLog = byContent[parsed.content];
+      if (matchLog) {
+        if (parsed.date && matchLog.date !== parsed.date && !seenFix[matchLog.id]) {
+          seenFix[matchLog.id] = true;
+          dateFixes.push({ logId: matchLog.id, oldDate: matchLog.date, newDate: parsed.date, content: parsed.content });
+        }
+      } else if (!seenNew[parsed.content]) {
+        seenNew[parsed.content] = true;
+        newLines.push(parsed);
+      }
     });
   }
-  return out;
+  return { newLines: newLines, dateFixes: dateFixes };
 }
 
 function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
@@ -5684,7 +5702,8 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) return 'changed';
   }
-  if (_pipeImportNewUpdateLines(existing, c, colMap, logsIndex).length) return 'changed';
+  var updChg = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
+  if (updChg.newLines.length || updChg.dateFixes.length) return 'changed';
   return 'same';
 }
 
@@ -5737,9 +5756,16 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) diffs.push({ label: mc.model + ' (qty)', old: String(existQty), newVal: String(importQty) });
   });
-  var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
-  if (newUpdateLines.length) {
-    diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: newUpdateLines.map(function(l) { return l.content; }).join(' | ') });
+  var updChanges = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
+  if (updChanges.newLines.length) {
+    diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: updChanges.newLines.map(function(l) { return l.content; }).join(' | ') });
+  }
+  if (updChanges.dateFixes.length) {
+    diffs.push({
+      label: '📅 แก้วันที่ Update เดิม (เนื้อหาตรงกัน แต่วันที่ในไฟล์ไม่ตรงกับที่บันทึกไว้)',
+      old: updChanges.dateFixes.map(function(f) { return fD(f.oldDate); }).join(', '),
+      newVal: updChanges.dateFixes.map(function(f) { return fD(f.newDate); }).join(', ')
+    });
   }
   return diffs;
 }
@@ -6388,12 +6414,19 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     if (action === 'update' && existing) {
       // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
       // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
-      var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
+      var updChanges = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
       var pIdx = pipeIndexById[existing.id];
       allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
       updated++;
-      newUpdateLines.forEach(function(line) {
+      updChanges.newLines.forEach(function(line) {
         pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line.content, date: line.date || pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+      });
+      // แก้วันที่ log เดิมที่เนื้อหาตรงกับไฟล์อยู่แล้วแต่วันที่ไม่ตรง (เช่น โดนบั๊กเก่าใส่วันที่ผิดไว้ตอน
+      // import ครั้งก่อน) — ปรับวันที่ให้ตรง ไม่สร้าง log ซ้ำ
+      updChanges.dateFixes.forEach(function(fix) {
+        for (var li = 0; li < pipeLogs.length; li++) {
+          if (pipeLogs[li].id === fix.logId) { pipeLogs[li] = Object.assign({}, pipeLogs[li], { date: fix.newDate }); break; }
+        }
       });
     } else {
       var newPipeId = _pipeGenId();
