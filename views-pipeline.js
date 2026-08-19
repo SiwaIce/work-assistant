@@ -1723,10 +1723,17 @@ function _pipeRowFields(p, excludeTypes) {
   var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
   var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
   var g = _pipeModelQtyByGroup(items);
+  // โครงการปิดแล้ว (Win/Lost/Deliver) ไม่มี "เดือนคาดการณ์" ให้ forecast ต่อแล้ว — ใส่ "Done" แทนค่าที่คำนวณ
+  // จาก Bidding Date ในคอลัมน์ Forecast Month ให้ตรงกับที่ทีมพิมพ์เองในชีทตอนปิดงาน ส่วนคอลัมน์ month
+  // (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิดไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
+  var pipeClosed = pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver';
   var fields = [
     p.rowNo || '', fD(p.registerDate), p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock || '',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
-    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), _pipeForecastMonthNum(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
+    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate),
+    pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
+    pipeClosed ? '' : _pipeForecastMonthNum(p.biddingDate),
+    fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
   ];
   // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
   // คำนวณสดทุกครั้งตอน export เท่านั้น (ไม่แตะ ST.pipeLog จริง) — timeline ในแอปยังเห็นทุก log แยกรายการปกติ
