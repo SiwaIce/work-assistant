@@ -5634,12 +5634,20 @@ function _pipeParseUpdateLine(line) {
 // สร้างซ้ำ (ไม่สร้าง log ใหม่ซ้อน)
 function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
   var logs = logsIndex ? (logsIndex[existing.id] || []) : ST.pipeLogsByPipe(existing.id);
-  var byContent = {};
-  logs.forEach(function(l) { var k = (l.content || '').trim(); if (!byContent[k]) byContent[k] = l; });
+  // pool: content -> [log,...] ที่ยังไม่ถูกจับคู่ — เก็บเป็น "กอง" ไม่ใช่ log เดียวต่อ content เพราะข้อความ
+  // สั้นๆ ที่พิมพ์ซ้ำบ่อย (เช่น "ติดตามต่อ") มักมีหลาย log คนละวันที่ที่เนื้อหาเหมือนกันเป๊ะ ถ้าจับคู่แบบเดิม
+  // (content เดียว = log เดียว) บรรทัดที่ 2 ในไฟล์จะไปเทียบชนกับ log ตัวเดียวกับบรรทัดแรก แล้วโดน flag ว่า
+  // "วันที่ไม่ตรง" ทั้งที่จริงๆ ทั้งคู่ตรงกับ log คนละตัวอยู่แล้ว (บั๊กที่เจอจริงหลัง deploy — "import ไฟล์เดิม
+  // ซ้ำแล้วเจอ changed เต็มไปหมด") แก้ด้วยการ "หยิบแล้วตัดออกจากกอง" ทีละอัน กันจับคู่ตัวเดียวกันซ้ำ
+  var pool = {};
+  logs.forEach(function(l) {
+    var k = (l.content || '').trim();
+    if (!pool[k]) pool[k] = [];
+    pool[k].push(l);
+  });
   var newLines = [];
   var dateFixes = [];
   var seenNew = {};
-  var seenFix = {};
   for (var u = 1; u <= 6; u++) {
     var raw = _pipeCol(c, colMap, 'update' + u).trim();
     if (!raw) continue;
@@ -5647,14 +5655,19 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
       line = line.trim();
       if (!line) return;
       var parsed = _pipeParseUpdateLine(line);
-      var matchLog = byContent[parsed.content];
-      if (matchLog) {
-        if (parsed.date && matchLog.date !== parsed.date && !seenFix[matchLog.id]) {
-          seenFix[matchLog.id] = true;
-          dateFixes.push({ logId: matchLog.id, oldDate: matchLog.date, newDate: parsed.date, content: parsed.content });
+      var candidates = pool[parsed.content];
+      if (candidates && candidates.length) {
+        // เลือกตัวที่วันที่ตรงกันก่อนเสมอถ้ามี (match สมบูรณ์ ไม่ต้องแก้อะไร) ไม่มีค่อยหยิบตัวแรกมาเทียบ/แก้วันที่
+        var exactIdx = -1;
+        for (var i = 0; i < candidates.length; i++) { if (candidates[i].date === parsed.date) { exactIdx = i; break; } }
+        var pickIdx = exactIdx !== -1 ? exactIdx : 0;
+        var pick = candidates[pickIdx];
+        candidates.splice(pickIdx, 1);
+        if (parsed.date && pick.date !== parsed.date) {
+          dateFixes.push({ logId: pick.id, oldDate: pick.date, newDate: parsed.date, content: parsed.content });
         }
-      } else if (!seenNew[parsed.content]) {
-        seenNew[parsed.content] = true;
+      } else if (!seenNew[parsed.content + '||' + parsed.date]) {
+        seenNew[parsed.content + '||' + parsed.date] = true;
         newLines.push(parsed);
       }
     });
