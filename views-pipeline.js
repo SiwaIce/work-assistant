@@ -2932,6 +2932,32 @@ function _mondayFacetSelectHtml(containerId, fn, label, options) {
   h += '</select>';
   return h;
 }
+// การ์ดโครงการแบบมีสีสถานะ (ตามสี config.pipelineStatuses[].color) + ป้าย POS ไล่สีตามค่า
+// + ยอดถ่วงน้ำหนัก (มูลค่าโครงการ × POS%) ให้เห็นว่าจริงๆ นับเป็นยอดเท่าไหร่ ไม่ใช่มูลค่าเต็ม
+function _pipeLiHtml(p, cfg, opts) {
+  opts = opts || {};
+  var st = (cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {};
+  var stColor = st.color || '#64748b';
+  var pos = p._pos || 0;
+  var posCls = pos >= 70 ? 'pos-badge-good' : pos >= 30 ? 'pos-badge-warn' : 'pos-badge-bad';
+  var amt = Number(p.forecastAmount) || 0;
+  var weighted = amt * pos / 100;
+  var dataAttrs = (opts.showDealer ? ' data-dealer="' + (p.dealerId || '') + '"' : '') + ' data-status="' + sanitize(p.status || '') + '"';
+  return '<div class="li"' + dataAttrs + ' onclick="' + (opts.closeFirst ? 'closeMForce();' : '') + 'go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer">'
+    + '<div class="lm">'
+      + '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>'
+      + '<div class="ls" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px">'
+        + (opts.extraLabel ? sanitize(opts.extraLabel) + ' · ' : '')
+        + '<span class="status-badge" style="background:' + stColor + '22;color:' + stColor + '">' + sanitize(st.name || p.status || '') + '</span>'
+        + '<span class="pos-badge ' + posCls + '">POS ' + pos + '%</span>'
+      + '</div>'
+    + '</div>'
+    + '<div style="text-align:right;flex-shrink:0">'
+      + '<div style="font-size:.78rem;font-weight:600">฿' + fmtMoneyShort(amt) + '</div>'
+      + '<div style="font-size:.62rem;color:var(--text3,#64748b)">ถ่วง ฿' + fmtMoneyShort(weighted) + '</div>'
+    + '</div>'
+  + '</div>';
+}
 function mondayListMore(containerId) {
   var container = document.getElementById(containerId);
   if (!container) return;
@@ -3089,7 +3115,7 @@ function showPosBucketM(level) {
     if (d) dealerOpts[d.id] = d.name;
     var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
     statusOpts[p.status] = stName;
-    rows += '<div class="li" data-dealer="' + (p.dealerId || '') + '" data-status="' + sanitize(p.status || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(d ? d.name : '-') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    rows += _pipeLiHtml(p, cfg, { showDealer: true, closeFirst: true, extraLabel: d ? d.name : '-' });
   });
   if (!list.length) rows = '<div class="empty"><p>ไม่มีโครงการในกลุ่มนี้</p></div>';
   var facets = _mondayFacetSelectHtml('mondayPosBucketList', 'mondayListFilterDealer', '🏢 บริษัท', Object.keys(dealerOpts).map(function(id) { return { value: id, text: dealerOpts[id] }; }).sort(function(a, b) { return a.text.localeCompare(b.text, 'th'); })) +
@@ -3223,7 +3249,7 @@ function rMondayCompany(el) {
   if (s.activePipes.length > 10) h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ..." style="margin-bottom:8px" oninput="mondayListSearch(\'mondayCoProjectList\',this.value)"><div style="font-size:11px;color:var(--text2);margin-bottom:8px" id="mondayCoProjectListMeta"></div>';
   h += '<div id="mondayCoProjectList">';
   s.activePipes.slice().sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); }).forEach(function(p) {
-    h += '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div><div class="ls">' + sanitize(((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status || '') + ' · POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+    h += _pipeLiHtml(p, cfg, {});
   });
   h += '</div>';
   if (s.activePipes.length > 10) h += '<button type="button" class="btn bo btn-full" id="mondayCoProjectListMore" onclick="mondayListMore(\'mondayCoProjectList\')" style="margin-top:6px">⬇️ แสดงเพิ่ม</button>';
@@ -3252,7 +3278,7 @@ function showMondayHalfM(dealerId, half, source) {
       s.activePipes.forEach(function(p) {
         var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
         statusOpts[p.status] = stName;
-        openRows += '<div class="li" data-status="' + sanitize(p.status || '') + '" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" style="cursor:pointer"><div class="lm"><div class="lt">' + sanitize(p.projectName || '') + '</div><div class="ls">POS ' + (p._pos || 0) + '% · ฿' + fmtMoneyShort(Number(p.forecastAmount) || 0) + '</div></div></div>';
+        openRows += _pipeLiHtml(p, cfg, { closeFirst: true });
       });
       if (!s.activePipes.length) openRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
       var openFacets = _mondayFacetSelectHtml('mondayHalfOpenList', 'mondayListFilterStatus', '📌 สถานะ', Object.keys(statusOpts).map(function(id) { return { value: id, text: statusOpts[id] }; }));
