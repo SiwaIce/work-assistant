@@ -708,6 +708,11 @@ function go(v, p) {
     return;
   }
   if (S && S.view) {
+    // เก็บตำแหน่งเลื่อนหน้าจอปัจจุบันไว้กับ state ที่กำลังจะออกจากหน้านี้ — ตอนกด goBack() จะได้เลื่อนกลับไป
+    // จุดเดิมที่เคยดูอยู่ (เช่น เลื่อน list ลงมาแล้วกดเข้า detail) ไม่ใช่กระโดดกลับไปบนสุดของหน้าเสมอ
+    // ตรวจแล้ว: #ct/#main/body สูงขยายตามเนื้อหาเสมอ (ไม่มี internal overflow จริง) สกรอลจริงเกิดที่ระดับ
+    // window/document เท่านั้น — ใช้ window.scrollY ถูกต้องแล้ว
+    S._scrollY = window.scrollY || window.pageYOffset || 0;
     navHistory.push(JSON.parse(JSON.stringify(S)));
     if (navHistory.length > 30) navHistory.shift();
   }
@@ -728,6 +733,7 @@ function go(v, p) {
 function goBack() {
   var prev = navHistory.pop();
   if (!prev) return;
+  var scrollY = prev._scrollY || 0;
   S = prev;
   render();
   var navs = document.querySelectorAll('[data-v]');
@@ -735,7 +741,8 @@ function goBack() {
     if (navs[i].dataset.v === S.view) navs[i].classList.add('act');
     else navs[i].classList.remove('act');
   }
-  window.scrollTo(0, 0);
+  // รอเฟรมถัดไปก่อนเลื่อน กัน scrollTo ทำงานก่อน DOM ที่เพิ่ง render() ใหม่จะมีความสูงจริงให้เลื่อนถึง
+  requestAnimationFrame(function() { window.scrollTo(0, scrollY); });
 }
 
 function render() {
@@ -4870,3 +4877,23 @@ if (typeof setInterval !== 'undefined') {
 }
 // เรียกใช้ตอน init
 setTimeout(addCustomerUpdateMenuItem, 1000);
+
+// ทูลทิปแสดงข้อความเต็มเมื่อเอาเม้าชี้ตัวหนังสือที่ถูกตัด (...) — ใช้ delegation จุดเดียว
+// ครอบคลุมทุกที่ที่มี text-overflow:ellipsis หรือ white-space:nowrap+overflow:hidden ทั้งแอป
+// โดยไม่ต้องแก้ทีละจุด (เช็ค scrollWidth>clientWidth = ข้อความล้นจริง ก่อนค่อยใส่ title)
+if (typeof document !== 'undefined') {
+  document.addEventListener('mouseover', function(e) {
+    var el = e.target;
+    for (var depth = 0; el && depth < 5; depth++, el = el.parentElement) {
+      if (el.nodeType !== 1) continue;
+      var cs = getComputedStyle(el);
+      var truncates = cs.textOverflow === 'ellipsis' || (cs.overflow === 'hidden' && cs.whiteSpace === 'nowrap');
+      if (!truncates) continue;
+      if (el.scrollWidth > el.clientWidth + 1) {
+        var full = (el.textContent || '').trim();
+        if (full && el.title !== full) el.title = full;
+      }
+      break;
+    }
+  }, true);
+}
