@@ -21,12 +21,15 @@ function doPost(e) {
     if (!sheet) return _resp({ ok: false, error: 'sheet not found: ' + SHEET_NAME });
 
     // จับคู่คอลัมน์ด้วยชื่อหัวตาราง (แถวที่ 1) ไม่ใช้ตำแหน่งตายตัว — สลับ/แทรกคอลัมน์ในชีทได้อิสระ
+    // normalize เป็นตัวพิมพ์เล็ก + ตัดช่องว่างซ้ำ กันเคส header สะกดต่างกันเล็กน้อย (เช่น "ROW NO." vs "Row No.")
+    // ทำให้ sync ล่มทั้งระบบเงียบๆ โดยไม่มีใครรู้
+    var _normHeader = function (s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
     var lastCol = sheet.getLastColumn();
     var headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     var headerIdx = {};
-    headerRow.forEach(function (h, i) { headerIdx[String(h).trim()] = i + 1; });
+    headerRow.forEach(function (h, i) { headerIdx[_normHeader(h)] = i + 1; });
 
-    var rowNoCol = headerIdx['ROW NO.'];
+    var rowNoCol = headerIdx[_normHeader('ROW NO.')];
     if (!rowNoCol) return _resp({ ok: false, error: 'ROW NO. column not found' });
 
     // หาแถวที่ ROW NO. ตรงกัน — ถ้าไม่เจอ ถือเป็นโครงการใหม่ เพิ่มแถวต่อท้าย
@@ -44,7 +47,7 @@ function doPost(e) {
     if (targetRow === -1) targetRow = lastRow + 1;
 
     Object.keys(data.fields || {}).forEach(function (header) {
-      var col = headerIdx[header];
+      var col = headerIdx[_normHeader(header)];
       if (col) sheet.getRange(targetRow, col).setValue(data.fields[header]);
     });
 

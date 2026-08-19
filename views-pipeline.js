@@ -1696,7 +1696,11 @@ function renderPipeTable(pipes) {
 function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 
 // คอลัมน์มาตรฐานของตาราง Pipeline แบบเต็ม — ใช้ร่วมกันทั้ง CSV export และมุมมอง Sheet บนจอ
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project ID','Project Name','End User Name','End User Name Eng','Unit type','Dealer Name','DJI Dealer','Project revenue','Model','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+// ต้องเรียงลำดับให้ตรงกับ Google Sheet จริงเป๊ะ เพราะ copyPipeRow() คัดลอกแบบ tab-separated ไปวางทับแถวในชีทตรงๆ
+// (ไม่ใช่จับคู่ชื่อหัวข้อแบบฝั่ง import) — แก้ตามคอลัมน์ชีทล่าสุด 2026-08-19: ตัด Project ID/Project revenue ออก
+// (ยังเก็บ field ในแอปไว้ใช้ภายในตามปกติ แค่ไม่ export ไปชีทแล้ว), สลับ DJI Dealer มาก่อน Dealer Name,
+// เพิ่ม Dock (แยกจาก Dock 3 Qty.) และ month (เลขเดือนของ Forecast Month)
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แปลง ROW NO. (คอลัมน์แรก) เป็นชนิดตัวเลขจริงก่อนเขียนไฟล์ xlsx เฉพาะที่เป็นตัวเลขล้วนๆ
 // เหตุผล: aoa_to_sheet เดา cell type จาก JS type ของค่า — p.rowNo เก็บเป็น string เสมอ ถ้าไม่แปลง
@@ -1720,9 +1724,9 @@ function _pipeRowFields(p, excludeTypes) {
   var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
   var g = _pipeModelQtyByGroup(items);
   var fields = [
-    p.rowNo || '', fD(p.registerDate), p.projectId || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', p.projectRevenue || '', modelCell,
+    p.rowNo || '', fD(p.registerDate), p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock || '',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
-    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
+    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate), _fmtForecastMonth(p.biddingDate), _pipeForecastMonthNum(p.biddingDate), fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
   ];
   // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
   // คำนวณสดทุกครั้งตอน export เท่านั้น (ไม่แตะ ST.pipeLog จริง) — timeline ในแอปยังเห็นทุก log แยกรายการปกติ
@@ -1893,7 +1897,7 @@ function _csvKeepNL(s) { return String(s || '').replace(/"/g, '""').replace(/\r/
 // สินค้าที่ไม่ใช่ main drone product (battery, RC, accessory ฯลฯ) ไม่นับ
 // M3M = Mavic 3 Multispectral Universal Edition — เช็คทั้งคำย่อ "M3M" และชื่อเต็ม "MULTISPECTRAL" เพราะข้อมูลจริงมีทั้ง 2 แบบ
 function _pipeModelQtyByGroup(items) {
-  var g = { m3m: 0, m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0 };
+  var g = { m3m: 0, m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0, dock: 0 };
   (items || []).forEach(function(it) {
     var name = (it.model || '').toUpperCase();
     var qty = Number(it.qty) || 0;
@@ -1904,6 +1908,8 @@ function _pipeModelQtyByGroup(items) {
     else if (name.indexOf('M4E') !== -1  || name.indexOf('MATRICE 4E') !== -1)                                        g.m4e  += qty;
     else if (name.indexOf('M400') !== -1 || name.indexOf('MATRICE 400') !== -1)                                       g.m400 += qty;
     else if (name.indexOf('DOCK 3') !== -1)                                                                            g.dock3 += qty;
+    // Dock ทั่วไป (ไม่ใช่ Dock 3) — เช็คหลัง Dock 3 เสมอ กันจับ "DOCK 3" ผิดเป็นกลุ่มนี้
+    else if (name.indexOf('DOCK') !== -1)                                                                              g.dock += qty;
   });
   return g;
 }
@@ -1916,6 +1922,15 @@ function _fmtForecastMonth(biddingDate) {
   d.setMonth(d.getMonth() + 2);
   var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return d.getFullYear() + ' ' + months[d.getMonth()];
+}
+
+// เลขเดือน (1-12) ของ Forecast Month — คอลัมน์ "month" แยกจาก "Forecast Month" ในชีท ให้ pivot/filter ใช้ตัวเลขได้ตรงๆ
+function _pipeForecastMonthNum(biddingDate) {
+  if (!biddingDate) return '';
+  var d = new Date(biddingDate);
+  if (isNaN(d.getTime())) return '';
+  d.setMonth(d.getMonth() + 2);
+  return d.getMonth() + 1;
 }
 
 async function aiAnalyzePipeline(btn) {
@@ -5246,6 +5261,7 @@ var _PIPE_IMPORT_COLS = [
   { key: 'djiDealer',         label: 'DJI Dealer' },
   { key: 'projectRevenue',    label: 'Project revenue' },
   { key: 'model',             label: 'Model' },
+  { key: 'dock',                label: 'Dock' },
   { key: 'm3m',                label: 'M3M Qty.' },
   { key: 'm4t',                label: 'M4T Qty.' },
   { key: 'm4e',                label: 'M4E Qty.' },
@@ -5279,6 +5295,7 @@ var _PIPE_MODEL_KEYS = [
   { key: 'm4t',   model: 'Matrice 4T',  gKey: 'm4t'   },
   { key: 'm4e',   model: 'Matrice 4E',  gKey: 'm4e'   },
   { key: 'dock3', model: 'Dock 3',      gKey: 'dock3' },
+  { key: 'dock',  model: 'Dock',        gKey: 'dock'  },
   { key: 'm4td',  model: 'Matrice 4TD', gKey: 'm4td'  },
   { key: 'm400',  model: 'Matrice 400', gKey: 'm400'  }
 ];
@@ -5320,7 +5337,7 @@ function showPastePipelineM(lockDealerId) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
   h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปมาแบบ "รวมแถวหัวตาราง" ด้วยเสมอ แล้ววางที่นี่ — ระบบจับคู่คอลัมน์จากชื่อหัวข้อ ไม่สนลำดับ/ตำแหน่ง สลับหรือแทรกคอลัมน์อื่นในชีตได้อิสระ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / Dock / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';
