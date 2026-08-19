@@ -1206,6 +1206,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsx\')">📤 xlsx</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="showPipeImportDateAuditM()" title="หา Log ที่อาจได้วันที่ผิดจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่ log เก่าที่ import ไปแล้วยังค้างวันที่ผิดอยู่)">🔍 เช็ค Log วันที่ผิด</button>' +
+    '<button class="btn bo" onclick="showPipeImportProjectIdAuditM()" title="หาโครงการที่ Project ID อาจถูกเขียนทับเป็นค่าว่างจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่โครงการที่ import ไปแล้วยังค้างค่าว่างอยู่)">🔍 เช็ค Project ID หาย</button>' +
     (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
@@ -2255,6 +2256,42 @@ function _pipeAuditGoto(idx) {
   var c = _pipeAuditCandidates[idx]; if (!c) return;
   closeMForce();
   go('pipeDetail', { pipeId: c.pipe.id });
+}
+
+// ================================================================
+// ตรวจหาโครงการที่ Project ID อาจถูกเขียนทับเป็นค่าว่างจากบั๊ก import เดิม (ก่อนแก้ 2026-08-19) — ตอนนั้น
+// ถ้าไฟล์ import ไม่มีคอลัมน์ "Project ID" (ซึ่งตัดออกจากชีทมาตรฐานไปแล้ว) ระบบจะเขียนทับ Project ID ของ
+// ทุกโครงการที่ import (ไม่ใช่แค่โครงการใหม่) ให้กลายเป็นค่าว่างทุกครั้ง — เดา pattern จาก: โครงการที่เคยตั้ง
+// djiCrmRegistered=true (ตั้งได้ก็ต่อเมื่อเคยมี Project ID ตอนลงทะเบียนเท่านั้น) แต่ตอนนี้ Project ID ว่างเปล่า
+// ถือเป็นความขัดแย้งที่บ่งชี้ว่าน่าจะโดนบั๊กเขียนทับ — ไม่ใช่ auto-fix เพราะระบบไม่รู้ค่าที่ถูกต้องจริงๆ ต้อง
+// เข้าไปกรอกกลับเองจากชีท/CRM ต้นฉบับ
+// (Project Revenue ตรวจแบบเดียวกันไม่ได้ เพราะไม่มี flag คู่กันมายืนยันว่า "เคยมีค่าที่ไม่ใช่ 0" — เตือนไว้ในข้อความแทน)
+// ================================================================
+function showPipeImportProjectIdAuditM() {
+  var allPipes = ST.getAll('pipeline');
+  var candidates = allPipes.filter(function(p) { return p.djiCrmRegistered && !(p.projectId || '').trim(); });
+  candidates.sort(function(a, b) { return (b.updated || b.created || '').localeCompare(a.updated || a.created || ''); });
+
+  var h = '<div style="max-width:640px">';
+  h += '<div class="hint" style="margin-bottom:10px">เช็คคร่าวๆ จาก pattern ของบั๊กเดิม: โครงการที่เคยลงทะเบียน CRM แล้ว (ปกติต้องมี Project ID เสมอ) แต่ตอนนี้ Project ID ว่างเปล่า — น่าจะโดน import เขียนทับก่อนแก้บั๊ก ต้องเข้าไปกรอกค่ากลับเองจากชีท/CRM ต้นฉบับ (ระบบไม่รู้ค่าที่ถูกต้อง)</div>';
+  h += '<div class="hint" style="margin-bottom:10px;color:var(--text3,#94a3b8)">⚠️ Project Revenue ตรวจแบบนี้ไม่ได้ เพราะไม่มีตัวช่วยยืนยันว่าเคยมีค่าจริงหรือเป็น 0 อยู่แล้วปกติ — ถ้าต้องการความชัวร์ ต้องเทียบกับสำเนาชีท/ไฟล์ backup ก่อนวันที่ 2026-08-19 เอง</div>';
+  if (!candidates.length) {
+    h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px;color:var(--accent)">พบ ' + candidates.length + ' โครงการที่ Project ID น่าจะหายไป</div>';
+    h += '<div style="max-height:60vh;overflow-y:auto">';
+    candidates.forEach(function(p) {
+      var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      h += '<div class="li" style="display:block;cursor:default">';
+      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+      h += '<div class="ls" style="margin:4px 0">🏢 ' + sanitize(d ? d.name : '-') + ' · Project ID ปัจจุบัน: (ว่าง) · เคยลงทะเบียน CRM: ✅</div>';
+      h += '<button class="btn btn-xs bo" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ / กรอก Project ID กลับ</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  openM('🔍 เช็ค Project ID ที่อาจหายจาก Import', h);
 }
 
 // ================================================================
