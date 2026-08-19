@@ -379,7 +379,7 @@ function rSODetail(el) {
   var nexts  = _SO_NEXT[s.status] || [];
   var cfg    = getConfig();
 
-  var html = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
+  var html = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
   html += (typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(s.sourceTaskId) : '';
 
   // ---- header card

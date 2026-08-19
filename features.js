@@ -3184,7 +3184,7 @@ function rDemoDetail(el) {
 
   var eff = getDemoEffectiveStatus(d);
   var meta = DEMO_STATUS_META[eff];
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
 
   h += '<div class="card">';
   h += '<h2>🚁 ' + sanitize(d.name) + ' <span class="demo-status ' + meta.cls + '">' + meta.label + '</span></h2>';
@@ -5012,7 +5012,7 @@ function rNoteDet(el) {
   }
 
   var html = '';
-  html += navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  html += navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
   html += '<div class="bc"><a onclick="go(\'knowledge\')">📚 Knowledge Base</a><span class="sep">›</span><span class="cur">' + sanitize((n.title || '').substr(0, 35)) + '</span></div>';
   html += '<div class="card" style="' + (isInactive ? 'opacity:.6;' : '') + '">';
   html += '<h2>' + sanitize(n.title || 'ไม่มีชื่อ') + ' ' + statusBadge + ' <span class="ml">' +

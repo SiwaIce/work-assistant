@@ -63,9 +63,14 @@ body.sb-collapsed #sb-tab{display:flex;align-items:center}
 #ct{padding:16px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
 /* === COMMON === */
-.bc{display:flex;gap:5px;margin-bottom:12px;font-size:.74rem;flex-wrap:wrap}
+.bc{display:flex;align-items:center;gap:5px;margin-bottom:12px;font-size:.74rem;flex-wrap:wrap}
 .bc a{color:#64748b;cursor:pointer}.bc a:hover{color:#3b82f6}
 .bc .sep{color:#475569}.bc .cur{color:#e2e8f0}
+
+/* ปุ่มย้อนกลับ (goBack) — ทรง pill โปร่ง ให้ดูเป็นปุ่มกดจริงชัดเจนกว่าลิงก์ข้อความเปล่าๆ ของ .bc a */
+.back-btn{display:inline-flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:99px;padding:6px 13px 6px 9px;font-size:.76rem;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;text-decoration:none}
+.back-btn:hover{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+.back-btn .ic{font-size:.82rem}
 
 /* === CARD === */
 .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:14px;margin-bottom:12px}

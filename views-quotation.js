@@ -617,7 +617,7 @@ function rQuoteEstimator(el) {
 
   var html = '<div style="max-width:640px;margin:0 auto">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-  html += navHistory.length ? '<button class="btn bo" onclick="goBack()">← กลับ</button>' : '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
+  html += navHistory.length ? '<a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a>' : '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
   html += '</div>';
   html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">ไม่ผูก Dealer · ไม่ใช่ใบเสนอราคาจริง — แค่ดูยอดรวมเร็วๆ</div>';
 

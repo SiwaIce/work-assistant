@@ -1482,7 +1482,7 @@ function rStockDetail(el) {
   var totalAll = stockTotalQty(lots);
   var sellable = stockSellableQty(lots);
 
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
 
   h += '<div class="card" style="margin-bottom:12px">';
   h += '<h2 style="margin:0 0 2px">' + sanitize(p.name || '-') + (p.eol ?
@@ -2073,7 +2073,7 @@ function rStockBatchReceive(el) {
   var locs = getStockLocations().filter(function(l) { return l.code !== '1021'; }); // 1021 ต้องกรอกรายละเอียดจอง/SO เฉพาะเจาะจง ไม่เหมาะกับการคีย์เป็นชุด
   var today = _nw().substring(0, 10);
 
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
   h += '<div class="card" style="margin-bottom:12px">';
   h += '<h2 style="margin:0 0 4px">📥 รับของเข้าคลัง (Batch Receive)</h2>';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">คีย์รับของหลาย SKU พร้อมกันในครั้งเดียว — ทุกรายการที่เพิ่มด้านล่างจะผูกเลขอ้างอิงเดียวกันไว้ ดูย้อนหลังทั้ง shipment ได้ในหน้าเดียว</div>';

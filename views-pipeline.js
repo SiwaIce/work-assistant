@@ -1971,8 +1971,8 @@ function rPipeDet(el) {
   
   document.getElementById('pgT').textContent = '📊 ' + (p.projectName || '').substr(0, 25);
 
-  var html = '<div class="bc">';
-  if (navHistory.length) html += '<a onclick="goBack()" style="color:var(--text2)">← กลับ</a><span class="sep">|</span>';
+  var html = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
+  html += '<div class="bc">';
   html += '<a onclick="go(\'pipeline\')">📊 Pipeline</a><span class="sep">›</span>';
   if (d) html += '<a onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' + sanitize(d.name) + '</a><span class="sep">›</span>';
   html += '<span class="cur">' + sanitize((p.projectName || '').substr(0, 35)) + '</span></div>';
@@ -3025,7 +3025,7 @@ function rPosCalibration(el) {
   document.getElementById('pgT').textContent = '🎯 POS Calibration';
   var cal = computePosCalibration();
   window._posCal = cal;
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
   h += '<div class="card"><h2>🎯 POS Calibration — ทำนายแม่นแค่ไหน</h2>' +
     '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">เทียบ POS ที่บันทึกไว้ล่าสุดก่อนโครงการปิด กับผลจริงว่า Win กี่ % ของแต่ละช่วง — เช่นช่วง 60-79% ถ้าตั้งไว้แม่น ควรจะ Win จริงประมาณ 70% ถ้าห่างกันมาก ลองปรับน้ำหนักใน ⚙️ POS Weights ดู</div>' +
     '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">โครงการปิดแล้วทั้งหมด (Won/Lost): ' + cal.totalClosed + ' · มีประวัติ POS เก็บไว้จริง: ' + cal.totalWithHistory +
@@ -3146,7 +3146,7 @@ function rMondayCompany(el) {
   var s = mondayCompanyStats(d.id, cfg);
   window._mondayCompanyStat = s;
 
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
   h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">' +
     '<div><h2 style="margin:0 0 4px">🏢 ' + sanitize(d.name) + ' ' + levelTag(d.level) + '</h2>' +
     '<div style="font-size:12px;color:var(--text2)">📅 Visit ล่าสุด: ' + (s.lastVisitDays === null ? 'ยังไม่เคย' : s.lastVisitDays + ' วันก่อน') + '</div></div>' +
@@ -3295,7 +3295,7 @@ var pcSearchMode = 'all'; // 'all'|'rowno'|'project'|'dealer' — เลือ�
 function rPipelineCompare(el) {
   document.getElementById('pgT').textContent = '📊 เปรียบเทียบโครงการ';
   var cfg = getConfig();
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
 
   h += '<div class="card"><h2>🆚 เปรียบเทียบโครงการ</h2>';
   h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">เลือกโครงการที่จะเทียบ (สูงสุด 4 โครงการ)</div>';

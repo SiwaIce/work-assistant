@@ -1240,8 +1240,8 @@ function rDealerDet(el) {
   const isPinned = ST.hasPin(d.id);
   const h = calcHealthScore(d.id);
   el.innerHTML = `
+  ${navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : ''}
   <div class="bc">
-    ${navHistory.length ? '<a onclick="goBack()" style="color:var(--text2)">← กลับ</a><span class="sep">|</span>' : ''}
     <a onclick="go('dealers')">🏪 Dealer</a><span class="sep">›</span>
     <span class="cur">${sanitize(d.name)}</span>
   </div>
@@ -5217,7 +5217,7 @@ function rSalesRepDashboard(el) {
   var totalWeighted = reps.reduce(function(s, r) { return s + r.weightedOpen; }, 0);
   var totalPct = totalTarget ? Math.round(totalActual / totalTarget * 100) : 0;
 
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
   h += '<div class="pg-head"><h2 style="margin:0">👤 Dashboard รายเซล</h2><div style="font-size:12px;color:var(--text2)">รวมยอด Dealer ตามเซลที่ดูแล — ยอดจริง = ยอดขาย SIS ปี ' + curYear + '</div></div>';
   h += '<div class="sr" style="margin-bottom:14px">' +
     '<div class="sc"><div class="sn c1">' + reps.length + '</div><div class="sl">เซล</div></div>' +

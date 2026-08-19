@@ -64,7 +64,7 @@ function rKpiCompanyPlan(el) {
   var cfg = getConfig();
   var plans = computeKpiCompanyPlanAll(cfg);
 
-  var h = navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : '';
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
 
   if (!plans.length) {
     h += '<div class="card"><div class="empty"><p>ยังไม่มีบริษัทระดับ S/A/B ในขอบเขตที่ดูอยู่ตอนนี้</p></div></div>';
@@ -712,7 +712,7 @@ function rKpiImprovementPlan(el) {
   var revised = currentForecast + opportunityTotal;
   var reasons = d.improvementReasons || [];
 
-  var h = '<div class="bc"><a onclick="go(\'kpiCompanyPlan\')">← กลับแผนบรรลุเป้า KPI</a></div>';
+  var h = '<div class="bc"><a class="back-btn" onclick="go(\'kpiCompanyPlan\')"><span class="ic">←</span> กลับแผนบรรลุเป้า KPI</a></div>';
   h += '<div class="card" style="padding:0;overflow:hidden">';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';

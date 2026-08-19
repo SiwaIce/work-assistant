@@ -1628,7 +1628,7 @@ function rMeetDet(el) {
   document.getElementById('pgT').textContent = '📅 ' + m.title;
 
   el.innerHTML = `
-  ${navHistory.length ? '<div class="bc"><a onclick="goBack()">← กลับ</a></div>' : ''}
+  ${navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : ''}
   <div class="bc"><a onclick="go('meetings')">📅 ประชุม</a><span class="sep">›</span><span class="cur">${sanitize(m.title)}</span></div>
   ${(typeof _sourceTaskBackLinkHtml === 'function') ? _sourceTaskBackLinkHtml(m.sourceTaskId) : ''}
 
