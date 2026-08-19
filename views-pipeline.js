@@ -5552,8 +5552,13 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 // ถ้าในชีทที่เอามา import ยังเป็น log แยกทีละอันไม่ได้รวบ (เช่นแก้ในชีทเอง/ไฟล์เก่า) ให้ import ตามที่ชีทมี
 // เข้าไปเป็น log ใหม่เลย ไม่ต้องพยายามจับคู่กับตัวรวบเดิม — ถ้าจะรวบให้ตรงกันอีกทีก็แค่ export จากแอปใหม่
 // ตัดวันที่นำหน้าออกก่อนเทียบ (export ใส่ dd/mm/yy ไว้หน้าข้อความเสมอ ดู logFmt ใน _pipeRowFields)
-function _pipeImportNewUpdateLines(existing, c, colMap) {
-  var existingContents = ST.pipeLogsByPipe(existing.id).map(function(l) { return (l.content || '').trim(); });
+// logsIndex (ถ้ามี): { pipeId: [log,...] } สร้างครั้งเดียวจาก ST.getAll('pipeLog') ทั้งก้อน แล้วส่งต่อเข้ามา
+// แทนการเรียก ST.pipeLogsByPipe() ต่อแถว — ตัวนั้น filter ทั้ง collection ทุกครั้งที่เรียก พอ preview/import
+// ทีเดียวหลายร้อย-พันแถว (import ทั้งชีต) กลายเป็น O(แถว × log ทั้งระบบ) จนหน้าเว็บค้างได้ (ไม่มี logsIndex
+// ก็ยัง fallback ไปแบบเดิมได้ปกติ สำหรับจุดที่เรียกทีละรายการ ไม่กระทบ)
+function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
+  var logs = logsIndex ? (logsIndex[existing.id] || []) : ST.pipeLogsByPipe(existing.id);
+  var existingContents = logs.map(function(l) { return (l.content || '').trim(); });
   var out = [];
   for (var u = 1; u <= 6; u++) {
     var raw = _pipeCol(c, colMap, 'update' + u).trim();
@@ -5568,7 +5573,7 @@ function _pipeImportNewUpdateLines(existing, c, colMap) {
   return out;
 }
 
-function _pipeImportState(existing, c, dealer, colMap) {
+function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   var statusRaw = _pipeCol(c, colMap, 'status').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
@@ -5608,13 +5613,13 @@ function _pipeImportState(existing, c, dealer, colMap) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) return 'changed';
   }
-  if (_pipeImportNewUpdateLines(existing, c, colMap).length) return 'changed';
+  if (_pipeImportNewUpdateLines(existing, c, colMap, logsIndex).length) return 'changed';
   return 'same';
 }
 
 // คืน array ของ field ที่เปลี่ยน [{label, old, newVal}]
 // colMap: {key: colIndex} จาก _pipeBuildColMap — อ่านค่าผ่าน _pipeCol(c, colMap, key) เสมอ ไม่ใช้ index ตรงๆ
-function _pipeImportDiff(existing, c, dealer, colMap) {
+function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   var statusRaw = _pipeCol(c, colMap, 'status').trim();
   var status = (typeof _csvStatusToId === 'function') ? _csvStatusToId(statusRaw) : 'initial';
   if (!status) status = 'initial';
@@ -5661,13 +5666,23 @@ function _pipeImportDiff(existing, c, dealer, colMap) {
     var existQty  = existG[mc.gKey] || 0;
     if (importQty !== existQty) diffs.push({ label: mc.model + ' (qty)', old: String(existQty), newVal: String(importQty) });
   });
-  var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap);
+  var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
   if (newUpdateLines.length) {
     diffs.push({ label: '📝 Update (จะเพิ่มเป็น log ใหม่)', old: '-', newVal: newUpdateLines.join(' | ') });
   }
   return diffs;
 }
 
+
+// สร้าง { pipeId: [log,...] } ครั้งเดียวจาก pipeLog ทั้ง collection — ดูคอมเมนต์ที่ _pipeImportNewUpdateLines
+function _pipeLogsIndexByPipe(allLogs) {
+  var idx = {};
+  allLogs.forEach(function(l) {
+    if (!idx[l.pipeId]) idx[l.pipeId] = [];
+    idx[l.pipeId].push(l);
+  });
+  return idx;
+}
 
 function _showPipeXlsxPreview(rows, dealerId, colMap) {
   var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
@@ -5676,6 +5691,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   dealers.forEach(function(d) { if (d.name) dealerByName[d.name.trim().toLowerCase()] = d; });
 
   var allPipes = ST.getAll('pipeline');
+  var logsIndex = _pipeLogsIndexByPipe(ST.getAll('pipeLog'));
   var pipeByKey = {};
   var pipeByRowNo = {};
   allPipes.forEach(function(p) {
@@ -5692,8 +5708,8 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   var rowMeta = rows.map(function(r) {
     var d = dealer || dealerByName[(_pipeCol(r, colMap, 'dealerName').trim()).toLowerCase()];
     var existing = _pipeFindExistingForImport(_pipeCol(r, colMap, 'rowNo'), _pipeCol(r, colMap, 'projectName'), _pipeCol(r, colMap, 'endUserTH'), d ? d.id : '', pipeByRowNo, pipeByKey);
-    var state = existing ? _pipeImportState(existing, r, d, colMap) : 'new';
-    var diff = state === 'changed' ? _pipeImportDiff(existing, r, d, colMap) : [];
+    var state = existing ? _pipeImportState(existing, r, d, colMap, logsIndex) : 'new';
+    var diff = state === 'changed' ? _pipeImportDiff(existing, r, d, colMap, logsIndex) : [];
     if (existing) matchedIds[existing.id] = true;
     counts[state]++;
     // แถวที่มีเลข Row No. มาด้วยในไฟล์ แต่จับคู่กับโครงการเดิมไม่ได้เลย (ทั้งด้วย Row No. และด้วยชื่อ/End
@@ -6212,6 +6228,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     pipeIndexById[p.id] = idx;
   });
   var pipeLogs = ST.getAll('pipeLog');
+  var logsIndex = _pipeLogsIndexByPipe(pipeLogs);
 
   // เก็บ Sale ล่าสุดที่เจอต่อ Dealer ระหว่าง import — เอาไว้ผูกกลับเข้า "เซลที่ดูแล" ของ Dealer หลัง loop จบ
   // (แถวหลังสุดของ dealer เดียวกันชนะ ถ้าชีทมีหลายแถวค่าไม่ตรงกัน)
@@ -6300,7 +6317,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     if (action === 'update' && existing) {
       // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
       // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
-      var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap);
+      var newUpdateLines = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
       var pIdx = pipeIndexById[existing.id];
       allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
       updated++;
