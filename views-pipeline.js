@@ -5786,9 +5786,10 @@ var _PIPE_MON3 = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9
 // จริง (เช่น "12/3/25-ข้อความ", "17/08/26 - ข้อความ") ต้องตัดตัวคั่นนี้ออกด้วย ไม่งั้นเนื้อหาที่เก็บจะมี "-"
 // ค้างอยู่ เทียบกับ log เดิม (ที่ไม่มี "-") ไม่ตรงกัน กลายเป็นสร้าง log ซ้ำทุกครั้งที่ import
 function _pipeSplitUpdateLine(line) {
-  var m1 = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-?\s*(.*)$/);
+  // -* (ไม่ใช่ -?) กันเคสมีขีดกลางซ้ำหลายตัวติดกันหลังวันที่ (เจอจริง: "--ข้อความ")
+  var m1 = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-*\s*(.*)$/);
   if (m1) return { date: _pipeDateFromPaste(m1[1]), content: m1[2] };
-  var m2 = line.match(/^(\d{1,2})([A-Za-z]{3})(\d{2,4})?\s*-?\s*(.*)$/);
+  var m2 = line.match(/^(\d{1,2})([A-Za-z]{3})(\d{2,4})?\s*-*\s*(.*)$/);
   if (m2 && _PIPE_MON3.hasOwnProperty(m2[2].toLowerCase())) {
     if (m2[3]) {
       var y4 = m2[3].length === 2 ? '20' + m2[3] : m2[3];
@@ -5821,9 +5822,12 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
   // (content เดียว = log เดียว) บรรทัดที่ 2 ในไฟล์จะไปเทียบชนกับ log ตัวเดียวกับบรรทัดแรก แล้วโดน flag ว่า
   // "วันที่ไม่ตรง" ทั้งที่จริงๆ ทั้งคู่ตรงกับ log คนละตัวอยู่แล้ว (บั๊กที่เจอจริงหลัง deploy — "import ไฟล์เดิม
   // ซ้ำแล้วเจอ changed เต็มไปหมด") แก้ด้วยการ "หยิบแล้วตัดออกจากกอง" ทีละอัน กันจับคู่ตัวเดียวกันซ้ำ
+  // key ด้วยเนื้อหาที่ตัดขีดกลางนำหน้าออกแล้วเสมอ (_pipeNormDashContent) ไม่ใช่ content ดิบ — กัน log เก่าที่ยัง
+  // มีขีดค้าง (จากบั๊กก่อนแก้ 2026-08-19 ที่ยังไม่ได้กดล้างด้วยเครื่องมือ "เช็ค Log ซ้ำ") ชนกับข้อความสะอาดที่
+  // parse ใหม่ได้ถูกต้อง จนสร้าง log ซ้ำอีกรอบตอน import ครั้งถัดไป — normalize ทั้งสองฝั่งให้เทียบกันตรงๆ
   var pool = {};
   logs.forEach(function(l) {
-    var k = (l.content || '').trim();
+    var k = _pipeNormDashContent(l.content);
     if (!pool[k]) pool[k] = [];
     pool[k].push(l);
   });
@@ -5837,6 +5841,7 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
       line = line.trim();
       if (!line) return;
       var parsed = _pipeParseUpdateLine(line);
+      parsed.content = _pipeNormDashContent(parsed.content); // กันขีดกลางหลงเหลือกรณีไม่มีวันที่ให้จับคู่นำหน้าเลย
       var candidates = pool[parsed.content];
       if (candidates && candidates.length) {
         // เลือกตัวที่วันที่ตรงกันก่อนเสมอถ้ามี (match สมบูรณ์ ไม่ต้องแก้อะไร) ไม่มีค่อยหยิบตัวแรกมาเทียบ/แก้วันที่
