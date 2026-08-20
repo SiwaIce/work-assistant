@@ -502,6 +502,10 @@ function pipeIsWon(p)    { return getStatusIdsByCategory('won').indexOf(p.status
 function pipeIsLost(p)   { return getStatusIdsByCategory('lost').indexOf(p.status) !== -1; }
 // "open" = ยังไม่ปิด — ไม่ใช่ lost และไม่ใช่ส่งมอบแล้ว (deliver)
 function pipeIsOpen(p)   { return !pipeIsLost(p) && p.status !== 'deliver'; }
+// "archived" = จบแล้ว (Win/Fail&Lost/Deliver) หรือถูก Hide ไว้ — ใช้ตัดสินว่าโครงการนี้ควรอยู่แท็บ
+// "Archived Project" ตอน export/import (แยกจากแท็บ Main) และซ่อนจากรายการหลักในแอปโดย default — ไม่ใช่
+// field ใหม่ที่ต้องเก็บเพิ่ม คำนวณสดจาก status/sheetDisplay ที่มีอยู่แล้วเสมอ
+function pipeIsArchived(p) { return pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver' || p.sheetDisplay === 'Hide'; }
 
 var PIPE_NAMES = {};
 function refreshPipeNames() {

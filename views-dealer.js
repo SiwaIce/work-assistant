@@ -9,6 +9,8 @@ function dealerPipeSearchInput(v) {
 }
 var dealerPipeSort = 'updated_desc';
 var dealerPipeDisplayFlt = 'all'; // 'all' | 'show' | 'hide' — กรองตาม sheetDisplay (DISPLAY Hide/Show)
+var dealerPipeHideArchived = true; // ซ่อนโครงการ Archived (ดู pipeIsArchived) จากรายการโดย default เหมือนหน้า Pipeline Board
+function toggleDealerPipeHideArchived() { dealerPipeHideArchived = !dealerPipeHideArchived; render(); }
 var dealerPipeSelectMode = false;
 var dealerPipeSelected = {};
 var _dealerPipeVisibleIds = [];
@@ -1602,6 +1604,7 @@ function dealerPipelineTab(d) {
     h += '<option value="show"' + (dealerPipeDisplayFlt==='show' ?' selected':'') + '>✅ Focus (Show)</option>';
     h += '<option value="hide"' + (dealerPipeDisplayFlt==='hide' ?' selected':'') + '>🙈 ซ่อน (Hide)</option>';
     h += '</select>';
+    h += '<button class="btn bsm ' + (dealerPipeHideArchived ? 'bo' : 'bp') + '" onclick="toggleDealerPipeHideArchived()" title="Archived = Win/Fail&Lost/Deliver/Hide">🗄️ ' + (dealerPipeHideArchived ? 'ซ่อน Archived (' + pipes.filter(pipeIsArchived).length + ')' : 'กำลังแสดง Archived') + '</button>';
     if (dealerPipeViewMode !== 'table') {
       h += '<button class="btn bsm ' + (dealerPipeSelectMode ? 'bd' : 'bo') + '" onclick="toggleDealerPipeSelectMode()">☑️ ' + (dealerPipeSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
       h += '<div style="display:flex;gap:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
@@ -1654,6 +1657,7 @@ function dealerPipelineTab(d) {
     }
     if (dealerPipeDisplayFlt === 'show') listPipes = listPipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
     else if (dealerPipeDisplayFlt === 'hide') listPipes = listPipes.filter(function(p) { return (p.sheetDisplay || 'Show') === 'Hide'; });
+    if (dealerPipeHideArchived) listPipes = listPipes.filter(function(p) { return !pipeIsArchived(p); });
     if (dealerPipeSearch) {
       var q = dealerPipeSearch.toLowerCase();
       listPipes = listPipes.filter(function(p) {

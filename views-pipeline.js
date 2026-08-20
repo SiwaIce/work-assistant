@@ -14,6 +14,10 @@ var pipeTaskFlt = false; // true = แสดงเฉพาะโครงกา
 function togglePipeTaskFlt() { pipeTaskFlt = !pipeTaskFlt; render(); }
 var pipeSale = 'all';
 var pipeDisplayFlt = 'all';
+// true (ค่าเริ่มต้น) = ซ่อนโครงการที่ Archived (Win/Lost/Deliver/Hide — ดู pipeIsArchived) จากรายการหลัก
+// ตรงกับที่ทีมแยกไว้เป็นแท็บ "Archived Project" ในชีท ไม่ให้ปนกับโครงการที่ยังต้องติดตามอยู่
+var pipeHideArchived = true;
+function togglePipeHideArchived() { pipeHideArchived = !pipeHideArchived; render(); }
 var pipeSearch = '';
 var pipeSearchMode = 'all'; // 'all'|'rowno'|'project'|'dealer' — เลือกฟิลด์ที่จะค้นหา กันพิมพ์ Row No. แล้วขึ้นทุกอย่างเพราะไปแมตช์ endUser/model/remark ด้วย (เหมือน pcSearchMode ในหน้าเปรียบเทียบโครงการ)
 var _pipeSearchTimer = null;
@@ -1119,6 +1123,8 @@ function rPipeline(el) {
   if (pipeSale !== 'all') pipes = pipes.filter(function(p) { return (p.saleName || '') === pipeSale; });
   if (pipeDisplayFlt === 'show') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
   else if (pipeDisplayFlt === 'hide') pipes = pipes.filter(function(p) { return (p.sheetDisplay || 'Show') === 'Hide'; });
+  var _archivedCountBeforeHide = allPipes.filter(pipeIsArchived).length;
+  if (pipeHideArchived) pipes = pipes.filter(function(p) { return !pipeIsArchived(p); });
   if (pipeTaskFlt) pipes = pipes.filter(function(p) { return _pipeOpenTaskIdx[p.id]; });
 
   if (pipeUrgentFlt) {
@@ -1212,6 +1218,7 @@ function rPipeline(el) {
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
     '<button class="btn ' + (pipeSelectMode ? 'bd' : 'bo') + '" onclick="togglePipeSelectMode()">☑️ ' + (pipeSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>' +
+    '<button class="btn ' + (pipeHideArchived ? 'bo' : 'bp') + '" onclick="togglePipeHideArchived()" title="Archived = Win/Fail&Lost/Deliver/Hide (ดูแท็บ Archived Project ตอน export)">🗄️ ' + (pipeHideArchived ? 'ซ่อน Archived (' + _archivedCountBeforeHide + ')' : 'กำลังแสดง Archived') + '</button>' +
     '<div style="flex:1"></div>' +
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()" title="ตาราง">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()" title="การ์ด">🃏</button>' +
@@ -1826,12 +1833,22 @@ function runPipeExportWithLogFilter(action, arg) {
 
 function dlPipeCSV(excludeTypes) { _exportPipeCSV(ST.getAll('pipeline'), 'pipeline-' + _td() + '.csv', excludeTypes); }
 
+// สร้าง workbook 2 ชีต "Main" (ยังเปิดอยู่) กับ "Archived Project" (Win/Lost/Deliver/Hide — ดู
+// pipeIsArchived) แยกตามชีต Google Sheet ที่ทีมปรับใหม่ — ใช้ร่วมกันทั้ง export ทั้งบริษัทและของ dealer เดียว
+function _pipeBuildXlsxWorkbook(pipes, excludeTypes) {
+  var mainPipes = pipes.filter(function(p) { return !pipeIsArchived(p); });
+  var archPipes = pipes.filter(pipeIsArchived);
+  var mainData = _pipeXlsxFixRowNoType([PIPE_SHEET_HEADERS].concat(mainPipes.map(function(p) { return _pipeRowFields(p, excludeTypes); })));
+  var archData = _pipeXlsxFixRowNoType([PIPE_SHEET_HEADERS].concat(archPipes.map(function(p) { return _pipeRowFields(p, excludeTypes); })));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mainData), 'Main');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(archData), 'Archived Project');
+  return wb;
+}
+
 function dlPipeXlsx(excludeTypes) {
   var pipes = ST.getAll('pipeline').slice().sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
-  var wsData = _pipeXlsxFixRowNoType([PIPE_SHEET_HEADERS].concat(pipes.map(function(p) { return _pipeRowFields(p, excludeTypes); })));
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Pipeline');
+  var wb = _pipeBuildXlsxWorkbook(pipes, excludeTypes);
   XLSX.writeFile(wb, 'pipeline-all-' + _td() + '.xlsx');
   var overflowCnt = pipes.filter(function(p) { return ST.pipeLogsByPipe(p.id).length > 6; }).length;
   toast('📥 Export Excel แล้ว (' + pipes.length + ' รายการ)' + (overflowCnt ? ' ⚠️ ' + overflowCnt + ' โครงการมี Update >6 รายการ — รายการที่ 7 เป็นต้นไปไม่ถูก export' : ''));
@@ -1849,10 +1866,7 @@ function dlPipeXlsxForDealer(dealerId, excludeTypes) {
   var pipes = ST.pipelineByDealer(dealerId).slice().sort(function(a, b) {
     return (a.registerDate || '').localeCompare(b.registerDate || '');
   });
-  var wsData = _pipeXlsxFixRowNoType([PIPE_SHEET_HEADERS].concat(pipes.map(function(p) { return _pipeRowFields(p, excludeTypes); })));
-  var ws = XLSX.utils.aoa_to_sheet(wsData);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Pipeline');
+  var wb = _pipeBuildXlsxWorkbook(pipes, excludeTypes);
   XLSX.writeFile(wb, 'pipeline-' + safeName + '-' + _td() + '.xlsx');
   var overflowCnt = pipes.filter(function(p) { return ST.pipeLogsByPipe(p.id).length > 6; }).length;
   toast('📥 Export Excel แล้ว (' + pipes.length + ' รายการ)' + (overflowCnt ? ' ⚠️ ' + overflowCnt + ' โครงการมี Update >6 รายการ — รายการที่ 7+ ไม่ถูก export' : ''));
@@ -5695,16 +5709,40 @@ function importPipelineXlsx(dealerId) {
     reader.onload = function(ev) {
       try {
         var wb = XLSX.read(ev.target.result, { type: 'binary', cellDates: true });
-        var ws = wb.Sheets[wb.SheetNames[0]];
+        // อ่านเฉพาะชีตที่ชื่อ "Main" และ "Archived Project" (ถ้ามี) จับคู่ด้วยชื่อ ไม่ใช่ตำแหน่ง — กันเคส
+        // สลับลำดับแท็บในไฟล์แล้วแอปดันไปอ่านชีตผิด (เช่น archived project ถูก import ทับ main) และกัน
+        // เผลอส่งไฟล์ master ทั้งเล่ม (มีแท็บ Summary/Pivot/Survey ฯลฯ) มาแล้วแอปไปอ่านชีตที่ไม่ใช่ pipeline
+        // เข้า — ไม่เจอทั้งสองชื่อเลย (เช่นไฟล์ที่แอปเอง export ออกมาเองชื่อชีต "Pipeline") ค่อย fallback
+        // ไปอ่านชีตแรกตามตำแหน่งเหมือนเดิม
+        var _pipeFindSheetByName = function(names) {
+          for (var i = 0; i < names.length; i++) {
+            var want = names[i].trim().toLowerCase();
+            for (var j = 0; j < wb.SheetNames.length; j++) {
+              if (wb.SheetNames[j].trim().toLowerCase() === want) return wb.Sheets[wb.SheetNames[j]];
+            }
+          }
+          return null;
+        };
+        var mainWs = _pipeFindSheetByName(['Main']);
+        var archWs = _pipeFindSheetByName(['Archived Project']);
+        var sheetsToRead = [];
+        if (mainWs) sheetsToRead.push(mainWs);
+        if (archWs) sheetsToRead.push(archWs);
+        if (!sheetsToRead.length) sheetsToRead.push(wb.Sheets[wb.SheetNames[0]]);
+
         // raw:true (ไม่ใช่ raw:false) — กันปัญหาเซลล์ที่เป็น "วันที่จริง" ถูกแปลงกลับเป็นข้อความแบบ
         // เดือน/วัน/ปี (M/D/YYYY, ไม่เติมเลข 0) ของ SheetJS ที่ทำให้วัน≤12 ถูกตีความสลับวัน/เดือนผิด
         // (เช่น 1 ต.ค. กลายเป็น "10/1/2026" แล้วถูกอ่านเป็น 10 ม.ค.) — อ่าน Date object ตรงๆ แล้วแปลงเป็น
         // YYYY-MM-DD เองแทน ไม่ผ่านขั้นตอนแปลงเป็นข้อความที่กำกวมเลย
-        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
-        rows = rows.map(function(r) { return r.map(_pipeXlsxCellToStr); });
-        if (!rows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
-        var headerRow = rows[0];
-        var dataRows = rows.slice(1);
+        var headerRow = null;
+        var dataRows = [];
+        sheetsToRead.forEach(function(ws) {
+          var sheetRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }).map(function(r) { return r.map(_pipeXlsxCellToStr); });
+          if (!sheetRows.length) return;
+          if (!headerRow) headerRow = sheetRows[0]; // ใช้หัวตารางจากแท็บแรกที่เจอข้อมูลเป็นตัวจับคู่คอลัมน์ของทุกแท็บ
+          dataRows = dataRows.concat(sheetRows.slice(1));
+        });
+        if (!headerRow) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
         var colRes = _pipeBuildColMap(headerRow);
         if (colRes.missingRequired.length) {
           toast('❌ ไม่พบคอลัมน์ที่จำเป็น: ' + colRes.missingRequired.join(', ') + ' — เช็คหัวตารางแถวแรกของไฟล์');
