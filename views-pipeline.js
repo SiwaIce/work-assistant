@@ -1548,15 +1548,81 @@ function togglePipeCardExpand(id, ev) {
   render();
 }
 
-// Next Action + สรุปรายการสินค้า (ชิปหมวดหมู่ + ตาราง Model/QTY/มูลค่า) แบบเดียวกับที่ใช้ใน modal เทียบ
-// Project — ใช้ _pipeCompareProductBreakdownHtml() ร่วมกัน (คุมด้วย pipeSummaryFullValue ตัวเดียวกัน)
+// Next Action + สินค้า/มูลค่า (แก้ไขได้ตรงนี้เลย) — เดิมมีแค่ตารางอ่านอย่างเดียว (_pipeCompareProductBreakdownHtml
+// ที่ใช้ร่วมกับ modal เทียบ Project) ต้องกด "แก้ไข" เปิด modal เต็มถึงจะเปลี่ยน Qty/มูลค่าได้ ไม่สะดวก —
+// เปลี่ยนมาใช้ตัวแก้ไขในตัวการ์ดแทน (ดู _pipeCardEditableProductHtml) ยังกดเข้า modal เต็มได้ปกติถ้าจะ
+// เพิ่ม/ลบ/เปลี่ยนรุ่นสินค้า จุดนี้แก้ได้แค่ Qty ของรายการเดิม + มูลค่ารวม ซึ่งเป็นสิ่งที่แก้บ่อยที่สุด
 function _pipeCardExpandedDetailHtml(p) {
-  var h = '<div style="border-top:1px dashed var(--border,#334155);padding-top:10px;margin-top:2px">';
+  var h = '<div style="border-top:1px dashed var(--border,#334155);padding-top:10px;margin-top:2px" onclick="event.stopPropagation()">';
   h += '<div style="font-size:11px;color:var(--text2,#94a3b8);margin-bottom:8px">🎯 Next Action: ' +
     (pipeNextActionHtml(p, true) || '<span style="color:var(--text3,#64748b)">ไม่ได้ตั้ง</span>') + '</div>';
-  h += _pipeCompareProductBreakdownHtml(p);
+  h += _pipeCardEditableProductHtml(p);
   h += '</div>';
   return h;
+}
+
+// ตัวแก้ไข Qty ต่อรายการ + มูลค่ารวม ตรงในตัวการ์ด ไม่ต้องเปิด modal เต็ม — แก้ได้แค่ Qty ของ item ที่มีอยู่แล้ว
+// (ไม่รองรับเพิ่ม/ลบ/เปลี่ยนรุ่นในนี้ ถ้าจะทำต้องเปิด modal เต็ม กดปุ่ม "✏️ แก้ไขเต็มรูปแบบ" ด้านล่าง)
+function _pipeCardEditableProductHtml(p) {
+  var items = getPipeItems(p);
+  var h = '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">📦 สินค้าและมูลค่า</div>';
+  if (items.length) {
+    h += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px">';
+    h += '<tr style="color:var(--text2)"><td style="padding:3px 0">Model</td><td style="text-align:center;width:70px">QTY</td><td style="text-align:right;width:90px">มูลค่า</td></tr>';
+    items.forEach(function(it, idx) {
+      var price = Number(it.price) || 0;
+      var qty = Number(it.qty) || 1;
+      h += '<tr style="border-top:1px solid var(--border,#334155)">' +
+        '<td style="padding:4px 4px 4px 0">' + sanitize(it.model || '-') + '</td>' +
+        '<td style="text-align:center;padding:4px 0"><input type="number" min="1" value="' + qty + '" id="pcQty_' + p.id + '_' + idx + '" oninput="_pipeCardRecalcItemTotal(\'' + p.id + '\',' + idx + ',' + price + ')" onclick="event.stopPropagation()" style="width:56px;text-align:center;font-size:11px;padding:2px 4px"></td>' +
+        '<td style="text-align:right;padding:4px 0" id="pcItemTotal_' + p.id + '_' + idx + '">' + fmtMoneyShort(qty * price) + '</td>' +
+        '</tr>';
+    });
+    h += '</table>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">ยังไม่มีรายการสินค้า — เพิ่มได้จากปุ่มแก้ไขเต็มรูปแบบด้านล่าง</div>';
+  }
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h += '<label style="font-size:11px;color:var(--text2);white-space:nowrap">มูลค่ารวม (฿)</label>';
+  h += '<input type="text" inputmode="decimal" class="js-money" id="pcForecast_' + p.id + '" value="' + nmI(p.forecastAmount || '') + '" onclick="event.stopPropagation()" style="flex:1;font-size:12px;padding:4px 6px">';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px">';
+  h += '<button class="btn btn-xs bp" onclick="event.stopPropagation();savePipeCardProduct(\'' + p.id + '\')">💾 บันทึก</button>';
+  h += '<button class="btn btn-xs bo" onclick="event.stopPropagation();showPipelineM(\'' + (p.dealerId || '') + '\',\'' + p.id + '\')">✏️ แก้ไขเต็มรูปแบบ</button>';
+  h += '</div>';
+  return h;
+}
+
+// อัปเดตยอดรวมต่อรายการสดๆ ตอนพิมพ์ Qty (ยังไม่บันทึกจริง แค่ preview ให้เห็นก่อนกด บันทึก)
+function _pipeCardRecalcItemTotal(pipeId, idx, price) {
+  var qtyEl = document.getElementById('pcQty_' + pipeId + '_' + idx);
+  var totalEl = document.getElementById('pcItemTotal_' + pipeId + '_' + idx);
+  if (!qtyEl || !totalEl) return;
+  var qty = Number(qtyEl.value) || 0;
+  totalEl.textContent = fmtMoneyShort(qty * price);
+}
+
+// บันทึก Qty ที่แก้ + มูลค่ารวมที่แก้ กลับเข้า pipeline ตรงๆ จากในตัวการ์ด ไม่ต้องเปิด modal เต็ม
+function savePipeCardProduct(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var items = getPipeItems(p).map(function(it, idx) {
+    var qtyEl = document.getElementById('pcQty_' + pipeId + '_' + idx);
+    var qty = qtyEl ? (Number(qtyEl.value) || 1) : (Number(it.qty) || 1);
+    var price = Number(it.price) || 0;
+    return Object.assign({}, it, { qty: qty, total: qty * price });
+  });
+  var fcEl = document.getElementById('pcForecast_' + pipeId);
+  var forecastAmount = fcEl ? parseNum(fcEl.value) : (Number(p.forecastAmount) || 0);
+  var updates = { forecastAmount: forecastAmount };
+  if (items.length) {
+    updates.items = items;
+    updates.model = items[0].model;
+    updates.modelQty = items.reduce(function(s, it) { return s + (Number(it.qty) || 1); }, 0);
+  }
+  ST.update('pipeline', pipeId, updates);
+  toast('💾 บันทึกสินค้า/มูลค่าแล้ว');
+  render();
 }
 
 function _buildQtMap() {
@@ -2353,8 +2419,13 @@ function _pipeDashCount(s) {
   return m ? m[0].length : 0;
 }
 var _pipeDupLogCandidates = [];
-function showPipeDuplicateLogAuditM() {
+// หา cluster ของ log ที่ซ้ำกัน (เนื้อหา+วันที่ตรงกันแต่มีขีดนำหน้าค้าง) — แยกออกจาก showPipeDuplicateLogAuditM
+// ให้เรียกใช้ซ้ำได้ทั้งจากปุ่มตรวจสอบเอง และจากท้าย flow import (ดู _doPipeXlsxImport)
+// pipeIdFilter (ไม่บังคับ): ถ้าใส่มา จะเช็คเฉพาะ pipeline ที่ id อยู่ใน set นี้ (เร็วกว่าตอนเพิ่งเสร็จ import
+// ไม่ต้องไล่ทั้งระบบ) ไม่ใส่ = เช็คทุก pipeline เหมือนเดิม
+function _pipeComputeDupLogClusters(pipeIdFilter) {
   var allPipes = ST.getAll('pipeline');
+  if (pipeIdFilter) allPipes = allPipes.filter(function(p) { return pipeIdFilter[p.id]; });
   var allLogs = ST.getAll('pipeLog');
   var logsByPipe = {};
   allLogs.forEach(function(l) { if (!logsByPipe[l.pipeId]) logsByPipe[l.pipeId] = []; logsByPipe[l.pipeId].push(l); });
@@ -2384,6 +2455,11 @@ function showPipeDuplicateLogAuditM() {
     });
   });
   clusters.sort(function(a, b) { return String(b.pipe.rowNo || '').localeCompare(String(a.pipe.rowNo || '')); });
+  return clusters;
+}
+
+function showPipeDuplicateLogAuditM(pipeIdFilter) {
+  var clusters = _pipeComputeDupLogClusters(pipeIdFilter);
   _pipeDupLogCandidates = clusters;
 
   var totalRemove = 0;
@@ -5628,6 +5704,7 @@ function doPastePipeline() {
   closeMForce();
   _pipeResolveUnknownDealersUI(dataRows, lockDealerId, colRes.map, function(resolvedRows) {
     _processPipeImportRows(resolvedRows, lockDealerId, null, null, colRes.map);
+    _pipeAfterImportCheckDup();
   });
 }
 
@@ -6684,6 +6761,15 @@ function _doPipeXlsxImport() {
   }).map(function(mp) { return mp.id; });
   closeMForce();
   _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap);
+  _pipeAfterImportCheckDup();
+}
+
+// ตรวจ log ซ้ำ (pattern ขีดนำหน้าค้าง — ดู _pipeComputeDupLogClusters) อัตโนมัติทันทีหลัง import เสร็จ แทนที่
+// ผู้ใช้จะต้องไปกดปุ่ม "🔍 เช็ค Log ซ้ำ" แยกต่างหากเองทีหลัง — เช็คทั้งระบบทุกครั้ง (เร็วพอ ไม่ต้องจำกัดเฉพาะ
+// pipeline ที่เพิ่ง import) เจอซ้ำถึงเปิดหน้าต่างให้ ไม่เจอก็เงียบๆ ไป ไม่รบกวน
+function _pipeAfterImportCheckDup() {
+  var clusters = _pipeComputeDupLogClusters();
+  if (clusters.length) showPipeDuplicateLogAuditM();
 }
 
 // ---- core row processor (shared by paste + xlsx) ----
