@@ -2489,14 +2489,25 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
   h += '</div>';
   openM('🔍 เช็ค Log ซ้ำจากขีดนำหน้าค้าง', h);
 }
+// เขียน pipeLog ทั้ง collection ครั้งเดียวตอนจบ (ประกอบ array ในหน่วยความจำก่อน) แทนเรียก ST.update/ST.delete
+// ทีละรายการ — ของเดิมเรียกต่อ cluster (อาจมีเป็นร้อยเป็นพัน cluster) แต่ละครั้ง ST._set() ที่ ST.update/delete
+// เรียกอยู่ข้างในจะ trigger firebase-sync.js push "ทั้ง collection" ใหม่ทุกครั้ง ไม่ใช่แค่รายการที่เปลี่ยน —
+// เจอ cluster เยอะๆ เข้าไปกลายเป็น push ซ้ำหลายร้อย-พันรอบจนแอปค้าง (บั๊กแบบเดียวกับที่เจอใน
+// _processPipeImportRows ตอน import ทีแรก — ดูคอมเมนต์ "เขียนครั้งเดียว" ตรงนั้นประกอบ)
 function _pipeDupLogDeleteAll() {
   if (!confirm('ลบ log ที่ซ้ำกันทั้งหมด และล้างขีดนำหน้าออกจากตัวที่เก็บไว้? (ไม่สามารถกู้คืนได้)')) return;
   var deleted = 0, cleaned = 0;
+  var removeIds = {};
+  var contentFix = {}; // logId -> เนื้อหาที่ล้างขีดแล้ว
   _pipeDupLogCandidates.forEach(function(c) {
     var normalized = _pipeNormDashContent(c.keep.content);
-    if (normalized !== c.keep.content) { ST.update('pipeLog', c.keep.id, { content: normalized }); cleaned++; }
-    c.remove.forEach(function(l) { ST.delete('pipeLog', l.id); deleted++; });
+    if (normalized !== c.keep.content) { contentFix[c.keep.id] = normalized; cleaned++; }
+    c.remove.forEach(function(l) { removeIds[l.id] = true; deleted++; });
   });
+  var updatedLogs = ST.getAll('pipeLog')
+    .filter(function(l) { return !removeIds[l.id]; })
+    .map(function(l) { return contentFix.hasOwnProperty(l.id) ? Object.assign({}, l, { content: contentFix[l.id] }) : l; });
+  ST._set(ST._keys.pipeLog, updatedLogs);
   toast('🗑️ ลบซ้ำ ' + deleted + ' รายการ' + (cleaned ? ' · ล้างขีดออก ' + cleaned + ' รายการ' : ''));
   closeMForce();
 }
