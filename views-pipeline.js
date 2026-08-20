@@ -1207,6 +1207,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="showPipeImportDateAuditM()" title="หา Log ที่อาจได้วันที่ผิดจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่ log เก่าที่ import ไปแล้วยังค้างวันที่ผิดอยู่)">🔍 เช็ค Log วันที่ผิด</button>' +
     '<button class="btn bo" onclick="showPipeImportProjectIdAuditM()" title="หาโครงการที่ Project ID อาจถูกเขียนทับเป็นค่าว่างจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่โครงการที่ import ไปแล้วยังค้างค่าว่างอยู่)">🔍 เช็ค Project ID หาย</button>' +
+    '<button class="btn bo" onclick="showPipeDuplicateLogAuditM()" title="หา Log ที่ซ้ำกันจากขีดกลางค้างหลังวันที่ (บั๊กที่แก้แล้ว แต่ log ที่ import ไปแล้วก่อนแก้ยังซ้ำอยู่)">🔍 เช็ค Log ซ้ำ</button>' +
     (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
@@ -2292,6 +2293,94 @@ function showPipeImportProjectIdAuditM() {
   }
   h += '</div>';
   openM('🔍 เช็ค Project ID ที่อาจหายจาก Import', h);
+}
+
+// ================================================================
+// ตรวจหา pipeLog ที่ซ้ำกัน (เนื้อหา+วันที่ตรงกัน แต่ตัวหนึ่งมีขีดกลาง "-"/"--" นำหน้าค้างอยู่) — เกิดจากบั๊ก
+// เก่า (ก่อนแก้ 2026-08-19) ที่ตอน import ไม่ตัดขีดกลางหลังวันที่ออก ("12/3/25-ข้อความ" ถูกเก็บเป็น
+// "-ข้อความ" แทนที่จะเป็น "ข้อความ") พอ import ซ้ำหลังแก้บั๊กแล้ว เนื้อหาที่ parse ใหม่ (สะอาด) ไม่ตรงกับของ
+// เดิม (มีขีด) เลยถูกสร้างเป็น log ใหม่ซ้อนขึ้นมาแทนที่จะจับคู่ — ให้เลือกลบตัวที่มีขีดนำหน้าทิ้ง เก็บตัวสะอาดไว้
+// ================================================================
+function _pipeNormDashContent(s) {
+  return (s || '').replace(/^-+\s*/, '').trim();
+}
+// จำนวนขีดกลางนำหน้า ("-"→1, "--"→2 ...) — ใช้เลือกว่าจะเก็บตัวไหนไว้ (น้อยขีดกว่า = สะอาดกว่า = เก็บ)
+// เจอเคสจริงที่ "ทั้งคู่" มีขีดนำหน้าคนละจำนวน (เช่น "--ข้อความ" กับ "-ข้อความ") ไม่ใช่แค่คู่ สะอาด/มีขีด เสมอไป
+function _pipeDashCount(s) {
+  var m = (s || '').match(/^-+/);
+  return m ? m[0].length : 0;
+}
+var _pipeDupLogCandidates = [];
+function showPipeDuplicateLogAuditM() {
+  var allPipes = ST.getAll('pipeline');
+  var allLogs = ST.getAll('pipeLog');
+  var logsByPipe = {};
+  allLogs.forEach(function(l) { if (!logsByPipe[l.pipeId]) logsByPipe[l.pipeId] = []; logsByPipe[l.pipeId].push(l); });
+
+  var clusters = [];
+  allPipes.forEach(function(p) {
+    var logs = logsByPipe[p.id] || [];
+    var groups = {};
+    logs.forEach(function(l) {
+      if (l.type !== 'note') return; // เกิดเฉพาะ log ที่ import สร้าง (type note) เท่านั้น
+      var key = _pipeNormDashContent(l.content) + '||' + (l.date || '');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(l);
+    });
+    Object.keys(groups).forEach(function(key) {
+      var g = groups[key];
+      if (g.length < 2) return;
+      var hasDashed = g.some(function(l) { return _pipeDashCount(l.content) > 0; });
+      if (!hasDashed) return; // ต้องมีตัวที่มีขีดนำหน้าถึงเข้าข่ายบั๊กนี้ — กัน false positive ที่ซ้ำกันเพราะเหตุผลอื่น
+      // เรียงตามจำนวนขีด (น้อยสุดก่อน) แล้ว created (เก่าสุดก่อน) — ตัวแรกคือตัวที่จะ "เก็บ" ที่เหลือคือ "ลบ"
+      var sorted = g.slice().sort(function(a, b) {
+        var da = _pipeDashCount(a.content), db = _pipeDashCount(b.content);
+        if (da !== db) return da - db;
+        return (a.created || '').localeCompare(b.created || '');
+      });
+      clusters.push({ pipe: p, keep: sorted[0], remove: sorted.slice(1) });
+    });
+  });
+  clusters.sort(function(a, b) { return String(b.pipe.rowNo || '').localeCompare(String(a.pipe.rowNo || '')); });
+  _pipeDupLogCandidates = clusters;
+
+  var totalRemove = 0;
+  clusters.forEach(function(c) { totalRemove += c.remove.length; });
+
+  var h = '<div style="max-width:680px">';
+  h += '<div class="hint" style="margin-bottom:10px">เช็คจาก pattern ของบั๊กเดิม: log ที่เนื้อหา+วันที่ตรงกัน แต่มีขีดกลาง "-"/"--" นำหน้าค้างอยู่ (มาจาก import ก่อนแก้บั๊กตัดขีดกลาง — บางคู่ติดขีดทั้ง 2 ฝั่งคนละจำนวนก็มี) — จะเก็บตัวที่ขีดน้อยที่สุดไว้ (ล้างขีดออกให้สะอาดด้วย) แล้วลบตัวที่เหลือทิ้ง</div>';
+  if (!clusters.length) {
+    h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px;color:var(--accent)">พบ ' + clusters.length + ' คู่ที่ซ้ำกัน (รวม ' + totalRemove + ' รายการจะถูกลบถ้ากด "ลบทั้งหมด")</div>';
+    h += '<button class="btn btn-sm bd" style="margin-bottom:10px" onclick="_pipeDupLogDeleteAll()">🗑️ ลบรายการซ้ำทั้งหมด (' + totalRemove + ' รายการ)</button>';
+    h += '<div style="max-height:55vh;overflow-y:auto">';
+    clusters.forEach(function(c) {
+      var p = c.pipe;
+      h += '<div class="li" style="display:block;cursor:default">';
+      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+      h += '<div class="ls" style="margin:3px 0;color:#22c55e">✅ เก็บไว้: ' + fD(c.keep.date) + ' — "' + sanitize((_pipeNormDashContent(c.keep.content) || '').slice(0, 80)) + '"</div>';
+      c.remove.forEach(function(l) {
+        h += '<div class="ls" style="margin:3px 0;color:#ef4444">❌ ลบ: ' + fD(l.date) + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
+      });
+      h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  openM('🔍 เช็ค Log ซ้ำจากขีดนำหน้าค้าง', h);
+}
+function _pipeDupLogDeleteAll() {
+  if (!confirm('ลบ log ที่ซ้ำกันทั้งหมด และล้างขีดนำหน้าออกจากตัวที่เก็บไว้? (ไม่สามารถกู้คืนได้)')) return;
+  var deleted = 0, cleaned = 0;
+  _pipeDupLogCandidates.forEach(function(c) {
+    var normalized = _pipeNormDashContent(c.keep.content);
+    if (normalized !== c.keep.content) { ST.update('pipeLog', c.keep.id, { content: normalized }); cleaned++; }
+    c.remove.forEach(function(l) { ST.delete('pipeLog', l.id); deleted++; });
+  });
+  toast('🗑️ ลบซ้ำ ' + deleted + ' รายการ' + (cleaned ? ' · ล้างขีดออก ' + cleaned + ' รายการ' : ''));
+  closeMForce();
 }
 
 // ================================================================
