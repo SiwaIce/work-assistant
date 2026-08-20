@@ -6048,7 +6048,12 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
       }
     });
   }
-  return { newLines: newLines, dateFixes: dateFixes };
+  // orphans = log ที่เหลือค้างใน pool หลังจับคู่ทุกบรรทัดในไฟล์แล้ว — มีอยู่ในระบบแต่ไม่มีบรรทัดไหนในไฟล์
+  // (ทุกคอลัมน์ Update 1-6 รวมกัน) ตรงด้วยเลย ไม่ auto-ลบ แค่ส่งกลับไปให้ preview แสดงเป็นตัวเลือกให้ผู้ใช้
+  // ตัดสินใจเอง (ลบ/เก็บ) — ตรงกับที่ขอ "ไฟล์มีอัพเดทอะไรก็ให้ตามนั้น อันที่มีอยู่แล้วแต่ไม่ตรงให้ถามว่าจะลบไหม"
+  var orphans = [];
+  Object.keys(pool).forEach(function(k) { pool[k].forEach(function(l) { orphans.push(l); }); });
+  return { newLines: newLines, dateFixes: dateFixes, orphans: orphans };
 }
 
 function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
@@ -6225,6 +6230,16 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     // ในระบบ) ถ้าปล่อยให้ import แบบ "เพิ่มใหม่" ไปเฉยๆ จะได้โครงการซ้ำ ส่วนของเดิมที่ควรถูกอัปเดตจะไม่ขยับเลย
     var unmatchedRowNo = (hasAnyRowNoInSystem && !existing && _pipeCol(r, colMap, 'rowNo').trim()) ? _pipeCol(r, colMap, 'rowNo').trim() : '';
     return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo };
+  });
+
+  // เก็บ log ("Update") ที่มีอยู่แล้วในระบบของ pipeline ที่จับคู่ได้ แต่ไม่ตรงกับบรรทัดไหนในคอลัมน์ Update
+  // 1-6 ของไฟล์เลย (ดู orphans ใน _pipeImportNewUpdateLines) — ไม่ auto-ลบ ให้ผู้ใช้เลือกเองว่าจะลบหรือเก็บไว้
+  // (เหมือน missingPipes ด้านล่าง แต่เป็นระดับ log ไม่ใช่ระดับ pipeline)
+  var orphanLogs = [];
+  rowMeta.forEach(function(m) {
+    if (!m.existing) return;
+    var res = _pipeImportNewUpdateLines(m.existing, m.row, colMap, logsIndex);
+    res.orphans.forEach(function(l) { orphanLogs.push({ log: l, pipe: m.existing }); });
   });
 
   // หา pipeline ที่มีในระบบแต่ไม่มีในไฟล์ (scoped ตาม dealer ถ้าล็อกไว้)
@@ -6480,11 +6495,34 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     h += '</div>';
   }
 
+  if (orphanLogs.length) {
+    h += '<div id="pipeOrphanLogBlock" style="margin-top:12px;border:1px solid #f59e0b40;border-radius:6px;background:#f59e0b08;padding:10px">';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    h += '<span style="font-size:.8rem;font-weight:700;color:#f59e0b">📝 Update ที่มีในระบบแต่ไม่ตรงกับไฟล์: ' + orphanLogs.length + ' รายการ</span>';
+    h += '<label style="margin-left:auto;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" onchange="_pipeOrphanLogChkAll(this.checked)" style="margin-right:4px">เลือกทั้งหมด</label>';
+    h += '</div>';
+    h += '<div style="font-size:10px;color:var(--text2);margin-bottom:6px">Update เหล่านี้อยู่ในระบบแต่ไม่พบข้อความที่ตรงกันในคอลัมน์ Update 1-6 ของไฟล์เลย (อาจเป็นของซ้ำ/เก่าจาก import ครั้งก่อน) — ไม่ติ๊ก = เก็บไว้ตามเดิม, ติ๊ก = ลบทิ้งพร้อม import นี้</div>';
+    h += '<div style="max-height:180px;overflow-y:auto;font-size:12px">';
+    orphanLogs.forEach(function(ol) {
+      h += '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer">' +
+        '<input type="checkbox" id="pipeOrphanLogChk_' + ol.log.id + '" style="flex-shrink:0">' +
+        '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          '<span style="color:var(--text2);font-size:10px">' + fD(ol.log.date) + '</span> ' +
+          sanitize((ol.log.content || '').slice(0, 70)) +
+          ' <span style="color:var(--text2);font-size:10px">— ' + sanitize((ol.pipe.rowNo ? ol.pipe.rowNo + ' ' : '') + (ol.pipe.projectName || '')).slice(0, 40) + '</span>' +
+        '</span>' +
+        '</label>';
+    });
+    h += '</div>';
+    h += '<div style="font-size:10px;color:#f59e0b;margin-top:6px">⚠️ รายการที่ติ๊กจะถูกลบถาวรพร้อมกับการ import — ไม่สามารถกู้คืนได้</div>';
+    h += '</div>';
+  }
+
   h += '<div style="display:flex;gap:8px;margin-top:12px">';
   h += '<button class="btn bp" style="flex:1" onclick="_doPipeXlsxImport()">📥 นำเข้า ' + rows.length + ' โครงการ</button>';
   h += '<button class="btn bo" onclick="closeMForce()">ยกเลิก</button>';
   h += '</div></div>';
-  window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, colMap: colMap };
+  window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, orphanLogs: orphanLogs, colMap: colMap };
   openM('📂 Preview: Import Pipeline จาก Excel', h);
   setMWide(960);
   _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all' }; // dealers: null = ทุกตัวถูกเลือก
@@ -6632,6 +6670,15 @@ function _pipeMissingChkAll(checked) {
   });
 }
 
+function _pipeOrphanLogChkAll(checked) {
+  var p = window._pipeXlsxPending;
+  if (!p || !p.orphanLogs) return;
+  p.orphanLogs.forEach(function(ol) {
+    var el = document.getElementById('pipeOrphanLogChk_' + ol.log.id);
+    if (el) el.checked = checked;
+  });
+}
+
 function _pipeImportBulkAct(val) {
   if (!val) return;
   var scopeEl = document.getElementById('pipeBulkScope');
@@ -6770,8 +6817,12 @@ function _doPipeXlsxImport() {
     var el = document.getElementById('pipeMissingChk_' + mp.id);
     return el && el.checked;
   }).map(function(mp) { return mp.id; });
+  var deleteLogIds = (p.orphanLogs || []).filter(function(ol) {
+    var el = document.getElementById('pipeOrphanLogChk_' + ol.log.id);
+    return el && el.checked;
+  }).map(function(ol) { return ol.log.id; });
   closeMForce();
-  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap);
+  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap, deleteLogIds);
   _pipeAfterImportCheckDup();
 }
 
@@ -6791,7 +6842,7 @@ function _pipeAfterImportCheckDup() {
 function _pipeGenId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
-function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) {
+function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, deleteLogIds) {
   if (typeof ST._guestBlocked === 'function' && ST._guestBlocked('pipeline')) return;
   var lockDealer = lockDealerId ? ST.getOne('dealers', lockDealerId) : null;
   var dealers = ST.getAll('dealers');
@@ -6925,21 +6976,27 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     }
   });
 
-  // เขียนครั้งเดียว — ดูคอมเมนต์ที่ต้นฟังก์ชัน (แทนที่จะเขียนทีละแถว ลด Firestore full-collection push
-  // จาก N ครั้งเหลือครั้งเดียว) ต้องเขียนก่อน deleteIds loop ด้านล่าง เพราะ ST.delete() อ่านจาก
-  // localStorage ปัจจุบัน ถ้ายังไม่เขียน batch นี้ลงไปก่อน การลบจะไปอ่านข้อมูลเก่าที่ยังไม่รวมแถวที่เพิ่ง import
-  if (added || updated) {
-    ST._set(ST._keys.pipeline, allPipes);
-    ST._set(ST._keys.pipeLog, pipeLogs);
-  }
+  // เขียนครั้งเดียวรวมทุกอย่าง (เพิ่ม/แก้/ลบ pipeline ที่ไม่มีในไฟล์/ลบ Update ที่ไม่ตรงไฟล์) — เดิมมี 2 จุด
+  // เขียนแยกกัน: จุดนี้เขียน pipeline+pipeLog ที่เพิ่ม/แก้ครั้งเดียว แต่จุดลบ pipeline ที่ไม่มีในไฟล์ (deleteIds)
+  // แยกไปเรียก ST.delete()/ST.deleteWhere() ทีละรายการต่างหาก (บั๊กแบบเดียวกับที่เจอใน _pipeDupLogDeleteAll —
+  // แต่ละครั้งที่เรียกไป trigger firebase-sync.js push ทั้ง collection ใหม่ เจอ pipeline ที่ไม่มีในไฟล์เยอะๆ
+  // (เช่น import ไฟล์บางส่วน) ก็ค้างได้เหมือนกัน) รวมเป็นจุดเดียวตรงนี้แทน พร้อมเพิ่มการลบ Update ที่ไม่ตรงไฟล์
+  // (deleteLogIds — ผู้ใช้เลือกเองจากช่อง "📝 Update ที่มีในระบบแต่ไม่ตรงกับไฟล์" ใน preview)
+  var deletePipeIdSet = {};
+  if (deleteIds && deleteIds.length) deleteIds.forEach(function(id) { deletePipeIdSet[id] = true; });
+  var deleteLogIdSet = {};
+  if (deleteLogIds && deleteLogIds.length) deleteLogIds.forEach(function(id) { deleteLogIdSet[id] = true; });
 
-  var deleted = 0;
-  if (deleteIds && deleteIds.length) {
-    deleteIds.forEach(function(id) {
-      ST.delete('pipeline', id);
-      ST.deleteWhere('pipeLog', function(l) { return l.pipeId === id; });
-      deleted++;
-    });
+  var deleted = deleteIds ? deleteIds.length : 0;
+  var deletedLogs = deleteLogIds ? deleteLogIds.length : 0;
+  var hasAnyChange = added || updated || deleted || deletedLogs;
+  if (hasAnyChange) {
+    var finalPipes = deleted ? allPipes.filter(function(p) { return !deletePipeIdSet[p.id]; }) : allPipes;
+    var finalLogs = (deleted || deletedLogs)
+      ? pipeLogs.filter(function(l) { return !deleteLogIdSet[l.id] && !deletePipeIdSet[l.pipeId]; })
+      : pipeLogs;
+    ST._set(ST._keys.pipeline, finalPipes);
+    ST._set(ST._keys.pipeLog, finalLogs);
   }
 
   // ผูกช่อง Sale ใน Excel กลับเข้า "เซลที่ดูแล" ของ Dealer — ถ้าไม่ตรงกับที่มีอยู่ ให้ import ทับ (ถือ Excel
@@ -6958,6 +7015,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
   if (added)   msg += ' ➕' + added + ' ใหม่';
   if (updated) msg += ' ✏️' + updated + ' อัปเดต';
   if (deleted) msg += ' 🗑️' + deleted + ' ลบ';
+  if (deletedLogs) msg += ' 📝🗑️' + deletedLogs + ' Update ที่ไม่ตรงไฟล์';
   if (dealersSynced) msg += ' 👤' + dealersSynced + ' Dealer อัปเดตเซลที่ดูแล';
   if (skipped) msg += ' (ข้าม ' + skipped + ')';
   toast(msg);
