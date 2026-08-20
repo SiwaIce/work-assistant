@@ -5685,13 +5685,38 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 // แทนการเรียก ST.pipeLogsByPipe() ต่อแถว — ตัวนั้น filter ทั้ง collection ทุกครั้งที่เรียก พอ preview/import
 // ทีเดียวหลายร้อย-พันแถว (import ทั้งชีต) กลายเป็น O(แถว × log ทั้งระบบ) จนหน้าเว็บค้างได้ (ไม่มี logsIndex
 // ก็ยัง fallback ไปแบบเดิมได้ปกติ สำหรับจุดที่เรียกทีละรายการ ไม่กระทบ)
-// แยกวันที่นำหน้า (dd/mm/yy หรือ dd/mm/yyyy — รูปแบบเดียวกับที่ logFmt ใน _pipeRowFields ใส่ไว้ตอน export)
-// ออกจาก 1 บรรทัดในคอลัมน์ Update — คืน {date, content} — date เป็น ISO ผ่าน _pipeDateFromPaste
-// (parse ไม่ได้ = '' ให้ผู้เรียก fallback เอาเอง เช่น registerDate หรือเวลาปัจจุบัน)
+// true = stamp วันที่ import จริง (วันนี้) ให้บรรทัด Update ที่ไม่มีวันที่นำหน้า/parse ไม่ได้ (ตั้งจาก checkbox
+// ในหน้า preview import), false (ค่าเริ่มต้น) = เก็บว่างไว้ตามต้นฉบับ ไม่เดาวันที่ให้
+var _pipeImportStampUndated = false;
+var _PIPE_MON3 = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+
+// แยกวันที่นำหน้าออกจาก 1 บรรทัดในคอลัมน์ Update — คืน {date, content} โดย date เป็น ISO หรือ '' ถ้า parse
+// ไม่ได้ (ไม่ stamp อะไรทั้งนั้น — ใช้เช็คตรงๆ ว่าบรรทัดนี้มีวันที่จริงไหม เช่นตอนนับ preview)
+// รองรับ 2 รูปแบบที่เจอจริงในชีท: "dd/mm/yy(yy)" (รูปแบบที่ logFmt ใน _pipeRowFields export ออกมา) และ
+// "ddMONyy" ไม่มีตัวคั่น (เช่น "15DEC25" — ทีมพิมพ์เองในชีทบ่อย) ทั้งสองแบบอาจตามด้วย "-" หรือช่องว่างก่อนข้อความ
+// จริง (เช่น "12/3/25-ข้อความ", "17/08/26 - ข้อความ") ต้องตัดตัวคั่นนี้ออกด้วย ไม่งั้นเนื้อหาที่เก็บจะมี "-"
+// ค้างอยู่ เทียบกับ log เดิม (ที่ไม่มี "-") ไม่ตรงกัน กลายเป็นสร้าง log ซ้ำทุกครั้งที่ import
+function _pipeSplitUpdateLine(line) {
+  var m1 = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-?\s*(.*)$/);
+  if (m1) return { date: _pipeDateFromPaste(m1[1]), content: m1[2] };
+  var m2 = line.match(/^(\d{1,2})([A-Za-z]{3})(\d{2,4})?\s*-?\s*(.*)$/);
+  if (m2 && _PIPE_MON3.hasOwnProperty(m2[2].toLowerCase())) {
+    if (m2[3]) {
+      var y4 = m2[3].length === 2 ? '20' + m2[3] : m2[3];
+      var mm = String(_PIPE_MON3[m2[2].toLowerCase()]).padStart(2, '0');
+      return { date: y4 + '-' + mm + '-' + m2[1].padStart(2, '0'), content: m2[4] };
+    }
+    return { date: '', content: m2[4] }; // มีวันที่+เดือนแต่ไม่มีปี (เช่น "26DEC" เฉยๆ) — ไม่พอสร้างวันที่แน่นอน
+  }
+  return { date: '', content: line };
+}
+
+// เหมือน _pipeSplitUpdateLine แต่ stamp วันนี้ให้ถ้า parse ไม่ได้และ _pipeImportStampUndated เปิดอยู่ — ใช้จุด
+// นี้เดียวตอนจะ "บันทึกจริง" ส่วนตอนแค่เช็ค/นับ (preview) ให้เรียก _pipeSplitUpdateLine ตรงๆ แทน
 function _pipeParseUpdateLine(line) {
-  var m = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(.*)$/);
-  if (!m) return { date: '', content: line };
-  return { date: _pipeDateFromPaste(m[1]), content: m[2] };
+  var r = _pipeSplitUpdateLine(line);
+  if (!r.date && _pipeImportStampUndated) r.date = _td();
+  return r;
 }
 
 // คืน { newLines: [{content,date},...], dateFixes: [{logId,oldDate,newDate,content},...] }
@@ -5880,6 +5905,7 @@ function _pipeLogsIndexByPipe(allLogs) {
 }
 
 function _showPipeXlsxPreview(rows, dealerId, colMap) {
+  _pipeImportStampUndated = false; // reset ทุกครั้งที่เปิด preview ใหม่ กันค่าจากรอบ import ก่อนหน้าค้างข้ามมา
   var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
@@ -5943,6 +5969,26 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     if (hasUnknown) unknownModelRows.push(i + 1);
   });
 
+  // เช็คหาบรรทัดในคอลัมน์ Update 1-6 ที่ไม่มีวันที่นำหน้าเลย/parse ไม่ได้ — เตือนไว้ก่อน commit จริง เพราะถ้าไม่
+  // stamp ให้ log จะถูกบันทึกแบบไม่มีวันที่ (เห็นในไทม์ไลน์เป็นช่องว่าง) ให้ผู้ใช้เลือกเองว่าจะเก็บแบบนั้นไว้
+  // ตามต้นฉบับ หรือ stamp วันที่ import วันนี้ให้ (ดู _pipeImportStampUndated)
+  var undatedCount = 0;
+  var undatedSamples = [];
+  rowMeta.forEach(function(m) {
+    for (var u = 1; u <= 6; u++) {
+      var raw = _pipeCol(m.row, colMap, 'update' + u).trim();
+      if (!raw) continue;
+      raw.split('\n').forEach(function(line) {
+        line = line.trim();
+        if (!line) return;
+        if (!_pipeSplitUpdateLine(line).date) {
+          undatedCount++;
+          if (undatedSamples.length < 5) undatedSamples.push(line);
+        }
+      });
+    }
+  });
+
   // กลุ่ม Dealer ที่พบในไฟล์นี้ (รวมแถวที่จับคู่ Dealer ไม่ได้เลยเป็นกลุ่ม "(ไม่มี Dealer)") — ใช้สร้าง chip กรอง
   var dealerBuckets = {};
   var dealerBucketOrder = [];
@@ -5959,6 +6005,12 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   var h = '<div>';
   if (dealer) h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(dealer.name) + '</b> — จะถูก set ให้ทุก row</div>';
   if (unknownModelRows.length) h += '<div style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚠️ แถวที่ ' + unknownModelRows.join(', ') + ' มีสินค้าที่ไม่ใช่ 6 รุ่นหลัก (M3M/M4T/M4E/M4TD/M400/Dock3) — จะสูญหายหลัง import เพราะไม่มีคอลัมน์รองรับ</div>';
+  if (undatedCount) {
+    h += '<div style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:8px 10px;margin-bottom:8px">';
+    h += '⚠️ พบ Update ' + undatedCount + ' บรรทัดที่ไม่มีวันที่นำหน้า (หรือ parse ไม่ออก) ตัวอย่าง: <div style="color:var(--text2);margin:4px 0 6px;max-height:70px;overflow-y:auto">' + undatedSamples.map(function(s) { return sanitize(s.length > 80 ? s.slice(0, 80) + '…' : s); }).join('<br>') + '</div>';
+    h += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="pipeStampUndatedChk" onchange="_pipeImportStampUndated=this.checked" style="width:auto">stamp วันที่ import วันนี้ (' + fD(_td()) + ') ให้บรรทัดเหล่านี้ — ไม่ติ๊ก = เก็บว่างไว้ตามต้นฉบับ</label>';
+    h += '</div>';
+  }
 
   // ── แท็บกรองสถานะ ──────────────────────────────────────────────
   var tabDefs = [
@@ -6503,7 +6555,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
       updated++;
       updChanges.newLines.forEach(function(line) {
-        pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line.content, date: line.date || pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+        pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line.content, date: line.date, created: new Date().toISOString() });
       });
       // แก้วันที่ log เดิมที่เนื้อหาตรงกับไฟล์อยู่แล้วแต่วันที่ไม่ตรง (เช่น โดนบั๊กเก่าใส่วันที่ผิดไว้ตอน
       // import ครั้งก่อน) — ปรับวันที่ให้ตรง ไม่สร้าง log ซ้ำ
@@ -6525,7 +6577,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
           uline = uline.trim();
           if (!uline) return;
           var parsedU = _pipeParseUpdateLine(uline);
-          pipeLogs.push({ id: _pipeGenId(), pipeId: newPipeId, type: 'note', content: parsedU.content, date: parsedU.date || pipeData.registerDate || new Date().toISOString(), created: new Date().toISOString() });
+          pipeLogs.push({ id: _pipeGenId(), pipeId: newPipeId, type: 'note', content: parsedU.content, date: parsedU.date, created: new Date().toISOString() });
         });
       }
     }
