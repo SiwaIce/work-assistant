@@ -14,6 +14,10 @@ var pipeTaskFlt = false; // true = แสดงเฉพาะโครงกา
 function togglePipeTaskFlt() { pipeTaskFlt = !pipeTaskFlt; render(); }
 var pipeSale = 'all';
 var pipeDisplayFlt = 'all';
+// แคชรายการ pipeline ที่กรองแล้วล่าสุดของหน้า Pipeline Board (หลังผ่านทุกตัวกรอง: สถานะ/Sale/Dealer/Display/
+// Archived/ค้นหา ฯลฯ) — ปุ่ม Export CSV/xlsx ใช้ตัวนี้แทน ST.getAll('pipeline') ตรงๆ เพื่อให้ export ตรงกับ
+// สิ่งที่กำลังดูอยู่บนจอ (เช่น กรอง Sale ไว้แล้วกด export ก็ได้เฉพาะของ Sale นั้น) ไม่มีตัวกรองเลย = เท่ากับทั้งหมดอยู่ดี
+var _pipeBoardVisiblePipes = [];
 // true (ค่าเริ่มต้น) = ซ่อนโครงการที่ Archived (Win/Lost/Deliver/Hide — ดู pipeIsArchived) จากรายการหลัก
 // ตรงกับที่ทีมแยกไว้เป็นแท็บ "Archived Project" ในชีท ไม่ให้ปนกับโครงการที่ยังต้องติดตามอยู่
 var pipeHideArchived = true;
@@ -1163,6 +1167,7 @@ function rPipeline(el) {
   }
   
   pipes = sortPipes(pipes, pipeSort);
+  _pipeBoardVisiblePipes = pipes;
   
   var ps = getPipeSummary();
   
@@ -1208,8 +1213,8 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="showImportPipelineM()">📥 Import</button>' +
     '<button class="btn bo" onclick="importPipelineXlsx(\'\')">📂 xlsx</button>' +
     '<button class="btn bo" onclick="showPastePipelineM()">📋 วาง</button>' +
-    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'csv\')">📤 CSV</button>' +
-    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsx\')">📤 xlsx</button>' +
+    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'csvFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 CSV</button>' +
+    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsxFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 xlsx</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
     '<button class="btn bo" onclick="showPipeImportDateAuditM()" title="หา Log ที่อาจได้วันที่ผิดจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่ log เก่าที่ import ไปแล้วยังค้างวันที่ผิดอยู่)">🔍 เช็ค Log วันที่ผิด</button>' +
     '<button class="btn bo" onclick="showPipeImportProjectIdAuditM()" title="หาโครงการที่ Project ID อาจถูกเขียนทับเป็นค่าว่างจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่โครงการที่ import ไปแล้วยังค้างค่าว่างอยู่)">🔍 เช็ค Project ID หาย</button>' +
@@ -1826,12 +1831,31 @@ function runPipeExportWithLogFilter(action, arg) {
   closeMForce();
   if (action === 'csv') dlPipeCSV(excludeTypes);
   else if (action === 'xlsx') dlPipeXlsx(excludeTypes);
+  else if (action === 'csvFiltered') dlPipeCSVFiltered(excludeTypes);
+  else if (action === 'xlsxFiltered') dlPipeXlsxFiltered(excludeTypes);
   else if (action === 'csvDealer') dlPipeCSVForDealer(arg, excludeTypes);
   else if (action === 'xlsxDealer') dlPipeXlsxForDealer(arg, excludeTypes);
   else if (action === 'copyRow') copyPipeRow(arg, excludeTypes);
 }
 
 function dlPipeCSV(excludeTypes) { _exportPipeCSV(ST.getAll('pipeline'), 'pipeline-' + _td() + '.csv', excludeTypes); }
+
+// export เฉพาะรายการที่กำลังกรองอยู่บนหน้า Pipeline Board ตอนนี้ (Sale/Dealer/สถานะ/Archived/ค้นหา ฯลฯ)
+// แทนที่จะ export ทั้งหมดเสมอ — ไม่มีตัวกรองใดๆ อยู่ก็เท่ากับ export ทั้งหมดอยู่ดี (_pipeBoardVisiblePipes
+// จะเท่ากับ ST.getAll('pipeline') ทั้งชุดตอนนั้น)
+function dlPipeCSVFiltered(excludeTypes) {
+  var pipes = _pipeBoardVisiblePipes;
+  var suffix = pipes.length !== ST.getAll('pipeline').length ? '-filtered' : '';
+  _exportPipeCSV(pipes, 'pipeline' + suffix + '-' + _td() + '.csv', excludeTypes);
+  toast('📥 Export CSV แล้ว (' + pipes.length + ' รายการ' + (suffix ? ' — เฉพาะที่กรองอยู่' : '') + ')');
+}
+function dlPipeXlsxFiltered(excludeTypes) {
+  var pipes = _pipeBoardVisiblePipes.slice();
+  var filtered = pipes.length !== ST.getAll('pipeline').length;
+  var wb = _pipeBuildXlsxWorkbook(pipes, excludeTypes);
+  XLSX.writeFile(wb, 'pipeline' + (filtered ? '-filtered' : '') + '-' + _td() + '.xlsx');
+  toast('📥 Export Excel แล้ว (' + pipes.length + ' รายการ' + (filtered ? ' — เฉพาะที่กรองอยู่' : '') + ')');
+}
 
 // สร้าง workbook 2 ชีต "Main" (ยังเปิดอยู่) กับ "Archived Project" (Win/Lost/Deliver/Hide — ดู
 // pipeIsArchived) แยกตามชีต Google Sheet ที่ทีมปรับใหม่ — ใช้ร่วมกันทั้ง export ทั้งบริษัทและของ dealer เดียว
@@ -6177,6 +6201,15 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     m.dealerKey = key;
   });
 
+  // รายชื่อ Sale ที่พบในไฟล์นี้ (คอลัมน์ Sale) — ใช้สร้าง dropdown กรอง + ปุ่ม "import เฉพาะ Sale นี้"
+  var saleOptSet = {};
+  rowMeta.forEach(function(m) {
+    var sv = _pipeCol(m.row, colMap, 'saleName').trim();
+    m.saleName = sv;
+    if (sv) saleOptSet[sv] = true;
+  });
+  var saleOptList = Object.keys(saleOptSet).sort(function(a, b) { return a.localeCompare(b, 'th'); });
+
   var h = '<div>';
   if (dealer) h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(dealer.name) + '</b> — จะถูก set ให้ทุก row</div>';
   if (unknownModelRows.length) h += '<div style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚠️ แถวที่ ' + unknownModelRows.join(', ') + ' มีสินค้าที่ไม่ใช่ 6 รุ่นหลัก (M3M/M4T/M4E/M4TD/M400/Dock3) — จะสูญหายหลัง import เพราะไม่มีคอลัมน์รองรับ</div>';
@@ -6227,6 +6260,13 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   h += '<option value="fc_asc">เรียง: Forecast น้อย→มาก</option>';
   h += '</select>';
   h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer"><input type="checkbox" id="pipeImportIssuesOnly" onchange="_pipeApplyImportFilters()" style="width:auto">แสดงเฉพาะแถวที่มีปัญหา</label>';
+  if (saleOptList.length > 1) {
+    h += '<select id="pipeImportSale" onchange="_pipeImportSaleChange(this.value)" style="font-size:12px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">';
+    h += '<option value="all">👤 ทุก Sale</option>';
+    saleOptList.forEach(function(s) { h += '<option value="' + sanitize(s) + '">' + sanitize(s) + '</option>'; });
+    h += '</select>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportOnlySale()" title="ตั้งค่าให้ import เฉพาะแถวของ Sale ที่กรองอยู่ตอนนี้ ที่เหลือตั้งเป็นข้ามทั้งหมด">🎯 Import เฉพาะที่กรองอยู่</button>';
+  }
   h += '</div>';
 
   // ── การ์ดสรุปตามตัวกรองปัจจุบัน (อัปเดตสดทุกครั้งที่กรอง) ──────────
@@ -6281,7 +6321,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
         '<option value="update"' + (defAct === 'update' ? ' selected' : '') + '>✏️ อัปเดต</option>' +
         '<option value="skip"'   + (defAct === 'skip'   ? ' selected' : '') + '>⏭ ข้าม</option>' +
       '</select>';
-    h += '<tr data-pstate="' + m.state + '" data-idx="' + i + '" data-dealer="' + sanitize(m.dealerKey) + '" data-issue="' + (m.hasIssue ? '1' : '0') + '" data-name="' + sanitize((rProjectName || rEndUserTH || '').toLowerCase()) + '" data-rowno="' + sanitize(_pipeCol(r, colMap, 'rowNo') || '') + '" data-forecast="' + fc + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
+    h += '<tr data-pstate="' + m.state + '" data-idx="' + i + '" data-dealer="' + sanitize(m.dealerKey) + '" data-sale="' + sanitize(m.saleName || '') + '" data-issue="' + (m.hasIssue ? '1' : '0') + '" data-name="' + sanitize((rProjectName || rEndUserTH || '').toLowerCase()) + '" data-rowno="' + sanitize(_pipeCol(r, colMap, 'rowNo') || '') + '" data-forecast="' + fc + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
       '<td style="padding:5px 10px;text-align:center;white-space:nowrap">' + badge + diffBtn + '</td>' +
       '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(_pipeCol(r, colMap, 'rowNo') || '-') + '</td>' +
       '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((rProjectName || rEndUserTH || '')) + '">' + nameDisplay + '</td>' +
@@ -6359,13 +6399,13 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, colMap: colMap };
   openM('📂 Preview: Import Pipeline จาก Excel', h);
   setMWide(960);
-  _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '' }; // dealers: null = ทุกตัวถูกเลือก
+  _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all' }; // dealers: null = ทุกตัวถูกเลือก
   _pipeImportSetFilter('all');
 }
 
 // สถานะตัวกรองปัจจุบันของ preview import — reset ใหม่ทุกครั้งที่เปิด preview (ดู _showPipeXlsxPreview)
 // dealers: null = ทุก Dealer ถูกเลือกอยู่ (ค่าเริ่มต้น), object {key: false} = ตัวที่ถูกเอาออกจากตัวกรอง
-var _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '' };
+var _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all' };
 
 // สลับ tab กรองสถานะ — ยังทำงานร่วมกับตัวกรองอื่น (Dealer/ค้นหา/มีปัญหา) ผ่าน _pipeApplyImportFilters
 function _pipeImportSetFilter(state) {
@@ -6424,6 +6464,32 @@ function _pipeImportSortChange(v) {
   _pipeApplyImportFilters();
 }
 
+function _pipeImportSaleChange(v) {
+  _pipeImportFilter.sale = v;
+  _pipeApplyImportFilters();
+}
+
+// ตั้งค่า action ของทุกแถวใหม่ทีเดียว: แถวที่อยู่ในตัวกรองปัจจุบัน (เช่นกรอง Sale ไว้แล้ว) กลับไปเป็น action
+// เริ่มต้นตามสถานะจริง (ใหม่=เพิ่ม, เปลี่ยน=อัปเดต, เดิม=ข้าม) ส่วนแถวที่ถูกกรองออกไปตั้งเป็น "ข้าม" ทั้งหมด —
+// ใช้ตอบโจทย์ "import เฉพาะ Sale คนนั้น" โดยไม่ต้องมากดข้ามทีละแถวเอง
+function _pipeImportOnlySale() {
+  var i = 0, affected = 0;
+  while (document.getElementById('pipeRowAct_' + i)) {
+    var sel = document.getElementById('pipeRowAct_' + i);
+    var tr = sel.closest('tr');
+    var visible = !tr || tr.style.display !== 'none';
+    if (visible) {
+      var pstate = tr ? tr.getAttribute('data-pstate') : '';
+      sel.value = pstate === 'new' ? 'add' : (pstate === 'changed' ? 'update' : 'skip');
+    } else {
+      sel.value = 'skip';
+    }
+    affected++;
+    i++;
+  }
+  toast('🎯 ตั้งค่า import เฉพาะแถวที่กรองอยู่แล้ว (ที่เหลือตั้งเป็นข้ามทั้งหมด — ' + affected + ' แถว)');
+}
+
 // ตัวกรองรวม (สถานะ/Dealer/ค้นหา/เฉพาะแถวมีปัญหา) + เรียงลำดับ + อัปเดตการ์ดสรุป — เรียกทุกครั้งที่ตัวกรองไหนเปลี่ยน
 // พับ diff row (🔍 ดูการเปลี่ยนแปลง) กลับเสมอทุกครั้งที่กรองใหม่ เหมือนพฤติกรรมเดิม ไม่ได้ตัดปุ่มนี้ออก
 function _pipeApplyImportFilters() {
@@ -6451,9 +6517,10 @@ function _pipeApplyImportFilters() {
   mainRows.forEach(function(tr) {
     var dealerOk = !st.dealers || st.dealers[tr.getAttribute('data-dealer')] !== false;
     var statusOk = st.status === 'all' || tr.getAttribute('data-pstate') === st.status;
+    var saleOk = !st.sale || st.sale === 'all' || tr.getAttribute('data-sale') === st.sale;
     var issueOk = !issuesOnly || tr.getAttribute('data-issue') === '1';
     var searchOk = !st.search || tr.getAttribute('data-name').indexOf(st.search) !== -1 || tr.getAttribute('data-rowno').toLowerCase().indexOf(st.search) !== -1;
-    var show = dealerOk && statusOk && issueOk && searchOk;
+    var show = dealerOk && statusOk && saleOk && issueOk && searchOk;
     tr.style.display = show ? '' : 'none';
     if (show) { visibleCount++; visibleForecast += parseFloat(tr.getAttribute('data-forecast')) || 0; }
     var diffTr = document.getElementById('pipeDiffRow_' + tr.getAttribute('data-idx'));
