@@ -1703,7 +1703,8 @@ function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 // (ไม่ใช่จับคู่ชื่อหัวข้อแบบฝั่ง import) — แก้ตามคอลัมน์ชีทล่าสุด 2026-08-19: ตัด Project ID/Project revenue ออก
 // (ยังเก็บ field ในแอปไว้ใช้ภายในตามปกติ แค่ไม่ export ไปชีทแล้ว), สลับ DJI Dealer มาก่อน Dealer Name,
 // เพิ่ม Dock (แยกจาก Dock 3 Qty.) และ month (เลขเดือนของ Forecast Month)
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+// เพิ่ม Industrial Type (2026-08-20) — อยู่หลัง Register Date ก่อน Project Name
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แปลง ROW NO. (คอลัมน์แรก) เป็นชนิดตัวเลขจริงก่อนเขียนไฟล์ xlsx เฉพาะที่เป็นตัวเลขล้วนๆ
 // เหตุผล: aoa_to_sheet เดา cell type จาก JS type ของค่า — p.rowNo เก็บเป็น string เสมอ ถ้าไม่แปลง
@@ -1731,7 +1732,7 @@ function _pipeRowFields(p, excludeTypes) {
   // (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิดไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
   var pipeClosed = pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver';
   var fields = [
-    p.rowNo || '', fD(p.registerDate), p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock || '',
+    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock || '',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate),
     pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
@@ -2023,7 +2024,10 @@ function rPipeDet(el) {
   
   html += '<div class="fr"><div><label>End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';
   html += '<div><label>End User (EN)</label><div>' + sanitize(p.endUserEN || '-') + '</div></div></div>';
-  
+
+  html += '<div class="fr"><div><label>Industrial Type</label><div>' + sanitize(p.industrialType || '-') + '</div></div>';
+  html += '<div><label></label><div></div></div></div>';
+
   html += '<div class="fr"><div><label>Unit Type</label><div>' + (p.unitType || '-') + '</div></div>';
   html += '<div><label>Dealer</label><div>🏪 <strong>' + (d ? sanitize(d.name) : '-') + '</strong> ' + (d ? levelTag(d.level) : '') + '</div></div></div>';
   
@@ -5439,6 +5443,7 @@ function _pipeDateFromPaste(s, refDateISO) {
 var _PIPE_IMPORT_COLS = [
   { key: 'rowNo',             label: 'ROW NO.' },
   { key: 'registerDate',      label: 'Register Date' },
+  { key: 'industrialType',    label: 'Industrial Type' },
   { key: 'projectId',         label: 'Project ID' },
   { key: 'projectName',       label: 'Project Name', required: true },
   { key: 'endUserTH',         label: 'End User Name' },
@@ -5487,6 +5492,40 @@ var _PIPE_MODEL_KEYS = [
   { key: 'm400',  model: 'Matrice 400', gKey: 'm400'  }
 ];
 
+// 6 ตัวเลือกหลักของ Industrial Type — เลือกจากลิสต์นี้ก่อน พิมพ์เองได้ผ่าน "อื่นๆ" (ยังไม่ทำเป็นลิสต์แก้ไขได้ใน
+// Admin ตามที่ตกลงไว้ — ถ้าจะให้แก้ไขลิสต์ได้ทีหลังค่อยย้ายไปเก็บใน config)
+var PIPE_INDUSTRY_TYPES = ['Public Safety', 'Geospatial', 'Utilities', 'Renewable Energy', 'Oil & Gas', 'Forestry'];
+
+// เดา Industrial Type จากคำในชื่อโครงการ/หน่วยงาน — ใช้ตอน import เฉพาะแถวที่ไม่มีค่ามาในไฟล์เลย (แค่ช่วย
+// แนะนำคร่าวๆ ไม่ใช่ AI ตีความจริง เดาผิดได้ถ้าชื่อโครงการไม่มีคำที่เข้าเกณฑ์ตรงๆ — ผู้ใช้แก้เองได้ในฟอร์ม)
+var _PIPE_INDUSTRY_KEYWORDS = [
+  { type: 'Public Safety',    kws: ['ตำรวจ', 'ดับเพลิง', 'ป้องกันภัย', 'สาธารณภัย', 'บรรเทาสาธารณภัย', 'อปพร', 'ปภ.', 'police', 'fire', 'rescue', 'disaster', 'safety'] },
+  { type: 'Geospatial',       kws: ['สำรวจ', 'แผนที่', 'รังวัด', 'ภูมิสารสนเทศ', 'geo', 'survey', 'mapping', 'gis', 'cadastral'] },
+  { type: 'Utilities',        kws: ['ประปา', 'การประปา', 'ไฟฟ้า', 'การไฟฟ้า', 'สายส่ง', 'utility', 'utilities', 'water', 'electric', 'power grid'] },
+  { type: 'Renewable Energy', kws: ['พลังงานทดแทน', 'โซล่าร์', 'โซล่าเซลล์', 'พลังงานลม', 'solar', 'wind farm', 'renewable'] },
+  { type: 'Oil & Gas',        kws: ['น้ำมัน', 'ก๊าซ', 'ปิโตรเลียม', 'ปตท', 'oil', 'gas', 'petroleum', 'pipeline inspection'] },
+  { type: 'Forestry',         kws: ['ป่าไม้', 'อุทยาน', 'ป่าสงวน', 'forest', 'national park'] }
+];
+function _pipeGuessIndustrialType(projectName, endUserTH) {
+  var text = ((projectName || '') + ' ' + (endUserTH || '')).toLowerCase();
+  for (var i = 0; i < _PIPE_INDUSTRY_KEYWORDS.length; i++) {
+    var grp = _PIPE_INDUSTRY_KEYWORDS[i];
+    for (var j = 0; j < grp.kws.length; j++) {
+      if (text.indexOf(grp.kws[j].toLowerCase()) !== -1) return grp.type;
+    }
+  }
+  return '';
+}
+
+// ตัวเดียวที่ตัดสินค่า Industrial Type สุดท้าย — ใช้ร่วมกันทั้ง diff/state comparison และ commit จริง (ต้อง
+// เป็นจุดเดียวกันเป๊ะ ไม่งั้นจะเจอปัญหาแบบเดียวกับ model qty ก่อนหน้านี้ที่สองจุดคำนวณคนละแบบ) ไฟล์มีค่ามาก็ใช้
+// ตามนั้น, คอลัมน์มีแต่ว่างก็ลองเดาจากคำในชื่อ/หน่วยงาน, เดาไม่ได้/ไม่มีคอลัมน์เลยก็คงค่าเดิมไว้
+function _pipeResolveIndustrialType(existing, c, colMap, projectName, endUserTH) {
+  if (!(colMap && colMap.hasOwnProperty('industrialType'))) return existing ? (existing.industrialType || '') : '';
+  var raw = _pipeCol(c, colMap, 'industrialType').trim();
+  return raw || _pipeGuessIndustrialType(projectName, endUserTH) || (existing ? (existing.industrialType || '') : '');
+}
+
 function _pipeNormHeader(s) {
   return (s || '').toString().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -5524,7 +5563,7 @@ function showPastePipelineM(lockDealerId) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
   h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปมาแบบ "รวมแถวหัวตาราง" ด้วยเสมอ แล้ววางที่นี่ — ระบบจับคู่คอลัมน์จากชื่อหัวข้อ ไม่สนลำดับ/ตำแหน่ง สลับหรือแทรกคอลัมน์อื่นในชีตได้อิสระ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / Dock / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Industrial Type / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / Dock / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';
@@ -5890,6 +5929,8 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   // ไม่งั้นทุกโครงการที่เคยมีค่าจะโดน flag ว่า "เปลี่ยน" (กลายเป็นค่าว่าง/0) ทุกครั้งที่ import ทั้งที่จริงๆ
   // ไม่มีอะไรเปลี่ยนเลย — เทียบเฉพาะตอนไฟล์มีคอลัมน์นี้จริงๆ เท่านั้น
   if (colMap && colMap.hasOwnProperty('projectId') && (existing.projectId || '') !== _pipeNormText(_pipeCol(c, colMap, 'projectId'))) return 'changed';
+  var resolvedIndType = _pipeResolveIndustrialType(existing, c, colMap, _pipeCol(c, colMap, 'projectName'), _pipeCol(c, colMap, 'endUserTH'));
+  if ((existing.industrialType || '') !== resolvedIndType) return 'changed';
   if (colMap && colMap.hasOwnProperty('projectRevenue') && Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'))) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount'))) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(_pipeCol(c, colMap, 'realAmount'))) > 0.001) return 'changed';
@@ -5949,6 +5990,8 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     var newPid = _pipeNormText(_pipeCol(c, colMap, 'projectId'));
     if (_pipeNormText(existing.projectId) !== newPid) diffs.push({ label: 'Project ID', old: _pipeNormText(existing.projectId), newVal: newPid });
   }
+  var newIndType = _pipeResolveIndustrialType(existing, c, colMap, _pipeCol(c, colMap, 'projectName'), _pipeCol(c, colMap, 'endUserTH'));
+  if ((existing.industrialType || '') !== newIndType) diffs.push({ label: 'Industrial Type', old: existing.industrialType || '', newVal: newIndType });
   if (colMap && colMap.hasOwnProperty('projectRevenue')) {
     var newRev = _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'));
     if (Math.abs(_pipeNormNum(existing.projectRevenue) - newRev) > 0.001) diffs.push({ label: 'Project Revenue', old: fmtMoney(_pipeNormNum(existing.projectRevenue)) || '0', newVal: fmtMoney(newRev) || '0' });
@@ -6589,6 +6632,8 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
       ? _pipeCol(c, colMap, 'projectId').trim()
       : (existing ? (existing.projectId || '') : '');
 
+    var industrialType = _pipeResolveIndustrialType(existing, c, colMap, projectName, endUserTH);
+
     // ใช้ตัวแปลงเดียวกับที่ diff/state ใช้เทียบ (_pipeResolveItemsFromRow) — ต้องเป็นแหล่งเดียวกันเป๊ะ
     // ไม่งั้นจะเจอ diff โผล่ซ้ำไปซ้ำมาไม่มีวันหายเหมือนที่เจอมา (ดูคอมเมนต์ที่ตัวฟังก์ชัน)
     var items = _pipeResolveItemsFromRow(c, colMap, existingItems);
@@ -6606,6 +6651,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap) 
     var pipeData = {
       rowNo: _pipeCol(c, colMap, 'rowNo').trim(),
       registerDate: regDate,
+      industrialType: industrialType,
       projectId: projectId,
       projectName: projectName,
       endUserTH: endUserTH,

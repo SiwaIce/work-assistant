@@ -503,6 +503,10 @@ function showPipelineM(dealerId, eid) {
     pipeItemMode = 'items';
   }
 
+  var _indTypeIsOther = p.industrialType && PIPE_INDUSTRY_TYPES.indexOf(p.industrialType) === -1;
+  var _indTypeOptHtml = PIPE_INDUSTRY_TYPES.map(function(t) { return '<option value="' + t + '"' + (p.industrialType === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+    '<option value="__other__"' + (_indTypeIsOther ? ' selected' : '') + '>อื่นๆ (พิมพ์เอง)</option>';
+
   openM(eid ? '✏️ Pipeline' : '➕ เพิ่ม Pipeline', '' +
     '<div class="fg"><label>ROW NO. <small style="color:var(--text2)">(เลขที่ในชีต — กรอกเองให้ตรงกับ Google Sheet)</small></label><input type="text" id="fp_rowno" value="' + sanitize(p.rowNo || '') + '" placeholder="เช่น 452"></div>' +
     '<div class="fg"><label>Project ID <small style="color:var(--text2)">(ได้จากตอนลูกค้าลงทะเบียน CRM ของ DJI — มีค่า = ถือว่าลงทะเบียนแล้ว)</small></label><input type="text" id="fp_projectid" value="' + sanitize(p.projectId || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="(function(v){var c=document.getElementById(\'fp_crm\');if(v&&c&&!c.checked){c.checked=true;document.getElementById(\'fp_crmdate_wrap\').style.display=\'\';}})(this.value.trim())"></div>' +
@@ -512,6 +516,8 @@ function showPipelineM(dealerId, eid) {
     '<div class="fg"><label>End User (EN)</label><input type="text" id="fp_eu_en" value="' + sanitize(p.endUserEN || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>🏛️ หน่วยงานใหญ่</label><input type="text" id="fp_agency_main" value="' + sanitize(p.agencyMain || '') + '" placeholder="เช่น กรม/กระทรวง/บริษัทแม่"></div>' +
     '<div class="fg"><label>หน่วยงานย่อย</label><input type="text" id="fp_agency_sub" value="' + sanitize(p.agencySub || '') + '" placeholder="เช่น กอง/สำนัก/สาขา"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Industrial Type</label><select id="fp_indtype" onchange="var w=document.getElementById(\'fp_indtype_custom_wrap\'); if(this.value===\'__other__\'){w.style.display=\'\';} else {w.style.display=\'none\';document.getElementById(\'fp_indtype_custom\').value=\'\';}">' + _indTypeOptHtml + '</select></div>' +
+    '<div class="fg" id="fp_indtype_custom_wrap"' + (_indTypeIsOther ? '' : ' style="display:none"') + '><label>ระบุ Industrial Type</label><input type="text" id="fp_indtype_custom" value="' + sanitize(_indTypeIsOther ? p.industrialType : '') + '" placeholder="พิมพ์เอง"></div></div>' +
     '<div class="fr"><div class="fg"><label>Unit Type <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'unitTypes\',\'⚙️ จัดการ Unit Type\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_unit\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_unit">' + optionsHTML(cfg.unitTypes, p.unitType, '--') + '</select></div>' +
     '<div class="fg"><label>Dealer Name *</label><input type="text" id="fp_dealer" list="fp_dealer_list" value="' + sanitize((ST.getOne('dealers', dealerId || p.dealerId) || {}).name || '') + '" placeholder="บริษัทที่เข้าประมูล พิมพ์อิสระ หรือเลือกจาก suggest" autocomplete="off">' + _dealerNameDatalistHtml('fp_dealer_list') + '</div></div>' +
     '<div class="fr"><div class="fg"><label>DJI Dealer</label><input type="text" id="fp_djid" list="fp_djid_list" value="' + sanitize(p.djiDealer || '') + '" placeholder="พิมพ์อิสระ หรือเลือกจาก suggest" autocomplete="off">' + _djiDealerDatalistHtml('fp_djid_list') + '</div>' +
@@ -1103,6 +1109,12 @@ function _finishSavePipeline(dealerId, eid) {
     endUserEN: document.getElementById('fp_eu_en').value.trim(),
     agencyMain: document.getElementById('fp_agency_main') ? document.getElementById('fp_agency_main').value.trim() : '',
     agencySub: document.getElementById('fp_agency_sub') ? document.getElementById('fp_agency_sub').value.trim() : '',
+    industrialType: (function() {
+      var sel = document.getElementById('fp_indtype');
+      if (!sel) return '';
+      if (sel.value === '__other__') return (document.getElementById('fp_indtype_custom') || {}).value ? document.getElementById('fp_indtype_custom').value.trim() : '';
+      return sel.value;
+    })(),
     unitType: document.getElementById('fp_unit').value,
     dealerId: dealerId,
     djiDealer: document.getElementById('fp_djid').value,
