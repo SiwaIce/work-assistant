@@ -877,6 +877,7 @@ function rKpiImprovementPlan(el) {
   h += '<button class="btn bsm bp" onclick="kpiImpCreateFollowupTasks(\'' + d.id + '\')">🗓️ สร้าง Task ติดตามรายสัปดาห์</button>';
   h += '<button class="btn bsm bo" onclick="exportImprovementPlanXlsx()">📤 Export Excel (ทุกบริษัทเสี่ยง)</button>';
   h += '<button class="btn bsm bo" onclick="printImprovementPlan(\'' + d.id + '\')">🖨️ พิมพ์ / บันทึกเป็น PDF</button>';
+  h += '<button class="btn bsm bo" onclick="viewImprovementPlanEN(\'' + d.id + '\')" title="เปิดหน้านี้เป็นภาษาอังกฤษล้วน สำหรับโชว์ Ryan/ผู้บริหารต่างชาติ">🇬🇧 English View</button>';
   h += '</div>';
 
   h += '</div>';
@@ -1020,9 +1021,11 @@ function _kpiPrintEn(s) {
   if (s.indexOf('ปี ') === 0) return 'FY ' + s.slice(3);
   return s;
 }
-function printImprovementPlan(dealerId) {
+// สร้าง HTML เต็มหน้า (ไม่รวม script/tag ปิดท้าย) ใช้ร่วมกันทั้งปุ่ม "พิมพ์/PDF" (เพิ่ม auto window.print())
+// และปุ่ม "English View" (เปิดดูเฉยๆ ไม่สั่งพิมพ์ทันที — ไว้โชว์ Ryan แบบหน้าเว็บปกติ) คืน null ถ้าไม่มี Dealer
+function _buildImprovementPlanEnHtml(dealerId) {
   var d = ST.getOne('dealers', dealerId);
-  if (!d) return;
+  if (!d) return null;
   var p = computeKpiCompanyPlan(dealerId, getConfig());
   var sisActual = kpiPlanSisActual(p);
   var gap = Math.max(0, p.target - sisActual);
@@ -1065,10 +1068,23 @@ function printImprovementPlan(dealerId) {
   html += '<h2>5) Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
     '<tr><td>New Opportunity (Action Plan Total)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
-  html += '<script>window.onload=function(){window.print();}</script></body></html>';
-
+  return html;
+}
+function _kpiOpenPlanWindow(html) {
   var win = window.open('', '_blank');
-  if (!win) return toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาต popup แล้วลองใหม่');
+  if (!win) { toast('⚠️ เบราว์เซอร์บล็อก popup — อนุญาต popup แล้วลองใหม่'); return; }
   win.document.write(html);
   win.document.close();
+}
+function printImprovementPlan(dealerId) {
+  var html = _buildImprovementPlanEnHtml(dealerId);
+  if (html === null) return;
+  _kpiOpenPlanWindow(html + '<script>window.onload=function(){window.print();}</script></body></html>');
+}
+// เปิดดูหน้า Improvement Plan ภาษาอังกฤษล้วนแบบหน้าเว็บปกติ (ไม่สั่งพิมพ์ทันที) — สำหรับโชว์ Ryan/ผู้บริหาร
+// ต่างชาติที่อยากดูตรงๆ ไม่ต้องผ่านกล่อง Print ก่อน ใช้ builder ตัวเดียวกับปุ่มพิมพ์เป๊ะๆ กันข้อความเพี้ยนกันคนละทาง
+function viewImprovementPlanEN(dealerId) {
+  var html = _buildImprovementPlanEnHtml(dealerId);
+  if (html === null) return;
+  _kpiOpenPlanWindow(html + '</body></html>');
 }
