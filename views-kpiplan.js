@@ -629,7 +629,7 @@ function kpiImpRelatedToCell(r) {
 function kpiImpGrowthPlanTable(dealerId) {
   var rows = getImprovementActions(dealerId);
   var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:880px">';
-  h += '<thead><tr>' + kpiImpTh('What', 140) + kpiImpTh('Related to', 160, 'ผูกกับ End User/โครงการก็ได้ หรือเว้นว่างถ้าเป็นแผนทั่วไป ไม่บังคับรูปแบบ') + kpiImpTh('Who', 90) + kpiImpTh('When', 80) + kpiImpTh('Expected Result', 150) + kpiImpTh('Expected Sales', 100, 'แผนที่ผูก Pipeline (มี 🔗) ไม่ถูกนับใน "New Opportunity" ของ Rollup ด้านล่าง เพราะมูลค่าโครงการนั้นถูกนับใน Pipeline ถ่วง POS ไปแล้ว — กันนับซ้ำ') + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  h += '<thead><tr>' + kpiImpTh('What to do', 140) + kpiImpTh('Related to Project', 160, 'ผูกกับ End User/โครงการก็ได้ หรือเว้นว่างถ้าเป็นแผนทั่วไป ไม่บังคับรูปแบบ') + kpiImpTh('Who', 90) + kpiImpTh('When', 80) + kpiImpTh('Expected Result', 150) + kpiImpTh('Expected Sales', 100, 'แผนที่ผูก Pipeline (มี 🔗) ไม่ถูกนับใน "New Opportunity" ของ Rollup ด้านล่าง เพราะมูลค่าโครงการนั้นถูกนับใน Pipeline ถ่วง POS ไปแล้ว — กันนับซ้ำ') + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
   if (!rows.length) h += '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มีแผน — กด "+ เพิ่มแผน" ด้านล่าง</td></tr>';
   rows.forEach(function(r) {
     h += '<tr>' + kpiImpTextCell('improvementActions', r.id, 'action', r.action) +
@@ -960,7 +960,7 @@ function exportImprovementPlanXlsx() {
     aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
     aoa.push([]);
     aoa.push(['3) Plan']);
-    aoa.push(['What', 'Related to', 'Who', 'When', 'Expected Result', 'Expected Sales']);
+    aoa.push(['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales']);
     if (actions.length) actions.forEach(function(a) {
       var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
       aoa.push([a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
@@ -1045,7 +1045,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
   }
 
   if (actions.length) {
-    html += '<h2>Plan</h2><table><tr><th>What</th><th>Related to</th><th>Who</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>';
+    html += '<h2>Plan</h2><table><tr><th>What to do</th><th>Related to Project</th><th>Who</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>';
     html += actions.map(function(a) {
       var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
       var sales = Number(a.expectedSales) || 0;
