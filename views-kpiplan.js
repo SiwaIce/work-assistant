@@ -840,9 +840,15 @@ function rKpiImprovementPlan(el) {
   h += '<div style="padding:16px 18px">';
   h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Gap vs Opportunity Rollup</div>';
   h += '<div style="background:var(--bg2);border-radius:11px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">';
+  // ตัว Gap ที่ใช้ใน Rollup ต้อง "หัก Pipeline ออกแล้ว" (ต่างจาก Gap ในการ์ด Sales Gap & Capability ข้อ 1 ที่
+  // เป็นแค่ Target - SIS จริง เฉยๆ ไม่เกี่ยวกับ Pipeline) เพราะ Rollup เรียงเป็นเนื้อเรื่องต่อกัน (Target →
+  // Current Forecast ที่รวม Pipeline แล้ว → เหลือขาดเท่าไหร่ → New Opportunity จะมาช่วยปิดส่วนที่เหลือนี้) ถ้าใช้
+  // Gap แบบไม่หัก Pipeline จะเห็นค่าที่สูงกว่าความเป็นจริง ทั้งที่ Current Forecast ข้างบนอาจจะเกินเป้าไปแล้วก็ได้
+  // ทำให้ตัวเลขดูขัดกันเอง (พบจากที่ผู้ใช้ทักว่า Rollup ดูไม่ตรง 2026-08-21)
+  var remainingGap = Math.max(0, p.target - currentForecast);
   h += kpiImpRollupRow('H2 Target', fmtMoneyShort(p.target));
   h += kpiImpRollupRow('Current Forecast (SIS จริง + Pipeline ถ่วง POS)', fmtMoneyShort(currentForecast));
-  h += kpiImpRollupRow('Sales Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiImpRollupRow('เหลือขาด (หลังหัก Pipeline แล้ว)', fmtMoneyShort(remainingGap), remainingGap > 0 ? 'stat-bad-t' : 'stat-good-t');
   h += kpiImpRollupRow('New Opportunity จาก Plan (ไม่รวมแผนที่ผูก Pipeline — นับใน Pipeline ถ่วง POS ไปแล้ว)', fmtMoneyShort(opportunityTotal));
   h += '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);font-size:13.5px;font-weight:800"><span>Revised Forecast (ถ้าทำตามแผนสำเร็จ)</span><span class="' + (revised >= p.target ? 'stat-good-t' : 'stat-bad-t') + '">' + fmtMoneyShort(revised) + (revised >= p.target ? ' ✓ เกินเป้า' : ' ยังขาด ' + fmtMoneyShort(p.target - revised)) + '</span></div>';
   h += '</div></div>';
