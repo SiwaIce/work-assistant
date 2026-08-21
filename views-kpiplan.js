@@ -698,21 +698,10 @@ function kpiImpRollupRow(label, val, colorCls) {
 // ปนมา) — เช็ค category จาก catalog สินค้าก่อน (getProductByName/_pipeResolveProduct) ถ้าหาไม่เจอ (สินค้าเก่า/
 // พิมพ์เองไม่ตรงชื่อ catalog เป๊ะ) fallback เดาจากชื่อรุ่น (Matrice/Mavic/Zenmuse/Dock) ถ้ากรองแล้วไม่เหลือ
 // รายการที่เข้าเกณฑ์เลย (เช่น ยังไม่ผูกสินค้าไว้) แสดงทุกรายการที่มีแทน ดีกว่าโชว์ว่างเปล่า
-// ชื่อที่จะใช้แสดง/เป็นหัวคอลัมน์ — ใช้ "ชื่อย่อ" จาก catalog สินค้าถ้ามีตั้งไว้ (Products > ชื่อย่อ ใช้ในการ์ด
-// Pipeline อยู่แล้ว เช่น "DJI DOCK 3(OVERSEAS EDITION)" → "Dock 3") กันหัวตารางยาวเกินไปเวลาชื่อเต็มมีวงเล็บ/
-// สเปกห้อยท้าย ถ้าไม่เจอสินค้าใน catalog หรือไม่ได้ตั้งชื่อย่อไว้ ใช้ชื่อเต็ม (model) แทน
-function _pipeModelDisplayName(model) {
-  var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(model) : (typeof getProductByName === 'function' ? getProductByName(model) : null);
-  return (prod && prod.shortName) ? prod.shortName : (model || '?');
-}
-// รุ่นสินค้า → Qty รวม (ผูกซ้ำรุ่นเดียวกันในโครงการเดียวเข้าด้วยกัน โดยกลุ่มตามชื่อย่อ กันสินค้าเดียวกันแต่พิมพ์
-// ชื่อเต็มไม่เป๊ะกันแตกเป็นคนละคอลัมน์) เฉพาะ Drone/Payload — ใช้เป็นต้นทางทั้งข้อความสรุป
-// (_pipeItemsDroneProductQty) และคอลัมน์ "<ชื่อย่อ> Qty" แยกต่อรุ่นใน Excel/PDF (เหมือน Google Sheet ที่มี
-// คอลัมน์ M4E Qty, M4T Qty ฯลฯ) — ดู _kpiConvModelSet ที่รวมรุ่นทั้งหมดของบริษัทนึงมาเป็นหัวตาราง
-function _pipeItemsDroneProductQtyMap(pipeObj) {
-  if (!pipeObj) return {};
+function _pipeItemsDroneProductQty(pipeObj) {
+  if (!pipeObj) return '';
   var items = (typeof getPipeItems === 'function') ? getPipeItems(pipeObj) : (pipeObj.items || []);
-  if (!items.length) return {};
+  if (!items.length) return '';
   var isDroneOrPayload = function(it) {
     var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(it.model) : (typeof getProductByName === 'function' ? getProductByName(it.model) : null);
     if (prod && prod.category) return prod.category === 'drone' || prod.category === 'payload';
@@ -721,25 +710,7 @@ function _pipeItemsDroneProductQtyMap(pipeObj) {
   };
   var filtered = items.filter(isDroneOrPayload);
   var list = filtered.length ? filtered : items;
-  var map = {};
-  list.forEach(function(it) {
-    var name = _pipeModelDisplayName(it.model);
-    map[name] = (map[name] || 0) + (Number(it.qty) || 1);
-  });
-  return map;
-}
-function _pipeItemsDroneProductQty(pipeObj) {
-  var map = _pipeItemsDroneProductQtyMap(pipeObj);
-  return Object.keys(map).map(function(m) { return m + ' ×' + map[m]; }).join(', ');
-}
-// รวมรุ่นสินค้าทั้งหมดที่ปรากฏใน curRows (โครงการงวดปัจจุบันของบริษัทนี้) มาเป็น 1 ชุด เรียงตามตัวอักษร — ใช้เป็น
-// หัวคอลัมน์ "<รุ่น> Qty" แยกต่อรุ่น ทั้งฝั่ง Excel (_kpiBuildDealerDetailSections) และ PDF
-// (_buildImprovementPlanBodyHtml) กันหัวตารางเพี้ยนกันคนละทาง — แต่ละบริษัทเห็นเฉพาะรุ่นที่ตัวเองมีจริง
-function _kpiConvModelSet(curRows) {
-  var set = [];
-  curRows.forEach(function(r) { Object.keys(r.productQtyMap || {}).forEach(function(m) { if (set.indexOf(m) === -1) set.push(m); }); });
-  set.sort();
-  return set;
+  return list.map(function(it) { return (it.model || '?') + ' ×' + (Number(it.qty) || 1); }).join(', ');
 }
 function _kpiConvBuildRows(dealerId, p) {
   var cfg = getConfig();
@@ -759,9 +730,8 @@ function _kpiConvBuildRows(dealerId, p) {
     }
     var pos = Number(pp.pos) || 0;
     var forecast = Number(pp.forecastAmount) || 0;
-    var productQtyMap = _pipeItemsDroneProductQtyMap(pipeObj);
-    var productQty = Object.keys(productQtyMap).map(function(m) { return m + ' ×' + productQtyMap[m]; }).join(', ');
-    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100, productQty: productQty, productQtyMap: productQtyMap };
+    var productQty = _pipeItemsDroneProductQty(pipeObj);
+    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100, productQty: productQty };
   });
   var totalForecast = 0, totalWeighted = 0;
   rows.forEach(function(r) { if (r.isCurrent) { totalForecast += r.forecast; totalWeighted += r.weighted; } });
@@ -998,22 +968,17 @@ function _kpiBuildDealerDetailSections(p) {
     note: (d.improvementReasons || []).length ? ('Key blockers: ' + d.improvementReasons.map(_kpiPrintEn).join(', ')) : ''
   });
 
-  // คอลัมน์ "<รุ่น> Qty" แยกต่อรุ่น (เหมือน Google Sheet ที่มี M4E Qty/M4T Qty ฯลฯ) ต่อจาก Forecast Product —
-  // มีเฉพาะรุ่นที่บริษัทนี้มีจริงในงวดปัจจุบัน (_kpiConvModelSet) กันตารางกว้างเกินจำเป็นถ้าไม่มีรุ่นนั้น
-  var models = _kpiConvModelSet(curRows);
-  var qtyColStart = 6, posColIdx = qtyColStart + models.length, forecastColIdx = posColIdx + 1, weightedColIdx = posColIdx + 2;
   sections.push({
     title: '2) Project Conversion Plan (' + conv.curPeriodKey + ')',
-    columns: ['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product'].concat(models.map(function(m) { return m + ' Qty'; })).concat(['POS%', 'Forecast', 'Weighted Target']),
-    moneyCols: [forecastColIdx, weightedColIdx], pctCols: [posColIdx],
+    columns: ['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target'],
+    moneyCols: [7, 8], pctCols: [6],
     rows: curRows.map(function(r) {
       var pp = r.pp, pipeObj = r.pipeObj;
       var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
       var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-      var qtyVals = models.map(function(m) { return r.productQtyMap[m] || ''; });
-      return [pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-'].concat(qtyVals).concat([r.pos / 100, r.forecast, r.weighted]);
+      return [pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos / 100, r.forecast, r.weighted];
     }),
-    totalRow: ['Total', '', '', '', '', ''].concat(models.map(function() { return ''; })).concat(['', conv.totalForecast, conv.totalWeighted])
+    totalRow: ['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]
   });
 
   sections.push({
@@ -1038,11 +1003,10 @@ function _kpiBuildDealerDetailSections(p) {
     boldLastRow: true
   });
 
-  var maxCols = sections.reduce(function(mx, sec) { return Math.max(mx, sec.columns ? sec.columns.length : 2); }, 2);
   return {
     dealerName: d.name, level: d.level || '', period: p.half + ' ' + p.sisYear,
     statusLabel: manualSt ? manualSt.label : '', summary: d.improvementSummary || '',
-    sections: sections, maxCols: maxCols
+    sections: sections
   };
 }
 
@@ -1052,7 +1016,7 @@ function _kpiBuildDealerDetailSections(p) {
 function _kpiAppendDealerDetailTab(wb, p, usedNames) {
   var data = _kpiBuildDealerDetailSections(p);
   var sheetName = _kpiSafeSheetName(data.dealerName, usedNames);
-  var COLS = data.maxCols; // จำนวนคอลัมน์กว้างสุดที่ใช้ในชีตนี้ (แปรผันได้ถ้ามีคอลัมน์ "<รุ่น> Qty" เพิ่ม) — ใช้กว้าง merge หัวข้อ section
+  var COLS = 9; // จำนวนคอลัมน์กว้างสุดที่ใช้ในชีตนี้ (ตาราง Project Conversion Plan) — ใช้กว้าง merge หัวข้อ section
 
   var aoa = [];
   var merges = [];
@@ -1081,20 +1045,11 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
   });
 
   var ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = _kpiDealerSheetColWidths(data.maxCols).map(function(w) { return { wch: w }; });
+  ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
   ws['!merges'] = merges;
   _kpiSetNumFmt(ws, moneyCells, '#,##0');
   _kpiSetNumFmt(ws, pctCells, '0%');
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
-}
-// ความกว้างคอลัมน์ของ sheet รายบริษัท — คอลัมน์คงที่ 6 อันแรก (#..Forecast Product) + คอลัมน์ "<รุ่น> Qty"
-// แปรผันตามจำนวนรุ่นที่บริษัทนั้นมีจริง (ดู maxCols จาก _kpiBuildDealerDetailSections) + POS%/Forecast/Weighted Target
-function _kpiDealerSheetColWidths(maxCols) {
-  var modelCount = Math.max(0, maxCols - 9);
-  var w = [24, 30, 16, 14, 18, 28]; // Project(1)/Forecast Product(5) กว้างขึ้น — มักมีข้อความยาว (หลายรุ่น×Qty ต่อแถว)
-  for (var i = 0; i < modelCount; i++) w.push(10);
-  w.push(10, 13, 14);
-  return w;
 }
 
 // ================================================================
@@ -1120,9 +1075,9 @@ function _kpiXlDownload(buffer, filename) {
 function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
   var data = _kpiBuildDealerDetailSections(p);
   var sheetName = _kpiSafeSheetName(data.dealerName, usedNames);
-  var COLS = data.maxCols;
+  var COLS = 9;
   var ws = wb.addWorksheet(sheetName, { views: [{ showGridLines: false }] });
-  ws.columns = _kpiDealerSheetColWidths(data.maxCols).map(function(w) { return { width: w }; });
+  ws.columns = [{ width: 22 }, { width: 20 }, { width: 16 }, { width: 14 }, { width: 18 }, { width: 22 }, { width: 10 }, { width: 14 }, { width: 16 }];
 
   var titleRow = ws.addRow(['Dealer Improvement Plan — ' + data.dealerName]);
   ws.mergeCells(titleRow.number, 1, titleRow.number, COLS);
@@ -1171,8 +1126,7 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         cell.border = _kpiXlThinBorder();
         if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
-        else if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
-        else if (colNum - 1 === 1 || colNum - 1 === 5) { cell.alignment = { wrapText: true, vertical: 'top' }; } // Project/Forecast Product — ข้อความยาว ให้ตัดบรรทัดแทนล้นคอลัมน์
+        if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
       });
     });
 
@@ -1514,17 +1468,14 @@ function _buildImprovementPlanBodyHtml(dealerId) {
   // ซ่อน section ที่ไม่มีข้อมูลเลยทิ้งไปทั้ง header (แสดงตารางว่างๆ แค่ "—" ไม่มีประโยชน์ รกตาเปล่าๆ)
   var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
   if (curRows.length) {
-    var models = _kpiConvModelSet(curRows);
-    var qtyHeaders = models.map(function(m) { return '<th>' + sanitize(m) + ' Qty</th>'; }).join('');
-    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th style="min-width:170px">Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th style="min-width:200px">Forecast Product</th>' + qtyHeaders + '<th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
+    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th>Forecast Product</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
     html += curRows.map(function(r) {
       var pp = r.pp, pipeObj = r.pipeObj;
       var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
       var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-      var qtyCells = models.map(function(m) { return '<td>' + (r.productQtyMap[m] || '-') + '</td>'; }).join('');
-      return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + sanitize(r.productQty || '-') + '</td>' + qtyCells + '<td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
+      return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + sanitize(r.productQty || '-') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
     }).join('');
-    html += '<tr><td colspan="' + (7 + models.length) + '"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
+    html += '<tr><td colspan="7"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
     html += '</table>';
   }
 
