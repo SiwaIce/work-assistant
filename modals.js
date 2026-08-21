@@ -381,6 +381,8 @@ function showDealerM(eid) {
     '<div class="fg"><label>เป้ายอดขาย H1 (฿) <small style="color:var(--text2)">ม.ค.-มิ.ย.</small></label><input type="text" inputmode="decimal" class="js-money" id="fd_targeth1" oninput="_fdSyncTargetTotal()" value="' + nmI(d.targetH1 !== undefined ? d.targetH1 : Math.round((d.targetRevenue || 0) / 2)) + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>เป้ายอดขาย H2 (฿) <small style="color:var(--text2)">ก.ค.-ธ.ค.</small></label><input type="text" inputmode="decimal" class="js-money" id="fd_targeth2" oninput="_fdSyncTargetTotal()" value="' + nmI(d.targetH2 !== undefined ? d.targetH2 : Math.round((d.targetRevenue || 0) / 2)) + '"></div>' +
     '<div class="fg"><label>เป้ารวมทั้งปี (฿) <small style="color:var(--text2)">= H1+H2 อัตโนมัติ</small></label><input type="text" id="fd_target_total" disabled value="' + nmI(d.targetRevenue || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>🛬 เป้า Dock H1 (฿) <small style="color:var(--text2)">แยกจากเป้ารวม — ผลักดัน Dock โดยเฉพาะ</small></label><input type="text" inputmode="decimal" class="js-money" id="fd_docktargeth1" value="' + nmI(d.dockTargetH1 || '') + '"></div>' +
+    '<div class="fg"><label>🛬 เป้า Dock H2 (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fd_docktargeth2" value="' + nmI(d.dockTargetH2 || '') + '"></div></div>' +
     '<div class="fg"><label>เงื่อนไขชำระเงิน</label><textarea id="fd_payment" rows="2">' + sanitize(d.paymentCondition || '') + '</textarea></div>' +
     '<div class="form-section">👤 ผู้ติดต่อ</div>' +
     '<div class="fg"><label>ผู้ติดต่อ</label><textarea id="fd_contact" rows="3">' + sanitize(d.contact || '') + '</textarea></div>' +
@@ -424,6 +426,8 @@ async function saveDealer(eid) {
     creditLimit: parseNum(document.getElementById('fd_credit').value),
     targetH1: parseNum(document.getElementById('fd_targeth1').value),
     targetH2: parseNum(document.getElementById('fd_targeth2').value),
+    dockTargetH1: parseNum(document.getElementById('fd_docktargeth1').value),
+    dockTargetH2: parseNum(document.getElementById('fd_docktargeth2').value),
     // targetRevenue = H1+H2 เสมอ (ไม่ได้กรอกตรงๆ อีกต่อไป) — คงไว้เพราะจุดอื่นในแอป (ตาราง Dealer list,
     // การ์ด Health, % achievement) ยังอ่านฟิลด์นี้อยู่ กันต้องไล่แก้ทุกจุดพร้อมกัน
     targetRevenue: parseNum(document.getElementById('fd_targeth1').value) + parseNum(document.getElementById('fd_targeth2').value),

@@ -930,6 +930,17 @@ function visitCoverageForMonth(monthKey) {
 //   - Pipeline เปิดอยู่ = สถานะยังไม่ Won/Lost ถ่วงด้วย POS (computeSuggestedPOS) แยก bucket สูง/กลาง/ต่ำ
 // ================================================================
 var MONDAY_STALE_DAYS = 30; // Pipeline เปิดอยู่ที่ไม่มี Log อัพเดตเกินกี่วัน ถือว่า "เงียบ"
+// รวมมูลค่า (qty × price) เฉพาะ item ที่เป็น Dock/Dock 3 ในโครงการหนึ่ง — ใช้คำนวณ KPI Dock Target แยกจาก
+// ยอดขายรวม (ดู dockWonH1/H2 ใน mondayCompanyStats)
+function _pipeDockRevenue(p) {
+  var items = (typeof getPipeItems === 'function') ? getPipeItems(p) : (p.items || []);
+  var sum = 0;
+  (items || []).forEach(function(it) {
+    var name = (it.model || '').toUpperCase();
+    if (name.indexOf('DOCK') !== -1) sum += (Number(it.qty) || 1) * (Number(it.price) || 0);
+  });
+  return sum;
+}
 function _mondayHalf(dateStr) {
   if (!dateStr) return null;
   var y = parseInt(dateStr.substr(0, 4), 10);
@@ -951,11 +962,15 @@ function mondayCompanyStats(dealerId, cfg) {
 
   var wonH1Project = 0, wonH2Project = 0;
   var wonProjectsH1 = [], wonProjectsH2 = [];
+  // Dock (Dock/Dock 3 รวมกัน) แยกเป็น KPI ของตัวเอง คู่กับ dockTargetH1/H2 บน Dealer — DJI ผลักดัน Dock เป็น
+  // สินค้า strategic ต่างหากจากยอดขายรวม (ดูไฟล์ Dealer_Improve_Plan_2026.xlsx ที่ตั้งเป้า Dock แยกจาก Sales Target)
+  var dockWonH1 = 0, dockWonH2 = 0;
   wonPipes.forEach(function(p) {
     var half = _mondayHalf(p.expectedCloseDate || p.registerDate);
     var amt = Number(p.realAmount || p.forecastAmount) || 0;
-    if (half === 'H1') { wonH1Project += amt; wonProjectsH1.push(p); }
-    else if (half === 'H2') { wonH2Project += amt; wonProjectsH2.push(p); }
+    var dockAmt = _pipeDockRevenue(p);
+    if (half === 'H1') { wonH1Project += amt; wonProjectsH1.push(p); dockWonH1 += dockAmt; }
+    else if (half === 'H2') { wonH2Project += amt; wonProjectsH2.push(p); dockWonH2 += dockAmt; }
   });
 
   var rrEntries = ST.filter('customerForecasts', function(f) { return f.dealerId === dealerId && f.type === 'runrate'; });
@@ -1012,6 +1027,8 @@ function mondayCompanyStats(dealerId, cfg) {
   return {
     dealer: d, activePipes: activePipes, wonPipes: wonPipes,
     targetH1: Number(d && d.targetH1) || 0, targetH2: Number(d && d.targetH2) || 0,
+    dockTargetH1: Number(d && d.dockTargetH1) || 0, dockTargetH2: Number(d && d.dockTargetH2) || 0,
+    dockWonH1: dockWonH1, dockWonH2: dockWonH2,
     wonH1Project: wonH1Project, wonH2Project: wonH2Project, wonProjectsH1: wonProjectsH1, wonProjectsH2: wonProjectsH2,
     wonH1Runrate: wonH1Runrate, wonH2RunrateWon: wonH2RunrateWon, h2RunrateRemaining: h2RunrateRemaining,
     rrWonH1: rrWonH1, rrWonH2: rrWonH2, rrRemainH2: rrRemainH2,

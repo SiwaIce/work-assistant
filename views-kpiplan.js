@@ -219,7 +219,13 @@ function kpiPlanRowHtml(p) {
   h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">';
   h += '<div style="min-width:0"><div style="font-size:15px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.dealer.name) + '</div>' +
     '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);margin-top:3px"><span style="width:6px;height:6px;border-radius:50%;background:' + lvlColor + ';display:inline-block"></span>Level ' + sanitize(p.dealer.level || '-') + '</div></div>';
-  h += '<span style="font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;background:' + st.bg + ';white-space:nowrap" class="' + st.cls + '">' + st.label + '</span>';
+  h += '<div style="display:flex;gap:4px;flex-shrink:0">';
+  h += '<span style="font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;background:' + st.bg + ';white-space:nowrap" class="' + st.cls + '" title="คำนวณอัตโนมัติจากตัวเลข">' + st.label + '</span>';
+  if (p.dealer.kpiStatusManual) {
+    var _mst = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === p.dealer.kpiStatusManual; });
+    if (_mst) h += '<span style="font-size:10px;font-weight:800;padding:4px 8px;border-radius:20px;background:' + _mst.bg + ';color:' + _mst.color + ';white-space:nowrap" title="ประเมินเองโดย Sale">' + _mst.icon + '</span>';
+  }
+  h += '</div>';
   h += '</div>';
 
   h += '<div style="height:9px;background:var(--bg2);border-radius:99px;overflow:hidden;margin-bottom:3px"><div style="height:100%;width:' + pct + '%;border-radius:99px;background:' + (isOk ? 'linear-gradient(90deg,var(--good,#22c55e),#6ee7a0)' : 'linear-gradient(90deg,#8b5cf6,#b794f6)') + '"></div></div>';
@@ -538,7 +544,23 @@ function copyKpiPlanSummary() {
 // sisRevenueByYear ที่ผูกกับ dealer อยู่แล้ว ไม่ต้องเปิด collection แยกสำหรับ field เดียว)
 // Gap/Target/Pipeline ทั้งหมดดึงจาก computeKpiCompanyPlan ตรงๆ ไม่คำนวณซ้ำ/ไม่เก็บสำเนา
 // ================================================================
-var IMPROVEMENT_REASONS = ['Pipeline ยังน้อย', 'Budget ยังไม่มา', 'ยังไม่มี Demo', 'เข้าถึง End User ไม่ได้', 'มีคู่แข่ง', 'ขายแต่ Product เดิม', 'Technical Solution ยังไม่พร้อม', 'ไม่มี New End User'];
+var IMPROVEMENT_REASONS = ['Pipeline ยังน้อย', 'Budget ยังไม่มา', 'ยังไม่มี Demo', 'เข้าถึง End User ไม่ได้', 'มีคู่แข่ง', 'ขายแต่ Product เดิม', 'Technical Solution ยังไม่พร้อม', 'ไม่มี New End User', 'กระทบราคาไม่เอา', 'เสนอราคาออนไลน์ไม่ได้'];
+
+// สถานะที่ Sale ประเมินเอง (มาจากไฟล์ Dealer_Improve_Plan_2026.xlsx คอลัมน์ "KPI Status/Progress") — คู่กับ
+// badge auto (kpiPlanStatus) ที่คำนวณจากตัวเลขล้วนๆ ไม่จำเป็นต้องตรงกันเสมอ เพราะ Sale อาจรู้บริบทที่ตัวเลข
+// ยังไม่สะท้อน (เช่น กำลังจะปิดดีลใหญ่เร็วๆ นี้ทั้งที่ Gap ยังสูงอยู่)
+var KPI_MANUAL_STATUS_OPTS = [
+  { key: 'on_track', label: 'On Track', icon: '🟢', color: '#22c55e', bg: 'rgba(34,197,94,.12)' },
+  { key: 'needs_focus', label: 'Needs Focus', icon: '🟡', color: '#f59e0b', bg: 'rgba(245,158,11,.12)' },
+  { key: 'at_risk', label: 'At Risk', icon: '🔴', color: '#ef4444', bg: 'rgba(239,68,68,.12)' }
+];
+function kpiSetManualStatus(dealerId, key) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var cur = d.kpiStatusManual || '';
+  ST.update('dealers', dealerId, { kpiStatusManual: cur === key ? '' : key }); // กดซ้ำอันที่เลือกอยู่ = ยกเลิก
+  render();
+}
 
 function getImprovementActions(dealerId) {
   return ST.filter('improvementActions', function(a) { return a.dealerId === dealerId; });
@@ -784,7 +806,15 @@ function rKpiImprovementPlan(el) {
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
   h += '<div><div style="font-size:16px;font-weight:800">' + sanitize(d.name) + ' — Improvement Plan ' + p.half + '</div><div style="font-size:11px;color:var(--text2);margin-top:3px">Level ' + sanitize(d.level || '-') + '</div></div>';
-  h += '<span style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;background:' + st.bg + '" class="' + st.cls + '">' + st.label + '</span>';
+  h += '<span style="font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;background:' + st.bg + '" class="' + st.cls + '" title="คำนวณอัตโนมัติจากตัวเลข">' + st.label + ' (auto)</span>';
+  h += '</div>';
+
+  h += '<div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h += '<span style="font-size:10.5px;color:var(--text2);font-weight:600">📝 ประเมินเอง:</span>';
+  KPI_MANUAL_STATUS_OPTS.forEach(function(opt) {
+    var on = (d.kpiStatusManual || '') === opt.key;
+    h += '<span onclick="kpiSetManualStatus(\'' + d.id + '\',\'' + opt.key + '\')" style="cursor:pointer;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ' + (on ? opt.color : 'var(--border)') + ';background:' + (on ? opt.bg : 'var(--bg2)') + ';color:' + (on ? opt.color : 'var(--text2)') + '">' + opt.icon + ' ' + opt.label + '</span>';
+  });
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';

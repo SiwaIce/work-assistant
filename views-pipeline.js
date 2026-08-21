@@ -3683,6 +3683,28 @@ function rMondayCompany(el) {
     '</div>';
   h += '</div></div>';
 
+  // 🛬 Dock Target — KPI แยกจากยอดขายรวม (ผลักดัน DJI Dock เป็นพิเศษ) โชว์เฉพาะ Dealer ที่ตั้งเป้าไว้ ไม่ให้
+  // การ์ดว่างๆ ไปกวนใจ Dealer ที่ไม่ได้โฟกัส Dock
+  if (s.dockTargetH1 || s.dockTargetH2) {
+    var dockPct1 = s.dockTargetH1 ? Math.round(s.dockWonH1 / s.dockTargetH1 * 100) : null;
+    var dockPct2 = s.dockTargetH2 ? Math.round(s.dockWonH2 / s.dockTargetH2 * 100) : null;
+    h += '<div class="card"><h2>🛬 เป้า Dock H1 / H2</h2>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+    h += '<div style="border:1px solid var(--border);border-radius:11px;padding:13px">' +
+      '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">H1</div>' +
+      (s.dockTargetH1
+        ? '<div style="font-size:14px;font-weight:800">฿' + fmtMoneyShort(s.dockWonH1) + ' / ฿' + fmtMoneyShort(s.dockTargetH1) + '</div><div style="font-size:11px;font-weight:700;margin-top:3px;color:' + (dockPct1 >= 100 ? '#22c55e' : dockPct1 >= 70 ? '#f59e0b' : '#ef4444') + '">' + dockPct1 + '%</div>'
+        : '<div style="font-size:11px;color:var(--text3)">ยังไม่ตั้งเป้า</div>') +
+      '</div>';
+    h += '<div style="border:1px solid var(--border);border-radius:11px;padding:13px">' +
+      '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">H2</div>' +
+      (s.dockTargetH2
+        ? '<div style="font-size:14px;font-weight:800">฿' + fmtMoneyShort(s.dockWonH2) + ' / ฿' + fmtMoneyShort(s.dockTargetH2) + '</div><div style="font-size:11px;font-weight:700;margin-top:3px;color:' + (dockPct2 >= 100 ? '#22c55e' : dockPct2 >= 70 ? '#f59e0b' : '#ef4444') + '">' + dockPct2 + '%</div>'
+        : '<div style="font-size:11px;color:var(--text3)">ยังไม่ตั้งเป้า</div>') +
+      '</div>';
+    h += '</div></div>';
+  }
+
   // funnel by status
   h += '<div class="card"><h2>🔻 Pipeline แยกตามสถานะ</h2>';
   var statusGroups = {};
