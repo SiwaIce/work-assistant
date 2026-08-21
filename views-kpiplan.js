@@ -1036,36 +1036,61 @@ function _buildImprovementPlanEnHtml(dealerId) {
   var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
 
   var html = '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' +
-    '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:18px 0 6px}' +
+    '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
     '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
-    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;font-size:10px}</style></head><body>';
+    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;font-size:10px}' +
+    '.item{border-left:3px solid #999;padding:5px 10px;margin-bottom:7px}.item-title{font-weight:700;font-size:12px}.item-sub{font-size:10.5px;color:#555;margin-top:2px}</style></head><body>';
   html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
-  html += '<h2>1) Sales Gap</h2><div class="stats">' +
+
+  html += '<h2>Sales Gap</h2><div class="stats">' +
     '<div class="stat">' + p.half + ' Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
     '<div class="stat">SIS Sell-out (Actual)<b>' + fmtMoneyShort(sisActual) + '</b></div>' +
     '<div class="stat">Gap<b>' + fmtMoneyShort(gap) + '</b></div>' +
     '<div class="stat">Pipeline (POS-Weighted)<b>' + fmtMoneyShort(p.pipeWeighted) + '</b></div></div>';
   if ((d.improvementReasons || []).length) html += '<div class="sub">Key blockers: ' + sanitize(d.improvementReasons.map(_kpiPrintEn).join(', ')) + '</div>';
 
-  html += '<h2>2) Main End User Mapping</h2><table><tr><th>End User</th><th>Industry</th><th>Current App</th><th>Potential Product</th><th>Potential</th></tr>' +
-    (endUsers.length ? endUsers.map(function(r) { return '<tr><td>' + sanitize(r.name) + '</td><td>' + sanitize(r.industry) + '</td><td>' + sanitize(r.currentApp) + '</td><td>' + sanitize(r.potentialProduct) + '</td><td>' + sanitize(r.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="5">—</td></tr>') + '</table>';
+  // ซ่อน section ที่ไม่มีข้อมูลเลยทิ้งไปทั้ง header (แสดงตารางว่างๆ แค่ "—" ไม่มีประโยชน์ รกตาเปล่าๆ)
+  if (endUsers.length) {
+    html += '<h2>Main End User Mapping</h2>';
+    html += endUsers.map(function(r) {
+      var subParts = [];
+      if (r.industry) subParts.push('Industry: ' + sanitize(r.industry));
+      if (r.currentApp) subParts.push('Current App: ' + sanitize(r.currentApp));
+      if (r.potentialProduct) subParts.push('Potential Product: ' + sanitize(r.potentialProduct));
+      return '<div class="item"><div class="item-title">' + sanitize(r.name || '(unnamed)') + (r.potential ? ' <span class="tag">' + sanitize(r.potential) + ' potential</span>' : '') + '</div>' +
+        (subParts.length ? '<div class="item-sub">' + subParts.join(' · ') + '</div>' : '') + '</div>';
+    }).join('');
+  }
 
-  html += '<h2>3) Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>Agency</th><th>Status</th><th>Expected Period</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
   var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
-  html += curRows.length ? curRows.map(function(r) {
-    var pp = r.pp, pipeObj = r.pipeObj;
-    var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
-    var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-    return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
-  }).join('') : '<tr><td colspan="8">—</td></tr>';
-  html += '<tr><td colspan="6"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
-  html += '</table>';
+  if (curRows.length) {
+    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>Agency</th><th>Status</th><th>Expected Period</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
+    html += curRows.map(function(r) {
+      var pp = r.pp, pipeObj = r.pipeObj;
+      var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+      var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
+      return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
+    }).join('');
+    html += '<tr><td colspan="6"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
+    html += '</table>';
+  }
 
-  html += '<h2>4) Action Plan</h2><table><tr><th>Action</th><th>Who</th><th>What</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>' +
-    (actions.length ? actions.map(function(a) { return '<tr><td>' + sanitize(a.action) + '</td><td>' + sanitize(a.who) + '</td><td>' + sanitize(a.what) + '</td><td>' + sanitize(a.when) + '</td><td>' + sanitize(a.expectedResult) + '</td><td>' + fmtMoneyShort(Number(a.expectedSales) || 0) + '</td></tr>'; }).join('') : '<tr><td colspan="6">—</td></tr>') + '</table>';
+  if (actions.length) {
+    html += '<h2>Action Plan</h2>';
+    html += actions.map(function(a) {
+      var subParts = [];
+      if (a.who) subParts.push('Who: ' + sanitize(a.who));
+      if (a.when) subParts.push('When: ' + sanitize(a.when));
+      if (a.what) subParts.push('What: ' + sanitize(a.what));
+      if (a.expectedResult) subParts.push('Expected Result: ' + sanitize(a.expectedResult));
+      if (Number(a.expectedSales)) subParts.push('Expected Sales: ฿' + fmtMoneyShort(Number(a.expectedSales)));
+      return '<div class="item"><div class="item-title">' + sanitize(a.action || '(unnamed action)') + '</div>' +
+        (subParts.length ? '<div class="item-sub">' + subParts.join(' · ') + '</div>' : '') + '</div>';
+    }).join('');
+  }
 
-  html += '<h2>5) Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
+  html += '<h2>Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
     '<tr><td>New Opportunity (Action Plan Total)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
   return html;
