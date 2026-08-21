@@ -698,9 +698,17 @@ function kpiImpRollupRow(label, val, colorCls) {
 // ปนมา) — เช็ค category จาก catalog สินค้าก่อน (getProductByName/_pipeResolveProduct) ถ้าหาไม่เจอ (สินค้าเก่า/
 // พิมพ์เองไม่ตรงชื่อ catalog เป๊ะ) fallback เดาจากชื่อรุ่น (Matrice/Mavic/Zenmuse/Dock) ถ้ากรองแล้วไม่เหลือ
 // รายการที่เข้าเกณฑ์เลย (เช่น ยังไม่ผูกสินค้าไว้) แสดงทุกรายการที่มีแทน ดีกว่าโชว์ว่างเปล่า
-// รุ่นสินค้า → Qty รวม (ผูกซ้ำรุ่นเดียวกันในโครงการเดียวเข้าด้วยกัน) เฉพาะ Drone/Payload — ใช้เป็นต้นทางทั้ง
-// ข้อความสรุป (_pipeItemsDroneProductQty) และคอลัมน์ "<รุ่น> Qty" แยกต่อรุ่นใน Excel/PDF (เหมือน Google Sheet
-// ที่มีคอลัมน์ M4E Qty, M4T Qty ฯลฯ) — ดู _kpiConvModelSet ที่รวมรุ่นทั้งหมดของบริษัทนึงมาเป็นหัวตาราง
+// ชื่อที่จะใช้แสดง/เป็นหัวคอลัมน์ — ใช้ "ชื่อย่อ" จาก catalog สินค้าถ้ามีตั้งไว้ (Products > ชื่อย่อ ใช้ในการ์ด
+// Pipeline อยู่แล้ว เช่น "DJI DOCK 3(OVERSEAS EDITION)" → "Dock 3") กันหัวตารางยาวเกินไปเวลาชื่อเต็มมีวงเล็บ/
+// สเปกห้อยท้าย ถ้าไม่เจอสินค้าใน catalog หรือไม่ได้ตั้งชื่อย่อไว้ ใช้ชื่อเต็ม (model) แทน
+function _pipeModelDisplayName(model) {
+  var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(model) : (typeof getProductByName === 'function' ? getProductByName(model) : null);
+  return (prod && prod.shortName) ? prod.shortName : (model || '?');
+}
+// รุ่นสินค้า → Qty รวม (ผูกซ้ำรุ่นเดียวกันในโครงการเดียวเข้าด้วยกัน โดยกลุ่มตามชื่อย่อ กันสินค้าเดียวกันแต่พิมพ์
+// ชื่อเต็มไม่เป๊ะกันแตกเป็นคนละคอลัมน์) เฉพาะ Drone/Payload — ใช้เป็นต้นทางทั้งข้อความสรุป
+// (_pipeItemsDroneProductQty) และคอลัมน์ "<ชื่อย่อ> Qty" แยกต่อรุ่นใน Excel/PDF (เหมือน Google Sheet ที่มี
+// คอลัมน์ M4E Qty, M4T Qty ฯลฯ) — ดู _kpiConvModelSet ที่รวมรุ่นทั้งหมดของบริษัทนึงมาเป็นหัวตาราง
 function _pipeItemsDroneProductQtyMap(pipeObj) {
   if (!pipeObj) return {};
   var items = (typeof getPipeItems === 'function') ? getPipeItems(pipeObj) : (pipeObj.items || []);
@@ -715,8 +723,8 @@ function _pipeItemsDroneProductQtyMap(pipeObj) {
   var list = filtered.length ? filtered : items;
   var map = {};
   list.forEach(function(it) {
-    var model = it.model || '?';
-    map[model] = (map[model] || 0) + (Number(it.qty) || 1);
+    var name = _pipeModelDisplayName(it.model);
+    map[name] = (map[name] || 0) + (Number(it.qty) || 1);
   });
   return map;
 }
