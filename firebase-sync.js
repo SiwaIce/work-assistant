@@ -865,26 +865,10 @@ function fixProductsStructureBeforeSync() {
           db.collection('guestViewData').doc(CURRENT_USER.uid).collection(shortKey).doc(id).delete()
             .catch(function(e) { console.warn('Guest mirror delete error:', coll, id, e); });
         }
-
-        try {
-          var items = JSON.parse(localStorage.getItem(key) || '[]');
-          var ref = getCollectionRef(shortKey);
-          if (ref && Array.isArray(items)) {
-            items.forEach(function(item) {
-              if (item && item.id) {
-                ref.doc(item.id).set(item).catch(function(e) { console.warn('Re-sync error after delete:', shortKey, item.id, e); });
-              }
-            });
-          }
-          if (_isGuestColl && Array.isArray(items)) {
-            var gRef2 = db.collection('guestViewData').doc(CURRENT_USER.uid).collection(shortKey);
-            items.forEach(function(item) {
-              if (item && item.id) {
-                gRef2.doc(item.id).set(item).catch(function(e) { console.warn('Guest mirror re-sync error:', shortKey, item.id, e); });
-              }
-            });
-          }
-        } catch(e) { console.warn('Re-sync after delete failed:', coll, e); }
+        // (เดิมมี loop เขียนทับ record ที่เหลือทั้งหมดกลับขึ้น Firestore ทีละตัวหลังลบ — ไม่จำเป็น เพราะ
+        // .doc(id).delete() ด้านบนลบตัวที่ต้องการไปแล้ว ส่วนที่เหลือไม่มีอะไรเปลี่ยนไม่ต้องเขียนซ้ำ ตัดออกเพราะ
+        // คอลเลกชันใหญ่ (เช่น pipeLog เป็นพันรายการ) ทำให้ลบ 1 รายการ = ยิง Firestore write เป็นพันครั้ง แอปค้าง
+        // นาน (พบ 2026-08-21) ถ้าสงสัยว่าข้อมูล local/cloud ไม่ตรงกันจริงๆ ใช้ปุ่ม "🔄 Sync" (forceSyncAll) แทน)
       }
     };
 

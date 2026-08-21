@@ -1216,9 +1216,7 @@ function rPipeline(el) {
     '<button class="btn bo" onclick="showPipeExportLogFilterM(\'csvFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 CSV</button>' +
     '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsxFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 xlsx</button>' +
     '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
-    '<button class="btn bo" onclick="showPipeImportDateAuditM()" title="หา Log ที่อาจได้วันที่ผิดจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่ log เก่าที่ import ไปแล้วยังค้างวันที่ผิดอยู่)">🔍 เช็ค Log วันที่ผิด</button>' +
-    '<button class="btn bo" onclick="showPipeImportProjectIdAuditM()" title="หาโครงการที่ Project ID อาจถูกเขียนทับเป็นค่าว่างจากการ Import ก่อนหน้านี้ (บั๊กที่แก้แล้ว แต่โครงการที่ import ไปแล้วยังค้างค่าว่างอยู่)">🔍 เช็ค Project ID หาย</button>' +
-    '<button class="btn bo" onclick="showPipeDuplicateLogAuditM()" title="หา Log ที่ซ้ำกันจากขีดกลางค้างหลังวันที่ (บั๊กที่แก้แล้ว แต่ log ที่ import ไปแล้วก่อนแก้ยังซ้ำอยู่)">🔍 เช็ค Log ซ้ำ</button>' +
+    '<button class="btn bo" onclick="showPipeDataHealthCheckM()" title="รวมทุกจุดตรวจสุขภาพข้อมูล Pipeline ไว้ที่เดียว (Log ซ้ำ/วันที่ผิด/Project ID หาย/Log กำพร้า/ไม่มี Dealer)">🩺 ตรวจสุขภาพข้อมูล</button>' +
     (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
@@ -2322,6 +2320,91 @@ function copyPipeRow(pipeId, excludeTypes) {
 // ให้ผู้ใช้ตรวจสอบทีละรายการเอง ไม่ใช่ auto-fix เพราะไม่รู้วันที่ถูกต้องจริงๆ)
 // ================================================================
 var _pipeAuditCandidates = [];
+// ================================================================
+// 🩺 ตรวจสุขภาพข้อมูล Pipeline — รวมทุกจุดตรวจที่มีอยู่แล้ว (Log ซ้ำ/วันที่ผิด/Project ID หาย จากบั๊ก import
+// เก่า) บวก 2 จุดใหม่ (Log กำพร้า/โครงการไม่มี Dealer) ไว้ที่เดียว แทนที่จะมีปุ่มแยกเต็ม toolbar — เปิดมาเห็น
+// จำนวนของแต่ละจุดพร้อมกันเลย ค่อยกดดูรายละเอียด/แก้เฉพาะจุดที่มีปัญหาจริง
+// ================================================================
+// pipeLog ที่ pipeId ชี้ไปโครงการที่ไม่มีอยู่แล้ว (ปกติ delDealer/deletePipeline ลบคู่กันอยู่แล้ว — เผื่อหลุดจาก
+// เหตุอื่น เช่น sync ผิดจังหวะ/แก้ข้อมูลตรงๆ ใน Firestore console)
+function _pipeHealthCheckOrphanLogs() {
+  var pipeIds = {};
+  ST.getAll('pipeline').forEach(function(p) { pipeIds[p.id] = true; });
+  return ST.getAll('pipeLog').filter(function(l) { return !pipeIds[l.pipeId]; });
+}
+// โครงการที่ dealerId ว่าง หรือชี้ไป Dealer ที่ไม่มีอยู่แล้ว
+function _pipeHealthCheckNoDealer() {
+  var dealerIds = {};
+  ST.getAll('dealers').forEach(function(d) { dealerIds[d.id] = true; });
+  return ST.getAll('pipeline').filter(function(p) { return !p.dealerId || !dealerIds[p.dealerId]; });
+}
+function _pipeDeleteOrphanLogs() {
+  var orphans = _pipeHealthCheckOrphanLogs();
+  if (!orphans.length) return;
+  if (!confirm('ลบ Log ที่อ้างอิงโครงการซึ่งไม่มีอยู่แล้วทั้งหมด ' + orphans.length + ' รายการ? (ไม่สามารถกู้คืนได้)')) return;
+  var orphanIds = {};
+  orphans.forEach(function(l) { orphanIds[l.id] = true; });
+  ST._set(ST._keys.pipeLog, ST.getAll('pipeLog').filter(function(l) { return !orphanIds[l.id]; }));
+  toast('🗑️ ลบ Log กำพร้า ' + orphans.length + ' รายการ');
+  showPipeDataHealthCheckM();
+}
+function _pipeShowNoDealerPipesM() {
+  var pipes = _pipeHealthCheckNoDealer();
+  var h = '<div style="max-width:640px">';
+  h += '<div class="hint" style="margin-bottom:10px">โครงการเหล่านี้ไม่มี Dealer ผูกอยู่ (ว่างเปล่า หรือชี้ไป Dealer ที่ถูกลบไปแล้ว) — ต้องเข้าไปเลือก Dealer ให้ถูกต้องเอง ระบบไม่รู้ว่าควรผูกกับใคร</div>';
+  h += '<div style="max-height:60vh;overflow-y:auto">';
+  pipes.forEach(function(p) {
+    h += '<div class="li" style="display:block;cursor:default">';
+    h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || p.endUserTH || '-')) + '</div>';
+    h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();showPipelineM(\'\',\'' + p.id + '\')">✏️ แก้ไข / เลือก Dealer</button>';
+    h += '</div>';
+  });
+  h += '</div></div>';
+  openM('🏢 โครงการไม่มี Dealer ผูกอยู่', h);
+}
+function showPipeDataHealthCheckM() {
+  var dupClusters = _pipeComputeDupLogClusters();
+  var dupRemoveCount = 0;
+  dupClusters.forEach(function(c) { dupRemoveCount += c.remove.length; });
+
+  var allPipes = ST.getAll('pipeline');
+  var dateAuditCount = 0;
+  allPipes.forEach(function(p) {
+    if (!p.registerDate) return;
+    ST.pipeLogsByPipe(p.id).forEach(function(l) { if (l.type === 'note' && l.date === p.registerDate) dateAuditCount++; });
+  });
+  var pidAuditCount = allPipes.filter(function(p) { return p.djiCrmRegistered && !(p.projectId || '').trim(); }).length;
+  var orphanLogCount = _pipeHealthCheckOrphanLogs().length;
+  var noDealerCount = _pipeHealthCheckNoDealer().length;
+
+  var checks = [
+    { icon: '🔁', label: 'Log ซ้ำ (ขีดนำหน้าค้างจาก Import เก่า)', count: dupClusters.length, sub: dupClusters.length ? (dupRemoveCount + ' รายการจะถูกลบถ้าเข้าไปกด "ลบทั้งหมด"') : '', action: "closeMForce();showPipeDuplicateLogAuditM()", actionLabel: '🔍 ดูรายการ' },
+    { icon: '📅', label: 'Log ที่อาจได้วันที่ผิดจาก Import เก่า',   count: dateAuditCount, action: "closeMForce();showPipeImportDateAuditM()", actionLabel: '🔍 ดูรายการ' },
+    { icon: '🆔', label: 'Project ID ที่อาจหายจาก Import เก่า',    count: pidAuditCount,  action: "closeMForce();showPipeImportProjectIdAuditM()", actionLabel: '🔍 ดูรายการ' },
+    { icon: '👻', label: 'Log กำพร้า (อ้างอิงโครงการที่ถูกลบไปแล้ว)', count: orphanLogCount, action: "_pipeDeleteOrphanLogs()", actionLabel: '🗑️ ลบทั้งหมด' },
+    { icon: '🏢', label: 'โครงการไม่มี Dealer ผูกอยู่',             count: noDealerCount,  action: "closeMForce();_pipeShowNoDealerPipesM()", actionLabel: '🔍 ดูรายการ' }
+  ];
+  var totalIssues = checks.reduce(function(s, c) { return s + c.count; }, 0);
+
+  var h = '<div style="max-width:640px">';
+  h += '<div class="hint" style="margin-bottom:10px">รวมทุกจุดตรวจสุขภาพข้อมูล Pipeline ไว้ที่เดียว — บางจุดเช็คจาก pattern ของบั๊กเก่าที่แก้ไปแล้ว ไม่ได้แปลว่าทุกรายการที่เจอผิดจริง 100% ต้องเข้าไปดูรายละเอียดเองว่าใช่เคสจริงไหมก่อนแก้</div>';
+  if (!totalIssues) {
+    h += '<div class="empty"><p>ไม่พบปัญหาที่เข้าข่ายเลย 🎉</p></div>';
+  } else {
+    checks.forEach(function(c) {
+      var color = c.count ? '#f59e0b' : '#22c55e';
+      h += '<div class="li" style="display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:default">';
+      h += '<div><div class="lt">' + c.icon + ' ' + sanitize(c.label) + '</div>' + (c.sub ? '<div class="ls" style="color:var(--text2)">' + sanitize(c.sub) + '</div>' : '') + '</div>';
+      h += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">';
+      h += '<span style="font-weight:700;color:' + color + '">' + c.count + '</span>';
+      if (c.count) h += '<button class="btn btn-xs bo" onclick="' + c.action + '">' + c.actionLabel + '</button>';
+      h += '</div></div>';
+    });
+  }
+  h += '</div>';
+  openM('🩺 ตรวจสุขภาพข้อมูล Pipeline', h);
+}
+
 function showPipeImportDateAuditM() {
   var allPipes = ST.getAll('pipeline');
   var candidates = [];
