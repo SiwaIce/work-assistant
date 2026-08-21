@@ -2458,12 +2458,26 @@ function _pipeComputeDupLogClusters(pipeIdFilter) {
   return clusters;
 }
 
+var _pipeDupLogLastFilter; // จำ pipeIdFilter ไว้ ใช้ re-scan หลังลบบางส่วนแล้วรีเฟรช modal
 function showPipeDuplicateLogAuditM(pipeIdFilter) {
+  _pipeDupLogLastFilter = pipeIdFilter;
   var clusters = _pipeComputeDupLogClusters(pipeIdFilter);
   _pipeDupLogCandidates = clusters;
 
   var totalRemove = 0;
   clusters.forEach(function(c) { totalRemove += c.remove.length; });
+
+  // จัดกลุ่มตาม dealer เพื่อให้เลือกลบทีละ dealer ได้
+  var byDealer = {}; // dealerId -> { name, clusters: [] }
+  clusters.forEach(function(c) {
+    var did = c.pipe.dealerId || '';
+    if (!byDealer[did]) {
+      var dealer = did ? ST.getOne('dealers', did) : null;
+      byDealer[did] = { name: dealer ? dealer.name : (did ? did : '(ไม่มี Dealer)'), clusters: [] };
+    }
+    byDealer[did].clusters.push(c);
+  });
+  var dealerIds = Object.keys(byDealer).sort(function(a, b) { return byDealer[b].clusters.length - byDealer[a].clusters.length; });
 
   var h = '<div style="max-width:680px">';
   h += '<div class="hint" style="margin-bottom:10px">เช็คจาก pattern ของบั๊กเดิม: log ที่เนื้อหา+วันที่ตรงกัน แต่มีขีดกลาง "-"/"--" นำหน้าค้างอยู่ (มาจาก import ก่อนแก้บั๊กตัดขีดกลาง — บางคู่ติดขีดทั้ง 2 ฝั่งคนละจำนวนก็มี) — จะเก็บตัวที่ขีดน้อยที่สุดไว้ (ล้างขีดออกให้สะอาดด้วย) แล้วลบตัวที่เหลือทิ้ง</div>';
@@ -2473,16 +2487,29 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
     h += '<div class="hint" style="margin-bottom:10px;color:var(--accent)">พบ ' + clusters.length + ' คู่ที่ซ้ำกัน (รวม ' + totalRemove + ' รายการจะถูกลบถ้ากด "ลบทั้งหมด")</div>';
     h += '<button class="btn btn-sm bd" style="margin-bottom:10px" onclick="_pipeDupLogDeleteAll()">🗑️ ลบรายการซ้ำทั้งหมด (' + totalRemove + ' รายการ)</button>';
     h += '<div style="max-height:55vh;overflow-y:auto">';
-    clusters.forEach(function(c) {
-      var p = c.pipe;
-      h += '<div class="li" style="display:block;cursor:default">';
-      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
-      h += '<div class="ls" style="margin:3px 0;color:#22c55e">✅ เก็บไว้: ' + fD(c.keep.date) + ' — "' + sanitize((_pipeNormDashContent(c.keep.content) || '').slice(0, 80)) + '"</div>';
-      c.remove.forEach(function(l) {
-        h += '<div class="ls" style="margin:3px 0;color:#ef4444">❌ ลบ: ' + fD(l.date) + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
-      });
-      h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ</button>';
+    dealerIds.forEach(function(did) {
+      var grp = byDealer[did];
+      var grpRemove = 0;
+      grp.clusters.forEach(function(c) { grpRemove += c.remove.length; });
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid rgba(127,127,127,0.3)">';
+      h += '<div style="font-weight:600;font-size:13px">🏢 ' + sanitize(grp.name) + ' <span style="font-weight:400;color:var(--text2);font-size:11px">(' + grp.clusters.length + ' คู่ · ' + grpRemove + ' รายการ)</span></div>';
+      h += '<button class="btn btn-xs bd" onclick="_pipeDupLogDeleteDealer(\'' + ppEsc(did) + '\')">🗑️ ลบเฉพาะ dealer นี้</button>';
       h += '</div>';
+      grp.clusters.forEach(function(c) {
+        var p = c.pipe;
+        var cid = c.pipe.id + '||' + (_pipeNormDashContent(c.keep.content) + '||' + (c.keep.date || ''));
+        h += '<div class="li" style="display:block;cursor:default">';
+        h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
+        h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+        h += '<button class="btn btn-xs bd" style="flex-shrink:0" onclick="_pipeDupLogDeleteOne(\'' + ppEsc(cid) + '\')">🗑️ ลบคู่นี้</button>';
+        h += '</div>';
+        h += '<div class="ls" style="margin:3px 0;color:#22c55e">✅ เก็บไว้: ' + fD(c.keep.date) + ' — "' + sanitize((_pipeNormDashContent(c.keep.content) || '').slice(0, 80)) + '"</div>';
+        c.remove.forEach(function(l) {
+          h += '<div class="ls" style="margin:3px 0;color:#ef4444">❌ ลบ: ' + fD(l.date) + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
+        });
+        h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ</button>';
+        h += '</div>';
+      });
     });
     h += '</div>';
   }
@@ -2494,12 +2521,14 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
 // เรียกอยู่ข้างในจะ trigger firebase-sync.js push "ทั้ง collection" ใหม่ทุกครั้ง ไม่ใช่แค่รายการที่เปลี่ยน —
 // เจอ cluster เยอะๆ เข้าไปกลายเป็น push ซ้ำหลายร้อย-พันรอบจนแอปค้าง (บั๊กแบบเดียวกับที่เจอใน
 // _processPipeImportRows ตอน import ทีแรก — ดูคอมเมนต์ "เขียนครั้งเดียว" ตรงนั้นประกอบ)
-function _pipeDupLogDeleteAll() {
-  if (!confirm('ลบ log ที่ซ้ำกันทั้งหมด และล้างขีดนำหน้าออกจากตัวที่เก็บไว้? (ไม่สามารถกู้คืนได้)')) return;
+// core: ลบเฉพาะ cluster ที่อยู่ใน `clusters` (ยังเขียน pipeLog ครั้งเดียวเหมือนเดิม — ดูคอมเมนต์ด้านบน)
+function _pipeDupLogDeleteClusters(clusters, confirmMsg) {
+  if (!clusters.length) return;
+  if (!confirm(confirmMsg)) return;
   var deleted = 0, cleaned = 0;
   var removeIds = {};
-  var contentFix = {}; // logId -> เนื้อหาที่ล้างขีดแล้ว
-  _pipeDupLogCandidates.forEach(function(c) {
+  var contentFix = {};
+  clusters.forEach(function(c) {
     var normalized = _pipeNormDashContent(c.keep.content);
     if (normalized !== c.keep.content) { contentFix[c.keep.id] = normalized; cleaned++; }
     c.remove.forEach(function(l) { removeIds[l.id] = true; deleted++; });
@@ -2509,7 +2538,21 @@ function _pipeDupLogDeleteAll() {
     .map(function(l) { return contentFix.hasOwnProperty(l.id) ? Object.assign({}, l, { content: contentFix[l.id] }) : l; });
   ST._set(ST._keys.pipeLog, updatedLogs);
   toast('🗑️ ลบซ้ำ ' + deleted + ' รายการ' + (cleaned ? ' · ล้างขีดออก ' + cleaned + ' รายการ' : ''));
-  closeMForce();
+  // scan ใหม่แล้วรีเฟรช modal (ถ้าไม่เหลือ cluster แล้วจะโชว์ "ไม่พบรายการที่เข้าข่าย 🎉" แทนการปิด modal เฉยๆ)
+  showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
+}
+function _pipeDupLogDeleteAll() {
+  _pipeDupLogDeleteClusters(_pipeDupLogCandidates, 'ลบ log ที่ซ้ำกันทั้งหมด และล้างขีดนำหน้าออกจากตัวที่เก็บไว้? (ไม่สามารถกู้คืนได้)');
+}
+function _pipeDupLogDeleteDealer(dealerId) {
+  var clusters = _pipeDupLogCandidates.filter(function(c) { return (c.pipe.dealerId || '') === dealerId; });
+  _pipeDupLogDeleteClusters(clusters, 'ลบ log ที่ซ้ำกันของ dealer นี้ทั้งหมด (' + clusters.length + ' คู่)? (ไม่สามารถกู้คืนได้)');
+}
+function _pipeDupLogDeleteOne(cid) {
+  var clusters = _pipeDupLogCandidates.filter(function(c) {
+    return (c.pipe.id + '||' + (_pipeNormDashContent(c.keep.content) + '||' + (c.keep.date || ''))) === cid;
+  });
+  _pipeDupLogDeleteClusters(clusters, 'ลบ log คู่นี้?');
 }
 
 // ================================================================
