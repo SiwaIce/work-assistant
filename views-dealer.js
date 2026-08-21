@@ -5222,7 +5222,8 @@ function rSalesRepDashboard(el) {
   var totalPct = totalTarget ? Math.round(totalActual / totalTarget * 100) : 0;
 
   var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
-  h += '<div class="pg-head"><h2 style="margin:0">👤 Dashboard รายเซล</h2><div style="font-size:12px;color:var(--text2)">รวมยอด Dealer ตามเซลที่ดูแล — ยอดจริง = ยอดขาย SIS ปี ' + curYear + '</div></div>';
+  h += '<div class="pg-head"><h2 style="margin:0">👤 Dashboard รายเซล</h2><div style="font-size:12px;color:var(--text2)">รวมยอด Dealer ตามเซลที่ดูแล — ยอดจริง = ยอดขาย SIS ปี ' + curYear + '</div>' +
+    '<button class="btn bo" onclick="go(\'dealerRiskRadar\')" title="Dealer ที่ pace ไม่ทันเป้าครึ่งปีนี้ เรียงตามความเสี่ยง">🛰️ Dealer เสี่ยงหลุดเป้า</button></div>';
   h += '<div class="sr" style="margin-bottom:14px">' +
     '<div class="sc"><div class="sn c1">' + reps.length + '</div><div class="sl">เซล</div></div>' +
     '<div class="sc"><div class="sn c2">฿' + fmtMoneyShort(totalActual) + '</div><div class="sl">ยอดขาย SIS รวม</div></div>' +
@@ -5249,6 +5250,64 @@ function rSalesRepDashboard(el) {
   });
   if (!reps.length) h += '<div class="empty"><p>ยังไม่มี Dealer</p></div>';
   h += '</div>';
+
+  el.innerHTML = h;
+}
+
+// ================================================================
+// 🛰️ DEALER RISK RADAR — Dealer เสี่ยงหลุดเป้ายอดขายครึ่งปีปัจจุบัน (ดู dealerPeriodRisk ใน utils.js)
+// เรียงตามความเสี่ยงมากไปน้อย ให้เห็นว่าควรโฟกัสตัวไหนก่อน ไม่ใช่แค่ไล่ตามลำดับ Achieve% ต่ำสุด
+// ================================================================
+function rDealerRiskRadar(el) {
+  document.getElementById('pgT').textContent = '🛰️ Dealer เสี่ยงหลุดเป้า';
+  var cfg = getConfig();
+  var dealers = ST.getAll('dealers');
+  var risks = dealers.map(function(d) { return dealerPeriodRisk(d.id, cfg); }).filter(function(r) { return r && r.level !== 'none'; });
+
+  var critical = risks.filter(function(r) { return r.level === 'critical'; });
+  var watch = risks.filter(function(r) { return r.level === 'watch'; });
+  var safe = risks.filter(function(r) { return r.level === 'safe'; });
+  var totalGap = critical.concat(watch).reduce(function(s, r) { return s + r.gap; }, 0);
+
+  var order = { critical: 0, watch: 1, safe: 2 };
+  risks.sort(function(a, b) {
+    if (order[a.level] !== order[b.level]) return order[a.level] - order[b.level];
+    return b.gap - a.gap;
+  });
+
+  var half = risks.length ? risks[0].half : (sisComputeHalfMonths(cfg).h1.indexOf(new Date().getMonth()) !== -1 ? 'H1' : 'H2');
+
+  var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
+  h += '<div class="pg-head"><h2 style="margin:0">🛰️ Dealer เสี่ยงหลุดเป้า (' + half + ')</h2><div style="font-size:12px;color:var(--text2)">เทียบ pace ที่ต้องเร่งในวันที่เหลือของงวดนี้ กับ pace เฉลี่ยที่ Dealer เคยทำได้จริง — ไม่ใช่แค่ Achieve% นิ่งๆ ที่ไม่รู้จักเวลา</div></div>';
+  h += '<div class="sr" style="margin-bottom:14px">' +
+    '<div class="sc"><div class="sn" style="color:#ef4444">' + critical.length + '</div><div class="sl">🔴 เสี่ยงสูง</div></div>' +
+    '<div class="sc"><div class="sn" style="color:#f59e0b">' + watch.length + '</div><div class="sl">🟡 ต้องเร่ง</div></div>' +
+    '<div class="sc"><div class="sn" style="color:#22c55e">' + safe.length + '</div><div class="sl">🟢 ตามทัน</div></div>' +
+    '<div class="sc"><div class="sn">' + fmtMoneyShort(totalGap) + '</div><div class="sl">มูลค่าที่ขาดรวม (เสี่ยงสูง+ต้องเร่ง)</div></div>' +
+    '</div>';
+
+  if (!risks.length) {
+    h += '<div class="empty"><p>ยังไม่มี Dealer ที่ตั้งเป้า H1/H2 ไว้เลย 🎉</p></div>';
+  } else {
+    h += '<div class="card"><h2>เรียงตามความเสี่ยง (สูง → ต่ำ)</h2>';
+    risks.forEach(function(r) {
+      var badge = r.level === 'critical' ? '<span style="color:#ef4444;font-weight:700;font-size:11px;white-space:nowrap">🔴 เสี่ยงสูง</span>'
+        : r.level === 'watch' ? '<span style="color:#f59e0b;font-weight:700;font-size:11px;white-space:nowrap">🟡 ต้องเร่ง</span>'
+        : '<span style="color:#22c55e;font-weight:700;font-size:11px;white-space:nowrap">🟢 ตามทัน</span>';
+      var paceTxt = r.gap <= 0 ? 'ครอบคลุมด้วย Pipeline แล้ว'
+        : r.daysRemaining <= 0 ? 'หมดเวลาของงวดแล้ว'
+        : r.paceMultiplier === Infinity ? 'ยังไม่เคยปิดยอดเลยในงวดนี้'
+        : ('ต้องเร่ง ' + r.paceMultiplier.toFixed(1) + '× ของ pace เดิม');
+      h += '<div class="li" style="display:block;cursor:pointer" onclick="go(\'dealerDetail\',{id:\'' + r.dealer.id + '\'})">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+      h += '<div class="lt" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(r.dealer.name) + '</div>' + badge;
+      h += '</div>';
+      h += '<div class="ls" style="margin-top:3px">เป้า ' + r.half + ': ฿' + fmtMoneyShort(r.target) + ' · ทำได้+Weighted Pipeline: ฿' + fmtMoneyShort(r.projected) + ' · ขาด: ฿' + fmtMoneyShort(r.gap) + '</div>';
+      h += '<div class="ls" style="color:var(--text2)">เหลือ ' + r.daysRemaining + ' วัน · ' + paceTxt + '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
 
   el.innerHTML = h;
 }

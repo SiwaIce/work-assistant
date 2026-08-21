@@ -1011,6 +1011,65 @@ function mondayCompanyStats(dealerId, cfg) {
 }
 
 // ================================================================
+// DEALER RISK RADAR — ประเมินว่า Dealer แต่ละคนกำลัง "เสี่ยงหลุดเป้า" ครึ่งปีปัจจุบันไหม โดยเทียบ pace ที่ต้อง
+// เร่งในวันที่เหลือของงวด กับ pace เฉลี่ยที่ตัวเองเคยทำได้จริงมาแล้วในงวดนี้ — ต่างจาก Achieve% ธรรมดา
+// (ยอดจริง/เป้า) ตรงที่รู้จัก "เวลา": Achieve 30% ตอนต้นงวดกับตอนใกล้ปิดงวดมีความเสี่ยงไม่เท่ากัน ตัวนี้จับ
+// ความต่างนั้นได้ (improvement plan "Dealer Risk Radar" เสนอ 2026-08-20)
+// ================================================================
+function dealerPeriodRisk(dealerId, cfg) {
+  cfg = cfg || getConfig();
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return null;
+
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var year = today.getFullYear();
+  var halves = sisComputeHalfMonths(cfg);
+  var curMonth = today.getMonth(); // 0-11
+  var isH1 = halves.h1.indexOf(curMonth) !== -1;
+  var half = isH1 ? halves.h1Period : halves.h2Period;
+  var halfKey = isH1 ? 'h1' : 'h2';
+  var target = Number(isH1 ? d.targetH1 : d.targetH2) || 0;
+
+  var periodStart = new Date(year, half.startMonth, 1);
+  var periodEnd = new Date(year, half.endMonth + 1, 0); // วันสุดท้ายของ endMonth (day 0 ของเดือนถัดไป)
+  var msDay = 86400000;
+  var daysTotal = Math.round((periodEnd - periodStart) / msDay) + 1;
+  var daysElapsed = Math.min(daysTotal, Math.max(0, Math.round((today - periodStart) / msDay) + 1));
+  var daysRemaining = Math.max(0, daysTotal - daysElapsed);
+
+  var sis = getSisRevenueForYear(d, year);
+  var actual = Number(sis[halfKey]) || 0;
+  var stats = mondayCompanyStats(dealerId, cfg);
+  var weighted = stats.openPipelineWeighted; // Pipeline เปิดอยู่ทั้งหมด ถ่วงด้วย POS แล้ว (v1: ยังไม่กรองเฉพาะที่คาดปิดในงวดนี้)
+  var projected = actual + weighted;
+  var gap = Math.max(0, target - projected); // ช่องว่างที่ยังขาดหลังหักลบ Pipeline ที่คาดว่าจะปิดได้แล้ว
+
+  var historicalDailyRate = daysElapsed > 0 ? actual / daysElapsed : 0;
+  var requiredDailyRate = daysRemaining > 0 ? gap / daysRemaining : (gap > 0 ? Infinity : 0);
+  var paceMultiplier;
+  if (gap <= 0) paceMultiplier = 0;
+  else if (historicalDailyRate <= 0) paceMultiplier = Infinity; // ยังไม่เคยปิดยอดเลยในงวดนี้ แต่ยังมีช่องว่างต้องปิด
+  else paceMultiplier = requiredDailyRate / historicalDailyRate;
+
+  // เกณฑ์: ครอบคลุมแล้ว(safe) / ต้องเร่งไม่เกิน 2 เท่าของ pace เดิม(watch) / เกิน 2 เท่าหรือหมดเวลาแล้วยังไม่ถึงเป้า(critical)
+  var level = 'none'; // ไม่มีเป้าตั้งไว้ — ไม่นับเป็นความเสี่ยง (เหมือน UI Achieve% เดิมที่ซ่อนถ้ายังไม่ตั้งเป้า)
+  if (target > 0) {
+    if (gap <= 0) level = 'safe';
+    else if (daysRemaining <= 0) level = 'critical';
+    else if (paceMultiplier <= 1.3) level = 'safe';
+    else if (paceMultiplier <= 2) level = 'watch';
+    else level = 'critical';
+  }
+
+  return {
+    dealer: d, half: isH1 ? 'H1' : 'H2', target: target, actual: actual, weighted: weighted,
+    projected: projected, gap: gap, daysTotal: daysTotal, daysElapsed: daysElapsed, daysRemaining: daysRemaining,
+    historicalDailyRate: historicalDailyRate, requiredDailyRate: requiredDailyRate, paceMultiplier: paceMultiplier,
+    level: level
+  };
+}
+
+// ================================================================
 // KPI COMPANY PLAN — แผนบรรลุเป้ารายบริษัท (SAB Partner) รายเดือน แยก Project/Runrate
 // ต่อยอดจาก mondayCompanyStats: เดือนที่ผ่านไปแล้ว/เดือนนี้ = ยอดจริง (ล็อก แก้ไม่ได้)
 // เดือนอนาคต = ค่าแนะนำอัตโนมัติจาก Pipeline เปิดอยู่ (ถ่วง POS ตาม expectedCloseDate) +
