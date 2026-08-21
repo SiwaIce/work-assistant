@@ -813,10 +813,11 @@ function rKpiImprovementPlan(el) {
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
   h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">1) Sales Gap & Capability (ดึงจากระบบอัตโนมัติ)</div>';
-  h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px">';
   h += kpiImpStat('H2 Target', fmtMoneyShort(p.target));
   h += kpiImpStat('SIS จริง', fmtMoneyShort(sisActual));
   h += kpiImpStat('Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
+  h += kpiImpStat('Pipeline Forecast ทั้งหมด (' + p.half + ')', fmtMoneyShort(p.pipelineTotalPeriod));
   h += kpiImpStat('Pipeline ถ่วง POS', fmtMoneyShort(p.pipeWeighted));
   h += '</div>';
   h += '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">สาเหตุหลักที่ Pipeline ปัจจุบันอาจไม่พอ (เลือกได้หลายข้อ)</div>';
@@ -917,7 +918,7 @@ function exportImprovementPlanXlsx() {
   var wb = XLSX.utils.book_new();
 
   // ---- Summary tab ----
-  var sumHeader = ['Dealer', 'Level', 'Auto Risk', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Sales Gap', 'Pipeline (POS-Weighted)', 'Current Forecast', 'New Opportunity', 'Revised Forecast', 'Dock Target H1', 'Dock Won H1', 'Dock Target H2', 'Dock Won H2', 'Key Blockers', 'Summary'];
+  var sumHeader = ['Dealer', 'Level', 'Auto Risk', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Sales Gap', 'Pipeline Forecast (Total)', 'Pipeline (POS-Weighted)', 'Current Forecast', 'New Opportunity', 'Revised Forecast', 'Dock Target H1', 'Dock Won H1', 'Dock Target H2', 'Dock Won H2', 'Key Blockers', 'Summary'];
   var sumRows = [sumHeader];
   plans.forEach(function(p) {
     var d = p.dealer;
@@ -929,16 +930,16 @@ function exportImprovementPlanXlsx() {
     var stats = mondayCompanyStats(d.id, cfg);
     sumRows.push([
       d.name, d.level || '', kpiPlanStatus(p).label, manualSt ? manualSt.label : '', p.half + ' ' + p.sisYear,
-      p.target, sisActual, gap, p.pipeWeighted, currentForecast, oppTotal, currentForecast + oppTotal,
+      p.target, sisActual, gap, p.pipelineTotalPeriod, p.pipeWeighted, currentForecast, oppTotal, currentForecast + oppTotal,
       d.dockTargetH1 || 0, stats.dockWonH1 || 0, d.dockTargetH2 || 0, stats.dockWonH2 || 0,
       (d.improvementReasons || []).map(_kpiPrintEn).join(', '), d.improvementSummary || ''
     ]);
   });
   var wsSum = XLSX.utils.aoa_to_sheet(sumRows);
-  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 40 }];
+  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 15 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 40 }];
   wsSum['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: sumHeader.length - 1 } }) };
   var sumMoneyCells = [];
-  var sumMoneyCols = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]; // Target..Dock Won H2
+  var sumMoneyCols = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]; // Target..Dock Won H2
   for (var sr = 1; sr < sumRows.length; sr++) sumMoneyCols.forEach(function(sc) { sumMoneyCells.push({ r: sr, c: sc }); });
   _kpiSetNumFmt(wsSum, sumMoneyCells, '#,##0');
   XLSX.utils.book_append_sheet(wb, wsSum, 'Summary');
@@ -966,9 +967,9 @@ function exportImprovementPlanXlsx() {
     if (d.improvementSummary) { aoa.push(['Summary', d.improvementSummary]); aoa.push([]); }
 
     _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['1) Sales Gap']);
-    aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline (POS-Weighted)']);
-    moneyCells.push({ r: aoa.length, c: 0 }, { r: aoa.length, c: 1 }, { r: aoa.length, c: 2 }, { r: aoa.length, c: 3 });
-    aoa.push([p.target, sisActual, gap, p.pipeWeighted]);
+    aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline Forecast (Total)', 'Pipeline (POS-Weighted)']);
+    moneyCells.push({ r: aoa.length, c: 0 }, { r: aoa.length, c: 1 }, { r: aoa.length, c: 2 }, { r: aoa.length, c: 3 }, { r: aoa.length, c: 4 });
+    aoa.push([p.target, sisActual, gap, p.pipelineTotalPeriod, p.pipeWeighted]);
     if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
     aoa.push([]);
 
@@ -1049,7 +1050,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
   var html = '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' +
     '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
-    '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
+    '.stats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;min-width:110px;text-align:center}' +
     '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}</style></head><body>';
   html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
 
@@ -1061,6 +1062,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
     '<div class="stat">' + p.half + ' Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
     '<div class="stat">SIS Sell-out (Actual)<b>' + fmtMoneyShort(sisActual) + '</b></div>' +
     '<div class="stat">Gap<b>' + fmtMoneyShort(gap) + '</b></div>' +
+    '<div class="stat">Pipeline Forecast (Total)<b>' + fmtMoneyShort(p.pipelineTotalPeriod) + '</b></div>' +
     '<div class="stat">Pipeline (POS-Weighted)<b>' + fmtMoneyShort(p.pipeWeighted) + '</b></div></div>';
   if ((d.improvementReasons || []).length) html += '<div class="sub">Key blockers: ' + sanitize(d.improvementReasons.map(_kpiPrintEn).join(', ')) + '</div>';
 

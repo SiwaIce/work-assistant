@@ -995,6 +995,9 @@ function mondayCompanyStats(dealerId, cfg) {
   // เกินจริงเพราะรวม Pipeline นอกงวดเข้าไปด้วย) — ตัวที่ไม่มีทั้ง 2 วันที่เลย ไม่รู้จะเดางวดไหน จึงไม่ถูกนับใน
   // ทั้ง H1/H2 split นี้ (แต่ยังนับใน openPipelineWeighted/openPipelineTotal รวมตามเดิม)
   var openPipelineWeightedH1 = 0, openPipelineWeightedH2 = 0;
+  // ยอด "ดิบ" (ไม่ถ่วง POS) แยกงวดด้วยเหมือนกัน — ใช้โชว์ "Pipeline Forecast ทั้งหมด" ของ H นั้นๆ คู่กับตัวถ่วง
+  // POS ในการ์ด Sales Gap & Capability ให้เห็นทั้งมูลค่าเต็มและมูลค่าที่ประเมินความเสี่ยงแล้ว
+  var openPipelineTotalH1 = 0, openPipelineTotalH2 = 0;
   // ตั้ง p._pos ลง object เดิมตรงๆ (ST.pipelineByDealer คืน object ที่ parse ใหม่จาก localStorage ทุกครั้งอยู่
   // แล้ว ไม่ใช่ reference ที่ใครแชร์กัน) กัน activePipes/high/mid/low ชี้คนละชุดกันแล้ว ._pos หายตอนใช้ต่อ
   activePipes.forEach(function(p) {
@@ -1007,8 +1010,8 @@ function mondayCompanyStats(dealerId, cfg) {
     var w = amt * pos / 100;
     openPipelineWeighted += w;
     var half = _mondayHalf(pipeEffectiveCloseDate(p));
-    if (half === 'H1') openPipelineWeightedH1 += w;
-    else if (half === 'H2') openPipelineWeightedH2 += w;
+    if (half === 'H1') { openPipelineWeightedH1 += w; openPipelineTotalH1 += amt; }
+    else if (half === 'H2') { openPipelineWeightedH2 += w; openPipelineTotalH2 += amt; }
     if (pos >= 70) high.push(p); else if (pos >= 40) mid.push(p); else low.push(p);
   });
   var commitAmt = high.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
@@ -1035,6 +1038,7 @@ function mondayCompanyStats(dealerId, cfg) {
     high: high, mid: mid, low: low, commitAmt: commitAmt, bestAmt: bestAmt,
     openPipelineTotal: openPipelineTotal, openPipelineWeighted: openPipelineWeighted,
     openPipelineWeightedH1: openPipelineWeightedH1, openPipelineWeightedH2: openPipelineWeightedH2,
+    openPipelineTotalH1: openPipelineTotalH1, openPipelineTotalH2: openPipelineTotalH2,
     stalePipes: stalePipes, lastVisitDays: lastVisitDays
   };
 }
@@ -1218,9 +1222,12 @@ function computeKpiCompanyPlan(dealerId, cfg) {
   // pipeWeighted ต้องเป็น Pipeline ที่คาดปิด "งวดนี้" เท่านั้น (ไม่ใช่รวมทุกงวด) ไม่งั้น Gap จะดูดีเกินจริง
   // เพราะมี Pipeline ที่จะปิด H/ปีอื่นมาช่วยลด Gap ของงวดนี้ผิดๆ (ดูคอมเมนต์ที่ openPipelineWeightedH1/H2 ใน mondayCompanyStats)
   var pipeWeighted = mm.half === 'H1' ? stats.openPipelineWeightedH1 : stats.openPipelineWeightedH2;
+  // ยอดดิบ (ไม่ถ่วง POS) เฉพาะงวดนี้ — คนละตัวกับ pipelineRawTotal ด้านล่างที่ตั้งใจให้เป็นยอดรวมทุกงวด (ใช้โชว์
+  // "Pipeline มูลค่ารวม" แบบภาพกว้างที่อื่น) ตัวนี้ใช้เฉพาะการ์ด Sales Gap & Capability ที่ต้องพูดถึงงวดนี้เท่านั้น
+  var pipelineTotalPeriod = mm.half === 'H1' ? stats.openPipelineTotalH1 : stats.openPipelineTotalH2;
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
-    actualSoFar: actualSoFar, pipeWeighted: pipeWeighted, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
+    actualSoFar: actualSoFar, pipeWeighted: pipeWeighted, pipelineTotalPeriod: pipelineTotalPeriod, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
     djiActual: djiActual, runrateForecast: runrateForecast,
     openPipelinesList: openPipelinesList, wonPipelinesList: wonPipelinesList,
     sisQuarters: sisQuarters, sisYear: sisYear,
