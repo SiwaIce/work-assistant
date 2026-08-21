@@ -1069,6 +1069,21 @@ function dealerPeriodRisk(dealerId, cfg) {
   };
 }
 
+// เดา Expected Close Date จาก Bidding Date + 1 เดือน ถ้าโครงการยังไม่ได้กรอก Expected Close Date เอง (พบบ่อย
+// เพราะ field นี้เพิ่งมาทีหลัง Bidding Date) เป็นแค่ค่าประมาณคร่าวๆ ให้พอจัดกลุ่มงวด H1/H2/ปีถัดไปได้ ไม่ใช่ค่า
+// ที่แม่นยำจริง (ใช้ใน Project Conversion Plan — kpiImpProjectConversionSection ใน views-kpiplan.js)
+function pipeEffectiveCloseDate(p) {
+  if (p.expectedCloseDate) return p.expectedCloseDate;
+  if (!p.biddingDate) return '';
+  var parts = p.biddingDate.split('-');
+  if (parts.length !== 3) return '';
+  var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return '';
+  var dt = new Date(y, m + 1, d); // +1 เดือน
+  var mm = dt.getMonth() + 1, dd = dt.getDate();
+  return dt.getFullYear() + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd;
+}
+
 // ================================================================
 // KPI COMPANY PLAN — แผนบรรลุเป้ารายบริษัท (SAB Partner) รายเดือน แยก Project/Runrate
 // ต่อยอดจาก mondayCompanyStats: เดือนที่ผ่านไปแล้ว/เดือนนี้ = ยอดจริง (ล็อก แก้ไม่ได้)

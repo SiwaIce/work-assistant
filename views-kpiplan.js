@@ -653,32 +653,64 @@ function kpiImpDemoSection(dealerId) {
 function kpiImpProjectConversionSection(dealerId, p) {
   if (!p.openPipelinesList.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ไม่มีโครงการเปิดอยู่ในระบบตอนนี้</div>';
   var actions = getImprovementActions(dealerId);
+  var cfg = getConfig();
+  var halves = sisComputeHalfMonths(cfg);
+  var curPeriodKey = p.sisYear + '-' + p.half;
+
+  // แต่ละแถวต้อง "รู้งวด" ของตัวเอง — ใช้ Expected Close Date ถ้ามี ไม่งั้นเดาจาก Bidding Date +1 เดือน (ดู
+  // pipeEffectiveCloseDate ใน utils.js) โครงการที่ไม่ตรงกับงวดที่หน้านี้กำลังพูดถึง (p.half/p.sisYear) จะถูก
+  // ซ่อนไว้ก่อนโดย default กันไปรวมเข้าเป้างวดนี้ผิดๆ — กดปุ่ม "แสดงทั้งหมด" เพื่อดูโครงการนอกงวดได้
+  var rows = p.openPipelinesList.map(function(pp) {
+    var pipeObj = ST.getOne('pipeline', pp.id);
+    var closeDate = pipeObj ? (pipeObj.expectedCloseDate || pipeEffectiveCloseDate(pipeObj)) : '';
+    var isGuessed = !!(pipeObj && !pipeObj.expectedCloseDate && closeDate);
+    var periodKey = 'unknown', periodLabel = 'ไม่ระบุวันที่';
+    if (closeDate) {
+      var y = parseInt(closeDate.slice(0, 4), 10);
+      var m = parseInt(closeDate.slice(5, 7), 10) - 1;
+      var half = halves.h1.indexOf(m) !== -1 ? 'H1' : (halves.h2.indexOf(m) !== -1 ? 'H2' : null);
+      periodKey = y + '-' + (half || '?');
+      periodLabel = half ? (half + ' ' + y) : ('ปี ' + y);
+    }
+    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey };
+  });
+  var outCount = rows.filter(function(r) { return !r.isCurrent; }).length;
+
   var totalForecast = 0, totalWeighted = 0;
-  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  var tblId = 'kpiConvTbl_' + dealerId;
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">';
+  h += '<div style="font-size:10.5px;color:var(--text3)">งวดปัจจุบัน: ' + sanitize(curPeriodKey) + ' · ⏱ = เดาวันที่คาดปิดจาก Bidding Date +1 เดือน (ยังไม่ได้กรอก Expected Close Date เอง)</div>';
+  if (outCount) h += '<button class="btn bsm bo" id="' + tblId + '_toggle" onclick="_kpiConvToggleOtherPeriod(\'' + tblId + '\')">👁️ แสดงทั้งหมด (' + outCount + ' นอกงวดนี้ซ่อนอยู่)</button>';
+  h += '</div>';
+
+  h += '<div style="overflow-x:auto"><table id="' + tblId + '" style="width:100%;border-collapse:collapse;font-size:11.5px">';
   h += '<thead><tr style="border-bottom:1px solid var(--border)">' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">#</th>' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700">โครงการ</th>' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">หน่วยงาน</th>' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">สถานะ</th>' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">งวดที่คาดปิด</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">POS%</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">Forecast</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap" title="Forecast × POS%">ยอดเป้าคำนวณ</th>' +
     '<th style="padding:6px 8px"></th>' +
     '</tr></thead><tbody>';
-  p.openPipelinesList.forEach(function(pp) {
-    var pipeObj = ST.getOne('pipeline', pp.id);
+  rows.forEach(function(r) {
+    var pp = r.pp, pipeObj = r.pipeObj;
     var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
     var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
     var pos = Number(pp.pos) || 0;
     var forecast = Number(pp.forecastAmount) || 0;
     var weighted = forecast * pos / 100;
-    totalForecast += forecast; totalWeighted += weighted;
+    if (r.isCurrent) { totalForecast += forecast; totalWeighted += weighted; }
     var linked = actions.some(function(a) { return a.pipeId === pp.id; });
-    h += '<tr style="border-bottom:1px solid var(--border)">';
+    var dim = r.isCurrent ? '' : 'opacity:.55;';
+    h += '<tr class="' + (r.isCurrent ? '' : 'kpiConvOtherPeriod') + '" style="border-bottom:1px solid var(--border);' + dim + (r.isCurrent ? '' : 'display:none') + '">';
     h += '<td style="padding:7px 8px;color:var(--text3);font-family:monospace;white-space:nowrap">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td>';
     h += '<td style="padding:7px 8px;font-weight:600;cursor:pointer;color:var(--accent);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})" title="' + sanitize(pp.projectName || '') + '">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + ' →</td>';
     h += '<td style="padding:7px 8px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(agency) + '">' + sanitize(agency) + '</td>';
     h += '<td style="padding:7px 8px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border);color:var(--text2)">' + sanitize(statusLabel) + '</span></td>';
+    h += '<td style="padding:7px 8px;white-space:nowrap">' + sanitize(r.periodLabel) + (r.isGuessed ? ' <span title="เดาจาก Bidding Date +1 เดือน">⏱</span>' : '') + '</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + pos + '%</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + fmtMoneyShort(forecast) + '</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:700;white-space:nowrap" class="stat-good-t">' + fmtMoneyShort(weighted) + '</td>';
@@ -687,12 +719,24 @@ function kpiImpProjectConversionSection(dealerId, p) {
       : '<button class="btn bsm bo" onclick="kpiImpAddActionFromPipeline(\'' + dealerId + '\',\'' + pp.id + '\',\'' + sanitize(pp.projectName || '').replace(/'/g, "\\'") + '\',' + forecast + ')">+ Action</button>') + '</td>';
     h += '</tr>';
   });
-  h += '<tr><td colspan="5" style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวม</td>' +
+  h += '<tr><td colspan="6" style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวม (เฉพาะงวด ' + sanitize(curPeriodKey) + ')</td>' +
     '<td style="padding:7px 8px;text-align:right;font-weight:700">' + fmtMoneyShort(totalForecast) + '</td>' +
     '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtMoneyShort(totalWeighted) + '</td>' +
     '<td></td></tr>';
   h += '</tbody></table></div>';
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:6px">⚠️ ยอดรวมนี้กรองเฉพาะงวดปัจจุบันแล้ว ต่างจาก "Pipeline ถ่วง POS" ในสรุปด้านบน/ล่างที่ยังรวมทุกงวด (ยังไม่ได้แก้จุดนั้น รอ confirm)</div>';
   return h;
+}
+// สลับโชว์/ซ่อนแถวโครงการที่อยู่นอกงวดปัจจุบันในตาราง Project Conversion Plan
+function _kpiConvToggleOtherPeriod(tblId) {
+  var tbl = document.getElementById(tblId);
+  var btn = document.getElementById(tblId + '_toggle');
+  if (!tbl) return;
+  var rows = tbl.querySelectorAll('.kpiConvOtherPeriod');
+  if (!rows.length) return;
+  var isHidden = rows[0].style.display === 'none';
+  rows.forEach(function(tr) { tr.style.display = isHidden ? '' : 'none'; });
+  if (btn) btn.textContent = isHidden ? '🙈 ซ่อนนอกงวดนี้' : '👁️ แสดงทั้งหมด (' + rows.length + ' นอกงวดนี้ซ่อนอยู่)';
 }
 function kpiImpAddActionFromPipeline(dealerId, pipeId, projectName, forecastAmount) {
   var existing = getImprovementActions(dealerId).filter(function(a) { return a.pipeId === pipeId; });
