@@ -606,11 +606,11 @@ function kpiImpAddAction(dealerId) {
   render();
 }
 
-function kpiImpTh(label, width) {
-  return '<th style="text-align:left;font-size:10px;color:var(--text2);font-weight:700;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border)' + (width ? ';width:' + width + 'px' : '') + '">' + label + '</th>';
+function kpiImpTh(label, width, title) {
+  return '<th style="text-align:left;font-size:10px;color:var(--text2);font-weight:700;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border)' + (width ? ';width:' + width + 'px' : '') + '"' + (title ? ' title="' + sanitize(title) + '"' : '') + '>' + label + '</th>';
 }
-function kpiImpTextCell(coll, id, field, val) {
-  return '<td style="padding:4px 8px"><input class="fm-input" style="font-size:11.5px;width:100%" value="' + sanitize(val || '') + '" onchange="kpiImpSaveField(\'' + coll + '\',\'' + id + '\',\'' + field + '\',this.value)"></td>';
+function kpiImpTextCell(coll, id, field, val, placeholder) {
+  return '<td style="padding:4px 8px"><input class="fm-input" style="font-size:11.5px;width:100%" value="' + sanitize(val || '') + '"' + (placeholder ? ' placeholder="' + sanitize(placeholder) + '"' : '') + ' onchange="kpiImpSaveField(\'' + coll + '\',\'' + id + '\',\'' + field + '\',this.value)"></td>';
 }
 function kpiImpDelBtn(coll, id) {
   return '<td style="padding:4px 6px;text-align:center"><button class="btn bsm bo" style="padding:2px 7px" onclick="kpiImpDeleteRow(\'' + coll + '\',\'' + id + '\')">✕</button></td>';
@@ -619,11 +619,11 @@ function kpiImpDelBtn(coll, id) {
 function kpiImpEndUserTable(dealerId) {
   var rows = getDealerEndUsers(dealerId);
   var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px">';
-  h += '<thead><tr>' + kpiImpTh('End User') + kpiImpTh('Industry') + kpiImpTh('Current App') + kpiImpTh('Potential Product') + kpiImpTh('Potential', 90) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  h += '<thead><tr>' + kpiImpTh('End User') + kpiImpTh('Industry') + kpiImpTh('Current App', null, 'แอปพลิเคชัน/วิธีทำงานที่ End User ใช้อยู่ตอนนี้ก่อนเสนอสินค้าใหม่ เช่น "ใช้โดรนคู่แข่ง (Autel)", "สำรวจด้วยแรงงานคน", "ยังไม่มีโดรนเลย"') + kpiImpTh('Potential Product') + kpiImpTh('Potential', 90) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
   if (!rows.length) h += '<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มี End User — กด "+ เพิ่ม End User" ด้านล่าง</td></tr>';
   rows.forEach(function(r) {
     h += '<tr>' + kpiImpTextCell('dealerEndUsers', r.id, 'name', r.name) + kpiImpTextCell('dealerEndUsers', r.id, 'industry', r.industry) +
-      kpiImpTextCell('dealerEndUsers', r.id, 'currentApp', r.currentApp) + kpiImpTextCell('dealerEndUsers', r.id, 'potentialProduct', r.potentialProduct) +
+      kpiImpTextCell('dealerEndUsers', r.id, 'currentApp', r.currentApp, 'เช่น ใช้คู่แข่ง / แรงงานคน / ยังไม่มี') + kpiImpTextCell('dealerEndUsers', r.id, 'potentialProduct', r.potentialProduct) +
       '<td style="padding:4px 8px"><select class="fm-input" style="font-size:11.5px" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'potential\',this.value)">' +
       ['High', 'Medium', 'Low'].map(function(o) { return '<option' + (r.potential === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></td>' +
       kpiImpDelBtn('dealerEndUsers', r.id) + '</tr>';
