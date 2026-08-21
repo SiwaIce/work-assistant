@@ -580,6 +580,13 @@ function kpiImpToggleReason(dealerId, reason) {
   ST.update('dealers', dealerId, { improvementReasons: reasons });
   render();
 }
+// เซฟ field ที่เก็บตรงบน Dealer เอง (เช่น improvementSummary) ต่างจาก kpiImpSaveField ที่เซฟ field บน record
+// ของ collection ย่อย (dealerEndUsers/improvementActions) ที่ระบุ id แถวแยกต่างหาก
+function kpiImpSaveDealerField(dealerId, field, value) {
+  var patch = {};
+  patch[field] = value;
+  ST.update('dealers', dealerId, patch);
+}
 function kpiImpSaveField(coll, id, field, value) {
   var patch = {};
   patch[field] = field === 'expectedSales' ? (Number(value) || 0) : value;
@@ -823,6 +830,11 @@ function rKpiImprovementPlan(el) {
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:8px">📋 Summary <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— สรุปสั้นๆ เผื่อพิมพ์แยกส่งให้ Ryan (ไม่บังคับ กรอกไว้จะโชว์ในหน้า Print/English View ด้วย)</span></div>';
+  h += '<textarea class="fm-input" rows="3" style="width:100%;font-size:12px" placeholder="เช่น สรุปสถานการณ์, ความเสี่ยงหลัก, สิ่งที่ต้องการจาก Ryan..." onchange="kpiImpSaveDealerField(\'' + d.id + '\',\'improvementSummary\',this.value)">' + sanitize(d.improvementSummary || '') + '</textarea>';
+  h += '</div>';
+
+  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
   h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">1) Sales Gap & Capability (ดึงจากระบบอัตโนมัติ)</div>';
   h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">';
   h += kpiImpStat('H2 Target', fmtMoneyShort(p.target));
@@ -924,7 +936,7 @@ function exportImprovementPlanXlsx() {
   var wb = XLSX.utils.book_new();
 
   // ---- Summary tab ----
-  var sumHeader = ['Dealer', 'Level', 'Auto Risk', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Sales Gap', 'Pipeline (POS-Weighted)', 'Current Forecast', 'New Opportunity', 'Revised Forecast', 'Dock Target H1', 'Dock Won H1', 'Dock Target H2', 'Dock Won H2', 'Key Blockers'];
+  var sumHeader = ['Dealer', 'Level', 'Auto Risk', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Sales Gap', 'Pipeline (POS-Weighted)', 'Current Forecast', 'New Opportunity', 'Revised Forecast', 'Dock Target H1', 'Dock Won H1', 'Dock Target H2', 'Dock Won H2', 'Key Blockers', 'Summary'];
   var sumRows = [sumHeader];
   plans.forEach(function(p) {
     var d = p.dealer;
@@ -938,11 +950,11 @@ function exportImprovementPlanXlsx() {
       d.name, d.level || '', kpiPlanStatus(p).label, manualSt ? manualSt.label : '', p.half + ' ' + p.sisYear,
       p.target, sisActual, gap, p.pipeWeighted, currentForecast, oppTotal, currentForecast + oppTotal,
       d.dockTargetH1 || 0, stats.dockWonH1 || 0, d.dockTargetH2 || 0, stats.dockWonH2 || 0,
-      (d.improvementReasons || []).map(_kpiPrintEn).join(', ')
+      (d.improvementReasons || []).map(_kpiPrintEn).join(', '), d.improvementSummary || ''
     ]);
   });
   var wsSum = XLSX.utils.aoa_to_sheet(sumRows);
-  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }];
+  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, wsSum, 'Summary');
 
   // ---- per-dealer detail tabs ----
@@ -962,6 +974,7 @@ function exportImprovementPlanXlsx() {
     aoa.push(['Dealer Improvement Plan', d.name]);
     aoa.push(['Level', d.level || '', 'Period', p.half + ' ' + p.sisYear]);
     aoa.push([]);
+    if (d.improvementSummary) { aoa.push(['Summary', d.improvementSummary]); aoa.push([]); }
     aoa.push(['1) Sales Gap']);
     aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline (POS-Weighted)']);
     aoa.push([p.target, sisActual, gap, p.pipeWeighted]);
@@ -1047,6 +1060,10 @@ function _buildImprovementPlanEnHtml(dealerId) {
     '.card-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:#777;margin-bottom:5px}.card-meta b{color:#333;font-weight:700}' +
     '.card-body div{font-size:10.5px;color:#333;line-height:1.6}.card-body b{color:#666;font-weight:700}</style></head><body>';
   html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
+
+  if (d.improvementSummary) {
+    html += '<h2>Summary</h2><div style="font-size:11.5px;color:#333;white-space:pre-wrap;line-height:1.6">' + sanitize(d.improvementSummary) + '</div>';
+  }
 
   html += '<h2>Sales Gap</h2><div class="stats">' +
     '<div class="stat">' + p.half + ' Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
