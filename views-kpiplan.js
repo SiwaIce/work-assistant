@@ -895,6 +895,19 @@ function _kpiSafeSheetName(name, used) {
   used[final] = true;
   return final;
 }
+// SheetJS ตัวฟรีที่แอปใช้อยู่ (xlsx.full.min.js community edition) เขียน cell style (สี/ตัวหนา/เส้นขอบ) ตอน
+// save .xlsx ไม่ได้จริง — เช็คแล้ว (ตั้ง .s แล้วเปิดไฟล์กลับมาโดน reset เป็นค่าว่างเสมอ ฟีเจอร์นี้เป็น SheetJS
+// Pro เท่านั้น) แต่ number format (คั่นหลักพัน/%), merge cell (แถบหัวข้อ section), autofilter เขียนได้จริงและ
+// รอดตอน save — ใช้ 3 อย่างนี้แทนเพื่อให้ไฟล์อ่านง่ายขึ้นโดยไม่ต้องเพิ่ม library ใหม่
+function _kpiSetNumFmt(ws, cells, fmt) {
+  cells.forEach(function(c) {
+    var addr = XLSX.utils.encode_cell(c);
+    if (ws[addr]) ws[addr].z = fmt;
+  });
+}
+function _kpiMergeSectionTitle(merges, rowIdx, colSpan) {
+  merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx, c: colSpan - 1 } });
+}
 // Export ให้ครบเหมือนหน้า Print/PDF (ดู printImprovementPlan) — Summary tab 1 แถวต่อบริษัท รวมเป้า Dock/สถานะ
 // manual ด้วย + tab แยกรายบริษัทที่มีทุก section เหมือน PDF (Sales Gap/End User/Project Conversion/Action Plan/Rollup)
 function exportImprovementPlanXlsx() {
@@ -923,6 +936,11 @@ function exportImprovementPlanXlsx() {
   });
   var wsSum = XLSX.utils.aoa_to_sheet(sumRows);
   wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 40 }];
+  wsSum['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: sumHeader.length - 1 } }) };
+  var sumMoneyCells = [];
+  var sumMoneyCols = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]; // Target..Dock Won H2
+  for (var sr = 1; sr < sumRows.length; sr++) sumMoneyCols.forEach(function(sc) { sumMoneyCells.push({ r: sr, c: sc }); });
+  _kpiSetNumFmt(wsSum, sumMoneyCells, '#,##0');
   XLSX.utils.book_append_sheet(wb, wsSum, 'Summary');
 
   // ---- per-dealer detail tabs ----
@@ -938,42 +956,58 @@ function exportImprovementPlanXlsx() {
     var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
 
     var aoa = [];
+    var merges = [];
+    var moneyCells = [], pctCells = [];
+    var COLS = 9; // จำนวนคอลัมน์กว้างสุดที่ใช้ในชีตนี้ (ตาราง Project Conversion Plan) — ใช้กว้าง merge หัวข้อ section
+
     aoa.push(['Dealer Improvement Plan', d.name]);
     aoa.push(['Level', d.level || '', 'Period', p.half + ' ' + p.sisYear]);
     aoa.push([]);
     if (d.improvementSummary) { aoa.push(['Summary', d.improvementSummary]); aoa.push([]); }
-    aoa.push(['1) Sales Gap']);
+
+    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['1) Sales Gap']);
     aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline (POS-Weighted)']);
+    moneyCells.push({ r: aoa.length, c: 0 }, { r: aoa.length, c: 1 }, { r: aoa.length, c: 2 }, { r: aoa.length, c: 3 });
     aoa.push([p.target, sisActual, gap, p.pipeWeighted]);
     if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
     aoa.push([]);
-    aoa.push(['2) Project Conversion Plan (' + conv.curPeriodKey + ')']);
+
+    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['2) Project Conversion Plan (' + conv.curPeriodKey + ')']);
     aoa.push(['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target']);
     if (curRows.length) {
       curRows.forEach(function(r) {
         var pp = r.pp, pipeObj = r.pipeObj;
         var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
         var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos, r.forecast, r.weighted]);
+        pctCells.push({ r: aoa.length, c: 6 });
+        moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
+        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos / 100, r.forecast, r.weighted]);
       });
     } else { aoa.push(['—']); }
+    moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
     aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
     aoa.push([]);
-    aoa.push(['3) Plan']);
+
+    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['3) Plan']);
     aoa.push(['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales']);
     if (actions.length) actions.forEach(function(a) {
       var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
+      moneyCells.push({ r: aoa.length, c: 5 });
       aoa.push([a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
     });
     else aoa.push(['—']);
     aoa.push([]);
-    aoa.push(['4) Rollup']);
-    aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
-    aoa.push(['New Opportunity (Plan Total, excl. Pipeline-linked)', total]);
-    aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
+
+    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['4) Rollup']);
+    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
+    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['New Opportunity (Plan Total, excl. Pipeline-linked)', total]);
+    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
+    ws['!merges'] = merges;
+    _kpiSetNumFmt(ws, moneyCells, '#,##0');
+    _kpiSetNumFmt(ws, pctCells, '0%');
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 
