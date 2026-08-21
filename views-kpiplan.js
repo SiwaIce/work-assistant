@@ -771,9 +771,9 @@ function _kpiConvToggleOtherPeriod(tblId) {
 }
 function kpiImpAddActionFromPipeline(dealerId, pipeId, projectName, forecastAmount) {
   var existing = getImprovementActions(dealerId).filter(function(a) { return a.pipeId === pipeId; });
-  if (existing.length) { toast('มีแผนสำหรับโครงการนี้อยู่แล้ว — ดูในตาราง Growth Plan ด้านล่าง'); return; }
+  if (existing.length) { toast('มีแผนสำหรับโครงการนี้อยู่แล้ว — ดูในตาราง Plan ด้านล่าง'); return; }
   ST.add('improvementActions', { dealerId: dealerId, action: 'แปลง Pipeline: ' + projectName, relatedTo: projectName, who: '', when: '', expectedResult: '', expectedSales: Number(forecastAmount) || 0, pipeId: pipeId });
-  toast('➕ เพิ่มแผนจากโครงการแล้ว — แก้รายละเอียดในตาราง Growth Plan ด้านล่าง');
+  toast('➕ เพิ่มแผนจากโครงการแล้ว — แก้รายละเอียดในตาราง Plan ด้านล่าง');
   render();
 }
 
@@ -833,7 +833,7 @@ function rKpiImprovementPlan(el) {
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Growth Plan <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— แผนเพิ่มยอดทุกทาง: เจาะ End User ใหม่, ผลักดันสินค้าใหม่, สนับสนุน Dealer, หรือช่วยดันโครงการใน Pipeline ให้ปิดได้ — ไม่ต้องผูกกับใครก็ได้ ถ้าเป็นแผนทั่วไป</span></div>';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Plan <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— แผนเพิ่มยอดทุกทาง: เจาะ End User ใหม่, ผลักดันสินค้าใหม่, สนับสนุน Dealer, หรือช่วยดันโครงการใน Pipeline ให้ปิดได้ — ไม่ต้องผูกกับใครก็ได้ ถ้าเป็นแผนทั่วไป</span></div>';
   h += kpiImpGrowthPlanTable(d.id);
   h += '</div>';
 
@@ -843,7 +843,7 @@ function rKpiImprovementPlan(el) {
   h += kpiImpRollupRow('H2 Target', fmtMoneyShort(p.target));
   h += kpiImpRollupRow('Current Forecast (SIS จริง + Pipeline ถ่วง POS)', fmtMoneyShort(currentForecast));
   h += kpiImpRollupRow('Sales Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
-  h += kpiImpRollupRow('New Opportunity จาก Growth Plan (ไม่รวมแผนที่ผูก Pipeline — นับใน Pipeline ถ่วง POS ไปแล้ว)', fmtMoneyShort(opportunityTotal));
+  h += kpiImpRollupRow('New Opportunity จาก Plan (ไม่รวมแผนที่ผูก Pipeline — นับใน Pipeline ถ่วง POS ไปแล้ว)', fmtMoneyShort(opportunityTotal));
   h += '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);font-size:13.5px;font-weight:800"><span>Revised Forecast (ถ้าทำตามแผนสำเร็จ)</span><span class="' + (revised >= p.target ? 'stat-good-t' : 'stat-bad-t') + '">' + fmtMoneyShort(revised) + (revised >= p.target ? ' ✓ เกินเป้า' : ' ยังขาด ' + fmtMoneyShort(p.target - revised)) + '</span></div>';
   h += '</div></div>';
 
@@ -953,7 +953,7 @@ function exportImprovementPlanXlsx() {
     } else { aoa.push(['—']); }
     aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
     aoa.push([]);
-    aoa.push(['3) Growth Plan']);
+    aoa.push(['3) Plan']);
     aoa.push(['What', 'Related to', 'Who', 'When', 'Expected Result', 'Expected Sales']);
     if (actions.length) actions.forEach(function(a) {
       var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
@@ -963,7 +963,7 @@ function exportImprovementPlanXlsx() {
     aoa.push([]);
     aoa.push(['4) Rollup']);
     aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
-    aoa.push(['New Opportunity (Growth Plan Total, excl. Pipeline-linked)', total]);
+    aoa.push(['New Opportunity (Plan Total, excl. Pipeline-linked)', total]);
     aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1010,13 +1010,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
     '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
     '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
-    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;font-size:10px}' +
-    '.card{background:#fafafa;border:1px solid #e2e2e2;border-left:4px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:9px}' +
-    '.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:5px}' +
-    '.card-title{font-weight:700;font-size:12.5px}.card-badge{font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;white-space:nowrap}' +
-    '.badge-money{background:#e6f4ea;color:#1a7a3c}.badge-high{background:#e6f4ea;color:#1a7a3c}.badge-medium{background:#fdf1da;color:#8a5a00}.badge-low{background:#f1f1f1;color:#666}' +
-    '.card-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:#777;margin-bottom:5px}.card-meta b{color:#333;font-weight:700}' +
-    '.card-body div{font-size:10.5px;color:#333;line-height:1.6}.card-body b{color:#666;font-weight:700}</style></head><body>';
+    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}</style></head><body>';
   html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
 
   if (d.improvementSummary) {
@@ -1045,25 +1039,17 @@ function _buildImprovementPlanEnHtml(dealerId) {
   }
 
   if (actions.length) {
-    html += '<h2>Growth Plan</h2>';
+    html += '<h2>Plan</h2><table><tr><th>What</th><th>Related to</th><th>Who</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>';
     html += actions.map(function(a) {
       var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
-      var metaParts = [];
-      if (relatedTo) metaParts.push('<span><b>Related to</b> ' + sanitize(relatedTo) + '</span>');
-      if (a.who) metaParts.push('<span><b>Who</b> ' + sanitize(a.who) + '</span>');
-      if (a.when) metaParts.push('<span><b>When</b> ' + sanitize(a.when) + '</span>');
-      var bodyLines = [];
-      if (a.expectedResult) bodyLines.push('<div><b>Expected Result</b> — ' + sanitize(a.expectedResult) + '</div>');
       var sales = Number(a.expectedSales) || 0;
-      return '<div class="card"><div class="card-head"><div class="card-title">' + sanitize(a.action || '(unnamed action)') + '</div>' +
-        (sales ? '<span class="card-badge badge-money">฿' + fmtMoneyShort(sales) + (a.pipeId ? ' <span style="font-weight:400">(in Pipeline)</span>' : '') + '</span>' : '') + '</div>' +
-        (metaParts.length ? '<div class="card-meta">' + metaParts.join('') + '</div>' : '') +
-        (bodyLines.length ? '<div class="card-body">' + bodyLines.join('') + '</div>' : '') + '</div>';
+      return '<tr><td>' + sanitize(a.action || '(unnamed action)') + '</td><td>' + sanitize(relatedTo || '-') + '</td><td>' + sanitize(a.who || '-') + '</td><td>' + sanitize(a.when || '-') + '</td><td>' + sanitize(a.expectedResult || '-') + '</td><td>' + (sales ? fmtMoneyShort(sales) : '-') + (a.pipeId ? ' <span style="color:#888;font-size:10px">(in Pipeline)</span>' : '') + '</td></tr>';
     }).join('');
+    html += '</table>';
   }
 
   html += '<h2>Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
-    '<tr><td>New Opportunity (Growth Plan Total, excl. Pipeline-linked)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
+    '<tr><td>New Opportunity (Plan Total, excl. Pipeline-linked)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
   return html;
 }
