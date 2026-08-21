@@ -973,6 +973,13 @@ function mondayCompanyStats(dealerId, cfg) {
 
   var high = [], mid = [], low = [];
   var openPipelineTotal = 0, openPipelineWeighted = 0;
+  // แยก weighted ตามงวดที่ "คาดว่าจะปิด" ด้วย (H1/H2 — ใช้ expectedCloseDate จริงถ้ามี ไม่งั้นเดาจาก Bidding
+  // Date +1 เดือน ดู pipeEffectiveCloseDate) เพราะ openPipelineWeighted รวมทุกงวดปนกัน เอาไปบวกตรงๆ กับเป้า
+  // ของ "ครึ่งปีเดียว" (เช่น ใน computeKpiCompanyPlan/dealerPeriodRisk) จะทำให้ Pipeline ที่จะปิดปีหน้า/H อื่น
+  // ไปช่วยดันตัวเลข Gap ของงวดนี้ผิดๆ (พบจริง 2026-08-21 — ตัวเลข "Pipeline ถ่วง POS" ใน Improvement Plan สูง
+  // เกินจริงเพราะรวม Pipeline นอกงวดเข้าไปด้วย) — ตัวที่ไม่มีทั้ง 2 วันที่เลย ไม่รู้จะเดางวดไหน จึงไม่ถูกนับใน
+  // ทั้ง H1/H2 split นี้ (แต่ยังนับใน openPipelineWeighted/openPipelineTotal รวมตามเดิม)
+  var openPipelineWeightedH1 = 0, openPipelineWeightedH2 = 0;
   // ตั้ง p._pos ลง object เดิมตรงๆ (ST.pipelineByDealer คืน object ที่ parse ใหม่จาก localStorage ทุกครั้งอยู่
   // แล้ว ไม่ใช่ reference ที่ใครแชร์กัน) กัน activePipes/high/mid/low ชี้คนละชุดกันแล้ว ._pos หายตอนใช้ต่อ
   activePipes.forEach(function(p) {
@@ -982,7 +989,11 @@ function mondayCompanyStats(dealerId, cfg) {
     p._pos = pos;
     var amt = Number(p.forecastAmount) || 0;
     openPipelineTotal += amt;
-    openPipelineWeighted += amt * pos / 100;
+    var w = amt * pos / 100;
+    openPipelineWeighted += w;
+    var half = _mondayHalf(pipeEffectiveCloseDate(p));
+    if (half === 'H1') openPipelineWeightedH1 += w;
+    else if (half === 'H2') openPipelineWeightedH2 += w;
     if (pos >= 70) high.push(p); else if (pos >= 40) mid.push(p); else low.push(p);
   });
   var commitAmt = high.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
@@ -1006,6 +1017,7 @@ function mondayCompanyStats(dealerId, cfg) {
     rrWonH1: rrWonH1, rrWonH2: rrWonH2, rrRemainH2: rrRemainH2,
     high: high, mid: mid, low: low, commitAmt: commitAmt, bestAmt: bestAmt,
     openPipelineTotal: openPipelineTotal, openPipelineWeighted: openPipelineWeighted,
+    openPipelineWeightedH1: openPipelineWeightedH1, openPipelineWeightedH2: openPipelineWeightedH2,
     stalePipes: stalePipes, lastVisitDays: lastVisitDays
   };
 }
@@ -1040,7 +1052,7 @@ function dealerPeriodRisk(dealerId, cfg) {
   var sis = getSisRevenueForYear(d, year);
   var actual = Number(sis[halfKey]) || 0;
   var stats = mondayCompanyStats(dealerId, cfg);
-  var weighted = stats.openPipelineWeighted; // Pipeline เปิดอยู่ทั้งหมด ถ่วงด้วย POS แล้ว (v1: ยังไม่กรองเฉพาะที่คาดปิดในงวดนี้)
+  var weighted = isH1 ? stats.openPipelineWeightedH1 : stats.openPipelineWeightedH2; // เฉพาะ Pipeline ที่คาดปิดงวดนี้ ถ่วงด้วย POS แล้ว
   var projected = actual + weighted;
   var gap = Math.max(0, target - projected); // ช่องว่างที่ยังขาดหลังหักลบ Pipeline ที่คาดว่าจะปิดได้แล้ว
 
@@ -1186,9 +1198,12 @@ function computeKpiCompanyPlan(dealerId, cfg) {
     return { id: p.id, rowNo: p.rowNo || '', projectName: p.projectName || '', amount: Number(p.realAmount || p.forecastAmount) || 0, closeDate: p.expectedCloseDate || p.registerDate || '' };
   }).sort(function(a, b) { return b.amount - a.amount; });
 
+  // pipeWeighted ต้องเป็น Pipeline ที่คาดปิด "งวดนี้" เท่านั้น (ไม่ใช่รวมทุกงวด) ไม่งั้น Gap จะดูดีเกินจริง
+  // เพราะมี Pipeline ที่จะปิด H/ปีอื่นมาช่วยลด Gap ของงวดนี้ผิดๆ (ดูคอมเมนต์ที่ openPipelineWeightedH1/H2 ใน mondayCompanyStats)
+  var pipeWeighted = mm.half === 'H1' ? stats.openPipelineWeightedH1 : stats.openPipelineWeightedH2;
   return {
     dealer: stats.dealer, target: target, half: mm.half, months: mm.months, monthly: monthly,
-    actualSoFar: actualSoFar, pipeWeighted: stats.openPipelineWeighted, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
+    actualSoFar: actualSoFar, pipeWeighted: pipeWeighted, pipelineRawTotal: stats.openPipelineTotal, forecastTotal: forecastTotal, gap: gap,
     djiActual: djiActual, runrateForecast: runrateForecast,
     openPipelinesList: openPipelinesList, wonPipelinesList: wonPipelinesList,
     sisQuarters: sisQuarters, sisYear: sisYear,

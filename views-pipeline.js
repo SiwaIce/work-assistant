@@ -3645,7 +3645,7 @@ function rMondayCompany(el) {
 
   var h1Won = s.wonH1Project + s.wonH1Runrate;
   var h1Pct = s.targetH1 ? Math.round(h1Won / s.targetH1 * 100) : 0;
-  var h2ProjectTotal = s.wonH2Project + s.openPipelineWeighted;
+  var h2ProjectTotal = s.wonH2Project + s.openPipelineWeightedH2; // เฉพาะ Pipeline ที่คาดปิด H2 เท่านั้น (เดิมรวมทุกงวดปนกัน ทำให้ H2 Projected สูงเกินจริง)
   var h2RunrateTotal = s.wonH2RunrateWon + s.h2RunrateRemaining;
   var h2Projected = h2ProjectTotal + h2RunrateTotal;
   var h2Pct = s.targetH2 ? Math.round(h2Projected / s.targetH2 * 100) : 0;
@@ -3676,7 +3676,7 @@ function rMondayCompany(el) {
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><b style="font-size:13px">H2 (ก.ค.–ธ.ค.)</b><span style="font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff">กำลังดำเนินอยู่</span></div>' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' + progressRingHtml(h2Pct, { size: 44, strokeW: 5, color: h2RingColor }) +
     '<div style="flex:1;font-size:11.5px;color:var(--text2)"><span>Won + คาดว่าจะได้</span><br><b style="color:var(--text);font-size:12.5px">฿' + fmtMoneyShort(h2Projected) + ' / ฿' + fmtMoneyShort(s.targetH2) + '</b></div></div>' +
-    '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project (Won ฿' + fmtMoneyShort(s.wonH2Project) + ' + Pipeline ฿' + fmtMoneyShort(s.openPipelineWeighted) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2ProjectTotal) + '</b></div>' +
+    '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'project\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>📁 Project (Won ฿' + fmtMoneyShort(s.wonH2Project) + ' + Pipeline ฿' + fmtMoneyShort(s.openPipelineWeightedH2) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2ProjectTotal) + '</b></div>' +
     '<div onclick="showMondayHalfM(\'' + d.id + '\',\'H2\',\'runrate\')" style="cursor:pointer;font-size:11px;color:var(--text2);display:flex;justify-content:space-between;padding:3px 4px;border-radius:6px"><span>🔁 Runrate (Won ฿' + fmtMoneyShort(s.wonH2RunrateWon) + ' + คาดไว้ ฿' + fmtMoneyShort(s.h2RunrateRemaining) + ') ›</span><b style="color:var(--text)">฿' + fmtMoneyShort(h2RunrateTotal) + '</b></div>' +
     '<div style="font-size:11.5px;font-weight:700;margin-top:6px;padding:6px 8px;border-radius:7px;background:' + v2.bg + ';color:' + v2.fg + '">' + v2.label + (h2Pct < 100 ? ' — ขาดอีก ฿' + fmtMoneyShort(s.targetH2 - h2Projected) : '') + '</div>' +
     '<div onclick="showEditSisRevenueModal(\'' + d.id + '\')" style="cursor:pointer;font-size:10.5px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)">💰 ยอดขาย SIS จริง — Q3: ' + fmtMoneyShort(_sisRev.q3 || 0) + ' · Q4: ' + fmtMoneyShort(_sisRev.q4 || 0) + ' <span style="color:var(--accent)">✏️</span></div>' +
@@ -3729,18 +3729,21 @@ function showMondayHalfM(dealerId, half, source) {
     h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">✅ ปิดแล้ว (Won) — ' + won.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfWonList', wonRows, won.length);
     if (won.length > 10) setupIds.push('mondayHalfWonList');
     if (half === 'H2') {
+      // กรองเฉพาะ Pipeline ที่คาดปิด H2 นี้ ให้ตรงกับยอด openPipelineWeightedH2 ที่ใช้คำนวณ h2ProjectTotal
+      // ด้านบน (เดิมโชว์ activePipes ทั้งหมดปนกันทุกงวด ทำให้ยอดที่นี่ไม่ตรงกับตัวเลขสรุป)
+      var openPipesH2 = s.activePipes.filter(function(p) { return _mondayHalf(pipeEffectiveCloseDate(p)) === 'H2'; });
       var openRows = '';
       var cfg = getConfig();
       var statusOpts = {};
-      s.activePipes.forEach(function(p) {
+      openPipesH2.forEach(function(p) {
         var stName = ((cfg.pipelineStatuses || []).find(function(x) { return x.id === p.status; }) || {}).name || p.status;
         statusOpts[p.status] = stName;
         openRows += _pipeLiHtml(p, cfg, { closeFirst: true });
       });
-      if (!s.activePipes.length) openRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
+      if (!openPipesH2.length) openRows = '<div style="font-size:12px;color:var(--text2);padding:8px 0">ไม่มีรายการ</div>';
       var openFacets = _mondayFacetSelectHtml('mondayHalfOpenList', 'mondayListFilterStatus', '📌 สถานะ', Object.keys(statusOpts).map(function(id) { return { value: id, text: statusOpts[id] }; }));
-      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ (ยังไม่ปิด — ถ่วง POS) — ' + s.activePipes.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfOpenList', openRows, s.activePipes.length, openFacets);
-      if (s.activePipes.length > 10) setupIds.push('mondayHalfOpenList');
+      h += '<div style="font-size:12px;color:var(--text2);margin:14px 0 6px">📊 Pipeline เปิดอยู่ ที่คาดปิด H2 (ยังไม่ปิด — ถ่วง POS) — ' + openPipesH2.length + ' โครงการ</div>' + mondayModalListWrapHtml('mondayHalfOpenList', openRows, openPipesH2.length, openFacets);
+      if (openPipesH2.length > 10) setupIds.push('mondayHalfOpenList');
     }
   } else {
     var wonRR = half === 'H1' ? s.rrWonH1 : s.rrWonH2;
