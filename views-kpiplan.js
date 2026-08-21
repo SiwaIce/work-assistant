@@ -672,16 +672,14 @@ function kpiImpDemoSection(dealerId) {
 // B) Project Conversion — ดึง Pipeline ที่เปิดอยู่จริงของบริษัทนี้ (p.openPipelinesList จาก
 // computeKpiCompanyPlan) มาให้กดแปลงเป็น Action Plan ทันที (prefill ชื่อโครงการ + มูลค่า, ผูก pipeId กันเพิ่มซ้ำ)
 // ไม่มีตาราง/collection แยกต่างหาก — ใช้ improvementActions ตัวเดียวกับ Action Plan section 6 ตรงๆ
-function kpiImpProjectConversionSection(dealerId, p) {
-  if (!p.openPipelinesList.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ไม่มีโครงการเปิดอยู่ในระบบตอนนี้</div>';
-  var actions = getImprovementActions(dealerId);
+// แต่ละแถวต้อง "รู้งวด" ของตัวเอง — ใช้ Expected Close Date ถ้ามี ไม่งั้นเดาจาก Bidding Date +1 เดือน (ดู
+// pipeEffectiveCloseDate ใน utils.js) โครงการที่ไม่ตรงกับงวดที่หน้านี้กำลังพูดถึง (p.half/p.sisYear) ถูกตัดออก
+// จากยอดรวม (totalForecast/totalWeighted) กันไปรวมเข้าเป้างวดนี้ผิดๆ — ใช้ร่วมกันทั้งตารางแบบ interactive
+// (kpiImpProjectConversionSection) และตาราง print (printImprovementPlan) กันตรรกะเพี้ยนไปคนละทางกัน
+function _kpiConvBuildRows(dealerId, p) {
   var cfg = getConfig();
   var halves = sisComputeHalfMonths(cfg);
   var curPeriodKey = p.sisYear + '-' + p.half;
-
-  // แต่ละแถวต้อง "รู้งวด" ของตัวเอง — ใช้ Expected Close Date ถ้ามี ไม่งั้นเดาจาก Bidding Date +1 เดือน (ดู
-  // pipeEffectiveCloseDate ใน utils.js) โครงการที่ไม่ตรงกับงวดที่หน้านี้กำลังพูดถึง (p.half/p.sisYear) จะถูก
-  // ซ่อนไว้ก่อนโดย default กันไปรวมเข้าเป้างวดนี้ผิดๆ — กดปุ่ม "แสดงทั้งหมด" เพื่อดูโครงการนอกงวดได้
   var rows = p.openPipelinesList.map(function(pp) {
     var pipeObj = ST.getOne('pipeline', pp.id);
     var closeDate = pipeObj ? (pipeObj.expectedCloseDate || pipeEffectiveCloseDate(pipeObj)) : '';
@@ -694,11 +692,22 @@ function kpiImpProjectConversionSection(dealerId, p) {
       periodKey = y + '-' + (half || '?');
       periodLabel = half ? (half + ' ' + y) : ('ปี ' + y);
     }
-    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey };
+    var pos = Number(pp.pos) || 0;
+    var forecast = Number(pp.forecastAmount) || 0;
+    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100 };
   });
+  var totalForecast = 0, totalWeighted = 0;
+  rows.forEach(function(r) { if (r.isCurrent) { totalForecast += r.forecast; totalWeighted += r.weighted; } });
+  return { rows: rows, curPeriodKey: curPeriodKey, totalForecast: totalForecast, totalWeighted: totalWeighted };
+}
+
+function kpiImpProjectConversionSection(dealerId, p) {
+  if (!p.openPipelinesList.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ไม่มีโครงการเปิดอยู่ในระบบตอนนี้</div>';
+  var actions = getImprovementActions(dealerId);
+  var built = _kpiConvBuildRows(dealerId, p);
+  var rows = built.rows, curPeriodKey = built.curPeriodKey, totalForecast = built.totalForecast, totalWeighted = built.totalWeighted;
   var outCount = rows.filter(function(r) { return !r.isCurrent; }).length;
 
-  var totalForecast = 0, totalWeighted = 0;
   var tblId = 'kpiConvTbl_' + dealerId;
   var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">';
   h += '<div style="font-size:10.5px;color:var(--text3)">งวดปัจจุบัน: ' + sanitize(curPeriodKey) + ' · ⏱ = เดาวันที่คาดปิดจาก Bidding Date +1 เดือน (ยังไม่ได้กรอก Expected Close Date เอง)</div>';
@@ -721,10 +730,7 @@ function kpiImpProjectConversionSection(dealerId, p) {
     var pp = r.pp, pipeObj = r.pipeObj;
     var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
     var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-    var pos = Number(pp.pos) || 0;
-    var forecast = Number(pp.forecastAmount) || 0;
-    var weighted = forecast * pos / 100;
-    if (r.isCurrent) { totalForecast += forecast; totalWeighted += weighted; }
+    var pos = r.pos, forecast = r.forecast, weighted = r.weighted;
     var linked = actions.some(function(a) { return a.pipeId === pp.id; });
     var dim = r.isCurrent ? '' : 'opacity:.55;';
     h += '<tr class="' + (r.isCurrent ? '' : 'kpiConvOtherPeriod') + '" style="border-bottom:1px solid var(--border);' + dim + (r.isCurrent ? '' : 'display:none') + '">';
@@ -746,7 +752,6 @@ function kpiImpProjectConversionSection(dealerId, p) {
     '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtMoneyShort(totalWeighted) + '</td>' +
     '<td></td></tr>';
   h += '</tbody></table></div>';
-  h += '<div style="font-size:10px;color:var(--text3);margin-top:6px">⚠️ ยอดรวมนี้กรองเฉพาะงวดปัจจุบันแล้ว ต่างจาก "Pipeline ถ่วง POS" ในสรุปด้านบน/ล่างที่ยังรวมทุกงวด (ยังไม่ได้แก้จุดนั้น รอ confirm)</div>';
   return h;
 }
 // สลับโชว์/ซ่อนแถวโครงการที่อยู่นอกงวดปัจจุบันในตาราง Project Conversion Plan
@@ -901,33 +906,120 @@ function kpiImpCreateFollowupTasks(dealerId) {
 
 // Export Excel — รวม Action Plan ของทุกบริษัทเสี่ยง (ไม่ใช่แค่บริษัทที่กำลังเปิดอยู่) เพราะ Ryan น่าจะอยาก
 // เห็นภาพรวมทั้งหมดทีเดียวเวลาเปิดไฟล์ ใช้ SheetJS (XLSX) ตัวเดียวกับ Import/Export ยอดขาย SIS
+// ตัดชื่อ Dealer ให้เป็นชื่อ sheet ที่ Excel ยอมรับ (≤31 ตัวอักษร, ห้ามมี \/?*[]:） กันชื่อซ้ำด้วยเลขต่อท้าย
+function _kpiSafeSheetName(name, used) {
+  var safe = (name || 'Dealer').replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || 'Dealer';
+  var final = safe, n = 2;
+  while (used[final]) { final = safe.slice(0, 28 - String(n).length - 1) + '_' + n; n++; }
+  used[final] = true;
+  return final;
+}
+// Export ให้ครบเหมือนหน้า Print/PDF (ดู printImprovementPlan) — Summary tab 1 แถวต่อบริษัท รวมเป้า Dock/สถานะ
+// manual ด้วย + tab แยกรายบริษัทที่มีทุก section เหมือน PDF (Sales Gap/End User/Project Conversion/Action Plan/Rollup)
 function exportImprovementPlanXlsx() {
-  var plans = computeKpiCompanyPlanAll(getConfig()).filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
+  var cfg = getConfig();
+  var plans = computeKpiCompanyPlanAll(cfg).filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
   if (!plans.length) return toast('ไม่มีบริษัทเสี่ยง');
-  var header = ['Dealer', 'Level', 'Risk', 'H2 Target', 'SIS จริง', 'Sales Gap', 'Action', 'Who', 'What', 'When', 'Expected Result', 'Expected Sales'];
-  var rows = [header];
+  var wb = XLSX.utils.book_new();
+
+  // ---- Summary tab ----
+  var sumHeader = ['Dealer', 'Level', 'Auto Risk', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Sales Gap', 'Pipeline (POS-Weighted)', 'Current Forecast', 'New Opportunity', 'Revised Forecast', 'Dock Target H1', 'Dock Won H1', 'Dock Target H2', 'Dock Won H2', 'Key Blockers'];
+  var sumRows = [sumHeader];
   plans.forEach(function(p) {
+    var d = p.dealer;
     var sisActual = kpiPlanSisActual(p);
     var gap = Math.max(0, p.target - sisActual);
-    var actions = getImprovementActions(p.dealer.id);
-    if (!actions.length) {
-      rows.push([p.dealer.name, p.dealer.level || '', kpiPlanStatus(p).label, p.target, sisActual, gap, '(ยังไม่มี Improvement Plan)', '', '', '', '', '']);
-    } else {
-      actions.forEach(function(a) {
-        rows.push([p.dealer.name, p.dealer.level || '', kpiPlanStatus(p).label, p.target, sisActual, gap, a.action || '', a.who || '', a.what || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
-      });
-    }
+    var currentForecast = sisActual + p.pipeWeighted;
+    var oppTotal = improvementActionsTotal(d.id);
+    var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
+    var stats = mondayCompanyStats(d.id, cfg);
+    sumRows.push([
+      d.name, d.level || '', kpiPlanStatus(p).label, manualSt ? manualSt.label : '', p.half + ' ' + p.sisYear,
+      p.target, sisActual, gap, p.pipeWeighted, currentForecast, oppTotal, currentForecast + oppTotal,
+      d.dockTargetH1 || 0, stats.dockWonH1 || 0, d.dockTargetH2 || 0, stats.dockWonH2 || 0,
+      (d.improvementReasons || []).map(_kpiPrintEn).join(', ')
+    ]);
   });
-  var ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 26 }, { wch: 10 }, { wch: 22 }, { wch: 14 }];
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Improvement Plan');
+  var wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, wsSum, 'Summary');
+
+  // ---- per-dealer detail tabs ----
+  var usedNames = {};
+  plans.forEach(function(p) {
+    var d = p.dealer;
+    var sheetName = _kpiSafeSheetName(d.name, usedNames);
+    var conv = _kpiConvBuildRows(d.id, p);
+    var actions = getImprovementActions(d.id);
+    var endUsers = getDealerEndUsers(d.id);
+    var sisActual = kpiPlanSisActual(p);
+    var gap = Math.max(0, p.target - sisActual);
+    var total = improvementActionsTotal(d.id);
+    var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
+
+    var aoa = [];
+    aoa.push(['Dealer Improvement Plan', d.name]);
+    aoa.push(['Level', d.level || '', 'Period', p.half + ' ' + p.sisYear]);
+    aoa.push([]);
+    aoa.push(['1) Sales Gap']);
+    aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline (POS-Weighted)']);
+    aoa.push([p.target, sisActual, gap, p.pipeWeighted]);
+    if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
+    aoa.push([]);
+    aoa.push(['2) Main End User Mapping']);
+    aoa.push(['End User', 'Industry', 'Current App', 'Potential Product', 'Potential']);
+    if (endUsers.length) endUsers.forEach(function(r) { aoa.push([r.name || '', r.industry || '', r.currentApp || '', r.potentialProduct || '', r.potential || '']); });
+    else aoa.push(['—']);
+    aoa.push([]);
+    aoa.push(['3) Project Conversion Plan (' + conv.curPeriodKey + ')']);
+    aoa.push(['#', 'Project', 'Agency', 'Status', 'Expected Period', 'POS%', 'Forecast', 'Weighted Target']);
+    if (curRows.length) {
+      curRows.forEach(function(r) {
+        var pp = r.pp, pipeObj = r.pipeObj;
+        var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+        var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
+        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.pos, r.forecast, r.weighted]);
+      });
+    } else { aoa.push(['—']); }
+    aoa.push(['Total', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
+    aoa.push([]);
+    aoa.push(['4) Action Plan']);
+    aoa.push(['Action', 'Who', 'What', 'When', 'Expected Result', 'Expected Sales']);
+    if (actions.length) actions.forEach(function(a) { aoa.push([a.action || '', a.who || '', a.what || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]); });
+    else aoa.push(['—']);
+    aoa.push([]);
+    aoa.push(['5) Rollup']);
+    aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
+    aoa.push(['New Opportunity (Action Plan Total)', total]);
+    aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
+
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
   XLSX.writeFile(wb, 'Improvement_Plan_' + plans[0].half + '_' + _td() + '.xlsx');
-  toast('📤 Export Excel แล้ว');
+  toast('📤 Export Excel แล้ว (' + (plans.length + 1) + ' tabs)');
 }
 
 // หน้าพิมพ์/PDF — เปิดแท็บใหม่ด้วย HTML ธรรมดา + window.print() แทนการเพิ่ม PDF library ใหม่ (เบากว่า และ
 // เบราว์เซอร์ทำ "บันทึกเป็น PDF" ในตัวได้อยู่แล้วจากกล่อง Print)
+// แปล label ที่มาจาก config/data ภายใน (สถานะ Pipeline, สาเหตุ Improve reason) เป็นอังกฤษคร่าวๆ สำหรับเอกสาร
+// พิมพ์ที่ส่งให้ผู้บริหาร/ต่างชาติ (Ryan) — ถ้าไม่รู้จักคำ ก็ปล่อยข้อความเดิมผ่านไป (ดีกว่าแสดงค่าว่าง)
+var KPI_PRINT_EN_MAP = {
+  'ไม่ระบุวันที่': 'No date', 'ปี ': 'FY ',
+  'Pipeline ยังน้อย': 'Pipeline too thin', 'Budget ยังไม่มา': 'Budget not released',
+  'ยังไม่มี Demo': 'No demo yet', 'เข้าถึง End User ไม่ได้': 'Cannot reach end user',
+  'มีคู่แข่ง': 'Competitor present', 'ขายแต่ Product เดิม': 'Selling same product only',
+  'Technical Solution ยังไม่พร้อม': 'Technical solution not ready', 'ไม่มี New End User': 'No new end user',
+  'กระทบราคาไม่เอา': 'Price objection', 'เสนอราคาออนไลน์ไม่ได้': 'Cannot quote online'
+};
+function _kpiPrintEn(s) {
+  if (!s) return s;
+  if (KPI_PRINT_EN_MAP[s]) return KPI_PRINT_EN_MAP[s];
+  if (s.indexOf('ปี ') === 0) return 'FY ' + s.slice(3);
+  return s;
+}
 function printImprovementPlan(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
@@ -937,28 +1029,41 @@ function printImprovementPlan(dealerId) {
   var actions = getImprovementActions(dealerId);
   var endUsers = getDealerEndUsers(dealerId);
   var total = improvementActionsTotal(dealerId);
+  var conv = _kpiConvBuildRows(dealerId, p);
+  var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
 
   var html = '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' +
     '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:18px 0 6px}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
     '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
-    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}</style></head><body>';
-  html += '<h1>🚀 Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' · พิมพ์เมื่อ ' + fD(_td()) + '</div>';
+    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;font-size:10px}</style></head><body>';
+  html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
   html += '<h2>1) Sales Gap</h2><div class="stats">' +
-    '<div class="stat">H2 Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
-    '<div class="stat">SIS จริง<b>' + fmtMoneyShort(sisActual) + '</b></div>' +
+    '<div class="stat">' + p.half + ' Target<b>' + fmtMoneyShort(p.target) + '</b></div>' +
+    '<div class="stat">SIS Sell-out (Actual)<b>' + fmtMoneyShort(sisActual) + '</b></div>' +
     '<div class="stat">Gap<b>' + fmtMoneyShort(gap) + '</b></div>' +
-    '<div class="stat">Pipeline ถ่วง POS<b>' + fmtMoneyShort(p.pipeWeighted) + '</b></div></div>';
-  if ((d.improvementReasons || []).length) html += '<div class="sub">สาเหตุหลัก: ' + sanitize(d.improvementReasons.join(', ')) + '</div>';
+    '<div class="stat">Pipeline (POS-Weighted)<b>' + fmtMoneyShort(p.pipeWeighted) + '</b></div></div>';
+  if ((d.improvementReasons || []).length) html += '<div class="sub">Key blockers: ' + sanitize(d.improvementReasons.map(_kpiPrintEn).join(', ')) + '</div>';
 
   html += '<h2>2) Main End User Mapping</h2><table><tr><th>End User</th><th>Industry</th><th>Current App</th><th>Potential Product</th><th>Potential</th></tr>' +
     (endUsers.length ? endUsers.map(function(r) { return '<tr><td>' + sanitize(r.name) + '</td><td>' + sanitize(r.industry) + '</td><td>' + sanitize(r.currentApp) + '</td><td>' + sanitize(r.potentialProduct) + '</td><td>' + sanitize(r.potential) + '</td></tr>'; }).join('') : '<tr><td colspan="5">—</td></tr>') + '</table>';
 
-  html += '<h2>3) Action Plan</h2><table><tr><th>Action</th><th>Who</th><th>What</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>' +
+  html += '<h2>3) Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>Agency</th><th>Status</th><th>Expected Period</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
+  var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
+  html += curRows.length ? curRows.map(function(r) {
+    var pp = r.pp, pipeObj = r.pipeObj;
+    var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+    var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
+    return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
+  }).join('') : '<tr><td colspan="8">—</td></tr>';
+  html += '<tr><td colspan="6"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
+  html += '</table>';
+
+  html += '<h2>4) Action Plan</h2><table><tr><th>Action</th><th>Who</th><th>What</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>' +
     (actions.length ? actions.map(function(a) { return '<tr><td>' + sanitize(a.action) + '</td><td>' + sanitize(a.who) + '</td><td>' + sanitize(a.what) + '</td><td>' + sanitize(a.when) + '</td><td>' + sanitize(a.expectedResult) + '</td><td>' + fmtMoneyShort(Number(a.expectedSales) || 0) + '</td></tr>'; }).join('') : '<tr><td colspan="6">—</td></tr>') + '</table>';
 
-  html += '<h2>4) Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
-    '<tr><td>New Opportunity (Action Plan รวม)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
+  html += '<h2>5) Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
+    '<tr><td>New Opportunity (Action Plan Total)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
   html += '<script>window.onload=function(){window.print();}</script></body></html>';
 
