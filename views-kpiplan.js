@@ -222,7 +222,8 @@ function saveKpiPlanTargets() {
     if (!h1El || !h2El) return;
     var h1 = parseNum(h1El.value), h2 = parseNum(h2El.value);
     if (h1 !== (Number(d.targetH1) || 0) || h2 !== (Number(d.targetH2) || 0)) {
-      ST.update('dealers', d.id, { targetH1: h1, targetH2: h2, targetRevenue: h1 + h2 });
+      var saveData = buildTargetSaveData(d, new Date().getFullYear(), { h1: h1, h2: h2, dockH1: d.dockTargetH1, dockH2: d.dockTargetH2 });
+      ST.update('dealers', d.id, saveData);
       changed++;
     }
   });
@@ -1032,7 +1033,7 @@ function exportImprovementPlanXlsx() {
     sumRows.push([
       d.name, d.level || '', kpiPlanStatus(p).label, manualSt ? manualSt.label : '', p.half + ' ' + p.sisYear,
       p.target, sisActual, gap, p.pipelineTotalPeriod, p.pipeWeighted, currentForecast, oppTotal, currentForecast + oppTotal,
-      d.dockTargetH1 || 0, stats.dockWonH1 || 0, d.dockTargetH2 || 0, stats.dockWonH2 || 0,
+      stats.dockTargetH1 || 0, stats.dockWonH1 || 0, stats.dockTargetH2 || 0, stats.dockWonH2 || 0,
       (d.improvementReasons || []).map(_kpiPrintEn).join(', '), d.improvementSummary || ''
     ]);
   });

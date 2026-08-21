@@ -1027,10 +1027,11 @@ function mondayCompanyStats(dealerId, cfg) {
 
   var lastVisitDays = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(dealerId) : null;
 
+  var _tgt = getTargetForYear(d, new Date().getFullYear());
   return {
     dealer: d, activePipes: activePipes, wonPipes: wonPipes,
-    targetH1: Number(d && d.targetH1) || 0, targetH2: Number(d && d.targetH2) || 0,
-    dockTargetH1: Number(d && d.dockTargetH1) || 0, dockTargetH2: Number(d && d.dockTargetH2) || 0,
+    targetH1: _tgt.h1, targetH2: _tgt.h2,
+    dockTargetH1: _tgt.dockH1, dockTargetH2: _tgt.dockH2,
     dockWonH1: dockWonH1, dockWonH2: dockWonH2,
     wonH1Project: wonH1Project, wonH2Project: wonH2Project, wonProjectsH1: wonProjectsH1, wonProjectsH2: wonProjectsH2,
     wonH1Runrate: wonH1Runrate, wonH2RunrateWon: wonH2RunrateWon, h2RunrateRemaining: h2RunrateRemaining,
@@ -1061,7 +1062,8 @@ function dealerPeriodRisk(dealerId, cfg) {
   var isH1 = halves.h1.indexOf(curMonth) !== -1;
   var half = isH1 ? halves.h1Period : halves.h2Period;
   var halfKey = isH1 ? 'h1' : 'h2';
-  var target = Number(isH1 ? d.targetH1 : d.targetH2) || 0;
+  var _tgtRisk = getTargetForYear(d, year);
+  var target = isH1 ? _tgtRisk.h1 : _tgtRisk.h2;
 
   var periodStart = new Date(year, half.startMonth, 1);
   var periodEnd = new Date(year, half.endMonth + 1, 0); // วันสุดท้ายของ endMonth (day 0 ของเดือนถัดไป)
@@ -1739,6 +1741,39 @@ function getSisYoy(dealer, year, half) {
   var prev = getSisRevenueForYear(dealer, curYear - 1)[half] || 0;
   var pct = prev > 0 ? Math.round((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
   return { cur: cur, prev: prev, pct: pct };
+}
+
+// อ่านเป้ายอดขาย (targetH1/H2 + Dock H1/H2) ของปีที่ระบุ — pattern เดียวกับ getSisRevenueForYear
+// ปีปัจจุบันที่ยังไม่มี targetsByYear จะ fallback ไปอ่านฟิลด์เดิม (targetH1/targetH2/dockTargetH1/dockTargetH2) อัตโนมัติ
+// ปีอื่นที่ไม่เคยตั้งจะได้ 0 เสมอ (ไม่เอาเป้าปีนี้ไปใช้กับปีก่อน/หลังผิดๆ)
+function getTargetForYear(dealer, year) {
+  year = String(year);
+  if (dealer && dealer.targetsByYear && dealer.targetsByYear[year]) {
+    var t = dealer.targetsByYear[year];
+    return { h1: Number(t.h1) || 0, h2: Number(t.h2) || 0, dockH1: Number(t.dockH1) || 0, dockH2: Number(t.dockH2) || 0 };
+  }
+  if (dealer && year === String(new Date().getFullYear())) {
+    return { h1: Number(dealer.targetH1) || 0, h2: Number(dealer.targetH2) || 0, dockH1: Number(dealer.dockTargetH1) || 0, dockH2: Number(dealer.dockTargetH2) || 0 };
+  }
+  return { h1: 0, h2: 0, dockH1: 0, dockH2: 0 };
+}
+
+// บันทึกเป้าปีที่ระบุ (เก็บลง targetsByYear[year] + mirror ไปฟิลด์เดิมถ้าเป็นปีปัจจุบัน เพื่อ backward-compat)
+// คืนค่า updateData object ไว้ให้ผู้เรียก ST.update เอง (ไม่ update ตรงนี้ กันผูกกับ ST มากไป)
+function buildTargetSaveData(dealer, year, vals) {
+  year = String(year);
+  var byYear = (dealer && dealer.targetsByYear) || {};
+  byYear = Object.assign({}, byYear);
+  byYear[year] = { h1: vals.h1 || 0, h2: vals.h2 || 0, dockH1: vals.dockH1 || 0, dockH2: vals.dockH2 || 0, updatedAt: Date.now() };
+  var updateData = { targetsByYear: byYear };
+  if (year === String(new Date().getFullYear())) {
+    updateData.targetH1 = vals.h1 || 0;
+    updateData.targetH2 = vals.h2 || 0;
+    updateData.dockTargetH1 = vals.dockH1 || 0;
+    updateData.dockTargetH2 = vals.dockH2 || 0;
+    updateData.targetRevenue = (vals.h1 || 0) + (vals.h2 || 0);
+  }
+  return updateData;
 }
 
 // ================================================================

@@ -5201,8 +5201,9 @@ function rSalesRepDashboard(el) {
     if (!repsMap[name]) repsMap[name] = { name: name, dealers: [], targetH1: 0, targetH2: 0, sisH1: 0, sisH2: 0, sisQ1: 0, sisQ2: 0, sisQ3: 0, sisQ4: 0, wonAmt: 0, weightedOpen: 0, openTotal: 0, activeCount: 0 };
     var r = repsMap[name];
     r.dealers.push(d);
-    r.targetH1 += Number(d.targetH1) || 0;
-    r.targetH2 += Number(d.targetH2) || 0;
+    var tgt = getTargetForYear(d, curYear);
+    r.targetH1 += tgt.h1;
+    r.targetH2 += tgt.h2;
     var sis = getSisRevenueForYear(d, curYear);
     r.sisH1 += sis.h1 || 0;
     r.sisH2 += sis.h2 || 0;

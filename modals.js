@@ -450,7 +450,11 @@ async function saveDealer(eid) {
   };
   
   if (!data.name) return alert('ใส่ชื่อบริษัท');
-  
+
+  // เก็บเป้าปีปัจจุบันลง targetsByYear ด้วย (กันเป้าปีนี้หายตอนขึ้นปีหน้า) — pattern เดียวกับ sisRevenueByYear
+  var _existingDealer = eid ? ST.getOne('dealers', eid) : null;
+  Object.assign(data, buildTargetSaveData(_existingDealer, new Date().getFullYear(), { h1: data.targetH1, h2: data.targetH2, dockH1: data.dockTargetH1, dockH2: data.dockTargetH2 }));
+
   if (eid) {
     ST.update('dealers', eid, data);
     // ✅ Audit Log
