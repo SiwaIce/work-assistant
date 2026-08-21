@@ -539,9 +539,11 @@ function copyKpiPlanSummary() {
 
 // ================================================================
 // IMPROVEMENT PLAN — แผนเพิ่มยอดต่อบริษัทเสี่ยง (โจทย์จาก Ryan: Who/What/When/Expected Result ไม่ใช่แค่
-// ติดตาม Pipeline เดิม) เก็บข้อมูล 2 ก้อน: improvementActions (ตาราง Action Plan) + dealerEndUsers
-// (End User Mapping) — สาเหตุหลัก (reason chips) เก็บที่ dealer.improvementReasons ตรงๆ (pattern เดียวกับ
-// sisRevenueByYear ที่ผูกกับ dealer อยู่แล้ว ไม่ต้องเปิด collection แยกสำหรับ field เดียว)
+// ติดตาม Pipeline เดิม) เก็บใน improvementActions ตัวเดียว — "Growth Plan" (เดิมแยก End User Mapping/
+// Demo-POC/New Product Expansion/Action Plan เป็น 4 ส่วน ยุบรวมเป็นตารางเดียว 2026-08-21 เพราะ Sale งงว่า
+// จะกรอกช่องไหน — แต่ละแถวมี relatedTo แบบข้อความอิสระ ไม่บังคับผูกกับ End User/โครงการใดๆ เผื่อเป็นแผนทั่วไป
+// เช่น รับรอง Dealer/Partner หรือโปรแกรมยืม Payload) — สาเหตุหลัก (reason chips) เก็บที่ dealer.improvementReasons
+// ตรงๆ (pattern เดียวกับ sisRevenueByYear ที่ผูกกับ dealer อยู่แล้ว ไม่ต้องเปิด collection แยกสำหรับ field เดียว)
 // Gap/Target/Pipeline ทั้งหมดดึงจาก computeKpiCompanyPlan ตรงๆ ไม่คำนวณซ้ำ/ไม่เก็บสำเนา
 // ================================================================
 var IMPROVEMENT_REASONS = ['Pipeline ยังน้อย', 'Budget ยังไม่มา', 'ยังไม่มี Demo', 'เข้าถึง End User ไม่ได้', 'มีคู่แข่ง', 'ขายแต่ Product เดิม', 'Technical Solution ยังไม่พร้อม', 'ไม่มี New End User', 'กระทบราคาไม่เอา', 'เสนอราคาออนไลน์ไม่ได้'];
@@ -565,9 +567,6 @@ function kpiSetManualStatus(dealerId, key) {
 function getImprovementActions(dealerId) {
   return ST.filter('improvementActions', function(a) { return a.dealerId === dealerId; });
 }
-function getDealerEndUsers(dealerId) {
-  return ST.filter('dealerEndUsers', function(a) { return a.dealerId === dealerId; });
-}
 function improvementActionsTotal(dealerId) {
   return getImprovementActions(dealerId).reduce(function(s, a) { return s + (Number(a.expectedSales) || 0); }, 0);
 }
@@ -581,7 +580,7 @@ function kpiImpToggleReason(dealerId, reason) {
   render();
 }
 // เซฟ field ที่เก็บตรงบน Dealer เอง (เช่น improvementSummary) ต่างจาก kpiImpSaveField ที่เซฟ field บน record
-// ของ collection ย่อย (dealerEndUsers/improvementActions) ที่ระบุ id แถวแยกต่างหาก
+// ของ collection ย่อย (improvementActions) ที่ระบุ id แถวแยกต่างหาก
 function kpiImpSaveDealerField(dealerId, field, value) {
   var patch = {};
   patch[field] = value;
@@ -595,10 +594,6 @@ function kpiImpSaveField(coll, id, field, value) {
 }
 function kpiImpDeleteRow(coll, id) {
   ST.delete(coll, id);
-  render();
-}
-function kpiImpAddEndUser(dealerId) {
-  ST.add('dealerEndUsers', { dealerId: dealerId, name: '', industry: '', currentApp: '', potentialProduct: '', potential: 'Medium' });
   render();
 }
 function kpiImpAddAction(dealerId) {
@@ -616,37 +611,32 @@ function kpiImpDelBtn(coll, id) {
   return '<td style="padding:4px 6px;text-align:center"><button class="btn bsm bo" style="padding:2px 7px" onclick="kpiImpDeleteRow(\'' + coll + '\',\'' + id + '\')">✕</button></td>';
 }
 
-function kpiImpEndUserTable(dealerId) {
-  var rows = getDealerEndUsers(dealerId);
-  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:640px">';
-  h += '<thead><tr>' + kpiImpTh('End User') + kpiImpTh('Industry') + kpiImpTh('Current App', null, 'แอปพลิเคชัน/วิธีทำงานที่ End User ใช้อยู่ตอนนี้ก่อนเสนอสินค้าใหม่ เช่น "ใช้โดรนคู่แข่ง (Autel)", "สำรวจด้วยแรงงานคน", "ยังไม่มีโดรนเลย"') + kpiImpTh('Potential Product') + kpiImpTh('Potential', 90) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
-  if (!rows.length) h += '<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มี End User — กด "+ เพิ่ม End User" ด้านล่าง</td></tr>';
-  rows.forEach(function(r) {
-    h += '<tr>' + kpiImpTextCell('dealerEndUsers', r.id, 'name', r.name) + kpiImpTextCell('dealerEndUsers', r.id, 'industry', r.industry) +
-      kpiImpTextCell('dealerEndUsers', r.id, 'currentApp', r.currentApp, 'เช่น ใช้คู่แข่ง / แรงงานคน / ยังไม่มี') + kpiImpTextCell('dealerEndUsers', r.id, 'potentialProduct', r.potentialProduct) +
-      '<td style="padding:4px 8px"><select class="fm-input" style="font-size:11.5px" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'potential\',this.value)">' +
-      ['High', 'Medium', 'Low'].map(function(o) { return '<option' + (r.potential === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></td>' +
-      kpiImpDelBtn('dealerEndUsers', r.id) + '</tr>';
-  });
-  h += '</tbody></table></div>';
-  h += '<button class="btn bsm bo" style="margin-top:8px" onclick="kpiImpAddEndUser(\'' + dealerId + '\')">+ เพิ่ม End User</button>';
-  return h;
+// "Related to" ไม่บังคับผูกกับใคร — ปล่อยว่างได้ถ้าเป็นแผนทั่วไปไม่เจาะจง (เช่น รับรอง Dealer/Partner, โปรแกรม
+// ยืม Payload ให้ลูกค้าไปสาธิตเอง) ถ้าเพิ่มมาจากปุ่ม "+ Action" ใน Project Conversion Plan จะผูก pipeId ไว้ให้
+// อัตโนมัติ (แสดงเป็น chip กดไปหน้าโครงการได้) ส่วนกรอกเองพิมพ์ได้อิสระ ไม่บังคับรูปแบบ
+function kpiImpRelatedToCell(r) {
+  if (r.pipeId) {
+    var pipeObj = ST.getOne('pipeline', r.pipeId);
+    var label = pipeObj ? (pipeObj.projectName || '(ไม่มีชื่อ)') : (r.relatedTo || '(โครงการถูกลบไปแล้ว)');
+    return '<td style="padding:4px 8px"><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 9px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);' + (pipeObj ? 'cursor:pointer' : '') + '"' + (pipeObj ? ' onclick="go(\'pipeDetail\',{pipeId:\'' + r.pipeId + '\'})"' : '') + ' title="ผูกกับ Pipeline โดยตรง">🔗 ' + sanitize(label) + '</span></td>';
+  }
+  return kpiImpTextCell('improvementActions', r.id, 'relatedTo', r.relatedTo, 'ชื่อ End User / อ้างอิงโครงการ / เว้นว่างถ้าเป็นแผนทั่วไป');
 }
-
-function kpiImpActionTable(dealerId) {
+function kpiImpGrowthPlanTable(dealerId) {
   var rows = getImprovementActions(dealerId);
-  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:760px">';
-  h += '<thead><tr>' + kpiImpTh('Action', 130) + kpiImpTh('Who', 90) + kpiImpTh('What', 170) + kpiImpTh('When', 80) + kpiImpTh('Expected Result', 150) + kpiImpTh('Expected Sales', 100) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
-  if (!rows.length) h += '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มี Action — กด "+ เพิ่ม Action" ด้านล่าง</td></tr>';
+  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:880px">';
+  h += '<thead><tr>' + kpiImpTh('What', 140) + kpiImpTh('Related to', 160, 'ผูกกับ End User/โครงการก็ได้ หรือเว้นว่างถ้าเป็นแผนทั่วไป ไม่บังคับรูปแบบ') + kpiImpTh('Who', 90) + kpiImpTh('When', 80) + kpiImpTh('Expected Result', 150) + kpiImpTh('Expected Sales', 100) + '<th style="width:26px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+  if (!rows.length) h += '<tr><td colspan="7" style="padding:14px;text-align:center;color:var(--text3);font-size:11.5px">ยังไม่มีแผน — กด "+ เพิ่มแผน" ด้านล่าง</td></tr>';
   rows.forEach(function(r) {
-    h += '<tr>' + kpiImpTextCell('improvementActions', r.id, 'action', r.action) + kpiImpTextCell('improvementActions', r.id, 'who', r.who) +
-      kpiImpTextCell('improvementActions', r.id, 'what', r.what) + kpiImpTextCell('improvementActions', r.id, 'when', r.when) +
+    h += '<tr>' + kpiImpTextCell('improvementActions', r.id, 'action', r.action) +
+      kpiImpRelatedToCell(r) +
+      kpiImpTextCell('improvementActions', r.id, 'who', r.who) + kpiImpTextCell('improvementActions', r.id, 'when', r.when) +
       kpiImpTextCell('improvementActions', r.id, 'expectedResult', r.expectedResult) +
       '<td style="padding:4px 8px"><input type="number" step="10000" class="fm-input" style="font-size:11.5px;width:100%;text-align:right" value="' + (Number(r.expectedSales) || 0) + '" onchange="kpiImpSaveField(\'improvementActions\',\'' + r.id + '\',\'expectedSales\',this.value)"></td>' +
       kpiImpDelBtn('improvementActions', r.id) + '</tr>';
   });
   h += '</tbody></table></div>';
-  h += '<button class="btn bsm bo" style="margin-top:8px" onclick="kpiImpAddAction(\'' + dealerId + '\')">+ เพิ่ม Action</button>';
+  h += '<button class="btn bsm bo" style="margin-top:8px" onclick="kpiImpAddAction(\'' + dealerId + '\')">+ เพิ่มแผน</button>';
   return h;
 }
 
@@ -657,28 +647,9 @@ function kpiImpRollupRow(label, val, colorCls) {
   return '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">' + label + '</span><span style="font-weight:800" class="' + (colorCls || '') + '">' + val + '</span></div>';
 }
 
-// A) Demo/POC ต่อ End User — ผูกกับแถวที่กรอกไว้แล้วในตาราง End User Mapping ตรงๆ (เพิ่มแค่ 2 field ใหม่บน
-// record เดิม demoStatus/demoNote) ไม่ต้องมี collection แยกหรือกรอกชื่อ End User ซ้ำ
-var IMPROVEMENT_DEMO_STATUSES = ['ยังไม่นัด', 'นัดแล้ว', 'ทำแล้ว', 'ปิด Project ได้'];
-function kpiImpDemoSection(dealerId) {
-  var rows = getDealerEndUsers(dealerId);
-  if (!rows.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ยังไม่มี End User — เพิ่มในส่วน "Main End User Mapping" ด้านบนก่อน</div>';
-  var h = '<div style="display:flex;flex-direction:column;gap:7px">';
-  rows.forEach(function(r) {
-    h += '<div style="display:flex;align-items:center;gap:10px;background:var(--bg2);border-radius:10px;padding:8px 10px;flex-wrap:wrap">';
-    h += '<span style="font-size:11.5px;font-weight:700;width:110px;flex:none">' + sanitize(r.name || '(ไม่มีชื่อ)') + '</span>';
-    h += '<select class="fm-input" style="width:130px;flex:none;font-size:11px" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'demoStatus\',this.value)">' +
-      IMPROVEMENT_DEMO_STATUSES.map(function(s) { return '<option' + (r.demoStatus === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>';
-    h += '<input class="fm-input" style="flex:1;min-width:160px;font-size:11px" placeholder="Product / วันนัด / หมายเหตุ" value="' + sanitize(r.demoNote || '') + '" onchange="kpiImpSaveField(\'dealerEndUsers\',\'' + r.id + '\',\'demoNote\',this.value)">';
-    h += '</div>';
-  });
-  h += '</div>';
-  return h;
-}
-
-// B) Project Conversion — ดึง Pipeline ที่เปิดอยู่จริงของบริษัทนี้ (p.openPipelinesList จาก
-// computeKpiCompanyPlan) มาให้กดแปลงเป็น Action Plan ทันที (prefill ชื่อโครงการ + มูลค่า, ผูก pipeId กันเพิ่มซ้ำ)
-// ไม่มีตาราง/collection แยกต่างหาก — ใช้ improvementActions ตัวเดียวกับ Action Plan section 6 ตรงๆ
+// ดึง Pipeline ที่เปิดอยู่จริงของบริษัทนี้ (p.openPipelinesList จาก computeKpiCompanyPlan) มาให้กดแปลงเป็น
+// Growth Plan ทันที (prefill ชื่อโครงการ + มูลค่า, ผูก pipeId กันเพิ่มซ้ำ) ไม่มีตาราง/collection แยกต่างหาก —
+// ใช้ improvementActions ตัวเดียวกับตาราง Growth Plan ตรงๆ
 // แต่ละแถวต้อง "รู้งวด" ของตัวเอง — ใช้ Expected Close Date ถ้ามี ไม่งั้นเดาจาก Bidding Date +1 เดือน (ดู
 // pipeEffectiveCloseDate ใน utils.js) โครงการที่ไม่ตรงกับงวดที่หน้านี้กำลังพูดถึง (p.half/p.sisYear) ถูกตัดออก
 // จากยอดรวม (totalForecast/totalWeighted) กันไปรวมเข้าเป้างวดนี้ผิดๆ — ใช้ร่วมกันทั้งตารางแบบ interactive
@@ -795,29 +766,9 @@ function _kpiConvToggleOtherPeriod(tblId) {
 }
 function kpiImpAddActionFromPipeline(dealerId, pipeId, projectName, forecastAmount) {
   var existing = getImprovementActions(dealerId).filter(function(a) { return a.pipeId === pipeId; });
-  if (existing.length) { toast('มี Action สำหรับโครงการนี้อยู่แล้ว — ดูในตาราง Action Plan ด้านล่าง'); return; }
-  ST.add('improvementActions', { dealerId: dealerId, action: 'แปลง Pipeline: ' + projectName, who: '', what: '', when: '', expectedResult: '', expectedSales: Number(forecastAmount) || 0, pipeId: pipeId });
-  toast('➕ เพิ่ม Action จากโครงการแล้ว — แก้รายละเอียดในตาราง Action Plan ด้านล่าง');
-  render();
-}
-
-// C) New Industry Expansion — ไม่มีข้อมูล Industry ในระบบให้แนะนำอัตโนมัติได้จริง เลยทำเป็นช่องพิมพ์ไอเดียสั้นๆ
-// แล้วดันเข้า Action Plan (collection เดียวกับ B) ทันที ไม่ต้องมีตาราง/collection ที่ 3
-function kpiImpExpansionSection(dealerId) {
-  var inputId = 'kpiImpExpIdea_' + dealerId;
-  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-  h += '<input id="' + inputId + '" class="fm-input" style="flex:1;min-width:220px;font-size:12px" placeholder="เช่น ขยายจาก Construction ไป Public Safety / เสนอ DJI Dock ให้ลูกค้าเดิม">';
-  h += '<button class="btn bsm bp" onclick="kpiImpQuickAddAction(\'' + dealerId + '\',\'' + inputId + '\')">+ เพิ่มเป็น Action</button>';
-  h += '</div>';
-  h += '<div style="font-size:10.5px;color:var(--text3);margin-top:6px">พิมพ์ไอเดีย Industry/Product ใหม่ที่ Dealer ยังไม่ได้เจาะ แล้วกดเพิ่ม จะไปโผล่ในตาราง Action Plan ด้านล่างให้แก้รายละเอียดต่อ</div>';
-  return h;
-}
-function kpiImpQuickAddAction(dealerId, inputId) {
-  var el = document.getElementById(inputId);
-  var val = el ? el.value.trim() : '';
-  if (!val) return toast('พิมพ์ไอเดียก่อนครับ');
-  ST.add('improvementActions', { dealerId: dealerId, action: val, who: '', what: '', when: '', expectedResult: '', expectedSales: 0 });
-  toast('➕ เพิ่ม Action แล้ว — แก้รายละเอียดในตาราง Action Plan ด้านล่าง');
+  if (existing.length) { toast('มีแผนสำหรับโครงการนี้อยู่แล้ว — ดูในตาราง Growth Plan ด้านล่าง'); return; }
+  ST.add('improvementActions', { dealerId: dealerId, action: 'แปลง Pipeline: ' + projectName, relatedTo: projectName, who: '', when: '', expectedResult: '', expectedSales: Number(forecastAmount) || 0, pipeId: pipeId });
+  toast('➕ เพิ่มแผนจากโครงการแล้ว — แก้รายละเอียดในตาราง Growth Plan ด้านล่าง');
   render();
 }
 
@@ -872,37 +823,22 @@ function rKpiImprovementPlan(el) {
   h += '</div></div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">2) Main End User Mapping</div>';
-  h += kpiImpEndUserTable(d.id);
-  h += '</div>';
-
-  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Demo / POC (ต่อ End User ด้านบน)</div>';
-  h += kpiImpDemoSection(d.id);
-  h += '</div>';
-
-  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Project Conversion Plan (จาก Pipeline ที่เปิดอยู่)</div>';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">2) Project Conversion Plan (จาก Pipeline ที่เปิดอยู่)</div>';
   h += kpiImpProjectConversionSection(d.id, p);
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">5) New Product / Industry Expansion</div>';
-  h += kpiImpExpansionSection(d.id);
-  h += '</div>';
-
-  h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">6) Action Plan (Who / What / When / Expected Result)</div>';
-  h += kpiImpActionTable(d.id);
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">3) Growth Plan <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— แผนเพิ่มยอดทุกทาง: เจาะ End User ใหม่, ผลักดันสินค้าใหม่, สนับสนุน Dealer, หรือช่วยดันโครงการใน Pipeline ให้ปิดได้ — ไม่ต้องผูกกับใครก็ได้ ถ้าเป็นแผนทั่วไป</span></div>';
+  h += kpiImpGrowthPlanTable(d.id);
   h += '</div>';
 
   h += '<div style="padding:16px 18px">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">7) Gap vs Opportunity Rollup</div>';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:10px">4) Gap vs Opportunity Rollup</div>';
   h += '<div style="background:var(--bg2);border-radius:11px;padding:12px 14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">';
   h += kpiImpRollupRow('H2 Target', fmtMoneyShort(p.target));
   h += kpiImpRollupRow('Current Forecast (SIS จริง + Pipeline ถ่วง POS)', fmtMoneyShort(currentForecast));
   h += kpiImpRollupRow('Sales Gap', fmtMoneyShort(Math.max(0, gap)), gap > 0 ? 'stat-bad-t' : 'stat-good-t');
-  h += kpiImpRollupRow('New Opportunity จาก Action Plan (รวม Expected Sales)', fmtMoneyShort(opportunityTotal));
+  h += kpiImpRollupRow('New Opportunity จาก Growth Plan (รวม Expected Sales)', fmtMoneyShort(opportunityTotal));
   h += '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px dashed var(--border);font-size:13.5px;font-weight:800"><span>Revised Forecast (ถ้าทำตามแผนสำเร็จ)</span><span class="' + (revised >= p.target ? 'stat-good-t' : 'stat-bad-t') + '">' + fmtMoneyShort(revised) + (revised >= p.target ? ' ✓ เกินเป้า' : ' ยังขาด ' + fmtMoneyShort(p.target - revised)) + '</span></div>';
   h += '</div></div>';
 
@@ -927,7 +863,7 @@ function kpiImpCreateFollowupTasks(dealerId) {
   actions.forEach(function(a) {
     var t = ST.add('tasks', {
       title: '🚀 ' + a.action + (d ? ' — ' + d.name : ''),
-      description: (a.what || '') + (a.expectedResult ? ' → ' + a.expectedResult : ''),
+      description: (a.relatedTo ? 'เกี่ยวกับ: ' + a.relatedTo + ' — ' : '') + (a.expectedResult || ''),
       startDate: _td(), dueDate: _td(), priority: 'high', category: 'Improvement Plan',
       status: 'active', sequential: false, url: '', dealerId: dealerId, pipeId: '', steps: []
     });
@@ -985,7 +921,6 @@ function exportImprovementPlanXlsx() {
     var sheetName = _kpiSafeSheetName(d.name, usedNames);
     var conv = _kpiConvBuildRows(d.id, p);
     var actions = getImprovementActions(d.id);
-    var endUsers = getDealerEndUsers(d.id);
     var sisActual = kpiPlanSisActual(p);
     var gap = Math.max(0, p.target - sisActual);
     var total = improvementActionsTotal(d.id);
@@ -1001,12 +936,7 @@ function exportImprovementPlanXlsx() {
     aoa.push([p.target, sisActual, gap, p.pipeWeighted]);
     if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
     aoa.push([]);
-    aoa.push(['2) Main End User Mapping']);
-    aoa.push(['End User', 'Industry', 'Current App', 'Potential Product', 'Potential']);
-    if (endUsers.length) endUsers.forEach(function(r) { aoa.push([r.name || '', r.industry || '', r.currentApp || '', r.potentialProduct || '', r.potential || '']); });
-    else aoa.push(['—']);
-    aoa.push([]);
-    aoa.push(['3) Project Conversion Plan (' + conv.curPeriodKey + ')']);
+    aoa.push(['2) Project Conversion Plan (' + conv.curPeriodKey + ')']);
     aoa.push(['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target']);
     if (curRows.length) {
       curRows.forEach(function(r) {
@@ -1018,14 +948,17 @@ function exportImprovementPlanXlsx() {
     } else { aoa.push(['—']); }
     aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
     aoa.push([]);
-    aoa.push(['4) Action Plan']);
-    aoa.push(['Action', 'Who', 'What', 'When', 'Expected Result', 'Expected Sales']);
-    if (actions.length) actions.forEach(function(a) { aoa.push([a.action || '', a.who || '', a.what || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]); });
+    aoa.push(['3) Growth Plan']);
+    aoa.push(['What', 'Related to', 'Who', 'When', 'Expected Result', 'Expected Sales']);
+    if (actions.length) actions.forEach(function(a) {
+      var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
+      aoa.push([a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
+    });
     else aoa.push(['—']);
     aoa.push([]);
-    aoa.push(['5) Rollup']);
+    aoa.push(['4) Rollup']);
     aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
-    aoa.push(['New Opportunity (Action Plan Total)', total]);
+    aoa.push(['New Opportunity (Growth Plan Total)', total]);
     aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1064,7 +997,6 @@ function _buildImprovementPlanEnHtml(dealerId) {
   var sisActual = kpiPlanSisActual(p);
   var gap = Math.max(0, p.target - sisActual);
   var actions = getImprovementActions(dealerId);
-  var endUsers = getDealerEndUsers(dealerId);
   var total = improvementActionsTotal(dealerId);
   var conv = _kpiConvBuildRows(dealerId, p);
   var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
@@ -1094,20 +1026,6 @@ function _buildImprovementPlanEnHtml(dealerId) {
   if ((d.improvementReasons || []).length) html += '<div class="sub">Key blockers: ' + sanitize(d.improvementReasons.map(_kpiPrintEn).join(', ')) + '</div>';
 
   // ซ่อน section ที่ไม่มีข้อมูลเลยทิ้งไปทั้ง header (แสดงตารางว่างๆ แค่ "—" ไม่มีประโยชน์ รกตาเปล่าๆ)
-  if (endUsers.length) {
-    html += '<h2>Main End User Mapping</h2>';
-    html += endUsers.map(function(r) {
-      var potentialCls = { High: 'badge-high', Medium: 'badge-medium', Low: 'badge-low' }[r.potential] || 'badge-low';
-      var bodyLines = [];
-      if (r.currentApp) bodyLines.push('<div><b>Current App</b> — ' + sanitize(r.currentApp) + '</div>');
-      if (r.potentialProduct) bodyLines.push('<div><b>Potential Product</b> — ' + sanitize(r.potentialProduct) + '</div>');
-      return '<div class="card"><div class="card-head"><div class="card-title">' + sanitize(r.name || '(unnamed)') + '</div>' +
-        (r.potential ? '<span class="card-badge ' + potentialCls + '">' + sanitize(r.potential) + ' potential</span>' : '') + '</div>' +
-        (r.industry ? '<div class="card-meta"><span><b>Industry</b> ' + sanitize(r.industry) + '</span></div>' : '') +
-        (bodyLines.length ? '<div class="card-body">' + bodyLines.join('') + '</div>' : '') + '</div>';
-    }).join('');
-  }
-
   var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
   if (curRows.length) {
     html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th>Forecast Product</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
@@ -1122,13 +1040,14 @@ function _buildImprovementPlanEnHtml(dealerId) {
   }
 
   if (actions.length) {
-    html += '<h2>Action Plan</h2>';
+    html += '<h2>Growth Plan</h2>';
     html += actions.map(function(a) {
+      var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
       var metaParts = [];
+      if (relatedTo) metaParts.push('<span><b>Related to</b> ' + sanitize(relatedTo) + '</span>');
       if (a.who) metaParts.push('<span><b>Who</b> ' + sanitize(a.who) + '</span>');
       if (a.when) metaParts.push('<span><b>When</b> ' + sanitize(a.when) + '</span>');
       var bodyLines = [];
-      if (a.what) bodyLines.push('<div><b>What</b> — ' + sanitize(a.what) + '</div>');
       if (a.expectedResult) bodyLines.push('<div><b>Expected Result</b> — ' + sanitize(a.expectedResult) + '</div>');
       var sales = Number(a.expectedSales) || 0;
       return '<div class="card"><div class="card-head"><div class="card-title">' + sanitize(a.action || '(unnamed action)') + '</div>' +
@@ -1139,7 +1058,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
   }
 
   html += '<h2>Rollup</h2><table><tr><td>Current Forecast</td><td>' + fmtMoneyShort(sisActual + p.pipeWeighted) + '</td></tr>' +
-    '<tr><td>New Opportunity (Action Plan Total)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
+    '<tr><td>New Opportunity (Growth Plan Total)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
   return html;
 }
