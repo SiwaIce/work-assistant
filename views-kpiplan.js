@@ -653,22 +653,45 @@ function kpiImpDemoSection(dealerId) {
 function kpiImpProjectConversionSection(dealerId, p) {
   if (!p.openPipelinesList.length) return '<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:10px 0">ไม่มีโครงการเปิดอยู่ในระบบตอนนี้</div>';
   var actions = getImprovementActions(dealerId);
-  var h = '<div style="display:flex;flex-direction:column;gap:7px">';
+  var totalForecast = 0, totalWeighted = 0;
+  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  h += '<thead><tr style="border-bottom:1px solid var(--border)">' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">#</th>' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700">โครงการ</th>' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">หน่วยงาน</th>' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">สถานะ</th>' +
+    '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">POS%</th>' +
+    '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">Forecast</th>' +
+    '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap" title="Forecast × POS%">ยอดเป้าคำนวณ</th>' +
+    '<th style="padding:6px 8px"></th>' +
+    '</tr></thead><tbody>';
   p.openPipelinesList.forEach(function(pp) {
     var pipeObj = ST.getOne('pipeline', pp.id);
     var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+    var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
+    var pos = Number(pp.pos) || 0;
+    var forecast = Number(pp.forecastAmount) || 0;
+    var weighted = forecast * pos / 100;
+    totalForecast += forecast; totalWeighted += weighted;
     var linked = actions.some(function(a) { return a.pipeId === pp.id; });
-    h += '<div style="display:flex;align-items:center;gap:9px;background:var(--bg2);border-radius:10px;padding:8px 10px;flex-wrap:wrap">';
-    h += '<span style="font-size:10px;color:var(--text3);font-family:monospace;min-width:32px">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</span>';
-    h += '<span style="flex:1;min-width:140px;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--accent)" onclick="go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + ' →</span>';
-    h += '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border);color:var(--text2)">' + sanitize(statusLabel) + '</span>';
-    h += '<span style="font-size:11px;font-weight:700;min-width:60px;text-align:right">' + fmtMoneyShort(pp.forecastAmount) + '</span>';
-    h += linked
-      ? '<span style="font-size:10.5px;font-weight:700" class="stat-good-t">✓ อยู่ใน Action Plan แล้ว</span>'
-      : '<button class="btn bsm bo" onclick="kpiImpAddActionFromPipeline(\'' + dealerId + '\',\'' + pp.id + '\',\'' + sanitize(pp.projectName || '').replace(/'/g, "\\'") + '\',' + (Number(pp.forecastAmount) || 0) + ')">+ เพิ่มเป็น Action</button>';
-    h += '</div>';
+    h += '<tr style="border-bottom:1px solid var(--border)">';
+    h += '<td style="padding:7px 8px;color:var(--text3);font-family:monospace;white-space:nowrap">' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td>';
+    h += '<td style="padding:7px 8px;font-weight:600;cursor:pointer;color:var(--accent);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="go(\'pipeDetail\',{pipeId:\'' + pp.id + '\'})" title="' + sanitize(pp.projectName || '') + '">' + sanitize(pp.projectName || '(ไม่มีชื่อ)') + ' →</td>';
+    h += '<td style="padding:7px 8px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(agency) + '">' + sanitize(agency) + '</td>';
+    h += '<td style="padding:7px 8px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border);color:var(--text2)">' + sanitize(statusLabel) + '</span></td>';
+    h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + pos + '%</td>';
+    h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + fmtMoneyShort(forecast) + '</td>';
+    h += '<td style="padding:7px 8px;text-align:right;font-weight:700;white-space:nowrap" class="stat-good-t">' + fmtMoneyShort(weighted) + '</td>';
+    h += '<td style="padding:7px 8px;white-space:nowrap">' + (linked
+      ? '<span style="font-size:10px;font-weight:700" class="stat-good-t">✓ อยู่ใน Action Plan</span>'
+      : '<button class="btn bsm bo" onclick="kpiImpAddActionFromPipeline(\'' + dealerId + '\',\'' + pp.id + '\',\'' + sanitize(pp.projectName || '').replace(/'/g, "\\'") + '\',' + forecast + ')">+ Action</button>') + '</td>';
+    h += '</tr>';
   });
-  h += '</div>';
+  h += '<tr><td colspan="5" style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวม</td>' +
+    '<td style="padding:7px 8px;text-align:right;font-weight:700">' + fmtMoneyShort(totalForecast) + '</td>' +
+    '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtMoneyShort(totalWeighted) + '</td>' +
+    '<td></td></tr>';
+  h += '</tbody></table></div>';
   return h;
 }
 function kpiImpAddActionFromPipeline(dealerId, pipeId, projectName, forecastAmount) {
