@@ -6154,6 +6154,72 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   return 'same';
 }
 
+// ================================================================
+// เลือก field ที่จะให้ import "อัปเดต" ทับจริง (เฉพาะโครงการที่มีอยู่แล้ว — โครงการใหม่ยังใส่ครบทุก field
+// เหมือนเดิมเสมอ) — บางครั้งไฟล์ Excel เปลี่ยนแค่ Update/Timeline แต่ field อื่นในระบบถูกแก้ไว้แล้วไม่อยากให้
+// import ไปทับ ผู้ใช้เลือกได้เป็นกลุ่มคอลัมน์ผ่าน checkbox ในหน้า preview (ดู _showPipeXlsxPreview)
+// key 'timeline' พิเศษ ไม่ใช่ pipeData field — ควบคุมว่าจะสร้าง log ใหม่/แก้วันที่ log เดิมจากคอลัมน์ Update
+// 1-6 หรือไม่ (ดู _processPipeImportRows)
+// ================================================================
+var PIPE_IMPORT_FIELD_GROUPS = [
+  { key: 'rowNo',          label: 'Row No.',                      keys: ['rowNo'] },
+  { key: 'projectName',    label: 'Project Name',                 keys: ['projectName'] },
+  { key: 'endUser',        label: 'End User (TH/EN)',             keys: ['endUserTH', 'endUserEN'] },
+  { key: 'unitType',       label: 'Unit Type',                    keys: ['unitType'] },
+  { key: 'dealer',         label: 'Dealer / DJI Dealer',          keys: ['dealerId', 'djiDealer'] },
+  { key: 'industrialType', label: 'Industrial Type',              keys: ['industrialType'] },
+  { key: 'items',          label: 'รายการสินค้า (Model/Qty)',      keys: ['items', 'model', 'modelQty'] },
+  { key: 'forecast',       label: 'Forecast Amount',              keys: ['forecastAmount'] },
+  { key: 'realAmount',     label: 'Real Amount',                  keys: ['realAmount'] },
+  { key: 'projectRevenue', label: 'Project Revenue',              keys: ['projectRevenue'] },
+  { key: 'tor',            label: 'TOR',                          keys: ['tor'] },
+  { key: 'dates',          label: 'Register/Bidding/Shipment Date', keys: ['registerDate', 'biddingDate', 'shipmentDate'] },
+  { key: 'remark',         label: 'Remark',                       keys: ['remark'] },
+  { key: 'appointment',    label: 'หนังสือแต่งตั้ง',                keys: ['appointmentLetter'] },
+  { key: 'pos',            label: 'Project POS (%)',              keys: ['projectPOS'] },
+  { key: 'status',         label: 'Status',                       keys: ['status'] },
+  { key: 'recurring',      label: 'งานซ้ำ (Recurring)',            keys: ['recurring'] },
+  { key: 'crm',            label: 'Project ID / CRM',             keys: ['projectId', 'djiCrmRegistered', 'djiCrmDate'] },
+  { key: 'saleName',       label: 'Sale',                         keys: ['saleName'] },
+  { key: 'sheetDisplay',   label: 'Sheet Display',                keys: ['sheetDisplay'] },
+  { key: 'timeline',       label: '📝 Timeline (Update log)',      keys: [] }
+];
+function _pipeImportFieldSelDefault() {
+  var sel = {};
+  PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) { sel[g.key] = true; });
+  return sel;
+}
+var _pipeImportFieldSel = _pipeImportFieldSelDefault();
+function _pipeImportFieldToggle(key, checked) { _pipeImportFieldSel[key] = checked; }
+function _pipeImportFieldSelSetAll(val) {
+  PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) { _pipeImportFieldSel[g.key] = val; });
+  PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) {
+    var el = document.getElementById('pipeFieldSel_' + g.key);
+    if (el) el.checked = val;
+  });
+}
+function _pipeImportFieldSelTimelineOnly() {
+  PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) {
+    var val = (g.key === 'timeline');
+    _pipeImportFieldSel[g.key] = val;
+    var el = document.getElementById('pipeFieldSel_' + g.key);
+    if (el) el.checked = val;
+  });
+}
+// ตัด pipeData ให้เหลือเฉพาะ key ของ field group ที่ติ๊กไว้ — ใช้ตอน "update" โครงการที่มีอยู่แล้วเท่านั้น
+// (โครงการใหม่ใช้ pipeData เต็มเสมอ ไม่ผ่านฟังก์ชันนี้) fieldSel = null/undefined = ไม่กรอง (apply ครบทุก field
+// เหมือนพฤติกรรมเดิมก่อนมี feature นี้ — เผื่อ caller อื่นที่ไม่ได้ผ่าน fieldSel มา เช่น paste import)
+function _pipeFilterPipeDataByFieldSel(pipeData, fieldSel) {
+  if (!fieldSel) return pipeData;
+  var filtered = {};
+  PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) {
+    if (g.key === 'timeline') return;
+    if (fieldSel[g.key] === false) return;
+    g.keys.forEach(function(k) { filtered[k] = pipeData[k]; });
+  });
+  return filtered;
+}
+
 // คืน array ของ field ที่เปลี่ยน [{label, old, newVal}]
 // colMap: {key: colIndex} จาก _pipeBuildColMap — อ่านค่าผ่าน _pipeCol(c, colMap, key) เสมอ ไม่ใช้ index ตรงๆ
 function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
@@ -6241,6 +6307,7 @@ function _pipeLogsIndexByPipe(allLogs) {
 
 function _showPipeXlsxPreview(rows, dealerId, colMap) {
   _pipeImportStampUndated = false; // reset ทุกครั้งที่เปิด preview ใหม่ กันค่าจากรอบ import ก่อนหน้าค้างข้ามมา
+  _pipeImportFieldSel = _pipeImportFieldSelDefault(); // reset เลือก field ครบทุกตัวทุกครั้งที่เปิด preview ใหม่
   var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
   var dealers = ST.getAll('dealers');
   var dealerByName = {};
@@ -6358,6 +6425,27 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
 
   var h = '<div>';
   if (dealer) h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(dealer.name) + '</b> — จะถูก set ให้ทุก row</div>';
+
+  // ── เลือก field ที่จะให้ "อัปเดต" ทับจริง (เฉพาะโครงการที่มีอยู่แล้ว) ──────────
+  if (counts['changed']) {
+    h += '<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">';
+    h += '<div style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 10px" onclick="_toggleFormSection(\'pipeFieldSelWrap\',this)">';
+    h += '🔧 เลือก field ที่จะ update (เฉพาะโครงการที่มีอยู่แล้วในระบบ — โครงการใหม่ใส่ครบทุก field เสมอ)';
+    h += '<span style="font-size:11px;font-weight:400;color:var(--text2)">▼ แสดง</span>';
+    h += '</div>';
+    h += '<div id="pipeFieldSelWrap" style="display:none;padding:0 10px 10px">';
+    h += '<div style="display:flex;gap:10px;margin-bottom:6px" onclick="event.stopPropagation()">';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportFieldSelSetAll(true)">☑️ เลือกทั้งหมด</button>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportFieldSelSetAll(false)">✖️ ไม่เลือกเลย</button>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportFieldSelTimelineOnly()">📝 เฉพาะ Timeline เท่านั้น</button>';
+    h += '</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 10px;font-size:12px" onclick="event.stopPropagation()">';
+    PIPE_IMPORT_FIELD_GROUPS.forEach(function(g) {
+      h += '<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="pipeFieldSel_' + g.key + '"' + (_pipeImportFieldSel[g.key] ? ' checked' : '') + ' onchange="_pipeImportFieldToggle(\'' + g.key + '\',this.checked)" style="width:auto">' + sanitize(g.label) + '</label>';
+    });
+    h += '</div>';
+    h += '</div></div>';
+  }
   if (unknownModelRows.length) h += '<div style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚠️ แถวที่ ' + unknownModelRows.join(', ') + ' มีสินค้าที่ไม่ใช่ 6 รุ่นหลัก (M3M/M4T/M4E/M4TD/M400/Dock3) — จะสูญหายหลัง import เพราะไม่มีคอลัมน์รองรับ</div>';
   if (undatedCount) {
     h += '<div style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:8px 10px;margin-bottom:8px">';
@@ -6865,7 +6953,7 @@ function _doPipeXlsxImport() {
     return el && el.checked;
   }).map(function(ol) { return ol.log.id; });
   closeMForce();
-  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap, deleteLogIds);
+  _processPipeImportRows(p.rows, p.dealerId, actions, deleteIds, p.colMap, deleteLogIds, _pipeImportFieldSel);
   _pipeAfterImportCheckDup();
 }
 
@@ -6885,7 +6973,10 @@ function _pipeAfterImportCheckDup() {
 function _pipeGenId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
-function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, deleteLogIds) {
+// fieldSel: { groupKey: true/false } จาก _pipeImportFieldSel — จำกัด field ที่ "update" โครงการที่มีอยู่แล้ว
+// จะเขียนทับ (ดู _pipeFilterPipeDataByFieldSel/PIPE_IMPORT_FIELD_GROUPS) null/undefined = ใส่ครบทุก field
+// เหมือนเดิม (caller เก่าที่ไม่ได้ส่งมา เช่น paste import) — ไม่กระทบโครงการใหม่ (action 'add') เลย
+function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, deleteLogIds, fieldSel) {
   if (typeof ST._guestBlocked === 'function' && ST._guestBlocked('pipeline')) return;
   var lockDealer = lockDealerId ? ST.getOne('dealers', lockDealerId) : null;
   var dealers = ST.getAll('dealers');
@@ -6986,9 +7077,14 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
     if (action === 'update' && existing) {
       // คอลัมน์ Update 1-6 ที่มีข้อความยังไม่เคยอยู่ใน log เดิมเลย (เช่น ชีทยังไม่ได้รวบ แต่แอป export แบบรวบ
       // ไปแล้ว) ให้เพิ่มเป็น pipeLog ใหม่ตามที่ชีทมีเลย ไม่พยายามจับคู่กับตัวรวบเดิม — กันข้อความหายตอน import
-      var updChanges = _pipeImportNewUpdateLines(existing, c, colMap, logsIndex);
+      // fieldSel.timeline === false = ผู้ใช้เลือกไม่เอา Timeline ในรอบนี้ → ไม่แตะ pipeLog เลย
+      var applyTimeline = !fieldSel || fieldSel.timeline !== false;
+      var updChanges = applyTimeline ? _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) : { newLines: [], dateFixes: [], orphans: [] };
       var pIdx = pipeIndexById[existing.id];
-      allPipes[pIdx] = Object.assign({}, allPipes[pIdx], pipeData, { updated: new Date().toISOString() });
+      var filteredPipeData = _pipeFilterPipeDataByFieldSel(pipeData, fieldSel);
+      // nextAction/followupDate เคลียร์เสมอไม่ว่าจะเลือก field ไหน — ไม่เกี่ยวกับ feature เลือก field (ของเดิม
+      // ตั้งใจเคลียร์เพราะย้ายไปใช้ Task แทนแล้ว ดูคอมเมนต์ที่ pipeData ด้านบน)
+      allPipes[pIdx] = Object.assign({}, allPipes[pIdx], filteredPipeData, { nextAction: '', followupDate: '', updated: new Date().toISOString() });
       updated++;
       updChanges.newLines.forEach(function(line) {
         pipeLogs.push({ id: _pipeGenId(), pipeId: existing.id, type: 'note', content: line.content, date: line.date, created: new Date().toISOString() });
