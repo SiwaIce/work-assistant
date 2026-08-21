@@ -258,6 +258,21 @@ function _pipeSkuForModel(name) {
   var p = _pipeResolveProduct(name);
   return p ? (p.sku || '') : '';
 }
+// รับได้ทั้ง dealer id หรือชื่อ dealer (ช่อง fp_dealer ในฟอร์ม pipeline เป็นชื่อ ไม่ใช่ id)
+function _resolveDealerFlexible(v) {
+  if (!v) return null;
+  var d = ST.getOne('dealers', v);
+  if (d) return d;
+  v = String(v).trim();
+  if (!v) return null;
+  return ST.getAll('dealers').find(function(x) { return x.name === v; }) || null;
+}
+// ดึง Level ของ dealer ที่กำลังเลือกอยู่ในฟอร์ม Add/Edit Pipeline (ใช้คำนวณราคาตาม Level)
+function _pipeFormDealerLevel() {
+  var nameEl = document.getElementById('fp_dealer');
+  var dealer = _resolveDealerFlexible(nameEl ? nameEl.value : '');
+  return dealer ? (dealer.level || 'Other') : null;
+}
 // ================================================================
 // GET ALL MODELS FROM PRODUCTS (for datalist)
 // ================================================================
@@ -635,9 +650,12 @@ function pqaModelChanged() {
   var raw = modelInput ? modelInput.value : '';
   var priceEl = document.getElementById('pqa_price');
   if (priceEl && raw) {
-    // รองรับพิมพ์ทั้ง SKU และชื่อ — ดึงราคา RRP Ex VAT จากแคตตาล็อก
+    // รองรับพิมพ์ทั้ง SKU และชื่อ — ดึงราคาตาม Level ของ dealer ที่เลือกในฟอร์ม ถ้าหาไม่ได้ค่อย fallback เป็น RRP
     var prod = _pipeResolveProduct(raw);
-    var price = prod ? (Number(prod.rrpExVat) || Number(prod.price) || 0) : 0;
+    var level = _pipeFormDealerLevel();
+    var price = 0;
+    if (prod && level && typeof window.getModelPriceByLevel === 'function') price = window.getModelPriceByLevel(prod.name, level) || 0;
+    if (!price) price = prod ? (Number(prod.rrpExVat) || Number(prod.price) || 0) : 0;
     if (!price && typeof window.getModelRrpExVat === 'function') price = window.getModelRrpExVat(raw);
     if (!price && typeof window.getModelPrice === 'function') price = window.getModelPrice(raw);
     if (price > 0) priceEl.value = nmI(price);
@@ -843,7 +861,9 @@ function pqaUpdateModel(idx, newModel) {
   pipeItemsTemp[idx].model = newModel;
   pipeItemsTemp[idx].sku = _pipeSkuForModel(newModel);
   var newPrice = 0;
-  if (typeof window.getModelRrpExVat === 'function') newPrice = window.getModelRrpExVat(newModel);
+  var _level = _pipeFormDealerLevel();
+  if (_level && typeof window.getModelPriceByLevel === 'function') newPrice = window.getModelPriceByLevel(newModel, _level) || 0;
+  if (!newPrice && typeof window.getModelRrpExVat === 'function') newPrice = window.getModelRrpExVat(newModel);
   if (!newPrice && typeof window.getModelPrice === 'function') newPrice = window.getModelPrice(newModel);
   if (newPrice > 0) pipeItemsTemp[idx].price = newPrice;
   pipeItemsTemp[idx].total = (Number(pipeItemsTemp[idx].qty) || 1) * (Number(pipeItemsTemp[idx].price) || 0);
@@ -943,7 +963,9 @@ function getRecommendedModels(dealerId, limit) {
 // ---------- ราคา / ค้นหา ----------
 function ppModelPrice(model) {
   var price = 0;
-  if (typeof window.getModelRrpExVat === 'function') price = window.getModelRrpExVat(model) || 0;
+  var dealer = _resolveDealerFlexible(_ppState.dealerId);
+  if (dealer && typeof window.getModelPriceByLevel === 'function') price = window.getModelPriceByLevel(model, dealer.level || 'Other') || 0;
+  if (!price && typeof window.getModelRrpExVat === 'function') price = window.getModelRrpExVat(model) || 0;
   if (!price && typeof window.getModelPrice === 'function') price = window.getModelPrice(model) || 0;
   return price;
 }
