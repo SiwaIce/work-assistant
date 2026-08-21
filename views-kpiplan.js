@@ -59,15 +59,45 @@ function kpiPlanTodayBanner() {
   return h;
 }
 
+// ตัวกรอง Sale สำหรับหน้า "แผนบรรลุเป้า KPI" — คนละอันกับ dealerScope ของ topbar (นั่นคือขอบเขตข้อมูลทั้งแอป
+// เปลี่ยนแล้วกระทบทุกหน้า) อันนี้แค่กรองเฉพาะหน้านี้ตอนจะดู/Export รายงานภาพรวมของเซลคนใดคนหนึ่งโดยเฉพาะ
+// เผื่อ manager อยากดูของเซลคนอื่นโดยไม่ต้องสลับ scope ทั้งระบบ — reset เป็น 'all' ทุกครั้งที่ไม่ได้ set ไว้ก่อน
+var _kpiOverviewSaleFilter = 'all';
+function kpiOverviewSetSaleFilter(v) { _kpiOverviewSaleFilter = v; render(); }
+
 function rKpiCompanyPlan(el) {
   document.getElementById('pgT').textContent = '🎯 แผนบรรลุเป้า KPI';
   var cfg = getConfig();
-  var plans = computeKpiCompanyPlanAll(cfg);
+  var allPlans = computeKpiCompanyPlanAll(cfg);
 
   var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '';
 
-  if (!plans.length) {
+  if (!allPlans.length) {
     h += '<div class="card"><div class="empty"><p>ยังไม่มีบริษัทระดับ S/A/B ในขอบเขตที่ดูอยู่ตอนนี้</p></div></div>';
+    el.innerHTML = h;
+    return;
+  }
+
+  // รายชื่อ Sale ที่พบในกลุ่ม S/A/B นี้ (เอาไว้ทำ dropdown กรอง) — โชว์เฉพาะตอนมีมากกว่า 1 คน ไม่งั้นไม่มีอะไรให้กรอง
+  var saleNames = allPlans.reduce(function(set, p) { var n = p.dealer.saleName || ''; if (n && set.indexOf(n) === -1) set.push(n); return set; }, [])
+    .sort(function(a, b) { return a.localeCompare(b, 'th'); });
+  if (_kpiOverviewSaleFilter !== 'all' && saleNames.indexOf(_kpiOverviewSaleFilter) === -1) _kpiOverviewSaleFilter = 'all';
+  var plans = _kpiOverviewSaleFilter === 'all' ? allPlans : allPlans.filter(function(p) { return (p.dealer.saleName || '') === _kpiOverviewSaleFilter; });
+
+  if (saleNames.length > 1) {
+    h += '<div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    h += '<span style="font-size:12px;color:var(--text2);font-weight:700">👤 ดูเฉพาะเซล:</span>';
+    h += '<select style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)" onchange="kpiOverviewSetSaleFilter(this.value)">';
+    h += '<option value="all"' + (_kpiOverviewSaleFilter === 'all' ? ' selected' : '') + '>ทุกเซล (' + allPlans.length + ' บริษัท)</option>';
+    saleNames.forEach(function(n) {
+      var cnt = allPlans.filter(function(p) { return (p.dealer.saleName || '') === n; }).length;
+      h += '<option value="' + sanitize(n) + '"' + (_kpiOverviewSaleFilter === n ? ' selected' : '') + '>' + sanitize(n) + ' (' + cnt + ' บริษัท)</option>';
+    });
+    h += '</select></div>';
+  }
+
+  if (!plans.length) {
+    h += '<div class="card"><div class="empty"><p>ไม่มีบริษัทของเซลที่เลือกอยู่ในกลุ่ม S/A/B</p></div></div>';
     el.innerHTML = h;
     return;
   }
@@ -101,8 +131,11 @@ function rKpiCompanyPlan(el) {
   h += kpiPlanSumCard('⚠️ เสี่ยงไม่ถึงเป้า', riskCount + ' / ' + plans.length, riskCount ? 'stat-bad-t' : 'stat-good-t');
   h += kpiPlanSumCard('📈 YoY', (yoyPct >= 0 ? '+' : '') + yoyPct + '%', yoyPct >= 0 ? 'stat-good-t' : 'stat-bad-t', '', 'เทียบ ' + half + ' ปีที่แล้ว');
   h += '</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
   h += '<button class="btn bsm bo" onclick="copyKpiPlanSummary()">📋 คัดลอกสรุปส่ง Ryan</button>';
-  h += '</div>';
+  h += '<button class="btn bsm bo" onclick="exportKpiOverviewXlsx()" title="Excel ภาพรวมทุกบริษัท (ตาม Sale ที่เลือกอยู่) — ใครถึงเป้าแล้ว/ใครต้อง Focus พร้อม Plan ของบริษัทที่มี">📤 Export ภาพรวม (Excel)</button>';
+  h += '<button class="btn bsm bo" onclick="printKpiOverviewReport()" title="รายงานภาพรวมทุกบริษัท (ตาม Sale ที่เลือกอยู่) แบบพิมพ์/PDF">🖨️ Overview Report (PDF)</button>';
+  h += '</div></div>';
 
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px">';
   plans.forEach(function(p) { h += kpiPlanRowHtml(p); });
@@ -909,6 +942,74 @@ function _kpiSetNumFmt(ws, cells, fmt) {
 function _kpiMergeSectionTitle(merges, rowIdx, colSpan) {
   merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx, c: colSpan - 1 } });
 }
+// สร้าง sheet รายละเอียด 1 บริษัท (Sales Gap/Project Conversion/Plan/Rollup) แล้ว append เข้า workbook ที่ส่งมา
+// — แยกออกมาให้ exportImprovementPlanXlsx (เฉพาะบริษัทเสี่ยง) และ exportKpiOverviewXlsx (ทุกบริษัท ตาม Sale
+// ที่เลือก) เรียกใช้ร่วมกัน กันโครงสร้าง sheet เพี้ยนไปคนละทางถ้าต้องแก้ทีหลัง
+function _kpiAppendDealerDetailTab(wb, p, usedNames) {
+  var d = p.dealer;
+  var sheetName = _kpiSafeSheetName(d.name, usedNames);
+  var conv = _kpiConvBuildRows(d.id, p);
+  var actions = getImprovementActions(d.id);
+  var sisActual = kpiPlanSisActual(p);
+  var gap = Math.max(0, p.target - sisActual);
+  var total = improvementActionsTotal(d.id);
+  var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
+
+  var aoa = [];
+  var merges = [];
+  var moneyCells = [], pctCells = [];
+  var COLS = 9; // จำนวนคอลัมน์กว้างสุดที่ใช้ในชีตนี้ (ตาราง Project Conversion Plan) — ใช้กว้าง merge หัวข้อ section
+
+  aoa.push(['Dealer Improvement Plan', d.name]);
+  aoa.push(['Level', d.level || '', 'Period', p.half + ' ' + p.sisYear]);
+  aoa.push([]);
+  if (d.improvementSummary) { aoa.push(['Summary', d.improvementSummary]); aoa.push([]); }
+
+  _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['1) Sales Gap']);
+  aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline Forecast (Total)', 'Pipeline (POS-Weighted)']);
+  moneyCells.push({ r: aoa.length, c: 0 }, { r: aoa.length, c: 1 }, { r: aoa.length, c: 2 }, { r: aoa.length, c: 3 }, { r: aoa.length, c: 4 });
+  aoa.push([p.target, sisActual, gap, p.pipelineTotalPeriod, p.pipeWeighted]);
+  if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
+  aoa.push([]);
+
+  _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['2) Project Conversion Plan (' + conv.curPeriodKey + ')']);
+  aoa.push(['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target']);
+  if (curRows.length) {
+    curRows.forEach(function(r) {
+      var pp = r.pp, pipeObj = r.pipeObj;
+      var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
+      var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
+      pctCells.push({ r: aoa.length, c: 6 });
+      moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
+      aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos / 100, r.forecast, r.weighted]);
+    });
+  } else { aoa.push(['—']); }
+  moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
+  aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
+  aoa.push([]);
+
+  _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['3) Plan']);
+  aoa.push(['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales']);
+  if (actions.length) actions.forEach(function(a) {
+    var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
+    moneyCells.push({ r: aoa.length, c: 5 });
+    aoa.push([a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
+  });
+  else aoa.push(['—']);
+  aoa.push([]);
+
+  _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['4) Rollup']);
+  moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
+  moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['New Opportunity (Plan Total, excl. Pipeline-linked)', total]);
+  moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
+
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
+  ws['!merges'] = merges;
+  _kpiSetNumFmt(ws, moneyCells, '#,##0');
+  _kpiSetNumFmt(ws, pctCells, '0%');
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
 // Export ให้ครบเหมือนหน้า Print/PDF (ดู printImprovementPlan) — Summary tab 1 แถวต่อบริษัท รวมเป้า Dock/สถานะ
 // manual ด้วย + tab แยกรายบริษัทที่มีทุก section เหมือน PDF (Sales Gap/End User/Project Conversion/Action Plan/Rollup)
 function exportImprovementPlanXlsx() {
@@ -946,74 +1047,102 @@ function exportImprovementPlanXlsx() {
 
   // ---- per-dealer detail tabs ----
   var usedNames = {};
-  plans.forEach(function(p) {
-    var d = p.dealer;
-    var sheetName = _kpiSafeSheetName(d.name, usedNames);
-    var conv = _kpiConvBuildRows(d.id, p);
-    var actions = getImprovementActions(d.id);
-    var sisActual = kpiPlanSisActual(p);
-    var gap = Math.max(0, p.target - sisActual);
-    var total = improvementActionsTotal(d.id);
-    var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
-
-    var aoa = [];
-    var merges = [];
-    var moneyCells = [], pctCells = [];
-    var COLS = 9; // จำนวนคอลัมน์กว้างสุดที่ใช้ในชีตนี้ (ตาราง Project Conversion Plan) — ใช้กว้าง merge หัวข้อ section
-
-    aoa.push(['Dealer Improvement Plan', d.name]);
-    aoa.push(['Level', d.level || '', 'Period', p.half + ' ' + p.sisYear]);
-    aoa.push([]);
-    if (d.improvementSummary) { aoa.push(['Summary', d.improvementSummary]); aoa.push([]); }
-
-    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['1) Sales Gap']);
-    aoa.push(['Target', 'SIS Sell-out (Actual)', 'Gap', 'Pipeline Forecast (Total)', 'Pipeline (POS-Weighted)']);
-    moneyCells.push({ r: aoa.length, c: 0 }, { r: aoa.length, c: 1 }, { r: aoa.length, c: 2 }, { r: aoa.length, c: 3 }, { r: aoa.length, c: 4 });
-    aoa.push([p.target, sisActual, gap, p.pipelineTotalPeriod, p.pipeWeighted]);
-    if ((d.improvementReasons || []).length) aoa.push(['Key blockers', d.improvementReasons.map(_kpiPrintEn).join(', ')]);
-    aoa.push([]);
-
-    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['2) Project Conversion Plan (' + conv.curPeriodKey + ')']);
-    aoa.push(['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target']);
-    if (curRows.length) {
-      curRows.forEach(function(r) {
-        var pp = r.pp, pipeObj = r.pipeObj;
-        var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
-        var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-        pctCells.push({ r: aoa.length, c: 6 });
-        moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
-        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos / 100, r.forecast, r.weighted]);
-      });
-    } else { aoa.push(['—']); }
-    moneyCells.push({ r: aoa.length, c: 7 }, { r: aoa.length, c: 8 });
-    aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
-    aoa.push([]);
-
-    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['3) Plan']);
-    aoa.push(['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales']);
-    if (actions.length) actions.forEach(function(a) {
-      var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
-      moneyCells.push({ r: aoa.length, c: 5 });
-      aoa.push([a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0]);
-    });
-    else aoa.push(['—']);
-    aoa.push([]);
-
-    _kpiMergeSectionTitle(merges, aoa.length, COLS); aoa.push(['4) Rollup']);
-    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Current Forecast', sisActual + p.pipeWeighted]);
-    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['New Opportunity (Plan Total, excl. Pipeline-linked)', total]);
-    moneyCells.push({ r: aoa.length, c: 1 }); aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
-
-    var ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
-    ws['!merges'] = merges;
-    _kpiSetNumFmt(ws, moneyCells, '#,##0');
-    _kpiSetNumFmt(ws, pctCells, '0%');
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  });
+  plans.forEach(function(p) { _kpiAppendDealerDetailTab(wb, p, usedNames); });
 
   XLSX.writeFile(wb, 'Improvement_Plan_' + plans[0].half + '_' + _td() + '.xlsx');
   toast('📤 Export Excel แล้ว (' + (plans.length + 1) + ' tabs)');
+}
+
+// ทุกบริษัท S/A/B ตาม Sale ที่เลือกอยู่ในหน้า "แผนบรรลุเป้า KPI" (_kpiOverviewSaleFilter) — ต่างจาก
+// exportImprovementPlanXlsx ตรงที่ไม่กรองเฉพาะบริษัทเสี่ยง รวมบริษัทที่ถึงเป้าแล้วด้วยให้เห็นภาพรวมทั้งทีม
+function _kpiOverviewFilteredPlans() {
+  var allPlans = computeKpiCompanyPlanAll(getConfig());
+  if (_kpiOverviewSaleFilter === 'all') return allPlans;
+  return allPlans.filter(function(p) { return (p.dealer.saleName || '') === _kpiOverviewSaleFilter; });
+}
+// Export ภาพรวมทุกบริษัท (ไม่ใช่แค่เสี่ยง) — Summary tab เห็นสถานะทุกคนรวมที่ถึงเป้าแล้ว ส่วน detail tab สร้าง
+// เฉพาะบริษัทที่เสี่ยง (ต้อง Focus) หรือมี Plan บันทึกไว้แล้ว กันสร้าง tab ว่างๆ ให้บริษัทที่ถึงเป้าและไม่มีแผนอะไรเลย
+function exportKpiOverviewXlsx() {
+  var plans = _kpiOverviewFilteredPlans();
+  if (!plans.length) return toast('ไม่มีบริษัทในขอบเขตที่เลือก');
+  var wb = XLSX.utils.book_new();
+
+  var sumHeader = ['Dealer', 'Level', 'Sale', 'Auto Status', 'Manual Status', 'Period', 'Target', 'SIS Sell-out (Actual)', 'Achieve %', 'Sales Gap', 'Pipeline Forecast (Total)', 'Pipeline (POS-Weighted)', 'Has Plan'];
+  var sumRows = [sumHeader];
+  var pctRowIdx = [];
+  plans.forEach(function(p) {
+    var d = p.dealer;
+    var sisActual = kpiPlanSisActual(p);
+    var gap = Math.max(0, p.target - sisActual);
+    var achievePct = p.target ? sisActual / p.target : '';
+    var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
+    var hasPlan = getImprovementActions(d.id).length > 0;
+    if (achievePct !== '') pctRowIdx.push(sumRows.length);
+    sumRows.push([
+      d.name, d.level || '', d.saleName || '', kpiPlanStatus(p).label, manualSt ? manualSt.label : '', p.half + ' ' + p.sisYear,
+      p.target, sisActual, achievePct, gap, p.pipelineTotalPeriod, p.pipeWeighted, hasPlan ? 'Yes' : 'No'
+    ]);
+  });
+  var wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum['!cols'] = [{ wch: 22 }, { wch: 7 }, { wch: 16 }, { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 9 }];
+  wsSum['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: sumHeader.length - 1 } }) };
+  var moneyCols = [6, 7, 9, 10, 11];
+  var moneyCells = [], pctCells = [];
+  for (var sr = 1; sr < sumRows.length; sr++) moneyCols.forEach(function(sc) { moneyCells.push({ r: sr, c: sc }); });
+  pctRowIdx.forEach(function(ri) { pctCells.push({ r: ri, c: 8 }); });
+  _kpiSetNumFmt(wsSum, moneyCells, '#,##0');
+  _kpiSetNumFmt(wsSum, pctCells, '0%');
+  XLSX.utils.book_append_sheet(wb, wsSum, 'Overview');
+
+  var usedNames = {};
+  plans.forEach(function(p) {
+    var risky = kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว';
+    var hasPlan = getImprovementActions(p.dealer.id).length > 0;
+    if (risky || hasPlan) _kpiAppendDealerDetailTab(wb, p, usedNames);
+  });
+
+  var filterTag = _kpiOverviewSaleFilter === 'all' ? 'All' : _kpiOverviewSaleFilter.replace(/[^a-zA-Zก-๙0-9]/g, '');
+  XLSX.writeFile(wb, 'KPI_Overview_' + filterTag + '_' + plans[0].half + '_' + _td() + '.xlsx');
+  toast('📤 Export ภาพรวมแล้ว (' + plans.length + ' บริษัท)');
+}
+// รายงานภาพรวม (พิมพ์/PDF) — ตารางสรุปทุกบริษัทก่อน แล้วต่อด้วย Plan แบบเต็มของบริษัทที่เสี่ยง/มี Plan
+// (ใช้ builder เดียวกับหน้ารายบริษัทเดี่ยว — ดู _buildImprovementPlanBodyHtml) คั่นแต่ละบริษัทด้วย page break
+function printKpiOverviewReport() {
+  var plans = _kpiOverviewFilteredPlans();
+  if (!plans.length) return toast('ไม่มีบริษัทในขอบเขตที่เลือก');
+  var half = plans[0].half, year = plans[0].sisYear;
+  var filterLabel = _kpiOverviewSaleFilter === 'all' ? 'All sales' : _kpiOverviewSaleFilter;
+
+  var html = '<!doctype html><html><head><meta charset="utf-8"><title>KPI Overview Report</title>' + _kpiPrintStyleHtml() + '</head><body>';
+  html += '<h1>KPI Overview Report</h1><div class="sub">' + sanitize(filterLabel) + ' · ' + half + ' ' + year + ' · Printed on ' + fD(_td()) + '</div>';
+
+  var onTrack = plans.filter(function(p) { return kpiPlanStatus(p).label === 'ถึงเป้าแล้ว'; });
+  var risky = plans.filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
+  html += '<h2>Summary</h2><div class="stats">' +
+    '<div class="stat">Total Companies<b>' + plans.length + '</b></div>' +
+    '<div class="stat">On Track<b>' + onTrack.length + '</b></div>' +
+    '<div class="stat">Needs Focus<b>' + risky.length + '</b></div></div>';
+
+  html += '<h2>All Companies</h2><table><tr><th>Dealer</th><th>Level</th><th>Sale</th><th>Status</th><th>Target</th><th>SIS Actual</th><th>Achieve%</th><th>Gap</th><th>Has Plan</th></tr>';
+  html += plans.map(function(p) {
+    var d = p.dealer;
+    var sisActual = kpiPlanSisActual(p);
+    var gap = Math.max(0, p.target - sisActual);
+    var achievePct = p.target ? Math.round(sisActual / p.target * 100) : null;
+    var hasPlan = getImprovementActions(d.id).length > 0;
+    var stLabel = kpiPlanStatus(p).label === 'ถึงเป้าแล้ว' ? 'On Track' : (_kpiPrintEn(kpiPlanStatus(p).label) || kpiPlanStatus(p).label);
+    return '<tr><td>' + sanitize(d.name) + '</td><td>' + sanitize(d.level || '-') + '</td><td>' + sanitize(d.saleName || '-') + '</td><td>' + sanitize(stLabel) + '</td><td>' + fmtMoneyShort(p.target) + '</td><td>' + fmtMoneyShort(sisActual) + '</td><td>' + (achievePct === null ? '-' : achievePct + '%') + '</td><td>' + fmtMoneyShort(gap) + '</td><td>' + (hasPlan ? 'Yes' : 'No') + '</td></tr>';
+  }).join('');
+  html += '</table>';
+
+  var detailPlans = plans.filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว' || getImprovementActions(p.dealer.id).length > 0; });
+  detailPlans.forEach(function(p) {
+    var body = _buildImprovementPlanBodyHtml(p.dealer.id);
+    if (body) html += '<div class="pagebreak"></div>' + body;
+  });
+
+  html += '<script>window.onload=function(){window.print();}</script></body></html>';
+  _kpiOpenPlanWindow(html);
 }
 
 // หน้าพิมพ์/PDF — เปิดแท็บใหม่ด้วย HTML ธรรมดา + window.print() แทนการเพิ่ม PDF library ใหม่ (เบากว่า และ
@@ -1034,9 +1163,17 @@ function _kpiPrintEn(s) {
   if (s.indexOf('ปี ') === 0) return 'FY ' + s.slice(3);
   return s;
 }
-// สร้าง HTML เต็มหน้า (ไม่รวม script/tag ปิดท้าย) ใช้ร่วมกันทั้งปุ่ม "พิมพ์/PDF" (เพิ่ม auto window.print())
-// และปุ่ม "English View" (เปิดดูเฉยๆ ไม่สั่งพิมพ์ทันที — ไว้โชว์ Ryan แบบหน้าเว็บปกติ) คืน null ถ้าไม่มี Dealer
-function _buildImprovementPlanEnHtml(dealerId) {
+// CSS ที่ใช้ร่วมกันทุกหน้าพิมพ์ (รายบริษัทเดี่ยว + Overview รวมหลายบริษัท) แยกออกมาเป็นค่าเดียวกันชัวร์ๆ
+function _kpiPrintStyleHtml() {
+  return '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
+    '.stats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;min-width:110px;text-align:center}' +
+    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.pagebreak{page-break-before:always;border-top:3px double #999;padding-top:18px;margin-top:24px}</style>';
+}
+// สร้างเฉพาะเนื้อหา (h1 ชื่อบริษัท...ตาราง Rollup) ไม่มี doctype/head/body — ใช้ซ้ำได้ทั้งหน้าเดี่ยว
+// (_buildImprovementPlanEnHtml ห่อ head/style ให้) และหน้า Overview รวมหลายบริษัท (printKpiOverviewReport
+// ต่อกันหลายก้อนในเอกสารเดียว คั่นด้วย page break) คืน null ถ้าไม่มี Dealer
+function _buildImprovementPlanBodyHtml(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return null;
   var p = computeKpiCompanyPlan(dealerId, getConfig());
@@ -1047,12 +1184,7 @@ function _buildImprovementPlanEnHtml(dealerId) {
   var conv = _kpiConvBuildRows(dealerId, p);
   var manualSt = KPI_MANUAL_STATUS_OPTS.find(function(o) { return o.key === d.kpiStatusManual; });
 
-  var html = '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' +
-    '<style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}' +
-    'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
-    '.stats{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;min-width:110px;text-align:center}' +
-    '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}</style></head><body>';
-  html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
+  var html = '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
 
   if (d.improvementSummary) {
     html += '<h2>Summary</h2><div style="font-size:11.5px;color:#333;white-space:pre-wrap;line-height:1.6">' + sanitize(d.improvementSummary) + '</div>';
@@ -1094,6 +1226,13 @@ function _buildImprovementPlanEnHtml(dealerId) {
     '<tr><td>New Opportunity (Plan Total, excl. Pipeline-linked)</td><td>' + fmtMoneyShort(total) + '</td></tr>' +
     '<tr><td><b>Revised Forecast</b></td><td><b>' + fmtMoneyShort(sisActual + p.pipeWeighted + total) + '</b></td></tr></table>';
   return html;
+}
+// ห่อ body ของบริษัทเดี่ยวด้วย doctype/head/style ให้เป็นเอกสารสมบูรณ์ — ใช้กับปุ่ม "พิมพ์/PDF" และ "English View" เดิม
+function _buildImprovementPlanEnHtml(dealerId) {
+  var body = _buildImprovementPlanBodyHtml(dealerId);
+  if (body === null) return null;
+  var d = ST.getOne('dealers', dealerId);
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Improvement Plan - ' + sanitize(d.name) + '</title>' + _kpiPrintStyleHtml() + '</head><body>' + body;
 }
 function _kpiOpenPlanWindow(html) {
   var win = window.open('', '_blank');
