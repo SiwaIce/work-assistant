@@ -683,6 +683,24 @@ function kpiImpDemoSection(dealerId) {
 // pipeEffectiveCloseDate ใน utils.js) โครงการที่ไม่ตรงกับงวดที่หน้านี้กำลังพูดถึง (p.half/p.sisYear) ถูกตัดออก
 // จากยอดรวม (totalForecast/totalWeighted) กันไปรวมเข้าเป้างวดนี้ผิดๆ — ใช้ร่วมกันทั้งตารางแบบ interactive
 // (kpiImpProjectConversionSection) และตาราง print (printImprovementPlan) กันตรรกะเพี้ยนไปคนละทางกัน
+// สรุป "รุ่นสินค้า × Qty" ของโครงการ เฉพาะรายการที่เป็น Drone/Payload (ไม่เอา accessory/battery/software/service
+// ปนมา) — เช็ค category จาก catalog สินค้าก่อน (getProductByName/_pipeResolveProduct) ถ้าหาไม่เจอ (สินค้าเก่า/
+// พิมพ์เองไม่ตรงชื่อ catalog เป๊ะ) fallback เดาจากชื่อรุ่น (Matrice/Mavic/Zenmuse/Dock) ถ้ากรองแล้วไม่เหลือ
+// รายการที่เข้าเกณฑ์เลย (เช่น ยังไม่ผูกสินค้าไว้) แสดงทุกรายการที่มีแทน ดีกว่าโชว์ว่างเปล่า
+function _pipeItemsDroneProductQty(pipeObj) {
+  if (!pipeObj) return '';
+  var items = (typeof getPipeItems === 'function') ? getPipeItems(pipeObj) : (pipeObj.items || []);
+  if (!items.length) return '';
+  var isDroneOrPayload = function(it) {
+    var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(it.model) : (typeof getProductByName === 'function' ? getProductByName(it.model) : null);
+    if (prod && prod.category) return prod.category === 'drone' || prod.category === 'payload';
+    var n = (it.model || '').toUpperCase();
+    return n.indexOf('MATRICE') !== -1 || n.indexOf('MAVIC') !== -1 || n.indexOf('ZENMUSE') !== -1 || n.indexOf('DOCK') !== -1;
+  };
+  var filtered = items.filter(isDroneOrPayload);
+  var list = filtered.length ? filtered : items;
+  return list.map(function(it) { return (it.model || '?') + ' ×' + (Number(it.qty) || 1); }).join(', ');
+}
 function _kpiConvBuildRows(dealerId, p) {
   var cfg = getConfig();
   var halves = sisComputeHalfMonths(cfg);
@@ -701,7 +719,8 @@ function _kpiConvBuildRows(dealerId, p) {
     }
     var pos = Number(pp.pos) || 0;
     var forecast = Number(pp.forecastAmount) || 0;
-    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100 };
+    var productQty = _pipeItemsDroneProductQty(pipeObj);
+    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100, productQty: productQty };
   });
   var totalForecast = 0, totalWeighted = 0;
   rows.forEach(function(r) { if (r.isCurrent) { totalForecast += r.forecast; totalWeighted += r.weighted; } });
@@ -728,6 +747,7 @@ function kpiImpProjectConversionSection(dealerId, p) {
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">หน่วยงาน</th>' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">สถานะ</th>' +
     '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">งวดที่คาดปิด</th>' +
+    '<th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">สินค้าที่คาดขาย</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">POS%</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">Forecast</th>' +
     '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap" title="Forecast × POS%">ยอดเป้าคำนวณ</th>' +
@@ -746,6 +766,7 @@ function kpiImpProjectConversionSection(dealerId, p) {
     h += '<td style="padding:7px 8px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(agency) + '">' + sanitize(agency) + '</td>';
     h += '<td style="padding:7px 8px;white-space:nowrap"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--card2);border:1px solid var(--border);color:var(--text2)">' + sanitize(statusLabel) + '</span></td>';
     h += '<td style="padding:7px 8px;white-space:nowrap">' + sanitize(r.periodLabel) + (r.isGuessed ? ' <span title="เดาจาก Bidding Date +1 เดือน">⏱</span>' : '') + '</td>';
+    h += '<td style="padding:7px 8px;color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(r.productQty) + '">' + sanitize(r.productQty || '-') + '</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + pos + '%</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:600;white-space:nowrap">' + fmtMoneyShort(forecast) + '</td>';
     h += '<td style="padding:7px 8px;text-align:right;font-weight:700;white-space:nowrap" class="stat-good-t">' + fmtMoneyShort(weighted) + '</td>';
@@ -754,7 +775,7 @@ function kpiImpProjectConversionSection(dealerId, p) {
       : '<button class="btn bsm bo" onclick="kpiImpAddActionFromPipeline(\'' + dealerId + '\',\'' + pp.id + '\',\'' + sanitize(pp.projectName || '').replace(/'/g, "\\'") + '\',' + forecast + ')">+ Action</button>') + '</td>';
     h += '</tr>';
   });
-  h += '<tr><td colspan="6" style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวม (เฉพาะงวด ' + sanitize(curPeriodKey) + ')</td>' +
+  h += '<tr><td colspan="7" style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวม (เฉพาะงวด ' + sanitize(curPeriodKey) + ')</td>' +
     '<td style="padding:7px 8px;text-align:right;font-weight:700">' + fmtMoneyShort(totalForecast) + '</td>' +
     '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtMoneyShort(totalWeighted) + '</td>' +
     '<td></td></tr>';
@@ -986,16 +1007,16 @@ function exportImprovementPlanXlsx() {
     else aoa.push(['—']);
     aoa.push([]);
     aoa.push(['3) Project Conversion Plan (' + conv.curPeriodKey + ')']);
-    aoa.push(['#', 'Project', 'Agency', 'Status', 'Expected Period', 'POS%', 'Forecast', 'Weighted Target']);
+    aoa.push(['#', 'Project', 'End-User', 'Status', 'Expected Period', 'Forecast Product', 'POS%', 'Forecast', 'Weighted Target']);
     if (curRows.length) {
       curRows.forEach(function(r) {
         var pp = r.pp, pipeObj = r.pipeObj;
         var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
         var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.pos, r.forecast, r.weighted]);
+        aoa.push([pp.rowNo || '', pp.projectName || '', agency, statusLabel, _kpiPrintEn(r.periodLabel) + (r.isGuessed ? ' (est.)' : ''), r.productQty || '-', r.pos, r.forecast, r.weighted]);
       });
     } else { aoa.push(['—']); }
-    aoa.push(['Total', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
+    aoa.push(['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]);
     aoa.push([]);
     aoa.push(['4) Action Plan']);
     aoa.push(['Action', 'Who', 'What', 'When', 'Expected Result', 'Expected Sales']);
@@ -1008,7 +1029,7 @@ function exportImprovementPlanXlsx() {
     aoa.push(['Revised Forecast', sisActual + p.pipeWeighted + total]);
 
     var ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 13 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 
@@ -1089,14 +1110,14 @@ function _buildImprovementPlanEnHtml(dealerId) {
 
   var curRows = conv.rows.filter(function(r) { return r.isCurrent; });
   if (curRows.length) {
-    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>Agency</th><th>Status</th><th>Expected Period</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
+    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th>Forecast Product</th><th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
     html += curRows.map(function(r) {
       var pp = r.pp, pipeObj = r.pipeObj;
       var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
       var agency = pipeObj ? (pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN || '-') : '-';
-      return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
+      return '<tr><td>' + (pp.rowNo ? '#' + sanitize(String(pp.rowNo)) : '—') + '</td><td>' + sanitize(pp.projectName || '(no name)') + '</td><td>' + sanitize(agency) + '</td><td>' + sanitize(statusLabel) + '</td><td>' + sanitize(_kpiPrintEn(r.periodLabel)) + (r.isGuessed ? ' (est.)' : '') + '</td><td>' + sanitize(r.productQty || '-') + '</td><td>' + r.pos + '%</td><td>' + fmtMoneyShort(r.forecast) + '</td><td>' + fmtMoneyShort(r.weighted) + '</td></tr>';
     }).join('');
-    html += '<tr><td colspan="6"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
+    html += '<tr><td colspan="7"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
     html += '</table>';
   }
 
