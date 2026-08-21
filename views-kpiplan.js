@@ -1040,7 +1040,12 @@ function _buildImprovementPlanEnHtml(dealerId) {
     'table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px}th,td{border:1px solid #ccc;padding:5px 7px;text-align:left}th{background:#f0f0f0}' +
     '.stats{display:flex;gap:10px;margin:8px 0 4px}.stat{border:1px solid #ccc;border-radius:6px;padding:6px 10px;flex:1;text-align:center}' +
     '.stat b{display:block;font-size:14px;margin-top:2px}.sub{color:#555;font-size:11px}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;font-size:10px}' +
-    '.item{border-left:3px solid #999;padding:5px 10px;margin-bottom:7px}.item-title{font-weight:700;font-size:12px}.item-sub{font-size:10.5px;color:#555;margin-top:2px}</style></head><body>';
+    '.card{background:#fafafa;border:1px solid #e2e2e2;border-left:4px solid #333;border-radius:6px;padding:10px 14px;margin-bottom:9px}' +
+    '.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:5px}' +
+    '.card-title{font-weight:700;font-size:12.5px}.card-badge{font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;white-space:nowrap}' +
+    '.badge-money{background:#e6f4ea;color:#1a7a3c}.badge-high{background:#e6f4ea;color:#1a7a3c}.badge-medium{background:#fdf1da;color:#8a5a00}.badge-low{background:#f1f1f1;color:#666}' +
+    '.card-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:#777;margin-bottom:5px}.card-meta b{color:#333;font-weight:700}' +
+    '.card-body div{font-size:10.5px;color:#333;line-height:1.6}.card-body b{color:#666;font-weight:700}</style></head><body>';
   html += '<h1>Dealer Improvement Plan — ' + sanitize(d.name) + '</h1><div class="sub">Level ' + sanitize(d.level || '-') + ' · ' + p.half + ' ' + p.sisYear + (manualSt ? ' · Status: ' + manualSt.label : '') + ' · Printed on ' + fD(_td()) + '</div>';
 
   html += '<h2>Sales Gap</h2><div class="stats">' +
@@ -1054,12 +1059,14 @@ function _buildImprovementPlanEnHtml(dealerId) {
   if (endUsers.length) {
     html += '<h2>Main End User Mapping</h2>';
     html += endUsers.map(function(r) {
-      var subParts = [];
-      if (r.industry) subParts.push('Industry: ' + sanitize(r.industry));
-      if (r.currentApp) subParts.push('Current App: ' + sanitize(r.currentApp));
-      if (r.potentialProduct) subParts.push('Potential Product: ' + sanitize(r.potentialProduct));
-      return '<div class="item"><div class="item-title">' + sanitize(r.name || '(unnamed)') + (r.potential ? ' <span class="tag">' + sanitize(r.potential) + ' potential</span>' : '') + '</div>' +
-        (subParts.length ? '<div class="item-sub">' + subParts.join(' · ') + '</div>' : '') + '</div>';
+      var potentialCls = { High: 'badge-high', Medium: 'badge-medium', Low: 'badge-low' }[r.potential] || 'badge-low';
+      var bodyLines = [];
+      if (r.currentApp) bodyLines.push('<div><b>Current App</b> — ' + sanitize(r.currentApp) + '</div>');
+      if (r.potentialProduct) bodyLines.push('<div><b>Potential Product</b> — ' + sanitize(r.potentialProduct) + '</div>');
+      return '<div class="card"><div class="card-head"><div class="card-title">' + sanitize(r.name || '(unnamed)') + '</div>' +
+        (r.potential ? '<span class="card-badge ' + potentialCls + '">' + sanitize(r.potential) + ' potential</span>' : '') + '</div>' +
+        (r.industry ? '<div class="card-meta"><span><b>Industry</b> ' + sanitize(r.industry) + '</span></div>' : '') +
+        (bodyLines.length ? '<div class="card-body">' + bodyLines.join('') + '</div>' : '') + '</div>';
     }).join('');
   }
 
@@ -1079,14 +1086,17 @@ function _buildImprovementPlanEnHtml(dealerId) {
   if (actions.length) {
     html += '<h2>Action Plan</h2>';
     html += actions.map(function(a) {
-      var subParts = [];
-      if (a.who) subParts.push('Who: ' + sanitize(a.who));
-      if (a.when) subParts.push('When: ' + sanitize(a.when));
-      if (a.what) subParts.push('What: ' + sanitize(a.what));
-      if (a.expectedResult) subParts.push('Expected Result: ' + sanitize(a.expectedResult));
-      if (Number(a.expectedSales)) subParts.push('Expected Sales: ฿' + fmtMoneyShort(Number(a.expectedSales)));
-      return '<div class="item"><div class="item-title">' + sanitize(a.action || '(unnamed action)') + '</div>' +
-        (subParts.length ? '<div class="item-sub">' + subParts.join(' · ') + '</div>' : '') + '</div>';
+      var metaParts = [];
+      if (a.who) metaParts.push('<span><b>Who</b> ' + sanitize(a.who) + '</span>');
+      if (a.when) metaParts.push('<span><b>When</b> ' + sanitize(a.when) + '</span>');
+      var bodyLines = [];
+      if (a.what) bodyLines.push('<div><b>What</b> — ' + sanitize(a.what) + '</div>');
+      if (a.expectedResult) bodyLines.push('<div><b>Expected Result</b> — ' + sanitize(a.expectedResult) + '</div>');
+      var sales = Number(a.expectedSales) || 0;
+      return '<div class="card"><div class="card-head"><div class="card-title">' + sanitize(a.action || '(unnamed action)') + '</div>' +
+        (sales ? '<span class="card-badge badge-money">฿' + fmtMoneyShort(sales) + '</span>' : '') + '</div>' +
+        (metaParts.length ? '<div class="card-meta">' + metaParts.join('') + '</div>' : '') +
+        (bodyLines.length ? '<div class="card-body">' + bodyLines.join('') + '</div>' : '') + '</div>';
     }).join('');
   }
 
