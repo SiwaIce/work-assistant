@@ -1091,7 +1091,7 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
 // แปรผันตามจำนวนรุ่นที่บริษัทนั้นมีจริง (ดู maxCols จาก _kpiBuildDealerDetailSections) + POS%/Forecast/Weighted Target
 function _kpiDealerSheetColWidths(maxCols) {
   var modelCount = Math.max(0, maxCols - 9);
-  var w = [24, 18, 16, 14, 18, 22];
+  var w = [24, 30, 16, 14, 18, 28]; // Project(1)/Forecast Product(5) กว้างขึ้น — มักมีข้อความยาว (หลายรุ่น×Qty ต่อแถว)
   for (var i = 0; i < modelCount; i++) w.push(10);
   w.push(10, 13, 14);
   return w;
@@ -1171,7 +1171,8 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         cell.border = _kpiXlThinBorder();
         if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
-        if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
+        else if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
+        else if (colNum - 1 === 1 || colNum - 1 === 5) { cell.alignment = { wrapText: true, vertical: 'top' }; } // Project/Forecast Product — ข้อความยาว ให้ตัดบรรทัดแทนล้นคอลัมน์
       });
     });
 
@@ -1515,7 +1516,7 @@ function _buildImprovementPlanBodyHtml(dealerId) {
   if (curRows.length) {
     var models = _kpiConvModelSet(curRows);
     var qtyHeaders = models.map(function(m) { return '<th>' + sanitize(m) + ' Qty</th>'; }).join('');
-    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th>Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th>Forecast Product</th>' + qtyHeaders + '<th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
+    html += '<h2>Project Conversion Plan (Open Pipeline — ' + sanitize(conv.curPeriodKey) + ')</h2><table><tr><th>#</th><th style="min-width:170px">Project</th><th>End-User</th><th>Status</th><th>Expected Period</th><th style="min-width:200px">Forecast Product</th>' + qtyHeaders + '<th>POS%</th><th>Forecast</th><th>Weighted Target</th></tr>';
     html += curRows.map(function(r) {
       var pp = r.pp, pipeObj = r.pipeObj;
       var statusLabel = (pipeObj && typeof PIPE_NAMES !== 'undefined' && PIPE_NAMES[pipeObj.status]) || (pipeObj ? pipeObj.status : '');
