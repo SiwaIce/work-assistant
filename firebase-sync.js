@@ -386,6 +386,7 @@ var SYNC_KEY_MAP = {
   'customer_forecasts': 'customerForecasts',
   'kpiMonthlyPlan': 'kpiMonthlyPlan',
   'improvementActions': 'improvementActions',
+  'summaryTemplates': 'summaryTemplates',
   'dealerEndUsers': 'dealerEndUsers',
   'contact_logs': 'contactLogs',
   'pending_followups': 'pendingFollowups',

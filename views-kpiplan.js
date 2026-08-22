@@ -625,6 +625,86 @@ function kpiImpSaveDealerField(dealerId, field, value) {
   patch[field] = value;
   ST.update('dealers', dealerId, patch);
 }
+
+// ================================================================
+// SUMMARY QUICK TEMPLATES — ข้อความสำเร็จรูปกดแทรกลงช่อง Summary กันพิมพ์ซ้ำๆ เอง เก็บใน collection
+// 'summaryTemplates' แยกต่างหาก (sync ขึ้น cloud ผ่าน SYNC_KEY_MAP เหมือน collection อื่น) แก้/เพิ่ม/ลบเองได้
+// เต็มที่ — seed ชุดเริ่มต้น 15 แบบไว้ให้ครั้งแรกที่เปิดใช้ (ครอบคลุมมุม: อัพเลเวล/Maintain/ความเสี่ยง/
+// Onboarding/Technical/ความสัมพันธ์) ไม่ seed ซ้ำถ้าผู้ใช้เคยแก้ไข/ลบไปแล้ว (เช็คแค่ตอน list ว่างเปล่าเท่านั้น)
+// ================================================================
+var KPI_SUMMARY_TEMPLATE_DEFAULTS = [
+  { label: '🔼 ดันอัพเลเวล', text: 'H2 [ปี] ทำยอดเกินเป้า ([X]%) มีแนวโน้มดันปรับ Level จาก [B] เป็น [A]' },
+  { label: '🔁 Maintain Level', text: 'H2 [ปี] ทำยอดเกินเป้า ([X]%) คอย Monitor รักษาระดับ Level [X] ต่อเนื่อง ยังไม่ถึงเกณฑ์อัพเลเวล' },
+  { label: '📉 Pipeline บาง', text: 'Pipeline ในมือยังบางเกินไป ต้องเร่งหาโครงการใหม่เพิ่มใน [เดือน] เพื่อให้ทันปิดยอดในงวดนี้' },
+  { label: '💰 รอ Budget', text: 'โครงการหลักติดขั้นตอนอนุมัติงบประมาณ คาดว่าจะได้ข้อสรุปภายใน [เดือน] ต้องติดตามใกล้ชิด' },
+  { label: '⚠️ เสี่ยงหลุดเป้า', text: 'ความเสี่ยงสูงที่จะหลุดเป้า H นี้ เนื่องจาก [ระบุสาเหตุ] ต้องวางแผนเร่งด่วน' },
+  { label: '🎥 Demo/POC', text: 'อยู่ระหว่าง Demo/POC ให้ลูกค้า [ชื่อลูกค้า] คาดว่าจะตัดสินใจภายใน [เดือน]' },
+  { label: '🥊 คู่แข่งตัดหน้า', text: 'มีความเสี่ยงจากคู่แข่งในโครงการ [ชื่อโครงการ] ต้องเร่งนำเสนอจุดแข็งเพิ่มเติม' },
+  { label: '🧭 End-User ใหม่', text: 'ต้องขยาย End-User ใหม่เพิ่ม เพราะพึ่งพาลูกค้าเดิมมากเกินไป' },
+  { label: '🆕 Observation Period', text: 'อยู่ในช่วง Observation Period การเป็น Authorized Dealer ([X] วัน) ยังไม่ซีเรียสเรื่องเป้า เน้น Support/Onboarding' },
+  { label: '🎁 Support สินค้า Demo', text: 'เข้าไปช่วย Support สินค้า Demo ให้นำไปเสนอหน่วยงาน เพื่อสร้าง Pipeline ใหม่' },
+  { label: '🛠 ต้องการ Technical', text: 'ต้องการ Technical Solution เพิ่มเติมเพื่อปิดการขาย ประสานทีม Technical/SE ช่วยสนับสนุน' },
+  { label: '💸 กระทบราคา', text: 'ลูกค้ากระทบเรื่องราคา ต้องพิจารณาโปรโมชั่น/ส่วนลดเพิ่มเติมเพื่อแข่งขันได้' },
+  { label: '🤝 นัดเข้าเยี่ยม', text: 'นัดเข้าเยี่ยมบริษัทเพื่อกระชับความสัมพันธ์ และสำรวจโอกาสใหม่ในไตรมาสหน้า' },
+  { label: '📄 ต่อสัญญา Dealer', text: 'ใกล้ครบกำหนดต่อสัญญา Dealer Agreement ต้องเตรียมเอกสาร/ประเมินผลงานก่อนต่อสัญญา' },
+  { label: '🔽 ลด Priority', text: 'พิจารณาลดระดับความสำคัญ เนื่องจาก [ระบุเหตุผล เช่น ไม่ Active/เปลี่ยนธุรกิจ] ให้ Focus ทรัพยากรที่บริษัทอื่นแทน' }
+];
+function _kpiEnsureDefaultSummaryTemplates() {
+  if (ST.getAll('summaryTemplates').length === 0) {
+    KPI_SUMMARY_TEMPLATE_DEFAULTS.forEach(function(t) { ST.add('summaryTemplates', { label: t.label, text: t.text }); });
+  }
+}
+function kpiSummaryTemplatePicker(dealerId) {
+  _kpiEnsureDefaultSummaryTemplates();
+  var tpls = ST.getAll('summaryTemplates');
+  var h = '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">กดรายการเพื่อแทรกลงช่อง Summary (แทรกต่อท้ายข้อความเดิม) — แก้ไข/เพิ่ม/ลบ Template ได้เอง</div>';
+  h += '<div id="kpiTplList" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto">' + tpls.map(kpiSummaryTemplateRowHtml).join('') + '</div>';
+  h += '<button class="btn bo btn-full" style="margin-top:12px" onclick="kpiSummaryTemplateAdd(\'' + dealerId + '\')">+ เพิ่ม Template ใหม่</button>';
+  openM('📋 เลือก Template Summary', h);
+  window._kpiTplTargetDealer = dealerId;
+}
+function kpiSummaryTemplateRowHtml(tp) {
+  return '<div style="display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:8px;padding:8px 10px">' +
+    '<div style="flex:1;min-width:0;cursor:pointer" onclick="kpiSummaryTemplateInsert(\'' + tp.id + '\')">' +
+    '<div style="font-size:11.5px;font-weight:700">' + sanitize(tp.label || '') + '</div>' +
+    '<div style="font-size:10.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sanitize(tp.text || '') + '</div></div>' +
+    '<button class="btn bsm bo" style="padding:2px 7px" onclick="kpiSummaryTemplateEdit(\'' + tp.id + '\')">✏️</button>' +
+    '<button class="btn bsm bo" style="padding:2px 7px" onclick="kpiSummaryTemplateDelete(\'' + tp.id + '\')">✕</button></div>';
+}
+function kpiSummaryTemplateInsert(tplId) {
+  var tp = ST.getOne('summaryTemplates', tplId);
+  var dealerId = window._kpiTplTargetDealer;
+  if (!tp || !dealerId) return;
+  var ta = document.getElementById('kpiSummaryTa_' + dealerId);
+  var cur = ta ? ta.value : (ST.getOne('dealers', dealerId) || {}).improvementSummary || '';
+  var next = cur ? (cur + '\n' + tp.text) : tp.text;
+  kpiImpSaveDealerField(dealerId, 'improvementSummary', next);
+  closeMForce();
+  render();
+}
+function kpiSummaryTemplateAdd(dealerId) {
+  var label = prompt('ชื่อ Template สั้นๆ (เช่น "ดันอัพเลเวล"):');
+  if (label === null || !label.trim()) return;
+  var text = prompt('ข้อความ Template (ใช้ [วงเล็บ] แทนจุดที่ต้องกรอกทีหลังได้):');
+  if (text === null || !text.trim()) return;
+  ST.add('summaryTemplates', { label: label.trim(), text: text.trim() });
+  kpiSummaryTemplatePicker(dealerId);
+}
+function kpiSummaryTemplateEdit(tplId) {
+  var tp = ST.getOne('summaryTemplates', tplId);
+  if (!tp) return;
+  var label = prompt('แก้ชื่อ Template:', tp.label || '');
+  if (label === null) return;
+  var text = prompt('แก้ข้อความ Template:', tp.text || '');
+  if (text === null) return;
+  ST.update('summaryTemplates', tplId, { label: label.trim(), text: text.trim() });
+  kpiSummaryTemplatePicker(window._kpiTplTargetDealer);
+}
+function kpiSummaryTemplateDelete(tplId) {
+  if (!confirm('ลบ Template นี้?')) return;
+  ST.delete('summaryTemplates', tplId);
+  kpiSummaryTemplatePicker(window._kpiTplTargetDealer);
+}
 function kpiImpSaveField(coll, id, field, value) {
   var patch = {};
   patch[field] = field === 'expectedSales' ? (Number(value) || 0) : value;
@@ -955,8 +1035,11 @@ function rKpiImprovementPlan(el) {
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
-  h += '<div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:8px">📋 Summary <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— สรุปสั้นๆ เผื่อพิมพ์แยกส่งให้ Ryan (ไม่บังคับ กรอกไว้จะโชว์ในหน้า Print/English View ด้วย)</span></div>';
-  h += '<textarea class="fm-input" rows="3" style="width:100%;font-size:12px" placeholder="เช่น สรุปสถานการณ์, ความเสี่ยงหลัก, สิ่งที่ต้องการจาก Ryan..." onchange="kpiImpSaveDealerField(\'' + d.id + '\',\'improvementSummary\',this.value)">' + sanitize(d.improvementSummary || '') + '</textarea>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+  h += '<div style="font-size:12px;font-weight:800;color:var(--text2)">📋 Summary <span style="font-weight:400;font-size:10.5px;color:var(--text3)">— สรุปสั้นๆ เผื่อพิมพ์แยกส่งให้ Ryan (ไม่บังคับ กรอกไว้จะโชว์ในหน้า Print/English View ด้วย)</span></div>';
+  h += '<button class="btn bsm bo" onclick="kpiSummaryTemplatePicker(\'' + d.id + '\')">📋 เลือก Template</button>';
+  h += '</div>';
+  h += '<textarea id="kpiSummaryTa_' + d.id + '" class="fm-input" rows="3" style="width:100%;font-size:12px" placeholder="เช่น สรุปสถานการณ์, ความเสี่ยงหลัก, สิ่งที่ต้องการจาก Ryan..." onchange="kpiImpSaveDealerField(\'' + d.id + '\',\'improvementSummary\',this.value)">' + sanitize(d.improvementSummary || '') + '</textarea>';
   h += '</div>';
 
   h += '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">';
