@@ -306,6 +306,12 @@ function kpiPlanRowHtml(p) {
     h += '<span style="font-size:11.5px;font-weight:700" class="stat-bad-t">🚀 ' + (impActions.length ? impActions.length + ' Action · คาดเพิ่ม ' + fmtMoneyShort(impTotal) : 'ยังไม่มี Improvement Plan') + '</span>';
     h += '<span style="font-size:11px;font-weight:700" class="stat-bad-t">' + (impActions.length ? 'ดูแผน' : 'สร้างแผน') + ' →</span>';
     h += '</div>';
+  } else {
+    // ถึงเป้าแล้ว ก็ยังเปิดหน้า Improvement Plan ได้ — เผื่ออยากบันทึก Summary (เช่น ดันอัพเลเวล/Maintain) แม้ไม่ต้องทำ Plan จริงจัง
+    h += '<div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(74,222,128,.1);border:1px dashed rgba(74,222,128,.4);border-radius:10px;padding:9px 12px;cursor:pointer" onclick="event.stopPropagation();go(\'kpiImprovementPlan\',{dealerId:\'' + p.dealer.id + '\'})">';
+    h += '<span style="font-size:11.5px;font-weight:700" class="stat-good-t">🎉 ถึงเป้าแล้ว' + (p.dealer.improvementSummary ? ' · มี Summary บันทึกไว้' : '') + '</span>';
+    h += '<span style="font-size:11px;font-weight:700" class="stat-good-t">ดู/บันทึก Summary →</span>';
+    h += '</div>';
   }
 
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">';
