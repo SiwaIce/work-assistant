@@ -653,10 +653,21 @@ function kpiImpDelBtn(coll, id) {
 // "Related to" ไม่บังคับผูกกับใคร — ปล่อยว่างได้ถ้าเป็นแผนทั่วไปไม่เจาะจง (เช่น รับรอง Dealer/Partner, โปรแกรม
 // ยืม Payload ให้ลูกค้าไปสาธิตเอง) ถ้าเพิ่มมาจากปุ่ม "+ Action" ใน Project Conversion Plan จะผูก pipeId ไว้ให้
 // อัตโนมัติ (แสดงเป็น chip กดไปหน้าโครงการได้) ส่วนกรอกเองพิมพ์ได้อิสระ ไม่บังคับรูปแบบ
+// Project ที่ผูก pipeId แต่ไม่มีชื่อ (ยังไม่ตั้งชื่อโครงการ) — ใช้ Row No./ชื่อโปรเจกต์/หน่วยงาน แทน ข้ามส่วน
+// ที่ไม่มีข้อมูลไป กันแสดง "-" เฉยๆ ซึ่งไม่มีประโยชน์เวลาต้องอ้างอิงว่าคือโครงการไหน
+function _kpiPipeRelatedLabel(pipeObj, fallbackText) {
+  if (!pipeObj) return fallbackText || '';
+  var parts = [];
+  if (pipeObj.rowNo) parts.push('#' + pipeObj.rowNo);
+  if (pipeObj.projectName) parts.push(pipeObj.projectName);
+  var agency = pipeObj.agencyMain || pipeObj.endUserTH || pipeObj.endUserEN;
+  if (agency) parts.push(agency);
+  return parts.length ? parts.join(' - ') : (fallbackText || '');
+}
 function kpiImpRelatedToCell(r) {
   if (r.pipeId) {
     var pipeObj = ST.getOne('pipeline', r.pipeId);
-    var label = pipeObj ? (pipeObj.projectName || '(ไม่มีชื่อ)') : (r.relatedTo || '(โครงการถูกลบไปแล้ว)');
+    var label = pipeObj ? _kpiPipeRelatedLabel(pipeObj, '(ไม่มีชื่อ)') : (r.relatedTo || '(โครงการถูกลบไปแล้ว)');
     return '<td style="padding:4px 8px"><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 9px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);' + (pipeObj ? 'cursor:pointer' : '') + '"' + (pipeObj ? ' onclick="go(\'pipeDetail\',{pipeId:\'' + r.pipeId + '\'})"' : '') + ' title="ผูกกับ Pipeline โดยตรง">🔗 ' + sanitize(label) + '</span></td>';
   }
   return kpiImpTextCell('improvementActions', r.id, 'relatedTo', r.relatedTo, 'ชื่อ End User / อ้างอิงโครงการ / เว้นว่างถ้าเป็นแผนทั่วไป');
@@ -1104,7 +1115,7 @@ function _kpiBuildDealerDetailSections(p) {
     columns: ['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales'],
     moneyCols: [5],
     rows: actions.map(function(a) {
-      var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
+      var relatedTo = a.pipeId ? _kpiPipeRelatedLabel(ST.getOne('pipeline', a.pipeId), a.relatedTo) : (a.relatedTo || '');
       return [a.action || '', relatedTo, a.who || '', a.when || '', a.expectedResult || '', Number(a.expectedSales) || 0];
     })
   });
@@ -1606,7 +1617,7 @@ function _buildImprovementPlanBodyHtml(dealerId) {
   if (actions.length) {
     html += '<h2>Plan</h2><table><tr><th>What to do</th><th>Related to Project</th><th>Who</th><th>When</th><th>Expected Result</th><th>Expected Sales</th></tr>';
     html += actions.map(function(a) {
-      var relatedTo = a.pipeId ? ((ST.getOne('pipeline', a.pipeId) || {}).projectName || a.relatedTo || '') : (a.relatedTo || '');
+      var relatedTo = a.pipeId ? _kpiPipeRelatedLabel(ST.getOne('pipeline', a.pipeId), a.relatedTo) : (a.relatedTo || '');
       var sales = Number(a.expectedSales) || 0;
       return '<tr><td>' + sanitize(a.action || '(unnamed action)') + '</td><td>' + sanitize(relatedTo || '-') + '</td><td>' + sanitize(a.who || '-') + '</td><td>' + sanitize(a.when || '-') + '</td><td>' + sanitize(a.expectedResult || '-') + '</td><td>' + (sales ? fmtMoneyShort(sales) : '-') + (a.pipeId ? ' <span style="color:#888;font-size:10px">(in Pipeline)</span>' : '') + '</td></tr>';
     }).join('');
