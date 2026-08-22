@@ -858,7 +858,7 @@ function kpiImpProjectConversionSection(dealerId, p) {
 function _kpiConvProductForecastSummaryHtml(rows, p) {
   var s = _kpiConvProductForecastSummary(rows, p);
   if (!s.models.length) return '';
-  var fmtQty = function(v) { return v ? (Math.round(v * 10) / 10).toLocaleString() : '-'; };
+  var fmtQty = function(v) { var r = Math.round(v || 0); return r ? r.toLocaleString() : '-'; };
   var h = '<div style="margin-top:16px;font-size:11.5px;font-weight:700;color:var(--text2)">📦 Total Forecast Product <span style="font-weight:400;color:var(--text3)">(ถ่วง POS% แยกรายเดือนใน ' + sanitize(p.half + ' ' + p.sisYear) + ')</span></div>';
   h += '<div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
   h += '<thead><tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">รุ่นสินค้า</th>';
@@ -882,7 +882,7 @@ function _kpiConvProductForecastSummaryHtml(rows, p) {
 function _kpiConvProductForecastSummaryHtmlEn(curRows, p) {
   var s = _kpiConvProductForecastSummary(curRows, p);
   if (!s.models.length) return '';
-  var fmtQty = function(v) { return v ? (Math.round(v * 10) / 10).toLocaleString() : '-'; };
+  var fmtQty = function(v) { var r = Math.round(v || 0); return r ? r.toLocaleString() : '-'; };
   var html = '<h2>Total Forecast Product (POS-Weighted, by Month — ' + sanitize(p.half + ' ' + p.sisYear) + ')</h2><table><tr><th>Product</th>';
   s.monthKeys.forEach(function(mk) { html += '<th>' + _kpiMonthKeyLabelEn(mk) + '</th>'; });
   html += '<th>Total</th></tr>';
@@ -1093,10 +1093,10 @@ function _kpiBuildDealerDetailSections(p) {
       decCols: fcSummary.monthKeys.map(function(mk, i) { return i + 1; }).concat([monthColCount + 1]),
       rows: fcSummary.models.map(function(model) {
         var rowTotal = fcSummary.monthKeys.reduce(function(sum, mk) { return sum + (fcSummary.data[model][mk] || 0); }, 0);
-        var vals = fcSummary.monthKeys.map(function(mk) { return Math.round((fcSummary.data[model][mk] || 0) * 10) / 10; });
-        return [model].concat(vals).concat([Math.round(rowTotal * 10) / 10]);
+        var vals = fcSummary.monthKeys.map(function(mk) { return Math.round(fcSummary.data[model][mk] || 0); });
+        return [model].concat(vals).concat([Math.round(rowTotal)]);
       }),
-      totalRow: ['Total'].concat(fcSummary.monthKeys.map(function(mk) { return Math.round(fcSummary.monthTotals[mk] * 10) / 10; })).concat([Math.round(fcSummary.grandTotal * 10) / 10])
+      totalRow: ['Total'].concat(fcSummary.monthKeys.map(function(mk) { return Math.round(fcSummary.monthTotals[mk]); })).concat([Math.round(fcSummary.grandTotal)])
     });
   }
 
@@ -1170,7 +1170,7 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
   ws['!merges'] = merges;
   _kpiSetNumFmt(ws, moneyCells, '#,##0');
   _kpiSetNumFmt(ws, pctCells, '0%');
-  _kpiSetNumFmt(ws, decCells, '#,##0.0');
+  _kpiSetNumFmt(ws, decCells, '#,##0');
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 }
 
@@ -1249,7 +1249,7 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
         if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
-        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0.0'; cell.alignment = { horizontal: 'right' }; }
+        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
       });
     });
 
@@ -1260,7 +1260,7 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         cell.font = { bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.headBg } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
-        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0.0'; cell.alignment = { horizontal: 'right' }; }
+        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
       });
     }
     if (sec.boldLastRow && sec.rows.length) {
