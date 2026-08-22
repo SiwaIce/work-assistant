@@ -698,10 +698,13 @@ function kpiImpRollupRow(label, val, colorCls) {
 // ปนมา) — เช็ค category จาก catalog สินค้าก่อน (getProductByName/_pipeResolveProduct) ถ้าหาไม่เจอ (สินค้าเก่า/
 // พิมพ์เองไม่ตรงชื่อ catalog เป๊ะ) fallback เดาจากชื่อรุ่น (Matrice/Mavic/Zenmuse/Dock) ถ้ากรองแล้วไม่เหลือ
 // รายการที่เข้าเกณฑ์เลย (เช่น ยังไม่ผูกสินค้าไว้) แสดงทุกรายการที่มีแทน ดีกว่าโชว์ว่างเปล่า
-function _pipeItemsDroneProductQty(pipeObj) {
-  if (!pipeObj) return '';
+// รุ่นสินค้า → Qty รวม (ผูกรุ่นเดียวกันในโครงการเดียวกันเข้าด้วยกัน) เฉพาะ Drone/Payload — ใช้เป็นทั้งข้อความ
+// สรุป (_pipeItemsDroneProductQty แสดงในตาราง Project Conversion Plan) และต้นทางคำนวณ "Total Forecast Product"
+// ถ่วง POS แยกรายเดือน (ดู _kpiConvProductForecastSummary) — คง key เป็นชื่อสินค้าเต็มตามที่ใช้ในระบบ (ไม่ใช้ชื่อย่อ)
+function _pipeItemsDroneProductQtyMap(pipeObj) {
+  if (!pipeObj) return {};
   var items = (typeof getPipeItems === 'function') ? getPipeItems(pipeObj) : (pipeObj.items || []);
-  if (!items.length) return '';
+  if (!items.length) return {};
   var isDroneOrPayload = function(it) {
     var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(it.model) : (typeof getProductByName === 'function' ? getProductByName(it.model) : null);
     if (prod && prod.category) return prod.category === 'drone' || prod.category === 'payload';
@@ -710,7 +713,16 @@ function _pipeItemsDroneProductQty(pipeObj) {
   };
   var filtered = items.filter(isDroneOrPayload);
   var list = filtered.length ? filtered : items;
-  return list.map(function(it) { return (it.model || '?') + ' ×' + (Number(it.qty) || 1); }).join(', ');
+  var map = {};
+  list.forEach(function(it) {
+    var model = it.model || '?';
+    map[model] = (map[model] || 0) + (Number(it.qty) || 1);
+  });
+  return map;
+}
+function _pipeItemsDroneProductQty(pipeObj) {
+  var map = _pipeItemsDroneProductQtyMap(pipeObj);
+  return Object.keys(map).map(function(m) { return m + ' ×' + map[m]; }).join(', ');
 }
 function _kpiConvBuildRows(dealerId, p) {
   var cfg = getConfig();
@@ -730,12 +742,58 @@ function _kpiConvBuildRows(dealerId, p) {
     }
     var pos = Number(pp.pos) || 0;
     var forecast = Number(pp.forecastAmount) || 0;
-    var productQty = _pipeItemsDroneProductQty(pipeObj);
-    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100, productQty: productQty };
+    var productQtyMap = _pipeItemsDroneProductQtyMap(pipeObj);
+    var productQty = Object.keys(productQtyMap).map(function(m) { return m + ' ×' + productQtyMap[m]; }).join(', ');
+    return { pp: pp, pipeObj: pipeObj, isGuessed: isGuessed, periodLabel: periodLabel, isCurrent: periodKey === curPeriodKey, pos: pos, forecast: forecast, weighted: forecast * pos / 100, productQty: productQty, productQtyMap: productQtyMap, closeMonthKey: closeDate ? closeDate.slice(0, 7) : null };
   });
   var totalForecast = 0, totalWeighted = 0;
   rows.forEach(function(r) { if (r.isCurrent) { totalForecast += r.forecast; totalWeighted += r.weighted; } });
   return { rows: rows, curPeriodKey: curPeriodKey, totalForecast: totalForecast, totalWeighted: totalWeighted };
+}
+// เดือน key 'YYYY-MM' → ป้ายภาษาอังกฤษสั้นๆ "Sep-26" (ใช้ในตาราง Total Forecast Product ทั้ง Live/PDF/Excel
+// เพราะเอกสารพวกนี้เป็นภาษาอังกฤษล้วนอยู่แล้ว — ต่างจาก fcMonthLabel ที่เป็นภาษาไทย ปี พ.ศ. ใช้จุดอื่นในแอป)
+function _kpiMonthKeyLabelEn(key) {
+  var parts = (key || '').split('-');
+  if (parts.length !== 2) return key || '';
+  var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+  return d.toLocaleString('en-US', { month: 'short' }) + '-' + parts[0].slice(2);
+}
+// สรุป "Qty ที่คาดขายต่อรุ่น ถ่วงด้วย POS%" ของโครงการงวดปัจจุบัน (curRows) แยกตามเดือนที่คาดปิดภายในงวด H นั้น
+// (Weighted Qty = Qty ของรุ่นนั้นในโครงการ × POS% ของโครงการ แล้วรวมตามเดือน/รุ่น) — ตรรกะเดียวกับที่ใช้คำนวณ
+// Weighted Target (เงิน) แค่เปลี่ยนหน่วยเป็นจำนวนเครื่อง ใช้ร่วมกันทั้ง Live/PDF/Excel
+function _kpiConvProductForecastSummary(rows, p, cfg) {
+  cfg = cfg || getConfig();
+  var halves = sisComputeHalfMonths(cfg);
+  var monthIdxs = (p.half === 'H1' ? halves.h1 : halves.h2).slice().sort(function(a, b) { return a - b; });
+  var monthKeys = monthIdxs.map(function(m) { return p.sisYear + '-' + (m + 1 < 10 ? '0' : '') + (m + 1); });
+  var curRows = rows.filter(function(r) { return r.isCurrent; });
+
+  var models = [];
+  var data = {}; // model -> { monthKey: weightedQty }
+  curRows.forEach(function(r) {
+    var qtyMap = r.productQtyMap || {};
+    var mk = r.closeMonthKey;
+    Object.keys(qtyMap).forEach(function(model) {
+      if (models.indexOf(model) === -1) models.push(model);
+      if (!data[model]) data[model] = {};
+      var w = qtyMap[model] * (r.pos / 100);
+      if (mk) data[model][mk] = (data[model][mk] || 0) + w;
+    });
+  });
+  models.sort();
+
+  var monthTotals = {};
+  monthKeys.forEach(function(mk) { monthTotals[mk] = 0; });
+  var grandTotal = 0;
+  models.forEach(function(model) {
+    monthKeys.forEach(function(mk) {
+      var v = data[model][mk] || 0;
+      monthTotals[mk] += v;
+      grandTotal += v;
+    });
+  });
+
+  return { monthKeys: monthKeys, models: models, data: data, monthTotals: monthTotals, grandTotal: grandTotal };
 }
 
 function kpiImpProjectConversionSection(dealerId, p) {
@@ -791,7 +849,52 @@ function kpiImpProjectConversionSection(dealerId, p) {
     '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtMoneyShort(totalWeighted) + '</td>' +
     '<td></td></tr>';
   h += '</tbody></table></div>';
+  h += _kpiConvProductForecastSummaryHtml(rows, p);
   return h;
+}
+// ตาราง "Total Forecast Product" ต่อจาก Project Conversion Plan — สรุปจำนวนเครื่องต่อรุ่นที่คาดขายในงวดนี้
+// ถ่วงด้วย POS% (Weighted Qty เหมือน Weighted Target แต่เป็นหน่วยเครื่องแทนเงิน) แยกตามเดือนที่คาดปิด — ใช้
+// ข้อมูลจาก _kpiConvProductForecastSummary ตัวเดียวกับ PDF/Excel กันตัวเลขเพี้ยนกันคนละทาง
+function _kpiConvProductForecastSummaryHtml(rows, p) {
+  var s = _kpiConvProductForecastSummary(rows, p);
+  if (!s.models.length) return '';
+  var fmtQty = function(v) { return v ? (Math.round(v * 10) / 10).toLocaleString() : '-'; };
+  var h = '<div style="margin-top:16px;font-size:11.5px;font-weight:700;color:var(--text2)">📦 Total Forecast Product <span style="font-weight:400;color:var(--text3)">(ถ่วง POS% แยกรายเดือนใน ' + sanitize(p.half + ' ' + p.sisYear) + ')</span></div>';
+  h += '<div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  h += '<thead><tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">รุ่นสินค้า</th>';
+  s.monthKeys.forEach(function(mk) { h += '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">' + _kpiMonthKeyLabelEn(mk) + '</th>'; });
+  h += '<th style="text-align:right;padding:6px 8px;color:var(--text2);font-weight:700;white-space:nowrap">รวม</th></tr></thead><tbody>';
+  s.models.forEach(function(model) {
+    var rowTotal = s.monthKeys.reduce(function(sum, mk) { return sum + (s.data[model][mk] || 0); }, 0);
+    h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 8px;font-weight:600">' + sanitize(model) + '</td>';
+    s.monthKeys.forEach(function(mk) { h += '<td style="padding:7px 8px;text-align:right">' + fmtQty(s.data[model][mk] || 0) + '</td>'; });
+    h += '<td style="padding:7px 8px;text-align:right;font-weight:700" class="stat-good-t">' + fmtQty(rowTotal) + '</td></tr>';
+  });
+  h += '<tr><td style="padding:7px 8px;text-align:right;font-weight:700;color:var(--text2)">รวมทุกรุ่น</td>';
+  s.monthKeys.forEach(function(mk) { h += '<td style="padding:7px 8px;text-align:right;font-weight:700">' + fmtQty(s.monthTotals[mk]) + '</td>'; });
+  h += '<td style="padding:7px 8px;text-align:right;font-weight:800" class="stat-good-t">' + fmtQty(s.grandTotal) + '</td></tr>';
+  h += '</tbody></table></div>';
+  return h;
+}
+// เวอร์ชัน PDF/print ของตาราง Total Forecast Product (หัวข้อ/ป้ายเป็นอังกฤษล้วน ต่างจาก
+// _kpiConvProductForecastSummaryHtml ที่เป็นภาษาไทยสำหรับหน้า Live ในแอป) — ใช้ข้อมูลจาก
+// _kpiConvProductForecastSummary ตัวเดียวกัน กันตัวเลขเพี้ยนกันคนละทาง
+function _kpiConvProductForecastSummaryHtmlEn(curRows, p) {
+  var s = _kpiConvProductForecastSummary(curRows, p);
+  if (!s.models.length) return '';
+  var fmtQty = function(v) { return v ? (Math.round(v * 10) / 10).toLocaleString() : '-'; };
+  var html = '<h2>Total Forecast Product (POS-Weighted, by Month — ' + sanitize(p.half + ' ' + p.sisYear) + ')</h2><table><tr><th>Product</th>';
+  s.monthKeys.forEach(function(mk) { html += '<th>' + _kpiMonthKeyLabelEn(mk) + '</th>'; });
+  html += '<th>Total</th></tr>';
+  html += s.models.map(function(model) {
+    var rowTotal = s.monthKeys.reduce(function(sum, mk) { return sum + (s.data[model][mk] || 0); }, 0);
+    var cells = s.monthKeys.map(function(mk) { return '<td>' + fmtQty(s.data[model][mk] || 0) + '</td>'; }).join('');
+    return '<tr><td>' + sanitize(model) + '</td>' + cells + '<td><b>' + fmtQty(rowTotal) + '</b></td></tr>';
+  }).join('');
+  var totalCells = s.monthKeys.map(function(mk) { return '<td><b>' + fmtQty(s.monthTotals[mk]) + '</b></td>'; }).join('');
+  html += '<tr><td><b>Total</b></td>' + totalCells + '<td><b>' + fmtQty(s.grandTotal) + '</b></td></tr>';
+  html += '</table>';
+  return html;
 }
 // สลับโชว์/ซ่อนแถวโครงการที่อยู่นอกงวดปัจจุบันในตาราง Project Conversion Plan
 function _kpiConvToggleOtherPeriod(tblId) {
@@ -981,6 +1084,22 @@ function _kpiBuildDealerDetailSections(p) {
     totalRow: ['Total', '', '', '', '', '', '', conv.totalForecast, conv.totalWeighted]
   });
 
+  var fcSummary = _kpiConvProductForecastSummary(curRows, p);
+  if (fcSummary.models.length) {
+    var monthColCount = fcSummary.monthKeys.length;
+    sections.push({
+      title: 'Total Forecast Product (POS-Weighted, by Month — ' + p.half + ' ' + p.sisYear + ')',
+      columns: ['Product'].concat(fcSummary.monthKeys.map(_kpiMonthKeyLabelEn)).concat(['Total']),
+      decCols: fcSummary.monthKeys.map(function(mk, i) { return i + 1; }).concat([monthColCount + 1]),
+      rows: fcSummary.models.map(function(model) {
+        var rowTotal = fcSummary.monthKeys.reduce(function(sum, mk) { return sum + (fcSummary.data[model][mk] || 0); }, 0);
+        var vals = fcSummary.monthKeys.map(function(mk) { return Math.round((fcSummary.data[model][mk] || 0) * 10) / 10; });
+        return [model].concat(vals).concat([Math.round(rowTotal * 10) / 10]);
+      }),
+      totalRow: ['Total'].concat(fcSummary.monthKeys.map(function(mk) { return Math.round(fcSummary.monthTotals[mk] * 10) / 10; })).concat([Math.round(fcSummary.grandTotal * 10) / 10])
+    });
+  }
+
   sections.push({
     title: '3) Plan',
     columns: ['What to do', 'Related to Project', 'Who', 'When', 'Expected Result', 'Expected Sales'],
@@ -1020,7 +1139,7 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
 
   var aoa = [];
   var merges = [];
-  var moneyCells = [], pctCells = [];
+  var moneyCells = [], pctCells = [], decCells = [];
 
   aoa.push(['Dealer Improvement Plan', data.dealerName]);
   aoa.push(['Level', data.level, 'Period', data.period]);
@@ -1034,10 +1153,12 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
     rows.forEach(function(row) {
       (sec.moneyCols || []).forEach(function(c) { moneyCells.push({ r: aoa.length, c: c }); });
       (sec.pctCols || []).forEach(function(c) { pctCells.push({ r: aoa.length, c: c }); });
+      (sec.decCols || []).forEach(function(c) { decCells.push({ r: aoa.length, c: c }); });
       aoa.push(row.slice());
     });
     if (sec.totalRow && sec.rows.length) {
       (sec.moneyCols || []).forEach(function(c) { moneyCells.push({ r: aoa.length, c: c }); });
+      (sec.decCols || []).forEach(function(c) { decCells.push({ r: aoa.length, c: c }); });
       aoa.push(sec.totalRow.slice());
     }
     if (sec.note) aoa.push([sec.note]);
@@ -1049,6 +1170,7 @@ function _kpiAppendDealerDetailTab(wb, p, usedNames) {
   ws['!merges'] = merges;
   _kpiSetNumFmt(ws, moneyCells, '#,##0');
   _kpiSetNumFmt(ws, pctCells, '0%');
+  _kpiSetNumFmt(ws, decCells, '#,##0.0');
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 }
 
@@ -1127,6 +1249,7 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
         if ((sec.pctCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '0%'; cell.alignment = { horizontal: 'right' }; }
+        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0.0'; cell.alignment = { horizontal: 'right' }; }
       });
     });
 
@@ -1137,6 +1260,7 @@ function _kpiAppendDealerDetailTabXl(wb, p, usedNames) {
         cell.font = { bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.headBg } };
         if ((sec.moneyCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right' }; }
+        if ((sec.decCols || []).indexOf(colNum - 1) !== -1) { cell.numFmt = '#,##0.0'; cell.alignment = { horizontal: 'right' }; }
       });
     }
     if (sec.boldLastRow && sec.rows.length) {
@@ -1477,6 +1601,7 @@ function _buildImprovementPlanBodyHtml(dealerId) {
     }).join('');
     html += '<tr><td colspan="7"><b>Total</b></td><td><b>' + fmtMoneyShort(conv.totalForecast) + '</b></td><td><b>' + fmtMoneyShort(conv.totalWeighted) + '</b></td></tr>';
     html += '</table>';
+    html += _kpiConvProductForecastSummaryHtmlEn(curRows, p);
   }
 
   if (actions.length) {
