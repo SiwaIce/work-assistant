@@ -697,22 +697,21 @@ function kpiImpRollupRow(label, val, colorCls) {
 // สรุป "รุ่นสินค้า × Qty" ของโครงการ เฉพาะรายการที่เป็น Drone/Payload (ไม่เอา accessory/battery/software/service
 // ปนมา) — เช็ค category จาก catalog สินค้าก่อน (getProductByName/_pipeResolveProduct) ถ้าหาไม่เจอ (สินค้าเก่า/
 // พิมพ์เองไม่ตรงชื่อ catalog เป๊ะ) fallback เดาจากชื่อรุ่น (Matrice/Mavic/Zenmuse/Dock) ถ้ากรองแล้วไม่เหลือ
-// รายการที่เข้าเกณฑ์เลย (เช่น ยังไม่ผูกสินค้าไว้) แสดงทุกรายการที่มีแทน ดีกว่าโชว์ว่างเปล่า
-// รุ่นสินค้า → Qty รวม (ผูกรุ่นเดียวกันในโครงการเดียวกันเข้าด้วยกัน) เฉพาะ Drone/Payload — ใช้เป็นทั้งข้อความ
-// สรุป (_pipeItemsDroneProductQty แสดงในตาราง Project Conversion Plan) และต้นทางคำนวณ "Total Forecast Product"
-// ถ่วง POS แยกรายเดือน (ดู _kpiConvProductForecastSummary) — คง key เป็นชื่อสินค้าเต็มตามที่ใช้ในระบบ (ไม่ใช้ชื่อย่อ)
+// รุ่นสินค้า → Qty รวม (ผูกรุ่นเดียวกันในโครงการเดียวกันเข้าด้วยกัน) เฉพาะ Drone/Payload ที่ "มีอยู่จริงในสินค้า
+// ทั้งหมด" (catalog) เท่านั้น — รายการที่พิมพ์ชื่อเองไม่ตรง catalog เป๊ะ/สินค้าที่ถูกลบไปแล้ว จะไม่ถูกเดามั่วๆ
+// ให้ตกไปเลย (ก่อนหน้านี้เคย fallback เดาจากชื่อรุ่น/โชว์ทุกรายการถ้ากรองแล้วไม่เหลือ — ตัดออกตามที่ขอ) ใช้เป็น
+// ทั้งข้อความสรุป (_pipeItemsDroneProductQty แสดงในตาราง Project Conversion Plan) และต้นทางคำนวณ
+// "Total Forecast Product" ถ่วง POS แยกรายเดือน (ดู _kpiConvProductForecastSummary) — คง key เป็นชื่อสินค้าเต็ม
+// ตามที่ใช้ในระบบ (ไม่ใช้ชื่อย่อ)
 function _pipeItemsDroneProductQtyMap(pipeObj) {
   if (!pipeObj) return {};
   var items = (typeof getPipeItems === 'function') ? getPipeItems(pipeObj) : (pipeObj.items || []);
   if (!items.length) return {};
   var isDroneOrPayload = function(it) {
     var prod = (typeof _pipeResolveProduct === 'function') ? _pipeResolveProduct(it.model) : (typeof getProductByName === 'function' ? getProductByName(it.model) : null);
-    if (prod && prod.category) return prod.category === 'drone' || prod.category === 'payload';
-    var n = (it.model || '').toUpperCase();
-    return n.indexOf('MATRICE') !== -1 || n.indexOf('MAVIC') !== -1 || n.indexOf('ZENMUSE') !== -1 || n.indexOf('DOCK') !== -1;
+    return !!(prod && prod.category && (prod.category === 'drone' || prod.category === 'payload'));
   };
-  var filtered = items.filter(isDroneOrPayload);
-  var list = filtered.length ? filtered : items;
+  var list = items.filter(isDroneOrPayload);
   var map = {};
   list.forEach(function(it) {
     var model = it.model || '?';
