@@ -1209,6 +1209,7 @@ function rPipeline(el) {
     '</div>' +
 
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
+    (typeof _smartFilterChipHtml === 'function' ? _smartFilterChipHtml('stale_pipeline') : '') +
     '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +
     '<button class="btn bo" onclick="showImportPipelineM()">📥 Import</button>' +
     '<button class="btn bo" onclick="importPipelineXlsx(\'\')">📂 xlsx</button>' +

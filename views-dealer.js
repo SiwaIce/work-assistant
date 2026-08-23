@@ -507,6 +507,7 @@ function rDealers(el) {
   </div>` : ''}
 
   <div class="bg" style="margin-bottom:8px;align-items:center">
+    ${typeof _smartFilterChipHtml === 'function' ? _smartFilterChipHtml('low_health') : ''}
     <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <button class="btn-xs" style="border-radius:0;${dealerListView==='card'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='card';render()">🗂 การ์ด</button>
       <button class="btn-xs" style="border-radius:0;${dealerListView==='table'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='table';render()">📊 ตาราง</button>

@@ -1454,6 +1454,15 @@ function getSmartFilters() {
   ];
 }
 
+// ชิปเล็กๆ ลิงก์ไปหน้า Smart Filter เดียวกับที่หน้า "วันนี้" ใช้ — เดิมมีแค่หน้า Today ที่เห็นชุด Smart Filter
+// นี้ หน้า Pipeline/Dealer list ต้องออกไปหน้า Today ก่อนถึงจะเห็นว่ามีกี่รายการต้องสนใจ (เจอจากการสแกน UX
+// 2026-08-23) — คืน '' ถ้า count เป็น 0 กันโชว์ชิปเปล่าไม่มีประโยชน์
+function _smartFilterChipHtml(filterId) {
+  var f = getSmartFilters().find(function(x) { return x.id === filterId; });
+  if (!f || !f.count) return '';
+  return '<span onclick="go(\'smartFilter\',{filterId:\'' + filterId + '\'})" style="cursor:pointer;font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;background:' + f.color + '18;color:' + f.color + ';border:1px solid ' + f.color + '55;white-space:nowrap">' + f.icon + ' ' + f.count + ' ' + sanitize(f.name) + '</span>';
+}
+
 // ================================================================
 // SMART INSIGHTS
 // ================================================================
