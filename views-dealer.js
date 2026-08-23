@@ -1180,7 +1180,15 @@ function dealerCardHTML(d, health) {
   </div>`;
 }
 
+// debounce 350ms เหมือนช่องค้นหาอื่นในแอป (ดู utils.js noteSearchInput/soSearchInput) — เดิมไม่มี debounce
+// เลย เรียก _filterDealerListNow ทุกตัวอักษรที่พิมพ์ ซึ่งแพงมากเพราะคำนวณ Health Score ใหม่ทุก Dealer
+// (ดูหมายเหตุใน _filterDealerListNow) ทำให้พิมพ์แล้วหน้าจอค้าง
+var _dealerFilterTimer = null;
 function filterDealerList() {
+  clearTimeout(_dealerFilterTimer);
+  _dealerFilterTimer = setTimeout(_filterDealerListNow, 350);
+}
+function _filterDealerListNow() {
   const q = document.getElementById('dSrc')?.value.toLowerCase() || '';
   let dealers = scopedDealers();
   if (dealerFilter !== 'all') {
@@ -1197,10 +1205,17 @@ function filterDealerList() {
     return;
   }
 
+  // ต้องส่ง health เข้า dealerCardHTML เอง (ดู rDealers ด้านบนที่ทำ pattern เดียวกัน) ไม่งั้น dealerCardHTML
+  // จะ fallback ไปเรียก calcHealthScore(d.id) แบบไม่มี index ให้ ซึ่งวน ST.pipelineByDealer()/
+  // ST.pipeLogsByPipe() ใหม่ทั้ง array ต่อ Dealer/Pipe เอง กลายเป็น O(dealers×pipelines) ทุกครั้งที่กรอง
   const grid = document.getElementById('dGrid');
-  if (grid) grid.innerHTML = dealers.length
-    ? dealers.map(d => dealerCardHTML(d)).join('')
-    : '<div class="empty" style="grid-column:1/-1"><p>ไม่พบ Dealer</p></div>';
+  if (grid) {
+    const _cfg = getConfig();
+    const _idx = buildHealthScoreIndexes();
+    grid.innerHTML = dealers.length
+      ? dealers.map(d => dealerCardHTML(d, calcHealthScore(d.id, _cfg, _idx.pipesByDealer[d.id] || [], _idx.logsByPipe))).join('')
+      : '<div class="empty" style="grid-column:1/-1"><p>ไม่พบ Dealer</p></div>';
+  }
 }
 
 // ================================================================
@@ -2329,7 +2344,7 @@ function _saveSalesForecastCore(dealerId, eid, data, onDone) {
     for (var i = 0; i < cache.length; i++) { if (cache[i].id === id) { idx = i; break; } }
     if (idx >= 0) cache[idx] = data; else cache.push(data);
     localStorage.setItem('v7_customer_forecasts', JSON.stringify(cache));
-    if (typeof syncToFirebase === 'function') syncToFirebase('customerForecasts', cache);
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('customerForecasts', data);
 
     dlrFcSelMonth = data.month;
     if (onDone) onDone();
@@ -2380,7 +2395,7 @@ function delSalesForecast(dealerId, id) {
   db.collection('dealerUpdates').doc(dealerId).collection('forecast').doc(id).delete().then(function() {
     var cache = JSON.parse(localStorage.getItem('v7_customer_forecasts') || '[]').filter(function(c) { return c.id !== id; });
     localStorage.setItem('v7_customer_forecasts', JSON.stringify(cache));
-    if (typeof syncToFirebase === 'function') syncToFirebase('customerForecasts', cache);
+    if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('customerForecasts', id);
     if (sfRREditId === id) sfRREditId = null;
     if (sfPREditId === id) sfPREditId = null;
     toast('🗑️ ลบแล้ว'); render();
