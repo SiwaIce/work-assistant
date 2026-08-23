@@ -2235,6 +2235,7 @@ function rPipeDet(el) {
   if (!_gvHidden('pipeline_notes')) {
   html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml">' +
     (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showMergePipeLogsM(\'' + p.id + '\')" title="รวม Update เก่าให้เหลือรายการเดียว กันไม่ให้หลุดจากช่อง Update 1-6 ตอน export">🔗 รวม Update เก่า</button> ' : '') +
+    (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showPipeDuplicateLogAuditM({\'' + p.id + '\':true})" title="เช็คเฉพาะโครงการนี้ว่ามี Update ซ้ำจากขีดนำหน้าค้าง (บั๊ก Import เก่าก่อนแก้ 2026-08-19) ไหม">🔍 เช็ค Log ซ้ำ</button> ' : '') +
     '<button class="btn bsm bp" onclick="showPipeUpdateM(\'' + p.id + '\')">➕ Update</button></span></h2>';
   if (logs.length) {
     html += '<div class="tl">';
