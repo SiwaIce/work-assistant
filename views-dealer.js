@@ -1283,6 +1283,8 @@ function rDealerDet(el) {
   <div class="tab-bar">
     <div class="tab-btn ${dealerTab==='info'?'act':''}" onclick="dealerTab='info';render()">📋 ข้อมูล</div>
     <div class="tab-btn ${dealerTab==='pipeline'?'act':''}" onclick="dealerTab='pipeline';render()">📊 Pipeline</div>
+    <div class="tab-btn ${dealerTab==='quotation'?'act':''}" onclick="dealerTab='quotation';render()">💰 ใบเสนอราคา</div>
+    <div class="tab-btn ${dealerTab==='so'?'act':''}" onclick="dealerTab='so';render()">📦 Sales Order</div>
     <div class="tab-btn ${dealerTab==='visit'?'act':''}" onclick="dealerTab='visit';render()">🤝 Visit</div>
     <div class="tab-btn ${dealerTab==='timeline'?'act':''}" onclick="dealerTab='timeline';render()">📝 Timeline</div>
     <div class="tab-btn ${dealerTab==='demo'?'act':''}" onclick="dealerTab='demo';render()">🚁 Demo</div>
@@ -1304,6 +1306,8 @@ function renderDealerTab(d) {
   switch (dealerTab) {
     case 'info': return dealerInfoTab(d);
     case 'pipeline': return dealerPipelineTab(d);
+    case 'quotation': return dealerQuotationTab(d);
+    case 'so': return dealerSalesOrderTab(d);
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
     case 'demo': return dealerDemoTab(d);
@@ -1807,6 +1811,78 @@ function copyDealerPipeline(dealerId) {
     tsv += (idx + 1) + '\t' + (p.projectName || '') + '\t' + (p.endUserTH || '') + '\t' + (p.model || '') + '\t' + (p.modelQty || 1) + '\t' + (p.forecastAmount || '') + '\t' + getPipeName(p.status) + '\t' + fD(p.biddingDate) + '\n';
   });
   copyText(tsv, '📋 Copy Pipeline ' + (d ? d.name : ''));
+}
+// ================================================================
+// TAB: QUOTATION — สรุปใบเสนอราคาของ Dealer นี้ (เดิมต้องออกไปหน้า Quotation หลักแล้วค้นชื่อเอาเอง ไม่มีทาง
+// เชื่อมจากหน้า Dealer เลย — เจอจากการสแกน UX 2026-08-23) แค่ลิสต์ย่อ กดแล้วไปหน้าแก้ไขจริงต่อ ไม่ทำ
+// search/filter/export ซ้ำในนี้ เพราะมีอยู่แล้วที่หน้า Quotation หลัก (ปุ่ม "ดูทั้งหมด" พาไปหน้านั้นได้)
+// ================================================================
+function dealerQuotationTab(d) {
+  var all = (typeof loadQuotations === 'function') ? loadQuotations() : [];
+  var list = all.filter(function(q) { return q.dealerId === d.id; })
+    .sort(function(a, b) { return (b.validFrom || '') < (a.validFrom || '') ? -1 : 1; });
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">' +
+    '<h2 style="margin:0;font-size:1rem">💰 ใบเสนอราคา (' + list.length + ')</h2>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn bo bsm" onclick="go(\'quotationV2\')">📋 ดูทั้งหมด</button>' +
+    '<button class="btn bp bsm" onclick="showCreateQuotationModal()">➕ สร้างใบเสนอราคา</button>' +
+    '</div></div>';
+  if (!list.length) {
+    h += '<div class="empty"><p>ยังไม่มีใบเสนอราคาสำหรับ Dealer นี้<br><button class="btn bp" style="margin-top:6px" onclick="showCreateQuotationModal()">➕ สร้างใบเสนอราคา</button></p></div>';
+    return h;
+  }
+  h += '<div style="display:flex;flex-direction:column;gap:8px">';
+  list.forEach(function(q) {
+    var color = quoteStatusColors[q.status] || '#64748b';
+    var label = quoteStatusLabels[q.status] || q.status || '-';
+    h += '<div class="card" style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px" onclick="editQuotation(\'' + q.id + '\')">' +
+      '<div style="min-width:0">' +
+      '<div style="font-weight:700;font-size:13px">' + sanitize(q.quoteNo || '-') + '</div>' +
+      (q.projectName ? '<div style="font-size:11.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px">' + sanitize(q.projectName) + '</div>' : '') +
+      '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">' + sanitize(q.validFrom || '-') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+      '<div style="font-weight:800;color:#22c55e;font-size:13px">' + formatNumber(q.totalAmount || 0) + ' ฿</div>' +
+      '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:' + color + '22;color:' + color + '">' + sanitize(label) + '</span>' +
+      '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+// ================================================================
+// TAB: SALES ORDER — สรุป SO ของ Dealer นี้ เหตุผลเดียวกับแท็บ Quotation ด้านบน
+// ================================================================
+function dealerSalesOrderTab(d) {
+  var all = ST.getAll('salesOrders');
+  var list = all.filter(function(s) { return s.dealerId === d.id; })
+    .sort(function(a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1; });
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">' +
+    '<h2 style="margin:0;font-size:1rem">📦 Sales Order (' + list.length + ')</h2>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn bo bsm" onclick="go(\'salesOrders\')">📋 ดูทั้งหมด</button>' +
+    '<button class="btn bp bsm" onclick="showCreateSOModal({dealerId:\'' + d.id + '\'})">➕ สร้าง SO</button>' +
+    '</div></div>';
+  if (!list.length) {
+    h += '<div class="empty"><p>ยังไม่มี Sales Order สำหรับ Dealer นี้<br><button class="btn bp" style="margin-top:6px" onclick="showCreateSOModal({dealerId:\'' + d.id + '\'})">➕ สร้าง SO</button></p></div>';
+    return h;
+  }
+  h += '<div style="display:flex;flex-direction:column;gap:8px">';
+  list.forEach(function(s) {
+    var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+    var models = (s.items || []).map(function(it) { return it.model; }).filter(Boolean);
+    var modelsTxt = models.length ? (models[0] + (models.length > 1 ? ', +' + (models.length - 1) + ' more' : '')) : '-';
+    h += '<div class="card" style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
+      '<div style="min-width:0">' +
+      '<div style="font-weight:700;font-size:13px">' + sanitize(s.soNumber || '-') + '</div>' +
+      '<div style="font-size:11.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px">' + sanitize(modelsTxt) + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+      (total ? '<div style="font-weight:800;color:#22c55e;font-size:13px">' + fmtMoneyShort(total) + '</div>' : '') +
+      (typeof _soStatusBadge === 'function' ? _soStatusBadge(s.status) : sanitize(s.status || '-')) +
+      '</div></div>';
+  });
+  h += '</div>';
+  return h;
 }
 // ================================================================
 // TAB: VISIT
