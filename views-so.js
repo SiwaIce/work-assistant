@@ -8,6 +8,10 @@ var soSelectMode = false;
 var soSelected = {};
 var _soVisibleIds = [];
 var _soTimelineExpandedIdx = null;
+// เดิมมีแต่ตาราง 6-7 คอลัมน์ ไม่มี card view เลย ต่างจาก Dealer/Quotation/Pipeline ที่มีให้สลับ — บนมือถือ
+// ต้อง scroll แนวนอนในกล่องแคบๆ ใช้งานยาก (เจอจากการสแกน UX 2026-08-23) เริ่มด้วย card อัตโนมัติถ้าจอแคบ
+// เหมือน pipeView/productViewMode ที่ทำ pattern นี้ไว้แล้ว
+var soViewMode = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'card' : 'table';
 
 // สถานะนี้คือสถานะ "เอกสาร/งานธุรการ" ล้วนๆ — คุมด้วยมือตามปกติ ไม่ผูกกับว่าสินค้าพร้อมส่งจริงหรือยัง
 // ความพร้อมส่งจริง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกัน) คำนวณแยกต่างหากแบบ real-time ต่อรายการ ดู soComputeReadiness()
@@ -221,6 +225,10 @@ function rSalesOrders(el) {
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">' +
     '<h2 style="margin:0;font-size:1.05rem">📦 Sales Order</h2>' +
     '<div style="display:flex;gap:8px">' +
+    '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+    '<button class="btn bsm' + (soViewMode==='card'?' bp':'') + '" style="border-radius:0" onclick="soViewMode=\'card\';render()">🗂️ Card</button>' +
+    '<button class="btn bsm' + (soViewMode==='table'?' bp':'') + '" style="border-radius:0" onclick="soViewMode=\'table\';render()">📋 Table</button>' +
+    '</div>' +
     '<button class="btn ' + (soSelectMode ? 'bd' : 'bo') + '" onclick="toggleSOSelectMode()">☑️ ' + (soSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>' +
     '<button class="btn bp" onclick="showCreateSOModal({})">➕ สร้าง SO</button></div></div>';
 
@@ -262,45 +270,10 @@ function rSalesOrders(el) {
 
   if (!list.length) {
     html += '<div style="text-align:center;color:var(--text2);padding:48px 0">ยังไม่มี Sales Order' + (soSearch||soFlt!=='all'?' (ไม่มีรายการตรงตัวกรอง)':'') + '</div>';
+  } else if (soViewMode === 'card') {
+    html += _soCardsHtml(list);
   } else {
-    html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:12px">';
-    html += '<thead><tr style="background:var(--bg2);text-align:left">' +
-      (soSelectMode ? '<th style="padding:10px 12px;width:32px;text-align:center"><input type="checkbox" id="soSelAll" title="เลือกทั้งหมด" onclick="toggleSOSelectAll(this.checked)"></th>' : '') +
-      '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">SO No.</th>' +
-      '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">Dealer</th>' +
-      '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">สินค้า</th>' +
-      '<th style="padding:10px 12px;font-weight:600;color:var(--text2);text-align:right">มูลค่า</th>' +
-      '<th style="padding:10px 12px;font-weight:600;color:var(--text2);min-width:190px">ความคืบหน้า</th>' +
-      '<th style="padding:10px 12px"></th></tr></thead><tbody>';
-    list.forEach(function(s){
-      var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
-      var models = (s.items||[]).map(function(it){ return it.model; }).filter(Boolean);
-      var modelsTxt = models.length ? (models[0] + (models.length>1 ? ', +' + (models.length-1) + ' more' : '')) : '-';
-      var days   = _soDaysInStage(s);
-      var warn   = _soWarnBadge(s);
-      var typeTag = '<span style="font-size:9px;padding:0 4px;border-radius:3px;background:var(--bg2);border:1px solid var(--border)">' + (s.type==='project'?'📋':'🏪') + '</span>';
-      var selectCell = soSelectMode
-        ? '<td style="padding:10px 12px;text-align:center" onclick="event.stopPropagation();toggleSOSelect(\'' + s.id + '\')">' +
-          '<input type="checkbox" id="soChk_' + s.id + '" ' + (soSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleSOSelect(\'' + s.id + '\')"></td>'
-        : '';
-      var trOnclick = soSelectMode ? ' onclick="toggleSOSelect(\'' + s.id + '\')"' : ' onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})"';
-      html += '<tr style="cursor:pointer;border-top:1px solid var(--border)"' + trOnclick + '">' +
-        selectCell +
-        '<td style="padding:12px">' + qcopyHtml(s.soNumber||'-') + ' ' + typeTag + '</td>' +
-        '<td style="padding:12px">' + (_gvHidden('so_dealerInfo') ? '-' : (sanitize(s.dealerName||'-') + (s.customerPO ? '<div style="color:var(--text2);font-size:11px">' + qcopyHtml(s.customerPO) + '</div>' : ''))) + '</td>' +
-        '<td style="padding:12px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(models.join(', ')) + '">' + sanitize(modelsTxt) + '</td>' +
-        '<td style="padding:12px;text-align:right">' + (_gvHidden('so_price') ? '-' : (total ? fmtMoneyShort(total) : '-')) + '</td>' +
-        '<td style="padding:12px">' + _soProgressBar(s.status) +
-          '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">' + _soStatusBadge(s.status) +
-          (!_soIsDone(s.status) && days != null ? '<span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? warn : '') + '</div>' +
-          // เดิมสถานะ pr_po_open โชว์ข้อมูลนี้อยู่ในตัว พอยุบรวมเป็น so_open แล้วต้องมีบรรทัดนี้แทน ไม่งั้นเลข PR/ETA หายไปจากมุมมอง list เลย
-          (s.status === 'so_open' && (s.prNumber || s.expectedDelivery) ?
-            '<div style="font-size:10px;color:var(--text2);margin-top:2px">' + (s.prNumber ? 'PR: ' + sanitize(s.prNumber) : '') + (s.prNumber && s.expectedDelivery ? ' · ' : '') + (s.expectedDelivery ? 'ETA: ' + fD(s.expectedDelivery) : '') + '</div>' : '') +
-          '</td>' +
-        '<td style="padding:12px;text-align:right;color:var(--text2)">' + (soSelectMode ? '' : '›') + '</td>' +
-        '</tr>';
-    });
-    html += '</tbody></table></div>';
+    html += _soTableHtml(list);
   }
 
   if (soSelectMode) {
@@ -321,6 +294,80 @@ function rSalesOrders(el) {
   }
 
   el.innerHTML = html;
+}
+
+// ตาราง SO — แยกออกมาจาก rSalesOrders() เดิม (ไม่เปลี่ยนพฤติกรรม) เพื่อสลับกับ _soCardsHtml() ได้
+function _soTableHtml(list) {
+  var html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr style="background:var(--bg2);text-align:left">' +
+    (soSelectMode ? '<th style="padding:10px 12px;width:32px;text-align:center"><input type="checkbox" id="soSelAll" title="เลือกทั้งหมด" onclick="toggleSOSelectAll(this.checked)"></th>' : '') +
+    '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">SO No.</th>' +
+    '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">Dealer</th>' +
+    '<th style="padding:10px 12px;font-weight:600;color:var(--text2)">สินค้า</th>' +
+    '<th style="padding:10px 12px;font-weight:600;color:var(--text2);text-align:right">มูลค่า</th>' +
+    '<th style="padding:10px 12px;font-weight:600;color:var(--text2);min-width:190px">ความคืบหน้า</th>' +
+    '<th style="padding:10px 12px"></th></tr></thead><tbody>';
+  list.forEach(function(s){
+    var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
+    var models = (s.items||[]).map(function(it){ return it.model; }).filter(Boolean);
+    var modelsTxt = models.length ? (models[0] + (models.length>1 ? ', +' + (models.length-1) + ' more' : '')) : '-';
+    var days   = _soDaysInStage(s);
+    var warn   = _soWarnBadge(s);
+    var typeTag = '<span style="font-size:9px;padding:0 4px;border-radius:3px;background:var(--bg2);border:1px solid var(--border)">' + (s.type==='project'?'📋':'🏪') + '</span>';
+    var selectCell = soSelectMode
+      ? '<td style="padding:10px 12px;text-align:center" onclick="event.stopPropagation();toggleSOSelect(\'' + s.id + '\')">' +
+        '<input type="checkbox" id="soChk_' + s.id + '" ' + (soSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleSOSelect(\'' + s.id + '\')"></td>'
+      : '';
+    var trOnclick = soSelectMode ? ' onclick="toggleSOSelect(\'' + s.id + '\')"' : ' onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})"';
+    html += '<tr style="cursor:pointer;border-top:1px solid var(--border)"' + trOnclick + '">' +
+      selectCell +
+      '<td style="padding:12px">' + qcopyHtml(s.soNumber||'-') + ' ' + typeTag + '</td>' +
+      '<td style="padding:12px">' + (_gvHidden('so_dealerInfo') ? '-' : (sanitize(s.dealerName||'-') + (s.customerPO ? '<div style="color:var(--text2);font-size:11px">' + qcopyHtml(s.customerPO) + '</div>' : ''))) + '</td>' +
+      '<td style="padding:12px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(models.join(', ')) + '">' + sanitize(modelsTxt) + '</td>' +
+      '<td style="padding:12px;text-align:right">' + (_gvHidden('so_price') ? '-' : (total ? fmtMoneyShort(total) : '-')) + '</td>' +
+      '<td style="padding:12px">' + _soProgressBar(s.status) +
+        '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">' + _soStatusBadge(s.status) +
+        (!_soIsDone(s.status) && days != null ? '<span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? warn : '') + '</div>' +
+        (s.status === 'so_open' && (s.prNumber || s.expectedDelivery) ?
+          '<div style="font-size:10px;color:var(--text2);margin-top:2px">' + (s.prNumber ? 'PR: ' + sanitize(s.prNumber) : '') + (s.prNumber && s.expectedDelivery ? ' · ' : '') + (s.expectedDelivery ? 'ETA: ' + fD(s.expectedDelivery) : '') + '</div>' : '') +
+        '</td>' +
+      '<td style="padding:12px;text-align:right;color:var(--text2)">' + (soSelectMode ? '' : '›') + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+// มุมมองการ์ด — สำหรับมือถือ/จอแคบ ที่ scroll ตารางแนวนอนใช้งานยาก (เจอจากการสแกน UX 2026-08-23) เนื้อหา
+// เดียวกับตาราง แค่จัดเป็นการ์ดต่อ SO 1 ใบ แทนแถวตาราง
+function _soCardsHtml(list) {
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+  list.forEach(function(s) {
+    var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
+    var models = (s.items||[]).map(function(it){ return it.model; }).filter(Boolean);
+    var modelsTxt = models.length ? (models[0] + (models.length>1 ? ', +' + (models.length-1) + ' more' : '')) : '-';
+    var days   = _soDaysInStage(s);
+    var warn   = _soWarnBadge(s);
+    var cardClick = soSelectMode ? "toggleSOSelect('" + s.id + "')" : "go('soDetail',{soId:'" + s.id + "'})";
+    html += '<div class="card" style="position:relative;padding:14px;cursor:pointer;border:1px solid ' + (soSelected[s.id] ? 'var(--accent)' : 'var(--border)') + '" onclick="' + cardClick + '">';
+    if (soSelectMode) html += '<input type="checkbox" id="soChk_' + s.id + '" ' + (soSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();toggleSOSelect(\'' + s.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">';
+    html += '<div style="font-weight:800;font-size:14px">' + sanitize(s.soNumber || '-') + ' <span style="font-size:9px;padding:0 4px;border-radius:3px;background:var(--bg2);border:1px solid var(--border);font-weight:400">' + (s.type==='project'?'📋':'🏪') + '</span></div>';
+    if (!soSelectMode) html += '<span style="color:var(--text2)">›</span>';
+    html += '</div>';
+    if (!_gvHidden('so_dealerInfo')) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">' + sanitize(s.dealerName || '-') + (s.customerPO ? ' · PO ' + sanitize(s.customerPO) : '') + '</div>';
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(models.join(', ')) + '">📦 ' + sanitize(modelsTxt) + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div>' + _soStatusBadge(s.status) + (!_soIsDone(s.status) && days != null ? ' <span style="font-size:10px;color:var(--text2)">' + days + ' วัน</span>' : '') + (warn ? ' ' + warn : '') + '</div>';
+    if (!_gvHidden('so_price')) html += '<div style="font-weight:800;color:#22c55e;font-size:14px">' + (total ? fmtMoneyShort(total) : '-') + '</div>';
+    html += '</div>';
+    html += _soProgressBar(s.status);
+    if (s.status === 'so_open' && (s.prNumber || s.expectedDelivery)) {
+      html += '<div style="font-size:10px;color:var(--text2);margin-top:6px">' + (s.prNumber ? 'PR: ' + sanitize(s.prNumber) : '') + (s.prNumber && s.expectedDelivery ? ' · ' : '') + (s.expectedDelivery ? 'ETA: ' + fD(s.expectedDelivery) : '') + '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 function toggleSOSelectMode() {
