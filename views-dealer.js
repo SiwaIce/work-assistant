@@ -378,6 +378,12 @@ let dealerListView = 'card'; // 'card' หรือ 'table' — เหมือ�
 // (Level) เดิม ใช้ร่วมกันได้ (AND) ไม่ทับกัน — dealer ที่ยังไม่มี saleName เลยถูกจัดเข้ากลุ่ม "(ไม่ระบุ)"
 let dealerSaleFilter = {};
 const DEALER_SALE_UNSET = '(ไม่ระบุ)';
+// เลือกหลายรายการ (bulk select) — เดิมหน้า Dealer list ไม่มี bulk action เลยสักอย่าง ทั้งที่หน้า Pipeline มีครบ
+// (select all/เปลี่ยนสถานะทีเดียว/export/ลบ) เจอจากการสแกน UX 2026-08-23 — pattern ตัวแปร/ฟังก์ชันเลียนแบบ
+// pipeSelectMode/pipeSelected/_pipeVisibleIds ใน views-pipeline.js ให้เหมือนกันทุกหน้า
+var dealerSelectMode = false;
+var dealerSelected = {};
+var _dealerVisibleIds = [];
 function toggleDealerSaleFilter(name) {
   if (dealerSaleFilter[name]) delete dealerSaleFilter[name];
   else dealerSaleFilter[name] = true;
@@ -510,11 +516,13 @@ function rDealers(el) {
     <button class="btn bsm bo" onclick="dlDealerCSV()">📤 CSV</button>
     <button class="btn bsm bo" onclick="exportDealersExcel()">📊 Excel</button>
     <button class="btn bsm bo" onclick="showDealerEmailPickerM()">📧 Email</button>
+    <button class="btn bsm ${dealerSelectMode?'bd':'bo'}" onclick="toggleDealerSelectMode()">☑️ ${dealerSelectMode?'ยกเลิก':'เลือกหลายรายการ'}</button>
   </div>
 
   ${dealers.length ? '' : '<div class="empty"><div class="icon">🏪</div><p>ยังไม่มี Dealer<br><button class="btn bp" onclick="showDealerM()" style="margin-top:6px">➕ เพิ่ม Dealer</button></p></div>'}
   ${dealers.length && dealerListView === 'table' ? '<div id="dTableWrap">' + _dealerTableHtml(dealers) + '</div>' :
-    dealers.length ? '<div class="card-grid" id="dGrid">' + dealers.map(d => dealerCardHTML(d, d._health)).join('') + '</div>' : ''}`;
+    dealers.length ? '<div class="card-grid" id="dGrid">' + (function() { _dealerVisibleIds = dealers.map(function(d) { return d.id; }); return dealers.map(d => dealerCardHTML(d, d._health)).join(''); })() + '</div>' : ''}
+  ${_dealerSelBarHtml()}`;
 }
 
 // ================================================================
@@ -595,6 +603,7 @@ function sortDealerTable(col) {
 }
 
 function _dealerTableHtml(dealers) {
+  _dealerVisibleIds = dealers.map(function(d) { return d.id; });
   var rows = dealers.map(function(d) {
     var pipes = ST.pipelineByDealer(d.id);
     var wonAmt = pipes.filter(function(p) { return pipeIsWon(p); }).reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0);
@@ -634,8 +643,9 @@ function _dealerTableHtml(dealers) {
   var TD = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">' +
     '<table class="tbl" id="dealerTbl" style="width:100%;min-width:1100px;table-layout:fixed">' +
-    '<colgroup>' + DEALER_TABLE_COLS.map(function(c) { return '<col style="width:' + c.width + '%">'; }).join('') + '</colgroup>' +
+    '<colgroup>' + (dealerSelectMode ? '<col style="width:34px">' : '') + DEALER_TABLE_COLS.map(function(c) { return '<col style="width:' + c.width + '%">'; }).join('') + '</colgroup>' +
     '<thead><tr>' +
+    (dealerSelectMode ? '<th style="text-align:center"><input type="checkbox" id="dealerSelAll" title="เลือกทั้งหมด" onclick="toggleDealerSelectAll(this.checked)"></th>' : '') +
     DEALER_TABLE_COLS.map(function(c) {
       var arrow = dealerTableSort.col === c.id ? (dealerTableSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
       return '<th style="' + TD + (c.sortable ? ';cursor:pointer;user-select:none' : '') + '"' +
@@ -643,7 +653,9 @@ function _dealerTableHtml(dealers) {
     }).join('') + '</tr></thead><tbody>';
   rows.forEach(function(r, idx) {
     var d = r.d, wonAmt = r.wonAmt, targetAmt = r.targetAmt, pct = r.pct, lvd = r.lvd, demo = r.demo, isAuthorized = r.isAuthorized, lvlColor = r.lvlColor;
-    h += '<tr onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})" style="cursor:pointer">';
+    var rowClick = dealerSelectMode ? 'toggleDealerSelect(\'' + d.id + '\')' : 'go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})';
+    h += '<tr onclick="' + rowClick + '" style="cursor:pointer">';
+    if (dealerSelectMode) h += '<td style="text-align:center" onclick="event.stopPropagation();toggleDealerSelect(\'' + d.id + '\')"><input type="checkbox" id="dealerChk_' + d.id + '" ' + (dealerSelected[d.id] ? 'checked' : '') + '></td>';
     h += '<td style="' + TD + ';color:var(--text2)">' + (idx + 1) + '</td>';
     h += '<td style="font-weight:600;' + TD + '" title="' + sanitize(d.name || '') + '">' + qcopyHtml(d.name) + '</td>';
     h += '<td style="' + TD + '" title="' + sanitize(d.sisCode || '') + '">' + qcopyHtml(d.sisCode) + '</td>';
@@ -667,6 +679,115 @@ function _dealerTableHtml(dealers) {
 
 // Copy ตารางเป็น HTML จริง (ไม่ใช่แค่ tab-separated) — วางลง Word/Email ได้ตารางมีเส้นขอบ/หัวตารางเลย
 // ต่างจาก copyDealerSummary() ที่ copy เป็น TSV (เหมาะกับวางลง Excel/Sheets มากกว่า)
+// ================================================================
+// DEALER LIST — BULK SELECT (เลือกหลายรายการ) — pattern เดียวกับ pipeSelectMode ใน views-pipeline.js
+// ================================================================
+function toggleDealerSelectMode() {
+  dealerSelectMode = !dealerSelectMode;
+  dealerSelected = {};
+  render();
+}
+function toggleDealerSelect(id) {
+  if (dealerSelected[id]) delete dealerSelected[id];
+  else dealerSelected[id] = true;
+  var cb = document.getElementById('dealerChk_' + id);
+  if (cb) cb.checked = !!dealerSelected[id];
+  var cnt = Object.keys(dealerSelected).length;
+  _dealerSelBarUpdate(cnt);
+  var allCb = document.getElementById('dealerSelAll');
+  if (allCb) allCb.checked = cnt === _dealerVisibleIds.length && cnt > 0;
+}
+function toggleDealerSelectAll(selectAll) {
+  dealerSelected = {};
+  if (selectAll) _dealerVisibleIds.forEach(function(id) { dealerSelected[id] = true; });
+  _dealerVisibleIds.forEach(function(id) {
+    var cb = document.getElementById('dealerChk_' + id);
+    if (cb) cb.checked = !!dealerSelected[id];
+  });
+  _dealerSelBarUpdate(Object.keys(dealerSelected).length);
+}
+function _dealerSelBarUpdate(cnt) {
+  var countEl = document.getElementById('dealerSelCount');
+  if (countEl) countEl.textContent = cnt + ' รายการที่เลือก';
+  var delBtn = document.getElementById('dealerSelDelBtn');
+  if (delBtn) { delBtn.disabled = !cnt; delBtn.textContent = '🗑️ ลบที่เลือก (' + cnt + ')'; }
+  var exportBtn = document.getElementById('dealerSelExportBtn');
+  if (exportBtn) exportBtn.disabled = !cnt;
+  var saleSel = document.getElementById('dealerSelSaleSel');
+  if (saleSel) saleSel.disabled = !cnt;
+  var saleBtn = document.getElementById('dealerSelSaleBtn');
+  if (saleBtn) saleBtn.disabled = !cnt;
+}
+// แถบเลือกด้านล่าง (sticky) — โชว์เฉพาะตอน dealerSelectMode เปิดอยู่ ให้ rDealers() แทรกต่อท้าย
+// action หลักที่ Dealer ต้องการจริง (ตามที่คุยกันตอนสแกน UX) คือ "ย้ายเซลที่ดูแล" ทีเดียวหลายบริษัท —
+// ใช้แทนที่ "เปลี่ยนสถานะ" แบบที่ Pipeline มี เพราะ Dealer ไม่มีแนวคิด status แบบเดียวกัน
+function _dealerSelBarHtml() {
+  if (!dealerSelectMode) return '';
+  var selCnt = Object.keys(dealerSelected).length;
+  var saleNames = {};
+  ST.getAll('dealers').forEach(function(d) { if (d.saleName) saleNames[d.saleName] = true; });
+  var saleOpts = Object.keys(saleNames).sort(function(a, b) { return a.localeCompare(b, 'th'); })
+    .map(function(n) { return '<option value="' + sanitize(n) + '">' + sanitize(n) + '</option>'; }).join('');
+  return '<div id="dealerSelBar" style="position:sticky;bottom:0;z-index:50;background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+    '<span id="dealerSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
+    '<button class="btn bo bsm" onclick="toggleDealerSelectAll(true)">เลือกทั้งหมด (' + _dealerVisibleIds.length + ')</button>' +
+    '<button class="btn bo bsm" onclick="toggleDealerSelectAll(false)">ยกเลิกเลือก</button>' +
+    '<select id="dealerSelSaleSel" ' + (!selCnt ? 'disabled' : '') + ' style="font-size:12px;min-width:130px"><option value="">🧑‍💼 ย้ายเซลที่ดูแล...</option>' + saleOpts + '</select>' +
+    '<button class="btn bo bsm" id="dealerSelSaleBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkChangeDealerSale()">ยืนยัน</button>' +
+    '<button class="btn bo bsm" id="dealerSelExportBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkExportDealersSelected()">📥 Export ที่เลือก</button>' +
+    '<button class="btn bd" id="dealerSelDelBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkDeleteDealers()">🗑️ ลบที่เลือก (' + selCnt + ')</button>' +
+    '<button class="btn bo bsm" style="margin-left:auto" onclick="toggleDealerSelectMode()">✕ ออก</button>' +
+    '</div>';
+}
+function bulkDeleteDealers() {
+  var ids = Object.keys(dealerSelected);
+  if (!ids.length) return;
+  if (!confirm('ลบ ' + ids.length + ' Dealer ที่เลือก?\nPipeline/Visit/ประวัติที่ผูกกับ Dealer เหล่านี้จะไม่ถูกลบตาม แค่ตัว Dealer เอง\nไม่สามารถกู้คืนได้')) return;
+  ids.forEach(function(id) {
+    ST.delete('dealers', id);
+    if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('dealers', id);
+  });
+  dealerSelected = {};
+  dealerSelectMode = false;
+  toast('🗑️ ลบแล้ว ' + ids.length + ' รายการ');
+  render();
+}
+function bulkChangeDealerSale() {
+  var sel = document.getElementById('dealerSelSaleSel');
+  var saleName = sel ? sel.value : '';
+  if (!saleName) { toast('⚠️ เลือกเซลก่อน'); return; }
+  var ids = Object.keys(dealerSelected);
+  if (!ids.length) return;
+  if (!confirm('ย้ายเซลที่ดูแล ' + ids.length + ' Dealer เป็น "' + saleName + '"?\n(Pipeline ของ Dealer เหล่านี้จะถูกย้ายเซลตามไปด้วยอัตโนมัติ)')) return;
+  ids.forEach(function(id) {
+    var saved = ST.update('dealers', id, { saleName: saleName });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', saved);
+    if (typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(id, saleName);
+  });
+  toast('🧑‍💼 ย้ายเซลแล้ว ' + ids.length + ' รายการ');
+  render();
+}
+function _dealerExcelRow(d) {
+  return [
+    d.id || '', d.name || '', d.sisCode || '', d.djiCode || '', d.level || '', d.djiDealer || '',
+    d.saleName || '', d.creditTerm || '', d.creditLimit || '', d.targetRevenue || '', d.contact || '',
+    d.googleMap || '', d.notes || '', d.paymentCondition || ''
+  ];
+}
+function bulkExportDealersSelected() {
+  var ids = Object.keys(dealerSelected);
+  if (!ids.length) return;
+  var dealers = ids.map(function(id) { return ST.getOne('dealers', id); }).filter(Boolean);
+  var headers = ['id', 'ชื่อบริษัท', 'SIS Code', 'DJI Code', 'Level', 'DJI Dealer', 'เซลที่ดูแล', 'Credit Term', 'Credit Limit', 'Target Revenue', 'ผู้ติดต่อ', 'Google Map', 'หมายเหตุ', 'Payment Condition'];
+  var rows = [headers].concat(dealers.map(_dealerExcelRow));
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 20 }, { wch: 35 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 40 }, { wch: 30 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Dealers');
+  XLSX.writeFile(wb, 'dealers-selected-' + _td() + '.xlsx');
+  toast('📥 Export ' + dealers.length + ' รายการที่เลือก');
+}
+
 function copyDealerTableAsWord() {
   var table = document.getElementById('dealerTbl');
   if (!table) return;
@@ -1153,7 +1274,12 @@ function dealerCardHTML(d, health) {
       </div>`
     : `<div class="dc-empty-hint">🔒 ยังไม่เป็น Authorized Dealer</div>`;
 
-  return `<div class="dealer-card dc2" onclick="go('dealerDetail',{dealerId:'${d.id}'})">
+  const selCb = dealerSelectMode
+    ? `<input type="checkbox" id="dealerChk_${d.id}" ${dealerSelected[d.id] ? 'checked' : ''} onclick="event.stopPropagation();toggleDealerSelect('${d.id}')" style="position:absolute;top:10px;right:10px;width:18px;height:18px;z-index:2">`
+    : '';
+  const cardClick = dealerSelectMode ? `toggleDealerSelect('${d.id}')` : `go('dealerDetail',{dealerId:'${d.id}'})`;
+  return `<div class="dealer-card dc2" style="position:relative" onclick="${cardClick}">
+    ${selCb}
     ${_gvHideLvlHealth ? '' : `<div class="dc-accent" style="background:${lvlColor}"></div>`}
     <div class="dc-body">
       <div class="dc-top">
@@ -1202,6 +1328,7 @@ function _filterDealerListNow() {
   if (dealerListView === 'table') {
     const wrap = document.getElementById('dTableWrap');
     if (wrap) wrap.innerHTML = dealers.length ? _dealerTableHtml(dealers) : '<div class="empty"><p>ไม่พบ Dealer</p></div>';
+    _dealerSelBarRefresh();
     return;
   }
 
@@ -1212,10 +1339,22 @@ function _filterDealerListNow() {
   if (grid) {
     const _cfg = getConfig();
     const _idx = buildHealthScoreIndexes();
+    _dealerVisibleIds = dealers.map(function(d) { return d.id; });
     grid.innerHTML = dealers.length
       ? dealers.map(d => dealerCardHTML(d, calcHealthScore(d.id, _cfg, _idx.pipesByDealer[d.id] || [], _idx.logsByPipe))).join('')
       : '<div class="empty" style="grid-column:1/-1"><p>ไม่พบ Dealer</p></div>';
   }
+  _dealerSelBarRefresh();
+}
+// รีเฟรชแถบเลือกด้านล่างหลังกรอง/ค้นหา (ไม่ re-render ทั้งหน้า) — ล้างรายการที่เลือกไว้ที่หลุดจากผลกรองใหม่ทิ้ง
+// กันกดยืนยัน bulk action ไปโดนรายการที่มองไม่เห็นแล้วในหน้าจอ (เพราะ _dealerSelBarHtml ถูกวาดไว้ตอน rDealers
+// รอบก่อนหน้า ไม่ได้ re-render ตรงนี้ — แค่ sync จำนวน/checkbox ให้ตรงกับ selection ที่เหลือ)
+function _dealerSelBarRefresh() {
+  if (!dealerSelectMode) return;
+  var visibleSet = {};
+  _dealerVisibleIds.forEach(function(id) { visibleSet[id] = true; });
+  Object.keys(dealerSelected).forEach(function(id) { if (!visibleSet[id]) delete dealerSelected[id]; });
+  _dealerSelBarUpdate(Object.keys(dealerSelected).length);
 }
 
 // ================================================================
@@ -3050,25 +3189,7 @@ function exportDealersExcel() {
   var dealers = ST.getAll('dealers');
   if (!dealers.length) return toast('\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Dealer');
   var headers = ['id','\u0E0A\u0E37\u0E48\u0E2D\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17','SIS Code','DJI Code','Level','DJI Dealer','\u0E40\u0E0B\u0E25\u0E17\u0E35\u0E48\u0E14\u0E39\u0E41\u0E25','Credit Term','Credit Limit','Target Revenue','\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D','Google Map','\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38','Payment Condition'];
-  var rows = [headers];
-  dealers.forEach(function(d) {
-    rows.push([
-      d.id||'',
-      d.name||'',
-      d.sisCode||'',
-      d.djiCode||'',
-      d.level||'',
-      d.djiDealer||'',
-      d.saleName||'',
-      d.creditTerm||'',
-      d.creditLimit||'',
-      d.targetRevenue||'',
-      d.contact||'',
-      d.googleMap||'',
-      d.notes||'',
-      d.paymentCondition||''
-    ]);
-  });
+  var rows = [headers].concat(dealers.map(_dealerExcelRow));
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(rows);
   // \u0E04\u0E2D\u0E25\u0E31\u0E21\u0E19\u0E4C id \u0E17\u0E33 read-only hint \u0E14\u0E49\u0E27\u0E22\u0E2A\u0E35
