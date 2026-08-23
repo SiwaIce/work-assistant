@@ -153,7 +153,8 @@ function quickMarkActionDone(actionId) {
   
   var pipeId = '';
   var actionText = '';
-  
+  var changedAction = null;
+
   for (var i = 0; i < pipeActions.length; i++) {
     if (pipeActions[i].id === actionId) {
       pipeActions[i].status = 'done';
@@ -161,12 +162,13 @@ function quickMarkActionDone(actionId) {
       if (response) pipeActions[i].response = response;
       pipeId = pipeActions[i].pipeId;
       actionText = pipeActions[i].text;
+      changedAction = pipeActions[i];
       break;
     }
   }
-  
+
   localStorage.setItem('v7_pipeActions', JSON.stringify(pipeActions));
-  if (typeof syncToFirebase === 'function') syncToFirebase('pipeActions', pipeActions);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeActions', changedAction);
 
   if (pipeId && typeof ST !== 'undefined' && ST.add) {
     ST.add('pipeLog', {

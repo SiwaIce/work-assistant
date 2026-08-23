@@ -387,7 +387,7 @@ function toggleRunrateConfidence(runrateId) {
   if (!item) return;
   item.confidence = item.confidence === 'confirmed' ? 'estimated' : 'confirmed';
   localStorage.setItem('v7_customer_forecasts', JSON.stringify(all));
-  if (typeof syncToFirebase === 'function') syncToFirebase('customerForecasts', all);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('customerForecasts', item);
   if (typeof loadForecastSummary === 'function') loadForecastSummary();
   toast(item.confidence === 'confirmed' ? '✅ เปลี่ยนเป็นสั่งแน่นอนแล้ว' : '🔵 เปลี่ยนเป็นคาดการณ์แล้ว');
 }
@@ -2487,7 +2487,7 @@ function resolveDealerIdByName(typedName, cb) {
   }
   if (!confirm('ไม่พบ Dealer ชื่อ "' + name + '" ในระบบ — ต้องการสร้าง Dealer ใหม่ชื่อนี้ไหม?')) return;
   var newDealer = ST.add('dealers', { name: name, level: 'Other', showSerial: 'Y' });
-  if (typeof syncToFirebase === 'function') syncToFirebase('dealers', ST.getAll('dealers'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', newDealer);
   cb(newDealer.id);
 }
 

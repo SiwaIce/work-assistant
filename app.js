@@ -2827,7 +2827,7 @@ function showCustomerNotification(dealerId, dealerName, projectName, type, updat
   
   // Save to localStorage for badge
   var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
-  updates.unshift({
+  var _newUpdate = {
     id: updateId,
     dealerId: dealerId,
     dealerName: dealerName || dealerId,
@@ -2835,10 +2835,11 @@ function showCustomerNotification(dealerId, dealerName, projectName, type, updat
     type: type,
     timestamp: new Date().toISOString(),
     read: false
-  });
+  };
+  updates.unshift(_newUpdate);
   var _trimmedUpdates = updates.slice(0, 50);
   localStorage.setItem('v7_customer_updates', JSON.stringify(_trimmedUpdates));
-  if (typeof syncToFirebase === 'function') syncToFirebase('customerUpdates', _trimmedUpdates);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('customerUpdates', _newUpdate);
 
   // Update badge
   updateCustomerUpdateBadge();
@@ -4630,7 +4631,7 @@ function _createPipelineFromForecastProject(updateData, dealerId) {
     content: '🆕 เพิ่มโครงการใหม่จากลูกค้า (อนุมัติแล้ว)',
     date: _nw()
   });
-  if (typeof syncToFirebase === 'function') syncToFirebase('pipeline', ST.getAll('pipeline'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', saved);
   return saved.id;
 }
 
@@ -4667,7 +4668,7 @@ function approveForecastUpdate(dealerId, updateId, callback) {
     updateData.approvedBy = CURRENT_USER.uid;
     customerForecasts.push(updateData);
     localStorage.setItem('v7_customer_forecasts', JSON.stringify(customerForecasts));
-    if (typeof syncToFirebase === 'function') syncToFirebase('customerForecasts', customerForecasts);
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('customerForecasts', updateData);
 
     // ✅ ถ้าเป็น "โครงการใหม่" (ไม่ใช่ runrate) ให้สร้าง Pipeline จริงพร้อม log วันที่อัปเดต
     var createdPipeId = null;

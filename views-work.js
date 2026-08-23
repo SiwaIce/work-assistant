@@ -2568,11 +2568,12 @@ function rContactLogs(el) {
 
 function markPendingDone(id) {
   var pending = JSON.parse(localStorage.getItem('v7_pending_followups') || '[]');
+  var changed = null;
   for (var i = 0; i < pending.length; i++) {
-    if (pending[i].id === id) { pending[i].done = true; break; }
+    if (pending[i].id === id) { pending[i].done = true; changed = pending[i]; break; }
   }
   localStorage.setItem('v7_pending_followups', JSON.stringify(pending));
-  if (typeof syncToFirebase === 'function') syncToFirebase('pendingFollowups', pending);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pendingFollowups', changed);
   toast('✅ ทำเครื่องหมายเสร็จแล้ว'); render();
 }
 
@@ -2582,7 +2583,7 @@ function deleteContactLog(id) {
   var newLogs = [];
   for (var i = 0; i < logs.length; i++) { if (logs[i].id !== id) newLogs.push(logs[i]); }
   localStorage.setItem('v7_contact_logs', JSON.stringify(newLogs));
-  if (typeof syncToFirebase === 'function') syncToFirebase('contactLogs', newLogs);
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('contactLogs', id);
   toast('🗑️ ลบแล้ว'); render();
 }
 

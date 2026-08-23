@@ -4441,8 +4441,8 @@ function vpMarkPlanActualFromVisit(visitId, prospectId) {
   var planId = window._vpLinkPlanId;
   window._vpLinkPlanId = null;
   var plan = ST.getOne('visitPlans', planId);
-  ST.update('visitPlans', planId, { status: 'done', visitId: visitId });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  var _updatedPlan = ST.update('visitPlans', planId, { status: 'done', visitId: visitId });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan);
   var pid = prospectId || (plan && plan.prospectId) || '';
   if (pid && typeof _vpAdvanceProspectIfBehind === 'function') _vpAdvanceProspectIfBehind(pid, 'visited', 'เข้าพบตามนัดแล้ว');
 }
@@ -4506,19 +4506,19 @@ function _createVisitFromPlan(planId, note) {
     topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: [],
     visitPlanId: planId
   });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visits', ST.getAll('visits'));
-  ST.update('visitPlans', planId, { visitId: visitObj.id });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visits', visitObj);
+  var _updatedPlan2 = ST.update('visitPlans', planId, { visitId: visitObj.id });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan2);
 }
 
 function vpQuickMarkAttended(planId) {
   var plan = ST.getOne('visitPlans', planId);
   if (!plan) return;
-  ST.update('visitPlans', planId, {
+  var _updatedPlan3 = ST.update('visitPlans', planId, {
     status: 'done',
     actual: { status: 'attended', note: (plan.actual && plan.actual.note) || '', date: _td() }
   });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan3);
   _createVisitFromPlan(planId, (plan.actual && plan.actual.note) || '');
   if (plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', 'เข้าพบตามนัดแล้ว');
   toast('✅ บันทึกแล้ว · สร้าง Visit Report แล้ว');
@@ -4528,11 +4528,11 @@ function vpQuickMarkAttended(planId) {
 function saveVpLeadActual(planId, status) {
   var note = (document.getElementById('vp_actual_note').value || '').trim();
   var plan = ST.getOne('visitPlans', planId);
-  ST.update('visitPlans', planId, {
+  var _updatedPlan4 = ST.update('visitPlans', planId, {
     status: status === 'attended' ? 'done' : status,
     actual: { status: status, note: note, date: _td() }
   });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan4);
   if (status === 'attended') {
     _createVisitFromPlan(planId, note);
     if (plan && plan.prospectId) _vpAdvanceProspectIfBehind(plan.prospectId, 'visited', note || 'เข้าพบตามนัดแล้ว');
@@ -4546,8 +4546,8 @@ function saveVpLeadActual(planId, status) {
 // (ไม่ลบ Visit Report ที่ผูกไว้ถ้ามี แค่ปลดสถานะนัดนี้กลับ — ถ้าผูก Prospect ไว้ ต้องไปกดแก้ stage ที่หน้า Lead เอง เพราะระบบเลื่อน stage ไปข้างหน้าอัตโนมัติเท่านั้น ไม่ดึงกลับอัตโนมัติ)
 function resetVisitPlanStatus(planId) {
   if (!confirm('ยกเลิกผลของนัดนี้ กลับเป็น "วางแผนไว้"?')) return;
-  ST.update('visitPlans', planId, { status: 'planned', actual: null });
-  if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', ST.getAll('visitPlans'));
+  var _updatedPlan5 = ST.update('visitPlans', planId, { status: 'planned', actual: null });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan5);
   toast('↩️ ยกเลิกผลแล้ว');
   render();
 }
@@ -6466,7 +6466,7 @@ function saveEmailDraft(to, cc, subject, body, dealerId) {
   // เก็บแค่ 20 draft ล่าสุด
   if (drafts.length > 20) drafts = drafts.slice(0, 20);
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
-  if (typeof syncToFirebase === 'function') syncToFirebase('emailDrafts', drafts);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('emailDrafts', draft);
   console.log('✅ บันทึก Draft แล้ว:', draft.id);
   return draft;
 }
@@ -6518,7 +6518,7 @@ function deleteEmailDraft(draftId) {
   var drafts = getEmailDrafts();
   drafts = drafts.filter(function(d) { return d.id !== draftId; });
   localStorage.setItem('v7_email_drafts', JSON.stringify(drafts));
-  if (typeof syncToFirebase === 'function') syncToFirebase('emailDrafts', drafts);
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('emailDrafts', draftId);
   toast('🗑️ ลบ Draft แล้ว');
   showEmailDraftWithDealer(); // รีเฟรชหน้า
 }

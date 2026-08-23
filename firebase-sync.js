@@ -644,6 +644,18 @@ function syncToFirebase(collName, data) {
   _syncPushValue(ref, data);
 }
 
+// ดันแค่ 1 รายการที่เพิ่ง add/update ขึ้น Firestore — ต่างจาก syncToFirebase(coll, ST.getAll(coll)) ที่เขียน
+// .set() ทับทุก doc ในทั้ง collection ซ้ำทุกครั้งที่แก้แค่รายการเดียว (เจอจากการสแกนหาจุดช้า 2026-08-22 — ถ้า
+// Pipeline มี 300 รายการ แก้ 1 อัน = เขียนขึ้น cloud 300 ครั้ง) ใช้ตัวนี้แทนตรงจุดที่รู้ชัดว่าแก้/เพิ่มรายการ
+// เดียว ส่วนจุด import/migrate ทั้งก้อนยังใช้ syncToFirebase(coll, ST.getAll(coll)) เหมือนเดิม (ถูกต้องแล้ว
+// เพราะเปลี่ยนหลายรายการพร้อมกันจริง) — item ต้องมี .id เสมอ (ตาม rule ของ ST ทุก collection)
+function syncItemToFirebase(collName, item) {
+  if (!SYNC_ENABLED || !CURRENT_USER || !item || !item.id) return;
+  var ref = getCollectionRef(collName);
+  if (!ref) return;
+  ref.doc(item.id).set(item).catch(_notifySyncFail);
+}
+
 function syncDeleteFromFirebase(collName, docId) {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
   var ref = getCollectionRef(collName);

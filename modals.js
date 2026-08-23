@@ -2850,7 +2850,7 @@ function saveLinkedContactLog(data) {
   var logs = JSON.parse(localStorage.getItem('v7_contact_logs') || '[]');
   logs.unshift(log);
   localStorage.setItem('v7_contact_logs', JSON.stringify(logs));
-  if (typeof syncToFirebase === 'function') syncToFirebase('contactLogs', logs);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('contactLogs', log);
   
   // บันทึกเพิ่มใน collections ที่เกี่ยวข้อง
   if (data.pipeId) {
@@ -2985,10 +2985,11 @@ function submitUnifiedContact() {
     var dueDate = dpG('uc_followup_due');
     if (dueDate) {
       var pendingFu = JSON.parse(localStorage.getItem('v7_pending_followups') || '[]');
-      pendingFu.push({ id: 'fu_' + Date.now(), contactId: log.id, dealerId: data.dealerId,
-        pipeId: data.pipeId, note: summary, dueDate: dueDate, channel: data.channel, done: false });
+      var _newFollowup = { id: 'fu_' + Date.now(), contactId: log.id, dealerId: data.dealerId,
+        pipeId: data.pipeId, note: summary, dueDate: dueDate, channel: data.channel, done: false };
+      pendingFu.push(_newFollowup);
       localStorage.setItem('v7_pending_followups', JSON.stringify(pendingFu));
-      if (typeof syncToFirebase === 'function') syncToFirebase('pendingFollowups', pendingFu);
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pendingFollowups', _newFollowup);
       toast('📞 ตั้งค่าเตือนติดตามวันที่ ' + dueDate);
     }
   }

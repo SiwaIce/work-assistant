@@ -195,14 +195,15 @@ function saveNoteText(id) {
   var color = colorEl ? colorEl.value : 'yellow';
   var pinEl = document.getElementById('nt_pin');
   var now = new Date().toISOString();
+  var savedNote;
   if (id) {
     var upd = { title: title, content: body, color: color, updated: now };
     if (pinEl) upd.pinned = pinEl.checked;
-    ST.update('postit', id, upd);
+    savedNote = ST.update('postit', id, upd);
   } else {
-    ST.add('postit', { title: title, content: body, type: 'text', color: color, pinned: false, status: 'active', created: now, updated: now });
+    savedNote = ST.add('postit', { title: title, content: body, type: 'text', color: color, pinned: false, status: 'active', created: now, updated: now });
   }
-  if (typeof syncToFirebase === 'function') syncToFirebase('postit', ST.getAll('postit'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', savedNote);
   closeMForce(); toast('💾 บันทึกแล้ว'); render();
 }
 
@@ -277,14 +278,15 @@ function saveFieldsNote(id) {
   var color = _getCurrentColor('sf_color');
   var pinEl = document.getElementById('sf_pin');
   var now = new Date().toISOString();
+  var savedNote;
   if (id) {
     var upd = { title: title, fields: fields, color: color, updated: now };
     if (pinEl) upd.pinned = pinEl.checked;
-    ST.update('postit', id, upd);
+    savedNote = ST.update('postit', id, upd);
   } else {
-    ST.add('postit', { title: title, type: 'fields', fields: fields, color: color, pinned: false, status: 'active', created: now, updated: now });
+    savedNote = ST.add('postit', { title: title, type: 'fields', fields: fields, color: color, pinned: false, status: 'active', created: now, updated: now });
   }
-  if (typeof syncToFirebase === 'function') syncToFirebase('postit', ST.getAll('postit'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', savedNote);
   _structFields = [];
   closeMForce(); toast('💾 บันทึกแล้ว'); render();
 }
@@ -342,22 +344,22 @@ function dupNote(id) {
   copy.updated = now;
   copy.status = 'active';
   if (copy.fields) copy.fields = copy.fields.map(function(f) { return { label: f.label, value: f.value }; });
-  ST.add('postit', copy);
-  if (typeof syncToFirebase === 'function') syncToFirebase('postit', ST.getAll('postit'));
+  var savedNote = ST.add('postit', copy);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', savedNote);
   toast('⧉ Duplicate แล้ว');
   render();
 }
 
 function trashNote(id) {
-  ST.update('postit', id, { status: 'trash', deletedAt: new Date().toISOString() });
-  if (typeof syncToFirebase === 'function') syncToFirebase('postit', ST.getAll('postit'));
+  var savedNote = ST.update('postit', id, { status: 'trash', deletedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', savedNote);
   toast('🗑️ ย้ายไปถังขยะแล้ว — เปิดถังขยะเพื่อกู้คืน');
   render();
 }
 
 function restoreNote(id) {
-  ST.update('postit', id, { status: 'active', deletedAt: null });
-  if (typeof syncToFirebase === 'function') syncToFirebase('postit', ST.getAll('postit'));
+  var savedNote = ST.update('postit', id, { status: 'active', deletedAt: null });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', savedNote);
   toast('♻️ กู้คืนแล้ว');
   render();
 }

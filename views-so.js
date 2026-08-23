@@ -857,7 +857,7 @@ function saveCreateSO() {
   };
 
   var saved = ST.add('salesOrders', obj);
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', saved);
   if (typeof addAuditLog === 'function') addAuditLog('create_so', 'salesOrder', saved.id, soNumber, dealerId, obj.dealerName);
   if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('so', saved.id, saved.soNumber);
   closeMForce();
@@ -912,8 +912,8 @@ function saveSOItemsEdit(soId) {
   var cfg = getConfig();
   var logs = (s.logs || []).slice();
   logs.push({ date: _td(), action: '✏️ แก้ไขรายการสินค้า', note: '', by: cfg.saleName || '' });
-  ST.update('salesOrders', soId, { items: items, quotationId: quotationId, updatedAt: new Date().toISOString(), logs: logs });
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, { items: items, quotationId: quotationId, updatedAt: new Date().toISOString(), logs: logs });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
   toast('💾 บันทึกรายการสินค้าแล้ว');
   go('soDetail', { soId: soId });
@@ -954,8 +954,8 @@ function saveSOTimelineEntry(soId, idx) {
   if (!action.trim()) { toast('⚠️ กรอกการกระทำก่อน'); return; }
   var logs = s.logs.slice();
   logs[idx] = Object.assign({}, logs[idx], { action: action.trim(), date: date || logs[idx].date, note: note.trim() });
-  ST.update('salesOrders', soId, { logs: logs, updatedAt: new Date().toISOString() });
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, { logs: logs, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   _soTimelineExpandedIdx = null;
   toast('💾 บันทึกแล้ว');
   _soRerenderKeepScroll();
@@ -967,8 +967,8 @@ function deleteSOTimelineEntry(soId, idx) {
   if (!confirm('ลบรายการ Timeline นี้?\nไม่สามารถกู้คืนได้')) return;
   var logs = s.logs.slice();
   logs.splice(idx, 1);
-  ST.update('salesOrders', soId, { logs: logs, updatedAt: new Date().toISOString() });
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, { logs: logs, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   _soTimelineExpandedIdx = null;
   toast('🗑️ ลบรายการแล้ว');
   _soRerenderKeepScroll();
@@ -1110,8 +1110,8 @@ function saveSOStatus(soId) {
   logs.push(logEntry);
   update.logs = logs;
 
-  ST.update('salesOrders', soId, update);
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
   toast('✅ อัปเดตสถานะแล้ว');
   go('soDetail', { soId: soId });
@@ -1176,8 +1176,8 @@ function saveSOEditSerials(soId) {
   var cfg = getConfig();
   var logs = (s.logs||[]).slice();
   logs.push({ date: _td(), action: '🔢 แก้ไข Serial ย้อนหลัง', note: '', by: cfg.saleName||'' });
-  ST.update('salesOrders', soId, { items: newItems, logs: logs, updatedAt: new Date().toISOString() });
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, { items: newItems, logs: logs, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
   toast('💾 บันทึก Serial แล้ว');
   go('soDetail', { soId: soId });
@@ -1189,8 +1189,8 @@ function saveSOItemComment(soId, idx, value) {
   if (!s || !s.items || !s.items[idx]) return;
   var items = s.items.slice();
   items[idx] = Object.assign({}, items[idx], { comment: value });
-  ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
 }
 
 // ---------------------------------------------------------------- edit modal
@@ -1233,7 +1233,7 @@ function saveSOEdit(soId) {
   var dealerId = (document.getElementById('soE_dealer')||{}).value || s.dealerId;
   var dealer   = ST.getOne('dealers', dealerId);
   var newSoNumber = (document.getElementById('soE_soNum')||{}).value || s.soNumber;
-  ST.update('salesOrders', soId, {
+  var updatedSO = ST.update('salesOrders', soId, {
     soNumber:         newSoNumber,
     invoiceNumber:    (document.getElementById('soE_invNum')||{}).value || '',
     invoiceDate:      (document.getElementById('soE_invDate')||{}).value || '',
@@ -1248,7 +1248,7 @@ function saveSOEdit(soId) {
   });
   // เลข SO เปลี่ยน — sync ไปยัง lot ที่จองไว้ใน 1021/PRPO ทุก SKU และ stockReservations ที่ผูก soId นี้ ไม่งั้นจะค้างเลขเก่า
   if (newSoNumber !== s.soNumber && typeof stockSyncSONumber === 'function') stockSyncSONumber(soId, newSoNumber);
-  if (typeof syncToFirebase === 'function') syncToFirebase('salesOrders', ST.getAll('salesOrders'));
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
   toast('✅ บันทึกแล้ว');
   go('soDetail', { soId: soId });

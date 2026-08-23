@@ -7369,8 +7369,8 @@ function migratePipelineStatuses() {
   var count = 0;
   all.forEach(function(p) {
     if (map[p.status]) {
-      ST.update('pipeline', p.id, {status: map[p.status]});
-      if (typeof syncToFirebase === 'function') syncToFirebase('pipeline', ST.getAll('pipeline'));
+      var updatedPipe = ST.update('pipeline', p.id, {status: map[p.status]});
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updatedPipe);
       count++;
     }
   });
