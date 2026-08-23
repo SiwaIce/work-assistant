@@ -1130,6 +1130,28 @@ function doSearch() {
     if ((m.title||'').toLowerCase().indexOf(q) !== -1)
       items.push({type:'📅 ประชุม', title:m.title, sub:fD(m.date), act:"go('meetingDetail',{meetingId:'"+m.id+"'})"});
   });
+  // เดิมค้นหาไม่ครอบคลุม Quotation/SO/Stock/Lead เลย — พิมพ์หาใบเสนอราคา/SO/สินค้าคงคลัง/Lead แล้วไม่เจอ
+  // ดูเหมือนไม่มีอยู่จริงทั้งที่มีอยู่ (เจอจากการสแกน UX 2026-08-23)
+  (function() {
+    var qs = [];
+    try { qs = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+    qs.forEach(function(qt) {
+      if ((qt.quoteNo||'').toLowerCase().indexOf(q) !== -1 || (qt.projectName||'').toLowerCase().indexOf(q) !== -1 || (qt.dealerName||'').toLowerCase().indexOf(q) !== -1)
+        items.push({type:'💰 ใบเสนอราคา', title:qt.quoteNo||'-', sub:(qt.projectName||'')+' • '+(qt.dealerName||''), act:"S.focusQuoteId='"+qt.id+"';go('quotationV2')"});
+    });
+  })();
+  ST.getAll('salesOrders').forEach(function(s) {
+    if ((s.soNumber||'').toLowerCase().indexOf(q) !== -1 || (s.dealerName||'').toLowerCase().indexOf(q) !== -1 || (s.customerPO||'').toLowerCase().indexOf(q) !== -1)
+      items.push({type:'📦 Sales Order', title:s.soNumber||'-', sub:s.dealerName||'', act:"go('soDetail',{soId:'"+s.id+"'})"});
+  });
+  ST.getAll('stockLevels').forEach(function(sl) {
+    if ((sl.sku||'').toLowerCase().indexOf(q) !== -1 || (sl.productName||'').toLowerCase().indexOf(q) !== -1)
+      items.push({type:'📦 สต็อกสินค้า', title:sl.productName||sl.sku, sub:sl.sku||'', act:"go('stockDetail',{sku:'"+sl.sku+"'})"});
+  });
+  ST.getAll('prospects').forEach(function(p) {
+    if ((p.companyName||'').toLowerCase().indexOf(q) !== -1 || (p.contactName||'').toLowerCase().indexOf(q) !== -1)
+      items.push({type:'🧲 Lead', title:p.companyName||'-', sub:p.contactName||'', act:"if(typeof showProspectDetailM==='function')showProspectDetailM('"+p.id+"')"});
+  });
 
   items = items.slice(0, 20);
   r.innerHTML = items.length
