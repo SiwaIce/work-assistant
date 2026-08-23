@@ -2235,7 +2235,7 @@ function rPipeDet(el) {
   if (!_gvHidden('pipeline_notes')) {
   html += '<div class="card"><h2>📝 Updates (' + logs.length + ') <span class="ml">' +
     (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showMergePipeLogsM(\'' + p.id + '\')" title="รวม Update เก่าให้เหลือรายการเดียว กันไม่ให้หลุดจากช่อง Update 1-6 ตอน export">🔗 รวม Update เก่า</button> ' : '') +
-    (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showPipeDuplicateLogAuditM({\'' + p.id + '\':true})" title="เช็คเฉพาะโครงการนี้ว่ามี Update ซ้ำจากขีดนำหน้าค้าง (บั๊ก Import เก่าก่อนแก้ 2026-08-19) ไหม">🔍 เช็ค Log ซ้ำ</button> ' : '') +
+    (logs.length >= 2 ? '<button class="btn bsm bo" onclick="showPipeDuplicateLogAuditM({\'' + p.id + '\':true})" title="เช็คเฉพาะโครงการนี้ว่ามี Update ที่เนื้อหา+วันที่ตรงกันซ้ำกันไหม (รวมเคสขีดนำหน้าค้างจาก Import เก่า)">🔍 เช็ค Log ซ้ำ</button> ' : '') +
     '<button class="btn bsm bp" onclick="showPipeUpdateM(\'' + p.id + '\')">➕ Update</button></span></h2>';
   if (logs.length) {
     html += '<div class="tl">';
@@ -2379,7 +2379,7 @@ function showPipeDataHealthCheckM() {
   var noDealerCount = _pipeHealthCheckNoDealer().length;
 
   var checks = [
-    { icon: '🔁', label: 'Log ซ้ำ (ขีดนำหน้าค้างจาก Import เก่า)', count: dupClusters.length, sub: dupClusters.length ? (dupRemoveCount + ' รายการจะถูกลบถ้าเข้าไปกด "ลบทั้งหมด"') : '', action: "closeMForce();showPipeDuplicateLogAuditM()", actionLabel: '🔍 ดูรายการ' },
+    { icon: '🔁', label: 'Log ซ้ำ (เนื้อหา+วันที่ตรงกัน)', count: dupClusters.length, sub: dupClusters.length ? (dupRemoveCount + ' รายการจะถูกลบถ้าเข้าไปกด "ลบทั้งหมด"') : '', action: "closeMForce();showPipeDuplicateLogAuditM()", actionLabel: '🔍 ดูรายการ' },
     { icon: '📅', label: 'Log ที่อาจได้วันที่ผิดจาก Import เก่า',   count: dateAuditCount, action: "closeMForce();showPipeImportDateAuditM()", actionLabel: '🔍 ดูรายการ' },
     { icon: '🆔', label: 'Project ID ที่อาจหายจาก Import เก่า',    count: pidAuditCount,  action: "closeMForce();showPipeImportProjectIdAuditM()", actionLabel: '🔍 ดูรายการ' },
     { icon: '👻', label: 'Log กำพร้า (อ้างอิงโครงการที่ถูกลบไปแล้ว)', count: orphanLogCount, action: "_pipeDeleteOrphanLogs()", actionLabel: '🗑️ ลบทั้งหมด' },
@@ -2493,8 +2493,16 @@ function showPipeImportProjectIdAuditM() {
 // "-ข้อความ" แทนที่จะเป็น "ข้อความ") พอ import ซ้ำหลังแก้บั๊กแล้ว เนื้อหาที่ parse ใหม่ (สะอาด) ไม่ตรงกับของ
 // เดิม (มีขีด) เลยถูกสร้างเป็น log ใหม่ซ้อนขึ้นมาแทนที่จะจับคู่ — ให้เลือกลบตัวที่มีขีดนำหน้าทิ้ง เก็บตัวสะอาดไว้
 // ================================================================
+// trim ก่อนตัดขีด (ไม่ใช่หลัง) — เจอเคสจริงที่มีเว้นวรรคนำหน้าขีดค้างอยู่ (" -ข้อความ") ถ้า trim ทีหลังแบบเดิม
+// regex ตัดขีดจะไม่ match เพราะ string ไม่ได้ขึ้นต้นด้วยขีดจริงๆ (ขึ้นต้นด้วยช่องว่าง) ทำให้ข้อความคู่นี้ "หลุดรอด"
+// จากการตรวจจับไป (เจอจากรายงานผู้ใช้ 2026-08-23 — ตรวจแล้วบางคู่ยังไม่หาย) ตัดวนซ้ำเผื่อมีขีด+ช่องว่างสลับกันหลายรอบ
+// ("- -ข้อความ") แล้วยุบช่องว่างซ้อนกันภายในข้อความ (multiple space/newline) ให้เหลือช่องเดียว กันเว้นวรรค/ขึ้น
+// บรรทัดใหม่ที่พิมพ์ไม่ตรงกันเป๊ะบล็อกการจับคู่ทั้งที่เนื้อหาจริงเหมือนกัน
 function _pipeNormDashContent(s) {
-  return (s || '').replace(/^-+\s*/, '').trim();
+  var t = (s || '').trim();
+  var prev;
+  do { prev = t; t = t.replace(/^-+\s*/, '').trim(); } while (t !== prev);
+  return t.replace(/\s+/g, ' ');
 }
 // จำนวนขีดกลางนำหน้า ("-"→1, "--"→2 ...) — ใช้เลือกว่าจะเก็บตัวไหนไว้ (น้อยขีดกว่า = สะอาดกว่า = เก็บ)
 // เจอเคสจริงที่ "ทั้งคู่" มีขีดนำหน้าคนละจำนวน (เช่น "--ข้อความ" กับ "-ข้อความ") ไม่ใช่แค่คู่ สะอาด/มีขีด เสมอไป
@@ -2527,8 +2535,11 @@ function _pipeComputeDupLogClusters(pipeIdFilter) {
     Object.keys(groups).forEach(function(key) {
       var g = groups[key];
       if (g.length < 2) return;
-      var hasDashed = g.some(function(l) { return _pipeDashCount(l.content) > 0; });
-      if (!hasDashed) return; // ต้องมีตัวที่มีขีดนำหน้าถึงเข้าข่ายบั๊กนี้ — กัน false positive ที่ซ้ำกันเพราะเหตุผลอื่น
+      // เดิมกรองเฉพาะกลุ่มที่มีตัวขีดนำหน้าค้างอย่างน้อย 1 ตัว ("hasDashed") กันไปชนกับข้อความสั้นๆ ที่ตั้งใจ
+      // พิมพ์ซ้ำวันเดียวกันจริงๆ (เช่น "ติดตามต่อ" ซ้ำ 2 รอบคนละความหมาย) — แต่พบว่ากรองแคบเกินไปจนบางคู่ที่ซ้ำ
+      // จริงจากบั๊ก import (เนื้อหา+วันที่ตรงกันเป๊ะ แต่ไม่มีขีดเหลือค้างเลยสักตัว) หลุดรอดไป (รายงานผู้ใช้
+      // 2026-08-23) ตัดเงื่อนไขนี้ออก ให้ถือว่าเนื้อหา+วันที่ตรงกันเป๊ะ 2 รายการขึ้นไปคือผู้ต้องสงสัยเสมอ — ยังไม่
+      // ลบอัตโนมัติอยู่ดี (ต้องกดยืนยันเองในหน้า preview) ความเสี่ยง false positive จึงรับได้
       // เรียงตามจำนวนขีด (น้อยสุดก่อน) แล้ว created (เก่าสุดก่อน) — ตัวแรกคือตัวที่จะ "เก็บ" ที่เหลือคือ "ลบ"
       var sorted = g.slice().sort(function(a, b) {
         var da = _pipeDashCount(a.content), db = _pipeDashCount(b.content);
@@ -2564,7 +2575,7 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
   var dealerIds = Object.keys(byDealer).sort(function(a, b) { return byDealer[b].clusters.length - byDealer[a].clusters.length; });
 
   var h = '<div style="max-width:680px">';
-  h += '<div class="hint" style="margin-bottom:10px">เช็คจาก pattern ของบั๊กเดิม: log ที่เนื้อหา+วันที่ตรงกัน แต่มีขีดกลาง "-"/"--" นำหน้าค้างอยู่ (มาจาก import ก่อนแก้บั๊กตัดขีดกลาง — บางคู่ติดขีดทั้ง 2 ฝั่งคนละจำนวนก็มี) — จะเก็บตัวที่ขีดน้อยที่สุดไว้ (ล้างขีดออกให้สะอาดด้วย) แล้วลบตัวที่เหลือทิ้ง</div>';
+  h += '<div class="hint" style="margin-bottom:10px">เช็คทุก Update ที่เนื้อหา (ตัดขีดนำหน้า/ช่องว่างซ้ำออกก่อนเทียบ) + วันที่ตรงกันเป๊ะตั้งแต่ 2 รายการขึ้นไป — ครอบคลุมทั้งเคสมีขีดค้างจาก Import เก่า และเคสซ้ำแบบอื่นที่เนื้อหาเหมือนกันเป๊ะ จะเก็บตัวที่ขีดน้อยที่สุด/เก่าสุดไว้ (ล้างขีดออกให้สะอาดด้วย) แล้วลบตัวที่เหลือทิ้ง — ยังไม่ลบอะไรจนกว่าจะกดยืนยัน</div>';
   if (!clusters.length) {
     h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
   } else {
@@ -2598,7 +2609,7 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
     h += '</div>';
   }
   h += '</div>';
-  openM('🔍 เช็ค Log ซ้ำจากขีดนำหน้าค้าง', h);
+  openM('🔍 เช็ค Log ซ้ำ', h);
 }
 // เขียน pipeLog ทั้ง collection ครั้งเดียวตอนจบ (ประกอบ array ในหน่วยความจำก่อน) แทนเรียก ST.update/ST.delete
 // ทีละรายการ — ของเดิมเรียกต่อ cluster (อาจมีเป็นร้อยเป็นพัน cluster) แต่ละครั้ง ST._set() ที่ ST.update/delete
