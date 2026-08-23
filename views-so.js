@@ -309,6 +309,12 @@ function rSalesOrders(el) {
       '<span id="soSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
       '<button class="btn bo bsm" onclick="toggleSOSelectAll(true)">เลือกทั้งหมด (' + _soVisibleIds.length + ')</button>' +
       '<button class="btn bo bsm" onclick="toggleSOSelectAll(false)">ยกเลิกเลือก</button>' +
+      (function() {
+        var opts = Object.keys(SO_STATUS).map(function(k) { return '<option value="' + k + '">' + SO_STATUS[k].icon + ' ' + SO_STATUS[k].label + '</option>'; }).join('');
+        return '<select id="soSelStatusSel" ' + (!selCnt ? 'disabled' : '') + ' style="font-size:12px;min-width:140px"><option value="">✏️ เปลี่ยนสถานะ...</option>' + opts + '</select>' +
+          '<button class="btn bo bsm" id="soSelStatusBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkChangeSOStatus()">ยืนยัน</button>';
+      })() +
+      '<button class="btn bo bsm" id="soSelExportBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkExportSO()">📥 Export ที่เลือก</button>' +
       '<button class="btn bd" id="soSelDelBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkDeleteSO()">🗑️ ลบที่เลือก (' + selCnt + ')</button>' +
       '<button class="btn bo bsm" style="margin-left:auto" onclick="toggleSOSelectMode()">✕ ออก</button>' +
       '</div>';
@@ -349,6 +355,48 @@ function _soSelBarUpdate(cnt) {
   if (countEl) countEl.textContent = cnt + ' รายการที่เลือก';
   var delBtn = document.getElementById('soSelDelBtn');
   if (delBtn) { delBtn.disabled = !cnt; delBtn.textContent = '🗑️ ลบที่เลือก (' + cnt + ')'; }
+  var exportBtn = document.getElementById('soSelExportBtn');
+  if (exportBtn) exportBtn.disabled = !cnt;
+  var statusSel = document.getElementById('soSelStatusSel');
+  if (statusSel) statusSel.disabled = !cnt;
+  var statusBtn = document.getElementById('soSelStatusBtn');
+  if (statusBtn) statusBtn.disabled = !cnt;
+}
+// เปลี่ยนสถานะทีเดียวหลายรายการ — pattern เดียวกับ bulkChangePipeStatus ใน views-pipeline.js (เจอจากการสแกน
+// UX 2026-08-23 ว่า SO/Quotation มีแค่ "ลบ" อย่างเดียว ต่างจาก Pipeline ที่มีครบ) ไม่ผ่าน saveSOStatus()
+// เดิม (ที่ผูกกับ UI เดี่ยว มี log/readiness check ประกอบ) เพราะ bulk ตรงนี้ตั้งใจให้ override ตรงๆ ได้ทุกสถานะ
+// ไม่บังคับตามลำดับ _SO_NEXT เหมือนหน้าแก้ทีละใบ — เหมาะกับกรณีแก้ข้อมูลผิดหลายใบพร้อมกันมากกว่า
+function bulkChangeSOStatus() {
+  var sel = document.getElementById('soSelStatusSel');
+  var statusId = sel ? sel.value : '';
+  if (!statusId) { toast('⚠️ เลือกสถานะก่อน'); return; }
+  var ids = Object.keys(soSelected);
+  if (!ids.length) return;
+  var statusObj = SO_STATUS[statusId];
+  if (!confirm('เปลี่ยนสถานะ ' + ids.length + ' รายการ เป็น "' + (statusObj ? statusObj.label : statusId) + '"?')) return;
+  ids.forEach(function(id) {
+    var saved = ST.update('salesOrders', id, { status: statusId });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', saved);
+  });
+  toast('✏️ เปลี่ยนสถานะแล้ว ' + ids.length + ' รายการ');
+  render();
+}
+function bulkExportSO() {
+  var ids = Object.keys(soSelected);
+  if (!ids.length) return;
+  var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
+  var headers = ['SO No.', 'Dealer', 'สถานะ', 'สินค้า', 'มูลค่า', 'PO', 'Invoice', 'สร้างเมื่อ'];
+  var rows = [headers].concat(list.map(function(s) {
+    var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+    var models = (s.items || []).map(function(it) { return it.model; }).filter(Boolean).join(', ');
+    return [s.soNumber || '', s.dealerName || '', (SO_STATUS[s.status] || {}).label || s.status || '', models, total, s.customerPO || '', s.invoiceNumber || '', s.createdAt ? s.createdAt.slice(0, 10) : ''];
+  }));
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Sales Orders');
+  XLSX.writeFile(wb, 'so-selected-' + _td() + '.xlsx');
+  toast('📥 Export ' + list.length + ' รายการที่เลือก');
 }
 
 function bulkDeleteSO() {

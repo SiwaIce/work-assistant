@@ -1007,6 +1007,12 @@ function refreshQuoteView() {
       '<span id="quoteSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
       '<button class="btn bo bsm" onclick="toggleQuoteSelectAll(true)">เลือกทั้งหมด (' + _quoteVisibleIds.length + ')</button>' +
       '<button class="btn bo bsm" onclick="toggleQuoteSelectAll(false)">ยกเลิกเลือก</button>' +
+      (function() {
+        var opts = quoteStatusList.map(function(k) { return '<option value="' + k + '">' + quoteStatusLabels[k] + '</option>'; }).join('');
+        return '<select id="quoteSelStatusSel" ' + (!selCnt ? 'disabled' : '') + ' style="font-size:12px;min-width:130px"><option value="">✏️ เปลี่ยนสถานะ...</option>' + opts + '</select>' +
+          '<button class="btn bo bsm" id="quoteSelStatusBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkChangeQuoteStatus()">ยืนยัน</button>';
+      })() +
+      '<button class="btn bo bsm" id="quoteSelExportBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkExportQuotesSelected()">📥 Export ที่เลือก</button>' +
       '<button class="btn bd" id="quoteSelDelBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkDeleteQuotes()">🗑️ ลบที่เลือก (' + selCnt + ')</button>' +
       '</div>';
   }
@@ -1045,6 +1051,12 @@ function _quoteSelBarUpdate(cnt) {
   if (countEl) countEl.textContent = cnt + ' รายการที่เลือก';
   var delBtn = document.getElementById('quoteSelDelBtn');
   if (delBtn) { delBtn.disabled = !cnt; delBtn.textContent = '🗑️ ลบที่เลือก (' + cnt + ')'; }
+  var exportBtn = document.getElementById('quoteSelExportBtn');
+  if (exportBtn) exportBtn.disabled = !cnt;
+  var statusSel = document.getElementById('quoteSelStatusSel');
+  if (statusSel) statusSel.disabled = !cnt;
+  var statusBtn = document.getElementById('quoteSelStatusBtn');
+  if (statusBtn) statusBtn.disabled = !cnt;
 }
 
 function bulkDeleteQuotes() {
@@ -1057,6 +1069,36 @@ function bulkDeleteQuotes() {
   quoteSelectMode = false;
   toast('🗑️ ลบแล้ว ' + ids.length + ' รายการ');
   render();
+}
+// เปลี่ยนสถานะทีเดียวหลายใบ + Export ที่เลือก — เจอจากการสแกน UX 2026-08-23 ว่า Quotation มีแค่ "ลบ" อย่างเดียว
+// ต่างจาก Pipeline ที่มีครบ ใช้ _saveQuotationsV2() (ตัวเดียวกับที่จุดแก้ไขทีละใบใช้อยู่แล้ว) กันเขียนตรง
+// localStorage เฉยๆ แบบ bulkDeleteQuotes ด้านบนที่ไม่ sync ขึ้น Firebase เลย (ของเดิม ไม่ใช่จุดนี้แก้)
+function bulkChangeQuoteStatus() {
+  var sel = document.getElementById('quoteSelStatusSel');
+  var statusId = sel ? sel.value : '';
+  if (!statusId) { toast('⚠️ เลือกสถานะก่อน'); return; }
+  var ids = Object.keys(quoteSelected);
+  if (!ids.length) return;
+  if (!confirm('เปลี่ยนสถานะ ' + ids.length + ' รายการ เป็น "' + quoteStatusLabels[statusId] + '"?')) return;
+  quotations.forEach(function(q) { if (quoteSelected[q.id]) q.status = statusId; });
+  _saveQuotationsV2();
+  toast('✏️ เปลี่ยนสถานะแล้ว ' + ids.length + ' รายการ');
+  render();
+}
+function bulkExportQuotesSelected() {
+  var ids = Object.keys(quoteSelected);
+  if (!ids.length) return;
+  var list = quotations.filter(function(q) { return quoteSelected[q.id]; });
+  var headers = ['เลขที่', 'โครงการ', 'Dealer', 'สถานะ', 'มูลค่า', 'วันที่'];
+  var rows = [headers].concat(list.map(function(q) {
+    return [q.quoteNo || '', q.projectName || '', q.dealerName || '', quoteStatusLabels[q.status] || q.status || '', q.totalAmount || 0, q.validFrom || ''];
+  }));
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
+  XLSX.writeFile(wb, 'quotations-selected-' + _td() + '.xlsx');
+  toast('📥 Export ' + list.length + ' รายการที่เลือก');
 }
 
 function renderQuoteCardsHTML(list) {
