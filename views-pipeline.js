@@ -2542,7 +2542,11 @@ function _pipeComputeDupLogClusters(pipeIdFilter) {
     var groups = {};
     logs.forEach(function(l) {
       if (l.type !== 'note') return; // เกิดเฉพาะ log ที่ import สร้าง (type note) เท่านั้น
-      var key = _pipeNormDashContent(l.content) + '||' + (l.date || '');
+      // เทียบแค่ระดับ "วัน" (ตัดเวลาทิ้ง) ไม่ใช่ string เต็ม — log จาก import ได้ date แบบ "YYYY-MM-DD" ล้วนๆ
+      // แต่ log จากกล่อง comment ด่วน (addQuickPipeComment) ใช้ _nw() ที่ได้ ISO เต็มพร้อมเวลา (เช่น
+      // "2026-06-05T09:15:32.000Z") เนื้อหาเดียวกันวันเดียวกันเลยเคยหลุดรอดไปเพราะ key ไม่ตรงกันแค่เพราะ
+      // format วันที่ต่างกัน ไม่เกี่ยวกับเนื้อหาซ้ำจริงหรือไม่ (รายงานผู้ใช้ 2026-08-24)
+      var key = _pipeNormDashContent(l.content) + '||' + (l.date || '').slice(0, 10);
       if (!groups[key]) groups[key] = [];
       groups[key].push(l);
     });
