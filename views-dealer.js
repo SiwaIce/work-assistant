@@ -422,6 +422,18 @@ function toggleDealerUrgentBar() {
   if (btn) btn.textContent = dealerUrgentOpen ? '▲ ซ่อน' : '▼ แสดง';
 }
 
+// เมนู "📤 Export ▾" หน้า Dealer list — เดิม 5 ปุ่ม copy/export เรียงแถวเดียวกับ view-toggle/bulk-select
+// (2026-08-24 UI audit ข้อ 4) รวมเป็นเมนูเดียว ใช้ toggleOvMenu()/closeOvMenu() กลางตัวเดียวกับ Pipeline
+function _dealerExportMenuHtml() {
+  return (
+    '<button onclick="closeOvMenu();copyDealerSummary()">📋 Copy TSV</button>' +
+    (dealerListView === 'table' ? '<button onclick="closeOvMenu();copyDealerTableAsWord()">📋 Copy (วางลง Word)</button>' : '') +
+    '<button onclick="closeOvMenu();dlDealerCSV()">📤 CSV</button>' +
+    '<button onclick="closeOvMenu();exportDealersExcel()">📊 Excel</button>' +
+    '<button onclick="closeOvMenu();showDealerEmailPickerM()">📧 Email</button>'
+  );
+}
+
 function rDealers(el) {
   document.getElementById('pgT').textContent = '🏪 Dealer';
   // scopedDealers() = ขอบเขตที่เลือกไว้จาก picker บน topbar (default: เฉพาะของฉัน) — chip "เซลที่ดูแล" ด้านล่าง
@@ -512,11 +524,7 @@ function rDealers(el) {
       <button class="btn-xs" style="border-radius:0;${dealerListView==='card'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='card';render()">🗂 การ์ด</button>
       <button class="btn-xs" style="border-radius:0;${dealerListView==='table'?'background:var(--accent);color:#fff':''}" onclick="dealerListView='table';render()">📊 ตาราง</button>
     </div>
-    <button class="btn bsm bo" onclick="copyDealerSummary()">📋 Copy TSV</button>
-    ${dealerListView==='table' ? '<button class="btn bsm bo" onclick="copyDealerTableAsWord()">📋 Copy (วางลง Word)</button>' : ''}
-    <button class="btn bsm bo" onclick="dlDealerCSV()">📤 CSV</button>
-    <button class="btn bsm bo" onclick="exportDealersExcel()">📊 Excel</button>
-    <button class="btn bsm bo" onclick="showDealerEmailPickerM()">📧 Email</button>
+    <button class="btn bsm bo ov-trigger" onclick="event.stopPropagation();toggleOvMenu(this, _dealerExportMenuHtml())">📤 Export ▾</button>
     <button class="btn bsm ${dealerSelectMode?'bd':'bo'}" onclick="toggleDealerSelectMode()">☑️ ${dealerSelectMode?'ยกเลิก':'เลือกหลายรายการ'}</button>
   </div>
 
