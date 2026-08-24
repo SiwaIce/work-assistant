@@ -1598,6 +1598,29 @@ function updClk() {
 setInterval(updClk, 1000); updClk();
 
 // ================================================================
+// SYNC STATUS — จุดเดียวในแอพหลักที่บอกว่ากำลัง offline หรือ sync ขึ้น Cloud มีปัญหาอยู่ไหม (เดิมมีแค่
+// toast ตอน sync fail ซึ่งหายไปเองใน ~4 วิ ถ้าพลาดไม่ทันอ่านก็ไม่รู้เลยว่าข้อมูลค้างอยู่ในเครื่อง) —
+// _syncErrorUntil ถูกตั้งจาก _notifySyncFail() ใน firebase-sync.js ให้ธงแดงค้างไว้ 15 วิ
+// ================================================================
+var _syncErrorUntil = 0;
+function updateSyncStatus() {
+  var el = document.getElementById('syncStatus');
+  if (!el) return;
+  if (!navigator.onLine) {
+    el.textContent = '🔴'; el.title = 'ออฟไลน์ — ข้อมูลบันทึกในเครื่องนี้ก่อน จะ sync ขึ้น Cloud เมื่อเชื่อมต่ออีกครั้ง';
+  } else if (Date.now() < _syncErrorUntil) {
+    el.textContent = '🟡'; el.title = 'Sync ขึ้น Cloud มีปัญหาล่าสุด — ข้อมูลยังอยู่ในเครื่องนี้ ลองรีเฟรชอีกครั้ง';
+  } else if (typeof SYNC_ENABLED !== 'undefined' && SYNC_ENABLED) {
+    el.textContent = '🟢'; el.title = 'เชื่อมต่อ Cloud ปกติ';
+  } else {
+    el.textContent = '⚪'; el.title = 'ยังไม่ได้เชื่อมต่อ Cloud (ข้อมูลอยู่ในเครื่องนี้เท่านั้น)';
+  }
+}
+window.addEventListener('online', updateSyncStatus);
+window.addEventListener('offline', updateSyncStatus);
+setInterval(updateSyncStatus, 5000); updateSyncStatus();
+
+// ================================================================
 // NOTIFICATIONS
 // ================================================================
 function checkNotifications() {

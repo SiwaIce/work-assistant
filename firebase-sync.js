@@ -608,6 +608,8 @@ function getCollectionRef(collName) {
 var _lastSyncFailToast = 0;
 function _notifySyncFail(e) {
   console.warn('Sync error:', e);
+  if (typeof window !== 'undefined') window._syncErrorUntil = Date.now() + 15000;
+  if (typeof updateSyncStatus === 'function') updateSyncStatus();
   var now = Date.now();
   if (now - _lastSyncFailToast < 8000) return;
   _lastSyncFailToast = now;
