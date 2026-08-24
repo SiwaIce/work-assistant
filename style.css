@@ -249,6 +249,10 @@ textarea{min-height:50px;resize:vertical}
 .pipe-table tr:hover td{background:#1e293b}
 .pipe-table tr.pipe-win{border-left:3px solid #22c55e}
 .pipe-table tr.pipe-win td{background:rgba(34,197,94,.08)}
+/* pipe-lost กับ pipe-bid-urgent ใช้แดงร่วมกันโดยตั้งใจ (แดง=urgent, ส้มอ่อน=soon เหมือน severity ที่อื่น
+   ในแอพ) — เช็คแล้วไม่มีทางชนกันจริง เพราะ pipeBidUrgency() (views-pipeline.js) กรอง pipeIsActive() ก่อน
+   เสมอ ปิดโครงการที่ Lost แล้วออกไปตั้งแต่แรก ไม่มีทาง flag "bidding urgent" ซ้อนกับ Lost ได้
+   (2026-08-24 UI audit ข้อ 6 — สรุปว่าไม่ใช่บั๊กจริง เก็บ opacity:.55 ของ Lost ไว้เป็นตัวช่วยแยกเผื่อ debug ต่อ) */
 .pipe-table tr.pipe-lost{border-left:3px solid #ef4444;opacity:.55}
 .pipe-table tr.pipe-bid-urgent td{background:rgba(239,68,68,.1)}
 .pipe-table tr.pipe-bid-urgent{border-left:3px solid #ef4444}
@@ -688,11 +692,6 @@ textarea{min-height:50px;resize:vertical}
    COLOR CODING & UX IMPROVEMENTS
    ============================================================ */
 
-/* Pipeline Value Highlights */
-.pipe-big { border-left: 3px solid #f59e0b !important; font-weight: 600; }
-.pipe-mega { border-left: 3px solid #f97316 !important; font-weight: 700; }
-.pipe-ultra { border-left: 3px solid #ef4444 !important; font-weight: 700; background: rgba(239,68,68,.05) !important; }
-
 /* Pipeline Board Card Enhanced */
 .pipe-kb-card .card-bidding { font-size: .6rem; margin-top: 3px; padding: 2px 6px; border-radius: 4px; display: inline-block; }
 .pipe-kb-card .card-bidding.bid-soon { background: #78350f; color: #fcd34d; }
@@ -700,10 +699,6 @@ textarea{min-height:50px;resize:vertical}
 .pipe-kb-card .card-bidding.bid-past { background: #334155; color: #64748b; text-decoration: line-through; }
 .pipe-kb-card .card-update { font-size: .58rem; color: #475569; margin-top: 3px; border-top: 1px solid #334155; padding-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pipe-kb-card .card-model { font-size: .6rem; color: #94a3b8; margin-top: 2px; }
-.pipe-kb-card.card-big { border-left: 3px solid #f59e0b; }
-.pipe-kb-card.card-mega { border-left: 3px solid #f97316; }
-.pipe-kb-card.card-ultra { border-left: 3px solid #ef4444; }
-
 /* Pipeline Board Filter */
 .pipe-kb-filter { display: flex; gap: 3px; margin-bottom: 8px; flex-wrap: wrap; }
 .pipe-kb-filter select { min-width: 120px; padding: 4px 8px; font-size: .72rem; }
