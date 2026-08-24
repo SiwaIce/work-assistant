@@ -2054,33 +2054,46 @@ function saveCurrentQuotation() {
 }
 function deleteQuotation(quoteId) {
   if (!confirm('ลบใบเสนอราคานี้?')) return;
-  
+
   // ✅ โหลดข้อมูลปัจจุบัน
   var currentQuotes = [];
   try {
     currentQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
   } catch(e) {}
-  
+
+  var _undoQuote = currentQuotes.find(function(q) { return q.id === quoteId; });
+
   // ✅ กรองเอารายการที่ต้องการลบออก
   var newQuotes = currentQuotes.filter(function(q) { return q.id !== quoteId; });
-  
+
   // ✅ บันทึก
   localStorage.setItem('v7_quotations_v2', JSON.stringify(newQuotes));
-  
+
   // ✅ อัปเดต global array
   quotations = newQuotes;
-  
+
   // ✅ ลบจาก Firebase
   if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
     db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(quoteId).delete().catch(function(e) {
       console.warn('Firebase delete error:', e);
     });
   }
-  
-  toast('🗑️ ลบแล้ว');
-  
-  // ✅ กลับไปหน้า列表
+
+  // ✅ กลับไปหน้ารายการ
   go('quotationV2');
+
+  showUndoToast('🗑️ ลบใบเสนอราคาแล้ว', function() {
+    if (!_undoQuote) return;
+    quotations.push(_undoQuote);
+    localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
+    if (typeof db !== 'undefined' && typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+      db.collection('users').doc(CURRENT_USER.uid).collection('quotations_v2').doc(quoteId).set(_undoQuote).catch(function(e) {
+        console.warn('Firebase restore error:', e);
+      });
+    }
+    editQuotation(quoteId);
+    toast('↩️ กู้คืนใบเสนอราคาแล้ว');
+  });
 }
 // ================================================================
 // QUOTATION CONTACTS

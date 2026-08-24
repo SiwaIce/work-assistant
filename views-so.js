@@ -1017,12 +1017,17 @@ function saveSOItemsEdit(soId) {
 function deleteSalesOrder(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
-  if (!confirm('ลบ ' + (s.soNumber||'SO นี้') + '?\nไม่สามารถกู้คืนได้')) return;
+  if (!confirm('ลบ ' + (s.soNumber||'SO นี้') + '?')) return;
   ST.delete('salesOrders', soId);
   if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('salesOrders', soId);
   if (typeof addAuditLog === 'function') addAuditLog('delete_so', 'salesOrder', soId, s.soNumber, s.dealerId, s.dealerName);
-  toast('🗑️ ลบ SO แล้ว');
   go('salesOrders');
+  showUndoToast('🗑️ ลบ ' + (s.soNumber||'SO') + ' แล้ว', function() {
+    ST.add('salesOrders', s);
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', s);
+    go('soDetail', { soId: soId });
+    toast('↩️ กู้คืน SO แล้ว');
+  });
 }
 
 // ---------------------------------------------------------------- timeline (ดู/แก้ไข/ลบ log ในหน้าเดียวกัน)

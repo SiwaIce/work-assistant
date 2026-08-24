@@ -3088,7 +3088,18 @@ function copyPreVisitBrief(dealerId) {
 function delDealer(id) {
   if (!confirm('⚠️ ลบ Dealer นี้?\n(Pipeline, Visit, Follow-up, Feedback จะถูกลบด้วย)')) return;
   if (!confirm('⚠️⚠️ ยืนยันอีกครั้ง — ลบทุกอย่าง?')) return;
-  
+
+  // เก็บสำเนาไว้ก่อนลบ เพื่อรองรับปุ่ม "เลิกทำ" (showUndoToast) — คืนของแบบเดิมทุก collection ที่ลบไป
+  const _undoDealer = ST.getOne('dealers', id);
+  const _undoPipes = ST.pipelineByDealer(id);
+  const _undoPipeIds = {};
+  _undoPipes.forEach(p => { _undoPipeIds[p.id] = true; });
+  const _undoLogs = ST.getAll('pipeLog').filter(l => _undoPipeIds[l.pipeId]);
+  const _undoVisits = ST.getAll('visits').filter(v => v.dealerId === id);
+  const _undoFollowups = ST.getAll('followups').filter(f => f.dealerId === id);
+  const _undoLineLog = ST.getAll('lineLog').filter(l => l.dealerId === id);
+  const _undoFeedback = ST.getAll('feedback').filter(f => f.dealerId === id);
+
   ST.delete('dealers', id);
   ST.deleteWhere('pipeline', p => p.dealerId === id);
   ST.deleteWhere('pipeLog', l => {
@@ -3099,10 +3110,31 @@ function delDealer(id) {
   ST.deleteWhere('followups', f => f.dealerId === id);
   ST.deleteWhere('lineLog', l => l.dealerId === id);
   ST.deleteWhere('feedback', f => f.dealerId === id);
-  
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('dealers', id);
+
   dealerTab = 'info';
   go('dealers');
-  toast('🗑️ ลบ Dealer แล้ว');
+  showUndoToast('🗑️ ลบ Dealer แล้ว', function() {
+    if (!_undoDealer) return;
+    ST.add('dealers', _undoDealer);
+    _undoPipes.forEach(p => ST.add('pipeline', p));
+    _undoLogs.forEach(l => ST.add('pipeLog', l));
+    _undoVisits.forEach(v => ST.add('visits', v));
+    _undoFollowups.forEach(f => ST.add('followups', f));
+    _undoLineLog.forEach(l => ST.add('lineLog', l));
+    _undoFeedback.forEach(f => ST.add('feedback', f));
+    if (typeof syncItemToFirebase === 'function') {
+      syncItemToFirebase('dealers', _undoDealer);
+      _undoPipes.forEach(p => syncItemToFirebase('pipeline', p));
+      _undoLogs.forEach(l => syncItemToFirebase('pipeLog', l));
+      _undoVisits.forEach(v => syncItemToFirebase('visits', v));
+      _undoFollowups.forEach(f => syncItemToFirebase('followups', f));
+      _undoLineLog.forEach(l => syncItemToFirebase('lineLog', l));
+      _undoFeedback.forEach(f => syncItemToFirebase('feedback', f));
+    }
+    go('dealerDetail', { dealerId: id });
+    toast('↩️ กู้คืน Dealer แล้ว');
+  });
 }
 
 // ================================================================

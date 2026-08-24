@@ -2299,12 +2299,23 @@ function delPipe(id) {
   if (!confirm('ลบ Pipeline นี้?')) return;
   var p = ST.getOne('pipeline', id);
   var dealerId = p && p.dealerId;
+  var _undoLogs = ST.getAll('pipeLog').filter(function(l) { return l.pipeId === id; });
   ST.delete('pipeline', id);
   ST.deleteWhere('pipeLog', function(l) { return l.pipeId === id; });
   if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('pipeline', id);
-  toast('🗑️ ลบแล้ว');
   if (dealerId) go('dealerDetail', { dealerId: dealerId });
   else go('pipeline');
+  showUndoToast('🗑️ ลบ Pipeline แล้ว', function() {
+    if (!p) return;
+    ST.add('pipeline', p);
+    _undoLogs.forEach(function(l) { ST.add('pipeLog', l); });
+    if (typeof syncItemToFirebase === 'function') {
+      syncItemToFirebase('pipeline', p);
+      _undoLogs.forEach(function(l) { syncItemToFirebase('pipeLog', l); });
+    }
+    go('pipeDetail', { pipeId: id });
+    toast('↩️ กู้คืน Pipeline แล้ว');
+  });
 }
 
 function copyPipeRow(pipeId, excludeTypes) {
