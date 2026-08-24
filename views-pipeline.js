@@ -2150,7 +2150,7 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>Unit Type</label><div>' + (p.unitType || '-') + '</div></div>';
   html += '<div><label>Dealer</label><div>🏪 <strong>' + (d ? sanitize(d.name) : '-') + '</strong> ' + (d ? levelTag(d.level) : '') + '</div></div></div>';
   
-  html += '<div class="fr"><div><label>DJI Dealer</label><div>' + (p.djiDealer || '-') + '</div></div>';
+  html += '<div class="fr"><div><label>Dealer Name</label><div>' + (p.djiDealer || '-') + '</div></div>';
   html += '<div><label>Model</label><div>' + getPipeModelSummary(p) + '</div></div></div>';
   
   html += '<div class="fr"><div><label>Forecast Amount</label><div>' + (_gvHidden('pipeline_forecast') ? '-' : fmtMoneyStyled(p.forecastAmount)) + '</div></div>';
