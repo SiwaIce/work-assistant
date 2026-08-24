@@ -1858,7 +1858,9 @@ var PIPE_LOG_TYPE_META = [
   { key: 'problem',        label: '🔴 ปัญหา', defaultOn: true },
   { key: 'solution',       label: '🟡 แก้ไข', defaultOn: true },
   { key: 'win',            label: '✅ Win', defaultOn: true },
-  { key: 'lost',           label: '❌ Lost', defaultOn: true },
+  // key เดิมเคยเป็น 'lost' แต่ log จริงที่ saveLossReason() สร้าง (modals.js) ใช้ type='fail_lost' เสมอ
+  // (ตรงกับ status id) ทำให้ checkbox นี้ไม่เคยกรอง/ล็อกอะไรได้จริงเลยตั้งแต่แรก — แก้ให้ key ตรงกับของจริง
+  { key: 'fail_lost',      label: '❌ Lost', defaultOn: true },
   { key: 'visit',          label: '🤝 Visit (ระบบสร้างอัตโนมัติจากการเข้าพบ)', defaultOn: false },
   { key: 'status_change',  label: '🔄 เปลี่ยนสถานะ (ระบบสร้างอัตโนมัติ)', defaultOn: false },
   { key: 'action',         label: '➕ Action Item', defaultOn: false },
@@ -2242,7 +2244,7 @@ function rPipeDet(el) {
     html += '<div class="tl">';
     for (var li = 0; li < logs.length; li++) {
       var l = logs[li];
-      var isEditable = l.type !== 'win' && l.type !== 'lost';
+      var isEditable = l.type !== 'win' && l.type !== 'fail_lost';
       
       html += '<div class="ti tl-' + (l.type || 'note') + '">';
       html += '<div style="display:flex;justify-content:space-between">';

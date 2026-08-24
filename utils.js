@@ -1906,7 +1906,7 @@ function logL(t) {
     visit:'🤝 Visit', followup:'📞 Follow-up', line:'💬 LINE',
     note:'⚪ หมายเหตุ', completed:'✅ เสร็จ', update:'📝 อัพเดท',
     forecast:'📦 Forecast', status_change:'🔄 เปลี่ยนสถานะ',
-    win:'✅ Win', lost:'❌ Lost'
+    win:'✅ Win', fail_lost:'❌ Lost'
   }[t] || t;
 }
 
