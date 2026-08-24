@@ -1103,6 +1103,29 @@ function _pipeCompareProductBreakdownHtml(p) {
   return h;
 }
 
+// เมนู "⋯ เพิ่มเติม" ของ toolbar หน้า Pipeline — เดิมปุ่มพวกนี้เรียงแถวเดียวรวม 17 ปุ่ม (2026-08-24 UI audit)
+// ย้ายปุ่มที่ไม่ได้กดทุกวัน (Import/Export/ตรวจสอบ/ตั้งค่า) มารวมที่นี่ ปุ่มที่กดบ่อย (เพิ่ม/เลือก/Archived)
+// ยังอยู่นอกเมนูเหมือนเดิม — ใช้ toggleOvMenu()/closeOvMenu() กลางจาก app.js
+function _pipeMoreMenuHtml() {
+  return (
+    '<div class="ov-grp-label">นำเข้าข้อมูล</div>' +
+    '<button onclick="closeOvMenu();showImportPipelineM()">📥 Import</button>' +
+    '<button onclick="closeOvMenu();importPipelineXlsx(\'\')">📂 xlsx</button>' +
+    '<button onclick="closeOvMenu();showPastePipelineM()">📋 วาง</button>' +
+    '<hr>' +
+    '<div class="ov-grp-label">ส่งออก / คัดลอก</div>' +
+    '<button onclick="closeOvMenu();showPipeExportLogFilterM(\'csvFiltered\')">📤 CSV</button>' +
+    '<button onclick="closeOvMenu();showPipeExportLogFilterM(\'xlsxFiltered\')">📤 xlsx</button>' +
+    '<button onclick="closeOvMenu();copyPipeTable()">📋 Copy</button>' +
+    '<hr>' +
+    '<div class="ov-grp-label">วิเคราะห์ / ตรวจสอบ</div>' +
+    '<button onclick="closeOvMenu();showPipeDataHealthCheckM()">🩺 ตรวจสุขภาพข้อมูล</button>' +
+    (AI_FEATURES_ENABLED ? '<button onclick="closeOvMenu();aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
+    '<button onclick="closeOvMenu();togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
+    '<button onclick="closeOvMenu();showPipeMatchWeightsM()">⚙️ ตั้งน้ำหนักการเทียบ</button>'
+  );
+}
+
 function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
   var cfg = getConfig();
@@ -1211,18 +1234,9 @@ function rPipeline(el) {
     '<div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center">' +
     (typeof _smartFilterChipHtml === 'function' ? _smartFilterChipHtml('stale_pipeline') : '') +
     '<button class="btn bp" onclick="showPipelineM()">➕ เพิ่ม</button>' +
-    '<button class="btn bo" onclick="showImportPipelineM()">📥 Import</button>' +
-    '<button class="btn bo" onclick="importPipelineXlsx(\'\')">📂 xlsx</button>' +
-    '<button class="btn bo" onclick="showPastePipelineM()">📋 วาง</button>' +
-    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'csvFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 CSV</button>' +
-    '<button class="btn bo" onclick="showPipeExportLogFilterM(\'xlsxFiltered\')" title="Export เฉพาะรายการที่กรองอยู่ตอนนี้ (Sale/Dealer/สถานะ ฯลฯ) — ไม่กรองอะไรเลย = ทั้งหมด">📤 xlsx</button>' +
-    '<button class="btn bo" onclick="copyPipeTable()">📋 Copy</button>' +
-    '<button class="btn bo" onclick="showPipeDataHealthCheckM()" title="รวมทุกจุดตรวจสุขภาพข้อมูล Pipeline ไว้ที่เดียว (Log ซ้ำ/วันที่ผิด/Project ID หาย/Log กำพร้า/ไม่มี Dealer)">🩺 ตรวจสุขภาพข้อมูล</button>' +
-    (AI_FEATURES_ENABLED ? '<button class="btn bo" onclick="aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
-    '<button class="btn ' + (pipeCompareMode ? 'bp' : 'bo') + '" onclick="togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
-    '<button class="btn bo" onclick="showPipeMatchWeightsM()" title="ตั้งน้ำหนักการเทียบ">⚙️</button>' +
     '<button class="btn ' + (pipeSelectMode ? 'bd' : 'bo') + '" onclick="togglePipeSelectMode()">☑️ ' + (pipeSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>' +
     '<button class="btn ' + (pipeHideArchived ? 'bo' : 'bp') + '" onclick="togglePipeHideArchived()" title="Archived = Win/Fail&Lost/Deliver/Hide (ดูแท็บ Archived Project ตอน export)">🗄️ ' + (pipeHideArchived ? 'ซ่อน Archived (' + _archivedCountBeforeHide + ')' : 'กำลังแสดง Archived') + '</button>' +
+    '<button class="btn bo ov-trigger" onclick="event.stopPropagation();toggleOvMenu(this, _pipeMoreMenuHtml())">⋯ เพิ่มเติม</button>' +
     '<div style="flex:1"></div>' +
     '<button class="btn bsm ' + (pipeView === 'table' ? 'bp' : 'bo') + '" onclick="pipeView=\'table\';render()" title="ตาราง">📋</button>' +
     '<button class="btn bsm ' + (pipeView === 'card' ? 'bp' : 'bo') + '" onclick="pipeView=\'card\';render()" title="การ์ด">🃏</button>' +

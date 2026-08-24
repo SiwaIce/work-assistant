@@ -959,6 +959,38 @@ document.addEventListener('click', function(e) {
   menu.style.display = 'none';
 });
 
+// ================================================================
+// "⋯ เพิ่มเติม" MENU แบบใช้ซ้ำได้ทั่วแอพ — เกิดจาก toolbar หน้า Pipeline ยัดปุ่มไว้แถวเดียว 17 ปุ่ม
+// (2026-08-24) เก็บเฉพาะปุ่มที่กดบ่อยไว้นอกเมนู ที่เหลือ (Export/ตรวจสอบ/ตั้งค่า) ย้ายมาไว้ในนี้แทน —
+// เขียนเป็น helper กลางเผื่อหน้าอื่นเอาไปใช้ต่อ (เช่น toolbar Dealer ที่มีปัญหาเดียวกัน)
+// ================================================================
+function toggleOvMenu(btn, html) {
+  var menu = document.getElementById('ovMenu');
+  if (!menu || !btn) return;
+  var willOpen = menu.style.display === 'none' || !menu.style.display;
+  if (willOpen) {
+    menu.innerHTML = html;
+    var r = btn.getBoundingClientRect();
+    var menuW = 230;
+    var left = Math.min(r.left, window.innerWidth - menuW - 8);
+    left = Math.max(8, left);
+    menu.style.left = left + 'px';
+    menu.style.top = (r.bottom + 6) + 'px';
+  }
+  menu.style.display = willOpen ? 'flex' : 'none';
+}
+function closeOvMenu() {
+  var menu = document.getElementById('ovMenu');
+  if (menu) menu.style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('ovMenu');
+  if (!menu || menu.style.display === 'none') return;
+  if (menu.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('.ov-trigger')) return;
+  menu.style.display = 'none';
+});
+
 function toggleSidebar() {
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.toggle('show');

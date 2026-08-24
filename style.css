@@ -139,6 +139,12 @@ textarea{min-height:50px;resize:vertical}
 .bg{display:flex;gap:5px;flex-wrap:wrap}
 .btn-full{width:100%;justify-content:center}
 
+/* === "⋯ เพิ่มเติม" overflow menu (#ovMenu ใน index.html, toggleOvMenu ใน app.js) === */
+#ovMenu button{background:transparent;border:none;color:var(--text);text-align:left;padding:7px 9px;border-radius:6px;font-size:.79rem;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;font-family:inherit}
+#ovMenu button:hover{background:var(--bg2)}
+#ovMenu .ov-grp-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);padding:6px 9px 2px;font-weight:700}
+#ovMenu hr{border:none;border-top:1px solid var(--border);margin:4px 0}
+
 /* === TAGS === */
 .tag{padding:2px 7px;border-radius:20px;font-size:.58rem;font-weight:600;display:inline-block;white-space:nowrap;line-height:1.4}
 .tag-s{background:#7c3aed;color:#e9d5ff}
@@ -386,6 +392,7 @@ textarea{min-height:50px;resize:vertical}
 
 /* === สีสถานะกลาง (good/warn/bad/info) — แบบเดียวกับ .tag-win/.tag-lost มี Light Theme ในตัว
    ใช้แทนการเขียน hex ตรงๆ ในโค้ด JS เพื่อให้ขึ้น Light Theme ถูกต้องด้วย === */
+.stat-neutral{color:var(--text);background:var(--bg2)}
 .stat-good{color:#86efac;background:#14532d}
 .stat-warn{color:#fcd34d;background:#78350f}
 .stat-bad{color:#fca5a5;background:#7f1d1d}

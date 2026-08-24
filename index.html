@@ -196,6 +196,10 @@
      ด้วย JS (toggleDealerScopeMenu ใน app.js) แทน กัน clip ทุกกรณี -->
 <div id="dealerScopeMenu" style="display:none;position:fixed;z-index:9000;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:10px;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
 
+<!-- เมนู "⋯ เพิ่มเติม" แบบใช้ซ้ำได้ทั่วแอพ (toggleOvMenu ใน app.js) — pattern เดียวกับ dealerScopeMenu ข้างบน
+     เหตุผลเดียวกัน: อยู่นอก container ที่มี overflow-x:auto กัน dropdown โดน clip -->
+<div id="ovMenu" style="display:none;position:fixed;z-index:9000;background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:6px;width:230px;box-shadow:0 8px 24px rgba(0,0,0,.25);flex-direction:column;gap:2px"></div>
+
 <!-- BOTTOM NAV (Mobile) -->
 <div id="bnav"><div class="bn">
 <div class="bi act" data-v="today" onclick="go('today')"><span class="bic">📌</span>วันนี้</div>

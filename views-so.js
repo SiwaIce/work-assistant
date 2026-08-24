@@ -232,18 +232,20 @@ function rSalesOrders(el) {
     '<button class="btn ' + (soSelectMode ? 'bd' : 'bo') + '" onclick="toggleSOSelectMode()">☑️ ' + (soSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>' +
     '<button class="btn bp" onclick="showCreateSOModal({})">➕ สร้าง SO</button></div></div>';
 
+  // ใช้ class .stat-good/.stat-warn/.stat-bad/.stat-info (มีอยู่แล้วใน style.css พร้อม Light Theme override)
+  // แทนการเขียน hex+alpha ตรงๆ — ของเดิมไม่เคยมี Light Theme override เลยเพราะ hardcode ไว้ในโค้ด (2026-08-24 UI audit)
   var stats = [
-    { label:'ทั้งหมด',      val: all.length,  bg:'var(--bg2)',    fg:'var(--text)'  },
-    { label:'Active',       val: activeCnt,   bg:'#3b82f622',     fg:'#3b82f6'      },
-    { label:'พร้อมส่ง',     val: readyCnt,    bg:'#22c55e22',     fg:'#22c55e'      },
-    { label:'รอสินค้า',     val: waitCnt,     bg:'#f59e0b22',     fg:'#f59e0b'      },
-    { label:'ต้องตาม',      val: attnCnt,     bg:'#ef444422',     fg:'#ef4444'      }
+    { label:'ทั้งหมด',      val: all.length,  cls:'stat-neutral' },
+    { label:'Active',       val: activeCnt,   cls:'stat-info'    },
+    { label:'พร้อมส่ง',     val: readyCnt,    cls:'stat-good'    },
+    { label:'รอสินค้า',     val: waitCnt,     cls:'stat-warn'    },
+    { label:'ต้องตาม',      val: attnCnt,     cls:'stat-bad'     }
   ];
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px">';
   stats.forEach(function(st){
-    html += '<div style="background:' + st.bg + ';border-radius:10px;padding:12px 14px">' +
-      '<div style="font-size:12px;color:' + st.fg + ';opacity:.85;margin-bottom:4px">' + st.label + '</div>' +
-      '<div style="font-size:22px;font-weight:600;color:' + st.fg + '">' + st.val + '</div></div>';
+    html += '<div class="' + st.cls + '" style="border-radius:10px;padding:12px 14px">' +
+      '<div style="font-size:12px;opacity:.85;margin-bottom:4px">' + st.label + '</div>' +
+      '<div style="font-size:22px;font-weight:600">' + st.val + '</div></div>';
   });
   html += '</div>';
 
