@@ -215,11 +215,13 @@
   <div class="fab-item" onclick="fabAct('visit')">🤝 Visit Report</div>
   <div class="fab-item" onclick="fabAct('contact')">📞 บันทึกติดต่อ</div>
   <div class="fab-item" onclick="fabAct('followup')">📞 Follow-up</div>
-  <div class="fab-item" onclick="fabAct('pipeline')">📊 Pipeline</div>
-  <div class="fab-item" onclick="fabAct('line')">💬 LINE Support</div>
   <div class="fab-item" onclick="fabAct('task')">📋 งาน</div>
-  <div class="fab-item" onclick="fabAct('meeting')">📅 ประชุม</div>
-  <div class="fab-item" onclick="fabAct('note')">📝 โน้ตด่วน</div>
+  <!-- 4 ปุ่มนี้ยังกดใช้ได้ปกติจาก sidebar/หน้าเมนู แค่ซ่อนจาก FAB บนมือถือ (ดู .fab-item-more ใน style.css) —
+       เดิม FAB กางเป็น 8 รายการ ซ้อนอยู่แถวเดียวกับ Bottom Nav บนจอเล็ก แน่นเกินไป (2026-08-24 UI audit ข้อ 8) -->
+  <div class="fab-item fab-item-more" onclick="fabAct('pipeline')">📊 Pipeline</div>
+  <div class="fab-item fab-item-more" onclick="fabAct('line')">💬 LINE Support</div>
+  <div class="fab-item fab-item-more" onclick="fabAct('meeting')">📅 ประชุม</div>
+  <div class="fab-item fab-item-more" onclick="fabAct('note')">📝 โน้ตด่วน</div>
 </div>
 <button class="fab-btn" id="fabBtn" onclick="toggleFab()">＋</button>
 </div>

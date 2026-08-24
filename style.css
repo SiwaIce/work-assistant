@@ -656,6 +656,7 @@ textarea{min-height:50px;resize:vertical}
   .cal-cell{min-height:32px}
   .cal-ev{display:none}
   .fab{bottom:70px;right:10px}
+  .fab-item-more{display:none}
   .dpp{width:230px;right:0;left:auto}
   .sf-grid{grid-template-columns:1fr 1fr}
   .kpi-row{grid-template-columns:1fr}
