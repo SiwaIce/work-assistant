@@ -135,7 +135,6 @@ textarea{min-height:50px;resize:vertical}
 .bd{background:#ef4444;color:#fff}.bd:hover{background:#dc2626}
 .bw{background:#f59e0b;color:#000}.bw:hover{background:#d97706}
 .bo{background:transparent;border:1px solid #475569;color:#94a3b8}.bo:hover{border-color:#3b82f6;color:#3b82f6}
-.bsm{padding:3px 7px;font-size:.66rem}
 .bg{display:flex;gap:5px;flex-wrap:wrap}
 .btn-full{width:100%;justify-content:center}
 
@@ -891,7 +890,6 @@ body {
   color: #60a5fa;
   background: rgba(59,130,246,.05);
 }
-.bsm { padding: 5px 10px; font-size: .72rem; }
 .btn-full { padding: 10px; font-size: .84rem; }
 
 /* Forms */
@@ -8016,6 +8014,12 @@ body {
   font-weight: 500;
   transition: var(--transition);
 }
+
+/* .bsm ("ปุ่มเล็ก") เคยประกาศซ้ำ 2 จุดก่อนหน้านี้ในไฟล์ (padding/font-size) แต่ .btn ด้านบนซึ่งมาทีหลัง
+   ทั้งคู่ทับ padding/font-size ของมันเงียบๆ มาตลอด (specificity เท่ากัน แพ้เพราะมาก่อนในไฟล์) ทำให้ปุ่มที่ติด
+   .bsm ทั่วแอพ (578 จุด) render เท่าปุ่มปกติทั้งที่ตั้งใจให้เล็กกว่า — รวมเหลือจุดเดียว วางไว้ "หลัง" .btn ตัวที่
+   ชนะจริง (2026-08-24 UI audit ข้อ 5) */
+.bsm { padding: 5px 10px; font-size: .72rem; }
 
 .bp {
   background: #3b82f6;
