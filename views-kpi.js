@@ -442,6 +442,60 @@ function kpiTopPotentialDeals(plan) {
 }
 
 // ================================================================
+// แผนดัน Dealer ให้ถึงเป้ายอดขาย — จัดกลุ่ม Dealer ที่เซลล์คนนี้ดูแลตามสถานะ "น่าจะช่วยให้ถึง KPI ไหม"
+// (2026-08-24 ตามคำขอ: นอกจาก KPI บริษัท ต้องมีมุมมองระดับ Dealer ว่ารายไหนพอดันได้ รายไหนยังไม่ขยับเลย)
+// ใช้ field เดียวกับที่ kpiComputeActual/kpiPotentialRecords ใช้อยู่แล้ว (saleName + registerDate ในช่วง
+// ไตรมาส) แค่ group ตาม dealerId เพิ่ม แทนที่จะรวมยอดเป็นก้อนเดียว
+// ================================================================
+function kpiDealerPlanBreakdown(plan) {
+  var revCat = (plan.categories || []).filter(function(c) { return c.type === 'pipelineRevenue'; })[0];
+  if (!revCat) return null;
+
+  var myDealers = ST.getAll('dealers').filter(function(d) { return (d.saleName || '') === plan.salesMemberName; });
+  var wonByDealer = {}, potByDealer = {};
+  ST.getAll('pipeline').forEach(function(p) {
+    if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
+    var rd = p.registerDate || '';
+    if (rd < plan.startDate || rd > plan.endDate) return;
+    if (pipeIsWon(p)) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
+    else if (pipeIsActive(p)) potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
+  });
+
+  var rows = myDealers.map(function(d) {
+    var won = wonByDealer[d.id] || 0;
+    var potential = potByDealer[d.id] || 0;
+    var status = won > 0 ? 'won' : (potential > 0 ? 'active' : 'none');
+    return { dealer: d, won: won, potential: potential, status: status };
+  }).sort(function(a, b) { return (b.won + b.potential) - (a.won + a.potential); });
+
+  return {
+    target: Number(revCat.target) || 0,
+    actual: kpiComputeActual(plan, revCat),
+    rows: rows,
+    noneCount: rows.filter(function(r) { return r.status === 'none'; }).length
+  };
+}
+
+// จัดกลุ่มดีลที่ kpiTopPotentialDeals() เลือกมา (ปิดแล้วจะพอดีเป้า) ตาม Dealer — ช่วยตอบคำถาม "ควรไปดันที่
+// เจ้าไหน" แทนที่จะเห็นแค่รายชื่อดีลเดี่ยวๆ
+function kpiDealerGapSuggestion(plan) {
+  var top = kpiTopPotentialDeals(plan);
+  if (!top || !top.picked.length) return null;
+  var byDealer = {};
+  top.picked.forEach(function(p) {
+    var key = p.dealerId || '_none';
+    if (!byDealer[key]) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      byDealer[key] = { dealerId: p.dealerId, dealerName: dl ? dl.name : (p.dealerName || '-'), amount: 0, count: 0 };
+    }
+    byDealer[key].amount += Number(p.forecastAmount) || 0;
+    byDealer[key].count++;
+  });
+  var list = Object.keys(byDealer).map(function(k) { return byDealer[k]; }).sort(function(a, b) { return b.amount - a.amount; });
+  return { remain: top.remain, sum: top.sum, willHitTarget: top.willHitTarget, list: list };
+}
+
+// ================================================================
 // Banner เตือนตามหลังเป้า — ใช้แสดงที่หน้า Today (เรียกจาก views-today.js)
 // ================================================================
 function kpiTodayBehindBanner() {
@@ -689,6 +743,40 @@ function rKpiScorecard(el) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
       h += '<div class="kpi-detail-row" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📦 ' + sanitize(p.projectName || (dl ? dl.name : '') || '-') + ' — ' + fmtMoneyShort(p.forecastAmount) + (typeof pipeTag === 'function' ? ' ' + pipeTag(p.status) : '') + '</div>';
     });
+    h += '</div>';
+  }
+
+  // 🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย — มุมมองระดับ Dealer (แยกจากมุมมองระดับดีลของการ์ด "Top deals" ด้านบน)
+  var dealerPlan = kpiDealerPlanBreakdown(plan);
+  if (dealerPlan && dealerPlan.rows.length) {
+    var dpRemain = Math.max(dealerPlan.target - dealerPlan.actual, 0);
+    h += '<div class="card">';
+    h += '<h2>🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย <span class="ml" style="font-size:11px;color:var(--text2)">เป้าที่เหลือ ' + fmtMoneyShort(dpRemain) + '</span></h2>';
+    h += '<div class="kpi-dealer-rows">';
+    dealerPlan.rows.forEach(function(r) {
+      var badge = r.status === 'won' ? '<span class="tag tag-win">✅ ถึงแล้ว ' + fmtMoneyShort(r.won) + '</span>'
+        : r.status === 'active' ? '<span class="tag tag-bidding">🟡 มีลุ้น ' + fmtMoneyShort(r.potential) + '</span>'
+        : '<span class="tag tag-lost">🔴 ยังไม่ขยับ</span>';
+      h += '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<span onclick="go(\'dealerDetail\',{dealerId:\'' + r.dealer.id + '\'})" style="cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🏪 ' + sanitize(r.dealer.name) + '</span>' +
+        badge +
+        (r.status === 'none' ? '<button class="btn bsm bo" onclick="event.stopPropagation();showFollowupM(\'' + r.dealer.id + '\')">📞 + Follow-up</button>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+    if (dealerPlan.noneCount) {
+      h += '<div class="kpi-sc-month" style="margin-top:6px">⚠️ ' + dealerPlan.noneCount + ' ราย ยังไม่มีความเคลื่อนไหวในไตรมาสนี้เลย — ไม่น่าช่วยให้ถึงเป้าได้ถ้าไม่รีบตามต่อ</div>';
+    }
+
+    var gapSug = kpiDealerGapSuggestion(plan);
+    if (gapSug) {
+      h += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">';
+      h += '<div class="kpi-sc-month" style="margin-bottom:6px">💡 ถ้าปิดของ Dealer เหล่านี้ได้ ' + (gapSug.willHitTarget ? 'จะถึงเป้าพอดี' : 'จะช่วยลดระยะห่างจากเป้าได้') + ' (รวม ' + fmtMoneyShort(gapSug.sum) + ' จากเป้าที่เหลือ ' + fmtMoneyShort(gapSug.remain) + ')</div>';
+      gapSug.list.forEach(function(g) {
+        h += '<div class="kpi-detail-row" ' + (g.dealerId ? 'onclick="go(\'dealerDetail\',{dealerId:\'' + g.dealerId + '\'})"' : '') + '>🏪 ' + sanitize(g.dealerName) + ' — ' + fmtMoneyShort(g.amount) + ' (' + g.count + ' ดีล)</div>';
+      });
+      h += '</div>';
+    }
     h += '</div>';
   }
 
