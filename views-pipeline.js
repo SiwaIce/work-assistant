@@ -5572,8 +5572,12 @@ var _PIPE_IMPORT_COLS = [
   { key: 'endUserTH',         label: 'End User Name' },
   { key: 'endUserEN',         label: 'End User Name Eng' },
   { key: 'unitType',          label: 'Unit type' },
-  { key: 'dealerName',        label: 'Dealer Name' },
-  { key: 'djiDealer',         label: 'DJI Dealer' },
+  // label สลับกับ key โดยตั้งใจ (2026-08-24) — คอลัมน์ในชีทต้นทางชื่อหัวข้อกับข้อมูลจริงสลับกันอยู่: คอลัมน์
+  // "DJI Dealer" ในชีทมีชื่อบริษัทจริง (ต้องใช้หา/สร้าง Dealer ในระบบ = key dealerName) ส่วนคอลัมน์
+  // "Dealer Name" ในชีทมีค่าประเภท SAB/Other (ข้อความอิสระเก็บไว้เฉยๆ = key djiDealer) — ดู label ที่สลับ
+  // คู่กันในฟอร์มแก้ไข Pipeline (modals.js) และหน้ารายละเอียด (rPipeDet) ด้วยแล้ว
+  { key: 'dealerName',        label: 'DJI Dealer' },
+  { key: 'djiDealer',         label: 'Dealer Name' },
   { key: 'projectRevenue',    label: 'Project revenue' },
   { key: 'model',             label: 'Model' },
   { key: 'dock',                label: 'Dock' },
@@ -6188,7 +6192,7 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserEN')) },
     { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(_pipeCol(c, colMap, 'unitType')) },
     { label: 'Dealer',          old: _pipeNormText((ST.getOne('dealers', existing.dealerId) || {}).name), newVal: _pipeNormText(dealer ? dealer.name : '') },
-    { label: 'DJI Dealer',      old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(_pipeCol(c, colMap, 'djiDealer')) },
+    { label: 'Dealer Name',     old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(_pipeCol(c, colMap, 'djiDealer')) },
     { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(_pipeCol(c, colMap, 'tor')) },
     { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(_pipeCol(c, colMap, 'remark')) },
     { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(_pipeCol(c, colMap, 'appointmentLetter')) },
@@ -6800,8 +6804,8 @@ var _PIPE_DETAIL_FIELD_DEFS = [
   { key: 'endUserTH',         label: 'End User TH' },
   { key: 'endUserEN',         label: 'End User EN' },
   { key: 'unitType',          label: 'Unit type' },
-  { key: 'dealerName',        label: 'Dealer Name' },
-  { key: 'djiDealer',         label: 'DJI Dealer' },
+  { key: 'dealerName',        label: 'DJI Dealer' },
+  { key: 'djiDealer',         label: 'Dealer Name' },
   { key: 'projectRevenue',    label: 'Project Revenue' },
   { key: 'model',             label: 'Model', wide: true },
   { key: 'm3m',                label: 'M3M Qty' },
