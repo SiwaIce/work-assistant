@@ -41,7 +41,8 @@ a{color:#3b82f6;text-decoration:none}
 #main{margin-left:200px;flex:1;min-width:0;min-height:100vh;display:flex;flex-direction:column;transition:margin-left .25s ease}
 .topbar{background:#1e293b;padding:8px 16px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;min-height:42px}
 .topbar-l{display:flex;align-items:center;gap:8px;min-width:0}
-.topbar-r{display:flex;align-items:center;gap:8px}
+/* .topbar-r ถูกประกาศซ้ำอีกจุดท้ายไฟล์ (gap:4px แทน 8px) ซึ่งมาทีหลังเลยชนะอยู่แล้ว — ลบตัวนี้ทิ้งไม่กระทบ
+   หน้าตาอะไร (2026-08-24 UI audit ข้อ 10) ดู .topbar-r ตัวจริงที่ใช้อยู่ใกล้ .theme-btn,.refresh-btn,.mode-toggle */
 .menu-btn{display:none;background:none;border:none;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px}
 .collapse-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#94a3b8;font-size:.85rem;cursor:pointer;padding:3px 7px;transition:.15s}
 .collapse-btn:hover{background:rgba(255,255,255,.14);color:#e2e8f0}
@@ -5708,30 +5709,11 @@ function renderUpcomingTimeline() {
 }
 /* ================================================================
    MODE TOGGLE + REFRESH BUTTON
+   ================================================================
+   .refresh-btn/.mode-toggle ตัวจริง (สี่เหลี่ยม 32x32 ไอคอนกลาง) ประกาศอยู่ท้ายไฟล์ ใกล้ .theme-btn —
+   บล็อกเดิมตรงนี้ (ปุ่มสี่เหลี่ยมผืนผ้า padding 4px 8px) ถูกทับไปเต็มๆ แล้วตั้งแต่ก่อนหน้านี้ ลบทิ้งไม่กระทบ
+   หน้าตาอะไร เหลือไว้แค่ override เฉพาะ Light/Midnight theme ด้านล่างซึ่งยังใช้งานอยู่จริง (2026-08-24 UI audit ข้อ 10)
    ================================================================ */
-.refresh-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text2);
-  transition: 0.15s;
-}
-.refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-.mode-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text2);
-  transition: 0.15s;
-}
-.mode-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Light theme */
 .theme-light .refresh-btn { border-color: #e2e8f0; color: #64748b; }
