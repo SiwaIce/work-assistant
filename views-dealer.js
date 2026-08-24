@@ -768,10 +768,11 @@ function bulkChangeDealerSale() {
   var ids = Object.keys(dealerSelected);
   if (!ids.length) return;
   if (!confirm('ย้ายเซลที่ดูแล ' + ids.length + ' Dealer เป็น "' + saleName + '"?\n(Pipeline ของ Dealer เหล่านี้จะถูกย้ายเซลตามไปด้วยอัตโนมัติ)')) return;
-  ids.forEach(function(id) {
-    var saved = ST.update('dealers', id, { saleName: saleName });
-    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', saved);
-    if (typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(id, saleName);
+  // ST.updateMany() แทนวน ST.update() ทีละ Dealer — เหตุผลเดียวกับ cascadeDealerSaleNameToPipelines
+  var saved = ST.updateMany('dealers', ids, { saleName: saleName });
+  saved.forEach(function(d) {
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', d);
+    if (typeof cascadeDealerSaleNameToPipelines === 'function') cascadeDealerSaleNameToPipelines(d.id, saleName);
   });
   toast('🧑‍💼 ย้ายเซลแล้ว ' + ids.length + ' รายการ');
   render();
@@ -3196,10 +3197,11 @@ function _dealerInlineSaveLevel(dealerId, newLevel) {
 // ทับ Sale ของทุก Pipeline ใต้ Dealer นี้ให้ตรงกับ "เซลที่ดูแล" ของ Dealer เสมอ (ตกลงกันไว้ว่าทับทั้งหมด
 // ไม่เช็คว่า Pipeline นั้นเคยตั้ง Sale ไว้ต่างจาก Dealer หรือเปล่า)
 function cascadeDealerSaleNameToPipelines(dealerId, saleName) {
-  var pipes = ST.pipelineByDealer(dealerId);
-  pipes.forEach(function(p) {
-    if (p.saleName !== saleName) ST.update('pipeline', p.id, { saleName: saleName });
-  });
+  // เดิมวน ST.update() ทีละ pipeline — แต่ ST.update() parse/stringify ทั้ง collection pipeline ใหม่ทุกครั้ง
+  // ที่เรียก พอ Dealer มีหลาย pipeline + ระบบมี pipeline รวมเยอะ ทำให้แอพค้างจริง (ผู้ใช้แจ้ง 2026-08-24)
+  // เปลี่ยนเป็น ST.updateMany() อ่าน/เขียนทั้งก้อนครั้งเดียว
+  var ids = ST.pipelineByDealer(dealerId).filter(function(p) { return p.saleName !== saleName; }).map(function(p) { return p.id; });
+  if (ids.length) ST.updateMany('pipeline', ids, { saleName: saleName });
 }
 
 function markDealerAuthorized(dealerId) {

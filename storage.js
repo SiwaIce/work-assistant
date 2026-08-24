@@ -125,6 +125,27 @@ const ST = {
     return null;
   },
 
+  // อัปเดตหลาย record พร้อมกันด้วยการ parse/stringify collection แค่ครั้งเดียว — ต่างจากการวนเรียก
+  // update() ทีละตัว (แต่ละครั้ง parse+stringify ทั้ง collection ใหม่หมด O(รายการที่แก้ × ขนาด collection))
+  // ใช้จุดไหนก็ได้ที่ต้องแก้หลาย record ใน collection เดียวกันพร้อมกัน (เช่น cascade เปลี่ยนเซลที่ดูแลไปยัง
+  // pipeline ทุกอันของ Dealer — ดู cascadeDealerSaleNameToPipelines ใน views-dealer.js ที่เจอปัญหาแอพค้างจริง
+  // เพราะวน update() ทีละ pipeline บน collection ที่มีเป็นพันรายการ 2026-08-24)
+  updateMany(collection, ids, updates) {
+    if (this._guestBlocked(collection)) return [];
+    const idSet = new Set(ids);
+    const arr = this.getAll(collection);
+    const now = new Date().toISOString();
+    const changed = [];
+    for (let i = 0; i < arr.length; i++) {
+      if (idSet.has(arr[i].id)) {
+        arr[i] = { ...arr[i], ...updates, updated: now };
+        changed.push(arr[i]);
+      }
+    }
+    if (changed.length) this._set(this._keys[collection], arr);
+    return changed;
+  },
+
   delete(collection, id) {
     if (this._guestBlocked(collection)) return;
     this._set(this._keys[collection], this.getAll(collection).filter(x => x.id !== id));
