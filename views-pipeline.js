@@ -6132,7 +6132,11 @@ var PIPE_IMPORT_FIELD_GROUPS = [
   { key: 'realAmount',     label: 'Real Amount',                  keys: ['realAmount'] },
   { key: 'projectRevenue', label: 'Project Revenue',              keys: ['projectRevenue'] },
   { key: 'tor',            label: 'TOR',                          keys: ['tor'] },
-  { key: 'dates',          label: 'Register/Bidding/Shipment Date', keys: ['registerDate', 'biddingDate', 'shipmentDate'] },
+  // แยก Bidding Date ออกจาก Register/Shipment Date เป็นคนละ toggle (เดิมรวมเป็น "dates" กลุ่มเดียว) —
+  // ผู้ใช้แจ้งว่าไฟล์บางรอบคอลัมน์ Bidding Date ว่างไปเฉยๆ (ยังกรอกไม่เสร็จ) แต่ในระบบมีค่าอยู่แล้ว ตอน import
+  // ไปทับเป็นว่างเสียหาย อยากข้ามเฉพาะ Bidding Date ได้โดยไม่กระทบ Register/Shipment Date (2026-08-24)
+  { key: 'registerShipDate', label: 'Register/Shipment Date',      keys: ['registerDate', 'shipmentDate'] },
+  { key: 'biddingDate',    label: 'Bidding Date',                 keys: ['biddingDate'] },
   { key: 'remark',         label: 'Remark',                       keys: ['remark'] },
   { key: 'appointment',    label: 'หนังสือแต่งตั้ง',                keys: ['appointmentLetter'] },
   { key: 'pos',            label: 'Project POS (%)',              keys: ['projectPOS'] },
