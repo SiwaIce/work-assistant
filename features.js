@@ -4849,7 +4849,7 @@ function rKnowledge(el) {
     h += noteListHTML(notes, cats, canGroup);
   }
 
-  h += '<div style="font-size:.64rem;color:#64748b;margin-top:6px">' + notes.length + ' note' + (noteSearch ? ' · ค้นหา: "' + sanitize(noteSearch) + '"' : '') + '</div>';
+  h += '<div style="font-size:.64rem;color:var(--text2);margin-top:6px">' + notes.length + ' note' + (noteSearch ? ' · ค้นหา: "' + sanitize(noteSearch) + '"' : '') + '</div>';
 
   el.innerHTML = h;
   if (noteSearch) {
@@ -5208,7 +5208,7 @@ function rRemind(el) {
   
   h += '<div class="card"><h2>🔔 Browser Notification</h2>' +
     '<button class="btn bs" onclick="if(\'Notification\' in window)Notification.requestPermission().then(p=>toast(p===\'granted\'?\'✅ เปิดแล้ว\':\'❌\'));else toast(\'ไม่รองรับ\',true)">🔔 เปิดการแจ้งเตือน</button>' +
-    '<div style="margin-top:4px;font-size:.7rem;color:#64748b">' + ('Notification' in window ? 'สถานะ: ' + Notification.permission : 'ไม่รองรับ') + '</div></div>';
+    '<div style="margin-top:4px;font-size:.7rem;color:var(--text2)">' + ('Notification' in window ? 'สถานะ: ' + Notification.permission : 'ไม่รองรับ') + '</div></div>';
   
   el.innerHTML = h;
 }
@@ -5273,7 +5273,7 @@ function renderWinLoss() {
     '<div class="sc"><div class="sn ' + (winRate >= 60 ? 'c2' : 'c4') + '">' + winRate + '%</div><div class="sl">Win Rate</div></div>' +
     '<div class="sc"><div class="sn c2">' + fmtMoneyShort(wonAmt) + '</div><div class="sl">Won Value</div></div>' +
     '</div>' +
-    (Object.keys(reasons).length ? '<div style="font-size:.78rem;color:#94a3b8;margin-bottom:4px">สาเหตุที่แพ้:</div>' +
+    (Object.keys(reasons).length ? '<div style="font-size:.78rem;color:var(--text2);margin-bottom:4px">สาเหตุที่แพ้:</div>' +
       Object.entries(reasons).sort(function(a,b) { return b[1]-a[1]; }).map(function(r) {
         return '<div class="wl-reason"><span style="flex:1">' + sanitize(r[0]) + '</span><span style="font-weight:700;color:#ef4444">' + r[1] + ' ครั้ง</span></div>';
       }).join('') : '');

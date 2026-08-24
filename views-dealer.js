@@ -1305,9 +1305,9 @@ function dealerCardHTML(d, health) {
 
       <div class="dealer-health">
         <span class="health-dot ${contactColor(lcd)}"></span>
-        <span style="font-size:.62rem;color:#64748b">ติดต่อ: ${lcd !== null ? lcd + 'd' : '-'}</span>
-        <span style="font-size:.62rem;color:#64748b">Visit: ${lvd !== null ? lvd + 'd' : '-'}</span>
-        <span style="font-size:.62rem;color:#64748b;margin-left:auto">📊 ${activePipes.length}</span>
+        <span style="font-size:.62rem;color:var(--text2)">ติดต่อ: ${lcd !== null ? lcd + 'd' : '-'}</span>
+        <span style="font-size:.62rem;color:var(--text2)">Visit: ${lvd !== null ? lvd + 'd' : '-'}</span>
+        <span style="font-size:.62rem;color:var(--text2);margin-left:auto">📊 ${activePipes.length}</span>
       </div>
 
       ${certHtml}
@@ -1668,8 +1668,8 @@ function certField(name, status, count, lastCheck) {
   const pass = status === 'pass' || status === 'yes' || status === 'added';
   return `<div style="padding:6px 8px;background:#0f172a;border:1px solid ${pass?'#22c55e':'#475569'};border-radius:6px">
     <div style="font-size:.72rem;display:flex;justify-content:space-between"><span>${name}</span><span>${pass?'✅':'❌'}</span></div>
-    ${count ? `<div style="font-size:.66rem;color:#64748b">${count} ใบ</div>` : ''}
-    ${lastCheck ? `<div style="font-size:.62rem;color:#475569">เช็ค: ${fDShort(lastCheck)}</div>` : ''}
+    ${count ? `<div style="font-size:.66rem;color:var(--text2)">${count} ใบ</div>` : ''}
+    ${lastCheck ? `<div style="font-size:.62rem;color:var(--text3)">เช็ค: ${fDShort(lastCheck)}</div>` : ''}
   </div>`;
 }
 
@@ -1682,7 +1682,7 @@ function renderLineLog(dealerId, limit) {
     return `<div class="line-item" style="padding:6px 8px">
       <div class="line-type ${lt.cls||'line-type-info'}" style="min-width:60px">${lt.name||l.logType}</div>
       <div style="flex:1"><div style="font-size:.76rem">${sanitize(l.summary||'')}</div>
-      <div style="font-size:.6rem;color:#64748b">${fD(l.date)} ${l.time||''}</div></div>
+      <div style="font-size:.6rem;color:var(--text2)">${fD(l.date)} ${l.time||''}</div></div>
       <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('lineLog','${l.id}');render()">✕</button>
     </div>`;
   }).join('');
@@ -1896,7 +1896,7 @@ function dealerPipelineTab(d) {
       }
     }
     if (dealerPipeSearch || listPipes.length !== pipes.length) {
-      h += '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + listPipes.length + ' / ' + pipes.length + ' รายการ</div>';
+      h += '<div style="font-size:.64rem;color:var(--text2);margin-top:4px">' + listPipes.length + ' / ' + pipes.length + ' รายการ</div>';
     }
   }
 
@@ -2063,7 +2063,7 @@ function dealerVisitTab(d) {
   <div class="card"><h2>💡 Feedback (${ST.feedbackByDealer(d.id).length})
     <span class="ml"><button class="btn bsm bp" onclick="showFeedbackM('${d.id}')">➕</button></span></h2>
   ${ST.feedbackByDealer(d.id).length ? ST.feedbackByDealer(d.id).map(f => `<div class="visit-sub">
-    <div style="display:flex;justify-content:space-between"><span style="font-size:.62rem;color:#64748b">${fD(f.date)} • ${f.source||''}</span>
+    <div style="display:flex;justify-content:space-between"><span style="font-size:.62rem;color:var(--text2)">${fD(f.date)} • ${f.source||''}</span>
     <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('feedback','${f.id}');render()">✕</button></div>
     <div style="font-size:.74rem;margin-top:1px">${sanitize(f.text)}</div>
     ${f.attachments && f.attachments.length ? attachGalleryHtml(f.attachments) : ''}

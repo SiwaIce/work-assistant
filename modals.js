@@ -1240,7 +1240,7 @@ function showPipeUpdateM(pipeId) {
   if (!p) return;
   var cfg = getConfig();
   openM('📝 อัพเดท Pipeline — ' + (p.projectName || '').substr(0, 30), '' +
-    '<div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
+    '<div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">' + sanitize((p.projectName || '').substr(0, 50)) + ' • ' + pipeTag(p.status) + ' • 💰 ' + fmtMoney(p.forecastAmount) + '</div>' +
     '<div class="fg"><label>ประเภท</label><select id="qu_t"><option value="update">📝 อัพเดท</option><option value="progress">🟢 คืบหน้า</option><option value="problem">🔴 ปัญหา</option><option value="solution">🟡 แก้ไข</option><option value="forecast">📦 Forecast</option><option value="note">⚪ หมายเหตุ</option></select></div>' +
     '<div class="fg"><label>⚡ Quick Fill</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
     '<button type="button" class="btn-sm" onclick="puQuickFill(\'ลูกค้ากำลังพิจารณา\')">🤔 กำลังพิจารณา</button>' +
@@ -1252,7 +1252,7 @@ function showPipeUpdateM(pipeId) {
     '<button type="button" class="btn-sm" onclick="puQuickFill(\'เลื่อนกำหนดตัดสินใจ\')">📅 เลื่อนตัดสินใจ</button>' +
     '<button type="button" class="btn-sm" onclick="puQuickFill(\'ติดตามลูกค้า ยังไม่มีความคืบหน้าใหม่\')">🔄 Follow-up</button>' +
     '</div></div>' +
-    '<div class="fg"><label>รายละเอียด <small style="color:#64748b">(ไม่บังคับ ถ้าแค่เปลี่ยน Status)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
+    '<div class="fg"><label>รายละเอียด <small style="color:var(--text2)">(ไม่บังคับ ถ้าแค่เปลี่ยน Status)</small></label><textarea id="qu_c" rows="3" placeholder="พิมพ์อัพเดทสั้นๆ..."></textarea></div>' +
     '<div class="fr"><div class="fg"><label>เปลี่ยน Status</label><select id="qu_st"><option value="">-- ไม่เปลี่ยน --</option>' + cfg.pipelineStatuses.map(function(s) { return '<option value="' + s.id + '"' + (p.status === s.id ? ' selected' : '') + '>' + s.name + '</option>'; }).join('') + '</select></div>' +
     '<div class="fg"></div></div>' +
     dpH('qu_fu', p.followupDate || '', 'Follow-up Date') +
@@ -1898,9 +1898,9 @@ function onVisitDealerChanged() {
 }
 
 function renderPipelineSelectEnhanced(dealerId, existUpdates) {
-  if (!dealerId) return '<div style="font-size:.72rem;color:#64748b">เลือก Dealer ก่อน</div>';
+  if (!dealerId) return '<div style="font-size:.72rem;color:var(--text2)">เลือก Dealer ก่อน</div>';
   var pipes = ST.pipelineByDealer(dealerId).filter(function(p) { return pipeIsOpen(p); });
-  if (!pipes.length) return '<div style="font-size:.72rem;color:#64748b">ไม่มี Pipeline active</div>';
+  if (!pipes.length) return '<div style="font-size:.72rem;color:var(--text2)">ไม่มี Pipeline active</div>';
   var eu = existUpdates || [];
   var cfg = getConfig();
   var statusOrder = ['bidding','initial','on_process','draft_tor','win','contracting','deliver','fail_lost'];
@@ -4075,11 +4075,11 @@ function previewDealerImport(input) {
     var h = '<div style="margin-top:8px">';
     var counts = { new: 0, changed: 0, same: 0, skip: 0 };
     rowMeta.forEach(function(m) { counts[m.skip ? 'skip' : m.state]++; });
-    h += '<div style="font-size:12px;color:#94a3b8;background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">' +
+    h += '<div style="font-size:12px;color:var(--text2);background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">' +
       '✅ พบข้อมูล <strong>' + rows.length + '</strong> แถว — ' +
       '<strong style="color:#22c55e">➕ ' + counts.new + ' ใหม่</strong> · ' +
       '<strong style="color:#f59e0b">✏️ ' + counts.changed + ' เปลี่ยน</strong> · ' +
-      '<span style="color:#64748b">⏭ ' + counts.same + ' เหมือนเดิม</span>' +
+      '<span style="color:var(--text2)">⏭ ' + counts.same + ' เหมือนเดิม</span>' +
       (counts.skip ? ' · <span style="color:#ef4444">⚠️ ' + counts.skip + ' ไม่มีชื่อบริษัท (ข้าม)</span>' : '') +
       '</div>';
 
@@ -4091,13 +4091,13 @@ function previewDealerImport(input) {
       }
       var badge = m.state === 'new' ? '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>' :
         m.state === 'changed' ? '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>' :
-        '<span style="color:#64748b;font-size:11px;font-weight:700">⏭ เหมือนเดิม</span>';
+        '<span style="color:var(--text2);font-size:11px;font-weight:700">⏭ เหมือนเดิม</span>';
       var defAct = m.state === 'same' ? 'skip' : (m.state === 'new' ? 'add' : 'update');
       h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b">';
       h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
       h += '<span style="flex:1;min-width:120px;font-size:12px;font-weight:600">' + sanitize(m.data.name) + '</span>';
       h += badge;
-      if (m.state === 'changed') h += ' <button type="button" onclick="_dealerImpToggleDiff(' + i + ')" id="dImpDiffBtn_' + i + '" style="font-size:10px;padding:1px 6px;border:1px solid #334155;border-radius:4px;background:#0f172a;cursor:pointer;color:#94a3b8">🔍 ' + m.diff.length + '</button>';
+      if (m.state === 'changed') h += ' <button type="button" onclick="_dealerImpToggleDiff(' + i + ')" id="dImpDiffBtn_' + i + '" style="font-size:10px;padding:1px 6px;border:1px solid #334155;border-radius:4px;background:#0f172a;cursor:pointer;color:var(--text2)">🔍 ' + m.diff.length + '</button>';
       h += '<select id="dImpAct_' + i + '" style="font-size:11px;padding:2px 5px;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#e2e8f0">' +
         '<option value="add"' + (defAct === 'add' ? ' selected' : '') + '>➕ เพิ่มใหม่</option>' +
         (m.existing ? '<option value="update"' + (defAct === 'update' ? ' selected' : '') + '>✏️ อัปเดต</option>' : '') +
@@ -4107,9 +4107,9 @@ function previewDealerImport(input) {
       if (m.state === 'changed' && m.diff.length) {
         h += '<table id="dImpDiffRow_' + i + '" style="display:none;width:100%;margin-top:6px;font-size:10.5px;border-collapse:collapse">';
         m.diff.forEach(function(d) {
-          h += '<tr><td style="padding:2px 6px;color:#64748b;white-space:nowrap">' + sanitize(d.label) + '</td>' +
+          h += '<tr><td style="padding:2px 6px;color:var(--text2);white-space:nowrap">' + sanitize(d.label) + '</td>' +
             '<td style="padding:2px 6px;color:#ef4444">' + sanitize(d.old || '(ว่าง)') + '</td>' +
-            '<td style="padding:2px 6px;color:#94a3b8">→</td>' +
+            '<td style="padding:2px 6px;color:var(--text2)">→</td>' +
             '<td style="padding:2px 6px;color:#22c55e">' + sanitize(d.newVal || '(ว่าง)') + '</td></tr>';
         });
         h += '</table>';
@@ -4162,13 +4162,13 @@ function showImportPipelineM() {
     '<div class="fg"><label>วิธีที่ 1: วาง JSON</label>' +
     '<textarea id="imp_pipe_json" rows="6" placeholder="วาง JSON ข้อมูล Pipeline ที่นี่..."></textarea></div>' +
     '<button class="btn bp btn-full" onclick="importPipelineJSON()">📥 Import จาก JSON</button>' +
-    '<div style="margin:10px 0;text-align:center;color:#64748b;font-size:.72rem">— หรือ —</div>' +
+    '<div style="margin:10px 0;text-align:center;color:var(--text2);font-size:.72rem">— หรือ —</div>' +
     '<div class="fg"><label>วิธีที่ 2: เลือกไฟล์ .json</label>' +
     '<input type="file" id="imp_pipe_file" accept=".json" onchange="importPipelineFile(event)" style="font-size:.76rem"></div>' +
-    '<div style="margin:10px 0;text-align:center;color:#64748b;font-size:.72rem">— หรือ —</div>' +
+    '<div style="margin:10px 0;text-align:center;color:var(--text2);font-size:.72rem">— หรือ —</div>' +
     '<div class="fg"><label>วิธีที่ 3: นำเข้าจาก Google Sheet (.csv)</label>' +
     '<input type="file" id="imp_pipe_csv" accept=".csv" onchange="importPipelineCSVFile(event)" style="font-size:.76rem"></div>' +
-    '<div style="margin-top:10px;font-size:.68rem;color:#64748b">' +
+    '<div style="margin-top:10px;font-size:.68rem;color:var(--text2)">' +
     '💡 จับคู่ Dealer Name อัตโนมัติ<br>' +
     '⚠️ ถ้าหาไม่เจอจะสร้าง Dealer ใหม่ให้<br>' +
     '📥 CSV: จะมีหน้า Preview ให้เลือก Dealer ก่อน ไม่กระทบ Dealer/Pipeline เดิม</div>');

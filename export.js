@@ -51,7 +51,7 @@ function xRender(areaId, headers, rows, filename) {
   el.innerHTML = `<div class="bg" style="margin-bottom:4px"><button class="btn bsm bp" onclick="copyTable('${tid}')">📋 Copy</button><button class="btn bsm bs" onclick="dlTableCSV('${tid}','${filename}')">📤 CSV</button></div>
   <div class="export-wrap"><table class="export-table" id="${tid}"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
   <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
-  <div style="font-size:.62rem;color:#64748b;margin-top:3px">${rows.length} รายการ</div>`;
+  <div style="font-size:.62rem;color:var(--text2);margin-top:3px">${rows.length} รายการ</div>`;
 }
 
 // รูปแบบคอลัมน์ตรงตามชีตปลายทางที่ทีมใช้อยู่แล้ว: Date เป็น DD/MM/YY, Year/Month เว้นว่าง (ฝั่งชีตมีสูตรคำนวณ
@@ -116,7 +116,7 @@ function xRenderVisit() {
     html += '</tr>';
   });
   html += '</tbody></table></div>';
-  html += '<div style="font-size:.62rem;color:#64748b;margin-top:3px">' + _xVisitRows.length + ' รายการ</div>';
+  html += '<div style="font-size:.62rem;color:var(--text2);margin-top:3px">' + _xVisitRows.length + ' รายการ</div>';
   el.innerHTML = html;
 }
 

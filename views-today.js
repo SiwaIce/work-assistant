@@ -450,7 +450,7 @@ function rToday(el) {
     '</div>' : '<div class="card" style="text-align:center;padding:20px"><div style="color:var(--text2)">ไม่มีตารางวันนี้</div></div>'}
 
     ${rts.length ? '<div class="card"><h2>🔄 Routine (' + rtDone + '/' + rts.length + ') <span class="ml"><button class="btn bsm bo" onclick="go(\'admin\',{tab:\'routine\'})">จัดการ</button></span></h2>' +
-    '<div class="rt-prog"><div class="pb" style="flex:1;height:8px"><div class="pf ' + (rtDone >= rts.length ? 'pf-green' : 'pf-blue') + '" style="width:' + (rts.length ? Math.round(rtDone / rts.length * 100) : 0) + '%"></div></div><span style="font-size:.78rem;color:#94a3b8;min-width:35px;text-align:right">' + (rts.length ? Math.round(rtDone / rts.length * 100) : 0) + '%</span></div>' +
+    '<div class="rt-prog"><div class="pb" style="flex:1;height:8px"><div class="pf ' + (rtDone >= rts.length ? 'pf-green' : 'pf-blue') + '" style="width:' + (rts.length ? Math.round(rtDone / rts.length * 100) : 0) + '%"></div></div><span style="font-size:.78rem;color:var(--text2);min-width:35px;text-align:right">' + (rts.length ? Math.round(rtDone / rts.length * 100) : 0) + '%</span></div>' +
     rts.map(function(r) { var isDone = rc.done.indexOf(r.id) !== -1; return '<div class="rt-item ' + (isDone ? 'rt-done' : '') + '"><div class="ck ' + (isDone ? 'chk' : '') + '" onclick="ST.toggleRoutineCheck(\'' + r.id + '\');render()"></div><div class="rt-time">' + (r.time || '') + '</div><div class="rt-title">' + sanitize(r.title) + '</div><span class="rt-tag">' + (DAY_NAMES[r.days] || r.days) + '</span></div>'; }).join('') +
     '</div>' : ''}
     `;
@@ -551,13 +551,13 @@ function rKPI(el) {
     <div class="kpi-pct" style="font-size:.82rem">${Math.round(kpi.followup.current/kpi.followup.target*100)}%</div></div>
     
     ${contacted.length ? `<div style="margin-bottom:6px;font-size:.74rem;color:#22c55e;font-weight:600">✅ ติดต่อแล้ว (${contacted.length}):</div>
-    ${contacted.map(d => `<div class="kpi-dealer done"><span class="dealer-name">🟢 ${sanitize(d.name)} ${levelTag(d.level)}</span><span style="color:#64748b">${d.lastContactDate ? fDShort(d.lastContactDate) : ''}</span></div>`).join('')}` : ''}
+    ${contacted.map(d => `<div class="kpi-dealer done"><span class="dealer-name">🟢 ${sanitize(d.name)} ${levelTag(d.level)}</span><span style="color:var(--text2)">${d.lastContactDate ? fDShort(d.lastContactDate) : ''}</span></div>`).join('')}` : ''}
     
     ${notContacted.length ? `<div style="margin:8px 0 6px;font-size:.74rem;color:#ef4444;font-weight:600">❌ ยังไม่ได้ติดต่อ (${notContacted.length}):</div>
     ${notContacted.map(d => `<div class="kpi-dealer ${d.lastContactDays > 14 ? 'overdue' : 'pending'}">
       <span class="health-dot ${d.contactStatus}"></span>
       <span class="dealer-name">${sanitize(d.name)} ${levelTag(d.level)}</span>
-      <span style="color:#64748b;font-size:.62rem">${d.lastContactDate ? fDRelative(d.lastContactDate) : 'ไม่เคย'}</span>
+      <span style="color:var(--text2);font-size:.62rem">${d.lastContactDate ? fDRelative(d.lastContactDate) : 'ไม่เคย'}</span>
       <span class="dealer-act" onclick="event.stopPropagation();showFollowupM('${d.id}')">📞 FU</span>
     </div>`).join('')}` : ''}
   </div>
@@ -570,11 +570,11 @@ function rKPI(el) {
     
     ${kpi.visit.details.length ? kpi.visit.details.map(v => { const d = ST.getOne('dealers', v.dealerId); return `<div class="kpi-dealer done"><span class="dealer-name">🟢 ${d?.name||'?'} — ${fD(v.date)} ${v.time||''}</span><span class="dealer-act" onclick="event.stopPropagation();go('visitDetail',{visitId:'${v.id}'})">ดู →</span></div>`; }).join('') : ''}
     
-    <div style="margin-top:8px;font-size:.74rem;color:#94a3b8">💡 แนะนำ Visit ถัดไป (ไม่ Visit นานสุด):</div>
+    <div style="margin-top:8px;font-size:.74rem;color:var(--text2)">💡 แนะนำ Visit ถัดไป (ไม่ Visit นานสุด):</div>
     ${dealerStatus.filter(d => d.level && d.level !== 'Other').sort((a,b) => (b.lastVisitDays === null ? 9999 : b.lastVisitDays) - (a.lastVisitDays === null ? 9999 : a.lastVisitDays)).slice(0,3).map(d => `<div class="kpi-dealer pending">
       <span class="health-dot ${contactColor(d.lastVisitDays)}"></span>
       <span class="dealer-name">${sanitize(d.name)}</span>
-      <span style="color:#64748b;font-size:.62rem">${d.lastVisitDate ? `Visit ${fDRelative(d.lastVisitDate)}` : 'ไม่เคย Visit'}</span>
+      <span style="color:var(--text2);font-size:.62rem">${d.lastVisitDate ? `Visit ${fDRelative(d.lastVisitDate)}` : 'ไม่เคย Visit'}</span>
       <span class="dealer-act" onclick="event.stopPropagation();showVisitM('${d.id}')">🤝</span>
     </div>`).join('')}
   </div>
@@ -616,7 +616,7 @@ function rKPI(el) {
   </table></div></div>
 
   <!-- Goal Setting -->
-  <div class="card"><h2>🎯 เป้าหมาย ${goalData.quarter.label} <span class="ml"><span style="font-size:.72rem;color:#64748b">เหลือ ${goalData.daysLeft} วัน</span></span></h2>
+  <div class="card"><h2>🎯 เป้าหมาย ${goalData.quarter.label} <span class="ml"><span style="font-size:.72rem;color:var(--text2)">เหลือ ${goalData.daysLeft} วัน</span></span></h2>
   <div style="text-align:center;margin-bottom:10px">
     <div style="font-size:1.1rem;font-weight:700">เป้ารวม: <span class="c3">${fmtMoney(goalData.totalTarget)}</span> ฿</div>
     <div style="font-size:.88rem">ยอดจริง: <span class="c2">${fmtMoney(goalData.totalWon)}</span> ฿ (${goalData.totalPct}%)</div>
@@ -664,7 +664,7 @@ function rCalendar(el) {
   for (let d = 1; d <= dim; d++) {
     const iso = `${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const de = evs.filter(e => e.date === iso);
-    h += `<div class="cal-cell${iso===tdy?' today':''}" onclick="showCalDay('${iso}')"><div class="cal-num">${d}</div>${de.slice(0,3).map(e => `<div class="cal-ev ev-${e.type}">${sanitize(e.label)}</div>`).join('')}${de.length>3?`<div style="font-size:.48rem;color:#64748b">+${de.length-3}</div>`:''}</div>`;
+    h += `<div class="cal-cell${iso===tdy?' today':''}" onclick="showCalDay('${iso}')"><div class="cal-num">${d}</div>${de.slice(0,3).map(e => `<div class="cal-ev ev-${e.type}">${sanitize(e.label)}</div>`).join('')}${de.length>3?`<div style="font-size:.48rem;color:var(--text2)">+${de.length-3}</div>`:''}</div>`;
   }
   const tot = fd + dim, rem = 7 - tot % 7;
   if (rem < 7) for (let i = 1; i <= rem; i++) h += `<div class="cal-cell other"><div class="cal-num">${i}</div></div>`;
@@ -732,9 +732,9 @@ function rHeatmap(el) {
     <div class="sc"><div class="sn c5">${activeDays?(totalAct/activeDays).toFixed(1):0}</div><div class="sl">เฉลี่ย/วัน</div></div>
   </div>
   <div class="card"><h2>🗓️ Heatmap — ${weeks} สัปดาห์</h2>
-  <div class="hm-grid">${DAYS_S.map(d => `<div style="font-size:.54rem;color:#475569;text-align:center;padding:2px">${d}</div>`).join('')}
+  <div class="hm-grid">${DAYS_S.map(d => `<div style="font-size:.54rem;color:var(--text3);text-align:center;padding:2px">${d}</div>`).join('')}
   ${cells.map(c => c ? `<div class="hm-cell hm-${c.level}" title="${fD(c.date)}: ${c.count}">${c.count||''}</div>` : '<div class="hm-cell hm-0"></div>').join('')}</div>
-  <div style="display:flex;gap:3px;align-items:center;margin-top:5px;font-size:.6rem;color:#64748b">น้อย ${[0,1,2,3,4].map(l => `<div class="hm-cell hm-${l}" style="width:10px;height:10px;display:inline-block"></div>`).join('')} เยอะ</div></div>`;
+  <div style="display:flex;gap:3px;align-items:center;margin-top:5px;font-size:.6rem;color:var(--text2)">น้อย ${[0,1,2,3,4].map(l => `<div class="hm-cell hm-${l}" style="width:10px;height:10px;display:inline-block"></div>`).join('')} เยอะ</div></div>`;
 }
 
 // ================================================================
@@ -802,7 +802,7 @@ function rRemind(el) {
   
   <div class="card"><h2>🔔 Browser Notification</h2>
   <button class="btn bs" onclick="if('Notification' in window)Notification.requestPermission().then(p=>toast(p==='granted'?'✅ เปิดแล้ว':'❌'));else toast('ไม่รองรับ',true)">🔔 เปิดการแจ้งเตือน</button>
-  <div style="margin-top:4px;font-size:.7rem;color:#64748b">${'Notification' in window ? 'สถานะ: '+Notification.permission : 'ไม่รองรับ'}</div></div>`;
+  <div style="margin-top:4px;font-size:.7rem;color:var(--text2)">${'Notification' in window ? 'สถานะ: '+Notification.permission : 'ไม่รองรับ'}</div></div>`;
 }
 
 // ================================================================
@@ -860,7 +860,7 @@ function renderWinLoss() {
     <div class="sc"><div class="sn ${winRate>=60?'c2':'c4'}">${winRate}%</div><div class="sl">Win Rate</div></div>
     <div class="sc"><div class="sn c2">${fmtMoneyShort(wonAmt)}</div><div class="sl">Won Value</div></div>
   </div>
-  ${Object.keys(reasons).length ? `<div style="font-size:.78rem;color:#94a3b8;margin-bottom:4px">สาเหตุที่แพ้:</div>
+  ${Object.keys(reasons).length ? `<div style="font-size:.78rem;color:var(--text2);margin-bottom:4px">สาเหตุที่แพ้:</div>
   ${Object.entries(reasons).sort((a,b) => b[1]-a[1]).map(([r,c]) => `<div class="wl-reason"><span style="flex:1">${sanitize(r)}</span><span style="font-weight:700;color:#ef4444">${c} ครั้ง</span></div>`).join('')}` : ''}`;
 }
 
@@ -978,7 +978,7 @@ function rFeedback(el) {
   </span></h2>
   ${all.length ? all.map(f => {
     const d = ST.getOne('dealers', f.dealerId);
-    return `<div class="visit-sub"><div style="display:flex;justify-content:space-between"><b>${d?.name||'?'}</b><span style="font-size:.62rem;color:#64748b">${fD(f.date)} • ${f.source||''}</span></div>
+    return `<div class="visit-sub"><div style="display:flex;justify-content:space-between"><b>${d?.name||'?'}</b><span style="font-size:.62rem;color:var(--text2)">${fD(f.date)} • ${f.source||''}</span></div>
     <div style="font-size:.74rem;margin-top:2px">${sanitize(f.text)}</div></div>`;
   }).join('') : emp('ยังไม่มี')}
   </div>`;
@@ -1165,7 +1165,7 @@ function rForecast(el) {
 
   // Source filter (Project / Run Rate / ทั้งคู่)
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;justify-content:center">';
-  h += '<span style="font-size:12px;color:#94a3b8">แหล่งข้อมูล:</span>';
+  h += '<span style="font-size:12px;color:var(--text2)">แหล่งข้อมูล:</span>';
   h += '<button class="btn bsm ' + (fcSourceFilter === 'project' ? 'bp' : 'bo') + '" onclick="fcSourceFilter=\'project\';render()">📋 Project</button>';
   h += '<button class="btn bsm ' + (fcSourceFilter === 'runrate' ? 'bp' : 'bo') + '" onclick="fcSourceFilter=\'runrate\';render()">📦 Run Rate</button>';
   h += '<button class="btn bsm ' + (fcSourceFilter === 'both' ? 'bp' : 'bo') + '" onclick="fcSourceFilter=\'both\';render()">🔀 ทั้งคู่</button>';

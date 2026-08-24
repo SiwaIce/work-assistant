@@ -102,13 +102,13 @@ function rVisitDet(el) {
     <button class="btn bsm bd" onclick="ST.delete('visits','${v.id}');toast('🗑️');go('visits')">🗑️</button>
   </span></h2>
   
-  <div class="fr"><div><label style="color:#64748b;font-size:.68rem">วันที่</label><div>${fD(v.date)}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">เวลา</label><div>${v.time||'-'}</div></div></div>
-  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">${d ? 'Dealer' : (v.prospectId ? 'Lead' : 'บริษัท (ไม่ใช่ Dealer)')}</label><div>${d?.name || v.company || '-'} ${d?levelTag(d.level):''}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">Mode</label><div>${modeTag(v.mode)}</div></div></div>
-  <div class="fr" style="margin-top:3px"><div><label style="color:#64748b;font-size:.68rem">DJI Dealer</label><div>${v.djiDealer||'-'}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">Sale</label><div>${v.saleName||cfg.saleName}</div></div></div>
-  ${v.location?`<div style="margin-top:3px"><label style="color:#64748b;font-size:.68rem">📍 Location</label><div><a href="${v.location}" target="_blank">${v.location.substr(0,50)}... ↗</a></div></div>`:''}
+  <div class="fr"><div><label style="color:var(--text2);font-size:.68rem">วันที่</label><div>${fD(v.date)}</div></div>
+  <div><label style="color:var(--text2);font-size:.68rem">เวลา</label><div>${v.time||'-'}</div></div></div>
+  <div class="fr" style="margin-top:3px"><div><label style="color:var(--text2);font-size:.68rem">${d ? 'Dealer' : (v.prospectId ? 'Lead' : 'บริษัท (ไม่ใช่ Dealer)')}</label><div>${d?.name || v.company || '-'} ${d?levelTag(d.level):''}</div></div>
+  <div><label style="color:var(--text2);font-size:.68rem">Mode</label><div>${modeTag(v.mode)}</div></div></div>
+  <div class="fr" style="margin-top:3px"><div><label style="color:var(--text2);font-size:.68rem">DJI Dealer</label><div>${v.djiDealer||'-'}</div></div>
+  <div><label style="color:var(--text2);font-size:.68rem">Sale</label><div>${v.saleName||cfg.saleName}</div></div></div>
+  ${v.location?`<div style="margin-top:3px"><label style="color:var(--text2);font-size:.68rem">📍 Location</label><div><a href="${v.location}" target="_blank">${v.location.substr(0,50)}... ↗</a></div></div>`:''}
   </div>
 
   <!-- Topic Details -->
@@ -131,9 +131,9 @@ function rVisitDet(el) {
 
   <!-- Revenue -->
   ${v.revenue||v.expectedRevenue?`<div class="card"><h2>💰 ยอดขาย</h2>
-  <div class="fr"><div><label style="color:#64748b;font-size:.68rem">ยอดขายปัจจุบัน</label><div style="font-weight:700;color:#22c55e">${v.revenue?fmtMoney(v.revenue)+' ฿':'-'}</div></div>
-  <div><label style="color:#64748b;font-size:.68rem">เป้าที่คาด</label><div style="font-weight:700;color:#f59e0b">${v.expectedRevenue?fmtMoney(v.expectedRevenue)+' ฿':'-'}</div></div></div>
-  ${v.customerSegment?`<div style="margin-top:3px"><label style="color:#64748b;font-size:.68rem">กลุ่มลูกค้า</label><div>${sanitize(v.customerSegment)}</div></div>`:''}</div>`:''}
+  <div class="fr"><div><label style="color:var(--text2);font-size:.68rem">ยอดขายปัจจุบัน</label><div style="font-weight:700;color:#22c55e">${v.revenue?fmtMoney(v.revenue)+' ฿':'-'}</div></div>
+  <div><label style="color:var(--text2);font-size:.68rem">เป้าที่คาด</label><div style="font-weight:700;color:#f59e0b">${v.expectedRevenue?fmtMoney(v.expectedRevenue)+' ฿':'-'}</div></div></div>
+  ${v.customerSegment?`<div style="margin-top:3px"><label style="color:var(--text2);font-size:.68rem">กลุ่มลูกค้า</label><div>${sanitize(v.customerSegment)}</div></div>`:''}</div>`:''}
 
   <!-- General Summary -->
   ${v.summary?`<div class="card"><h2>📝 สรุปการคุย</h2><div style="white-space:pre-wrap;font-size:.78rem">${sanitize(v.summary)}</div></div>`:''}
@@ -144,9 +144,9 @@ function rVisitDet(el) {
     const pipe = ST.getOne('pipeline', pu.pipeId);
     return `<div class="visit-sub" ${pipe?`onclick="go('pipeDetail',{pipeId:'${pipe.id}'})" style="cursor:pointer"`:''}>
       <div style="display:flex;justify-content:space-between"><b>${pipe?sanitize((pipe.rowNo?pipe.rowNo+' · ':'')+pipe.projectName):sanitize(pu.name||'')}</b>${pipe?pipeTag(pipe.status):''}</div>
-      <div style="font-size:.72rem;color:#94a3b8">${pu.model?'Model: '+pu.model:''} ${pu.newStatus?'→ '+getPipeName(pu.newStatus):''}</div>
-      ${pu.note?`<div style="font-size:.72rem;color:#94a3b8">${sanitize(pu.note)}</div>`:''}
-      ${Array.isArray(pu.items)&&pu.items.length?`<div style="font-size:.7rem;color:#94a3b8;margin-top:2px">📦 ${pu.items.map(it=>sanitize(it.model+(Number(it.qty)>1?' x'+it.qty:''))).join(', ')}</div>`:''}
+      <div style="font-size:.72rem;color:var(--text2)">${pu.model?'Model: '+pu.model:''} ${pu.newStatus?'→ '+getPipeName(pu.newStatus):''}</div>
+      ${pu.note?`<div style="font-size:.72rem;color:var(--text2)">${sanitize(pu.note)}</div>`:''}
+      ${Array.isArray(pu.items)&&pu.items.length?`<div style="font-size:.7rem;color:var(--text2);margin-top:2px">📦 ${pu.items.map(it=>sanitize(it.model+(Number(it.qty)>1?' x'+it.qty:''))).join(', ')}</div>`:''}
     </div>`;
   }).join('')}</div>`:''}
 
@@ -154,7 +154,7 @@ function rVisitDet(el) {
   ${v.forecastNotes?.length?`<div class="card"><h2>📦 Forecast QTY</h2>
   ${v.forecastNotes.map(fn => `<div class="visit-sub">
     <div style="display:flex;justify-content:space-between"><b>${sanitize(typeof fcMonthLabel==='function'?fcMonthLabel(fn.month):(fn.month||''))}</b><span style="color:#22c55e">${fn.amount?fmtMoney(fn.amount)+' ฿':''}</span></div>
-    ${fcHasItems(fn)?`<div style="font-size:.72rem;white-space:pre-wrap;color:#94a3b8">${sanitize(fcItemsText(fn))}</div>`:''}
+    ${fcHasItems(fn)?`<div style="font-size:.72rem;white-space:pre-wrap;color:var(--text2)">${sanitize(fcItemsText(fn))}</div>`:''}
   </div>`).join('')}</div>`:''}
 
   <!-- Feedback -->
@@ -168,8 +168,8 @@ function rVisitDet(el) {
 // โชว์เฉพาะฟิลด์ที่กรอกไว้จริง กันการ์ดยาวว่างเปล่า
 // ================================================================
 function renderPartnerDataCard(pd) {
-  const row = (label, val) => val ? `<div style="margin-top:5px"><label style="color:#64748b;font-size:.68rem">${label}</label><div style="font-size:.78rem">${sanitize(String(val))}</div></div>` : '';
-  const attachRow = (label, atts) => (atts||[]).length ? `<div style="margin-top:5px"><label style="color:#64748b;font-size:.68rem">${label}</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${atts.map(a => _attachItemHtml(a, `window.open('${a.url}','_blank')`)).join('')}</div></div>` : '';
+  const row = (label, val) => val ? `<div style="margin-top:5px"><label style="color:var(--text2);font-size:.68rem">${label}</label><div style="font-size:.78rem">${sanitize(String(val))}</div></div>` : '';
+  const attachRow = (label, atts) => (atts||[]).length ? `<div style="margin-top:5px"><label style="color:var(--text2);font-size:.68rem">${label}</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${atts.map(a => _attachItemHtml(a, `window.open('${a.url}','_blank')`)).join('')}</div></div>` : '';
   return `<div class="card"><h2>🆕 New Partner — ข้อมูลนัดคุยเป็น Authorized Dealer</h2>
     ${row('ยอดขายรวมต่อปี (฿)', pd.annualRevenue)}
     ${row('จำนวนพนักงาน', pd.employeeCount)}
@@ -212,7 +212,7 @@ function renderTopicDetail(t, v) {
     html += `<div style="font-size:.74rem;margin-top:3px">สนใจ Anti-drone: <b>${t.status||'-'}</b></div>`;
   }
   
-  return html || '<div style="font-size:.74rem;color:#475569">ไม่มีรายละเอียดเพิ่มเติม</div>';
+  return html || '<div style="font-size:.74rem;color:var(--text3)">ไม่มีรายละเอียดเพิ่มเติม</div>';
 }
 
 // ================================================================

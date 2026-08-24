@@ -3318,19 +3318,11 @@ body { background: var(--bg); color: var(--text); font-size: var(--font-base); }
 .wait-title { color: var(--text) !important; }
 .rt-title { color: var(--text) !important; }
 
-/* Form labels in detail pages */
-div[style*="color:#64748b"], div[style*="color: #64748b"],
-label[style*="color:#64748b"], label[style*="color: #64748b"] {
-  color: var(--text2) !important;
-}
-
-/* Fix hard-coded gray colors */
-div[style*="color:#94a3b8"], span[style*="color:#94a3b8"] {
-  color: var(--text2) !important;
-}
-div[style*="color:#475569"], span[style*="color:#475569"] {
-  color: var(--text3) !important;
-}
+/* [style*="color:#64748b/#94a3b8/#475569"] patches removed 2026-08-24 — JS ที่เคยใช้ hex พวกนี้ตรงๆ
+   (ในหน้าแอพจริง ไม่นับเอกสาร standalone แยกต่างหากอย่าง buildFinalClientView/Quotation print/KPI print
+   ที่ไม่โหลด style.css อยู่แล้ว) ถูกแก้ให้ใช้ var(--text2)/var(--text3) ตรงจุดแทนแล้ว ไม่ต้องพึ่ง patch
+   แบบจับ string เปราะบางแบบนี้อีก (UI audit ข้อ 2) — ยัง OK ที่จะทับซ้ำกันไม่ได้ผลถ้ามีจุดไหนหลุดรอด เพราะ
+   ไม่มีผลเสียอะไรนอกจากสีไม่ตรง ไม่ใช่ error */
 
 /* Smart Notifications */
 .sn-text { color: var(--text) !important; }
@@ -3371,21 +3363,9 @@ div[style*="color:#475569"], span[style*="color:#475569"] {
 
 .theme-midnight .quick-update-btn { color: #a1a1aa !important; }  /* เดิม #3f3f46 */
 
-/* Midnight hard-coded fix */
-.theme-midnight div[style*="color:#64748b"],
-.theme-midnight div[style*="color: #64748b"],
-.theme-midnight label[style*="color:#64748b"],
-.theme-midnight label[style*="color: #64748b"] {
-  color: #a1a1aa !important;
-}
-.theme-midnight div[style*="color:#94a3b8"],
-.theme-midnight span[style*="color:#94a3b8"] {
-  color: #a1a1aa !important;
-}
-.theme-midnight div[style*="color:#475569"],
-.theme-midnight span[style*="color:#475569"] {
-  color: #71717a !important;
-}
+/* Midnight hard-coded fix — #64748b/#94a3b8/#475569 patches removed 2026-08-24 พร้อมกับตัวจับ base/light
+   ด้านบน (ดูคอมเมนต์ที่ "Smart Notifications" หมวดบน) เหลือแค่ #334155 ที่ยังไม่ได้ migrate (ยังใช้ปนกันทั้ง
+   text/border/background หลายความหมาย ต้องดูทีละจุด ไม่ใช่แค่แทนที่ตรงๆ) */
 .theme-midnight div[style*="color:#334155"],
 .theme-midnight span[style*="color:#334155"] {
   color: #52525b !important;
@@ -3452,12 +3432,9 @@ div[style*="color:#475569"], span[style*="color:#475569"] {
 /* Fix stat cards */
 .theme-light .sc { background: #ffffff !important; border-color: #e2e8f0 !important; }
 
-/* Pipeline detail labels */
-.theme-light .fr label,
-.theme-light div[style*="color:#64748b"],
-.theme-light label[style*="color:#64748b"],
-.theme-light div[style*="color: #64748b"],
-.theme-light label[style*="color: #64748b"] {
+/* Pipeline detail labels — [style*="color:#64748b"] patch ตัวจับ hex ตรงๆ ลบไปแล้ว (ดูคอมเมนต์บนสุดของ
+   หมวด "Form labels in detail pages" ก่อนหน้านี้ในไฟล์) เหลือ .fr label ที่ยังต้องใช้จริง */
+.theme-light .fr label {
   color: #64748b !important;
 }
 
@@ -3576,13 +3553,8 @@ div[style*="color:#475569"], span[style*="color:#475569"] {
 .theme-light .btn-xs { background: #f1f5f9 !important; color: #334155 !important; }
 .theme-light .btn-xs:hover { background: #e2e8f0 !important; }
 
-/* Fix inline styles that use dark colors */
-.theme-light [style*="color:#e0e6f0"],
-.theme-light [style*="color: #e0e6f0"] { color: #1e293b !important; }
-.theme-light [style*="color:#b0b8cc"],
-.theme-light [style*="color: #b0b8cc"] { color: #64748b !important; }
-.theme-light [style*="color:#8892b0"],
-.theme-light [style*="color: #8892b0"] { color: #64748b !important; }
+/* [style*="color:#e0e6f0/#b0b8cc/#8892b0"] patches ลบแล้ว (2026-08-24) — เหลือแค่ใน standalone document
+   ที่ไม่โหลด style.css เลย (buildFinalClientView ใน views-dealer.js) patch พวกนี้ไม่เคยมีผลกับจุดนั้นอยู่แล้ว */
 
 /* bg2 background fix */
 .theme-light [style*="background:#0f1923"],

@@ -267,7 +267,7 @@ function rPipelineTeam(el) {
 
   var pipeTeamCardGridClass = pipeTeamCardCols === 2 ? ' pcg-2col' : ' pcg-1col';
   el.innerHTML = h + (pipeTeamView === 'table' ? _renderPipeTeamTable(list) : _renderPipeTeamCards(list, pipeTeamCardGridClass)) +
-    '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + list.length + ' รายการ' +
+    '<div style="font-size:.64rem;color:var(--text2);margin-top:4px">' + list.length + ' รายการ' +
     (pipeTeamSearch ? ' (ค้นหา: "' + sanitize(pipeTeamSearch) + '")' : '') + '</div>';
 
   var srcEl = document.getElementById('pipeTeamSrc');
@@ -1360,7 +1360,7 @@ function rPipeline(el) {
        '<span id="pipeSheetStatus" style="font-size:.8rem;color:var(--text2)"></span></div></div>' :
      renderPipeTable(pipes)) +
 
-    '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + pipes.length + ' รายการ' +
+    '<div style="font-size:.64rem;color:var(--text2);margin-top:4px">' + pipes.length + ' รายการ' +
     (pipeSearch ? ' (ค้นหา: "' + sanitize(pipeSearch) + '")' : '') +
     '</div>' +
 
@@ -1895,7 +1895,7 @@ function showPipeExportLogFilterM(action, arg) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 0"><input type="checkbox" class="expLogTypeChk" value="' + m.key + '"' + (st[m.key] ? ' checked' : '') + '> ' + m.label + '</label>';
   }).join('');
   openM('📤 เลือก Update ที่จะรวมใน Export', `
-    <div style="font-size:.76rem;color:#94a3b8;margin-bottom:8px">เลือกประเภท Update ที่จะไปโผล่ในคอลัมน์ Update 1-6 ของไฟล์ที่ export/copy ครั้งนี้ (ไม่กระทบ log จริงในระบบ)</div>
+    <div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">เลือกประเภท Update ที่จะไปโผล่ในคอลัมน์ Update 1-6 ของไฟล์ที่ export/copy ครั้งนี้ (ไม่กระทบ log จริงในระบบ)</div>
     <div style="max-height:280px;overflow-y:auto">${rows}</div>
     <div class="fm-actions" style="margin-top:10px">
       <button class="btn bp" onclick="runPipeExportWithLogFilter('${action}','${arg || ''}')">📤 Export</button>
@@ -2169,7 +2169,7 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>🏛️ ปีงบประมาณ</label><div>' + (p.budgetFiscalYear ? 'ปีงบ ' + p.budgetFiscalYear : '— ไม่ระบุ') + (_fyS ? ' <span style="background:' + _fyS.c + '22;color:' + _fyS.c + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">' + _fyS.e + ' ' + _fyS.t + '</span>' : '') + '</div></div>';
   html += '<div><label></label><div></div></div></div>';
   html += '<div class="fr"><div><label>🗂️ ลงทะเบียน CRM ของ DJI</label><div>' + (p.djiCrmRegistered ? '✅ ลงแล้ว' + (p.djiCrmDate ? ' (' + fD(p.djiCrmDate) + ')' : '') : '⬜ ยังไม่ลง') + '</div></div>';
-  html += '<div><label>⚔️ คู่แข่ง</label><div>' + (p.hasCompetitor ? '⚠️ คาดว่ามี' + (p.competitorName ? ' — <span style="color:#f59e0b">' + sanitize(p.competitorName) + '</span> <span style="font-size:10px;color:#475569">🔒 ภายใน</span>' : '') : '— ไม่ระบุ') + '</div></div></div>';
+  html += '<div><label>⚔️ คู่แข่ง</label><div>' + (p.hasCompetitor ? '⚠️ คาดว่ามี' + (p.competitorName ? ' — <span style="color:#f59e0b">' + sanitize(p.competitorName) + '</span> <span style="font-size:10px;color:var(--text3)">🔒 ภายใน</span>' : '') : '— ไม่ระบุ') + '</div></div></div>';
   
   html += '<div class="fr"><div><label>🎯 Next Action</label><div>' + pipeNextActionHtml(p, false) + '</div></div>';
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
@@ -4141,9 +4141,9 @@ function rPipeDashboard(el) {
   });
 
   h += '<div class="card" style="margin-bottom:10px">';
-  h += '<h2>🔔 ต้องจัดการ <span style="font-size:.7rem;font-weight:400;color:#64748b">Followup / Bidding / Close ภายใน 14 วัน</span></h2>';
+  h += '<h2>🔔 ต้องจัดการ <span style="font-size:.7rem;font-weight:400;color:var(--text2)">Followup / Bidding / Close ภายใน 14 วัน</span></h2>';
   if (!actionItems.length) {
-    h += '<div style="text-align:center;padding:16px;color:#475569;font-size:.85rem">ไม่มีรายการเร่งด่วน ✅</div>';
+    h += '<div style="text-align:center;padding:16px;color:var(--text3);font-size:.85rem">ไม่มีรายการเร่งด่วน ✅</div>';
   } else {
     actionItems.slice(0, 8).forEach(function(p) {
       var dealer = ST.getOne('dealers', p.dealerId);
@@ -4189,8 +4189,8 @@ function showPipeMonthM(ym) {
   var label = thMonths[parseInt(parts[1]) - 1] + ' ' + (parseInt(parts[0]) + 543);
   var totalAmt = pipes.reduce(function(a, p) { return a + (Number(p.forecastAmount)||0); }, 0);
 
-  var h = '<div style="font-size:.78rem;color:#64748b;margin-bottom:10px">' + pipes.length + ' โครงการ • รวม ' + fmtMoneyShort(totalAmt) + '</div>';
-  if (!pipes.length) { h += '<div style="text-align:center;padding:20px;color:#475569">ไม่มีโครงการในเดือนนี้</div>'; }
+  var h = '<div style="font-size:.78rem;color:var(--text2);margin-bottom:10px">' + pipes.length + ' โครงการ • รวม ' + fmtMoneyShort(totalAmt) + '</div>';
+  if (!pipes.length) { h += '<div style="text-align:center;padding:20px;color:var(--text3)">ไม่มีโครงการในเดือนนี้</div>'; }
   pipes.forEach(function(p) {
     var dealer = ST.getOne('dealers', p.dealerId);
     var hasClose = p.expectedCloseDate && p.expectedCloseDate.substr(0,7) === ym;

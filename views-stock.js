@@ -1220,7 +1220,7 @@ function rStock(el) {
       }
     });
     h += '</tbody></table></div>';
-    h += '<div style="font-size:.64rem;color:#64748b;margin-top:4px">' + rows.length + ' รายการ</div>';
+    h += '<div style="font-size:.64rem;color:var(--text2);margin-top:4px">' + rows.length + ' รายการ</div>';
   }
 
   if (stockShowAging) {

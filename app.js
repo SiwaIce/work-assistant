@@ -545,7 +545,7 @@ function pipeNextActionHtml(p, compact) {
     }).join('');
   }
   if (p.nextAction) return '<span style="color:var(--text2,#94a3b8)" title="ข้อความเก่าจากก่อนเปลี่ยนมาใช้ Task — อ่านอย่างเดียว แก้ไม่ได้">' + sanitize(p.nextAction) + '</span>';
-  return compact ? '' : '<span style="color:#475569">ไม่ได้ตั้ง</span>';
+  return compact ? '' : '<span style="color:var(--text3)">ไม่ได้ตั้ง</span>';
 }
 
 // ================================================================

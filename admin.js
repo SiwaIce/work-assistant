@@ -162,7 +162,7 @@ function rAdmin(el) {
     // Notification
     '<div class="card"><h2>🔔 Browser Notification</h2>' +
     '<button class="btn bs" onclick="admReqNotif()">🔔 เปิดการแจ้งเตือน</button>' +
-    '<div style="margin-top:4px;font-size:.68rem;color:#64748b" id="adm_nf_status"></div></div>' +
+    '<div style="margin-top:4px;font-size:.68rem;color:var(--text2)" id="adm_nf_status"></div></div>' +
 
     // Quick Links
     quickLinks +
@@ -302,7 +302,7 @@ function rAdmin(el) {
     // DJI Dealer Types
     '<div class="card"><h2>🏪 DJI Dealer Types</h2>' +
     '<textarea id="adm_djitypes" rows="3" style="font-size:.72rem">' + (cfg.djiDealerTypes || []).join('\n') + '</textarea>' +
-    '<div style="font-size:.62rem;color:#64748b;margin:3px 0">แต่ละบรรทัด = 1 ประเภท</div>' +
+    '<div style="font-size:.62rem;color:var(--text2);margin:3px 0">แต่ละบรรทัด = 1 ประเภท</div>' +
     '<button class="btn bp bsm" onclick="admSaveDjiTypes()">💾 บันทึก</button></div>' +
 
     // Dealer Tiers
@@ -326,7 +326,7 @@ function rAdmin(el) {
     // Monthly Checklist
     '<div class="card"><h2>📋 Monthly Checklist</h2>' +
     '<textarea id="adm_monthly" rows="5" style="font-size:.72rem">' + (cfg.monthlyChecklist || []).join('\n') + '</textarea>' +
-    '<div style="font-size:.62rem;color:#64748b;margin:3px 0">แต่ละบรรทัด = 1 รายการ (Reset ทุกต้นเดือน)</div>' +
+    '<div style="font-size:.62rem;color:var(--text2);margin:3px 0">แต่ละบรรทัด = 1 รายการ (Reset ทุกต้นเดือน)</div>' +
     '<button class="btn bp bsm" onclick="admSaveMonthly()">💾 บันทึก</button></div>' +
 
     // Onboarding Steps Template
@@ -434,7 +434,7 @@ function rAdmin(el) {
 
     // External Links
     '<div class="card"><h2>🔗 External Links</h2>' +
-    '<p style="font-size:.68rem;color:#64748b;margin-bottom:6px">Pricelist, Stock Check, เครื่องมือภายนอก</p>' +
+    '<p style="font-size:.68rem;color:var(--text2);margin-bottom:6px">Pricelist, Stock Check, เครื่องมือภายนอก</p>' +
     '<div id="adm_links">' + linkRows + '</div>' +
     '<div style="display:flex;gap:3px;margin-top:4px">' +
     '<input type="text" id="lk_new_n" placeholder="ชื่อ" style="width:80px">' +
@@ -1610,7 +1610,7 @@ function renderTeamMemberListHTML() {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">';
     html += '<div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.82rem;flex-shrink:0">' + (m.name || '?').charAt(0).toUpperCase() + '</div>';
     html += '<div style="flex:1;min-width:0">';
-    html += '<div style="font-weight:600;font-size:.8rem">' + sanitize(m.name) + (m.active === false ? ' <span style="font-size:.6rem;color:#94a3b8;background:var(--bg3);padding:1px 5px;border-radius:4px">ปิด</span>' : '') + '</div>';
+    html += '<div style="font-weight:600;font-size:.8rem">' + sanitize(m.name) + (m.active === false ? ' <span style="font-size:.6rem;color:var(--text2);background:var(--bg3);padding:1px 5px;border-radius:4px">ปิด</span>' : '') + '</div>';
     html += '<div style="font-size:.63rem;color:var(--text3);margin-top:2px">PIN: <code style="background:var(--bg3);padding:1px 6px;border-radius:3px;font-size:.68rem">' + m.pin + '</code>&nbsp;·&nbsp;ID: <span style="opacity:.7">' + m.id + '</span></div>';
     html += '</div>';
     html += '<div style="display:flex;gap:4px;flex-shrink:0">';
@@ -1855,7 +1855,7 @@ function _gvProfileRowHTML(pr, idx) {
   var active = !!pr.pin;
   var h = '<div id="gvRow_' + idx + '" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">';
   h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
-  h += '<span class="tag" style="background:' + (active ? '#22c55e20;color:#22c55e' : '#64748b20;color:#64748b') + ';font-size:10px">' + (active ? 'เปิดใช้งานอยู่' : 'ยังไม่มี PIN') + '</span>';
+  h += '<span class="tag" style="background:' + (active ? '#22c55e20;color:#22c55e' : '#64748b20;color:var(--text2)') + ';font-size:10px">' + (active ? 'เปิดใช้งานอยู่' : 'ยังไม่มี PIN') + '</span>';
   h += '<input type="text" id="gvp_name_' + idx + '" value="' + sanitize(pr.name || '') + '" placeholder="ชื่อโปรไฟล์ เช่น ทีมช่าง" style="flex:1;min-width:120px">';
   h += '<input type="text" id="gvp_pin_' + idx + '" value="' + sanitize(pr.pin || '') + '" placeholder="PIN" maxlength="10" style="width:90px">';
   h += '</div>';
