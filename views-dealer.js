@@ -737,7 +737,7 @@ function _dealerSelBarHtml() {
   ST.getAll('dealers').forEach(function(d) { if (d.saleName) saleNames[d.saleName] = true; });
   var saleOpts = Object.keys(saleNames).sort(function(a, b) { return a.localeCompare(b, 'th'); })
     .map(function(n) { return '<option value="' + sanitize(n) + '">' + sanitize(n) + '</option>'; }).join('');
-  return '<div id="dealerSelBar" style="position:sticky;bottom:0;z-index:50;background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+  return '<div id="dealerSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
     '<span id="dealerSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
     '<button class="btn bo bsm" onclick="toggleDealerSelectAll(true)">เลือกทั้งหมด (' + _dealerVisibleIds.length + ')</button>' +
     '<button class="btn bo bsm" onclick="toggleDealerSelectAll(false)">ยกเลิกเลือก</button>' +
@@ -1886,7 +1886,7 @@ function dealerPipelineTab(d) {
 
       if (dealerPipeSelectMode) {
         var selCnt = Object.keys(dealerPipeSelected).length;
-        h += '<div style="position:sticky;bottom:0;z-index:50;background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">' +
+        h += '<div class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">' +
           '<span style="font-size:13px;font-weight:600;min-width:80px" id="dpSelCount">' + selCnt + ' รายการที่เลือก</span>' +
           '<button class="btn bo bsm" onclick="toggleDealerPipeSelectAll(true)">เลือกทั้งหมด (' + _dealerPipeVisibleIds.length + ')</button>' +
           '<button class="btn bo bsm" onclick="toggleDealerPipeSelectAll(false)">ยกเลิกเลือก</button>' +

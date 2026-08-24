@@ -919,7 +919,7 @@ function renderPipeCompareSuggestPanel() {
 
 function renderPipeCompareBar() {
   var n = pipeCompareSelected.length;
-  return '<div style="position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-top:10px">' +
+  return '<div class="sel-bar" style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-top:10px">' +
     '<span style="font-size:.78rem">เลือกแล้ว <strong>' + n + '/3</strong> โปรเจค</span>' +
     '<button class="btn bsm bp" ' + (n < 2 ? 'disabled' : '') + ' onclick="openPipeCompareModal()">🔍 เทียบเลย</button>' +
     '</div>';
@@ -1769,7 +1769,7 @@ function renderPipeTable(pipes) {
 
   if (pipeSelectMode) {
     var selCnt = Object.keys(pipeSelected).length;
-    html += '<div id="pipeSelBar" style="position:sticky;bottom:0;z-index:50;background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+    html += '<div id="pipeSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
       '<span id="pipeSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
       '<button class="btn bo bsm" onclick="togglePipeSelectAll(true)">เลือกทั้งหมด (' + _pipeVisibleIds.length + ')</button>' +
       '<button class="btn bo bsm" onclick="togglePipeSelectAll(false)">ยกเลิกเลือก</button>' +

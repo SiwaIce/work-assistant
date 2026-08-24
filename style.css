@@ -618,6 +618,13 @@ textarea{min-height:50px;resize:vertical}
 .link-item{display:flex;align-items:center;gap:6px;padding:5px 8px;background:#0f172a;border:1px solid #334155;border-radius:7px;margin-bottom:3px;font-size:.72rem}
 .link-item a{color:#3b82f6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* === แถบเลือกหลายรายการ (bulk-select) — Dealer/Pipeline/Quotation/SO/เทียบ Project ===
+   position:sticky ธรรมดา (bottom:0) จะไปสติ๊กที่ขอบล่างของ #ct พอดี ซึ่งบนมือถือมี #bnav (fixed, z-index:100)
+   วางทับอยู่แนวเดียวกัน — ปุ่มขวาสุดของแถบ (Export/ลบ/ออก) เสี่ยงโดน Bottom Nav บังเพราะ z-index ต่ำกว่า
+   (2026-08-24 UI audit ข้อ 9) ยกขึ้นเหนือ Bottom Nav บนมือถือด้วย bottom offset แบบเดียวกับ .fab/.backup-bar */
+.sel-bar{position:sticky;bottom:0;z-index:50}
+@media(max-width:768px){ .sel-bar{bottom:70px} }
+
 /* === MOBILE BOTTOM NAV === */
 #bnav{display:none;position:fixed;bottom:0;left:0;right:0;background:#1e293b;border-top:1px solid #334155;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
 #bnav .bn{display:flex;justify-content:space-around}
