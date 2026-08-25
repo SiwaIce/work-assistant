@@ -660,10 +660,15 @@ function rKpiScorecard(el) {
   }
   var member = members.filter(function(m) { return m.id === kpiSelectedSalesId; })[0];
 
+  // ชื่อซ้ำกันในทีม Sales — ต่อ PIN ท้ายชื่อกันเลือกผิดคน (ตัวปัญหาจริงต้องไปลบ/เปลี่ยนชื่อที่ 🔍 ตรวจสอบชื่อเซลล์)
+  var memberNameCounts = {};
+  members.forEach(function(m) { memberNameCounts[m.name] = (memberNameCounts[m.name] || 0) + 1; });
+
   var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">';
   h += '<select class="fm-input" style="min-width:160px" onchange="kpiSelectedSalesId=this.value;kpiSelectedPlanId=null;render()">';
   members.forEach(function(m) {
-    h += '<option value="' + m.id + '"' + (m.id === kpiSelectedSalesId ? ' selected' : '') + '>' + sanitize(m.name) + '</option>';
+    var label = sanitize(m.name) + (memberNameCounts[m.name] > 1 ? ' (PIN:' + sanitize(m.pin || '-') + ')' : '');
+    h += '<option value="' + m.id + '"' + (m.id === kpiSelectedSalesId ? ' selected' : '') + '>' + label + '</option>';
   });
   h += '</select>';
 

@@ -1768,15 +1768,23 @@ function showSaleNameMismatchM() {
   var h = '<div id="smmRoot">';
   h += '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ตรวจว่าชื่อเซลล์ (Sale Name) ที่บันทึกไว้ใน Dealer/Pipeline/Visit ตรงกับรายชื่อในทีม Sales ปัจจุบันไหม — ถ้าไม่ตรง (เช่น เปลี่ยนชื่อสมาชิกทีมแล้ว แต่ข้อมูลเก่ายังเป็นชื่อเดิม) KPI จะคำนวณไม่เจอเลย</p>';
 
+  var nameCounts = {};
+  members.forEach(function(m) { nameCounts[m.name] = (nameCounts[m.name] || 0) + 1; });
+  var hasDup = Object.keys(nameCounts).some(function(n) { return nameCounts[n] > 1; });
+
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
   h += '<div style="font-size:.72rem;font-weight:700">✅ สมาชิกทีม Sales</div>';
   h += '<button class="btn bp bsm" onclick="showAddSalesMemberM(1)">➕ เพิ่มเซลล์</button>';
   h += '</div>';
+  if (hasDup) {
+    h += '<div style="font-size:.68rem;color:#ef4444;background:rgba(239,68,68,.1);border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠️ มีชื่อซ้ำกันในทีม Sales — ระบบแยกไม่ออกว่าเป็นคนละคน (dropdown เลือกเซลล์จะขึ้นชื่อซ้ำ) ลบหรือแก้ชื่อให้ไม่ซ้ำกันด้านล่างนี้ได้เลย</div>';
+  }
   members.forEach(function(m) {
     var u = usage[m.name];
     var total = u ? (u.dealers + u.pipelines + u.visits) : 0;
+    var dupTag = nameCounts[m.name] > 1 ? ' <span style="color:#ef4444;font-size:.62rem">(PIN:' + sanitize(m.pin || '-') + ')</span>' : '';
     h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
-      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(m.name) + '</span>' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(m.name) + dupTag + '</span>' +
       '<span style="color:' + (total ? 'var(--text2)' : '#ef4444') + ';white-space:nowrap">' + (total ? total + ' รายการ' : '⚠️ ไม่พบข้อมูลเลย') + '</span>' +
       '<button class="btn bsm bo" style="flex-shrink:0" onclick="showEditSalesMemberNameM(\'' + m.id + '\',1)" title="แก้ไขชื่อ">✏️</button>' +
       '<button class="btn bsm bd" style="flex-shrink:0" onclick="deleteSalesMember(\'' + m.id + '\')" title="ลบ">🗑️</button>' +
