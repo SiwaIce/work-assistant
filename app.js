@@ -938,6 +938,9 @@ function renderDealerScopeMenu() {
   } else {
     h += '<div style="font-size:11px;color:var(--text3,#64748b)">ไม่มีเซลอื่นในระบบ</div>';
   }
+  h += '<div style="border-top:1px solid var(--border,#334155);margin-top:8px;padding-top:8px">';
+  h += '<button class="btn bsm bo" style="width:100%" onclick="toggleDealerScopeMenu();showSaleNameMismatchM()">🔍 ตรวจสอบชื่อเซลล์ไม่ตรงกัน</button>';
+  h += '</div>';
   menu.innerHTML = h;
 }
 function _dealerScopeToggleName(name, on) {

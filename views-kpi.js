@@ -684,6 +684,7 @@ function rKpiScorecard(el) {
   if (plan) h += '<button class="btn bsm bo" onclick="showKpiConfigM(\'' + plan.id + '\')">⚙️ ตั้งค่าไตรมาสนี้</button>';
   if (plan) h += '<button class="btn bsm bd" onclick="kpiDeleteQuarterPlan(\'' + plan.id + '\')">🗑️ ลบไตรมาสนี้</button>';
   h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
+  h += '<button class="btn bsm bo" onclick="showSaleNameMismatchM()" title="ถ้าตัวเลข KPI ขึ้น 0 ทั้งที่มีโครงการจริง มักเกิดจากชื่อเซลล์ในข้อมูลไม่ตรงกับสมาชิกทีม — เช็คได้ที่นี่">🔍 ตรวจสอบชื่อเซลล์</button>';
   h += '</div>';
 
   if (!plan) {
