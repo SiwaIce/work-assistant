@@ -6287,6 +6287,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   });
 
   var counts = { 'new': 0, changed: 0, same: 0 };
+  var archivedCount = 0;
   var matchedIds = {};
   // เตือน "Row No. ไม่พบของเดิม" มีความหมายก็ต่อเมื่อระบบมีโครงการที่เคยผูก Row No. ไว้อยู่แล้วบ้าง — ถ้ายังไม่
   // มีเลยสักโครงการ (เช่น import ทั้งชีตครั้งแรกสุด) ทุกแถวก็จะเป็น "ใหม่" จริงๆ ทั้งหมด ไม่ใช่เคสจับคู่พลาด
@@ -6302,7 +6303,13 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
     // User/Dealer) — เสี่ยงเป็นเคส "จับคู่พลาด" มากกว่าโครงการใหม่จริง (เช่น ชื่อ Dealer สะกดไม่ตรงกับที่มี
     // ในระบบ) ถ้าปล่อยให้ import แบบ "เพิ่มใหม่" ไปเฉยๆ จะได้โครงการซ้ำ ส่วนของเดิมที่ควรถูกอัปเดตจะไม่ขยับเลย
     var unmatchedRowNo = (hasAnyRowNoInSystem && !existing && _pipeCol(r, colMap, 'rowNo').trim()) ? _pipeCol(r, colMap, 'rowNo').trim() : '';
-    return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo };
+    // ใช้ pipeIsArchived() ตัวเดียวกับที่ export/หน้า Pipeline list ใช้อยู่แล้ว (Lost/Deliver/Hide) ตัดสินจาก
+    // ค่าที่ "จะเป็น" หลัง import แถวนี้ (ไม่ใช่ค่าเดิมของ existing) เพื่อแยก tab Archived ให้ดูง่ายตอน preview
+    var rowStatusId = (typeof _csvStatusToId === 'function') ? (_csvStatusToId(_pipeCol(r, colMap, 'status').trim()) || 'initial') : 'initial';
+    var rowSheetDisplay = _pipeCol(r, colMap, 'sheetDisplay').trim() || (existing ? (existing.sheetDisplay || 'Show') : 'Show');
+    var isArchived = pipeIsArchived({ status: rowStatusId, sheetDisplay: rowSheetDisplay });
+    if (isArchived) archivedCount++;
+    return { row: r, dealer: d, existing: existing, state: state, diff: diff, unmatchedRowNo: unmatchedRowNo, isArchived: isArchived };
   });
 
   // เก็บ log ("Update") ที่มีอยู่แล้วในระบบของ pipeline ที่จับคู่ได้ แต่ไม่ตรงกับบรรทัดไหนในคอลัมน์ Update
@@ -6433,6 +6440,20 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   });
   h += '</div>';
 
+  // ── แยก Main / Archived Project (Lost/Deliver/Hide) — เหมือนที่ export แยกเป็น 2 sheet อยู่แล้ว ผู้ใช้
+  // แจ้งว่าอยากเห็นแยกกันตอน preview ด้วย ดูง่ายกว่าปนกันในลิสต์เดียว (2026-08-24) ค่าเริ่มต้นซ่อน Archived ไว้
+  if (archivedCount) {
+    h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+    [
+      { key: 'main',     label: '🗂️ Main',                count: rows.length - archivedCount },
+      { key: 'archived', label: '📦 Archived Project',      count: archivedCount },
+      { key: 'all',      label: 'ทั้งหมด',                  count: rows.length }
+    ].forEach(function(t) {
+      h += '<button id="pipeArchTab_' + t.key + '" onclick="_pipeImportSetArchivedFilter(\'' + t.key + '\')" style="padding:5px 12px;border-radius:6px;background:var(--bg2);color:var(--text2);font-size:12px;border:1px solid ' + (t.key === 'main' ? 'var(--border-strong,var(--border))' : 'transparent') + ';cursor:pointer">' + t.label + ' ' + t.count + '</button>';
+    });
+    h += '</div>';
+  }
+
   // ── กรองตาม Dealer (chip เลือกได้หลายอัน) — โชว์เฉพาะตอนมีมากกว่า 1 Dealer ในไฟล์ ไม่งั้นไม่มีอะไรให้กรอง ──
   if (dealerBucketOrder.length > 1) {
     h += '<div style="font-size:11px;color:var(--text2);margin-bottom:5px">🏪 กรองตาม Dealer</div>';
@@ -6518,7 +6539,7 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
         '<option value="update"' + (defAct === 'update' ? ' selected' : '') + '>✏️ อัปเดต</option>' +
         '<option value="skip"'   + (defAct === 'skip'   ? ' selected' : '') + '>⏭ ข้าม</option>' +
       '</select>';
-    h += '<tr data-pstate="' + m.state + '" data-idx="' + i + '" data-dealer="' + sanitize(m.dealerKey) + '" data-sale="' + sanitize(m.saleName || '') + '" data-issue="' + (m.hasIssue ? '1' : '0') + '" data-name="' + sanitize((rProjectName || rEndUserTH || '').toLowerCase()) + '" data-rowno="' + sanitize(_pipeCol(r, colMap, 'rowNo') || '') + '" data-forecast="' + fc + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
+    h += '<tr data-pstate="' + m.state + '" data-idx="' + i + '" data-dealer="' + sanitize(m.dealerKey) + '" data-sale="' + sanitize(m.saleName || '') + '" data-issue="' + (m.hasIssue ? '1' : '0') + '" data-archived="' + (m.isArchived ? '1' : '0') + '" data-name="' + sanitize((rProjectName || rEndUserTH || '').toLowerCase()) + '" data-rowno="' + sanitize(_pipeCol(r, colMap, 'rowNo') || '') + '" data-forecast="' + fc + '" style="border-bottom:' + (m.state === 'changed' ? 'none' : '1px solid var(--border)') + '">' +
       '<td style="padding:5px 10px;text-align:center;white-space:nowrap">' + badge + diffBtn + '</td>' +
       '<td style="padding:5px 10px;color:var(--text2);white-space:nowrap">' + sanitize(_pipeCol(r, colMap, 'rowNo') || '-') + '</td>' +
       '<td style="padding:5px 10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize((rProjectName || rEndUserTH || '')) + '">' + nameDisplay + '</td>' +
@@ -6619,13 +6640,14 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
   window._pipeXlsxPending = { rows: rows, dealerId: dealerId, rowMeta: rowMeta, missing: missingPipes, orphanLogs: orphanLogs, colMap: colMap };
   openM('📂 Preview: Import Pipeline จาก Excel', h);
   setMWide(960);
-  _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all' }; // dealers: null = ทุกตัวถูกเลือก
+  _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all', archived: 'main' }; // dealers: null = ทุกตัวถูกเลือก
   _pipeImportSetFilter('all');
 }
 
 // สถานะตัวกรองปัจจุบันของ preview import — reset ใหม่ทุกครั้งที่เปิด preview (ดู _showPipeXlsxPreview)
 // dealers: null = ทุก Dealer ถูกเลือกอยู่ (ค่าเริ่มต้น), object {key: false} = ตัวที่ถูกเอาออกจากตัวกรอง
-var _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all' };
+// archived: 'main' (ค่าเริ่มต้น ซ่อน Archived ให้ดูง่าย) | 'archived' | 'all' — ดู pipeIsArchived() ที่ใช้ตัดสิน
+var _pipeImportFilter = { status: 'all', dealers: null, sort: 'rowno', search: '', sale: 'all', archived: 'main' };
 
 // สลับ tab กรองสถานะ — ยังทำงานร่วมกับตัวกรองอื่น (Dealer/ค้นหา/มีปัญหา) ผ่าน _pipeApplyImportFilters
 function _pipeImportSetFilter(state) {
@@ -6635,6 +6657,15 @@ function _pipeImportSetFilter(state) {
   ['all', 'new', 'changed', 'same', 'missing'].forEach(function(k) {
     var btn = document.getElementById('pipeFTab_' + k);
     if (btn) btn.style.border = (k === state) ? '1px solid var(--border-strong,var(--border))' : '1px solid transparent';
+  });
+  _pipeApplyImportFilters();
+}
+
+function _pipeImportSetArchivedFilter(val) {
+  _pipeImportFilter.archived = val;
+  ['main', 'archived', 'all'].forEach(function(k) {
+    var btn = document.getElementById('pipeArchTab_' + k);
+    if (btn) btn.style.border = (k === val) ? '1px solid var(--border-strong,var(--border))' : '1px solid transparent';
   });
   _pipeApplyImportFilters();
 }
@@ -6740,7 +6771,8 @@ function _pipeApplyImportFilters() {
     var saleOk = !st.sale || st.sale === 'all' || tr.getAttribute('data-sale') === st.sale;
     var issueOk = !issuesOnly || tr.getAttribute('data-issue') === '1';
     var searchOk = !st.search || tr.getAttribute('data-name').indexOf(st.search) !== -1 || tr.getAttribute('data-rowno').toLowerCase().indexOf(st.search) !== -1;
-    var show = dealerOk && statusOk && saleOk && issueOk && searchOk;
+    var archOk = !st.archived || st.archived === 'all' || (tr.getAttribute('data-archived') === '1') === (st.archived === 'archived');
+    var show = dealerOk && statusOk && saleOk && issueOk && searchOk && archOk;
     tr.style.display = show ? '' : 'none';
     if (show) { visibleCount++; visibleForecast += parseFloat(tr.getAttribute('data-forecast')) || 0; }
     var diffTr = document.getElementById('pipeDiffRow_' + tr.getAttribute('data-idx'));
