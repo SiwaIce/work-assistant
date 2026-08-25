@@ -1112,6 +1112,7 @@ function _pipeMoreMenuHtml() {
     '<button onclick="closeOvMenu();showImportPipelineM()">📥 Import</button>' +
     '<button onclick="closeOvMenu();importPipelineXlsx(\'\')">📂 xlsx</button>' +
     '<button onclick="closeOvMenu();showPastePipelineM()">📋 วาง</button>' +
+    '<button onclick="closeOvMenu();showClearTimelineM()" title="ล้าง Update log เก่าทิ้งก่อน import ไฟล์ใหม่ทั้งหมด กันข้อมูลซ้ำ/ปนกับของเดิม">🗑️ ล้าง Timeline ทั้งหมด</button>' +
     '<hr>' +
     '<div class="ov-grp-label">ส่งออก / คัดลอก</div>' +
     '<button onclick="closeOvMenu();showPipeExportLogFilterM(\'csvFiltered\')">📤 CSV</button>' +
@@ -2390,6 +2391,61 @@ function _pipeShowNoDealerPipesM() {
   });
   h += '</div></div>';
   openM('🏢 โครงการไม่มี Dealer ผูกอยู่', h);
+}
+// ================================================================
+// ล้าง Timeline (pipeLog) ทั้งหมด — ใช้ก่อน import ไฟล์ใหม่ทั้งชีทเพื่อกันข้อมูลซ้ำ/ปนกับของเก่า (ผู้ใช้ขอ
+// 2026-08-24) เลือกขอบเขตได้ตาม Main/Archived Project เดียวกับ tab ที่เพิ่งเพิ่มในหน้า import preview —
+// ใช้ pipeIsArchived() ตัวเดียวกันตัดสินจากสถานะ "ปัจจุบัน" ของ pipeline ในระบบ (ไม่ใช่ไฟล์ที่จะ import)
+// ================================================================
+function _pipeTimelineScopeCounts() {
+  var pipeArchived = {};
+  ST.getAll('pipeline').forEach(function(p) { pipeArchived[p.id] = pipeIsArchived(p); });
+  var counts = { main: 0, archived: 0, orphan: 0 };
+  ST.getAll('pipeLog').forEach(function(l) {
+    if (!pipeArchived.hasOwnProperty(l.pipeId)) { counts.orphan++; return; }
+    if (pipeArchived[l.pipeId]) counts.archived++; else counts.main++;
+  });
+  return counts;
+}
+function showClearTimelineM() {
+  var c = _pipeTimelineScopeCounts();
+  var total = c.main + c.archived;
+  if (!total) { toast('ยังไม่มี Timeline ในระบบเลย'); return; }
+  openM('🗑️ ล้าง Timeline (Update log) ทั้งหมด', '' +
+    '<div style="font-size:.8rem;color:#ef4444;background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:10px;margin-bottom:10px">⚠️ ลบถาวร กู้คืนไม่ได้ — ใช้ก่อน import ไฟล์ใหม่ทั้งชีทเพื่อกันข้อมูลเก่าปนกับของใหม่</div>' +
+    '<div class="fg"><label>เลือกขอบเขตที่จะล้าง</label>' +
+      '<div class="radio-g">' +
+        '<label><input type="radio" name="clr_scope" value="all" checked><span>ทั้งหมด — Main (' + c.main + ') + Archived Project (' + c.archived + ') = ' + total + ' log</span></label>' +
+        '<label><input type="radio" name="clr_scope" value="main"><span>เฉพาะ Main (' + c.main + ' log) — เก็บ Archived Project ไว้เหมือนเดิม</span></label>' +
+        '<label><input type="radio" name="clr_scope" value="archived"><span>เฉพาะ Archived Project (' + c.archived + ' log) — เก็บ Main ไว้เหมือนเดิม</span></label>' +
+      '</div>' +
+    '</div>' +
+    (c.orphan ? '<div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">ℹ️ พบ Log กำพร้า (ชี้ไปโครงการที่ไม่มีแล้ว) ' + c.orphan + ' รายการ — ไม่แตะจุดนี้ ไปลบผ่าน "🩺 ตรวจสุขภาพข้อมูล" แทน</div>' : '') +
+    '<button class="btn bd btn-full" onclick="clearPipelineTimeline()">🗑️ ล้าง Timeline ตามที่เลือก</button>'
+  );
+}
+function clearPipelineTimeline() {
+  var scope = (document.querySelector('input[name="clr_scope"]:checked') || {}).value || 'all';
+  var pipeArchived = {};
+  ST.getAll('pipeline').forEach(function(p) { pipeArchived[p.id] = pipeIsArchived(p); });
+  var toDelete = ST.getAll('pipeLog').filter(function(l) {
+    if (!pipeArchived.hasOwnProperty(l.pipeId)) return false; // log กำพร้า ไม่แตะ (มีเครื่องมือแยกจัดการอยู่แล้ว)
+    if (scope === 'main') return !pipeArchived[l.pipeId];
+    if (scope === 'archived') return pipeArchived[l.pipeId];
+    return true; // 'all'
+  });
+  if (!toDelete.length) { toast('ไม่มี Timeline ในขอบเขตที่เลือก'); return; }
+  if (!confirm('⚠️ ลบ Timeline ' + toDelete.length + ' รายการถาวร?\nกู้คืนไม่ได้')) return;
+  if (!confirm('⚠️⚠️ ยืนยันอีกครั้ง — ลบจริงแน่นอนใช่ไหม?')) return;
+
+  var idSet = {};
+  toDelete.forEach(function(l) { idSet[l.id] = true; });
+  ST.deleteWhere('pipeLog', function(l) { return idSet[l.id]; });
+  if (typeof syncDeleteFromFirebase === 'function') toDelete.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+
+  closeMForce();
+  toast('🗑️ ลบ Timeline ' + toDelete.length + ' รายการแล้ว');
+  render();
 }
 function showPipeDataHealthCheckM() {
   var dupClusters = _pipeComputeDupLogClusters();
