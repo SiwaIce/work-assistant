@@ -1577,7 +1577,11 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + (defaultMode === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (defaultMode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
-    '<div class="fg"><label>DJI Dealer</label><select id="fv_djid">' + optionsHTML(cfg.djiDealerTypes, v.djiDealer || (dealer ? dealer.djiDealer : '') || '', '--') + '</select></div></div>' +
+    // เดิมเป็น dropdown เลือก SAB/Other เอง แต่ทีมกรอกจริงเป็น Level ของ Dealer เสมอ (เช่น "B") ไม่ได้ใช้ค่า
+    // SAB/Other ตามชื่อ field เลย (ผู้ใช้แจ้ง 2026-08-24 พร้อมตัวอย่างจากชีทจริง) เปลี่ยนเป็นดึง Level ของ
+    // Dealer ที่ผูกอยู่มาโชว์ตรงๆ อัตโนมัติแทน ไม่ต้องเลือกเอง (readonly — field ชื่อ id เดิม fv_djid ไว้เผื่อ
+    // โค้ดจุดอื่นอ่านค่านี้ตอน save อยู่ ไม่ต้องแก้จุดอื่นเพิ่ม)
+    '<div class="fg"><label>DJI Dealer Level</label><input type="text" id="fv_djid" value="' + sanitize(dealer ? (dealer.level || 'Other') : '') + '" readonly style="background:var(--bg2);cursor:not-allowed"></div></div>' +
     '<div class="fg"><label>📍 Location</label><input type="url" id="fv_loc" value="' + (v.location || (dealer ? dealer.googleMap : '') || '') + '"></div>';
 
   // Topics
@@ -1892,7 +1896,7 @@ function onVisitDealerChanged() {
   var loc = document.getElementById('fv_loc');
   if (loc && !loc.value && d.googleMap) loc.value = d.googleMap;
   var djid = document.getElementById('fv_djid');
-  if (djid && d.djiDealer) djid.value = d.djiDealer;
+  if (djid) djid.value = d.level || 'Other';
   var pipesDiv = document.getElementById('fv_pipes');
   if (pipesDiv) pipesDiv.innerHTML = renderPipelineSelectEnhanced(did, []);
 }
