@@ -4620,6 +4620,33 @@ function fmtDateKey(date) {
 // ================================================================
 // SMART FILTER PAGE
 // ================================================================
+// stale_pipeline เดิม render เป็น list เปล่าๆ ไม่มี sort/filter/ค้นหาเลย — พอมีเป็นร้อยรายการ (เช่น
+// "116 Pipeline ไม่อัพเดท 14d") หาของที่อยากดูยากมาก เพิ่มค้นหา/เรียง/กรองตาม Dealer ให้ (2026-08-24)
+var sfStaleSearch = '';
+var sfStaleSort = 'stale_desc';
+var sfStaleDealer = 'all';
+function sfStaleSearchInput(v) { sfStaleSearch = v; render(); }
+function sfStaleSortChange(v) { sfStaleSort = v; render(); }
+function sfStaleDealerChange(v) { sfStaleDealer = v; render(); }
+function _sfStalePipelineData() {
+  return getStalePipelines().map(function(p) {
+    var logs = ST.pipeLogsByPipe(p.id);
+    var lastDate = logs.length ? logs[0].date.split('T')[0] : (p.created ? p.created.split('T')[0] : '');
+    var d = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    return { p: p, dealerId: p.dealerId || '', dealerName: d ? d.name : '(ไม่มี Dealer)', staleDays: lastDate ? -dTo(lastDate) : 999 };
+  });
+}
+function _sfStalePipelineItem(item) {
+  var p = item.p;
+  var staleColor = item.staleDays >= 60 ? '#ef4444' : item.staleDays >= 30 ? '#f59e0b' : '#94a3b8';
+  return '<div class="li" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
+    '<div class="lm">' +
+    '<div class="lt">' + sanitize(p.projectName || '-') + ' ' + pipeTag(p.status) + '</div>' +
+    '<div class="ls">🏪 ' + sanitize(item.dealerName) + ' • ' + (p.model || '') + ' • 💰 ' + fmtMoney(p.forecastAmount) + (p.biddingDate ? ' • Bid: ' + fDShort(p.biddingDate) : '') + '</div>' +
+    '</div>' +
+    '<span style="font-size:11px;font-weight:700;color:' + staleColor + ';white-space:nowrap;flex-shrink:0">⏰ ค้าง ' + item.staleDays + ' วัน</span>' +
+    '</div>';
+}
 function rSmartFilter(el) {
   var fid = S.filterId;
   var filters = getSmartFilters();
@@ -4664,8 +4691,40 @@ function rSmartFilter(el) {
       break;
     }
     case 'stale_pipeline': {
-      var items = getStalePipelines();
-      html = items.map(function(p) { return pipeListItem(p); }).join('') || '<div class="empty"><p>✅ ไม่มี Pipeline ค้าง</p></div>';
+      var staleData = _sfStalePipelineData();
+      var dealerNames = {};
+      staleData.forEach(function(it) { dealerNames[it.dealerId || '__none__'] = it.dealerName; });
+      var dealerOptions = Object.keys(dealerNames).sort(function(a, b) { return dealerNames[a].localeCompare(dealerNames[b], 'th'); });
+
+      var filtered = staleData.filter(function(it) {
+        if (sfStaleDealer !== 'all' && (it.dealerId || '__none__') !== sfStaleDealer) return false;
+        if (sfStaleSearch) {
+          var q = sfStaleSearch.toLowerCase();
+          if ((it.p.projectName || '').toLowerCase().indexOf(q) === -1 && it.dealerName.toLowerCase().indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+      if (sfStaleSort === 'stale_desc') filtered.sort(function(a, b) { return b.staleDays - a.staleDays; });
+      else if (sfStaleSort === 'stale_asc') filtered.sort(function(a, b) { return a.staleDays - b.staleDays; });
+      else if (sfStaleSort === 'dealer_az') filtered.sort(function(a, b) { return a.dealerName.localeCompare(b.dealerName, 'th'); });
+      else if (sfStaleSort === 'fc_desc') filtered.sort(function(a, b) { return (Number(b.p.forecastAmount) || 0) - (Number(a.p.forecastAmount) || 0); });
+
+      var toolbar = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ/บริษัท..." value="' + sanitize(sfStaleSearch) + '" oninput="sfStaleSearchInput(this.value)" style="flex:1;min-width:160px;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">' +
+        '<select onchange="sfStaleDealerChange(this.value)" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">' +
+        '<option value="all">🏪 ทุกบริษัท</option>' +
+        dealerOptions.map(function(k) { return '<option value="' + sanitize(k) + '"' + (sfStaleDealer === k ? ' selected' : '') + '>' + sanitize(dealerNames[k]) + '</option>'; }).join('') +
+        '</select>' +
+        '<select onchange="sfStaleSortChange(this.value)" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">' +
+        '<option value="stale_desc"' + (sfStaleSort === 'stale_desc' ? ' selected' : '') + '>⏰ ค้างนานสุดก่อน</option>' +
+        '<option value="stale_asc"' + (sfStaleSort === 'stale_asc' ? ' selected' : '') + '>⏰ ค้างน้อยสุดก่อน</option>' +
+        '<option value="dealer_az"' + (sfStaleSort === 'dealer_az' ? ' selected' : '') + '>🏪 ชื่อบริษัท A-Z</option>' +
+        '<option value="fc_desc"' + (sfStaleSort === 'fc_desc' ? ' selected' : '') + '>💰 Forecast มาก→น้อย</option>' +
+        '</select>' +
+        '</div>';
+      var listHtml = filtered.map(_sfStalePipelineItem).join('') || '<div class="empty"><p>ไม่พบรายการที่ตรงกับตัวกรอง</p></div>';
+      html = toolbar + '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">แสดง ' + filtered.length + ' / ' + staleData.length + ' รายการ</div>' + listHtml;
+      if (!staleData.length) html = '<div class="empty"><p>✅ ไม่มี Pipeline ค้าง</p></div>';
       break;
     }
     case 'big_projects': {
