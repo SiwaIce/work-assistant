@@ -1624,7 +1624,7 @@ function renderTeamMemberListHTML() {
   return html;
 }
 
-function showAddSalesMemberM() {
+function showAddSalesMemberM(fromMismatch) {
   var rndPin = Math.floor(1000 + Math.random() * 9000).toString();
   openM('➕ เพิ่มสมาชิกทีม Sales',
     '<div class="fm-group"><label>ชื่อ Sales *</label>' +
@@ -1632,13 +1632,13 @@ function showAddSalesMemberM() {
     '<div class="fm-group"><label>PIN (4 หลัก) — ใช้ Login sales-view</label>' +
     '<input type="text" id="sm_pin" class="fm-input" maxlength="6" placeholder="ตัวเลข 4-6 หลัก" value="' + rndPin + '"></div>' +
     '<div class="fm-actions">' +
-    '<button class="btn bp" onclick="addSalesMember()">💾 เพิ่มสมาชิก</button>' +
+    '<button class="btn bp" onclick="addSalesMember(' + (fromMismatch ? 1 : 0) + ')">💾 เพิ่มสมาชิก</button>' +
     '<button class="btn bo" onclick="closeM()">ยกเลิก</button>' +
     '</div>'
   );
 }
 
-function addSalesMember() {
+function addSalesMember(fromMismatch) {
   var nameEl = document.getElementById('sm_name');
   var pinEl = document.getElementById('sm_pin');
   if (!nameEl || !nameEl.value.trim()) { toast('กรุณาใส่ชื่อ'); return; }
@@ -1659,8 +1659,8 @@ function addSalesMember() {
   }
   closeMForce();
   toast('✅ เพิ่ม ' + name + ' แล้ว');
-  var el = document.getElementById('teamMemberList');
-  if (el) el.innerHTML = renderTeamMemberListHTML();
+  if (fromMismatch) showSaleNameMismatchM();
+  else { var el = document.getElementById('teamMemberList'); if (el) el.innerHTML = renderTeamMemberListHTML(); }
 }
 
 function deleteSalesMember(id) {
@@ -1668,8 +1668,64 @@ function deleteSalesMember(id) {
   var members = getSalesMembers().filter(function(m) { return m.id !== id; });
   saveSalesMembers(members);
   toast('🗑️ ลบสมาชิกแล้ว');
+  if (_smmIsOpen()) { showSaleNameMismatchM(); return; }
   var el = document.getElementById('teamMemberList');
   if (el) el.innerHTML = renderTeamMemberListHTML();
+}
+
+function _smmIsOpen() { return !!document.getElementById('smmRoot'); }
+
+// ================================================================
+// แก้ไขชื่อสมาชิกทีม — ต้องโอน saleName ในข้อมูล Dealer/Pipeline/Visit + salesMemberName
+// ในแผน KPI เก่าที่เคยสร้างไว้ (เป็น snapshot ตอนสร้างแผน ไม่ได้ผูก live กับชื่อสมาชิก) ไปด้วย
+// ไม่งั้นเปลี่ยนชื่อแล้ว KPI จะคำนวณไม่เจอ (สลับด้านกับปัญหาเดิมที่ _saleNameUsageMap ตรวจเจอ)
+// ================================================================
+function showEditSalesMemberNameM(id, fromMismatch) {
+  var m = getSalesMembers().filter(function(x) { return x.id === id; })[0];
+  if (!m) return;
+  openM('✏️ แก้ไขชื่อเซลล์',
+    '<div class="fm-group"><label>ชื่อใหม่</label><input type="text" id="sm_edit_name" class="fm-input" value="' + sanitize(m.name) + '"></div>' +
+    '<p style="font-size:.68rem;color:var(--text3);margin:6px 0 10px">ถ้าเปลี่ยนชื่อ ระบบจะโอน Dealer/Pipeline/Visit/แผน KPI ที่ผูกกับชื่อเดิมมาเป็นชื่อใหม่ให้อัตโนมัติ ไม่ต้องไปแก้ทีละที่</p>' +
+    '<div class="fm-actions">' +
+    '<button class="btn bp" onclick="saveEditSalesMemberName(\'' + id + '\',' + (fromMismatch ? 1 : 0) + ')">💾 บันทึก</button>' +
+    '<button class="btn bo" onclick="closeM()">ยกเลิก</button>' +
+    '</div>'
+  );
+}
+
+function saveEditSalesMemberName(id, fromMismatch) {
+  var nameEl = document.getElementById('sm_edit_name');
+  var newName = nameEl ? nameEl.value.trim() : '';
+  if (!newName) { toast('กรุณาใส่ชื่อ'); return; }
+  var members = getSalesMembers();
+  var m = members.filter(function(x) { return x.id === id; })[0];
+  if (!m) return;
+  var oldName = m.name;
+  if (oldName === newName) { closeMForce(); if (fromMismatch) showSaleNameMismatchM(); return; }
+  if (members.some(function(x) { return x.id !== id && x.name === newName; })) { toast('⚠️ มีชื่อนี้อยู่แล้ว ใช้ "🔍 ตรวจสอบชื่อเซลล์" เพื่อโอนรวมแทน'); return; }
+
+  var dealerIds = ST.getAll('dealers').filter(function(d) { return d.saleName === oldName; }).map(function(d) { return d.id; });
+  var authDealerIds = ST.getAll('dealers').filter(function(d) { return d.authorizedBy === oldName; }).map(function(d) { return d.id; });
+  var pipelineIds = ST.getAll('pipeline').filter(function(p) { return p.saleName === oldName; }).map(function(p) { return p.id; });
+  var visitIds = ST.getAll('visits').filter(function(v) { return v.saleName === oldName; }).map(function(v) { return v.id; });
+  var plans = getKpiQuarterPlans().filter(function(p) { return p.salesMemberName === oldName; });
+
+  m.name = newName;
+  saveSalesMembers(members);
+  if (dealerIds.length) ST.updateMany('dealers', dealerIds, { saleName: newName }).forEach(function(d) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', d); });
+  if (authDealerIds.length) ST.updateMany('dealers', authDealerIds, { authorizedBy: newName }).forEach(function(d) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', d); });
+  if (pipelineIds.length) ST.updateMany('pipeline', pipelineIds, { saleName: newName }).forEach(function(p) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', p); });
+  if (visitIds.length) ST.updateMany('visits', visitIds, { saleName: newName }).forEach(function(v) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visits', v); });
+  if (plans.length) {
+    var allPlans = getKpiQuarterPlans();
+    allPlans.forEach(function(p) { if (p.salesMemberName === oldName) p.salesMemberName = newName; });
+    saveKpiQuarterPlans(allPlans);
+  }
+
+  closeMForce();
+  toast('✅ เปลี่ยนชื่อ "' + oldName + '" → "' + newName + '" แล้ว (โอนข้อมูลที่เกี่ยวข้องให้ด้วย)');
+  if (fromMismatch) showSaleNameMismatchM();
+  else { var el = document.getElementById('teamMemberList'); if (el) el.innerHTML = renderTeamMemberListHTML(); }
 }
 
 function toggleSalesMember(id) {
@@ -1709,15 +1765,22 @@ function showSaleNameMismatchM() {
   members.forEach(function(m) { memberNames[m.name] = true; });
   var usage = _saleNameUsageMap();
 
-  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ตรวจว่าชื่อเซลล์ (Sale Name) ที่บันทึกไว้ใน Dealer/Pipeline/Visit ตรงกับรายชื่อในทีม Sales ปัจจุบันไหม — ถ้าไม่ตรง (เช่น เปลี่ยนชื่อสมาชิกทีมแล้ว แต่ข้อมูลเก่ายังเป็นชื่อเดิม) KPI จะคำนวณไม่เจอเลย</p>';
+  var h = '<div id="smmRoot">';
+  h += '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ตรวจว่าชื่อเซลล์ (Sale Name) ที่บันทึกไว้ใน Dealer/Pipeline/Visit ตรงกับรายชื่อในทีม Sales ปัจจุบันไหม — ถ้าไม่ตรง (เช่น เปลี่ยนชื่อสมาชิกทีมแล้ว แต่ข้อมูลเก่ายังเป็นชื่อเดิม) KPI จะคำนวณไม่เจอเลย</p>';
 
-  h += '<div style="font-size:.72rem;font-weight:700;margin-bottom:6px">✅ สมาชิกทีม Sales</div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+  h += '<div style="font-size:.72rem;font-weight:700">✅ สมาชิกทีม Sales</div>';
+  h += '<button class="btn bp bsm" onclick="showAddSalesMemberM(1)">➕ เพิ่มเซลล์</button>';
+  h += '</div>';
   members.forEach(function(m) {
     var u = usage[m.name];
     var total = u ? (u.dealers + u.pipelines + u.visits) : 0;
-    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between">' +
-      '<span>' + sanitize(m.name) + '</span>' +
-      '<span style="color:' + (total ? 'var(--text2)' : '#ef4444') + '">' + (total ? total + ' รายการ' : '⚠️ ไม่พบข้อมูลเลย') + '</span></div>';
+    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(m.name) + '</span>' +
+      '<span style="color:' + (total ? 'var(--text2)' : '#ef4444') + ';white-space:nowrap">' + (total ? total + ' รายการ' : '⚠️ ไม่พบข้อมูลเลย') + '</span>' +
+      '<button class="btn bsm bo" style="flex-shrink:0" onclick="showEditSalesMemberNameM(\'' + m.id + '\',1)" title="แก้ไขชื่อ">✏️</button>' +
+      '<button class="btn bsm bd" style="flex-shrink:0" onclick="deleteSalesMember(\'' + m.id + '\')" title="ลบ">🗑️</button>' +
+      '</div>';
   });
 
   var orphanNames = Object.keys(usage).filter(function(n) { return !memberNames[n]; });
@@ -1740,6 +1803,7 @@ function showSaleNameMismatchM() {
       h += '</div></div>';
     });
   }
+  h += '</div>';
   openM('🔍 ตรวจสอบชื่อเซลล์', h);
 }
 
