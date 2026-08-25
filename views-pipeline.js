@@ -6090,11 +6090,13 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   if ((existing.industrialType || '') !== resolvedIndType) return 'changed';
   if (colMap && colMap.hasOwnProperty('projectRevenue') && Math.abs(_pipeNormNum(existing.projectRevenue) - _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'))) > 0.001) return 'changed';
   if (Math.abs(_pipeNormNum(existing.forecastAmount) - _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount'))) > 0.001) return 'changed';
-  if (Math.abs(_pipeNormNum(existing.realAmount)     - _pipeNormNum(_pipeCol(c, colMap, 'realAmount'))) > 0.001) return 'changed';
+  // Real Amount / Bidding Date / Shipment Date: เหตุผลเดียวกับ projectId/projectRevenue ด้านบน — ชีท Main
+  // กับ Archived Project มีชุดคอลัมน์ไม่เหมือนกัน บางคอลัมน์หายไปทั้งคอลัมน์ (ผู้ใช้แจ้ง 2026-08-24)
+  if (colMap && colMap.hasOwnProperty('realAmount') && Math.abs(_pipeNormNum(existing.realAmount) - _pipeNormNum(_pipeCol(c, colMap, 'realAmount'))) > 0.001) return 'changed';
   var impBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
   if ((existing.registerDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate'))) return 'changed';
-  if ((existing.biddingDate || '') !== impBiddingDate) return 'changed';
-  if ((existing.shipmentDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate)) return 'changed';
+  if (colMap && colMap.hasOwnProperty('biddingDate') && (existing.biddingDate || '') !== impBiddingDate) return 'changed';
+  if (colMap && colMap.hasOwnProperty('shipmentDate') && (existing.shipmentDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate)) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
@@ -6207,12 +6209,13 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   ];
   var numPairs = [
     { label: 'Forecast',        oldN: _pipeNormNum(existing.forecastAmount),  newN: _pipeNormNum(_pipeCol(c, colMap, 'forecastAmount')) },
-    { label: 'Real Amount',     oldN: _pipeNormNum(existing.realAmount),      newN: _pipeNormNum(_pipeCol(c, colMap, 'realAmount')) },
     { label: 'Project POS',     oldN: _pipeNormNum(existing.projectPOS),      newN: _pipeNormNum(_pipeCol(c, colMap, 'projectPOS')) },
   ];
   var diffs = pairs.filter(function(p) { return p.old !== p.newVal; });
-  // Project ID / Project revenue: เทียบเฉพาะตอนไฟล์มีคอลัมน์นี้จริงๆ (ดูคอมเมนต์ที่ _pipeImportState) —
-  // ไม่งั้นทุกโครงการที่เคยมีค่าจะโดน flag "เปลี่ยน" ทุกครั้งเพราะคอลัมน์นี้ไม่อยู่ในชีทมาตรฐานแล้ว
+  // Project ID / Project revenue / Real Amount / Bidding Date / Shipment Date: เทียบเฉพาะตอนไฟล์มีคอลัมน์
+  // นี้จริงๆ (ดูคอมเมนต์ที่ _pipeImportState) — ไม่งั้นทุกโครงการที่เคยมีค่าจะโดน flag "เปลี่ยน (เป็นว่าง)" ทุก
+  // ครั้งเพราะคอลัมน์นี้ไม่อยู่ในชีทที่ import รอบนี้ (เจอจริง: ชีท Main กับ Archived Project มีชุดคอลัมน์ไม่
+  // เหมือนกัน บางคอลัมน์หายไปทั้งคอลัมน์ ไม่ใช่แค่บางแถวว่าง — ผู้ใช้แจ้ง 2026-08-24)
   if (colMap && colMap.hasOwnProperty('projectId')) {
     var newPid = _pipeNormText(_pipeCol(c, colMap, 'projectId'));
     if (_pipeNormText(existing.projectId) !== newPid) diffs.push({ label: 'Project ID', old: _pipeNormText(existing.projectId), newVal: newPid });
@@ -6223,18 +6226,27 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     var newRev = _pipeNormNum(_pipeCol(c, colMap, 'projectRevenue'));
     if (Math.abs(_pipeNormNum(existing.projectRevenue) - newRev) > 0.001) diffs.push({ label: 'Project Revenue', old: fmtMoney(_pipeNormNum(existing.projectRevenue)) || '0', newVal: fmtMoney(newRev) || '0' });
   }
+  if (colMap && colMap.hasOwnProperty('realAmount')) {
+    var newRealAmt = _pipeNormNum(_pipeCol(c, colMap, 'realAmount'));
+    if (Math.abs(_pipeNormNum(existing.realAmount) - newRealAmt) > 0.001) diffs.push({ label: 'Real Amount', old: fmtMoney(_pipeNormNum(existing.realAmount)) || '0', newVal: fmtMoney(newRealAmt) || '0' });
+  }
   numPairs.forEach(function(p) {
     if (Math.abs(p.oldN - p.newN) > 0.001) diffs.push({ label: p.label, old: fmtMoney(p.oldN) || '0', newVal: fmtMoney(p.newN) || '0' });
   });
   var impBiddingDate = _pipeDateFromPaste(_pipeCol(c, colMap, 'biddingDate'));
   var datePairs = [
-    { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate')) },
-    { label: 'Bidding Date',  oldISO: existing.biddingDate  || '', newISO: impBiddingDate },
-    { label: 'Shipment Date', oldISO: existing.shipmentDate || '', newISO: _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate) }
+    { label: 'Register Date', oldISO: existing.registerDate || '', newISO: _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate')) }
   ];
   datePairs.forEach(function(p) {
     if (p.oldISO !== p.newISO) diffs.push({ label: p.label, old: p.oldISO ? fD(p.oldISO) : '', newVal: p.newISO ? fD(p.newISO) : '' });
   });
+  if (colMap && colMap.hasOwnProperty('biddingDate') && (existing.biddingDate || '') !== impBiddingDate) {
+    diffs.push({ label: 'Bidding Date', old: existing.biddingDate ? fD(existing.biddingDate) : '', newVal: impBiddingDate ? fD(impBiddingDate) : '' });
+  }
+  if (colMap && colMap.hasOwnProperty('shipmentDate')) {
+    var newShipISO = _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate);
+    if ((existing.shipmentDate || '') !== newShipISO) diffs.push({ label: 'Shipment Date', old: existing.shipmentDate ? fD(existing.shipmentDate) : '', newVal: newShipISO ? fD(newShipISO) : '' });
+  }
   var _ei2 = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei2);
   var importG2 = _pipeModelQtyByGroup(_pipeResolveItemsFromRow(c, colMap, _ei2));
@@ -7049,10 +7061,19 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
       model: items[0] ? items[0].model : '',
       modelQty: items[0] ? items[0].qty : 1,
       forecastAmount: parseFloat(_pipeCol(c, colMap, 'forecastAmount').replace(/,/g, '')) || 0,
-      realAmount: parseFloat(_pipeCol(c, colMap, 'realAmount').replace(/,/g, '')) || 0,
+      // Real Amount / Bidding Date / Shipment Date: เหตุผลเดียวกับ projectId/projectRevenue — ถ้าไฟล์ที่
+      // import รอบนี้ไม่มีคอลัมน์นี้เลย (เจอจริง: ชีท Main กับ Archived Project คอลัมน์ไม่เหมือนกัน) ต้องคง
+      // ค่าเดิมไว้ ไม่เขียนทับเป็นว่าง/0 (ผู้ใช้แจ้ง 2026-08-24)
+      realAmount: colMap && colMap.hasOwnProperty('realAmount')
+        ? (parseFloat(_pipeCol(c, colMap, 'realAmount').replace(/,/g, '')) || 0)
+        : (existing ? (Number(existing.realAmount) || 0) : 0),
       tor: _pipeCol(c, colMap, 'tor').trim(),
-      biddingDate: pipeBiddingDate,
-      shipmentDate: _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), pipeBiddingDate),
+      biddingDate: colMap && colMap.hasOwnProperty('biddingDate')
+        ? pipeBiddingDate
+        : (existing ? (existing.biddingDate || '') : ''),
+      shipmentDate: colMap && colMap.hasOwnProperty('shipmentDate')
+        ? _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), pipeBiddingDate)
+        : (existing ? (existing.shipmentDate || '') : ''),
       remark: _pipeCol(c, colMap, 'remark').trim(),
       appointmentLetter: _pipeCol(c, colMap, 'appointmentLetter').trim(),
       projectPOS: parseInt(_pipeCol(c, colMap, 'projectPOS')) || 0,
