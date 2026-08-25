@@ -397,6 +397,7 @@ function rAdmin(el) {
     '<div class="bg" style="margin-top:10px;flex-wrap:wrap">' +
     '<button class="btn bp bsm" onclick="showAddSalesMemberM()">➕ เพิ่ม Sales</button>' +
     '<button class="btn bo bsm" onclick="copyGMLink()">🔗 Copy GM Link</button>' +
+    '<button class="btn bo bsm" onclick="showSaleNameMismatchM()" title="เช็คว่าชื่อเซลล์ใน Dealer/Pipeline/Visit ตรงกับสมาชิกทีมไหม — ถ้าไม่ตรง KPI จะคำนวณไม่เจอ">🔍 ตรวจสอบชื่อเซลล์</button>' +
     '</div></div>' +
 
     // Sales Link Permissions — แยกการ์ดต่างหากจากทีม Sales ด้านบน ให้หาง่าย
@@ -1679,6 +1680,89 @@ function toggleSalesMember(id) {
   saveSalesMembers(members);
   var el = document.getElementById('teamMemberList');
   if (el) el.innerHTML = renderTeamMemberListHTML();
+}
+
+// ================================================================
+// ตรวจสอบชื่อเซลล์ไม่ตรงกัน — Dealer/Pipeline/Visit เก็บ saleName เป็น string อิสระ
+// ถ้าเปลี่ยนชื่อสมาชิกทีม (หรือชื่อเดิมพิมพ์ไม่ตรง) ข้อมูลเก่าจะไม่ขยับตาม ทำให้ KPI (จับคู่ตาม
+// string เป๊ะๆ) คำนวณไม่เจอเลย — เครื่องมือนี้ช่วยหาชื่อที่ "ลอย" (ไม่ตรงกับสมาชิกทีมคนไหน) แล้วโอนได้
+// ================================================================
+function _saleNameUsageMap() {
+  var map = {};
+  function bump(name, kind) {
+    if (!name) return;
+    if (!map[name]) map[name] = { dealers: 0, pipelines: 0, visits: 0, authorizedDealers: 0 };
+    map[name][kind]++;
+  }
+  ST.getAll('dealers').forEach(function(d) {
+    bump(d.saleName, 'dealers');
+    if (d.authorizedDate) bump(d.authorizedBy, 'authorizedDealers');
+  });
+  ST.getAll('pipeline').forEach(function(p) { bump(p.saleName, 'pipelines'); });
+  ST.getAll('visits').forEach(function(v) { bump(v.saleName, 'visits'); });
+  return map;
+}
+
+function showSaleNameMismatchM() {
+  var members = getSalesMembers();
+  var memberNames = {};
+  members.forEach(function(m) { memberNames[m.name] = true; });
+  var usage = _saleNameUsageMap();
+
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ตรวจว่าชื่อเซลล์ (Sale Name) ที่บันทึกไว้ใน Dealer/Pipeline/Visit ตรงกับรายชื่อในทีม Sales ปัจจุบันไหม — ถ้าไม่ตรง (เช่น เปลี่ยนชื่อสมาชิกทีมแล้ว แต่ข้อมูลเก่ายังเป็นชื่อเดิม) KPI จะคำนวณไม่เจอเลย</p>';
+
+  h += '<div style="font-size:.72rem;font-weight:700;margin-bottom:6px">✅ สมาชิกทีม Sales</div>';
+  members.forEach(function(m) {
+    var u = usage[m.name];
+    var total = u ? (u.dealers + u.pipelines + u.visits) : 0;
+    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between">' +
+      '<span>' + sanitize(m.name) + '</span>' +
+      '<span style="color:' + (total ? 'var(--text2)' : '#ef4444') + '">' + (total ? total + ' รายการ' : '⚠️ ไม่พบข้อมูลเลย') + '</span></div>';
+  });
+
+  var orphanNames = Object.keys(usage).filter(function(n) { return !memberNames[n]; });
+  h += '<div style="font-size:.72rem;font-weight:700;margin:14px 0 6px">⚠️ ชื่อที่พบในข้อมูล แต่ไม่ตรงกับสมาชิกทีมคนไหนเลย</div>';
+  if (!orphanNames.length) {
+    h += '<div style="font-size:.72rem;color:var(--text3);text-align:center;padding:8px">ไม่มี — ชื่อทั้งหมดตรงกันแล้ว ✅</div>';
+  } else if (!members.length) {
+    h += '<div style="font-size:.72rem;color:var(--text3);text-align:center;padding:8px">ยังไม่มีสมาชิกทีม Sales — เพิ่มก่อนถึงจะโอนชื่อได้</div>';
+  } else {
+    var memberOpts = members.map(function(m) { return '<option value="' + sanitize(m.name) + '">' + sanitize(m.name) + '</option>'; }).join('');
+    orphanNames.forEach(function(n, idx) {
+      var u = usage[n];
+      var total = u.dealers + u.pipelines + u.visits + u.authorizedDealers;
+      var rid = 'orphSel_' + idx;
+      h += '<div style="background:var(--bg2);border-radius:8px;padding:8px;margin-bottom:6px">';
+      h += '<div style="font-size:.76rem;font-weight:600">"' + sanitize(n) + '" <span style="font-weight:400;color:var(--text2);font-size:.68rem">(Dealer ' + u.dealers + ', Pipeline ' + u.pipelines + ', Visit ' + u.visits + (u.authorizedDealers ? ', Authorized-by ' + u.authorizedDealers : '') + ')</span></div>';
+      h += '<div style="display:flex;gap:6px;margin-top:6px">';
+      h += '<select id="' + rid + '" style="flex:1;font-size:.72rem"><option value="">→ โอนเป็น...</option>' + memberOpts + '</select>';
+      h += '<button class="btn bp bsm" onclick="mergeSaleName(\'' + sanitize(n).replace(/'/g, "\\'") + '\',\'' + rid + '\')">โอน</button>';
+      h += '</div></div>';
+    });
+  }
+  openM('🔍 ตรวจสอบชื่อเซลล์', h);
+}
+
+function mergeSaleName(oldName, selId) {
+  var sel = document.getElementById(selId);
+  var newName = sel ? sel.value : '';
+  if (!newName) { toast('⚠️ เลือกชื่อที่จะโอนเป็นก่อน'); return; }
+  var dealerIds = ST.getAll('dealers').filter(function(d) { return d.saleName === oldName; }).map(function(d) { return d.id; });
+  var authDealerIds = ST.getAll('dealers').filter(function(d) { return d.authorizedBy === oldName; }).map(function(d) { return d.id; });
+  var pipelineIds = ST.getAll('pipeline').filter(function(p) { return p.saleName === oldName; }).map(function(p) { return p.id; });
+  var visitIds = ST.getAll('visits').filter(function(v) { return v.saleName === oldName; }).map(function(v) { return v.id; });
+  var total = dealerIds.length + pipelineIds.length + visitIds.length + authDealerIds.length;
+  if (!total) { toast('ไม่มีรายการให้โอน'); return; }
+  if (!confirm('โอนชื่อ "' + oldName + '" → "' + newName + '"?\nDealer ' + dealerIds.length + ' · Pipeline ' + pipelineIds.length + ' · Visit ' + visitIds.length + (authDealerIds.length ? ' · Dealer(ผู้ Authorize) ' + authDealerIds.length : '') + ' รายการ (รวม ' + total + ')\n\nแก้ไขจริงในข้อมูล ย้อนกลับเองไม่ได้ (ต้องโอนกลับด้วยมือถ้าพลาด)')) return;
+
+  if (dealerIds.length) ST.updateMany('dealers', dealerIds, { saleName: newName }).forEach(function(d) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', d); });
+  if (authDealerIds.length) ST.updateMany('dealers', authDealerIds, { authorizedBy: newName }).forEach(function(d) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', d); });
+  if (pipelineIds.length) ST.updateMany('pipeline', pipelineIds, { saleName: newName }).forEach(function(p) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', p); });
+  if (visitIds.length) ST.updateMany('visits', visitIds, { saleName: newName }).forEach(function(v) { if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visits', v); });
+
+  toast('✅ โอนชื่อ "' + oldName + '" → "' + newName + '" แล้ว (' + total + ' รายการ)');
+  closeMForce();
+  showSaleNameMismatchM();
 }
 
 function copyTeamLink(salesId) {
