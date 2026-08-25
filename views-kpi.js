@@ -500,7 +500,7 @@ function kpiDealerGapSuggestion(plan) {
 // ================================================================
 function kpiTodayBehindBanner() {
   if (typeof getSalesMembers !== 'function') return '';
-  var members = getSalesMembers().filter(function(m) { return m.active !== false; });
+  var members = kpiSalesOptions();
   var cur = kpiGetCurrentQuarter();
   var behindItems = [];
   members.forEach(function(m) {
@@ -535,7 +535,7 @@ function kpiCategoryCTA(cat) {
 // Export สรุป KPI ทุกเซลล์ เป็น Excel ให้หัวหน้าดู
 // ================================================================
 function exportKpiSummaryExcel() {
-  var members = (typeof getSalesMembers === 'function' ? getSalesMembers() : []).filter(function(m) { return m.active !== false; });
+  var members = kpiSalesOptions();
   if (!members.length) return toast('ไม่มีรายชื่อเซลล์');
 
   // เก็บ category ที่เจอทั้งหมด (id -> {icon,label}) เรียงตามลำดับที่เจอครั้งแรก ใช้ทำคอลัมน์ dashboard แบบไดนามิก
@@ -647,9 +647,25 @@ function exportKpiSummaryExcel() {
 // ================================================================
 // หน้าหลัก: Scorecard
 // ================================================================
+// รายชื่อเซลล์ให้เลือกใน dropdown ผสาน "ทีม Sales" ที่ลงทะเบียนไว้ (⚙️ ตั้งค่า) เข้ากับชื่อ saleName
+// ที่มีอยู่จริงใน Dealer/Pipeline แต่ยังไม่เคยลงทะเบียนเป็นสมาชิกทีม — กันปัญหาเซลจริงที่ดูแล Dealer
+// อยู่ไม่ขึ้นในตัวเลือกเลยเพราะไม่เคยไปเพิ่มชื่อไว้ในทีม Sales (ใช้ id ปลอม 'freename_' ได้ปกติ
+// เพราะ KPI ทั้งระบบอ้างอิงด้วย salesMemberId/salesMemberName ที่เก็บไว้ในแผนเอง ไม่ได้ join กลับไปหา
+// getSalesMembers() ที่ไหนอีก)
+function kpiSalesOptions() {
+  var registered = (typeof getSalesMembers === 'function' ? getSalesMembers() : []).filter(function(m) { return m.active !== false; });
+  var known = {};
+  registered.forEach(function(m) { known[m.name] = true; });
+  var extra = {};
+  ST.getAll('dealers').forEach(function(d) { if (d.saleName && !known[d.saleName]) extra[d.saleName] = true; });
+  ST.getAll('pipeline').forEach(function(p) { if (p.saleName && !known[p.saleName]) extra[p.saleName] = true; });
+  var extraList = Object.keys(extra).map(function(n) { return { id: 'freename_' + n, name: n, active: true, freeText: true }; });
+  return registered.concat(extraList).sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'th'); });
+}
+
 function rKpiScorecard(el) {
   document.getElementById('pgT').textContent = '📊 KPI เซลล์';
-  var members = (typeof getSalesMembers === 'function' ? getSalesMembers() : []).filter(function(m) { return m.active !== false; });
+  var members = kpiSalesOptions();
 
   if (!members.length) {
     el.innerHTML = '<div class="card" style="text-align:center;padding:30px">ยังไม่มีรายชื่อเซลล์ — เพิ่มได้ที่เมนู ⚙️ ตั้งค่า &gt; ทีมขาย</div>';
@@ -667,7 +683,9 @@ function rKpiScorecard(el) {
   var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">';
   h += '<select class="fm-input" style="min-width:160px" onchange="kpiSelectedSalesId=this.value;kpiSelectedPlanId=null;render()">';
   members.forEach(function(m) {
-    var label = sanitize(m.name) + (memberNameCounts[m.name] > 1 ? ' (PIN:' + sanitize(m.pin || '-') + ')' : '');
+    var label = sanitize(m.name) +
+      (memberNameCounts[m.name] > 1 ? ' (PIN:' + sanitize(m.pin || '-') + ')' : '') +
+      (m.freeText ? ' — ยังไม่ได้เพิ่มในทีม' : '');
     h += '<option value="' + m.id + '"' + (m.id === kpiSelectedSalesId ? ' selected' : '') + '>' + label + '</option>';
   });
   h += '</select>';
