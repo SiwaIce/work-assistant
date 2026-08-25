@@ -2375,6 +2375,11 @@ function _pipeDeleteOrphanLogs() {
   var orphanIds = {};
   orphans.forEach(function(l) { orphanIds[l.id] = true; });
   ST._set(ST._keys.pipeLog, ST.getAll('pipeLog').filter(function(l) { return !orphanIds[l.id]; }));
+  // ST._set() auto push ตัวที่เหลือขึ้น Firestore ให้เองแล้ว แต่ไม่ลบ doc ที่หายไปจากอาเรย์ — ต้องสั่งลบเอง
+  // (เหตุผลเดียวกับ _pipeDupLogDeleteClusters ด้านบน ไม่งั้น log กำพร้าจะโผล่คืนตอน sync รอบถัดไป)
+  if (typeof syncDeleteFromFirebase === 'function') {
+    orphans.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+  }
   toast('🗑️ ลบ Log กำพร้า ' + orphans.length + ' รายการ');
   showPipeDataHealthCheckM();
 }
@@ -2720,6 +2725,13 @@ function _pipeDupLogDeleteClusters(clusters, confirmMsg) {
     .filter(function(l) { return !removeIds[l.id]; })
     .map(function(l) { return contentFix.hasOwnProperty(l.id) ? Object.assign({}, l, { content: contentFix[l.id] }) : l; });
   ST._set(ST._keys.pipeLog, updatedLogs);
+  // ST._set() ถูก override ใน firebase-sync.js ให้ auto push record ที่ "เหลืออยู่ในอาเรย์" ขึ้น Firestore
+  // ให้เองอยู่แล้ว (ครอบคลุมทั้งของที่เก็บไว้และที่แก้ content/ล้างขีด) — แต่ override นี้ไม่รู้จักลบ doc ที่หายไป
+  // จากอาเรย์ (แค่ .set() ตัวที่เหลือ ไม่เคย .delete() ตัวที่เอาออก) ต้องสั่งลบตรงๆ เอง ไม่งั้น doc ซ้ำเดิมยังอยู่
+  // บน Firestore แล้ว listener sync รอบถัดไปจะดึงกลับมาเงียบๆ ดูเหมือน "ลบไปแล้วแต่กลับมาอีก" (ผู้ใช้แจ้ง 2026-08-24)
+  if (typeof syncDeleteFromFirebase === 'function') {
+    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipeLog', id); });
+  }
   toast('🗑️ ลบซ้ำ ' + deleted + ' รายการ' + (cleaned ? ' · ล้างขีดออก ' + cleaned + ' รายการ' : ''));
   // scan ใหม่แล้วรีเฟรช modal (ถ้าไม่เหลือ cluster แล้วจะโชว์ "ไม่พบรายการที่เข้าข่าย 🎉" แทนการปิด modal เฉยๆ)
   showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
@@ -7203,11 +7215,19 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
   var hasAnyChange = added || updated || deleted || deletedLogs;
   if (hasAnyChange) {
     var finalPipes = deleted ? allPipes.filter(function(p) { return !deletePipeIdSet[p.id]; }) : allPipes;
-    var finalLogs = (deleted || deletedLogs)
-      ? pipeLogs.filter(function(l) { return !deleteLogIdSet[l.id] && !deletePipeIdSet[l.pipeId]; })
-      : pipeLogs;
+    var removedLogs = (deleted || deletedLogs) ? pipeLogs.filter(function(l) { return deleteLogIdSet[l.id] || deletePipeIdSet[l.pipeId]; }) : [];
+    var finalLogs = removedLogs.length ? pipeLogs.filter(function(l) { return !deleteLogIdSet[l.id] && !deletePipeIdSet[l.pipeId]; }) : pipeLogs;
     ST._set(ST._keys.pipeline, finalPipes);
     ST._set(ST._keys.pipeLog, finalLogs);
+    // ST._set() ถูก override ใน firebase-sync.js ให้ auto push record ที่ "เหลืออยู่ในอาเรย์" ขึ้น Firestore
+    // ให้เอง (ครอบคลุมของที่เพิ่ม/แก้แล้ว) แต่ override นี้ไม่รู้จักลบ doc ที่หายไปจากอาเรย์ (แค่ .set() ตัวที่
+    // เหลือ ไม่เคย .delete() ตัวที่เอาออก) — pipeline ที่ไม่มีในไฟล์ (deleteIds) และ Update ที่ไม่ตรงไฟล์
+    // (deleteLogIds) ที่ผู้ใช้เลือกลบตอน preview เลยไม่เคยถูกลบจริงบน Firestore ต้องสั่งลบเองตรงๆ ไม่งั้นจะโผล่
+    // กลับมาตอน sync รอบถัดไป (ผู้ใช้แจ้ง 2026-08-24)
+    if (typeof syncDeleteFromFirebase === 'function') {
+      if (deleted) deleteIds.forEach(function(id) { syncDeleteFromFirebase('pipeline', id); });
+      removedLogs.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+    }
   }
 
   // ผูกช่อง Sale ใน Excel กลับเข้า "เซลที่ดูแล" ของ Dealer — ถ้าไม่ตรงกับที่มีอยู่ ให้ import ทับ (ถือ Excel
