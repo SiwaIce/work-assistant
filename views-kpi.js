@@ -835,6 +835,58 @@ function _kpiToggleVisit(id) {
   if (btn) btn.textContent = open ? '▼ ดู' : '▲ ซ่อน';
 }
 
+function _kpiRecordRowHtml(r, cat) {
+  if (cat.type === 'visitCount') {
+    var dl = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
+    var vLabel = sanitize(dl ? dl.name : (r.company || r.summary || '-').substr(0, 40));
+    var vid = 'kvi_' + r.id;
+    var h = '<div class="kpi-detail-row" style="cursor:default">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    h += '<span style="cursor:pointer" onclick="closeMForce();go(\'visitDetail\',{visitId:\'' + r.id + '\'})">📍 ' + fD(r.date) + ' — <b>' + vLabel + '</b></span>';
+    if (r.summary) h += '<span style="font-size:10px;color:var(--text2);padding:1px 6px;border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:8px;white-space:nowrap" id="' + vid + '_btn" onclick="_kpiToggleVisit(\'' + vid + '\')">▼ ดู</span>';
+    h += '</div>';
+    if (r.summary) h += '<div id="' + vid + '" style="display:none;font-size:11px;color:var(--text2);white-space:pre-wrap;padding:6px 0 2px;border-top:1px solid var(--border);margin-top:5px">' + sanitize(r.summary) + '</div>';
+    h += '</div>';
+    return h;
+  }
+  if (cat.type === 'dealerAuthorized') {
+    return '<div class="kpi-detail-row" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})">🤝 ' + sanitize(r.name) + ' — ' + fD(r.authorizedDate) + '</div>';
+  }
+  var dl2 = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
+  var rowNoTag = r.rowNo ? '<span style="color:var(--text2)">#' + sanitize(String(r.rowNo)) + '</span> ' : '';
+  return '<div class="kpi-detail-row" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + r.id + '\'})">📦 ' + rowNoTag + sanitize(r.projectName || (dl2 ? dl2.name : '') || '-') +
+    (dl2 ? ' <span style="color:var(--text2)">— ' + sanitize(dl2.name) + '</span>' : '') + ' — ' + fmtMoneyShort(r.forecastAmount) + '</div>';
+}
+
+function _kpiRecordMatchesQuery(r, cat, q) {
+  if (cat.type === 'visitCount') {
+    var d = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
+    return [(d ? d.name : ''), r.company, r.summary].some(function(s) { return (s || '').toLowerCase().indexOf(q) !== -1; });
+  }
+  if (cat.type === 'dealerAuthorized') {
+    return (r.name || '').toLowerCase().indexOf(q) !== -1;
+  }
+  var dl = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
+  return [String(r.rowNo || ''), r.projectName, (dl ? dl.name : '')].some(function(s) { return (s || '').toLowerCase().indexOf(q) !== -1; });
+}
+
+function _kpiRecordsListHtml(records, cat) {
+  if (!records.length) return '<div style="color:var(--text2);font-size:12px;text-align:center;padding:10px">ยังไม่มีรายการ</div>';
+  return records.map(function(r) { return _kpiRecordRowHtml(r, cat); }).join('');
+}
+
+function _kpiRecordsFilterList(planId, categoryId) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
+  if (!cat) return;
+  var q = (document.getElementById('kpi_records_search').value || '').trim().toLowerCase();
+  var all = kpiContributingRecords(plan, cat);
+  var filtered = q ? all.filter(function(r) { return _kpiRecordMatchesQuery(r, cat, q); }) : all;
+  document.getElementById('kpi_records_list').innerHTML = _kpiRecordsListHtml(filtered, cat);
+  document.getElementById('kpi_records_count').textContent = 'รายการที่นับเข้า KPI นี้ (' + filtered.length + (q ? ' / ทั้งหมด ' + all.length : '') + ')';
+}
+
 function showKpiDetailM(planId, categoryId) {
   var plans = getKpiQuarterPlans();
   var plan = plans.filter(function(p) { return p.id === planId; })[0];
@@ -887,29 +939,11 @@ function showKpiDetailM(planId, categoryId) {
       h += '</div>';
     }
     var records = kpiContributingRecords(plan, cat);
-    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">รายการที่นับเข้า KPI นี้ (' + records.length + ')</div>';
-    h += '<div style="max-height:240px;overflow-y:auto">';
-    if (!records.length) h += '<div style="color:var(--text2);font-size:12px;text-align:center;padding:10px">ยังไม่มีรายการ</div>';
-    records.forEach(function(r) {
-      if (cat.type === 'visitCount') {
-        var dl = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
-        var vLabel = sanitize(dl ? dl.name : (r.company || r.summary || '-').substr(0, 40));
-        var vid = 'kvi_' + r.id;
-        h += '<div class="kpi-detail-row" style="cursor:default">';
-        h += '<div style="display:flex;justify-content:space-between;align-items:center">';
-        h += '<span style="cursor:pointer" onclick="closeMForce();go(\'visitDetail\',{visitId:\'' + r.id + '\'})">📍 ' + fD(r.date) + ' — <b>' + vLabel + '</b></span>';
-        if (r.summary) h += '<span style="font-size:10px;color:var(--text2);padding:1px 6px;border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:8px;white-space:nowrap" id="' + vid + '_btn" onclick="_kpiToggleVisit(\'' + vid + '\')">▼ ดู</span>';
-        h += '</div>';
-        if (r.summary) h += '<div id="' + vid + '" style="display:none;font-size:11px;color:var(--text2);white-space:pre-wrap;padding:6px 0 2px;border-top:1px solid var(--border);margin-top:5px">' + sanitize(r.summary) + '</div>';
-        h += '</div>';
-      } else if (cat.type === 'dealerAuthorized') {
-        h += '<div class="kpi-detail-row" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})">🤝 ' + sanitize(r.name) + ' — ' + fD(r.authorizedDate) + '</div>';
-      } else {
-        var dl2 = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
-        h += '<div class="kpi-detail-row" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + r.id + '\'})">📦 ' + sanitize(r.projectName || (dl2 ? dl2.name : '') || '-') + ' — ' + fmtMoneyShort(r.forecastAmount) + '</div>';
-      }
-    });
-    h += '</div>';
+    if (records.length > 5) {
+      h += '<input type="text" id="kpi_records_search" placeholder="🔍 ค้นหา Row No / ชื่อ Dealer / ชื่อโครงการ..." style="width:100%;margin-bottom:6px" oninput="_kpiRecordsFilterList(\'' + planId + '\',\'' + categoryId + '\')">';
+    }
+    h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px" id="kpi_records_count">รายการที่นับเข้า KPI นี้ (' + records.length + ')</div>';
+    h += '<div style="max-height:240px;overflow-y:auto" id="kpi_records_list">' + _kpiRecordsListHtml(records, cat) + '</div>';
 
     var potentialRecords = kpiPotentialRecords(plan, cat);
     if (potentialRecords.length) {
