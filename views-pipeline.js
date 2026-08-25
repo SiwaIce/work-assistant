@@ -2616,12 +2616,19 @@ function _pipeComputeDupLogClusters(pipeIdFilter) {
     var logs = logsByPipe[p.id] || [];
     var groups = {};
     logs.forEach(function(l) {
-      if (l.type !== 'note') return; // เกิดเฉพาะ log ที่ import สร้าง (type note) เท่านั้น
+      // เดิมเช็คเฉพาะ type 'note' (import สร้าง + กล่อง comment ด่วน) — แต่ปุ่ม "➕ Update" ก็สร้าง type
+      // 'update' ได้เหมือนกัน (ค่า default ของ dropdown) เนื้อหาเดียวกันวันเดียวกันแต่พิมพ์ผ่านคนละช่องกันก็
+      // ถือเป็นซ้ำจริงเหมือนกัน เพิ่ม 'update' เข้ามาด้วย — ยังไม่รวม type อัตโนมัติอื่นๆ (win/fail_lost/
+      // status_change/visit/followup/action) เพราะ log พวกนี้ระบบล็อกแก้ไม่ได้อยู่แล้ว เนื้อหาเหมือนกันโดย
+      // บังเอิญมีโอกาสเป็นเหตุการณ์จริงคนละครั้งมากกว่า (เช่น Visit 2 ครั้งพิมพ์สรุปคล้ายกัน) ไม่อยากเสี่ยง
+      // false positive กับ log ที่ลบเองไม่ได้ (รายงานผู้ใช้ 2026-08-24 — เช็คแล้วยังมีคู่ที่ดูซ้ำแต่ไม่ขึ้นมาให้ลบ)
+      if (l.type !== 'note' && l.type !== 'update') return;
+      // เทียบแบบ case-insensitive ด้วย เผื่อพิมพ์/import มาตัวพิมพ์ใหญ่-เล็กต่างกันแต่เนื้อหาเดียวกัน
       // เทียบแค่ระดับ "วัน" (ตัดเวลาทิ้ง) ไม่ใช่ string เต็ม — log จาก import ได้ date แบบ "YYYY-MM-DD" ล้วนๆ
       // แต่ log จากกล่อง comment ด่วน (addQuickPipeComment) ใช้ _nw() ที่ได้ ISO เต็มพร้อมเวลา (เช่น
       // "2026-06-05T09:15:32.000Z") เนื้อหาเดียวกันวันเดียวกันเลยเคยหลุดรอดไปเพราะ key ไม่ตรงกันแค่เพราะ
       // format วันที่ต่างกัน ไม่เกี่ยวกับเนื้อหาซ้ำจริงหรือไม่ (รายงานผู้ใช้ 2026-08-24)
-      var key = _pipeNormDashContent(l.content) + '||' + (l.date || '').slice(0, 10);
+      var key = _pipeNormDashContent(l.content).toLowerCase() + '||' + (l.date || '').slice(0, 10);
       if (!groups[key]) groups[key] = [];
       groups[key].push(l);
     });
