@@ -1124,7 +1124,8 @@ function _pipeMoreMenuHtml() {
     (AI_FEATURES_ENABLED ? '<button onclick="closeOvMenu();aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button onclick="closeOvMenu();togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
     '<button onclick="closeOvMenu();showPipeMatchWeightsM()">⚙️ ตั้งน้ำหนักการเทียบ</button>' +
-    '<button onclick="closeOvMenu();showRecalcPriceByLevelM()" title="คำนวณราคาต่อรายการสินค้าทุกโครงการใหม่ ตาม Level ของ Dealer ที่ผูกอยู่ (แทนราคา RRP)">💰 Recalculate ราคาตาม Level</button>'
+    '<button onclick="closeOvMenu();showRecalcPriceByLevelM()" title="คำนวณราคาต่อรายการสินค้าทุกโครงการใหม่ ตาม Level ของ Dealer ที่ผูกอยู่ (แทนราคา RRP)">💰 Recalculate ราคาตาม Level</button>' +
+    (_getRecalcUndoSnapshot() ? '<button onclick="closeOvMenu();undoRecalcPriceByLevel()" title="ย้อนราคากลับไปก่อนการ Recalculate ครั้งล่าสุด">↩️ Undo Recalculate ล่าสุด</button>' : '')
   );
 }
 
@@ -1223,17 +1224,56 @@ function _recalcRenderModal() {
   openM('💰 Recalculate ราคาตาม Level', h);
 }
 
+// Snapshot ของ recalc ครั้งล่าสุด (เก็บ items เดิมทั้งก้อนของทุกโครงการที่โดนแก้) เก็บใน localStorage
+// ตรงๆ ไม่ผ่าน ST เพราะเป็นแค่ undo buffer ชั่วคราวเครื่องเดียว ไม่ต้อง sync ข้าม device — จำไว้แค่ "ครั้งล่าสุด"
+// ครั้งเดียว ถูกทับเมื่อ recalc ใหม่อีกรอบ หรือลบทิ้งเมื่อกด Undo แล้ว (2026-08-26 เดิม pipeLog เก็บแค่ยอดรวม
+// เก่า/ใหม่ ไม่ได้เก็บราคาต่อรายการ ทำให้ข้อความ "ย้อนกลับเองไม่ได้" เป็นจริงตามตัวอักษร — แก้ให้ย้อนได้จริง)
+var RECALC_UNDO_KEY = 'v7_recalcUndoSnapshot';
+function _getRecalcUndoSnapshot() {
+  try { return JSON.parse(localStorage.getItem(RECALC_UNDO_KEY)); } catch (e) { return null; }
+}
+function _setRecalcUndoSnapshot(snap) {
+  try { localStorage.setItem(RECALC_UNDO_KEY, JSON.stringify(snap)); } catch (e) {}
+}
+function _clearRecalcUndoSnapshot() {
+  try { localStorage.removeItem(RECALC_UNDO_KEY); } catch (e) {}
+}
+
 function applyRecalcPriceByLevel() {
   var r = _recalcPriceByLevelPreview();
   if (!r.changes.length) return;
-  if (!confirm('ยืนยัน Recalculate ราคาตาม Level ' + r.changes.length + ' โครงการ?\nแก้ไขจริง ย้อนกลับเองไม่ได้ (ต้องแก้คืนทีละโครงการถ้าพลาด)')) return;
+  if (!confirm('ยืนยัน Recalculate ราคาตาม Level ' + r.changes.length + ' โครงการ?\nกด Undo ในข้อความแจ้งเตือนได้ทันที หรือย้อนทีหลังได้จากเมนู ⋯ จนกว่าจะ Recalculate ทับอีกครั้ง')) return;
+  var snapshot = { appliedAt: _nw(), changes: r.changes.map(function(c) {
+    return { pipeId: c.p.id, oldItems: c.p.items || [], oldForecastAmount: c.oldForecast };
+  }) };
   r.changes.forEach(function(c) {
     var updated = ST.update('pipeline', c.p.id, { items: c.newItems, forecastAmount: c.newForecast });
     if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
     ST.add('pipeLog', { pipeId: c.p.id, type: 'update', content: '💰 Recalculate ราคาตาม Level (' + c.level + '): ' + fmtMoney(c.oldForecast) + ' → ' + fmtMoney(c.newForecast), date: _nw() });
   });
-  toast('💰 Recalculate ราคาแล้ว ' + r.changes.length + ' โครงการ');
+  _setRecalcUndoSnapshot(snapshot);
   closeMForce();
+  render();
+  showUndoToast('💰 Recalculate ราคาแล้ว ' + r.changes.length + ' โครงการ', function() { undoRecalcPriceByLevel(true); });
+}
+
+// skipConfirm = true เมื่อกดจาก toast ทันทีหลัง apply (ตั้งใจย้อนอยู่แล้ว ไม่ต้องถามซ้ำ) — false/ไม่ส่งมา
+// เมื่อกดจากเมนู ⋯ ทีหลัง (อาจจำไม่ได้แล้วว่า recalc อะไรไป ต้องถามยืนยันก่อน)
+function undoRecalcPriceByLevel(skipConfirm) {
+  var snap = _getRecalcUndoSnapshot();
+  if (!snap || !snap.changes || !snap.changes.length) { toast('⚠️ ไม่มีการ Recalculate ล่าสุดให้ Undo'); return; }
+  if (!skipConfirm && !confirm('ยืนยัน Undo การ Recalculate ราคาตาม Level เมื่อ ' + fD(snap.appliedAt) + ' (' + snap.changes.length + ' โครงการ) กลับเป็นราคาก่อนหน้า?')) return;
+  var restored = 0;
+  snap.changes.forEach(function(c) {
+    var p = ST.getOne('pipeline', c.pipeId);
+    if (!p) return;
+    var updated = ST.update('pipeline', c.pipeId, { items: c.oldItems, forecastAmount: c.oldForecastAmount });
+    if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+    ST.add('pipeLog', { pipeId: c.pipeId, type: 'update', content: '↩️ Undo Recalculate ราคาตาม Level — คืนเป็น ' + fmtMoney(c.oldForecastAmount), date: _nw() });
+    restored++;
+  });
+  _clearRecalcUndoSnapshot();
+  toast('↩️ Undo Recalculate แล้ว ' + restored + ' โครงการ');
   render();
 }
 

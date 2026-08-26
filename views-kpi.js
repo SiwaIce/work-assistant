@@ -99,10 +99,14 @@ function _kpiForecastMonthInfo(p, plan) {
 // ================================================================
 var _kpiMoTab = 'bid';
 var _kpiMoMonth = null, _kpiMoYear = null;
+// ซ่อนดีลที่ปิดแล้ว (Win/Lost) ออกจากรายเดือน — ปิดไว้เป็นค่าเริ่มต้นเหมือนเดิม (แสดงทุกสถานะ) ผู้ใช้เปิดเองได้
+// ถ้าอยากโฟกัสเฉพาะดีลที่ยังไม่ปิดในเดือนนั้น (2026-08-26)
+var _kpiMoHideClosed = false;
 function _kpiMoInit() {
   if (_kpiMoMonth === null) { var n = new Date(); _kpiMoMonth = n.getMonth(); _kpiMoYear = n.getFullYear(); }
 }
 function _kpiMoSetTab(t) { _kpiMoTab = t; render(); }
+function _kpiMoToggleHideClosed(checked) { _kpiMoHideClosed = checked; render(); }
 function _kpiMoShift(delta) {
   _kpiMoInit();
   _kpiMoMonth += delta;
@@ -128,9 +132,14 @@ function _kpiParseForecastMonthText(text) {
   return { year: year, month: monIdx + 1 };
 }
 
-function kpiProjectsByMonth(plan, tab, month, year) {
+function kpiProjectsByMonth(plan, tab, month, year, hideClosed) {
+  var cfg = getConfig();
   var pipes = _kpiPipelines().filter(function(p) { return (p.saleName || '') === plan.salesMemberName; });
   return pipes.filter(function(p) {
+    if (hideClosed) {
+      var st = (cfg.pipelineStatuses || []).filter(function(s) { return s.id === p.status; })[0];
+      if (st && st.category !== 'active') return false;
+    }
     if (tab === 'bid') {
       if (!p.biddingDate) return false;
       var d = new Date(p.biddingDate);
@@ -147,6 +156,13 @@ function kpiProjectsByMonth(plan, tab, month, year) {
     }
     return false;
   }).sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); });
+}
+
+// จำนวนโครงการที่มี Forecast Month เป็นข้อความ แต่ parse ไม่ออก (เช่นพิมพ์ผิด/ฟอร์แมตแปลก) — เตือนไว้ในการ์ด
+// รายเดือนตอนดูแท็บ Forecast Month กันโครงการหายไปเงียบๆ โดยไม่รู้ตัวว่าเป็นเพราะ parse ไม่ผ่าน (2026-08-26)
+function kpiUnparsedForecastMonthProjects(plan) {
+  var pipes = _kpiPipelines().filter(function(p) { return (p.saleName || '') === plan.salesMemberName; });
+  return pipes.filter(function(p) { return !!(p.forecastMonth && p.forecastMonth.trim()) && !_kpiParseForecastMonthText(p.forecastMonth); });
 }
 
 function kpiGetPlansForSales(salesMemberId) {
@@ -1175,8 +1191,19 @@ function rKpiScorecard(el) {
   h += '<span style="font-size:.8rem;font-weight:600;min-width:80px;text-align:center">' + KPI_MONTH_NAMES[_kpiMoMonth] + ' ' + _kpiMoYear + '</span>';
   h += '<button class="btn bsm bo" onclick="_kpiMoShift(1)">›</button>';
   h += '</div></div>';
+  h += '<label style="display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--text2);margin-bottom:6px;cursor:pointer">' +
+    '<input type="checkbox" style="width:auto" ' + (_kpiMoHideClosed ? 'checked' : '') + ' onchange="_kpiMoToggleHideClosed(this.checked)">ซ่อนดีลที่ปิดแล้ว (Win/Lost)</label>';
 
-  var moProjects = kpiProjectsByMonth(plan, _kpiMoTab, _kpiMoMonth, _kpiMoYear);
+  if (_kpiMoTab === 'fc') {
+    var unparsed = kpiUnparsedForecastMonthProjects(plan);
+    if (unparsed.length) {
+      h += '<div class="kpi-sc-month" style="margin-bottom:6px">⚠️ ' + unparsed.length + ' โครงการมี Forecast Month แต่อ่านเดือน/ปีไม่ออก (เช่นพิมพ์ผิดฟอร์แมต) จะไม่ขึ้นในรายเดือนแท็บนี้เลย — ' +
+        unparsed.slice(0, 5).map(function(p) { return sanitize(p.projectName || '-') + ' ("' + sanitize(p.forecastMonth) + '")'; }).join(', ') +
+        (unparsed.length > 5 ? ' ...' : '') + '</div>';
+    }
+  }
+
+  var moProjects = kpiProjectsByMonth(plan, _kpiMoTab, _kpiMoMonth, _kpiMoYear, _kpiMoHideClosed);
   h += '<div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">' + moProjects.length + ' โครงการ</div>';
   h += '<div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">';
   if (!moProjects.length) {
