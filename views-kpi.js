@@ -1319,10 +1319,23 @@ function showKpiDetailM(planId, categoryId) {
       var potentialAmt = kpiPotentialAmount(plan, cat);
       h += '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">';
       h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">🌱 ดีลที่ยังไม่ปิด แต่มีลุ้น (' + potentialRecords.length + ' รายการ — รวม ' + (isMoney ? fmtMoneyShort(potentialAmt) : potentialAmt) + ' ' + (cat.unit || '') + ')</div>';
-      h += '<div style="max-height:200px;overflow-y:auto">';
+      h += '<div style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">';
       potentialRecords.forEach(function(p) {
         var dl3 = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-        h += '<div class="kpi-detail-row" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">🌱 ' + sanitize(p.projectName || (dl3 ? dl3.name : '') || '-') + ' — ' + fmtMoneyShort(p.forecastAmount) + '</div>';
+        var items = (getPipeItems(p) || []).map(function(it) { return (it.model || '-') + ' x' + (it.qty || 1); }).join(', ');
+        var fc = _kpiForecastMonthInfo(p, plan);
+        var lastLog = (typeof ST !== 'undefined' && ST.pipeLogsByPipe) ? ST.pipeLogsByPipe(p.id)[0] : null;
+        var fcBadge = fc ? ('<span class="tag" style="background:' + (fc.inQuarter ? '#22c55e18;color:#16803c' : '#94a3b818;color:#64748b') + '">' + sanitize(fc.label) + (fc.inQuarter ? ' ✓' : '') + '</span>') : '';
+        h += '<div class="kpi-detail-row" style="cursor:pointer" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
+        h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
+          '<span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.projectName || '') + '">' + (p.rowNo ? '<span style="color:var(--text2);font-weight:400">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + '🌱 ' + sanitize(p.projectName || (dl3 ? dl3.name : '') || '-') + '</span>' +
+          '<b style="white-space:nowrap">' + fmtMoneyShort(p.forecastAmount) + '</b></div>';
+        h += '<div style="font-size:11px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          (dl3 ? '🏪 ' + sanitize(dl3.name) : '') + (p.endUserTH || p.endUserEN ? ' · 👤 ' + sanitize(p.endUserTH || p.endUserEN) : '') + '</div>';
+        if (items) h += '<div style="font-size:11px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(items) + '">📦 ' + sanitize(items) + '</div>';
+        h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">' + (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + fcBadge + '</div>';
+        if (lastLog) h += '<div style="font-size:10.5px;color:var(--text2);margin-top:4px;padding-top:4px;border-top:1px dashed var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📝 ' + fD(lastLog.date) + ' · ' + sanitize((lastLog.content || '').substr(0, 50)) + '</div>';
+        h += '</div>';
       });
       h += '</div></div>';
     }
