@@ -968,34 +968,39 @@ function rKpiScorecard(el) {
       return (Number(b.p.forecastAmount) || 0) - (Number(a.p.forecastAmount) || 0);
     });
 
-    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.74rem;white-space:nowrap">';
+    // table-layout:fixed + width ต่อคอลัมน์ กันคอลัมน์ "รายการสินค้า" (ข้อความยาวไม่จำกัด) ดันตารางล้นจอ —
+    // แต่ละช่องตัดด้วย ellipsis บรรทัดเดียว ใช้ title="..." โผล่ข้อความเต็มตอนชี้เมาส์แทน (2026-08-26 ตามคำขอ)
+    var TDCOLS = [
+      ['No.', 36, 'left'], ['โครงการ', 190, 'left'], ['End user', 120, 'left'], ['Dealer', 120, 'left'],
+      ['รายการสินค้า', 220, 'left'], ['มูลค่า', 70, 'right'], ['สถานะ', 90, 'left'], ['Forecast', 100, 'left'], ['อัพเดทล่าสุด', 150, 'left']
+    ];
+    h += '<div style="overflow-x:auto"><table style="width:100%;min-width:' + TDCOLS.reduce(function(s, c) { return s + c[1]; }, 0) + 'px;border-collapse:collapse;font-size:.74rem;table-layout:fixed">';
+    h += '<colgroup>' + TDCOLS.map(function(c) { return '<col style="width:' + c[1] + 'px">'; }).join('') + '</colgroup>';
     h += '<thead><tr style="border-bottom:1px solid var(--border)">' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">No.</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">โครงการ</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">End user</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">Dealer</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">รายการสินค้า</th>' +
-      '<th style="text-align:right;padding:5px 6px;color:var(--text2)">มูลค่า</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">สถานะ</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">Forecast</th>' +
-      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">อัพเดทล่าสุด</th></tr></thead><tbody>';
+      TDCOLS.map(function(c) { return '<th style="text-align:' + c[2] + ';padding:5px 6px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c[0] + '</th>'; }).join('') +
+      '</tr></thead><tbody>';
     if (!filtered.length) {
-      h += '<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2)">ไม่พบรายการที่ตรงกับตัวกรอง</td></tr>';
+      h += '<tr><td colspan="' + TDCOLS.length + '" style="text-align:center;padding:14px;color:var(--text2)">ไม่พบรายการที่ตรงกับตัวกรอง</td></tr>';
     }
+    var tdCell = function(html, align, title) {
+      return '<td style="padding:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (align ? ';text-align:' + align : '') + '"' + (title ? ' title="' + sanitize(title) + '"' : '') + '>' + html + '</td>';
+    };
     filtered.forEach(function(r) {
       var p = r.p;
       var fcBadge = r.fc ? ('<span class="tag" style="background:' + (r.fc.inQuarter ? '#22c55e18;color:#16803c' : '#94a3b818;color:#64748b') + '">' + sanitize(r.fc.label) + (r.fc.inQuarter ? ' ✓' : '') + '</span>') : '<span style="color:var(--text2)">-</span>';
-      var updHtml = r.lastLog ? (sanitize((r.lastLog.content || '').substr(0, 40)) + '<div style="color:var(--text2);font-size:.64rem">' + fD(r.lastLog.date) + '</div>') : '<span style="color:var(--text2)">-</span>';
+      var updText = r.lastLog ? fD(r.lastLog.date) + ' · ' + (r.lastLog.content || '') : '-';
+      var updHtml = r.lastLog ? (sanitize((r.lastLog.content || '').substr(0, 30)) + '<div style="color:var(--text2);font-size:.64rem">' + fD(r.lastLog.date) + '</div>') : '<span style="color:var(--text2)">-</span>';
       h += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
-        '<td style="padding:6px;color:var(--text2)">' + (p.rowNo || '-') + '</td>' +
-        '<td style="padding:6px;max-width:200px;white-space:normal">' + sanitize(p.projectName || '-') + '</td>' +
-        '<td style="padding:6px;color:var(--text2)">' + sanitize(p.endUserTH || p.endUserEN || '-') + '</td>' +
-        '<td style="padding:6px">' + sanitize(r.dealer ? r.dealer.name : '-') + '</td>' +
-        '<td style="padding:6px;color:var(--text2)">' + sanitize(r.items || '-') + '</td>' +
-        '<td style="padding:6px;text-align:right;font-weight:600">' + fmtMoneyShort(p.forecastAmount) + '</td>' +
-        '<td style="padding:6px">' + (typeof pipeTag === 'function' ? pipeTag(p.status) : sanitize(p.status || '-')) + '</td>' +
-        '<td style="padding:6px">' + fcBadge + '</td>' +
-        '<td style="padding:6px;color:var(--text2)">' + updHtml + '</td></tr>';
+        tdCell(p.rowNo || '-', null) +
+        tdCell(sanitize(p.projectName || '-'), null, p.projectName) +
+        tdCell(sanitize(p.endUserTH || p.endUserEN || '-'), null, p.endUserTH || p.endUserEN) +
+        tdCell(sanitize(r.dealer ? r.dealer.name : '-'), null, r.dealer ? r.dealer.name : '') +
+        tdCell(sanitize(r.items || '-'), null, r.items) +
+        tdCell('<b>' + fmtMoneyShort(p.forecastAmount) + '</b>', 'right') +
+        tdCell(typeof pipeTag === 'function' ? pipeTag(p.status) : sanitize(p.status || '-'), null) +
+        tdCell(fcBadge, null) +
+        tdCell(updHtml, null, updText) +
+        '</tr>';
     });
     h += '</tbody></table></div>';
     h += '</div>';
