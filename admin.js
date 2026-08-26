@@ -1683,8 +1683,16 @@ function _smmIsOpen() { return !!document.getElementById('smmRoot'); }
 function showEditSalesMemberNameM(id, fromMismatch) {
   var m = getSalesMembers().filter(function(x) { return x.id === id; })[0];
   if (!m) return;
+  // เสนอชื่อที่ "ลอย" (พบในข้อมูล Dealer/Pipeline/Visit จริง แต่ไม่ตรงกับสมาชิกทีมคนไหน) ให้เลือกในช่องนี้ด้วย
+  // เผื่อกรณีอยากรวมชื่อ ICE ว่างๆ ให้กลายเป็นชื่อจริงที่มีลูกค้าอยู่แล้ว ไม่ต้องพิมพ์เองให้พลาดตัวสะกด
+  var known = {};
+  getSalesMembers().forEach(function(x) { known[x.name] = true; });
+  var orphanNames = Object.keys(_saleNameUsageMap()).filter(function(n) { return !known[n]; });
+  var datalistHtml = '<datalist id="sm_edit_name_list">' + orphanNames.map(function(n) { return '<option value="' + sanitize(n) + '">'; }).join('') + '</datalist>';
+
   openM('✏️ แก้ไขชื่อเซลล์',
-    '<div class="fm-group"><label>ชื่อใหม่</label><input type="text" id="sm_edit_name" class="fm-input" value="' + sanitize(m.name) + '"></div>' +
+    '<div class="fm-group"><label>ชื่อใหม่</label><input type="text" id="sm_edit_name" class="fm-input" list="sm_edit_name_list" value="' + sanitize(m.name) + '" placeholder="พิมพ์เอง หรือเลือกจากชื่อที่พบในข้อมูล">' + datalistHtml + '</div>' +
+    (orphanNames.length ? '<p style="font-size:.68rem;color:var(--text3);margin:4px 0 10px">💡 กดในช่องชื่อด้านบน จะมีชื่อที่พบในข้อมูลจริงให้เลือกด้วย: ' + orphanNames.map(sanitize).join(', ') + '</p>' : '') +
     '<p style="font-size:.68rem;color:var(--text3);margin:6px 0 10px">ถ้าเปลี่ยนชื่อ ระบบจะโอน Dealer/Pipeline/Visit/แผน KPI ที่ผูกกับชื่อเดิมมาเป็นชื่อใหม่ให้อัตโนมัติ ไม่ต้องไปแก้ทีละที่</p>' +
     '<div class="fm-actions">' +
     '<button class="btn bp" onclick="saveEditSalesMemberName(\'' + id + '\',' + (fromMismatch ? 1 : 0) + ')">💾 บันทึก</button>' +
