@@ -1123,8 +1123,83 @@ function _pipeMoreMenuHtml() {
     '<button onclick="closeOvMenu();showPipeDataHealthCheckM()">🩺 ตรวจสุขภาพข้อมูล</button>' +
     (AI_FEATURES_ENABLED ? '<button onclick="closeOvMenu();aiAnalyzePipeline(this)">🤖 AI วิเคราะห์</button>' : '') +
     '<button onclick="closeOvMenu();togglePipeCompareMode()">🔍 ' + (pipeCompareMode ? 'ออกจากโหมดเทียบ' : 'เทียบ Project') + '</button>' +
-    '<button onclick="closeOvMenu();showPipeMatchWeightsM()">⚙️ ตั้งน้ำหนักการเทียบ</button>'
+    '<button onclick="closeOvMenu();showPipeMatchWeightsM()">⚙️ ตั้งน้ำหนักการเทียบ</button>' +
+    '<button onclick="closeOvMenu();showRecalcPriceByLevelM()" title="คำนวณราคาต่อรายการสินค้าทุกโครงการใหม่ ตาม Level ของ Dealer ที่ผูกอยู่ (แทนราคา RRP)">💰 Recalculate ราคาตาม Level</button>'
   );
+}
+
+// ================================================================
+// Recalculate ราคาต่อรายการสินค้าทุกโครงการ (ทุก Dealer ทีเดียว) ตาม Level ของ Dealer แทนราคา RRP Ex Vat
+// เดิม ทั้ง item.price ตอนเพิ่มใหม่ และค่าที่ import มา ส่วนใหญ่อิง RRP — เครื่องมือนี้ไล่แก้ย้อนหลังทีเดียว
+// (2026-08-26 ตามคำขอ — ครอบคลุมทุกสถานะรวม Win/Deliver ด้วย และอัปเดต Forecast Amount ให้ตรงผลรวมใหม่ด้วย)
+// ================================================================
+function _recalcPriceByLevelPreview() {
+  var changes = [];
+  var totalDelta = 0, skippedNoProduct = 0;
+  ST.getAll('pipeline').forEach(function(p) {
+    var items = getPipeItems(p) || [];
+    if (!items.length) return;
+    var dealer = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var level = dealer ? (dealer.level || 'Other') : 'Other';
+    var changedItems = false;
+    var newItems = items.map(function(it) {
+      var prod = (typeof getProductByName === 'function') ? getProductByName(it.model) : null;
+      if (!prod) { skippedNoProduct++; return it; }
+      var newPrice = (typeof getModelPriceByLevel === 'function') ? (window.getModelPriceByLevel(it.model, level) || 0) : 0;
+      if (!newPrice) return it;
+      var qty = Number(it.qty) || 1;
+      var newTotal = newPrice * qty;
+      if (Number(it.price) !== newPrice || Number(it.total) !== newTotal) changedItems = true;
+      var copy = {}; for (var k in it) copy[k] = it[k];
+      copy.price = newPrice; copy.total = newTotal;
+      return copy;
+    });
+    if (!changedItems) return;
+    var newForecast = newItems.reduce(function(s, it) { return s + (Number(it.total) || 0); }, 0);
+    var oldForecast = Number(p.forecastAmount) || 0;
+    changes.push({ p: p, dealer: dealer, level: level, newItems: newItems, oldForecast: oldForecast, newForecast: newForecast });
+    totalDelta += (newForecast - oldForecast);
+  });
+  return { changes: changes, totalDelta: totalDelta, skippedNoProduct: skippedNoProduct };
+}
+
+function showRecalcPriceByLevelM() {
+  var r = _recalcPriceByLevelPreview();
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">คำนวณราคาต่อรายการสินค้าใหม่ทุกโครงการ (ทุก Dealer ทุกสถานะ รวม Win/Deliver) ตาม Level ของ Dealer ที่ผูกอยู่ แทนราคา RRP Ex Vat เดิม แล้วอัปเดต Forecast Amount ให้ตรงผลรวมใหม่ด้วย</p>';
+  if (!r.changes.length) {
+    h += '<div style="text-align:center;padding:16px;color:var(--text3)">ไม่มีโครงการไหนที่ราคาต้องเปลี่ยนเลย ✅</div>';
+    openM('💰 Recalculate ราคาตาม Level', h);
+    return;
+  }
+  h += '<div style="background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:10px">';
+  h += '<div style="font-size:.8rem;font-weight:700">จะเปลี่ยน ' + r.changes.length + ' โครงการ</div>';
+  h += '<div style="font-size:.72rem;color:' + (r.totalDelta >= 0 ? '#22c55e' : '#ef4444') + ';margin-top:2px">Forecast Amount รวมจะ' + (r.totalDelta >= 0 ? 'เพิ่มขึ้น' : 'ลดลง') + ' ' + fmtMoney(Math.abs(r.totalDelta)) + ' บาท</div>';
+  if (r.skippedNoProduct) h += '<div style="font-size:.68rem;color:var(--text2);margin-top:2px">⚠️ ' + r.skippedNoProduct + ' รายการสินค้าไม่พบในแคตตาล็อก ข้ามไว้ ไม่แตะราคา</div>';
+  h += '</div>';
+  h += '<div style="max-height:260px;overflow-y:auto">';
+  r.changes.slice(0, 50).forEach(function(c) {
+    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between;gap:8px">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 ' + sanitize(c.p.projectName || (c.dealer ? c.dealer.name : '') || '-') + ' <span style="color:var(--text2)">(' + sanitize(c.level) + ')</span></span>' +
+      '<span style="white-space:nowrap">' + fmtMoneyShort(c.oldForecast) + ' → <b>' + fmtMoneyShort(c.newForecast) + '</b></span></div>';
+  });
+  if (r.changes.length > 50) h += '<div style="text-align:center;color:var(--text2);font-size:.7rem;padding:6px">...และอีก ' + (r.changes.length - 50) + ' โครงการ</div>';
+  h += '</div>';
+  h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="applyRecalcPriceByLevel()">✅ ยืนยัน Recalculate ' + r.changes.length + ' โครงการ</button>';
+  openM('💰 Recalculate ราคาตาม Level', h);
+}
+
+function applyRecalcPriceByLevel() {
+  var r = _recalcPriceByLevelPreview();
+  if (!r.changes.length) return;
+  if (!confirm('ยืนยัน Recalculate ราคาตาม Level ' + r.changes.length + ' โครงการ?\nแก้ไขจริง ย้อนกลับเองไม่ได้ (ต้องแก้คืนทีละโครงการถ้าพลาด)')) return;
+  r.changes.forEach(function(c) {
+    var updated = ST.update('pipeline', c.p.id, { items: c.newItems, forecastAmount: c.newForecast });
+    if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+    ST.add('pipeLog', { pipeId: c.p.id, type: 'update', content: '💰 Recalculate ราคาตาม Level (' + c.level + '): ' + fmtMoney(c.oldForecast) + ' → ' + fmtMoney(c.newForecast), date: _nw() });
+  });
+  toast('💰 Recalculate ราคาแล้ว ' + r.changes.length + ' โครงการ');
+  closeMForce();
+  render();
 }
 
 function rPipeline(el) {
