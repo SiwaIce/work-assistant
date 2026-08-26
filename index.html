@@ -10,19 +10,20 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
 <link rel="stylesheet" href="style.css">
 <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js" defer></script>
+<script src="firebase-init.js" defer></script>
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
 <!-- ExcelJS — เฉพาะ export "Excel สวย" (สี/ตัวหนา/เส้นขอบจริง) ที่ SheetJS free รองรับไม่ได้ -->
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
 <!-- jexcel CE v4 — spreadsheet edit mode -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.css">
-<script src="https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.js" defer></script>
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
 </head>
@@ -309,46 +310,38 @@
 </div>
 
 <!-- SCRIPTS -->
-<!-- Firebase Init -->
-<script>
-firebase.initializeApp({
-  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
-  authDomain: "work-assistant-9e024.firebaseapp.com",
-  projectId: "work-assistant-9e024",
-  storageBucket: "work-assistant-9e024.firebasestorage.app",
-  messagingSenderId: "796607223436",
-  appId: "1:796607223436:web:1455abe90b141104678da9"
-});
-var db = firebase.firestore();
-var auth = firebase.auth();
-</script>
-<script src="utils.js"></script>
-<script src="storage.js"></script>
-<script src="products.js"></script>
-<script src="firebase-sync.js"></script>
-<script src="sheet-sync.js"></script>
-<script src="views-today.js"></script>
-<script src="modals.js"></script>
-<script src="views-dealer.js"></script>
-<script src="views-pipeline.js"></script>
-<script src="views-visit.js"></script>
-<script src="views-work.js"></script>
-<script src="views-announcements.js"></script>
-<script src="views-leads.js"></script>
-<script src="views-prospects.js"></script>
-<script src="views-quotation.js"></script>
-<script src="views-notes.js"></script>
-<script src="kanban.js"></script>
-<script src="export.js"></script>
-<script src="admin.js"></script>
-<script src="features.js"></script>
-<script src="audit.js"></script>
-<script src="views-kpi.js"></script>
-<script src="views-kpiplan.js"></script>
-<script src="views-salesoverview.js"></script>
-<script src="views-so.js"></script>
-<script src="views-stock.js"></script>
-<script src="app.js"></script>
+<!-- defer ทุกตัว (รวม firebase-init.js ด้านบน) — เดิม script ธรรมดาทั้งหมด ~30 ไฟล์ block การ parse/render
+     หน้าจอทั้งก้อนจนกว่าจะโหลดครบทีละไฟล์ (โดยเฉพาะ 8 ไฟล์ CDN ใน <head> ที่ยังไม่ถึง <body> เลยด้วยซ้ำ) ทำให้
+     เปิดแอปแล้วจอขาวค้างนาน — defer โหลดพร้อมกันแบบขนานแล้วค่อย execute ตามลำดับที่เขียนไว้เป๊ะๆ ก่อน
+     DOMContentLoaded เหมือนเดิมทุกประการ แค่ไม่ block การ render ระหว่างรอโหลด (2026-08-26)
+-->
+<script src="utils.js" defer></script>
+<script src="storage.js" defer></script>
+<script src="products.js" defer></script>
+<script src="firebase-sync.js" defer></script>
+<script src="sheet-sync.js" defer></script>
+<script src="views-today.js" defer></script>
+<script src="modals.js" defer></script>
+<script src="views-dealer.js" defer></script>
+<script src="views-pipeline.js" defer></script>
+<script src="views-visit.js" defer></script>
+<script src="views-work.js" defer></script>
+<script src="views-announcements.js" defer></script>
+<script src="views-leads.js" defer></script>
+<script src="views-prospects.js" defer></script>
+<script src="views-quotation.js" defer></script>
+<script src="views-notes.js" defer></script>
+<script src="kanban.js" defer></script>
+<script src="export.js" defer></script>
+<script src="admin.js" defer></script>
+<script src="features.js" defer></script>
+<script src="audit.js" defer></script>
+<script src="views-kpi.js" defer></script>
+<script src="views-kpiplan.js" defer></script>
+<script src="views-salesoverview.js" defer></script>
+<script src="views-so.js" defer></script>
+<script src="views-stock.js" defer></script>
+<script src="app.js" defer></script>
 <div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
   <div class="qcmd-box">
     <div class="qcmd-input-wrap">
