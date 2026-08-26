@@ -1,7 +1,25 @@
 // ================================================================
 // KPI QUARTER SCORECARD — เป้า/weight ต่อไตรมาส ต่อเซลล์
-// คำนวณ "ทำได้แล้ว" สดจาก Pipeline/Dealer/Visit ที่มีอยู่แล้ว ไม่เก็บ cache
+// คำนวณ "ทำได้แล้ว" สดจาก Pipeline/Dealer/Visit ที่มีอยู่แล้ว
 // ================================================================
+
+// แคช ST.getAll('pipeline'/'dealers') แค่ "ต่อ 1 รอบ render" — หน้านี้เรียกฟังก์ชันคำนวณ KPI ซ้อนกันเยอะมาก
+// (ทุก category × เป้ารายเดือน 3 เดือน × การ์ด top-deals/dealer-plan/product ฯลฯ) แต่ละครั้งเดิม vanilla
+// ST.getAll() re-parse JSON จาก localStorage ใหม่ทุกครั้ง พอ Pipeline เป็นพันแถวจริงจะช้ามาก (สาเหตุที่หน้า
+// KPI โหลดนาน) — ล้างแคชทุกครั้งที่ rKpiScorecard() เริ่ม render ใหม่ ข้อมูลจึงยังสดเหมือนเดิมทุกครั้งที่เข้าหน้า
+// แค่ไม่ re-fetch ซ้ำๆ ภายในรอบ render เดียวกัน
+var _kpiCache = null;
+function _kpiInvalidateCache() { _kpiCache = null; }
+function _kpiPipelines() {
+  if (!_kpiCache) _kpiCache = {};
+  if (!_kpiCache.pipelines) _kpiCache.pipelines = ST.getAll('pipeline');
+  return _kpiCache.pipelines;
+}
+function _kpiDealers() {
+  if (!_kpiCache) _kpiCache = {};
+  if (!_kpiCache.dealers) _kpiCache.dealers = ST.getAll('dealers');
+  return _kpiCache.dealers;
+}
 
 function getKpiQuarterPlans() {
   var saved = localStorage.getItem('v7_kpiQuarterPlans');
@@ -177,7 +195,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
 
   if (cat.type === 'pipelineRevenue') {
     var sum = 0;
-    ST.getAll('pipeline').forEach(function(p) {
+    _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
       var rd = p.registerDate || '';
@@ -195,7 +213,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
   if (cat.type === 'pipelineModelQty') {
     var qty = 0;
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
-    ST.getAll('pipeline').forEach(function(p) {
+    _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
       var rd = p.registerDate || '';
@@ -209,7 +227,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
   }
 
   if (cat.type === 'dealerAuthorized') {
-    return ST.getAll('dealers').filter(function(d) {
+    return _kpiDealers().filter(function(d) {
       if (!d.authorizedDate) return false;
       if ((d.authorizedBy || '') !== plan.salesMemberName) return false;
       return d.authorizedDate >= startDate && d.authorizedDate <= endDate;
@@ -337,7 +355,7 @@ function kpiPrevPlan(salesMemberId, currentPlan) {
 function kpiContributingRecords(plan, cat) {
   if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
-    var records = ST.getAll('pipeline').filter(function(p) {
+    var records = _kpiPipelines().filter(function(p) {
       if (!pipeIsWon(p)) return false;
       if ((p.saleName || '') !== plan.salesMemberName) return false;
       var rd = p.registerDate || '';
@@ -363,7 +381,7 @@ function kpiContributingRecords(plan, cat) {
     return records;
   }
   if (cat.type === 'dealerAuthorized') {
-    return ST.getAll('dealers').filter(function(d) {
+    return _kpiDealers().filter(function(d) {
       if (!d.authorizedDate) return false;
       if ((d.authorizedBy || '') !== plan.salesMemberName) return false;
       return d.authorizedDate >= plan.startDate && d.authorizedDate <= plan.endDate;
@@ -436,7 +454,7 @@ function kpiPaceInfo(plan, cat) {
 function kpiPotentialRecords(plan, cat) {
   if (cat.type !== 'pipelineRevenue' && cat.type !== 'pipelineModelQty') return [];
   var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
-  return ST.getAll('pipeline').filter(function(p) {
+  return _kpiPipelines().filter(function(p) {
     if (!pipeIsActive(p)) return false;
     if ((p.saleName || '') !== plan.salesMemberName) return false;
     var rd = p.registerDate || '';
@@ -504,10 +522,10 @@ function kpiDealerPlanBreakdown(plan) {
   var revCat = (plan.categories || []).filter(function(c) { return c.type === 'pipelineRevenue'; })[0];
   if (!revCat) return null;
 
-  var myDealers = ST.getAll('dealers').filter(function(d) { return (d.saleName || '') === plan.salesMemberName; });
+  var myDealers = _kpiDealers().filter(function(d) { return (d.saleName || '') === plan.salesMemberName; });
   var wonByDealer = {}, potByDealer = {}, dealsByDealer = {};
   var planCount = 0, winCount = 0, deliverCount = 0;
-  ST.getAll('pipeline').forEach(function(p) {
+  _kpiPipelines().forEach(function(p) {
     if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
     var rd = p.registerDate || '';
     if (rd < plan.startDate || rd > plan.endDate) return;
@@ -549,7 +567,7 @@ function kpiProductSalesBreakdown(plan) {
   if (!catalog.length) return null;
 
   var qtyByName = {}, dealsByName = {};
-  ST.getAll('pipeline').forEach(function(p) {
+  _kpiPipelines().forEach(function(p) {
     if (!pipeIsWon(p)) return;
     if ((p.saleName || '') !== plan.salesMemberName) return;
     var rd = p.registerDate || '';
@@ -622,6 +640,7 @@ function kpiDealerGapSuggestion(plan) {
 // ================================================================
 function kpiTodayBehindBanner() {
   if (typeof getSalesMembers !== 'function') return '';
+  _kpiInvalidateCache();
   var members = kpiSalesOptions();
   var cur = kpiGetCurrentQuarter();
   var behindItems = [];
@@ -657,6 +676,7 @@ function kpiCategoryCTA(cat) {
 // Export สรุป KPI ทุกเซลล์ เป็น Excel ให้หัวหน้าดู
 // ================================================================
 function exportKpiSummaryExcel() {
+  _kpiInvalidateCache();
   var members = kpiSalesOptions();
   if (!members.length) return toast('ไม่มีรายชื่อเซลล์');
 
@@ -779,8 +799,8 @@ function kpiSalesOptions() {
   var known = {};
   registered.forEach(function(m) { known[m.name] = true; });
   var extra = {};
-  ST.getAll('dealers').forEach(function(d) { if (d.saleName && !known[d.saleName]) extra[d.saleName] = true; });
-  ST.getAll('pipeline').forEach(function(p) { if (p.saleName && !known[p.saleName]) extra[p.saleName] = true; });
+  _kpiDealers().forEach(function(d) { if (d.saleName && !known[d.saleName]) extra[d.saleName] = true; });
+  _kpiPipelines().forEach(function(p) { if (p.saleName && !known[p.saleName]) extra[p.saleName] = true; });
   var extraList = Object.keys(extra).map(function(n) { return { id: 'freename_' + n, name: n, active: true, freeText: true }; });
   return registered.concat(extraList).sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'th'); });
 }
@@ -795,6 +815,7 @@ function kpiSetDefaultSales(name) {
 }
 
 function rKpiScorecard(el) {
+  _kpiInvalidateCache();
   document.getElementById('pgT').textContent = '📊 KPI เซลล์';
   var members = kpiSalesOptions();
 
