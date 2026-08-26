@@ -260,6 +260,26 @@ function saveKpiRunRateLogs(list) {
   if (typeof syncToFirebase === 'function') syncToFirebase('kpiRunRateLogs', list);
 }
 
+// Run Rate ผูกกับโครงการจริงได้ (l.pipeId) — ไว้ใช้เวลายอดจากโครงการยังไม่ขึ้นอัตโนมัติ (เช่น สถานะ/
+// วันที่/ชื่อเซลยังไม่ถูก) เอาโครงการจริงมานับ manual ไปพลางก่อน พอไปแก้ต้นทางให้ถูกจนโครงการนั้นเข้าเกณฑ์
+// อัตโนมัติเองแล้ว ฟังก์ชันนี้จะบอกให้ข้าม log นี้ตอนรวมยอด กันนับซ้ำ — ไม่ต้องมาลบ log เองด้วยมือ (2026-08-26)
+function _kpiRunRateAutoCovered(l, plan, cat, startDate, endDate) {
+  if (!l.pipeId) return false;
+  var p = ST.getOne('pipeline', l.pipeId);
+  if (!p || !pipeIsWon(p)) return false;
+  if ((p.saleName || '') !== plan.salesMemberName) return false;
+  var rd = p.registerDate || '';
+  if (rd < startDate || rd > endDate) return false;
+  if (cat.type === 'pipelineModelQty') {
+    var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
+    return (getPipeItems(p) || []).some(function(it) {
+      var m = (it.model || '').toLowerCase();
+      return keywords.some(function(k) { return m.indexOf(k) !== -1; });
+    });
+  }
+  return true;
+}
+
 // ================================================================
 // คำนวณ actual ต่อ category type
 // ================================================================
@@ -279,6 +299,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
       if ((l.kind || 'revenue') !== 'revenue') return;
       if ((l.salesMemberName || '') !== plan.salesMemberName) return;
       if ((l.date || '') < startDate || (l.date || '') > endDate) return;
+      if (_kpiRunRateAutoCovered(l, plan, cat, startDate, endDate)) return;
       sum += Number(l.amount) || 0;
     });
     return sum;
@@ -301,6 +322,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
       if (l.kind !== 'qty') return;
       if ((l.salesMemberName || '') !== plan.salesMemberName) return;
       if ((l.date || '') < startDate || (l.date || '') > endDate) return;
+      if (_kpiRunRateAutoCovered(l, plan, cat, startDate, endDate)) return;
       var m = (l.item || '').toLowerCase();
       if (keywords.some(function(k) { return m.indexOf(k) !== -1; })) qty += Number(l.amount) || 0;
     });
@@ -459,9 +481,10 @@ function kpiContributingRecords(plan, cat) {
         var m = (l.item || '').toLowerCase();
         if (!keywords.some(function(k) { return m.indexOf(k) !== -1; })) return;
       }
+      if (_kpiRunRateAutoCovered(l, plan, cat, plan.startDate, plan.endDate)) return;
       records.push({
         _runRate: true, _qty: cat.type === 'pipelineModelQty', id: l.id, projectName: l.item || 'Run Rate', note: l.note || '',
-        registerDate: l.date, forecastAmount: l.amount, status: '', dealerId: null
+        registerDate: l.date, forecastAmount: l.amount, status: '', dealerId: null, pipeId: l.pipeId || null
       });
     });
     return records;
@@ -1312,8 +1335,9 @@ function _kpiRecordRowHtml(r, cat, planId) {
     return '<div class="kpi-detail-row" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})">🤝 ' + sanitize(r.name) + ' — ' + fD(r.authorizedDate) + '</div>';
   }
   if (r._runRate) {
+    var pipeLink = r.pipeId ? ' <span style="cursor:pointer;text-decoration:underline dotted" onclick="event.stopPropagation();closeMForce();go(\'pipeDetail\',{pipeId:\'' + r.pipeId + '\'})" title="ผูกกับโครงการนี้ในระบบ — พอแก้ต้นทาง (สถานะ/วันที่/ชื่อเซล) ให้เข้าเกณฑ์ จะนับอัตโนมัติเองแล้วรายการนี้จะหายไป กันนับซ้ำ">🔗 ไปที่โครงการ</span>' : '';
     return '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
-      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🔁 ' + sanitize(r.projectName) + (r.note ? ' <span style="color:var(--text2)">— ' + sanitize(r.note) + '</span>' : '') + ' <span style="color:var(--text2)">(' + fD(r.registerDate) + ')</span></span>' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🔁 ' + sanitize(r.projectName) + (r.note ? ' <span style="color:var(--text2)">— ' + sanitize(r.note) + '</span>' : '') + ' <span style="color:var(--text2)">(' + fD(r.registerDate) + ')</span>' + pipeLink + '</span>' +
       '<b>' + (r._qty ? r.forecastAmount + ' หน่วย' : fmtMoneyShort(r.forecastAmount)) + '</b>' +
       '<button class="btn bsm bo" onclick="showEditRunRateM(\'' + r.id + '\',\'' + planId + '\',\'' + cat.id + '\')" title="แก้ไข">✏️</button>' +
       '<button class="btn bsm bd" onclick="deleteKpiRunRateLog(\'' + r.id + '\',\'' + planId + '\',\'' + cat.id + '\')" title="ลบ">🗑️</button>' +
@@ -1418,6 +1442,13 @@ function showKpiDetailM(planId, categoryId) {
       h += '<div id="kpi_rr_form" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px">';
       h += '<input type="hidden" id="kpi_rr_kind" value="' + (isQtyCat ? 'qty' : 'revenue') + '">';
       h += '<div class="fg"><label>วันที่</label><input type="date" id="kpi_rr_date" value="' + _td() + '"></div>';
+      h += '<div class="fg"><label>ผูกกับโครงการ Pipeline ที่มีอยู่แล้ว (ไม่บังคับ — เผื่อยอดยังไม่ขึ้นอัตโนมัติ)</label>' +
+        '<input type="text" id="kpi_rr_pipesearch" placeholder="🔍 พิมพ์ชื่อโครงการ / Dealer..." oninput="_kpiRrSearchPipe(this.value)">' +
+        '<div id="kpi_rr_pipe_results" style="margin-top:4px"></div>' +
+        '<input type="hidden" id="kpi_rr_pipeid" value="">' +
+        '<div id="kpi_rr_pipe_selected" style="display:none;margin-top:4px;font-size:.7rem;background:var(--bg2);padding:4px 8px;border-radius:6px">' +
+        '🔗 <span id="kpi_rr_pipe_selected_name"></span>' +
+        '<span style="cursor:pointer;color:#ef4444" onclick="_kpiRrClearPipe()"> ✕ เอาออก</span></div></div>';
       if (isQtyCat) {
         h += '<div class="fg"><label>จำนวน (หน่วย)</label><input type="number" id="kpi_rr_amount" placeholder="1"></div>';
         h += '<div class="fg"><label>รุ่นสินค้า</label><select id="kpi_rr_item">' + (cat.modelMatch || []).map(function(k) { return '<option value="' + sanitize(k) + '">' + sanitize(k) + '</option>'; }).join('') + '</select>' +
@@ -1519,16 +1550,81 @@ function saveKpiRunRateLog(planId, categoryId) {
   if (!amount || amount <= 0) { toast(kind === 'qty' ? '⚠️ กรอกจำนวนก่อน' : '⚠️ กรอกจำนวนเงินก่อน'); return; }
   var date = (dateEl && dateEl.value) ? dateEl.value : _td();
 
+  var pipeIdEl = document.getElementById('kpi_rr_pipeid');
+
   var logs = getKpiRunRateLogs();
   logs.push({
     id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
     salesMemberName: plan.salesMemberName, date: date, amount: amount, kind: kind,
     item: itemEl ? itemEl.value.trim() : '', note: noteEl ? noteEl.value.trim() : '',
+    pipeId: (pipeIdEl && pipeIdEl.value) ? pipeIdEl.value : null,
     createdAt: new Date().toISOString()
   });
   saveKpiRunRateLogs(logs);
   toast('💾 บันทึก Run Rate แล้ว');
   showKpiDetailM(planId, categoryId);
+}
+
+// ค้นหาโครงการ Pipeline ที่มีอยู่แล้วมาผูกกับ Run Rate log — เลือกแล้ว auto-fill ยอด/ชื่อให้จากข้อมูลจริง
+// ของโครงการนั้น (ไม่ต้องพิมพ์ยอดเดาเอง) และเก็บ pipeId ไว้เทียบตอนคำนวณ actual ว่ายัง manual อยู่หรือ
+// เข้าเกณฑ์อัตโนมัติแล้ว (ดู _kpiRunRateAutoCovered) (2026-08-26)
+function _kpiRrSearchPipe(q) {
+  var resultsEl = document.getElementById('kpi_rr_pipe_results');
+  if (!resultsEl) return;
+  q = (q || '').trim().toLowerCase();
+  if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+  var matches = ST.getAll('pipeline').filter(function(p) {
+    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '')).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }).slice(0, 8);
+  resultsEl.innerHTML = matches.length ? matches.map(function(p) {
+    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    return '<div class="kpi-detail-row" style="cursor:pointer;padding:5px 8px;font-size:.72rem" onclick="_kpiRrPickPipe(\'' + p.id + '\')">' +
+      sanitize(p.projectName || '-') + (dl ? ' <span style="color:var(--text2)">— ' + sanitize(dl.name) + '</span>' : '') +
+      ' <span style="color:var(--text2)">(' + fmtMoneyShort(p.forecastAmount) + ')</span></div>';
+  }).join('') : '<div style="font-size:.7rem;color:var(--text2);padding:4px 8px">ไม่พบโครงการที่ตรงกัน</div>';
+}
+
+function _kpiRrPickPipe(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var pipeIdEl = document.getElementById('kpi_rr_pipeid');
+  if (pipeIdEl) pipeIdEl.value = pipeId;
+  var kindEl = document.getElementById('kpi_rr_kind');
+  var kind = kindEl ? kindEl.value : 'revenue';
+  var amountEl = document.getElementById('kpi_rr_amount');
+  var itemEl = document.getElementById('kpi_rr_item');
+  if (kind === 'revenue') {
+    if (amountEl) amountEl.value = Number(p.forecastAmount) || 0;
+    if (itemEl) itemEl.value = p.projectName || '';
+  } else if (itemEl && itemEl.tagName === 'SELECT') {
+    // qty category ผูกกับรุ่นสินค้าคงที่ (dropdown ของ modelMatch) — ไล่หารุ่นที่โครงการนี้มีขาย
+    // แล้ว auto-select + auto-fill จำนวนจริงจากรายการสินค้าในโครงการ
+    var items = (typeof getPipeItems === 'function' ? getPipeItems(p) : (p.items || [])) || [];
+    var matchedKeyword = null, matchedQty = 0;
+    for (var i = 0; i < itemEl.options.length; i++) {
+      var kw = itemEl.options[i].value.toLowerCase();
+      var sum = items.reduce(function(s, it) { return (it.model || '').toLowerCase().indexOf(kw) !== -1 ? s + (Number(it.qty) || 0) : s; }, 0);
+      if (sum > 0) { matchedKeyword = itemEl.options[i].value; matchedQty = sum; break; }
+    }
+    if (matchedKeyword) { itemEl.value = matchedKeyword; if (amountEl) amountEl.value = matchedQty; }
+  }
+  var selBox = document.getElementById('kpi_rr_pipe_selected');
+  var selName = document.getElementById('kpi_rr_pipe_selected_name');
+  if (selName) selName.textContent = p.projectName || '(ไม่มีชื่อโครงการ)';
+  if (selBox) selBox.style.display = 'block';
+  var searchEl = document.getElementById('kpi_rr_pipesearch');
+  if (searchEl) searchEl.value = '';
+  var resultsEl = document.getElementById('kpi_rr_pipe_results');
+  if (resultsEl) resultsEl.innerHTML = '';
+}
+
+function _kpiRrClearPipe() {
+  var pipeIdEl = document.getElementById('kpi_rr_pipeid');
+  if (pipeIdEl) pipeIdEl.value = '';
+  var selBox = document.getElementById('kpi_rr_pipe_selected');
+  if (selBox) selBox.style.display = 'none';
 }
 
 function showEditRunRateM(id, planId, categoryId) {
