@@ -156,6 +156,20 @@ function kpiConfirmCreateQuarter(salesMemberId, salesMemberName) {
 }
 
 // ================================================================
+// ยอดขาย Run Rate — ยอดขายที่ไม่มีโครงการ/Pipeline ผูกอยู่ (เช่น ขายอุปกรณ์เสริมหน้าร้าน) บันทึกเองแล้ว
+// รวมเข้ากับ KPI "ยอดขาย DJI Product" โดยตรง ไม่ทำเป็น category แยก (2026-08-26 ตามคำขอ)
+// ================================================================
+function getKpiRunRateLogs() {
+  var saved = localStorage.getItem('v7_kpiRunRateLogs');
+  if (saved) { try { var p = JSON.parse(saved); return Array.isArray(p) ? p : []; } catch (e) { return []; } }
+  return [];
+}
+function saveKpiRunRateLogs(list) {
+  localStorage.setItem('v7_kpiRunRateLogs', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('kpiRunRateLogs', list);
+}
+
+// ================================================================
 // คำนวณ actual ต่อ category type
 // ================================================================
 function kpiComputeActualInRange(plan, cat, startDate, endDate) {
@@ -169,6 +183,11 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
       var rd = p.registerDate || '';
       if (rd < startDate || rd > endDate) return;
       sum += Number(p.forecastAmount) || 0;
+    });
+    getKpiRunRateLogs().forEach(function(l) {
+      if ((l.salesMemberName || '') !== plan.salesMemberName) return;
+      if ((l.date || '') < startDate || (l.date || '') > endDate) return;
+      sum += Number(l.amount) || 0;
     });
     return sum;
   }
@@ -318,7 +337,7 @@ function kpiPrevPlan(salesMemberId, currentPlan) {
 function kpiContributingRecords(plan, cat) {
   if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
-    return ST.getAll('pipeline').filter(function(p) {
+    var records = ST.getAll('pipeline').filter(function(p) {
       if (!pipeIsWon(p)) return false;
       if ((p.saleName || '') !== plan.salesMemberName) return false;
       var rd = p.registerDate || '';
@@ -331,6 +350,17 @@ function kpiContributingRecords(plan, cat) {
       }
       return true;
     });
+    if (cat.type === 'pipelineRevenue') {
+      getKpiRunRateLogs().forEach(function(l) {
+        if ((l.salesMemberName || '') !== plan.salesMemberName) return;
+        if ((l.date || '') < plan.startDate || (l.date || '') > plan.endDate) return;
+        records.push({
+          _runRate: true, id: l.id, projectName: l.item || 'Run Rate', note: l.note || '',
+          registerDate: l.date, forecastAmount: l.amount, status: '', dealerId: null
+        });
+      });
+    }
+    return records;
   }
   if (cat.type === 'dealerAuthorized') {
     return ST.getAll('dealers').filter(function(d) {
@@ -1088,7 +1118,7 @@ function _kpiToggleVisit(id) {
   if (btn) btn.textContent = open ? '▼ ดู' : '▲ ซ่อน';
 }
 
-function _kpiRecordRowHtml(r, cat) {
+function _kpiRecordRowHtml(r, cat, planId) {
   if (cat.type === 'visitCount') {
     var dl = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
     var vLabel = sanitize(dl ? dl.name : (r.company || r.summary || '-').substr(0, 40));
@@ -1105,6 +1135,14 @@ function _kpiRecordRowHtml(r, cat) {
   if (cat.type === 'dealerAuthorized') {
     return '<div class="kpi-detail-row" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})">🤝 ' + sanitize(r.name) + ' — ' + fD(r.authorizedDate) + '</div>';
   }
+  if (r._runRate) {
+    return '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🔁 ' + sanitize(r.projectName) + (r.note ? ' <span style="color:var(--text2)">— ' + sanitize(r.note) + '</span>' : '') + ' <span style="color:var(--text2)">(' + fD(r.registerDate) + ')</span></span>' +
+      '<b>' + fmtMoneyShort(r.forecastAmount) + '</b>' +
+      '<button class="btn bsm bo" onclick="showEditRunRateM(\'' + r.id + '\',\'' + planId + '\',\'' + cat.id + '\')" title="แก้ไข">✏️</button>' +
+      '<button class="btn bsm bd" onclick="deleteKpiRunRateLog(\'' + r.id + '\',\'' + planId + '\',\'' + cat.id + '\')" title="ลบ">🗑️</button>' +
+      '</div>';
+  }
   var dl2 = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
   var rowNoTag = r.rowNo ? '<span style="color:var(--text2)">#' + sanitize(String(r.rowNo)) + '</span> ' : '';
   return '<div class="kpi-detail-row" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + r.id + '\'})">📦 ' + rowNoTag + sanitize(r.projectName || (dl2 ? dl2.name : '') || '-') +
@@ -1120,12 +1158,12 @@ function _kpiRecordMatchesQuery(r, cat, q) {
     return (r.name || '').toLowerCase().indexOf(q) !== -1;
   }
   var dl = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
-  return [String(r.rowNo || ''), r.projectName, (dl ? dl.name : '')].some(function(s) { return (s || '').toLowerCase().indexOf(q) !== -1; });
+  return [String(r.rowNo || ''), r.projectName, r.note, (dl ? dl.name : '')].some(function(s) { return (s || '').toLowerCase().indexOf(q) !== -1; });
 }
 
-function _kpiRecordsListHtml(records, cat) {
+function _kpiRecordsListHtml(records, cat, planId) {
   if (!records.length) return '<div style="color:var(--text2);font-size:12px;text-align:center;padding:10px">ยังไม่มีรายการ</div>';
-  return records.map(function(r) { return _kpiRecordRowHtml(r, cat); }).join('');
+  return records.map(function(r) { return _kpiRecordRowHtml(r, cat, planId); }).join('');
 }
 
 function _kpiRecordsFilterList(planId, categoryId) {
@@ -1136,7 +1174,7 @@ function _kpiRecordsFilterList(planId, categoryId) {
   var q = (document.getElementById('kpi_records_search').value || '').trim().toLowerCase();
   var all = kpiContributingRecords(plan, cat);
   var filtered = q ? all.filter(function(r) { return _kpiRecordMatchesQuery(r, cat, q); }) : all;
-  document.getElementById('kpi_records_list').innerHTML = _kpiRecordsListHtml(filtered, cat);
+  document.getElementById('kpi_records_list').innerHTML = _kpiRecordsListHtml(filtered, cat, planId);
   document.getElementById('kpi_records_count').textContent = 'รายการที่นับเข้า KPI นี้ (' + filtered.length + (q ? ' / ทั้งหมด ' + all.length : '') + ')';
 }
 
@@ -1196,7 +1234,18 @@ function showKpiDetailM(planId, categoryId) {
       h += '<input type="text" id="kpi_records_search" placeholder="🔍 ค้นหา Row No / ชื่อ Dealer / ชื่อโครงการ..." style="width:100%;margin-bottom:6px" oninput="_kpiRecordsFilterList(\'' + planId + '\',\'' + categoryId + '\')">';
     }
     h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px" id="kpi_records_count">รายการที่นับเข้า KPI นี้ (' + records.length + ')</div>';
-    h += '<div style="max-height:240px;overflow-y:auto" id="kpi_records_list">' + _kpiRecordsListHtml(records, cat) + '</div>';
+    h += '<div style="max-height:240px;overflow-y:auto" id="kpi_records_list">' + _kpiRecordsListHtml(records, cat, planId) + '</div>';
+
+    if (cat.type === 'pipelineRevenue') {
+      h += '<button class="btn bsm bo btn-full" id="kpi_rr_addbtn" style="margin-top:8px" onclick="_kpiToggleRunRateForm()">+ บันทึกยอด Run Rate</button>';
+      h += '<div id="kpi_rr_form" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px">';
+      h += '<div class="fg"><label>วันที่</label><input type="date" id="kpi_rr_date" value="' + _td() + '"></div>';
+      h += '<div class="fg"><label>จำนวนเงิน (บาท)</label><input type="number" id="kpi_rr_amount" placeholder="15000"></div>';
+      h += '<div class="fg"><label>สินค้า / รายการ (ไม่บังคับ)</label><input type="text" id="kpi_rr_item" placeholder="เช่น TB65 Battery, DJI Care"></div>';
+      h += '<div class="fg"><label>หมายเหตุ (ไม่บังคับ)</label><input type="text" id="kpi_rr_note" placeholder="ขายหน้าร้าน / ลูกค้าประจำ"></div>';
+      h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="saveKpiRunRateLog(\'' + planId + '\',\'' + categoryId + '\')">บันทึก</button><button class="btn bo" style="flex:1" onclick="_kpiToggleRunRateForm()">ยกเลิก</button></div>';
+      h += '</div>';
+    }
 
     var potentialRecords = kpiPotentialRecords(plan, cat);
     if (potentialRecords.length) {
@@ -1245,6 +1294,81 @@ function kpiSaveManualScore(planId, categoryId) {
   toast('💾 บันทึกคะแนนแล้ว');
   closeMForce();
   render();
+}
+
+// ================================================================
+// เพิ่ม/แก้ไข/ลบ ยอดขาย Run Rate — บันทึกอิสระ ไม่ผูก Pipeline รวมเข้ากับ "ยอดขาย DJI Product" โดยตรง
+// ================================================================
+function _kpiToggleRunRateForm() {
+  var form = document.getElementById('kpi_rr_form');
+  var btn = document.getElementById('kpi_rr_addbtn');
+  if (!form) return;
+  var open = form.style.display !== 'none';
+  form.style.display = open ? 'none' : 'block';
+  if (btn) btn.style.display = open ? '' : 'none';
+}
+
+function saveKpiRunRateLog(planId, categoryId) {
+  var plans = getKpiQuarterPlans();
+  var plan = plans.filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var dateEl = document.getElementById('kpi_rr_date');
+  var amountEl = document.getElementById('kpi_rr_amount');
+  var itemEl = document.getElementById('kpi_rr_item');
+  var noteEl = document.getElementById('kpi_rr_note');
+  var amount = amountEl ? Number(amountEl.value) : 0;
+  if (!amount || amount <= 0) { toast('⚠️ กรอกจำนวนเงินก่อน'); return; }
+  var date = (dateEl && dateEl.value) ? dateEl.value : _td();
+
+  var logs = getKpiRunRateLogs();
+  logs.push({
+    id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+    salesMemberName: plan.salesMemberName, date: date, amount: amount,
+    item: itemEl ? itemEl.value.trim() : '', note: noteEl ? noteEl.value.trim() : '',
+    createdAt: new Date().toISOString()
+  });
+  saveKpiRunRateLogs(logs);
+  toast('💾 บันทึกยอด Run Rate แล้ว');
+  showKpiDetailM(planId, categoryId);
+}
+
+function showEditRunRateM(id, planId, categoryId) {
+  var l = getKpiRunRateLogs().filter(function(x) { return x.id === id; })[0];
+  if (!l) return;
+  openM('✏️ แก้ไขยอด Run Rate',
+    '<div class="fg"><label>วันที่</label><input type="date" id="kpi_rr_edate" value="' + sanitize(l.date || '') + '"></div>' +
+    '<div class="fg"><label>จำนวนเงิน (บาท)</label><input type="number" id="kpi_rr_eamount" value="' + (l.amount || 0) + '"></div>' +
+    '<div class="fg"><label>สินค้า / รายการ (ไม่บังคับ)</label><input type="text" id="kpi_rr_eitem" value="' + sanitize(l.item || '') + '"></div>' +
+    '<div class="fg"><label>หมายเหตุ (ไม่บังคับ)</label><input type="text" id="kpi_rr_enote" value="' + sanitize(l.note || '') + '"></div>' +
+    '<div class="fm-actions">' +
+    '<button class="btn bp" onclick="saveEditRunRateLog(\'' + id + '\',\'' + planId + '\',\'' + categoryId + '\')">💾 บันทึก</button>' +
+    '<button class="btn bo" onclick="showKpiDetailM(\'' + planId + '\',\'' + categoryId + '\')">ยกเลิก</button>' +
+    '</div>'
+  );
+}
+
+function saveEditRunRateLog(id, planId, categoryId) {
+  var logs = getKpiRunRateLogs();
+  var l = logs.filter(function(x) { return x.id === id; })[0];
+  if (!l) return;
+  var amount = Number(document.getElementById('kpi_rr_eamount').value);
+  if (!amount || amount <= 0) { toast('⚠️ กรอกจำนวนเงินก่อน'); return; }
+  l.date = document.getElementById('kpi_rr_edate').value || l.date;
+  l.amount = amount;
+  l.item = document.getElementById('kpi_rr_eitem').value.trim();
+  l.note = document.getElementById('kpi_rr_enote').value.trim();
+  saveKpiRunRateLogs(logs);
+  toast('💾 แก้ไขแล้ว');
+  showKpiDetailM(planId, categoryId);
+}
+
+function deleteKpiRunRateLog(id, planId, categoryId) {
+  if (!confirm('ลบรายการ Run Rate นี้?')) return;
+  var logs = getKpiRunRateLogs();
+  saveKpiRunRateLogs(logs.filter(function(l) { return l.id !== id; }));
+  if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('kpiRunRateLogs', id);
+  toast('🗑️ ลบแล้ว');
+  showKpiDetailM(planId, categoryId);
 }
 
 function kpiAddLog(planId, categoryId) {
