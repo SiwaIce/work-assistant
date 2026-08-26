@@ -757,6 +757,46 @@ function rKpiScorecard(el) {
   h += '</div>';
   h += '</div>';
 
+  h += '<div class="kpi-sc-grid">';
+  (plan.categories || []).forEach(function(cat) {
+    var actual = kpiComputeActual(plan, cat);
+    var pct = kpiAchievementPct(plan, cat);
+    var pctShow = Math.min(pct, 100);
+    var isDone = pct >= 100;
+    var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
+    var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
+    var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
+    var pace = kpiPaceInfo(plan, cat);
+    var paceMeta = KPI_PACE_META[pace.status];
+    var potential = (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') ? kpiPotentialAmount(plan, cat) : 0;
+    var potentialPct = potential ? Math.min((actual + potential) / (Number(cat.target) || 1) * 100, 100) : 0;
+
+    // เดือนนี้ — เป้า/ทำได้ (รายเดือน 1/3)
+    var monthHtml = '';
+    var mb = kpiMonthlyBreakdown(plan, cat);
+    if (mb) {
+      var curMonth = mb.filter(function(m) { return m.isCurrent; })[0];
+      if (curMonth) {
+        var mShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(curMonth.actual) + '/' + fmtMoneyShort(curMonth.target) : Math.round(curMonth.actual) + '/' + Math.round(curMonth.target);
+        monthHtml = '<div class="kpi-sc-month">📅 เดือนนี้: ' + mShow + ' ' + (cat.unit || '') + '</div>';
+      }
+    }
+
+    h += '<div class="kpi-sc-card' + (isDone ? ' done' : '') + '" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
+    if (isDone) h += '<div class="kpi-sc-ribbon">🎉</div>';
+    h += '<div class="kpi-sc-top"><span class="kpi-sc-icon">' + cat.icon + '</span><span class="kpi-sc-weight">น้ำหนัก ' + cat.weight + '%</span></div>';
+    h += '<div class="kpi-sc-label">' + sanitize(cat.label) + '</div>';
+    h += '<div class="kpi-sc-bar">';
+    if (potentialPct > pctShow) h += '<div class="kpi-sc-bar-potential" style="width:' + potentialPct + '%"></div>';
+    h += '<div class="kpi-sc-bar-fill" style="width:' + pctShow + '%;background:' + barColor + '"></div>';
+    h += '</div>';
+    h += '<div class="kpi-sc-nums"><span>' + actualShow + ' / ' + targetShow + ' ' + (cat.unit || '') + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
+    h += '<div class="kpi-sc-pace" style="color:' + paceMeta.color + '">' + paceMeta.label + '</div>';
+    h += monthHtml;
+    h += '</div>';
+  });
+  h += '</div>';
+
   // 🌱 Top deals ที่ควรปิดให้ถึงเป้า
   var topDeals = kpiTopPotentialDeals(plan);
   if (topDeals) {
@@ -803,46 +843,6 @@ function rKpiScorecard(el) {
     }
     h += '</div>';
   }
-
-  h += '<div class="kpi-sc-grid">';
-  (plan.categories || []).forEach(function(cat) {
-    var actual = kpiComputeActual(plan, cat);
-    var pct = kpiAchievementPct(plan, cat);
-    var pctShow = Math.min(pct, 100);
-    var isDone = pct >= 100;
-    var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
-    var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
-    var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
-    var pace = kpiPaceInfo(plan, cat);
-    var paceMeta = KPI_PACE_META[pace.status];
-    var potential = (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') ? kpiPotentialAmount(plan, cat) : 0;
-    var potentialPct = potential ? Math.min((actual + potential) / (Number(cat.target) || 1) * 100, 100) : 0;
-
-    // เดือนนี้ — เป้า/ทำได้ (รายเดือน 1/3)
-    var monthHtml = '';
-    var mb = kpiMonthlyBreakdown(plan, cat);
-    if (mb) {
-      var curMonth = mb.filter(function(m) { return m.isCurrent; })[0];
-      if (curMonth) {
-        var mShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(curMonth.actual) + '/' + fmtMoneyShort(curMonth.target) : Math.round(curMonth.actual) + '/' + Math.round(curMonth.target);
-        monthHtml = '<div class="kpi-sc-month">📅 เดือนนี้: ' + mShow + ' ' + (cat.unit || '') + '</div>';
-      }
-    }
-
-    h += '<div class="kpi-sc-card' + (isDone ? ' done' : '') + '" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
-    if (isDone) h += '<div class="kpi-sc-ribbon">🎉</div>';
-    h += '<div class="kpi-sc-top"><span class="kpi-sc-icon">' + cat.icon + '</span><span class="kpi-sc-weight">น้ำหนัก ' + cat.weight + '%</span></div>';
-    h += '<div class="kpi-sc-label">' + sanitize(cat.label) + '</div>';
-    h += '<div class="kpi-sc-bar">';
-    if (potentialPct > pctShow) h += '<div class="kpi-sc-bar-potential" style="width:' + potentialPct + '%"></div>';
-    h += '<div class="kpi-sc-bar-fill" style="width:' + pctShow + '%;background:' + barColor + '"></div>';
-    h += '</div>';
-    h += '<div class="kpi-sc-nums"><span>' + actualShow + ' / ' + targetShow + ' ' + (cat.unit || '') + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
-    h += '<div class="kpi-sc-pace" style="color:' + paceMeta.color + '">' + paceMeta.label + '</div>';
-    h += monthHtml;
-    h += '</div>';
-  });
-  h += '</div>';
 
   el.innerHTML = h;
 }
