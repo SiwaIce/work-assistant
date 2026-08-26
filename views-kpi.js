@@ -518,18 +518,21 @@ function kpiProductSalesBreakdown(plan) {
   var catalog = getAllProducts().filter(function(pr) { return mainCats[pr.category]; });
   if (!catalog.length) return null;
 
-  var qtyByName = {};
+  var qtyByName = {}, dealsByName = {};
   ST.getAll('pipeline').forEach(function(p) {
     if (!pipeIsWon(p)) return;
     if ((p.saleName || '') !== plan.salesMemberName) return;
     var rd = p.registerDate || '';
     if (rd < plan.startDate || rd > plan.endDate) return;
+    var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
     (getPipeItems(p) || []).forEach(function(it) {
       var m = (it.model || '').toLowerCase();
       if (!m) return;
       var match = catalog.filter(function(pr) { var n = pr.name.toLowerCase(); return m.indexOf(n) !== -1 || n.indexOf(m) !== -1; })[0];
       if (!match) return;
-      qtyByName[match.name] = (qtyByName[match.name] || 0) + (Number(it.qty) || 0);
+      var qty = Number(it.qty) || 0;
+      qtyByName[match.name] = (qtyByName[match.name] || 0) + qty;
+      (dealsByName[match.name] = dealsByName[match.name] || []).push({ p: p, qty: qty, actualType: actualType });
     });
   });
 
@@ -547,7 +550,10 @@ function kpiProductSalesBreakdown(plan) {
 
   var rows = names.map(function(name) {
     var cat = kpiTargets[name];
-    return { name: name, qty: qtyByName[name] || 0, target: cat ? (Number(cat.target) || 0) : null, catId: cat ? cat.id : null };
+    var deals = dealsByName[name] || [];
+    var winQty = deals.filter(function(d) { return d.actualType === 'Win'; }).reduce(function(s, d) { return s + d.qty; }, 0);
+    var deliverQty = deals.filter(function(d) { return d.actualType === 'Deliver'; }).reduce(function(s, d) { return s + d.qty; }, 0);
+    return { name: name, qty: qtyByName[name] || 0, target: cat ? (Number(cat.target) || 0) : null, catId: cat ? cat.id : null, deals: deals, winQty: winQty, deliverQty: deliverQty };
   }).sort(function(a, b) { return b.qty - a.qty; });
 
   return { rows: rows };
@@ -977,17 +983,35 @@ function rKpiScorecard(el) {
       '<th style="text-align:right;padding:5px 6px;color:var(--text2)">ยอดขาย (หน่วย)</th>' +
       '<th style="text-align:right;padding:5px 6px;color:var(--text2)">เป้า KPI</th>' +
       '<th style="text-align:left;padding:5px 6px;color:var(--text2)">ความคืบหน้า</th></tr></thead><tbody>';
-    prodSales.rows.forEach(function(r) {
+    prodSales.rows.forEach(function(r, ppIdx) {
       var pct = r.target ? Math.min(100, Math.round(r.qty / r.target * 100)) : null;
       var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
       var progress = r.target
         ? '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div><span style="font-size:.68rem;color:var(--text2);width:32px;text-align:right">' + pct + '%</span></div>'
         : '<span style="color:var(--text2)">ไม่มี KPI ผูก</span>';
-      h += '<tr style="border-bottom:1px solid var(--border)' + (r.catId ? ';cursor:pointer' : '') + '"' + (r.catId ? ' onclick="showKpiDetailM(\'' + plan.id + '\',\'' + r.catId + '\')"' : '') + '>' +
-        '<td style="padding:6px;font-weight:600">' + sanitize(r.name) + '</td>' +
-        '<td style="padding:6px;text-align:right">' + r.qty + '</td>' +
+      var rid = 'kpp_' + ppIdx;
+      var chevron = r.deals.length ? '<span id="' + rid + '_ic" onclick="_kpiDpToggle(\'' + rid + '\')" style="cursor:pointer;color:var(--text2);margin-right:5px">▶</span>' : '<span style="display:inline-block;width:14px"></span>';
+      var nameHtml = r.catId
+        ? '<span onclick="event.stopPropagation();showKpiDetailM(\'' + plan.id + '\',\'' + r.catId + '\')" style="cursor:pointer;text-decoration:underline dotted">' + sanitize(r.name) + '</span>'
+        : sanitize(r.name);
+      h += '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:6px;font-weight:600">' + chevron + nameHtml + '</td>' +
+        '<td style="padding:6px;text-align:right">' + r.qty + (r.deals.length ? '<div style="font-size:.62rem;color:var(--text2);font-weight:400">Win ' + r.winQty + ' · Deliver ' + r.deliverQty + '</div>' : '') + '</td>' +
         '<td style="padding:6px;text-align:right;color:var(--text2)">' + (r.target != null ? r.target : '-') + '</td>' +
         '<td style="padding:6px;min-width:120px">' + progress + '</td></tr>';
+      if (r.deals.length) {
+        h += '<tr><td colspan="4" style="padding:0">';
+        h += '<div id="' + rid + '" style="display:none;padding:2px 6px 6px 22px">';
+        r.deals.forEach(function(dl) {
+          var p = dl.p;
+          var typeColor = dl.actualType === 'Deliver' ? '#6366f1' : '#22c55e';
+          h += '<div style="display:flex;gap:8px;align-items:center;font-size:.7rem;padding:4px;border-top:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.projectName || '-') + '</span>' +
+            '<span style="width:40px;text-align:right;color:var(--text2)">x' + dl.qty + '</span>' +
+            '<span style="width:56px;text-align:right;color:' + typeColor + ';font-weight:600">' + dl.actualType + '</span></div>';
+        });
+        h += '</div></td></tr>';
+      }
     });
     h += '</tbody></table></div></div>';
   }
