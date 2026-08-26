@@ -53,6 +53,29 @@ function kpiQuarterRange(q, year) {
 var kpiSelectedSalesId = null;
 var kpiSelectedPlanId = null;
 
+// ค้นหา/กรอง/จัดเรียง ตารางดีลที่ควรปิดในการ์ด "🌱 ปิด N ดีลนี้..." — state ระดับหน้า เหมือน sfStale* ใน features.js
+var _kpiTdSearch = '';
+var _kpiTdStatus = '';
+var _kpiTdForecast = '';
+var _kpiTdSort = 'amt_desc';
+function _kpiTdSearchInput(v) { _kpiTdSearch = v; render(); }
+function _kpiTdStatusChange(v) { _kpiTdStatus = v; render(); }
+function _kpiTdForecastChange(v) { _kpiTdForecast = v; render(); }
+function _kpiTdSortChange(v) { _kpiTdSort = v; render(); }
+
+// เดือนที่คาดว่าจะปิดดีล — ประมาณจาก Bidding Date + 2 เดือน (กติกาเดียวกับ _pipeForecastMonthNum ใน
+// views-pipeline.js ที่ใช้คำนวณคอลัมน์ "Month" ตอน export) แล้วเทียบว่าอยู่ในช่วงไตรมาส KPI นี้ไหม
+function _kpiForecastMonthInfo(p, plan) {
+  if (!p.biddingDate) return null;
+  var d = new Date(p.biddingDate);
+  if (isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + 2);
+  var year = d.getFullYear(), month = d.getMonth() + 1;
+  var midMonth = new Date(year, month - 1, 15);
+  var inQuarter = !!(plan && midMonth >= new Date(plan.startDate + 'T00:00:00') && midMonth <= new Date(plan.endDate + 'T23:59:59'));
+  return { label: KPI_MONTH_NAMES[month - 1] + ' ' + year, sortKey: year + '-' + String(month).padStart(2, '0'), inQuarter: inQuarter };
+}
+
 function kpiGetPlansForSales(salesMemberId) {
   return getKpiQuarterPlans().filter(function(p) { return p.salesMemberId === salesMemberId; })
     .sort(function(a, b) { return (a.startDate || '').localeCompare(b.startDate || ''); });
@@ -797,16 +820,85 @@ function rKpiScorecard(el) {
   });
   h += '</div>';
 
-  // 🌱 Top deals ที่ควรปิดให้ถึงเป้า
+  // 🌱 Top deals ที่ควรปิดให้ถึงเป้า — ตารางค้นหา/กรอง/จัดเรียงได้ (2026-08-26 ตามคำขอ)
   var topDeals = kpiTopPotentialDeals(plan);
   if (topDeals) {
     h += '<div class="card kpi-topdeals-card">';
     h += '<div class="kpi-topdeals-title">🌱 ปิด ' + topDeals.picked.length + ' ดีลนี้' + (topDeals.willHitTarget ? ' ก็ถึงเป้ายอดขายไตรมาสนี้!' : ' ช่วยลดระยะห่างจากเป้าได้') + '</div>';
     h += '<div class="kpi-topdeals-sub">เป้าที่เหลือ ' + fmtMoneyShort(topDeals.remain) + ' — ดีลที่เลือก รวม ' + fmtMoneyShort(topDeals.sum) + (topDeals.totalCandidates > topDeals.picked.length ? ' (จากทั้งหมด ' + topDeals.totalCandidates + ' ดีลที่มีลุ้น)' : '') + '</div>';
-    topDeals.picked.forEach(function(p) {
+
+    var tdRows = topDeals.picked.map(function(p) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-      h += '<div class="kpi-detail-row" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📦 ' + sanitize(p.projectName || (dl ? dl.name : '') || '-') + ' — ' + fmtMoneyShort(p.forecastAmount) + (typeof pipeTag === 'function' ? ' ' + pipeTag(p.status) : '') + '</div>';
+      var items = (getPipeItems(p) || []).map(function(it) { return (it.model || '-') + ' x' + (it.qty || 1); }).join(', ');
+      var lastLog = (typeof ST !== 'undefined' && ST.pipeLogsByPipe) ? ST.pipeLogsByPipe(p.id)[0] : null;
+      return { p: p, dealer: dl, items: items, fc: _kpiForecastMonthInfo(p, plan), lastLog: lastLog };
     });
+
+    var tdStatuses = [];
+    var tdStatusSeen = {};
+    tdRows.forEach(function(r) { if (r.p.status && !tdStatusSeen[r.p.status]) { tdStatusSeen[r.p.status] = true; tdStatuses.push(r.p.status); } });
+
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">';
+    h += '<input type="text" placeholder="🔍 ค้นหาโครงการ/Dealer/End user" style="flex:1;min-width:160px" value="' + sanitize(_kpiTdSearch) + '" oninput="_kpiTdSearchInput(this.value)">';
+    h += '<select style="min-width:120px" onchange="_kpiTdStatusChange(this.value)"><option value="">สถานะทั้งหมด</option>';
+    tdStatuses.forEach(function(s) { h += '<option value="' + s + '"' + (_kpiTdStatus === s ? ' selected' : '') + '>' + sanitize(typeof getPipeName === 'function' ? getPipeName(s) : s) + '</option>'; });
+    h += '</select>';
+    h += '<select style="min-width:150px" onchange="_kpiTdForecastChange(this.value)">' +
+      '<option value=""' + (!_kpiTdForecast ? ' selected' : '') + '>Forecast: ทั้งหมด</option>' +
+      '<option value="in"' + (_kpiTdForecast === 'in' ? ' selected' : '') + '>อยู่ในไตรมาสนี้</option>' +
+      '<option value="out"' + (_kpiTdForecast === 'out' ? ' selected' : '') + '>นอกไตรมาสนี้</option></select>';
+    h += '<select style="min-width:150px" onchange="_kpiTdSortChange(this.value)">';
+    [['amt_desc', 'มูลค่า: มาก→น้อย'], ['amt_asc', 'มูลค่า: น้อย→มาก'], ['upd_desc', 'อัพเดทล่าสุดก่อน'], ['fc_asc', 'Forecast: ใกล้สุดก่อน']].forEach(function(o) {
+      h += '<option value="' + o[0] + '"' + (_kpiTdSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    });
+    h += '</select></div>';
+
+    var q = _kpiTdSearch.trim().toLowerCase();
+    var filtered = tdRows.filter(function(r) {
+      if (_kpiTdStatus && r.p.status !== _kpiTdStatus) return false;
+      if (_kpiTdForecast === 'in' && !(r.fc && r.fc.inQuarter)) return false;
+      if (_kpiTdForecast === 'out' && (r.fc && r.fc.inQuarter)) return false;
+      if (!q) return true;
+      var hay = [r.p.projectName, r.p.endUserTH, r.p.endUserEN, r.dealer ? r.dealer.name : ''].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    filtered.sort(function(a, b) {
+      if (_kpiTdSort === 'amt_asc') return (Number(a.p.forecastAmount) || 0) - (Number(b.p.forecastAmount) || 0);
+      if (_kpiTdSort === 'upd_desc') return (b.lastLog ? b.lastLog.date : '').localeCompare(a.lastLog ? a.lastLog.date : '');
+      if (_kpiTdSort === 'fc_asc') return (a.fc ? a.fc.sortKey : '9999-99').localeCompare(b.fc ? b.fc.sortKey : '9999-99');
+      return (Number(b.p.forecastAmount) || 0) - (Number(a.p.forecastAmount) || 0);
+    });
+
+    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.74rem;white-space:nowrap">';
+    h += '<thead><tr style="border-bottom:1px solid var(--border)">' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">No.</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">โครงการ</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">End user</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">Dealer</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">รายการสินค้า</th>' +
+      '<th style="text-align:right;padding:5px 6px;color:var(--text2)">มูลค่า</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">สถานะ</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">Forecast</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">อัพเดทล่าสุด</th></tr></thead><tbody>';
+    if (!filtered.length) {
+      h += '<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2)">ไม่พบรายการที่ตรงกับตัวกรอง</td></tr>';
+    }
+    filtered.forEach(function(r) {
+      var p = r.p;
+      var fcBadge = r.fc ? ('<span class="tag" style="background:' + (r.fc.inQuarter ? '#22c55e18;color:#16803c' : '#94a3b818;color:#64748b') + '">' + sanitize(r.fc.label) + (r.fc.inQuarter ? ' ✓' : '') + '</span>') : '<span style="color:var(--text2)">-</span>';
+      var updHtml = r.lastLog ? (sanitize((r.lastLog.content || '').substr(0, 40)) + '<div style="color:var(--text2);font-size:.64rem">' + fD(r.lastLog.date) + '</div>') : '<span style="color:var(--text2)">-</span>';
+      h += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
+        '<td style="padding:6px;color:var(--text2)">' + (p.rowNo || '-') + '</td>' +
+        '<td style="padding:6px;max-width:200px;white-space:normal">' + sanitize(p.projectName || '-') + '</td>' +
+        '<td style="padding:6px;color:var(--text2)">' + sanitize(p.endUserTH || p.endUserEN || '-') + '</td>' +
+        '<td style="padding:6px">' + sanitize(r.dealer ? r.dealer.name : '-') + '</td>' +
+        '<td style="padding:6px;color:var(--text2)">' + sanitize(r.items || '-') + '</td>' +
+        '<td style="padding:6px;text-align:right;font-weight:600">' + fmtMoneyShort(p.forecastAmount) + '</td>' +
+        '<td style="padding:6px">' + (typeof pipeTag === 'function' ? pipeTag(p.status) : sanitize(p.status || '-')) + '</td>' +
+        '<td style="padding:6px">' + fcBadge + '</td>' +
+        '<td style="padding:6px;color:var(--text2)">' + updHtml + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
     h += '</div>';
   }
 
