@@ -1133,14 +1133,28 @@ function _pipeMoreMenuHtml() {
 // เดิม ทั้ง item.price ตอนเพิ่มใหม่ และค่าที่ import มา ส่วนใหญ่อิง RRP — เครื่องมือนี้ไล่แก้ย้อนหลังทีเดียว
 // (2026-08-26 ตามคำขอ — ครอบคลุมทุกสถานะรวม Win/Deliver ด้วย และอัปเดต Forecast Amount ให้ตรงผลรวมใหม่ด้วย)
 // ================================================================
+// เลือกสถานะที่จะรวมเข้า Recalculate (checkbox) + เลือก Level เองต่อโครงการ (dropdown ต่อแถว) — เผื่อ
+// Dealer เพิ่งอัปเกรด Level มา โครงการเก่าอยากคง Level เดิมไว้ ไม่ตามไปเป็น Level ปัจจุบันอัตโนมัติ
+// (2026-08-26 ตามคำขอ) ทั้งคู่เป็น state ชั่วคราวระหว่างเปิด modal นี้ — reset ทุกครั้งที่เปิดใหม่จากเมนู
+var _recalcStatusSel = null;
+var _recalcLevelOverride = {};
+
+function _recalcDefaultStatusSel() {
+  var cfg = getConfig();
+  var sel = {};
+  (cfg.pipelineStatuses || []).forEach(function(s) { sel[s.id] = (s.category === 'active'); });
+  return sel;
+}
+
 function _recalcPriceByLevelPreview() {
   var changes = [];
   var totalDelta = 0, skippedNoProduct = 0;
   ST.getAll('pipeline').forEach(function(p) {
+    if (_recalcStatusSel && _recalcStatusSel[p.status] === false) return;
     var items = getPipeItems(p) || [];
     if (!items.length) return;
     var dealer = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    var level = dealer ? (dealer.level || 'Other') : 'Other';
+    var level = _recalcLevelOverride[p.id] || (dealer ? (dealer.level || 'Other') : 'Other');
     var changedItems = false;
     var newItems = items.map(function(it) {
       var prod = (typeof getProductByName === 'function') ? getProductByName(it.model) : null;
@@ -1164,10 +1178,29 @@ function _recalcPriceByLevelPreview() {
 }
 
 function showRecalcPriceByLevelM() {
+  _recalcStatusSel = _recalcDefaultStatusSel();
+  _recalcLevelOverride = {};
+  _recalcRenderModal();
+}
+
+function _recalcToggleStatus(id, checked) { _recalcStatusSel[id] = checked; _recalcRenderModal(); }
+function _recalcSetLevelOverride(pipeId, level) { _recalcLevelOverride[pipeId] = level; _recalcRenderModal(); }
+
+function _recalcRenderModal() {
+  var cfg = getConfig();
   var r = _recalcPriceByLevelPreview();
-  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">คำนวณราคาต่อรายการสินค้าใหม่ทุกโครงการ (ทุก Dealer ทุกสถานะ รวม Win/Deliver) ตาม Level ของ Dealer ที่ผูกอยู่ แทนราคา RRP Ex Vat เดิม แล้วอัปเดต Forecast Amount ให้ตรงผลรวมใหม่ด้วย</p>';
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">คำนวณราคาต่อรายการสินค้าใหม่ตาม Level ของ Dealer ที่ผูกอยู่ แทนราคา RRP Ex Vat เดิม แล้วอัปเดต Forecast Amount ให้ตรงผลรวมใหม่ด้วย</p>';
+
+  h += '<div style="margin-bottom:10px"><div style="font-size:.72rem;font-weight:700;margin-bottom:5px">เลือกสถานะที่จะ Recalculate</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px">';
+  (cfg.pipelineStatuses || []).forEach(function(s) {
+    h += '<label style="display:flex;align-items:center;gap:4px;font-size:.7rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
+      '<input type="checkbox" style="width:auto" ' + (_recalcStatusSel[s.id] ? 'checked' : '') + ' onchange="_recalcToggleStatus(\'' + s.id + '\',this.checked)">' + sanitize(s.name) + '</label>';
+  });
+  h += '</div></div>';
+
   if (!r.changes.length) {
-    h += '<div style="text-align:center;padding:16px;color:var(--text3)">ไม่มีโครงการไหนที่ราคาต้องเปลี่ยนเลย ✅</div>';
+    h += '<div style="text-align:center;padding:16px;color:var(--text3)">ไม่มีโครงการไหนในสถานะที่เลือกที่ราคาต้องเปลี่ยนเลย ✅</div>';
     openM('💰 Recalculate ราคาตาม Level', h);
     return;
   }
@@ -1176,11 +1209,13 @@ function showRecalcPriceByLevelM() {
   h += '<div style="font-size:.72rem;color:' + (r.totalDelta >= 0 ? '#22c55e' : '#ef4444') + ';margin-top:2px">Forecast Amount รวมจะ' + (r.totalDelta >= 0 ? 'เพิ่มขึ้น' : 'ลดลง') + ' ' + fmtMoney(Math.abs(r.totalDelta)) + ' บาท</div>';
   if (r.skippedNoProduct) h += '<div style="font-size:.68rem;color:var(--text2);margin-top:2px">⚠️ ' + r.skippedNoProduct + ' รายการสินค้าไม่พบในแคตตาล็อก ข้ามไว้ ไม่แตะราคา</div>';
   h += '</div>';
-  h += '<div style="max-height:260px;overflow-y:auto">';
+  h += '<div style="max-height:300px;overflow-y:auto">';
   r.changes.slice(0, 50).forEach(function(c) {
-    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between;gap:8px">' +
-      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📦 ' + sanitize(c.p.projectName || (c.dealer ? c.dealer.name : '') || '-') + ' <span style="color:var(--text2)">(' + sanitize(c.level) + ')</span></span>' +
-      '<span style="white-space:nowrap">' + fmtMoneyShort(c.oldForecast) + ' → <b>' + fmtMoneyShort(c.newForecast) + '</b></span></div>';
+    var levelOpts = ['S', 'A', 'B', 'Other'].map(function(lv) { return '<option value="' + lv + '"' + (c.level === lv ? ' selected' : '') + '>' + lv + '</option>'; }).join('');
+    h += '<div class="kpi-detail-row" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(c.dealer ? c.dealer.name : '') + '">📦 ' + sanitize(c.p.projectName || (c.dealer ? c.dealer.name : '') || '-') + '</span>' +
+      '<select style="font-size:.68rem;width:70px" onchange="_recalcSetLevelOverride(\'' + c.p.id + '\',this.value)">' + levelOpts + '</select>' +
+      '<span style="white-space:nowrap;font-size:.72rem">' + fmtMoneyShort(c.oldForecast) + ' → <b>' + fmtMoneyShort(c.newForecast) + '</b></span></div>';
   });
   if (r.changes.length > 50) h += '<div style="text-align:center;color:var(--text2);font-size:.7rem;padding:6px">...และอีก ' + (r.changes.length - 50) + ' โครงการ</div>';
   h += '</div>';
