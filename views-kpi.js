@@ -81,10 +81,8 @@ function _kpiTdStatusChange(v) { _kpiTdStatus = v; render(); }
 function _kpiTdForecastChange(v) { _kpiTdForecast = v; render(); }
 function _kpiTdSortChange(v) { _kpiTdSort = v; render(); }
 
-// เดือนที่คาดว่าจะปิดดีล — ประมาณจาก Bidding Date + 2 เดือน (กติกาเดียวกับ _pipeForecastMonthNum ใน
-// views-pipeline.js ที่ใช้คำนวณคอลัมน์ "Month" ตอน export) แล้วเทียบว่าอยู่ในช่วงไตรมาส KPI นี้ไหม
-// ใช้ Shipment Date จริงที่เซลกรอกไว้ (ไม่ใช่เดาจาก Bidding Date +2 เดือนแบบเดิม — เปลี่ยนตามที่ยืนยัน
-// 2026-08-26 ว่า Shipment Date คือฟิลด์ที่ควรใช้คำนวณ Forecast ของ KPI)
+// เดือนที่คาดว่าจะปิดดีล — ใช้ Shipment Date จริงที่เซลกรอกไว้ (ยืนยัน 2026-08-26 ว่าเป็นฟิลด์ที่ควรใช้
+// คำนวณ Forecast ของ KPI แทนการเดาจาก Bidding Date +2 เดือนแบบเดิม) แล้วเทียบว่าอยู่ในช่วงไตรมาสนี้ไหม
 function _kpiForecastMonthInfo(p, plan) {
   if (!p.shipmentDate) return null;
   var d = new Date(p.shipmentDate);
@@ -93,6 +91,62 @@ function _kpiForecastMonthInfo(p, plan) {
   var midMonth = new Date(year, month - 1, 15);
   var inQuarter = !!(plan && midMonth >= new Date(plan.startDate + 'T00:00:00') && midMonth <= new Date(plan.endDate + 'T23:59:59'));
   return { label: KPI_MONTH_NAMES[month - 1] + ' ' + year, sortKey: year + '-' + String(month).padStart(2, '0'), inQuarter: inQuarter };
+}
+
+// ================================================================
+// การ์ด "📅 โครงการรายเดือน" — ดูโครงการตามเดือน สลับได้ 3 มุมมอง (Bidding/Forecast Month/Shipment Date)
+// (2026-08-26 ตามคำขอ)
+// ================================================================
+var _kpiMoTab = 'bid';
+var _kpiMoMonth = null, _kpiMoYear = null;
+function _kpiMoInit() {
+  if (_kpiMoMonth === null) { var n = new Date(); _kpiMoMonth = n.getMonth(); _kpiMoYear = n.getFullYear(); }
+}
+function _kpiMoSetTab(t) { _kpiMoTab = t; render(); }
+function _kpiMoShift(delta) {
+  _kpiMoInit();
+  _kpiMoMonth += delta;
+  if (_kpiMoMonth < 0) { _kpiMoMonth = 11; _kpiMoYear--; }
+  else if (_kpiMoMonth > 11) { _kpiMoMonth = 0; _kpiMoYear++; }
+  render();
+}
+
+// Forecast Month เป็นข้อความอิสระจากชีท (เช่น "2026 Aug", "Aug-26", "2026-08") — เดาแบบยืดหยุ่นด้วยการหา
+// ปี (20xx) กับชื่อเดือนภาษาอังกฤษย่อ/เต็มในข้อความ ไม่ต้อง strict format เดียว
+function _kpiParseForecastMonthText(text) {
+  if (!text) return null;
+  var t = text.trim();
+  var iso = t.match(/(\d{4})-(\d{1,2})(?:-|$)/);
+  if (iso) return { year: +iso[1], month: +iso[2] };
+  var monNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  var tl = t.toLowerCase();
+  var monIdx = -1;
+  for (var i = 0; i < 12; i++) { if (tl.indexOf(monNames[i]) !== -1) { monIdx = i; break; } }
+  if (monIdx === -1) return null;
+  var yrMatch = tl.match(/(20\d{2})/);
+  var year = yrMatch ? +yrMatch[1] : new Date().getFullYear();
+  return { year: year, month: monIdx + 1 };
+}
+
+function kpiProjectsByMonth(plan, tab, month, year) {
+  var pipes = _kpiPipelines().filter(function(p) { return (p.saleName || '') === plan.salesMemberName; });
+  return pipes.filter(function(p) {
+    if (tab === 'bid') {
+      if (!p.biddingDate) return false;
+      var d = new Date(p.biddingDate);
+      return !isNaN(d.getTime()) && d.getMonth() === month && d.getFullYear() === year;
+    }
+    if (tab === 'ship') {
+      if (!p.shipmentDate) return false;
+      var d2 = new Date(p.shipmentDate);
+      return !isNaN(d2.getTime()) && d2.getMonth() === month && d2.getFullYear() === year;
+    }
+    if (tab === 'fc') {
+      var info = _kpiParseForecastMonthText(p.forecastMonth);
+      return !!info && info.month === (month + 1) && info.year === year;
+    }
+    return false;
+  }).sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); });
 }
 
 function kpiGetPlansForSales(salesMemberId) {
@@ -1105,6 +1159,41 @@ function rKpiScorecard(el) {
     });
     h += '</tbody></table></div></div>';
   }
+
+  // 📅 โครงการรายเดือน — สลับดูตาม Bidding Date / Forecast Month / Shipment Date
+  _kpiMoInit();
+  h += '<div class="card">';
+  h += '<h2>📅 โครงการรายเดือน</h2>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">';
+  h += '<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  [['bid', 'Bidding Date'], ['fc', 'Forecast Month'], ['ship', 'Shipment Date']].forEach(function(t) {
+    h += '<button class="btn bsm ' + (_kpiMoTab === t[0] ? 'bp' : 'bo') + '" style="border-radius:0;border:none" onclick="_kpiMoSetTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+  });
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-left:auto">';
+  h += '<button class="btn bsm bo" onclick="_kpiMoShift(-1)">‹</button>';
+  h += '<span style="font-size:.8rem;font-weight:600;min-width:80px;text-align:center">' + KPI_MONTH_NAMES[_kpiMoMonth] + ' ' + _kpiMoYear + '</span>';
+  h += '<button class="btn bsm bo" onclick="_kpiMoShift(1)">›</button>';
+  h += '</div></div>';
+
+  var moProjects = kpiProjectsByMonth(plan, _kpiMoTab, _kpiMoMonth, _kpiMoYear);
+  h += '<div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">' + moProjects.length + ' โครงการ</div>';
+  h += '<div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">';
+  if (!moProjects.length) {
+    h += '<div style="text-align:center;color:var(--text2);padding:16px;font-size:.78rem">ไม่มีโครงการในเดือนนี้</div>';
+  }
+  moProjects.forEach(function(p) {
+    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    h += '<div class="kpi-detail-row" style="cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
+    h += '<div style="display:flex;justify-content:space-between;gap:8px">' +
+      '<span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      (p.rowNo ? '<span style="color:var(--text2);font-weight:400">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + sanitize(p.projectName || '-') + '</span>' +
+      '<b style="white-space:nowrap">' + fmtMoneyShort(p.forecastAmount) + '</b></div>';
+    h += '<div style="font-size:.68rem;color:var(--text2);margin-top:2px;display:flex;gap:6px;align-items:center">' +
+      (dl ? '🏪 ' + sanitize(dl.name) : '') + (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + '</div>';
+    h += '</div>';
+  });
+  h += '</div></div>';
 
   // 🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย — มุมมองระดับ Dealer (แยกจากมุมมองระดับดีลของการ์ด "Top deals" ด้านบน)
   var dealerPlan = kpiDealerPlanBreakdown(plan);
