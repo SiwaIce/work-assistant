@@ -785,6 +785,15 @@ function kpiSalesOptions() {
   return registered.concat(extraList).sort(function(a, b) { return (a.name || '').localeCompare(b.name || '', 'th'); });
 }
 
+// ปักหมุดเซลที่จะให้เป็นค่าเริ่มต้นตอนเปิดหน้า KPI เซลล์ — เก็บด้วยชื่อ (ไม่ใช่ id) เพราะรายชื่อจาก
+// kpiSalesOptions() ผสมทั้ง id จริงจากทีม Sales และ id ปลอม 'freename_' ที่ไม่คงที่ ชื่อจึงเทียบได้ตรงกว่า
+function getKpiDefaultSalesName() { return localStorage.getItem('v7_kpiDefaultSalesName') || ''; }
+function kpiSetDefaultSales(name) {
+  localStorage.setItem('v7_kpiDefaultSalesName', name);
+  toast('📌 ตั้ง "' + name + '" เป็นค่าเริ่มต้นของหน้า KPI แล้ว');
+  render();
+}
+
 function rKpiScorecard(el) {
   document.getElementById('pgT').textContent = '📊 KPI เซลล์';
   var members = kpiSalesOptions();
@@ -794,7 +803,14 @@ function rKpiScorecard(el) {
     return;
   }
   if (!kpiSelectedSalesId || !members.some(function(m) { return m.id === kpiSelectedSalesId; })) {
-    kpiSelectedSalesId = members[0].id;
+    // เดิม fallback ไป members[0] เฉยๆ (เรียงตามชื่อ ก-ฮ) ทำให้เปิดหน้ามาเจอเซลคนอื่นเป็นค่าเริ่มต้นเสมอ —
+    // ตอนนี้เลือกตามลำดับ: ค่าที่ผู้ใช้ปักหมุดไว้เอง > ชื่อ "ของฉัน" จาก dealer scope > members[0] (fallback สุดท้าย)
+    var defName = getKpiDefaultSalesName();
+    var myName = typeof myDealerScopeName === 'function' ? myDealerScopeName() : '';
+    var preferred = members.filter(function(m) { return m.name === defName; })[0]
+      || members.filter(function(m) { return m.name === myName; })[0]
+      || members[0];
+    kpiSelectedSalesId = preferred.id;
   }
   var member = members.filter(function(m) { return m.id === kpiSelectedSalesId; })[0];
 
@@ -811,6 +827,8 @@ function rKpiScorecard(el) {
     h += '<option value="' + m.id + '"' + (m.id === kpiSelectedSalesId ? ' selected' : '') + '>' + label + '</option>';
   });
   h += '</select>';
+  var isDefaultSales = getKpiDefaultSalesName() === member.name;
+  h += '<button class="btn bsm ' + (isDefaultSales ? 'bp' : 'bo') + '" onclick="kpiSetDefaultSales(\'' + sanitize(member.name).replace(/'/g, "\\'") + '\')" title="ตั้งให้เปิดหน้านี้มาเจอ ' + sanitize(member.name) + ' เป็นค่าเริ่มต้นเสมอ">' + (isDefaultSales ? '📌 ค่าเริ่มต้น' : '📌 ตั้งเป็นค่าเริ่มต้น') + '</button>';
 
   var plans = kpiGetPlansForSales(member.id);
   if (!kpiSelectedPlanId || !plans.some(function(p) { return p.id === kpiSelectedPlanId; })) {
