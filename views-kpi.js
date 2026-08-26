@@ -506,6 +506,53 @@ function kpiDealerPlanBreakdown(plan) {
   };
 }
 
+// ================================================================
+// ยอดขายตาม Product (Win แล้ว) — เฉพาะ Drone/Bundle (Dock) ตามคำขอ 2026-08-26 ไม่รวม Payload/
+// Battery/Charger/Software/Service/Other เทียบเป้ากับ KPI หมวด pipelineModelQty ถ้ามีผูกอยู่ (เช่น Dock 3/4)
+// จับคู่ it.model (ข้อความอิสระ) กับชื่อสินค้าในแคตตาล็อกแบบ substring ทั้งสองทาง เหมือนที่ modelMatch
+// ของ pipelineModelQty ใช้อยู่แล้ว เพราะข้อมูลจริงพิมพ์ไม่ตรงกับชื่อแคตตาล็อกเป๊ะเสมอไป
+// ================================================================
+function kpiProductSalesBreakdown(plan) {
+  if (typeof getAllProducts !== 'function') return null;
+  var mainCats = { drone: true, bundle: true };
+  var catalog = getAllProducts().filter(function(pr) { return mainCats[pr.category]; });
+  if (!catalog.length) return null;
+
+  var qtyByName = {};
+  ST.getAll('pipeline').forEach(function(p) {
+    if (!pipeIsWon(p)) return;
+    if ((p.saleName || '') !== plan.salesMemberName) return;
+    var rd = p.registerDate || '';
+    if (rd < plan.startDate || rd > plan.endDate) return;
+    (getPipeItems(p) || []).forEach(function(it) {
+      var m = (it.model || '').toLowerCase();
+      if (!m) return;
+      var match = catalog.filter(function(pr) { var n = pr.name.toLowerCase(); return m.indexOf(n) !== -1 || n.indexOf(m) !== -1; })[0];
+      if (!match) return;
+      qtyByName[match.name] = (qtyByName[match.name] || 0) + (Number(it.qty) || 0);
+    });
+  });
+
+  var kpiTargets = {};
+  (plan.categories || []).forEach(function(cat) {
+    if (cat.type !== 'pipelineModelQty') return;
+    (cat.modelMatch || []).forEach(function(kw) {
+      catalog.forEach(function(pr) { if (pr.name.toLowerCase().indexOf(kw.toLowerCase()) !== -1) kpiTargets[pr.name] = cat; });
+    });
+  });
+
+  var names = Object.keys(qtyByName);
+  catalog.forEach(function(pr) { if (kpiTargets[pr.name] && names.indexOf(pr.name) === -1) names.push(pr.name); });
+  if (!names.length) return null;
+
+  var rows = names.map(function(name) {
+    var cat = kpiTargets[name];
+    return { name: name, qty: qtyByName[name] || 0, target: cat ? (Number(cat.target) || 0) : null, catId: cat ? cat.id : null };
+  }).sort(function(a, b) { return b.qty - a.qty; });
+
+  return { rows: rows };
+}
+
 function _kpiDpToggle(id) {
   var el = document.getElementById(id);
   var icon = document.getElementById(id + '_ic');
@@ -916,6 +963,33 @@ function rKpiScorecard(el) {
     });
     h += '</tbody></table></div>';
     h += '</div>';
+  }
+
+  // 📦 ยอดขายตาม Product — การ์ดแยกต่างหาก (2026-08-26 ตามคำขอ)
+  var prodSales = kpiProductSalesBreakdown(plan);
+  if (prodSales) {
+    h += '<div class="card">';
+    h += '<h2>📦 ยอดขายตาม Product</h2>';
+    h += '<div style="font-size:.68rem;color:var(--text2);margin:-4px 0 8px">เฉพาะ Drone / Dock — ไม่รวมอุปกรณ์เสริม แบตเตอรี่ ซอฟต์แวร์</div>';
+    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.74rem">';
+    h += '<thead><tr style="border-bottom:1px solid var(--border)">' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">Product</th>' +
+      '<th style="text-align:right;padding:5px 6px;color:var(--text2)">ยอดขาย (หน่วย)</th>' +
+      '<th style="text-align:right;padding:5px 6px;color:var(--text2)">เป้า KPI</th>' +
+      '<th style="text-align:left;padding:5px 6px;color:var(--text2)">ความคืบหน้า</th></tr></thead><tbody>';
+    prodSales.rows.forEach(function(r) {
+      var pct = r.target ? Math.min(100, Math.round(r.qty / r.target * 100)) : null;
+      var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
+      var progress = r.target
+        ? '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div><span style="font-size:.68rem;color:var(--text2);width:32px;text-align:right">' + pct + '%</span></div>'
+        : '<span style="color:var(--text2)">ไม่มี KPI ผูก</span>';
+      h += '<tr style="border-bottom:1px solid var(--border)' + (r.catId ? ';cursor:pointer' : '') + '"' + (r.catId ? ' onclick="showKpiDetailM(\'' + plan.id + '\',\'' + r.catId + '\')"' : '') + '>' +
+        '<td style="padding:6px;font-weight:600">' + sanitize(r.name) + '</td>' +
+        '<td style="padding:6px;text-align:right">' + r.qty + '</td>' +
+        '<td style="padding:6px;text-align:right;color:var(--text2)">' + (r.target != null ? r.target : '-') + '</td>' +
+        '<td style="padding:6px;min-width:120px">' + progress + '</td></tr>';
+    });
+    h += '</tbody></table></div></div>';
   }
 
   // 🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย — มุมมองระดับ Dealer (แยกจากมุมมองระดับดีลของการ์ด "Top deals" ด้านบน)
