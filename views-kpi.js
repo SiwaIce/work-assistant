@@ -475,28 +475,44 @@ function kpiDealerPlanBreakdown(plan) {
   if (!revCat) return null;
 
   var myDealers = ST.getAll('dealers').filter(function(d) { return (d.saleName || '') === plan.salesMemberName; });
-  var wonByDealer = {}, potByDealer = {};
+  var wonByDealer = {}, potByDealer = {}, dealsByDealer = {};
+  var planCount = 0, winCount = 0, deliverCount = 0;
   ST.getAll('pipeline').forEach(function(p) {
     if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
     var rd = p.registerDate || '';
     if (rd < plan.startDate || rd > plan.endDate) return;
-    if (pipeIsWon(p)) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
-    else if (pipeIsActive(p)) potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
+    var won = pipeIsWon(p), active = pipeIsActive(p);
+    if (!won && !active) return; // Fail&Lost หรือสถานะอื่นที่ไม่นับใน Plan/Actual — ไม่แสดง
+    if (won) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
+    else potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
+    var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
+    if (won) { if (actualType === 'Deliver') deliverCount++; else winCount++; } else planCount++;
+    (dealsByDealer[p.dealerId] = dealsByDealer[p.dealerId] || []).push({ p: p, state: won ? 'actual' : 'plan', actualType: actualType });
   });
 
   var rows = myDealers.map(function(d) {
     var won = wonByDealer[d.id] || 0;
     var potential = potByDealer[d.id] || 0;
     var status = won > 0 ? 'won' : (potential > 0 ? 'active' : 'none');
-    return { dealer: d, won: won, potential: potential, status: status };
+    return { dealer: d, won: won, potential: potential, status: status, deals: dealsByDealer[d.id] || [] };
   }).sort(function(a, b) { return (b.won + b.potential) - (a.won + a.potential); });
 
   return {
     target: Number(revCat.target) || 0,
     actual: kpiComputeActual(plan, revCat),
     rows: rows,
-    noneCount: rows.filter(function(r) { return r.status === 'none'; }).length
+    noneCount: rows.filter(function(r) { return r.status === 'none'; }).length,
+    planCount: planCount, winCount: winCount, deliverCount: deliverCount
   };
+}
+
+function _kpiDpToggle(id) {
+  var el = document.getElementById(id);
+  var icon = document.getElementById(id + '_ic');
+  if (!el) return;
+  var open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (icon) icon.textContent = open ? '▶' : '▼';
 }
 
 // จัดกลุ่มดีลที่ kpiTopPotentialDeals() เลือกมา (ปิดแล้วจะพอดีเป้า) ตาม Dealer — ช่วยตอบคำถาม "ควรไปดันที่
@@ -908,16 +924,39 @@ function rKpiScorecard(el) {
     var dpRemain = Math.max(dealerPlan.target - dealerPlan.actual, 0);
     h += '<div class="card">';
     h += '<h2>🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย <span class="ml" style="font-size:11px;color:var(--text2)">เป้าที่เหลือ ' + fmtMoneyShort(dpRemain) + '</span></h2>';
+    h += '<div style="font-size:.68rem;color:var(--text2);margin:-4px 0 8px">Plan ' + dealerPlan.planCount + ' · Actual ' + (dealerPlan.winCount + dealerPlan.deliverCount) + ' (Win ' + dealerPlan.winCount + ', Deliver ' + dealerPlan.deliverCount + ')</div>';
     h += '<div class="kpi-dealer-rows">';
-    dealerPlan.rows.forEach(function(r) {
+    dealerPlan.rows.forEach(function(r, dpIdx) {
       var badge = r.status === 'won' ? '<span class="tag tag-win">✅ ถึงแล้ว ' + fmtMoneyShort(r.won) + '</span>'
         : r.status === 'active' ? '<span class="tag tag-bidding">🟡 มีลุ้น ' + fmtMoneyShort(r.potential) + '</span>'
         : '<span class="tag tag-lost">🔴 ยังไม่ขยับ</span>';
-      h += '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      var rid = 'kdp_' + dpIdx;
+      h += '<div class="kpi-detail-row" style="cursor:default">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        (r.deals.length ? '<span id="' + rid + '_ic" onclick="_kpiDpToggle(\'' + rid + '\')" style="cursor:pointer;color:var(--text2);width:12px;flex-shrink:0">▶</span>' : '<span style="width:12px;flex-shrink:0"></span>') +
         '<span onclick="go(\'dealerDetail\',{dealerId:\'' + r.dealer.id + '\'})" style="cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🏪 ' + sanitize(r.dealer.name) + '</span>' +
         badge +
         (r.status === 'none' ? '<button class="btn bsm bo" onclick="event.stopPropagation();showFollowupM(\'' + r.dealer.id + '\')">📞 + Follow-up</button>' : '') +
         '</div>';
+      if (r.deals.length) {
+        h += '<div id="' + rid + '" style="display:none;margin-top:6px;padding-left:20px">';
+        h += '<div style="display:flex;gap:8px;font-size:.6rem;color:var(--text2);padding:2px 4px">' +
+          '<span style="flex:1">โครงการ</span><span style="width:70px">สถานะ</span><span style="width:60px;text-align:right">มูลค่า</span>' +
+          '<span style="width:36px;text-align:center">Plan</span><span style="width:60px;text-align:center">Actual</span></div>';
+        r.deals.forEach(function(dl) {
+          var p = dl.p;
+          var planMark = dl.state === 'plan' ? '<span style="color:#3b82f6;font-weight:700">✓</span>' : '<span style="color:var(--text2)">–</span>';
+          var actualMark = dl.state === 'actual' ? '<span style="color:#22c55e;font-weight:600">✓ ' + dl.actualType + '</span>' : '<span style="color:var(--text2)">–</span>';
+          h += '<div style="display:flex;gap:8px;align-items:center;font-size:.7rem;padding:4px;border-top:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.projectName || '-') + '</span>' +
+            '<span style="width:70px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (typeof getPipeName === 'function' ? sanitize(getPipeName(p.status)) : sanitize(p.status || '-')) + '</span>' +
+            '<span style="width:60px;text-align:right">' + fmtMoneyShort(p.forecastAmount) + '</span>' +
+            '<span style="width:36px;text-align:center">' + planMark + '</span>' +
+            '<span style="width:60px;text-align:center">' + actualMark + '</span></div>';
+        });
+        h += '</div>';
+      }
+      h += '</div>';
     });
     h += '</div>';
     if (dealerPlan.noneCount) {
