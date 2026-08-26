@@ -2162,6 +2162,8 @@ function rPipeDet(el) {
   
   html += '<div class="fr"><div><label>Bidding Date</label><div>' + fD(p.biddingDate) + ' ' + (p.biddingDate ? _pipeBidDateBadge(p, isWon || isLost) : '') + '</div></div>';
   html += '<div><label>Shipment Date</label><div>' + fD(p.shipmentDate) + '</div></div></div>';
+  html += '<div class="fr"><div><label>Forecast Month</label><div>' + (p.forecastMonth || '-') + '</div></div>';
+  html += '<div><label>Expected Close Date</label><div>' + fD(p.expectedCloseDate) + '</div></div></div>';
   
   html += '<div class="fr"><div><label>หนังสือแต่งตั้ง</label><div>' + (p.appointmentLetter || '-') + '</div></div>';
   html += '<div><label>งานซ้ำ</label><div>' + (p.recurring ? '✅ ใช่' : 'ไม่ใช่') + '</div></div></div>';
@@ -6172,6 +6174,7 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
   if ((existing.registerDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'registerDate'))) return 'changed';
   if (colMap && colMap.hasOwnProperty('biddingDate') && (existing.biddingDate || '') !== impBiddingDate) return 'changed';
   if (colMap && colMap.hasOwnProperty('shipmentDate') && (existing.shipmentDate || '') !== _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate)) return 'changed';
+  if (colMap && colMap.hasOwnProperty('forecastMonth') && _pipeNormText(existing.forecastMonth) !== _pipeNormText(_pipeCol(c, colMap, 'forecastMonth'))) return 'changed';
   // ใช้ fallback เดียวกับ _pipeRowFields — record เก่าที่เก็บ qty ใน model/modelQty แทน items
   var _ei = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei);
@@ -6214,6 +6217,7 @@ var PIPE_IMPORT_FIELD_GROUPS = [
   // ไปทับเป็นว่างเสียหาย อยากข้ามเฉพาะ Bidding Date ได้โดยไม่กระทบ Register/Shipment Date (2026-08-24)
   { key: 'registerShipDate', label: 'Register/Shipment Date',      keys: ['registerDate', 'shipmentDate'] },
   { key: 'biddingDate',    label: 'Bidding Date',                 keys: ['biddingDate'] },
+  { key: 'forecastMonth',  label: 'Forecast Month',               keys: ['forecastMonth'] },
   { key: 'remark',         label: 'Remark',                       keys: ['remark'] },
   { key: 'appointment',    label: 'หนังสือแต่งตั้ง',                keys: ['appointmentLetter'] },
   { key: 'pos',            label: 'Project POS (%)',              keys: ['projectPOS'] },
@@ -6321,6 +6325,10 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
   if (colMap && colMap.hasOwnProperty('shipmentDate')) {
     var newShipISO = _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), impBiddingDate);
     if ((existing.shipmentDate || '') !== newShipISO) diffs.push({ label: 'Shipment Date', old: existing.shipmentDate ? fD(existing.shipmentDate) : '', newVal: newShipISO ? fD(newShipISO) : '' });
+  }
+  if (colMap && colMap.hasOwnProperty('forecastMonth')) {
+    var newFcMonth = _pipeNormText(_pipeCol(c, colMap, 'forecastMonth'));
+    if (_pipeNormText(existing.forecastMonth) !== newFcMonth) diffs.push({ label: 'Forecast Month', old: _pipeNormText(existing.forecastMonth), newVal: newFcMonth });
   }
   var _ei2 = (existing.items && existing.items.length) ? existing.items : (existing.model ? [{model: existing.model, qty: existing.modelQty || 1}] : []);
   var existG = _pipeModelQtyByGroup(_ei2);
@@ -7149,6 +7157,11 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
       shipmentDate: colMap && colMap.hasOwnProperty('shipmentDate')
         ? _pipeDateFromPaste(_pipeCol(c, colMap, 'shipmentDate'), pipeBiddingDate)
         : (existing ? (existing.shipmentDate || '') : ''),
+      // เดิม field นี้อยู่แค่ใน _PIPE_IMPORT_COLS (ให้ match คอลัมน์ตอน preview/diff) แต่ไม่เคยเขียนเข้า
+      // pipeData จริงเลยสักที — import แล้วค่าหายตลอด แก้ตรงนี้ (2026-08-26)
+      forecastMonth: colMap && colMap.hasOwnProperty('forecastMonth')
+        ? _pipeCol(c, colMap, 'forecastMonth').trim()
+        : (existing ? (existing.forecastMonth || '') : ''),
       remark: _pipeCol(c, colMap, 'remark').trim(),
       appointmentLetter: _pipeCol(c, colMap, 'appointmentLetter').trim(),
       projectPOS: parseInt(_pipeCol(c, colMap, 'projectPOS')) || 0,

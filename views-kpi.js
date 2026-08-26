@@ -83,11 +83,12 @@ function _kpiTdSortChange(v) { _kpiTdSort = v; render(); }
 
 // เดือนที่คาดว่าจะปิดดีล — ประมาณจาก Bidding Date + 2 เดือน (กติกาเดียวกับ _pipeForecastMonthNum ใน
 // views-pipeline.js ที่ใช้คำนวณคอลัมน์ "Month" ตอน export) แล้วเทียบว่าอยู่ในช่วงไตรมาส KPI นี้ไหม
+// ใช้ Shipment Date จริงที่เซลกรอกไว้ (ไม่ใช่เดาจาก Bidding Date +2 เดือนแบบเดิม — เปลี่ยนตามที่ยืนยัน
+// 2026-08-26 ว่า Shipment Date คือฟิลด์ที่ควรใช้คำนวณ Forecast ของ KPI)
 function _kpiForecastMonthInfo(p, plan) {
-  if (!p.biddingDate) return null;
-  var d = new Date(p.biddingDate);
+  if (!p.shipmentDate) return null;
+  var d = new Date(p.shipmentDate);
   if (isNaN(d.getTime())) return null;
-  d.setMonth(d.getMonth() + 2);
   var year = d.getFullYear(), month = d.getMonth() + 1;
   var midMonth = new Date(year, month - 1, 15);
   var inQuarter = !!(plan && midMonth >= new Date(plan.startDate + 'T00:00:00') && midMonth <= new Date(plan.endDate + 'T23:59:59'));

@@ -559,7 +559,8 @@ function showPipelineM(dealerId, eid) {
     '<div class="fr"><div class="fg"><label>Real Amount (฿)</label><input type="text" inputmode="decimal" class="js-money" id="fp_real" value="' + nmI(p.realAmount || '') + '"></div>' +
     '<div class="fg"><label>TOR <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'torOptions\',\'⚙️ จัดการ TOR\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_tor\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_tor">' + optionsHTML(cfg.torOptions, p.tor || 'Open') + '</select></div></div>' +
     '<div class="fr">' + dpH('fp_bid', p.biddingDate || '', 'Bidding Date') + dpH('fp_ship', p.shipmentDate || '', 'Shipment Date') + '</div>' +
-    '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') + '<div class="fg"></div></div>' +
+    '<div class="fr">' + dpH('fp_close', p.expectedCloseDate || '', '🎯 Expected Close Date (คาดปิดดีล/ได้ PO)') +
+    '<div class="fg"><label>Forecast Month <small style="color:var(--text2)">(เดือนที่คาดว่าจะสั่งซื้อ)</small></label><input type="text" id="fp_forecastMonth" value="' + sanitize(p.forecastMonth || '') + '" placeholder="เช่น 2026 Aug"></div></div>' +
     '<div class="fr"><div class="fg"><label>หนังสือแต่งตั้ง <button type="button" class="btn-xs" onclick="showCfgListEditorM(\'appointmentOptions\',\'⚙️ จัดการหนังสือแต่งตั้ง\', function(added){ showPipelineM(' + _pipeReopenArgs + '); if(added) setTimeout(function(){var s=document.getElementById(\'fp_appt\'); if(s) s.value=added;},0); })">⚙️</button></label><select id="fp_appt">' + optionsHTML(cfg.appointmentOptions, p.appointmentLetter, '--') + '</select></div>' +
     '<div class="fg"><label>🎯 Project POS (%) <small style="color:var(--text2)">(โอกาสได้งาน)</small></label><input type="number" id="fp_pos" min="0" max="100" value="' + (p.projectPOS || '') + '" placeholder="0-100"></div></div>' +
     posChecklistHtml(p, 'fp_', '', _posLastLog, 'showPipelineM(' + _pipeReopenArgs + ')', true) +
@@ -1154,6 +1155,7 @@ function _finishSavePipeline(dealerId, eid) {
     biddingDate: dpG('fp_bid'),
     shipmentDate: dpG('fp_ship'),
     expectedCloseDate: dpG('fp_close'),
+    forecastMonth: document.getElementById('fp_forecastMonth') ? document.getElementById('fp_forecastMonth').value.trim() : '',
     appointmentLetter: document.getElementById('fp_appt').value,
     projectPOS: document.getElementById('fp_pos') ? (parseInt(document.getElementById('fp_pos').value) || 0) : 0,
     status: document.getElementById('fp_status').value,
