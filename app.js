@@ -1917,6 +1917,18 @@ var APP_MENU_ACTIONS = [
   {id: 'presentation', icon: '🎬', name: 'Presentation', action: "openPresentation()"}
 ];
 
+// ผูก route (S.view) ปัจจุบันเข้ากับแท็บที่ควรไฮไลท์ในแถบล่างมือถือ — ครอบคลุมหน้าย่อย/drill-down ด้วย ไม่ใช่
+// แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
+// แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
+// ต้องประกาศก่อนเรียก render() ครั้งแรกด้านล่าง (INIT) — เดิมอยู่ท้ายไฟล์ ทำให้ render() แรกสุด
+// อ่านค่านี้ตอนยังเป็น undefined (var hoisting) แล้ว throw จน script ที่เหลือหยุดทำงานทั้งไฟล์
+var MB_NAV_ROUTE_GROUPS = {
+  today: ['today', 'salesOverview'],
+  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
+  tasks: ['tasks', 'taskDetail']
+};
+
 // Apply on load
 applyAppearance();
 
@@ -2513,15 +2525,6 @@ function renderMbHome() {
   updateMbNav();
 }
 
-// ผูก route (S.view) ปัจจุบันเข้ากับแท็บที่ควรไฮไลท์ในแถบล่างมือถือ — ครอบคลุมหน้าย่อย/drill-down ด้วย ไม่ใช่
-// แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
-// แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
-var MB_NAV_ROUTE_GROUPS = {
-  today: ['today', 'salesOverview'],
-  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar'],
-  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
-  tasks: ['tasks', 'taskDetail']
-};
 function updateMbNav() {
   var items = document.querySelectorAll('.mb-nav-item');
   for (var i = 0; i < items.length; i++) items[i].classList.remove('act');
