@@ -1950,7 +1950,11 @@ function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 // ล่าสุด (เลือกแหล่งได้ตอน export ผ่าน _pipeExportUpdateDateSrc — ดู showPipeExportLogFilterM) ไม่ใช่ field ที่
 // เก็บจริงใน pipeData — แทรกก่อน "Update 1" ตามที่ผู้ใช้ระบุ (คอลัมน์หลังจากนี้ในชีท Google Sheet จริงต้องเลื่อน
 // ตามด้วย ถ้าจะให้ copyPipeRow()/export วางทับแถวในชีทได้ตรงคอลัมน์เหมือนเดิม)
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update Date','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+// ตัด Real Amount / Bidding Date / Shipment date / Duplicate งานซ้ำ ออกจาก export (2026-08-27) — เทียบหัวตาราง
+// กับ Google Sheet จริงของผู้ใช้แล้วพบว่าทั้ง 4 คอลัมน์นี้ไม่มีอยู่ในชีทเลย ทำให้ทุกคอลัมน์หลังจากนั้นเคยเลื่อน
+// เพี้ยนตอน copyPipeRow()/paste ทับแถวมาตลอด — field ในแอป (p.realAmount/p.biddingDate/p.recurring) ยังเก็บ/ใช้
+// คำนวณภายในตามปกติ (เช่น Forecast Month ยังคำนวณจาก biddingDate) แค่ไม่ export เป็นคอลัมน์แยกอีกต่อไป
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','TOR','Forecast Month','month','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Update Date','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แหล่งข้อมูลคำนวณคอลัมน์ "Update Date" ตอน export — เลือกได้ในหน้า export (dropdown ใน showPipeExportLogFilterM)
 // 'timeline' = วันที่ log ล่าสุดในการ์ด Updates ของโครงการ, 'visit' = วันที่ Visit ล่าสุดของ Dealer นั้น,
@@ -1995,10 +1999,10 @@ function _pipeRowFields(p, excludeTypes) {
   var fields = [
     p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
-    p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate),
+    p.forecastAmount || '', p.tor || '',
     pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
     pipeClosed ? '' : _pipeForecastMonthNum(p.biddingDate),
-    fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : '',
+    p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status),
     _pipeUpdateDateValue(p, _pipeExportUpdateDateSrc)
   ];
   // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
