@@ -295,6 +295,16 @@ function rVisitWindow(el) {
   if (window._vwPlanId && !eid && !window._visitDraftOverride) {
     var _vwPlan = ST.getOne('visitPlans', window._vwPlanId);
     if (_vwPlan && _vwPlan.date) window._visitDraftOverride = { date: _vwPlan.date };
+    // ดึงหัวข้อ Agenda ที่ติ๊กว่าคุยแล้วในแผนนัดมาร่างลงช่อง "สรุปการคุย" ให้อัตโนมัติ (ผู้ใช้ขอ 2026-08-27) —
+    // เอาเฉพาะที่ติ๊กจริง (a.done) ไม่ใช่ทุกหัวข้อในแผน เพราะบางหัวข้ออาจไม่ได้คุยจริงในนัดนี้ ถ้าไม่มีติ๊กเลย
+    // ไม่ต้องแทรกอะไร ปล่อยช่องว่างเหมือนเดิม — ผู้ใช้ยังแก้/ลบข้อความนี้เองต่อได้ตามปกติก่อนกดบันทึก
+    if (_vwPlan && _vwPlan.agenda && _vwPlan.agenda.length) {
+      var _doneTopics = _vwPlan.agenda.filter(function(a) { return a.done; });
+      if (_doneTopics.length) {
+        var _draftSummary = 'หัวข้อที่คุยตาม Agenda:\n' + _doneTopics.map(function(a) { return '- ' + a.text; }).join('\n');
+        window._visitDraftOverride = Object.assign({}, window._visitDraftOverride, { summary: _draftSummary });
+      }
+    }
   }
   var formHtml = buildVisitFormHtml(dealerId, eid, 'rVisitWindowRerender()');
 
