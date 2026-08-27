@@ -2835,7 +2835,19 @@ function _pipeComputeFuzzyDupLogClusters(pipeIdFilter) {
       var dateSet = {};
       g.forEach(function(l) { dateSet[(l.date || '').slice(0, 10)] = true; });
       if (Object.keys(dateSet).length <= 1) return; // วันที่ตรงกันหมด — exact-match cluster จับไปแล้ว ไม่ต้องซ้ำ
-      fuzzy.push({ pipe: p, items: g.slice().sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); }) });
+      var items = g.slice().sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+      // แนะนำว่าจะ "เก็บ" ตัวไหน — ให้คะแนนตัวที่ข้อมูลครบกว่า (มีวันที่ > ไม่มี) และสะอาดกว่า (ขีดน้อยกว่า)
+      // สูงสุด ถ้ามีตัวเดียวที่คะแนนสูงสุดชัดเจน (confident) แนะนำลบตัวที่เหลือทั้งหมด (ให้ผู้ใช้ติ๊กออกเองได้ถ้า
+      // ไม่เห็นด้วย) — ถ้าคะแนนเท่ากันหลายตัว (เช่น มีวันที่ทั้งคู่แต่คนละวันจริง อาจเป็นคนละเหตุการณ์บังเอิญพิมพ์
+      // ข้อความคล้ายกัน) ไม่กล้าแนะนำเอง ปล่อยให้ผู้ใช้ตัดสินใจเองทั้งกลุ่ม (ไม่ติ๊กไว้ล่วงหน้าให้เลย)
+      var scored = items.map(function(l) {
+        return { log: l, score: (l.date ? 10 : 0) - _pipeDashCount(l.content) };
+      });
+      var maxScore = Math.max.apply(null, scored.map(function(s) { return s.score; }));
+      var topScorers = scored.filter(function(s) { return s.score === maxScore; });
+      var confident = topScorers.length === 1;
+      var keepId = topScorers[0].log.id;
+      fuzzy.push({ pipe: p, items: items, keepId: keepId, confident: confident });
     });
   });
   fuzzy.sort(function(a, b) { return String(b.pipe.rowNo || '').localeCompare(String(a.pipe.rowNo || '')); });
@@ -2899,17 +2911,29 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
   // เคสเนื้อหาตรงกันแต่วันที่ไม่ตรง/บางตัวไม่มีวันที่ — ดูคอมเมนต์ _pipeComputeFuzzyDupLogClusters ด้านบน
   // (ผู้ใช้แจ้ง 2026-08-27 ว่ามี log ซ้ำจริงแต่ปุ่มนี้หาไม่เจอ — เพราะ exact-match ต้องวันที่ตรงกันด้วย)
   var fuzzy = _pipeComputeFuzzyDupLogClusters(pipeIdFilter);
+  _pipeFuzzyDupLogCandidates = fuzzy;
   if (fuzzy.length) {
-    h += '<div class="hint" style="margin:16px 0 10px;color:#f59e0b">⚠️ พบ ' + fuzzy.length + ' กลุ่มที่เนื้อหาตรงกันแต่วันที่ไม่ตรงกัน (หรือบางรายการไม่มีวันที่) — ไม่ลบให้อัตโนมัติเพราะไม่แน่ใจว่าคนละเหตุการณ์จริงหรือไม่ กรุณาตรวจดูแล้วลบเองทีละรายการ</div>';
-    h += '<div style="max-height:40vh;overflow-y:auto">';
-    fuzzy.forEach(function(f) {
+    var recommendedCount = 0;
+    fuzzy.forEach(function(f) { if (f.confident) recommendedCount += f.items.length - 1; });
+    h += '<div class="hint" style="margin:16px 0 10px;color:#f59e0b">⚠️ พบ ' + fuzzy.length + ' กลุ่มที่เนื้อหาตรงกันแต่วันที่ไม่ตรงกัน (หรือบางรายการไม่มีวันที่) — ' +
+      'ติ๊กไว้ล่วงหน้าเฉพาะกลุ่มที่มั่นใจว่าตัวไหนควรเก็บ (มีวันที่ + ขีดนำหน้าน้อยกว่า = ข้อมูลครบกว่า) ' +
+      'กลุ่มที่มีวันที่จริงคนละวันชัดเจนหลายตัว (❓) ไม่ติ๊กให้ เพราะอาจเป็นคนละเหตุการณ์ — ตรวจสอบและติ๊ก/ถอดติ๊กเองได้ก่อนกดลบ</div>';
+    h += '<button class="btn btn-sm bd" style="margin-bottom:10px" onclick="_pipeDupLogDeleteFuzzyChecked()">🗑️ ลบตามที่ติ๊กไว้ (แนะนำ ' + recommendedCount + ' รายการ)</button>';
+    h += '<div style="max-height:45vh;overflow-y:auto">';
+    fuzzy.forEach(function(f, fi) {
       var p = f.pipe;
       h += '<div class="li" style="display:block;cursor:default">';
-      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+      h += '<div class="lt">' + (f.confident ? '' : '❓ ') + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
       f.items.forEach(function(l) {
-        h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:3px 0">';
-        h += '<div class="ls">📅 ' + (l.date ? fD(l.date) : '(ไม่มีวันที่)') + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
-        h += '<button class="btn btn-xs bd" style="flex-shrink:0" onclick="_pipeDupLogDeleteFuzzyOne(\'' + ppEsc(l.id) + '\')">🗑️</button>';
+        var isKeep = l.id === f.keepId;
+        h += '<div style="display:flex;align-items:flex-start;gap:8px;margin:3px 0">';
+        if (isKeep) {
+          h += '<span style="flex-shrink:0;color:#22c55e;font-size:11px;padding-top:2px">✅ เก็บ</span>';
+        } else {
+          h += '<input type="checkbox" class="fuzzy-rm-chk" data-fi="' + fi + '" data-id="' + sanitize(l.id) + '"' + (f.confident ? ' checked' : '') + ' style="margin-top:3px;flex-shrink:0">';
+        }
+        h += '<div class="ls" style="flex:1">📅 ' + (l.date ? fD(l.date) : '(ไม่มีวันที่)') + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
+        if (!isKeep) h += '<button class="btn btn-xs bd" style="flex-shrink:0" onclick="_pipeDupLogDeleteFuzzyOne(\'' + ppEsc(l.id) + '\')">🗑️</button>';
         h += '</div>';
       });
       h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ</button>';
@@ -2924,12 +2948,30 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
   h += '</div>';
   openM('🔍 เช็ค Log ซ้ำ', h);
 }
+var _pipeFuzzyDupLogCandidates = [];
 // ลบ log 1 รายการจากลิสต์ "เนื้อหาตรงกันแต่วันที่ไม่ตรง" แล้ว re-scan รีเฟรช modal (เหมือน _pipeDupLogDeleteClusters
 // แต่ไม่มี cluster ให้ยืนยันเป็นคู่ๆ เพราะเป็นการลบทีละรายการเอง)
 function _pipeDupLogDeleteFuzzyOne(logId) {
   if (!confirm('ลบ Log นี้?')) return;
   ST.delete('pipeLog', logId);
   toast('🗑️ ลบแล้ว');
+  showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
+}
+// ลบ log ทุกตัวที่ติ๊กไว้ในโซน "เนื้อหาตรงกันแต่วันที่ไม่ตรง" พร้อมกันทีเดียว (เขียน pipeLog ครั้งเดียว —
+// เหตุผลเดียวกับ _pipeDupLogDeleteClusters ด้านบน กันแอปค้างถ้ามีติ๊กไว้เยอะ) ผู้ใช้แจ้ง 2026-08-27 ว่ามีเป็น
+// ร้อยกลุ่ม ลบทีละรายการเองไม่ไหว ขอเป็น bulk ที่แนะนำตัวเลือกให้ล่วงหน้า
+function _pipeDupLogDeleteFuzzyChecked() {
+  var checked = Array.prototype.slice.call(document.querySelectorAll('.fuzzy-rm-chk:checked'));
+  if (!checked.length) { toast('ยังไม่ได้ติ๊กรายการที่จะลบ'); return; }
+  if (!confirm('ลบ Log ที่ติ๊กไว้ทั้งหมด ' + checked.length + ' รายการ? (ไม่สามารถกู้คืนได้)')) return;
+  var removeIds = {};
+  checked.forEach(function(chk) { removeIds[chk.getAttribute('data-id')] = true; });
+  var updatedLogs = ST.getAll('pipeLog').filter(function(l) { return !removeIds[l.id]; });
+  ST._set(ST._keys.pipeLog, updatedLogs);
+  if (typeof syncDeleteFromFirebase === 'function') {
+    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipeLog', id); });
+  }
+  toast('🗑️ ลบแล้ว ' + checked.length + ' รายการ');
   showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
 }
 // เขียน pipeLog ทั้ง collection ครั้งเดียวตอนจบ (ประกอบ array ในหน่วยความจำก่อน) แทนเรียก ST.update/ST.delete
