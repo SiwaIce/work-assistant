@@ -1997,7 +1997,11 @@ function _pipeRowFields(p, excludeTypes) {
   // (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิดไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
   var pipeClosed = pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver';
   var fields = [
-    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock ? 'Yes' : 'No',
+    // "Dock" = มี Dock รุ่นไหนก็ได้ (Dock ทั่วไป หรือ Dock 3 ที่แยกนับคอลัมน์ "Dock 3 Qty." ต่างหาก) — เดิมเช็คแค่
+    // g.dock ตัวเดียว แต่สินค้าจริงส่วนใหญ่ที่ผู้ใช้ขายตอนนี้ชื่อรุ่นมี "Dock 3" (เช่น "DJI Dock 3(Overseas
+    // Edition)") ซึ่ง _pipeModelQtyByGroup แยกไปนับใน g.dock3 อยู่แล้ว (ตั้งใจ แยกนับจำนวนต่างหาก) ทำให้ g.dock
+    // เป็น 0 คอลัมน์นี้เลยขึ้น "No" ทั้งที่โครงการมี Dock 3 อยู่จริง (ผู้ใช้แจ้ง 2026-08-27)
+    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, (g.dock || g.dock3) ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.tor || '',
     pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
@@ -2206,23 +2210,29 @@ function renderPipeSheetTable(pipes) {
 // เก็บ \n ไว้ (สำหรับเซลล์ Model หลายบรรทัด) แค่ escape "
 function _csvKeepNL(s) { return String(s || '').replace(/"/g, '""').replace(/\r/g, ''); }
 
-// แตก qty ตามกลุ่มสินค้าหลัก (M3M/M4T/M4E/M4TD/M400/Dock 3) — เช็คเฉพาะเจาะจงก่อนกว้าง กัน M4TD หลุดไป M4T
-// สินค้าที่ไม่ใช่ main drone product (battery, RC, accessory ฯลฯ) ไม่นับ
+// แตก qty ตามกลุ่มสินค้าหลัก (M3M/M4T/M4E/M4TD/M400/Dock 3) — สินค้าที่ไม่ใช่ main drone product (battery, RC,
+// accessory ฯลฯ) ไม่นับ
 // M3M = Mavic 3 Multispectral Universal Edition — เช็คทั้งคำย่อ "M3M" และชื่อเต็ม "MULTISPECTRAL" เพราะข้อมูลจริงมีทั้ง 2 แบบ
+// เดิมเช็คแบบ if/else if ต่อกันทั้งหมด (เจอกลุ่มไหนก่อนหยุดเลย ไม่เช็คกลุ่มอื่นต่อ) พังกับรายการสินค้าจริงที่พิมพ์
+// รวมหลายรุ่นไว้ในช่อง model เดียว (เช่น "Dock 3 + M4TD", "DOCK3+M4TD" — พบเยอะจากการ copy สเปคจากใบเสนอราคามา
+// ทั้งก้อน) เจอ "M4TD" ก่อนแล้วหยุดเช็ค เลยไม่นับ "Dock 3" ในสตริงเดียวกันเลย ทำให้ทั้ง Dock 3 Qty. และคอลัมน์
+// "Dock" (Yes/No) พลาดไปด้วย (ผู้ใช้แจ้ง 2026-08-27) — แก้เป็นเช็คแต่ละกลุ่มอิสระต่อกัน นับได้มากกว่า 1 กลุ่มต่อ 1
+// รายการถ้าข้อความมีหลายรุ่นปนกัน ยกเว้นคู่ที่ substring ทับกัน (M4TD มี "M4T" อยู่ในตัว, "DOCK 3" มี "DOCK" อยู่
+// ในตัว) ต้องเช็คตัวเจาะจงก่อนแล้ว "else" ตัวกว้าง กันนับซ้ำเป็น 2 กลุ่มจากสินค้าตัวเดียว
 function _pipeModelQtyByGroup(items) {
   var g = { m3m: 0, m4td: 0, m4t: 0, m4e: 0, m400: 0, dock3: 0, dock: 0 };
   (items || []).forEach(function(it) {
     var name = (it.model || '').toUpperCase();
     var qty = Number(it.qty) || 0;
     // รองรับทั้งชื่อย่อ (M3M, M4T...) และชื่อเต็มที่ xlsx import เก็บไว้ (MATRICE 3M, MATRICE 4T...)
-    if      (name.indexOf('M3M') !== -1 || name.indexOf('MULTISPECTRAL') !== -1 || name.indexOf('MATRICE 3M') !== -1) g.m3m  += qty;
-    else if (name.indexOf('M4TD') !== -1 || name.indexOf('MATRICE 4TD') !== -1)                                       g.m4td += qty;
-    else if (name.indexOf('M4T') !== -1  || name.indexOf('MATRICE 4T') !== -1)                                        g.m4t  += qty;
-    else if (name.indexOf('M4E') !== -1  || name.indexOf('MATRICE 4E') !== -1)                                        g.m4e  += qty;
-    else if (name.indexOf('M400') !== -1 || name.indexOf('MATRICE 400') !== -1)                                       g.m400 += qty;
-    else if (name.indexOf('DOCK 3') !== -1)                                                                            g.dock3 += qty;
-    // Dock ทั่วไป (ไม่ใช่ Dock 3) — เช็คหลัง Dock 3 เสมอ กันจับ "DOCK 3" ผิดเป็นกลุ่มนี้
-    else if (name.indexOf('DOCK') !== -1)                                                                              g.dock += qty;
+    if (name.indexOf('M3M') !== -1 || name.indexOf('MULTISPECTRAL') !== -1 || name.indexOf('MATRICE 3M') !== -1) g.m3m += qty;
+    if      (name.indexOf('M4TD') !== -1 || name.indexOf('MATRICE 4TD') !== -1) g.m4td += qty;
+    else if (name.indexOf('M4T') !== -1  || name.indexOf('MATRICE 4T') !== -1)  g.m4t  += qty;
+    if (name.indexOf('M4E') !== -1  || name.indexOf('MATRICE 4E') !== -1)   g.m4e  += qty;
+    if (name.indexOf('M400') !== -1 || name.indexOf('MATRICE 400') !== -1) g.m400 += qty;
+    // Dock 3 เจาะจงก่อนเสมอ แล้ว "else" ค่อยเป็น Dock ทั่วไป — กันจับ "DOCK 3" ผิดเป็น Dock ทั่วไปด้วย
+    if      (name.indexOf('DOCK 3') !== -1) g.dock3 += qty;
+    else if (name.indexOf('DOCK') !== -1)   g.dock += qty;
   });
   return g;
 }
