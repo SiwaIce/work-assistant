@@ -1974,7 +1974,7 @@ function _pipeRowFields(p, excludeTypes) {
   // (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิดไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
   var pipeClosed = pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver';
   var fields = [
-    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock || '',
+    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, g.dock ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate),
     pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
