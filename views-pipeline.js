@@ -2577,16 +2577,17 @@ function showClearTimelineM() {
         '<label><input type="radio" name="clr_scope" value="archived"><span>เฉพาะ Archived Project (' + c.archived + ' log) — เก็บ Main ไว้เหมือนเดิม</span></label>' +
       '</div>' +
     '</div>' +
-    (c.orphan ? '<div style="font-size:.72rem;color:var(--text2);margin-bottom:8px">ℹ️ พบ Log กำพร้า (ชี้ไปโครงการที่ไม่มีแล้ว) ' + c.orphan + ' รายการ — ไม่แตะจุดนี้ ไปลบผ่าน "🩺 ตรวจสุขภาพข้อมูล" แทน</div>' : '') +
+    (c.orphan ? '<label style="display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text2);margin-bottom:8px"><input type="checkbox" id="clr_orphan" checked><span>รวม Log กำพร้า (ชี้ไปโครงการที่ไม่มีแล้ว) ' + c.orphan + ' รายการด้วย — ล้างให้เกลี้ยงจริงก่อน import ใหม่ทั้งหมด</span></label>' : '') +
     '<button class="btn bd btn-full" onclick="clearPipelineTimeline()">🗑️ ล้าง Timeline ตามที่เลือก</button>'
   );
 }
 function clearPipelineTimeline() {
   var scope = (document.querySelector('input[name="clr_scope"]:checked') || {}).value || 'all';
+  var includeOrphan = (document.getElementById('clr_orphan') || {}).checked;
   var pipeArchived = {};
   ST.getAll('pipeline').forEach(function(p) { pipeArchived[p.id] = pipeIsArchived(p); });
   var toDelete = ST.getAll('pipeLog').filter(function(l) {
-    if (!pipeArchived.hasOwnProperty(l.pipeId)) return false; // log กำพร้า ไม่แตะ (มีเครื่องมือแยกจัดการอยู่แล้ว)
+    if (!pipeArchived.hasOwnProperty(l.pipeId)) return !!includeOrphan; // log กำพร้า — ลบด้วยถ้าติ๊กไว้ (ค่าเริ่มต้น: ติ๊ก)
     if (scope === 'main') return !pipeArchived[l.pipeId];
     if (scope === 'archived') return pipeArchived[l.pipeId];
     return true; // 'all'
