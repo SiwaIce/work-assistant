@@ -6213,6 +6213,17 @@ function importPipelineXlsx(dealerId) {
           toast('❌ ไม่พบคอลัมน์ที่จำเป็น: ' + colRes.missingRequired.join(', ') + ' — เช็คหัวตารางแถวแรกของไฟล์');
           return;
         }
+        // Forecast Month ในไฟล์มักเป็นเซลล์วันที่ format แสดงผลแค่ "2026 Sep" (เดือน+ปี ไม่มีวันที่จริง) แต่
+        // _pipeXlsxCellToStr ด้านบนแปลง Date object ทุกเซลล์เป็น "YYYY-MM-DD" เหมือนกันหมด (เซลล์วันที่จริงอื่นๆ
+        // ต้องการแบบนั้น) ทำให้ Forecast Month กลายเป็น "2026-09-01" ไม่ตรงกับที่เห็นในไฟล์ (ผู้ใช้แจ้ง
+        // 2026-08-27) — แปลงกลับเป็น "YYYY Mon" เฉพาะคอลัมน์นี้เท่านั้นหลัง colMap รู้ตำแหน่งคอลัมน์แล้ว
+        if (colRes.map.hasOwnProperty('forecastMonth')) {
+          var fmIdx = colRes.map.forecastMonth;
+          dataRows.forEach(function(r) {
+            var m = /^(\d{4})-(\d{2})-\d{2}$/.exec(r[fmIdx]);
+            if (m) r[fmIdx] = m[1] + ' ' + _PIPE_MON3_NAME[parseInt(m[2], 10) - 1];
+          });
+        }
         // drop rows with no projectName AND no endUserTH (truly empty)
         dataRows = dataRows.filter(function(r) { return _pipeCol(r, colRes.map, 'projectName').trim() || _pipeCol(r, colRes.map, 'endUserTH').trim(); });
         if (!dataRows.length) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
@@ -6320,6 +6331,8 @@ function _pipeNormNum(v)  { return parseFloat(String(v || '').replace(/,/g, ''))
 // ในหน้า preview import), false (ค่าเริ่มต้น) = เก็บว่างไว้ตามต้นฉบับ ไม่เดาวันที่ให้
 var _pipeImportStampUndated = false;
 var _PIPE_MON3 = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+// ทิศตรงข้ามของ _PIPE_MON3 (เลขเดือน 1-12 → ชื่อย่อ) ใช้แปลง Forecast Month กลับเป็น "YYYY Mon" ตอน import xlsx
+var _PIPE_MON3_NAME = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // แยกวันที่นำหน้าออกจาก 1 บรรทัดในคอลัมน์ Update — คืน {date, content} โดย date เป็น ISO หรือ '' ถ้า parse
 // ไม่ได้ (ไม่ stamp อะไรทั้งนั้น — ใช้เช็คตรงๆ ว่าบรรทัดนี้มีวันที่จริงไหม เช่นตอนนับ preview)
