@@ -6207,16 +6207,44 @@ function importPipelineXlsx(dealerId) {
         // เดือน/วัน/ปี (M/D/YYYY, ไม่เติมเลข 0) ของ SheetJS ที่ทำให้วัน≤12 ถูกตีความสลับวัน/เดือนผิด
         // (เช่น 1 ต.ค. กลายเป็น "10/1/2026" แล้วถูกอ่านเป็น 10 ม.ค.) — อ่าน Date object ตรงๆ แล้วแปลงเป็น
         // YYYY-MM-DD เองแทน ไม่ผ่านขั้นตอนแปลงเป็นข้อความที่กำกวมเลย
-        var headerRow = null;
+        // จับคู่คอลัมน์แยกทีละแท็บด้วยหัวตารางของแท็บนั้นเอง (ไม่ใช้หัวตารางจากแท็บแรกจับคู่ให้ทุกแท็บเหมือนเดิม)
+        // แล้วแปลง row เป็น layout กลาง (canonical, ลำดับคอลัมน์คงที่ตาม _PIPE_IMPORT_COLS) ก่อนส่งต่อ — เดิมถ้า
+        // แท็บ "Main" กับ "Archived Project" มีลำดับคอลัมน์ในไฟล์ไม่ตรงกัน (คนละคนแก้ไฟล์คนละช่วง) ระบบใช้ index
+        // จากแท็บแรกอ่านข้อมูลของอีกแท็บ ทำให้ค่าจากคอลัมน์หนึ่งไปโผล่อีกคอลัมน์แทน (เช่น Update 1/2 กลายเป็นว่าง
+        // เพราะ index ที่ควรจะเป็น Update ดันไปตรงกับคอลัมน์อื่นในแท็บนั้น) เกิดเฉพาะบางโครงการ (เฉพาะแท็บที่ลำดับ
+        // ไม่ตรง) พอดีกับที่ผู้ใช้แจ้ง (2026-08-27) — แก้ให้แต่ละแท็บอ่านหัวตารางตัวเองเสมอ กันปัญหานี้ทั้งหมด
+        var canonicalKeys = _PIPE_IMPORT_COLS.map(function(def) { return def.key; });
+        var canonicalPos = {};
+        canonicalKeys.forEach(function(k, i) { canonicalPos[k] = i; });
         var dataRows = [];
+        var missingRequired = null;
+        var anySheetRead = false;
+        // foundKeys = union ของคีย์ที่เจอใน "อย่างน้อยหนึ่งแท็บ" — ใช้สร้าง colRes.map สุดท้าย (เฉพาะคีย์ที่เจอจริง
+        // เท่านั้นถึงจะขึ้น hasOwnProperty ตรงกับพฤติกรรมเดิม กันโค้ดด้านล่างที่เช็ค colMap.hasOwnProperty(key) เพื่อ
+        // ตัดสินใจ "ไฟล์ไม่มีคอลัมน์นี้เลย ให้คงค่าเดิมไว้ ไม่เขียนทับเป็นว่าง" (เช่น realAmount/biddingDate) เข้าใจผิด
+        // ว่าทุกคอลัมน์มีในไฟล์เสมอ ถ้าใช้ layout กลางแบบตายตัวทั้ง 28 คีย์ตรงๆ (จะกลายเป็นมีครบทุกคีย์เสมอ ทำให้
+        // แถวจากแท็บที่ไม่มีคอลัมน์นั้นจริงๆ โดนเขียนทับเป็นค่าว่าง/0 แทนที่จะคงค่าเดิมไว้ — ผลข้างเคียงที่ไม่ตั้งใจ)
+        var foundKeys = {};
         sheetsToRead.forEach(function(ws) {
           var sheetRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }).map(function(r) { return r.map(_pipeXlsxCellToStr); });
           if (!sheetRows.length) return;
-          if (!headerRow) headerRow = sheetRows[0]; // ใช้หัวตารางจากแท็บแรกที่เจอข้อมูลเป็นตัวจับคู่คอลัมน์ของทุกแท็บ
-          dataRows = dataRows.concat(sheetRows.slice(1));
+          anySheetRead = true;
+          var thisColRes = _pipeBuildColMap(sheetRows[0]);
+          if (missingRequired === null) missingRequired = thisColRes.missingRequired; // เอาผลจากแท็บแรกที่มีข้อมูลไปเช็ค required
+          Object.keys(thisColRes.map).forEach(function(k) { foundKeys[k] = true; });
+          sheetRows.slice(1).forEach(function(r) {
+            var canonicalRow = new Array(canonicalKeys.length).fill('');
+            canonicalKeys.forEach(function(k) {
+              var idx = thisColRes.map[k];
+              if (idx !== undefined) canonicalRow[canonicalPos[k]] = r[idx];
+            });
+            dataRows.push(canonicalRow);
+          });
         });
-        if (!headerRow) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
-        var colRes = _pipeBuildColMap(headerRow);
+        if (!anySheetRead) { toast('⚠️ ไม่พบข้อมูลในไฟล์'); return; }
+        var canonicalIdx = {};
+        Object.keys(foundKeys).forEach(function(k) { canonicalIdx[k] = canonicalPos[k]; });
+        var colRes = { map: canonicalIdx, missingRequired: missingRequired || [] };
         if (colRes.missingRequired.length) {
           toast('❌ ไม่พบคอลัมน์ที่จำเป็น: ' + colRes.missingRequired.join(', ') + ' — เช็คหัวตารางแถวแรกของไฟล์');
           return;
