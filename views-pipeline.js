@@ -1961,11 +1961,14 @@ var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project N
 // 'max' = ล่าสุดของสองอย่างเทียบกัน — ค่าเริ่มต้น 'timeline' ตามที่ผู้ใช้เลือกไว้ (2026-08-27)
 var _pipeExportUpdateDateSrc = 'timeline';
 function _pipeUpdateDateValue(p, mode) {
+  var m = mode || 'timeline';
+  // 'manual' = ค่าที่ผู้ใช้แก้เองในชีทแล้ว import กลับเข้ามา (p.updateDateManual) — ไม่คำนวณสด ใช้ตามที่บันทึกไว้
+  // เป๊ะๆ (ว่างถ้ายังไม่เคย import ค่านี้กลับมาเลย ไม่ fallback ไปโหมดอื่นให้ เพื่อให้เห็นชัดว่ายังไม่มีค่าที่แก้เอง)
+  if (m === 'manual') return fD(p.updateDateManual || '');
   var logs = ST.pipeLogsByPipe(p.id); // เรียงใหม่สุดก่อนแล้ว (ดู storage.js) — [0] คือล่าสุด
   var latestLog = logs.length ? logs[0].date : '';
   var visits = ST.visitsByDealer(p.dealerId); // เรียงใหม่สุดก่อนแล้วเหมือนกัน
   var latestVisit = visits.length ? visits[0].date : '';
-  var m = mode || 'timeline';
   if (m === 'visit') return fD(latestVisit);
   if (m === 'max') return fD((latestLog || '').slice(0, 10) >= (latestVisit || '').slice(0, 10) ? latestLog : latestVisit);
   return fD(latestLog);
@@ -2080,6 +2083,7 @@ function showPipeExportLogFilterM(action, arg) {
         <option value="timeline"${_pipeExportUpdateDateSrc === 'timeline' ? ' selected' : ''}>Timeline ล่าสุด</option>
         <option value="visit"${_pipeExportUpdateDateSrc === 'visit' ? ' selected' : ''}>Visit ล่าสุด</option>
         <option value="max"${_pipeExportUpdateDateSrc === 'max' ? ' selected' : ''}>ล่าสุดของสองอย่าง (max)</option>
+        <option value="manual"${_pipeExportUpdateDateSrc === 'manual' ? ' selected' : ''}>ค่าที่แก้เอง (จาก import กลับเข้ามา)</option>
       </select>
     </div>
     <div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">เลือกประเภท Update ที่จะไปโผล่ในคอลัมน์ Update 1-6 ของไฟล์ที่ export/copy ครั้งนี้ (ไม่กระทบ log จริงในระบบ)</div>
@@ -5998,6 +6002,7 @@ var _PIPE_IMPORT_COLS = [
   { key: 'appointmentLetter', label: 'Letter of Authorized' },
   { key: 'projectPOS',         label: 'Project POS' },
   { key: 'status',             label: 'Status' },
+  { key: 'updateDate',         label: 'Update Date' },
   { key: 'recurring',          label: 'Duplicate' },
   { key: 'update1',            label: 'Update 1' },
   { key: 'update2',            label: 'Update 2' },
@@ -6590,6 +6595,7 @@ var PIPE_IMPORT_FIELD_GROUPS = [
   { key: 'registerShipDate', label: 'Register/Shipment Date',      keys: ['registerDate', 'shipmentDate'] },
   { key: 'biddingDate',    label: 'Bidding Date',                 keys: ['biddingDate'] },
   { key: 'forecastMonth',  label: 'Forecast Month',               keys: ['forecastMonth'] },
+  { key: 'updateDateManual', label: 'Update Date (แก้เอง)',       keys: ['updateDateManual'] },
   { key: 'remark',         label: 'Remark',                       keys: ['remark'] },
   { key: 'appointment',    label: 'หนังสือแต่งตั้ง',                keys: ['appointmentLetter'] },
   { key: 'pos',            label: 'Project POS (%)',              keys: ['projectPOS'] },
@@ -7534,6 +7540,13 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
       forecastMonth: colMap && colMap.hasOwnProperty('forecastMonth')
         ? _pipeCol(c, colMap, 'forecastMonth').trim()
         : (existing ? (existing.forecastMonth || '') : ''),
+      // "Update Date" ปกติคำนวณสดตอน export จาก Timeline/Visit ล่าสุด (ดู _pipeUpdateDateValue) ไม่ได้เก็บจริง
+      // แต่ถ้าผู้ใช้แก้ค่าเองในชีทแล้ว import กลับเข้ามา ให้บันทึกไว้เป็น field แยก (updateDateManual) เพื่อให้
+      // เลือกใช้ตอน export รอบถัดไปได้ (ดู dropdown ใน showPipeExportLogFilterM) — ไม่ได้เขียนทับ field คำนวณสด
+      // ตัวเดิม กันชนกับค่าที่คำนวณจาก Timeline/Visit จริง (ผู้ใช้ถาม 2026-08-27)
+      updateDateManual: colMap && colMap.hasOwnProperty('updateDate')
+        ? _pipeDateFromPaste(_pipeCol(c, colMap, 'updateDate'))
+        : (existing ? (existing.updateDateManual || '') : ''),
       remark: _pipeCol(c, colMap, 'remark').trim(),
       appointmentLetter: _pipeCol(c, colMap, 'appointmentLetter').trim(),
       projectPOS: parseInt(_pipeCol(c, colMap, 'projectPOS')) || 0,
