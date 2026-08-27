@@ -872,8 +872,14 @@ function fixProductsStructureBeforeSync() {
 
         var _delRef = getCollectionRef(shortKey);
         if (id && _delRef) {
+          // เดิม catch แค่ console.warn — ถ้าลบไม่สำเร็จจริง (ออฟไลน์/เน็ตหลุดจังหวะนั้น) local จะลบไปแล้ว
+          // (ดูเหมือนลบสำเร็จ) แต่ doc บน Firestore ยังอยู่ พอมีจุดอื่นในแอปเขียนคอลเลกชันเดียวกันอีกครั้ง (เช่น
+          // pipeLog ถูกเขียนบ่อยมากจากทุกโครงการ) onSnapshot listener จะดึง doc ที่ "ลบไม่สำเร็จ" ตัวนี้กลับมา
+          // ทับ local เงียบๆ ดูเหมือน "ลบไปแล้วแต่กลับมาอีก" (ผู้ใช้แจ้ง 2026-08-27) — เปลี่ยนมาแจ้งเตือนผู้ใช้แทน
+          // เงียบๆ ให้ตรงกับ syncDeleteFromFirebase() ที่ใช้ _notifySyncFail() อยู่แล้ว
           _delRef.doc(id).delete().catch(function(e) {
             console.warn('Delete sync error:', coll, id, e);
+            _notifySyncFail(e);
           });
         }
         if (id && _isGuestColl) {
