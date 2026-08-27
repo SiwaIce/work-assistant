@@ -1946,7 +1946,26 @@ function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 // (ยังเก็บ field ในแอปไว้ใช้ภายในตามปกติ แค่ไม่ export ไปชีทแล้ว), สลับ DJI Dealer มาก่อน Dealer Name,
 // เพิ่ม Dock (แยกจาก Dock 3 Qty.) และ month (เลขเดือนของ Forecast Month)
 // เพิ่ม Industrial Type (2026-08-20) — อยู่หลัง Register Date ก่อน Project Name
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+// เพิ่ม "Update Date" (2026-08-27) — วันที่ล่าสุดที่มีความเคลื่อนไหวจริง คำนวณสดตอน export จาก Timeline/Visit
+// ล่าสุด (เลือกแหล่งได้ตอน export ผ่าน _pipeExportUpdateDateSrc — ดู showPipeExportLogFilterM) ไม่ใช่ field ที่
+// เก็บจริงใน pipeData — แทรกก่อน "Update 1" ตามที่ผู้ใช้ระบุ (คอลัมน์หลังจากนี้ในชีท Google Sheet จริงต้องเลื่อน
+// ตามด้วย ถ้าจะให้ copyPipeRow()/export วางทับแถวในชีทได้ตรงคอลัมน์เหมือนเดิม)
+var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','Real Amount','TOR','Bidding Date','Forecast Month','month','Shipment date','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Duplicate งานซ้ำ','Update Date','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+
+// แหล่งข้อมูลคำนวณคอลัมน์ "Update Date" ตอน export — เลือกได้ในหน้า export (dropdown ใน showPipeExportLogFilterM)
+// 'timeline' = วันที่ log ล่าสุดในการ์ด Updates ของโครงการ, 'visit' = วันที่ Visit ล่าสุดของ Dealer นั้น,
+// 'max' = ล่าสุดของสองอย่างเทียบกัน — ค่าเริ่มต้น 'timeline' ตามที่ผู้ใช้เลือกไว้ (2026-08-27)
+var _pipeExportUpdateDateSrc = 'timeline';
+function _pipeUpdateDateValue(p, mode) {
+  var logs = ST.pipeLogsByPipe(p.id); // เรียงใหม่สุดก่อนแล้ว (ดู storage.js) — [0] คือล่าสุด
+  var latestLog = logs.length ? logs[0].date : '';
+  var visits = ST.visitsByDealer(p.dealerId); // เรียงใหม่สุดก่อนแล้วเหมือนกัน
+  var latestVisit = visits.length ? visits[0].date : '';
+  var m = mode || 'timeline';
+  if (m === 'visit') return fD(latestVisit);
+  if (m === 'max') return fD((latestLog || '').slice(0, 10) >= (latestVisit || '').slice(0, 10) ? latestLog : latestVisit);
+  return fD(latestLog);
+}
 
 // แปลง ROW NO. (คอลัมน์แรก) เป็นชนิดตัวเลขจริงก่อนเขียนไฟล์ xlsx เฉพาะที่เป็นตัวเลขล้วนๆ
 // เหตุผล: aoa_to_sheet เดา cell type จาก JS type ของค่า — p.rowNo เก็บเป็น string เสมอ ถ้าไม่แปลง
@@ -1979,7 +1998,8 @@ function _pipeRowFields(p, excludeTypes) {
     p.forecastAmount || '', p.realAmount || '', p.tor || '', fD(p.biddingDate),
     pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
     pipeClosed ? '' : _pipeForecastMonthNum(p.biddingDate),
-    fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : ''
+    fD(p.shipmentDate), p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status), p.recurring ? 'Yes' : '',
+    _pipeUpdateDateValue(p, _pipeExportUpdateDateSrc)
   ];
   // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
   // คำนวณสดทุกครั้งตอน export เท่านั้น (ไม่แตะ ST.pipeLog จริง) — timeline ในแอปยังเห็นทุก log แยกรายการปกติ
@@ -2046,6 +2066,14 @@ function showPipeExportLogFilterM(action, arg) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 0"><input type="checkbox" class="expLogTypeChk" value="' + m.key + '"' + (st[m.key] ? ' checked' : '') + '> ' + m.label + '</label>';
   }).join('');
   openM('📤 เลือก Update ที่จะรวมใน Export', `
+    <div class="fg" style="margin-bottom:10px">
+      <label>📅 คอลัมน์ "Update Date" คำนวณจาก</label>
+      <select id="expUpdateDateSrc" onchange="_pipeExportUpdateDateSrc=this.value">
+        <option value="timeline"${_pipeExportUpdateDateSrc === 'timeline' ? ' selected' : ''}>Timeline ล่าสุด</option>
+        <option value="visit"${_pipeExportUpdateDateSrc === 'visit' ? ' selected' : ''}>Visit ล่าสุด</option>
+        <option value="max"${_pipeExportUpdateDateSrc === 'max' ? ' selected' : ''}>ล่าสุดของสองอย่าง (max)</option>
+      </select>
+    </div>
     <div style="font-size:.76rem;color:var(--text2);margin-bottom:8px">เลือกประเภท Update ที่จะไปโผล่ในคอลัมน์ Update 1-6 ของไฟล์ที่ export/copy ครั้งนี้ (ไม่กระทบ log จริงในระบบ)</div>
     <div style="max-height:280px;overflow-y:auto">${rows}</div>
     <div class="fm-actions" style="margin-top:10px">
