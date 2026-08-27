@@ -2530,7 +2530,7 @@ function _pipeDeleteOrphanLogs() {
   // ST._set() auto push ตัวที่เหลือขึ้น Firestore ให้เองแล้ว แต่ไม่ลบ doc ที่หายไปจากอาเรย์ — ต้องสั่งลบเอง
   // (เหตุผลเดียวกับ _pipeDupLogDeleteClusters ด้านบน ไม่งั้น log กำพร้าจะโผล่คืนตอน sync รอบถัดไป)
   if (typeof syncDeleteFromFirebase === 'function') {
-    orphans.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+    orphans.forEach(function(l) { syncDeleteFromFirebase('pipelog', l.id); });
   }
   toast('🗑️ ลบ Log กำพร้า ' + orphans.length + ' รายการ');
   showPipeDataHealthCheckM();
@@ -2598,7 +2598,7 @@ function clearPipelineTimeline() {
   var idSet = {};
   toDelete.forEach(function(l) { idSet[l.id] = true; });
   ST.deleteWhere('pipeLog', function(l) { return idSet[l.id]; });
-  if (typeof syncDeleteFromFirebase === 'function') toDelete.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+  if (typeof syncDeleteFromFirebase === 'function') toDelete.forEach(function(l) { syncDeleteFromFirebase('pipelog', l.id); });
 
   closeMForce();
   toast('🗑️ ลบ Timeline ' + toDelete.length + ' รายการแล้ว');
@@ -2969,7 +2969,7 @@ function _pipeDupLogDeleteFuzzyChecked() {
   var updatedLogs = ST.getAll('pipeLog').filter(function(l) { return !removeIds[l.id]; });
   ST._set(ST._keys.pipeLog, updatedLogs);
   if (typeof syncDeleteFromFirebase === 'function') {
-    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipeLog', id); });
+    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipelog', id); });
   }
   toast('🗑️ ลบแล้ว ' + checked.length + ' รายการ');
   showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
@@ -3000,7 +3000,7 @@ function _pipeDupLogDeleteClusters(clusters, confirmMsg) {
   // จากอาเรย์ (แค่ .set() ตัวที่เหลือ ไม่เคย .delete() ตัวที่เอาออก) ต้องสั่งลบตรงๆ เอง ไม่งั้น doc ซ้ำเดิมยังอยู่
   // บน Firestore แล้ว listener sync รอบถัดไปจะดึงกลับมาเงียบๆ ดูเหมือน "ลบไปแล้วแต่กลับมาอีก" (ผู้ใช้แจ้ง 2026-08-24)
   if (typeof syncDeleteFromFirebase === 'function') {
-    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipeLog', id); });
+    Object.keys(removeIds).forEach(function(id) { syncDeleteFromFirebase('pipelog', id); });
   }
   toast('🗑️ ลบซ้ำ ' + deleted + ' รายการ' + (cleaned ? ' · ล้างขีดออก ' + cleaned + ' รายการ' : ''));
   // scan ใหม่แล้วรีเฟรช modal (ถ้าไม่เหลือ cluster แล้วจะโชว์ "ไม่พบรายการที่เข้าข่าย 🎉" แทนการปิด modal เฉยๆ)
@@ -7507,7 +7507,7 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
     // กลับมาตอน sync รอบถัดไป (ผู้ใช้แจ้ง 2026-08-24)
     if (typeof syncDeleteFromFirebase === 'function') {
       if (deleted) deleteIds.forEach(function(id) { syncDeleteFromFirebase('pipeline', id); });
-      removedLogs.forEach(function(l) { syncDeleteFromFirebase('pipeLog', l.id); });
+      removedLogs.forEach(function(l) { syncDeleteFromFirebase('pipelog', l.id); });
     }
   }
 
