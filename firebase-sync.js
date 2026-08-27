@@ -361,6 +361,7 @@ var SYNC_KEY_MAP = {
   'postit': 'postit',
   'pipeActions': 'pipeActions',
   'visitPlans': 'visitPlans',
+  'agendaTemplates': 'agendaTemplates',
   'demo': 'demo',
   'demoLoans': 'demoLoans',
   'quotes': 'quotes',

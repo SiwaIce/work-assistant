@@ -3827,6 +3827,7 @@ function rVisitPlan(el) {
     '<button class="btn-xs" style="border-radius:0;' + (vpViewMode === 'week' ? 'background:var(--accent);color:#fff' : '') + '" onclick="vpViewMode=\'week\';render()">📋 รายสัปดาห์</button>' +
     '</div>' +
     '<div style="flex:1"></div>' +
+    '<button class="btn bo" onclick="showAgendaLibraryM()">📚 คลังหัวข้อ Agenda</button>' +
     '<button class="btn bo" onclick="copyVisitPlan()">📋 Copy</button>' +
     '</div>';
 
@@ -4094,6 +4095,18 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
   }
   if (p.note) h2 += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;font-size:11px;color:var(--text2);margin-bottom:8px">' + sanitize(p.note) + '</div>';
   if (p.actual && p.actual.note) h2 += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px"><strong style="color:#4ade80">ผลการนัด:</strong> ' + sanitize(p.actual.note) + '</div>';
+  if (p.agenda && p.agenda.length) {
+    h2 += '<div style="background:var(--bg,#0f172a);border-radius:8px;padding:8px;margin-bottom:8px">';
+    h2 += '<div style="font-size:11px;font-weight:700;margin-bottom:4px">📋 Agenda</div>';
+    p.agenda.forEach(function(a, ai) {
+      h2 += '<label style="display:flex;align-items:flex-start;gap:6px;padding:3px 0;font-size:11.5px;cursor:pointer">';
+      h2 += '<input type="checkbox" style="margin-top:2px" ' + (a.done ? 'checked' : '') + ' onchange="event.stopPropagation();vpToggleAgendaDone(\'' + p.id + '\',' + ai + ',this.checked)">';
+      h2 += '<span style="flex:1' + (a.done ? ';text-decoration:line-through;color:var(--text2)' : '') + '">' + sanitize(a.text);
+      if (a.srcType) h2 += ' <button style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:10.5px" onclick="event.stopPropagation();openAgendaSource(\'' + (!isLead && p.dealerId ? p.dealerId : '') + '\',\'' + a.srcType + '\',\'' + sanitize(a.srcValue || '').replace(/'/g, "\\'") + '\')">🔗 เปิด</button>';
+      h2 += '</span></label>';
+    });
+    h2 += '</div>';
+  }
 
   h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
@@ -4184,6 +4197,277 @@ function saveVisitPlans(list) {
   if (typeof syncToFirebase === 'function') syncToFirebase('visitPlans', list);
 }
 
+// ================================================================
+// VISIT AGENDA — คลังหัวข้อ Agenda ส่วนกลาง (ใช้ซ้ำได้ทุก Dealer) เลือกติ๊กใส่ Visit Plan ได้ หรือพิมพ์เฉพาะ
+// Dealer นั้นเองก็ได้ — แต่ละหัวข้อแนบ "แหล่งข้อมูล" ได้ (ลิงก์ไปหน้า Dealer แท็บต่างๆ ในแอป หรือ URL ภายนอก
+// เช่น ไฟล์ Presentation/Promotion) กดเปิดพูดได้เลยตอนถึงหน้างาน ไม่ต้องสลับหาเมนูเอง (ผู้ใช้ขอ 2026-08-27)
+// agenda ที่บันทึกลง Visit Plan เป็นการ "คัดลอกค่า" ตอนเลือกใช้ ไม่ผูกกับ template ต้นฉบับอีก — แก้ template
+// ทีหลังไม่กระทบ Visit Plan ที่บันทึกไปแล้ว
+// ================================================================
+var AGENDA_SOURCE_TYPES = [
+  { id: 'pipeline',  label: '📊 เปิด Pipeline ของ Dealer',       tab: 'pipeline' },
+  { id: 'quotation', label: '💰 เปิดใบเสนอราคาของ Dealer',        tab: 'quotation' },
+  { id: 'demo',      label: '🚁 เปิด Demo Unit ของ Dealer',       tab: 'demo' },
+  { id: 'so',        label: '📦 เปิด Sales Order ของ Dealer',     tab: 'so' },
+  { id: 'forecast',  label: '📦 เปิด Forecast ของ Dealer',        tab: 'forecast' },
+  { id: 'timeline',  label: '📝 เปิด Timeline ของ Dealer',        tab: 'timeline' },
+  { id: 'info',      label: '📋 เปิดข้อมูล Dealer',               tab: 'info' }
+];
+
+function _agendaGenId() { return 'ag_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+
+// ชุดหัวข้อตัวอย่างที่น่าจะได้ใช้จริงกับทีมขายโดรน/Dealer — สร้างให้ครั้งแรกที่ยังไม่มีคลังเลยเท่านั้น
+// (ผู้ใช้แก้/ลบ/เพิ่มเองได้ทั้งหมดทีหลังผ่าน showAgendaLibraryM)
+function _agendaDefaultTemplates() {
+  return [
+    { id: 'tpl_monthly', name: 'เยี่ยมประจำเดือน', icon: '🗓️', topics: [
+      { id: _agendaGenId(), text: 'เช็คสถานะ Demo Unit ที่ยืมไป', sub: '', srcType: 'demo', srcValue: '' },
+      { id: _agendaGenId(), text: 'อัปเดต Promotion / ราคาสินค้าใหม่ไตรมาสนี้', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'เช็คสต็อกคงเหลือหน้าร้าน', sub: '', srcType: '', srcValue: '' }
+    ]},
+    { id: 'tpl_newproduct', name: 'เปิดตัวสินค้าใหม่', icon: '🚀', topics: [
+      { id: _agendaGenId(), text: 'แนะนำสินค้าใหม่ให้ทีมปฏิบัติการ', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'อัปเดต Promotion / ราคาสินค้าใหม่ไตรมาสนี้', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'ถามแผนสั่งซื้อไตรมาสหน้า', sub: '', srcType: 'pipeline', srcValue: '' }
+    ]},
+    { id: 'tpl_debt', name: 'ตามหนี้ค้างชำระ', icon: '⚠️', topics: [
+      { id: _agendaGenId(), text: 'แจ้งยอดค้างชำระ + ขอวันที่ชัดเจน', sub: '', srcType: 'so', srcValue: '' },
+      { id: _agendaGenId(), text: 'เสนอเงื่อนไขผ่อนชำระถ้าจำเป็น', sub: '', srcType: '', srcValue: '' }
+    ]},
+    { id: 'tpl_closedeal', name: 'ปิดดีล Pipeline', icon: '🤝', topics: [
+      { id: _agendaGenId(), text: 'ทวนสเปค/ราคาล่าสุดของโครงการที่ค้างอยู่', sub: '', srcType: 'pipeline', srcValue: '' },
+      { id: _agendaGenId(), text: 'ยื่นใบเสนอราคาล่าสุด / เช็คว่าถึงมือผู้อนุมัติหรือยัง', sub: '', srcType: 'quotation', srcValue: '' },
+      { id: _agendaGenId(), text: 'ถามวันที่คาดว่าจะได้ PO', sub: '', srcType: '', srcValue: '' }
+    ]},
+    { id: 'tpl_newdealer', name: 'Dealer ใหม่ (Visit แรก)', icon: '🆕', topics: [
+      { id: _agendaGenId(), text: 'แนะนำโครงสร้างทีม/ช่องทางติดต่อของเรา', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'อธิบายเงื่อนไข Level ตัวแทนจำหน่าย', sub: '', srcType: 'info', srcValue: '' },
+      { id: _agendaGenId(), text: 'เก็บข้อมูลผู้ติดต่อหลัก + ผู้มีอำนาจอนุมัติ', sub: '', srcType: 'info', srcValue: '' },
+      { id: _agendaGenId(), text: 'นัดวัน Training สินค้าเบื้องต้น', sub: '', srcType: '', srcValue: '' }
+    ]},
+    { id: 'tpl_training', name: 'อบรมสินค้า / Training', icon: '🎓', topics: [
+      { id: _agendaGenId(), text: 'สาธิตการใช้งานสินค้าหลัก', sub: '', srcType: 'demo', srcValue: '' },
+      { id: _agendaGenId(), text: 'ทบทวนขั้นตอน Maintenance เบื้องต้น', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'ตอบคำถามทีมช่างหน้างาน', sub: '', srcType: '', srcValue: '' }
+    ]},
+    { id: 'tpl_review', name: 'รีวิวยอดขายไตรมาส', icon: '📊', topics: [
+      { id: _agendaGenId(), text: 'สรุปยอดขายเทียบเป้าไตรมาสที่ผ่านมา', sub: '', srcType: 'forecast', srcValue: '' },
+      { id: _agendaGenId(), text: 'ตั้งเป้ายอดขายไตรมาสหน้าร่วมกัน', sub: '', srcType: '', srcValue: '' },
+      { id: _agendaGenId(), text: 'สอบถามแผนงบประมาณจัดซื้อปีถัดไป', sub: '', srcType: '', srcValue: '' }
+    ]}
+  ];
+}
+
+function getAgendaTemplates() {
+  var saved = localStorage.getItem('v7_agendaTemplates');
+  if (!saved) {
+    var defaults = _agendaDefaultTemplates();
+    saveAgendaTemplates(defaults);
+    return defaults;
+  }
+  try { return JSON.parse(saved) || []; } catch(e) { return []; }
+}
+function saveAgendaTemplates(list) {
+  localStorage.setItem('v7_agendaTemplates', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('agendaTemplates', list);
+}
+
+function _agendaSourceLabel(srcType) {
+  var t = AGENDA_SOURCE_TYPES.filter(function(x) { return x.id === srcType; })[0];
+  return t ? t.label : '';
+}
+
+// เปิดแหล่งข้อมูลของหัวข้อ agenda — 'external' เปิด URL ในแท็บใหม่ / อื่นๆ พาไปหน้า Dealer แท็บที่ตรงกัน
+// (agenda ของนัด Lead ที่ไม่ผูก Dealer จะไม่มีปุ่มนี้ให้กด เพราะไม่มี dealerId ให้ไปเปิด)
+function openAgendaSource(dealerId, srcType, srcValue) {
+  if (srcType === 'external') {
+    if (srcValue) window.open(srcValue, '_blank');
+    return;
+  }
+  var meta = AGENDA_SOURCE_TYPES.filter(function(x) { return x.id === srcType; })[0];
+  if (!meta || !dealerId) return;
+  dealerTab = meta.tab;
+  go('dealerDetail', { dealerId: dealerId });
+}
+
+// ---- คลังหัวข้อ Agenda (จัดการชุด/หัวข้อ) ----
+function showAgendaLibraryM() {
+  var templates = getAgendaTemplates();
+  var h = '<div style="max-width:560px">';
+  h += '<p style="font-size:.75rem;color:var(--text2);margin-bottom:10px">ชุดหัวข้อที่ใช้ร่วมกันได้ทุก Dealer — แก้ไข ทำสำเนา หรือสร้างชุดใหม่ได้อิสระ ไม่กระทบ Agenda ที่บันทึกเข้า Visit Plan ไปแล้ว (คัดลอกค่าไว้ตอนเลือกใช้ ไม่ผูกกับต้นฉบับอีก)</p>';
+  h += '<div style="max-height:60vh;overflow-y:auto">';
+  if (!templates.length) h += '<div class="empty"><p>ยังไม่มีชุดหัวข้อเลย — สร้างชุดแรกด้านล่าง</p></div>';
+  templates.forEach(function(tpl) {
+    h += '<div class="card" style="margin-bottom:10px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+    h += '<div style="font-weight:700;font-size:13px">' + (tpl.icon || '📋') + ' ' + sanitize(tpl.name) + ' <span style="font-weight:400;color:var(--text2);font-size:11px">(' + tpl.topics.length + ' หัวข้อ)</span></div>';
+    h += '<div style="display:flex;gap:4px">';
+    h += '<button class="btn btn-xs bo" onclick="_agendaRenameTpl(\'' + tpl.id + '\')">✏️ เปลี่ยนชื่อ</button>';
+    h += '<button class="btn btn-xs bo" onclick="_agendaDupTpl(\'' + tpl.id + '\')">⧉ ทำสำเนา</button>';
+    h += '<button class="btn btn-xs bd" onclick="_agendaDelTpl(\'' + tpl.id + '\')">🗑️</button>';
+    h += '</div></div>';
+    tpl.topics.forEach(function(t, idx) {
+      h += '<div class="li" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">';
+      h += '<div><div class="lt">' + sanitize(t.text) + '</div>' + (t.srcType ? '<div class="ls" style="color:var(--accent)">' + sanitize(t.srcType === 'external' ? ('🔗 ' + (t.srcValue || 'ลิงก์ภายนอก')) : _agendaSourceLabel(t.srcType)) + '</div>' : '') + '</div>';
+      h += '<div style="display:flex;gap:4px;flex-shrink:0"><button class="btn btn-xs bo" onclick="_agendaEditTopicM(\'' + tpl.id + '\',' + idx + ')">✏️</button><button class="btn btn-xs bd" onclick="_agendaDelTopic(\'' + tpl.id + '\',' + idx + ')">🗑️</button></div>';
+      h += '</div>';
+    });
+    h += '<div style="display:flex;gap:6px;margin-top:8px"><input type="text" id="agenda_newtopic_' + tpl.id + '" placeholder="+ เพิ่มหัวข้อ..." style="flex:1"><button class="btn btn-sm bp" onclick="_agendaAddTopic(\'' + tpl.id + '\')">เพิ่ม</button></div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><input type="text" id="agenda_newtpl_name" placeholder="ชื่อชุดใหม่..." style="flex:1"><button class="btn bp" onclick="_agendaAddTpl()">➕ สร้างชุดใหม่</button></div>';
+  h += '</div>';
+  openM('📚 คลังหัวข้อ Agenda', h);
+}
+function _agendaAddTpl() {
+  var input = document.getElementById('agenda_newtpl_name');
+  var name = ((input && input.value) || '').trim();
+  if (!name) { toast('กรอกชื่อชุดก่อน'); return; }
+  var templates = getAgendaTemplates();
+  templates.push({ id: _agendaGenId(), name: name, icon: '📋', topics: [] });
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+function _agendaRenameTpl(tplId) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  var name = prompt('ชื่อชุดใหม่:', tpl.name);
+  if (!name || !name.trim()) return;
+  tpl.name = name.trim();
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+function _agendaDupTpl(tplId) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  var copy = JSON.parse(JSON.stringify(tpl));
+  copy.id = _agendaGenId();
+  copy.name = tpl.name + ' (สำเนา)';
+  copy.topics.forEach(function(t) { t.id = _agendaGenId(); });
+  templates.push(copy);
+  saveAgendaTemplates(templates);
+  toast('⧉ ทำสำเนาแล้ว');
+  showAgendaLibraryM();
+}
+function _agendaDelTpl(tplId) {
+  if (!confirm('ลบชุดหัวข้อนี้ทั้งหมด?')) return;
+  var templates = getAgendaTemplates().filter(function(t) { return t.id !== tplId; });
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+function _agendaAddTopic(tplId) {
+  var input = document.getElementById('agenda_newtopic_' + tplId);
+  var text = ((input && input.value) || '').trim();
+  if (!text) return;
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  tpl.topics.push({ id: _agendaGenId(), text: text, sub: '', srcType: '', srcValue: '' });
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+function _agendaDelTopic(tplId, idx) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  tpl.topics.splice(idx, 1);
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+function _agendaEditTopicM(tplId, idx) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  var topic = tpl.topics[idx];
+  if (!topic) return;
+  var h = '<div class="fm-group"><label>ข้อความหัวข้อ</label><input type="text" id="agedit_text" class="fm-input" value="' + sanitize(topic.text) + '"></div>';
+  h += '<div class="fm-group"><label>หมายเหตุเสริม (ไม่บังคับ)</label><input type="text" id="agedit_sub" class="fm-input" value="' + sanitize(topic.sub || '') + '"></div>';
+  h += '<div class="fm-group"><label>แหล่งข้อมูลประกอบ (ไม่บังคับ)</label><select id="agedit_srctype" class="fm-input" onchange="document.getElementById(\'agedit_srcurl_wrap\').style.display=this.value===\'external\'?\'\':\'none\'">';
+  h += '<option value="">— ไม่แนบ —</option>';
+  h += '<option value="external"' + (topic.srcType === 'external' ? ' selected' : '') + '>🔗 ลิงก์ภายนอก (วาง URL เอง)</option>';
+  AGENDA_SOURCE_TYPES.forEach(function(s) { h += '<option value="' + s.id + '"' + (topic.srcType === s.id ? ' selected' : '') + '>' + s.label + '</option>'; });
+  h += '</select></div>';
+  h += '<div class="fm-group" id="agedit_srcurl_wrap" style="' + (topic.srcType === 'external' ? '' : 'display:none') + '"><label>URL</label><input type="text" id="agedit_srcurl" class="fm-input" value="' + sanitize(topic.srcType === 'external' ? (topic.srcValue || '') : '') + '" placeholder="https://..."></div>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="_agendaSaveTopicEdit(\'' + tplId + '\',' + idx + ')">💾 บันทึก</button><button class="btn" onclick="showAgendaLibraryM()">ยกเลิก</button></div>';
+  openM('✏️ แก้ไขหัวข้อ', h);
+}
+function _agendaSaveTopicEdit(tplId, idx) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  var topic = tpl.topics[idx];
+  if (!topic) return;
+  var text = (document.getElementById('agedit_text').value || '').trim();
+  if (!text) { toast('กรอกข้อความหัวข้อก่อน'); return; }
+  topic.text = text;
+  topic.sub = (document.getElementById('agedit_sub').value || '').trim();
+  var srcType = document.getElementById('agedit_srctype').value || '';
+  topic.srcType = srcType;
+  topic.srcValue = srcType === 'external' ? (document.getElementById('agedit_srcurl').value || '').trim() : '';
+  saveAgendaTemplates(templates);
+  showAgendaLibraryM();
+}
+
+// ---- ตัว Agenda ที่กำลังแก้ในฟอร์ม Visit Plan (state ชั่วคราวระหว่างเปิด modal) ----
+var _vpAgendaWorking = [];
+function _vpAgendaListHtml() {
+  if (!_vpAgendaWorking.length) return '<div style="color:var(--text2);font-size:11.5px;padding:8px 0">ยังไม่มีหัวข้อ — เลือกชุดสำเร็จรูปด้านบน หรือเพิ่มเองด้านล่าง</div>';
+  return _vpAgendaWorking.map(function(t, idx) {
+    return '<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 4px;border-radius:6px;cursor:pointer" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'\'">' +
+      '<input type="checkbox" style="margin-top:3px" ' + (t.included ? 'checked' : '') + ' onchange="_vpAgendaToggle(' + idx + ',this.checked)">' +
+      '<span style="flex:1;font-size:12.5px' + (t.included ? '' : ';color:var(--text2)') + '">' + sanitize(t.text) +
+      (t.sub ? '<span style="display:block;color:var(--text2);font-size:11px">' + sanitize(t.sub) + '</span>' : '') +
+      (t.srcType ? '<span style="display:block;color:var(--accent);font-size:11px">' + (t.srcType === 'external' ? ('🔗 ' + sanitize(t.srcValue || 'ลิงก์ภายนอก')) : sanitize(_agendaSourceLabel(t.srcType))) + '</span>' : '') +
+      '</span>' +
+      '<button type="button" style="background:transparent;border:none;color:var(--text2);cursor:pointer;padding:0;font-size:12px;flex-shrink:0" onclick="event.preventDefault();_vpAgendaRemove(' + idx + ')" title="ลบออกจากนัดนี้">✕</button>' +
+      '</label>';
+  }).join('');
+}
+function _vpAgendaRerender() {
+  var el = document.getElementById('vp_agenda_list');
+  if (el) el.innerHTML = _vpAgendaListHtml();
+}
+// เลือกชุดสำเร็จรูป — เติมหัวข้อที่ยังไม่มี (เทียบด้วยข้อความ) ต่อท้าย ไม่ล้างของเดิม/ที่พิมพ์เพิ่มเองทิ้ง
+function _vpApplyTemplate(tplId) {
+  var templates = getAgendaTemplates();
+  var tpl = templates.filter(function(t) { return t.id === tplId; })[0];
+  if (!tpl) return;
+  var existingTexts = {};
+  _vpAgendaWorking.forEach(function(t) { existingTexts[t.text] = true; });
+  tpl.topics.forEach(function(t) {
+    if (existingTexts[t.text]) return;
+    _vpAgendaWorking.push({ text: t.text, sub: t.sub || '', srcType: t.srcType || '', srcValue: t.srcValue || '', included: true });
+  });
+  document.querySelectorAll('.vp-tpl-tag').forEach(function(b) { b.classList.toggle('bp', b.dataset.tplid === tplId); b.classList.toggle('bo', b.dataset.tplid !== tplId); });
+  _vpAgendaRerender();
+}
+function _vpAgendaToggle(idx, checked) {
+  if (_vpAgendaWorking[idx]) _vpAgendaWorking[idx].included = checked;
+  _vpAgendaRerender();
+}
+function _vpAgendaRemove(idx) {
+  _vpAgendaWorking.splice(idx, 1);
+  _vpAgendaRerender();
+}
+function _vpAgendaAddCustom() {
+  var input = document.getElementById('vp_agenda_custom');
+  var text = ((input && input.value) || '').trim();
+  if (!text) return;
+  _vpAgendaWorking.push({ text: text, sub: '', srcType: '', srcValue: '', included: true });
+  input.value = '';
+  _vpAgendaRerender();
+}
+function vpToggleAgendaDone(planId, idx, checked) {
+  var plans = getVisitPlans();
+  var p = plans.filter(function(x) { return x.id === planId; })[0];
+  if (!p || !p.agenda || !p.agenda[idx]) return;
+  p.agenda[idx].done = checked;
+  saveVisitPlans(plans);
+}
+
 // ฟอร์มเพิ่ม/แก้ไขนัด — เลือกได้ว่าผูกกับ Dealer ที่มีอยู่ (autofill ผู้ติดต่อ/เบอร์/อีเมล/location) หรือ Lead ใหม่ (กรอกเอง)
 function showAddVisitPlanM(date, prefillDealerId, editId) {
   var dealers = [];
@@ -4272,6 +4556,21 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   });
   h += '</select></div>';
 
+  // Agenda — เลือกชุดสำเร็จรูปจากคลังกลาง (showAgendaLibraryM) แล้วติ๊กเอา/ถอด หรือพิมพ์เพิ่มเฉพาะนัดนี้เอง —
+  // เก็บ state ชั่วคราวใน _vpAgendaWorking ระหว่างเปิดฟอร์ม บันทึกจริงตอนกด "บันทึก" (ดู saveVisitPlan)
+  _vpAgendaWorking = (plan && plan.agenda) ? JSON.parse(JSON.stringify(plan.agenda)).map(function(t) { return Object.assign({ included: true }, t); }) : [];
+  var agendaTemplatesNow = getAgendaTemplates();
+  h += '<div class="fm-group"><label>📋 Agenda (หัวข้อที่จะคุย)</label>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">';
+  agendaTemplatesNow.forEach(function(tpl) {
+    h += '<button type="button" class="btn btn-xs bo vp-tpl-tag" data-tplid="' + tpl.id + '" onclick="_vpApplyTemplate(\'' + tpl.id + '\')">' + (tpl.icon || '📋') + ' ' + sanitize(tpl.name) + '</button>';
+  });
+  h += '<button type="button" class="btn btn-xs bo" onclick="closeM();showAgendaLibraryM()">📚 จัดการคลังหัวข้อ</button>';
+  h += '</div>';
+  h += '<div id="vp_agenda_list" style="max-height:200px;overflow-y:auto;background:var(--bg2);border-radius:8px;padding:6px 8px">' + _vpAgendaListHtml() + '</div>';
+  h += '<div style="display:flex;gap:6px;margin-top:6px"><input type="text" id="vp_agenda_custom" placeholder="+ เพิ่มหัวข้อเฉพาะนัดนี้..." class="fm-input" style="flex:1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_vpAgendaAddCustom();}"><button type="button" class="btn btn-sm bo" onclick="_vpAgendaAddCustom()">เพิ่ม</button></div>';
+  h += '</div>';
+
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><input type="text" id="vp_note" class="fm-input" value="' + sanitize(selNote) + '" placeholder="เช่น Follow-up M400, Demo L3"></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn bp" onclick="saveVisitPlan(document.getElementById(\'vp_date\').value||\'' + date + '\',\'' + (editId || '') + '\')">💾 บันทึก</button>';
@@ -4345,7 +4644,10 @@ function saveVisitPlan(date, editId) {
   var timeStart = document.getElementById('vp_time_start') ? document.getElementById('vp_time_start').value : '';
   var timeEnd = document.getElementById('vp_time_end') ? document.getElementById('vp_time_end').value : '';
 
-  var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note, timeStart: timeStart, timeEnd: timeEnd };
+  var agenda = _vpAgendaWorking.filter(function(t) { return t.included; }).map(function(t) {
+    return { text: t.text, sub: t.sub || '', srcType: t.srcType || '', srcValue: t.srcValue || '', done: !!t.done };
+  });
+  var data = { date: date, sourceType: sourceType, title: title, mode: mode, taskId: taskId, note: note, timeStart: timeStart, timeEnd: timeEnd, agenda: agenda };
 
   if (!editId) { try { localStorage.setItem('v7_vpLastDefaults', JSON.stringify({ sourceType: sourceType, mode: mode })); } catch(e) {} }
 
