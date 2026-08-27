@@ -1584,6 +1584,8 @@ var _kpiApMonth = '';
 var _kpiApSearch = '';
 var _kpiApDealerId = ''; // กรองตาม Dealer เพิ่ม (ผู้ใช้ขอ 2026-08-27) — '' = ทุก Dealer
 var _kpiApExpanded = {}; // pipeId -> true ถ้ากดขยายดูรายละเอียดสินค้าอยู่ — เก็บไว้กันยุบตอน re-render จาก filter อื่น
+var _kpiApDockOnly = false; // ติ๊กแล้วโชว์เฉพาะโครงการที่มี Dock (ใช้เกณฑ์เดียวกับคอลัมน์ "Dock" ตอน export —
+// g.dock || g.dock3 จาก _pipeModelQtyByGroup) ช่วยหาโครงการมาเพิ่มเข้าหมวด Dock (dock3) ได้ง่ายขึ้น (ผู้ใช้ขอ 2026-08-27)
 
 function _kpiApDefaultStatusSel() {
   var cfg = getConfig();
@@ -1598,7 +1600,13 @@ function showKpiAddProjectM(planId, categoryId) {
   _kpiApSearch = '';
   _kpiApDealerId = '';
   _kpiApExpanded = {};
+  _kpiApDockOnly = false;
   _kpiApRenderModal(planId, categoryId);
+}
+
+function _kpiApHasDock(p) {
+  var g = (typeof _pipeModelQtyByGroup === 'function') ? _pipeModelQtyByGroup(getPipeItems(p) || []) : null;
+  return !!(g && (g.dock || g.dock3));
 }
 
 function _kpiApFilteredProjects() {
@@ -1607,6 +1615,7 @@ function _kpiApFilteredProjects() {
     if (_kpiApStatusSel && _kpiApStatusSel[p.status] === false) return false;
     if (_kpiApMonth && (!p.biddingDate || p.biddingDate.slice(0, 7) !== _kpiApMonth)) return false;
     if (_kpiApDealerId && p.dealerId !== _kpiApDealerId) return false;
+    if (_kpiApDockOnly && !_kpiApHasDock(p)) return false;
     if (q) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
       var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '') + ' ' + (p.rowNo || '')).toLowerCase();
@@ -1675,6 +1684,12 @@ function _kpiApSetDealer(planId, categoryId, val) {
   if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
 }
 
+function _kpiApToggleDockOnly(planId, categoryId, checked) {
+  _kpiApDockOnly = checked;
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
 function _kpiApToggleExpand(planId, categoryId, pipeId) {
   _kpiApExpanded[pipeId] = !_kpiApExpanded[pipeId];
   var listEl = document.getElementById('kpi_ap_list');
@@ -1701,6 +1716,8 @@ function _kpiApRenderModal(planId, categoryId) {
     '<option value="">ทุก Dealer</option>' +
     dealers.map(function(d) { return '<option value="' + sanitize(d.id) + '"' + (_kpiApDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; }).join('') +
     '</select></span>';
+  h += '<label style="display:flex;align-items:center;gap:4px;font-size:.7rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
+    '<input type="checkbox" style="width:auto" ' + (_kpiApDockOnly ? 'checked' : '') + ' onchange="_kpiApToggleDockOnly(\'' + planId + '\',\'' + categoryId + '\',this.checked)">🚁 เฉพาะโครงการที่มี Dock</label>';
   h += '</div>';
   h += '<div id="kpi_ap_list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiApListHtml(planId, categoryId) + '</div>';
   openM('➕ เพิ่มโครงการเข้า KPI นี้', h);
@@ -1736,8 +1753,27 @@ function _kpiApPick(planId, categoryId, pipeId) {
     salesMemberName: plan.salesMemberName, date: _td(), amount: amount, kind: kind,
     item: item, note: '', pipeId: pipeId, createdAt: new Date().toISOString()
   });
+  var msg = '➕ เพิ่มโครงการเข้า KPI แล้ว';
+  // เลือกโครงการเข้าหมวด Dock (dock3) แล้ว — ลิงก์บันทึกเข้าหมวด "ยอดขาย DJI Product" (id 'revenue') ของแผน
+  // เดียวกันให้ด้วยเลย ถ้ามีหมวดนี้อยู่ในแผน (ผู้ใช้ขอ 2026-08-27 เพราะโครงการที่ auto-detect Dock พลาด มักจะ
+  // พลาดนับยอดขาย Product ไปด้วยเหตุผลเดียวกัน) กันนับซ้ำถ้าเคย pick โครงการนี้เข้าหมวด revenue ไปแล้วก่อนหน้า
+  if (categoryId === 'dock3') {
+    var revCat = plan.categories.filter(function(c) { return c.id === 'revenue'; })[0];
+    var alreadyLinked = logs.some(function(l) { return l.pipeId === pipeId && l.kind === 'revenue' && l.salesMemberName === plan.salesMemberName; });
+    if (revCat && !alreadyLinked) {
+      var revAmount = Number(p.forecastAmount) || 0;
+      if (revAmount > 0) {
+        logs.push({
+          id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + 'r',
+          salesMemberName: plan.salesMemberName, date: _td(), amount: revAmount, kind: 'revenue',
+          item: p.projectName || '', note: '🔗 ลิงก์อัตโนมัติจากการเพิ่มเข้าหมวด Dock', pipeId: pipeId, createdAt: new Date().toISOString()
+        });
+        msg = '➕ เพิ่มเข้า KPI Dock + ยอดขาย DJI Product แล้ว';
+      }
+    }
+  }
   saveKpiRunRateLogs(logs);
-  toast('➕ เพิ่มโครงการเข้า KPI แล้ว');
+  toast(msg);
   showKpiDetailM(planId, categoryId);
 }
 
