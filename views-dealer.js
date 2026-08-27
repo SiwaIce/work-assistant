@@ -1471,6 +1471,22 @@ function renderDealerTab(d) {
 // ================================================================
 // TAB: INFO (Redesigned - Premium) WITH SIS REVENUE
 // ================================================================
+// แท็บย่อยภายในแท็บ "📋 ข้อมูล" ของหน้า Dealer — เดิมยัดการ์ดข้อมูลบริษัท/ผู้ติดต่อ/ธุรกิจ/Certification/
+// สุขภาพองค์กร/หมายเหตุ/รายชื่อผู้ติดต่อ/อีเมล/LINE ต่อกันยาวมากในแท็บเดียว (แยกจากแท็บ Pipeline/Visit/
+// Timeline ฯลฯ ที่มีแท็บของตัวเองอยู่แล้ว ไม่แตะ) — สลับด้วย CSS display ล้วนๆ ไม่ re-render (2026-08-27)
+var _diActiveTab = 'overview';
+function _diTabClick(tab) {
+  _diActiveTab = tab;
+  document.querySelectorAll('.stab-pane[data-diowner]').forEach(function(el) {
+    el.style.display = el.getAttribute('data-stab') === tab ? '' : 'none';
+  });
+  document.querySelectorAll('.stab-btn[data-diowner]').forEach(function(b) {
+    var on = b.getAttribute('data-stab') === tab;
+    b.classList.toggle('bp', on);
+    b.classList.toggle('bo', !on);
+  });
+}
+
 function dealerInfoTab(d) {
   const pipes = ST.pipelineByDealer(d.id);
   const wonAmt = pipes.filter(p => pipeIsWon(p)).reduce((a,p) => a + (Number(p.forecastAmount)||0), 0);
@@ -1517,8 +1533,16 @@ function dealerInfoTab(d) {
     <div class="sc"><div class="sn c1">${pipes.filter(p => pipeIsOpen(p)).length}</div><div class="sl">Pipeline Active</div></div>
   </div>
 
+  <div class="stab-bar">
+    <button class="btn bsm stab-btn ${_diActiveTab === 'overview' ? 'bp' : 'bo'}" data-diowner="1" data-stab="overview" onclick="_diTabClick('overview')">🏢 ภาพรวม</button>
+    <button class="btn bsm stab-btn ${_diActiveTab === 'health' ? 'bp' : 'bo'}" data-diowner="1" data-stab="health" onclick="_diTabClick('health')">🏥 สุขภาพ &amp; หมายเหตุ</button>
+    <button class="btn bsm stab-btn ${_diActiveTab === 'contacts' ? 'bp' : 'bo'}" data-diowner="1" data-stab="contacts" onclick="_diTabClick('contacts')">👥 ผู้ติดต่อ</button>
+    <button class="btn bsm stab-btn ${_diActiveTab === 'comm' ? 'bp' : 'bo'}" data-diowner="1" data-stab="comm" onclick="_diTabClick('comm')">📧 อีเมล &amp; LINE</button>
+  </div>
+
+  <div class="stab-pane" data-diowner="1" data-stab="overview" ${_diActiveTab !== 'overview' ? 'style="display:none"' : ''}>
   <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px">
-    
+
     <div class="card" style="margin-bottom: 0">
       <h2>🏢 ข้อมูลบริษัท</h2>
       <div style="display: flex; flex-direction: column; gap: 10px">
@@ -1628,7 +1652,9 @@ function dealerInfoTab(d) {
       </div>
     </div>
   </div>
+  </div>
 
+  <div class="stab-pane" data-diowner="1" data-stab="health" ${_diActiveTab !== 'health' ? 'style="display:none"' : ''}>
   <div class="card">
     <h2>🏥 สุขภาพองค์กร — รายละเอียด</h2>
     <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px">
@@ -1652,9 +1678,13 @@ function dealerInfoTab(d) {
     ${d.notes ? `<div><label style="font-size: 11px; color: var(--text2)">หมายเหตุ</label><div style="font-size: 13px; white-space: pre-wrap">${sanitize(d.notes)}</div></div>` : ''}
   </div>
   ` : ''}
+  </div>
 
+  <div class="stab-pane" data-diowner="1" data-stab="contacts" ${_diActiveTab !== 'contacts' ? 'style="display:none"' : ''}>
   ${renderDealerContacts(d)}
+  </div>
 
+  <div class="stab-pane" data-diowner="1" data-stab="comm" ${_diActiveTab !== 'comm' ? 'style="display:none"' : ''}>
   ${renderDealerLoopEmailCard(d)}
 
   ${renderDealerEmailHistoryCard(d)}
@@ -1662,6 +1692,7 @@ function dealerInfoTab(d) {
   <div class="card">
     <h2>💬 LINE Support <span class="ml"><button class="btn bsm bp" onclick="showLineLogM('${d.id}')">➕</button></span></h2>
     ${renderLineLog(d.id, 5)}
+  </div>
   </div>`;
 }
 

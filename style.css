@@ -4657,6 +4657,10 @@ function renderUpcomingTimeline() {
 .kpi-chip-nums b { font-size: 12px; }
 .kpi-tabbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 
+/* ---- Generic sub-tab bar (reusable) — สลับ section ด้วย CSS display ล้วนๆ กันหน้ายาวเกินจำเป็น
+   ตอนมีการ์ดหลายอันต่อกันในแท็บ/เมนูเดียว โดยไม่ต้องมีระบบแท็บใหม่ทั้งหน้า (2026-08-27 เริ่มที่ Dealer > ข้อมูล) ---- */
+.stab-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+
 /* ---- Hero Dashboard ---- */
 .kpi-hero-card { padding: 20px; margin-bottom: 12px; background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.06) 100%); position: relative; overflow: hidden; }
 .kpi-hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), #60a5fa, #a855f7); }
