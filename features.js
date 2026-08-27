@@ -4470,8 +4470,7 @@ function vpToggleAgendaDone(planId, idx, checked) {
 
 // ฟอร์มเพิ่ม/แก้ไขนัด — เลือกได้ว่าผูกกับ Dealer ที่มีอยู่ (autofill ผู้ติดต่อ/เบอร์/อีเมล/location) หรือ Lead ใหม่ (กรอกเอง)
 function showAddVisitPlanM(date, prefillDealerId, editId) {
-  var dealers = [];
-  try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
+  window._vpCurrentEditId = editId || '';
   var plan = null;
   if (editId) {
     var plans = getVisitPlans();
@@ -4494,7 +4493,7 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   h += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
   // นัดเก่าที่มาจาก Task (สร้างผ่าน "รอสร้าง") — โชว์ลิงก์ย้อนกลับตอนเปิดแก้ไขนัดนี้ทีหลัง
   if (plan && plan.sourceTaskId && typeof _sourceTaskBackLinkHtml === 'function') h += _sourceTaskBackLinkHtml(plan.sourceTaskId);
-  h += '<div class="fm-group"><label>📅 วันที่นัด</label><input type="date" id="vp_date" class="fm-input" value="' + sanitize(date) + '"></div>';
+  h += '<div class="fm-group"><label>📅 วันที่นัด</label><input type="date" id="vp_date" class="fm-input" value="' + sanitize(date) + '" onchange="_vpSlotSuggestRender(this.value,\'' + (editId || '') + '\');vpCheckTimeConflict(this.value,\'' + (editId || '') + '\')"></div>';
 
   h += '<div style="display:flex;gap:6px;margin-bottom:10px">';
   h += '<button type="button" id="vp_src_dealer_btn" class="btn bsm ' + (sourceType === 'dealer' ? 'bp' : 'bo') + '" style="flex:1" onclick="vpSetSourceType(\'dealer\')">🏢 Dealer ที่มีอยู่</button>';
@@ -4502,19 +4501,20 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   h += '</div>';
   h += '<input type="hidden" id="vp_source_type" value="' + sourceType + '">';
 
-  h += '<div class="fm-group"><label>📝 หัวข้อนัด</label><input type="text" id="vp_title" class="fm-input" value="' + sanitize(selTitle) + '" placeholder="เช่น เสนอราคา Matrice 4E"></div>';
+  h += '<div class="fm-group"><label>📝 หัวข้อนัด</label><input type="text" id="vp_title" class="fm-input" value="' + sanitize(selTitle) + '" placeholder="เช่น เสนอราคา Matrice 4E"><div id="vp_title_suggest"></div></div>';
 
-  // โซน Dealer
+  // โซน Dealer — เปลี่ยนจาก <select> ยาวๆ เป็น search-suggest (พิมพ์ค้นชื่อ) กันต้องไล่สกอลลิ่งหา Dealer เป็น
+  // ร้อยราย พอเลือกแล้วดึงข้อมูลจริงมาโชว์เป็น "context card" ให้ทันที (ผู้ติดต่อ/Level/Visit ล่าสุด/Pipeline
+  // ค้างอยู่) ไม่ต้องเปิดหน้า Dealer แยกไปเช็คก่อนนัด (ผู้ใช้ขอ 2026-08-27) — vp_dealer ยังเป็น id เดิมที่เก็บ
+  // dealerId จริง (แค่เปลี่ยนจาก select เป็น hidden input) กันโค้ด saveVisitPlan ต้องแก้ตาม
+  var selDealerObj = selDealer ? ST.getOne('dealers', selDealer) : null;
   h += '<div id="vp_dealer_zone" style="' + (sourceType === 'dealer' ? '' : 'display:none') + '">';
-  h += '<div class="fm-group"><label>🏪 Dealer</label><select id="vp_dealer" class="fm-input" onchange="vpDealerPicked()">';
-  h += '<option value="">-- เลือก --</option>';
-  dealers.forEach(function(d) {
-    h += '<option value="' + d.id + '"' +
-      ' data-contact="' + sanitize(d.contact || '') + '" data-phone="' + sanitize(d.phone || '') + '" data-email="' + sanitize(d.email || '') + '" data-map="' + sanitize(d.googleMap || '') + '"' +
-      (selDealer === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>';
-  });
-  h += '</select></div>';
-  h += '<div id="vp_dealer_preview" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>';
+  h += '<div class="fm-group ac-wrap"><label>🏪 Dealer</label>';
+  h += '<input type="text" id="vp_dealer_search" class="fm-input" placeholder="🔍 พิมพ์ค้นหา Dealer..." value="' + sanitize(selDealerObj ? selDealerObj.name : '') + '" oninput="_vpDealerSearch(this.value)" onfocus="_vpDealerSearch(this.value)" autocomplete="off">';
+  h += '<input type="hidden" id="vp_dealer" value="' + sanitize(selDealer) + '">';
+  h += '<div id="vp_dealer_ac_menu"></div>';
+  h += '</div>';
+  h += '<div id="vp_dealer_preview"></div>';
   h += '</div>';
 
   // โซน Lead (กรอกเอง หรือดึงจาก Prospect ที่บันทึกไว้ก่อนแล้ว)
@@ -4544,17 +4544,16 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
   h += '<div class="fr"><div class="fg"><label>🕐 เวลาเริ่ม</label><input type="time" id="vp_time_start" class="fm-input" value="' + sanitize(plan ? (plan.timeStart || '') : '') + '" oninput="vpCheckTimeConflict(document.getElementById(\'vp_date\').value||\'' + date + '\',\'' + (editId || '') + '\')"></div>';
   h += '<div class="fg"><label>🕐 เวลาสิ้นสุด</label><input type="time" id="vp_time_end" class="fm-input" value="' + sanitize(plan ? (plan.timeEnd || '') : '') + '" oninput="vpCheckTimeConflict(document.getElementById(\'vp_date\').value||\'' + date + '\',\'' + (editId || '') + '\')"></div></div>';
   h += '<div id="vp_time_conflict_warning"></div>';
+  // แนะนำช่วงเวลาว่าง — เทียบกับนัดอื่นในวันเดียวกันให้อัตโนมัติ (ใช้ vpFindConflicts เดิม) กันต้องลองพิมพ์
+  // เวลาเองแล้วเจอ "ชนกับ" ทีหลัง (ผู้ใช้ขอ 2026-08-27)
+  h += '<div id="vp_slot_suggest"></div>';
 
-  h += '<div class="fm-group"><label>📋 งานที่เกี่ยวข้อง (ถ้ามี)</label><select id="vp_task" class="fm-input">';
-  h += '<option value="">-- ไม่ระบุ --</option>';
-  var tasks = [];
-  try { tasks = ST.filter('tasks', function(t) { return t.status === 'active'; }); } catch(e) {}
-  tasks.forEach(function(t) {
-    var dd = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
-    var label = sanitize(t.title) + (dd ? ' (' + sanitize(dd.name) + ')' : '');
-    h += '<option value="' + t.id + '"' + (plan && plan.taskId === t.id ? ' selected' : '') + '>' + label + '</option>';
-  });
-  h += '</select></div>';
+  h += '<div class="fm-group ac-wrap"><label>📋 งานที่เกี่ยวข้อง (ค้นหาได้ ไม่บังคับ)</label>';
+  var _selTaskObj = (plan && plan.taskId) ? ST.getOne('tasks', plan.taskId) : null;
+  h += '<input type="text" id="vp_task_search" class="fm-input" placeholder="🔍 พิมพ์ค้นหางาน..." value="' + sanitize(_selTaskObj ? _selTaskObj.title : '') + '" oninput="_vpTaskSearch(this.value)" onfocus="_vpTaskSearch(this.value)" autocomplete="off">';
+  h += '<input type="hidden" id="vp_task" value="' + sanitize(plan ? (plan.taskId || '') : '') + '">';
+  h += '<div id="vp_task_ac_menu"></div>';
+  h += '</div>';
 
   // Agenda — เลือกชุดสำเร็จรูปจากคลังกลาง (showAgendaLibraryM) แล้วติ๊กเอา/ถอด หรือพิมพ์เพิ่มเฉพาะนัดนี้เอง —
   // เก็บ state ชั่วคราวใน _vpAgendaWorking ระหว่างเปิดฟอร์ม บันทึกจริงตอนกด "บันทึก" (ดู saveVisitPlan)
@@ -4581,6 +4580,7 @@ function showAddVisitPlanM(date, prefillDealerId, editId) {
 
   setTimeout(vpDealerPicked, 50);
   setTimeout(function() { vpCheckTimeConflict(date, editId || ''); }, 50);
+  setTimeout(function() { _vpSlotSuggestRender(date, editId || ''); }, 50);
 }
 
 // เช็คชนเวลาแบบสด — เรียกตอนแก้ช่องเวลาเริ่ม/สิ้นสุดในฟอร์ม
@@ -4620,19 +4620,110 @@ function vpSetSourceType(type) {
   document.getElementById('vp_lead_zone').style.display = type === 'lead' ? '' : 'none';
 }
 
-// โชว์ preview ข้อมูลผู้ติดต่อของ Dealer ที่เลือก (ดึงสดจากข้อมูล Dealer เสมอ ไม่ copy ลงแผน)
+// ---- Dealer search-suggest (แทน <select> ยาวๆ) — ดูคอมเมนต์ที่จุดสร้าง HTML ใน showAddVisitPlanM ----
+function _vpDealerSearch(q) {
+  var menu = document.getElementById('vp_dealer_ac_menu');
+  if (!menu) return;
+  q = (q || '').trim().toLowerCase();
+  if (!q) { menu.innerHTML = ''; return; }
+  var matches = ST.getAll('dealers').filter(function(d) { return (d.name || '').toLowerCase().indexOf(q) !== -1; }).slice(0, 8);
+  if (!matches.length) { menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบ Dealer ที่ตรงกับคำค้น</div></div>'; return; }
+  menu.innerHTML = '<div class="ac-menu">' + matches.map(function(d) {
+    var lastDays = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(d.id) : null;
+    var meta = (d.level ? 'Level ' + d.level + ' · ' : '') + (lastDays !== null ? 'Visit ล่าสุด ' + lastDays + ' วันก่อน' : 'ยังไม่เคย Visit');
+    return '<div class="ac-item" onclick="_vpDealerPick(\'' + d.id + '\')"><span class="av">' + sanitize((d.name || '?').slice(0, 2)) + '</span><div class="info"><div class="n">' + sanitize(d.name) + '</div><div class="m">' + sanitize(meta) + '</div></div></div>';
+  }).join('') + '</div>';
+}
+function _vpDealerPick(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  document.getElementById('vp_dealer').value = dealerId;
+  document.getElementById('vp_dealer_search').value = d.name;
+  document.getElementById('vp_dealer_ac_menu').innerHTML = '';
+  vpDealerPicked();
+}
+
+// ดึงข้อมูลจริงของ Dealer ที่เลือกมาโชว์เป็น context card ทันที (ผู้ติดต่อ/Level/Visit ล่าสุด/Pipeline ค้างอยู่)
+// + แนะนำหัวข้อนัดที่เคยใช้กับ Dealer นี้มาก่อน — ดึงสดทุกครั้งเสมอ ไม่ copy ค่าลงแผน (ผู้ใช้ขอ 2026-08-27)
 function vpDealerPicked() {
-  var sel = document.getElementById('vp_dealer');
+  var dealerId = document.getElementById('vp_dealer') ? document.getElementById('vp_dealer').value : '';
   var prev = document.getElementById('vp_dealer_preview');
-  if (!sel || !prev) return;
-  if (!sel.value) { prev.innerHTML = ''; return; }
-  var opt = sel.options[sel.selectedIndex];
+  if (!prev) return;
+  if (!dealerId) { prev.innerHTML = ''; _vpTitleSuggestRender([]); return; }
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) { prev.innerHTML = ''; return; }
+
   var lines = [];
-  if (opt.getAttribute('data-contact')) lines.push('👤 ' + opt.getAttribute('data-contact'));
-  if (opt.getAttribute('data-phone')) lines.push('📞 ' + opt.getAttribute('data-phone'));
-  if (opt.getAttribute('data-email')) lines.push('✉️ ' + opt.getAttribute('data-email'));
-  if (opt.getAttribute('data-map')) lines.push('📍 ' + opt.getAttribute('data-map'));
-  prev.innerHTML = lines.length ? ('💡 ดึงจากข้อมูล Dealer: ' + lines.join(' · ')) : '<span style="color:#f59e0b">⚠️ Dealer นี้ยังไม่มีข้อมูลผู้ติดต่อ — แก้ไขเพิ่มได้ที่หน้า Dealer</span>';
+  if (d.contact) lines.push('👤 ' + d.contact);
+  if (d.phone) lines.push('📞 ' + d.phone);
+  if (d.email) lines.push('✉️ ' + d.email);
+
+  var lastDays = (typeof ST.getLastVisitDays === 'function') ? ST.getLastVisitDays(dealerId) : null;
+  var pipes = (typeof ST.pipelineByDealer === 'function') ? ST.pipelineByDealer(dealerId) : [];
+  var openPipes = pipes.filter(function(p) { return (typeof pipeIsOpen === 'function') ? pipeIsOpen(p) : true; });
+  var openAmt = openPipes.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
+
+  var h = '<div class="vp-context-card">';
+  h += '<div class="ctxrow"><span class="k">ติดต่อ</span><span class="v">' + (lines.length ? sanitize(lines.join(' · ')) : '<span style="color:#eab308">⚠️ ยังไม่มีข้อมูล</span>') + '</span></div>';
+  if (d.level) h += '<div class="ctxrow"><span class="k">Level</span><span class="v">' + sanitize(d.level) + '</span></div>';
+  h += '<div class="ctxrow"><span class="k">Visit ล่าสุด</span><span class="v' + (lastDays !== null && lastDays > 30 ? ' warn' : '') + '">' + (lastDays !== null ? lastDays + ' วันก่อน' : 'ยังไม่เคย') + '</span></div>';
+  h += '<div class="ctxrow"><span class="k">Pipeline ค้างอยู่</span><span class="v">' + openPipes.length + ' โครงการ' + (openAmt ? ' · ' + fmtMoneyShort(openAmt) : '') + '</span></div>';
+  h += '</div>';
+  prev.innerHTML = h;
+
+  var pastTitles = getVisitPlans().filter(function(p) { return p.dealerId === dealerId && p.title; })
+    .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); })
+    .map(function(p) { return p.title; });
+  var uniqueTitles = [];
+  pastTitles.forEach(function(t) { if (uniqueTitles.indexOf(t) === -1) uniqueTitles.push(t); });
+  _vpTitleSuggestRender(uniqueTitles.slice(0, 4));
+}
+function _vpTitleSuggestRender(titles) {
+  var el = document.getElementById('vp_title_suggest');
+  if (!el) return;
+  if (!titles.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="vp-suggest-chips"><span style="font-size:10px;color:var(--text3);align-self:center">เคยใช้:</span>' +
+    titles.map(function(t) { return '<span class="vp-suggest-chip" onclick="document.getElementById(\'vp_title\').value=\'' + sanitize(t).replace(/'/g, "\\'") + '\'">' + sanitize(t) + '</span>'; }).join('') + '</div>';
+}
+
+// ---- Task search-suggest (แทน <select> เดิม) ----
+function _vpTaskSearch(q) {
+  var menu = document.getElementById('vp_task_ac_menu');
+  if (!menu) return;
+  q = (q || '').trim().toLowerCase();
+  var tasks = [];
+  try { tasks = ST.filter('tasks', function(t) { return t.status === 'active'; }); } catch(e) {}
+  if (q) tasks = tasks.filter(function(t) { return (t.title || '').toLowerCase().indexOf(q) !== -1; });
+  tasks = tasks.slice(0, 8);
+  if (!tasks.length) { menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบงานที่ตรงกับคำค้น</div></div>'; return; }
+  menu.innerHTML = '<div class="ac-menu">' + tasks.map(function(t) {
+    var dd = t.dealerId ? ST.getOne('dealers', t.dealerId) : null;
+    return '<div class="ac-item" onclick="_vpTaskPick(\'' + t.id + '\')"><span class="av">📋</span><div class="info"><div class="n">' + sanitize(t.title) + '</div><div class="m">' + (dd ? sanitize(dd.name) : 'ไม่ผูก Dealer') + '</div></div></div>';
+  }).join('') + '</div>';
+}
+function _vpTaskPick(taskId) {
+  var t = ST.getOne('tasks', taskId);
+  if (!t) return;
+  document.getElementById('vp_task').value = taskId;
+  document.getElementById('vp_task_search').value = t.title;
+  document.getElementById('vp_task_ac_menu').innerHTML = '';
+}
+
+// ---- แนะนำช่วงเวลาว่าง — เทียบกับนัดอื่นในวันเดียวกันด้วย vpFindConflicts เดิม ----
+var VP_SLOT_CANDIDATES = [['09:00', '10:00'], ['10:30', '11:30'], ['13:00', '14:00'], ['14:30', '15:30'], ['16:00', '17:00']];
+function _vpSlotSuggestRender(date, editId) {
+  var el = document.getElementById('vp_slot_suggest');
+  if (!el || !date) return;
+  el.innerHTML = '<div class="hint" style="font-size:10.5px;color:var(--text2);margin:4px 0 2px">💡 ช่วงว่างวันนี้ (เทียบกับนัดอื่นอัตโนมัติ)</div><div class="vp-slot-row">' +
+    VP_SLOT_CANDIDATES.map(function(c) {
+      var busy = vpFindConflicts(date, c[0], c[1], editId || '').length > 0;
+      return '<span class="vp-slot-chip' + (busy ? ' busy' : '') + '"' + (busy ? '' : ' onclick="_vpPickSlot(\'' + c[0] + '\',\'' + c[1] + '\')"') + '>' + c[0] + '–' + c[1] + (busy ? ' (ติดนัด)' : '') + '</span>';
+    }).join('') + '</div>';
+}
+function _vpPickSlot(start, end) {
+  document.getElementById('vp_time_start').value = start;
+  document.getElementById('vp_time_end').value = end;
+  vpCheckTimeConflict(document.getElementById('vp_date').value, window._vpCurrentEditId || '');
 }
 
 function saveVisitPlan(date, editId) {
