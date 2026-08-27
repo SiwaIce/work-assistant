@@ -97,6 +97,22 @@ function _kpiForecastMonthInfo(p, plan) {
 // การ์ด "📅 โครงการรายเดือน" — ดูโครงการตามเดือน สลับได้ 3 มุมมอง (Bidding/Forecast Month/Shipment Date)
 // (2026-08-26 ตามคำขอ)
 // ================================================================
+// แท็บล่างของหน้า KPI เซลล์ (ดีลที่ควรปิด/รายเดือน/Dealer/Product) — สลับด้วย CSS display ล้วนๆ ไม่ re-render
+// หน้าใหม่ทั้งหน้า (เร็วกว่า + ไม่หลุด focus ช่องค้นหา) กันปัญหาเดิมที่การ์ดทั้ง 4 อันต่อกันยาวต้องเลื่อนจอ
+// มากตอนเปิดหน้า (2026-08-27 ตามคำขอ)
+var _kpiActiveTab = 'deals';
+function _kpiTabClick(tab) {
+  _kpiActiveTab = tab;
+  document.querySelectorAll('.kpi-tabpane').forEach(function(el) {
+    el.style.display = el.getAttribute('data-kpitab') === tab ? '' : 'none';
+  });
+  document.querySelectorAll('.kpi-tabbtn').forEach(function(b) {
+    var on = b.getAttribute('data-kpitab') === tab;
+    b.classList.toggle('bp', on);
+    b.classList.toggle('bo', !on);
+  });
+}
+
 var _kpiMoTab = 'bid';
 var _kpiMoMonth = null, _kpiMoYear = null;
 // ซ่อนดีลที่ปิดแล้ว (Win/Lost) ออกจากรายเดือน — ปิดไว้เป็นค่าเริ่มต้นเหมือนเดิม (แสดงทุกสถานะ) ผู้ใช้เปิดเองได้
@@ -1027,7 +1043,9 @@ function rKpiScorecard(el) {
   h += '</div>';
   h += '</div>';
 
-  h += '<div class="kpi-sc-grid">';
+  // การ์ด KPI ย่อเป็น "chip" กระชับ 5 อันเรียงแถวเดียว (เดิมการ์ดใหญ่ทำให้หน้ายาวเกินจำเป็น) — คลิกเปิด
+  // modal รายละเอียดเดิมทุกอย่างเหมือนเดิม (showKpiDetailM) ไม่ได้ตัดฟีเจอร์อะไรออก แค่ตัวกระตุ้นเล็กลง
+  h += '<div class="kpi-chip-row">';
   (plan.categories || []).forEach(function(cat) {
     var actual = kpiComputeActual(plan, cat);
     var pct = kpiAchievementPct(plan, cat);
@@ -1036,40 +1054,28 @@ function rKpiScorecard(el) {
     var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
     var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
     var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
-    var pace = kpiPaceInfo(plan, cat);
-    var paceMeta = KPI_PACE_META[pace.status];
-    var potential = (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') ? kpiPotentialAmount(plan, cat) : 0;
-    var potentialPct = potential ? Math.min((actual + potential) / (Number(cat.target) || 1) * 100, 100) : 0;
 
-    // เดือนนี้ — เป้า/ทำได้ (รายเดือน 1/3)
-    var monthHtml = '';
-    var mb = kpiMonthlyBreakdown(plan, cat);
-    if (mb) {
-      var curMonth = mb.filter(function(m) { return m.isCurrent; })[0];
-      if (curMonth) {
-        var mShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(curMonth.actual) + '/' + fmtMoneyShort(curMonth.target) : Math.round(curMonth.actual) + '/' + Math.round(curMonth.target);
-        monthHtml = '<div class="kpi-sc-month">📅 เดือนนี้: ' + mShow + ' ' + (cat.unit || '') + '</div>';
-      }
-    }
+    h += '<div class="kpi-chip' + (isDone ? ' done' : '') + '" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
+    h += '<div class="kpi-chip-top"><span>' + cat.icon + '</span>' + (isDone ? '<span>🎉</span>' : '<span class="kpi-chip-w">' + cat.weight + '%</span>') + '</div>';
+    h += '<div class="kpi-chip-label">' + sanitize(cat.label) + '</div>';
+    h += '<div class="kpi-chip-bar"><div style="width:' + pctShow + '%;background:' + barColor + '"></div></div>';
+    h += '<div class="kpi-chip-nums"><span>' + actualShow + '/' + targetShow + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
+    h += '</div>';
+  });
+  h += '</div>';
 
-    h += '<div class="kpi-sc-card' + (isDone ? ' done' : '') + '" onclick="showKpiDetailM(\'' + plan.id + '\',\'' + cat.id + '\')">';
-    if (isDone) h += '<div class="kpi-sc-ribbon">🎉</div>';
-    h += '<div class="kpi-sc-top"><span class="kpi-sc-icon">' + cat.icon + '</span><span class="kpi-sc-weight">น้ำหนัก ' + cat.weight + '%</span></div>';
-    h += '<div class="kpi-sc-label">' + sanitize(cat.label) + '</div>';
-    h += '<div class="kpi-sc-bar">';
-    if (potentialPct > pctShow) h += '<div class="kpi-sc-bar-potential" style="width:' + potentialPct + '%"></div>';
-    h += '<div class="kpi-sc-bar-fill" style="width:' + pctShow + '%;background:' + barColor + '"></div>';
-    h += '</div>';
-    h += '<div class="kpi-sc-nums"><span>' + actualShow + ' / ' + targetShow + ' ' + (cat.unit || '') + '</span><b style="color:' + barColor + '">' + Math.round(pct) + '%</b></div>';
-    h += '<div class="kpi-sc-pace" style="color:' + paceMeta.color + '">' + paceMeta.label + '</div>';
-    h += monthHtml;
-    h += '</div>';
+  // แท็บล่าง — เดิมการ์ด "ปิด N ดีลนี้/รายเดือน/Dealer/Product" ต่อกันยาวลงมาเรื่อยๆ ต้องเลื่อนจอมาก
+  // ตอนนี้โชว์ทีละแท็บ สลับด้วย _kpiTabClick() (CSS display ล้วนๆ ไม่ re-render หน้าใหม่)
+  h += '<div class="kpi-tabbar">';
+  [['deals', '🌱 ดีลที่ควรปิด'], ['monthly', '📅 รายเดือน'], ['dealers', '🏪 Dealer'], ['products', '📦 Product']].forEach(function(t) {
+    h += '<button class="btn bsm kpi-tabbtn ' + (_kpiActiveTab === t[0] ? 'bp' : 'bo') + '" data-kpitab="' + t[0] + '" onclick="_kpiTabClick(\'' + t[0] + '\')">' + t[1] + '</button>';
   });
   h += '</div>';
 
   // 🌱 Top deals ที่ควรปิดให้ถึงเป้า — ตารางค้นหา/กรอง/จัดเรียงได้ (2026-08-26 ตามคำขอ)
   var topDeals = kpiTopPotentialDeals(plan);
   if (topDeals) {
+    h += '<div class="kpi-tabpane" data-kpitab="deals"' + (_kpiActiveTab !== 'deals' ? ' style="display:none"' : '') + '>';
     h += '<div class="card kpi-topdeals-card">';
     h += '<div class="kpi-topdeals-title">🌱 ปิด ' + topDeals.picked.length + ' ดีลนี้' + (topDeals.willHitTarget ? ' ก็ถึงเป้ายอดขายไตรมาสนี้!' : ' ช่วยลดระยะห่างจากเป้าได้') + '</div>';
     h += '<div class="kpi-topdeals-sub">เป้าที่เหลือ ' + fmtMoneyShort(topDeals.remain) + ' — ดีลที่เลือก รวม ' + fmtMoneyShort(topDeals.sum) + (topDeals.totalCandidates > topDeals.picked.length ? ' (จากทั้งหมด ' + topDeals.totalCandidates + ' ดีลที่มีลุ้น)' : '') + '</div>';
@@ -1152,11 +1158,13 @@ function rKpiScorecard(el) {
     });
     h += '</tbody></table></div>';
     h += '</div>';
+    h += '</div>';
   }
 
   // 📦 ยอดขายตาม Product — การ์ดแยกต่างหาก (2026-08-26 ตามคำขอ)
   var prodSales = kpiProductSalesBreakdown(plan);
   if (prodSales) {
+    h += '<div class="kpi-tabpane" data-kpitab="products"' + (_kpiActiveTab !== 'products' ? ' style="display:none"' : '') + '>';
     h += '<div class="card">';
     h += '<h2>📦 ยอดขายตาม Product</h2>';
     h += '<div style="font-size:.68rem;color:var(--text2);margin:-4px 0 8px">เฉพาะ Drone / Dock — ไม่รวมอุปกรณ์เสริม แบตเตอรี่ ซอฟต์แวร์</div>';
@@ -1197,10 +1205,12 @@ function rKpiScorecard(el) {
       }
     });
     h += '</tbody></table></div></div>';
+    h += '</div>';
   }
 
   // 📅 โครงการรายเดือน — สลับดูตาม Bidding Date / Forecast Month / Shipment Date
   _kpiMoInit();
+  h += '<div class="kpi-tabpane" data-kpitab="monthly"' + (_kpiActiveTab !== 'monthly' ? ' style="display:none"' : '') + '>';
   h += '<div class="card">';
   h += '<h2>📅 โครงการรายเดือน</h2>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">';
@@ -1244,11 +1254,13 @@ function rKpiScorecard(el) {
     h += '</div>';
   });
   h += '</div></div>';
+  h += '</div>';
 
   // 🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย — มุมมองระดับ Dealer (แยกจากมุมมองระดับดีลของการ์ด "Top deals" ด้านบน)
   var dealerPlan = kpiDealerPlanBreakdown(plan);
   if (dealerPlan && dealerPlan.rows.length) {
     var dpRemain = Math.max(dealerPlan.target - dealerPlan.actual, 0);
+    h += '<div class="kpi-tabpane" data-kpitab="dealers"' + (_kpiActiveTab !== 'dealers' ? ' style="display:none"' : '') + '>';
     h += '<div class="card">';
     h += '<h2>🎯 แผนดัน Dealer ให้ถึงเป้ายอดขาย <span class="ml" style="font-size:11px;color:var(--text2)">เป้าที่เหลือ ' + fmtMoneyShort(dpRemain) + '</span></h2>';
     h += '<div style="font-size:.68rem;color:var(--text2);margin:-4px 0 8px">Plan ' + dealerPlan.planCount + ' · Actual ' + (dealerPlan.winCount + dealerPlan.deliverCount) + ' (Win ' + dealerPlan.winCount + ', Deliver ' + dealerPlan.deliverCount + ')</div>';
@@ -1299,6 +1311,7 @@ function rKpiScorecard(el) {
       });
       h += '</div>';
     }
+    h += '</div>';
     h += '</div>';
   }
 
