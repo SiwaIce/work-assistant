@@ -2751,6 +2751,17 @@ function _pipeDashCount(s) {
   var m = (s || '').match(/^-+/);
   return m ? m[0].length : 0;
 }
+// ตัดวันที่ที่ฝังอยู่ในเนื้อหาเป็นข้อความ (เช่น "18DEC25-...", "11/3/26-...") ออกก่อนเทียบซ้ำ — ใช้ regex
+// ตัวเดียวกับ _pipeSplitUpdateLine ที่ import ใช้แยกวันที่จริงตอนนี้ เจอเคสจริง (ผู้ใช้แจ้ง 2026-08-27): ข้อความ
+// เดียวกันมี 2 ก็อปปี้ ก็อปหนึ่งมาจากบั๊ก import เก่า (ก่อนแก้) ที่ไม่ได้แยกวันที่ออกจาก field date เลย เก็บวันที่
+// เป็นข้อความนำหน้าไว้ในเนื้อหาแทน (field date เลยผิดเป็นวันที่ import แทนวันที่จริง) อีกก็อปเป็นเวอร์ชันที่ import
+// รอบใหม่แยกวันที่ถูกต้องแล้ว (เนื้อหาสะอาด) — เทียบด้วย _pipeNormDashContent เฉยๆ ไม่เจอเพราะ prefix ไม่ใช่
+// ขีดกลางล้วนๆ ต้องตัดแบบนี้ก่อนถึงจะเห็นว่าเนื้อหาจริงๆ ตรงกัน — ใช้แค่ตอนหา "คู่ซ้ำ" เท่านั้น ไม่ใช้ตอนเขียนทับ
+// เนื้อหาที่จะเก็บไว้จริง (กันข้อความที่ตั้งใจขึ้นต้นด้วยตัวเลขจริงๆ โดนตัดทิ้งถาวรโดยไม่ได้ตั้งใจ)
+function _pipeDedupNormContent(s) {
+  var stripped = _pipeSplitUpdateLine((s || '').trim()).content;
+  return _pipeNormDashContent(stripped).toLowerCase();
+}
 var _pipeDupLogCandidates = [];
 // หา cluster ของ log ที่ซ้ำกัน (เนื้อหา+วันที่ตรงกันแต่มีขีดนำหน้าค้าง) — แยกออกจาก showPipeDuplicateLogAuditM
 // ให้เรียกใช้ซ้ำได้ทั้งจากปุ่มตรวจสอบเอง และจากท้าย flow import (ดู _doPipeXlsxImport)
@@ -2824,7 +2835,7 @@ function _pipeComputeFuzzyDupLogClusters(pipeIdFilter) {
     var byContent = {};
     logs.forEach(function(l) {
       if (l.type !== 'note' && l.type !== 'update') return;
-      var key = _pipeNormDashContent(l.content).toLowerCase();
+      var key = _pipeDedupNormContent(l.content);
       if (!key) return;
       if (!byContent[key]) byContent[key] = [];
       byContent[key].push(l);
@@ -2841,7 +2852,9 @@ function _pipeComputeFuzzyDupLogClusters(pipeIdFilter) {
       // ไม่เห็นด้วย) — ถ้าคะแนนเท่ากันหลายตัว (เช่น มีวันที่ทั้งคู่แต่คนละวันจริง อาจเป็นคนละเหตุการณ์บังเอิญพิมพ์
       // ข้อความคล้ายกัน) ไม่กล้าแนะนำเอง ปล่อยให้ผู้ใช้ตัดสินใจเองทั้งกลุ่ม (ไม่ติ๊กไว้ล่วงหน้าให้เลย)
       var scored = items.map(function(l) {
-        return { log: l, score: (l.date ? 10 : 0) - _pipeDashCount(l.content) };
+        // เนื้อหามีวันที่ฝังเป็นข้อความนำหน้า (บั๊ก import เก่า) ถือว่า "สกปรกกว่า" เหมือนมีขีดนำหน้าค้าง
+        var hasEmbeddedDate = !!_pipeSplitUpdateLine((l.content || '').trim()).date;
+        return { log: l, score: (l.date ? 10 : 0) - _pipeDashCount(l.content) - (hasEmbeddedDate ? 5 : 0) };
       });
       var maxScore = Math.max.apply(null, scored.map(function(s) { return s.score; }));
       var topScorers = scored.filter(function(s) { return s.score === maxScore; });
@@ -6354,9 +6367,15 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
   // key ด้วยเนื้อหาที่ตัดขีดกลางนำหน้าออกแล้วเสมอ (_pipeNormDashContent) ไม่ใช่ content ดิบ — กัน log เก่าที่ยัง
   // มีขีดค้าง (จากบั๊กก่อนแก้ 2026-08-19 ที่ยังไม่ได้กดล้างด้วยเครื่องมือ "เช็ค Log ซ้ำ") ชนกับข้อความสะอาดที่
   // parse ใหม่ได้ถูกต้อง จนสร้าง log ซ้ำอีกรอบตอน import ครั้งถัดไป — normalize ทั้งสองฝั่งให้เทียบกันตรงๆ
+  // pool key ใช้ _pipeDedupNormContent (ตัด date prefix ฝังในเนื้อหา + ขีดนำหน้า + lowercase) ไม่ใช่แค่
+  // _pipeNormDashContent เฉยๆ — เดิมถ้า log เก่ายังมีวันที่ฝังเป็นข้อความค้างอยู่ (บั๊ก import ก่อน 2026-08-19
+  // ที่ยังไม่ได้กดล้างด้วย "เช็ค Log ซ้ำ") แต่ไฟล์ที่ import รอบนี้ parse ออกมาเป็นเนื้อหาสะอาด (ตัด prefix ออก
+  // แล้วเก็บใน date field แทน) คนละ string กันเป๊ะ จับคู่กันไม่ได้ กลายเป็น "เนื้อหาใหม่" สร้าง log ซ้ำเพิ่มขึ้น
+  // ทุกรอบที่ import (ต้นเหตุจริงที่ผู้ใช้แจ้ง 2026-08-27 ว่าลบซ้ำแล้วแต่ import ใหม่ก็น่าจะกลับมาซ้ำอีก) — แก้ที่
+  // key เทียบเท่านั้น เนื้อหาที่จะบันทึกจริง (parsed.content) ยังคงตัดแค่ขีดนำหน้าเหมือนเดิม ไม่บังคับ lowercase ทับ
   var pool = {};
   logs.forEach(function(l) {
-    var k = _pipeNormDashContent(l.content);
+    var k = _pipeDedupNormContent(l.content);
     if (!pool[k]) pool[k] = [];
     pool[k].push(l);
   });
@@ -6371,7 +6390,8 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
       if (!line) return;
       var parsed = _pipeParseUpdateLine(line);
       parsed.content = _pipeNormDashContent(parsed.content); // กันขีดกลางหลงเหลือกรณีไม่มีวันที่ให้จับคู่นำหน้าเลย
-      var candidates = pool[parsed.content];
+      var matchKey = _pipeDedupNormContent(parsed.content);
+      var candidates = pool[matchKey];
       if (candidates && candidates.length) {
         // เลือกตัวที่วันที่ตรงกันก่อนเสมอถ้ามี (match สมบูรณ์ ไม่ต้องแก้อะไร) ไม่มีค่อยหยิบตัวแรกมาเทียบ/แก้วันที่
         var exactIdx = -1;
@@ -6382,8 +6402,8 @@ function _pipeImportNewUpdateLines(existing, c, colMap, logsIndex) {
         if (parsed.date && pick.date !== parsed.date) {
           dateFixes.push({ logId: pick.id, oldDate: pick.date, newDate: parsed.date, content: parsed.content });
         }
-      } else if (!seenNew[parsed.content + '||' + parsed.date]) {
-        seenNew[parsed.content + '||' + parsed.date] = true;
+      } else if (!seenNew[matchKey + '||' + parsed.date]) {
+        seenNew[matchKey + '||' + parsed.date] = true;
         newLines.push(parsed);
       }
     });
