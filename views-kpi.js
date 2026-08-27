@@ -1438,17 +1438,13 @@ function showKpiDetailM(planId, categoryId) {
 
     if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') {
       var isQtyCat = cat.type === 'pipelineModelQty';
-      h += '<button class="btn bsm bo btn-full" id="kpi_rr_addbtn" style="margin-top:8px" onclick="_kpiToggleRunRateForm()">+ บันทึก' + (isQtyCat ? 'จำนวน' : 'ยอด') + ' Run Rate เอง</button>';
+      h += '<div style="display:flex;gap:6px;margin-top:8px">';
+      h += '<button class="btn bp bsm" style="flex:1" onclick="showKpiAddProjectM(\'' + planId + '\',\'' + categoryId + '\')" title="เลือกโครงการที่มีอยู่แล้วมานับเข้า KPI นี้เอง — ค้นได้ทุกช่วงเวลา กรองสถานะ/เดือนได้">➕ เพิ่มโครงการ</button>';
+      h += '<button class="btn bo bsm" style="flex:1" id="kpi_rr_addbtn" onclick="_kpiToggleRunRateForm()">+ บันทึก' + (isQtyCat ? 'จำนวน' : 'ยอด') + 'เอง</button>';
+      h += '</div>';
       h += '<div id="kpi_rr_form" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px">';
       h += '<input type="hidden" id="kpi_rr_kind" value="' + (isQtyCat ? 'qty' : 'revenue') + '">';
       h += '<div class="fg"><label>วันที่</label><input type="date" id="kpi_rr_date" value="' + _td() + '"></div>';
-      h += '<div class="fg"><label>ผูกกับโครงการ Pipeline ที่มีอยู่แล้ว (ไม่บังคับ — เผื่อยอดยังไม่ขึ้นอัตโนมัติ)</label>' +
-        '<input type="text" id="kpi_rr_pipesearch" placeholder="🔍 พิมพ์ชื่อโครงการ / Dealer..." oninput="_kpiRrSearchPipe(this.value)">' +
-        '<div id="kpi_rr_pipe_results" style="margin-top:4px"></div>' +
-        '<input type="hidden" id="kpi_rr_pipeid" value="">' +
-        '<div id="kpi_rr_pipe_selected" style="display:none;margin-top:4px;font-size:.7rem;background:var(--bg2);padding:4px 8px;border-radius:6px">' +
-        '🔗 <span id="kpi_rr_pipe_selected_name"></span>' +
-        '<span style="cursor:pointer;color:#ef4444" onclick="_kpiRrClearPipe()"> ✕ เอาออก</span></div></div>';
       if (isQtyCat) {
         h += '<div class="fg"><label>จำนวน (หน่วย)</label><input type="number" id="kpi_rr_amount" placeholder="1"></div>';
         h += '<div class="fg"><label>รุ่นสินค้า</label><select id="kpi_rr_item">' + (cat.modelMatch || []).map(function(k) { return '<option value="' + sanitize(k) + '">' + sanitize(k) + '</option>'; }).join('') + '</select>' +
@@ -1565,66 +1561,124 @@ function saveKpiRunRateLog(planId, categoryId) {
   showKpiDetailM(planId, categoryId);
 }
 
-// ค้นหาโครงการ Pipeline ที่มีอยู่แล้วมาผูกกับ Run Rate log — เลือกแล้ว auto-fill ยอด/ชื่อให้จากข้อมูลจริง
-// ของโครงการนั้น (ไม่ต้องพิมพ์ยอดเดาเอง) และเก็บ pipeId ไว้เทียบตอนคำนวณ actual ว่ายัง manual อยู่หรือ
-// เข้าเกณฑ์อัตโนมัติแล้ว (ดู _kpiRunRateAutoCovered) (2026-08-26)
-function _kpiRrSearchPipe(q) {
-  var resultsEl = document.getElementById('kpi_rr_pipe_results');
-  if (!resultsEl) return;
-  q = (q || '').trim().toLowerCase();
-  if (q.length < 2) { resultsEl.innerHTML = ''; return; }
-  var matches = ST.getAll('pipeline').filter(function(p) {
-    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '')).toLowerCase();
-    return hay.indexOf(q) !== -1;
-  }).slice(0, 8);
-  resultsEl.innerHTML = matches.length ? matches.map(function(p) {
-    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    return '<div class="kpi-detail-row" style="cursor:pointer;padding:5px 8px;font-size:.72rem" onclick="_kpiRrPickPipe(\'' + p.id + '\')">' +
-      sanitize(p.projectName || '-') + (dl ? ' <span style="color:var(--text2)">— ' + sanitize(dl.name) + '</span>' : '') +
-      ' <span style="color:var(--text2)">(' + fmtMoneyShort(p.forecastAmount) + ')</span></div>';
-  }).join('') : '<div style="font-size:.7rem;color:var(--text2);padding:4px 8px">ไม่พบโครงการที่ตรงกัน</div>';
+// ================================================================
+// ➕ เพิ่มโครงการที่มีอยู่แล้วเข้า KPI นี้เอง — เลือกจากทุกโครงการ ทุกช่วงเวลา กรองสถานะ/เดือนได้ เหมือนหา
+// โครงการในเมนู Pipeline (เปลี่ยนจากช่องค้นหาเล็กๆ ในฟอร์ม Run Rate เดิม มาเป็น picker เต็มรูปแบบ 2026-08-27)
+// เลือกแล้ว auto-fill ยอด/จำนวนจากข้อมูลจริงของโครงการ เก็บ pipeId ไว้กัน _kpiRunRateAutoCovered() นับซ้ำ
+// ================================================================
+var _kpiApStatusSel = null;
+var _kpiApMonth = '';
+var _kpiApSearch = '';
+
+function _kpiApDefaultStatusSel() {
+  var cfg = getConfig();
+  var sel = {};
+  (cfg.pipelineStatuses || []).forEach(function(s) { sel[s.id] = true; });
+  return sel;
 }
 
-function _kpiRrPickPipe(pipeId) {
+function showKpiAddProjectM(planId, categoryId) {
+  _kpiApStatusSel = _kpiApDefaultStatusSel();
+  _kpiApMonth = '';
+  _kpiApSearch = '';
+  _kpiApRenderModal(planId, categoryId);
+}
+
+function _kpiApFilteredProjects() {
+  var q = (_kpiApSearch || '').trim().toLowerCase();
+  return ST.getAll('pipeline').filter(function(p) {
+    if (_kpiApStatusSel && _kpiApStatusSel[p.status] === false) return false;
+    if (_kpiApMonth && (!p.biddingDate || p.biddingDate.slice(0, 7) !== _kpiApMonth)) return false;
+    if (q) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '') + ' ' + (p.rowNo || '')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  }).sort(function(a, b) { return (b.registerDate || '').localeCompare(a.registerDate || ''); });
+}
+
+function _kpiApListHtml(planId, categoryId) {
+  var list = _kpiApFilteredProjects().slice(0, 100);
+  if (!list.length) return '<div style="text-align:center;color:var(--text2);padding:16px;font-size:.78rem">ไม่พบโครงการที่ตรงกับตัวกรอง</div>';
+  return list.map(function(p) {
+    var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    return '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      (p.rowNo ? '<span style="color:var(--text2)">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + sanitize(p.projectName || (dl ? dl.name : '') || '-') +
+      (dl ? ' <span style="color:var(--text2)">— ' + sanitize(dl.name) + '</span>' : '') +
+      ' <span style="color:var(--text2)">' + fmtMoneyShort(p.forecastAmount) + '</span> ' +
+      (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + '</span>' +
+      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiApPick(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')">+ เลือก</button></div>';
+  }).join('');
+}
+
+function _kpiApSearchInput(planId, categoryId, val) {
+  _kpiApSearch = val;
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
+function _kpiApToggleStatus(planId, categoryId, id, checked) {
+  _kpiApStatusSel[id] = checked;
+  _kpiApRenderModal(planId, categoryId);
+}
+
+function _kpiApSetMonth(planId, categoryId, val) {
+  _kpiApMonth = val;
+  _kpiApRenderModal(planId, categoryId);
+}
+
+function _kpiApRenderModal(planId, categoryId) {
+  var cfg = getConfig();
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:8px">เลือกโครงการที่มีอยู่แล้วมานับเข้า KPI นี้เอง (เผื่อยอดยังไม่ขึ้นอัตโนมัติ) — ค้นได้จากทุกช่วงเวลา ทุกโครงการ</p>';
+  h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ / Dealer / Row No..." value="' + sanitize(_kpiApSearch) + '" oninput="_kpiApSearchInput(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="margin-bottom:8px">';
+  h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">กรองตามสถานะ</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  (cfg.pipelineStatuses || []).forEach(function(s) {
+    h += '<label style="display:flex;align-items:center;gap:4px;font-size:.68rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
+      '<input type="checkbox" style="width:auto" ' + (_kpiApStatusSel[s.id] ? 'checked' : '') + ' onchange="_kpiApToggleStatus(\'' + planId + '\',\'' + categoryId + '\',\'' + s.id + '\',this.checked)">' + sanitize(s.name) + '</label>';
+  });
+  h += '</div></div>';
+  h += '<div style="margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><label style="font-size:.7rem">กรองตามเดือน (Bidding Date)</label>' +
+    '<input type="month" value="' + sanitize(_kpiApMonth) + '" onchange="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto">' +
+    (_kpiApMonth ? '<button class="btn bsm bo" onclick="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',\'\')">ล้าง (ดูทุกช่วงเวลา)</button>' : '') + '</div>';
+  h += '<div id="kpi_ap_list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiApListHtml(planId, categoryId) + '</div>';
+  openM('➕ เพิ่มโครงการเข้า KPI นี้', h);
+}
+
+function _kpiApPick(planId, categoryId, pipeId) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
+  if (!cat) return;
   var p = ST.getOne('pipeline', pipeId);
   if (!p) return;
-  var pipeIdEl = document.getElementById('kpi_rr_pipeid');
-  if (pipeIdEl) pipeIdEl.value = pipeId;
-  var kindEl = document.getElementById('kpi_rr_kind');
-  var kind = kindEl ? kindEl.value : 'revenue';
-  var amountEl = document.getElementById('kpi_rr_amount');
-  var itemEl = document.getElementById('kpi_rr_item');
+  var kind = cat.type === 'pipelineModelQty' ? 'qty' : 'revenue';
+  var item = '', amount = 0;
   if (kind === 'revenue') {
-    if (amountEl) amountEl.value = Number(p.forecastAmount) || 0;
-    if (itemEl) itemEl.value = p.projectName || '';
-  } else if (itemEl && itemEl.tagName === 'SELECT') {
-    // qty category ผูกกับรุ่นสินค้าคงที่ (dropdown ของ modelMatch) — ไล่หารุ่นที่โครงการนี้มีขาย
-    // แล้ว auto-select + auto-fill จำนวนจริงจากรายการสินค้าในโครงการ
-    var items = (typeof getPipeItems === 'function' ? getPipeItems(p) : (p.items || [])) || [];
-    var matchedKeyword = null, matchedQty = 0;
-    for (var i = 0; i < itemEl.options.length; i++) {
-      var kw = itemEl.options[i].value.toLowerCase();
+    amount = Number(p.forecastAmount) || 0;
+    item = p.projectName || '';
+  } else {
+    var items = getPipeItems(p) || [];
+    var keywords = cat.modelMatch || [];
+    for (var i = 0; i < keywords.length; i++) {
+      var kw = keywords[i].toLowerCase();
       var sum = items.reduce(function(s, it) { return (it.model || '').toLowerCase().indexOf(kw) !== -1 ? s + (Number(it.qty) || 0) : s; }, 0);
-      if (sum > 0) { matchedKeyword = itemEl.options[i].value; matchedQty = sum; break; }
+      if (sum > 0) { item = keywords[i]; amount = sum; break; }
     }
-    if (matchedKeyword) { itemEl.value = matchedKeyword; if (amountEl) amountEl.value = matchedQty; }
+    if (!item && keywords.length) item = keywords[0];
   }
-  var selBox = document.getElementById('kpi_rr_pipe_selected');
-  var selName = document.getElementById('kpi_rr_pipe_selected_name');
-  if (selName) selName.textContent = p.projectName || '(ไม่มีชื่อโครงการ)';
-  if (selBox) selBox.style.display = 'block';
-  var searchEl = document.getElementById('kpi_rr_pipesearch');
-  if (searchEl) searchEl.value = '';
-  var resultsEl = document.getElementById('kpi_rr_pipe_results');
-  if (resultsEl) resultsEl.innerHTML = '';
-}
+  if (!amount) { toast('⚠️ โครงการนี้ไม่มียอด/จำนวนที่นับเข้าหัวข้อนี้ได้ ลองกรอกเองแทน'); return; }
 
-function _kpiRrClearPipe() {
-  var pipeIdEl = document.getElementById('kpi_rr_pipeid');
-  if (pipeIdEl) pipeIdEl.value = '';
-  var selBox = document.getElementById('kpi_rr_pipe_selected');
-  if (selBox) selBox.style.display = 'none';
+  var logs = getKpiRunRateLogs();
+  logs.push({
+    id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+    salesMemberName: plan.salesMemberName, date: _td(), amount: amount, kind: kind,
+    item: item, note: '', pipeId: pipeId, createdAt: new Date().toISOString()
+  });
+  saveKpiRunRateLogs(logs);
+  toast('➕ เพิ่มโครงการเข้า KPI แล้ว');
+  showKpiDetailM(planId, categoryId);
 }
 
 function showEditRunRateM(id, planId, categoryId) {
