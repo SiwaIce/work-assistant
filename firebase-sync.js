@@ -658,11 +658,14 @@ function syncItemToFirebase(collName, item) {
   ref.doc(item.id).set(item).catch(_notifySyncFail);
 }
 
+// คืนค่าเป็น Promise เสมอ (แต่เดิมไม่ return อะไรเลย เรียกแบบ fire-and-forget อย่างเดียว) — ให้จุดที่ต้องการ
+// "รอให้ลบเสร็จจริงบน Cloud ก่อนค่อยทำอย่างอื่นต่อ" (เช่น ล้าง Timeline ก่อน import ใหม่) ใช้ Promise.all() รอได้
+// เจตนาเดิมที่เรียกแบบไม่รอผล (ส่วนใหญ่ในระบบ) ยังทำงานเหมือนเดิมทุกประการ แค่ไม่ได้ใช้ค่าที่ return มา
 function syncDeleteFromFirebase(collName, docId) {
-  if (!SYNC_ENABLED || !CURRENT_USER) return;
+  if (!SYNC_ENABLED || !CURRENT_USER) return Promise.resolve();
   var ref = getCollectionRef(collName);
-  if (!ref || !docId) return;
-  ref.doc(docId).delete().catch(_notifySyncFail);
+  if (!ref || !docId) return Promise.resolve();
+  return ref.doc(docId).delete().catch(_notifySyncFail);
 }
 
 // ================================================================

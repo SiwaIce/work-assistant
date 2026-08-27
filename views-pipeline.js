@@ -2598,11 +2598,18 @@ function clearPipelineTimeline() {
   var idSet = {};
   toDelete.forEach(function(l) { idSet[l.id] = true; });
   ST.deleteWhere('pipeLog', function(l) { return idSet[l.id]; });
-  if (typeof syncDeleteFromFirebase === 'function') toDelete.forEach(function(l) { syncDeleteFromFirebase('pipelog', l.id); });
 
   closeMForce();
-  toast('🗑️ ลบ Timeline ' + toDelete.length + ' รายการแล้ว');
   render();
+  // เดิมยิง syncDeleteFromFirebase แบบ fire-and-forget ไม่รอผล ถ้าผู้ใช้ import ไฟล์ใหม่ต่อทันที (หรือปิดแท็บ)
+  // ก่อนคำสั่งลบร้อยกว่ารายการยิงถึง Firestore ครบ ตัวที่ยังไม่ทันลบจะโดน onSnapshot ดึงกลับมาทับเครื่อง เหมือน
+  // "ล้างไปแล้วแต่กลับมาอีก" (ผู้ใช้ถาม 2026-08-27 ว่าต้องรอ sync ก่อนไหม) — ตอนนี้ syncDeleteFromFirebase()
+  // return Promise แล้ว รอให้ลบเสร็จจริงทุกตัวก่อนค่อยบอกว่า "ปลอดภัยที่จะ import ต่อได้" ไม่ต้องเดาว่าต้องรอนานแค่ไหน
+  if (typeof syncDeleteFromFirebase !== 'function') { toast('🗑️ ลบ Timeline ' + toDelete.length + ' รายการแล้ว'); return; }
+  toast('🗑️ ลบแล้ว ' + toDelete.length + ' รายการ — กำลัง sync ขึ้น Cloud...');
+  Promise.all(toDelete.map(function(l) { return syncDeleteFromFirebase('pipelog', l.id); }))
+    .then(function() { toast('✅ Sync เสร็จแล้ว — import ไฟล์ใหม่ได้เลย'); })
+    .catch(function() { toast('⚠️ Sync บางรายการไม่สำเร็จ — เช็คเน็ตแล้วลองกด "🔄 Sync" ก่อน import', true); });
 }
 function showPipeDataHealthCheckM() {
   var dupClusters = _pipeComputeDupLogClusters();
