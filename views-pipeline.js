@@ -1995,10 +1995,16 @@ function _pipeRowFields(p, excludeTypes) {
   var items = (p.items && p.items.length) ? p.items : (p.model ? [{ model: p.model, qty: p.modelQty || 1 }] : []);
   var modelCell = items.map(function(it) { return (it.model || '') + '*' + (Number(it.qty) || 1); }).join('\n');
   var g = _pipeModelQtyByGroup(items);
-  // โครงการปิดแล้ว (Win/Lost/Deliver) ไม่มี "เดือนคาดการณ์" ให้ forecast ต่อแล้ว — ใส่ "Done" แทนค่าที่คำนวณ
-  // จาก Bidding Date ในคอลัมน์ Forecast Month ให้ตรงกับที่ทีมพิมพ์เองในชีทตอนปิดงาน ส่วนคอลัมน์ month
-  // (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิดไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
+  // โครงการปิดแล้ว (Win/Lost/Deliver) ไม่มี "เดือนคาดการณ์" ให้ forecast ต่อแล้ว — ใส่ "Done" แทนค่าที่กรอกไว้ใน
+  // คอลัมน์ Forecast Month ส่วนคอลัมน์ month (ตัวเลขไว้ pivot) เว้นว่างไปเลย กัน pivot รายเดือนของ deal ที่ปิด
+  // ไปแล้วมานับซ้ำเป็นยอด forecast เดือนนั้น
   var pipeClosed = pipeIsWon(p) || pipeIsLost(p) || p.status === 'deliver';
+  // เดิม export คำนวณ Forecast Month ใหม่จาก Bidding Date + 2 เดือนเสมอ (สูตรเดา) ไม่เคยอ่าน p.forecastMonth ที่
+  // ผู้ใช้พิมพ์เองหรือ import เข้ามาเลย ทำให้ค่าที่กรอกไว้ (เช่น "2027" ปีเฉยๆ ไม่รู้เดือน) หายไปตอน export กลาย
+  // เป็นค่าคำนวณจาก Bidding Date แทน (ผู้ใช้แจ้ง 2026-08-27) — เปลี่ยนมาอ่านจาก p.forecastMonth ตรงๆ ให้ตรงกับที่
+  // เห็นในฟอร์มแก้ไขโครงการ ส่วนคอลัมน์ month (ตัวเลข) parse เดือนจากข้อความเดียวกัน (ใช้ตัว parser เดียวกับหน้า
+  // KPI โครงการรายเดือน) — ถ้า parse เดือนไม่ได้ (เช่นมีแต่ปีเฉยๆ) ปล่อยว่างไป ไม่เดา
+  var fcMonthParsed = _kpiParseForecastMonthText(p.forecastMonth);
   var fields = [
     // "Dock" = มี Dock รุ่นไหนก็ได้ (Dock ทั่วไป หรือ Dock 3 ที่แยกนับคอลัมน์ "Dock 3 Qty." ต่างหาก) — เดิมเช็คแค่
     // g.dock ตัวเดียว แต่สินค้าจริงส่วนใหญ่ที่ผู้ใช้ขายตอนนี้ชื่อรุ่นมี "Dock 3" (เช่น "DJI Dock 3(Overseas
@@ -2007,8 +2013,8 @@ function _pipeRowFields(p, excludeTypes) {
     p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, (g.dock || g.dock3) ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.tor || '',
-    pipeClosed ? 'Done' : _fmtForecastMonth(p.biddingDate),
-    pipeClosed ? '' : _pipeForecastMonthNum(p.biddingDate),
+    pipeClosed ? 'Done' : (p.forecastMonth || ''),
+    pipeClosed ? '' : (fcMonthParsed ? fcMonthParsed.month : ''),
     p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status),
     _pipeUpdateDateValue(p, _pipeExportUpdateDateSrc)
   ];
@@ -2241,24 +2247,6 @@ function _pipeModelQtyByGroup(items) {
   return g;
 }
 
-// Forecast Month = Bidding Date + 2 เดือน, format "2026 Jun"
-function _fmtForecastMonth(biddingDate) {
-  if (!biddingDate) return '';
-  var d = new Date(biddingDate);
-  if (isNaN(d.getTime())) return '';
-  d.setMonth(d.getMonth() + 2);
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return d.getFullYear() + ' ' + months[d.getMonth()];
-}
-
-// เลขเดือน (1-12) ของ Forecast Month — คอลัมน์ "month" แยกจาก "Forecast Month" ในชีท ให้ pivot/filter ใช้ตัวเลขได้ตรงๆ
-function _pipeForecastMonthNum(biddingDate) {
-  if (!biddingDate) return '';
-  var d = new Date(biddingDate);
-  if (isNaN(d.getTime())) return '';
-  d.setMonth(d.getMonth() + 2);
-  return d.getMonth() + 1;
-}
 
 async function aiAnalyzePipeline(btn) {
   var allPipes = ST.getAll('pipeline');
