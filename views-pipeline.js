@@ -2805,6 +2805,43 @@ function _pipeComputeDupLogClusters(pipeIdFilter) {
   return clusters;
 }
 
+// หา log ที่ "เนื้อหาตรงกัน (ตัดขีดนำหน้าแล้ว) แต่วันที่ไม่ตรงกัน/บางตัวไม่มีวันที่เลย" — เคสที่
+// _pipeComputeDupLogClusters (ต้องตรงทั้งเนื้อหา+วันที่) มองไม่เห็น เจอจริงจากผู้ใช้แจ้ง 2026-08-27:
+// log เก่าที่ import/พิมพ์รวมหลายบรรทัดไว้ในรายการเดียว ถูก parse แยกออกมาเป็น log ใหม่ทีหลัง (คนละรอบ
+// import คนละครั้งที่วันที่ไม่ตรงกันหรือดึงวันที่ไม่ได้เลยจนได้ค่าว่าง) เนื้อหาซ้ำกันเป๊ะแต่ date field ต่างกัน
+// ไม่กล้าลบอัตโนมัติเหมือน exact-match (เสี่ยงเจอกรณีเนื้อหาสั้นๆ พิมพ์ซ้ำคนละวันจริงๆ) แค่โชว์ให้ผู้ใช้ตรวจสอบ/
+// ลบเองทีละรายการผ่านปุ่ม 🗑️ ที่มีอยู่แล้วในการ์ด Updates (deletePipelineLog)
+function _pipeComputeFuzzyDupLogClusters(pipeIdFilter) {
+  var allPipes = ST.getAll('pipeline');
+  if (pipeIdFilter) allPipes = allPipes.filter(function(p) { return pipeIdFilter[p.id]; });
+  var allLogs = ST.getAll('pipeLog');
+  var logsByPipe = {};
+  allLogs.forEach(function(l) { if (!logsByPipe[l.pipeId]) logsByPipe[l.pipeId] = []; logsByPipe[l.pipeId].push(l); });
+
+  var fuzzy = [];
+  allPipes.forEach(function(p) {
+    var logs = logsByPipe[p.id] || [];
+    var byContent = {};
+    logs.forEach(function(l) {
+      if (l.type !== 'note' && l.type !== 'update') return;
+      var key = _pipeNormDashContent(l.content).toLowerCase();
+      if (!key) return;
+      if (!byContent[key]) byContent[key] = [];
+      byContent[key].push(l);
+    });
+    Object.keys(byContent).forEach(function(key) {
+      var g = byContent[key];
+      if (g.length < 2) return;
+      var dateSet = {};
+      g.forEach(function(l) { dateSet[(l.date || '').slice(0, 10)] = true; });
+      if (Object.keys(dateSet).length <= 1) return; // วันที่ตรงกันหมด — exact-match cluster จับไปแล้ว ไม่ต้องซ้ำ
+      fuzzy.push({ pipe: p, items: g.slice().sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); }) });
+    });
+  });
+  fuzzy.sort(function(a, b) { return String(b.pipe.rowNo || '').localeCompare(String(a.pipe.rowNo || '')); });
+  return fuzzy;
+}
+
 var _pipeDupLogLastFilter; // จำ pipeIdFilter ไว้ ใช้ re-scan หลังลบบางส่วนแล้วรีเฟรช modal
 function showPipeDuplicateLogAuditM(pipeIdFilter) {
   _pipeDupLogLastFilter = pipeIdFilter;
@@ -2828,9 +2865,7 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
 
   var h = '<div style="max-width:680px">';
   h += '<div class="hint" style="margin-bottom:10px">เช็คทุก Update ที่เนื้อหา (ตัดขีดนำหน้า/ช่องว่างซ้ำออกก่อนเทียบ) + วันที่ตรงกันเป๊ะตั้งแต่ 2 รายการขึ้นไป — ครอบคลุมทั้งเคสมีขีดค้างจาก Import เก่า และเคสซ้ำแบบอื่นที่เนื้อหาเหมือนกันเป๊ะ จะเก็บตัวที่ขีดน้อยที่สุด/เก่าสุดไว้ (ล้างขีดออกให้สะอาดด้วย) แล้วลบตัวที่เหลือทิ้ง — ยังไม่ลบอะไรจนกว่าจะกดยืนยัน</div>';
-  if (!clusters.length) {
-    h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
-  } else {
+  if (clusters.length) {
     h += '<div class="hint" style="margin-bottom:10px;color:var(--accent)">พบ ' + clusters.length + ' คู่ที่ซ้ำกัน (รวม ' + totalRemove + ' รายการจะถูกลบถ้ากด "ลบทั้งหมด")</div>';
     h += '<button class="btn btn-sm bd" style="margin-bottom:10px" onclick="_pipeDupLogDeleteAll()">🗑️ ลบรายการซ้ำทั้งหมด (' + totalRemove + ' รายการ)</button>';
     h += '<div style="max-height:55vh;overflow-y:auto">';
@@ -2860,8 +2895,42 @@ function showPipeDuplicateLogAuditM(pipeIdFilter) {
     });
     h += '</div>';
   }
+
+  // เคสเนื้อหาตรงกันแต่วันที่ไม่ตรง/บางตัวไม่มีวันที่ — ดูคอมเมนต์ _pipeComputeFuzzyDupLogClusters ด้านบน
+  // (ผู้ใช้แจ้ง 2026-08-27 ว่ามี log ซ้ำจริงแต่ปุ่มนี้หาไม่เจอ — เพราะ exact-match ต้องวันที่ตรงกันด้วย)
+  var fuzzy = _pipeComputeFuzzyDupLogClusters(pipeIdFilter);
+  if (fuzzy.length) {
+    h += '<div class="hint" style="margin:16px 0 10px;color:#f59e0b">⚠️ พบ ' + fuzzy.length + ' กลุ่มที่เนื้อหาตรงกันแต่วันที่ไม่ตรงกัน (หรือบางรายการไม่มีวันที่) — ไม่ลบให้อัตโนมัติเพราะไม่แน่ใจว่าคนละเหตุการณ์จริงหรือไม่ กรุณาตรวจดูแล้วลบเองทีละรายการ</div>';
+    h += '<div style="max-height:40vh;overflow-y:auto">';
+    fuzzy.forEach(function(f) {
+      var p = f.pipe;
+      h += '<div class="li" style="display:block;cursor:default">';
+      h += '<div class="lt">' + sanitize((p.rowNo ? p.rowNo + ' ' : '') + (p.projectName || '')) + '</div>';
+      f.items.forEach(function(l) {
+        h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:3px 0">';
+        h += '<div class="ls">📅 ' + (l.date ? fD(l.date) : '(ไม่มีวันที่)') + ' — "' + sanitize((l.content || '').slice(0, 80)) + '"</div>';
+        h += '<button class="btn btn-xs bd" style="flex-shrink:0" onclick="_pipeDupLogDeleteFuzzyOne(\'' + ppEsc(l.id) + '\')">🗑️</button>';
+        h += '</div>';
+      });
+      h += '<button class="btn btn-xs bo" style="margin-top:4px" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📋 ดูโครงการ</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  if (!clusters.length && !fuzzy.length) {
+    h += '<div class="empty"><p>ไม่พบรายการที่เข้าข่าย 🎉</p></div>';
+  }
   h += '</div>';
   openM('🔍 เช็ค Log ซ้ำ', h);
+}
+// ลบ log 1 รายการจากลิสต์ "เนื้อหาตรงกันแต่วันที่ไม่ตรง" แล้ว re-scan รีเฟรช modal (เหมือน _pipeDupLogDeleteClusters
+// แต่ไม่มี cluster ให้ยืนยันเป็นคู่ๆ เพราะเป็นการลบทีละรายการเอง)
+function _pipeDupLogDeleteFuzzyOne(logId) {
+  if (!confirm('ลบ Log นี้?')) return;
+  ST.delete('pipeLog', logId);
+  toast('🗑️ ลบแล้ว');
+  showPipeDuplicateLogAuditM(_pipeDupLogLastFilter);
 }
 // เขียน pipeLog ทั้ง collection ครั้งเดียวตอนจบ (ประกอบ array ในหน่วยความจำก่อน) แทนเรียก ST.update/ST.delete
 // ทีละรายการ — ของเดิมเรียกต่อ cluster (อาจมีเป็นร้อยเป็นพัน cluster) แต่ละครั้ง ST._set() ที่ ST.update/delete
