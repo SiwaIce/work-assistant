@@ -1582,6 +1582,8 @@ function saveKpiRunRateLog(planId, categoryId) {
 var _kpiApStatusSel = null;
 var _kpiApMonth = '';
 var _kpiApSearch = '';
+var _kpiApDealerId = ''; // กรองตาม Dealer เพิ่ม (ผู้ใช้ขอ 2026-08-27) — '' = ทุก Dealer
+var _kpiApExpanded = {}; // pipeId -> true ถ้ากดขยายดูรายละเอียดสินค้าอยู่ — เก็บไว้กันยุบตอน re-render จาก filter อื่น
 
 function _kpiApDefaultStatusSel() {
   var cfg = getConfig();
@@ -1594,6 +1596,8 @@ function showKpiAddProjectM(planId, categoryId) {
   _kpiApStatusSel = _kpiApDefaultStatusSel();
   _kpiApMonth = '';
   _kpiApSearch = '';
+  _kpiApDealerId = '';
+  _kpiApExpanded = {};
   _kpiApRenderModal(planId, categoryId);
 }
 
@@ -1602,6 +1606,7 @@ function _kpiApFilteredProjects() {
   return ST.getAll('pipeline').filter(function(p) {
     if (_kpiApStatusSel && _kpiApStatusSel[p.status] === false) return false;
     if (_kpiApMonth && (!p.biddingDate || p.biddingDate.slice(0, 7) !== _kpiApMonth)) return false;
+    if (_kpiApDealerId && p.dealerId !== _kpiApDealerId) return false;
     if (q) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
       var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '') + ' ' + (p.rowNo || '')).toLowerCase();
@@ -1611,18 +1616,40 @@ function _kpiApFilteredProjects() {
   }).sort(function(a, b) { return (b.registerDate || '').localeCompare(a.registerDate || ''); });
 }
 
+// รายละเอียดสินค้า (model x qty) ของโครงการ — โชว์ตอนกดขยายแถว กันต้องกด "+ เลือก" มั่วๆ ทั้งที่ยังไม่รู้ว่าใน
+// โครงการนั้นมีสินค้าอะไรบ้าง (ผู้ใช้ขอ 2026-08-27 ให้ดูรายละเอียดสินค้าได้ก่อนเลือก)
+function _kpiApDetailHtml(p) {
+  var items = getPipeItems(p) || [];
+  var rows = items.length
+    ? items.map(function(it) { return '<div style="display:flex;justify-content:space-between;gap:8px"><span>' + sanitize(it.model || '-') + '</span><span style="color:var(--text2)">x' + (Number(it.qty) || 1) + '</span></div>'; }).join('')
+    : '<div style="color:var(--text2)">ไม่มีรายการสินค้า</div>';
+  return '<div style="font-size:.72rem;background:var(--bg2);border-radius:6px;padding:8px 10px;margin:2px 0 4px">' +
+    rows +
+    '<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:2px;color:var(--text2)">' +
+    (p.endUserTH ? '<div>👤 ' + sanitize(p.endUserTH) + '</div>' : '') +
+    (p.tor ? '<div>📄 TOR: ' + sanitize(p.tor) + '</div>' : '') +
+    (p.biddingDate ? '<div>📅 Bidding Date: ' + fD(p.biddingDate) + '</div>' : '') +
+    '</div></div>';
+}
+
 function _kpiApListHtml(planId, categoryId) {
   var list = _kpiApFilteredProjects().slice(0, 100);
   if (!list.length) return '<div style="text-align:center;color:var(--text2);padding:16px;font-size:.78rem">ไม่พบโครงการที่ตรงกับตัวกรอง</div>';
   return list.map(function(p) {
     var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-    return '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
-      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+    var expanded = !!_kpiApExpanded[p.id];
+    return '<div>' +
+      '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
+      '<span style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden">' +
+      '<button class="btn bsm bo" style="flex-shrink:0;padding:1px 7px" onclick="_kpiApToggleExpand(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')" title="ดูรายละเอียดสินค้า">' + (expanded ? '▲' : '▼') + '</button>' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
       (p.rowNo ? '<span style="color:var(--text2)">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + sanitize(p.projectName || (dl ? dl.name : '') || '-') +
       (dl ? ' <span style="color:var(--text2)">— ' + sanitize(dl.name) + '</span>' : '') +
       ' <span style="color:var(--text2)">' + fmtMoneyShort(p.forecastAmount) + '</span> ' +
-      (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + '</span>' +
-      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiApPick(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')">+ เลือก</button></div>';
+      (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + '</span></span>' +
+      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiApPick(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')">+ เลือก</button></div>' +
+      (expanded ? _kpiApDetailHtml(p) : '') +
+      '</div>';
   }).join('');
 }
 
@@ -1642,8 +1669,21 @@ function _kpiApSetMonth(planId, categoryId, val) {
   _kpiApRenderModal(planId, categoryId);
 }
 
+function _kpiApSetDealer(planId, categoryId, val) {
+  _kpiApDealerId = val;
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
+function _kpiApToggleExpand(planId, categoryId, pipeId) {
+  _kpiApExpanded[pipeId] = !_kpiApExpanded[pipeId];
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
 function _kpiApRenderModal(planId, categoryId) {
   var cfg = getConfig();
+  var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
   var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:8px">เลือกโครงการที่มีอยู่แล้วมานับเข้า KPI นี้เอง (เผื่อยอดยังไม่ขึ้นอัตโนมัติ) — ค้นได้จากทุกช่วงเวลา ทุกโครงการ</p>';
   h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ / Dealer / Row No..." value="' + sanitize(_kpiApSearch) + '" oninput="_kpiApSearchInput(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="margin-bottom:8px">';
   h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">กรองตามสถานะ</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
@@ -1652,9 +1692,16 @@ function _kpiApRenderModal(planId, categoryId) {
       '<input type="checkbox" style="width:auto" ' + (_kpiApStatusSel[s.id] ? 'checked' : '') + ' onchange="_kpiApToggleStatus(\'' + planId + '\',\'' + categoryId + '\',\'' + s.id + '\',this.checked)">' + sanitize(s.name) + '</label>';
   });
   h += '</div></div>';
-  h += '<div style="margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><label style="font-size:.7rem">กรองตามเดือน (Bidding Date)</label>' +
+  h += '<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
+  h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">กรองตามเดือน (Bidding Date)</label>' +
     '<input type="month" value="' + sanitize(_kpiApMonth) + '" onchange="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto">' +
-    (_kpiApMonth ? '<button class="btn bsm bo" onclick="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',\'\')">ล้าง (ดูทุกช่วงเวลา)</button>' : '') + '</div>';
+    (_kpiApMonth ? '<button class="btn bsm bo" onclick="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',\'\')">ล้าง</button>' : '') + '</span>';
+  h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">Dealer</label>' +
+    '<select onchange="_kpiApSetDealer(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto;max-width:220px">' +
+    '<option value="">ทุก Dealer</option>' +
+    dealers.map(function(d) { return '<option value="' + sanitize(d.id) + '"' + (_kpiApDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; }).join('') +
+    '</select></span>';
+  h += '</div>';
   h += '<div id="kpi_ap_list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiApListHtml(planId, categoryId) + '</div>';
   openM('➕ เพิ่มโครงการเข้า KPI นี้', h);
 }
