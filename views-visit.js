@@ -98,7 +98,8 @@ function rVisitDet(el) {
     <button class="btn bsm bp" onclick="showVisitDraft('${v.id}')">📧 Draft Email</button>
     <button class="btn bsm bo" onclick="copyVisitRow('${v.id}')">📋 Copy Row</button>
     <button class="btn bsm bo" onclick="copyVisitSAP('${v.id}')">📄 SAP</button>
-    <button class="btn bsm bo" onclick="showVisitM('${v.dealerId||''}','${v.id}')">✏️</button>
+    <button class="btn bsm bo" onclick="showVisitM('${v.dealerId||''}','${v.id}')" title="แก้ไขแบบ Modal เล็ก">✏️</button>
+    <button class="btn bsm bo" onclick="openVisitWindow('${v.dealerId||''}','${v.id}','','')" title="แก้ไขแบบเปิดแท็บเต็มจอ — มีสมุดโน้ตเร็วด้านขวา">🪟</button>
     <button class="btn bsm bd" onclick="ST.delete('visits','${v.id}');toast('🗑️');go('visits')">🗑️</button>
   </span></h2>
   
