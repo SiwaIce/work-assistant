@@ -3886,21 +3886,37 @@ var DOCK_DEVELOP_STEPS = [
   { key: 'bo', icon: '📦', title: 'BO', desc: 'ได้ Booking Order' }
 ];
 
+// รองรับข้อมูลเก่า (เคยเป็นค่าวันที่เดี่ยว dd[key]) — แปลงเป็น array ตอนอ่านครั้งแรก ไม่ต้อง migrate ทิ้งของเดิม
+function _ddStepDates(dd, key) {
+  if (dd.actions && Array.isArray(dd.actions[key])) return dd.actions[key];
+  if (dd[key]) return [dd[key]];
+  return [];
+}
+
 function dealerDockDevelopTab(d) {
   var dd = d.dockDevelop || {};
-  var doneCount = DOCK_DEVELOP_STEPS.filter(function(s) { return !!dd[s.key]; }).length;
+  var doneCount = DOCK_DEVELOP_STEPS.filter(function(s) { return _ddStepDates(dd, s.key).length > 0; }).length;
   var rating = dd.potential || '';
 
   var h = '<div class="card" style="width:100%"><h2>🚀 Dock Promote Action ' +
     '<span class="ml"><button class="btn bsm bo" onclick="copyDockDevelopForSheet(\'' + d.id + '\')">📋 Copy สำหรับ Sheet</button></span></h2>' +
-    '<p class="hint" style="font-size:.68rem;color:var(--text3);margin-bottom:10px">แผนกิจกรรมส่งเสริมการขาย Dock ต่อ Dealer นี้ · ' + doneCount + '/' + DOCK_DEVELOP_STEPS.length + ' ขั้นตอนมีวันที่แล้ว</p>' +
+    '<p class="hint" style="font-size:.68rem;color:var(--text3);margin-bottom:10px">แผนกิจกรรมส่งเสริมการขาย Dock ต่อ Dealer นี้ · ' + doneCount + '/' + DOCK_DEVELOP_STEPS.length + ' ขั้นตอนมีวันที่แล้ว · ทำได้หลายรอบต่อขั้นตอน กด "+ เพิ่มวันที่" เพื่อบันทึกรอบใหม่</p>' +
     '<div class="fg" style="margin-bottom:10px"><label style="font-size:.68rem;color:var(--text3)">Target Customer Industry</label>' +
     '<input type="text" value="' + sanitize(dd.targetIndustry || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'targetIndustry\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>';
 
   DOCK_DEVELOP_STEPS.forEach(function(s) {
-    h += '<div class="dd-step"><div class="ic">' + s.icon + '</div>' +
-      '<div class="main"><div class="t">' + sanitize(s.title) + '</div><div class="s">' + sanitize(s.desc) + '</div></div>' +
-      '<input type="date" value="' + (dd[s.key] || '') + '" onchange="saveDockDevelopField(\'' + d.id + '\',\'' + s.key + '\',this.value)"></div>';
+    var dates = _ddStepDates(dd, s.key).slice().sort().reverse();
+    h += '<div class="dd-step" style="align-items:flex-start;flex-wrap:wrap">' +
+      '<div class="ic">' + s.icon + '</div>' +
+      '<div class="main"><div class="t">' + sanitize(s.title) + '</div><div class="s">' + sanitize(s.desc) + '</div>' +
+      (dates.length ? '<div class="tagrow" style="margin-top:6px">' + dates.map(function(dt, i) {
+        return '<span class="tagchip on">' + fD(dt) + ' <span style="cursor:pointer;margin-left:4px" onclick="removeDockDevelopDate(\'' + d.id + '\',\'' + s.key + '\',' + i + ')" title="ลบ">✕</span></span>';
+      }).join('') + '</div>' : '') +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
+      '<input type="date" id="dd_newdate_' + s.key + '_' + d.id + '">' +
+      '<button class="btn bsm bo" onclick="addDockDevelopDate(\'' + d.id + '\',\'' + s.key + '\',document.getElementById(\'dd_newdate_' + s.key + '_' + d.id + '\').value)">+ เพิ่มวันที่</button>' +
+      '</div></div>';
   });
 
   h += '</div>';
@@ -3942,12 +3958,49 @@ function saveDockDevelopField(dealerId, field, value) {
   render();
 }
 
+// เพิ่ม/ลบ วันที่ของขั้นตอน Dock Promote Action — ทำได้หลายรอบต่อขั้นตอน (เก็บเป็น array ใน dd.actions[key])
+function addDockDevelopDate(dealerId, stepKey, value) {
+  if (!value) { toast('⚠️ เลือกวันที่ก่อน'); return; }
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var dd = d.dockDevelop || {};
+  var dates = _ddStepDates(dd, stepKey);
+  if (dates.indexOf(value) !== -1) { toast('มีวันที่นี้อยู่แล้ว'); return; }
+  dates.push(value);
+  if (!dd.actions) dd.actions = {};
+  dd.actions[stepKey] = dates;
+  delete dd[stepKey]; // เลิกใช้ค่าเดี่ยวเก่าเมื่อย้ายมาเป็น array แล้ว กันข้อมูลซ้อนกัน 2 ที่
+  d.dockDevelop = dd;
+  ST.update('dealers', dealerId, d);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  toast('💾 เพิ่มวันที่แล้ว');
+  render();
+}
+
+function removeDockDevelopDate(dealerId, stepKey, idx) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.dockDevelop) return;
+  var dates = _ddStepDates(d.dockDevelop, stepKey);
+  dates.splice(idx, 1);
+  if (!d.dockDevelop.actions) d.dockDevelop.actions = {};
+  d.dockDevelop.actions[stepKey] = dates;
+  delete d.dockDevelop[stepKey];
+  ST.update('dealers', dealerId, d);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
 // คัดลอกแถวข้อมูลตรงลำดับคอลัมน์แท็บ "Dock Promote Action" + "Dock Dealer" ใน Dealer Develop.xlsx
+// ชีทมีช่องละ 1 วันที่ต่อขั้นตอน — export วันที่ล่าสุดของแต่ละขั้นตอน (ในแอปเก็บประวัติทุกรอบไว้ครบ)
 function copyDockDevelopForSheet(dealerId) {
   var d = ST.getOne('dealers', dealerId);
   if (!d) return;
   var dd = d.dockDevelop || {};
-  var actionRow = [d.name || '', dd.targetIndustry || ''].concat(DOCK_DEVELOP_STEPS.map(function(s) { return dd[s.key] || ''; })).join('\t');
+  var actionRow = [d.name || '', dd.targetIndustry || ''].concat(DOCK_DEVELOP_STEPS.map(function(s) {
+    var dates = _ddStepDates(dd, s.key).slice().sort();
+    return dates.length ? dates[dates.length - 1] : '';
+  })).join('\t');
   var ratingRow = [d.name || '', dd.potential ? (dd.potential === 'high' ? 'High' : dd.potential === 'mid' ? 'Middle' : 'Low') : '', dd.keyPerson || '', dd.keyAccounts || '', dd.firstVisit || '', dd.salesOfSis || '', dd.nextStep || ''].join('\t');
   var tsv = 'Dock Promote Action:\n' + actionRow + '\n\nDock Dealer:\n' + ratingRow;
   if (navigator.clipboard && navigator.clipboard.writeText) {
