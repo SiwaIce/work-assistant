@@ -3463,6 +3463,8 @@ function dealerOnboardTab(d) {
   var html = '<div class="card" style="width:100%"><h2>🔄 Dealer Onboarding ' +
     (isComplete ? '<span class="tag tag-completed">✅ เสร็จสมบูรณ์</span>' : '<span class="tag tag-active">🔄 กำลังดำเนินการ</span>') +
     ' <span class="ml">' +
+    '<button class="btn bsm bo" onclick="copyOnboardRowForSheet(\'' + d.id + '\')" title="คัดลอกแถวข้อมูลไปวางใน Google Sheet">📋 Copy</button> ' +
+    '<button class="btn bsm bo" onclick="showOnboardStepsConfigM()" title="ตั้งค่ารายการขั้นตอน Onboarding">⚙️ ตั้งค่ารายการ</button> ' +
     '<button class="btn bsm bo" onclick="resetOnboarding(\'' + d.id + '\')">🔄 Reset</button>' +
     '</span></h2>' +
 
@@ -3473,12 +3475,22 @@ function dealerOnboardTab(d) {
     '<div class="ob-summary-card" style="width:100%"><div class="val c3">' + (total - done) + '</div><div class="lbl">เหลือ</div></div>' +
     '<div class="ob-summary-card" style="width:100%"><div class="val ' + (pct >= 80 ? 'c2' : pct >= 50 ? 'c3' : 'c4') + '">' + pct + '%</div><div class="lbl">Progress</div></div>' +
     '</div>' +
-    
+
     '<div class="ob-progress" style="display:flex;gap:10px;align-items:center;width:100%;margin-bottom:16px">' +
     '<div class="pb" style="flex:1;height:10px"><div class="pf ' + (pct >= 80 ? 'pf-green' : pct >= 50 ? 'pf-yellow' : 'pf-blue') + '" style="width:' + pct + '%"></div></div>' +
     '<div class="pct">' + pct + '%</div></div>' +
-    
+
     (ob.startDate ? '<div style="font-size:.7rem;color:var(--text3);margin-bottom:10px">เริ่ม: ' + fD(ob.startDate) + ' (' + daysBetween(ob.startDate, _td()) + ' วันที่แล้ว)</div>' : '');
+
+  html += '<div class="ob-group-label" style="width:100%;margin-top:4px;margin-bottom:8px">📊 ข้อมูลสรุป (สำหรับ Google Sheet)</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;width:100%;margin-bottom:12px">' +
+    _obScalarField(d.id, 'observationEndDate', 'date', 'Observation Period End', ob.observationEndDate || '') +
+    _obScalarField(d.id, 'revenue', 'number', 'Revenue', ob.revenue || '') +
+    _obScalarField(d.id, 'demoInvestment', 'number', 'Demo Investment', ob.demoInvestment || '') +
+    _obScalarField(d.id, 'mktPlan', 'text', 'MKT Plan / Co-visiting', ob.mktPlan || '') +
+    '<div><div style="font-size:.62rem;color:var(--text3);margin-bottom:2px">DSEC progress</div>' +
+    '<div style="font-size:.75rem;padding:6px 0">' + (d.dsecStatus === 'pass' ? '✅ ผ่านแล้ว' : (d.dsecStatus || '— ยังไม่ผ่าน')) + '</div></div>' +
+    '</div>';
 
   html += '<div class="ob-group-label" style="width:100%;margin-top:12px;margin-bottom:8px;padding-top:8px;border-top:1px solid var(--border)">📋 ขั้นตอน Onboarding</div>';
   for (var i = 0; i < onboardSteps.length; i++) {
@@ -3532,6 +3544,7 @@ function renderOnboardStepFullWidth(dealerId, step, idx, currentIdx) {
     (step.done && step.date ? '✅ เสร็จแล้ว — ' + fD(step.date) : '') +
     (!step.done && isCurrent ? '🔄 ขั้นตอนปัจจุบัน — กดเพื่อทำเสร็จ' : '') +
     (!step.done && !isCurrent ? 'ยังไม่ได้ทำ — กดเพื่อทำเสร็จ' : '') +
+    (step.planDate ? ' · 📅 แผน: ' + fD(step.planDate) : '') +
     '</div>' +
     '<input type="text" class="ob-note-inline" value="' + sanitize(step.note || '') + '" placeholder="+ พิมพ์โน้ตตรงนี้ได้เลย" style="font-size:.7rem;color:var(--text2);margin-top:4px;width:100%;background:transparent;border:none;border-bottom:1px dashed var(--border);padding:2px 0" ' +
     'onclick="event.stopPropagation()" onblur="saveOnboardStepNoteInline(\'' + dealerId + '\',' + idx + ',this.value)" onkeydown="if(event.key===\'Enter\'){this.blur();}">' +
@@ -3554,6 +3567,101 @@ function saveOnboardStepNoteInline(dealerId, stepIdx, noteValue) {
 }
 
 // ================================================================
+// ONBOARDING — ข้อมูลสรุประดับ Dealer (สำหรับ copy ไป Google Sheet)
+// ================================================================
+function _obScalarField(dealerId, field, type, label, value) {
+  var inputHtml = type === 'text'
+    ? '<input type="text" value="' + sanitize(String(value)) + '" onblur="saveOnboardScalar(\'' + dealerId + '\',\'' + field + '\',this.value)" style="width:100%;font-size:.75rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 7px">'
+    : '<input type="' + type + '" value="' + sanitize(String(value)) + '" onblur="saveOnboardScalar(\'' + dealerId + '\',\'' + field + '\',this.value)" style="width:100%;font-size:.75rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 7px;box-sizing:border-box">';
+  return '<div><div style="font-size:.62rem;color:var(--text3);margin-bottom:2px">' + label + '</div>' + inputHtml + '</div>';
+}
+
+function saveOnboardScalar(dealerId, field, value) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.onboarding) return;
+  var v = (field === 'revenue' || field === 'demoInvestment') ? (Number(value) || 0) : (value || '').trim();
+  if (d.onboarding[field] === v) return;
+  d.onboarding[field] = v;
+  ST.update('dealers', dealerId, d);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  toast('💾 บันทึกแล้ว');
+}
+
+// เปิดตัวตั้งค่า Onboarding Steps Template เดียวกับใน Admin แต่เรียกจากแทป Onboard ของ Dealer ได้เลย
+function showOnboardStepsConfigM() {
+  var cfg = getConfig();
+  openM('⚙️ ตั้งค่ารายการ Onboarding', '' +
+    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:6px">ขั้นตอน Onboard Dealer ใหม่ — ใช้เป็น Template สำหรับทุก Dealer</p>' +
+    '<textarea id="adm_onboard" rows="12" style="font-size:.72rem;width:100%">' +
+    (cfg.onboardingSteps || []).map(function(s) { return s.title + '|' + (s.group || 'onboard'); }).join('\n') +
+    '</textarea>' +
+    '<div style="font-size:.62rem;color:var(--text3);margin:3px 0">แต่ละบรรทัด: ชื่อขั้นตอน|กลุ่ม (onboard หรือ after)</div>' +
+    '<button class="btn bsm bo" style="margin-bottom:8px" onclick="_obLoadSheetTemplateSteps()">📥 เพิ่มขั้นตอนตาม Google Sheet template (Policy/Product/Solution/Demo/MKT Training)</button>' +
+    '<button class="btn bp btn-full" onclick="_obSaveStepsConfigAndClose()">💾 บันทึก</button>');
+}
+
+function _obLoadSheetTemplateSteps() {
+  var el = document.getElementById('adm_onboard');
+  if (!el) return;
+  var needed = ['Policy Training', 'Product Training', 'Solution Training', 'Demo', 'MKT Training'];
+  var existing = el.value.toLowerCase();
+  var toAdd = needed.filter(function(t) { return existing.indexOf(t.toLowerCase()) === -1; });
+  if (!toAdd.length) { toast('มีขั้นตอนเหล่านี้อยู่แล้ว'); return; }
+  el.value = (el.value.trim() ? el.value.trim() + '\n' : '') + toAdd.map(function(t) { return t + '|after'; }).join('\n');
+  toast('📥 เพิ่มแล้ว — กด บันทึก เพื่อยืนยัน');
+}
+
+function _obSaveStepsConfigAndClose() {
+  admSaveOnboard();
+  closeMForce();
+  render();
+}
+
+// จับคู่ step กับหมวด training จากชื่อ (ยืดหยุ่นกับชื่อที่ admin ตั้งเอง)
+function _onboardFindStep(ob, keywords) {
+  var steps = (ob && ob.steps) || [];
+  for (var i = 0; i < steps.length; i++) {
+    var t = (steps[i].title || '').toLowerCase();
+    var ok = true;
+    for (var k = 0; k < keywords.length; k++) { if (t.indexOf(keywords[k]) === -1) { ok = false; break; } }
+    if (ok) return steps[i];
+  }
+  return null;
+}
+
+// คัดลอก 1 แถวข้อมูล Onboarding ของ Dealer นี้ (TSV) ให้วางลง Google Sheet ได้ตรงคอลัมน์ทันที
+// ลำดับคอลัมน์: Dealer Name, On Board Time, Observation Period End at, Revenue, Demo Investment, DSEC progress,
+// MKT Plan or Co-visiting, [Policy/Product/Solution/Demo/MKT Training] x (Plan Date, Complete Date)
+function copyOnboardRowForSheet(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.onboarding) { toast('ยังไม่ได้เริ่ม Onboarding'); return; }
+  var ob = d.onboarding;
+  var cats = [['policy'], ['product'], ['solution'], ['demo'], ['mkt']];
+  var cells = [
+    d.name || '',
+    ob.startDate || '',
+    ob.observationEndDate || '',
+    ob.revenue || '',
+    ob.demoInvestment || '',
+    d.dsecStatus === 'pass' ? 'Pass' : (d.dsecStatus || ''),
+    ob.mktPlan || ''
+  ];
+  for (var i = 0; i < cats.length; i++) {
+    var s = _onboardFindStep(ob, cats[i]);
+    cells.push(s ? (s.planDate || '') : '');
+    cells.push(s ? (s.date || '') : '');
+  }
+  var tsv = cells.join('\t');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tsv).then(function() {
+      toast('📋 คัดลอกแล้ว — ไปวางใน Google Sheet ได้เลย');
+    }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ อุปกรณ์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+
+// ================================================================
 // ONBOARDING ACTIONS
 // ================================================================
 function startOnboarding(dealerId) {
@@ -3566,6 +3674,7 @@ function startOnboarding(dealerId) {
       title: templateSteps[i].title,
       group: templateSteps[i].group || 'onboard',
       done: false,
+      planDate: '',
       date: '',
       note: ''
     });
@@ -3628,7 +3737,8 @@ function editOnboardStep(dealerId, stepIdx) {
     '<label><input type="radio" name="obs_done" value="0"' + (!step.done ? ' checked' : '') + '><span>☐ ยังไม่เสร็จ</span></label>' +
     '<label><input type="radio" name="obs_done" value="1"' + (step.done ? ' checked' : '') + '><span>✅ เสร็จแล้ว</span></label>' +
     '</div></div>' +
-    dpH('obs_date', step.date || _td(), 'วันที่เสร็จ') +
+    dpH('obs_plandate', step.planDate || '', 'วันที่วางแผน (Plan Date)') +
+    dpH('obs_date', step.date || _td(), 'วันที่เสร็จ (Complete Date)') +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="obs_note" rows="3">' + sanitize(step.note || '') + '</textarea></div>' +
     '<button class="btn bp btn-full" onclick="saveOnboardStep(\'' + dealerId + '\',' + stepIdx + ')">💾 บันทึก</button>');
 }
@@ -3641,6 +3751,7 @@ function saveOnboardStep(dealerId, stepIdx) {
   var noteEl = document.getElementById('obs_note');
   
   d.onboarding.steps[stepIdx].done = doneEl ? doneEl.value === '1' : false;
+  d.onboarding.steps[stepIdx].planDate = dpG('obs_plandate') || '';
   d.onboarding.steps[stepIdx].date = dpG('obs_date') || '';
   d.onboarding.steps[stepIdx].note = noteEl ? noteEl.value.trim() : '';
   
