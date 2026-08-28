@@ -3587,32 +3587,80 @@ function saveOnboardScalar(dealerId, field, value) {
   toast('💾 บันทึกแล้ว');
 }
 
-// เปิดตัวตั้งค่า Onboarding Steps Template เดียวกับใน Admin แต่เรียกจากแทป Onboard ของ Dealer ได้เลย
+// ตั้งค่ารายการ Onboarding Steps — เรียกจากแทป Onboard ของ Dealer ได้เลย
+// เป็น list editor ที่ปรับด้วยปุ่ม (เพิ่ม/ลบ/เลื่อนลำดับ/เลือกกลุ่มจาก dropdown) แทนการพิมพ์ "ชื่อ|กลุ่ม" เองในกล่องข้อความ
+var _obCfgWorking = [];
+
 function showOnboardStepsConfigM() {
   var cfg = getConfig();
-  openM('⚙️ ตั้งค่ารายการ Onboarding', '' +
-    '<p style="font-size:.68rem;color:var(--text3);margin-bottom:6px">ขั้นตอน Onboard Dealer ใหม่ — ใช้เป็น Template สำหรับทุก Dealer</p>' +
-    '<textarea id="adm_onboard" rows="12" style="font-size:.72rem;width:100%">' +
-    (cfg.onboardingSteps || []).map(function(s) { return s.title + '|' + (s.group || 'onboard'); }).join('\n') +
-    '</textarea>' +
-    '<div style="font-size:.62rem;color:var(--text3);margin:3px 0">แต่ละบรรทัด: ชื่อขั้นตอน|กลุ่ม (onboard หรือ after)</div>' +
-    '<button class="btn bsm bo" style="margin-bottom:8px" onclick="_obLoadSheetTemplateSteps()">📥 เพิ่มขั้นตอนตาม Google Sheet template (Policy/Product/Solution/Demo/MKT Training)</button>' +
-    '<button class="btn bp btn-full" onclick="_obSaveStepsConfigAndClose()">💾 บันทึก</button>');
+  _obCfgWorking = (cfg.onboardingSteps || []).map(function(s) { return { title: s.title, group: s.group || 'onboard' }; });
+  openM('⚙️ ตั้งค่ารายการ Onboarding', _obCfgModalHtml());
 }
 
+function _obCfgModalHtml() {
+  return '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">ขั้นตอน Onboard Dealer ใหม่ — ใช้เป็น Template สำหรับทุก Dealer</p>' +
+    '<div id="ob_cfg_list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;margin-bottom:8px">' +
+    _obCfgListHtml() +
+    '</div>' +
+    '<button class="btn bsm bo" style="width:100%;margin-bottom:6px" onclick="_obCfgAddRow()">➕ เพิ่มขั้นตอน</button>' +
+    '<button class="btn bsm bo" style="width:100%;margin-bottom:10px" onclick="_obLoadSheetTemplateSteps()">📥 เพิ่มขั้นตอนตาม Google Sheet template (Policy/Product/Solution/Demo/MKT Training)</button>' +
+    '<button class="btn bp btn-full" onclick="_obSaveStepsConfig()">💾 บันทึก</button>';
+}
+
+function _obCfgListHtml() {
+  if (!_obCfgWorking.length) return '<div style="text-align:center;color:var(--text3);font-size:.72rem;padding:10px">ยังไม่มีขั้นตอน — กด ➕ เพิ่มขั้นตอน</div>';
+  return _obCfgWorking.map(function(s, i) {
+    return '<div style="display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 8px">' +
+      '<span style="font-size:.65rem;color:var(--text3);width:16px;text-align:center;flex-shrink:0">' + (i + 1) + '</span>' +
+      '<input type="text" value="' + sanitize(s.title) + '" placeholder="ชื่อขั้นตอน" oninput="_obCfgSetTitle(' + i + ',this.value)" style="flex:1;min-width:0;font-size:.75rem;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 7px">' +
+      '<select onchange="_obCfgSetGroup(' + i + ',this.value)" style="font-size:.68rem;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 4px;flex-shrink:0">' +
+      '<option value="onboard"' + (s.group === 'onboard' ? ' selected' : '') + '>ก่อน Onboard</option>' +
+      '<option value="after"' + (s.group === 'after' ? ' selected' : '') + '>หลัง Onboard</option>' +
+      '</select>' +
+      '<button class="btn bsm bo" style="padding:3px 7px;flex-shrink:0" onclick="_obCfgMove(' + i + ',-1)"' + (i === 0 ? ' disabled' : '') + ' title="เลื่อนขึ้น">▲</button>' +
+      '<button class="btn bsm bo" style="padding:3px 7px;flex-shrink:0" onclick="_obCfgMove(' + i + ',1)"' + (i === _obCfgWorking.length - 1 ? ' disabled' : '') + ' title="เลื่อนลง">▼</button>' +
+      '<button class="btn bsm bd" style="padding:3px 7px;flex-shrink:0" onclick="_obCfgRemove(' + i + ')" title="ลบ">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+function _obCfgRerender() {
+  var el = document.getElementById('ob_cfg_list');
+  if (el) el.innerHTML = _obCfgListHtml();
+}
+
+function _obCfgSetTitle(i, v) { if (_obCfgWorking[i]) _obCfgWorking[i].title = v; }
+function _obCfgSetGroup(i, v) { if (_obCfgWorking[i]) _obCfgWorking[i].group = v; }
+
+function _obCfgMove(i, dir) {
+  var j = i + dir;
+  if (j < 0 || j >= _obCfgWorking.length) return;
+  var tmp = _obCfgWorking[i]; _obCfgWorking[i] = _obCfgWorking[j]; _obCfgWorking[j] = tmp;
+  _obCfgRerender();
+}
+
+function _obCfgRemove(i) { _obCfgWorking.splice(i, 1); _obCfgRerender(); }
+function _obCfgAddRow() { _obCfgWorking.push({ title: '', group: 'onboard' }); _obCfgRerender(); }
+
 function _obLoadSheetTemplateSteps() {
-  var el = document.getElementById('adm_onboard');
-  if (!el) return;
   var needed = ['Policy Training', 'Product Training', 'Solution Training', 'Demo', 'MKT Training'];
-  var existing = el.value.toLowerCase();
-  var toAdd = needed.filter(function(t) { return existing.indexOf(t.toLowerCase()) === -1; });
+  var existingText = _obCfgWorking.map(function(s) { return (s.title || '').toLowerCase(); }).join('\n');
+  var toAdd = needed.filter(function(t) { return existingText.indexOf(t.toLowerCase()) === -1; });
   if (!toAdd.length) { toast('มีขั้นตอนเหล่านี้อยู่แล้ว'); return; }
-  el.value = (el.value.trim() ? el.value.trim() + '\n' : '') + toAdd.map(function(t) { return t + '|after'; }).join('\n');
+  toAdd.forEach(function(t) { _obCfgWorking.push({ title: t, group: 'after' }); });
+  _obCfgRerender();
   toast('📥 เพิ่มแล้ว — กด บันทึก เพื่อยืนยัน');
 }
 
-function _obSaveStepsConfigAndClose() {
-  admSaveOnboard();
+function _obSaveStepsConfig() {
+  var cfg = getConfig();
+  var steps = _obCfgWorking.filter(function(s) { return (s.title || '').trim(); }).map(function(s) {
+    var title = s.title.trim();
+    return { id: title.toLowerCase().replace(/[^a-z0-9]/g, '_').substr(0, 30), title: title, group: s.group || 'onboard' };
+  });
+  cfg.onboardingSteps = steps;
+  saveConfig(cfg);
+  toast('💾 บันทึก Onboarding Steps แล้ว');
   closeMForce();
   render();
 }

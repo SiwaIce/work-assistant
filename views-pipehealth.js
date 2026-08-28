@@ -5,7 +5,17 @@
 var _pipeHealthActiveTab = 'health';
 var _pipeHealthWeekOffset = 0;
 var _pipeHealthWkTab = 'bid';
-var PIPEHEALTH_STALE_DAYS = 14;
+
+// เกณฑ์ "ค้างอัปเดต" ปรับได้จากหน้าจอ (การ์ดสุขภาพ Pipeline) — เก็บไว้ในเครื่องนี้เท่านั้น ไม่ sync ข้ามอุปกรณ์
+function pipeHealthStaleDays() {
+  var v = Number(localStorage.getItem('v7_pipeHealthStaleDays'));
+  return v > 0 ? v : 14;
+}
+function _pipeHealthSetStaleDays(v) {
+  var n = Math.max(1, Number(v) || 14);
+  localStorage.setItem('v7_pipeHealthStaleDays', String(n));
+  render();
+}
 
 function rPipeHealth(el) {
   document.getElementById('pgT').textContent = '🚦 Pipeline Health';
@@ -78,9 +88,10 @@ function pipeHealthStatsBySale() {
       var rd = p.registerDate || (p.created ? p.created.split('T')[0] : '');
       return rd >= wk.start && rd <= wk.end;
     }).sort(function(a, b) { return (b.registerDate || '').localeCompare(a.registerDate || ''); });
+    var staleDays = pipeHealthStaleDays();
     var stale = openPipes.filter(function(p) {
       var d = lastActivityDate(p);
-      return d && daysBetween(d, _td()) > PIPEHEALTH_STALE_DAYS;
+      return d && daysBetween(d, _td()) > staleDays;
     }).sort(function(a, b) { return lastActivityDate(a).localeCompare(lastActivityDate(b)); });
     var lastVisitDate = lastVisitMap[name] || '';
     return {
@@ -98,12 +109,18 @@ function pipeHealthStatsBySale() {
 
 function _pipeHealthHealthPaneHtml() {
   var stats = pipeHealthStatsBySale();
+  var staleDays = pipeHealthStaleDays();
   var h = '<div class="card">' +
-    '<h2>🚦 สุขภาพ Pipeline รายเซล <span style="font-weight:400;color:var(--text3);font-size:12px">สัปดาห์ของ ' + stats.weekRange.label + '</span></h2>' +
-    '<p class="ph-hint">"โครงการใหม่" นับจาก Register Date ในสัปดาห์นี้ · "ค้างอัปเดต" นับจากวันที่ Timeline ล่าสุดของโครงการ เกิน ' + PIPEHEALTH_STALE_DAYS + ' วัน — กดตัวเลขเพื่อดูรายชื่อโครงการ</p>' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">' +
+    '<h2 style="margin:0">🚦 สุขภาพ Pipeline รายเซล <span style="font-weight:400;color:var(--text3);font-size:12px">สัปดาห์ของ ' + stats.weekRange.label + '</span></h2>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);flex-shrink:0">เกณฑ์ค้างอัปเดต ' +
+    '<input type="number" min="1" value="' + staleDays + '" style="width:52px;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;text-align:center" ' +
+    'onchange="_pipeHealthSetStaleDays(this.value)"> วัน</label>' +
+    '</div>' +
+    '<p class="ph-hint">"โครงการใหม่" นับจาก Register Date ในสัปดาห์นี้ · "ค้างอัปเดต" นับจากวันที่ Timeline ล่าสุดของโครงการ เกิน ' + staleDays + ' วัน — กดตัวเลขเพื่อดูรายชื่อโครงการ</p>' +
     '<div style="overflow-x:auto"><table class="ph-rep-table"><thead><tr>' +
     '<th>เซล</th><th class="num">Pipeline ทั้งหมด</th><th class="num">🆕 ใหม่สัปดาห์นี้</th>' +
-    '<th class="num">⚠️ ค้างอัปเดต &gt;' + PIPEHEALTH_STALE_DAYS + ' วัน</th><th class="num ph-hide-sm">Visit ล่าสุด</th>' +
+    '<th class="num">⚠️ ค้างอัปเดต &gt;' + staleDays + ' วัน</th><th class="num ph-hide-sm">Visit ล่าสุด</th>' +
     '</tr></thead><tbody>';
 
   if (!stats.reps.length) {
@@ -195,7 +212,7 @@ function _pipeHealthShowAllM(saleName, kind) {
   var rep = stats.reps.filter(function(r) { return r.name === saleName; })[0];
   if (!rep) return;
   var list = kind === 'new' ? rep.newThisWeek : rep.stale;
-  var title = (kind === 'new' ? '🆕 โครงการใหม่สัปดาห์นี้ — ' : '⚠️ ค้างอัปเดต >' + PIPEHEALTH_STALE_DAYS + ' วัน — ') + saleName;
+  var title = (kind === 'new' ? '🆕 โครงการใหม่สัปดาห์นี้ — ' : '⚠️ ค้างอัปเดต >' + pipeHealthStaleDays() + ' วัน — ') + saleName;
   openM(title, '<div class="ph-drill open" style="margin:0">' + list.map(function(p) { return _pipeHealthRowHtml(p, kind); }).join('') + '</div>');
 }
 
