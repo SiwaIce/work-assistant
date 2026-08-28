@@ -4834,7 +4834,14 @@ function vpMarkPlanActualFromVisit(visitId, prospectId) {
   var planId = window._vpLinkPlanId;
   window._vpLinkPlanId = null;
   var plan = ST.getOne('visitPlans', planId);
-  var _updatedPlan = ST.update('visitPlans', planId, { status: 'done', visitId: visitId });
+  var updates = { status: 'done', visitId: visitId };
+  // เขียนสถานะติ๊ก/รายละเอียด Agenda ที่แก้ไว้ใน Visit Report กลับเข้าแผนนัดต้นทางด้วย (ดู
+  // _visitAgendaSectionHtml ใน modals.js) — ให้การ์ด Visit Plan (ทั้งในเมนู Visit Planning และแท็บ Dealer)
+  // เห็นสถานะติ๊กล่าสุดตรงกับที่กรอกไว้ตอนบันทึกผล ไม่ใช่ค่าติ๊กเก่าตอนวางแผน (ผู้ใช้ขอ 2026-08-27)
+  if (window._visitAgendaWorking && window._visitAgendaPlanId === planId) updates.agenda = window._visitAgendaWorking;
+  window._visitAgendaWorking = null;
+  window._visitAgendaPlanId = null;
+  var _updatedPlan = ST.update('visitPlans', planId, updates);
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _updatedPlan);
   var pid = prospectId || (plan && plan.prospectId) || '';
   if (pid && typeof _vpAdvanceProspectIfBehind === 'function') _vpAdvanceProspectIfBehind(pid, 'visited', 'เข้าพบตามนัดแล้ว');

@@ -295,17 +295,11 @@ function rVisitWindow(el) {
   if (window._vwPlanId && !eid && !window._visitDraftOverride) {
     var _vwPlan = ST.getOne('visitPlans', window._vwPlanId);
     if (_vwPlan && _vwPlan.date) window._visitDraftOverride = { date: _vwPlan.date };
-    // ดึงหัวข้อ Agenda ที่ติ๊กว่าคุยแล้วในแผนนัดมาร่างลงช่อง "สรุปการคุย" ให้อัตโนมัติ (ผู้ใช้ขอ 2026-08-27) —
-    // เอาเฉพาะที่ติ๊กจริง (a.done) ไม่ใช่ทุกหัวข้อในแผน เพราะบางหัวข้ออาจไม่ได้คุยจริงในนัดนี้ ถ้าไม่มีติ๊กเลย
-    // ไม่ต้องแทรกอะไร ปล่อยช่องว่างเหมือนเดิม — ผู้ใช้ยังแก้/ลบข้อความนี้เองต่อได้ตามปกติก่อนกดบันทึก
-    if (_vwPlan && _vwPlan.agenda && _vwPlan.agenda.length) {
-      var _doneTopics = _vwPlan.agenda.filter(function(a) { return a.done; });
-      if (_doneTopics.length) {
-        var _draftSummary = 'หัวข้อที่คุยตาม Agenda:\n' + _doneTopics.map(function(a) { return '- ' + a.text; }).join('\n');
-        window._visitDraftOverride = Object.assign({}, window._visitDraftOverride, { summary: _draftSummary });
-      }
-    }
   }
+  // Agenda ของแผนนัดนี้ (ถ้ามี) แสดงเป็นเช็คลิสต์ที่แก้ไข/ติ๊ก/ใส่รายละเอียดต่อได้จริงในฟอร์มเลย (ดู
+  // _visitAgendaSectionHtml ใน modals.js) — เดิมจุดนี้เคยแค่ copy ข้อความหัวข้อที่ติ๊กไว้ในแผนนัดลงช่องสรุปแบบ
+  // ครั้งเดียวจบเงียบๆ ตอนเปิดฟอร์ม (เห็นแต่ข้อความ แก้ทีละหัวข้อไม่ได้) แทนที่ด้วยเช็คลิสต์แบบเต็มนี้ตามที่ผู้ใช้
+  // ขอ 2026-08-27 (ทำเป็น checkbox ใส่รายละเอียดต่อหัวข้อได้ในหน้า Visit Report จริง)
   var formHtml = buildVisitFormHtml(dealerId, eid, 'rVisitWindowRerender()');
 
   var h = '<div class="vw-layout">';
@@ -320,6 +314,7 @@ function rVisitWindow(el) {
   h += '</div></div>';
 
   el.innerHTML = h;
+  setTimeout(function() { document.querySelectorAll('.fv-autogrow').forEach(_fvAutogrow); }, 30);
 
   // preset โหมด Offline/Online ตามที่ผูกมากับนัด (ถ้ามี) — เฉพาะตอนเปิดครั้งแรกจาก Visit Plan
   if (window._vwMode) {

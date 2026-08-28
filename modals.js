@@ -1371,6 +1371,7 @@ function showVisitM(dealerId, eid) {
   var html = buildVisitFormHtml(existDealer, eid, rerender);
   var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : (visitMode === 'partner' ? '🆕 New Partner Report' : '📝 Standard Visit'));
   openM(title, html);
+  setTimeout(function() { document.querySelectorAll('.fv-autogrow').forEach(_fvAutogrow); }, 30);
 }
 
 // เตือนถ่ายรูป — โชว์เฉพาะตอนยังไม่มีรูปแนบเลย (เช็คจาก window._visitAttach ที่ตั้งไว้ก่อนเรียกฟังก์ชันนี้)
@@ -1513,6 +1514,74 @@ function _pillGetValue(id) {
   return sel ? sel.getAttribute('data-val') : '';
 }
 
+// ================================================================
+// AGENDA ใน VISIT REPORT — ดึงจาก Visit Plan ที่ผูกไว้ (window._vwPlanId จาก vpGoVisit) มาเป็นเช็คลิสต์จริง
+// ติ๊กว่าคุยแล้ว + ใส่รายละเอียดต่อหัวข้อได้ แล้วกดรวมเป็นร่างสรุปการคุยได้ทีเดียว (ผู้ใช้ขอ 2026-08-27 ตามมอคอัพ
+// ที่อนุมัติ) — เก็บ state ชั่วคราวใน window._visitAgendaWorking ระหว่างเปิดฟอร์ม แล้ว sync กลับเข้า visitPlans
+// ตอนบันทึก Visit สำเร็จ (ดู vpMarkPlanActualFromVisit ใน features.js) ให้เช็คสถานะตรงกันทั้ง 2 ที่
+// ================================================================
+function _visitFindAgendaPlan(dealerId) {
+  if (window._vwPlanId) {
+    var linked = ST.getOne('visitPlans', window._vwPlanId);
+    if (linked && linked.agenda && linked.agenda.length) return linked;
+  }
+  if (!dealerId || typeof getVisitPlans !== 'function') return null;
+  var candidates = getVisitPlans().filter(function(p) { return p.dealerId === dealerId && p.agenda && p.agenda.length && p.status !== 'done'; });
+  candidates.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  return candidates[0] || null;
+}
+function _visitAgendaSectionHtml(dealerId) {
+  var plan = _visitFindAgendaPlan(dealerId);
+  if (!plan) { window._visitAgendaWorking = null; return ''; }
+  // ไม่เขียนทับ state ที่แก้อยู่ระหว่างสลับโหมด Quick/Standard/Full (rerender เรียกฟังก์ชันนี้ซ้ำด้วย dealerId
+  // เดิม) — เอาค่าจาก plan มาตั้งต้นแค่ครั้งแรกที่ยังไม่มี working state ของ plan นี้เท่านั้น
+  if (!window._visitAgendaWorking || window._visitAgendaPlanId !== plan.id) {
+    window._visitAgendaWorking = JSON.parse(JSON.stringify(plan.agenda));
+    window._visitAgendaPlanId = plan.id;
+  }
+  var doneCount = window._visitAgendaWorking.filter(function(t) { return t.done; }).length;
+  var h = '<div class="form-section">📋 Agenda สำหรับนัดนี้ (' + doneCount + '/' + window._visitAgendaWorking.length + ' คุยแล้ว)</div>';
+  h += '<div id="visit_agenda_list">' + _visitAgendaListHtml() + '</div>';
+  h += '<button type="button" class="btn bsm bo" style="margin-top:6px" onclick="_visitAgendaDraftToSummary()">✨ รวม Agenda ที่คุยแล้ว → สรุปการคุย</button>';
+  return h;
+}
+function _visitAgendaListHtml() {
+  if (!window._visitAgendaWorking) return '';
+  return window._visitAgendaWorking.map(function(t, idx) {
+    var srcBtn = t.srcType ? (' <button type="button" style="background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:10.5px" onclick="event.preventDefault();openAgendaSource(\'' + (window._vwDealerId || '') + '\',\'' + t.srcType + '\',\'' + sanitize(t.srcValue || '').replace(/'/g, "\\'") + '\')">🔗 เปิด</button>') : '';
+    return '<div style="padding:6px 4px;border-bottom:1px solid var(--border)">' +
+      '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">' +
+      '<input type="checkbox" style="margin-top:3px" ' + (t.done ? 'checked' : '') + ' onchange="_visitAgendaToggle(' + idx + ',this.checked)">' +
+      '<span style="flex:1;font-size:13px' + (t.done ? '' : ';color:var(--text2)') + '">' + sanitize(t.text) + srcBtn + '</span></label>' +
+      (t.done ? '<div style="margin:6px 0 2px 24px"><textarea class="fv-autogrow" rows="1" placeholder="รายละเอียดที่คุยจริง..." oninput="_visitAgendaDetailInput(' + idx + ',this)" style="width:100%;font-family:inherit;font-size:12.5px;padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg2);color:var(--text);overflow:hidden;resize:none">' + sanitize(t.detail || '') + '</textarea></div>' : '') +
+      '</div>';
+  }).join('');
+}
+function _fvAutogrow(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+function _visitAgendaToggle(idx, checked) {
+  window._visitAgendaWorking[idx].done = checked;
+  var el = document.getElementById('visit_agenda_list');
+  if (el) el.innerHTML = _visitAgendaListHtml();
+  document.querySelectorAll('#visit_agenda_list textarea.fv-autogrow').forEach(_fvAutogrow);
+}
+function _visitAgendaDetailInput(idx, el) {
+  window._visitAgendaWorking[idx].detail = el.value;
+  _fvAutogrow(el);
+}
+function _visitAgendaDraftToSummary() {
+  if (!window._visitAgendaWorking) return;
+  var lines = window._visitAgendaWorking.filter(function(t) { return t.done; }).map(function(t) {
+    return '✅ ' + t.text + (t.detail ? ': ' + t.detail : '');
+  });
+  if (!lines.length) { toast('⚠️ ยังไม่ได้ติ๊กหัวข้อไหนเลย'); return; }
+  var ta = document.getElementById('fv_summary');
+  if (!ta) return;
+  var existing = ta.value.trim();
+  ta.value = (existing ? existing + '\n\n' : '') + lines.join('\n');
+  _fvAutogrow(ta);
+  toast('✨ รวมเข้าสรุปการคุยแล้ว');
+}
+
 // ปุ่มสลับโหมด Quick/Standard/Full/(New Partner) — ใช้ร่วมกันทั้ง 3 branch (Quick, Standard/Full, Partner)
 // New Partner โชว์เฉพาะ dealer ที่ยังไม่เป็น SAB Authorized Dealer (หรือยังไม่มี dealer ผูกไว้เลย) — ถ้าเป็น SAB แล้วซ่อนปุ่ม
 // แต่รายงานเก่าที่เคยกรอกไว้ (reportMode==='partner') ยังเปิดดู/แก้ไขได้ตามปกติผ่าน rVisitDet
@@ -1565,7 +1634,8 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + (defaultMode === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (defaultMode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
-      '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label>' + (AI_FEATURES_ENABLED ? '<button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button>' : '') + '</div><textarea id="fv_summary" rows="5" placeholder="พิมพ์โน้ตคร่าวๆ' + (AI_FEATURES_ENABLED ? ' แล้วกด ✨ AI จัดระเบียบ' : '') + '">' + sanitize(v.summary || '') + '</textarea></div>' +
+      _visitAgendaSectionHtml(existDealer) +
+      '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุป *</label>' + (AI_FEATURES_ENABLED ? '<button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button>' : '') + '</div><textarea id="fv_summary" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="พิมพ์โน้ตคร่าวๆ' + (AI_FEATURES_ENABLED ? ' แล้วกด ✨ AI จัดระเบียบ' : '') + '">' + sanitize(v.summary || '') + '</textarea></div>' +
       attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
       '<button class="btn bp btn-full" onclick="saveVisitQuick(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก</button>';
   }
@@ -1605,8 +1675,9 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     }
   }
 
-  html += '<div class="form-section">📝 สรุปเพิ่มเติม</div>' +
-    '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" rows="3" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
+  html += _visitAgendaSectionHtml(existDealer) +
+    '<div class="form-section">📝 สรุปเพิ่มเติม</div>' +
+    '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>' +
     attachUploadHtml('_visitAttach', 'visits', '📷 รูปหน้าร้าน/หลักฐานการเข้าพบ') +
     '<div class="form-section">📊 Pipeline ที่อัพเดต</div>' +
     '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
@@ -2484,9 +2555,13 @@ function saveVisitQuick(dealerId, eid) {
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
   if (!eid) _visitClearDraft();
-  closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
+  // เดิม vpMarkPlanActualFromVisit/notifyVisitSavedAcrossTabs อยู่หลัง render() — render() มีบั๊กเดิม
+  // (updateMbNav อ่าน .today ของ undefined พังทุกครั้ง ไม่เกี่ยวกับที่แก้ในเซสชันนี้) throw แบบไม่ได้ ครอบ
+  // try/catch เอง ทำให้โค้ดที่อยู่ "หลัง" render() ในฟังก์ชันนี้ไม่เคยรันเลยสักครั้ง — เจอจากการทดสอบ sync
+  // Agenda กลับเข้า Visit Plan (2026-08-27) ว่าไม่เคยเห็นผลจริง ย้ายมาไว้ก่อน render() แทน กันเงียบๆ ไม่รันอีก
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
+  closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
 }
 
 // Save Visit (Standard/Full)
