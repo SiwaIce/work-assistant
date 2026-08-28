@@ -403,6 +403,18 @@ function showDealerM(eid) {
     '<div class="fg"><label>กลุ่มลูกค้าหลัก</label><input type="text" id="fd_segment" value="' + sanitize(d.customerSegment || '') + '"></div></div>' +
     '<div class="fg"><label>Dock Interest</label><select id="fd_dock"><option value="">--</option><option value="yes"' + (d.dockInterest === 'yes' ? ' selected' : '') + '>มี</option><option value="no"' + (d.dockInterest === 'no' ? ' selected' : '') + '>ไม่มี</option><option value="กำลังดู"' + (d.dockInterest === 'กำลังดู' ? ' selected' : '') + '>กำลังดู</option></select></div>' +
     '<div class="fg"><label>หมายเหตุ</label><textarea id="fd_notes" rows="2">' + sanitize(d.notes || '') + '</textarea></div>' +
+    '<div class="form-section">🌍 อุตสาหกรรม &amp; พัฒนา Dealer</div>' +
+    '<div class="fr"><div class="fg"><label>จังหวัด</label><input type="text" id="fd_province" value="' + sanitize(d.province || '') + '"></div>' +
+    '<div class="fg"><label>ภาค</label><input type="text" id="fd_region" value="' + sanitize(d.region || '') + '"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Top 1 Industry</label><input type="text" id="fd_topindustry" value="' + sanitize(d.topIndustry || '') + '"></div>' +
+    '<div class="fg"><label>พนักงานทั้งหมด (ที่ดูแล DJI)</label><input type="text" id="fd_staff" value="' + sanitize(d.staffCount || '') + '" placeholder="เช่น 20 (100)"></div></div>' +
+    '<div class="fr"><div class="fg"><label>Dock ที่มีอยู่ (qty)</label><input type="number" id="fd_dockqty" value="' + (d.dockQty || '') + '"></div>' +
+    '<div class="fg"><label>% DJI Enterprise</label><input type="number" id="fd_djient" value="' + (d.djiEntPercent || '') + '"></div></div>' +
+    '<div class="fg"><label>ยอดรวมบริษัท (THB)</label><input type="text" id="fd_companyrevenue" value="' + sanitize(d.companyRevenue || '') + '" placeholder="เช่น 450M หรือ 450,000,000"></div>' +
+    '<div class="fg"><label>Top 3 End User</label><input type="text" id="fd_topendusers" value="' + sanitize(d.topEndUsers || '') + '" placeholder="คั่นด้วยจุลภาค"></div>' +
+    '<div class="fg"><label>อุตสาหกรรมที่เกี่ยวข้อง (เลือกได้หลายอัน)</label><div id="fd_industrytags" class="tagrow">' +
+    DEALER_INDUSTRY_TAGS.map(function(tag) { return '<span class="tagchip' + ((d.industryTags || []).indexOf(tag) !== -1 ? ' on' : '') + '" onclick="this.classList.toggle(\'on\')">' + sanitize(tag) + '</span>'; }).join('') +
+    '</div></div>' +
     '<button class="btn bp btn-full" onclick="saveDealer(\'' + (eid || '') + '\')">💾 บันทึก</button>');
 }
 
@@ -446,6 +458,15 @@ async function saveDealer(eid) {
     customerSegment: document.getElementById('fd_segment').value.trim(),
     dockInterest: document.getElementById('fd_dock').value,
     notes: document.getElementById('fd_notes').value.trim(),
+    province: document.getElementById('fd_province').value.trim(),
+    region: document.getElementById('fd_region').value.trim(),
+    topIndustry: document.getElementById('fd_topindustry').value.trim(),
+    staffCount: document.getElementById('fd_staff').value.trim(),
+    dockQty: parseNum(document.getElementById('fd_dockqty').value),
+    djiEntPercent: parseNum(document.getElementById('fd_djient').value),
+    companyRevenue: document.getElementById('fd_companyrevenue').value.trim(),
+    topEndUsers: document.getElementById('fd_topendusers').value.trim(),
+    industryTags: Array.prototype.slice.call(document.querySelectorAll('#fd_industrytags .tagchip.on')).map(function(el) { return el.textContent; }),
     attachments: window._dealerAttach || []
   };
   

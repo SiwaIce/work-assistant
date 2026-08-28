@@ -731,6 +731,10 @@ function getCurQuarter() {
 // features.js/views-dealer.js/views-visit.js/modals.js ใช้ร่วมกันหมด)
 // ================================================================
 var THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+// อุตสาหกรรมที่ Dealer ให้บริการ (multi-select) — ตรงตามคอลัมน์ในแท็บ SAB ของ "Dealer Develop.xlsx"
+// (2026-08-28) ใช้ร่วมกันระหว่างฟอร์มแก้ไข Dealer (modals.js) กับการแสดงผลแท็บข้อมูล (views-dealer.js)
+var DEALER_INDUSTRY_TAGS = ['Police', 'Fire Fighter & Rescue', 'Emergency Response', 'Law Enforcement', 'Construction', 'Survey', 'Mining', 'Utilities', 'Green Energy', 'Oil & Gas', 'Geological exploration', 'Agriculture'];
 function fcMonthKey(offset) {
   var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + (offset || 0));
   return d.getFullYear() + '-' + (d.getMonth() + 1 < 10 ? '0' : '') + (d.getMonth() + 1);

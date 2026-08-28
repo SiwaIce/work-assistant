@@ -776,6 +776,7 @@ var R = {
   customerForecastSummary: rCustomerForecastSummary,
   dealers: rDealers,
   dealerDetail: rDealerDet,
+  endUserList: rEndUserList,
   salesRepDashboard: rSalesRepDashboard,
   dealerRiskRadar: rDealerRiskRadar,
   pipeDash: rPipeDashboard,
@@ -1860,6 +1861,7 @@ var APP_MENU_REGISTRY = [
   {id: 'today', icon: '📌', name: 'วันนี้'},
   {id: 'salesOverview', icon: '📊', name: 'ภาพรวมยอดขาย'},
   {id: 'dealers', icon: '🏪', name: 'Dealers'},
+  {id: 'endUserList', icon: '👥', name: 'End User ทั้งหมด'},
   {id: 'salesRepDashboard', icon: '👤', name: 'Dashboard รายเซล'},
   {id: 'dealerRiskRadar', icon: '🛰️', name: 'Dealer เสี่ยงหลุดเป้า'},
   {id: 'pipeline', icon: '📊', name: 'Pipeline'},
@@ -2520,7 +2522,7 @@ function renderMbHome() {
 // แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
 var MB_NAV_ROUTE_GROUPS = {
   today: ['today', 'salesOverview'],
-  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar'],
+  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar', 'endUserList'],
   pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
   tasks: ['tasks', 'taskDetail']
 };

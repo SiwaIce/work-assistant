@@ -21,6 +21,14 @@ function rExports(el) {
   <div class="card"><h2>🏪 Dealer Summary</h2>
   <div class="bg" style="margin-bottom:6px"><button class="btn bp" onclick="xDealer()">📊 แสดง</button></div><div id="xd_area"></div></div>
 
+  <div class="card"><h2>🏗️ Dealer Development</h2>
+  <p class="hint" style="margin-bottom:6px">คัดลอกข้อมูลสำหรับกรอก Google Sheet "Dealer Develop" (SAB/Dock Promote/Dock Dealer/End User) — เลือก Dealer แล้ว Copy ได้ทุกส่วนในหน้าเดียว ไม่ต้องเปิดแท็บ Dealer ทีละอัน</p>
+  <select id="xdd_dealer" onchange="xDealerDevRender()" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;box-sizing:border-box;margin-bottom:10px">
+    <option value="">-- เลือก Dealer --</option>
+    ${ST.getAll('dealers').slice().sort((a,b)=>a.name.localeCompare(b.name)).map(d=>'<option value="'+d.id+'">'+sanitize(d.name)+'</option>').join('')}
+  </select>
+  <div id="xdd_area"></div></div>
+
   <div class="card"><h2>💰 ยอดขาย SIS</h2>
   <p class="hint" style="margin-bottom:6px">Import ไฟล์ Excel รูปแบบเดียวกับที่ทีมใช้อยู่แล้ว (คอลัมน์ Customer Code/Customer Name/Month(Billing Date)/Total Sales/Total Adj Profit — ระบบหาแถวหัวตารางเองอัตโนมัติ ไม่ต้องตรงเลขแถวเป๊ะ) — จับคู่บริษัทด้วย Customer Code = SIS Code แล้วมี preview ให้ตรวจสอบก่อน import จริง</p>
   <div class="bg" style="gap:6px;flex-wrap:wrap">
@@ -43,6 +51,28 @@ function rExports(el) {
   <input type="file" id="impFile" accept=".json" style="display:none" onchange="showRestorePreview(event)">
   <p class="hint" style="margin-top:6px">Export JSON = สำรองครบทุกข้อมูล · Import (วางทับ) = กู้คืนทั้งหมด · Merge = เพิ่มเฉพาะข้อมูลใหม่โดยไม่ลบของเดิม</p>
   </div>`;
+}
+
+function xDealerDevRender() {
+  var dealerId = document.getElementById('xdd_dealer').value;
+  var el = document.getElementById('xdd_area');
+  if (!el) return;
+  if (!dealerId) { el.innerHTML = ''; return; }
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var euCount = ST.getAll('dealerEndUsers').filter(function(e) { return e.dealerId === dealerId; }).length;
+  el.innerHTML =
+    '<div style="display:flex;flex-direction:column;gap:8px">' +
+    '<div class="bg" style="justify-content:space-between;align-items:center;background:var(--bg2);border-radius:8px;padding:8px 10px">' +
+    '<span style="font-size:.75rem">📋 ข้อมูล Dealer (แท็บ SAB)</span>' +
+    '<button class="btn bsm bp" onclick="copyDealerProfileForSheet(\'' + dealerId + '\')">📋 Copy</button></div>' +
+    '<div class="bg" style="justify-content:space-between;align-items:center;background:var(--bg2);border-radius:8px;padding:8px 10px">' +
+    '<span style="font-size:.75rem">🚀 Dock Promote Action + ประเมินศักยภาพ</span>' +
+    '<button class="btn bsm bp" onclick="copyDockDevelopForSheet(\'' + dealerId + '\')">📋 Copy</button></div>' +
+    '<div class="bg" style="justify-content:space-between;align-items:center;background:var(--bg2);border-radius:8px;padding:8px 10px">' +
+    '<span style="font-size:.75rem">👥 End User (' + euCount + ' ราย)</span>' +
+    '<button class="btn bsm bp" onclick="copyDealerEndUsersForSheet(\'' + dealerId + '\')"' + (euCount ? '' : ' disabled') + '>📋 Copy</button></div>' +
+    '</div>';
 }
 
 function xRender(areaId, headers, rows, filename) {

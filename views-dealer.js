@@ -1440,6 +1440,8 @@ function rDealerDet(el) {
     <div class="tab-btn ${dealerTab==='forecast'?'act':''}" onclick="dealerTab='forecast';render()">📦 Forecast</div>
     <div class="tab-btn ${dealerTab==='tasks'?'act':''}" onclick="dealerTab='tasks';render()">📋 งาน</div>
     <div class="tab-btn ${dealerTab==='onboard'?'act':''}" onclick="dealerTab='onboard';render()">🔄 Onboard</div>
+    <div class="tab-btn ${dealerTab==='dockDevelop'?'act':''}" onclick="dealerTab='dockDevelop';render()">🚀 Dock Develop</div>
+    <div class="tab-btn ${dealerTab==='endUsers'?'act':''}" onclick="dealerTab='endUsers';render()">👥 End User</div>
     <div class="tab-btn ${dealerTab==='announcements'?'act':''}" onclick="dealerTab='announcements';render()">📢 ประกาศ</div>
   </div>
 
@@ -1463,6 +1465,8 @@ function renderDealerTab(d) {
     case 'forecast': return dealerForecastTab(d);
     case 'tasks': return dealerTasksTab(d);
     case 'onboard': return dealerOnboardTab(d);
+    case 'dockDevelop': return dealerDockDevelopTab(d);
+    case 'endUsers': return dealerEndUsersTab(d);
     case 'announcements': return dealerAnnouncementsTab(d);
     default: return dealerInfoTab(d);
   }
@@ -1485,6 +1489,31 @@ function _diTabClick(tab) {
     b.classList.toggle('bp', on);
     b.classList.toggle('bo', !on);
   });
+}
+
+// คัดลอกแถวข้อมูล Dealer นี้เป็น TSV ตรงลำดับคอลัมน์กับแท็บ "SAB" ใน Dealer Develop.xlsx
+// คอลัมน์ที่แอปยังไม่มีข้อมูล (Accomplished, DAC, Customer DB Analysis, Dock Solution Training, BO Collection, PO)
+// ปล่อยว่างไว้ให้กรอกเองต่อ — ไม่เดาค่าใส่
+function copyDealerProfileForSheet(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var yr = new Date().getFullYear();
+  var rev = (typeof getSisRevenueForYear === 'function') ? getSisRevenueForYear(d, yr) : {};
+  var tags = d.industryTags || [];
+  function flag(tag) { return tags.indexOf(tag) !== -1 ? 'Y' : ''; }
+  var cells = [
+    d.name || '', d.saleName || '', d.level || '', d.topIndustry || '', d.province || '', d.region || '', d.staffCount || '',
+    rev.h1 || '', d.targetH2 || '', '', d.dockQty || '', d.companyRevenue || '', d.djiEntPercent ? (d.djiEntPercent / 100) : '',
+    d.dsecStatus === 'pass' ? 'Pass' : (d.dsecStatus || ''), '', d.fh2Status === 'pass' ? 'Pass' : (d.fh2Status || ''),
+    '', '', '', '', d.topEndUsers || ''
+  ];
+  DEALER_INDUSTRY_TAGS.forEach(function(tag) { cells.push(flag(tag)); });
+  var tsv = cells.join('\t');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tsv).then(function() { toast('📋 คัดลอกแล้ว — ไปวางใน Google Sheet แท็บ SAB ได้เลย'); }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ อุปกรณ์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
 }
 
 function dealerInfoTab(d) {
@@ -1650,6 +1679,20 @@ function dealerInfoTab(d) {
           </div>
         `).join('')}
       </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 0; grid-column: 1 / -1">
+      <h2>🌍 อุตสาหกรรม &amp; พัฒนา Dealer <span class="ml"><button class="btn bsm bo" onclick="copyDealerProfileForSheet('${d.id}')">📋 Copy สำหรับ Sheet</button></span></h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 10px; font-size: 13px">
+        <div><div style="font-size: 10px; color: var(--text2)">จังหวัด / ภาค</div><div style="font-weight:500">${sanitize(d.province || '-')} ${d.region ? '· ' + sanitize(d.region) : ''}</div></div>
+        <div><div style="font-size: 10px; color: var(--text2)">Top 1 Industry</div><div style="font-weight:500">${sanitize(d.topIndustry || '-')}</div></div>
+        <div><div style="font-size: 10px; color: var(--text2)">พนักงานทั้งหมด</div><div style="font-weight:500">${sanitize(d.staffCount || '-')}</div></div>
+        <div><div style="font-size: 10px; color: var(--text2)">Dock ที่มีอยู่</div><div style="font-weight:500">${d.dockQty || 0}</div></div>
+        <div><div style="font-size: 10px; color: var(--text2)">ยอดรวมบริษัท</div><div style="font-weight:500">${sanitize(d.companyRevenue || '-')}</div></div>
+        <div><div style="font-size: 10px; color: var(--text2)">% DJI Enterprise</div><div style="font-weight:500">${d.djiEntPercent ? d.djiEntPercent + '%' : '-'}</div></div>
+        <div style="grid-column:1/-1"><div style="font-size: 10px; color: var(--text2)">Top 3 End User</div><div style="font-weight:500">${sanitize(d.topEndUsers || '-')}</div></div>
+      </div>
+      ${(d.industryTags || []).length ? '<div class="tagrow" style="margin-top:10px">' + d.industryTags.map(function(t) { return '<span class="tagchip on" style="cursor:default">' + sanitize(t) + '</span>'; }).join('') + '</div>' : ''}
     </div>
   </div>
   </div>
@@ -3830,6 +3873,187 @@ function resetOnboarding(dealerId) {
   toast('🔄 Reset แล้ว');
   render();
 }
+
+// ================================================================
+// TAB: DOCK DEVELOP — แผนส่งเสริม Dock (Dock Promote Action) + ประเมินศักยภาพ (Dock Dealer)
+// ตรงตามแท็บ "Dock Promote Action" + "Dock Dealer" ใน Dealer Develop.xlsx (2026-08-28)
+// ================================================================
+var DOCK_DEVELOP_STEPS = [
+  { key: 'siSTraining', icon: '📚', title: 'SiS Solution Training', desc: 'อบรม Solution ให้ทีมขายของ Dealer' },
+  { key: 'customerVisit', icon: '🚗', title: 'Customer Visiting by Dealer', desc: 'Dealer ไปเยี่ยมลูกค้าเอง' },
+  { key: 'coVisit', icon: '🤝', title: 'Co-visiting', desc: 'SiS ไปเยี่ยมลูกค้าร่วมกับ Dealer' },
+  { key: 'poc', icon: '🔬', title: 'POC', desc: 'ทดสอบระบบหน้างาน (Proof of Concept)' },
+  { key: 'bo', icon: '📦', title: 'BO', desc: 'ได้ Booking Order' }
+];
+
+function dealerDockDevelopTab(d) {
+  var dd = d.dockDevelop || {};
+  var doneCount = DOCK_DEVELOP_STEPS.filter(function(s) { return !!dd[s.key]; }).length;
+  var rating = dd.potential || '';
+
+  var h = '<div class="card" style="width:100%"><h2>🚀 Dock Promote Action ' +
+    '<span class="ml"><button class="btn bsm bo" onclick="copyDockDevelopForSheet(\'' + d.id + '\')">📋 Copy สำหรับ Sheet</button></span></h2>' +
+    '<p class="hint" style="font-size:.68rem;color:var(--text3);margin-bottom:10px">แผนกิจกรรมส่งเสริมการขาย Dock ต่อ Dealer นี้ · ' + doneCount + '/' + DOCK_DEVELOP_STEPS.length + ' ขั้นตอนมีวันที่แล้ว</p>' +
+    '<div class="fg" style="margin-bottom:10px"><label style="font-size:.68rem;color:var(--text3)">Target Customer Industry</label>' +
+    '<input type="text" value="' + sanitize(dd.targetIndustry || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'targetIndustry\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>';
+
+  DOCK_DEVELOP_STEPS.forEach(function(s) {
+    h += '<div class="dd-step"><div class="ic">' + s.icon + '</div>' +
+      '<div class="main"><div class="t">' + sanitize(s.title) + '</div><div class="s">' + sanitize(s.desc) + '</div></div>' +
+      '<input type="date" value="' + (dd[s.key] || '') + '" onchange="saveDockDevelopField(\'' + d.id + '\',\'' + s.key + '\',this.value)"></div>';
+  });
+
+  h += '</div>';
+
+  h += '<div class="card" style="width:100%"><h2>🎯 ประเมินศักยภาพ Dealer</h2>' +
+    '<p class="hint" style="font-size:.68rem;color:var(--text3);margin-bottom:10px">ให้เรตติ้ง + บันทึกคนสำคัญ/ประวัติ/ก้าวต่อไป — ใช้พิจารณาว่าจะโฟกัส Dealer ไหนก่อน</p>' +
+    '<div class="dd-rating-row">' +
+    ['high', 'mid', 'low'].map(function(r) {
+      var label = r === 'high' ? '🟢 High' : r === 'mid' ? '🟡 Middle' : '🔴 Low';
+      return '<div class="dd-rating-pill ' + r + (rating === r ? ' on' : '') + '" onclick="saveDockDevelopField(\'' + d.id + '\',\'potential\',\'' + r + '\')">' + label + '</div>';
+    }).join('') +
+    '</div>' +
+    '<div class="fg" style="margin-bottom:8px"><label style="font-size:.68rem;color:var(--text3)">Key Person</label>' +
+    '<input type="text" value="' + sanitize(dd.keyPerson || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'keyPerson\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>' +
+    '<div class="fg" style="margin-bottom:8px"><label style="font-size:.68rem;color:var(--text3)">Key Accounts / History Contract</label>' +
+    '<input type="text" value="' + sanitize(dd.keyAccounts || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'keyAccounts\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">' +
+    '<div class="fg"><label style="font-size:.68rem;color:var(--text3)">First Visit</label>' +
+    '<input type="date" value="' + (dd.firstVisit || '') + '" onchange="saveDockDevelopField(\'' + d.id + '\',\'firstVisit\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>' +
+    '<div class="fg"><label style="font-size:.68rem;color:var(--text3)">Sales of SiS (THB)</label>' +
+    '<input type="number" value="' + (dd.salesOfSis || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'salesOfSis\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>' +
+    '</div>' +
+    '<div class="fg"><label style="font-size:.68rem;color:var(--text3)">Next Step</label>' +
+    '<input type="text" value="' + sanitize(dd.nextStep || '') + '" onblur="saveDockDevelopField(\'' + d.id + '\',\'nextStep\',this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;box-sizing:border-box"></div>' +
+    '</div>';
+
+  return h;
+}
+
+function saveDockDevelopField(dealerId, field, value) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var dd = d.dockDevelop || {};
+  dd[field] = (field === 'salesOfSis') ? (Number(value) || 0) : value;
+  d.dockDevelop = dd;
+  ST.update('dealers', dealerId, d);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+// คัดลอกแถวข้อมูลตรงลำดับคอลัมน์แท็บ "Dock Promote Action" + "Dock Dealer" ใน Dealer Develop.xlsx
+function copyDockDevelopForSheet(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var dd = d.dockDevelop || {};
+  var actionRow = [d.name || '', dd.targetIndustry || ''].concat(DOCK_DEVELOP_STEPS.map(function(s) { return dd[s.key] || ''; })).join('\t');
+  var ratingRow = [d.name || '', dd.potential ? (dd.potential === 'high' ? 'High' : dd.potential === 'mid' ? 'Middle' : 'Low') : '', dd.keyPerson || '', dd.keyAccounts || '', dd.firstVisit || '', dd.salesOfSis || '', dd.nextStep || ''].join('\t');
+  var tsv = 'Dock Promote Action:\n' + actionRow + '\n\nDock Dealer:\n' + ratingRow;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tsv).then(function() { toast('📋 คัดลอกแล้ว — ไปวางใน Google Sheet ได้เลย (2 แท็บ แยกด้วยบรรทัดว่าง)'); }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ อุปกรณ์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+
+// ================================================================
+// TAB: END USER — ลูกค้าปลายทางที่ Dealer นี้ดูแล พร้อมงบประมาณรายปี (2026-08-28)
+// เก็บใน storage key 'dealerEndUsers' (v7_dealerEndUsers) ซึ่งลงทะเบียน sync ไว้แล้วแต่ยังไม่เคยมี UI ใช้งาน
+// ================================================================
+function dealerEndUsersTab(d) {
+  var list = ST.getAll('dealerEndUsers').filter(function(e) { return e.dealerId === d.id; });
+  var h = '<div class="card" style="width:100%"><h2>👥 End User <span class="ml">' +
+    '<button class="btn bsm bo" onclick="copyDealerEndUsersForSheet(\'' + d.id + '\')">📋 Copy สำหรับ Sheet</button> ' +
+    '<button class="btn bsm bp" onclick="showEndUserM(\'\',\'' + d.id + '\')">➕ เพิ่ม End User</button>' +
+    '</span></h2>' +
+    '<p class="hint" style="font-size:.68rem;color:var(--text3);margin-bottom:10px">ติดตามลูกค้าปลายทางแยกจาก Dealer พร้อมงบประมาณรายปีและ Next Step ของแต่ละราย</p>';
+
+  if (!list.length) {
+    h += '<div class="empty"><p>ยังไม่มี End User — กด ➕ เพิ่ม End User</p></div></div>';
+    return h;
+  }
+
+  h += '<div style="overflow-x:auto"><table class="eu-table"><thead><tr>' +
+    '<th>End User</th><th class="num">งบปีนี้คงเหลือ</th><th class="num">งบปีถัดไป</th><th>Follow Up / Next Step</th><th></th>' +
+    '</tr></thead><tbody>';
+  list.forEach(function(e) {
+    h += '<tr><td style="font-weight:600">' + sanitize(e.name) + '</td>' +
+      '<td class="num">' + fmtMoney(e.budgetCur || 0) + '</td>' +
+      '<td class="num">' + fmtMoney(e.budgetNext || 0) + '</td>' +
+      '<td>' + sanitize(e.note || '-') + '</td>' +
+      '<td><button class="btn bsm bo" onclick="showEndUserM(\'' + e.id + '\',\'' + d.id + '\')">✏️</button></td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+// dealerId ที่ส่งมา = ล็อก Dealer ไว้ (เปิดจากแท็บ End User ของ Dealer) — ไม่ส่งมา (undefined/'') = ให้เลือก Dealer เอง (เปิดจากเมนูรวม)
+function showEndUserM(eid, dealerId) {
+  var e = eid ? ST.getOne('dealerEndUsers', eid) : {};
+  var yr = new Date().getFullYear();
+  var lockedDealer = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var dealerField = lockedDealer
+    ? '<div class="fg"><label>Dealer</label><input type="text" value="' + sanitize(lockedDealer.name) + '" disabled></div>'
+    : '<div class="fg"><label>Dealer *</label><select id="eu_dealer">' + ST.getAll('dealers').slice().sort(function(a, b) { return a.name.localeCompare(b.name); }).map(function(dl) { return '<option value="' + dl.id + '"' + (e.dealerId === dl.id ? ' selected' : '') + '>' + sanitize(dl.name) + '</option>'; }).join('') + '</select></div>';
+
+  openM(eid ? '✏️ End User' : '➕ เพิ่ม End User', '' +
+    '<div class="fg"><label>ชื่อ End User *</label><input type="text" id="eu_name" value="' + sanitize(e.name || '') + '"></div>' +
+    dealerField +
+    '<div class="fr"><div class="fg"><label>งบ ' + yr + ' คงเหลือ (฿)</label><input type="number" id="eu_budgetcur" value="' + (e.budgetCur || '') + '"></div>' +
+    '<div class="fg"><label>งบ ' + (yr + 1) + ' (฿)</label><input type="number" id="eu_budgetnext" value="' + (e.budgetNext || '') + '"></div></div>' +
+    '<div class="fg"><label>Follow Up / Next Step</label><textarea id="eu_note" rows="3">' + sanitize(e.note || '') + '</textarea></div>' +
+    '<div class="bg">' +
+    '<button class="btn bp" style="flex:1" onclick="saveEndUser(\'' + (eid || '') + '\',\'' + (dealerId || '') + '\')">💾 บันทึก</button>' +
+    (eid ? '<button class="btn bd" onclick="deleteEndUser(\'' + eid + '\')">🗑️</button>' : '') +
+    '</div>');
+}
+
+function saveEndUser(eid, dealerId) {
+  var name = document.getElementById('eu_name').value.trim();
+  if (!name) return alert('ใส่ชื่อ End User');
+  var dealerSel = document.getElementById('eu_dealer');
+  var finalDealerId = dealerId || (dealerSel ? dealerSel.value : '');
+  if (!finalDealerId) return alert('เลือก Dealer');
+  var data = {
+    name: name,
+    dealerId: finalDealerId,
+    budgetCur: Number(document.getElementById('eu_budgetcur').value) || 0,
+    budgetNext: Number(document.getElementById('eu_budgetnext').value) || 0,
+    note: document.getElementById('eu_note').value.trim()
+  };
+  if (eid) ST.update('dealerEndUsers', eid, data);
+  else ST.add('dealerEndUsers', data);
+  closeMForce();
+  toast('💾 บันทึกแล้ว');
+  render();
+}
+
+function deleteEndUser(eid) {
+  if (!confirm('⚠️ ลบ End User นี้?')) return;
+  ST.delete('dealerEndUsers', eid);
+  closeMForce();
+  toast('🗑️ ลบแล้ว');
+  render();
+}
+
+// คัดลอกทั้งตาราง End User ของ Dealer นี้เป็น TSV ตรงคอลัมน์กับแท็บ "End User" ใน Dealer Develop.xlsx
+function copyDealerEndUsersForSheet(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var list = ST.getAll('dealerEndUsers').filter(function(e) { return e.dealerId === dealerId; });
+  if (!list.length) { toast('ยังไม่มี End User'); return; }
+  var yr = new Date().getFullYear();
+  var tsv = list.map(function(e) {
+    return [e.name || '', d.name || '', e.budgetCur || 0, e.budgetNext || 0, e.note || ''].join('\t');
+  }).join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(tsv).then(function() { toast('📋 คัดลอกแล้ว — ไปวางใน Google Sheet แท็บ End User ได้เลย'); }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ อุปกรณ์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+
 // ================================================================
 // RENDER DEALER CONTACTS
 // ================================================================
@@ -6376,4 +6600,49 @@ function saveDealerPipeSheet() {
   var msg = '✅ บันทึก ' + saved + ' รายการ' + (deleted ? ' · ลบ ' + deleted + ' รายการ' : '');
   if (st) st.textContent = msg;
   toast('💾 ' + msg);
+}
+
+// ================================================================
+// เมนูรวม "👥 End User ทั้งหมด" — ดูข้าม Dealer ได้ (แยกจากแท็บ End User ในหน้า Dealer ที่กรองเฉพาะเจ้าเดียว)
+// ================================================================
+var _euListSearch = '';
+function euListSearchInput(v) { _euListSearch = v; render(); }
+
+function rEndUserList(el) {
+  document.getElementById('pgT').textContent = '👥 End User ทั้งหมด';
+  var dealerMap = {};
+  ST.getAll('dealers').forEach(function(dl) { dealerMap[dl.id] = dl; });
+  var list = ST.getAll('dealerEndUsers');
+  var q = _euListSearch.trim().toLowerCase();
+  if (q) {
+    list = list.filter(function(e) {
+      var dl = dealerMap[e.dealerId];
+      return (e.name || '').toLowerCase().indexOf(q) !== -1 || (dl && dl.name.toLowerCase().indexOf(q) !== -1);
+    });
+  }
+  list.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+
+  var h = '<div class="card"><h2>👥 End User ทั้งหมด (' + list.length + ') <span class="ml"><button class="btn bsm bp" onclick="showEndUserM(\'\',\'\')">➕ เพิ่ม End User</button></span></h2>' +
+    '<input type="text" placeholder="🔍 ค้นหาชื่อ End User หรือ Dealer..." value="' + sanitize(_euListSearch) + '" oninput="euListSearchInput(this.value)" style="width:100%;font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;box-sizing:border-box;margin-bottom:12px">';
+
+  if (!list.length) {
+    h += '<div class="empty"><p>ไม่พบ End User</p></div></div>';
+    el.innerHTML = h;
+    return;
+  }
+
+  h += '<div style="overflow-x:auto"><table class="eu-table"><thead><tr>' +
+    '<th>End User</th><th>Dealer</th><th class="num">งบปีนี้คงเหลือ</th><th class="num">งบปีถัดไป</th><th>Follow Up / Next Step</th><th></th>' +
+    '</tr></thead><tbody>';
+  list.forEach(function(e) {
+    var dl = dealerMap[e.dealerId];
+    h += '<tr><td style="font-weight:600">' + sanitize(e.name) + '</td>' +
+      '<td style="cursor:pointer;color:var(--accent)" onclick="go(\'dealerDetail\',{dealerId:\'' + e.dealerId + '\'})">' + (dl ? sanitize(dl.name) : '—') + '</td>' +
+      '<td class="num">' + fmtMoney(e.budgetCur || 0) + '</td>' +
+      '<td class="num">' + fmtMoney(e.budgetNext || 0) + '</td>' +
+      '<td>' + sanitize(e.note || '-') + '</td>' +
+      '<td><button class="btn bsm bo" onclick="showEndUserM(\'' + e.id + '\',\'' + e.dealerId + '\')">✏️</button></td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  el.innerHTML = h;
 }
