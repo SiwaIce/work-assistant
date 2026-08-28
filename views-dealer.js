@@ -2070,8 +2070,18 @@ function dealerSalesOrderTab(d) {
 function dealerVisitTab(d) {
   const vts = ST.visitsByDealer(d.id);
   const fus = ST.followupsByDealer(d.id);
+  // แผนนัดที่วางไว้ล่วงหน้าจากเมนู "Visit Planning" — เดิมแท็บนี้โชว์แต่ Visit ที่บันทึกผลแล้ว มองไม่เห็นว่ามี
+  // นัดที่วางแผนไว้รอไปหรือเปล่าเลย ต้องสลับไปเมนู Visit Planning แยกถึงจะเห็น (ผู้ใช้แจ้ง 2026-08-27) — ใช้
+  // vpPlanCardHtml เดิม (เต็มรูปแบบ มี Agenda/ปุ่มแก้ไข-ลบ-เปิด Visit Report ให้ครบอยู่แล้ว) ไม่ต้องสร้างการ์ดใหม่
+  const vps = (typeof getVisitPlans === 'function' ? getVisitPlans() : []).filter(p => p.dealerId === d.id && p.status !== 'done')
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   return `
+  <div class="card"><h2>📅 แผนนัด Visit ที่จะถึง (${vps.length})
+    <span class="ml"><button class="btn bsm bp" onclick="showAddVisitPlanM('${_td()}','${d.id}')">➕ วางแผนนัด</button></span></h2>
+  ${vps.length ? vps.map(p => vpPlanCardHtml(p, true, vpFindConflicts(p.date, p.timeStart, p.timeEnd, p.id))).join('') : '<div class="empty"><p>ยังไม่มีแผนนัดที่กำลังจะถึง</p></div>'}
+  </div>
+
   <div class="card"><h2>🤝 Visit / Meeting (${vts.length})
     <span class="ml">
       <button class="btn bsm bo" onclick="copyDealerVisits('${d.id}')">📋 Copy</button>
