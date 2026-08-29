@@ -9777,3 +9777,33 @@ input:focus, select:focus, textarea:focus {
 .eu-table tr:last-child td{border-bottom:none}
 .eu-table td.num{text-align:right;font-weight:600}
 .vp-slot-chip.busy{background:var(--bg2);color:var(--text3);text-decoration:line-through;cursor:not-allowed}
+
+/* ===== Sales Analytics (2026-08-28) ===== */
+.sa-pagetabs{display:flex;gap:4px;margin:10px 0;border-bottom:2px solid var(--border)}
+.sa-pagetab{appearance:none;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:700;color:var(--text2);padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-2px}
+.sa-pagetab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.sa-badge{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:600;padding:4px 10px;border-radius:20px;margin-bottom:10px}
+.sa-badge.so{background:color-mix(in srgb,var(--accent) 15%,var(--card));color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--card))}
+.sa-badge.sis{background:color-mix(in srgb,#f59e0b 18%,var(--card));color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,var(--card))}
+.sa-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.sa-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.sa-stat .lbl{font-size:.66rem;color:var(--text3);text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px}
+.sa-stat .val{font-size:1.1rem;font-weight:700}
+.sa-gtabs{display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+.sa-gtab{appearance:none;border:none;background:none;cursor:pointer;font-family:inherit;font-size:.76rem;font-weight:600;color:var(--text2);padding:7px 12px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.sa-gtab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.sa-table{width:100%;border-collapse:collapse}
+.sa-table th{text-align:left;font-size:.62rem;text-transform:uppercase;color:var(--text3);font-weight:700;padding:0 8px 8px;border-bottom:1px solid var(--border)}
+.sa-table th.num{text-align:right}
+.sa-table td{padding:8px;border-bottom:1px solid var(--border);font-size:.76rem}
+.sa-table tr:last-child td{border-bottom:none}
+.sa-table td.num{text-align:right;font-weight:600}
+.sa-tiernote{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:.7rem;color:var(--text2);display:flex;flex-direction:column;gap:4px}
+.sa-tiernote > b{color:var(--text);font-size:.72rem}
+.sa-tiernote .dot,.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.sa-stagegroup{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.sa-projrow{display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:7px;padding:7px 9px;font-size:.72rem}
+.sa-projrow .n{flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-projrow .d{color:var(--text2);font-size:.68rem;flex-shrink:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-projrow .v{font-weight:700;flex-shrink:0}
+.sa-rowno{font-size:.62rem;color:var(--text3);background:var(--card);border:1px solid var(--border);border-radius:5px;padding:1px 6px;flex-shrink:0}
