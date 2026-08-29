@@ -143,12 +143,22 @@ function saPipeWonDate(p) {
   return p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : ''); // ไม่มี log เปลี่ยนสถานะ (ข้อมูลเก่า/import) — ใช้ค่าเดิมแทน
 }
 
+// วันที่คาดว่าจะปิด/สั่งซื้อของโครงการที่ยังเปิดอยู่ (Plan) — ลองอ่าน Forecast Month (ที่เซลกรอกเองว่าคาดว่าจะ
+// สั่งซื้อเดือนไหน) ก่อน expectedCloseDate เพราะบางโครงการกรอก Forecast Month ไว้แต่ไม่ได้กรอก Expected Close
+// Date เป็นวันที่จริง — ไม่มีทั้งคู่ค่อย fallback ไป registerDate (2026-08-29 ตามที่ผู้ใช้พบว่าบางโครงการขึ้นผิดเดือน)
+function saForecastMonthDate(p) {
+  if (!p.forecastMonth || typeof _kpiParseForecastMonthText !== 'function') return '';
+  var info = _kpiParseForecastMonthText(p.forecastMonth);
+  if (!info) return '';
+  return info.year + '-' + String(info.month).padStart(2, '0') + '-15'; // มีแค่เดือน/ปี ไม่มีวัน ใช้กลางเดือนแทน
+}
+
 function saPipelineInRange(category, start, end, saleFilter) {
   var ids = getStatusIdsByCategory(category);
   return ST.getAll('pipeline').filter(function(p) {
     if (ids.indexOf(p.status) === -1) return false;
     if (saleFilter !== 'all' && (p.saleName || '') !== saleFilter) return false;
-    var d = category === 'won' ? saPipeWonDate(p) : (p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
+    var d = category === 'won' ? saPipeWonDate(p) : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
     return d && d >= start && d < end;
   });
 }
