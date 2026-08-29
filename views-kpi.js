@@ -1469,6 +1469,8 @@ function showKpiDetailM(planId, categoryId) {
       h += '<div class="fg"><label>หมายเหตุ (ไม่บังคับ)</label><input type="text" id="kpi_rr_note" placeholder="ขายหน้าร้าน / ลูกค้าประจำ"></div>';
       h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="saveKpiRunRateLog(\'' + planId + '\',\'' + categoryId + '\')">บันทึก</button><button class="btn bo" style="flex:1" onclick="_kpiToggleRunRateForm()">ยกเลิก</button></div>';
       h += '</div>';
+    } else if (cat.type === 'dealerAuthorized') {
+      h += '<button class="btn bp bsm btn-full" style="margin-top:8px" onclick="showKpiAddDealerAuthorizedM(\'' + planId + '\',\'' + categoryId + '\')" title="เลือก Dealer ที่ Authorize ไปแล้วมานับเข้า KPI นี้เอง เผื่อยังไม่ขึ้นอัตโนมัติ">➕ เพิ่ม Dealer</button>';
     }
 
     var potentialRecords = kpiPotentialRecords(plan, cat);
@@ -1774,6 +1776,61 @@ function _kpiApPick(planId, categoryId, pipeId) {
   }
   saveKpiRunRateLogs(logs);
   toast(msg);
+  showKpiDetailM(planId, categoryId);
+}
+
+// ================================================================
+// เพิ่ม Dealer เข้า KPI "Dealer ใหม่ Authorized" เอง — เผื่อยอดยังไม่ขึ้นอัตโนมัติ
+// (เช่น Authorize ผ่านช่องทางอื่นมาก่อนหน้านี้ หรืออยากผูกเข้าควอเตอร์นี้ตรงๆ)
+// ================================================================
+var _kpiAdSearch = '';
+function showKpiAddDealerAuthorizedM(planId, categoryId) {
+  _kpiAdSearch = '';
+  _kpiAdRenderModal(planId, categoryId);
+}
+function _kpiAdFilteredDealers() {
+  var q = (_kpiAdSearch || '').trim().toLowerCase();
+  return ST.getAll('dealers').filter(function(d) {
+    if (!q) return true;
+    return (d.name || '').toLowerCase().indexOf(q) !== -1;
+  }).sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+}
+function _kpiAdListHtml(planId, categoryId) {
+  var list = _kpiAdFilteredDealers().slice(0, 100);
+  if (!list.length) return '<div style="text-align:center;color:var(--text2);padding:16px;font-size:.78rem">ไม่พบ Dealer</div>';
+  return list.map(function(d) {
+    return '<div class="kpi-detail-row" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">' + sanitize(d.name) +
+      (d.authorizedDate ? ' <span style="color:var(--text2)">— Authorized แล้ว ' + fD(d.authorizedDate) + (d.authorizedBy ? ' โดย ' + sanitize(d.authorizedBy) : '') + '</span>' : ' <span style="color:var(--text3)">— ยังไม่ Authorize</span>') + '</span>' +
+      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiAdPick(\'' + planId + '\',\'' + categoryId + '\',\'' + d.id + '\')">+ เลือก</button></div>';
+  }).join('');
+}
+function _kpiAdSearchInput(planId, categoryId, val) {
+  _kpiAdSearch = val;
+  var listEl = document.getElementById('kpi_ad_list');
+  if (listEl) listEl.innerHTML = _kpiAdListHtml(planId, categoryId);
+}
+function _kpiAdRenderModal(planId, categoryId) {
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:8px">เลือก Dealer มานับเข้า KPI นี้เอง — ใช้เวลายอดยังไม่ขึ้นอัตโนมัติ</p>';
+  h += '<div class="fg"><label>วันที่นับเข้า KPI (ควอเตอร์นี้)</label><input type="date" id="kpi_ad_date" value="' + _td() + '"></div>';
+  h += '<input type="text" placeholder="🔍 ค้นหาชื่อ Dealer..." value="' + sanitize(_kpiAdSearch) + '" oninput="_kpiAdSearchInput(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="margin-bottom:8px">';
+  h += '<div id="kpi_ad_list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiAdListHtml(planId, categoryId) + '</div>';
+  openM('➕ เพิ่ม Dealer เข้า KPI นี้', h);
+}
+function _kpiAdPick(planId, categoryId, dealerId) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var dateEl = document.getElementById('kpi_ad_date');
+  var chosenDate = (dateEl && dateEl.value) ? dateEl.value : _td();
+  if (d.authorizedDate && !confirm('"' + d.name + '" มีวันที่ Authorize อยู่แล้ว (' + fD(d.authorizedDate) + (d.authorizedBy ? ' โดย ' + d.authorizedBy : '') + ') — จะทับเป็นวันที่ ' + fD(chosenDate) + ' และนับเข้า KPI ของ ' + plan.salesMemberName + ' แทนใช่ไหม?')) return;
+  var updates = { authorizedDate: chosenDate, authorizedBy: plan.salesMemberName };
+  if (d.level === 'Other' || !d.level) updates.level = 'B';
+  ST.update('dealers', dealerId, updates);
+  if (typeof syncDealerToFirebase === 'function') syncDealerToFirebase(dealerId);
+  _kpiInvalidateCache(); // _kpiDealers() แคช ST.getAll('dealers') ไว้ — ต้องล้างไม่งั้นตัวเลข KPI ที่รีเฟรชโมดัลจะยังเป็นค่าเก่า
+  toast('➕ เพิ่ม ' + d.name + ' เข้า KPI แล้ว');
   showKpiDetailM(planId, categoryId);
 }
 

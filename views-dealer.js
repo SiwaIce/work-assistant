@@ -3804,6 +3804,14 @@ function toggleOnboardStep(dealerId, stepIdx) {
       updates.level = d.level === 'Other' ? 'B' : d.level;
       updates.appointmentLetter = 'ออกแล้ว';
       updates.appointmentDate = _td();
+      // ให้ทำ Onboarding ขั้นตอนนี้เสร็จ = นับเข้า KPI "Dealer ใหม่ Authorized" ได้เลย เหมือนกดปุ่ม
+      // markDealerAuthorized() แยกต่างหาก — เดิมทำ Onboarding เสร็จแล้ว KPI ไม่ขยับเพราะไม่เคยเซ็ตฟิลด์นี้เลย
+      // เช็ค !d.authorizedDate กันรีเซ็ตวันที่ทับของ Dealer ที่เคย Authorize ไปแล้วก่อนหน้า (ยกเลิก-ติ๊กใหม่)
+      if (!d.authorizedDate) {
+        var cfgAuth = getConfig();
+        updates.authorizedDate = _td();
+        updates.authorizedBy = cfgAuth.saleName || ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email) : '');
+      }
     }
     if (Object.keys(updates).length) {
       for (var k in updates) d[k] = updates[k];
@@ -3856,6 +3864,12 @@ function saveOnboardStep(dealerId, stepIdx) {
       if (d.level === 'Other') d.level = 'B';
       d.appointmentLetter = 'ออกแล้ว';
       d.appointmentDate = d.onboarding.steps[stepIdx].date || _td();
+      // เหตุผลเดียวกับใน toggleOnboardStep — ให้ทำ Onboarding เสร็จนับเข้า KPI ได้เลย
+      if (!d.authorizedDate) {
+        var cfgAuth2 = getConfig();
+        d.authorizedDate = d.onboarding.steps[stepIdx].date || _td();
+        d.authorizedBy = cfgAuth2.saleName || ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email) : '');
+      }
     }
   }
   
