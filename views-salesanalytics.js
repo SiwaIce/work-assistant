@@ -128,12 +128,27 @@ function saActualForRange(start, end, saleFilter) {
   return { source: 'sis', total: sis.total, byDealer: sis.byDealer, orders: [] };
 }
 
+// วันที่ปิดจริงของโครงการ "won" — เอาจาก log "เปลี่ยนสถานะ" (ระบบสร้างอัตโนมัติทุกครั้งที่เปลี่ยนสถานะ) หา
+// ครั้งแรกสุดที่เปลี่ยนเข้าสถานะกลุ่ม won เพราะนี่คือวันที่ "ปิดดีลจริง" — ไม่ใช่ expectedCloseDate (แค่ค่าคาดการณ์)
+// หรือ registerDate (วันที่ลงทะเบียนโครงการ อาจเป็นปีก่อนหน้าที่ยังไม่ปิด) ไม่งั้นกราฟจะเอายอดไปโผล่ผิดปี
+function saPipeWonDate(p) {
+  var wonNames = {};
+  (getConfig().pipelineStatuses || []).filter(function(s) { return s.category === 'won'; }).forEach(function(s) { wonNames[s.name] = true; });
+  var wonLogs = ST.getAll('pipeLog').filter(function(l) {
+    if (l.pipeId !== p.id || l.type !== 'status_change' || !l.content) return false;
+    var parts = l.content.split('→');
+    return parts.length > 1 && wonNames[parts[1].trim()];
+  }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); }); // เก่า→ใหม่ เอาอันแรกสุด = ปิดดีลครั้งแรก
+  if (wonLogs.length) return (wonLogs[0].date || '').split('T')[0];
+  return p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : ''); // ไม่มี log เปลี่ยนสถานะ (ข้อมูลเก่า/import) — ใช้ค่าเดิมแทน
+}
+
 function saPipelineInRange(category, start, end, saleFilter) {
   var ids = getStatusIdsByCategory(category);
   return ST.getAll('pipeline').filter(function(p) {
     if (ids.indexOf(p.status) === -1) return false;
     if (saleFilter !== 'all' && (p.saleName || '') !== saleFilter) return false;
-    var d = p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : '');
+    var d = category === 'won' ? saPipeWonDate(p) : (p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
     return d && d >= start && d < end;
   });
 }
