@@ -1,8 +1,10 @@
 // ================================================================
-// 📈 SALES ANALYTICS — ยอดขายจริง (Sales Order + fallback ยอดขาย SIS) + Plan vs Actual (Pipeline vs จริง)
-// (2026-08-28) ต่อยอดจากมอคอัพที่คุยกันไว้ — สโคปที่ทำจริงรอบนี้: 2 แท็บหลัก + ตัวกรองเวลา/เซล + drill-down
-// จริงไปหน้า Dealer/Pipeline Detail + Copy สรุป ส่วนของตกแต่ง (compare overlay/เส้นเป้า/บันทึกมุมมอง/โหมด
-// นำเสนอ/แชร์ลิงก์/ปักหมุดโน้ต) ที่อยู่ในมอคอัพยังไม่ทำรอบนี้ เพิ่มทีหลังได้ถ้าต้องการจริงๆ
+// 📈 SALES ANALYTICS — ยอดขายจริง (Pipeline: Win/Contracting/Deliver) + Plan vs Actual (Pipeline vs SIS)
+// (2026-08-28, แก้ 2026-08-29) เดิมแท็บยอดขายจริงใช้ Sales Order/ยอดขาย SIS เป็นหลัก แต่ใช้งานจริง Sales Order
+// แทบไม่มีข้อมูล (ไม่ค่อยได้บันทึก) เลยเปลี่ยนมาใช้ Pipeline สถานะ Win/Contracting/Deliver แทน เพราะเป็น
+// เครื่องมือที่ใช้งานทุกวันอยู่แล้ว มีข้อมูลสม่ำเสมอกว่ามาก และมีระดับสินค้าให้แยกได้ (SIS ไม่มี) — แลกมาด้วย
+// ตัวเลขเป็น "ยอดที่ปิดแล้วใน Pipeline" ไม่ใช่ยอดตัดบัญชีจริงเป๊ะ ส่วนแท็บ Plan vs Actual ยังคงใช้ Sales
+// Order/SIS เป็น Actual เหมือนเดิม (ไม่เปลี่ยน) เพื่อรักษาไว้สำหรับเทียบ gap ระหว่างปิดดีลกับตัดยอดบัญชีจริง
 // ================================================================
 var saGran = 'year';
 var saOffset = { year: 0, quarter: 0, month: 0, week: 0, day: 0 }; // 0 = ช่วงปัจจุบัน, ลบ = ย้อนหลัง
@@ -138,6 +140,21 @@ function saPipelineInRange(category, start, end, saleFilter) {
 
 function saAmt(p) { return Number(p.forecastAmount) || 0; }
 
+// ยอดต่อรายการสินค้าในโครงการเดียว — แจกยอด forecastAmount ของโครงการตามสัดส่วนจำนวนหน่วย (ส่วนใหญ่โครงการไม่ได้
+// กรอกราคาต่อหน่วยแยกไว้ มีแต่ยอดรวมทั้งโครงการ) ถ้า item มี .total อยู่แล้วก็ใช้ตรงๆ เลย แม่นกว่า
+function saPipeItemRevenue(p) {
+  var items = getPipeItems(p) || [];
+  if (!items.length) return [];
+  var hasExplicitTotal = items.every(function(it) { return it.total != null && it.total !== ''; });
+  if (hasExplicitTotal) return items.map(function(it) { return { model: it.model || '-', qty: Number(it.qty) || 1, v: Number(it.total) || 0 }; });
+  var totalQty = items.reduce(function(s, it) { return s + (Number(it.qty) || 1); }, 0) || 1;
+  var projectTotal = saAmt(p);
+  return items.map(function(it) {
+    var qty = Number(it.qty) || 1;
+    return { model: it.model || '-', qty: qty, v: projectTotal * (qty / totalQty) };
+  });
+}
+
 // ================================================================
 // PAGE ROUTER
 // ================================================================
@@ -185,30 +202,31 @@ function saFilterBarHtml() {
 }
 
 // ================================================================
-// TAB: 💰 ยอดขายจริง
+// TAB: 💰 ยอดขายจริง — ใช้ Pipeline (Win/Contracting/Deliver) เป็นแหล่งหลัก
+// (2026-08-29 เปลี่ยนจาก Sales Order/ยอดขาย SIS ตามคำขอ — Pipeline เป็นเครื่องมือที่ใช้งานจริงทุกวันอยู่แล้ว
+// มีข้อมูลสม่ำเสมอกว่า SO มาก และมีระดับสินค้าที่ SIS ไม่มี ข้อแลกเปลี่ยน: เป็นยอดที่ "ปิดแล้วใน Pipeline"
+// (ราคาที่เสนอ/รอวางบิล) ไม่ใช่ยอดตัดบัญชีจริงเป๊ะ — อาจมีส่วนต่างจากสินค้า Run Rate/Demo ที่ลูกค้าสั่งเพิ่มเอง
+// โดยไม่ได้ลงเป็นโครงการ ดูเทียบกับยอดบัญชีจริง (SIS) ได้ที่แท็บ Plan vs Actual)
 // ================================================================
 function saActualPaneHtml() {
   var period = saPeriodBars(saGran, saOffset[saGran]);
-  var whole = saActualForRange(period.bars[0].start, period.bars[period.bars.length - 1].end, saSaleFilter);
-  var orders = whole.orders.length;
-  var avg = orders ? whole.total / orders : 0;
+  var start0 = period.bars[0].start, end0 = period.bars[period.bars.length - 1].end;
+  var wholePipes = saPipelineInRange('won', start0, end0, saSaleFilter);
+  var wholeTotal = wholePipes.reduce(function(s, p) { return s + saAmt(p); }, 0);
+  var avg = wholePipes.length ? wholeTotal / wholePipes.length : 0;
 
-  var srcBadge = whole.source === 'so'
-    ? '<span class="sa-badge so">📊 ข้อมูลจาก Sales Order — ละเอียดครบทุกมิติรวมถึงแยกสินค้า</span>'
-    : '<span class="sa-badge sis">📄 ยังไม่มี Sales Order ช่วงนี้ — ใช้ยอดขาย SIS แทน (รวม/Dealer/เซล ได้ แต่แยกสินค้าไม่ได้)</span>';
-
-  var h = srcBadge;
+  var h = '<span class="sa-badge so">🚁 ยอดที่ปิดแล้วใน Pipeline (Win/Contracting/Deliver) — อาจต่างจากยอดบัญชีจริงเล็กน้อย (เช่น สินค้า Run Rate/Demo ที่ไม่ได้ลงเป็นโครงการ) เทียบกับยอด SIS ได้ที่แท็บ Plan vs Actual</span>';
 
   h += '<div class="sa-stats">' +
-    '<div class="sa-stat"><div class="lbl">ยอดขายรวม</div><div class="val">' + fmtMoney(whole.total) + ' ฿</div></div>' +
-    '<div class="sa-stat"><div class="lbl">จำนวนออเดอร์</div><div class="val">' + (whole.source === 'so' ? orders : '—') + '</div></div>' +
-    '<div class="sa-stat"><div class="lbl">มูลค่าเฉลี่ย/ออเดอร์</div><div class="val">' + (whole.source === 'so' && orders ? fmtMoney(avg) + ' ฿' : '—') + '</div></div>' +
+    '<div class="sa-stat"><div class="lbl">ยอดขายรวม</div><div class="val">' + fmtMoney(wholeTotal) + ' ฿</div></div>' +
+    '<div class="sa-stat"><div class="lbl">จำนวนโครงการ</div><div class="val">' + wholePipes.length + '</div></div>' +
+    '<div class="sa-stat"><div class="lbl">มูลค่าเฉลี่ย/โครงการ</div><div class="val">' + (wholePipes.length ? fmtMoney(avg) + ' ฿' : '—') + '</div></div>' +
     '</div>';
 
   h += '<div class="card"><h2>ยอดขายตามช่วงเวลา <span class="hint">คลิกแท่งเพื่อดูรายละเอียดช่วงนั้น</span></h2>' +
     saBarChartHtml(period.bars.map(function(b) {
-      var r = saActualForRange(b.start, b.end, saSaleFilter);
-      return { key: b.key, v: r.total, onclick: "saOpenPeriodDrillM('" + b.start + "','" + b.end + "','" + sanitize(b.key).replace(/'/g, "\\'") + "')" };
+      var v = saPipelineInRange('won', b.start, b.end, saSaleFilter).reduce(function(s, p) { return s + saAmt(p); }, 0);
+      return { key: b.key, v: v, onclick: "saOpenPeriodDrillM('" + b.start + "','" + b.end + "','" + sanitize(b.key).replace(/'/g, "\\'") + "')" };
     })) +
     '</div>';
 
@@ -218,73 +236,50 @@ function saActualPaneHtml() {
     '<button class="sa-gtab' + (saTab === 'product' ? ' on' : '') + '" onclick="saSetTab(\'product\')">🚁 แยกตามสินค้า</button>' +
     '</div>';
 
-  var start0 = period.bars[0].start, end0 = period.bars[period.bars.length - 1].end;
-  if (saTab === 'product' && whole.source !== 'so') {
-    h += '<div class="empty"><div class="icon">📄</div><p>ช่วงเวลานี้ยังไม่มีข้อมูลระดับสินค้า — มีแค่ยอดขาย SIS (สรุปรายเดือน) กรอกผ่าน Sales Order เพิ่มเพื่อดูมิตินี้</p></div>';
+  var rows = saTab === 'dealer' ? saBreakdownDealer(wholePipes)
+    : saTab === 'sale' ? saBreakdownSale(wholePipes)
+    : saBreakdownProduct(wholePipes);
+  h += '<table class="sa-table"><thead><tr><th>#</th><th>' + (saTab === 'dealer' ? 'Dealer' : saTab === 'sale' ? 'เซล' : 'สินค้า') + '</th><th class="num">ยอดขาย</th><th class="num">จำนวน</th></tr></thead><tbody>';
+  if (!rows.length) {
+    h += '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">ไม่มีข้อมูลช่วงนี้</td></tr>';
   } else {
-    var rows = saTab === 'dealer' ? saBreakdownDealer(start0, end0, whole)
-      : saTab === 'sale' ? saBreakdownSale(start0, end0, whole)
-      : saBreakdownProduct(start0, end0, whole);
-    h += '<table class="sa-table"><thead><tr><th>#</th><th>' + (saTab === 'dealer' ? 'Dealer' : saTab === 'sale' ? 'เซล' : 'สินค้า') + '</th><th class="num">ยอดขาย</th><th class="num">จำนวน</th></tr></thead><tbody>';
-    if (!rows.length) {
-      h += '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">ไม่มีข้อมูลช่วงนี้</td></tr>';
-    } else {
-      rows.slice(0, 30).forEach(function(r, i) {
-        var clickAttr = (saTab === 'dealer' && r.id) ? ' style="cursor:pointer" onclick="go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})"' : '';
-        h += '<tr' + clickAttr + '><td>' + (i + 1) + '</td><td style="font-weight:600">' + sanitize(r.name) + '</td>' +
-          '<td class="num">' + fmtMoney(r.v) + ' ฿</td><td class="num">' + (r.qty || '—') + '</td></tr>';
-      });
-    }
-    h += '</tbody></table>';
+    rows.slice(0, 30).forEach(function(r, i) {
+      var clickAttr = (saTab === 'dealer' && r.id) ? ' style="cursor:pointer" onclick="go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})"' : '';
+      h += '<tr' + clickAttr + '><td>' + (i + 1) + '</td><td style="font-weight:600">' + sanitize(r.name) + '</td>' +
+        '<td class="num">' + fmtMoney(r.v) + ' ฿</td><td class="num">' + (r.qty || '—') + '</td></tr>';
+    });
   }
+  h += '</tbody></table>';
   h += '</div>';
   return h;
 }
 
-function saBreakdownDealer(start, end, whole) {
-  if (whole.source === 'so') {
-    var orders = saOrdersInRange(start, end, saSaleFilter);
-    var map = {};
-    orders.forEach(function(o) {
-      if (!map[o.dealerId]) map[o.dealerId] = { id: o.dealerId, name: o.dealerName || '-', v: 0, qty: 0 };
-      map[o.dealerId].v += saOrderTotal(o);
-      map[o.dealerId].qty += saOrderQty(o);
-    });
-    return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.v - a.v; });
-  }
-  return Object.keys(whole.byDealer || {}).map(function(id) {
-    var d = ST.getOne('dealers', id);
-    return { id: id, name: d ? d.name : '-', v: whole.byDealer[id], qty: null };
-  }).sort(function(a, b) { return b.v - a.v; });
-}
-function saBreakdownSale(start, end, whole) {
-  var dsm = saDealerSaleMap();
+function saBreakdownDealer(pipes) {
   var map = {};
-  if (whole.source === 'so') {
-    var orders = saOrdersInRange(start, end, saSaleFilter);
-    orders.forEach(function(o) {
-      var sn = dsm[o.dealerId] || '(ไม่ระบุ)';
-      if (!map[sn]) map[sn] = { name: sn, v: 0, qty: 0 };
-      map[sn].v += saOrderTotal(o); map[sn].qty += saOrderQty(o);
-    });
-  } else {
-    Object.keys(whole.byDealer || {}).forEach(function(id) {
-      var sn = dsm[id] || '(ไม่ระบุ)';
-      if (!map[sn]) map[sn] = { name: sn, v: 0, qty: null };
-      map[sn].v += whole.byDealer[id];
-    });
-  }
+  pipes.forEach(function(p) {
+    if (!map[p.dealerId]) { var d = ST.getOne('dealers', p.dealerId); map[p.dealerId] = { id: p.dealerId, name: d ? d.name : '-', v: 0, qty: 0 }; }
+    map[p.dealerId].v += saAmt(p);
+    map[p.dealerId].qty += saPipeItemRevenue(p).reduce(function(s, it) { return s + it.qty; }, 0);
+  });
   return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.v - a.v; });
 }
-function saBreakdownProduct(start, end) {
-  var orders = saOrdersInRange(start, end, saSaleFilter);
+function saBreakdownSale(pipes) {
   var map = {};
-  orders.forEach(function(o) {
-    (o.items || []).forEach(function(it) {
-      var key = it.model || '-';
-      if (!map[key]) map[key] = { name: key, v: 0, qty: 0 };
-      map[key].v += (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
-      map[key].qty += Number(it.qty) || 0;
+  pipes.forEach(function(p) {
+    var sn = p.saleName || '(ไม่ระบุ)';
+    if (!map[sn]) map[sn] = { name: sn, v: 0, qty: 0 };
+    map[sn].v += saAmt(p);
+    map[sn].qty += saPipeItemRevenue(p).reduce(function(s, it) { return s + it.qty; }, 0);
+  });
+  return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.v - a.v; });
+}
+function saBreakdownProduct(pipes) {
+  var map = {};
+  pipes.forEach(function(p) {
+    saPipeItemRevenue(p).forEach(function(it) {
+      if (!map[it.model]) map[it.model] = { name: it.model, v: 0, qty: 0 };
+      map[it.model].v += it.v;
+      map[it.model].qty += it.qty;
     });
   });
   return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.v - a.v; });
@@ -314,24 +309,24 @@ function saBarChartHtml(bars) {
 }
 
 function saOpenPeriodDrillM(start, end, key) {
-  var r = saActualForRange(start, end, saSaleFilter);
-  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">' + sanitize(key) + ' · ' + (r.source === 'so' ? 'จาก Sales Order' : 'จาก ยอดขาย SIS') + '</p>';
-  if (r.source === 'so') {
-    h += '<table class="sa-table"><thead><tr><th>SO</th><th>Dealer</th><th class="num">ยอด</th><th></th></tr></thead><tbody>' +
-      r.orders.map(function(o) {
-        return '<tr><td>' + sanitize(o.soNumber || o.id) + '</td><td>' + sanitize(o.dealerName || '-') + '</td>' +
-          '<td class="num">' + fmtMoney(saOrderTotal(o)) + ' ฿</td>' +
-          '<td><button class="btn bsm bo" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + o.dealerId + '\'})">เปิด →</button></td></tr>';
-      }).join('') + '</tbody></table>';
+  var pipes = saPipelineInRange('won', start, end, saSaleFilter).sort(function(a, b) { return saAmt(b) - saAmt(a); });
+  var dealerMap = {}; ST.getAll('dealers').forEach(function(d) { dealerMap[d.id] = d; });
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">' + sanitize(key) + ' · ' + pipes.length + ' โครงการ · รวม ' + fmtMoney(pipes.reduce(function(s, p) { return s + saAmt(p); }, 0)) + ' ฿</p>';
+  if (!pipes.length) {
+    h += '<div class="empty"><p>ไม่มีโครงการปิดแล้วในช่วงนี้</p></div>';
   } else {
-    h += '<table class="sa-table"><thead><tr><th>Dealer</th><th class="num">ยอดขาย SIS</th><th></th></tr></thead><tbody>' +
-      Object.keys(r.byDealer).map(function(id) {
-        var d = ST.getOne('dealers', id);
-        return '<tr><td>' + sanitize(d ? d.name : '-') + '</td><td class="num">' + fmtMoney(r.byDealer[id]) + ' ฿</td>' +
-          '<td><button class="btn bsm bo" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + id + '\'})">เปิด →</button></td></tr>';
-      }).join('') + '</tbody></table>';
+    h += '<div class="sa-stagegroup">' + pipes.map(function(p) {
+      var d = dealerMap[p.dealerId];
+      return '<div class="sa-projrow">' +
+        (p.rowNo ? '<span class="sa-rowno mono">#' + sanitize(String(p.rowNo)) + '</span>' : '') +
+        '<span class="n">' + sanitize(p.projectName || '-') + '</span>' +
+        '<span class="d">' + sanitize(d ? d.name : '-') + '</span>' +
+        '<span class="v mono">' + fmtMoney(saAmt(p)) + '</span>' +
+        '<button class="btn bsm bp" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">เปิด →</button>' +
+        '</div>';
+    }).join('') + '</div>';
   }
-  openM('📅 รายละเอียดยอดขาย', h);
+  openM('📅 รายละเอียด — ' + sanitize(key), h);
 }
 
 // ================================================================
