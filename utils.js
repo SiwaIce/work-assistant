@@ -2669,27 +2669,36 @@ function _pipeWonStatusNames() {
 }
 
 // log ยืนยัน — เฉพาะ log ที่ระบบสร้างเองตอนกดเปลี่ยนสถานะในแอป (changePipeStatus/savePipeUpdate) เนื้อหาจะเป็น
-// รูปแบบ "เดิม → ใหม่" เสมอ เอา log แรกสุดที่เปลี่ยนเข้ากลุ่ม won (ปิดดีลครั้งแรก ไม่ใช่ครั้งหลังสุด)
-function _pipeConfirmedWonLogDate(p) {
+// รูปแบบ "เดิม → ใหม่" เสมอ เอา log แรกสุดที่เปลี่ยนเข้ากลุ่ม won (ปิดดีลครั้งแรก ไม่ใช่ครั้งหลังสุด) — คืน log
+// entry เต็ม (ไม่ใช่แค่วันที่) ไว้ให้ UI โชว์เนื้อหาจริงที่ใช้ตัดสินใจได้ ไม่ต้องเชื่อเฉยๆ ว่าวันที่มาจากไหน
+function _pipeConfirmedWonLog(p) {
   var wonNames = _pipeWonStatusNames();
   var logs = ST.getAll('pipeLog').filter(function(l) {
     if (l.pipeId !== p.id || l.type !== 'status_change' || !l.content) return false;
     var parts = l.content.split('→');
     return parts.length > 1 && wonNames[parts[1].trim()];
   }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
-  return logs.length ? (logs[0].date || '').split('T')[0] : '';
+  return logs.length ? logs[0] : null;
+}
+function _pipeConfirmedWonLogDate(p) {
+  var l = _pipeConfirmedWonLog(p);
+  return l ? (l.date || '').split('T')[0] : '';
 }
 
 // เดาจาก log ข้อความ — log อะไรก็ได้ (ปกติ type='note' จาก import) ที่เนื้อหามีชื่อสถานะกลุ่ม won ปรากฏอยู่ตรงๆ
 // ไม่ต้องเป๊ะฟอร์แมต "เดิม → ใหม่" เหมือนชั้นบน — เดาได้ไม่แม่นเท่า เรียกเฉพาะตอนไม่มี log ยืนยันเท่านั้น
-function _pipeGuessedWonLogDate(p) {
+function _pipeGuessedWonLog(p) {
   var wonNames = Object.keys(_pipeWonStatusNames());
-  if (!wonNames.length) return '';
+  if (!wonNames.length) return null;
   var logs = ST.getAll('pipeLog').filter(function(l) {
     if (l.pipeId !== p.id || !l.content) return false;
     return wonNames.some(function(n) { return l.content.indexOf(n) !== -1; });
   }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
-  return logs.length ? (logs[0].date || '').split('T')[0] : '';
+  return logs.length ? logs[0] : null;
+}
+function _pipeGuessedWonLogDate(p) {
+  var l = _pipeGuessedWonLog(p);
+  return l ? (l.date || '').split('T')[0] : '';
 }
 
 // รายการแหล่งวันที่ที่ "มีข้อมูลจริง" สำหรับโครงการนี้ เรียงตามลำดับความน่าเชื่อถือ — register อยู่ท้ายสุดเสมอ

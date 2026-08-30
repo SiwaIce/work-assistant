@@ -569,6 +569,22 @@ function _cdmSetSource(pipeId, key) {
   _cdmRenderModal();
 }
 
+// โชว์เนื้อหา log จริงที่เป็นที่มาของชั้น "Log ยืนยัน"/"เดาจาก Log" (ถ้ามี) — ไม่ใช่แค่โชว์วันที่เฉยๆ เพราะ
+// เฉพาะชั้น "เดาจาก Log" เดาจากข้อความอิสระ ผู้ใช้ควรเห็นเนื้อหาจริงที่ระบบใช้ตัดสินเอง จะได้เช็คได้ว่าเดาถูกไหม
+// โดยไม่ต้องออกจาก modal นี้ไปหาเองในหน้า Pipeline Detail (2026-08-30 ตามคำขอให้ทุกจุดหาที่มาได้ในตัว)
+function _cdmSourceDetailHtml(p) {
+  var confirmedLog = _pipeConfirmedWonLog(p);
+  var guessedLog = confirmedLog ? null : _pipeGuessedWonLog(p);
+  if (!confirmedLog && !guessedLog) return '';
+  var l = confirmedLog || guessedLog;
+  var label = confirmedLog ? '📌 Log ยืนยัน (ระบบสร้างเองตอนกดเปลี่ยนสถานะ)' : '🔍 เดาจาก Log (ไม่ยืนยัน — เช็คว่าเดาถูกไหม)';
+  var color = confirmedLog ? 'var(--good,#22c55e)' : 'var(--guess,#a78bfa)';
+  return '<div style="font-size:.72rem;background:var(--bg2);border-radius:6px;padding:8px 10px;margin:2px 0 4px;border-left:3px solid ' + color + '">' +
+    '<div style="font-weight:700;color:' + color + ';margin-bottom:3px">' + label + '</div>' +
+    '<div style="color:var(--text2)">' + fD((l.date || '').split('T')[0]) + ' — "' + sanitize(l.content || '') + '"</div>' +
+    '</div>';
+}
+
 function _cdmBulkSetMonth(v) { _cdmBulkMonth = v; }
 function _cdmBulkSetShip(v) { _cdmBulkShip = v; }
 
@@ -639,13 +655,19 @@ function _cdmRenderModal() {
       h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
       h += '<input type="checkbox" style="width:auto" ' + (_cdmSel[p.id] ? 'checked' : '') + ' onchange="_cdmToggleSel(\'' + p.id + '\',this.checked)">';
       h += '<button class="btn bsm bo" style="padding:1px 7px" onclick="_cdmToggleExpand(\'' + p.id + '\')">' + (expanded ? '▲' : '▼') + '</button>';
-      h += '<span style="flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">' +
+      h += '<span style="flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;cursor:pointer;text-decoration:underline dotted" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})" title="เปิดโครงการนี้เต็มหน้า">' +
         (p.rowNo ? '<span style="color:var(--text2);font-weight:400">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + sanitize(p.projectName || (dl ? dl.name : '') || '-') + '</span>';
       h += pipeTag(p.status);
       h += '<span style="font-size:.72rem;color:var(--text2);white-space:nowrap">' + fmtMoneyShort(p.forecastAmount) + '</span>';
       h += '</div>';
-      h += '<div style="font-size:.68rem;color:var(--text3);margin:3px 0 6px">🏪 ' + sanitize(dl ? dl.name : '-') + ' · 🗓️ Register: ' + fD(p.registerDate) + '</div>';
-      if (expanded) h += _kpiApDetailHtml(p);
+      h += '<div style="font-size:.68rem;color:var(--text3);margin:3px 0 6px">🏪 ' +
+        (dl ? '<span style="cursor:pointer;text-decoration:underline dotted" onclick="closeMForce();go(\'dealerDetail\',{dealerId:\'' + dl.id + '\'})" title="เปิดหน้า Dealer นี้">' + sanitize(dl.name) + '</span>' : '-') +
+        ' · 🗓️ Register: ' + fD(p.registerDate) + '</div>';
+      if (expanded) {
+        h += _kpiApDetailHtml(p);
+        h += _cdmSourceDetailHtml(p);
+        h += '<div style="margin:2px 0 8px"><span style="cursor:pointer;font-size:.7rem;color:var(--accent);text-decoration:underline dotted" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📂 เปิดโครงการเต็ม (ดู Timeline/แก้ไขทุกฟิลด์) →</span></div>';
+      }
       h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">';
       h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + (p.forecastMonth || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
       h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Shipment Date</label><input type="date" style="font-size:.72rem;width:130px" value="' + (p.shipmentDate || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'shipmentDate\',this.value)"></div>';
