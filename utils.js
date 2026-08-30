@@ -2641,3 +2641,88 @@ function exportToICS(summary, description, startDate, endDate, location, url) {
   
   toast('📅 สร้างไฟล์ .ics แล้ว! เปิดด้วย Outlook หรือ Google Calendar ได้');
 }
+
+// ================================================================
+// วันที่ปิดดีล — 5 ชั้นตามความน่าเชื่อถือ ใช้ร่วมกันทั้ง Sales Analytics และ KPI แทนที่แต่ละหน้าคำนวณเองคนละ
+// แบบ (เดิม Sales Analytics ใช้วันที่จาก log เปลี่ยนสถานะจริง ส่วน KPI ใช้ registerDate เฉยๆ ทำให้ยอด "ปิดแล้ว"
+// ของสองหน้าไม่ตรงกัน) ลำดับ:
+//   1) log ยืนยัน      — log type='status_change' ที่ระบบสร้างเองตอนกดเปลี่ยนสถานะในแอป (รูปแบบ "เดิม → ใหม่")
+//   2) เดาจาก log       — ไม่มี log ยืนยัน (พบมากกับดีลที่ import จาก Sheet — import สร้าง log เป็น type='note'
+//                          เสมอ ไม่เคยเป็น status_change) แต่มี log อื่นที่เนื้อหาเอ่ยชื่อสถานะกลุ่ม won ไว้ตรงๆ
+//   3) Forecast Month   — เดือนที่เซลกรอกเองว่าคาดว่าจะสั่งซื้อ/ปิด
+//   4) Shipment Date    — วันที่คาดว่าจะส่งมอบ
+//   5) Register Date    — วันที่ลงทะเบียนโครงการ มีอยู่แล้วแทบทุกโครงการ กันไว้ท้ายสุดไม่ให้ไม่มีข้อมูลเลย
+// เลือก override เองต่อโครงการได้ผ่าน p.closeDateSource ('' หรือไม่ตั้ง = auto ตามลำดับข้างบน) 2026-08-29
+// ================================================================
+var PIPE_CLOSE_DATE_TIER_META = {
+  log:      { label: '📌 Log ยืนยัน' },
+  guess:    { label: '🔍 เดาจาก Log' },
+  fc:       { label: '🔮 Forecast Month' },
+  ship:     { label: '🚚 Shipment Date' },
+  register: { label: '🗓️ Register Date' }
+};
+
+function _pipeWonStatusNames() {
+  var names = {};
+  (getConfig().pipelineStatuses || []).filter(function(s) { return s.category === 'won'; }).forEach(function(s) { names[s.name] = true; });
+  return names;
+}
+
+// log ยืนยัน — เฉพาะ log ที่ระบบสร้างเองตอนกดเปลี่ยนสถานะในแอป (changePipeStatus/savePipeUpdate) เนื้อหาจะเป็น
+// รูปแบบ "เดิม → ใหม่" เสมอ เอา log แรกสุดที่เปลี่ยนเข้ากลุ่ม won (ปิดดีลครั้งแรก ไม่ใช่ครั้งหลังสุด) — คืน log
+// entry เต็ม (ไม่ใช่แค่วันที่) ไว้ให้ UI โชว์เนื้อหาจริงที่ใช้ตัดสินใจได้ ไม่ต้องเชื่อเฉยๆ ว่าวันที่มาจากไหน
+function _pipeConfirmedWonLog(p) {
+  var wonNames = _pipeWonStatusNames();
+  var logs = ST.getAll('pipeLog').filter(function(l) {
+    if (l.pipeId !== p.id || l.type !== 'status_change' || !l.content) return false;
+    var parts = l.content.split('→');
+    return parts.length > 1 && wonNames[parts[1].trim()];
+  }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  return logs.length ? logs[0] : null;
+}
+function _pipeConfirmedWonLogDate(p) {
+  var l = _pipeConfirmedWonLog(p);
+  return l ? (l.date || '').split('T')[0] : '';
+}
+
+// เดาจาก log ข้อความ — log อะไรก็ได้ (ปกติ type='note' จาก import) ที่เนื้อหามีชื่อสถานะกลุ่ม won ปรากฏอยู่ตรงๆ
+// ไม่ต้องเป๊ะฟอร์แมต "เดิม → ใหม่" เหมือนชั้นบน — เดาได้ไม่แม่นเท่า เรียกเฉพาะตอนไม่มี log ยืนยันเท่านั้น
+function _pipeGuessedWonLog(p) {
+  var wonNames = Object.keys(_pipeWonStatusNames());
+  if (!wonNames.length) return null;
+  var logs = ST.getAll('pipeLog').filter(function(l) {
+    if (l.pipeId !== p.id || !l.content) return false;
+    return wonNames.some(function(n) { return l.content.indexOf(n) !== -1; });
+  }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  return logs.length ? logs[0] : null;
+}
+function _pipeGuessedWonLogDate(p) {
+  var l = _pipeGuessedWonLog(p);
+  return l ? (l.date || '').split('T')[0] : '';
+}
+
+// รายการแหล่งวันที่ที่ "มีข้อมูลจริง" สำหรับโครงการนี้ เรียงตามลำดับความน่าเชื่อถือ — register อยู่ท้ายสุดเสมอ
+// เพราะมีข้อมูลอยู่แล้วแทบทุกโครงการ ระบบเลยไม่มีวันไม่มีแหล่งให้เลือกเลยสักอัน
+function pipeCloseDateSources(p) {
+  var out = [];
+  var logDate = _pipeConfirmedWonLogDate(p);
+  if (logDate) out.push({ key: 'log', date: logDate });
+  var guessDate = logDate ? '' : _pipeGuessedWonLogDate(p); // ไม่มี log ยืนยันเท่านั้นถึงจะลองเดา
+  if (guessDate) out.push({ key: 'guess', date: guessDate });
+  var fcInfo = (p.forecastMonth && typeof _kpiParseForecastMonthText === 'function') ? _kpiParseForecastMonthText(p.forecastMonth) : null;
+  if (fcInfo) out.push({ key: 'fc', date: fcInfo.year + '-' + String(fcInfo.month).padStart(2, '0') + '-15' }); // มีแค่เดือน/ปี ใช้กลางเดือนแทนวัน
+  if (p.shipmentDate) out.push({ key: 'ship', date: p.shipmentDate });
+  out.push({ key: 'register', date: p.registerDate || (p.created ? p.created.split('T')[0] : '') });
+  return out;
+}
+
+// วันที่ปิดดีลที่ "ใช้จริง" ของโครงการนี้ {key, date} — เคารพ p.closeDateSource ถ้าตั้งไว้และยังมีข้อมูลอยู่จริง
+// ไม่งั้น auto (ตัวแรกในลำดับที่มีข้อมูลจริง)
+function pipeResolvedCloseDate(p) {
+  var sources = pipeCloseDateSources(p);
+  if (p.closeDateSource) {
+    var match = sources.filter(function(s) { return s.key === p.closeDateSource; })[0];
+    if (match) return match;
+  }
+  return sources[0];
+}

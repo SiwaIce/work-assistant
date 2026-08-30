@@ -284,7 +284,7 @@ function _kpiRunRateAutoCovered(l, plan, cat, startDate, endDate) {
   var p = ST.getOne('pipeline', l.pipeId);
   if (!p || !pipeIsWon(p)) return false;
   if ((p.saleName || '') !== plan.salesMemberName) return false;
-  var rd = p.registerDate || '';
+  var rd = pipeResolvedCloseDate(p).date;
   if (rd < startDate || rd > endDate) return false;
   if (cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
@@ -307,7 +307,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < startDate || rd > endDate) return;
       sum += Number(p.forecastAmount) || 0;
     });
@@ -327,7 +327,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < startDate || rd > endDate) return;
       (getPipeItems(p) || []).forEach(function(it) {
         var m = (it.model || '').toLowerCase();
@@ -413,7 +413,7 @@ function renderVisitTypeStatusCard() {
   var s = kpiVisitStatusThisMonth();
   var partnerMissing = s.partnerTotal - s.partnerDone;
   var pct = s.target ? Math.min(100, Math.round(s.actualQ / s.target * 100)) : 0;
-  var ringColor = s.onPace ? '#22c55e' : '#ef4444';
+  var ringColor = s.onPace ? 'var(--good)' : 'var(--bad)';
   var h = '<div class="card"><h2>📍 สถานะ Visit เดือนนี้</h2>';
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
   h += '<div style="background:var(--bg2);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--text2)">Partner (SAB) Offline</div>' +
@@ -477,7 +477,7 @@ function kpiContributingRecords(plan, cat) {
     var records = _kpiPipelines().filter(function(p) {
       if (!pipeIsWon(p)) return false;
       if ((p.saleName || '') !== plan.salesMemberName) return false;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < plan.startDate || rd > plan.endDate) return false;
       if (cat.type === 'pipelineModelQty') {
         return (getPipeItems(p) || []).some(function(it) {
@@ -554,9 +554,9 @@ function kpiQuarterTimeProgress(plan) {
 }
 
 var KPI_PACE_META = {
-  ahead: { label: '🚀 ล้ำหน้าเป้า', color: '#22c55e' },
-  onTrack: { label: '🟢 ตามทัน', color: '#3b82f6' },
-  behind: { label: '🔴 ตามหลังเป้า', color: '#ef4444' }
+  ahead: { label: '🚀 ล้ำหน้าเป้า', color: 'var(--good)' },
+  onTrack: { label: '🟢 ตามทัน', color: 'var(--status-info)' },
+  behind: { label: '🔴 ตามหลังเป้า', color: 'var(--bad)' }
 };
 
 function kpiPaceInfo(plan, cat) {
@@ -652,10 +652,12 @@ function kpiDealerPlanBreakdown(plan) {
   var planCount = 0, winCount = 0, deliverCount = 0;
   _kpiPipelines().forEach(function(p) {
     if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
-    var rd = p.registerDate || '';
-    if (rd < plan.startDate || rd > plan.endDate) return;
     var won = pipeIsWon(p), active = pipeIsActive(p);
     if (!won && !active) return; // Fail&Lost หรือสถานะอื่นที่ไม่นับใน Plan/Actual — ไม่แสดง
+    // ดีล won ใช้วันที่ปิดดีลที่ resolve ได้ (เดียวกับที่ kpiComputeActual ใช้) ส่วนดีลที่ยังเปิดอยู่ (active/Plan)
+    // ยังไม่มีวันปิดจริงให้ resolve ได้ ใช้ registerDate เป็นตัวแทนช่วงเวลาเหมือนเดิม
+    var rd = won ? pipeResolvedCloseDate(p).date : (p.registerDate || '');
+    if (rd < plan.startDate || rd > plan.endDate) return;
     if (won) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
     else potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
     var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
@@ -695,7 +697,7 @@ function kpiProductSalesBreakdown(plan) {
   _kpiPipelines().forEach(function(p) {
     if (!pipeIsWon(p)) return;
     if ((p.saleName || '') !== plan.salesMemberName) return;
-    var rd = p.registerDate || '';
+    var rd = pipeResolvedCloseDate(p).date;
     if (rd < plan.startDate || rd > plan.endDate) return;
     var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
     (getPipeItems(p) || []).forEach(function(it) {
@@ -856,7 +858,7 @@ function exportKpiSummaryExcel() {
                 var mm = (it.model || '').toLowerCase();
                 return (cat.modelMatch || []).some(function(k) { return mm.indexOf(k.toLowerCase()) !== -1; });
               }).reduce(function(s, it) { return s + (Number(it.qty) || 0); }, 0) + ' หน่วย';
-          salesRows.push([p.registerDate || '', m.name, cat.label, p.projectName || '-', d ? d.name : '-', counted, p.status || '']);
+          salesRows.push([pipeResolvedCloseDate(p).date, m.name, cat.label, p.projectName || '-', d ? d.name : '-', counted, p.status || '']);
         });
       } else if (cat.type === 'dealerAuthorized') {
         kpiContributingRecords(plan, cat).forEach(function(d) {
@@ -994,6 +996,8 @@ function rKpiScorecard(el) {
   if (plan) h += '<button class="btn bsm bd" onclick="kpiDeleteQuarterPlan(\'' + plan.id + '\')">🗑️ ลบไตรมาสนี้</button>';
   h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
   h += '<button class="btn bsm bo" onclick="showSaleNameMismatchM()" title="ถ้าตัวเลข KPI ขึ้น 0 ทั้งที่มีโครงการจริง มักเกิดจากชื่อเซลล์ในข้อมูลไม่ตรงกับสมาชิกทีม — เช็คได้ที่นี่">🔍 ตรวจสอบชื่อเซลล์</button>';
+  var cdmCount = cdmRegisterTierCount();
+  h += '<button class="btn bsm bo" onclick="showCloseDateManagerM()" title="ดู/แก้วันที่ปิดดีลที่ใช้คำนวณยอด KPI — ใช้ร่วมกับหน้า Sales Analytics">🧭 จัดการวันที่ปิดดีล' + (cdmCount ? ' (' + cdmCount + ')' : '') + '</button>';
   h += '</div>';
 
   if (!plan) {
@@ -1003,7 +1007,7 @@ function rKpiScorecard(el) {
   }
 
   var overall = kpiOverallScore(plan);
-  var overallColor = overall >= 100 ? '#22c55e' : overall >= 70 ? '#3b82f6' : overall >= 40 ? '#eab308' : '#ef4444';
+  var overallColor = overall >= 100 ? 'var(--good)' : overall >= 70 ? 'var(--status-info)' : overall >= 40 ? 'var(--status-gold)' : 'var(--bad)';
   var time = kpiQuarterTimeProgress(plan);
   var doneCount = (plan.categories || []).filter(function(cat) { return kpiAchievementPct(plan, cat) >= 100; }).length;
 
@@ -1013,7 +1017,7 @@ function rKpiScorecard(el) {
   if (prevPlan) {
     var prevScore = kpiOverallScore(prevPlan);
     var delta = Math.round((overall - prevScore) * 10) / 10;
-    var trendColor = delta > 0 ? '#22c55e' : delta < 0 ? '#ef4444' : '#94a3b8';
+    var trendColor = delta > 0 ? 'var(--good)' : delta < 0 ? 'var(--bad)' : 'var(--neutral)';
     var trendArrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '►';
     trendHtml = '<div class="kpi-trend" style="color:' + trendColor + '">' + trendArrow + ' ' + Math.abs(delta) + '% จาก ' + sanitize(prevPlan.quarter) + ' (' + prevScore + '%)</div>';
   }
@@ -1051,7 +1055,7 @@ function rKpiScorecard(el) {
     var pct = kpiAchievementPct(plan, cat);
     var pctShow = Math.min(pct, 100);
     var isDone = pct >= 100;
-    var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
+    var barColor = pct >= 100 ? 'var(--good)' : pct >= 50 ? 'var(--status-info)' : 'var(--bad)';
     var actualShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(actual) : actual;
     var targetShow = cat.type === 'pipelineRevenue' ? fmtMoneyShort(cat.target) : cat.target;
 
@@ -1141,7 +1145,7 @@ function rKpiScorecard(el) {
     };
     filtered.forEach(function(r) {
       var p = r.p;
-      var fcBadge = r.fc ? ('<span class="tag" style="background:' + (r.fc.inQuarter ? '#22c55e18;color:#16803c' : '#94a3b818;color:#64748b') + '">' + sanitize(r.fc.label) + (r.fc.inQuarter ? ' ✓' : '') + '</span>') : '<span style="color:var(--text2)">-</span>';
+      var fcBadge = r.fc ? ('<span class="tag" style="background:' + (r.fc.inQuarter ? 'var(--good-tint);color:var(--good-tint-text)' : 'var(--neutral-tint);color:var(--text3)') + '">' + sanitize(r.fc.label) + (r.fc.inQuarter ? ' ✓' : '') + '</span>') : '<span style="color:var(--text2)">-</span>';
       var updText = r.lastLog ? fD(r.lastLog.date) + ' · ' + (r.lastLog.content || '') : '-';
       var updHtml = r.lastLog ? (sanitize((r.lastLog.content || '').substr(0, 30)) + '<div style="color:var(--text2);font-size:.64rem">' + fD(r.lastLog.date) + '</div>') : '<span style="color:var(--text2)">-</span>';
       h += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
@@ -1176,7 +1180,7 @@ function rKpiScorecard(el) {
       '<th style="text-align:left;padding:5px 6px;color:var(--text2)">ความคืบหน้า</th></tr></thead><tbody>';
     prodSales.rows.forEach(function(r, ppIdx) {
       var pct = r.target ? Math.min(100, Math.round(r.qty / r.target * 100)) : null;
-      var barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#3b82f6' : '#ef4444';
+      var barColor = pct >= 100 ? 'var(--good)' : pct >= 50 ? 'var(--status-info)' : 'var(--bad)';
       var progress = r.target
         ? '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div><span style="font-size:.68rem;color:var(--text2);width:32px;text-align:right">' + pct + '%</span></div>'
         : '<span style="color:var(--text2)">ไม่มี KPI ผูก</span>';
@@ -1195,7 +1199,7 @@ function rKpiScorecard(el) {
         h += '<div id="' + rid + '" style="display:none;padding:2px 6px 6px 22px">';
         r.deals.forEach(function(dl) {
           var p = dl.p;
-          var typeColor = dl.actualType === 'Deliver' ? '#6366f1' : '#22c55e';
+          var typeColor = dl.actualType === 'Deliver' ? 'var(--deliver)' : 'var(--good)';
           h += '<div style="display:flex;gap:8px;align-items:center;font-size:.7rem;padding:4px;border-top:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
             '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.projectName || '-') + '</span>' +
             '<span style="width:40px;text-align:right;color:var(--text2)">x' + dl.qty + '</span>' +
@@ -1284,8 +1288,8 @@ function rKpiScorecard(el) {
           '<span style="width:36px;text-align:center">Plan</span><span style="width:60px;text-align:center">Actual</span></div>';
         r.deals.forEach(function(dl) {
           var p = dl.p;
-          var planMark = dl.state === 'plan' ? '<span style="color:#3b82f6;font-weight:700">✓</span>' : '<span style="color:var(--text2)">–</span>';
-          var actualMark = dl.state === 'actual' ? '<span style="color:#22c55e;font-weight:600">✓ ' + dl.actualType + '</span>' : '<span style="color:var(--text2)">–</span>';
+          var planMark = dl.state === 'plan' ? '<span style="color:var(--status-info);font-weight:700">✓</span>' : '<span style="color:var(--text2)">–</span>';
+          var actualMark = dl.state === 'actual' ? '<span style="color:var(--good);font-weight:600">✓ ' + dl.actualType + '</span>' : '<span style="color:var(--text2)">–</span>';
           h += '<div style="display:flex;gap:8px;align-items:center;font-size:.7rem;padding:4px;border-top:1px solid var(--border);cursor:pointer" onclick="go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">' +
             '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(p.projectName || '-') + '</span>' +
             '<span style="width:70px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (typeof getPipeName === 'function' ? sanitize(getPipeName(p.status)) : sanitize(p.status || '-')) + '</span>' +
@@ -1432,7 +1436,7 @@ function showKpiDetailM(planId, categoryId) {
       h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">📅 เป้ารายเดือน (แบ่งเท่ากันทุกเดือน)</div>';
       h += '<div class="kpi-month-grid">';
       mb.forEach(function(m) {
-        var mColor = m.pct >= 100 ? '#22c55e' : m.pct >= 50 ? '#3b82f6' : '#ef4444';
+        var mColor = m.pct >= 100 ? 'var(--good)' : m.pct >= 50 ? 'var(--status-info)' : 'var(--bad)';
         var mActualShow = isMoney ? fmtMoneyShort(m.actual) : Math.round(m.actual * 10) / 10;
         var mTargetShow = isMoney ? fmtMoneyShort(m.target) : Math.round(m.target * 10) / 10;
         h += '<div class="kpi-month-cell' + (m.isCurrent ? ' cur' : '') + '">';
@@ -1484,7 +1488,7 @@ function showKpiDetailM(planId, categoryId) {
         var items = (getPipeItems(p) || []).map(function(it) { return (it.model || '-') + ' x' + (it.qty || 1); }).join(', ');
         var fc = _kpiForecastMonthInfo(p, plan);
         var lastLog = (typeof ST !== 'undefined' && ST.pipeLogsByPipe) ? ST.pipeLogsByPipe(p.id)[0] : null;
-        var fcBadge = fc ? ('<span class="tag" style="background:' + (fc.inQuarter ? '#22c55e18;color:#16803c' : '#94a3b818;color:#64748b') + '">' + sanitize(fc.label) + (fc.inQuarter ? ' ✓' : '') + '</span>') : '';
+        var fcBadge = fc ? ('<span class="tag" style="background:' + (fc.inQuarter ? 'var(--good-tint);color:var(--good-tint-text)' : 'var(--neutral-tint);color:var(--text3)') + '">' + sanitize(fc.label) + (fc.inQuarter ? ' ✓' : '') + '</span>') : '';
         h += '<div class="kpi-detail-row" style="cursor:pointer" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">';
         h += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
           '<span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(p.projectName || '') + '">' + (p.rowNo ? '<span style="color:var(--text2);font-weight:400">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + '🌱 ' + sanitize(p.projectName || (dl3 ? dl3.name : '') || '-') + '</span>' +
