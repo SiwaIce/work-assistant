@@ -1763,6 +1763,8 @@ input:focus, select:focus, textarea:focus {
   --accent-glow: rgba(159,232,112,.3);
   --shadow: 0 1px 3px rgba(0,0,0,.06);
   --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
+  --chart-plan: #f59e0b;
+  --chart-committed: #22c55e;
 }
 .theme-light #sidebar {
   background: #ffffff !important;
@@ -2048,6 +2050,8 @@ input:focus, select:focus, textarea:focus {
   --sidebar-w: 200px;
   --shadow: 0 1px 3px rgba(0,0,0,.1);
   --shadow-lg: 0 4px 12px rgba(0,0,0,.2);
+  --chart-plan: #f59e0b;
+  --chart-committed: #22c55e;
 }
 
 /* Apply Variables */
@@ -2055,6 +2059,10 @@ body { background: var(--bg); color: var(--text); font-size: var(--font-base); }
 #sidebar { width: var(--sidebar-w); }
 #main { margin-left: var(--sidebar-w); }
 #ct { padding: var(--spacing-lg); }
+/* Tooltip ลอยของกราฟแท่ง SVG (Sales Analytics) — แทน native <title> ของ browser ที่ช้าและไม่มีสไตล์
+   ใช้ตัวเดียวร่วมกันทุกกราฟในหน้า สร้าง/reuse ผ่าน JS แล้วย้ายตำแหน่งตามเมาส์ (position:fixed) */
+.sa-chart-tip { position: fixed; z-index: 9999; pointer-events: none; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: .72rem; color: var(--text); box-shadow: var(--shadow-lg); white-space: nowrap; }
+.sa-chart-tip b { font-family: inherit; }
 /* Quick Copy — ปุ่ม copy เล็กๆ ท้ายข้อความ โผล่ตอน hover (มือถือโชว์ถาวร) */
 .qcopy { position: relative; }
 .qcopy-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 4px; border: none; border-radius: 4px; background: var(--accent); color: #fff; font-size: 10px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; vertical-align: middle; padding: 0; }

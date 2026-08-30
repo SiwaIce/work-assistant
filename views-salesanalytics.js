@@ -303,23 +303,75 @@ function saBreakdownProduct(pipes) {
   return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.v - a.v; });
 }
 
+// ---- Tooltip ลอยของกราฟแท่ง ใช้ร่วมกันทุกกราฟในหน้านี้ (แทน SVG <title> ที่เป็น native tooltip ของ
+// browser — ช้า ไม่มีสไตล์ ไม่ match กับดีไซน์แอป) สร้าง/reuse element เดียวผ่าน .sa-chart-tip (style.css)
+// (2026-08-30 ตามคำแนะนำ dataviz — ต้องมี hover layer แทน title เฉยๆ)
+function _saChartTooltipShow(evt, html) {
+  var el = document.getElementById('saChartTooltipEl');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'saChartTooltipEl';
+    el.className = 'sa-chart-tip';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html;
+  el.style.display = 'block';
+  _saChartTooltipMove(evt);
+}
+function _saChartTooltipMove(evt) {
+  var el = document.getElementById('saChartTooltipEl');
+  if (!el) return;
+  var x = evt.clientX + 14, y = evt.clientY + 14;
+  x = Math.min(x, window.innerWidth - el.offsetWidth - 10);
+  y = Math.min(y, window.innerHeight - el.offsetHeight - 10);
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+function _saChartTooltipHide() {
+  var el = document.getElementById('saChartTooltipEl');
+  if (el) el.style.display = 'none';
+}
+
+// เส้น grid + ตัวเลขกำกับแกน Y (0/⅓/⅔/max) — เดิมมีแค่เส้นเฉยๆ ไม่มีตัวเลข ต้อง hover ทุกครั้งถึงจะรู้ค่า
+function _saChartAxisSvg(max, W, padT, padH) {
+  var svg = '';
+  for (var g = 0; g <= 3; g++) {
+    var y = padT + padH * (1 - g / 3);
+    svg += '<line x1="0" y1="' + y + '" x2="' + W + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"></line>';
+    svg += '<text x="4" y="' + (y - 3) + '" font-size="9" fill="var(--text3)">' + fmtMoneyShort(max * g / 3) + '</text>';
+  }
+  return svg;
+}
+
+// path ของแท่งกราฟมนแค่มุมบน (ชนพื้น/baseline สนิท) — เดิมใช้ <rect rx="3"> ซึ่งมนทั้ง 4 มุมรวมมุมล่างที่
+// ควรปักกับแกนด้วย ทำให้แท่งดูเหมือนลอยจากพื้นเล็กน้อยแทนที่จะเป็นแท่งจริง
+function _saBarPath(x, y, w, h, r) {
+  if (h <= 0 || w <= 0) return '';
+  r = Math.min(r, w / 2, h);
+  if (r <= 0) return 'M' + x + ',' + (y + h) + 'h' + w + 'v' + (-h) + 'h' + (-w) + 'z';
+  return 'M' + x + ',' + (y + h) +
+    'L' + x + ',' + (y + r) +
+    'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+    'L' + (x + w - r) + ',' + y +
+    'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) +
+    'L' + (x + w) + ',' + (y + h) + 'Z';
+}
+
 // ---- แท่งกราฟ SVG แบบง่าย ใช้ร่วมกันทั้งแท็บยอดขายจริง/Plan vs Actual ----
 function saBarChartHtml(bars) {
-  var W = 1000, H = 200, padB = 26, padT = 8;
+  var W = 1000, H = 200, padB = 26, padT = 8, padH = H - padT - padB;
   var max = Math.max.apply(null, bars.map(function(b) { return b.v; })) || 1;
   var n = bars.length;
   var gap = 8;
   var barW = (W - gap * (n + 1)) / n;
   var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:180px" preserveAspectRatio="none">';
-  for (var g = 0; g <= 3; g++) {
-    var y = padT + (H - padT - padB) * (1 - g / 3);
-    svg += '<line x1="0" y1="' + y + '" x2="' + W + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"></line>';
-  }
+  svg += _saChartAxisSvg(max, W, padT, padH);
   bars.forEach(function(b, i) {
     var x = gap + i * (barW + gap);
-    var h = (H - padT - padB) * (b.v / max);
-    svg += '<rect x="' + x + '" y="' + (H - padB - h) + '" width="' + barW + '" height="' + h + '" rx="3" fill="var(--accent)" style="cursor:pointer" onclick="' + (b.onclick || '') + '">' +
-      '<title>' + sanitize(b.key) + ': ' + fmtMoney(b.v) + ' ฿</title></rect>';
+    var h = padH * (b.v / max);
+    var tip = "'" + sanitize(b.key).replace(/'/g, "\\'") + "<br><b>" + fmtMoney(b.v).replace(/'/g, "\\'") + " ฿</b>'";
+    svg += '<path d="' + _saBarPath(x, H - padB - h, barW, h, 4) + '" fill="var(--accent)" style="cursor:pointer" ' +
+      'onclick="' + (b.onclick || '') + '" onmouseenter="_saChartTooltipShow(event,' + tip + ')" onmousemove="_saChartTooltipMove(event)" onmouseleave="_saChartTooltipHide()"></path>';
     svg += '<text x="' + (x + barW / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--text3)">' + sanitize(b.key) + '</text>';
   });
   svg += '</svg>';
@@ -364,10 +416,10 @@ function saPlanPaneHtml() {
 
   var h = '<div class="sa-tiernote">' +
     '<b>3 ชั้นข้อมูล ไม่ได้บวกกัน — แต่ละอันเป็นคนละมุมมอง:</b>' +
-    '<div><span class="dot" style="background:#f59e0b"></span><b>Plan</b> = Pipeline ที่ยังเปิดอยู่ (Initial/On Process/Draft TOR/Bidding) ยังไม่แน่นอน</div>' +
-    '<div><span class="dot" style="background:#22c55e"></span><b>Committed</b> = ปิดดีลแล้วใน Pipeline (Win/Contracting/Deliver) แต่ยังไม่ตัดยอดบัญชี</div>' +
+    '<div><span class="dot" style="background:var(--chart-plan)"></span><b>Plan</b> = Pipeline ที่ยังเปิดอยู่ (Initial/On Process/Draft TOR/Bidding) ยังไม่แน่นอน</div>' +
+    '<div><span class="dot" style="background:var(--chart-committed)"></span><b>Committed</b> = ปิดดีลแล้วใน Pipeline (Win/Contracting/Deliver) แต่ยังไม่ตัดยอดบัญชี</div>' +
     '<div><span class="dot" style="background:var(--accent)"></span><b>Actual</b> = ยอดขายจริงที่บันทึกบัญชีแล้ว</div>' +
-    '<div style="color:#f59e0b;font-size:.68rem">⚠️ Committed กับ Actual อาจไม่เท่ากันเป๊ะ เพราะมี delay ระหว่างปิดดีลกับตัดยอดบัญชีจริง</div>' +
+    '<div style="color:var(--chart-plan);font-size:.68rem">⚠️ Committed กับ Actual อาจไม่เท่ากันเป๊ะ เพราะมี delay ระหว่างปิดดีลกับตัดยอดบัญชีจริง</div>' +
     '</div>';
 
   h += '<div class="sa-stats">' +
@@ -383,6 +435,11 @@ function saPlanPaneHtml() {
   return h;
 }
 
+// 3 series (Plan/Committed/Actual) สีส้ม/เขียว/ฟ้า ผ่านการเช็คแล้วว่าคนตาบอดสี (โดยเฉพาะ protanopia) แยก
+// ส้ม-เขียวยาก และในโหมด Light สีเขียว Committed กับสีเขียว accent ของ Actual แยกยากแม้สายตาปกติ (ΔE < 15) —
+// เก็บสีเดิมไว้ (ใช้เป็นสีสถานะเดียวกับที่อื่นในแอปมาตลอด เปลี่ยนจะขัดกับทั้งแอป) แต่เพิ่มตัวเลขกำกับบนแท่งตรงๆ
+// เป็น secondary encoding แทน (ตามคำแนะนำ dataviz — 3 series อยู่ในเกณฑ์ที่ควร direct-label อยู่แล้วด้วย)
+// (2026-08-30)
 function saPlanGroupedChartHtml(bars) {
   var data = bars.map(function(b) {
     var plan = saPipelineInRange('active', b.start, b.end, saSaleFilter).reduce(function(s, p) { return s + saAmt(p); }, 0);
@@ -390,32 +447,39 @@ function saPlanGroupedChartHtml(bars) {
     var actual = saActualForRange(b.start, b.end, saSaleFilter).total;
     return { key: b.key, plan: plan, committed: committed, actual: actual, start: b.start, end: b.end };
   });
-  var W = 1000, H = 200, padB = 26, padT = 8;
+  var W = 1000, H = 200, padB = 26, padT = 8, padH = H - padT - padB;
   var max = Math.max.apply(null, data.map(function(b) { return Math.max(b.plan, b.committed, b.actual); })) || 1;
   var n = data.length, groupGap = 8;
   var groupW = (W - groupGap * (n + 1)) / n;
   var barGap = 2, barW = (groupW - barGap * 2) / 3;
   var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:180px" preserveAspectRatio="none">';
-  for (var g = 0; g <= 3; g++) {
-    var y = padT + (H - padT - padB) * (1 - g / 3);
-    svg += '<line x1="0" y1="' + y + '" x2="' + W + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"></line>';
-  }
-  var SERIES = [{ k: 'plan', c: '#f59e0b', cat: 'active' }, { k: 'committed', c: '#22c55e', cat: 'won' }, { k: 'actual', c: 'var(--accent)', cat: null }];
+  svg += _saChartAxisSvg(max, W, padT, padH);
+  var SERIES = [
+    { k: 'plan', c: 'var(--chart-plan)', label: 'Plan', cat: 'active' },
+    { k: 'committed', c: 'var(--chart-committed)', label: 'Committed', cat: 'won' },
+    { k: 'actual', c: 'var(--accent)', label: 'Actual', cat: null }
+  ];
   data.forEach(function(b, i) {
     var gx = groupGap + i * (groupW + groupGap);
     SERIES.forEach(function(s, si) {
       var v = b[s.k];
-      var h = (H - padT - padB) * (v / max);
+      var h = padH * (v / max);
       var x = gx + si * (barW + barGap);
+      var y = H - padB - h;
       var click = s.cat ? "saOpenStageDrillM('" + s.cat + "','" + b.start + "','" + b.end + "')" : '';
-      svg += '<rect x="' + x + '" y="' + (H - padB - h) + '" width="' + barW + '" height="' + h + '" rx="2" fill="' + s.c + '" style="cursor:pointer" onclick="' + click + '">' +
-        '<title>' + sanitize(b.key) + ' — ' + s.k + ': ' + fmtMoney(v) + ' ฿</title></rect>';
+      var tip = "'" + sanitize(b.key).replace(/'/g, "\\'") + " — " + s.label + "<br><b>" + fmtMoney(v).replace(/'/g, "\\'") + " ฿</b>'";
+      svg += '<path d="' + _saBarPath(x, y, barW, h, 2) + '" fill="' + s.c + '" style="cursor:pointer" ' +
+        'onclick="' + click + '" onmouseenter="_saChartTooltipShow(event,' + tip + ')" onmousemove="_saChartTooltipMove(event)" onmouseleave="_saChartTooltipHide()"></path>';
+      // ตัวเลขกำกับบนแท่ง — โชว์เฉพาะแท่งที่สูงพอ (กันตัวเลขซ้อนกันตอนแท่งเตี้ย/ช่วงเวลาถี่ เช่นมุมมองรายวัน)
+      if (h > 22 && v > 0) {
+        svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 3) + '" text-anchor="middle" font-size="7.5" fill="var(--text2)">' + fmtMoneyShort(v) + '</text>';
+      }
     });
     svg += '<text x="' + (gx + groupW / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--text3)">' + sanitize(b.key) + '</text>';
   });
   svg += '</svg>';
   svg += '<div style="display:flex;gap:14px;font-size:.68rem;color:var(--text2);margin-top:8px">' +
-    '<span><span class="dot" style="background:#f59e0b"></span>Plan</span><span><span class="dot" style="background:#22c55e"></span>Committed</span><span><span class="dot" style="background:var(--accent)"></span>Actual</span></div>';
+    '<span><span class="dot" style="background:var(--chart-plan)"></span>Plan</span><span><span class="dot" style="background:var(--chart-committed)"></span>Committed</span><span><span class="dot" style="background:var(--accent)"></span>Actual</span></div>';
   return svg;
 }
 
