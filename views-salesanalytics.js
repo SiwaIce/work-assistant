@@ -144,10 +144,13 @@ function saForecastMonthDate(p) {
 
 function saPipelineInRange(category, start, end, saleFilter) {
   var ids = getStatusIdsByCategory(category);
+  // build ทีเดียวนอกลูป ไม่ใช่ให้ pipeResolvedCloseDate() เรียก ST.getAll('pipeLog') เองต่อโครงการ — ฟังก์ชันนี้
+  // ถูกเรียกซ้ำหลายรอบต่อการ render หนึ่งครั้ง (ทีละ period bar) ถ้าไม่ build ล่วงหน้าจะ parse pipeLog ทั้งก้อนซ้ำ
+  var logIdx = category === 'won' ? _pipeWonLogIndex() : null;
   return ST.getAll('pipeline').filter(function(p) {
     if (ids.indexOf(p.status) === -1) return false;
     if (saleFilter !== 'all' && (p.saleName || '') !== saleFilter) return false;
-    var d = category === 'won' ? pipeResolvedCloseDate(p).date : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
+    var d = category === 'won' ? pipeResolvedCloseDate(p, logIdx).date : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
     return d && d >= start && d < end;
   });
 }
@@ -582,16 +585,20 @@ function showCloseDateManagerM() {
 
 // จำนวนโครงการทั้งหมดที่กำลัง "ใช้ Register Date อยู่" (แม่นน้อยสุด) — โชว์เป็นตัวเลขต่อท้ายปุ่มเปิดเครื่องมือนี้
 function cdmRegisterTierCount() {
-  return ST.getAll('pipeline').filter(function(p) { return pipeResolvedCloseDate(p).key === 'register'; }).length;
+  var logIdx = _pipeWonLogIndex(); // build ครั้งเดียวนอกลูป — ดูคอมเมนต์ที่ _pipeWonLogIndex (utils.js)
+  return ST.getAll('pipeline').filter(function(p) { return pipeResolvedCloseDate(p, logIdx).key === 'register'; }).length;
 }
 
 function _cdmFilteredProjects() {
   var q = (_cdmSearch || '').trim().toLowerCase();
+  var logIdx = _pipeWonLogIndex();
+  var dealerById = null;
+  if (q) { dealerById = {}; ST.getAll('dealers').forEach(function(d) { dealerById[d.id] = d; }); }
   return ST.getAll('pipeline').filter(function(p) {
-    if (_cdmTierSel && _cdmTierSel[pipeResolvedCloseDate(p).key] === false) return false;
+    if (_cdmTierSel && _cdmTierSel[pipeResolvedCloseDate(p, logIdx).key] === false) return false;
     if (_cdmDealerId && p.dealerId !== _cdmDealerId) return false;
     if (q) {
-      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      var dl = p.dealerId ? dealerById[p.dealerId] : null;
       var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '') + ' ' + (p.rowNo || '')).toLowerCase();
       if (hay.indexOf(q) === -1) return false;
     }
@@ -601,7 +608,14 @@ function _cdmFilteredProjects() {
 
 function _cdmToggleTier(key, checked) { _cdmTierSel[key] = checked; _cdmRenderModal(); }
 function _cdmSetDealer(v) { _cdmDealerId = v; _cdmRenderModal(); }
-function _cdmSearchInput(v) { _cdmSearch = v; _cdmRenderModal(); }
+// debounce ก่อน re-render ทั้ง modal — ถ้า re-render (openM แทน innerHTML ทั้งก้อน) ทุกครั้งที่กดตัวอักษร ช่อง
+// ค้นหาจะเสีย focus กลางคันทุกตัวอักษร ต้องกดเข้าไปพิมพ์ใหม่ทุกครั้ง รู้สึกเหมือนพิมพ์ช้ามาก
+var _cdmSearchDebounce = null;
+function _cdmSearchInput(v) {
+  _cdmSearch = v;
+  clearTimeout(_cdmSearchDebounce);
+  _cdmSearchDebounce = setTimeout(_cdmRenderModal, 300);
+}
 function _cdmToggleExpand(pipeId) { _cdmExpanded[pipeId] = !_cdmExpanded[pipeId]; _cdmRenderModal(); }
 
 function _cdmToggleSel(pipeId, checked) { if (checked) _cdmSel[pipeId] = true; else delete _cdmSel[pipeId]; _cdmRenderModal(); }
@@ -718,10 +732,12 @@ function _cdmRenderModal() {
     h += '<div style="text-align:center;padding:20px;color:var(--text3)">🔍 ไม่มีโครงการที่ตรงกับตัวกรองนี้</div>';
   } else {
     h += '<div style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">';
+    var rowLogIdx = _pipeWonLogIndex(); // build ครั้งเดียวนอกลูป แทนให้แต่ละแถวเรียก ST.getAll('pipeLog') เอง
+    var rowDealerById = {}; dealers.forEach(function(d) { rowDealerById[d.id] = d; });
     list.slice(0, 150).forEach(function(p) {
-      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
-      var sources = pipeCloseDateSources(p);
-      var effKey = pipeResolvedCloseDate(p).key;
+      var dl = p.dealerId ? rowDealerById[p.dealerId] : null;
+      var sources = pipeCloseDateSources(p, rowLogIdx);
+      var effKey = pipeResolvedCloseDate(p, rowLogIdx).key;
       var expanded = !!_cdmExpanded[p.id];
       h += '<div class="kpi-detail-row" style="cursor:default">';
       h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';

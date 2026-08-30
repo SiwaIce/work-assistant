@@ -492,7 +492,7 @@ function getConfig() {
   return cfg;
 }
 
-function saveConfig(cfg) { ST.setObj('config', cfg); refreshPipeNames(); }
+function saveConfig(cfg) { ST.setObj('config', cfg); refreshPipeNames(); if (typeof _pipeInvalidateWonStatusCache === 'function') _pipeInvalidateWonStatusCache(); }
 
 function getStatusIdsByCategory(cat) {
   return (getConfig().pipelineStatuses || []).filter(function(s) { return s.category === cat; }).map(function(s) { return s.id; });

@@ -2662,52 +2662,76 @@ var PIPE_CLOSE_DATE_TIER_META = {
   register: { label: '🗓️ Register Date' }
 };
 
+// getConfig() ทำ JSON.parse(JSON.stringify(DEF_CONFIG)) ใหม่ทุกครั้งที่เรียก (deep clone ทั้งก้อน config) —
+// ฟังก์ชันนี้ถูกเรียกต่อโครงการในลูปคำนวณวันที่ปิดดีล เรียก getConfig() ซ้ำหลักร้อยครั้งต่อการ render หนึ่งครั้ง
+// กลายเป็นต้นทุนหลักของความช้า (มากกว่าการ scan pipeLog เสียอีก) — cache ไว้ ล้างเมื่อ saveConfig() ถูกเรียกเท่านั้น
+var _pipeWonStatusNamesCache = null;
 function _pipeWonStatusNames() {
+  if (_pipeWonStatusNamesCache) return _pipeWonStatusNamesCache;
   var names = {};
   (getConfig().pipelineStatuses || []).filter(function(s) { return s.category === 'won'; }).forEach(function(s) { names[s.name] = true; });
+  _pipeWonStatusNamesCache = names;
   return names;
+}
+function _pipeInvalidateWonStatusCache() { _pipeWonStatusNamesCache = null; }
+
+// index ของ pipeLog แยกตาม pipeId — ST.getAll() ทำ JSON.parse(localStorage) ใหม่ทุกครั้งที่เรียก ไม่มี cache
+// ชั้น storage (ตั้งใจ — ดูคอมเมนต์ที่ ST._get ใน storage.js: เคยลองแคชแบบ deep-clone แล้วช้าลงกว่าเดิมสำหรับ
+// หน้าที่เรียกไม่ถี่ วิธีที่ถูกต้องคือ "ทำ index ล่วงหน้าแทนเรียกในลูป" ที่จุดเรียกเอง) ฟังก์ชันข้างล่างนี้เดิม
+// เรียก ST.getAll('pipeLog') ต่อ "หนึ่งโครงการ" ทำให้หน้า KPI/Sales Analytics ที่วนทุกโครงการกลายเป็น
+// parse ข้อมูลทั้งก้อนซ้ำหลักร้อยครั้งต่อการ render เดียว — ต้อง build index ครั้งเดียวที่จุดเรียก (ในลูป)
+// แล้วส่ง logIdx เข้ามาแทน ไม่ใช่แคชไว้ในนี้ (ยังต้องเช็ค .length ทุกครั้งอยู่ดี ซึ่ง parse ทั้งก้อนไปแล้ว)
+function _pipeWonLogIndex() {
+  var idx = {};
+  ST.getAll('pipeLog').forEach(function(l) { if (l.pipeId) (idx[l.pipeId] || (idx[l.pipeId] = [])).push(l); });
+  return idx;
 }
 
 // log ยืนยัน — เฉพาะ log ที่ระบบสร้างเองตอนกดเปลี่ยนสถานะในแอป (changePipeStatus/savePipeUpdate) เนื้อหาจะเป็น
 // รูปแบบ "เดิม → ใหม่" เสมอ เอา log แรกสุดที่เปลี่ยนเข้ากลุ่ม won (ปิดดีลครั้งแรก ไม่ใช่ครั้งหลังสุด) — คืน log
 // entry เต็ม (ไม่ใช่แค่วันที่) ไว้ให้ UI โชว์เนื้อหาจริงที่ใช้ตัดสินใจได้ ไม่ต้องเชื่อเฉยๆ ว่าวันที่มาจากไหน
-function _pipeConfirmedWonLog(p) {
+// logIdx: ผลลัพธ์ของ _pipeWonLogIndex() ที่ build ไว้ล่วงหน้าแล้ว (ถ้าเรียกในลูป) — ไม่ส่งมาก็ยังทำงานถูกต้อง
+// แค่ช้ากว่า (เรียก ST.getAll('pipeLog') ใหม่เอง) เผื่อเรียกครั้งเดียวนอกลูปที่ยังไม่คุ้มทำ index
+function _pipeConfirmedWonLog(p, logIdx) {
   var wonNames = _pipeWonStatusNames();
-  var logs = ST.getAll('pipeLog').filter(function(l) {
-    if (l.pipeId !== p.id || l.type !== 'status_change' || !l.content) return false;
+  var myLogs = logIdx ? (logIdx[p.id] || []) : ST.getAll('pipeLog').filter(function(l) { return l.pipeId === p.id; });
+  var logs = myLogs.filter(function(l) {
+    if (l.type !== 'status_change' || !l.content) return false;
     var parts = l.content.split('→');
     return parts.length > 1 && wonNames[parts[1].trim()];
   }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
   return logs.length ? logs[0] : null;
 }
-function _pipeConfirmedWonLogDate(p) {
-  var l = _pipeConfirmedWonLog(p);
+function _pipeConfirmedWonLogDate(p, logIdx) {
+  var l = _pipeConfirmedWonLog(p, logIdx);
   return l ? (l.date || '').split('T')[0] : '';
 }
 
 // เดาจาก log ข้อความ — log อะไรก็ได้ (ปกติ type='note' จาก import) ที่เนื้อหามีชื่อสถานะกลุ่ม won ปรากฏอยู่ตรงๆ
 // ไม่ต้องเป๊ะฟอร์แมต "เดิม → ใหม่" เหมือนชั้นบน — เดาได้ไม่แม่นเท่า เรียกเฉพาะตอนไม่มี log ยืนยันเท่านั้น
-function _pipeGuessedWonLog(p) {
+function _pipeGuessedWonLog(p, logIdx) {
   var wonNames = Object.keys(_pipeWonStatusNames());
   if (!wonNames.length) return null;
-  var logs = ST.getAll('pipeLog').filter(function(l) {
-    if (l.pipeId !== p.id || !l.content) return false;
+  var myLogs = logIdx ? (logIdx[p.id] || []) : ST.getAll('pipeLog').filter(function(l) { return l.pipeId === p.id; });
+  var logs = myLogs.filter(function(l) {
+    if (!l.content) return false;
     return wonNames.some(function(n) { return l.content.indexOf(n) !== -1; });
   }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
   return logs.length ? logs[0] : null;
 }
-function _pipeGuessedWonLogDate(p) {
-  var l = _pipeGuessedWonLog(p);
+function _pipeGuessedWonLogDate(p, logIdx) {
+  var l = _pipeGuessedWonLog(p, logIdx);
   return l ? (l.date || '').split('T')[0] : '';
 }
 
 // รายการแหล่งวันที่ที่ "มีข้อมูลจริง" สำหรับโครงการนี้ เรียงตามลำดับความน่าเชื่อถือ — register อยู่ท้ายสุดเสมอ
 // เพราะมีข้อมูลอยู่แล้วแทบทุกโครงการ ระบบเลยไม่มีวันไม่มีแหล่งให้เลือกเลยสักอัน
-function pipeCloseDateSources(p) {
+// logIdx: ดู _pipeConfirmedWonLog — เรียกในลูปกับหลายโครงการ ควร build ครั้งเดียวด้วย _pipeWonLogIndex() แล้วส่งมา
+function pipeCloseDateSources(p, logIdx) {
   var out = [];
-  var logDate = _pipeConfirmedWonLogDate(p);
+  var logDate = _pipeConfirmedWonLogDate(p, logIdx);
   if (logDate) out.push({ key: 'log', date: logDate });
-  var guessDate = logDate ? '' : _pipeGuessedWonLogDate(p); // ไม่มี log ยืนยันเท่านั้นถึงจะลองเดา
+  var guessDate = logDate ? '' : _pipeGuessedWonLogDate(p, logIdx); // ไม่มี log ยืนยันเท่านั้นถึงจะลองเดา
   if (guessDate) out.push({ key: 'guess', date: guessDate });
   var fcInfo = (p.forecastMonth && typeof _kpiParseForecastMonthText === 'function') ? _kpiParseForecastMonthText(p.forecastMonth) : null;
   if (fcInfo) out.push({ key: 'fc', date: fcInfo.year + '-' + String(fcInfo.month).padStart(2, '0') + '-15' }); // มีแค่เดือน/ปี ใช้กลางเดือนแทนวัน
@@ -2717,9 +2741,9 @@ function pipeCloseDateSources(p) {
 }
 
 // วันที่ปิดดีลที่ "ใช้จริง" ของโครงการนี้ {key, date} — เคารพ p.closeDateSource ถ้าตั้งไว้และยังมีข้อมูลอยู่จริง
-// ไม่งั้น auto (ตัวแรกในลำดับที่มีข้อมูลจริง)
-function pipeResolvedCloseDate(p) {
-  var sources = pipeCloseDateSources(p);
+// ไม่งั้น auto (ตัวแรกในลำดับที่มีข้อมูลจริง) — logIdx: ดู pipeCloseDateSources
+function pipeResolvedCloseDate(p, logIdx) {
+  var sources = pipeCloseDateSources(p, logIdx);
   if (p.closeDateSource) {
     var match = sources.filter(function(s) { return s.key === p.closeDateSource; })[0];
     if (match) return match;
