@@ -128,20 +128,9 @@ function saActualForRange(start, end, saleFilter) {
   return { source: 'sis', total: sis.total, byDealer: sis.byDealer, orders: [] };
 }
 
-// วันที่ปิดจริงของโครงการ "won" — เอาจาก log "เปลี่ยนสถานะ" (ระบบสร้างอัตโนมัติทุกครั้งที่เปลี่ยนสถานะ) หา
-// ครั้งแรกสุดที่เปลี่ยนเข้าสถานะกลุ่ม won เพราะนี่คือวันที่ "ปิดดีลจริง" — ไม่ใช่ expectedCloseDate (แค่ค่าคาดการณ์)
-// หรือ registerDate (วันที่ลงทะเบียนโครงการ อาจเป็นปีก่อนหน้าที่ยังไม่ปิด) ไม่งั้นกราฟจะเอายอดไปโผล่ผิดปี
-function saPipeWonDate(p) {
-  var wonNames = {};
-  (getConfig().pipelineStatuses || []).filter(function(s) { return s.category === 'won'; }).forEach(function(s) { wonNames[s.name] = true; });
-  var wonLogs = ST.getAll('pipeLog').filter(function(l) {
-    if (l.pipeId !== p.id || l.type !== 'status_change' || !l.content) return false;
-    var parts = l.content.split('→');
-    return parts.length > 1 && wonNames[parts[1].trim()];
-  }).sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); }); // เก่า→ใหม่ เอาอันแรกสุด = ปิดดีลครั้งแรก
-  if (wonLogs.length) return (wonLogs[0].date || '').split('T')[0];
-  return p.expectedCloseDate || p.registerDate || (p.created ? p.created.split('T')[0] : ''); // ไม่มี log เปลี่ยนสถานะ (ข้อมูลเก่า/import) — ใช้ค่าเดิมแทน
-}
+// วันที่ปิดจริงของโครงการ "won" — ใช้ pipeResolvedCloseDate() (utils.js) ตัวเดียวกับที่ KPI ใช้ ลำดับ 5 ชั้น
+// (log ยืนยัน → เดาจาก log → Forecast Month → Shipment Date → Register Date) แทนที่จะคำนวณเองแยกแบบเดิม —
+// เดิมหน้านี้กับ KPI ใช้คนละ field กัน (log กับ registerDate) ทำให้ยอด "ปิดแล้ว" ของสองหน้าไม่ตรงกัน (2026-08-29)
 
 // วันที่คาดว่าจะปิด/สั่งซื้อของโครงการที่ยังเปิดอยู่ (Plan) — ลองอ่าน Forecast Month (ที่เซลกรอกเองว่าคาดว่าจะ
 // สั่งซื้อเดือนไหน) ก่อน expectedCloseDate เพราะบางโครงการกรอก Forecast Month ไว้แต่ไม่ได้กรอก Expected Close
@@ -158,7 +147,7 @@ function saPipelineInRange(category, start, end, saleFilter) {
   return ST.getAll('pipeline').filter(function(p) {
     if (ids.indexOf(p.status) === -1) return false;
     if (saleFilter !== 'all' && (p.saleName || '') !== saleFilter) return false;
-    var d = category === 'won' ? saPipeWonDate(p) : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
+    var d = category === 'won' ? pipeResolvedCloseDate(p).date : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
     return d && d >= start && d < end;
   });
 }
@@ -185,8 +174,12 @@ function saPipeItemRevenue(p) {
 // ================================================================
 function rSalesAnalytics(el) {
   document.getElementById('pgT').textContent = '📈 Sales Analytics';
-  var h = '<div class="card"><h2>📈 Sales Analytics</h2>' +
-    '<p class="hint" style="font-size:.7rem;color:var(--text3);margin-bottom:0">ยอดขายรวม/แยกสินค้า/แยก Dealer/แยกเซล — เลือกช่วงเวลาได้ตั้งแต่รายปีถึงรายวัน</p></div>';
+  var regCount = cdmRegisterTierCount();
+  var h = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">' +
+    '<div><h2 style="margin:0">📈 Sales Analytics</h2>' +
+    '<p class="hint" style="font-size:.7rem;color:var(--text3);margin:3px 0 0">ยอดขายรวม/แยกสินค้า/แยก Dealer/แยกเซล — เลือกช่วงเวลาได้ตั้งแต่รายปีถึงรายวัน</p></div>' +
+    '<button class="btn bsm bo" onclick="showCloseDateManagerM()" title="ดู/แก้วันที่ปิดดีลที่ใช้คำนวณกราฟหน้านี้ — ใช้ร่วมกับหน้า KPI">🧭 จัดการวันที่ปิดดีล' + (regCount ? ' (' + regCount + ')' : '') + '</button>' +
+    '</div></div>';
 
   h += '<div class="sa-pagetabs">' +
     '<button class="sa-pagetab' + (saPage === 'actual' ? ' on' : '') + '" onclick="saSetPage(\'actual\')">💰 ยอดขายจริง</button>' +
@@ -497,4 +490,174 @@ function _saToggleStageGroup(hdr) {
   var open = grp.style.display !== 'none';
   grp.style.display = open ? 'none' : '';
   hdr.querySelector('span').textContent = open ? '▶' : '▼';
+}
+
+// ================================================================
+// 🧭 จัดการวันที่ปิดดีล — ดู/แก้ Forecast Month, Shipment Date และเลือกแหล่งวันที่ที่ใช้จริงเองต่อโครงการ
+// (pipeCloseDateSources/pipeResolvedCloseDate ใน utils.js) เข้าถึงได้จากเมนู ⋯ ทั้งหน้านี้และหน้า KPI เพราะ
+// ทั้งสองหน้าใช้แหล่งวันที่เดียวกันแล้ว แก้ที่นี่มีผลกับตัวเลขทั้งสองหน้าพร้อมกัน (2026-08-29)
+// ================================================================
+var _cdmTierSel = null;
+var _cdmDealerId = '';
+var _cdmSearch = '';
+var _cdmSel = {};
+var _cdmExpanded = {};
+var _cdmBulkMonth = '';
+var _cdmBulkShip = '';
+
+function _cdmDefaultTierSel() { return { log: false, guess: false, fc: false, ship: false, register: true }; }
+
+function showCloseDateManagerM() {
+  _cdmTierSel = _cdmDefaultTierSel();
+  _cdmDealerId = ''; _cdmSearch = ''; _cdmSel = {}; _cdmExpanded = {};
+  var n = new Date();
+  _cdmBulkMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+  _cdmBulkShip = _td();
+  _cdmRenderModal();
+}
+
+// จำนวนโครงการทั้งหมดที่กำลัง "ใช้ Register Date อยู่" (แม่นน้อยสุด) — โชว์เป็นตัวเลขต่อท้ายปุ่มเปิดเครื่องมือนี้
+function cdmRegisterTierCount() {
+  return ST.getAll('pipeline').filter(function(p) { return pipeResolvedCloseDate(p).key === 'register'; }).length;
+}
+
+function _cdmFilteredProjects() {
+  var q = (_cdmSearch || '').trim().toLowerCase();
+  return ST.getAll('pipeline').filter(function(p) {
+    if (_cdmTierSel && _cdmTierSel[pipeResolvedCloseDate(p).key] === false) return false;
+    if (_cdmDealerId && p.dealerId !== _cdmDealerId) return false;
+    if (q) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      var hay = ((p.projectName || '') + ' ' + (dl ? dl.name : '') + ' ' + (p.rowNo || '')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  }).sort(function(a, b) { return (Number(b.forecastAmount) || 0) - (Number(a.forecastAmount) || 0); });
+}
+
+function _cdmToggleTier(key, checked) { _cdmTierSel[key] = checked; _cdmRenderModal(); }
+function _cdmSetDealer(v) { _cdmDealerId = v; _cdmRenderModal(); }
+function _cdmSearchInput(v) { _cdmSearch = v; _cdmRenderModal(); }
+function _cdmToggleExpand(pipeId) { _cdmExpanded[pipeId] = !_cdmExpanded[pipeId]; _cdmRenderModal(); }
+
+function _cdmToggleSel(pipeId, checked) { if (checked) _cdmSel[pipeId] = true; else delete _cdmSel[pipeId]; _cdmRenderModal(); }
+function _cdmToggleSelAll(checked) {
+  _cdmFilteredProjects().forEach(function(p) { if (checked) _cdmSel[p.id] = true; else delete _cdmSel[p.id]; });
+  _cdmRenderModal();
+}
+
+// แก้ Forecast Month / Shipment Date ตรงจากตาราง — ถ้าเคยเลือก source เป็นฟิลด์นี้ไว้เองแล้วเพิ่งลบค่าออกจน
+// ว่าง ต้องคืนกลับไปใช้ auto แทน กันเลือก source ที่ไม่มีข้อมูลค้างอยู่ (เห็นผลเหมือนกับใน mockup)
+function _cdmSetField(pipeId, field, val) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var fieldToTier = { forecastMonth: 'fc', shipmentDate: 'ship' };
+  var updates = {}; updates[field] = val;
+  if (!val && p.closeDateSource === fieldToTier[field]) updates.closeDateSource = '';
+  var updated = ST.update('pipeline', pipeId, updates);
+  if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+  _cdmRenderModal();
+}
+
+function _cdmSetSource(pipeId, key) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var sources = pipeCloseDateSources(p);
+  var autoKey = sources[0].key;
+  var updated = ST.update('pipeline', pipeId, { closeDateSource: (key === autoKey) ? '' : key });
+  if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+  _cdmRenderModal();
+}
+
+function _cdmBulkSetMonth(v) { _cdmBulkMonth = v; }
+function _cdmBulkSetShip(v) { _cdmBulkShip = v; }
+
+function _cdmBulkApply(field) {
+  var val = field === 'forecastMonth' ? _cdmBulkMonth : _cdmBulkShip;
+  if (!val) { toast('⚠️ เลือกค่าที่จะตั้งก่อน'); return; }
+  var ids = Object.keys(_cdmSel);
+  if (!ids.length) return;
+  ids.forEach(function(id) { _cdmSetFieldQuiet(id, field, val); });
+  toast('💾 ตั้งค่าให้ ' + ids.length + ' โครงการแล้ว');
+  _cdmRenderModal();
+}
+// เหมือน _cdmSetField แต่ไม่ re-render ทุกครั้ง (ไว้ให้ _cdmBulkApply เรียกวนหลายโครงการแล้ว render ทีเดียวตอนจบ)
+function _cdmSetFieldQuiet(pipeId, field, val) {
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var updates = {}; updates[field] = val;
+  var updated = ST.update('pipeline', pipeId, updates);
+  if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+}
+
+function _cdmRenderModal() {
+  var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var TIER_CHIPS = [
+    ['log', '📌 มี Log ยืนยัน'], ['guess', '🔍 เดาจาก Log'],
+    ['fc', '🔮 มี Forecast Month แล้ว'], ['ship', '🚚 มี Shipment Date แล้ว'],
+    ['register', '🗓️ ใช้ Register Date (ต้องกรอก)']
+  ];
+  var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:10px">แก้ Forecast Month / Shipment Date ทีละแถวหรือเลือกหลายแถวพร้อมกันได้ — ถ้าโครงการไหนมีมากกว่า 1 แหล่งพร้อมกัน เลือกแหล่งที่จะใช้จริงเองได้จากดรอปดาวน์ท้ายแถว (มีผลกับยอดทั้งหน้า Sales Analytics และ KPI)</p>';
+
+  h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:5px">แหล่งวันที่</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  TIER_CHIPS.forEach(function(t) {
+    h += '<label style="display:flex;align-items:center;gap:4px;font-size:.7rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
+      '<input type="checkbox" style="width:auto" ' + (_cdmTierSel[t[0]] ? 'checked' : '') + ' onchange="_cdmToggleTier(\'' + t[0] + '\',this.checked)">' + t[1] + '</label>';
+  });
+  h += '</div></div>';
+
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<select onchange="_cdmSetDealer(this.value)" style="font-size:.76rem"><option value="">🏪 ทุก Dealer</option>' +
+    dealers.map(function(d) { return '<option value="' + d.id + '"' + (_cdmDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; }).join('') + '</select>';
+  h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ / Row No..." value="' + sanitize(_cdmSearch) + '" oninput="_cdmSearchInput(this.value)" style="flex:1;min-width:160px;font-size:.76rem">';
+  h += '</div>';
+
+  var list = _cdmFilteredProjects();
+  var selCount = Object.keys(_cdmSel).length;
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:8px">';
+  h += '<label style="display:flex;align-items:center;gap:5px;font-size:.72rem;cursor:pointer"><input type="checkbox" style="width:auto" onchange="_cdmToggleSelAll(this.checked)" ' + (list.length && selCount === list.length ? 'checked' : '') + '>เลือกที่แสดงอยู่ทั้งหมด</label>';
+  h += '<span style="font-size:.72rem;color:var(--text2)"><b>' + selCount + '</b> รายการที่เลือก</span>';
+  h += '<div style="flex:1"></div>';
+  h += '<span style="font-size:.68rem;color:var(--text3)">ตั้ง Forecast Month:</span><input type="month" value="' + sanitize(_cdmBulkMonth) + '" oninput="_cdmBulkSetMonth(this.value)" style="font-size:.72rem">' +
+    '<button class="btn bsm bp" ' + (selCount ? '' : 'disabled') + ' onclick="_cdmBulkApply(\'forecastMonth\')">ใช้กับที่เลือก</button>';
+  h += '<span style="font-size:.68rem;color:var(--text3)">ตั้ง Shipment Date:</span><input type="date" value="' + sanitize(_cdmBulkShip) + '" oninput="_cdmBulkSetShip(this.value)" style="font-size:.72rem">' +
+    '<button class="btn bsm bp" ' + (selCount ? '' : 'disabled') + ' onclick="_cdmBulkApply(\'shipmentDate\')">ใช้กับที่เลือก</button>';
+  h += '</div>';
+
+  h += '<div style="font-size:.7rem;color:var(--text3);margin-bottom:6px">' + list.length + ' โครงการ</div>';
+
+  if (!list.length) {
+    h += '<div style="text-align:center;padding:20px;color:var(--text3)">🔍 ไม่มีโครงการที่ตรงกับตัวกรองนี้</div>';
+  } else {
+    h += '<div style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">';
+    list.slice(0, 150).forEach(function(p) {
+      var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+      var sources = pipeCloseDateSources(p);
+      var effKey = pipeResolvedCloseDate(p).key;
+      var expanded = !!_cdmExpanded[p.id];
+      h += '<div class="kpi-detail-row" style="cursor:default">';
+      h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+      h += '<input type="checkbox" style="width:auto" ' + (_cdmSel[p.id] ? 'checked' : '') + ' onchange="_cdmToggleSel(\'' + p.id + '\',this.checked)">';
+      h += '<button class="btn bsm bo" style="padding:1px 7px" onclick="_cdmToggleExpand(\'' + p.id + '\')">' + (expanded ? '▲' : '▼') + '</button>';
+      h += '<span style="flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">' +
+        (p.rowNo ? '<span style="color:var(--text2);font-weight:400">#' + sanitize(String(p.rowNo)) + '</span> ' : '') + sanitize(p.projectName || (dl ? dl.name : '') || '-') + '</span>';
+      h += pipeTag(p.status);
+      h += '<span style="font-size:.72rem;color:var(--text2);white-space:nowrap">' + fmtMoneyShort(p.forecastAmount) + '</span>';
+      h += '</div>';
+      h += '<div style="font-size:.68rem;color:var(--text3);margin:3px 0 6px">🏪 ' + sanitize(dl ? dl.name : '-') + ' · 🗓️ Register: ' + fD(p.registerDate) + '</div>';
+      if (expanded) h += _kpiApDetailHtml(p);
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + (p.forecastMonth || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Shipment Date</label><input type="date" style="font-size:.72rem;width:130px" value="' + (p.shipmentDate || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'shipmentDate\',this.value)"></div>';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">แหล่งที่ใช้ (เลือกเองได้)</label><select style="font-size:.72rem" onchange="_cdmSetSource(\'' + p.id + '\',this.value)">' +
+        sources.map(function(s) { return '<option value="' + s.key + '"' + (s.key === effKey ? ' selected' : '') + '>' + PIPE_CLOSE_DATE_TIER_META[s.key].label + ' (' + fD(s.date) + ')</option>'; }).join('') +
+        '</select></div>';
+      h += '</div>';
+      h += '</div>';
+    });
+    if (list.length > 150) h += '<div style="text-align:center;color:var(--text3);font-size:.7rem;padding:6px">...และอีก ' + (list.length - 150) + ' โครงการ — กรองเพิ่มเพื่อดูให้ครบ</div>';
+    h += '</div>';
+  }
+
+  openM('🧭 จัดการวันที่ปิดดีล', h);
 }

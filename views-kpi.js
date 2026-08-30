@@ -284,7 +284,7 @@ function _kpiRunRateAutoCovered(l, plan, cat, startDate, endDate) {
   var p = ST.getOne('pipeline', l.pipeId);
   if (!p || !pipeIsWon(p)) return false;
   if ((p.saleName || '') !== plan.salesMemberName) return false;
-  var rd = p.registerDate || '';
+  var rd = pipeResolvedCloseDate(p).date;
   if (rd < startDate || rd > endDate) return false;
   if (cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
@@ -307,7 +307,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < startDate || rd > endDate) return;
       sum += Number(p.forecastAmount) || 0;
     });
@@ -327,7 +327,7 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < startDate || rd > endDate) return;
       (getPipeItems(p) || []).forEach(function(it) {
         var m = (it.model || '').toLowerCase();
@@ -477,7 +477,7 @@ function kpiContributingRecords(plan, cat) {
     var records = _kpiPipelines().filter(function(p) {
       if (!pipeIsWon(p)) return false;
       if ((p.saleName || '') !== plan.salesMemberName) return false;
-      var rd = p.registerDate || '';
+      var rd = pipeResolvedCloseDate(p).date;
       if (rd < plan.startDate || rd > plan.endDate) return false;
       if (cat.type === 'pipelineModelQty') {
         return (getPipeItems(p) || []).some(function(it) {
@@ -652,10 +652,12 @@ function kpiDealerPlanBreakdown(plan) {
   var planCount = 0, winCount = 0, deliverCount = 0;
   _kpiPipelines().forEach(function(p) {
     if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
-    var rd = p.registerDate || '';
-    if (rd < plan.startDate || rd > plan.endDate) return;
     var won = pipeIsWon(p), active = pipeIsActive(p);
     if (!won && !active) return; // Fail&Lost หรือสถานะอื่นที่ไม่นับใน Plan/Actual — ไม่แสดง
+    // ดีล won ใช้วันที่ปิดดีลที่ resolve ได้ (เดียวกับที่ kpiComputeActual ใช้) ส่วนดีลที่ยังเปิดอยู่ (active/Plan)
+    // ยังไม่มีวันปิดจริงให้ resolve ได้ ใช้ registerDate เป็นตัวแทนช่วงเวลาเหมือนเดิม
+    var rd = won ? pipeResolvedCloseDate(p).date : (p.registerDate || '');
+    if (rd < plan.startDate || rd > plan.endDate) return;
     if (won) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
     else potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
     var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
@@ -695,7 +697,7 @@ function kpiProductSalesBreakdown(plan) {
   _kpiPipelines().forEach(function(p) {
     if (!pipeIsWon(p)) return;
     if ((p.saleName || '') !== plan.salesMemberName) return;
-    var rd = p.registerDate || '';
+    var rd = pipeResolvedCloseDate(p).date;
     if (rd < plan.startDate || rd > plan.endDate) return;
     var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
     (getPipeItems(p) || []).forEach(function(it) {
@@ -856,7 +858,7 @@ function exportKpiSummaryExcel() {
                 var mm = (it.model || '').toLowerCase();
                 return (cat.modelMatch || []).some(function(k) { return mm.indexOf(k.toLowerCase()) !== -1; });
               }).reduce(function(s, it) { return s + (Number(it.qty) || 0); }, 0) + ' หน่วย';
-          salesRows.push([p.registerDate || '', m.name, cat.label, p.projectName || '-', d ? d.name : '-', counted, p.status || '']);
+          salesRows.push([pipeResolvedCloseDate(p).date, m.name, cat.label, p.projectName || '-', d ? d.name : '-', counted, p.status || '']);
         });
       } else if (cat.type === 'dealerAuthorized') {
         kpiContributingRecords(plan, cat).forEach(function(d) {
@@ -994,6 +996,8 @@ function rKpiScorecard(el) {
   if (plan) h += '<button class="btn bsm bd" onclick="kpiDeleteQuarterPlan(\'' + plan.id + '\')">🗑️ ลบไตรมาสนี้</button>';
   h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
   h += '<button class="btn bsm bo" onclick="showSaleNameMismatchM()" title="ถ้าตัวเลข KPI ขึ้น 0 ทั้งที่มีโครงการจริง มักเกิดจากชื่อเซลล์ในข้อมูลไม่ตรงกับสมาชิกทีม — เช็คได้ที่นี่">🔍 ตรวจสอบชื่อเซลล์</button>';
+  var cdmCount = cdmRegisterTierCount();
+  h += '<button class="btn bsm bo" onclick="showCloseDateManagerM()" title="ดู/แก้วันที่ปิดดีลที่ใช้คำนวณยอด KPI — ใช้ร่วมกับหน้า Sales Analytics">🧭 จัดการวันที่ปิดดีล' + (cdmCount ? ' (' + cdmCount + ')' : '') + '</button>';
   h += '</div>';
 
   if (!plan) {
