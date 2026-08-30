@@ -426,7 +426,7 @@ function saPlanPaneHtml() {
     '<div class="sa-stat" style="cursor:pointer" onclick="saOpenStageDrillM(\'active\',\'' + start0 + '\',\'' + end0 + '\')"><div class="lbl">🟠 Plan (Pipeline เปิดอยู่)</div><div class="val">' + fmtMoney(totalPlan) + ' ฿</div></div>' +
     '<div class="sa-stat" style="cursor:pointer" onclick="saOpenStageDrillM(\'won\',\'' + start0 + '\',\'' + end0 + '\')"><div class="lbl">🟢 Committed (ปิดแล้ว)</div><div class="val">' + fmtMoney(totalCommitted) + ' ฿</div></div>' +
     '<div class="sa-stat"><div class="lbl">🔵 Actual (ยอดขายจริง)</div><div class="val">' + fmtMoney(totalActual) + ' ฿</div></div>' +
-    '<div class="sa-stat"><div class="lbl">ส่วนต่าง Committed − Actual</div><div class="val" style="color:' + (gap >= 0 ? '#22c55e' : '#ef4444') + '">' + (gap >= 0 ? '+' : '-') + fmtMoney(Math.abs(gap)) + ' ฿</div></div>' +
+    '<div class="sa-stat"><div class="lbl">ส่วนต่าง Committed − Actual</div><div class="val" style="color:' + (gap >= 0 ? 'var(--good)' : 'var(--bad)') + '">' + (gap >= 0 ? '+' : '-') + fmtMoney(Math.abs(gap)) + ' ฿</div></div>' +
     '</div>';
 
   h += '<div class="card"><h2>Plan / Committed / Actual แยกรายช่วงเวลา</h2>' + saPlanGroupedChartHtml(period.bars) + '</div>';
@@ -512,7 +512,7 @@ function saPlanDealerTableHtml(start, end) {
   rows.slice(0, 30).forEach(function(r, i) {
     h += '<tr style="cursor:pointer" onclick="go(\'dealerDetail\',{dealerId:\'' + r.id + '\'})"><td>' + (i + 1) + '</td><td style="font-weight:600">' + sanitize(r.name) + '</td>' +
       '<td class="num">' + fmtMoney(r.plan) + '</td><td class="num">' + fmtMoney(r.committed) + '</td><td class="num">' + fmtMoney(r.actual) + '</td>' +
-      '<td class="num" style="color:' + (r.gap >= 0 ? '#22c55e' : '#ef4444') + '">' + (r.gap >= 0 ? '+' : '-') + fmtMoney(Math.abs(r.gap)) + '</td></tr>';
+      '<td class="num" style="color:' + (r.gap >= 0 ? 'var(--good)' : 'var(--bad)') + '">' + (r.gap >= 0 ? '+' : '-') + fmtMoney(Math.abs(r.gap)) + '</td></tr>';
   });
   h += '</tbody></table>';
   return h;
@@ -642,7 +642,7 @@ function _cdmSourceDetailHtml(p) {
   if (!confirmedLog && !guessedLog) return '';
   var l = confirmedLog || guessedLog;
   var label = confirmedLog ? '📌 Log ยืนยัน (ระบบสร้างเองตอนกดเปลี่ยนสถานะ)' : '🔍 เดาจาก Log (ไม่ยืนยัน — เช็คว่าเดาถูกไหม)';
-  var color = confirmedLog ? 'var(--good,#22c55e)' : 'var(--guess,#a78bfa)';
+  var color = confirmedLog ? 'var(--good)' : 'var(--guess)';
   return '<div style="font-size:.72rem;background:var(--bg2);border-radius:6px;padding:8px 10px;margin:2px 0 4px;border-left:3px solid ' + color + '">' +
     '<div style="font-weight:700;color:' + color + ';margin-bottom:3px">' + label + '</div>' +
     '<div style="color:var(--text2)">' + fD((l.date || '').split('T')[0]) + ' — "' + sanitize(l.content || '') + '"</div>' +

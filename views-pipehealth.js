@@ -139,7 +139,7 @@ function _pipeHealthRepRowHtml(rep, idx) {
   var newCls = newCount === 0 ? 'zero' : 'good';
   var staleCls = staleCount === 0 ? 'zero' : (staleCount >= 10 ? 'bad' : 'warn');
   var lastVisitTxt = rep.lastVisitDays === null ? '—' : rep.lastVisitDays + ' วันก่อน';
-  var lastVisitColor = (rep.lastVisitDays !== null && rep.lastVisitDays > 30) ? 'var(--c4,#ef4444)' : 'var(--text2)';
+  var lastVisitColor = (rep.lastVisitDays !== null && rep.lastVisitDays > 30) ? 'var(--bad)' : 'var(--text2)';
   var newDrillId = 'ph_new_' + idx, staleDrillId = 'ph_stale_' + idx;
 
   var h = '<tr>' +
@@ -263,7 +263,7 @@ function _pipeHealthWeeklyPaneHtml() {
     list.forEach(function(p) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
       var st = (cfg.pipelineStatuses || []).filter(function(s) { return s.id === p.status; })[0];
-      var color = st ? st.color : '#94a3b8';
+      var color = st ? st.color : 'var(--neutral)';
       h += '<div class="ph-proj-row">' +
         '<span class="ph-dot" style="background:' + color + '"></span>' +
         '<div class="ph-main"><div class="t">' + sanitize(p.projectName || '-') + '</div>' +

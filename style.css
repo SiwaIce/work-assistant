@@ -2052,6 +2052,20 @@ input:focus, select:focus, textarea:focus {
   --shadow-lg: 0 4px 12px rgba(0,0,0,.2);
   --chart-plan: #f59e0b;
   --chart-committed: #22c55e;
+
+  /* สถานะ/เทรนด์ที่ใช้ซ้ำหลายจุดในหน้า KPI/Pipeline Health — ค่าเดิมเป็น hex ดิบเหมือนกันไม่ว่าจะธีมไหน
+     (ไม่เคยมีการแยกค่าตามธีมมาก่อน) เลยประกาศไว้ที่ :root ครั้งเดียว ไม่ต้องซ้ำใน .theme-light ก็ inherit
+     ลงไปถูกต้องอยู่แล้ว — รวมไว้กันเขียน hex ซ้ำกระจายหลายสิบจุดแบบเดิม (2026-08-30) */
+  --good: #22c55e;
+  --bad: #ef4444;
+  --neutral: #94a3b8;
+  --status-info: #3b82f6;
+  --status-gold: #eab308;
+  --deliver: #6366f1;
+  --guess: #a78bfa;
+  --good-tint: rgba(34,197,94,.094);
+  --good-tint-text: #16803c;
+  --neutral-tint: rgba(148,163,184,.094);
 }
 
 /* Apply Variables */
