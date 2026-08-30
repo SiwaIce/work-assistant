@@ -649,6 +649,14 @@ function _cdmSourceDetailHtml(p) {
     '</div>';
 }
 
+// p.forecastMonth เก็บเป็น free text ("2026 Aug") ไม่ใช่ ISO "YYYY-MM" ที่ <input type="month"> ต้องการ —
+// ถ้าใส่ free text ตรงๆ เป็น value ของ input ชนิดนี้ เบราว์เซอร์จะปฏิเสธค่าที่ format ไม่ตรงแล้วโชว์ช่องว่างเปล่า
+// ทั้งที่จริงมีค่าอยู่ ต้องแปลงเป็น ISO ก่อนเสมอ ไม่งั้นดูเหมือนโครงการยังไม่กรอก Forecast Month ทั้งที่กรอกแล้ว
+function _cdmForecastMonthIso(text) {
+  var info = (text && typeof _kpiParseForecastMonthText === 'function') ? _kpiParseForecastMonthText(text) : null;
+  return info ? (info.year + '-' + String(info.month).padStart(2, '0')) : '';
+}
+
 function _cdmBulkSetMonth(v) { _cdmBulkMonth = v; }
 function _cdmBulkSetShip(v) { _cdmBulkShip = v; }
 
@@ -733,7 +741,7 @@ function _cdmRenderModal() {
         h += '<div style="margin:2px 0 8px"><span style="cursor:pointer;font-size:.7rem;color:var(--accent);text-decoration:underline dotted" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📂 เปิดโครงการเต็ม (ดู Timeline/แก้ไขทุกฟิลด์) →</span></div>';
       }
       h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">';
-      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + (p.forecastMonth || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + _cdmForecastMonthIso(p.forecastMonth) + '" onchange="_cdmSetField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
       h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Shipment Date</label><input type="date" style="font-size:.72rem;width:130px" value="' + (p.shipmentDate || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'shipmentDate\',this.value)"></div>';
       h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">แหล่งที่ใช้ (เลือกเองได้)</label><select style="font-size:.72rem" onchange="_cdmSetSource(\'' + p.id + '\',this.value)">' +
         sources.map(function(s) { return '<option value="' + s.key + '"' + (s.key === effKey ? ' selected' : '') + '>' + PIPE_CLOSE_DATE_TIER_META[s.key].label + ' (' + fD(s.date) + ')</option>'; }).join('') +
