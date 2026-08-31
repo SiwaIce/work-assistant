@@ -571,12 +571,16 @@ var _cdmSel = {};
 var _cdmExpanded = {};
 var _cdmBulkMonth = '';
 var _cdmBulkShip = '';
+// แก้ Forecast Month/Shipment Date/แหล่งที่ใช้ เดิม onchange แล้วบันทึกทันที — เลือกผิด/พิมพ์ผิดกลายเป็นข้อมูล
+// จริงไปแล้ว ต้องไปตามแก้ที่หน้า Pipeline Detail อีกรอบ (2026-08-30 ตามที่ผู้ใช้ขอ) ตอนนี้พักไว้ใน _cdmPending
+// ก่อน {pipeId: {field: value}} จนกว่าจะกด "✅ ยืนยัน" ต่อแถวถึงจะ ST.update จริง — กด "✕ ยกเลิก" ทิ้งได้เสมอ
+var _cdmPending = {};
 
 function _cdmDefaultTierSel() { return { log: false, guess: false, fc: false, ship: false, register: true }; }
 
 function showCloseDateManagerM() {
   _cdmTierSel = _cdmDefaultTierSel();
-  _cdmDealerId = ''; _cdmSearch = ''; _cdmSel = {}; _cdmExpanded = {};
+  _cdmDealerId = ''; _cdmSearch = ''; _cdmSel = {}; _cdmExpanded = {}; _cdmPending = {};
   var n = new Date();
   _cdmBulkMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
   _cdmBulkShip = _td();
@@ -624,26 +628,43 @@ function _cdmToggleSelAll(checked) {
   _cdmRenderModal();
 }
 
-// แก้ Forecast Month / Shipment Date ตรงจากตาราง — ถ้าเคยเลือก source เป็นฟิลด์นี้ไว้เองแล้วเพิ่งลบค่าออกจน
-// ว่าง ต้องคืนกลับไปใช้ auto แทน กันเลือก source ที่ไม่มีข้อมูลค้างอยู่ (เห็นผลเหมือนกับใน mockup)
-function _cdmSetField(pipeId, field, val) {
-  var p = ST.getOne('pipeline', pipeId);
-  if (!p) return;
-  var fieldToTier = { forecastMonth: 'fc', shipmentDate: 'ship' };
-  var updates = {}; updates[field] = val;
-  if (!val && p.closeDateSource === fieldToTier[field]) updates.closeDateSource = '';
-  var updated = ST.update('pipeline', pipeId, updates);
-  if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+// พักค่าที่แก้ไว้ใน _cdmPending ก่อน — ยังไม่บันทึกจนกว่าจะกด "✅ ยืนยัน" ต่อแถว (ดูคอมเมนต์ที่ _cdmPending)
+function _cdmStageField(pipeId, field, val) {
+  if (!_cdmPending[pipeId]) _cdmPending[pipeId] = {};
+  _cdmPending[pipeId][field] = val;
   _cdmRenderModal();
 }
-
-function _cdmSetSource(pipeId, key) {
+function _cdmStageSource(pipeId, key) {
   var p = ST.getOne('pipeline', pipeId);
   if (!p) return;
-  var sources = pipeCloseDateSources(p);
-  var autoKey = sources[0].key;
-  var updated = ST.update('pipeline', pipeId, { closeDateSource: (key === autoKey) ? '' : key });
+  var autoKey = pipeCloseDateSources(p)[0].key;
+  if (!_cdmPending[pipeId]) _cdmPending[pipeId] = {};
+  _cdmPending[pipeId].closeDateSource = (key === autoKey) ? '' : key;
+  _cdmRenderModal();
+}
+function _cdmCancelRow(pipeId) { delete _cdmPending[pipeId]; _cdmRenderModal(); }
+
+// ยืนยันบันทึกค่าที่ค้างไว้ของแถวนี้จริง — ถ้าล้างฟิลด์ที่กำลังถูกเลือกเป็นแหล่งอยู่ (ของเดิมหรือที่เพิ่ง stage
+// เอง) จนว่างเปล่า ต้องคืนกลับไปใช้ auto แทน กันเลือก source ที่ไม่มีข้อมูลค้างอยู่ (เหมือนพฤติกรรมเดิมก่อนแยก stage)
+function _cdmConfirmRow(pipeId) {
+  var p = ST.getOne('pipeline', pipeId);
+  var pend = _cdmPending[pipeId];
+  if (!p || !pend) return;
+  var fieldToTier = { forecastMonth: 'fc', shipmentDate: 'ship' };
+  var updates = {};
+  if (pend.forecastMonth !== undefined) updates.forecastMonth = pend.forecastMonth;
+  if (pend.shipmentDate !== undefined) updates.shipmentDate = pend.shipmentDate;
+  if (pend.closeDateSource !== undefined) updates.closeDateSource = pend.closeDateSource;
+  Object.keys(fieldToTier).forEach(function(f) {
+    if (updates[f] !== '') return;
+    var tier = fieldToTier[f];
+    var effectiveSource = (updates.closeDateSource !== undefined) ? updates.closeDateSource : p.closeDateSource;
+    if (effectiveSource === tier) updates.closeDateSource = '';
+  });
+  var updated = ST.update('pipeline', pipeId, updates);
   if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+  delete _cdmPending[pipeId];
+  toast('💾 บันทึกแล้ว');
   _cdmRenderModal();
 }
 
@@ -683,7 +704,9 @@ function _cdmBulkApply(field) {
   toast('💾 ตั้งค่าให้ ' + ids.length + ' โครงการแล้ว');
   _cdmRenderModal();
 }
-// เหมือน _cdmSetField แต่ไม่ re-render ทุกครั้ง (ไว้ให้ _cdmBulkApply เรียกวนหลายโครงการแล้ว render ทีเดียวตอนจบ)
+// เขียนตรงทันที ไม่ผ่าน _cdmPending — bulk apply มีปุ่ม "ใช้กับที่เลือก" เป็นจุดยืนยันอยู่แล้วในตัว (ต้องติ๊ก
+// เลือกแถว + กดปุ่มนี้เอง 2 ขั้นตอน) ไม่เสี่ยงบันทึกพลาดจากการกดเมาส์ผิดแบบ input ต่อแถว จึงไม่ต้อง stage ซ้ำ
+// ไม่ re-render ทุกแถว (ไว้ให้ _cdmBulkApply เรียกวนหลายโครงการแล้ว render ทีเดียวตอนจบ)
 function _cdmSetFieldQuiet(pipeId, field, val) {
   var p = ST.getOne('pipeline', pipeId);
   if (!p) return;
@@ -756,12 +779,22 @@ function _cdmRenderModal() {
         h += _cdmSourceDetailHtml(p);
         h += '<div style="margin:2px 0 8px"><span style="cursor:pointer;font-size:.7rem;color:var(--accent);text-decoration:underline dotted" onclick="closeMForce();go(\'pipeDetail\',{pipeId:\'' + p.id + '\'})">📂 เปิดโครงการเต็ม (ดู Timeline/แก้ไขทุกฟิลด์) →</span></div>';
       }
-      h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">';
-      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + _cdmForecastMonthIso(p.forecastMonth) + '" onchange="_cdmSetField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
-      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Shipment Date</label><input type="date" style="font-size:.72rem;width:130px" value="' + (p.shipmentDate || '') + '" onchange="_cdmSetField(\'' + p.id + '\',\'shipmentDate\',this.value)"></div>';
-      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">แหล่งที่ใช้ (เลือกเองได้)</label><select style="font-size:.72rem" onchange="_cdmSetSource(\'' + p.id + '\',this.value)">' +
-        sources.map(function(s) { return '<option value="' + s.key + '"' + (s.key === effKey ? ' selected' : '') + '>' + PIPE_CLOSE_DATE_TIER_META[s.key].label + ' (' + fD(s.date) + ')</option>'; }).join('') +
+      var pend = _cdmPending[p.id] || {};
+      var hasPending = Object.keys(pend).length > 0;
+      var fcVal = pend.forecastMonth !== undefined ? pend.forecastMonth : _cdmForecastMonthIso(p.forecastMonth);
+      var shipVal = pend.shipmentDate !== undefined ? pend.shipmentDate : (p.shipmentDate || '');
+      var srcVal = pend.closeDateSource !== undefined ? pend.closeDateSource : effKey;
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:4px' + (hasPending ? ';background:var(--guess-bg);border-radius:8px;padding:6px 8px' : '') + '">';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Forecast Month</label><input type="month" style="font-size:.72rem;width:120px" value="' + fcVal + '" onchange="_cdmStageField(\'' + p.id + '\',\'forecastMonth\',this.value)"></div>';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">Shipment Date</label><input type="date" style="font-size:.72rem;width:130px" value="' + shipVal + '" onchange="_cdmStageField(\'' + p.id + '\',\'shipmentDate\',this.value)"></div>';
+      h += '<div><label style="display:block;font-size:.6rem;color:var(--text3)">แหล่งที่ใช้ (เลือกเองได้)</label><select style="font-size:.72rem" onchange="_cdmStageSource(\'' + p.id + '\',this.value)">' +
+        sources.map(function(s) { return '<option value="' + s.key + '"' + (s.key === srcVal ? ' selected' : '') + '>' + PIPE_CLOSE_DATE_TIER_META[s.key].label + ' (' + fD(s.date) + ')</option>'; }).join('') +
         '</select></div>';
+      if (hasPending) {
+        h += '<div style="display:flex;gap:5px;align-items:center"><span style="font-size:.65rem;color:var(--guess);font-weight:700">✋ ยังไม่บันทึก</span>' +
+          '<button class="btn bsm bp" onclick="_cdmConfirmRow(\'' + p.id + '\')">✅ ยืนยัน</button>' +
+          '<button class="btn bsm bo" onclick="_cdmCancelRow(\'' + p.id + '\')">✕ ยกเลิก</button></div>';
+      }
       h += '</div>';
       h += '</div>';
     });
