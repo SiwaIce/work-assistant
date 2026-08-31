@@ -1758,7 +1758,7 @@ function renderLineLog(dealerId, limit) {
       <div class="line-type ${lt.cls||'line-type-info'}" style="min-width:60px">${lt.name||l.logType}</div>
       <div style="flex:1"><div style="font-size:.76rem">${sanitize(l.summary||'')}</div>
       <div style="font-size:.6rem;color:var(--text2)">${fD(l.date)} ${l.time||''}</div></div>
-      <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('lineLog','${l.id}');render()">✕</button>
+      <button class="btn bsm bd" onclick="event.stopPropagation();if(confirm('ลบบันทึกนี้?'))(ST.delete('lineLog','${l.id}'),render())">✕</button>
     </div>`;
   }).join('');
 }
@@ -2141,7 +2141,7 @@ function dealerVisitTab(d) {
   ${fus.length ? fus.slice(0, 10).map(f => `<div class="li">
     <div class="lm"><div class="lt"><span class="tag ${f.method==='line'?'tag-active':f.method==='call'?'tag-completed':'tag-a'}">${f.method||'?'}</span> ${fD(f.date)}</div>
     <div class="ls">${sanitize(f.summary?.substr(0,80)||'')}</div></div>
-    <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('followups','${f.id}');render()">✕</button>
+    <button class="btn bsm bd" onclick="event.stopPropagation();if(confirm('ลบ Follow-up นี้?'))(ST.delete('followups','${f.id}'),render())">✕</button>
   </div>`).join('') : '<div class="empty"><p>ยังไม่มี Follow-up</p></div>'}
   </div>
 
@@ -2149,7 +2149,7 @@ function dealerVisitTab(d) {
     <span class="ml"><button class="btn bsm bp" onclick="showFeedbackM('${d.id}')">➕</button></span></h2>
   ${ST.feedbackByDealer(d.id).length ? ST.feedbackByDealer(d.id).map(f => `<div class="visit-sub">
     <div style="display:flex;justify-content:space-between"><span style="font-size:.62rem;color:var(--text2)">${fD(f.date)} • ${f.source||''}</span>
-    <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('feedback','${f.id}');render()">✕</button></div>
+    <button class="btn bsm bd" onclick="event.stopPropagation();if(confirm('ลบ Feedback นี้?'))(ST.delete('feedback','${f.id}'),render())">✕</button></div>
     <div style="font-size:.74rem;margin-top:1px">${sanitize(f.text)}</div>
     ${f.attachments && f.attachments.length ? attachGalleryHtml(f.attachments) : ''}
   </div>`).join('') : '<div class="empty"><p>ยังไม่มี Feedback</p></div>'}

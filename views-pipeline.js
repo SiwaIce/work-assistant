@@ -508,18 +508,48 @@ function _pipeInlineEdit(pipeId, field) {
   if (!cell || cell.querySelector('input,select')) return;
   var html = '';
   if (field === 'forecastAmount') {
-    html = '<input type="text" inputmode="decimal" class="js-money" value="' + nmI(p.forecastAmount || 0) + '" style="width:100px;text-align:right;padding:2px" onclick="event.stopPropagation()" onchange="_pipeInlineSave(\'' + pipeId + '\',\'forecastAmount\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">';
+    html = '<input type="text" inputmode="decimal" class="js-money" value="' + nmI(p.forecastAmount || 0) + '" style="width:90px;text-align:right;padding:2px" onclick="event.stopPropagation()" onchange="_pipeInlineStage(\'' + pipeId + '\',\'forecastAmount\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">';
   } else if (field === 'biddingDate') {
     html = '<input type="date" value="' + (p.biddingDate || '') + '" style="padding:2px" onclick="event.stopPropagation()" onchange="_pipeInlineSave(\'' + pipeId + '\',\'biddingDate\',this.value)">';
   } else if (field === 'status') {
     var cfg = getConfig();
     var opts = (cfg.pipelineStatuses || []).map(function(s) { return '<option value="' + sanitize(s.id) + '"' + (s.id === p.status ? ' selected' : '') + '>' + sanitize(s.name) + '</option>'; }).join('');
-    html = '<select onclick="event.stopPropagation()" onchange="_pipeInlineSave(\'' + pipeId + '\',\'status\',this.value)" style="padding:2px">' + opts + '</select>';
+    html = '<select onclick="event.stopPropagation()" onchange="_pipeInlineStage(\'' + pipeId + '\',\'status\',this.value)" style="padding:2px">' + opts + '</select>';
   }
   if (!html) return;
   cell.innerHTML = html;
   var input = cell.querySelector('input,select');
   if (input) { input.focus(); if (input.select) input.select(); }
+}
+
+// สถานะ/มูลค่า Forecast มีผลกับตัวเลขรวมทั้งทีม กด/เลื่อนเมาส์พลาดในตารางที่แน่นๆ แล้วเปลี่ยนไปเลยไม่ได้ —
+// เปลี่ยนค่าใน dropdown/ช่องกรอกแล้วยังไม่บันทึกทันที ต้องกด ✅ ยืนยันก่อน (เหมือน pattern ใน
+// close-date manager ของ Sales Analytics) — biddingDate ยังบันทึกทันทีเหมือนเดิม เพราะความเสี่ยงต่ำกว่ามาก
+var _pipeInlinePending = {};
+function _pipeInlineStage(pipeId, field, value) {
+  if (!_pipeInlinePending[pipeId]) _pipeInlinePending[pipeId] = {};
+  _pipeInlinePending[pipeId][field] = value;
+  var ids = { forecastAmount: 'pfc_', status: 'pst_' };
+  var cell = document.getElementById(ids[field] + pipeId);
+  if (!cell) return;
+  var old = cell.querySelector('.pipe-inline-actions');
+  if (old) old.remove();
+  var actions = document.createElement('span');
+  actions.className = 'pipe-inline-actions';
+  actions.style.marginLeft = '4px';
+  actions.innerHTML = '<button class="btn bsm bp" style="padding:1px 5px" onclick="event.stopPropagation();_pipeInlineConfirm(\'' + pipeId + '\',\'' + field + '\')">✅</button>' +
+    '<button class="btn bsm bo" style="padding:1px 5px" onclick="event.stopPropagation();_pipeInlineCancelEdit(\'' + pipeId + '\',\'' + field + '\')">✕</button>';
+  cell.appendChild(actions);
+}
+function _pipeInlineConfirm(pipeId, field) {
+  var val = _pipeInlinePending[pipeId] && _pipeInlinePending[pipeId][field];
+  if (val === undefined) return;
+  delete _pipeInlinePending[pipeId][field];
+  _pipeInlineSave(pipeId, field, val);
+}
+function _pipeInlineCancelEdit(pipeId, field) {
+  if (_pipeInlinePending[pipeId]) delete _pipeInlinePending[pipeId][field];
+  render();
 }
 
 function _pipeInlineSave(pipeId, field, value) {

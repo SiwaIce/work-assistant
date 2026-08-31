@@ -1157,25 +1157,38 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// debounce ก่อนรัน doSearch() จริง — เดิมรันเต็มทุกตัวอักษรที่พิมพ์ (parse 9+ collection ใหม่ทุกครั้ง ไม่มี
+// cache) ทำให้พิมพ์ค้นหาเร็วๆ แล้วรู้สึกหน่วง หน่วง 200ms หลังหยุดพิมพ์ค่อยรันจริง
+var _doSearchDebounce = null;
+function doSearchDebounced() {
+  clearTimeout(_doSearchDebounce);
+  _doSearchDebounce = setTimeout(doSearch, 200);
+}
 function doSearch() {
   var q = document.getElementById('searchInp').value.toLowerCase().trim();
   var r = document.getElementById('searchRes');
   if (!q) { r.innerHTML = '<div class="empty"><p>พิมพ์เพื่อค้นหา...</p></div>'; return; }
   var items = [];
 
-  ST.getAll('dealers').forEach(function(d) {
+  var allDealers = ST.getAll('dealers');
+  // build ครั้งเดียว แทนเรียก ST.getOne('dealers',...) ต่อแถว pipeline/visit ทุกครั้งที่ doSearch() รัน
+  // (ST.getAll parse localStorage ใหม่ทุกครั้ง ไม่มี cache — ดูคอมเมนต์ที่ ST._get ใน storage.js)
+  var searchDealerById = {};
+  allDealers.forEach(function(d) { searchDealerById[d.id] = d; });
+
+  allDealers.forEach(function(d) {
     if ((d.name||'').toLowerCase().indexOf(q) !== -1 || (d.contact||'').toLowerCase().indexOf(q) !== -1 || (d.sisCode||'').toLowerCase().indexOf(q) !== -1)
       items.push({type:'🏪 Dealer', title:d.name, sub:(d.level||'')+' '+(d.contact||''), act:"go('dealerDetail',{dealerId:'"+d.id+"'})"});
   });
   ST.getAll('pipeline').forEach(function(p) {
     if ((p.projectName||'').toLowerCase().indexOf(q) !== -1 || (p.endUserTH||'').toLowerCase().indexOf(q) !== -1 || (p.model||'').toLowerCase().indexOf(q) !== -1) {
-      var d = ST.getOne('dealers', p.dealerId);
+      var d = searchDealerById[p.dealerId];
       items.push({type:'📊 Pipeline', title:p.projectName, sub:(d?d.name:'')+' • '+fmtMoneyShort(p.forecastAmount), act:"go('pipeDetail',{pipeId:'"+p.id+"'})"});
     }
   });
   ST.getAll('visits').forEach(function(v) {
     if ((v.summary||'').toLowerCase().indexOf(q) !== -1) {
-      var d = ST.getOne('dealers', v.dealerId);
+      var d = searchDealerById[v.dealerId];
       items.push({type:'🤝 Visit', title:(d?d.name:'?')+' — '+fD(v.date), sub:(v.summary||'').substr(0,50), act:"go('visitDetail',{visitId:'"+v.id+"'})"});
     }
   });
@@ -2281,10 +2294,14 @@ function qCmdSearch(q) {
 
     if (!_gvBlocked || _gvAllowed.indexOf('pipeline') !== -1) {
       var pipeline = ST.getAll('pipeline');
+      // build ครั้งเดียวก่อนลูป แทนเรียก ST.getOne('dealers',...) ต่อแถว pipeline ทุกตัวอักษรที่พิมพ์ใน Ctrl+K
+      // (ST.getAll parse localStorage ใหม่ทุกครั้ง ไม่มี cache — ดูคอมเมนต์ที่ ST._get ใน storage.js)
+      var qcDealerById = {};
+      (dealers || ST.getAll('dealers')).forEach(function(d) { qcDealerById[d.id] = d; });
       for (var i = 0; i < pipeline.length; i++) {
         var p = pipeline[i];
         var pname = p.projectName || p.name || '';
-        var pd = ST.getOne('dealers', p.dealerId);
+        var pd = qcDealerById[p.dealerId];
         var pMatch = pname.toLowerCase().indexOf(q) !== -1 ||
           String(p.rowNo || '').toLowerCase().indexOf(q) !== -1 ||
           (pd && pd.name || '').toLowerCase().indexOf(q) !== -1;

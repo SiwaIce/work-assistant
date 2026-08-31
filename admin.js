@@ -998,7 +998,7 @@ function showTplDet(id) {
     '<div class="bg" style="margin-top:8px">' +
     '<button class="btn bp" onclick="closeM();useTpl(\'' + tp.id + '\')">🚀 ใช้</button>' +
     '<button class="btn bo" onclick="closeM();showTemplateM(\'' + tp.id + '\')">✏️</button>' +
-    '<button class="btn bd" onclick="ST.delete(\'templates\',\'' + tp.id + '\');closeM();render()">🗑️</button>' +
+    '<button class="btn bd" onclick="if(confirm(\'ลบ Template นี้?\'))(ST.delete(\'templates\',\'' + tp.id + '\'),closeM(),render())">🗑️</button>' +
     '</div>'
   );
 }

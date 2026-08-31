@@ -480,7 +480,7 @@ function rToday(el) {
     // ⚙️ อื่นๆ = Quick Notes + Health + Pins
     tabContent += `
     <div class="card"><h2>📝 Quick Notes <span class="ml"><button class="btn bsm bp" onclick="showQNote()">➕</button></span></h2>
-    ${qn.length ? qn.map(function(n) { return '<div style="padding:4px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;margin-bottom:3px;display:flex;justify-content:space-between;font-size:.76rem"><div style="white-space:pre-wrap;flex:1">' + sanitize(n.text) + '</div><button class="btn bsm bd" onclick="ST.delete(\'qnotes\',\'' + n.id + '\');render()">✕</button></div>'; }).join('') : '<div class="empty"><p>กด ➕ จดโน้ตด่วน</p></div>'}
+    ${qn.length ? qn.map(function(n) { return '<div style="padding:4px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;margin-bottom:3px;display:flex;justify-content:space-between;font-size:.76rem"><div style="white-space:pre-wrap;flex:1">' + sanitize(n.text) + '</div><button class="btn bsm bd" onclick="if(confirm(\'ลบโน้ตนี้?\'))(ST.delete(\'qnotes\',\'' + n.id + '\'),render())">✕</button></div>'; }).join('') : '<div class="empty"><p>กด ➕ จดโน้ตด่วน</p></div>'}
     </div>
     `;
     tabContent += healthHtml;
@@ -789,7 +789,7 @@ function rRemind(el) {
       <div style="flex:1"><div class="wait-title">${sanitize(w.title)}</div>
       <div class="wait-days">${w.person?'👤 '+sanitize(w.person):''} ${w.sentDate?'• ส่ง: '+fDShort(w.sentDate):''} ${days?'• รอ '+days+'d':''} ${w.dueDate?'• กำหนด: '+fDShort(w.dueDate)+' '+dlB(w.dueDate,false):''}</div></div>
       <button class="btn bsm bs" onclick="ST.resolveWaiting('${w.id}');toast('✅');render()">✅</button>
-      <button class="btn bsm bd" onclick="ST.delete('waiting','${w.id}');render()">✕</button></div>`;
+      <button class="btn bsm bd" onclick="if(confirm('ลบรายการนี้?'))(ST.delete('waiting','${w.id}'),render())">✕</button></div>`;
   }).join('') : emp('ไม่มี')}</div>
   
   ${noContact.length ? `<div class="card"><h2>📞 ไม่ติดต่อ > 14 วัน (${noContact.length})</h2>
@@ -961,7 +961,7 @@ function rFollowup(el) {
     const d = ST.getOne('dealers', f.dealerId);
     return `<div class="li"><div class="lm"><div class="lt">${d?.name||'?'} <span class="tag ${f.method==='line'?'tag-active':f.method==='call'?'tag-completed':f.method==='email'?'tag-a':'tag-count'}">${f.method||'?'}</span> ${levelTag(d?.level)}</div>
     <div class="ls">${fD(f.date)} • ${sanitize(f.summary?.substr(0,80)||'')}</div></div>
-    <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('followups','${f.id}');render()">✕</button></div>`;
+    <button class="btn bsm bd" onclick="event.stopPropagation();if(confirm('ลบ Follow-up นี้?'))(ST.delete('followups','${f.id}'),render())">✕</button></div>`;
   }).join('') : '<div class="empty"><div class="icon">📞</div><p>ยังไม่มี</p></div>'}`;
 }
 

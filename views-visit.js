@@ -100,7 +100,7 @@ function rVisitDet(el) {
     <button class="btn bsm bo" onclick="copyVisitSAP('${v.id}')">📄 SAP</button>
     <button class="btn bsm bo" onclick="showVisitM('${v.dealerId||''}','${v.id}')" title="แก้ไขแบบ Modal เล็ก">✏️</button>
     <button class="btn bsm bo" onclick="openVisitWindow('${v.dealerId||''}','${v.id}','','')" title="แก้ไขแบบเปิดแท็บเต็มจอ — มีสมุดโน้ตเร็วด้านขวา">🪟</button>
-    <button class="btn bsm bd" onclick="ST.delete('visits','${v.id}');toast('🗑️');go('visits')">🗑️</button>
+    <button class="btn bsm bd" onclick="if(confirm('ลบ Visit Report นี้?\\nกู้คืนไม่ได้'))(ST.delete('visits','${v.id}'),toast('🗑️'),go('visits'))">🗑️</button>
   </span></h2>
   
   <div class="fr"><div><label style="color:var(--text2);font-size:.68rem">วันที่</label><div>${fD(v.date)}</div></div>

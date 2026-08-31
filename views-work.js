@@ -1426,7 +1426,7 @@ function rTaskDet(el) {
               <span>${fDT(l.date)}</span>
               <span style="display:flex;gap:4px">
                 <button class="btn bsm bo" onclick="event.stopPropagation();editTimelineLog('${l.id}', '${sanitize(l.content).replace(/'/g, "\\'")}', '${l.type}', '${l.date}')" style="padding:1px 6px">✏️</button>
-                <button class="btn bsm bd" onclick="event.stopPropagation();ST.delete('taskLogs','${l.id}');render()" style="padding:1px 4px">✕</button>
+                <button class="btn bsm bd" onclick="event.stopPropagation();if(confirm('ลบ Log นี้?'))(ST.delete('taskLogs','${l.id}'),render())" style="padding:1px 4px">✕</button>
               </span>
             </div>
             <div class="td2-tl-type">${logL(l.type)}</div>

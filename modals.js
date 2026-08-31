@@ -3960,7 +3960,7 @@ function showTplDet(id) {
     '<div class="bg" style="margin-top:8px">' +
     '<button class="btn bp" onclick="closeMForce();useTpl(\'' + tp.id + '\')">🚀 ใช้</button>' +
     '<button class="btn bo" onclick="closeMForce();showTemplateM(\'' + tp.id + '\')">✏️</button>' +
-    '<button class="btn bd" onclick="ST.delete(\'templates\',\'' + tp.id + '\');closeMForce();render()">🗑️</button></div>');
+    '<button class="btn bd" onclick="if(confirm(\'ลบ Template นี้?\'))(ST.delete(\'templates\',\'' + tp.id + '\'),closeMForce(),render())">🗑️</button></div>');
 }
 
 function useTpl(tid) {

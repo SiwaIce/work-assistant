@@ -43,6 +43,10 @@ function rKanban(el) {
 
 function collectKBCards() {
   let cards = [];
+  // build ครั้งเดียวก่อนลูป แทนเรียก ST.getOne('dealers',...) ต่อ task ทุกครั้งที่ render บอร์ด (ลาก/วางการ์ด
+  // ก็ render ใหม่ทุกครั้ง) — ดูคอมเมนต์ที่ ST._get ใน storage.js
+  var kbDealerById = {};
+  ST.getAll('dealers').forEach(d => { kbDealerById[d.id] = d; });
   ST.filter('tasks', t => t.status === 'active').forEach(t => {
     if (t.steps?.length) {
       t.steps.forEach((s, i) => {
@@ -52,7 +56,7 @@ function collectKBCards() {
       });
     } else {
       var dn = '';
-if (t.dealerId) { var dd = ST.getOne('dealers', t.dealerId); if (dd) dn = dd.name; }
+if (t.dealerId && kbDealerById[t.dealerId]) dn = kbDealerById[t.dealerId].name;
 cards.push({id:t.id, title:t.title, dueDate:t.dueDate, type:'task',
   kb: t.kanban || 'todo', priority:t.priority, tn:t.title, tid:t.id,
   dealerName: dn,

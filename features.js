@@ -5628,7 +5628,7 @@ function rRemind(el) {
         '<div style="flex:1"><div class="wait-title">' + sanitize(w.title) + '</div>' +
         '<div class="wait-days">' + (w.person ? '👤 ' + sanitize(w.person) : '') + (w.sentDate ? '• ส่ง: ' + fDShort(w.sentDate) : '') + (days ? '• รอ ' + days + 'd' : '') + (w.dueDate ? '• กำหนด: ' + fDShort(w.dueDate) + ' ' + dlB(w.dueDate, false) : '') + '</div></div>' +
         '<button class="btn bsm bs" onclick="ST.resolveWaiting(\'' + w.id + '\');toast(\'✅\');render()">✅</button>' +
-        '<button class="btn bsm bd" onclick="ST.delete(\'waiting\',\'' + w.id + '\');render()">✕</button></div>';
+        '<button class="btn bsm bd" onclick="if(confirm(\'ลบรายการนี้?\'))(ST.delete(\'waiting\',\'' + w.id + '\'),render())">✕</button></div>';
     });
   } else {
     h += '<div class="empty"><p>✅ ไม่มีรายการที่รอ</p></div>';
