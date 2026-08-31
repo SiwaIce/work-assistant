@@ -28,6 +28,11 @@ var tasksFilterCategory = 'all';
 var tasksSearch = '';
 var tasksSortDate = 'asc'; // 'asc' = เก่าสุด→ใหม่สุด (ใกล้ครบกำหนดก่อน, ค่าเริ่มต้นเดิม), 'desc' = ใหม่สุด→เก่าสุด
 
+// เลือกหลายรายการพร้อมกัน (list view เท่านั้น) — pattern เดียวกับ pipeSelectMode/pipeSelected ใน views-pipeline.js
+var taskSelectMode = false;
+var taskSelected = {};
+var _taskVisibleIds = [];
+
 // ตัวแปรสำหรับ Kanban drag & drop
 var dragSourceTaskId = null;
 
@@ -76,7 +81,10 @@ function rUnifiedTasks(el) {
   
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   h += '<h2 style="font-size:1rem;margin:0">📋 จัดการงาน</h2>';
+  h += '<span>';
+  if (tasksView === 'list') h += '<button class="btn ' + (taskSelectMode ? 'bd' : 'bo') + '" onclick="toggleTaskSelectMode()" style="margin-right:6px">☑️ ' + (taskSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
   h += '<button class="btn bp" onclick="showTaskM()">➕ เพิ่มงาน</button>';
+  h += '</span>';
   h += '</div>';
 
   h += '<div class="fr" style="margin-bottom:8px;gap:6px">';
@@ -312,33 +320,107 @@ function renderTaskListView(groupedTasks, totalCount) {
   if (totalCount === 0) {
     return '<div class="empty"><div class="icon">📋</div><p>ไม่พบงาน<br><button class="btn bp" onclick="showTaskM()" style="margin-top:8px">➕ เพิ่มงาน</button></p></div>';
   }
-  
+
   var h = '';
   var groupKeys = Object.keys(groupedTasks);
-  
+  _taskVisibleIds = [];
+
   for (var g = 0; g < groupKeys.length; g++) {
     var groupName = groupKeys[g];
     var tasks = groupedTasks[groupName];
-    
+
     if (groupName) {
       h += '<div style="margin:16px 0 8px 0;padding-bottom:4px;border-bottom:2px solid var(--accent)">';
       h += '<h3 style="font-size:14px;font-weight:700;color:var(--accent)">' + groupName + ' (' + tasks.length + ')</h3>';
       h += '</div>';
     }
-    
+
     // เดิมใช้ auto-fit minmax(280px,1fr) ตั้งใจให้ยุบคอลัมน์เองบนจอแคบ แต่ auto-fit ก็ยัดคอลัมน์เพิ่มเรื่อยๆ
     // บนจอกว้างด้วยเหมือนกัน (จอกว้างพอ 280px*5 กลายเป็น 5 คอลัมน์ ทั้งที่ตั้งใจแค่ 2) เปลี่ยนเป็น repeat(2,...)
     // ตายตัวจริง แล้วให้ media query ใน style.css คุม breakpoint แทน (ต่ำกว่า 700px ยุบเป็น 1 คอลัมน์เสมอ)
     h += '<div class="task-grid' + (taskCardCols === 2 ? ' task-grid-2col' : '') + '">';
-    
+
     for (var i = 0; i < tasks.length; i++) {
+      _taskVisibleIds.push(tasks[i].id);
       h += renderTaskCard(tasks[i]);
     }
-    
+
     h += '</div>';
   }
-  
+
+  if (taskSelectMode) h += _taskSelBarHtml();
+
   return h;
+}
+
+// แถบเครื่องมือตอนอยู่โหมด "☑️ เลือก" — pattern เดียวกับ pipeSelBar ใน views-pipeline.js
+function _taskSelBarHtml() {
+  var selCnt = Object.keys(taskSelected).length;
+  return '<div id="taskSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;bottom:0">' +
+    '<span id="taskSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
+    '<button class="btn bo bsm" onclick="toggleTaskSelectAll(true)">เลือกทั้งหมด (' + _taskVisibleIds.length + ')</button>' +
+    '<button class="btn bo bsm" onclick="toggleTaskSelectAll(false)">ยกเลิกเลือก</button>' +
+    '<button class="btn bs bsm" id="taskSelDoneBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkCompleteTasks()">✅ ทำเสร็จที่เลือก</button>' +
+    '<button class="btn bd" id="taskSelDelBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkDeleteTasks()">🗑️ ลบที่เลือก (' + selCnt + ')</button>' +
+    '<button class="btn bo bsm" style="margin-left:auto" onclick="toggleTaskSelectMode()">✕ ออก</button>' +
+    '</div>';
+}
+
+function toggleTaskSelectMode() {
+  taskSelectMode = !taskSelectMode;
+  taskSelected = {};
+  render();
+}
+function toggleTaskSelect(id) {
+  if (taskSelected[id]) delete taskSelected[id];
+  else taskSelected[id] = true;
+  var cb = document.getElementById('taskChk_' + id);
+  if (cb) cb.checked = !!taskSelected[id];
+  var cnt = Object.keys(taskSelected).length;
+  _taskSelBarUpdate(cnt);
+  var allCb = document.getElementById('taskSelAll');
+  if (allCb) allCb.checked = cnt === _taskVisibleIds.length && cnt > 0;
+}
+function toggleTaskSelectAll(selectAll) {
+  taskSelected = {};
+  if (selectAll) _taskVisibleIds.forEach(function(id) { taskSelected[id] = true; });
+  _taskVisibleIds.forEach(function(id) {
+    var cb = document.getElementById('taskChk_' + id);
+    if (cb) cb.checked = !!taskSelected[id];
+  });
+  _taskSelBarUpdate(Object.keys(taskSelected).length);
+}
+function _taskSelBarUpdate(cnt) {
+  var countEl = document.getElementById('taskSelCount');
+  if (countEl) countEl.textContent = cnt + ' รายการที่เลือก';
+  var delBtn = document.getElementById('taskSelDelBtn');
+  if (delBtn) { delBtn.disabled = !cnt; delBtn.textContent = '🗑️ ลบที่เลือก (' + cnt + ')'; }
+  var doneBtn = document.getElementById('taskSelDoneBtn');
+  if (doneBtn) doneBtn.disabled = !cnt;
+}
+function bulkCompleteTasks() {
+  var ids = Object.keys(taskSelected);
+  if (!ids.length) return;
+  if (!confirm('ทำเครื่องหมายเสร็จ ' + ids.length + ' งานที่เลือก?')) return;
+  ids.forEach(function(id) { ST.update('tasks', id, { status: 'completed' }); });
+  taskSelected = {};
+  taskSelectMode = false;
+  toast('✅ ทำเสร็จแล้ว ' + ids.length + ' งาน');
+  render();
+}
+function bulkDeleteTasks() {
+  var ids = Object.keys(taskSelected);
+  if (!ids.length) return;
+  if (!confirm('ลบ ' + ids.length + ' งานที่เลือก?\nไม่สามารถกู้คืนได้')) return;
+  ids.forEach(function(id) {
+    ST.delete('tasks', id);
+    ST.deleteWhere('taskLogs', function(l) { return l.tid === id; });
+    if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('tasks', id);
+  });
+  taskSelected = {};
+  taskSelectMode = false;
+  toast('🗑️ ลบแล้ว ' + ids.length + ' งาน');
+  render();
 }
 
 // ตัวเดียวที่ activate ได้ทีละอัน (การ์ดไหนกำลังอยู่โหมดเลื่อนวัน / เลือกสถานะด่วน) — เก็บเป็น global เดียว
@@ -516,8 +598,9 @@ function renderTaskCard(t) {
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
       ${dateShiftBarHtml}
       <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:80px' : ''}">
-        <input type="checkbox" class="task-complete-chk" ${checkedAttr}
-          onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">
+        ${taskSelectMode ? `<input type="checkbox" id="taskChk_${t.id}" class="task-complete-chk" ${taskSelected[t.id] ? 'checked' : ''}
+          onclick="event.stopPropagation();toggleTaskSelect('${t.id}')" title="เลือกงานนี้">` : `<input type="checkbox" class="task-complete-chk" ${checkedAttr}
+          onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">`}
         ${expanded ? ringHtml : ''}
         <div style="flex:1;min-width:0">
           <div class="task-title">${sanitize(t.title)}</div>
