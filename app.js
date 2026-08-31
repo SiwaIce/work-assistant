@@ -1909,7 +1909,6 @@ var APP_MENU_REGISTRY = [
   {id: 'exports', icon: '📤', name: 'Export'},
   {id: 'health', icon: '🏥', name: 'Data Health'},
   {id: 'reminders', icon: '🔔', name: 'แจ้งเตือน'},
-  {id: 'insights', icon: '🤖', name: 'Insights'},
   {id: 'customerUpdateHistory', icon: '📜', name: 'ประวัติอัพเดท'},
   {id: 'customerForecastUpdates', icon: '📦', name: 'แผนซื้อลูกค้า'},
   {id: 'customerForecastSummary', icon: '📊', name: 'สรุป Forecast ลูกค้า'},

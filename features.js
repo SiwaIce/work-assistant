@@ -5585,7 +5585,10 @@ function emptyKBTrash() {
 // ================================================================
 function rRemind(el) {
   document.getElementById('pgT').textContent = '🔔 แจ้งเตือน';
-  
+  // ทางลัดไปหน้า Insights — เดิมเป็นเมนูแยกในไซด์บาร์ ยุบมารวมเป็นปุ่มในหน้านี้แทนเพื่อลดจำนวนเมนู (2026-08-31)
+  // หน้า insights เองไม่ได้แก้/ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกในไซด์บาร์แล้ว
+  var h0 = '<div style="margin-bottom:10px"><button class="btn bsm bp">🔔 แจ้งเตือน</button> <button class="btn bsm bo" onclick="go(\'insights\')">🤖 Insights</button></div>';
+
   var urgTasks = getUrgentItems();
   var bidUrg = [];
   var waitUrg = [];
@@ -5603,8 +5606,8 @@ function rRemind(el) {
   var dealerStatus = getDealerContactStatus();
   noContact = (dealerStatus || []).filter(function(d) { return (d.lastContactDays === null || d.lastContactDays > 14) && d.level && d.level !== 'Other'; });
 
-  var h = '';
-  
+  var h = h0;
+
   if (bidUrg.length) {
     h += '<div class="card"><h2>⏳ Bidding ใกล้ถึง</h2>' + bidUrg.map(function(p) { return pipeListItem(p); }).join('') + '</div>';
   }
@@ -5679,8 +5682,10 @@ function rInsights(el) {
   document.getElementById('pgT').textContent = '🤖 Insights';
   var insights = generateInsights();
   var sf = getSmartFilters();
-  
-  var h = '<div class="card"><h2>🔍 Smart Filters</h2>' +
+  // ทางลัดกลับไปหน้าแจ้งเตือน — คู่กับปุ่มใน rRemind (ดูคอมเมนต์ที่นั่น)
+  var h = '<div style="margin-bottom:10px"><button class="btn bsm bo" onclick="go(\'reminders\')">🔔 แจ้งเตือน</button> <button class="btn bsm bp">🤖 Insights</button></div>';
+
+  h += '<div class="card"><h2>🔍 Smart Filters</h2>' +
     '<div class="sf-grid">' + (sf || []).map(function(f) {
       return '<div class="sf-card" onclick="go(\'smartFilter\',{filterId:\'' + f.id + '\'})">' +
         '<div class="sf-icon">' + f.icon + '</div><div class="sf-info"><div class="sf-name">' + f.name + '</div></div>' +
