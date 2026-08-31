@@ -1897,6 +1897,9 @@ function rProducts(el) {
   }
   
   var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button></span></h2>';
+  // ทางลัดไปหน้า "ราคาตาม Level" — เดิมเป็นเมนูแยกในไซด์บาร์ ยุบมารวมเป็นปุ่มในหน้านี้แทนเพื่อลดจำนวนเมนู
+  // (2026-08-30) หน้า productPrices เองไม่ได้แก้/ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกในไซด์บาร์แล้ว
+  html += '<div style="margin-bottom:10px"><button class="btn bsm bp">📋 Catalog</button> <button class="btn bsm bo" onclick="go(\'productPrices\')">💰 ราคาตาม Level</button></div>';
   
   // ✅ แถบกรอง (เพิ่ม Select สำหรับประเภทสินค้า)
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
@@ -2287,7 +2290,9 @@ function rProductPrices(el) {
   }
   
   var html = '<div class="card"><h2>💰 ราคาสินค้าแยกตาม Level</h2>';
-  
+  // ทางลัดกลับไปหน้า Catalog — คู่กับปุ่มใน rProducts (ดูคอมเมนต์ที่นั่น)
+  html += '<div style="margin-bottom:10px"><button class="btn bsm bo" onclick="go(\'products\')">📋 Catalog</button> <button class="btn bsm bp">💰 ราคาตาม Level</button></div>';
+
   html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
   html += '<input type="text" id="priceSearchInput" class="fm-input" placeholder="🔍 ค้นหาสินค้า (ชื่อ, SKU, EAN)" style="flex:1" value="' + sanitize(priceSearch) + '" oninput="priceSearch=this.value;renderPriceList()" autocomplete="off">';
   html += '<select id="priceCategorySelect" class="fm-input" style="width:150px" onchange="priceCategoryFilter=this.value;renderPriceList()">';

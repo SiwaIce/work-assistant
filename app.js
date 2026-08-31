@@ -1894,7 +1894,6 @@ var APP_MENU_REGISTRY = [
   {id: 'feedback', icon: '💡', name: 'Feedback'},
   {id: 'products', icon: '📋', name: 'สินค้าทั้งหมด'},
   {id: 'stock', icon: '📦', name: 'Stock สินค้า'},
-  {id: 'productPrices', icon: '💰', name: 'ราคาตาม Level'},
   {id: 'productBundles', icon: '🎁', name: 'Bundle/Combo'},
   {id: 'productDemo', icon: '🚁', name: 'Demo Unit'},
   {id: 'productImport', icon: '📥', name: 'Import/Export สินค้า'},
