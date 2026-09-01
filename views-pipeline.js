@@ -2676,6 +2676,42 @@ function clearPipelineTimeline() {
     .then(function() { toast('✅ Sync เสร็จแล้ว — import ไฟล์ใหม่ได้เลย'); })
     .catch(function() { toast('⚠️ Sync บางรายการไม่สำเร็จ — เช็คเน็ตแล้วลองกด "🔄 Sync" ก่อน import', true); });
 }
+
+// ล้าง Timeline เฉพาะ Dealer เดียว — ทางเลือกจากล้างทั้งหมด เผื่ออยาก import ไฟล์ใหม่แค่บาง Dealer โดยไม่
+// กระทบ Timeline ของ Dealer อื่น (ผู้ใช้ขอ 2026-09-01) เรียกจากหน้า Dealer > tab Pipeline
+function showClearDealerTimelineM(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  var pipeIds = {};
+  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeIds[p.id] = true; });
+  var toDelete = ST.getAll('pipeLog').filter(function(l) { return pipeIds[l.pipeId]; });
+  if (!toDelete.length) { toast('Dealer นี้ยังไม่มี Timeline เลย'); return; }
+  openM('🗑️ ล้าง Timeline เฉพาะ Dealer นี้', '' +
+    '<div style="font-size:.8rem;color:#ef4444;background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:10px;margin-bottom:10px">⚠️ ลบถาวร กู้คืนไม่ได้ — ลบเฉพาะ Timeline ของโครงการที่ผูกกับ <b>' + sanitize(d ? d.name : '-') + '</b> เท่านั้น Dealer อื่นไม่กระทบ ใช้ก่อน import ไฟล์ใหม่เฉพาะ Dealer นี้</div>' +
+    '<div style="margin-bottom:10px">จะลบ Timeline ทั้งหมด <b>' + toDelete.length + ' รายการ</b> ของ ' + sanitize(d ? d.name : '-') + '</div>' +
+    '<button class="btn bd btn-full" onclick="clearDealerPipelineTimeline(\'' + dealerId + '\')">🗑️ ล้าง Timeline ของ Dealer นี้</button>'
+  );
+}
+function clearDealerPipelineTimeline(dealerId) {
+  var pipeIds = {};
+  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeIds[p.id] = true; });
+  var toDelete = ST.getAll('pipeLog').filter(function(l) { return pipeIds[l.pipeId]; });
+  if (!toDelete.length) { toast('ไม่มี Timeline ของ Dealer นี้'); return; }
+  if (!confirm('⚠️ ลบ Timeline ' + toDelete.length + ' รายการถาวรของ Dealer นี้?\nกู้คืนไม่ได้')) return;
+  if (!confirm('⚠️⚠️ ยืนยันอีกครั้ง — ลบจริงแน่นอนใช่ไหม?')) return;
+
+  var idSet = {};
+  toDelete.forEach(function(l) { idSet[l.id] = true; });
+  ST.deleteWhere('pipeLog', function(l) { return idSet[l.id]; });
+
+  closeMForce();
+  render();
+  if (typeof syncDeleteFromFirebase !== 'function') { toast('🗑️ ลบ Timeline ' + toDelete.length + ' รายการแล้ว'); return; }
+  toast('🗑️ ลบแล้ว ' + toDelete.length + ' รายการ — กำลัง sync ขึ้น Cloud...');
+  Promise.all(toDelete.map(function(l) { return syncDeleteFromFirebase('pipelog', l.id); }))
+    .then(function() { toast('✅ Sync เสร็จแล้ว — import ไฟล์ใหม่ของ Dealer นี้ได้เลย'); })
+    .catch(function() { toast('⚠️ Sync บางรายการไม่สำเร็จ — เช็คเน็ตแล้วลองกด "🔄 Sync" ก่อน import', true); });
+}
+
 function showPipeDataHealthCheckM() {
   var dupClusters = _pipeComputeDupLogClusters();
   var dupRemoveCount = 0;
@@ -5988,19 +6024,22 @@ function _pipeDateFromPaste(s, refDateISO) {
 // ================================================================
 var _PIPE_IMPORT_COLS = [
   { key: 'rowNo',             label: 'ROW NO.' },
-  { key: 'registerDate',      label: 'Register Date' },
+  // Google Sheet เปลี่ยนหัวข้อ "Register Date" → "Record Date" (2026-09-01) — เก็บ altLabels ไว้กันไฟล์เก่า/
+  // export เก่าที่ยังใช้ชื่อเดิมพังไปด้วย จับคู่ได้ทั้งคู่
+  { key: 'registerDate',      label: 'Record Date',                 altLabels: ['Register Date'] },
   { key: 'industrialType',    label: 'Industrial Type' },
   { key: 'projectId',         label: 'Project ID' },
   { key: 'projectName',       label: 'Project Name', required: true },
   { key: 'endUserTH',         label: 'End User Name' },
-  { key: 'endUserEN',         label: 'End User Name Eng' },
+  { key: 'endUserEN',         label: 'End User Name (Eng)',         altLabels: ['End User Name Eng'] },
   { key: 'unitType',          label: 'Unit type' },
   // label สลับกับ key โดยตั้งใจ (2026-08-24) — คอลัมน์ในชีทต้นทางชื่อหัวข้อกับข้อมูลจริงสลับกันอยู่: คอลัมน์
-  // "DJI Dealer" ในชีทมีชื่อบริษัทจริง (ต้องใช้หา/สร้าง Dealer ในระบบ = key dealerName) ส่วนคอลัมน์
-  // "Dealer Name" ในชีทมีค่าประเภท SAB/Other (ข้อความอิสระเก็บไว้เฉยๆ = key djiDealer) — ดู label ที่สลับ
+  // "DJI Dealer" (ตอนนี้เปลี่ยนชื่อเป็น "DJI Autorize Dealer" ในชีท — สะกดตามชีทจริง ไม่ใช่พิมพ์ผิด 2026-09-01)
+  // มีชื่อบริษัทจริง (ต้องใช้หา/สร้าง Dealer ในระบบ = key dealerName) ส่วนคอลัมน์ "Dealer Name" (เปลี่ยนชื่อเป็น
+  // "Sub Dealer" ในชีทใหม่) มีค่าประเภท SAB/Other (ข้อความอิสระเก็บไว้เฉยๆ = key djiDealer) — ดู label ที่สลับ
   // คู่กันในฟอร์มแก้ไข Pipeline (modals.js) และหน้ารายละเอียด (rPipeDet) ด้วยแล้ว
-  { key: 'dealerName',        label: 'DJI Dealer' },
-  { key: 'djiDealer',         label: 'Dealer Name' },
+  { key: 'dealerName',        label: 'DJI Autorize Dealer',         altLabels: ['DJI Dealer'] },
+  { key: 'djiDealer',         label: 'Sub Dealer',                  altLabels: ['Dealer Name'] },
   { key: 'projectRevenue',    label: 'Project revenue' },
   { key: 'model',             label: 'Model' },
   { key: 'dock',                label: 'Dock' },
@@ -6010,17 +6049,19 @@ var _PIPE_IMPORT_COLS = [
   { key: 'dock3',              label: 'Dock 3 Qty.' },
   { key: 'm4td',               label: 'M4TD Qty.' },
   { key: 'm400',               label: 'M400 Qty.' },
-  { key: 'forecastAmount',    label: 'Forecast Amount' },
+  { key: 'forecastAmount',    label: 'Forecast Revenue',            altLabels: ['Forecast Amount'] },
   { key: 'realAmount',        label: 'Real Amount' },
   { key: 'tor',                label: 'TOR' },
   { key: 'biddingDate',       label: 'Bidding Date' },
-  { key: 'forecastMonth',     label: 'Forecast Month' },
+  // "Forecast Month" เปลี่ยนชื่อเป็น "Purchase Month" ในชีทใหม่ (ผู้ใช้ยืนยัน 2026-09-01) — คอลัมน์ "month" ที่
+  // เพิ่มมาข้างๆ เป็นแค่เลขเดือนที่แปลงมาจาก Purchase Month อีกที (คำนวณในชีทเอง) ไม่ต้อง map เข้าระบบซ้ำ
+  { key: 'forecastMonth',     label: 'Purchase Month',              altLabels: ['Forecast Month'] },
   { key: 'shipmentDate',      label: 'Shipment date' },
   { key: 'remark',             label: 'Remark' },
   { key: 'appointmentLetter', label: 'Letter of Authorized' },
-  { key: 'projectPOS',         label: 'Project POS' },
+  { key: 'projectPOS',         label: '% Possibility',              altLabels: ['Project POS'] },
   { key: 'status',             label: 'Status' },
-  { key: 'updateDate',         label: 'Update Date' },
+  { key: 'updateDate',         label: 'Last Update Date',           altLabels: ['Update Date'] },
   { key: 'recurring',          label: 'Duplicate' },
   { key: 'update1',            label: 'Update 1' },
   { key: 'update2',            label: 'Update 2' },
@@ -6083,17 +6124,22 @@ function _pipeNormHeader(s) {
 
 // สร้าง { map: {key: colIndex}, missingRequired: [label,...] } จากแถวหัวตารางจริงในไฟล์
 // จับคู่แบบ exact หรือ startsWith เท่านั้น (หลัง normalize ตัด \n/เว้นวรรคซ้ำ/ตัวพิมพ์) ไม่มีการเดาข้าม
+// def.altLabels (ถ้ามี) = ชื่อหัวข้อเดิมที่เคยใช้ก่อนชีทเปลี่ยนชื่อ (2026-09-01) ลองจับคู่ต่อจาก label หลัก
+// ไม่เจอ กันไฟล์/export เก่าที่ยังเป็นชื่อหัวข้อแบบเดิมพังไปด้วย
 function _pipeBuildColMap(headerRow) {
   var map = {};
   var used = {};
   var missingRequired = [];
   _PIPE_IMPORT_COLS.forEach(function(def) {
-    var want = _pipeNormHeader(def.label);
+    var candidates = [def.label].concat(def.altLabels || []).map(_pipeNormHeader);
     var foundIdx = -1;
-    for (var i = 0; i < headerRow.length; i++) {
-      if (used[i]) continue;
-      var cell = _pipeNormHeader(headerRow[i]);
-      if (cell && (cell === want || cell.indexOf(want) === 0)) { foundIdx = i; break; }
+    for (var c = 0; c < candidates.length && foundIdx === -1; c++) {
+      var want = candidates[c];
+      for (var i = 0; i < headerRow.length; i++) {
+        if (used[i]) continue;
+        var cell = _pipeNormHeader(headerRow[i]);
+        if (cell && (cell === want || cell.indexOf(want) === 0)) { foundIdx = i; break; }
+      }
     }
     if (foundIdx !== -1) { map[def.key] = foundIdx; used[foundIdx] = true; }
     else if (def.required) missingRequired.push(def.label);
@@ -6114,7 +6160,7 @@ function showPastePipelineM(lockDealerId) {
     h += '<div style="font-size:.8rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px">🏪 Dealer: <b>' + sanitize(lockDealer.name) + '</b> — จะถูก set ให้ทุก row อัตโนมัติ (ไม่ต้องมีคอลัมน์ Dealer ใน Excel)</div>';
   }
   h += '<p style="font-size:.8rem;color:var(--text2);margin-bottom:4px">ก็อปมาแบบ "รวมแถวหัวตาราง" ด้วยเสมอ แล้ววางที่นี่ — ระบบจับคู่คอลัมน์จากชื่อหัวข้อ ไม่สนลำดับ/ตำแหน่ง สลับหรือแทรกคอลัมน์อื่นในชีตได้อิสระ</p>';
-  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Register Date / Industrial Type / Project ID / End User Name / End User Name Eng / Unit type / Dealer Name / DJI Dealer / Project revenue / Model / Dock / M3M-M400 Qty. / Forecast Amount / Real Amount / TOR / Bidding Date / Shipment date / Remark / Letter of Authorized / Project POS / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
+  h += '<p style="font-size:.75rem;color:var(--text3);margin-bottom:8px">ต้องมีคอลัมน์ชื่อ <strong>Project Name</strong> เป็นอย่างน้อย ส่วนคอลัมน์อื่นที่รู้จัก: ROW NO. / Record Date / Industrial Type / Project ID / End User Name / End User Name (Eng) / Unit type / Sub Dealer / DJI Autorize Dealer / Project revenue / Model / Dock / M3M-M400 Qty. / Forecast Revenue / Real Amount / TOR / Bidding Date / Purchase Month / Shipment date / Remark / Letter of Authorized / % Possibility / Status / Duplicate / Update 1-6 / Sale / DISPLAY</p>';
   h += '<input type="hidden" id="pastePipeLockDealer" value="' + sanitize(lockDealerId || '') + '">';
   h += '<textarea id="pastePipeTa" style="width:100%;height:220px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;background:var(--bg2);color:var(--text)" placeholder="วางข้อมูลจาก Excel ที่นี่..."></textarea>';
   h += '<div style="display:flex;gap:8px;margin-top:10px">';

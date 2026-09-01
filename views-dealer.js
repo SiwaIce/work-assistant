@@ -1804,6 +1804,7 @@ function dealerPipelineTab(d) {
   h += '<button class="btn bsm ' + (dealerPipeViewMode === 'sheet' ? 'bp' : 'bo') + '" onclick="dealerPipeViewMode=dealerPipeViewMode===\'sheet\'?\'list\':\'sheet\';render()" title="มุมมอง Sheet เต็มคอลัมน์">📊</button>';
   h += '<button class="btn bsm ' + (dealerPipeViewMode === 'sheetedit' ? 'bp' : 'bo') + '" onclick="dealerPipeViewMode=dealerPipeViewMode===\'sheetedit\'?\'list\':\'sheetedit\';render()" title="แก้ไขแบบตาราง">🗂️</button>';
   h += '<button class="btn bsm bp" onclick="showPipelineM(\'' + d.id + '\')">➕</button>';
+  h += '<button class="btn bsm bd" onclick="showClearDealerTimelineM(\'' + d.id + '\')" title="ล้าง Timeline (Update log) เฉพาะ Dealer นี้ ก่อน import ไฟล์ใหม่ — ไม่กระทบ Dealer อื่น">🗑️ ล้าง Log</button>';
   h += '</span></h2>';
 
   h += '<div class="sr" style="margin-bottom:8px">';
