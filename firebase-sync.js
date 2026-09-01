@@ -549,6 +549,13 @@ auth.onAuthStateChanged(function(user) {
     // ✅ Publish แคตตาล็อกสินค้าให้ client-view (รอ products sync ลง localStorage ก่อน)
     setTimeout(function() { if (typeof publishCatalogToClientView === 'function') publishCatalogToClientView(); }, 5000);
 
+    // ✅ Publish แคตตาล็อก Demo (สำหรับหน้ายืมของลูกค้า) + โหลดคำขอยืมที่รออนุมัติมาอัปเดตตัวเลขแจ้งเตือน sidebar
+    // ไว้ล่วงหน้า ไม่ต้องรอให้เปิดเมนู Demo Equipment ก่อนถึงจะเห็นว่ามีคำขอค้างอยู่กี่รายการ
+    setTimeout(function() {
+      if (typeof publishDemoCatalog === 'function') publishDemoCatalog();
+      if (typeof loadDemoRequests === 'function') loadDemoRequests();
+    }, 5500);
+
     // ✅ Sync pipeline to shared teamPipeline + load other team members' pipeline
     setTimeout(function() {
       if (typeof syncMainPipelineToShared === 'function') syncMainPipelineToShared();

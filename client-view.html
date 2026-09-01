@@ -1331,6 +1331,7 @@ input[list]::-webkit-calendar-picker-indicator {
   <div class="tab-btn" data-tab="forecast">📦 แผนการสั่งซื้อ</div>
   <div class="tab-btn" data-tab="updateHistory">📝 ประวัติการอัพเดท</div>
   <div class="tab-btn" data-tab="announcements" id="annTabBtn">📢 ประกาศ</div>
+  <div class="tab-btn" data-tab="demo">🚁 ยืม Demo</div>
 </div>
   <div id="tabContent"><div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดข้อมูล...</div></div></div>
   <div class="cv-footer" style="text-align:center; padding:32px 0 16px; margin-top:32px; border-top:1px solid var(--border); font-size:12px; color:var(--text2)">
@@ -4106,6 +4107,7 @@ function renderCurrentTab() {
   else if (currentTab === 'updateHistory') renderUpdateHistoryTab();
   else if (currentTab === 'compliance') renderComplianceTab();
   else if (currentTab === 'announcements') renderAnnouncementsTab();
+  else if (currentTab === 'demo') renderDemoTab();
 }
 
 // ================================================================
@@ -4246,6 +4248,116 @@ function renderAnnouncementsTab() {
 
 function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ================================================================
+// DEMO TAB — ยืม Demo Unit จาก SiS (บินสาธิตได้ / จัดแสดงสินค้าเท่านั้น)
+// อ่านแคตตาล็อกจาก dealerUpdates/__demoCatalog__ (publish โดยแอปหลัก — ดู publishDemoCatalog() ใน
+// features.js) ไม่มีชื่อผู้ยืม/Dealer อื่นปนมาเลยตั้งแต่ต้น ไม่ใช่แค่ซ่อนที่ UI จึงรักษาความเป็นส่วนตัวได้จริง
+// ส่งคำขอเขียนไปที่ dealerUpdates/{dealerId}/demoRequests ซึ่ง Dealer ตัวเองเขียนได้อยู่แล้ว (path เดียวกับ
+// pipeline/forecast) ทีมงานฝั่งแอปหลักจะเห็นคำขอนี้ในเมนู Demo Equipment > 🟡 คำขอยืม
+// ================================================================
+var _demoCatalog = null;
+var _demoTabType = 'fly'; // 'fly' | 'display'
+
+function renderDemoTab() {
+  var tc = document.getElementById('tabContent');
+  if (!tc) return;
+  tc.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดรายการ Demo...</div></div>';
+
+  db.collection('dealerUpdates').doc('__demoCatalog__').get().then(function(doc) {
+    _demoCatalog = doc.exists ? (doc.data().units || []) : [];
+    renderDemoTabContent();
+  }).catch(function(e) {
+    tc.innerHTML = '<div class="section"><div style="color:#ef4444;padding:20px">เกิดข้อผิดพลาด: ' + escHtml(e.message) + '</div></div>';
+  });
+}
+
+function demoTabSetType(t) { _demoTabType = t; renderDemoTabContent(); }
+
+function renderDemoTabContent() {
+  var tc = document.getElementById('tabContent');
+  var units = (_demoCatalog || []).filter(function(u) { return u.status !== 'lost' && u.status !== 'unavailable'; });
+
+  var h = '<div class="section" style="margin-bottom:12px">';
+  h += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  h += '<button onclick="demoTabSetType(\'fly\')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-weight:700;font-size:13px;' + (_demoTabType === 'fly' ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--bg2);color:var(--text)') + '">✈️ บินสาธิต / จัดแสดงได้</button>';
+  h += '<button onclick="demoTabSetType(\'display\')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-weight:700;font-size:13px;' + (_demoTabType === 'display' ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : 'background:var(--bg2);color:var(--text)') + '">🖼️ จัดแสดงสินค้าเท่านั้น ห้ามบิน</button>';
+  h += '</div>';
+
+  var shown = units.filter(function(u) { return _demoTabType === 'fly' ? u.flyable !== false : u.flyable === false; });
+
+  if (!shown.length) {
+    h += '<div style="text-align:center;padding:30px;color:var(--text2)">ยังไม่มีเครื่องในหมวดนี้</div>';
+  } else {
+    var today = new Date().toISOString().slice(0, 10);
+    shown.forEach(function(u) {
+      var busyNow = (u.busyRanges || []).some(function(r) { return r.start <= today && today <= r.end; });
+      h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">';
+      h += '<div style="font-weight:700;font-size:14px">🚁 ' + escHtml(u.name || '-') + '</div>';
+      h += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;' + (busyNow ? 'background:rgba(239,68,68,.14);color:#ef4444' : 'background:rgba(34,197,94,.14);color:#22c55e') + '">' + (busyNow ? 'ไม่ว่างตอนนี้' : 'ว่างตอนนี้') + '</span>';
+      h += '</div>';
+      if (u.model) h += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + escHtml(u.model) + '</div>';
+      if ((u.busyRanges || []).length) {
+        h += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">📅 ช่วงไม่ว่างที่ทราบ: ' + u.busyRanges.map(function(r) { return escHtml(r.start) + ' – ' + escHtml(r.end); }).join(', ') + '</div>';
+      }
+      h += '<button onclick="openDemoRequestForm(\'' + u.id + '\',\'' + escHtml(u.name || '').replace(/'/g, "\\'") + '\',' + (u.flyable !== false) + ')" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:9px;font-weight:700;font-size:13px;cursor:pointer">📩 ส่งคำขอยืมเครื่องนี้</button>';
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+  h += '<div id="demoReqFormZone"></div>';
+  tc.innerHTML = h;
+}
+
+function openDemoRequestForm(unitId, unitName, flyable) {
+  var zone = document.getElementById('demoReqFormZone');
+  if (!zone) return;
+  var h = '<div class="section" id="demoReqForm" style="border:2px solid var(--accent)">';
+  h += '<div style="font-weight:700;margin-bottom:10px">📩 ขอยืม — ' + escHtml(unitName) + '</div>';
+  if (!flyable) h += '<div style="font-size:12px;background:rgba(148,163,184,.14);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:10px">🖼️ เครื่องนี้ใช้เพื่อจัดแสดงสินค้าเท่านั้น ขึ้นบินสาธิตจริงไม่ได้</div>';
+  h += '<div style="margin-bottom:10px"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">👤 End User (ลูกค้าปลายทาง)</label><input type="text" id="dreq_endUser" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)" placeholder="ชื่อหน่วยงาน/บริษัทที่จะใช้เครื่องจริง"></div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+  h += '<div style="flex:1"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📅 วันที่ต้องการยืม</label><input type="date" id="dreq_start" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  h += '<div style="flex:1"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📅 วันที่คืน</label><input type="date" id="dreq_end" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:10px"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">🎯 ยืมไปทำอะไร / งานอะไร</label><textarea id="dreq_purpose" rows="2" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)" placeholder="เช่น สาธิตให้ลูกค้าดูก่อนตัดสินใจซื้อ"></textarea></div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+  h += '<div style="flex:1"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">👤 ชื่อผู้ติดต่อ</label><input type="text" id="dreq_contact" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  h += '<div style="flex:1"><label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📱 เบอร์โทร</label><input type="text" id="dreq_phone" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button onclick="document.getElementById(\'demoReqForm\').remove()" style="flex:1;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer">ยกเลิก</button>';
+  h += '<button onclick="submitDemoRequest(\'' + unitId + '\',\'' + escHtml(unitName).replace(/'/g, "\\'") + '\')" style="flex:2;padding:10px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-weight:700;cursor:pointer">📩 ส่งคำขอ</button>';
+  h += '</div></div>';
+  zone.innerHTML = h;
+  document.getElementById('demoReqForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function submitDemoRequest(unitId, unitName) {
+  if (!dealerId) { showToast('❌ ไม่พบข้อมูล Dealer'); return; }
+  var endUser = (document.getElementById('dreq_endUser').value || '').trim();
+  var start = document.getElementById('dreq_start').value;
+  var end = document.getElementById('dreq_end').value;
+  var purpose = (document.getElementById('dreq_purpose').value || '').trim();
+  var contact = (document.getElementById('dreq_contact').value || '').trim();
+  var phone = (document.getElementById('dreq_phone').value || '').trim();
+  if (!start || !end) { showToast('❌ กรุณาเลือกวันที่ยืมและวันที่คืน'); return; }
+  if (end < start) { showToast('❌ วันที่คืนต้องไม่ก่อนวันที่ยืม'); return; }
+  if (!contact || !phone) { showToast('❌ กรุณากรอกชื่อและเบอร์ผู้ติดต่อ'); return; }
+
+  db.collection('dealerUpdates').doc(dealerId).collection('demoRequests').add({
+    unitId: unitId, unitName: unitName, endUser: endUser, purpose: purpose,
+    startDate: start, endDate: end, contactName: contact, phone: phone,
+    status: 'pending', submittedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    showToast('✅ ส่งคำขอแล้ว — ทีมงาน SiS จะติดต่อกลับเพื่อยืนยัน');
+    var form = document.getElementById('demoReqForm');
+    if (form) form.remove();
+  }).catch(function(e) {
+    showToast('❌ ส่งคำขอไม่สำเร็จ: ' + e.message);
+  });
 }
 
 function cvMarkAnnRead(annId, version, silent) {

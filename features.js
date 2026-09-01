@@ -2836,9 +2836,13 @@ function getDemoItems() {
     try {
       var parsed = JSON.parse(saved);
       if (!Array.isArray(parsed)) return [];
-      // migrate สถานะเดิม "maintenance" -> "unavailable"
+      // migrate สถานะเดิม "maintenance" -> "unavailable"; เครื่องเก่าที่ยังไม่มี flyable ถือว่าบินได้ (ค่าเดิม
+      // ก่อนแยกประเภท เครื่องส่วนใหญ่ในระบบบินได้จริง ปลอดภัยกว่าเดาเป็นโชว์อย่างเดียว)
       var migrated = false;
-      parsed.forEach(function(d) { if (d.status === 'maintenance') { d.status = 'unavailable'; migrated = true; } });
+      parsed.forEach(function(d) {
+        if (d.status === 'maintenance') { d.status = 'unavailable'; migrated = true; }
+        if (d.flyable === undefined) { d.flyable = true; migrated = true; }
+      });
       if (migrated) saveDemoItems(parsed);
       return parsed;
     } catch(e) {
@@ -2852,6 +2856,33 @@ function saveDemoItems(list) {
   if (!list || !Array.isArray(list)) list = [];
   localStorage.setItem('v7_demo', JSON.stringify(list));
   if (typeof syncToFirebase === 'function') syncToFirebase('demo', list);
+  publishDemoCatalog();
+}
+
+// เผยแพร่สำเนา read-only ของแคตตาล็อก Demo ไปที่ dealerUpdates/__demoCatalog__ — path สาธารณะเดียวกับที่
+// publishCatalogToClientView() ใช้กับสินค้า (ดู products.js) เพราะ users/{uid}/... อ่านไม่ได้ถ้าไม่ login
+// ตั้งใจไม่ใส่ชื่อผู้ยืม/Dealer เพื่อรักษาความเป็นส่วนตัว (ลูกค้าใน client-view.html เห็นแค่ว่าง/ไม่ว่าง)
+// ponytail: ช่วงไม่ว่างคำนวณจาก loan ที่ยืนยันแล้ว (active) เท่านั้น ไม่รวมคำขอที่ยังรออนุมัติ — คำขอใหม่จะ
+// ไม่ไปกันคนอื่นเห็นว่าง จนกว่า staff จะกดอนุมัติจริง ถ้าต้องการกันไว้ตั้งแต่ส่งคำขอ ต้อง query demoRequests
+// ข้าม dealer ทุกตัวตอน publish ซึ่งมีต้นทุนสูงกว่ามากเทียบกับที่ได้ ไม่คุ้มสำหรับตอนนี้
+function publishDemoCatalog() {
+  if (typeof db === 'undefined') return;
+  try {
+    var items = getDemoItems();
+    var loans = getDemoLoans();
+    var units = items.map(function(d) {
+      var ranges = loans.filter(function(l) { return l.demoId === d.id && l.status === 'active' && l.lentDate; })
+        .map(function(l) {
+          var s = ftParseDate(l.lentDate), e = ftParseDate(l.returnDate) || s;
+          return { start: s ? s.toISOString().slice(0, 10) : l.lentDate, end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate) };
+        });
+      return { id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges };
+    });
+    db.collection('dealerUpdates').doc('__demoCatalog__').set({
+      units: units,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(e) { console.warn('publishDemoCatalog error:', e); });
+  } catch(e) { console.warn('publishDemoCatalog error:', e); }
 }
 
 var DEMO_STATUS_META = {
@@ -2904,8 +2935,9 @@ function demoLoansByDemo(demoId) {
     .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); });
 }
 
-var demoTrackerTab = 'list'; // 'list' | 'calendar'
+var demoTrackerTab = 'list'; // 'list' | 'calendar' | 'requests'
 var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
+var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
 var demoModelFilter = 'all';
 var demoOverdueFlt = false; // true = กรองเฉพาะเครื่องที่ยืมเกิน 30 วันยังไม่คืน
 var demoSearch = '';
@@ -2917,7 +2949,7 @@ function demoSearchInput(v) {
 }
 
 function demoSetStatusFilter(s) { demoStatusFilter = s; render(); }
-function demoClearFilters() { demoStatusFilter = 'all'; demoModelFilter = 'all'; demoSearch = ''; render(); }
+function demoClearFilters() { demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoSearch = ''; render(); }
 
 function demoComplianceBadges(d) {
   var h = '<div class="demo-compliance">';
@@ -2962,10 +2994,15 @@ function rDemoTracker(el) {
   h += '<div class="today-tabs" style="margin-bottom:10px">';
   h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoTrackerTab=\'list\';render()">📋 รายการ</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoTrackerTab=\'calendar\';render()">🗓️ ปฏิทิน</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'requests' ? 'act' : '') + '" onclick="demoTrackerTab=\'requests\';loadDemoRequests();render()">🟡 คำขอยืม' + (_demoReqPendingCount ? ' (' + _demoReqPendingCount + ')' : '') + '</div>';
   h += '</div>';
 
   if (demoTrackerTab === 'calendar') {
     el.innerHTML = h + renderDemoCalendar();
+    return;
+  }
+  if (demoTrackerTab === 'requests') {
+    el.innerHTML = h + renderDemoRequestsTab();
     return;
   }
 
@@ -2987,6 +3024,15 @@ function rDemoTracker(el) {
   });
   h += '</div>';
 
+  // ประเภทการใช้งาน — บินสาธิตได้ vs จัดแสดงสินค้าเท่านั้น (ห้ามบิน)
+  var flyCount = items.filter(function(d) { return d.flyable !== false; }).length;
+  var displayCount = items.length - flyCount;
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<button class="demo-filter-chip ' + (demoTypeFilter === 'all' ? 'act' : '') + '" onclick="demoTypeFilter=\'all\';render()">ทุกประเภท</button>';
+  h += '<button class="demo-filter-chip ' + (demoTypeFilter === 'fly' ? 'act' : '') + '" onclick="demoTypeFilter=\'fly\';render()">✈️ บินสาธิตได้ (' + flyCount + ')</button>';
+  h += '<button class="demo-filter-chip ' + (demoTypeFilter === 'display' ? 'act' : '') + '" onclick="demoTypeFilter=\'display\';render()">🖼️ จัดแสดงเท่านั้น (' + displayCount + ')</button>';
+  h += '</div>';
+
   // ค้นหา + กรองตามรุ่น
   var uniqueModels = [];
   items.forEach(function(d) { if (d.name && uniqueModels.indexOf(d.name) === -1) uniqueModels.push(d.name); });
@@ -3005,6 +3051,8 @@ function rDemoTracker(el) {
 
   var shown = items.filter(function(d) {
     if (demoStatusFilter !== 'all' && getDemoEffectiveStatus(d) !== demoStatusFilter) return false;
+    if (demoTypeFilter === 'fly' && d.flyable === false) return false;
+    if (demoTypeFilter === 'display' && d.flyable !== false) return false;
     if (demoModelFilter !== 'all' && d.name !== demoModelFilter) return false;
     if (demoOverdueFlt) {
       if (getDemoEffectiveStatus(d) !== 'lent') return false;
@@ -3046,6 +3094,7 @@ function rDemoTracker(el) {
     h += '<span class="demo-status ' + meta.cls + '">' + meta.label + '</span>';
     h += '</div>';
     h += '<div class="demo-card2-info">';
+    h += '<div>' + (d.flyable !== false ? '<span style="color:#38bdf8">✈️ บินสาธิตได้</span>' : '<span style="color:var(--text2)">🖼️ จัดแสดงเท่านั้น (ห้ามบิน)</span>') + '</div>';
     if (d.sku) h += '<div>🏷️ SiS Part: ' + qcopyHtml(d.sku) + '</div>';
     if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(d.rentalDbNo) + '</div>';
     if (eff === 'lent' || eff === 'reserved') {
@@ -3172,6 +3221,137 @@ function renderDemoCalendar() {
 }
 
 // ================================================================
+// DEMO REQUESTS — คำขอยืมจาก Dealer ผ่าน client-view.html (dealerUpdates/{dealerId}/demoRequests)
+// เขียนจากฝั่งลูกค้าได้เพราะ dealerUpdates/{dealerId}/* เป็น path ที่เปิดให้ Dealer ที่มี PIN เขียนได้อยู่แล้ว
+// (path เดียวกับ pipeline/forecast ที่ client-view.html ใช้) ต่างจาก users/{uid}/* ที่ล็อกเฉพาะเจ้าของ
+// ================================================================
+var _demoRequestsCache = []; // [{id, dealerId, ...data}] เฉพาะ status='pending' เท่านั้น — โหลดสดจาก Firestore
+var _demoReqPendingCount = 0;
+var _demoReqLoading = false;
+
+// โหลดคำขอที่ยังรออนุมัติจากทุก Dealer — วนอ่าน subcollection ทีละ Dealer เหมือน rCustomerForecastUpdates
+// (ไม่มี top-level collection ให้ query รวดเดียวได้ เพราะ path ผูกกับ dealer แต่ละราย)
+function loadDemoRequests(cb) {
+  if (typeof db === 'undefined' || !CURRENT_USER) { if (cb) cb(); return; }
+  _demoReqLoading = true;
+  var dealers = ST.getAll('dealers');
+  var all = [];
+  Promise.all(dealers.map(function(dealer) {
+    return db.collection('dealerUpdates').doc(dealer.id).collection('demoRequests')
+      .where('status', '==', 'pending').get()
+      .then(function(snap) {
+        snap.forEach(function(doc) {
+          var data = doc.data();
+          data.id = doc.id;
+          data.dealerId = dealer.id;
+          data.dealerName = dealer.name;
+          all.push(data);
+        });
+      })
+      .catch(function(e) { console.warn('loadDemoRequests error for dealer', dealer.id, e); });
+  })).then(function() {
+    all.sort(function(a, b) {
+      var ta = a.submittedAt && a.submittedAt.toMillis ? a.submittedAt.toMillis() : 0;
+      var tb = b.submittedAt && b.submittedAt.toMillis ? b.submittedAt.toMillis() : 0;
+      return ta - tb; // เก่าสุด(ขอก่อน) ก่อน
+    });
+    _demoRequestsCache = all;
+    _demoReqPendingCount = all.length;
+    _demoReqLoading = false;
+    updateDemoReqBadge();
+    if (cb) cb();
+  });
+}
+
+// ตัวเลขแจ้งเตือนที่ sidebar ข้างเมนู Demo Equipment — pattern เดียวกับ #nBdg ของ Reminders
+function updateDemoReqBadge() {
+  var el = document.getElementById('demoReqBdg');
+  if (el) { el.style.display = _demoReqPendingCount ? 'inline' : 'none'; el.textContent = _demoReqPendingCount; }
+}
+
+// สองคำขอ "ชนกัน" ถ้าเป็นเครื่องเดียวกันและช่วงวันที่ทับกัน
+function demoReqOverlaps(a, b) { return a.unitId === b.unitId && a.startDate <= b.endDate && b.startDate <= a.endDate; }
+function demoReqConflictsOf(req) { return _demoRequestsCache.filter(function(r) { return r.id !== req.id && demoReqOverlaps(req, r); }); }
+
+function renderDemoRequestsTab() {
+  if (_demoReqLoading) return '<div class="card" style="text-align:center;padding:30px;color:var(--text2)">⏳ กำลังโหลดคำขอ...</div>';
+  if (!_demoRequestsCache.length) {
+    return '<div class="card" style="text-align:center;padding:30px"><div style="font-size:40px;margin-bottom:8px">✅</div><p style="color:var(--text2)">ไม่มีคำขอค้างตรวจสอบ</p></div>';
+  }
+  var h = '<div class="card"><h2>🟡 คำขอยืมจาก Dealer (' + _demoRequestsCache.length + ')</h2>';
+  h += '<p style="font-size:12px;color:var(--text2);margin:-4px 0 10px">เรียงตามเวลาที่ส่งเข้ามาก่อน-หลัง — แถวที่มีป้าย ⚠️ ชนกัน คือมีคำขออื่นขอเครื่องเดียวกันช่วงเวลาเดียวกันไว้ด้วย</p>';
+  _demoRequestsCache.forEach(function(r) {
+    var conflicts = demoReqConflictsOf(r);
+    var submittedTxt = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate().toLocaleString('th-TH') : '-';
+    h += '<div class="li" style="flex-direction:column;align-items:stretch;gap:4px">';
+    h += '<div class="lm"><div class="lt">🚁 ' + sanitize(r.unitName || '-') + (conflicts.length ? ' <span class="fu-badge fu-badge-red">⚠️ ชนกัน ' + conflicts.length + ' รายการ</span>' : '') + '</div>';
+    h += '<div class="ls">🏪 ' + sanitize(r.dealerName || '-') + ' · 👤 End User: ' + sanitize(r.endUser || '-') + '</div></div>';
+    h += '<div class="ls">📅 ' + sanitize(r.startDate || '-') + ' – ' + sanitize(r.endDate || '-') + '</div>';
+    if (r.purpose) h += '<div class="ls">🎯 ' + sanitize(r.purpose) + '</div>';
+    h += '<div class="ls">👤 ผู้ติดต่อ: ' + sanitize(r.contactName || '-') + ' · ' + sanitize(r.phone || '-') + '</div>';
+    h += '<div class="ls" style="color:var(--text3)">ส่งคำขอเมื่อ: ' + submittedTxt + '</div>';
+    h += '<div style="display:flex;gap:6px;margin-top:4px">';
+    h += '<button class="btn bsm bp" onclick="approveDemoRequest(\'' + r.dealerId + '\',\'' + r.id + '\')">✅ อนุมัติ</button>';
+    h += '<button class="btn bsm bd" onclick="rejectDemoRequest(\'' + r.dealerId + '\',\'' + r.id + '\')">✕ ปฏิเสธ</button>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// อนุมัติคำขอ — เทียบเท่ากับ lendDemo() แต่ใช้ข้อมูลจากคำขอแทนฟอร์ม, ถ้ามีคำขออื่นชนกันจะถามยืนยันก่อนแล้ว
+// ปฏิเสธที่ชนกันให้อัตโนมัติ (ป้องกันเครื่องเดียวกันถูกจองซ้อนสองราย)
+function approveDemoRequest(dealerId, reqId) {
+  var req = _demoRequestsCache.filter(function(r) { return r.id === reqId; })[0];
+  if (!req) return;
+  var conflicts = demoReqConflictsOf(req);
+  if (conflicts.length) {
+    if (!confirm('ช่วงเวลานี้มีคำขออื่นชนกันอยู่ ' + conflicts.length + ' รายการ — อนุมัติรายการนี้จะถือว่าปฏิเสธรายการที่ชนกันให้อัตโนมัติ ดำเนินการต่อไหม?')) return;
+  } else if (!confirm('อนุมัติคำขอยืม "' + req.unitName + '" จาก ' + req.dealerName + '?')) return;
+
+  var items = getDemoItems();
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].id === req.unitId) {
+      items[i].status = 'lent';
+      items[i].dealerId = dealerId;
+      items[i].borrower = req.dealerName || '';
+      items[i].purpose = (req.purpose || '') + (req.endUser ? ' · End User: ' + req.endUser : '');
+      items[i].lentDate = req.startDate || _td();
+      items[i].returnDate = req.endDate || '';
+      items[i].note = 'อนุมัติจากคำขอลูกค้า — ผู้ติดต่อ ' + (req.contactName || '-') + ' ' + (req.phone || '');
+      break;
+    }
+  }
+  saveDemoItems(items);
+
+  var loans = getDemoLoans();
+  loans.push({
+    id: gid(), demoId: req.unitId, demoName: req.unitName,
+    dealerId: dealerId, borrower: req.dealerName || '', purpose: req.purpose || '',
+    lentDate: req.startDate || _td(), returnDate: req.endDate || '', actualReturnDate: '',
+    note: 'จากคำขอลูกค้า (End User: ' + (req.endUser || '-') + ')', status: 'active', created: _nw()
+  });
+  saveDemoLoans(loans);
+
+  db.collection('dealerUpdates').doc(dealerId).collection('demoRequests').doc(reqId).set({ status: 'approved' }, { merge: true });
+  conflicts.forEach(function(c) {
+    db.collection('dealerUpdates').doc(c.dealerId).collection('demoRequests').doc(c.id).set({ status: 'rejected' }, { merge: true });
+  });
+
+  toast('✅ อนุมัติแล้ว — เปลี่ยนสถานะเครื่องเป็นให้ยืมแล้ว');
+  loadDemoRequests(render);
+}
+
+function rejectDemoRequest(dealerId, reqId) {
+  var req = _demoRequestsCache.filter(function(r) { return r.id === reqId; })[0];
+  if (!req) return;
+  if (!confirm('ปฏิเสธคำขอจาก ' + (req.dealerName || 'Dealer') + '?')) return;
+  db.collection('dealerUpdates').doc(dealerId).collection('demoRequests').doc(reqId).set({ status: 'rejected' }, { merge: true })
+    .then(function() { toast('✕ ปฏิเสธแล้ว'); loadDemoRequests(render); })
+    .catch(function(e) { toast('❌ ผิดพลาด: ' + e.message, true); });
+}
+
+// ================================================================
 // DEMO DETAIL — spec + ประวัติการยืมทั้งหมด
 // ================================================================
 function rDemoDetail(el) {
@@ -3248,7 +3428,10 @@ function fillDemoSku(selectEl) {
 
 function demoComplianceFieldsHtml(d) {
   d = d || {};
-  var h = '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '"></div>';
+  var h = '<div class="fm-group"><label>✈️ ประเภทการใช้งาน</label><select id="dm_flyable" class="fm-input">' +
+    '<option value="1"' + (d.flyable !== false ? ' selected' : '') + '>✈️ บินสาธิตได้</option>' +
+    '<option value="0"' + (d.flyable === false ? ' selected' : '') + '>🖼️ จัดแสดงสินค้าเท่านั้น (ห้ามบิน)</option></select></div>';
+  h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '"></div>';
   h += '<div class="fm-group" style="display:flex;gap:14px;flex-wrap:wrap">';
   h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_nbtc"' + (d.nbtcRegistered ? ' checked' : '') + '> ขึ้นทะเบียน กสทช</label>';
   h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_insurance"' + (d.droneInsurance ? ' checked' : '') + '> ประกันภัยโดรน</label>';
@@ -3258,6 +3441,7 @@ function demoComplianceFieldsHtml(d) {
 }
 function readDemoComplianceFields() {
   return {
+    flyable: document.getElementById('dm_flyable').value !== '0',
     rentalDbNo: (document.getElementById('dm_rentaldb').value || '').trim(),
     nbtcRegistered: document.getElementById('dm_nbtc').checked,
     droneInsurance: document.getElementById('dm_insurance').checked,
@@ -3433,6 +3617,7 @@ function updateDemo(demoId) {
       items[i].serialNumber = (document.getElementById('dm_sn').value || '').trim();
       items[i].model = document.getElementById('dm_model').value || '';
       items[i].sku = (document.getElementById('dm_sku').value || '').trim();
+      items[i].flyable = compliance.flyable;
       items[i].rentalDbNo = compliance.rentalDbNo;
       items[i].nbtcRegistered = compliance.nbtcRegistered;
       items[i].droneInsurance = compliance.droneInsurance;
