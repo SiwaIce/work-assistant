@@ -296,6 +296,10 @@ function getKpiRunRateLogs() {
 function saveKpiRunRateLogs(list) {
   localStorage.setItem('v7_kpiRunRateLogs', JSON.stringify(list));
   if (typeof syncToFirebase === 'function') syncToFirebase('kpiRunRateLogs', list);
+  // ล้างแคชต่อ render ทันที (ดู _kpiCache ด้านบน) — ไม่งั้นเรียกฟังก์ชันนี้แล้วเปิด modal ต่อ (showKpiDetailM/
+  // showKpiMonthDetailM) จะยังอ่าน _kpiRunRateLogsCached() ตัวเก่าก่อนบันทึกอยู่ ทำให้ยอด/รายการที่เพิ่ง
+  // เพิ่ม-แก้-ลบไปไม่ขึ้นทันที (บั๊กที่เจอ 2026-09-01 หลังเพิ่มแคชให้หน้า KPI)
+  _kpiInvalidateCache();
 }
 
 // Run Rate ผูกกับโครงการจริงได้ (l.pipeId) — ไว้ใช้เวลายอดจากโครงการยังไม่ขึ้นอัตโนมัติ (เช่น สถานะ/
