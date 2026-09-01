@@ -1874,12 +1874,19 @@ function _kpiApComputeAuto(cat, p) {
   } else {
     var items = getPipeItems(p) || [];
     var keywords = cat.modelMatch || [];
-    for (var i = 0; i < keywords.length; i++) {
-      var kw = keywords[i].toLowerCase();
-      var sum = items.reduce(function(s, it) { return (it.model || '').toLowerCase().indexOf(kw) !== -1 ? s + (Number(it.qty) || 0) : s; }, 0);
-      if (sum > 0) { item = keywords[i]; amount = sum; break; }
-    }
-    if (!item && keywords.length) item = keywords[0];
+    // เดิมเจอ keyword แรกที่แมตช์แล้วหยุดทันที (break) — ถ้าโครงการมีทั้ง Dock 3 และ Dock 4 ปนกัน จะนับแค่
+    // ตัวแรกตัวเดียว ตัวที่สองหายไปเงียบๆ (ผู้ใช้เจอ 2026-09-01) เปลี่ยนเป็นรวมทุก keyword ที่แมตช์แทน
+    var matchedLabels = [];
+    keywords.forEach(function(kwRaw) {
+      var kw = (kwRaw || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!kw) return;
+      var sum = items.reduce(function(s, it) {
+        var m = (it.model || '').toLowerCase().replace(/\s+/g, ' ');
+        return m.indexOf(kw) !== -1 ? s + (Number(it.qty) || 0) : s;
+      }, 0);
+      if (sum > 0) { amount += sum; matchedLabels.push(kwRaw); }
+    });
+    item = matchedLabels.length ? matchedLabels.join(', ') : (keywords[0] || '');
   }
   return { kind: kind, item: item, amount: amount };
 }
@@ -1895,8 +1902,9 @@ function _kpiApOpenPickForm(planId, categoryId, pipeId) {
   var p = ST.getOne('pipeline', pipeId);
   if (!p) return;
   var auto = _kpiApComputeAuto(cat, p);
-  if (!auto.amount) { toast('⚠️ โครงการนี้ไม่มียอด/จำนวนที่นับเข้าหัวข้อนี้ได้ ลองกรอกเองแทน'); return; }
-
+  // เดิม auto.amount = 0 แล้วเด้ง toast บล็อกไปเลย เลือกโครงการนี้ต่อไม่ได้แม้จะเห็นว่ามีสินค้าที่ต้องการอยู่จริง
+  // (คำในชื่อโมเดลไม่ตรงกับ modelMatch ของหัวข้อนี้เป๊ะ) ผู้ใช้เจอ 2026-09-01 — เปลี่ยนเป็นเปิดฟอร์มต่อได้เสมอ
+  // ให้กรอกจำนวนเองแทน พร้อมโชว์รายชื่อสินค้าจริงในโครงการเทียบกับคำค้นที่ตั้งไว้ให้เห็นว่าทำไมไม่ auto-match
   _kpiApPicking = { pipeId: pipeId };
   var isQty = auto.kind === 'qty';
   var originDate = pipeIsWon(p) ? pipeResolvedCloseDate(p).date : null;
@@ -1904,6 +1912,10 @@ function _kpiApOpenPickForm(planId, categoryId, pipeId) {
 
   var h = '<div style="margin-top:10px;padding:12px;border:1.5px solid var(--accent,#4f6bf0);border-radius:10px;background:var(--bg2)">';
   h += '<div style="font-weight:700;font-size:.8rem;margin-bottom:6px">✅ ' + sanitize(p.projectName || '-') + '</div>';
+  if (isQty && !auto.amount) {
+    var actualModels = (getPipeItems(p) || []).map(function(it) { return sanitize(it.model || '-') + ' x' + (Number(it.qty) || 1); }).join(', ') || '-';
+    h += '<div style="font-size:.68rem;color:#e08a2c;background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠️ ไม่พบสินค้าที่ตรงกับคำค้นของหัวข้อนี้ (' + sanitize((cat.modelMatch || []).join(', ')) + ') ในโครงการนี้ — สินค้าที่มีจริง: ' + actualModels + ' — กรอกจำนวนเองด้านล่างได้เลย</div>';
+  }
   if (originDate && !originInThisQuarter) {
     h += '<div style="font-size:.68rem;color:var(--text2);background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">' +
       'ℹ️ โครงการนี้ Win แล้ว ระบบนับยอดเต็ม (' + (isQty ? auto.amount : fmtMoney(auto.amount)) + ') เข้าไตรมาสที่ปิดดีลจริง (' + fD(originDate) + ') อัตโนมัติอยู่แล้ว — ยอดที่ใส่ด้านล่างจะถูกหักออกจากไตรมาสนั้นให้อัตโนมัติเท่ากับที่ย้ายมานับที่นี่ ป้องกันนับซ้ำ</div>';
