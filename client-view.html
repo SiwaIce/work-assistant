@@ -1370,7 +1370,8 @@ var editableItems = [];
 var pipelineSearch = '';
 var pipelineSort = 'date_desc';
 var pipelineFilter = 'all';
-var pipelineStatusFilter = 'all';
+var pipelineStatusSel = {}; // {statusId: true} — ว่าง = ทั้งหมด (เปลี่ยนจาก dropdown เดี่ยวเป็นเลือกได้หลายสถานะ ผู้ใช้ขอ 2026-09-01)
+var pipelineMonthSel = {}; // {0-11: true} — ว่าง = ทุกเดือน กรองจาก biddingDate (ไม่สนปี เหมือนตัวกรองเดือนฝั่งแอปหลัก)
 var staleFilter = 'all';
 var cvPipeFY = 'all';
 var pipelineView = 'list'; // 'list' | 'kanban' | 'sheet'
@@ -2053,8 +2054,15 @@ function filterAndSortPipelines(pipelines) {
   if (pipelineFilter !== 'all') {
     result = result.filter(function(p) { var st = p._status || 'approved'; return st === pipelineFilter; });
   }
-  if (pipelineStatusFilter !== 'all') {
-    result = result.filter(function(p) { return (p.status || '') === pipelineStatusFilter; });
+  if (Object.keys(pipelineStatusSel).length) {
+    result = result.filter(function(p) { return !!pipelineStatusSel[p.status || '']; });
+  }
+  if (Object.keys(pipelineMonthSel).length) {
+    result = result.filter(function(p) {
+      if (!p.biddingDate) return false;
+      var d = new Date(p.biddingDate);
+      return !isNaN(d.getTime()) && !!pipelineMonthSel[d.getMonth()];
+    });
   }
   if (cvPipeFY !== 'all') {
     result = result.filter(function(p) {
@@ -2089,7 +2097,37 @@ function filterAndSortPipelines(pipelines) {
   return result;
 }
 
-function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; pipelineStatusFilter = 'all'; staleFilter = 'all'; cvPipeFY = 'all'; renderPipelineTab(); }
+function resetPipelineFilters() { pipelineSearch = ''; pipelineSort = 'date_desc'; pipelineFilter = 'all'; pipelineStatusSel = {}; pipelineMonthSel = {}; staleFilter = 'all'; cvPipeFY = 'all'; renderPipelineTab(); }
+
+// เผื่อ STATUS_LIST ยังไม่มี category (config เก่า/ยังไม่ sync) — เดาจาก id ชุด default กันปุ่มลัด Active/จบแล้ว
+// เลือกไม่ได้อะไรเลย
+function _cvStatusIdsByCategoryOrFallback(cat) {
+  var byCat = cvGetIdsByCategory(cat);
+  if (byCat.length) return byCat;
+  var fallback = { active: ['initial', 'on_process', 'draft_tor', 'bidding'], won: ['win', 'contracting', 'deliver'], lost: ['fail_lost'] }[cat] || [];
+  return STATUS_LIST.filter(function(s) { return fallback.indexOf(s.id) !== -1; }).map(function(s) { return s.id; });
+}
+function cvToggleStatusFilter(id) {
+  if (pipelineStatusSel[id]) delete pipelineStatusSel[id]; else pipelineStatusSel[id] = true;
+  renderPipelineTab();
+}
+function cvSetStatusShortcut(kind) {
+  pipelineStatusSel = {};
+  if (kind === 'active') _cvStatusIdsByCategoryOrFallback('active').forEach(function(id) { pipelineStatusSel[id] = true; });
+  else if (kind === 'closed') { _cvStatusIdsByCategoryOrFallback('won').concat(_cvStatusIdsByCategoryOrFallback('lost')).forEach(function(id) { pipelineStatusSel[id] = true; }); }
+  renderPipelineTab();
+}
+var TH_MONTH_ABBR = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function cvToggleMonthFilter(idx) {
+  if (pipelineMonthSel[idx]) delete pipelineMonthSel[idx]; else pipelineMonthSel[idx] = true;
+  renderPipelineTab();
+}
+function cvSetMonthShortcut(kind) {
+  pipelineMonthSel = {};
+  var ranges = { h1: [0, 1, 2, 3, 4, 5], h2: [6, 7, 8, 9, 10, 11], q1: [0, 1, 2], q2: [3, 4, 5], q3: [6, 7, 8], q4: [9, 10, 11] };
+  (ranges[kind] || []).forEach(function(m) { pipelineMonthSel[m] = true; });
+  renderPipelineTab();
+}
 
 // ========== PIPELINE SUMMARY DASHBOARD ==========
 var pipeChartOpen = false;
@@ -2223,10 +2261,6 @@ function renderPipelineTab() {
   html += '<option value="name_asc"' + (pipelineSort === 'name_asc' ? ' selected' : '') + '>🔤 ชื่อ A-Z</option>';
   html += '<option value="stale_desc"' + (pipelineSort === 'stale_desc' ? ' selected' : '') + '>⏰ ไม่ได้อัพเดทนานสุด</option>';
   html += '</select></div>';
-  html += '<div class="toolbar-item"><label>📊 สถานะโครงการ</label><select id="pipelineStatusFilterSelect" class="toolbar-select" onchange="pipelineStatusFilter=this.value; renderPipelineTab()">';
-  html += '<option value="all"' + (pipelineStatusFilter === 'all' ? ' selected' : '') + '>ทั้งหมด</option>';
-  STATUS_LIST.forEach(function(s) { html += '<option value="' + s.id + '"' + (pipelineStatusFilter === s.id ? ' selected' : '') + '>' + s.name + '</option>'; });
-  html += '</select></div>';
   html += '<div class="toolbar-item"><label>✅ การอัพเดท</label><select id="pipelineFilterSelect" class="toolbar-select" onchange="pipelineFilter=this.value; renderPipelineTab()">';
   html += '<option value="all"' + (pipelineFilter === 'all' ? ' selected' : '') + '>ทั้งหมด</option>';
   html += '<option value="pending"' + (pipelineFilter === 'pending' ? ' selected' : '') + '>⏳ รอตรวจสอบ</option>';
@@ -2243,9 +2277,38 @@ function renderPipelineTab() {
   html += (function() { var cur = currentThaiFY(); var o = ''; for (var fy = cur + 2; fy >= cur - 2; fy--) o += '<option value="' + fy + '"' + (String(cvPipeFY) === String(fy) ? ' selected' : '') + '>ปีงบ ' + fy + (fy === cur ? ' (ปีนี้)' : '') + '</option>'; return o; })();
   html += '</select></div>';
   html += '<div class="toolbar-item" style="flex:0.5; min-width:auto"><label>&nbsp;</label><button class="btn btn-primary" style="width:100%" onclick="refreshData()">🔄 รีเฟรช</button></div>';
-  if (pipelineSearch || pipelineFilter !== 'all' || pipelineStatusFilter !== 'all' || staleFilter !== 'all' || cvPipeFY !== 'all') html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
+  var _cvHasFilter = pipelineSearch || pipelineFilter !== 'all' || Object.keys(pipelineStatusSel).length || Object.keys(pipelineMonthSel).length || staleFilter !== 'all' || cvPipeFY !== 'all';
+  if (_cvHasFilter) html += '<div class="toolbar-item" style="flex:0.3; min-width:auto"><label>&nbsp;</label><button class="btn reset-btn" style="width:100%" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button></div>';
   html += '</div>';
-  
+
+  // สถานะโครงการ — เลือกได้หลายสถานะ (chip) แทน dropdown เดี่ยวเดิม + ปุ่มลัด Active/จบแล้ว (ผู้ใช้ขอ 2026-09-01)
+  html += '<div class="toolbar-row" style="align-items:center;gap:6px 10px">';
+  html += '<label style="font-size:12px;color:var(--text-secondary);white-space:nowrap">📊 สถานะ:</label>';
+  html += '<button class="btn btn-sm" style="' + (Object.keys(pipelineStatusSel).length === 0 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipelineStatusSel={};renderPipelineTab()">ทั้งหมด</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetStatusShortcut(\'active\')">🟢 Active</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>';
+  STATUS_LIST.forEach(function(s) {
+    var on = !!pipelineStatusSel[s.id];
+    html += '<label class="btn btn-sm" style="cursor:pointer;' + (on ? 'background:var(--accent);color:#fff' : '') + '"><input type="checkbox" style="display:none" ' + (on ? 'checked' : '') + ' onchange="cvToggleStatusFilter(\'' + s.id + '\')">' + s.name + '</label>';
+  });
+  html += '</div>';
+
+  // เดือน (จาก Bidding Date) — เลือกได้หลายเดือน + ปุ่มลัดครึ่งปี/ไตรมาส (ผู้ใช้ขอ 2026-09-01)
+  html += '<div class="toolbar-row" style="align-items:center;gap:6px 10px;margin-top:6px">';
+  html += '<label style="font-size:12px;color:var(--text-secondary);white-space:nowrap">📅 เดือน (Bidding):</label>';
+  html += '<button class="btn btn-sm" style="' + (Object.keys(pipelineMonthSel).length === 0 ? 'background:var(--accent);color:#fff' : '') + '" onclick="pipelineMonthSel={};renderPipelineTab()">ทุกเดือน</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'h1\')">H1</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'h2\')">H2</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'q1\')">Q1</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'q2\')">Q2</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'q3\')">Q3</button>';
+  html += '<button class="btn btn-sm" onclick="cvSetMonthShortcut(\'q4\')">Q4</button>';
+  TH_MONTH_ABBR.forEach(function(label, idx) {
+    var on = !!pipelineMonthSel[idx];
+    html += '<label class="btn btn-sm" style="cursor:pointer;' + (on ? 'background:var(--accent);color:#fff' : '') + '"><input type="checkbox" style="display:none" ' + (on ? 'checked' : '') + ' onchange="cvToggleMonthFilter(' + idx + ')">' + label + '</label>';
+  });
+  html += '</div>';
+
   var staleCount = pipelinesData.filter(function(p) { return isStaleProject(p) && p._status !== 'rejected'; }).length;
   var warningCount = pipelinesData.filter(function(p) { return isWarningProject(p) && p._status !== 'rejected'; }).length;
   if (staleCount > 0) {
@@ -2255,7 +2318,7 @@ function renderPipelineTab() {
   }
   if (!hasData) {
     html += '<div class="empty-state" style="padding:40px 20px"><div class="empty-state-icon">📭</div><div style="font-weight:500; margin-bottom:6px">ไม่มีโครงการที่ตรงกับเงื่อนไข</div>';
-    if (pipelineSearch || pipelineFilter !== 'all' || pipelineStatusFilter !== 'all' || staleFilter !== 'all' || cvPipeFY !== 'all') html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div><button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
+    if (_cvHasFilter) html += '<div class="hint">ลองเปลี่ยนคำค้นหา หรือกด "ล้างตัวกรอง" เพื่อดูทั้งหมด</div><button class="btn btn-sm" style="margin-top:12px" onclick="resetPipelineFilters()">✖️ ล้างตัวกรอง</button>';
     else html += '<div class="hint">หากมีโครงการ กรุณาติดต่อพนักงานขายเพื่อเพิ่มข้อมูล</div>';
     html += '</div>';
   } else {
