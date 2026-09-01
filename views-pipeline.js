@@ -9,6 +9,30 @@ function togglePipeStatus(k) { if (pipeFlt[k]) delete pipeFlt[k]; else pipeFlt[k
 function clearPipeStatusFlt() { pipeFlt = {}; render(); }
 function togglePipeBidMonth(idx) { if (pipeBidMonthFilter[idx]) delete pipeBidMonthFilter[idx]; else pipeBidMonthFilter[idx] = true; render(); }
 function clearPipeBidMonthFilter() { pipeBidMonthFilter = {}; render(); }
+
+// เผื่อ pipelineStatuses ยังไม่มี category (config เก่า) — เดาจาก id ชุด default กันปุ่มลัด Active/จบแล้วเลือกไม่ได้อะไรเลย
+function _pipeStatusIdsByCategoryOrFallback(cat) {
+  var cfg = getConfig();
+  var byCat = (cfg.pipelineStatuses || []).filter(function(s) { return s.category === cat; }).map(function(s) { return s.id; });
+  if (byCat.length) return byCat;
+  var fallback = { active: ['initial', 'on_process', 'draft_tor', 'bidding'], won: ['win', 'contracting', 'deliver'], lost: ['fail_lost'] }[cat] || [];
+  return (cfg.pipelineStatuses || []).filter(function(s) { return fallback.indexOf(s.id) !== -1; }).map(function(s) { return s.id; });
+}
+// ปุ่มลัดกรองสถานะ Active/จบแล้ว — ตั้งกล่องติ๊กให้อัตโนมัติ เหมือนที่ทำไว้ใน client-view.html แล้ว (ผู้ใช้ขอ
+// 2026-09-01 ให้เอามาใช้ในเมนู Pipeline หลักและ Dealer > Pipeline ด้วย)
+function pipeSetStatusShortcut(kind) {
+  pipeFlt = {};
+  if (kind === 'active') _pipeStatusIdsByCategoryOrFallback('active').forEach(function(id) { pipeFlt[id] = true; });
+  else if (kind === 'closed') _pipeStatusIdsByCategoryOrFallback('won').concat(_pipeStatusIdsByCategoryOrFallback('lost')).forEach(function(id) { pipeFlt[id] = true; });
+  render();
+}
+// ปุ่มลัดกรองเดือน H1/H2/Q1-Q4 (ตาม Bidding Date) — ใช้ร่วมกันทั้ง Pipeline หลักและ Dealer > Pipeline
+var PIPE_MONTH_SHORTCUT_RANGES = { h1: [0, 1, 2, 3, 4, 5], h2: [6, 7, 8, 9, 10, 11], q1: [0, 1, 2], q2: [3, 4, 5], q3: [6, 7, 8], q4: [9, 10, 11] };
+function pipeSetMonthShortcut(kind) {
+  pipeBidMonthFilter = {};
+  (PIPE_MONTH_SHORTCUT_RANGES[kind] || []).forEach(function(m) { pipeBidMonthFilter[m] = true; });
+  render();
+}
 var pipeFY = 'all';
 var pipeTaskFlt = false; // true = แสดงเฉพาะโครงการที่มี Task เปิดค้างอยู่ (ดู pipeOpenTasks ใน app.js)
 function togglePipeTaskFlt() { pipeTaskFlt = !pipeTaskFlt; render(); }
@@ -1532,6 +1556,10 @@ function rPipeline(el) {
     '</div>' +
 
     '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+    '<button class="btn bsm bo" onclick="pipeSetStatusShortcut(\'active\')">🟢 Active</button>' +
+    '<button class="btn bsm bo" onclick="pipeSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>' +
+    '</div>' +
     '<div class="pipe-sum">' +
     Object.entries(ps.summary).filter(function(e) { return e[1].count > 0; }).map(function(e) {
       var k = e[0], v = e[1];
@@ -1553,6 +1581,11 @@ function rPipeline(el) {
         (pipeTaskFlt ? 'background:#ef4444;color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">📋 มีงานค้าง (' + taskCnt + ')</span></div>';
     })() +
     '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
+    ['H1','H2','Q1','Q2','Q3','Q4'].map(function(k) {
+      return '<button class="btn bsm bo" onclick="pipeSetMonthShortcut(\'' + k.toLowerCase() + '\')">' + k + '</button>';
+    }).join('') +
+    '</div>' +
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
     ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map(function(mn, idx) {
       var on = !!pipeBidMonthFilter[idx];

@@ -21,6 +21,18 @@ function toggleDealerPipeStatus(k) { if (dealerPipeStatusFlt[k]) delete dealerPi
 function clearDealerPipeStatusFlt() { dealerPipeStatusFlt = {}; render(); }
 function toggleDealerPipeBidMonth(idx) { if (dealerPipeBidMonthFlt[idx]) delete dealerPipeBidMonthFlt[idx]; else dealerPipeBidMonthFlt[idx] = true; render(); }
 function clearDealerPipeBidMonthFlt() { dealerPipeBidMonthFlt = {}; render(); }
+// ปุ่มลัด Active/จบแล้ว + H1/H2/Q1-Q4 เหมือนเมนู Pipeline หลัก — ใช้ helper ร่วมกัน (ผู้ใช้ขอ 2026-09-01)
+function dealerPipeSetStatusShortcut(kind) {
+  dealerPipeStatusFlt = {};
+  if (kind === 'active') _pipeStatusIdsByCategoryOrFallback('active').forEach(function(id) { dealerPipeStatusFlt[id] = true; });
+  else if (kind === 'closed') _pipeStatusIdsByCategoryOrFallback('won').concat(_pipeStatusIdsByCategoryOrFallback('lost')).forEach(function(id) { dealerPipeStatusFlt[id] = true; });
+  render();
+}
+function dealerPipeSetMonthShortcut(kind) {
+  dealerPipeBidMonthFlt = {};
+  (PIPE_MONTH_SHORTCUT_RANGES[kind] || []).forEach(function(m) { dealerPipeBidMonthFlt[m] = true; });
+  render();
+}
 
 // ================================================================
 // JWT TOKEN FUNCTIONS (แบบไม่ต้องใช้ library)
@@ -1866,6 +1878,10 @@ function dealerPipelineTab(d) {
       });
       var totalAmtAll = pipes.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
       h += '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>';
+      h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+        '<button class="btn bsm bo" onclick="dealerPipeSetStatusShortcut(\'active\')">🟢 Active</button>' +
+        '<button class="btn bsm bo" onclick="dealerPipeSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>' +
+        '</div>';
       h += '<div class="pipe-sum">';
       Object.entries(statusSummary).forEach(function(e) {
         var k = e[0], v = e[1];
@@ -1879,6 +1895,11 @@ function dealerPipelineTab(d) {
       h += '</div>';
       h += pipeSelectedSubtotalHtml(dealerPipeStatusFlt, statusSummary);
       h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+      h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">';
+      ['H1','H2','Q1','Q2','Q3','Q4'].forEach(function(k) {
+        h += '<button class="btn bsm bo" onclick="dealerPipeSetMonthShortcut(\'' + k.toLowerCase() + '\')">' + k + '</button>';
+      });
+      h += '</div>';
       h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">';
       ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].forEach(function(mn, idx) {
         var on = !!dealerPipeBidMonthFlt[idx];
