@@ -2085,6 +2085,11 @@ function renderFavorites() {
   var byId = {};
   APP_MENU_REGISTRY.concat(APP_MENU_ACTIONS).forEach(function(m) { byId[m.id] = m; });
 
+  // เมนูที่ถูกยุบรวม/ลบไปแล้ว (เช่นตอน merge Quotation V2/quoteEstimator/marginAnalysis) จะไม่มีใน byId
+  // อีกต่อไป — เก็บไว้ใน favorites ต่อจะโชว์เป็น id ดิบๆ ล้างออกอัตโนมัติแทนที่จะปล่อยค้าง
+  var cleaned = favs.filter(function(id) { return byId[id]; });
+  if (cleaned.length !== favs.length) { favs = cleaned; saveFavorites(favs); }
+
   for (var i = 0; i < favs.length; i++) {
     var favId = favs[i];
     var item = byId[favId];
