@@ -151,6 +151,10 @@ function saPipelineInRange(category, start, end, saleFilter) {
     if (ids.indexOf(p.status) === -1) return false;
     if (saleFilter !== 'all' && (p.saleName || '') !== saleFilter) return false;
     var d = category === 'won' ? pipeResolvedCloseDate(p, logIdx).date : (p.expectedCloseDate || saForecastMonthDate(p) || p.registerDate || (p.created ? p.created.split('T')[0] : ''));
+    // เก็บวันที่ resolved ไว้ที่ตัว object เลย (transient ไม่ persist) ให้ผู้เรียกเอาไป bucket เองต่อได้โดยไม่ต้อง
+    // เรียกฟังก์ชันนี้ซ้ำ — saActualPaneHtml() เดิมเรียกซ้ำทีละแท่งกราฟ (6-12 ครั้ง) ทำให้ ST.getAll('pipeline')
+    // และ _pipeWonLogIndex() ถูก parse ใหม่ทั้งก้อนซ้ำๆ ต่อการ render หนึ่งครั้ง (เจอจากสแกนหาจุดช้า 2026-09-01)
+    p._saCloseDate = d;
     return d && d >= start && d < end;
   });
 }
@@ -244,9 +248,11 @@ function saActualPaneHtml() {
     '<div class="sa-stat"><div class="lbl">มูลค่าเฉลี่ย/โครงการ</div><div class="val">' + (wholePipes.length ? fmtMoney(avg) + ' ฿' : '—') + '</div></div>' +
     '</div>';
 
+  // bucket wholePipes (ดึงมาแล้วทั้งช่วงด้านบน) ตาม _saCloseDate ที่ saPipelineInRange() stash ไว้ให้ แทนเรียก
+  // saPipelineInRange() ซ้ำทีละแท่งกราฟ (เดิม 6-12 ครั้งต่อ render = ST.getAll('pipeline') parse ใหม่ซ้ำเท่านั้น)
   h += '<div class="card"><h2>ยอดขายตามช่วงเวลา <span class="hint">คลิกแท่งเพื่อดูรายละเอียดช่วงนั้น</span></h2>' +
     saBarChartHtml(period.bars.map(function(b) {
-      var v = saPipelineInRange('won', b.start, b.end, saSaleFilter).reduce(function(s, p) { return s + saAmt(p); }, 0);
+      var v = wholePipes.filter(function(p) { return p._saCloseDate >= b.start && p._saCloseDate < b.end; }).reduce(function(s, p) { return s + saAmt(p); }, 0);
       return { key: b.key, v: v, onclick: "saOpenPeriodDrillM('" + b.start + "','" + b.end + "','" + sanitize(b.key).replace(/'/g, "\\'") + "')" };
     })) +
     '</div>';
@@ -276,9 +282,13 @@ function saActualPaneHtml() {
 }
 
 function saBreakdownDealer(pipes) {
+  // dealerId → dealer index ครั้งเดียว แทนเรียก ST.getOne ต่อ dealer ที่พบใหม่ (เดิมยิง JSON.parse ทั้ง
+  // collection dealers ใหม่ทุกครั้ง — เจอจากสแกนหาจุดช้าของหน้า Sales Analytics 2026-09-01)
+  var dealerById = {};
+  ST.getAll('dealers').forEach(function(d) { dealerById[d.id] = d; });
   var map = {};
   pipes.forEach(function(p) {
-    if (!map[p.dealerId]) { var d = ST.getOne('dealers', p.dealerId); map[p.dealerId] = { id: p.dealerId, name: d ? d.name : '-', v: 0, qty: 0 }; }
+    if (!map[p.dealerId]) { var d = dealerById[p.dealerId]; map[p.dealerId] = { id: p.dealerId, name: d ? d.name : '-', v: 0, qty: 0 }; }
     map[p.dealerId].v += saAmt(p);
     map[p.dealerId].qty += saPipeItemRevenue(p).reduce(function(s, it) { return s + it.qty; }, 0);
   });

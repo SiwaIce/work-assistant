@@ -20,6 +20,28 @@ function _kpiDealers() {
   if (!_kpiCache.dealers) _kpiCache.dealers = ST.getAll('dealers');
   return _kpiCache.dealers;
 }
+// เพิ่ม 2026-09-01 (เจอจากสแกนหาจุดช้าตอนแก้ไข KPI) — getKpiRunRateLogs()/_pipeWonLogIndex() เดิมไม่ได้อยู่ใน
+// แคชนี้เลย แม้จะมี _kpiCache อยู่แล้ว ทำให้ _kpiRunRateAutoCovered() (เรียกต่อ log ต่อ category) ยังยิง
+// ST.getOne('pipeline', ...) + ST.getAll('pipeLog') ใหม่ทุกครั้งอยู่ดี
+function _kpiRunRateLogsCached() {
+  if (!_kpiCache) _kpiCache = {};
+  if (!_kpiCache.runRateLogs) _kpiCache.runRateLogs = getKpiRunRateLogs();
+  return _kpiCache.runRateLogs;
+}
+function _kpiPipelineById() {
+  if (!_kpiCache) _kpiCache = {};
+  if (!_kpiCache.pipelineById) {
+    var idx = {};
+    _kpiPipelines().forEach(function(p) { idx[p.id] = p; });
+    _kpiCache.pipelineById = idx;
+  }
+  return _kpiCache.pipelineById;
+}
+function _kpiWonLogIndex() {
+  if (!_kpiCache) _kpiCache = {};
+  if (!_kpiCache.wonLogIdx) _kpiCache.wonLogIdx = (typeof _pipeWonLogIndex === 'function') ? _pipeWonLogIndex() : {};
+  return _kpiCache.wonLogIdx;
+}
 
 function getKpiQuarterPlans() {
   var saved = localStorage.getItem('v7_kpiQuarterPlans');
@@ -284,10 +306,10 @@ function _kpiRunRateAutoCovered(l, plan, cat, startDate, endDate) {
   // เดียวกันในไตรมาสต้นทาง ทำให้หักส่วนต่างไม่ได้จริง (2026-09-01)
   if (l.splitAdjustment) return false;
   if (!l.pipeId) return false;
-  var p = ST.getOne('pipeline', l.pipeId);
+  var p = _kpiPipelineById()[l.pipeId];
   if (!p || !pipeIsWon(p)) return false;
   if ((p.saleName || '') !== plan.salesMemberName) return false;
-  var rd = pipeResolvedCloseDate(p).date;
+  var rd = pipeResolvedCloseDate(p, _kpiWonLogIndex()).date;
   if (rd < startDate || rd > endDate) return false;
   if (cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
@@ -307,14 +329,15 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
 
   if (cat.type === 'pipelineRevenue') {
     var sum = 0;
+    var wonLogIdx = _kpiWonLogIndex();
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = pipeResolvedCloseDate(p).date;
+      var rd = pipeResolvedCloseDate(p, wonLogIdx).date;
       if (rd < startDate || rd > endDate) return;
       sum += Number(p.forecastAmount) || 0;
     });
-    getKpiRunRateLogs().forEach(function(l) {
+    _kpiRunRateLogsCached().forEach(function(l) {
       if ((l.kind || 'revenue') !== 'revenue') return;
       if ((l.salesMemberName || '') !== plan.salesMemberName) return;
       if ((l.date || '') < startDate || (l.date || '') > endDate) return;
@@ -327,17 +350,18 @@ function kpiComputeActualInRange(plan, cat, startDate, endDate) {
   if (cat.type === 'pipelineModelQty') {
     var qty = 0;
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
+    var wonLogIdx2 = _kpiWonLogIndex();
     _kpiPipelines().forEach(function(p) {
       if (!pipeIsWon(p)) return;
       if ((p.saleName || '') !== plan.salesMemberName) return;
-      var rd = pipeResolvedCloseDate(p).date;
+      var rd = pipeResolvedCloseDate(p, wonLogIdx2).date;
       if (rd < startDate || rd > endDate) return;
       (getPipeItems(p) || []).forEach(function(it) {
         var m = (it.model || '').toLowerCase();
         if (keywords.some(function(k) { return m.indexOf(k) !== -1; })) qty += Number(it.qty) || 0;
       });
     });
-    getKpiRunRateLogs().forEach(function(l) {
+    _kpiRunRateLogsCached().forEach(function(l) {
       if (l.kind !== 'qty') return;
       if ((l.salesMemberName || '') !== plan.salesMemberName) return;
       if ((l.date || '') < startDate || (l.date || '') > endDate) return;
@@ -461,7 +485,7 @@ function kpiMonthlyBreakdown(plan, cat) {
   var monthlyTarget = (Number(cat.target) || 0) / 3;
   return months.map(function(m) {
     var actual = kpiComputeActualInRange(plan, cat, m.startDate, m.endDate);
-    return { label: m.label, isCurrent: m.isCurrent, target: monthlyTarget, actual: actual, pct: monthlyTarget ? (actual / monthlyTarget * 100) : 0 };
+    return { label: m.label, isCurrent: m.isCurrent, startDate: m.startDate, endDate: m.endDate, target: monthlyTarget, actual: actual, pct: monthlyTarget ? (actual / monthlyTarget * 100) : 0 };
   });
 }
 
@@ -477,10 +501,11 @@ function kpiPrevPlan(salesMemberId, currentPlan) {
 function kpiContributingRecords(plan, cat) {
   if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') {
     var keywords = (cat.modelMatch || []).map(function(s) { return s.toLowerCase(); });
+    var wonLogIdx3 = _kpiWonLogIndex();
     var records = _kpiPipelines().filter(function(p) {
       if (!pipeIsWon(p)) return false;
       if ((p.saleName || '') !== plan.salesMemberName) return false;
-      var rd = pipeResolvedCloseDate(p).date;
+      var rd = pipeResolvedCloseDate(p, wonLogIdx3).date;
       if (rd < plan.startDate || rd > plan.endDate) return false;
       if (cat.type === 'pipelineModelQty') {
         return (getPipeItems(p) || []).some(function(it) {
@@ -490,7 +515,7 @@ function kpiContributingRecords(plan, cat) {
       }
       return true;
     });
-    getKpiRunRateLogs().forEach(function(l) {
+    _kpiRunRateLogsCached().forEach(function(l) {
       var lKind = l.kind || 'revenue';
       if (cat.type === 'pipelineRevenue' && lKind !== 'revenue') return;
       if (cat.type === 'pipelineModelQty' && lKind !== 'qty') return;
@@ -522,6 +547,65 @@ function kpiContributingRecords(plan, cat) {
     });
   }
   return [];
+}
+
+// วันที่ "ที่ใช้จริง" ของแต่ละ record จาก kpiContributingRecords() — ใช้ bucket เข้ารายเดือน (showKpiMonthDetailM)
+// ต้องแยกตามชนิด record เพราะ field ที่เก็บวันที่ไม่เหมือนกัน (โครงการ Pipeline จริงใช้วันที่ปิดดีลที่ resolve
+// ได้ ไม่ใช่ p.registerDate ตรงๆ, ส่วน run-rate log ใช้ l.date ที่ถูก alias มาเป็น r.registerDate ไว้แล้ว)
+function _kpiRecordEffectiveDate(r, cat) {
+  if (cat.type === 'visitCount') return r.date || '';
+  if (cat.type === 'dealerAuthorized') return r.authorizedDate || '';
+  if (r._runRate) return r.registerDate || '';
+  return pipeResolvedCloseDate(r, _kpiWonLogIndex()).date;
+}
+
+// รายละเอียด KPI เฉพาะเดือนที่กด (จากตาราง "เป้ารายเดือน" ใน showKpiDetailM) — ผู้ใช้ขอ 2026-09-01 ให้กดดู
+// รายการของเดือนนั้นๆ ได้ตรงๆ แทนที่จะเห็นแค่ตัวเลขรวม พร้อมฟอร์มเพิ่ม/บันทึกที่ตั้งวันที่ให้ล่วงหน้าอยู่ในเดือน
+// นั้นแล้ว (ไม่ต้อง fix เป็นวันนี้เสมอ) แก้ปัญหาที่แก้ไข/เพิ่มข้อมูลเดือนก่อนหน้าทำได้ยาก
+function showKpiMonthDetailM(planId, categoryId, monthStart, monthEnd) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
+  if (!cat) return;
+  var isMoney = cat.type === 'pipelineRevenue';
+  var isQtyCat = cat.type === 'pipelineModelQty';
+  var monthLabel = KPI_MONTH_NAMES[new Date(monthStart + 'T00:00:00').getMonth()];
+  var actual = kpiComputeActualInRange(plan, cat, monthStart, monthEnd);
+  var monthlyTarget = (Number(cat.target) || 0) / 3;
+  var monthRecords = kpiContributingRecords(plan, cat).filter(function(r) {
+    var d = _kpiRecordEffectiveDate(r, cat);
+    return d && d >= monthStart && d <= monthEnd;
+  });
+
+  var h = '<button class="btn bsm bo" onclick="showKpiDetailM(\'' + planId + '\',\'' + categoryId + '\')" style="margin-bottom:10px">← กลับไปดูทั้งไตรมาส</button>';
+  h += '<div style="text-align:center;margin-bottom:10px">';
+  h += '<div style="font-size:24px;font-weight:800">' + (isMoney ? fmtMoney(actual) : actual) + ' <span style="font-size:14px;color:var(--text2);font-weight:400">/ ' + (isMoney ? fmtMoney(monthlyTarget) : (Math.round(monthlyTarget * 10) / 10)) + ' ' + (cat.unit || '') + '</span></div>';
+  h += '</div>';
+
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">รายการที่นับเข้าเดือนนี้ (' + monthRecords.length + ')</div>';
+  h += '<div style="max-height:280px;overflow-y:auto">' + _kpiRecordsListHtml(monthRecords, cat, planId) + '</div>';
+
+  if (cat.type === 'pipelineRevenue' || cat.type === 'pipelineModelQty') {
+    h += '<div style="display:flex;gap:6px;margin-top:8px">';
+    h += '<button class="btn bp bsm" style="flex:1" onclick="showKpiAddProjectM(\'' + planId + '\',\'' + categoryId + '\',\'' + monthStart + '\')">➕ เพิ่มโครงการเข้าเดือน' + monthLabel + '</button>';
+    h += '<button class="btn bo bsm" style="flex:1" onclick="_kpiToggleRunRateForm()">+ บันทึก' + (isQtyCat ? 'จำนวน' : 'ยอด') + 'เอง</button>';
+    h += '</div>';
+    h += '<div id="kpi_rr_form" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px">';
+    h += '<input type="hidden" id="kpi_rr_kind" value="' + (isQtyCat ? 'qty' : 'revenue') + '">';
+    h += '<div class="fg"><label>วันที่</label><input type="date" id="kpi_rr_date" value="' + monthStart + '"></div>';
+    if (isQtyCat) {
+      h += '<div class="fg"><label>จำนวน (หน่วย)</label><input type="number" id="kpi_rr_amount" placeholder="1"></div>';
+      h += '<div class="fg"><label>รุ่นสินค้า</label><select id="kpi_rr_item">' + (cat.modelMatch || []).map(function(k) { return '<option value="' + sanitize(k) + '">' + sanitize(k) + '</option>'; }).join('') + '</select></div>';
+    } else {
+      h += '<div class="fg"><label>จำนวนเงิน (บาท)</label><input type="number" id="kpi_rr_amount" placeholder="15000"></div>';
+      h += '<div class="fg"><label>สินค้า / รายการ (ไม่บังคับ)</label><input type="text" id="kpi_rr_item" placeholder="เช่น TB65 Battery, DJI Care"></div>';
+    }
+    h += '<div class="fg"><label>หมายเหตุ (ไม่บังคับ)</label><input type="text" id="kpi_rr_note" placeholder="ขายหน้าร้าน / ลูกค้าประจำ"></div>';
+    h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="saveKpiRunRateLog(\'' + planId + '\',\'' + categoryId + '\')">บันทึก</button><button class="btn bo" style="flex:1" onclick="_kpiToggleRunRateForm()">ยกเลิก</button></div>';
+    h += '</div>';
+  }
+
+  openM('📅 เดือน' + monthLabel + ' — ' + sanitize(cat.label), h);
 }
 
 function kpiAchievementPct(plan, cat) {
@@ -653,13 +737,14 @@ function kpiDealerPlanBreakdown(plan) {
   var myDealers = _kpiDealers().filter(function(d) { return (d.saleName || '') === plan.salesMemberName; });
   var wonByDealer = {}, potByDealer = {}, dealsByDealer = {};
   var planCount = 0, winCount = 0, deliverCount = 0;
+  var wonLogIdx4 = _kpiWonLogIndex();
   _kpiPipelines().forEach(function(p) {
     if ((p.saleName || '') !== plan.salesMemberName || !p.dealerId) return;
     var won = pipeIsWon(p), active = pipeIsActive(p);
     if (!won && !active) return; // Fail&Lost หรือสถานะอื่นที่ไม่นับใน Plan/Actual — ไม่แสดง
     // ดีล won ใช้วันที่ปิดดีลที่ resolve ได้ (เดียวกับที่ kpiComputeActual ใช้) ส่วนดีลที่ยังเปิดอยู่ (active/Plan)
     // ยังไม่มีวันปิดจริงให้ resolve ได้ ใช้ registerDate เป็นตัวแทนช่วงเวลาเหมือนเดิม
-    var rd = won ? pipeResolvedCloseDate(p).date : (p.registerDate || '');
+    var rd = won ? pipeResolvedCloseDate(p, wonLogIdx4).date : (p.registerDate || '');
     if (rd < plan.startDate || rd > plan.endDate) return;
     if (won) wonByDealer[p.dealerId] = (wonByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
     else potByDealer[p.dealerId] = (potByDealer[p.dealerId] || 0) + (Number(p.forecastAmount) || 0);
@@ -697,10 +782,11 @@ function kpiProductSalesBreakdown(plan) {
   if (!catalog.length) return null;
 
   var qtyByName = {}, dealsByName = {};
+  var wonLogIdx5 = _kpiWonLogIndex();
   _kpiPipelines().forEach(function(p) {
     if (!pipeIsWon(p)) return;
     if ((p.saleName || '') !== plan.salesMemberName) return;
-    var rd = pipeResolvedCloseDate(p).date;
+    var rd = pipeResolvedCloseDate(p, wonLogIdx5).date;
     if (rd < plan.startDate || rd > plan.endDate) return;
     var actualType = p.status === 'deliver' ? 'Deliver' : 'Win';
     (getPipeItems(p) || []).forEach(function(it) {
@@ -1442,7 +1528,7 @@ function showKpiDetailM(planId, categoryId) {
         var mColor = m.pct >= 100 ? 'var(--good)' : m.pct >= 50 ? 'var(--status-info)' : 'var(--bad)';
         var mActualShow = isMoney ? fmtMoneyShort(m.actual) : Math.round(m.actual * 10) / 10;
         var mTargetShow = isMoney ? fmtMoneyShort(m.target) : Math.round(m.target * 10) / 10;
-        h += '<div class="kpi-month-cell' + (m.isCurrent ? ' cur' : '') + '">';
+        h += '<div class="kpi-month-cell' + (m.isCurrent ? ' cur' : '') + '" style="cursor:pointer" onclick="showKpiMonthDetailM(\'' + planId + '\',\'' + categoryId + '\',\'' + m.startDate + '\',\'' + m.endDate + '\')" title="ดูรายละเอียดของเดือนนี้">';
         h += '<div class="kpi-month-label">' + m.label + (m.isCurrent ? ' (เดือนนี้)' : '') + '</div>';
         h += '<div class="kpi-month-val" style="color:' + mColor + '">' + mActualShow + ' / ' + mTargetShow + '</div>';
         h += '</div>';
@@ -1606,7 +1692,9 @@ function _kpiApDefaultStatusSel() {
   return sel;
 }
 
-function showKpiAddProjectM(planId, categoryId) {
+var _kpiApPresetDate = null; // เดือนที่กดมาจาก showKpiMonthDetailM() (ถ้ามี) — ใช้ตั้งค่าเริ่มต้นของวันที่ใน
+// ฟอร์มยืนยันแทนวันนี้เสมอ (ผู้ใช้ขอ 2026-09-01 ให้เพิ่ม/แก้ข้อมูลเดือนก่อนหน้าง่ายขึ้น)
+function showKpiAddProjectM(planId, categoryId, presetDate) {
   _kpiApStatusSel = _kpiApDefaultStatusSel();
   _kpiApMonth = '';
   _kpiApSearch = '';
@@ -1617,6 +1705,7 @@ function showKpiAddProjectM(planId, categoryId) {
   _kpiApExpanded = {};
   _kpiApDockOnly = false;
   _kpiApPicking = null;
+  _kpiApPresetDate = presetDate || null;
   _kpiApRenderModal(planId, categoryId);
   if (typeof setMWide === 'function') setMWide(1100);
 }
@@ -1817,7 +1906,7 @@ function _kpiApOpenPickForm(planId, categoryId, pipeId) {
   }
   h += '<div class="fg"><label>' + (isQty ? 'จำนวน (หน่วย)' : 'ยอดเงิน (บาท)') + ' ที่จะนับเข้าไตรมาสนี้</label>' +
     '<input type="number" id="kpi_ap_pick_amount" value="' + auto.amount + '"></div>';
-  h += '<div class="fg"><label>วันที่จะนับเข้า KPI</label><input type="date" id="kpi_ap_pick_date" value="' + _td() + '"></div>';
+  h += '<div class="fg"><label>วันที่จะนับเข้า KPI</label><input type="date" id="kpi_ap_pick_date" value="' + (_kpiApPresetDate || _td()) + '"></div>';
   h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="_kpiApConfirmPick(\'' + planId + '\',\'' + categoryId + '\',\'' + pipeId + '\')">💾 ยืนยันบันทึก</button>' +
     '<button class="btn bo" style="flex:1" onclick="_kpiApCancelPick(\'' + planId + '\',\'' + categoryId + '\')">ยกเลิก</button></div>';
   h += '</div>';

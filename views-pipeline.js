@@ -1169,6 +1169,9 @@ function _pipeMoreMenuHtml() {
 // (2026-08-26 ตามคำขอ) ทั้งคู่เป็น state ชั่วคราวระหว่างเปิด modal นี้ — reset ทุกครั้งที่เปิดใหม่จากเมนู
 var _recalcStatusSel = null;
 var _recalcLevelOverride = {};
+var _recalcSkipTimelineLog = false; // ติ๊ก "ไม่ต้องบันทึก Timeline log" แล้ว = true — ผู้ใช้ขอ 2026-09-01
+// เพราะ log "💰 Recalculate ราคาตาม Level" ที่ auto สร้างต่อโครงการไปติดอยู่ในคอลัมน์ Update ตอน export ปนกับ
+// Update จริงจากทีมขาย — ปิดได้ไม่กระทบ Undo เพราะ undo ใช้ RECALC_UNDO_KEY แยกต่างหาก ไม่ได้อ่านจาก log นี้
 
 function _recalcDefaultStatusSel() {
   var cfg = getConfig();
@@ -1180,11 +1183,15 @@ function _recalcDefaultStatusSel() {
 function _recalcPriceByLevelPreview() {
   var changes = [];
   var totalDelta = 0, skippedNoProduct = 0;
+  // build dealerId → dealer index once แทนเรียก ST.getOne ต่อแถว (เจอจากสแกนหาจุดช้า 2026-09-01 — เดิมยิง
+  // JSON.parse ทั้ง collection dealers ใหม่ทุกแถว Pipeline)
+  var dealerById = {};
+  ST.getAll('dealers').forEach(function(d) { dealerById[d.id] = d; });
   ST.getAll('pipeline').forEach(function(p) {
     if (_recalcStatusSel && _recalcStatusSel[p.status] === false) return;
     var items = getPipeItems(p) || [];
     if (!items.length) return;
-    var dealer = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
+    var dealer = p.dealerId ? dealerById[p.dealerId] : null;
     var level = _recalcLevelOverride[p.id] || (dealer ? (dealer.level || 'Other') : 'Other');
     var changedItems = false;
     var newItems = items.map(function(it) {
@@ -1211,11 +1218,32 @@ function _recalcPriceByLevelPreview() {
 function showRecalcPriceByLevelM() {
   _recalcStatusSel = _recalcDefaultStatusSel();
   _recalcLevelOverride = {};
+  _recalcSkipTimelineLog = false;
   _recalcRenderModal();
 }
 
 function _recalcToggleStatus(id, checked) { _recalcStatusSel[id] = checked; _recalcRenderModal(); }
 function _recalcSetLevelOverride(pipeId, level) { _recalcLevelOverride[pipeId] = level; _recalcRenderModal(); }
+function _recalcToggleSkipLog(checked) { _recalcSkipTimelineLog = checked; }
+
+// ลบ Timeline log ของ Recalculate ที่เคยบันทึกไว้ก่อนที่จะมีตัวเลือก "ไม่ต้องบันทึก" (ผู้ใช้ขอ 2026-09-01) —
+// จับด้วย prefix ข้อความเดียวกับที่ applyRecalcPriceByLevel() ใช้สร้าง ('💰 Recalculate ราคาตาม Level')
+function _recalcOldLogCount() {
+  return ST.getAll('pipeLog').filter(function(l) { return (l.content || '').indexOf('💰 Recalculate ราคาตาม Level') === 0; }).length;
+}
+function removeOldRecalcTimelineLogs() {
+  var toDelete = ST.getAll('pipeLog').filter(function(l) { return (l.content || '').indexOf('💰 Recalculate ราคาตาม Level') === 0; });
+  if (!toDelete.length) { toast('ไม่มี Timeline log ของ Recalculate ค้างอยู่เลย'); return; }
+  if (!confirm('⚠️ ลบ Timeline log ของ Recalculate ที่เคยบันทึกไว้ ' + toDelete.length + ' รายการถาวร?\nกู้คืนไม่ได้')) return;
+  var idSet = {};
+  toDelete.forEach(function(l) { idSet[l.id] = true; });
+  ST.deleteWhere('pipeLog', function(l) { return idSet[l.id]; });
+  toast('🗑️ ลบแล้ว ' + toDelete.length + ' รายการ');
+  if (typeof syncDeleteFromFirebase === 'function') {
+    Promise.all(toDelete.map(function(l) { return syncDeleteFromFirebase('pipelog', l.id); }));
+  }
+  _recalcRenderModal();
+}
 
 function _recalcRenderModal() {
   var cfg = getConfig();
@@ -1232,6 +1260,11 @@ function _recalcRenderModal() {
 
   if (!r.changes.length) {
     h += '<div style="text-align:center;padding:16px;color:var(--text3)">ไม่มีโครงการไหนในสถานะที่เลือกที่ราคาต้องเปลี่ยนเลย ✅</div>';
+    var oldRecalcLogCount0 = _recalcOldLogCount();
+    if (oldRecalcLogCount0) {
+      h += '<div style="font-size:.68rem;color:var(--text2);text-align:center">พบ Timeline log ของ Recalculate ที่เคยบันทึกไว้ก่อนหน้า ' + oldRecalcLogCount0 + ' รายการ — ' +
+        '<span style="color:#ef4444;cursor:pointer;text-decoration:underline" onclick="removeOldRecalcTimelineLogs()">ลบทั้งหมด</span></div>';
+    }
     openM('💰 Recalculate ราคาตาม Level', h);
     return;
   }
@@ -1250,6 +1283,14 @@ function _recalcRenderModal() {
   });
   if (r.changes.length > 50) h += '<div style="text-align:center;color:var(--text2);font-size:.7rem;padding:6px">...และอีก ' + (r.changes.length - 50) + ' โครงการ</div>';
   h += '</div>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2);margin-top:10px;cursor:pointer">' +
+    '<input type="checkbox" style="width:auto" ' + (_recalcSkipTimelineLog ? 'checked' : '') + ' onchange="_recalcToggleSkipLog(this.checked)">' +
+    'ไม่ต้องบันทึก Timeline log ของการ Recalculate นี้ (กันไปติดคอลัมน์ Update ตอน export ปนกับของทีมขาย)</label>';
+  var oldRecalcLogCount = _recalcOldLogCount();
+  if (oldRecalcLogCount) {
+    h += '<div style="font-size:.68rem;color:var(--text2);margin-top:4px">พบ Timeline log ของ Recalculate ที่เคยบันทึกไว้ก่อนหน้า ' + oldRecalcLogCount + ' รายการ — ' +
+      '<span style="color:#ef4444;cursor:pointer;text-decoration:underline" onclick="removeOldRecalcTimelineLogs()">ลบทั้งหมด</span></div>';
+  }
   h += '<button class="btn bp btn-full" style="margin-top:10px" onclick="applyRecalcPriceByLevel()">✅ ยืนยัน Recalculate ' + r.changes.length + ' โครงการ</button>';
   openM('💰 Recalculate ราคาตาม Level', h);
 }
@@ -1279,7 +1320,9 @@ function applyRecalcPriceByLevel() {
   r.changes.forEach(function(c) {
     var updated = ST.update('pipeline', c.p.id, { items: c.newItems, forecastAmount: c.newForecast });
     if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
-    ST.add('pipeLog', { pipeId: c.p.id, type: 'update', content: '💰 Recalculate ราคาตาม Level (' + c.level + '): ' + fmtMoney(c.oldForecast) + ' → ' + fmtMoney(c.newForecast), date: _nw() });
+    if (!_recalcSkipTimelineLog) {
+      ST.add('pipeLog', { pipeId: c.p.id, type: 'update', content: '💰 Recalculate ราคาตาม Level (' + c.level + '): ' + fmtMoney(c.oldForecast) + ' → ' + fmtMoney(c.newForecast), date: _nw() });
+    }
   });
   _setRecalcUndoSnapshot(snapshot);
   closeMForce();
@@ -1315,6 +1358,10 @@ function rPipeline(el) {
   // (แปลง JSON ทั้ง collection ทาสก์ใหม่ทุกครั้ง ไม่มีแคช) วนทุกโปรเจกต์ = O(n²) ตอนข้อมูลเยอะ
   var _pipeOpenTaskIdx = {};
   ST.getAll('tasks').forEach(function(t) { if (t.status !== 'completed' && t.pipeId) _pipeOpenTaskIdx[t.pipeId] = true; });
+  // dealerId → dealer index ครั้งเดียวตรงนี้ ใช้ทั้งตอนค้นหา (เดิมยิง ST.getOne ต่อแถวทุกครั้งที่พิมพ์ค้นหา —
+  // เจอจากสแกนหาจุดช้า 2026-09-01) และใช้ต่อที่ _dealerMap ด้านล่างแทนสร้างซ้ำ
+  var _dealerMap = {};
+  ST.getAll('dealers').forEach(function(dl) { _dealerMap[dl.id] = dl; });
 
   var pipes = allPipes;
   if (Object.keys(pipeFlt).length) pipes = pipes.filter(function(p) { return pipeFlt[p.status]; });
@@ -1356,7 +1403,7 @@ function rPipeline(el) {
   if (pipeSearch) {
     var q = pipeSearch.toLowerCase();
     pipes = pipes.filter(function(p) {
-      var d = ST.getOne('dealers', p.dealerId);
+      var d = _dealerMap[p.dealerId];
       if (pipeSearchMode === 'rowno') return String(p.rowNo || '').toLowerCase().indexOf(q) !== -1;
       if (pipeSearchMode === 'project') return (p.projectName || '').toLowerCase().indexOf(q) !== -1;
       if (pipeSearchMode === 'dealer') return ((d && d.name) || '').toLowerCase().indexOf(q) !== -1;

@@ -55,22 +55,34 @@ function getDemoProducts() {
 // CORE DATA MANAGEMENT
 // ================================================================
 
-// โค้ดเดิม (มีปัญหา)
+// เดิม JSON.parse ทั้งก้อนใหม่ทุกครั้งที่เรียก ไม่มีแคชเลย (หนักกว่า ST เสียอีก เพราะแม้แต่ ST ยังมีคอมเมนต์
+// อธิบายว่าตั้งใจไม่แคช — ตัวนี้ไม่มีการตัดสินใจอะไรเลย) พบว่าเป็นสาเหตุหลักที่ทำให้ "Recalculate ราคาตามเลเวล"
+// และหน้า import Pipeline ช้ามาก เพราะถูกเรียกซ้ำต่อแถว/ต่อ item (2026-09-01) — แคชด้วยการเทียบ raw string
+// ของ localStorage เอง (ไม่ใช่ตั้ง dirty flag ตอนเขียน) ปลอดภัยแน่นอนต่อให้มีจุดเขียน localStorage ตรงๆ
+// หลายจุด (เช่นใน firebase-sync.js) ที่ไม่ได้ผ่าน saveProductsData — เพราะเช็คเนื้อหาจริงทุกครั้ง ไม่มีทางค้าง
+var _productsRawCache = null;
+var _productsParsedCache = null;
 function getProductsData() {
   try {
     var saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+    if (saved && saved === _productsRawCache) return _productsParsedCache;
     if (saved) {
       var parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        return { models: parsed, bundles: [], demoUnits: [], lastUpdated: null };
+        parsed = { models: parsed, bundles: [], demoUnits: [], lastUpdated: null };
+      } else {
+        if (!parsed.models) parsed.models = [];
+        if (!parsed.bundles) parsed.bundles = [];
+        if (!parsed.demoUnits) parsed.demoUnits = [];
       }
-      if (!parsed.models) parsed.models = [];
-      if (!parsed.bundles) parsed.bundles = [];
-      if (!parsed.demoUnits) parsed.demoUnits = [];
+      _productsRawCache = saved;
+      _productsParsedCache = parsed;
       return parsed;
     }
   } catch(e) {}
-  return { models: [], bundles: [], demoUnits: [], lastUpdated: null };
+  _productsRawCache = null;
+  _productsParsedCache = { models: [], bundles: [], demoUnits: [], lastUpdated: null };
+  return _productsParsedCache;
 }
 // เขียนแค่ localStorage เฉยๆ ไม่ push ขึ้น cloud — ใช้ตอน "รับ" ข้อมูลที่เพิ่ง pull มาจาก cloud เอง
 // (ดู loadProductsFromFirebase) ถ้าใช้ saveProductsData ธรรมดาจะ push ข้อมูลที่เพิ่ง pull กลับขึ้นไปทันที
