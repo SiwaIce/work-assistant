@@ -1916,15 +1916,11 @@ var APP_MENU_REGISTRY = [
   {id: 'demoTracker', icon: '🚁', name: 'Demo Equipment'},
   {id: 'kpiScorecard', icon: '📊', name: 'KPI เซลล์'},
   {id: 'quotationV2', icon: '💰', name: 'Quotation V2'},
-  {id: 'quoteEstimator', icon: '💡', name: 'ประเมินราคาคร่าวๆ'},
-  {id: 'marginAnalysis', icon: '📊', name: 'Margin Analysis'},
   {id: 'knowledge', icon: '📚', name: 'Knowledge'},
   {id: 'exports', icon: '📤', name: 'Export'},
   {id: 'health', icon: '🏥', name: 'Data Health'},
   {id: 'reminders', icon: '🔔', name: 'แจ้งเตือน'},
   {id: 'customerUpdateHistory', icon: '📜', name: 'ประวัติอัพเดท'},
-  {id: 'customerForecastUpdates', icon: '📦', name: 'แผนซื้อลูกค้า'},
-  {id: 'customerForecastSummary', icon: '📊', name: 'สรุป Forecast ลูกค้า'},
   {id: 'auditLog', icon: '📜', name: 'Audit Log'},
   {id: 'admin', icon: '⚙️', name: 'ตั้งค่า'}
 ];
@@ -3854,6 +3850,20 @@ function autoSyncPipelineToCustomer(pipeId) {
   ref.set(customerData, { merge: true }).catch(function(e) { console.warn('autoSyncPipelineToCustomer error:', e); });
 }
 
+// ทางลัดสลับไปมาระหว่าง 3 หน้าที่ใช้ข้อมูล Firestore dealerUpdates ชุดเดียวกัน (ประวัติ/คิวรออนุมัติ/สรุป) —
+// เดิมเป็น 3 เมนูแยกใน sidebar ยุบมารวมเป็นปุ่มสลับแทนเพื่อลดจำนวนเมนู (2026-08-31) หน้าเดิมทั้ง 3 ไม่ได้แก้/
+// ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกใน sidebar อีก 2 อัน (เหลือ customerUpdateHistory)
+function _cuTabsHtml(active) {
+  var tabs = [
+    { id: 'customerUpdateHistory', label: '📜 ประวัติอัพเดท' },
+    { id: 'customerForecastUpdates', label: '🛒 แผนซื้อลูกค้า' },
+    { id: 'customerForecastSummary', label: '🧾 สรุป Forecast' }
+  ];
+  return '<div style="margin-bottom:10px">' + tabs.map(function(t) {
+    return '<button class="btn bsm ' + (t.id === active ? 'bp' : 'bo') + '" ' + (t.id === active ? '' : 'onclick="go(\'' + t.id + '\')"') + ' style="margin-right:4px">' + t.label + '</button>';
+  }).join('') + '</div>';
+}
+
 // ================================================================
 // CUSTOMER UPDATE HISTORY - ดูประวัติการอัพเดทของลูกค้า
 // ================================================================
@@ -3889,8 +3899,8 @@ function rCustomerUpdateHistory(el) {
     <option value="approved" ${historyFilterStatus === 'approved' ? 'selected' : ''}>🟢 อนุมัติแล้ว</option>
     <option value="rejected" ${historyFilterStatus === 'rejected' ? 'selected' : ''}>🔴 ปฏิเสธ</option>
   `;
-  
-  var html = `
+
+  var html = _cuTabsHtml('customerUpdateHistory') + `
     <div class="card">
       <h2>📅 ช่วงเวลา</h2>
       <div class="fr">
@@ -4218,7 +4228,7 @@ function rCustomerForecastSummary(el) {
     dealerOpts += '<option value="' + dealers[i].id + '"' + (fcSummaryDealer === dealers[i].id ? ' selected' : '') + '>' + sanitize(dealers[i].name) + '</option>';
   }
 
-  var html = `
+  var html = _cuTabsHtml('customerForecastSummary') + `
     <div class="card">
       <h2>🔍 ตัวกรอง</h2>
       <div class="fr">
@@ -4575,11 +4585,11 @@ function rCustomerForecastUpdates(el) {
     }
     
     if (pendingCount === 0) {
-      el.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขอแผนการสั่งซื้อจากลูกค้า</p></div></div>';
+      el.innerHTML = _cuTabsHtml('customerForecastUpdates') + '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขอแผนการสั่งซื้อจากลูกค้า</p></div></div>';
       return;
     }
-    
-    var html = '<div class="card"><h2>📦 แผนการสั่งซื้อจากลูกค้า (' + pendingCount + ')</h2>';
+
+    var html = _cuTabsHtml('customerForecastUpdates') + '<div class="card"><h2>📦 แผนการสั่งซื้อจากลูกค้า (' + pendingCount + ')</h2>';
     
     // Batch actions
     html += '<div class="bg" style="margin-bottom:12px">';

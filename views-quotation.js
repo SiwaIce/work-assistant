@@ -2,6 +2,20 @@
 // QUOTATION MODULE V2 - PROFESSIONAL QUOTATION MANAGEMENT
 // ================================================================
 
+// ทางลัดสลับไปมาระหว่าง 3 หน้าที่ใช้ข้อมูล v7_quotations_v2 ชุดเดียวกัน (list/ประเมินราคาไว/margin) — เดิม
+// เป็น 3 เมนูแยกใน sidebar ยุบมารวมเป็นปุ่มสลับแทนเพื่อลดจำนวนเมนู (2026-08-31) หน้าเดิมทั้ง 3 ไม่ได้แก้/ย้าย
+// อะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกใน sidebar อีก 2 อัน (เหลือ quotationV2)
+function _qtTabsHtml(active) {
+  var tabs = [
+    { id: 'quotationV2', label: '💰 Quotation V2' },
+    { id: 'quoteEstimator', label: '💡 ประเมินราคาคร่าวๆ' },
+    { id: 'marginAnalysis', label: '📊 Margin Analysis' }
+  ];
+  return '<div style="margin-bottom:10px">' + tabs.map(function(t) {
+    return '<button class="btn bsm ' + (t.id === active ? 'bp' : 'bo') + '" ' + (t.id === active ? '' : 'onclick="go(\'' + t.id + '\')"') + ' style="margin-right:4px">' + t.label + '</button>';
+  }).join('') + '</div>';
+}
+
 // ================================================================
 // GLOBAL VARIABLES
 // ================================================================
@@ -616,9 +630,7 @@ function rQuoteEstimator(el) {
   estimatorItems = [];
 
   var html = '<div style="max-width:640px;margin:0 auto">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-  html += navHistory.length ? '<a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a>' : '<button class="btn bo" onclick="go(\'quotationV2\')">← กลับ</button>';
-  html += '</div>';
+  html += _qtTabsHtml('quoteEstimator');
   html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">ไม่ผูก Dealer · ไม่ใช่ใบเสนอราคาจริง — แค่ดูยอดรวมเร็วๆ</div>';
 
   html += '<div id="estPresetZone"></div>';
@@ -910,13 +922,12 @@ function rQuotationV2(el) {
     dealerMap[dealers[i].id] = dealers[i];
   }
   
-  var html = '';
-  
+  var html = _qtTabsHtml('quotationV2');
+
   // Header with create button
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
   html += '<h2 style="font-size:1rem;margin:0">📋 รายการใบเสนอราคา</h2>';
   html += '<div style="display:flex;gap:8px">';
-  html += '<button class="btn bo" onclick="go(\'quoteEstimator\')">💡 ประเมินราคาคร่าวๆ</button>';
   html += '<button class="btn bp" onclick="showCreateQuotationModal()" style="background:#22c55e">➕ สร้างใบเสนอราคา</button>';
   html += '</div>';
   html += '</div>';
@@ -2326,6 +2337,7 @@ function rMarginAnalysis(el) {
   var marColor = avgMargin >= 10 ? '#22c55e' : (avgMargin >= 5 ? '#f59e0b' : '#ef4444');
 
   var html = '<div style="max-width:1200px;margin:0 auto">';
+  html += _qtTabsHtml('marginAnalysis');
 
   // Summary cards
   html += '<div class="sr" style="margin-bottom:16px">';
