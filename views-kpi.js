@@ -1964,7 +1964,10 @@ function _kpiApConfirmPick(planId, categoryId, pipeId) {
   // ข้ามไตรมาสจะเกินยอดจริงของโครงการ — ใส่ splitAdjustment:true ให้ _kpiRunRateAutoCovered() ไม่ข้ามนับ log นี้
   var originDate = pipeIsWon(p) ? pipeResolvedCloseDate(p).date : null;
   var originInThisQuarter = originDate && originDate >= plan.startDate && originDate <= plan.endDate;
-  var crossQuarterMove = !!(originDate && !originInThisQuarter);
+  // หักปรับเฉพาะตอนที่ auto-detect เจอยอดจริง (auto.amount > 0) เท่านั้น — ถ้าไม่เจอ (เช่นชื่อสินค้าไม่ตรงกับ
+  // modelMatch เป๊ะ ตามที่แก้ไว้ให้กรอกเองได้แล้ว) แปลว่าไตรมาส origin ไม่เคยถูกนับอัตโนมัติจากโครงการนี้เลย
+  // ไม่มีอะไรให้หัก ถ้าหักไปจะทำให้ไตรมาส origin ติดลบผิดๆ (ผู้ใช้เจอ 2026-09-01 หลังแก้ให้กรอกเองได้)
+  var crossQuarterMove = !!(originDate && !originInThisQuarter && auto.amount > 0);
   if (crossQuarterMove) {
     logs.push({
       id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + 'adj',
