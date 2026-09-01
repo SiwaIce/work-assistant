@@ -280,6 +280,9 @@ function saveKpiRunRateLogs(list) {
 // วันที่/ชื่อเซลยังไม่ถูก) เอาโครงการจริงมานับ manual ไปพลางก่อน พอไปแก้ต้นทางให้ถูกจนโครงการนั้นเข้าเกณฑ์
 // อัตโนมัติเองแล้ว ฟังก์ชันนี้จะบอกให้ข้าม log นี้ตอนรวมยอด กันนับซ้ำ — ไม่ต้องมาลบ log เองด้วยมือ (2026-08-26)
 function _kpiRunRateAutoCovered(l, plan, cat, startDate, endDate) {
+  // log หักปรับจากการแบ่งงวด (ดู _kpiApConfirmPick) ต้องนับเสมอ ไม่งั้นจะโดนข้ามเหมือน log ปกติที่ผูก pipeId
+  // เดียวกันในไตรมาสต้นทาง ทำให้หักส่วนต่างไม่ได้จริง (2026-09-01)
+  if (l.splitAdjustment) return false;
   if (!l.pipeId) return false;
   var p = ST.getOne('pipeline', l.pipeId);
   if (!p || !pipeIsWon(p)) return false;
@@ -1589,9 +1592,12 @@ var _kpiApStatusSel = null;
 var _kpiApMonth = '';
 var _kpiApSearch = '';
 var _kpiApDealerId = ''; // กรองตาม Dealer เพิ่ม (ผู้ใช้ขอ 2026-08-27) — '' = ทุก Dealer
+var _kpiApSalesName = ''; // กรองตามชื่อเซล (saleName บนโครงการ) — '' = ทุกเซล (ผู้ใช้ขอ 2026-09-01)
+var _kpiApAmountMin = ''; var _kpiApAmountMax = ''; // กรองช่วงยอด Forecast — '' = ไม่จำกัด (ผู้ใช้ขอ 2026-09-01)
 var _kpiApExpanded = {}; // pipeId -> true ถ้ากดขยายดูรายละเอียดสินค้าอยู่ — เก็บไว้กันยุบตอน re-render จาก filter อื่น
 var _kpiApDockOnly = false; // ติ๊กแล้วโชว์เฉพาะโครงการที่มี Dock (ใช้เกณฑ์เดียวกับคอลัมน์ "Dock" ตอน export —
 // g.dock || g.dock3 จาก _pipeModelQtyByGroup) ช่วยหาโครงการมาเพิ่มเข้าหมวด Dock (dock3) ได้ง่ายขึ้น (ผู้ใช้ขอ 2026-08-27)
+var _kpiApPicking = null; // {pipeId} ระหว่างเปิดฟอร์มยืนยันยอด/วันที่ก่อนบันทึกจริง (ผู้ใช้ขอ 2026-09-01) — null = ยังไม่ได้กด "+ เลือก"
 
 function _kpiApDefaultStatusSel() {
   var cfg = getConfig();
@@ -1605,9 +1611,14 @@ function showKpiAddProjectM(planId, categoryId) {
   _kpiApMonth = '';
   _kpiApSearch = '';
   _kpiApDealerId = '';
+  _kpiApSalesName = '';
+  _kpiApAmountMin = '';
+  _kpiApAmountMax = '';
   _kpiApExpanded = {};
   _kpiApDockOnly = false;
+  _kpiApPicking = null;
   _kpiApRenderModal(planId, categoryId);
+  if (typeof setMWide === 'function') setMWide(1100);
 }
 
 function _kpiApHasDock(p) {
@@ -1617,10 +1628,15 @@ function _kpiApHasDock(p) {
 
 function _kpiApFilteredProjects() {
   var q = (_kpiApSearch || '').trim().toLowerCase();
+  var amtMin = _kpiApAmountMin !== '' ? Number(_kpiApAmountMin) : null;
+  var amtMax = _kpiApAmountMax !== '' ? Number(_kpiApAmountMax) : null;
   return ST.getAll('pipeline').filter(function(p) {
     if (_kpiApStatusSel && _kpiApStatusSel[p.status] === false) return false;
     if (_kpiApMonth && (!p.biddingDate || p.biddingDate.slice(0, 7) !== _kpiApMonth)) return false;
     if (_kpiApDealerId && p.dealerId !== _kpiApDealerId) return false;
+    if (_kpiApSalesName && (p.saleName || '') !== _kpiApSalesName) return false;
+    if (amtMin !== null && (Number(p.forecastAmount) || 0) < amtMin) return false;
+    if (amtMax !== null && (Number(p.forecastAmount) || 0) > amtMax) return false;
     if (_kpiApDockOnly && !_kpiApHasDock(p)) return false;
     if (q) {
       var dl = p.dealerId ? ST.getOne('dealers', p.dealerId) : null;
@@ -1662,7 +1678,7 @@ function _kpiApListHtml(planId, categoryId) {
       (dl ? ' <span style="color:var(--text2)">— ' + sanitize(dl.name) + '</span>' : '') +
       ' <span style="color:var(--text2)">' + fmtMoneyShort(p.forecastAmount) + '</span> ' +
       (typeof pipeTag === 'function' ? pipeTag(p.status) : '') + '</span></span>' +
-      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiApPick(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')">+ เลือก</button></div>' +
+      '<button class="btn bp bsm" style="flex-shrink:0" onclick="_kpiApOpenPickForm(\'' + planId + '\',\'' + categoryId + '\',\'' + p.id + '\')">+ เลือก</button></div>' +
       (expanded ? _kpiApDetailHtml(p) : '') +
       '</div>';
   }).join('');
@@ -1696,6 +1712,18 @@ function _kpiApToggleDockOnly(planId, categoryId, checked) {
   if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
 }
 
+function _kpiApSetSales(planId, categoryId, val) {
+  _kpiApSalesName = val;
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
+function _kpiApSetAmount(planId, categoryId, which, val) {
+  if (which === 'min') _kpiApAmountMin = val; else _kpiApAmountMax = val;
+  var listEl = document.getElementById('kpi_ap_list');
+  if (listEl) listEl.innerHTML = _kpiApListHtml(planId, categoryId);
+}
+
 function _kpiApToggleExpand(planId, categoryId, pipeId) {
   _kpiApExpanded[pipeId] = !_kpiApExpanded[pipeId];
   var listEl = document.getElementById('kpi_ap_list');
@@ -1705,6 +1733,9 @@ function _kpiApToggleExpand(planId, categoryId, pipeId) {
 function _kpiApRenderModal(planId, categoryId) {
   var cfg = getConfig();
   var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var salesNames = [];
+  ST.getAll('pipeline').forEach(function(p) { if (p.saleName && salesNames.indexOf(p.saleName) === -1) salesNames.push(p.saleName); });
+  salesNames.sort();
   var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:8px">เลือกโครงการที่มีอยู่แล้วมานับเข้า KPI นี้เอง (เผื่อยอดยังไม่ขึ้นอัตโนมัติ) — ค้นได้จากทุกช่วงเวลา ทุกโครงการ</p>';
   h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ / Dealer / Row No..." value="' + sanitize(_kpiApSearch) + '" oninput="_kpiApSearchInput(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="margin-bottom:8px">';
   h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">กรองตามสถานะ</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
@@ -1722,20 +1753,26 @@ function _kpiApRenderModal(planId, categoryId) {
     '<option value="">ทุก Dealer</option>' +
     dealers.map(function(d) { return '<option value="' + sanitize(d.id) + '"' + (_kpiApDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>'; }).join('') +
     '</select></span>';
+  h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">Sales</label>' +
+    '<select onchange="_kpiApSetSales(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto;max-width:180px">' +
+    '<option value="">ทุก Sales</option>' +
+    salesNames.map(function(n) { return '<option value="' + sanitize(n) + '"' + (_kpiApSalesName === n ? ' selected' : '') + '>' + sanitize(n) + '</option>'; }).join('') +
+    '</select></span>';
+  h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">ยอด Forecast</label>' +
+    '<input type="number" placeholder="ต่ำสุด" value="' + sanitize(_kpiApAmountMin) + '" oninput="_kpiApSetAmount(\'' + planId + '\',\'' + categoryId + '\',\'min\',this.value)" style="width:100px">' +
+    '<span style="color:var(--text3)">–</span>' +
+    '<input type="number" placeholder="สูงสุด" value="' + sanitize(_kpiApAmountMax) + '" oninput="_kpiApSetAmount(\'' + planId + '\',\'' + categoryId + '\',\'max\',this.value)" style="width:100px">' +
+    '</span>';
   h += '<label style="display:flex;align-items:center;gap:4px;font-size:.7rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
     '<input type="checkbox" style="width:auto" ' + (_kpiApDockOnly ? 'checked' : '') + ' onchange="_kpiApToggleDockOnly(\'' + planId + '\',\'' + categoryId + '\',this.checked)">🚁 เฉพาะโครงการที่มี Dock</label>';
   h += '</div>';
-  h += '<div id="kpi_ap_list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiApListHtml(planId, categoryId) + '</div>';
+  h += '<div id="kpi_ap_list" style="max-height:480px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">' + _kpiApListHtml(planId, categoryId) + '</div>';
+  h += '<div id="kpi_ap_pickzone"></div>';
   openM('➕ เพิ่มโครงการเข้า KPI นี้', h);
 }
 
-function _kpiApPick(planId, categoryId, pipeId) {
-  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
-  if (!plan) return;
-  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
-  if (!cat) return;
-  var p = ST.getOne('pipeline', pipeId);
-  if (!p) return;
+// คำนวณยอด/จำนวนเต็มที่ auto-detect ได้จากตัวโครงการเอง (ไม่ผูกกับวันที่/การแบ่งงวดใดๆ)
+function _kpiApComputeAuto(cat, p) {
   var kind = cat.type === 'pipelineModelQty' ? 'qty' : 'revenue';
   var item = '', amount = 0;
   if (kind === 'revenue') {
@@ -1751,19 +1788,93 @@ function _kpiApPick(planId, categoryId, pipeId) {
     }
     if (!item && keywords.length) item = keywords[0];
   }
-  if (!amount) { toast('⚠️ โครงการนี้ไม่มียอด/จำนวนที่นับเข้าหัวข้อนี้ได้ ลองกรอกเองแทน'); return; }
+  return { kind: kind, item: item, amount: amount };
+}
+
+// เปิดฟอร์มยืนยันยอด/วันที่ก่อนบันทึกจริง (ผู้ใช้ขอ 2026-09-01) — เดิมกด "+ เลือก" แล้วบันทึกยอดเต็มทันที
+// ตอนนี้ต้องมายืนยัน/แก้ยอดก่อน เพื่อรองรับกรณีส่งมอบแบ่งงวด (ไม่เต็มยอดโครงการในไตรมาสเดียว) และให้เลือกวันที่
+// ย้อนหลังในไตรมาสนี้ได้ด้วย (แทนที่จะ fix เป็นวันนี้เสมอ)
+function _kpiApOpenPickForm(planId, categoryId, pipeId) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
+  if (!cat) return;
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var auto = _kpiApComputeAuto(cat, p);
+  if (!auto.amount) { toast('⚠️ โครงการนี้ไม่มียอด/จำนวนที่นับเข้าหัวข้อนี้ได้ ลองกรอกเองแทน'); return; }
+
+  _kpiApPicking = { pipeId: pipeId };
+  var isQty = auto.kind === 'qty';
+  var originDate = pipeIsWon(p) ? pipeResolvedCloseDate(p).date : null;
+  var originInThisQuarter = originDate && originDate >= plan.startDate && originDate <= plan.endDate;
+
+  var h = '<div style="margin-top:10px;padding:12px;border:1.5px solid var(--accent,#4f6bf0);border-radius:10px;background:var(--bg2)">';
+  h += '<div style="font-weight:700;font-size:.8rem;margin-bottom:6px">✅ ' + sanitize(p.projectName || '-') + '</div>';
+  if (originDate && !originInThisQuarter) {
+    h += '<div style="font-size:.68rem;color:var(--text2);background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">' +
+      'ℹ️ โครงการนี้ Win แล้ว ระบบนับยอดเต็ม (' + (isQty ? auto.amount : fmtMoney(auto.amount)) + ') เข้าไตรมาสที่ปิดดีลจริง (' + fD(originDate) + ') อัตโนมัติอยู่แล้ว — ยอดที่ใส่ด้านล่างจะถูกหักออกจากไตรมาสนั้นให้อัตโนมัติเท่ากับที่ย้ายมานับที่นี่ ป้องกันนับซ้ำ</div>';
+  }
+  h += '<div class="fg"><label>' + (isQty ? 'จำนวน (หน่วย)' : 'ยอดเงิน (บาท)') + ' ที่จะนับเข้าไตรมาสนี้</label>' +
+    '<input type="number" id="kpi_ap_pick_amount" value="' + auto.amount + '"></div>';
+  h += '<div class="fg"><label>วันที่จะนับเข้า KPI</label><input type="date" id="kpi_ap_pick_date" value="' + _td() + '"></div>';
+  h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="_kpiApConfirmPick(\'' + planId + '\',\'' + categoryId + '\',\'' + pipeId + '\')">💾 ยืนยันบันทึก</button>' +
+    '<button class="btn bo" style="flex:1" onclick="_kpiApCancelPick(\'' + planId + '\',\'' + categoryId + '\')">ยกเลิก</button></div>';
+  h += '</div>';
+  var zone = document.getElementById('kpi_ap_pickzone');
+  if (zone) { zone.innerHTML = h; zone.scrollIntoView({ behavior: 'smooth', block: 'end' }); }
+}
+
+function _kpiApCancelPick(planId, categoryId) {
+  _kpiApPicking = null;
+  var zone = document.getElementById('kpi_ap_pickzone');
+  if (zone) zone.innerHTML = '';
+}
+
+function _kpiApConfirmPick(planId, categoryId, pipeId) {
+  var plan = getKpiQuarterPlans().filter(function(p) { return p.id === planId; })[0];
+  if (!plan) return;
+  var cat = plan.categories.filter(function(c) { return c.id === categoryId; })[0];
+  if (!cat) return;
+  var p = ST.getOne('pipeline', pipeId);
+  if (!p) return;
+  var auto = _kpiApComputeAuto(cat, p);
+  var amountEl = document.getElementById('kpi_ap_pick_amount');
+  var dateEl = document.getElementById('kpi_ap_pick_date');
+  var amount = amountEl ? Number(amountEl.value) : auto.amount;
+  var date = (dateEl && dateEl.value) ? dateEl.value : _td();
+  if (!amount || amount <= 0) { toast(auto.kind === 'qty' ? '⚠️ กรอกจำนวนก่อน' : '⚠️ กรอกจำนวนเงินก่อน'); return; }
 
   var logs = getKpiRunRateLogs();
   logs.push({
     id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-    salesMemberName: plan.salesMemberName, date: _td(), amount: amount, kind: kind,
-    item: item, note: '', pipeId: pipeId, createdAt: new Date().toISOString()
+    salesMemberName: plan.salesMemberName, date: date, amount: amount, kind: auto.kind,
+    item: auto.item, note: '', pipeId: pipeId, createdAt: new Date().toISOString()
   });
   var msg = '➕ เพิ่มโครงการเข้า KPI แล้ว';
+
+  // แบ่งงวด/ย้ายไตรมาส (ผู้ใช้ขอ 2026-09-01): ถ้าไตรมาสที่ปิดดีลจริง (origin) ไม่ใช่ไตรมาสที่กำลังบันทึกอยู่นี้
+  // แปลว่ายอดเต็มของโครงการนี้ auto-detect ไปนับที่ไตรมาส origin อยู่แล้ว (ทั้งก้อนเสมอ ไม่ว่าจะย้ายมาบางส่วน
+  // หรือทั้งหมด) — ต้องหักยอดที่ย้ายมานับที่นี่ออกจากไตรมาส origin ให้เท่ากันเป๊ะ (ไม่ใช่หักส่วนต่าง) ไม่งั้นยอดรวม
+  // ข้ามไตรมาสจะเกินยอดจริงของโครงการ — ใส่ splitAdjustment:true ให้ _kpiRunRateAutoCovered() ไม่ข้ามนับ log นี้
+  var originDate = pipeIsWon(p) ? pipeResolvedCloseDate(p).date : null;
+  var originInThisQuarter = originDate && originDate >= plan.startDate && originDate <= plan.endDate;
+  var crossQuarterMove = !!(originDate && !originInThisQuarter);
+  if (crossQuarterMove) {
+    logs.push({
+      id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + 'adj',
+      salesMemberName: plan.salesMemberName, date: originDate, amount: -amount, kind: auto.kind,
+      item: auto.item, note: '🔀 หักปรับยอด — ย้ายมานับไตรมาสอื่นแทน', pipeId: pipeId,
+      splitAdjustment: true, createdAt: new Date().toISOString()
+    });
+    msg = '➕ เพิ่มเข้า KPI แล้ว (หักยอดที่ย้ายมาออกจากไตรมาสต้นทางให้แล้ว)';
+  }
+
   // เลือกโครงการเข้าหมวด Dock (dock3) แล้ว — ลิงก์บันทึกเข้าหมวด "ยอดขาย DJI Product" (id 'revenue') ของแผน
   // เดียวกันให้ด้วยเลย ถ้ามีหมวดนี้อยู่ในแผน (ผู้ใช้ขอ 2026-08-27 เพราะโครงการที่ auto-detect Dock พลาด มักจะ
   // พลาดนับยอดขาย Product ไปด้วยเหตุผลเดียวกัน) กันนับซ้ำถ้าเคย pick โครงการนี้เข้าหมวด revenue ไปแล้วก่อนหน้า
-  if (categoryId === 'dock3') {
+  // ข้ามลิงก์อัตโนมัตินี้ถ้ากำลังย้ายไตรมาส/แบ่งงวดอยู่ เพราะยอด revenue เต็มของ origin ไม่ตรงกับส่วนที่ย้ายมา
+  if (categoryId === 'dock3' && !crossQuarterMove) {
     var revCat = plan.categories.filter(function(c) { return c.id === 'revenue'; })[0];
     var alreadyLinked = logs.some(function(l) { return l.pipeId === pipeId && l.kind === 'revenue' && l.salesMemberName === plan.salesMemberName; });
     if (revCat && !alreadyLinked) {
@@ -1771,7 +1882,7 @@ function _kpiApPick(planId, categoryId, pipeId) {
       if (revAmount > 0) {
         logs.push({
           id: 'kpirr_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + 'r',
-          salesMemberName: plan.salesMemberName, date: _td(), amount: revAmount, kind: 'revenue',
+          salesMemberName: plan.salesMemberName, date: date, amount: revAmount, kind: 'revenue',
           item: p.projectName || '', note: '🔗 ลิงก์อัตโนมัติจากการเพิ่มเข้าหมวด Dock', pipeId: pipeId, createdAt: new Date().toISOString()
         });
         msg = '➕ เพิ่มเข้า KPI Dock + ยอดขาย DJI Product แล้ว';
@@ -1780,6 +1891,7 @@ function _kpiApPick(planId, categoryId, pipeId) {
   }
   saveKpiRunRateLogs(logs);
   toast(msg);
+  _kpiApPicking = null;
   showKpiDetailM(planId, categoryId);
 }
 
