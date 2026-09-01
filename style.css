@@ -4638,6 +4638,56 @@ function renderUpcomingTimeline() {
 .demo-gantt-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 
 /* ================================================================
+   TEAM VISIT PLAN — ตาราง วัน/สัปดาห์/เดือน แชร์ทั้งทีม (teamVisitPlans collection)
+   ================================================================ */
+.tvp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.tvp-viewtabs { display: flex; gap: 3px; background: var(--bg2); border-radius: 10px; padding: 3px; }
+.tvp-viewtabs button { border: none; background: transparent; color: var(--text2); padding: 6px 12px; border-radius: 8px; font-size: .72rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+.tvp-viewtabs button.act { background: var(--card); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.tvp-nav { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px 4px 4px 12px; }
+.tvp-nav .rng { font-weight: 700; font-size: .78rem; min-width: 120px; text-align: center; }
+.tvp-nav button.navb { width: 26px; height: 26px; border-radius: 7px; border: none; background: var(--bg2); color: var(--text); cursor: pointer; }
+.tvp-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: .7rem; color: var(--text2); margin-bottom: 10px; align-items: center; }
+.tvp-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 4px; }
+.tvp-scroll { overflow-x: auto; }
+table.tvp-table { border-collapse: collapse; width: 100%; min-width: 640px; }
+table.tvp-table th, table.tvp-table td { border-bottom: 1px solid var(--border); }
+table.tvp-table thead th { position: sticky; top: 0; background: var(--card); z-index: 2; padding: 8px 6px; font-size: .68rem; color: var(--text2); font-weight: 700; text-align: center; }
+table.tvp-table thead th.today { color: var(--accent); }
+table.tvp-table thead th .dn { display: block; font-size: .9rem; font-weight: 700; color: var(--text); margin-top: 2px; }
+table.tvp-table thead th.today .dn { color: var(--accent); }
+table.tvp-table thead th.namecol { text-align: left; position: sticky; left: 0; z-index: 3; min-width: 150px; background: var(--card); }
+td.tvp-namecell { position: sticky; left: 0; background: var(--card); z-index: 1; padding: 8px 10px; border-right: 1px solid var(--border); min-width: 150px; }
+.tvp-person { display: flex; align-items: center; gap: 8px; }
+.tvp-avatar { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .68rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+.tvp-me { font-size: .6rem; background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 999px; font-weight: 700; margin-left: 4px; }
+td.tvp-daycell { padding: 5px; vertical-align: top; min-width: 110px; }
+.tvp-chip { border-radius: 8px; padding: 5px 7px; font-size: .68rem; cursor: pointer; margin-bottom: 3px; line-height: 1.3; }
+.tvp-chip .tt { font-weight: 700; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvp-chip .tm { opacity: .75; font-size: .6rem; }
+.tvp-chip.offline { background: rgba(79,107,240,.14); color: #4f6bf0; }
+.tvp-chip.online { background: rgba(165,88,214,.14); color: #a558d6; }
+.tvp-free { height: 38px; border: 1.5px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: .66rem; cursor: pointer; }
+.tvp-free:hover { border-color: #22c55e; color: #22c55e; }
+.tvp-insight { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.tvp-fbar { flex: 1; min-width: 80px; background: var(--bg2); border-radius: 8px; padding: 8px 10px; border: 1px solid transparent; }
+.tvp-fbar.best { border-color: #22c55e; background: rgba(34,197,94,.08); }
+.tvp-fbar .fd { font-size: .65rem; color: var(--text2); font-weight: 700; }
+.tvp-fbar .fc { font-size: 1.1rem; font-weight: 700; }
+.tvp-month { display: grid; grid-template-columns: repeat(7, 1fr); }
+.tvp-mdow { text-align: center; font-size: .65rem; font-weight: 700; color: var(--text2); padding: 8px 0; border-bottom: 1px solid var(--border); }
+.tvp-mcell { min-height: 70px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 5px; cursor: pointer; }
+.tvp-mcell:hover { background: var(--bg2); }
+.tvp-mcell.other { opacity: .35; }
+.tvp-mcell.today .tvp-mn { color: var(--accent); }
+.tvp-mn { font-size: .68rem; font-weight: 700; }
+.tvp-mavatars { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; }
+.tvp-detail-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); cursor: default; }
+.tvp-detail-row:last-child { border-bottom: none; }
+.tvp-detail-row.clickable { cursor: pointer; }
+.tvp-detail-row.clickable:hover { background: var(--bg2); }
+
+/* ================================================================
    KPI QUARTER SCORECARD
    ================================================================ */
 .kpi-overall-card { text-align: center; padding: 20px; margin-bottom: 14px; background: linear-gradient(135deg, var(--card) 0%, rgba(59,130,246,0.05) 100%); position: relative; overflow: hidden; }
