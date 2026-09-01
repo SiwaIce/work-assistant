@@ -7,6 +7,7 @@
 // ================================================================
 var _tvpItems = [];
 var _tvpLoading = true;
+var _tvpError = null;
 var _tvpListenerStarted = false;
 var tvpView = 'week'; // 'day' | 'week' | 'month'
 var tvpAnchor = _td();
@@ -29,10 +30,15 @@ function _tvpStartListener() {
     snap.forEach(function(doc) { var d = doc.data(); d.id = doc.id; items.push(d); });
     _tvpItems = items;
     _tvpLoading = false;
+    _tvpError = null;
     if (typeof S !== 'undefined' && S.view === 'teamVisitPlan' && typeof render === 'function') render();
   }, function(err) {
+    // เดิมไม่เรียก render() ตรงนี้ — ถ้า Firestore rule ยังไม่เปิดให้ collection นี้ (permission-denied) หน้าจะ
+    // ค้างที่ "กำลังโหลดแผนทีม..." ตลอดไปเพราะ error callback ไม่เคยสั่งวาดใหม่เลย (ผู้ใช้เจอ 2026-09-01)
     console.warn('teamVisitPlans listener error:', err);
     _tvpLoading = false;
+    _tvpError = (err && err.code) || 'unknown';
+    if (typeof S !== 'undefined' && S.view === 'teamVisitPlan' && typeof render === 'function') render();
   });
 }
 
@@ -96,6 +102,15 @@ function rTeamVisitPlan(el) {
 
   if (_tvpLoading) {
     el.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--text2)">⏳ กำลังโหลดแผนทีม...</div>';
+    return;
+  }
+  if (_tvpError) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--text2)">' +
+      '<div style="font-size:.9rem;color:#ef4444;margin-bottom:6px">⚠️ โหลดแผนทีมไม่สำเร็จ (' + sanitize(_tvpError) + ')</div>' +
+      (_tvpError === 'permission-denied'
+        ? '<div style="font-size:.75rem">ยังไม่ได้เพิ่ม Firestore rule ให้ collection <code>teamVisitPlans</code> — ไปที่ Firebase Console &gt; Firestore Database &gt; Rules แล้วเพิ่ม rule แบบเดียวกับ <code>teamPipeline</code> ก่อน</div>'
+        : '<div style="font-size:.75rem">ลองกด 🔄 รีเฟรชข้อมูล มุมขวาบน หรือเช็คการเชื่อมต่ออินเทอร์เน็ต</div>') +
+      '</div>';
     return;
   }
 
