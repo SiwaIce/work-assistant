@@ -2679,23 +2679,46 @@ function clearPipelineTimeline() {
 
 // ล้าง Timeline เฉพาะ Dealer เดียว — ทางเลือกจากล้างทั้งหมด เผื่ออยาก import ไฟล์ใหม่แค่บาง Dealer โดยไม่
 // กระทบ Timeline ของ Dealer อื่น (ผู้ใช้ขอ 2026-09-01) เรียกจากหน้า Dealer > tab Pipeline
+// มีตัวเลือกขอบเขต Main/Archived/ทั้งหมด เหมือน showClearTimelineM() ตัวรวมทั้งบริษัท (ผู้ใช้ขอเพิ่ม 2026-09-01
+// หลังจากสังเกตว่าตัวเดิมไม่มีให้เลือกแบบเดียวกัน) กันโครงการ Archived ของ Dealer นี้โดนลบ Timeline ไปด้วยโดยไม่ตั้งใจ
+function _pipeDealerTimelineScopeCounts(dealerId) {
+  var pipeArchived = {};
+  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeArchived[p.id] = pipeIsArchived(p); });
+  var counts = { main: 0, archived: 0 };
+  ST.getAll('pipeLog').forEach(function(l) {
+    if (!pipeArchived.hasOwnProperty(l.pipeId)) return;
+    if (pipeArchived[l.pipeId]) counts.archived++; else counts.main++;
+  });
+  return counts;
+}
 function showClearDealerTimelineM(dealerId) {
   var d = ST.getOne('dealers', dealerId);
-  var pipeIds = {};
-  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeIds[p.id] = true; });
-  var toDelete = ST.getAll('pipeLog').filter(function(l) { return pipeIds[l.pipeId]; });
-  if (!toDelete.length) { toast('Dealer นี้ยังไม่มี Timeline เลย'); return; }
+  var c = _pipeDealerTimelineScopeCounts(dealerId);
+  var total = c.main + c.archived;
+  if (!total) { toast('Dealer นี้ยังไม่มี Timeline เลย'); return; }
   openM('🗑️ ล้าง Timeline เฉพาะ Dealer นี้', '' +
     '<div style="font-size:.8rem;color:#ef4444;background:#ef444418;border:1px solid #ef444440;border-radius:8px;padding:10px;margin-bottom:10px">⚠️ ลบถาวร กู้คืนไม่ได้ — ลบเฉพาะ Timeline ของโครงการที่ผูกกับ <b>' + sanitize(d ? d.name : '-') + '</b> เท่านั้น Dealer อื่นไม่กระทบ ใช้ก่อน import ไฟล์ใหม่เฉพาะ Dealer นี้</div>' +
-    '<div style="margin-bottom:10px">จะลบ Timeline ทั้งหมด <b>' + toDelete.length + ' รายการ</b> ของ ' + sanitize(d ? d.name : '-') + '</div>' +
-    '<button class="btn bd btn-full" onclick="clearDealerPipelineTimeline(\'' + dealerId + '\')">🗑️ ล้าง Timeline ของ Dealer นี้</button>'
+    '<div class="fg"><label>เลือกขอบเขตที่จะล้าง</label>' +
+      '<div class="radio-g">' +
+        '<label><input type="radio" name="clr_dealer_scope" value="all" checked><span>ทั้งหมด — Main (' + c.main + ') + Archived Project (' + c.archived + ') = ' + total + ' log</span></label>' +
+        '<label><input type="radio" name="clr_dealer_scope" value="main"><span>เฉพาะ Main (' + c.main + ' log) — เก็บ Archived Project ไว้เหมือนเดิม</span></label>' +
+        '<label><input type="radio" name="clr_dealer_scope" value="archived"><span>เฉพาะ Archived Project (' + c.archived + ' log) — เก็บ Main ไว้เหมือนเดิม</span></label>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn bd btn-full" onclick="clearDealerPipelineTimeline(\'' + dealerId + '\')">🗑️ ล้าง Timeline ตามที่เลือก</button>'
   );
 }
 function clearDealerPipelineTimeline(dealerId) {
-  var pipeIds = {};
-  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeIds[p.id] = true; });
-  var toDelete = ST.getAll('pipeLog').filter(function(l) { return pipeIds[l.pipeId]; });
-  if (!toDelete.length) { toast('ไม่มี Timeline ของ Dealer นี้'); return; }
+  var scope = (document.querySelector('input[name="clr_dealer_scope"]:checked') || {}).value || 'all';
+  var pipeArchived = {};
+  ST.pipelineByDealer(dealerId).forEach(function(p) { pipeArchived[p.id] = pipeIsArchived(p); });
+  var toDelete = ST.getAll('pipeLog').filter(function(l) {
+    if (!pipeArchived.hasOwnProperty(l.pipeId)) return false;
+    if (scope === 'main') return !pipeArchived[l.pipeId];
+    if (scope === 'archived') return pipeArchived[l.pipeId];
+    return true; // 'all'
+  });
+  if (!toDelete.length) { toast('ไม่มี Timeline ของ Dealer นี้ในขอบเขตที่เลือก'); return; }
   if (!confirm('⚠️ ลบ Timeline ' + toDelete.length + ' รายการถาวรของ Dealer นี้?\nกู้คืนไม่ได้')) return;
   if (!confirm('⚠️⚠️ ยืนยันอีกครั้ง — ลบจริงแน่นอนใช่ไหม?')) return;
 
