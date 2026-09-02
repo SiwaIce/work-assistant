@@ -116,6 +116,20 @@ function togglePipeTeamBidMonth(idx) {
   render();
 }
 function clearPipeTeamBidMonthFilter() { pipeTeamBidMonthFilter = {}; render(); }
+// ปุ่มลัด Active/จบแล้ว + H1/H2/Q1-4 เหมือน Pipeline หลัก/Dealer > Pipeline (ผู้ใช้ขอ 2026-09-02) — ใช้ helper
+// เดียวกัน (_pipeStatusIdsByCategoryOrFallback/PIPE_MONTH_SHORTCUT_RANGES ประกาศไว้ท้ายไฟล์นี้ แต่เรียกใช้ได้
+// เพราะ function declaration/var ถูก hoist ตั้งแต่โหลดสคริปต์ ก่อนผู้ใช้จะกดปุ่มจริงอยู่แล้ว)
+function pipeTeamSetStatusShortcut(kind) {
+  pipeTeamStatusFlt = {};
+  if (kind === 'active') _pipeStatusIdsByCategoryOrFallback('active').forEach(function(id) { pipeTeamStatusFlt[id] = true; });
+  else if (kind === 'closed') _pipeStatusIdsByCategoryOrFallback('won').concat(_pipeStatusIdsByCategoryOrFallback('lost')).forEach(function(id) { pipeTeamStatusFlt[id] = true; });
+  render();
+}
+function pipeTeamSetMonthShortcut(kind) {
+  pipeTeamBidMonthFilter = {};
+  (PIPE_MONTH_SHORTCUT_RANGES[kind] || []).forEach(function(m) { pipeTeamBidMonthFilter[m] = true; });
+  render();
+}
 
 function _pipeTeamMergedList() {
   var mine = ST.getAll('pipeline').filter(function(p) { return pipeIsOpen(p); }).map(function(p) {
@@ -188,8 +202,8 @@ function rPipelineTeam(el) {
   if (Object.keys(pipeTeamStatusFlt).length) list = list.filter(function(p) { return pipeTeamStatusFlt[p.status]; });
   if (Object.keys(pipeTeamBidMonthFilter).length) {
     list = list.filter(function(p) {
-      var d = fcParseDate(p.biddingDate);
-      return d && pipeTeamBidMonthFilter[d.getMonth()];
+      var m = _pipeMonthOf(p, pipeMonthSource);
+      return m !== null && pipeTeamBidMonthFilter[m];
     });
   }
   if (pipeTeamFY !== 'all') {
@@ -289,6 +303,10 @@ function rPipelineTeam(el) {
 
   // แถบสถานะ — เลือกได้หลายช่อง (ไม่เลือกเลย = แสดงทุกสถานะ) กดที่ช่องเดิมซ้ำเพื่อยกเลิกเฉพาะช่องนั้น
   h += '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+    '<button class="btn bsm bo" onclick="pipeTeamSetStatusShortcut(\'active\')">🟢 Active</button>' +
+    '<button class="btn bsm bo" onclick="pipeTeamSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>' +
+    '</div>';
   h += '<div class="pipe-sum">';
   Object.entries(ps).filter(function(e) { return e[1].count > 0; }).forEach(function(e) {
     var k = e[0], v = e[1];
@@ -302,8 +320,13 @@ function rPipelineTeam(el) {
   h += '</div>';
   h += pipeSelectedSubtotalHtml(pipeTeamStatusFlt, ps);
 
-  // แถบเดือน — กรองจาก Bidding Date (เลือกได้หลายเดือน ไม่เลือกเลย = ทุกเดือน) เหมือนแพทเทิร์นที่ใช้ใน Forecast ตาม Model
-  h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+  // แถบเดือน — กรองจากฟิลด์ที่เลือกไว้ (ดู pipeMonthSource) เหมือนแพทเทิร์นที่ใช้ใน Pipeline หลัก/Dealer > Pipeline
+  h += '<div class="hint" style="margin:8px 0 4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">📅 ' + _pipeMonthSourceSelectHtml() + ' เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">';
+  ['H1','H2','Q1','Q2','Q3','Q4'].forEach(function(k) {
+    h += '<button class="btn bsm bo" onclick="pipeTeamSetMonthShortcut(\'' + k.toLowerCase() + '\')">' + k + '</button>';
+  });
+  h += '</div>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">';
   var _pipeTeamMonthNames = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   _pipeTeamMonthNames.forEach(function(mn, idx) {

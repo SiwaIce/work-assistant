@@ -1679,7 +1679,9 @@ function saveKpiRunRateLog(planId, categoryId) {
 // เลือกแล้ว auto-fill ยอด/จำนวนจากข้อมูลจริงของโครงการ เก็บ pipeId ไว้กัน _kpiRunRateAutoCovered() นับซ้ำ
 // ================================================================
 var _kpiApStatusSel = null;
-var _kpiApMonth = '';
+var _kpiApMonthSel = {}; // multi-select: {monthIdx(0-11): true} — ว่าง = ทุกเดือน แปลงจาก _kpiApMonth (single
+// YYYY-MM) เดิม ให้เป็นแบบเดียวกับ Pipeline หลัก/Dealer/Pipeline รวมทีม เพื่อใส่ปุ่มลัด H1/H2/Q1-4 ได้ (ผู้ใช้ขอ
+// 2026-09-02) — ไม่ยึดปีอีกต่อไป เข้ากับ modal นี้ที่ตั้งใจค้นได้ "ทุกช่วงเวลา" อยู่แล้ว
 var _kpiApSearch = '';
 var _kpiApDealerId = ''; // กรองตาม Dealer เพิ่ม (ผู้ใช้ขอ 2026-08-27) — '' = ทุก Dealer
 var _kpiApSalesName = ''; // กรองตามชื่อเซล (saleName บนโครงการ) — '' = ทุกเซล (ผู้ใช้ขอ 2026-09-01)
@@ -1700,7 +1702,7 @@ var _kpiApPresetDate = null; // เดือนที่กดมาจาก sh
 // ฟอร์มยืนยันแทนวันนี้เสมอ (ผู้ใช้ขอ 2026-09-01 ให้เพิ่ม/แก้ข้อมูลเดือนก่อนหน้าง่ายขึ้น)
 function showKpiAddProjectM(planId, categoryId, presetDate) {
   _kpiApStatusSel = _kpiApDefaultStatusSel();
-  _kpiApMonth = '';
+  _kpiApMonthSel = {};
   _kpiApSearch = '';
   _kpiApDealerId = '';
   _kpiApSalesName = '';
@@ -1725,7 +1727,10 @@ function _kpiApFilteredProjects() {
   var amtMax = _kpiApAmountMax !== '' ? Number(_kpiApAmountMax) : null;
   return ST.getAll('pipeline').filter(function(p) {
     if (_kpiApStatusSel && _kpiApStatusSel[p.status] === false) return false;
-    if (_kpiApMonth && (!p.biddingDate || p.biddingDate.slice(0, 7) !== _kpiApMonth)) return false;
+    if (Object.keys(_kpiApMonthSel).length) {
+      var _apM = (typeof _pipeMonthOf === 'function') ? _pipeMonthOf(p, typeof pipeMonthSource !== 'undefined' ? pipeMonthSource : 'biddingDate') : null;
+      if (_apM === null || !_kpiApMonthSel[_apM]) return false;
+    }
     if (_kpiApDealerId && p.dealerId !== _kpiApDealerId) return false;
     if (_kpiApSalesName && (p.saleName || '') !== _kpiApSalesName) return false;
     if (amtMin !== null && (Number(p.forecastAmount) || 0) < amtMin) return false;
@@ -1788,8 +1793,31 @@ function _kpiApToggleStatus(planId, categoryId, id, checked) {
   _kpiApRenderModal(planId, categoryId);
 }
 
-function _kpiApSetMonth(planId, categoryId, val) {
-  _kpiApMonth = val;
+// ปุ่มลัด Active/จบแล้ว — ใช้ helper เดียวกับ Pipeline หลัก (ผู้ใช้ขอ 2026-09-02)
+// สำคัญ: _kpiApFilteredProjects() เช็ค "=== false" เท่านั้นถึงจะตัดออก (ค่าเริ่มต้น _kpiApDefaultStatusSel()
+// ติ๊กทุกสถานะเป็น true หมด = ไม่กรองอะไรเลย) ปุ่มลัดนี้เลยต้องตั้งสถานะที่ไม่ได้เลือกเป็น false ชัดเจน ไม่ใช่แค่
+// ปล่อยว่าง ไม่งั้นจะไม่กรองอะไรออกเลยเหมือนเดิม
+function _kpiApSetStatusShortcut(planId, categoryId, kind) {
+  var allIds = (getConfig().pipelineStatuses || []).map(function(s) { return s.id; });
+  var keepIds = kind === 'active' ? _pipeStatusIdsByCategoryOrFallback('active')
+    : kind === 'closed' ? _pipeStatusIdsByCategoryOrFallback('won').concat(_pipeStatusIdsByCategoryOrFallback('lost'))
+    : allIds; // 'all'
+  _kpiApStatusSel = {};
+  allIds.forEach(function(id) { _kpiApStatusSel[id] = keepIds.indexOf(id) !== -1; });
+  _kpiApRenderModal(planId, categoryId);
+}
+
+function _kpiApToggleMonth(planId, categoryId, idx) {
+  if (_kpiApMonthSel[idx]) delete _kpiApMonthSel[idx]; else _kpiApMonthSel[idx] = true;
+  _kpiApRenderModal(planId, categoryId);
+}
+function _kpiApSetMonthShortcut(planId, categoryId, kind) {
+  _kpiApMonthSel = {};
+  (PIPE_MONTH_SHORTCUT_RANGES[kind] || []).forEach(function(m) { _kpiApMonthSel[m] = true; });
+  _kpiApRenderModal(planId, categoryId);
+}
+function _kpiApClearMonth(planId, categoryId) {
+  _kpiApMonthSel = {};
   _kpiApRenderModal(planId, categoryId);
 }
 
@@ -1831,16 +1859,34 @@ function _kpiApRenderModal(planId, categoryId) {
   salesNames.sort();
   var h = '<p style="font-size:.72rem;color:var(--text3);margin-bottom:8px">เลือกโครงการที่มีอยู่แล้วมานับเข้า KPI นี้เอง (เผื่อยอดยังไม่ขึ้นอัตโนมัติ) — ค้นได้จากทุกช่วงเวลา ทุกโครงการ</p>';
   h += '<input type="text" placeholder="🔍 ค้นหาชื่อโครงการ / Dealer / Row No..." value="' + sanitize(_kpiApSearch) + '" oninput="_kpiApSearchInput(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="margin-bottom:8px">';
-  h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">กรองตามสถานะ</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  h += '<div style="margin-bottom:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">กรองตามสถานะ</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+    '<button class="btn bsm bo" onclick="_kpiApSetStatusShortcut(\'' + planId + '\',\'' + categoryId + '\',\'active\')">🟢 Active</button>' +
+    '<button class="btn bsm bo" onclick="_kpiApSetStatusShortcut(\'' + planId + '\',\'' + categoryId + '\',\'closed\')">🏁 จบแล้ว</button>' +
+    '<button class="btn bsm bo" onclick="_kpiApSetStatusShortcut(\'' + planId + '\',\'' + categoryId + '\',\'all\')">ทั้งหมด</button>' +
+    '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px">';
   (cfg.pipelineStatuses || []).forEach(function(s) {
     h += '<label style="display:flex;align-items:center;gap:4px;font-size:.68rem;background:var(--bg2);padding:3px 8px;border-radius:12px;cursor:pointer">' +
       '<input type="checkbox" style="width:auto" ' + (_kpiApStatusSel[s.id] ? 'checked' : '') + ' onchange="_kpiApToggleStatus(\'' + planId + '\',\'' + categoryId + '\',\'' + s.id + '\',this.checked)">' + sanitize(s.name) + '</label>';
   });
   h += '</div></div>';
+  h += '<div style="margin-bottom:8px">';
+  h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px"><span style="font-size:.7rem;font-weight:700">📅 กรองตามเดือน</span>' + _pipeMonthSourceSelectHtml() + '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:5px">';
+  ['H1', 'H2', 'Q1', 'Q2', 'Q3', 'Q4'].forEach(function(k) {
+    h += '<button class="btn bsm bo" onclick="_kpiApSetMonthShortcut(\'' + planId + '\',\'' + categoryId + '\',\'' + k.toLowerCase() + '\')">' + k + '</button>';
+  });
+  h += '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">';
+  ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'].forEach(function(mn, idx) {
+    var on = !!_kpiApMonthSel[idx];
+    h += '<span onclick="_kpiApToggleMonth(\'' + planId + '\',\'' + categoryId + '\',' + idx + ')" style="cursor:pointer;font-size:.68rem;padding:3px 8px;border-radius:12px;' +
+      (on ? 'background:var(--accent);color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">' + mn + '</span>';
+  });
+  if (Object.keys(_kpiApMonthSel).length) h += '<button class="btn bsm bo" onclick="_kpiApClearMonth(\'' + planId + '\',\'' + categoryId + '\')">✕ ล้าง</button>';
+  h += '</div></div>';
   h += '<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
-  h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">กรองตามเดือน (Bidding Date)</label>' +
-    '<input type="month" value="' + sanitize(_kpiApMonth) + '" onchange="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto">' +
-    (_kpiApMonth ? '<button class="btn bsm bo" onclick="_kpiApSetMonth(\'' + planId + '\',\'' + categoryId + '\',\'\')">ล้าง</button>' : '') + '</span>';
   h += '<span style="display:flex;align-items:center;gap:6px"><label style="font-size:.7rem">Dealer</label>' +
     '<select onchange="_kpiApSetDealer(\'' + planId + '\',\'' + categoryId + '\',this.value)" style="width:auto;max-width:220px">' +
     '<option value="">ทุก Dealer</option>' +
