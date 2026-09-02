@@ -2211,16 +2211,25 @@ function showKpiConfigM(planId) {
 
 function kpiConfigRowHtml(cat) {
   cat = cat || { label: '', target: 0, weight: 0, type: 'manualScore' };
-  var h = '<div class="kpi-cfg-row" data-cat="' + sanitize(JSON.stringify(cat)) + '">';
+  var rowId = 'kpicfgmm_' + Math.random().toString(36).substr(2, 8);
+  var h = '<div class="kpi-cfg-row-wrap" style="margin-bottom:6px">';
+  h += '<div class="kpi-cfg-row" data-cat="' + sanitize(JSON.stringify(cat)) + '" style="margin-bottom:0">';
   h += '<input type="text" placeholder="ชื่อหัวข้อ" value="' + sanitize(cat.label || '') + '" data-f="label" class="fm-input">';
   h += '<input type="number" placeholder="เป้า" value="' + (cat.target != null ? cat.target : '') + '" data-f="target" class="fm-input">';
   h += '<input type="number" placeholder="weight%" value="' + (cat.weight != null ? cat.weight : '') + '" data-f="weight" class="fm-input">';
-  h += '<select data-f="type" class="fm-input">';
+  h += '<select data-f="type" class="fm-input" onchange="document.getElementById(\'' + rowId + '\').style.display = this.value===\'pipelineModelQty\'?\'block\':\'none\'">';
   [['pipelineRevenue', 'ยอดขาย Pipeline'], ['pipelineModelQty', 'จำนวนยูนิตตามรุ่น'], ['dealerAuthorized', 'Dealer ใหม่ Authorized'], ['visitCount', 'จำนวน Visit'], ['manualScore', 'กรอกคะแนนเอง']].forEach(function(t) {
     h += '<option value="' + t[0] + '"' + (cat.type === t[0] ? ' selected' : '') + '>' + t[1] + '</option>';
   });
   h += '</select>';
-  h += '<button class="btn bsm bd" onclick="this.closest(\'.kpi-cfg-row\').remove()">🗑️</button>';
+  h += '<button class="btn bsm bd" onclick="this.closest(\'.kpi-cfg-row-wrap\').remove()">🗑️</button>';
+  h += '</div>';
+  // ช่องคำค้นสินค้า (modelMatch) — โผล่เฉพาะประเภท "จำนวนยูนิตตามรุ่น" เดิมหน้านี้ไม่มีให้แก้เลย ต้องไปสร้าง
+  // หมวดใหม่จาก template เก่าถึงจะมีค่าติดมา ถ้าเพิ่มหัวข้อเองผ่าน "➕ เพิ่มหัวข้อ KPI" จะได้ modelMatch ว่างเปล่า
+  // ตลอดไปเพราะไม่มีทางแก้ (ผู้ใช้เจอ 2026-09-02 — หัวข้อ Dock 3/4 กรองอะไรไม่เจอเลยเพราะเหตุนี้)
+  h += '<div id="' + rowId + '" style="display:' + (cat.type === 'pipelineModelQty' ? 'block' : 'none') + ';margin-top:4px">' +
+    '<input type="text" placeholder="คำค้นสินค้า คั่นด้วย , (เช่น Dock 3, Dock 4)" value="' + sanitize((cat.modelMatch || []).join(', ')) + '" data-f="modelMatch" class="fm-input" style="width:100%">' +
+    '</div>';
   h += '</div>';
   return h;
 }
@@ -2235,9 +2244,11 @@ function kpiConfigSave(planId) {
   var plans = getKpiQuarterPlans();
   var plan = plans.filter(function(p) { return p.id === planId; })[0];
   if (!plan) return;
-  var rows = document.querySelectorAll('#kpi_cfg_rows .kpi-cfg-row');
+  var wraps = document.querySelectorAll('#kpi_cfg_rows .kpi-cfg-row-wrap');
   var cats = [];
-  rows.forEach(function(row) {
+  wraps.forEach(function(wrap) {
+    var row = wrap.querySelector('.kpi-cfg-row');
+    if (!row) return;
     var label = row.querySelector('[data-f=label]').value.trim();
     if (!label) return;
     var target = Number(row.querySelector('[data-f=target]').value) || 0;
@@ -2245,11 +2256,15 @@ function kpiConfigSave(planId) {
     var type = row.querySelector('[data-f=type]').value;
     var prev = {};
     try { prev = JSON.parse(row.getAttribute('data-cat')); } catch (e) {}
+    var mmEl = wrap.querySelector('[data-f=modelMatch]');
+    var modelMatch = type === 'pipelineModelQty' && mmEl
+      ? mmEl.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean)
+      : (prev.modelMatch || []);
     cats.push({
       id: prev.id || ('cat_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5)),
       label: label, icon: prev.icon || '📌', type: type,
       target: target, weight: weight, unit: prev.unit || '',
-      modelMatch: prev.modelMatch || [], manualValue: prev.manualValue != null ? prev.manualValue : null
+      modelMatch: modelMatch, manualValue: prev.manualValue != null ? prev.manualValue : null
     });
   });
   var newStart = dpG('kpi_cfg_start');
