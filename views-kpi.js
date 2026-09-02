@@ -1960,14 +1960,24 @@ function _kpiApOpenPickForm(planId, categoryId, pipeId) {
   h += '<div style="font-weight:700;font-size:.8rem;margin-bottom:6px">✅ ' + sanitize(p.projectName || '-') + '</div>';
   if (isQty && !auto.amount) {
     var actualModels = (getPipeItems(p) || []).map(function(it) { return sanitize(it.model || '-') + ' x' + (Number(it.qty) || 1); }).join(', ') || '-';
-    h += '<div style="font-size:.68rem;color:#e08a2c;background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠️ ไม่พบสินค้าที่ตรงกับคำค้นของหัวข้อนี้ (' + sanitize((cat.modelMatch || []).join(', ')) + ') ในโครงการนี้ — สินค้าที่มีจริง: ' + actualModels + ' — กรอกจำนวนเองด้านล่างได้เลย</div>';
+    // แยกข้อความ 2 แบบ — ถ้าหัวข้อนี้ไม่มีคำค้น (modelMatch ว่าง) เลยไม่มีอะไรให้ match ตั้งแต่ต้น ต่างจากกรณี
+    // มีคำค้นแต่ข้อความสินค้าไม่ตรง (เดิม 2 เคสนี้ขึ้นข้อความเดียวกัน ทำให้ตอน modelMatch ว่างขึ้น "()" งงๆ)
+    var mmList = cat.modelMatch || [];
+    var mmMsg = mmList.length
+      ? 'ไม่พบสินค้าที่ตรงกับคำค้นของหัวข้อนี้ (' + sanitize(mmList.join(', ')) + ') ในโครงการนี้ — สินค้าที่มีจริง: ' + actualModels
+      : 'หัวข้อนี้ยังไม่ได้ตั้งคำค้นสินค้า (modelMatch) เลย — ไปตั้งค่าที่ "⚙️ ตั้งค่าไตรมาสนี้" ก่อน หรือกรอกจำนวนเองด้านล่างไปพลางๆ ก่อนได้';
+    h += '<div style="font-size:.68rem;color:#e08a2c;background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠️ ' + mmMsg + ' — กรอกจำนวนเองด้านล่างได้เลย</div>';
   }
   if (originDate && !originInThisQuarter) {
     h += '<div style="font-size:.68rem;color:var(--text2);background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:8px">' +
       'ℹ️ โครงการนี้ Win แล้ว ระบบนับยอดเต็ม (' + (isQty ? auto.amount : fmtMoney(auto.amount)) + ') เข้าไตรมาสที่ปิดดีลจริง (' + fD(originDate) + ') อัตโนมัติอยู่แล้ว — ยอดที่ใส่ด้านล่างจะถูกหักออกจากไตรมาสนั้นให้อัตโนมัติเท่ากับที่ย้ายมานับที่นี่ ป้องกันนับซ้ำ</div>';
   }
+  // เดิม pre-fill เป็น "0" ตรงๆ ตอน auto.amount=0 (กรณีไม่ auto-match) — ดูเหมือนกรอกไว้แล้วจริงๆ ผู้ใช้กด
+  // ยืนยันโดยไม่ทันสังเกตว่ายังเป็น 0 อยู่ แล้วโดนเงื่อนไข "amount<=0" บล็อกเงียบๆ (แค่ toast เตือนแวบเดียว) —
+  // ดูเหมือนกด "บันทึก" แล้วไม่มีอะไรเกิดขึ้นเลย (ผู้ใช้เจอ 2026-09-02) ปล่อยว่างแทนพร้อม placeholder ให้ชัดว่า
+  // ต้องกรอกเอง
   h += '<div class="fg"><label>' + (isQty ? 'จำนวน (หน่วย)' : 'ยอดเงิน (บาท)') + ' ที่จะนับเข้าไตรมาสนี้</label>' +
-    '<input type="number" id="kpi_ap_pick_amount" value="' + auto.amount + '"></div>';
+    '<input type="number" id="kpi_ap_pick_amount"' + (auto.amount ? ' value="' + auto.amount + '"' : ' placeholder="พิมพ์จำนวนที่จะนับ" style="border-color:#e08a2c"') + '></div>';
   h += '<div class="fg"><label>วันที่จะนับเข้า KPI</label><input type="date" id="kpi_ap_pick_date" value="' + (_kpiApPresetDate || _td()) + '"></div>';
   h += '<div style="display:flex;gap:6px"><button class="btn bp" style="flex:1" onclick="_kpiApConfirmPick(\'' + planId + '\',\'' + categoryId + '\',\'' + pipeId + '\')">💾 ยืนยันบันทึก</button>' +
     '<button class="btn bo" style="flex:1" onclick="_kpiApCancelPick(\'' + planId + '\',\'' + categoryId + '\')">ยกเลิก</button></div>';
