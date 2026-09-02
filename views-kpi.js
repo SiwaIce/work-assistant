@@ -2227,11 +2227,86 @@ function kpiConfigRowHtml(cat) {
   // ช่องคำค้นสินค้า (modelMatch) — โผล่เฉพาะประเภท "จำนวนยูนิตตามรุ่น" เดิมหน้านี้ไม่มีให้แก้เลย ต้องไปสร้าง
   // หมวดใหม่จาก template เก่าถึงจะมีค่าติดมา ถ้าเพิ่มหัวข้อเองผ่าน "➕ เพิ่มหัวข้อ KPI" จะได้ modelMatch ว่างเปล่า
   // ตลอดไปเพราะไม่มีทางแก้ (ผู้ใช้เจอ 2026-09-02 — หัวข้อ Dock 3/4 กรองอะไรไม่เจอเลยเพราะเหตุนี้)
-  h += '<div id="' + rowId + '" style="display:' + (cat.type === 'pipelineModelQty' ? 'block' : 'none') + ';margin-top:4px">' +
-    '<input type="text" placeholder="คำค้นสินค้า คั่นด้วย , (เช่น Dock 3, Dock 4)" value="' + sanitize((cat.modelMatch || []).join(', ')) + '" data-f="modelMatch" class="fm-input" style="width:100%">' +
+  // ค้นหา+เลือกสินค้าจากแคตตาล็อกจริงแทนพิมพ์ข้อความล้วน (ผู้ใช้ขอ 2026-09-02) — ยังพิมพ์คำค้นเองที่ไม่มีใน
+  // แคตตาล็อกได้ด้วย (กด Enter/,) เก็บค่าจริงไว้ใน hidden input เดิม กันไม่ต้องแก้ kpiConfigSave()
+  h += '<div id="' + rowId + '" style="display:' + (cat.type === 'pipelineModelQty' ? 'block' : 'none') + ';margin-top:4px;position:relative">' +
+    '<input type="hidden" id="' + rowId + '_hidden" data-f="modelMatch" value="' + sanitize((cat.modelMatch || []).join(', ')) + '">' +
+    '<div id="' + rowId + '_chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">' + _kpiMmChipsHtmlFromArray(rowId, cat.modelMatch || []) + '</div>' +
+    '<input type="text" id="' + rowId + '_search" class="fm-input" placeholder="🔍 พิมพ์ค้นหาสินค้า หรือพิมพ์คำค้นเองแล้วกด Enter" style="width:100%" ' +
+    'oninput="_kpiMmSearchInput(\'' + rowId + '\',this.value)" onkeydown="_kpiMmSearchKeydown(\'' + rowId + '\',event)" onblur="setTimeout(function(){_kpiMmHideSuggest(\'' + rowId + '\')},150)">' +
+    '<div id="' + rowId + '_suggest" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card,var(--bg));border:1px solid var(--border);border-radius:8px;margin-top:2px;max-height:180px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>' +
     '</div>';
   h += '</div>';
   return h;
+}
+
+function _kpiMmAllProductNames() {
+  if (typeof getAllProducts !== 'function') return [];
+  var seen = {}; var names = [];
+  getAllProducts().forEach(function(p) { if (p && p.name && !seen[p.name]) { seen[p.name] = true; names.push(p.name); } });
+  names.sort();
+  return names;
+}
+function _kpiMmChipsHtmlFromArray(rowId, tags) {
+  return (tags || []).map(function(t, i) {
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg2);color:var(--accent,inherit);padding:3px 6px 3px 9px;border-radius:12px;font-size:.68rem">' +
+      sanitize(t) + '<span onclick="_kpiMmRemoveTag(\'' + rowId + '\',' + i + ')" style="cursor:pointer;font-weight:700;opacity:.7">✕</span></span>';
+  }).join('');
+}
+function _kpiMmGetTags(rowId) {
+  var hidden = document.getElementById(rowId + '_hidden');
+  return hidden ? hidden.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+}
+function _kpiMmSetTags(rowId, tags) {
+  var hidden = document.getElementById(rowId + '_hidden');
+  if (hidden) hidden.value = tags.join(', ');
+  var box = document.getElementById(rowId + '_chips');
+  if (box) box.innerHTML = _kpiMmChipsHtmlFromArray(rowId, tags);
+}
+function _kpiMmAddTag(rowId, tag) {
+  tag = (tag || '').trim();
+  if (!tag) return;
+  var tags = _kpiMmGetTags(rowId);
+  if (tags.indexOf(tag) === -1) tags.push(tag);
+  _kpiMmSetTags(rowId, tags);
+  var input = document.getElementById(rowId + '_search');
+  if (input) { input.value = ''; input.focus(); }
+  _kpiMmHideSuggest(rowId);
+}
+function _kpiMmRemoveTag(rowId, idx) {
+  var tags = _kpiMmGetTags(rowId);
+  tags.splice(idx, 1);
+  _kpiMmSetTags(rowId, tags);
+}
+function _kpiMmHideSuggest(rowId) {
+  var sug = document.getElementById(rowId + '_suggest');
+  if (sug) { sug.style.display = 'none'; sug.innerHTML = ''; }
+}
+function _kpiMmSearchInput(rowId, q) {
+  var sug = document.getElementById(rowId + '_suggest');
+  if (!sug) return;
+  q = (q || '').trim().toLowerCase();
+  if (!q) { _kpiMmHideSuggest(rowId); return; }
+  var existing = _kpiMmGetTags(rowId);
+  var matches = _kpiMmAllProductNames().filter(function(n) {
+    return n.toLowerCase().indexOf(q) !== -1 && existing.indexOf(n) === -1;
+  }).slice(0, 8);
+  if (!matches.length) { _kpiMmHideSuggest(rowId); return; }
+  sug.innerHTML = matches.map(function(n) {
+    return '<div onmousedown="event.preventDefault();_kpiMmAddTag(\'' + rowId + '\',\'' + sanitize(n).replace(/'/g, "\\'") + '\')" ' +
+      'style="padding:6px 10px;cursor:pointer;font-size:.72rem;border-bottom:1px solid var(--border)" ' +
+      'onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'\'">' + sanitize(n) + '</div>';
+  }).join('');
+  sug.style.display = 'block';
+}
+function _kpiMmSearchKeydown(rowId, ev) {
+  if (ev.key === 'Enter' || ev.key === ',') {
+    ev.preventDefault();
+    var input = document.getElementById(rowId + '_search');
+    if (input && input.value.trim()) _kpiMmAddTag(rowId, input.value.replace(/,$/, ''));
+  } else if (ev.key === 'Escape') {
+    _kpiMmHideSuggest(rowId);
+  }
 }
 
 function kpiConfigAddRow() {
