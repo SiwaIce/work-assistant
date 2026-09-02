@@ -1874,7 +1874,7 @@ function dealerPipelineTab(d) {
       var statusSummary = {};
       getConfig().pipelineStatuses.forEach(function(s) {
         var items = pipes.filter(function(p) { return p.status === s.id; });
-        if (items.length) statusSummary[s.id] = { count: items.length, amount: items.reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0), name: s.name, color: s.color };
+        statusSummary[s.id] = { count: items.length, amount: items.reduce(function(a, p) { return a + (Number(p.forecastAmount) || 0); }, 0), name: s.name, color: s.color };
       });
       var totalAmtAll = pipes.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
       h += '<div class="hint" style="margin-bottom:4px">สถานะ (เลือกได้หลายช่อง — ไม่เลือกเลย = ทั้งหมด)</div>';

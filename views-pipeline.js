@@ -308,7 +308,7 @@ function rPipelineTeam(el) {
     '<button class="btn bsm bo" onclick="pipeTeamSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>' +
     '</div>';
   h += '<div class="pipe-sum">';
-  Object.entries(ps).filter(function(e) { return e[1].count > 0; }).forEach(function(e) {
+  Object.entries(ps).forEach(function(e) {
     var k = e[0], v = e[1];
     h += '<div class="pipe-sum-card ' + (pipeTeamStatusFlt[k] ? 'act' : '') + '" onclick="togglePipeTeamStatus(\'' + k + '\')">' +
       '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
@@ -1610,7 +1610,7 @@ function rPipeline(el) {
     '<button class="btn bsm bo" onclick="pipeSetStatusShortcut(\'closed\')">🏁 จบแล้ว</button>' +
     '</div>' +
     '<div class="pipe-sum">' +
-    Object.entries(ps.summary).filter(function(e) { return e[1].count > 0; }).map(function(e) {
+    Object.entries(ps.summary).map(function(e) {
       var k = e[0], v = e[1];
       return '<div class="pipe-sum-card ' + (pipeFlt[k] ? 'act' : '') + '" onclick="togglePipeStatus(\'' + k + '\')">' +
         '<div class="stage" style="color:' + (v.color || '#94a3b8') + '">' + v.name + '</div>' +
