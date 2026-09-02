@@ -5551,8 +5551,25 @@ function noteGridCardHTML(n, cats) {
       '<div class="note-gc-title">' + (n.pinned?'📌 ':'') + sanitize(n.title || 'ไม่มีชื่อ') + '</div>' +
       '<div class="note-gc-preview">' + sanitize((n.content||'').substr(0, 100)) + '</div>' +
       '<div class="note-gc-meta">' + fDShort(n.created ? n.created.split('T')[0] : '') + '</div>' +
+      (_noteLinksArray(n).length ? '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">' + _noteLinkBtnsHtml(n) + '</div>' : '') +
     '</div>' +
   '</div>';
+}
+
+// ปุ่มลิงก์สั้นๆ บนการ์ด — เดิมต้องกดเข้า noteDetail แล้วเลื่อนไปหาลิงก์ในเนื้อหาก่อนถึงจะกดได้ (ผู้ใช้ขอ
+// 2026-09-02 ให้กดจากหน้าการ์ดได้เลย) ใช้ n.links (คั่นบรรทัด เหมือนที่ rNoteDet ใช้อยู่แล้ว) — ไม่ต้อง
+// เพิ่ม field ใหม่ stopPropagation กันไม่ให้ลิงก์ก็เด้งเข้า noteDetail ไปด้วย
+function _noteLinksArray(n) {
+  return (n.links || '').split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+}
+function _noteLinkBtnsHtml(n) {
+  var links = _noteLinksArray(n);
+  if (!links.length) return '';
+  return links.map(function(url, i) {
+    var safeUrl = sanitize(url).replace(/'/g, "\\'");
+    return '<span class="note-badge" style="background:rgba(59,130,246,.15);color:#3b82f6;cursor:pointer" ' +
+      'onclick="event.stopPropagation();window.open(\'' + safeUrl + '\',\'_blank\')" title="' + sanitize(url) + '">🔗 Link' + (links.length > 1 ? ' ' + (i + 1) : '') + '</span>';
+  }).join('');
 }
 
 function noteCardHTML(n, cats) {
@@ -5581,6 +5598,7 @@ function noteCardHTML(n, cats) {
         '<span class="note-badge" style="background:' + color + '22;color:' + color + '">' + sanitize(n.category||'📌 อื่นๆ') + '</span>' +
         '<span class="nlm-date">' + fDShort(n.created ? n.created.split('T')[0] : '') + '</span>' +
         (tags.length ? tags.map(function(t){return '<span class="note-badge grey">#' + sanitize(t.trim()) + '</span>';}).join('') : '') +
+        _noteLinkBtnsHtml(n) +
       '</div>' +
     '</div>' +
     '<div class="note-lc-qs">' +
