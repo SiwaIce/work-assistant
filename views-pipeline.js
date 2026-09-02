@@ -26,12 +26,38 @@ function pipeSetStatusShortcut(kind) {
   else if (kind === 'closed') _pipeStatusIdsByCategoryOrFallback('won').concat(_pipeStatusIdsByCategoryOrFallback('lost')).forEach(function(id) { pipeFlt[id] = true; });
   render();
 }
-// ปุ่มลัดกรองเดือน H1/H2/Q1-Q4 (ตาม Bidding Date) — ใช้ร่วมกันทั้ง Pipeline หลักและ Dealer > Pipeline
+// ปุ่มลัดกรองเดือน H1/H2/Q1-Q4 (ตามฟิลด์วันที่ที่เลือกไว้ — ดู pipeMonthSource) — ใช้ร่วมกันทั้ง Pipeline
+// หลักและ Dealer > Pipeline
 var PIPE_MONTH_SHORTCUT_RANGES = { h1: [0, 1, 2, 3, 4, 5], h2: [6, 7, 8, 9, 10, 11], q1: [0, 1, 2], q2: [3, 4, 5], q3: [6, 7, 8], q4: [9, 10, 11] };
 function pipeSetMonthShortcut(kind) {
   pipeBidMonthFilter = {};
   (PIPE_MONTH_SHORTCUT_RANGES[kind] || []).forEach(function(m) { pipeBidMonthFilter[m] = true; });
   render();
+}
+
+// เลือกได้ว่าตัวกรอง "เดือน" จะอิงจากฟิลด์ไหน — default เป็น Forecast Month เพราะเป็นช่วงที่คาดว่าจะสั่งซื้อจริง
+// (ต่างจาก Bidding Date ที่เป็นแค่วันยื่นซอง กับ Shipment Date ที่มักเป็นแค่ประมาณการ) ผู้ใช้ขอ 2026-09-02 —
+// ใช้ร่วมกันทั้ง Pipeline หลักและ Dealer > Pipeline (มีตัวแปรเดียว ไม่แยกต่อหน้า ตั้งไว้ที่ไหนมีผลทั้งคู่)
+var pipeMonthSource = 'forecastMonth'; // 'biddingDate' | 'forecastMonth' | 'shipmentDate'
+var PIPE_MONTH_SOURCE_LABELS = { biddingDate: 'Bidding Date', forecastMonth: 'Forecast Month', shipmentDate: 'Shipment Date' };
+function _pipeMonthOf(p, source) {
+  if (source === 'forecastMonth') {
+    var info = (typeof _kpiParseForecastMonthText === 'function') ? _kpiParseForecastMonthText(p.forecastMonth) : null;
+    return info ? info.month - 1 : null;
+  }
+  if (source === 'shipmentDate') {
+    if (!p.shipmentDate) return null;
+    var sd = fcParseDate(p.shipmentDate);
+    return sd ? sd.getMonth() : null;
+  }
+  var bd = fcParseDate(p.biddingDate);
+  return bd ? bd.getMonth() : null;
+}
+function _pipeMonthSourceSelectHtml() {
+  return '<select onchange="pipeMonthSource=this.value;render()" style="font-size:.72rem;padding:2px 6px;border-radius:6px">' +
+    Object.keys(PIPE_MONTH_SOURCE_LABELS).map(function(k) {
+      return '<option value="' + k + '"' + (pipeMonthSource === k ? ' selected' : '') + '>' + PIPE_MONTH_SOURCE_LABELS[k] + '</option>';
+    }).join('') + '</select>';
 }
 var pipeFY = 'all';
 var pipeTaskFlt = false; // true = แสดงเฉพาะโครงการที่มี Task เปิดค้างอยู่ (ดู pipeOpenTasks ใน app.js)
@@ -1391,8 +1417,8 @@ function rPipeline(el) {
   if (Object.keys(pipeFlt).length) pipes = pipes.filter(function(p) { return pipeFlt[p.status]; });
   if (Object.keys(pipeBidMonthFilter).length) {
     pipes = pipes.filter(function(p) {
-      var bd = fcParseDate(p.biddingDate);
-      return bd && pipeBidMonthFilter[bd.getMonth()];
+      var m = _pipeMonthOf(p, pipeMonthSource);
+      return m !== null && pipeBidMonthFilter[m];
     });
   }
   if (pipeFY !== 'all') pipes = pipes.filter(function(p) {
@@ -1580,7 +1606,7 @@ function rPipeline(el) {
         '<span onclick="togglePipeTaskFlt()" style="cursor:pointer;font-size:.72rem;padding:4px 10px;border-radius:14px;display:inline-flex;align-items:center;gap:4px;' +
         (pipeTaskFlt ? 'background:#ef4444;color:#fff' : 'background:var(--bg2);border:1px solid var(--border);color:var(--text2)') + '">📋 มีงานค้าง (' + taskCnt + ')</span></div>';
     })() +
-    '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>' +
+    '<div class="hint" style="margin:8px 0 4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">📅 ' + _pipeMonthSourceSelectHtml() + ' เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>' +
     '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">' +
     ['H1','H2','Q1','Q2','Q3','Q4'].map(function(k) {
       return '<button class="btn bsm bo" onclick="pipeSetMonthShortcut(\'' + k.toLowerCase() + '\')">' + k + '</button>';

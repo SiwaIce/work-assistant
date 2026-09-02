@@ -1894,7 +1894,7 @@ function dealerPipelineTab(d) {
         '<div class="stage">📊 ทั้งหมด</div><div class="count">' + pipes.length + '</div><div class="amount">' + fmtMoneyShort(totalAmtAll) + '</div></div>';
       h += '</div>';
       h += pipeSelectedSubtotalHtml(dealerPipeStatusFlt, statusSummary);
-      h += '<div class="hint" style="margin:8px 0 4px">📅 Bidding Date เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
+      h += '<div class="hint" style="margin:8px 0 4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">📅 ' + _pipeMonthSourceSelectHtml() + ' เดือนไหนบ้าง (ไม่เลือก = ทุกเดือน)</div>';
       h += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">';
       ['H1','H2','Q1','Q2','Q3','Q4'].forEach(function(k) {
         h += '<button class="btn bsm bo" onclick="dealerPipeSetMonthShortcut(\'' + k.toLowerCase() + '\')">' + k + '</button>';
@@ -1915,8 +1915,8 @@ function dealerPipelineTab(d) {
     if (Object.keys(dealerPipeStatusFlt).length) listPipes = listPipes.filter(function(p) { return dealerPipeStatusFlt[p.status]; });
     if (Object.keys(dealerPipeBidMonthFlt).length) {
       listPipes = listPipes.filter(function(p) {
-        var bd = fcParseDate(p.biddingDate);
-        return bd && dealerPipeBidMonthFlt[bd.getMonth()];
+        var m = _pipeMonthOf(p, pipeMonthSource);
+        return m !== null && dealerPipeBidMonthFlt[m];
       });
     }
     if (dealerPipeDisplayFlt === 'show') listPipes = listPipes.filter(function(p) { return (p.sheetDisplay || 'Show') !== 'Hide'; });
