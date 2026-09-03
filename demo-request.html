@@ -15,7 +15,7 @@
 }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,'Segoe UI',sans-serif; min-height:100vh; }
-.wrap { max-width:900px; margin:0 auto; padding:20px 16px 70px; }
+.wrap { max-width:1280px; margin:0 auto; padding:20px 16px 70px; }
 .toplogo { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
 .toplogo .mark { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#6fd0ff); display:flex; align-items:center; justify-content:center; font-size:18px; }
 .toplogo .name { font-weight:700; font-size:16px; }
@@ -62,8 +62,12 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .unit-card { border:1px solid var(--border); border-radius:12px; padding:13px; background:var(--surface-2); cursor:pointer; position:relative; }
 .unit-card:hover { border-color:var(--accent); }
 .unit-card.disabled { opacity:.5; cursor:not-allowed; }
-.unit-card .un { font-weight:700; font-size:13.5px; margin-bottom:8px; }
+.unit-card.selected { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 2px var(--accent) inset; }
+.unit-card .un { font-weight:700; font-size:13.5px; margin-bottom:8px; padding-right:20px; }
 .unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; }
+.unit-card .sel-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+#stickyBarWrap { position:sticky; bottom:14px; z-index:20; display:flex; flex-direction:column; gap:8px; margin:16px 0; }
+#stickyBarWrap .cart-bar { position:static; margin:0; }
 .picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
 .picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
 .picked-unit-banner .un2 { font-weight:700; font-size:15px; }
@@ -130,7 +134,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div class="pagehead">
         <div class="eyebrow">ขั้นตอนที่ 1</div>
         <h1>เลือกอุปกรณ์ที่ต้องการยืม</h1>
-        <p>เลือกได้ทีละเครื่อง ดูปฏิทินว่างของเครื่องนั้นแล้วค่อยเลือกวันที่ — เพิ่มได้หลายรายการก่อนไปกรอกข้อมูลติดต่อ</p>
+        <p>ติ๊กเลือกเครื่องที่ต้องการได้หลายเครื่อง/หลายรุ่นพร้อมกัน แล้วกด "ถัดไป: เลือกวันที่" ครั้งเดียวเพื่อกำหนดช่วงวันให้ทุกเครื่องที่เลือก</p>
       </div>
       <div class="cat-tabs" id="custCatTabs"></div>
       <div class="browse-toolbar">
@@ -145,15 +149,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
     </div>
 
     <div id="step-calendar" class="wiz-step">
-      <button class="back-link" onclick="backToBrowse()">← กลับไปเลือกเครื่องอื่น</button>
+      <button class="back-link" onclick="backToBrowse()">← กลับไปแก้ไขรายการที่เลือก</button>
       <div class="card" style="margin-bottom:16px">
-        <div class="picked-unit-banner">
-          <div class="um2" id="pickedUnitIcon">🚁</div>
-          <div>
-            <div class="un2" id="pickedUnitName">-</div>
-            <div class="ud2" id="pickedUnitDesc">-</div>
-          </div>
-        </div>
+        <div id="calUnitsBanner" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
         <div class="cal-toolbar">
           <button class="cal-nav-btn" onclick="unitCalNav(-1)">◀</button>
           <div class="month-label" id="unitCalMonthLabel"></div>
@@ -161,8 +159,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         </div>
         <div class="cal-grid" id="unitCalGrid"></div>
         <div class="cal-legend">
-          <span><span class="dot" style="background:var(--good)"></span>ว่าง (กดเลือกได้)</span>
-          <span><span class="dot" style="background:var(--bad)"></span>ถูกยืมอยู่</span>
+          <span><span class="dot" style="background:var(--good)"></span>ว่างทุกเครื่องที่เลือก (กดเลือกได้)</span>
+          <span><span class="dot" style="background:var(--bad)"></span>มีบางเครื่องไม่ว่าง</span>
           <span><span class="dot" style="border:1px dashed var(--warn);background:var(--good-soft)"></span>⚠️ มีคนจอง รอคอนเฟิร์ม</span>
           <span><span class="dot" style="background:var(--accent)"></span>ช่วงที่เลือก</span>
         </div>
@@ -204,10 +202,18 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
     </div>
 
-    <div class="cart-bar" id="cartBar" style="display:none">
-      <span class="cb-label">🧺 เลือกไว้ <span id="cartCount">0</span> รายการ</span>
-      <div id="cartChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
-      <button class="btn btn-primary btn-sm" onclick="goToContact()">ถัดไป: กรอกข้อมูลติดต่อ →</button>
+    <div id="stickyBarWrap">
+      <div class="cart-bar" id="selBar" style="display:none">
+        <span class="cb-label">✅ เลือกไว้ <span id="selCount">0</span> เครื่อง</span>
+        <div id="selChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+        <button class="btn btn-ghost btn-sm" onclick="clearSelection()">ล้าง</button>
+        <button class="btn btn-primary btn-sm" onclick="goToMultiCalendar()">ถัดไป: เลือกวันที่ →</button>
+      </div>
+      <div class="cart-bar" id="cartBar" style="display:none">
+        <span class="cb-label">🧺 ในตะกร้า <span id="cartCount">0</span> รายการ</span>
+        <div id="cartChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+        <button class="btn btn-primary btn-sm" onclick="goToContact()">ถัดไป: กรอกข้อมูลติดต่อ →</button>
+      </div>
     </div>
   </div>
 
@@ -239,6 +245,7 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
 function fmtISO(y, m, d) { return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0'); }
+function todayIso() { var t = new Date(); return fmtISO(t.getFullYear(), t.getMonth(), t.getDate()); }
 function addDaysIso(iso, days) {
   var p = iso.split('-'); var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
   d.setDate(d.getDate() + days);
@@ -301,6 +308,23 @@ function iconForCategory(catId) {
 // STEP 1: เลือกอุปกรณ์
 // ================================================================
 var custCategory = 'all', custSearch = '', custTypeFilter = 'all', custSort = 'name_asc';
+var selectedUnitIds = [];
+function toggleUnitSelect(id) {
+  var i = selectedUnitIds.indexOf(id);
+  if (i === -1) selectedUnitIds.push(id); else selectedUnitIds.splice(i, 1);
+  renderSelBar(); renderBrowse();
+}
+function clearSelection() { selectedUnitIds = []; renderSelBar(); renderBrowse(); }
+function renderSelBar() {
+  document.getElementById('selCount').textContent = selectedUnitIds.length;
+  document.getElementById('selChips').innerHTML = selectedUnitIds.map(function(id) {
+    var u = UNITS.filter(function(x) { return x.id === id; })[0];
+    if (!u) return '';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
+  }).join('');
+  var onBrowse = document.getElementById('step-browse').classList.contains('on');
+  document.getElementById('selBar').style.display = (selectedUnitIds.length && onBrowse) ? 'flex' : 'none';
+}
 function renderCatTabs() {
   var counts = { all: UNITS.length };
   CATEGORIES.forEach(function(c) { counts[c.id] = UNITS.filter(function(u) { return u.category === c.id; }).length; });
@@ -336,16 +360,20 @@ function renderBrowse() {
     return bv - av;
   });
   if (!order.length) { grid.innerHTML = '<div class="empty-state">🔍 ไม่พบรุ่นที่ตรงกับการค้นหา/ตัวกรอง หรือยังไม่มีอุปกรณ์ในระบบ</div>'; return; }
+  var today = todayIso();
   grid.innerHTML = order.map(function(model) {
     var units = groups[model];
-    var availCount = units.filter(function(u){return u.clickable;}).length;
+    var availCount = units.filter(function(u){return u.clickable && unitDayState(u, today) === 'avail';}).length;
     return '<div class="model-group"><div class="mg-head"><span class="mn">' + units[0].icon + ' ' + esc(model) + '</span><span class="mc">' + availCount + '/' + units.length + ' เครื่องว่างตอนนี้</span></div>' +
       '<div class="mg-units">' + units.map(function(u) {
-        var statusPill = u.statusRaw === 'available' ? '<span class="pill pill-good">✅ ว่างตอนนี้</span>'
-          : (u.statusRaw === 'lent' || u.statusRaw === 'reserved') ? '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้ — กดดูวันว่างอื่นได้</span>'
-          : '<span class="pill pill-bad">⛔ งดใช้งาน</span>';
+        var statusPill;
+        if (!u.clickable) statusPill = '<span class="pill pill-bad">⛔ งดใช้งาน</span>';
+        else if (unitDayState(u, today) === 'busy') statusPill = '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้ — กดเลือกดูวันว่างอื่นได้</span>';
+        else statusPill = '<span class="pill pill-good">✅ ว่างตอนนี้</span>';
         var flyPill = u.flyable ? '<span class="pill pill-muted">✈️ บินได้</span>' : '<span class="pill pill-muted">🖼️ จัดแสดงเท่านั้น</span>';
-        return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + '" ' + (u.clickable ? 'onclick="openUnitCalendar(\'' + u.id + '\')"' : '') + '>' +
+        var isSel = selectedUnitIds.indexOf(u.id) !== -1;
+        return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + (isSel ? ' selected' : '') + '" ' + (u.clickable ? 'onclick="toggleUnitSelect(\'' + u.id + '\')"' : '') + '>' +
+          (isSel ? '<span class="sel-check">✓</span>' : '') +
           '<div class="un">' + esc(u.label) + '</div><div class="badges">' + statusPill + flyPill + '</div></div>';
       }).join('') + '</div></div>';
   }).join('');
@@ -354,7 +382,7 @@ function renderBrowse() {
 // ================================================================
 // STEP 2: ปฏิทินของเครื่องที่เลือก
 // ================================================================
-var custCalUnit = null, custCalMonthOffset = 0, rangeStart = null, rangeEnd = null, custDayCount = 1;
+var calUnits = [], custCalMonthOffset = 0, rangeStart = null, rangeEnd = null, custDayCount = 1;
 function unitDayState(unit, iso) {
   var busy = (unit.busyRanges || []).some(function(r) { return iso >= r.start && iso <= r.end; });
   if (busy) return 'busy';
@@ -365,13 +393,20 @@ function hasPendingReqOnDay(unit, iso) {
     return (req.items || []).some(function(it) { return it.model === unit.model && iso >= it.start && iso <= it.end; });
   });
 }
-function openUnitCalendar(unitId) {
-  custCalUnit = UNITS.filter(function(u) { return u.id === unitId; })[0];
-  if (!custCalUnit) return;
+function combinedDayState(iso) {
+  return calUnits.every(function(u) { return unitDayState(u, iso) === 'avail'; }) ? 'avail' : 'busy';
+}
+function combinedPendingOnDay(iso) {
+  return calUnits.some(function(u) { return hasPendingReqOnDay(u, iso); });
+}
+function goToMultiCalendar() {
+  if (!selectedUnitIds.length) return;
+  calUnits = UNITS.filter(function(u) { return selectedUnitIds.indexOf(u.id) !== -1; });
+  if (!calUnits.length) return;
   custCalMonthOffset = 0; rangeStart = null; rangeEnd = null; custDayCount = 1;
-  document.getElementById('pickedUnitIcon').textContent = custCalUnit.icon;
-  document.getElementById('pickedUnitName').textContent = custCalUnit.model + ' — ' + custCalUnit.label;
-  document.getElementById('pickedUnitDesc').textContent = custCalUnit.flyable ? '✈️ บินสาธิตได้' : '🖼️ จัดแสดงเท่านั้น (ห้ามบิน)';
+  document.getElementById('calUnitsBanner').innerHTML = calUnits.map(function(u) {
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + '</span>';
+  }).join('');
   document.getElementById('rangeStartInput').value = '';
   document.getElementById('rangeEndInput').value = '';
   document.getElementById('custDayCountInput').value = 1;
@@ -379,10 +414,11 @@ function openUnitCalendar(unitId) {
   switchWizStep('calendar');
   renderUnitCal();
 }
-function backToBrowse() { switchWizStep('browse'); renderBrowse(); }
+function backToBrowse() { switchWizStep('browse'); renderBrowse(); renderSelBar(); }
 function switchWizStep(name) {
   ['browse','calendar','contact'].forEach(function(s) { document.getElementById('step-' + s).classList.toggle('on', s === name); });
   document.getElementById('cartBar').style.display = (cart.length && name !== 'contact') ? 'flex' : 'none';
+  document.getElementById('selBar').style.display = (selectedUnitIds.length && name === 'browse') ? 'flex' : 'none';
 }
 function renderUnitCal() {
   var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + custCalMonthOffset);
@@ -396,8 +432,8 @@ function renderUnitCal() {
   for (var i = 0; i < firstDow; i++) h += '<div class="cal-cell other"></div>';
   for (var d = 1; d <= totalDays; d++) {
     var iso = fmtISO(year, month, d);
-    var state = unitDayState(custCalUnit, iso);
-    var pendingReq = state === 'avail' && hasPendingReqOnDay(custCalUnit, iso);
+    var state = combinedDayState(iso);
+    var pendingReq = state === 'avail' && combinedPendingOnDay(iso);
     var clickable = state === 'avail';
     var isToday = isThisMonth && today.getDate() === d;
     var inRange = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd;
@@ -423,10 +459,10 @@ function syncRangeInputs() {
 }
 function checkRangeWarn() {
   var warnEl = document.getElementById('custRangeWarn');
-  if (!rangeStart || !rangeEnd || !custCalUnit) { warnEl.innerHTML = ''; return; }
+  if (!rangeStart || !rangeEnd || !calUnits.length) { warnEl.innerHTML = ''; return; }
   var hasIssue = false, cur = rangeStart;
-  while (cur <= rangeEnd) { if (unitDayState(custCalUnit, cur) !== 'avail') { hasIssue = true; break; } cur = addDaysIso(cur, 1); }
-  warnEl.innerHTML = hasIssue ? '<div class="range-warn">⚠️ ช่วงที่เลือกมีบางวันไม่ว่าง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่</div>' : '';
+  while (cur <= rangeEnd) { if (combinedDayState(cur) !== 'avail') { hasIssue = true; break; } cur = addDaysIso(cur, 1); }
+  warnEl.innerHTML = hasIssue ? '<div class="range-warn">⚠️ ช่วงที่เลือกมีบางวันไม่ว่างสำหรับบางเครื่อง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่</div>' : '';
 }
 function custDayCountChange(delta) {
   custDayCount = Math.max(1, custDayCount + delta);
@@ -451,7 +487,10 @@ function manualRangeChange() {
 var cart = [];
 function addToCart() {
   if (!rangeStart) { alert('เลือกวันที่ก่อนนะครับ'); return; }
-  cart.push({ unitId: custCalUnit.id, model: custCalUnit.model, icon: custCalUnit.icon, label: custCalUnit.label, start: rangeStart, end: rangeEnd || rangeStart });
+  calUnits.forEach(function(u) {
+    cart.push({ unitId: u.id, model: u.model, icon: u.icon, label: u.label, start: rangeStart, end: rangeEnd || rangeStart });
+  });
+  clearSelection();
   renderCartBar(); backToBrowse();
 }
 function renderCartBar() {
