@@ -3002,6 +3002,7 @@ function rDemoTracker(el) {
   var h = '';
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์</button>';
+  h += '<button class="btn bo" onclick="showDemoLinksM()">🔗 ลิงก์ขอยืม/จัดการ Demo</button>';
   h += '</div>';
 
   if (overdueCount) {
@@ -3473,6 +3474,23 @@ function readDemoComplianceFields() {
     droneInsurance: document.getElementById('dm_insurance').checked,
     caatRegistered: document.getElementById('dm_caat').checked
   };
+}
+
+// ลิงก์ 2 หน้าใหม่ (demo-request.html/demo-staff.html) เป็นไฟล์แยกนอก SPA ไม่มีเมนูในแอพลิงก์ตรงไปหาได้
+// (ผู้ใช้ถาม 2026-09-05 ว่าเมนูอยู่ไหน) เลยเพิ่มปุ่มนี้ไว้โชว์+copy URL แทน คำนวณ base URL จาก location
+// ปัจจุบันเอง กันพิมพ์โดเมนผิดตอน deploy คนละที่ (localhost ตอน dev, โดเมนจริงตอน production)
+function showDemoLinksM() {
+  var base = location.href.replace(/[^/]*\.html.*$/, '').replace(/#.*$/, '');
+  var reqUrl = base + 'demo-request.html';
+  var staffUrl = base + 'demo-staff.html';
+  var h = '<div style="max-width:420px">';
+  h += '<div class="fm-group"><label>🔗 ลิงก์สำหรับลูกค้า (ขอยืม Demo — ส่งให้ใครก็ได้ ไม่ต้องมี Dealer PIN)</label>';
+  h += '<div style="display:flex;gap:6px"><input type="text" class="fm-input" readonly value="' + sanitize(reqUrl) + '" id="demoLinkCust" onclick="this.select()"><button class="btn bsm bo" onclick="copyToClip(document.getElementById(\'demoLinkCust\').value)">📋</button></div></div>';
+  h += '<div class="fm-group"><label>🔒 ลิงก์สำหรับทีม (อนุมัติ/กรอกยืมเอง/ติดตามคืน — ต้องกรอกรหัสผ่านร่วมก่อน)</label>';
+  h += '<div style="display:flex;gap:6px"><input type="text" class="fm-input" readonly value="' + sanitize(staffUrl) + '" id="demoLinkStaff" onclick="this.select()"><button class="btn bsm bo" onclick="copyToClip(document.getElementById(\'demoLinkStaff\').value)">📋</button></div></div>';
+  h += '<div style="font-size:11px;color:var(--text2);margin-top:6px">2 หน้านี้เป็นไฟล์แยกนอกแอพหลัก (demo-request.html / demo-staff.html) ไม่ต้อง login แบบเต็มรูปแบบ ใช้ข้อมูลอุปกรณ์ชุดเดียวกับเมนูนี้ผ่าน Firestore</div>';
+  h += '</div>';
+  openM('🔗 ลิงก์ยืม Demo', h);
 }
 
 function showAddDemoM() {
