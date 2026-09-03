@@ -326,6 +326,14 @@ var DEF_CONFIG = {
   torOptions: ['Open','Lock','N/A'],
   appointmentOptions: ['ออกแล้ว','ยังไม่ออก','ไม่ต้องใช้'],
 
+  // หมวดหมู่อุปกรณ์ Demo — ใช้เป็นแท็บกรองในหน้ายืม Demo สาธารณะ (demo-request.html) แก้ชื่อ/ไอคอน/เพิ่มลบ
+  // ได้จากหน้าตั้งค่าเครื่องมือจัดการ Demo (demo-staff.html)
+  demoCategories: [
+    { id: 'drone', label: 'Drone', icon: '🚁' },
+    { id: 'dock', label: 'Dock', icon: '🛰️' },
+    { id: 'payload', label: 'Payload', icon: '🎯' }
+  ],
+
   // น้ำหนักคำนวณ "POS แนะนำ" (utils.js computeSuggestedPOS) — แก้ได้จากปุ่ม ⚙️ ข้าง POS แนะนำเลย
   // ไม่ต้องเข้า Admin (showPosWeightsEditorM ใน modals.js) ตัวเลขพวกนี้เป็นแค่ค่าเริ่มต้นที่ประเมินเอง ปรับได้ตลอด
   posWeights: {

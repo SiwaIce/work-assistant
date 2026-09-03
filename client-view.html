@@ -4315,8 +4315,10 @@ function escHtml(s) {
 
 // ================================================================
 // DEMO TAB — ยืม Demo Unit จาก SiS (บินสาธิตได้ / จัดแสดงสินค้าเท่านั้น)
-// อ่านแคตตาล็อกจาก dealerUpdates/__demoCatalog__ (publish โดยแอปหลัก — ดู publishDemoCatalog() ใน
+// อ่านแคตตาล็อกจาก dealerUpdates/demoCatalogPublic (publish โดยแอปหลัก — ดู publishDemoCatalog() ใน
 // features.js) ไม่มีชื่อผู้ยืม/Dealer อื่นปนมาเลยตั้งแต่ต้น ไม่ใช่แค่ซ่อนที่ UI จึงรักษาความเป็นส่วนตัวได้จริง
+// ชื่อ doc เดิมคือ __demoCatalog__ — เปลี่ยนเป็น demoCatalogPublic (2026-09-05) เพราะ Firestore สงวนชื่อ
+// __xxx__ ไว้ใช้ภายใน .get()/.set() บนชื่อแบบนั้น error ทันที แปลว่าแท็บนี้อ่านข้อมูลไม่สำเร็จเลยตั้งแต่สร้าง
 // ส่งคำขอเขียนไปที่ dealerUpdates/{dealerId}/demoRequests ซึ่ง Dealer ตัวเองเขียนได้อยู่แล้ว (path เดียวกับ
 // pipeline/forecast) ทีมงานฝั่งแอปหลักจะเห็นคำขอนี้ในเมนู Demo Equipment > 🟡 คำขอยืม
 // ================================================================
@@ -4328,7 +4330,7 @@ function renderDemoTab() {
   if (!tc) return;
   tc.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>กำลังโหลดรายการ Demo...</div></div>';
 
-  db.collection('dealerUpdates').doc('__demoCatalog__').get().then(function(doc) {
+  db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
     _demoCatalog = doc.exists ? (doc.data().units || []) : [];
     renderDemoTabContent();
   }).catch(function(e) {

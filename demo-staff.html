@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>จัดการ Demo Equipment — ทีม SIS</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg:#f4f6f9; --surface:#fff; --surface-2:#eef1f6; --border:#dde3ec; --text:#17202b; --text2:#5b6779; --text3:#8a94a6;
+  --accent:#0b74de; --accent-ink:#fff; --accent-soft:#e8f1fd;
+  --good:#1a9c5e; --good-soft:#e5f7ee; --warn:#b8770a; --warn-soft:#fdf1de; --bad:#d1364a; --bad-soft:#fbe8ea;
+  --shadow:0 1px 2px rgba(23,32,43,.04),0 8px 24px -12px rgba(23,32,43,.12); --radius:14px;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,'Segoe UI',sans-serif; min-height:100vh; }
+.wrap { max-width:1000px; margin:0 auto; padding:20px 16px 70px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px; }
+.field { margin-bottom:14px; }
+.field label { display:block; font-size:12.5px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+.field input, .field textarea, .field select { width:100%; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.field textarea { resize:vertical; min-height:70px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:600px) { .grid2 { grid-template-columns:1fr; } }
+.btn { font:inherit; font-weight:700; font-size:14px; padding:11px 20px; border-radius:10px; border:1px solid transparent; cursor:pointer; }
+.btn-primary { background:var(--accent); color:var(--accent-ink); }
+.btn-ghost { background:transparent; border-color:var(--border); color:var(--text); }
+.btn-sm { padding:6px 12px; font-size:12.5px; border-radius:8px; }
+.btn-full { width:100%; }
+.pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+.pill-good { background:var(--good-soft); color:var(--good); }
+.pill-warn { background:var(--warn-soft); color:var(--warn); }
+.pill-bad { background:var(--bad-soft); color:var(--bad); }
+.pill-muted { background:var(--surface-2); color:var(--text2); }
+.back-link { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-weight:600; font-size:13.5px; cursor:pointer; margin-bottom:14px; background:none; border:none; padding:0; }
+.lockwrap { max-width:360px; margin:90px auto; text-align:center; }
+.lockwrap .ic { font-size:40px; margin-bottom:10px; }
+.pinboxes input { width:200px; text-align:center; font-size:22px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-weight:700; padding:10px; letter-spacing:6px; }
+.topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
+.stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+@media (max-width:700px) { .stat-row { grid-template-columns:repeat(2,1fr); } }
+.stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
+.stat .n { font-size:22px; font-weight:700; }
+.stat .l { font-size:11.5px; color:var(--text2); margin-top:2px; }
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto; }
+.tabs button { border:none; background:transparent; font:inherit; font-weight:600; font-size:13.5px; color:var(--text2); padding:10px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
+.tabs button.on { color:var(--accent); border-color:var(--accent); }
+.tabpane { display:none; } .tabpane.on { display:block; }
+.req-item { display:flex; gap:14px; padding:14px; border:1px solid var(--border); border-radius:12px; margin-bottom:10px; background:var(--surface); align-items:flex-start; flex-wrap:wrap; }
+.req-item.conflict { border-color:var(--warn); background:var(--warn-soft); }
+.req-item .avatar { width:38px; height:38px; border-radius:10px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0; }
+.req-item .body { flex:1; min-width:200px; }
+.req-item .co { font-weight:700; font-size:14px; }
+.req-item .meta { font-size:12px; color:var(--text2); margin-top:3px; line-height:1.6; }
+.req-item .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.conflict-note { width:100%; font-size:11.5px; font-weight:700; color:var(--warn); background:var(--surface); border-radius:8px; padding:6px 10px; margin-top:6px; }
+.unit-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+.unit-table th { text-align:left; font-size:10.5px; text-transform:uppercase; color:var(--text3); padding:8px 10px; border-bottom:1px solid var(--border); }
+.unit-table td { padding:10px; border-bottom:1px solid var(--border); }
+.unit-table tr:hover td { background:var(--surface-2); cursor:pointer; }
+.empty-state { text-align:center; padding:40px 20px; color:var(--text3); }
+.rt-item { display:flex; gap:14px; padding:14px; border-radius:12px; margin-bottom:10px; align-items:flex-start; flex-wrap:wrap; border:1px solid var(--border); background:var(--surface); }
+.rt-item.overdue { border-color:var(--bad); background:var(--bad-soft); }
+.rt-item.duesoon { border-color:var(--warn); background:var(--warn-soft); }
+.rt-item .icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; background:var(--surface-2); }
+.rt-item .body { flex:1; min-width:200px; }
+.rt-section-title { font-weight:700; font-size:13.5px; margin:18px 0 10px; }
+.rt-section-title:first-child { margin-top:0; }
+.picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
+.picked-unit-banner .un2 { font-weight:700; font-size:15px; }
+.picked-unit-banner .ud2 { font-size:12px; color:var(--text2); }
+.catmgr-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; margin-bottom:6px; background:var(--surface-2); }
+.catmgr-row input { flex:1; font:inherit; font-size:13px; padding:6px 9px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); }
+.link-callout { display:flex; align-items:center; gap:10px; background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:10px 14px; font-size:12.5px; margin-bottom:18px; flex-wrap:wrap; }
+.link-callout code { background:var(--surface); padding:3px 8px; border-radius:6px; font-size:12px; }
+.loading { text-align:center; padding:60px 20px; color:var(--text2); }
+.toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 18px; border-radius:10px; font-size:13px; z-index:99; box-shadow:var(--shadow); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="staff-lock-view">
+    <div class="lockwrap">
+      <div class="ic">🔒</div>
+      <h2>เข้าสู่ระบบจัดการ Demo</h2>
+      <p style="color:var(--text2);font-size:13px">กรอกรหัสผ่านทีม (รหัสเดียวกันทั้งทีม ไม่ต้อง Login เต็มรูปแบบ)</p>
+      <input type="password" id="pinInput" placeholder="รหัสผ่านทีม" style="margin-bottom:14px">
+      <button class="btn btn-primary btn-full" onclick="attemptUnlock()" id="unlockBtn">🔓 เข้าสู่ระบบ</button>
+      <p id="lockMsg" style="margin-top:14px;font-size:11.5px;color:var(--bad)"></p>
+      <p style="margin-top:14px;font-size:11.5px;color:var(--text3)">จำอุปกรณ์นี้ไว้ 30 วัน — ไม่ต้องกรอกซ้ำทุกครั้ง</p>
+    </div>
+  </div>
+
+  <div id="staff-main-view" style="display:none">
+    <div class="loading" id="staffLoading">กำลังโหลดข้อมูล...</div>
+    <div id="staffContent" style="display:none">
+      <div class="topbar">
+        <div><div style="font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">Staff • ไม่ผูกบัญชีส่วนตัว</div><h1 style="margin:2px 0 0;font-size:22px">🚁 จัดการ Demo Equipment</h1></div>
+        <button class="btn btn-ghost btn-sm" onclick="staffLock()">🔒 ออกจากระบบ</button>
+      </div>
+
+      <div class="link-callout">
+        🔗 ลิงก์สำหรับส่งให้ลูกค้ายืม (อันเดียวใช้ได้กับทุกราย):
+        <code id="pubLink"></code>
+        <button class="btn btn-ghost btn-sm" onclick="copyPubLink()">📋 คัดลอกลิงก์</button>
+      </div>
+
+      <div class="stat-row" id="statRow"></div>
+
+      <div class="tabs">
+        <button class="on" data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
+        <button data-tab="return" onclick="staffTab('return')">🔔 ติดตามคืน <span id="returnCountBadge"></span></button>
+        <button data-tab="units" onclick="staffTab('units')">🚁 รายการเครื่อง</button>
+      </div>
+
+      <div class="tabpane on" id="tab-pending"></div>
+      <div class="tabpane" id="tab-return"></div>
+      <div class="tabpane" id="tab-units">
+        <div id="unitsListView">
+          <button class="btn btn-ghost btn-sm" id="catMgrToggleBtn" style="margin-bottom:10px" onclick="toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
+          <div class="card" id="catMgrPanel" style="display:none;margin-bottom:14px">
+            <div style="font-weight:700;margin-bottom:8px">🏷️ หมวดหมู่ที่ลูกค้าเห็นเป็นแท็บ</div>
+            <div id="catMgrRows"></div>
+            <button class="btn btn-ghost btn-sm" onclick="catMgrAddRow()">➕ เพิ่มหมวดหมู่</button>
+            <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="catMgrSave()">💾 บันทึกหมวดหมู่</button>
+          </div>
+          <div class="card" style="padding:0;overflow:auto">
+            <table class="unit-table">
+              <thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>
+              <tbody id="unitTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="unitDetailView" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// Firebase — เชื่อมตรงไม่ผ่าน Auth เหมือน demo-request.html/client-view.html
+// Firestore rules ที่ต้องเพิ่ม (ยังไม่มี — ต้องไปเพิ่มเองใน Firebase Console เหมือน teamVisitPlans):
+//   - dealerUpdates/demoCatalogPublic : read (สาธารณะ), write (จากหน้านี้ตอนแก้หมวดหมู่)
+//   - dealerUpdates/demoStaffAuth     : read+write (เก็บ pinHash)
+//   - publicDemoRequests/{id}         : read, update (จากหน้านี้อนุมัติ/ปฏิเสธ) — create มาจาก demo-request.html
+//   - publicDemoLoans/{id}            : read, create, update (จากหน้านี้)
+// ================================================================
+var firebaseConfig = {
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+
+function esc(s) { s = String(s == null ? '' : s); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtISO(y,m,d) { return y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0'); }
+function _td() { var d = new Date(); return fmtISO(d.getFullYear(), d.getMonth(), d.getDate()); }
+function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+async function sha256(str) {
+  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.prototype.map.call(new Uint8Array(buf), function(b) { return b.toString(16).padStart(2,'0'); }).join('');
+}
+function toastMock(msg) {
+  var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(function() { t.remove(); }, 2800);
+}
+
+// ================================================================
+// PIN gate — เก็บ hash (SHA-256) ไว้ที่ dealerUpdates/demoStaffAuth ไม่ใช่รหัสตรงๆ ถ้ายังไม่เคยตั้งจะให้ตั้ง
+// รหัสแรกได้เลย (bootstrap) — นี่คือ soft gate กัน "เผลอ" ไม่ใช่ระบบความปลอดภัยจริง เหมือนที่ยอมรับกันทั้งระบบ
+// อยู่แล้ว (permission เปิดกว้าง) ถ้าใครรู้ path ตรงๆ ก็ยังเรียก Firestore ตรงได้อยู่ดี
+// ================================================================
+function attemptUnlock() {
+  var pin = document.getElementById('pinInput').value.trim();
+  var btn = document.getElementById('unlockBtn');
+  var msg = document.getElementById('lockMsg');
+  if (!pin) { msg.textContent = 'กรอกรหัสผ่านก่อนนะครับ'; return; }
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  db.collection('dealerUpdates').doc('demoStaffAuth').get().then(function(doc) {
+    if (!doc.exists || !doc.data().pinHash) {
+      if (!confirm('ยังไม่เคยตั้งรหัสผ่านทีม ต้องการตั้งรหัส "' + pin + '" เป็นรหัสผ่านทีมเลยไหม?')) { btn.disabled = false; btn.textContent = '🔓 เข้าสู่ระบบ'; return; }
+      return sha256(pin).then(function(h) {
+        return db.collection('dealerUpdates').doc('demoStaffAuth').set({ pinHash: h });
+      }).then(function() { unlockSuccess(pin); });
+    }
+    return sha256(pin).then(function(h) {
+      if (h === doc.data().pinHash) { unlockSuccess(pin); }
+      else { msg.textContent = '❌ รหัสผ่านไม่ถูกต้อง'; btn.disabled = false; btn.textContent = '🔓 เข้าสู่ระบบ'; }
+    });
+  }).catch(function(e) {
+    msg.textContent = 'เชื่อมต่อไม่สำเร็จ: ' + e.message;
+    btn.disabled = false; btn.textContent = '🔓 เข้าสู่ระบบ';
+  });
+}
+function unlockSuccess(pin) {
+  try { localStorage.setItem('demoStaffPinOk', pin + '|' + (Date.now() + 30*86400000)); } catch(e) {}
+  document.getElementById('staff-lock-view').style.display = 'none';
+  document.getElementById('staff-main-view').style.display = 'block';
+  document.getElementById('pubLink').textContent = location.href.replace(/demo-staff\.html.*$/, 'demo-request.html');
+  loadStaffData();
+}
+function staffLock() {
+  try { localStorage.removeItem('demoStaffPinOk'); } catch(e) {}
+  location.reload();
+}
+function copyPubLink() {
+  var t = document.getElementById('pubLink').textContent;
+  navigator.clipboard && navigator.clipboard.writeText(t).then(function() { toastMock('📋 คัดลอกลิงก์แล้ว'); });
+}
+(function checkRememberedPin() {
+  try {
+    var saved = localStorage.getItem('demoStaffPinOk');
+    if (!saved) return;
+    var parts = saved.split('|');
+    if (Number(parts[1]) > Date.now()) { document.getElementById('pinInput').value = parts[0]; }
+  } catch(e) {}
+})();
+
+// ================================================================
+// โหลดข้อมูลจริง — catalog (หนึ่งครั้ง), pending requests + active loans (realtime listener)
+// ================================================================
+var UNITS = [];       // จาก dealerUpdates/demoCatalogPublic.units — ข้อมูลเครื่องเต็ม (SKU/S-N/compliance)
+var CATEGORIES = [];
+var PENDING = [];      // publicDemoRequests status=='pending'
+var LOANS = [];        // publicDemoLoans ทั้งหมด (active + returned) — ใช้คำนวณ busy/ประวัติ
+var currentUnitDetail = null;
+
+function loadStaffData() {
+  db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
+    var data = doc.exists ? doc.data() : {};
+    UNITS = data.units || [];
+    CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
+    document.getElementById('staffLoading').style.display = 'none';
+    document.getElementById('staffContent').style.display = 'block';
+    listenPending();
+    listenLoans();
+  }).catch(function(e) {
+    document.getElementById('staffLoading').innerHTML = '<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message) + '<br>อาจต้องเพิ่ม Firestore rule ให้อ่าน dealerUpdates/demoCatalogPublic ได้ก่อน</div>';
+  });
+}
+function listenPending() {
+  db.collection('publicDemoRequests').where('status', '==', 'pending').onSnapshot(function(snap) {
+    PENDING = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
+    renderAll();
+  }, function(e) { console.warn('listenPending error', e); });
+}
+function listenLoans() {
+  db.collection('publicDemoLoans').onSnapshot(function(snap) {
+    LOANS = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
+    renderAll();
+  }, function(e) { console.warn('listenLoans error', e); });
+}
+function activeLoansFor(unitId) { return LOANS.filter(function(l) { return l.unitId === unitId && l.status === 'active'; }); }
+function unitIsBusyOn(unitId, iso) { return activeLoansFor(unitId).some(function(l) { return iso >= l.start && iso <= l.end; }); }
+function unitCurrentLoan(unitId) {
+  var today = _td();
+  return activeLoansFor(unitId).filter(function(l) { return today >= l.start && today <= l.end; })[0] || null;
+}
+
+var _staffRenderTimer = null;
+function renderAll() {
+  clearTimeout(_staffRenderTimer);
+  _staffRenderTimer = setTimeout(function() {
+    renderStatRow(); renderPendingTab(); renderReturnTab(); renderUnitsTable();
+    if (currentUnitDetail) openUnitDetail(currentUnitDetail.id);
+  }, 30);
+}
+
+function renderStatRow() {
+  var avail = 0, busy = 0, off = 0;
+  UNITS.forEach(function(u) {
+    if (u.status === 'unavailable' || u.status === 'lost') off++;
+    else if (unitIsBusyOn(u.id, _td())) busy++;
+    else avail++;
+  });
+  document.getElementById('statRow').innerHTML =
+    '<div class="stat"><div class="n" style="color:var(--good)">' + avail + '</div><div class="l">✅ ว่างพร้อมยืม</div></div>' +
+    '<div class="stat"><div class="n" style="color:var(--accent)">' + busy + '</div><div class="l">📤 กำลังถูกยืม</div></div>' +
+    '<div class="stat"><div class="n" style="color:var(--warn)">' + PENDING.length + '</div><div class="l">🟡 รออนุมัติ</div></div>' +
+    '<div class="stat"><div class="n" style="color:var(--text2)">' + off + '</div><div class="l">⛔ ไม่พร้อมใช้งาน</div></div>';
+  document.getElementById('pendingCountBadge').textContent = '(' + PENDING.length + ')';
+  var overdue = LOANS.filter(function(l) { return l.status === 'active' && l.end < _td(); }).length;
+  document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
+}
+
+function staffTab(name) {
+  document.querySelectorAll('.tabs button').forEach(function(b) { b.classList.toggle('on', b.dataset.tab === name); });
+  document.querySelectorAll('.tabpane').forEach(function(p) { p.classList.toggle('on', p.id === 'tab-' + name); });
+}
+
+// ---- คำขอรออนุมัติ + ตรวจจับคำขอชนกัน ----
+function datesOverlap(s1,e1,s2,e2) { return s1 <= e2 && s2 <= e1; }
+function findConflictsFor(req) {
+  return PENDING.filter(function(other) {
+    if (other._id === req._id) return false;
+    return req.items.some(function(a) { return other.items.some(function(b) { return a.model === b.model && datesOverlap(a.start,a.end,b.start,b.end); }); });
+  });
+}
+function renderPendingTab() {
+  var el = document.getElementById('tab-pending');
+  if (!PENDING.length) { el.innerHTML = '<div class="empty-state">🎉 ไม่มีคำขอค้างอยู่</div>'; return; }
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">⚠️ = คำขอนี้เลือกรุ่น+ช่วงวันที่ทับกับคำขออื่นที่ยังรออนุมัติอยู่ — อนุมัติจะช่วยเสนอปฏิเสธคำขอที่ชนกันให้อัตโนมัติ</div>';
+  h += PENDING.map(function(req) {
+    var conflicts = findConflictsFor(req);
+    var itemsTxt = req.items.map(function(it) { return esc(it.model) + ' (' + esc(it.label) + ') ' + it.start + (it.end !== it.start ? ' – ' + it.end : ''); }).join('<br>');
+    var conflictHtml = conflicts.length ? '<div class="conflict-note">⚠️ ชนกับคำขอของ ' + conflicts.map(function(c){return esc(c.companyName);}).join(', ') + '</div>' : '';
+    return '<div class="req-item' + (conflicts.length ? ' conflict' : '') + '">' +
+      '<div class="avatar">' + esc((req.companyName||'?').substr(0,2)) + '</div>' +
+      '<div class="body"><div class="co">' + esc(req.companyName) + ' <span class="pill pill-warn">🟡 รออนุมัติ</span></div>' +
+      '<div class="meta">👤 ' + esc(req.contactName) + ' · 📞 ' + esc(req.phone) + (req.email ? ' · ' + esc(req.email) : '') + '<br>' + itemsTxt + (req.purpose ? '<br>📝 ' + esc(req.purpose) : '') + '</div>' + conflictHtml + '</div>' +
+      '<div class="actions">' +
+      '<input type="text" id="apprName_' + req._id + '" placeholder="ชื่อผู้ทำเรื่อง/คีย์เบิก" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:150px">' +
+      '<select id="apprDest_' + req._id + '" style="font-size:12.5px;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)">' +
+      '<option value="customer">📍 ส่งที่อยู่ลูกค้า</option><option value="office">🏢 รับที่บริษัท</option><option value="event">🎪 ส่งไปงาน</option></select>' +
+      '<button class="btn btn-primary btn-sm" onclick="approveRequest(\'' + req._id + '\')">✅ อนุมัติ</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="rejectRequest(\'' + req._id + '\')">✕ ปฏิเสธ</button>' +
+      '</div></div>';
+  }).join('');
+  el.innerHTML = h;
+}
+function approveRequest(reqId) {
+  var req = PENDING.filter(function(r) { return r._id === reqId; })[0];
+  if (!req) return;
+  var approver = (document.getElementById('apprName_' + reqId).value || '').trim();
+  if (!approver) { alert('กรอกชื่อผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  var conflicts = findConflictsFor(req);
+  if (conflicts.length) {
+    var names = conflicts.map(function(c) { return c.companyName; }).join(', ');
+    if (!confirm('คำขอนี้ชนกับคำขอของ ' + names + '\n\nกด OK เพื่ออนุมัติรายการนี้ และปฏิเสธคำขอที่ชนกันให้อัตโนมัติ')) return;
+  }
+  var batch = db.batch();
+  var reqRef = db.collection('publicDemoRequests').doc(reqId);
+  batch.update(reqRef, { status: 'approved', approver: approver });
+  req.items.forEach(function(it) {
+    var loanRef = db.collection('publicDemoLoans').doc();
+    batch.set(loanRef, {
+      unitId: it.unitId, model: it.model, label: it.label, borrower: req.companyName, purpose: req.purpose || '',
+      start: it.start, end: it.end, actualReturnDate: '', approver: approver, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  });
+  conflicts.forEach(function(c) { batch.update(db.collection('publicDemoRequests').doc(c._id), { status: 'rejected' }); });
+  batch.commit().then(function() { toastMock('✅ อนุมัติแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+function rejectRequest(reqId) {
+  if (!confirm('ปฏิเสธคำขอนี้?')) return;
+  db.collection('publicDemoRequests').doc(reqId).update({ status: 'rejected' })
+    .then(function() { toastMock('✕ ปฏิเสธแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ---- ติดตามการคืน ----
+function renderReturnTab() {
+  var el = document.getElementById('tab-return');
+  var today = _td();
+  var active = LOANS.filter(function(l) { return l.status === 'active'; });
+  var overdue = active.filter(function(l) { return l.end < today; });
+  var soon = active.filter(function(l) { return l.end >= today && daysBetween(today, l.end) <= 2; });
+  var h = '';
+  h += '<div class="rt-section-title">🔴 เลยกำหนดคืนแล้ว (' + overdue.length + ')</div>';
+  h += overdue.length ? overdue.map(returnRowHtml.bind(null, 'overdue')).join('') : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
+  h += '<div class="rt-section-title">🟡 ใกล้ถึงกำหนดคืน (' + soon.length + ')</div>';
+  h += soon.length ? soon.map(returnRowHtml.bind(null, 'duesoon')).join('') : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
+  el.innerHTML = h;
+}
+function returnRowHtml(cls, l) {
+  var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+  var daysTxt = l.end < _td() ? 'เลยมาแล้ว ' + daysBetween(l.end, _td()) + ' วัน' : 'อีก ' + daysBetween(_td(), l.end) + ' วัน';
+  return '<div class="rt-item ' + cls + '"><div class="icon">' + (u ? '🚁' : '🚁') + '</div>' +
+    '<div class="body"><div style="font-weight:700">' + esc(l.model) + ' (' + esc(l.label) + ')</div>' +
+    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + l.end + ' (' + daysTxt + ')</div></div>' +
+    '<div class="actions"><button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l._id + '\')">✅ รับคืนแล้ว</button></div></div>';
+}
+function markLoanReturned(loanId) {
+  db.collection('publicDemoLoans').doc(loanId).update({ status: 'returned', actualReturnDate: _td() })
+    .then(function() { toastMock('✅ รับคืนแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ---- รายการเครื่อง + รายละเอียด + กรอกยืมเอง ----
+function renderUnitsTable() {
+  var groups = {}, order = [];
+  UNITS.forEach(function(u) { if (!groups[u.model]) { groups[u.model] = []; order.push(u.model); } groups[u.model].push(u); });
+  var rows = [];
+  order.sort().forEach(function(model) {
+    groups[model].forEach(function(u, i) {
+      var label = groups[model].length > 1 ? 'เครื่อง #' + (i+1) : (u.name && u.name !== model ? u.name : 'เครื่อง #1');
+      var loan = unitCurrentLoan(u.id);
+      var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
+        : loan ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
+      rows.push('<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
+        '<td>' + esc(model) + ' (' + esc(label) + ')</td><td>' + esc(u.sku||'—') + '</td><td>' + esc(u.serialNumber||'—') + '</td><td>' + esc(u.rentalDbNo||'—') + '</td>' +
+        '<td>' + (u.nbtcRegistered?'✅':'❌') + ' · ' + (u.droneInsurance?'✅':'❌') + ' · ' + (u.caatRegistered?'✅':'❌') + '</td>' +
+        '<td>' + (u.flyable!==false?'✈️ บินได้':'🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
+        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end : '—') + '</td></tr>');
+    });
+  });
+  document.getElementById('unitTbody').innerHTML = rows.join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">ยังไม่มีอุปกรณ์ในระบบ — เพิ่มได้จากเมนู Demo Equipment ในแอพหลัก</td></tr>';
+}
+function openUnitDetail(unitId) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!u) return;
+  currentUnitDetail = u;
+  document.getElementById('unitsListView').style.display = 'none';
+  var view = document.getElementById('unitDetailView');
+  view.style.display = 'block';
+  var loan = unitCurrentLoan(u.id);
+  var history = LOANS.filter(function(l) { return l.unitId === u.id; }).sort(function(a,b){ return (b.start||'').localeCompare(a.start||''); }).slice(0,8);
+  var h = '<button class="back-link" onclick="closeUnitDetail()">← กลับไปรายการเครื่อง</button>';
+  h += '<div class="card" style="margin-bottom:16px"><div class="picked-unit-banner"><div class="um2">🚁</div><div><div class="un2">' + esc(u.model) + '</div>' +
+    '<div class="ud2">SiS Part: ' + esc(u.sku||'—') + ' · S/N: ' + esc(u.serialNumber||'—') + (u.rentalDbNo ? ' · เครื่องเช่า: ' + esc(u.rentalDbNo) : '') + '</div></div></div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+    '<span class="pill pill-muted">' + (u.flyable!==false?'✈️ บินได้':'🖼️ จัดแสดงเท่านั้น') + '</span>' +
+    '<span class="pill pill-muted">กสทช ' + (u.nbtcRegistered?'✅':'❌') + '</span><span class="pill pill-muted">ประกันภัย ' + (u.droneInsurance?'✅':'❌') + '</span><span class="pill pill-muted">CAAT ' + (u.caatRegistered?'✅':'❌') + '</span></div>';
+  if (loan) {
+    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + loan.end + '</div>' +
+      '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>';
+  } else if (u.status === 'unavailable' || u.status === 'lost') {
+    h += '<div style="font-size:13px;color:var(--text2)">เครื่องนี้ไม่พร้อมใช้งาน — แก้ไขสถานะได้จากเมนู Demo Equipment ในแอพหลัก</div>';
+  } else {
+    h += '<button class="btn btn-primary btn-sm" onclick="showManualLoanForm(\'' + u.id + '\')">✍️ กรอกยืมเครื่องนี้</button>';
+  }
+  h += '<div id="manualLoanFormZone"></div></div>';
+  h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">📜 ประวัติการยืมล่าสุด</div>';
+  h += history.length ? history.map(function(l) {
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">' + esc(l.borrower) + ' · ' + l.start + ' – ' + l.end +
+      (l.status === 'active' ? ' <span class="pill pill-warn">กำลังยืม</span>' : ' <span class="pill pill-good">คืนแล้ว</span>') + '</div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่มีประวัติ</div>';
+  h += '</div>';
+  view.innerHTML = h;
+}
+function closeUnitDetail() {
+  currentUnitDetail = null;
+  document.getElementById('unitsListView').style.display = 'block';
+  document.getElementById('unitDetailView').style.display = 'none';
+}
+function showManualLoanForm(unitId) {
+  var zone = document.getElementById('manualLoanFormZone');
+  zone.innerHTML = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<div class="grid2">' +
+    '<div class="field"><label>วันที่ยืม *</label><input type="date" id="mlStart" value="' + _td() + '"></div>' +
+    '<div class="field"><label>วันที่คาดว่าจะคืน *</label><input type="date" id="mlEnd" value="' + _td() + '"></div>' +
+    '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>' +
+    '<div class="field"><label>ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="mlRequester" placeholder="ชื่อ-นามสกุล"></div>' +
+    '</div><div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
+    '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
+}
+function saveManualLoan(unitId) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  var start = document.getElementById('mlStart').value, end = document.getElementById('mlEnd').value;
+  var company = document.getElementById('mlCompany').value.trim();
+  var requester = document.getElementById('mlRequester').value.trim();
+  var purpose = document.getElementById('mlPurpose').value.trim();
+  if (!start || !end) { alert('เลือกวันที่ก่อนนะครับ'); return; }
+  if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
+  if (!requester) { alert('กรอกผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  if (unitIsBusyOn(unitId, start)) { if (!confirm('ช่วงนี้เครื่องนี้อาจไม่ว่างจริง ยืนยันจะบันทึกต่อไหม?')) return; }
+  db.collection('publicDemoLoans').add({
+    unitId: unitId, model: u.model, label: 'เครื่อง', borrower: company, purpose: purpose,
+    start: start, end: end, actualReturnDate: '', approver: requester, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() { toastMock('💾 บันทึกยืมแล้ว'); closeUnitDetail(); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ---- จัดการหมวดหมู่ ----
+function toggleCatMgr() {
+  var panel = document.getElementById('catMgrPanel');
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (!open) renderCatMgrRows();
+}
+function renderCatMgrRows() {
+  document.getElementById('catMgrRows').innerHTML = CATEGORIES.map(function(c, i) {
+    return '<div class="catmgr-row"><input type="text" value="' + esc(c.icon) + '" style="width:44px;text-align:center" onchange="CATEGORIES[' + i + '].icon=this.value">' +
+      '<input type="text" value="' + esc(c.label) + '" onchange="CATEGORIES[' + i + '].label=this.value">' +
+      '<button class="btn btn-ghost btn-sm" onclick="CATEGORIES.splice(' + i + ',1);renderCatMgrRows()">🗑️</button></div>';
+  }).join('');
+}
+function catMgrAddRow() { CATEGORIES.push({ id: 'cat_' + Date.now(), label: 'หมวดใหม่', icon: '📦' }); renderCatMgrRows(); }
+function catMgrSave() {
+  db.collection('dealerUpdates').doc('demoCatalogPublic').set({ categories: CATEGORIES }, { merge: true })
+    .then(function() { toastMock('💾 บันทึกหมวดหมู่แล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน dealerUpdates/demoCatalogPublic ได้)'); });
+}
+</script>
+</body>
+</html>

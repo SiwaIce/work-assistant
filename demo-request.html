@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ยืมเครื่อง Demo — SIS Distribution</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg:#f4f6f9; --surface:#fff; --surface-2:#eef1f6; --border:#dde3ec; --text:#17202b; --text2:#5b6779; --text3:#8a94a6;
+  --accent:#0b74de; --accent-ink:#fff; --accent-soft:#e8f1fd;
+  --good:#1a9c5e; --good-soft:#e5f7ee; --warn:#b8770a; --warn-soft:#fdf1de; --bad:#d1364a; --bad-soft:#fbe8ea;
+  --shadow:0 1px 2px rgba(23,32,43,.04),0 8px 24px -12px rgba(23,32,43,.12); --radius:14px;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,'Segoe UI',sans-serif; min-height:100vh; }
+.wrap { max-width:900px; margin:0 auto; padding:20px 16px 70px; }
+.toplogo { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.toplogo .mark { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#6fd0ff); display:flex; align-items:center; justify-content:center; font-size:18px; }
+.toplogo .name { font-weight:700; font-size:16px; }
+.toplogo .sub { font-size:11.5px; color:var(--text3); }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px; }
+.pagehead { margin-bottom:20px; }
+.pagehead .eyebrow { font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
+.pagehead h1 { font-size:24px; margin:0 0 6px; }
+.pagehead p { margin:0; color:var(--text2); font-size:13.5px; line-height:1.6; }
+.field { margin-bottom:14px; }
+.field label { display:block; font-size:12.5px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+.field input, .field textarea, .field select { width:100%; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.field textarea { resize:vertical; min-height:70px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:600px) { .grid2 { grid-template-columns:1fr; } }
+.btn { font:inherit; font-weight:700; font-size:14px; padding:11px 20px; border-radius:10px; border:1px solid transparent; cursor:pointer; }
+.btn-primary { background:var(--accent); color:var(--accent-ink); }
+.btn-ghost { background:transparent; border-color:var(--border); color:var(--text); }
+.btn-sm { padding:6px 12px; font-size:12.5px; border-radius:8px; }
+.btn-full { width:100%; }
+.btn[disabled] { opacity:.5; cursor:not-allowed; }
+.pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+.pill-good { background:var(--good-soft); color:var(--good); }
+.pill-warn { background:var(--warn-soft); color:var(--warn); }
+.pill-bad { background:var(--bad-soft); color:var(--bad); }
+.pill-muted { background:var(--surface-2); color:var(--text2); }
+.wiz-step { display:none; } .wiz-step.on { display:block; }
+.back-link { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-weight:600; font-size:13.5px; cursor:pointer; margin-bottom:14px; background:none; border:none; padding:0; }
+.cat-tabs { display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; padding-bottom:2px; }
+.cat-tab { display:flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px; font-weight:600; padding:9px 16px; border-radius:11px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text2); }
+.cat-tab.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.cat-tab .cnt { font-size:10.5px; opacity:.75; background:rgba(0,0,0,.12); border-radius:999px; padding:1px 6px; }
+.cat-tab.on .cnt { background:rgba(255,255,255,.25); }
+.browse-toolbar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.browse-toolbar input { flex:1; min-width:160px; }
+.filter-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.filter-chip { font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px; cursor:pointer; border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
+.filter-chip.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.model-group { margin-bottom:18px; }
+.model-group .mg-head { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+.model-group .mg-head .mn { font-weight:700; font-size:14px; }
+.model-group .mg-head .mc { font-size:11.5px; color:var(--text3); }
+.model-group .mg-units { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+.unit-card { border:1px solid var(--border); border-radius:12px; padding:13px; background:var(--surface-2); cursor:pointer; position:relative; }
+.unit-card:hover { border-color:var(--accent); }
+.unit-card.disabled { opacity:.5; cursor:not-allowed; }
+.unit-card .un { font-weight:700; font-size:13.5px; margin-bottom:8px; }
+.unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; }
+.picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
+.picked-unit-banner .un2 { font-weight:700; font-size:15px; }
+.picked-unit-banner .ud2 { font-size:12px; color:var(--text2); }
+.cal-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.cal-toolbar .month-label { font-weight:700; font-size:15px; min-width:130px; text-align:center; }
+.cal-nav-btn { width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.cal-dow { text-align:center; font-size:11px; color:var(--text3); font-weight:600; padding-bottom:4px; }
+.cal-cell { height:78px; border-radius:9px; padding:5px 6px; font-size:10.5px; cursor:pointer; border:1px solid var(--border); background:var(--surface-2); display:flex; flex-direction:column; gap:3px; overflow:hidden; }
+.cal-cell.other { opacity:.3; cursor:default; }
+.cal-cell.today { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.cal-cell.avail { background:var(--good-soft); }
+.cal-cell.busy { background:var(--bad-soft); }
+.cal-cell.requested { background:var(--good-soft); border:1px dashed var(--warn); }
+.cal-cell.inrange { background:var(--accent-soft); border-color:var(--accent); }
+.cal-cell.rangeend { background:var(--accent); border-color:var(--accent); }
+.cal-cell.rangeend .cal-num, .cal-cell.rangeend .cal-tag { color:var(--accent-ink); }
+.cal-num { font-weight:700; font-size:11.5px; }
+.cal-tag { font-size:9px; font-weight:700; padding:1px 5px; border-radius:5px; align-self:flex-start; }
+.cal-tag.avail { background:var(--good); color:#fff; }
+.cal-tag.busy { background:var(--bad); color:#fff; }
+.cal-tag.requested { background:var(--warn); color:#1a1400; }
+.cal-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-top:12px; }
+.cal-legend span { display:flex; align-items:center; gap:6px; }
+.cal-legend .dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
+.daycount-row { display:flex; align-items:center; gap:10px; margin:12px 0; padding:10px 12px; background:var(--surface-2); border-radius:10px; flex-wrap:wrap; }
+.stepper { display:flex; border:1px solid var(--border); border-radius:9px; overflow:hidden; }
+.stepper button { width:32px; height:32px; border:none; background:var(--surface); color:var(--text); font-size:16px; font-weight:700; cursor:pointer; }
+.stepper input { width:44px; height:32px; text-align:center; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); background:var(--surface); color:var(--text); font-weight:700; }
+.range-warn { font-size:11.5px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:6px 10px; margin-bottom:10px; }
+.range-inputs { display:flex; gap:10px; margin:14px 0; }
+.range-inputs .field { flex:1; margin-bottom:0; }
+.cart-bar { position:sticky; bottom:14px; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:10px 14px; box-shadow:var(--shadow); display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:16px 0; }
+.cart-bar .cb-label { font-weight:700; font-size:13px; white-space:nowrap; }
+.cart-chip { display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border-radius:999px; padding:5px 6px 5px 12px; font-size:11.5px; }
+.cart-chip .x { cursor:pointer; width:16px; height:16px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:10px; }
+.cart-summary-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); gap:10px; }
+.cart-summary-item:last-child { border-bottom:none; }
+.cart-summary-item .csi-name { font-weight:600; font-size:13.5px; }
+.cart-summary-item .csi-date { font-size:12px; color:var(--text2); }
+.confirm-box { text-align:center; padding:50px 20px; }
+.confirm-box .ic { font-size:44px; margin-bottom:14px; }
+.confirm-box h2 { margin:0 0 8px; font-size:20px; }
+.confirm-box p { color:var(--text2); font-size:14px; max-width:380px; margin:0 auto 20px; line-height:1.6; }
+.empty-state { text-align:center; padding:40px 20px; color:var(--text3); }
+.loading { text-align:center; padding:60px 20px; color:var(--text2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toplogo">
+    <div class="mark">🚁</div>
+    <div>
+      <div class="name">DJI Demo Center</div>
+      <div class="sub">ยืมเครื่อง Demo ทดลองใช้งาน — SIS Distribution</div>
+    </div>
+  </div>
+
+  <div id="loadingView" class="loading">กำลังโหลดข้อมูลอุปกรณ์...</div>
+
+  <div id="cust-wizard" style="display:none">
+    <div id="step-browse" class="wiz-step on">
+      <div class="pagehead">
+        <div class="eyebrow">ขั้นตอนที่ 1</div>
+        <h1>เลือกอุปกรณ์ที่ต้องการยืม</h1>
+        <p>เลือกได้ทีละเครื่อง ดูปฏิทินว่างของเครื่องนั้นแล้วค่อยเลือกวันที่ — เพิ่มได้หลายรายการก่อนไปกรอกข้อมูลติดต่อ</p>
+      </div>
+      <div class="cat-tabs" id="custCatTabs"></div>
+      <div class="browse-toolbar">
+        <input type="text" id="custSearch" placeholder="🔍 ค้นหารุ่น เช่น Mavic, Dock..." oninput="custSearch=this.value;renderBrowse()">
+        <select id="custSort" onchange="custSort=this.value;renderBrowse()">
+          <option value="name_asc">เรียง: ชื่อรุ่น A-Z</option>
+          <option value="avail_first">เรียง: ว่างเยอะสุดก่อน</option>
+        </select>
+      </div>
+      <div class="filter-chips" id="custTypeChips"></div>
+      <div id="unitGrid"></div>
+    </div>
+
+    <div id="step-calendar" class="wiz-step">
+      <button class="back-link" onclick="backToBrowse()">← กลับไปเลือกเครื่องอื่น</button>
+      <div class="card" style="margin-bottom:16px">
+        <div class="picked-unit-banner">
+          <div class="um2" id="pickedUnitIcon">🚁</div>
+          <div>
+            <div class="un2" id="pickedUnitName">-</div>
+            <div class="ud2" id="pickedUnitDesc">-</div>
+          </div>
+        </div>
+        <div class="cal-toolbar">
+          <button class="cal-nav-btn" onclick="unitCalNav(-1)">◀</button>
+          <div class="month-label" id="unitCalMonthLabel"></div>
+          <button class="cal-nav-btn" onclick="unitCalNav(1)">▶</button>
+        </div>
+        <div class="cal-grid" id="unitCalGrid"></div>
+        <div class="cal-legend">
+          <span><span class="dot" style="background:var(--good)"></span>ว่าง (กดเลือกได้)</span>
+          <span><span class="dot" style="background:var(--bad)"></span>ถูกยืมอยู่</span>
+          <span><span class="dot" style="border:1px dashed var(--warn);background:var(--good-soft)"></span>⚠️ มีคนจอง รอคอนเฟิร์ม</span>
+          <span><span class="dot" style="background:var(--accent)"></span>ช่วงที่เลือก</span>
+        </div>
+        <div class="daycount-row">
+          <span style="font-size:13px;font-weight:600">📅 จะยืมกี่วัน:</span>
+          <div class="stepper">
+            <button onclick="custDayCountChange(-1)">−</button>
+            <input type="number" id="custDayCountInput" value="1" min="1" oninput="custDayCountInputChange(this.value)">
+            <button onclick="custDayCountChange(1)">+</button>
+          </div>
+          <span style="font-size:11.5px;color:var(--text2)">กดวันเริ่มยืม ระบบเลือกช่วงให้อัตโนมัติ</span>
+        </div>
+        <div id="custRangeWarn"></div>
+        <div class="range-inputs">
+          <div class="field"><label>วันที่เริ่มยืม</label><input type="date" id="rangeStartInput" onchange="manualRangeChange()"></div>
+          <div class="field"><label>วันที่คืน</label><input type="date" id="rangeEndInput" onchange="manualRangeChange()"></div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="addToCart()">✅ เพิ่มลงตะกร้า</button>
+      </div>
+    </div>
+
+    <div id="step-contact" class="wiz-step">
+      <button class="back-link" onclick="backToBrowse()">← กลับไปเลือกอุปกรณ์เพิ่ม</button>
+      <div class="pagehead"><div class="eyebrow">ขั้นตอนที่ 2</div><h1>ข้อมูลผู้ยืม</h1></div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px">🧺 รายการที่จะยืม</div>
+        <div id="cartSummaryList"></div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;font-size:14px;margin-bottom:14px">📋 ข้อมูลผู้ยืม</div>
+        <div class="grid2">
+          <div class="field"><label>ชื่อบริษัท / ผู้ยืม *</label><input type="text" id="ctCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
+          <div class="field"><label>ชื่อผู้ติดต่อ *</label><input type="text" id="ctContact" placeholder="ชื่อ-นามสกุล"></div>
+          <div class="field"><label>เบอร์โทรติดต่อ *</label><input type="tel" id="ctPhone" placeholder="08x-xxx-xxxx"></div>
+          <div class="field"><label>อีเมล (ถ้ามี)</label><input type="email" id="ctEmail" placeholder="name@company.com"></div>
+        </div>
+        <div class="field"><label>วัตถุประสงค์ / หมายเหตุ</label><textarea id="ctPurpose" placeholder="เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า"></textarea></div>
+        <button class="btn btn-primary btn-full" id="submitBtn" onclick="submitCustomerRequest()">📨 ส่งคำขอยืม</button>
+      </div>
+    </div>
+
+    <div class="cart-bar" id="cartBar" style="display:none">
+      <span class="cb-label">🧺 เลือกไว้ <span id="cartCount">0</span> รายการ</span>
+      <div id="cartChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+      <button class="btn btn-primary btn-sm" onclick="goToContact()">ถัดไป: กรอกข้อมูลติดต่อ →</button>
+    </div>
+  </div>
+
+  <div id="cust-confirm-view" style="display:none">
+    <div class="card confirm-box">
+      <div class="ic">✅</div>
+      <h2>ส่งคำขอเรียบร้อยแล้ว</h2>
+      <p>ทีมงาน SIS Distribution จะตรวจสอบและติดต่อกลับเพื่อยืนยันการยืมภายใน 1 วันทำการ คุณสามารถปิดหน้านี้ได้เลย</p>
+      <button class="btn btn-ghost" onclick="location.reload()">↩️ ส่งคำขอใหม่อีกครั้ง</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// Firebase — เชื่อมตรงแบบเดียวกับ client-view.html (ไม่ผ่าน Auth) — Firestore Security Rules ต้องเปิด
+// read บน dealerUpdates/demoCatalogPublic (มีอยู่แล้วสำหรับ client-view.html) และเปิด create บน
+// publicDemoRequests/{autoId} ให้ (ยังไม่มี rule — ต้องไปเพิ่มเองใน Firebase Console เหมือน teamVisitPlans)
+// ================================================================
+var firebaseConfig = {
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+
+function fmtISO(y, m, d) { return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0'); }
+function addDaysIso(iso, days) {
+  var p = iso.split('-'); var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  d.setDate(d.getDate() + days);
+  return fmtISO(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function daysBetweenIso(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function fThDate(iso) {
+  var p = iso.split('-'); var mn = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return p[2] + ' ' + mn[Number(p[1]) - 1];
+}
+var DOW_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+var MONTH_TH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function esc(s) { s = String(s == null ? '' : s); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ================================================================
+// โหลดแคตตาล็อกจริงจาก Firestore — เดิม main app publish ไว้ที่ dealerUpdates/demoCatalogPublic อยู่แล้ว
+// (units: [{id, name, model, flyable, status, busyRanges, category, ...}]) ตอนนี้เพิ่ม category ให้แล้ว
+// ต่อยอดจากแท็บหมวดหมู่ (categories) ที่ demo-staff.html เขียน merge เข้าเอกสารเดียวกันนี้
+// ================================================================
+var UNITS = []; // [{id, icon, category, model, label, flyable, busyRanges, clickable}]
+var CATEGORIES = [];
+var pendingRequestsRaw = []; // จาก publicDemoRequests สถานะ pending — ใช้โชว์ป้าย "มีคนจอง รอคอนเฟิร์ม"
+
+function loadCatalog() {
+  db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
+    var data = doc.exists ? doc.data() : {};
+    CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
+    var raw = data.units || [];
+    // จัดกลุ่มตาม model แล้วเลข "เครื่อง #N" ต่อกันในกลุ่มเดียวกัน (label ไม่ได้เก็บจาก main app ตรงๆ)
+    var byModel = {};
+    raw.forEach(function(u) { (byModel[u.model] = byModel[u.model] || []).push(u); });
+    UNITS = [];
+    Object.keys(byModel).forEach(function(model) {
+      byModel[model].forEach(function(u, i) {
+        var clickable = u.status !== 'unavailable' && u.status !== 'lost';
+        UNITS.push({
+          id: u.id, icon: iconForCategory(u.category), category: u.category || '', model: model,
+          label: byModel[model].length > 1 ? 'เครื่อง #' + (i + 1) : (u.name && u.name !== model ? u.name : 'เครื่อง #1'),
+          flyable: u.flyable !== false, busyRanges: u.busyRanges || [],
+          statusRaw: u.status, clickable: clickable
+        });
+      });
+    });
+    return db.collection('publicDemoRequests').where('status', '==', 'pending').get();
+  }).then(function(snap) {
+    if (snap) pendingRequestsRaw = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
+    document.getElementById('loadingView').style.display = 'none';
+    document.getElementById('cust-wizard').style.display = 'block';
+    renderBrowse();
+  }).catch(function(e) {
+    document.getElementById('loadingView').innerHTML = '<div class="empty-state">โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง<br><span style="font-size:11px">' + esc(e.message) + '</span></div>';
+  });
+}
+function iconForCategory(catId) {
+  var c = CATEGORIES.filter(function(x) { return x.id === catId; })[0];
+  return c ? c.icon : '🚁';
+}
+
+// ================================================================
+// STEP 1: เลือกอุปกรณ์
+// ================================================================
+var custCategory = 'all', custSearch = '', custTypeFilter = 'all', custSort = 'name_asc';
+function renderCatTabs() {
+  var counts = { all: UNITS.length };
+  CATEGORIES.forEach(function(c) { counts[c.id] = UNITS.filter(function(u) { return u.category === c.id; }).length; });
+  var tabs = [{ id: 'all', label: 'ทั้งหมด', icon: '📦' }].concat(CATEGORIES);
+  document.getElementById('custCatTabs').innerHTML = tabs.map(function(c) {
+    if (c.id !== 'all' && !counts[c.id]) return '';
+    return '<div class="cat-tab' + (custCategory === c.id ? ' on' : '') + '" onclick="custCategory=\'' + c.id + '\';renderBrowse()">' +
+      c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (counts[c.id] || 0) + '</span></div>';
+  }).join('');
+}
+function renderTypeChips() {
+  var opts = [['all','ทั้งหมด'],['fly','✈️ บินได้'],['display','🖼️ จัดแสดงเท่านั้น']];
+  document.getElementById('custTypeChips').innerHTML = opts.map(function(o) {
+    return '<span class="filter-chip' + (custTypeFilter === o[0] ? ' on' : '') + '" onclick="custTypeFilter=\'' + o[0] + '\';renderBrowse()">' + o[1] + '</span>';
+  }).join('');
+}
+function renderBrowse() {
+  renderCatTabs(); renderTypeChips();
+  var grid = document.getElementById('unitGrid');
+  var groups = {}, order = [];
+  UNITS.forEach(function(u) {
+    if (custCategory !== 'all' && u.category !== custCategory) return;
+    if (custTypeFilter === 'fly' && !u.flyable) return;
+    if (custTypeFilter === 'display' && u.flyable) return;
+    if (custSearch && u.model.toLowerCase().indexOf(custSearch.toLowerCase()) === -1) return;
+    if (!groups[u.model]) { groups[u.model] = []; order.push(u.model); }
+    groups[u.model].push(u);
+  });
+  if (custSort === 'name_asc') order.sort();
+  else order.sort(function(a,b) {
+    var av = groups[a].filter(function(u){return u.clickable;}).length;
+    var bv = groups[b].filter(function(u){return u.clickable;}).length;
+    return bv - av;
+  });
+  if (!order.length) { grid.innerHTML = '<div class="empty-state">🔍 ไม่พบรุ่นที่ตรงกับการค้นหา/ตัวกรอง หรือยังไม่มีอุปกรณ์ในระบบ</div>'; return; }
+  grid.innerHTML = order.map(function(model) {
+    var units = groups[model];
+    var availCount = units.filter(function(u){return u.clickable;}).length;
+    return '<div class="model-group"><div class="mg-head"><span class="mn">' + units[0].icon + ' ' + esc(model) + '</span><span class="mc">' + availCount + '/' + units.length + ' เครื่องว่างตอนนี้</span></div>' +
+      '<div class="mg-units">' + units.map(function(u) {
+        var statusPill = u.statusRaw === 'available' ? '<span class="pill pill-good">✅ ว่างตอนนี้</span>'
+          : (u.statusRaw === 'lent' || u.statusRaw === 'reserved') ? '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้ — กดดูวันว่างอื่นได้</span>'
+          : '<span class="pill pill-bad">⛔ งดใช้งาน</span>';
+        var flyPill = u.flyable ? '<span class="pill pill-muted">✈️ บินได้</span>' : '<span class="pill pill-muted">🖼️ จัดแสดงเท่านั้น</span>';
+        return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + '" ' + (u.clickable ? 'onclick="openUnitCalendar(\'' + u.id + '\')"' : '') + '>' +
+          '<div class="un">' + esc(u.label) + '</div><div class="badges">' + statusPill + flyPill + '</div></div>';
+      }).join('') + '</div></div>';
+  }).join('');
+}
+
+// ================================================================
+// STEP 2: ปฏิทินของเครื่องที่เลือก
+// ================================================================
+var custCalUnit = null, custCalMonthOffset = 0, rangeStart = null, rangeEnd = null, custDayCount = 1;
+function unitDayState(unit, iso) {
+  var busy = (unit.busyRanges || []).some(function(r) { return iso >= r.start && iso <= r.end; });
+  if (busy) return 'busy';
+  return 'avail';
+}
+function hasPendingReqOnDay(unit, iso) {
+  return pendingRequestsRaw.some(function(req) {
+    return (req.items || []).some(function(it) { return it.model === unit.model && iso >= it.start && iso <= it.end; });
+  });
+}
+function openUnitCalendar(unitId) {
+  custCalUnit = UNITS.filter(function(u) { return u.id === unitId; })[0];
+  if (!custCalUnit) return;
+  custCalMonthOffset = 0; rangeStart = null; rangeEnd = null; custDayCount = 1;
+  document.getElementById('pickedUnitIcon').textContent = custCalUnit.icon;
+  document.getElementById('pickedUnitName').textContent = custCalUnit.model + ' — ' + custCalUnit.label;
+  document.getElementById('pickedUnitDesc').textContent = custCalUnit.flyable ? '✈️ บินสาธิตได้' : '🖼️ จัดแสดงเท่านั้น (ห้ามบิน)';
+  document.getElementById('rangeStartInput').value = '';
+  document.getElementById('rangeEndInput').value = '';
+  document.getElementById('custDayCountInput').value = 1;
+  document.getElementById('custRangeWarn').innerHTML = '';
+  switchWizStep('calendar');
+  renderUnitCal();
+}
+function backToBrowse() { switchWizStep('browse'); renderBrowse(); }
+function switchWizStep(name) {
+  ['browse','calendar','contact'].forEach(function(s) { document.getElementById('step-' + s).classList.toggle('on', s === name); });
+  document.getElementById('cartBar').style.display = (cart.length && name !== 'contact') ? 'flex' : 'none';
+}
+function renderUnitCal() {
+  var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + custCalMonthOffset);
+  var year = base.getFullYear(), month = base.getMonth();
+  var totalDays = new Date(year, month + 1, 0).getDate();
+  var firstDow = new Date(year, month, 1).getDay();
+  document.getElementById('unitCalMonthLabel').textContent = MONTH_TH[month] + ' ' + (year + 543);
+  var today = new Date(); today.setHours(0,0,0,0);
+  var isThisMonth = today.getFullYear() === year && today.getMonth() === month;
+  var h = DOW_TH.map(function(d) { return '<div class="cal-dow">' + d + '</div>'; }).join('');
+  for (var i = 0; i < firstDow; i++) h += '<div class="cal-cell other"></div>';
+  for (var d = 1; d <= totalDays; d++) {
+    var iso = fmtISO(year, month, d);
+    var state = unitDayState(custCalUnit, iso);
+    var pendingReq = state === 'avail' && hasPendingReqOnDay(custCalUnit, iso);
+    var clickable = state === 'avail';
+    var isToday = isThisMonth && today.getDate() === d;
+    var inRange = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd;
+    var isEdge = iso === rangeStart || iso === rangeEnd;
+    var stateCls = state === 'busy' ? 'busy' : (pendingReq ? 'requested' : 'avail');
+    var stateLabel = state === 'busy' ? 'ไม่ว่าง' : (pendingReq ? '⚠️ มีคนจอง รอคอนเฟิร์ม' : 'ว่าง');
+    var cls = 'cal-cell ' + stateCls + (isToday ? ' today' : '') + (isEdge ? ' rangeend' : (inRange ? ' inrange' : ''));
+    h += '<div class="' + cls + '" ' + (clickable ? 'onclick="pickCalDay(\'' + iso + '\')"' : '') + '>' +
+      '<span class="cal-num">' + d + '</span>' +
+      (!inRange && !isEdge ? '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>' : (isEdge ? '<span class="cal-tag">✓ เลือก</span>' : '')) + '</div>';
+  }
+  document.getElementById('unitCalGrid').innerHTML = h;
+}
+function unitCalNav(dir) { custCalMonthOffset += dir; renderUnitCal(); }
+function pickCalDay(iso) {
+  rangeStart = iso; rangeEnd = addDaysIso(iso, custDayCount - 1);
+  syncRangeInputs(); renderUnitCal();
+}
+function syncRangeInputs() {
+  document.getElementById('rangeStartInput').value = rangeStart || '';
+  document.getElementById('rangeEndInput').value = rangeEnd || rangeStart || '';
+  checkRangeWarn();
+}
+function checkRangeWarn() {
+  var warnEl = document.getElementById('custRangeWarn');
+  if (!rangeStart || !rangeEnd || !custCalUnit) { warnEl.innerHTML = ''; return; }
+  var hasIssue = false, cur = rangeStart;
+  while (cur <= rangeEnd) { if (unitDayState(custCalUnit, cur) !== 'avail') { hasIssue = true; break; } cur = addDaysIso(cur, 1); }
+  warnEl.innerHTML = hasIssue ? '<div class="range-warn">⚠️ ช่วงที่เลือกมีบางวันไม่ว่าง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่</div>' : '';
+}
+function custDayCountChange(delta) {
+  custDayCount = Math.max(1, custDayCount + delta);
+  document.getElementById('custDayCountInput').value = custDayCount;
+  if (rangeStart) { rangeEnd = addDaysIso(rangeStart, custDayCount - 1); syncRangeInputs(); renderUnitCal(); }
+}
+function custDayCountInputChange(v) {
+  custDayCount = Math.max(1, parseInt(v, 10) || 1);
+  if (rangeStart) { rangeEnd = addDaysIso(rangeStart, custDayCount - 1); syncRangeInputs(); renderUnitCal(); }
+}
+function manualRangeChange() {
+  rangeStart = document.getElementById('rangeStartInput').value || null;
+  rangeEnd = document.getElementById('rangeEndInput').value || null;
+  if (rangeStart && rangeEnd && rangeEnd < rangeStart) { var t = rangeStart; rangeStart = rangeEnd; rangeEnd = t; }
+  if (rangeStart && rangeEnd) { custDayCount = daysBetweenIso(rangeStart, rangeEnd) + 1; document.getElementById('custDayCountInput').value = custDayCount; }
+  checkRangeWarn(); renderUnitCal();
+}
+
+// ================================================================
+// ตะกร้า + ส่งคำขอจริงเข้า publicDemoRequests
+// ================================================================
+var cart = [];
+function addToCart() {
+  if (!rangeStart) { alert('เลือกวันที่ก่อนนะครับ'); return; }
+  cart.push({ unitId: custCalUnit.id, model: custCalUnit.model, icon: custCalUnit.icon, label: custCalUnit.label, start: rangeStart, end: rangeEnd || rangeStart });
+  renderCartBar(); backToBrowse();
+}
+function renderCartBar() {
+  document.getElementById('cartCount').textContent = cart.length;
+  document.getElementById('cartChips').innerHTML = cart.map(function(c, i) {
+    return '<span class="cart-chip">' + c.icon + ' ' + esc(c.model) + ' · ' + fThDate(c.start) + (c.end !== c.start ? '–' + fThDate(c.end) : '') +
+      '<span class="x" onclick="removeFromCart(' + i + ')">✕</span></span>';
+  }).join('');
+  var curStep = document.getElementById('step-contact').classList.contains('on') ? 'contact' : 'browse';
+  document.getElementById('cartBar').style.display = (cart.length && curStep !== 'contact') ? 'flex' : 'none';
+}
+function removeFromCart(i) { cart.splice(i, 1); renderCartBar(); if (!cart.length) backToBrowse(); }
+function goToContact() {
+  switchWizStep('contact');
+  document.getElementById('cartSummaryList').innerHTML = cart.length ? cart.map(function(c, i) {
+    return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) + '</div>' +
+      '<div class="csi-date">📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</div></div>' +
+      '<button class="btn btn-ghost btn-sm" onclick="removeFromCart(' + i + ');goToContact()">✕ เอาออก</button></div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--text2)">ยังไม่ได้เลือกอุปกรณ์</div>';
+  document.getElementById('cartBar').style.display = 'none';
+}
+function submitCustomerRequest() {
+  if (!cart.length) { alert('ยังไม่ได้เลือกอุปกรณ์เลยครับ'); return; }
+  var company = document.getElementById('ctCompany').value.trim();
+  var contact = document.getElementById('ctContact').value.trim();
+  var phone = document.getElementById('ctPhone').value.trim();
+  var email = document.getElementById('ctEmail').value.trim();
+  var purpose = document.getElementById('ctPurpose').value.trim();
+  if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
+  if (!contact) { alert('กรอกชื่อผู้ติดต่อก่อนนะครับ'); return; }
+  if (!phone) { alert('กรอกเบอร์โทรติดต่อก่อนนะครับ'); return; }
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
+  db.collection('publicDemoRequests').add({
+    items: cart.map(function(c) { return { unitId: c.unitId, model: c.model, label: c.label, start: c.start, end: c.end }; }),
+    companyName: company, contactName: contact, phone: phone, email: email, purpose: purpose,
+    status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function() {
+    document.getElementById('cust-wizard').style.display = 'none';
+    document.getElementById('cust-confirm-view').style.display = 'block';
+  }).catch(function(e) {
+    alert('ส่งคำขอไม่สำเร็จ: ' + e.message + '\n(อาจเป็นเพราะยังไม่ได้เปิด permission เขียนข้อมูลของ Firestore — แจ้งทีมงาน SIS)');
+    btn.disabled = false; btn.textContent = '📨 ส่งคำขอยืม';
+  });
+}
+
+loadCatalog();
+</script>
+</body>
+</html>

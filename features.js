@@ -2859,12 +2859,24 @@ function saveDemoItems(list) {
   publishDemoCatalog();
 }
 
-// เผยแพร่สำเนา read-only ของแคตตาล็อก Demo ไปที่ dealerUpdates/__demoCatalog__ — path สาธารณะเดียวกับที่
+// ชื่อ doc เปลี่ยนจาก __demoCatalog__ เป็น demoCatalogPublic (2026-09-05) — Firestore สงวนชื่อ document ที่
+// ขึ้นต้น-ลงท้ายด้วย __ ไว้ใช้ภายใน สั่ง .doc('__demoCatalog__').get()/.set() จริงจะ error ทันที ("Resource id
+// is invalid because it is reserved") แปลว่า path เดิมไม่เคยอ่าน/เขียนสำเร็จเลยตั้งแต่แรก (แต่ .catch() ด้านล่าง
+// กลืน error ไว้เงียบๆ เลยไม่มีใครสังเกตเห็น) เจอตอนทดสอบ demo-request.html จริงกับ Firestore — __catalog__
+// ของสินค้าใน products.js เจอปัญหาเดียวกัน แต่ยังไม่ได้แก้ในรอบนี้ (นอกขอบเขตงาน Demo)
+//
+// เผยแพร่สำเนา read-only ของแคตตาล็อก Demo ไปที่ dealerUpdates/demoCatalogPublic — path สาธารณะเดียวกับที่
 // publishCatalogToClientView() ใช้กับสินค้า (ดู products.js) เพราะ users/{uid}/... อ่านไม่ได้ถ้าไม่ login
 // ตั้งใจไม่ใส่ชื่อผู้ยืม/Dealer เพื่อรักษาความเป็นส่วนตัว (ลูกค้าใน client-view.html เห็นแค่ว่าง/ไม่ว่าง)
 // ponytail: ช่วงไม่ว่างคำนวณจาก loan ที่ยืนยันแล้ว (active) เท่านั้น ไม่รวมคำขอที่ยังรออนุมัติ — คำขอใหม่จะ
 // ไม่ไปกันคนอื่นเห็นว่าง จนกว่า staff จะกดอนุมัติจริง ถ้าต้องการกันไว้ตั้งแต่ส่งคำขอ ต้อง query demoRequests
 // ข้าม dealer ทุกตัวตอน publish ซึ่งมีต้นทุนสูงกว่ามากเทียบกับที่ได้ ไม่คุ้มสำหรับตอนนี้
+//
+// เพิ่ม sku/serialNumber/rentalDbNo/compliance/category (2026-09-05) ให้ demo-staff.html (หน้าจัดการภายใน
+// แบบรหัสผ่านร่วม ไม่ผ่าน Auth) อ่านได้ครบ — ทำให้เอกสารนี้มีรายละเอียดเครื่องที่เดิมตั้งใจไม่เผยแพร่ (S/N,
+// SKU) หลุดไปอยู่ใน path ที่อ่านได้โดยไม่ login เลย (เหมือน demoCatalogPublic เดิม) ความเสี่ยงเดียวกับที่ยอมรับ
+// อยู่แล้วทั้งระบบ (permission เปิดกว้าง รอผู้ใช้ปิดเองทีหลัง) — demo-request.html (ฝั่งลูกค้า) จะไม่โชว์ฟิลด์
+// พวกนี้ แต่ตัวเอกสารเองอ่านได้ถ้ารู้ path ตรงๆ
 function publishDemoCatalog() {
   if (typeof db === 'undefined') return;
   try {
@@ -2874,11 +2886,19 @@ function publishDemoCatalog() {
       var ranges = loans.filter(function(l) { return l.demoId === d.id && l.status === 'active' && l.lentDate; })
         .map(function(l) {
           var s = ftParseDate(l.lentDate), e = ftParseDate(l.returnDate) || s;
-          return { start: s ? s.toISOString().slice(0, 10) : l.lentDate, end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate) };
+          return {
+            start: s ? s.toISOString().slice(0, 10) : l.lentDate,
+            end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate),
+            borrower: l.borrower || '', purpose: l.purpose || '', approver: l.approver || ''
+          };
         });
-      return { id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges };
+      return {
+        id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges,
+        category: d.category || '', sku: d.sku || '', serialNumber: d.serialNumber || '', rentalDbNo: d.rentalDbNo || '',
+        nbtcRegistered: !!d.nbtcRegistered, droneInsurance: !!d.droneInsurance, caatRegistered: !!d.caatRegistered
+      };
     });
-    db.collection('dealerUpdates').doc('__demoCatalog__').set({
+    db.collection('dealerUpdates').doc('demoCatalogPublic').set({
       units: units,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).catch(function(e) { console.warn('publishDemoCatalog error:', e); });
@@ -3428,7 +3448,12 @@ function fillDemoSku(selectEl) {
 
 function demoComplianceFieldsHtml(d) {
   d = d || {};
-  var h = '<div class="fm-group"><label>✈️ ประเภทการใช้งาน</label><select id="dm_flyable" class="fm-input">' +
+  var cats = (getConfig().demoCategories || []);
+  var h = '<div class="fm-group"><label>🏷️ หมวดหมู่ (โชว์เป็นแท็บในหน้ายืม Demo สาธารณะ)</label><select id="dm_category" class="fm-input">';
+  h += '<option value=""' + (!d.category ? ' selected' : '') + '>— ไม่ระบุ —</option>';
+  cats.forEach(function(c) { h += '<option value="' + c.id + '"' + (d.category === c.id ? ' selected' : '') + '>' + c.icon + ' ' + sanitize(c.label) + '</option>'; });
+  h += '</select></div>';
+  h += '<div class="fm-group"><label>✈️ ประเภทการใช้งาน</label><select id="dm_flyable" class="fm-input">' +
     '<option value="1"' + (d.flyable !== false ? ' selected' : '') + '>✈️ บินสาธิตได้</option>' +
     '<option value="0"' + (d.flyable === false ? ' selected' : '') + '>🖼️ จัดแสดงสินค้าเท่านั้น (ห้ามบิน)</option></select></div>';
   h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '"></div>';
@@ -3441,6 +3466,7 @@ function demoComplianceFieldsHtml(d) {
 }
 function readDemoComplianceFields() {
   return {
+    category: (document.getElementById('dm_category').value || '').trim(),
     flyable: document.getElementById('dm_flyable').value !== '0',
     rentalDbNo: (document.getElementById('dm_rentaldb').value || '').trim(),
     nbtcRegistered: document.getElementById('dm_nbtc').checked,
@@ -3617,6 +3643,7 @@ function updateDemo(demoId) {
       items[i].serialNumber = (document.getElementById('dm_sn').value || '').trim();
       items[i].model = document.getElementById('dm_model').value || '';
       items[i].sku = (document.getElementById('dm_sku').value || '').trim();
+      items[i].category = compliance.category;
       items[i].flyable = compliance.flyable;
       items[i].rentalDbNo = compliance.rentalDbNo;
       items[i].nbtcRegistered = compliance.nbtcRegistered;
