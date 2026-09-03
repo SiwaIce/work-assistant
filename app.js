@@ -1940,6 +1940,23 @@ var APP_MENU_ACTIONS = [
   {id: 'presentation', icon: '🎬', name: 'Presentation', action: "openPresentation()"}
 ];
 
+// ผูก route (S.view) ปัจจุบันเข้ากับแท็บที่ควรไฮไลท์ในแถบล่างมือถือ — ครอบคลุมหน้าย่อย/drill-down ด้วย ไม่ใช่
+// แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
+// แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
+// ⚠️ ต้องอยู่ก่อน render() ตัวแรกด้านล่าง (INIT) เสมอ — เดิมประกาศไว้ไกลด้านล่างของไฟล์ (ใกล้ updateMbNav)
+// ทำให้ตอนโหลดหน้าครั้งแรก render() (บรรทัดนี้ทำงานก่อนถึงจุดประกาศ) ไปเรียก updateMbNav() ซึ่งอ่าน
+// MB_NAV_ROUTE_GROUPS[...] ทั้งที่ยังเป็น undefined อยู่ → throw กลางฟังก์ชัน render() ทำให้โค้ดส่วนคืน
+// focus/cursor ให้ input ที่ท้ายฟังก์ชัน render() (ดูคอมเมนต์ตรงนั้น) "ไม่เคยทำงานเลยทั้งเซสชัน" ตั้งแต่
+// render() ครั้งแรกที่พัง — ทุกช่อง search/input ในทั้งแอปเลยหลุด focus ทุกครั้งที่พิมพ์ ต้องคลิกใหม่ทุกตัวอักษร
+// (ผู้ใช้แจ้ง 2026-09-03 จากเมนู Demo Equipment แต่จริงๆ กระทบทุกเมนูที่มีช่อง search) ย้ายมาไว้ก่อน render()
+// ตัวแรกเพื่อให้ผูก assignment เสร็จก่อนถูกใช้งานจริง
+var MB_NAV_ROUTE_GROUPS = {
+  today: ['today', 'salesOverview', 'salesAnalytics'],
+  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar', 'endUserList'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
+  tasks: ['tasks', 'taskDetail']
+};
+
 // Apply on load
 applyAppearance();
 
@@ -2545,15 +2562,6 @@ function renderMbHome() {
   updateMbNav();
 }
 
-// ผูก route (S.view) ปัจจุบันเข้ากับแท็บที่ควรไฮไลท์ในแถบล่างมือถือ — ครอบคลุมหน้าย่อย/drill-down ด้วย ไม่ใช่
-// แค่แมตช์ตรงชื่อ route หลักเป๊ะๆ (เดิมใช้ indexOf ธรรมดา ทำให้เข้าไปหน้ารายละเอียด เช่น dealerDetail/pipeDetail
-// แล้วแท็บล่างหลุด ไม่ไฮไลท์อะไรเลย ดูเหมือนหลุดออกจากโซนนั้นทั้งที่ยังอยู่)
-var MB_NAV_ROUTE_GROUPS = {
-  today: ['today', 'salesOverview', 'salesAnalytics'],
-  dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar', 'endUserList'],
-  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
-  tasks: ['tasks', 'taskDetail']
-};
 function updateMbNav() {
   var items = document.querySelectorAll('.mb-nav-item');
   for (var i = 0; i < items.length; i++) items[i].classList.remove('act');
