@@ -2971,6 +2971,7 @@ var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเคร�
 var demoSort = 'name_asc'; // 'name_asc' | 'status' | 'lent_longest' | 'newest'
 var demoOverdueFlt = false; // true = กรองเฉพาะเครื่องที่ยืมเกิน 30 วันยังไม่คืน
 var demoDueSoonFlt = false; // true = กรองเฉพาะเครื่องที่ใกล้ครบกำหนดคืน (≤3 วัน)
+var demoDupRentalFlt = false; // true = กรองเฉพาะเครื่องที่เลขเครื่องเช่าไปซ้ำกับเครื่องอื่น
 var demoSearch = '';
 var _demoSearchTimer = null;
 function demoSearchInput(v) {
@@ -3161,6 +3162,113 @@ function saveDemoBulkRental() {
 }
 
 // ================================================================
+// กรอก Model ทีละรุ่น — ต่างจากเลขเครื่องเช่า (ที่ทุกเครื่องมีเลขไม่ซ้ำกัน ต้องกรอกทีละช่อง) ตรงที่ Model
+// ใช้ร่วมกันทั้งรุ่น เครื่องชื่อเดียวกันเป็นสิบๆ ตัวควรได้ Model เดียวกันหมด จึงจัดกลุ่มตามชื่อเครื่องแล้ว
+// ให้กรอกกลุ่มละช่องเดียว (130 เครื่องอาจเหลือแค่ 5-6 ช่อง) — Model คือชื่อที่ใช้เป็นหัวข้อกลุ่มในหน้า
+// ขอยืมของลูกค้า (demo-request.html) ถ้าว่างจะ fallback ไปใช้ชื่อเครื่องเต็มแทน
+// ================================================================
+var _demoModelDraft = {};
+function showDemoBulkModelM() {
+  _demoModelDraft = {};
+  openM('📦 กรอก Model (กรอกทีละรุ่น ใช้กับทุกเครื่องในรุ่นนั้น)', demoBulkModelHtml());
+  setMWide(780);
+}
+function demoBulkModelGroups() {
+  var items = getDemoItems();
+  var by = {}, order = [];
+  items.forEach(function(d) {
+    var key = (d.name || '').trim() || '(ไม่มีชื่อ)';
+    if (!by[key]) { by[key] = []; order.push(key); }
+    by[key].push(d);
+  });
+  order.sort();
+  return order.map(function(k) {
+    var units = by[k];
+    var models = {};
+    units.forEach(function(u) { models[(u.model || '').trim()] = 1; });
+    var keys = Object.keys(models);
+    return { name: k, units: units, current: keys.length === 1 ? keys[0] : '', mixed: keys.length > 1 };
+  });
+}
+// ตัดส่วนที่เป็นหมายเหตุภายในออกให้เหลือชื่อรุ่นสั้นๆ เช่น "DJI Matrice 400 (Demo Unit)" -> "DJI Matrice 400"
+// เก็บชื่อแบรนด์ไว้ (ไม่ตัด DJI) เพราะเป็นข้อมูลจริงไม่ใช่ noise — เป็นแค่ค่าแนะนำ ผู้ใช้แก้เองได้ทุกช่อง
+function _demoSuggestModel(name) {
+  return String(name || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function demoBulkModelHtml() {
+  var groups = demoBulkModelGroups();
+  var missing = groups.filter(function(g) { return !g.current && !g.mixed; }).length;
+  var h = '';
+  h += '<div class="hint" style="margin-bottom:10px">Model คือชื่อที่ใช้เป็น "หัวข้อรุ่น" ในหน้าขอยืมของลูกค้า — กรอกช่องเดียวใช้กับทุกเครื่องในรุ่นนั้น เว้นว่างไว้ได้ (ลูกค้าจะเห็นชื่อเครื่องเต็มแทน)</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<button class="btn bsm bo" onclick="demoBulkModelAutoFill()">⚡ เติมอัตโนมัติจากชื่อเครื่อง</button>';
+  h += '<span style="margin-left:auto;font-size:12px;color:var(--text2)">' + groups.length + ' รุ่น' + (missing ? ' · ยังไม่มี Model ' + missing + ' รุ่น' : '') + '</span>';
+  h += '</div>';
+  h += '<div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px">';
+  h += '<thead><tr>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">ชื่อเครื่อง (ตามที่บันทึกไว้)</th>';
+  h += '<th style="padding:7px 9px;text-align:right;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:70px">จำนวน</th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:250px">Model (ชื่อรุ่นที่ลูกค้าเห็น)</th>';
+  h += '</tr></thead><tbody id="demoModelRows">';
+  groups.forEach(function(g, i) {
+    var cur = _demoModelDraft[g.name] !== undefined ? _demoModelDraft[g.name] : g.current;
+    h += '<tr>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(g.name) + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">' + g.units.length + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)"><input type="text" class="fm-input" style="padding:5px 8px;font-size:12px" data-name="' + sanitize(g.name) + '" data-idx="' + i + '" value="' + sanitize(cur) + '" placeholder="' + (g.mixed ? 'ตอนนี้ตั้งไว้ไม่เหมือนกัน — กรอกเพื่อตั้งใหม่ทั้งรุ่น' : sanitize(_demoSuggestModel(g.name))) + '" oninput="demoBulkModelOnInput(this)" onkeydown="demoBulkModelOnKey(event,this)" autocomplete="off"></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bp" onclick="saveDemoBulkModel()">💾 บันทึกทั้งหมด</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div>';
+  return h;
+}
+function demoBulkModelOnInput(inp) { _demoModelDraft[inp.getAttribute('data-name')] = inp.value; }
+function demoBulkModelOnKey(e, inp) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var idx = Number(inp.getAttribute('data-idx'));
+  var next = document.querySelector('#demoModelRows input[data-idx="' + (idx + 1) + '"]');
+  if (next) { next.focus(); next.select(); }
+}
+function demoBulkModelAutoFill() {
+  // เติมเฉพาะช่องที่ยังว่าง ไม่ไปทับค่าที่ตั้งไว้แล้วหรือที่เพิ่งพิมพ์เอง
+  document.querySelectorAll('#demoModelRows input').forEach(function(inp) {
+    if (inp.value.trim()) return;
+    inp.value = _demoSuggestModel(inp.getAttribute('data-name'));
+    _demoModelDraft[inp.getAttribute('data-name')] = inp.value;
+  });
+  toast('⚡ เติมให้แล้ว — ตรวจ/แก้ได้ก่อนบันทึก');
+}
+function saveDemoBulkModel() {
+  var items = getDemoItems();
+  var changedGroups = 0, changedUnits = 0;
+  Object.keys(_demoModelDraft).forEach(function(name) {
+    var v = (_demoModelDraft[name] || '').trim();
+    var touched = false;
+    items.forEach(function(d) {
+      var key = (d.name || '').trim() || '(ไม่มีชื่อ)';
+      if (key !== name) return;
+      if ((d.model || '').trim() === v) return;
+      d.model = v;
+      changedUnits++;
+      touched = true;
+    });
+    if (touched) changedGroups++;
+  });
+  if (!changedUnits) { toast('ยังไม่มีอะไรเปลี่ยน'); return; }
+  if (!confirm('ตั้ง Model ให้ ' + changedGroups + ' รุ่น (รวม ' + changedUnits + ' เครื่อง) ยืนยัน?')) return;
+  saveDemoItems(items);
+  _demoModelDraft = {};
+  toast('✅ บันทึกแล้ว ' + changedUnits + ' เครื่อง');
+  closeMForce();
+  render();
+}
+
+// ================================================================
 // Import/Export ข้อมูล Demo Equipment — ไฟล์ .xlsx ผ่าน SheetJS (ตัวเดียวกับที่ products.js ใช้ import
 // pipeline/products อยู่แล้ว) จับคู่แถวกลับเข้าเครื่องเดิมด้วยคอลัมน์ ID ถ้ามี ไม่มี/ไม่ตรง = สร้างเครื่องใหม่
 // ================================================================
@@ -3290,9 +3398,28 @@ function rDemoTracker(el) {
   h += '<button class="btn bo" onclick="showDemoLinksM()">🔗 ลิงก์ขอยืม/จัดการ Demo</button>';
   h += '<button class="btn bo" onclick="showDemoCatMgrM()">⚙️ จัดการหมวดหมู่</button>';
   if (pendingRentalItems.length) h += '<button class="btn bo" onclick="showDemoBulkRentalM()">📋 กรอกเลขเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
+  var _missingModel = allItems.filter(function(d) { return !(d.model || '').trim(); }).length;
+  if (_missingModel) h += '<button class="btn bo" onclick="showDemoBulkModelM()">📦 กรอก Model (' + _missingModel + ')</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export</button>';
   h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import</button>';
   h += '</div>';
+
+  // เลขเครื่องเช่าซ้ำ — เลขนี้ควรชี้เครื่องเดียวเท่านั้น ถ้าซ้ำแปลว่าคีย์ผิดหรือหลายเครื่องถูกลงทะเบียนรวมเป็น
+  // รายการเดียว ซึ่งทำให้แยกไม่ออกว่ายืมตัวไหนไปตอนทวงคืน (ผู้ใช้เจอ 2026-09-04: 5 เครื่องใช้เลข 17128 ร่วมกัน)
+  var _rentalSeen = {}, _dupRentals = {};
+  allItems.forEach(function(d) {
+    var v = (d.rentalDbNo || '').trim();
+    if (!v) return;
+    if (_rentalSeen[v]) _dupRentals[v] = 1; else _rentalSeen[v] = 1;
+  });
+  var _dupNums = Object.keys(_dupRentals);
+  if (_dupNums.length) {
+    var _dupUnitCount = allItems.filter(function(d) { return _dupRentals[(d.rentalDbNo || '').trim()]; }).length;
+    h += '<div class="demo-duesoon-box" onclick="demoDupRentalFlt=!demoDupRentalFlt;demoReadyFilter=\'all\';render()" style="margin-bottom:10px;background:' + (demoDupRentalFlt ? '#ef444418' : 'var(--bg2)') + ';border:1px solid ' + (demoDupRentalFlt ? '#ef4444' : 'var(--border)') + ';max-width:100%">';
+    h += '<div style="font-size:11px;color:#ef4444">⚠️ เลขเครื่องเช่าซ้ำ ' + _dupNums.length + ' เลข (' + _dupUnitCount + ' เครื่อง) — กดดู/แก้</div>';
+    h += '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">' + sanitize(_dupNums.slice(0, 6).join(', ')) + (_dupNums.length > 6 ? ' …' : '') + '</div>';
+    h += '</div>';
+  }
 
   if (overdueCount || dueSoonCount) {
     h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
@@ -3427,6 +3554,7 @@ function rDemoTracker(el) {
       var retD = ftParseDate(d.returnDate);
       if (!retD || Math.ceil((retD - now) / 86400000) > 3) return false;
     }
+    if (demoDupRentalFlt && !_dupRentals[(d.rentalDbNo || '').trim()]) return false;
     if (demoSearch) {
       var q = demoSearch.toLowerCase();
       var hay = ((d.name || '') + ' ' + (d.sku || '') + ' ' + (d.serialNumber || '') + ' ' + (d.rentalDbNo || '') + ' ' + (d.borrower || '') + ' ' + (d.purpose || '') + ' ' + (d.note || '')).toLowerCase();
@@ -3470,7 +3598,7 @@ function rDemoTracker(el) {
   // ที่ sort ไว้ ทำให้กด "เรียงตามยืมนานสุด" แล้วหน้าจอไม่เปลี่ยนอะไรเลย (เรียงข้างในกลุ่มซึ่งมักมีตัวเดียว)
   var groupByCat = demoSort === 'name_asc' && demoCategoryFilter === 'all' && demoCats.length && items.some(function(d) { return d.category; });
   if (!groupByCat) {
-    h += '<div class="demo-grid">' + shown.map(function(d) { return demoCardHtml(d, now); }).join('') + '</div>';
+    h += '<div class="demo-grid">' + shown.map(function(d) { return demoCardHtml(d, now, _dupRentals); }).join('') + '</div>';
   } else {
     var catBuckets = demoCats.map(function(c) {
       return { cat: c, list: shown.filter(function(d) { return d.category === c.id; }) };
@@ -3480,7 +3608,7 @@ function rDemoTracker(el) {
     catBuckets.forEach(function(b) {
       if (!b.list.length) return;
       h += '<details class="demo-cat-group" open><summary>' + (b.cat.icon || '') + ' ' + sanitize(b.cat.label) + ' <span class="cnt">' + b.list.length + '</span></summary>';
-      h += '<div class="demo-grid">' + b.list.map(function(d) { return demoCardHtml(d, now); }).join('') + '</div>';
+      h += '<div class="demo-grid">' + b.list.map(function(d) { return demoCardHtml(d, now, _dupRentals); }).join('') + '</div>';
       h += '</details>';
     });
   }
@@ -3488,7 +3616,7 @@ function rDemoTracker(el) {
   el.innerHTML = h;
 }
 
-function demoCardHtml(d, now) {
+function demoCardHtml(d, now, dupRentals) {
   var eff = getDemoEffectiveStatus(d);
   var meta = DEMO_STATUS_META[eff];
   var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
@@ -3519,7 +3647,11 @@ function demoCardHtml(d, now) {
   // ต้อง .trim() ให้ตรงกับเงื่อนไขที่ใช้แบ่งสโคป "พร้อมให้ยืม/ยังไม่ลงทะเบียน" ใน rDemoTracker() เป๊ะๆ
   // ไม่งั้นค่าที่มีแต่ช่องว่างจะถูกนับเป็น "ยังไม่ลงทะเบียน" ตอนกรอง แต่การ์ดกลับโชว์บรรทัดหมายเลขว่างเปล่า
   var _rental = (d.rentalDbNo || '').trim();
-  if (_rental) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(_rental) + '</div>';
+  if (_rental) {
+    h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(_rental);
+    if (dupRentals && dupRentals[_rental]) h += ' <span style="color:#ef4444;font-weight:700">⚠️ ซ้ำกับเครื่องอื่น</span>';
+    h += '</div>';
+  }
   else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
   if (eff === 'lent' || eff === 'reserved') {
     if ((d.jobNo || '').trim()) h += '<div>📄 ใบงาน: <b onclick="demoTrackerTab=\'jobs\';render()" style="cursor:pointer;text-decoration:underline">' + sanitize(d.jobNo) + '</b>' + ((d.refNo || '').trim() ? ' <span style="color:var(--text3)">· 🔖 ' + sanitize(d.refNo) + '</span>' : '') + '</div>';

@@ -389,6 +389,7 @@ function renderBrowse() {
           (isSel ? '<span class="sel-check">✓</span>' : '') +
           '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
           (u.rentalDbNo ? '<div class="uref">🏷️ เลขเครื่องเช่า ' + esc(u.rentalDbNo) + '</div>' : '') +
+          (u.serialNumber ? '<div class="uref">🔢 S/N ' + esc(u.serialNumber) + '</div>' : '') +
           '<div class="badges">' + statusPill + flyPill + '</div></div>';
       }).join('') + '</div></div>';
   }).join('');
