@@ -1910,7 +1910,26 @@ function rProducts(el) {
     products = products.filter(function(p) { return isDemoProduct(p); });
   }
   
-  var html = '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button></span></h2>';
+  var html = '';
+  // คำอธิบายสำหรับคนใช้ครั้งแรก — หน้านี้มี 4 มุมมองที่ใช้คนละงาน ถ้าไม่บอกจะไม่รู้ว่าควรกดอันไหนตอนไหน
+  if (localStorage.getItem('v7_prodHelpHidden') !== '1') {
+    html += '<div class="card" style="border-left:4px solid var(--accent)">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">';
+    html += '<div style="font-weight:700;font-size:14px">👋 หน้านี้ใช้ทำอะไร</div>';
+    html += '<button class="btn-xs" onclick="prodHideHelp()">✕ ไม่ต้องแสดงอีก</button>';
+    html += '</div>';
+    html += '<div style="font-size:12.5px;color:var(--text2);line-height:1.9;margin-top:8px">';
+    html += 'คลังข้อมูลสินค้ากลางของทั้งแอพ — ราคาที่ใช้ในใบเสนอราคา/Pipeline ดึงจากที่นี่<br>';
+    html += '<b>4 มุมมอง เลือกตามงาน:</b><br>';
+    html += '📋 <b>Table</b> — ดูราคาทุก Level พร้อมกัน มีปุ่มคัดลอกทุกช่อง เหมาะเวลาจะก๊อปไปทำใบเสนอราคา<br>';
+    html += '🖼️ <b>Catalog</b> — การ์ดรูปสินค้า เหมาะเวลาหาของด้วยสายตา กดการ์ดเพื่อดูรายละเอียดเต็ม<br>';
+    html += '🗂️ <b>Sheet</b> — แก้หลายสินค้าหลายช่องพร้อมกันแบบ Excel <b>ต้องกด 💾 บันทึกทั้งหมด</b> ไม่งั้นที่แก้จะหาย<br>';
+    html += '💰 <b>Margin</b> — ดูกำไรแต่ละ Level เทียบต้นทุน';
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 เพิ่มสินค้าทีละมากๆ ใช้ 📤 Export ออกไปแก้ใน Excel แล้ว 📥 นำเข้ากลับ หรือ 📋 วาง Excel ก๊อปจากชีตมาวางตรงๆ</div>';
+    html += '</div>';
+  }
+  html += '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button></span></h2>';
   // ทางลัดไปหน้า "ราคาตาม Level" — เดิมเป็นเมนูแยกในไซด์บาร์ ยุบมารวมเป็นปุ่มในหน้านี้แทนเพื่อลดจำนวนเมนู
   // (2026-08-30) หน้า productPrices เองไม่ได้แก้/ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกในไซด์บาร์แล้ว
   html += '<div style="margin-bottom:10px"><button class="btn bsm bp">📋 Catalog</button> <button class="btn bsm bo" onclick="go(\'productPrices\')">💰 ราคาตาม Level</button></div>';
@@ -1936,6 +1955,7 @@ function rProducts(el) {
   html += '</select>';
   
   html += '<button class="btn bsm bo" onclick="resetProductFilters()">✖️ ล้าง</button>';
+  if (localStorage.getItem('v7_prodHelpHidden') === '1') html += '<button class="btn bsm bo" onclick="prodShowHelp()">❓ วิธีใช้</button>';
   // SKU/EAN ควรชี้สินค้าตัวเดียว ถ้าซ้ำแปลว่าคีย์ผิดหรือ import เข้ามาซ้ำ — เดิมตรวจแค่ตอน import ของเก่าที่
   // ซ้ำอยู่แล้วเลยไม่มีใครเห็น (เจอปัญหาแบบเดียวกันมาแล้วกับเลขเครื่องเช่าในเมนู Demo)
   var _dupProd = _findProductDupes();
@@ -2055,6 +2075,28 @@ function _prodSigOf(sku, ean, name, cat, rrpIn, rrpEx, s, a, b, other, eolFlag, 
 }
 
 // หา SKU/EAN ที่ซ้ำกันในข้อมูลที่มีอยู่ (ไม่ใช่ตอน import) — คืนเฉพาะค่าที่ไม่ว่างและซ้ำจริง
+function prodHideHelp() { localStorage.setItem('v7_prodHelpHidden', '1'); render(); }
+function prodShowHelp() { localStorage.removeItem('v7_prodHelpHidden'); render(); }
+
+// ข้อความตอนไม่มีของให้แสดง — แยก "ยังไม่มีสินค้าเลย" กับ "กรองแล้วไม่เจอ" เพราะทางแก้คนละอย่าง
+function _prodEmptyHtml() {
+  var hasAny = getAllProducts().length > 0;
+  var h = '<div style="text-align:center;padding:34px 20px">';
+  h += '<div style="font-size:44px;margin-bottom:10px">📦</div>';
+  if (hasAny) {
+    h += '<div style="font-weight:600;margin-bottom:4px">ไม่พบสินค้าที่ตรงกับตัวกรอง</div>';
+    h += '<div style="color:var(--text2);font-size:13px;margin-bottom:14px">ลองเปลี่ยนคำค้น หมวดหมู่ หรือประเภทสินค้า</div>';
+    h += '<button class="btn bo" onclick="resetProductFilters()">✖️ ล้างตัวกรอง</button>';
+  } else {
+    h += '<div style="font-weight:600;margin-bottom:4px">ยังไม่มีสินค้าในระบบ</div>';
+    h += '<div style="color:var(--text2);font-size:13px;max-width:420px;margin:0 auto 14px">เพิ่มทีละรายการ หรือนำเข้าจาก Excel ทีเดียวหลายรายการก็ได้</div>';
+    h += '<button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้าแรก</button> ';
+    h += '<button class="btn bo" onclick="showPasteProductsM()">📋 วางจาก Excel</button>';
+  }
+  h += '</div>';
+  return h;
+}
+
 function _findProductDupes() {
   var bySku = {}, byEan = {};
   getAllProducts().forEach(function(p) {
@@ -2244,7 +2286,7 @@ function renderProductsCatalog(products) {
     }
     var statusTag = p.eol ? '<span class="tag tag-cancelled" style="position:absolute;top:5px;right:5px;font-size:10px;padding:2px 5px">EOL</span>' : '';
     var tp = p.typePrices || {};
-    html += '<div class="prod-card" onclick="showProductDetailM(\'' + p.id + '\')">';
+    html += '<div class="prod-card" onclick="go(\'productDetail\',{productId:\'' + p.id + '\'})">';
     html += '<div class="prod-card-img">' + imgContent + statusTag + '</div>';
     html += '<div class="prod-card-body">';
     html += '<div class="prod-card-name">' + sanitize(p.name) + '</div>';
@@ -2257,7 +2299,77 @@ function renderProductsCatalog(products) {
     html += '</div>';
     html += '</div></div>';
   }
-  grid.innerHTML = html || '<div class="empty">ไม่พบสินค้า</div>';
+  grid.innerHTML = html || _prodEmptyHtml();
+}
+
+// หน้ารายละเอียดสินค้าแบบเต็มหน้า (route: productDetail) — เดิมมีแต่ modal ซึ่งเปิดค้างไว้/ส่งลิงก์ให้คนอื่น
+// เปิดหน้าเดียวกันไม่ได้ และกดปุ่ม back ของเบราว์เซอร์ก็ไม่กลับมาที่สินค้าตัวเดิม ตัว modal ยังใช้ได้เหมือนเดิม
+// (มีจุดเรียกจากที่อื่นอยู่) แค่เพิ่มทางเลือกเปิดเป็นหน้าเต็ม
+function rProductDetail(el) {
+  var p = getProductById(S.productId);
+  if (!p) { go('products'); return; }
+  var catIcon = getCategoryIcon(p.category) || '📦';
+  var catName = getCategoryName(p.category);
+  var tp = p.typePrices || {};
+  document.getElementById('pgT').textContent = catIcon + ' ' + p.name;
+
+  var h = navHistory.length
+    ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>'
+    : '<button class="btn bsm bo" onclick="go(\'products\')" style="margin-bottom:10px">← กลับไปรายการสินค้า</button>';
+
+  var statusBadge = p.eol ? '<span class="tag tag-cancelled">⏰ EOL</span>' : '<span class="tag tag-completed">✅ มีขาย</span>';
+  if (isDemoProduct(p)) statusBadge += ' <span class="tag" style="background:#f59e0b;color:#fff">🎪 Demo</span>';
+
+  h += '<div class="card">';
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">';
+  if (p.imageUrl) {
+    h += '<img src="' + sanitize(p.imageUrl) + '" alt="' + sanitize(p.name) + '" style="width:160px;height:160px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:var(--bg2)" onerror="this.style.display=\'none\'">';
+  } else {
+    h += '<div style="width:160px;height:160px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:54px">' + catIcon + '</div>';
+  }
+  h += '<div style="flex:1;min-width:240px">';
+  h += '<h2 style="margin:0 0 6px">' + sanitize(p.name) + ' ' + statusBadge + '</h2>';
+  h += '<div class="demo-info">';
+  h += '<div>' + catIcon + ' หมวดหมู่: ' + sanitize(catName) + '</div>';
+  h += _prodDetailRow('🏷️', 'SKU (SiS Part)', p.sku, p.id);
+  h += _prodDetailRow('🔢', 'EAN', p.ean, p.id);
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">';
+  h += '<button class="btn bsm bp" onclick="showEditProductModal(\'' + p.id + '\')">✏️ แก้ไขสินค้า</button>';
+  h += '<button class="btn bsm bo" onclick="copyToClip(location.href)">🔗 คัดลอกลิงก์หน้านี้</button>';
+  h += '</div>';
+  h += '</div></div></div>';
+
+  h += '<div class="card"><h2>💰 ราคา</h2><div class="demo-info">';
+  [['RRP in Vat', p.rrpInVat || 0], ['RRP Ex Vat', p.rrpExVat || 0],
+   ['S (Type 1)', tp.S || 0], ['A (Type 2)', tp.A || 0], ['B (Type 3)', tp.B || p.price || 0], ['Other (Type 4)', tp.Other || 0]
+  ].forEach(function(r) {
+    h += '<div>' + r[0] + ': ฿' + qcopyHtml(fmtMoney(r[1])) + '</div>';
+  });
+  h += '</div></div>';
+
+  // ต้นทุน/กำไรถือเป็นข้อมูลภายใน — ซ่อนตามสิทธิ์เดียวกับมุมมอง Margin ในหน้ารายการ ไม่ให้หลุดผ่านหน้านี้
+  if (!_gvHidden('products_margin')) {
+    var cost = Number(p.cost) || 0;
+    h += '<div class="card"><h2>📊 ต้นทุน / กำไร</h2><div class="demo-info">';
+    h += '<div>ต้นทุน: ' + (cost ? '฿' + qcopyHtml(fmtMoney(cost)) : '<span style="color:var(--text3)">ยังไม่ได้กรอก</span> <button class="btn-xs" onclick="showEditProductModal(\'' + p.id + '\')">กรอกเลย</button>') + '</div>';
+    if (cost) {
+      ['S', 'A', 'B', 'Other'].forEach(function(lv) {
+        var price = Number(tp[lv]) || (lv === 'B' ? Number(p.price) || 0 : 0);
+        if (!price) return;
+        var m = (price - cost) / price * 100;
+        h += '<div>' + lv + ': ฿' + fmtMoney(price) + ' → กำไร <b style="color:' + (m < 10 ? '#ef4444' : m < 20 ? '#f59e0b' : '#22c55e') + '">' + m.toFixed(1) + '%</b></div>';
+      });
+    }
+    h += '</div></div>';
+  }
+
+  el.innerHTML = h;
+}
+function _prodDetailRow(icon, label, value, pid) {
+  var v = (value || '').trim();
+  if (v) return '<div>' + icon + ' ' + label + ': ' + qcopyHtml(v) + '</div>';
+  return '<div style="color:var(--text3)">' + icon + ' ' + label + ': <span style="color:#f59e0b">ยังไม่ได้กรอก</span> <button class="btn-xs" onclick="showEditProductModal(\'' + pid + '\')">กรอกเลย</button></div>';
 }
 
 function showProductDetailM(productId) {
@@ -2299,6 +2411,7 @@ function showProductDetailM(productId) {
 
   html += '<div class="fm-actions" style="margin-top:14px">';
   html += '<button class="btn bp" onclick="closeMForce();showEditProductModal(\'' + p.id + '\')">✏️ แก้ไข</button>';
+  html += '<button class="btn bo" onclick="closeMForce();go(\'productDetail\',{productId:\'' + p.id + '\'})">🔗 เปิดหน้าเต็ม</button>';
   html += '<button class="btn" onclick="closeM()">ปิด</button>';
   html += '</div></div>';
 
@@ -2353,7 +2466,7 @@ function renderProductsTable(products) {
       '<button class="btn bsm bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️</button></td>';
     html += '</tr>';
   }
-  tbody.innerHTML = html;
+  tbody.innerHTML = html || '<tr><td colspan="13">' + _prodEmptyHtml() + '</td></tr>';
 }
 function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';

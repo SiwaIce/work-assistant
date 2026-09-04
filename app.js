@@ -836,6 +836,7 @@ var R = {
   
   // ✅ เพิ่มตรงนี้
   products: rProducts,
+  productDetail: rProductDetail,
   stock: rStock,
   stockDetail: rStockDetail,
   stockBatchReceive: rStockBatchReceive,
