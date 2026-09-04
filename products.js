@@ -1879,6 +1879,8 @@ var productViewMode = (typeof window !== 'undefined' && window.innerWidth < 768)
 var _marginWhatIf = 0; // จำลองส่วนลด % ในมุมมอง Margin (0 = ราคาเต็ม)
 var _prodSheetInstance = null;
 var _prodSheetIds = [];
+var _prodSheetSnapshot = {}; // id -> ลายเซ็นค่าเดิมของแถว ใช้เทียบว่าแก้จริงไหมตอนบันทึก
+var _prodSheetDirty = false; // มีการแก้ในตาราง Sheet ที่ยังไม่ได้บันทึกหรือยัง
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
@@ -1934,6 +1936,12 @@ function rProducts(el) {
   html += '</select>';
   
   html += '<button class="btn bsm bo" onclick="resetProductFilters()">✖️ ล้าง</button>';
+  // SKU/EAN ควรชี้สินค้าตัวเดียว ถ้าซ้ำแปลว่าคีย์ผิดหรือ import เข้ามาซ้ำ — เดิมตรวจแค่ตอน import ของเก่าที่
+  // ซ้ำอยู่แล้วเลยไม่มีใครเห็น (เจอปัญหาแบบเดียวกันมาแล้วกับเลขเครื่องเช่าในเมนู Demo)
+  var _dupProd = _findProductDupes();
+  if (_dupProd.total) {
+    html += '<button class="btn bsm bd" onclick="showProductDupesM()" title="กดดูรายการที่ซ้ำ">⚠️ ซ้ำ ' + _dupProd.total + ' ค่า</button>';
+  }
   html += '<span style="margin-left:auto;display:flex;gap:4px">';
   html += '<button id="btnProdTable" class="btn bsm' + (productViewMode==='table'?' bp':'') + '" onclick="setProductView(\'table\')">📋 Table</button>';
   html += '<button id="btnProdCatalog" class="btn bsm' + (productViewMode==='catalog'?' bp':'') + '" onclick="setProductView(\'catalog\')">🖼️ Catalog</button>';
@@ -1997,6 +2005,16 @@ function rProducts(el) {
       newProducts = newProducts.filter(function(p) { return isDemoProduct(p); });
     }
     
+    // กรอง/ค้นหาใน Sheet mode = สร้างตารางใหม่ทั้งก้อน ของที่แก้ค้างไว้จะหาย ถามก่อน และถ้าผู้ใช้ไม่ยอม
+    // ให้คืนช่องค้นหา/ตัวกรองกลับเป็นค่าเดิม ไม่งั้น UI จะโชว์ตัวกรองใหม่แต่ตารางยังเป็นชุดเดิม
+    // (ต้องเช็คก่อนเขียนทับ productSearch/productCategoryFilter/productTypeFilter ด้านล่าง ไม่งั้นค่าเดิมหายไปแล้ว)
+    if (productViewMode === 'sheet' && !_prodSheetConfirmLeave()) {
+      var si = document.getElementById('productSearchInput'); if (si) si.value = productSearch;
+      var ci = document.getElementById('productCategorySelect'); if (ci) ci.value = productCategoryFilter;
+      var ti = document.getElementById('productTypeSelect'); if (ti) ti.value = productTypeFilter;
+      return;
+    }
+
     productSearch = q;
     productCategoryFilter = cat;
     productTypeFilter = type;
@@ -2027,8 +2045,60 @@ function resetProductFilters() {
   renderProductsList();
 }
 
+// ลายเซ็นของสินค้า 1 รายการ ใช้เทียบว่า "แก้จริงไหม" ตอนบันทึก Sheet — ต้องคำนวณจากค่าที่ normalize แล้ว
+// ทั้งสองฝั่ง (ตอนสร้างตารางกับตอนบันทึก) เพราะ jspreadsheet คืนค่าตัวเลขกลับมาเป็นสตริง ถ้าเทียบค่าดิบ
+// ตรงๆ จะไม่มีวันตรงกันเลย แล้วทุกแถวจะถูกนับว่า "แก้แล้ว" ทั้งหมด
+function _prodSigOf(sku, ean, name, cat, rrpIn, rrpEx, s, a, b, other, eolFlag, cost) {
+  return [String(sku || '').trim(), String(ean || '').trim(), String(name || '').trim(), cat || 'other',
+    Number(rrpIn) || 0, Number(rrpEx) || 0, Number(s) || 0, Number(a) || 0, Number(b) || 0, Number(other) || 0,
+    eolFlag ? 'EOL' : 'Active', Number(cost) || 0].join('|');
+}
+
+// หา SKU/EAN ที่ซ้ำกันในข้อมูลที่มีอยู่ (ไม่ใช่ตอน import) — คืนเฉพาะค่าที่ไม่ว่างและซ้ำจริง
+function _findProductDupes() {
+  var bySku = {}, byEan = {};
+  getAllProducts().forEach(function(p) {
+    var s = (p.sku || '').trim();
+    if (s) (bySku[s] = bySku[s] || []).push(p);
+    var e = (p.ean || '').trim();
+    if (e) (byEan[e] = byEan[e] || []).push(p);
+  });
+  var sku = Object.keys(bySku).filter(function(k) { return bySku[k].length > 1; });
+  var ean = Object.keys(byEan).filter(function(k) { return byEan[k].length > 1; });
+  return { sku: sku, ean: ean, bySku: bySku, byEan: byEan, total: sku.length + ean.length };
+}
+function showProductDupesM() {
+  var d = _findProductDupes();
+  var h = '<div style="max-width:620px">';
+  if (!d.total) {
+    h += '<div class="card" style="text-align:center;padding:24px"><div style="font-size:36px">✅</div><p>ไม่พบ SKU หรือ EAN ที่ซ้ำกัน</p></div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px">ค่าเหล่านี้ควรชี้สินค้าตัวเดียว การที่ซ้ำมักแปลว่า import เข้ามาซ้ำหรือคีย์ผิด — กดชื่อสินค้าเพื่อเปิดดู/แก้ไข</div>';
+    h += '<div style="max-height:56vh;overflow:auto">';
+    [['sku', 'SKU', d.sku, d.bySku], ['ean', 'EAN', d.ean, d.byEan]].forEach(function(sec) {
+      if (!sec[2].length) return;
+      h += '<div style="font-weight:700;font-size:13px;margin:10px 0 6px">' + sec[1] + ' ซ้ำ (' + sec[2].length + ' ค่า)</div>';
+      sec[2].forEach(function(v) {
+        var list = sec[3][v];
+        h += '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:7px">';
+        h += '<div style="font-weight:700;font-size:12.5px;color:#f59e0b">⚠️ ' + sanitize(v) + ' — ใช้อยู่ ' + list.length + ' รายการ</div>';
+        list.forEach(function(p) {
+          h += '<div style="font-size:12px;padding:3px 0;cursor:pointer;text-decoration:underline" onclick="closeMForce();showProductDetailM(\'' + p.id + '\')">' + sanitize(p.name || '(ไม่มีชื่อ)') + '</div>';
+        });
+        h += '</div>';
+      });
+    });
+    h += '</div>';
+  }
+  h += '<div class="fm-actions" style="margin-top:12px"><button class="btn" onclick="closeMForce()">ปิด</button></div></div>';
+  openM('⚠️ ตรวจ SKU / EAN ซ้ำ', h);
+  if (typeof setMWide === 'function') setMWide(660);
+}
+
 function setProductView(mode) {
   if (mode === 'margin' && _gvHidden('products_margin')) mode = 'table'; // ปุ่มถูกซ่อนไปแล้ว แต่กันไว้เผื่อเรียกตรงๆ
+  // ออกจาก Sheet ทั้งที่ยังไม่บันทึก = งานหาย (ตารางถูกสร้างใหม่ทุกครั้ง) ถามก่อนเสมอ
+  if (productViewMode === 'sheet' && mode !== 'sheet' && !_prodSheetConfirmLeave()) return;
   productViewMode = mode;
   var tw = document.getElementById('productsTableWrap');
   var cw = document.getElementById('productsCatalogWrap');
@@ -2269,7 +2339,7 @@ function renderProductsTable(products) {
     html += '<tr>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td>' + (p.sku ? qcopyHtml(p.sku) : '-') + '</td>';
-    html += '<td>' + sanitize(p.ean || '-') + '</td>';
+    html += '<td>' + (p.ean ? qcopyHtml(p.ean) : '-') + '</td>';
     html += '<td><strong>' + qcopyHtml(p.name) + '</strong></td>';
     html += '<td>' + categoryIcon + ' ' + sanitize(categoryName) + '</td>';
     html += '<td style="text-align:right">' + (p.rrpInVat != null ? qcopyHtml(fmtMoney(p.rrpInVat)) : fmtMoney(p.rrpInVat)) + '</td>';
@@ -3301,13 +3371,23 @@ function initProductsSheet(products) {
   if (!el) return;
   if (el.jexcel) { jexcel.destroy(el); el.innerHTML = ''; }
 
+  // ⚠️ id ของสินค้าต้องเดินทางไปกับ "แถว" ไม่ใช่เก็บเป็นลำดับไว้ข้างนอก — เดิมเก็บ _prodSheetIds ไว้ตอนเปิด
+  // ตารางครั้งเดียวแล้วตอนบันทึกอ่านด้วย _prodSheetIds[idx] แต่ตารางแทรก/ลบแถวได้ พอลบแถวกลางทิ้ง แถวล่างจะ
+  // เลื่อนขึ้นมาแทนที่ ทำให้ index ไม่ตรงกับ id เดิมอีกต่อไป → ตอนบันทึกข้อมูลของสินค้าตัวหนึ่งจะถูกเขียนทับ
+  // สินค้าอีกตัว แล้วไล่ผิดต่อกันไปทั้งตารางแบบเงียบๆ (พบ 2026-09-04) แก้โดยเพิ่มคอลัมน์ id แบบซ่อนไว้ท้ายสุด
+  // (ต่อท้าย ไม่แทรกหน้า เพื่อไม่ให้ index คอลัมน์เดิม 0-11 ขยับ โค้ดที่อ้าง index เดิมอย่าง _fitProductSheet
+  // จึงยังทำงานเหมือนเดิมทุกอย่าง)
   _prodSheetIds = products.map(function(p) { return p.id; });
+  // snapshot ค่าเดิมไว้เทียบตอนบันทึก จะได้เขียนเฉพาะรายการที่แก้จริง ไม่ใช่ยิง updateProduct ทุกแถวทุกครั้ง
+  _prodSheetSnapshot = {};
   var data = products.map(function(p) {
     var tp = p.typePrices || {};
-    return [p.sku||'', p.ean||'', p.name||'', p.category||'other',
+    var row = [p.sku||'', p.ean||'', p.name||'', p.category||'other',
             p.rrpInVat||0, p.rrpExVat||0,
             tp.S||0, tp.A||0, tp.B||p.price||0, tp.Other||0,
-            p.eol ? 'EOL' : 'Active', p.cost||0];
+            p.eol ? 'EOL' : 'Active', p.cost||0, p.id];
+    _prodSheetSnapshot[p.id] = _prodSigOf(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], p.eol, row[11]);
+    return row;
   });
 
   _prodSheetInstance = jexcel(el, {
@@ -3324,13 +3404,19 @@ function initProductsSheet(products) {
       { title: 'B', type: 'numeric', width: 80 },
       { title: 'Other', type: 'numeric', width: 80 },
       { title: 'สถานะ', type: 'dropdown', source: ['Active','EOL'], width: 70 },
-      { title: 'ต้นทุน', type: 'numeric', width: 80 }
+      { title: 'ต้นทุน', type: 'numeric', width: 80 },
+      { title: '_id', type: 'hidden' }
     ],
-    minDimensions: [12, Math.max(data.length, 5)],
+    minDimensions: [13, Math.max(data.length, 5)],
     allowInsertRow: true,
     allowDeleteRow: true,
-    contextMenu: false
+    contextMenu: false,
+    onchange: function() { _prodSheetDirty = true; _updProdSheetDirtyUI(); },
+    oninsertrow: function() { _prodSheetDirty = true; _updProdSheetDirtyUI(); },
+    ondeleterow: function() { _prodSheetDirty = true; _updProdSheetDirtyUI(); }
   });
+  _prodSheetDirty = false;
+  _updProdSheetDirtyUI();
   // stretch ชื่อสินค้า column to fill available width
   requestAnimationFrame(function() { _fitProductSheet(); });
 }
@@ -3348,9 +3434,10 @@ function _fitProductSheet() {
 function saveProductsSheet() {
   if (!_prodSheetInstance) { toast('⚠️ เปิด Sheet mode ก่อน'); return; }
   var rows = _prodSheetInstance.getData();
-  var saved = 0, added = 0;
+  var saved = 0, added = 0, unchanged = 0;
+  var seenIds = {};
 
-  rows.forEach(function(r, idx) {
+  rows.forEach(function(r) {
     var name = (r[2] || '').toString().trim();
     if (!name) return;
     var data = {
@@ -3366,14 +3453,58 @@ function saveProductsSheet() {
       cost: parseFloat(r[11]) || 0,
       updatedAt: new Date().toISOString()
     };
-    var id = _prodSheetIds[idx];
-    if (id) { updateProduct(id, data); saved++; }
-    else { data.createdAt = new Date().toISOString(); addProduct(data); added++; }
+    // อ่าน id จากคอลัมน์ซ่อนของแถวนั้นเอง — ไม่ใช่จากลำดับแถว จึงถูกต้องเสมอแม้จะแทรก/ลบ/สลับแถว
+    var id = (r[12] || '').toString().trim();
+    if (id) {
+      seenIds[id] = true;
+      // เขียนเฉพาะแถวที่ค่าเปลี่ยนจริง — เดิมยิง updateProduct ทุกแถวทุกครั้งที่กดบันทึก ทำให้ updatedAt
+      // ของสินค้าทั้งคลังขยับหมดและ sync ขึ้น Firestore ทั้งก้อนโดยไม่จำเป็น
+      var sig = _prodSigOf(data.sku, data.ean, data.name, data.category, data.rrpInVat, data.rrpExVat,
+        data.typePrices.S, data.typePrices.A, data.typePrices.B, data.typePrices.Other, data.eol, data.cost);
+      if (_prodSheetSnapshot[id] === sig) { unchanged++; return; }
+      updateProduct(id, data);
+      _prodSheetSnapshot[id] = sig;
+      saved++;
+    } else {
+      data.createdAt = new Date().toISOString();
+      addProduct(data);
+      added++;
+    }
   });
 
+  // แถวที่หายไปจากตาราง = ผู้ใช้กดลบแถวไว้ แต่ฟังก์ชันนี้ไม่ได้ลบสินค้าจริง (และไม่ควรลบเงียบๆ ด้วย)
+  // ต้องบอกให้รู้ ไม่งั้นจะเข้าใจว่าลบไปแล้วทั้งที่สินค้ายังอยู่ในระบบ
+  var removed = _prodSheetIds.filter(function(id) { return id && !seenIds[id]; });
+
   var st = document.getElementById('sheetSaveStatus');
-  if (st) st.textContent = '✅ บันทึก ' + saved + (added ? ', เพิ่ม ' + added : '') + ' รายการ';
+  var msg = '✅ บันทึก ' + saved + ' รายการ' + (added ? ', เพิ่มใหม่ ' + added : '') + (unchanged ? ' (ไม่เปลี่ยน ' + unchanged + ')' : '');
+  if (st) {
+    st.innerHTML = sanitize(msg);
+    if (removed.length) {
+      st.innerHTML += '<div style="color:#f59e0b;margin-top:4px">⚠️ มี ' + removed.length + ' แถวที่ถูกลบออกจากตาราง — <b>สินค้ายังไม่ถูกลบจริง</b> ถ้าต้องการลบ ให้ใช้ปุ่มลบในมุมมอง 📋 Table</div>';
+    }
+  }
+  _prodSheetIds = rows.map(function(r) { return (r[12] || '').toString().trim(); }).filter(Boolean);
+  _prodSheetDirty = false;
+  _updProdSheetDirtyUI();
   toast('💾 บันทึก ' + (saved + added) + ' รายการ');
+}
+
+// แสดงสถานะ "ยังไม่บันทึก" ให้เห็นตลอด — Sheet ถูกทำลายทุกครั้งที่ render() หรือสลับมุมมอง ถ้าไม่เตือนไว้
+// งานที่แก้ค้างจะหายไปโดยไม่รู้ตัว
+function _updProdSheetDirtyUI() {
+  var st = document.getElementById('sheetSaveStatus');
+  if (!st) return;
+  if (_prodSheetDirty) st.innerHTML = '<span style="color:#f59e0b;font-weight:700">✏️ มีการแก้ไขที่ยังไม่บันทึก</span>';
+}
+// เรียกก่อนออกจาก Sheet — true = ไปต่อได้, false = ผู้ใช้ขอกลับไปบันทึกก่อน
+function _prodSheetConfirmLeave() {
+  if (!_prodSheetDirty || !_prodSheetInstance) return true;
+  if (confirm('ยังมีการแก้ไขในตาราง Sheet ที่ยังไม่ได้บันทึก — ออกแล้วจะหายไป ยืนยัน?')) {
+    _prodSheetDirty = false;
+    return true;
+  }
+  return false;
 }
 
 // ================================================================
