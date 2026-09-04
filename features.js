@@ -2980,6 +2980,9 @@ function demoSearchInput(v) {
   _demoSearchTimer = setTimeout(function() { render(); }, 350);
 }
 
+function demoHideHelp() { localStorage.setItem('v7_demoHelpHidden', '1'); render(); }
+function demoShowHelp() { localStorage.removeItem('v7_demoHelpHidden'); render(); }
+
 function demoSetStatusFilter(s) { demoStatusFilter = s; render(); }
 function demoClearFilters() { demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoCategoryFilter = 'all'; demoReadyFilter = 'ready'; demoSearch = ''; render(); }
 
@@ -3393,6 +3396,26 @@ function rDemoTracker(el) {
   });
 
   var h = '';
+
+  // คำอธิบายสำหรับคนเปิดใช้ครั้งแรก — เมนูนี้มีหลายแท็บและหลายสถานะ ถ้าไม่บอกลำดับงานจะเดาไม่ออกว่าต้องเริ่มตรงไหน
+  // ซ่อนถาวรได้ (เก็บใน localStorage) และกดเปิดดูใหม่ได้จากปุ่ม ❓ วิธีใช้ ที่แถบเครื่องมือ
+  if (localStorage.getItem('v7_demoHelpHidden') !== '1') {
+    h += '<div class="card" style="margin-bottom:10px;border-left:4px solid var(--accent)">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">';
+    h += '<div style="font-weight:700;font-size:14px">👋 เมนูนี้ใช้ทำอะไร</div>';
+    h += '<button class="btn-xs" onclick="demoHideHelp()">✕ ไม่ต้องแสดงอีก</button>';
+    h += '</div>';
+    h += '<div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-top:8px">';
+    h += 'ใช้ติดตามเครื่อง Demo ว่าตอนนี้เครื่องไหนอยู่ที่ไหน ใครยืมไป ต้องคืนวันไหน<br>';
+    h += '<b>ลำดับการใช้งาน:</b> ① <b>➕ เพิ่มอุปกรณ์</b> เข้าระบบ → ② กรอก <b>หมายเลขเครื่องเช่า</b> (เลขที่คีย์เบิกจากคลัง — ไม่มีเลขนี้จะยังให้ยืมไม่ได้) → ③ กด <b>📤 ให้ยืม/จอง</b> พร้อมใส่ <b>เลขใบงาน</b> ถ้ายืมหลายเครื่องพร้อมกัน → ④ พอลูกค้าคืน กด <b>✅ คืนแล้ว</b> หรือคืนทั้งใบงานทีเดียวที่แท็บ 📄 ใบงาน';
+    h += '</div>';
+    h += '<div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-top:8px">';
+    h += '<b>แท็บต่างๆ:</b> <b>📋 รายการ</b> = เครื่องทั้งหมดแยกตามหมวดหมู่ · <b>📄 ใบงาน</b> = รวมเครื่องที่เบิกใบเดียวกัน กดคืนทีเดียวได้ · <b>🗓️ ปฏิทิน</b> = ดูว่าช่วงไหนเครื่องไหนไม่ว่าง · <b>🟡 คำขอยืม</b> = คำขอที่ลูกค้าส่งมาจากลิงก์สาธารณะ รออนุมัติ';
+    h += '</div>';
+    h += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 ค่าที่มีปุ่ม 📋 (เลขเครื่องเช่า, S/N, เลขใบงาน ฯลฯ) กดคัดลอกไปวางที่อื่นได้ทันที · กดชื่อเครื่องเพื่อดูรายละเอียดทั้งหมด</div>';
+    h += '</div>';
+  }
+
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์</button>';
   h += '<button class="btn bo" onclick="showDemoLinksM()">🔗 ลิงก์ขอยืม/จัดการ Demo</button>';
@@ -3402,6 +3425,7 @@ function rDemoTracker(el) {
   if (_missingModel) h += '<button class="btn bo" onclick="showDemoBulkModelM()">📦 กรอก Model (' + _missingModel + ')</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export</button>';
   h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import</button>';
+  if (localStorage.getItem('v7_demoHelpHidden') === '1') h += '<button class="btn bo" onclick="demoShowHelp()">❓ วิธีใช้</button>';
   h += '</div>';
 
   // เลขเครื่องเช่าซ้ำ — เลขนี้ควรชี้เครื่องเดียวเท่านั้น ถ้าซ้ำแปลว่าคีย์ผิดหรือหลายเครื่องถูกลงทะเบียนรวมเป็น
@@ -3486,7 +3510,7 @@ function rDemoTracker(el) {
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
   h += '<button class="demo-filter-chip ' + (demoStatusFilter === 'all' ? 'act' : '') + '" onclick="demoSetStatusFilter(\'all\')">ทั้งหมด (' + items.length + ')</button>';
   Object.keys(DEMO_STATUS_META).forEach(function(s) {
-    h += '<button class="demo-filter-chip ' + (demoStatusFilter === s ? 'act' : '') + '" onclick="demoSetStatusFilter(\'' + s + '\')">' + DEMO_STATUS_META[s].label + ' (' + counts[s] + ')</button>';
+    h += '<button class="demo-filter-chip ' + (demoStatusFilter === s ? 'act' : '') + '" title="' + sanitize(DEMO_STATUS_META[s].desc) + '" onclick="demoSetStatusFilter(\'' + s + '\')">' + DEMO_STATUS_META[s].label + ' (' + counts[s] + ')</button>';
   });
   h += '</div>';
 
@@ -3589,7 +3613,17 @@ function rDemoTracker(el) {
   });
 
   if (!shown.length) {
-    h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div><p>' + (items.length ? 'ไม่พบอุปกรณ์ในสถานะนี้' : 'ยังไม่มีอุปกรณ์ Demo — กด ➕ เพื่อเพิ่ม') + '</p></div>';
+    h += '<div class="card" style="text-align:center;padding:30px"><div style="font-size:48px;margin-bottom:10px">🚁</div>';
+    if (!allItems.length) {
+      h += '<p style="font-weight:600">ยังไม่มีอุปกรณ์ Demo ในระบบ</p>';
+      h += '<p style="color:var(--text2);font-size:13px;max-width:420px;margin:6px auto 14px">เริ่มจากเพิ่มเครื่องเข้าระบบก่อน แล้วค่อยกรอกหมายเลขเครื่องเช่าเพื่อให้พร้อมปล่อยยืม</p>';
+      h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์เครื่องแรก</button>';
+    } else {
+      h += '<p style="font-weight:600">ไม่พบอุปกรณ์ที่ตรงกับตัวกรองนี้</p>';
+      h += '<p style="color:var(--text2);font-size:13px">ลองเปลี่ยนตัวกรองด้านบน หรือล้างตัวกรองทั้งหมด</p>';
+      h += '<button class="btn bo" onclick="demoClearFilters()">✖️ ล้างตัวกรอง</button>';
+    }
+    h += '</div>';
   }
 
   // จัดกลุ่มตามหมวดหมู่เป็นกลุ่มพับได้ — ช่วยเวลามีเครื่องเป็นร้อยตัว ไม่ต้องเลื่อนยาวเป็นพืด
@@ -3635,14 +3669,15 @@ function demoCardHtml(d, now, dupRentals) {
   h += '<div class="demo-card2-id">';
   h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">' + (cat && cat.icon ? cat.icon : '🚁') + '</div>';
   h += '<div>';
-  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">' + sanitize(d.name) + '</div>';
+  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})" title="กดเพื่อดูรายละเอียดทั้งหมด">' + sanitize(d.name) + '</div>';
   if (d.serialNumber) h += '<span class="demo-sn-chip" style="background:' + mColor + '22;color:' + mColor + '">S/N ' + qcopyHtml(d.serialNumber) + '</span>';
   if (cat) h += '<div><span class="demo-cat-badge">' + (cat.icon || '') + ' ' + sanitize(cat.label) + '</span></div>';
   h += '</div></div>';
-  h += '<span class="demo-status ' + meta.cls + '">' + meta.label + '</span>';
+  h += '<span class="demo-status ' + meta.cls + '" title="' + sanitize(meta.desc) + '">' + meta.label + '</span>';
   h += '</div>';
   h += '<div class="demo-card2-info">';
   h += '<div>' + (d.flyable !== false ? '<span style="color:#38bdf8">✈️ บินสาธิตได้</span>' : '<span style="color:var(--text2)">🖼️ จัดแสดงเท่านั้น (ห้ามบิน)</span>') + '</div>';
+  if ((d.model || '').trim()) h += '<div>📦 Model: ' + qcopyHtml(d.model) + '</div>';
   if (d.sku) h += '<div>🏷️ SiS Part: ' + qcopyHtml(d.sku) + '</div>';
   // ต้อง .trim() ให้ตรงกับเงื่อนไขที่ใช้แบ่งสโคป "พร้อมให้ยืม/ยังไม่ลงทะเบียน" ใน rDemoTracker() เป๊ะๆ
   // ไม่งั้นค่าที่มีแต่ช่องว่างจะถูกนับเป็น "ยังไม่ลงทะเบียน" ตอนกรอง แต่การ์ดกลับโชว์บรรทัดหมายเลขว่างเปล่า
@@ -3654,7 +3689,8 @@ function demoCardHtml(d, now, dupRentals) {
   }
   else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
   if (eff === 'lent' || eff === 'reserved') {
-    if ((d.jobNo || '').trim()) h += '<div>📄 ใบงาน: <b onclick="demoTrackerTab=\'jobs\';render()" style="cursor:pointer;text-decoration:underline">' + sanitize(d.jobNo) + '</b>' + ((d.refNo || '').trim() ? ' <span style="color:var(--text3)">· 🔖 ' + sanitize(d.refNo) + '</span>' : '') + '</div>';
+    if ((d.jobNo || '').trim()) h += '<div>📄 ใบงาน: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
+    if ((d.refNo || '').trim()) h += '<div>🔖 เลขอ้างอิง: ' + qcopyHtml(d.refNo) + '</div>';
     h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
     h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '') + '</div>';
@@ -3733,9 +3769,9 @@ function renderDemoJobsTab() {
     h += '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + accent + '">';
     h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">';
     h += '<div>';
-    h += '<div style="font-weight:700;font-size:14px">' + (isNone ? '➖ ไม่ระบุเลขใบงาน' : '📄 ' + sanitize(g.jobNo)) + ' <span style="font-size:11px;font-weight:600;color:var(--text2)">' + g.loans.length + ' เครื่อง</span></div>';
+    h += '<div style="font-weight:700;font-size:14px">' + (isNone ? '➖ ไม่ระบุเลขใบงาน' : '📄 ' + qcopyHtml(g.jobNo)) + ' <span style="font-size:11px;font-weight:600;color:var(--text2)">' + g.loans.length + ' เครื่อง</span></div>';
     var sub = [];
-    if (g.refNo) sub.push('🔖 ' + sanitize(g.refNo));
+    if (g.refNo) sub.push('🔖 ' + qcopyHtml(g.refNo));
     var borrower = g.loans[0].dealerId ? ((ST.getOne('dealers', g.loans[0].dealerId) || {}).name || '') : (g.loans[0].borrower || '');
     if (borrower && !isNone) sub.push('👤 ' + sanitize(borrower));
     if (g.loans[0].lentDate && !isNone) sub.push('📅 ยืม ' + sanitize(g.loans[0].lentDate));
@@ -3755,8 +3791,9 @@ function renderDemoJobsTab() {
       h += '<label style="display:flex;align-items:center;gap:9px;padding:8px 10px;font-size:12px;cursor:pointer;' + (li ? 'border-top:1px solid var(--border)' : '') + '">';
       h += '<input type="checkbox" class="demo-job-cb" data-g="' + gi + '" value="' + sanitize(l.demoId) + '">';
       h += '<span style="flex:1">' + sanitize(l.demoName || unit.name || '-');
-      if (unit.serialNumber) h += ' <span style="color:var(--text2);font-family:monospace;font-size:11px">S/N ' + sanitize(unit.serialNumber) + '</span>';
-      if (unit.rentalDbNo) h += ' <span style="color:var(--text3);font-size:11px">· เช่า ' + sanitize(unit.rentalDbNo) + '</span>';
+      if (unit.serialNumber) h += ' <span style="color:var(--text2);font-size:11px">S/N ' + qcopyHtml(unit.serialNumber) + '</span>';
+      if (unit.rentalDbNo) h += ' <span style="color:var(--text3);font-size:11px">· เช่า ' + qcopyHtml(unit.rentalDbNo) + '</span>';
+      if (unit.id) h += ' <button class="btn-xs" onclick="event.preventDefault();event.stopPropagation();go(\'demoDetail\',{demoId:\'' + unit.id + '\'})">รายละเอียด →</button>';
       h += '</span>';
       if (isNone && l.borrower) h += '<span style="color:var(--text2);font-size:11px">👤 ' + sanitize(l.borrower) + '</span>';
       if (isNone && l.returnDate) h += '<span style="color:var(--text2);font-size:11px">📅 ' + sanitize(l.returnDate) + '</span>';
@@ -4041,36 +4078,73 @@ function rDemoDetail(el) {
   var meta = DEMO_STATUS_META[eff];
   var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bsm bo" onclick="go(\'demoTracker\')" style="margin-bottom:10px">← กลับ</button>';
 
+  // แถบสถานะ + ปุ่มที่ "ทำได้ตอนนี้" อยู่บนสุด — คนที่เพิ่งเปิดใช้ครั้งแรกจะเห็นทันทีว่าเครื่องนี้อยู่สถานะไหน
+  // แปลว่าอะไร และกดอะไรต่อได้บ้าง โดยไม่ต้องเดาเอง
   h += '<div class="card">';
-  h += '<h2>🚁 ' + sanitize(d.name) + ' <span class="demo-status ' + meta.cls + '">' + meta.label + '</span></h2>';
+  h += '<h2 style="margin-bottom:4px">🚁 ' + sanitize(d.name) + ' <span class="demo-status ' + meta.cls + '" title="' + sanitize(meta.desc) + '">' + meta.label + '</span></h2>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">ℹ️ ' + sanitize(meta.desc) + '</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">';
+  if (eff === 'available') h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม / จอง</button>';
+  if (eff === 'lent' || eff === 'reserved') h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ รับคืน</button>';
+  if (eff === 'unavailable') h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ ตั้งเป็นพร้อมใช้</button>';
+  h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️ แก้ไขข้อมูลเครื่อง</button>';
+  if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')">🗑️ ลบ</button>';
+  h += '</div>';
+  h += '</div>';
+
+  // ข้อมูลระบุตัวเครื่อง — ทุกค่าที่เอาไปใช้ต่อได้ กดปุ่ม 📋 คัดลอกได้ทันที ช่องที่ยังว่างจะมีปุ่มพาไปกรอกให้เลย
+  h += '<div class="card"><h2>🔖 ข้อมูลระบุตัวเครื่อง</h2>';
   h += '<div class="demo-info">';
-  if (d.serialNumber) h += '<div>🔢 S/N: ' + sanitize(d.serialNumber) + '</div>';
-  if (d.model) h += '<div>📦 Model: ' + sanitize(d.model) + '</div>';
-  if (d.sku) h += '<div>🏷️ SiS Part: ' + sanitize(d.sku) + '</div>';
-  if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + sanitize(d.rentalDbNo) + '</div>';
-  h += '<div style="color:var(--text2)">ℹ️ ' + meta.desc + '</div>';
-  if (eff === 'lent' || eff === 'reserved') {
-    var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
-    h += '<div>👤 ผู้ยืม: ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
-    if (d.purpose) h += '<div>🎯 ใช้งานกับ: ' + sanitize(d.purpose) + '</div>';
-    h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (d.returnDate ? ' • กำหนดคืน: ' + d.returnDate : '') + '</div>';
-  }
+  h += _demoDetailRow('📦', 'Model (ชื่อรุ่นที่ลูกค้าเห็น)', d.model, d.id, 'ยังไม่ได้ตั้ง — ลูกค้าจะเห็นชื่อเครื่องเต็มแทน');
+  h += _demoDetailRow('🔢', 'Serial Number', d.serialNumber, d.id, 'ยังไม่ได้กรอก');
+  h += _demoDetailRow('🏷️', 'SiS Part (SKU)', d.sku, d.id, 'ยังไม่ได้กรอก');
+  h += _demoDetailRow('📋', 'หมายเลขเครื่องเช่า', d.rentalDbNo, d.id, 'ยังไม่ลงทะเบียนเช่า — ยืมจริงไม่ได้ และลูกค้าไม่เห็นเครื่องนี้');
+  var _cat = (getConfig().demoCategories || []).filter(function(c) { return c.id === d.category; })[0];
+  h += '<div>🗂️ หมวดหมู่: ' + (_cat ? (_cat.icon || '') + ' ' + sanitize(_cat.label) : '<span style="color:var(--text3)">ไม่ระบุ</span> <button class="btn-xs" onclick="showEditDemoM(\'' + d.id + '\')">ตั้งหมวดหมู่</button>') + '</div>';
+  h += '<div>' + (d.flyable !== false ? '✈️ บินสาธิตได้' : '🖼️ จัดแสดงเท่านั้น (ห้ามบิน)') + '</div>';
   if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
   h += '</div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin:10px 0 4px">เอกสาร/การจดทะเบียน</div>';
   h += demoComplianceBadges(d);
   h += '</div>';
+
+  // สถานะการยืมปัจจุบัน — โชว์เฉพาะตอนถูกยืม/จองอยู่ พร้อมลิงก์ไปใบงานและ Dealer ที่เกี่ยวข้อง
+  if (eff === 'lent' || eff === 'reserved') {
+    var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
+    var _now = new Date();
+    var _ret = ftParseDate(d.returnDate);
+    var _days = _ret ? Math.ceil((_ret - _now) / 86400000) : null;
+    h += '<div class="card"><h2>' + (eff === 'reserved' ? '📅 การจองปัจจุบัน' : '📤 กำลังถูกยืมอยู่') + '</h2>';
+    h += '<div class="demo-info">';
+    if ((d.jobNo || '').trim()) {
+      h += '<div>📄 เลขใบงาน: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="demoTrackerTab=\'jobs\';go(\'demoTracker\')">ดูทั้งใบงาน →</button></div>';
+    }
+    if ((d.refNo || '').trim()) h += '<div>🔖 เลขอ้างอิง: ' + qcopyHtml(d.refNo) + '</div>';
+    h += '<div>👤 ผู้ยืม: ' + (dd ? '<b onclick="go(\'dealerDetail\',{dealerId:\'' + dd.id + '\'})" style="cursor:pointer;text-decoration:underline">' + sanitize(dd.name) + '</b>' : sanitize(d.borrower || '-')) + '</div>';
+    if (d.purpose) h += '<div>🎯 ใช้งานกับ: ' + sanitize(d.purpose) + '</div>';
+    h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + sanitize(d.lentDate || '-') + '</div>';
+    if (d.returnDate) {
+      h += '<div>📅 กำหนดคืน: ' + sanitize(d.returnDate);
+      if (_days !== null) h += ' <b style="color:' + (_days < 0 ? '#ef4444' : _days <= 3 ? '#f59e0b' : 'var(--text2)') + '">' + (_days < 0 ? '(เลยกำหนด ' + Math.abs(_days) + ' วัน)' : _days === 0 ? '(ครบวันนี้)' : '(อีก ' + _days + ' วัน)') + '</b>';
+      h += '</div>';
+    } else {
+      h += '<div style="color:#f59e0b">📅 ยังไม่ได้ระบุกำหนดคืน <button class="btn-xs" onclick="showEditDemoM(\'' + d.id + '\')">กรอกกำหนดคืน</button></div>';
+    }
+    h += '</div></div>';
+  }
 
   var history = demoLoansByDemo(d.id);
   h += '<div class="card"><h2>📜 ประวัติการยืม (' + history.length + ')</h2>';
   if (!history.length) {
-    h += '<p style="color:var(--text2)">ยังไม่มีประวัติการยืม</p>';
+    h += '<p style="color:var(--text2)">ยังไม่มีประวัติการยืม — เมื่อเครื่องนี้ถูกให้ยืมและรับคืน รายการจะถูกบันทึกไว้ที่นี่ทุกครั้ง</p>';
   } else {
     history.forEach(function(l) {
-      var dd = l.dealerId ? ST.getOne('dealers', l.dealerId) : null;
+      var dd2 = l.dealerId ? ST.getOne('dealers', l.dealerId) : null;
       h += '<div class="li">';
       h += '<div class="lm">';
-      h += '<div class="lt">👤 ' + sanitize(dd ? dd.name : (l.borrower || '-')) + ' <span class="fu-badge ' + (l.status === 'active' ? 'fu-badge-red' : '') + '">' + (l.status === 'active' ? '📤 กำลังยืม' : '✅ คืนแล้ว') + '</span></div>';
-      h += '<div class="ls">📅 ยืม: ' + (l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + l.actualReturnDate : (l.returnDate ? ' • กำหนดคืน: ' + l.returnDate : '')) + '</div>';
+      h += '<div class="lt">👤 ' + sanitize(dd2 ? dd2.name : (l.borrower || '-')) + ' <span class="fu-badge ' + (l.status === 'active' ? 'fu-badge-red' : '') + '">' + (l.status === 'active' ? '📤 กำลังยืม' : '✅ คืนแล้ว') + '</span></div>';
+      if ((l.jobNo || '').trim()) h += '<div class="ls">📄 ใบงาน: ' + qcopyHtml(l.jobNo) + ((l.refNo || '').trim() ? ' · 🔖 ' + qcopyHtml(l.refNo) : '') + '</div>';
+      h += '<div class="ls">📅 ยืม: ' + sanitize(l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + sanitize(l.actualReturnDate) : (l.returnDate ? ' • กำหนดคืน: ' + sanitize(l.returnDate) : '')) + '</div>';
       if (l.purpose) h += '<div class="ls">🎯 ' + sanitize(l.purpose) + '</div>';
       if (l.note) h += '<div class="ls">📝 ' + sanitize(l.note) + '</div>';
       h += '</div></div>';
@@ -4079,6 +4153,15 @@ function rDemoDetail(el) {
   h += '</div>';
 
   el.innerHTML = h;
+}
+
+// แถวข้อมูลในหน้ารายละเอียด — มีค่า = โชว์พร้อมปุ่มคัดลอก, ไม่มีค่า = บอกว่าขาดอะไรพร้อมปุ่มกดไปแก้ทันที
+// (ไม่ปล่อยให้แถวหายไปเงียบๆ เพราะคนใช้ครั้งแรกจะไม่รู้ว่ามีช่องนี้อยู่และควรกรอก)
+function _demoDetailRow(icon, label, value, demoId, emptyHint) {
+  var v = (value || '').trim();
+  if (v) return '<div>' + icon + ' ' + label + ': ' + qcopyHtml(v) + '</div>';
+  return '<div style="color:var(--text3)">' + icon + ' ' + label + ': <span style="color:#f59e0b">' + sanitize(emptyHint) + '</span> ' +
+    '<button class="btn-xs" onclick="showEditDemoM(\'' + demoId + '\')">กรอกเลย</button></div>';
 }
 
 // ตัวเลือก Model ดึงจากสินค้าหมวด Demo Unit ใน Products module พร้อม SKU
