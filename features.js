@@ -3441,18 +3441,29 @@ function rDemoTracker(el) {
 
   // เลขเครื่องเช่าซ้ำ — เลขนี้ควรชี้เครื่องเดียวเท่านั้น ถ้าซ้ำแปลว่าคีย์ผิดหรือหลายเครื่องถูกลงทะเบียนรวมเป็น
   // รายการเดียว ซึ่งทำให้แยกไม่ออกว่ายืมตัวไหนไปตอนทวงคืน (ผู้ใช้เจอ 2026-09-04: 5 เครื่องใช้เลข 17128 ร่วมกัน)
-  var _rentalSeen = {}, _dupRentals = {};
+  var _rentalSeen = {}, _dupRentals = {}, _snSeen = {}, _dupSns = {};
   allItems.forEach(function(d) {
     var v = (d.rentalDbNo || '').trim();
-    if (!v) return;
-    if (_rentalSeen[v]) _dupRentals[v] = 1; else _rentalSeen[v] = 1;
+    if (v) { if (_rentalSeen[v]) _dupRentals[v] = 1; else _rentalSeen[v] = 1; }
+    var s = (d.serialNumber || '').trim();
+    if (s) { if (_snSeen[s]) _dupSns[s] = 1; else _snSeen[s] = 1; }
   });
   var _dupNums = Object.keys(_dupRentals);
-  if (_dupNums.length) {
-    var _dupUnitCount = allItems.filter(function(d) { return _dupRentals[(d.rentalDbNo || '').trim()]; }).length;
-    h += '<div class="demo-duesoon-box" onclick="demoDupRentalFlt=!demoDupRentalFlt;demoReadyFilter=\'all\';render()" style="margin-bottom:10px;background:' + (demoDupRentalFlt ? '#ef444418' : 'var(--bg2)') + ';border:1px solid ' + (demoDupRentalFlt ? '#ef4444' : 'var(--border)') + ';max-width:100%">';
-    h += '<div style="font-size:11px;color:#ef4444">⚠️ เลขเครื่องเช่าซ้ำ ' + _dupNums.length + ' เลข (' + _dupUnitCount + ' เครื่อง) — กดดู/แก้</div>';
-    h += '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">' + sanitize(_dupNums.slice(0, 6).join(', ')) + (_dupNums.length > 6 ? ' …' : '') + '</div>';
+  var _dupSnList = Object.keys(_dupSns);
+  if (_dupNums.length || _dupSnList.length) {
+    var _dupUnitCount = allItems.filter(function(d) {
+      return _dupRentals[(d.rentalDbNo || '').trim()] || _dupSns[(d.serialNumber || '').trim()];
+    }).length;
+    var _parts = [];
+    if (_dupNums.length) _parts.push('เลขเครื่องเช่าซ้ำ ' + _dupNums.length + ' เลข');
+    if (_dupSnList.length) _parts.push('S/N ซ้ำ ' + _dupSnList.length + ' เลข');
+    h += '<div class="demo-duesoon-box" style="margin-bottom:10px;background:' + (demoDupRentalFlt ? '#ef444418' : 'var(--bg2)') + ';border:1px solid ' + (demoDupRentalFlt ? '#ef4444' : 'var(--border)') + ';max-width:100%;cursor:default">';
+    h += '<div style="font-size:11px;color:#ef4444">⚠️ ' + _parts.join(' · ') + ' (รวม ' + _dupUnitCount + ' เครื่อง) — น่าจะเป็นเครื่องเดียวกันที่คีย์ซ้ำ</div>';
+    h += '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">' + sanitize(_dupNums.concat(_dupSnList).slice(0, 6).join(', ')) + (_dupNums.length + _dupSnList.length > 6 ? ' …' : '') + '</div>';
+    h += '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">';
+    h += '<button class="btn bsm bo" onclick="demoDupRentalFlt=!demoDupRentalFlt;demoReadyFilter=\'all\';render()">' + (demoDupRentalFlt ? '✖️ เลิกกรอง' : '🔍 ดูเฉพาะที่ซ้ำ') + '</button>';
+    h += '<button class="btn bsm bd" onclick="showDemoDupCleanupM()">🧹 รวม/ลบตัวซ้ำ</button>';
+    h += '</div>';
     h += '</div>';
   }
 
@@ -3594,7 +3605,7 @@ function rDemoTracker(el) {
       var retD = ftParseDate(d.returnDate);
       if (!retD || Math.ceil((retD - now) / 86400000) > 3) return false;
     }
-    if (demoDupRentalFlt && !_dupRentals[(d.rentalDbNo || '').trim()]) return false;
+    if (demoDupRentalFlt && !_dupRentals[(d.rentalDbNo || '').trim()] && !_dupSns[(d.serialNumber || '').trim()]) return false;
     if (demoSearch) {
       var q = demoSearch.toLowerCase();
       var hay = ((d.name || '') + ' ' + (d.sku || '') + ' ' + (d.serialNumber || '') + ' ' + (d.rentalDbNo || '') + ' ' + (d.borrower || '') + ' ' + (d.purpose || '') + ' ' + (d.note || '')).toLowerCase();
@@ -3729,6 +3740,135 @@ function demoCardHtml(d, now, dupRentals) {
   if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
   h += '</div></div>';
   return h;
+}
+
+// ================================================================
+// รวม/ลบเครื่องที่ซ้ำกัน — เจอเคสจริง 2026-09-04: หลายเครื่องใช้ S/N และเลขเครื่องเช่าเดียวกัน ซึ่งแปลว่า
+// เป็นเครื่องเดียวกันที่ถูกคีย์ซ้ำ ไม่ใช่คนละตัว
+//
+// ตั้งใจจับเฉพาะ "ซ้ำแบบมั่นใจ" 2 แบบ คือ S/N ตรงกัน หรือเลขเครื่องเช่าตรงกัน (ค่าที่ไม่ว่าง) เท่านั้น
+// ⚠️ ไม่นับเครื่องที่ข้อมูลว่างเหมือนกันหมด (ชื่อ+SKU เดียวกัน แต่ S/N ว่าง) เป็นตัวซ้ำ เพราะมันอาจเป็นเครื่อง
+// จริงคนละตัวที่ยังไม่ได้กรอกข้อมูล — ถ้าเหมาลบจะทำให้ของจริงในสต็อกหายไปจากระบบ ต้องให้คนตัดสินใจเอง
+// ================================================================
+function demoFindDupGroups() {
+  var items = getDemoItems();
+  var loans = getDemoLoans();
+  var loanCount = {};
+  loans.forEach(function(l) { loanCount[l.demoId] = (loanCount[l.demoId] || 0) + 1; });
+  var activeLoan = {};
+  loans.forEach(function(l) { if (l.status === 'active') activeLoan[l.demoId] = true; });
+
+  var groups = [];
+  function collect(field, labelTh) {
+    var by = {};
+    items.forEach(function(d) {
+      var v = (d[field] || '').trim();
+      if (!v) return;
+      (by[v] = by[v] || []).push(d);
+    });
+    Object.keys(by).forEach(function(v) {
+      if (by[v].length < 2) return;
+      // กันซ้ำซ้อน: ถ้าชุดเครื่องนี้ถูกจับไว้แล้วจากอีกเงื่อนไข ไม่ต้องเพิ่มกลุ่มใหม่
+      var ids = by[v].map(function(d) { return d.id; }).sort().join(',');
+      if (groups.some(function(g) { return g.ids === ids; })) return;
+      groups.push({ ids: ids, field: field, label: labelTh, value: v, units: by[v] });
+    });
+  }
+  collect('serialNumber', 'S/N ซ้ำ');
+  collect('rentalDbNo', 'เลขเครื่องเช่าซ้ำ');
+
+  // เลือก "ตัวที่ควรเก็บ" ให้เป็นค่าเริ่มต้น: กำลังถูกยืมอยู่ > มีประวัติยืมมากสุด > ข้อมูลครบสุด
+  // (เก็บตัวที่มีประวัติไว้ เพราะลบตัวนั้นทิ้งจะทำให้ประวัติการยืมชี้ไปยังเครื่องที่ไม่มีอยู่แล้ว)
+  groups.forEach(function(g) {
+    g.units.forEach(function(d) {
+      d._score = (activeLoan[d.id] ? 10000 : 0) + (loanCount[d.id] || 0) * 100 +
+        ['name', 'model', 'sku', 'serialNumber', 'rentalDbNo', 'category', 'note'].filter(function(f) { return (d[f] || '').trim(); }).length;
+      d._loans = loanCount[d.id] || 0;
+      d._active = !!activeLoan[d.id];
+    });
+    var best = g.units.slice().sort(function(a, b) { return b._score - a._score; })[0];
+    g.keepId = best.id;
+  });
+  return groups;
+}
+
+function showDemoDupCleanupM() {
+  var groups = demoFindDupGroups();
+  var h = '<div>';
+  if (!groups.length) {
+    h += '<div class="card" style="text-align:center;padding:26px"><div style="font-size:38px;margin-bottom:8px">✅</div><p>ไม่พบเครื่องที่ S/N หรือเลขเครื่องเช่าซ้ำกัน</p></div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div></div>';
+    openM('🧹 ตรวจเครื่องซ้ำ', h);
+    return;
+  }
+  h += '<div class="hint" style="margin-bottom:10px">เลือกตัวที่จะ <b>เก็บไว้</b> ในแต่ละกลุ่ม ตัวที่เหลือในกลุ่มนั้นจะถูกลบ — ระบบเลือกตัวที่มีประวัติการยืม/ข้อมูลครบที่สุดไว้ให้แล้ว เปลี่ยนเองได้<br>เอากลุ่มไหนออกจากการลบ ให้ติ๊ก “ข้ามกลุ่มนี้”</div>';
+  h += '<div style="max-height:52vh;overflow:auto">';
+  groups.forEach(function(g, gi) {
+    h += '<div style="border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:10px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px">';
+    h += '<div style="font-weight:700;font-size:13px">⚠️ ' + sanitize(g.label) + ': ' + sanitize(g.value) + ' <span style="font-weight:600;color:var(--text2);font-size:11.5px">(' + g.units.length + ' รายการ)</span></div>';
+    h += '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="dup-skip" data-g="' + gi + '"> ข้ามกลุ่มนี้</label>';
+    h += '</div>';
+    g.units.forEach(function(d) {
+      var flags = [];
+      if (d._active) flags.push('<span style="color:#ef4444;font-weight:700">📤 กำลังถูกยืม</span>');
+      if (d._loans) flags.push('<span style="color:var(--text2)">ประวัติยืม ' + d._loans + ' ครั้ง</span>');
+      h += '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 4px;font-size:12px;cursor:pointer;border-top:1px solid var(--border)">';
+      h += '<input type="radio" name="dupkeep' + gi + '" class="dup-keep" data-g="' + gi + '" value="' + d.id + '"' + (d.id === g.keepId ? ' checked' : '') + ' style="margin-top:2px">';
+      h += '<span style="flex:1"><b>' + sanitize(d.name || '-') + '</b>';
+      h += '<div style="color:var(--text2);font-size:11.5px;line-height:1.7">';
+      h += 'S/N: ' + sanitize(d.serialNumber || '—') + ' · เลขเช่า: ' + sanitize(d.rentalDbNo || '—') + ' · SKU: ' + sanitize(d.sku || '—');
+      if (flags.length) h += '<br>' + flags.join(' · ');
+      h += '</div></span></label>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bd" onclick="runDemoDupCleanup()">🗑️ ลบตัวซ้ำตามที่เลือก</button>';
+  h += '<button class="btn" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div><div id="dupCleanupWarn"></div></div>';
+  openM('🧹 ตรวจเครื่องซ้ำ (' + groups.length + ' กลุ่ม)', h);
+  setMWide(660);
+}
+
+function runDemoDupCleanup() {
+  var groups = demoFindDupGroups();
+  var skip = {};
+  document.querySelectorAll('.dup-skip:checked').forEach(function(cb) { skip[cb.getAttribute('data-g')] = true; });
+  var keepBy = {};
+  document.querySelectorAll('.dup-keep:checked').forEach(function(r) { keepBy[r.getAttribute('data-g')] = r.value; });
+
+  var toRemove = [], blocked = [];
+  groups.forEach(function(g, gi) {
+    if (skip[gi]) return;
+    var keep = keepBy[gi] || g.keepId;
+    g.units.forEach(function(d) {
+      if (d.id === keep) return;
+      // ไม่ลบเครื่องที่ยังมีรายการยืมค้างอยู่ — ต้องรับคืนให้เรียบร้อยก่อน ไม่งั้นใบยืมจะชี้ไปยังเครื่องที่ถูกลบ
+      if (d._active) { blocked.push(d); return; }
+      if (toRemove.indexOf(d.id) === -1) toRemove.push(d.id);
+    });
+  });
+
+  var warnEl = document.getElementById('dupCleanupWarn');
+  if (blocked.length) {
+    warnEl.innerHTML = '<div style="margin-top:10px;background:#ef444418;color:#ef4444;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600">' +
+      '⚠️ ข้าม ' + blocked.length + ' รายการที่กำลังถูกยืมอยู่ ลบไม่ได้จนกว่าจะรับคืน: ' +
+      blocked.map(function(d) { return sanitize(d.name); }).join(', ') + '</div>';
+  } else if (warnEl) warnEl.innerHTML = '';
+
+  if (!toRemove.length) { toast(blocked.length ? 'ไม่มีรายการที่ลบได้' : 'ยังไม่ได้เลือกอะไรให้ลบ'); return; }
+  if (!confirm('ลบเครื่องที่ซ้ำ ' + toRemove.length + ' รายการถาวร?\n(ตัวที่เลือก "เก็บไว้" ในแต่ละกลุ่มจะไม่ถูกลบ)\n\nย้อนกลับไม่ได้ — แนะนำให้ Export เก็บไว้ก่อนถ้ายังไม่ได้ทำ')) return;
+
+  var items = getDemoItems().filter(function(d) { return toRemove.indexOf(d.id) === -1; });
+  saveDemoItems(items);
+  if (typeof syncDeleteFromFirebase === 'function') {
+    toRemove.forEach(function(id) { syncDeleteFromFirebase('demo', id); });
+  }
+  toast('🗑️ ลบตัวซ้ำแล้ว ' + toRemove.length + ' รายการ');
+  closeMForce();
+  render();
 }
 
 // ================================================================
