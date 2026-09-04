@@ -3495,6 +3495,8 @@ function rDemoTracker(el) {
     h += '</div>';
     if (demoReadyFilter === 'pending') {
       h += '<div class="hint" style="margin-bottom:10px;color:#f59e0b">📋 เครื่องกลุ่มนี้ยังไม่มีหมายเลขเครื่องเช่า จึงยังให้ยืมจริงไม่ได้ และไม่แสดงในหน้าขอยืมของลูกค้า — กด <b onclick="showDemoBulkRentalM()" style="cursor:pointer;text-decoration:underline">📋 กรอกเลขเครื่องเช่า</b> เพื่อกรอกทีเดียวหลายเครื่อง แล้วย้ายเข้ากลุ่ม "พร้อมให้ยืม"</div>';
+      var _blankN = demoFindBlankUnits().blanks.length;
+      if (_blankN) h += '<div class="hint" style="margin-bottom:10px">🧹 ในกลุ่มนี้มี <b>' + _blankN + ' แถวที่ไม่มีทั้ง S/N และเลขเครื่องเช่า</b> (มักเกิดจาก import ซ้ำ) — <b onclick="showDemoBlankCleanupM()" style="cursor:pointer;text-decoration:underline">ตรวจและลบทิ้ง</b></div>';
     }
   }
 
@@ -3790,6 +3792,80 @@ function demoFindDupGroups() {
     g.keepId = best.id;
   });
   return groups;
+}
+
+// ลบ "เครื่องเปล่า" ที่เกิดจากการ import ซ้ำ — ไม่มีทั้ง S/N และเลขเครื่องเช่า จึงระบุตัวตนไม่ได้และยืมไม่ได้
+// (ผู้ใช้ยืนยัน 2026-09-04 ว่าเป็นขยะจาก import) แยกเป็นคนละเครื่องมือกับการรวมตัวซ้ำ เพราะเงื่อนไขต่างกัน
+// คนละแบบ — อันนั้นคือ "ซ้ำกับตัวอื่นแน่ๆ" ส่วนอันนี้คือ "ไม่มีข้อมูลระบุตัวตนเลย"
+//
+// กันพลาด: เครื่องที่เคยถูกยืมจริง (มีประวัติ) หรือกำลังถูกยืมอยู่ จะไม่ถูกเสนอให้ลบ เพราะถ้าเคยยืมได้แปลว่า
+// เป็นเครื่องจริง ไม่ใช่แถวขยะ และการลบจะทำให้ประวัติการยืมชี้ไปยังเครื่องที่ไม่มีอยู่
+function demoFindBlankUnits() {
+  var loans = getDemoLoans();
+  var used = {};
+  loans.forEach(function(l) { used[l.demoId] = (used[l.demoId] || 0) + 1; });
+  var blanks = [], keptWithHistory = [];
+  getDemoItems().forEach(function(d) {
+    if ((d.serialNumber || '').trim() || (d.rentalDbNo || '').trim()) return;
+    if (used[d.id]) { keptWithHistory.push(d); return; }
+    blanks.push(d);
+  });
+  return { blanks: blanks, keptWithHistory: keptWithHistory };
+}
+
+function showDemoBlankCleanupM() {
+  var res = demoFindBlankUnits();
+  var h = '<div>';
+  if (!res.blanks.length) {
+    h += '<div class="card" style="text-align:center;padding:26px"><div style="font-size:38px;margin-bottom:8px">✅</div><p>ไม่มีเครื่องเปล่าให้ลบ' + (res.keptWithHistory.length ? '<br><span style="font-size:12px;color:var(--text2)">(มี ' + res.keptWithHistory.length + ' เครื่องที่ไม่มี S/N แต่เคยถูกยืมจริง — ไม่ถือเป็นขยะ)</span>' : '') + '</p></div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div></div>';
+    openM('🧹 ลบเครื่องเปล่า', h);
+    return;
+  }
+  // จัดกลุ่มตามชื่อ ให้เห็นภาพว่ารุ่นไหนมีแถวขยะกี่แถว
+  var byName = {}, order = [];
+  res.blanks.forEach(function(d) {
+    var k = (d.name || '').trim() || '(ไม่มีชื่อ)';
+    if (!byName[k]) { byName[k] = []; order.push(k); }
+    byName[k].push(d);
+  });
+  order.sort();
+  h += '<div class="hint" style="margin-bottom:10px">เครื่องเหล่านี้ <b>ไม่มีทั้ง S/N และเลขเครื่องเช่า</b> จึงระบุตัวตนไม่ได้และปล่อยยืมไม่ได้ — ติ๊กออกได้ถ้าตัวไหนเป็นของจริงที่รอกรอกข้อมูล</div>';
+  if (res.keptWithHistory.length) {
+    h += '<div style="background:var(--bg2);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text2);margin-bottom:10px">🛡️ กันไว้ให้แล้ว ' + res.keptWithHistory.length + ' เครื่อง ที่ไม่มี S/N แต่<b>เคยถูกยืมจริง</b> — ไม่แสดงในรายการนี้ เพราะน่าจะเป็นเครื่องจริงที่ยังไม่ได้กรอกข้อมูล</div>';
+  }
+  h += '<div style="max-height:48vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">';
+  order.forEach(function(name) {
+    h += '<div style="padding:6px 8px;font-weight:700;font-size:12.5px;background:var(--bg2);border-radius:6px;margin:4px 0 2px">' + sanitize(name) + ' <span style="font-weight:600;color:var(--text2)">— ' + byName[name].length + ' แถว</span></div>';
+    byName[name].forEach(function(d) {
+      h += '<label style="display:flex;align-items:center;gap:8px;padding:4px 10px;font-size:12px;cursor:pointer">';
+      h += '<input type="checkbox" class="blank-del" value="' + d.id + '" checked>';
+      h += '<span style="color:var(--text2)">SKU: ' + sanitize(d.sku || '—') + ' · สถานะ: ' + sanitize(d.status || 'available') + (d.note ? ' · ' + sanitize(d.note) : '') + '</span>';
+      h += '</label>';
+    });
+  });
+  h += '</div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bd" onclick="runDemoBlankCleanup()">🗑️ ลบที่ติ๊กไว้</button>';
+  h += '<button class="btn bo" onclick="document.querySelectorAll(\'.blank-del\').forEach(function(c){c.checked=false})">ล้างการติ๊กทั้งหมด</button>';
+  h += '<button class="btn" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('🧹 ลบเครื่องเปล่า (' + res.blanks.length + ' แถว)', h);
+  setMWide(620);
+}
+function runDemoBlankCleanup() {
+  var ids = [];
+  document.querySelectorAll('.blank-del:checked').forEach(function(c) { ids.push(c.value); });
+  if (!ids.length) { toast('ยังไม่ได้ติ๊กอะไรไว้'); return; }
+  if (!confirm('ลบเครื่องเปล่า ' + ids.length + ' แถวถาวร?\n\nย้อนกลับไม่ได้ — แนะนำให้ Export เก็บไว้ก่อนถ้ายังไม่ได้ทำ')) return;
+  var items = getDemoItems().filter(function(d) { return ids.indexOf(d.id) === -1; });
+  saveDemoItems(items);
+  if (typeof syncDeleteFromFirebase === 'function') {
+    ids.forEach(function(id) { syncDeleteFromFirebase('demo', id); });
+  }
+  toast('🗑️ ลบแล้ว ' + ids.length + ' แถว');
+  closeMForce();
+  render();
 }
 
 function showDemoDupCleanupM() {
