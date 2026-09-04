@@ -118,6 +118,23 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .confirm-box p { color:var(--text2); font-size:14px; max-width:380px; margin:0 auto 20px; line-height:1.6; }
 .empty-state { text-align:center; padding:40px 20px; color:var(--text3); }
 .loading { text-align:center; padding:60px 20px; color:var(--text2); }
+/* แถบบอกขั้นตอน — ลูกค้าเห็นตั้งแต่แรกว่ามีทั้งหมดกี่ขั้น ตอนนี้อยู่ขั้นไหน เหลืออีกเท่าไหร่ */
+.stepbar { display:flex; align-items:center; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+.stepbar .sb { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--text3); }
+.stepbar .sb .n { width:24px; height:24px; border-radius:50%; background:var(--surface-2); color:var(--text3); display:flex; align-items:center; justify-content:center; font-size:12px; border:1px solid var(--border); flex-shrink:0; }
+.stepbar .sb.on { color:var(--accent); }
+.stepbar .sb.on .n { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+.stepbar .sb.done { color:var(--good); }
+.stepbar .sb.done .n { background:var(--good-soft); color:var(--good); border-color:var(--good); }
+.stepbar .sep { flex:1; min-width:14px; height:1px; background:var(--border); }
+@media (max-width:600px) { .stepbar .sb span.lb { display:none; } .stepbar { gap:4px; } }
+.intro-card { background:var(--accent-soft); border:1px solid rgba(11,116,222,.22); border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; }
+.intro-card .it { font-weight:700; font-size:13.5px; margin-bottom:6px; }
+.intro-card .ib { font-size:12.5px; color:var(--text2); line-height:1.8; }
+.hint-row { font-size:12.5px; color:var(--text2); background:var(--surface-2); border-radius:9px; padding:9px 12px; margin-bottom:14px; line-height:1.7; }
+.req-mark { color:var(--bad); font-weight:700; }
+.next-steps { text-align:left; max-width:400px; margin:0 auto 22px; }
+.next-steps li { font-size:13px; color:var(--text2); line-height:1.9; }
 </style>
 </head>
 <body>
@@ -133,12 +150,22 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   <div id="loadingView" class="loading">กำลังโหลดข้อมูลอุปกรณ์...</div>
 
   <div id="cust-wizard" style="display:none">
+    <div class="stepbar" id="stepBar"></div>
+
     <div id="step-browse" class="wiz-step on">
-      <div class="pagehead">
-        <div class="eyebrow">ขั้นตอนที่ 1</div>
-        <h1>เลือกอุปกรณ์ที่ต้องการยืม</h1>
-        <p>ติ๊กเลือกเครื่องที่ต้องการได้หลายเครื่อง/หลายรุ่นพร้อมกัน แล้วกด "ถัดไป: เลือกวันที่" ครั้งเดียวเพื่อกำหนดช่วงวันให้ทุกเครื่องที่เลือก</p>
+      <div class="intro-card">
+        <div class="it">👋 หน้านี้ใช้ขอยืมเครื่อง DJI ไปทดลองใช้งาน</div>
+        <div class="ib">
+          เลือกเครื่องและช่วงวันที่ต้องการ แล้วกรอกข้อมูลติดต่อ — ใช้เวลาไม่ถึง 2 นาที ไม่ต้องสมัครสมาชิก<br>
+          <b>สิ่งที่ส่งไปคือ “คำขอ” ยังไม่ใช่การยืนยัน</b> ทีมงาน SIS จะตรวจสอบคิวเครื่องแล้วติดต่อกลับเพื่อยืนยันอีกครั้งภายใน 1 วันทำการ
+        </div>
       </div>
+      <div class="pagehead">
+        <div class="eyebrow">ขั้นตอนที่ 1 จาก 3</div>
+        <h1>เลือกอุปกรณ์ที่ต้องการยืม</h1>
+        <p>ติ๊กเลือกได้หลายเครื่อง/หลายรุ่นพร้อมกัน (เช่น โดรน + เพย์โหลดที่ใช้คู่กัน) แล้วกดปุ่มด้านล่างเพื่อเลือกช่วงวันครั้งเดียวให้ทุกเครื่องที่เลือก</p>
+      </div>
+      <div class="hint-row">💡 กดที่การ์ดเพื่อเลือก/ยกเลิก — เครื่องที่ขึ้นว่า “ไม่ว่างตอนนี้” ยังกดเลือกได้ ระบบจะพาไปดูว่าว่างวันไหนบ้าง</div>
       <div class="cat-tabs" id="custCatTabs"></div>
       <div class="browse-toolbar">
         <input type="text" id="custSearch" placeholder="🔍 ค้นหารุ่น เช่น Mavic, Dock..." oninput="custSearch=this.value;renderBrowse()">
@@ -153,7 +180,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 
     <div id="step-calendar" class="wiz-step">
       <button class="back-link" onclick="backToBrowse()">← กลับไปแก้ไขรายการที่เลือก</button>
+      <div class="pagehead">
+        <div class="eyebrow">ขั้นตอนที่ 2 จาก 3</div>
+        <h1>เลือกช่วงวันที่จะยืม</h1>
+        <p>ปฏิทินด้านล่างแสดงเฉพาะวันที่ <b>ว่างพร้อมกันทุกเครื่อง</b> ที่คุณเลือกไว้ — ใส่จำนวนวันที่จะยืม แล้วกดวันเริ่ม ระบบจะเลือกช่วงให้อัตโนมัติ</p>
+      </div>
       <div class="card" style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:7px">กำลังเลือกวันให้เครื่องเหล่านี้:</div>
         <div id="calUnitsBanner" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
         <div class="cal-toolbar">
           <button class="cal-nav-btn" onclick="unitCalNav(-1)">◀</button>
@@ -187,21 +220,27 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 
     <div id="step-contact" class="wiz-step">
       <button class="back-link" onclick="backToBrowse()">← กลับไปเลือกอุปกรณ์เพิ่ม</button>
-      <div class="pagehead"><div class="eyebrow">ขั้นตอนที่ 2</div><h1>ข้อมูลผู้ยืม</h1></div>
+      <div class="pagehead">
+        <div class="eyebrow">ขั้นตอนที่ 3 จาก 3</div>
+        <h1>กรอกข้อมูลติดต่อกลับ</h1>
+        <p>เหลือขั้นตอนสุดท้าย — ทีมงานต้องใช้ข้อมูลนี้ติดต่อกลับเพื่อยืนยันคิวเครื่องและนัดรับ-ส่ง</p>
+      </div>
       <div class="card" style="margin-bottom:16px">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px">🧺 รายการที่จะยืม</div>
         <div id="cartSummaryList"></div>
       </div>
       <div class="card">
-        <div style="font-weight:700;font-size:14px;margin-bottom:14px">📋 ข้อมูลผู้ยืม</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px">📋 ข้อมูลผู้ยืม</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">ช่องที่มี <span class="req-mark">*</span> จำเป็นต้องกรอก</div>
         <div class="grid2">
-          <div class="field"><label>ชื่อบริษัท / ผู้ยืม *</label><input type="text" id="ctCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
-          <div class="field"><label>ชื่อผู้ติดต่อ *</label><input type="text" id="ctContact" placeholder="ชื่อ-นามสกุล"></div>
-          <div class="field"><label>เบอร์โทรติดต่อ *</label><input type="tel" id="ctPhone" placeholder="08x-xxx-xxxx"></div>
+          <div class="field"><label>ชื่อบริษัท / ผู้ยืม <span class="req-mark">*</span></label><input type="text" id="ctCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
+          <div class="field"><label>ชื่อผู้ติดต่อ <span class="req-mark">*</span></label><input type="text" id="ctContact" placeholder="ชื่อ-นามสกุล"></div>
+          <div class="field"><label>เบอร์โทรติดต่อ <span class="req-mark">*</span></label><input type="tel" id="ctPhone" placeholder="08x-xxx-xxxx"></div>
           <div class="field"><label>อีเมล (ถ้ามี)</label><input type="email" id="ctEmail" placeholder="name@company.com"></div>
         </div>
-        <div class="field"><label>วัตถุประสงค์ / หมายเหตุ</label><textarea id="ctPurpose" placeholder="เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า"></textarea></div>
+        <div class="field"><label>วัตถุประสงค์ / หมายเหตุ</label><textarea id="ctPurpose" placeholder="เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า, ต้องการให้ส่งของไปที่หน้างาน"></textarea><div style="font-size:11.5px;color:var(--text3);margin-top:5px">บอกลักษณะงานที่จะใช้ ช่วยให้ทีมงานเตรียมเครื่องและอุปกรณ์เสริมได้ตรงกว่า</div></div>
         <button class="btn btn-primary btn-full" id="submitBtn" onclick="submitCustomerRequest()">📨 ส่งคำขอยืม</button>
+        <div style="font-size:11.5px;color:var(--text3);text-align:center;margin-top:9px">กดส่งแล้วยังไม่ถือว่าจองสำเร็จ — รอทีมงานติดต่อกลับเพื่อยืนยัน</div>
       </div>
     </div>
 
@@ -224,7 +263,16 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
     <div class="card confirm-box">
       <div class="ic">✅</div>
       <h2>ส่งคำขอเรียบร้อยแล้ว</h2>
-      <p>ทีมงาน SIS Distribution จะตรวจสอบและติดต่อกลับเพื่อยืนยันการยืมภายใน 1 วันทำการ คุณสามารถปิดหน้านี้ได้เลย</p>
+      <p>ทีมงาน SIS Distribution ได้รับคำขอของคุณแล้ว ปิดหน้านี้ได้เลย ไม่ต้องส่งซ้ำ</p>
+      <div id="confirmSummary" style="max-width:420px;margin:0 auto 20px;text-align:left"></div>
+      <div class="next-steps">
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">ขั้นตอนต่อไป</div>
+        <ol class="next-steps">
+          <li>ทีมงานตรวจสอบว่าเครื่องว่างตามวันที่ขอหรือไม่</li>
+          <li>ติดต่อกลับตามเบอร์/อีเมลที่ให้ไว้ ภายใน 1 วันทำการ เพื่อยืนยันคิวและนัดรับ-ส่ง</li>
+          <li>เมื่อยืนยันแล้วจึงถือว่าจองสำเร็จ</li>
+        </ol>
+      </div>
       <button class="btn btn-ghost" onclick="location.reload()">↩️ ส่งคำขอใหม่อีกครั้ง</button>
     </div>
   </div>
@@ -307,9 +355,15 @@ function loadCatalog() {
     if (snap) pendingRequestsRaw = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
     document.getElementById('loadingView').style.display = 'none';
     document.getElementById('cust-wizard').style.display = 'block';
+    renderStepBar('browse');
     renderBrowse();
   }).catch(function(e) {
-    document.getElementById('loadingView').innerHTML = '<div class="empty-state">โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง<br><span style="font-size:11px">' + esc(e.message) + '</span></div>';
+    document.getElementById('loadingView').innerHTML =
+      '<div class="empty-state"><div style="font-size:40px;margin-bottom:10px">📡</div>' +
+      '<div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:6px">โหลดรายการอุปกรณ์ไม่สำเร็จ</div>' +
+      '<div style="font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.7">อาจเป็นที่สัญญาณอินเทอร์เน็ตชั่วคราว ลองโหลดหน้าใหม่อีกครั้ง — ถ้ายังไม่ได้ ติดต่อทีมงาน SIS ได้โดยตรง</div>' +
+      '<button class="btn btn-primary" onclick="location.reload()">🔄 ลองใหม่อีกครั้ง</button>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:14px">รายละเอียดข้อผิดพลาด: ' + esc(e.message) + '</div></div>';
   });
 }
 function iconForCategory(catId) {
@@ -435,6 +489,18 @@ function switchWizStep(name) {
   ['browse','calendar','contact'].forEach(function(s) { document.getElementById('step-' + s).classList.toggle('on', s === name); });
   document.getElementById('cartBar').style.display = (cart.length && name !== 'contact') ? 'flex' : 'none';
   document.getElementById('selBar').style.display = (selectedUnitIds.length && name === 'browse') ? 'flex' : 'none';
+  renderStepBar(name);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+// แถบขั้นตอน 1-2-3 ด้านบนสุด — ขั้นที่ผ่านมาแล้วขึ้นเครื่องหมายถูก ขั้นปัจจุบันไฮไลต์
+function renderStepBar(active) {
+  var steps = [['browse', 'เลือกอุปกรณ์'], ['calendar', 'เลือกวันที่'], ['contact', 'ข้อมูลติดต่อ']];
+  var curIdx = steps.map(function(s) { return s[0]; }).indexOf(active || 'browse');
+  document.getElementById('stepBar').innerHTML = steps.map(function(s, i) {
+    var cls = i === curIdx ? 'on' : (i < curIdx ? 'done' : '');
+    return (i ? '<span class="sep"></span>' : '') +
+      '<span class="sb ' + cls + '"><span class="n">' + (i < curIdx ? '✓' : (i + 1)) + '</span><span class="lb">' + s[1] + '</span></span>';
+  }).join('');
 }
 function renderUnitCal() {
   var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + custCalMonthOffset);
@@ -535,9 +601,11 @@ function submitCustomerRequest() {
   var phone = document.getElementById('ctPhone').value.trim();
   var email = document.getElementById('ctEmail').value.trim();
   var purpose = document.getElementById('ctPurpose').value.trim();
-  if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
-  if (!contact) { alert('กรอกชื่อผู้ติดต่อก่อนนะครับ'); return; }
-  if (!phone) { alert('กรอกเบอร์โทรติดต่อก่อนนะครับ'); return; }
+  // โฟกัสช่องที่ยังไม่ได้กรอกให้ด้วย ไม่ใช่แค่เตือนแล้วปล่อยให้ลูกค้าหาเองว่าช่องไหน
+  function _need(el, msg) { alert(msg); el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (!company) { _need(document.getElementById('ctCompany'), 'กรุณากรอกชื่อบริษัท / ผู้ยืม'); return; }
+  if (!contact) { _need(document.getElementById('ctContact'), 'กรุณากรอกชื่อผู้ติดต่อ'); return; }
+  if (!phone) { _need(document.getElementById('ctPhone'), 'กรุณากรอกเบอร์โทรติดต่อ เพื่อให้ทีมงานติดต่อกลับได้'); return; }
   var btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
   db.collection('publicDemoRequests').add({
@@ -545,8 +613,19 @@ function submitCustomerRequest() {
     companyName: company, contactName: contact, phone: phone, email: email, purpose: purpose,
     status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() {
+    // สรุปสิ่งที่ขอไปให้เห็นบนหน้ายืนยัน — ลูกค้าจะได้ตรวจทานได้ว่าส่งถูกและถ่ายรูปเก็บไว้อ้างอิงได้
+    document.getElementById('confirmSummary').innerHTML =
+      '<div style="background:var(--surface-2);border-radius:10px;padding:12px 14px">' +
+      '<div style="font-weight:700;font-size:12.5px;margin-bottom:7px">สรุปคำขอของคุณ</div>' +
+      cart.map(function(c) {
+        return '<div style="font-size:12.5px;line-height:1.8">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) +
+          '<span style="color:var(--text2)"> · 📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</span></div>';
+      }).join('') +
+      '<div style="font-size:12px;color:var(--text2);margin-top:8px;border-top:1px solid var(--border);padding-top:8px">👤 ' + esc(company) + ' · ' + esc(contact) + ' · ' + esc(phone) + '</div>' +
+      '</div>';
     document.getElementById('cust-wizard').style.display = 'none';
     document.getElementById('cust-confirm-view').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }).catch(function(e) {
     alert('ส่งคำขอไม่สำเร็จ: ' + e.message + '\n(อาจเป็นเพราะยังไม่ได้เปิด permission เขียนข้อมูลของ Firestore — แจ้งทีมงาน SIS)');
     btn.disabled = false; btn.textContent = '📨 ส่งคำขอยืม';
