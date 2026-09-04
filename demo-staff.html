@@ -60,6 +60,24 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .unit-table td { padding:10px; border-bottom:1px solid var(--border); }
 .unit-table tr:hover td { background:var(--surface-2); cursor:pointer; }
 .empty-state { text-align:center; padding:40px 20px; color:var(--text3); }
+/* ตัวกรอง + จัดกลุ่มรายการเครื่อง (ชุดเดียวกับที่หน้าลูกค้าใช้ ให้หน้าตาสองหน้าไปทางเดียวกัน) */
+.filter-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.filter-chip { font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px; cursor:pointer; border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
+.filter-chip.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.cat-tabs { display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
+.cat-tab { display:flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px; font-weight:600; padding:8px 15px; border-radius:11px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text2); }
+.cat-tab.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.cat-tab .cnt { font-size:10.5px; opacity:.75; background:rgba(0,0,0,.12); border-radius:999px; padding:1px 6px; }
+.cat-tab.on .cnt { background:rgba(255,255,255,.25); }
+.browse-toolbar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.browse-toolbar input { flex:1; min-width:200px; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.model-group { margin-bottom:14px; }
+.model-group > summary { cursor:pointer; display:flex; align-items:baseline; gap:10px; padding:10px 13px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; list-style:none; }
+.model-group > summary::-webkit-details-marker { display:none; }
+.model-group > summary::before { content:'▸'; font-size:11px; color:var(--text3); transition:transform .15s; }
+.model-group[open] > summary::before { transform:rotate(90deg); }
+.model-group > summary .mn { font-weight:700; font-size:14px; }
+.model-group > summary .mc { font-size:11.5px; color:var(--text2); margin-left:auto; }
 .rt-item { display:flex; gap:14px; padding:14px; border-radius:12px; margin-bottom:10px; align-items:flex-start; flex-wrap:wrap; border:1px solid var(--border); background:var(--surface); }
 .rt-item.overdue { border-color:var(--bad); background:var(--bad-soft); }
 .rt-item.duesoon { border-color:var(--warn); background:var(--warn-soft); }
@@ -127,12 +145,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
             <button class="btn btn-ghost btn-sm" onclick="catMgrAddRow()">➕ เพิ่มหมวดหมู่</button>
             <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="catMgrSave()">💾 บันทึกหมวดหมู่</button>
           </div>
-          <div class="card" style="padding:0;overflow:auto">
-            <table class="unit-table">
-              <thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>
-              <tbody id="unitTbody"></tbody>
-            </table>
+          <div class="filter-chips" id="unitReadyChips"></div>
+          <div class="cat-tabs" id="unitCatTabs"></div>
+          <div class="browse-toolbar">
+            <input type="text" id="unitSearch" placeholder="🔍 ค้นหา (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
+            <span id="unitCountLabel" style="align-self:center;font-size:12px;color:var(--text2);white-space:nowrap"></span>
           </div>
+          <div id="unitGroups"></div>
         </div>
         <div id="unitDetailView" style="display:none"></div>
       </div>
@@ -383,24 +402,104 @@ function markLoanReturned(loanId) {
 }
 
 // ---- รายการเครื่อง + รายละเอียด + กรอกยืมเอง ----
+// รายการเครื่องแยกเป็นกลุ่มตามรุ่น + กรองได้ — เดิมเทรวมเป็นตารางเดียวยาวเป็นร้อยแถว ปนกันทั้งเครื่องที่
+// พร้อมยืมจริงกับเครื่องที่ยังไม่ได้ลงทะเบียนเช่า (ซึ่งยืมไม่ได้และลูกค้าก็ไม่เห็น) เลยหาของที่ต้องใช้ยาก
+var unitReadyFilter = 'ready';  // 'ready' = มีเลขเครื่องเช่า | 'pending' | 'all'
+var unitCatFilter = 'all';
+var unitSearch = '';
+var _unitSearchTimer = null;
+function unitSearchInput(v) {
+  unitSearch = v;
+  clearTimeout(_unitSearchTimer);
+  _unitSearchTimer = setTimeout(renderUnitsTable, 250);
+}
+function setUnitReady(v) { unitReadyFilter = v; renderUnitsTable(); }
+function setUnitCat(v) { unitCatFilter = v; renderUnitsTable(); }
+function _unitHasRental(u) { return !!String(u.rentalDbNo || '').trim(); }
+function _unitModelKey(u) { return String(u.model || '').trim() || String(u.name || '').trim() || 'ไม่ระบุรุ่น'; }
+
 function renderUnitsTable() {
+  var readyCount = UNITS.filter(_unitHasRental).length;
+  var pendingCount = UNITS.length - readyCount;
+
+  // ชิปสโคป — โชว์เฉพาะตอนมีเครื่องที่ยังไม่ลงทะเบียนจริงๆ ไม่งั้นเกะกะเปล่าๆ
+  var chips = '';
+  if (pendingCount) {
+    chips += '<span class="filter-chip' + (unitReadyFilter === 'ready' ? ' on' : '') + '" onclick="setUnitReady(\'ready\')">✅ พร้อมให้ยืม (' + readyCount + ')</span>';
+    chips += '<span class="filter-chip' + (unitReadyFilter === 'pending' ? ' on' : '') + '" onclick="setUnitReady(\'pending\')">📋 ยังไม่ลงทะเบียนเช่า (' + pendingCount + ')</span>';
+    chips += '<span class="filter-chip' + (unitReadyFilter === 'all' ? ' on' : '') + '" onclick="setUnitReady(\'all\')">ทั้งหมด (' + UNITS.length + ')</span>';
+  }
+  document.getElementById('unitReadyChips').innerHTML = chips;
+
+  var scoped = unitReadyFilter === 'pending' ? UNITS.filter(function(u) { return !_unitHasRental(u); })
+             : unitReadyFilter === 'all' ? UNITS
+             : UNITS.filter(_unitHasRental);
+
+  // แท็บหมวดหมู่ นับจากสโคปปัจจุบัน
+  var catCounts = { all: scoped.length };
+  CATEGORIES.forEach(function(c) { catCounts[c.id] = scoped.filter(function(u) { return u.category === c.id; }).length; });
+  var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
+  document.getElementById('unitCatTabs').innerHTML = tabs.map(function(c) {
+    if (c.id !== 'all' && !catCounts[c.id]) return '';
+    return '<div class="cat-tab' + (unitCatFilter === c.id ? ' on' : '') + '" onclick="setUnitCat(\'' + c.id + '\')">' +
+      c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (catCounts[c.id] || 0) + '</span></div>';
+  }).join('');
+
+  var q = unitSearch.trim().toLowerCase();
+  var shown = scoped.filter(function(u) {
+    if (unitCatFilter !== 'all' && u.category !== unitCatFilter) return false;
+    if (!q) return true;
+    return ((u.model || '') + ' ' + (u.name || '') + ' ' + (u.sku || '') + ' ' + (u.serialNumber || '') + ' ' + (u.rentalDbNo || '')).toLowerCase().indexOf(q) !== -1;
+  });
+  document.getElementById('unitCountLabel').textContent = 'แสดง ' + shown.length + ' / ' + UNITS.length + ' เครื่อง';
+
+  if (!shown.length) {
+    document.getElementById('unitGroups').innerHTML = '<div class="empty-state">' +
+      (UNITS.length ? '🔍 ไม่พบเครื่องที่ตรงกับตัวกรอง — ลองเปลี่ยนหมวดหมู่หรือล้างคำค้น' : 'ยังไม่มีอุปกรณ์ในระบบ — เพิ่มได้จากเมนู Demo Equipment ในแอพหลัก') + '</div>';
+    return;
+  }
+
+  // เลข "เครื่อง #N" ต้องนับจากทั้งรุ่น (UNITS ทั้งหมด) ไม่ใช่จากที่เหลือหลังกรอง ไม่งั้นเครื่องเดิมจะเปลี่ยน
+  // เลขไปมาทุกครั้งที่เปลี่ยนตัวกรอง ทำให้อ้างอิงกันผิดตัว
+  var idxInModel = {};
+  UNITS.forEach(function(u) {
+    var k = _unitModelKey(u);
+    idxInModel[k] = idxInModel[k] || [];
+    idxInModel[k].push(u.id);
+  });
+
   var groups = {}, order = [];
-  UNITS.forEach(function(u) { if (!groups[u.model]) { groups[u.model] = []; order.push(u.model); } groups[u.model].push(u); });
-  var rows = [];
-  order.sort().forEach(function(model) {
-    groups[model].forEach(function(u, i) {
-      var label = groups[model].length > 1 ? 'เครื่อง #' + (i+1) : (u.name && u.name !== model ? u.name : 'เครื่อง #1');
+  shown.forEach(function(u) {
+    var k = _unitModelKey(u);
+    if (!groups[k]) { groups[k] = []; order.push(k); }
+    groups[k].push(u);
+  });
+  order.sort();
+
+  var h = order.map(function(model) {
+    var list = groups[model];
+    var availN = list.filter(function(u) {
+      return u.status !== 'unavailable' && u.status !== 'lost' && !unitCurrentLoan(u.id);
+    }).length;
+    var rows = list.map(function(u) {
+      var n = idxInModel[model].indexOf(u.id) + 1;
       var loan = unitCurrentLoan(u.id);
       var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
         : loan ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
-      rows.push('<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
-        '<td>' + esc(model) + ' (' + esc(label) + ')</td><td>' + esc(u.sku||'—') + '</td><td>' + esc(u.serialNumber||'—') + '</td><td>' + esc(u.rentalDbNo||'—') + '</td>' +
-        '<td>' + (u.nbtcRegistered?'✅':'❌') + ' · ' + (u.droneInsurance?'✅':'❌') + ' · ' + (u.caatRegistered?'✅':'❌') + '</td>' +
-        '<td>' + (u.flyable!==false?'✈️ บินได้':'🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
-        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end : '—') + '</td></tr>');
-    });
-  });
-  document.getElementById('unitTbody').innerHTML = rows.join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text3)">ยังไม่มีอุปกรณ์ในระบบ — เพิ่มได้จากเมนู Demo Equipment ในแอพหลัก</td></tr>';
+      var rental = _unitHasRental(u) ? esc(u.rentalDbNo) : '<span style="color:var(--warn)">ยังไม่ลงทะเบียน</span>';
+      return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
+        '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
+        '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
+        '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
+        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end : '—') + '</td></tr>';
+    }).join('');
+    return '<details class="model-group" open><summary><span class="mn">' + esc(model) + '</span>' +
+      '<span class="mc">' + availN + '/' + list.length + ' ว่างตอนนี้</span></summary>' +
+      '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
+      '<thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div></details>';
+  }).join('');
+  document.getElementById('unitGroups').innerHTML = h;
 }
 function openUnitDetail(unitId) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
