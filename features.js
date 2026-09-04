@@ -2966,6 +2966,7 @@ var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailab
 var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
 var demoModelFilter = 'all';
 var demoCategoryFilter = 'all'; // 'all' | category id | '_none'
+var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเครื่องเช่า = ยืมได้จริง) | 'pending' | 'all'
 var demoSort = 'name_asc'; // 'name_asc' | 'status' | 'lent_longest' | 'newest'
 var demoOverdueFlt = false; // true = กรองเฉพาะเครื่องที่ยืมเกิน 30 วันยังไม่คืน
 var demoDueSoonFlt = false; // true = กรองเฉพาะเครื่องที่ใกล้ครบกำหนดคืน (≤3 วัน)
@@ -2978,7 +2979,7 @@ function demoSearchInput(v) {
 }
 
 function demoSetStatusFilter(s) { demoStatusFilter = s; render(); }
-function demoClearFilters() { demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoCategoryFilter = 'all'; demoSearch = ''; render(); }
+function demoClearFilters() { demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoCategoryFilter = 'all'; demoReadyFilter = 'ready'; demoSearch = ''; render(); }
 
 // ================================================================
 // จัดการหมวดหมู่ Demo — แก้ config เดียวกับที่ demo-staff.html เขียนผ่าน merge เข้า demoCatalogPublic
@@ -3117,8 +3118,17 @@ function demoComplianceBadges(d) {
 
 function rDemoTracker(el) {
   document.getElementById('pgT').textContent = '🚁 Demo Equipment';
-  var items = getDemoItems();
-  if (!items || !Array.isArray(items)) items = [];
+  var allItems = getDemoItems();
+  if (!allItems || !Array.isArray(allItems)) allItems = [];
+
+  // เครื่องที่ยังไม่มี "หมายเลขเครื่องเช่า" (rentalDbNo) = ยังไม่ได้ทำเรื่องเข้าเครื่องเช่า ยืมจริงไม่ได้
+  // แยกออกจากรายการหลักโดยปริยาย ไม่ให้เกะกะตอนดูว่าเครื่องไหนจองได้ (หน้าลูกค้าก็ซ่อนเช่นกัน — ดู
+  // loadCatalog() ใน demo-request.html) แต่ยังกดชิปเข้าไปดู/แก้ไขได้ ไม่ใช่ซ่อนหายไปเฉยๆ
+  var readyItems = allItems.filter(function(d) { return !!(d.rentalDbNo || '').trim(); });
+  var pendingRentalItems = allItems.filter(function(d) { return !(d.rentalDbNo || '').trim(); });
+  var items = demoReadyFilter === 'pending' ? pendingRentalItems
+            : demoReadyFilter === 'all' ? allItems
+            : readyItems;
 
   var now = new Date();
   var counts = { available: 0, reserved: 0, lent: 0, unavailable: 0, lost: 0 };
@@ -3164,6 +3174,20 @@ function rDemoTracker(el) {
       h += '</div>';
     }
     h += '</div>';
+  }
+
+  // สโคป "พร้อมให้ยืม / ยังไม่ลงทะเบียนเช่า" — วางไว้บนสุดเหนือแท็บ เพราะมันคุมทุกตัวเลขที่อยู่ใต้ลงไป
+  // (stat, ชิปสถานะ, ชิปหมวดหมู่ ฯลฯ นับจากสโคปนี้ทั้งหมด) จะได้ไม่งงว่าทำไมยอดรวมไม่ตรงกับที่เคยเห็น
+  if (demoTrackerTab === 'list' && pendingRentalItems.length) {
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+    h += '<span style="font-size:11px;color:var(--text2);margin-right:2px">แสดง:</span>';
+    h += '<button class="demo-filter-chip ' + (demoReadyFilter === 'ready' ? 'act' : '') + '" onclick="demoReadyFilter=\'ready\';render()">✅ พร้อมให้ยืม (' + readyItems.length + ')</button>';
+    h += '<button class="demo-filter-chip ' + (demoReadyFilter === 'pending' ? 'act' : '') + '" onclick="demoReadyFilter=\'pending\';render()">📋 ยังไม่ลงทะเบียนเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
+    h += '<button class="demo-filter-chip ' + (demoReadyFilter === 'all' ? 'act' : '') + '" onclick="demoReadyFilter=\'all\';render()">ทั้งหมด (' + allItems.length + ')</button>';
+    h += '</div>';
+    if (demoReadyFilter === 'pending') {
+      h += '<div class="hint" style="margin-bottom:10px;color:#f59e0b">📋 เครื่องกลุ่มนี้ยังไม่มีหมายเลขเครื่องเช่า จึงยังให้ยืมจริงไม่ได้ และไม่แสดงในหน้าขอยืมของลูกค้า — กรอกหมายเลขเครื่องเช่าผ่านปุ่ม ✏️ เพื่อย้ายเข้ากลุ่ม "พร้อมให้ยืม"</div>';
+    }
   }
 
   h += '<div class="today-tabs" style="margin-bottom:10px">';
@@ -3352,7 +3376,11 @@ function demoCardHtml(d, now) {
   h += '<div class="demo-card2-info">';
   h += '<div>' + (d.flyable !== false ? '<span style="color:#38bdf8">✈️ บินสาธิตได้</span>' : '<span style="color:var(--text2)">🖼️ จัดแสดงเท่านั้น (ห้ามบิน)</span>') + '</div>';
   if (d.sku) h += '<div>🏷️ SiS Part: ' + qcopyHtml(d.sku) + '</div>';
-  if (d.rentalDbNo) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(d.rentalDbNo) + '</div>';
+  // ต้อง .trim() ให้ตรงกับเงื่อนไขที่ใช้แบ่งสโคป "พร้อมให้ยืม/ยังไม่ลงทะเบียน" ใน rDemoTracker() เป๊ะๆ
+  // ไม่งั้นค่าที่มีแต่ช่องว่างจะถูกนับเป็น "ยังไม่ลงทะเบียน" ตอนกรอง แต่การ์ดกลับโชว์บรรทัดหมายเลขว่างเปล่า
+  var _rental = (d.rentalDbNo || '').trim();
+  if (_rental) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(_rental) + '</div>';
+  else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
   if (eff === 'lent' || eff === 'reserved') {
     h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';

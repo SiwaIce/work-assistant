@@ -273,7 +273,10 @@ function loadCatalog() {
   db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
     var data = doc.exists ? doc.data() : {};
     CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
-    var raw = data.units || [];
+    // เครื่องที่ยังไม่มีหมายเลขเครื่องเช่า (rentalDbNo) = ยังไม่ได้ทำเรื่องเข้าเครื่องเช่า ให้ยืมจริงไม่ได้
+    // จึงไม่แสดงให้ลูกค้าเห็นเลย (ไม่งั้นลูกค้าจองมาแล้วทีมงานต้องมาปฏิเสธทีหลัง) — ฝั่งภายในซ่อนไว้เหมือนกัน
+    // แต่ยังกดชิป "ยังไม่ลงทะเบียนเครื่องเช่า" เข้าไปดูได้ ดู rDemoTracker() ใน features.js
+    var raw = (data.units || []).filter(function(u) { return !!String(u.rentalDbNo || '').trim(); });
     // จัดกลุ่มตาม model แล้วเลข "เครื่อง #N" ต่อกันในกลุ่มเดียวกัน (label ไม่ได้เก็บจาก main app ตรงๆ)
     var byModel = {};
     raw.forEach(function(u) { (byModel[u.model] = byModel[u.model] || []).push(u); });
