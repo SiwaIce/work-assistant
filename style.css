@@ -4629,6 +4629,23 @@ function renderUpcomingTimeline() {
 .demo-cat-group > summary .cnt { font-size: 11px; font-weight: 600; color: var(--text2); background: var(--card); padding: 1px 9px; border-radius: 999px; }
 .demo-duesoon-box { cursor: pointer; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; max-width: 240px; display: inline-block; }
 
+/* Demo Equipment — ตารางแก้ไขรวม (แก้หลายเครื่อง หลายฟิลด์ พร้อมกัน) */
+.demo-grid-wrap { overflow: auto; max-height: 62vh; border: 1px solid var(--border); border-radius: 9px; }
+.demo-grid-tbl { border-collapse: separate; border-spacing: 0; font-size: 12px; white-space: nowrap; }
+.demo-grid-tbl th { position: sticky; top: 0; z-index: 3; background: var(--card); padding: 7px 8px; text-align: left; border-bottom: 2px solid var(--border); font-size: 11.5px; }
+/* คอลัมน์ชื่อปักซ้ายไว้ เลื่อนดูคอลัมน์ขวาสุดก็ยังรู้ว่าแถวไหนคือเครื่องอะไร */
+.demo-grid-tbl th.stick, .demo-grid-tbl td.stick { position: sticky; left: 0; z-index: 2; background: var(--card); border-right: 1px solid var(--border); }
+.demo-grid-tbl th.stick { z-index: 4; }
+.demo-grid-tbl td { padding: 3px 5px; border-bottom: 1px solid var(--border); }
+.demo-grid-tbl tr:hover td { background: var(--bg2); }
+.demo-grid-tbl tr:hover td.stick { background: var(--bg2); }
+.demo-grid-tbl input, .demo-grid-tbl select { width: 100%; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); }
+.demo-grid-tbl input:hover, .demo-grid-tbl select:hover { border-color: var(--border); }
+.demo-grid-tbl input:focus, .demo-grid-tbl select:focus { border-color: var(--accent); background: var(--card); outline: none; }
+.demo-grid-tbl .dirty input, .demo-grid-tbl .dirty select { background: rgba(245,158,11,0.14); border-color: #f59e0b; }
+.demo-grid-tbl .ro { color: var(--text3); padding: 4px 6px; font-size: 11.5px; }
+.demo-grid-savebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+
 /* Demo Equipment — Gantt calendar (v2): 1 แถว = 1 เครื่อง (S/N) */
 .demo-gantt-wrap { overflow-x: auto; }
 .demo-gantt { min-width: 720px; }

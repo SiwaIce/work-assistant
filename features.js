@@ -2961,7 +2961,7 @@ function demoLoansByDemo(demoId) {
     .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); });
 }
 
-var demoTrackerTab = 'list'; // 'list' | 'jobs' | 'calendar' | 'requests'
+var demoTrackerTab = 'list'; // 'list' | 'grid' | 'jobs' | 'calendar' | 'requests'
 var _demoActiveJobCount = 0; // จำนวนใบงานที่ยังยืมอยู่ — โชว์เป็นตัวเลขบนแท็บ 📄 ใบงาน
 var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
 var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
@@ -2978,6 +2978,17 @@ function demoSearchInput(v) {
   demoSearch = v;
   clearTimeout(_demoSearchTimer);
   _demoSearchTimer = setTimeout(function() { render(); }, 350);
+}
+
+// เปลี่ยนแท็บ — เตือนก่อนถ้ายังมีของที่แก้ในตารางแต่ยังไม่บันทึก (ออกจากแท็บแล้ว draft จะหายไปเงียบๆ)
+function demoGoTab(tab) {
+  if (demoTrackerTab === 'grid' && tab !== 'grid' && Object.keys(_demoGridDraft).length) {
+    if (!confirm('ยังมีการแก้ไขในตารางที่ยังไม่ได้บันทึก — ออกจากแท็บนี้แล้วจะหายไป ยืนยัน?')) return;
+    _demoGridDraft = {};
+  }
+  demoTrackerTab = tab;
+  if (tab === 'requests') loadDemoRequests();
+  render();
 }
 
 function demoHideHelp() { localStorage.setItem('v7_demoHelpHidden', '1'); render(); }
@@ -3477,12 +3488,17 @@ function rDemoTracker(el) {
   }
 
   h += '<div class="today-tabs" style="margin-bottom:10px">';
-  h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoTrackerTab=\'list\';render()">📋 รายการ</div>';
-  h += '<div class="today-tab ' + (demoTrackerTab === 'jobs' ? 'act' : '') + '" onclick="demoTrackerTab=\'jobs\';render()">📄 ใบงาน' + (_demoActiveJobCount ? ' (' + _demoActiveJobCount + ')' : '') + '</div>';
-  h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoTrackerTab=\'calendar\';render()">🗓️ ปฏิทิน</div>';
-  h += '<div class="today-tab ' + (demoTrackerTab === 'requests' ? 'act' : '') + '" onclick="demoTrackerTab=\'requests\';loadDemoRequests();render()">🟡 คำขอยืม' + (_demoReqPendingCount ? ' (' + _demoReqPendingCount + ')' : '') + '</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoGoTab(\'list\')">📋 รายการ</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'grid' ? 'act' : '') + '" onclick="demoGoTab(\'grid\')">✏️ แก้ไขตาราง</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'jobs' ? 'act' : '') + '" onclick="demoGoTab(\'jobs\')">📄 ใบงาน' + (_demoActiveJobCount ? ' (' + _demoActiveJobCount + ')' : '') + '</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoGoTab(\'calendar\')">🗓️ ปฏิทิน</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'requests' ? 'act' : '') + '" onclick="demoGoTab(\'requests\')">🟡 คำขอยืม' + (_demoReqPendingCount ? ' (' + _demoReqPendingCount + ')' : '') + '</div>';
   h += '</div>';
 
+  if (demoTrackerTab === 'grid') {
+    el.innerHTML = h + renderDemoGridTab();
+    return;
+  }
   if (demoTrackerTab === 'jobs') {
     el.innerHTML = h + renderDemoJobsTab();
     return;
@@ -3713,6 +3729,211 @@ function demoCardHtml(d, now, dupRentals) {
   if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
   h += '</div></div>';
   return h;
+}
+
+// ================================================================
+// ตารางแก้ไขรวม — แก้ได้หลายเครื่อง หลายฟิลด์ ในหน้าเดียว แบบสเปรดชีต แทนการเปิดโมดัลแก้ทีละเครื่อง
+// เก็บค่าที่แก้ไว้ใน _demoGridDraft (ไม่เขียนลงข้อมูลจริงจนกว่าจะกดบันทึก) เพื่อให้ค้นหา/กรองระหว่างแก้ได้
+// โดยที่ยังไม่บันทึกก็ไม่หาย และกดยกเลิกทิ้งทั้งหมดได้
+//
+// สถานะ "กำลังยืม/จอง" แก้ในตารางไม่ได้โดยตั้งใจ — สถานะพวกนี้ผูกกับ record การยืม (v7_demoLoans) ถ้าปล่อยให้
+// แก้ตรงๆ จะทำให้ตัวเครื่องกับประวัติการยืมไม่ตรงกัน (เช่น เครื่องว่างแต่ loan ยังค้าง active) ต้องผ่านปุ่ม
+// ให้ยืม/รับคืน เท่านั้น ส่วนเครื่องที่ไม่ได้ถูกยืมอยู่ แก้ available/unavailable/lost ได้ตามปกติ
+// ================================================================
+var _demoGridDraft = {};
+var _demoGridSearch = '';
+function demoGridRows() {
+  var items = getDemoItems();
+  var q = _demoGridSearch.trim().toLowerCase();
+  if (q) {
+    items = items.filter(function(d) {
+      return ((d.name || '') + ' ' + (d.model || '') + ' ' + (d.sku || '') + ' ' + (d.serialNumber || '') + ' ' + (d.rentalDbNo || '')).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  return items.slice().sort(function(a, b) {
+    var n = (a.name || '').localeCompare(b.name || '');
+    return n !== 0 ? n : (a.serialNumber || '').localeCompare(b.serialNumber || '');
+  });
+}
+function _demoGridVal(d, f) {
+  if (_demoGridDraft[d.id] && _demoGridDraft[d.id][f] !== undefined) return _demoGridDraft[d.id][f];
+  if (f === 'flyable') return d.flyable !== false ? '1' : '0';
+  return d[f] || '';
+}
+function _demoGridIsDirty(d, f) {
+  return !!(_demoGridDraft[d.id] && _demoGridDraft[d.id][f] !== undefined);
+}
+function renderDemoGridTab() {
+  var rows = demoGridRows();
+  var total = getDemoItems().length;
+  var cats = getConfig().demoCategories || [];
+  var h = '';
+  h += '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง — กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก · สถานะที่กำลังยืม/จองอยู่แก้ที่นี่ไม่ได้ ต้องใช้ปุ่มรับคืนในแท็บรายการหรือใบงาน</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<input type="text" id="demoGridSrc" class="fm-input" style="flex:1;min-width:220px" placeholder="🔍 กรองแถว (ชื่อ, Model, SKU, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoGridSearch) + '" oninput="demoGridSearchInput(this.value)" autocomplete="off">';
+  h += '<span style="align-self:center;font-size:12px;color:var(--text2)">แสดง ' + rows.length + ' / ' + total + ' เครื่อง</span>';
+  h += '</div>';
+
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px"><p>' + (total ? 'ไม่พบเครื่องที่ตรงกับคำค้น' : 'ยังไม่มีอุปกรณ์ในระบบ') + '</p></div>';
+    return h;
+  }
+
+  var cols = [
+    { f: 'name', label: 'ชื่ออุปกรณ์', w: 210, stick: true },
+    { f: 'model', label: 'Model', w: 160 },
+    { f: 'sku', label: 'SKU', w: 130 },
+    { f: 'serialNumber', label: 'Serial Number', w: 150 },
+    { f: 'rentalDbNo', label: 'เลขเครื่องเช่า', w: 120 },
+    { f: 'category', label: 'หมวดหมู่', w: 130, type: 'cat' },
+    { f: 'flyable', label: 'ประเภท', w: 130, type: 'fly' },
+    { f: 'status', label: 'สถานะ', w: 130, type: 'status' },
+    { f: 'note', label: 'หมายเหตุ', w: 200 }
+  ];
+
+  h += '<div class="demo-grid-wrap"><table class="demo-grid-tbl">';
+  h += '<thead><tr>';
+  cols.forEach(function(c) { h += '<th class="' + (c.stick ? 'stick' : '') + '" style="min-width:' + c.w + 'px">' + c.label + '</th>'; });
+  h += '</tr></thead><tbody>';
+  rows.forEach(function(d, ri) {
+    var eff = getDemoEffectiveStatus(d);
+    var onLoan = eff === 'lent' || eff === 'reserved';
+    h += '<tr>';
+    cols.forEach(function(c, ci) {
+      var dirty = _demoGridIsDirty(d, c.f) ? ' dirty' : '';
+      h += '<td class="' + (c.stick ? 'stick' : '') + dirty + '">';
+      if (c.type === 'cat') {
+        h += '<select data-id="' + d.id + '" data-f="category" data-r="' + ri + '" data-c="' + ci + '" onchange="demoGridEdit(this)" onkeydown="demoGridKey(event,this)">';
+        h += '<option value=""' + (!_demoGridVal(d, 'category') ? ' selected' : '') + '>— ไม่ระบุ —</option>';
+        cats.forEach(function(ct) {
+          h += '<option value="' + sanitize(ct.id) + '"' + (_demoGridVal(d, 'category') === ct.id ? ' selected' : '') + '>' + (ct.icon || '') + ' ' + sanitize(ct.label) + '</option>';
+        });
+        h += '</select>';
+      } else if (c.type === 'fly') {
+        var fv = _demoGridVal(d, 'flyable');
+        h += '<select data-id="' + d.id + '" data-f="flyable" data-r="' + ri + '" data-c="' + ci + '" onchange="demoGridEdit(this)" onkeydown="demoGridKey(event,this)">';
+        h += '<option value="1"' + (fv === '1' ? ' selected' : '') + '>✈️ บินสาธิตได้</option>';
+        h += '<option value="0"' + (fv === '0' ? ' selected' : '') + '>🖼️ จัดแสดงเท่านั้น</option>';
+        h += '</select>';
+      } else if (c.type === 'status') {
+        if (onLoan) {
+          h += '<span class="ro" title="สถานะนี้มาจากรายการยืมที่ยังไม่ปิด — รับคืนก่อนถึงจะแก้ได้">' + DEMO_STATUS_META[eff].label + ' 🔒</span>';
+        } else {
+          var sv = _demoGridVal(d, 'status') || 'available';
+          h += '<select data-id="' + d.id + '" data-f="status" data-r="' + ri + '" data-c="' + ci + '" onchange="demoGridEdit(this)" onkeydown="demoGridKey(event,this)">';
+          ['available', 'unavailable', 'lost'].forEach(function(s) {
+            h += '<option value="' + s + '"' + (sv === s ? ' selected' : '') + '>' + DEMO_STATUS_META[s].label + '</option>';
+          });
+          h += '</select>';
+        }
+      } else {
+        h += '<input type="text" data-id="' + d.id + '" data-f="' + c.f + '" data-r="' + ri + '" data-c="' + ci + '" value="' + sanitize(_demoGridVal(d, c.f)) + '" oninput="demoGridEdit(this)" onkeydown="demoGridKey(event,this)" autocomplete="off">';
+      }
+      h += '</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="demo-grid-savebar">';
+  h += '<button class="btn bp" onclick="saveDemoGrid()">💾 บันทึกที่แก้ไข</button>';
+  h += '<button class="btn bo" onclick="demoGridDiscard()">↩️ ยกเลิกที่แก้ไว้</button>';
+  h += '<span id="demoGridCount" style="font-size:12px;color:var(--text2)">' + _demoGridChangeSummary() + '</span>';
+  h += '</div>';
+  h += '<div id="demoGridWarn"></div>';
+  return h;
+}
+function _demoGridChangeSummary() {
+  var units = Object.keys(_demoGridDraft).length;
+  if (!units) return 'ยังไม่มีการแก้ไข';
+  var fields = 0;
+  Object.keys(_demoGridDraft).forEach(function(id) { fields += Object.keys(_demoGridDraft[id]).length; });
+  return '✏️ แก้ไว้ ' + fields + ' ช่อง ใน ' + units + ' เครื่อง (ยังไม่บันทึก)';
+}
+function demoGridEdit(el) {
+  var id = el.getAttribute('data-id'), f = el.getAttribute('data-f');
+  if (!_demoGridDraft[id]) _demoGridDraft[id] = {};
+  _demoGridDraft[id][f] = el.value;
+  var td = el.parentElement;
+  if (td) td.classList.add('dirty');
+  var c = document.getElementById('demoGridCount');
+  if (c) c.textContent = _demoGridChangeSummary();
+}
+// Enter = ลงแถวถัดไปคอลัมน์เดิม (พฤติกรรมแบบสเปรดชีต) ส่วน Tab ปล่อยให้เบราว์เซอร์จัดการตามปกติ
+function demoGridKey(e, el) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var r = Number(el.getAttribute('data-r')), c = el.getAttribute('data-c');
+  var next = document.querySelector('.demo-grid-tbl [data-r="' + (r + 1) + '"][data-c="' + c + '"]');
+  if (next) { next.focus(); if (next.select) next.select(); }
+}
+var _demoGridSearchTimer = null;
+function demoGridSearchInput(v) {
+  _demoGridSearch = v;
+  clearTimeout(_demoGridSearchTimer);
+  _demoGridSearchTimer = setTimeout(function() { render(); }, 300);
+}
+function demoGridDiscard() {
+  if (!Object.keys(_demoGridDraft).length) { toast('ยังไม่มีการแก้ไข'); return; }
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่บันทึกทั้งหมด?')) return;
+  _demoGridDraft = {};
+  render();
+}
+function saveDemoGrid() {
+  var ids = Object.keys(_demoGridDraft);
+  if (!ids.length) { toast('ยังไม่มีการแก้ไข'); return; }
+  var items = getDemoItems();
+  var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+
+  // ประกอบภาพ "หลังบันทึก" ก่อน แล้วค่อยตรวจเลขเครื่องเช่าซ้ำจากทั้งชุด — เลขที่เพิ่งแก้อาจไปชนเครื่องที่
+  // ไม่ได้แสดงอยู่ในตารางตอนนี้ (ถูกกรองออกด้วยคำค้น) ถ้าตรวจเฉพาะแถวบนจอจะปล่อยเลขซ้ำหลุดเข้าไปได้
+  var finalRental = {};
+  items.forEach(function(d) { finalRental[d.id] = (d.rentalDbNo || '').trim(); });
+  ids.forEach(function(id) {
+    if (byId[id] && _demoGridDraft[id].rentalDbNo !== undefined) finalRental[id] = (_demoGridDraft[id].rentalDbNo || '').trim();
+  });
+  var seen = {}, dupes = [];
+  Object.keys(finalRental).forEach(function(id) {
+    var v = finalRental[id];
+    if (!v) return;
+    if (seen[v]) dupes.push({ num: v, a: seen[v], b: id }); else seen[v] = id;
+  });
+  var warnEl = document.getElementById('demoGridWarn');
+  if (dupes.length) {
+    var msg = dupes.slice(0, 5).map(function(x) {
+      return 'เลข ' + sanitize(x.num) + ' ซ้ำกันระหว่าง "' + sanitize((byId[x.a] || {}).name || '') + '" กับ "' + sanitize((byId[x.b] || {}).name || '') + '"';
+    }).join('<br>');
+    if (warnEl) warnEl.innerHTML = '<div style="margin-top:10px;background:#ef444418;color:#ef4444;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600">⚠️ หมายเลขเครื่องเช่าซ้ำ ' + dupes.length + ' คู่ — แก้ก่อนบันทึก<br>' + msg + (dupes.length > 5 ? '<br>…และอีก ' + (dupes.length - 5) + ' คู่' : '') + '</div>';
+    return;
+  }
+  if (warnEl) warnEl.innerHTML = '';
+
+  var changedUnits = 0, changedFields = 0;
+  ids.forEach(function(id) {
+    var d = byId[id];
+    if (!d) return;
+    var touched = false;
+    Object.keys(_demoGridDraft[id]).forEach(function(f) {
+      var v = _demoGridDraft[id][f];
+      if (f === 'flyable') {
+        var nv = v === '1';
+        if ((d.flyable !== false) === nv) return;
+        d.flyable = nv;
+      } else {
+        var sv = (v || '').trim();
+        if ((d[f] || '') === sv) return;
+        d[f] = sv;
+      }
+      changedFields++; touched = true;
+    });
+    if (touched) changedUnits++;
+  });
+  if (!changedFields) { toast('ค่าที่แก้ตรงกับของเดิม ไม่มีอะไรเปลี่ยน'); _demoGridDraft = {}; render(); return; }
+  if (!confirm('บันทึกการแก้ไข ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง?')) return;
+  saveDemoItems(items);
+  _demoGridDraft = {};
+  toast('✅ บันทึกแล้ว ' + changedFields + ' ช่อง');
+  render();
 }
 
 // ================================================================
