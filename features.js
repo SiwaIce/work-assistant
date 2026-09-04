@@ -2961,7 +2961,8 @@ function demoLoansByDemo(demoId) {
     .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); });
 }
 
-var demoTrackerTab = 'list'; // 'list' | 'calendar' | 'requests'
+var demoTrackerTab = 'list'; // 'list' | 'jobs' | 'calendar' | 'requests'
+var _demoActiveJobCount = 0; // จำนวนใบงานที่ยังยืมอยู่ — โชว์เป็นตัวเลขบนแท็บ 📄 ใบงาน
 var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
 var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
 var demoModelFilter = 'all';
@@ -3172,12 +3173,13 @@ function exportDemoItemsExcel() {
       'หมวดหมู่': d.category || '', 'บินได้ (Y/N)': d.flyable !== false ? 'Y' : 'N',
       'สถานะ': d.status || 'available', 'กสทช (Y/N)': d.nbtcRegistered ? 'Y' : 'N',
       'ประกันภัย (Y/N)': d.droneInsurance ? 'Y' : 'N', 'CAAT (Y/N)': d.caatRegistered ? 'Y' : 'N',
+      'เลขใบงาน': d.jobNo || '', 'เลขอ้างอิง': d.refNo || '',
       'ผู้ยืม': d.borrower || '', 'วันที่ยืม': d.lentDate || '', 'กำหนดคืน': d.returnDate || '',
       'หมายเหตุ': d.note || ''
     };
   });
   var ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:14},{wch:25},{wch:15},{wch:15},{wch:18},{wch:15},{wch:12},{wch:10},{wch:12},{wch:10},{wch:10},{wch:10},{wch:18},{wch:12},{wch:12},{wch:25}];
+  ws['!cols'] = [{wch:14},{wch:25},{wch:15},{wch:15},{wch:18},{wch:15},{wch:12},{wch:10},{wch:12},{wch:10},{wch:10},{wch:10},{wch:16},{wch:14},{wch:18},{wch:12},{wch:12},{wch:25}];
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'demo');
   XLSX.writeFile(wb, 'demo-equipment-' + _td() + '.xlsx');
@@ -3216,6 +3218,8 @@ function importDemoItemsExcel() {
           rec.nbtcRegistered = String(r['กสทช (Y/N)'] || '').trim().toUpperCase() === 'Y';
           rec.droneInsurance = String(r['ประกันภัย (Y/N)'] || '').trim().toUpperCase() === 'Y';
           rec.caatRegistered = String(r['CAAT (Y/N)'] || '').trim().toUpperCase() === 'Y';
+          rec.jobNo = String(r['เลขใบงาน'] || rec.jobNo || '').trim();
+          rec.refNo = String(r['เลขอ้างอิง'] || rec.refNo || '').trim();
           rec.borrower = String(r['ผู้ยืม'] || rec.borrower || '').trim();
           rec.lentDate = String(r['วันที่ยืม'] || rec.lentDate || '').trim();
           rec.returnDate = String(r['กำหนดคืน'] || rec.returnDate || '').trim();
@@ -3262,6 +3266,7 @@ function rDemoTracker(el) {
   var now = new Date();
   var counts = { available: 0, reserved: 0, lent: 0, unavailable: 0, lost: 0 };
   items.forEach(function(d) { counts[getDemoEffectiveStatus(d)]++; });
+  _demoActiveJobCount = demoActiveJobGroups().length;
 
   // นับเครื่องที่ยืมเกิน 30 วันยังไม่คืน — ใช้ตรรกะเดียวกับ isOverdue ต่อการ์ดด้านล่าง
   // + นับเครื่องใกล้ครบกำหนดคืน (returnDate ภายใน 3 วันข้างหน้า รวมที่เลยกำหนดแล้วด้วย) ให้เตือนก่อนจะเกิน 30 วัน
@@ -3322,10 +3327,15 @@ function rDemoTracker(el) {
 
   h += '<div class="today-tabs" style="margin-bottom:10px">';
   h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoTrackerTab=\'list\';render()">📋 รายการ</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'jobs' ? 'act' : '') + '" onclick="demoTrackerTab=\'jobs\';render()">📄 ใบงาน' + (_demoActiveJobCount ? ' (' + _demoActiveJobCount + ')' : '') + '</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoTrackerTab=\'calendar\';render()">🗓️ ปฏิทิน</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'requests' ? 'act' : '') + '" onclick="demoTrackerTab=\'requests\';loadDemoRequests();render()">🟡 คำขอยืม' + (_demoReqPendingCount ? ' (' + _demoReqPendingCount + ')' : '') + '</div>';
   h += '</div>';
 
+  if (demoTrackerTab === 'jobs') {
+    el.innerHTML = h + renderDemoJobsTab();
+    return;
+  }
   if (demoTrackerTab === 'calendar') {
     el.innerHTML = h + renderDemoCalendar();
     return;
@@ -3512,6 +3522,7 @@ function demoCardHtml(d, now) {
   if (_rental) h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(_rental) + '</div>';
   else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
   if (eff === 'lent' || eff === 'reserved') {
+    if ((d.jobNo || '').trim()) h += '<div>📄 ใบงาน: <b onclick="demoTrackerTab=\'jobs\';render()" style="cursor:pointer;text-decoration:underline">' + sanitize(d.jobNo) + '</b>' + ((d.refNo || '').trim() ? ' <span style="color:var(--text3)">· 🔖 ' + sanitize(d.refNo) + '</span>' : '') + '</div>';
     h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
     h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '') + '</div>';
@@ -3534,6 +3545,123 @@ function demoCardHtml(d, now) {
   if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
   h += '</div></div>';
   return h;
+}
+
+// ================================================================
+// DEMO JOB SHEETS (ใบงาน) — รวมเครื่องที่เบิกในใบงานเดียวกัน (jobNo) ให้กดคืนทีเดียวทั้งชุด หรือติ๊กคืน
+// เฉพาะบางเครื่องได้ ไม่ต้องไล่กดคืนทีละเครื่องจากหน้ารายการ
+// loan ที่ยืมไว้ก่อนมีฟีเจอร์นี้ (ไม่มี jobNo) ไม่ได้ถูกซ่อน — รวมไว้กลุ่ม "ไม่ระบุเลขใบงาน" ให้ยังคืนได้
+// เหมือนเดิม แต่ไม่มีปุ่ม "คืนทั้งใบ" เพราะมันไม่ใช่ชุดเดียวกันจริง แค่บังเอิญไม่มีเลขใบงานเหมือนกัน
+// ================================================================
+function demoActiveJobGroups() {
+  var loans = getDemoLoans().filter(function(l) { return l.status === 'active'; });
+  var groups = {}, order = [];
+  loans.forEach(function(l) {
+    var key = (l.jobNo || '').trim() || '_none';
+    if (!groups[key]) { groups[key] = { jobNo: key === '_none' ? '' : (l.jobNo || '').trim(), refNo: l.refNo || '', loans: [] }; order.push(key); }
+    if (!groups[key].refNo && l.refNo) groups[key].refNo = l.refNo;
+    groups[key].loans.push(l);
+  });
+  // ใบที่ครบกำหนดคืนเร็วสุดขึ้นก่อน (ใบไม่มีกำหนดคืนไปท้าย) ส่วน "ไม่ระบุเลขใบงาน" ปักไว้ท้ายสุดเสมอ
+  order.sort(function(a, b) {
+    if (a === '_none') return 1;
+    if (b === '_none') return -1;
+    var ra = groups[a].loans.map(function(l) { return l.returnDate || ''; }).filter(Boolean).sort()[0] || '';
+    var rb = groups[b].loans.map(function(l) { return l.returnDate || ''; }).filter(Boolean).sort()[0] || '';
+    if (!ra && !rb) return 0;
+    if (!ra) return 1;
+    if (!rb) return -1;
+    var da = ftParseDate(ra), db2 = ftParseDate(rb);
+    return (da && db2) ? da - db2 : 0;
+  });
+  return order.map(function(k) { return groups[k]; });
+}
+
+function renderDemoJobsTab() {
+  var groups = demoActiveJobGroups();
+  if (!groups.length) {
+    return '<div class="card" style="text-align:center;padding:34px"><div style="font-size:44px;margin-bottom:10px">📄</div><p>ยังไม่มีใบงานที่ยืมอยู่ — เครื่องที่ให้ยืมพร้อมกันโดยใส่ "เลขใบงาน" เดียวกันจะมารวมกันที่นี่</p></div>';
+  }
+  var now = new Date();
+  var items = getDemoItems();
+  var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+  var h = '';
+  h += '<div class="hint" style="margin-bottom:10px">ติ๊กเลือกเฉพาะเครื่องที่จะคืน แล้วกด "คืนที่เลือก" หรือกด "คืนทั้งใบ" เพื่อคืนทุกเครื่องในใบงานนั้นทีเดียว</div>';
+
+  groups.forEach(function(g, gi) {
+    var isNone = !g.jobNo;
+    var retDates = g.loans.map(function(l) { return l.returnDate || ''; }).filter(Boolean).sort();
+    var soonest = retDates[0] || '';
+    var retD = soonest ? ftParseDate(soonest) : null;
+    var daysToReturn = retD ? Math.ceil((retD - now) / 86400000) : null;
+    var isLate = daysToReturn !== null && daysToReturn < 0;
+    var isSoon = daysToReturn !== null && daysToReturn >= 0 && daysToReturn <= 3;
+    var accent = isLate ? '#ef4444' : (isSoon ? '#f59e0b' : 'var(--border)');
+
+    h += '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + accent + '">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">';
+    h += '<div>';
+    h += '<div style="font-weight:700;font-size:14px">' + (isNone ? '➖ ไม่ระบุเลขใบงาน' : '📄 ' + sanitize(g.jobNo)) + ' <span style="font-size:11px;font-weight:600;color:var(--text2)">' + g.loans.length + ' เครื่อง</span></div>';
+    var sub = [];
+    if (g.refNo) sub.push('🔖 ' + sanitize(g.refNo));
+    var borrower = g.loans[0].dealerId ? ((ST.getOne('dealers', g.loans[0].dealerId) || {}).name || '') : (g.loans[0].borrower || '');
+    if (borrower && !isNone) sub.push('👤 ' + sanitize(borrower));
+    if (g.loans[0].lentDate && !isNone) sub.push('📅 ยืม ' + sanitize(g.loans[0].lentDate));
+    if (soonest) sub.push('📅 คืน ' + sanitize(soonest) + (daysToReturn !== null ? ' <b style="color:' + (isLate ? '#ef4444' : isSoon ? '#f59e0b' : 'var(--text2)') + '">' + (daysToReturn < 0 ? '(เลยกำหนด ' + Math.abs(daysToReturn) + ' วัน)' : daysToReturn === 0 ? '(ครบวันนี้)' : '(อีก ' + daysToReturn + ' วัน)') + '</b>' : ''));
+    if (sub.length) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:3px;line-height:1.7">' + sub.join(' &nbsp;·&nbsp; ') + '</div>';
+    h += '</div>';
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    h += '<button class="btn bsm bo" onclick="demoJobToggleAll(' + gi + ',true)">☑️ เลือกทั้งหมด</button>';
+    h += '<button class="btn bsm bp" onclick="demoJobReturnSelected(' + gi + ')">✅ คืนที่เลือก</button>';
+    if (!isNone) h += '<button class="btn bsm bp" onclick="demoJobReturnAll(' + gi + ')">📦 คืนทั้งใบ</button>';
+    h += '</div>';
+    h += '</div>';
+
+    h += '<div style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    g.loans.forEach(function(l, li) {
+      var unit = byId[l.demoId] || {};
+      h += '<label style="display:flex;align-items:center;gap:9px;padding:8px 10px;font-size:12px;cursor:pointer;' + (li ? 'border-top:1px solid var(--border)' : '') + '">';
+      h += '<input type="checkbox" class="demo-job-cb" data-g="' + gi + '" value="' + sanitize(l.demoId) + '">';
+      h += '<span style="flex:1">' + sanitize(l.demoName || unit.name || '-');
+      if (unit.serialNumber) h += ' <span style="color:var(--text2);font-family:monospace;font-size:11px">S/N ' + sanitize(unit.serialNumber) + '</span>';
+      if (unit.rentalDbNo) h += ' <span style="color:var(--text3);font-size:11px">· เช่า ' + sanitize(unit.rentalDbNo) + '</span>';
+      h += '</span>';
+      if (isNone && l.borrower) h += '<span style="color:var(--text2);font-size:11px">👤 ' + sanitize(l.borrower) + '</span>';
+      if (isNone && l.returnDate) h += '<span style="color:var(--text2);font-size:11px">📅 ' + sanitize(l.returnDate) + '</span>';
+      h += '</label>';
+    });
+    h += '</div>';
+    if (g.loans[0].purpose && !isNone) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:8px">🎯 ' + sanitize(g.loans[0].purpose) + '</div>';
+    h += '</div>';
+  });
+  return h;
+}
+
+function demoJobToggleAll(gi, on) {
+  document.querySelectorAll('.demo-job-cb[data-g="' + gi + '"]').forEach(function(cb) { cb.checked = on; });
+}
+function _demoJobSelectedIds(gi) {
+  var ids = [];
+  document.querySelectorAll('.demo-job-cb[data-g="' + gi + '"]:checked').forEach(function(cb) { ids.push(cb.value); });
+  return ids;
+}
+function demoJobReturnSelected(gi) {
+  var ids = _demoJobSelectedIds(gi);
+  if (!ids.length) { toast('ยังไม่ได้เลือกเครื่องที่จะคืน'); return; }
+  if (!confirm('ยืนยันคืน ' + ids.length + ' เครื่อง?')) return;
+  var n = _returnDemoUnits(ids);
+  toast('✅ คืนแล้ว ' + n + ' เครื่อง');
+  render();
+}
+function demoJobReturnAll(gi) {
+  var groups = demoActiveJobGroups();
+  var g = groups[gi];
+  if (!g) return;
+  var ids = g.loans.map(function(l) { return l.demoId; });
+  if (!confirm('คืนทั้งใบงาน ' + (g.jobNo || '') + ' — ทั้งหมด ' + ids.length + ' เครื่อง ยืนยัน?')) return;
+  var n = _returnDemoUnits(ids);
+  toast('✅ คืนทั้งใบแล้ว ' + n + ' เครื่อง');
+  render();
 }
 
 // ================================================================
@@ -3929,7 +4057,34 @@ function saveDemo() {
 function showLendDemoM(demoId) {
   var dealers = [];
   try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
-  var h = '<div style="max-width:400px">';
+  var items = getDemoItems();
+  var self = items.filter(function(d) { return d.id === demoId; })[0] || {};
+  // เครื่องอื่นที่ยืมพร้อมกันได้ในใบงานเดียวกัน — เฉพาะที่ว่างจริงและลงทะเบียนเครื่องเช่าแล้ว
+  // (เงื่อนไขเดียวกับสโคป "พร้อมให้ยืม" ในหน้ารายการ ไม่งั้นจะเลือกเครื่องที่คีย์เบิกไม่ได้เข้ามาปนได้)
+  var others = items.filter(function(d) {
+    return d.id !== demoId && getDemoEffectiveStatus(d) === 'available' && (d.rentalDbNo || '').trim();
+  }).sort(function(a, b) {
+    var n = (a.name || '').localeCompare(b.name || '');
+    return n !== 0 ? n : (a.serialNumber || '').localeCompare(b.serialNumber || '');
+  });
+
+  var h = '<div style="max-width:460px">';
+  h += '<div class="fm-group"><label>📄 เลขใบงาน (เลขที่คีย์เบิกจากคลัง)</label><input type="text" id="dm_jobno" class="fm-input" placeholder="เช่น JOB-2569-0912" autocomplete="off"><div class="hint">ใส่เลขเดียวกันให้ทุกเครื่องที่เบิกในใบงานเดียวกัน — แท็บ 📄 ใบงาน จะรวมให้กดคืนทีเดียวได้</div></div>';
+  h += '<div class="fm-group"><label>🔖 เลขอ้างอิง</label><input type="text" id="dm_refno" class="fm-input" placeholder="เลขอ้างอิงอื่น (ถ้ามี)" autocomplete="off"></div>';
+  h += '<div class="fm-group"><label>🚁 เครื่องที่ยืมในใบงานนี้</label>';
+  h += '<div style="font-size:12px;padding:6px 9px;background:var(--bg2);border-radius:7px;margin-bottom:6px">' + sanitize(self.name || '-') + (self.serialNumber ? ' <span style="color:var(--text2);font-family:monospace">S/N ' + sanitize(self.serialNumber) + '</span>' : '') + '</div>';
+  if (others.length) {
+    h += '<details><summary style="cursor:pointer;font-size:12px;color:var(--accent)">➕ เพิ่มเครื่องอื่นในใบงานเดียวกัน (' + others.length + ' เครื่องว่าง)</summary>';
+    h += '<div style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:7px;margin-top:6px;padding:4px">';
+    others.forEach(function(d) {
+      h += '<label style="display:flex;align-items:center;gap:7px;padding:4px 6px;font-size:12px;cursor:pointer">';
+      h += '<input type="checkbox" class="dm-extra-unit" value="' + d.id + '">';
+      h += '<span>' + sanitize(d.name) + (d.serialNumber ? ' <span style="color:var(--text2);font-family:monospace">S/N ' + sanitize(d.serialNumber) + '</span>' : '') + '</span>';
+      h += '</label>';
+    });
+    h += '</div></details>';
+  }
+  h += '</div>';
   h += '<div class="fm-group"><label>🏪 ให้ยืมใคร</label><select id="dm_dealer" class="fm-input">';
   h += '<option value="">-- เลือก Dealer --</option>';
   dealers.forEach(function(d) { h += '<option value="' + d.id + '">' + sanitize(d.name) + '</option>'; });
@@ -3948,70 +4103,95 @@ function showLendDemoM(demoId) {
 
 function lendDemo(demoId) {
   var items = getDemoItems();
+  var jobNo = (document.getElementById('dm_jobno').value || '').trim();
+  var refNo = (document.getElementById('dm_refno').value || '').trim();
   var dealerId = document.getElementById('dm_dealer').value || '';
   var borrower = (document.getElementById('dm_borrower').value || '').trim();
   var purpose = document.getElementById('dm_purpose') ? document.getElementById('dm_purpose').value.trim() : '';
   var lentDate = (document.getElementById('dm_lent').value || '').trim() || _td();
   var returnDate = (document.getElementById('dm_return').value || '').trim();
   var note = (document.getElementById('dm_lnote').value || '').trim();
-  var demoName = '';
 
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].id === demoId) {
-      items[i].status = 'lent';
-      items[i].dealerId = dealerId;
-      items[i].borrower = borrower;
-      items[i].purpose = purpose;
-      items[i].lentDate = lentDate;
-      items[i].returnDate = returnDate;
-      items[i].note = note;
-      demoName = items[i].name;
-      break;
-    }
-  }
-  saveDemoItems(items);
+  // เครื่องหลัก + เครื่องที่ติ๊กเพิ่มในใบงานเดียวกัน ทุกตัวใช้ผู้ยืม/วันที่/เลขใบงานชุดเดียวกันหมด
+  var targetIds = [demoId];
+  document.querySelectorAll('.dm-extra-unit:checked').forEach(function(cb) {
+    if (targetIds.indexOf(cb.value) === -1) targetIds.push(cb.value);
+  });
 
   var loans = getDemoLoans();
-  loans.push({
-    id: gid(), demoId: demoId, demoName: demoName,
-    dealerId: dealerId, borrower: borrower, purpose: purpose,
-    lentDate: lentDate, returnDate: returnDate, actualReturnDate: '',
-    note: note, status: 'active', created: _nw()
+  targetIds.forEach(function(id) {
+    var demoName = '';
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === id) {
+        items[i].status = 'lent';
+        items[i].jobNo = jobNo;
+        items[i].refNo = refNo;
+        items[i].dealerId = dealerId;
+        items[i].borrower = borrower;
+        items[i].purpose = purpose;
+        items[i].lentDate = lentDate;
+        items[i].returnDate = returnDate;
+        items[i].note = note;
+        demoName = items[i].name;
+        break;
+      }
+    }
+    loans.push({
+      id: gid(), demoId: id, demoName: demoName,
+      jobNo: jobNo, refNo: refNo,
+      dealerId: dealerId, borrower: borrower, purpose: purpose,
+      lentDate: lentDate, returnDate: returnDate, actualReturnDate: '',
+      note: note, status: 'active', created: _nw()
+    });
   });
+  saveDemoItems(items);
   saveDemoLoans(loans);
 
-  toast('📤 ให้ยืมแล้ว');
+  toast(targetIds.length > 1 ? '📤 ให้ยืมแล้ว ' + targetIds.length + ' เครื่อง' : '📤 ให้ยืมแล้ว');
   closeMForce();
   render();
 }
 
+// คืนอุปกรณ์หลายเครื่องพร้อมกัน — ตรรกะกลางที่ทั้งปุ่มคืนรายเครื่อง ปุ่มคืนทั้งใบงาน และคืนเฉพาะที่เลือก
+// เรียกใช้ร่วมกัน (ไม่ confirm/ไม่ render เอง ให้ผู้เรียกจัดการ) คืนค่าเป็นจำนวนเครื่องที่คืนสำเร็จจริง
+function _returnDemoUnits(demoIds) {
+  var items = getDemoItems();
+  var loans = getDemoLoans();
+  var done = 0;
+  demoIds.forEach(function(demoId) {
+    var hit = false;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === demoId) {
+        items[i].status = 'available';
+        items[i].jobNo = '';
+        items[i].refNo = '';
+        items[i].dealerId = '';
+        items[i].borrower = '';
+        items[i].purpose = '';
+        items[i].lentDate = '';
+        items[i].returnDate = '';
+        items[i].note = '';
+        hit = true;
+        break;
+      }
+    }
+    if (hit) done++;
+    for (var j = loans.length - 1; j >= 0; j--) {
+      if (loans[j].demoId === demoId && loans[j].status === 'active') {
+        loans[j].status = 'returned';
+        loans[j].actualReturnDate = _td();
+        break;
+      }
+    }
+  });
+  saveDemoItems(items);
+  saveDemoLoans(loans);
+  return done;
+}
+
 function returnDemo(demoId) {
   if (!confirm('ยืนยันคืนอุปกรณ์?')) return;
-  var items = getDemoItems();
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].id === demoId) {
-      items[i].status = 'available';
-      items[i].dealerId = '';
-      items[i].borrower = '';
-      items[i].purpose = '';
-      items[i].lentDate = '';
-      items[i].returnDate = '';
-      items[i].note = '';
-      break;
-    }
-  }
-  saveDemoItems(items);
-
-  var loans = getDemoLoans();
-  for (var j = loans.length - 1; j >= 0; j--) {
-    if (loans[j].demoId === demoId && loans[j].status === 'active') {
-      loans[j].status = 'returned';
-      loans[j].actualReturnDate = _td();
-      break;
-    }
-  }
-  saveDemoLoans(loans);
-
+  _returnDemoUnits([demoId]);
   toast('✅ คืนอุปกรณ์แล้ว');
   render();
 }
