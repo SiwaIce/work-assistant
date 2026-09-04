@@ -3031,6 +3031,135 @@ function demoCatMgrSave() {
 }
 
 // ================================================================
+// กรอกหมายเลขเครื่องเช่าทีละหลายเครื่องในหน้าเดียว — ทางลัดแทนการกด ✏️ ทีละเครื่อง หรือ Export/Import
+// ผ่าน Excel ซึ่งเกินจำเป็นเมื่อต้องกรอกแค่ฟิลด์เดียว เก็บค่าที่พิมพ์ไว้ใน _demoBulkDraft (ไม่ใช่อ่านจาก DOM
+// ตอนกดบันทึกอย่างเดียว) เพื่อให้สลับ "เฉพาะที่ยังไม่กรอก / ทั้งหมด" ได้โดยไม่ทำของที่พิมพ์ค้างไว้หาย
+// ================================================================
+var _demoBulkDraft = {};
+var _demoBulkShowAll = false;
+function showDemoBulkRentalM() {
+  _demoBulkDraft = {};
+  _demoBulkShowAll = false;
+  openM('📋 กรอกหมายเลขเครื่องเช่า (หลายเครื่องพร้อมกัน)', demoBulkRentalHtml());
+  setMWide(860);
+  setTimeout(function() {
+    var first = document.querySelector('#demoBulkRows input');
+    if (first) first.focus();
+  }, 60);
+}
+function demoBulkRentalRows() {
+  var items = getDemoItems();
+  var rows = _demoBulkShowAll ? items : items.filter(function(d) { return !(d.rentalDbNo || '').trim(); });
+  // เรียงตามรุ่นแล้วต่อด้วย S/N — เครื่องรุ่นเดียวกันอยู่ติดกัน กรอกเลขที่ไล่กันเป็นชุดได้ง่ายกว่า
+  return rows.slice().sort(function(a, b) {
+    var n = (a.name || '').localeCompare(b.name || '');
+    return n !== 0 ? n : (a.serialNumber || '').localeCompare(b.serialNumber || '');
+  });
+}
+function demoBulkRentalHtml() {
+  var items = getDemoItems();
+  var missing = items.filter(function(d) { return !(d.rentalDbNo || '').trim(); }).length;
+  var rows = demoBulkRentalRows();
+  var h = '';
+  h += '<div class="hint" style="margin-bottom:10px">กรอกแล้วกด Enter เพื่อไปช่องถัดไป — เว้นว่างไว้ได้ ระบบบันทึกเฉพาะช่องที่กรอก และจะเตือนถ้าเลขซ้ำกัน</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<button class="demo-filter-chip ' + (!_demoBulkShowAll ? 'act' : '') + '" onclick="demoBulkSetScope(false)">📋 ยังไม่กรอก (' + missing + ')</button>';
+  h += '<button class="demo-filter-chip ' + (_demoBulkShowAll ? 'act' : '') + '" onclick="demoBulkSetScope(true)">ทั้งหมด (' + items.length + ')</button>';
+  h += '<span style="margin-left:auto;font-size:12px;color:var(--text2)">กรอกไว้แล้ว <b id="demoBulkFilled">0</b> ช่อง</span>';
+  h += '</div>';
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px"><div style="font-size:38px;margin-bottom:8px">✅</div><p>ทุกเครื่องมีหมายเลขเครื่องเช่าครบแล้ว</p></div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div>';
+    return h;
+  }
+  h += '<div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px">';
+  h += '<thead><tr>';
+  ['อุปกรณ์', 'S/N', 'SKU', 'หมายเลขเครื่องเช่า'].forEach(function(hd, i) {
+    h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1' + (i === 3 ? ';width:190px' : '') + '">' + hd + '</th>';
+  });
+  h += '</tr></thead><tbody id="demoBulkRows">';
+  rows.forEach(function(d, i) {
+    var cur = _demoBulkDraft[d.id] !== undefined ? _demoBulkDraft[d.id] : (d.rentalDbNo || '');
+    h += '<tr>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(d.name || '-') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);font-family:monospace;color:var(--text2)">' + sanitize(d.serialNumber || '-') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);color:var(--text2)">' + sanitize(d.sku || '-') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)"><input type="text" class="fm-input" style="padding:5px 8px;font-size:12px" data-id="' + d.id + '" data-idx="' + i + '" value="' + sanitize(cur) + '" oninput="demoBulkOnInput(this)" onkeydown="demoBulkOnKey(event,this)" autocomplete="off"></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div id="demoBulkWarn"></div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bp" onclick="saveDemoBulkRental()">💾 บันทึกทั้งหมด</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div>';
+  return h;
+}
+function demoBulkSetScope(showAll) {
+  _demoBulkShowAll = showAll;
+  document.getElementById('mBd').innerHTML = demoBulkRentalHtml();
+  demoBulkRefreshCount();
+}
+function demoBulkOnInput(inp) {
+  _demoBulkDraft[inp.getAttribute('data-id')] = inp.value;
+  demoBulkRefreshCount();
+}
+function demoBulkOnKey(e, inp) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var idx = Number(inp.getAttribute('data-idx'));
+  var next = document.querySelector('#demoBulkRows input[data-idx="' + (idx + 1) + '"]');
+  if (next) { next.focus(); next.select(); }
+}
+function demoBulkRefreshCount() {
+  var el = document.getElementById('demoBulkFilled');
+  if (!el) return;
+  var n = 0;
+  document.querySelectorAll('#demoBulkRows input').forEach(function(i) { if (i.value.trim()) n++; });
+  el.textContent = n;
+}
+function saveDemoBulkRental() {
+  var items = getDemoItems();
+  var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+
+  // รวมค่าที่จะบันทึก: ค่าที่พิมพ์ไว้ (draft) ทับค่าเดิม แล้วเช็คเลขซ้ำจาก "ภาพรวมหลังบันทึก" ทั้งชุด
+  // ไม่ใช่เช็คเฉพาะช่องที่เพิ่งกรอก — เลขที่กรอกใหม่อาจไปชนกับเครื่องที่มีเลขนั้นอยู่แล้วและไม่ได้แสดงในหน้านี้
+  var finalVals = {}, changed = 0;
+  items.forEach(function(d) { finalVals[d.id] = (d.rentalDbNo || '').trim(); });
+  Object.keys(_demoBulkDraft).forEach(function(id) {
+    if (!byId[id]) return;
+    var v = (_demoBulkDraft[id] || '').trim();
+    if (v !== finalVals[id]) { finalVals[id] = v; changed++; }
+  });
+  if (!changed) { toast('ยังไม่มีอะไรเปลี่ยน'); return; }
+
+  var seen = {}, dupes = [];
+  Object.keys(finalVals).forEach(function(id) {
+    var v = finalVals[id];
+    if (!v) return;
+    if (seen[v]) dupes.push({ num: v, a: seen[v], b: id }); else seen[v] = id;
+  });
+  var warnEl = document.getElementById('demoBulkWarn');
+  if (dupes.length) {
+    var msg = dupes.slice(0, 5).map(function(x) {
+      return 'เลข ' + sanitize(x.num) + ' ซ้ำกันระหว่าง "' + sanitize((byId[x.a] || {}).name || '') + '" กับ "' + sanitize((byId[x.b] || {}).name || '') + '"';
+    }).join('<br>');
+    if (warnEl) warnEl.innerHTML = '<div class="range-warn" style="margin-top:10px;background:#ef444418;color:#ef4444;border-radius:8px;padding:8px 10px;font-size:12px">⚠️ หมายเลขเครื่องเช่าซ้ำ ' + dupes.length + ' คู่ — แก้ก่อนบันทึก<br>' + msg + (dupes.length > 5 ? '<br>…และอีก ' + (dupes.length - 5) + ' คู่' : '') + '</div>';
+    return;
+  }
+  if (warnEl) warnEl.innerHTML = '';
+
+  if (!confirm('บันทึกหมายเลขเครื่องเช่า ' + changed + ' เครื่อง?')) return;
+  items.forEach(function(d) { d.rentalDbNo = finalVals[d.id]; });
+  saveDemoItems(items);
+  _demoBulkDraft = {};
+  toast('✅ บันทึกแล้ว ' + changed + ' เครื่อง');
+  closeMForce();
+  render();
+}
+
+// ================================================================
 // Import/Export ข้อมูล Demo Equipment — ไฟล์ .xlsx ผ่าน SheetJS (ตัวเดียวกับที่ products.js ใช้ import
 // pipeline/products อยู่แล้ว) จับคู่แถวกลับเข้าเครื่องเดิมด้วยคอลัมน์ ID ถ้ามี ไม่มี/ไม่ตรง = สร้างเครื่องใหม่
 // ================================================================
@@ -3155,6 +3284,7 @@ function rDemoTracker(el) {
   h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์</button>';
   h += '<button class="btn bo" onclick="showDemoLinksM()">🔗 ลิงก์ขอยืม/จัดการ Demo</button>';
   h += '<button class="btn bo" onclick="showDemoCatMgrM()">⚙️ จัดการหมวดหมู่</button>';
+  if (pendingRentalItems.length) h += '<button class="btn bo" onclick="showDemoBulkRentalM()">📋 กรอกเลขเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export</button>';
   h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import</button>';
   h += '</div>';
@@ -3186,7 +3316,7 @@ function rDemoTracker(el) {
     h += '<button class="demo-filter-chip ' + (demoReadyFilter === 'all' ? 'act' : '') + '" onclick="demoReadyFilter=\'all\';render()">ทั้งหมด (' + allItems.length + ')</button>';
     h += '</div>';
     if (demoReadyFilter === 'pending') {
-      h += '<div class="hint" style="margin-bottom:10px;color:#f59e0b">📋 เครื่องกลุ่มนี้ยังไม่มีหมายเลขเครื่องเช่า จึงยังให้ยืมจริงไม่ได้ และไม่แสดงในหน้าขอยืมของลูกค้า — กรอกหมายเลขเครื่องเช่าผ่านปุ่ม ✏️ เพื่อย้ายเข้ากลุ่ม "พร้อมให้ยืม"</div>';
+      h += '<div class="hint" style="margin-bottom:10px;color:#f59e0b">📋 เครื่องกลุ่มนี้ยังไม่มีหมายเลขเครื่องเช่า จึงยังให้ยืมจริงไม่ได้ และไม่แสดงในหน้าขอยืมของลูกค้า — กด <b onclick="showDemoBulkRentalM()" style="cursor:pointer;text-decoration:underline">📋 กรอกเลขเครื่องเช่า</b> เพื่อกรอกทีเดียวหลายเครื่อง แล้วย้ายเข้ากลุ่ม "พร้อมให้ยืม"</div>';
     }
   }
 
