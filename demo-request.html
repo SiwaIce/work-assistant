@@ -54,17 +54,20 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .filter-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
 .filter-chip { font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px; cursor:pointer; border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
 .filter-chip.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-.model-group { margin-bottom:18px; }
-.model-group .mg-head { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
-.model-group .mg-head .mn { font-weight:700; font-size:14px; }
-.model-group .mg-head .mc { font-size:11.5px; color:var(--text3); }
-.model-group .mg-units { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
-.unit-card { border:1px solid var(--border); border-radius:12px; padding:13px; background:var(--surface-2); cursor:pointer; position:relative; }
+.model-group { margin-bottom:24px; }
+/* หัวข้อรุ่นเป็น sticky — เลื่อนดูเครื่องเป็นสิบตัวในรุ่นเดียวกันก็ยังเห็นตลอดว่ากำลังดูรุ่นอะไรอยู่
+   จึงไม่ต้องพิมพ์ชื่อรุ่นซ้ำในการ์ดทุกใบ (ชื่อรุ่นยาว ทำให้การ์ดสูงและดูแน่นโดยไม่จำเป็น) */
+.model-group .mg-head { position:sticky; top:0; z-index:5; display:flex; align-items:baseline; gap:10px; margin-bottom:10px; padding:10px 13px; background:var(--surface); border:1px solid var(--border); border-radius:10px; flex-wrap:wrap; box-shadow:0 2px 8px -4px rgba(23,32,43,.18); }
+.model-group .mg-head .mn { font-weight:700; font-size:14.5px; }
+.model-group .mg-head .mc { font-size:11.5px; color:var(--text2); margin-left:auto; }
+.model-group .mg-units { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.unit-card { border:1px solid var(--border); border-radius:12px; padding:14px 15px; background:var(--surface-2); cursor:pointer; position:relative; }
 .unit-card:hover { border-color:var(--accent); }
 .unit-card.disabled { opacity:.5; cursor:not-allowed; }
 .unit-card.selected { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 2px var(--accent) inset; }
-.unit-card .un { font-weight:700; font-size:13.5px; margin-bottom:8px; padding-right:20px; }
-.unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; }
+.unit-card .un { font-weight:700; font-size:13.5px; padding-right:22px; }
+.unit-card .uref { font-size:11.5px; color:var(--text2); font-family:ui-monospace,'SF Mono',Menlo,monospace; margin-top:4px; }
+.unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
 .unit-card .sel-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 #stickyBarWrap { position:sticky; bottom:14px; z-index:20; display:flex; flex-direction:column; gap:8px; margin:16px 0; }
 #stickyBarWrap .cart-bar { position:static; margin:0; }
@@ -277,16 +280,23 @@ function loadCatalog() {
     // จึงไม่แสดงให้ลูกค้าเห็นเลย (ไม่งั้นลูกค้าจองมาแล้วทีมงานต้องมาปฏิเสธทีหลัง) — ฝั่งภายในซ่อนไว้เหมือนกัน
     // แต่ยังกดชิป "ยังไม่ลงทะเบียนเครื่องเช่า" เข้าไปดูได้ ดู rDemoTracker() ใน features.js
     var raw = (data.units || []).filter(function(u) { return !!String(u.rentalDbNo || '').trim(); });
-    // จัดกลุ่มตาม model แล้วเลข "เครื่อง #N" ต่อกันในกลุ่มเดียวกัน (label ไม่ได้เก็บจาก main app ตรงๆ)
+    // จัดกลุ่มตามรุ่น — ใช้ model ก่อน ถ้าว่างค่อยใช้ name (ฟิลด์ model ในแอพหลักมาจาก dropdown ที่หลาย
+    // เครื่องไม่ได้เลือกไว้ ปล่อยว่าง) เดิมใช้ u.model ตรงๆ พอทุกเครื่อง model ว่างเหมือนกันหมด เลยตกไปอยู่
+    // กลุ่มเดียวกันทั้งก้อน หัวข้อกลุ่มไม่มีชื่อรุ่น และการ์ดเหลือแค่ "เครื่อง #1..#130" ดูไม่ออกว่าเครื่องอะไร
     var byModel = {};
-    raw.forEach(function(u) { (byModel[u.model] = byModel[u.model] || []).push(u); });
+    raw.forEach(function(u) {
+      var key = String(u.model || '').trim() || String(u.name || '').trim() || 'ไม่ระบุรุ่น';
+      (byModel[key] = byModel[key] || []).push(u);
+    });
     UNITS = [];
     Object.keys(byModel).forEach(function(model) {
       byModel[model].forEach(function(u, i) {
         var clickable = u.status !== 'unavailable' && u.status !== 'lost';
         UNITS.push({
           id: u.id, icon: iconForCategory(u.category), category: u.category || '', model: model,
-          label: byModel[model].length > 1 ? 'เครื่อง #' + (i + 1) : (u.name && u.name !== model ? u.name : 'เครื่อง #1'),
+          label: 'เครื่อง #' + (i + 1),
+          rentalDbNo: String(u.rentalDbNo || '').trim(),
+          serialNumber: String(u.serialNumber || '').trim(),
           flyable: u.flyable !== false, busyRanges: u.busyRanges || [],
           statusRaw: u.status, clickable: clickable
         });
@@ -323,7 +333,7 @@ function renderSelBar() {
   document.getElementById('selChips').innerHTML = selectedUnitIds.map(function(id) {
     var u = UNITS.filter(function(x) { return x.id === id; })[0];
     if (!u) return '';
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
   }).join('');
   var onBrowse = document.getElementById('step-browse').classList.contains('on');
   document.getElementById('selBar').style.display = (selectedUnitIds.length && onBrowse) ? 'flex' : 'none';
@@ -377,7 +387,9 @@ function renderBrowse() {
         var isSel = selectedUnitIds.indexOf(u.id) !== -1;
         return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + (isSel ? ' selected' : '') + '" ' + (u.clickable ? 'onclick="toggleUnitSelect(\'' + u.id + '\')"' : '') + '>' +
           (isSel ? '<span class="sel-check">✓</span>' : '') +
-          '<div class="un">' + esc(u.label) + '</div><div class="badges">' + statusPill + flyPill + '</div></div>';
+          '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
+          (u.rentalDbNo ? '<div class="uref">🏷️ เลขเครื่องเช่า ' + esc(u.rentalDbNo) + '</div>' : '') +
+          '<div class="badges">' + statusPill + flyPill + '</div></div>';
       }).join('') + '</div></div>';
   }).join('');
 }
@@ -408,7 +420,7 @@ function goToMultiCalendar() {
   if (!calUnits.length) return;
   custCalMonthOffset = 0; rangeStart = null; rangeEnd = null; custDayCount = 1;
   document.getElementById('calUnitsBanner').innerHTML = calUnits.map(function(u) {
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + '</span>';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') + '</span>';
   }).join('');
   document.getElementById('rangeStartInput').value = '';
   document.getElementById('rangeEndInput').value = '';
@@ -491,7 +503,7 @@ var cart = [];
 function addToCart() {
   if (!rangeStart) { alert('เลือกวันที่ก่อนนะครับ'); return; }
   calUnits.forEach(function(u) {
-    cart.push({ unitId: u.id, model: u.model, icon: u.icon, label: u.label, start: rangeStart, end: rangeEnd || rangeStart });
+    cart.push({ unitId: u.id, model: u.model, icon: u.icon, label: u.label, rentalDbNo: u.rentalDbNo, start: rangeStart, end: rangeEnd || rangeStart });
   });
   clearSelection();
   renderCartBar(); backToBrowse();
@@ -509,7 +521,7 @@ function removeFromCart(i) { cart.splice(i, 1); renderCartBar(); if (!cart.lengt
 function goToContact() {
   switchWizStep('contact');
   document.getElementById('cartSummaryList').innerHTML = cart.length ? cart.map(function(c, i) {
-    return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) + '</div>' +
+    return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) + (c.rentalDbNo ? ' <span style="font-size:11px;color:var(--text3);font-weight:400">· เลขเครื่องเช่า ' + esc(c.rentalDbNo) + '</span>' : '') + '</div>' +
       '<div class="csi-date">📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</div></div>' +
       '<button class="btn btn-ghost btn-sm" onclick="removeFromCart(' + i + ');goToContact()">✕ เอาออก</button></div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--text2)">ยังไม่ได้เลือกอุปกรณ์</div>';
@@ -528,7 +540,7 @@ function submitCustomerRequest() {
   var btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
   db.collection('publicDemoRequests').add({
-    items: cart.map(function(c) { return { unitId: c.unitId, model: c.model, label: c.label, start: c.start, end: c.end }; }),
+    items: cart.map(function(c) { return { unitId: c.unitId, model: c.model, label: c.label, rentalDbNo: c.rentalDbNo || '', start: c.start, end: c.end }; }),
     companyName: company, contactName: contact, phone: phone, email: email, purpose: purpose,
     status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() {
