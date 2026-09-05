@@ -126,13 +126,25 @@ function _publishGuestViewProducts(data) {
 }
 
 // ✅ Publish แคตตาล็อก (ชื่อ+หมวด) ไป Firestore ให้ client-view อ่านได้ (ลูกค้าอ่าน localStorage เครื่องเซลล์ไม่ได้)
+//
+// ⚠️ ชื่อ doc เปลี่ยนจาก __catalog__ เป็น catalogPublic (2026-09-05) — Firestore สงวน document id ที่ขึ้นต้น
+// และลงท้ายด้วย __ ไว้ใช้ภายใน เรียก .doc('__catalog__').set()/.get() จะ error ทันที ("Resource id is invalid
+// because it is reserved") แปลว่า path เดิมไม่เคยเขียนหรืออ่านสำเร็จเลยตั้งแต่แรก แต่ .catch() ด้านล่างกลืน
+// error ไว้เงียบๆ เลยไม่มีใครสังเกต — ฟีเจอร์แคตตาล็อกใน client-view.html จึงตกไปใช้ fallback มาตลอด
+// (บั๊กตัวเดียวกับที่เจอใน __demoCatalog__ ตอนทำเมนู Demo แล้วแก้ไปแล้ว) ไม่ต้องย้ายข้อมูลเก่า เพราะ doc เดิม
+// ไม่เคยถูกสร้างขึ้นจริง
+//
+// เพิ่ม guard CURRENT_USER ด้วย — เซสชันที่ไม่ได้ล็อกอิน (โหมด Offline / เครื่องที่ยังไม่ sync) ไม่มีข้อมูลจริง
+// อยู่ในมือ ถ้าปล่อยให้เขียนได้จะไปทับแคตตาล็อกสาธารณะทิ้ง (rules เปิด write: if true) แบบเดียวกับที่เคยเกิด
+// กับ publishDemoCatalog() มาแล้ว — ฟังก์ชันข้างบนในไฟล์นี้ก็กันด้วยเงื่อนไขเดียวกันอยู่แล้ว
 function publishCatalogToClientView() {
   if (typeof db === 'undefined') return;
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return;
   try {
     var src = (typeof getActiveProducts === 'function') ? getActiveProducts() : getAllProducts();
     var models = (src || []).map(function(p) { return { name: p.name, category: p.category || 'other' }; });
     if (!models.length) return;
-    db.collection('dealerUpdates').doc('__catalog__').set({
+    db.collection('dealerUpdates').doc('catalogPublic').set({
       models: models,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).catch(function(e) { console.warn('publishCatalog error:', e); });

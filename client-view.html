@@ -1606,9 +1606,11 @@ function isWarningProject(p) {
 }
 
 // ✅ โหลดแคตตาล็อกสินค้าจริงจาก Firestore (publish โดย app หลัก) — client-view อ่าน localStorage เครื่องตัวเองไม่ได้
+// ชื่อ doc เปลี่ยนจาก __catalog__ เป็น catalogPublic (2026-09-05) เพราะ Firestore สงวน id ที่ขึ้นต้น-ลงท้ายด้วย __
+// ทำให้ .get() เดิม throw ทุกครั้งแล้วตกไป fallback ด้านล่างเสมอ — ดู publishCatalogToClientView() ใน products.js
 async function loadCatalogFromFirebase() {
   try {
-    var doc = await db.collection('dealerUpdates').doc('__catalog__').get();
+    var doc = await db.collection('dealerUpdates').doc('catalogPublic').get();
     if (doc.exists) {
       var m = doc.data().models;
       if (Array.isArray(m) && m.length) {
