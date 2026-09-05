@@ -2900,6 +2900,7 @@ function publishDemoCatalog() {
         });
       return {
         id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges,
+        isAccessory: !!d.isAccessory, brand: d.brand || '',
         category: d.category || '', sku: d.sku || '', serialNumber: d.serialNumber || '', rentalDbNo: d.rentalDbNo || '',
         nbtcRegistered: !!d.nbtcRegistered, droneInsurance: !!d.droneInsurance, caatRegistered: !!d.caatRegistered
       };
@@ -2963,11 +2964,15 @@ function demoLoansByDemo(demoId) {
 
 var demoTrackerTab = 'list'; // 'list' | 'grid' | 'jobs' | 'calendar' | 'requests'
 var _demoActiveJobCount = 0; // จำนวนใบงานที่ยังยืมอยู่ — โชว์เป็นตัวเลขบนแท็บ 📄 ใบงาน
+var demoJobGroupBy = 'job'; // 'job' = จัดกลุ่มตามเลขที่ใบจอง | 'ref' = ตามเลขที่ใบเบิก
 var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
 var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
 var demoModelFilter = 'all';
 var demoCategoryFilter = 'all'; // 'all' | category id | '_none'
 var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเครื่องเช่า = ยืมได้จริง) | 'pending' | 'all'
+// ในไฟล์คลังจริง 58 จาก 71 รายการเป็นอุปกรณ์เสริม (แบต ใบพัด สายชาร์จ โรลอัพ) ถ้าเทรวมกับเครื่องหลัก
+// รายการจะจมไปด้วยของจุกจิก — ค่าเริ่มต้นจึงโชว์เฉพาะเครื่องหลัก
+var demoKindFilter = 'main'; // 'main' | 'accessory' | 'all'
 var demoSort = 'name_asc'; // 'name_asc' | 'status' | 'lent_longest' | 'newest'
 var demoOverdueFlt = false; // true = กรองเฉพาะเครื่องที่ยืมเกิน 30 วันยังไม่คืน
 var demoDueSoonFlt = false; // true = กรองเฉพาะเครื่องที่ใกล้ครบกำหนดคืน (≤3 วัน)
@@ -2995,7 +3000,7 @@ function demoHideHelp() { localStorage.setItem('v7_demoHelpHidden', '1'); render
 function demoShowHelp() { localStorage.removeItem('v7_demoHelpHidden'); render(); }
 
 function demoSetStatusFilter(s) { demoStatusFilter = s; render(); }
-function demoClearFilters() { demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoCategoryFilter = 'all'; demoReadyFilter = 'ready'; demoSearch = ''; render(); }
+function demoClearFilters() { demoKindFilter = 'main'; demoStatusFilter = 'all'; demoTypeFilter = 'all'; demoModelFilter = 'all'; demoCategoryFilter = 'all'; demoReadyFilter = 'ready'; demoSearch = ''; render(); }
 
 // ================================================================
 // จัดการหมวดหมู่ Demo — แก้ config เดียวกับที่ demo-staff.html เขียนผ่าน merge เข้า demoCatalogPublic
@@ -3295,7 +3300,7 @@ function exportDemoItemsExcel() {
       'หมวดหมู่': d.category || '', 'บินได้ (Y/N)': d.flyable !== false ? 'Y' : 'N',
       'สถานะ': d.status || 'available', 'กสทช (Y/N)': d.nbtcRegistered ? 'Y' : 'N',
       'ประกันภัย (Y/N)': d.droneInsurance ? 'Y' : 'N', 'CAAT (Y/N)': d.caatRegistered ? 'Y' : 'N',
-      'เลขใบงาน': d.jobNo || '', 'เลขอ้างอิง': d.refNo || '',
+      'เลขที่ใบจอง': d.jobNo || '', 'เลขที่ใบเบิก': d.refNo || '',
       'ผู้ยืม': d.borrower || '', 'วันที่ยืม': d.lentDate || '', 'กำหนดคืน': d.returnDate || '',
       'หมายเหตุ': d.note || ''
     };
@@ -3307,6 +3312,279 @@ function exportDemoItemsExcel() {
   XLSX.writeFile(wb, 'demo-equipment-' + _td() + '.xlsx');
   toast('📤 Export สำเร็จ');
 }
+// ================================================================
+// นำเข้าไฟล์ทะเบียนเครื่องเช่าจากคลัง (เครื่องเช่า.xlsx) — คนละฟอร์แมตกับ Export ของแอปเอง จึงแยกเป็นอีกปุ่ม
+// หัวคอลัมน์จริง: ลำดับ | Name | status | กำหนดส่ง | กำหนดรับคืน | เลขที่ใบจอง | หมายเหตุ | Category |
+//                 หมายเลขเครื่องเช่า | Name | Brand | SiS Part | Serial No.
+// จับคู่กลับเข้าเครื่องเดิมด้วย "หมายเลขเครื่องเช่า" ซึ่งเป็นตัวชี้ตัวตนที่ไม่ซ้ำในไฟล์คลัง (ยืนยันแล้วกับไฟล์จริง
+// 71 แถว ไม่ซ้ำเลย) — ไม่ใช้ Serial เพราะอุปกรณ์เสริมหลายชิ้นเขียนว่า "No Serial" เหมือนกันหมด
+// ================================================================
+var _demoImportPreview = null;
+
+// Export ให้หน้าตาเหมือนไฟล์ทะเบียนคลัง (คอลัมน์เดิม ลำดับเดิม) เพื่อเอาไปเทียบกับระบบคลังได้ตรงๆ
+// วันที่ส่งออกเป็นข้อความ dd/mm/yyyy ไม่ใช่ serial เพราะอ่านง่ายกว่าและ import กลับก็รองรับทั้งสองแบบ
+function exportDemoRentalSheet() {
+  var items = getDemoItems().filter(function(d) { return (d.rentalDbNo || '').trim(); });
+  items.sort(function(a, b) { return (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true }); });
+  var data = items.map(function(d, i) {
+    var eff = getDemoEffectiveStatus(d);
+    return {
+      'ลำดับ': i + 1,
+      'Name': d.name || '',
+      'status': (eff === 'lent' || eff === 'reserved') ? 'จอง' : 'ว่าง',
+      'กำหนดส่ง': d.sendDueDate || d.lentDate || '',
+      'กำหนดรับคืน': d.returnDate || '',
+      'เลขที่ใบจอง': d.jobNo || '',
+      'หมายเหตุ': d.note || '',
+      'Category': d.isAccessory ? 'Drone Accessories' : 'Drone',
+      'หมายเลขเครื่องเช่า': d.rentalDbNo || '',
+      'Brand': d.brand || '',
+      'SiS Part': d.sku || '',
+      'Serial No.': d.serialNumber || ''
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:6},{wch:38},{wch:8},{wch:12},{wch:12},{wch:12},{wch:26},{wch:18},{wch:16},{wch:8},{wch:22},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'เครื่องเช่า');
+  XLSX.writeFile(wb, 'เครื่องเช่า-จากแอป-' + _td().replace(/\//g, '-') + '.xlsx');
+  toast('📤 Export รูปแบบไฟล์คลังแล้ว (' + data.length + ' เครื่อง)');
+}
+
+// วันที่ในไฟล์ Excel มาเป็นเลขลำดับวัน (serial) เช่น 46244 = 10 ส.ค. 2026 — ต้องแปลงเอง เพราะอ่านแบบ raw
+// ฐานคือ 1899-12-30 (ชดเชยบั๊กปี 1900 ของ Excel ที่นับ 29 ก.พ. 1900 ซึ่งไม่มีจริง)
+function _xlSerialToThaiDate(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  var n = Number(v);
+  if (!isFinite(n) || n <= 0) {
+    // เผื่อบางแถวเป็นข้อความวันที่อยู่แล้ว ปล่อยผ่านไปให้ ftParseDate จัดการต่อ
+    var s = String(v).trim();
+    return s;
+  }
+  var d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+  return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear();
+}
+function _pickCol(row, names) {
+  for (var i = 0; i < names.length; i++) {
+    if (row[names[i]] !== undefined && String(row[names[i]]).trim() !== '') return String(row[names[i]]).trim();
+  }
+  return '';
+}
+// หมวดหมู่ในไฟล์คลังเป็น Drone / Drone Accessories — แปลงเป็น id หมวดหมู่ของแอป และเดา "เครื่องหลัก vs อุปกรณ์เสริม"
+function _mapWarehouseCategory(catText) {
+  var c = String(catText || '').trim().toLowerCase();
+  if (c.indexOf('accessor') !== -1) return { category: 'accessory', isAccessory: true };
+  if (c.indexOf('drone') !== -1) return { category: 'drone', isAccessory: false };
+  if (c.indexOf('dock') !== -1) return { category: 'dock', isAccessory: false };
+  return { category: '', isAccessory: false };
+}
+
+function importDemoRentalSheet() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var wb = XLSX.read(ev.target.result, { type: 'binary' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+        if (!rows.length) { alert('ไม่พบข้อมูลในไฟล์'); return; }
+
+        var items = getDemoItems();
+        var byRental = {};
+        items.forEach(function(d) {
+          var r = (d.rentalDbNo || '').trim();
+          if (r) byRental[r] = d;
+        });
+
+        var plan = { update: [], create: [], skipped: 0, rows: rows.length };
+        var seenRental = {};
+        rows.forEach(function(r) {
+          var rental = _pickCol(r, ['หมายเลขเครื่องเช่า']);
+          var name = _pickCol(r, ['Name', 'Name_1', 'ชื่อ']);
+          if (!rental || !name) { plan.skipped++; return; }
+          if (seenRental[rental]) { plan.skipped++; return; } // กันไฟล์เองมีเลขซ้ำ
+          seenRental[rental] = true;
+
+          var catInfo = _mapWarehouseCategory(_pickCol(r, ['Category']));
+          var statusTxt = _pickCol(r, ['status', 'สถานะ']);
+          var sendDue = _xlSerialToThaiDate(r['กำหนดส่ง']);
+          var retDue = _xlSerialToThaiDate(r['กำหนดรับคืน']);
+          var note = _pickCol(r, ['หมายเหตุ']);
+          var slipMatch = note.match(/Fix-\d+/i);
+
+          var rec = {
+            rentalDbNo: rental,
+            name: name,
+            model: name,
+            brand: _pickCol(r, ['Brand']),
+            sku: _pickCol(r, ['SiS Part']),
+            serialNumber: _pickCol(r, ['Serial No.', 'Serial No', 'Serial']),
+            category: catInfo.category,
+            isAccessory: catInfo.isAccessory,
+            jobNo: _pickCol(r, ['เลขที่ใบจอง']),
+            refNo: slipMatch ? slipMatch[0] : '',
+            note: note,
+            sendDueDate: sendDue,
+            returnDate: retDue,
+            _statusTxt: statusTxt
+          };
+
+          // "จอง" + กำหนดส่งยังไม่ถึง = จองล่วงหน้า (reserved) / ถึงแล้ว = ออกไปอยู่กับลูกค้า (lent)
+          if (statusTxt.indexOf('จอง') !== -1) {
+            var sd = ftParseDate(sendDue);
+            var today = new Date(); today.setHours(0, 0, 0, 0);
+            rec.status = 'lent';
+            rec.lentDate = sendDue;
+            if (sd && sd > today) rec.status = 'reserved';
+          } else {
+            rec.status = 'available';
+            rec.lentDate = '';
+            rec.returnDate = '';
+            rec.jobNo = '';
+          }
+
+          var existing = byRental[rental];
+          if (existing) { rec._id = existing.id; rec._oldName = existing.name; plan.update.push(rec); }
+          else plan.create.push(rec);
+        });
+
+        _demoImportPreview = plan;
+        showDemoImportPreviewM();
+      } catch (err) {
+        alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+  input.click();
+}
+
+// แสดงตัวอย่างก่อนเขียนจริงเสมอ — ไฟล์คลังทับสถานะ/วันที่ของทุกเครื่องที่ตรงเลข ถ้าพลาดไฟล์ผิดจะเสียหายทั้งชุด
+function showDemoImportPreviewM() {
+  var p = _demoImportPreview;
+  if (!p) return;
+  var h = '<div>';
+  h += '<div class="hint" style="margin-bottom:10px">อ่านไฟล์ได้ ' + p.rows + ' แถว — ตรวจสรุปด้านล่างก่อนกดนำเข้า ระบบจับคู่ด้วย <b>หมายเลขเครื่องเช่า</b></div>';
+  h += '<div class="sr" style="margin-bottom:12px">';
+  h += '<div class="sc"><div class="sn c2">' + p.create.length + '</div><div class="sl">➕ เพิ่มใหม่</div></div>';
+  h += '<div class="sc"><div class="sn c1">' + p.update.length + '</div><div class="sl">🔄 อัปเดตของเดิม</div></div>';
+  h += '<div class="sc"><div class="sn c3">' + p.skipped + '</div><div class="sl">ข้าม (ไม่มีเลข/ชื่อ)</div></div>';
+  h += '</div>';
+
+  var lent = p.create.concat(p.update).filter(function(r) { return r.status === 'lent'; }).length;
+  var resv = p.create.concat(p.update).filter(function(r) { return r.status === 'reserved'; }).length;
+  var avail = p.create.concat(p.update).filter(function(r) { return r.status === 'available'; }).length;
+  var acc = p.create.concat(p.update).filter(function(r) { return r.isAccessory; }).length;
+  h += '<div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.9">';
+  h += 'หลังนำเข้าจะได้: 📤 ถูกยืมอยู่ ' + lent + ' · 📅 จองล่วงหน้า ' + resv + ' · ✅ ว่าง ' + avail + '<br>';
+  h += 'ในนี้เป็น <b>อุปกรณ์เสริม ' + acc + '</b> รายการ (จะถูกซ่อนจากหน้าขอยืมของลูกค้าโดยอัตโนมัติ)';
+  h += '</div>';
+
+  if (p.update.length) {
+    var renamed = p.update.filter(function(r) { return r._oldName && r._oldName !== r.name; });
+    if (renamed.length) {
+      h += '<div style="background:#f59e0b18;border-radius:8px;padding:9px 11px;font-size:12px;margin-bottom:10px">⚠️ มี ' + renamed.length + ' เครื่องที่ชื่อในไฟล์ต่างจากในระบบ จะถูกเปลี่ยนตามไฟล์<br>' +
+        renamed.slice(0, 3).map(function(r) { return sanitize(r._oldName) + ' → ' + sanitize(r.name); }).join('<br>') + (renamed.length > 3 ? '<br>…' : '') + '</div>';
+    }
+  }
+  h += '<div style="max-height:34vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:11.5px"><thead><tr>';
+  ['', 'เลขเช่า', 'ชื่อ', 'สถานะ', 'ใบจอง', 'คืน'].forEach(function(t) {
+    h += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0">' + t + '</th>';
+  });
+  h += '</tr></thead><tbody>';
+  p.create.concat(p.update).slice(0, 200).forEach(function(r) {
+    h += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + (r._id ? '🔄' : '➕') + '</td>' +
+      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.rentalDbNo) + '</td>' +
+      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.name) + (r.isAccessory ? ' <span style="color:var(--text3)">(เสริม)</span>' : '') + '</td>' +
+      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + (DEMO_STATUS_META[r.status] ? DEMO_STATUS_META[r.status].label : r.status) + '</td>' +
+      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.jobNo || '—') + '</td>' +
+      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.returnDate || '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="fm-actions" style="margin-top:12px">';
+  h += '<button class="btn bp" onclick="runDemoRentalImport()">📥 นำเข้าตามนี้</button>';
+  h += '<button class="btn" onclick="closeMForce()">ยกเลิก</button>';
+  h += '</div></div>';
+  openM('📥 ตรวจก่อนนำเข้าไฟล์คลัง', h);
+  setMWide(760);
+}
+
+function runDemoRentalImport() {
+  var p = _demoImportPreview;
+  if (!p) return;
+  if (!confirm('นำเข้า: เพิ่มใหม่ ' + p.create.length + ' เครื่อง, อัปเดต ' + p.update.length + ' เครื่อง\n\nสถานะ/วันที่/เลขใบจอง ของเครื่องที่ตรงเลขเช่าจะถูกทับตามไฟล์ ยืนยัน?')) return;
+  var items = getDemoItems();
+  var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+
+  function apply(target, r) {
+    target.name = r.name;
+    target.model = r.model;
+    target.brand = r.brand;
+    target.sku = r.sku;
+    target.serialNumber = r.serialNumber;
+    target.rentalDbNo = r.rentalDbNo;
+    if (r.category) target.category = r.category;
+    target.isAccessory = r.isAccessory;
+    target.jobNo = r.jobNo;
+    target.refNo = r.refNo;
+    target.note = r.note;
+    target.sendDueDate = r.sendDueDate;
+    target.status = r.status;
+    target.lentDate = r.lentDate;
+    target.returnDate = r.returnDate;
+    if (target.flyable === undefined) target.flyable = !r.isAccessory;
+  }
+  p.update.forEach(function(r) { if (byId[r._id]) { apply(byId[r._id], r); r._id = byId[r._id].id; } });
+  p.create.forEach(function(r) {
+    var rec = { id: 'dm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), dealerId: '', borrower: '' };
+    apply(rec, r);
+    items.push(rec);
+    r._id = rec.id;
+  });
+  saveDemoItems(items);
+
+  // สร้าง/ปรับ record การยืมให้ตรงกับไฟล์ด้วย — ไม่ใช่แค่ตั้งสถานะบนตัวเครื่อง เพราะแท็บ 📄 ใบงาน และปุ่ม
+  // "คืนทั้งใบ" อ่านจาก v7_demoLoans ถ้าไม่สร้าง ใบจองที่ import มาจะไม่โผล่และกดคืนเป็นชุดไม่ได้
+  var loans = getDemoLoans();
+  var activeByDemo = {};
+  loans.forEach(function(l) { if (l.status === 'active') activeByDemo[l.demoId] = l; });
+  var loanAdded = 0, loanClosed = 0;
+  p.create.concat(p.update).forEach(function(r) {
+    var onLoan = (r.status === 'lent' || r.status === 'reserved');
+    var cur = activeByDemo[r._id];
+    if (onLoan) {
+      if (cur) {
+        cur.jobNo = r.jobNo; cur.refNo = r.refNo;
+        cur.lentDate = r.lentDate; cur.returnDate = r.returnDate;
+      } else {
+        loans.push({
+          id: gid(), demoId: r._id, demoName: r.name,
+          jobNo: r.jobNo, refNo: r.refNo, dealerId: '', borrower: '', purpose: '',
+          lentDate: r.lentDate, returnDate: r.returnDate, actualReturnDate: '',
+          note: r.note || '', status: 'active', created: _nw()
+        });
+        loanAdded++;
+      }
+    } else if (cur) {
+      // ไฟล์บอกว่าว่างแล้ว แต่ในระบบยังค้างยืมอยู่ = ของถูกคืนไปแล้วในระบบคลัง ปิดใบให้ตรงกัน
+      cur.status = 'returned';
+      cur.actualReturnDate = _td();
+      loanClosed++;
+    }
+  });
+  saveDemoLoans(loans);
+  _demoImportPreview = null;
+  toast('✅ นำเข้าแล้ว (เพิ่ม ' + p.create.length + ', อัปเดต ' + p.update.length + ', เปิดใบยืม ' + loanAdded + (loanClosed ? ', ปิดใบ ' + loanClosed : '') + ')');
+  closeMForce();
+  render();
+}
+
 function importDemoItemsExcel() {
   var input = document.createElement('input');
   input.type = 'file';
@@ -3340,8 +3618,8 @@ function importDemoItemsExcel() {
           rec.nbtcRegistered = String(r['กสทช (Y/N)'] || '').trim().toUpperCase() === 'Y';
           rec.droneInsurance = String(r['ประกันภัย (Y/N)'] || '').trim().toUpperCase() === 'Y';
           rec.caatRegistered = String(r['CAAT (Y/N)'] || '').trim().toUpperCase() === 'Y';
-          rec.jobNo = String(r['เลขใบงาน'] || rec.jobNo || '').trim();
-          rec.refNo = String(r['เลขอ้างอิง'] || rec.refNo || '').trim();
+          rec.jobNo = String(r['เลขที่ใบจอง'] || rec.jobNo || '').trim();
+          rec.refNo = String(r['เลขที่ใบเบิก'] || rec.refNo || '').trim();
           rec.borrower = String(r['ผู้ยืม'] || rec.borrower || '').trim();
           rec.lentDate = String(r['วันที่ยืม'] || rec.lentDate || '').trim();
           rec.returnDate = String(r['กำหนดคืน'] || rec.returnDate || '').trim();
@@ -3381,28 +3659,36 @@ function rDemoTracker(el) {
   // loadCatalog() ใน demo-request.html) แต่ยังกดชิปเข้าไปดู/แก้ไขได้ ไม่ใช่ซ่อนหายไปเฉยๆ
   var readyItems = allItems.filter(function(d) { return !!(d.rentalDbNo || '').trim(); });
   var pendingRentalItems = allItems.filter(function(d) { return !(d.rentalDbNo || '').trim(); });
-  var items = demoReadyFilter === 'pending' ? pendingRentalItems
+  var scopedByRental = demoReadyFilter === 'pending' ? pendingRentalItems
             : demoReadyFilter === 'all' ? allItems
             : readyItems;
+  var mainCount = scopedByRental.filter(function(d) { return !d.isAccessory; }).length;
+  var accCount = scopedByRental.length - mainCount;
+  var items = demoKindFilter === 'accessory' ? scopedByRental.filter(function(d) { return !!d.isAccessory; })
+            : demoKindFilter === 'all' ? scopedByRental
+            : scopedByRental.filter(function(d) { return !d.isAccessory; });
 
   var now = new Date();
   var counts = { available: 0, reserved: 0, lent: 0, unavailable: 0, lost: 0 };
   items.forEach(function(d) { counts[getDemoEffectiveStatus(d)]++; });
   _demoActiveJobCount = demoActiveJobGroups().length;
 
-  // นับเครื่องที่ยืมเกิน 30 วันยังไม่คืน — ใช้ตรรกะเดียวกับ isOverdue ต่อการ์ดด้านล่าง
-  // + นับเครื่องใกล้ครบกำหนดคืน (returnDate ภายใน 3 วันข้างหน้า รวมที่เลยกำหนดแล้วด้วย) ให้เตือนก่อนจะเกิน 30 วัน
+  // "เกินกำหนดคืน" = เลยวันกำหนดคืนจริงที่ระบุไว้ ไม่ใช่แค่ยืมนานเกิน 30 วัน — ไฟล์ทะเบียนคลังมีวันกำหนดคืน
+  // ของทุกใบจองอยู่แล้ว การเทียบกับวันจริงตรงกว่ามาก (เครื่องที่ยืมยาว 6 เดือนตามสัญญาไม่ควรถูกนับว่าเกิน
+  // ส่วนเครื่องที่กำหนดคืนอาทิตย์เดียวแต่เลยมา 3 วันควรถูกนับ) เครื่องที่ไม่ได้ระบุกำหนดคืนถึงจะใช้เกณฑ์ 30 วันเดิม
   var overdueCount = 0, dueSoonCount = 0;
   items.forEach(function(d) {
     var eff = getDemoEffectiveStatus(d);
     if (eff !== 'lent') return;
-    var lentDate = ftParseDate(d.lentDate);
-    var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
-    if (daysBorrowed > 30) overdueCount++;
     var retDate = ftParseDate(d.returnDate);
     if (retDate) {
       var daysToReturn = Math.ceil((retDate - now) / 86400000);
-      if (daysToReturn <= 3) dueSoonCount++;
+      if (daysToReturn < 0) overdueCount++;
+      else if (daysToReturn <= 3) dueSoonCount++;
+    } else {
+      var lentDate = ftParseDate(d.lentDate);
+      var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
+      if (daysBorrowed > 30) overdueCount++;
     }
   });
 
@@ -3434,8 +3720,10 @@ function rDemoTracker(el) {
   if (pendingRentalItems.length) h += '<button class="btn bo" onclick="showDemoBulkRentalM()">📋 กรอกเลขเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
   var _missingModel = allItems.filter(function(d) { return !(d.model || '').trim(); }).length;
   if (_missingModel) h += '<button class="btn bo" onclick="showDemoBulkModelM()">📦 กรอก Model (' + _missingModel + ')</button>';
-  h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export</button>';
-  h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import</button>';
+  h += '<button class="btn bp" onclick="importDemoRentalSheet()">🏭 นำเข้าไฟล์คลัง</button>';
+  h += '<button class="btn bo" onclick="exportDemoRentalSheet()">📤 Export (รูปแบบคลัง)</button>';
+  h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export (เต็ม)</button>';
+  h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import (เต็ม)</button>';
   if (localStorage.getItem('v7_demoHelpHidden') === '1') h += '<button class="btn bo" onclick="demoShowHelp()">❓ วิธีใช้</button>';
   h += '</div>';
 
@@ -3445,8 +3733,9 @@ function rDemoTracker(el) {
   allItems.forEach(function(d) {
     var v = (d.rentalDbNo || '').trim();
     if (v) { if (_rentalSeen[v]) _dupRentals[v] = 1; else _rentalSeen[v] = 1; }
+    // ข้าม "No Serial" ฯลฯ ด้วยเหตุผลเดียวกับใน demoFindDupGroups() — เป็นข้อความแทนความว่าง ไม่ใช่ตัวระบุ
     var s = (d.serialNumber || '').trim();
-    if (s) { if (_snSeen[s]) _dupSns[s] = 1; else _snSeen[s] = 1; }
+    if (s && !_isPlaceholderSerial(s)) { if (_snSeen[s]) _dupSns[s] = 1; else _snSeen[s] = 1; }
   });
   var _dupNums = Object.keys(_dupRentals);
   var _dupSnList = Object.keys(_dupSns);
@@ -3471,7 +3760,7 @@ function rDemoTracker(el) {
     h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
     if (overdueCount) {
       h += '<div class="demo-duesoon-box" onclick="demoOverdueFlt=!demoOverdueFlt;demoDueSoonFlt=false;demoStatusFilter=demoOverdueFlt?\'lent\':demoStatusFilter;render()" style="background:' + (demoOverdueFlt ? '#ef444418' : 'var(--bg2)') + ';border:1px solid ' + (demoOverdueFlt ? '#ef4444' : 'var(--border)') + '">';
-      h += '<div style="font-size:11px;color:#ef4444">⚠️ เครื่องเกินกำหนดคืน (&gt;30 วัน)</div>';
+      h += '<div style="font-size:11px;color:#ef4444">⚠️ เลยกำหนดคืนแล้ว</div>';
       h += '<div style="font-size:20px;font-weight:700;color:#ef4444">' + overdueCount + ' เครื่อง</div>';
       h += '</div>';
     }
@@ -3481,6 +3770,16 @@ function rDemoTracker(el) {
       h += '<div style="font-size:20px;font-weight:700;color:#f59e0b">' + dueSoonCount + ' เครื่อง</div>';
       h += '</div>';
     }
+    h += '</div>';
+  }
+
+  // เครื่องหลัก vs อุปกรณ์เสริม — โชว์เฉพาะตอนมีอุปกรณ์เสริมอยู่จริง (ข้อมูลที่ยังไม่ได้ import จะไม่มี)
+  if (demoTrackerTab === 'list' && accCount) {
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+    h += '<span style="font-size:11px;color:var(--text2);margin-right:2px">ประเภท:</span>';
+    h += '<button class="demo-filter-chip ' + (demoKindFilter === 'main' ? 'act' : '') + '" onclick="demoKindFilter=\'main\';render()">🚁 เครื่องหลัก (' + mainCount + ')</button>';
+    h += '<button class="demo-filter-chip ' + (demoKindFilter === 'accessory' ? 'act' : '') + '" onclick="demoKindFilter=\'accessory\';render()">🔩 อุปกรณ์เสริม (' + accCount + ')</button>';
+    h += '<button class="demo-filter-chip ' + (demoKindFilter === 'all' ? 'act' : '') + '" onclick="demoKindFilter=\'all\';render()">ทั้งหมด (' + scopedByRental.length + ')</button>';
     h += '</div>';
   }
 
@@ -3596,16 +3895,24 @@ function rDemoTracker(el) {
     if (demoModelFilter !== 'all' && d.name !== demoModelFilter) return false;
     if (demoCategoryFilter === '_none' && d.category) return false;
     if (demoCategoryFilter !== 'all' && demoCategoryFilter !== '_none' && d.category !== demoCategoryFilter) return false;
+    // เกณฑ์เดียวกับกล่องนับและการ์ด: มีกำหนดคืนใช้วันจริง / ไม่มีค่อยใช้ 30 วัน
     if (demoOverdueFlt) {
       if (getDemoEffectiveStatus(d) !== 'lent') return false;
-      var lentDate2 = ftParseDate(d.lentDate);
-      var daysBorrowed2 = lentDate2 ? Math.floor((now - lentDate2) / 86400000) : 0;
-      if (daysBorrowed2 <= 30) return false;
+      var retD0 = ftParseDate(d.returnDate);
+      if (retD0) {
+        if (Math.ceil((retD0 - now) / 86400000) >= 0) return false;
+      } else {
+        var lentDate2 = ftParseDate(d.lentDate);
+        var daysBorrowed2 = lentDate2 ? Math.floor((now - lentDate2) / 86400000) : 0;
+        if (daysBorrowed2 <= 30) return false;
+      }
     }
     if (demoDueSoonFlt) {
       if (getDemoEffectiveStatus(d) !== 'lent') return false;
       var retD = ftParseDate(d.returnDate);
-      if (!retD || Math.ceil((retD - now) / 86400000) > 3) return false;
+      if (!retD) return false;
+      var dtr = Math.ceil((retD - now) / 86400000);
+      if (dtr < 0 || dtr > 3) return false;
     }
     if (demoDupRentalFlt && !_dupRentals[(d.rentalDbNo || '').trim()] && !_dupSns[(d.serialNumber || '').trim()]) return false;
     if (demoSearch) {
@@ -3685,10 +3992,11 @@ function demoCardHtml(d, now, dupRentals) {
   var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
   var lentDate = ftParseDate(d.lentDate);
   var daysBorrowed = lentDate ? Math.floor((now - lentDate) / 86400000) : 0;
-  var isOverdue = eff === 'lent' && daysBorrowed > 30;
+  // ใช้เกณฑ์เดียวกับกล่องนับด้านบน: มีกำหนดคืน = เทียบวันจริง / ไม่มีกำหนดคืน = ใช้เกณฑ์ยืมเกิน 30 วัน
   var retDate = ftParseDate(d.returnDate);
   var daysToReturn = retDate ? Math.ceil((retDate - now) / 86400000) : null;
-  var isDueSoon = eff === 'lent' && daysToReturn !== null && daysToReturn <= 3;
+  var isOverdue = eff === 'lent' && (daysToReturn !== null ? daysToReturn < 0 : daysBorrowed > 30);
+  var isDueSoon = eff === 'lent' && daysToReturn !== null && daysToReturn >= 0 && daysToReturn <= 3;
   var mColor = demoModelColor(d.name);
   var cat = (getConfig().demoCategories || []).filter(function(c) { return c.id === d.category; })[0];
 
@@ -3718,8 +4026,8 @@ function demoCardHtml(d, now, dupRentals) {
   }
   else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
   if (eff === 'lent' || eff === 'reserved') {
-    if ((d.jobNo || '').trim()) h += '<div>📄 ใบงาน: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
-    if ((d.refNo || '').trim()) h += '<div>🔖 เลขอ้างอิง: ' + qcopyHtml(d.refNo) + '</div>';
+    if ((d.jobNo || '').trim()) h += '<div>📄 ใบจอง: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
+    if ((d.refNo || '').trim()) h += '<div>🔖 เลขที่ใบเบิก: ' + qcopyHtml(d.refNo) + '</div>';
     h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
     h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '') + '</div>';
@@ -3739,7 +4047,7 @@ function demoCardHtml(d, now, dupRentals) {
   if (eff === 'unavailable') h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ พร้อมใช้</button>';
   h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
   if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')">🗑️</button>';
-  if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เกิน 30 วัน!</span>';
+  if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เลยกำหนดคืน!</span>';
   h += '</div></div>';
   return h;
 }
@@ -3752,6 +4060,12 @@ function demoCardHtml(d, now, dupRentals) {
 // ⚠️ ไม่นับเครื่องที่ข้อมูลว่างเหมือนกันหมด (ชื่อ+SKU เดียวกัน แต่ S/N ว่าง) เป็นตัวซ้ำ เพราะมันอาจเป็นเครื่อง
 // จริงคนละตัวที่ยังไม่ได้กรอกข้อมูล — ถ้าเหมาลบจะทำให้ของจริงในสต็อกหายไปจากระบบ ต้องให้คนตัดสินใจเอง
 // ================================================================
+// ค่าที่เขียนไว้แทน "ไม่มีซีเรียล" — ไม่ใช่ซีเรียลจริง จึงห้ามเอาไปนับซ้ำหรือใช้ระบุตัวตน
+function _isPlaceholderSerial(v) {
+  var s = String(v || '').trim().toLowerCase().replace(/[\s._-]/g, '');
+  return !s || s === 'noserial' || s === 'na' || s === 'n/a' || s === 'none' || s === 'ไม่มี' || s === 'ไม่มีซีเรียล';
+}
+
 function demoFindDupGroups() {
   var items = getDemoItems();
   var loans = getDemoLoans();
@@ -3766,6 +4080,10 @@ function demoFindDupGroups() {
     items.forEach(function(d) {
       var v = (d[field] || '').trim();
       if (!v) return;
+      // อุปกรณ์เสริมหลายชิ้น (แบต ใบพัด สายชาร์จ ผ้าปูโต๊ะ) ไม่มีซีเรียลจริง ไฟล์คลังเขียนว่า "No Serial"
+      // เหมือนกันหมด ถ้านับเป็นค่าซ้ำจะกลายเป็น "S/N ซ้ำ 8 เครื่อง" แล้วเสนอให้ลบของจริงทิ้ง — ค่าพวกนี้
+      // เป็นข้อความแทนความว่าง ไม่ใช่ตัวระบุตัวตน ตัวชี้ตัวตนจริงคือหมายเลขเครื่องเช่าซึ่งไม่ซ้ำอยู่แล้ว
+      if (field === 'serialNumber' && _isPlaceholderSerial(v)) return;
       (by[v] = by[v] || []).push(d);
     });
     Object.keys(by).forEach(function(v) {
@@ -3776,8 +4094,8 @@ function demoFindDupGroups() {
       groups.push({ ids: ids, field: field, label: labelTh, value: v, units: by[v] });
     });
   }
-  collect('serialNumber', 'S/N ซ้ำ');
   collect('rentalDbNo', 'เลขเครื่องเช่าซ้ำ');
+  collect('serialNumber', 'S/N ซ้ำ');
 
   // เลือก "ตัวที่ควรเก็บ" ให้เป็นค่าเริ่มต้น: กำลังถูกยืมอยู่ > มีประวัติยืมมากสุด > ข้อมูลครบสุด
   // (เก็บตัวที่มีประวัติไว้ เพราะลบตัวนั้นทิ้งจะทำให้ประวัติการยืมชี้ไปยังเครื่องที่ไม่มีอยู่แล้ว)
@@ -3806,7 +4124,10 @@ function demoFindBlankUnits() {
   loans.forEach(function(l) { used[l.demoId] = (used[l.demoId] || 0) + 1; });
   var blanks = [], keptWithHistory = [];
   getDemoItems().forEach(function(d) {
-    if ((d.serialNumber || '').trim() || (d.rentalDbNo || '').trim()) return;
+    // "No Serial" ไม่นับว่ามีข้อมูลระบุตัวตน (อุปกรณ์เสริมหลายชิ้นเป็นแบบนี้โดยธรรมชาติ) ตัวชี้ตัวตนจริง
+    // คือหมายเลขเครื่องเช่า — เครื่องที่มีเลขเช่าจึงไม่ถูกนับเป็นแถวเปล่าไม่ว่าซีเรียลจะเป็นอะไร
+    if ((d.rentalDbNo || '').trim()) return;
+    if ((d.serialNumber || '').trim() && !_isPlaceholderSerial(d.serialNumber)) return;
     if (used[d.id]) { keptWithHistory.push(d); return; }
     blanks.push(d);
   });
@@ -3974,6 +4295,7 @@ function demoGridRows() {
 function _demoGridVal(d, f) {
   if (_demoGridDraft[d.id] && _demoGridDraft[d.id][f] !== undefined) return _demoGridDraft[d.id][f];
   if (f === 'flyable') return d.flyable !== false ? '1' : '0';
+  if (f === 'isAccessory') return d.isAccessory ? '1' : '0';
   return d[f] || '';
 }
 function _demoGridIsDirty(d, f) {
@@ -4002,6 +4324,7 @@ function renderDemoGridTab() {
     { f: 'serialNumber', label: 'Serial Number', w: 150 },
     { f: 'rentalDbNo', label: 'เลขเครื่องเช่า', w: 120 },
     { f: 'category', label: 'หมวดหมู่', w: 130, type: 'cat' },
+    { f: 'isAccessory', label: 'เครื่องหลัก/เสริม', w: 130, type: 'kind' },
     { f: 'flyable', label: 'ประเภท', w: 130, type: 'fly' },
     { f: 'status', label: 'สถานะ', w: 130, type: 'status' },
     { f: 'note', label: 'หมายเหตุ', w: 200 }
@@ -4024,6 +4347,12 @@ function renderDemoGridTab() {
         cats.forEach(function(ct) {
           h += '<option value="' + sanitize(ct.id) + '"' + (_demoGridVal(d, 'category') === ct.id ? ' selected' : '') + '>' + (ct.icon || '') + ' ' + sanitize(ct.label) + '</option>';
         });
+        h += '</select>';
+      } else if (c.type === 'kind') {
+        var kv = _demoGridVal(d, 'isAccessory');
+        h += '<select data-id="' + d.id + '" data-f="isAccessory" data-r="' + ri + '" data-c="' + ci + '" onchange="demoGridEdit(this)" onkeydown="demoGridKey(event,this)">';
+        h += '<option value="0"' + (kv !== '1' ? ' selected' : '') + '>🚁 เครื่องหลัก</option>';
+        h += '<option value="1"' + (kv === '1' ? ' selected' : '') + '>🔩 อุปกรณ์เสริม</option>';
         h += '</select>';
       } else if (c.type === 'fly') {
         var fv = _demoGridVal(d, 'flyable');
@@ -4135,6 +4464,10 @@ function saveDemoGrid() {
         var nv = v === '1';
         if ((d.flyable !== false) === nv) return;
         d.flyable = nv;
+      } else if (f === 'isAccessory') {
+        var av = v === '1';
+        if (!!d.isAccessory === av) return;
+        d.isAccessory = av;
       } else {
         var sv = (v || '').trim();
         if ((d[f] || '') === sv) return;
@@ -4161,10 +4494,13 @@ function saveDemoGrid() {
 function demoActiveJobGroups() {
   var loans = getDemoLoans().filter(function(l) { return l.status === 'active'; });
   var groups = {}, order = [];
+  // จัดกลุ่มตามใบจอง หรือ ใบเบิก ก็ได้ — สองอันนี้จัดกลุ่มไม่ตรงกัน (ใบเบิกหนึ่งใบอาจมีของหลายใบจอง)
+  // ในไฟล์คลังจริง ใบจอง 29179 มี 13 เครื่อง ส่วนใบเบิก Fix-019713 มี 22 เครื่อง คนละมิติกัน
+  var byField = demoJobGroupBy === 'ref' ? 'refNo' : 'jobNo';
   loans.forEach(function(l) {
-    var key = (l.jobNo || '').trim() || '_none';
-    if (!groups[key]) { groups[key] = { jobNo: key === '_none' ? '' : (l.jobNo || '').trim(), refNo: l.refNo || '', loans: [] }; order.push(key); }
-    if (!groups[key].refNo && l.refNo) groups[key].refNo = l.refNo;
+    var key = (l[byField] || '').trim() || '_none';
+    if (!groups[key]) { groups[key] = { jobNo: key === '_none' ? '' : (l[byField] || '').trim(), refNo: byField === 'jobNo' ? (l.refNo || '') : (l.jobNo || ''), loans: [] }; order.push(key); }
+    if (!groups[key].refNo) groups[key].refNo = byField === 'jobNo' ? (l.refNo || '') : (l.jobNo || '');
     groups[key].loans.push(l);
   });
   // ใบที่ครบกำหนดคืนเร็วสุดขึ้นก่อน (ใบไม่มีกำหนดคืนไปท้าย) ส่วน "ไม่ระบุเลขใบงาน" ปักไว้ท้ายสุดเสมอ
@@ -4191,7 +4527,12 @@ function renderDemoJobsTab() {
   var items = getDemoItems();
   var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
   var h = '';
-  h += '<div class="hint" style="margin-bottom:10px">ติ๊กเลือกเฉพาะเครื่องที่จะคืน แล้วกด "คืนที่เลือก" หรือกด "คืนทั้งใบ" เพื่อคืนทุกเครื่องในใบงานนั้นทีเดียว</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<span style="font-size:11px;color:var(--text2)">จัดกลุ่มตาม:</span>';
+  h += '<button class="demo-filter-chip ' + (demoJobGroupBy === 'job' ? 'act' : '') + '" onclick="demoJobGroupBy=\'job\';render()">📄 เลขที่ใบจอง</button>';
+  h += '<button class="demo-filter-chip ' + (demoJobGroupBy === 'ref' ? 'act' : '') + '" onclick="demoJobGroupBy=\'ref\';render()">🔖 เลขที่ใบเบิก</button>';
+  h += '</div>';
+  h += '<div class="hint" style="margin-bottom:10px">ติ๊กเลือกเฉพาะเครื่องที่จะคืน แล้วกด "คืนที่เลือก" หรือกด "คืนทั้งใบ" เพื่อคืนทุกเครื่องในใบนั้นทีเดียว</div>';
 
   groups.forEach(function(g, gi) {
     var isNone = !g.jobNo;
@@ -4554,9 +4895,9 @@ function rDemoDetail(el) {
     h += '<div class="card"><h2>' + (eff === 'reserved' ? '📅 การจองปัจจุบัน' : '📤 กำลังถูกยืมอยู่') + '</h2>';
     h += '<div class="demo-info">';
     if ((d.jobNo || '').trim()) {
-      h += '<div>📄 เลขใบงาน: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="demoTrackerTab=\'jobs\';go(\'demoTracker\')">ดูทั้งใบงาน →</button></div>';
+      h += '<div>📄 เลขที่ใบจอง: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="demoTrackerTab=\'jobs\';go(\'demoTracker\')">ดูทั้งใบงาน →</button></div>';
     }
-    if ((d.refNo || '').trim()) h += '<div>🔖 เลขอ้างอิง: ' + qcopyHtml(d.refNo) + '</div>';
+    if ((d.refNo || '').trim()) h += '<div>🔖 เลขที่ใบเบิก: ' + qcopyHtml(d.refNo) + '</div>';
     h += '<div>👤 ผู้ยืม: ' + (dd ? '<b onclick="go(\'dealerDetail\',{dealerId:\'' + dd.id + '\'})" style="cursor:pointer;text-decoration:underline">' + sanitize(dd.name) + '</b>' : sanitize(d.borrower || '-')) + '</div>';
     if (d.purpose) h += '<div>🎯 ใช้งานกับ: ' + sanitize(d.purpose) + '</div>';
     h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + sanitize(d.lentDate || '-') + '</div>';
@@ -4580,7 +4921,7 @@ function rDemoDetail(el) {
       h += '<div class="li">';
       h += '<div class="lm">';
       h += '<div class="lt">👤 ' + sanitize(dd2 ? dd2.name : (l.borrower || '-')) + ' <span class="fu-badge ' + (l.status === 'active' ? 'fu-badge-red' : '') + '">' + (l.status === 'active' ? '📤 กำลังยืม' : '✅ คืนแล้ว') + '</span></div>';
-      if ((l.jobNo || '').trim()) h += '<div class="ls">📄 ใบงาน: ' + qcopyHtml(l.jobNo) + ((l.refNo || '').trim() ? ' · 🔖 ' + qcopyHtml(l.refNo) : '') + '</div>';
+      if ((l.jobNo || '').trim()) h += '<div class="ls">📄 ใบจอง: ' + qcopyHtml(l.jobNo) + ((l.refNo || '').trim() ? ' · 🔖 ' + qcopyHtml(l.refNo) : '') + '</div>';
       h += '<div class="ls">📅 ยืม: ' + sanitize(l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + sanitize(l.actualReturnDate) : (l.returnDate ? ' • กำหนดคืน: ' + sanitize(l.returnDate) : '')) + '</div>';
       if (l.purpose) h += '<div class="ls">🎯 ' + sanitize(l.purpose) + '</div>';
       if (l.note) h += '<div class="ls">📝 ' + sanitize(l.note) + '</div>';
@@ -4721,8 +5062,8 @@ function showLendDemoM(demoId) {
   });
 
   var h = '<div style="max-width:460px">';
-  h += '<div class="fm-group"><label>📄 เลขใบงาน (เลขที่คีย์เบิกจากคลัง)</label><input type="text" id="dm_jobno" class="fm-input" placeholder="เช่น JOB-2569-0912" autocomplete="off"><div class="hint">ใส่เลขเดียวกันให้ทุกเครื่องที่เบิกในใบงานเดียวกัน — แท็บ 📄 ใบงาน จะรวมให้กดคืนทีเดียวได้</div></div>';
-  h += '<div class="fm-group"><label>🔖 เลขอ้างอิง</label><input type="text" id="dm_refno" class="fm-input" placeholder="เลขอ้างอิงอื่น (ถ้ามี)" autocomplete="off"></div>';
+  h += '<div class="fm-group"><label>📄 เลขที่ใบจอง</label><input type="text" id="dm_jobno" class="fm-input" placeholder="เช่น 29179" autocomplete="off"><div class="hint">เลขจากระบบคลัง — ใส่เลขเดียวกันให้ทุกเครื่องที่จองครั้งเดียวกัน แท็บ 📄 ใบงาน จะรวมให้กดคืนทีเดียวได้</div></div>';
+  h += '<div class="fm-group"><label>🔖 เลขที่ใบเบิก</label><input type="text" id="dm_refno" class="fm-input" placeholder="เช่น Fix-020134" autocomplete="off"><div class="hint">คนละชุดกับใบจอง — ใบเบิกคือรอบที่เบิกของออกจากคลัง หนึ่งใบเบิกอาจมีของหลายใบจอง</div></div>';
   h += '<div class="fm-group"><label>🚁 เครื่องที่ยืมในใบงานนี้</label>';
   h += '<div style="font-size:12px;padding:6px 9px;background:var(--bg2);border-radius:7px;margin-bottom:6px">' + sanitize(self.name || '-') + (self.serialNumber ? ' <span style="color:var(--text2);font-family:monospace">S/N ' + sanitize(self.serialNumber) + '</span>' : '') + '</div>';
   if (others.length) {

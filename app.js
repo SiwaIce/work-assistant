@@ -328,10 +328,12 @@ var DEF_CONFIG = {
 
   // หมวดหมู่อุปกรณ์ Demo — ใช้เป็นแท็บกรองในหน้ายืม Demo สาธารณะ (demo-request.html) แก้ชื่อ/ไอคอน/เพิ่มลบ
   // ได้จากหน้าตั้งค่าเครื่องมือจัดการ Demo (demo-staff.html)
+  // 'accessory' ตรงกับ "Drone Accessories" ในไฟล์ทะเบียนคลัง ซึ่งเป็นของส่วนใหญ่ในทะเบียน (58 จาก 71)
   demoCategories: [
     { id: 'drone', label: 'Drone', icon: '🚁' },
     { id: 'dock', label: 'Dock', icon: '🛰️' },
-    { id: 'payload', label: 'Payload', icon: '🎯' }
+    { id: 'payload', label: 'Payload', icon: '🎯' },
+    { id: 'accessory', label: 'Drone Accessories', icon: '🔩' }
   ],
 
   // น้ำหนักคำนวณ "POS แนะนำ" (utils.js computeSuggestedPOS) — แก้ได้จากปุ่ม ⚙️ ข้าง POS แนะนำเลย
