@@ -3321,6 +3321,24 @@ function exportDemoItemsExcel() {
 // ================================================================
 var _demoImportPreview = null;
 
+// ล้างข้อมูล Demo ทั้งหมด — สำหรับกรณีข้อมูลเก่าค้างจนอยากเริ่มใหม่จากไฟล์คลัง แยกเป็นปุ่มของตัวเองด้วย
+// (นอกจากทำผ่านโหมด "ล้างก่อน import") เผื่ออยากล้างเฉยๆ โดยยังไม่ import
+function clearAllDemoData() {
+  var items = getDemoItems();
+  var loans = getDemoLoans();
+  if (!items.length && !loans.length) { toast('ไม่มีข้อมูล Demo ให้ล้าง'); return; }
+  if (!confirm('⚠️ ล้างข้อมูล Demo ทั้งหมด\n\n• อุปกรณ์ ' + items.length + ' รายการ\n• ประวัติ/ใบยืม ' + loans.length + ' รายการ\n\nย้อนกลับไม่ได้ — แนะนำกด 📤 Export เก็บไว้ก่อน\nยืนยัน?')) return;
+  if (!confirm('ยืนยันอีกครั้ง — ข้อมูล Demo ทั้งหมดจะหายถาวร')) return;
+  // ต้องสั่งลบบน cloud ด้วย ไม่งั้น listener จะดึงของเก่ากลับมาทับตอน sync รอบถัดไป
+  if (typeof syncDeleteFromFirebase === 'function') {
+    items.forEach(function(d) { syncDeleteFromFirebase('demo', d.id); });
+  }
+  saveDemoItems([]);
+  saveDemoLoans([]);
+  toast('🗑️ ล้างข้อมูล Demo แล้ว');
+  render();
+}
+
 // Export ให้หน้าตาเหมือนไฟล์ทะเบียนคลัง (คอลัมน์เดิม ลำดับเดิม) เพื่อเอาไปเทียบกับระบบคลังได้ตรงๆ
 // วันที่ส่งออกเป็นข้อความ dd/mm/yyyy ไม่ใช่ serial เพราะอ่านง่ายกว่าและ import กลับก็รองรับทั้งสองแบบ
 function exportDemoRentalSheet() {
@@ -3401,7 +3419,7 @@ function importDemoRentalSheet() {
           if (r) byRental[r] = d;
         });
 
-        var plan = { update: [], create: [], skipped: 0, rows: rows.length };
+        var plan = { rowMeta: [], skipped: 0, rows: rows.length };
         var seenRental = {};
         rows.forEach(function(r) {
           var rental = _pickCol(r, ['หมายเลขเครื่องเช่า']);
@@ -3448,11 +3466,10 @@ function importDemoRentalSheet() {
             rec.jobNo = '';
           }
 
-          var existing = byRental[rental];
-          if (existing) { rec._id = existing.id; rec._oldName = existing.name; plan.update.push(rec); }
-          else plan.create.push(rec);
+          plan.rowMeta.push({ rec: rec, act: undefined, state: 'new', exId: null, oldName: '' });
         });
 
+        if (!plan.rowMeta.length) { alert('ไม่พบแถวที่นำเข้าได้ — ตรวจว่ามีคอลัมน์ "หมายเลขเครื่องเช่า" และ "Name" หรือไม่'); return; }
         _demoImportPreview = plan;
         showDemoImportPreviewM();
       } catch (err) {
@@ -3464,62 +3481,178 @@ function importDemoRentalSheet() {
   input.click();
 }
 
+// ลายเซ็นของฟิลด์ที่ import เขียน — ใช้บอกว่าแถวนี้ "เหมือนเดิม" หรือ "มีอะไรเปลี่ยน"
+function _demoImportSig(o) {
+  return [o.name, o.model, o.brand, o.sku, o.serialNumber, o.category, o.isAccessory ? 1 : 0,
+    o.jobNo, o.refNo, o.note, o.sendDueDate, o.status, o.lentDate, o.returnDate]
+    .map(function(v) { return String(v === undefined || v === null ? '' : v).trim(); }).join('|');
+}
+var _demoImportMode = 'merge'; // 'merge' = รวมกับของเดิม | 'replace' = ล้างของเดิมทั้งหมดก่อน
+var _demoImportFilter = 'all'; // all | new | changed | same
+
+function _demoImportRecalcState() {
+  var items = getDemoItems();
+  var byRental = {};
+  items.forEach(function(d) { var r = (d.rentalDbNo || '').trim(); if (r) byRental[r] = d; });
+  _demoImportPreview.rowMeta.forEach(function(m) {
+    var ex = byRental[m.rec.rentalDbNo];
+    if (!ex) { m.state = 'new'; m.exId = null; m.oldName = ''; if (m.act === undefined) m.act = 'add'; return; }
+    m.exId = ex.id; m.oldName = ex.name || '';
+    m.state = (_demoImportSig(ex) === _demoImportSig(m.rec)) ? 'same' : 'changed';
+    if (m.act === undefined) m.act = (m.state === 'same') ? 'skip' : 'update';
+  });
+}
+
 // แสดงตัวอย่างก่อนเขียนจริงเสมอ — ไฟล์คลังทับสถานะ/วันที่ของทุกเครื่องที่ตรงเลข ถ้าพลาดไฟล์ผิดจะเสียหายทั้งชุด
+// เลือกได้รายแถวว่าจะเอาหรือไม่เอา (แบบเดียวกับหน้า import ของ Pipeline) และเลือกได้ว่าจะล้างของเดิมก่อนไหม
 function showDemoImportPreviewM() {
+  if (!_demoImportPreview) return;
+  _demoImportMode = 'merge';
+  _demoImportFilter = 'all';
+  _demoImportRecalcState();
+  openM('📥 ตรวจก่อนนำเข้าไฟล์คลัง', _demoImportPreviewHtml());
+  setMWide(860);
+}
+
+function _demoImportPreviewHtml() {
   var p = _demoImportPreview;
-  if (!p) return;
+  var meta = p.rowMeta;
+  var cnt = { neu: 0, changed: 0, same: 0 };
+  meta.forEach(function(m) { cnt[m.state === 'new' ? 'neu' : m.state]++; });
+  var willAdd = meta.filter(function(m) { return m.act === 'add'; }).length;
+  var willUpd = meta.filter(function(m) { return m.act === 'update'; }).length;
+  var willSkip = meta.filter(function(m) { return m.act === 'skip'; }).length;
+
+  var items = getDemoItems();
+  var inFile = {}; meta.forEach(function(m) { inFile[m.rec.rentalDbNo] = 1; });
+  var notInFile = items.filter(function(d) { return !inFile[(d.rentalDbNo || '').trim()]; });
+
   var h = '<div>';
-  h += '<div class="hint" style="margin-bottom:10px">อ่านไฟล์ได้ ' + p.rows + ' แถว — ตรวจสรุปด้านล่างก่อนกดนำเข้า ระบบจับคู่ด้วย <b>หมายเลขเครื่องเช่า</b></div>';
-  h += '<div class="sr" style="margin-bottom:12px">';
-  h += '<div class="sc"><div class="sn c2">' + p.create.length + '</div><div class="sl">➕ เพิ่มใหม่</div></div>';
-  h += '<div class="sc"><div class="sn c1">' + p.update.length + '</div><div class="sl">🔄 อัปเดตของเดิม</div></div>';
-  h += '<div class="sc"><div class="sn c3">' + p.skipped + '</div><div class="sl">ข้าม (ไม่มีเลข/ชื่อ)</div></div>';
-  h += '</div>';
+  h += '<div class="hint" style="margin-bottom:10px">อ่านไฟล์ได้ ' + p.rows + ' แถว (ข้าม ' + p.skipped + ' แถวที่ไม่มีเลขเช่า/ชื่อ) — จับคู่ด้วย <b>หมายเลขเครื่องเช่า</b> · เลือกรายแถวได้ว่าจะเอาหรือข้าม</div>';
 
-  var lent = p.create.concat(p.update).filter(function(r) { return r.status === 'lent'; }).length;
-  var resv = p.create.concat(p.update).filter(function(r) { return r.status === 'reserved'; }).length;
-  var avail = p.create.concat(p.update).filter(function(r) { return r.status === 'available'; }).length;
-  var acc = p.create.concat(p.update).filter(function(r) { return r.isAccessory; }).length;
-  h += '<div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.9">';
-  h += 'หลังนำเข้าจะได้: 📤 ถูกยืมอยู่ ' + lent + ' · 📅 จองล่วงหน้า ' + resv + ' · ✅ ว่าง ' + avail + '<br>';
-  h += 'ในนี้เป็น <b>อุปกรณ์เสริม ' + acc + '</b> รายการ (จะถูกซ่อนจากหน้าขอยืมของลูกค้าโดยอัตโนมัติ)';
-  h += '</div>';
-
-  if (p.update.length) {
-    var renamed = p.update.filter(function(r) { return r._oldName && r._oldName !== r.name; });
-    if (renamed.length) {
-      h += '<div style="background:#f59e0b18;border-radius:8px;padding:9px 11px;font-size:12px;margin-bottom:10px">⚠️ มี ' + renamed.length + ' เครื่องที่ชื่อในไฟล์ต่างจากในระบบ จะถูกเปลี่ยนตามไฟล์<br>' +
-        renamed.slice(0, 3).map(function(r) { return sanitize(r._oldName) + ' → ' + sanitize(r.name); }).join('<br>') + (renamed.length > 3 ? '<br>…' : '') + '</div>';
-    }
+  // โหมดนำเข้า — ล้างของเดิมก่อนเป็นทางเลือกสำหรับกรณี "ข้อมูลเก่าค้างอยู่ อยากเริ่มใหม่จากไฟล์คลัง"
+  h += '<div style="border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:10px">';
+  h += '<div style="font-weight:700;font-size:12.5px;margin-bottom:6px">วิธีนำเข้า</div>';
+  h += '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;cursor:pointer;margin-bottom:5px">';
+  h += '<input type="radio" name="demoImpMode" value="merge"' + (_demoImportMode === 'merge' ? ' checked' : '') + ' onchange="_demoImportSetMode(\'merge\')" style="margin-top:2px">';
+  h += '<span><b>🔀 รวมกับของเดิม</b> <span style="color:var(--text2)">— เครื่องที่ไม่ได้อยู่ในไฟล์จะถูกเก็บไว้เหมือนเดิม</span></span></label>';
+  h += '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;cursor:pointer">';
+  h += '<input type="radio" name="demoImpMode" value="replace"' + (_demoImportMode === 'replace' ? ' checked' : '') + ' onchange="_demoImportSetMode(\'replace\')" style="margin-top:2px">';
+  h += '<span><b>🗑️ ล้างข้อมูลเดิมทั้งหมดก่อน</b> <span style="color:var(--text2)">— ใช้เมื่อของเก่าค้างและอยากยึดไฟล์คลังเป็นหลัก</span></span></label>';
+  if (_demoImportMode === 'replace') {
+    h += '<div style="background:#ef444418;color:#ef4444;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600;margin-top:8px">';
+    h += '⚠️ จะลบเครื่องเดิมทั้งหมด ' + items.length + ' รายการ แล้วสร้างใหม่จากไฟล์ ' + meta.length + ' รายการ';
+    if (notInFile.length) h += '<br>ในนั้นมี <b>' + notInFile.length + ' เครื่องที่ไม่มีในไฟล์</b> จะหายไปด้วย เช่น ' + notInFile.slice(0, 3).map(function(d) { return sanitize(d.name || '-'); }).join(', ') + (notInFile.length > 3 ? ' …' : '');
+    h += '<br>ประวัติการยืมทั้งหมดจะถูกล้างด้วย · ย้อนกลับไม่ได้ — แนะนำกด Export เก็บไว้ก่อน</div>';
+  } else if (notInFile.length) {
+    h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">ℹ️ มี ' + notInFile.length + ' เครื่องในระบบที่ไม่มีในไฟล์นี้ — จะไม่ถูกแตะต้อง</div>';
   }
-  h += '<div style="max-height:34vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
-  h += '<table style="border-collapse:collapse;width:100%;font-size:11.5px"><thead><tr>';
-  ['', 'เลขเช่า', 'ชื่อ', 'สถานะ', 'ใบจอง', 'คืน'].forEach(function(t) {
-    h += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0">' + t + '</th>';
+  h += '</div>';
+
+  h += '<div class="sr" style="margin-bottom:10px">';
+  h += '<div class="sc"><div class="sn c2">' + cnt.neu + '</div><div class="sl">➕ ใหม่</div></div>';
+  h += '<div class="sc"><div class="sn c5">' + cnt.changed + '</div><div class="sl">✏️ เปลี่ยน</div></div>';
+  h += '<div class="sc"><div class="sn c3">' + cnt.same + '</div><div class="sl">⏭ เหมือนเดิม</div></div>';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:11.5px">';
+  h += '<span style="color:var(--text2)">ปรับทั้งหมด:</span>';
+  h += '<button class="btn btn-xs bo" onclick="_demoImportBulk(\'add\')">➕ เอาทั้งหมด</button>';
+  h += '<button class="btn btn-xs bo" onclick="_demoImportBulk(\'update\')">✏️ อัปเดตทั้งหมด</button>';
+  h += '<button class="btn btn-xs bo" onclick="_demoImportBulk(\'skip\')">⏭ ข้ามทั้งหมด</button>';
+  h += '<button class="btn btn-xs bo" onclick="_demoImportBulk(\'reset\')">↩️ ค่าแนะนำ</button>';
+  h += '<span style="margin-left:auto;color:var(--text2)">แสดง:</span>';
+  ['all|ทั้งหมด', 'new|เฉพาะใหม่', 'changed|เฉพาะที่เปลี่ยน', 'same|เฉพาะเหมือนเดิม'].forEach(function(o) {
+    var v = o.split('|');
+    h += '<button class="demo-filter-chip' + (_demoImportFilter === v[0] ? ' act' : '') + '" style="padding:3px 9px;font-size:11px" onclick="_demoImportSetFilter(\'' + v[0] + '\')">' + v[1] + '</button>';
+  });
+  h += '</div>';
+
+  h += '<div style="max-height:38vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:11.5px;white-space:nowrap"><thead><tr>';
+  ['สถานะ', 'เลขเช่า', 'ชื่อ', 'สถานะยืม', 'ใบจอง', 'คืน', 'จะทำอะไร'].forEach(function(t) {
+    h += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">' + t + '</th>';
   });
   h += '</tr></thead><tbody>';
-  p.create.concat(p.update).slice(0, 200).forEach(function(r) {
-    h += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + (r._id ? '🔄' : '➕') + '</td>' +
-      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.rentalDbNo) + '</td>' +
-      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.name) + (r.isAccessory ? ' <span style="color:var(--text3)">(เสริม)</span>' : '') + '</td>' +
-      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + (DEMO_STATUS_META[r.status] ? DEMO_STATUS_META[r.status].label : r.status) + '</td>' +
-      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.jobNo || '—') + '</td>' +
-      '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.returnDate || '—') + '</td></tr>';
+  var shown = 0;
+  meta.forEach(function(m, i) {
+    if (_demoImportFilter !== 'all' && m.state !== _demoImportFilter && !(_demoImportFilter === 'new' && m.state === 'new')) return;
+    if (_demoImportFilter === 'new' && m.state !== 'new') return;
+    shown++;
+    if (shown > 300) return;
+    var r = m.rec;
+    var badge = m.state === 'new' ? '<span style="color:#22c55e;font-weight:700">➕ ใหม่</span>'
+      : m.state === 'changed' ? '<span style="color:#f59e0b;font-weight:700">✏️ เปลี่ยน</span>'
+      : '<span style="color:var(--text2);font-weight:700">⏭ เดิม</span>';
+    h += '<tr>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + badge + '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.rentalDbNo) + '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border);white-space:normal">' + sanitize(r.name) + (r.isAccessory ? ' <span style="color:var(--text3)">(เสริม)</span>' : '');
+    if (m.oldName && m.oldName !== r.name) h += '<div style="color:#f59e0b;font-size:10.5px">เดิม: ' + sanitize(m.oldName) + '</div>';
+    h += '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + (DEMO_STATUS_META[r.status] ? DEMO_STATUS_META[r.status].label : sanitize(r.status)) + '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.jobNo || '—') + '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)">' + sanitize(r.returnDate || '—') + '</td>';
+    h += '<td style="padding:4px 8px;border-bottom:1px solid var(--border)"><select data-mi="' + i + '" onchange="_demoImportSetAct(' + i + ',this.value)" style="font-size:11px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text)">';
+    [['add', '➕ เพิ่มใหม่'], ['update', '✏️ อัปเดต'], ['skip', '⏭ ข้าม']].forEach(function(o) {
+      if (o[0] === 'update' && !m.exId) return; // ไม่มีของเดิมให้อัปเดต
+      if (o[0] === 'add' && m.exId) return;     // มีของเดิมอยู่แล้ว เพิ่มซ้ำจะได้เลขเช่าซ้ำ
+      h += '<option value="' + o[0] + '"' + (m.act === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    });
+    h += '</select></td>';
+    h += '</tr>';
   });
   h += '</tbody></table></div>';
-  h += '<div class="fm-actions" style="margin-top:12px">';
+  if (shown > 300) h += '<div style="font-size:11px;color:var(--text3);margin-top:5px">แสดง 300 แถวแรกจาก ' + shown + ' แถว (ตอนนำเข้าจะทำครบทุกแถวตามที่ตั้งไว้)</div>';
+
+  h += '<div class="fm-actions" style="margin-top:12px;align-items:center">';
   h += '<button class="btn bp" onclick="runDemoRentalImport()">📥 นำเข้าตามนี้</button>';
   h += '<button class="btn" onclick="closeMForce()">ยกเลิก</button>';
+  h += '<span style="font-size:12px;color:var(--text2);margin-left:auto">จะเพิ่ม <b>' + willAdd + '</b> · อัปเดต <b>' + willUpd + '</b> · ข้าม <b>' + willSkip + '</b></span>';
   h += '</div></div>';
-  openM('📥 ตรวจก่อนนำเข้าไฟล์คลัง', h);
-  setMWide(760);
+  return h;
+}
+function _demoImportRefresh() { document.getElementById('mBd').innerHTML = _demoImportPreviewHtml(); }
+function _demoImportSetMode(m) {
+  _demoImportMode = m;
+  // โหมดล้างของเดิม = ทุกแถวกลายเป็นของใหม่หมด ไม่มีอะไรให้ "อัปเดต"
+  if (m === 'replace') _demoImportPreview.rowMeta.forEach(function(x) { if (x.act === 'skip' && x.state === 'same') x.act = 'add'; });
+  _demoImportRefresh();
+}
+function _demoImportSetFilter(f) { _demoImportFilter = f; _demoImportRefresh(); }
+function _demoImportSetAct(i, v) { _demoImportPreview.rowMeta[i].act = v; _demoImportRefresh(); }
+function _demoImportBulk(act) {
+  _demoImportPreview.rowMeta.forEach(function(m) {
+    if (_demoImportFilter !== 'all' && m.state !== _demoImportFilter) return;
+    if (act === 'reset') { m.act = m.state === 'new' ? 'add' : (m.state === 'same' ? 'skip' : 'update'); return; }
+    if (act === 'update' && !m.exId) { m.act = 'add'; return; }
+    if (act === 'add' && m.exId) { m.act = 'update'; return; }
+    m.act = act;
+  });
+  _demoImportRefresh();
 }
 
 function runDemoRentalImport() {
   var p = _demoImportPreview;
   if (!p) return;
-  if (!confirm('นำเข้า: เพิ่มใหม่ ' + p.create.length + ' เครื่อง, อัปเดต ' + p.update.length + ' เครื่อง\n\nสถานะ/วันที่/เลขใบจอง ของเครื่องที่ตรงเลขเช่าจะถูกทับตามไฟล์ ยืนยัน?')) return;
+  var picked = p.rowMeta.filter(function(m) { return m.act !== 'skip'; });
+  var nAdd = picked.filter(function(m) { return m.act === 'add'; }).length;
+  var nUpd = picked.filter(function(m) { return m.act === 'update'; }).length;
+  if (!picked.length) { toast('ทุกแถวถูกตั้งเป็น "ข้าม" — ไม่มีอะไรให้นำเข้า'); return; }
+
   var items = getDemoItems();
+  if (_demoImportMode === 'replace') {
+    if (!confirm('⚠️ ล้างข้อมูลเดิมทั้งหมด ' + items.length + ' เครื่อง และประวัติการยืมทั้งหมด แล้วสร้างใหม่ ' + picked.length + ' เครื่องจากไฟล์\n\nย้อนกลับไม่ได้ ยืนยัน?')) return;
+    if (!confirm('ยืนยันอีกครั้ง — ข้อมูล Demo เดิมทั้งหมดจะหายถาวร\n\nกด OK เพื่อล้างและนำเข้าใหม่')) return;
+    // ลบทีละตัวผ่าน syncDeleteFromFirebase ด้วย ไม่งั้นของเก่าบน cloud จะถูกดึงกลับมาตอน sync รอบถัดไป
+    if (typeof syncDeleteFromFirebase === 'function') {
+      items.forEach(function(d) { syncDeleteFromFirebase('demo', d.id); });
+    }
+    items = [];
+    saveDemoLoans([]);
+  } else {
+    if (!confirm('นำเข้า: เพิ่มใหม่ ' + nAdd + ' เครื่อง, อัปเดต ' + nUpd + ' เครื่อง\n\nสถานะ/วันที่/เลขใบจอง ของเครื่องที่เลือกไว้จะถูกทับตามไฟล์ ยืนยัน?')) return;
+  }
   var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
 
   function apply(target, r) {
@@ -3540,12 +3673,18 @@ function runDemoRentalImport() {
     target.returnDate = r.returnDate;
     if (target.flyable === undefined) target.flyable = !r.isAccessory;
   }
-  p.update.forEach(function(r) { if (byId[r._id]) { apply(byId[r._id], r); r._id = byId[r._id].id; } });
-  p.create.forEach(function(r) {
-    var rec = { id: 'dm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), dealerId: '', borrower: '' };
-    apply(rec, r);
-    items.push(rec);
-    r._id = rec.id;
+  picked.forEach(function(m) {
+    var r = m.rec;
+    if (m.act === 'update' && m.exId && byId[m.exId]) {
+      apply(byId[m.exId], r);
+      m.targetId = m.exId;
+    } else {
+      var rec = { id: 'dm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), dealerId: '', borrower: '' };
+      apply(rec, r);
+      items.push(rec);
+      byId[rec.id] = rec;
+      m.targetId = rec.id;
+    }
   });
   saveDemoItems(items);
 
@@ -3555,16 +3694,17 @@ function runDemoRentalImport() {
   var activeByDemo = {};
   loans.forEach(function(l) { if (l.status === 'active') activeByDemo[l.demoId] = l; });
   var loanAdded = 0, loanClosed = 0;
-  p.create.concat(p.update).forEach(function(r) {
+  picked.forEach(function(m) {
+    var r = m.rec;
     var onLoan = (r.status === 'lent' || r.status === 'reserved');
-    var cur = activeByDemo[r._id];
+    var cur = activeByDemo[m.targetId];
     if (onLoan) {
       if (cur) {
         cur.jobNo = r.jobNo; cur.refNo = r.refNo;
         cur.lentDate = r.lentDate; cur.returnDate = r.returnDate;
       } else {
         loans.push({
-          id: gid(), demoId: r._id, demoName: r.name,
+          id: gid(), demoId: m.targetId, demoName: r.name,
           jobNo: r.jobNo, refNo: r.refNo, dealerId: '', borrower: '', purpose: '',
           lentDate: r.lentDate, returnDate: r.returnDate, actualReturnDate: '',
           note: r.note || '', status: 'active', created: _nw()
@@ -3580,7 +3720,7 @@ function runDemoRentalImport() {
   });
   saveDemoLoans(loans);
   _demoImportPreview = null;
-  toast('✅ นำเข้าแล้ว (เพิ่ม ' + p.create.length + ', อัปเดต ' + p.update.length + ', เปิดใบยืม ' + loanAdded + (loanClosed ? ', ปิดใบ ' + loanClosed : '') + ')');
+  toast('✅ นำเข้าแล้ว (เพิ่ม ' + nAdd + ', อัปเดต ' + nUpd + ', เปิดใบยืม ' + loanAdded + (loanClosed ? ', ปิดใบ ' + loanClosed : '') + ')');
   closeMForce();
   render();
 }
@@ -3724,6 +3864,7 @@ function rDemoTracker(el) {
   h += '<button class="btn bo" onclick="exportDemoRentalSheet()">📤 Export (รูปแบบคลัง)</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export (เต็ม)</button>';
   h += '<button class="btn bo" onclick="importDemoItemsExcel()">📥 Import (เต็ม)</button>';
+  if (allItems.length) h += '<button class="btn bd" onclick="clearAllDemoData()">🗑️ ล้างข้อมูลทั้งหมด</button>';
   if (localStorage.getItem('v7_demoHelpHidden') === '1') h += '<button class="btn bo" onclick="demoShowHelp()">❓ วิธีใช้</button>';
   h += '</div>';
 
