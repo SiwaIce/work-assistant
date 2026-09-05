@@ -2113,7 +2113,11 @@ function copyPipeTable() { copyTable('pipeTable', '📋 Copy Pipeline Table'); }
 // กับ Google Sheet จริงของผู้ใช้แล้วพบว่าทั้ง 4 คอลัมน์นี้ไม่มีอยู่ในชีทเลย ทำให้ทุกคอลัมน์หลังจากนั้นเคยเลื่อน
 // เพี้ยนตอน copyPipeRow()/paste ทับแถวมาตลอด — field ในแอป (p.realAmount/p.biddingDate/p.recurring) ยังเก็บ/ใช้
 // คำนวณภายในตามปกติ (เช่น Forecast Month ยังคำนวณจาก biddingDate) แค่ไม่ export เป็นคอลัมน์แยกอีกต่อไป
-var PIPE_SHEET_HEADERS = ['ROW NO.','Register Date','Industrial Type','Project Name','End User Name','End User Name Eng','Unit type','DJI Dealer','Dealer Name','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Amount','TOR','Forecast Month','month','Remark','Letter of Authorized หนังสือแต่งตั้ง','Project POS','Status','Update Date','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
+// หัวคอลัมน์ต้องตรงกับ Google Sheet ปัจจุบัน (ผู้ใช้ยืนยันหัวข้อล่าสุด 2026-09-05) — ฝั่ง import จับคู่ด้วยชื่อ
+// หัวข้อ (มี altLabels รองรับชื่อเก่า) แต่ฝั่ง export ยังใช้ชื่อชุดเก่าอยู่ ทำให้ไฟล์ที่ export ออกไปหัวข้อไม่ตรง
+// กับชีทจริง เวลาเอาไปวางทับต้องมาแก้หัวเอง — เปลี่ยนมาใช้ชื่อชุดปัจจุบัน และเพิ่มคอลัมน์ "Duplicate งานซ้ำ"
+// ที่ชีทเพิ่มเข้ามาระหว่าง Status กับ Last Update Date (เดิม export ไม่มีคอลัมน์นี้เลยทั้งที่ import อ่านอยู่)
+var PIPE_SHEET_HEADERS = ['Row No.','Record Date','Industrial Type','Project Name','End User Name','End User Name (Eng)','Unit type','DJI Autorize Dealer','Sub Dealer','Model','Dock','M3M Qty.','M4T Qty.','M4E Qty.','Dock 3 Qty.','M4TD Qty.','M400 Qty.','Forecast Revenue','TOR','Purchase Month','month','Remark','Letter of Authorized','% Possibility','Status','Duplicate งานซ้ำ','Last Update Date','Update 1','Update 2','Update 3','Update 4','Update 5','Update 6','Sale','DISPLAY (Hide/Show)'];
 
 // แหล่งข้อมูลคำนวณคอลัมน์ "Update Date" ตอน export — เลือกได้ในหน้า export (dropdown ใน showPipeExportLogFilterM)
 // 'timeline' = วันที่ log ล่าสุดในการ์ด Updates ของโครงการ, 'visit' = วันที่ Visit ล่าสุดของ Dealer นั้น,
@@ -2169,15 +2173,22 @@ function _pipeRowFields(p, excludeTypes) {
     // g.dock ตัวเดียว แต่สินค้าจริงส่วนใหญ่ที่ผู้ใช้ขายตอนนี้ชื่อรุ่นมี "Dock 3" (เช่น "DJI Dock 3(Overseas
     // Edition)") ซึ่ง _pipeModelQtyByGroup แยกไปนับใน g.dock3 อยู่แล้ว (ตั้งใจ แยกนับจำนวนต่างหาก) ทำให้ g.dock
     // เป็น 0 คอลัมน์นี้เลยขึ้น "No" ทั้งที่โครงการมี Dock 3 อยู่จริง (ผู้ใช้แจ้ง 2026-08-27)
-    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', p.djiDealer || '', d ? d.name : '', modelCell, (g.dock || g.dock3) ? 'Yes' : 'No',
+    // คอลัมน์ "DJI Autorize Dealer" ในชีทเก็บ "ชื่อบริษัท Dealer จริง" ส่วน "Sub Dealer" เก็บค่าประเภท SAB/Other
+    // (ดูคอมเมนต์ยาวใน _PIPE_IMPORT_COLS) — เดิม export สลับกันอยู่ คือยัด p.djiDealer (SAB/Other) ลงคอลัมน์แรก
+    // และชื่อ Dealer จริงลงคอลัมน์ที่สอง ตรงข้ามกับที่ฝั่ง import อ่าน ทำให้ export ออกไปแล้ว import กลับเข้ามา
+    // ชื่อ Dealer จะกลายเป็น "SAB" — สลับให้ตรงกับชีท/ฝั่ง import แล้ว
+    p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', modelCell, (g.dock || g.dock3) ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.tor || '',
     pipeClosed ? 'Done' : (p.forecastMonth || ''),
     pipeClosed ? '' : (fcMonthParsed ? fcMonthParsed.month : ''),
     p.remark || '', p.appointmentLetter || '', p.projectPOS || '', getPipeName(p.status),
+    p.recurring ? 'Yes' : '',
     _pipeUpdateDateValue(p, _pipeExportUpdateDateSrc)
   ];
-  // Update 1 = รวมทุก log ยกเว้นตัวล่าสุดเสมอ 1 ก้อน, Update 2 = เฉพาะตัวล่าสุด, Update 3-6 = ว่างเสมอ
+  // Update 1 = log ล่าสุดตัวเดียว, Update 2 = รวม log ก่อนหน้าทั้งหมด 1 ก้อน, Update 3-6 = ว่างเสมอ
+  // (สลับจากเดิมที่ Update 1 เป็นก้อนรวมและ Update 2 เป็นตัวล่าสุด — ชีทเปลี่ยนกติกาให้ช่องแรกเป็นข้อมูลล่าสุด
+  // ผู้ใช้ยืนยัน 2026-09-05) เรียงในก้อนรวมยังเป็นเก่า→ใหม่เหมือนเดิม
   // คำนวณสดทุกครั้งตอน export เท่านั้น (ไม่แตะ ST.pipeLog จริง) — timeline ในแอปยังเห็นทุก log แยกรายการปกติ
   // customerNoteOnly (ถ้ามี) = ข้อความที่ลูกค้าพิมพ์มาจริงๆ ล้วนๆ ไม่มีสรุปอัตโนมัติปน — export ใส่คำนำหน้าสั้นๆ
   // "อัพเดทจากลูกค้า:" ให้รู้ที่มา (ตัด "✅ อนุมัติการ" ออก เหลือแค่ระบุแหล่งที่มา) ส่วน log เก่าก่อนแก้ที่ไม่มี
@@ -2201,8 +2212,8 @@ function _pipeRowFields(p, excludeTypes) {
   } else {
     var older = logs.slice(0, logs.length - 1);
     var latest = logs[logs.length - 1];
-    fields.push(older.map(logFmt).join('\n'));
-    fields.push(logFmt(latest));
+    fields.push(logFmt(latest));                 // Update 1 = ล่าสุด
+    fields.push(older.map(logFmt).join('\n'));   // Update 2 = รวมก่อนหน้าทั้งหมด
     for (var li3 = 0; li3 < 4; li3++) fields.push('');
   }
   fields.push(p.saleName || '', p.sheetDisplay || 'Show');
@@ -2333,14 +2344,28 @@ function dlPipeXlsxForDealer(dealerId, excludeTypes) {
   toast('📥 Export Excel แล้ว (' + pipes.length + ' รายการ)' + (overflowCnt ? ' ⚠️ ' + overflowCnt + ' โครงการมี Update >6 รายการ — รายการที่ 7+ ไม่ถูก export' : ''));
 }
 
+// คอลัมน์ที่ต้องเก็บ \n ไว้ (ไม่ให้ esc() แปลงเป็นช่องว่าง): Model = สินค้าหลายบรรทัด, Update 1-6 = timeline
+// ที่รวมหลาย log ไว้ในช่องเดียว ถ้า strip \n ทิ้ง log ทั้งหมดจะต่อกันเป็นบรรทัดยาวเส้นเดียวอ่านไม่ออก
+// อ่าน index จากหัวคอลัมน์จริงแทนการ hardcode เลข เพราะลำดับคอลัมน์เปลี่ยนมาหลายรอบแล้ว
+var _PIPE_KEEP_NL_IDX = null;
+function _pipeKeepNlIdx() {
+  if (!_PIPE_KEEP_NL_IDX) {
+    _PIPE_KEEP_NL_IDX = {};
+    PIPE_SHEET_HEADERS.forEach(function(h, i) {
+      if (h === 'Model' || /^Update [1-6]$/.test(h)) _PIPE_KEEP_NL_IDX[i] = true;
+    });
+  }
+  return _PIPE_KEEP_NL_IDX;
+}
+
 function _exportPipeCSV(pipes, filename, excludeTypes) {
   pipes = pipes.slice().sort(function(a, b) { return (a.registerDate || '').localeCompare(b.registerDate || ''); });
+  var keepNl = _pipeKeepNlIdx();
   var csv = '﻿"' + PIPE_SHEET_HEADERS.join('","') + '"\n';
   pipes.forEach(function(p) {
     var f = _pipeRowFields(p, excludeTypes);
     csv += f.map(function(v, idx) {
-      // Model cell (idx 9 — เลื่อน +1 จากเดิมเพราะเพิ่มคอลัมน์ ROW NO. เข้ามาเป็นตัวแรก) เก็บ \n ไว้สำหรับสินค้าหลายบรรทัด ส่วนฟิลด์อื่น strip \n ตามมาตรฐาน CSV
-      return '"' + (idx === 9 ? _csvKeepNL(v) : esc(v)) + '"';
+      return '"' + (keepNl[idx] ? _csvKeepNL(v) : esc(v)) + '"';
     }).join(',') + '\n';
   });
   dlBlob(csv, filename);
@@ -2348,10 +2373,14 @@ function _exportPipeCSV(pipes, filename, excludeTypes) {
 
 // มุมมอง Sheet — ตารางเต็มคอลัมน์ตรงกับ CSV export ใช้ทั้งหน้า Pipeline หลักและ Pipeline tab ของ Dealer
 function renderPipeSheetTable(pipes) {
-  // คอลัมน์ที่เป็นตัวเลขเงิน (right-align + comma) และ qty (right-align + comma) — index เลื่อน +1 ทั้งหมด
-  // จากเดิม เพราะเพิ่มคอลัมน์ ROW NO. เข้ามาเป็นคอลัมน์แรกสุด
-  var _moneyIdx = { 8: true, 16: true, 17: true };
-  var _qtyIdx   = { 10: true, 11: true, 12: true, 13: true, 14: true, 15: true };
+  // คอลัมน์เงิน/จำนวน หา index จากหัวคอลัมน์จริง ไม่ hardcode — ของเดิมเขียนเลขไว้ตายตัวแล้วไม่ได้ขยับตามตอน
+  // เพิ่ม/สลับคอลัมน์ ทำให้เพี้ยนมานาน: index 8 ("Sub Dealer" ซึ่งเป็นข้อความ) ถูกจัดเป็นเงิน, index 10 ("Dock"
+  // ที่เป็น Yes/No) ถูกจัดเป็นจำนวน ส่วน "M400 Qty." กลับถูกจัดเป็นเงิน — ชิดขวาและฟอร์แมตผิดทั้งสามคอลัมน์
+  var _moneyIdx = {}, _qtyIdx = {};
+  PIPE_SHEET_HEADERS.forEach(function(hd, i) {
+    if (hd === 'Forecast Revenue' || hd === 'Forecast Amount') _moneyIdx[i] = true;
+    else if (/Qty\.?$/.test(hd)) _qtyIdx[i] = true;
+  });
   var h = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
   h += '<thead><tr>' + PIPE_SHEET_HEADERS.map(function(hd, ci) {
     var align = (_moneyIdx[ci] || _qtyIdx[ci]) ? 'right' : 'left';
