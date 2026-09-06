@@ -2173,10 +2173,10 @@ function _pipeRowFields(p, excludeTypes) {
     // g.dock ตัวเดียว แต่สินค้าจริงส่วนใหญ่ที่ผู้ใช้ขายตอนนี้ชื่อรุ่นมี "Dock 3" (เช่น "DJI Dock 3(Overseas
     // Edition)") ซึ่ง _pipeModelQtyByGroup แยกไปนับใน g.dock3 อยู่แล้ว (ตั้งใจ แยกนับจำนวนต่างหาก) ทำให้ g.dock
     // เป็น 0 คอลัมน์นี้เลยขึ้น "No" ทั้งที่โครงการมี Dock 3 อยู่จริง (ผู้ใช้แจ้ง 2026-08-27)
-    // คอลัมน์ "DJI Autorize Dealer" ในชีทเก็บ "ชื่อบริษัท Dealer จริง" ส่วน "Sub Dealer" เก็บค่าประเภท SAB/Other
-    // (ดูคอมเมนต์ยาวใน _PIPE_IMPORT_COLS) — เดิม export สลับกันอยู่ คือยัด p.djiDealer (SAB/Other) ลงคอลัมน์แรก
-    // และชื่อ Dealer จริงลงคอลัมน์ที่สอง ตรงข้ามกับที่ฝั่ง import อ่าน ทำให้ export ออกไปแล้ว import กลับเข้ามา
-    // ชื่อ Dealer จะกลายเป็น "SAB" — สลับให้ตรงกับชีท/ฝั่ง import แล้ว
+    // "DJI Authorized Dealer" = บริษัทที่อยู่ในเมนู Dealer จริง (ผูกกับ p.dealerId) ส่วน "Sub Dealer" = บริษัทย่อย
+    // ที่ยื่นประมูลภายใต้ Authorized Dealer อีกทอด เป็น free text ล้วนๆ ไม่ผูกกับ record ไหน (ผู้ใช้ยืนยัน
+    // 2026-09-06) — เดิม export สลับสองคอลัมน์นี้กัน ตรงข้ามกับที่ฝั่ง import อ่าน ทำให้ export ออกไปแล้ว
+    // import กลับเข้ามา ชื่อ Dealer จะกลายเป็นชื่อบริษัทย่อยแทน — สลับให้ตรงกับชีท/ฝั่ง import แล้ว
     p.rowNo || '', fD(p.registerDate), p.industrialType || '', p.projectName || '', p.endUserTH || '', p.endUserEN || '', p.unitType || '', d ? d.name : '', p.djiDealer || '', modelCell, (g.dock || g.dock3) ? 'Yes' : 'No',
     g.m3m || '', g.m4t || '', g.m4e || '', g.dock3 || '', g.m4td || '', g.m400 || '',
     p.forecastAmount || '', p.tor || '',
@@ -2523,7 +2523,7 @@ function rPipeDet(el) {
   html += '<div class="fr"><div><label>Unit Type</label><div>' + (p.unitType || '-') + '</div></div>';
   html += '<div><label>Dealer</label><div>🏪 <strong>' + (d ? sanitize(d.name) : '-') + '</strong> ' + (d ? levelTag(d.level) : '') + '</div></div></div>';
   
-  html += '<div class="fr"><div><label>Dealer Name</label><div>' + (p.djiDealer || '-') + '</div></div>';
+  html += '<div class="fr"><div><label>Sub Dealer</label><div>' + (p.djiDealer || '-') + '</div></div>';
   html += '<div><label>Model</label><div>' + getPipeModelSummary(p) + '</div></div></div>';
   
   html += '<div class="fr"><div><label>Forecast Amount</label><div>' + (_gvHidden('pipeline_forecast') ? '-' : fmtMoneyStyled(p.forecastAmount)) + '</div></div>';
@@ -6214,11 +6214,12 @@ var _PIPE_IMPORT_COLS = [
   { key: 'endUserTH',         label: 'End User Name' },
   { key: 'endUserEN',         label: 'End User Name (Eng)',         altLabels: ['End User Name Eng'] },
   { key: 'unitType',          label: 'Unit type' },
-  // label สลับกับ key โดยตั้งใจ (2026-08-24) — คอลัมน์ในชีทต้นทางชื่อหัวข้อกับข้อมูลจริงสลับกันอยู่: คอลัมน์
-  // "DJI Dealer" (ตอนนี้เปลี่ยนชื่อเป็น "DJI Autorize Dealer" ในชีท — สะกดตามชีทจริง ไม่ใช่พิมพ์ผิด 2026-09-01)
-  // มีชื่อบริษัทจริง (ต้องใช้หา/สร้าง Dealer ในระบบ = key dealerName) ส่วนคอลัมน์ "Dealer Name" (เปลี่ยนชื่อเป็น
-  // "Sub Dealer" ในชีทใหม่) มีค่าประเภท SAB/Other (ข้อความอิสระเก็บไว้เฉยๆ = key djiDealer) — ดู label ที่สลับ
-  // คู่กันในฟอร์มแก้ไข Pipeline (modals.js) และหน้ารายละเอียด (rPipeDet) ด้วยแล้ว
+  // ชื่อ key ในแอปกับความหมายจริงไม่ตรงกันมาแต่แรก จึงต้องอ่านคู่กันเสมอ (ผู้ใช้ยืนยันความหมาย 2026-09-06):
+  //   คอลัมน์ "DJI Autorize Dealer" (สะกดตามชีทจริง ไม่ใช่พิมพ์ผิด / เดิมชื่อ "DJI Dealer") = บริษัทที่อยู่ใน
+  //     เมนู Dealer จริง ต้องใช้หา/สร้าง Dealer ในระบบ → key dealerName แล้วผูกเป็น p.dealerId
+  //   คอลัมน์ "Sub Dealer" (เดิมชื่อ "Dealer Name") = บริษัทย่อยที่ยื่นประมูลภายใต้ Authorized Dealer อีกทอด
+  //     เป็น free text ล้วนๆ ไม่ผูกกับ record ไหน → key djiDealer (ชื่อ key ชวนสับสน แต่คงไว้กันข้อมูลเดิมพัง)
+  // ⚠️ อย่าสับสนกับ dealer.djiDealer บน record Dealer ซึ่งเป็นคนละฟิลด์ = ประเภท SAB/Other (ดู cfg.djiDealerTypes)
   { key: 'dealerName',        label: 'DJI Autorize Dealer',         altLabels: ['DJI Dealer'] },
   { key: 'djiDealer',         label: 'Sub Dealer',                  altLabels: ['Dealer Name'] },
   { key: 'projectRevenue',    label: 'Project revenue' },
@@ -6827,7 +6828,7 @@ var PIPE_IMPORT_FIELD_GROUPS = [
   { key: 'projectName',    label: 'Project Name',                 keys: ['projectName'] },
   { key: 'endUser',        label: 'End User (TH/EN)',             keys: ['endUserTH', 'endUserEN'] },
   { key: 'unitType',       label: 'Unit Type',                    keys: ['unitType'] },
-  { key: 'dealer',         label: 'Dealer / DJI Dealer',          keys: ['dealerId', 'djiDealer'] },
+  { key: 'dealer',         label: 'Dealer / Sub Dealer',          keys: ['dealerId', 'djiDealer'] },
   { key: 'industrialType', label: 'Industrial Type',              keys: ['industrialType'] },
   { key: 'items',          label: 'รายการสินค้า (Model/Qty)',      keys: ['items', 'model', 'modelQty'] },
   { key: 'forecast',       label: 'Forecast Amount',              keys: ['forecastAmount'] },
@@ -6900,7 +6901,7 @@ function _pipeImportDiff(existing, c, dealer, colMap, logsIndex) {
     { label: 'End User (EN)',   old: _pipeNormText(existing.endUserEN),         newVal: _pipeNormText(_pipeCol(c, colMap, 'endUserEN')) },
     { label: 'Unit Type',       old: _pipeNormText(existing.unitType),          newVal: _pipeNormText(_pipeCol(c, colMap, 'unitType')) },
     { label: 'Dealer',          old: _pipeNormText((ST.getOne('dealers', existing.dealerId) || {}).name), newVal: _pipeNormText(dealer ? dealer.name : '') },
-    { label: 'Dealer Name',     old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(_pipeCol(c, colMap, 'djiDealer')) },
+    { label: 'Sub Dealer',       old: _pipeNormText(existing.djiDealer),         newVal: _pipeNormText(_pipeCol(c, colMap, 'djiDealer')) },
     { label: 'TOR',             old: _pipeNormText(existing.tor),               newVal: _pipeNormText(_pipeCol(c, colMap, 'tor')) },
     { label: 'Remark',          old: _pipeNormText(existing.remark),            newVal: _pipeNormText(_pipeCol(c, colMap, 'remark')) },
     { label: 'Appointment',     old: _pipeNormText(existing.appointmentLetter), newVal: _pipeNormText(_pipeCol(c, colMap, 'appointmentLetter')) },
@@ -7559,7 +7560,7 @@ var _PIPE_DETAIL_FIELD_DEFS = [
   { key: 'endUserEN',         label: 'End User EN' },
   { key: 'unitType',          label: 'Unit type' },
   { key: 'dealerName',        label: 'DJI Dealer' },
-  { key: 'djiDealer',         label: 'Dealer Name' },
+  { key: 'djiDealer',         label: 'Sub Dealer' },
   { key: 'projectRevenue',    label: 'Project Revenue' },
   { key: 'model',             label: 'Model', wide: true },
   { key: 'm3m',                label: 'M3M Qty' },
