@@ -301,6 +301,20 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-mrow .mn b { display:block; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dcal-mrow .mn i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
 .dcal-mrow .mr { font-size:11.5px; font-family:ui-monospace,monospace; color:var(--text2); white-space:nowrap; flex-shrink:0; }
+.dcal-quickpick { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:9px;
+  padding:9px 11px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; }
+.dcal-quickpick > span { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text3); }
+.dcal-quickpick button { font:inherit; font-size:12px; font-weight:600; padding:4px 11px; border-radius:999px;
+  cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text2); }
+.dcal-quickpick button:hover { border-color:var(--accent); color:var(--accent); }
+.dcal-quickpick button i { font-style:normal; font-size:10px; color:var(--text3); font-family:ui-monospace,monospace; }
+.dcal-quickpick button.more { border-style:dashed; }
+.dcal-ev { font-size:9.5px; font-weight:600; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dcal-ev.back { color:var(--good); }
+.dcal-ev.out { color:var(--warn); }
+.dcal-ev.full { color:var(--bad); }
+.dcal-cell.tight { background:var(--bad-soft); border-color:var(--bad); }
+.dcal-load { background:var(--bad); }
 </style>
 </head>
 <body>
@@ -1539,29 +1553,71 @@ function _scViewMonth() {
       (fits.length ? '<b>' + fits.length + '</b> วันในเดือนนี้ · ประกอบได้สูงสุด <b>' + maxSet + '</b> ชุด' : '<b>ไม่มีวันไหนว่างครบ</b>') +
       (rtxt ? '<div style="margin-top:5px;font-size:11.5px;color:var(--text2)">วันที่ว่างครบ: <b>' + rtxt + '</b></div>' : '') + '</div>';
   }
+  // ทางลัดเลือกรุ่น — รายเดือนมีประโยชน์จริงตอนรู้ว่าถามถึงรุ่นไหน
+  if (!scPicked.length) {
+    var cnt = {};
+    pool.forEach(function(u) { var m = _unitModelKey(u); cnt[m] = (cnt[m] || 0) + 1; });
+    var top = Object.keys(cnt).sort(function(a, b) { return cnt[b] - cnt[a] || a.localeCompare(b); }).slice(0, 6);
+    if (top.length) {
+      h += '<div class="dcal-quickpick"><span>ดูรุ่นไหน?</span>';
+      top.forEach(function(m) {
+        h += '<button onclick="scPicked.push(\'' + _scEsq(m) + '\');scOpen=null;renderStaffCalendar()">' + esc(m.length > 16 ? m.slice(0, 15) + '…' : m) + ' <i>' + cnt[m] + '</i></button>';
+      });
+      h += '<button class="more" onclick="scTogglePicker(event)">รุ่นอื่น…</button></div>';
+    }
+  }
   h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย</div>';
   if (scOpen) h += _scDrill();
+  // เตรียมข้อมูลรายวันล่วงหน้า ไม่งั้นคิดใหม่ทุกช่องจะกลายเป็น 30×เครื่อง×การยืม
+  var act = bks.filter(function(b) { return b.status !== 'returned'; });
+  var backOn = {}, outOn = {};
+  act.forEach(function(b) {
+    var ki = _scIso(b.e); backOn[ki] = (backOn[ki] || 0) + 1;
+    var ko = _scIso(b.s); outOn[ko] = (outOn[ko] || 0) + 1;
+  });
+  var modelsOf = {};
+  units.forEach(function(u) { var m = _unitModelKey(u); (modelsOf[m] = modelsOf[m] || []).push(u); });
+  var modelKeys = Object.keys(modelsOf);
   h += '<div class="dcal-mg">';
   ['อา','จ','อ','พ','พฤ','ศ','ส'].forEach(function(x) { h += '<div class="dcal-dow">' + x + '</div>'; });
   for (var i = 0; i < pad; i++) h += '<div class="dcal-cell pad"></div>';
   for (var d2 = 1; d2 <= nDays; d2++) {
     var cur = new Date(y, mo, d2), iso = _scIso(cur), k = 'day:' + iso;
-    var busy = units.filter(function(u) { return bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= cur && cur <= b.e; }); }).length;
+    var busySet = {};
+    act.forEach(function(b) { if (b.s <= cur && cur <= b.e) busySet[b.unitId] = 1; });
+    // "รุ่นเต็ม" คือสัญญาณที่ใช้ได้จริง — ว่างรวม 52 ตัวไม่ได้แปลว่ารับปากลูกค้าได้ ถ้าไม่มีรุ่นที่เขาขอ
+    var full = 0;
+    modelKeys.forEach(function(m) { if (!modelsOf[m].some(function(u) { return !busySet[u.id]; })) full++; });
+    var nBack = backOn[iso] || 0, nOut = outOn[iso] || 0;
     var isToday = cur.getTime() === todayD.getTime();
     var sets = scPicked.length ? Math.min.apply(null, scPicked.map(function(m) { return _scFreeOn(m, cur, bks, pool).length; })) : null;
     var cls = 'dcal-cell' + (isToday ? ' today' : '') + (scOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    if (sets === null && full && modelKeys.length && full / modelKeys.length >= 0.5) cls += ' tight';
     h += '<button class="' + cls + '" onclick="scToggleOpen(\'' + k + '\')"><span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
     if (sets === null) {
-      h += '<span class="dcal-mini"><i class="dcal-dot" style="background:#f59e0b"></i>ยืม ' + busy + '</span>' +
-        '<span class="dcal-mini"><i class="dcal-dot" style="background:#22c55e"></i>ว่าง ' + (units.length - busy) + '</span>' +
-        '<span class="dcal-load" style="width:' + (units.length ? busy / units.length * 100 : 0) + '%"></span>';
+      // วันที่ไม่มีอะไรเกิดขึ้นปล่อยว่าง — วันที่มีของเข้าออกจะได้เด่นขึ้นมาเอง
+      if (nBack) h += '<span class="dcal-ev back">↩ คืน ' + nBack + '</span>';
+      if (nOut) h += '<span class="dcal-ev out">↗ ส่ง ' + nOut + '</span>';
+      // เขียน "รุ่นเต็ม" เฉพาะวันที่ตึงจริง — ไม่งั้นตัวเลขเดิมซ้ำยาวสิบวันติด กลายเป็นปัญหาเดิม
+      if (full && modelKeys.length && full / modelKeys.length >= 0.5) {
+        h += '<span class="dcal-ev full" title="รุ่นที่ไม่เหลือเครื่องว่างเลยในวันนี้">⚠ เต็ม ' + full + '/' + modelKeys.length + ' รุ่น</span>';
+      }
+      if (full) h += '<span class="dcal-load" title="' + full + ' จาก ' + modelKeys.length + ' รุ่นไม่เหลือเครื่องว่าง" style="width:' + (full / modelKeys.length * 100) + '%"></span>';
     } else {
       h += '<span class="dcal-mini" style="font-weight:700;color:' + (sets > 0 ? 'var(--good)' : 'var(--bad)') + '">' +
         (sets > 0 ? (scPicked.length > 1 ? '✅ ' + sets + ' ชุด' : '✅ ว่าง ' + sets) : '✕ ไม่ว่าง') + '</span>';
     }
     h += '</button>';
   }
-  return h + '</div>';
+  h += '</div>';
+  if (!scPicked.length) {
+    h += '<div class="dcal-legend" style="margin-top:9px">' +
+      '<span><b style="color:var(--good)">↩ คืน</b> เครื่องที่ครบกำหนดคืนวันนั้น</span>' +
+      '<span><b style="color:var(--warn)">↗ ส่ง</b> เครื่องที่ต้องส่งออกวันนั้น</span>' +
+      '<span><b style="color:var(--bad)">⚠ รุ่นเต็ม</b> รุ่นที่ไม่เหลือเครื่องว่างเลย — รับปากลูกค้าไม่ได้</span>' +
+      '<span style="color:var(--text3)">วันที่ว่างเปล่า = ไม่มีของเข้าออก และทุกรุ่นยังมีเครื่องว่าง</span></div>';
+  }
+  return h;
 }
 
 // ---- 3) รายรุ่น ----

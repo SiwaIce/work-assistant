@@ -6169,8 +6169,32 @@ function _dcViewMonth() {
       (fits.length ? '<b>' + fits.length + '</b> วันในเดือนนี้ · ประกอบได้สูงสุด <b>' + maxSet + '</b> ชุด' : '<b>ไม่มีวันไหนว่างครบ</b>') +
       (rtxt ? '<div style="margin-top:5px;font-size:11.5px;color:var(--text2)">วันที่ว่างครบ: <b>' + rtxt + '</b></div>' : '') + '</div>';
   }
+  // ทางลัดเลือกรุ่น — มุมมองรายเดือนมีประโยชน์จริงตอนรู้ว่าถามถึงรุ่นไหน ให้กดทีเดียวถึงได้เลย
+  if (!demoCalPicked.length) {
+    var cnt = {};
+    basePool.forEach(function(d) { var m = demoCalModelOf(d); cnt[m] = (cnt[m] || 0) + 1; });
+    var top = Object.keys(cnt).sort(function(a, b) { return cnt[b] - cnt[a] || a.localeCompare(b); }).slice(0, 6);
+    if (top.length) {
+      h += '<div class="dcal-quickpick"><span>ดูรุ่นไหน?</span>';
+      top.forEach(function(m) {
+        h += '<button onclick="demoCalPick(\'' + sanitize(m).replace(/'/g, "\\'") + '\',true)">' + sanitize(_dcShort(m)) + ' <i>' + cnt[m] + '</i></button>';
+      });
+      h += '<button class="more" onclick="demoCalTogglePicker()">รุ่นอื่น…</button></div>';
+    }
+  }
   h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วจองได้จากตรงนั้นเลย</div>';
   if (demoCalOpen) h += _dcDrill();
+
+  // เตรียมข้อมูลรายวันไว้ล่วงหน้า — คิดใหม่ทุกช่องจะกลายเป็น 30×71×จำนวนการยืม
+  var act = bks.filter(function(b) { return b.status !== 'returned'; });
+  var backOn = {}, outOn = {};       // วันคืน / วันส่งออก
+  act.forEach(function(b) {
+    var ki = _dcISO(b.e); backOn[ki] = (backOn[ki] || 0) + 1;
+    var ko = _dcISO(b.s); outOn[ko] = (outOn[ko] || 0) + 1;
+  });
+  var modelsOf = {};                 // รุ่น -> รายการเครื่อง (ใช้นับว่าวันไหนรุ่นไหนเต็ม)
+  units.forEach(function(d) { var m = demoCalModelOf(d); (modelsOf[m] = modelsOf[m] || []).push(d); });
+  var modelKeys = Object.keys(modelsOf);
 
   h += '<div class="dcal-mg">';
   ['อา','จ','อ','พ','พฤ','ศ','ส'].forEach(function(x) { h += '<div class="dcal-dow">' + x + '</div>'; });
@@ -6178,18 +6202,33 @@ function _dcViewMonth() {
   for (var d2 = 1; d2 <= nDays; d2++) {
     var cur = new Date(y, mo, d2);
     var isoS = _dcISO(cur), k = 'day:' + isoS;
-    var busy = units.filter(function(u) { return bks.some(function(b) { return b.unitId === u.id && b.s <= cur && cur <= b.e; }); }).length;
-    var freeN = units.length - busy;
+    var busySet = {};
+    act.forEach(function(b) { if (b.s <= cur && cur <= b.e) busySet[b.unitId] = 1; });
+    // "รุ่นที่เต็ม" คือสัญญาณที่ใช้ได้จริง — ยอดเครื่องว่างรวม 52 ตัวไม่ได้แปลว่ารับปากลูกค้าได้
+    // เพราะ 52 ตัวนั้นอาจไม่มีรุ่นที่เขาขอเลยสักตัว
+    var full = 0;
+    modelKeys.forEach(function(m) {
+      var anyFree = modelsOf[m].some(function(d) { return !busySet[d.id]; });
+      if (!anyFree) full++;
+    });
+    var nBack = backOn[isoS] || 0, nOut = outOn[isoS] || 0;
     var isToday = cur.getTime() === todayD.getTime();
     var sets = null;
     if (demoCalPicked.length) sets = Math.min.apply(null, demoCalPicked.map(function(m) { return _dcFreeUnitsOn(m, cur, bks, basePool).length; }));
     var cls = 'dcal-cell' + (isToday ? ' today' : '') + (demoCalOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    if (sets === null && full && modelKeys.length && full / modelKeys.length >= 0.5) cls += ' tight';
     h += '<button class="' + cls + '" onclick="demoCalToggleOpen(\'' + k + '\')">' +
       '<span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
     if (sets === null) {
-      h += '<span class="dcal-mini"><i class="dcal-dot" style="background:#f59e0b"></i>ยืม ' + busy + '</span>' +
-        '<span class="dcal-mini"><i class="dcal-dot" style="background:#22c55e"></i>ว่าง ' + freeN + '</span>' +
-        '<span class="dcal-load" style="width:' + (units.length ? busy / units.length * 100 : 0) + '%"></span>';
+      // วันที่ไม่มีอะไรเกิดขึ้นปล่อยว่างไว้ — วันที่มีของเข้าออกจะได้เด่นขึ้นมาเอง
+      if (nBack) h += '<span class="dcal-ev back">↩ คืน ' + nBack + '</span>';
+      if (nOut) h += '<span class="dcal-ev out">↗ ส่ง ' + nOut + '</span>';
+      // เขียน "รุ่นเต็ม" เป็นตัวหนังสือเฉพาะวันที่ตึงจริง — ไม่งั้นตัวเลขเดิมจะซ้ำยาวเป็นสิบวันติดกัน
+      // กลายเป็นปัญหาเดิมที่ทุกช่องเขียนเหมือนกัน วันอื่นให้ดูจากความยาวแถบล่างพอ
+      if (full && modelKeys.length && full / modelKeys.length >= 0.5) {
+        h += '<span class="dcal-ev full" title="รุ่นที่ไม่เหลือเครื่องว่างเลยในวันนี้">⚠ เต็ม ' + full + '/' + modelKeys.length + ' รุ่น</span>';
+      }
+      if (full) h += '<span class="dcal-load" title="' + full + ' จาก ' + modelKeys.length + ' รุ่นไม่เหลือเครื่องว่าง" style="width:' + (full / modelKeys.length * 100) + '%"></span>';
     } else {
       h += '<span class="dcal-mini" style="font-weight:700;color:' + (sets > 0 ? '#22c55e' : '#ef4444') + '">' +
         (sets > 0 ? (demoCalPicked.length > 1 ? '✅ ' + sets + ' ชุด' : '✅ ว่าง ' + sets) : '✕ ไม่ว่าง') + '</span>';
@@ -6201,6 +6240,13 @@ function _dcViewMonth() {
     h += '</button>';
   }
   h += '</div>';
+  if (!demoCalPicked.length) {
+    h += '<div class="demo-gantt-legend" style="margin-top:9px">' +
+      '<span><b style="color:#22c55e">↩ คืน</b> เครื่องที่ครบกำหนดคืนวันนั้น</span>' +
+      '<span><b style="color:#f59e0b">↗ ส่ง</b> เครื่องที่ต้องส่งออกวันนั้น</span>' +
+      '<span><b style="color:#ef4444">⚠ รุ่นเต็ม</b> รุ่นที่ไม่เหลือเครื่องว่างเลย — รับปากลูกค้าไม่ได้</span>' +
+      '<span style="color:var(--text3)">วันที่ว่างเปล่า = ไม่มีของเข้าออก และทุกรุ่นยังมีเครื่องว่าง</span></div>';
+  }
   return h;
 }
 
