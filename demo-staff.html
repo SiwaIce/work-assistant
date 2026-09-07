@@ -7,12 +7,23 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
+/* ค่าเริ่มต้นเป็นธีมมืดชุดเดียวกับแอปหลัก (ตัวแปรลอกจาก :root ใน style.css) — หน้านี้เปิดจากลิงก์
+   แยกจาก SPA เลยแชร์ style.css กันไม่ได้ ต้องประกาศซ้ำที่นี่ ถ้าแก้สีในแอปหลักต้องมาแก้ตรงนี้ด้วย */
 :root {
+  --bg:#0f172a; --surface:#1e293b; --surface-2:#172033; --border:#334155; --text:#e2e8f0; --text2:#b0bec5; --text3:#8892b0;
+  --accent:#3b82f6; --accent-ink:#fff; --accent-soft:rgba(59,130,246,.16);
+  --good:#22c55e; --good-soft:rgba(34,197,94,.14); --warn:#f59e0b; --warn-soft:rgba(245,158,11,.14);
+  --bad:#ef4444; --bad-soft:rgba(239,68,68,.13);
+  --shadow:0 1px 2px rgba(0,0,0,.2),0 12px 32px -14px rgba(0,0,0,.5); --radius:14px;
+}
+body.theme-light {
   --bg:#f4f6f9; --surface:#fff; --surface-2:#eef1f6; --border:#dde3ec; --text:#17202b; --text2:#5b6779; --text3:#8a94a6;
   --accent:#0b74de; --accent-ink:#fff; --accent-soft:#e8f1fd;
   --good:#1a9c5e; --good-soft:#e5f7ee; --warn:#b8770a; --warn-soft:#fdf1de; --bad:#d1364a; --bad-soft:#fbe8ea;
-  --shadow:0 1px 2px rgba(23,32,43,.04),0 8px 24px -12px rgba(23,32,43,.12); --radius:14px;
+  --shadow:0 1px 2px rgba(23,32,43,.04),0 8px 24px -12px rgba(23,32,43,.12);
 }
+.theme-btn { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:9px;
+  width:36px; height:36px; font-size:15px; cursor:pointer; flex-shrink:0; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,'Segoe UI',sans-serif; min-height:100vh; }
 .wrap { max-width:1000px; margin:0 auto; padding:20px 16px 70px; }
@@ -36,7 +47,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .back-link { display:inline-flex; align-items:center; gap:6px; color:var(--accent); font-weight:600; font-size:13.5px; cursor:pointer; margin-bottom:14px; background:none; border:none; padding:0; }
 .lockwrap { max-width:360px; margin:90px auto; text-align:center; }
 .lockwrap .ic { font-size:40px; margin-bottom:10px; }
-.pinboxes input { width:200px; text-align:center; font-size:22px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-weight:700; padding:10px; letter-spacing:6px; }
+/* เดิมเขียน selector เป็น .pinboxes input ซึ่งไม่มีใน markup เลย (input อยู่ใต้ .lockwrap ตรงๆ)
+   ตอนธีมสว่างเลยดูปกติเพราะ input ที่ไม่ถูกจัดสไตล์ก็ขาวอยู่แล้ว พอเปลี่ยนเป็นธีมมืดจะกลายเป็นกล่องขาวโพลน */
+.lockwrap input { width:100%; text-align:center; font-size:20px; border-radius:10px; border:1px solid var(--border);
+  background:var(--surface-2); color:var(--text); font-weight:700; padding:11px; letter-spacing:4px; font-family:inherit; }
+.lockwrap input::placeholder { color:var(--text3); font-weight:400; letter-spacing:normal; }
 .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:10px; }
 .stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
 @media (max-width:700px) { .stat-row { grid-template-columns:repeat(2,1fr); } }
@@ -67,7 +82,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .cat-tabs { display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; }
 .cat-tab { display:flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px; font-weight:600; padding:8px 15px; border-radius:11px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text2); }
 .cat-tab.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-.cat-tab .cnt { font-size:10.5px; opacity:.75; background:rgba(0,0,0,.12); border-radius:999px; padding:1px 6px; }
+.cat-tab .cnt { font-size:10.5px; opacity:.75; background:rgba(128,128,128,.22); border-radius:999px; padding:1px 6px; }
 .cat-tab.on .cnt { background:rgba(255,255,255,.25); }
 .browse-toolbar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
 .browse-toolbar input { flex:1; min-width:200px; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
@@ -95,6 +110,86 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .link-callout code { background:var(--surface); padding:3px 8px; border-radius:6px; font-size:12px; }
 .loading { text-align:center; padding:60px 20px; color:var(--text2); }
 .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 18px; border-radius:10px; font-size:13px; z-index:99; box-shadow:var(--shadow); }
+/* ---- ปฏิทิน 5 มุมมอง (ชุดเดียวกับ .dcal-* ในแอปหลัก ปรับมาใช้ตัวแปรสีของหน้านี้) ---- */
+.dcal-views { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
+.dcal-vbtn { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer; font:inherit;
+  font-weight:600; border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
+.dcal-vbtn.act { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.dcal-toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+.dcal-pickwrap { position:relative; }
+.dcal-picker { position:absolute; top:calc(100% + 5px); left:0; z-index:40; width:320px; max-width:88vw;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px; box-shadow:var(--shadow); }
+.dcal-picker input { width:100%; margin-bottom:6px; font:inherit; font-size:13px; padding:8px 10px;
+  border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.dcal-pklist { max-height:220px; overflow:auto; display:flex; flex-direction:column; gap:1px; }
+.dcal-pklist label { display:flex; align-items:center; gap:7px; font-size:12.5px; padding:5px 6px; border-radius:6px; cursor:pointer; }
+.dcal-pklist label:hover { background:var(--surface-2); }
+.dcal-pklist .cnt { margin-left:auto; font-size:10.5px; color:var(--text3); }
+.dcal-chips { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.dcal-chip { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+  background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent); border-radius:999px; padding:2px 5px 2px 10px; }
+.dcal-chip button { background:var(--accent); color:#fff; border:none; border-radius:50%; width:15px; height:15px;
+  font-size:9px; line-height:1; cursor:pointer; font-family:inherit; }
+.dcal-wrap { overflow-x:auto; }
+.dcal-tl { min-width:780px; }
+.dcal-head { display:grid; grid-template-columns:var(--dcal-lab,210px) 1fr; gap:10px; align-items:end; margin-bottom:5px; }
+.dcal-months { display:grid; font-size:10px; color:var(--text3); font-weight:600; }
+.dcal-months span { border-left:1px solid var(--border); padding-left:4px; overflow:hidden; }
+.dcal-row { display:grid; grid-template-columns:var(--dcal-lab,210px) 1fr; gap:10px; align-items:center;
+  padding:4px 0; border-top:1px solid var(--border); }
+.dcal-lab { font-size:12px; line-height:1.3; min-width:0; background:none; border:none; padding:0; text-align:left;
+  font-family:inherit; color:var(--text); cursor:pointer; }
+.dcal-lab b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dcal-lab .m2 { font-size:10px; color:var(--text3); font-family:ui-monospace,'SF Mono',Menlo,monospace; }
+.dcal-lab:hover b { color:var(--accent); text-decoration:underline; }
+.dcal-track { position:relative; height:24px; background:var(--surface-2); border-radius:5px; overflow:hidden; }
+.dcal-grid { position:absolute; inset:0; pointer-events:none; }
+.dcal-grid i { position:absolute; top:0; bottom:0; width:1px; background:var(--border); }
+.dcal-today { position:absolute; top:0; bottom:0; width:2px; background:#ff5252; z-index:2; pointer-events:none; }
+.dcal-bar { position:absolute; top:3px; bottom:3px; border-radius:4px; font-size:10px; font-weight:600; color:#fff;
+  display:flex; align-items:center; padding:0 5px; overflow:hidden; white-space:nowrap; cursor:pointer;
+  border:none; font-family:inherit; }
+.dcal-bar.b-out { background:#f59e0b; }
+.dcal-bar.b-late { background:#ef4444; }
+.dcal-bar.b-soon { background:transparent; border:1.5px dashed var(--accent); color:var(--accent); }
+.dcal-bar.b-done { background:var(--border); color:var(--text2); }
+.dcal-bar.on { box-shadow:0 0 0 2px var(--text); }
+.dcal-mg { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.dcal-dow { text-align:center; font-size:10px; font-weight:600; color:var(--text3); padding-bottom:2px; }
+.dcal-cell { border:1px solid var(--border); border-radius:7px; padding:5px 6px; min-height:68px; background:var(--surface-2);
+  display:flex; flex-direction:column; gap:2px; cursor:pointer; text-align:left; font-family:inherit; color:var(--text); }
+.dcal-cell.pad { background:transparent; border:none; cursor:default; min-height:0; }
+.dcal-cell.today { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.dcal-cell.on { box-shadow:0 0 0 2px var(--accent); }
+.dcal-cell.fits { background:var(--good-soft); border-color:var(--good); }
+.dcal-cell.nofit { background:var(--bad-soft); border-color:var(--bad); }
+.dcal-cell:hover { border-color:var(--accent); }
+.dcal-num { font-weight:700; font-size:11.5px; }
+.dcal-mini { font-size:9.5px; color:var(--text2); display:flex; align-items:center; gap:3px; }
+.dcal-dot { width:6px; height:6px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.dcal-load { height:3px; border-radius:2px; background:#f59e0b; margin-top:auto; }
+.dcal-drill { border:1px solid var(--accent); background:var(--surface-2); border-radius:9px; padding:11px 13px; margin:4px 0 10px; }
+.dcal-drill-hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:9px; }
+.dcal-kv { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; margin-bottom:9px; }
+.dcal-kv span.k { display:block; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
+.dcal-urow { display:grid; grid-template-columns:110px 1fr auto; gap:10px; align-items:center; padding:7px 10px;
+  border-bottom:1px solid var(--border); font-size:12px; }
+.dcal-urow:last-child { border-bottom:none; }
+.dcal-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-top:10px; }
+.dcal-legend span { display:flex; align-items:center; gap:6px; }
+.dcal-legend i { width:14px; height:9px; border-radius:3px; display:inline-block; }
+.dcal-combo { background:var(--accent-soft); border:1px solid var(--accent); border-radius:9px; padding:10px 13px;
+  font-size:12.5px; margin-bottom:10px; }
+.dcal-src { font-size:10.5px; color:var(--text3); margin-top:10px; line-height:1.5; }
+.dcal-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+.dcal-tbl th { text-align:left; padding:5px 7px; border-bottom:1px solid var(--border); font-size:10px;
+  text-transform:uppercase; color:var(--text3); }
+.dcal-tbl td { padding:5px 7px; border-bottom:1px solid var(--border); }
+.dcal-idpc { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; white-space:nowrap;
+  font-family:ui-monospace,'SF Mono',Menlo,monospace; background:var(--surface); border:1px solid var(--border);
+  border-radius:6px; padding:1px 7px; color:var(--text); }
+.dcal-idpc i { font-style:normal; font-weight:700; font-size:9px; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--text3); font-family:-apple-system,'Segoe UI',sans-serif; }
 </style>
 </head>
 <body>
@@ -117,7 +212,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
     <div id="staffContent" style="display:none">
       <div class="topbar">
         <div><div style="font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">Staff • ไม่ผูกบัญชีส่วนตัว</div><h1 style="margin:2px 0 0;font-size:22px">🚁 จัดการ Demo Equipment</h1></div>
-        <button class="btn btn-ghost btn-sm" onclick="staffLock()">🔒 ออกจากระบบ</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="theme-btn" id="themeBtn" onclick="toggleStaffTheme()" title="สลับธีมสว่าง/มืด">🌙</button>
+          <button class="btn btn-ghost btn-sm" onclick="staffLock()">🔒 ออกจากระบบ</button>
+        </div>
       </div>
 
       <div class="link-callout">
@@ -132,10 +230,12 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         <button class="on" data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
         <button data-tab="return" onclick="staffTab('return')">🔔 ติดตามคืน <span id="returnCountBadge"></span></button>
         <button data-tab="units" onclick="staffTab('units')">🚁 รายการเครื่อง</button>
+        <button data-tab="calendar" onclick="staffTab('calendar')">🗓️ ปฏิทิน</button>
       </div>
 
       <div class="tabpane on" id="tab-pending"></div>
       <div class="tabpane" id="tab-return"></div>
+      <div class="tabpane" id="tab-calendar"></div>
       <div class="tabpane" id="tab-units">
         <div id="unitsListView">
           <button class="btn btn-ghost btn-sm" id="catMgrToggleBtn" style="margin-bottom:10px" onclick="toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
@@ -278,7 +378,18 @@ function listenLoans() {
   }, function(e) { console.warn('listenLoans error', e); });
 }
 function activeLoansFor(unitId) { return LOANS.filter(function(l) { return l.unitId === unitId && l.status === 'active'; }); }
-function unitIsBusyOn(unitId, iso) { return activeLoansFor(unitId).some(function(l) { return iso >= l.start && iso <= l.end; }); }
+// การยืมที่คีย์ในแอปหลักมาถึงหน้านี้ทาง busyRanges ไม่ได้อยู่ใน publicDemoLoans — เดิมทุกจุดที่เช็ค "ว่างไหม"
+// ดูแต่ LOANS อย่างเดียว หน้านี้เลยขึ้นว่าว่างทั้ง 71 เครื่องทั้งที่แอปหลักปล่อยยืมอยู่ 19 เครื่อง
+// (เจอตอนทำปฏิทินซึ่งรวมสองแหล่ง แล้วตัวเลขขัดกันเอง) ต้องนับ busyRanges ด้วยทุกจุดที่ถามว่าว่างไหม
+function unitAppRangeOn(unitId, iso) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!u) return null;
+  return (u.busyRanges || []).filter(function(r) { return iso >= r.start && iso <= r.end; })[0] || null;
+}
+function unitIsBusyOn(unitId, iso) {
+  if (activeLoansFor(unitId).some(function(l) { return iso >= l.start && iso <= l.end; })) return true;
+  return !!unitAppRangeOn(unitId, iso);
+}
 function unitCurrentLoan(unitId) {
   var today = _td();
   return activeLoansFor(unitId).filter(function(l) { return today >= l.start && today <= l.end; })[0] || null;
@@ -288,7 +399,7 @@ var _staffRenderTimer = null;
 function renderAll() {
   clearTimeout(_staffRenderTimer);
   _staffRenderTimer = setTimeout(function() {
-    renderStatRow(); renderPendingTab(); renderReturnTab(); renderUnitsTable();
+    renderStatRow(); renderPendingTab(); renderReturnTab(); renderUnitsTable(); renderStaffCalendar();
     if (currentUnitDetail) openUnitDetail(currentUnitDetail.id);
   }, 30);
 }
@@ -479,19 +590,21 @@ function renderUnitsTable() {
   var h = order.map(function(model) {
     var list = groups[model];
     var availN = list.filter(function(u) {
-      return u.status !== 'unavailable' && u.status !== 'lost' && !unitCurrentLoan(u.id);
+      return u.status !== 'unavailable' && u.status !== 'lost' && !unitIsBusyOn(u.id, _td());
     }).length;
     var rows = list.map(function(u) {
       var n = idxInModel[model].indexOf(u.id) + 1;
       var loan = unitCurrentLoan(u.id);
+      var appRange = loan ? null : unitAppRangeOn(u.id, _td());
       var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
-        : loan ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
+        : (loan || appRange) ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
       var rental = _unitHasRental(u) ? esc(u.rentalDbNo) : '<span style="color:var(--warn)">ยังไม่ลงทะเบียน</span>';
       return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
         '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
         '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
-        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end : '—') + '</td></tr>';
+        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end
+          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + appRange.end) : '—') + '</td></tr>';
     }).join('');
     return '<details class="model-group" open><summary><span class="mn">' + esc(model) + '</span>' +
       '<span class="mc">' + availN + '/' + list.length + ' ว่างตอนนี้</span></summary>' +
@@ -516,9 +629,16 @@ function openUnitDetail(unitId) {
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
     '<span class="pill pill-muted">' + (u.flyable!==false?'✈️ บินได้':'🖼️ จัดแสดงเท่านั้น') + '</span>' +
     '<span class="pill pill-muted">กสทช ' + (u.nbtcRegistered?'✅':'❌') + '</span><span class="pill pill-muted">ประกันภัย ' + (u.droneInsurance?'✅':'❌') + '</span><span class="pill pill-muted">CAAT ' + (u.caatRegistered?'✅':'❌') + '</span></div>';
+  var appRange = loan ? null : unitAppRangeOn(u.id, _td());
   if (loan) {
     h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + loan.end + '</div>' +
       '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>';
+  } else if (appRange) {
+    // การยืมนี้อยู่ในแอปหลัก ไม่ได้อยู่ใน publicDemoLoans จึงกดรับคืนจากหน้านี้ไม่ได้ (ไม่มี doc ให้อัปเดต)
+    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">📤 ถูกยืมอยู่ — ' +
+      esc(appRange.borrower || 'ไม่ระบุผู้ยืม') + ' · กำหนดคืน ' + esc(appRange.end) + '</div>' +
+      '<div style="font-size:12px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:8px 11px">' +
+      'รายการนี้คีย์จากเมนู Demo Equipment ในแอปหลัก การรับคืนต้องกดที่แอปหลัก หน้านี้กดคืนได้เฉพาะรายการที่อนุมัติ/คีย์จากหน้านี้เอง</div>';
   } else if (u.status === 'unavailable' || u.status === 'lost') {
     h += '<div style="font-size:13px;color:var(--text2)">เครื่องนี้ไม่พร้อมใช้งาน — แก้ไขสถานะได้จากเมนู Demo Equipment ในแอพหลัก</div>';
   } else {
@@ -564,6 +684,546 @@ function saveManualLoan(unitId) {
     start: start, end: end, actualReturnDate: '', approver: requester, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() { toastMock('💾 บันทึกยืมแล้ว'); closeUnitDetail(); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
+
+// ================================================================
+// ปฏิทิน 5 มุมมอง — พอร์ตจาก renderDemoCalendar() ในแอปหลัก (features.js)
+// ต่างกันที่แหล่งข้อมูล: หน้านี้ไม่มี v7_demoLoans ต้องรวมสองทางเข้าด้วยกัน
+//   1) LOANS (publicDemoLoans) — รายการที่อนุมัติ/คีย์จากหน้านี้เอง
+//   2) UNITS[].busyRanges       — การยืมที่คีย์ในแอปหลักแล้ว publish ตามมา
+// สองชุดนี้ควรไม่ทับกัน แต่ dedup ด้วย unitId|start|end ไว้เผื่อวันหน้ามี sync สองทาง
+// publicDemoLoans ไม่เก็บ jobNo/refNo มุมมองที่ 4 จึงจัดชุดด้วย ผู้ยืม+ช่วงวัน แทนเลขใบจอง
+// (คำขอที่อนุมัติทีเดียวสร้าง loan หลายรายการที่มี borrower/start/end ชุดเดียวกันอยู่แล้ว)
+// ================================================================
+var scView = 'timeline';        // timeline | month | model | batch | find
+var scSpan = 6, scSpanStart = 0, scMonthOffset = 0;
+var scPicked = [], scOpen = null, scKind = 'all';
+var scFindModel = '', scFindFrom = '', scFindTo = '';
+var SC_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+function _scDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+function _scFromIso(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? new Date(+p[0], +p[1]-1, +p[2]) : null; }
+function _scIso(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function _scAdd(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function _scFmt(d) { return d.getDate() + ' ' + SC_MONTHS[d.getMonth()]; }
+function _scOverlap(b, from, to) { return b.s <= to && from <= b.e; }
+// ปีที่เป็นไปไม่ได้ = ข้อมูลพัง ถ้าปล่อยเข้าปฏิทิน แถบเดียวจะลากข้ามทุกเดือนตลอดไป (เคยเจอในแอปหลัก)
+function _scSane(iso) { var d = _scFromIso(iso); if (!d || isNaN(d.getTime())) return null; var y = d.getFullYear(); return (y >= 2000 && y <= 2100) ? d : null; }
+
+function scBookings() {
+  var out = [], seen = {};
+  function add(unitId, sIso, eIso, borrower, purpose, approver, status) {
+    var s = _scSane(sIso); if (!s) return;
+    var e = _scSane(eIso) || s; if (e < s) e = s;
+    var k = unitId + '|' + _scIso(s) + '|' + _scIso(e);
+    if (seen[k]) return;
+    seen[k] = 1;
+    out.push({ unitId: unitId, s: s, e: e, borrower: borrower || '', purpose: purpose || '',
+      approver: approver || '', status: status || 'active' });
+  }
+  LOANS.forEach(function(l) { add(l.unitId, l.start, l.actualReturnDate || l.end, l.borrower, l.purpose, l.approver, l.status); });
+  UNITS.forEach(function(u) { (u.busyRanges || []).forEach(function(r) { add(u.id, r.start, r.end, r.borrower, r.purpose, r.approver, 'active'); }); });
+  return out;
+}
+function scAllUnits() {
+  return UNITS.filter(function(u) {
+    if (scKind === 'main' && u.isAccessory) return false;
+    if (scKind === 'accessory' && !u.isAccessory) return false;
+    return true;
+  });
+}
+function scUnits() {
+  return scAllUnits().filter(function(u) { return !scPicked.length || scPicked.indexOf(_unitModelKey(u)) !== -1; });
+}
+function scBarState(b, today) {
+  if (b.status === 'returned') return 'done';
+  if (b.e < today) return 'late';
+  if (b.s > today) return 'soon';
+  return 'out';
+}
+function scRange() {
+  var from = _scDay(new Date()); from.setDate(1); from.setMonth(from.getMonth() + scSpanStart);
+  var to = new Date(from); to.setMonth(to.getMonth() + scSpan); to.setDate(0);
+  return { from: from, to: to, days: Math.round((to - from) / 86400000) + 1 };
+}
+function _scPct(d, r) { return Math.max(0, Math.min(100, ((_scDay(d) - r.from) / 86400000) / r.days * 100)); }
+function _scDocs(u) {
+  function b(ok, t) { return '<span class="pill ' + (ok ? 'pill-good' : 'pill-bad') + '">' + (ok ? '✓' : '✗') + ' ' + t + '</span>'; }
+  return '<span style="display:inline-flex;gap:4px;flex-wrap:wrap">' +
+    '<span class="pill pill-muted">' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>' +
+    b(u.nbtcRegistered, 'กสทช.') + b(u.droneInsurance, 'ประกัน') + b(u.caatRegistered, 'CAAT') + '</span>';
+}
+function _scIdChips(u) {
+  var h = '';
+  if (u.rentalDbNo) h += '<span class="dcal-idpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span> ';
+  if (u.serialNumber) h += '<span class="dcal-idpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
+  return h || '<span style="color:var(--text3)">—</span>';
+}
+function _scEsq(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+// ---- แถบเครื่องมือ ----
+function scToolbar() {
+  var views = [['timeline','📊 ไทม์ไลน์'],['month','📅 รายเดือน'],['model','🚁 รายรุ่น'],['batch','📄 ชุดยืม'],['find','🔍 หาเครื่องว่าง']];
+  var h = '<div class="dcal-views">' + views.map(function(v) {
+    return '<button class="dcal-vbtn' + (scView === v[0] ? ' act' : '') + '" onclick="scSetView(\'' + v[0] + '\')">' + v[1] + '</button>';
+  }).join('') + '</div>';
+  h += '<div class="dcal-toolbar">';
+  [['main','🚁 เครื่องหลัก'],['accessory','🔩 อุปกรณ์เสริม'],['all','ทั้งหมด']].forEach(function(k) {
+    h += '<button class="dcal-vbtn' + (scKind === k[0] ? ' act' : '') + '" onclick="scKind=\'' + k[0] + '\';scOpen=null;renderStaffCalendar()">' + k[1] + '</button>';
+  });
+  h += '<span class="dcal-pickwrap"><button class="dcal-vbtn' + (scPicked.length ? ' act' : '') + '" onclick="scTogglePicker(event)">🎯 เลือกรุ่น' + (scPicked.length ? ' (' + scPicked.length + ')' : '…') + '</button>';
+  h += '<span id="scPicker"></span></span></div>';
+  if (scPicked.length) {
+    h += '<div class="dcal-chips" style="margin-bottom:10px">' + scPicked.map(function(m) {
+      return '<span class="dcal-chip">' + esc(m) + '<button onclick="scUnpick(\'' + _scEsq(m) + '\')">✕</button></span>';
+    }).join('') + '<button class="dcal-vbtn" onclick="scPicked=[];scOpen=null;renderStaffCalendar()">ล้างทั้งหมด</button></div>';
+  }
+  return h;
+}
+function scSetView(v) { scView = v; scOpen = null; renderStaffCalendar(); }
+function _scPickerBox(q) {
+  return '<span class="dcal-picker" onclick="event.stopPropagation()">' +
+    '<input type="text" id="scPickSearch" value="' + esc(q || '') + '" placeholder="พิมพ์ชื่อรุ่นเพื่อกรอง" oninput="scRenderPickList(this.value)" autocomplete="off">' +
+    '<div class="dcal-pklist" id="scPickList"></div></span>';
+}
+function scTogglePicker(ev) {
+  ev.stopPropagation();
+  var box = document.getElementById('scPicker');
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  box.innerHTML = _scPickerBox('');
+  scRenderPickList('');
+  document.getElementById('scPickSearch').focus();
+}
+function scRenderPickList(q) {
+  q = (q || '').toLowerCase();
+  var counts = {};
+  scAllUnits().forEach(function(u) { var m = _unitModelKey(u); counts[m] = (counts[m] || 0) + 1; });
+  var keys = Object.keys(counts).sort().filter(function(m) { return !q || m.toLowerCase().indexOf(q) !== -1; });
+  document.getElementById('scPickList').innerHTML = keys.length ? keys.map(function(m) {
+    return '<label><input type="checkbox"' + (scPicked.indexOf(m) !== -1 ? ' checked' : '') +
+      ' onchange="scPick(this,\'' + _scEsq(m) + '\')"><span>' + esc(m) + '</span><span class="cnt">' + counts[m] + '</span></label>';
+  }).join('') : '<div style="font-size:12px;color:var(--text3);padding:6px">ไม่พบรุ่นที่ค้นหา</div>';
+}
+function scPick(el, m) {
+  var i = scPicked.indexOf(m);
+  if (el.checked && i === -1) scPicked.push(m);
+  if (!el.checked && i !== -1) scPicked.splice(i, 1);
+  scOpen = null;
+  var q = (document.getElementById('scPickSearch') || {}).value || '';
+  renderStaffCalendar();
+  // เปิด picker ค้างไว้ให้ติ๊กหลายรุ่นรวดเดียว ไม่ต้องกดเปิดใหม่ทุกครั้ง
+  var box = document.getElementById('scPicker');
+  if (box) { box.innerHTML = _scPickerBox(q); scRenderPickList(q); }
+}
+function scUnpick(m) { var i = scPicked.indexOf(m); if (i !== -1) scPicked.splice(i, 1); scOpen = null; renderStaffCalendar(); }
+document.addEventListener('click', function() { var b = document.getElementById('scPicker'); if (b) b.innerHTML = ''; });
+
+// ---- ชิ้นส่วนไทม์ไลน์ ----
+function _scMonthHead(r) {
+  var n = scSpan, h = '<div class="dcal-months" style="grid-template-columns:repeat(' + n + ',1fr)">', c = new Date(r.from);
+  for (var i = 0; i < n; i++) { h += '<span>' + SC_MONTHS[c.getMonth()] + (n > 6 ? '' : ' ' + String(c.getFullYear()).slice(2)) + '</span>'; c.setMonth(c.getMonth()+1); }
+  return h + '</div>';
+}
+function _scGrid() {
+  var h = '<div class="dcal-grid">';
+  for (var i = 1; i < scSpan; i++) h += '<i style="left:' + (i / scSpan * 100) + '%"></i>';
+  return h + '</div>';
+}
+function _scTodayLine(r) {
+  var t = _scDay(new Date());
+  if (t < r.from || t > r.to) return '';
+  return '<div class="dcal-today" style="left:' + _scPct(t, r) + '%"></div>';
+}
+function _scBar(b, r, today, label, key) {
+  var L = _scPct(b.s, r), R = _scPct(_scAdd(b.e, 1), r), w = Math.max(1.1, R - L);
+  return '<button class="dcal-bar b-' + scBarState(b, today) + (scOpen === key ? ' on' : '') + '" style="left:' + L + '%;width:' + w + '%" ' +
+    'title="' + esc(label) + ' · ' + _scFmt(b.s) + ' – ' + _scFmt(b.e) + '" onclick="scToggleOpen(\'' + _scEsq(key) + '\')">' + esc(label) + '</button>';
+}
+function _scSpanCtl() {
+  var r = scRange();
+  var h = '<div class="dcal-toolbar" style="justify-content:space-between">';
+  h += '<span style="display:flex;gap:6px;align-items:center">';
+  h += '<button class="dcal-vbtn" onclick="scSpanStart--;scOpen=null;renderStaffCalendar()">◀</button>';
+  h += '<b style="font-size:13px">' + _scFmt(r.from) + ' ' + r.from.getFullYear() + ' – ' + _scFmt(r.to) + ' ' + r.to.getFullYear() + '</b>';
+  h += '<button class="dcal-vbtn" onclick="scSpanStart++;scOpen=null;renderStaffCalendar()">▶</button>';
+  if (scSpanStart !== 0) h += '<button class="dcal-vbtn" onclick="scSpanStart=0;scOpen=null;renderStaffCalendar()">วันนี้</button>';
+  h += '</span><span style="display:flex;gap:5px;align-items:center;font-size:11.5px;color:var(--text2)">ช่วง:';
+  [3,6,12].forEach(function(n) { h += '<button class="dcal-vbtn' + (scSpan === n ? ' act' : '') + '" onclick="scSpan=' + n + ';renderStaffCalendar()">' + n + ' เดือน</button>'; });
+  return h + '</span></div>';
+}
+function _scLegend() {
+  return '<div class="dcal-legend">' +
+    '<span><i style="background:#f59e0b"></i>กำลังยืม</span>' +
+    '<span><i style="background:#ef4444"></i>เลยกำหนดคืน</span>' +
+    '<span><i style="border:1.5px dashed var(--accent)"></i>จองล่วงหน้า</span>' +
+    '<span><i style="background:var(--border)"></i>คืนแล้ว</span>' +
+    '<span><i style="background:#ff5252;width:3px"></i>วันนี้</span></div>';
+}
+function _scSrc() {
+  return '<div class="dcal-src">📄 รวมข้อมูล 2 ทาง — รายการที่อนุมัติ/คีย์จากหน้านี้ (publicDemoLoans) และการยืมที่คีย์ในแอปหลักซึ่ง publish ตามมา · หน้านี้ไม่มีเลขใบจอง/ใบเบิก จึงจัดชุดด้วยผู้ยืม + ช่วงวันแทน</div>';
+}
+function scToggleOpen(k) { scOpen = (scOpen === k) ? null : k; renderStaffCalendar(); }
+function scCloseBtn() { return '<button class="btn btn-ghost btn-sm" onclick="scOpen=null;renderStaffCalendar()">✕ ปิด</button>'; }
+function scBookBtn(unitId, from, label, ghost, to) {
+  return '<button class="btn ' + (ghost ? 'btn-ghost' : 'btn-primary') + ' btn-sm" onclick="event.stopPropagation();scBook(\'' + unitId + '\',\'' + _scIso(from) + '\'' + (to ? ',\'' + _scIso(to) + '\'' : '') + ')">' + label + '</button>';
+}
+// จองจากทุกจุดของปฏิทิน — พาไปฟอร์มคีย์ยืมเดิมพร้อมเติมวันที่ให้ ไม่ต้องกลับไปหาเครื่องเองในแท็บรายการ
+function scBook(unitId, startIso, endIso) {
+  staffTab('units');
+  openUnitDetail(unitId);
+  showManualLoanForm(unitId);
+  var s = document.getElementById('mlStart'), e = document.getElementById('mlEnd');
+  if (s) s.value = startIso;
+  if (e) e.value = endIso || startIso;
+  var zone = document.getElementById('manualLoanFormZone');
+  if (zone) zone.scrollIntoView({ block: 'center' });
+}
+
+// ---- แผงรายละเอียดที่กดเปิด ----
+function scBatchKey(b) { return (b.borrower || '—') + '|' + _scIso(b.s) + '|' + _scIso(b.e); }
+function _scDrill() {
+  if (!scOpen) return '';
+  var t = scOpen.split(':')[0], v = scOpen.slice(t.length + 1);
+  if (t === 'unit') return _scDrillUnit(v);
+  if (t === 'batch') return _scDrillBatch(v);
+  if (t === 'day') return _scDrillDay(v);
+  if (t === 'model') return _scDrillModel(v);
+  return '';
+}
+function _scDrillUnit(unitId) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!u) return '';
+  var today = _scDay(new Date());
+  var bs = scBookings().filter(function(b) { return b.unitId === unitId; }).sort(function(a, b) { return b.s - a.s; });
+  var cur = bs.filter(function(b) { return b.status !== 'returned' && b.e >= today && b.s <= today; })[0] ||
+            bs.filter(function(b) { return b.status !== 'returned' && b.e < today; })[0];
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">' + esc(u.model || u.name || '-') + '</b><div style="margin-top:4px">' + _scIdChips(u) + '</div>' +
+    '</div>' + scCloseBtn() + '</div>';
+  h += '<div style="margin-bottom:9px">' + _scDocs(u) + '</div>';
+  if (cur) {
+    var left = Math.round((cur.e - today) / 86400000);
+    h += '<div class="dcal-kv"><div><span class="k">ผู้ยืม</span><b>' + esc(cur.borrower || '—') + '</b></div>' +
+      (cur.approver ? '<div><span class="k">ผู้ทำเรื่อง</span><b>' + esc(cur.approver) + '</b></div>' : '') +
+      (cur.purpose ? '<div><span class="k">วัตถุประสงค์</span><b>' + esc(cur.purpose) + '</b></div>' : '') +
+      '<div><span class="k">ช่วงยืม</span><b>' + _scFmt(cur.s) + ' – ' + _scFmt(cur.e) + '</b></div>' +
+      '<div><span class="k">กำหนดคืน</span><b style="color:' + (left < 0 ? '#ef4444' : left <= 3 ? '#f59e0b' : 'inherit') + '">' +
+      (left < 0 ? 'เลยมา ' + Math.abs(left) + ' วัน' : left === 0 ? 'ครบวันนี้' : 'อีก ' + left + ' วัน') + '</b></div></div>';
+  }
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+  if (cur) h += scBookBtn(u.id, _scAdd(cur.e, 1), '📤 จองต่อ — เริ่ม ' + _scFmt(_scAdd(cur.e, 1)), true);
+  else h += scBookBtn(u.id, today, '📤 จองเครื่องนี้');
+  h += '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')">📄 รายละเอียดเต็ม →</button></div>';
+  if (bs.length > 1) {
+    h += '<div style="font-size:11px;color:var(--text2);margin:10px 0 4px">ประวัติ/คิวของเครื่องนี้</div><table class="dcal-tbl"><tbody>';
+    bs.slice(0, 6).forEach(function(b) {
+      h += '<tr><td>' + _scFmt(b.s) + ' – ' + _scFmt(b.e) + '</td><td>' + esc(b.borrower || '—') + '</td>' +
+        '<td>' + (b.status === 'returned' ? 'คืนแล้ว' : 'กำลังยืม') + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  return h + _scSrc() + '</div>';
+}
+function _scDrillBatch(key) {
+  var bs = scBookings().filter(function(b) { return scBatchKey(b) === key; });
+  if (!bs.length) return '';
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  bs = bs.filter(function(b) { return byId[b.unitId]; });
+  if (!bs.length) return '';
+  var f = bs[0], today = _scDay(new Date());
+  var late = Math.round((today - f.e) / 86400000);
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">📄 ' + esc(f.borrower || 'ไม่ระบุผู้ยืม') + '</b>' +
+    '<div style="font-size:11px;color:var(--text2)">' + bs.length + ' เครื่อง · ' + _scFmt(f.s) + ' – ' + _scFmt(f.e) + '</div>' +
+    '</div>' + scCloseBtn() + '</div>';
+  h += '<div class="dcal-kv">';
+  if (f.approver) h += '<div><span class="k">ผู้ทำเรื่อง</span><b>' + esc(f.approver) + '</b></div>';
+  if (f.purpose) h += '<div><span class="k">วัตถุประสงค์</span><b>' + esc(f.purpose) + '</b></div>';
+  h += '<div><span class="k">รวม</span><b>' + (Math.round((f.e - f.s) / 86400000) + 1) + ' วัน</b></div>';
+  if (scBarState(f, today) === 'late') h += '<div><span class="k">เลยกำหนด</span><b style="color:#ef4444">' + late + ' วัน</b></div>';
+  h += '</div>';
+  h += '<table class="dcal-tbl"><thead><tr><th>เครื่อง</th><th>เอกสาร</th><th></th></tr></thead><tbody>';
+  bs.forEach(function(b) {
+    var u = byId[b.unitId];
+    h += '<tr><td style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')"><b>' + esc(u.model || u.name || '-') + '</b>' +
+      '<div style="margin-top:3px">' + _scIdChips(u) + '</div></td>' +
+      '<td>' + _scDocs(u) + '</td>' +
+      '<td style="text-align:right">' + scBookBtn(u.id, _scAdd(b.e, 1), 'จองต่อ', true) + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div style="margin-top:9px"><button class="btn btn-ghost btn-sm" onclick="staffTab(\'return\')">🔔 ไปแท็บติดตามคืน →</button></div>';
+  return h + _scSrc() + '</div>';
+}
+function _scDrillDay(iso) {
+  var cur = _scFromIso(iso);
+  if (!cur) return '';
+  var units = scUnits(), bks = scBookings();
+  var busyBy = {};
+  bks.forEach(function(b) { if (b.s <= cur && cur <= b.e && b.status !== 'returned') (busyBy[b.unitId] = busyBy[b.unitId] || []).push(b); });
+  var out = units.filter(function(u) { return busyBy[u.id]; });
+  var free = units.filter(function(u) { return !busyBy[u.id]; });
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">📅 ' + cur.getDate() + ' ' + SC_MONTHS[cur.getMonth()] + ' ' + cur.getFullYear() + '</b>' +
+    '<div style="font-size:11px;color:var(--text2)">ยืมอยู่ ' + out.length + ' · ว่าง ' + free.length + ' เครื่อง</div>' +
+    '</div>' + scCloseBtn() + '</div>';
+  if (free.length) {
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + free.length + ' เครื่อง — คีย์ยืมได้เลย</div>';
+    h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
+    free.slice(0, 10).forEach(function(u) {
+      h += '<div class="dcal-urow"><div style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</div>' +
+        '<div><div style="font-weight:600">' + esc(u.model || u.name || '-') + '</div><div style="margin-top:3px">' + _scDocs(u) + '</div></div>' +
+        '<div>' + scBookBtn(u.id, cur, '📤 คีย์ยืม') + '</div></div>';
+    });
+    h += '</div>';
+    if (free.length > 10) h += '<div style="font-size:11px;color:var(--text3);margin-top:5px">…และอีก ' + (free.length - 10) + ' เครื่อง</div>';
+  }
+  if (out.length) {
+    var groups = {};
+    out.forEach(function(u) { busyBy[u.id].forEach(function(b) { (groups[scBatchKey(b)] = groups[scBatchKey(b)] || []).push({ u: u, b: b }); }); });
+    h += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px">ถูกยืมอยู่ ' + out.length + ' เครื่อง</div>';
+    h += '<table class="dcal-tbl"><thead><tr><th>ผู้ยืม</th><th>เครื่อง</th><th>คืน</th></tr></thead><tbody>';
+    Object.keys(groups).forEach(function(k) {
+      var g = groups[k], b0 = g[0].b;
+      h += '<tr style="cursor:pointer" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
+        '<td>' + esc(b0.borrower || '—') + '</td>' +
+        '<td>' + g.length + ' เครื่อง — ' + esc(g[0].u.model || g[0].u.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
+        '<td>' + _scFmt(b0.e) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  return h + _scSrc() + '</div>';
+}
+function _scDrillModel(m) {
+  var units = scAllUnits().filter(function(u) { return _unitModelKey(u) === m; });
+  var today = _scDay(new Date()), bks = scBookings();
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">🚁 ' + esc(m) + '</b><div style="font-size:11px;color:var(--text2)">มี ' + units.length + ' เครื่อง</div>' +
+    '</div>' + scCloseBtn() + '</div>';
+  h += '<table class="dcal-tbl"><thead><tr><th>เครื่อง</th><th>เอกสาร</th><th>ผู้ยืม / คืน</th><th></th></tr></thead><tbody>';
+  units.forEach(function(u) {
+    var cur = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.e >= today; })[0];
+    h += '<tr><td style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</td>' +
+      '<td>' + _scDocs(u) + '</td>' +
+      '<td>' + (cur ? esc(cur.borrower || '—') + '<div style="font-size:10px;color:var(--text3)">คืน ' + _scFmt(cur.e) + '</div>' : '<span class="pill pill-good">✅ ว่าง</span>') + '</td>' +
+      '<td style="text-align:right">' + (cur ? scBookBtn(u.id, _scAdd(cur.e, 1), 'จองต่อ', true) : scBookBtn(u.id, today, '📤 คีย์ยืม')) + '</td></tr>';
+  });
+  return h + '</tbody></table>' + _scSrc() + '</div>';
+}
+
+// ---- 1) ไทม์ไลน์ ----
+function _scViewTimeline() {
+  var r = scRange(), today = _scDay(new Date());
+  var units = scUnits(), bks = scBookings(), byUnit = {};
+  bks.forEach(function(b) { if (_scOverlap(b, r.from, r.to)) (byUnit[b.unitId] = byUnit[b.unitId] || []).push(b); });
+  units = units.slice().sort(function(a, b) {
+    var n = _unitModelKey(a).localeCompare(_unitModelKey(b));
+    return n !== 0 ? n : String(a.rentalDbNo || '').localeCompare(String(b.rentalDbNo || ''), undefined, { numeric: true });
+  });
+  var h = _scSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดแถบ = ดูชุดยืมนั้น · กดชื่อเครื่อง = ดูรายละเอียดและคีย์ยืมต่อ</div>';
+  if (scOpen) h += _scDrill();
+  if (!units.length) return h + '<div class="empty-state">ไม่มีเครื่องตรงตัวกรอง</div>';
+  h += '<div class="dcal-wrap"><div class="dcal-tl"><div class="dcal-head"><div></div>' + _scMonthHead(r) + '</div>';
+  units.forEach(function(u) {
+    var bars = (byUnit[u.id] || []).map(function(b) {
+      return _scBar(b, r, today, b.borrower || 'ยืม', 'batch:' + scBatchKey(b));
+    }).join('');
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="scToggleOpen(\'unit:' + u.id + '\')">' +
+      '<b>' + esc(u.model || u.name || '-') + '</b><span class="m2">เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</span></button>' +
+      '<div class="dcal-track">' + _scGrid() + _scTodayLine(r) + bars + '</div></div>';
+  });
+  return h + '</div></div>' + _scLegend();
+}
+
+// ---- 2) รายเดือน (+ ว่างพร้อมกันเมื่อเลือกหลายรุ่น) ----
+function _scFreeOn(model, cur, bks, pool) {
+  return pool.filter(function(u) {
+    if (_unitModelKey(u) !== model) return false;
+    return !bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= cur && cur <= b.e; });
+  });
+}
+function _scViewMonth() {
+  var base = new Date(); base.setDate(1); base.setHours(0,0,0,0); base.setMonth(base.getMonth() + scMonthOffset);
+  var y = base.getFullYear(), mo = base.getMonth();
+  var nDays = new Date(y, mo + 1, 0).getDate(), pad = new Date(y, mo, 1).getDay();
+  var todayD = _scDay(new Date());
+  var units = scUnits(), bks = scBookings(), pool = scAllUnits();
+  var h = '<div class="dcal-toolbar">';
+  h += '<button class="dcal-vbtn" onclick="scMonthOffset--;scOpen=null;renderStaffCalendar()">◀</button>';
+  h += '<b style="font-size:14px">' + SC_MONTHS[mo] + ' ' + y + '</b>';
+  h += '<button class="dcal-vbtn" onclick="scMonthOffset++;scOpen=null;renderStaffCalendar()">▶</button>';
+  if (scMonthOffset !== 0) h += '<button class="dcal-vbtn" onclick="scMonthOffset=0;scOpen=null;renderStaffCalendar()">เดือนนี้</button>';
+  h += '<span style="margin-left:auto;font-size:11.5px;color:var(--text2)">' + units.length + ' เครื่องในมุมมองนี้</span></div>';
+  if (scPicked.length) {
+    var fits = [], maxSet = 0;
+    for (var d1 = 1; d1 <= nDays; d1++) {
+      var c1 = new Date(y, mo, d1);
+      var sets = Math.min.apply(null, scPicked.map(function(m) { return _scFreeOn(m, c1, bks, pool).length; }));
+      if (sets > 0) fits.push(d1);
+      if (sets > maxSet) maxSet = sets;
+    }
+    var ranges = [], run = null;
+    fits.forEach(function(dv) { if (run && dv === run[1] + 1) run[1] = dv; else { run = [dv, dv]; ranges.push(run); } });
+    var rtxt = ranges.map(function(x) { return x[0] === x[1] ? x[0] : x[0] + '–' + x[1]; }).join(', ');
+    h += '<div class="dcal-combo">' +
+      (scPicked.length > 1 ? '🎯 ' + scPicked.map(esc).join(' + ') + ' — ว่าง<b>พร้อมกัน</b> ' : '🎯 ' + esc(scPicked[0]) + ' — ว่าง ') +
+      (fits.length ? '<b>' + fits.length + '</b> วันในเดือนนี้ · ประกอบได้สูงสุด <b>' + maxSet + '</b> ชุด' : '<b>ไม่มีวันไหนว่างครบ</b>') +
+      (rtxt ? '<div style="margin-top:5px;font-size:11.5px;color:var(--text2)">วันที่ว่างครบ: <b>' + rtxt + '</b></div>' : '') + '</div>';
+  }
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย</div>';
+  if (scOpen) h += _scDrill();
+  h += '<div class="dcal-mg">';
+  ['อา','จ','อ','พ','พฤ','ศ','ส'].forEach(function(x) { h += '<div class="dcal-dow">' + x + '</div>'; });
+  for (var i = 0; i < pad; i++) h += '<div class="dcal-cell pad"></div>';
+  for (var d2 = 1; d2 <= nDays; d2++) {
+    var cur = new Date(y, mo, d2), iso = _scIso(cur), k = 'day:' + iso;
+    var busy = units.filter(function(u) { return bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= cur && cur <= b.e; }); }).length;
+    var isToday = cur.getTime() === todayD.getTime();
+    var sets = scPicked.length ? Math.min.apply(null, scPicked.map(function(m) { return _scFreeOn(m, cur, bks, pool).length; })) : null;
+    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (scOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    h += '<button class="' + cls + '" onclick="scToggleOpen(\'' + k + '\')"><span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
+    if (sets === null) {
+      h += '<span class="dcal-mini"><i class="dcal-dot" style="background:#f59e0b"></i>ยืม ' + busy + '</span>' +
+        '<span class="dcal-mini"><i class="dcal-dot" style="background:#22c55e"></i>ว่าง ' + (units.length - busy) + '</span>' +
+        '<span class="dcal-load" style="width:' + (units.length ? busy / units.length * 100 : 0) + '%"></span>';
+    } else {
+      h += '<span class="dcal-mini" style="font-weight:700;color:' + (sets > 0 ? 'var(--good)' : 'var(--bad)') + '">' +
+        (sets > 0 ? (scPicked.length > 1 ? '✅ ' + sets + ' ชุด' : '✅ ว่าง ' + sets) : '✕ ไม่ว่าง') + '</span>';
+    }
+    h += '</button>';
+  }
+  return h + '</div>';
+}
+
+// ---- 3) รายรุ่น ----
+function _scViewModel() {
+  var r = scRange(), today = _scDay(new Date());
+  var units = scUnits(), bks = scBookings(), by = {};
+  units.forEach(function(u) { var m = _unitModelKey(u); (by[m] = by[m] || []).push(u); });
+  var keys = Object.keys(by).sort();
+  var h = _scSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">1 แถว = 1 รุ่น · ตัวเลขบนแถบ = ใช้ไปกี่เครื่องจากทั้งหมด — จาก ' + units.length + ' เครื่อง เหลือ ' + keys.length + ' แถว</div>';
+  if (scOpen) h += _scDrill();
+  if (!keys.length) return h + '<div class="empty-state">ไม่มีเครื่องตรงตัวกรอง</div>';
+  h += '<div class="dcal-wrap"><div class="dcal-tl"><div class="dcal-head"><div></div>' + _scMonthHead(r) + '</div>';
+  keys.forEach(function(m) {
+    var list = by[m], total = list.length, ids = {};
+    list.forEach(function(u) { ids[u.id] = 1; });
+    // ยุบช่วงที่เหมือนกันเป็นแถบเดียวแล้วนับว่ากินไปกี่เครื่อง ไม่งั้นแถบจะซ้อนกันหลายชั้นจนอ่านไม่ออก
+    var seen = {}, order = [];
+    bks.forEach(function(b) {
+      if (!ids[b.unitId] || !_scOverlap(b, r.from, r.to)) return;
+      var key = scBatchKey(b);
+      if (!seen[key]) { seen[key] = { b: b, n: 0 }; order.push(key); }
+      seen[key].n++;
+    });
+    var bars = order.map(function(k) { return _scBar(seen[k].b, r, today, seen[k].n + '/' + total, 'batch:' + k); }).join('');
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="scToggleOpen(\'model:' + _scEsq(m) + '\')">' +
+      '<b>' + esc(m) + '</b><span class="m2">' + total + ' เครื่อง</span></button>' +
+      '<div class="dcal-track">' + _scGrid() + _scTodayLine(r) + bars + '</div></div>';
+  });
+  return h + '</div></div>' + _scLegend();
+}
+
+// ---- 4) ชุดยืม (จัดกลุ่มด้วยผู้ยืม + ช่วงวัน แทนเลขใบจองที่หน้านี้ไม่มี) ----
+function _scViewBatch() {
+  var r = scRange(), today = _scDay(new Date());
+  var units = scUnits(), inScope = {}; units.forEach(function(u) { inScope[u.id] = 1; });
+  var bks = scBookings().filter(function(b) { return inScope[b.unitId] && _scOverlap(b, r.from, r.to); });
+  var groups = {}, order = [];
+  bks.forEach(function(b) {
+    var k = scBatchKey(b);
+    if (!groups[k]) { groups[k] = { b: b, list: [] }; order.push(k); }
+    groups[k].list.push(b);
+  });
+  order.sort(function(a, b) { return groups[a].b.s - groups[b].b.s; });
+  var h = _scSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">1 แถว = 1 ชุดยืม (ผู้ยืมเดียวกัน ช่วงวันเดียวกัน) · จาก ' + bks.length + ' รายการ เหลือ ' + order.length + ' แถว</div>';
+  if (scOpen) h += _scDrill();
+  if (!order.length) return h + '<div class="empty-state">ไม่มีการยืม/จองในช่วงนี้</div>';
+  h += '<div class="dcal-wrap"><div class="dcal-tl" style="--dcal-lab:230px"><div class="dcal-head"><div></div>' + _scMonthHead(r) + '</div>';
+  order.forEach(function(k) {
+    var g = groups[k];
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
+      '<b>📄 ' + esc(g.b.borrower || 'ไม่ระบุผู้ยืม') + '</b><span class="m2">' + g.list.length + ' เครื่อง' +
+      (g.b.approver ? ' · ' + esc(g.b.approver) : '') + '</span></button>' +
+      '<div class="dcal-track">' + _scGrid() + _scTodayLine(r) + _scBar(g.b, r, today, g.list.length + ' เครื่อง', 'batch:' + k) + '</div></div>';
+  });
+  return h + '</div></div>' + _scLegend();
+}
+
+// ---- 5) หาเครื่องว่าง ----
+function _scViewFind() {
+  var pool = scAllUnits(), models = {};
+  pool.forEach(function(u) { var m = _unitModelKey(u); models[m] = (models[m] || 0) + 1; });
+  var keys = Object.keys(models).sort();
+  if (!scFindModel || !models[scFindModel]) scFindModel = scPicked[0] || keys[0] || '';
+  if (!scFindFrom) scFindFrom = _scIso(_scDay(new Date()));
+  if (!scFindTo) scFindTo = _scIso(_scAdd(_scDay(new Date()), 6));
+  var h = '<div class="dcal-toolbar" style="align-items:flex-end;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:11px 13px">';
+  h += '<div class="field" style="margin:0;min-width:200px"><label>รุ่น</label><select onchange="scFindModel=this.value;scOpen=null;renderStaffCalendar()">';
+  keys.forEach(function(m) { h += '<option value="' + esc(m) + '"' + (m === scFindModel ? ' selected' : '') + '>' + esc(m) + ' (' + models[m] + ')</option>'; });
+  h += '</select></div>';
+  h += '<div class="field" style="margin:0"><label>ตั้งแต่</label><input type="date" value="' + scFindFrom + '" onchange="scFindFrom=this.value;renderStaffCalendar()"></div>';
+  h += '<div class="field" style="margin:0"><label>ถึง</label><input type="date" value="' + scFindTo + '" onchange="scFindTo=this.value;renderStaffCalendar()"></div></div>';
+  if (!keys.length) return h + '<div class="empty-state">ยังไม่มีอุปกรณ์</div>';
+  var from = _scFromIso(scFindFrom), to = _scFromIso(scFindTo);
+  if (!from || !to) return h + '<div class="empty-state">เลือกช่วงวันให้ครบก่อน</div>';
+  if (to < from) { var t = from; from = to; to = t; }
+  var bks = scBookings();
+  var list = pool.filter(function(u) { return _unitModelKey(u) === scFindModel; });
+  var clash = {};
+  list.forEach(function(u) { clash[u.id] = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && _scOverlap(b, from, to); }); });
+  var freeU = list.filter(function(u) { return !clash[u.id].length; });
+  if (freeU.length) {
+    h += '<div style="background:var(--good-soft);border:1px solid var(--good);color:var(--good);border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px">' +
+      '✅ ว่าง <b style="font-size:16px">' + freeU.length + '</b> จาก ' + list.length + ' เครื่อง ในช่วง ' + _scFmt(from) + ' – ' + _scFmt(to) + '</div>';
+  } else {
+    var next = null;
+    list.forEach(function(u) { clash[u.id].forEach(function(b) { if (!next || b.e < next) next = b.e; }); });
+    h += '<div style="background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px">' +
+      '✕ ไม่ว่างเลย ทั้ง ' + list.length + ' เครื่องถูกจองหมด' + (next ? ' · ว่างเร็วสุดหลัง <b>' + _scFmt(next) + '</b>' : '') + '</div>';
+  }
+  if (scOpen) h += _scDrill();
+  h += '<table class="dcal-tbl"><thead><tr><th>เครื่อง</th><th>เอกสาร</th><th>ช่วงที่ขอ</th><th>ติดใครอยู่</th><th></th></tr></thead><tbody>';
+  list.forEach(function(u) {
+    var c = clash[u.id];
+    h += '<tr><td style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</td>' +
+      '<td>' + _scDocs(u) + '</td>' +
+      '<td>' + (c.length ? '<span class="pill pill-warn">ไม่ว่าง</span>' : '<span class="pill pill-good">ว่าง</span>') + '</td>' +
+      '<td>' + (c.length ? esc(c[0].borrower || '—') + '<div style="font-size:10px;color:var(--text3)">คืน ' + _scFmt(c[0].e) + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="text-align:right">' + (c.length ? scBookBtn(u.id, _scAdd(c[0].e, 1), 'จองต่อ', true) : scBookBtn(u.id, from, '📤 คีย์ยืมช่วงนี้', false, to)) + '</td></tr>';
+  });
+  return h + '</tbody></table>' + _scSrc();
+}
+
+function renderStaffCalendar() {
+  var el = document.getElementById('tab-calendar');
+  if (!el) return;
+  var h = scToolbar();
+  if (scView === 'month') h += _scViewMonth();
+  else if (scView === 'model') h += _scViewModel();
+  else if (scView === 'batch') h += _scViewBatch();
+  else if (scView === 'find') h += _scViewFind();
+  else h += _scViewTimeline();
+  el.innerHTML = h;
+}
+
+// ---- ธีม: ค่าเริ่มต้นมืดเหมือนแอปหลัก สลับเป็นสว่างได้ จำไว้ต่อเครื่อง ----
+function applyStaffTheme(mode) {
+  document.body.classList.toggle('theme-light', mode === 'light');
+  var b = document.getElementById('themeBtn');
+  if (b) b.textContent = mode === 'light' ? '☀️' : '🌙';
+}
+function toggleStaffTheme() {
+  var next = document.body.classList.contains('theme-light') ? 'dark' : 'light';
+  try { localStorage.setItem('demoStaffTheme', next); } catch (e) {}
+  applyStaffTheme(next);
+}
+(function initStaffTheme() {
+  var saved = 'dark';
+  try { saved = localStorage.getItem('demoStaffTheme') || 'dark'; } catch (e) {}
+  applyStaffTheme(saved);
+})();
 
 // ---- จัดการหมวดหมู่ ----
 function toggleCatMgr() {
