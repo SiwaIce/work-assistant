@@ -110,6 +110,47 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .link-callout code { background:var(--surface); padding:3px 8px; border-radius:6px; font-size:12px; }
 .loading { text-align:center; padding:60px 20px; color:var(--text2); }
 .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 18px; border-radius:10px; font-size:13px; z-index:99; box-shadow:var(--shadow); }
+/* ---- มุมมองการ์ด (โครงเดียวกับหน้าลูกค้า แต่ใส่ข้อมูลภายในเพิ่ม) ---- */
+.view-toggle { display:flex; gap:4px; margin-bottom:10px; }
+.view-toggle button { font:inherit; font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
+.view-toggle button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.su-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:11px; }
+.su-card { border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:11px; padding:12px 13px; background:var(--surface); }
+.su-card.busy { border-left-color:var(--warn); }
+.su-card.off { border-left-color:var(--text3); opacity:.75; }
+.su-card.late { border-left-color:var(--bad); background:var(--bad-soft); }
+.su-top { display:flex; align-items:flex-start; gap:9px; }
+.su-ic { width:32px; height:32px; border-radius:9px; background:var(--accent-soft); display:flex; align-items:center;
+  justify-content:center; font-size:16px; flex-shrink:0; }
+.su-nm { font-weight:700; font-size:13px; line-height:1.35; }
+.su-idline { display:flex; flex-wrap:wrap; gap:4px 5px; margin-top:5px; }
+.su-meta { display:flex; flex-wrap:wrap; gap:4px 5px; margin-top:8px; }
+.su-lent { margin-top:8px; padding:7px 9px; border-radius:8px; background:var(--surface-2); border-left:3px solid var(--accent); font-size:11.5px; line-height:1.6; }
+.su-acts { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
+.su-pending { font-size:10.5px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:6px; padding:3px 8px; margin-top:7px; display:inline-block; }
+/* ---- modal ---- */
+.sm-ov { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:200; padding:16px; }
+.sm-ov.on { display:flex; }
+.sm-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px;
+  max-height:90vh; overflow-y:auto; box-shadow:var(--shadow); }
+.sm-hd { display:flex; justify-content:space-between; align-items:center; padding:13px 17px; border-bottom:1px solid var(--border);
+  position:sticky; top:0; background:var(--surface); border-radius:14px 14px 0 0; }
+.sm-hd h3 { margin:0; font-size:15px; color:var(--accent); }
+.sm-hd button { background:none; border:none; color:var(--text2); font-size:20px; cursor:pointer; }
+.sm-bd { padding:16px 17px; }
+.sm-sec { font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text3);
+  margin:16px 0 9px; display:flex; align-items:center; gap:8px; }
+.sm-sec::after { content:''; flex:1; height:1px; background:var(--border); }
+.sm-sec:first-child { margin-top:0; }
+.sm-toggles { display:flex; gap:7px; flex-wrap:wrap; }
+.sm-tg { position:relative; display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12px; font-weight:600;
+  padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text3); }
+.sm-tg input { position:absolute; opacity:0; width:0; height:0; }
+.sm-tg .bx { width:15px; height:15px; border-radius:5px; border:1.5px solid var(--text3); display:flex; align-items:center;
+  justify-content:center; font-size:10px; color:transparent; flex-shrink:0; }
+.sm-tg:has(input:checked) { border-color:var(--good); color:var(--good); background:var(--good-soft); }
+.sm-tg:has(input:checked) .bx { background:var(--good); border-color:var(--good); color:#fff; }
 /* ---- ปฏิทิน 5 มุมมอง (ชุดเดียวกับ .dcal-* ในแอปหลัก ปรับมาใช้ตัวแปรสีของหน้านี้) ---- */
 .dcal-views { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
 .dcal-vbtn { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer; font:inherit;
@@ -245,6 +286,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
             <button class="btn btn-ghost btn-sm" onclick="catMgrAddRow()">➕ เพิ่มหมวดหมู่</button>
             <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="catMgrSave()">💾 บันทึกหมวดหมู่</button>
           </div>
+          <div id="pendingEditsBanner" style="display:none;align-items:center;gap:10px;background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12px;line-height:1.6"></div>
+          <div class="view-toggle" id="unitViewToggle"></div>
           <div class="filter-chips" id="unitReadyChips"></div>
           <div class="cat-tabs" id="unitCatTabs"></div>
           <div class="browse-toolbar">
@@ -259,6 +302,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   </div>
 </div>
 
+<div class="sm-ov" id="smOverlay" onclick="if(event.target===this)closeSm()">
+  <div class="sm-box">
+    <div class="sm-hd"><h3 id="smTitle"></h3><button onclick="closeSm()">✕</button></div>
+    <div class="sm-bd" id="smBody"></div>
+  </div>
+</div>
+
 <script>
 // ================================================================
 // Firebase — เชื่อมตรงไม่ผ่าน Auth เหมือน demo-request.html/client-view.html
@@ -267,6 +317,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 //   - dealerUpdates/demoStaffAuth     : read+write (เก็บ pinHash)
 //   - publicDemoRequests/{id}         : read, update (จากหน้านี้อนุมัติ/ปฏิเสธ) — create มาจาก demo-request.html
 //   - publicDemoLoans/{id}            : read, create, update (จากหน้านี้)
+//   - publicDemoEdits/{unitId}        : read, write, delete — ⚠️ ยังไม่มี ต้องเพิ่มก่อนปุ่ม "แก้ไข" ถึงจะทำงาน
+//                                       (คิวแก้ไขจากหน้านี้ ให้แอปหลักมากดรับเข้าแล้วลบทิ้ง)
 // ================================================================
 var firebaseConfig = {
   apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
@@ -355,11 +407,13 @@ var currentUnitDetail = null;
 function loadStaffData() {
   db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
     var data = doc.exists ? doc.data() : {};
-    UNITS = data.units || [];
+    RAW_UNITS = data.units || [];
+    applyEditOverlay();
     CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
     document.getElementById('staffLoading').style.display = 'none';
     document.getElementById('staffContent').style.display = 'block';
     listenPending();
+    listenEdits();
     listenLoans();
   }).catch(function(e) {
     document.getElementById('staffLoading').innerHTML = '<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message) + '<br>อาจต้องเพิ่ม Firestore rule ให้อ่าน dealerUpdates/demoCatalogPublic ได้ก่อน</div>';
@@ -529,7 +583,18 @@ function setUnitCat(v) { unitCatFilter = v; renderUnitsTable(); }
 function _unitHasRental(u) { return !!String(u.rentalDbNo || '').trim(); }
 function _unitModelKey(u) { return String(u.model || '').trim() || String(u.name || '').trim() || 'ไม่ระบุรุ่น'; }
 
+function renderPendingEditsBanner() {
+  var el = document.getElementById('pendingEditsBanner');
+  if (!el) return;
+  var n = pendingEditCount();
+  if (!n) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = '<span>✏️ มีการแก้ไขจากหน้านี้ <b>' + n + ' เครื่อง</b> ที่ยังไม่ถูกรับเข้าแอปหลัก — ' +
+    'หน้านี้กับลิงก์ลูกค้าเห็นค่าใหม่แล้ว แต่จะยังไม่ลงข้อมูลตัวจริงจนกว่าจะมีคนเปิดเมนู Demo Equipment ในแอปหลักแล้วกดรับเข้า</span>';
+}
 function renderUnitsTable() {
+  renderUnitViewToggle();
+  renderPendingEditsBanner();
   var readyCount = UNITS.filter(_unitHasRental).length;
   var pendingCount = UNITS.length - readyCount;
 
@@ -609,13 +674,81 @@ function renderUnitsTable() {
         '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end
           : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + appRange.end) : '—') + '</td></tr>';
     }).join('');
+    var body = unitViewMode === 'card'
+      ? '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
+      : '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
+        '<thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>';
     return '<details class="model-group" open><summary><span class="mn">' + esc(model) + '</span>' +
-      '<span class="mc">' + availN + '/' + list.length + ' ว่างตอนนี้</span></summary>' +
-      '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
-      '<thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>' +
-      '<tbody>' + rows + '</tbody></table></div></details>';
+      '<span class="mc">' + availN + '/' + list.length + ' ว่างตอนนี้</span></summary>' + body + '</details>';
   }).join('');
   document.getElementById('unitGroups').innerHTML = h;
+}
+
+// ---- มุมมองการ์ด: โครงเดียวกับหน้าลูกค้า แต่ใส่ข้อมูลภายในที่ลูกค้าไม่เห็น (เอกสาร ผู้ยืม เลขใบเบิก) ----
+var unitViewMode = (function(){ try { return localStorage.getItem("demoStaffUnitView") || "card"; } catch (e) { return "card"; } })();
+function setUnitView(v) {
+  unitViewMode = v;
+  try { localStorage.setItem('demoStaffUnitView', v); } catch (e) {}
+  renderUnitsTable();
+}
+function renderUnitViewToggle() {
+  var el = document.getElementById('unitViewToggle');
+  if (!el) return;
+  el.innerHTML = [['card','🗂️ การ์ด'],['table','📋 ตาราง']].map(function(v) {
+    return '<button class="' + (unitViewMode === v[0] ? 'on' : '') + '" onclick="setUnitView(\'' + v[0] + '\')">' + v[1] + '</button>';
+  }).join('');
+}
+function unitCardHtml(raw, n) {
+  var u = unitView(raw);
+  var loan = unitCurrentLoan(u.id);
+  var appRange = loan ? null : unitAppRangeOn(u.id, _td());
+  var off = u.status === 'unavailable' || u.status === 'lost';
+  var endIso = loan ? loan.end : (appRange ? appRange.end : '');
+  var late = endIso && endIso < _td();
+  var cls = off ? 'off' : late ? 'late' : (loan || appRange) ? 'busy' : '';
+  var cat = (CATEGORIES || []).filter(function(c) { return c.id === u.category; })[0];
+  var h = '<div class="su-card ' + cls + '">';
+  h += '<div class="su-top"><div class="su-ic">' + (cat && cat.icon ? cat.icon : '🚁') + '</div><div style="flex:1;min-width:0">';
+  h += '<div class="su-nm">เครื่อง #' + n + ' — ' + esc(u.model || u.name || '-') + '</div>';
+  h += '<div class="su-idline">';
+  if (String(u.rentalDbNo || '').trim()) h += '<span class="dcal-idpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span>';
+  else h += '<span class="pill pill-warn">ยังไม่ลงทะเบียนเครื่องเช่า</span>';
+  if (u.serialNumber) h += '<span class="dcal-idpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
+  if (u.sku) h += '<span class="dcal-idpc"><i>SKU</i>' + esc(u.sku) + '</span>';
+  h += '</div></div>';
+  h += '<span class="pill ' + (off ? 'pill-bad' : (loan || appRange) ? 'pill-warn' : 'pill-good') + '">' +
+    (off ? '⛔ ไม่พร้อม' : (loan || appRange) ? '📤 ถูกยืม' : '✅ ว่าง') + '</span></div>';
+  h += '<div class="su-meta">';
+  h += '<span class="pill pill-muted">' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>';
+  if (cat) h += '<span class="pill pill-muted">' + cat.icon + ' ' + esc(cat.label) + '</span>';
+  if (u.customerVisible === false) h += '<span class="pill pill-muted">🙈 ซ่อนจากลูกค้า</span>';
+  [['nbtcRegistered','กสทช.'],['droneInsurance','ประกัน'],['caatRegistered','CAAT']].forEach(function(f) {
+    h += '<span class="pill ' + (u[f[0]] ? 'pill-good' : 'pill-bad') + '">' + (u[f[0]] ? '✓' : '✗') + ' ' + f[1] + '</span>';
+  });
+  h += '</div>';
+  if (loan || appRange) {
+    var b = loan || appRange;
+    h += '<div class="su-lent"><b>👤 ' + esc(b.borrower || 'ไม่ระบุผู้ยืม') + '</b>' +
+      (b.approver ? ' <span style="color:var(--text2)">· ผู้ทำเรื่อง ' + esc(b.approver) + '</span>' : '') +
+      '<div>📅 ' + esc(b.start || '—') + ' → ' + esc(b.end || '—') +
+      (late ? ' <b style="color:var(--bad)">(เลยกำหนด)</b>' : '') + '</div>' +
+      (b.purpose ? '<div>🎯 ' + esc(b.purpose) + '</div>' : '') +
+      (!loan ? '<div style="color:var(--text3);font-size:10.5px">คีย์จากแอปหลัก — รับคืนต้องกดที่แอปหลัก</div>' : '') + '</div>';
+  }
+  if (u.note) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">📝 ' + esc(u.note) + '</div>';
+  if (unitHasPending(u.id)) {
+    var p = PENDING_EDITS[u.id];
+    h += '<div class="su-pending">✏️ แก้ไว้ ' + Object.keys(p.fields || {}).length + ' ช่อง' +
+      (p.editedBy ? ' โดย ' + esc(p.editedBy) : '') + ' · รอแอปหลักรับเข้า</div>';
+  }
+  h += '<div class="su-acts">';
+  h += '<button class="btn btn-ghost btn-sm" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button>';
+  h += '<button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button>';
+  if (loan) h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืน</button>';
+  else if (!appRange && !off) h += '<button class="btn btn-primary btn-sm" onclick="openUnitDetail(\'' + u.id + '\');showManualLoanForm(\'' + u.id + '\')">📤 คีย์ยืม</button>';
+  h += '</div></div>';
+  return h;
 }
 function openUnitDetail(unitId) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
@@ -1227,6 +1360,140 @@ function toggleStaffTheme() {
   try { saved = localStorage.getItem('demoStaffTheme') || 'dark'; } catch (e) {}
   applyStaffTheme(saved);
 })();
+
+// ================================================================
+// แก้ไขข้อมูลเครื่องจากหน้านี้ — ผ่าน "คิวแก้ไข" ไม่ใช่เขียนทับ demoCatalogPublic ตรงๆ
+//
+// เหตุผล: ข้อมูลตัวจริงอยู่ที่ localStorage v7_demo ของแอปหลัก แล้ว publishDemoCatalog() เขียน
+// units[] ทั้งก้อนทับ demoCatalogPublic ทุกครั้งที่มีการบันทึกในแอป ถ้าหน้านี้แก้ units[] ตรงๆ
+// การแก้จะหายทันทีที่แอปหลัก publish ครั้งถัดไป (หน้านี้ไม่มี auth เลยเขียนเข้า users/{uid}/demo ไม่ได้)
+//
+// จึงเขียนลง publicDemoEdits/{unitId} เก็บเฉพาะฟิลด์ที่แก้ แล้ว:
+//   - หน้านี้ overlay ทับ UNITS ตอนแสดงผล เห็นผลทันทีเหมือนแก้สำเร็จแล้ว
+//   - แอปหลักขึ้นแบนเนอร์ให้ตรวจแล้วกดรับเข้า จากนั้นลบคิวทิ้ง
+// เท่ากับการแก้จากหน้านี้จะ "ลงตัวจริง" ต่อเมื่อมีคนเปิดแอปหลักแล้วกดรับ — บอกไว้บนการ์ดชัดๆ
+// ================================================================
+var PENDING_EDITS = {};   // unitId -> {fields:{...}, editedAt, editedBy}
+var RAW_UNITS = [];       // ตามที่ publish มาจริงๆ — ใช้เทียบ diff ตอนบันทึก ห้ามเอาไปแสดงผล
+var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneInsurance','caatRegistered','customerVisible','note','name','model','serialNumber','sku'];
+
+function listenEdits() {
+  db.collection('publicDemoEdits').onSnapshot(function(snap) {
+    PENDING_EDITS = {};
+    snap.docs.forEach(function(d) { PENDING_EDITS[d.id] = d.data() || {}; });
+    applyEditOverlay();
+    renderAll();
+  }, function(e) { console.warn('listenEdits error', e); });
+}
+// ทับค่าที่แก้ไว้ลง UNITS ตั้งแต่ต้นทาง เพื่อให้ทุกส่วนของหน้า (ตาราง การ์ด ปฏิทิน ตัวเลขสรุป ตัวกรอง)
+// เห็นค่าเดียวกันหมดโดยไม่ต้องไปแก้ทีละจุด — ของจริงที่ publish มาเก็บไว้ที่ RAW_UNITS สำหรับเทียบ diff
+function applyEditOverlay() { UNITS = RAW_UNITS.map(unitView); }
+function unitView(u) {
+  var p = PENDING_EDITS[u.id];
+  if (!p || !p.fields) return u;
+  var out = {};
+  Object.keys(u).forEach(function(k) { out[k] = u[k]; });
+  Object.keys(p.fields).forEach(function(k) { if (_EDIT_FIELDS.indexOf(k) !== -1) out[k] = p.fields[k]; });
+  return out;
+}
+function unitHasPending(id) { return !!PENDING_EDITS[id]; }
+function pendingEditCount() { return Object.keys(PENDING_EDITS).length; }
+
+function openSm(title, html) {
+  document.getElementById('smTitle').textContent = title;
+  document.getElementById('smBody').innerHTML = html;
+  document.getElementById('smOverlay').classList.add('on');
+}
+function closeSm() { document.getElementById('smOverlay').classList.remove('on'); }
+
+function _smTg(id, on, label) {
+  return '<label class="sm-tg"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="bx">✓</span>' + esc(label) + '</label>';
+}
+function openUnitEditM(unitId) {
+  // UNITS ผ่าน overlay มาแล้ว ฟอร์มจึงขึ้นค่าที่แก้ค้างไว้ ไม่ใช่ค่าเดิมก่อนแก้
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!u) return;
+  var cats = CATEGORIES || [];
+  var h = '<div class="sm-sec">ข้อมูลเครื่อง</div>';
+  h += '<div class="field"><label>🚁 ชื่อ</label><input type="text" id="ed_name" value="' + esc(u.name || '') + '"></div>';
+  h += '<div class="grid2">';
+  h += '<div class="field"><label>🔢 S/N</label><input type="text" id="ed_sn" value="' + esc(u.serialNumber || '') + '"></div>';
+  h += '<div class="field"><label>🏷️ SiS Part (SKU)</label><input type="text" id="ed_sku" value="' + esc(u.sku || '') + '"></div>';
+  h += '</div>';
+  h += '<div class="field"><label>📦 Model</label><input type="text" id="ed_model" value="' + esc(u.model || '') + '"></div>';
+  h += '<div class="sm-sec">การจัดกลุ่ม</div><div class="grid2">';
+  h += '<div class="field"><label>🏷️ หมวดหมู่</label><select id="ed_cat"><option value=""' + (!u.category ? ' selected' : '') + '>— ไม่ระบุ —</option>';
+  var known = !u.category || cats.some(function(c) { return c.id === u.category; });
+  cats.forEach(function(c) { h += '<option value="' + esc(c.id) + '"' + (u.category === c.id ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.label) + '</option>'; });
+  if (!known) h += '<option value="' + esc(u.category) + '" selected>⚠️ ' + esc(u.category) + ' — หมวดที่ถูกลบไปแล้ว</option>';
+  h += '</select></div>';
+  h += '<div class="field"><label>✈️ ประเภทการใช้งาน</label><select id="ed_fly">' +
+    '<option value="1"' + (u.flyable !== false ? ' selected' : '') + '>✈️ บินสาธิตได้</option>' +
+    '<option value="0"' + (u.flyable === false ? ' selected' : '') + '>🖼️ จัดแสดงเท่านั้น</option></select></div></div>';
+  h += '<div class="sm-sec">ทะเบียน &amp; เอกสาร</div>';
+  h += '<div class="field"><label>📋 หมายเลขเครื่องเช่า</label><input type="text" id="ed_rental" value="' + esc(u.rentalDbNo || '') + '"></div>';
+  h += '<div class="field"><label>📑 เอกสาร/ทะเบียน — กดเพื่อสลับ</label><div class="sm-toggles">' +
+    _smTg('ed_nbtc', u.nbtcRegistered, 'กสทช.') + _smTg('ed_ins', u.droneInsurance, 'ประกันภัยโดรน') + _smTg('ed_caat', u.caatRegistered, 'CAAT') + '</div></div>';
+  h += '<div class="sm-sec">ลูกค้า &amp; หมายเหตุ</div>';
+  h += '<div class="field"><label>👀 ให้ลูกค้าขอยืมเองได้ไหม</label><div class="sm-toggles">' +
+    _smTg('ed_vis', u.customerVisible !== false, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
+  h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ed_note" rows="2">' + esc(u.note || '') + '</textarea></div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="ed_by" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div style="font-size:11.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
+    '⚠️ หน้านี้แก้ข้อมูลตัวจริงในแอปหลักโดยตรงไม่ได้ — ที่แก้จะเข้าคิวไว้ก่อน หน้านี้กับลิงก์ลูกค้าจะเห็นผลทันที ' +
+    'แล้วรอคนเปิดเมนู Demo Equipment ในแอปหลักกด “รับเข้า” อีกครั้งถึงจะลงข้อมูลตัวจริงถาวร</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button class="btn btn-primary" onclick="saveUnitEdit(\'' + unitId + '\')">💾 บันทึกเข้าคิว</button>';
+  h += '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button>';
+  if (unitHasPending(unitId)) h += '<button class="btn btn-ghost" style="margin-left:auto;color:var(--bad)" onclick="dropUnitEdit(\'' + unitId + '\')">↩️ ทิ้งที่แก้ไว้</button>';
+  h += '</div>';
+  openSm('✏️ แก้ไขอุปกรณ์', h);
+}
+function _lastEditor() { try { return localStorage.getItem('demoStaffEditor') || ''; } catch (e) { return ''; } }
+function saveUnitEdit(unitId) {
+  var raw = RAW_UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!raw) return;
+  var by = (document.getElementById('ed_by').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var next = {
+    name: (document.getElementById('ed_name').value || '').trim(),
+    serialNumber: (document.getElementById('ed_sn').value || '').trim(),
+    sku: (document.getElementById('ed_sku').value || '').trim(),
+    model: (document.getElementById('ed_model').value || '').trim(),
+    category: document.getElementById('ed_cat').value || '',
+    flyable: document.getElementById('ed_fly').value !== '0',
+    rentalDbNo: (document.getElementById('ed_rental').value || '').trim(),
+    nbtcRegistered: document.getElementById('ed_nbtc').checked,
+    droneInsurance: document.getElementById('ed_ins').checked,
+    caatRegistered: document.getElementById('ed_caat').checked,
+    customerVisible: document.getElementById('ed_vis').checked,
+    note: (document.getElementById('ed_note').value || '').trim()
+  };
+  // ส่งเฉพาะฟิลด์ที่ต่างจากของจริงจริงๆ คิวจะได้ไม่บวมด้วยค่าที่เหมือนเดิม และแอปหลักเห็นชัดว่าเปลี่ยนอะไรบ้าง
+  var diff = {};
+  Object.keys(next).forEach(function(k) {
+    var cur = raw[k];
+    if (k === 'flyable') cur = raw.flyable !== false;
+    if (k === 'customerVisible') cur = raw.customerVisible !== false;
+    if (typeof next[k] === 'boolean') { if (!!cur !== next[k]) diff[k] = next[k]; }
+    else if (String(cur == null ? '' : cur) !== next[k]) diff[k] = next[k];
+  });
+  if (!Object.keys(diff).length) { alert('ไม่มีอะไรเปลี่ยน'); return; }
+  db.collection('publicDemoEdits').doc(unitId).set({
+    unitId: unitId, fields: diff, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    unitLabel: raw.model || raw.name || '', rentalDbNo: raw.rentalDbNo || ''
+  }, { merge: true }).then(function() {
+    toastMock('💾 บันทึกเข้าคิวแล้ว (' + Object.keys(diff).length + ' ช่อง)');
+    closeSm();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
+}
+function dropUnitEdit(unitId) {
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่ถูกรับเข้าของเครื่องนี้?')) return;
+  db.collection('publicDemoEdits').doc(unitId).delete()
+    .then(function() { toastMock('↩️ ทิ้งแล้ว'); closeSm(); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
 
 // ---- จัดการหมวดหมู่ ----
 function toggleCatMgr() {

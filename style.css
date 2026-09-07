@@ -10051,3 +10051,10 @@ input:focus, select:focus, textarea:focus {
   border-left: 3px solid var(--accent); }
 .demo-lentrow { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; font-size: 12px; }
 .demo-lentsub { font-size: 11px; color: var(--text2); margin-top: 4px; line-height: 1.5; }
+
+/* แถบแจ้งว่ามีการแก้ไขจากหน้า demo-staff.html รออยู่ */
+.demo-staffedit-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; cursor: pointer;
+  background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.45); color: #f59e0b;
+  border-radius: 10px; padding: 10px 13px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.55; }
+.demo-staffedit-bar b { color: #f59e0b; }
+.demo-staffedit-bar button { margin-left: auto; }

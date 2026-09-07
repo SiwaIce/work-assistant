@@ -2978,6 +2978,157 @@ var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเคร�
 // เครื่องที่สภาพไม่พร้อมโชว์) — ยังอยู่ในระบบและให้ยืมแบบคีย์เองได้ตามปกติ แค่ไม่โผล่ใน demo-request.html
 // ค่าเริ่มต้นคือ "โชว์" เพื่อไม่ให้เครื่องเดิมที่ไม่มีฟิลด์นี้หายจากหน้าลูกค้าทันทีที่ deploy
 function demoIsCustomerVisible(d) { return !d || d.customerVisible !== false; }
+
+// ================================================================
+// รับการแก้ไขที่ทีมงานทำจากหน้า demo-staff.html เข้ามาลงข้อมูลตัวจริง
+//
+// หน้า staff ไม่มี auth เขียนเข้า users/{uid}/demo ไม่ได้ และถ้าเขียนทับ demoCatalogPublic ตรงๆ
+// publishDemoCatalog() รอบถัดไปจะทับหายทันที จึงพักไว้ที่ publicDemoEdits/{unitId} แล้วให้ฝั่งนี้ดึงเข้า
+// ตั้งใจให้เป็น "กดรับเข้า" ไม่ใช่ merge อัตโนมัติ เพราะเป็นการเขียนทับข้อมูลตัวจริงจาก source ที่ไม่มี
+// การยืนยันตัวตน ควรมีคนเห็นก่อนว่าใครแก้อะไรบ้าง
+// ================================================================
+var DEMO_STAFF_EDITS = [];
+var _DEMO_EDIT_LABELS = {
+  name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part', category: 'หมวดหมู่',
+  flyable: 'ประเภทการใช้งาน', rentalDbNo: 'เลขเครื่องเช่า', nbtcRegistered: 'กสทช.',
+  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ'
+};
+var _demoEditsFetchedAt = 0;
+function fetchDemoStaffEdits(force) {
+  if (typeof db === 'undefined') return;
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return;
+  // rDemoTracker() ถูกเรียกใหม่ทุกครั้งที่กดชิปกรอง/สลับแท็บ ถ้ายิง .get() ทุกรอบจะกลายเป็นอ่าน Firestore
+  // สิบๆ ครั้งต่อนาทีโดยเปล่าประโยชน์ — คิวนี้เปลี่ยนไม่บ่อย เว้น 60 วิพอ
+  var now = Date.now();
+  if (!force && now - _demoEditsFetchedAt < 60000) return;
+  _demoEditsFetchedAt = now;
+  db.collection('publicDemoEdits').get().then(function(snap) {
+    var next = snap.docs.map(function(doc) { var x = doc.data() || {}; x._id = doc.id; return x; });
+    var changed = next.length !== DEMO_STAFF_EDITS.length;
+    DEMO_STAFF_EDITS = next;
+    if (changed && S && S.view === 'demoTracker') render();
+  }).catch(function(e) { console.warn('fetchDemoStaffEdits error:', e); });
+}
+function _demoEditFmt(field, v) {
+  if (field === 'flyable') return v ? '✈️ บินสาธิตได้' : '🖼️ จัดแสดงเท่านั้น';
+  if (field === 'customerVisible') return v ? '👀 โชว์ให้ลูกค้า' : '🙈 ซ่อนจากลูกค้า';
+  if (typeof v === 'boolean') return v ? '✅ มี' : '❌ ไม่มี';
+  if (field === 'category') {
+    var c = (getConfig().demoCategories || []).filter(function(x) { return x.id === v; })[0];
+    return c ? (c.icon || '') + ' ' + c.label : (v ? sanitize(v) : '— ไม่ระบุ —');
+  }
+  return v === '' || v == null ? '<span style="color:var(--text3)">(ว่าง)</span>' : sanitize(String(v));
+}
+function showDemoStaffEditsM() {
+  var items = getDemoItems(), byId = {};
+  items.forEach(function(d) { byId[d.id] = d; });
+  var rows = DEMO_STAFF_EDITS.filter(function(e) { return byId[e._id]; });
+  var orphan = DEMO_STAFF_EDITS.length - rows.length;
+  var h = '<div class="hint" style="margin-bottom:10px">รายการที่ทีมงานแก้จากหน้า demo-staff.html — กดรับเข้าแล้วจะเขียนลงข้อมูลตัวจริงและล้างคิวทิ้ง<br>ตอนนี้หน้า staff กับลิงก์ลูกค้าเห็นค่าใหม่ไปแล้ว แต่แอปนี้ยังเป็นค่าเดิมจนกว่าจะกดรับ</div>';
+  if (orphan) h += '<div class="dm-warn">⚠️ มีคิวอีก ' + orphan + ' รายการที่หาเครื่องปลายทางไม่เจอ (อาจถูกลบไปแล้ว) — กด “ล้างคิวที่หาเครื่องไม่เจอ” ด้านล่างเพื่อทิ้ง</div>';
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีรายการรอรับเข้า</div>';
+    h += '<div class="fm-actions">' + (orphan ? '<button class="btn bd" onclick="clearOrphanDemoEdits()">🗑️ ล้างคิวที่หาเครื่องไม่เจอ (' + orphan + ')</button>' : '') +
+      '<button class="btn" onclick="closeMForce()">ปิด</button></div>';
+    return openM('📥 รับการแก้ไขจากหน้า Staff', h), setMWide(820);
+  }
+  h += '<div style="max-height:54vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>' +
+    '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">เครื่อง</th>' +
+    '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">ที่แก้</th>' +
+    '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:120px">คนแก้</th>' +
+    '<th style="padding:7px 9px;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:150px"></th></tr></thead><tbody>';
+  rows.forEach(function(e) {
+    var d = byId[e._id], f = e.fields || {};
+    h += '<tr><td style="padding:6px 9px;border-bottom:1px solid var(--border);vertical-align:top">' +
+      '<b>' + sanitize(d.name || '-') + '</b><div style="font-size:10px;color:var(--text3);font-family:monospace">เช่า ' +
+      sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(d.serialNumber || '—') + '</div></td>';
+    h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border)">';
+    Object.keys(f).forEach(function(k) {
+      var cur = k === 'flyable' ? (d.flyable !== false) : k === 'customerVisible' ? demoIsCustomerVisible(d) : d[k];
+      h += '<div style="margin-bottom:3px"><span style="font-size:10px;color:var(--text3);text-transform:uppercase">' +
+        (_DEMO_EDIT_LABELS[k] || k) + '</span> ' + _demoEditFmt(k, cur) +
+        ' <span style="color:var(--accent)">→</span> <b>' + _demoEditFmt(k, f[k]) + '</b></div>';
+    });
+    h += '</td>';
+    h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border)">' + sanitize(e.editedBy || '—') + '</td>';
+    h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">' +
+      '<button class="btn bsm bp" onclick="applyDemoStaffEdit(\'' + e._id + '\')">✅ รับ</button> ' +
+      '<button class="btn bsm bd" onclick="rejectDemoStaffEdit(\'' + e._id + '\')">✕ ทิ้ง</button></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn bp" onclick="applyAllDemoStaffEdits()">✅ รับเข้าทั้งหมด (' + rows.length + ')</button>';
+  if (orphan) h += '<button class="btn bd" onclick="clearOrphanDemoEdits()">🗑️ ล้างคิวที่หาเครื่องไม่เจอ (' + orphan + ')</button>';
+  h += '<button class="btn" onclick="closeMForce()">ปิด</button></div>';
+  openM('📥 รับการแก้ไขจากหน้า Staff', h);
+  setMWide(880);
+}
+function _applyDemoEditsLocal(ids) {
+  var items = getDemoItems(), n = 0;
+  DEMO_STAFF_EDITS.forEach(function(e) {
+    if (ids.indexOf(e._id) === -1) return;
+    var d = items.filter(function(x) { return x.id === e._id; })[0];
+    if (!d) return;
+    Object.keys(e.fields || {}).forEach(function(k) {
+      if (_DEMO_EDIT_LABELS[k] === undefined) return;   // รับเฉพาะฟิลด์ที่รู้จัก กันค่าแปลกปลอมหลุดเข้าข้อมูลจริง
+      d[k] = e.fields[k];
+    });
+    n++;
+  });
+  if (n) saveDemoItems(items);
+  return n;
+}
+function _dropDemoEditDocs(ids) {
+  if (typeof db === 'undefined') return Promise.resolve();
+  return Promise.all(ids.map(function(id) {
+    return db.collection('publicDemoEdits').doc(id).delete().catch(function(e) { console.warn('drop edit', id, e); });
+  }));
+}
+function applyDemoStaffEdit(id) {
+  var n = _applyDemoEditsLocal([id]);
+  _dropDemoEditDocs([id]).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return e._id !== id; });
+    toast(n ? '✅ รับเข้าแล้ว' : 'ไม่พบเครื่องปลายทาง');
+    showDemoStaffEditsM();
+    render();
+  });
+}
+function rejectDemoStaffEdit(id) {
+  if (!confirm('ทิ้งการแก้ไขนี้โดยไม่รับเข้า?')) return;
+  _dropDemoEditDocs([id]).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return e._id !== id; });
+    toast('✕ ทิ้งแล้ว');
+    showDemoStaffEditsM();
+    render();
+  });
+}
+function applyAllDemoStaffEdits() {
+  var items = getDemoItems(), byId = {};
+  items.forEach(function(d) { byId[d.id] = 1; });
+  var ids = DEMO_STAFF_EDITS.filter(function(e) { return byId[e._id]; }).map(function(e) { return e._id; });
+  if (!ids.length) { toast('ไม่มีรายการให้รับ'); return; }
+  if (!confirm('รับการแก้ไขทั้ง ' + ids.length + ' รายการเข้าข้อมูลตัวจริง?')) return;
+  var n = _applyDemoEditsLocal(ids);
+  _dropDemoEditDocs(ids).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return ids.indexOf(e._id) === -1; });
+    toast('✅ รับเข้า ' + n + ' เครื่องแล้ว');
+    closeMForce();
+    render();
+  });
+}
+function clearOrphanDemoEdits() {
+  var items = getDemoItems(), byId = {};
+  items.forEach(function(d) { byId[d.id] = 1; });
+  var ids = DEMO_STAFF_EDITS.filter(function(e) { return !byId[e._id]; }).map(function(e) { return e._id; });
+  if (!ids.length) return;
+  if (!confirm('ล้างคิว ' + ids.length + ' รายการที่หาเครื่องปลายทางไม่เจอ?')) return;
+  _dropDemoEditDocs(ids).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return ids.indexOf(e._id) === -1; });
+    toast('🗑️ ล้างแล้ว');
+    showDemoStaffEditsM();
+  });
+}
 var demoVisFilter = 'all';   // all | shown | hidden
 
 // ---- ตั้งค่าทีละหลายเครื่องว่าจะให้ลูกค้าเห็นตัวไหนบ้าง ----
@@ -4277,6 +4428,15 @@ function rDemoTracker(el) {
     h += '</div>';
     h += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 ค่าที่มีปุ่ม 📋 (เลขเครื่องเช่า, S/N, เลขใบงาน ฯลฯ) กดคัดลอกไปวางที่อื่นได้ทันที · กดชื่อเครื่องเพื่อดูรายละเอียดทั้งหมด</div>';
     h += '</div>';
+  }
+
+  // ดึงคิวแก้ไขจากหน้า staff ทุกครั้งที่เข้าเมนูนี้ — เป็น .get() ครั้งเดียวไม่ใช่ listener ถาวร
+  // เพราะเมนูนี้ไม่ได้เปิดค้างไว้ทั้งวัน และไม่อยากให้ render วนเองระหว่างที่กำลังแก้ของอยู่
+  fetchDemoStaffEdits();
+  if (DEMO_STAFF_EDITS.length) {
+    h += '<div class="demo-staffedit-bar" onclick="showDemoStaffEditsM()">' +
+      '<span>✏️ ทีมงานแก้ข้อมูลจากหน้า Staff ไว้ <b>' + DEMO_STAFF_EDITS.length + ' เครื่อง</b> — ยังไม่ได้ลงข้อมูลตัวจริงในแอปนี้</span>' +
+      '<button class="btn bsm bp" onclick="event.stopPropagation();fetchDemoStaffEdits(true);showDemoStaffEditsM()">📥 ตรวจแล้วรับเข้า</button></div>';
   }
 
   var _demoHiddenCount = allItems.filter(function(d) { return !demoIsCustomerVisible(d); }).length;
