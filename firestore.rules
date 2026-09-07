@@ -1,0 +1,134 @@
+// =================================================================
+// ⚠️ ไฟล์นี้เป็น "สำเนาอ้างอิง" เท่านั้น — แก้ไฟล์นี้แล้วไม่มีผลอะไรทั้งสิ้น
+//
+// โปรเจกต์นี้ไม่มี firebase CLI / firebase.json / .firebaserc จึง deploy จากไฟล์ไม่ได้
+// ตัวจริงที่บังคับใช้อยู่คือที่ Firebase Console:
+//   Console → work-assistant-9e024 → Firestore Database → แท็บ Rules → Publish
+//
+// เก็บไว้เพื่อให้มีประวัติใน git ว่า rules เคยเป็นอย่างไร และ diff ได้เวลาแก้
+// ทุกครั้งที่แก้ที่ Console แล้ว กรุณา copy กลับมาใส่ไฟล์นี้ให้ตรงกันด้วย
+// อัปเดตล่าสุด: 2026-09-07 (เพิ่ม publicDemoEdits)
+// =================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ============================================================
+    // 1. USER DATA (Admin)
+    // ============================================================
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      match /{collection}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    // ============================================================
+    // 2. DEALER UPDATES
+    // ============================================================
+    match /dealerUpdates/{dealerId} {
+      allow read, write: if true;
+      match /pipeline/{pipeId} {
+        allow create: if request.resource.data.dealerId == dealerId &&
+                       request.resource.data._status == 'pending';
+        allow update: if resource.data.dealerId == dealerId &&
+                       (resource.data._status == 'pending' || resource.data._status == 'rejected');
+      }
+      match /{collection}/{docId} {
+        allow read, write: if true;
+      }
+    }
+    // ============================================================
+    // 3. TOKEN REGISTRY
+    // ============================================================
+    match /tokenRegistry/{tokenId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+    // ============================================================
+    // 4. TEAM SYSTEM (sales-view / gm-view)
+    // ============================================================
+    match /teamPipeline/{docId} {
+      allow read, write: if true;
+    }
+    match /teamConfig/{docId} {
+      allow read, write: if true;
+    }
+    match /salesMembers/{memberId} {
+      allow read, write: if true;
+      match /{sub}/{subDoc} {
+        allow read, write: if true;
+      }
+    }
+    // แผนเยี่ยมลูกค้าของทีม (views-teamvisitplan.js — onSnapshot + set)
+    // เดิมไม่มี rule ตัวนี้เลย = ถูกปฏิเสธมาตลอด ฟีเจอร์นี้จึงไม่เคยทำงานจริง
+    match /teamVisitPlans/{docId} {
+      allow read, write: if true;
+    }
+    // ============================================================
+    // 5. ANNOUNCEMENTS (ประกาศ & นโยบาย)
+    // ============================================================
+    match /announcements/{docId} {
+      allow read, write: if true;
+      match /{sub}/{subDoc} {
+        allow read, write: if true;
+      }
+    }
+    match /dealers/{dealerId}/announcementDeliveries/{docId} {
+      allow read, write: if true;
+    }
+    // ============================================================
+    // 6. LEAD FORMS (Event Lead Capture)
+    // ============================================================
+    match /leadForms/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /leadSubmissions/{docId} {
+      allow read, write: if true;
+    }
+    // สถิติการกดลิงก์ฟอร์ม (views-leads.js — add + where().get())
+    // เดิมไม่มี rule = ถูกปฏิเสธ แต่ฝั่งอ่านมี .catch() กลืน error ไว้ เลยได้ข้อมูลว่างแบบเงียบๆ
+    match /leadFormClicks/{docId} {
+      allow read, write: if true;
+    }
+    // ============================================================
+    // 7. APP CONFIG (Gemini Key ฯลฯ)
+    // ============================================================
+    match /appConfig/{docId} {
+      allow read, write: if request.auth != null;
+    }
+    // ============================================================
+    // 8. GUEST VIEW (ลิงก์ PIN ดู Stock/Sales Order อย่างเดียว)
+    // อ่านได้ทุกคน (ไม่ login) แต่เขียนได้เฉพาะเจ้าของบัญชีจริง (auth ตรง ownerUid) เท่านั้น
+    // ============================================================
+    match /guestViewData/{ownerUid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == ownerUid;
+      match /{collection}/{docId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == ownerUid;
+      }
+    }
+    // ============================================================
+    // 9. DEMO EQUIPMENT — public request/loan (demo-request.html, demo-staff.html)
+    // คำขอยืม Demo จากลูกค้า (ลิงก์สาธารณะ อันเดียวใช้ได้ทุกราย) + รายการยืมที่อนุมัติแล้ว
+    // (dealerUpdates/demoCatalogPublic กับ dealerUpdates/demoStaffAuth ใช้ rule ข้อ 2 ที่มีอยู่แล้วได้เลย
+    // ไม่ต้องเพิ่ม เพราะ dealerUpdates/{dealerId} เปิด read,write: if true ครอบคลุมทุก doc ใน collection นี้)
+    // ============================================================
+    match /publicDemoRequests/{docId} {
+      allow read, write: if true;
+    }
+    match /publicDemoLoans/{docId} {
+      allow read, write: if true;
+    }
+    // คิวแก้ไขข้อมูลเครื่องที่ทีมงานแก้จาก demo-staff.html
+    // หน้านั้นไม่มี auth เขียนเข้า users/{uid}/demo ไม่ได้ และถ้าเขียนทับ dealerUpdates/demoCatalogPublic
+    // ตรงๆ publishDemoCatalog() จากแอปหลักจะทับหายในรอบถัดไป จึงพักไว้ที่นี่ก่อน
+    // ตัวคิวไม่ใช่ข้อมูลจริง — แอปหลัก (ที่ล็อกอินแล้ว) ต้องกด "รับเข้า" ถึงจะลงข้อมูลจริงแล้วลบ doc ทิ้ง
+    match /publicDemoEdits/{unitId} {
+      allow read, write: if true;
+    }
+  }
+}
