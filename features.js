@@ -4941,13 +4941,22 @@ function demoCalToggleOpen(k) { demoCalOpen = (demoCalOpen === k) ? null : k; re
 // ---- ข้อมูลพื้นฐาน ----
 // ทุกช่วงยืม/จองของเครื่อง — อ่านจาก v7_demoLoans (แหล่งจริงของการจอง) ไม่ใช่ฟิลด์บนตัวเครื่อง
 // เพราะเครื่องหนึ่งมีได้หลายใบจองคนละช่วง ส่วนฟิลด์บนตัวเครื่องเก็บได้แค่ใบล่าสุด
+// ftParseDate ใช้ new Date(y,m,d) ซึ่ง "ทด" ค่าที่เกินให้เงียบๆ — '99/99/9999' จะกลายเป็นปี 10007
+// ถ้าปล่อยเข้าปฏิทิน แถบเดียวจะลากยาวข้ามทุกเดือนตลอดไป และเครื่องนั้นจะขึ้นว่า "ถูกยืม" ทุกวันไม่มีวันจบ
+// เลยกรองปีที่เป็นไปไม่ได้ทิ้งตรงนี้ (เฉพาะปฏิทิน ไม่แตะ ftParseDate ที่เมนูอื่นใช้ร่วมกัน)
+function _dcSaneDate(v) {
+  if (!v) return null;
+  var d = ftParseDate(v);
+  if (!d || isNaN(d.getTime())) return null;
+  var y = d.getFullYear();
+  return (y >= 2000 && y <= 2100) ? d : null;
+}
 function demoCalBookings() {
   var out = [];
   getDemoLoans().forEach(function(l) {
-    if (!l.lentDate) return;
-    var s = ftParseDate(l.lentDate);
-    var e = (l.actualReturnDate && ftParseDate(l.actualReturnDate)) || (l.returnDate && ftParseDate(l.returnDate)) || s;
-    if (!s) return;
+    var s = _dcSaneDate(l.lentDate);
+    if (!s) return;   // ไม่มีวันเริ่มที่ใช้ได้ = วางบนปฏิทินไม่ได้
+    var e = _dcSaneDate(l.actualReturnDate) || _dcSaneDate(l.returnDate) || s;
     if (e < s) e = s;
     out.push({ id: l.id, unitId: l.demoId, s: s, e: e, jobNo: (l.jobNo || '').trim(), refNo: (l.refNo || '').trim(),
       borrower: l.borrower || '', dealerId: l.dealerId || '', purpose: l.purpose || '', status: l.status });
@@ -5001,7 +5010,7 @@ function demoCalToolbar() {
     });
   h += '</div>';
 
-  h += '<div class="dcal-bar">';
+  h += '<div class="dcal-toolbar">';
   // ตัวกรองเครื่องหลัก/เสริม ใช้ตัวเดียวกับแท็บรายการ เพื่อไม่ให้ผู้ใช้ต้องตั้งสองที่
   h += '<button class="demo-filter-chip ' + (demoKindFilter === 'main' ? 'act' : '') + '" onclick="demoKindFilter=\'main\';demoCalOpen=null;render()">🚁 เครื่องหลัก</button>';
   h += '<button class="demo-filter-chip ' + (demoKindFilter === 'accessory' ? 'act' : '') + '" onclick="demoKindFilter=\'accessory\';demoCalOpen=null;render()">🔩 อุปกรณ์เสริม</button>';
@@ -5180,9 +5189,10 @@ function _dcDrillUnit(unitId) {
   return h + _dcSrcNote() + '</div>';
 }
 function _dcDrillJob(jobNo) {
-  var bs = demoCalBookings().filter(function(b) { return b.jobNo === jobNo; });
-  if (!bs.length) return '';
   var items = getDemoItems(), byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+  // ข้ามรายการยืมที่เครื่องถูกลบไปแล้ว ไม่งั้นจะได้แถวว่างเปล่าที่กดอะไรไม่ได้ปนมาในใบจอง
+  var bs = demoCalBookings().filter(function(b) { return b.jobNo === jobNo && byId[b.unitId]; });
+  if (!bs.length) return '';
   var f = bs[0], today = _dcDay(new Date());
   var slips = {}; bs.forEach(function(b) { if (b.refNo) slips[b.refNo] = 1; });
   var late = Math.round((today - f.e) / 86400000);
