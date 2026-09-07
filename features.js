@@ -5411,7 +5411,12 @@ var demoCalColorBy = 'stat';      // stat | who
 var demoCalDense = false;         // โหมดแน่น
 var demoCalForceTL = false;       // บนจอแคบ: บังคับดูไทม์ไลน์แทนรายการ
 
-function demoCalIsNarrow() { return window.innerWidth < 760; }
+// innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง / ตอนสั่งพิมพ์ — ถ้าเชื่อค่าดิบ
+// จะเด้งไปโหมดมือถือทั้งที่อยู่บนเดสก์ท็อป จึงถือว่า "วัดไม่ได้ = ไม่แคบ" และอ่าน clientWidth เป็นหลัก
+function demoCalIsNarrow() {
+  var w = document.documentElement.clientWidth || window.innerWidth || 0;
+  return w > 0 && w < 760;
+}
 function demoCalSetSearch(v) { demoCalSearch = v; demoCalOpen = null; render(); }
 var _dcSearchTimer = null;
 function demoCalSearchInput(v) {
@@ -6004,7 +6009,9 @@ function _dcViewTimeline() {
   if (demoCalIsNarrow() && !demoCalForceTL) return _dcMobileList(r, units, bks, byUnit);
 
   var h = _dcSpanCtl();
-  h += _dcLateStrip(bks);
+  // ส่ง allBks ไม่ใช่ bks ที่กรองตามช่วงแล้ว — เครื่องที่เลยกำหนดคืนตั้งแต่ก่อนช่วงที่ดูอยู่ ก็ยังไม่ได้คืนจริง
+  // ถ้ากรองตามช่วงมันจะหายไปจากแถบเตือนทั้งที่ของยังอยู่ที่ลูกค้า
+  h += _dcLateStrip(allBks);
   h += _dcDensity(r, units, bks);
   h += '<div class="dcal-hint">👆 กดแถบ = ดูใบจองนั้น · กดชื่อ = ดูรายละเอียด · <b>ลากบนพื้นที่ว่างของแถว = จองช่วงนั้นเลย</b></div>';
   if (demoCalOpen) h += _dcDrill();

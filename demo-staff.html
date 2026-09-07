@@ -231,6 +231,76 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   border-radius:6px; padding:1px 7px; color:var(--text); }
 .dcal-idpc i { font-style:normal; font-weight:700; font-size:9px; letter-spacing:.04em; text-transform:uppercase;
   color:var(--text3); font-family:-apple-system,'Segoe UI',sans-serif; }
+/* ---- ไทม์ไลน์: ชุดปรับปรุง 16 ข้อ (คู่กับแอปหลัก) ---- */
+.dcal-ctl-lb { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); margin-left:6px; }
+.dcal-srch { position:relative; flex:1; min-width:190px; max-width:520px; }
+.dcal-srch input { width:100%; font:inherit; font-size:13px; padding:7px 28px 7px 30px; border-radius:8px;
+  border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.dcal-srch input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+.dcal-srch .ic { position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text3); pointer-events:none; }
+.dcal-srch .clr { position:absolute; right:5px; top:50%; transform:translateY(-50%); background:none; border:0;
+  color:var(--text3); cursor:pointer; font-size:13px; padding:2px 6px; }
+.dcal-hint { font-size:11.5px; color:var(--text2); margin-bottom:8px; line-height:1.55; }
+.dcal-count { font-size:11px; color:var(--text3); font-family:ui-monospace,monospace; margin-bottom:5px; }
+.dcal-ruler { position:relative; height:27px; }
+.dcal-ruler .mo { position:absolute; top:0; height:100%; font-size:11px; font-weight:600; color:var(--text2);
+  padding-left:5px; border-left:1px solid var(--border); overflow:hidden; white-space:nowrap; }
+.dcal-ruler .wk { position:absolute; bottom:0; font-size:9px; color:var(--text3); font-family:ui-monospace,monospace; transform:translateX(-2px); }
+.dcal-head > .pad { position:sticky; left:0; z-index:6; background:var(--surface); }
+.dcal-grid i.mo { background:var(--border); }
+.dcal-dens { border:1px solid var(--border); border-radius:9px; padding:9px 12px 7px; margin-bottom:9px; background:var(--surface-2); }
+.dcal-dens .dens-hd { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+.dcal-dens .dens-hd span { font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
+.dcal-dens .dens-hd b { font-size:11px; color:var(--text2); font-family:ui-monospace,monospace; }
+.dcal-dens .dens-bars { display:flex; align-items:flex-end; gap:2px; height:34px; }
+.dcal-dens .dens-bars i { flex:1; background:var(--warn); border-radius:2px 2px 0 0; min-height:3px; opacity:.5; }
+.dcal-dens .dens-bars i.hot { opacity:1; }
+.dcal-dens .dens-bars i.nowk { outline:1.5px solid #ff5252; outline-offset:1px; }
+.dcal-late { display:flex; gap:7px; align-items:center; flex-wrap:wrap; padding:9px 12px; margin-bottom:9px;
+  background:var(--bad-soft); border:1px solid var(--bad); border-radius:9px; font-size:12px; }
+.dcal-late > b { color:var(--bad); }
+.dcal-late .lz { font-family:ui-monospace,monospace; font-size:11px; font-weight:600; background:var(--surface);
+  color:var(--bad); border:1px solid var(--bad); border-radius:6px; padding:2px 8px; cursor:pointer; }
+.dcal-row.grp { background:var(--surface-2); }
+.dcal-row:hover { background:rgba(128,128,128,.06); }
+.dcal-row.grp:hover { background:var(--surface-2); }
+.dcal-lab { position:sticky; left:0; z-index:5; background:var(--surface); padding-right:6px; }
+.dcal-row.grp .dcal-lab { background:var(--surface-2); }
+.dcal-lab.ind { padding-left:15px; }
+.dcal-lab .cr { display:inline-block; width:11px; color:var(--text3); font-size:10px; }
+.dcal-lab b { white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.dcal-bar { gap:6px; }
+.dcal-bar .bw { overflow:hidden; text-overflow:ellipsis; }
+.dcal-bar .bd { font-family:ui-monospace,monospace; font-size:9px; opacity:.85; flex-shrink:0; margin-left:auto; }
+.dcal-freetag { position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:10px; font-weight:600; color:var(--good); }
+.dcal-nextfree { position:absolute; right:7px; top:50%; transform:translateY(-50%); font-size:9.5px; font-weight:600;
+  color:var(--good); font-family:ui-monospace,monospace; z-index:1; }
+.dcal-track[data-unit] { cursor:crosshair; }
+.dcal-dragsel { position:absolute; top:2px; bottom:2px; background:var(--accent); opacity:.42; border-radius:4px; z-index:5; pointer-events:none; }
+.dcal-cross { position:absolute; top:26px; bottom:0; width:1px; background:var(--accent); z-index:6; pointer-events:none; display:none; }
+.dcal-crossdate { position:absolute; top:6px; transform:translateX(-50%); background:var(--accent); color:#fff;
+  font-size:9.5px; font-weight:700; padding:1px 7px; border-radius:5px; white-space:nowrap; z-index:7;
+  pointer-events:none; display:none; font-family:ui-monospace,monospace; }
+.dcal-tl { position:relative; }
+.dcal-wrap.dense .dcal-row { padding:1px 0; }
+.dcal-wrap.dense .dcal-lab b { font-size:11px; -webkit-line-clamp:1; }
+.dcal-wrap.dense .dcal-lab .m2 { display:none; }
+.dcal-wrap.dense .dcal-track { height:19px; }
+.dcal-msec { border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; background:var(--surface); }
+.dcal-msec .mst { font-size:12px; font-weight:700; padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border); }
+.dcal-msec .mst b { font-family:ui-monospace,monospace; color:var(--text2); }
+.dcal-msec.late { border-color:var(--bad); }
+.dcal-msec.late .mst { background:var(--bad-soft); color:var(--bad); }
+.dcal-msec.warn .mst { background:var(--warn-soft); color:var(--warn); }
+.dcal-msec.ok .mst { background:var(--good-soft); color:var(--good); }
+.dcal-mrow { display:flex; width:100%; align-items:center; gap:10px; padding:8px 12px; background:none; border:0;
+  border-bottom:1px solid var(--border); font:inherit; color:var(--text); text-align:left; cursor:pointer; }
+.dcal-mrow:last-child { border-bottom:0; }
+.dcal-mrow:hover { background:var(--surface-2); }
+.dcal-mrow .mn { flex:1; min-width:0; }
+.dcal-mrow .mn b { display:block; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dcal-mrow .mn i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
+.dcal-mrow .mr { font-size:11.5px; font-family:ui-monospace,monospace; color:var(--text2); white-space:nowrap; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -834,6 +904,37 @@ var scView = 'timeline';        // timeline | month | model | batch | find
 var scSpan = 6, scSpanStart = 0, scMonthOffset = 0;
 var scPicked = [], scOpen = null, scKind = 'all';
 var scFindModel = '', scFindFrom = '', scFindTo = '';
+// ---- ตัวควบคุมไทม์ไลน์ (ชุดเดียวกับแอปหลัก) ----
+var scSearch = '', scGrouped = true, scExpanded = {}, scHideFree = true;
+var scSort = 'busy', scColorBy = 'stat', scDense = false, scForceTL = false;
+var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16','#06b6d4','#f43f5e'];
+// innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
+function scIsNarrow() {
+  var w = document.documentElement.clientWidth || window.innerWidth || 0;
+  return w > 0 && w < 760;
+}
+function scWhoName(b) { return (b.borrower || '').trim() || 'ไม่ระบุผู้ยืม'; }
+function scWhoColor(n) { var h = 0; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return _SC_WHO_COLORS[h % _SC_WHO_COLORS.length]; }
+var _scSearchTimer = null;
+function scSearchInput(v) { scSearch = v; clearTimeout(_scSearchTimer); _scSearchTimer = setTimeout(function() { scOpen = null; renderStaffCalendar(); }, 260); }
+function scSetSearch(v) { scSearch = v; scOpen = null; renderStaffCalendar(); }
+function scToggleGroup(m) { scExpanded[m] = !scExpanded[m]; renderStaffCalendar(); }
+function scSet(k, v) { window[k] = v; scOpen = null; renderStaffCalendar(); }
+function scMatch(u, bks) {
+  var q = scSearch.trim().toLowerCase();
+  if (!q) return true;
+  var hay = [u.name, u.model, u.serialNumber, u.rentalDbNo, u.sku].join(' ');
+  bks.forEach(function(b) { if (b.unitId === u.id) hay += ' ' + scWhoName(b) + ' ' + (b.approver || ''); });
+  return hay.toLowerCase().indexOf(q) !== -1;
+}
+function scNextFree(unitId, bks, r) {
+  var today = _scDay(new Date());
+  var mine = bks.filter(function(b) { return b.unitId === unitId && b.status !== 'returned' && b.e >= today; });
+  if (!mine.length) return null;
+  var last = mine.reduce(function(a, b) { return b.e > a.e ? b : a; });
+  var nf = _scAdd(last.e, 1);
+  return nf <= r.to ? nf : null;
+}
 var SC_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
 function _scDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
@@ -898,10 +999,15 @@ function _scEsq(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').re
 
 // ---- แถบเครื่องมือ ----
 function scToolbar() {
-  var views = [['timeline','📊 ไทม์ไลน์'],['month','📅 รายเดือน'],['model','🚁 รายรุ่น'],['batch','📄 ชุดยืม'],['find','🔍 หาเครื่องว่าง']];
+  // "รายรุ่น" ยุบเป็นสวิตช์จัดกลุ่มของไทม์ไลน์ เหมือนแอปหลัก
+  if (scView === 'model') { scView = 'timeline'; scGrouped = true; }
+  var views = [['timeline','📊 ไทม์ไลน์'],['month','📅 รายเดือน'],['batch','📄 ชุดยืม'],['find','🔍 หาเครื่องว่าง']];
   var h = '<div class="dcal-views">' + views.map(function(v) {
     return '<button class="dcal-vbtn' + (scView === v[0] ? ' act' : '') + '" onclick="scSetView(\'' + v[0] + '\')">' + v[1] + '</button>';
   }).join('') + '</div>';
+  h += '<div class="dcal-toolbar"><div class="dcal-srch"><span class="ic">🔍</span>' +
+    '<input type="text" id="scSearch" placeholder="ค้นหา รุ่น / เลขเครื่องเช่า / S/N / ผู้ยืม" value="' + esc(scSearch) + '" oninput="scSearchInput(this.value)" autocomplete="off">' +
+    (scSearch ? '<button class="clr" onclick="scSetSearch(\'\')">✕</button>' : '') + '</div></div>';
   h += '<div class="dcal-toolbar">';
   [['main','🚁 เครื่องหลัก'],['accessory','🔩 อุปกรณ์เสริม'],['all','ทั้งหมด']].forEach(function(k) {
     h += '<button class="dcal-vbtn' + (scKind === k[0] ? ' act' : '') + '" onclick="scKind=\'' + k[0] + '\';scOpen=null;renderStaffCalendar()">' + k[1] + '</button>';
@@ -912,6 +1018,24 @@ function scToolbar() {
     h += '<div class="dcal-chips" style="margin-bottom:10px">' + scPicked.map(function(m) {
       return '<span class="dcal-chip">' + esc(m) + '<button onclick="scUnpick(\'' + _scEsq(m) + '\')">✕</button></span>';
     }).join('') + '<button class="dcal-vbtn" onclick="scPicked=[];scOpen=null;renderStaffCalendar()">ล้างทั้งหมด</button></div>';
+  }
+  if (scView === 'timeline' && !(scIsNarrow() && !scForceTL)) {
+    h += '<div class="dcal-toolbar">';
+    h += '<span class="dcal-ctl-lb">จัดกลุ่ม</span>';
+    h += '<button class="dcal-vbtn' + (scGrouped ? ' act' : '') + '" onclick="scSet(\'scGrouped\',true)">🚁 รายรุ่น</button>';
+    h += '<button class="dcal-vbtn' + (!scGrouped ? ' act' : '') + '" onclick="scSet(\'scGrouped\',false)">📋 รายเครื่อง</button>';
+    h += '<span class="dcal-ctl-lb">เรียง</span>';
+    [['busy','ยุ่งสุด'],['due','ใกล้คืน'],['name','ชื่อ']].forEach(function(s) {
+      h += '<button class="dcal-vbtn' + (scSort === s[0] ? ' act' : '') + '" onclick="scSet(\'scSort\',\'' + s[0] + '\')">' + s[1] + '</button>';
+    });
+    h += '<span class="dcal-ctl-lb">สี</span>';
+    h += '<button class="dcal-vbtn' + (scColorBy === 'stat' ? ' act' : '') + '" onclick="scSet(\'scColorBy\',\'stat\')">ตามสถานะ</button>';
+    h += '<button class="dcal-vbtn' + (scColorBy === 'who' ? ' act' : '') + '" onclick="scSet(\'scColorBy\',\'who\')">ตามผู้ยืม</button>';
+    h += '<button class="dcal-vbtn' + (scHideFree ? ' act' : '') + '" onclick="scSet(\'scHideFree\',' + !scHideFree + ')">' +
+      (scHideFree ? '☑️' : '⬜') + ' ซ่อนเครื่องที่ว่างทั้งช่วง</button>';
+    h += '<button class="dcal-vbtn' + (scDense ? ' act' : '') + '" onclick="scSet(\'scDense\',' + !scDense + ')">' +
+      (scDense ? '▪️ แน่น' : '▫️ สบาย') + '</button>';
+    h += '</div>';
   }
   return h;
 }
@@ -954,14 +1078,63 @@ function scUnpick(m) { var i = scPicked.indexOf(m); if (i !== -1) scPicked.splic
 document.addEventListener('click', function() { var b = document.getElementById('scPicker'); if (b) b.innerHTML = ''; });
 
 // ---- ชิ้นส่วนไทม์ไลน์ ----
+// ไม้บรรทัด: ชื่อเดือน + เลขวันที่ทุกสัปดาห์ — เดิมมีแค่ชื่อเดือน กะไม่ออกว่าแถบเริ่มวันไหน
 function _scMonthHead(r) {
-  var n = scSpan, h = '<div class="dcal-months" style="grid-template-columns:repeat(' + n + ',1fr)">', c = new Date(r.from);
-  for (var i = 0; i < n; i++) { h += '<span>' + SC_MONTHS[c.getMonth()] + (n > 6 ? '' : ' ' + String(c.getFullYear()).slice(2)) + '</span>'; c.setMonth(c.getMonth()+1); }
+  var h = '<div class="dcal-ruler">', c = new Date(r.from);
+  while (c <= r.to) {
+    var next = new Date(c.getFullYear(), c.getMonth() + 1, 1), end = next > r.to ? r.to : next;
+    h += '<div class="mo" style="left:' + _scPct(c, r) + '%;width:' + (_scPct(end, r) - _scPct(c, r)) + '%">' +
+      SC_MONTHS[c.getMonth()] + ' ' + String(c.getFullYear() + 543).slice(2) + '</div>';
+    c = next;
+  }
+  var step = scSpan >= 12 ? 14 : 7, w = new Date(r.from);
+  while (w <= r.to) {
+    if (w.getDate() !== 1) h += '<div class="wk" style="left:' + _scPct(w, r) + '%">' + w.getDate() + '</div>';
+    w = _scAdd(w, step);
+  }
   return h + '</div>';
 }
-function _scGrid() {
-  var h = '<div class="dcal-grid">';
-  for (var i = 1; i < scSpan; i++) h += '<i style="left:' + (i / scSpan * 100) + '%"></i>';
+function _scGrid(r) {
+  r = r || scRange();
+  var h = '<div class="dcal-grid">', w = new Date(r.from);
+  while (w <= r.to) { h += '<i class="' + (w.getDate() === 1 ? 'mo' : '') + '" style="left:' + _scPct(w, r) + '%"></i>'; w = _scAdd(w, 7); }
+  return h + '</div>';
+}
+// แถบสรุปความหนาแน่นรายสัปดาห์
+function _scDensity(r, units, bks) {
+  if (!units.length) return '';
+  var weeks = [], w = new Date(r.from), today = _scDay(new Date());
+  while (w <= r.to) {
+    var end = _scAdd(w, 6), n = 0;
+    units.forEach(function(u) { if (bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= end && w <= b.e; })) n++; });
+    weeks.push({ s: new Date(w), n: n });
+    w = _scAdd(w, 7);
+  }
+  var max = weeks.length ? Math.max.apply(null, weeks.map(function(x) { return x.n; })) : 0;
+  var peak = weeks.filter(function(x) { return x.n === max; })[0];
+  if (!max || !peak) return '';
+  var h = '<div class="dcal-dens"><div class="dens-hd"><span>ของตึงช่วงไหน — เครื่องที่ถูกยืม รายสัปดาห์</span>' +
+    '<b>ตึงสุด ' + _scFmt(peak.s) + ' — ' + max + '/' + units.length + ' เครื่อง</b></div><div class="dens-bars">';
+  weeks.forEach(function(x) {
+    var isNow = today >= x.s && today < _scAdd(x.s, 7);
+    h += '<i class="' + (x.n === max ? 'hot' : '') + (isNow ? ' nowk' : '') + '" style="height:' + Math.max(8, x.n / max * 100) + '%" ' +
+      'title="สัปดาห์ ' + _scFmt(x.s) + ' · ยืม ' + x.n + ' เครื่อง"></i>';
+  });
+  return h + '</div></div>';
+}
+function _scLateStrip(bks) {
+  var today = _scDay(new Date()), byId = {};
+  UNITS.forEach(function(u) { byId[u.id] = u; });
+  var late = bks.filter(function(b) { return b.status !== 'returned' && b.e < today && byId[b.unitId]; });
+  if (!late.length) return '';
+  late.sort(function(a, b) { return a.e - b.e; });
+  var h = '<div class="dcal-late"><b>⚠️ เลยกำหนดคืน ' + late.length + ' เครื่อง</b>';
+  late.slice(0, 12).forEach(function(b) {
+    var u = byId[b.unitId];
+    h += '<button class="lz" onclick="scSetSearch(\'' + _scEsq(u.rentalDbNo || u.model || '') + '\')">' +
+      esc(u.rentalDbNo || '—') + ' · ' + esc(scWhoName(b)) + ' · เลย ' + Math.round((today - b.e) / 86400000) + ' วัน</button>';
+  });
+  if (late.length > 12) h += '<span style="font-size:11px;color:var(--text2)">…และอีก ' + (late.length - 12) + '</span>';
   return h + '</div>';
 }
 function _scTodayLine(r) {
@@ -971,8 +1144,16 @@ function _scTodayLine(r) {
 }
 function _scBar(b, r, today, label, key) {
   var L = _scPct(b.s, r), R = _scPct(_scAdd(b.e, 1), r), w = Math.max(1.1, R - L);
-  return '<button class="dcal-bar b-' + scBarState(b, today) + (scOpen === key ? ' on' : '') + '" style="left:' + L + '%;width:' + w + '%" ' +
-    'title="' + esc(label) + ' · ' + _scFmt(b.s) + ' – ' + _scFmt(b.e) + '" onclick="scToggleOpen(\'' + _scEsq(key) + '\')">' + esc(label) + '</button>';
+  var st = scBarState(b, today), inner = '';
+  if (w > 24) inner = '<span class="bw">' + esc(label) + '</span><span class="bd">' + _scFmt(b.s) + '–' + _scFmt(b.e) + '</span>';
+  else if (w > 10) inner = '<span class="bw">' + esc(label) + '</span>';
+  var sty = 'left:' + L + '%;width:' + w + '%';
+  if (scColorBy === 'who') {
+    var c = scWhoColor(scWhoName(b));
+    sty += st === 'soon' ? ';border-color:' + c + ';color:' + c : ';background:' + c;
+  }
+  return '<button class="dcal-bar b-' + st + (scOpen === key ? ' on' : '') + '" style="' + sty + '" ' +
+    'title="' + esc(label) + ' · ' + _scFmt(b.s) + ' – ' + _scFmt(b.e) + '" onclick="scToggleOpen(\'' + _scEsq(key) + '\')">' + inner + '</button>';
 }
 function _scSpanCtl() {
   var r = scRange();
@@ -1146,28 +1327,181 @@ function _scDrillModel(m) {
 }
 
 // ---- 1) ไทม์ไลน์ ----
+function _scUnitRow(u, bksOf, r, today, indent) {
+  var bars = bksOf.map(function(b) { return _scBar(b, r, today, scWhoName(b), 'batch:' + scBatchKey(b)); }).join('');
+  var nf = scNextFree(u.id, bksOf, r);
+  var h = '<div class="dcal-row"><button class="dcal-lab' + (indent ? ' ind' : '') + '" onclick="scToggleOpen(\'unit:' + u.id + '\')">' +
+    '<b>' + esc(u.model || u.name || '-') + '</b><span class="m2">เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</span></button>' +
+    '<div class="dcal-track" data-unit="' + u.id + '">' + _scGrid(r) + _scTodayLine(r);
+  if (!bksOf.length) h += '<span class="dcal-freetag">ว่างทั้งช่วง</span>';
+  else if (nf) h += '<span class="dcal-nextfree">ว่าง ' + _scFmt(nf) + '</span>';
+  return h + bars + '</div></div>';
+}
+function _scSortRows(rows, kBusy, kDue, kName) {
+  if (scSort === 'name') return rows.sort(function(a, b) { return kName(a).localeCompare(kName(b)); });
+  if (scSort === 'due') return rows.sort(function(a, b) { return kDue(a) - kDue(b); });
+  return rows.sort(function(a, b) { return kBusy(b) - kBusy(a); });
+}
 function _scViewTimeline() {
   var r = scRange(), today = _scDay(new Date());
-  var units = scUnits(), bks = scBookings(), byUnit = {};
-  bks.forEach(function(b) { if (_scOverlap(b, r.from, r.to)) (byUnit[b.unitId] = byUnit[b.unitId] || []).push(b); });
-  units = units.slice().sort(function(a, b) {
-    var n = _unitModelKey(a).localeCompare(_unitModelKey(b));
-    return n !== 0 ? n : String(a.rentalDbNo || '').localeCompare(String(b.rentalDbNo || ''), undefined, { numeric: true });
-  });
+  var allBks = scBookings();
+  var units = scUnits().filter(function(u) { return scMatch(u, allBks); });
+  var bks = allBks.filter(function(b) { return _scOverlap(b, r.from, r.to); });
+  var byUnit = {};
+  bks.forEach(function(b) { (byUnit[b.unitId] = byUnit[b.unitId] || []).push(b); });
+
+  if (scIsNarrow() && !scForceTL) return _scMobileList(r, units, bks);
+
   var h = _scSpanCtl();
-  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดแถบ = ดูชุดยืมนั้น · กดชื่อเครื่อง = ดูรายละเอียดและคีย์ยืมต่อ</div>';
+  // ส่ง allBks — เครื่องที่เลยกำหนดตั้งแต่ก่อนช่วงที่ดูอยู่ ก็ยังไม่ได้คืนจริง ไม่ควรหายจากแถบเตือน
+  h += _scLateStrip(allBks);
+  h += _scDensity(r, units, bks);
+  h += '<div class="dcal-hint">👆 กดแถบ = ดูชุดยืม · กดชื่อ = ดูรายละเอียด · <b>ลากบนพื้นที่ว่างของแถว = คีย์ยืมช่วงนั้นเลย</b></div>';
   if (scOpen) h += _scDrill();
-  if (!units.length) return h + '<div class="empty-state">ไม่มีเครื่องตรงตัวกรอง</div>';
-  h += '<div class="dcal-wrap"><div class="dcal-tl"><div class="dcal-head"><div></div>' + _scMonthHead(r) + '</div>';
-  units.forEach(function(u) {
-    var bars = (byUnit[u.id] || []).map(function(b) {
-      return _scBar(b, r, today, b.borrower || 'ยืม', 'batch:' + scBatchKey(b));
-    }).join('');
-    h += '<div class="dcal-row"><button class="dcal-lab" onclick="scToggleOpen(\'unit:' + u.id + '\')">' +
-      '<b>' + esc(u.model || u.name || '-') + '</b><span class="m2">เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</span></button>' +
-      '<div class="dcal-track">' + _scGrid() + _scTodayLine(r) + bars + '</div></div>';
+
+  var rows = '', shown = 0, total = 0;
+  if (scGrouped) {
+    var by = {}, order = [];
+    units.forEach(function(u) { var m = _unitModelKey(u); if (!by[m]) { by[m] = []; order.push(m); } by[m].push(u); });
+    var gs = order.map(function(m) {
+      var list = by[m], gb = [];
+      list.forEach(function(u) { (byUnit[u.id] || []).forEach(function(b) { gb.push(b); }); });
+      return { m: m, list: list, bks: gb, due: gb.length ? Math.min.apply(null, gb.map(function(x) { return x.e; })) : Infinity };
+    });
+    total = gs.length;
+    if (scHideFree) gs = gs.filter(function(x) { return x.bks.length; });
+    _scSortRows(gs, function(x) { return x.bks.length; }, function(x) { return x.due; }, function(x) { return x.m; });
+    shown = gs.length;
+    gs.forEach(function(x) {
+      var isOpen = !!scExpanded[x.m] || !!scSearch.trim(), n = x.list.length;
+      var seen = {}, ord = [];
+      x.bks.forEach(function(b) {
+        var k = scBatchKey(b);
+        if (!seen[k]) { seen[k] = { b: b, n: 0 }; ord.push(k); }
+        seen[k].n++;
+      });
+      var bars = ord.map(function(k) { return _scBar(seen[k].b, r, today, seen[k].n + '/' + n + ' ' + scWhoName(seen[k].b), 'batch:' + k); }).join('');
+      rows += '<div class="dcal-row grp"><button class="dcal-lab" onclick="scToggleGroup(\'' + _scEsq(x.m) + '\')">' +
+        '<b><span class="cr">' + (isOpen ? '▾' : '▸') + '</span>' + esc(x.m) + '</b>' +
+        '<span class="m2">' + n + ' เครื่อง · ใช้อยู่ ' + x.bks.filter(function(b) { return scBarState(b, today) !== 'soon'; }).length + '</span></button>' +
+        '<div class="dcal-track">' + _scGrid(r) + _scTodayLine(r) + bars + '</div></div>';
+      if (isOpen) x.list.forEach(function(u) { rows += _scUnitRow(u, byUnit[u.id] || [], r, today, true); });
+    });
+  } else {
+    var us = units.slice();
+    total = us.length;
+    if (scHideFree) us = us.filter(function(u) { return (byUnit[u.id] || []).length; });
+    _scSortRows(us,
+      function(u) { var b = byUnit[u.id] || []; return b.length * 10 + (b.some(function(x) { return scBarState(x, today) === 'late'; }) ? 5 : 0); },
+      function(u) { var b = byUnit[u.id] || []; return b.length ? Math.min.apply(null, b.map(function(x) { return x.e; })) : Infinity; },
+      function(u) { return _unitModelKey(u) + (u.rentalDbNo || ''); });
+    shown = us.length;
+    us.forEach(function(u) { rows += _scUnitRow(u, byUnit[u.id] || [], r, today, false); });
+  }
+
+  if (!rows) {
+    return h + '<div class="empty-state">' + (scSearch.trim() ? '🔍 ไม่พบเครื่องที่ตรงกับ “' + esc(scSearch) + '”' :
+      scHideFree ? 'ไม่มีเครื่องถูกยืมในช่วงนี้ — กด “ซ่อนเครื่องที่ว่างทั้งช่วง” เพื่อดูทั้งหมด' : 'ไม่มีเครื่องตรงตัวกรอง') + '</div>';
+  }
+  h += '<div class="dcal-count">แสดง ' + shown + '/' + total + ' แถว' + (scHideFree ? ' · ซ่อนที่ว่างอยู่' : '') + '</div>';
+  h += '<div class="dcal-wrap' + (scDense ? ' dense' : '') + '"><div class="dcal-tl" style="--dcal-lab:236px">' +
+    '<div class="dcal-head"><div class="pad"></div>' + _scMonthHead(r) + '</div>' + rows +
+    '<div class="dcal-cross" id="scCross"></div><div class="dcal-crossdate" id="scCrossDate"></div></div></div>' + _scLegend();
+  setTimeout(_scWireTrack, 0);
+  return h;
+}
+
+// ---- ลากบนพื้นที่ว่างเพื่อคีย์ยืม + เส้นชี้วันที่ ----
+function _scWireTrack() {
+  var wrap = document.querySelector('#tab-calendar .dcal-wrap');
+  if (!wrap) return;
+  var cross = document.getElementById('scCross'), cdate = document.getElementById('scCrossDate');
+  var tl = wrap.querySelector('.dcal-tl'), r = scRange();
+  function dateAt(p) { return _scAdd(r.from, Math.round(p / 100 * r.days)); }
+  wrap.querySelectorAll('.dcal-track[data-unit]').forEach(function(tr) {
+    var sel = null, startP = 0;
+    function px(e) { var rc = tr.getBoundingClientRect(); return (e.clientX - rc.left) / rc.width * 100; }
+    tr.addEventListener('mousemove', function(e) {
+      if (cross && tl) {
+        var t2 = tl.getBoundingClientRect();
+        cross.style.display = cdate.style.display = 'block';
+        cross.style.left = cdate.style.left = (e.clientX - t2.left) + 'px';
+        cdate.textContent = _scFmt(dateAt(px(e)));
+      }
+      if (!sel) return;
+      var p = px(e);
+      sel.style.left = Math.min(startP, p) + '%';
+      sel.style.width = Math.abs(p - startP) + '%';
+    });
+    tr.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.dcal-bar')) return;
+      startP = px(e);
+      sel = document.createElement('div'); sel.className = 'dcal-dragsel';
+      sel.style.left = startP + '%'; sel.style.width = '0%';
+      tr.appendChild(sel);
+      e.preventDefault();
+    });
+    tr.addEventListener('mouseup', function(e) {
+      if (!sel) return;
+      var p = px(e), a = dateAt(Math.min(startP, p)), b = dateAt(Math.max(startP, p));
+      sel.remove(); sel = null;
+      if (Math.abs(p - startP) < 0.5) return;
+      scBook(tr.dataset.unit, _scIso(a), _scIso(b));
+    });
+    tr.addEventListener('mouseleave', function() { if (sel) { sel.remove(); sel = null; } });
   });
-  return h + '</div></div>' + _scLegend();
+  wrap.addEventListener('mouseleave', function() {
+    if (cross) cross.style.display = 'none';
+    if (cdate) cdate.style.display = 'none';
+  });
+}
+
+// ---- มุมมองมือถือ: รายการตามสิ่งที่ต้องทำ ----
+function _scMobileList(r, units, bks) {
+  var today = _scDay(new Date()), byId = {};
+  UNITS.forEach(function(u) { byId[u.id] = u; });
+  var inScope = {}; units.forEach(function(u) { inScope[u.id] = 1; });
+  var act = bks.filter(function(b) { return b.status !== 'returned' && inScope[b.unitId]; });
+  var late = act.filter(function(b) { return b.e < today; }).sort(function(a, b) { return a.e - b.e; });
+  var dueWk = act.filter(function(b) { return b.e >= today && b.e <= _scAdd(today, 7); }).sort(function(a, b) { return a.e - b.e; });
+  var outWk = act.filter(function(b) { return b.s > today && b.s <= _scAdd(today, 7); }).sort(function(a, b) { return a.s - b.s; });
+  var freeUnits = units.filter(function(u) { return !act.some(function(b) { return b.unitId === u.id && b.s <= today && today <= b.e; }); });
+  var byModel = {};
+  freeUnits.forEach(function(u) { var m = _unitModelKey(u); byModel[m] = (byModel[m] || 0) + 1; });
+
+  var h = '<div class="dcal-toolbar"><div class="dcal-srch" style="flex:1"><span class="ic">🔍</span>' +
+    '<input type="text" id="scSearch" placeholder="ค้นหา รุ่น / เลขเช่า / ผู้ยืม" value="' + esc(scSearch) + '" oninput="scSearchInput(this.value)" autocomplete="off">' +
+    (scSearch ? '<button class="clr" onclick="scSetSearch(\'\')">✕</button>' : '') + '</div></div>';
+  h += '<div class="dcal-hint">📱 จอแคบแสดงเป็นรายการตามสิ่งที่ต้องทำ — ' +
+    '<button class="btn btn-ghost btn-sm" onclick="scForceTL=true;renderStaffCalendar()">ดูแบบไทม์ไลน์แทน →</button></div>';
+  if (scOpen) h += _scDrill();
+  function sec(title, list, cls, right) {
+    if (!list.length) return '';
+    var s = '<div class="dcal-msec ' + (cls || '') + '"><div class="mst">' + title + ' <b>' + list.length + '</b></div>';
+    list.slice(0, 20).forEach(function(b) {
+      var u = byId[b.unitId]; if (!u) return;
+      s += '<button class="dcal-mrow" onclick="scToggleOpen(\'unit:' + u.id + '\')">' +
+        '<span class="mn"><b>' + esc(u.model || u.name || '-') + '</b>' +
+        '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(scWhoName(b)) + '</i></span>' +
+        '<span class="mr">' + right(b) + '</span></button>';
+    });
+    if (list.length > 20) s += '<div style="font-size:11px;color:var(--text3);padding:4px 10px">…และอีก ' + (list.length - 20) + '</div>';
+    return s + '</div>';
+  }
+  h += sec('⚠️ เลยกำหนดคืน', late, 'late', function(b) { return '<b style="color:var(--bad)">เลย ' + Math.round((today - b.e) / 86400000) + ' วัน</b>'; });
+  h += sec('🔔 ต้องคืนสัปดาห์นี้', dueWk, 'warn', function(b) { return _scFmt(b.e); });
+  h += sec('📤 ส่งออกสัปดาห์นี้', outWk, '', function(b) { return _scFmt(b.s); });
+  var mk = Object.keys(byModel).sort();
+  if (mk.length) {
+    h += '<div class="dcal-msec ok"><div class="mst">✅ ว่างพร้อมยืม <b>' + freeUnits.length + '</b></div>';
+    mk.forEach(function(m) {
+      h += '<button class="dcal-mrow" onclick="scToggleOpen(\'model:' + _scEsq(m) + '\')">' +
+        '<span class="mn"><b>' + esc(m) + '</b></span><span class="mr">' + byModel[m] + ' เครื่อง</span></button>';
+    });
+    h += '</div>';
+  }
+  if (!late.length && !dueWk.length && !outWk.length && !mk.length) h += '<div class="empty-state">ไม่มีรายการตรงตัวกรอง</div>';
+  return h;
 }
 
 // ---- 2) รายเดือน (+ ว่างพร้อมกันเมื่อเลือกหลายรุ่น) ----
@@ -1231,7 +1565,8 @@ function _scViewMonth() {
 }
 
 // ---- 3) รายรุ่น ----
-function _scViewModel() {
+function _scViewModel() { scGrouped = true; return _scViewTimeline(); }
+function _scViewModelOld() {
   var r = scRange(), today = _scDay(new Date());
   var units = scUnits(), bks = scBookings(), by = {};
   units.forEach(function(u) { var m = _unitModelKey(u); (by[m] = by[m] || []).push(u); });
