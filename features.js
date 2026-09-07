@@ -3938,12 +3938,8 @@ function importDemoItemsExcel() {
 }
 
 function demoComplianceBadges(d) {
-  var h = '<div class="demo-compliance">';
-  h += '<span>' + (d.nbtcRegistered ? '✅' : '❌') + ' กสทช</span>';
-  h += '<span>' + (d.droneInsurance ? '✅' : '❌') + ' ประกันภัย</span>';
-  h += '<span>' + (d.caatRegistered ? '✅' : '❌') + ' CAAT</span>';
-  h += '</div>';
-  return h;
+  function b(ok, label) { return '<span class="demo-mp ' + (ok ? 'ok' : 'no') + '">' + (ok ? '✓' : '✗') + ' ' + label + '</span>'; }
+  return b(d.nbtcRegistered, 'กสทช.') + b(d.droneInsurance, 'ประกันภัย') + b(d.caatRegistered, 'CAAT');
 }
 
 function rDemoTracker(el) {
@@ -4303,54 +4299,76 @@ function demoCardHtml(d, now, dupRentals) {
   var mColor = demoModelColor(d.name);
   var cat = (getConfig().demoCategories || []).filter(function(c) { return c.id === d.category; })[0];
 
-  var h = '';
-  h += '<div class="demo-card2' + (isOverdue ? ' demo-overdue' : '') + '" style="border-left-color:' + mColor + '">';
-  h += '<div class="demo-card2-top">';
-  h += '<div class="demo-card2-id">';
-  h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">' + (cat && cat.icon ? cat.icon : '🚁') + '</div>';
-  h += '<div>';
-  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})" title="กดเพื่อดูรายละเอียดทั้งหมด">' + sanitize(d.name) + '</div>';
-  if (d.serialNumber) h += '<span class="demo-sn-chip" style="background:' + mColor + '22;color:' + mColor + '">S/N ' + qcopyHtml(d.serialNumber) + '</span>';
-  if (cat) h += '<div><span class="demo-cat-badge">' + (cat.icon || '') + ' ' + sanitize(cat.label) + '</span></div>';
-  h += '</div></div>';
-  h += '<span class="demo-status ' + meta.cls + '" title="' + sanitize(meta.desc) + '">' + meta.label + '</span>';
-  h += '</div>';
-  h += '<div class="demo-card2-info">';
-  h += '<div>' + (d.flyable !== false ? '<span style="color:#38bdf8">✈️ บินสาธิตได้</span>' : '<span style="color:var(--text2)">🖼️ จัดแสดงเท่านั้น (ห้ามบิน)</span>') + '</div>';
-  if ((d.model || '').trim()) h += '<div>📦 Model: ' + qcopyHtml(d.model) + '</div>';
-  if (d.sku) h += '<div>🏷️ SiS Part: ' + qcopyHtml(d.sku) + '</div>';
   // ต้อง .trim() ให้ตรงกับเงื่อนไขที่ใช้แบ่งสโคป "พร้อมให้ยืม/ยังไม่ลงทะเบียน" ใน rDemoTracker() เป๊ะๆ
   // ไม่งั้นค่าที่มีแต่ช่องว่างจะถูกนับเป็น "ยังไม่ลงทะเบียน" ตอนกรอง แต่การ์ดกลับโชว์บรรทัดหมายเลขว่างเปล่า
   var _rental = (d.rentalDbNo || '').trim();
+  var _model = (d.model || '').trim();
+
+  var h = '';
+  h += '<div class="demo-card2' + (isOverdue ? ' demo-overdue' : '') + '" style="border-left-color:' + mColor + '">';
+
+  // ---- หัวการ์ด: ไอคอน + ชื่อ + บรรทัดระบุตัวตน + สถานะ ----
+  h += '<div class="demo-card2-top">';
+  h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">' + (cat && cat.icon ? cat.icon : '🚁') + '</div>';
+  h += '<div class="demo-card2-hd">';
+  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})" title="กดเพื่อดูรายละเอียดทั้งหมด">' + sanitize(d.name) + '</div>';
+  // เลขเช่า · S/N · หมวดหมู่ รวมเป็นบรรทัดเดียว เดิมกินคนละบรรทัดทั้งที่เป็นข้อมูลระบุตัวตนชุดเดียวกัน
+  h += '<div class="demo-idline">';
   if (_rental) {
-    h += '<div>📋 หมายเลขเครื่องเช่า: ' + qcopyHtml(_rental);
-    if (dupRentals && dupRentals[_rental]) h += ' <span style="color:#ef4444;font-weight:700">⚠️ ซ้ำกับเครื่องอื่น</span>';
-    h += '</div>';
+    h += '<span class="demo-idpc"><i>เช่า</i>' + qcopyHtml(_rental) + '</span>';
+    if (dupRentals && dupRentals[_rental]) h += '<span class="demo-idpc warn">⚠️ เลขซ้ำกับเครื่องอื่น</span>';
+  } else {
+    h += '<span class="demo-idpc warn">📋 ยังไม่ลงทะเบียนเครื่องเช่า</span>';
   }
-  else h += '<div style="color:#f59e0b">📋 ยังไม่ลงทะเบียนเครื่องเช่า — ยืมจริงไม่ได้ / ลูกค้าไม่เห็นเครื่องนี้</div>';
-  if (eff === 'lent' || eff === 'reserved') {
-    if ((d.jobNo || '').trim()) h += '<div>📄 ใบจอง: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
-    if ((d.refNo || '').trim()) h += '<div>🔖 เลขที่ใบเบิก: ' + qcopyHtml(d.refNo) + '</div>';
-    h += '<div>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '-')) + '</div>';
-    if (d.purpose) h += '<div>🎯 ' + sanitize(d.purpose) + '</div>';
-    h += '<div>📅 ' + (eff === 'reserved' ? 'จองวันที่: ' : 'ยืมตั้งแต่: ') + (d.lentDate || '-') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '') + '</div>';
-    if (d.returnDate) {
-      h += '<div>📅 กำหนดคืน: ' + d.returnDate;
-      if (isDueSoon) h += ' <span style="color:#f59e0b;font-weight:700">' + (daysToReturn < 0 ? '(เลยกำหนด ' + Math.abs(daysToReturn) + ' วัน)' : daysToReturn === 0 ? '(ครบวันนี้)' : '(อีก ' + daysToReturn + ' วัน)') + '</span>';
-      h += '</div>';
-    }
-  }
-  if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
-  h += '</div>';
+  if (d.serialNumber) h += '<span class="demo-idpc"><i>S/N</i>' + qcopyHtml(d.serialNumber) + '</span>';
+  if (cat) h += '<span class="demo-idpc plain">' + (cat.icon || '') + ' ' + sanitize(cat.label) + '</span>';
+  h += '</div></div>';
+  h += '<div class="demo-card2-stat"><span class="demo-status ' + meta.cls + '" title="' + sanitize(meta.desc) + '">' + meta.label + '</span>';
+  if (isOverdue) h += '<span class="demo-od">⚠️ เลยกำหนดคืน</span>';
+  h += '</div></div>';
+
+  if (!_rental) h += '<div class="demo-card2-flag">ยืมจริงไม่ได้ และลูกค้าไม่เห็นเครื่องนี้ในหน้าขอยืม — กรอกเลขเครื่องเช่าก่อน</div>';
+
+  // ---- แถวคุณสมบัติ: บินได้/จัดแสดง + เอกสาร 3 อย่าง อยู่บรรทัดเดียวกัน ----
+  h += '<div class="demo-meta">';
+  h += (d.flyable !== false ? '<span class="demo-mp fly">✈️ บินสาธิตได้</span>' : '<span class="demo-mp">🖼️ จัดแสดงเท่านั้น</span>');
   h += demoComplianceBadges(d);
+  h += '</div>';
+
+  // ---- รายละเอียดรอง: โชว์ Model เฉพาะตอนที่ไม่ซ้ำกับชื่อ ไม่งั้นเป็นบรรทัดซ้ำเปล่าๆ ----
+  var sub = '';
+  if (_model && _model !== (d.name || '').trim()) sub += '<div>📦 ' + qcopyHtml(_model) + '</div>';
+  if (d.sku) sub += '<div>🏷️ ' + qcopyHtml(d.sku) + '</div>';
+  if (d.note) sub += '<div>📝 ' + sanitize(d.note) + '</div>';
+  if (sub) h += '<div class="demo-card2-info">' + sub + '</div>';
+
+  // ---- กล่องข้อมูลการยืม แยกพื้นหลังให้เห็นชัดว่าเป็นสถานะปัจจุบัน ไม่ใช่ข้อมูลถาวรของเครื่อง ----
+  if (eff === 'lent' || eff === 'reserved') {
+    h += '<div class="demo-lentbox">';
+    h += '<div class="demo-lentrow"><b>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '—')) + '</b>';
+    if ((d.jobNo || '').trim()) h += '<span class="demo-idpc"><i>ใบจอง</i>' + qcopyHtml(d.jobNo) + '</span>';
+    if ((d.refNo || '').trim()) h += '<span class="demo-idpc"><i>ใบเบิก</i>' + qcopyHtml(d.refNo) + '</span>';
+    h += '<button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
+    if (d.purpose) h += '<div class="demo-lentsub">🎯 ' + sanitize(d.purpose) + '</div>';
+    h += '<div class="demo-lentsub">📅 ' + (eff === 'reserved' ? 'จอง ' : 'ยืม ') + (d.lentDate || '—') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '');
+    if (d.returnDate) {
+      h += ' → คืน ' + d.returnDate;
+      if (daysToReturn !== null) {
+        var late = daysToReturn < 0;
+        if (late || isDueSoon) h += ' <b style="color:' + (late ? '#ef4444' : '#f59e0b') + '">' +
+          (late ? '(เลย ' + Math.abs(daysToReturn) + ' วัน)' : daysToReturn === 0 ? '(ครบวันนี้)' : '(อีก ' + daysToReturn + ' วัน)') + '</b>';
+      }
+    }
+    h += '</div></div>';
+  }
+
   h += '<div class="demo-card2-actions">';
-  h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียด</button>';
   if (eff === 'available') h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม/จอง</button>';
   if (eff === 'lent' || eff === 'reserved') h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
   if (eff === 'unavailable') h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ พร้อมใช้</button>';
-  h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')">✏️</button>';
-  if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')">🗑️</button>';
-  if (isOverdue) h += '<span style="color:#ff5252;font-size:11px;font-weight:700">⚠️ เลยกำหนดคืน!</span>';
+  h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียด</button>';
+  h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')" title="แก้ไขอุปกรณ์">✏️</button>';
+  if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')" title="ลบเครื่องนี้">🗑️</button>';
   h += '</div></div>';
   return h;
 }
@@ -5729,7 +5747,7 @@ function rDemoDetail(el) {
   if (d.note) h += '<div>📝 ' + sanitize(d.note) + '</div>';
   h += '</div>';
   h += '<div style="font-size:12px;color:var(--text2);margin:10px 0 4px">เอกสาร/การจดทะเบียน</div>';
-  h += demoComplianceBadges(d);
+  h += '<div class="demo-meta">' + demoComplianceBadges(d) + '</div>';
   h += '</div>';
 
   // สถานะการยืมปัจจุบัน — โชว์เฉพาะตอนถูกยืม/จองอยู่ พร้อมลิงก์ไปใบงานและ Dealer ที่เกี่ยวข้อง
@@ -5792,14 +5810,32 @@ function _demoDetailRow(icon, label, value, demoId, emptyHint) {
 function demoUnitOptions(selected) {
   var units = [];
   try { units = getAllDemoUnits(); } catch (e) { units = []; }
+  selected = (selected || '').trim();
   var h = '<option value="">-- เลือก Model --</option>';
+  var found = false;
   for (var i = 0; i < units.length; i++) {
     var u = units[i];
     var name = u.productName || u.name || '';
     if (!name) continue;
+    if (selected === name) found = true;
     h += '<option value="' + sanitize(name) + '" data-sku="' + sanitize(u.sku || '') + '"' + (selected === name ? ' selected' : '') + '>' + sanitize(name) + (u.sku ? ' (' + sanitize(u.sku) + ')' : '') + '</option>';
   }
+  // เครื่องที่ import จากไฟล์ทะเบียนมี model เป็นชื่อที่ไม่มีในแคตตาล็อก ถ้าไม่ใส่ option ให้ select จะเด้งไป
+  // "-- เลือก Model --" ทั้งที่ข้อมูลมีอยู่ แล้วพอกดบันทึก updateDemo() จะเขียนค่าว่างทับ = Model หายทันที
+  // ทั้งที่ผู้ใช้ไม่ได้แตะช่องนี้เลย จึงต้องพาค่าเดิมติดมาเป็นตัวเลือกเสมอ
+  if (selected && !found) {
+    h = '<option value="">-- เลือก Model --</option>' +
+      '<option value="' + sanitize(selected) + '" selected>' + sanitize(selected) + ' — ค่าเดิม (ไม่มีในแคตตาล็อก)</option>' +
+      h.slice('<option value="">-- เลือก Model --</option>'.length);
+  }
   return h;
+}
+function _demoModelIsOffCatalog(model) {
+  model = (model || '').trim();
+  if (!model) return false;
+  var units = [];
+  try { units = getAllDemoUnits(); } catch (e) { units = []; }
+  return !units.some(function(u) { return (u.productName || u.name || '') === model; });
 }
 function fillDemoSku(selectEl) {
   var sel = selectEl.selectedOptions && selectEl.selectedOptions[0];
@@ -5811,20 +5847,29 @@ function fillDemoSku(selectEl) {
 function demoComplianceFieldsHtml(d) {
   d = d || {};
   var cats = (getConfig().demoCategories || []);
-  var h = '<div class="fm-group"><label>🏷️ หมวดหมู่ (โชว์เป็นแท็บในหน้ายืม Demo สาธารณะ)</label><select id="dm_category" class="fm-input">';
+  var h = '<div class="dm-sec">การจัดกลุ่ม</div><div class="dm-row2">';
+  h += '<div class="fm-group"><label>🏷️ หมวดหมู่</label><select id="dm_category" class="fm-input">';
   h += '<option value=""' + (!d.category ? ' selected' : '') + '>— ไม่ระบุ —</option>';
   cats.forEach(function(c) { h += '<option value="' + c.id + '"' + (d.category === c.id ? ' selected' : '') + '>' + c.icon + ' ' + sanitize(c.label) + '</option>'; });
-  h += '</select></div>';
+  h += '</select><div class="hint">ใช้เป็นแท็บในหน้ายืม Demo สาธารณะ</div></div>';
   h += '<div class="fm-group"><label>✈️ ประเภทการใช้งาน</label><select id="dm_flyable" class="fm-input">' +
     '<option value="1"' + (d.flyable !== false ? ' selected' : '') + '>✈️ บินสาธิตได้</option>' +
     '<option value="0"' + (d.flyable === false ? ' selected' : '') + '>🖼️ จัดแสดงสินค้าเท่านั้น (ห้ามบิน)</option></select></div>';
-  h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '"></div>';
-  h += '<div class="fm-group" style="display:flex;gap:14px;flex-wrap:wrap">';
-  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_nbtc"' + (d.nbtcRegistered ? ' checked' : '') + '> ขึ้นทะเบียน กสทช</label>';
-  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_insurance"' + (d.droneInsurance ? ' checked' : '') + '> ประกันภัยโดรน</label>';
-  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="dm_caat"' + (d.caatRegistered ? ' checked' : '') + '> ขึ้นทะเบียน CAAT</label>';
   h += '</div>';
+  h += '<div class="dm-sec">ทะเบียน &amp; เอกสาร</div>';
+  h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '">';
+  if (!(d.rentalDbNo || '').trim()) h += '<div class="hint">ยังไม่มีเลขนี้ = ยืมจริงไม่ได้ และลูกค้าจะไม่เห็นเครื่องนี้ในหน้าขอยืม</div>';
+  h += '</div>';
+  h += '<div class="fm-group"><label>📑 เอกสาร/ทะเบียน — กดเพื่อสลับ</label><div class="dm-toggles">';
+  h += _dmToggle('dm_nbtc', d.nbtcRegistered, 'กสทช.');
+  h += _dmToggle('dm_insurance', d.droneInsurance, 'ประกันภัยโดรน');
+  h += _dmToggle('dm_caat', d.caatRegistered, 'CAAT');
+  h += '</div></div>';
   return h;
+}
+function _dmToggle(id, on, label) {
+  return '<label class="dm-tg"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '>' +
+    '<span class="bx">✓</span>' + sanitize(label) + '</label>';
 }
 function readDemoComplianceFields() {
   return {
@@ -5855,18 +5900,22 @@ function showDemoLinksM() {
 }
 
 function showAddDemoM() {
-  var h = '<div style="max-width:400px">';
+  var h = '<div class="dm-sec">ข้อมูลเครื่อง</div>';
   h += '<div class="fm-group"><label>🚁 ชื่ออุปกรณ์ *</label><input type="text" id="dm_name" class="fm-input" placeholder="เช่น L3 Demo Unit #1"></div>';
+  h += '<div class="dm-row2">';
   h += '<div class="fm-group"><label>🔢 Serial Number</label><input type="text" id="dm_sn" class="fm-input" placeholder="S/N"></div>';
+  h += '<div class="fm-group"><label>🏷️ SiS Part (SKU)</label><input type="text" id="dm_sku" class="fm-input" placeholder="ดึงอัตโนมัติจาก Model"></div>';
+  h += '</div>';
   h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions('') + '</select></div>';
-  h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" placeholder="ดึงอัตโนมัติจาก Model"></div>';
   h += demoComplianceFieldsHtml({});
-  h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input"></textarea></div>';
+  h += '<div class="dm-sec">หมายเหตุ</div>';
+  h += '<div class="fm-group"><textarea id="dm_note" rows="2" class="fm-input" placeholder="ข้อมูลเพิ่มเติม เช่น อยู่ที่สาขาไหน อุปกรณ์ที่มากับเครื่อง"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn bp" onclick="saveDemo()">💾 บันทึก</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
-  h += '</div></div>';
+  h += '</div>';
   openM('➕ เพิ่มอุปกรณ์ Demo', h);
+  setMWide(620);
 }
 
 function saveDemo() {
@@ -6041,14 +6090,33 @@ function showEditDemoM(demoId) {
   for (var i = 0; i < items.length; i++) { if (items[i].id === demoId) { d = items[i]; break; } }
   if (!d) return;
 
-  var h = '<div style="max-width:400px">';
+  var eff = getDemoEffectiveStatus(d);
+  var meta = DEMO_STATUS_META[eff] || { label: eff };
+  var mColor = demoModelColor(d.name);
+  var cat = (getConfig().demoCategories || []).filter(function(c) { return c.id === d.category; })[0];
+
+  // หัวการ์ดย่อ — บอกว่ากำลังแก้เครื่องไหนอยู่ ไม่ต้องเลื่อนหาจากในฟอร์ม
+  var h = '<div class="dm-head"><div class="dm-head-ic" style="background:' + mColor + '22;color:' + mColor + '">' + (cat && cat.icon ? cat.icon : '🚁') + '</div><div style="min-width:0">';
+  h += '<div class="dm-head-nm">' + sanitize(d.name || '(ไม่มีชื่อ)') + '</div>';
+  h += '<div class="dm-head-sub">เช่า ' + sanitize((d.rentalDbNo || '').trim() || '—') + ' · S/N ' + sanitize(d.serialNumber || '—') + '</div>';
+  h += '</div><span class="demo-status ' + meta.cls + '" style="margin-left:auto;flex-shrink:0">' + meta.label + '</span></div>';
+
+  h += '<div class="dm-sec">ข้อมูลเครื่อง</div>';
   h += '<div class="fm-group"><label>🚁 ชื่อ</label><input type="text" id="dm_name" class="fm-input" value="' + sanitize(d.name || '') + '"></div>';
+  h += '<div class="dm-row2">';
   h += '<div class="fm-group"><label>🔢 S/N</label><input type="text" id="dm_sn" class="fm-input" value="' + sanitize(d.serialNumber || '') + '"></div>';
+  h += '<div class="fm-group"><label>🏷️ SiS Part (SKU)</label><input type="text" id="dm_sku" class="fm-input" value="' + sanitize(d.sku || '') + '" placeholder="ดึงอัตโนมัติจาก Model"></div>';
+  h += '</div>';
   h += '<div class="fm-group"><label>📦 Model</label><select id="dm_model" class="fm-input" onchange="fillDemoSku(this)">' + demoUnitOptions(d.model || '') + '</select></div>';
-  h += '<div class="fm-group"><label>🏷️ SKU</label><input type="text" id="dm_sku" class="fm-input" value="' + sanitize(d.sku || '') + '" placeholder="ดึงอัตโนมัติจาก Model"></div>';
+  if (_demoModelIsOffCatalog(d.model)) {
+    h += '<div class="dm-warn">⚠️ Model นี้ไม่มีในแคตตาล็อกสินค้า (มาจากไฟล์ทะเบียนคลัง) — ค่าเดิมถูกเก็บไว้ให้แล้ว กดบันทึกได้เลยโดยไม่หาย ถ้าอยากผูกกับสินค้าจริงค่อยเลือกใหม่จากลิสต์</div>';
+  }
   h += demoComplianceFieldsHtml(d);
+
+  h += '<div class="dm-sec">สถานะ &amp; หมายเหตุ</div>';
   if (d.status === 'lent') {
-    h += '<div class="fm-group"><label>📊 สถานะ</label><div class="hint">📤 On Borrowed / Reserved — จัดการผ่านปุ่ม "คืนแล้ว" ในหน้ารายการ ไม่แก้ตรงนี้</div></div>';
+    h += '<div class="fm-group"><label>📊 สถานะ</label>' +
+      '<div class="hint" style="margin-top:0">ตอนนี้ ' + meta.label + ' — สถานะนี้เปลี่ยนด้วยปุ่ม “✅ คืนแล้ว” ในหน้ารายการ ไม่แก้ที่นี่ เพื่อให้ประวัติการยืมตรงกับความจริง</div></div>';
   } else {
     h += '<div class="fm-group"><label>📊 สถานะ</label><select id="dm_status" class="fm-input">';
     h += '<option value="available"' + (d.status === 'available' ? ' selected' : '') + '>✅ Available</option>';
@@ -6056,13 +6124,16 @@ function showEditDemoM(demoId) {
     h += '<option value="lost"' + (d.status === 'lost' ? ' selected' : '') + '>💔 Lost/Damaged</option>';
     h += '</select></div>';
   }
-  h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_note" rows="2" class="fm-input">' + sanitize(d.note || '') + '</textarea></div>';
+  h += '<div class="fm-group"><textarea id="dm_note" rows="2" class="fm-input" placeholder="ข้อมูลเพิ่มเติม เช่น อยู่ที่สาขาไหน อุปกรณ์ที่มากับเครื่อง">' + sanitize(d.note || '') + '</textarea></div>';
+
   h += '<div class="fm-actions">';
   h += '<button class="btn bp" onclick="updateDemo(\'' + demoId + '\')">💾 บันทึก</button>';
-  h += '<button class="btn bd" onclick="deleteDemo(\'' + demoId + '\')">🗑️ ลบ</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
-  h += '</div></div>';
+  // แยกปุ่มลบไปคนละฝั่งกับบันทึก — เดิมอยู่ติดกันเลยกดพลาดได้ง่าย
+  h += '<button class="btn bd dm-danger" onclick="deleteDemo(\'' + demoId + '\')">🗑️ ลบเครื่องนี้</button>';
+  h += '</div>';
   openM('✏️ แก้ไขอุปกรณ์', h);
+  setMWide(620);
 }
 
 function updateDemo(demoId) {
