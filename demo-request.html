@@ -66,8 +66,15 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .unit-card.disabled { opacity:.5; cursor:not-allowed; }
 .unit-card.selected { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 2px var(--accent) inset; }
 .unit-card .un { font-weight:700; font-size:13.5px; padding-right:22px; }
-.unit-card .uref { font-size:11.5px; color:var(--text2); font-family:ui-monospace,'SF Mono',Menlo,monospace; margin-top:4px; }
-.unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
+/* เลขเครื่องเช่า/S-N เคยกินคนละบรรทัดทั้งที่เป็นข้อมูลระบุตัวตนชุดเดียวกัน — รวมเป็นแถวชิปแถวเดียว
+   ใช้ภาษาภาพเดียวกับการ์ดฝั่งภายใน (.demo-idpc ใน style.css) เพื่อให้สองหน้าอ่านเหมือนกัน */
+.unit-card .badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; align-items:center; }
+.uidpc { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; white-space:nowrap; max-width:100%;
+  font-family:ui-monospace,'SF Mono',Menlo,monospace; background:var(--surface); border:1px solid var(--border);
+  border-radius:6px; padding:2px 7px; color:var(--text); }
+.uidpc i { font-style:normal; font-weight:700; font-size:9px; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--text3); font-family:-apple-system,'Segoe UI',sans-serif; }
+.unit-card .uhint { font-size:10.5px; color:var(--text3); margin-top:7px; line-height:1.45; }
 .unit-card .sel-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 #stickyBarWrap { position:sticky; bottom:14px; z-index:20; display:flex; flex-direction:column; gap:8px; margin:16px 0; }
 #stickyBarWrap .cart-bar { position:static; margin:0; }
@@ -391,7 +398,7 @@ function renderSelBar() {
   document.getElementById('selChips').innerHTML = selectedUnitIds.map(function(id) {
     var u = UNITS.filter(function(x) { return x.id === id; })[0];
     if (!u) return '';
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
   }).join('');
   var onBrowse = document.getElementById('step-browse').classList.contains('on');
   document.getElementById('selBar').style.display = (selectedUnitIds.length && onBrowse) ? 'flex' : 'none';
@@ -437,18 +444,23 @@ function renderBrowse() {
     var availCount = units.filter(function(u){return u.clickable && unitDayState(u, today) === 'avail';}).length;
     return '<div class="model-group"><div class="mg-head"><span class="mn">' + units[0].icon + ' ' + esc(model) + '</span><span class="mc">' + availCount + '/' + units.length + ' เครื่องว่างตอนนี้</span></div>' +
       '<div class="mg-units">' + units.map(function(u) {
+        var busy = u.clickable && unitDayState(u, today) === 'busy';
         var statusPill;
         if (!u.clickable) statusPill = '<span class="pill pill-bad">⛔ งดใช้งาน</span>';
-        else if (unitDayState(u, today) === 'busy') statusPill = '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้ — กดเลือกดูวันว่างอื่นได้</span>';
+        else if (busy) statusPill = '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้</span>';
         else statusPill = '<span class="pill pill-good">✅ ว่างตอนนี้</span>';
         var flyPill = u.flyable ? '<span class="pill pill-muted">✈️ บินได้</span>' : '<span class="pill pill-muted">🖼️ จัดแสดงเท่านั้น</span>';
         var isSel = selectedUnitIds.indexOf(u.id) !== -1;
+        // สถานะมาก่อน เพราะลูกค้าเลือกเครื่องจาก "ว่างไหม" เป็นอย่างแรก แล้วค่อยดูว่าเครื่องไหน
+        var chips = statusPill + flyPill;
+        if (u.rentalDbNo) chips += '<span class="uidpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span>';
+        if (u.serialNumber) chips += '<span class="uidpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
         return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + (isSel ? ' selected' : '') + '" ' + (u.clickable ? 'onclick="toggleUnitSelect(\'' + u.id + '\')"' : '') + '>' +
           (isSel ? '<span class="sel-check">✓</span>' : '') +
           '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
-          (u.rentalDbNo ? '<div class="uref">🏷️ เลขเครื่องเช่า ' + esc(u.rentalDbNo) + '</div>' : '') +
-          (u.serialNumber ? '<div class="uref">🔢 S/N ' + esc(u.serialNumber) + '</div>' : '') +
-          '<div class="badges">' + statusPill + flyPill + '</div></div>';
+          '<div class="badges">' + chips + '</div>' +
+          (busy ? '<div class="uhint">กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง</div>' : '') +
+          '</div>';
       }).join('') + '</div></div>';
   }).join('');
 }
@@ -479,7 +491,7 @@ function goToMultiCalendar() {
   if (!calUnits.length) return;
   custCalMonthOffset = 0; rangeStart = null; rangeEnd = null; custDayCount = 1;
   document.getElementById('calUnitsBanner').innerHTML = calUnits.map(function(u) {
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') + '</span>';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</span>';
   }).join('');
   document.getElementById('rangeStartInput').value = '';
   document.getElementById('rangeEndInput').value = '';
@@ -592,7 +604,8 @@ function removeFromCart(i) { cart.splice(i, 1); renderCartBar(); if (!cart.lengt
 function goToContact() {
   switchWizStep('contact');
   document.getElementById('cartSummaryList').innerHTML = cart.length ? cart.map(function(c, i) {
-    return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) + (c.rentalDbNo ? ' <span style="font-size:11px;color:var(--text3);font-weight:400">· เลขเครื่องเช่า ' + esc(c.rentalDbNo) + '</span>' : '') + '</div>' +
+    return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) +
+      (c.rentalDbNo ? ' <span class="uidpc"><i>เช่า</i>' + esc(c.rentalDbNo) + '</span>' : '') + '</div>' +
       '<div class="csi-date">📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</div></div>' +
       '<button class="btn btn-ghost btn-sm" onclick="removeFromCart(' + i + ');goToContact()">✕ เอาออก</button></div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--text2)">ยังไม่ได้เลือกอุปกรณ์</div>';
