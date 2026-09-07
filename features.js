@@ -3135,13 +3135,159 @@ function demoClearFilters() { demoKindFilter = 'main'; demoStatusFilter = 'all';
 // ================================================================
 function showDemoCatMgrM() {
   var cats = getConfig().demoCategories || [];
-  var h = '<div style="max-width:420px">';
+  var items = getDemoItems();
+  var unset = items.filter(function(d) { return !(d.category || '').trim(); }).length;
+  var h = '<div style="max-width:460px">';
   h += '<div class="hint" style="margin-bottom:10px">ใช้จัดกลุ่มอุปกรณ์ในหน้ารายการให้หาง่ายขึ้น และเป็นตัวเลือกหมวดหมู่ตอนเพิ่ม/แก้ไขเครื่อง — ลบหมวดหมู่ไม่ลบเครื่องที่เคยตั้งไว้ แค่กลายเป็น "ไม่ระบุหมวดหมู่"</div>';
   h += '<div id="demoCatMgrRows">' + demoCatMgrRowsHtml(cats) + '</div>';
   h += '<button class="btn bsm bo" onclick="demoCatMgrAddRow()" style="margin-top:6px">➕ เพิ่มหมวดหมู่</button>';
+  // ตัวหมวดหมู่กับการจับเครื่องเข้าหมวด เป็นคนละงานกัน แต่คนมาหน้านี้มักจะมาทำต่อกันเลย จึงวางทางเข้าไว้ให้
+  h += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  h += '<div style="font-size:12.5px;font-weight:600;margin-bottom:4px">จับเครื่องเข้าหมวดหมู่</div>';
+  h += '<div class="hint" style="margin-bottom:8px">' + items.length + ' เครื่องในระบบ' +
+    (unset ? ' · <b style="color:#f59e0b">' + unset + ' เครื่องยังไม่ระบุหมวด</b>' : ' · ระบุหมวดครบแล้ว') + '</div>';
+  h += '<button class="btn bsm bo" onclick="showDemoBulkCatM()">🏷️ ตั้งหมวดหมู่ทีละหลายเครื่อง →</button></div>';
   h += '<div class="fm-actions" style="margin-top:14px"><button class="btn bp" onclick="demoCatMgrSave()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>';
   h += '</div>';
   openM('⚙️ จัดการหมวดหมู่ Demo', h);
+}
+
+// ================================================================
+// ตั้งหมวดหมู่ทีละหลายเครื่อง — เดิมต้องเปิด modal แก้ไขทีละตัว ซึ่งกับคลัง 71 เครื่องคือเปิด 71 รอบ
+// ใช้ draft เหมือนเครื่องมือ bulk ตัวอื่น (แก้ค้างไว้ได้ สลับสโคป/ค้นหาไม่หาย ยังไม่เขียนจนกดบันทึก)
+// ================================================================
+var _demoCatDraft = {}, _demoCatScope = 'unset', _demoCatSearch = '';
+function showDemoBulkCatM() {
+  _demoCatDraft = {}; _demoCatSearch = '';
+  _demoCatScope = getDemoItems().some(function(d) { return !(d.category || '').trim(); }) ? 'unset' : 'all';
+  openM('🏷️ ตั้งหมวดหมู่ทีละหลายเครื่อง', demoBulkCatHtml());
+  setMWide(860);
+}
+function _demoCatVal(d) { return _demoCatDraft[d.id] !== undefined ? _demoCatDraft[d.id] : (d.category || ''); }
+function _demoCatList() { return getConfig().demoCategories || []; }
+function _demoCatLabel(id) {
+  if (!id) return '— ไม่ระบุ —';
+  var c = _demoCatList().filter(function(x) { return x.id === id; })[0];
+  return c ? (c.icon || '') + ' ' + c.label : '(หมวดที่ถูกลบไปแล้ว)';
+}
+function demoBulkCatRows() {
+  var q = _demoCatSearch.trim().toLowerCase();
+  return getDemoItems().filter(function(d) {
+    var cur = _demoCatVal(d);
+    if (_demoCatScope === 'unset' && cur) return false;
+    if (_demoCatScope !== 'unset' && _demoCatScope !== 'all' && cur !== _demoCatScope) return false;
+    if (!q) return true;
+    return [d.name, d.model, d.serialNumber, d.rentalDbNo, d.sku].some(function(v) {
+      return String(v || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }).sort(function(a, b) {
+    var n = String(a.model || a.name || '').localeCompare(String(b.model || b.name || ''));
+    return n !== 0 ? n : String(a.rentalDbNo || '').localeCompare(String(b.rentalDbNo || ''), undefined, { numeric: true });
+  });
+}
+function demoBulkCatHtml() {
+  var all = getDemoItems(), cats = _demoCatList();
+  var unset = all.filter(function(d) { return !_demoCatVal(d); }).length;
+  var rows = demoBulkCatRows();
+  if (!cats.length) {
+    return '<div class="card" style="text-align:center;padding:26px"><div style="font-size:38px;margin-bottom:8px">🏷️</div>' +
+      '<p>ยังไม่มีหมวดหมู่ให้เลือก — สร้างหมวดหมู่ก่อนที่ปุ่ม ⚙️ จัดการหมวดหมู่</p></div>' +
+      '<div class="fm-actions"><button class="btn bp" onclick="closeMForce();showDemoCatMgrM()">⚙️ ไปสร้างหมวดหมู่</button>' +
+      '<button class="btn" onclick="closeMForce()">ปิด</button></div>';
+  }
+  var h = '<div class="hint" style="margin-bottom:10px">เลือกหมวดในตารางได้เลย · พิมพ์ชื่อรุ่นในช่องค้นหาแล้วกด <b>ตั้งทุกแถวที่แสดง</b> = จับทั้งรุ่นเข้าหมวดเดียวกันในคลิกเดียว<br>ยังไม่บันทึกจนกว่าจะกดปุ่มบันทึก</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<button class="demo-filter-chip ' + (_demoCatScope === 'unset' ? 'act' : '') + '" onclick="_demoCatSetScope(\'unset\')">📋 ยังไม่ระบุหมวด (' + unset + ')</button>';
+  h += '<button class="demo-filter-chip ' + (_demoCatScope === 'all' ? 'act' : '') + '" onclick="_demoCatSetScope(\'all\')">ทั้งหมด (' + all.length + ')</button>';
+  cats.forEach(function(c) {
+    var n = all.filter(function(d) { return _demoCatVal(d) === c.id; }).length;
+    if (!n) return;
+    h += '<button class="demo-filter-chip ' + (_demoCatScope === c.id ? 'act' : '') + '" onclick="_demoCatSetScope(\'' + c.id + '\')">' + (c.icon || '') + ' ' + sanitize(c.label) + ' (' + n + ')</button>';
+  });
+  h += '<input type="text" id="demoCatSrc" class="fm-input" style="flex:1;min-width:170px" placeholder="🔍 กรองแถว (ชื่อ, รุ่น, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoCatSearch) + '" oninput="_demoCatSearchInput(this.value)" autocomplete="off">';
+  h += '</div>';
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">' + (all.length ? 'ไม่พบแถวที่ตรงกับตัวกรอง' : 'ยังไม่มีอุปกรณ์ในระบบ') + '</div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div>';
+    return h;
+  }
+  // ตั้งทั้งคอลัมน์ — ทำเฉพาะแถวที่แสดงอยู่ตอนนี้ ไม่ใช่ทั้งคลัง กันเผลอตั้งค่าให้เครื่องที่ไม่ได้ดูอยู่
+  h += '<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px;padding:8px 11px;background:var(--bg2);border-radius:8px">';
+  h += '<span style="font-size:12px;font-weight:600">ตั้งทุกแถวที่แสดง (' + rows.length + ' เครื่อง) เป็น:</span>';
+  h += '<select id="demoCatBulkPick" class="fm-input" style="width:auto;min-width:170px"><option value="">— ไม่ระบุ —</option>';
+  cats.forEach(function(c) { h += '<option value="' + c.id + '">' + (c.icon || '') + ' ' + sanitize(c.label) + '</option>'; });
+  h += '</select><button class="btn bsm bp" onclick="_demoCatSetAll()">↳ ตั้งเลย</button></div>';
+  h += '<div style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:200px">หมวดหมู่</th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">อุปกรณ์</th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">เลขเช่า / S/N</th>';
+  h += '</tr></thead><tbody>';
+  rows.forEach(function(d) {
+    var cur = _demoCatVal(d), dirty = _demoCatDraft[d.id] !== undefined;
+    var known = !cur || cats.some(function(c) { return c.id === cur; });
+    h += '<tr' + (dirty ? ' style="background:rgba(245,158,11,.14)"' : '') + '>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)"><select class="fm-input" style="padding:5px 8px;font-size:12px" onchange="_demoCatSet(\'' + d.id + '\',this.value)">';
+    h += '<option value=""' + (!cur ? ' selected' : '') + '>— ไม่ระบุ —</option>';
+    cats.forEach(function(c) { h += '<option value="' + c.id + '"' + (cur === c.id ? ' selected' : '') + '>' + (c.icon || '') + ' ' + sanitize(c.label) + '</option>'; });
+    // หมวดที่ถูกลบไปแล้วแต่เครื่องยังผูกอยู่ ต้องพาค่าเดิมมาเป็นตัวเลือกด้วย ไม่งั้น select เด้งไป "ไม่ระบุ"
+    // แล้วพอกดบันทึกจะเขียนค่าว่างทับทั้งที่ไม่ได้ตั้งใจแตะ (บั๊กแบบเดียวกับช่อง Model ที่เพิ่งแก้ไป)
+    if (!known) h += '<option value="' + sanitize(cur) + '" selected>⚠️ ' + sanitize(cur) + ' — หมวดที่ถูกลบไปแล้ว</option>';
+    h += '</select></td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(d.name || '-') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);color:var(--text2);font-family:monospace">' +
+      sanitize((d.rentalDbNo || '—')) + ' · ' + sanitize(d.serialNumber || '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="demo-grid-savebar">';
+  h += '<button class="btn bp" onclick="saveDemoBulkCat()">💾 บันทึกที่แก้ไข</button>';
+  h += '<button class="btn bo" onclick="_demoCatDiscard()">↩️ ยกเลิกที่แก้ไว้</button>';
+  h += '<span id="demoCatCount" style="font-size:12px;color:var(--text2)">' + _demoCatSummary() + '</span>';
+  h += '</div>';
+  return h;
+}
+function _demoCatSummary() {
+  var n = Object.keys(_demoCatDraft).length;
+  return n ? '✏️ แก้ไว้ ' + n + ' เครื่อง (ยังไม่บันทึก)' : 'ยังไม่มีการแก้ไข';
+}
+function _demoCatRefresh() { document.getElementById('mBd').innerHTML = demoBulkCatHtml(); }
+function _demoCatSetScope(s) { _demoCatScope = s; _demoCatRefresh(); }
+var _demoCatTimer = null;
+function _demoCatSearchInput(v) { _demoCatSearch = v; clearTimeout(_demoCatTimer); _demoCatTimer = setTimeout(_demoCatRefresh, 300); }
+function _demoCatSet(id, val) {
+  var d = getDemoItems().filter(function(x) { return x.id === id; })[0];
+  // ตั้งกลับเป็นค่าเดิม = ถอดออกจาก draft จะได้ไม่นับเป็น "แก้ไว้" และไม่เขียนทับตอนบันทึก
+  if (d && (d.category || '') === val) delete _demoCatDraft[id];
+  else _demoCatDraft[id] = val;
+  var c = document.getElementById('demoCatCount');
+  if (c) c.textContent = _demoCatSummary();
+}
+function _demoCatSetAll() {
+  var val = (document.getElementById('demoCatBulkPick') || {}).value || '';
+  var rows = demoBulkCatRows();
+  if (!rows.length) return;
+  if (!confirm('ตั้ง ' + rows.length + ' เครื่องที่แสดงอยู่เป็น "' + _demoCatLabel(val) + '" ?')) return;
+  rows.forEach(function(d) { _demoCatSet(d.id, val); });
+  _demoCatRefresh();
+}
+function _demoCatDiscard() {
+  if (!Object.keys(_demoCatDraft).length) { toast('ยังไม่มีการแก้ไข'); return; }
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่บันทึกทั้งหมด?')) return;
+  _demoCatDraft = {}; _demoCatRefresh();
+}
+function saveDemoBulkCat() {
+  if (!Object.keys(_demoCatDraft).length) { toast('ยังไม่มีการแก้ไข'); return; }
+  var items = getDemoItems(), n = 0;
+  items.forEach(function(d) {
+    if (_demoCatDraft[d.id] === undefined) return;
+    d.category = _demoCatDraft[d.id];
+    n++;
+  });
+  saveDemoItems(items);
+  _demoCatDraft = {};
+  toast('💾 บันทึก ' + n + ' เครื่องแล้ว');
+  closeMForce();
+  render();
 }
 function demoCatMgrRowHtml(c) {
   return '<div class="fr" style="gap:6px;margin-bottom:6px;align-items:center" data-id="' + sanitize(c.id || '') + '">' +
@@ -4147,6 +4293,8 @@ function rDemoTracker(el) {
     return !(d.nbtcRegistered && d.droneInsurance && d.caatRegistered);
   }).length;
   if (_missingDocs) h += '<button class="btn bo" onclick="showDemoBulkDocsM()">📑 กรอกเอกสาร (' + _missingDocs + ')</button>';
+  var _missingCat = allItems.filter(function(d) { return !(d.category || '').trim(); }).length;
+  if (_missingCat) h += '<button class="btn bo" onclick="showDemoBulkCatM()">🏷️ ตั้งหมวดหมู่ (' + _missingCat + ')</button>';
   h += '<button class="btn bp" onclick="importDemoRentalSheet()">🏭 นำเข้าไฟล์คลัง</button>';
   h += '<button class="btn bo" onclick="exportDemoRentalSheet()">📤 Export (รูปแบบคลัง)</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export (เต็ม)</button>';
