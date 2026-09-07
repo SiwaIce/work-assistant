@@ -75,6 +75,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .uidpc i { font-style:normal; font-weight:700; font-size:9px; letter-spacing:.04em; text-transform:uppercase;
   color:var(--text3); font-family:-apple-system,'Segoe UI',sans-serif; }
 .unit-card .uhint { font-size:10.5px; color:var(--text3); margin-top:7px; line-height:1.45; }
+.unit-card .unext { font-size:11px; color:var(--good); font-weight:600; margin-top:7px; }
+.cal-grid { user-select:none; }
+.cal-cell[data-iso] { cursor:pointer; }
 .unit-card .sel-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 #stickyBarWrap { position:sticky; bottom:14px; z-index:20; display:flex; flex-direction:column; gap:8px; margin:16px 0; }
 #stickyBarWrap .cart-bar { position:static; margin:0; }
@@ -175,10 +178,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div class="hint-row">💡 กดที่การ์ดเพื่อเลือก/ยกเลิก — เครื่องที่ขึ้นว่า “ไม่ว่างตอนนี้” ยังกดเลือกได้ ระบบจะพาไปดูว่าว่างวันไหนบ้าง</div>
       <div class="cat-tabs" id="custCatTabs"></div>
       <div class="browse-toolbar">
-        <input type="text" id="custSearch" placeholder="🔍 ค้นหารุ่น เช่น Mavic, Dock..." oninput="custSearch=this.value;renderBrowse()">
+        <input type="text" id="custSearch" placeholder="🔍 ค้นหารุ่น หรือเลขเครื่อง เช่น Mavic, Dock, 17661" oninput="custSearch=this.value;renderBrowse()">
         <select id="custSort" onchange="custSort=this.value;renderBrowse()">
           <option value="name_asc">เรียง: ชื่อรุ่น A-Z</option>
           <option value="avail_first">เรียง: ว่างเยอะสุดก่อน</option>
+          <option value="soonest">เรียง: ว่างเร็วสุดก่อน</option>
         </select>
       </div>
       <div class="filter-chips" id="custTypeChips"></div>
@@ -388,7 +392,7 @@ function iconForCategory(catId) {
 // ================================================================
 // STEP 1: เลือกอุปกรณ์
 // ================================================================
-var custCategory = 'all', custSearch = '', custTypeFilter = 'all', custSort = 'name_asc';
+var custCategory = 'all', custSearch = '', custTypeFilter = 'all', custSort = 'name_asc', custAvailOnly = false;
 var selectedUnitIds = [];
 function toggleUnitSelect(id) {
   var i = selectedUnitIds.indexOf(id);
@@ -418,9 +422,22 @@ function renderCatTabs() {
 }
 function renderTypeChips() {
   var opts = [['all','ทั้งหมด'],['fly','✈️ บินได้'],['display','🖼️ จัดแสดงเท่านั้น']];
-  document.getElementById('custTypeChips').innerHTML = opts.map(function(o) {
+  var h = opts.map(function(o) {
     return '<span class="filter-chip' + (custTypeFilter === o[0] ? ' on' : '') + '" onclick="custTypeFilter=\'' + o[0] + '\';renderBrowse()">' + o[1] + '</span>';
   }).join('');
+  // ลูกค้าส่วนใหญ่อยากได้เครื่องเลย ไม่ได้อยากไล่ดูของที่ติดคิวอยู่ — ให้กรองเหลือเฉพาะที่ว่างวันนี้ได้
+  h += '<span class="filter-chip' + (custAvailOnly ? ' on' : '') + '" onclick="custAvailOnly=!custAvailOnly;renderBrowse()">' +
+    (custAvailOnly ? '☑️' : '⬜') + ' เฉพาะที่ว่างตอนนี้</span>';
+  document.getElementById('custTypeChips').innerHTML = h;
+}
+// เครื่องนี้จะว่างวันไหน — ตอบคำถามที่ลูกค้าถามต่อทันทีหลังเห็นว่า "ไม่ว่างตอนนี้"
+function unitNextFree(u) {
+  var iso = todayIso();
+  for (var i = 0; i < 400; i++) {
+    if (unitDayState(u, iso) === 'avail') return iso;
+    iso = addDaysIso(iso, 1);
+  }
+  return null;
 }
 function renderBrowse() {
   renderCatTabs(); renderTypeChips();
@@ -430,11 +447,30 @@ function renderBrowse() {
     if (custCategory !== 'all' && u.category !== custCategory) return;
     if (custTypeFilter === 'fly' && !u.flyable) return;
     if (custTypeFilter === 'display' && u.flyable) return;
-    if (custSearch && u.model.toLowerCase().indexOf(custSearch.toLowerCase()) === -1) return;
+    // ค้นเลขเครื่องเช่า/S/N ได้ด้วย — ลูกค้าที่เคยยืมมักอ้างถึงเครื่องด้วยเลขที่อยู่บนตัวเครื่อง
+    if (custSearch) {
+      var hay = (u.model + ' ' + u.label + ' ' + (u.rentalDbNo || '') + ' ' + (u.serialNumber || '')).toLowerCase();
+      if (hay.indexOf(custSearch.toLowerCase()) === -1) return;
+    }
+    if (custAvailOnly && !(u.clickable && unitDayState(u, todayIso()) === 'avail')) return;
     if (!groups[u.model]) { groups[u.model] = []; order.push(u.model); }
     groups[u.model].push(u);
   });
   if (custSort === 'name_asc') order.sort();
+  else if (custSort === 'soonest') {
+    // รุ่นที่มีเครื่องว่างเร็วที่สุดขึ้นก่อน — ตอบ "อยากได้เร็วที่สุด ได้อะไรบ้าง"
+    var soon = {};
+    order.forEach(function(m) {
+      var best = null;
+      groups[m].forEach(function(u) {
+        if (!u.clickable) return;
+        var nf = unitNextFree(u);
+        if (nf && (!best || nf < best)) best = nf;
+      });
+      soon[m] = best || '9999-99-99';
+    });
+    order.sort(function(a,b) { return soon[a] < soon[b] ? -1 : soon[a] > soon[b] ? 1 : a.localeCompare(b); });
+  }
   else order.sort(function(a,b) {
     var av = groups[a].filter(function(u){return u.clickable;}).length;
     var bv = groups[b].filter(function(u){return u.clickable;}).length;
@@ -458,10 +494,12 @@ function renderBrowse() {
         var chips = statusPill + flyPill;
         if (u.rentalDbNo) chips += '<span class="uidpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span>';
         if (u.serialNumber) chips += '<span class="uidpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
+        var nf = busy ? unitNextFree(u) : null;
         return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + (isSel ? ' selected' : '') + '" ' + (u.clickable ? 'onclick="toggleUnitSelect(\'' + u.id + '\')"' : '') + '>' +
           (isSel ? '<span class="sel-check">✓</span>' : '') +
           '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
           '<div class="badges">' + chips + '</div>' +
+          (nf ? '<div class="unext">📅 ว่างเร็วสุด <b>' + fThDate(nf) + '</b></div>' : '') +
           (busy ? '<div class="uhint">กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง</div>' : '') +
           '</div>';
       }).join('') + '</div></div>';
@@ -542,11 +580,49 @@ function renderUnitCal() {
     var stateCls = state === 'busy' ? 'busy' : (pendingReq ? 'requested' : 'avail');
     var stateLabel = state === 'busy' ? 'ไม่ว่าง' : (pendingReq ? '⚠️ มีคนจอง รอคอนเฟิร์ม' : 'ว่าง');
     var cls = 'cal-cell ' + stateCls + (isToday ? ' today' : '') + (isEdge ? ' rangeend' : (inRange ? ' inrange' : ''));
-    h += '<div class="' + cls + '" ' + (clickable ? 'onclick="pickCalDay(\'' + iso + '\')"' : '') + '>' +
+    h += '<div class="' + cls + '" ' + (clickable ? 'data-iso="' + iso + '" onclick="pickCalDay(\'' + iso + '\')"' : '') + '>' +
       '<span class="cal-num">' + d + '</span>' +
       (!inRange && !isEdge ? '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>' : (isEdge ? '<span class="cal-tag">✓ เลือก</span>' : '')) + '</div>';
   }
   document.getElementById('unitCalGrid').innerHTML = h;
+  wireCalDrag();
+}
+// ลากคลุมหลายวันเพื่อเลือกช่วง — เดิมต้องกดวันเริ่มแล้วไปปรับจำนวนวันในช่องตัวเลข
+// ลากเป็นวิธีที่คนคาดหวังจากปฏิทินอยู่แล้ว และเห็นช่วงที่กำลังจะได้ระหว่างลากเลย
+function wireCalDrag() {
+  var grid = document.getElementById('unitCalGrid');
+  if (!grid) return;
+  var dragging = false, anchor = null;
+  function cellIso(t) { var c = t.closest ? t.closest('.cal-cell[data-iso]') : null; return c ? c.dataset.iso : null; }
+  function paint(a, b) {
+    rangeStart = a < b ? a : b;
+    rangeEnd = a < b ? b : a;
+    custDayCount = daysBetweenIso(rangeStart, rangeEnd) + 1;
+    var inp = document.getElementById('custDayCountInput');
+    if (inp) inp.value = custDayCount;
+    syncRangeInputs(); checkRangeWarn();
+    grid.querySelectorAll('.cal-cell[data-iso]').forEach(function(c) {
+      var iso = c.dataset.iso, on = iso >= rangeStart && iso <= rangeEnd;
+      c.classList.toggle('inrange', on && iso !== rangeStart && iso !== rangeEnd);
+      c.classList.toggle('rangeend', on && (iso === rangeStart || iso === rangeEnd));
+    });
+  }
+  grid.addEventListener('mousedown', function(e) {
+    var iso = cellIso(e.target);
+    if (!iso) return;
+    dragging = true; anchor = iso; paint(iso, iso);
+    e.preventDefault();
+  });
+  grid.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var iso = cellIso(e.target);
+    if (iso) paint(anchor, iso);
+  });
+  window.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    renderUnitCal();   // วาดใหม่ให้ป้าย "✓ เลือก" กับสถานะตรงกับช่วงที่ได้จริง
+  }, { once: true });
 }
 function unitCalNav(dir) { custCalMonthOffset += dir; renderUnitCal(); }
 function pickCalDay(iso) {
