@@ -3187,6 +3187,163 @@ function saveDemoBulkRental() {
 // ขอยืมของลูกค้า (demo-request.html) ถ้าว่างจะ fallback ไปใช้ชื่อเครื่องเต็มแทน
 // ================================================================
 var _demoModelDraft = {};
+// ================================================================
+// กรอกเอกสาร (กสทช. / ประกันภัย / CAAT) และประเภทการบิน ทีเดียวหลายเครื่อง
+// ฟิลด์พวกนี้ไม่มีในไฟล์ทะเบียนคลัง (ทะเบียนมีแค่เลขเช่า/SN/ใบจอง/วันที่) พอ import เข้ามาจึงว่างทั้งหมด
+// ต้องมากรอกในแอปเอง — ถ้าเปิดแก้ทีละเครื่องผ่านโมดัลจะช้ามากกับของ 71 รายการ
+// จุดต่างจากตัวกรอกเลขเครื่องเช่า/Model: ค่าเป็น "ติ๊ก/ไม่ติ๊ก" ล้วนๆ เลยทำเป็นตารางติ๊ก + ติ๊กทั้งคอลัมน์
+// ได้ในคลิกเดียว ซึ่งเป็นตัวช่วยที่ประหยัดเวลาที่สุดสำหรับงานแบบนี้
+// ================================================================
+var _demoDocDraft = {};      // { itemId: { nbtcRegistered:bool, droneInsurance:bool, caatRegistered:bool, flyable:bool } }
+var _demoDocScope = 'todo';  // 'todo' = เฉพาะที่ยังไม่ครบ | 'all'
+var _demoDocSearch = '';
+var _DEMO_DOC_FIELDS = [
+  { f: 'nbtcRegistered', label: 'กสทช.' },
+  { f: 'droneInsurance', label: 'ประกันภัย' },
+  { f: 'caatRegistered', label: 'CAAT' },
+  { f: 'flyable',        label: 'บินได้' }
+];
+
+function _demoDocVal(d, f) {
+  if (_demoDocDraft[d.id] && _demoDocDraft[d.id][f] !== undefined) return _demoDocDraft[d.id][f];
+  if (f === 'flyable') return d.flyable !== false;   // ไม่เคยตั้ง = ถือว่าบินได้ (ค่าเดิมของระบบ)
+  return !!d[f];
+}
+function _demoDocComplete(d) {
+  // "ครบ" = เอกสารสามอย่างติ๊กแล้ว (flyable ไม่นับ เพราะเป็นคุณสมบัติเครื่อง ไม่ใช่เอกสารที่ต้องไปทำ)
+  return _demoDocVal(d, 'nbtcRegistered') && _demoDocVal(d, 'droneInsurance') && _demoDocVal(d, 'caatRegistered');
+}
+function demoDocRows() {
+  var items = getDemoItems();
+  var q = _demoDocSearch.trim().toLowerCase();
+  return items.filter(function(d) {
+    if (_demoDocScope === 'todo' && _demoDocComplete(d)) return false;
+    if (!q) return true;
+    return ((d.name || '') + ' ' + (d.model || '') + ' ' + (d.serialNumber || '') + ' ' + (d.rentalDbNo || '')).toLowerCase().indexOf(q) !== -1;
+  }).sort(function(a, b) {
+    var n = (a.name || '').localeCompare(b.name || '');
+    return n !== 0 ? n : (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true });
+  });
+}
+function showDemoBulkDocsM() {
+  _demoDocDraft = {};
+  _demoDocScope = 'todo';
+  _demoDocSearch = '';
+  openM('📑 กรอกเอกสาร (กสทช. / ประกัน / CAAT)', demoDocHtml());
+  setMWide(880);
+}
+function demoDocHtml() {
+  var all = getDemoItems();
+  var todo = all.filter(function(d) { return !_demoDocComplete(d); }).length;
+  var rows = demoDocRows();
+  var h = '';
+  h += '<div class="hint" style="margin-bottom:10px">ติ๊กในตารางได้เลย · กด <b>ติ๊กทั้งคอลัมน์</b> ที่หัวตารางเพื่อตั้งทีเดียวทุกแถวที่แสดงอยู่ · ยังไม่บันทึกจนกว่าจะกดปุ่มบันทึก<br>ข้อมูลชุดนี้ไม่มีในไฟล์ทะเบียนคลัง ต้องกรอกในแอปเอง</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<button class="demo-filter-chip ' + (_demoDocScope === 'todo' ? 'act' : '') + '" onclick="_demoDocSetScope(\'todo\')">📋 ยังไม่ครบ (' + todo + ')</button>';
+  h += '<button class="demo-filter-chip ' + (_demoDocScope === 'all' ? 'act' : '') + '" onclick="_demoDocSetScope(\'all\')">ทั้งหมด (' + all.length + ')</button>';
+  h += '<input type="text" id="demoDocSrc" class="fm-input" style="flex:1;min-width:180px" placeholder="🔍 กรองแถว (ชื่อ, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoDocSearch) + '" oninput="_demoDocSearchInput(this.value)" autocomplete="off">';
+  h += '<span style="font-size:12px;color:var(--text2);white-space:nowrap">แสดง ' + rows.length + ' แถว</span>';
+  h += '</div>';
+
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px"><div style="font-size:38px;margin-bottom:8px">✅</div><p>' +
+      (all.length ? (_demoDocScope === 'todo' ? 'เอกสารครบทุกเครื่องแล้ว' : 'ไม่พบแถวที่ตรงกับคำค้น') : 'ยังไม่มีอุปกรณ์ในระบบ') + '</p></div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div>';
+    return h;
+  }
+
+  h += '<div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px">';
+  h += '<thead><tr>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">อุปกรณ์</th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">เลขเช่า / S/N</th>';
+  _DEMO_DOC_FIELDS.forEach(function(c) {
+    h += '<th style="padding:5px 8px;text-align:center;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:96px">' +
+      c.label + '<div style="margin-top:3px;font-weight:400"><button class="btn-xs" onclick="_demoDocCol(\'' + c.f + '\',true)" title="ติ๊กทั้งคอลัมน์">☑️</button> ' +
+      '<button class="btn-xs" onclick="_demoDocCol(\'' + c.f + '\',false)" title="ล้างทั้งคอลัมน์">⬜</button></div></th>';
+  });
+  h += '</tr></thead><tbody>';
+  rows.forEach(function(d) {
+    h += '<tr>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(d.name || '-') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);color:var(--text2)">' +
+      sanitize((d.rentalDbNo || '—')) + ' · ' + sanitize(d.serialNumber || '—') + '</td>';
+    _DEMO_DOC_FIELDS.forEach(function(c) {
+      var on = _demoDocVal(d, c.f);
+      var dirty = !!(_demoDocDraft[d.id] && _demoDocDraft[d.id][c.f] !== undefined);
+      h += '<td style="padding:5px 8px;text-align:center;border-bottom:1px solid var(--border)' + (dirty ? ';background:rgba(245,158,11,.14)' : '') + '">' +
+        '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="_demoDocSet(\'' + d.id + '\',\'' + c.f + '\',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="demo-grid-savebar">';
+  h += '<button class="btn bp" onclick="saveDemoBulkDocs()">💾 บันทึกที่แก้ไข</button>';
+  h += '<button class="btn bo" onclick="_demoDocDiscard()">↩️ ยกเลิกที่แก้ไว้</button>';
+  h += '<span id="demoDocCount" style="font-size:12px;color:var(--text2)">' + _demoDocSummary() + '</span>';
+  h += '</div>';
+  return h;
+}
+function _demoDocSummary() {
+  var u = Object.keys(_demoDocDraft).length;
+  if (!u) return 'ยังไม่มีการแก้ไข';
+  var n = 0;
+  Object.keys(_demoDocDraft).forEach(function(id) { n += Object.keys(_demoDocDraft[id]).length; });
+  return '✏️ แก้ไว้ ' + n + ' ช่อง ใน ' + u + ' เครื่อง (ยังไม่บันทึก)';
+}
+function _demoDocRefresh() { document.getElementById('mBd').innerHTML = demoDocHtml(); }
+function _demoDocSetScope(s) { _demoDocScope = s; _demoDocRefresh(); }
+var _demoDocTimer = null;
+function _demoDocSearchInput(v) {
+  _demoDocSearch = v;
+  clearTimeout(_demoDocTimer);
+  _demoDocTimer = setTimeout(_demoDocRefresh, 300);
+}
+function _demoDocSet(id, f, val) {
+  if (!_demoDocDraft[id]) _demoDocDraft[id] = {};
+  _demoDocDraft[id][f] = !!val;
+  var c = document.getElementById('demoDocCount');
+  if (c) c.textContent = _demoDocSummary();
+}
+// ติ๊กทั้งคอลัมน์ — ทำเฉพาะแถวที่แสดงอยู่ตอนนี้ (ตามสโคป+คำค้น) ไม่ใช่ทั้งคลัง กันเผลอตั้งค่าให้เครื่องที่ไม่ได้ดูอยู่
+function _demoDocCol(f, val) {
+  demoDocRows().forEach(function(d) { _demoDocSet(d.id, f, val); });
+  _demoDocRefresh();
+}
+function _demoDocDiscard() {
+  if (!Object.keys(_demoDocDraft).length) { toast('ยังไม่มีการแก้ไข'); return; }
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่บันทึกทั้งหมด?')) return;
+  _demoDocDraft = {};
+  _demoDocRefresh();
+}
+function saveDemoBulkDocs() {
+  var ids = Object.keys(_demoDocDraft);
+  if (!ids.length) { toast('ยังไม่มีการแก้ไข'); return; }
+  var items = getDemoItems();
+  var byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+  var changedUnits = 0, changedFields = 0;
+  ids.forEach(function(id) {
+    var d = byId[id];
+    if (!d) return;
+    var touched = false;
+    Object.keys(_demoDocDraft[id]).forEach(function(f) {
+      var nv = !!_demoDocDraft[id][f];
+      var cur = (f === 'flyable') ? (d.flyable !== false) : !!d[f];
+      if (cur === nv) return;
+      d[f] = nv;
+      changedFields++; touched = true;
+    });
+    if (touched) changedUnits++;
+  });
+  if (!changedFields) { toast('ค่าที่ติ๊กตรงกับของเดิม ไม่มีอะไรเปลี่ยน'); _demoDocDraft = {}; _demoDocRefresh(); return; }
+  if (!confirm('บันทึกเอกสาร ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง?')) return;
+  saveDemoItems(items);
+  _demoDocDraft = {};
+  toast('✅ บันทึกแล้ว ' + changedFields + ' ช่อง');
+  closeMForce();
+  render();
+}
+
 function showDemoBulkModelM() {
   _demoModelDraft = {};
   openM('📦 กรอก Model (กรอกทีละรุ่น ใช้กับทุกเครื่องในรุ่นนั้น)', demoBulkModelHtml());
@@ -3860,6 +4017,11 @@ function rDemoTracker(el) {
   if (pendingRentalItems.length) h += '<button class="btn bo" onclick="showDemoBulkRentalM()">📋 กรอกเลขเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
   var _missingModel = allItems.filter(function(d) { return !(d.model || '').trim(); }).length;
   if (_missingModel) h += '<button class="btn bo" onclick="showDemoBulkModelM()">📦 กรอก Model (' + _missingModel + ')</button>';
+  // เอกสารยังไม่ครบกี่เครื่อง — ไฟล์ทะเบียนคลังไม่มีข้อมูลนี้ให้ ต้องมากรอกในแอปเสมอหลัง import
+  var _missingDocs = allItems.filter(function(d) {
+    return !(d.nbtcRegistered && d.droneInsurance && d.caatRegistered);
+  }).length;
+  if (_missingDocs) h += '<button class="btn bo" onclick="showDemoBulkDocsM()">📑 กรอกเอกสาร (' + _missingDocs + ')</button>';
   h += '<button class="btn bp" onclick="importDemoRentalSheet()">🏭 นำเข้าไฟล์คลัง</button>';
   h += '<button class="btn bo" onclick="exportDemoRentalSheet()">📤 Export (รูปแบบคลัง)</button>';
   h += '<button class="btn bo" onclick="exportDemoItemsExcel()">📤 Export (เต็ม)</button>';
