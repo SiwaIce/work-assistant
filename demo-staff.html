@@ -599,6 +599,9 @@ function renderUnitsTable() {
       var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
         : (loan || appRange) ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
       var rental = _unitHasRental(u) ? esc(u.rentalDbNo) : '<span style="color:var(--warn)">ยังไม่ลงทะเบียน</span>';
+      // ตั้งค่านี้แก้ได้ที่แอปหลักเท่านั้น (ปุ่ม "👀 เลือกที่ลูกค้ายืมได้") หน้านี้อ่านค่าที่ publish มาเพื่อให้รู้ว่า
+      // ทำไมเครื่องนี้ไม่โผล่ในลิงก์ลูกค้า จะได้ไม่ไปนั่งหาสาเหตุผิดจุด
+      if (u.customerVisible === false) statusPill += ' <span class="pill pill-muted" title="ตั้งค่าที่แอปหลัก">🙈 ซ่อนจากลูกค้า</span>';
       return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
         '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +

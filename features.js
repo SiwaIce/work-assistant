@@ -2902,13 +2902,17 @@ function publishDemoCatalog() {
         id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges,
         isAccessory: !!d.isAccessory, brand: d.brand || '',
         category: d.category || '', sku: d.sku || '', serialNumber: d.serialNumber || '', rentalDbNo: d.rentalDbNo || '',
-        nbtcRegistered: !!d.nbtcRegistered, droneInsurance: !!d.droneInsurance, caatRegistered: !!d.caatRegistered
+        nbtcRegistered: !!d.nbtcRegistered, droneInsurance: !!d.droneInsurance, caatRegistered: !!d.caatRegistered,
+        customerVisible: demoIsCustomerVisible(d)
       };
     });
+    // ⚠️ ต้องมี { merge: true } — demo-staff.html เขียนฟิลด์ categories ลง doc เดียวกันนี้ (catMgrSave)
+    // ถ้า set() ทับทั้ง doc หมวดหมู่ที่ทีมงานตั้งไว้จะหายทุกครั้งที่แอปหลัก publish แล้วหน้าลูกค้าจะกลับไป
+    // ใช้หมวดหมู่ default ทันที
     db.collection('dealerUpdates').doc('demoCatalogPublic').set({
       units: units,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function(e) { console.warn('publishDemoCatalog error:', e); });
+    }, { merge: true }).catch(function(e) { console.warn('publishDemoCatalog error:', e); });
   } catch(e) { console.warn('publishDemoCatalog error:', e); }
 }
 
@@ -2970,6 +2974,127 @@ var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
 var demoModelFilter = 'all';
 var demoCategoryFilter = 'all'; // 'all' | category id | '_none'
 var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเครื่องเช่า = ยืมได้จริง) | 'pending' | 'all'
+// เครื่องที่ไม่อยากให้ลูกค้าขอยืมเองผ่านลิงก์สาธารณะ (เครื่องสำรองงาน event, เครื่องที่จองไว้ให้ลูกค้ารายใหญ่,
+// เครื่องที่สภาพไม่พร้อมโชว์) — ยังอยู่ในระบบและให้ยืมแบบคีย์เองได้ตามปกติ แค่ไม่โผล่ใน demo-request.html
+// ค่าเริ่มต้นคือ "โชว์" เพื่อไม่ให้เครื่องเดิมที่ไม่มีฟิลด์นี้หายจากหน้าลูกค้าทันทีที่ deploy
+function demoIsCustomerVisible(d) { return !d || d.customerVisible !== false; }
+var demoVisFilter = 'all';   // all | shown | hidden
+
+// ---- ตั้งค่าทีละหลายเครื่องว่าจะให้ลูกค้าเห็นตัวไหนบ้าง ----
+var _demoVisDraft = {}, _demoVisScope = 'all', _demoVisSearch = '';
+function showDemoVisibilityM() {
+  _demoVisDraft = {}; _demoVisScope = 'all'; _demoVisSearch = '';
+  openM('👀 เลือกสินค้าที่ให้ลูกค้ายืมได้', demoVisHtml());
+  setMWide(820);
+}
+function _demoVisVal(d) {
+  return _demoVisDraft[d.id] !== undefined ? _demoVisDraft[d.id] : demoIsCustomerVisible(d);
+}
+function demoVisRows() {
+  var q = _demoVisSearch.trim().toLowerCase();
+  return getDemoItems().filter(function(d) {
+    if (_demoVisScope === 'shown' && !_demoVisVal(d)) return false;
+    if (_demoVisScope === 'hidden' && _demoVisVal(d)) return false;
+    if (_demoVisScope === 'blocked' && (d.rentalDbNo || '').trim() && !d.isAccessory) return false;
+    if (!q) return true;
+    return [d.name, d.model, d.serialNumber, d.rentalDbNo, d.sku].some(function(v) {
+      return String(v || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }).sort(function(a, b) {
+    var n = String(a.model || a.name || '').localeCompare(String(b.model || b.name || ''));
+    return n !== 0 ? n : String(a.rentalDbNo || '').localeCompare(String(b.rentalDbNo || ''), undefined, { numeric: true });
+  });
+}
+// เครื่องที่ลูกค้าไม่มีวันเห็นอยู่แล้วไม่ว่าจะติ๊กยังไง — หน้าลูกค้ากรองอุปกรณ์เสริมและเครื่องที่ยังไม่ลงทะเบียนออกก่อน
+// ถ้าไม่บอกไว้ คนใช้จะติ๊กให้ "โชว์" แล้วงงว่าทำไมยังไม่ขึ้นในลิงก์ลูกค้า
+function _demoVisBlockedReason(d) {
+  if (d.isAccessory) return 'อุปกรณ์เสริม';
+  if (!(d.rentalDbNo || '').trim()) return 'ยังไม่ลงทะเบียนเครื่องเช่า';
+  return '';
+}
+function demoVisHtml() {
+  var all = getDemoItems();
+  var shown = all.filter(function(d) { return _demoVisVal(d); }).length;
+  var blocked = all.filter(function(d) { return _demoVisBlockedReason(d); }).length;
+  var rows = demoVisRows();
+  var h = '<div class="hint" style="margin-bottom:10px">ติ๊ก = ลูกค้าเห็นเครื่องนี้ในลิงก์ขอยืม · ติ๊กออก = ซ่อน (เครื่องยังอยู่ในระบบ ทีมงานกดให้ยืมเองได้ตามปกติ)<br>ยังไม่บันทึกจนกว่าจะกดปุ่มบันทึก</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+  h += '<button class="demo-filter-chip ' + (_demoVisScope === 'all' ? 'act' : '') + '" onclick="_demoVisSetScope(\'all\')">ทั้งหมด (' + all.length + ')</button>';
+  h += '<button class="demo-filter-chip ' + (_demoVisScope === 'shown' ? 'act' : '') + '" onclick="_demoVisSetScope(\'shown\')">👀 ลูกค้าเห็น (' + shown + ')</button>';
+  h += '<button class="demo-filter-chip ' + (_demoVisScope === 'hidden' ? 'act' : '') + '" onclick="_demoVisSetScope(\'hidden\')">🙈 ซ่อนไว้ (' + (all.length - shown) + ')</button>';
+  if (blocked) h += '<button class="demo-filter-chip ' + (_demoVisScope === 'blocked' ? 'act' : '') + '" onclick="_demoVisSetScope(\'blocked\')">⚠️ ลูกค้าไม่เห็นอยู่แล้ว (' + blocked + ')</button>';
+  h += '<input type="text" id="demoVisSrc" class="fm-input" style="flex:1;min-width:170px" placeholder="🔍 กรองแถว (ชื่อ, รุ่น, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoVisSearch) + '" oninput="_demoVisSearchInput(this.value)" autocomplete="off">';
+  h += '</div>';
+  if (!rows.length) {
+    h += '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">' + (all.length ? 'ไม่พบแถวที่ตรงกับตัวกรอง' : 'ยังไม่มีอุปกรณ์ในระบบ') + '</div>';
+    h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div>';
+    return h;
+  }
+  h += '<div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>';
+  h += '<th style="padding:7px 9px;text-align:center;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1;width:104px">ลูกค้าเห็น' +
+    '<div style="margin-top:3px;font-weight:400"><button class="btn-xs" onclick="_demoVisCol(true)" title="ติ๊กทุกแถวที่แสดงอยู่">☑️</button> ' +
+    '<button class="btn-xs" onclick="_demoVisCol(false)" title="ล้างทุกแถวที่แสดงอยู่">⬜</button></div></th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">อุปกรณ์</th>';
+  h += '<th style="padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);background:var(--card);position:sticky;top:0;z-index:1">เลขเช่า / S/N</th>';
+  h += '</tr></thead><tbody>';
+  rows.forEach(function(d) {
+    var on = _demoVisVal(d), dirty = _demoVisDraft[d.id] !== undefined, why = _demoVisBlockedReason(d);
+    h += '<tr' + (dirty ? ' style="background:rgba(245,158,11,.14)"' : '') + '>';
+    h += '<td style="padding:5px 9px;text-align:center;border-bottom:1px solid var(--border)">' +
+      '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="_demoVisSet(\'' + d.id + '\',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(d.name || '-') +
+      (why ? '<div style="font-size:10px;color:#f59e0b">⚠️ ' + why + ' — ลูกค้าไม่เห็นอยู่แล้ว</div>' : '') + '</td>';
+    h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);color:var(--text2);font-family:monospace">' +
+      sanitize((d.rentalDbNo || '—')) + ' · ' + sanitize(d.serialNumber || '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="demo-grid-savebar">';
+  h += '<button class="btn bp" onclick="saveDemoVisibility()">💾 บันทึกที่แก้ไข</button>';
+  h += '<button class="btn bo" onclick="_demoVisDiscard()">↩️ ยกเลิกที่แก้ไว้</button>';
+  h += '<span id="demoVisCount" style="font-size:12px;color:var(--text2)">' + _demoVisSummary() + '</span>';
+  h += '</div>';
+  return h;
+}
+function _demoVisSummary() {
+  var n = Object.keys(_demoVisDraft).length;
+  return n ? '✏️ แก้ไว้ ' + n + ' เครื่อง (ยังไม่บันทึก)' : 'ยังไม่มีการแก้ไข';
+}
+function _demoVisRefresh() { document.getElementById('mBd').innerHTML = demoVisHtml(); }
+function _demoVisSetScope(s) { _demoVisScope = s; _demoVisRefresh(); }
+var _demoVisTimer = null;
+function _demoVisSearchInput(v) { _demoVisSearch = v; clearTimeout(_demoVisTimer); _demoVisTimer = setTimeout(_demoVisRefresh, 300); }
+function _demoVisSet(id, val) {
+  var d = getDemoItems().filter(function(x) { return x.id === id; })[0];
+  // ถ้าติ๊กกลับไปตรงกับค่าเดิม ให้ถอดออกจาก draft ไปเลย จะได้ไม่นับเป็น "แก้ไว้" และไม่เขียนทับตอนบันทึก
+  if (d && demoIsCustomerVisible(d) === !!val) delete _demoVisDraft[id];
+  else _demoVisDraft[id] = !!val;
+  var c = document.getElementById('demoVisCount');
+  if (c) c.textContent = _demoVisSummary();
+}
+// ติ๊กทั้งคอลัมน์ — เฉพาะแถวที่แสดงอยู่ตอนนี้ ไม่ใช่ทั้งคลัง กันเผลอตั้งค่าให้เครื่องที่ไม่ได้ดูอยู่
+function _demoVisCol(val) { demoVisRows().forEach(function(d) { _demoVisSet(d.id, val); }); _demoVisRefresh(); }
+function _demoVisDiscard() {
+  if (!Object.keys(_demoVisDraft).length) { toast('ยังไม่มีการแก้ไข'); return; }
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่บันทึกทั้งหมด?')) return;
+  _demoVisDraft = {}; _demoVisRefresh();
+}
+function saveDemoVisibility() {
+  var ids = Object.keys(_demoVisDraft);
+  if (!ids.length) { toast('ยังไม่มีการแก้ไข'); return; }
+  var items = getDemoItems();
+  var n = 0;
+  items.forEach(function(d) {
+    if (_demoVisDraft[d.id] === undefined) return;
+    d.customerVisible = _demoVisDraft[d.id];
+    n++;
+  });
+  saveDemoItems(items);
+  _demoVisDraft = {};
+  toast('💾 บันทึก ' + n + ' เครื่องแล้ว');
+  closeMForce();
+  render();
+}
 // ในไฟล์คลังจริง 58 จาก 71 รายการเป็นอุปกรณ์เสริม (แบต ใบพัด สายชาร์จ โรลอัพ) ถ้าเทรวมกับเครื่องหลัก
 // รายการจะจมไปด้วยของจุกจิก — ค่าเริ่มต้นจึงโชว์เฉพาะเครื่องหลัก
 var demoKindFilter = 'main'; // 'main' | 'accessory' | 'all'
@@ -3960,6 +4085,8 @@ function rDemoTracker(el) {
   var items = demoKindFilter === 'accessory' ? scopedByRental.filter(function(d) { return !!d.isAccessory; })
             : demoKindFilter === 'all' ? scopedByRental
             : scopedByRental.filter(function(d) { return !d.isAccessory; });
+  if (demoVisFilter === 'shown') items = items.filter(function(d) { return demoIsCustomerVisible(d); });
+  else if (demoVisFilter === 'hidden') items = items.filter(function(d) { return !demoIsCustomerVisible(d); });
 
   var now = new Date();
   var counts = { available: 0, reserved: 0, lent: 0, unavailable: 0, lost: 0 };
@@ -4006,10 +4133,12 @@ function rDemoTracker(el) {
     h += '</div>';
   }
 
+  var _demoHiddenCount = allItems.filter(function(d) { return !demoIsCustomerVisible(d); }).length;
   h += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   h += '<button class="btn bp" onclick="showAddDemoM()">➕ เพิ่มอุปกรณ์</button>';
   h += '<button class="btn bo" onclick="showDemoLinksM()">🔗 ลิงก์ขอยืม/จัดการ Demo</button>';
   h += '<button class="btn bo" onclick="showDemoCatMgrM()">⚙️ จัดการหมวดหมู่</button>';
+  h += '<button class="btn bo" onclick="showDemoVisibilityM()">👀 เลือกที่ลูกค้ายืมได้' + (_demoHiddenCount ? ' (ซ่อน ' + _demoHiddenCount + ')' : '') + '</button>';
   if (pendingRentalItems.length) h += '<button class="btn bo" onclick="showDemoBulkRentalM()">📋 กรอกเลขเครื่องเช่า (' + pendingRentalItems.length + ')</button>';
   var _missingModel = allItems.filter(function(d) { return !(d.model || '').trim(); }).length;
   if (_missingModel) h += '<button class="btn bo" onclick="showDemoBulkModelM()">📦 กรอก Model (' + _missingModel + ')</button>';
@@ -4080,6 +4209,20 @@ function rDemoTracker(el) {
     h += '<button class="demo-filter-chip ' + (demoKindFilter === 'accessory' ? 'act' : '') + '" onclick="demoKindFilter=\'accessory\';render()">🔩 อุปกรณ์เสริม (' + accCount + ')</button>';
     h += '<button class="demo-filter-chip ' + (demoKindFilter === 'all' ? 'act' : '') + '" onclick="demoKindFilter=\'all\';render()">ทั้งหมด (' + scopedByRental.length + ')</button>';
     h += '</div>';
+  }
+
+  // สโคป "ลูกค้าเห็นไหม" — โชว์เฉพาะตอนมีเครื่องที่ถูกซ่อนไว้จริง ไม่งั้นเป็นชิปเปล่าๆ ที่กดไปก็ได้ผลเหมือนเดิม
+  if (demoTrackerTab === 'list') {
+    var hiddenItems = scopedByRental.filter(function(d) { return !demoIsCustomerVisible(d); });
+    if (hiddenItems.length) {
+      h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+      h += '<span style="font-size:11px;color:var(--text2);margin-right:2px">ลูกค้าเห็น:</span>';
+      h += '<button class="demo-filter-chip ' + (demoVisFilter === 'all' ? 'act' : '') + '" onclick="demoVisFilter=\'all\';render()">ทั้งหมด (' + scopedByRental.length + ')</button>';
+      h += '<button class="demo-filter-chip ' + (demoVisFilter === 'shown' ? 'act' : '') + '" onclick="demoVisFilter=\'shown\';render()">👀 ลูกค้าเห็น (' + (scopedByRental.length - hiddenItems.length) + ')</button>';
+      h += '<button class="demo-filter-chip ' + (demoVisFilter === 'hidden' ? 'act' : '') + '" onclick="demoVisFilter=\'hidden\';render()">🙈 ซ่อนไว้ (' + hiddenItems.length + ')</button>';
+      h += '<button class="btn-xs" onclick="showDemoVisibilityM()">⚙️ ตั้งค่าทีละหลายเครื่อง</button>';
+      h += '</div>';
+    }
   }
 
   // สโคป "พร้อมให้ยืม / ยังไม่ลงทะเบียนเช่า" — วางไว้บนสุดเหนือแท็บ เพราะมันคุมทุกตัวเลขที่อยู่ใต้ลงไป
@@ -4332,6 +4475,7 @@ function demoCardHtml(d, now, dupRentals) {
   // ---- แถวคุณสมบัติ: บินได้/จัดแสดง + เอกสาร 3 อย่าง อยู่บรรทัดเดียวกัน ----
   h += '<div class="demo-meta">';
   h += (d.flyable !== false ? '<span class="demo-mp fly">✈️ บินสาธิตได้</span>' : '<span class="demo-mp">🖼️ จัดแสดงเท่านั้น</span>');
+  if (!demoIsCustomerVisible(d)) h += '<span class="demo-mp hid" title="ลูกค้าไม่เห็นเครื่องนี้ในลิงก์ขอยืม">🙈 ซ่อนจากลูกค้า</span>';
   h += demoComplianceBadges(d);
   h += '</div>';
 
@@ -5856,6 +6000,9 @@ function demoComplianceFieldsHtml(d) {
     '<option value="1"' + (d.flyable !== false ? ' selected' : '') + '>✈️ บินสาธิตได้</option>' +
     '<option value="0"' + (d.flyable === false ? ' selected' : '') + '>🖼️ จัดแสดงสินค้าเท่านั้น (ห้ามบิน)</option></select></div>';
   h += '</div>';
+  h += '<div class="fm-group"><label>👀 ให้ลูกค้าขอยืมเองได้ไหม</label><div class="dm-toggles">' +
+    _dmToggle('dm_custvis', demoIsCustomerVisible(d), 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div>' +
+    '<div class="hint">ติ๊กออก = เครื่องนี้จะไม่โผล่ในหน้า demo-request.html ที่ส่งให้ลูกค้า แต่ยังอยู่ในระบบและกด “ให้ยืม/จอง” เองได้ตามปกติ</div></div>';
   h += '<div class="dm-sec">ทะเบียน &amp; เอกสาร</div>';
   h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '">';
   if (!(d.rentalDbNo || '').trim()) h += '<div class="hint">ยังไม่มีเลขนี้ = ยืมจริงไม่ได้ และลูกค้าจะไม่เห็นเครื่องนี้ในหน้าขอยืม</div>';
@@ -5872,13 +6019,15 @@ function _dmToggle(id, on, label) {
     '<span class="bx">✓</span>' + sanitize(label) + '</label>';
 }
 function readDemoComplianceFields() {
+  var vis = document.getElementById('dm_custvis');
   return {
     category: (document.getElementById('dm_category').value || '').trim(),
     flyable: document.getElementById('dm_flyable').value !== '0',
     rentalDbNo: (document.getElementById('dm_rentaldb').value || '').trim(),
     nbtcRegistered: document.getElementById('dm_nbtc').checked,
     droneInsurance: document.getElementById('dm_insurance').checked,
-    caatRegistered: document.getElementById('dm_caat').checked
+    caatRegistered: document.getElementById('dm_caat').checked,
+    customerVisible: vis ? vis.checked : true
   };
 }
 
@@ -6151,6 +6300,7 @@ function updateDemo(demoId) {
       items[i].nbtcRegistered = compliance.nbtcRegistered;
       items[i].droneInsurance = compliance.droneInsurance;
       items[i].caatRegistered = compliance.caatRegistered;
+      items[i].customerVisible = compliance.customerVisible;
       var statusEl = document.getElementById('dm_status');
       items[i].status = statusEl ? (statusEl.value || 'available') : items[i].status;
       items[i].note = (document.getElementById('dm_note').value || '').trim();
