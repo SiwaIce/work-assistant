@@ -4914,102 +4914,635 @@ function demoJobReturnAll(gi) {
   render();
 }
 
+
 // ================================================================
-// DEMO CALENDAR — ภาพรวมว่าวันไหนเครื่องไหนถูกยืม
+// DEMO CALENDAR — 5 มุมมองในแท็บเดียว
+//   timeline = ไทม์ไลน์หลายเดือน (1 แถว = 1 เครื่อง)  · month = ตารางรายเดือน
+//   model    = 1 แถว = 1 รุ่น (ใช้ไปกี่/ทั้งหมด)       · jobs  = 1 แถว = 1 ใบจอง
+//   find     = หาเครื่องว่างตามรุ่น+ช่วงวัน
+// เดิมมีมุมมองเดียว (Gantt เดือนเดียว) ซึ่งใช้กับข้อมูลจริงไม่ได้ เพราะการจองยาว 3–8 เดือน เปิดเดือนไหน
+// ก็เห็นแถบเต็มความกว้างเหมือนกันหมด และ dropdown เลือกเครื่องมี 71 รายการจนหาไม่เจอ
 // ================================================================
-var demoCalMonthOffset = 0;
-var demoCalUnitFilter = 'all';
-function demoCalChangeMonth(delta) { demoCalMonthOffset += delta; render(); }
+var demoCalView = 'timeline';   // timeline | month | model | jobs | find
+var demoCalMonthOffset = 0;     // ใช้กับมุมมอง month
+var demoCalSpanStart = 0;       // เดือนเริ่มของไทม์ไลน์ (offset จากเดือนนี้)
+var demoCalSpan = 6;            // จำนวนเดือนที่ไทม์ไลน์แสดง
+var demoCalPicked = [];         // รุ่นที่เจาะจงเลือก — ว่าง = ทุกรุ่น
+var demoCalOpen = null;         // drill ที่เปิดอยู่ 'unit:xx' | 'job:xx' | 'day:xx' | 'model:xx'
+var demoCalUnitFilter = 'all';  // (คงไว้เพื่อความเข้ากันได้กับโค้ดเดิมที่อาจอ้างถึง)
+var demoCalFindFrom = '', demoCalFindTo = '', demoCalFindModel = '';
+
+function demoCalChangeMonth(delta) { demoCalMonthOffset += delta; demoCalOpen = null; render(); }
+function demoCalGoView(v) { demoCalView = v; demoCalOpen = null; render(); }
+function demoCalShift(delta) { demoCalSpanStart += delta; demoCalOpen = null; render(); }
+function demoCalSetSpan(n) { demoCalSpan = n; demoCalOpen = null; render(); }
+function demoCalToggleOpen(k) { demoCalOpen = (demoCalOpen === k) ? null : k; render(); }
+
+// ---- ข้อมูลพื้นฐาน ----
+// ทุกช่วงยืม/จองของเครื่อง — อ่านจาก v7_demoLoans (แหล่งจริงของการจอง) ไม่ใช่ฟิลด์บนตัวเครื่อง
+// เพราะเครื่องหนึ่งมีได้หลายใบจองคนละช่วง ส่วนฟิลด์บนตัวเครื่องเก็บได้แค่ใบล่าสุด
+function demoCalBookings() {
+  var out = [];
+  getDemoLoans().forEach(function(l) {
+    if (!l.lentDate) return;
+    var s = ftParseDate(l.lentDate);
+    var e = (l.actualReturnDate && ftParseDate(l.actualReturnDate)) || (l.returnDate && ftParseDate(l.returnDate)) || s;
+    if (!s) return;
+    if (e < s) e = s;
+    out.push({ id: l.id, unitId: l.demoId, s: s, e: e, jobNo: (l.jobNo || '').trim(), refNo: (l.refNo || '').trim(),
+      borrower: l.borrower || '', dealerId: l.dealerId || '', purpose: l.purpose || '', status: l.status });
+  });
+  return out;
+}
+function demoCalUnits() {
+  return getDemoItems().filter(function(d) {
+    if (demoKindFilter === 'main' && d.isAccessory) return false;
+    if (demoKindFilter === 'accessory' && !d.isAccessory) return false;
+    if (demoCalPicked.length && demoCalPicked.indexOf(demoCalModelOf(d)) === -1) return false;
+    return true;
+  });
+}
+function demoCalModelOf(d) { return (d.model || '').trim() || (d.name || '').trim() || 'ไม่ระบุรุ่น'; }
+// ชื่อรุ่นย่อสำหรับช่องแคบๆ ในตารางเดือน — ตัดคำท้ายทิ้งก่อน ค่อยตัดกลางคำเป็นทางสุดท้าย
+function _dcShort(m) {
+  m = String(m || '').trim();
+  if (m.length <= 13) return m;
+  var w = m.split(/\s+/), out = w[0];
+  for (var i = 1; i < w.length && (out + ' ' + w[i]).length <= 13; i++) out += ' ' + w[i];
+  return out.length >= 6 ? out + '…' : m.slice(0, 12) + '…';
+}
+function _dcDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+function _dcOverlap(b, from, to) { return b.s <= to && from <= b.e; }
+function demoCalBarState(b, today) {
+  if (b.status === 'returned') return 'done';
+  if (b.e < today) return 'late';
+  if (b.s > today) return 'soon';
+  return 'out';
+}
+function _dcFmt(d) { return d.getDate() + ' ' + getMonthName(d.getMonth()); }
+function _dcISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function _dcAddDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function _dcThai(d) { return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); }
+
+// ช่วงเวลาที่ไทม์ไลน์ครอบคลุม
+function demoCalRange() {
+  var a = new Date(); a.setDate(1); a.setHours(0,0,0,0); a.setMonth(a.getMonth() + demoCalSpanStart);
+  var b = new Date(a); b.setMonth(b.getMonth() + demoCalSpan); b.setDate(0);
+  return { from: a, to: b };
+}
+function _dcPct(d, r) { return (d - r.from) / (r.to - r.from) * 100; }
+
+// ---- แถบเครื่องมือร่วมทุกมุมมอง ----
+function demoCalToolbar() {
+  var h = '<div class="dcal-views">';
+  [['timeline','📊 ไทม์ไลน์'],['month','📅 รายเดือน'],['model','🚁 รายรุ่น'],['jobs','📄 รายใบจอง'],['find','🔍 หาเครื่องว่าง']]
+    .forEach(function(v) {
+      h += '<button class="dcal-vbtn ' + (demoCalView === v[0] ? 'act' : '') + '" onclick="demoCalGoView(\'' + v[0] + '\')">' + v[1] + '</button>';
+    });
+  h += '</div>';
+
+  h += '<div class="dcal-bar">';
+  // ตัวกรองเครื่องหลัก/เสริม ใช้ตัวเดียวกับแท็บรายการ เพื่อไม่ให้ผู้ใช้ต้องตั้งสองที่
+  h += '<button class="demo-filter-chip ' + (demoKindFilter === 'main' ? 'act' : '') + '" onclick="demoKindFilter=\'main\';demoCalOpen=null;render()">🚁 เครื่องหลัก</button>';
+  h += '<button class="demo-filter-chip ' + (demoKindFilter === 'accessory' ? 'act' : '') + '" onclick="demoKindFilter=\'accessory\';demoCalOpen=null;render()">🔩 อุปกรณ์เสริม</button>';
+  h += '<button class="demo-filter-chip ' + (demoKindFilter === 'all' ? 'act' : '') + '" onclick="demoKindFilter=\'all\';demoCalOpen=null;render()">ทั้งหมด</button>';
+  h += '<div class="dcal-pickwrap">';
+  h += '<button class="demo-filter-chip ' + (demoCalPicked.length ? 'act' : '') + '" onclick="demoCalTogglePicker()">🎯 เลือกรุ่น' + (demoCalPicked.length ? ' (' + demoCalPicked.length + ')' : '…') + '</button>';
+  h += '<div class="dcal-picker" id="dcalPicker" style="display:none">';
+  h += '<input type="text" id="dcalPkSearch" class="fm-input" placeholder="ค้นหารุ่น…" oninput="demoCalRenderPicker()" autocomplete="off">';
+  h += '<div class="dcal-pklist" id="dcalPkList"></div>';
+  h += '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light)">';
+  h += '<button class="btn-xs" onclick="demoCalPicked=[];demoCalOpen=null;render()">ล้างที่เลือก</button>';
+  h += '<button class="btn-xs" onclick="demoCalTogglePicker()">เสร็จ</button>';
+  h += '</div></div></div>';
+  h += '</div>';
+
+  if (demoCalPicked.length) {
+    h += '<div class="dcal-chips" style="margin-bottom:10px">';
+    demoCalPicked.forEach(function(m) {
+      h += '<span class="dcal-chip">' + sanitize(m) + '<button onclick="demoCalUnpick(\'' + sanitize(m).replace(/'/g, "\\'") + '\')" title="เอาออก">✕</button></span>';
+    });
+    if (demoCalPicked.length > 1) h += '<span style="font-size:11px;color:var(--text3)">เลือกหลายรุ่น = หาวันที่<b>ว่างพร้อมกัน</b></span>';
+    h += '</div>';
+  }
+  return h;
+}
+function demoCalTogglePicker() {
+  var el = document.getElementById('dcalPicker');
+  if (!el) return;
+  var show = el.style.display === 'none';
+  el.style.display = show ? 'block' : 'none';
+  if (show) { demoCalRenderPicker(); var s = document.getElementById('dcalPkSearch'); if (s) s.focus(); }
+}
+function demoCalRenderPicker() {
+  var el = document.getElementById('dcalPkList');
+  if (!el) return;
+  var q = ((document.getElementById('dcalPkSearch') || {}).value || '').toLowerCase();
+  var counts = {};
+  getDemoItems().forEach(function(d) {
+    if (demoKindFilter === 'main' && d.isAccessory) return;
+    if (demoKindFilter === 'accessory' && !d.isAccessory) return;
+    var m = demoCalModelOf(d); counts[m] = (counts[m] || 0) + 1;
+  });
+  var keys = Object.keys(counts).sort().filter(function(m) { return !q || m.toLowerCase().indexOf(q) !== -1; });
+  el.innerHTML = keys.length ? keys.map(function(m) {
+    var esc2 = sanitize(m).replace(/'/g, "\\'");
+    return '<label><input type="checkbox"' + (demoCalPicked.indexOf(m) !== -1 ? ' checked' : '') +
+      ' onchange="demoCalPick(\'' + esc2 + '\',this.checked)"><span>' + sanitize(m) + '</span><span class="cnt">' + counts[m] + '</span></label>';
+  }).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px">ไม่พบรุ่นที่ค้นหา</div>';
+}
+function demoCalPick(m, on) {
+  if (on) { if (demoCalPicked.indexOf(m) === -1) demoCalPicked.push(m); }
+  else demoCalPicked = demoCalPicked.filter(function(x) { return x !== m; });
+  demoCalOpen = null; render();
+}
+function demoCalUnpick(m) { demoCalPicked = demoCalPicked.filter(function(x) { return x !== m; }); demoCalOpen = null; render(); }
+
+// ---- ชิ้นส่วนไทม์ไลน์ ----
+function _dcMonthHead(r) {
+  var n = demoCalSpan, h = '<div class="dcal-months" style="grid-template-columns:repeat(' + n + ',1fr)">';
+  var c = new Date(r.from);
+  for (var i = 0; i < n; i++) { h += '<span>' + getMonthName(c.getMonth()) + (n > 6 ? '' : ' ' + String(c.getFullYear()).slice(2)) + '</span>'; c.setMonth(c.getMonth()+1); }
+  return h + '</div>';
+}
+function _dcGrid() {
+  var g = '';
+  for (var i = 1; i < demoCalSpan; i++) g += '<i style="left:' + (i / demoCalSpan * 100) + '%"></i>';
+  return '<div class="dcal-grid">' + g + '</div>';
+}
+function _dcTodayLine(r) {
+  var t = _dcDay(new Date());
+  if (t < r.from || t > r.to) return '';
+  return '<div class="dcal-today" style="left:' + _dcPct(t, r) + '%"></div>';
+}
+function _dcBar(b, r, today, label, key) {
+  var L = Math.max(0, _dcPct(b.s, r)), R = Math.min(100, _dcPct(b.e, r));
+  var w = Math.max(1.4, R - L);
+  var cls = 'b-' + demoCalBarState(b, today);
+  return '<button class="dcal-bar ' + cls + (demoCalOpen === key ? ' on' : '') + '" style="left:' + L + '%;width:' + w + '%" ' +
+    'onclick="event.stopPropagation();demoCalToggleOpen(\'' + key + '\')" title="' + sanitize(label + ' · ' + _dcFmt(b.s) + ' – ' + _dcFmt(b.e)) + '">' + sanitize(label) + '</button>';
+}
+function _dcSpanCtl() {
+  var r = demoCalRange();
+  var h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+  h += '<button class="btn bsm bo" onclick="demoCalShift(-1)">◀</button>';
+  h += '<b style="font-size:13px">' + _dcFmt(r.from) + ' – ' + _dcFmt(r.to) + ' ' + r.to.getFullYear() + '</b>';
+  h += '<button class="btn bsm bo" onclick="demoCalShift(1)">▶</button>';
+  h += '<span style="margin-left:auto;font-size:11px;color:var(--text2)">ช่วง:</span>';
+  [3,6,12].forEach(function(n) {
+    h += '<button class="demo-filter-chip ' + (demoCalSpan === n ? 'act' : '') + '" onclick="demoCalSetSpan(' + n + ')">' + n + ' เดือน</button>';
+  });
+  if (demoCalSpanStart !== 0) h += '<button class="btn-xs" onclick="demoCalSpanStart=0;render()">กลับมาเดือนนี้</button>';
+  return h + '</div>';
+}
+function _dcLegend() {
+  return '<div class="demo-gantt-legend">' +
+    '<span><span class="demo-gantt-legend-dot" style="background:#f59e0b"></span>กำลังถูกยืม</span>' +
+    '<span><span class="demo-gantt-legend-dot" style="background:#ef4444"></span>เลยกำหนดคืน</span>' +
+    '<span><span class="demo-gantt-legend-dot" style="border:1.5px dashed var(--accent)"></span>จองล่วงหน้า</span>' +
+    '<span><span class="demo-gantt-legend-dot" style="background:var(--border)"></span>คืนแล้ว</span>' +
+    '<span><span class="demo-gantt-legend-dot" style="background:#ff5252;width:2px"></span>วันนี้</span></div>';
+}
+function _dcSrcNote() {
+  return '<div class="dcal-src">📄 เลขเครื่องเช่า · S/N · ใบจอง · ใบเบิก · วันที่ มาจากไฟล์ทะเบียนคลัง — ' +
+    'ผู้ยืม · กสทช. · ประกัน · CAAT เป็นฟิลด์ในแอป ถ้ายังว่างให้กรอกที่ปุ่ม 📑 กรอกเอกสาร หรือตอนกดให้ยืม</div>';
+}
+
+// ---- drill: รายละเอียดที่กดเปิด ----
+function _dcDrill() {
+  if (!demoCalOpen) return '';
+  var p = demoCalOpen.split(':'), t = p[0], v = p.slice(1).join(':');
+  if (t === 'unit') return _dcDrillUnit(v);
+  if (t === 'job') return _dcDrillJob(v);
+  if (t === 'day') return _dcDrillDay(v);
+  if (t === 'model') return _dcDrillModel(v);
+  return '';
+}
+function _dcDocBadges(d) {
+  function b(ok, t) { return '<span class="pill ' + (ok ? 'p-free' : 'p-late') + '" style="font-size:10px;padding:1px 7px;border-radius:999px;background:' + (ok ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.13)') + ';color:' + (ok ? '#22c55e' : '#ef4444') + '">' + (ok ? '✓' : '✗') + ' ' + t + '</span>'; }
+  return '<span style="display:inline-flex;gap:4px;flex-wrap:wrap">' +
+    '<span class="pill" style="font-size:10px;padding:1px 7px;border-radius:999px;background:var(--bg2);color:var(--text2)">' + (d.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>' +
+    b(d.nbtcRegistered, 'กสทช.') + b(d.droneInsurance, 'ประกัน') + b(d.caatRegistered, 'CAAT') + '</span>';
+}
+function _dcBorrower(b) {
+  if (!b) return '<span style="color:var(--text3)">—</span>';
+  var dd = b.dealerId ? ST.getOne('dealers', b.dealerId) : null;
+  var nm = dd ? dd.name : (b.borrower || '');
+  return nm ? sanitize(nm) : '<span style="color:var(--text3)">— <span style="font-size:10px">ยังไม่ได้กรอก</span></span>';
+}
+function _dcCloseBtn() { return '<button class="btn-xs" onclick="demoCalOpen=null;render()">✕ ปิด</button>'; }
+function _dcBookBtn(unitId, fromDate, label, ghost, toDate) {
+  return '<button class="btn bsm ' + (ghost ? 'bo' : 'bp') + '" onclick="event.stopPropagation();showLendDemoM(\'' + unitId + '\',\'' + _dcThai(fromDate) + '\'' + (toDate ? ',\'' + _dcThai(toDate) + '\'' : '') + ')">' + label + '</button>';
+}
+function _dcDrillUnit(unitId) {
+  var d = getDemoItems().filter(function(x) { return x.id === unitId; })[0];
+  if (!d) return '';
+  var today = _dcDay(new Date());
+  var bs = demoCalBookings().filter(function(b) { return b.unitId === unitId; }).sort(function(a,b) { return b.s - a.s; });
+  var cur = bs.filter(function(b) { return b.status === 'active'; })[0];
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">' + sanitize(d.name || '-') + '</b>' +
+    '<div style="font-size:11px;color:var(--text2);font-family:monospace">เช่า ' + sanitize(d.rentalDbNo || '—') + ' · S/N ' + sanitize(d.serialNumber || '—') + '</div>' +
+    '</div>' + _dcCloseBtn() + '</div>';
+  h += '<div class="dcal-kv">';
+  h += '<div><span class="k">สถานะ</span><b>' + (DEMO_STATUS_META[getDemoEffectiveStatus(d)] || {}).label + '</b></div>';
+  if (cur) {
+    h += '<div><span class="k">ผู้ยืม</span><b>' + _dcBorrower(cur) + '</b></div>';
+    if (cur.jobNo) h += '<div><span class="k">ใบจอง</span><b>' + qcopyHtml(cur.jobNo) + '</b></div>';
+    if (cur.refNo) h += '<div><span class="k">ใบเบิก</span><b>' + qcopyHtml(cur.refNo) + '</b></div>';
+    h += '<div><span class="k">ช่วงยืม</span><b>' + _dcFmt(cur.s) + ' – ' + _dcFmt(cur.e) + '</b></div>';
+  }
+  if (d.sku) h += '<div><span class="k">SKU</span><b>' + qcopyHtml(d.sku) + '</b></div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:9px">' + _dcDocBadges(d) + '</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px">';
+  if (cur) {
+    var after = _dcAddDays(cur.e, 1);
+    var left = Math.round((cur.e - today) / 86400000);
+    h += _dcBookBtn(d.id, after, '📤 จองต่อ — เริ่ม ' + _dcFmt(after), true);
+    h += '<span style="font-size:11px;color:var(--text2)">' + (left < 0 ? 'เลยกำหนดคืนมา ' + Math.abs(left) + ' วัน' : 'อีก ' + left + ' วันถึงกำหนดคืน') + '</span>';
+    h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ รับคืน</button>';
+  } else {
+    h += _dcBookBtn(d.id, today, '📤 จองเครื่องนี้');
+  }
+  h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียดเต็ม →</button>';
+  h += '</div>';
+  if (bs.length > 1) {
+    h += '<div style="font-size:11px;color:var(--text2);margin-top:8px">ประวัติ/คิวของเครื่องนี้</div>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><tbody>';
+    bs.slice(0, 6).forEach(function(b) {
+      h += '<tr><td style="padding:3px 6px;border-bottom:1px solid var(--border-light)">' + _dcFmt(b.s) + ' – ' + _dcFmt(b.e) + '</td>' +
+        '<td style="padding:3px 6px;border-bottom:1px solid var(--border-light)">' + (b.jobNo ? 'ใบ ' + sanitize(b.jobNo) : '—') + '</td>' +
+        '<td style="padding:3px 6px;border-bottom:1px solid var(--border-light)">' + (b.status === 'active' ? 'กำลังยืม' : 'คืนแล้ว') + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  return h + _dcSrcNote() + '</div>';
+}
+function _dcDrillJob(jobNo) {
+  var bs = demoCalBookings().filter(function(b) { return b.jobNo === jobNo; });
+  if (!bs.length) return '';
+  var items = getDemoItems(), byId = {}; items.forEach(function(d) { byId[d.id] = d; });
+  var f = bs[0], today = _dcDay(new Date());
+  var slips = {}; bs.forEach(function(b) { if (b.refNo) slips[b.refNo] = 1; });
+  var late = Math.round((today - f.e) / 86400000);
+  var stt = demoCalBarState(f, today);
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">📄 ใบจอง ' + qcopyHtml(jobNo) + '</b>' +
+    '<div style="font-size:11px;color:var(--text2)">' + bs.length + ' เครื่อง · เบิกจาก ' + (Object.keys(slips).length || '—') + ' ใบเบิก</div>' +
+    '</div>' + _dcCloseBtn() + '</div>';
+  h += '<div class="dcal-kv">';
+  h += '<div><span class="k">ผู้ยืม</span><b>' + _dcBorrower(f) + '</b></div>';
+  h += '<div><span class="k">ส่ง</span><b>' + _dcFmt(f.s) + '</b></div>';
+  h += '<div><span class="k">กำหนดคืน</span><b>' + _dcFmt(f.e) + '</b></div>';
+  h += '<div><span class="k">รวม</span><b>' + (Math.round((f.e - f.s) / 86400000) + 1) + ' วัน</b></div>';
+  if (stt === 'late') h += '<div><span class="k">เลยกำหนด</span><b style="color:#ef4444">' + late + ' วัน</b></div>';
+  h += '</div>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เลขเช่า</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">รุ่น / S/N</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เอกสาร</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ใบเบิก</th>' +
+    '<th></th></tr></thead><tbody>';
+  bs.forEach(function(b) {
+    var d = byId[b.unitId] || {};
+    h += '<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border-light);cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + b.unitId + '\')"><b>' + sanitize(d.rentalDbNo || '—') + '</b></td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)"><div>' + sanitize(d.name || '-') + '</div><div style="font-size:10px;color:var(--text3);font-family:monospace">' + sanitize(d.serialNumber || '—') + '</div></td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcDocBadges(d) + '</td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);font-family:monospace">' + sanitize(b.refNo || '—') + '</td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);text-align:right">' + _dcBookBtn(b.unitId, _dcAddDays(b.e, 1), 'จองต่อ', true) + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div style="margin-top:9px"><button class="btn bsm bp" onclick="demoTrackerTab=\'jobs\';render()">📄 ไปแท็บใบงาน (คืนทั้งใบ) →</button></div>';
+  return h + _dcSrcNote() + '</div>';
+}
+function _dcDrillDay(isoStr) {
+  var parts = isoStr.split('-'), cur = new Date(+parts[0], +parts[1]-1, +parts[2]);
+  var units = demoCalUnits(), bks = demoCalBookings();
+  var busyBy = {};
+  bks.forEach(function(b) { if (b.s <= cur && cur <= b.e) (busyBy[b.unitId] = busyBy[b.unitId] || []).push(b); });
+  var out = units.filter(function(d) { return busyBy[d.id]; });
+  var free = units.filter(function(d) { return !busyBy[d.id]; });
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">📅 ' + cur.getDate() + ' ' + getMonthName(cur.getMonth()) + ' ' + cur.getFullYear() + '</b>' +
+    '<div style="font-size:11px;color:var(--text2)">ยืมอยู่ ' + out.length + ' · ว่าง ' + free.length + ' เครื่อง</div>' +
+    '</div>' + _dcCloseBtn() + '</div>';
+  if (free.length) {
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + free.length + ' เครื่อง — จองได้เลย</div>';
+    h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:10px">';
+    free.slice(0, 10).forEach(function(d) {
+      h += '<div class="dcal-urow"><div style="font-family:monospace;font-weight:600;cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' + sanitize(d.rentalDbNo || '—') + '</div>' +
+        '<div><div style="font-size:12px;font-weight:600">' + sanitize(d.name || '-') + '</div>' +
+        '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-bottom:3px">S/N ' + sanitize(d.serialNumber || '—') + '</div>' + _dcDocBadges(d) + '</div>' +
+        '<div>' + _dcBookBtn(d.id, cur, '📤 จอง') + '</div></div>';
+    });
+    h += '</div>';
+    if (free.length > 10) h += '<div style="font-size:11px;color:var(--text3);margin:-4px 0 8px">…และอีก ' + (free.length - 10) + ' เครื่อง</div>';
+  }
+  if (out.length) {
+    var jobs = {};
+    out.forEach(function(d) { busyBy[d.id].forEach(function(b) { (jobs[b.jobNo || '_'] = jobs[b.jobNo || '_'] || []).push({ d: d, b: b }); }); });
+    h += '<div style="font-size:12px;font-weight:600;margin:10px 0 4px">ถูกยืมอยู่ ' + out.length + ' เครื่อง</div>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>' +
+      '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ใบจอง</th>' +
+      '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ผู้ยืม</th>' +
+      '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เครื่อง</th>' +
+      '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">คืน</th></tr></thead><tbody>';
+    Object.keys(jobs).sort().forEach(function(j) {
+      var g = jobs[j], b0 = g[0].b;
+      h += '<tr style="cursor:pointer" onclick="demoCalToggleOpen(\'' + (j === '_' ? 'unit:' + g[0].d.id : 'job:' + j) + '\')">' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);font-family:monospace">' + (j === '_' ? '—' : sanitize(j)) + '</td>' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcBorrower(b0) + '</td>' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + g.length + ' เครื่อง — ' + sanitize(g[0].d.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcFmt(b0.e) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  return h + _dcSrcNote() + '</div>';
+}
+function _dcDrillModel(m) {
+  var units = getDemoItems().filter(function(d) {
+    if (demoKindFilter === 'main' && d.isAccessory) return false;
+    if (demoKindFilter === 'accessory' && !d.isAccessory) return false;
+    return demoCalModelOf(d) === m;
+  });
+  var today = _dcDay(new Date()), bks = demoCalBookings();
+  var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
+    '<b style="font-size:14px">🚁 ' + sanitize(m) + '</b>' +
+    '<div style="font-size:11px;color:var(--text2)">มี ' + units.length + ' เครื่อง</div>' +
+    '</div>' + _dcCloseBtn() + '</div>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เลขเช่า / S/N</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เอกสาร</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">สถานะ</th>' +
+    '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ผู้ยืม / ใบจอง</th>' +
+    '<th></th></tr></thead><tbody>';
+  units.forEach(function(d) {
+    var cur = bks.filter(function(b) { return b.unitId === d.id && b.status === 'active'; })[0];
+    h += '<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border-light);cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' +
+      '<b style="font-family:monospace">' + sanitize(d.rentalDbNo || '—') + '</b>' +
+      '<div style="font-size:10px;color:var(--text3);font-family:monospace">' + sanitize(d.serialNumber || '—') + '</div></td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcDocBadges(d) + '</td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + (DEMO_STATUS_META[getDemoEffectiveStatus(d)] || {}).label + '</td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + (cur ? _dcBorrower(cur) + '<div style="font-size:10px;color:var(--text3);font-family:monospace">ใบ ' + sanitize(cur.jobNo || '—') + ' · คืน ' + _dcFmt(cur.e) + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);text-align:right">' +
+      (cur ? _dcBookBtn(d.id, _dcAddDays(cur.e, 1), 'จองต่อ', true) : _dcBookBtn(d.id, today, '📤 จอง')) + '</td></tr>';
+  });
+  h += '</tbody></table>' + _dcSrcNote() + '</div>';
+  return h;
+}
+
+// ---- 1) ไทม์ไลน์หลายเดือน ----
+function _dcViewTimeline() {
+  var r = demoCalRange(), today = _dcDay(new Date());
+  var units = demoCalUnits(), bks = demoCalBookings();
+  var byUnit = {};
+  bks.forEach(function(b) { if (_dcOverlap(b, r.from, r.to)) (byUnit[b.unitId] = byUnit[b.unitId] || []).push(b); });
+  units = units.slice().sort(function(a, b) {
+    var n = (a.name || '').localeCompare(b.name || '');
+    return n !== 0 ? n : (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true });
+  });
+  var h = _dcSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดแถบ = ดูใบจองนั้น · กดชื่อเครื่อง = ดูรายละเอียดเครื่องและจองต่อ</div>';
+  if (demoCalOpen) h += _dcDrill();
+  if (!units.length) return h + '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีเครื่องตรงตัวกรอง</div>';
+  h += '<div class="demo-gantt-wrap"><div class="dcal-tl" style="--dcal-lab:210px">';
+  h += '<div class="dcal-head"><div></div>' + _dcMonthHead(r) + '</div>';
+  units.forEach(function(d) {
+    var bars = (byUnit[d.id] || []).map(function(b) {
+      return _dcBar(b, r, today, b.jobNo ? 'ใบ ' + b.jobNo : (b.borrower || 'ยืม'), b.jobNo ? 'job:' + b.jobNo : 'unit:' + d.id);
+    }).join('');
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' +
+      '<b>' + sanitize(d.name || '-') + '</b><span class="m2">เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(d.serialNumber || '—') + '</span></button>' +
+      '<div class="dcal-track">' + _dcGrid() + _dcTodayLine(r) + bars + '</div></div>';
+  });
+  h += '</div></div>' + _dcLegend();
+  return h;
+}
+
+// ---- 2) ตารางรายเดือน (+ ว่างพร้อมกันเมื่อเลือกหลายรุ่น) ----
+function _dcFreeUnitsOn(model, cur, bks, allUnits) {
+  return allUnits.filter(function(d) {
+    if (demoCalModelOf(d) !== model) return false;
+    return !bks.some(function(b) { return b.unitId === d.id && b.s <= cur && cur <= b.e; });
+  });
+}
+function _dcViewMonth() {
+  var base = new Date(); base.setDate(1); base.setHours(0,0,0,0); base.setMonth(base.getMonth() + demoCalMonthOffset);
+  var y = base.getFullYear(), mo = base.getMonth();
+  var nDays = new Date(y, mo + 1, 0).getDate(), pad = new Date(y, mo, 1).getDay();
+  var todayD = _dcDay(new Date());
+  var units = demoCalUnits(), bks = demoCalBookings();
+  // ฐานสำหรับนับ "ว่างพร้อมกัน" ต้องไม่ถูกกรองด้วย picked (เพราะ picked คือรุ่นที่กำลังถาม)
+  var basePool = getDemoItems().filter(function(d) {
+    if (demoKindFilter === 'main' && d.isAccessory) return false;
+    if (demoKindFilter === 'accessory' && !d.isAccessory) return false;
+    return true;
+  });
+  var h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">';
+  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(-1)">◀</button>';
+  h += '<b style="font-size:14px">' + getMonthName(mo) + ' ' + y + '</b>';
+  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
+  if (demoCalMonthOffset !== 0) h += '<button class="btn-xs" onclick="demoCalMonthOffset=0;render()">เดือนนี้</button>';
+  h += '<span style="margin-left:auto;font-size:11.5px;color:var(--text2)">' + units.length + ' เครื่องในมุมมองนี้</span></div>';
+
+  if (demoCalPicked.length) {
+    var fits = [], maxSet = 0;
+    for (var dd = 1; dd <= nDays; dd++) {
+      var c2 = new Date(y, mo, dd);
+      var sets = Math.min.apply(null, demoCalPicked.map(function(m) { return _dcFreeUnitsOn(m, c2, bks, basePool).length; }));
+      if (sets > 0) fits.push(dd);
+      if (sets > maxSet) maxSet = sets;
+    }
+    var ranges = [], run = null;
+    fits.forEach(function(dv) { if (run && dv === run[1] + 1) run[1] = dv; else { run = [dv, dv]; ranges.push(run); } });
+    var rtxt = ranges.map(function(x) { return x[0] === x[1] ? x[0] : x[0] + '–' + x[1]; }).join(', ');
+    h += '<div class="dcal-combo">' +
+      (demoCalPicked.length > 1 ? '🎯 ' + demoCalPicked.map(sanitize).join(' + ') + ' — ว่าง<b>พร้อมกัน</b> ' : '🎯 ' + sanitize(demoCalPicked[0]) + ' — ว่าง ') +
+      (fits.length ? '<b>' + fits.length + '</b> วันในเดือนนี้ · ประกอบได้สูงสุด <b>' + maxSet + '</b> ชุด' : '<b>ไม่มีวันไหนว่างครบ</b>') +
+      (rtxt ? '<div style="margin-top:5px;font-size:11.5px;color:var(--text2)">วันที่ว่างครบ: <b>' + rtxt + '</b></div>' : '') + '</div>';
+  }
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วจองได้จากตรงนั้นเลย</div>';
+  if (demoCalOpen) h += _dcDrill();
+
+  h += '<div class="dcal-mg">';
+  ['อา','จ','อ','พ','พฤ','ศ','ส'].forEach(function(x) { h += '<div class="dcal-dow">' + x + '</div>'; });
+  for (var i = 0; i < pad; i++) h += '<div class="dcal-cell pad"></div>';
+  for (var d2 = 1; d2 <= nDays; d2++) {
+    var cur = new Date(y, mo, d2);
+    var isoS = _dcISO(cur), k = 'day:' + isoS;
+    var busy = units.filter(function(u) { return bks.some(function(b) { return b.unitId === u.id && b.s <= cur && cur <= b.e; }); }).length;
+    var freeN = units.length - busy;
+    var isToday = cur.getTime() === todayD.getTime();
+    var sets = null;
+    if (demoCalPicked.length) sets = Math.min.apply(null, demoCalPicked.map(function(m) { return _dcFreeUnitsOn(m, cur, bks, basePool).length; }));
+    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (demoCalOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    h += '<button class="' + cls + '" onclick="demoCalToggleOpen(\'' + k + '\')">' +
+      '<span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
+    if (sets === null) {
+      h += '<span class="dcal-mini"><i class="dcal-dot" style="background:#f59e0b"></i>ยืม ' + busy + '</span>' +
+        '<span class="dcal-mini"><i class="dcal-dot" style="background:#22c55e"></i>ว่าง ' + freeN + '</span>' +
+        '<span class="dcal-load" style="width:' + (units.length ? busy / units.length * 100 : 0) + '%"></span>';
+    } else {
+      h += '<span class="dcal-mini" style="font-weight:700;color:' + (sets > 0 ? '#22c55e' : '#ef4444') + '">' +
+        (sets > 0 ? (demoCalPicked.length > 1 ? '✅ ' + sets + ' ชุด' : '✅ ว่าง ' + sets) : '✕ ไม่ว่าง') + '</span>';
+      demoCalPicked.slice(0, 3).forEach(function(m) {
+        var nf = _dcFreeUnitsOn(m, cur, bks, basePool).length;
+        h += '<span class="dcal-mini" title="' + sanitize(m) + '"><i class="dcal-dot" style="background:' + (nf ? '#22c55e' : '#ef4444') + '"></i>' + sanitize(_dcShort(m)) + ' ' + nf + '</span>';
+      });
+    }
+    h += '</button>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// ---- 3) รายรุ่น ----
+function _dcViewModel() {
+  var r = demoCalRange(), today = _dcDay(new Date());
+  var units = demoCalUnits(), bks = demoCalBookings();
+  var by = {};
+  units.forEach(function(d) { (by[demoCalModelOf(d)] = by[demoCalModelOf(d)] || []).push(d); });
+  var keys = Object.keys(by).sort();
+  var h = _dcSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">1 แถว = 1 รุ่น · ตัวเลขบนแถบ = ใช้ไปกี่เครื่องจากทั้งหมด · จาก ' + units.length + ' เครื่อง เหลือ ' + keys.length + ' แถว</div>';
+  if (demoCalOpen) h += _dcDrill();
+  if (!keys.length) return h + '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีเครื่องตรงตัวกรอง</div>';
+  h += '<div class="demo-gantt-wrap"><div class="dcal-tl" style="--dcal-lab:210px">';
+  h += '<div class="dcal-head"><div></div>' + _dcMonthHead(r) + '</div>';
+  keys.forEach(function(m) {
+    var list = by[m], total = list.length, ids = {};
+    list.forEach(function(d) { ids[d.id] = 1; });
+    // ยุบช่วงที่เหมือนกันเป็นแถบเดียว แล้วนับว่าช่วงนั้นกินไปกี่เครื่อง ไม่งั้นแถบจะทับกันหลายชั้น
+    var seen = {}, order = [];
+    bks.forEach(function(b) {
+      if (!ids[b.unitId] || !_dcOverlap(b, r.from, r.to)) return;
+      var key = b.s.getTime() + '|' + b.e.getTime() + '|' + (b.jobNo || '');
+      if (!seen[key]) { seen[key] = { b: b, n: 0 }; order.push(key); }
+      seen[key].n++;
+    });
+    var bars = order.map(function(key) {
+      var o = seen[key];
+      return _dcBar(o.b, r, today, o.n + '/' + total, o.b.jobNo ? 'job:' + o.b.jobNo : 'model:' + m);
+    }).join('');
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="demoCalToggleOpen(\'model:' + sanitize(m).replace(/'/g, "\\'") + '\')">' +
+      '<b>' + sanitize(m) + '</b><span class="m2">' + total + ' เครื่อง</span></button>' +
+      '<div class="dcal-track">' + _dcGrid() + _dcTodayLine(r) + bars + '</div></div>';
+  });
+  h += '</div></div>' + _dcLegend();
+  return h;
+}
+
+// ---- 4) รายใบจอง ----
+function _dcViewJobs() {
+  var r = demoCalRange(), today = _dcDay(new Date());
+  var units = demoCalUnits(), inScope = {}; units.forEach(function(d) { inScope[d.id] = 1; });
+  var bks = demoCalBookings().filter(function(b) { return inScope[b.unitId] && _dcOverlap(b, r.from, r.to); });
+  var groups = {}, order = [];
+  bks.forEach(function(b) {
+    var k = b.jobNo || '_none';
+    if (!groups[k]) { groups[k] = { jobNo: b.jobNo, list: [], s: b.s, e: b.e }; order.push(k); }
+    groups[k].list.push(b);
+    if (b.s < groups[k].s) groups[k].s = b.s;
+    if (b.e > groups[k].e) groups[k].e = b.e;
+  });
+  order.sort(function(a, b) {
+    if (a === '_none') return 1;
+    if (b === '_none') return -1;
+    return groups[a].s - groups[b].s;
+  });
+  var h = _dcSpanCtl();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">1 แถว = 1 ใบจอง · กดเพื่อดูว่ามีเครื่องอะไรบ้าง — จาก ' + bks.length + ' รายการยืม เหลือ ' + order.length + ' แถว</div>';
+  if (demoCalOpen) h += _dcDrill();
+  if (!order.length) return h + '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีการยืม/จองในช่วงนี้</div>';
+  h += '<div class="demo-gantt-wrap"><div class="dcal-tl" style="--dcal-lab:200px">';
+  h += '<div class="dcal-head"><div></div>' + _dcMonthHead(r) + '</div>';
+  order.forEach(function(k) {
+    var g = groups[k], slips = {};
+    g.list.forEach(function(b) { if (b.refNo) slips[b.refNo] = 1; });
+    var key = g.jobNo ? 'job:' + g.jobNo : 'unit:' + g.list[0].unitId;
+    var bar = _dcBar({ s: g.s, e: g.e, status: g.list[0].status }, r, today, g.list.length + ' เครื่อง', key);
+    h += '<div class="dcal-row"><button class="dcal-lab" onclick="demoCalToggleOpen(\'' + key + '\')">' +
+      '<b>' + (g.jobNo ? '📄 ใบจอง ' + sanitize(g.jobNo) : '➖ ไม่ระบุใบจอง') + '</b>' +
+      '<span class="m2">' + g.list.length + ' เครื่อง' + (Object.keys(slips).length ? ' · ' + Object.keys(slips).length + ' ใบเบิก' : '') + '</span></button>' +
+      '<div class="dcal-track">' + _dcGrid() + _dcTodayLine(r) + bar + '</div></div>';
+  });
+  h += '</div></div>' + _dcLegend();
+  return h;
+}
+
+// ---- 5) หาเครื่องว่าง ----
+function _dcViewFind() {
+  var items = getDemoItems().filter(function(d) {
+    if (demoKindFilter === 'main' && d.isAccessory) return false;
+    if (demoKindFilter === 'accessory' && !d.isAccessory) return false;
+    return true;
+  });
+  var models = {};
+  items.forEach(function(d) { var m = demoCalModelOf(d); models[m] = (models[m] || 0) + 1; });
+  var keys = Object.keys(models).sort();
+  if (!demoCalFindModel || !models[demoCalFindModel]) demoCalFindModel = demoCalPicked[0] || keys[0] || '';
+  if (!demoCalFindFrom) demoCalFindFrom = _dcISO(_dcDay(new Date()));
+  if (!demoCalFindTo) demoCalFindTo = _dcISO(_dcAddDays(_dcDay(new Date()), 6));
+
+  var h = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:12px">';
+  h += '<div class="fm-group" style="margin:0"><label>รุ่น</label><select class="fm-input" style="min-width:200px" onchange="demoCalFindModel=this.value;demoCalOpen=null;render()">';
+  keys.forEach(function(m) { h += '<option value="' + sanitize(m) + '"' + (m === demoCalFindModel ? ' selected' : '') + '>' + sanitize(m) + ' (' + models[m] + ')</option>'; });
+  h += '</select></div>';
+  h += '<div class="fm-group" style="margin:0"><label>ตั้งแต่</label><input type="date" class="fm-input" value="' + demoCalFindFrom + '" onchange="demoCalFindFrom=this.value;render()"></div>';
+  h += '<div class="fm-group" style="margin:0"><label>ถึง</label><input type="date" class="fm-input" value="' + demoCalFindTo + '" onchange="demoCalFindTo=this.value;render()"></div>';
+  h += '</div>';
+
+  if (!keys.length) return h + '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ยังไม่มีอุปกรณ์</div>';
+  var fp = demoCalFindFrom.split('-'), tp = demoCalFindTo.split('-');
+  var from = new Date(+fp[0], +fp[1]-1, +fp[2]), to = new Date(+tp[0], +tp[1]-1, +tp[2]);
+  if (to < from) { var tmp = from; from = to; to = tmp; }
+  var bks = demoCalBookings();
+  var list = items.filter(function(d) { return demoCalModelOf(d) === demoCalFindModel; });
+  var clash = {};
+  list.forEach(function(d) {
+    clash[d.id] = bks.filter(function(b) { return b.unitId === d.id && _dcOverlap(b, from, to); });
+  });
+  var freeU = list.filter(function(d) { return !clash[d.id].length; });
+
+  if (freeU.length) {
+    h += '<div style="background:rgba(34,197,94,.12);border:1px solid #22c55e;color:#22c55e;border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px">' +
+      '✅ ว่าง <b style="font-size:16px">' + freeU.length + '</b> จาก ' + list.length + ' เครื่อง ในช่วง ' + _dcFmt(from) + ' – ' + _dcFmt(to) + '</div>';
+  } else {
+    var next = null;
+    list.forEach(function(d) { clash[d.id].forEach(function(b) { if (!next || b.e < next) next = b.e; }); });
+    h += '<div style="background:rgba(239,68,68,.1);border:1px solid #ef4444;color:#ef4444;border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px">' +
+      '✕ ไม่ว่างเลย ทั้ง ' + list.length + ' เครื่องถูกจองหมด' + (next ? ' · ว่างเร็วสุดหลัง <b>' + _dcFmt(next) + '</b>' : '') + '</div>';
+  }
+  if (demoCalOpen) h += _dcDrill();
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' +
+    '<th style="text-align:left;padding:5px 7px;border-bottom:1px solid var(--border)">เลขเช่า / S/N</th>' +
+    '<th style="text-align:left;padding:5px 7px;border-bottom:1px solid var(--border)">เอกสาร</th>' +
+    '<th style="text-align:left;padding:5px 7px;border-bottom:1px solid var(--border)">ช่วงที่ขอ</th>' +
+    '<th style="text-align:left;padding:5px 7px;border-bottom:1px solid var(--border)">ติดใครอยู่</th>' +
+    '<th></th></tr></thead><tbody>';
+  list.forEach(function(d) {
+    var c = clash[d.id];
+    h += '<tr><td style="padding:5px 7px;border-bottom:1px solid var(--border-light);cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' +
+      '<b style="font-family:monospace">' + sanitize(d.rentalDbNo || '—') + '</b>' +
+      '<div style="font-size:10px;color:var(--text3);font-family:monospace">' + sanitize(d.serialNumber || '—') + '</div></td>' +
+      '<td style="padding:5px 7px;border-bottom:1px solid var(--border-light)">' + _dcDocBadges(d) + '</td>' +
+      '<td style="padding:5px 7px;border-bottom:1px solid var(--border-light)">' + (c.length ? '<span style="color:#f59e0b;font-weight:600">ไม่ว่าง</span>' : '<span style="color:#22c55e;font-weight:600">ว่าง</span>') + '</td>' +
+      '<td style="padding:5px 7px;border-bottom:1px solid var(--border-light)">' + (c.length ? _dcBorrower(c[0]) + '<div style="font-size:10px;color:var(--text3);font-family:monospace">ใบ ' + sanitize(c[0].jobNo || '—') + ' · คืน ' + _dcFmt(c[0].e) + '</div>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="padding:5px 7px;border-bottom:1px solid var(--border-light);text-align:right">' +
+      (c.length ? _dcBookBtn(d.id, _dcAddDays(c[0].e, 1), 'จองต่อ', true) : _dcBookBtn(d.id, from, '📤 จองช่วงนี้', false, to)) + '</td></tr>';
+  });
+  h += '</tbody></table>' + _dcSrcNote();
+  return h;
+}
 
 function renderDemoCalendar() {
-  var base = new Date();
-  base.setDate(1);
-  base.setMonth(base.getMonth() + demoCalMonthOffset);
-  var year = base.getFullYear(), month = base.getMonth();
-  var monthKey = (month + 1) + '/' + year;
-  var totalDays = getDaysInMonth(monthKey);
-  var monthStart = new Date(year, month, 1);
-  var monthEnd = new Date(year, month, totalDays);
-  var todayD = new Date(); todayD.setHours(0, 0, 0, 0);
-
-  var allUnits = getDemoItems();
-  var loans = getDemoLoans();
-  if (demoCalUnitFilter !== 'all') loans = loans.filter(function(l) { return l.demoId === demoCalUnitFilter; });
-
-  // จัดกลุ่มประวัติยืม/จองตามเครื่อง (1 เครื่อง = 1 แถวเสมอ ไม่ปนกับเครื่องรุ่นเดียวกันตัวอื่น)
-  var byUnit = {};
-  loans.forEach(function(l) {
-    if (!l.lentDate) return;
-    var start = ftParseDate(l.lentDate);
-    var end = (l.actualReturnDate && ftParseDate(l.actualReturnDate)) || (l.returnDate && ftParseDate(l.returnDate)) || new Date();
-    if (!start) return;
-    if (end < start) end = start;
-    if (end < monthStart || start > monthEnd) return;
-    if (!byUnit[l.demoId]) byUnit[l.demoId] = [];
-    byUnit[l.demoId].push({ loan: l, start: start, end: end });
-  });
-
-  var unitIds = demoCalUnitFilter !== 'all' ? [demoCalUnitFilter] : Object.keys(byUnit);
-  var rows = unitIds.map(function(id) {
-    var unit = null;
-    for (var i = 0; i < allUnits.length; i++) { if (allUnits[i].id === id) { unit = allUnits[i]; break; } }
-    return { id: id, unit: unit, bars: byUnit[id] || [] };
-  }).filter(function(r) { return r.unit; });
-  rows.sort(function(a, b) { return (a.unit.name + (a.unit.serialNumber || '')).localeCompare(b.unit.name + (b.unit.serialNumber || '')); });
-
-  var monthName = getMonthName(month) + ' ' + year;
-  var h = '<div class="card" style="padding:10px;margin-bottom:10px">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(-1)">◀</button>';
-  h += '<b>🚁 ' + monthName + '</b>';
-  h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
-  h += '</div>';
-  h += '<select class="fm-input" onchange="demoCalUnitFilter=this.value;render()">';
-  h += '<option value="all"' + (demoCalUnitFilter === 'all' ? ' selected' : '') + '>🚁 ดูทุกเครื่องที่มีการยืม/จองเดือนนี้</option>';
-  allUnits.forEach(function(u) {
-    h += '<option value="' + u.id + '"' + (demoCalUnitFilter === u.id ? ' selected' : '') + '>' + sanitize(u.name) + (u.serialNumber ? ' (S/N ' + sanitize(u.serialNumber) + ')' : '') + '</option>';
-  });
-  h += '</select>';
-  h += '</div>';
-
-  if (!rows.length) {
-    return h + '<div class="card" style="text-align:center;padding:30px;color:var(--text2)">ไม่มีเครื่องที่ถูกยืม/จองในเดือนนี้</div>';
-  }
-
-  h += '<div class="demo-gantt-wrap"><div class="demo-gantt card" style="padding:10px">';
-  h += '<div class="demo-gantt-head"><div></div><div class="demo-gantt-head-days">';
-  var step = totalDays > 28 ? 2 : 1;
-  for (var dnum = 1; dnum <= totalDays; dnum += step) {
-    h += '<span style="left:' + ((dnum - 0.5) / totalDays * 100) + '%">' + dnum + '</span>';
-  }
-  h += '</div></div>';
-
-  var todayPct = (todayD >= monthStart && todayD <= monthEnd) ? ((todayD.getDate() - 0.5) / totalDays * 100) : null;
-
-  rows.forEach(function(r) {
-    var mColor = demoModelColor(r.unit.name);
-    h += '<div class="demo-gantt-row">';
-    h += '<div class="demo-gantt-label"><b>' + sanitize(r.unit.name) + '</b>' + (r.unit.serialNumber ? '<br><span class="demo-gantt-sn" style="color:' + mColor + '">S/N ' + sanitize(r.unit.serialNumber) + '</span>' : '') + '</div>';
-    h += '<div class="demo-gantt-track">';
-    if (todayPct !== null) h += '<div class="demo-gantt-today-line" style="left:' + todayPct + '%" title="วันนี้"></div>';
-    r.bars.forEach(function(b) {
-      var clipStart = b.start < monthStart ? monthStart : b.start;
-      var clipEnd = b.end > monthEnd ? monthEnd : b.end;
-      var leftPct = (clipStart.getDate() - 1) / totalDays * 100;
-      var widthPct = Math.max((clipEnd.getDate() - clipStart.getDate() + 1) / totalDays * 100, 100 / totalDays);
-      var isFuture = b.start > todayD;
-      var label = (isFuture ? '📅 ' : '📤 ') + (b.loan.borrower || '-');
-      h += '<div class="demo-gantt-bar' + (isFuture ? ' is-reserved' : '') + '" style="left:' + leftPct + '%;width:' + widthPct + '%;' + (isFuture ? 'color:' + mColor : 'background:' + mColor) + '" onclick="go(\'demoDetail\',{demoId:\'' + r.id + '\'})" title="' + sanitize((r.unit.name || '') + ' - ' + (b.loan.borrower || '')) + '">' + sanitize(label) + '</div>';
-    });
-    h += '</div></div>';
-  });
-  h += '</div></div>';
-
-  h += '<div class="demo-gantt-legend">';
-  h += '<span><span class="demo-gantt-legend-dot" style="background:var(--accent)"></span>กำลังถูกยืม</span>';
-  h += '<span><span class="demo-gantt-legend-dot" style="border:1px dashed var(--accent);background:transparent"></span>จองล่วงหน้า</span>';
-  h += '<span style="color:var(--text3)">สีของแถบ = แยกตามรุ่นเครื่อง ไม่ใช่ตามสถานะ</span>';
-  h += '</div>';
+  var h = demoCalToolbar();
+  if (demoCalView === 'month') h += _dcViewMonth();
+  else if (demoCalView === 'model') h += _dcViewModel();
+  else if (demoCalView === 'jobs') h += _dcViewJobs();
+  else if (demoCalView === 'find') h += _dcViewFind();
+  else h += _dcViewTimeline();
   return h;
 }
 
@@ -5350,7 +5883,7 @@ function saveDemo() {
   render();
 }
 
-function showLendDemoM(demoId) {
+function showLendDemoM(demoId, startDate, endDate) {
   var dealers = [];
   try { dealers = ST.getAll('dealers'); } catch(e) { dealers = []; }
   var items = getDemoItems();
@@ -5387,8 +5920,8 @@ function showLendDemoM(demoId) {
   h += '</select></div>';
   h += '<div class="fm-group"><label>👤 ผู้ยืม (ถ้าไม่ใช่ Dealer)</label><input type="text" id="dm_borrower" class="fm-input" placeholder="ชื่อผู้ยืม"></div>';
   h += '<div class="fm-group"><label>🎯 ใช้งานกับ / End User / วัตถุประสงค์</label><input type="text" id="dm_purpose" class="fm-input" placeholder="เช่น สาธิตให้บริษัท ABC ดู / สำรวจพื้นที่ก่อสร้าง"></div>';
-  h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + _td() + '"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
-  h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" placeholder="DD/MM/YYYY"></div>';
+  h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + sanitize(startDate || _td()) + '"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
+  h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" value="' + sanitize(endDate || '') + '" placeholder="DD/MM/YYYY"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_lnote" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn bp" onclick="lendDemo(\'' + demoId + '\')">📤 ให้ยืม</button>';
