@@ -2979,7 +2979,18 @@ var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเคร�
 // เครื่องที่ไม่อยากให้ลูกค้าขอยืมเองผ่านลิงก์สาธารณะ (เครื่องสำรองงาน event, เครื่องที่จองไว้ให้ลูกค้ารายใหญ่,
 // เครื่องที่สภาพไม่พร้อมโชว์) — ยังอยู่ในระบบและให้ยืมแบบคีย์เองได้ตามปกติ แค่ไม่โผล่ใน demo-request.html
 // ค่าเริ่มต้นคือ "โชว์" เพื่อไม่ให้เครื่องเดิมที่ไม่มีฟิลด์นี้หายจากหน้าลูกค้าทันทีที่ deploy
-function demoIsCustomerVisible(d) { return !d || d.customerVisible !== false; }
+// ลูกค้าเห็นเครื่องนี้ไหม — 3 สถานะ ไม่ใช่แค่ true/false
+//   true      = เปิดเอง ให้เห็นแน่นอน แม้จะเป็นอุปกรณ์เสริม (ใช้กับ Payload เช่น Zenmuse / SpotLight / Speaker
+//               ซึ่งไฟล์คลังจัดเป็น "Drone Accessories" หมด ทั้งที่ลูกค้าขอยืมของพวกนี้จริง)
+//   false     = ปิดเอง ไม่ให้เห็น
+//   undefined = ยังไม่เคยตั้ง → เครื่องหลักเห็น อุปกรณ์เสริมไม่เห็น (พฤติกรรมเดิม)
+// เดิมเป็นแค่ true/false แล้วหน้าลูกค้าตัด isAccessory ออกทั้งก้อนอีกชั้น ทำให้ต่อให้ติ๊กเปิดก็ไม่มีวันโผล่
+function demoIsCustomerVisible(d) {
+  if (!d) return true;
+  if (d.customerVisible === true) return true;
+  if (d.customerVisible === false) return false;
+  return !d.isAccessory;
+}
 
 // ---- ผู้คีย์เบิก ----
 // ผู้ยืมคือลูกค้า ส่วนคนที่คีย์เบิกออกจากคลังต้องเป็นทีมงานเสมอ เพราะลูกค้าไม่มีสิทธิ์ในระบบคลัง
@@ -3163,7 +3174,8 @@ function demoVisRows() {
   return getDemoItems().filter(function(d) {
     if (_demoVisScope === 'shown' && !_demoVisVal(d)) return false;
     if (_demoVisScope === 'hidden' && _demoVisVal(d)) return false;
-    if (_demoVisScope === 'blocked' && (d.rentalDbNo || '').trim() && !d.isAccessory) return false;
+    if (_demoVisScope === 'blocked' && !_demoVisBlockedReason(d)) return false;
+    if (_demoVisScope === 'acc' && !d.isAccessory) return false;
     if (!q) return true;
     return [d.name, d.model, d.serialNumber, d.rentalDbNo, d.sku].some(function(v) {
       return String(v || '').toLowerCase().indexOf(q) !== -1;
@@ -3175,8 +3187,9 @@ function demoVisRows() {
 }
 // เครื่องที่ลูกค้าไม่มีวันเห็นอยู่แล้วไม่ว่าจะติ๊กยังไง — หน้าลูกค้ากรองอุปกรณ์เสริมและเครื่องที่ยังไม่ลงทะเบียนออกก่อน
 // ถ้าไม่บอกไว้ คนใช้จะติ๊กให้ "โชว์" แล้วงงว่าทำไมยังไม่ขึ้นในลิงก์ลูกค้า
+// เหลือเงื่อนไขเดียวที่ติ๊กแล้วก็ยังไม่โผล่ — ไม่มีเลขเครื่องเช่า = เบิกจริงไม่ได้
+// (อุปกรณ์เสริมไม่นับเป็นข้อห้ามแล้ว ติ๊กเปิดรายตัวได้ เช่น Payload กล้อง ไฟ ลำโพง)
 function _demoVisBlockedReason(d) {
-  if (d.isAccessory) return 'อุปกรณ์เสริม';
   if (!(d.rentalDbNo || '').trim()) return 'ยังไม่ลงทะเบียนเครื่องเช่า';
   return '';
 }
@@ -3185,12 +3198,17 @@ function demoVisHtml() {
   var shown = all.filter(function(d) { return _demoVisVal(d); }).length;
   var blocked = all.filter(function(d) { return _demoVisBlockedReason(d); }).length;
   var rows = demoVisRows();
-  var h = '<div class="hint" style="margin-bottom:10px">ติ๊ก = ลูกค้าเห็นเครื่องนี้ในลิงก์ขอยืม · ติ๊กออก = ซ่อน (เครื่องยังอยู่ในระบบ ทีมงานกดให้ยืมเองได้ตามปกติ)<br>ยังไม่บันทึกจนกว่าจะกดปุ่มบันทึก</div>';
+  var h = '<div class="hint" style="margin-bottom:10px">ติ๊ก = ลูกค้าเห็นเครื่องนี้ในลิงก์ขอยืม · ติ๊กออก = ซ่อน (เครื่องยังอยู่ในระบบ ทีมงานกดให้ยืมเองได้ตามปกติ)<br>' +
+    '🔩 <b>อุปกรณ์เสริมค่าเริ่มต้นคือไม่โชว์</b> — แต่ไฟล์คลังจัด Payload (กล้อง ไฟ ลำโพง) ไว้กลุ่มเดียวกับใบพัด/สายชาร์จ ถ้าตัวไหนลูกค้าขอยืมจริงให้ติ๊กเปิดได้เลย<br>ยังไม่บันทึกจนกว่าจะกดปุ่มบันทึก</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
   h += '<button class="demo-filter-chip ' + (_demoVisScope === 'all' ? 'act' : '') + '" onclick="_demoVisSetScope(\'all\')">ทั้งหมด (' + all.length + ')</button>';
   h += '<button class="demo-filter-chip ' + (_demoVisScope === 'shown' ? 'act' : '') + '" onclick="_demoVisSetScope(\'shown\')">👀 ลูกค้าเห็น (' + shown + ')</button>';
   h += '<button class="demo-filter-chip ' + (_demoVisScope === 'hidden' ? 'act' : '') + '" onclick="_demoVisSetScope(\'hidden\')">🙈 ซ่อนไว้ (' + (all.length - shown) + ')</button>';
-  if (blocked) h += '<button class="demo-filter-chip ' + (_demoVisScope === 'blocked' ? 'act' : '') + '" onclick="_demoVisSetScope(\'blocked\')">⚠️ ลูกค้าไม่เห็นอยู่แล้ว (' + blocked + ')</button>';
+  // อุปกรณ์เสริมค่าเริ่มต้นคือไม่โชว์ แต่ Payload (กล้อง ไฟ ลำโพง) ก็อยู่ในกลุ่มนี้ตามไฟล์คลัง
+  // เลยแยกชิปไว้ให้เข้ามาเปิดเฉพาะตัวที่ลูกค้าขอยืมจริงได้ง่ายๆ
+  var accN = all.filter(function(d) { return d.isAccessory; }).length;
+  if (accN) h += '<button class="demo-filter-chip ' + (_demoVisScope === 'acc' ? 'act' : '') + '" onclick="_demoVisSetScope(\'acc\')">🔩 อุปกรณ์เสริม/Payload (' + accN + ')</button>';
+  if (blocked) h += '<button class="demo-filter-chip ' + (_demoVisScope === 'blocked' ? 'act' : '') + '" onclick="_demoVisSetScope(\'blocked\')">⚠️ ติ๊กแล้วก็ยังไม่โผล่ (' + blocked + ')</button>';
   h += '<input type="text" id="demoVisSrc" class="fm-input" style="flex:1;min-width:170px" placeholder="🔍 กรองแถว (ชื่อ, รุ่น, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoVisSearch) + '" oninput="_demoVisSearchInput(this.value)" autocomplete="off">';
   h += '</div>';
   if (!rows.length) {
@@ -3212,7 +3230,8 @@ function demoVisHtml() {
     h += '<td style="padding:5px 9px;text-align:center;border-bottom:1px solid var(--border)">' +
       '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="_demoVisSet(\'' + d.id + '\',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>';
     h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border)">' + sanitize(d.name || '-') +
-      (why ? '<div style="font-size:10px;color:#f59e0b">⚠️ ' + why + ' — ลูกค้าไม่เห็นอยู่แล้ว</div>' : '') + '</td>';
+      (d.isAccessory ? ' <span class="demo-mp" style="font-size:9px">🔩 อุปกรณ์เสริม</span>' : '') +
+      (why ? '<div style="font-size:10px;color:#f59e0b">⚠️ ' + why + ' — ติ๊กแล้วก็ยังไม่โผล่</div>' : '') + '</td>';
     h += '<td style="padding:5px 9px;border-bottom:1px solid var(--border);color:var(--text2);font-family:monospace">' +
       sanitize((d.rentalDbNo || '—')) + ' · ' + sanitize(d.serialNumber || '—') + '</td></tr>';
   });
@@ -4800,7 +4819,9 @@ function demoCardHtml(d, now, dupRentals) {
   // ---- แถวคุณสมบัติ: บินได้/จัดแสดง + เอกสาร 3 อย่าง อยู่บรรทัดเดียวกัน ----
   h += '<div class="demo-meta">';
   h += (d.flyable !== false ? '<span class="demo-mp fly">✈️ บินสาธิตได้</span>' : '<span class="demo-mp">🖼️ จัดแสดงเท่านั้น</span>');
-  if (!demoIsCustomerVisible(d)) h += '<span class="demo-mp hid" title="ลูกค้าไม่เห็นเครื่องนี้ในลิงก์ขอยืม">🙈 ซ่อนจากลูกค้า</span>';
+  // ขึ้นป้ายเฉพาะตอนตั้งใจซ่อนเอง — อุปกรณ์เสริมไม่โชว์อยู่แล้วตามค่าเริ่มต้น ถ้าติดป้ายทุกตัวจะรกเป็นสิบใบ
+  if (d.customerVisible === false) h += '<span class="demo-mp hid" title="ลูกค้าไม่เห็นเครื่องนี้ในลิงก์ขอยืม">🙈 ซ่อนจากลูกค้า</span>';
+  else if (d.customerVisible === true && d.isAccessory) h += '<span class="demo-mp fly" title="เปิดให้ลูกค้าขอยืมได้ ทั้งที่เป็นอุปกรณ์เสริม">👀 ลูกค้ายืมได้</span>';
   h += demoComplianceBadges(d);
   h += '</div>';
 
@@ -6780,7 +6801,9 @@ function demoComplianceFieldsHtml(d) {
   h += '</div>';
   h += '<div class="fm-group"><label>👀 ให้ลูกค้าขอยืมเองได้ไหม</label><div class="dm-toggles">' +
     _dmToggle('dm_custvis', demoIsCustomerVisible(d), 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div>' +
-    '<div class="hint">ติ๊กออก = เครื่องนี้จะไม่โผล่ในหน้า demo-request.html ที่ส่งให้ลูกค้า แต่ยังอยู่ในระบบและกด “ให้ยืม/จอง” เองได้ตามปกติ</div></div>';
+    (d.isAccessory
+      ? '<div class="hint">อุปกรณ์เสริมค่าเริ่มต้นคือ<b>ไม่โชว์</b> (ลูกค้าไม่ได้ขอยืมใบพัดหรือสายชาร์จ) — แต่ถ้าเป็นของที่ลูกค้าขอยืมจริง เช่น Payload กล้อง ไฟ ลำโพง ให้ติ๊กเปิดตัวนี้ได้</div>'
+      : '<div class="hint">ติ๊กออก = เครื่องนี้จะไม่โผล่ในหน้า demo-request.html ที่ส่งให้ลูกค้า แต่ยังอยู่ในระบบและกด “ให้ยืม/จอง” เองได้ตามปกติ</div>') + '</div>';
   h += '<div class="dm-sec">ทะเบียน &amp; เอกสาร</div>';
   h += '<div class="fm-group"><label>📋 หมายเลขเครื่องเช่า (DB เครื่องเช่า)</label><input type="text" id="dm_rentaldb" class="fm-input" value="' + sanitize(d.rentalDbNo || '') + '">';
   if (!(d.rentalDbNo || '').trim()) h += '<div class="hint">ยังไม่มีเลขนี้ = ยืมจริงไม่ได้ และลูกค้าจะไม่เห็นเครื่องนี้ในหน้าขอยืม</div>';
