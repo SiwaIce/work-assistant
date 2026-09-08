@@ -739,6 +739,29 @@ function scLoanLogHtml(l) {
 }
 function _scLoan(loanId) { return LOANS.filter(function(x) { return x._id === loanId; })[0] || null; }
 
+// รายชื่อผู้ยืมเดิม — หน้านี้ไม่มีทะเบียน Dealer เหมือนแอปหลัก จึงรวมจากใบยืมที่เคยคีย์ไว้แทน
+// ช่วยให้ชื่อบริษัทเดียวกันสะกดตรงกันทุกครั้ง ไม่แตกเป็นหลายเวอร์ชันจนนับประวัติไม่ตรง
+function scBorrowerDatalist(listId) {
+  var map = {};
+  LOANS.forEach(function(l) {
+    var n = String(l.borrower || '').trim();
+    if (!n) return;
+    var k = n.toLowerCase().replace(/\s+/g, ' ');
+    if (!map[k]) map[k] = { name: n, times: 0, active: 0 };
+    map[k].times++;
+    if (l.status === 'active') map[k].active++;
+  });
+  var list = Object.keys(map).map(function(k) { return map[k]; })
+    .sort(function(a, b) { return b.times - a.times || a.name.localeCompare(b.name, 'th'); });
+  var h = '<datalist id="' + listId + '">';
+  list.forEach(function(b) {
+    var bits = ['เคยยืม ' + b.times + ' ครั้ง'];
+    if (b.active) bits.push('📤 ยืมอยู่ ' + b.active);
+    h += '<option value="' + esc(b.name) + '">' + esc(bits.join(' · ')) + '</option>';
+  });
+  return h + '</datalist>';
+}
+
 function openLoanLogM(loanId) {
   var l = _scLoan(loanId);
   if (!l) { alert('ไม่พบใบยืมนี้'); return; }
@@ -802,7 +825,7 @@ function openTransferM(loanId) {
   if (l.status !== 'active') { alert('ใบนี้คืนแล้ว โอนไม่ได้'); return; }
   var h = '<div class="sm-sec">โอนผู้ยืม (ลูกค้า)</div>';
   h += '<div class="field"><label>ผู้ยืมตอนนี้</label><input type="text" value="' + esc(l.borrower || '—') + '" disabled></div>';
-  h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="tf_borrower" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม"></div>';
+  h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="tf_borrower" list="tfBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม">' + scBorrowerDatalist('tfBorrowerList') + '</div>';
   h += '<div class="sm-sec">เปลี่ยนผู้คีย์ (ทีมงาน)</div>';
   h += '<div class="field"><label>ผู้คีย์ตอนนี้</label><input type="text" value="' + esc(l.approver || '— ไม่ได้บันทึก —') + '" disabled></div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="tf_keyer" placeholder="เว้นว่าง = ไม่เปลี่ยน">' +
@@ -1078,7 +1101,7 @@ function showManualLoanForm(unitId) {
     '<div class="grid2">' +
     '<div class="field"><label>วันที่ยืม *</label><input type="date" id="mlStart" value="' + _td() + '"></div>' +
     '<div class="field"><label>วันที่คาดว่าจะคืน *</label><input type="date" id="mlEnd" value="' + _td() + '"></div>' +
-    '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>' +
+    '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" list="mlBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('mlBorrowerList') + '</div>' +
     '<div class="field"><label>ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="mlRequester" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>' +
     '</div><div class="field"><label>เลขที่ใบจอง</label><input type="text" id="mlJob" placeholder="เลขจากระบบคลัง เช่น 29179"></div>' +
     '<div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
