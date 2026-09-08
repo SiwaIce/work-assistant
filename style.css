@@ -10166,3 +10166,24 @@ input:focus, select:focus, textarea:focus {
 .dcal-ev.full { color:#ef4444; }
 .dcal-cell.tight { background:rgba(239,68,68,.07); border-color:rgba(239,68,68,.35); }
 .dcal-load { background:#ef4444; }
+
+/* ---- โหมดเลือกหลายวันในปฏิทินรายเดือน ---- */
+.dcal-cell.ticked { background: var(--accent); border-color: var(--accent); }
+.dcal-cell.ticked .dcal-num, .dcal-cell.ticked .dcal-ev, .dcal-cell.ticked .dcal-mini { color: #fff; }
+.dcal-cell.ticked .dcal-load { background: rgba(255,255,255,.6); }
+.dcal-multisum { border: 1px solid var(--accent); background: rgba(59,130,246,.09); border-radius: 10px;
+  padding: 11px 13px; margin-bottom: 10px; font-size: 12.5px; }
+.dcal-multisum.empty { border-style: dashed; background: transparent; color: var(--text2); }
+.dcal-multisum .ms-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dcal-multisum .ms-hd .btn-xs { margin-left: auto; }
+.dcal-multisum .ms-note { font-size: 11px; color: var(--text2); margin-top: 6px; line-height: 1.55; }
+.dcal-multisum .ms-warn { font-size: 11.5px; color: #ef4444; background: rgba(239,68,68,.1);
+  border-radius: 7px; padding: 7px 10px; margin-top: 8px; line-height: 1.5; }
+.dcal-multisum .ms-free { font-size: 12px; font-weight: 600; color: #22c55e; margin: 9px 0 5px; }
+.dcal-multisum .ms-list { border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.dcal-multisum .ms-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-bottom: 1px solid var(--border-light); flex-wrap: wrap; }
+.dcal-multisum .ms-row:last-child { border-bottom: 0; }
+.dcal-multisum .ms-row span { flex: 1; min-width: 0; }
+.dcal-multisum .ms-row b { display: block; font-size: 12.5px; }
+.dcal-multisum .ms-row i { display: block; font-style: normal; font-size: 10.5px; color: var(--text3); font-family: monospace; }

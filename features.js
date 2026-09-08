@@ -2895,7 +2895,9 @@ function publishDemoCatalog() {
           return {
             start: s ? s.toISOString().slice(0, 10) : l.lentDate,
             end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate),
-            borrower: l.borrower || '', purpose: l.purpose || '', approver: l.approver || ''
+            borrower: l.borrower || '', purpose: l.purpose || '',
+            // publish เป็นชื่อ approver เพื่อให้ตรงกับที่ demo-staff.html ใช้อยู่แล้ว
+            approver: l.keyedBy || l.approver || ''
           };
         });
       return {
@@ -2978,6 +2980,21 @@ var demoReadyFilter = 'ready'; // 'ready' (มีหมายเลขเคร�
 // เครื่องที่สภาพไม่พร้อมโชว์) — ยังอยู่ในระบบและให้ยืมแบบคีย์เองได้ตามปกติ แค่ไม่โผล่ใน demo-request.html
 // ค่าเริ่มต้นคือ "โชว์" เพื่อไม่ให้เครื่องเดิมที่ไม่มีฟิลด์นี้หายจากหน้าลูกค้าทันทีที่ deploy
 function demoIsCustomerVisible(d) { return !d || d.customerVisible !== false; }
+
+// ---- ผู้คีย์เบิก ----
+// ผู้ยืมคือลูกค้า ส่วนคนที่คีย์เบิกออกจากคลังต้องเป็นทีมงานเสมอ เพราะลูกค้าไม่มีสิทธิ์ในระบบคลัง
+// พอถึงกำหนดคืนจึงต้องตามคนคีย์ ไม่ใช่ตามลูกค้า — เก็บชื่อไว้ตั้งแต่ตอนปล่อยยืม
+function _demoDefaultKeyer() {
+  try { var last = localStorage.getItem('v7_demoKeyer'); if (last) return last; } catch (e) {}
+  if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) return CURRENT_USER.displayName || CURRENT_USER.email || '';
+  return '';
+}
+function _demoRememberKeyer(n) { try { localStorage.setItem('v7_demoKeyer', n); } catch (e) {} }
+// ชื่อผู้คีย์ของการยืมนี้ — ข้อมูลเก่าก่อนมีฟิลด์นี้จะว่าง ให้บอกตรงๆ ว่าไม่ได้บันทึกไว้
+function _dcKeyer(b) {
+  var n = (b && (b.keyedBy || b.approver) || '').trim();
+  return n ? sanitize(n) : '<span style="color:#f59e0b">ไม่ได้บันทึกผู้คีย์</span>';
+}
 
 // ================================================================
 // รับการแก้ไขที่ทีมงานทำจากหน้า demo-staff.html เข้ามาลงข้อมูลตัวจริง
@@ -4797,7 +4814,8 @@ function demoCardHtml(d, now, dupRentals) {
   // ---- กล่องข้อมูลการยืม แยกพื้นหลังให้เห็นชัดว่าเป็นสถานะปัจจุบัน ไม่ใช่ข้อมูลถาวรของเครื่อง ----
   if (eff === 'lent' || eff === 'reserved') {
     h += '<div class="demo-lentbox">';
-    h += '<div class="demo-lentrow"><b>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '—')) + '</b>';
+    h += '<div class="demo-lentrow"><b>👤 ' + (dd ? sanitize(dd.name) : sanitize(d.borrower || '—')) + '</b>' +
+      '<span class="demo-idpc"><i>ผู้คีย์</i>' + _dcKeyer(d) + '</span>';
     if ((d.jobNo || '').trim()) h += '<span class="demo-idpc"><i>ใบจอง</i>' + qcopyHtml(d.jobNo) + '</span>';
     if ((d.refNo || '').trim()) h += '<span class="demo-idpc"><i>ใบเบิก</i>' + qcopyHtml(d.refNo) + '</span>';
     h += '<button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
@@ -5413,6 +5431,63 @@ var demoCalForceTL = false;       // บนจอแคบ: บังคับ�
 
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง / ตอนสั่งพิมพ์ — ถ้าเชื่อค่าดิบ
 // จะเด้งไปโหมดมือถือทั้งที่อยู่บนเดสก์ท็อป จึงถือว่า "วัดไม่ได้ = ไม่แคบ" และอ่าน clientWidth เป็นหลัก
+// ---- โหมดเลือกหลายวันในมุมมองรายเดือน ----
+// ปกติกดวัน = เปิดรายละเอียดวันนั้น · กดปุ่มนี้ก่อนถึงจะเปลี่ยนเป็นติ๊กเลือกวัน
+var demoCalMultiDay = false, demoCalPickDays = [];
+function demoCalToggleMultiDay() {
+  demoCalMultiDay = !demoCalMultiDay;
+  demoCalPickDays = [];
+  demoCalOpen = null;
+  render();
+}
+function demoCalDayClick(iso) {
+  if (!demoCalMultiDay) { demoCalToggleOpen('day:' + iso); return; }
+  var i = demoCalPickDays.indexOf(iso);
+  if (i === -1) demoCalPickDays.push(iso); else demoCalPickDays.splice(i, 1);
+  demoCalPickDays.sort();
+  render();
+}
+function demoCalClearDays() { demoCalPickDays = []; render(); }
+// เครื่องที่ว่าง "ตลอดช่วง" ที่ติ๊กไว้ — ต้องไม่ชนการยืมไหนเลยในช่วงนั้น ถึงจะคีย์ยืมยาวรวดเดียวได้
+function _dcFreeThroughout(from, to, units, bks) {
+  return units.filter(function(d) {
+    return !bks.some(function(b) {
+      return b.unitId === d.id && b.status !== 'returned' && b.s <= to && from <= b.e;
+    });
+  });
+}
+function _dcMultiSummary(units, bks) {
+  if (!demoCalMultiDay) return '';
+  if (!demoCalPickDays.length) {
+    return '<div class="dcal-multisum empty">🗓️ โหมดเลือกหลายวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก กดซ้ำเพื่อเอาออก</div>';
+  }
+  var a = demoCalPickDays[0], z = demoCalPickDays[demoCalPickDays.length - 1];
+  var from = _dcFromISO(a), to = _dcFromISO(z);
+  var span = Math.round((to - from) / 86400000) + 1;
+  var free = _dcFreeThroughout(from, to, units, bks);
+  var h = '<div class="dcal-multisum"><div class="ms-hd"><b>ติ๊กไว้ ' + demoCalPickDays.length + ' วัน</b> · ช่วง ' +
+    _dcFmt(from) + ' – ' + _dcFmt(to) + ' รวม <b>' + span + ' วัน</b>' +
+    '<button class="btn-xs" onclick="demoCalClearDays()">ล้างที่เลือก</button></div>';
+  if (span > demoCalPickDays.length) {
+    h += '<div class="ms-note">วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย — เครื่องถูกยืมต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้</div>';
+  }
+  if (!free.length) {
+    h += '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div></div>';
+    return h;
+  }
+  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + free.length + '</b> เครื่อง — กดเพื่อคีย์ยืมพร้อมวันที่</div>';
+  h += '<div class="ms-list">';
+  free.slice(0, 8).forEach(function(d) {
+    h += '<div class="ms-row"><span><b>' + sanitize(d.name || '-') + '</b>' +
+      '<i>เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(d.serialNumber || '—') + '</i></span>' +
+      '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\',\'' + _dcThai(from) + '\',\'' + _dcThai(to) + '\')">📤 จองช่วงนี้</button></div>';
+  });
+  h += '</div>';
+  if (free.length > 8) h += '<div class="ms-note">…และอีก ' + (free.length - 8) + ' เครื่อง</div>';
+  return h + '</div>';
+}
+function _dcFromISO(iso) { var p = String(iso).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+
 function demoCalIsNarrow() {
   var w = document.documentElement.clientWidth || window.innerWidth || 0;
   return w > 0 && w < 760;
@@ -5483,7 +5558,8 @@ function demoCalBookings() {
     var e = _dcSaneDate(l.actualReturnDate) || _dcSaneDate(l.returnDate) || s;
     if (e < s) e = s;
     out.push({ id: l.id, unitId: l.demoId, s: s, e: e, jobNo: (l.jobNo || '').trim(), refNo: (l.refNo || '').trim(),
-      borrower: l.borrower || '', dealerId: l.dealerId || '', purpose: l.purpose || '', status: l.status });
+      borrower: l.borrower || '', dealerId: l.dealerId || '', purpose: l.purpose || '',
+      keyedBy: l.keyedBy || l.approver || '', status: l.status });
   });
   return out;
 }
@@ -5679,8 +5755,11 @@ function _dcLateStrip(bks) {
   var h = '<div class="dcal-late"><b>⚠️ เลยกำหนดคืน ' + late.length + ' เครื่อง</b>';
   late.slice(0, 12).forEach(function(b) {
     var d = byId[b.unitId];
+    // ใส่ชื่อผู้คีย์ไว้ด้วย เพราะแถบนี้คือรายการที่ต้องไปตาม และคนที่ตามได้คือคนคีย์ ไม่ใช่ลูกค้า
+    var kb = (b.keyedBy || '').trim();
     h += '<button class="lz" onclick="demoCalSetSearch(\'' + sanitize(d.rentalDbNo || d.name || '') .replace(/'/g, "\\'") + '\')">' +
-      sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(_dcWhoName(b)) + ' · เลย ' + Math.round((today - b.e) / 86400000) + ' วัน</button>';
+      sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(_dcWhoName(b)) +
+      (kb ? ' · คีย์โดย ' + sanitize(kb) : '') + ' · เลย ' + Math.round((today - b.e) / 86400000) + ' วัน</button>';
   });
   if (late.length > 12) h += '<span style="font-size:11px;color:var(--text2)">…และอีก ' + (late.length - 12) + '</span>';
   return h + '</div>';
@@ -5784,6 +5863,7 @@ function _dcDrillUnit(unitId) {
   h += '<div><span class="k">สถานะ</span><b>' + (DEMO_STATUS_META[getDemoEffectiveStatus(d)] || {}).label + '</b></div>';
   if (cur) {
     h += '<div><span class="k">ผู้ยืม</span><b>' + _dcBorrower(cur) + '</b></div>';
+    h += '<div><span class="k">ผู้คีย์เบิก</span><b>' + _dcKeyer(cur) + '</b></div>';
     if (cur.jobNo) h += '<div><span class="k">ใบจอง</span><b>' + qcopyHtml(cur.jobNo) + '</b></div>';
     if (cur.refNo) h += '<div><span class="k">ใบเบิก</span><b>' + qcopyHtml(cur.refNo) + '</b></div>';
     h += '<div><span class="k">ช่วงยืม</span><b>' + _dcFmt(cur.s) + ' – ' + _dcFmt(cur.e) + '</b></div>';
@@ -5830,6 +5910,7 @@ function _dcDrillJob(jobNo) {
     '</div>' + _dcCloseBtn() + '</div>';
   h += '<div class="dcal-kv">';
   h += '<div><span class="k">ผู้ยืม</span><b>' + _dcBorrower(f) + '</b></div>';
+  h += '<div><span class="k">ผู้คีย์เบิก</span><b>' + _dcKeyer(f) + '</b></div>';
   h += '<div><span class="k">ส่ง</span><b>' + _dcFmt(f.s) + '</b></div>';
   h += '<div><span class="k">กำหนดคืน</span><b>' + _dcFmt(f.e) + '</b></div>';
   h += '<div><span class="k">รวม</span><b>' + (Math.round((f.e - f.s) / 86400000) + 1) + ' วัน</b></div>';
@@ -5890,7 +5971,8 @@ function _dcDrillDay(isoStr) {
       var g = jobs[j], b0 = g[0].b;
       h += '<tr style="cursor:pointer" onclick="demoCalToggleOpen(\'' + (j === '_' ? 'unit:' + g[0].d.id : 'job:' + j) + '\')">' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);font-family:monospace">' + (j === '_' ? '—' : sanitize(j)) + '</td>' +
-        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcBorrower(b0) + '</td>' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcBorrower(b0) +
+        '<div style="font-size:10px;color:var(--text3)">คีย์โดย ' + _dcKeyer(b0) + '</div></td>' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' +
         (b0.purpose ? sanitize(b0.purpose) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') + '</td>' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + g.length + ' เครื่อง — ' + sanitize(g[0].d.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
@@ -6104,9 +6186,12 @@ function _dcMobileList(r, units, bks, byUnit) {
     var s = '<div class="dcal-msec ' + (cls || '') + '"><div class="mst">' + title + ' <b>' + list.length + '</b></div>';
     list.slice(0, 20).forEach(function(b) {
       var d = byId[b.unitId]; if (!d) return;
+      // ใส่ชื่อผู้คีย์ในรายการที่ต้องตาม — คนที่ไปคีย์คืนเข้าคลังได้คือทีมงานคนนั้น ไม่ใช่ลูกค้า
+      var kb = (b.keyedBy || '').trim();
       s += '<button class="dcal-mrow" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' +
         '<span class="mn"><b>' + sanitize(d.model || d.name || '-') + '</b>' +
-        '<i>เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(_dcWhoName(b)) + '</i></span>' +
+        '<i>เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(_dcWhoName(b)) +
+        (kb ? ' · คีย์โดย ' + sanitize(kb) : '') + '</i></span>' +
         '<span class="mr">' + fmtRight(b) + '</span></button>';
     });
     if (list.length > 20) s += '<div style="font-size:11px;color:var(--text3);padding:4px 2px">…และอีก ' + (list.length - 20) + '</div>';
@@ -6154,6 +6239,8 @@ function _dcViewMonth() {
   h += '<b style="font-size:14px">' + getMonthName(mo) + ' ' + y + '</b>';
   h += '<button class="btn bsm bo" onclick="demoCalChangeMonth(1)">▶</button>';
   if (demoCalMonthOffset !== 0) h += '<button class="btn-xs" onclick="demoCalMonthOffset=0;render()">เดือนนี้</button>';
+  h += '<button class="demo-filter-chip ' + (demoCalMultiDay ? 'act' : '') + '" onclick="demoCalToggleMultiDay()">' +
+    (demoCalMultiDay ? '✓ เสร็จแล้ว' : '🗓️ เลือกหลายวัน') + '</button>';
   h += '<span style="margin-left:auto;font-size:11.5px;color:var(--text2)">' + units.length + ' เครื่องในมุมมองนี้</span></div>';
 
   if (demoCalPicked.length) {
@@ -6185,8 +6272,11 @@ function _dcViewMonth() {
       h += '<button class="more" onclick="demoCalTogglePicker()">รุ่นอื่น…</button></div>';
     }
   }
-  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วจองได้จากตรงนั้นเลย</div>';
-  if (demoCalOpen) h += _dcDrill();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">' +
+    (demoCalMultiDay ? '👆 กดกล่องวันเพื่อติ๊กเลือก — เลือกครบแล้วเลื่อนลงไปกดจองเครื่องที่ว่างตลอดช่วง'
+                     : '👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วจองได้จากตรงนั้นเลย') + '</div>';
+  if (demoCalOpen && !demoCalMultiDay) h += _dcDrill();
+  h += _dcMultiSummary(units, bks);
 
   // เตรียมข้อมูลรายวันไว้ล่วงหน้า — คิดใหม่ทุกช่องจะกลายเป็น 30×71×จำนวนการยืม
   var act = bks.filter(function(b) { return b.status !== 'returned'; });
@@ -6218,10 +6308,12 @@ function _dcViewMonth() {
     var isToday = cur.getTime() === todayD.getTime();
     var sets = null;
     if (demoCalPicked.length) sets = Math.min.apply(null, demoCalPicked.map(function(m) { return _dcFreeUnitsOn(m, cur, bks, basePool).length; }));
-    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (demoCalOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    var ticked = demoCalMultiDay && demoCalPickDays.indexOf(isoS) !== -1;
+    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (demoCalOpen === k && !demoCalMultiDay ? ' on' : '') +
+      (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit')) + (ticked ? ' ticked' : '');
     if (sets === null && full && modelKeys.length && full / modelKeys.length >= 0.5) cls += ' tight';
-    h += '<button class="' + cls + '" onclick="demoCalToggleOpen(\'' + k + '\')">' +
-      '<span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
+    h += '<button class="' + cls + '" onclick="demoCalDayClick(\'' + isoS + '\')">' +
+      '<span class="dcal-num">' + d2 + (isToday ? ' •' : '') + (ticked ? ' ✓' : '') + '</span>';
     if (sets === null) {
       // วันที่ไม่มีอะไรเกิดขึ้นปล่อยว่างไว้ — วันที่มีของเข้าออกจะได้เด่นขึ้นมาเอง
       if (nBack) h += '<span class="dcal-ev back">↩ คืน ' + nBack + '</span>';
@@ -6813,6 +6905,11 @@ function showLendDemoM(demoId, startDate, endDate) {
   dealers.forEach(function(d) { h += '<option value="' + d.id + '">' + sanitize(d.name) + '</option>'; });
   h += '</select></div>';
   h += '<div class="fm-group"><label>👤 ผู้ยืม (ถ้าไม่ใช่ Dealer)</label><input type="text" id="dm_borrower" class="fm-input" placeholder="ชื่อผู้ยืม"></div>';
+  // ผู้ยืมคือลูกค้า แต่คนที่คีย์เบิกออกจากคลังต้องเป็นทีมงานเสมอ — เก็บไว้เพื่อรู้ว่าตอนครบกำหนด
+  // ต้องตามใคร ให้ไปคีย์คืนเข้าคลัง ไม่ใช่ไปตามลูกค้าซึ่งไม่มีสิทธิ์คีย์ในระบบคลังอยู่แล้ว
+  h += '<div class="fm-group"><label>🧑‍💼 ผู้คีย์เบิก (ทีมงาน) *</label><input type="text" id="dm_keyedby" class="fm-input" value="' +
+    sanitize(_demoDefaultKeyer()) + '" placeholder="ชื่อ-นามสกุล พนักงานที่คีย์เบิก">' +
+    '<div class="hint">คนละคนกับผู้ยืม — พอถึงกำหนดคืน ระบบจะได้บอกได้ว่าต้องตามใครไปคีย์คืนเข้าคลัง</div></div>';
   h += '<div class="fm-group"><label>🎯 ใช้งานกับ / End User / วัตถุประสงค์</label><input type="text" id="dm_purpose" class="fm-input" placeholder="เช่น สาธิตให้บริษัท ABC ดู / สำรวจพื้นที่ก่อสร้าง"></div>';
   h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + sanitize(startDate || _td()) + '"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
   h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" value="' + sanitize(endDate || '') + '" placeholder="DD/MM/YYYY"></div>';
@@ -6834,6 +6931,9 @@ function lendDemo(demoId) {
   var lentDate = (document.getElementById('dm_lent').value || '').trim() || _td();
   var returnDate = (document.getElementById('dm_return').value || '').trim();
   var note = (document.getElementById('dm_lnote').value || '').trim();
+  var keyedBy = (document.getElementById('dm_keyedby') ? document.getElementById('dm_keyedby').value : '').trim();
+  if (!keyedBy) { toast('⚠️ ใส่ชื่อผู้คีย์เบิกก่อน — ต้องรู้ว่าตอนครบกำหนดจะตามใครไปคีย์คืน'); return; }
+  _demoRememberKeyer(keyedBy);
 
   // เครื่องหลัก + เครื่องที่ติ๊กเพิ่มในใบงานเดียวกัน ทุกตัวใช้ผู้ยืม/วันที่/เลขใบงานชุดเดียวกันหมด
   var targetIds = [demoId];
@@ -6855,6 +6955,7 @@ function lendDemo(demoId) {
         items[i].lentDate = lentDate;
         items[i].returnDate = returnDate;
         items[i].note = note;
+        items[i].keyedBy = keyedBy;
         demoName = items[i].name;
         break;
       }
@@ -6862,7 +6963,7 @@ function lendDemo(demoId) {
     loans.push({
       id: gid(), demoId: id, demoName: demoName,
       jobNo: jobNo, refNo: refNo,
-      dealerId: dealerId, borrower: borrower, purpose: purpose,
+      dealerId: dealerId, borrower: borrower, purpose: purpose, keyedBy: keyedBy,
       lentDate: lentDate, returnDate: returnDate, actualReturnDate: '',
       note: note, status: 'active', created: _nw()
     });

@@ -314,6 +314,25 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-ev.out { color:var(--warn); }
 .dcal-ev.full { color:var(--bad); }
 .dcal-cell.tight { background:var(--bad-soft); border-color:var(--bad); }
+.dcal-cell.ticked { background:var(--accent); border-color:var(--accent); }
+.dcal-cell.ticked .dcal-num, .dcal-cell.ticked .dcal-ev, .dcal-cell.ticked .dcal-mini { color:var(--accent-ink); }
+.dcal-cell.ticked .dcal-load { background:rgba(255,255,255,.6); }
+.dcal-multisum { border:1px solid var(--accent); background:var(--accent-soft); border-radius:10px;
+  padding:11px 13px; margin-bottom:10px; font-size:12.5px; }
+.dcal-multisum.empty { border-style:dashed; background:transparent; color:var(--text2); }
+.dcal-multisum .ms-hd { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dcal-multisum .ms-hd button { margin-left:auto; }
+.dcal-multisum .ms-note { font-size:11px; color:var(--text2); margin-top:6px; line-height:1.55; }
+.dcal-multisum .ms-warn { font-size:11.5px; color:var(--bad); background:var(--bad-soft);
+  border-radius:7px; padding:7px 10px; margin-top:8px; line-height:1.5; }
+.dcal-multisum .ms-free { font-size:12px; font-weight:600; color:var(--good); margin:9px 0 5px; }
+.dcal-multisum .ms-list { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.dcal-multisum .ms-row { display:flex; align-items:center; gap:10px; padding:7px 10px;
+  border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.dcal-multisum .ms-row:last-child { border-bottom:0; }
+.dcal-multisum .ms-row span { flex:1; min-width:0; }
+.dcal-multisum .ms-row b { display:block; font-size:12.5px; }
+.dcal-multisum .ms-row i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
 .dcal-load { background:var(--bad); }
 </style>
 </head>
@@ -923,6 +942,51 @@ var scSearch = '', scGrouped = true, scExpanded = {}, scHideFree = true;
 var scSort = 'busy', scColorBy = 'stat', scDense = false, scForceTL = false;
 var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16','#06b6d4','#f43f5e'];
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
+// ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับแอปหลัก) ----
+var scMultiDay = false, scPickDays = [];
+function scToggleMultiDay() { scMultiDay = !scMultiDay; scPickDays = []; scOpen = null; renderStaffCalendar(); }
+function scDayClick(iso) {
+  if (!scMultiDay) { scToggleOpen('day:' + iso); return; }
+  var i = scPickDays.indexOf(iso);
+  if (i === -1) scPickDays.push(iso); else scPickDays.splice(i, 1);
+  scPickDays.sort();
+  renderStaffCalendar();
+}
+function scClearDays() { scPickDays = []; renderStaffCalendar(); }
+// เครื่องที่ว่าง "ตลอดช่วง" ที่ติ๊กไว้ ถึงจะคีย์ยืมยาวรวดเดียวได้
+function _scFreeThroughout(from, to, units, bks) {
+  return units.filter(function(u) {
+    return !bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= to && from <= b.e; });
+  });
+}
+function _scMultiSummary(units, bks) {
+  if (!scMultiDay) return '';
+  if (!scPickDays.length) {
+    return '<div class="dcal-multisum empty">🗓️ โหมดเลือกหลายวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก กดซ้ำเพื่อเอาออก</div>';
+  }
+  var from = _scFromIso(scPickDays[0]), to = _scFromIso(scPickDays[scPickDays.length - 1]);
+  var span = Math.round((to - from) / 86400000) + 1;
+  var free = _scFreeThroughout(from, to, units, bks);
+  var h = '<div class="dcal-multisum"><div class="ms-hd"><b>ติ๊กไว้ ' + scPickDays.length + ' วัน</b> · ช่วง ' +
+    _scFmt(from) + ' – ' + _scFmt(to) + ' รวม <b>' + span + ' วัน</b>' +
+    '<button class="btn btn-ghost btn-sm" onclick="scClearDays()">ล้างที่เลือก</button></div>';
+  if (span > scPickDays.length) {
+    h += '<div class="ms-note">วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย — เครื่องถูกยืมต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้</div>';
+  }
+  if (!free.length) {
+    return h + '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div></div>';
+  }
+  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + free.length + '</b> เครื่อง — กดเพื่อคีย์ยืมพร้อมวันที่</div><div class="ms-list">';
+  free.slice(0, 8).forEach(function(u) {
+    h += '<div class="ms-row"><span><b>' + esc(u.model || u.name || '-') + '</b>' +
+      '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i></span>' +
+      '<button class="btn btn-primary btn-sm" onclick="scBook(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')">📤 คีย์ยืมช่วงนี้</button></div>';
+  });
+  h += '</div>';
+  if (free.length > 8) h += '<div class="ms-note">…และอีก ' + (free.length - 8) + ' เครื่อง</div>';
+  return h + '</div>';
+}
+
 function scIsNarrow() {
   var w = document.documentElement.clientWidth || window.innerWidth || 0;
   return w > 0 && w < 760;
@@ -1538,6 +1602,7 @@ function _scViewMonth() {
   h += '<b style="font-size:14px">' + SC_MONTHS[mo] + ' ' + y + '</b>';
   h += '<button class="dcal-vbtn" onclick="scMonthOffset++;scOpen=null;renderStaffCalendar()">▶</button>';
   if (scMonthOffset !== 0) h += '<button class="dcal-vbtn" onclick="scMonthOffset=0;scOpen=null;renderStaffCalendar()">เดือนนี้</button>';
+  h += '<button class="dcal-vbtn' + (scMultiDay ? ' act' : '') + '" onclick="scToggleMultiDay()">' + (scMultiDay ? '✓ เสร็จแล้ว' : '🗓️ เลือกหลายวัน') + '</button>';
   h += '<span style="margin-left:auto;font-size:11.5px;color:var(--text2)">' + units.length + ' เครื่องในมุมมองนี้</span></div>';
   if (scPicked.length) {
     var fits = [], maxSet = 0;
@@ -1568,8 +1633,11 @@ function _scViewMonth() {
       h += '<button class="more" onclick="scTogglePicker(event)">รุ่นอื่น…</button></div>';
     }
   }
-  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย</div>';
-  if (scOpen) h += _scDrill();
+  h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">' +
+    (scMultiDay ? '👆 กดกล่องวันเพื่อติ๊กเลือก — เลือกครบแล้วเลื่อนลงไปคีย์ยืมเครื่องที่ว่างตลอดช่วง'
+                : '👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย') + '</div>';
+  if (scOpen && !scMultiDay) h += _scDrill();
+  h += _scMultiSummary(units, bks);
   // เตรียมข้อมูลรายวันล่วงหน้า ไม่งั้นคิดใหม่ทุกช่องจะกลายเป็น 30×เครื่อง×การยืม
   var act = bks.filter(function(b) { return b.status !== 'returned'; });
   var backOn = {}, outOn = {};
@@ -1593,9 +1661,11 @@ function _scViewMonth() {
     var nBack = backOn[iso] || 0, nOut = outOn[iso] || 0;
     var isToday = cur.getTime() === todayD.getTime();
     var sets = scPicked.length ? Math.min.apply(null, scPicked.map(function(m) { return _scFreeOn(m, cur, bks, pool).length; })) : null;
-    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (scOpen === k ? ' on' : '') + (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit'));
+    var ticked = scMultiDay && scPickDays.indexOf(iso) !== -1;
+    var cls = 'dcal-cell' + (isToday ? ' today' : '') + (scOpen === k && !scMultiDay ? ' on' : '') +
+      (sets === null ? '' : (sets > 0 ? ' fits' : ' nofit')) + (ticked ? ' ticked' : '');
     if (sets === null && full && modelKeys.length && full / modelKeys.length >= 0.5) cls += ' tight';
-    h += '<button class="' + cls + '" onclick="scToggleOpen(\'' + k + '\')"><span class="dcal-num">' + d2 + (isToday ? ' •' : '') + '</span>';
+    h += '<button class="' + cls + '" onclick="scDayClick(\'' + iso + '\')"><span class="dcal-num">' + d2 + (isToday ? ' •' : '') + (ticked ? ' ✓' : '') + '</span>';
     if (sets === null) {
       // วันที่ไม่มีอะไรเกิดขึ้นปล่อยว่าง — วันที่มีของเข้าออกจะได้เด่นขึ้นมาเอง
       if (nBack) h += '<span class="dcal-ev back">↩ คืน ' + nBack + '</span>';
