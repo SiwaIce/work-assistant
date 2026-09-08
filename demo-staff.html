@@ -143,6 +143,21 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   margin:16px 0 9px; display:flex; align-items:center; gap:8px; }
 .sm-sec::after { content:''; flex:1; height:1px; background:var(--border); }
 .sm-sec:first-child { margin-top:0; }
+/* ประวัติใบยืม — เส้นแนวตั้งซ้ายอ่านเป็นลำดับเวลา ใหม่สุดอยู่บน */
+.sc-log { margin-top:10px; border-left:2px solid var(--border); padding-left:12px; }
+.sc-log .lg-hd { font-size:11px; font-weight:700; color:var(--text2); letter-spacing:.3px; margin-bottom:7px; }
+.sc-log .lg-hd span { font-weight:600; color:var(--text3); }
+.sc-log .lg-empty { font-size:11px; color:var(--text3); line-height:1.55; }
+.sc-log .lg-row { display:flex; gap:8px; align-items:flex-start; padding:5px 0; border-top:1px solid var(--border); }
+.sc-log .lg-row:first-of-type { border-top:0; }
+.sc-log .lg-ic { flex:0 0 auto; font-size:13px; line-height:1.35; }
+.sc-log .lg-row > div { min-width:0; flex:1; }
+.sc-log .lg-t { font-size:12px; line-height:1.45; word-break:break-word; }
+.sc-log .lg-m { font-size:10px; color:var(--text3); font-variant-numeric:tabular-nums; margin-top:1px; }
+.sc-kv { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:4px; }
+.sc-kv > div { background:var(--surface-2); border-radius:8px; padding:7px 10px; min-width:0; }
+.sc-kv span { display:block; font-size:10px; color:var(--text3); margin-bottom:2px; }
+.sc-kv b { font-size:12.5px; word-break:break-word; }
 .sm-toggles { display:flex; gap:7px; flex-wrap:wrap; }
 .sm-tg { position:relative; display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12px; font-weight:600;
   padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text3); }
@@ -604,6 +619,7 @@ function renderPendingTab() {
       '<div class="body"><div class="co">' + esc(req.companyName) + ' <span class="pill pill-warn">🟡 รออนุมัติ</span></div>' +
       '<div class="meta">👤 ' + esc(req.contactName) + ' · 📞 ' + esc(req.phone) + (req.email ? ' · ' + esc(req.email) : '') + '<br>' + itemsTxt + (req.purpose ? '<br>📝 ' + esc(req.purpose) : '') + '</div>' + conflictHtml + '</div>' +
       '<div class="actions">' +
+      '<input type="text" id="apprJob_' + req._id + '" placeholder="เลขที่ใบจอง" title="เลขใบจองจากระบบคลัง — ใส่ไว้จะตามของกลับได้ตรงใบ" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:110px">' +
       '<input type="text" id="apprName_' + req._id + '" placeholder="ชื่อผู้ทำเรื่อง/คีย์เบิก" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:150px">' +
       '<select id="apprDest_' + req._id + '" style="font-size:12.5px;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)">' +
       '<option value="customer">📍 ส่งที่อยู่ลูกค้า</option><option value="office">🏢 รับที่บริษัท</option><option value="event">🎪 ส่งไปงาน</option></select>' +
@@ -618,6 +634,8 @@ function approveRequest(reqId) {
   if (!req) return;
   var approver = (document.getElementById('apprName_' + reqId).value || '').trim();
   if (!approver) { alert('กรอกชื่อผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  var jobNo = (document.getElementById('apprJob_' + reqId).value || '').trim();
+  if (!jobNo && !confirm('ยังไม่ได้ใส่เลขที่ใบจอง\n\nไม่ใส่ก็อนุมัติได้ แต่เวลาตามของกลับจะอ้างอิงกับระบบคลังไม่ได้\n\nกด OK เพื่ออนุมัติโดยไม่มีเลขใบจอง')) return;
   var conflicts = findConflictsFor(req);
   if (conflicts.length) {
     var names = conflicts.map(function(c) { return c.companyName; }).join(', ');
@@ -625,12 +643,14 @@ function approveRequest(reqId) {
   }
   var batch = db.batch();
   var reqRef = db.collection('publicDemoRequests').doc(reqId);
-  batch.update(reqRef, { status: 'approved', approver: approver });
+  batch.update(reqRef, { status: 'approved', approver: approver, jobNo: jobNo });
   req.items.forEach(function(it) {
     var loanRef = db.collection('publicDemoLoans').doc();
     batch.set(loanRef, {
       unitId: it.unitId, model: it.model, label: it.label, borrower: req.companyName, purpose: req.purpose || '',
-      start: it.start, end: it.end, actualReturnDate: '', approver: approver, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      start: it.start, end: it.end, actualReturnDate: '', approver: approver, jobNo: jobNo,
+      status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      events: [_scEv('created', approver, req.companyName + ' · ' + it.start + ' → ' + it.end + (jobNo ? ' · ใบจอง ' + jobNo : ''))]
     });
   });
   conflicts.forEach(function(c) { batch.update(db.collection('publicDemoRequests').doc(c._id), { status: 'rejected' }); });
@@ -661,12 +681,158 @@ function returnRowHtml(cls, l) {
   var daysTxt = l.end < _td() ? 'เลยมาแล้ว ' + daysBetween(l.end, _td()) + ' วัน' : 'อีก ' + daysBetween(_td(), l.end) + ' วัน';
   return '<div class="rt-item ' + cls + '"><div class="icon">' + (u ? '🚁' : '🚁') + '</div>' +
     '<div class="body"><div style="font-weight:700">' + esc(l.model) + ' (' + esc(l.label) + ')</div>' +
-    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + l.end + ' (' + daysTxt + ')</div></div>' +
-    '<div class="actions"><button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l._id + '\')">✅ รับคืนแล้ว</button></div></div>';
+    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + l.end + ' (' + daysTxt + ')' +
+    '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
+    (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div></div>' +
+    '<div class="actions">' +
+    '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l._id + '\')">✅ รับคืนแล้ว</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + l._id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l._id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ประวัติใบยืม">📜</button>' +
+    '</div></div>';
 }
 function markLoanReturned(loanId) {
-  db.collection('publicDemoLoans').doc(loanId).update({ status: 'returned', actualReturnDate: _td() })
-    .then(function() { toastMock('✅ รับคืนแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+  db.collection('publicDemoLoans').doc(loanId).update({
+    status: 'returned', actualReturnDate: _td(),
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', _lastEditor(), 'รับคืนเข้าคลัง ' + _td()))
+  }).then(function() { toastMock('✅ รับคืนแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ================================================================
+// วงจรชีวิตของใบยืม — ต่อเวลา / โอนผู้ยืม / เปลี่ยนผู้คีย์ / ประวัติ
+//
+// ทุกอย่างเขียนต่อท้าย events[] ด้วย arrayUnion ไม่อ่านมาเขียนทับทั้งก้อน เพราะหน้านี้เปิดพร้อมกันหลายคนได้
+// ถ้าอ่าน-แก้-เขียนทับ คนที่กดทีหลังจะลบเหตุการณ์ของคนที่กดก่อนหน้าทิ้งโดยไม่รู้ตัว
+// ================================================================
+var SC_EV_META = {
+  created:  { icon: '📤', label: 'อนุมัติ/ปล่อยยืม' },
+  extended: { icon: '⏩', label: 'เลื่อนกำหนดคืน' },
+  borrower: { icon: '🔄', label: 'โอนผู้ยืม' },
+  keyer:    { icon: '🧑‍💼', label: 'เปลี่ยนผู้คีย์' },
+  returned: { icon: '✅', label: 'รับคืน' }
+};
+function _scEv(type, by, text) {
+  return { at: new Date().toISOString(), type: type, by: by || '', text: text || '' };
+}
+function _scStamp(iso) {
+  var d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d.getTime())) return '—';
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function scLoanLogHtml(l) {
+  var ev = (l && l.events) || [];
+  if (!ev.length) {
+    return '<div class="sc-log"><div class="lg-hd">📜 ประวัติใบยืม</div>' +
+      '<div class="lg-empty">ใบนี้อนุมัติไว้ก่อนมีระบบประวัติ — การเปลี่ยนแปลงหลังจากนี้จะถูกบันทึกไว้ทั้งหมด</div></div>';
+  }
+  var h = '<div class="sc-log"><div class="lg-hd">📜 ประวัติใบยืม <span>' + ev.length + ' รายการ</span></div>';
+  // events[] ถูกต่อท้ายเสมอ ลำดับในอาเรย์จึงเรียงตามเวลาอยู่แล้ว — reverse ก่อนให้ใหม่สุดขึ้นก่อน
+  // แล้วค่อย sort ตามเวลา (sort ของ JS เสถียร) เหตุการณ์ที่เกิดวินาทีเดียวกันจะได้ไม่สลับกลับเป็นเก่าขึ้นก่อน
+  ev.slice().reverse().sort(function(a, b) { return String(b.at || '').localeCompare(String(a.at || '')); }).forEach(function(e) {
+    var m = SC_EV_META[e.type] || { icon: '•', label: e.type };
+    h += '<div class="lg-row"><span class="lg-ic">' + m.icon + '</span><div>' +
+      '<div class="lg-t"><b>' + m.label + '</b>' + (e.text ? ' — ' + esc(e.text) : '') + '</div>' +
+      '<div class="lg-m">' + _scStamp(e.at) + (e.by ? ' · โดย ' + esc(e.by) : '') + '</div></div></div>';
+  });
+  return h + '</div>';
+}
+function _scLoan(loanId) { return LOANS.filter(function(x) { return x._id === loanId; })[0] || null; }
+
+function openLoanLogM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) { alert('ไม่พบใบยืมนี้'); return; }
+  var h = '<div class="sm-sec">' + esc(l.model || '') + ' (' + esc(l.label || '') + ')</div>';
+  h += '<div class="sc-kv">' +
+    '<div><span>ผู้ยืม</span><b>' + esc(l.borrower || '—') + '</b></div>' +
+    '<div><span>ผู้คีย์</span><b>' + esc(l.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
+    '<div><span>ใบจอง</span><b>' + esc(l.jobNo || '—') + '</b></div>' +
+    '<div><span>ช่วงยืม</span><b>' + esc(l.start || '—') + ' → ' + esc(l.end || '—') + '</b></div>' +
+    (l.purpose ? '<div><span>ยืมไปทำอะไร</span><b>' + esc(l.purpose) + '</b></div>' : '') +
+    (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(l.actualReturnDate) + '</b></div>' : '') +
+    '</div>';
+  h += scLoanLogHtml(l);
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
+  if (l.status === 'active') {
+    h += '<button class="btn btn-ghost" onclick="openExtendM(\'' + loanId + '\')">⏩ ต่อเวลา</button>';
+    h += '<button class="btn btn-ghost" onclick="openTransferM(\'' + loanId + '\')">🔄 โอน</button>';
+  }
+  h += '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  openSm('📜 ประวัติใบยืม', h);
+}
+
+function openExtendM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (l.status !== 'active') { alert('ใบนี้คืนแล้ว เลื่อนกำหนดคืนไม่ได้'); return; }
+  var h = '<div class="sm-sec">' + esc(l.model || '') + ' (' + esc(l.label || '') + ') · ผู้ยืม ' + esc(l.borrower || '—') + '</div>';
+  h += '<div class="grid2">';
+  h += '<div class="field"><label>กำหนดคืนเดิม</label><input type="text" value="' + esc(l.end || '') + '" disabled></div>';
+  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="xt_end" value="' + esc(l.end || '') + '"></div>';
+  h += '</div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="xt_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์ / งานเลื่อน"></div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="xt_by" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary" onclick="saveExtend(\'' + loanId + '\')">⏩ เลื่อนกำหนดคืน</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
+  openSm('⏩ ต่อเวลา / เลื่อนกำหนดคืน', h);
+}
+function saveExtend(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var end = (document.getElementById('xt_end').value || '').trim();
+  var why = (document.getElementById('xt_why').value || '').trim();
+  var by = (document.getElementById('xt_by').value || '').trim();
+  if (!end) { alert('เลือกกำหนดคืนใหม่ก่อนนะครับ'); return; }
+  if (end === l.end) { alert('วันเดิม ไม่มีอะไรเปลี่ยน'); return; }
+  if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
+  if (end < l.start) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืม (' + l.start + ')'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  db.collection('publicDemoLoans').doc(loanId).update({
+    end: end,
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('extended', by, 'จาก ' + (l.end || '—') + ' → ' + end + ' · ' + why))
+  }).then(function() { closeSm(); toastMock('⏩ เลื่อนกำหนดคืนเป็น ' + end); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+function openTransferM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (l.status !== 'active') { alert('ใบนี้คืนแล้ว โอนไม่ได้'); return; }
+  var h = '<div class="sm-sec">โอนผู้ยืม (ลูกค้า)</div>';
+  h += '<div class="field"><label>ผู้ยืมตอนนี้</label><input type="text" value="' + esc(l.borrower || '—') + '" disabled></div>';
+  h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="tf_borrower" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม"></div>';
+  h += '<div class="sm-sec">เปลี่ยนผู้คีย์ (ทีมงาน)</div>';
+  h += '<div class="field"><label>ผู้คีย์ตอนนี้</label><input type="text" value="' + esc(l.approver || '— ไม่ได้บันทึก —') + '" disabled></div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="tf_keyer" placeholder="เว้นว่าง = ไม่เปลี่ยน">' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:4px">ใช้ตอนคนคีย์เดิมลาออก/ลาพัก — คนใหม่จะเป็นคนที่ต้องตามคืนแทน</div></div>';
+  h += '<div class="sm-sec">บันทึกเหตุผล</div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="tf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / สมชายลาออก"></div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="tf_by" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary" onclick="saveTransfer(\'' + loanId + '\')">🔄 บันทึกการโอน</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
+  openSm('🔄 โอนผู้ยืม / เปลี่ยนผู้คีย์', h);
+}
+function saveTransfer(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var nb = (document.getElementById('tf_borrower').value || '').trim();
+  var nk = (document.getElementById('tf_keyer').value || '').trim();
+  var why = (document.getElementById('tf_why').value || '').trim();
+  var by = (document.getElementById('tf_by').value || '').trim();
+  if (!nb && !nk) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
+  if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var upd = {}, evs = [];
+  if (nb) { upd.borrower = nb; evs.push(_scEv('borrower', by, 'จาก ' + (l.borrower || '—') + ' → ' + nb + ' · ' + why)); }
+  if (nk) { upd.approver = nk; evs.push(_scEv('keyer', by, 'จาก ' + (l.approver || '—') + ' → ' + nk + ' · ' + why)); }
+  upd.events = firebase.firestore.FieldValue.arrayUnion.apply(firebase.firestore.FieldValue, evs);
+  db.collection('publicDemoLoans').doc(loanId).update(upd)
+    .then(function() { closeSm(); toastMock('🔄 บันทึกการโอนแล้ว'); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 // ---- รายการเครื่อง + รายละเอียด + กรอกยืมเอง ----
@@ -870,8 +1036,14 @@ function openUnitDetail(unitId) {
     '<span class="pill pill-muted">กสทช ' + (u.nbtcRegistered?'✅':'❌') + '</span><span class="pill pill-muted">ประกันภัย ' + (u.droneInsurance?'✅':'❌') + '</span><span class="pill pill-muted">CAAT ' + (u.caatRegistered?'✅':'❌') + '</span></div>';
   var appRange = loan ? null : unitAppRangeOn(u.id, _td());
   if (loan) {
-    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + loan.end + '</div>' +
-      '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>';
+    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + loan.end +
+      '<br>🧑‍💼 ผู้คีย์: ' + (loan.approver ? esc(loan.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึก</span>') +
+      (loan.jobNo ? ' · 📄 ใบจอง ' + esc(loan.jobNo) : '') + '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + loan._id + '\')">⏩ ต่อเวลา</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + loan._id + '\')">🔄 โอน</button>' +
+      '</div>' + scLoanLogHtml(loan);
   } else if (appRange) {
     // การยืมนี้อยู่ในแอปหลัก ไม่ได้อยู่ใน publicDemoLoans จึงกดรับคืนจากหน้านี้ไม่ได้ (ไม่มี doc ให้อัปเดต)
     h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">📤 ถูกยืมอยู่ — ' +
@@ -886,8 +1058,11 @@ function openUnitDetail(unitId) {
   h += '<div id="manualLoanFormZone"></div></div>';
   h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">📜 ประวัติการยืมล่าสุด</div>';
   h += history.length ? history.map(function(l) {
-    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">' + esc(l.borrower) + ' · ' + l.start + ' – ' + l.end +
-      (l.status === 'active' ? ' <span class="pill pill-warn">กำลังยืม</span>' : ' <span class="pill pill-good">คืนแล้ว</span>') + '</div>';
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;display:flex;gap:8px;align-items:center">' +
+      '<span style="flex:1;min-width:0">' + esc(l.borrower) + ' · ' + l.start + ' – ' + l.end +
+      (l.status === 'active' ? ' <span class="pill pill-warn">กำลังยืม</span>' : ' <span class="pill pill-good">คืนแล้ว</span>') +
+      ((l.events || []).length > 1 ? ' <span class="pill pill-muted">' + l.events.length + ' เหตุการณ์</span>' : '') + '</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ดูประวัติใบนี้">📜</button></div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่มีประวัติ</div>';
   h += '</div>';
   view.innerHTML = h;
@@ -904,8 +1079,9 @@ function showManualLoanForm(unitId) {
     '<div class="field"><label>วันที่ยืม *</label><input type="date" id="mlStart" value="' + _td() + '"></div>' +
     '<div class="field"><label>วันที่คาดว่าจะคืน *</label><input type="date" id="mlEnd" value="' + _td() + '"></div>' +
     '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>' +
-    '<div class="field"><label>ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="mlRequester" placeholder="ชื่อ-นามสกุล"></div>' +
-    '</div><div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
+    '<div class="field"><label>ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="mlRequester" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>' +
+    '</div><div class="field"><label>เลขที่ใบจอง</label><input type="text" id="mlJob" placeholder="เลขจากระบบคลัง เช่น 29179"></div>' +
+    '<div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
     '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
 }
 function saveManualLoan(unitId) {
@@ -918,9 +1094,13 @@ function saveManualLoan(unitId) {
   if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
   if (!requester) { alert('กรอกผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
   if (unitIsBusyOn(unitId, start)) { if (!confirm('ช่วงนี้เครื่องนี้อาจไม่ว่างจริง ยืนยันจะบันทึกต่อไหม?')) return; }
+  var jobNo = (document.getElementById('mlJob').value || '').trim();
+  try { localStorage.setItem('demoStaffEditor', requester); } catch (e) {}
   db.collection('publicDemoLoans').add({
     unitId: unitId, model: u.model, label: 'เครื่อง', borrower: company, purpose: purpose,
-    start: start, end: end, actualReturnDate: '', approver: requester, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    start: start, end: end, actualReturnDate: '', approver: requester, jobNo: jobNo,
+    status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    events: [_scEv('created', requester, company + ' · ' + start + ' → ' + end + (jobNo ? ' · ใบจอง ' + jobNo : ''))]
   }).then(function() { toastMock('💾 บันทึกยืมแล้ว'); closeUnitDetail(); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 

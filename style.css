@@ -10214,3 +10214,19 @@ input:focus, select:focus, textarea:focus {
 .demo-card2.st-out { border-left-color: #f59e0b; }
 .demo-card2.st-late { border-left-color: #ef4444; }
 .demo-card2.st-off { border-left-color: var(--text3); }
+
+/* ── ประวัติใบยืม (log) ─────────────────────────────────────────
+   เส้นแนวตั้งด้านซ้ายทำให้อ่านเป็นลำดับเวลา ไม่ใช่รายการกระจัดกระจาย
+   เรียงใหม่สุดอยู่บน เพราะเวลาคนเปิดดูคือ "ตอนนี้ใบนี้อยู่สถานะไหน" ไม่ใช่ย้อนอ่านตั้งแต่ต้น */
+.demo-log { margin-top: 10px; border-left: 2px solid var(--border); padding-left: 12px; }
+.demo-log .log-hd { font-size: 11px; font-weight: 700; color: var(--text2);
+  letter-spacing: .3px; margin-bottom: 7px; }
+.demo-log .log-hd span { font-weight: 600; color: var(--text3); }
+.demo-log .log-empty { font-size: 11px; color: var(--text3); line-height: 1.5; padding-bottom: 4px; }
+.demo-log .log-row { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0;
+  border-top: 1px solid var(--border-light); }
+.demo-log .log-row:first-of-type { border-top: 0; }
+.demo-log .lg-ic { flex: 0 0 auto; font-size: 13px; line-height: 1.35; }
+.demo-log .lg-body { min-width: 0; flex: 1; }
+.demo-log .lg-t { font-size: 12px; line-height: 1.45; word-break: break-word; }
+.demo-log .lg-m { font-size: 10px; color: var(--text3); font-variant-numeric: tabular-nums; margin-top: 1px; }

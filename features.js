@@ -3001,6 +3001,191 @@ function _demoDefaultKeyer() {
   return '';
 }
 function _demoRememberKeyer(n) { try { localStorage.setItem('v7_demoKeyer', n); } catch (e) {} }
+
+// ================================================================
+// ประวัติของใบยืม (log) + ต่อเวลา / โอนผู้ยืม / เปลี่ยนผู้คีย์
+//
+// เดิมใบยืมมีแค่ 2 สถานะ คือ active กับ returned แก้อะไรระหว่างทางไม่ได้เลย ต้องคืนแล้วเปิดใบใหม่
+// ซึ่งทำให้ประวัติขาด — ไม่รู้ว่าเครื่องนี้อยู่กับลูกค้ารายเดิมต่อเนื่อง 3 เดือนหรือคนละคน
+// ทุกการเปลี่ยนแปลงจึงบันทึกต่อท้าย events[] ไม่เขียนทับของเดิม
+// ================================================================
+var DEMO_EV_META = {
+  created:     { icon: '📤', label: 'ปล่อยยืม' },
+  extended:    { icon: '⏩', label: 'เลื่อนกำหนดคืน' },
+  borrower:    { icon: '🔄', label: 'โอนผู้ยืม' },
+  keyer:       { icon: '🧑‍💼', label: 'เปลี่ยนผู้คีย์' },
+  jobno:       { icon: '📄', label: 'แก้เลขใบจอง' },
+  returned:    { icon: '✅', label: 'รับคืน' },
+  note:        { icon: '📝', label: 'บันทึกเพิ่ม' }
+};
+function _p2(n) { return (n < 10 ? '0' : '') + n; }
+// วันที่ในระบบมีสองรูปแบบปนกัน (ISO จาก _td() และ DD/MM/YYYY จากฟอร์ม) — ข้อความใน log ใช้แบบเดียว
+function _demoDayTxt(v) {
+  var d = ftParseDate(v);
+  return d ? _p2(d.getDate()) + '/' + _p2(d.getMonth() + 1) + '/' + d.getFullYear() : String(v || '—');
+}
+// ประวัติกินเวลาข้ามปีได้ (เครื่องบางตัวยืมต่อเนื่องหลายรอบ) จึงใส่ปีเต็มเสมอ ไม่ใช้ _dcFmt ที่ตัดปีทิ้ง
+function _demoLogStamp(dt) {
+  return _p2(dt.getDate()) + '/' + _p2(dt.getMonth() + 1) + '/' + dt.getFullYear() +
+    ' ' + _p2(dt.getHours()) + ':' + _p2(dt.getMinutes());
+}
+function _demoAddEvent(loan, type, by, text) {
+  if (!loan.events) loan.events = [];
+  loan.events.push({ at: new Date().toISOString(), type: type, by: by || '', text: text || '' });
+}
+function demoActiveLoanOf(demoId) {
+  return getDemoLoans().filter(function(l) { return l.demoId === demoId && l.status === 'active'; })
+    .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); })[0] || null;
+}
+function _demoLoanLogHtml(loan) {
+  var ev = (loan && loan.events) || [];
+  if (!ev.length) {
+    return '<div class="demo-log"><div class="log-hd">📜 ประวัติใบยืม</div>' +
+      '<div class="log-empty">ใบนี้คีย์ไว้ก่อนมีระบบประวัติ — การเปลี่ยนแปลงหลังจากนี้จะถูกบันทึกไว้ทั้งหมด</div></div>';
+  }
+  var h = '<div class="demo-log"><div class="log-hd">📜 ประวัติใบยืม <span>' + ev.length + ' รายการ</span></div>';
+  ev.slice().reverse().forEach(function(e) {
+    var m = DEMO_EV_META[e.type] || { icon: '•', label: e.type };
+    var dt = e.at ? new Date(e.at) : null;
+    h += '<div class="log-row"><span class="lg-ic">' + m.icon + '</span><div class="lg-body">' +
+      '<div class="lg-t"><b>' + m.label + '</b>' + (e.text ? ' — ' + sanitize(e.text) : '') + '</div>' +
+      '<div class="lg-m">' + (dt ? _demoLogStamp(dt) : '—') +
+      (e.by ? ' · โดย ' + sanitize(e.by) : '') + '</div></div></div>';
+  });
+  return h + '</div>';
+}
+function showDemoLoanLogM(demoId) {
+  var loan = demoActiveLoanOf(demoId);
+  var all = getDemoLoans().filter(function(l) { return l.demoId === demoId; })
+    .sort(function(a, b) { return (b.lentDate || '').localeCompare(a.lentDate || ''); });
+  var d = getDemoItems().filter(function(x) { return x.id === demoId; })[0] || {};
+  var h = '<div class="dm-head"><div class="dm-head-ic" style="background:var(--bg2)">📜</div><div>' +
+    '<div class="dm-head-nm">' + sanitize(d.name || '-') + '</div>' +
+    '<div class="dm-head-sub">เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ' + all.length + ' ใบยืมในประวัติ</div></div></div>';
+  if (!all.length) h += '<div class="card" style="text-align:center;padding:24px;color:var(--text2)">ยังไม่เคยปล่อยยืมเครื่องนี้</div>';
+  all.forEach(function(l) {
+    h += '<div class="dm-sec">' + (l.status === 'active' ? '🟢 ใบที่กำลังยืมอยู่' : '⚪ คืนแล้ว') +
+      (l.jobNo ? ' · ใบจอง ' + sanitize(l.jobNo) : '') + '</div>';
+    h += '<div class="dcal-kv">' +
+      '<div><span class="k">ผู้ยืม</span><b>' + sanitize(l.borrower || '—') + '</b></div>' +
+      '<div><span class="k">ผู้คีย์</span><b>' + _dcKeyer(l) + '</b></div>' +
+      '<div><span class="k">ช่วง</span><b>' + sanitize(_demoDayTxt(l.lentDate)) + ' → ' + sanitize(_demoDayTxt(l.returnDate)) + '</b></div>' +
+      (l.actualReturnDate ? '<div><span class="k">คืนจริง</span><b>' + sanitize(_demoDayTxt(l.actualReturnDate)) + '</b></div>' : '') +
+      '</div>';
+    h += _demoLoanLogHtml(l);
+  });
+  h += '<div class="fm-actions"><button class="btn" onclick="closeMForce()">ปิด</button></div>';
+  openM('📜 ประวัติการยืม', h);
+  setMWide(680);
+}
+
+// ---- ต่อเวลา / เลื่อนกำหนดคืน ----
+function showDemoExtendM(demoId) {
+  var loan = demoActiveLoanOf(demoId);
+  if (!loan) { toast('เครื่องนี้ไม่ได้ถูกยืมอยู่'); return; }
+  var d = getDemoItems().filter(function(x) { return x.id === demoId; })[0] || {};
+  var h = '<div class="dm-head"><div class="dm-head-ic" style="background:var(--bg2)">⏩</div><div>' +
+    '<div class="dm-head-nm">' + sanitize(d.name || '-') + '</div>' +
+    '<div class="dm-head-sub">เช่า ' + sanitize(d.rentalDbNo || '—') + ' · ผู้ยืม ' + sanitize(loan.borrower || '—') + '</div></div></div>';
+  h += '<div class="dm-sec">เลื่อนกำหนดคืน</div>';
+  h += '<div class="dm-row2">';
+  h += '<div class="fm-group"><label>กำหนดคืนเดิม</label><input type="text" class="fm-input" value="' + sanitize(loan.returnDate || '—') + '" disabled></div>';
+  h += '<div class="fm-group"><label>📅 กำหนดคืนใหม่ *</label><input type="text" id="dx_newret" class="fm-input dp" value="' + sanitize(loan.returnDate || '') + '"></div>';
+  h += '</div>';
+  h += '<div class="fm-group"><label>📝 เหตุผล *</label><input type="text" id="dx_reason" class="fm-input" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์ / งานเลื่อน"></div>';
+  h += '<div class="fm-group"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="dx_by" class="fm-input" value="' + sanitize(_demoDefaultKeyer()) + '"></div>';
+  h += '<div class="hint" style="margin-bottom:12px">ไม่ได้ปิดใบเดิมแล้วเปิดใหม่ — ใบเดิมถูกเลื่อนวันและบันทึกไว้ในประวัติ จะได้รู้ว่าเครื่องอยู่กับลูกค้ารายนี้ต่อเนื่องมาตลอด</div>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="saveDemoExtend(\'' + demoId + '\')">⏩ เลื่อนกำหนดคืน</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button></div>';
+  openM('⏩ ต่อเวลา / เลื่อนกำหนดคืน', h);
+  setMWide(560);
+}
+function saveDemoExtend(demoId) {
+  var newRet = (document.getElementById('dx_newret').value || '').trim();
+  var reason = (document.getElementById('dx_reason').value || '').trim();
+  var by = (document.getElementById('dx_by').value || '').trim();
+  if (!newRet) { toast('ใส่กำหนดคืนใหม่ก่อน'); return; }
+  if (!reason) { toast('ใส่เหตุผลด้วย — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  if (!by) { toast('ใส่ชื่อคนที่ทำเรื่อง'); return; }
+  var nd = ftParseDate(newRet);
+  if (!nd) { toast('รูปแบบวันที่ไม่ถูกต้อง (DD/MM/YYYY)'); return; }
+  _demoRememberKeyer(by);
+  var loans = getDemoLoans(), loan = null;
+  loans.forEach(function(l) { if (l.demoId === demoId && l.status === 'active' && !loan) loan = l; });
+  if (!loan) { toast('ไม่พบใบยืมที่ยังไม่คืน'); return; }
+  var old = loan.returnDate || '—';
+  loan.returnDate = newRet;
+  _demoAddEvent(loan, 'extended', by, 'จาก ' + _demoDayTxt(old) + ' → ' + _demoDayTxt(newRet) + ' · ' + reason);
+  saveDemoLoans(loans);
+  var items = getDemoItems();
+  items.forEach(function(d) { if (d.id === demoId) d.returnDate = newRet; });
+  saveDemoItems(items);
+  toast('⏩ เลื่อนกำหนดคืนเป็น ' + newRet);
+  closeMForce(); render();
+}
+
+// ---- โอนผู้ยืม / เปลี่ยนผู้คีย์ ----
+function showDemoTransferM(demoId) {
+  var loan = demoActiveLoanOf(demoId);
+  if (!loan) { toast('เครื่องนี้ไม่ได้ถูกยืมอยู่'); return; }
+  var d = getDemoItems().filter(function(x) { return x.id === demoId; })[0] || {};
+  var dealers = [];
+  try { dealers = ST.getAll('dealers'); } catch (e) { dealers = []; }
+  var h = '<div class="dm-head"><div class="dm-head-ic" style="background:var(--bg2)">🔄</div><div>' +
+    '<div class="dm-head-nm">' + sanitize(d.name || '-') + '</div>' +
+    '<div class="dm-head-sub">เช่า ' + sanitize(d.rentalDbNo || '—') + '</div></div></div>';
+  h += '<div class="dm-sec">โอนผู้ยืม (ลูกค้า)</div>';
+  h += '<div class="fm-group"><label>ผู้ยืมตอนนี้</label><input type="text" class="fm-input" value="' + sanitize(loan.borrower || '—') + '" disabled></div>';
+  h += '<div class="fm-group"><label>🏪 โอนให้ Dealer</label><select id="dt_dealer" class="fm-input"><option value="">— ไม่เปลี่ยน —</option>';
+  dealers.forEach(function(x) { h += '<option value="' + x.id + '">' + sanitize(x.name) + '</option>'; });
+  h += '</select></div>';
+  h += '<div class="fm-group"><label>👤 หรือพิมพ์ชื่อผู้ยืมใหม่</label><input type="text" id="dt_borrower" class="fm-input" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม"></div>';
+  h += '<div class="dm-sec">เปลี่ยนผู้คีย์ (ทีมงาน)</div>';
+  h += '<div class="fm-group"><label>ผู้คีย์ตอนนี้</label><input type="text" class="fm-input" value="' + sanitize(loan.keyedBy || loan.approver || '— ไม่ได้บันทึก —') + '" disabled></div>';
+  h += '<div class="fm-group"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="dt_keyer" class="fm-input" placeholder="เว้นว่าง = ไม่เปลี่ยน">' +
+    '<div class="hint">ใช้ตอนคนคีย์เดิมลาออก/ลาพัก — คนใหม่จะเป็นคนที่ต้องตามคืนแทน</div></div>';
+  h += '<div class="dm-sec">บันทึกเหตุผล</div>';
+  h += '<div class="fm-group"><label>📝 เหตุผล *</label><input type="text" id="dt_reason" class="fm-input" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / สมชายลาออก"></div>';
+  h += '<div class="fm-group"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="dt_by" class="fm-input" value="' + sanitize(_demoDefaultKeyer()) + '"></div>';
+  h += '<div class="fm-actions"><button class="btn bp" onclick="saveDemoTransfer(\'' + demoId + '\')">🔄 บันทึกการโอน</button>' +
+    '<button class="btn" onclick="closeM()">ยกเลิก</button></div>';
+  openM('🔄 โอนผู้ยืม / เปลี่ยนผู้คีย์', h);
+  setMWide(560);
+}
+function saveDemoTransfer(demoId) {
+  var dealerId = document.getElementById('dt_dealer').value || '';
+  var newBorrower = (document.getElementById('dt_borrower').value || '').trim();
+  var newKeyer = (document.getElementById('dt_keyer').value || '').trim();
+  var reason = (document.getElementById('dt_reason').value || '').trim();
+  var by = (document.getElementById('dt_by').value || '').trim();
+  if (!dealerId && !newBorrower && !newKeyer) { toast('ยังไม่ได้เลือกว่าจะเปลี่ยนอะไร'); return; }
+  if (!reason) { toast('ใส่เหตุผลด้วย — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  if (!by) { toast('ใส่ชื่อคนที่ทำเรื่อง'); return; }
+  _demoRememberKeyer(by);
+  var loans = getDemoLoans(), loan = null;
+  loans.forEach(function(l) { if (l.demoId === demoId && l.status === 'active' && !loan) loan = l; });
+  if (!loan) { toast('ไม่พบใบยืมที่ยังไม่คืน'); return; }
+  var items = getDemoItems();
+  var bName = newBorrower;
+  if (dealerId) { var dd = ST.getOne('dealers', dealerId); if (dd) bName = dd.name; }
+  if (bName) {
+    var oldB = loan.borrower || '—';
+    _demoAddEvent(loan, 'borrower', by, 'จาก ' + oldB + ' → ' + bName + ' · ' + reason);
+    loan.borrower = bName;
+    if (dealerId) loan.dealerId = dealerId;
+    items.forEach(function(d) { if (d.id === demoId) { d.borrower = bName; if (dealerId) d.dealerId = dealerId; } });
+  }
+  if (newKeyer) {
+    var oldK = loan.keyedBy || loan.approver || '— ไม่ได้บันทึก —';
+    _demoAddEvent(loan, 'keyer', by, 'จาก ' + oldK + ' → ' + newKeyer + ' · ' + reason);
+    loan.keyedBy = newKeyer;
+    items.forEach(function(d) { if (d.id === demoId) d.keyedBy = newKeyer; });
+  }
+  saveDemoLoans(loans);
+  saveDemoItems(items);
+  toast('🔄 บันทึกการโอนแล้ว');
+  closeMForce(); render();
+}
 // ชื่อผู้คีย์ของการยืมนี้ — ข้อมูลเก่าก่อนมีฟิลด์นี้จะว่าง ให้บอกตรงๆ ว่าไม่ได้บันทึกไว้
 function _dcKeyer(b) {
   var n = (b && (b.keyedBy || b.approver) || '').trim();
@@ -4891,9 +5076,14 @@ function demoCardHtml(d, now, dupRentals, unitNo) {
 
   h += '<div class="demo-card2-actions">';
   if (eff === 'available') h += '<button class="btn bsm bp" onclick="showLendDemoM(\'' + d.id + '\')">📤 ให้ยืม/จอง</button>';
-  if (eff === 'lent' || eff === 'reserved') h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
+  if (eff === 'lent' || eff === 'reserved') {
+    h += '<button class="btn bsm bp" onclick="returnDemo(\'' + d.id + '\')">✅ คืนแล้ว</button>';
+    h += '<button class="btn bsm bo" onclick="showDemoExtendM(\'' + d.id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩ ต่อเวลา</button>';
+    h += '<button class="btn bsm bo" onclick="showDemoTransferM(\'' + d.id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄 โอน</button>';
+  }
   if (eff === 'unavailable') h += '<button class="btn bsm bp" onclick="demoSetStatus(\'' + d.id + '\',\'available\')">✅ พร้อมใช้</button>';
   h += '<button class="btn bsm bo" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})">📄 รายละเอียด</button>';
+  h += '<button class="btn bsm bo" onclick="showDemoLoanLogM(\'' + d.id + '\')" title="ประวัติการยืมของเครื่องนี้">📜</button>';
   h += '<button class="btn bsm bo" onclick="showEditDemoM(\'' + d.id + '\')" title="แก้ไขอุปกรณ์">✏️</button>';
   if (eff === 'available') h += '<button class="btn bsm bd" onclick="deleteDemo(\'' + d.id + '\')" title="ลบเครื่องนี้">🗑️</button>';
   h += '</div></div>';
@@ -6751,6 +6941,11 @@ function rDemoDetail(el) {
     } else {
       h += '<div style="color:#f59e0b">📅 ยังไม่ได้ระบุกำหนดคืน <button class="btn-xs" onclick="showEditDemoM(\'' + d.id + '\')">กรอกกำหนดคืน</button></div>';
     }
+    h += '<div>🧑‍💼 ผู้คีย์เบิก: ' + _dcKeyer(d) + '</div>';
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' +
+      '<button class="btn bsm bo" onclick="showDemoExtendM(\'' + d.id + '\')">⏩ ต่อเวลา / เลื่อนกำหนดคืน</button>' +
+      '<button class="btn bsm bo" onclick="showDemoTransferM(\'' + d.id + '\')">🔄 โอนผู้ยืม / เปลี่ยนผู้คีย์</button>' +
+      '</div>';
     h += '</div></div>';
   }
 
@@ -6767,7 +6962,9 @@ function rDemoDetail(el) {
       if ((l.jobNo || '').trim()) h += '<div class="ls">📄 ใบจอง: ' + qcopyHtml(l.jobNo) + ((l.refNo || '').trim() ? ' · 🔖 ' + qcopyHtml(l.refNo) : '') + '</div>';
       h += '<div class="ls">📅 ยืม: ' + sanitize(l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + sanitize(l.actualReturnDate) : (l.returnDate ? ' • กำหนดคืน: ' + sanitize(l.returnDate) : '')) + '</div>';
       if (l.purpose) h += '<div class="ls">🎯 ' + sanitize(l.purpose) + '</div>';
+      h += '<div class="ls">🧑‍💼 ผู้คีย์: ' + _dcKeyer(l) + '</div>';
       if (l.note) h += '<div class="ls">📝 ' + sanitize(l.note) + '</div>';
+      h += _demoLoanLogHtml(l);
       h += '</div></div>';
     });
   }
@@ -7019,13 +7216,15 @@ function lendDemo(demoId) {
         break;
       }
     }
-    loans.push({
+    var rec = {
       id: gid(), demoId: id, demoName: demoName,
       jobNo: jobNo, refNo: refNo,
       dealerId: dealerId, borrower: borrower, purpose: purpose, keyedBy: keyedBy,
       lentDate: lentDate, returnDate: returnDate, actualReturnDate: '',
-      note: note, status: 'active', created: _nw()
-    });
+      note: note, status: 'active', created: _nw(), events: []
+    };
+    _demoAddEvent(rec, 'created', keyedBy, (borrower || '—') + ' · ' + _demoDayTxt(lentDate) + ' → ' + (returnDate ? _demoDayTxt(returnDate) : '—') + (jobNo ? ' · ใบจอง ' + jobNo : ''));
+    loans.push(rec);
   });
   saveDemoItems(items);
   saveDemoLoans(loans);
@@ -7063,6 +7262,9 @@ function _returnDemoUnits(demoIds) {
       if (loans[j].demoId === demoId && loans[j].status === 'active') {
         loans[j].status = 'returned';
         loans[j].actualReturnDate = _td();
+        // _td() เป็น ISO (YYYY-MM-DD) ส่วนวันที่ยืม/คืนในฟอร์มเป็น DD/MM/YYYY — เก็บคงรูปแบบเดิมไว้
+        // (ตัวอ่านรองรับทั้งสองแบบอยู่แล้ว) แต่ข้อความใน log แปลงให้เป็นรูปแบบเดียวกับที่คนกรอกเห็น
+        _demoAddEvent(loans[j], 'returned', _demoDefaultKeyer(), 'รับคืนเข้าคลัง ' + _demoDayTxt(_td()));
         break;
       }
     }
