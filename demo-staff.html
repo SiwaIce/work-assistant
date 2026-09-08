@@ -231,6 +231,37 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-urow { display:grid; grid-template-columns:110px 1fr auto; gap:10px; align-items:center; padding:7px 10px;
   border-bottom:1px solid var(--border); font-size:12px; }
 .dcal-urow:last-child { border-bottom:none; }
+/* บนจอแคบ คอลัมน์เลขเครื่อง 110px บีบจน "เช่า/S-N" ตัดบรรทัดมั่ว แถวเดียวสูงเกิน 140px อ่านยาก
+   สลับเป็นชื่อรุ่นขึ้นก่อน (สิ่งที่คนกวาดตาหา) เลขเครื่องอยู่ใต้ชื่อ ปุ่มคีย์ยืมอยู่ขวาคร่อมสองแถว */
+@media (max-width:620px) {
+  .dcal-urow { grid-template-columns:1fr auto; gap:5px 10px; padding:9px 10px; }
+  .dcal-urow > div:nth-child(1) { grid-column:1; grid-row:2; }
+  .dcal-urow > div:nth-child(2) { grid-column:1; grid-row:1; }
+  .dcal-urow > div:nth-child(3) { grid-column:2; grid-row:1 / span 2; align-self:center; }
+}
+/* ตัวกรองภายในกล่องรายละเอียดของวัน */
+.dcal-dayf { background:var(--surface-2); border:1px solid var(--border); border-radius:9px;
+  padding:9px 10px; margin-bottom:10px; }
+.df-search { display:flex; align-items:center; gap:7px; background:var(--surface);
+  border:1px solid var(--border); border-radius:8px; padding:6px 10px; }
+.df-search > span { flex:0 0 auto; font-size:12px; opacity:.7; }
+.df-search input { flex:1; min-width:0; border:0; background:transparent; color:var(--text);
+  font-size:12.5px; outline:none; font-family:inherit; }
+.df-clr { flex:0 0 auto; border:0; background:transparent; color:var(--text3);
+  cursor:pointer; font-size:13px; padding:0 2px; }
+.df-cats { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.df-c { font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:999px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface); color:var(--text2); font-family:inherit; }
+.df-c b { color:var(--text); font-variant-numeric:tabular-nums; }
+.df-c:hover { border-color:var(--accent); }
+.df-c.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.df-c.on b { color:#fff; }
+/* หมวดที่วันนี้ไม่มีของว่างเลย — จางลงแต่ยังกดได้ จะได้รู้ว่ามีหมวดนี้อยู่ ไม่ใช่หายไปเฉยๆ */
+.df-c.zero { opacity:.45; }
+.df-note { font-size:10.5px; color:var(--text3); margin-top:7px; }
+.df-note b { color:var(--text2); }
+.df-empty { font-size:12px; color:var(--text2); background:var(--surface-2); border:1px dashed var(--border);
+  border-radius:8px; padding:11px 12px; display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
 .dcal-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-top:10px; }
 .dcal-legend span { display:flex; align-items:center; gap:6px; }
 .dcal-legend i { width:14px; height:9px; border-radius:3px; display:inline-block; }
@@ -1459,7 +1490,25 @@ function _scLegend() {
 function _scSrc() {
   return '<div class="dcal-src">📄 รวมข้อมูล 2 ทาง — รายการที่อนุมัติ/คีย์จากหน้านี้ (publicDemoLoans) และการยืมที่คีย์ในแอปหลักซึ่ง publish ตามมา · หน้านี้ไม่มีเลขใบจอง/ใบเบิก จึงจัดชุดด้วยผู้ยืม + ช่วงวันแทน</div>';
 }
-function scToggleOpen(k) { scOpen = (scOpen === k) ? null : k; renderStaffCalendar(); }
+// ตัวกรองภายในกล่องรายละเอียดของวัน — แยกจากตัวกรองใหญ่ด้านบน เพราะคนละคำถามกัน
+// ข้างบนถามว่า "ทั้งเดือนนี้สนใจรุ่นไหน" ส่วนตรงนี้ถามว่า "เฉพาะวันนี้ มีอะไรว่างให้หยิบบ้าง"
+var scDayQ = '', scDayCat = 'all', scDayAll = false;
+function scDayReset() { scDayQ = ''; scDayCat = 'all'; scDayAll = false; }
+var _scDayTimer = null;
+function scDaySearch(v) {
+  scDayQ = v;
+  clearTimeout(_scDayTimer);
+  _scDayTimer = setTimeout(renderStaffCalendar, 160);
+}
+function scDaySetCat(c) { scDayCat = c; scDayAll = false; renderStaffCalendar(); }
+function scDayMore() { scDayAll = true; renderStaffCalendar(); }
+
+function scToggleOpen(k) {
+  // เปลี่ยนไปดูวันอื่น = เริ่มกรองใหม่ ไม่งั้นคำค้นของวันก่อนหน้าจะติดมาแล้วเห็นว่า "ว่าง 0 เครื่อง" โดยไม่รู้สาเหตุ
+  if (k !== scOpen) scDayReset();
+  scOpen = (scOpen === k) ? null : k;
+  renderStaffCalendar();
+}
 function scCloseBtn() { return '<button class="btn btn-ghost btn-sm" onclick="scOpen=null;renderStaffCalendar()">✕ ปิด</button>'; }
 function scBookBtn(unitId, from, label, ghost, to) {
   return '<button class="btn ' + (ghost ? 'btn-ghost' : 'btn-primary') + ' btn-sm" onclick="event.stopPropagation();scBook(\'' + unitId + '\',\'' + _scIso(from) + '\'' + (to ? ',\'' + _scIso(to) + '\'' : '') + ')">' + label + '</button>';
@@ -1563,21 +1612,79 @@ function _scDrillDay(iso) {
     '<b style="font-size:14px">📅 ' + cur.getDate() + ' ' + SC_MONTHS[cur.getMonth()] + ' ' + cur.getFullYear() + '</b>' +
     '<div style="font-size:11px;color:var(--text2)">ยืมอยู่ ' + out.length + ' · ว่าง ' + free.length + ' เครื่อง</div>' +
     '</div>' + scCloseBtn() + '</div>';
-  if (free.length) {
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + free.length + ' เครื่อง — คีย์ยืมได้เลย</div>';
+
+  // ---- ค้นหา + เลือกหมวด เฉพาะภายในวันนี้ ----
+  // ชิปหมวดแสดงจำนวน "ที่ว่างจริงในวันนี้" ไม่ใช่จำนวนที่มีทั้งหมด — มองแวบเดียวรู้เลยว่าวันนี้หยิบอะไรได้
+  var dq = scDayQ.trim().toLowerCase();
+  function dayHit(u) {
+    if (!dq) return true;
+    return [u.name, u.model, u.serialNumber, u.rentalDbNo, u.sku].join(' ').toLowerCase().indexOf(dq) !== -1;
+  }
+  function catOf(u) { return String(u.category || '') || '_none'; }
+  var catN = {}, usedCats = [];
+  free.forEach(function(u) {
+    var c = catOf(u);
+    if (catN[c] === undefined) { catN[c] = 0; usedCats.push(c); }
+    if (dayHit(u)) catN[c]++;
+  });
+  var freeHit = free.filter(function(u) { return dayHit(u) && (scDayCat === 'all' || catOf(u) === scDayCat); });
+  var outHit = out.filter(function(u) {
+    if (scDayCat !== 'all' && catOf(u) !== scDayCat) return false;
+    if (!dq) return true;
+    if (dayHit(u)) return true;
+    // ในฝั่งที่ถูกยืม ให้ค้นชื่อผู้ยืม/ผู้ทำเรื่องได้ด้วย — คำถามที่เจอบ่อยคือ "วันนั้นของอยู่กับใคร"
+    return busyBy[u.id].some(function(b) {
+      return (scWhoName(b) + ' ' + (b.approver || '') + ' ' + (b.purpose || '')).toLowerCase().indexOf(dq) !== -1;
+    });
+  });
+
+  if (free.length + out.length) {
+    h += '<div class="dcal-dayf">';
+    h += '<div class="df-search"><span>🔍</span>' +
+      '<input type="text" id="scDayQ" value="' + esc(scDayQ) + '" autocomplete="off"' +
+      ' placeholder="พิมพ์หาในวันนี้ — รุ่น / เลขเช่า / S/N / ผู้ยืม" oninput="scDaySearch(this.value)">' +
+      (scDayQ ? '<button class="df-clr" onclick="scDayQ=\'\';renderStaffCalendar()">✕</button>' : '') + '</div>';
+    if (usedCats.length > 1 || scDayCat !== 'all') {
+      var totalFree = usedCats.reduce(function(s, c) { return s + catN[c]; }, 0);
+      h += '<div class="df-cats">';
+      h += '<button class="df-c' + (scDayCat === 'all' ? ' on' : '') + '" onclick="scDaySetCat(\'all\')">📦 ทั้งหมด <b>' + totalFree + '</b></button>';
+      usedCats.forEach(function(c) {
+        var meta = (CATEGORIES || []).filter(function(x) { return x.id === c; })[0];
+        var lbl = meta ? meta.icon + ' ' + meta.label : '➖ ไม่ระบุหมวด';
+        h += '<button class="df-c' + (scDayCat === c ? ' on' : '') + (catN[c] ? '' : ' zero') + '" onclick="scDaySetCat(\'' + _scEsq(c) + '\')">' +
+          esc(lbl) + ' <b>' + catN[c] + '</b></button>';
+      });
+      h += '</div><div class="df-note">ตัวเลขบนชิป = จำนวนที่<b>ว่างในวันนี้</b> ของหมวดนั้น</div>';
+    }
+    h += '</div>';
+  }
+
+  if (freeHit.length) {
+    var cap = scDayAll ? freeHit.length : 10;
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + freeHit.length + ' เครื่อง' +
+      (freeHit.length !== free.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + free.length + ')</span>' : '') +
+      ' — คีย์ยืมได้เลย</div>';
     h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-    free.slice(0, 10).forEach(function(u) {
+    freeHit.slice(0, cap).forEach(function(u) {
       h += '<div class="dcal-urow"><div style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</div>' +
         '<div><div style="font-weight:600">' + esc(u.model || u.name || '-') + '</div><div style="margin-top:3px">' + _scDocs(u) + '</div></div>' +
         '<div>' + scBookBtn(u.id, cur, '📤 คีย์ยืม') + '</div></div>';
     });
     h += '</div>';
-    if (free.length > 10) h += '<div style="font-size:11px;color:var(--text3);margin-top:5px">…และอีก ' + (free.length - 10) + ' เครื่อง</div>';
+    // เดิมตัดที่ 10 เครื่องแล้วจบ ที่เหลือดูไม่ได้เลย — ตอนนี้กดดูต่อได้
+    if (freeHit.length > cap) {
+      h += '<button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="scDayMore()">▾ ดูอีก ' + (freeHit.length - cap) + ' เครื่อง</button>';
+    }
+  } else if (free.length) {
+    h += '<div class="df-empty">🔍 ว่าง ' + free.length + ' เครื่องในวันนี้ แต่ไม่มีตัวไหนตรงกับที่กรองไว้' +
+      ' <button class="btn btn-ghost btn-sm" onclick="scDayReset();renderStaffCalendar()">ล้างตัวกรอง</button></div>';
   }
-  if (out.length) {
+
+  if (outHit.length) {
     var groups = {};
-    out.forEach(function(u) { busyBy[u.id].forEach(function(b) { (groups[scBatchKey(b)] = groups[scBatchKey(b)] || []).push({ u: u, b: b }); }); });
-    h += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px">ถูกยืมอยู่ ' + out.length + ' เครื่อง</div>';
+    outHit.forEach(function(u) { busyBy[u.id].forEach(function(b) { (groups[scBatchKey(b)] = groups[scBatchKey(b)] || []).push({ u: u, b: b }); }); });
+    h += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px">ถูกยืมอยู่ ' + outHit.length + ' เครื่อง' +
+      (outHit.length !== out.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + out.length + ')</span>' : '') + '</div>';
     h += '<table class="dcal-tbl"><thead><tr><th>ผู้ยืม</th><th>ยืมไปทำอะไร</th><th>เครื่อง</th><th>คืน</th></tr></thead><tbody>';
     Object.keys(groups).forEach(function(k) {
       var g = groups[k], b0 = g[0].b;
@@ -2001,6 +2108,10 @@ function _scViewFind() {
 function renderStaffCalendar() {
   var el = document.getElementById('tab-calendar');
   if (!el) return;
+  // วาดใหม่ทั้งแท็บทุกครั้ง ช่องค้นหาที่กำลังพิมพ์อยู่จึงถูกสร้างใหม่และโฟกัสหลุด — จำ id + ตำแหน่ง
+  // เคอร์เซอร์ไว้ก่อนแล้วคืนให้หลังวาดเสร็จ ทำที่จุดเดียวตรงนี้ ช่องค้นหาทุกช่องในปฏิทินได้ผลหมด
+  var a = document.activeElement;
+  var keep = (a && a.id && el.contains(a)) ? { id: a.id, s: a.selectionStart, e: a.selectionEnd } : null;
   var h = scToolbar();
   if (scView === 'month') h += _scViewMonth();
   else if (scView === 'model') h += _scViewModel();
@@ -2008,6 +2119,13 @@ function renderStaffCalendar() {
   else if (scView === 'find') h += _scViewFind();
   else h += _scViewTimeline();
   el.innerHTML = h;
+  if (keep) {
+    var back = document.getElementById(keep.id);
+    if (back) {
+      back.focus();
+      try { back.setSelectionRange(keep.s, keep.e); } catch (e) {}
+    }
+  }
 }
 
 // ---- ธีม: ค่าเริ่มต้นมืดเหมือนแอปหลัก สลับเป็นสว่างได้ จำไว้ต่อเครื่อง ----

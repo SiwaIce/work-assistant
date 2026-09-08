@@ -5847,7 +5847,19 @@ function demoCalChangeMonth(delta) { demoCalMonthOffset += delta; demoCalOpen = 
 function demoCalGoView(v) { demoCalView = v; demoCalOpen = null; render(); }
 function demoCalShift(delta) { demoCalSpanStart += delta; demoCalOpen = null; render(); }
 function demoCalSetSpan(n) { demoCalSpan = n; demoCalOpen = null; render(); }
-function demoCalToggleOpen(k) { demoCalOpen = (demoCalOpen === k) ? null : k; render(); }
+// ตัวกรองภายในกล่องรายละเอียดของวัน — คนละคำถามกับตัวกรองใหญ่ด้านบน
+// ข้างบนถามว่า "ทั้งเดือนสนใจรุ่นไหน" ตรงนี้ถามว่า "เฉพาะวันนี้ มีอะไรว่างให้หยิบบ้าง"
+var dcDayQ = '', dcDayCat = 'all', dcDayAll = false;
+function dcDayReset() { dcDayQ = ''; dcDayCat = 'all'; dcDayAll = false; }
+function dcDaySearch(v) { dcDayQ = v; render(); }
+function dcDaySetCat(c) { dcDayCat = c; dcDayAll = false; render(); }
+function dcDayMore() { dcDayAll = true; render(); }
+function demoCalToggleOpen(k) {
+  // เปลี่ยนไปดูวันอื่น = เริ่มกรองใหม่ ไม่งั้นคำค้นของวันก่อนติดมาแล้วเห็น "ว่าง 0 เครื่อง" โดยไม่รู้สาเหตุ
+  if (k !== demoCalOpen) dcDayReset();
+  demoCalOpen = (demoCalOpen === k) ? null : k;
+  render();
+}
 
 // ---- ข้อมูลพื้นฐาน ----
 // ทุกช่วงยืม/จองของเครื่อง — อ่านจาก v7_demoLoans (แหล่งจริงของการจอง) ไม่ใช่ฟิลด์บนตัวเครื่อง
@@ -6257,22 +6269,81 @@ function _dcDrillDay(isoStr) {
     '<b style="font-size:14px">📅 ' + cur.getDate() + ' ' + getMonthName(cur.getMonth()) + ' ' + cur.getFullYear() + '</b>' +
     '<div style="font-size:11px;color:var(--text2)">ยืมอยู่ ' + out.length + ' · ว่าง ' + free.length + ' เครื่อง</div>' +
     '</div>' + _dcCloseBtn() + '</div>';
-  if (free.length) {
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + free.length + ' เครื่อง — จองได้เลย</div>';
+  // ---- ค้นหา + เลือกหมวด เฉพาะภายในวันนี้ ----
+  // ตัวเลขบนชิปคือจำนวนที่ "ว่างจริงในวันนี้" ของหมวดนั้น มองแวบเดียวรู้ว่าวันนี้หยิบอะไรได้บ้าง
+  var dq = dcDayQ.trim().toLowerCase();
+  function dayHit(d) {
+    if (!dq) return true;
+    return [d.name, d.model, d.serialNumber, d.rentalDbNo, d.sku].join(' ').toLowerCase().indexOf(dq) !== -1;
+  }
+  function catOf(d) { return String(d.category || '') || '_none'; }
+  var catN = {}, usedCats = [];
+  free.forEach(function(d) {
+    var c = catOf(d);
+    if (catN[c] === undefined) { catN[c] = 0; usedCats.push(c); }
+    if (dayHit(d)) catN[c]++;
+  });
+  var freeHit = free.filter(function(d) { return dayHit(d) && (dcDayCat === 'all' || catOf(d) === dcDayCat); });
+  var outHit = out.filter(function(d) {
+    if (dcDayCat !== 'all' && catOf(d) !== dcDayCat) return false;
+    if (!dq) return true;
+    if (dayHit(d)) return true;
+    // ฝั่งที่ถูกยืมให้ค้นผู้ยืม/ผู้คีย์/เลขใบจองได้ด้วย — คำถามที่เจอบ่อยคือ "วันนั้นของอยู่กับใคร"
+    return busyBy[d.id].some(function(b) {
+      return (_dcWhoName(b) + ' ' + (b.keyedBy || b.approver || '') + ' ' + (b.purpose || '') + ' ' + (b.jobNo || ''))
+        .toLowerCase().indexOf(dq) !== -1;
+    });
+  });
+
+  if (free.length + out.length) {
+    h += '<div class="dcal-dayf">';
+    h += '<div class="df-search"><span>🔍</span>' +
+      '<input type="text" id="dcDayQ" value="' + sanitize(dcDayQ) + '" autocomplete="off"' +
+      ' placeholder="พิมพ์หาในวันนี้ — รุ่น / เลขเช่า / S/N / ผู้ยืม" oninput="dcDaySearch(this.value)">' +
+      (dcDayQ ? '<button class="df-clr" onclick="dcDayQ=\'\';render()">✕</button>' : '') + '</div>';
+    if (usedCats.length > 1 || dcDayCat !== 'all') {
+      var totalFree = usedCats.reduce(function(s, c) { return s + catN[c]; }, 0);
+      var allCats = _demoCatList();
+      h += '<div class="df-cats">';
+      h += '<button class="df-c' + (dcDayCat === 'all' ? ' on' : '') + '" onclick="dcDaySetCat(\'all\')">📦 ทั้งหมด <b>' + totalFree + '</b></button>';
+      usedCats.forEach(function(c) {
+        var meta = allCats.filter(function(x) { return x.id === c; })[0];
+        var lbl = meta ? (meta.icon || '') + ' ' + meta.label : '➖ ไม่ระบุหมวด';
+        h += '<button class="df-c' + (dcDayCat === c ? ' on' : '') + (catN[c] ? '' : ' zero') +
+          '" onclick="dcDaySetCat(\'' + c.replace(/'/g, "\\'") + '\')">' + sanitize(lbl) + ' <b>' + catN[c] + '</b></button>';
+      });
+      h += '</div><div class="df-note">ตัวเลขบนชิป = จำนวนที่<b>ว่างในวันนี้</b> ของหมวดนั้น</div>';
+    }
+    h += '</div>';
+  }
+
+  if (freeHit.length) {
+    var cap = dcDayAll ? freeHit.length : 10;
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + freeHit.length + ' เครื่อง' +
+      (freeHit.length !== free.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + free.length + ')</span>' : '') +
+      ' — จองได้เลย</div>';
     h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:10px">';
-    free.slice(0, 10).forEach(function(d) {
+    freeHit.slice(0, cap).forEach(function(d) {
       h += '<div class="dcal-urow"><div style="font-family:monospace;font-weight:600;cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' + sanitize(d.rentalDbNo || '—') + '</div>' +
         '<div><div style="font-size:12px;font-weight:600">' + sanitize(d.name || '-') + '</div>' +
         '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-bottom:3px">S/N ' + sanitize(d.serialNumber || '—') + '</div>' + _dcDocBadges(d) + '</div>' +
         '<div>' + _dcBookBtn(d.id, cur, '📤 จอง') + '</div></div>';
     });
     h += '</div>';
-    if (free.length > 10) h += '<div style="font-size:11px;color:var(--text3);margin:-4px 0 8px">…และอีก ' + (free.length - 10) + ' เครื่อง</div>';
+    // เดิมตัดที่ 10 เครื่องแล้วจบ ที่เหลือดูไม่ได้เลย — ตอนนี้กดดูต่อได้
+    if (freeHit.length > cap) {
+      h += '<button class="btn bsm bo" style="margin:-4px 0 10px" onclick="dcDayMore()">▾ ดูอีก ' + (freeHit.length - cap) + ' เครื่อง</button>';
+    }
+  } else if (free.length) {
+    h += '<div class="df-empty">🔍 ว่าง ' + free.length + ' เครื่องในวันนี้ แต่ไม่มีตัวไหนตรงกับที่กรองไว้' +
+      ' <button class="btn bsm bo" onclick="dcDayReset();render()">ล้างตัวกรอง</button></div>';
   }
-  if (out.length) {
+
+  if (outHit.length) {
     var jobs = {};
-    out.forEach(function(d) { busyBy[d.id].forEach(function(b) { (jobs[b.jobNo || '_'] = jobs[b.jobNo || '_'] || []).push({ d: d, b: b }); }); });
-    h += '<div style="font-size:12px;font-weight:600;margin:10px 0 4px">ถูกยืมอยู่ ' + out.length + ' เครื่อง</div>';
+    outHit.forEach(function(d) { busyBy[d.id].forEach(function(b) { (jobs[b.jobNo || '_'] = jobs[b.jobNo || '_'] || []).push({ d: d, b: b }); }); });
+    h += '<div style="font-size:12px;font-weight:600;margin:10px 0 4px">ถูกยืมอยู่ ' + outHit.length + ' เครื่อง' +
+      (outHit.length !== out.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + out.length + ')</span>' : '') + '</div>';
     h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ใบจอง</th>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ผู้ยืม</th>' +
