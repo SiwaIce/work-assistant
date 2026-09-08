@@ -92,6 +92,29 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .day-detail .dd-row:last-child { border-bottom:0; }
 .day-detail .dd-nm { flex:1; min-width:0; font-size:12.5px; font-weight:600; }
 .day-detail .dd-nm i { font-style:normal; font-weight:400; color:var(--text3); font-size:11.5px; }
+/* ค้นหา + เลือกหมวด ภายในแผงรายละเอียดของวัน */
+.day-detail .dd-filter { margin-bottom:10px; }
+.day-detail .ddf-search { display:flex; align-items:center; gap:7px; background:var(--surface);
+  border:1px solid var(--border); border-radius:8px; padding:7px 11px; }
+.day-detail .ddf-search > span { flex:0 0 auto; font-size:12px; opacity:.7; }
+.day-detail .ddf-search input { flex:1; min-width:0; border:0; background:transparent; color:var(--text);
+  font-size:12.5px; outline:none; font-family:inherit; }
+.day-detail .ddf-clr { flex:0 0 auto; border:0; background:transparent; color:var(--text3);
+  cursor:pointer; font-size:13px; padding:0 2px; }
+.day-detail .ddf-cats { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.day-detail .ddf-c { font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:999px; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface); color:var(--text2); font-family:inherit; }
+.day-detail .ddf-c b { color:var(--text); font-variant-numeric:tabular-nums; }
+.day-detail .ddf-c.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.day-detail .ddf-c.on b { color:#fff; }
+/* หมวดที่วันนี้ไม่มีของว่างเลย — จางลงแต่ยังกดได้ จะได้รู้ว่ามีหมวดนี้อยู่ ไม่ใช่หายไปเฉยๆ */
+.day-detail .ddf-c.zero { opacity:.45; }
+.day-detail .ddf-note { font-size:10.5px; color:var(--text3); margin-top:7px; }
+.day-detail .ddf-note b { color:var(--text2); }
+.day-detail .dd-count { font-size:11px; color:var(--text2); margin-bottom:5px; }
+.day-detail .dd-empty { font-size:12px; color:var(--text2); background:var(--surface);
+  border:1px dashed var(--border); border-radius:9px; padding:11px 12px; margin-bottom:11px;
+  display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
 .day-detail .dd-busy { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .day-detail .dd-busy i { font-style:normal; font-size:11px; color:var(--good); font-weight:600; }
 .day-detail .dd-note { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:8px 11px; line-height:1.55; }
@@ -708,8 +731,23 @@ function custClearDays() {
   rangeStart = null; rangeEnd = null;
   syncRangeInputs(); checkRangeWarn(); renderUnitCal();
 }
+// ตัวกรองภายในแผงรายละเอียดของวัน — ถามว่า "เฉพาะวันนี้ ของที่เลือกไว้ ตัวไหนว่างบ้าง"
+// ⚠️ ค้นเฉพาะข้อมูลเครื่องของตัวเอง (รุ่น/ชื่อ/เลขเช่า/S/N) เท่านั้น
+// ห้ามเอา busyRanges มาค้นเด็ดขาด — แคตตาล็อกที่ publish มามีชื่อผู้คีย์ติดมาด้วย
+// ถ้าเผลอค้นตรงนั้น ลูกค้าจะพิมพ์ชื่อพนักงานแล้วรู้ได้ว่าใครคีย์เครื่องไหน ซึ่งไม่ควรหลุดออกฝั่งนี้
+var custDayQ = '', custDayCat = 'all';
+function custDayReset() { custDayQ = ''; custDayCat = 'all'; }
+function custDaySearch(v) { custDayQ = v; renderDayDetail(); }
+function custDaySetCat(c) { custDayCat = c; renderDayDetail(); }
+function custDayMatch(u) {
+  var q = custDayQ.trim().toLowerCase();
+  if (!q) return true;
+  return [u.model, u.label, u.rentalDbNo, u.serialNumber].join(' ').toLowerCase().indexOf(q) !== -1;
+}
 function custDayClick(iso) {
   if (custMultiDay) { custToggleDay(iso); return; }
+  // เปลี่ยนไปดูวันอื่น = เริ่มกรองใหม่ ไม่งั้นคำค้นของวันก่อนติดมาแล้วเห็นรายการว่างเปล่าโดยไม่รู้สาเหตุ
+  if (iso !== custDayOpen) custDayReset();
   custDayOpen = (custDayOpen === iso) ? null : iso;
   renderUnitCal();
 }
@@ -735,22 +773,72 @@ function renderDayDetail() {
     '<div class="dd-sub">' + (allFree ? (pending ? 'ว่างครบทุกเครื่องที่เลือก — แต่มีคนขอจองวันนี้ไว้ รอทีมงานคอนเฟิร์ม' : 'ว่างครบทุกเครื่องที่เลือก') :
       'ว่าง ' + freeU.length + ' · ไม่ว่าง ' + busyU.length + ' จาก ' + calUnits.length + ' เครื่องที่เลือก') + '</div>' +
     '</div><button class="dd-x" onclick="custDayOpen=null;renderUnitCal()">✕</button></div>';
-  h += '<div class="dd-list">';
-  calUnits.forEach(function(u) {
-    var free = unitDayState(u, iso) === 'avail';
-    var nf = free ? null : unitNextFreeFrom(u, iso);
-    h += '<div class="dd-row"><span class="dd-nm">' + u.icon + ' ' + esc(u.model) + ' <i>' + esc(u.label) + '</i></span>' +
-      (free ? '<span class="pill pill-good">✅ ว่าง</span>'
-            : '<span class="dd-busy"><span class="pill pill-warn">📤 มีผู้ยืมอยู่</span>' +
-              (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') + '</span>') + '</div>';
+  // ---- ค้นหา + เลือกหมวด เฉพาะภายในวันนี้ ----
+  // ตัวเลขบนชิปคือจำนวนที่ "ว่างในวันนี้" ของหมวดนั้น มองแวบเดียวรู้ว่าวันนี้หยิบอะไรได้
+  // โชว์เมื่อของที่เลือกไว้เยอะพอที่จะหายาก เลือกไว้ 2-3 เครื่องแล้วมีช่องค้นหาคือรกเปล่าๆ
+  var catN = {}, usedCats = [];
+  freeU.forEach(function(u) {
+    var c = u.category || '_none';
+    if (catN[c] === undefined) { catN[c] = 0; usedCats.push(c); }
+    if (custDayMatch(u)) catN[c]++;
   });
-  h += '</div>';
+  var showTools = calUnits.length > 3;
+  if (showTools) {
+    h += '<div class="dd-filter">';
+    h += '<div class="ddf-search"><span>🔍</span>' +
+      '<input type="text" id="custDayQ" value="' + esc(custDayQ) + '" autocomplete="off"' +
+      ' placeholder="พิมพ์หาในวันนี้ — รุ่น / เลขเช่า / S/N" oninput="custDaySearch(this.value)">' +
+      (custDayQ ? '<button class="ddf-clr" onclick="custDayQ=\'\';renderDayDetail()">✕</button>' : '') + '</div>';
+    if (usedCats.length > 1 || custDayCat !== 'all') {
+      var totalFree = usedCats.reduce(function(s, c) { return s + catN[c]; }, 0);
+      h += '<div class="ddf-cats">';
+      h += '<button class="ddf-c' + (custDayCat === 'all' ? ' on' : '') + '" onclick="custDaySetCat(\'all\')">📦 ทั้งหมด <b>' + totalFree + '</b></button>';
+      usedCats.forEach(function(c) {
+        var meta = CATEGORIES.filter(function(x) { return x.id === c; })[0];
+        var lbl = meta ? meta.icon + ' ' + meta.label : '➖ ไม่ระบุหมวด';
+        h += '<button class="ddf-c' + (custDayCat === c ? ' on' : '') + (catN[c] ? '' : ' zero') +
+          '" onclick="custDaySetCat(\'' + String(c).replace(/'/g, "\\'") + '\')">' + esc(lbl) + ' <b>' + catN[c] + '</b></button>';
+      });
+      h += '</div><div class="ddf-note">ตัวเลขบนชิป = จำนวนที่<b>ว่างในวันนี้</b> ของหมวดนั้น</div>';
+    }
+    h += '</div>';
+  }
+
+  var shown = calUnits.filter(function(u) {
+    if (custDayCat !== 'all' && (u.category || '_none') !== custDayCat) return false;
+    return custDayMatch(u);
+  });
+  if (!shown.length) {
+    h += '<div class="dd-empty">🔍 ไม่มีเครื่องที่ตรงกับที่กรองไว้' +
+      ' <button class="btn btn-ghost btn-sm" onclick="custDayReset();renderDayDetail()">ล้างตัวกรอง</button></div>';
+  } else {
+    if (shown.length !== calUnits.length) {
+      h += '<div class="dd-count">แสดง ' + shown.length + ' จาก ' + calUnits.length + ' เครื่องที่เลือกไว้</div>';
+    }
+    h += '<div class="dd-list">';
+    shown.forEach(function(u) {
+      var free = unitDayState(u, iso) === 'avail';
+      var nf = free ? null : unitNextFreeFrom(u, iso);
+      h += '<div class="dd-row"><span class="dd-nm">' + u.icon + ' ' + esc(u.model) + ' <i>' + esc(u.label) + '</i></span>' +
+        (free ? '<span class="pill pill-good">✅ ว่าง</span>'
+              : '<span class="dd-busy"><span class="pill pill-warn">📤 มีผู้ยืมอยู่</span>' +
+                (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') + '</span>') + '</div>';
+    });
+    h += '</div>';
+  }
   if (allFree) {
     h += '<button class="btn btn-primary btn-sm" onclick="custPickFromDetail(\'' + iso + '\')">📅 เลือกวันนี้เป็นวันเริ่มยืม</button>';
   } else {
     h += '<div class="dd-note">วันนี้ยืมพร้อมกันทุกเครื่องไม่ได้ — เอาเครื่องที่ไม่ว่างออกจากรายการที่เลือก หรือเลื่อนไปวันที่ว่างครบ</div>';
   }
+  // เขียนทับทั้งแผงทุกครั้งที่พิมพ์ ช่องค้นหาจึงถูกสร้างใหม่และโฟกัสหลุด — จำตำแหน่งเคอร์เซอร์ไว้คืนให้
+  var a = document.activeElement;
+  var keep = (a && a.id === 'custDayQ') ? { s: a.selectionStart, e: a.selectionEnd } : null;
   box.innerHTML = h + '<div class="dd-priv">🔒 ระบบไม่แสดงข้อมูลผู้ยืมรายอื่น</div></div>';
+  if (keep) {
+    var back = document.getElementById('custDayQ');
+    if (back) { back.focus(); try { back.setSelectionRange(keep.s, keep.e); } catch (e) {} }
+  }
 }
 // วันว่างถัดไปนับจากวันที่กำหนด (ใช้ในแผงรายละเอียด)
 function unitNextFreeFrom(u, fromIso) {
