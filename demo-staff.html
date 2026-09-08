@@ -1311,11 +1311,13 @@ function _scDrillDay(iso) {
     var groups = {};
     out.forEach(function(u) { busyBy[u.id].forEach(function(b) { (groups[scBatchKey(b)] = groups[scBatchKey(b)] || []).push({ u: u, b: b }); }); });
     h += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px">ถูกยืมอยู่ ' + out.length + ' เครื่อง</div>';
-    h += '<table class="dcal-tbl"><thead><tr><th>ผู้ยืม</th><th>เครื่อง</th><th>คืน</th></tr></thead><tbody>';
+    h += '<table class="dcal-tbl"><thead><tr><th>ผู้ยืม</th><th>ยืมไปทำอะไร</th><th>เครื่อง</th><th>คืน</th></tr></thead><tbody>';
     Object.keys(groups).forEach(function(k) {
       var g = groups[k], b0 = g[0].b;
       h += '<tr style="cursor:pointer" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
-        '<td>' + esc(b0.borrower || '—') + '</td>' +
+        '<td><b>' + esc(b0.borrower || '—') + '</b>' +
+        (b0.approver ? '<div style="font-size:10px;color:var(--text3)">ผู้ทำเรื่อง ' + esc(b0.approver) + '</div>' : '') + '</td>' +
+        '<td>' + (b0.purpose ? esc(b0.purpose) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') + '</td>' +
         '<td>' + g.length + ' เครื่อง — ' + esc(g[0].u.model || g[0].u.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
         '<td>' + _scFmt(b0.e) + '</td></tr>';
     });

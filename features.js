@@ -5883,6 +5883,7 @@ function _dcDrillDay(isoStr) {
     h += '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ใบจอง</th>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ผู้ยืม</th>' +
+      '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">ยืมไปทำอะไร</th>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">เครื่อง</th>' +
       '<th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">คืน</th></tr></thead><tbody>';
     Object.keys(jobs).sort().forEach(function(j) {
@@ -5890,6 +5891,8 @@ function _dcDrillDay(isoStr) {
       h += '<tr style="cursor:pointer" onclick="demoCalToggleOpen(\'' + (j === '_' ? 'unit:' + g[0].d.id : 'job:' + j) + '\')">' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);font-family:monospace">' + (j === '_' ? '—' : sanitize(j)) + '</td>' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcBorrower(b0) + '</td>' +
+        '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' +
+        (b0.purpose ? sanitize(b0.purpose) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') + '</td>' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + g.length + ' เครื่อง — ' + sanitize(g[0].d.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
         '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light)">' + _dcFmt(b0.e) + '</td></tr>';
     });

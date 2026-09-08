@@ -78,6 +78,30 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .unit-card .unext { font-size:11px; color:var(--good); font-weight:600; margin-top:7px; }
 .cal-grid { user-select:none; }
 .cal-cell[data-iso] { cursor:pointer; }
+.cal-cell.opened { box-shadow:0 0 0 2px var(--accent); }
+.cal-cell.ticked { background:var(--accent); border-color:var(--accent); }
+.cal-cell.ticked .cal-num, .cal-cell.ticked .cal-tag { color:var(--accent-ink); }
+/* แผงรายละเอียดรายวัน */
+.day-detail { border:1px solid var(--accent); background:var(--accent-soft); border-radius:11px; padding:12px 14px; margin-top:12px; }
+.day-detail .dd-hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.day-detail .dd-hd b { font-size:14.5px; }
+.day-detail .dd-sub { font-size:12px; color:var(--text2); margin-top:2px; }
+.day-detail .dd-x { background:none; border:0; color:var(--text2); font-size:16px; cursor:pointer; padding:0 4px; }
+.day-detail .dd-list { background:var(--surface); border:1px solid var(--border); border-radius:9px; margin-bottom:11px; }
+.day-detail .dd-row { display:flex; align-items:center; gap:10px; padding:8px 11px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.day-detail .dd-row:last-child { border-bottom:0; }
+.day-detail .dd-nm { flex:1; min-width:0; font-size:12.5px; font-weight:600; }
+.day-detail .dd-nm i { font-style:normal; font-weight:400; color:var(--text3); font-size:11.5px; }
+.day-detail .dd-busy { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.day-detail .dd-busy i { font-style:normal; font-size:11px; color:var(--good); font-weight:600; }
+.day-detail .dd-note { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:8px 11px; line-height:1.55; }
+.day-detail .dd-priv { font-size:10.5px; color:var(--text3); margin-top:9px; }
+/* สรุปโหมดเลือกหลายวัน */
+.multi-sum { border:1px solid var(--accent); background:var(--accent-soft); border-radius:11px; padding:11px 14px; margin-top:12px; font-size:13px; }
+.multi-sum.empty { border-style:dashed; color:var(--text2); background:transparent; }
+.multi-sum .ms-note { font-size:11.5px; color:var(--text2); margin-top:6px; line-height:1.55; }
+.multi-sum .ms-warn { font-size:11.5px; color:var(--warn); background:var(--warn-soft); border-radius:7px; padding:7px 10px; margin-top:8px; line-height:1.55; }
+.multi-sum button { margin-top:9px; }
 .unit-card .sel-check { position:absolute; top:10px; right:10px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 #stickyBarWrap { position:sticky; bottom:14px; z-index:20; display:flex; flex-direction:column; gap:8px; margin:16px 0; }
 #stickyBarWrap .cart-bar { position:static; margin:0; }
@@ -205,6 +229,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <button class="cal-nav-btn" onclick="unitCalNav(1)">▶</button>
         </div>
         <div class="cal-grid" id="unitCalGrid"></div>
+        <div id="calDayDetail"></div>
+        <div id="multiSummary"></div>
         <div class="cal-legend">
           <span><span class="dot" style="background:var(--good)"></span>ว่างทุกเครื่องที่เลือก (กดเลือกได้)</span>
           <span><span class="dot" style="background:var(--bad)"></span>มีบางเครื่องไม่ว่าง</span>
@@ -581,89 +607,152 @@ function renderUnitCal() {
     var stateCls = state === 'busy' ? 'busy' : (pendingReq ? 'requested' : 'avail');
     var stateLabel = state === 'busy' ? 'ไม่ว่าง' : (pendingReq ? '⚠️ มีคนจอง รอคอนเฟิร์ม' : 'ว่าง');
     var cls = 'cal-cell ' + stateCls + (isToday ? ' today' : '') + (isEdge ? ' rangeend' : (inRange ? ' inrange' : ''));
-    h += '<div class="' + cls + '" ' + (clickable ? 'data-iso="' + iso + '" onclick="pickCalDay(\'' + iso + '\')"' : '') + '>' +
-      '<span class="cal-num">' + d + '</span>' +
-      (!inRange && !isEdge ? '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>' : (isEdge ? '<span class="cal-tag">✓ เลือก</span>' : '')) + '</div>';
+    // ทุกวันกดได้ รวมวันที่ไม่ว่าง — เพราะการกดคือ "ดูรายละเอียด" ไม่ใช่ "เลือก"
+    var ticked = custMultiDay && custPickedDays.indexOf(iso) !== -1;
+    var opened = custDayOpen === iso;
+    var cls2 = cls + (ticked ? ' ticked' : '') + (opened ? ' opened' : '');
+    var tag = '';
+    if (custMultiDay) tag = ticked ? '<span class="cal-tag">✓ เลือกแล้ว</span>' : '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>';
+    else if (isEdge) tag = '<span class="cal-tag">✓ เลือก</span>';
+    else if (!inRange) tag = '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>';
+    h += '<div class="' + cls2 + '" data-iso="' + iso + '" onclick="custDayClick(\'' + iso + '\')">' +
+      '<span class="cal-num">' + d + '</span>' + tag + '</div>';
   }
   document.getElementById('unitCalGrid').innerHTML = h;
-  wireCalDrag();
+  syncMultiDayUI();
+  renderDayDetail();
+  renderMultiSummary();
+}
+// สรุปวันที่ติ๊กไว้ในโหมดเลือกหลายวัน — ต้องบอกให้ชัดว่าวันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางก็ถูกนับด้วย
+function renderMultiSummary() {
+  var box = document.getElementById('multiSummary');
+  if (!box) return;
+  if (!custMultiDay) { box.innerHTML = ''; return; }
+  if (!custPickedDays.length) {
+    box.innerHTML = '<div class="multi-sum empty">ยังไม่ได้เลือกวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก</div>';
+    return;
+  }
+  var span = daysBetweenIso(custPickedDays[0], custPickedDays[custPickedDays.length - 1]) + 1;
+  var gap = span > custPickedDays.length;
+  var bad = [], it = custPickedDays[0];
+  while (it <= custPickedDays[custPickedDays.length - 1]) {
+    if (combinedDayState(it) !== 'avail') bad.push(it);
+    it = addDaysIso(it, 1);
+  }
+  var h = '<div class="multi-sum"><b>ติ๊กไว้ ' + custPickedDays.length + ' วัน</b> · ยืม ' +
+    fThDate(custPickedDays[0]) + ' – ' + fThDate(custPickedDays[custPickedDays.length - 1]) + ' รวม <b>' + span + ' วัน</b>';
+  if (gap) h += '<div class="ms-note">วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย เพราะเครื่องอยู่กับคุณต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้</div>';
+  if (bad.length) h += '<div class="ms-warn">⚠️ ในช่วงนี้มี ' + bad.length + ' วันที่บางเครื่องไม่ว่าง (' + fThDate(bad[0]) + (bad.length > 1 ? ' และอีก ' + (bad.length - 1) + ' วัน' : '') + ') — ส่งคำขอได้ แต่ทีมงานอาจต้องเลื่อนให้</div>';
+  h += '<button class="btn btn-ghost btn-sm" onclick="custClearDays()">ล้างที่เลือก</button></div>';
+  box.innerHTML = h;
 }
 // ลากคลุมหลายวันเพื่อเลือกช่วง — เดิมต้องกดวันเริ่มแล้วไปปรับจำนวนวันในช่องตัวเลข
 // ลากเป็นวิธีที่คนคาดหวังจากปฏิทินอยู่แล้ว และเห็นช่วงที่กำลังจะได้ระหว่างลากเลย
-// สถานะการลากต้องอยู่นอกฟังก์ชัน เพราะ renderUnitCal() เรียก wireCalDrag() ใหม่ทุกครั้งที่วาดปฏิทิน
-var _calDragging = false, _calAnchor = null, _calDragMoved = false, _calDragEndAt = 0;
-// โหมด "เลือกหลายวัน" — กดวันเริ่ม แล้วกดวันสุดท้าย ไม่ต้องลาก ใช้บนมือถือได้ด้วย
-var custMultiDay = false, _multiAnchor = null;
+// กดวัน = ดูรายละเอียดวันนั้น (ค่าเริ่มต้น) · จะเลือกวันต้องกดปุ่ม "เลือกหลายวัน" ก่อน
+// เลิกใช้การลากเลือกช่วงแล้ว — จอสัมผัสไม่ยิง mousemove จึงใช้ไม่ได้อยู่แล้ว และมันไปทับการกดดูรายละเอียด
+var custMultiDay = false, custPickedDays = [], custDayOpen = null;
 
 function toggleMultiDay() {
   custMultiDay = !custMultiDay;
-  _multiAnchor = null;
+  custDayOpen = null;
+  if (custMultiDay) {
+    // ยกช่วงที่เลือกไว้แล้วมาเป็นจุดตั้งต้น จะได้ไม่ต้องเลือกใหม่ทั้งหมด
+    custPickedDays = [];
+    if (rangeStart) {
+      var it = rangeStart;
+      while (it <= (rangeEnd || rangeStart)) { custPickedDays.push(it); it = addDaysIso(it, 1); }
+    }
+  } else {
+    custPickedDays = [];
+  }
+  renderUnitCal();
+}
+function syncMultiDayUI() {
   var b = document.getElementById('multiDayBtn'), hint = document.getElementById('pickModeHint');
   if (b) {
-    b.textContent = custMultiDay ? '✓ กำลังเลือกหลายวัน' : '🗓️ เลือกหลายวัน';
+    b.textContent = custMultiDay ? '✓ เสร็จแล้ว' : '🗓️ เลือกหลายวัน';
     b.className = custMultiDay ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   }
   if (hint) hint.textContent = custMultiDay
-    ? 'กดวันเริ่ม แล้วกดวันสุดท้าย — ระบบจะติ๊กวันระหว่างนั้นให้ทั้งหมด'
-    : 'กดวันเริ่มยืม ระบบเลือกช่วงให้อัตโนมัติ';
+    ? 'กดที่กล่องวันเพื่อติ๊กเลือก — กดซ้ำเพื่อเอาออก'
+    : 'กดที่กล่องวันเพื่อดูรายละเอียดวันนั้น · จะเลือกหลายวันให้กดปุ่ม 🗓️';
+}
+// ติ๊กวันในโหมดเลือกหลายวัน — เครื่องถูกยืมต่อเนื่อง จะคืนกลางทางแล้วยืมต่อไม่ได้
+// ถ้าติ๊กวันที่ไม่ติดกัน ระบบจึงนับช่วงจากวันแรกถึงวันสุดท้าย และบอกให้รู้ว่ารวมวันตรงกลางด้วย
+function custToggleDay(iso) {
+  var i = custPickedDays.indexOf(iso);
+  if (i === -1) custPickedDays.push(iso);
+  else custPickedDays.splice(i, 1);
+  custPickedDays.sort();
+  if (custPickedDays.length) {
+    rangeStart = custPickedDays[0];
+    rangeEnd = custPickedDays[custPickedDays.length - 1];
+    custDayCount = daysBetweenIso(rangeStart, rangeEnd) + 1;
+    var inp = document.getElementById('custDayCountInput');
+    if (inp) inp.value = custDayCount;
+  } else {
+    rangeStart = null; rangeEnd = null;
+  }
+  syncRangeInputs(); checkRangeWarn(); renderUnitCal();
+}
+function custClearDays() {
+  custPickedDays = [];
+  rangeStart = null; rangeEnd = null;
+  syncRangeInputs(); checkRangeWarn(); renderUnitCal();
+}
+function custDayClick(iso) {
+  if (custMultiDay) { custToggleDay(iso); return; }
+  custDayOpen = (custDayOpen === iso) ? null : iso;
   renderUnitCal();
 }
-function _calPaintRange(a, b) {
-  rangeStart = a < b ? a : b;
-  rangeEnd = a < b ? b : a;
-  custDayCount = daysBetweenIso(rangeStart, rangeEnd) + 1;
-  var inp = document.getElementById('custDayCountInput');
-  if (inp) inp.value = custDayCount;
-  syncRangeInputs(); checkRangeWarn();
-  var grid = document.getElementById('unitCalGrid');
-  if (!grid) return;
-  grid.querySelectorAll('.cal-cell[data-iso]').forEach(function(c) {
-    var iso = c.dataset.iso, on = iso >= rangeStart && iso <= rangeEnd;
-    c.classList.toggle('inrange', on && iso !== rangeStart && iso !== rangeEnd);
-    c.classList.toggle('rangeend', on && (iso === rangeStart || iso === rangeEnd));
-  });
+// เลือกวันนี้เป็นวันเริ่มยืม จากในแผงรายละเอียด
+function custPickFromDetail(iso) {
+  custDayOpen = null;
+  pickCalDay(iso);
 }
-function wireCalDrag() {
-  var grid = document.getElementById('unitCalGrid');
-  if (!grid) return;
-  function cellIso(t) { var c = t.closest ? t.closest('.cal-cell[data-iso]') : null; return c ? c.dataset.iso : null; }
-  // จบการลากแล้ว browser จะยิง click ตามมาที่ช่องที่ปล่อยเมาส์ ซึ่งไปเรียก pickCalDay()
-  // แล้วเขียนทับช่วงที่เพิ่งลากได้ทิ้ง — ดักที่ capture phase ให้ click นั้นตกไป
-  // ต้องเช็คเวลาด้วย ไม่ใช่แค่ธง เพราะถ้าปล่อยเมาส์นอกปฏิทิน click จะไม่มาถึงตรงนี้เลย
-  // ธงจะค้างเป็น true แล้วไปกิน "คลิกจริง" ครั้งถัดไปแทน (กดวันแรกแล้วไม่มีอะไรเกิดขึ้น)
-  grid.addEventListener('click', function(e) {
-    var fresh = _calDragMoved && (Date.now() - _calDragEndAt) < 350;
-    _calDragMoved = false;
-    if (!fresh) return;
-    e.stopPropagation(); e.preventDefault();
-  }, true);
-  grid.addEventListener('mousedown', function(e) {
-    if (custMultiDay) return;   // โหมดเลือกหลายวันใช้การกดทีละครั้ง ไม่ต้องลาก
-    var iso = cellIso(e.target);
-    if (!iso) return;
-    // ตั้งจุดเริ่มไว้เฉยๆ ยังไม่เขียนช่วง — ถ้าเขียนตั้งแต่ตอนกด การคลิกเฉยๆ จะบีบช่วงเหลือ 1 วันทุกครั้ง
-    // แล้วช่อง "จะยืมกี่วัน" จะใช้ไม่ได้เลย ต้องรอให้ลากไปโดนช่องอื่นจริงก่อนถึงเริ่มเขียน
-    _calDragging = true; _calAnchor = iso; _calDragMoved = false;
-    e.preventDefault();
+// แผงรายละเอียดรายวัน — ฝั่งลูกค้า "ไม่บอกว่าใครยืม" บอกแค่ว่าว่างหรือไม่ และจะว่างอีกทีเมื่อไหร่
+function renderDayDetail() {
+  var box = document.getElementById('calDayDetail');
+  if (!box) return;
+  if (!custDayOpen) { box.innerHTML = ''; return; }
+  var iso = custDayOpen;
+  var freeU = [], busyU = [];
+  calUnits.forEach(function(u) {
+    if (unitDayState(u, iso) === 'avail') freeU.push(u); else busyU.push(u);
   });
-  grid.addEventListener('mousemove', function(e) {
-    if (!_calDragging) return;
-    var iso = cellIso(e.target);
-    if (!iso || iso === _calAnchor) return;
-    _calDragMoved = true;
-    _calPaintRange(_calAnchor, iso);
+  var allFree = busyU.length === 0;
+  var pending = allFree && combinedPendingOnDay(iso);
+  var h = '<div class="day-detail"><div class="dd-hd"><div>' +
+    '<b>📅 ' + fThDate(iso) + '</b>' +
+    '<div class="dd-sub">' + (allFree ? (pending ? 'ว่างครบทุกเครื่องที่เลือก — แต่มีคนขอจองวันนี้ไว้ รอทีมงานคอนเฟิร์ม' : 'ว่างครบทุกเครื่องที่เลือก') :
+      'ว่าง ' + freeU.length + ' · ไม่ว่าง ' + busyU.length + ' จาก ' + calUnits.length + ' เครื่องที่เลือก') + '</div>' +
+    '</div><button class="dd-x" onclick="custDayOpen=null;renderUnitCal()">✕</button></div>';
+  h += '<div class="dd-list">';
+  calUnits.forEach(function(u) {
+    var free = unitDayState(u, iso) === 'avail';
+    var nf = free ? null : unitNextFreeFrom(u, iso);
+    h += '<div class="dd-row"><span class="dd-nm">' + u.icon + ' ' + esc(u.model) + ' <i>' + esc(u.label) + '</i></span>' +
+      (free ? '<span class="pill pill-good">✅ ว่าง</span>'
+            : '<span class="dd-busy"><span class="pill pill-warn">📤 มีผู้ยืมอยู่</span>' +
+              (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') + '</span>') + '</div>';
   });
+  h += '</div>';
+  if (allFree) {
+    h += '<button class="btn btn-primary btn-sm" onclick="custPickFromDetail(\'' + iso + '\')">📅 เลือกวันนี้เป็นวันเริ่มยืม</button>';
+  } else {
+    h += '<div class="dd-note">วันนี้ยืมพร้อมกันทุกเครื่องไม่ได้ — เอาเครื่องที่ไม่ว่างออกจากรายการที่เลือก หรือเลื่อนไปวันที่ว่างครบ</div>';
+  }
+  box.innerHTML = h + '<div class="dd-priv">🔒 ระบบไม่แสดงข้อมูลผู้ยืมรายอื่น</div></div>';
 }
-// ผูก mouseup ที่ window ครั้งเดียวตอนโหลด — เดิมผูกใหม่ทุก render พร้อม { once:true }
-// ทำให้ listener ถูกใช้ทิ้งตั้งแต่คลิกแรกที่ไหนก็ได้บนหน้า พอลากรอบถัดไปไม่มีตัวจับ mouseup
-// _calDragging เลยค้างเป็น true ตลอด แล้ววันวิ่งตามเมาส์ไม่หยุด (บั๊กที่ผู้ใช้เจอ)
-window.addEventListener('mouseup', function() {
-  if (!_calDragging) return;
-  _calDragging = false;
-  _calDragEndAt = Date.now();
-  // ปล่อยเมาส์โดยไม่ได้ลากไปไหน = คลิกธรรมดา ปล่อยให้ onclick ของช่องทำงานตามปกติ ไม่ต้องวาดใหม่
-  if (_calDragMoved) renderUnitCal();   // วาดใหม่ให้ป้าย "✓ เลือก" ตรงกับช่วงที่ลากได้
-});
+// วันว่างถัดไปนับจากวันที่กำหนด (ใช้ในแผงรายละเอียด)
+function unitNextFreeFrom(u, fromIso) {
+  var iso = fromIso;
+  for (var i = 0; i < 400; i++) {
+    if (unitDayState(u, iso) === 'avail') return iso;
+    iso = addDaysIso(iso, 1);
+  }
+  return null;
+}
 function unitCalNav(dir) { custCalMonthOffset += dir; renderUnitCal(); }
 function pickCalDay(iso) {
   if (custMultiDay) {
