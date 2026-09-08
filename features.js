@@ -4752,27 +4752,58 @@ function rDemoTracker(el) {
   // (ถ้ากรองเหลือหมวดเดียวอยู่แล้ว หรือยังไม่ได้ตั้งหมวดหมู่เลย ก็แสดงเป็น grid เดียวตามเดิม ไม่ต้องมีหัวข้อกลุ่ม)
   // ปิดการจัดกลุ่มเมื่อผู้ใช้เลือก sort อื่นที่ไม่ใช่ค่าเริ่มต้น — ถ้ายังจัดกลุ่มอยู่ ลำดับหมวดหมู่จะครอบลำดับ
   // ที่ sort ไว้ ทำให้กด "เรียงตามยืมนานสุด" แล้วหน้าจอไม่เปลี่ยนอะไรเลย (เรียงข้างในกลุ่มซึ่งมักมีตัวเดียว)
-  var groupByCat = demoSort === 'name_asc' && demoCategoryFilter === 'all' && demoCats.length && items.some(function(d) { return d.category; });
-  if (!groupByCat) {
+  // จัดกลุ่มระดับ "รุ่น" ไม่ใช่ระดับหมวดหมู่ — หมวดหมู่มีแค่ 3 อัน พอกรองเหลือ Drone อย่างเดียว
+  // การ์ดทุกรุ่นจะไหลติดกันเป็นพืด (M400 ต่อด้วย M4E ไม่มีอะไรคั่น) แยกไม่ออกว่ารุ่นไหนจบตรงไหน
+  // ปิดการจัดกลุ่มเมื่อผู้ใช้เลือก sort อื่น — ไม่งั้นลำดับกลุ่มจะครอบลำดับที่ sort ไว้
+  var groupByModel = demoSort === 'name_asc';
+  if (!groupByModel) {
     h += '<div class="demo-grid">' + shown.map(function(d) { return demoCardHtml(d, now, _dupRentals); }).join('') + '</div>';
   } else {
-    var catBuckets = demoCats.map(function(c) {
-      return { cat: c, list: shown.filter(function(d) { return d.category === c.id; }) };
+    // เลข "เครื่อง #N" นับจากทั้งรุ่นในคลัง ไม่ใช่จากที่เหลือหลังกรอง ไม่งั้นเครื่องเดิมจะเปลี่ยนเลขไปมา
+    // ทุกครั้งที่เปลี่ยนตัวกรอง แล้วอ้างอิงกันผิดตัว
+    var idxInModel = {};
+    allItems.forEach(function(d) {
+      var k = demoCalModelOf(d);
+      (idxInModel[k] = idxInModel[k] || []).push(d.id);
     });
-    var noneList = shown.filter(function(d) { return !d.category || !demoCats.some(function(c) { return c.id === d.category; }); });
-    if (noneList.length) catBuckets.push({ cat: { icon: '➖', label: 'ไม่ระบุหมวดหมู่' }, list: noneList });
-    catBuckets.forEach(function(b) {
-      if (!b.list.length) return;
-      h += '<details class="demo-cat-group" open><summary>' + (b.cat.icon || '') + ' ' + sanitize(b.cat.label) + ' <span class="cnt">' + b.list.length + '</span></summary>';
-      h += '<div class="demo-grid">' + b.list.map(function(d) { return demoCardHtml(d, now, _dupRentals); }).join('') + '</div>';
-      h += '</details>';
+    var mBuckets = {}, mOrder = [];
+    shown.forEach(function(d) {
+      var k = demoCalModelOf(d);
+      if (!mBuckets[k]) { mBuckets[k] = []; mOrder.push(k); }
+      mBuckets[k].push(d);
+    });
+    mOrder.sort(function(a, b) { return a.localeCompare(b); });
+    mOrder.forEach(function(m) {
+      var list = mBuckets[m];
+      var free = list.filter(function(d) { return getDemoEffectiveStatus(d) === 'available'; }).length;
+      var out = list.filter(function(d) { var e = getDemoEffectiveStatus(d); return e === 'lent' || e === 'reserved'; }).length;
+      var late = list.filter(function(d) {
+        if (getDemoEffectiveStatus(d) !== 'lent') return false;
+        var rd = ftParseDate(d.returnDate);
+        return rd ? rd < now : (ftParseDate(d.lentDate) ? Math.floor((now - ftParseDate(d.lentDate)) / 86400000) > 30 : false);
+      }).length;
+      var cat0 = demoCats.filter(function(c) { return c.id === list[0].category; })[0];
+      h += '<details class="demo-mgroup" open><summary>' +
+        '<span class="mg-ic">' + (cat0 && cat0.icon ? cat0.icon : '🚁') + '</span>' +
+        '<span class="mg-name">' + sanitize(m) + '</span>' +
+        '<span class="mg-stats">' +
+          '<span class="s-all">' + list.length + ' เครื่อง</span>' +
+          (free ? '<span class="s-free">✅ ว่าง ' + free + '</span>' : '') +
+          (out ? '<span class="s-out">📤 ยืม ' + out + '</span>' : '') +
+          (late ? '<span class="s-late">⚠️ เลยกำหนด ' + late + '</span>' : '') +
+        '</span></summary>';
+      h += '<div class="demo-grid">' + list.map(function(d) {
+        return demoCardHtml(d, now, _dupRentals, (idxInModel[m] || []).indexOf(d.id) + 1);
+      }).join('') + '</div></details>';
     });
   }
 
   el.innerHTML = h;
 }
 
-function demoCardHtml(d, now, dupRentals) {
+// unitNo = ลำดับเครื่องในรุ่น ส่งมาเฉพาะตอนอยู่ในกลุ่มรุ่น — หัวกลุ่มบอกชื่อรุ่นแล้ว
+// การ์ดจึงไม่ต้องเขียนชื่อรุ่นซ้ำอีก 12 ใบ ใช้พื้นที่ไปกับสิ่งที่ต่างกันจริงแทน
+function demoCardHtml(d, now, dupRentals, unitNo) {
   var eff = getDemoEffectiveStatus(d);
   var meta = DEMO_STATUS_META[eff];
   var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
@@ -4792,13 +4823,18 @@ function demoCardHtml(d, now, dupRentals) {
   var _model = (d.model || '').trim();
 
   var h = '';
-  h += '<div class="demo-card2' + (isOverdue ? ' demo-overdue' : '') + '" style="border-left-color:' + mColor + '">';
+  // แถบซ้ายบอก "สถานะ" ไม่ใช่สีประจำรุ่น — พอจัดกลุ่มตามรุ่นแล้ว สีรุ่นไม่ได้บอกอะไรเพิ่ม
+  // กลายเป็นสีสุ่มๆ เต็มหน้า ส่วนสถานะคือสิ่งที่อยากกวาดตาหาจริง
+  var stCls = isOverdue ? ' st-late' : (eff === 'lent' || eff === 'reserved') ? ' st-out'
+            : eff === 'available' ? ' st-free' : ' st-off';
+  h += '<div class="demo-card2' + (isOverdue ? ' demo-overdue' : '') + stCls + '">';
 
   // ---- หัวการ์ด: ไอคอน + ชื่อ + บรรทัดระบุตัวตน + สถานะ ----
   h += '<div class="demo-card2-top">';
   h += '<div class="demo-card2-icon" style="background:' + mColor + '22;color:' + mColor + '">' + (cat && cat.icon ? cat.icon : '🚁') + '</div>';
   h += '<div class="demo-card2-hd">';
-  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})" title="กดเพื่อดูรายละเอียดทั้งหมด">' + sanitize(d.name) + '</div>';
+  h += '<div class="demo-card2-name" onclick="go(\'demoDetail\',{demoId:\'' + d.id + '\'})" title="กดเพื่อดูรายละเอียดทั้งหมด">' +
+    (unitNo ? 'เครื่อง #' + unitNo : sanitize(d.name)) + '</div>';
   // เลขเช่า · S/N · หมวดหมู่ รวมเป็นบรรทัดเดียว เดิมกินคนละบรรทัดทั้งที่เป็นข้อมูลระบุตัวตนชุดเดียวกัน
   h += '<div class="demo-idline">';
   if (_rental) {
@@ -4808,7 +4844,7 @@ function demoCardHtml(d, now, dupRentals) {
     h += '<span class="demo-idpc warn">📋 ยังไม่ลงทะเบียนเครื่องเช่า</span>';
   }
   if (d.serialNumber) h += '<span class="demo-idpc"><i>S/N</i>' + qcopyHtml(d.serialNumber) + '</span>';
-  if (cat) h += '<span class="demo-idpc plain">' + (cat.icon || '') + ' ' + sanitize(cat.label) + '</span>';
+  if (cat && !unitNo) h += '<span class="demo-idpc plain">' + (cat.icon || '') + ' ' + sanitize(cat.label) + '</span>';
   h += '</div></div>';
   h += '<div class="demo-card2-stat"><span class="demo-status ' + meta.cls + '" title="' + sanitize(meta.desc) + '">' + meta.label + '</span>';
   if (isOverdue) h += '<span class="demo-od">⚠️ เลยกำหนดคืน</span>';
@@ -4827,7 +4863,7 @@ function demoCardHtml(d, now, dupRentals) {
 
   // ---- รายละเอียดรอง: โชว์ Model เฉพาะตอนที่ไม่ซ้ำกับชื่อ ไม่งั้นเป็นบรรทัดซ้ำเปล่าๆ ----
   var sub = '';
-  if (_model && _model !== (d.name || '').trim()) sub += '<div>📦 ' + qcopyHtml(_model) + '</div>';
+  if (!unitNo && _model && _model !== (d.name || '').trim()) sub += '<div>📦 ' + qcopyHtml(_model) + '</div>';
   if (d.sku) sub += '<div>🏷️ ' + qcopyHtml(d.sku) + '</div>';
   if (d.note) sub += '<div>📝 ' + sanitize(d.note) + '</div>';
   if (sub) h += '<div class="demo-card2-info">' + sub + '</div>';

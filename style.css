@@ -10187,3 +10187,30 @@ input:focus, select:focus, textarea:focus {
 .dcal-multisum .ms-row span { flex: 1; min-width: 0; }
 .dcal-multisum .ms-row b { display: block; font-size: 12.5px; }
 .dcal-multisum .ms-row i { display: block; font-style: normal; font-size: 10.5px; color: var(--text3); font-family: monospace; }
+
+/* ---- จัดกลุ่มการ์ดตามรุ่น ---- */
+.demo-mgroup { margin-bottom: 18px; }
+.demo-mgroup > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  margin-bottom: 11px; position: sticky; top: 0; z-index: 6; }
+.demo-mgroup > summary::-webkit-details-marker { display: none; }
+.demo-mgroup > summary::before { content: '▸'; font-size: 11px; color: var(--text3); transition: transform .15s; flex-shrink: 0; }
+.demo-mgroup[open] > summary::before { transform: rotate(90deg); }
+.demo-mgroup > summary:hover { border-color: var(--accent); }
+.demo-mgroup .mg-ic { font-size: 16px; flex-shrink: 0; }
+.demo-mgroup .mg-name { font-weight: 700; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.demo-mgroup .mg-stats { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+.demo-mgroup .mg-stats span { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.demo-mgroup .s-all { background: var(--card); color: var(--text2); font-family: monospace; }
+.demo-mgroup .s-free { background: rgba(34,197,94,.14); color: #22c55e; }
+.demo-mgroup .s-out { background: rgba(245,158,11,.14); color: #f59e0b; }
+.demo-mgroup .s-late { background: rgba(239,68,68,.14); color: #ef4444; }
+@media (max-width: 560px) {
+  .demo-mgroup > summary { flex-wrap: wrap; }
+  .demo-mgroup .mg-stats { margin-left: 0; width: 100%; }
+}
+/* แถบซ้ายของการ์ดบอกสถานะ แทนสีประจำรุ่น */
+.demo-card2.st-free { border-left-color: #22c55e; }
+.demo-card2.st-out { border-left-color: #f59e0b; }
+.demo-card2.st-late { border-left-color: #ef4444; }
+.demo-card2.st-off { border-left-color: var(--text3); }
