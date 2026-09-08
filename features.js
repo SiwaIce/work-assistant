@@ -6163,6 +6163,37 @@ function _dcDocBadges(d) {
     '<span class="pill" style="font-size:10px;padding:1px 7px;border-radius:999px;background:var(--bg2);color:var(--text2)">' + (d.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>' +
     b(d.nbtcRegistered, 'กสทช.') + b(d.droneInsurance, 'ประกัน') + b(d.caatRegistered, 'CAAT') + '</span>';
 }
+// ชื่อรุ่นจากทะเบียนมีวงเล็บต่อท้ายซ้ำแทบทุกเครื่อง — "DJI Matrice 400 (General Demo)",
+// "DJI Matrice 4TD(Demo Unit)" (บางตัวไม่เว้นวรรคหน้าวงเล็บ) ส่วนที่ซ้ำทุกแถวไม่ช่วยแยกเครื่อง
+function _dcModelParts(d) {
+  var full = String(d.name || d.model || '').trim() || '-';
+  var m = full.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (m && m[1].trim()) return { main: m[1].trim(), sub: m[2].trim() };
+  return { main: full, sub: '' };
+}
+// เดิมขึ้นชิปเอกสาร 3 ใบทุกแถว ซึ่งในทะเบียนจริงเป็น ✗ เหมือนกันหมด — สิ่งที่เหมือนกันทุกแถว
+// ไม่ช่วยแยกแยะ แต่กินสายตามากที่สุด ยุบเหลือชิปเดียว รายละเอียดรายใบเก็บไว้ใน tooltip
+function _dcDocTag(d) {
+  var n = (d.nbtcRegistered ? 1 : 0) + (d.droneInsurance ? 1 : 0) + (d.caatRegistered ? 1 : 0);
+  var tip = 'กสทช. ' + (d.nbtcRegistered ? '✓' : '✗') + ' · ประกัน ' + (d.droneInsurance ? '✓' : '✗') +
+    ' · CAAT ' + (d.caatRegistered ? '✓' : '✗');
+  if (n === 3) return '<span class="du-t ok" title="' + tip + '">✓ เอกสารครบ</span>';
+  return '<span class="du-t doc" title="' + tip + '">เอกสาร ' + n + '/3</span>';
+}
+function _dcDayRow(d, cur) {
+  var p = _dcModelParts(d);
+  return '<div class="du-row">' +
+    '<div class="du-rent" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')" title="กดดูรายละเอียดเครื่องนี้">' +
+      '<small>เช่า</small>' + sanitize(d.rentalDbNo || '—') + '</div>' +
+    '<div class="du-mid"><div class="du-mdl">' + sanitize(p.main) +
+      (p.sub ? ' <u>' + sanitize(p.sub) + '</u>' : '') + '</div>' +
+      '<div class="du-sub">' +
+        (d.serialNumber ? '<span class="du-sn">' + sanitize(d.serialNumber) + '</span>' : '') +
+        (d.flyable !== false ? '<span class="du-t fly">✈️ บินได้</span>' : '<span class="du-t disp">🖼️ จัดแสดง</span>') +
+        _dcDocTag(d) +
+      '</div></div>' +
+    '<div>' + _dcBookBtn(d.id, cur, 'จอง') + '</div></div>';
+}
 function _dcBorrower(b) {
   if (!b) return '<span style="color:var(--text3)">—</span>';
   var dd = b.dealerId ? ST.getOne('dealers', b.dealerId) : null;
@@ -6318,21 +6349,45 @@ function _dcDrillDay(isoStr) {
   }
 
   if (freeHit.length) {
-    var cap = dcDayAll ? freeHit.length : 10;
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + freeHit.length + ' เครื่อง' +
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">ว่าง ' + freeHit.length + ' เครื่อง' +
       (freeHit.length !== free.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + free.length + ')</span>' : '') +
       ' — จองได้เลย</div>';
-    h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:10px">';
-    freeHit.slice(0, cap).forEach(function(d) {
-      h += '<div class="dcal-urow"><div style="font-family:monospace;font-weight:600;cursor:pointer" onclick="demoCalToggleOpen(\'unit:' + d.id + '\')">' + sanitize(d.rentalDbNo || '—') + '</div>' +
-        '<div><div style="font-size:12px;font-weight:600">' + sanitize(d.name || '-') + '</div>' +
-        '<div style="font-size:10px;color:var(--text3);font-family:monospace;margin-bottom:3px">S/N ' + sanitize(d.serialNumber || '—') + '</div>' + _dcDocBadges(d) + '</div>' +
-        '<div>' + _dcBookBtn(d.id, cur, '📤 จอง') + '</div></div>';
-    });
+    h += '<div class="du-list' + (freeHit.length > 6 ? '' : ' flat') + '">';
+    // ว่างเกิน 6 เครื่องเมื่อไหร่ค่อยจัดกลุ่มตามรุ่น — ทะเบียนจริงมีรุ่นซ้ำหลายตัว คำถามที่เจอบ่อย
+    // คือ "รุ่นนี้ว่างไหม" หัวกลุ่มตอบได้เร็วกว่าไล่อ่านทีละแถว แต่ถ้าว่างไม่กี่เครื่องคนละรุ่น
+    // หัวกลุ่มจะกลายเป็นส่วนเกิน จึงไม่จัดกลุ่ม
+    var truncated = 0;
+    if (freeHit.length > 6) {
+      var groups = {}, order = [];
+      freeHit.forEach(function(d) {
+        var k = demoCalModelOf(d);   // คีย์เดียวกับมุมมองรุ่นและตัวกรอง "เลือกรุ่น" กลุ่มจะได้ตรงกัน
+        if (!groups[k]) { groups[k] = []; order.push(k); }
+        groups[k].push(d);
+      });
+      order.sort(function(a, b) { return groups[b].length - groups[a].length || a.localeCompare(b, 'th'); });
+      var cats = _demoCatList();
+      order.forEach(function(k) {
+        var list = groups[k], p = _dcModelParts(list[0]);
+        var cat = cats.filter(function(c) { return c.id === list[0].category; })[0];
+        // ทั้งกลุ่มบินไม่ได้ = เตือนบนหัวกลุ่มเลย จะได้ไม่เผลอจองไปงานบินแล้วมารู้ทีหลัง
+        var allDisplay = list.every(function(x) { return x.flyable === false; });
+        h += '<div class="du-ghd"><span class="du-gic">' + (cat && cat.icon ? cat.icon : '➖') + '</span>' +
+          '<span class="du-gnm">' + sanitize(p.main) + (p.sub ? ' <u>' + sanitize(p.sub) + '</u>' : '') + '</span>' +
+          '<span class="du-gc">' + (allDisplay ? '🖼️ จัดแสดงเท่านั้น · ' : '') + 'ว่าง ' + list.length + ' เครื่อง</span></div>';
+        // แต่ละกลุ่มโชว์ 4 ตัวพอ — สิ่งที่ต้องเห็นครบคือ "มีรุ่นอะไรว่างบ้าง" ไม่ใช่ทุกเครื่องในรุ่น
+        var lim = dcDayAll ? list.length : Math.min(4, list.length);
+        list.slice(0, lim).forEach(function(d) { h += _dcDayRow(d, cur); });
+        if (list.length > lim) {
+          truncated += list.length - lim;
+          h += '<div class="du-more">…อีก ' + (list.length - lim) + ' เครื่องในรุ่นนี้</div>';
+        }
+      });
+    } else {
+      freeHit.forEach(function(d) { h += _dcDayRow(d, cur); });
+    }
     h += '</div>';
-    // เดิมตัดที่ 10 เครื่องแล้วจบ ที่เหลือดูไม่ได้เลย — ตอนนี้กดดูต่อได้
-    if (freeHit.length > cap) {
-      h += '<button class="btn bsm bo" style="margin:-4px 0 10px" onclick="dcDayMore()">▾ ดูอีก ' + (freeHit.length - cap) + ' เครื่อง</button>';
+    if (truncated) {
+      h += '<button class="btn bsm bo" style="margin:7px 0 10px" onclick="dcDayMore()">▾ ดูครบทั้ง ' + freeHit.length + ' เครื่อง</button>';
     }
   } else if (free.length) {
     h += '<div class="df-empty">🔍 ว่าง ' + free.length + ' เครื่องในวันนี้ แต่ไม่มีตัวไหนตรงกับที่กรองไว้' +
