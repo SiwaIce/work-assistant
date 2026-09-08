@@ -228,16 +228,47 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-drill-hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:9px; }
 .dcal-kv { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; margin-bottom:9px; }
 .dcal-kv span.k { display:block; font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); }
-.dcal-urow { display:grid; grid-template-columns:110px 1fr auto; gap:10px; align-items:center; padding:7px 10px;
-  border-bottom:1px solid var(--border); font-size:12px; }
-.dcal-urow:last-child { border-bottom:none; }
-/* บนจอแคบ คอลัมน์เลขเครื่อง 110px บีบจน "เช่า/S-N" ตัดบรรทัดมั่ว แถวเดียวสูงเกิน 140px อ่านยาก
-   สลับเป็นชื่อรุ่นขึ้นก่อน (สิ่งที่คนกวาดตาหา) เลขเครื่องอยู่ใต้ชื่อ ปุ่มคีย์ยืมอยู่ขวาคร่อมสองแถว */
+/* ── แถวเครื่องว่างในกล่องวัน ─────────────────────────────────────────
+   เดิมยัดเลขเช่า+S/N ไว้ในคอลัมน์เดียวกว้าง 110px แต่ S/N ยาว 16 ตัว ชิปเลยล้นไปชนคอลัมน์ถัดไป
+   คราวนี้เลขเช่า (ตัวที่ต้องเอาไปคีย์เบิกจริง) ได้คอลัมน์แคบของตัวเอง 74px พอดี 5 หลัก
+   ส่วน S/N ย้ายลงบรรทัดรองที่กว้างเต็ม ไม่ต้องแย่งที่กับใคร */
+.du-list { border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden; }
+.du-row { display:grid; grid-template-columns:74px 1fr auto; gap:0 14px; align-items:center;
+  padding:9px 12px; border-bottom:1px solid var(--border); }
+.du-row:last-child { border-bottom:none; }
+/* แถบสลับสีอ่อน ช่วยให้ตากวาดตามแนวนอนไม่หลุดแถว — ใช้เฉพาะตอนไม่จัดกลุ่ม
+   เพราะพอมีหัวกลุ่มคั่น จังหวะสลับสีจะเพี้ยนและหัวกลุ่มเองก็ทำหน้าที่แบ่งจังหวะอยู่แล้ว */
+.du-list.flat .du-row:nth-child(even) { background:var(--surface-2); }
+.du-rent { font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:14px; font-weight:700;
+  letter-spacing:-.02em; color:var(--text); font-variant-numeric:tabular-nums; cursor:pointer; }
+.du-rent small { display:block; font-family:-apple-system,'Segoe UI',sans-serif; font-size:8.5px;
+  font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--text3); margin-bottom:-1px; }
+.du-rent:hover { color:var(--accent); }
+.du-mid { min-width:0; }
+.du-mdl { font-size:13.5px; font-weight:700; letter-spacing:-.01em; }
+.du-mdl u { text-decoration:none; font-weight:500; color:var(--text3); font-size:11.5px; }
+.du-sub { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-top:3px; }
+.du-sn { font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:10.5px; color:var(--text3); }
+.du-t { font-size:10px; font-weight:700; padding:1px 7px; border-radius:5px; white-space:nowrap; }
+.du-t.fly { background:var(--surface-2); color:var(--text2); border:1px solid var(--border); }
+.du-t.disp { background:var(--warn-soft); color:var(--warn); }
+/* เอกสารไม่ครบ = เส้นประเงียบๆ · ครบ = เขียว ให้เด่นเฉพาะตัวที่ต่างจากพวก */
+.du-t.doc { background:transparent; color:var(--text3); border:1px dashed var(--border); }
+.du-t.ok { background:var(--good-soft); color:var(--good); }
+.du-ghd { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--surface-2);
+  border-bottom:1px solid var(--border); font-size:11.5px; }
+.du-ghd + .du-row { background:var(--surface); }
+.du-gic { flex:0 0 auto; font-size:13px; }
+.du-gnm { font-weight:700; min-width:0; }
+.du-gnm u { text-decoration:none; font-weight:500; color:var(--text3); font-size:10.5px; }
+.du-gc { margin-inline-start:auto; font-weight:600; color:var(--text3); white-space:nowrap;
+  font-variant-numeric:tabular-nums; }
+.du-more { padding:6px 12px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--border); }
 @media (max-width:620px) {
-  .dcal-urow { grid-template-columns:1fr auto; gap:5px 10px; padding:9px 10px; }
-  .dcal-urow > div:nth-child(1) { grid-column:1; grid-row:2; }
-  .dcal-urow > div:nth-child(2) { grid-column:1; grid-row:1; }
-  .dcal-urow > div:nth-child(3) { grid-column:2; grid-row:1 / span 2; align-self:center; }
+  .du-row { grid-template-columns:64px 1fr auto; gap:0 10px; padding:9px 10px; }
+  .du-rent { font-size:13px; }
+  .du-mdl { font-size:12.5px; }
+  .du-sn { font-size:9.5px; }
 }
 /* ตัวกรองภายในกล่องรายละเอียดของวัน */
 .dcal-dayf { background:var(--surface-2); border:1px solid var(--border); border-radius:9px;
@@ -1301,6 +1332,38 @@ function _scDocs(u) {
     '<span class="pill pill-muted">' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>' +
     b(u.nbtcRegistered, 'กสทช.') + b(u.droneInsurance, 'ประกัน') + b(u.caatRegistered, 'CAAT') + '</span>';
 }
+// ชื่อรุ่นจากทะเบียนมีวงเล็บต่อท้ายซ้ำแทบทุกเครื่อง — "DJI Matrice 400 (General Demo)",
+// "DJI Matrice 4TD(Demo Unit)" (บางตัวไม่เว้นวรรคหน้าวงเล็บ) ส่วนที่ซ้ำทุกแถวไม่ช่วยแยกเครื่อง
+// จึงแยกออกมาแสดงเป็นตัวจาง ให้ชื่อรุ่นจริงเด่นแทน
+function _scModelParts(u) {
+  var full = String(u.model || u.name || '').trim() || '-';
+  var m = full.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (m && m[1].trim()) return { main: m[1].trim(), sub: m[2].trim() };
+  return { main: full, sub: '' };
+}
+// เดิมขึ้นชิปเอกสาร 3 ใบทุกแถว ซึ่งในทะเบียนจริงเป็น ✗ เหมือนกันหมด — สิ่งที่เหมือนกันทุกแถว
+// ไม่ช่วยแยกแยะ แต่กินสายตามากที่สุด ยุบเหลือชิปเดียว ตัวที่เอกสารครบค่อยเด่นขึ้นมาเป็นสีเขียว
+function _scDocTag(u) {
+  var n = (u.nbtcRegistered ? 1 : 0) + (u.droneInsurance ? 1 : 0) + (u.caatRegistered ? 1 : 0);
+  var tip = 'กสทช. ' + (u.nbtcRegistered ? '✓' : '✗') + ' · ประกัน ' + (u.droneInsurance ? '✓' : '✗') +
+    ' · CAAT ' + (u.caatRegistered ? '✓' : '✗');
+  if (n === 3) return '<span class="du-t ok" title="' + tip + '">✓ เอกสารครบ</span>';
+  return '<span class="du-t doc" title="' + tip + '">เอกสาร ' + n + '/3</span>';
+}
+function _scDayRow(u, cur) {
+  var p = _scModelParts(u);
+  return '<div class="du-row">' +
+    '<div class="du-rent" onclick="scToggleOpen(\'unit:' + u.id + '\')" title="กดดูรายละเอียดเครื่องนี้">' +
+      '<small>เช่า</small>' + esc(u.rentalDbNo || '—') + '</div>' +
+    '<div class="du-mid"><div class="du-mdl">' + esc(p.main) +
+      (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + '</div>' +
+      '<div class="du-sub">' +
+        (u.serialNumber ? '<span class="du-sn">' + esc(u.serialNumber) + '</span>' : '') +
+        (u.flyable !== false ? '<span class="du-t fly">✈️ บินได้</span>' : '<span class="du-t disp">🖼️ จัดแสดง</span>') +
+        _scDocTag(u) +
+      '</div></div>' +
+    '<div>' + scBookBtn(u.id, cur, 'คีย์ยืม', true) + '</div></div>';
+}
 function _scIdChips(u) {
   var h = '';
   if (u.rentalDbNo) h += '<span class="dcal-idpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span> ';
@@ -1660,20 +1723,46 @@ function _scDrillDay(iso) {
   }
 
   if (freeHit.length) {
-    var cap = scDayAll ? freeHit.length : 10;
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:4px">ว่าง ' + freeHit.length + ' เครื่อง' +
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">ว่าง ' + freeHit.length + ' เครื่อง' +
       (freeHit.length !== free.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + free.length + ')</span>' : '') +
       ' — คีย์ยืมได้เลย</div>';
-    h += '<div style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">';
-    freeHit.slice(0, cap).forEach(function(u) {
-      h += '<div class="dcal-urow"><div style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</div>' +
-        '<div><div style="font-weight:600">' + esc(u.model || u.name || '-') + '</div><div style="margin-top:3px">' + _scDocs(u) + '</div></div>' +
-        '<div>' + scBookBtn(u.id, cur, '📤 คีย์ยืม') + '</div></div>';
-    });
+    h += '<div class="du-list' + (freeHit.length > 6 ? '' : ' flat') + '">';
+    // ว่างเกิน 6 เครื่องเมื่อไหร่ค่อยจัดกลุ่มตามรุ่น — ทะเบียนจริงมีรุ่นซ้ำหลายตัว (4E สามเครื่อง,
+    // 4T สองเครื่อง) คำถามที่เจอบ่อยคือ "รุ่นนี้ว่างไหม" หัวกลุ่มตอบได้เร็วกว่าไล่อ่านทีละแถว
+    // แต่ถ้าว่างแค่ไม่กี่เครื่องคนละรุ่น หัวกลุ่มจะกลายเป็นส่วนเกิน จึงไม่จัดกลุ่ม
+    var truncated = 0;
+    if (freeHit.length > 6) {
+      var groups = {}, order = [];
+      freeHit.forEach(function(u) {
+        var k = _unitModelKey(u);   // คีย์เดียวกับตัวกรอง "เลือกรุ่น" ด้านบน กลุ่มจะได้ตรงกัน
+        if (!groups[k]) { groups[k] = []; order.push(k); }
+        groups[k].push(u);
+      });
+      order.sort(function(a, b) { return groups[b].length - groups[a].length || a.localeCompare(b, 'th'); });
+      order.forEach(function(k) {
+        var list = groups[k], p = _scModelParts(list[0]);
+        var cat = (CATEGORIES || []).filter(function(c) { return c.id === list[0].category; })[0];
+        // ทั้งกลุ่มบินไม่ได้ = เตือนไว้บนหัวกลุ่มเลย จะได้ไม่เผลอคีย์ยืมไปงานบินแล้วมารู้ทีหลัง
+        var allDisplay = list.every(function(u) { return u.flyable === false; });
+        // ไม่มีหมวด = ➖ ให้ตรงกับชิปกรอง "ไม่ระบุหมวด" ข้างบน ไม่ใช่เดาเป็น 🚁
+        // (Zenmuse/BS100 ไม่ใช่โดรน ถ้าใส่ไอคอนโดรนให้จะอ่านผิดทันที)
+        h += '<div class="du-ghd"><span class="du-gic">' + (cat ? cat.icon : '➖') + '</span>' +
+          '<span class="du-gnm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + '</span>' +
+          '<span class="du-gc">' + (allDisplay ? '🖼️ จัดแสดงเท่านั้น · ' : '') + 'ว่าง ' + list.length + ' เครื่อง</span></div>';
+        // แต่ละกลุ่มโชว์ 4 ตัวพอ — สิ่งที่ต้องเห็นครบคือ "มีรุ่นอะไรว่างบ้าง" ไม่ใช่ทุกเครื่องในรุ่น
+        var lim = scDayAll ? list.length : Math.min(4, list.length);
+        list.slice(0, lim).forEach(function(u) { h += _scDayRow(u, cur); });
+        if (list.length > lim) {
+          truncated += list.length - lim;
+          h += '<div class="du-more">…อีก ' + (list.length - lim) + ' เครื่องในรุ่นนี้</div>';
+        }
+      });
+    } else {
+      freeHit.forEach(function(u) { h += _scDayRow(u, cur); });
+    }
     h += '</div>';
-    // เดิมตัดที่ 10 เครื่องแล้วจบ ที่เหลือดูไม่ได้เลย — ตอนนี้กดดูต่อได้
-    if (freeHit.length > cap) {
-      h += '<button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="scDayMore()">▾ ดูอีก ' + (freeHit.length - cap) + ' เครื่อง</button>';
+    if (truncated) {
+      h += '<button class="btn btn-ghost btn-sm" style="margin-top:7px" onclick="scDayMore()">▾ ดูครบทั้ง ' + freeHit.length + ' เครื่อง</button>';
     }
   } else if (free.length) {
     h += '<div class="df-empty">🔍 ว่าง ' + free.length + ' เครื่องในวันนี้ แต่ไม่มีตัวไหนตรงกับที่กรองไว้' +
