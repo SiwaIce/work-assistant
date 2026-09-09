@@ -3032,7 +3032,7 @@ function demoResolveBorrower(typed) {
 
 var demoTrackerTab = 'list'; // 'list' | 'grid' | 'jobs' | 'calendar' | 'borrowers' | 'requests'
 var demoBwSearch = '', demoBwOpen = {}, demoBwOnlyActive = false;
-var _demoActiveJobCount = 0; // จำนวนใบงานที่ยังยืมอยู่ — โชว์เป็นตัวเลขบนแท็บ 📄 ใบงาน
+var _demoActiveJobCount = 0; // จำนวนใบจองที่ยังยืมอยู่ — โชว์เป็นตัวเลขบนแท็บ 📄 ใบจอง
 var demoJobGroupBy = 'job'; // 'job' = จัดกลุ่มตามเลขที่ใบจอง | 'ref' = ตามเลขที่ใบเบิก
 var demoStatusFilter = 'all'; // 'all' | available | reserved | lent | unavailable | lost
 var demoTypeFilter = 'all'; // 'all' | 'fly' | 'display'
@@ -4827,7 +4827,7 @@ function runDemoRentalImport() {
   });
   saveDemoItems(items);
 
-  // สร้าง/ปรับ record การยืมให้ตรงกับไฟล์ด้วย — ไม่ใช่แค่ตั้งสถานะบนตัวเครื่อง เพราะแท็บ 📄 ใบงาน และปุ่ม
+  // สร้าง/ปรับ record การยืมให้ตรงกับไฟล์ด้วย — ไม่ใช่แค่ตั้งสถานะบนตัวเครื่อง เพราะแท็บ 📄 ใบจอง และปุ่ม
   // "คืนทั้งใบ" อ่านจาก v7_demoLoans ถ้าไม่สร้าง ใบจองที่ import มาจะไม่โผล่และกดคืนเป็นชุดไม่ได้
   var loans = getDemoLoans();
   var activeByDemo = {};
@@ -4991,12 +4991,12 @@ function rDemoTracker(el) {
     h += '</div>';
     h += '<div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-top:8px">';
     h += 'ใช้ติดตามเครื่อง Demo ว่าตอนนี้เครื่องไหนอยู่ที่ไหน ใครยืมไป ต้องคืนวันไหน<br>';
-    h += '<b>ลำดับการใช้งาน:</b> ① <b>➕ เพิ่มอุปกรณ์</b> เข้าระบบ → ② กรอก <b>หมายเลขเครื่องเช่า</b> (เลขที่คีย์เบิกจากคลัง — ไม่มีเลขนี้จะยังให้ยืมไม่ได้) → ③ กด <b>📤 ให้ยืม/จอง</b> พร้อมใส่ <b>เลขใบงาน</b> ถ้ายืมหลายเครื่องพร้อมกัน → ④ พอลูกค้าคืน กด <b>✅ คืนแล้ว</b> หรือคืนทั้งใบงานทีเดียวที่แท็บ 📄 ใบงาน';
+    h += '<b>ลำดับการใช้งาน:</b> ① <b>➕ เพิ่มอุปกรณ์</b> เข้าระบบ → ② กรอก <b>หมายเลขเครื่องเช่า</b> (เลขที่คีย์เบิกจากคลัง — ไม่มีเลขนี้จะยังให้ยืมไม่ได้) → ③ กด <b>📤 ให้ยืม/จอง</b> พร้อมใส่ <b>เลขใบจอง</b> ถ้ายืมหลายเครื่องพร้อมกัน → ④ พอลูกค้าคืน กด <b>✅ คืนแล้ว</b> หรือคืนทั้งใบจองทีเดียวที่แท็บ 📄 ใบจอง';
     h += '</div>';
     h += '<div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-top:8px">';
-    h += '<b>แท็บต่างๆ:</b> <b>📋 รายการ</b> = เครื่องทั้งหมดแยกตามหมวดหมู่ · <b>📄 ใบงาน</b> = รวมเครื่องที่เบิกใบเดียวกัน กดคืนทีเดียวได้ · <b>🗓️ ปฏิทิน</b> = ดูว่าช่วงไหนเครื่องไหนไม่ว่าง · <b>🟡 คำขอยืม</b> = คำขอที่ลูกค้าส่งมาจากลิงก์สาธารณะ รออนุมัติ';
+    h += '<b>แท็บต่างๆ:</b> <b>📋 รายการ</b> = เครื่องทั้งหมดแยกตามหมวดหมู่ · <b>📄 ใบจอง</b> = รวมเครื่องที่เบิกใบเดียวกัน กดคืนทีเดียวได้ · <b>🗓️ ปฏิทิน</b> = ดูว่าช่วงไหนเครื่องไหนไม่ว่าง · <b>🟡 คำขอยืม</b> = คำขอที่ลูกค้าส่งมาจากลิงก์สาธารณะ รออนุมัติ';
     h += '</div>';
-    h += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 ค่าที่มีปุ่ม 📋 (เลขเครื่องเช่า, S/N, เลขใบงาน ฯลฯ) กดคัดลอกไปวางที่อื่นได้ทันที · กดชื่อเครื่องเพื่อดูรายละเอียดทั้งหมด</div>';
+    h += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 ค่าที่มีปุ่ม 📋 (เลขเครื่องเช่า, S/N, เลขใบจอง ฯลฯ) กดคัดลอกไปวางที่อื่นได้ทันที · กดชื่อเครื่องเพื่อดูรายละเอียดทั้งหมด</div>';
     h += '</div>';
   }
 
@@ -5132,7 +5132,7 @@ function rDemoTracker(el) {
   h += '<div class="today-tabs" style="margin-bottom:10px">';
   h += '<div class="today-tab ' + (demoTrackerTab === 'list' ? 'act' : '') + '" onclick="demoGoTab(\'list\')">📋 รายการ</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'grid' ? 'act' : '') + '" onclick="demoGoTab(\'grid\')">✏️ แก้ไขตาราง</div>';
-  h += '<div class="today-tab ' + (demoTrackerTab === 'jobs' ? 'act' : '') + '" onclick="demoGoTab(\'jobs\')">📄 ใบงาน' + (_demoActiveJobCount ? ' (' + _demoActiveJobCount + ')' : '') + '</div>';
+  h += '<div class="today-tab ' + (demoTrackerTab === 'jobs' ? 'act' : '') + '" onclick="demoGoTab(\'jobs\')">📄 ใบจอง' + (_demoActiveJobCount ? ' (' + _demoActiveJobCount + ')' : '') + '</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'calendar' ? 'act' : '') + '" onclick="demoGoTab(\'calendar\')">🗓️ ปฏิทิน</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'borrowers' ? 'act' : '') + '" onclick="demoGoTab(\'borrowers\')">🏢 ผู้ยืม</div>';
   h += '<div class="today-tab ' + (demoTrackerTab === 'requests' ? 'act' : '') + '" onclick="demoGoTab(\'requests\')">🟡 คำขอยืม' + (_demoReqPendingCount ? ' (' + _demoReqPendingCount + ')' : '') + '</div>';
@@ -5442,7 +5442,7 @@ function demoCardHtml(d, now, dupRentals, unitNo) {
       '<span class="demo-idpc"><i>ผู้คีย์</i>' + _dcKeyer(d) + '</span>';
     if ((d.jobNo || '').trim()) h += '<span class="demo-idpc"><i>ใบจอง</i>' + qcopyHtml(d.jobNo) + '</span>';
     if ((d.refNo || '').trim()) h += '<span class="demo-idpc"><i>ใบเบิก</i>' + qcopyHtml(d.refNo) + '</span>';
-    h += '<button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบงาน →</button></div>';
+    h += '<button class="btn-xs" onclick="event.stopPropagation();demoTrackerTab=\'jobs\';render()">ดูใบจอง →</button></div>';
     if (d.purpose) h += '<div class="demo-lentsub">🎯 ' + sanitize(d.purpose) + '</div>';
     h += '<div class="demo-lentsub">📅 ' + (eff === 'reserved' ? 'จอง ' : 'ยืม ') + (d.lentDate || '—') + (eff === 'lent' ? ' (' + daysBorrowed + ' วัน)' : '');
     if (d.returnDate) {
@@ -5726,7 +5726,7 @@ function renderDemoGridTab() {
   var total = getDemoItems().length;
   var cats = getConfig().demoCategories || [];
   var h = '';
-  h += '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง — กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก · สถานะที่กำลังยืม/จองอยู่แก้ที่นี่ไม่ได้ ต้องใช้ปุ่มรับคืนในแท็บรายการหรือใบงาน</div>';
+  h += '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง — กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก · สถานะที่กำลังยืม/จองอยู่แก้ที่นี่ไม่ได้ ต้องใช้ปุ่มรับคืนในแท็บรายการหรือใบจอง</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
   h += '<input type="text" id="demoGridSrc" class="fm-input" style="flex:1;min-width:220px" placeholder="🔍 กรองแถว (ชื่อ, Model, SKU, S/N, เลขเครื่องเช่า)" value="' + sanitize(_demoGridSearch) + '" oninput="demoGridSearchInput(this.value)" autocomplete="off">';
   h += '<span style="align-self:center;font-size:12px;color:var(--text2)">แสดง ' + rows.length + ' / ' + total + ' เครื่อง</span>';
@@ -5906,10 +5906,10 @@ function saveDemoGrid() {
 }
 
 // ================================================================
-// DEMO JOB SHEETS (ใบงาน) — รวมเครื่องที่เบิกในใบงานเดียวกัน (jobNo) ให้กดคืนทีเดียวทั้งชุด หรือติ๊กคืน
+// DEMO JOB SHEETS (ใบงาน) — รวมเครื่องที่เบิกในใบจองเดียวกัน (jobNo) ให้กดคืนทีเดียวทั้งชุด หรือติ๊กคืน
 // เฉพาะบางเครื่องได้ ไม่ต้องไล่กดคืนทีละเครื่องจากหน้ารายการ
-// loan ที่ยืมไว้ก่อนมีฟีเจอร์นี้ (ไม่มี jobNo) ไม่ได้ถูกซ่อน — รวมไว้กลุ่ม "ไม่ระบุเลขใบงาน" ให้ยังคืนได้
-// เหมือนเดิม แต่ไม่มีปุ่ม "คืนทั้งใบ" เพราะมันไม่ใช่ชุดเดียวกันจริง แค่บังเอิญไม่มีเลขใบงานเหมือนกัน
+// loan ที่ยืมไว้ก่อนมีฟีเจอร์นี้ (ไม่มี jobNo) ไม่ได้ถูกซ่อน — รวมไว้กลุ่ม "ไม่ระบุเลขใบจอง" ให้ยังคืนได้
+// เหมือนเดิม แต่ไม่มีปุ่ม "คืนทั้งใบ" เพราะมันไม่ใช่ชุดเดียวกันจริง แค่บังเอิญไม่มีเลขใบจองเหมือนกัน
 // ================================================================
 function demoActiveJobGroups() {
   var loans = getDemoLoans().filter(function(l) { return l.status === 'active'; });
@@ -5923,7 +5923,7 @@ function demoActiveJobGroups() {
     if (!groups[key].refNo) groups[key].refNo = byField === 'jobNo' ? (l.refNo || '') : (l.jobNo || '');
     groups[key].loans.push(l);
   });
-  // ใบที่ครบกำหนดคืนเร็วสุดขึ้นก่อน (ใบไม่มีกำหนดคืนไปท้าย) ส่วน "ไม่ระบุเลขใบงาน" ปักไว้ท้ายสุดเสมอ
+  // ใบที่ครบกำหนดคืนเร็วสุดขึ้นก่อน (ใบไม่มีกำหนดคืนไปท้าย) ส่วน "ไม่ระบุเลขใบจอง" ปักไว้ท้ายสุดเสมอ
   order.sort(function(a, b) {
     if (a === '_none') return 1;
     if (b === '_none') return -1;
@@ -5941,7 +5941,7 @@ function demoActiveJobGroups() {
 function renderDemoJobsTab() {
   var groups = demoActiveJobGroups();
   if (!groups.length) {
-    return '<div class="card" style="text-align:center;padding:34px"><div style="font-size:44px;margin-bottom:10px">📄</div><p>ยังไม่มีใบงานที่ยืมอยู่ — เครื่องที่ให้ยืมพร้อมกันโดยใส่ "เลขใบงาน" เดียวกันจะมารวมกันที่นี่</p></div>';
+    return '<div class="card" style="text-align:center;padding:34px"><div style="font-size:44px;margin-bottom:10px">📄</div><p>ยังไม่มีใบจองที่ยืมอยู่ — เครื่องที่ให้ยืมพร้อมกันโดยใส่ "เลขใบจอง" เดียวกันจะมารวมกันที่นี่</p></div>';
   }
   var now = new Date();
   var items = getDemoItems();
@@ -5967,7 +5967,7 @@ function renderDemoJobsTab() {
     h += '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + accent + '">';
     h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">';
     h += '<div>';
-    h += '<div style="font-weight:700;font-size:14px">' + (isNone ? '➖ ไม่ระบุเลขใบงาน' : '📄 ' + qcopyHtml(g.jobNo)) + ' <span style="font-size:11px;font-weight:600;color:var(--text2)">' + g.loans.length + ' เครื่อง</span></div>';
+    h += '<div style="font-weight:700;font-size:14px">' + (isNone ? '➖ ไม่ระบุเลขใบจอง' : '📄 ' + qcopyHtml(g.jobNo)) + ' <span style="font-size:11px;font-weight:600;color:var(--text2)">' + g.loans.length + ' เครื่อง</span></div>';
     var sub = [];
     if (g.refNo) sub.push('🔖 ' + qcopyHtml(g.refNo));
     var borrower = g.loans[0].dealerId ? ((ST.getOne('dealers', g.loans[0].dealerId) || {}).name || '') : (g.loans[0].borrower || '');
@@ -6025,7 +6025,7 @@ function demoJobReturnAll(gi) {
   var g = groups[gi];
   if (!g) return;
   var ids = g.loans.map(function(l) { return l.demoId; });
-  if (!confirm('คืนทั้งใบงาน ' + (g.jobNo || '') + ' — ทั้งหมด ' + ids.length + ' เครื่อง ยืนยัน?')) return;
+  if (!confirm('คืนทั้งใบจอง ' + (g.jobNo || '') + ' — ทั้งหมด ' + ids.length + ' เครื่อง ยืนยัน?')) return;
   var n = _returnDemoUnits(ids);
   toast('✅ คืนทั้งใบแล้ว ' + n + ' เครื่อง');
   render();
@@ -6603,7 +6603,7 @@ function _dcDrillJob(jobNo) {
       '<td style="padding:4px 6px;border-bottom:1px solid var(--border-light);text-align:right">' + _dcBookBtn(b.unitId, _dcAddDays(b.e, 1), 'จองต่อ', true) + '</td></tr>';
   });
   h += '</tbody></table>';
-  h += '<div style="margin-top:9px"><button class="btn bsm bp" onclick="demoTrackerTab=\'jobs\';render()">📄 ไปแท็บใบงาน (คืนทั้งใบ) →</button></div>';
+  h += '<div style="margin-top:9px"><button class="btn bsm bp" onclick="demoTrackerTab=\'jobs\';render()">📄 ไปแท็บใบจอง (คืนทั้งใบ) →</button></div>';
   return h + _dcSrcNote() + '</div>';
 }
 function _dcDrillDay(isoStr) {
@@ -7572,7 +7572,7 @@ function rDemoDetail(el) {
   h += '<div class="demo-meta">' + demoComplianceBadges(d) + '</div>';
   h += '</div>';
 
-  // สถานะการยืมปัจจุบัน — โชว์เฉพาะตอนถูกยืม/จองอยู่ พร้อมลิงก์ไปใบงานและ Dealer ที่เกี่ยวข้อง
+  // สถานะการยืมปัจจุบัน — โชว์เฉพาะตอนถูกยืม/จองอยู่ พร้อมลิงก์ไปใบจองและ Dealer ที่เกี่ยวข้อง
   if (eff === 'lent' || eff === 'reserved') {
     var dd = d.dealerId ? ST.getOne('dealers', d.dealerId) : null;
     var _now = new Date();
@@ -7581,7 +7581,7 @@ function rDemoDetail(el) {
     h += '<div class="card"><h2>' + (eff === 'reserved' ? '📅 การจองปัจจุบัน' : '📤 กำลังถูกยืมอยู่') + '</h2>';
     h += '<div class="demo-info">';
     if ((d.jobNo || '').trim()) {
-      h += '<div>📄 เลขที่ใบจอง: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="demoTrackerTab=\'jobs\';go(\'demoTracker\')">ดูทั้งใบงาน →</button></div>';
+      h += '<div>📄 เลขที่ใบจอง: ' + qcopyHtml(d.jobNo) + ' <button class="btn-xs" onclick="demoTrackerTab=\'jobs\';go(\'demoTracker\')">ดูทั้งใบจอง →</button></div>';
     }
     if ((d.refNo || '').trim()) h += '<div>🔖 เลขที่ใบเบิก: ' + qcopyHtml(d.refNo) + '</div>';
     h += '<div>👤 ผู้ยืม: ' + (dd ? '<b onclick="go(\'dealerDetail\',{dealerId:\'' + dd.id + '\'})" style="cursor:pointer;text-decoration:underline">' + sanitize(dd.name) + '</b>' : sanitize(d.borrower || '-')) + '</div>';
@@ -7782,7 +7782,7 @@ function saveDemo() {
 function showLendDemoM(demoId, startDate, endDate) {
   var items = getDemoItems();
   var self = items.filter(function(d) { return d.id === demoId; })[0] || {};
-  // เครื่องอื่นที่ยืมพร้อมกันได้ในใบงานเดียวกัน — เฉพาะที่ว่างจริงและลงทะเบียนเครื่องเช่าแล้ว
+  // เครื่องอื่นที่ยืมพร้อมกันได้ในใบจองเดียวกัน — เฉพาะที่ว่างจริงและลงทะเบียนเครื่องเช่าแล้ว
   // (เงื่อนไขเดียวกับสโคป "พร้อมให้ยืม" ในหน้ารายการ ไม่งั้นจะเลือกเครื่องที่คีย์เบิกไม่ได้เข้ามาปนได้)
   var others = items.filter(function(d) {
     return d.id !== demoId && getDemoEffectiveStatus(d) === 'available' && (d.rentalDbNo || '').trim();
@@ -7792,12 +7792,12 @@ function showLendDemoM(demoId, startDate, endDate) {
   });
 
   var h = '<div style="max-width:460px">';
-  h += '<div class="fm-group"><label>📄 เลขที่ใบจอง</label><input type="text" id="dm_jobno" class="fm-input" placeholder="เช่น 29179" autocomplete="off"><div class="hint">เลขจากระบบคลัง — ใส่เลขเดียวกันให้ทุกเครื่องที่จองครั้งเดียวกัน แท็บ 📄 ใบงาน จะรวมให้กดคืนทีเดียวได้</div></div>';
+  h += '<div class="fm-group"><label>📄 เลขที่ใบจอง</label><input type="text" id="dm_jobno" class="fm-input" placeholder="เช่น 29179" autocomplete="off"><div class="hint">เลขจากระบบคลัง — ใส่เลขเดียวกันให้ทุกเครื่องที่จองครั้งเดียวกัน แท็บ 📄 ใบจอง จะรวมให้กดคืนทีเดียวได้</div></div>';
   h += '<div class="fm-group"><label>🔖 เลขที่ใบเบิก</label><input type="text" id="dm_refno" class="fm-input" placeholder="เช่น Fix-020134" autocomplete="off"><div class="hint">คนละชุดกับใบจอง — ใบเบิกคือรอบที่เบิกของออกจากคลัง หนึ่งใบเบิกอาจมีของหลายใบจอง</div></div>';
-  h += '<div class="fm-group"><label>🚁 เครื่องที่ยืมในใบงานนี้</label>';
+  h += '<div class="fm-group"><label>🚁 เครื่องที่ยืมในใบจองนี้</label>';
   h += '<div style="font-size:12px;padding:6px 9px;background:var(--bg2);border-radius:7px;margin-bottom:6px">' + sanitize(self.name || '-') + (self.serialNumber ? ' <span style="color:var(--text2);font-family:monospace">S/N ' + sanitize(self.serialNumber) + '</span>' : '') + '</div>';
   if (others.length) {
-    h += '<details><summary style="cursor:pointer;font-size:12px;color:var(--accent)">➕ เพิ่มเครื่องอื่นในใบงานเดียวกัน (' + others.length + ' เครื่องว่าง)</summary>';
+    h += '<details><summary style="cursor:pointer;font-size:12px;color:var(--accent)">➕ เพิ่มเครื่องอื่นในใบจองเดียวกัน (' + others.length + ' เครื่องว่าง)</summary>';
     h += '<div style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:7px;margin-top:6px;padding:4px">';
     others.forEach(function(d) {
       h += '<label style="display:flex;align-items:center;gap:7px;padding:4px 6px;font-size:12px;cursor:pointer">';
@@ -7843,7 +7843,7 @@ function lendDemo(demoId) {
   if (!keyedBy) { toast('⚠️ ใส่ชื่อผู้คีย์เบิกก่อน — ต้องรู้ว่าตอนครบกำหนดจะตามใครไปคีย์คืน'); return; }
   _demoRememberKeyer(keyedBy);
 
-  // เครื่องหลัก + เครื่องที่ติ๊กเพิ่มในใบงานเดียวกัน ทุกตัวใช้ผู้ยืม/วันที่/เลขใบงานชุดเดียวกันหมด
+  // เครื่องหลัก + เครื่องที่ติ๊กเพิ่มในใบจองเดียวกัน ทุกตัวใช้ผู้ยืม/วันที่/เลขใบจองชุดเดียวกันหมด
   var targetIds = [demoId];
   document.querySelectorAll('.dm-extra-unit:checked').forEach(function(cb) {
     if (targetIds.indexOf(cb.value) === -1) targetIds.push(cb.value);
@@ -7886,7 +7886,7 @@ function lendDemo(demoId) {
   render();
 }
 
-// คืนอุปกรณ์หลายเครื่องพร้อมกัน — ตรรกะกลางที่ทั้งปุ่มคืนรายเครื่อง ปุ่มคืนทั้งใบงาน และคืนเฉพาะที่เลือก
+// คืนอุปกรณ์หลายเครื่องพร้อมกัน — ตรรกะกลางที่ทั้งปุ่มคืนรายเครื่อง ปุ่มคืนทั้งใบจอง และคืนเฉพาะที่เลือก
 // เรียกใช้ร่วมกัน (ไม่ confirm/ไม่ render เอง ให้ผู้เรียกจัดการ) คืนค่าเป็นจำนวนเครื่องที่คืนสำเร็จจริง
 function _returnDemoUnits(demoIds) {
   var items = getDemoItems();
