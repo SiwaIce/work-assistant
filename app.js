@@ -3350,17 +3350,15 @@ function batchApproveSelected() {
     selectedDealers[dealerId].forEach(function(updateId) { queue.push({ dealerId: dealerId, updateId: updateId }); });
   }
   var errors = 0;
+  toast('🔄 กำลังอนุมัติ ' + queue.length + ' รายการ...');
   (function next(i) {
     if (i >= queue.length) {
       toast('✅ อนุมัติ ' + (queue.length - errors) + ' รายการ' + (errors ? ' (ผิดพลาด ' + errors + ')' : ''));
-      setTimeout(function() {
-        if (typeof render === 'function') render();
-        else if (typeof rCustomerUpdates === 'function') rCustomerUpdates(document.getElementById('ct'));
-      }, 1000);
       return;
     }
     approvePipelineUpdate(queue[i].dealerId, queue[i].updateId, function(success) {
       if (!success) errors++;
+      else _dropUpdateFromView(queue[i].updateId);   // ตัดออกทีละใบ เห็นความคืบหน้าระหว่างทาง
       next(i + 1);
     });
   })(0);
@@ -3391,16 +3389,47 @@ function batchApproveAll() {
   (function next(i) {
     if (i >= updates.length) {
       toast('✅ อนุมัติทั้งหมด ' + (updates.length - errors) + ' รายการ' + (errors ? ' (ผิดพลาด ' + errors + ')' : ''));
-      setTimeout(function() {
-        if (typeof render === 'function') render();
-      }, 1000);
       return;
     }
     approvePipelineUpdate(updates[i].dealerId, updates[i].id, function(success) {
       if (!success) errors++;
+      else _dropUpdateFromView(updates[i].id);
       next(i + 1);
     });
   })(0);
+}
+
+// ================================================================
+// เอารายการที่จัดการแล้วออกจากหน้าจอ โดยไม่ต้องโหลดใหม่ทั้งหมด
+//
+// เดิมกดอนุมัติทีนึงแล้วเรียก render() ซึ่งวิ่งกลับไป rCustomerUpdates แล้วยิง query
+// แยกทีละ dealer (1 query ต่อ 1 ร้าน) บวก updateCustomerUpdateBadge() ที่ยิงอีกชุดเท่ากัน
+// = อ่าน Firestore 2 เท่าของจำนวน dealer ทุกครั้งที่กดอนุมัติ 1 รายการ บวกหน่วงอีก 500ms
+// ร้านเยอะเมื่อไหร่ก็ค้างยาว ทั้งที่ตัวอนุมัติเองใช้แค่ 3 ops
+// ================================================================
+function _dropUpdateFromView(updateId) {
+  allUpdatesData = allUpdatesData.filter(function(u) { return u.id !== updateId; });
+  if (selectedUpdates) delete selectedUpdates[updateId];
+
+  var badge = document.getElementById('customerUpdateBadge');
+  if (badge) {
+    badge.textContent = allUpdatesData.length;
+    badge.style.display = allUpdatesData.length ? 'inline' : 'none';
+  }
+  var el = document.getElementById('ct');
+  if (!document.getElementById('updatesListContainer')) return;
+  if (!allUpdatesData.length) {
+    if (el) el.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่มีคำขออัพเดทจากลูกค้า</p></div></div>';
+    return;
+  }
+  // ถ้ากรอง dealer อยู่แล้วรายการของร้านนั้นหมด ให้เด้งกลับไปดูทุกร้าน ไม่ใช่ค้างหน้าว่าง
+  if (currentFilterDealer !== 'all' &&
+      !allUpdatesData.some(function(u) { return u.dealerId === currentFilterDealer; })) {
+    currentFilterDealer = 'all';
+  }
+  filterUpdatesByDealer(currentFilterDealer);
+  var h2 = document.querySelector('#ct .card h2');
+  if (h2) h2.textContent = '📥 คำขออัพเดท (' + allUpdatesData.length + ')';
 }
 
 // ✅ Approve Single (แก้ไขให้มี callback)
@@ -3408,9 +3437,7 @@ function approveSingleUpdate(dealerId, updateId) {
   approvePipelineUpdate(dealerId, updateId, function(success) {
     if (success) {
       toast('✅ อนุมัติแล้ว');
-      setTimeout(function() {
-        if (typeof render === 'function') render();
-      }, 500);
+      _dropUpdateFromView(updateId);
     }
   });
 }
@@ -3427,9 +3454,7 @@ function rejectSingleUpdate(dealerId, updateId) {
     })
     .then(function() {
       toast('❌ ปฏิเสธคำขอแล้ว');
-      setTimeout(function() {
-        if (typeof render === 'function') render();
-      }, 500);
+      _dropUpdateFromView(updateId);
     })
     .catch(function(err) {
       toast('❌ เกิดข้อผิดพลาด: ' + err.message);
@@ -3472,6 +3497,26 @@ function _summarizePipelineUpdateChanges(before, after) {
 }
 
 // ✅ แก้ไข approvePipelineUpdate ให้มี callback
+// เวลาที่ "ลูกค้าส่งอัพเดทมา" จาก doc คำขอ — ลองตามลำดับความน่าเชื่อถือ
+//   _resubmittedAt = ส่งซ้ำหลังถูกตีกลับ (ใหม่กว่า _updatedAt จึงมาก่อน)
+//   _updatedAt     = ตอนกดส่ง (Firestore Timestamp)
+//   createdAt      = ISO string ตอนสร้าง (doc เก่าบางตัวมีแค่นี้)
+// คืน null ถ้าหาไม่ได้ ให้ผู้เรียกตัดสินใจ fallback เอง
+function _customerUpdateIso(u) {
+  if (!u) return null;
+  var t = u._resubmittedAt || u._updatedAt;
+  if (t) {
+    if (typeof t.toDate === 'function') return t.toDate().toISOString();
+    if (t.seconds) return new Date(t.seconds * 1000).toISOString();
+    var d = new Date(t);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  if (u.createdAt) {
+    var c = new Date(u.createdAt);
+    if (!isNaN(c.getTime())) return c.toISOString();
+  }
+  return null;
+}
 function approvePipelineUpdate(dealerId, updateId, callback) {
   if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) {
     if (callback) callback(false);
@@ -3546,6 +3591,11 @@ function approvePipelineUpdate(dealerId, updateId, callback) {
       var _noteText = (updateData.updateNote && updateData.updateNote !== 'อัพเดทข้อมูลทั่วไป' && updateData.updateNote !== 'อัพเดทข้อมูลโครงการ') ? updateData.updateNote : '';
       var _finalContent = [_summaryText, _noteText].filter(Boolean).join(' — ') || 'อัพเดทข้อมูลโครงการ';
 
+      // วันที่ใน timeline ต้องเป็น "วันที่ลูกค้าอัพเดทมา" ไม่ใช่วันที่เรากดอนุมัติ
+      // ไม่งั้นถ้าคำขอค้างไว้หลายวันกว่าจะมีคนมากด ประวัติโครงการจะเลื่อนไปกองอยู่วันที่กด
+      // ทำให้อ่านลำดับเหตุการณ์ผิด และ export รายงานตามช่วงเวลาก็ได้ตัวเลขเพี้ยน
+      // เวลาที่กดอนุมัติเก็บแยกไว้ที่ approvedAt เผื่อต้องตรวจย้อนหลังว่าใครกดเมื่อไหร่
+      var _custAt = _customerUpdateIso(updateData);
       ST.add('pipeLog', {
         pipeId: pipeId,
         type: 'update',
@@ -3553,7 +3603,8 @@ function approvePipelineUpdate(dealerId, updateId, callback) {
         // ✅ เก็บข้อความที่ลูกค้าพิมพ์มาจริงๆ แยกไว้ต่างหาก (ไม่มีสรุปอัตโนมัติ/คำนำหน้า "อนุมัติ...")
         // ให้ export ดึงไปใช้ตรงๆ ได้ ส่วน content เต็มยังใช้โชว์ context ใน timeline ของแอปตามเดิม
         customerNoteOnly: _noteText,
-        date: _nw()
+        date: _custAt || _nw(),
+        approvedAt: _nw()
       });
 // ✅ เพิ่ม Audit Log
 var dealer = ST.getOne('dealers', dealerId);
@@ -3589,7 +3640,7 @@ function rejectPipelineUpdate(dealerId, updateId) {
     .then(function() {
       toast('❌ ปฏิเสธคำขอแล้ว');
       if (S && S.view === 'customerUpdates') {
-        go('customerUpdates');
+        _dropUpdateFromView(updateId);   // ตัดออกจากหน้าจอเลย ไม่ต้องยิง query ใหม่ทุก dealer
       } else {
         render();
       }
