@@ -4953,6 +4953,16 @@ function rDemoTracker(el) {
   // "เกินกำหนดคืน" = เลยวันกำหนดคืนจริงที่ระบุไว้ ไม่ใช่แค่ยืมนานเกิน 30 วัน — ไฟล์ทะเบียนคลังมีวันกำหนดคืน
   // ของทุกใบจองอยู่แล้ว การเทียบกับวันจริงตรงกว่ามาก (เครื่องที่ยืมยาว 6 เดือนตามสัญญาไม่ควรถูกนับว่าเกิน
   // ส่วนเครื่องที่กำหนดคืนอาทิตย์เดียวแต่เลยมา 3 วันควรถูกนับ) เครื่องที่ไม่ได้ระบุกำหนดคืนถึงจะใช้เกณฑ์ 30 วันเดิม
+  // ⚠️ กล่องเตือนนี้เคยนับเฉพาะเครื่องในสโคปที่กรองอยู่ ซึ่งค่าเริ่มต้นคือ "เครื่องหลัก"
+  // ผลคือของจริงเลยกำหนด 16 เครื่อง แต่กล่องขึ้นแค่ 4 — อุปกรณ์เสริมที่ค้างอีก 12 ตัวหายไปเงียบๆ
+  // กล่องเตือนที่รายงานต่ำกว่าจริงอันตรายกว่าไม่มีกล่อง เพราะคนอ่านแล้วนึกว่าจัดการครบแล้ว
+  // จึงนับทั้งคลังไว้เทียบด้วย แล้วบอกให้เห็นว่านอกสโคปยังมีอีกเท่าไหร่
+  var overdueAll = 0;
+  scopedByRental.forEach(function(d) {
+    if (getDemoEffectiveStatus(d) !== 'lent') return;
+    var rd = ftParseDate(d.returnDate);
+    if (rd && Math.ceil((rd - now) / 86400000) < 0) overdueAll++;
+  });
   var overdueCount = 0, dueSoonCount = 0;
   items.forEach(function(d) {
     var eff = getDemoEffectiveStatus(d);
@@ -5052,12 +5062,22 @@ function rDemoTracker(el) {
     h += '</div>';
   }
 
+  if (overdueAll && !overdueCount) {
+    // สโคปที่ดูอยู่ไม่มีของค้าง แต่คลังมี — ไม่งั้นจะไม่รู้เลยว่ามีของหายอยู่
+    h += '<div class="demo-od-hint" onclick="demoKindFilter=\'all\';demoOverdueFlt=true;demoDueSoonFlt=false;demoStatusFilter=\'lent\';render()">' +
+      '⚠️ ในสโคปที่ดูอยู่ไม่มีของเลยกำหนด แต่ทั้งคลังมี <b>' + overdueAll + ' เครื่อง</b> — กดเพื่อดูทั้งหมด</div>';
+  }
   if (overdueCount || dueSoonCount) {
     h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
     if (overdueCount) {
       h += '<div class="demo-duesoon-box" onclick="demoOverdueFlt=!demoOverdueFlt;demoDueSoonFlt=false;demoStatusFilter=demoOverdueFlt?\'lent\':demoStatusFilter;render()" style="background:' + (demoOverdueFlt ? '#ef444418' : 'var(--bg2)') + ';border:1px solid ' + (demoOverdueFlt ? '#ef4444' : 'var(--border)') + '">';
       h += '<div style="font-size:11px;color:#ef4444">⚠️ เลยกำหนดคืนแล้ว</div>';
       h += '<div style="font-size:20px;font-weight:700;color:#ef4444">' + overdueCount + ' เครื่อง</div>';
+      // ถ้าที่เห็นน้อยกว่าทั้งคลัง ต้องบอก ไม่งั้นเข้าใจว่าเหลือแค่นี้
+      if (overdueAll > overdueCount) {
+        h += '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">ทั้งคลัง ' + overdueAll +
+          ' เครื่อง · <span style="color:var(--accent)" onclick="event.stopPropagation();demoKindFilter=\'all\';render()">ดูทั้งหมด</span></div>';
+      }
       h += '</div>';
     }
     if (dueSoonCount) {
@@ -7365,8 +7385,17 @@ function renderDemoBorrowersTab() {
     '<input type="checkbox" ' + (demoBwOnlyActive ? 'checked' : '') + ' onchange="toggleDemoBwActive()"> เฉพาะที่ยังถือของอยู่</label></div>';
 
   if (!shown.length) {
-    h += '<div style="text-align:center;padding:26px;color:var(--text2)">' +
-      (loans.length ? 'ไม่พบผู้ยืมที่ตรงกับที่ค้น' : 'ยังไม่มีประวัติการยืม — พอปล่อยยืมครั้งแรก ชื่อบริษัทจะมาโผล่ที่นี่เอง') + '</div>';
+    // แยกให้ชัดว่า "ไม่มีใบยืมเลย" กับ "มีใบยืมแต่ไม่มีใครกรอกชื่อผู้ยืม" คนละเรื่องกัน
+    // เคสหลังเจอจริงบน production ทั้ง 54 ใบไม่มีชื่อ แท็บนี้เลยขึ้นว่างเปล่าเหมือนเสีย
+    var noName = loans.filter(function(l) { return !String(l.borrower || '').trim(); }).length;
+    var msg;
+    if (!loans.length) msg = 'ยังไม่มีประวัติการยืม — พอปล่อยยืมครั้งแรก ชื่อบริษัทจะมาโผล่ที่นี่เอง';
+    else if (q || demoBwOnlyActive) msg = 'ไม่พบผู้ยืมที่ตรงกับที่ค้น';
+    else if (noName) msg = '<b style="color:#f59e0b">มีใบยืม ' + loans.length + ' ใบ แต่ไม่มีใบไหนกรอกชื่อผู้ยืมไว้เลย</b>' +
+      '<div style="margin-top:8px;font-size:12.5px;line-height:1.7">หน้านี้จัดกลุ่มตามชื่อผู้ยืม จึงยังไม่มีอะไรให้แสดง' +
+      '<br>เติมชื่อย้อนหลังได้ที่ปุ่ม ✏️ ของแต่ละเครื่อง หรือที่หน้า demo-staff แถบ “📌 วันนี้”</div>';
+    else msg = 'ไม่พบผู้ยืมที่ตรงกับที่ค้น';
+    h += '<div style="text-align:center;padding:26px;color:var(--text2)">' + msg + '</div>';
     return h + '</div>';
   }
 

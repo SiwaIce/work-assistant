@@ -10369,3 +10369,10 @@ input:focus, select:focus, textarea:focus {
 .demo-la .la-l { font-size: 11.5px; color: var(--text2); margin-top: 3px; line-height: 1.55; }
 .demo-la .la-l b { color: var(--text); }
 .demo-la .la-warn { font-size: 11.5px; color: #f59e0b; margin-top: 4px; line-height: 1.55; }
+
+/* เตือนว่านอกสโคปที่กรองอยู่ยังมีของเลยกำหนดค้าง — กล่องเตือนที่รายงานต่ำกว่าจริง
+   อันตรายกว่าไม่มีกล่อง เพราะคนอ่านแล้วนึกว่าจัดการครบแล้ว */
+.demo-od-hint { font-size: 12px; color: #f59e0b; background: rgba(245,158,11,.1);
+  border: 1px dashed #f59e0b; border-radius: 9px; padding: 9px 12px; margin-bottom: 10px;
+  cursor: pointer; line-height: 1.55; }
+.demo-od-hint:hover { background: rgba(245,158,11,.18); }

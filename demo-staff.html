@@ -1027,7 +1027,7 @@ function renderPendingTab() {
       '<div class="meta">👤 ' + esc(req.contactName) + ' · 📞 ' + esc(req.phone) + (req.email ? ' · ' + esc(req.email) : '') + '<br>' + itemsTxt + (req.purpose ? '<br>📝 ' + esc(req.purpose) : '') + '</div>' + conflictHtml + '</div>' +
       '<div class="actions">' +
       '<input type="text" id="apprJob_' + req._id + '" placeholder="เลขที่ใบจอง" title="เลขใบจองจากระบบคลัง — ใส่ไว้จะตามของกลับได้ตรงใบ" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:110px">' +
-      '<input type="text" id="apprName_' + req._id + '" placeholder="ชื่อผู้ทำเรื่อง/คีย์เบิก" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:150px">' +
+      '<input type="text" id="apprName_' + req._id + '" placeholder="ชื่อผู้คีย์เบิก" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);width:150px">' +
       '<select id="apprDest_' + req._id + '" style="font-size:12.5px;padding:7px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)">' +
       '<option value="customer">📍 ส่งที่อยู่ลูกค้า</option><option value="office">🏢 รับที่บริษัท</option><option value="event">🎪 ส่งไปงาน</option></select>' +
       '<button class="btn btn-primary btn-sm" onclick="approveRequest(\'' + req._id + '\')">✅ อนุมัติ</button>' +
@@ -1040,7 +1040,7 @@ function approveRequest(reqId) {
   var req = PENDING.filter(function(r) { return r._id === reqId; })[0];
   if (!req) return;
   var approver = (document.getElementById('apprName_' + reqId).value || '').trim();
-  if (!approver) { alert('กรอกชื่อผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  if (!approver) { alert('กรอกชื่อผู้คีย์เบิกก่อนนะครับ'); return; }
   var jobNo = (document.getElementById('apprJob_' + reqId).value || '').trim();
   if (!jobNo && !confirm('ยังไม่ได้ใส่เลขที่ใบจอง\n\nไม่ใส่ก็อนุมัติได้ แต่เวลาตามของกลับจะอ้างอิงกับระบบคลังไม่ได้\n\nกด OK เพื่ออนุมัติโดยไม่มีเลขใบจอง')) return;
   var conflicts = findConflictsFor(req);
@@ -1671,7 +1671,7 @@ function unitCardHtml(raw, n) {
   if (loan || appRange) {
     var b = loan || appRange;
     h += '<div class="su-lent' + (late ? ' late' : '') + '"><b>👤 ' + esc(b.borrower || 'ไม่ได้ระบุผู้ยืม') + '</b>' +
-      (b.approver ? ' <span style="color:var(--text2)">· ผู้ทำเรื่อง ' + esc(b.approver) + '</span>' : '') +
+      (b.approver ? ' <span style="color:var(--text2)">· ผู้คีย์เบิก ' + esc(b.approver) + '</span>' : '') +
       '<div>📅 ' + esc(_scD(b.start)) + ' → ' + esc(_scD(b.end)) +
       (late ? ' <b style="color:var(--bad)">(เลยกำหนด ' + daysBetween(b.end, _td()) + ' วัน)</b>' : '') + '</div>' +
       (b.purpose ? '<div>🎯 ' + esc(b.purpose) + '</div>' : '') +
@@ -1773,7 +1773,7 @@ function showManualLoanForm(unitId) {
     '<div class="field"><label>วันที่ยืม *</label><input type="date" id="mlStart" value="' + _td() + '"></div>' +
     '<div class="field"><label>วันที่คาดว่าจะคืน *</label><input type="date" id="mlEnd" value="' + _td() + '"></div>' +
     '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" list="mlBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('mlBorrowerList') + '</div>' +
-    '<div class="field"><label>ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="mlRequester" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>' +
+    '<div class="field"><label>ผู้คีย์เบิก *</label><input type="text" id="mlRequester" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>' +
     '</div><div class="field"><label>เลขที่ใบจอง</label><input type="text" id="mlJob" placeholder="เลขจากระบบคลัง เช่น 29179"></div>' +
     '<div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
     '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
@@ -1972,7 +1972,7 @@ function renderLendFlow() {
     '<button class="btn btn-ghost btn-sm" onclick="lendSetDays(lendDays+1)">+</button></div></div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>🏢 ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="lfCompany" list="lfBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('lfBorrowerList') + '</div>';
-  h += '<div class="field"><label>🧑‍💼 ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="lfBy" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก *</label><input type="text" id="lfBy" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
   h += '</div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>📄 เลขที่ใบจอง</label><input type="text" id="lfJob" placeholder="เลขจากระบบคลัง"></div>';
@@ -2004,7 +2004,7 @@ function saveLendBatch() {
   if (!start || !end) { alert('เลือกวันที่ยืมและกำหนดคืนก่อนนะครับ'); return; }
   if (end < start) { alert('กำหนดคืนอยู่ก่อนวันที่ยืม'); return; }
   if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
-  if (!by) { alert('กรอกผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  if (!by) { alert('กรอกผู้คีย์เบิกก่อนนะครับ'); return; }
   var busy = list.filter(function(u) {
     var bks = scBookings();
     var it = start, hit = false;
@@ -2049,7 +2049,7 @@ function saveManualLoan(unitId) {
   var purpose = document.getElementById('mlPurpose').value.trim();
   if (!start || !end) { alert('เลือกวันที่ก่อนนะครับ'); return; }
   if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
-  if (!requester) { alert('กรอกผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  if (!requester) { alert('กรอกผู้คีย์เบิกก่อนนะครับ'); return; }
   if (unitIsBusyOn(unitId, start)) { if (!confirm('ช่วงนี้เครื่องนี้อาจไม่ว่างจริง ยืนยันจะบันทึกต่อไหม?')) return; }
   var jobNo = (document.getElementById('mlJob').value || '').trim();
   try { localStorage.setItem('demoStaffEditor', requester); } catch (e) {}
@@ -2510,7 +2510,7 @@ function _scDrillUnit(unitId) {
   if (cur) {
     var left = Math.round((cur.e - today) / 86400000);
     h += '<div class="dcal-kv"><div><span class="k">ผู้ยืม</span><b>' + esc(cur.borrower || '—') + '</b></div>' +
-      (cur.approver ? '<div><span class="k">ผู้ทำเรื่อง</span><b>' + esc(cur.approver) + '</b></div>' : '') +
+      (cur.approver ? '<div><span class="k">ผู้คีย์เบิก</span><b>' + esc(cur.approver) + '</b></div>' : '') +
       (cur.purpose ? '<div><span class="k">วัตถุประสงค์</span><b>' + esc(cur.purpose) + '</b></div>' : '') +
       '<div><span class="k">ช่วงยืม</span><b>' + _scFmt(cur.s) + ' – ' + _scFmt(cur.e) + '</b></div>' +
       '<div><span class="k">กำหนดคืน</span><b style="color:' + (left < 0 ? '#ef4444' : left <= 3 ? '#f59e0b' : 'inherit') + '">' +
@@ -2543,7 +2543,7 @@ function _scDrillBatch(key) {
     '<div style="font-size:11px;color:var(--text2)">' + bs.length + ' เครื่อง · ' + _scFmt(f.s) + ' – ' + _scFmt(f.e) + '</div>' +
     '</div>' + scCloseBtn() + '</div>';
   h += '<div class="dcal-kv">';
-  if (f.approver) h += '<div><span class="k">ผู้ทำเรื่อง</span><b>' + esc(f.approver) + '</b></div>';
+  if (f.approver) h += '<div><span class="k">ผู้คีย์เบิก</span><b>' + esc(f.approver) + '</b></div>';
   if (f.purpose) h += '<div><span class="k">วัตถุประสงค์</span><b>' + esc(f.purpose) + '</b></div>';
   h += '<div><span class="k">รวม</span><b>' + (Math.round((f.e - f.s) / 86400000) + 1) + ' วัน</b></div>';
   if (scBarState(f, today) === 'late') h += '<div><span class="k">เลยกำหนด</span><b style="color:#ef4444">' + late + ' วัน</b></div>';
@@ -2592,7 +2592,7 @@ function _scDrillDay(iso) {
     if (scDayCat !== 'all' && catOf(u) !== scDayCat) return false;
     if (!dq) return true;
     if (dayHit(u)) return true;
-    // ในฝั่งที่ถูกยืม ให้ค้นชื่อผู้ยืม/ผู้ทำเรื่องได้ด้วย — คำถามที่เจอบ่อยคือ "วันนั้นของอยู่กับใคร"
+    // ในฝั่งที่ถูกยืม ให้ค้นชื่อผู้ยืม/ผู้คีย์เบิกได้ด้วย — คำถามที่เจอบ่อยคือ "วันนั้นของอยู่กับใคร"
     return busyBy[u.id].some(function(b) {
       return (scWhoName(b) + ' ' + (b.approver || '') + ' ' + (b.purpose || '')).toLowerCase().indexOf(dq) !== -1;
     });
@@ -2676,7 +2676,7 @@ function _scDrillDay(iso) {
       var g = groups[k], b0 = g[0].b;
       h += '<tr style="cursor:pointer" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
         '<td><b>' + esc(b0.borrower || '—') + '</b>' +
-        (b0.approver ? '<div style="font-size:10px;color:var(--text3)">ผู้ทำเรื่อง ' + esc(b0.approver) + '</div>' : '') + '</td>' +
+        (b0.approver ? '<div style="font-size:10px;color:var(--text3)">ผู้คีย์เบิก ' + esc(b0.approver) + '</div>' : '') + '</td>' +
         '<td>' + (b0.purpose ? esc(b0.purpose) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') + '</td>' +
         '<td>' + g.length + ' เครื่อง — ' + esc(g[0].u.model || g[0].u.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
         '<td>' + _scFmt(b0.e) + '</td></tr>';
