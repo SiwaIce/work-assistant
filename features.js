@@ -7287,7 +7287,8 @@ function rDemoDetail(el) {
       h += '<div class="lm">';
       h += '<div class="lt">👤 ' + sanitize(dd2 ? dd2.name : (l.borrower || '-')) + ' <span class="fu-badge ' + (l.status === 'active' ? 'fu-badge-red' : '') + '">' + (l.status === 'active' ? '📤 กำลังยืม' : '✅ คืนแล้ว') + '</span></div>';
       if ((l.jobNo || '').trim()) h += '<div class="ls">📄 ใบจอง: ' + qcopyHtml(l.jobNo) + ((l.refNo || '').trim() ? ' · 🔖 ' + qcopyHtml(l.refNo) : '') + '</div>';
-      h += '<div class="ls">📅 ยืม: ' + sanitize(l.lentDate || '-') + (l.actualReturnDate ? ' • คืนจริง: ' + sanitize(l.actualReturnDate) : (l.returnDate ? ' • กำหนดคืน: ' + sanitize(l.returnDate) : '')) + '</div>';
+      // วันที่ในระบบมีทั้ง ISO (จาก _td()) และ DD/MM/YYYY (จากฟอร์ม) — แสดงให้เป็นรูปแบบเดียวเสมอ
+      h += '<div class="ls">📅 ยืม: ' + sanitize(_demoDayTxt(l.lentDate)) + (l.actualReturnDate ? ' • คืนจริง: ' + sanitize(_demoDayTxt(l.actualReturnDate)) : (l.returnDate ? ' • กำหนดคืน: ' + sanitize(_demoDayTxt(l.returnDate)) : '')) + '</div>';
       if (l.purpose) h += '<div class="ls">🎯 ' + sanitize(l.purpose) + '</div>';
       h += '<div class="ls">🧑‍💼 ผู้คีย์: ' + _dcKeyer(l) + '</div>';
       if (l.note) h += '<div class="ls">📝 ' + sanitize(l.note) + '</div>';

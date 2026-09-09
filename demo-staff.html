@@ -158,6 +158,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sc-kv > div { background:var(--surface-2); border-radius:8px; padding:7px 10px; min-width:0; }
 .sc-kv span { display:block; font-size:10px; color:var(--text3); margin-bottom:2px; }
 .sc-kv b { font-size:12.5px; word-break:break-word; }
+/* วันที่ที่เลือกไว้ เขียนกำกับใต้ช่อง <input type="date"> เป็น วัน/เดือน/ปี
+   เพราะช่องวันที่ของเบราว์เซอร์แสดงตามภาษาเครื่อง (en-US จะขึ้น เดือน/วัน/ปี) แก้จากโค้ดไม่ได้ */
+.dhint { font-size:11.5px; color:var(--text2); margin-top:5px; font-variant-numeric:tabular-nums; }
+.dhint:empty { display:none; }
 .sm-toggles { display:flex; gap:7px; flex-wrap:wrap; }
 .sm-tg { position:relative; display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12px; font-weight:600;
   padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text3); }
@@ -743,7 +747,7 @@ function returnRowHtml(cls, l) {
   var daysTxt = l.end < _td() ? 'เลยมาแล้ว ' + daysBetween(l.end, _td()) + ' วัน' : 'อีก ' + daysBetween(_td(), l.end) + ' วัน';
   return '<div class="rt-item ' + cls + '"><div class="icon">' + (u ? '🚁' : '🚁') + '</div>' +
     '<div class="body"><div style="font-weight:700">' + esc(l.model) + ' (' + esc(l.label) + ')</div>' +
-    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + l.end + ' (' + daysTxt + ')' +
+    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + _scD(l.end) + ' (' + daysTxt + ')' +
     '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
     (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div></div>' +
     '<div class="actions">' +
@@ -756,7 +760,7 @@ function returnRowHtml(cls, l) {
 function markLoanReturned(loanId) {
   db.collection('publicDemoLoans').doc(loanId).update({
     status: 'returned', actualReturnDate: _td(),
-    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', _lastEditor(), 'รับคืนเข้าคลัง ' + _td()))
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', _lastEditor(), 'รับคืนเข้าคลัง ' + _scD(_td())))
   }).then(function() { toastMock('✅ รับคืนแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -776,6 +780,28 @@ var SC_EV_META = {
 function _scEv(type, by, text) {
   return { at: new Date().toISOString(), type: type, by: by || '', text: text || '' };
 }
+// วันที่เก็บเป็น ISO (2026-09-20) ซึ่งอ่านเป็น ปี-เดือน-วัน — เวลาโชว์ให้คนอ่านใช้ วัน/เดือน/ปี เสมอ
+function _scD(iso) {
+  var p = String(iso || '').split('-');
+  if (p.length !== 3 || !p[0]) return String(iso || '—');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+// ช่อง <input type="date"> ของเบราว์เซอร์แสดงตามภาษาของเครื่อง เครื่องที่ตั้งเป็น en-US จะขึ้นเป็น
+// เดือน/วัน/ปี ซึ่งอ่านสลับกับที่คนไทยคุ้น และเปลี่ยนจากในโค้ดไม่ได้ (เบราว์เซอร์คุมเอง)
+// จึงเขียนวันที่ที่เลือกไว้เป็น วัน/เดือน/ปี กำกับใต้ช่อง จะได้ไม่มีทางอ่านสลับ
+function _scDateHints(root) {
+  var list = (root || document).querySelectorAll('input[type="date"]');
+  for (var i = 0; i < list.length; i++) {
+    var inp = list[i], box = inp.parentNode;
+    if (!box) continue;
+    var hint = box.querySelector('.dhint');
+    if (!hint) { hint = document.createElement('div'); hint.className = 'dhint'; box.appendChild(hint); }
+    hint.textContent = inp.value ? '📅 ' + _scD(inp.value) : '';
+  }
+}
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'date') _scDateHints(e.target.parentNode);
+});
 function _scStamp(iso) {
   var d = iso ? new Date(iso) : null;
   if (!d || isNaN(d.getTime())) return '—';
@@ -832,9 +858,9 @@ function openLoanLogM(loanId) {
     '<div><span>ผู้ยืม</span><b>' + esc(l.borrower || '—') + '</b></div>' +
     '<div><span>ผู้คีย์</span><b>' + esc(l.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
     '<div><span>ใบจอง</span><b>' + esc(l.jobNo || '—') + '</b></div>' +
-    '<div><span>ช่วงยืม</span><b>' + esc(l.start || '—') + ' → ' + esc(l.end || '—') + '</b></div>' +
+    '<div><span>ช่วงยืม</span><b>' + esc(_scD(l.start)) + ' → ' + esc(_scD(l.end)) + '</b></div>' +
     (l.purpose ? '<div><span>ยืมไปทำอะไร</span><b>' + esc(l.purpose) + '</b></div>' : '') +
-    (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(l.actualReturnDate) + '</b></div>' : '') +
+    (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
     '</div>';
   h += scLoanLogHtml(l);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
@@ -852,7 +878,7 @@ function openExtendM(loanId) {
   if (l.status !== 'active') { alert('ใบนี้คืนแล้ว เลื่อนกำหนดคืนไม่ได้'); return; }
   var h = '<div class="sm-sec">' + esc(l.model || '') + ' (' + esc(l.label || '') + ') · ผู้ยืม ' + esc(l.borrower || '—') + '</div>';
   h += '<div class="grid2">';
-  h += '<div class="field"><label>กำหนดคืนเดิม</label><input type="text" value="' + esc(l.end || '') + '" disabled></div>';
+  h += '<div class="field"><label>กำหนดคืนเดิม</label><input type="text" value="' + esc(_scD(l.end)) + '" disabled></div>';
   h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="xt_end" value="' + esc(l.end || '') + '"></div>';
   h += '</div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="xt_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์ / งานเลื่อน"></div>';
@@ -872,7 +898,7 @@ function saveExtend(loanId) {
   if (end === l.end) { alert('วันเดิม ไม่มีอะไรเปลี่ยน'); return; }
   if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
   if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
-  if (end < l.start) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืม (' + l.start + ')'); return; }
+  if (end < l.start) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืม (' + _scD(l.start) + ')'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   db.collection('publicDemoLoans').doc(loanId).update({
     end: end,
@@ -1025,8 +1051,8 @@ function renderUnitsTable() {
         '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
         '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
-        '<td>' + (loan ? esc(loan.borrower) + ' · ' + loan.end
-          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + appRange.end) : '—') + '</td></tr>';
+        '<td>' + (loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
+          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td></tr>';
     }).join('');
     var body = unitViewMode === 'card'
       ? '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
@@ -1121,7 +1147,7 @@ function openUnitDetail(unitId) {
     '<span class="pill pill-muted">กสทช ' + (u.nbtcRegistered?'✅':'❌') + '</span><span class="pill pill-muted">ประกันภัย ' + (u.droneInsurance?'✅':'❌') + '</span><span class="pill pill-muted">CAAT ' + (u.caatRegistered?'✅':'❌') + '</span></div>';
   var appRange = loan ? null : unitAppRangeOn(u.id, _td());
   if (loan) {
-    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + loan.end +
+    h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + _scD(loan.end) +
       '<br>🧑‍💼 ผู้คีย์: ' + (loan.approver ? esc(loan.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึก</span>') +
       (loan.jobNo ? ' · 📄 ใบจอง ' + esc(loan.jobNo) : '') + '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
@@ -1144,7 +1170,7 @@ function openUnitDetail(unitId) {
   h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">📜 ประวัติการยืมล่าสุด</div>';
   h += history.length ? history.map(function(l) {
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;display:flex;gap:8px;align-items:center">' +
-      '<span style="flex:1;min-width:0">' + esc(l.borrower) + ' · ' + l.start + ' – ' + l.end +
+      '<span style="flex:1;min-width:0">' + esc(l.borrower) + ' · ' + _scD(l.start) + ' – ' + _scD(l.end) +
       (l.status === 'active' ? ' <span class="pill pill-warn">กำลังยืม</span>' : ' <span class="pill pill-good">คืนแล้ว</span>') +
       ((l.events || []).length > 1 ? ' <span class="pill pill-muted">' + l.events.length + ' เหตุการณ์</span>' : '') + '</span>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ดูประวัติใบนี้">📜</button></div>';
@@ -1168,6 +1194,7 @@ function showManualLoanForm(unitId) {
     '</div><div class="field"><label>เลขที่ใบจอง</label><input type="text" id="mlJob" placeholder="เลขจากระบบคลัง เช่น 29179"></div>' +
     '<div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
     '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
+  _scDateHints(zone);
 }
 function saveManualLoan(unitId) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
@@ -2208,6 +2235,7 @@ function renderStaffCalendar() {
   else if (scView === 'find') h += _scViewFind();
   else h += _scViewTimeline();
   el.innerHTML = h;
+  _scDateHints(el);
   if (keep) {
     var back = document.getElementById(keep.id);
     if (back) {
@@ -2276,6 +2304,7 @@ function openSm(title, html) {
   document.getElementById('smTitle').textContent = title;
   document.getElementById('smBody').innerHTML = html;
   document.getElementById('smOverlay').classList.add('on');
+  _scDateHints(document.getElementById('smBody'));
 }
 function closeSm() { document.getElementById('smOverlay').classList.remove('on'); }
 
