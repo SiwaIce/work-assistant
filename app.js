@@ -4993,19 +4993,19 @@ function openEmailDraft() {
     toast('⚠️ ฟังก์ชันยังไม่พร้อม');
   }
 }
-// เพิ่มเมนูใน sidebar (เรียกใช้หลังจาก DOM โหลด)
+// เมนู "📥 คำขออัพเดทจากลูกค้า" อยู่ใน index.html กลุ่ม 📊 ข้อมูล ตรงๆ แล้ว ไม่ต้องแทรกด้วย JS
+//
+// เดิมแทรกทีหลังโดยอ้างอิงตำแหน่งจากเมนู insights — พอเมนูนั้นถูกเอาออกจาก sidebar
+// querySelector คืน null แล้วโค้ดก็ `if (insightsItem)` เฉยๆ ไม่มี else ไม่มี log
+// เมนูจึงหายไปทั้งอันแบบเงียบสนิท ทั้งที่หน้ากับ route ยังทำงานปกติ เข้าไม่ได้เพราะไม่มีปุ่มให้กด
+// เก็บฟังก์ชันไว้เป็นตัวกันพลาด เผื่อมีคนลบบรรทัดใน index.html ทิ้ง
 function addCustomerUpdateMenuItem() {
-  var sidebar = document.getElementById('sidebar');
-  if (!sidebar) return;
-  
-  // ตรวจสอบว่ามีเมนูนี้อยู่แล้วหรือไม่
-  if (document.querySelector('.nl[data-v="customerUpdates"]')) return;
-  
-  var insightsItem = document.querySelector('.nl[data-v="insights"]');
-  if (insightsItem) {
-    var menuHtml = '<div class="nl" data-v="customerUpdates" onclick="go(\'customerUpdates\')">📥 คำขออัพเดท <span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>';
-    insightsItem.insertAdjacentHTML('afterend', menuHtml);
-  }
+  if (document.querySelector('.nl[data-v="customerUpdates"]')) return;   // มีอยู่แล้ว ปกติ
+  var group = document.getElementById('sgi-data');
+  if (!group) { console.warn('addCustomerUpdateMenuItem: ไม่พบกลุ่มเมนู ข้อมูล'); return; }
+  group.insertAdjacentHTML('afterbegin',
+    '<div class="nl" data-v="customerUpdates" onclick="go(\'customerUpdates\')">📥 คำขออัพเดทจากลูกค้า ' +
+    '<span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>');
 }
 
 function toggleSbGroup(key) {
