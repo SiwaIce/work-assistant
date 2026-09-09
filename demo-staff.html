@@ -105,7 +105,12 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   cursor:pointer; padding:11px 14px; border-radius:11px; border:1px solid var(--border);
   background:var(--surface); color:var(--text); }
 .triage-hd .th-ar { color:var(--text3); font-size:11px; }
-.triage-hd .th-t { font-weight:700; font-size:13.5px; }
+.triage-hd .th-t { font-weight:700; font-size:13.5px; min-width:0; }
+/* สรุปตอนยุบ — ตัวเลขยังเห็น ไม่ต้องกางก็รู้ว่าค้างอะไรอยู่ */
+.triage-hd .th-sum { font-weight:600; font-size:12.5px; color:var(--text2); }
+.triage-hd .th-sum b { color:var(--bad); font-variant-numeric:tabular-nums; }
+.triage-hd .th-sep { color:var(--text3); margin:0 2px; }
+.tg.info { border-style:dashed; opacity:.85; }
 .triage-hd .th-n { margin-inline-start:auto; font-size:11.5px; font-weight:700;
   background:var(--bad-soft); color:var(--bad); padding:2px 9px; border-radius:999px; }
 .triage-hd .th-ok { margin-inline-start:auto; font-size:11.5px; font-weight:700;
@@ -191,6 +196,30 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .su-idline { display:flex; flex-wrap:wrap; gap:4px 5px; margin-top:5px; }
 .su-meta { display:flex; flex-wrap:wrap; gap:4px 5px; margin-top:8px; }
 .su-lent { margin-top:8px; padding:7px 9px; border-radius:8px; background:var(--surface-2); border-left:3px solid var(--accent); font-size:11.5px; line-height:1.6; }
+/* เครื่องที่เลยกำหนดคืน — ขอบซ้ายแดง เห็นตั้งแต่ยังไม่อ่านรายละเอียด */
+.su-lent.late { border-left-color:var(--bad); background:var(--bad-soft); }
+/* หัวกลุ่มรุ่น: บอกสถานะ ไม่ใช่แค่จำนวน */
+.model-group > summary .mc { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.mc-ok, .mc-out, .mc-late, .mc-off, .mc-disp { font-size:10.5px; font-weight:700; padding:2px 8px;
+  border-radius:999px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.mc-ok { background:var(--good-soft); color:var(--good); }
+.mc-out { background:var(--warn-soft); color:var(--warn); }
+.mc-late { background:var(--bad-soft); color:var(--bad); }
+.mc-off { background:var(--surface-2); color:var(--text3); }
+.mc-disp { background:var(--surface-2); color:var(--text2); border:1px solid var(--border); }
+/* โหมดแน่น — แถวเตี้ยสำหรับอุปกรณ์เสริมจำนวนมาก */
+.su-dense { border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden; }
+.sd-row { display:grid; grid-template-columns:78px 1fr auto; gap:0 12px; align-items:center;
+  padding:6px 12px; border-bottom:1px solid var(--border); font-size:12px; cursor:pointer; }
+.sd-row:last-child { border-bottom:none; }
+.sd-row:nth-child(even) { background:var(--surface-2); }
+.sd-row:hover { background:var(--accent-soft); }
+.sd-row.late { box-shadow:inset 3px 0 0 var(--bad); }
+.sd-rent { font-family:ui-monospace,Consolas,monospace; font-weight:700; font-variant-numeric:tabular-nums; }
+.sd-nm { min-width:0; color:var(--text2); }
+.sd-hid { opacity:.7; }
+.sd-st { flex:0 0 auto; }
+.uvt-sep { width:1px; align-self:stretch; background:var(--border); margin:0 3px; }
 .su-acts { display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; }
 .su-pending { font-size:10.5px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:6px; padding:3px 8px; margin-top:7px; display:inline-block; }
 /* ---- modal ---- */
@@ -685,18 +714,32 @@ function activeLoansFor(unitId) { return LOANS.filter(function(l) { return l.uni
 // การยืมที่คีย์ในแอปหลักมาถึงหน้านี้ทาง busyRanges ไม่ได้อยู่ใน publicDemoLoans — เดิมทุกจุดที่เช็ค "ว่างไหม"
 // ดูแต่ LOANS อย่างเดียว หน้านี้เลยขึ้นว่าว่างทั้ง 71 เครื่องทั้งที่แอปหลักปล่อยยืมอยู่ 19 เครื่อง
 // (เจอตอนทำปฏิทินซึ่งรวมสองแหล่ง แล้วตัวเลขขัดกันเอง) ต้องนับ busyRanges ด้วยทุกจุดที่ถามว่าว่างไหม
+// ⚠️ ของที่เลยกำหนดคืนแล้วยังไม่ได้คืน = ยังไม่ว่าง
+//
+// เดิมทุกตัวเช็คถามแค่ "วันนี้อยู่ในช่วงยืมไหม" (iso <= r.end) พอเลยกำหนดไปแล้ววันหนึ่ง ช่วงนั้นก็หลุด
+// เงื่อนไข เครื่องเลยกลับมาแสดงว่า "✅ ว่าง" ทั้งที่ยังอยู่ที่ลูกค้า — เจอจริง 16 เครื่องบน production
+// เครื่องที่ค้าง 133 วันก็ขึ้นว่าว่างให้คนเอาไปปล่อยยืมซ้ำได้
+//
+// busyRanges ที่ publish มามีเฉพาะใบที่ status === 'active' (publishDemoCatalog กรองไว้) เช่นเดียวกับ
+// activeLoansFor() ดังนั้นช่วงที่ยังอยู่ = ใบที่ยังไม่ปิด ถ้าวันสิ้นสุดผ่านไปแล้วแปลว่าเลยกำหนด ไม่ใช่ว่าง
+function _rangeStillOut(r, iso) { return iso >= r.start; }
 function unitAppRangeOn(unitId, iso) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
   if (!u) return null;
-  return (u.busyRanges || []).filter(function(r) { return iso >= r.start && iso <= r.end; })[0] || null;
+  var rs = (u.busyRanges || []).filter(function(r) { return _rangeStillOut(r, iso); });
+  if (!rs.length) return null;
+  // ถ้ามีหลายช่วง เอาช่วงที่ครบกำหนดเร็วที่สุดก่อน (ค้างนานสุด = ต้องตามก่อน)
+  return rs.sort(function(a, b) { return String(a.end).localeCompare(String(b.end)); })[0];
 }
 function unitIsBusyOn(unitId, iso) {
-  if (activeLoansFor(unitId).some(function(l) { return iso >= l.start && iso <= l.end; })) return true;
+  if (activeLoansFor(unitId).some(function(l) { return iso >= l.start; })) return true;
   return !!unitAppRangeOn(unitId, iso);
 }
 function unitCurrentLoan(unitId) {
   var today = _td();
-  return activeLoansFor(unitId).filter(function(l) { return today >= l.start && today <= l.end; })[0] || null;
+  var ls = activeLoansFor(unitId).filter(function(l) { return today >= l.start; });
+  if (!ls.length) return null;
+  return ls.sort(function(a, b) { return String(a.end).localeCompare(String(b.end)); })[0];
 }
 
 var _staffRenderTimer = null;
@@ -759,35 +802,65 @@ function renderTriage() {
   var soon = all.filter(function(x) { return x.end >= today && daysBetween(today, x.end) <= 2; });
   var noName = noNameLoans();
 
+  // แต่ละแถวมีคะแนนความเร่งด่วน (sev) แล้วเรียงจากมากไปน้อย — เดิมลำดับตายตัวตามที่เขียนโค้ด
+  // ทำให้วันที่มีลูกค้ารอคำขออยู่ 5 ใบ ยังถูกดันไปอยู่ใต้ "ใกล้ครบกำหนดอีก 2 วัน" ทั้งที่คนรออยู่จริง
   var rows = [];
   if (overdue.length) {
     var w = overdue[0], wu = UNITS.filter(function(u) { return u.id === w.unitId; })[0];
-    rows.push({ cls: 'crit', ic: '🔴', t: 'ต้องตามคืน <b>' + overdue.length + '</b> เครื่อง',
+    rows.push({ sev: 100, key: 'ตามคืน', n: overdue.length, cls: 'crit', ic: '🔴',
+      t: 'ต้องตามคืน <b>' + overdue.length + '</b> เครื่อง',
       s: 'ค้างนานสุด ' + daysBetween(w.end, today) + ' วัน · ' + esc((wu && (wu.model || wu.name)) || '') +
          (wu && wu.rentalDbNo ? ' เช่า ' + esc(wu.rentalDbNo) : ''),
       go: '<button class="tg-go" onclick="staffTab(\'return\')">ไปตามคืน →</button>' });
   }
   if (noName.length) {
     var nnLate = noName.filter(function(x) { return x.end < today; }).length;
-    rows.push({ cls: nnLate ? 'crit' : 'warn', ic: '🧑‍💼', t: 'ไม่รู้ว่าตามใคร <b>' + noName.length + '</b> ใบ',
+    // ถ้าใบที่ไม่มีชื่อทับกับใบที่เลยกำหนด = ตามคืนไม่ได้เลย เร่งด่วนพอๆ กับการตามคืน
+    rows.push({ sev: nnLate ? 95 : 40, key: 'ไม่รู้ตามใคร', n: noName.length,
+      cls: nnLate ? 'crit' : 'warn', ic: '🧑‍💼', t: 'ไม่รู้ว่าตามใคร <b>' + noName.length + '</b> ใบ',
       s: 'ไม่มีทั้งชื่อผู้ยืมและผู้คีย์เบิก' +
-         (nnLate ? ' — ใน 16 ใบที่เลยกำหนด มี ' + nnLate + ' ใบอยู่ในกลุ่มนี้ ตามคืนไม่ได้เลย' : '') +
+         (nnLate ? ' — ใน ' + overdue.length + ' ใบที่เลยกำหนด มี ' + nnLate + ' ใบอยู่ในกลุ่มนี้ ตามคืนไม่ได้เลย' : '') +
          ' · กรอกตรงนี้ได้เลย',
       go: '<button class="tg-go" onclick="toggleNames()">' + (namesOpen ? '▴ ปิด' : '▾ กรอกชื่อ') + '</button>' });
   }
-  if (soon.length) {
-    rows.push({ cls: 'warn', ic: '🟡', t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง',
-      s: 'ภายใน 2 วัน', go: '<button class="tg-go" onclick="staffTab(\'return\')">ดูรายการ →</button>' });
-  }
   if (PENDING.length) {
-    rows.push({ cls: 'warn', ic: '🟡', t: 'คำขอจากลูกค้า <b>' + PENDING.length + '</b> รายการ',
-      s: 'รออนุมัติ', go: '<button class="tg-go" onclick="staffTab(\'pending\')">ไปอนุมัติ →</button>' });
+    // ลูกค้ารออยู่จริง จึงมาก่อน "ใกล้ครบกำหนด" ซึ่งยังไม่มีใครเดือดร้อน
+    rows.push({ sev: 80, key: 'คำขอรออนุมัติ', n: PENDING.length, cls: 'warn', ic: '🟡',
+      t: 'คำขอจากลูกค้า <b>' + PENDING.length + '</b> รายการ', s: 'รออนุมัติ',
+      go: '<button class="tg-go" onclick="staffTab(\'pending\')">ไปอนุมัติ →</button>' });
   }
+  if (soon.length) {
+    rows.push({ sev: 60, key: 'ใกล้ครบ', n: soon.length, cls: 'warn', ic: '🟡',
+      t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง', s: 'ภายใน 2 วัน',
+      go: '<button class="tg-go" onclick="staffTab(\'return\')">ดูรายการ →</button>' });
+  }
+  // เอกสารไม่ครบ — ข้อมูลที่มีอยู่แล้วแต่ไม่เคยมีที่แสดง ถ้าบริษัทบังคับต้องมีก่อนปล่อยยืม อันนี้บล็อกทุกใบ
+  var noDoc = UNITS.filter(function(u) {
+    return !(u.nbtcRegistered && u.droneInsurance && u.caatRegistered);
+  }).length;
+  if (noDoc) {
+    rows.push({ sev: 20, key: 'เอกสารไม่ครบ', n: noDoc, cls: 'warn', ic: '📄',
+      t: 'เอกสารไม่ครบ <b>' + noDoc + '</b> / ' + UNITS.length + ' เครื่อง',
+      s: 'กสทช. · ประกันภัยโดรน · CAAT — ดูรายตัวได้ที่การ์ดแต่ละเครื่อง (กด “ดูข้อมูลเพิ่ม”)',
+      go: '<button class="tg-go" onclick="staffTab(\'units\')">ไปรายการเครื่อง →</button>' });
+  }
+  // ซ่อนจากลูกค้า — ไม่ใช่ปัญหา แต่ให้เห็นว่าตั้งไว้แบบนี้จริง ไม่ใช่ลืมติ๊ก
+  var hidden = UNITS.filter(function(u) { return u.customerVisible === false; }).length;
+  if (hidden) {
+    rows.push({ sev: 10, key: 'ซ่อนจากลูกค้า', n: hidden, cls: 'info', ic: '🙈',
+      t: 'ซ่อนจากลูกค้าอยู่ <b>' + hidden + '</b> เครื่อง',
+      s: 'ตั้งค่าไว้ที่แอปหลัก — แสดงไว้ให้รู้ว่าตั้งใจซ่อน ไม่ใช่ลืม',
+      go: '<button class="tg-go" onclick="staffTab(\'units\')">ตรวจดู →</button>' });
+  }
+  rows.sort(function(a, b) { return b.sev - a.sev; });
 
   var h = '<div class="triage-wrap">';
+  // ตอนยุบต้องยังเห็นตัวเลข ไม่ใช่แค่ "N เรื่อง" — คนที่ยุบไว้คือคนที่รู้อยู่แล้ว แค่ไม่อยากให้กินที่
+  var sum = rows.filter(function(r) { return r.sev >= 40; })
+    .map(function(r) { return '<b>' + r.n + '</b> ' + r.key; }).join(' <span class="th-sep">·</span> ');
   h += '<button class="triage-hd" onclick="toggleTriage()" aria-expanded="' + (triageOpen ? 'true' : 'false') + '">' +
     '<span class="th-ar">' + (triageOpen ? '▾' : '▸') + '</span>' +
-    '<span class="th-t">📌 วันนี้ต้องทำอะไร</span>' +
+    '<span class="th-t">📌 วันนี้' + (!triageOpen && sum ? ' <span class="th-sum">' + sum + '</span>' : 'ต้องทำอะไร') + '</span>' +
     (rows.length ? '<span class="th-n">' + rows.length + ' เรื่อง</span>' : '<span class="th-ok">เคลียร์</span>') +
     '</button>';
   if (triageOpen) {
@@ -1331,13 +1404,29 @@ function renderUnitsTable() {
         '<td>' + (loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
           : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td></tr>';
     }).join('');
-    var body = unitViewMode === 'card'
-      ? '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
-      : '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
+    var body = unitViewMode !== 'card'
+      ? '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
         '<thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table></div>';
+        '<tbody>' + rows + '</tbody></table></div>'
+      : unitDense
+        ? '<div class="su-dense">' + list.map(function(u) { return unitDenseHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
+        : '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>';
+    // หัวกลุ่มบอกสถานะ ไม่ใช่แค่จำนวน — เดิมเขียน "1/2 ว่างตอนนี้" ต้องไล่อ่านทุกใบเองว่าตัวไหนมีปัญหา
+    var lateN = 0, busyN = 0, offN = 0;
+    list.forEach(function(u) {
+      if (u.status === 'unavailable' || u.status === 'lost') { offN++; return; }
+      var ln = unitCurrentLoan(u.id), ar = ln ? null : unitAppRangeOn(u.id, _td());
+      var endIso = ln ? ln.end : (ar ? ar.end : '');
+      if (ln || ar) { busyN++; if (endIso && endIso < _td()) lateN++; }
+    });
+    var allDisplay = list.length && list.every(function(u) { return u.flyable === false; });
+    var stat = '<span class="mc-ok">✅ ว่าง ' + availN + '</span>';
+    if (busyN) stat += '<span class="mc-out">📤 ยืม ' + busyN + '</span>';
+    if (lateN) stat += '<span class="mc-late">⚠️ เลยกำหนด ' + lateN + '</span>';
+    if (offN) stat += '<span class="mc-off">⛔ ไม่พร้อม ' + offN + '</span>';
+    if (allDisplay) stat += '<span class="mc-disp">🖼️ จัดแสดงเท่านั้น</span>';
     return '<details class="model-group" open><summary><span class="mn">' + esc(model) + '</span>' +
-      '<span class="mc">' + availN + '/' + list.length + ' ว่างตอนนี้</span></summary>' + body + '</details>';
+      '<span class="mc">' + stat + '</span></summary>' + body + '</details>';
   }).join('');
   document.getElementById('unitGroups').innerHTML = h;
 }
@@ -1349,12 +1438,44 @@ function setUnitView(v) {
   try { localStorage.setItem('demoStaffUnitView', v); } catch (e) {}
   renderUnitsTable();
 }
+// 46 จาก 71 เป็นอุปกรณ์เสริม (แบต ใบพัด สายชาร์จ RollUp) ซึ่งไม่ต้องดู S/N หรือเอกสารเลย
+// แต่กินพื้นที่เท่าเครื่องหลัก — โหมดแน่นเหลือแค่เลขเช่า + ชื่อ + สถานะ พอสำหรับไล่หาว่าตัวไหนว่าง
+var unitDense = (function(){ try { return localStorage.getItem('demoStaffUnitDense') === '1'; } catch (e) { return false; } })();
+function setUnitDense(on) {
+  unitDense = !!on;
+  try { localStorage.setItem('demoStaffUnitDense', unitDense ? '1' : '0'); } catch (e) {}
+  renderUnitsTable();
+}
+function unitDenseHtml(raw, n) {
+  var u = unitView(raw);
+  var loan = unitCurrentLoan(u.id);
+  var appRange = loan ? null : unitAppRangeOn(u.id, _td());
+  var off = u.status === 'unavailable' || u.status === 'lost';
+  var endIso = loan ? loan.end : (appRange ? appRange.end : '');
+  var late = endIso && endIso < _td();
+  var pill = off ? '<span class="pill pill-bad">⛔</span>'
+    : late ? '<span class="pill pill-bad">⚠️ เลย ' + daysBetween(endIso, _td()) + ' ว.</span>'
+    : (loan || appRange) ? '<span class="pill pill-warn">📤 ' + _scD(endIso) + '</span>'
+    : '<span class="pill pill-good">✅ ว่าง</span>';
+  return '<div class="sd-row' + (late ? ' late' : '') + '" onclick="openUnitDetail(\'' + u.id + '\')">' +
+    '<span class="sd-rent">' + esc(u.rentalDbNo || '—') + '</span>' +
+    '<span class="sd-nm">เครื่อง #' + n +
+      (u.customerVisible === false ? ' <span class="sd-hid">🙈</span>' : '') + '</span>' +
+    '<span class="sd-st">' + pill + '</span></div>';
+}
 function renderUnitViewToggle() {
   var el = document.getElementById('unitViewToggle');
   if (!el) return;
-  el.innerHTML = [['card','🗂️ การ์ด'],['table','📋 ตาราง']].map(function(v) {
+  var h = [['card','🗂️ การ์ด'],['table','📋 ตาราง']].map(function(v) {
     return '<button class="' + (unitViewMode === v[0] ? 'on' : '') + '" onclick="setUnitView(\'' + v[0] + '\')">' + v[1] + '</button>';
   }).join('');
+  // ความหนาแน่นใช้ได้เฉพาะมุมมองการ์ด (ตารางแน่นอยู่แล้วโดยธรรมชาติ)
+  if (unitViewMode === 'card') {
+    h += '<span class="uvt-sep"></span>';
+    h += '<button class="' + (unitDense ? '' : 'on') + '" onclick="setUnitDense(false)" title="เห็น S/N และเอกสารครบ">สบายตา</button>';
+    h += '<button class="' + (unitDense ? 'on' : '') + '" onclick="setUnitDense(true)" title="เหลือเลขเช่า + สถานะ เหมาะกับอุปกรณ์เสริมจำนวนมาก">แน่น</button>';
+  }
+  el.innerHTML = h;
 }
 function unitCardHtml(raw, n) {
   var u = unitView(raw);
@@ -1386,7 +1507,7 @@ function unitCardHtml(raw, n) {
   h += '</div>';
   if (loan || appRange) {
     var b = loan || appRange;
-    h += '<div class="su-lent"><b>👤 ' + esc(b.borrower || 'ไม่ระบุผู้ยืม') + '</b>' +
+    h += '<div class="su-lent' + (late ? ' late' : '') + '"><b>👤 ' + esc(b.borrower || 'ไม่ได้ระบุผู้ยืม') + '</b>' +
       (b.approver ? ' <span style="color:var(--text2)">· ผู้ทำเรื่อง ' + esc(b.approver) + '</span>' : '') +
       '<div>📅 ' + esc(_scD(b.start)) + ' → ' + esc(_scD(b.end)) +
       (late ? ' <b style="color:var(--bad)">(เลยกำหนด ' + daysBetween(b.end, _td()) + ' วัน)</b>' : '') + '</div>' +
