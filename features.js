@@ -2897,7 +2897,11 @@ function publishDemoCatalog() {
             end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate),
             borrower: l.borrower || '', purpose: l.purpose || '',
             // publish เป็นชื่อ approver เพื่อให้ตรงกับที่ demo-staff.html ใช้อยู่แล้ว
-            approver: l.keyedBy || l.approver || ''
+            approver: l.keyedBy || l.approver || '',
+            // เลขใบจาก "ระบบคลัง" (โปรแกรมภายนอก) — เดิมไม่ถูก publish มาเลย ทำให้หน้า demo-staff
+            // จัดกลุ่ม "ตามใบจอง" ไม่ได้สักรายการ ต้องเดาเป็น ผู้ยืม+ช่วงวัน แทน ซึ่งยุบใบคนละใบของ
+            // ลูกค้าเดียวกันเข้าด้วยกัน และแยกใบเดียวที่เครื่องคืนไม่พร้อมกันออกจากกัน
+            jobNo: l.jobNo || '', refNo: l.refNo || ''
           };
         });
       return {
