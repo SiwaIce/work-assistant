@@ -3792,7 +3792,8 @@ function demoCatOrphanHtml() {
       cats.forEach(function(c) { h += '<option value="' + sanitize(c.id) + '">' + (c.icon || '') + ' ' + sanitize(c.label) + '</option>'; });
       h += '</select><button class="btn bsm bp" onclick="demoCatAdoptId(\'' + sanitize(o.id).replace(/'/g, "\\'") + '\')">↩️ ให้หมวดนี้ใช้ id เดิม</button></div>';
       h += '<div class="oh-hint">วิธีนี้ไม่แตะข้อมูลเครื่องเลย แค่เปลี่ยน id ของหมวดที่เลือกให้กลับไปเป็น <code>' +
-        sanitize(o.id) + '</code> — เครื่องทั้ง ' + o.n + ' ตัวจะกลับเข้าหมวดทันที</div>';
+        sanitize(o.id) + '</code> — เครื่องทั้ง ' + o.n + ' ตัวจะกลับเข้าหมวดทันที ' +
+        'และจะอัปเดตให้หน้าทีมงาน/ลิงก์ลูกค้าด้วยอัตโนมัติ (สองที่นั้นเก็บรายการหมวดคนละชุดกับแอปนี้)</div>';
     } else {
       h += '<div class="oh-hint">ยังไม่มีหมวดในรายการ — เพิ่มหมวดก่อนแล้วค่อยกลับมาซ่อม</div>';
     }
@@ -3820,8 +3821,32 @@ function demoCatAdoptId(orphanId) {
   cfg.demoCategories = cats;
   saveConfig(cfg);
   toast('✅ ซ่อมแล้ว — ' + target.label + ' ใช้ id "' + orphanId + '"' + (moved ? ' · ย้าย ' + moved + ' เครื่องตามมาด้วย' : ''));
+  _publishCatIdFix(targetId, orphanId);
   showDemoCatMgrM();
   render();
+}
+// รายการหมวดหมู่มีสองชุดที่แยกกันจริงๆ:
+//   1) getConfig().demoCategories — ของแอปนี้
+//   2) dealerUpdates/demoCatalogPublic.categories — ที่ demo-staff กับลิงก์ลูกค้าอ่าน
+//      ชุดนี้ demo-staff เป็นคนเขียน (catMgrSave) ส่วน publishDemoCatalog() ตั้งใจไม่แตะ (ใช้ merge)
+//      เพื่อไม่ให้ทับหมวดที่ทีมงานตั้งไว้
+// ซ่อมแค่ชุดแรกจึงไม่พอ — ฝั่ง staff/ลูกค้าจะยังจับคู่ไม่ติดเหมือนเดิม
+// แก้แบบเจาะจงทีละ id ไม่เขียนทับทั้งรายการ เผื่อฝั่งนั้นมีหมวดที่แอปนี้ไม่มี
+function _publishCatIdFix(fromId, toId) {
+  if (typeof db === 'undefined') return;
+  if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return;
+  var ref = db.collection('dealerUpdates').doc('demoCatalogPublic');
+  ref.get().then(function(snap) {
+    var pub = ((snap.data() || {}).categories || []).slice();
+    if (!pub.length) return;
+    if (pub.some(function(c) { return c.id === toId; })) return;   // ฝั่งนั้นถูกอยู่แล้ว
+    var hit = pub.filter(function(c) { return c.id === fromId; })[0];
+    if (!hit) return;
+    hit.id = toId;
+    return ref.set({ categories: pub }, { merge: true }).then(function() {
+      toast('📤 อัปเดตหมวดให้หน้าทีมงาน/ลูกค้าแล้ว');
+    });
+  }).catch(function(e) { console.warn('publish cat fix', e); });
 }
 // จำนวนเครื่องต่อหมวด — หมวดที่ยังไม่มีเครื่องจะไม่โผล่เป็นแท็บในหน้ารายการ (กันแท็บว่างรก)
 // เขียนไว้ตรงนี้ให้เห็นชัด จะได้ไม่งงว่าเพิ่มหมวดแล้วทำไมยังไม่เห็น
