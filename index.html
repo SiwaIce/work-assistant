@@ -78,6 +78,8 @@
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('main')">📌 หลัก <span class="sg-chev" id="sgc-main">▾</span></div>
 <div class="sg-items" id="sgi-main">
   <div class="nl" data-v="today" onclick="go('today')">📌 วันนี้</div>
+  <!-- กล่องรอดำเนินการ + มีตัวเลขแจ้งเตือน ต้องอยู่กลุ่มที่กางอยู่เสมอ ไม่ใช่กลุ่มที่พับไว้เป็นค่าเริ่มต้น -->
+  <div class="nl" data-v="customerUpdates" onclick="go('customerUpdates')" title="ลูกค้าอัพเดทโครงการมาจาก Client-view — กดอนุมัติแล้วข้อมูลจะลง Pipeline และ timeline ให้">📥 คำขออัพเดทจากลูกค้า <span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>
   <div class="nl" data-v="salesOverview" onclick="go('salesOverview')" title="สรุปยอดขายภาพรวม เลือกดูได้ทั้งบริษัท/เฉพาะ Dealer/เฉพาะ Sales รายเดือน/ไตรมาส/ครึ่งปี">💹 ภาพรวมยอดขาย</div>
   <div class="nl" data-v="dealers" onclick="go('dealers')">🏪 Dealers</div>
   <div class="nl" data-v="pipeline" onclick="go('pipeline')" title="Pipeline ของตัวเอง — จัดการโปรเจกต์ที่ตัวเองดูแล">📊 Pipeline</div>
@@ -106,7 +108,6 @@
 <!-- ข้อมูล -->
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('data')">📊 ข้อมูล <span class="sg-chev" id="sgc-data">▾</span></div>
 <div class="sg-items" id="sgi-data">
-  <div class="nl" data-v="customerUpdates" onclick="go('customerUpdates')">📥 คำขออัพเดทจากลูกค้า <span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>
   <div class="nl" data-v="forecastComparison" onclick="go('forecastComparison')">🔀 เปรียบเทียบ Forecast</div>
   <div class="nl" data-v="visits" onclick="go('visits')">🤝 Visit Report</div>
   <div class="nl" data-v="followup" onclick="go('followup')">📞 Follow-up</div>

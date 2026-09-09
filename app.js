@@ -5001,8 +5001,10 @@ function openEmailDraft() {
 // เก็บฟังก์ชันไว้เป็นตัวกันพลาด เผื่อมีคนลบบรรทัดใน index.html ทิ้ง
 function addCustomerUpdateMenuItem() {
   if (document.querySelector('.nl[data-v="customerUpdates"]')) return;   // มีอยู่แล้ว ปกติ
-  var group = document.getElementById('sgi-data');
-  if (!group) { console.warn('addCustomerUpdateMenuItem: ไม่พบกลุ่มเมนู ข้อมูล'); return; }
+  // ต้องเป็นกลุ่ม "หลัก" ซึ่งกางอยู่เสมอ — เคยวางไว้กลุ่ม "ข้อมูล" แล้วมองไม่เห็นเพราะกลุ่มนั้น
+  // ถูกพับเป็นค่าเริ่มต้น (initSbGroups: data=false) เมนูอยู่ใน DOM จริงแต่ขนาด 0x0
+  var group = document.getElementById('sgi-main');
+  if (!group) { console.warn('addCustomerUpdateMenuItem: ไม่พบกลุ่มเมนู หลัก'); return; }
   group.insertAdjacentHTML('afterbegin',
     '<div class="nl" data-v="customerUpdates" onclick="go(\'customerUpdates\')">📥 คำขออัพเดทจากลูกค้า ' +
     '<span class="nb" id="customerUpdateBadge" style="display:none">0</span></div>');
