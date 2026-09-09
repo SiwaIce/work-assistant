@@ -99,6 +99,22 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-item .icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; background:var(--surface-2); }
 .rt-item .body { flex:1; min-width:200px; }
 .rt-section-title { font-weight:700; font-size:13.5px; margin:18px 0 10px; }
+.rt-sum { background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+  padding:11px 13px; font-size:13px; }
+.rt-later { margin-top:18px; }
+.rt-later > summary { cursor:pointer; font-weight:700; font-size:13px; padding:10px 13px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:10px; list-style:none; }
+.rt-later > summary::-webkit-details-marker { display:none; }
+.rt-later > summary::before { content:'▸ '; color:var(--text3); }
+.rt-later[open] > summary::before { content:'▾ '; }
+.rt-later[open] > summary { margin-bottom:10px; }
+.rt-sum b { font-size:14px; }
+.rt-sum-note { font-size:11.5px; color:var(--text2); margin-top:5px; line-height:1.55; }
+.rt-rent { font-size:11px; font-weight:600; color:var(--text2); background:var(--surface-2);
+  border:1px solid var(--border); border-radius:5px; padding:1px 7px; font-family:ui-monospace,Consolas,monospace; }
+/* ใบที่คีย์จากแอปหลัก — บอกให้ชัดว่าทำไมไม่มีปุ่มรับคืน */
+.rt-src { font-size:11.5px; color:var(--warn); background:var(--warn-soft);
+  border-radius:7px; padding:6px 10px; margin-top:7px; line-height:1.5; }
 .rt-section-title:first-child { margin-top:0; }
 .picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
 .picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
@@ -655,7 +671,8 @@ function renderStatRow() {
     '<div class="stat"><div class="n" style="color:var(--warn)">' + PENDING.length + '</div><div class="l">🟡 รออนุมัติ</div></div>' +
     '<div class="stat"><div class="n" style="color:var(--text2)">' + off + '</div><div class="l">⛔ ไม่พร้อมใช้งาน</div></div>';
   document.getElementById('pendingCountBadge').textContent = '(' + PENDING.length + ')';
-  var overdue = LOANS.filter(function(l) { return l.status === 'active' && l.end < _td(); }).length;
+  // นับจากทั้งสองแหล่งเหมือนในแท็บ ไม่งั้นตัวเลขบนแท็บกับข้างในไม่ตรงกัน
+  var overdue = _overdueCount();
   document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
 }
 
@@ -729,33 +746,106 @@ function rejectRequest(reqId) {
 }
 
 // ---- ติดตามการคืน ----
+// ================================================================
+// การยืมที่ยังไม่คืน — ต้องรวม 2 แหล่ง ไม่ใช่อ่าน publicDemoLoans อย่างเดียว
+//
+// เดิมแท็บนี้อ่านแต่ publicDemoLoans แล้วรายงานว่า "ไม่มีอะไรต้องตาม" ทั้งที่ของจริงมีเครื่องเลย
+// กำหนดคืนค้างอยู่หลายสิบเครื่อง — เพราะการยืมเกือบทั้งหมดคีย์จากแอปหลัก ซึ่งส่งมาทาง
+// busyRanges ของแคตตาล็อกที่ publish ไม่ได้ลงใน publicDemoLoans เลย
+//
+//   src 'staff' = อนุมัติ/คีย์จากหน้านี้ → มี doc ให้อัปเดต กดรับคืน/ต่อเวลา/โอน ได้ครบ
+//   src 'app'   = คีย์จากแอปหลัก → หน้านี้ไม่มี doc ให้อัปเดต จึงกดรับคืนไม่ได้
+//                 แต่ต้อง "เห็น" ว่ามีของค้าง พร้อมบอกว่าให้ไปกดที่ไหน
+// ================================================================
+function activeReturns() {
+  var today = _td(), out = [], seen = {};
+  LOANS.forEach(function(l) {
+    if (l.status !== 'active' || !l.start || !l.end) return;
+    seen[l.unitId + '|' + l.start + '|' + l.end] = 1;
+    out.push({ src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', label: l.label || '',
+      borrower: l.borrower || '', approver: l.approver || '', jobNo: l.jobNo || '',
+      start: l.start, end: l.end });
+  });
+  UNITS.forEach(function(u) {
+    (u.busyRanges || []).forEach(function(r) {
+      if (!r.start || !r.end) return;
+      if (r.start > today) return;   // จองไว้ล่วงหน้า ยังไม่ถึงรอบต้องตามคืน
+      var k = u.id + '|' + r.start + '|' + r.end;
+      if (seen[k]) return;           // ชุดเดียวกันมาสองทาง อย่านับซ้ำ
+      seen[k] = 1;
+      out.push({ src: 'app', id: null, unitId: u.id, model: u.model || u.name || '', label: '',
+        borrower: r.borrower || '', approver: r.approver || '', jobNo: '',
+        start: r.start, end: r.end });
+    });
+  });
+  return out;
+}
+function _overdueCount() {
+  var today = _td();
+  return activeReturns().filter(function(x) { return x.end < today; }).length;
+}
 function renderReturnTab() {
   var el = document.getElementById('tab-return');
   var today = _td();
-  var active = LOANS.filter(function(l) { return l.status === 'active'; });
-  var overdue = active.filter(function(l) { return l.end < today; });
-  var soon = active.filter(function(l) { return l.end >= today && daysBetween(today, l.end) <= 2; });
-  var h = '';
+  var all = activeReturns();
+  var overdue = all.filter(function(x) { return x.end < today; })
+    .sort(function(a, b) { return a.end.localeCompare(b.end); });   // ค้างนานสุดขึ้นก่อน
+  var soon = all.filter(function(x) { return x.end >= today && daysBetween(today, x.end) <= 2; })
+    .sort(function(a, b) { return a.end.localeCompare(b.end); });
+  var fromApp = all.filter(function(x) { return x.src === 'app'; }).length;
+
+  var h = '<div class="rt-sum">' +
+    '<b>ยังไม่คืน ' + all.length + ' เครื่อง</b> · เลยกำหนด ' + overdue.length + ' · ใกล้ครบ ' + soon.length +
+    (fromApp ? '<div class="rt-sum-note">ในนี้มี ' + fromApp + ' เครื่องที่คีย์ยืมจากแอปหลัก — เห็นได้ที่นี่ แต่ต้องไปกดรับคืนในแอปหลัก</div>' : '') +
+    '</div>';
   h += '<div class="rt-section-title">🔴 เลยกำหนดคืนแล้ว (' + overdue.length + ')</div>';
-  h += overdue.length ? overdue.map(returnRowHtml.bind(null, 'overdue')).join('') : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
+  h += overdue.length ? overdue.map(returnRowHtml.bind(null, 'overdue')).join('')
+    : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
   h += '<div class="rt-section-title">🟡 ใกล้ถึงกำหนดคืน (' + soon.length + ')</div>';
-  h += soon.length ? soon.map(returnRowHtml.bind(null, 'duesoon')).join('') : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
+  h += soon.length ? soon.map(returnRowHtml.bind(null, 'duesoon')).join('')
+    : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
+
+  // ที่เหลือคือยืมอยู่แต่ยังไม่ถึงกำหนด ยังไม่ต้องตาม — พับไว้ ไม่งั้นตัวเลขบนสุดกับที่เห็นจะไม่ตรงกัน
+  // (เคยเป็นแบบนั้น: สรุปบอก 35 แต่จอแสดงแค่ 16 คนอ่านจะงงว่าอีก 19 หายไปไหน)
+  var later = all.filter(function(x) { return x.end >= today && daysBetween(today, x.end) > 2; })
+    .sort(function(a, b) { return a.end.localeCompare(b.end); });
+  if (later.length) {
+    h += '<details class="rt-later"><summary>📤 ยืมอยู่ ยังไม่ถึงกำหนด (' + later.length + ') — ยังไม่ต้องตาม</summary>' +
+      later.map(returnRowHtml.bind(null, '')).join('') + '</details>';
+  }
   el.innerHTML = h;
 }
 function returnRowHtml(cls, l) {
   var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
-  var daysTxt = l.end < _td() ? 'เลยมาแล้ว ' + daysBetween(l.end, _td()) + ' วัน' : 'อีก ' + daysBetween(_td(), l.end) + ' วัน';
-  return '<div class="rt-item ' + cls + '"><div class="icon">' + (u ? '🚁' : '🚁') + '</div>' +
-    '<div class="body"><div style="font-weight:700">' + esc(l.model) + ' (' + esc(l.label) + ')</div>' +
-    '<div class="meta">ผู้ยืม: ' + esc(l.borrower) + ' · กำหนดคืน ' + _scD(l.end) + ' (' + daysTxt + ')' +
+  var today = _td();
+  var late = l.end < today;
+  var daysTxt = late ? 'เลยมาแล้ว ' + daysBetween(l.end, today) + ' วัน'
+    : (l.end === today ? 'ครบกำหนดวันนี้' : 'อีก ' + daysBetween(today, l.end) + ' วัน');
+  var cat = (CATEGORIES || []).filter(function(c) { return u && c.id === u.category; })[0];
+  var p = u ? _scModelParts(u) : { main: l.model || 'เครื่องที่ถูกลบไปแล้ว', sub: '' };
+
+  var h = '<div class="rt-item ' + cls + '"><div class="icon">' + (cat ? cat.icon : '🚁') + '</div>';
+  h += '<div class="body"><div style="font-weight:700">' + esc(p.main) +
+    (p.sub ? ' <span style="font-weight:500;color:var(--text3);font-size:12px">' + esc(p.sub) + '</span>' : '') +
+    (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
+  h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? esc(l.borrower) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
+    ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
     '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
-    (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div></div>' +
-    '<div class="actions">' +
-    '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l._id + '\')">✅ รับคืนแล้ว</button>' +
-    '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + l._id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
-    '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l._id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
-    '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ประวัติใบยืม">📜</button>' +
-    '</div></div>';
+    (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div>';
+  // ใบที่มาจากแอปหลักไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
+  if (l.src === 'app') h += '<div class="rt-src">📲 คีย์ยืมจากแอปหลัก — รับคืนต้องกดในแอปหลัก เมนู Demo Equipment</div>';
+  h += '</div>';
+
+  h += '<div class="actions">';
+  if (l.src === 'staff') {
+    h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l.id + '\')">✅ รับคืนแล้ว</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + l.id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l.id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l.id + '\')" title="ประวัติใบยืม">📜</button>';
+  } else if (u) {
+    h += '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>';
+  }
+  return h + '</div></div>';
 }
 function markLoanReturned(loanId) {
   db.collection('publicDemoLoans').doc(loanId).update({
