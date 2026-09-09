@@ -211,7 +211,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .mc-disp { background:var(--surface-2); color:var(--text2); border:1px solid var(--border); }
 /* โหมดแน่น — แถวเตี้ยสำหรับอุปกรณ์เสริมจำนวนมาก */
 .su-dense { border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden; }
-.sd-row { display:grid; grid-template-columns:78px 1fr auto; gap:0 12px; align-items:center;
+.sd-row { display:grid; grid-template-columns:22px 78px 1fr auto; gap:0 10px; align-items:center;
   padding:6px 12px; border-bottom:1px solid var(--border); font-size:12px; cursor:pointer; }
 .sd-row:last-child { border-bottom:none; }
 .sd-row:nth-child(even) { background:var(--surface-2); }
@@ -257,6 +257,59 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
    เพราะช่องวันที่ของเบราว์เซอร์แสดงตามภาษาเครื่อง (en-US จะขึ้น เดือน/วัน/ปี) แก้จากโค้ดไม่ได้ */
 .dhint { font-size:11.5px; color:var(--text2); margin-top:5px; font-variant-numeric:tabular-nums; }
 .dhint:empty { display:none; }
+/* ── คีย์ยืมหลายเครื่องพร้อมกัน ─────────────────────────────────────── */
+.su-pick, .sd-pick { flex:0 0 auto; display:flex; align-items:center; }
+.su-pick input, .sd-pick input { width:17px; height:17px; cursor:pointer; accent-color:var(--accent); }
+.su-card.picked, .sd-row.picked { outline:2px solid var(--accent); outline-offset:-2px; }
+/* แถบสรุปที่เลือกไว้ — ลอยอยู่บนสุดของแท็บ กดไปต่อได้เลย */
+.lendbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; position:sticky; top:0; z-index:20;
+  background:var(--accent-soft); border:1px solid var(--accent); border-radius:11px;
+  padding:10px 13px; margin-bottom:12px; }
+.lendbar .lb-n { font-size:13px; font-weight:600; white-space:nowrap; }
+.lendbar .lb-chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0; }
+.lb-chip { display:inline-flex; align-items:center; gap:6px; font-size:11.5px;
+  background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
+.lb-chip .x { cursor:pointer; color:var(--text3); font-weight:700; }
+.lb-chip .x:hover { color:var(--bad); }
+/* ขั้นตอน 1-2-3 */
+.lf-steps { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
+.lf-steps span { font-size:11.5px; font-weight:600; color:var(--text3);
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:4px 12px; }
+.lf-steps span.on { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+.lf-chips { display:flex; gap:7px; flex-wrap:wrap; }
+.lf-navrow { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.lf-navrow .lf-free { margin-inline-start:auto; font-size:12px; color:var(--text2); }
+.lf-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.lf-dow { text-align:center; font-size:10.5px; color:var(--text3); padding:3px 0; }
+.lf-cell { border:1px solid var(--border); border-radius:8px; padding:5px 6px; min-height:46px;
+  cursor:pointer; background:var(--surface); }
+.lf-cell .n { display:block; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
+.lf-cell .t { display:block; font-size:9.5px; margin-top:2px; }
+.lf-cell.ok { border-color:var(--good); background:var(--good-soft); }
+.lf-cell.ok .t { color:var(--good); }
+.lf-cell.no { background:var(--bad-soft); border-color:var(--bad); opacity:.75; }
+.lf-cell.no .t { color:var(--bad); }
+.lf-cell.sel { outline:2px solid var(--accent); outline-offset:-2px; }
+.lf-cell.today { box-shadow:inset 0 -3px 0 var(--accent); }
+.lf-block { border:1px solid var(--warn); background:var(--warn-soft); border-radius:10px;
+  padding:11px 13px; margin-bottom:11px; font-size:12.5px; }
+.lf-bnote { font-size:11.5px; color:var(--text2); margin:5px 0 8px; line-height:1.55; }
+.lf-brow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface);
+  border:1px solid var(--border); border-radius:9px; padding:7px 10px; margin-top:6px; font-size:12px; }
+.lf-brow span { flex:1; min-width:0; }
+.lf-brow i { display:block; font-style:normal; font-size:11px; color:var(--text2); margin-top:2px; }
+.lf-day { margin-top:11px; border-top:1px solid var(--border); padding-top:10px; }
+.lf-drow { display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:12px; padding:5px 0; }
+.lf-drow > span:first-child { flex:1; min-width:0; }
+.lf-days { display:flex; align-items:center; gap:12px; }
+.lf-warn { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:8px;
+  padding:9px 11px; margin-bottom:11px; line-height:1.55; }
+/* จอแคบ: แถบ sticky ที่สูง 200px+ กินจอเกินไป — เหลือแค่จำนวนกับปุ่มไปต่อ
+   รายการเครื่องเต็มๆ ไปเห็นในขั้นถัดไปอยู่แล้ว และเอาออกได้ที่นั่นเหมือนกัน */
+@media (max-width:620px) {
+  .lendbar .lb-chips { display:none; }
+  .lendbar { padding:9px 11px; }
+}
 .sm-toggles { display:flex; gap:7px; flex-wrap:wrap; }
 .sm-tg { position:relative; display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12px; font-weight:600;
   padding:7px 13px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text3); }
@@ -558,7 +611,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div class="tabpane on" id="tab-pending"></div>
       <div class="tabpane" id="tab-return"></div>
       <div class="tabpane" id="tab-calendar"></div>
-      <div class="tabpane" id="tab-units">
+      <div id="lendPickBar" class="lendbar" style="display:none"></div>
+    <div class="tabpane" id="tab-units">
         <div id="unitsListView">
           <button class="btn btn-ghost btn-sm" id="catMgrToggleBtn" style="margin-bottom:10px" onclick="toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
           <div class="card" id="catMgrPanel" style="display:none;margin-bottom:14px">
@@ -578,6 +632,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <div id="unitGroups"></div>
         </div>
         <div id="unitDetailView" style="display:none"></div>
+        <div id="unitLendView" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -941,6 +996,13 @@ function saveQuickName(unitId) {
 function staffTab(name) {
   document.querySelectorAll('.tabs button').forEach(function(b) { b.classList.toggle('on', b.dataset.tab === name); });
   document.querySelectorAll('.tabpane').forEach(function(p) { p.classList.toggle('on', p.id === 'tab-' + name); });
+  // แถบ "เลือกไว้ N เครื่อง" มีความหมายเฉพาะตอนอยู่แท็บรายการเครื่อง — แท็บอื่นซ่อนไว้
+  var bar = document.getElementById('lendPickBar');
+  if (bar) {
+    if (name === 'units' && lendPicked.length &&
+        document.getElementById('unitLendView').style.display !== 'block') renderLendBar();
+    else bar.style.display = 'none';
+  }
 }
 
 // ---- คำขอรออนุมัติ + ตรวจจับคำขอชนกัน ----
@@ -1414,6 +1476,7 @@ function renderPendingEditsBanner() {
 function renderUnitsTable() {
   renderUnitViewToggle();
   renderPendingEditsBanner();
+  renderLendBar();
   var readyCount = UNITS.filter(_unitHasRental).length;
   var pendingCount = UNITS.length - readyCount;
 
@@ -1546,7 +1609,12 @@ function unitDenseHtml(raw, n) {
     : late ? '<span class="pill pill-bad">⚠️ เลย ' + daysBetween(endIso, _td()) + ' ว.</span>'
     : (loan || appRange) ? '<span class="pill pill-warn">📤 ' + _scD(endIso) + '</span>'
     : '<span class="pill pill-good">✅ ว่าง</span>';
-  return '<div class="sd-row' + (late ? ' late' : '') + '" onclick="openUnitDetail(\'' + u.id + '\')">' +
+  var canPick = !off && !loan && !appRange && _unitHasRental(u);
+  return '<div class="sd-row' + (late ? ' late' : '') + (lendIsPicked(u.id) ? ' picked' : '') +
+    '" onclick="openUnitDetail(\'' + u.id + '\')">' +
+    '<span class="sd-pick" onclick="event.stopPropagation()">' +
+      (canPick ? '<input type="checkbox"' + (lendIsPicked(u.id) ? ' checked' : '') +
+        ' onchange="lendToggle(\'' + u.id + '\')">' : '') + '</span>' +
     '<span class="sd-rent">' + esc(u.rentalDbNo || '—') + '</span>' +
     '<span class="sd-nm">เครื่อง #' + n +
       (u.customerVisible === false ? ' <span class="sd-hid">🙈</span>' : '') + '</span>' +
@@ -1575,8 +1643,14 @@ function unitCardHtml(raw, n) {
   var late = endIso && endIso < _td();
   var cls = off ? 'off' : late ? 'late' : (loan || appRange) ? 'busy' : '';
   var cat = _scCatOf(u);
-  var h = '<div class="su-card ' + cls + '">';
-  h += '<div class="su-top"><div class="su-ic" title="' + esc(cat.label) + '">' + cat.icon + '</div><div style="flex:1;min-width:0">';
+  var h = '<div class="su-card ' + cls + (lendIsPicked(u.id) ? ' picked' : '') + '">';
+  h += '<div class="su-top">';
+  // ติ๊กเลือกได้เฉพาะเครื่องที่ยืมได้จริง (ลงทะเบียนเช่าแล้ว ว่าง และไม่ได้ปิดใช้งาน)
+  if (!off && !loan && !appRange && _unitHasRental(u)) {
+    h += '<label class="su-pick" onclick="event.stopPropagation()"><input type="checkbox"' +
+      (lendIsPicked(u.id) ? ' checked' : '') + ' onchange="lendToggle(\'' + u.id + '\')"></label>';
+  }
+  h += '<div class="su-ic" title="' + esc(cat.label) + '">' + cat.icon + '</div><div style="flex:1;min-width:0">';
   // ชื่อรุ่นอยู่บนหัวกลุ่มอยู่แล้ว การ์ดจึงเหลือแค่ "เครื่อง #N" ไม่ต้องเขียนชื่อรุ่นซ้ำทุกใบ
   h += '<div class="su-nm">เครื่อง #' + n + '</div>';
   h += '<div class="su-idline">';
@@ -1639,6 +1713,9 @@ function openUnitDetail(unitId) {
   if (!u) return;
   currentUnitDetail = u;
   document.getElementById('unitsListView').style.display = 'none';
+  document.getElementById('unitLendView').style.display = 'none';
+  var _lb = document.getElementById('lendPickBar');
+  if (_lb) _lb.style.display = 'none';
   var view = document.getElementById('unitDetailView');
   view.style.display = 'block';
   var loan = unitCurrentLoan(u.id);
@@ -1686,6 +1763,8 @@ function closeUnitDetail() {
   currentUnitDetail = null;
   document.getElementById('unitsListView').style.display = 'block';
   document.getElementById('unitDetailView').style.display = 'none';
+  document.getElementById('unitLendView').style.display = 'none';
+  renderLendBar();
 }
 function showManualLoanForm(unitId) {
   var zone = document.getElementById('manualLoanFormZone');
@@ -1700,6 +1779,268 @@ function showManualLoanForm(unitId) {
     '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
   _scDateHints(zone);
 }
+// ================================================================
+// คีย์ยืมหลายเครื่องพร้อมกัน — เลือกเครื่อง → ปฏิทินหาวันว่างพร้อมกัน → กรอกครั้งเดียว
+//
+// เดิมคีย์ได้ทีละเครื่อง (ต้องเข้าหน้ารายละเอียดของแต่ละตัว) ซึ่งงานจริงมักยืมเป็นชุด
+// เช่นโดรน + แบต + คอนโทรลเลอร์ ต้องกรอกชื่อลูกค้า/วันที่/ใบจอง ซ้ำทุกตัว
+// โครงเดียวกับลิงก์ลูกค้าที่ใช้ง่ายอยู่แล้ว ต่างกันที่ฝั่งนี้กรอกข้อมูลภายในได้ครบกว่า
+// ================================================================
+var lendPicked = [];            // unitId ที่เลือกไว้
+var lendStart = '', lendEnd = '', lendDays = 1, lendMonthOffset = 0, lendDayOpen = null;
+
+function lendIsPicked(id) { return lendPicked.indexOf(id) !== -1; }
+// อัปเดตเฉพาะการ์ดใบนั้นกับแถบสรุป ไม่วาดตารางใหม่ทั้ง 71 ใบ
+// (วาดใหม่ทั้งตารางทำให้ติ๊กรัวๆ ไม่ทัน เพราะ checkbox ตัวถัดไปถูกสร้างใหม่ระหว่างทาง และหน้ากระตุก)
+function _lendPaint(id) {
+  var on = lendIsPicked(id);
+  var box = document.querySelector('.su-pick input[onchange*="' + id + '"], .sd-pick input[onchange*="' + id + '"]');
+  if (box) {
+    box.checked = on;
+    var row = box.closest('.su-card') || box.closest('.sd-row');
+    if (row) row.classList.toggle('picked', on);
+  }
+}
+function lendToggle(id, ev) {
+  if (ev) { ev.stopPropagation(); }
+  var i = lendPicked.indexOf(id);
+  if (i === -1) lendPicked.push(id); else lendPicked.splice(i, 1);
+  _lendPaint(id);
+  renderLendBar();
+}
+function lendClear() {
+  var was = lendPicked.slice();
+  lendPicked = [];
+  was.forEach(_lendPaint);
+  renderLendBar();
+}
+function renderLendBar() {
+  var el = document.getElementById('lendPickBar');
+  if (!el) return;
+  if (!lendPicked.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = '<span class="lb-n">เลือกไว้ <b>' + lendPicked.length + '</b> เครื่อง</span>' +
+    '<div class="lb-chips">' + lendPicked.map(function(id) {
+      var u = UNITS.filter(function(x) { return x.id === id; })[0];
+      if (!u) return '';
+      var p = _scModelParts(u);
+      return '<span class="lb-chip">' + esc(p.main) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') +
+        '<span class="x" onclick="lendToggle(\'' + id + '\')">✕</span></span>';
+    }).join('') + '</div>' +
+    '<button class="btn btn-ghost btn-sm" onclick="lendClear()">ล้าง</button>' +
+    '<button class="btn btn-primary btn-sm" onclick="openLendFlow()">📅 เลือกวันที่ยืม →</button>';
+}
+
+function openLendFlow() {
+  if (!lendPicked.length) return;
+  lendStart = ''; lendEnd = ''; lendDays = 1; lendMonthOffset = 0; lendDayOpen = null;
+  document.getElementById('unitsListView').style.display = 'none';
+  document.getElementById('unitDetailView').style.display = 'none';
+  document.getElementById('lendPickBar').style.display = 'none';
+  document.getElementById('unitLendView').style.display = 'block';
+  renderLendFlow();
+  window.scrollTo(0, 0);
+}
+function closeLendFlow() {
+  document.getElementById('unitLendView').style.display = 'none';
+  document.getElementById('unitsListView').style.display = 'block';
+  renderLendBar();
+  renderUnitsTable();
+}
+function lendUnits() { return UNITS.filter(function(u) { return lendIsPicked(u.id); }); }
+// ว่างพร้อมกันทุกเครื่องที่เลือกไว้ในวันนั้นไหม
+function lendAllFreeOn(iso) {
+  var cur = _scFromIso(iso);
+  if (!cur) return false;
+  var bks = scBookings();
+  return lendUnits().every(function(u) {
+    return !bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); });
+  });
+}
+function lendSetDays(d) {
+  lendDays = Math.max(1, d);
+  if (lendStart) lendEnd = _scIso(_scAdd(_scFromIso(lendStart), lendDays - 1));
+  renderLendFlow();
+}
+function lendPickDay(iso) {
+  lendStart = iso;
+  lendEnd = _scIso(_scAdd(_scFromIso(iso), lendDays - 1));
+  lendDayOpen = null;
+  renderLendFlow();
+}
+function lendOpenDay(iso) { lendDayOpen = (lendDayOpen === iso) ? null : iso; renderLendFlow(); }
+function lendNav(d) { lendMonthOffset += d; lendDayOpen = null; renderLendFlow(); }
+
+function renderLendFlow() {
+  var el = document.getElementById('unitLendView');
+  if (!el) return;
+  var list = lendUnits();
+  if (!list.length) { closeLendFlow(); return; }
+
+  var h = '<button class="back-link" onclick="closeLendFlow()">← กลับไปเลือกเครื่อง</button>';
+  h += '<div class="lf-steps"><span class="on">1 เลือกเครื่อง</span><span class="on">2 เลือกวันที่</span><span' +
+    (lendStart ? ' class="on"' : '') + '>3 กรอกข้อมูล</span></div>';
+
+  // ---- เครื่องที่เลือกไว้ (เอาออกได้ตรงนี้) ----
+  h += '<div class="card" style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:8px">' +
+    'จะคีย์ยืม ' + list.length + ' เครื่อง</div><div class="lf-chips">';
+  list.forEach(function(u) {
+    var p = _scModelParts(u);
+    h += '<span class="lb-chip">' + esc(p.main) + ' · <b>' + esc(u.rentalDbNo || '—') + '</b>' +
+      (list.length > 1 ? '<span class="x" title="เอาออก" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕</span>' : '') +
+      '</span>';
+  });
+  h += '</div></div>';
+
+  // ---- ปฏิทิน: ว่างพร้อมกันทุกเครื่องวันไหน ----
+  var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + lendMonthOffset);
+  var y = base.getFullYear(), m = base.getMonth();
+  var days = new Date(y, m + 1, 0).getDate(), firstDow = new Date(y, m, 1).getDay();
+  var freeCount = 0, blocked = {};
+  for (var d = 1; d <= days; d++) {
+    var iso = _scIso(new Date(y, m, d));
+    if (lendAllFreeOn(iso)) freeCount++;
+    else {
+      var cur = _scFromIso(iso), bks = scBookings();
+      list.forEach(function(u) {
+        if (bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); })) blocked[u.id] = (blocked[u.id] || 0) + 1;
+      });
+    }
+  }
+
+  h += '<div class="card" style="margin-bottom:14px">';
+  h += '<div class="lf-navrow"><button class="btn btn-ghost btn-sm" onclick="lendNav(-1)">◀</button>' +
+    '<b>' + SC_MONTHS[m] + ' ' + y + '</b>' +
+    '<button class="btn btn-ghost btn-sm" onclick="lendNav(1)">▶</button>' +
+    '<span class="lf-free">ว่างพร้อมกัน ' + freeCount + ' วันในเดือนนี้</span></div>';
+
+  // ทั้งเดือนไม่มีวันว่างพร้อมกัน = บอกว่าตัวไหนบล็อก แล้วเอาออกได้เลย ไม่ต้องเดา
+  if (!freeCount && list.length > 1) {
+    var bl = list.filter(function(u) { return blocked[u.id]; })
+      .map(function(u) { return { u: u, n: blocked[u.id] }; })
+      .sort(function(a, b) { return b.n - a.n; });
+    h += '<div class="lf-block"><b>เดือนนี้ไม่มีวันไหนที่ทุกเครื่องว่างพร้อมกัน</b>' +
+      '<div class="lf-bnote">เอาเครื่องที่ติดออกแล้วคีย์แยกใบทีหลังได้ หรือกดดูเดือนถัดไป</div>';
+    bl.forEach(function(x) {
+      var p = _scModelParts(x.u);
+      h += '<div class="lf-brow"><span>' + esc(p.main) + ' · ' + esc(x.u.rentalDbNo || '—') +
+        '<i>ไม่ว่าง ' + x.n + ' วันในเดือนนี้</i></span>' +
+        '<button class="btn btn-ghost btn-sm" onclick="lendToggle(\'' + x.u.id + '\');renderLendFlow()">✕ เอาออก</button></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="lf-cal">';
+  ['อา','จ','อ','พ','พฤ','ศ','ส'].forEach(function(w) { h += '<div class="lf-dow">' + w + '</div>'; });
+  for (var i = 0; i < firstDow; i++) h += '<div></div>';
+  var todayIso2 = _td();
+  for (var d2 = 1; d2 <= days; d2++) {
+    var iso2 = _scIso(new Date(y, m, d2));
+    var free = lendAllFreeOn(iso2);
+    var inRange = lendStart && lendEnd && iso2 >= lendStart && iso2 <= lendEnd;
+    var cls = 'lf-cell ' + (free ? 'ok' : 'no') + (inRange ? ' sel' : '') + (iso2 === todayIso2 ? ' today' : '');
+    h += '<div class="' + cls + '" onclick="' + (free ? 'lendPickDay' : 'lendOpenDay') + '(\'' + iso2 + '\')">' +
+      '<span class="n">' + d2 + '</span><span class="t">' + (free ? 'ว่าง' : 'ไม่ว่าง') + '</span></div>';
+  }
+  h += '</div>';
+
+  // กดวันที่ไม่ว่าง = ดูว่าตัวไหนติด
+  if (lendDayOpen) {
+    var curO = _scFromIso(lendDayOpen), bksO = scBookings();
+    h += '<div class="lf-day"><b>📅 ' + _scD(lendDayOpen) + '</b>';
+    list.forEach(function(u) {
+      var hit = bksO.filter(function(b) { return b.unitId === u.id && scBusyOn(b, curO); })[0];
+      var p = _scModelParts(u);
+      h += '<div class="lf-drow"><span>' + esc(p.main) + ' · ' + esc(u.rentalDbNo || '—') + '</span>' +
+        (hit ? '<span class="pill pill-warn">📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e) + '</span>' +
+               (list.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕ เอาออก</button>' : '')
+             : '<span class="pill pill-good">✅ ว่าง</span>') + '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+
+  // ---- ขั้นที่ 3: กรอกข้อมูล ----
+  h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">กรอกข้อมูลการยืม</div>';
+  h += '<div class="grid2">';
+  h += '<div class="field"><label>📅 วันที่ยืม *</label><input type="date" id="lfStart" value="' + esc(lendStart) + '" onchange="lendStart=this.value;lendEnd=this.value>lendEnd?this.value:lendEnd;renderLendFlow()"></div>';
+  h += '<div class="field"><label>📅 กำหนดคืน *</label><input type="date" id="lfEnd" value="' + esc(lendEnd) + '" onchange="lendEnd=this.value;renderLendFlow()"></div>';
+  h += '</div>';
+  h += '<div class="field"><label>⏱️ จำนวนวัน (กดวันในปฏิทินแล้วคำนวณให้)</label>' +
+    '<div class="lf-days"><button class="btn btn-ghost btn-sm" onclick="lendSetDays(lendDays-1)">−</button>' +
+    '<b>' + lendDays + ' วัน</b>' +
+    '<button class="btn btn-ghost btn-sm" onclick="lendSetDays(lendDays+1)">+</button></div></div>';
+  h += '<div class="grid2">';
+  h += '<div class="field"><label>🏢 ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="lfCompany" list="lfBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('lfBorrowerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้ทำเรื่อง/คีย์เบิก *</label><input type="text" id="lfBy" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '</div>';
+  h += '<div class="grid2">';
+  h += '<div class="field"><label>📄 เลขที่ใบจอง</label><input type="text" id="lfJob" placeholder="เลขจากระบบคลัง"></div>';
+  h += '<div class="field"><label>🎯 วัตถุประสงค์</label><input type="text" id="lfPurpose" placeholder="เช่น สาธิตลูกค้า"></div>';
+  h += '</div>';
+  if (lendStart && lendEnd) {
+    var bad = [];
+    var it = lendStart;
+    while (it <= lendEnd) { if (!lendAllFreeOn(it)) bad.push(it); it = _scIso(_scAdd(_scFromIso(it), 1)); }
+    if (bad.length) h += '<div class="lf-warn">⚠️ ช่วงที่เลือกมี ' + bad.length + ' วันที่บางเครื่องไม่ว่าง (' + _scD(bad[0]) + ')' +
+      ' — บันทึกได้แต่จะทับกับใบเดิม</div>';
+  }
+  h += '<button class="btn btn-primary" onclick="saveLendBatch()">💾 บันทึกยืม ' + list.length + ' เครื่อง</button>';
+  h += '</div>';
+
+  el.innerHTML = h;
+  _scDateHints(el);
+}
+
+function saveLendBatch() {
+  var list = lendUnits();
+  if (!list.length) { alert('ยังไม่ได้เลือกเครื่อง'); return; }
+  var start = (document.getElementById('lfStart').value || '').trim();
+  var end = (document.getElementById('lfEnd').value || '').trim();
+  var company = (document.getElementById('lfCompany').value || '').trim();
+  var by = (document.getElementById('lfBy').value || '').trim();
+  var jobNo = (document.getElementById('lfJob').value || '').trim();
+  var purpose = (document.getElementById('lfPurpose').value || '').trim();
+  if (!start || !end) { alert('เลือกวันที่ยืมและกำหนดคืนก่อนนะครับ'); return; }
+  if (end < start) { alert('กำหนดคืนอยู่ก่อนวันที่ยืม'); return; }
+  if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
+  if (!by) { alert('กรอกผู้ทำเรื่อง/คีย์เบิกก่อนนะครับ'); return; }
+  var busy = list.filter(function(u) {
+    var bks = scBookings();
+    var it = start, hit = false;
+    while (it <= end && !hit) {
+      var cur = _scFromIso(it);
+      if (bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); })) hit = true;
+      it = _scIso(_scAdd(_scFromIso(it), 1));
+    }
+    return hit;
+  });
+  if (busy.length && !confirm('มี ' + busy.length + ' เครื่องที่ช่วงนี้ไม่ว่างจริง\n\n' +
+      busy.map(function(u) { return '· ' + (u.model || u.name) + ' เช่า ' + (u.rentalDbNo || '—'); }).join('\n') +
+      '\n\nยืนยันจะบันทึกทับต่อไหม?')) return;
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+
+  // เขียนทีเดียวเป็น batch — ถ้าพลาดกลางทางจะไม่เหลือใบครึ่งๆ กลางๆ ให้ตามเก็บ
+  var batch = db.batch();
+  list.forEach(function(u) {
+    var ref = db.collection('publicDemoLoans').doc();
+    batch.set(ref, {
+      unitId: u.id, model: u.model || u.name || '', label: 'เครื่อง',
+      borrower: company, purpose: purpose, start: start, end: end, actualReturnDate: '',
+      approver: by, jobNo: jobNo, status: 'active',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      events: [_scEv('created', by, company + ' · ' + _scD(start) + ' → ' + _scD(end) +
+        (jobNo ? ' · ใบจอง ' + jobNo : '') + (list.length > 1 ? ' · คีย์พร้อมกัน ' + list.length + ' เครื่อง' : ''))]
+    });
+  });
+  batch.commit().then(function() {
+    toastMock('💾 บันทึกยืมแล้ว ' + list.length + ' เครื่อง');
+    lendPicked = [];
+    closeLendFlow();
+    staffTab('return');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 function saveManualLoan(unitId) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
   var start = document.getElementById('mlStart').value, end = document.getElementById('mlEnd').value;
