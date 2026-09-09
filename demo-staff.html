@@ -166,6 +166,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-rent { font-size:11px; font-weight:600; color:var(--text2); background:var(--surface-2);
   border:1px solid var(--border); border-radius:5px; padding:1px 7px; font-family:ui-monospace,Consolas,monospace; }
 /* ใบที่คีย์จากแอปหลัก — บอกให้ชัดว่าทำไมไม่มีปุ่มรับคืน */
+/* ส่งคำขอไปแล้ว รอแอปหลักรับเข้า */
+.rt-src.queued { color:var(--accent); background:var(--accent-soft); }
 .rt-src { font-size:11.5px; color:var(--warn); background:var(--warn-soft);
   border-radius:7px; padding:6px 10px; margin-top:7px; line-height:1.5; }
 .rt-section-title:first-child { margin-top:0; }
@@ -1093,7 +1095,14 @@ function returnRowHtml(cls, l) {
     '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
     (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div>';
   // ใบที่มาจากแอปหลักไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
-  if (l.src === 'app') h += '<div class="rt-src">📲 คีย์ยืมจากแอปหลัก — รับคืนต้องกดในแอปหลัก เมนู Demo Equipment</div>';
+  if (l.src === 'app') {
+    var pend = PENDING_EDITS[l.unitId];
+    var pa = pend && pend.loanAction;
+    h += pa
+      ? '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
+        ' — รอเปิดแอปหลักกด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>'
+      : '<div class="rt-src">📲 ใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — กดปุ่มด้านขวาเพื่อ<b>ส่งคำขอ</b>ไปเข้าคิว แล้วรอแอปหลักกด “รับเข้า”</div>';
+  }
   h += '</div>';
 
   h += '<div class="actions">';
@@ -1103,10 +1112,90 @@ function returnRowHtml(cls, l) {
       '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l.id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l.id + '\')" title="ประวัติใบยืม">📜</button>';
   } else if (u) {
+    // ใบจากแอปหลักไม่มี doc ให้แก้ตรงๆ — ส่งเป็นคำขอเข้าคิวเดียวกับการแก้ข้อมูลเครื่อง
+    var pe = PENDING_EDITS[l.unitId];
+    if (!(pe && pe.loanAction)) {
+      h += '<button class="btn btn-primary btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'return\')">✅ ขอรับคืน</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน">⏩</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์">🔄</button>';
+    }
     h += '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>';
   }
   return h + '</div></div>';
 }
+// ================================================================
+// คำขอจัดการใบยืมที่คีย์มาจากแอปหลัก
+//
+// ใบพวกนี้ไม่มี doc ใน publicDemoLoans หน้านี้จึงอัปเดตตัวจริงไม่ได้ — ส่งเป็น "คำขอ" เข้าคิว
+// publicDemoEdits เหมือนการแก้ข้อมูลเครื่อง แล้วให้คนที่ล็อกอินแอปหลักกดรับเข้า
+// เลือกทางนี้แทนการให้สองที่เขียนใบยืมพร้อมกัน เพราะถ้าเขียนทั้งสองทางแล้วไม่ sync กัน
+// ข้อมูลจะแตกคนละทางโดยไม่มีใครรู้ว่าอันไหนถูก
+// ================================================================
+function _laLabel(t) { return { 'return': 'รับคืน', 'extend': 'เลื่อนกำหนดคืน', 'transfer': 'โอน' }[t] || t; }
+function askLoanAction(unitId, type) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  if (!u) return;
+  var ar = unitAppRangeOn(unitId, _td());
+  var p = _scModelParts(u);
+  var h = '<div class="sm-sec">' + esc(p.main) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</div>';
+  h += '<div class="sc-kv"><div><span>ผู้ยืม</span><b>' + esc((ar && ar.borrower) || '— ไม่ได้ระบุ —') + '</b></div>' +
+    '<div><span>กำหนดคืน</span><b>' + esc(_scD(ar && ar.end)) + '</b></div></div>';
+  if (type === 'return') {
+    h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="la_date" value="' + _td() + '"></div>';
+  } else if (type === 'extend') {
+    h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="la_end" value="' + esc((ar && ar.end) || _td()) + '"></div>';
+  } else {
+    h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="la_borrower" list="laBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' + scBorrowerDatalist('laBorrowerList') + '</div>';
+    h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="la_keyer" placeholder="เว้นว่าง = ไม่เปลี่ยน"></div>';
+  }
+  h += '<div class="field"><label>📝 เหตุผล / หมายเหตุ' + (type === 'return' ? '' : ' *') + '</label><input type="text" id="la_reason" placeholder="' +
+    (type === 'return' ? 'เช่น ลูกค้าส่งคืนที่ออฟฟิศแล้ว' : 'เช่น ลูกค้าขอใช้ต่อ / สมชายลาออก') + '"></div>';
+  h += '<div class="field"><label>✍️ คนส่งคำขอ *</label><input type="text" id="la_by" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div style="font-size:11.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
+    '⚠️ ใบนี้คีย์จากแอปหลัก หน้านี้เปลี่ยนตัวจริงไม่ได้ — กดส่งแล้วจะเข้าคิวไว้ ' +
+    'ต้องไปเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะมีผลจริง</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary" onclick="saveLoanAction(\'' + unitId + '\',\'' + type + '\')">📤 ส่งคำขอ' + _laLabel(type) + '</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
+  openSm('📤 ขอ' + _laLabel(type) + ' (ผ่านแอปหลัก)', h);
+}
+function saveLoanAction(unitId, type) {
+  var by = (document.getElementById('la_by').value || '').trim();
+  var reason = (document.getElementById('la_reason').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนส่งคำขอก่อนนะครับ — แอปหลักจะได้รู้ว่าใครขอ'); return; }
+  var la = { type: type, by: by, reason: reason, at: new Date().toISOString() };
+  if (type === 'return') {
+    la.date = (document.getElementById('la_date').value || '').trim();
+    if (!la.date) { alert('เลือกวันที่รับคืนจริงก่อนนะครับ'); return; }
+  } else if (type === 'extend') {
+    la.newEnd = (document.getElementById('la_end').value || '').trim();
+    if (!la.newEnd) { alert('เลือกกำหนดคืนใหม่ก่อนนะครับ'); return; }
+    if (!reason) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่อง'); return; }
+  } else {
+    la.borrower = (document.getElementById('la_borrower').value || '').trim();
+    la.keyedBy = (document.getElementById('la_keyer').value || '').trim();
+    if (!la.borrower && !la.keyedBy) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
+    if (!reason) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่อง'); return; }
+  }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0] || {};
+  db.collection('publicDemoEdits').doc(unitId).set({
+    unitId: unitId, loanAction: la, editedBy: by,
+    editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+  }, { merge: true }).then(function() {
+    closeSm();
+    toastMock('📤 ส่งคำขอแล้ว — รอแอปหลักกดรับเข้า');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+function cancelLoanAction(unitId) {
+  if (!confirm('ยกเลิกคำขอนี้?')) return;
+  db.collection('publicDemoEdits').doc(unitId).update({
+    loanAction: firebase.firestore.FieldValue.delete()
+  }).then(function() { toastMock('✕ ยกเลิกคำขอแล้ว'); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 function markLoanReturned(loanId) {
   db.collection('publicDemoLoans').doc(loanId).update({
     status: 'returned', actualReturnDate: _td(),
@@ -1530,7 +1619,11 @@ function unitCardHtml(raw, n) {
   h += '</div></div></details>';
   if (unitHasPending(u.id)) {
     var p = PENDING_EDITS[u.id];
-    h += '<div class="su-pending">✏️ แก้ไว้ ' + Object.keys(p.fields || {}).length + ' ช่อง' +
+    var nf = Object.keys(p.fields || {}).length;
+    var bits = [];
+    if (nf) bits.push('✏️ แก้ไว้ ' + nf + ' ช่อง');
+    if (p.loanAction && p.loanAction.type) bits.push('📤 ขอ' + esc(_laLabel(p.loanAction.type)));
+    h += '<div class="su-pending">' + (bits.join(' · ') || '✏️ มีรายการค้าง') +
       (p.editedBy ? ' โดย ' + esc(p.editedBy) : '') + ' · รอแอปหลักรับเข้า</div>';
   }
   h += '<div class="su-acts">';

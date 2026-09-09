@@ -3298,6 +3298,27 @@ function _demoEditFmt(field, v) {
   }
   return v === '' || v == null ? '<span style="color:var(--text3)">(ว่าง)</span>' : sanitize(String(v));
 }
+// คำขอจัดการใบยืมที่ส่งมาจากหน้า demo-staff — เขียนให้อ่านออกว่ากดรับเข้าแล้วจะเกิดอะไร
+function _demoLoanActionFmt(la, d) {
+  var loan = demoActiveLoanOf(d.id);
+  var head = { 'return': '✅ ขอรับคืนเข้าคลัง', 'extend': '⏩ ขอเลื่อนกำหนดคืน', 'transfer': '🔄 ขอโอน' }[la.type] || la.type;
+  var h = '<div class="demo-la"><b>' + head + '</b>';
+  if (!loan) {
+    h += '<div class="la-warn">⚠️ เครื่องนี้ไม่มีใบยืมที่ยังไม่คืนแล้ว — กดรับเข้าจะไม่เกิดอะไรขึ้น (อาจมีคนคืนไปก่อน)</div>';
+    return h + '</div>';
+  }
+  if (la.type === 'return') {
+    h += '<div class="la-l">' + sanitize(loan.borrower || 'ไม่ได้ระบุผู้ยืม') + ' · กำหนดคืน ' + sanitize(_demoDayTxt(loan.returnDate)) + '</div>';
+    h += '<div class="la-l">คืนจริง <b>' + sanitize(_demoDayTxt(la.date || _td())) + '</b> — เครื่องจะกลับเป็น “ว่าง”</div>';
+  } else if (la.type === 'extend') {
+    h += '<div class="la-l">' + sanitize(_demoDayTxt(loan.returnDate)) + ' <span style="color:var(--accent)">→</span> <b>' + sanitize(_demoDayTxt(la.newEnd)) + '</b></div>';
+  } else if (la.type === 'transfer') {
+    if ((la.borrower || '').trim()) h += '<div class="la-l">ผู้ยืม ' + sanitize(loan.borrower || '—') + ' <span style="color:var(--accent)">→</span> <b>' + sanitize(la.borrower) + '</b></div>';
+    if ((la.keyedBy || '').trim()) h += '<div class="la-l">ผู้คีย์ ' + sanitize(loan.keyedBy || loan.approver || '—') + ' <span style="color:var(--accent)">→</span> <b>' + sanitize(la.keyedBy) + '</b></div>';
+  }
+  if ((la.reason || '').trim()) h += '<div class="la-l">📝 ' + sanitize(la.reason) + '</div>';
+  return h + '</div>';
+}
 function showDemoStaffEditsM() {
   var items = getDemoItems(), byId = {};
   items.forEach(function(d) { byId[d.id] = d; });
@@ -3323,6 +3344,8 @@ function showDemoStaffEditsM() {
       '<b>' + sanitize(d.name || '-') + '</b><div style="font-size:10px;color:var(--text3);font-family:monospace">เช่า ' +
       sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(d.serialNumber || '—') + '</div></td>';
     h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border)">';
+    // คำขอจัดการใบยืมต้องอ่านออกว่าจะเกิดอะไรขึ้น ไม่ใช่ขึ้นเป็นช่องว่างเพราะไม่มี fields
+    if (e.loanAction && e.loanAction.type) h += _demoLoanActionFmt(e.loanAction, d);
     Object.keys(f).forEach(function(k) {
       var cur = k === 'flyable' ? (d.flyable !== false) : k === 'customerVisible' ? demoIsCustomerVisible(d) : d[k];
       h += '<div style="margin-bottom:3px"><span style="font-size:10px;color:var(--text3);text-transform:uppercase">' +
@@ -3368,6 +3391,47 @@ function _applyDemoEditsLocal(ids) {
             'กรอกย้อนหลังจากหน้า demo-staff' + (e.editedBy ? ' โดย ' + e.editedBy : '') + ' — ' +
             lk.map(function(k) { return _DEMO_EDIT_LABELS[k] + ': ' + (loanFields[k] || '—'); }).join(' · '));
           loanTouched++;
+        }
+      }
+    }
+    // ---- คำขอจัดการใบยืมจากหน้า demo-staff (รับคืน / ต่อเวลา / โอน) ----
+    // หน้านั้นไม่มี doc ของใบยืมที่คีย์จากแอปนี้ให้แก้ จึงส่งเป็น "คำขอ" มาเข้าคิวเดียวกับการแก้ข้อมูลเครื่อง
+    // แล้วให้คนที่ล็อกอินแอปนี้กดรับเข้า — แอปนี้ยังเป็นแหล่งความจริงเดียว ไม่มีการเขียนใบยืมจากสองที่
+    if (e.loanAction && e.loanAction.type) {
+      var la = e.loanAction;
+      var act = null;
+      loans.forEach(function(l) { if (l.demoId === d.id && l.status === 'active' && !act) act = l; });
+      if (act) {
+        var who = (la.by || e.editedBy || '').trim() || 'demo-staff';
+        if (la.type === 'return') {
+          act.status = 'returned';
+          act.actualReturnDate = la.date || _td();
+          _demoAddEvent(act, 'returned', who, 'รับคืนเข้าคลัง ' + _demoDayTxt(act.actualReturnDate) +
+            ' · สั่งจากหน้า demo-staff' + (la.reason ? ' — ' + la.reason : ''));
+          d.status = 'available';
+          d.jobNo = ''; d.refNo = ''; d.dealerId = ''; d.borrower = '';
+          d.purpose = ''; d.lentDate = ''; d.returnDate = ''; d.note = '';
+          loanTouched++;
+        } else if (la.type === 'extend' && la.newEnd) {
+          var oldEnd = act.returnDate || '—';
+          act.returnDate = la.newEnd;
+          d.returnDate = la.newEnd;
+          _demoAddEvent(act, 'extended', who, 'จาก ' + _demoDayTxt(oldEnd) + ' → ' + _demoDayTxt(la.newEnd) +
+            ' · สั่งจากหน้า demo-staff' + (la.reason ? ' — ' + la.reason : ''));
+          loanTouched++;
+        } else if (la.type === 'transfer') {
+          if ((la.borrower || '').trim()) {
+            _demoAddEvent(act, 'borrower', who, 'จาก ' + (act.borrower || '—') + ' → ' + la.borrower +
+              ' · สั่งจากหน้า demo-staff' + (la.reason ? ' — ' + la.reason : ''));
+            act.borrower = la.borrower; d.borrower = la.borrower;
+            loanTouched++;
+          }
+          if ((la.keyedBy || '').trim()) {
+            _demoAddEvent(act, 'keyer', who, 'จาก ' + (act.keyedBy || act.approver || '—') + ' → ' + la.keyedBy +
+              ' · สั่งจากหน้า demo-staff' + (la.reason ? ' — ' + la.reason : ''));
+            act.keyedBy = la.keyedBy; d.keyedBy = la.keyedBy;
+            loanTouched++;
+          }
         }
       }
     }

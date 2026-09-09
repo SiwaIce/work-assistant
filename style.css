@@ -10361,3 +10361,11 @@ input:focus, select:focus, textarea:focus {
 .demo-filter-chip.out { opacity: .5; border-style: dashed; }
 .demo-filter-chip.out .oo { font-size: 10px; font-weight: 600; opacity: .85; }
 .demo-filter-chip.out:hover { opacity: 1; }
+
+/* คำขอจัดการใบยืมที่ส่งมาจากหน้า demo-staff (ในกล่องรับเข้า) */
+.demo-la { background: var(--bg2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+  padding: 7px 10px; margin-bottom: 7px; }
+.demo-la > b { font-size: 12.5px; }
+.demo-la .la-l { font-size: 11.5px; color: var(--text2); margin-top: 3px; line-height: 1.55; }
+.demo-la .la-l b { color: var(--text); }
+.demo-la .la-warn { font-size: 11.5px; color: #f59e0b; margin-top: 4px; line-height: 1.55; }
