@@ -3599,6 +3599,7 @@ function showDemoCatMgrM() {
   h += '<div id="demoCatMgrRows">' + demoCatMgrRowsHtml(cats) + '</div>';
   h += '<button class="btn bsm bo" onclick="demoCatMgrAddRow()" style="margin-top:6px">➕ เพิ่มหมวดหมู่</button>';
   h += demoCatOrphanHtml();
+  h += '<div id="demoCatPubBox"></div>';   // เติมทีหลังเมื่ออ่านรายการฝั่งที่ publish เสร็จ
   h += demoCatCountsHtml();
   // ตัวหมวดหมู่กับการจับเครื่องเข้าหมวด เป็นคนละงานกัน แต่คนมาหน้านี้มักจะมาทำต่อกันเลย จึงวางทางเข้าไว้ให้
   h += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
@@ -3609,6 +3610,78 @@ function showDemoCatMgrM() {
   h += '<div class="fm-actions" style="margin-top:14px"><button class="btn bp" onclick="demoCatMgrSave()">💾 บันทึก</button><button class="btn" onclick="closeM()">ยกเลิก</button></div>';
   h += '</div>';
   openM('⚙️ จัดการหมวดหมู่ Demo', h);
+  demoCatCheckPublished();
+}
+
+// ================================================================
+// ตรวจรายการหมวดฝั่งที่ publish (dealerUpdates/demoCatalogPublic.categories)
+//
+// ชุดนั้นเป็นคนละก้อนกับ getConfig().demoCategories — demo-staff เป็นคนเขียน ส่วน publishDemoCatalog()
+// ตั้งใจไม่แตะ (merge) เพื่อไม่ให้ทับหมวดที่ทีมงานตั้งไว้ ผลคือสองชุดเลื่อนออกจากกันได้เงียบๆ
+// และเวลาเพี้ยน หน้าทีมงานกับลิงก์ลูกค้าจะจับเครื่องเข้าหมวดไม่ติด ทั้งที่แอปนี้ดูปกติดี
+// ================================================================
+function demoCatCheckPublished() {
+  var box = document.getElementById('demoCatPubBox');
+  if (!box) return;
+  if (typeof db === 'undefined' || typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return;
+  db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(snap) {
+    box = document.getElementById('demoCatPubBox');
+    if (!box) return;
+    var pub = (snap.data() || {}).categories || [];
+    if (!pub.length) return;
+    var known = {};
+    pub.forEach(function(c) { known[c.id] = 1; });
+    var by = {};
+    getDemoItems().forEach(function(d) {
+      var id = String(d.category || '').trim();
+      if (id && !known[id]) by[id] = (by[id] || 0) + 1;
+    });
+    var ids = Object.keys(by);
+    if (!ids.length) return;   // ฝั่งนั้นตรงอยู่แล้ว ไม่ต้องรบกวน
+    var local = getConfig().demoCategories || [];
+    var h = '<div class="demo-orphan"><b>⚠️ หน้าทีมงาน/ลิงก์ลูกค้ายังใช้รายการหมวดคนละชุด</b>' +
+      '<div class="oh-note">แอปนี้ซ่อมแล้ว แต่รายการที่ส่งให้อีกสองหน้ายังเป็นของเดิม ' +
+      'เครื่องจึงยังจับหมวดไม่ติดที่ฝั่งนั้น</div>';
+    ids.forEach(function(id) {
+      var mine = local.filter(function(c) { return c.id === id; })[0];
+      h += '<div class="oh-row"><div class="oh-id">id <code>' + sanitize(id) + '</code> · <b>' + by[id] + ' เครื่อง</b>' +
+        (mine ? ' — ในแอปนี้คือ ' + (mine.icon || '') + ' ' + sanitize(mine.label) : '') + '</div></div>';
+    });
+    h += '<div class="oh-fix"><button class="btn bsm bp" onclick="demoCatPushToPublic()">📤 ส่งรายการหมวดของแอปนี้ไปแทน</button></div>';
+    h += '<div class="oh-hint">ส่งรายการหมวดจากแอปนี้ไปทับชุดที่ publish — ถ้าทีมงานเคยเพิ่มหมวดไว้เองที่หน้า demo-staff ' +
+      'และแอปนี้ไม่มี หมวดนั้นจะหายไป (ระบบจะบอกก่อนว่ามีอันไหนบ้าง)</div>';
+    box.innerHTML = h + '</div>';
+  }).catch(function(e) { console.warn('check published cats', e); });
+}
+function demoCatPushToPublic() {
+  var local = getConfig().demoCategories || [];
+  if (!local.length) { toast('ยังไม่มีหมวดในแอปนี้'); return; }
+  var ref = db.collection('dealerUpdates').doc('demoCatalogPublic');
+  ref.get().then(function(snap) {
+    var pub = (snap.data() || {}).categories || [];
+    var mineIds = {}, mineLabels = {};
+    local.forEach(function(c) {
+      mineIds[c.id] = 1;
+      mineLabels[String(c.label || '').trim().toLowerCase()] = 1;
+    });
+    // หมวดที่มีเฉพาะฝั่งโน้น = ทีมงานเพิ่มเองที่ demo-staff — ต้องเตือนก่อนว่าจะหาย
+    // แต่ถ้าชื่อซ้ำกับหมวดของแอปนี้ แปลว่าเป็นตัวเดียวกันที่ id เพี้ยน (คือตัวที่กำลังจะซ่อมพอดี)
+    // ไม่ใช่ของที่หายไปจริง — ถ้าเอามาเตือนด้วยจะดูน่าตกใจเกินเหตุจนคนไม่กล้ากด
+    var lost = pub.filter(function(c) {
+      if (mineIds[c.id]) return false;
+      return !mineLabels[String(c.label || '').trim().toLowerCase()];
+    });
+    var msg = 'ส่งรายการหมวด ' + local.length + ' หมวดจากแอปนี้ไปแทนชุดที่หน้าทีมงาน/ลูกค้าใช้อยู่';
+    if (lost.length) {
+      msg += '\n\n⚠️ หมวดที่จะหายไป (มีเฉพาะฝั่งนั้น):\n' +
+        lost.map(function(c) { return '· ' + (c.icon || '') + ' ' + c.label; }).join('\n');
+    }
+    if (!confirm(msg + '\n\nยืนยัน?')) return;
+    return ref.set({ categories: local }, { merge: true }).then(function() {
+      toast('📤 ส่งแล้ว — หน้าทีมงานกับลิงก์ลูกค้าจะเห็นหมวดตรงกับแอปนี้');
+      closeMForce();
+    });
+  }).catch(function(e) { toast('ผิดพลาด: ' + e.message); });
 }
 
 // ================================================================
@@ -3749,10 +3822,12 @@ function saveDemoBulkCat() {
   render();
 }
 function demoCatMgrRowHtml(c) {
-  return '<div class="fr" style="gap:6px;margin-bottom:6px;align-items:center" data-id="' + sanitize(c.id || '') + '">' +
-    '<input type="text" class="fm-input" style="width:48px;text-align:center;flex:none" value="' + sanitize(c.icon || '') + '" data-f="icon" placeholder="🚁">' +
-    '<input type="text" class="fm-input" style="flex:1" value="' + sanitize(c.label || '') + '" data-f="label" placeholder="ชื่อหมวดหมู่">' +
-    '<button class="btn bsm bd" onclick="this.parentElement.remove()">🗑️</button>' +
+  // เดิมใช้คลาส .fr ซึ่งเป็น grid 2 คอลัมน์ ไม่ใช่แถวแนวนอน — ไอคอนกับชื่อไปอยู่คนละช่อง
+  // ส่วนปุ่มลบตกลงไปบรรทัดใหม่แล้วยืดเต็มความกว้างจนดูเหมือนแถบสีแดง
+  return '<div class="demo-catrow" data-id="' + sanitize(c.id || '') + '">' +
+    '<input type="text" class="fm-input" value="' + sanitize(c.icon || '') + '" data-f="icon" placeholder="🚁">' +
+    '<input type="text" class="fm-input" value="' + sanitize(c.label || '') + '" data-f="label" placeholder="ชื่อหมวดหมู่">' +
+    '<button class="btn bsm bd" onclick="this.parentElement.remove()" title="ลบหมวดนี้">🗑️</button>' +
     '</div>';
 }
 function demoCatMgrRowsHtml(cats) { return cats.map(demoCatMgrRowHtml).join(''); }
