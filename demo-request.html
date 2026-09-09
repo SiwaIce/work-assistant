@@ -104,6 +104,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .blockhint .bh-nm i { font-style:normal; font-weight:400; color:var(--text3); font-size:11.5px; }
 .blockhint .bh-d { display:block; font-size:11px; font-weight:400; color:var(--text2); margin-top:2px; }
 .day-detail .dd-rm { margin-inline-start:8px; }
+/* เครื่องที่ยังไม่ได้คืน — ไม่มีวันว่างให้บอก */
+.unext.stuck { color:var(--warn); }
 /* ปุ่ม ✕ บนชิปเดิมกว้าง 16px ซึ่งเล็กเกินไปสำหรับนิ้ว — ขยายพื้นที่แตะบนจอสัมผัส
    ใช้ pointer:coarse แทน max-width เพราะปัญหาคือวิธีชี้ ไม่ใช่ขนาดจอ */
 @media (pointer:coarse) {
@@ -511,7 +513,13 @@ function renderTypeChips() {
   document.getElementById('custTypeChips').innerHTML = h;
 }
 // เครื่องนี้จะว่างวันไหน — ตอบคำถามที่ลูกค้าถามต่อทันทีหลังเห็นว่า "ไม่ว่างตอนนี้"
+// เครื่องที่เลยกำหนดคืนแล้วยังไม่ได้คืน — ไม่มีใครรู้ว่าจะกลับมาเมื่อไหร่ จึงไม่มี "วันว่างถัดไป"
+function unitStuck(u) {
+  var t = todayIso();
+  return (u.busyRanges || []).some(function(r) { return r.end < t; });
+}
 function unitNextFree(u) {
+  if (unitStuck(u)) return null;   // ไม่ต้องวนหา 400 วันให้เปลืองเปล่า ยังไงก็ไม่เจอ
   var iso = todayIso();
   for (var i = 0; i < 400; i++) {
     if (unitDayState(u, iso) === 'avail') return iso;
@@ -580,7 +588,9 @@ function renderBrowse() {
           '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
           '<div class="badges">' + chips + '</div>' +
           (nf ? '<div class="unext">📅 ว่างเร็วสุด <b>' + fThDate(nf) + '</b></div>' : '') +
-          (busy ? '<div class="uhint">กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง</div>' : '') +
+          // เครื่องที่ยังไม่ได้คืน บอกตรงๆ ว่ายังไม่มีกำหนด ไม่ใช่ชวนให้กดเลือกแล้วไปเจอปฏิทินแดงทั้งเดือน
+          (busy && !nf ? '<div class="unext stuck">⏳ ยังไม่ได้คืน — ยังไม่มีกำหนดว่าง</div>' : '') +
+          (busy && nf ? '<div class="uhint">กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง</div>' : '') +
           '</div>';
       }).join('') + '</div></div>';
   }).join('');
@@ -590,8 +600,20 @@ function renderBrowse() {
 // STEP 2: ปฏิทินของเครื่องที่เลือก
 // ================================================================
 var calUnits = [], custCalMonthOffset = 0, rangeStart = null, rangeEnd = null, custDayCount = 1;
+// ช่วงยืมที่ "เลยกำหนดคืนแล้วแต่ยังไม่ได้คืน" = เครื่องยังไม่กลับมา จึงยังไม่ว่างไปเรื่อยๆ
+//
+// busyRanges ที่ส่งมาให้หน้านี้มีเฉพาะใบที่ยังไม่ปิด (แอปหลักกรอง status active ตอน publish)
+// ถ้าวันสิ้นสุดผ่านไปแล้วแปลว่าของยังอยู่ที่ลูกค้ารายเดิม ไม่ใช่ว่าง — เดิมเช็คแค่ iso <= r.end
+// พอเลยกำหนดไปวันเดียวเครื่องก็กลับมาเป็น "ว่าง" ให้ลูกค้ากดขอยืมได้ ทั้งที่ไม่มีใครรู้ว่าของอยู่ไหน
+// (เจอจริง 13 เครื่องบน production เครื่องหนึ่งค้างมาตั้งแต่ 29 เม.ย.)
+function _rangeCovers(r, iso, todayI) {
+  if (iso < r.start) return false;          // ยังไม่ถึงวันเริ่มยืม
+  if (iso <= r.end) return true;            // อยู่ในช่วงปกติ
+  return r.end < todayI;                    // เลยกำหนดแล้วยังไม่ปิด → ยังไม่ว่าง
+}
 function unitDayState(unit, iso) {
-  var busy = (unit.busyRanges || []).some(function(r) { return iso >= r.start && iso <= r.end; });
+  var t = todayIso();
+  var busy = (unit.busyRanges || []).some(function(r) { return _rangeCovers(r, iso, t); });
   if (busy) return 'busy';
   return 'avail';
 }

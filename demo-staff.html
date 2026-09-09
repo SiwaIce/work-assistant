@@ -1657,9 +1657,15 @@ function scDayClick(iso) {
 }
 function scClearDays() { scPickDays = []; renderStaffCalendar(); }
 // เครื่องที่ว่าง "ตลอดช่วง" ที่ติ๊กไว้ ถึงจะคีย์ยืมยาวรวดเดียวได้
+// ช่วงกับใบยืมทับกันไหม — นับใบที่เลยกำหนดแล้วยังไม่ปิดว่าทับตลอด (ของยังไม่กลับมา)
+function scClashes(b, from, to) {
+  if (b.status === 'returned') return false;
+  if (b.e < _scDay(new Date())) return b.s <= to;   // ค้างอยู่ ไม่มีกำหนดคืน
+  return _scOverlap(b, from, to);
+}
 function _scFreeThroughout(from, to, units, bks) {
   return units.filter(function(u) {
-    return !bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= to && from <= b.e; });
+    return !bks.some(function(b) { return b.unitId === u.id && scClashes(b, from, to); });
   });
 }
 function _scMultiSummary(units, bks) {
@@ -1724,6 +1730,15 @@ function _scIso(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padSt
 function _scAdd(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function _scFmt(d) { return d.getDate() + ' ' + SC_MONTHS[d.getMonth()]; }
 function _scOverlap(b, from, to) { return b.s <= to && from <= b.e; }
+// ใบที่เลยกำหนดคืนแล้วยังไม่ปิด = ของยังไม่กลับมา จึงยังไม่ว่างต่อไปเรื่อยๆ ไม่ใช่ว่างตั้งแต่วันถัดจากกำหนด
+// ใช้เฉพาะตอนตัดสิน "ว่าง/ไม่ว่าง" — ไม่เอาไปยืดวันสิ้นสุดจริง เพราะแท่งไทม์ไลน์จะลากยาวจนพัง
+// (เคยเจอมาแล้วตอนข้อมูลวันที่เพี้ยน แถบเดียวลากข้ามทุกเดือน)
+function scBusyOn(b, cur) {
+  if (b.status === 'returned') return false;
+  if (cur < b.s) return false;
+  if (cur <= b.e) return true;
+  return b.e < _scDay(new Date());
+}
 // ปีที่เป็นไปไม่ได้ = ข้อมูลพัง ถ้าปล่อยเข้าปฏิทิน แถบเดียวจะลากข้ามทุกเดือนตลอดไป (เคยเจอในแอปหลัก)
 function _scSane(iso) { var d = _scFromIso(iso); if (!d || isNaN(d.getTime())) return null; var y = d.getFullYear(); return (y >= 2000 && y <= 2100) ? d : null; }
 
@@ -2116,7 +2131,7 @@ function _scDrillDay(iso) {
   if (!cur) return '';
   var units = scUnits(), bks = scBookings();
   var busyBy = {};
-  bks.forEach(function(b) { if (b.s <= cur && cur <= b.e && b.status !== 'returned') (busyBy[b.unitId] = busyBy[b.unitId] || []).push(b); });
+  bks.forEach(function(b) { if (scBusyOn(b, cur)) (busyBy[b.unitId] = busyBy[b.unitId] || []).push(b); });
   var out = units.filter(function(u) { return busyBy[u.id]; });
   var free = units.filter(function(u) { return !busyBy[u.id]; });
   var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
@@ -2392,7 +2407,7 @@ function _scMobileList(r, units, bks) {
   var late = act.filter(function(b) { return b.e < today; }).sort(function(a, b) { return a.e - b.e; });
   var dueWk = act.filter(function(b) { return b.e >= today && b.e <= _scAdd(today, 7); }).sort(function(a, b) { return a.e - b.e; });
   var outWk = act.filter(function(b) { return b.s > today && b.s <= _scAdd(today, 7); }).sort(function(a, b) { return a.s - b.s; });
-  var freeUnits = units.filter(function(u) { return !act.some(function(b) { return b.unitId === u.id && b.s <= today && today <= b.e; }); });
+  var freeUnits = units.filter(function(u) { return !act.some(function(b) { return b.unitId === u.id && scBusyOn(b, today); }); });
   var byModel = {};
   freeUnits.forEach(function(u) { var m = _unitModelKey(u); byModel[m] = (byModel[m] || 0) + 1; });
 
@@ -2435,7 +2450,7 @@ function _scMobileList(r, units, bks) {
 function _scFreeOn(model, cur, bks, pool) {
   return pool.filter(function(u) {
     if (_unitModelKey(u) !== model) return false;
-    return !bks.some(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.s <= cur && cur <= b.e; });
+    return !bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); });
   });
 }
 function _scViewMonth() {
@@ -2501,7 +2516,7 @@ function _scViewMonth() {
   for (var d2 = 1; d2 <= nDays; d2++) {
     var cur = new Date(y, mo, d2), iso = _scIso(cur), k = 'day:' + iso;
     var busySet = {};
-    act.forEach(function(b) { if (b.s <= cur && cur <= b.e) busySet[b.unitId] = 1; });
+    act.forEach(function(b) { if (scBusyOn(b, cur)) busySet[b.unitId] = 1; });
     // "รุ่นเต็ม" คือสัญญาณที่ใช้ได้จริง — ว่างรวม 52 ตัวไม่ได้แปลว่ารับปากลูกค้าได้ ถ้าไม่มีรุ่นที่เขาขอ
     var full = 0;
     modelKeys.forEach(function(m) { if (!modelsOf[m].some(function(u) { return !busySet[u.id]; })) full++; });
@@ -2618,7 +2633,7 @@ function _scViewFind() {
   var bks = scBookings();
   var list = pool.filter(function(u) { return _unitModelKey(u) === scFindModel; });
   var clash = {};
-  list.forEach(function(u) { clash[u.id] = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && _scOverlap(b, from, to); }); });
+  list.forEach(function(u) { clash[u.id] = bks.filter(function(b) { return b.unitId === u.id && scClashes(b, from, to); }); });
   var freeU = list.filter(function(u) { return !clash[u.id].length; });
   if (freeU.length) {
     h += '<div style="background:var(--good-soft);border:1px solid var(--good);color:var(--good);border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px">' +
