@@ -1666,7 +1666,9 @@ function doImportFullExcel() {
       
       // อ่าน header
       var headers = rows[0];
-      var colIdx = { sku: 0, ean: 1, name: 2, rrpInVat: 3, rrpExVat: 4, priceS: 5, priceA: 6, priceB: 7, priceOther: 8 };
+      var _COLIDX_DEFAULT = { sku: 0, ean: 1, name: 2, rrpInVat: 3, rrpExVat: 4, priceS: 5, priceA: 6, priceB: 7, priceOther: 8 };
+      var colIdx = {};
+      for (var _k in _COLIDX_DEFAULT) colIdx[_k] = _COLIDX_DEFAULT[_k];
       
       // หา column อัตโนมัติ
       for (var i = 0; i < headers.length; i++) {
@@ -1682,9 +1684,36 @@ function doImportFullExcel() {
         if (h.indexOf('type 4') !== -1) colIdx.priceOther = i;
       }
       
+      // 🛡️ กันเหตุ "ราคาหายทั้งแคตตาล็อก" (เกิดจริง 2026-09-09)
+      //
+      // คอลัมน์ราคาจับจากหัวตารางที่ต้องเขียนว่า "Type 1/2/3/4" และ "RRP in/ex VAT" เท่านั้น
+      // ไฟล์ที่ใช้หัวคอลัมน์ชื่ออื่นจะไม่แมตช์สักอัน แล้วตกไปใช้ตำแหน่งตายตัว (ช่อง 3-8)
+      // พอตำแหน่งไม่ตรง parseFloat ได้ NaN แล้ว || 0 ทำให้ราคาเป็น 0 ทุกแถว
+      // ส่วนคอลัมน์ชื่อจับจาก 'product'/'name' ซึ่งแมตช์ง่ายกว่า ชื่อจึงรอด ราคาจึงศูนย์ยกแผง
+      // เดิมไม่เตือนอะไรเลย ยังขึ้นว่า "นำเข้าเสร็จ N รายการ" แล้วเขียนทับของจริงทิ้ง
+      var _priceHeaderFound = ['rrpInVat','rrpExVat','priceS','priceA','priceB','priceOther']
+        .some(function(k) { return colIdx[k] !== _COLIDX_DEFAULT[k]; });
+      var _sample = rows.slice(1, Math.min(rows.length, 40));
+      var _withPrice = _sample.filter(function(r) {
+        return ['rrpInVat','rrpExVat','priceS','priceA','priceB','priceOther'].some(function(k) {
+          return (parseFloat(r[colIdx[k]]) || 0) > 0;
+        });
+      }).length;
+      if (!_withPrice) {
+        var _heads = headers.map(function(x, ix) { return ix + ':' + String(x || '(ว่าง)'); }).join('  ');
+        alert('⛔ หยุดนำเข้า — อ่านราคาจากไฟล์นี้ไม่ได้เลยสักแถว\n\n' +
+          (_priceHeaderFound ? 'เจอหัวคอลัมน์ราคา แต่ทุกแถวอ่านได้ 0'
+                             : 'ไม่พบหัวคอลัมน์ราคาที่รู้จัก (ต้องมีคำว่า "Type 1/2/3/4" หรือ "RRP in VAT" / "RRP ex VAT")') +
+          '\n\nหัวตารางที่เจอในไฟล์:\n' + _heads +
+          '\n\nถ้านำเข้าต่อ ราคาของสินค้าทั้งหมดจะกลายเป็น 0 และทับของเดิมทิ้ง จึงยกเลิกให้แล้ว\n' +
+          'แก้ชื่อหัวคอลัมน์ในไฟล์ให้ตรงแล้วลองใหม่');
+        return;
+      }
+
       var imported = 0;
       var errors = 0;
-      
+      var zeroPriced = 0;
+
       for (var i = 1; i < rows.length; i++) {
         try {
           var row = rows[i];
@@ -1705,7 +1734,8 @@ function doImportFullExcel() {
           var priceOther = parseFloat(row[colIdx.priceOther]) || 0;
           
           if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
-          
+          if (!priceB && !priceS && !priceA && !priceOther && !rrpInVat && !rrpExVat) zeroPriced++;
+
           // กำหนดหมวดหมู่
           var category = 'other';
           var nameLower = name.toLowerCase();
@@ -1736,14 +1766,24 @@ function doImportFullExcel() {
         }
       }
       
+      // ครึ่งหนึ่งขึ้นไปราคาเป็น 0 = น่าจะอ่านคอลัมน์ผิด ให้คนตัดสินใจก่อนทับของเดิม
+      if (imported && zeroPriced >= imported / 2) {
+        if (!confirm('⚠️ ' + zeroPriced + ' จาก ' + imported + ' รายการ ไม่มีราคาเลย\n\n' +
+            'ถ้ากดตกลง ราคาเดิมของสินค้าเหล่านี้จะถูกทับด้วย 0\n' +
+            'ถ้าไม่ได้ตั้งใจ ให้กดยกเลิกแล้วตรวจหัวคอลัมน์ราคาในไฟล์ก่อน')) {
+          toast('ยกเลิกการนำเข้า — ข้อมูลเดิมยังอยู่ครบ');
+          return;
+        }
+      }
+
       localStorage.setItem('v7_products', JSON.stringify(productsData));
-      
+
       // รีเฟรช Products module
       if (typeof Products !== 'undefined' && Products.refresh) {
         Products.refresh();
       }
-      
-      toast('✅ นำเข้าเสร็จ! ' + imported + ' รายการ');
+
+      toast('✅ นำเข้าเสร็จ! ' + imported + ' รายการ' + (zeroPriced ? ' (ไม่มีราคา ' + zeroPriced + ')' : ''));
       
       if (typeof render === 'function') render();
       
@@ -2600,8 +2640,12 @@ function saveSingleProductPrice(id) {
 
 function saveAllProductPrices() {
   var products = getAllProducts();
+  var saved = 0;
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
+    // ตารางเรนเดอร์เฉพาะรายการที่ผ่านค้นหา/หมวด แต่ลูปนี้วนทุกสินค้า
+    // แถวที่ไม่ได้อยู่บนจอจะไม่มีช่องกรอก ต้องข้าม ไม่ใช่อ่าน null แล้วพัง (หรือเขียน 0 ทับ)
+    if (!document.getElementById('price_b_' + p.id)) continue;
     var rrpInVat = parseNum(document.getElementById('rrp_in_vat_' + p.id).value);
     var rrpExVat = parseNum(document.getElementById('rrp_ex_vat_' + p.id).value);
     var priceS = parseNum(document.getElementById('price_s_' + p.id).value);
@@ -2617,8 +2661,10 @@ function saveAllProductPrices() {
       typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO },
       eol: eol
     });
+    saved++;
   }
-  toast('💾 บันทึกราคาทั้งหมดแล้ว');
+  toast('💾 บันทึกราคาแล้ว ' + saved + ' รายการ' +
+        (saved < products.length ? ' (ที่เหลืออีก ' + (products.length - saved) + ' ไม่ได้อยู่ในตัวกรอง จึงไม่แตะ)' : ''));
   render();
 }
 

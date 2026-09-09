@@ -1616,7 +1616,14 @@ async function loadCatalogFromFirebase() {
       if (Array.isArray(m) && m.length) {
         productList = m;
         allModels = m.map(function(p) { return p.name; });
-        try { localStorage.setItem('v7_products', JSON.stringify({ models: m })); } catch(e) {}
+        // ⛔ ห้ามเขียนลง v7_products เด็ดขาด — catalogPublic มีแค่ {name, category} (ดู
+        // publishCatalogToClientView) ส่วน v7_products คือแคตตาล็อกจริงของแอปหลักที่มีราคา/SKU/EAN ครบ
+        // และหน้านี้อยู่ origin เดียวกับ index.html จึงใช้ localStorage ก้อนเดียวกัน เขียนทับ = ราคาหายทั้งคลัง
+        // เกิดจริง 2026-09-09: 233 รายการเหลือราคา 0 ทั้งหมด ชื่อยังอยู่ เพราะ ensureProductStructure
+        // เติม price/typePrices เป็น 0 ให้ทุกตัวที่ไม่มีฟิลด์ราคา — บั๊กนี้เพิ่งมีผลหลัง c924b15 (5 ก.ย.)
+        // ที่แก้ doc id จาก __catalog__ (Firestore สงวนไว้ .get() throw ตลอด) เป็น catalogPublic
+        // ทำให้ .get() สำเร็จเป็นครั้งแรก แล้วเปิดสวิตช์บรรทัดที่เขียนทับนี้ขึ้นมา
+        try { localStorage.setItem('v7_catalogPublic_cache', JSON.stringify({ models: m })); } catch(e) {}
         console.log('✅ Catalog from Firestore:', m.length);
         return;
       }
@@ -1637,9 +1644,9 @@ function loadModelsFromProducts() {
       return productList;
     }
   }
-  // Fallback 1: อ่านจาก v7_products โดยตรง
+  // Fallback 1: แคชของ catalogPublic ที่หน้านี้เก็บไว้เอง แล้วค่อยตกไป v7_products ของแอปหลัก
   try {
-    var saved = localStorage.getItem('v7_products');
+    var saved = localStorage.getItem('v7_catalogPublic_cache') || localStorage.getItem('v7_products');
     if (saved) {
       var parsed = JSON.parse(saved);
       var rawModels = [];
