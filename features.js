@@ -3598,6 +3598,8 @@ function showDemoCatMgrM() {
   h += '<div class="hint" style="margin-bottom:10px">ใช้จัดกลุ่มอุปกรณ์ในหน้ารายการให้หาง่ายขึ้น และเป็นตัวเลือกหมวดหมู่ตอนเพิ่ม/แก้ไขเครื่อง — ลบหมวดหมู่ไม่ลบเครื่องที่เคยตั้งไว้ แค่กลายเป็น "ไม่ระบุหมวดหมู่"</div>';
   h += '<div id="demoCatMgrRows">' + demoCatMgrRowsHtml(cats) + '</div>';
   h += '<button class="btn bsm bo" onclick="demoCatMgrAddRow()" style="margin-top:6px">➕ เพิ่มหมวดหมู่</button>';
+  h += demoCatOrphanHtml();
+  h += demoCatCountsHtml();
   // ตัวหมวดหมู่กับการจับเครื่องเข้าหมวด เป็นคนละงานกัน แต่คนมาหน้านี้มักจะมาทำต่อกันเลย จึงวางทางเข้าไว้ให้
   h += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
   h += '<div style="font-size:12.5px;font-weight:600;margin-bottom:4px">จับเครื่องเข้าหมวดหมู่</div>';
@@ -3754,6 +3756,94 @@ function demoCatMgrRowHtml(c) {
     '</div>';
 }
 function demoCatMgrRowsHtml(cats) { return cats.map(demoCatMgrRowHtml).join(''); }
+
+// ================================================================
+// หมวดที่เครื่องผูกไว้แต่ไม่มีในรายการแล้ว
+//
+// การ "เปลี่ยนชื่อ" หมวดเก็บ id เดิมไว้อยู่แล้ว (demoCatMgrSave) เครื่องจึงไม่หลุด — แต่ถ้า "ลบแถวทิ้ง
+// แล้วเพิ่มใหม่" แถวใหม่จะได้ id ใหม่ ส่วนเครื่องยังถือ id เก่า กลายเป็นจับคู่ไม่ติดทั้งกอง
+// เคสจริง: 46 เครื่องถือ id "accessory" แต่รายการมีแค่ "cat_..." ทำให้แท็บหมวดนั้นนับได้ 0 แล้วถูกซ่อน
+// จนไม่มีใครเห็นว่าเครื่องหายไปไหน
+// ================================================================
+function demoCatOrphans() {
+  var cats = getConfig().demoCategories || [];
+  var known = {};
+  cats.forEach(function(c) { known[c.id] = 1; });
+  var by = {};
+  getDemoItems().forEach(function(d) {
+    var id = String(d.category || '').trim();
+    if (!id || known[id]) return;
+    by[id] = (by[id] || 0) + 1;
+  });
+  return Object.keys(by).map(function(id) { return { id: id, n: by[id] }; })
+    .sort(function(a, b) { return b.n - a.n; });
+}
+function demoCatOrphanHtml() {
+  var orphans = demoCatOrphans();
+  if (!orphans.length) return '';
+  var cats = getConfig().demoCategories || [];
+  var h = '<div class="demo-orphan"><b>⚠️ มีเครื่องผูกกับหมวดที่ไม่มีในรายการแล้ว</b>' +
+    '<div class="oh-note">เครื่องพวกนี้จะไม่โผล่ในแท็บหมวดไหนเลย และขึ้นเป็น “ไม่ระบุหมวด” ทั้งในแอปนี้ ' +
+    'หน้าทีมงาน และลิงก์ลูกค้า — เกิดตอนลบหมวดทิ้งแล้วสร้างใหม่ (แถวใหม่ได้ id ใหม่ แต่เครื่องยังถือ id เก่า)</div>';
+  orphans.forEach(function(o) {
+    h += '<div class="oh-row"><div class="oh-id">id <code>' + sanitize(o.id) + '</code> · <b>' + o.n + ' เครื่อง</b></div>';
+    if (cats.length) {
+      h += '<div class="oh-fix"><select id="ohSel_' + sanitize(o.id) + '" class="fm-input">';
+      cats.forEach(function(c) { h += '<option value="' + sanitize(c.id) + '">' + (c.icon || '') + ' ' + sanitize(c.label) + '</option>'; });
+      h += '</select><button class="btn bsm bp" onclick="demoCatAdoptId(\'' + sanitize(o.id).replace(/'/g, "\\'") + '\')">↩️ ให้หมวดนี้ใช้ id เดิม</button></div>';
+      h += '<div class="oh-hint">วิธีนี้ไม่แตะข้อมูลเครื่องเลย แค่เปลี่ยน id ของหมวดที่เลือกให้กลับไปเป็น <code>' +
+        sanitize(o.id) + '</code> — เครื่องทั้ง ' + o.n + ' ตัวจะกลับเข้าหมวดทันที</div>';
+    } else {
+      h += '<div class="oh-hint">ยังไม่มีหมวดในรายการ — เพิ่มหมวดก่อนแล้วค่อยกลับมาซ่อม</div>';
+    }
+    h += '</div>';
+  });
+  return h + '</div>';
+}
+// ให้หมวดที่เลือก "รับ id เดิม" กลับมา — ซ่อมที่ต้นเหตุโดยไม่ต้องไล่แก้เครื่องทีละตัว
+function demoCatAdoptId(orphanId) {
+  var sel = document.getElementById('ohSel_' + orphanId);
+  if (!sel) return;
+  var targetId = sel.value;
+  var cfg = getConfig(), cats = cfg.demoCategories || [];
+  if (cats.some(function(c) { return c.id === orphanId; })) { toast('มีหมวดที่ใช้ id นี้อยู่แล้ว'); return; }
+  var target = cats.filter(function(c) { return c.id === targetId; })[0];
+  if (!target) return;
+  var n = demoCatOrphans().filter(function(o) { return o.id === orphanId; })[0];
+  if (!confirm('ให้หมวด "' + target.label + '" ใช้ id "' + orphanId + '"\n\n' +
+      (n ? n.n + ' เครื่อง' : 'เครื่อง') + 'ที่ผูก id นี้ไว้จะกลับเข้าหมวดทันที · ไม่มีการแก้ข้อมูลเครื่อง\n\nยืนยัน?')) return;
+  // เครื่องที่ผูก id ใหม่ไว้ (ตั้งหลังหมวดถูกสร้างใหม่) ต้องย้ายตามด้วย ไม่งั้นจะกลายเป็นกำพร้าแทน
+  var items = getDemoItems(), moved = 0;
+  items.forEach(function(d) { if (d.category === targetId) { d.category = orphanId; moved++; } });
+  if (moved) saveDemoItems(items);
+  target.id = orphanId;
+  cfg.demoCategories = cats;
+  saveConfig(cfg);
+  toast('✅ ซ่อมแล้ว — ' + target.label + ' ใช้ id "' + orphanId + '"' + (moved ? ' · ย้าย ' + moved + ' เครื่องตามมาด้วย' : ''));
+  showDemoCatMgrM();
+  render();
+}
+// จำนวนเครื่องต่อหมวด — หมวดที่ยังไม่มีเครื่องจะไม่โผล่เป็นแท็บในหน้ารายการ (กันแท็บว่างรก)
+// เขียนไว้ตรงนี้ให้เห็นชัด จะได้ไม่งงว่าเพิ่มหมวดแล้วทำไมยังไม่เห็น
+function demoCatCountsHtml() {
+  var cats = getConfig().demoCategories || [];
+  if (!cats.length) return '';
+  var items = getDemoItems(), by = {};
+  items.forEach(function(d) { var k = String(d.category || '').trim(); if (k) by[k] = (by[k] || 0) + 1; });
+  var h = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">มีเครื่องอยู่ในหมวดไหนบ้าง</div>';
+  h += '<div class="demo-catcounts">';
+  cats.forEach(function(c) {
+    var n = by[c.id] || 0;
+    h += '<span class="cc' + (n ? '' : ' zero') + '">' + (c.icon || '') + ' ' + sanitize(c.label) + ' <b>' + n + '</b></span>';
+  });
+  h += '</div>';
+  if (cats.some(function(c) { return !(by[c.id] || 0); })) {
+    h += '<div class="hint" style="margin-top:7px">หมวดที่มี 0 เครื่องจะยังไม่ขึ้นเป็นแท็บในหน้ารายการ — ' +
+      'จับเครื่องเข้าหมวดก่อน แล้วแท็บจะโผล่เอง</div>';
+  }
+  return h + '</div>';
+}
 function demoCatMgrAddRow() {
   var wrap = document.getElementById('demoCatMgrRows');
   wrap.insertAdjacentHTML('beforeend', demoCatMgrRowHtml({ id: '', icon: '', label: '' }));
