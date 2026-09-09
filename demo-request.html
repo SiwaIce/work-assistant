@@ -92,6 +92,23 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .day-detail .dd-row:last-child { border-bottom:0; }
 .day-detail .dd-nm { flex:1; min-width:0; font-size:12.5px; font-weight:600; }
 .day-detail .dd-nm i { font-style:normal; font-weight:400; color:var(--text3); font-size:11.5px; }
+/* เตือนตอนทั้งเดือนไม่มีวันว่างพร้อมกัน + ให้เอาตัวที่ติดออกได้ทันที */
+.blockhint { border:1px solid var(--warn); background:var(--warn-soft); border-radius:11px;
+  padding:12px 14px; margin-bottom:14px; }
+.blockhint > b { font-size:13.5px; }
+.blockhint .bh-note { font-size:12px; color:var(--text2); margin-top:5px; line-height:1.6; }
+.blockhint .bh-list { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+.blockhint .bh-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 11px; }
+.blockhint .bh-nm { flex:1; min-width:0; font-size:12.5px; font-weight:600; }
+.blockhint .bh-nm i { font-style:normal; font-weight:400; color:var(--text3); font-size:11.5px; }
+.blockhint .bh-d { display:block; font-size:11px; font-weight:400; color:var(--text2); margin-top:2px; }
+.day-detail .dd-rm { margin-inline-start:8px; }
+/* ปุ่ม ✕ บนชิปเดิมกว้าง 16px ซึ่งเล็กเกินไปสำหรับนิ้ว — ขยายพื้นที่แตะบนจอสัมผัส
+   ใช้ pointer:coarse แทน max-width เพราะปัญหาคือวิธีชี้ ไม่ใช่ขนาดจอ */
+@media (pointer:coarse) {
+  #calUnitsBanner .cart-chip .x { padding:6px 8px; margin:-6px -4px -6px 2px; }
+}
 .dhint { font-size:11.5px; color:var(--text2); margin-top:5px; font-variant-numeric:tabular-nums; }
 .dhint:empty { display:none; }
 /* คำในวงเล็บที่ซ้ำทุกแถว (Demo Unit / General Demo) — จางลงให้ชื่อรุ่นจริงเด่นแทน */
@@ -249,7 +266,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
       <div class="card" style="margin-bottom:16px">
         <div style="font-size:12px;color:var(--text2);margin-bottom:7px">กำลังเลือกวันให้เครื่องเหล่านี้:</div>
-        <div id="calUnitsBanner" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+        <div id="calUnitsBanner" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+        <div id="calBlockHint"></div>
         <div class="cal-toolbar">
           <button class="cal-nav-btn" onclick="unitCalNav(-1)">◀</button>
           <div class="month-label" id="unitCalMonthLabel"></div>
@@ -593,9 +611,7 @@ function goToMultiCalendar() {
   calUnits = UNITS.filter(function(u) { return selectedUnitIds.indexOf(u.id) !== -1; });
   if (!calUnits.length) return;
   custCalMonthOffset = 0; rangeStart = null; rangeEnd = null; custDayCount = 1;
-  document.getElementById('calUnitsBanner').innerHTML = calUnits.map(function(u) {
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</span>';
-  }).join('');
+  renderCalBanner();
   document.getElementById('rangeStartInput').value = '';
   document.getElementById('rangeEndInput').value = '';
   document.getElementById('custDayCountInput').value = 1;
@@ -655,6 +671,7 @@ function renderUnitCal() {
   }
   document.getElementById('unitCalGrid').innerHTML = h;
   syncMultiDayUI();
+  renderCalBlockHint();
   renderDayDetail();
   renderMultiSummary();
 }
@@ -757,6 +774,67 @@ function custDayMatch(u) {
   if (!q) return true;
   return [u.model, u.label, u.rentalDbNo, u.serialNumber].join(' ').toLowerCase().indexOf(q) !== -1;
 }
+// ================================================================
+// เอาเครื่องออกจากรายการได้ตรงหน้าเลือกวัน ไม่ต้องย้อนกลับไปหน้าแรก
+//
+// ปฏิทินขั้นนี้โชว์เฉพาะวันที่ว่าง "พร้อมกันครบทุกเครื่อง" ที่เลือกไว้ พอมีเครื่องใดเครื่องหนึ่งไม่ว่าง
+// ทั้งเดือนจะกลายเป็นไม่ว่างหมด แล้วคนใช้ก็ตันอยู่ตรงนั้น ต้องเดาเองว่าตัวไหนเป็นตัวปัญหา
+// จึงต้องเอาออกได้ตรงนี้ พร้อมบอกให้ชัดว่าตัวไหนกำลังบล็อกอยู่
+// ================================================================
+function renderCalBanner() {
+  var el = document.getElementById('calUnitsBanner');
+  if (!el) return;
+  el.innerHTML = calUnits.map(function(u) {
+    var mp = custModelParts(u.model);
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(mp.main) + ' · ' + esc(u.label) +
+      (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') +
+      (calUnits.length > 1 ? '<span class="x" title="เอาเครื่องนี้ออก" onclick="custRemoveUnit(\'' + u.id + '\')">✕</span>' : '') +
+      '</span>';
+  }).join('');
+}
+function custRemoveUnit(id) {
+  if (calUnits.length <= 1) return;   // เหลือตัวเดียวแล้ว เอาออกอีกจะไม่เหลืออะไรให้เลือกวัน
+  var i = selectedUnitIds.indexOf(id);
+  if (i !== -1) selectedUnitIds.splice(i, 1);
+  calUnits = UNITS.filter(function(u) { return selectedUnitIds.indexOf(u.id) !== -1; });
+  // ช่วงที่เลือกไว้อาจใช้ได้แล้วหลังเอาตัวที่ติดออก — คำนวณคำเตือนใหม่ ไม่ต้องล้างที่เลือก
+  custDayOpen = null; custDayReset();
+  renderCalBanner(); syncRangeInputs(); checkRangeWarn(); renderUnitCal();
+}
+// วันไหนก็ไม่ว่างเลยทั้งเดือน = ต้องบอกว่าตัวไหนเป็นตัวบล็อก ไม่ใช่ปล่อยให้เดา
+function _blockersThisMonth() {
+  var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + custCalMonthOffset);
+  var y = base.getFullYear(), m = base.getMonth();
+  var days = new Date(y, m + 1, 0).getDate();
+  var anyFree = false, blocked = {};
+  for (var d = 1; d <= days; d++) {
+    var iso = fmtISO(y, m, d);
+    var bad = calUnits.filter(function(u) { return unitDayState(u, iso) !== 'avail'; });
+    if (!bad.length) { anyFree = true; break; }
+    bad.forEach(function(u) { blocked[u.id] = (blocked[u.id] || 0) + 1; });
+  }
+  if (anyFree) return null;
+  return calUnits.filter(function(u) { return blocked[u.id]; })
+    .map(function(u) { return { u: u, n: blocked[u.id] }; })
+    .sort(function(a, b) { return b.n - a.n; });
+}
+function renderCalBlockHint() {
+  var box = document.getElementById('calBlockHint');
+  if (!box) return;
+  var bl = (calUnits.length > 1) ? _blockersThisMonth() : null;
+  if (!bl || !bl.length) { box.innerHTML = ''; return; }
+  var h = '<div class="blockhint"><b>เดือนนี้ไม่มีวันไหนว่างพร้อมกันครบทุกเครื่อง</b>' +
+    '<div class="bh-note">ปฏิทินจะขึ้นว่าง ก็ต่อเมื่อทุกเครื่องที่เลือกไว้ว่างพร้อมกันในวันเดียวกัน ' +
+    'ลองเอาเครื่องที่ติดออก แล้วค่อยขอยืมแยกอีกใบ หรือกดดูเดือนถัดไป</div><div class="bh-list">';
+  bl.forEach(function(x) {
+    var mp = custModelParts(x.u.model);
+    var nf = unitNextFreeFrom(x.u, fmtISO(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
+    h += '<div class="bh-row"><span class="bh-nm">' + x.u.icon + ' ' + esc(mp.main) + ' <i>' + esc(x.u.label) + '</i>' +
+      '<span class="bh-d">ไม่ว่าง ' + x.n + ' วันในเดือนนี้' + (nf ? ' · ว่างอีกครั้ง ' + fThDate(nf) : '') + '</span></span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="custRemoveUnit(\'' + x.u.id + '\')">✕ เอาออก</button></div>';
+  });
+  return void (box.innerHTML = h + '</div></div>');
+}
 function custDayClick(iso) {
   if (custMultiDay) { custToggleDay(iso); return; }
   // เปลี่ยนไปดูวันอื่น = เริ่มกรองใหม่ ไม่งั้นคำค้นของวันก่อนติดมาแล้วเห็นรายการว่างเปล่าโดยไม่รู้สาเหตุ
@@ -837,7 +915,10 @@ function renderDayDetail() {
         (mp.sub ? ' <u>' + esc(mp.sub) + '</u>' : '') + ' <i>' + esc(u.label) + '</i></span>' +
         (free ? '<span class="pill pill-good">✅ ว่าง</span>'
               : '<span class="dd-busy"><span class="pill pill-warn">📤 มีผู้ยืมอยู่</span>' +
-                (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') + '</span>') + '</div>';
+                (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') +
+                // เอาตัวที่ติดออกได้ตรงนี้เลย ไม่ต้องย้อนกลับไปหน้าเลือกอุปกรณ์
+                (calUnits.length > 1 ? '<button class="btn btn-ghost btn-sm dd-rm" onclick="custRemoveUnit(\'' + u.id + '\')">✕ เอาออก</button>' : '') +
+                '</span>') + '</div>';
     });
     h += '</div>';
   }
