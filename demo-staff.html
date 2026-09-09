@@ -77,6 +77,25 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .gs-late { color:#ef4444; font-weight:600; }
 .gs-empty, .gs-more { font-size:12px; color:var(--text2); padding:12px; }
 .gs-more { border-top:1px solid var(--border); }
+/* ติดตามคืน — สลับมุมมองรายเครื่อง / ตามใบจอง */
+.rt-views { display:flex; gap:4px; margin-bottom:10px; }
+.rt-views button { border:1px solid var(--border); background:var(--surface-2); font:inherit; font-size:12.5px; font-weight:600;
+  color:var(--text2); padding:7px 13px; border-radius:8px; cursor:pointer; }
+.rt-views button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.rt-slip { border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; }
+.rt-slip.late { border-color:#ef4444; }
+.rt-slip-hd { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+  padding:11px 13px; background:var(--surface-2); border-bottom:1px solid var(--border); }
+.rt-slip.late .rt-slip-hd { background:rgba(239,68,68,.10); }
+.rt-slip-hd b { font-size:13.5px; }
+.rt-slip-sub { font-size:11.5px; color:var(--text2); margin-top:3px; }
+.rt-slip-act { display:flex; gap:6px; flex-wrap:wrap; }
+.rt-slip-list { margin:0 0 9px; padding-left:20px; font-size:12.5px; line-height:1.9; }
+.rt-viareq { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; }
+.rt-guess { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; vertical-align:middle; }
+.rt-guess-note { color:var(--warn); }
+.rt-warn { font-size:12px; line-height:1.65; color:var(--warn); background:var(--warn-soft); border:1px solid var(--warn);
+  border-radius:9px; padding:9px 11px; margin-bottom:11px; }
 .paste-panel { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); padding:11px 12px; margin-bottom:12px; }
 .paste-hd { font-size:12px; font-weight:700; color:var(--text2); margin-bottom:7px; }
 .paste-panel textarea { width:100%; box-sizing:border-box; font:inherit; font-size:13px; line-height:1.6; padding:9px 11px;
@@ -1241,7 +1260,9 @@ function activeReturns() {
       if (seen[k]) return;           // ชุดเดียวกันมาสองทาง อย่านับซ้ำ
       seen[k] = 1;
       out.push({ src: 'app', id: null, unitId: u.id, model: u.model || u.name || '', label: '',
-        borrower: r.borrower || '', approver: r.approver || '', jobNo: '',
+        borrower: r.borrower || '', approver: r.approver || '',
+        // เดิมตั้งเป็น '' ตายตัวเพราะ publishDemoCatalog ไม่เคยส่งเลขใบมา — ส่งแล้ว ต้องอ่านด้วย
+        jobNo: String(r.jobNo || '').trim() || String(r.refNo || '').trim(),
         start: r.start, end: r.end });
     });
   });
@@ -1251,17 +1272,89 @@ function _overdueCount() {
   var today = _td();
   return activeReturns().filter(function(x) { return x.end < today; }).length;
 }
+// ================================================================
+// ติดตามคืน — 2 มุมมอง
+//   รายเครื่อง : เรียงตามความด่วน (เลยกำหนด → ใกล้ครบ → ยังไม่ถึง) ของเดิม
+//   ตามใบจอง  : 1 ใบ = 1 กล่อง กดคืนทั้งใบ/เลื่อนทั้งใบได้ทีเดียว
+// ใบเบิกจริงใบหนึ่งมีหลายเครื่อง เดิมต้องกดคืนทีละเครื่อง ใบละ 10 เครื่องคือ 10 รอบ
+// ================================================================
+var rtView = 'unit';
+try { rtView = localStorage.getItem('demoStaffReturnView') || 'unit'; } catch (e) {}
+function rtSetView(v) {
+  rtView = v;
+  try { localStorage.setItem('demoStaffReturnView', v); } catch (e) {}
+  renderReturnTab();
+}
+function _rtSlipKey(l) {
+  var j = String(l.jobNo || '').trim();
+  return j ? 'J:' + j : 'D:' + (String(l.borrower || '').trim() || '—') + '|' + l.start + '|' + l.end;
+}
+function _rtViewToggle(nSlips) {
+  return '<div class="rt-views">' +
+    '<button class="' + (rtView === 'unit' ? 'on' : '') + '" onclick="rtSetView(\'unit\')">🚁 รายเครื่อง</button>' +
+    '<button class="' + (rtView === 'slip' ? 'on' : '') + '" onclick="rtSetView(\'slip\')">📄 ตามใบจอง' +
+      (nSlips ? ' (' + nSlips + ')' : '') + '</button></div>';
+}
+
+function renderReturnTabBySlip(all) {
+  var el = document.getElementById('tab-return'), today = _td();
+  var groups = {}, order = [];
+  all.forEach(function(l) {
+    var k = _rtSlipKey(l);
+    if (!groups[k]) { groups[k] = { key: k, list: [], jobNo: String(l.jobNo || '').trim(), who: '', worst: 0, end: l.end }; order.push(k); }
+    var g = groups[k];
+    g.list.push(l);
+    if (!g.who && String(l.borrower || '').trim()) g.who = l.borrower.trim();
+    if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
+    if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
+  });
+  // ค้างนานสุดขึ้นก่อน แล้วค่อยเรียงตามกำหนดคืนที่ใกล้ที่สุด
+  order.sort(function(a, b) { return groups[b].worst - groups[a].worst || groups[a].end.localeCompare(groups[b].end); });
+
+  var h = _rtViewToggle(order.length);
+  var late = order.filter(function(k) { return groups[k].worst > 0; }).length;
+  h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
+    (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') + '</div>';
+  if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">🎉 ไม่มีเครื่องค้างอยู่</div>');
+
+  order.forEach(function(k) {
+    var g = groups[k];
+    var canDo = g.list.filter(function(l) { return l.src === 'staff' || !(PENDING_EDITS[l.unitId] || {}).loanAction; }).length;
+    h += '<div class="rt-slip' + (g.worst ? ' late' : '') + '">';
+    var guess = k.charAt(0) !== 'J';
+    h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
+      (guess && g.list.length > 1 ? ' <span class="rt-guess" title="ไม่มีเลขใบจอง จึงเดาจากผู้ยืมและช่วงวันที่ตรงกัน อาจไม่ใช่ใบเดียวกันจริง">เดากลุ่ม</span>' : '') +
+      '<div class="rt-slip-sub">' + esc(g.who || 'ไม่ระบุผู้ยืม') + ' · ' + g.list.length + ' เครื่อง · กำหนดคืน ' + _scD(g.end) +
+      (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
+      (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
+    if (canDo) {
+      h += '<div class="rt-slip-act">' +
+        '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(k) + '\')">✅ คืนทั้งใบ (' + canDo + ')</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="openSlipExtendM(\'' + _scEsq(k) + '\')" title="เลื่อนกำหนดคืนทั้งใบ">⏩ เลื่อนทั้งใบ</button></div>';
+    }
+    h += '</div>';
+    h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
+      .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l); }).join('');
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
 function renderReturnTab() {
   var el = document.getElementById('tab-return');
   var today = _td();
   var all = activeReturns();
+  if (rtView === 'slip') return renderReturnTabBySlip(all);
   var overdue = all.filter(function(x) { return x.end < today; })
     .sort(function(a, b) { return a.end.localeCompare(b.end); });   // ค้างนานสุดขึ้นก่อน
   var soon = all.filter(function(x) { return x.end >= today && daysBetween(today, x.end) <= 2; })
     .sort(function(a, b) { return a.end.localeCompare(b.end); });
   var fromApp = all.filter(function(x) { return x.src === 'app'; }).length;
 
-  var h = '<div class="rt-sum">' +
+  var slipCount = {};
+  all.forEach(function(l) { slipCount[_rtSlipKey(l)] = 1; });
+  var h = _rtViewToggle(Object.keys(slipCount).length);
+  h += '<div class="rt-sum">' +
     '<b>ยังไม่คืน ' + all.length + ' เครื่อง</b> · เลยกำหนด ' + overdue.length + ' · ใกล้ครบ ' + soon.length +
     (fromApp ? '<div class="rt-sum-note">ในนี้มี ' + fromApp + ' เครื่องที่คีย์ยืมจากแอปหลัก — เห็นได้ที่นี่ แต่ต้องไปกดรับคืนในแอปหลัก</div>' : '') +
     '</div>';
@@ -1393,6 +1486,126 @@ function saveLoanAction(unitId, type) {
     toastMock('📤 ส่งคำขอแล้ว — รอแอปหลักกดรับเข้า');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
+// ---- คืน/เลื่อน ทั้งใบจอง ----
+//
+// ใบหนึ่งมีได้ทั้งเครื่องที่คีย์จากหน้านี้ (แก้ตัวจริงได้) และเครื่องที่คีย์จากแอปหลัก (ต้องส่งคำขอเข้าคิว)
+// เขียนรวมใน batch เดียว จะได้ไม่เหลือใบครึ่งๆ กลางๆ ถ้าพลาดกลางทาง — ฟอร์มเดียวจบทั้งสองแบบ
+function _rtSlipRows(key) {
+  return activeReturns().filter(function(l) {
+    if (_rtSlipKey(l) !== key) return false;
+    return l.src === 'staff' || !(PENDING_EDITS[l.unitId] || {}).loanAction;
+  });
+}
+function _rtSlipHead(key, rows) {
+  var j = key.charAt(0) === 'J' ? key.slice(2) : '';
+  var nApp = rows.filter(function(l) { return l.src === 'app'; }).length;
+  var h = '<div class="sm-sec">' + (j ? '📄 ใบจอง ' + esc(j) : '📄 ชุดนี้ไม่มีเลขใบจอง') + ' · ' + rows.length + ' เครื่อง</div>';
+  h += '<ul class="rt-slip-list">' + rows.map(function(l) {
+    var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+    return '<li>' + esc(u.model || u.name || l.model || '-') +
+      (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+      (l.src === 'app' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') + '</li>';
+  }).join('') + '</ul>';
+  if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอแอปหลักกด “รับเข้า”</div>';
+  // กลุ่มที่ไม่มีเลขใบจองคือการเดา ไม่ใช่ใบจริง — เตือนก่อนกดทีเดียวหลายเครื่อง
+  if (!j && rows.length > 1) {
+    h += '<div class="rt-warn">⚠️ ชุดนี้<b>ไม่มีเลขใบจอง</b> ระบบเดากลุ่มจากผู้ยืมและช่วงวันที่ตรงกัน ' +
+      rows.length + ' เครื่องนี้อาจไม่ได้อยู่ใบเดียวกันจริง — ไล่ดูรายชื่อด้านบนให้ครบก่อนกด</div>';
+  }
+  return h;
+}
+function openSlipReturnM(key) {
+  var rows = _rtSlipRows(key);
+  if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
+  var h = _rtSlipHead(key, rows);
+  h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="sr_date" value="' + _td() + '"></div>';
+  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="sr_by" list="srKeyerList" autocomplete="off" value="' +
+    esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('srKeyerList') + '</div>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipReturn(\'' + _scEsq(key) + '\')">✅ รับคืนทั้งใบ ' + rows.length + ' เครื่อง</button>';
+  openSm('รับคืนทั้งใบ', h);
+}
+function saveSlipReturn(key) {
+  var rows = _rtSlipRows(key);
+  if (!rows.length) return;
+  var date = (document.getElementById('sr_date').value || '').trim();
+  var by = (document.getElementById('sr_by').value || '').trim();
+  if (!date) { alert('เลือกวันที่รับคืนจริงก่อนนะครับ'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องก่อนนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var batch = db.batch(), nDirect = 0, nReq = 0;
+  rows.forEach(function(l) {
+    if (l.src === 'staff') {
+      batch.update(db.collection('publicDemoLoans').doc(l.id), {
+        status: 'returned', actualReturnDate: date,
+        events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', by, 'รับคืนเข้าคลัง ' + _scD(date) + ' · คืนทั้งใบ ' + rows.length + ' เครื่อง'))
+      });
+      nDirect++;
+    } else {
+      var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+      batch.set(db.collection('publicDemoEdits').doc(l.unitId), {
+        unitId: l.unitId, editedBy: by,
+        loanAction: { type: 'return', by: by, date: date, reason: 'คืนทั้งใบ ' + rows.length + ' เครื่อง', at: new Date().toISOString() },
+        editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+      }, { merge: true });
+      nReq++;
+    }
+  });
+  batch.commit().then(function() {
+    closeSm();
+    toastMock('✅ ' + (nDirect ? 'รับคืน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : ''));
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+function openSlipExtendM(key) {
+  var rows = _rtSlipRows(key);
+  if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
+  var maxEnd = rows.map(function(l) { return l.end; }).sort().pop();
+  var h = _rtSlipHead(key, rows);
+  h += '<div class="hint">กำหนดคืนในใบนี้ตอนนี้ช้าสุดคือ ' + _scD(maxEnd) + ' — เลื่อนแล้วทุกเครื่องในใบจะใช้วันใหม่วันเดียวกัน</div>';
+  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="se_end" value="' + maxEnd + '"></div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="se_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์"></div>';
+  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="se_by" list="seKeyerList" autocomplete="off" value="' +
+    esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('seKeyerList') + '</div>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipExtend(\'' + _scEsq(key) + '\')">⏩ เลื่อนทั้งใบ ' + rows.length + ' เครื่อง</button>';
+  openSm('เลื่อนกำหนดคืนทั้งใบ', h);
+}
+function saveSlipExtend(key) {
+  var rows = _rtSlipRows(key);
+  if (!rows.length) return;
+  var end = (document.getElementById('se_end').value || '').trim();
+  var why = (document.getElementById('se_why').value || '').trim();
+  var by = (document.getElementById('se_by').value || '').trim();
+  if (!end) { alert('เลือกกำหนดคืนใหม่ก่อนนะครับ'); return; }
+  if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องก่อนนะครับ'); return; }
+  var early = rows.filter(function(l) { return end < l.start; });
+  if (early.length) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืมของ ' + early.length + ' เครื่องในใบนี้'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var batch = db.batch(), nDirect = 0, nReq = 0;
+  rows.forEach(function(l) {
+    if (l.src === 'staff') {
+      batch.update(db.collection('publicDemoLoans').doc(l.id), {
+        end: end,
+        events: firebase.firestore.FieldValue.arrayUnion(_scEv('extended', by, 'จาก ' + (l.end || '—') + ' → ' + end + ' · ' + why + ' · เลื่อนทั้งใบ'))
+      });
+      nDirect++;
+    } else {
+      var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+      batch.set(db.collection('publicDemoEdits').doc(l.unitId), {
+        unitId: l.unitId, editedBy: by,
+        loanAction: { type: 'extend', by: by, newEnd: end, reason: why + ' · เลื่อนทั้งใบ', at: new Date().toISOString() },
+        editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+      }, { merge: true });
+      nReq++;
+    }
+  });
+  batch.commit().then(function() {
+    closeSm();
+    toastMock('⏩ ' + (nDirect ? 'เลื่อน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : ''));
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 function cancelLoanAction(unitId) {
   if (!confirm('ยกเลิกคำขอนี้?')) return;
   db.collection('publicDemoEdits').doc(unitId).update({
