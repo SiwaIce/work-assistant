@@ -5109,10 +5109,28 @@ function rDemoTracker(el) {
   if (demoCats.length || uncategorized) {
     h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
     h += '<button class="demo-filter-chip ' + (demoCategoryFilter === 'all' ? 'act' : '') + '" onclick="demoCategoryFilter=\'all\';render()">📦 ทุกหมวดหมู่</button>';
+    // ตัวเลขบนชิปนับ "เฉพาะในสโคปที่เลือกอยู่" (เครื่องหลัก / อุปกรณ์เสริม / ทั้งหมด) ไม่ใช่ทั้งคลัง
+    // เดิมหมวดที่ไม่มีเครื่องในสโคปจะถูกซ่อนหายไปเลย ทำให้งงมาก เช่นค่าเริ่มต้นคือ "เครื่องหลัก"
+    // แล้ว Payload ทั้ง 10 ตัวถูกจัดเป็นอุปกรณ์เสริม แท็บ Payload จึงหายทั้งแท็บ ส่วน Drone Accessories
+    // ขึ้นแค่ 4 ทั้งที่ทั้งคลังมี 46 — ดูแล้วเหมือนข้อมูลหาย ทั้งที่แค่ถูกกรองอยู่
+    // ตอนนี้ยังโชว์แต่ทำให้จาง พร้อมบอกจำนวนจริงทั้งคลัง กดแล้วสลับไปสโคป "ทั้งหมด" ให้เลย
     demoCats.forEach(function(c) {
       var cnt = items.filter(function(d) { return d.category === c.id; }).length;
-      if (!cnt) return;
-      h += '<button class="demo-filter-chip ' + (demoCategoryFilter === c.id ? 'act' : '') + '" onclick="demoCategoryFilter=\'' + c.id + '\';render()">' + (c.icon || '') + ' ' + sanitize(c.label) + ' (' + cnt + ')</button>';
+      var total = scopedByRental.filter(function(d) { return d.category === c.id; }).length;
+      if (!total) return;
+      if (cnt) {
+        // ถ้าตัวเลขในสโคปกับทั้งคลังไม่เท่ากัน เขียน "4 / 46" ให้เห็นเลยว่าที่เหลืออยู่นอกสโคป
+        // ไม่ใช่หายไปไหน (เทียบกับหน้าจัดการหมวดหมู่ที่นับทั้งคลังเสมอ)
+        var lbl = (cnt === total) ? String(cnt) : (cnt + ' / ' + total);
+        h += '<button class="demo-filter-chip ' + (demoCategoryFilter === c.id ? 'act' : '') + '"' +
+          (cnt === total ? '' : ' title="ในสโคปที่เลือกอยู่ ' + cnt + ' เครื่อง · ทั้งคลัง ' + total + ' เครื่อง"') +
+          ' onclick="demoCategoryFilter=\'' + c.id + '\';render()">' +
+          (c.icon || '') + ' ' + sanitize(c.label) + ' (' + lbl + ')</button>';
+      } else {
+        h += '<button class="demo-filter-chip out" title="ไม่มีในสโคปที่เลือกอยู่ — ทั้งคลังมี ' + total + ' เครื่อง กดเพื่อดูทั้งหมด"' +
+          ' onclick="demoKindFilter=\'all\';demoCategoryFilter=\'' + c.id + '\';render()">' +
+          (c.icon || '') + ' ' + sanitize(c.label) + ' <span class="oo">' + total + ' นอกสโคป</span></button>';
+      }
     });
     if (uncategorized) h += '<button class="demo-filter-chip ' + (demoCategoryFilter === '_none' ? 'act' : '') + '" onclick="demoCategoryFilter=\'_none\';render()">➖ ไม่ระบุหมวดหมู่ (' + uncategorized + ')</button>';
     h += '</div>';

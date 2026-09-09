@@ -10355,3 +10355,9 @@ input:focus, select:focus, textarea:focus {
 .demo-catrow > input[data-f="icon"] { width: 52px; flex: 0 0 52px; text-align: center; }
 .demo-catrow > input[data-f="label"] { flex: 1; min-width: 0; }
 .demo-catrow > button { flex: 0 0 auto; }
+
+/* ชิปหมวดหมู่ที่ไม่มีเครื่องอยู่ในสโคปที่เลือก — จางไว้แต่ยังกดได้
+   เดิมซ่อนทิ้งเลย ทำให้แท็บทั้งแท็บหายไปโดยไม่บอกเหตุผล (เช่น Payload หายตอนดูเฉพาะเครื่องหลัก) */
+.demo-filter-chip.out { opacity: .5; border-style: dashed; }
+.demo-filter-chip.out .oo { font-size: 10px; font-weight: 600; opacity: .85; }
+.demo-filter-chip.out:hover { opacity: 1; }
