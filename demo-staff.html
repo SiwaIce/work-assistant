@@ -99,6 +99,54 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-item .icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; background:var(--surface-2); }
 .rt-item .body { flex:1; min-width:200px; }
 .rt-section-title { font-weight:700; font-size:13.5px; margin:18px 0 10px; }
+/* ── แถบ "วันนี้ต้องทำอะไร" ───────────────────────────────────────── */
+.triage-wrap { margin-bottom:14px; }
+.triage-hd { width:100%; display:flex; align-items:center; gap:9px; font:inherit; text-align:start;
+  cursor:pointer; padding:11px 14px; border-radius:11px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); }
+.triage-hd .th-ar { color:var(--text3); font-size:11px; }
+.triage-hd .th-t { font-weight:700; font-size:13.5px; }
+.triage-hd .th-n { margin-inline-start:auto; font-size:11.5px; font-weight:700;
+  background:var(--bad-soft); color:var(--bad); padding:2px 9px; border-radius:999px; }
+.triage-hd .th-ok { margin-inline-start:auto; font-size:11.5px; font-weight:700;
+  background:var(--good-soft); color:var(--good); padding:2px 9px; border-radius:999px; }
+.tg { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:11px;
+  border:1px solid var(--border); background:var(--surface); margin-top:8px; flex-wrap:wrap; }
+.tg.crit { border-color:var(--bad); background:var(--bad-soft); }
+.tg.warn { border-color:var(--warn); background:var(--warn-soft); }
+.tg.calm { border-style:dashed; }
+.tg-ic { font-size:19px; flex:0 0 auto; }
+.tg-b { flex:1; min-width:150px; }
+.tg-t { font-weight:700; font-size:13.5px; }
+.tg-t b { font-variant-numeric:tabular-nums; }
+.tg-s { font-size:11.5px; color:var(--text2); margin-top:1px; }
+.tg-go { flex:0 0 auto; font:inherit; font-size:12px; font-weight:700; padding:7px 13px; border-radius:8px;
+  border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; white-space:nowrap; }
+.tg.crit .tg-go { border-color:var(--bad); color:var(--bad); }
+/* กรอกชื่อย้อนหลังแบบเร็ว */
+.qn { margin-top:9px; border:1px solid var(--border); border-radius:11px; background:var(--surface); padding:12px 13px; }
+.qn-hd { font-weight:700; font-size:13px; }
+.qn-note { font-size:11.5px; color:var(--warn); background:var(--warn-soft);
+  border-radius:8px; padding:8px 10px; margin-top:8px; line-height:1.55; }
+.qn-row { border-top:1px solid var(--border); padding:10px 0; }
+.qn-row.done { opacity:.6; }
+.qn-nm { font-size:12.5px; }
+.qn-sub { font-size:11px; color:var(--text2); margin-top:2px; font-variant-numeric:tabular-nums; }
+.qn-in { display:flex; gap:7px; margin-top:7px; flex-wrap:wrap; }
+.qn-in input { flex:1; min-width:130px; font:inherit; font-size:12.5px; padding:7px 10px;
+  border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.qn-done { font-size:12px; color:var(--good); margin-top:6px; }
+/* ส่วนที่กางดูเพิ่มในการ์ดเครื่อง */
+.su-more { margin-top:9px; }
+.su-more > summary { cursor:pointer; font-size:11.5px; color:var(--accent); list-style:none; }
+.su-more > summary::-webkit-details-marker { display:none; }
+.su-more > summary::before { content:'▸ '; }
+.su-more[open] > summary::before { content:'▾ '; }
+.su-more-b { margin-top:8px; padding-top:9px; border-top:1px solid var(--border); }
+.su-kv { display:flex; gap:10px; font-size:12px; padding:3px 0; }
+.su-kv span { color:var(--text3); flex:0 0 110px; }
+.su-kv b { min-width:0; word-break:break-word; font-family:ui-monospace,Consolas,monospace; }
+.su-docs { display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; }
 .rt-sum { background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
   padding:11px 13px; font-size:13px; }
 .rt-later { margin-top:18px; }
@@ -465,6 +513,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         <button class="btn btn-ghost btn-sm" onclick="copyPubLink()">📋 คัดลอกลิงก์</button>
       </div>
 
+      <div id="triageBar"></div>
+
       <div class="stat-row" id="statRow"></div>
 
       <div class="tabs">
@@ -674,6 +724,143 @@ function renderStatRow() {
   // นับจากทั้งสองแหล่งเหมือนในแท็บ ไม่งั้นตัวเลขบนแท็บกับข้างในไม่ตรงกัน
   var overdue = _overdueCount();
   document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
+  renderTriage();
+}
+
+// ================================================================
+// แถบ "วันนี้ต้องทำอะไร" — อยู่เหนือแท็บ เห็นก่อนเสมอไม่ว่าเปิดมาที่แท็บไหน
+//
+// ต่างจากแถบตัวเลข 4 ช่องข้างล่างตรงที่อันนั้นบอก "มีอะไรอยู่" (สถานะคลัง) ส่วนอันนี้บอก "ต้องลงมือทำอะไร"
+// จึงขึ้นเฉพาะแถวที่มีจำนวนจริง ถ้าเคลียร์หมดเหลือบรรทัดเดียว — ไม่งั้นมันจะกลายเป็นแถบสถิติอีกอัน
+// ที่คนเลิกอ่านไปเอง
+// ================================================================
+var triageOpen = (function() { try { return localStorage.getItem('demoStaffTriage') !== 'closed'; } catch (e) { return true; } })();
+var namesOpen = false;
+function toggleTriage() {
+  triageOpen = !triageOpen;
+  try { localStorage.setItem('demoStaffTriage', triageOpen ? 'open' : 'closed'); } catch (e) {}
+  renderTriage();
+}
+function toggleNames() { namesOpen = !namesOpen; renderTriage(); }
+
+// ใบที่ยังไม่คืนและไม่รู้ว่าของอยู่กับใคร — ตามคืนไม่ได้เพราะไม่มีชื่อให้ทวง
+function noNameLoans() {
+  // เรียงตามกำหนดคืน ตัวที่เลยกำหนดนานสุดขึ้นก่อน — ใบพวกนั้นต้องตามด่วนกว่าใบที่ยังไม่ถึงกำหนด
+  return activeReturns().filter(function(x) { return !x.borrower.trim() && !x.approver.trim(); })
+    .sort(function(a, b) { return a.end.localeCompare(b.end); });
+}
+function renderTriage() {
+  var el = document.getElementById('triageBar');
+  if (!el) return;
+  var today = _td();
+  var all = activeReturns();
+  var overdue = all.filter(function(x) { return x.end < today; })
+    .sort(function(a, b) { return a.end.localeCompare(b.end); });
+  var soon = all.filter(function(x) { return x.end >= today && daysBetween(today, x.end) <= 2; });
+  var noName = noNameLoans();
+
+  var rows = [];
+  if (overdue.length) {
+    var w = overdue[0], wu = UNITS.filter(function(u) { return u.id === w.unitId; })[0];
+    rows.push({ cls: 'crit', ic: '🔴', t: 'ต้องตามคืน <b>' + overdue.length + '</b> เครื่อง',
+      s: 'ค้างนานสุด ' + daysBetween(w.end, today) + ' วัน · ' + esc((wu && (wu.model || wu.name)) || '') +
+         (wu && wu.rentalDbNo ? ' เช่า ' + esc(wu.rentalDbNo) : ''),
+      go: '<button class="tg-go" onclick="staffTab(\'return\')">ไปตามคืน →</button>' });
+  }
+  if (noName.length) {
+    var nnLate = noName.filter(function(x) { return x.end < today; }).length;
+    rows.push({ cls: nnLate ? 'crit' : 'warn', ic: '🧑‍💼', t: 'ไม่รู้ว่าตามใคร <b>' + noName.length + '</b> ใบ',
+      s: 'ไม่มีทั้งชื่อผู้ยืมและผู้คีย์เบิก' +
+         (nnLate ? ' — ใน 16 ใบที่เลยกำหนด มี ' + nnLate + ' ใบอยู่ในกลุ่มนี้ ตามคืนไม่ได้เลย' : '') +
+         ' · กรอกตรงนี้ได้เลย',
+      go: '<button class="tg-go" onclick="toggleNames()">' + (namesOpen ? '▴ ปิด' : '▾ กรอกชื่อ') + '</button>' });
+  }
+  if (soon.length) {
+    rows.push({ cls: 'warn', ic: '🟡', t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง',
+      s: 'ภายใน 2 วัน', go: '<button class="tg-go" onclick="staffTab(\'return\')">ดูรายการ →</button>' });
+  }
+  if (PENDING.length) {
+    rows.push({ cls: 'warn', ic: '🟡', t: 'คำขอจากลูกค้า <b>' + PENDING.length + '</b> รายการ',
+      s: 'รออนุมัติ', go: '<button class="tg-go" onclick="staffTab(\'pending\')">ไปอนุมัติ →</button>' });
+  }
+
+  var h = '<div class="triage-wrap">';
+  h += '<button class="triage-hd" onclick="toggleTriage()" aria-expanded="' + (triageOpen ? 'true' : 'false') + '">' +
+    '<span class="th-ar">' + (triageOpen ? '▾' : '▸') + '</span>' +
+    '<span class="th-t">📌 วันนี้ต้องทำอะไร</span>' +
+    (rows.length ? '<span class="th-n">' + rows.length + ' เรื่อง</span>' : '<span class="th-ok">เคลียร์</span>') +
+    '</button>';
+  if (triageOpen) {
+    if (!rows.length) {
+      h += '<div class="tg calm"><span class="tg-ic">✅</span><div class="tg-b">' +
+        '<div class="tg-t">วันนี้ไม่มีอะไรค้าง</div>' +
+        '<div class="tg-s">ไม่มีของเลยกำหนด ไม่มีคำขอรออนุมัติ</div></div></div>';
+    }
+    rows.forEach(function(r) {
+      h += '<div class="tg ' + r.cls + '"><span class="tg-ic">' + r.ic + '</span>' +
+        '<div class="tg-b"><div class="tg-t">' + r.t + '</div><div class="tg-s">' + r.s + '</div></div>' + r.go + '</div>';
+    });
+    if (namesOpen && noName.length) h += _quickNamesHtml(noName);
+  }
+  el.innerHTML = h + '</div>';
+}
+
+// กรอกชื่อผู้ยืม/ผู้คีย์ ย้อนหลังแบบรวดเร็ว — พิมพ์ตรงนี้ทีละใบแล้วกดบันทึกได้เลย
+// ไม่ต้องเข้าไปทีละเครื่อง (แต่กด "แก้เต็ม" เข้าไปกรอกในฟอร์มใหญ่ก็ได้ ถ้าจะแก้อย่างอื่นด้วย)
+//
+// ⚠️ ใบพวกนี้มาจาก busyRanges = ใบยืมที่คีย์ในแอปหลัก หน้านี้ไม่มี doc ให้เขียนตรงๆ จึงส่งเข้าคิว
+// publicDemoEdits เหมือนการแก้ข้อมูลเครื่องอย่างอื่น แล้วรอแอปหลักกด "รับเข้า"
+function _quickNamesHtml(list) {
+  var h = '<div class="qn"><div class="qn-hd">กรอกชื่อย้อนหลัง ' + list.length + ' ใบ</div>' +
+    '<div class="qn-note">⚠️ ใบเหล่านี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ที่กรอกจะเข้าคิวไว้ ' +
+    'รอเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะลงถาวร</div>';
+  h += '<div class="field" style="margin:10px 0 12px"><label>✍️ คนกรอก (ใส่ครั้งเดียว ใช้ได้ทุกแถว) *</label>' +
+    '<input type="text" id="qnBy" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  list.forEach(function(x) {
+    var u = UNITS.filter(function(a) { return a.id === x.unitId; })[0];
+    if (!u) return;
+    var p = _scModelParts(u);
+    var pend = PENDING_EDITS[u.id];
+    var done = pend && pend.fields && (pend.fields.borrower || pend.fields.keyedBy);
+    h += '<div class="qn-row' + (done ? ' done' : '') + '">';
+    h += '<div class="qn-nm"><b>' + esc(p.main) + '</b>' +
+      (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+      '<div class="qn-sub">กำหนดคืน ' + _scD(x.end) +
+      (x.end < _td() ? ' · <b style="color:var(--bad)">เลยมาแล้ว ' + daysBetween(x.end, _td()) + ' วัน</b>'
+                     : ' · ยังไม่ถึงกำหนด') + '</div></div>';
+    if (done) {
+      h += '<div class="qn-done">✅ เข้าคิวแล้ว — ' + esc(pend.fields.borrower || '') +
+        (pend.fields.keyedBy ? ' / ' + esc(pend.fields.keyedBy) : '') + '</div>';
+    } else {
+      h += '<div class="qn-in">' +
+        '<input type="text" id="qnB_' + u.id + '" placeholder="ผู้ยืม (บริษัท/ลูกค้า)" list="qnBorrowerList" autocomplete="off">' +
+        '<input type="text" id="qnK_' + u.id + '" placeholder="ผู้คีย์เบิก (ทีมงาน)" autocomplete="off">' +
+        '<button class="btn btn-primary btn-sm" onclick="saveQuickName(\'' + u.id + '\')">บันทึก</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitEditM(\'' + u.id + '\')" title="เปิดฟอร์มเต็ม">แก้เต็ม</button>' +
+        '</div>';
+    }
+    h += '</div>';
+  });
+  return h + scBorrowerDatalist('qnBorrowerList') + '</div>';
+}
+function saveQuickName(unitId) {
+  var by = (document.getElementById('qnBy').value || '').trim();
+  var b = (document.getElementById('qnB_' + unitId).value || '').trim();
+  var k = (document.getElementById('qnK_' + unitId).value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนกรอกก่อนนะครับ — แอปหลักจะได้รู้ว่าใครกรอก'); return; }
+  if (!b && !k) { alert('กรอกอย่างน้อยหนึ่งช่อง (ผู้ยืม หรือ ผู้คีย์เบิก)'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var u = UNITS.filter(function(a) { return a.id === unitId; })[0] || {};
+  var fields = {};
+  if (b) fields.borrower = b;
+  if (k) fields.keyedBy = k;
+  db.collection('publicDemoEdits').doc(unitId).set({
+    unitId: unitId, fields: fields, editedBy: by,
+    editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+  }, { merge: true }).then(function() {
+    toastMock('💾 เข้าคิวแล้ว — รอแอปหลักกดรับเข้า');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 function staffTab(name) {
@@ -821,10 +1008,10 @@ function returnRowHtml(cls, l) {
   var late = l.end < today;
   var daysTxt = late ? 'เลยมาแล้ว ' + daysBetween(l.end, today) + ' วัน'
     : (l.end === today ? 'ครบกำหนดวันนี้' : 'อีก ' + daysBetween(today, l.end) + ' วัน');
-  var cat = (CATEGORIES || []).filter(function(c) { return u && c.id === u.category; })[0];
+  var cat = u ? _scCatOf(u) : { icon: '🚁', label: '' };
   var p = u ? _scModelParts(u) : { main: l.model || 'เครื่องที่ถูกลบไปแล้ว', sub: '' };
 
-  var h = '<div class="rt-item ' + cls + '"><div class="icon">' + (cat ? cat.icon : '🚁') + '</div>';
+  var h = '<div class="rt-item ' + cls + '"><div class="icon" title="' + esc(cat.label) + '">' + cat.icon + '</div>';
   h += '<div class="body"><div style="font-weight:700">' + esc(p.main) +
     (p.sub ? ' <span style="font-weight:500;color:var(--text3);font-size:12px">' + esc(p.sub) + '</span>' : '') +
     (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
@@ -1177,36 +1364,49 @@ function unitCardHtml(raw, n) {
   var endIso = loan ? loan.end : (appRange ? appRange.end : '');
   var late = endIso && endIso < _td();
   var cls = off ? 'off' : late ? 'late' : (loan || appRange) ? 'busy' : '';
-  var cat = (CATEGORIES || []).filter(function(c) { return c.id === u.category; })[0];
+  var cat = _scCatOf(u);
   var h = '<div class="su-card ' + cls + '">';
-  h += '<div class="su-top"><div class="su-ic">' + (cat && cat.icon ? cat.icon : '🚁') + '</div><div style="flex:1;min-width:0">';
-  h += '<div class="su-nm">เครื่อง #' + n + ' — ' + esc(u.model || u.name || '-') + '</div>';
+  h += '<div class="su-top"><div class="su-ic" title="' + esc(cat.label) + '">' + cat.icon + '</div><div style="flex:1;min-width:0">';
+  // ชื่อรุ่นอยู่บนหัวกลุ่มอยู่แล้ว การ์ดจึงเหลือแค่ "เครื่อง #N" ไม่ต้องเขียนชื่อรุ่นซ้ำทุกใบ
+  h += '<div class="su-nm">เครื่อง #' + n + '</div>';
   h += '<div class="su-idline">';
   if (String(u.rentalDbNo || '').trim()) h += '<span class="dcal-idpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span>';
   else h += '<span class="pill pill-warn">ยังไม่ลงทะเบียนเครื่องเช่า</span>';
   if (u.serialNumber) h += '<span class="dcal-idpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
-  if (u.sku) h += '<span class="dcal-idpc"><i>SKU</i>' + esc(u.sku) + '</span>';
   h += '</div></div>';
   h += '<span class="pill ' + (off ? 'pill-bad' : (loan || appRange) ? 'pill-warn' : 'pill-good') + '">' +
     (off ? '⛔ ไม่พร้อม' : (loan || appRange) ? '📤 ถูกยืม' : '✅ ว่าง') + '</span></div>';
+  // แถวเดียวพอ — ประเภทการใช้งาน + เอกสารยุบเป็นชิปเดียว (ทั้งทะเบียนไม่มีเครื่องไหนเอกสารครบเลย
+  // ขึ้น ✗ แดงสามดวงทุกใบจึงไม่ได้ช่วยแยกอะไร แค่กินสายตา) รายละเอียดรายใบอยู่ในส่วนที่กางออก
   h += '<div class="su-meta">';
-  h += '<span class="pill pill-muted">' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>';
-  if (cat) h += '<span class="pill pill-muted">' + cat.icon + ' ' + esc(cat.label) + '</span>';
-  if (u.customerVisible === false) h += '<span class="pill pill-muted">🙈 ซ่อนจากลูกค้า</span>';
-  [['nbtcRegistered','กสทช.'],['droneInsurance','ประกัน'],['caatRegistered','CAAT']].forEach(function(f) {
-    h += '<span class="pill ' + (u[f[0]] ? 'pill-good' : 'pill-bad') + '">' + (u[f[0]] ? '✓' : '✗') + ' ' + f[1] + '</span>';
-  });
+  h += '<span class="nu-t ' + (u.flyable !== false ? 'fly' : 'disp') + '">' +
+    (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>';
+  h += _scDocTag(u);
+  if (u.customerVisible === false) h += '<span class="nu-t hid">🙈 ซ่อนจากลูกค้า</span>';
   h += '</div>';
   if (loan || appRange) {
     var b = loan || appRange;
     h += '<div class="su-lent"><b>👤 ' + esc(b.borrower || 'ไม่ระบุผู้ยืม') + '</b>' +
       (b.approver ? ' <span style="color:var(--text2)">· ผู้ทำเรื่อง ' + esc(b.approver) + '</span>' : '') +
-      '<div>📅 ' + esc(b.start || '—') + ' → ' + esc(b.end || '—') +
-      (late ? ' <b style="color:var(--bad)">(เลยกำหนด)</b>' : '') + '</div>' +
+      '<div>📅 ' + esc(_scD(b.start)) + ' → ' + esc(_scD(b.end)) +
+      (late ? ' <b style="color:var(--bad)">(เลยกำหนด ' + daysBetween(b.end, _td()) + ' วัน)</b>' : '') + '</div>' +
       (b.purpose ? '<div>🎯 ' + esc(b.purpose) + '</div>' : '') +
       (!loan ? '<div style="color:var(--text3);font-size:10.5px">คีย์จากแอปหลัก — รับคืนต้องกดที่แอปหลัก</div>' : '') + '</div>';
   }
   if (u.note) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">📝 ' + esc(u.note) + '</div>';
+  // กางดูรายละเอียดในที่เดิม ไม่ต้องเปลี่ยนหน้า — SKU กับทะเบียนเอกสารรายใบย้ายมาอยู่ตรงนี้
+  h += '<details class="su-more"><summary>ดูข้อมูลเพิ่ม</summary><div class="su-more-b">';
+  h += '<div class="su-kv"><span>SiS Part (SKU)</span><b>' + esc(u.sku || '—') + '</b></div>';
+  h += '<div class="su-kv"><span>S/N</span><b>' + esc(u.serialNumber || '—') + '</b></div>';
+  var kc = _scCatOf(u);
+  h += '<div class="su-kv"><span>หมวดหมู่</span><b' + (kc.missing ? ' style="color:var(--warn)"' : '') + '>' +
+    kc.icon + ' ' + esc(kc.label) + '</b></div>';
+  h += '<div class="su-kv"><span>ลูกค้าเห็น</span><b>' + (u.customerVisible === false ? '🙈 ซ่อน' : '👀 เห็น') + '</b></div>';
+  h += '<div class="su-docs">';
+  [['nbtcRegistered', 'กสทช.'], ['droneInsurance', 'ประกันภัยโดรน'], ['caatRegistered', 'CAAT']].forEach(function(f) {
+    h += '<span class="pill ' + (u[f[0]] ? 'pill-good' : 'pill-bad') + '">' + (u[f[0]] ? '✓' : '✗') + ' ' + f[1] + '</span>';
+  });
+  h += '</div></div></details>';
   if (unitHasPending(u.id)) {
     var p = PENDING_EDITS[u.id];
     h += '<div class="su-pending">✏️ แก้ไว้ ' + Object.keys(p.fields || {}).length + ' ช่อง' +
@@ -1466,6 +1666,16 @@ function _scDocTag(u) {
     ' · CAAT ' + (u.caatRegistered ? '✓' : '✗');
   if (n === 3) return '<span class="du-t ok" title="' + tip + '">✓ เอกสารครบ</span>';
   return '<span class="du-t doc" title="' + tip + '">เอกสาร ' + n + '/3</span>';
+}
+// "ยังไม่ได้ตั้งหมวด" กับ "ตั้งไว้แต่หมวดนั้นไม่มีแล้ว" เป็นคนละปัญหาและแก้คนละวิธี
+// เคสหลังเกิดตอนหมวดถูกลบ/สร้างใหม่จนได้ id ใหม่ แต่เครื่องยังถือ id เก่าอยู่ — ถ้าเขียนรวมว่า
+// "ไม่ระบุ" เหมือนกันหมด จะไล่หาสาเหตุไม่เจอว่าทำไมเครื่องหายไปจากแท็บหมวดของมัน
+function _scCatOf(u) {
+  var id = String(u.category || '').trim();
+  if (!id) return { icon: '➖', label: 'ยังไม่ได้ตั้งหมวด', missing: false };
+  var c = (CATEGORIES || []).filter(function(x) { return x.id === id; })[0];
+  if (c) return { icon: c.icon || '📦', label: c.label, missing: false };
+  return { icon: '⚠️', label: 'หมวด "' + id + '" ไม่มีในรายการหมวดแล้ว', missing: true };
 }
 function _scDayRow(u, cur) {
   var p = _scModelParts(u);
@@ -1858,12 +2068,12 @@ function _scDrillDay(iso) {
       order.sort(function(a, b) { return groups[b].length - groups[a].length || a.localeCompare(b, 'th'); });
       order.forEach(function(k) {
         var list = groups[k], p = _scModelParts(list[0]);
-        var cat = (CATEGORIES || []).filter(function(c) { return c.id === list[0].category; })[0];
+        var gcat = _scCatOf(list[0]);
         // ทั้งกลุ่มบินไม่ได้ = เตือนไว้บนหัวกลุ่มเลย จะได้ไม่เผลอคีย์ยืมไปงานบินแล้วมารู้ทีหลัง
         var allDisplay = list.every(function(u) { return u.flyable === false; });
-        // ไม่มีหมวด = ➖ ให้ตรงกับชิปกรอง "ไม่ระบุหมวด" ข้างบน ไม่ใช่เดาเป็น 🚁
-        // (Zenmuse/BS100 ไม่ใช่โดรน ถ้าใส่ไอคอนโดรนให้จะอ่านผิดทันที)
-        h += '<div class="du-ghd"><span class="du-gic">' + (cat ? cat.icon : '➖') + '</span>' +
+        // ไม่มีหมวด = ➖ ไม่ใช่เดาเป็น 🚁 (Zenmuse/BS100 ไม่ใช่โดรน ถ้าใส่ไอคอนโดรนจะอ่านผิดทันที)
+        // หมวดที่หายไปจากรายการแล้ว = ⚠️ จะได้รู้ว่าเป็นข้อมูลเพี้ยน ไม่ใช่แค่ยังไม่ได้ตั้ง
+        h += '<div class="du-ghd"><span class="du-gic" title="' + esc(gcat.label) + '">' + gcat.icon + '</span>' +
           '<span class="du-gnm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + '</span>' +
           '<span class="du-gc">' + (allDisplay ? '🖼️ จัดแสดงเท่านั้น · ' : '') + 'ว่าง ' + list.length + ' เครื่อง</span></div>';
         // แต่ละกลุ่มโชว์ 4 ตัวพอ — สิ่งที่ต้องเห็นครบคือ "มีรุ่นอะไรว่างบ้าง" ไม่ใช่ทุกเครื่องในรุ่น

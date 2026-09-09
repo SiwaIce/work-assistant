@@ -3264,8 +3264,14 @@ var DEMO_STAFF_EDITS = [];
 var _DEMO_EDIT_LABELS = {
   name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part', category: 'หมวดหมู่',
   flyable: 'ประเภทการใช้งาน', rentalDbNo: 'เลขเครื่องเช่า', nbtcRegistered: 'กสทช.',
-  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ'
+  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ',
+  // สองช่องนี้เป็นข้อมูลของ "ใบยืม" ไม่ใช่ของตัวเครื่อง — เปิดให้แก้จาก demo-staff เพื่อเก็บตกใบเก่าที่
+  // คีย์ไว้ตั้งแต่ก่อนระบบบังคับกรอกผู้คีย์ ซึ่งตอนนี้ไม่มีชื่อใครเลยจึงตามของคืนไม่ได้
+  borrower: 'ผู้ยืม', keyedBy: 'ผู้คีย์เบิก'
 };
+// ฟิลด์ที่ต้องเขียนลงใบยืมที่ยังไม่คืนด้วย ไม่ใช่แค่ตัวเครื่อง — เพราะ busyRanges ที่ publish ไปให้
+// demo-staff/ลูกค้า สร้างจาก "ใบยืม" ถ้าเขียนแต่ตัวเครื่อง ชื่อจะยังหายอยู่เหมือนเดิมทุกที่
+var _DEMO_EDIT_LOAN_FIELDS = { borrower: 1, keyedBy: 1 };
 var _demoEditsFetchedAt = 0;
 function fetchDemoStaffEdits(force) {
   if (typeof db === 'undefined') return;
@@ -3338,18 +3344,37 @@ function showDemoStaffEditsM() {
   setMWide(880);
 }
 function _applyDemoEditsLocal(ids) {
-  var items = getDemoItems(), n = 0;
+  var items = getDemoItems(), loans = getDemoLoans(), n = 0, loanTouched = 0;
   DEMO_STAFF_EDITS.forEach(function(e) {
     if (ids.indexOf(e._id) === -1) return;
     var d = items.filter(function(x) { return x.id === e._id; })[0];
     if (!d) return;
+    var loanFields = {};
     Object.keys(e.fields || {}).forEach(function(k) {
       if (_DEMO_EDIT_LABELS[k] === undefined) return;   // รับเฉพาะฟิลด์ที่รู้จัก กันค่าแปลกปลอมหลุดเข้าข้อมูลจริง
       d[k] = e.fields[k];
+      if (_DEMO_EDIT_LOAN_FIELDS[k]) loanFields[k] = e.fields[k];
     });
+    // ผู้ยืม/ผู้คีย์ ต้องลงในใบยืมที่ยังไม่คืนด้วย ไม่งั้น publish รอบหน้าจะยังส่งชื่อว่างออกไปเหมือนเดิม
+    var lk = Object.keys(loanFields);
+    if (lk.length) {
+      var active = null;
+      loans.forEach(function(l) { if (l.demoId === d.id && l.status === 'active' && !active) active = l; });
+      if (active) {
+        var before = lk.map(function(k) { return (active[k] || '').trim(); }).join('|');
+        lk.forEach(function(k) { active[k] = loanFields[k]; });
+        if (before !== lk.map(function(k) { return (active[k] || '').trim(); }).join('|')) {
+          _demoAddEvent(active, 'note', _demoDefaultKeyer(),
+            'กรอกย้อนหลังจากหน้า demo-staff' + (e.editedBy ? ' โดย ' + e.editedBy : '') + ' — ' +
+            lk.map(function(k) { return _DEMO_EDIT_LABELS[k] + ': ' + (loanFields[k] || '—'); }).join(' · '));
+          loanTouched++;
+        }
+      }
+    }
     n++;
   });
   if (n) saveDemoItems(items);
+  if (loanTouched) saveDemoLoans(loans);
   return n;
 }
 function _dropDemoEditDocs(ids) {
