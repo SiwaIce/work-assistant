@@ -711,7 +711,18 @@ function gid() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
 
-function _td() { return new Date().toISOString().split('T')[0]; }
+// "วันไหนของปฏิทิน" ต้องอ่านจากเวลาท้องถิ่นเสมอ ห้ามผ่าน toISOString()
+//
+// toISOString() แปลงเป็น UTC ก่อน ไทยเป็น UTC+7 ช่วงเที่ยงคืนถึง 07:00 ตามเวลาไทยจึงยังเป็น "เมื่อวาน"
+// ในเวลา UTC — _td() เดิมใช้ toISOString() ทำให้ทั้งแอปคิดว่าเป็นเมื่อวานตลอดเช้ามืด (ของเลยกำหนด
+// นับผิด, ค่าเริ่มต้นในฟอร์มเป็นเมื่อวาน, "ครบกำหนดวันนี้" ไม่ขึ้น) วันที่ที่เก็บไว้ทั้งหมดเป็นวันปฏิทิน
+// ที่คนกรอก จึงต้องเทียบกับวันปฏิทินท้องถิ่นเหมือนกัน
+// (บั๊กพันธุ์เดียวกับที่ทำให้ busyRanges ที่ publish ออกไปเลื่อน 1 วัน — พบ 2026-09-10)
+function _isoDay(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function _td() { return _isoDay(new Date()); }
+// ตัวนี้เป็น "เวลาจริง ณ ขณะนั้น" ไม่ใช่วันปฏิทิน — ISO/UTC ถูกแล้ว ไม่ต้องแก้
 function _nw() { return new Date().toISOString(); }
 
 function getTodayDow() {
@@ -1022,7 +1033,8 @@ function mondayCompanyStats(dealerId, cfg) {
   var bestAmt = commitAmt + mid.reduce(function(s, p) { return s + (Number(p.forecastAmount) || 0); }, 0);
 
   var staleThreshold = new Date(); staleThreshold.setDate(staleThreshold.getDate() - MONDAY_STALE_DAYS);
-  var staleThresholdIso = staleThreshold.toISOString().slice(0, 10);
+  // เทียบกับ lastDate ซึ่งเป็นวันปฏิทินที่คนกรอก จึงต้องเป็นวันปฏิทินท้องถิ่นด้วย
+  var staleThresholdIso = _isoDay(staleThreshold);
   var stalePipes = activePipes.filter(function(p) {
     var lastLog = ST.pipeLogsByPipe(p.id)[0];
     var lastDate = lastLog ? lastLog.date.split('T')[0] : (p.registerDate || '');
@@ -1420,7 +1432,9 @@ function mondayQuarterRange() {
   var q = Math.floor(now.getMonth() / 3);
   var start = new Date(now.getFullYear(), q * 3, 1);
   var end = new Date(now.getFullYear(), q * 3 + 3, 0);
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), label: 'Q' + (q + 1) + '/' + now.getFullYear() };
+  // ทั้งสองตัวคือเที่ยงคืนเวลาไทย ถ้าผ่าน toISOString() จะถอยไป 1 วันทั้งคู่ — ขอบไตรมาสจะกินวันสุดท้าย
+  // ของไตรมาสก่อนเข้ามา และตัดวันสุดท้ายของไตรมาสนี้ทิ้ง (เช่น Q4 กลายเป็น 30 ก.ย. – 30 ธ.ค.)
+  return { start: _isoDay(start), end: _isoDay(end), label: 'Q' + (q + 1) + '/' + now.getFullYear() };
 }
 
 // ดีเลย์ = วันที่ตั้งไว้ (Bidding/Expected Close/Shipment) ผ่านมาแล้วแต่โครงการยังไม่ Win/Lost — คืน array

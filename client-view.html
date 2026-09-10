@@ -1414,7 +1414,8 @@ var sanitize = esc;
 function showToast(msg) { var t = document.createElement('div'); t.className = 'success-toast'; t.textContent = msg || 'สำเร็จ!'; document.body.appendChild(t); setTimeout(function() { if(t.remove) t.remove(); }, 3000); }
 function closeModal() { var modal = document.querySelector('.modal-overlay'); if (modal) modal.remove(); }
 function _nw() { return new Date().toISOString(); }
-function _td() { return new Date().toISOString().split('T')[0]; }
+// _td() ใช้ของ utils.js (โหลดไว้ด้านบนแล้ว) — เดิมนิยามซ้ำที่นี่และซ้ำอีกที่ด้านล่าง ทั้งสองตัวใช้
+// toISOString() ซึ่งให้ "วันนี้ตาม UTC" ไทยเป็น UTC+7 ช่วงเที่ยงคืนถึง 07:00 จึงได้เมื่อวาน
 function addD(iso, n) { var d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
 
 var STATUS_LIST = [
@@ -2628,7 +2629,7 @@ async function saveSheetPipelineChanges() {
 }
 
 // ========== DATE HELPER FUNCTIONS ==========
-function _td() { return new Date().toISOString().split('T')[0]; }
+// _td() มาจาก utils.js — อย่านิยามซ้ำที่นี่ ตัวที่นิยามทีหลังจะบังของจริงทั้งไฟล์
 function dTo(dateStr) {
   if (!dateStr) return 999;
   var today = _td();
