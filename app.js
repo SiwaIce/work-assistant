@@ -4033,7 +4033,7 @@ function loadHistoryData() {
           // กรองตามวันที่
           var timestamp = data.timestamp;
           if (timestamp && timestamp.toDate) {
-            var dateStr = timestamp.toDate().toISOString().split('T')[0];
+            var dateStr = _isoDay(timestamp.toDate());
             if (dateStr >= historyStartDate && dateStr <= historyEndDate) {
               allUpdates.push(data);
             }

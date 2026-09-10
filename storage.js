@@ -190,7 +190,7 @@ const ST = {
     return all.find(x => x.date === date) || { date, done: [] };
   },
   toggleRoutineCheck(routineId) {
-    const date = new Date().toISOString().split('T')[0];
+    const date = _td();
     let all = this.getAll('rtChecks');
     let rec = all.find(x => x.date === date);
     if (!rec) { rec = { date, done: [] }; all.push(rec); }
@@ -230,11 +230,11 @@ const ST = {
 
   // Backup
   getLastBackup() { return localStorage.getItem(this._keys.backupDate) || null; },
-  setLastBackup() { localStorage.setItem(this._keys.backupDate, new Date().toISOString().split('T')[0]); },
+  setLastBackup() { localStorage.setItem(this._keys.backupDate, _td()); },
   getDaysSinceBackup() {
     const last = this.getLastBackup();
     if (!last) return 999;
-    return Math.ceil((new Date(new Date().toISOString().split('T')[0]) - new Date(last)) / 86400000);
+    return Math.ceil((new Date(_td()) - new Date(last)) / 86400000);
   },
 
   // Storage Info
@@ -279,7 +279,7 @@ const ST = {
   },
   getLastContactDays(dealerId) {
     const last = this.getLastContactDate(dealerId);
-    return last ? Math.ceil((new Date(new Date().toISOString().split('T')[0]) - new Date(last)) / 86400000) : null;
+    return last ? Math.ceil((new Date(_td()) - new Date(last)) / 86400000) : null;
   },
   getLastVisitDate(dealerId) {
     const last = this.visitsByDealer(dealerId).find(v => v.mode === 'offline');
@@ -287,14 +287,14 @@ const ST = {
   },
   getLastVisitDays(dealerId) {
     const last = this.getLastVisitDate(dealerId);
-    return last ? Math.ceil((new Date(new Date().toISOString().split('T')[0]) - new Date(last)) / 86400000) : null;
+    return last ? Math.ceil((new Date(_td()) - new Date(last)) / 86400000) : null;
   },
 
   addDueDateHistory(taskId, oldDate, newDate, reason) {
     const task = this.getOne('tasks', taskId);
     if (!task) return;
     const history = task.dueDateHistory || [];
-    history.push({ oldDate: oldDate || '', newDate: newDate, reason: reason || 'ไม่ได้ระบุ', changedBy: 'Siwawong', changedAt: new Date().toISOString().split('T')[0] });
+    history.push({ oldDate: oldDate || '', newDate: newDate, reason: reason || 'ไม่ได้ระบุ', changedBy: 'Siwawong', changedAt: _td() });
     this.update('tasks', taskId, { dueDateHistory: history, updatedAt: new Date().toISOString() });
   },
 

@@ -2170,7 +2170,7 @@ function kpiAddLog(planId, categoryId) {
   var logs = getKpiQuarterLogs();
   logs.push({
     id: 'kpilog_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-    planId: planId, categoryId: categoryId, date: new Date().toISOString().split('T')[0],
+    planId: planId, categoryId: categoryId, date: _td(),
     note: note, done: false, createdAt: new Date().toISOString()
   });
   saveKpiQuarterLogs(logs);

@@ -1623,25 +1623,33 @@ function daysBetween(d1, d2) {
   return Math.ceil((new Date(d2) - new Date(d1)) / 864e5);
 }
 
+// บวก/ลบวันจากวันปฏิทิน — อยู่ในโลกของ "วันปฏิทิน" ล้วนๆ ไม่แตะ UTC เลย (ดู _isoDay ด้านบน)
+//
+// เดิมเขียนว่า new Date(iso) → setDate() → toISOString() ซึ่งเดินทางข้าม UTC ไปกลับ
+// "YYYY-MM-DD" ถูก parse เป็นเที่ยงคืน UTC (ไม่ใช่ท้องถิ่น) แล้ว setDate() ทำงานกับวันท้องถิ่น
+// ที่ UTC+7 บังเอิญหักล้างกันพอดีจึงยังไม่พัง แต่พังทันทีถ้าช่วงวันคร่อมการเปลี่ยน DST
+// (เวลาท้องถิ่นคงเดิมแต่ offset ขยับ 1 ชม. ดัน instant ข้ามเที่ยงคืน UTC) ไทยไม่มี DST จึงรอดมาตลอด
 function addD(iso, n) {
-  const d = new Date(iso);
+  var p = String(iso || '').split('-');
+  if (p.length !== 3) return iso;
+  var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  if (isNaN(d.getTime())) return iso;
   d.setDate(d.getDate() + n);
-  return d.toISOString().split('T')[0];
+  return _isoDay(d);
 }
 
 function getWeekRange(refDate) {
   const ref = refDate ? new Date(refDate) : new Date();
   const dow = ref.getDay();
   const diffS = dow === 0 ? 6 : dow - 1;
-  const ws = addD(ref.toISOString().split('T')[0], -diffS);
+  // dow มาจาก getDay() ซึ่งเป็นวันท้องถิ่น ถ้าฐานวันที่มาจาก toISOString() (วัน UTC) สองอย่างจะคนละวันกัน
+  // ช่วงเช้ามืดตามเวลาไทย ทำให้สัปดาห์เลื่อนไปทั้งสัปดาห์
+  const ws = addD(_isoDay(ref), -diffS);
   return { start: ws, end: addD(ws, 6) };
 }
 
-// ห้ามใช้ e.toISOString() กับวันที่ที่สร้างจาก local component (new Date(y,m,d)) — แปลงเป็น UTC ก่อนเสมอ
-// ทำให้วันที่ถอยหลัง 1 วันในโซนเวลา UTC+7 (เที่ยงคืนไทยกลายเป็นเย็นวันก่อนหน้าที่ UTC) — ใช้ getFullYear/getMonth/getDate แทน
-function _localISODate(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
+// ชื่อเดิมของ _isoDay — เก็บไว้ให้ที่เรียกอยู่แล้วยังทำงานได้ อย่าเพิ่มตัวที่สาม ใช้ _isoDay ในโค้ดใหม่
+function _localISODate(d) { return _isoDay(d); }
 
 function getMonthRange(refDate) {
   const d = refDate ? new Date(refDate) : new Date();
@@ -2608,7 +2616,7 @@ function exportToICS(summary, description, startDate, endDate, location, url) {
     var d = parseThaiDate(dateStr);
     if (!d) return '';
     if (isAllDay) {
-      return d.toISOString().split('T')[0].replace(/-/g, '');
+      return _isoDay(d).replace(/-/g, '');
     }
     return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   }

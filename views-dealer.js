@@ -3315,7 +3315,7 @@ function markDealerAuthorized(dealerId) {
   if (!d) return;
   if (!confirm('อัปเกรด "' + d.name + '" เป็น Level B และนับเป็น Dealer ใหม่ที่พัฒนาในไตรมาสนี้ ใช่ไหม?')) return;
   var cfg = getConfig();
-  var today = new Date().toISOString().split('T')[0];
+  var today = _td();
   var saleName = cfg.saleName || ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.displayName || CURRENT_USER.email) : '');
   ST.update('dealers', dealerId, { level: 'B', authorizedDate: today, authorizedBy: saleName });
   if (typeof addAuditLog === 'function') addAuditLog('mark_dealer_authorized', 'dealer', dealerId, d.name, dealerId, d.name, { newLevel: 'B' });

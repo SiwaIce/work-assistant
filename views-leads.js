@@ -988,11 +988,11 @@ function _ldAnalyticsHtml(form, subs, clicks) {
     .concat(form.companyFields  || [])
     .filter(function(f) { return f.type !== 'section'; });
 
-  var todayStr = new Date().toISOString().split('T')[0];
+  var todayStr = _td();
   var todayCnt = subs.filter(function(s) {
     if (!s.createdAt) return false;
     var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-    return d.toISOString().split('T')[0] === todayStr;
+    return _isoDay(d) === todayStr;
   }).length;
   var pCnt = subs.filter(function(s) { return s.contactType === 'personal'; }).length;
   var cCnt = subs.filter(function(s) { return s.contactType === 'company'; }).length;
@@ -1198,12 +1198,12 @@ function _ldDayData(subs, days) {
   for (var i = days - 1; i >= 0; i--) {
     var d   = new Date();
     d.setDate(d.getDate() - i);
-    var key = d.toISOString().split('T')[0];
+    var key = _isoDay(d);
     var lbl = d.getDate() + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
     var cnt = subs.filter(function(s) {
       if (!s.createdAt) return false;
       var sd = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-      return sd.toISOString().split('T')[0] === key;
+      return _isoDay(sd) === key;
     }).length;
     result.push({lbl: lbl, cnt: cnt});
   }
@@ -1364,11 +1364,11 @@ async function aiAnalyzeLeads(btn) {
     return f.label + ': ' + vals.length + ' คำตอบ';
   }).filter(Boolean).join('\n');
 
-  var todayStr = new Date().toISOString().split('T')[0];
+  var todayStr = _td();
   var todayCnt = subs.filter(function(s) {
     if (!s.createdAt) return false;
     var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-    return d.toISOString().split('T')[0] === todayStr;
+    return _isoDay(d) === todayStr;
   }).length;
 
   var prompt = 'คุณเป็นนักวิเคราะห์การตลาด ช่วยวิเคราะห์ข้อมูล Lead Form ต่อไปนี้และให้คำแนะนำเป็นภาษาไทย:\n\n' +

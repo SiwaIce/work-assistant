@@ -1416,7 +1416,7 @@ function closeModal() { var modal = document.querySelector('.modal-overlay'); if
 function _nw() { return new Date().toISOString(); }
 // _td() ใช้ของ utils.js (โหลดไว้ด้านบนแล้ว) — เดิมนิยามซ้ำที่นี่และซ้ำอีกที่ด้านล่าง ทั้งสองตัวใช้
 // toISOString() ซึ่งให้ "วันนี้ตาม UTC" ไทยเป็น UTC+7 ช่วงเที่ยงคืนถึง 07:00 จึงได้เมื่อวาน
-function addD(iso, n) { var d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+// addD() ก็ใช้ของ utils.js เช่นกัน — เดิมนิยามซ้ำที่นี่ด้วยเวอร์ชันที่เดินทางข้าม UTC ไปกลับ
 
 var STATUS_LIST = [
   { id: 'initial', name: '🔍 Initial', color: '#eab308' },
@@ -4950,7 +4950,7 @@ async function renderComplianceTabContent(dealer) {
   var _activeDeals = pipelines.filter(function(p) { return !cvPipeIsLost(p) && p._status !== 'rejected'; });
   var _totalPipeVal = 0;
   for (var _qi = 0; _qi < _activeDeals.length; _qi++) _totalPipeVal += (_activeDeals[_qi].forecastAmount || 0);
-  var _today = new Date().toISOString().split('T')[0];
+  var _today = _td();
   var _nextBid = null;
   for (var _qi = 0; _qi < _activeDeals.length; _qi++) { var _bd = _activeDeals[_qi].biddingDate; if (_bd && _bd >= _today && (!_nextBid || _bd < _nextBid)) _nextBid = _bd; }
   var _nextBidTxt = _nextBid ? fD(_nextBid) : '-';
@@ -5691,7 +5691,7 @@ function getNewDemoPolicyAlerts() {
         productName: policy.productName, 
         releaseDate: policy.releaseDate, 
         orderWithinDays: policy.orderWithinDays, 
-        deadline: deadline.toISOString().split('T')[0], 
+        deadline: _isoDay(deadline), 
         daysLeft: daysLeft, 
         isUrgent: isUrgent, 
         isOverdue: isOverdue, 
@@ -5796,7 +5796,7 @@ function getNewDemoPolicyAlerts() {
     if (daysLeft > -30) {
       var isUrgent = daysLeft <= 30 && daysLeft > 0;
       var isOverdue = daysLeft < 0;
-      alerts.push({ id: policy.id || i, active: true, productName: policy.productName, releaseDate: policy.releaseDate, orderWithinDays: policy.orderWithinDays, deadline: deadline.toISOString().split('T')[0], daysLeft: daysLeft, isUrgent: isUrgent, isOverdue: isOverdue, message: policy.alertMessage });
+      alerts.push({ id: policy.id || i, active: true, productName: policy.productName, releaseDate: policy.releaseDate, orderWithinDays: policy.orderWithinDays, deadline: _isoDay(deadline), daysLeft: daysLeft, isUrgent: isUrgent, isOverdue: isOverdue, message: policy.alertMessage });
     }
   }
   return alerts;
