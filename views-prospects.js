@@ -502,7 +502,7 @@ function addProspectNote(id) {
   var p = list.find(function(x) { return x.id === id; });
   if (!p) return;
   if (!p.history) p.history = [];
-  p.history.push({ stage: '__note__', note: note, date: new Date().toISOString().slice(0, 10) });
+  p.history.push({ stage: '__note__', note: note, date: _td() });
   saveProspects(list);
   toast('💬 บันทึกแล้ว');
   showProspectDetailM(id);

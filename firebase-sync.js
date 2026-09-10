@@ -1063,7 +1063,7 @@ function exportFullBackup() {
   var blob = new Blob([JSON.stringify(allData, null, 2)], {type: 'application/json'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'full-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.download = 'full-backup-' + _td() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

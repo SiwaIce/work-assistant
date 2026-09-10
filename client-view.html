@@ -3180,7 +3180,7 @@ function submitPipelineUpdate(pipeId) {
     shipmentDate: newShipmentDate,
     // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น)
     djiCrmRegistered: newProjectId ? true : (document.getElementById('editProjCrm') ? document.getElementById('editProjCrm').checked : false),
-    djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : '') || (newProjectId ? new Date().toISOString().slice(0,10) : ''),
+    djiCrmDate: convertToISODate(document.getElementById('editProjCrmDate') ? document.getElementById('editProjCrmDate').value : '') || (newProjectId ? _td() : ''),
     hasCompetitor: document.getElementById('editProjComp') ? document.getElementById('editProjComp').checked : false,
     tor: document.getElementById('editProjTor') ? document.getElementById('editProjTor').value.trim() : '',
     nextAction: document.getElementById('editProjNextAction') ? document.getElementById('editProjNextAction').value.trim() : '',
@@ -3350,7 +3350,7 @@ function submitNewProject() {
     shipmentDate: shipmentDate,
     // มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (Project ID ได้มาจากตอนลงทะเบียนเท่านั้น)
     djiCrmRegistered: newProjectId ? true : (document.getElementById('newProjCrm') ? document.getElementById('newProjCrm').checked : false),
-    djiCrmDate: convertToISODate(document.getElementById('newProjCrmDate') ? document.getElementById('newProjCrmDate').value : '') || (newProjectId ? new Date().toISOString().slice(0,10) : ''),
+    djiCrmDate: convertToISODate(document.getElementById('newProjCrmDate') ? document.getElementById('newProjCrmDate').value : '') || (newProjectId ? _td() : ''),
     hasCompetitor: document.getElementById('newProjComp') ? document.getElementById('newProjComp').checked : false,
     budgetFiscalYear: document.getElementById('newProjFY') && document.getElementById('newProjFY').value ? parseInt(document.getElementById('newProjFY').value, 10) : null,
     dealerId: dealerId,
@@ -4365,7 +4365,7 @@ function renderDemoTabContent() {
   if (!shown.length) {
     h += '<div style="text-align:center;padding:30px;color:var(--text2)">ยังไม่มีเครื่องในหมวดนี้</div>';
   } else {
-    var today = new Date().toISOString().slice(0, 10);
+    var today = _td();
     shown.forEach(function(u) {
       var busyNow = (u.busyRanges || []).some(function(r) { return r.start <= today && today <= r.end; });
       h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">';

@@ -216,6 +216,9 @@ select.fi option{background:var(--bg2)}
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <script>
+// วันปฏิทินต้องอ่านจากเวลาท้องถิ่น — toISOString() แปลงเป็น UTC ก่อน ไทยเป็น UTC+7 ช่วงเที่ยงคืนถึง 07:00
+// จึงได้ "เมื่อวาน" หน้านี้เป็นหน้าเดี่ยวไม่ได้โหลด utils.js จึงต้องมีตัวช่วยของตัวเอง (ตัวเดียวกับ utils.js/_td)
+function _td(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 firebase.initializeApp({
   apiKey:"AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
   authDomain:"work-assistant-9e024.firebaseapp.com",
@@ -422,7 +425,7 @@ function updateDtabBar(){
 
 // ── HOME ───────────────────────────────────────────────
 function renderHome(el){
-  var today=new Date().toISOString().slice(0,10);
+  var today=_td();
   var activePipe=pipeline.filter(function(p){return['lost','delivered'].indexOf(p.status)===-1;});
   var totalAmt=activePipe.reduce(function(s,p){return s+(Number(p.forecastAmount)||0);},0);
   var pending=tasks.filter(function(t){return!t.done;});
@@ -532,7 +535,7 @@ function exportSalesDealersExcel(){
   var ws=XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=[{wch:22},{wch:35},{wch:14},{wch:8},{wch:16},{wch:35},{wch:20},{wch:14},{wch:28},{wch:12},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,'Dealers');
-  XLSX.writeFile(wb,'dealers-'+SALES_ID+'-'+new Date().toISOString().slice(0,10)+'.xlsx');
+  XLSX.writeFile(wb,'dealers-'+SALES_ID+'-'+_td()+'.xlsx');
   showToast('📊 Export '+dealers.length+' Dealer สำเร็จ');
 }
 
@@ -798,7 +801,7 @@ function rdForecast(el){
 
 // TAB: งาน
 function rdTasks(el){
-  var today=new Date().toISOString().slice(0,10);
+  var today=_td();
   var dt=tasks.filter(function(t){return t.dealerId===currentDealer.id;});
   var pend=dt.filter(function(t){return!t.done;}),done=dt.filter(function(t){return t.done;});
   var h=dHero(currentDealer);
@@ -888,7 +891,7 @@ function renderGlobalPipeline(el){
 
 // ── GLOBAL TASKS ───────────────────────────────────────
 function renderGlobalTasks(el){
-  var today=new Date().toISOString().slice(0,10);
+  var today=_td();
   var pend=tasks.filter(function(t){return!t.done;});
   var done=tasks.filter(function(t){return t.done;});
   var ov=pend.filter(function(t){return t.dueDate&&t.dueDate<today;});
@@ -1015,7 +1018,7 @@ function showEditVisit(id){
 }
 
 function buildVisitForm(v){
-  var today=new Date().toISOString().slice(0,10);
+  var today=_td();
   var typeOpts=VISIT_TYPES.map(function(t){return'<option value="'+t+'"'+(v&&v.type===t?' selected':'')+'>'+t+'</option>';}).join('');
   var topicHtml=VISIT_TOPICS.map(function(t){
     var ck=v&&v.topics&&v.topics.indexOf(t)>=0?' checked':'';

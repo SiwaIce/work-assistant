@@ -1618,9 +1618,28 @@ function dTo(ds) {
   return Math.ceil((new Date(d) - new Date(_td())) / 864e5);
 }
 
+// จำนวนวันปฏิทินระหว่างสองวัน — เทียบ "วัน" ไม่ใช่ "เวลา" จึงได้จำนวนเต็มเสมอ ไม่มีเศษให้ปัด
+//
+// เดิมเอา Date สองตัวมาลบกันแล้ว Math.ceil ซึ่งมีปัญหา 2 อย่าง:
+//   1. ที่เรียกบางแห่งส่ง timestamp เต็ม (เช่น lastActivityDate) ปนกับที่ส่งวันปฏิทิน ผลลัพธ์เลยมีเศษวัน
+//      แล้วโดนปัดขึ้นเป็นวันเต็มเสมอ — ค้าง 9 วันกับ 6 ชั่วโมง นับเป็น 10
+//   2. "2026-8-31" (ไม่เติมศูนย์) ถูก parse เป็นเที่ยงคืน "ท้องถิ่น" ส่วน "2026-08-31" เป็นเที่ยงคืน UTC
+//      สองแบบนี้ห่างกัน 7 ชม. ที่ไทย พอเจอ Math.ceil ก็เพี้ยนไป 1 วัน
+// ตัวนี้แปลงทั้งสองฝั่งเป็น "เลขวันปฏิทิน" ก่อนเสมอ — สตริงวันที่อ่านตามตัวเลขตรงๆ ไม่ผ่านโซนเวลา
+// ส่วน timestamp เต็มใช้วันปฏิทิน "ตามเวลาท้องถิ่น" ของเวลานั้น (ดู _isoDay)
+function _dayNum(v) {
+  if (!v) return null;
+  var s = String(v);
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5;
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5;
+}
 function daysBetween(d1, d2) {
-  if (!d1 || !d2) return 0;
-  return Math.ceil((new Date(d2) - new Date(d1)) / 864e5);
+  var a = _dayNum(d1), b = _dayNum(d2);
+  if (a === null || b === null) return 0;
+  return b - a;
 }
 
 // บวก/ลบวันจากวันปฏิทิน — อยู่ในโลกของ "วันปฏิทิน" ล้วนๆ ไม่แตะ UTC เลย (ดู _isoDay ด้านบน)

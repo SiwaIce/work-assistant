@@ -324,10 +324,10 @@ function showAnnModal(annId) {
   // Dates
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">วันเผยแพร่</label>';
-  var pub = ann && ann.publishAt ? (ann.publishAt.seconds ? new Date(ann.publishAt.seconds*1000) : new Date(ann.publishAt)).toISOString().slice(0,10) : '';
+  var pub = ann && ann.publishAt ? _isoDay(ann.publishAt.seconds ? new Date(ann.publishAt.seconds*1000) : new Date(ann.publishAt)) : '';
   h += '<input type="date" id="annPublishAt" class="inp" value="' + pub + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
   h += '<div><label style="font-size:11px;color:var(--text2);font-weight:600">หมดอายุ</label>';
-  var exp = ann && ann.expireAt ? (ann.expireAt.seconds ? new Date(ann.expireAt.seconds*1000) : new Date(ann.expireAt)).toISOString().slice(0,10) : '';
+  var exp = ann && ann.expireAt ? _isoDay(ann.expireAt.seconds ? new Date(ann.expireAt.seconds*1000) : new Date(ann.expireAt)) : '';
   h += '<input type="date" id="annExpireAt" class="inp" value="' + exp + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div></div>';
 
   // Changelog (edit only)
