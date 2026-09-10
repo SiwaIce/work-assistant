@@ -93,6 +93,15 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-slip-list { margin:0 0 9px; padding-left:20px; font-size:12.5px; line-height:1.9; }
 .rt-viareq { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; }
 .rt-guess { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; vertical-align:middle; }
+.qn-slip { border:1px solid var(--border); border-radius:11px; padding:10px 12px; margin-bottom:10px; background:var(--surface); }
+.qn-slip.done { opacity:.6; }
+.qn-slip-hd { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
+.qn-slip-hd b { font-size:13.5px; }
+.qn-units { margin:6px 0 9px; }
+.qn-units summary { font-size:11.5px; color:var(--text2); cursor:pointer; }
+.qn-units ul { margin:7px 0 0; padding-left:20px; font-size:12.5px; line-height:2.1; }
+.qn-tick { color:var(--ok, #10b981); font-size:11.5px; font-weight:600; }
+.filter-chip-x { cursor:pointer; }
 .rt-guess-note { color:var(--warn); }
 .rt-warn { font-size:12px; line-height:1.65; color:var(--warn); background:var(--warn-soft); border:1px solid var(--warn);
   border-radius:9px; padding:9px 11px; margin-bottom:11px; }
@@ -910,6 +919,25 @@ function noNameLoans() {
   return activeReturns().filter(function(x) { return !x.borrower.trim() && !x.approver.trim(); })
     .sort(function(a, b) { return a.end.localeCompare(b.end); });
 }
+// ปุ่มในแถบ "วันนี้ต้องทำอะไร" ต้องพาไปเห็น "ของที่นับมา" จริงๆ ไม่ใช่แค่สลับแท็บแล้วปล่อยให้ไปหาเอง
+// เดิมทุกปุ่มเรียก staffTab() เฉยๆ กด "ซ่อนจากลูกค้า 13 เครื่อง" แล้วเจอ 71 เครื่องเหมือนเดิม
+function tgUnits(mode) {
+  unitReadyFilter = mode;
+  unitCatFilter = 'all';
+  unitSearch = '';
+  var s = document.getElementById('unitSearch'); if (s) s.value = '';
+  staffTab('units');
+  renderUnitsTable();
+  var el = document.getElementById('tab-units');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function tgReturn(view) {
+  if (view) rtView = view;
+  staffTab('return');
+  renderReturnTab();
+  var el = document.getElementById('tab-return');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function renderTriage() {
   var el = document.getElementById('triageBar');
   if (!el) return;
@@ -929,7 +957,7 @@ function renderTriage() {
       t: 'ต้องตามคืน <b>' + overdue.length + '</b> เครื่อง',
       s: 'ค้างนานสุด ' + daysBetween(w.end, today) + ' วัน · ' + esc((wu && (wu.model || wu.name)) || '') +
          (wu && wu.rentalDbNo ? ' เช่า ' + esc(wu.rentalDbNo) : ''),
-      go: '<button class="tg-go" onclick="staffTab(\'return\')">ไปตามคืน →</button>' });
+      go: '<button class="tg-go" onclick="tgReturn(\'slip\')">ไปตามคืน →</button>' });
   }
   if (noName.length) {
     var nnLate = noName.filter(function(x) { return x.end < today; }).length;
@@ -950,7 +978,7 @@ function renderTriage() {
   if (soon.length) {
     rows.push({ sev: 60, key: 'ใกล้ครบ', n: soon.length, cls: 'warn', ic: '🟡',
       t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง', s: 'ภายใน 2 วัน',
-      go: '<button class="tg-go" onclick="staffTab(\'return\')">ดูรายการ →</button>' });
+      go: '<button class="tg-go" onclick="tgReturn()">ดูรายการ →</button>' });
   }
   // เอกสารไม่ครบ — ข้อมูลที่มีอยู่แล้วแต่ไม่เคยมีที่แสดง ถ้าบริษัทบังคับต้องมีก่อนปล่อยยืม อันนี้บล็อกทุกใบ
   var noDoc = UNITS.filter(function(u) {
@@ -960,7 +988,7 @@ function renderTriage() {
     rows.push({ sev: 20, key: 'เอกสารไม่ครบ', n: noDoc, cls: 'warn', ic: '📄',
       t: 'เอกสารไม่ครบ <b>' + noDoc + '</b> / ' + UNITS.length + ' เครื่อง',
       s: 'กสทช. · ประกันภัยโดรน · CAAT — ดูรายตัวได้ที่การ์ดแต่ละเครื่อง (กด “ดูข้อมูลเพิ่ม”)',
-      go: '<button class="tg-go" onclick="staffTab(\'units\')">ไปรายการเครื่อง →</button>' });
+      go: '<button class="tg-go" onclick="tgUnits(\'nodoc\')">ดูเฉพาะที่ไม่ครบ →</button>' });
   }
   // ซ่อนจากลูกค้า — ไม่ใช่ปัญหา แต่ให้เห็นว่าตั้งไว้แบบนี้จริง ไม่ใช่ลืมติ๊ก
   var hidden = UNITS.filter(function(u) { return u.customerVisible === false; }).length;
@@ -968,7 +996,7 @@ function renderTriage() {
     rows.push({ sev: 10, key: 'ซ่อนจากลูกค้า', n: hidden, cls: 'info', ic: '🙈',
       t: 'ซ่อนจากลูกค้าอยู่ <b>' + hidden + '</b> เครื่อง',
       s: 'ตั้งค่าไว้ที่แอปหลัก — แสดงไว้ให้รู้ว่าตั้งใจซ่อน ไม่ใช่ลืม',
-      go: '<button class="tg-go" onclick="staffTab(\'units\')">ตรวจดู →</button>' });
+      go: '<button class="tg-go" onclick="tgUnits(\'hidden\')">ดูเฉพาะที่ซ่อน →</button>' });
   }
   rows.sort(function(a, b) { return b.sev - a.sev; });
 
@@ -1001,56 +1029,93 @@ function renderTriage() {
 //
 // ⚠️ ใบพวกนี้มาจาก busyRanges = ใบยืมที่คีย์ในแอปหลัก หน้านี้ไม่มี doc ให้เขียนตรงๆ จึงส่งเข้าคิว
 // publicDemoEdits เหมือนการแก้ข้อมูลเครื่องอย่างอื่น แล้วรอแอปหลักกด "รับเข้า"
+// กรอกชื่อย้อนหลัง — กรอก "ตามใบจอง" ไม่ใช่ทีละเครื่อง
+//
+// ผู้ยืมกับผู้คีย์เบิกเป็นของ "ใบ" ไม่ใช่ของเครื่อง ใบหนึ่งมี 13 เครื่องก็ชื่อเดียวกันทั้ง 13
+// เดิมฟอร์มไล่ทีละเครื่อง 35 รอบ ทั้งที่ของจริงมีแค่ 10 ใบ — พิมพ์ชื่อเดิมซ้ำ 13 ครั้งต่อใบ
+function _qnGroups(list) {
+  var groups = {}, order = [];
+  list.forEach(function(x) {
+    var k = _rtSlipKey(x);
+    if (!groups[k]) { groups[k] = { key: k, jobNo: String(x.jobNo || '').trim(), list: [], end: x.end }; order.push(k); }
+    groups[k].list.push(x);
+    if (x.end < groups[k].end) groups[k].end = x.end;
+  });
+  order.sort(function(a, b) { return groups[a].end.localeCompare(groups[b].end); });
+  return order.map(function(k) { return groups[k]; });
+}
+function _qnGroupUnits(key) {
+  return noNameLoans().filter(function(x) { return _rtSlipKey(x) === key; })
+    .map(function(x) { return UNITS.filter(function(a) { return a.id === x.unitId; })[0]; })
+    .filter(Boolean);
+}
 function _quickNamesHtml(list) {
-  var h = '<div class="qn"><div class="qn-hd">กรอกชื่อย้อนหลัง ' + list.length + ' ใบ</div>' +
+  var groups = _qnGroups(list), today = _td();
+  var h = '<div class="qn"><div class="qn-hd">กรอกชื่อย้อนหลัง ' + groups.length + ' ใบ (' + list.length + ' เครื่อง)</div>' +
     '<div class="qn-note">⚠️ ใบเหล่านี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ที่กรอกจะเข้าคิวไว้ ' +
     'รอเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะลงถาวร</div>';
-  h += '<div class="field" style="margin:10px 0 12px"><label>✍️ คนกรอก (ใส่ครั้งเดียว ใช้ได้ทุกแถว) *</label>' +
+  h += '<div class="field" style="margin:10px 0 12px"><label>✍️ คนกรอก (ใส่ครั้งเดียว ใช้ได้ทุกใบ) *</label>' +
     '<input type="text" id="qnBy" list="qnKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('qnKeyerList') + '</div>';
-  list.forEach(function(x) {
-    var u = UNITS.filter(function(a) { return a.id === x.unitId; })[0];
-    if (!u) return;
-    var p = _scModelParts(u);
-    var pend = PENDING_EDITS[u.id];
-    var done = pend && pend.fields && (pend.fields.borrower || pend.fields.keyedBy);
-    h += '<div class="qn-row' + (done ? ' done' : '') + '">';
-    h += '<div class="qn-nm"><b>' + esc(p.main) + '</b>' +
-      (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
-      '<div class="qn-sub">กำหนดคืน ' + _scD(x.end) +
-      (x.end < _td() ? ' · <b style="color:var(--bad)">เลยมาแล้ว ' + daysBetween(x.end, _td()) + ' วัน</b>'
-                     : ' · ยังไม่ถึงกำหนด') + '</div></div>';
-    if (done) {
-      h += '<div class="qn-done">✅ เข้าคิวแล้ว — ' + esc(pend.fields.borrower || '') +
-        (pend.fields.keyedBy ? ' / ' + esc(pend.fields.keyedBy) : '') + '</div>';
+
+  groups.forEach(function(g, gi) {
+    var units = g.list.map(function(x) { return UNITS.filter(function(a) { return a.id === x.unitId; })[0]; }).filter(Boolean);
+    if (!units.length) return;
+    var doneN = units.filter(function(u) {
+      var p = PENDING_EDITS[u.id];
+      return p && p.fields && (p.fields.borrower || p.fields.keyedBy);
+    }).length;
+    var late = g.end < today;
+    var guess = g.key.charAt(0) !== 'J';
+    h += '<div class="qn-slip' + (doneN === units.length ? ' done' : '') + '">';
+    h += '<div class="qn-slip-hd"><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
+      (guess && units.length > 1 ? ' <span class="rt-guess" title="ไม่มีเลขใบจอง จึงเดาจากช่วงวันที่ตรงกัน">เดากลุ่ม</span>' : '') +
+      '<span class="qn-sub">' + units.length + ' เครื่อง · กำหนดคืน ' + _scD(g.end) +
+      (late ? ' · <b style="color:var(--bad)">เลยมาแล้ว ' + daysBetween(g.end, today) + ' วัน</b>' : '') + '</span></div>';
+    h += '<details class="qn-units"><summary>ดูเครื่องในใบนี้ (' + units.length + ')</summary><ul>' +
+      units.map(function(u) {
+        var p = PENDING_EDITS[u.id], d = p && p.fields && (p.fields.borrower || p.fields.keyedBy);
+        return '<li>' + esc(_scModelParts(u).main) +
+          (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+          (d ? ' <span class="qn-tick">✅ ' + esc(p.fields.borrower || p.fields.keyedBy) + '</span>' : '') +
+          ' <button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitEditM(\'' + u.id + '\')">แก้ตัวนี้</button></li>';
+      }).join('') + '</ul></details>';
+    if (doneN === units.length) {
+      h += '<div class="qn-done">✅ เข้าคิวครบทั้งใบแล้ว</div>';
     } else {
       h += '<div class="qn-in">' +
-        '<input type="text" id="qnB_' + u.id + '" placeholder="ผู้ยืม (บริษัท/ลูกค้า)" list="qnBorrowerList" autocomplete="off">' +
-        '<input type="text" id="qnK_' + u.id + '" list="qnKeyerList" placeholder="ผู้คีย์เบิก (ทีมงาน)" autocomplete="off">' +
-        '<button class="btn btn-primary btn-sm" onclick="saveQuickName(\'' + u.id + '\')">บันทึก</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitEditM(\'' + u.id + '\')" title="เปิดฟอร์มเต็ม">แก้เต็ม</button>' +
+        '<input type="text" id="qnB_' + gi + '" placeholder="ผู้ยืม (บริษัท/ลูกค้า)" list="qnBorrowerList" autocomplete="off">' +
+        '<input type="text" id="qnK_' + gi + '" list="qnKeyerList" placeholder="ผู้คีย์เบิก (ทีมงาน)" autocomplete="off">' +
+        '<button class="btn btn-primary btn-sm" onclick="saveQuickNameSlip(\'' + _scEsq(g.key) + '\',' + gi + ')">บันทึกทั้งใบ (' +
+        (units.length - doneN) + ')</button>' +
         '</div>';
     }
     h += '</div>';
   });
   return h + scBorrowerDatalist('qnBorrowerList') + '</div>';
 }
-function saveQuickName(unitId) {
+function saveQuickNameSlip(key, gi) {
   var by = (document.getElementById('qnBy').value || '').trim();
-  var b = (document.getElementById('qnB_' + unitId).value || '').trim();
-  var k = (document.getElementById('qnK_' + unitId).value || '').trim();
+  var b = (document.getElementById('qnB_' + gi).value || '').trim();
+  var k = (document.getElementById('qnK_' + gi).value || '').trim();
   if (!by) { alert('ใส่ชื่อคนกรอกก่อนนะครับ — แอปหลักจะได้รู้ว่าใครกรอก'); return; }
   if (!b && !k) { alert('กรอกอย่างน้อยหนึ่งช่อง (ผู้ยืม หรือ ผู้คีย์เบิก)'); return; }
+  var units = _qnGroupUnits(key);
+  if (!units.length) { alert('ไม่พบเครื่องในใบนี้แล้ว — ลองรีเฟรช'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
-  var u = UNITS.filter(function(a) { return a.id === unitId; })[0] || {};
   var fields = {};
   if (b) fields.borrower = b;
   if (k) fields.keyedBy = k;
-  db.collection('publicDemoEdits').doc(unitId).set({
-    unitId: unitId, fields: fields, editedBy: by,
-    editedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
-  }, { merge: true }).then(function() {
-    toastMock('💾 เข้าคิวแล้ว — รอแอปหลักกดรับเข้า');
+  // ทั้งใบเขียนทีเดียวใน batch เดียว จะได้ไม่เหลือใบที่ชื่อลงครึ่งเดียว
+  var batch = db.batch();
+  units.forEach(function(u) {
+    batch.set(db.collection('publicDemoEdits').doc(u.id), {
+      unitId: u.id, fields: fields, editedBy: by,
+      editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+    }, { merge: true });
+  });
+  batch.commit().then(function() {
+    toastMock('💾 เข้าคิวแล้ว ' + units.length + ' เครื่อง — รอแอปหลักกดรับเข้า');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -1878,6 +1943,15 @@ function renderUnitsTable() {
 
   // ชิปสโคป — โชว์เฉพาะตอนมีเครื่องที่ยังไม่ลงทะเบียนจริงๆ ไม่งั้นเกะกะเปล่าๆ
   var chips = '';
+  // ตัวกรองที่มาจากการกดปุ่มในแถบ "วันนี้ต้องทำอะไร" — ต้องบอกให้ชัดว่ากำลังกรองอยู่ ไม่งั้นคนกดจะ
+  // งงว่าทำไมเครื่องหายไป (เดิมปุ่มพวกนั้นแค่สลับแท็บเฉยๆ ไม่ได้กรองอะไรเลย จึงดู "กดแล้วไม่ขึ้นตามที่กด")
+  var SPECIAL = { nodoc: '📄 เฉพาะเครื่องที่เอกสารไม่ครบ', hidden: '🙈 เฉพาะเครื่องที่ซ่อนจากลูกค้า' };
+  if (SPECIAL[unitReadyFilter]) {
+    chips += '<span class="filter-chip on filter-chip-x" onclick="setUnitReady(\'ready\')" title="ล้างตัวกรองนี้">' +
+      SPECIAL[unitReadyFilter] + ' (' + (unitReadyFilter === 'nodoc'
+        ? UNITS.filter(function(u) { return !(u.nbtcRegistered && u.droneInsurance && u.caatRegistered); }).length
+        : UNITS.filter(function(u) { return u.customerVisible === false; }).length) + ') ✕</span>';
+  }
   if (pendingCount) {
     chips += '<span class="filter-chip' + (unitReadyFilter === 'ready' ? ' on' : '') + '" onclick="setUnitReady(\'ready\')">✅ พร้อมให้ยืม (' + readyCount + ')</span>';
     chips += '<span class="filter-chip' + (unitReadyFilter === 'pending' ? ' on' : '') + '" onclick="setUnitReady(\'pending\')">📋 ยังไม่ลงทะเบียนเช่า (' + pendingCount + ')</span>';
@@ -1887,6 +1961,8 @@ function renderUnitsTable() {
 
   var scoped = unitReadyFilter === 'pending' ? UNITS.filter(function(u) { return !_unitHasRental(u); })
              : unitReadyFilter === 'all' ? UNITS
+             : unitReadyFilter === 'nodoc' ? UNITS.filter(function(u) { return !(u.nbtcRegistered && u.droneInsurance && u.caatRegistered); })
+             : unitReadyFilter === 'hidden' ? UNITS.filter(function(u) { return u.customerVisible === false; })
              : UNITS.filter(_unitHasRental);
 
   // แท็บหมวดหมู่ นับจากสโคปปัจจุบัน
