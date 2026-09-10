@@ -2877,6 +2877,15 @@ function saveDemoItems(list) {
 // SKU) หลุดไปอยู่ใน path ที่อ่านได้โดยไม่ login เลย (เหมือน demoCatalogPublic เดิม) ความเสี่ยงเดียวกับที่ยอมรับ
 // อยู่แล้วทั้งระบบ (permission เปิดกว้าง รอผู้ใช้ปิดเองทีหลัง) — demo-request.html (ฝั่งลูกค้า) จะไม่โชว์ฟิลด์
 // พวกนี้ แต่ตัวเอกสารเองอ่านได้ถ้ารู้ path ตรงๆ
+// วันที่ปฏิทินต้องอ่านจากส่วนประกอบ "เวลาท้องถิ่น" ห้ามใช้ toISOString()
+//
+// ftParseDate คืน new Date(y, mo, dd) = เที่ยงคืนตามเวลาเครื่อง (ไทย = UTC+7) พอเรียก toISOString()
+// จะกลายเป็น 17:00 ของ "เมื่อวาน" ในเวลา UTC แล้ว .slice(0,10) จึงได้วันที่ย้อนหลังไป 1 วันเสมอ
+// อาการที่เจอจริง 2026-09-10: ใบยืมที่คีย์ไว้ 31 ส.ค. ถูก publish ออกไปเป็น 30 ส.ค. ครบทั้ง 54 ใบ
+// ทำให้หน้า demo-staff กับหน้าลูกค้าแสดงวันเริ่ม/วันคืนเร็วไป 1 วัน และนับเลยกำหนดเกินจริง 1 วัน
+function _demoIsoLocal(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 function publishDemoCatalog() {
   // ต้องล็อกอินอยู่เท่านั้นถึงจะเผยแพร่ได้ — เซสชันที่ไม่ได้ล็อกอิน (โหมด Offline / เครื่องที่ยังไม่ sync)
   // ไม่มีข้อมูลตัวจริงอยู่ในมือ localStorage อาจว่างเปล่าหรือเป็นข้อมูลทดสอบ ถ้าปล่อยให้เขียนได้จะไป
@@ -2893,8 +2902,8 @@ function publishDemoCatalog() {
         .map(function(l) {
           var s = ftParseDate(l.lentDate), e = ftParseDate(l.returnDate) || s;
           return {
-            start: s ? s.toISOString().slice(0, 10) : l.lentDate,
-            end: e ? e.toISOString().slice(0, 10) : (l.returnDate || l.lentDate),
+            start: s ? _demoIsoLocal(s) : l.lentDate,
+            end: e ? _demoIsoLocal(e) : (l.returnDate || l.lentDate),
             borrower: l.borrower || '', purpose: l.purpose || '',
             // publish เป็นชื่อ approver เพื่อให้ตรงกับที่ demo-staff.html ใช้อยู่แล้ว
             approver: l.keyedBy || l.approver || '',
@@ -3271,11 +3280,14 @@ var _DEMO_EDIT_LABELS = {
   droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ',
   // สองช่องนี้เป็นข้อมูลของ "ใบยืม" ไม่ใช่ของตัวเครื่อง — เปิดให้แก้จาก demo-staff เพื่อเก็บตกใบเก่าที่
   // คีย์ไว้ตั้งแต่ก่อนระบบบังคับกรอกผู้คีย์ ซึ่งตอนนี้ไม่มีชื่อใครเลยจึงตามของคืนไม่ได้
-  borrower: 'ผู้ยืม', keyedBy: 'ผู้คีย์เบิก'
+  borrower: 'ผู้ยืม', keyedBy: 'ผู้คีย์เบิก',
+  // เลขใบจองมาจากระบบคลัง (โปรแกรมภายนอก) — demo-staff นำเข้าไฟล์ "เครื่องเช่า" แล้วส่งมาเป็นคำขอ
+  // จับคู่ด้วยเลขเครื่องเช่า ใบเก่าที่คีย์ไว้ก่อนมีช่องนี้จึงเติมย้อนหลังได้โดยไม่ต้องพิมพ์ทีละใบ
+  jobNo: 'เลขที่ใบจอง'
 };
 // ฟิลด์ที่ต้องเขียนลงใบยืมที่ยังไม่คืนด้วย ไม่ใช่แค่ตัวเครื่อง — เพราะ busyRanges ที่ publish ไปให้
 // demo-staff/ลูกค้า สร้างจาก "ใบยืม" ถ้าเขียนแต่ตัวเครื่อง ชื่อจะยังหายอยู่เหมือนเดิมทุกที่
-var _DEMO_EDIT_LOAN_FIELDS = { borrower: 1, keyedBy: 1 };
+var _DEMO_EDIT_LOAN_FIELDS = { borrower: 1, keyedBy: 1, jobNo: 1 };
 var _demoEditsFetchedAt = 0;
 function fetchDemoStaffEdits(force) {
   if (typeof db === 'undefined') return;
@@ -3379,7 +3391,9 @@ function _applyDemoEditsLocal(ids) {
     var loanFields = {};
     Object.keys(e.fields || {}).forEach(function(k) {
       if (_DEMO_EDIT_LABELS[k] === undefined) return;   // รับเฉพาะฟิลด์ที่รู้จัก กันค่าแปลกปลอมหลุดเข้าข้อมูลจริง
-      d[k] = e.fields[k];
+      // เลขใบจองเป็นของ "ใบยืม" ล้วนๆ ตัวเครื่องไม่ควรมีฟิลด์นี้ติดไว้ (เครื่องเดียวถูกยืมได้หลายใบ
+      // คนละเวลา ถ้าเขียนลงตัวเครื่องด้วยจะเหลือเลขใบล่าสุดค้างไว้แล้วอ่านผิดว่าเป็นของใบไหน)
+      if (k !== 'jobNo') d[k] = e.fields[k];
       if (_DEMO_EDIT_LOAN_FIELDS[k]) loanFields[k] = e.fields[k];
     });
     // ผู้ยืม/ผู้คีย์ ต้องลงในใบยืมที่ยังไม่คืนด้วย ไม่งั้น publish รอบหน้าจะยังส่งชื่อว่างออกไปเหมือนเดิม

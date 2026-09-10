@@ -6,6 +6,8 @@
 <title>จัดการ Demo Equipment — ทีม SIS</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<!-- อ่านไฟล์ export จากระบบคลัง (นำเข้าเลขที่ใบจอง) — defer เพราะใช้ตอนกดปุ่มเท่านั้น ไม่ต้องรอตอนเปิดหน้า -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
 <style>
 /* ค่าเริ่มต้นเป็นธีมมืดชุดเดียวกับแอปหลัก (ตัวแปรลอกจาก :root ใน style.css) — หน้านี้เปิดจากลิงก์
    แยกจาก SPA เลยแชร์ style.css กันไม่ได้ ต้องประกาศซ้ำที่นี่ ถ้าแก้สีในแอปหลักต้องมาแก้ตรงนี้ด้วย */
@@ -102,6 +104,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .qn-units ul { margin:7px 0 0; padding-left:20px; font-size:12.5px; line-height:2.1; }
 .qn-tick { color:var(--ok, #10b981); font-size:11.5px; font-weight:600; }
 .filter-chip-x { cursor:pointer; }
+.ri-sum { font-size:13px; line-height:1.7; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:9px; padding:9px 11px; margin:10px 0; }
+.ri-tbl { display:block; max-height:260px; overflow-y:auto; margin-top:10px; }
 .rt-guess-note { color:var(--warn); }
 .rt-warn { font-size:12px; line-height:1.65; color:var(--warn); background:var(--warn-soft); border:1px solid var(--warn);
   border-radius:9px; padding:9px 11px; margin-bottom:11px; }
@@ -688,6 +693,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <div class="browse-toolbar">
             <input type="text" id="unitSearch" placeholder="🔍 ค้นหา (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
             <button class="btn btn-ghost btn-sm" onclick="lendPasteToggle()" title="ก๊อปเลขเครื่องเช่าจากระบบคลังมาวาง แล้วติ๊กให้อัตโนมัติ" style="white-space:nowrap">📋 วางเลขเครื่อง</button>
+            <button class="btn btn-ghost btn-sm" onclick="openRentImport()" title="นำเข้าไฟล์ export จากระบบคลัง เติมเลขที่ใบจองย้อนหลังให้ทุกเครื่อง" style="white-space:nowrap">📥 นำเข้าเลขใบจอง</button>
             <span id="unitCountLabel" style="align-self:center;font-size:12px;color:var(--text2);white-space:nowrap"></span>
           </div>
           <div id="lendPastePanel" class="paste-panel" style="display:none">
@@ -2273,6 +2279,172 @@ function _lendPaint(id) {
     if (row) row.classList.toggle('picked', on);
   }
 }
+// ================================================================
+// นำเข้าไฟล์ "เครื่องเช่า" จากระบบคลัง — เติมเลขที่ใบจองย้อนหลัง
+//
+// ระบบคลัง (โปรแกรมภายนอก) ถือเลขที่ใบจองไว้ ส่วนแอปนี้ไม่เคยมี จึงจัดกลุ่ม "ตามใบ" ไม่ได้เลย
+// ต้องเดาจากผู้ยืม+ช่วงวันแทน ไฟล์ export ของระบบคลังมีทั้งเลขเครื่องเช่าและเลขที่ใบจองอยู่แถวเดียวกัน
+// จับคู่ด้วยเลขเครื่องเช่าจึงเติมให้ครบทีเดียวได้ โดยไม่ต้องพิมพ์ทีละใบ
+//
+// เขียนผ่านคิว publicDemoEdits เหมือนการแก้อย่างอื่น — ใบยืมตัวจริงอยู่ในแอปหลัก หน้านี้ไม่เขียนทับเอง
+// ================================================================
+var _riRows = null;
+function openRentImport() {
+  var h = '<div class="hint">ไฟล์ export จากระบบคลัง (เช่น <b>เครื่องเช่า.xlsx</b>) ต้องมีคอลัมน์ ' +
+    '<b>หมายเลขเครื่องเช่า</b> และ <b>เลขที่ใบจอง</b> — จับคู่ด้วยหมายเลขเครื่องเช่า</div>' +
+    '<div class="field"><label>📂 เลือกไฟล์</label><input type="file" id="riFile" accept=".xlsx,.xls" onchange="riRead()"></div>' +
+    '<div id="riOut"></div>';
+  _riRows = null;
+  openSm('นำเข้าเลขที่ใบจอง', h);
+}
+function _riNum(v) { return String(v == null ? '' : v).toUpperCase().replace(/\s+/g, ''); }
+function _riDate(n) {
+  if (!n) return '';
+  if (typeof n === 'string') return n.slice(0, 10);
+  var d = new Date(Math.round((n - 25569) * 86400000));
+  return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+}
+function riRead() {
+  var f = document.getElementById('riFile').files[0];
+  var out = document.getElementById('riOut');
+  if (!f) return;
+  if (typeof XLSX === 'undefined') { out.innerHTML = '<div class="rt-warn">อ่านไฟล์ไม่ได้ — ยังโหลดตัวอ่าน Excel ไม่สำเร็จ ลองรีเฟรชหน้า</div>'; return; }
+  out.innerHTML = '<div class="hint">กำลังอ่าน…</div>';
+  var rd = new FileReader();
+  rd.onload = function(e) {
+    var rows;
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    } catch (err) { out.innerHTML = '<div class="rt-warn">อ่านไฟล์ไม่สำเร็จ: ' + esc(err.message) + '</div>'; return; }
+    if (!rows.length) { out.innerHTML = '<div class="rt-warn">ไฟล์นี้ไม่มีข้อมูล</div>'; return; }
+
+    var cols = Object.keys(rows[0]);
+    var pick = function(names) {
+      for (var i = 0; i < cols.length; i++) {
+        var c = String(cols[i]).replace(/\s+/g, '');
+        for (var j = 0; j < names.length; j++) if (c.indexOf(names[j]) !== -1) return cols[i];
+      }
+      return null;
+    };
+    var cRent = pick(['หมายเลขเครื่องเช่า', 'เลขเครื่องเช่า', 'เครื่องเช่า']);
+    var cJob = pick(['เลขที่ใบจอง', 'ใบจอง']);
+    var cDue = pick(['กำหนดรับคืน', 'กำหนดคืน']);
+    if (!cRent || !cJob) {
+      out.innerHTML = '<div class="rt-warn">ไม่พบคอลัมน์ที่ต้องใช้<br>ต้องมี <b>หมายเลขเครื่องเช่า</b>' +
+        (cRent ? ' ✅' : ' ❌') + ' และ <b>เลขที่ใบจอง</b>' + (cJob ? ' ✅' : ' ❌') +
+        '<br><br>คอลัมน์ที่เจอในไฟล์: ' + esc(cols.join(' · ')) + '</div>';
+      return;
+    }
+
+    var byRent = {}; UNITS.forEach(function(u) { if (u.rentalDbNo) byRent[_riNum(u.rentalDbNo)] = u; });
+    // ต้องเทียบกับ "ใบยืมทั้งหมดที่ยังไม่คืน" ไม่ใช่ activeReturns() ซึ่งตัดใบที่จองล่วงหน้ายังไม่ถึงวันเริ่มออก
+    // (เคยเตือนผิดว่า 19 เครื่องไม่ได้ยืมอยู่ ทั้งที่จองไว้จริง แค่ยังไม่ถึงรอบต้องตามคืน)
+    // แอปหลักเติมเลขใบให้ทุกใบที่ status === 'active' ซึ่งรวมใบที่ยังไม่ถึงวันเริ่มด้วย
+    var loanBy = {};
+    scBookings().forEach(function(b) {
+      if (b.status === 'returned') return;
+      var cur = loanBy[b.unitId];
+      if (!cur || b.s < cur.s) loanBy[b.unitId] = b;   // มีหลายช่วง เอาช่วงที่เริ่มก่อนสุด
+    });
+
+    var plan = [], noMatch = [], noJob = 0, same = 0;
+    rows.forEach(function(r) {
+      var job = String(r[cJob] == null ? '' : r[cJob]).trim();
+      var rent = String(r[cRent] == null ? '' : r[cRent]).trim();
+      if (!rent) return;
+      var u = byRent[_riNum(rent)];
+      if (!u) { noMatch.push(rent); return; }
+      if (!job) { noJob++; return; }
+      var l = loanBy[u.id];
+      var cur = l ? String(l.jobNo || '').trim() : '';
+      if (cur === job) { same++; return; }
+      plan.push({ unitId: u.id, rent: rent, job: job, cur: cur,
+        model: (u.model || u.name || '-'),
+        onLoan: !!l,
+        dueFile: cDue ? _riDate(r[cDue]) : '',
+        dueApp: l ? _scIso(l.e) : '' });
+    });
+    _riRows = plan;
+
+    var h = '<div class="ri-sum">อ่านได้ ' + rows.length + ' แถว · จับคู่เครื่องได้ ' + (rows.length - noMatch.length) +
+      ' · <b>จะเติมเลขใบจอง ' + plan.length + ' เครื่อง</b>' +
+      (same ? ' · ตรงอยู่แล้ว ' + same : '') + (noJob ? ' · ไม่มีเลขใบ ' + noJob : '') + '</div>';
+    if (noMatch.length) {
+      h += '<div class="rt-warn">⚠️ ไม่พบเครื่องที่ตรงกับเลขเช่า ' + noMatch.length + ' แถว: ' +
+        esc(noMatch.slice(0, 10).join(', ')) + (noMatch.length > 10 ? '…' : '') + ' — แถวพวกนี้จะถูกข้าม</div>';
+    }
+    var notOnLoan = plan.filter(function(p) { return !p.onLoan; }).length;
+    if (notOnLoan) {
+      h += '<div class="rt-warn">⚠️ ' + notOnLoan + ' เครื่องมีเลขใบในไฟล์ แต่ระบบนี้ไม่ได้บันทึกว่ากำลังยืมอยู่ — ' +
+        'ส่งไปได้ แต่แอปหลักจะเติมให้เฉพาะเครื่องที่มีใบยืมค้างอยู่จริง</div>';
+    }
+    var mismatch = plan.filter(function(p) { return p.dueFile && p.dueApp && p.dueFile !== p.dueApp; });
+    if (mismatch.length) {
+      // เกือบทุกใบต่างกัน "ไฟล์ช้ากว่า 1 วัน" = อาการของบั๊ก timezone ตอน publish (แก้แล้ว 2026-09-10)
+      // ไม่ใช่ข้อมูลคนละชุด บอกให้ชัดจะได้ไม่ไล่แก้วันที่ทีละใบโดยไม่จำเป็น
+      var offByOne = mismatch.filter(function(p) {
+        return Math.round((new Date(p.dueFile) - new Date(p.dueApp)) / 86400000) === 1;
+      }).length;
+      h += '<div class="rt-warn">📅 กำหนดคืนไม่ตรงกัน ' + mismatch.length + ' เครื่อง — <b>ตัวนำเข้านี้ไม่แตะวันที่</b> เติมแค่เลขใบจอง' +
+        (offByOne >= mismatch.length * 0.8
+          ? '<br><b>' + offByOne + ' ใบต่างกันพอดี 1 วัน</b> — เกิดจากบั๊กเวลาตอนส่งข้อมูลออกจากแอปหลัก (แก้แล้ว) ' +
+            'วันจะตรงเองหลังเปิดแอปหลักให้ส่งข้อมูลใหม่อีกครั้ง ไม่ต้องไล่แก้ทีละใบ'
+          : ' ถ้าวันไม่ตรงต้องแก้เอง') + '</div>';
+    }
+    if (!plan.length) { out.innerHTML = h + '<div class="hint">ไม่มีอะไรต้องเติม</div>'; return; }
+
+    var slips = {}; plan.forEach(function(p) { slips[p.job] = (slips[p.job] || 0) + 1; });
+    h += '<div class="hint">จะได้ ' + Object.keys(slips).length + ' ใบ: ' +
+      Object.keys(slips).sort(function(a, b) { return slips[b] - slips[a]; })
+        .map(function(j) { return esc(j) + ' (' + slips[j] + ')'; }).join(' · ') + '</div>';
+    h += '<table class="dcal-tbl ri-tbl"><thead><tr><th>เครื่อง</th><th>เลขเช่า</th><th>เดิม</th><th>จะเป็น</th><th>กำหนดคืน</th></tr></thead><tbody>' +
+      plan.map(function(p) {
+        var dm = p.dueFile && p.dueApp && p.dueFile !== p.dueApp;
+        return '<tr><td>' + esc(p.model) + (p.onLoan ? '' : ' <span class="rt-guess">ไม่ได้ยืมอยู่</span>') + '</td>' +
+          '<td>' + esc(p.rent) + '</td><td>' + (p.cur ? esc(p.cur) : '<span style="color:var(--text3)">—</span>') + '</td>' +
+          '<td><b>' + esc(p.job) + '</b></td>' +
+          '<td>' + (dm ? '<span style="color:var(--warn)">ไฟล์ ' + _scD(p.dueFile) + ' · ระบบ ' + _scD(p.dueApp) + '</span>'
+                       : (p.dueApp ? _scD(p.dueApp) : '—')) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    h += '<div class="field" style="margin-top:12px"><label>✍️ คนนำเข้า *</label>' +
+      '<input type="text" id="riBy" list="riKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' +
+      scKeyerDatalist('riKeyerList') + '</div>';
+    h += '<button class="btn btn-primary btn-full" onclick="riApply()">📤 ส่งเข้าคิว ' + plan.length + ' เครื่อง</button>';
+    h += '<div class="hint">ส่งแล้วต้องเปิดเมนู Demo Equipment ในแอปหลักกด “รับเข้า” อีกครั้ง ถึงจะลงข้อมูลจริง</div>';
+    out.innerHTML = h;
+  };
+  rd.readAsArrayBuffer(f);
+}
+function riApply() {
+  if (!_riRows || !_riRows.length) return;
+  var by = (document.getElementById('riBy').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนนำเข้าก่อนนะครับ — แอปหลักจะได้รู้ว่าใครส่งมา'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var rows = _riRows.slice();
+  // Firestore จำกัด batch ละ 500 ops — ไฟล์คลังเป็นหลักสิบ แต่แบ่งไว้กันไฟล์ใหญ่ในอนาคต
+  var chunks = [];
+  for (var i = 0; i < rows.length; i += 400) chunks.push(rows.slice(i, i + 400));
+  chunks.reduce(function(chain, chunk) {
+    return chain.then(function() {
+      var batch = db.batch();
+      chunk.forEach(function(p) {
+        var u = UNITS.filter(function(x) { return x.id === p.unitId; })[0] || {};
+        batch.set(db.collection('publicDemoEdits').doc(p.unitId), {
+          unitId: p.unitId, fields: { jobNo: p.job }, editedBy: by,
+          editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
+        }, { merge: true });
+      });
+      return batch.commit();
+    });
+  }, Promise.resolve()).then(function() {
+    closeSm();
+    toastMock('📤 ส่งเข้าคิวแล้ว ' + rows.length + ' เครื่อง — รอแอปหลักกดรับเข้า');
+    _riRows = null;
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 // ใบจองจากระบบคลังมาเป็นรายการเลขเครื่องเช่า — เดิมต้องไล่หาแล้วติ๊กทีละใบ ใบละ 10 เครื่องคือ 10 รอบ
 // วางทั้งก้อนแล้วให้จับคู่ให้ (เทียบทั้งเลขเครื่องเช่าและ S/N เผื่อก๊อปมาคนละคอลัมน์)
 function lendPasteToggle() {
