@@ -3000,19 +3000,10 @@ function showCustomerNotification(dealerId, dealerName, projectName, type, updat
   updateCustomerUpdateBadge();
 }
 
-function updateCustomerUpdateBadge() {
-  var updates = JSON.parse(localStorage.getItem('v7_customer_updates') || '[]');
-  var unread = updates.filter(function(u) { return !u.read; }).length;
-  var badge = document.getElementById('customerUpdateBadge');
-  if (badge) {
-    if (unread > 0) {
-      badge.textContent = unread;
-      badge.style.display = 'inline';
-    } else {
-      badge.style.display = 'none';
-    }
-  }
-}
+// ตัวนี้เคยเป็น updateCustomerUpdateBadge อีกตัวหนึ่ง (อ่าน v7_customer_updates ใน localStorage)
+// แต่มีฟังก์ชันชื่อเดียวกันประกาศทีหลังในไฟล์นี้ (ดึงจาก Firestore) ตัวหลังจึงบังตัวนี้มาตลอด
+// โค้ดนี้ไม่เคยถูกเรียกเลยสักครั้ง — เก็บไว้ก็มีแต่ทำให้อ่านผิดว่า badge มาจาก localStorage
+// ถ้าวันหน้าต้องการนับจาก localStorage จริงๆ ให้ตั้งชื่อใหม่ อย่าประกาศชื่อซ้ำ
 
 function sendLineNotify(message) {
   // ถ้ามี LINE Notify token ให้ส่ง
@@ -3728,43 +3719,42 @@ function viewPipelineUpdateDetail(dealerId, updateId) {
 }
 
 // เพิ่ม badge counter อัพเดท
+// นับคำขออัพเดทจากลูกค้าที่ยังไม่ได้กด — ยิง 1 query ต่อ dealer 1 ราย
+//
+// เดิมถูกเรียกทุก 30 วินาทีตลอดเวลาที่เปิดแอปไว้ แม้แท็บอยู่เบื้องหลัง ที่ 19 ราย = 2,280 query/ชม.
+// หรือ 54,720 query/วัน เพื่ออัปเดตตัวเลขตัวเดียวบนป้าย บนมือถือที่เน็ตช้ากว่าและวิทยุต้องปลุกทุกรอบ
+// งานพวกนี้ไปเบียดคิวกับการโหลดข้อมูลจริง จนรู้สึกว่าแอปค้าง (ผู้ใช้แจ้ง 2026-09-11)
+//
+// ตอนนี้: ทำเฉพาะตอนหน้าจอเปิดอยู่จริง, กันยิงซ้อน, และรอบห่างขึ้น (ดู _scheduleBadgePoll ท้ายไฟล์)
+var _badgeInFlight = false;
 function updateCustomerUpdateBadge() {
   if (typeof CURRENT_USER === 'undefined' || !CURRENT_USER) return;
-  
+  if (_badgeInFlight) return;                                    // รอบก่อนยังไม่เสร็จ อย่าซ้อน
+  if (typeof document !== 'undefined' && document.hidden) return; // แท็บอยู่เบื้องหลัง ไม่มีใครเห็นป้าย
+
+  var badge = document.getElementById('customerUpdateBadge');
   var dealers = ST.getAll('dealers');
-  var pendingCount = 0;
-  var checked = 0;
-  
   if (!dealers.length) {
-    var badge = document.getElementById('customerUpdateBadge');
     if (badge) badge.style.display = 'none';
     return;
   }
-  
-  dealers.forEach(function(dealer) {
-    db.collection('dealerUpdates').doc(dealer.id).collection('pipeline')
-      .where('_status', '==', 'pending')
-      .get()
-      .then(function(snapshot) {
-        pendingCount += snapshot.size;
-        checked++;
-        
-        if (checked === dealers.length) {
-          var badge = document.getElementById('customerUpdateBadge');
-          if (badge) {
-            badge.textContent = pendingCount;
-            badge.style.display = pendingCount ? 'inline' : 'none';
-          }
-        }
-      })
-      .catch(function() {
-        checked++;
-        if (checked === dealers.length) {
-          var badge = document.getElementById('customerUpdateBadge');
-          if (badge) badge.style.display = 'none';
-        }
-      });
-  });
+
+  _badgeInFlight = true;
+  // เดิมนับด้วยตัวแปร checked เทียบกับ dealers.length ถ้ารายชื่อ dealer เปลี่ยนระหว่างรอผล
+  // เงื่อนไขจะไม่มีทางเท่ากัน แล้วป้ายค้างไม่อัปเดตไปเลย — Promise.all ไม่มีปัญหานั้น
+  Promise.all(dealers.map(function(dealer) {
+    return db.collection('dealerUpdates').doc(dealer.id).collection('pipeline')
+      .where('_status', '==', 'pending').get()
+      .then(function(s) { return s.size; })
+      .catch(function() { return 0; });
+  })).then(function(counts) {
+    _badgeInFlight = false;
+    var pendingCount = counts.reduce(function(a, b) { return a + b; }, 0);
+    var el = document.getElementById('customerUpdateBadge');
+    if (!el) return;
+    el.textContent = pendingCount;
+    el.style.display = pendingCount ? 'inline' : 'none';
+  }).catch(function() { _badgeInFlight = false; });
 }
 // ================================================================
 // SYNC PIPELINE TO DEALER UPDATES (สำหรับส่งให้ลูกค้าดู)
@@ -5098,14 +5088,24 @@ if (typeof document !== 'undefined') {
   });
 }
 
-// อัพเดท badge ทุก 30 วินาที
-if (typeof setInterval !== 'undefined') {
+// รอบอัปเดต badge — 5 นาที ไม่ใช่ 30 วินาที และหยุดสนิทเมื่อแท็บอยู่เบื้องหลัง
+//
+// ป้ายนี้บอกจำนวนคำขอที่รออยู่ ไม่ใช่ข้อมูลที่ต้องตรงวินาทีต่อวินาที แต่ละรอบยิง 1 query ต่อ dealer
+// 1 ราย ของเดิมจึงกินเน็ตและแบตเตอรี่มากโดยไม่ได้อะไรเพิ่ม โดยเฉพาะบนมือถือ
+// กลับมาดูหน้าจอเมื่อไหร่ค่อยอัปเดตให้ทันที จะได้ไม่รู้สึกว่าตัวเลขเก่า
+var _BADGE_POLL_MS = 300000;
+function _scheduleBadgePoll() {
+  if (typeof setInterval === 'undefined') return;
   setInterval(function() {
-    if (typeof updateCustomerUpdateBadge === 'function') {
-      updateCustomerUpdateBadge();
-    }
-  }, 30000);
+    if (typeof updateCustomerUpdateBadge === 'function') updateCustomerUpdateBadge();
+  }, _BADGE_POLL_MS);
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && typeof updateCustomerUpdateBadge === 'function') updateCustomerUpdateBadge();
+    });
+  }
 }
+_scheduleBadgePoll();
 // เรียกใช้ตอน init
 setTimeout(addCustomerUpdateMenuItem, 1000);
 
