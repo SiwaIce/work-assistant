@@ -9799,6 +9799,63 @@ function exportKnowledgeToExcel() {
   toast('📥 Export แล้ว ' + all.length + ' รายการ (ใช้งานอยู่ ' + active + ')');
 }
 
+// ---- IMPORT — อ่านไฟล์ที่ export ไว้กลับเข้ามา ----
+//
+// จับคู่ด้วย id เหมือนฝั่ง Note: id เดิม = ทับ, ไม่มี = เพิ่มใหม่ นำเข้าซ้ำไม่เกิดของซ้ำ
+// ช่อง Dealer ใน export เป็น "ชื่อ" เพื่อให้คนอ่านรู้เรื่อง ตอนนำเข้าจึงต้องแปลงกลับเป็น id
+// หาชื่อไม่เจอก็เก็บค่าที่อ่านได้ไว้ตามเดิม ดีกว่าทิ้งความเชื่อมโยงไปเฉยๆ
+function importKnowledgeFromExcel(input) {
+  var file = input && input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (typeof XLSX === 'undefined') return toast('❌ ยังโหลดตัวอ่าน Excel ไม่สำเร็จ ลองรีเฟรชหน้า');
+  var rd = new FileReader();
+  rd.onload = function(e) {
+    var rows;
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    } catch (err) { return toast('❌ อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+    if (!rows.length) return toast('ไฟล์นี้ไม่มีข้อมูล');
+
+    var byName = {}, byId = {};
+    try { ST.getAll('dealers').forEach(function(d) { byName[(d.name || '').trim().toLowerCase()] = d.id; byId[d.id] = 1; }); } catch (e2) {}
+    var existing = {}; ST.getAll('notes').forEach(function(n) { existing[n.id] = n; });
+
+    var add = [], upd = [], lostDealer = 0;
+    rows.forEach(function(r) {
+      var dRaw = String(r['Dealer'] || '').trim();
+      var dId = '';
+      if (dRaw) { dId = byId[dRaw] ? dRaw : (byName[dRaw.toLowerCase()] || dRaw); if (!byId[dId]) lostDealer++; }
+      var rec = {
+        title: String(r['หัวข้อ'] || ''), category: String(r['หมวดหมู่'] || ''),
+        tags: String(r['แท็ก'] || ''), content: String(r['เนื้อหา'] || ''),
+        dealerId: dId, status: String(r['สถานะ'] || '') || 'active',
+        pinned: String(r['ปักหมุด'] || '').trim() !== '',
+        expireDate: String(r['วันหมดอายุ'] || ''), remindDate: String(r['วันเตือน'] || ''),
+        created: String(r['สร้างเมื่อ'] || ''), updated: String(r['แก้ไขล่าสุด'] || ''),
+        deletedAt: String(r['ลบเมื่อ'] || '')
+      };
+      var j = String(r['อื่นๆ (JSON)'] || '').trim();
+      if (j) { try { var ex = JSON.parse(j); Object.keys(ex).forEach(function(k) { rec[k] = ex[k]; }); } catch (e3) {} }
+      var id = String(r['id'] || '').trim();
+      if (id && existing[id]) upd.push({ id: id, rec: rec }); else add.push(rec);
+    });
+
+    if (!confirm('นำเข้า Knowledge จากไฟล์นี้?\n\n➕ เพิ่มใหม่ ' + add.length + ' รายการ\n♻️ ทับของเดิม ' + upd.length + ' รายการ' +
+        (lostDealer ? '\n⚠️ หา Dealer ไม่เจอ ' + lostDealer + ' รายการ (เก็บค่าที่อ่านได้ไว้)' : '') +
+        '\n\nรายการที่ id ตรงกับของเดิมจะถูกเขียนทับ')) return;
+    upd.forEach(function(u) { ST.update('notes', u.id, u.rec); });
+    add.forEach(function(rec) {
+      var saved = ST.add('notes', rec);
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('notes', saved);
+    });
+    toast('📤 นำเข้าแล้ว — เพิ่ม ' + add.length + ' · ทับ ' + upd.length);
+    render();
+  };
+  rd.readAsArrayBuffer(file);
+}
+
 function rKnowledge(el) {
   document.getElementById('pgT').textContent = '📚 Knowledge Base';
   var cfg = getConfig();
@@ -9877,6 +9934,8 @@ function rKnowledge(el) {
     '<button class="btn bsm ' + (noteView==='list'?'bp':'bo') + '" onclick="noteView=\'list\';render()" title="List">☰</button>' +
     '<button class="btn bsm ' + (noteView==='grid'?'bp':'bo') + '" onclick="noteView=\'grid\';render()" title="Grid">⊞</button>' +
     '<button class="btn bo" onclick="exportKnowledgeToExcel()" title="ดาวน์โหลด Knowledge ทั้งหมดเก็บไว้">📥 Export</button>' +
+    '<input type="file" id="kbImportFile" accept=".xlsx,.xls" style="display:none" onchange="importKnowledgeFromExcel(this)">' +
+    '<button class="btn bo" onclick="document.getElementById(\'kbImportFile\').click()" title="นำไฟล์ที่ export ไว้กลับเข้ามา">📤 Import</button>' +
     '<button class="btn bp" onclick="showNoteM()">➕ เพิ่ม</button>' +
     '</div>';
 

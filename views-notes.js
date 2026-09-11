@@ -67,6 +67,68 @@ function exportNotesToExcel() {
   toast('📥 Export แล้ว ' + all.length + ' รายการ (ใช้งานอยู่ ' + active + ' · ในถังขยะ ' + (all.length - active) + ')');
 }
 
+// ---- IMPORT — อ่านไฟล์ที่ export ไว้กลับเข้ามา ----
+//
+// จับคู่ด้วย id: เจอ id เดิม = อัปเดตทับ, ไม่เจอ = เพิ่มใหม่ จึงนำเข้าไฟล์เดิมซ้ำกี่รอบก็ไม่เกิดของซ้ำ
+// คอลัมน์ "อื่นๆ (JSON)" ถูกกางกลับเป็นฟิลด์เดิม ของที่ export ตอนยังไม่รู้จักฟิลด์นั้นจึงกลับมาครบ
+// สรุปให้ดูก่อนเสมอแล้วค่อยยืนยัน — เป็นการเขียนทับข้อมูลจริง ไม่ควรเกิดจากการกดพลาด
+function _noteSheetRows(file, cb) {
+  if (typeof XLSX === 'undefined') { toast('❌ ยังโหลดตัวอ่าน Excel ไม่สำเร็จ ลองรีเฟรชหน้า'); return; }
+  var rd = new FileReader();
+  rd.onload = function(e) {
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      cb(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' }));
+    } catch (err) { toast('❌ อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+  };
+  rd.readAsArrayBuffer(file);
+}
+function _noteMergeExtras(rec, raw) {
+  var j = String(raw['อื่นๆ (JSON)'] || '').trim();
+  if (!j) return rec;
+  try { var extra = JSON.parse(j); Object.keys(extra).forEach(function(k) { rec[k] = extra[k]; }); } catch (e) {}
+  return rec;
+}
+function importNotesFromExcel(input) {
+  var file = input && input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  _noteSheetRows(file, function(rows) {
+    if (!rows.length) return toast('ไฟล์นี้ไม่มีข้อมูล');
+    var existing = {}; ST.getAll('postit').forEach(function(n) { existing[n.id] = n; });
+    var add = [], upd = [];
+    rows.forEach(function(r) {
+      var fields = String(r['ข้อมูลแบบ Fields'] || '').split('\n').filter(Boolean).map(function(line) {
+        var i = line.indexOf(':');
+        return i === -1 ? { label: line.trim(), value: '' } : { label: line.slice(0, i).trim(), value: line.slice(i + 1).trim() };
+      });
+      var rec = _noteMergeExtras({
+        title: String(r['หัวข้อ'] || ''),
+        type: String(r['ชนิด'] || '') === 'Fields' ? 'fields' : 'text',
+        content: String(r['เนื้อหา'] || ''),
+        color: String(r['สี'] || '') || 'yellow',
+        pinned: String(r['ปักหมุด'] || '').trim() !== '',
+        status: String(r['สถานะ'] || '') || 'active',
+        created: String(r['สร้างเมื่อ'] || ''),
+        updated: String(r['แก้ไขล่าสุด'] || ''),
+        deletedAt: String(r['ลบเมื่อ'] || '')
+      }, r);
+      if (fields.length) rec.fields = fields;
+      var id = String(r['id'] || '').trim();
+      if (id && existing[id]) upd.push({ id: id, rec: rec }); else add.push(rec);
+    });
+    if (!confirm('นำเข้า Note จากไฟล์นี้?\n\n➕ เพิ่มใหม่ ' + add.length + ' รายการ\n♻️ ทับของเดิม ' + upd.length + ' รายการ\n\n' +
+        'รายการที่ id ตรงกับของเดิมจะถูกเขียนทับ')) return;
+    upd.forEach(function(u) { ST.update('postit', u.id, u.rec); });
+    add.forEach(function(rec) {
+      var saved = ST.add('postit', rec);
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('postit', saved);
+    });
+    toast('📤 นำเข้าแล้ว — เพิ่ม ' + add.length + ' · ทับ ' + upd.length);
+    render();
+  });
+}
+
 function rNotes(el) {
   document.getElementById('pgT').textContent = '📓 Note';
   var all = ST.getAll('postit');
@@ -102,7 +164,11 @@ function rNotes(el) {
   }
   var trashLabel = '🗑️ ถังขยะ' + (trashItems.length ? ' (' + trashItems.length + ')' : '');
   h += '<button class="btn ' + (notesShowTrash ? 'bd' : 'bo') + '" onclick="notesShowTrash=!notesShowTrash;notesQ=\'\';render()">' + (notesShowTrash ? '← กลับ' : trashLabel) + '</button>';
-  if (!notesShowTrash) h += '<button class="btn bo" onclick="exportNotesToExcel()" title="ดาวน์โหลด Note ทั้งหมดเก็บไว้">📥 Export</button>';
+  if (!notesShowTrash) {
+    h += '<button class="btn bo" onclick="exportNotesToExcel()" title="ดาวน์โหลด Note ทั้งหมดเก็บไว้">📥 Export</button>';
+    h += '<input type="file" id="noteImportFile" accept=".xlsx,.xls" style="display:none" onchange="importNotesFromExcel(this)">';
+    h += '<button class="btn bo" onclick="document.getElementById(\'noteImportFile\').click()" title="นำไฟล์ที่ export ไว้กลับเข้ามา">📤 Import</button>';
+  }
   h += '</div>';
 
   if (notesShowTrash) {

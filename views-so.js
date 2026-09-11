@@ -690,6 +690,12 @@ function showCreateSOModal(opts) {
   html += '<div id="soN_pipeSec"' + (initType!=='project'?' style="display:none"':'') + '>';
   html += '<label class="lbl">Pipeline Project <span style="font-size:10px;color:var(--text2)">(เฉพาะ Win / Contracting / Deliver)</span></label>';
   html += '<select id="soN_pipelineId" class="inp" onchange="_soFillFromPipe(this.value)">' + pipeOpts + '</select>';
+  // Project ID — ดึงมาจาก Pipeline ที่เลือก ถ้าโครงการนั้นยังไม่มี กรอกตรงนี้ได้เลยแล้วเขียนกลับไปให้
+  // (ในแอปนี้ "มี Project ID = ถือว่าลงทะเบียน CRM แล้ว" จึงต้องตั้ง djiCrmRegistered ตามไปด้วยเสมอ)
+  html += '<div style="margin-top:8px"><label class="lbl">Project ID ' +
+    '<span style="font-size:10px;color:var(--text2)">(ได้จากตอนลงทะเบียน CRM ของ DJI — ยังไม่มีก็กรอกที่นี่ได้)</span></label>' +
+    '<input id="soN_projectId" class="inp" value="' + sanitize((pipe && pipe.projectId) || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
+    '<div id="soN_projIdNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '</div>';
 
   // ใบเสนอราคา — กรองตาม dealer/project ที่เลือก เลือกแล้วดึงรายการสินค้ามาเติมให้ ไม่เลือกก็สร้าง SO ตรงได้ (จะสร้างใบเสนอราคาใหม่ให้อัตโนมัติตอนบันทึก)
@@ -715,6 +721,8 @@ function showCreateSOModal(opts) {
   openM('➕ สร้าง Sales Order', html);
   // ถ้ามาจาก "สร้าง SO จากใบเสนอราคา" อยู่แล้ว รายการเริ่มต้น = รายการของใบเสนอราคานั้น เก็บไว้เทียบตอนบันทึกว่าแก้ไปไหม
   window._soQuoteItemsSnapshot = opts.quotationId ? JSON.stringify(initItems) : null;
+  _soProjIdDirty = false;
+  _soProjIdNote();
 }
 
 // รายชื่อใบเสนอราคาที่ตรงกับ dealer/project ที่เลือกในฟอร์มสร้าง SO — มี pipelineId ก็กรองด้วย pipeline ก่อน (แม่นกว่า) ไม่งั้นกรองแค่ dealer
@@ -831,6 +839,25 @@ function _soTypeToggle(type) {
   }
 }
 
+// ผู้ใช้พิมพ์ Project ID เองแล้ว — อย่าให้การเลือก Pipeline ใหม่มาทับของที่พิมพ์ไว้เงียบๆ
+var _soProjIdDirty = false;
+function _soProjIdTouched() { _soProjIdDirty = true; _soProjIdNote(); }
+function _soProjIdNote() {
+  var el = document.getElementById('soN_projectId'), note = document.getElementById('soN_projIdNote');
+  if (!el || !note) return;
+  var pipeId = (document.getElementById('soN_pipelineId') || {}).value || '';
+  var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
+  var typed = (el.value || '').trim();
+  var onPipe = p ? String(p.projectId || '').trim() : '';
+  if (!p) { note.textContent = typed ? 'จะบันทึกไว้กับ SO ใบนี้' : ''; note.style.color = ''; return; }
+  if (!typed) { note.textContent = onPipe ? '' : 'โครงการนี้ยังไม่มี Project ID'; note.style.color = ''; return; }
+  if (typed === onPipe) { note.textContent = '✓ ตรงกับที่บันทึกไว้ในโครงการแล้ว'; note.style.color = 'var(--text2)'; return; }
+  note.textContent = onPipe
+    ? '⚠️ ไม่ตรงกับของเดิมในโครงการ (' + onPipe + ') — ตอนบันทึกจะถามก่อนว่าจะแก้ต้นทางไหม'
+    : '↩︎ ตอนบันทึกจะเขียนกลับไปที่โครงการให้ด้วย (นับเป็นลงทะเบียน CRM แล้ว)';
+  note.style.color = onPipe ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)';
+}
+
 function _soFillFromPipe(pipeId) {
   if (!pipeId) return;
   var p = ST.getOne('pipeline', pipeId);
@@ -839,6 +866,11 @@ function _soFillFromPipe(pipeId) {
   // fill dealer
   var dSel = document.getElementById('soN_dealerId');
   if (dSel && p.dealerId) dSel.value = p.dealerId;
+
+  // Project ID ของโครงการที่เลือก — ไม่ทับถ้าผู้ใช้พิมพ์เองไว้แล้ว
+  var pidEl = document.getElementById('soN_projectId');
+  if (pidEl && !_soProjIdDirty) pidEl.value = p.projectId || '';
+  _soProjIdNote();
 
   // fill items
   var wrap = document.getElementById('soN_items');
@@ -909,6 +941,7 @@ function saveCreateSO() {
   var pipelineId  = (document.getElementById('soN_pipelineId') ||{}).value || '';
   var quotationId = (document.getElementById('soN_quotationId')||{}).value || '';
   var note        = (document.getElementById('soN_note')       ||{}).value || '';
+  var projectId   = ((document.getElementById('soN_projectId') ||{}).value || '').trim();
 
   if (!dealerId) { alert('กรุณาเลือก Dealer'); return; }
 
@@ -943,9 +976,39 @@ function saveCreateSO() {
     if (newQ) quotationId = newQ.id;
   }
 
+  // ---- Project ID: เขียนกลับไปที่โครงการต้นทางให้ด้วย ----
+  //
+  // Project ID เป็นของโครงการ ไม่ใช่ของ SO — เก็บไว้บน SO เพื่ออ้างอิงได้เร็ว แต่ต้นทางคือ pipeline
+  // ถ้ากรอกมาแล้วโครงการยังไม่มี ให้เติมให้เลย (ไม่ต้องถาม เพราะไม่ได้ทับอะไร) ถ้ามีอยู่แล้วแต่ไม่ตรง
+  // ต้องถามก่อน จะได้ไม่เผลอแก้ข้อมูลที่ลงทะเบียนไว้แล้ว
+  // กฎของแอป: มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (ดู modals.js / client-view.html)
+  if (projectId && pipelineId) {
+    var srcPipe = ST.getOne('pipeline', pipelineId);
+    if (srcPipe) {
+      var cur = String(srcPipe.projectId || '').trim();
+      var write = !cur || (cur !== projectId && confirm(
+        'โครงการนี้มี Project ID อยู่แล้ว: ' + cur + '\n' +
+        'ที่กรอกในฟอร์ม: ' + projectId + '\n\n' +
+        'ตกลง = แก้ Project ID ของโครงการเป็นค่าใหม่\nยกเลิก = เก็บค่าใหม่ไว้กับ SO ใบนี้เท่านั้น ไม่แตะโครงการ'));
+      if (write) {
+        var upd = { projectId: projectId };
+        if (!srcPipe.djiCrmRegistered) { upd.djiCrmRegistered = true; upd.djiCrmDate = srcPipe.djiCrmDate || _td(); }
+        try {
+          ST.update('pipeline', pipelineId, upd);
+          try {
+            ST.add('pipeLog', { pipeId: pipelineId, type: 'note', date: _td(),
+              content: 'Project ID ' + (cur ? 'แก้จาก ' + cur + ' เป็น ' : 'บันทึก ') + projectId +
+                       ' — กรอกตอนสร้าง SO ' + soNumber, created: new Date().toISOString() });
+          } catch (e) {}
+          toast(cur ? '🗂️ แก้ Project ID ของโครงการแล้ว' : '🗂️ บันทึก Project ID กลับไปที่โครงการแล้ว');
+        } catch (e) { toast('⚠️ บันทึก Project ID กลับไปที่โครงการไม่สำเร็จ'); }
+      }
+    }
+  }
+
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
-    customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId,
+    customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
     prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', expectedDelivery: '',
     status: 'po_received', items: items, saleName: cfg.saleName||'',
     logs: [{ date: _td(), action: '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],
