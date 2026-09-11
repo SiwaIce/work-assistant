@@ -340,6 +340,7 @@ function deleteAttachment(path) {
 var SYNC_KEY_MAP = {
   'dealers': 'dealers',
   'pipeline': 'pipeline',
+  'runrate': 'runrate',
   'pipelog': 'pipelog',
   'visits': 'visits',
   'followups': 'followups',

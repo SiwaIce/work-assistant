@@ -87,6 +87,7 @@
   <div class="nl" data-v="pipeBoard" onclick="go('pipeBoard')" title="Pipeline ของตัวเอง มุมมอง Kanban — ลากการ์ดเปลี่ยนสถานะได้">🗂️ Board</div>
   <div class="nl" data-v="pipeDash" onclick="go('pipeDash')">🧮 Overview</div>
   <div class="nl" data-v="mondayMeeting" onclick="go('mondayMeeting')" title="สรุป Pipeline แยกตาม Dealer + Forecast สินค้าเดือนนี้ สำหรับประชุมทีม">🗓️ ประชุมจันทร์</div>
+  <div class="nl" data-v="runrate" onclick="go('runrate')" title="สินค้าที่ Dealer ซื้อไปขายต่อ — ไม่ใช่โครงการ จึงแยกจาก Pipeline">🏪 Run Rate</div>
   <div class="nl" data-v="salesOrders" onclick="go('salesOrders')">📦 Sales Order</div>
   <div class="nl" data-v="serialSearch" onclick="go('serialSearch')">🔍 ค้นหา Serial</div>
 </div>
@@ -341,6 +342,7 @@
 <script src="views-salesoverview.js" defer></script>
 <script src="views-salesanalytics.js" defer></script>
 <script src="views-so.js" defer></script>
+<script src="views-runrate.js" defer></script>
 <script src="views-stock.js" defer></script>
 <script src="app.js" defer></script>
 <div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">

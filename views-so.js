@@ -669,7 +669,7 @@ function showCreateSOModal(opts) {
       '</option>';
   });
 
-  var initType = opts.pipelineId ? 'project' : 'runrate';
+  var initType = opts.pipelineId ? 'project' : (opts.runrateId ? 'runrate' : 'runrate');
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   html += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
@@ -684,7 +684,7 @@ function showCreateSOModal(opts) {
   html += '</div>';
 
   // Dealer ก่อน — เลือกแล้วกรอง project ให้เฉพาะของ dealer นั้น
-  html += '<div><label class="lbl">Dealer *</label><select id="soN_dealerId" class="inp" onchange="_soFilterProjectsByDealer(this.value)">' + dealerOpts + '</select></div>';
+  html += '<div><label class="lbl">Dealer *</label><select id="soN_dealerId" class="inp" onchange="_soFilterProjectsByDealer(this.value);_soFilterRunrateByDealer(this.value)">' + dealerOpts + '</select></div>';
 
   // project picker (แสดงเมื่อ type=project) — กรองตาม dealer
   html += '<div id="soN_pipeSec"' + (initType!=='project'?' style="display:none"':'') + '>';
@@ -697,6 +697,13 @@ function showCreateSOModal(opts) {
     '<input id="soN_projectId" class="inp" value="' + sanitize((pipe && pipe.projectId) || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
     '<div id="soN_projIdNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '</div>';
+
+  // ถัง Run rate — SO แบบ run rate ผูกเข้า Project ID ที่ลูกค้าสร้างไว้รับยอด (ถังเดียวมีได้หลาย SO)
+  // แสดงเฉพาะตอน type = runrate เพราะ SO แบบโครงการใช้ Pipeline Project แทน
+  html += '<div id="soN_rrSec"' + (initType !== 'runrate' ? ' style="display:none"' : '') + '>';
+  html += '<label class="lbl">Project ID (Run rate) <span style="font-size:10px;color:var(--text2)">(เลขที่ลูกค้าสร้างไว้รับยอด — ยอด SO ใบนี้จะไปรวมในถังนั้น)</span></label>';
+  html += '<select id="soN_runrateId" class="inp" onchange="_soRRPick(this.value)">' + _soRunrateOptionsHtml(preDealerId, opts.runrateId || '') + '</select>';
+  html += '<div id="soN_rrNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
 
   // ใบเสนอราคา — กรองตาม dealer/project ที่เลือก เลือกแล้วดึงรายการสินค้ามาเติมให้ ไม่เลือกก็สร้าง SO ตรงได้ (จะสร้างใบเสนอราคาใหม่ให้อัตโนมัติตอนบันทึก)
   html += '<div><label class="lbl">ใบเสนอราคา <span style="font-size:10px;color:var(--text2)">(เลือกเพื่อดึงรายการมา หรือไม่เลือกก็สร้าง SO ตรงได้)</span></label>';
@@ -837,6 +844,48 @@ function _soTypeToggle(type) {
     var sel = document.getElementById('soN_pipelineId');
     if (sel) sel.value = '';
   }
+  // Run rate ใช้ถังของตัวเอง ไม่ใช่ Pipeline Project — สลับกันคนละโหมด ไม่ให้ผูกทั้งสองทางพร้อมกัน
+  var rrSec = document.getElementById('soN_rrSec');
+  if (rrSec) rrSec.style.display = type === 'runrate' ? '' : 'none';
+  if (type !== 'runrate') {
+    var rrSel = document.getElementById('soN_runrateId');
+    if (rrSel) rrSel.value = '';
+  }
+  _soRRPick((document.getElementById('soN_runrateId') || {}).value || '');
+}
+
+// ตัวเลือกถัง Run rate ของ dealer ที่เลือกไว้ — บอกยอดที่อยู่ในถังแล้วด้วย จะได้รู้ว่าเลือกถูกใบ
+function _soRunrateOptionsHtml(dealerId, keepId) {
+  var list = ST.getAll('runrate').filter(function(r) {
+    if ((r.status || 'active') !== 'active' && r.id !== keepId) return false;
+    return !dealerId || r.dealerId === dealerId;
+  }).sort(function(a, b) { return (a.projectId || '') > (b.projectId || '') ? 1 : -1; });
+  var h = '<option value="">-- ไม่ระบุ --</option>';
+  list.forEach(function(r) {
+    var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
+    var amt = (typeof _rrTotal === 'function') ? _rrTotal(r.id) : 0;
+    h += '<option value="' + r.id + '"' + (keepId === r.id ? ' selected' : '') + '>' +
+      sanitize(r.projectId || '(ไม่มีเลข)') + (r.models ? ' · ' + sanitize(String(r.models).substr(0, 24)) : '') +
+      ' · มี ' + n + ' SO ฿' + fmtMoney(amt) + '</option>';
+  });
+  return h;
+}
+function _soRRPick(rrId) {
+  var note = document.getElementById('soN_rrNote');
+  if (!note) return;
+  var r = rrId ? ST.getOne('runrate', rrId) : null;
+  if (!r) { note.textContent = ''; return; }
+  var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
+  note.textContent = 'ยอดของ SO ใบนี้จะไปรวมใน ' + (r.projectId || '(ไม่มีเลข)') + ' — ตอนนี้มี ' + n + ' ใบอยู่ในถังแล้ว';
+  note.style.color = 'var(--text2)';
+}
+// เปลี่ยน Dealer แล้วต้องกรองถัง Run rate ตามไปด้วย เหมือนที่กรอง Pipeline Project
+function _soFilterRunrateByDealer(dealerId) {
+  var sel = document.getElementById('soN_runrateId');
+  if (!sel) return;
+  var keep = sel.value;
+  sel.innerHTML = _soRunrateOptionsHtml(dealerId, keep);
+  if (sel.value !== keep) _soRRPick(sel.value);
 }
 
 // ผู้ใช้พิมพ์ Project ID เองแล้ว — อย่าให้การเลือก Pipeline ใหม่มาทับของที่พิมพ์ไว้เงียบๆ
@@ -942,6 +991,9 @@ function saveCreateSO() {
   var quotationId = (document.getElementById('soN_quotationId')||{}).value || '';
   var note        = (document.getElementById('soN_note')       ||{}).value || '';
   var projectId   = ((document.getElementById('soN_projectId') ||{}).value || '').trim();
+  var runrateId   = (document.getElementById('soN_runrateId')  ||{}).value || '';
+  // SO เป็นได้อย่างใดอย่างหนึ่ง — โครงการ หรือ run rate ไม่ใช่ทั้งสอง ไม่งั้นยอดจะถูกนับซ้ำสองที่
+  if (type === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
 
   if (!dealerId) { alert('กรุณาเลือก Dealer'); return; }
 
@@ -1009,6 +1061,9 @@ function saveCreateSO() {
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
     customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
+    // ถัง Run rate ที่ SO ใบนี้ผูกอยู่ — ยอดของใบนี้จะถูกนับรวมในถังนั้น (ดู _rrTotal ใน views-runrate.js)
+    runrateId: runrateId,
+    runrateProjectId: runrateId ? ((ST.getOne('runrate', runrateId) || {}).projectId || '') : '',
     prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', expectedDelivery: '',
     status: 'po_received', items: items, saleName: cfg.saleName||'',
     logs: [{ date: _td(), action: '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],

@@ -7,6 +7,10 @@ const ST = {
     dealers: 'v7_dealers',
     pipeline: 'v7_pipeline',
     pipeLog: 'v7_pipelog',
+    // Run Rate — สินค้าที่ Dealer ซื้อไปขายต่อ ไม่ใช่โครงการ จึงแยกคอลเลกชันจาก pipeline โดยตั้งใจ
+    // 1 รายการ = 1 Project ID ที่ลูกค้าสร้างไว้เป็น "ถังรับยอด" แล้ว SO แบบ run rate หลายใบผูกเข้าถังเดียวกัน
+    // (ลูกค้าสร้างหลายถังเพื่อแยก PO ได้) ยอดขายจริงของถังจึงมาจากผลรวม SO ที่ผูกไว้ ไม่ได้กรอกเอง
+    runrate: 'v7_runrate',
     visits: 'v7_visits',
     followups: 'v7_followups',
     lineLog: 'v7_linelog',
@@ -166,6 +170,7 @@ const ST = {
   // Dealers
   dealersByLevel(level) { return this.filter('dealers', d => d.level === level); },
   pipelineByDealer(dealerId) { return this.filter('pipeline', p => p.dealerId === dealerId); },
+  runrateByDealer(dealerId) { return this.filter('runrate', r => r.dealerId === dealerId); },
   pipelineByStatus(status) { return this.filter('pipeline', p => p.status === status); },
   pipeLogsByPipe(pipeId) { return this.filter('pipeLog', l => l.pipeId === pipeId).sort((a,b) => (b.date||'').localeCompare(a.date||'')); },
   visitsByDealer(dealerId) { return this.filter('visits', v => v.dealerId === dealerId).sort((a,b) => (b.date||'').localeCompare(a.date||'')); },
