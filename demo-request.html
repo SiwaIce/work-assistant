@@ -20,6 +20,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .toplogo .mark { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#6fd0ff); display:flex; align-items:center; justify-content:center; font-size:18px; }
 .toplogo .name { font-weight:700; font-size:16px; }
 .toplogo .sub { font-size:11.5px; color:var(--text3); }
+.langbtn { margin-left:auto; flex:none; border:1px solid var(--border); background:var(--surface); color:var(--text);
+  font:inherit; font-size:12.5px; font-weight:700; padding:8px 14px; border-radius:9px; cursor:pointer; min-width:52px; }
+.langbtn:hover { border-color:var(--accent); color:var(--accent); }
+.langbtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px; }
 .pagehead { margin-bottom:20px; }
 .pagehead .eyebrow { font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
@@ -223,36 +227,37 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
     <div class="mark">🚁</div>
     <div>
       <div class="name">DJI Demo Center</div>
-      <div class="sub">ยืมเครื่อง Demo ทดลองใช้งาน — SIS Distribution</div>
+      <div class="sub" data-i18n="hdr.sub">ยืมเครื่อง Demo ทดลองใช้งาน — SIS Distribution</div>
     </div>
+    <button class="langbtn" id="langBtn" onclick="toggleLang()" title="Switch language"></button>
   </div>
 
-  <div id="loadingView" class="loading">กำลังโหลดข้อมูลอุปกรณ์...</div>
+  <div id="loadingView" class="loading" data-i18n="loading">กำลังโหลดข้อมูลอุปกรณ์...</div>
 
   <div id="cust-wizard" style="display:none">
     <div class="stepbar" id="stepBar"></div>
 
     <div id="step-browse" class="wiz-step on">
       <div class="intro-card">
-        <div class="it">👋 หน้านี้ใช้ขอยืมเครื่อง DJI ไปทดลองใช้งาน</div>
-        <div class="ib">
+        <div class="it" data-i18n="intro.t">👋 หน้านี้ใช้ขอยืมเครื่อง DJI ไปทดลองใช้งาน</div>
+        <div class="ib" data-i18n="intro.b">
           เลือกเครื่องและช่วงวันที่ต้องการ แล้วกรอกข้อมูลติดต่อ — ใช้เวลาไม่ถึง 2 นาที ไม่ต้องสมัครสมาชิก<br>
           <b>สิ่งที่ส่งไปคือ “คำขอ” ยังไม่ใช่การยืนยัน</b> ทีมงาน SIS จะตรวจสอบคิวเครื่องแล้วติดต่อกลับเพื่อยืนยันอีกครั้งภายใน 1 วันทำการ
         </div>
       </div>
       <div class="pagehead">
-        <div class="eyebrow">ขั้นตอนที่ 1 จาก 3</div>
-        <h1>เลือกอุปกรณ์ที่ต้องการยืม</h1>
-        <p>ติ๊กเลือกได้หลายเครื่อง/หลายรุ่นพร้อมกัน (เช่น โดรน + เพย์โหลดที่ใช้คู่กัน) แล้วกดปุ่มด้านล่างเพื่อเลือกช่วงวันครั้งเดียวให้ทุกเครื่องที่เลือก</p>
+        <div class="eyebrow" data-i18n="step1.eyebrow">ขั้นตอนที่ 1 จาก 3</div>
+        <h1 data-i18n="step1.h1">เลือกอุปกรณ์ที่ต้องการยืม</h1>
+        <p data-i18n="step1.p">ติ๊กเลือกได้หลายเครื่อง/หลายรุ่นพร้อมกัน (เช่น โดรน + เพย์โหลดที่ใช้คู่กัน) แล้วกดปุ่มด้านล่างเพื่อเลือกช่วงวันครั้งเดียวให้ทุกเครื่องที่เลือก</p>
       </div>
-      <div class="hint-row">💡 กดที่การ์ดเพื่อเลือก/ยกเลิก — เครื่องที่ขึ้นว่า “ไม่ว่างตอนนี้” ยังกดเลือกได้ ระบบจะพาไปดูว่าว่างวันไหนบ้าง</div>
+      <div class="hint-row" data-i18n="step1.hint">💡 กดที่การ์ดเพื่อเลือก/ยกเลิก — เครื่องที่ขึ้นว่า “ไม่ว่างตอนนี้” ยังกดเลือกได้ ระบบจะพาไปดูว่าว่างวันไหนบ้าง</div>
       <div class="cat-tabs" id="custCatTabs"></div>
       <div class="browse-toolbar">
-        <input type="text" id="custSearch" placeholder="🔍 ค้นหารุ่น หรือเลขเครื่อง เช่น Mavic, Dock, 17661" oninput="custSearch=this.value;renderBrowse()">
+        <input type="text" id="custSearch" data-i18n-ph="search.ph" placeholder="🔍 ค้นหารุ่น หรือเลขเครื่อง เช่น Mavic, Dock, 17661" oninput="custSearch=this.value;renderBrowse()">
         <select id="custSort" onchange="custSort=this.value;renderBrowse()">
-          <option value="name_asc">เรียง: ชื่อรุ่น A-Z</option>
-          <option value="avail_first">เรียง: ว่างเยอะสุดก่อน</option>
-          <option value="soonest">เรียง: ว่างเร็วสุดก่อน</option>
+          <option value="name_asc" data-i18n="sort.name">เรียง: ชื่อรุ่น A-Z</option>
+          <option value="avail_first" data-i18n="sort.avail">เรียง: ว่างเยอะสุดก่อน</option>
+          <option value="soonest" data-i18n="sort.soon">เรียง: ว่างเร็วสุดก่อน</option>
         </select>
       </div>
       <div class="filter-chips" id="custTypeChips"></div>
@@ -260,14 +265,14 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
     </div>
 
     <div id="step-calendar" class="wiz-step">
-      <button class="back-link" onclick="backToBrowse()">← กลับไปแก้ไขรายการที่เลือก</button>
+      <button class="back-link" onclick="backToBrowse()" data-i18n="back.edit">← กลับไปแก้ไขรายการที่เลือก</button>
       <div class="pagehead">
-        <div class="eyebrow">ขั้นตอนที่ 2 จาก 3</div>
-        <h1>เลือกช่วงวันที่จะยืม</h1>
-        <p>ปฏิทินด้านล่างแสดงเฉพาะวันที่ <b>ว่างพร้อมกันทุกเครื่อง</b> ที่คุณเลือกไว้ — ใส่จำนวนวันที่จะยืม แล้วกดวันเริ่ม ระบบจะเลือกช่วงให้อัตโนมัติ</p>
+        <div class="eyebrow" data-i18n="step2.eyebrow">ขั้นตอนที่ 2 จาก 3</div>
+        <h1 data-i18n="step2.h1">เลือกช่วงวันที่จะยืม</h1>
+        <p data-i18n="step2.p">ปฏิทินด้านล่างแสดงเฉพาะวันที่ <b>ว่างพร้อมกันทุกเครื่อง</b> ที่คุณเลือกไว้ — ใส่จำนวนวันที่จะยืม แล้วกดวันเริ่ม ระบบจะเลือกช่วงให้อัตโนมัติ</p>
       </div>
       <div class="card" style="margin-bottom:16px">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:7px">กำลังเลือกวันให้เครื่องเหล่านี้:</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:7px" data-i18n="cal.forThese">กำลังเลือกวันให้เครื่องเหล่านี้:</div>
         <div id="calUnitsBanner" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
         <div id="calBlockHint"></div>
         <div class="cal-toolbar">
@@ -279,13 +284,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         <div id="calDayDetail"></div>
         <div id="multiSummary"></div>
         <div class="cal-legend">
-          <span><span class="dot" style="background:var(--good)"></span>ว่างทุกเครื่องที่เลือก (กดเลือกได้)</span>
-          <span><span class="dot" style="background:var(--bad)"></span>มีบางเครื่องไม่ว่าง</span>
-          <span><span class="dot" style="border:1px dashed var(--warn);background:var(--good-soft)"></span>⚠️ มีคนจอง รอคอนเฟิร์ม</span>
-          <span><span class="dot" style="background:var(--accent)"></span>ช่วงที่เลือก</span>
+          <span><span class="dot" style="background:var(--good)"></span><span data-i18n="lg.free">ว่างทุกเครื่องที่เลือก (กดเลือกได้)</span></span>
+          <span><span class="dot" style="background:var(--bad)"></span><span data-i18n="lg.busy">มีบางเครื่องไม่ว่าง</span></span>
+          <span><span class="dot" style="border:1px dashed var(--warn);background:var(--good-soft)"></span><span data-i18n="lg.pending">⚠️ มีคนจอง รอคอนเฟิร์ม</span></span>
+          <span><span class="dot" style="background:var(--accent)"></span><span data-i18n="lg.picked">ช่วงที่เลือก</span></span>
         </div>
         <div class="daycount-row">
-          <span style="font-size:13px;font-weight:600">📅 จะยืมกี่วัน:</span>
+          <span style="font-size:13px;font-weight:600" data-i18n="cal.howMany">📅 จะยืมกี่วัน:</span>
           <div class="stepper">
             <button onclick="custDayCountChange(-1)">−</button>
             <input type="number" id="custDayCountInput" value="1" min="1" oninput="custDayCountInputChange(this.value)">
@@ -296,50 +301,50 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         </div>
         <div id="custRangeWarn"></div>
         <div class="range-inputs">
-          <div class="field"><label>วันที่เริ่มยืม</label><input type="date" id="rangeStartInput" onchange="manualRangeChange()"><div class="dhint" id="rangeStartHint"></div></div>
-          <div class="field"><label>วันที่คืน</label><input type="date" id="rangeEndInput" onchange="manualRangeChange()"><div class="dhint" id="rangeEndHint"></div></div>
+          <div class="field"><label data-i18n="lbl.start">วันที่เริ่มยืม</label><input type="date" id="rangeStartInput" onchange="manualRangeChange()"><div class="dhint" id="rangeStartHint"></div></div>
+          <div class="field"><label data-i18n="lbl.end">วันที่คืน</label><input type="date" id="rangeEndInput" onchange="manualRangeChange()"><div class="dhint" id="rangeEndHint"></div></div>
         </div>
-        <button class="btn btn-primary btn-full" onclick="addToCart()">✅ เพิ่มลงตะกร้า</button>
+        <button class="btn btn-primary btn-full" onclick="addToCart()" data-i18n="btn.addCart">✅ เพิ่มลงตะกร้า</button>
       </div>
     </div>
 
     <div id="step-contact" class="wiz-step">
-      <button class="back-link" onclick="backToBrowse()">← กลับไปเลือกอุปกรณ์เพิ่ม</button>
+      <button class="back-link" onclick="backToBrowse()" data-i18n="back.more">← กลับไปเลือกอุปกรณ์เพิ่ม</button>
       <div class="pagehead">
-        <div class="eyebrow">ขั้นตอนที่ 3 จาก 3</div>
-        <h1>กรอกข้อมูลติดต่อกลับ</h1>
-        <p>เหลือขั้นตอนสุดท้าย — ทีมงานต้องใช้ข้อมูลนี้ติดต่อกลับเพื่อยืนยันคิวเครื่องและนัดรับ-ส่ง</p>
+        <div class="eyebrow" data-i18n="step3.eyebrow">ขั้นตอนที่ 3 จาก 3</div>
+        <h1 data-i18n="step3.h1">กรอกข้อมูลติดต่อกลับ</h1>
+        <p data-i18n="step3.p">เหลือขั้นตอนสุดท้าย — ทีมงานต้องใช้ข้อมูลนี้ติดต่อกลับเพื่อยืนยันคิวเครื่องและนัดรับ-ส่ง</p>
       </div>
       <div class="card" style="margin-bottom:16px">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px">🧺 รายการที่จะยืม</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px" data-i18n="ct.cartTitle">🧺 รายการที่จะยืม</div>
         <div id="cartSummaryList"></div>
       </div>
       <div class="card">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px">📋 ข้อมูลผู้ยืม</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">ช่องที่มี <span class="req-mark">*</span> จำเป็นต้องกรอก</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px" data-i18n="ct.infoTitle">📋 ข้อมูลผู้ยืม</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px" data-i18n="ct.reqNote">ช่องที่มี <span class="req-mark">*</span> จำเป็นต้องกรอก</div>
         <div class="grid2">
-          <div class="field"><label>ชื่อบริษัท / ผู้ยืม <span class="req-mark">*</span></label><input type="text" id="ctCompany" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
-          <div class="field"><label>ชื่อผู้ติดต่อ <span class="req-mark">*</span></label><input type="text" id="ctContact" placeholder="ชื่อ-นามสกุล"></div>
-          <div class="field"><label>เบอร์โทรติดต่อ <span class="req-mark">*</span></label><input type="tel" id="ctPhone" placeholder="08x-xxx-xxxx"></div>
-          <div class="field"><label>อีเมล (ถ้ามี)</label><input type="email" id="ctEmail" placeholder="name@company.com"></div>
+          <div class="field"><label data-i18n="ct.company">ชื่อบริษัท / ผู้ยืม <span class="req-mark">*</span></label><input type="text" id="ctCompany" data-i18n-ph="ct.companyPh" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
+          <div class="field"><label data-i18n="ct.contact">ชื่อผู้ติดต่อ <span class="req-mark">*</span></label><input type="text" id="ctContact" data-i18n-ph="ct.contactPh" placeholder="ชื่อ-นามสกุล"></div>
+          <div class="field"><label data-i18n="ct.phone">เบอร์โทรติดต่อ <span class="req-mark">*</span></label><input type="tel" id="ctPhone" placeholder="08x-xxx-xxxx"></div>
+          <div class="field"><label data-i18n="ct.email">อีเมล (ถ้ามี)</label><input type="email" id="ctEmail" placeholder="name@company.com"></div>
         </div>
-        <div class="field"><label>วัตถุประสงค์ / หมายเหตุ</label><textarea id="ctPurpose" placeholder="เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า, ต้องการให้ส่งของไปที่หน้างาน"></textarea><div style="font-size:11.5px;color:var(--text3);margin-top:5px">บอกลักษณะงานที่จะใช้ ช่วยให้ทีมงานเตรียมเครื่องและอุปกรณ์เสริมได้ตรงกว่า</div></div>
-        <button class="btn btn-primary btn-full" id="submitBtn" onclick="submitCustomerRequest()">📨 ส่งคำขอยืม</button>
-        <div style="font-size:11.5px;color:var(--text3);text-align:center;margin-top:9px">กดส่งแล้วยังไม่ถือว่าจองสำเร็จ — รอทีมงานติดต่อกลับเพื่อยืนยัน</div>
+        <div class="field"><label data-i18n="ct.purpose">วัตถุประสงค์ / หมายเหตุ</label><textarea id="ctPurpose" data-i18n-ph="ct.purposePh" placeholder="เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า, ต้องการให้ส่งของไปที่หน้างาน"></textarea><div style="font-size:11.5px;color:var(--text3);margin-top:5px" data-i18n="ct.purposeHint">บอกลักษณะงานที่จะใช้ ช่วยให้ทีมงานเตรียมเครื่องและอุปกรณ์เสริมได้ตรงกว่า</div></div>
+        <button class="btn btn-primary btn-full" id="submitBtn" onclick="submitCustomerRequest()" data-i18n="btn.submit">📨 ส่งคำขอยืม</button>
+        <div style="font-size:11.5px;color:var(--text3);text-align:center;margin-top:9px" data-i18n="ct.footNote">กดส่งแล้วยังไม่ถือว่าจองสำเร็จ — รอทีมงานติดต่อกลับเพื่อยืนยัน</div>
       </div>
     </div>
 
     <div id="stickyBarWrap">
       <div class="cart-bar" id="selBar" style="display:none">
-        <span class="cb-label">✅ เลือกไว้ <span id="selCount">0</span> เครื่อง</span>
+        <span class="cb-label"><span data-i18n="bar.selPre">✅ เลือกไว้</span> <span id="selCount">0</span> <span data-i18n="bar.selPost">เครื่อง</span></span>
         <div id="selChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
-        <button class="btn btn-ghost btn-sm" onclick="clearSelection()">ล้าง</button>
-        <button class="btn btn-primary btn-sm" onclick="goToMultiCalendar()">ถัดไป: เลือกวันที่ →</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearSelection()" data-i18n="btn.clear">ล้าง</button>
+        <button class="btn btn-primary btn-sm" onclick="goToMultiCalendar()" data-i18n="btn.nextDates">ถัดไป: เลือกวันที่ →</button>
       </div>
       <div class="cart-bar" id="cartBar" style="display:none">
-        <span class="cb-label">🧺 ในตะกร้า <span id="cartCount">0</span> รายการ</span>
+        <span class="cb-label"><span data-i18n="bar.cartPre">🧺 ในตะกร้า</span> <span id="cartCount">0</span> <span data-i18n="bar.cartPost">รายการ</span></span>
         <div id="cartChips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
-        <button class="btn btn-primary btn-sm" onclick="goToContact()">ถัดไป: กรอกข้อมูลติดต่อ →</button>
+        <button class="btn btn-primary btn-sm" onclick="goToContact()" data-i18n="btn.nextContact">ถัดไป: กรอกข้อมูลติดต่อ →</button>
       </div>
     </div>
   </div>
@@ -347,18 +352,18 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   <div id="cust-confirm-view" style="display:none">
     <div class="card confirm-box">
       <div class="ic">✅</div>
-      <h2>ส่งคำขอเรียบร้อยแล้ว</h2>
-      <p>ทีมงาน SIS Distribution ได้รับคำขอของคุณแล้ว ปิดหน้านี้ได้เลย ไม่ต้องส่งซ้ำ</p>
+      <h2 data-i18n="done.h2">ส่งคำขอเรียบร้อยแล้ว</h2>
+      <p data-i18n="done.p">ทีมงาน SIS Distribution ได้รับคำขอของคุณแล้ว ปิดหน้านี้ได้เลย ไม่ต้องส่งซ้ำ</p>
       <div id="confirmSummary" style="max-width:420px;margin:0 auto 20px;text-align:left"></div>
       <div class="next-steps">
-        <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">ขั้นตอนต่อไป</div>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:6px" data-i18n="done.nextTitle">ขั้นตอนต่อไป</div>
         <ol class="next-steps">
-          <li>ทีมงานตรวจสอบว่าเครื่องว่างตามวันที่ขอหรือไม่</li>
-          <li>ติดต่อกลับตามเบอร์/อีเมลที่ให้ไว้ ภายใน 1 วันทำการ เพื่อยืนยันคิวและนัดรับ-ส่ง</li>
-          <li>เมื่อยืนยันแล้วจึงถือว่าจองสำเร็จ</li>
+          <li data-i18n="done.n1">ทีมงานตรวจสอบว่าเครื่องว่างตามวันที่ขอหรือไม่</li>
+          <li data-i18n="done.n2">ติดต่อกลับตามเบอร์/อีเมลที่ให้ไว้ ภายใน 1 วันทำการ เพื่อยืนยันคิวและนัดรับ-ส่ง</li>
+          <li data-i18n="done.n3">เมื่อยืนยันแล้วจึงถือว่าจองสำเร็จ</li>
         </ol>
       </div>
-      <button class="btn btn-ghost" onclick="location.reload()">↩️ ส่งคำขอใหม่อีกครั้ง</button>
+      <button class="btn btn-ghost" onclick="location.reload()" data-i18n="done.again">↩️ ส่งคำขอใหม่อีกครั้ง</button>
     </div>
   </div>
 </div>
@@ -380,6 +385,235 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.firestore();
 
+// ================================================================
+// สองภาษา ไทย/อังกฤษ — ลูกค้าต่างชาติเปิดลิงก์เดียวกันนี้ได้
+//
+// ข้อความคงที่ใน HTML ติด data-i18n ไว้ (ค่าในไฟล์คือภาษาไทย = ค่าเริ่มต้น ถ้าคีย์ไหนหลุด
+// จากพจนานุกรมก็ยังอ่านรู้เรื่อง ไม่กลายเป็นช่องว่าง) ส่วนข้อความที่ JS สร้างใช้ tr('key')
+// สลับภาษาแล้วจำไว้ใน localStorage ของเครื่องลูกค้า เปิดครั้งหน้าได้ภาษาเดิม
+// ครั้งแรกเดาจากภาษาเบราว์เซอร์ — ไม่ใช่ไทยให้ขึ้นอังกฤษเลย จะได้ไม่ต้องหาปุ่ม
+// ================================================================
+var LANG = 'th';
+try {
+  var _saved = localStorage.getItem('demoReqLang');
+  LANG = _saved || ((navigator.language || '').toLowerCase().indexOf('th') === 0 ? 'th' : 'en');
+} catch (e) {}
+
+var I18N = {
+  'hdr.sub':        ['ยืมเครื่อง Demo ทดลองใช้งาน — SIS Distribution', 'Borrow DJI demo equipment — SIS Distribution'],
+  'loading':        ['กำลังโหลดข้อมูลอุปกรณ์...', 'Loading equipment…'],
+  'intro.t':        ['👋 หน้านี้ใช้ขอยืมเครื่อง DJI ไปทดลองใช้งาน', '👋 Request DJI equipment to try out'],
+  'intro.b':        ['เลือกเครื่องและช่วงวันที่ต้องการ แล้วกรอกข้อมูลติดต่อ — ใช้เวลาไม่ถึง 2 นาที ไม่ต้องสมัครสมาชิก<br><b>สิ่งที่ส่งไปคือ “คำขอ” ยังไม่ใช่การยืนยัน</b> ทีมงาน SIS จะตรวจสอบคิวเครื่องแล้วติดต่อกลับเพื่อยืนยันอีกครั้งภายใน 1 วันทำการ',
+                     'Pick your equipment and dates, then leave your contact details — under 2 minutes, no account needed.<br><b>This sends a request, not a confirmed booking.</b> Our team checks availability and gets back to you to confirm within one business day.'],
+  'step1.eyebrow':  ['ขั้นตอนที่ 1 จาก 3', 'Step 1 of 3'],
+  'step1.h1':       ['เลือกอุปกรณ์ที่ต้องการยืม', 'Choose your equipment'],
+  'step1.p':        ['ติ๊กเลือกได้หลายเครื่อง/หลายรุ่นพร้อมกัน (เช่น โดรน + เพย์โหลดที่ใช้คู่กัน) แล้วกดปุ่มด้านล่างเพื่อเลือกช่วงวันครั้งเดียวให้ทุกเครื่องที่เลือก',
+                     'Pick as many units and models as you need (a drone plus the payload that goes with it, say), then set the dates once for everything you picked.'],
+  'step1.hint':     ['💡 กดที่การ์ดเพื่อเลือก/ยกเลิก — เครื่องที่ขึ้นว่า “ไม่ว่างตอนนี้” ยังกดเลือกได้ ระบบจะพาไปดูว่าว่างวันไหนบ้าง',
+                     '💡 Tap a card to select or deselect. Units marked unavailable can still be picked — we will show you when they are free.'],
+  'search.ph':      ['🔍 ค้นหารุ่น หรือเลขเครื่อง เช่น Mavic, Dock, 17661', '🔍 Search model or unit number — Mavic, Dock, 17661'],
+  'sort.name':      ['เรียง: ชื่อรุ่น A-Z', 'Sort: model A–Z'],
+  'sort.avail':     ['เรียง: ว่างเยอะสุดก่อน', 'Sort: most available first'],
+  'sort.soon':      ['เรียง: ว่างเร็วสุดก่อน', 'Sort: available soonest'],
+  'back.edit':      ['← กลับไปแก้ไขรายการที่เลือก', '← Back to change your selection'],
+  'back.more':      ['← กลับไปเลือกอุปกรณ์เพิ่ม', '← Back to add more equipment'],
+  'step2.eyebrow':  ['ขั้นตอนที่ 2 จาก 3', 'Step 2 of 3'],
+  'step2.h1':       ['เลือกช่วงวันที่จะยืม', 'Choose your dates'],
+  'step2.p':        ['ปฏิทินด้านล่างแสดงเฉพาะวันที่ <b>ว่างพร้อมกันทุกเครื่อง</b> ที่คุณเลือกไว้ — ใส่จำนวนวันที่จะยืม แล้วกดวันเริ่ม ระบบจะเลือกช่วงให้อัตโนมัติ',
+                     'The calendar shows only the days when <b>every unit you picked is free at the same time</b>. Enter how many days you need, tap a start date, and the range fills itself in.'],
+  'cal.forThese':   ['กำลังเลือกวันให้เครื่องเหล่านี้:', 'Choosing dates for:'],
+  'lg.free':        ['ว่างทุกเครื่องที่เลือก (กดเลือกได้)', 'All selected units free (tap to pick)'],
+  'lg.busy':        ['มีบางเครื่องไม่ว่าง', 'Some units unavailable'],
+  'lg.pending':     ['⚠️ มีคนจอง รอคอนเฟิร์ม', '⚠️ Requested by someone else, awaiting confirmation'],
+  'lg.picked':      ['ช่วงที่เลือก', 'Your selected range'],
+  'cal.howMany':    ['📅 จะยืมกี่วัน:', '📅 How many days:'],
+  'lbl.start':      ['วันที่เริ่มยืม', 'Start date'],
+  'lbl.end':        ['วันที่คืน', 'Return date'],
+  'btn.addCart':    ['✅ เพิ่มลงตะกร้า', '✅ Add to list'],
+  'step3.eyebrow':  ['ขั้นตอนที่ 3 จาก 3', 'Step 3 of 3'],
+  'step3.h1':       ['กรอกข้อมูลติดต่อกลับ', 'Your contact details'],
+  'step3.p':        ['เหลือขั้นตอนสุดท้าย — ทีมงานต้องใช้ข้อมูลนี้ติดต่อกลับเพื่อยืนยันคิวเครื่องและนัดรับ-ส่ง',
+                     'Last step — we need these to confirm availability and arrange delivery or pickup.'],
+  'ct.cartTitle':   ['🧺 รายการที่จะยืม', '🧺 What you are requesting'],
+  'ct.infoTitle':   ['📋 ข้อมูลผู้ยืม', '📋 Your details'],
+  'ct.reqNote':     ['ช่องที่มี <span class="req-mark">*</span> จำเป็นต้องกรอก', 'Fields marked <span class="req-mark">*</span> are required'],
+  'ct.company':     ['ชื่อบริษัท / ผู้ยืม <span class="req-mark">*</span>', 'Company / borrower <span class="req-mark">*</span>'],
+  'ct.companyPh':   ['เช่น บริษัท เอบีซี จำกัด', 'e.g. ABC Company Ltd.'],
+  'ct.contact':     ['ชื่อผู้ติดต่อ <span class="req-mark">*</span>', 'Contact name <span class="req-mark">*</span>'],
+  'ct.contactPh':   ['ชื่อ-นามสกุล', 'Full name'],
+  'ct.phone':       ['เบอร์โทรติดต่อ <span class="req-mark">*</span>', 'Phone <span class="req-mark">*</span>'],
+  'ct.email':       ['อีเมล (ถ้ามี)', 'Email (optional)'],
+  'ct.purpose':     ['วัตถุประสงค์ / หมายเหตุ', 'What you will use it for / notes'],
+  'ct.purposePh':   ['เช่น ทดลองบินสำรวจพื้นที่เกษตร, ใช้สาธิตลูกค้า, ต้องการให้ส่งของไปที่หน้างาน',
+                     'e.g. agricultural survey trial, customer demo, please deliver to site'],
+  'ct.purposeHint': ['บอกลักษณะงานที่จะใช้ ช่วยให้ทีมงานเตรียมเครื่องและอุปกรณ์เสริมได้ตรงกว่า',
+                     'Telling us the job helps us prepare the right unit and accessories.'],
+  'btn.submit':     ['📨 ส่งคำขอยืม', '📨 Send request'],
+  'ct.footNote':    ['กดส่งแล้วยังไม่ถือว่าจองสำเร็จ — รอทีมงานติดต่อกลับเพื่อยืนยัน',
+                     'Sending this does not confirm a booking — we will contact you to confirm.'],
+  'bar.selPre':     ['✅ เลือกไว้', '✅ Selected'],
+  'bar.selPost':    ['เครื่อง', 'unit(s)'],
+  'bar.cartPre':    ['🧺 ในตะกร้า', '🧺 In your list'],
+  'bar.cartPost':   ['รายการ', 'item(s)'],
+  'btn.clear':      ['ล้าง', 'Clear'],
+  'btn.nextDates':  ['ถัดไป: เลือกวันที่ →', 'Next: choose dates →'],
+  'btn.nextContact':['ถัดไป: กรอกข้อมูลติดต่อ →', 'Next: your details →'],
+  'done.h2':        ['ส่งคำขอเรียบร้อยแล้ว', 'Request sent'],
+  'done.p':         ['ทีมงาน SIS Distribution ได้รับคำขอของคุณแล้ว ปิดหน้านี้ได้เลย ไม่ต้องส่งซ้ำ',
+                     'SIS Distribution has your request. You can close this page — no need to send it again.'],
+  'done.nextTitle': ['ขั้นตอนต่อไป', 'What happens next'],
+  'done.n1':        ['ทีมงานตรวจสอบว่าเครื่องว่างตามวันที่ขอหรือไม่', 'We check the equipment is free on your dates.'],
+  'done.n2':        ['ติดต่อกลับตามเบอร์/อีเมลที่ให้ไว้ ภายใน 1 วันทำการ เพื่อยืนยันคิวและนัดรับ-ส่ง',
+                     'We contact you on the phone or email you gave, within one business day, to confirm and arrange delivery or pickup.'],
+  'done.n3':        ['เมื่อยืนยันแล้วจึงถือว่าจองสำเร็จ', 'Your booking is confirmed only once we have spoken.'],
+  'done.again':     ['↩️ ส่งคำขอใหม่อีกครั้ง', '↩️ Send another request'],
+
+  // ---- ข้อความที่ JS สร้างระหว่างใช้งาน ----
+  'st.free':        ['ว่างพร้อมยืม', 'Available'],
+  'st.busy':        ['ไม่ว่างตอนนี้', 'Unavailable now'],
+  'st.stuck':       ['⏳ ยังไม่ได้คืน — ยังไม่มีกำหนดว่าง', '⏳ Not returned yet — no free date known'],
+  'st.nextFree':    ['ว่างอีกที', 'Free again'],
+  'unit.pick':      ['เลือก', 'Select'],
+  'unit.picked':    ['เลือกแล้ว', 'Selected'],
+  'day.searchPh':   ['🔍 ค้นหาในวันนี้', '🔍 Search within this day'],
+  'day.allCat':     ['ทุกประเภท', 'All types'],
+  'cat.all':        ['ทั้งหมด', 'All'],
+  'multi.on':       ['🗓️ เลือกหลายวัน', '🗓️ Pick multiple days'],
+  'multi.off':      ['✓ เสร็จแล้ว', '✓ Done'],
+  'hint.pick':      ['กดวันเริ่มยืม ระบบเลือกช่วงให้อัตโนมัติ', 'Tap a start date and the range fills in'],
+  'hint.multi':     ['กดเลือกได้หลายวัน', 'Tap as many days as you need'],
+  'err.needPick':   ['เลือกอุปกรณ์อย่างน้อย 1 เครื่องก่อนนะครับ', 'Please select at least one unit first.'],
+  'err.needRange':  ['เลือกช่วงวันที่ก่อนนะครับ', 'Please choose your dates first.'],
+  'err.needCompany':['กรอกชื่อบริษัท / ผู้ยืมก่อนนะครับ', 'Please enter your company or name.'],
+  'err.needContact':['กรอกชื่อผู้ติดต่อก่อนนะครับ', 'Please enter a contact name.'],
+  'err.needPhone':  ['กรอกเบอร์โทรติดต่อก่อนนะครับ', 'Please enter a phone number.'],
+  'err.send':       ['ส่งคำขอไม่สำเร็จ ลองใหม่อีกครั้ง: ', 'Could not send your request, please try again: '],
+  'btn.sending':    ['กำลังส่ง...', 'Sending…'],
+  'cart.empty':     ['ยังไม่มีรายการในตะกร้า', 'Nothing in your list yet'],
+  'cart.remove':    ['เอาออก', 'Remove'],
+  'days.unit':      ['วัน', 'day(s)'],
+  'units.unit':     ['เครื่อง', 'unit(s)'],
+
+  'err.loadTitle':  ['โหลดรายการอุปกรณ์ไม่สำเร็จ', 'Could not load the equipment list'],
+  'err.loadBody':   ['อาจเป็นที่สัญญาณอินเทอร์เน็ตชั่วคราว ลองโหลดหน้าใหม่อีกครั้ง — ถ้ายังไม่ได้ ติดต่อทีมงาน SIS ได้โดยตรง',
+                     'This may be a temporary connection problem. Try reloading — if it keeps failing, contact the SIS team directly.'],
+  'err.retry':      ['🔄 ลองใหม่อีกครั้ง', '🔄 Try again'],
+  'err.detail':     ['รายละเอียดข้อผิดพลาด: ', 'Error detail: '],
+  'unit.noModel':   ['ไม่ระบุรุ่น', 'Unspecified model'],
+  'unit.n':         ['เครื่อง #', 'Unit #'],
+  'f.fly':          ['✈️ บินได้', '✈️ Flyable'],
+  'f.display':      ['🖼️ จัดแสดงเท่านั้น', '🖼️ Display only'],
+  'f.availOnly':    ['เฉพาะที่ว่างตอนนี้', 'Available now only'],
+  'browse.noMatch': ['🔍 ไม่พบรุ่นที่ตรงกับการค้นหา/ตัวกรอง หรือยังไม่มีอุปกรณ์ในระบบ',
+                     '🔍 Nothing matches your search or filters, or no equipment is listed yet'],
+  'browse.freeOf':  ['เครื่องว่างตอนนี้', 'available now'],
+  'pill.blocked':   ['⛔ งดใช้งาน', '⛔ Out of service'],
+  'pill.busy':      ['📤 ไม่ว่างตอนนี้', '📤 Unavailable now'],
+  'pill.free':      ['✅ ว่างตอนนี้', '✅ Available now'],
+  'chip.rent':      ['เช่า', 'Rental'],
+  'unit.soonest':   ['📅 ว่างเร็วสุด', '📅 Free from'],
+  'unit.hintPick':  ['กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง',
+                     'You can still pick it — the next step shows when it is free.'],
+  'sb.browse':      ['เลือกอุปกรณ์', 'Equipment'],
+  'sb.calendar':    ['เลือกวันที่', 'Dates'],
+  'sb.contact':     ['ข้อมูลติดต่อ', 'Your details'],
+  'cal.busy':       ['ไม่ว่าง', 'Unavailable'],
+  'cal.pending':    ['⚠️ มีคนจอง รอคอนเฟิร์ม', '⚠️ Requested, awaiting confirmation'],
+  'cal.free':       ['ว่าง', 'Free'],
+  'cal.tagTicked':  ['✓ เลือกแล้ว', '✓ Picked'],
+  'cal.tagPick':    ['✓ เลือก', '✓ Pick'],
+  'ms.empty':       ['ยังไม่ได้เลือกวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก', 'No days picked yet — tap the day boxes in the calendar'],
+  'ms.tickedPre':   ['ติ๊กไว้', 'Picked'],
+  'ms.borrowFrom':  ['ยืม', 'Borrowing'],
+  'ms.total':       ['รวม', 'total'],
+  'ms.gapNote':     ['วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย เพราะเครื่องอยู่กับคุณต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้',
+                     'Days in between that you did not tick still count — the equipment stays with you the whole time.'],
+  'ms.badPre':      ['⚠️ ในช่วงนี้มี', '⚠️ In this range there are'],
+  'ms.badPost':     ['วันที่บางเครื่องไม่ว่าง', 'day(s) when some units are unavailable'],
+  'ms.badTail':     ['— ส่งคำขอได้ แต่ทีมงานอาจต้องเลื่อนให้', '— you can still send the request, but we may need to shift the dates'],
+  'ms.andMore':     ['และอีก', 'and'],
+  'ms.clear':       ['ล้างที่เลือก', 'Clear picked days'],
+  'bh.title':       ['เดือนนี้ไม่มีวันไหนว่างพร้อมกันครบทุกเครื่อง', 'No day this month has every selected unit free at once'],
+  'bh.note':        ['ปฏิทินจะขึ้นว่าง ก็ต่อเมื่อทุกเครื่องที่เลือกไว้ว่างพร้อมกันในวันเดียวกัน ลองเอาเครื่องที่ติดออก แล้วค่อยขอยืมแยกอีกใบ หรือกดดูเดือนถัดไป',
+                     'A day only shows as free when every unit you picked is free on it. Try removing the blocking unit and requesting it separately, or look at next month.'],
+  'bh.busyPre':     ['ไม่ว่าง', 'Unavailable'],
+  'bh.busyPost':    ['วันในเดือนนี้', 'day(s) this month'],
+  'bh.freeAgain':   ['ว่างอีกครั้ง', 'free again'],
+  'bh.remove':      ['✕ เอาออก', '✕ Remove'],
+  'dd.allFreePend': ['ว่างครบทุกเครื่องที่เลือก — แต่มีคนขอจองวันนี้ไว้ รอทีมงานคอนเฟิร์ม',
+                     'All selected units are free — but someone has requested this day and we have not confirmed it yet'],
+  'dd.allFree':     ['ว่างครบทุกเครื่องที่เลือก', 'All selected units are free'],
+  'dd.freeWord':    ['ว่าง', 'free'],
+  'dd.busyWord':    ['ไม่ว่าง', 'unavailable'],
+  'dd.ofSelected':  ['จาก', 'of'],
+  'dd.searchPh':    ['พิมพ์หาในวันนี้ — รุ่น / เลขเช่า / S/N', 'Search within this day — model / rental no. / S/N'],
+  'dd.allCats':     ['📦 ทั้งหมด', '📦 All'],
+  'dd.noCat':       ['➖ ไม่ระบุหมวด', '➖ Uncategorised'],
+  'dd.chipNote':    ['ตัวเลขบนชิป = จำนวนที่<b>ว่างในวันนี้</b> ของหมวดนั้น', 'The number on each chip is how many are <b>free on this day</b>'],
+  'dd.noMatch':     ['🔍 ไม่มีเครื่องที่ตรงกับที่กรองไว้', '🔍 Nothing matches your filters'],
+  'dd.clearFilter': ['ล้างตัวกรอง', 'Clear filters'],
+  'dd.showPre':     ['แสดง', 'Showing'],
+  'dd.showPost':    ['เครื่องที่เลือกไว้', 'selected units'],
+  'dd.pillFree':    ['✅ ว่าง', '✅ Free'],
+  'dd.pillBusy':    ['📤 มีผู้ยืมอยู่', '📤 On loan'],
+  'dd.freeAgain':   ['ว่างอีกครั้ง', 'Free again'],
+  'dd.pickDay':     ['📅 เลือกวันนี้เป็นวันเริ่มยืม', '📅 Start from this day'],
+  'dd.cantAll':     ['วันนี้ยืมพร้อมกันทุกเครื่องไม่ได้ — เอาเครื่องที่ไม่ว่างออกจากรายการที่เลือก หรือเลื่อนไปวันที่ว่างครบ',
+                     'Not everything is free on this day — remove the unavailable units, or choose a day when all of them are free.'],
+  'dd.privacy':     ['🔒 ระบบไม่แสดงข้อมูลผู้ยืมรายอื่น', '🔒 We never show who else has borrowed'],
+  'warn.range':     ['⚠️ ช่วงที่เลือกมีบางวันไม่ว่างสำหรับบางเครื่อง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่',
+                     '⚠️ Some days in this range are unavailable for some units — try a different length or start date.'],
+  'alert.pickDate': ['เลือกวันที่ก่อนนะครับ', 'Please choose your dates first.'],
+  'alert.noItems':  ['ยังไม่ได้เลือกอุปกรณ์เลยครับ', 'You have not added any equipment yet.'],
+  'cart.none':      ['ยังไม่ได้เลือกอุปกรณ์', 'No equipment selected yet'],
+  'cart.remove':    ['✕ เอาออก', '✕ Remove'],
+  'need.company':   ['กรุณากรอกชื่อบริษัท / ผู้ยืม', 'Please enter your company or name'],
+  'need.contact':   ['กรุณากรอกชื่อผู้ติดต่อ', 'Please enter a contact name'],
+  'need.phone':     ['กรุณากรอกเบอร์โทรติดต่อ เพื่อให้ทีมงานติดต่อกลับได้', 'Please enter a phone number so we can reach you'],
+  'btn.sendingNow': ['กำลังส่งคำขอ...', 'Sending your request…'],
+  'sum.title':      ['สรุปคำขอของคุณ', 'Your request'],
+  'err.sendFail':   ['ส่งคำขอไม่สำเร็จ: ', 'Could not send your request: '],
+  'err.sendHint':   ['\n(อาจเป็นเพราะยังไม่ได้เปิด permission เขียนข้อมูลของ Firestore — แจ้งทีมงาน SIS)',
+                     '\n(The team may still need to enable write permission — please let SIS know.)'],
+  'unit.remove':    ['เอาเครื่องนี้ออก', 'Remove this unit'],
+  'cal.removeUnit': ['✕ เอาออก', '✕ Remove'],
+  'doc.title':      ['ยืมเครื่อง Demo — SIS Distribution', 'Borrow demo equipment — SIS Distribution']
+};
+
+function tr(k) {
+  var e = I18N[k];
+  if (!e) return k;
+  return e[LANG === 'en' ? 1 : 0];
+}
+function applyI18n() {
+  document.documentElement.lang = LANG;
+  document.title = tr('doc.title');
+  var n = document.querySelectorAll('[data-i18n]');
+  for (var i = 0; i < n.length; i++) {
+    var k = n[i].getAttribute('data-i18n');
+    if (I18N[k]) n[i].innerHTML = tr(k);
+  }
+  var p = document.querySelectorAll('[data-i18n-ph]');
+  for (var j = 0; j < p.length; j++) {
+    var pk = p[j].getAttribute('data-i18n-ph');
+    if (I18N[pk]) p[j].placeholder = tr(pk);
+  }
+  var b = document.getElementById('langBtn');
+  if (b) b.textContent = LANG === 'th' ? 'EN' : 'ไทย';
+}
+function toggleLang() {
+  LANG = LANG === 'th' ? 'en' : 'th';
+  try { localStorage.setItem('demoReqLang', LANG); } catch (e) {}
+  applyI18n();
+  // วาดใหม่ทุกส่วนที่ JS สร้างข้อความเอง — data-i18n ไม่ครอบถึง
+  if (typeof renderCatTabs === 'function' && UNITS.length) {
+    renderCatTabs(); renderTypeChips(); renderBrowse(); renderSelBar(); renderCartBar();
+    if (document.getElementById('step-calendar').classList.contains('on')) {
+      renderUnitCal(); renderCalBanner(); renderMultiSummary(); syncMultiDayUI();
+    }
+  }
+}
+
 function fmtISO(y, m, d) { return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0'); }
 function todayIso() { var t = new Date(); return fmtISO(t.getFullYear(), t.getMonth(), t.getDate()); }
 function addDaysIso(iso, days) {
@@ -388,12 +622,20 @@ function addDaysIso(iso, days) {
   return fmtISO(d.getFullYear(), d.getMonth(), d.getDate());
 }
 function daysBetweenIso(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+// ชื่อเดือน/วัน สลับตามภาษา — ปฏิทินเป็นส่วนที่ลูกค้าต่างชาติต้องอ่านมากที่สุดในหน้านี้
+var _MON_S = { th: ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'],
+               en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] };
+var _MON_L = { th: ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'],
+               en: ['January','February','March','April','May','June','July','August','September','October','November','December'] };
+var _DOW = { th: ['อา','จ','อ','พ','พฤ','ศ','ส'], en: ['Su','Mo','Tu','We','Th','Fr','Sa'] };
 function fThDate(iso) {
-  var p = iso.split('-'); var mn = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  return p[2] + ' ' + mn[Number(p[1]) - 1];
+  var p = String(iso || '').split('-');
+  if (p.length !== 3) return String(iso || '');
+  return Number(p[2]) + ' ' + _MON_S[LANG === 'en' ? 'en' : 'th'][Number(p[1]) - 1];
 }
-var DOW_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
-var MONTH_TH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+// เดิมเป็น array ตรงๆ ตอนนี้ต้องเปลี่ยนตามภาษา — ทำเป็น getter ที่ชื่อเดิมจะได้ไม่ต้องไล่แก้ที่เรียก
+Object.defineProperty(window, 'DOW_TH', { get: function() { return _DOW[LANG === 'en' ? 'en' : 'th']; } });
+Object.defineProperty(window, 'MONTH_TH', { get: function() { return _MON_L[LANG === 'en' ? 'en' : 'th']; } });
 function esc(s) { s = String(s == null ? '' : s); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ================================================================
@@ -433,7 +675,7 @@ function loadCatalog() {
     // กลุ่มเดียวกันทั้งก้อน หัวข้อกลุ่มไม่มีชื่อรุ่น และการ์ดเหลือแค่ "เครื่อง #1..#130" ดูไม่ออกว่าเครื่องอะไร
     var byModel = {};
     raw.forEach(function(u) {
-      var key = String(u.model || '').trim() || String(u.name || '').trim() || 'ไม่ระบุรุ่น';
+      var key = String(u.model || '').trim() || String(u.name || '').trim() || tr('unit.noModel');
       (byModel[key] = byModel[key] || []).push(u);
     });
     UNITS = [];
@@ -442,7 +684,7 @@ function loadCatalog() {
         var clickable = u.status !== 'unavailable' && u.status !== 'lost';
         UNITS.push({
           id: u.id, icon: iconForCategory(u.category), category: u.category || '', model: model,
-          label: 'เครื่อง #' + (i + 1),
+          label: tr('unit.n') + (i + 1),
           rentalDbNo: String(u.rentalDbNo || '').trim(),
           serialNumber: String(u.serialNumber || '').trim(),
           flyable: u.flyable !== false, busyRanges: u.busyRanges || [],
@@ -460,10 +702,10 @@ function loadCatalog() {
   }).catch(function(e) {
     document.getElementById('loadingView').innerHTML =
       '<div class="empty-state"><div style="font-size:40px;margin-bottom:10px">📡</div>' +
-      '<div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:6px">โหลดรายการอุปกรณ์ไม่สำเร็จ</div>' +
-      '<div style="font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.7">อาจเป็นที่สัญญาณอินเทอร์เน็ตชั่วคราว ลองโหลดหน้าใหม่อีกครั้ง — ถ้ายังไม่ได้ ติดต่อทีมงาน SIS ได้โดยตรง</div>' +
-      '<button class="btn btn-primary" onclick="location.reload()">🔄 ลองใหม่อีกครั้ง</button>' +
-      '<div style="font-size:11px;color:var(--text3);margin-top:14px">รายละเอียดข้อผิดพลาด: ' + esc(e.message) + '</div></div>';
+      '<div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:6px">' + tr('err.loadTitle') + '</div>' +
+      '<div style="font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.7">' + tr('err.loadBody') + '</div>' +
+      '<button class="btn btn-primary" onclick="location.reload()">' + tr('err.retry') + '</button>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:14px">' + tr('err.detail') + esc(e.message) + '</div></div>';
   });
 }
 function iconForCategory(catId) {
@@ -487,7 +729,7 @@ function renderSelBar() {
   document.getElementById('selChips').innerHTML = selectedUnitIds.map(function(id) {
     var u = UNITS.filter(function(x) { return x.id === id; })[0];
     if (!u) return '';
-    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
+    return '<span class="cart-chip">' + u.icon + ' ' + esc(u.model) + ' · ' + esc(u.label) + (u.rentalDbNo ? ' · ' + tr('chip.rent') + ' ' + esc(u.rentalDbNo) : '') + '<span class="x" onclick="toggleUnitSelect(\'' + id + '\')">✕</span></span>';
   }).join('');
   var onBrowse = document.getElementById('step-browse').classList.contains('on');
   document.getElementById('selBar').style.display = (selectedUnitIds.length && onBrowse) ? 'flex' : 'none';
@@ -495,7 +737,7 @@ function renderSelBar() {
 function renderCatTabs() {
   var counts = { all: UNITS.length };
   CATEGORIES.forEach(function(c) { counts[c.id] = UNITS.filter(function(u) { return u.category === c.id; }).length; });
-  var tabs = [{ id: 'all', label: 'ทั้งหมด', icon: '📦' }].concat(CATEGORIES);
+  var tabs = [{ id: 'all', label: tr('cat.all'), icon: '📦' }].concat(CATEGORIES);
   document.getElementById('custCatTabs').innerHTML = tabs.map(function(c) {
     if (c.id !== 'all' && !counts[c.id]) return '';
     return '<div class="cat-tab' + (custCategory === c.id ? ' on' : '') + '" onclick="custCategory=\'' + c.id + '\';renderBrowse()">' +
@@ -503,13 +745,13 @@ function renderCatTabs() {
   }).join('');
 }
 function renderTypeChips() {
-  var opts = [['all','ทั้งหมด'],['fly','✈️ บินได้'],['display','🖼️ จัดแสดงเท่านั้น']];
+  var opts = [['all',tr('cat.all')],['fly',tr('f.fly')],['display',tr('f.display')]];
   var h = opts.map(function(o) {
     return '<span class="filter-chip' + (custTypeFilter === o[0] ? ' on' : '') + '" onclick="custTypeFilter=\'' + o[0] + '\';renderBrowse()">' + o[1] + '</span>';
   }).join('');
   // ลูกค้าส่วนใหญ่อยากได้เครื่องเลย ไม่ได้อยากไล่ดูของที่ติดคิวอยู่ — ให้กรองเหลือเฉพาะที่ว่างวันนี้ได้
   h += '<span class="filter-chip' + (custAvailOnly ? ' on' : '') + '" onclick="custAvailOnly=!custAvailOnly;renderBrowse()">' +
-    (custAvailOnly ? '☑️' : '⬜') + ' เฉพาะที่ว่างตอนนี้</span>';
+    (custAvailOnly ? '☑️' : '⬜') + ' ' + tr('f.availOnly') + '</span>';
   document.getElementById('custTypeChips').innerHTML = h;
 }
 // เครื่องนี้จะว่างวันไหน — ตอบคำถามที่ลูกค้าถามต่อทันทีหลังเห็นว่า "ไม่ว่างตอนนี้"
@@ -564,33 +806,33 @@ function renderBrowse() {
     var bv = groups[b].filter(function(u){return u.clickable;}).length;
     return bv - av;
   });
-  if (!order.length) { grid.innerHTML = '<div class="empty-state">🔍 ไม่พบรุ่นที่ตรงกับการค้นหา/ตัวกรอง หรือยังไม่มีอุปกรณ์ในระบบ</div>'; return; }
+  if (!order.length) { grid.innerHTML = '<div class="empty-state">' + tr('browse.noMatch') + '</div>'; return; }
   var today = todayIso();
   grid.innerHTML = order.map(function(model) {
     var units = groups[model];
     var availCount = units.filter(function(u){return u.clickable && unitDayState(u, today) === 'avail';}).length;
-    return '<div class="model-group"><div class="mg-head"><span class="mn">' + units[0].icon + ' ' + esc(model) + '</span><span class="mc">' + availCount + '/' + units.length + ' เครื่องว่างตอนนี้</span></div>' +
+    return '<div class="model-group"><div class="mg-head"><span class="mn">' + units[0].icon + ' ' + esc(model) + '</span><span class="mc">' + availCount + '/' + units.length + ' ' + tr('browse.freeOf') + '</span></div>' +
       '<div class="mg-units">' + units.map(function(u) {
         var busy = u.clickable && unitDayState(u, today) === 'busy';
         var statusPill;
-        if (!u.clickable) statusPill = '<span class="pill pill-bad">⛔ งดใช้งาน</span>';
-        else if (busy) statusPill = '<span class="pill pill-warn">📤 ไม่ว่างตอนนี้</span>';
-        else statusPill = '<span class="pill pill-good">✅ ว่างตอนนี้</span>';
-        var flyPill = u.flyable ? '<span class="pill pill-muted">✈️ บินได้</span>' : '<span class="pill pill-muted">🖼️ จัดแสดงเท่านั้น</span>';
+        if (!u.clickable) statusPill = '<span class="pill pill-bad">' + tr('pill.blocked') + '</span>';
+        else if (busy) statusPill = '<span class="pill pill-warn">' + tr('pill.busy') + '</span>';
+        else statusPill = '<span class="pill pill-good">' + tr('pill.free') + '</span>';
+        var flyPill = u.flyable ? '<span class="pill pill-muted">' + tr('f.fly') + '</span>' : '<span class="pill pill-muted">' + tr('f.display') + '</span>';
         var isSel = selectedUnitIds.indexOf(u.id) !== -1;
         // สถานะมาก่อน เพราะลูกค้าเลือกเครื่องจาก "ว่างไหม" เป็นอย่างแรก แล้วค่อยดูว่าเครื่องไหน
         var chips = statusPill + flyPill;
-        if (u.rentalDbNo) chips += '<span class="uidpc"><i>เช่า</i>' + esc(u.rentalDbNo) + '</span>';
+        if (u.rentalDbNo) chips += '<span class="uidpc"><i>' + tr('chip.rent') + '</i>' + esc(u.rentalDbNo) + '</span>';
         if (u.serialNumber) chips += '<span class="uidpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
         var nf = busy ? unitNextFree(u) : null;
         return '<div class="unit-card' + (u.clickable ? '' : ' disabled') + (isSel ? ' selected' : '') + '" ' + (u.clickable ? 'onclick="toggleUnitSelect(\'' + u.id + '\')"' : '') + '>' +
           (isSel ? '<span class="sel-check">✓</span>' : '') +
           '<div class="un">' + u.icon + ' ' + esc(u.label) + '</div>' +
           '<div class="badges">' + chips + '</div>' +
-          (nf ? '<div class="unext">📅 ว่างเร็วสุด <b>' + fThDate(nf) + '</b></div>' : '') +
+          (nf ? '<div class="unext">' + tr('unit.soonest') + ' <b>' + fThDate(nf) + '</b></div>' : '') +
           // เครื่องที่ยังไม่ได้คืน บอกตรงๆ ว่ายังไม่มีกำหนด ไม่ใช่ชวนให้กดเลือกแล้วไปเจอปฏิทินแดงทั้งเดือน
-          (busy && !nf ? '<div class="unext stuck">⏳ ยังไม่ได้คืน — ยังไม่มีกำหนดว่าง</div>' : '') +
-          (busy && nf ? '<div class="uhint">กดเลือกได้ — ขั้นต่อไปจะเห็นปฏิทินว่าเครื่องนี้ว่างวันไหนบ้าง</div>' : '') +
+          (busy && !nf ? '<div class="unext stuck">' + tr('st.stuck') + '</div>' : '') +
+          (busy && nf ? '<div class="uhint">' + tr('unit.hintPick') + '</div>' : '') +
           '</div>';
       }).join('') + '</div></div>';
   }).join('');
@@ -651,7 +893,7 @@ function switchWizStep(name) {
 }
 // แถบขั้นตอน 1-2-3 ด้านบนสุด — ขั้นที่ผ่านมาแล้วขึ้นเครื่องหมายถูก ขั้นปัจจุบันไฮไลต์
 function renderStepBar(active) {
-  var steps = [['browse', 'เลือกอุปกรณ์'], ['calendar', 'เลือกวันที่'], ['contact', 'ข้อมูลติดต่อ']];
+  var steps = [['browse', tr('sb.browse')], ['calendar', tr('sb.calendar')], ['contact', tr('sb.contact')]];
   var curIdx = steps.map(function(s) { return s[0]; }).indexOf(active || 'browse');
   document.getElementById('stepBar').innerHTML = steps.map(function(s, i) {
     var cls = i === curIdx ? 'on' : (i < curIdx ? 'done' : '');
@@ -664,7 +906,9 @@ function renderUnitCal() {
   var year = base.getFullYear(), month = base.getMonth();
   var totalDays = new Date(year, month + 1, 0).getDate();
   var firstDow = new Date(year, month, 1).getDay();
-  document.getElementById('unitCalMonthLabel').textContent = MONTH_TH[month] + ' ' + (year + 543);
+  // ไทยใช้ พ.ศ. อังกฤษใช้ ค.ศ. — ลูกค้าต่างชาติเห็น "September 2569" แล้วงงว่าปีอะไร
+  document.getElementById('unitCalMonthLabel').textContent =
+    MONTH_TH[month] + ' ' + (LANG === 'en' ? year : year + 543);
   var today = new Date(); today.setHours(0,0,0,0);
   var isThisMonth = today.getFullYear() === year && today.getMonth() === month;
   var h = DOW_TH.map(function(d) { return '<div class="cal-dow">' + d + '</div>'; }).join('');
@@ -678,15 +922,15 @@ function renderUnitCal() {
     var inRange = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd;
     var isEdge = iso === rangeStart || iso === rangeEnd;
     var stateCls = state === 'busy' ? 'busy' : (pendingReq ? 'requested' : 'avail');
-    var stateLabel = state === 'busy' ? 'ไม่ว่าง' : (pendingReq ? '⚠️ มีคนจอง รอคอนเฟิร์ม' : 'ว่าง');
+    var stateLabel = state === 'busy' ? tr('cal.busy') : (pendingReq ? tr('cal.pending') : tr('cal.free'));
     var cls = 'cal-cell ' + stateCls + (isToday ? ' today' : '') + (isEdge ? ' rangeend' : (inRange ? ' inrange' : ''));
     // ทุกวันกดได้ รวมวันที่ไม่ว่าง — เพราะการกดคือ "ดูรายละเอียด" ไม่ใช่ "เลือก"
     var ticked = custMultiDay && custPickedDays.indexOf(iso) !== -1;
     var opened = custDayOpen === iso;
     var cls2 = cls + (ticked ? ' ticked' : '') + (opened ? ' opened' : '');
     var tag = '';
-    if (custMultiDay) tag = ticked ? '<span class="cal-tag">✓ เลือกแล้ว</span>' : '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>';
-    else if (isEdge) tag = '<span class="cal-tag">✓ เลือก</span>';
+    if (custMultiDay) tag = ticked ? '<span class="cal-tag">' + tr('cal.tagTicked') + '</span>' : '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>';
+    else if (isEdge) tag = '<span class="cal-tag">' + tr('cal.tagPick') + '</span>';
     else if (!inRange) tag = '<span class="cal-tag ' + stateCls + '">' + stateLabel + '</span>';
     h += '<div class="' + cls2 + '" data-iso="' + iso + '" onclick="custDayClick(\'' + iso + '\')">' +
       '<span class="cal-num">' + d + '</span>' + tag + '</div>';
@@ -703,7 +947,7 @@ function renderMultiSummary() {
   if (!box) return;
   if (!custMultiDay) { box.innerHTML = ''; return; }
   if (!custPickedDays.length) {
-    box.innerHTML = '<div class="multi-sum empty">ยังไม่ได้เลือกวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก</div>';
+    box.innerHTML = '<div class="multi-sum empty">' + tr('ms.empty') + '</div>';
     return;
   }
   var span = daysBetweenIso(custPickedDays[0], custPickedDays[custPickedDays.length - 1]) + 1;
@@ -713,11 +957,11 @@ function renderMultiSummary() {
     if (combinedDayState(it) !== 'avail') bad.push(it);
     it = addDaysIso(it, 1);
   }
-  var h = '<div class="multi-sum"><b>ติ๊กไว้ ' + custPickedDays.length + ' วัน</b> · ยืม ' +
-    fThDate(custPickedDays[0]) + ' – ' + fThDate(custPickedDays[custPickedDays.length - 1]) + ' รวม <b>' + span + ' วัน</b>';
-  if (gap) h += '<div class="ms-note">วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย เพราะเครื่องอยู่กับคุณต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้</div>';
-  if (bad.length) h += '<div class="ms-warn">⚠️ ในช่วงนี้มี ' + bad.length + ' วันที่บางเครื่องไม่ว่าง (' + fThDate(bad[0]) + (bad.length > 1 ? ' และอีก ' + (bad.length - 1) + ' วัน' : '') + ') — ส่งคำขอได้ แต่ทีมงานอาจต้องเลื่อนให้</div>';
-  h += '<button class="btn btn-ghost btn-sm" onclick="custClearDays()">ล้างที่เลือก</button></div>';
+  var h = '<div class="multi-sum"><b>' + tr('ms.tickedPre') + ' ' + custPickedDays.length + ' ' + tr('days.unit') + '</b> · ' + tr('ms.borrowFrom') + ' ' +
+    fThDate(custPickedDays[0]) + ' – ' + fThDate(custPickedDays[custPickedDays.length - 1]) + ' ' + tr('ms.total') + ' <b>' + span + ' ' + tr('days.unit') + '</b>';
+  if (gap) h += '<div class="ms-note">' + tr('ms.gapNote') + '</div>';
+  if (bad.length) h += '<div class="ms-warn">' + tr('ms.badPre') + ' ' + bad.length + ' ' + tr('ms.badPost') + ' (' + fThDate(bad[0]) + (bad.length > 1 ? ' ' + tr('ms.andMore') + ' ' + (bad.length - 1) + ' ' + tr('days.unit') : '') + ') ' + tr('ms.badTail') + '</div>';
+  h += '<button class="btn btn-ghost btn-sm" onclick="custClearDays()">' + tr('ms.clear') + '</button></div>';
   box.innerHTML = h;
 }
 // ลากคลุมหลายวันเพื่อเลือกช่วง — เดิมต้องกดวันเริ่มแล้วไปปรับจำนวนวันในช่องตัวเลข
@@ -744,12 +988,12 @@ function toggleMultiDay() {
 function syncMultiDayUI() {
   var b = document.getElementById('multiDayBtn'), hint = document.getElementById('pickModeHint');
   if (b) {
-    b.textContent = custMultiDay ? '✓ เสร็จแล้ว' : '🗓️ เลือกหลายวัน';
+    b.textContent = custMultiDay ? tr('multi.off') : tr('multi.on');
     b.className = custMultiDay ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   }
   if (hint) hint.textContent = custMultiDay
-    ? 'กดที่กล่องวันเพื่อติ๊กเลือก — กดซ้ำเพื่อเอาออก'
-    : 'กดที่กล่องวันเพื่อดูรายละเอียดวันนั้น · จะเลือกหลายวันให้กดปุ่ม 🗓️';
+    ? tr('hint.multi')
+    : tr('hint.pick');
 }
 // ติ๊กวันในโหมดเลือกหลายวัน — เครื่องถูกยืมต่อเนื่อง จะคืนกลางทางแล้วยืมต่อไม่ได้
 // ถ้าติ๊กวันที่ไม่ติดกัน ระบบจึงนับช่วงจากวันแรกถึงวันสุดท้าย และบอกให้รู้ว่ารวมวันตรงกลางด้วย
@@ -809,8 +1053,8 @@ function renderCalBanner() {
   el.innerHTML = calUnits.map(function(u) {
     var mp = custModelParts(u.model);
     return '<span class="cart-chip">' + u.icon + ' ' + esc(mp.main) + ' · ' + esc(u.label) +
-      (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') +
-      (calUnits.length > 1 ? '<span class="x" title="เอาเครื่องนี้ออก" onclick="custRemoveUnit(\'' + u.id + '\')">✕</span>' : '') +
+      (u.rentalDbNo ? ' · ' + tr('chip.rent') + ' ' + esc(u.rentalDbNo) : '') +
+      (calUnits.length > 1 ? '<span class="x" title="' + tr('unit.remove') + '" onclick="custRemoveUnit(\'' + u.id + '\')">✕</span>' : '') +
       '</span>';
   }).join('');
 }
@@ -845,15 +1089,14 @@ function renderCalBlockHint() {
   if (!box) return;
   var bl = (calUnits.length > 1) ? _blockersThisMonth() : null;
   if (!bl || !bl.length) { box.innerHTML = ''; return; }
-  var h = '<div class="blockhint"><b>เดือนนี้ไม่มีวันไหนว่างพร้อมกันครบทุกเครื่อง</b>' +
-    '<div class="bh-note">ปฏิทินจะขึ้นว่าง ก็ต่อเมื่อทุกเครื่องที่เลือกไว้ว่างพร้อมกันในวันเดียวกัน ' +
-    'ลองเอาเครื่องที่ติดออก แล้วค่อยขอยืมแยกอีกใบ หรือกดดูเดือนถัดไป</div><div class="bh-list">';
+  var h = '<div class="blockhint"><b>' + tr('bh.title') + '</b>' +
+    '<div class="bh-note">' + tr('bh.note') + '</div><div class="bh-list">';
   bl.forEach(function(x) {
     var mp = custModelParts(x.u.model);
     var nf = unitNextFreeFrom(x.u, fmtISO(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
     h += '<div class="bh-row"><span class="bh-nm">' + x.u.icon + ' ' + esc(mp.main) + ' <i>' + esc(x.u.label) + '</i>' +
-      '<span class="bh-d">ไม่ว่าง ' + x.n + ' วันในเดือนนี้' + (nf ? ' · ว่างอีกครั้ง ' + fThDate(nf) : '') + '</span></span>' +
-      '<button class="btn btn-ghost btn-sm" onclick="custRemoveUnit(\'' + x.u.id + '\')">✕ เอาออก</button></div>';
+      '<span class="bh-d">' + tr('bh.busyPre') + ' ' + x.n + ' ' + tr('bh.busyPost') + (nf ? ' · ' + tr('bh.freeAgain') + ' ' + fThDate(nf) : '') + '</span></span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="custRemoveUnit(\'' + x.u.id + '\')">' + tr('bh.remove') + '</button></div>';
   });
   return void (box.innerHTML = h + '</div></div>');
 }
@@ -883,8 +1126,8 @@ function renderDayDetail() {
   var pending = allFree && combinedPendingOnDay(iso);
   var h = '<div class="day-detail"><div class="dd-hd"><div>' +
     '<b>📅 ' + fThDate(iso) + '</b>' +
-    '<div class="dd-sub">' + (allFree ? (pending ? 'ว่างครบทุกเครื่องที่เลือก — แต่มีคนขอจองวันนี้ไว้ รอทีมงานคอนเฟิร์ม' : 'ว่างครบทุกเครื่องที่เลือก') :
-      'ว่าง ' + freeU.length + ' · ไม่ว่าง ' + busyU.length + ' จาก ' + calUnits.length + ' เครื่องที่เลือก') + '</div>' +
+    '<div class="dd-sub">' + (allFree ? (pending ? tr('dd.allFreePend') : tr('dd.allFree')) :
+      tr('dd.freeWord') + ' ' + freeU.length + ' · ' + tr('dd.busyWord') + ' ' + busyU.length + ' ' + tr('dd.ofSelected') + ' ' + calUnits.length) + '</div>' +
     '</div><button class="dd-x" onclick="custDayOpen=null;renderUnitCal()">✕</button></div>';
   // ---- ค้นหา + เลือกหมวด เฉพาะภายในวันนี้ ----
   // ตัวเลขบนชิปคือจำนวนที่ "ว่างในวันนี้" ของหมวดนั้น มองแวบเดียวรู้ว่าวันนี้หยิบอะไรได้
@@ -900,19 +1143,19 @@ function renderDayDetail() {
     h += '<div class="dd-filter">';
     h += '<div class="ddf-search"><span>🔍</span>' +
       '<input type="text" id="custDayQ" value="' + esc(custDayQ) + '" autocomplete="off"' +
-      ' placeholder="พิมพ์หาในวันนี้ — รุ่น / เลขเช่า / S/N" oninput="custDaySearch(this.value)">' +
+      ' placeholder="' + tr('dd.searchPh') + '" oninput="custDaySearch(this.value)">' +
       (custDayQ ? '<button class="ddf-clr" onclick="custDayQ=\'\';renderDayDetail()">✕</button>' : '') + '</div>';
     if (usedCats.length > 1 || custDayCat !== 'all') {
       var totalFree = usedCats.reduce(function(s, c) { return s + catN[c]; }, 0);
       h += '<div class="ddf-cats">';
-      h += '<button class="ddf-c' + (custDayCat === 'all' ? ' on' : '') + '" onclick="custDaySetCat(\'all\')">📦 ทั้งหมด <b>' + totalFree + '</b></button>';
+      h += '<button class="ddf-c' + (custDayCat === 'all' ? ' on' : '') + '" onclick="custDaySetCat(\'all\')">' + tr('dd.allCats') + ' <b>' + totalFree + '</b></button>';
       usedCats.forEach(function(c) {
         var meta = CATEGORIES.filter(function(x) { return x.id === c; })[0];
-        var lbl = meta ? meta.icon + ' ' + meta.label : '➖ ไม่ระบุหมวด';
+        var lbl = meta ? meta.icon + ' ' + meta.label : tr('dd.noCat');
         h += '<button class="ddf-c' + (custDayCat === c ? ' on' : '') + (catN[c] ? '' : ' zero') +
           '" onclick="custDaySetCat(\'' + String(c).replace(/'/g, "\\'") + '\')">' + esc(lbl) + ' <b>' + catN[c] + '</b></button>';
       });
-      h += '</div><div class="ddf-note">ตัวเลขบนชิป = จำนวนที่<b>ว่างในวันนี้</b> ของหมวดนั้น</div>';
+      h += '</div><div class="ddf-note">' + tr('dd.chipNote') + '</div>';
     }
     h += '</div>';
   }
@@ -922,11 +1165,11 @@ function renderDayDetail() {
     return custDayMatch(u);
   });
   if (!shown.length) {
-    h += '<div class="dd-empty">🔍 ไม่มีเครื่องที่ตรงกับที่กรองไว้' +
-      ' <button class="btn btn-ghost btn-sm" onclick="custDayReset();renderDayDetail()">ล้างตัวกรอง</button></div>';
+    h += '<div class="dd-empty">' + tr('dd.noMatch') + '' +
+      ' <button class="btn btn-ghost btn-sm" onclick="custDayReset();renderDayDetail()">' + tr('dd.clearFilter') + '</button></div>';
   } else {
     if (shown.length !== calUnits.length) {
-      h += '<div class="dd-count">แสดง ' + shown.length + ' จาก ' + calUnits.length + ' เครื่องที่เลือกไว้</div>';
+      h += '<div class="dd-count">' + tr('dd.showPre') + ' ' + shown.length + ' ' + tr('dd.ofSelected') + ' ' + calUnits.length + ' ' + tr('dd.showPost') + '</div>';
     }
     h += '<div class="dd-list">';
     shown.forEach(function(u) {
@@ -935,24 +1178,24 @@ function renderDayDetail() {
       var mp = custModelParts(u.model);
       h += '<div class="dd-row"><span class="dd-nm">' + u.icon + ' ' + esc(mp.main) +
         (mp.sub ? ' <u>' + esc(mp.sub) + '</u>' : '') + ' <i>' + esc(u.label) + '</i></span>' +
-        (free ? '<span class="pill pill-good">✅ ว่าง</span>'
-              : '<span class="dd-busy"><span class="pill pill-warn">📤 มีผู้ยืมอยู่</span>' +
-                (nf ? '<i>ว่างอีกครั้ง ' + fThDate(nf) + '</i>' : '') +
+        (free ? '<span class="pill pill-good">' + tr('dd.pillFree') + '</span>'
+              : '<span class="dd-busy"><span class="pill pill-warn">' + tr('dd.pillBusy') + '</span>' +
+                (nf ? '<i>' + tr('dd.freeAgain') + ' ' + fThDate(nf) + '</i>' : '') +
                 // เอาตัวที่ติดออกได้ตรงนี้เลย ไม่ต้องย้อนกลับไปหน้าเลือกอุปกรณ์
-                (calUnits.length > 1 ? '<button class="btn btn-ghost btn-sm dd-rm" onclick="custRemoveUnit(\'' + u.id + '\')">✕ เอาออก</button>' : '') +
+                (calUnits.length > 1 ? '<button class="btn btn-ghost btn-sm dd-rm" onclick="custRemoveUnit(\'' + u.id + '\')">' + tr('cal.removeUnit') + '</button>' : '') +
                 '</span>') + '</div>';
     });
     h += '</div>';
   }
   if (allFree) {
-    h += '<button class="btn btn-primary btn-sm" onclick="custPickFromDetail(\'' + iso + '\')">📅 เลือกวันนี้เป็นวันเริ่มยืม</button>';
+    h += '<button class="btn btn-primary btn-sm" onclick="custPickFromDetail(\'' + iso + '\')">' + tr('dd.pickDay') + '</button>';
   } else {
-    h += '<div class="dd-note">วันนี้ยืมพร้อมกันทุกเครื่องไม่ได้ — เอาเครื่องที่ไม่ว่างออกจากรายการที่เลือก หรือเลื่อนไปวันที่ว่างครบ</div>';
+    h += '<div class="dd-note">' + tr('dd.cantAll') + '</div>';
   }
   // เขียนทับทั้งแผงทุกครั้งที่พิมพ์ ช่องค้นหาจึงถูกสร้างใหม่และโฟกัสหลุด — จำตำแหน่งเคอร์เซอร์ไว้คืนให้
   var a = document.activeElement;
   var keep = (a && a.id === 'custDayQ') ? { s: a.selectionStart, e: a.selectionEnd } : null;
-  box.innerHTML = h + '<div class="dd-priv">🔒 ระบบไม่แสดงข้อมูลผู้ยืมรายอื่น</div></div>';
+  box.innerHTML = h + '<div class="dd-priv">' + tr('dd.privacy') + '</div></div>';
   if (keep) {
     var back = document.getElementById('custDayQ');
     if (back) { back.focus(); try { back.setSelectionRange(keep.s, keep.e); } catch (e) {} }
@@ -1008,7 +1251,7 @@ function checkRangeWarn() {
   if (!rangeStart || !rangeEnd || !calUnits.length) { warnEl.innerHTML = ''; return; }
   var hasIssue = false, cur = rangeStart;
   while (cur <= rangeEnd) { if (combinedDayState(cur) !== 'avail') { hasIssue = true; break; } cur = addDaysIso(cur, 1); }
-  warnEl.innerHTML = hasIssue ? '<div class="range-warn">⚠️ ช่วงที่เลือกมีบางวันไม่ว่างสำหรับบางเครื่อง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่</div>' : '';
+  warnEl.innerHTML = hasIssue ? '<div class="range-warn">' + tr('warn.range') + '</div>' : '';
 }
 function custDayCountChange(delta) {
   custDayCount = Math.max(1, custDayCount + delta);
@@ -1032,7 +1275,7 @@ function manualRangeChange() {
 // ================================================================
 var cart = [];
 function addToCart() {
-  if (!rangeStart) { alert('เลือกวันที่ก่อนนะครับ'); return; }
+  if (!rangeStart) { alert(tr('alert.pickDate')); return; }
   calUnits.forEach(function(u) {
     cart.push({ unitId: u.id, model: u.model, icon: u.icon, label: u.label, rentalDbNo: u.rentalDbNo, start: rangeStart, end: rangeEnd || rangeStart });
   });
@@ -1053,14 +1296,14 @@ function goToContact() {
   switchWizStep('contact');
   document.getElementById('cartSummaryList').innerHTML = cart.length ? cart.map(function(c, i) {
     return '<div class="cart-summary-item"><div><div class="csi-name">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) +
-      (c.rentalDbNo ? ' <span class="uidpc"><i>เช่า</i>' + esc(c.rentalDbNo) + '</span>' : '') + '</div>' +
+      (c.rentalDbNo ? ' <span class="uidpc"><i>' + tr('chip.rent') + '</i>' + esc(c.rentalDbNo) + '</span>' : '') + '</div>' +
       '<div class="csi-date">📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</div></div>' +
-      '<button class="btn btn-ghost btn-sm" onclick="removeFromCart(' + i + ');goToContact()">✕ เอาออก</button></div>';
-  }).join('') : '<div style="font-size:12.5px;color:var(--text2)">ยังไม่ได้เลือกอุปกรณ์</div>';
+      '<button class="btn btn-ghost btn-sm" onclick="removeFromCart(' + i + ');goToContact()">' + tr('cart.remove') + '</button></div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--text2)">' + tr('cart.none') + '</div>';
   document.getElementById('cartBar').style.display = 'none';
 }
 function submitCustomerRequest() {
-  if (!cart.length) { alert('ยังไม่ได้เลือกอุปกรณ์เลยครับ'); return; }
+  if (!cart.length) { alert(tr('alert.noItems')); return; }
   var company = document.getElementById('ctCompany').value.trim();
   var contact = document.getElementById('ctContact').value.trim();
   var phone = document.getElementById('ctPhone').value.trim();
@@ -1068,11 +1311,11 @@ function submitCustomerRequest() {
   var purpose = document.getElementById('ctPurpose').value.trim();
   // โฟกัสช่องที่ยังไม่ได้กรอกให้ด้วย ไม่ใช่แค่เตือนแล้วปล่อยให้ลูกค้าหาเองว่าช่องไหน
   function _need(el, msg) { alert(msg); el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-  if (!company) { _need(document.getElementById('ctCompany'), 'กรุณากรอกชื่อบริษัท / ผู้ยืม'); return; }
-  if (!contact) { _need(document.getElementById('ctContact'), 'กรุณากรอกชื่อผู้ติดต่อ'); return; }
-  if (!phone) { _need(document.getElementById('ctPhone'), 'กรุณากรอกเบอร์โทรติดต่อ เพื่อให้ทีมงานติดต่อกลับได้'); return; }
+  if (!company) { _need(document.getElementById('ctCompany'), tr('need.company')); return; }
+  if (!contact) { _need(document.getElementById('ctContact'), tr('need.contact')); return; }
+  if (!phone) { _need(document.getElementById('ctPhone'), tr('need.phone')); return; }
   var btn = document.getElementById('submitBtn');
-  btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
+  btn.disabled = true; btn.textContent = tr('btn.sendingNow');
   db.collection('publicDemoRequests').add({
     items: cart.map(function(c) { return { unitId: c.unitId, model: c.model, label: c.label, rentalDbNo: c.rentalDbNo || '', start: c.start, end: c.end }; }),
     companyName: company, contactName: contact, phone: phone, email: email, purpose: purpose,
@@ -1081,7 +1324,7 @@ function submitCustomerRequest() {
     // สรุปสิ่งที่ขอไปให้เห็นบนหน้ายืนยัน — ลูกค้าจะได้ตรวจทานได้ว่าส่งถูกและถ่ายรูปเก็บไว้อ้างอิงได้
     document.getElementById('confirmSummary').innerHTML =
       '<div style="background:var(--surface-2);border-radius:10px;padding:12px 14px">' +
-      '<div style="font-weight:700;font-size:12.5px;margin-bottom:7px">สรุปคำขอของคุณ</div>' +
+      '<div style="font-weight:700;font-size:12.5px;margin-bottom:7px">' + tr('sum.title') + '</div>' +
       cart.map(function(c) {
         return '<div style="font-size:12.5px;line-height:1.8">' + c.icon + ' ' + esc(c.model) + ' — ' + esc(c.label) +
           '<span style="color:var(--text2)"> · 📅 ' + fThDate(c.start) + (c.end !== c.start ? ' – ' + fThDate(c.end) : '') + '</span></div>';
@@ -1092,11 +1335,12 @@ function submitCustomerRequest() {
     document.getElementById('cust-confirm-view').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }).catch(function(e) {
-    alert('ส่งคำขอไม่สำเร็จ: ' + e.message + '\n(อาจเป็นเพราะยังไม่ได้เปิด permission เขียนข้อมูลของ Firestore — แจ้งทีมงาน SIS)');
-    btn.disabled = false; btn.textContent = '📨 ส่งคำขอยืม';
+    alert(tr('err.sendFail') + e.message + tr('err.sendHint'));
+    btn.disabled = false; btn.textContent = tr('btn.submit');
   });
 }
 
+applyI18n();
 loadCatalog();
 </script>
 </body>
