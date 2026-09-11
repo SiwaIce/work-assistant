@@ -29,6 +29,44 @@ function _noteColorPicker(radioName, selected) {
 // ================================================================
 // MAIN PAGE
 // ================================================================
+// ================================================================
+// EXPORT — เอา Note ออกมาเก็บไว้เอง (คนละคอลเลกชันกับ Knowledge: Note = postit, Knowledge = notes)
+//
+// Note มี 2 แบบปนกันในคอลเลกชันเดียว: แบบข้อความ (content) กับแบบ Fields (fields[] คู่ label/value)
+// แผ่นเดียวจึงมีทั้งคอลัมน์ "เนื้อหา" และ "ข้อมูลแบบ Fields" ที่แบนคู่ label/value มาเป็นบรรทัด
+// คอลัมน์สุดท้ายเก็บคีย์ที่ไม่รู้จักไว้เป็น JSON — เป็นไฟล์สำรอง ถ้าวันหน้ามีฟิลด์ใหม่จะได้ไม่หายเงียบ
+// ================================================================
+var _NOTE_KNOWN = ['id','title','content','type','fields','color','pinned','status','created','updated','deletedAt'];
+function _noteExtras(n) {
+  var extra = {};
+  Object.keys(n || {}).forEach(function(k) { if (_NOTE_KNOWN.indexOf(k) === -1) extra[k] = n[k]; });
+  return Object.keys(extra).length ? JSON.stringify(extra) : '';
+}
+function _noteFieldsText(n) {
+  if (!n.fields || !n.fields.length) return '';
+  return n.fields.filter(function(f) { return (f.label || '') || (f.value || ''); })
+    .map(function(f) { return (f.label || '-') + ': ' + (f.value || ''); }).join('\n');
+}
+function exportNotesToExcel() {
+  var all = ST.getAll('postit');
+  if (!all.length) return toast('ยังไม่มี Note ให้ export');
+  if (typeof XLSX === 'undefined') return toast('❌ ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า');
+  var headers = ['id','หัวข้อ','ชนิด','เนื้อหา','ข้อมูลแบบ Fields','สี','ปักหมุด','สถานะ','สร้างเมื่อ','แก้ไขล่าสุด','ลบเมื่อ','อื่นๆ (JSON)'];
+  var rows = [headers].concat(all.map(function(n) {
+    return [ n.id || '', n.title || '', n.type === 'fields' ? 'Fields' : 'ข้อความ',
+      n.content || '', _noteFieldsText(n), n.color || '',
+      n.pinned ? 'ปักหมุด' : '', n.status || 'active',
+      n.created || '', n.updated || '', n.deletedAt || '', _noteExtras(n) ];
+  }));
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:30},{wch:10},{wch:50},{wch:40},{wch:10},{wch:10},{wch:10},{wch:20},{wch:20},{wch:20},{wch:30}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Note');
+  XLSX.writeFile(wb, 'notes-export-' + _td() + '.xlsx');
+  var active = all.filter(function(n) { return (n.status || 'active') === 'active'; }).length;
+  toast('📥 Export แล้ว ' + all.length + ' รายการ (ใช้งานอยู่ ' + active + ' · ในถังขยะ ' + (all.length - active) + ')');
+}
+
 function rNotes(el) {
   document.getElementById('pgT').textContent = '📓 Note';
   var all = ST.getAll('postit');
@@ -64,6 +102,7 @@ function rNotes(el) {
   }
   var trashLabel = '🗑️ ถังขยะ' + (trashItems.length ? ' (' + trashItems.length + ')' : '');
   h += '<button class="btn ' + (notesShowTrash ? 'bd' : 'bo') + '" onclick="notesShowTrash=!notesShowTrash;notesQ=\'\';render()">' + (notesShowTrash ? '← กลับ' : trashLabel) + '</button>';
+  if (!notesShowTrash) h += '<button class="btn bo" onclick="exportNotesToExcel()" title="ดาวน์โหลด Note ทั้งหมดเก็บไว้">📥 Export</button>';
   h += '</div>';
 
   if (notesShowTrash) {

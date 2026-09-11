@@ -9762,6 +9762,43 @@ function _noteHasImage(n) {
   return (n.attachments || []).some(function(a) { return _attachIcon(a) === null; });
 }
 
+// ================================================================
+// EXPORT — เอา Knowledge ออกมาเก็บไว้เอง
+//
+// คนละคอลเลกชันกับเมนู Note: Knowledge = 'notes' ส่วน Note (กระดาษโน้ต) = 'postit'
+// เอา dealerId มาแปลงเป็นชื่อ dealer ให้ด้วย เปิดไฟล์ทีหลังจะได้อ่านรู้เรื่องโดยไม่ต้องเปิดแอปเทียบ
+// คอลัมน์สุดท้ายเก็บคีย์ที่ไม่รู้จักเป็น JSON — ไฟล์สำรองต้องไม่ทำข้อมูลหายเงียบเมื่อมีฟิลด์ใหม่
+// ================================================================
+var _KB_KNOWN = ['id','title','content','text','category','tags','status','dealerId','pinned',
+                 'expireDate','remindDate','created','updated','deletedAt'];
+function exportKnowledgeToExcel() {
+  var all = ST.getAll('notes');
+  if (!all.length) return toast('ยังไม่มี Knowledge ให้ export');
+  if (typeof XLSX === 'undefined') return toast('❌ ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า');
+  var dealerName = {};
+  try { ST.getAll('dealers').forEach(function(d) { dealerName[d.id] = d.name || ''; }); } catch (e) {}
+  var headers = ['id','หัวข้อ','หมวดหมู่','แท็ก','เนื้อหา','Dealer','สถานะ','ปักหมุด',
+                 'วันหมดอายุ','วันเตือน','สร้างเมื่อ','แก้ไขล่าสุด','ลบเมื่อ','อื่นๆ (JSON)'];
+  var rows = [headers].concat(all.map(function(n) {
+    var extra = {};
+    Object.keys(n || {}).forEach(function(k) { if (_KB_KNOWN.indexOf(k) === -1) extra[k] = n[k]; });
+    return [ n.id || '', n.title || '', n.category || '', n.tags || '',
+      n.content || n.text || '',
+      n.dealerId ? (dealerName[n.dealerId] || n.dealerId) : '',
+      n.status || 'active', n.pinned ? 'ปักหมุด' : '',
+      n.expireDate || '', n.remindDate || '', n.created || '', n.updated || '', n.deletedAt || '',
+      Object.keys(extra).length ? JSON.stringify(extra) : '' ];
+  }));
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:32},{wch:16},{wch:20},{wch:60},{wch:28},{wch:10},{wch:10},
+                 {wch:14},{wch:14},{wch:20},{wch:20},{wch:20},{wch:30}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Knowledge');
+  XLSX.writeFile(wb, 'knowledge-export-' + _td() + '.xlsx');
+  var active = all.filter(function(n) { return (n.status || 'active') === 'active'; }).length;
+  toast('📥 Export แล้ว ' + all.length + ' รายการ (ใช้งานอยู่ ' + active + ')');
+}
+
 function rKnowledge(el) {
   document.getElementById('pgT').textContent = '📚 Knowledge Base';
   var cfg = getConfig();
@@ -9839,6 +9876,7 @@ function rKnowledge(el) {
     '<option value="title_asc"'    + (noteSort==='title_asc'?' selected':'')    + '>A-Z</option></select>' +
     '<button class="btn bsm ' + (noteView==='list'?'bp':'bo') + '" onclick="noteView=\'list\';render()" title="List">☰</button>' +
     '<button class="btn bsm ' + (noteView==='grid'?'bp':'bo') + '" onclick="noteView=\'grid\';render()" title="Grid">⊞</button>' +
+    '<button class="btn bo" onclick="exportKnowledgeToExcel()" title="ดาวน์โหลด Knowledge ทั้งหมดเก็บไว้">📥 Export</button>' +
     '<button class="btn bp" onclick="showNoteM()">➕ เพิ่ม</button>' +
     '</div>';
 
