@@ -1064,6 +1064,13 @@ function saveCreateSO() {
   // กติกาการเขียนกลับอยู่ใน pidWriteBackToPipeline (utils.js) ใช้ร่วมกับใบเสนอราคา จะได้ไม่มีสองมาตรฐาน
   if (projectId && pipelineId) pidWriteBackToPipeline(pipelineId, projectId, 'กรอกตอนสร้าง SO ' + soNumber);
 
+  // เอกสารใบนี้ระบุไปแล้วว่าเลขนี้เป็นโครงการหรือ run rate — ถ้าทะเบียน Project ID ยังไม่รู้ ก็ถือว่ารู้แล้ว
+  // (เลข run rate อยู่ที่ถัง ไม่ได้อยู่บน SO จึงต้องหยิบจากถังที่ผูก)
+  if (typeof djpNoteKindFromDoc === 'function') {
+    if (type === 'runrate') djpNoteKindFromDoc(((runrateId && ST.getOne('runrate', runrateId)) || {}).projectId, 'runrate');
+    else djpNoteKindFromDoc(projectId, 'project');
+  }
+
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
     customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
@@ -1618,6 +1625,10 @@ function saveSOEdit(soId) {
   // เขียนกลับไปที่โครงการต้นทาง — ตัวกลางเดียวกับฟอร์มสร้าง SO และใบเสนอราคา
   if (linkType === 'project' && projectId && pipelineId) {
     pidWriteBackToPipeline(pipelineId, projectId, 'แก้ไข SO ' + newSoNumber);
+  }
+  if (typeof djpNoteKindFromDoc === 'function') {
+    if (linkType === 'runrate') djpNoteKindFromDoc(((runrateId && ST.getOne('runrate', runrateId)) || {}).projectId, 'runrate');
+    else djpNoteKindFromDoc(projectId, 'project');
   }
 
   var updatedSO = ST.update('salesOrders', soId, {

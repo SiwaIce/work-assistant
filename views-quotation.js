@@ -2233,6 +2233,8 @@ function saveCurrentQuotation() {
   if (linkType === 'project' && linkProjectId && linkPipelineId) {
     pidWriteBackToPipeline(linkPipelineId, linkProjectId, 'กรอกในใบเสนอราคา ' + quoteNo);
   }
+  // ใบนี้ระบุประเภทไว้แล้ว ถ้าทะเบียน Project ID ยังไม่รู้ว่าเลขนี้เป็นอะไร ก็บันทึกให้จากตรงนี้ได้เลย
+  if (typeof djpNoteKindFromDoc === 'function') djpNoteKindFromDoc(linkProjectId, linkType);
   
   // ✅ คำนวณ totals จาก quotationItems ปัจจุบัน
   var grossTotal = 0;

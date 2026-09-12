@@ -29,6 +29,45 @@ var DJP_COLS = [
 
 var djpTab = 'all', djpQ = '', djpPeriod = 'all', djpBasis = 'reg', djpAnchor = '', djpOpenDealer = null, djpSel = {};
 
+// เลขที่ลงทะเบียนไว้ถูกเอาไปใช้ได้สองแบบ: เป็นโครงการจริง (ผูก Pipeline) หรือเป็นถังรับยอด Run rate
+// ไฟล์ CRM ไม่ได้บอกว่าอันไหนเป็นอะไร จึงเริ่มที่ '' = ยังไม่รู้ แล้วรู้เอาทีหลังจาก 3 ทาง:
+// เลือกเองในหน้านี้ · ผูกกับ Pipeline/ถังแล้วรู้เอง · หรือมีคนกรอกเลขนี้ลงใบเสนอราคา/SO ที่ระบุประเภทไว้แล้ว
+var DJP_KINDS = {
+  '':        { label: 'ยังไม่ระบุ', icon: '❔', color: 'var(--text2)' },
+  project:   { label: 'โครงการ',    icon: '📋', color: '#60a5fa' },
+  runrate:   { label: 'Run rate',   icon: '🏪', color: '#a78bfa' }
+};
+function djpKindOf(p) {
+  if (p.kind) return p.kind;
+  if (p.pipelineId) return 'project';
+  if (p.runrateId) return 'runrate';
+  return '';
+}
+
+// หาทะเบียนจากเลข — ใช้ pidSame เพื่อให้ "ID20260611-0022" กับ "20260611-0022" เจอกัน
+function djpFindByPid(pid) {
+  if (!pidNorm(pid)) return null;
+  return ST.getAll('djiProjects').filter(function(p) { return pidSame(p.pid, pid); })[0] || null;
+}
+
+// เรียกจากตอนบันทึกใบเสนอราคา/SO — เอกสารพวกนั้นระบุประเภทไว้อยู่แล้ว ถ้าทะเบียนยังไม่รู้ว่าเลขนี้เป็นอะไร
+// ก็ถือว่าได้คำตอบแล้ว เขียนให้เลยโดยไม่ต้องถาม (เขียนเฉพาะตอนยังว่าง — ไม่ไปทับสิ่งที่คนตั้งใจเลือกไว้เอง)
+function djpNoteKindFromDoc(pid, kind) {
+  if (!pidNorm(pid) || (kind !== 'project' && kind !== 'runrate')) return false;
+  var p = djpFindByPid(pid);
+  if (!p || p.kind) return false;
+  var up = ST.update('djiProjects', p.id, { kind: kind });
+  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof toast === 'function') toast('🗂️ บันทึกไว้ในทะเบียนแล้วว่า ' + p.pid + ' เป็น' + DJP_KINDS[kind].label);
+  return true;
+}
+
+function djpSetKind(id, kind) {
+  var up = ST.update('djiProjects', id, { kind: kind });
+  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  render();
+}
+
 // ---------------------------------------------------------------- ตัวช่วย
 function _djpNorm(v) { return String(v === null || v === undefined ? '' : v).trim(); }
 // ไฟล์ CRM เขียนวันที่เป็น DD/MM/YYYY HH:MM ซึ่งกลับหัวกับไฟล์สมุดเดินของที่เป็น ISO — แปลงเองทั้งคู่
@@ -56,6 +95,11 @@ function djpDealerOf(p) {
   return ST.getAll('dealers').filter(function(d) { return _djpNorm(d.djiCode).toUpperCase() === code; })[0] || null;
 }
 function djpPipelineOf(p) { return p.pipelineId ? ST.getOne('pipeline', p.pipelineId) : null; }
+function djpRunrateOf(p) { return p.runrateId ? ST.getOne('runrate', p.runrateId) : null; }
+// ถังที่ใช้เลขเดียวกันอยู่แล้ว — ถังบังคับให้มี Project ID ตั้งแต่สร้าง เลขจึงเป็นตัวจับคู่ที่แน่นอนที่สุด
+function djpBucketByPid(p) {
+  return ST.getAll('runrate').filter(function(r) { return pidSame(r.projectId, p.pid); })[0] || null;
+}
 
 // ---- ยอดเงิน: คาดการณ์ กับ ขายจริง คนละแหล่งกัน จึงคืนคู่กันเสมอ ไม่ยุบเป็นตัวเดียว ----
 // คาดการณ์ = forecast ของโครงการใน Pipeline ที่ผูกไว้ (ยังไม่ผูก = ยังไม่มีตัวเลข)
@@ -65,9 +109,12 @@ function _djpSOTotal(s) {
 }
 function _djpSODate(s) { return (s.invoiceDate || (s.createdAt || '').slice(0, 10) || ''); }
 function djpSOsOf(p) {
+  var rr = p.runrateId || (djpBucketByPid(p) || {}).id || '';
   return ST.getAll('salesOrders').filter(function(s) {
     if (s.projectId && pidSame(s.projectId, p.pid)) return true;
-    return !!(p.pipelineId && s.pipelineId === p.pipelineId);
+    if (p.pipelineId && s.pipelineId === p.pipelineId) return true;
+    // SO แบบ run rate ไม่ถือเลขของตัวเอง ยอดผูกกับถังแทน (ดู saveCreateSO) จึงต้องตามผ่านถัง
+    return !!(rr && s.runrateId === rr);
   });
 }
 function djpAmounts(p, range) {
@@ -308,16 +355,98 @@ function djpSuggestPipelines(p) {
   var used = {};
   ST.getAll('djiProjects').forEach(function(x) { if (x.pipelineId && x.id !== p.id) used[x.pipelineId] = 1; });
   return ST.getAll('pipeline').map(function(pipe) {
-    var score = 0;
-    if (dealer && pipe.dealerId === dealer.id) score += 3;
-    if (pidSame(pipe.projectId, p.pid)) score += 10;   // เลขตรงกันแล้ว = ตัวเดียวกันแน่นอน
-    score += _djpSimilar(pipe.endUserTH, p.acct) * 3;
-    score += _djpSimilar(pipe.projectName, p.name) * 2;
+    var score = 0, why = [];
+    if (pidNorm(pipe.projectId) && pidSame(pipe.projectId, p.pid)) { score += 10; why.push('เลข Project ID ตรงกัน'); }
+    if (dealer && pipe.dealerId === dealer.id) { score += 3; why.push('Dealer เดียวกัน'); }
+    var su = _djpSimilar(pipe.endUserTH, p.acct);
+    if (su > 0.3) { why.push('End User ' + (su > 0.7 ? 'ตรงกัน' : 'คล้ายกัน')); }
+    score += su * 3;
+    var sn = _djpSimilar(pipe.projectName, p.name);
+    if (sn > 0.3) { why.push('ชื่อโครงการ' + (sn > 0.7 ? 'ตรงกัน' : 'คล้ายกัน')); }
+    score += sn * 2;
     if (used[pipe.id]) score -= 4;                      // ถูกผูกกับ Project ID อื่นไปแล้ว
-    return { pipe: pipe, score: score, taken: !!used[pipe.id] };
+    return { pipe: pipe, score: score, taken: !!used[pipe.id], why: why };
   }).filter(function(x) { return x.score > 0.4; })
     .sort(function(a, b) { return b.score - a.score; })
     .slice(0, 12);
+}
+
+// ---- จับคู่อัตโนมัติ: เฉพาะคู่ที่เลข Project ID ตรงกันเป๊ะ ----
+// เลขตรงกันคือหลักฐานที่แน่นอนที่สุดที่มี ไม่ใช่การเดาจากชื่อ จึงผูกให้ได้เลยโดยไม่ต้องถามทีละอัน
+// แต่ "ชื่อ" ไม่แตะ — การเลือกว่าจะใช้ชื่อไหนเป็นการตัดสินใจ ไม่ควรทำแทนตอนกดปุ่มเดียว 30 รายการ
+function djpAutoLinkPlan() {
+  var out = { pipe: [], bucket: [], conflict: [], nameDiff: 0 };
+  var pipes = ST.getAll('pipeline'), buckets = ST.getAll('runrate');
+  ST.getAll('djiProjects').forEach(function(p) {
+    if (p.pipelineId || p.runrateId) return;
+    var kind = djpKindOf(p);
+    var mp = (kind === 'runrate') ? [] : pipes.filter(function(x) { return pidNorm(x.projectId) && pidSame(x.projectId, p.pid); });
+    var mb = (kind === 'project') ? [] : buckets.filter(function(x) { return pidSame(x.projectId, p.pid); });
+    var total = mp.length + mb.length;
+    if (!total) return;
+    if (total > 1) { out.conflict.push(p); return; }
+    if (mp.length) {
+      out.pipe.push({ p: p, target: mp[0] });
+      if (_djpNorm(p.name) !== _djpNorm(mp[0].projectName)) out.nameDiff++;
+    } else {
+      out.bucket.push({ p: p, target: mb[0] });
+    }
+  });
+  return out;
+}
+
+function showDjpAutoLinkM() {
+  var plan = djpAutoLinkPlan();
+  window._djpAutoPlan = plan;
+  var total = plan.pipe.length + plan.bucket.length;
+  var h = '<div class="hint" style="margin-bottom:10px">ผูกให้เฉพาะคู่ที่<b>เลข Project ID ตรงกันเป๊ะ</b> — เป็นหลักฐานที่แน่นอน ไม่ใช่การเดาจากชื่อ</div>';
+  h += '<div class="rr-stats" style="margin-bottom:12px">' +
+    '<div class="rr-stat"><div class="n" style="color:#60a5fa">' + plan.pipe.length + '</div><div class="l">ผูกกับโครงการ</div></div>' +
+    '<div class="rr-stat"><div class="n" style="color:#a78bfa">' + plan.bucket.length + '</div><div class="l">ผูกกับถัง Run rate</div></div>' +
+    '<div class="rr-stat"><div class="n" style="color:' + (plan.conflict.length ? 'var(--warn,#f59e0b)' : 'var(--text2)') + '">' + plan.conflict.length + '</div><div class="l">เลขซ้ำหลายที่ ข้ามไป</div></div>' +
+    '</div>';
+  if (plan.nameDiff) {
+    h += '<div class="hint" style="margin-bottom:10px">ℹ️ ในนั้นมี ' + plan.nameDiff + ' คู่ที่ชื่อโครงการสองฝั่งไม่ตรงกัน — ผูกให้ก่อนโดย<b>ไม่แตะชื่อ</b> ' +
+      'แล้วค่อยกดเข้าไปเลือกทีละอันว่าจะใช้ชื่อไหน (เลือกชื่อเป็นการตัดสินใจ ไม่ควรทำแทนรวดเดียว)</div>';
+  }
+  if (plan.conflict.length) {
+    h += '<div class="hint" style="color:var(--warn,#f59e0b);margin-bottom:10px">⚠️ เลขเหล่านี้ไปตรงกับหลายที่พร้อมกัน ต้องเลือกเอง: ' +
+      plan.conflict.slice(0, 5).map(function(p) { return '<span style="font-family:monospace">' + sanitize(p.pid) + '</span>'; }).join(', ') +
+      (plan.conflict.length > 5 ? ' …อีก ' + (plan.conflict.length - 5) : '') + '</div>';
+  }
+  if (!total) {
+    h += '<div class="empty"><p>ไม่มีคู่ที่เลขตรงกันเหลือให้ผูกแล้ว</p></div><button class="btn bo btn-full" onclick="closeMForce()">ปิด</button>';
+  } else {
+    h += '<button class="btn bp btn-full" onclick="djpCommitAutoLink()">🔗 ผูกให้เลย ' + total + ' คู่</button>';
+    h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ยกเลิก</button>';
+  }
+  openM('⚡ จับคู่อัตโนมัติจากเลขที่ตรงกัน', h);
+}
+
+function djpCommitAutoLink() {
+  var plan = window._djpAutoPlan;
+  if (!plan) { closeMForce(); return; }
+  var upd = [], pipeUpd = [];
+  plan.pipe.forEach(function(x) {
+    var u = ST.update('djiProjects', x.p.id, { pipelineId: x.target.id, kind: 'project' });
+    if (u) upd.push(u);
+    if (!x.target.djiCrmRegistered) {
+      var pu = ST.update('pipeline', x.target.id, { djiCrmRegistered: true, djiCrmDate: x.target.djiCrmDate || x.p.regDate || _td() });
+      if (pu) pipeUpd.push(pu);
+    }
+  });
+  plan.bucket.forEach(function(x) {
+    var u = ST.update('djiProjects', x.p.id, { runrateId: x.target.id, kind: 'runrate' });
+    if (u) upd.push(u);
+  });
+  window._djpAutoPlan = null;
+  if (typeof syncToFirebase === 'function') {
+    if (upd.length) syncToFirebase('djiProjects', upd);
+    if (pipeUpd.length) syncToFirebase('pipeline', pipeUpd);
+  }
+  closeMForce();
+  toast('🔗 ผูกให้แล้ว ' + upd.length + ' คู่');
+  render();
 }
 
 function showDjpLinkM(id) {
@@ -338,27 +467,118 @@ function showDjpLinkM(id) {
       ' <a href="#" onclick="djpUnlink(\'' + p.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
   }
 
-  h += '<div class="hint" style="margin-bottom:6px">เลือกโครงการใน Pipeline ที่ตรงกัน — เรียงตัวที่น่าจะใช่ขึ้นก่อน โดยดู Dealer, End User และชื่อประกอบกัน</div>';
+  // เลือกชนิดได้ตรงนี้ หรือปล่อยให้รู้เองตอนกรอกเลขนี้ในใบเสนอราคา/SO ก็ได้ — ชนิดเป็นตัวกำหนดว่า
+  // "ผูก" หมายถึงผูกกับโครงการใน Pipeline หรือผูกกับถังรับยอด Run rate ซึ่งคนละที่กันคนละความหมาย
+  var kind = djpKindOf(p);
+  h += '<div class="hint" style="margin-bottom:6px">เลขนี้ใช้เป็นอะไร</div>';
+  h += '<div class="rr-toolbar" style="margin-bottom:10px">';
+  ['project', 'runrate'].forEach(function(k) {
+    h += '<button class="btn bsm ' + (kind === k ? 'bp' : 'bo') + '" onclick="djpSetKindInModal(\'' + p.id + '\',\'' + k + '\')">' +
+      DJP_KINDS[k].icon + ' ' + DJP_KINDS[k].label + '</button>';
+  });
+  if (kind) h += '<button class="btn bsm bo" onclick="djpSetKindInModal(\'' + p.id + '\',\'\')">ล้าง</button>';
+  h += '</div>';
+
+  if (kind === 'runrate') {
+    // ฝั่ง Run rate: ถังบังคับให้มี Project ID ตั้งแต่สร้าง เลขจึงจับคู่กันได้ตรงๆ ไม่ต้องเดา
+    var cur = djpRunrateOf(p);
+    if (cur) {
+      h += '<div class="hint" style="margin-bottom:10px">ตอนนี้ผูกอยู่กับถัง <b>' + sanitize(cur.projectId || '(ไม่มีเลข)') + '</b> ' +
+        '<a href="#" onclick="djpUnlink(\'' + p.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
+    }
+    var same = djpBucketByPid(p);
+    if (same && (!cur || cur.id !== same.id)) {
+      h += '<div style="border:1px solid var(--ok,#22c55e);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer" onclick="djpLinkBucket(\'' + p.id + '\',\'' + same.id + '\')">' +
+        '<div style="font-size:12.5px;font-weight:600">✓ มีถังที่ใช้เลขนี้อยู่แล้ว — กดผูกได้เลย</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px">' + sanitize(same.projectId) +
+        (same.models ? ' · ' + sanitize(String(same.models).substr(0, 26)) : '') + '</div></div>';
+    }
+    var others = ST.getAll('runrate').filter(function(r) {
+      return (!same || r.id !== same.id) && (!dealer || r.dealerId === dealer.id);
+    });
+    if (others.length) {
+      h += '<div class="hint" style="margin-bottom:6px">หรือเลือกถังอื่นของ Dealer รายนี้</div>';
+      h += '<div style="max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+      others.forEach(function(r) {
+        h += '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="djpLinkBucket(\'' + p.id + '\',\'' + r.id + '\')">' +
+          '<div style="font-family:monospace;font-size:12px">' + sanitize(r.projectId || '(ไม่มีเลข)') + '</div>' +
+          (r.models ? '<div style="font-size:11px;color:var(--text2)">' + sanitize(r.models) + '</div>' : '') + '</div>';
+      });
+      h += '</div>';
+    }
+    if (!same) {
+      h += '<button class="btn bo btn-full" onclick="djpCreateBucketFrom(\'' + p.id + '\')">➕ ยังไม่มีถัง — สร้างถัง Run rate ด้วยเลขนี้</button>';
+    }
+    h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ปิด</button>';
+    openM('🔗 ผูกกับถัง Run rate', h);
+    return;
+  }
+
+  h += '<div class="hint" style="margin-bottom:6px">เลือกโครงการใน Pipeline ที่ตรงกัน — เรียงตัวที่น่าจะใช่ขึ้นก่อน พร้อมบอกว่าเสนอเพราะอะไร</div>';
   if (!sug.length) {
     h += '<div class="empty" style="padding:12px"><p>ไม่เจอโครงการที่ใกล้เคียงเลย — สร้างใหม่จากทะเบียนนี้ได้</p></div>';
   } else {
     h += '<div style="max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
     sug.forEach(function(x) {
       var d = ST.getOne('dealers', x.pipe.dealerId);
-      h += '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="djpPickPipeline(\'' + p.id + '\',\'' + x.pipe.id + '\')">' +
-        '<div style="font-size:12.5px;font-weight:600">' + sanitize(String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 60)) + '</div>' +
+      var exact = x.why.indexOf('เลข Project ID ตรงกัน') !== -1;
+      h += '<div style="border:1px solid ' + (exact ? 'var(--ok,#22c55e)' : 'var(--border)') + ';border-radius:8px;padding:8px 10px;cursor:pointer" onclick="djpPickPipeline(\'' + p.id + '\',\'' + x.pipe.id + '\')">' +
+        '<div style="font-size:12.5px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 60)) + '</div>' +
         '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
           (d ? '🏪 ' + sanitize(d.name) + ' · ' : '') +
-          (x.pipe.endUserTH ? '🏢 ' + sanitize(String(x.pipe.endUserTH).substr(0, 28)) + ' · ' : '') +
+          (x.pipe.endUserTH ? '🏢 ' + sanitize(String(x.pipe.endUserTH).substr(0, 26)) + ' · ' : '') +
           (pidNorm(x.pipe.projectId) ? '🗂️ ' + sanitize(x.pipe.projectId) : 'ยังไม่มี Project ID') +
-          (x.taken ? ' · <span style="color:var(--warn,#f59e0b)">ผูกกับเลขอื่นอยู่</span>' : '') +
-        '</div></div>';
+        '</div>' +
+        (x.why.length ? '<div style="font-size:10.5px;color:' + (exact ? 'var(--ok,#22c55e)' : 'var(--text2)') + ';margin-top:3px">เสนอเพราะ: ' + sanitize(x.why.join(' · ')) + '</div>' : '') +
+        (x.taken ? '<div style="font-size:10.5px;color:var(--warn,#f59e0b);margin-top:2px">⚠ ผูกกับเลขอื่นอยู่แล้ว</div>' : '') +
+        '</div>';
     });
     h += '</div>';
   }
   h += '<button class="btn bo btn-full" onclick="djpCreatePipelineFrom(\'' + p.id + '\')">➕ ไม่มีในระบบ — สร้างโครงการใหม่จากทะเบียนนี้</button>';
   h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ปิด</button>';
   openM('🔗 ผูกกับโครงการใน Pipeline', h);
+}
+
+// เปลี่ยนชนิดจากในโมดัลแล้วเปิดใหม่ทันที เพราะทั้งหน้าตาและความหมายของ "ผูก" เปลี่ยนตามชนิด
+function djpSetKindInModal(id, kind) {
+  var up = ST.update('djiProjects', id, { kind: kind });
+  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  showDjpLinkM(id);
+}
+
+function djpLinkBucket(id, rrId) {
+  var p = ST.getOne('djiProjects', id), r = ST.getOne('runrate', rrId);
+  if (!p || !r) return;
+  if (!pidSame(r.projectId, p.pid) &&
+      !confirm('เลขไม่ตรงกัน\n\nทะเบียน: ' + p.pid + '\nถัง: ' + (r.projectId || '(ไม่มีเลข)') +
+               '\n\nยอดของ SO จะเข้าถังตามที่เลือก ไม่ใช่ตามเลขในทะเบียน\n\nตกลง = ผูกตามนี้')) return;
+  var up = ST.update('djiProjects', id, { runrateId: rrId, kind: 'runrate', pipelineId: '' });
+  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  closeMForce();
+  toast('🔗 ผูกกับถัง ' + (r.projectId || '') + ' แล้ว');
+  render();
+}
+
+// สร้างถังใหม่ด้วยเลขของทะเบียนนี้ — ถัง Run rate บังคับว่าต้องมี Dealer และเลข จึงต้องรู้ Dealer ก่อน
+function djpCreateBucketFrom(id) {
+  var p = ST.getOne('djiProjects', id);
+  if (!p) return;
+  var dealer = djpDealerOf(p);
+  if (!dealer) { alert('ยังไม่รู้ว่าเลขนี้เป็นของ Dealer ไหน — ระบุ Dealer ก่อนถึงจะสร้างถังได้'); return; }
+  var dup = (typeof _rrFindByProjectId === 'function') ? _rrFindByProjectId(p.pid, null) : null;
+  if (dup) { djpLinkBucket(id, dup.id); return; }
+  var saved = ST.add('runrate', {
+    dealerId: dealer.id, projectId: p.pid, models: '', status: 'active',
+    note: 'สร้างจากทะเบียน Project ID ของ DJI CRM', createdAt: new Date().toISOString()
+  });
+  if (!saved) { toast('สร้างถังไม่สำเร็จ', true); return; }
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', saved);
+  var up = ST.update('djiProjects', id, { runrateId: saved.id, kind: 'runrate', pipelineId: '' });
+  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  closeMForce();
+  toast('✅ สร้างถัง Run rate ' + p.pid + ' แล้ว');
+  render();
 }
 
 // ชื่อสองฝั่งไม่ตรงกันเป็นเรื่องปกติ (คนละคนตั้ง คนละเวลา) — ถามว่าจะใช้ชื่อไหน แล้วเขียนให้ตรงกันทั้งคู่
@@ -426,8 +646,8 @@ function _djpApplyLink(projId, pipeId, nameFrom) {
 
 function djpUnlink(id) {
   var p = ST.getOne('djiProjects', id);
-  if (!p || !confirm('ยกเลิกการผูกกับโครงการใน Pipeline?\n\nชื่อและ Project ID ที่เขียนไปแล้วจะไม่ถูกย้อนกลับ')) return;
-  var up = ST.update('djiProjects', id, { pipelineId: '' });
+  if (!p || !confirm('ยกเลิกการผูก?\n\nชื่อและ Project ID ที่เขียนไปแล้วจะไม่ถูกย้อนกลับ')) return;
+  var up = ST.update('djiProjects', id, { pipelineId: '', runrateId: '' });
   if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
   closeMForce();
   toast('ยกเลิกการผูกแล้ว');
@@ -521,6 +741,17 @@ function djpBulkCreatePipelines() {
   render();
 }
 
+function djpBulkSetKind(kind) {
+  var ids = _djpSelIds();
+  if (!ids.length) return;
+  var upd = [];
+  ids.forEach(function(id) { var u = ST.update('djiProjects', id, { kind: kind }); if (u) upd.push(u); });
+  if (upd.length && typeof syncToFirebase === 'function') syncToFirebase('djiProjects', upd);
+  djpSel = {};
+  toast('✅ ตั้งเป็น' + DJP_KINDS[kind].label + ' ' + upd.length + ' รายการ');
+  render();
+}
+
 function djpBulkAssignDealer() {
   var ids = _djpSelIds();
   if (!ids.length) return;
@@ -551,6 +782,7 @@ function _djpVisible() {
     if (djpTab === 'linked' && !p.pipelineId) return false;
     if (djpTab === 'unlinked' && p.pipelineId) return false;
     if (djpTab === 'nodealer' && djpDealerOf(p)) return false;
+    if (djpTab === 'nokind' && djpKindOf(p)) return false;
     if (!djpInRange(p, range)) return false;
     if (!q) return true;
     return (p.pid || '').toLowerCase().indexOf(q) !== -1 ||
@@ -578,9 +810,14 @@ function _djpRowHtml(p, range) {
   h += '<td style="text-align:right;white-space:nowrap">' + (amt.forecast ? '฿' + fmtMoney(amt.forecast) : '<span style="color:var(--text2)">—</span>') + '</td>';
   h += '<td style="text-align:right;white-space:nowrap">' + (amt.actual ? '<b style="color:#22c55e">฿' + fmtMoney(amt.actual) + '</b>' : '<span style="color:var(--text2)">—</span>') +
        (amt.soCount ? '<div style="font-size:10px;color:var(--text2)">' + amt.soCount + ' SO</div>' : '') + '</td>';
+  var kind = djpKindOf(p), ki = DJP_KINDS[kind];
+  h += '<td style="white-space:nowrap"><span style="color:' + ki.color + ';font-size:11px">' + ki.icon + ' ' + ki.label + '</span></td>';
+  var bucket = djpRunrateOf(p);
   h += '<td style="white-space:nowrap">' + (pipe
     ? '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + pipe.id + '\'});return false" style="color:var(--accent)">🔗 ' + sanitize(String(pipe.projectName || '').substr(0, 22)) + '</a>'
-    : '<button class="btn bsm bo" onclick="showDjpLinkM(\'' + p.id + '\')">+ ผูกโครงการ</button>') + '</td>';
+    : bucket
+      ? '<a href="#" onclick="go(\'runrate\');return false" style="color:#a78bfa">🏪 ถัง ' + sanitize(bucket.projectId || '') + '</a>'
+      : '<button class="btn bsm bo" onclick="showDjpLinkM(\'' + p.id + '\')">+ ผูก</button>') + '</td>';
   return h + '</tr>';
 }
 
@@ -615,8 +852,14 @@ function rDjiProjects(el) {
     '<div class="rr-stat"><div class="n" style="font-size:15px;color:#22c55e">฿' + fmtMoney(sumA) + '</div><div class="l">Project — ขายจริง</div></div>' +
     '<div class="rr-stat"><div class="n" style="font-size:15px;color:#a78bfa">฿' + fmtMoney(rrTotal) + '</div><div class="l">Run rate — ขายจริง</div></div>' +
     '</div>';
+  var auto = djpAutoLinkPlan();
+  var autoN = auto.pipe.length + auto.bucket.length;
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
-    '<button class="btn bp bsm" onclick="importDjiProjectsXlsx()">⬆️ นำเข้าไฟล์</button></div></div>';
+    '<button class="btn bp bsm" onclick="importDjiProjectsXlsx()">⬆️ นำเข้าไฟล์</button>' +
+    (autoN ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjpAutoLinkM()">⚡ จับคู่อัตโนมัติได้ ' + autoN + ' คู่</button>' : '') +
+    '</div>';
+  if (autoN) h += '<div class="hint" style="margin-top:8px">มี ' + autoN + ' คู่ที่เลข Project ID ตรงกับโครงการ/ถังในระบบอยู่แล้ว — กดผูกให้ทีเดียวได้ ไม่ต้องไล่ทีละอัน</div>';
+  h += '</div>';
 
   // ---- ช่วงเวลา ----
   h += '<div class="rr-toolbar" style="align-items:center">';
@@ -644,10 +887,11 @@ function rDjiProjects(el) {
     all: all.filter(function(p) { return djpInRange(p, range); }).length,
     linked: linked,
     unlinked: inRange.length - linked,
-    nodealer: noDealer
+    nodealer: noDealer,
+    nokind: inRange.filter(function(p) { return !djpKindOf(p); }).length
   };
   h += '<div class="rr-toolbar">';
-  [['all', 'ทั้งหมด'], ['unlinked', 'ยังไม่ผูก Pipeline'], ['linked', 'ผูกแล้ว'], ['nodealer', 'ยังไม่รู้ Dealer']].forEach(function(t) {
+  [['all', 'ทั้งหมด'], ['unlinked', 'ยังไม่ผูก'], ['linked', 'ผูกแล้ว'], ['nokind', 'ยังไม่ระบุว่าใช้เป็นอะไร'], ['nodealer', 'ยังไม่รู้ Dealer']].forEach(function(t) {
     h += '<button class="btn bsm ' + (djpTab === t[0] ? 'bp' : 'bo') + '" onclick="djpSetTab(\'' + t[0] + '\')">' + t[1] + ' (' + counts[t[0]] + ')</button>';
   });
   h += '</div>';
@@ -659,6 +903,8 @@ function rDjiProjects(el) {
     '<b style="font-size:12px">เลือกไว้ <span id="djpBulkCount">' + _djpSelIds().length + '</span> รายการ</b>' +
     '<button class="btn bsm bp" onclick="djpBulkCreatePipelines()">➕ สร้างโครงการใน Pipeline</button>' +
     '<button class="btn bsm bo" onclick="djpBulkAssignDealer()">🏪 ระบุ Dealer</button>' +
+    '<button class="btn bsm bo" onclick="djpBulkSetKind(\'project\')">📋 ตั้งเป็นโครงการ</button>' +
+    '<button class="btn bsm bo" onclick="djpBulkSetKind(\'runrate\')">🏪 ตั้งเป็น Run rate</button>' +
     '<button class="btn bsm bo" onclick="djpClearSel()">ล้างที่เลือก</button></div>';
 
   var list = _djpVisible();
@@ -699,7 +945,7 @@ function rDjiProjects(el) {
     h += '</div></summary>';
     h += '<div style="overflow-x:auto;border-top:1px solid var(--border)"><table class="rr-tbl" style="min-width:820px"><thead><tr>' +
       '<th></th><th>Project ID</th><th>โครงการ / End User</th><th>Dealer</th><th>ลงทะเบียน</th>' +
-      '<th style="text-align:right">คาดการณ์</th><th style="text-align:right">ขายจริง</th><th>Pipeline</th>' +
+      '<th style="text-align:right">คาดการณ์</th><th style="text-align:right">ขายจริง</th><th>ใช้เป็น</th><th>ผูกกับ</th>' +
       '</tr></thead><tbody>';
     g.items.sort(function(a, b) { return (b.pid || '').localeCompare(a.pid || ''); })
       .forEach(function(p) { h += _djpRowHtml(p, range); });
@@ -707,4 +953,85 @@ function rDjiProjects(el) {
   });
 
   el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------- ผูกจากฝั่ง Pipeline
+// ทางเดียวกันแต่เดินกลับด้าน: ยืนอยู่ที่โครงการแล้วมองหาทะเบียนที่ใช่ ให้คะแนนด้วยเกณฑ์ชุดเดียวกับ
+// djpSuggestPipelines จะได้ไม่มีสองมาตรฐาน — เปิดจากหน้า Pipeline ตอนเพิ่งรู้ว่าลูกค้าลงทะเบียนไว้แล้ว
+function djpSuggestForPipeline(pipe) {
+  var dealer = pipe.dealerId ? ST.getOne('dealers', pipe.dealerId) : null;
+  return ST.getAll('djiProjects').map(function(p) {
+    var score = 0, why = [];
+    if (pidNorm(pipe.projectId) && pidSame(pipe.projectId, p.pid)) { score += 10; why.push('เลข Project ID ตรงกัน'); }
+    var pd = djpDealerOf(p);
+    if (dealer && pd && pd.id === dealer.id) { score += 3; why.push('Dealer เดียวกัน'); }
+    var su = _djpSimilar(pipe.endUserTH, p.acct);
+    if (su > 0.3) why.push('End User ' + (su > 0.7 ? 'ตรงกัน' : 'คล้ายกัน'));
+    score += su * 3;
+    var sn = _djpSimilar(pipe.projectName, p.name);
+    if (sn > 0.3) why.push('ชื่อโครงการ' + (sn > 0.7 ? 'ตรงกัน' : 'คล้ายกัน'));
+    score += sn * 2;
+    if (p.pipelineId && p.pipelineId !== pipe.id) score -= 4;
+    return { p: p, score: score, why: why, taken: !!(p.pipelineId && p.pipelineId !== pipe.id) };
+  }).filter(function(x) { return x.score > 0.4; })
+    .sort(function(a, b) { return b.score - a.score; })
+    .slice(0, 12);
+}
+
+function showDjpLinkFromPipeM(pipeId) {
+  var pipe = ST.getOne('pipeline', pipeId);
+  if (!pipe) return;
+  var all = ST.getAll('djiProjects');
+  if (!all.length) {
+    alert('ยังไม่มีทะเบียน Project ID ในระบบ — นำเข้าไฟล์ Project ที่ export จาก DJI CRM ก่อน (เมนู 🗂️ ทะเบียน Project ID)');
+    return;
+  }
+  var linked = all.filter(function(p) { return p.pipelineId === pipeId; })[0];
+  var sug = djpSuggestForPipeline(pipe);
+
+  var h = '<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:10px">' +
+    '<div style="font-size:12.5px;font-weight:600">' + sanitize(pipe.projectName || '(ไม่มีชื่อ)') + '</div>' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:2px">🏢 ' + sanitize(pipe.endUserTH || '-') +
+    ' · 🗂️ ' + (pidNorm(pipe.projectId) ? sanitize(pipe.projectId) : 'ยังไม่มี Project ID') + '</div></div>';
+
+  if (linked) {
+    h += '<div class="hint" style="margin-bottom:10px">ผูกอยู่กับทะเบียน <b style="font-family:monospace">' + sanitize(linked.pid) + '</b> ' +
+      '<a href="#" onclick="djpUnlink(\'' + linked.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
+  }
+
+  h += '<div class="hint" style="margin-bottom:6px">เลือกทะเบียน Project ID ที่ตรงกับโครงการนี้ — เรียงตัวที่น่าจะใช่ขึ้นก่อน</div>';
+  if (!sug.length) {
+    h += '<div class="empty" style="padding:12px"><p>ไม่เจอทะเบียนที่ใกล้เคียง — ลองค้นในเมนู 🗂️ ทะเบียน Project ID</p></div>';
+  } else {
+    h += '<div style="max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+    sug.forEach(function(x) {
+      var d = djpDealerOf(x.p);
+      var exact = x.why.indexOf('เลข Project ID ตรงกัน') !== -1;
+      h += '<div style="border:1px solid ' + (exact ? 'var(--ok,#22c55e)' : 'var(--border)') + ';border-radius:8px;padding:8px 10px;cursor:pointer" onclick="djpPickPipeline(\'' + x.p.id + '\',\'' + pipeId + '\')">' +
+        '<div style="font-family:monospace;font-size:12px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(x.p.pid) + '</div>' +
+        '<div style="font-size:12px;margin-top:2px">' + sanitize(String(x.p.name || '').substr(0, 58)) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
+          (x.p.acct ? '🏢 ' + sanitize(String(x.p.acct).substr(0, 26)) + ' · ' : '') +
+          (d ? '🏪 ' + sanitize(d.name) : sanitize(x.p.dealerName || '')) +
+          (x.p.regDate ? ' · ' + sanitize(x.p.regDate) : '') + '</div>' +
+        (x.why.length ? '<div style="font-size:10.5px;color:' + (exact ? 'var(--ok,#22c55e)' : 'var(--text2)') + ';margin-top:3px">เสนอเพราะ: ' + sanitize(x.why.join(' · ')) + '</div>' : '') +
+        (x.taken ? '<div style="font-size:10.5px;color:var(--warn,#f59e0b);margin-top:2px">⚠ ผูกกับโครงการอื่นอยู่แล้ว</div>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+  }
+  h += '<button class="btn bo btn-full" onclick="closeMForce();go(\'djiProjects\')">เปิดเมนูทะเบียน Project ID</button>';
+  h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ปิด</button>';
+  openM('🗂️ ผูกกับทะเบียน Project ID', h);
+}
+
+// ป้ายเล็กๆ ข้างช่อง Project ID ในหน้าโครงการ — บอกว่าผูกทะเบียนไว้แล้วหรือยัง แล้วกดผูกได้จากตรงนั้นเลย
+function djpPipeBadgeHtml(pipeId) {
+  var linked = ST.getAll('djiProjects').filter(function(p) { return p.pipelineId === pipeId; })[0];
+  if (linked) {
+    return '<a href="#" onclick="go(\'djiProjects\');return false" style="font-size:11px;color:#22c55e;text-decoration:none" ' +
+      'title="ผูกกับทะเบียน Project ID ของ DJI CRM แล้ว">🗂️ ผูกทะเบียนแล้ว</a>' +
+      ' <a href="#" onclick="showDjpLinkFromPipeM(\'' + pipeId + '\');return false" style="font-size:11px;color:var(--text2)">เปลี่ยน</a>';
+  }
+  return '<a href="#" onclick="showDjpLinkFromPipeM(\'' + pipeId + '\');return false" style="font-size:11px;color:var(--accent)">🗂️ ผูกทะเบียน Project ID</a>';
 }

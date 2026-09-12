@@ -2511,7 +2511,10 @@ function rPipeDet(el) {
   html += '<div><label></label><div></div></div></div>';
   html += _pipePosPickerHtml(p);
 
-  html += '<div class="fr"><div><label>Project ID</label><div>' + (p.projectId ? qcopyHtml(p.projectId) : '<span style="color:var(--text2)">— ยังไม่ลงทะเบียน CRM</span>') + '</div></div>';
+  // ผูกกับทะเบียน Project ID ได้จากตรงนี้ด้วย ไม่ใช่เฉพาะจากเมนูทะเบียน — เวลารู้ว่าลูกค้าลงทะเบียนไว้แล้ว
+  // เรามักจะยืนอยู่ที่หน้าโครงการนี่แหละ ไม่ใช่หน้าทะเบียน (ดู showDjpLinkFromPipeM ใน views-djiprojects.js)
+  html += '<div class="fr"><div><label>Project ID</label><div>' + (p.projectId ? qcopyHtml(p.projectId) : '<span style="color:var(--text2)">— ยังไม่ลงทะเบียน CRM</span>') +
+    (typeof djpPipeBadgeHtml === 'function' ? '<div style="margin-top:3px">' + djpPipeBadgeHtml(p.id) + '</div>' : '') + '</div></div>';
   html += '<div><label></label><div></div></div></div>';
   
   html += '<div class="fr"><div><label>End User (TH)</label><div>' + sanitize(p.endUserTH || '-') + '</div></div>';
