@@ -57,14 +57,14 @@ function djpNoteKindFromDoc(pid, kind) {
   var p = djpFindByPid(pid);
   if (!p || p.kind) return false;
   var up = ST.update('djiProjects', p.id, { kind: kind });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   if (typeof toast === 'function') toast('🗂️ บันทึกไว้ในทะเบียนแล้วว่า ' + p.pid + ' เป็น' + DJP_KINDS[kind].label);
   return true;
 }
 
 function djpSetKind(id, kind) {
   var up = ST.update('djiProjects', id, { kind: kind });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   render();
 }
 
@@ -329,11 +329,20 @@ function djpCommitImport() {
   });
 
   window._djpPending = null;
-  var all = added.concat(touched);
-  if (all.length && typeof syncToFirebase === 'function') syncToFirebase('djiProjects', all);
-  closeMForce();
-  toast('✅ นำเข้า ' + added.length + ' โครงการ · อัปเดต ' + touched.length);
-  go('djiProjects');
+
+  // รอให้ขึ้น cloud เสร็จก่อนค่อยบอกว่าสำเร็จ — เหตุผลเดียวกับฝั่งสมุดเดินของ (ดู djlCommitImport)
+  var body = document.getElementById('mBd');
+  if (body) body.innerHTML = '<div style="padding:18px;text-align:center"><div style="font-size:26px;margin-bottom:8px">⏳</div>' +
+    '<div style="font-size:13px">กำลังบันทึกขึ้น Cloud — อย่าเพิ่งปิดหรือรีเฟรชหน้านี้</div></div>';
+  var done = function(okCloud) {
+    closeMForce();
+    toast(okCloud === false
+      ? '✅ นำเข้าในเครื่องแล้ว (' + added.length + ' ใหม่ · ' + touched.length + ' อัปเดต) — แต่ยังไม่ขึ้น Cloud'
+      : '✅ นำเข้า ' + added.length + ' โครงการ · อัปเดต ' + touched.length);
+    go('djiProjects');
+  };
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects').then(done, function() { done(false); });
+  else done();
 }
 
 // ---------------------------------------------------------------- จับคู่กับ Pipeline
@@ -500,7 +509,7 @@ function djpCommitAutoLink() {
   });
   window._djpAutoPlan = null;
   if (typeof syncToFirebase === 'function') {
-    if (upd.length) syncToFirebase('djiProjects', upd);
+    if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
     if (pipeUpd.length) syncToFirebase('pipeline', pipeUpd);
   }
   closeMForce();
@@ -602,7 +611,7 @@ function showDjpLinkM(id) {
 // เปลี่ยนชนิดจากในโมดัลแล้วเปิดใหม่ทันที เพราะทั้งหน้าตาและความหมายของ "ผูก" เปลี่ยนตามชนิด
 function djpSetKindInModal(id, kind) {
   var up = ST.update('djiProjects', id, { kind: kind });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   showDjpLinkM(id);
 }
 
@@ -613,7 +622,7 @@ function djpLinkBucket(id, rrId) {
       !confirm('เลขไม่ตรงกัน\n\nทะเบียน: ' + p.pid + '\nถัง: ' + (r.projectId || '(ไม่มีเลข)') +
                '\n\nยอดของ SO จะเข้าถังตามที่เลือก ไม่ใช่ตามเลขในทะเบียน\n\nตกลง = ผูกตามนี้')) return;
   var up = ST.update('djiProjects', id, { runrateId: rrId, kind: 'runrate', pipelineId: '' });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
   toast('🔗 ผูกกับถัง ' + (r.projectId || '') + ' แล้ว');
   render();
@@ -634,7 +643,7 @@ function djpCreateBucketFrom(id) {
   if (!saved) { toast('สร้างถังไม่สำเร็จ', true); return; }
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', saved);
   var up = ST.update('djiProjects', id, { runrateId: saved.id, kind: 'runrate', pipelineId: '' });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
   toast('✅ สร้างถัง Run rate ' + p.pid + ' แล้ว');
   render();
@@ -679,7 +688,7 @@ function _djpApplyLink(projId, pipeId, nameFrom) {
   var projUpd = { pipelineId: pipeId };
   if (name) projUpd.name = name;
   var savedProj = ST.update('djiProjects', projId, projUpd);
-  if (savedProj && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', savedProj);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
 
   var pipeUpd = {};
   if (name && name !== _djpNorm(pipe.projectName)) pipeUpd.projectName = name;
@@ -707,7 +716,7 @@ function djpUnlink(id) {
   var p = ST.getOne('djiProjects', id);
   if (!p || !confirm('ยกเลิกการผูก?\n\nชื่อและ Project ID ที่เขียนไปแล้วจะไม่ถูกย้อนกลับ')) return;
   var up = ST.update('djiProjects', id, { pipelineId: '', runrateId: '' });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
   toast('ยกเลิกการผูกแล้ว');
   render();
@@ -743,7 +752,7 @@ function djpCreatePipelineFrom(id) {
     if (lg && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', lg);
   } catch (e) {}
   var up = ST.update('djiProjects', id, { pipelineId: pipe.id });
-  if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('djiProjects', up);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
   toast('✅ สร้างโครงการแล้ว');
   go('pipeDetail', { pipeId: pipe.id });
@@ -793,7 +802,7 @@ function djpBulkCreatePipelines() {
   if (typeof syncToFirebase === 'function') {
     if (pipes.length) syncToFirebase('pipeline', pipes);
     if (logs.length) syncToFirebase('pipeLog', logs.filter(Boolean));
-    if (projUpd.length) syncToFirebase('djiProjects', projUpd);
+    if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   }
   djpSel = {};
   toast('✅ สร้าง ' + made + ' โครงการแล้ว');
@@ -805,7 +814,7 @@ function djpBulkSetKind(kind) {
   if (!ids.length) return;
   var upd = [];
   ids.forEach(function(id) { var u = ST.update('djiProjects', id, { kind: kind }); if (u) upd.push(u); });
-  if (upd.length && typeof syncToFirebase === 'function') syncToFirebase('djiProjects', upd);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   djpSel = {};
   toast('✅ ตั้งเป็น' + DJP_KINDS[kind].label + ' ' + upd.length + ' รายการ');
   render();
@@ -826,7 +835,7 @@ function djpCommitBulkDealer() {
   if (!did) { alert('เลือก Dealer ก่อนนะครับ'); return; }
   var upd = [];
   _djpSelIds().forEach(function(id) { var u = ST.update('djiProjects', id, { dealerId: did }); if (u) upd.push(u); });
-  if (upd.length && typeof syncToFirebase === 'function') syncToFirebase('djiProjects', upd);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   djpSel = {};
   closeMForce();
   toast('✅ ระบุ Dealer ให้ ' + upd.length + ' รายการแล้ว');

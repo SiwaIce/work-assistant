@@ -225,12 +225,29 @@ function djlCommitImport() {
   // ซ้ำ 4,500 ครั้งจนเบราว์เซอร์ค้าง (ดู addMany ใน storage.js)
   var saved = ST.addMany('djiMovements', fresh.map(function(r) { return Object.assign({ importedAt: now }, r); }));
   window._djlPending = null;
-  // ดันขึ้น cloud เฉพาะแถวที่เพิ่งเพิ่ม ไม่ใช่ทั้งเล่ม — งวดถัดไปมีของใหม่ไม่กี่ร้อยแถว ถ้าส่งทั้งเล่มทุกครั้ง
-  // จะเขียน Firestore หลักพันครั้งซ้ำๆ โดยเปล่าประโยชน์
-  if (saved.length && typeof syncToFirebase === 'function') syncToFirebase('djiMovements', saved);
-  closeMForce();
-  toast('✅ นำเข้า ' + saved.length + ' แถวแล้ว');
-  go('djiLedger');
+
+  // ต้องรอให้เขียนขึ้น cloud เสร็จจริงก่อนบอกว่าสำเร็จ — เดิมยิงแบบไม่รอผลแล้วปิดหน้าต่างทันที ผู้ใช้กด
+  // refresh ตอนเขียนยังไม่เสร็จ listener ก็เอา "เท่าที่ลงแล้ว" มาเขียนทับ ข้อมูล 4,541 แถวเหลือ 10
+  // (เจอจริง 2026-09-12) ระหว่างรอจึงล็อกปุ่มไว้และบอกว่ากำลังทำอะไรอยู่
+  _djlImportBusy('กำลังบันทึกขึ้น Cloud — อย่าเพิ่งปิดหรือรีเฟรชหน้านี้');
+  var done = function(okCloud) {
+    closeMForce();
+    toast(okCloud === false
+      ? '✅ นำเข้า ' + saved.length + ' แถวในเครื่องแล้ว — แต่ยังไม่ขึ้น Cloud'
+      : '✅ นำเข้า ' + saved.length + ' แถวแล้ว');
+    go('djiLedger');
+  };
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiMovements').then(done, function() { done(false); });
+  else done();
+}
+
+// ล็อกหน้าต่างระหว่างเขียนขึ้น cloud — ปุ่มกดไม่ได้ และบอกให้ชัดว่าอย่าเพิ่งรีเฟรช
+function _djlImportBusy(msg) {
+  var body = document.getElementById('mBd');
+  if (!body) return;
+  body.innerHTML = '<div style="padding:18px;text-align:center">' +
+    '<div style="font-size:26px;margin-bottom:8px">⏳</div>' +
+    '<div style="font-size:13px">' + sanitize(msg) + '</div></div>';
 }
 
 // ---------------------------------------------------------------- จับคู่เข้า SO
@@ -470,8 +487,20 @@ function rDjiLedger(el) {
     '<span style="font-size:11px;color:var(--text2);align-self:center">ดูเป็น</span>' +
     '<button class="btn bsm ' + (djlView === 'row' ? 'bp' : 'bo') + '" onclick="djlSetView(\'row\')">รายแถว</button>' +
     '<button class="btn bsm ' + (djlView === 'invoice' ? 'bp' : 'bo') + '" onclick="djlSetView(\'invoice\')">🧾 รายใบ Invoice</button>' +
-    (djlView === 'invoice' ? '<button class="btn bsm ' + (djlInvOnly ? 'bp' : 'bo') + '" onclick="djlToggleInvOnly()">เฉพาะที่ยังไม่มี Project ID</button>' : '') +
     '</div>';
+  if (djlView === 'invoice') {
+    var fc = _djlFilterCounts(dmap);
+    h += '<div class="rr-toolbar">' +
+      '<span style="font-size:11px;color:var(--text2);align-self:center">กรอง</span>' +
+      [['all', 'ทั้งหมด', fc.all], ['nopid', 'ยังไม่มี Project ID', fc.nopid],
+       ['prefixed', 'มีคำนำหน้า ID/ProjectID', fc.prefixed], ['badfmt', 'รูปแบบผิด', fc.badfmt]]
+      .map(function(f) {
+        return '<button class="btn bsm ' + (djlInvFilter === f[0] ? 'bp' : 'bo') + '" onclick="djlSetInvFilter(\'' + f[0] + '\')">' +
+          f[1] + ' (' + f[2] + ')</button>';
+      }).join('') +
+      (fc.prefixed ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjlNormalizeM()">✨ จัดรูปแบบให้เป็นมาตรฐาน</button>' : '') +
+      '</div>';
+  }
   h += '<input type="text" class="inp" style="margin-bottom:10px" placeholder="🔍 ค้นหา SN / Invoice / EAN / Project ID / Dealer" value="' +
     sanitize(djlQ) + '" oninput="djlQ=this.value;djlLimit=100;render()" autocomplete="off">';
 
@@ -547,10 +576,17 @@ function _djlSNCardHtml(sn) {
 //
 // เลขเดียวกันใช้ได้หลายใบ (ในไฟล์มี ID20260611-0022 กระจาย 3 ใบ) ตัวเลือกจึงจำเลขที่เพิ่งใช้ไว้ให้กดซ้ำ
 // ================================================================
-var djlView = 'row', djlInvSel = {}, djlInvOnly = false, djlLastPid = '';
+var djlView = 'row', djlInvSel = {}, djlInvFilter = 'all', djlLastPid = '';
+// เก็บชื่อเดิมไว้ เผื่อโค้ด/เทสต์เก่ายังอ้างอยู่
+Object.defineProperty(window, 'djlInvOnly', {
+  get: function() { return djlInvFilter === 'nopid'; },
+  set: function(v) { djlInvFilter = v ? 'nopid' : 'all'; },
+  configurable: true
+});
 
 function djlSetView(v) { djlView = v; djlLimit = 100; render(); }
-function djlToggleInvOnly() { djlInvOnly = !djlInvOnly; render(); }
+function djlSetInvFilter(v) { djlInvFilter = v; djlLimit = 100; render(); }
+function djlToggleInvOnly() { djlSetInvFilter(djlInvFilter === 'nopid' ? 'all' : 'nopid'); }
 
 // SO ที่ใช้เลข invoice ใบนี้ — สะพานเดียวกับที่ใช้เติม SN (ดู djlPlanMatch)
 function _djlSOsForInvoice(inv) {
@@ -590,7 +626,16 @@ function _djlInvoiceGroups(dmap) {
   });
   var q = djlQ.trim().toLowerCase();
   return Object.keys(by).map(function(k) { return by[k]; }).filter(function(g) {
-    if (djlInvOnly && pidNorm(g.pid)) return false;
+    if (djlInvFilter === 'nopid' && pidNorm(g.pid)) return false;
+    // "รูปแบบผิด" = มีเลขแล้วแต่ไม่เข้ารูปแบบ YYYYMMDD-NNNN เลย (คำนำหน้า ID/ProjectID ไม่นับว่าผิด
+    // เพราะ pidLooksValid มองทะลุคำนำหน้าให้อยู่แล้ว — ตัวที่ติดกรองนี้คือเลขที่พิมพ์ผิดจริงๆ)
+    if (djlInvFilter === 'badfmt' && (!pidNorm(g.pid) || pidLooksValid(g.pid))) return false;
+    // "มีคำนำหน้า" = เลขอ่านออก (มีไส้ใน) แต่เขียนติดคำว่า ID/ProjectID มา — จัดให้เป็นมาตรฐานได้
+    // ต้องเช็คว่ามีไส้ในก่อน ไม่งั้นเลขที่อ่านไม่ออก (pidCore คืน '') จะหลุดเข้ามาด้วยเพราะ '' ไม่เท่ากับตัวมันเอง
+    if (djlInvFilter === 'prefixed') {
+      var core = pidCore(g.pid);
+      if (!core || core === pidNorm(g.pid)) return false;
+    }
     if (!q) return true;
     return (g.inv || '').toLowerCase().indexOf(q) !== -1 ||
            (g.name || '').toLowerCase().indexOf(q) !== -1 ||
@@ -606,7 +651,7 @@ function djlSetInvoicePid(inv, pid, silent) {
   var ids = ST.filter('djiMovements', function(m) { return _djlNormInv(m.inv) === k; }).map(function(m) { return m.id; });
   if (!ids.length) return 0;
   var changed = ST.updateMany('djiMovements', ids, { pid: pidNorm(pid) });
-  if (changed.length && typeof syncToFirebase === 'function') syncToFirebase('djiMovements', changed);
+  if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiMovements');
   if (pidNorm(pid)) djlLastPid = pidNorm(pid);
   if (!silent) toast('🗂️ ใส่ ' + (pidNorm(pid) || '(ล้างเลข)') + ' ให้ ' + changed.length + ' แถวของใบนี้แล้ว');
   return changed.length;
@@ -816,7 +861,10 @@ function _djlRenderInvoiceView(el, h, dmap) {
     '<button class="btn bsm bo" onclick="djlClearInvSel()">ล้างที่เลือก</button></div>';
 
   if (!groups.length) {
-    h += '<div class="empty"><p>' + (djlInvOnly ? 'ใส่ Project ID ครบทุกใบแล้ว 🎉' : 'ไม่พบใบที่ตรงกับที่ค้น') + '</p></div>';
+    var emptyMsg = { nopid: 'ใส่ Project ID ครบทุกใบแล้ว 🎉',
+                     prefixed: 'ไม่มีเลขที่ติดคำนำหน้าเหลือแล้ว 🎉',
+                     badfmt: 'ไม่มีเลขที่รูปแบบผิดเหลือแล้ว 🎉' }[djlInvFilter] || 'ไม่พบใบที่ตรงกับที่ค้น';
+    h += '<div class="empty"><p>' + emptyMsg + '</p></div>';
     el.innerHTML = h;
     return;
   }
@@ -848,4 +896,76 @@ function _djlRenderInvoiceView(el, h, dmap) {
     h += '<button class="btn bo btn-full" style="margin-top:8px" onclick="djlLimit+=200;render()">โหลดเพิ่ม (เหลืออีก ' + (groups.length - djlLimit) + ')</button>';
   }
   el.innerHTML = h;
+}
+
+// ---- นับจำนวนต่อตัวกรอง ----
+function _djlFilterCounts(dmap) {
+  dmap = dmap || _djlDealerByCode();
+  var seen = {}, c = { all: 0, nopid: 0, prefixed: 0, badfmt: 0 };
+  ST.getAll('djiMovements').forEach(function(m) {
+    if (djlBucket(m, dmap) !== djlTab) return;
+    var k = _djlNorm(m.inv) || '(ไม่มีเลข)';
+    if (seen[k]) { if (pidNorm(m.pid) && !seen[k].pid) seen[k].pid = m.pid; return; }
+    seen[k] = { pid: pidNorm(m.pid) };
+  });
+  Object.keys(seen).forEach(function(k) {
+    var pid = seen[k].pid;
+    c.all++;
+    if (!pid) { c.nopid++; return; }
+    if (!pidLooksValid(pid)) c.badfmt++;
+    else if (pid !== pidCore(pid)) c.prefixed++;
+  });
+  return c;
+}
+
+// ---- จัดรูปแบบเลขให้เป็นมาตรฐาน ----
+// ไฟล์ DJI เขียนเลขเดียวกันสามแบบ: 20260525-0016 / ID20260611-0022 / ProjectID20260615-0008
+// ระบบเทียบทะลุคำนำหน้าให้อยู่แล้ว แต่การเก็บให้เป็นแบบเดียวทำให้ค้นหา คัดลอก และส่งต่อไม่สับสน
+// ตัดเฉพาะคำนำหน้า ไม่แตะไส้ใน และไม่ยุ่งกับเลขที่อ่านไม่ออก (พวกนั้นต้องให้คนแก้เอง)
+function djlNormalizePlan() {
+  var dmap = _djlDealerByCode(), seen = {}, out = [];
+  ST.getAll('djiMovements').forEach(function(m) {
+    if (djlBucket(m, dmap) !== djlTab) return;
+    var pid = pidNorm(m.pid);
+    if (!pid) return;
+    var core = pidCore(pid);
+    if (!core || core === pid) return;
+    var k = _djlNormInv(m.inv);
+    if (seen[k]) return;
+    seen[k] = 1;
+    out.push({ inv: m.inv, from: pid, to: core });
+  });
+  return out;
+}
+
+function showDjlNormalizeM() {
+  var plan = djlNormalizePlan();
+  window._djlNormPlan = plan;
+  var h = '<div class="hint" style="margin-bottom:10px">ไฟล์ DJI เขียนเลขเดียวกันหลายแบบปนกัน — ตัดคำนำหน้า <span style="font-family:monospace">ID</span> / <span style="font-family:monospace">ProjectID</span> ออกให้เหลือรูปแบบเดียว <span style="font-family:monospace">' + PROJECT_ID_HINT.replace('รูปแบบ ', '') + '</span><br>ไส้ในไม่ถูกแตะ และเลขที่อ่านไม่ออกจะไม่ถูกยุ่ง</div>';
+  if (!plan.length) {
+    h += '<div class="empty"><p>เลขทุกใบเป็นรูปแบบมาตรฐานอยู่แล้ว</p></div><button class="btn bo btn-full" onclick="closeMForce()">ปิด</button>';
+  } else {
+    h += '<div style="max-height:250px;overflow:auto;display:flex;flex-direction:column;gap:5px;margin-bottom:10px">';
+    plan.slice(0, 40).forEach(function(x) {
+      h += '<div style="border:1px solid var(--border);border-radius:7px;padding:6px 9px;font-size:12px">' +
+        '<div style="font-family:monospace;color:var(--text2);font-size:11px">🧾 ' + sanitize(x.inv) + '</div>' +
+        '<div style="font-family:monospace"><span style="color:var(--text2);text-decoration:line-through">' + sanitize(x.from) + '</span>' +
+        ' → <b style="color:var(--ok,#22c55e)">' + sanitize(x.to) + '</b></div></div>';
+    });
+    if (plan.length > 40) h += '<div style="font-size:11px;color:var(--text2);padding:4px">…อีก ' + (plan.length - 40) + '</div>';
+    h += '</div>';
+    h += '<button class="btn bp btn-full" onclick="djlCommitNormalize()">✨ จัดรูปแบบให้ ' + plan.length + ' ใบ</button>';
+    h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ยกเลิก</button>';
+  }
+  openM('✨ จัดรูปแบบ Project ID', h);
+}
+
+function djlCommitNormalize() {
+  var plan = window._djlNormPlan || [];
+  var n = 0;
+  plan.forEach(function(x) { if (djlSetInvoicePid(x.inv, x.to, true)) n++; });
+  window._djlNormPlan = null;
+  closeMForce();
+  toast(n ? ('✨ จัดรูปแบบให้ ' + n + ' ใบแล้ว') : 'ไม่มีอะไรต้องแก้');
+  render();
 }

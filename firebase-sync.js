@@ -382,8 +382,14 @@ var SYNC_KEY_MAP = {
   // ถ้าลงทะเบียนตรงนี้ listener ทั่วไปจะเขียน v7_products ทับด้วย array ดิบ ทำให้ราคาสินค้าหาย
   'bundles': 'bundles',    // ✅ เพิ่ม
   'demoUnits': 'demoUnits', // ✅ เพิ่ม
-  'djiMovements': 'djiMovements',
-  'djiProjects': 'djiProjects',
+  // 'djiMovements' / 'djiProjects' ไม่ลงทะเบียนตรงนี้โดยตั้งใจ — เหตุผลเดียวกับ 'products' ด้านบนแต่คนละอาการ
+  // ทั้งสองเป็นข้อมูลนำเข้าจากไฟล์ DJI ที่มีหลักพันแถว ถ้าเก็บเป็น doc ละแถวตามกลไกทั่วไปจะเจ็บสองทาง:
+  //   เขียน — import ครั้งเดียวยิง .set() 4,500 ครั้งพร้อมกันแบบไม่รอผล ส่วนใหญ่ไม่ทันลง แล้ว onSnapshot
+  //           ที่ฟังอยู่ก็เอา "เท่าที่ลงแล้ว" มาเขียนทับ localStorage ทันที ข้อมูลหายทั้งก้อน (เจอจริง 2026-09-12)
+  //   อ่าน  — onSnapshot บน collection 4,500 doc = 4,500 document reads ทุกครั้งที่เปิดแอป โควตา Spark
+  //           50,000 reads/วัน หมดภายในเปิดแอปสิบกว่าครั้ง ซึ่งจะพังทั้งแอป ไม่ใช่แค่เมนูนี้
+  // จึงเก็บเป็นก้อน (chunk ละ 400 แถว) ผ่าน saveChunkedToFirebase/loadChunkedFromFirebase ด้านล่างแทน
+  // 4,541 แถวเหลือ 12 doc → อ่าน 12 ครั้งต่อการเปิดแอป และเขียนเป็น batch ที่รอผลจริง
   'audit_logs': 'auditLogs',
   'salesMembers': 'salesMembers',
   'customer_updates': 'customerUpdates',
@@ -549,6 +555,14 @@ auth.onAuthStateChanged(function(user) {
       });
     }
 
+    // ✅ ข้อมูลนำเข้าจากไฟล์ DJI เก็บเป็นก้อน ไม่ได้อยู่ใน listener ทั่วไป จึงต้องดึงเองตรงนี้
+    Promise.all([
+      loadChunkedFromFirebase('djiMovements', 'v7_djiMovements'),
+      loadChunkedFromFirebase('djiProjects', 'v7_djiProjects')
+    ]).then(function(res) {
+      if ((res[0] || res[1]) && typeof render === 'function') render();
+    });
+
     // ✅ Publish แคตตาล็อกสินค้าให้ client-view (รอ products sync ลง localStorage ก่อน)
     setTimeout(function() { if (typeof publishCatalogToClientView === 'function') publishCatalogToClientView(); }, 5000);
 
@@ -683,6 +697,107 @@ function syncDeleteFromFirebase(collName, docId) {
 // REAL-TIME LISTENERS
 // ================================================================
 var activeListeners = [];
+
+// ================================================================
+// เก็บข้อมูลนำเข้าก้อนใหญ่เป็น chunk — ใช้กับ djiMovements / djiProjects
+// 1 doc = 400 แถว บวก doc '_meta' ไว้บอกว่ามีกี่ก้อน เพื่อให้ลบก้อนที่เกินทิ้งได้เวลาข้อมูลหดลง
+// (ไม่งั้นก้อนเก่าที่ค้างอยู่จะถูกอ่านกลับมาต่อท้ายจนข้อมูลผีเพิ่มขึ้นเอง)
+// ================================================================
+// ตั้งใจไม่ประกาศเป็น var ระดับไฟล์ — ไฟล์นี้มีโค้ด top-level ที่พึ่ง firebase SDK อยู่ก่อนหน้า ถ้า SDK โหลด
+// ไม่ได้ (เน็ตล่ม/โดนบล็อก) สคริปต์จะหยุดกลางคัน ฟังก์ชันยังถูก hoist เรียกได้ แต่ var หลังจุดนั้นไม่เคยถูกรัน
+// กลายเป็น undefined แล้ว rows.slice(0, undefined) คืนค่าว่าง = เขียนก้อนเปล่าขึ้น cloud โดยไม่มีใครรู้
+function _chunkSize() { return 400; }
+
+// ใช้ getCollectionRef ตัวเดียวกับ sync ปกติ ไม่ประกอบ path เอง — ไม่งั้นโหมดล็อกอินด้วย PIN (SALES_MODE)
+// ที่เก็บข้อมูลใต้ salesMembers/{id}/ จะถูกเขียนลง users/{uid}/ แทน คนละที่กับข้อมูลอื่นทั้งหมดของคนนั้น
+function _chunkRef(collName) {
+  if (typeof db === 'undefined' || !CURRENT_USER) return null;
+  return (typeof getCollectionRef === 'function') ? getCollectionRef(collName) : null;
+}
+
+// คืน Promise เสมอ — จุดที่เรียกต้องรอให้เขียนเสร็จก่อนค่อยบอกผู้ใช้ว่าบันทึกแล้ว
+function saveChunkedToFirebase(collName, rows) {
+  var ref = _chunkRef(collName);
+  if (!ref) return Promise.resolve(false);
+  rows = rows || [];
+  var chunks = [];
+  var size = _chunkSize();
+  for (var i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size));
+
+  return Promise.all([ref.doc('_meta').get(), ref.get()]).then(function(r) {
+    var doc = r[0], snap = r[1];
+    var oldCount = (doc.exists && Number(doc.data().chunks)) || 0;
+    // เวอร์ชันก่อนหน้าเก็บเป็น doc ละแถว ถ้ายังค้างอยู่ให้เก็บกวาดทิ้งตอนเขียนรอบนี้ — มันไม่ถูกอ่านอยู่แล้ว
+    // (id ไม่ตรงรูปแบบ c0, c1, …) แต่กินที่และทำให้ ref.get() แพงขึ้นทุกครั้งที่โหลด
+    var legacy = [];
+    snap.forEach(function(d) { if (d.id !== '_meta' && !/^c\d+$/.test(d.id)) legacy.push(d.id); });
+    // กันเคสที่เคยพลาดมาแล้ว: ถ้าแบ่งก้อนพลาดจนได้ก้อนเปล่าทั้งที่มีแถวจริง อย่าเขียนทับของบน cloud เด็ดขาด
+    var packed = chunks.reduce(function(t, c) { return t + c.length; }, 0);
+    if (packed !== rows.length) {
+      return Promise.reject(new Error('แบ่งก้อนข้อมูลผิดพลาด (' + packed + '/' + rows.length + ') — ยกเลิกการเขียนขึ้น cloud'));
+    }
+    var ops = [];
+    chunks.forEach(function(c, idx) { ops.push({ type: 'set', ref: ref.doc('c' + idx), data: { rows: c } }); });
+    // ก้อนเก่าที่เกินจำนวนใหม่ต้องลบ ไม่งั้นตอนอ่านกลับจะได้แถวที่ถูกลบไปแล้วคืนมาด้วย
+    for (var j = chunks.length; j < oldCount; j++) ops.push({ type: 'delete', ref: ref.doc('c' + j) });
+    legacy.forEach(function(id) { ops.push({ type: 'delete', ref: ref.doc(id) }); });
+    ops.push({ type: 'set', ref: ref.doc('_meta'), data: { chunks: chunks.length, count: rows.length, savedAt: new Date().toISOString() } });
+
+    var groups = [];
+    for (var k = 0; k < ops.length; k += 400) groups.push(ops.slice(k, k + 400));
+    return groups.reduce(function(chain, group) {
+      return chain.then(function() {
+        var batch = db.batch();
+        group.forEach(function(op) {
+          if (op.type === 'delete') batch.delete(op.ref); else batch.set(op.ref, op.data);
+        });
+        return batch.commit();
+      });
+    }, Promise.resolve()).then(function() { return true; });
+  });
+}
+
+function loadChunkedFromFirebase(collName, lsKey) {
+  var ref = _chunkRef(collName);
+  if (!ref) return Promise.resolve(false);
+  return ref.get().then(function(snap) {
+    if (snap.empty) return false;
+    var meta = null, byIdx = {};
+    snap.forEach(function(doc) {
+      if (doc.id === '_meta') { meta = doc.data(); return; }
+      var m = doc.id.match(/^c(\d+)$/);
+      if (m) byIdx[Number(m[1])] = (doc.data().rows || []);
+    });
+    var total = meta ? Number(meta.chunks) || 0 : Object.keys(byIdx).length;
+    var rows = [];
+    for (var i = 0; i < total; i++) rows = rows.concat(byIdx[i] || []);
+    if (!rows.length && !meta) return false;
+    try { localStorage.setItem(lsKey, JSON.stringify(rows)); } catch (e) {
+      console.warn('เก็บ ' + lsKey + ' ลงเครื่องไม่สำเร็จ', e);
+      if (typeof toast === 'function') toast('⚠️ พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอสำหรับ ' + collName, true);
+      return false;
+    }
+    return true;
+  }).catch(function(e) {
+    console.warn('โหลด ' + collName + ' จาก cloud ไม่สำเร็จ', e);
+    return false;
+  });
+}
+
+// เรียกจากจุดที่เพิ่งแก้ข้อมูลเสร็จ — คืน Promise ให้รอได้ และแจ้งเตือนเมื่อพลาดจริง
+function pushDjiDataToCloud(which) {
+  var map = { djiMovements: 'v7_djiMovements', djiProjects: 'v7_djiProjects' };
+  var lsKey = map[which];
+  if (!lsKey) return Promise.resolve(false);
+  if (typeof SYNC_ENABLED === 'undefined' || !SYNC_ENABLED || !CURRENT_USER) return Promise.resolve(false);
+  var rows = [];
+  try { rows = JSON.parse(localStorage.getItem(lsKey) || '[]'); } catch (e) {}
+  return saveChunkedToFirebase(which, rows).catch(function(e) {
+    console.warn('sync ' + which + ' ล้มเหลว', e);
+    if (typeof toast === 'function') toast('⚠️ บันทึกขึ้น Cloud ไม่สำเร็จ — ข้อมูลยังอยู่ในเครื่องนี้ ลองกดอีกครั้งเมื่อเน็ตพร้อม', true);
+    return false;
+  });
+}
 
 function initFirebaseListeners() {
   // ลบ listeners เดิม
