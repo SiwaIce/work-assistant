@@ -441,10 +441,22 @@ function rDjiLedger(el) {
     '<div class="rr-stat"><div class="n">' + Object.keys(snSet).length + '</div><div class="l">SN ไม่ซ้ำ</div></div>' +
     '<div class="rr-stat"><div class="n" style="font-size:13px">' + (lastImport ? sanitize(lastImport.slice(0, 10)) : '-') + '</div><div class="l">นำเข้าล่าสุด</div></div>' +
     '</div>';
+  var noPid = 0, invSeen = {};
+  all.forEach(function(m) {
+    if (djlBucket(m, dmap) !== 'sold' || m.status !== DJL_OK_STATUS || m.type !== DJL_SELL_TYPE) return;
+    var k = _djlNormInv(m.inv);
+    if (!k || invSeen[k]) return;
+    invSeen[k] = 1;
+    if (!pidNorm(m.pid)) noPid++;
+  });
+  var autoPid = djlAutoPidPlan().length;
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
     '<button class="btn bp bsm" onclick="importDjiLedgerXlsx()">⬆️ นำเข้าไฟล์</button>' +
     '<button class="btn bo bsm" onclick="showDjlMatchM()">🔗 จับคู่เข้า SO</button>' +
-    '</div></div>';
+    (autoPid ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjlAutoPidM()">⚡ ดึง Project ID จาก SO ได้ ' + autoPid + ' ใบ</button>' : '') +
+    '</div>';
+  if (noPid) h += '<div class="hint" style="margin-top:8px">🗂️ ยังไม่มี Project ID อยู่ ' + noPid + ' ใบ — กดดู “รายใบ Invoice” แล้วใส่ทีเดียวได้ทั้งใบ (หนึ่ง invoice มีได้โครงการเดียว)</div>';
+  h += '</div>';
 
   h += '<div class="rr-toolbar">';
   ['sold', 'unauth', 'inbound'].forEach(function(k) {
@@ -454,8 +466,16 @@ function rDjiLedger(el) {
   });
   h += '</div>';
   h += '<div class="hint" style="margin-bottom:8px">' + DJL_BUCKETS[djlTab].hint + '</div>';
+  h += '<div class="rr-toolbar">' +
+    '<span style="font-size:11px;color:var(--text2);align-self:center">ดูเป็น</span>' +
+    '<button class="btn bsm ' + (djlView === 'row' ? 'bp' : 'bo') + '" onclick="djlSetView(\'row\')">รายแถว</button>' +
+    '<button class="btn bsm ' + (djlView === 'invoice' ? 'bp' : 'bo') + '" onclick="djlSetView(\'invoice\')">🧾 รายใบ Invoice</button>' +
+    (djlView === 'invoice' ? '<button class="btn bsm ' + (djlInvOnly ? 'bp' : 'bo') + '" onclick="djlToggleInvOnly()">เฉพาะที่ยังไม่มี Project ID</button>' : '') +
+    '</div>';
   h += '<input type="text" class="inp" style="margin-bottom:10px" placeholder="🔍 ค้นหา SN / Invoice / EAN / Project ID / Dealer" value="' +
     sanitize(djlQ) + '" oninput="djlQ=this.value;djlLimit=100;render()" autocomplete="off">';
+
+  if (djlView === 'invoice') { _djlRenderInvoiceView(el, h, dmap); return; }
 
   var list = _djlFiltered(dmap);
   if (!list.length) {
@@ -516,4 +536,316 @@ function _djlSNCardHtml(sn) {
   h += '</table>';
   h += djlSNHistoryHtml(sn);
   return h + '</div>';
+}
+
+// ================================================================
+// มุมมองรายใบ Invoice — สำหรับเติม Project ID ที่ DJI ไม่ได้ใส่มาให้
+//
+// ในไฟล์จริง Project ID ติดมาแค่ 474 จาก 4,541 แถว ที่เหลือว่าง แต่ไม่ต้องเติมทีละแถว: ตรวจกับข้อมูลจริง
+// แล้ว "ไม่มี invoice ใบไหนเลยที่มีหลาย Project ID" (0 จาก 336 ใบ) และใบที่ DJI ใส่มาก็ใส่ครบทุกแถวเสมอ
+// หนึ่งใบจึงเท่ากับหนึ่งโครงการ เติมทีเดียวทั้งใบได้ — งานจาก 3,387 แถวเหลือ 329 ใบ
+//
+// เลขเดียวกันใช้ได้หลายใบ (ในไฟล์มี ID20260611-0022 กระจาย 3 ใบ) ตัวเลือกจึงจำเลขที่เพิ่งใช้ไว้ให้กดซ้ำ
+// ================================================================
+var djlView = 'row', djlInvSel = {}, djlInvOnly = false, djlLastPid = '';
+
+function djlSetView(v) { djlView = v; djlLimit = 100; render(); }
+function djlToggleInvOnly() { djlInvOnly = !djlInvOnly; render(); }
+
+// SO ที่ใช้เลข invoice ใบนี้ — สะพานเดียวกับที่ใช้เติม SN (ดู djlPlanMatch)
+function _djlSOsForInvoice(inv) {
+  var k = _djlNormInv(inv);
+  if (!k) return [];
+  return ST.getAll('salesOrders').filter(function(s) { return _djlNormInv(s.invoiceNumber) === k; });
+}
+// Project ID ที่ SO ฝั่งเรารู้อยู่แล้ว — แบบโครงการอ่านจาก so.projectId แบบ run rate อ่านจากถังที่ผูก
+function _djlPidFromSO(inv) {
+  var found = '';
+  _djlSOsForInvoice(inv).forEach(function(s) {
+    if (found) return;
+    if (pidNorm(s.projectId)) { found = s.projectId; return; }
+    if (s.runrateId) {
+      var r = ST.getOne('runrate', s.runrateId);
+      if (r && pidNorm(r.projectId)) found = r.projectId;
+    }
+  });
+  return found;
+}
+
+function _djlInvoiceGroups(dmap) {
+  var by = {};
+  ST.getAll('djiMovements').forEach(function(m) {
+    if (djlBucket(m, dmap) !== djlTab) return;
+    var k = _djlNorm(m.inv) || '(ไม่มีเลข)';
+    var g = by[k] || (by[k] = { inv: m.inv, ids: [], rows: 0, qty: 0, sns: {}, eans: {}, pid: '', date: '', name: m.name, code: m.code, types: {}, fail: 0 });
+    g.ids.push(m.id);
+    g.rows++;
+    g.qty += Number(m.qty) || 0;
+    if (m.sn) g.sns[m.sn] = 1;
+    if (m.ean) g.eans[m.ean] = 1;
+    if (m.type) g.types[m.type] = 1;
+    if (m.status !== DJL_OK_STATUS) g.fail++;
+    if (pidNorm(m.pid) && !g.pid) g.pid = m.pid;
+    if ((m.date || '') > g.date) g.date = m.date || '';
+  });
+  var q = djlQ.trim().toLowerCase();
+  return Object.keys(by).map(function(k) { return by[k]; }).filter(function(g) {
+    if (djlInvOnly && pidNorm(g.pid)) return false;
+    if (!q) return true;
+    return (g.inv || '').toLowerCase().indexOf(q) !== -1 ||
+           (g.name || '').toLowerCase().indexOf(q) !== -1 ||
+           (g.pid || '').toLowerCase().indexOf(q) !== -1 ||
+           Object.keys(g.sns).some(function(x) { return x.toLowerCase().indexOf(q) !== -1; }) ||
+           Object.keys(g.eans).some(function(x) { return x.indexOf(q) !== -1; });
+  }).sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+}
+
+// เขียนเลขลงทุกแถวของใบนั้นทีเดียว — updateMany อ่าน/เขียน collection รอบเดียว ไม่ใช่ทีละแถว
+function djlSetInvoicePid(inv, pid, silent) {
+  var k = _djlNormInv(inv);
+  var ids = ST.filter('djiMovements', function(m) { return _djlNormInv(m.inv) === k; }).map(function(m) { return m.id; });
+  if (!ids.length) return 0;
+  var changed = ST.updateMany('djiMovements', ids, { pid: pidNorm(pid) });
+  if (changed.length && typeof syncToFirebase === 'function') syncToFirebase('djiMovements', changed);
+  if (pidNorm(pid)) djlLastPid = pidNorm(pid);
+  if (!silent) toast('🗂️ ใส่ ' + (pidNorm(pid) || '(ล้างเลข)') + ' ให้ ' + changed.length + ' แถวของใบนี้แล้ว');
+  return changed.length;
+}
+
+// ---- ดึงจาก SO ที่ผูกไว้แล้ว: ไม่ต้องพิมพ์อะไรเลย ----
+function djlAutoPidPlan() {
+  var dmap = _djlDealerByCode();
+  var seen = {}, out = [];
+  ST.getAll('djiMovements').forEach(function(m) {
+    if (djlBucket(m, dmap) !== 'sold' || pidNorm(m.pid)) return;
+    var k = _djlNormInv(m.inv);
+    if (!k || seen[k]) return;
+    seen[k] = 1;
+    var pid = _djlPidFromSO(m.inv);
+    if (pid) out.push({ inv: m.inv, pid: pid });
+  });
+  return out;
+}
+function showDjlAutoPidM() {
+  var plan = djlAutoPidPlan();
+  window._djlPidPlan = plan;
+  var h = '<div class="hint" style="margin-bottom:10px">ใบไหนที่เราเปิด SO ไว้แล้วและ SO นั้นรู้ Project ID อยู่แล้ว ก็ไม่ต้องพิมพ์ซ้ำ — ดึงมาใส่ให้เลย</div>';
+  if (!plan.length) {
+    h += '<div class="empty"><p>ไม่มีใบไหนที่ดึงจาก SO ได้ตอนนี้ — อาจยังไม่ได้เปิด SO หรือ SO ยังไม่มี Project ID</p></div>' +
+      '<button class="btn bo btn-full" onclick="closeMForce()">ปิด</button>';
+  } else {
+    h += '<div style="max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:5px;margin-bottom:10px">';
+    plan.slice(0, 40).forEach(function(x) {
+      h += '<div style="border:1px solid var(--border);border-radius:7px;padding:6px 9px;display:flex;justify-content:space-between;gap:8px;font-size:12px">' +
+        '<span style="font-family:monospace">' + sanitize(x.inv) + '</span>' +
+        '<span style="font-family:monospace;color:var(--ok,#22c55e)">' + sanitize(x.pid) + '</span></div>';
+    });
+    if (plan.length > 40) h += '<div style="font-size:11px;color:var(--text2);padding:4px">…อีก ' + (plan.length - 40) + '</div>';
+    h += '</div>';
+    h += '<button class="btn bp btn-full" onclick="djlCommitAutoPid()">🗂️ ใส่ให้ ' + plan.length + ' ใบ</button>';
+    h += '<button class="btn bo btn-full" style="margin-top:6px" onclick="closeMForce()">ยกเลิก</button>';
+  }
+  openM('⚡ ดึง Project ID จาก SO', h);
+}
+function djlCommitAutoPid() {
+  var plan = window._djlPidPlan || [];
+  var n = 0;
+  plan.forEach(function(x) { n += djlSetInvoicePid(x.inv, x.pid, true) ? 1 : 0; });
+  window._djlPidPlan = null;
+  closeMForce();
+  toast('✅ ใส่ Project ID ให้ ' + n + ' ใบแล้ว');
+  render();
+}
+
+// ---- ตัวเลือกเลข: กดเอา ไม่ต้องพิมพ์ 13 ตัว ----
+function _djlPidChoices(dealerId) {
+  var out = [], seen = {};
+  var add = function(pid, label, src, owner) {
+    var c = pidNorm(pid);
+    if (!c || seen[c.toLowerCase()]) return;
+    seen[c.toLowerCase()] = 1;
+    out.push({ pid: c, label: label, src: src, owner: dealerId ? '' : (owner || '') });
+  };
+  if (djlLastPid) add(djlLastPid, 'เลขที่เพิ่งใช้', '🕘');
+  // ทะเบียนจาก CRM ของ dealer รายนี้ — แหล่งที่ตรงที่สุด เพราะเลขมาจากที่เดียวกัน
+  ST.getAll('djiProjects').forEach(function(p) {
+    var d = (typeof djpDealerOf === 'function') ? djpDealerOf(p) : null;
+    if (dealerId && (!d || d.id !== dealerId)) return;
+    add(p.pid, String(p.name || '').substr(0, 44), '🗂️', d ? d.name : p.dealerName);
+  });
+  ST.getAll('runrate').forEach(function(r) {
+    if (dealerId && r.dealerId !== dealerId) return;
+    add(r.projectId, 'ถัง Run rate' + (r.models ? ' · ' + String(r.models).substr(0, 22) : ''), '🏪',
+        (ST.getOne('dealers', r.dealerId) || {}).name);
+  });
+  ST.getAll('pipeline').forEach(function(pipe) {
+    if (dealerId && pipe.dealerId !== dealerId) return;
+    add(pipe.projectId, String(pipe.projectName || '').substr(0, 44), '📋',
+        (ST.getOne('dealers', pipe.dealerId) || {}).name);
+  });
+  return out;
+}
+
+function showDjlPidM(inv) {
+  var dmap = _djlDealerByCode();
+  var rows = ST.djiMovesByInvoice(inv);
+  if (!rows.length) return;
+  var first = rows[0];
+  var dealer = djlDealerOf(first, dmap);
+  var cur = '';
+  rows.forEach(function(m) { if (!cur && pidNorm(m.pid)) cur = m.pid; });
+  var fromSO = _djlPidFromSO(inv);
+  var sos = _djlSOsForInvoice(inv);
+
+  var h = '<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:10px">' +
+    '<div style="font-family:monospace;font-weight:700">🧾 ' + sanitize(inv) + '</div>' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:2px">' + sanitize(first.name || first.code) +
+    ' · ' + rows.length + ' แถว · ' + Object.keys(rows.reduce(function(a, m) { if (m.sn) a[m.sn] = 1; return a; }, {})).length + ' SN' +
+    (first.date ? ' · ' + sanitize(first.date) : '') + '</div>' +
+    (sos.length ? '<div style="font-size:11px;color:var(--text2);margin-top:2px">📦 SO: ' +
+      sos.map(function(s) { return sanitize(s.soNumber || '-'); }).join(', ') + '</div>' : '') +
+    '</div>';
+  h += '<div class="hint" style="margin-bottom:8px">ใส่ทีเดียวใช้กับทุกแถวของใบนี้ — ตรวจกับข้อมูลจริงแล้วหนึ่ง invoice มีได้โครงการเดียวเสมอ</div>';
+
+  if (fromSO && !pidSame(fromSO, cur)) {
+    h += '<div style="border:1px solid var(--ok,#22c55e);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer" onclick="djlApplyPid(\'' + sanitize(inv) + '\',\'' + sanitize(fromSO) + '\')">' +
+      '<div style="font-size:12.5px;font-weight:600">✓ SO ของใบนี้รู้เลขอยู่แล้ว — กดใช้ได้เลย</div>' +
+      '<div style="font-family:monospace;font-size:12px;margin-top:2px">' + sanitize(fromSO) + '</div></div>';
+  }
+
+  h += '<div class="fg"><label>Project ID <small style="color:var(--text2)">(' + PROJECT_ID_HINT + ')</small></label>' +
+    '<input type="text" id="djlPidInput" class="inp" value="' + sanitize(cur) + '" placeholder="20260912-0005"></div>';
+  h += '<button class="btn bp btn-full" style="margin:8px 0" onclick="djlApplyPid(\'' + sanitize(inv) + '\')">💾 บันทึก</button>';
+
+  // กรองตาม Dealer ก่อนเพราะตรงที่สุด แต่ถ้า Dealer รายนั้นไม่มีเลขเลย อย่าโชว์ว่างเปล่า — ถอยไปโชว์ทั้งหมด
+  // (เจอตอนรันจริง: SYSTRONICS ไม่มีโครงการในทะเบียน แล้วหน้าไปบอกว่า "ยังไม่ได้นำเข้าทะเบียน" ทั้งที่นำเข้าแล้ว)
+  var choices = _djlPidChoices(dealer ? dealer.id : '');
+  var narrowed = true;
+  if (!choices.length && dealer) { choices = _djlPidChoices(''); narrowed = false; }
+  if (choices.length) {
+    h += '<div class="hint" style="margin-bottom:6px">' + (narrowed
+      ? 'หรือเลือกจากเลขที่มีอยู่แล้วของ ' + sanitize(dealer ? dealer.name : 'Dealer รายนี้')
+      : '⚠️ ' + sanitize(dealer.name) + ' ยังไม่มีเลขในระบบเลย — แสดงเลขของทุก Dealer ให้เลือก เช็คให้ดีก่อนกด') + '</div>';
+    h += '<div style="max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:5px">';
+    choices.slice(0, 40).forEach(function(c) {
+      h += '<div style="border:1px solid var(--border);border-radius:7px;padding:6px 9px;cursor:pointer" onclick="djlApplyPid(\'' + sanitize(inv) + '\',\'' + sanitize(c.pid) + '\')">' +
+        '<div style="font-family:monospace;font-size:12px;font-weight:600">' + c.src + ' ' + sanitize(c.pid) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2)">' + sanitize(c.label) + (c.owner ? ' · ' + sanitize(c.owner) : '') + '</div></div>';
+    });
+    h += '</div>';
+  } else {
+    var hasReg = ST.getAll('djiProjects').length;
+    h += '<div class="hint">' + (hasReg
+      ? 'ยังไม่มีเลขไหนในระบบให้เลือก — พิมพ์เองได้ที่ช่องด้านบน'
+      : 'ยังไม่ได้นำเข้าทะเบียน Project ID จาก DJI CRM — นำเข้าแล้วจะมีเลขให้กดเลือกที่นี่') + '</div>';
+  }
+  if (cur) h += '<button class="btn bd btn-full" style="margin-top:8px" onclick="djlApplyPid(\'' + sanitize(inv) + '\',\'\',1)">🗑️ ล้างเลขออกจากใบนี้</button>';
+  openM('🗂️ ใส่ Project ID ให้ใบ Invoice', h);
+}
+
+function djlApplyPid(inv, pid, allowEmpty) {
+  var v = pid !== undefined ? pid : ((document.getElementById('djlPidInput') || {}).value || '');
+  v = pidNorm(v);
+  if (!v && !allowEmpty) { alert('ใส่เลขก่อนนะครับ'); return; }
+  if (v) {
+    var warn = pidFormatWarning(v);
+    if (warn && !confirm('⚠️ ' + warn + '\n\nที่กรอก: ' + v + '\n\nตกลง = บันทึกตามนี้  ยกเลิก = กลับไปแก้')) return;
+  }
+  djlSetInvoicePid(inv, v);
+
+  // SO ฝั่งเรายังไม่มีเลข แต่เพิ่งได้จากสมุด — เขียนกลับให้ด้วย จะได้ไม่ต้องไปกรอกซ้ำอีกที่
+  if (v) {
+    _djlSOsForInvoice(inv).forEach(function(s) {
+      if (s.type === 'runrate' || pidNorm(s.projectId)) return;
+      if (!confirm('SO ' + (s.soNumber || '') + ' ยังไม่มี Project ID\n\nใส่ ' + v + ' ให้ด้วยไหม?')) return;
+      var up = ST.update('salesOrders', s.id, { projectId: v });
+      if (up && typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', up);
+      if (up && up.pipelineId && typeof pidWriteBackToPipeline === 'function') {
+        pidWriteBackToPipeline(up.pipelineId, v, 'ใส่จากสมุดเดินของ invoice ' + inv);
+      }
+    });
+  }
+  closeMForce();
+  render();
+}
+
+// ---- ทำทีเดียวหลายใบ (เลขเดียวใช้ได้หลายใบจริงในข้อมูล) ----
+function djlToggleInv(inv, el) { if (el && el.checked) djlInvSel[inv] = 1; else delete djlInvSel[inv]; render(); }
+function djlClearInvSel() { djlInvSel = {}; render(); }
+function djlBulkPid() {
+  var invs = Object.keys(djlInvSel);
+  if (!invs.length) return;
+  var first = ST.djiMovesByInvoice(invs[0])[0];
+  var dealer = first ? djlDealerOf(first) : null;
+  var choices = _djlPidChoices(dealer ? dealer.id : '');
+  var h = '<div class="hint" style="margin-bottom:10px">ใส่เลขเดียวกันให้ ' + invs.length + ' ใบที่เลือก — เลขเดียวใช้ได้หลายใบ (ในไฟล์จริงมีเลขที่กระจาย 3 ใบ)</div>';
+  h += '<div class="fg"><label>Project ID</label><input type="text" id="djlBulkPidInput" class="inp" value="' + sanitize(djlLastPid) + '" placeholder="20260912-0005"></div>';
+  h += '<button class="btn bp btn-full" style="margin:8px 0" onclick="djlCommitBulkPid()">💾 ใส่ให้ทั้ง ' + invs.length + ' ใบ</button>';
+  if (choices.length) {
+    h += '<div class="hint" style="margin-bottom:6px">หรือเลือกจากเลขที่มีอยู่</div><div style="max-height:200px;overflow:auto;display:flex;flex-direction:column;gap:5px">';
+    choices.slice(0, 30).forEach(function(c) {
+      h += '<div style="border:1px solid var(--border);border-radius:7px;padding:6px 9px;cursor:pointer" onclick="document.getElementById(\'djlBulkPidInput\').value=\'' + sanitize(c.pid) + '\'">' +
+        '<div style="font-family:monospace;font-size:12px">' + c.src + ' ' + sanitize(c.pid) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2)">' + sanitize(c.label) + '</div></div>';
+    });
+    h += '</div>';
+  }
+  openM('🗂️ ใส่ Project ID หลายใบ', h);
+}
+function djlCommitBulkPid() {
+  var v = pidNorm((document.getElementById('djlBulkPidInput') || {}).value);
+  if (!v) { alert('ใส่เลขก่อนนะครับ'); return; }
+  var warn = pidFormatWarning(v);
+  if (warn && !confirm('⚠️ ' + warn + '\n\nตกลง = บันทึกตามนี้')) return;
+  var n = 0;
+  Object.keys(djlInvSel).forEach(function(inv) { if (djlSetInvoicePid(inv, v, true)) n++; });
+  djlInvSel = {};
+  closeMForce();
+  toast('✅ ใส่ ' + v + ' ให้ ' + n + ' ใบแล้ว');
+  render();
+}
+
+// ---- มุมมองรายใบ: หนึ่งการ์ดต่อหนึ่ง invoice พร้อมช่องใส่ Project ID ----
+function _djlRenderInvoiceView(el, h, dmap) {
+  var groups = _djlInvoiceGroups(dmap);
+  var selN = Object.keys(djlInvSel).length;
+  h += '<div class="card" style="padding:9px 12px;margin-bottom:10px;gap:8px;flex-wrap:wrap;align-items:center;display:' +
+    (selN ? 'flex' : 'none') + '">' +
+    '<b style="font-size:12px">เลือกไว้ ' + selN + ' ใบ</b>' +
+    '<button class="btn bsm bp" onclick="djlBulkPid()">🗂️ ใส่ Project ID เดียวกัน</button>' +
+    '<button class="btn bsm bo" onclick="djlClearInvSel()">ล้างที่เลือก</button></div>';
+
+  if (!groups.length) {
+    h += '<div class="empty"><p>' + (djlInvOnly ? 'ใส่ Project ID ครบทุกใบแล้ว 🎉' : 'ไม่พบใบที่ตรงกับที่ค้น') + '</p></div>';
+    el.innerHTML = h;
+    return;
+  }
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">' + groups.length + ' ใบ' +
+    (djlLimit < groups.length ? ' · แสดง ' + djlLimit + ' ใบแรก' : '') + '</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:8px">';
+  groups.slice(0, djlLimit).forEach(function(g) {
+    var nsn = Object.keys(g.sns).length, nean = Object.keys(g.eans).length;
+    var has = pidNorm(g.pid);
+    h += '<div class="card" style="padding:11px 13px">';
+    h += '<div style="display:flex;gap:9px;align-items:flex-start">';
+    h += '<input type="checkbox" style="margin-top:3px"' + (djlInvSel[g.inv] ? ' checked' : '') +
+      ' onchange="djlToggleInv(\'' + sanitize(g.inv) + '\',this)">';
+    h += '<div style="flex:1;min-width:0">';
+    h += '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">' +
+      '<span style="font-family:monospace;font-weight:700;font-size:13px">🧾 ' + qcopyHtml(g.inv) + '</span>' +
+      '<span style="font-size:11px;color:var(--text2)">' + sanitize(g.date) + '</span></div>';
+    h += '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">' + sanitize(String(g.name || g.code).substr(0, 34)) +
+      ' · ' + (nsn ? nsn + ' SN' : g.qty + ' ชิ้น') + ' · ' + nean + ' รุ่น' +
+      (g.fail ? ' · <span style="color:var(--danger,#ef4444)">' + g.fail + ' แถวถูกตีกลับ</span>' : '') + '</div>';
+    h += '<div style="margin-top:7px">' + (has
+      ? '<span style="font-family:monospace;font-size:12px;color:var(--ok,#22c55e)">🗂️ ' + sanitize(g.pid) + '</span>' +
+        ' <a href="#" onclick="showDjlPidM(\'' + sanitize(g.inv) + '\');return false" style="font-size:11px;color:var(--text2)">แก้</a>'
+      : '<button class="btn bsm bo" onclick="showDjlPidM(\'' + sanitize(g.inv) + '\')">+ ใส่ Project ID</button>') + '</div>';
+    h += '</div></div></div>';
+  });
+  h += '</div>';
+  if (groups.length > djlLimit) {
+    h += '<button class="btn bo btn-full" style="margin-top:8px" onclick="djlLimit+=200;render()">โหลดเพิ่ม (เหลืออีก ' + (groups.length - djlLimit) + ')</button>';
+  }
+  el.innerHTML = h;
 }
