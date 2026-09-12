@@ -362,13 +362,14 @@ const ST = {
     if (!data || !data.version) throw new Error('Invalid data format');
     if (data.raw) {
       for (const k in data.raw) if (data.raw.hasOwnProperty(k)) localStorage.setItem(k, data.raw[k]);
+      this._rev++;
       return;
     }
     // เข้ากันได้กับไฟล์ backup รุ่นเก่า (version 'v7' — มีแค่ collection ที่ลงทะเบียนไว้ตอนนั้น)
     for (const [name, key] of Object.entries(this._keys)) if (data[name] !== undefined) this._set(key, data[name]);
   },
 
-  clearAll() { for (const key of Object.values(this._keys)) localStorage.removeItem(key); }
+  clearAll() { for (const key of Object.values(this._keys)) localStorage.removeItem(key); this._rev++; }
 };
 
 ST._migratePostitKey();
