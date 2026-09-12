@@ -10401,3 +10401,9 @@ input:focus, select:focus, textarea:focus {
 .rr-tbl td { padding:6px 8px; border-bottom:1px solid var(--border); }
 .rr-tbl tbody tr:hover { background:var(--surface-2); }
 .rr-acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+
+
+/* หัวกลุ่ม Dealer ในหน้าทะเบียน Project ID — ลูกศรหมุนตามสถานะเปิด/ปิดของ <details> ให้รู้ว่ากดขยายได้ */
+.djp-ar { display:inline-block; color:var(--text2); font-size:11px; transition:transform .15s }
+details[open] > summary .djp-ar { transform:rotate(90deg) }
+@media (prefers-reduced-motion: reduce) { .djp-ar { transition:none } }

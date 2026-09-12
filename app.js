@@ -1962,7 +1962,7 @@ var APP_MENU_ACTIONS = [
 var MB_NAV_ROUTE_GROUPS = {
   today: ['today', 'salesOverview', 'salesAnalytics'],
   dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar', 'endUserList'],
-  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison', 'djiProjects', 'djiLedger'],
   tasks: ['tasks', 'taskDetail']
 };
 

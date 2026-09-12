@@ -756,7 +756,7 @@ function _djpUpdateBulkBar() {
   var bar = document.getElementById('djpBulkBar');
   if (!bar) return;
   var n = _djpSelIds().length;
-  bar.style.display = n ? '' : 'none';
+  bar.style.display = n ? 'flex' : 'none';
   var cnt = document.getElementById('djpBulkCount');
   if (cnt) cnt.textContent = n;
 }
@@ -959,7 +959,8 @@ function rDjiProjects(el) {
     sanitize(djpQ) + '" oninput="djpQ=this.value;render()" autocomplete="off">';
 
   // ---- แถบทำทีเดียวหลายอัน ----
-  h += '<div id="djpBulkBar" class="card" style="display:' + (_djpSelIds().length ? '' : 'none') + ';padding:9px 12px;margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+  h += '<div id="djpBulkBar" class="card" style="padding:9px 12px;margin-bottom:10px;gap:8px;flex-wrap:wrap;align-items:center;display:' +
+    (_djpSelIds().length ? 'flex' : 'none') + '">' +
     '<b style="font-size:12px">เลือกไว้ <span id="djpBulkCount">' + _djpSelIds().length + '</span> รายการ</b>' +
     '<button class="btn bsm bp" onclick="djpBulkCreatePipelines()">➕ สร้างโครงการใน Pipeline</button>' +
     '<button class="btn bsm bo" onclick="djpBulkAssignDealer()">🏪 ระบุ Dealer</button>' +
@@ -995,7 +996,7 @@ function rDjiProjects(el) {
     h += '<details class="card" style="margin-bottom:8px;padding:0" ' + (keys.length <= 3 ? 'open' : '') + '>';
     h += '<summary style="cursor:pointer;padding:11px 14px;list-style:none">';
     h += '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">';
-    h += '<div><b>' + sanitize(g.name) + '</b>' + (g.dealer && g.dealer.djiCode ? ' <span style="font-family:monospace;font-size:11px;color:var(--text2)">' + sanitize(g.dealer.djiCode) + '</span>' : '') +
+    h += '<div><span class="djp-ar">▸</span> <b>' + sanitize(g.name) + '</b>' + (g.dealer && g.dealer.djiCode ? ' <span style="font-family:monospace;font-size:11px;color:var(--text2)">' + sanitize(g.dealer.djiCode) + '</span>' : '') +
       '<div style="font-size:11px;color:var(--text2)">' + g.items.length + ' Project ID · ผูกแล้ว ' + gl + ' · ยังไม่ผูก ' + (g.items.length - gl) + '</div></div>';
     h += '<div style="text-align:right;font-size:12px">' +
       '<div><span style="color:var(--text2);font-size:10px">Project คาดการณ์</span> ฿' + fmtMoney(gf) + '</div>' +
@@ -1104,7 +1105,7 @@ function djpPipeBadgeHtml(pipeId) {
 // แผ่นดิน") ได้ 0 ส่วนโครงการคนละอันที่ชื่อพิมพ์เหมือนกันเป๊ะ (วิทยาลัยเทคนิคคนละจังหวัด) ได้ 0.78
 // การเรียงลำดับจึงช่วยได้แค่ดันตัวที่น่าจะใช่ขึ้นมา คนต้องเป็นคนชี้ — หน้านี้ทำให้การชี้นั้นเร็ว:
 // ล็อก Dealer ไว้ (สัญญาณเดียวที่เชื่อได้เสมอ) เอาเฉพาะที่ยังไม่ผูกมาเรียงคู่กัน แล้วกดทีละคู่รวดเดียว
-var djpBoardDealer = '', djpBoardProj = '', djpBoardQ = '';
+var djpBoardDealer = '', djpBoardProj = '', djpBoardQ = '', djpBoardShowList = false;
 
 function showDjpMatchBoardM(dealerId) {
   if (dealerId !== undefined) { djpBoardDealer = dealerId || ''; djpBoardProj = ''; djpBoardQ = ''; }
@@ -1153,31 +1154,36 @@ function _djpRenderBoard(keepFocus) {
     return;
   }
 
-  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">';
+  // เดิมโชว์รายการที่เลือกไว้สองที่ (ในลิสต์ซ้าย + การ์ดรายละเอียด) ซึ่งพอ modal แคบจนคอลัมน์ตกลงมาซ้อนกัน
+  // มันกลายเป็นของซ้ำติดกันอ่านสับสน — เปลี่ยนเป็นเลื่อนทีละอันแทน ได้ผลเหมือนกันแต่ไม่ซ้ำ และใช้บนมือถือได้
+  var idx = list.findIndex(function(x) { return x.id === djpBoardProj; });
+  if (idx < 0) idx = 0;
+  h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">' +
+    '<button class="btn bsm bo" onclick="djpBoardStep(-1)">‹</button>' +
+    '<b style="flex:1;text-align:center;font-size:12px">' + (idx + 1) + ' / ' + list.length + ' ที่ยังไม่ผูก</b>' +
+    '<button class="btn bsm bo" onclick="djpBoardStep(1)">›</button>' +
+    '<button class="btn bsm bo" onclick="djpBoardToggleList()">' + (djpBoardShowList ? 'ซ่อนรายการ' : 'ดูรายการ') + '</button></div>';
 
-  // ---- ซ้าย: ทะเบียนที่ยังไม่ผูก ----
-  h += '<div style="flex:1 1 240px;min-width:0">';
-  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">ทะเบียนที่ยังไม่ผูก (' + list.length + ')</div>';
-  h += '<div style="max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:4px">';
-  list.slice(0, 60).forEach(function(p) {
-    var on = p.id === djpBoardProj;
-    h += '<div onclick="djpBoardPickProj(\'' + p.id + '\')" style="cursor:pointer;border:1px solid ' +
-      (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent-light,rgba(59,130,246,.1))' : 'transparent') +
-      ';border-radius:7px;padding:6px 8px">' +
-      '<div style="font-family:monospace;font-size:11.5px;font-weight:600">' + sanitize(p.pid) + '</div>' +
-      '<div style="font-size:11px;color:var(--text2)">' + sanitize(String(p.name || '').substr(0, 38)) + '</div></div>';
-  });
-  if (list.length > 60) h += '<div style="font-size:11px;color:var(--text2);padding:4px">…อีก ' + (list.length - 60) + ' — กรอง Dealer เพื่อให้สั้นลง</div>';
-  h += '</div></div>';
+  if (djpBoardShowList) {
+    h += '<div style="max-height:160px;overflow:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:10px">';
+    list.slice(0, 80).forEach(function(p) {
+      var on = p.id === djpBoardProj;
+      h += '<div onclick="djpBoardPickProj(\'' + p.id + '\')" style="cursor:pointer;border:1px solid ' +
+        (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent-light,rgba(59,130,246,.1))' : 'transparent') +
+        ';border-radius:7px;padding:6px 8px">' +
+        '<div style="font-family:monospace;font-size:11.5px;font-weight:600">' + sanitize(p.pid) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2)">' + sanitize(String(p.name || '').substr(0, 44)) + '</div></div>';
+    });
+    if (list.length > 80) h += '<div style="font-size:11px;color:var(--text2);padding:4px">…อีก ' + (list.length - 80) + ' — เลือก Dealer เพื่อให้สั้นลง</div>';
+    h += '</div>';
+  }
 
-  // ---- ขวา: ผู้สมัครจาก Pipeline ----
-  h += '<div style="flex:2 1 300px;min-width:0">';
   if (cur) {
     var cd = djpDealerOf(cur);
-    h += '<div style="border:1px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:8px">' +
-      '<div style="font-family:monospace;font-size:12px;font-weight:700">' + sanitize(cur.pid) + '</div>' +
+    h += '<div style="border:1px solid var(--accent);border-radius:8px;padding:9px 11px;margin-bottom:8px">' +
+      '<div style="font-family:monospace;font-size:12.5px;font-weight:700">' + sanitize(cur.pid) + '</div>' +
       '<div style="font-size:12px;margin-top:2px">' + sanitize(cur.name) + '</div>' +
-      '<div style="font-size:11px;color:var(--text2);margin-top:2px">🏢 ' + sanitize(cur.acct || '-') +
+      '<div style="font-size:11px;color:var(--text2);margin-top:3px">🏢 ' + sanitize(cur.acct || '-') +
       (cur.prov ? ' · 📍 ' + sanitize(cur.prov) : '') + (cur.regDate ? ' · 🗓️ ' + sanitize(cur.regDate) : '') +
       (cd ? ' · 🏪 ' + sanitize(cd.name) : '') + '</div></div>';
 
@@ -1198,7 +1204,9 @@ function _djpRenderBoard(keepFocus) {
       cands = djpSuggestPipelines(cur);
     }
 
-    h += '<div style="max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:5px">';
+    h += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' +
+      (djpBoardQ.trim() ? 'ผลการค้นหา' : 'โครงการที่น่าจะใช่') + ' (' + cands.length + ')</div>';
+    h += '<div style="max-height:250px;overflow:auto;display:flex;flex-direction:column;gap:5px">';
     if (!cands.length) {
       h += '<div class="empty" style="padding:10px"><p>' + (djpBoardQ.trim() ? 'ไม่เจอที่ตรงกับคำค้น' : 'ระบบไม่เจอตัวที่ใกล้เคียง — ลองพิมพ์ค้นเอง') + '</p></div>';
     }
@@ -1218,7 +1226,7 @@ function _djpRenderBoard(keepFocus) {
     h += '</div>';
     h += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
       '<button class="btn bsm bo" onclick="closeMForce();djpCreatePipelineFrom(\'' + cur.id + '\')">➕ ไม่มีในระบบ — สร้างใหม่</button>' +
-      '<button class="btn bsm bo" onclick="djpBoardSkip()">ข้ามไปอันถัดไป ›</button></div>';
+      '<button class="btn bsm bo" onclick="djpBoardStep(1)">ข้ามไปอันถัดไป ›</button></div>';
   }
   h += '</div></div>';
   h += '<button class="btn bo btn-full" style="margin-top:10px" onclick="closeMForce();render()">ปิด</button>';
@@ -1230,10 +1238,16 @@ function _djpRenderBoard(keepFocus) {
   }
 }
 
-function djpBoardSkip() {
+// เดินหน้า/ถอยหลังทีละรายการ วนรอบได้ทั้งสองทาง — ของที่ยังไม่ผูกมีเป็นร้อย การไล่ทีละอันคือการใช้งานจริง
+function djpBoardStep(dir) {
   var list = _djpBoardUnlinked(djpBoardDealer);
+  if (!list.length) { djpBoardProj = ''; _djpRenderBoard(); return; }
   var i = list.findIndex(function(p) { return p.id === djpBoardProj; });
-  djpBoardProj = list.length ? list[(i + 1) % list.length].id : '';
+  if (i < 0) i = 0;
+  djpBoardProj = list[(i + dir + list.length) % list.length].id;
   djpBoardQ = '';
   _djpRenderBoard();
 }
+function djpBoardToggleList() { djpBoardShowList = !djpBoardShowList; _djpRenderBoard(); }
+// ชื่อเดิม เผื่อมีที่อื่นเรียกอยู่
+function djpBoardSkip() { djpBoardStep(1); }
