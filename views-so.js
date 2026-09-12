@@ -669,7 +669,9 @@ function showCreateSOModal(opts) {
       '</option>';
   });
 
-  var initType = opts.pipelineId ? 'project' : (opts.runrateId ? 'runrate' : 'runrate');
+  // ประเภทที่ส่งมาจากใบเสนอราคามาก่อน แล้วค่อยเดาจาก pipelineId ที่ส่งมา — ไม่งั้นใบเสนอราคาแบบ run rate
+  // ที่ยังไม่ได้ผูกถังจะเปิดมาเป็นโหมดโครงการแล้วเลขที่กรอกไว้หาย
+  var initType = opts.linkType || (opts.pipelineId ? 'project' : 'runrate');
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   html += (typeof _pendingLinkGuidelineHtml === 'function') ? _pendingLinkGuidelineHtml() : '';
@@ -693,8 +695,8 @@ function showCreateSOModal(opts) {
   // Project ID — ดึงมาจาก Pipeline ที่เลือก ถ้าโครงการนั้นยังไม่มี กรอกตรงนี้ได้เลยแล้วเขียนกลับไปให้
   // (ในแอปนี้ "มี Project ID = ถือว่าลงทะเบียน CRM แล้ว" จึงต้องตั้ง djiCrmRegistered ตามไปด้วยเสมอ)
   html += '<div style="margin-top:8px"><label class="lbl">Project ID ' +
-    '<span style="font-size:10px;color:var(--text2)">(ได้จากตอนลงทะเบียน CRM ของ DJI — ยังไม่มีก็กรอกที่นี่ได้)</span></label>' +
-    '<input id="soN_projectId" class="inp" value="' + sanitize((pipe && pipe.projectId) || '') + '" placeholder="ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
+    '<span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ' — ยังไม่มีก็กรอกที่นี่ได้)</span></label>' +
+    '<input id="soN_projectId" class="inp" value="' + sanitize(pidNorm(opts.projectId) || (pipe && pipe.projectId) || '') + '" placeholder="20260912-0005 — ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
     '<div id="soN_projIdNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '</div>';
 
@@ -767,6 +769,25 @@ function _soFillFromQuote(quoteId) {
   window._soQuoteItemsSnapshot = JSON.stringify(items);
   var poEl = document.getElementById('soN_customerPO');
   if (poEl && !poEl.value && q.poNo) poEl.value = q.poNo;
+
+  // ใบเสนอราคาถือการผูกงานไว้แล้ว (โครงการ/ถัง + Project ID) — ดึงตามมาให้ครบ ไม่ต้องเลือกซ้ำ
+  // ไม่ทับ Project ID ที่ผู้ใช้พิมพ์เองไว้ ด้วยเหตุผลเดียวกับตอนเลือกโครงการ (_soFillFromPipe)
+  var qType = q.linkType || (q.runrateId ? 'runrate' : (q.pipelineId ? 'project' : ''));
+  if (qType) {
+    var tSel = document.getElementById('soN_type');
+    if (tSel && tSel.value !== qType) { tSel.value = qType; _soTypeToggle(qType); }
+  }
+  if (q.pipelineId) {
+    var pSel = document.getElementById('soN_pipelineId');
+    if (pSel) pSel.value = q.pipelineId;
+  }
+  if (q.runrateId) {
+    var rSel = document.getElementById('soN_runrateId');
+    if (rSel) { rSel.value = q.runrateId; _soRRPick(q.runrateId); }
+  }
+  var pidEl2 = document.getElementById('soN_projectId');
+  if (pidEl2 && !_soProjIdDirty && pidNorm(q.projectId)) pidEl2.value = q.projectId;
+  _soProjIdNote();
 }
 
 // เทียบแบบ normalize เฉพาะฟิลด์ที่มีความหมาย (ไม่ใช่ JSON.stringify ตรงๆ) กัน false positive จาก field เกิน/ลำดับต่าง
@@ -898,13 +919,23 @@ function _soProjIdNote() {
   var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
   var typed = (el.value || '').trim();
   var onPipe = p ? String(p.projectId || '').trim() : '';
-  if (!p) { note.textContent = typed ? 'จะบันทึกไว้กับ SO ใบนี้' : ''; note.style.color = ''; return; }
+  // รูปแบบเลขผิดปกติ/เลขนี้มีเจ้าของอยู่แล้ว — ต่อท้ายข้อความหลัก ไม่ไปแทนที่ เพราะเรื่องการผูกสำคัญกว่า
+  var extra = '';
+  if (typed) {
+    var fmt = pidFormatWarning(typed);
+    if (fmt) extra += '  ·  ⚠️ ' + fmt;
+    var owners = pidOwners(typed, { pipeId: pipeId });
+    if (owners.buckets.length) extra += '  ·  ⚠️ เลขนี้เป็นถัง Run rate อยู่แล้ว';
+    else if (owners.pipelines.length) extra += '  ·  ⚠️ เลขนี้ใช้กับโครงการอื่นอยู่แล้ว';
+  }
+
+  if (!p) { note.textContent = (typed ? 'จะบันทึกไว้กับ SO ใบนี้' : '') + extra; note.style.color = extra ? 'var(--warn, #f59e0b)' : ''; return; }
   if (!typed) { note.textContent = onPipe ? '' : 'โครงการนี้ยังไม่มี Project ID'; note.style.color = ''; return; }
-  if (typed === onPipe) { note.textContent = '✓ ตรงกับที่บันทึกไว้ในโครงการแล้ว'; note.style.color = 'var(--text2)'; return; }
-  note.textContent = onPipe
+  if (typed === onPipe) { note.textContent = '✓ ตรงกับที่บันทึกไว้ในโครงการแล้ว' + extra; note.style.color = extra ? 'var(--warn, #f59e0b)' : 'var(--text2)'; return; }
+  note.textContent = (onPipe
     ? '⚠️ ไม่ตรงกับของเดิมในโครงการ (' + onPipe + ') — ตอนบันทึกจะถามก่อนว่าจะแก้ต้นทางไหม'
-    : '↩︎ ตอนบันทึกจะเขียนกลับไปที่โครงการให้ด้วย (นับเป็นลงทะเบียน CRM แล้ว)';
-  note.style.color = onPipe ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)';
+    : '↩︎ ตอนบันทึกจะเขียนกลับไปที่โครงการให้ด้วย (นับเป็นลงทะเบียน CRM แล้ว)') + extra;
+  note.style.color = (onPipe || extra) ? 'var(--warn, #f59e0b)' : 'var(--ok, #10b981)';
 }
 
 function _soFillFromPipe(pipeId) {
@@ -1029,34 +1060,9 @@ function saveCreateSO() {
   }
 
   // ---- Project ID: เขียนกลับไปที่โครงการต้นทางให้ด้วย ----
-  //
   // Project ID เป็นของโครงการ ไม่ใช่ของ SO — เก็บไว้บน SO เพื่ออ้างอิงได้เร็ว แต่ต้นทางคือ pipeline
-  // ถ้ากรอกมาแล้วโครงการยังไม่มี ให้เติมให้เลย (ไม่ต้องถาม เพราะไม่ได้ทับอะไร) ถ้ามีอยู่แล้วแต่ไม่ตรง
-  // ต้องถามก่อน จะได้ไม่เผลอแก้ข้อมูลที่ลงทะเบียนไว้แล้ว
-  // กฎของแอป: มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (ดู modals.js / client-view.html)
-  if (projectId && pipelineId) {
-    var srcPipe = ST.getOne('pipeline', pipelineId);
-    if (srcPipe) {
-      var cur = String(srcPipe.projectId || '').trim();
-      var write = !cur || (cur !== projectId && confirm(
-        'โครงการนี้มี Project ID อยู่แล้ว: ' + cur + '\n' +
-        'ที่กรอกในฟอร์ม: ' + projectId + '\n\n' +
-        'ตกลง = แก้ Project ID ของโครงการเป็นค่าใหม่\nยกเลิก = เก็บค่าใหม่ไว้กับ SO ใบนี้เท่านั้น ไม่แตะโครงการ'));
-      if (write) {
-        var upd = { projectId: projectId };
-        if (!srcPipe.djiCrmRegistered) { upd.djiCrmRegistered = true; upd.djiCrmDate = srcPipe.djiCrmDate || _td(); }
-        try {
-          ST.update('pipeline', pipelineId, upd);
-          try {
-            ST.add('pipeLog', { pipeId: pipelineId, type: 'note', date: _td(),
-              content: 'Project ID ' + (cur ? 'แก้จาก ' + cur + ' เป็น ' : 'บันทึก ') + projectId +
-                       ' — กรอกตอนสร้าง SO ' + soNumber, created: new Date().toISOString() });
-          } catch (e) {}
-          toast(cur ? '🗂️ แก้ Project ID ของโครงการแล้ว' : '🗂️ บันทึก Project ID กลับไปที่โครงการแล้ว');
-        } catch (e) { toast('⚠️ บันทึก Project ID กลับไปที่โครงการไม่สำเร็จ'); }
-      }
-    }
-  }
+  // กติกาการเขียนกลับอยู่ใน pidWriteBackToPipeline (utils.js) ใช้ร่วมกับใบเสนอราคา จะได้ไม่มีสองมาตรฐาน
+  if (projectId && pipelineId) pidWriteBackToPipeline(pipelineId, projectId, 'กรอกตอนสร้าง SO ' + soNumber);
 
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
@@ -1415,6 +1421,108 @@ function saveSOItemComment(soId, idx, value) {
 
 // ---------------------------------------------------------------- edit modal
 
+// ตัวเลือกโครงการสำหรับหน้าแก้ไข SO — เกณฑ์เดียวกับฟอร์มสร้าง (เฉพาะที่ Win แล้ว) บวกอันที่ SO ใบนี้ผูกอยู่
+// เผื่อสถานะโครงการถูกย้อนกลับไปหลังเปิด SO ไปแล้ว จะได้ไม่หลุดออกจากรายการจนแก้อะไรไม่ได้
+function _soPipelineOptionsHtml(dealerId, keepId) {
+  var list = ST.getAll('pipeline').filter(function(p) {
+    if (p.id === keepId) return true;
+    if (!pipeIsWon(p)) return false;
+    return !dealerId || p.dealerId === dealerId;
+  }).sort(function(a, b) { return (a.projectName || '') > (b.projectName || '') ? 1 : -1; });
+  var h = '<option value="">-- ไม่ระบุ / เลือกทีหลัง --</option>';
+  list.forEach(function(p) {
+    var d = ST.getOne('dealers', p.dealerId);
+    h += '<option value="' + p.id + '"' + (keepId === p.id ? ' selected' : '') + '>' +
+      sanitize((p.projectName || '(ไม่มีชื่อ)').substr(0, 40)) + (d ? ' [' + sanitize(d.name) + ']' : '') + '</option>';
+  });
+  return h;
+}
+
+// ชื่อที่มนุษย์อ่านรู้เรื่องว่ายอดของ SO ใบนี้ไปเข้าที่ไหน — ใช้ในข้อความยืนยันตอนย้ายการผูก
+function _soLinkLabel(type, pipelineId, runrateId) {
+  if (type === 'runrate') {
+    var r = runrateId ? ST.getOne('runrate', runrateId) : null;
+    return r ? ('ถัง Run rate ' + (r.projectId || '(ไม่มีเลข)')) : 'Run rate (ยังไม่ผูกถัง)';
+  }
+  var p = pipelineId ? ST.getOne('pipeline', pipelineId) : null;
+  return p ? ('โครงการ ' + (p.projectName || '(ไม่มีชื่อ)')) : 'โครงการ (ยังไม่ผูก)';
+}
+
+function _soEditTypeToggle(type) {
+  var pipeSec = document.getElementById('soE_pipeSec');
+  var rrSec = document.getElementById('soE_rrSec');
+  if (pipeSec) pipeSec.style.display = type === 'project' ? '' : 'none';
+  if (rrSec) rrSec.style.display = type === 'runrate' ? '' : 'none';
+  // ตั้งใจ "ไม่" ล้างค่าของฝั่งที่ซ่อน — saveSOEdit ล้างให้ตามประเภทตอนบันทึกอยู่แล้ว ถ้ามาล้างตรงนี้ด้วย
+  // แค่สลับโหมดดูแล้วสลับกลับ โครงการ/ถังที่ผูกไว้เดิมจะหายทันทีทั้งที่ยังไม่ได้กดบันทึกอะไรเลย
+  _soEditLinkNote();
+}
+
+// เปลี่ยน Dealer ในหน้าแก้ไข → รายการโครงการ/ถังต้องกรองตามไปด้วย ไม่งั้นค้างของเจ้าเดิมให้เลือกผิด
+function _soEditDealerChanged(dealerId) {
+  var pSel = document.getElementById('soE_pipelineId');
+  if (pSel) { var kp = pSel.value; pSel.innerHTML = _soPipelineOptionsHtml(dealerId, kp); if (pSel.value !== kp) pSel.value = ''; }
+  var rSel = document.getElementById('soE_runrateId');
+  if (rSel) { var kr = rSel.value; rSel.innerHTML = _soRunrateOptionsHtml(dealerId, kr); if (rSel.value !== kr) rSel.value = ''; }
+  _soEditLinkNote();
+}
+
+// คำเตือนสดใต้ส่วนการผูกงาน — บอกก่อนกดบันทึกว่ายอดกำลังจะย้ายไปไหน และเลข Project ID มีปัญหาอะไรไหม
+function _soEditLinkNote() {
+  var note = document.getElementById('soE_linkNote');
+  if (!note) return;
+  var s = window._soEditOrig || {};
+  var type = (document.getElementById('soE_type') || {}).value || 'project';
+  var pipeId = (document.getElementById('soE_pipelineId') || {}).value || '';
+  var rrId = (document.getElementById('soE_runrateId') || {}).value || '';
+
+  // SO แบบ run rate ไม่ถือ Project ID ของตัวเอง — เลขคือของถัง (ดู saveCreateSO ที่ล้าง projectId ทิ้ง)
+  // ช่องนี้จึงต้องอ่านอย่างเดียวและสะท้อนเลขของถังที่เลือก ไม่งั้นพิมพ์ลงไปแล้วค่าหายเงียบๆ ตอนบันทึก
+  var pidEl = document.getElementById('soE_projectId');
+  if (pidEl) {
+    if (type === 'runrate') {
+      // เก็บเลขของโหมดโครงการไว้ก่อนทับ เผื่อสลับกลับมา — ไม่งั้นสลับไปกลับทีเดียวเลขที่กรอกไว้หายเลย
+      if (!pidEl.readOnly) window._soEditProjIdDraft = pidEl.value;
+      var rr = rrId ? ST.getOne('runrate', rrId) : null;
+      pidEl.readOnly = true;
+      pidEl.style.opacity = '.7';
+      pidEl.value = rr ? (rr.projectId || '') : '';
+      pidEl.placeholder = 'มาจากถังที่เลือก';
+    } else {
+      if (pidEl.readOnly) pidEl.value = window._soEditProjIdDraft || '';
+      pidEl.readOnly = false;
+      pidEl.style.opacity = '';
+      pidEl.placeholder = '20260912-0005';
+    }
+  }
+  var typed = pidNorm((pidEl || {}).value);
+
+  var msgs = [], hasWarn = false;
+  var oldType = s.type || (s.runrateId ? 'runrate' : 'project');
+  var moved = (oldType !== type) || (type === 'runrate' && (s.runrateId || '') !== rrId) ||
+              (type === 'project' && (s.pipelineId || '') !== pipeId);
+  if (moved) {
+    var amt = (typeof _rrSOTotal === 'function') ? _rrSOTotal(s) : 0;
+    msgs.push('↔️ ยอด ฿' + fmtMoney(amt) + ' จะย้าย: ' +
+      _soLinkLabel(oldType, s.pipelineId, s.runrateId) + ' → ' + _soLinkLabel(type, pipeId, rrId));
+    hasWarn = true;
+  }
+  if (type === 'runrate') {
+    msgs.push('ℹ️ Run rate ใช้ Project ID ของถัง — แก้เลขได้ที่ตัวถัง (เมนู Run Rate) ไม่ใช่ที่ SO ใบนี้');
+  }
+  if (type === 'project' && typed) {
+    var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
+    var onPipe = p ? pidNorm(p.projectId) : '';
+    if (p && !onPipe) msgs.push('↩︎ ตอนบันทึกจะเขียน Project ID กลับไปที่โครงการให้ด้วย');
+    else if (p && !pidSame(onPipe, typed)) { msgs.push('⚠️ ไม่ตรงกับของเดิมในโครงการ (' + onPipe + ') — ตอนบันทึกจะถามก่อน'); hasWarn = true; }
+    var fmt = pidFormatWarning(typed);
+    if (fmt) { msgs.push('⚠️ ' + fmt); hasWarn = true; }
+  }
+  note.textContent = msgs.join('\n');
+  note.style.whiteSpace = 'pre-line';
+  note.style.color = hasWarn ? 'var(--warn, #f59e0b)' : 'var(--text2)';
+}
+
 function showSOEditModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
@@ -1432,8 +1540,31 @@ function showSOEditModal(soId) {
   html += '</div>';
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soE_invDate" class="inp" type="date" value="' + (s.invoiceDate||'') + '"></div>';
-  html += '<div style="flex:1"><label class="lbl">Dealer</label><select id="soE_dealer" class="inp">' + dOpts + '</select></div>';
+  html += '<div style="flex:1"><label class="lbl">Dealer</label><select id="soE_dealer" class="inp" onchange="_soEditDealerChanged(this.value)">' + dOpts + '</select></div>';
   html += '</div>';
+
+  // ---- การผูกงาน: โครงการ หรือ Run rate + Project ID ----
+  // เดิมแก้ได้แค่ตอนสร้าง SO เท่านั้น พอได้เลข CRM มาทีหลัง (ซึ่งเป็นเรื่องปกติ) เลยเติมไม่ได้ ต้องไปแก้ที่
+  // Pipeline แทน — และ SO ที่ผูกถังผิดก็ย้ายถังไม่ได้เลย ต้องลบทิ้งแล้วเปิดใหม่
+  var curType = s.type || (s.runrateId ? 'runrate' : 'project');
+  html += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<div style="flex:1"><label class="lbl">ประเภท</label><select id="soE_type" class="inp" onchange="_soEditTypeToggle(this.value)">' +
+    '<option value="project"' + (curType === 'project' ? ' selected' : '') + '>📋 Project</option>' +
+    '<option value="runrate"' + (curType === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>' +
+    '</select></div>';
+  html += '<div style="flex:1"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
+    '<input id="soE_projectId" class="inp" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote()"></div>';
+  html += '</div>';
+  html += '<div id="soE_pipeSec"' + (curType !== 'project' ? ' style="display:none"' : '') + '>' +
+    '<label class="lbl">Pipeline Project</label>' +
+    '<select id="soE_pipelineId" class="inp" onchange="_soEditLinkNote()">' + _soPipelineOptionsHtml(s.dealerId, s.pipelineId || '') + '</select></div>';
+  html += '<div id="soE_rrSec"' + (curType !== 'runrate' ? ' style="display:none"' : '') + '>' +
+    '<label class="lbl">ถังรับยอด Run rate</label>' +
+    '<select id="soE_runrateId" class="inp" onchange="_soEditLinkNote()">' + _soRunrateOptionsHtml(s.dealerId, s.runrateId || '') + '</select></div>';
+  html += '<div id="soE_linkNote" class="hint" style="font-size:11px"></div>';
+  html += '</div>';
+
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">PO ลูกค้า</label><input id="soE_po" class="inp" value="' + sanitize(s.customerPO||'') + '"></div>';
   html += '<div style="flex:1"><label class="lbl">PR ภายใน</label><input id="soE_pr" class="inp" value="' + sanitize(s.prNumber||'') + '"></div>';
@@ -1445,6 +1576,10 @@ function showSOEditModal(soId) {
   html += attachUploadHtml('_soAttach', 'salesOrders', '📷 รูปแนบ (PO/Delivery Note/ใบตรวจรับ/สินค้าที่ส่งจริง)');
   html += '<button class="btn bp" onclick="saveSOEdit(\'' + soId + '\')">💾 บันทึก</button></div>';
   openM('✏️ แก้ไข SO', html);
+  // เก็บสภาพเดิมไว้เทียบว่าการผูกงานเปลี่ยนไปไหม — อ่านจากฟอร์มอย่างเดียวไม่รู้ว่าย้ายมาจากไหน
+  window._soEditOrig = s;
+  window._soEditProjIdDraft = s.projectId || '';
+  _soEditLinkNote();
 }
 
 function saveSOEdit(soId) {
@@ -1453,8 +1588,46 @@ function saveSOEdit(soId) {
   var dealerId = (document.getElementById('soE_dealer')||{}).value || s.dealerId;
   var dealer   = ST.getOne('dealers', dealerId);
   var newSoNumber = (document.getElementById('soE_soNum')||{}).value || s.soNumber;
+
+  // ---- การผูกงาน: โครงการ หรือ Run rate อย่างใดอย่างหนึ่ง (กติกาเดียวกับ saveCreateSO) ----
+  var linkType   = (document.getElementById('soE_type')||{}).value || s.type || (s.runrateId ? 'runrate' : 'project');
+  var pipelineId = (document.getElementById('soE_pipelineId')||{}).value || '';
+  var runrateId  = (document.getElementById('soE_runrateId') ||{}).value || '';
+  var projectId  = pidNorm((document.getElementById('soE_projectId')||{}).value);
+  if (linkType === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
+
+  // ยอดของถัง/โครงการคำนวณสดจาก SO ที่ผูกอยู่ (ดู _rrTotal) การย้ายจึงมีผลทันทีกับตัวเลขสองฝั่ง
+  // — ต้องบอกให้ชัดก่อนว่าเงินก้อนไหนกำลังย้ายจากไหนไปไหน ไม่ใช่เปลี่ยนเงียบๆ
+  var oldType = s.type || (s.runrateId ? 'runrate' : 'project');
+  var linkMoved = (oldType !== linkType) ||
+                  (linkType === 'runrate' && (s.runrateId || '') !== runrateId) ||
+                  (linkType === 'project' && (s.pipelineId || '') !== pipelineId);
+  if (linkMoved) {
+    var movedAmt = (typeof _rrSOTotal === 'function') ? _rrSOTotal(s) : 0;
+    if (!confirm('ย้ายการผูกยอดของ SO ' + (s.soNumber || '') + '\n\n' +
+        'ยอด ฿' + fmtMoney(movedAmt) + '\n' +
+        'จาก: ' + _soLinkLabel(oldType, s.pipelineId, s.runrateId) + '\n' +
+        'ไป: ' + _soLinkLabel(linkType, pipelineId, runrateId) + '\n\n' +
+        'ตกลง = ย้ายตามนี้  ยกเลิก = ไม่บันทึก')) return;
+  }
+
+  // รูปแบบเลขแปลก = เตือนแล้วให้ตัดสินใจ ไม่บล็อก (พิมพ์ไว้ก่อนแล้วมาแก้ทีหลังได้)
+  var pidWarn = pidFormatWarning(projectId);
+  if (pidWarn && !confirm('⚠️ ' + pidWarn + '\n\nที่กรอก: ' + projectId + '\n\nตกลง = บันทึกตามนี้  ยกเลิก = กลับไปแก้')) return;
+
+  // เขียนกลับไปที่โครงการต้นทาง — ตัวกลางเดียวกับฟอร์มสร้าง SO และใบเสนอราคา
+  if (linkType === 'project' && projectId && pipelineId) {
+    pidWriteBackToPipeline(pipelineId, projectId, 'แก้ไข SO ' + newSoNumber);
+  }
+
   var updatedSO = ST.update('salesOrders', soId, {
     soNumber:         newSoNumber,
+    type:             linkType,
+    pipelineId:       pipelineId,
+    projectId:        projectId,
+    runrateId:        runrateId,
+    // เลขของถังที่ denormalize ไว้ตอนสร้าง SO — ต้องอัปเดตตามถังใหม่ ไม่งั้นจะค้างเลขถังเดิมไว้หลอกตา
+    runrateProjectId: runrateId ? ((ST.getOne('runrate', runrateId) || {}).projectId || '') : '',
     invoiceNumber:    (document.getElementById('soE_invNum')||{}).value || '',
     invoiceDate:      (document.getElementById('soE_invDate')||{}).value || '',
     dealerId:         dealerId,
@@ -1509,7 +1682,14 @@ function createSOFromQuotation(quoteId) {
   var presetItems = (q.items || []).map(function(it){
     return { model: it.name || it.model || '', sku: it.sku || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [] };
   });
-  showCreateSOModal({ pipelineId: q.pipelineId || '', quotationId: q.id, dealerId: q.dealerId || '', customerPO: q.poNo || '', presetItems: presetItems });
+  // สืบทอดการผูกงานจากใบเสนอราคามาเลย ไม่ต้องมาเลือก/พิมพ์เลขซ้ำอีกรอบ — ใบเสนอราคาเป็นจุดที่มักได้
+  // Project ID มาก่อน SO อยู่แล้ว (ดู _quoteLinkSectionHtml ใน views-quotation.js)
+  showCreateSOModal({
+    pipelineId: q.pipelineId || '', quotationId: q.id, dealerId: q.dealerId || '',
+    customerPO: q.poNo || '', presetItems: presetItems,
+    linkType: q.linkType || (q.runrateId ? 'runrate' : (q.pipelineId ? 'project' : '')),
+    projectId: q.projectId || '', runrateId: q.runrateId || ''
+  });
 }
 
 function createSOFromPipeline(pipelineId) {

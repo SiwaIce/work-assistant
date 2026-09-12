@@ -17,6 +17,11 @@ var RUNRATE_STATUS = {
 
 var runrateQ = '', runrateDealerFilter = 'all', runrateStatusFilter = 'active', runrateOpenId = null;
 
+// ตอนบันทึกถังสำเร็จ ให้เรียกกลับไปที่หน้าที่เปิดฟอร์มนี้มา (เช่น ใบเสนอราคาที่กด "สร้างถังใหม่" กลางคัน)
+// จะได้เลือกถังที่เพิ่งสร้างให้เลยโดยไม่ต้องเด้งออกไปหน้า Run Rate แล้วเดินกลับมาเอง — ตั้งใหม่ทุกครั้งที่
+// เปิดฟอร์ม ฟอร์มที่เปิดตามปกติจึงไม่ค้าง callback ของคนก่อน
+var _rrAfterSave = null;
+
 // ---- ตัวช่วย ----
 function _rrSOs(rrId) {
   if (!rrId) return [];
@@ -181,7 +186,8 @@ function dealerRunRateTab(d) {
 }
 
 // ---- ฟอร์มเพิ่ม/แก้ไข ----
-function showRunRateM(id, presetDealerId) {
+function showRunRateM(id, presetDealerId, afterSave) {
+  _rrAfterSave = afterSave || null;
   var r = id ? ST.getOne('runrate', id) : null;
   var dealers = ST.getAll('dealers').sort(function(a, b) { return (a.name || '') > (b.name || '') ? 1 : -1; });
   var curDealer = (r && r.dealerId) || presetDealerId || '';
@@ -191,8 +197,9 @@ function showRunRateM(id, presetDealerId) {
     dealers.map(function(d) {
       return '<option value="' + d.id + '"' + (curDealer === d.id ? ' selected' : '') + '>' + sanitize(d.name) + '</option>';
     }).join('') + '</select></div>';
-  h += '<div class="fg"><label>Project ID (Run rate) *</label>' +
-    '<input type="text" id="rr_pid" class="inp" value="' + sanitize((r && r.projectId) || '') + '" placeholder="เลขที่ลูกค้าสร้างไว้สำหรับ Run rate"></div>';
+  h += '<div class="fg"><label>Project ID (Run rate) * <small style="color:var(--text2)">(' + PROJECT_ID_HINT + ')</small></label>' +
+    '<input type="text" id="rr_pid" class="inp" value="' + sanitize((r && r.projectId) || '') + '" placeholder="20260912-0005" oninput="_rrPidNote()">' +
+    '<div id="rr_pidNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   h += '<div class="fg"><label>รุ่นสินค้า <small style="color:var(--text2)">(ใส่ไว้ให้รู้ว่าถังนี้ใช้กับอะไร — เว้นว่างได้)</small></label>' +
     '<input type="text" id="rr_models" class="inp" value="' + sanitize((r && r.models) || '') + '" placeholder="เช่น Mavic 3E, Mini 4 Pro"></div>';
   h += '<div class="fg"><label>สถานะ</label><select id="rr_status" class="inp">' +
@@ -202,6 +209,28 @@ function showRunRateM(id, presetDealerId) {
   h += '<div class="fg"><label>หมายเหตุ</label><textarea id="rr_note" class="inp" rows="2" placeholder="เช่น แยก PO รอบไตรมาส 4">' + sanitize((r && r.note) || '') + '</textarea></div>';
   h += '<button class="btn bp btn-full" onclick="saveRunRate(' + (id ? '\'' + id + '\'' : 'null') + ')">💾 บันทึก</button>';
   openM(id ? '✏️ แก้ไข Project ID (Run rate)' : '➕ เพิ่ม Project ID (Run rate)', h);
+  _rrPidNote(id);
+}
+
+// คำเตือนสดใต้ช่อง Project ID — บอกตั้งแต่ตอนพิมพ์ว่ารูปแบบแปลกหรือเลขนี้มีคนใช้อยู่แล้ว
+// (เลขซ้ำเป็นเรื่องใหญ่กว่ารูปแบบ เลยโชว์ก่อน) ตัว id ของถังที่กำลังแก้อ่านจากฟอร์มไม่ได้ จึงส่งเข้ามาตอนเปิด
+var _rrPidNoteEditingId = null;
+function _rrPidNote(editingId) {
+  if (arguments.length) _rrPidNoteEditingId = editingId || null;
+  var el = document.getElementById('rr_pid'), note = document.getElementById('rr_pidNote');
+  if (!el || !note) return;
+  var pid = pidNorm(el.value);
+  var dupes = pidOwnerSummary(pid, { runrateId: _rrPidNoteEditingId });
+  if (dupes) {
+    note.textContent = '⚠️ เลขนี้ถูกใช้อยู่แล้ว:\n' + dupes;
+    note.style.whiteSpace = 'pre-line';
+    note.style.color = 'var(--warn, #f59e0b)';
+    return;
+  }
+  note.style.whiteSpace = '';
+  var fmt = pidFormatWarning(pid);
+  note.textContent = fmt ? '⚠️ ' + fmt : '';
+  note.style.color = fmt ? 'var(--warn, #f59e0b)' : '';
 }
 
 function saveRunRate(id) {
@@ -220,6 +249,15 @@ function saveRunRate(id) {
           '\n\nเลขนี้ต้องไม่ซ้ำ เพราะใช้ผูกยอด SO เข้าถัง ถ้าซ้ำยอดจะเข้าผิดใบ');
     return;
   }
+  // เลขเดียวกันไปโผล่ในโครงการฝั่ง Pipeline ด้วยแปลว่ามีอย่างน้อยหนึ่งฝั่งกรอกผิด — เตือนแต่ไม่บล็อก
+  // เพราะตัดสินแทนไม่ได้ว่าฝั่งไหนถูก
+  var alsoPipes = pidOwners(pid, { runrateId: id }).pipelines;
+  if (alsoPipes.length && !confirm('Project ID "' + pid + '" ถูกใช้เป็นเลขของโครงการใน Pipeline อยู่แล้ว:\n' +
+      alsoPipes.map(function(p) { return '· ' + (p.projectName || '(ไม่มีชื่อ)'); }).join('\n') +
+      '\n\nRun rate กับโครงการเป็นคนละยอดกัน ปกติจะไม่ใช้เลขเดียวกัน\n\nตกลง = บันทึกต่อ  ยกเลิก = กลับไปแก้')) return;
+  // รูปแบบเลขผิดปกติ — ให้ยืนยันได้ เพราะเวิร์กโฟลว์จริงต้องพิมพ์เลขคร่าวๆ ไว้ก่อนแล้วมาแก้ทีหลัง
+  var fmtWarn = pidFormatWarning(pid);
+  if (fmtWarn && !confirm('⚠️ ' + fmtWarn + '\n\nที่กรอก: ' + pid + '\n\nตกลง = บันทึกตามนี้  ยกเลิก = กลับไปแก้')) return;
 
   var data = { dealerId: dealerId, projectId: pid, models: models, status: status, note: note };
   var saved;
@@ -232,6 +270,7 @@ function saveRunRate(id) {
   }
   if (saved && typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', saved);
   closeMForce();
+  if (_rrAfterSave) { var cb = _rrAfterSave; _rrAfterSave = null; cb(saved); return; }
   render();
 }
 

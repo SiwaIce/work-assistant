@@ -2578,6 +2578,95 @@ function modelOptions(selected) {
 }
 
 // ================================================================
+// PROJECT ID — เลขที่ได้ตอนลงทะเบียน CRM ในระบบ DJI รูปแบบ YYYYMMDD-NNNN (เช่น 20260912-0005)
+//
+// เลขนี้ร้อยทุกขั้นของงานเข้าด้วยกัน: Pipeline (โครงการ) → ใบเสนอราคา → SO → Invoice และฝั่ง Run rate ก็ใช้
+// เลขชุดเดียวกันเป็น "ถังรับยอด" ที่ SO หลายใบผูกเข้ามาได้ เลขจึงต้องสะกดตรงกันทุกที่ ไม่งั้นยอดจะกระจาย
+// ไปคนละก้อนโดยไม่มีใครสังเกต — กลุ่มฟังก์ชันนี้เลยเป็นที่เดียวที่รู้เรื่องรูปแบบเลขและการหาเจ้าของเลข
+//
+// ตั้งใจ "ไม่บังคับ" รูปแบบ เพราะงานจริงต้องพิมพ์เลขไว้ก่อนแล้วค่อยมาแก้ทีหลังได้ ผิดรูปแบบจึงได้แค่คำเตือน
+// ไม่ใช่ error ที่บล็อกการบันทึก
+// ================================================================
+var PROJECT_ID_PATTERN = /^\d{8}-\d{4}$/;
+var PROJECT_ID_HINT = 'รูปแบบ YYYYMMDD-NNNN เช่น 20260912-0005';
+
+function pidNorm(v) { return String(v === null || v === undefined ? '' : v).trim(); }
+// เลขสองตัวนี้คืออันเดียวกันไหม — ช่องว่างหัวท้าย/ตัวพิมพ์ไม่นับ
+function pidSame(a, b) { return pidNorm(a).toLowerCase() === pidNorm(b).toLowerCase(); }
+function pidLooksValid(v) { return PROJECT_ID_PATTERN.test(pidNorm(v)); }
+// คำเตือนเรื่องรูปแบบ — คืน '' ถ้ายังว่าง (ยังไม่กรอกไม่ใช่ความผิด) หรือถูกรูปแบบแล้ว
+function pidFormatWarning(v) {
+  var s = pidNorm(v);
+  if (!s || pidLooksValid(s)) return '';
+  return 'รูปแบบไม่เหมือนเลข CRM ปกติ (' + PROJECT_ID_HINT + ')';
+}
+
+// ใครใช้เลขนี้อยู่แล้วบ้าง — ใช้เตือนเลขซ้ำก่อนบันทึก กันยอดไหลเข้าผิดที่
+// except = { pipeId, runrateId } คือรายการที่กำลังแก้อยู่ ไม่ต้องนับว่าซ้ำกับตัวเอง
+function pidOwners(pid, except) {
+  except = except || {};
+  var out = { pipelines: [], buckets: [] };
+  if (!pidNorm(pid)) return out;
+  try {
+    out.pipelines = ST.getAll('pipeline').filter(function(p) {
+      return p.id !== except.pipeId && pidSame(p.projectId, pid);
+    });
+    out.buckets = ST.getAll('runrate').filter(function(r) {
+      return r.id !== except.runrateId && pidSame(r.projectId, pid);
+    });
+  } catch (e) {}
+  return out;
+}
+// สรุปเจ้าของเลขเป็นข้อความสั้นๆ ไว้ใส่ใน confirm/คำเตือน — คืน '' ถ้ายังไม่มีใครใช้
+function pidOwnerSummary(pid, except) {
+  var o = pidOwners(pid, except), lines = [];
+  o.pipelines.forEach(function(p) { lines.push('· โครงการ: ' + (p.projectName || '(ไม่มีชื่อ)')); });
+  o.buckets.forEach(function(r) {
+    var d = r.dealerId ? ST.getOne('dealers', r.dealerId) : null;
+    lines.push('· ถัง Run rate: ' + (d ? d.name : '(ไม่ระบุ Dealer)'));
+  });
+  return lines.join('\n');
+}
+
+// เขียน Project ID กลับไปที่โครงการต้นทาง — ใช้ร่วมกันทั้งฟอร์ม SO และใบเสนอราคา กติกาจะได้เหมือนกันทั้งคู่:
+// ต้นทางยังว่าง = เติมให้เลย (ไม่ได้ทับอะไร ไม่ต้องถาม) · มีอยู่แล้วแต่ไม่ตรง = ถามก่อน · ตรงอยู่แล้ว = ไม่ต้องทำอะไร
+// กฎของแอป: มี Project ID = ถือว่าลงทะเบียน CRM แล้วเสมอ (ดู modals.js / client-view.html) จึงตั้ง
+// djiCrmRegistered ตามไปด้วยทุกครั้ง
+//
+// sync ขึ้น Firebase ด้วย — เดิมโค้ดใน saveCreateSO เขียนแค่ ST.update() แล้วจบ เลขจึงค้างอยู่แค่เครื่องที่
+// กรอก ไม่ขึ้นไปให้เครื่องอื่นเห็น (แอปเลิก poll ทุกคอลเลกชันไปแล้ว จึงไม่มีอะไรมาตามเก็บให้ทีหลัง)
+// คืน true ถ้าได้เขียนจริง
+function pidWriteBackToPipeline(pipelineId, projectId, sourceLabel) {
+  var pid = pidNorm(projectId);
+  if (!pipelineId || !pid) return false;
+  var p = ST.getOne('pipeline', pipelineId);
+  if (!p) return false;
+  var cur = pidNorm(p.projectId);
+  if (pidSame(cur, pid)) return false;
+  if (cur && !confirm('โครงการนี้มี Project ID อยู่แล้ว: ' + cur + '\n' +
+      'ที่กรอกในฟอร์ม: ' + pid + '\n\n' +
+      'ตกลง = แก้ Project ID ของโครงการเป็นค่าใหม่\nยกเลิก = เก็บค่าใหม่ไว้กับเอกสารใบนี้เท่านั้น ไม่แตะโครงการ')) return false;
+
+  var upd = { projectId: pid };
+  if (!p.djiCrmRegistered) { upd.djiCrmRegistered = true; upd.djiCrmDate = p.djiCrmDate || _td(); }
+  try {
+    var updated = ST.update('pipeline', pipelineId, upd);
+    if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', updated);
+    try {
+      var log = ST.add('pipeLog', { pipeId: pipelineId, type: 'note', date: _td(),
+        content: 'Project ID ' + (cur ? 'แก้จาก ' + cur + ' เป็น ' : 'บันทึก ') + pid +
+                 (sourceLabel ? ' — ' + sourceLabel : ''), created: new Date().toISOString() });
+      if (log && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', log);
+    } catch (e) {}
+    if (typeof toast === 'function') toast(cur ? '🗂️ แก้ Project ID ของโครงการแล้ว' : '🗂️ บันทึก Project ID กลับไปที่โครงการแล้ว');
+    return true;
+  } catch (e) {
+    if (typeof toast === 'function') toast('⚠️ บันทึก Project ID กลับไปที่โครงการไม่สำเร็จ');
+    return false;
+  }
+}
+
+// ================================================================
 // HELPER: Sanitize HTML (prevent XSS)
 // ================================================================
 function sanitize(str) {

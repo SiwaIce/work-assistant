@@ -1362,6 +1362,8 @@ function createNewQuotation() {
     dealerLevel: dealerLevel || 'B',
     levelUsed: levelUsed,
     createdAt: new Date().toISOString(),
+    // ใบเปล่า — ยังไม่ผูกอะไร ค่อยเลือกโครงการ/ถังและกรอก Project ID ในหน้าแก้ไขทีหลังได้
+    linkType: 'project', pipelineId: '', runrateId: '', projectId: '',
     validFrom: validFrom,
     validTo: validTo,
     paymentTerm: paymentTerm,
@@ -1600,6 +1602,8 @@ function createQuoteFromPipeline(pipelineId, selections) {
     dealerId: p.dealerId || '', dealerName: dealer ? dealer.name : (p.dealerName||''),
     dealerLevel: dealerLevel, levelUsed: dealerLevel,
     pipelineId: pipelineId, projectName: p.projectName||'', endUserTH: p.endUserTH||'',
+    // สร้างจากโครงการ — หยิบ Project ID ของโครงการมาถือไว้เลย ถ้ายังไม่มีก็เว้นไว้แล้วมากรอกในใบนี้ได้
+    linkType: 'project', runrateId: '', projectId: p.projectId || '',
     createdAt: new Date().toISOString(), validFrom: _td(), validTo: addD(_td(), 30),
     paymentTerm: 'Net due 30 days',
     quotedBy: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : (getConfig().saleName || ''),
@@ -1713,6 +1717,8 @@ function createQuoteFromRunrateSelection(dealerId, selections) {
     dealerId: dealerId, dealerName: dealer.name,
     dealerLevel: dealerLevel, levelUsed: dealerLevel,
     pipelineId: '', projectName: '', endUserTH: '',
+    // มาจาก Run Rate forecast — ตั้งประเภทไว้ให้ตรงตั้งแต่ต้น ส่วนถัง/เลขค่อยเลือกในใบ (forecast บอกแค่รุ่นกับจำนวน)
+    linkType: 'runrate', runrateId: '', projectId: '',
     createdAt: new Date().toISOString(), validFrom: _td(), validTo: addD(_td(), 30),
     paymentTerm: 'Net due 30 days',
     quotedBy: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER.displayName : (getConfig().saleName || ''),
@@ -1731,6 +1737,181 @@ function createQuoteFromRunrateSelection(dealerId, selections) {
 
   toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   renderEditQuotationPage(newQuote);
+}
+
+// ================================================================
+// การผูกงานของใบเสนอราคา — โครงการ (Pipeline) หรือ Run rate (ถังรับยอด) + Project ID
+//
+// ใบเสนอราคาคือจุดแรกที่มักได้ Project ID จริงมาถือ: ลูกค้าลงทะเบียน CRM ตอน Bidding แล้วส่งเลขมาให้พร้อม
+// ตอนขอราคา แต่เดิมช่องนี้มีแค่ใน Pipeline กับ SO เลยต้องวนไปกรอกที่อื่นก่อนแล้วค่อยกลับมาออกใบ — ย้ายมา
+// กรอกตรงนี้ได้เลย แล้วเขียนกลับไปต้นทางให้ ทั้งระบบจะได้ถือเลขชุดเดียวกัน
+//
+// ทุกช่องผูกทีหลังได้: เปิดใบเปล่าไว้ก่อนแล้วค่อยเลือกโครงการ/ถังทีหลังก็ได้ หรือพิมพ์เลขไว้ก่อนแล้วค่อยผูก
+// ก็ได้ — งานจริงไม่ได้เดินเป็นเส้นตรง บังคับลำดับแล้วจะกรอกไม่ได้
+//
+// เลือกได้อย่างใดอย่างหนึ่งเท่านั้น (โครงการ หรือ Run rate) ด้วยเหตุผลเดียวกับฝั่ง SO — ยอดก้อนเดียวต้องไม่
+// ถูกนับสองที่ ดู saveCreateSO ใน views-so.js
+// ================================================================
+function _quoteLinkType(quote) {
+  if (quote && quote.linkType) return quote.linkType;
+  if (quote && quote.runrateId) return 'runrate';
+  return 'project';
+}
+
+// โครงการของ Dealer รายนี้ — ไม่กรองสถานะ เพราะใบเสนอราคาออกได้ตั้งแต่ก่อน Win (ต่างจากฟอร์มสร้าง SO
+// ที่จำกัดเฉพาะ Win/Contracting/Deliver เพราะกว่าจะเปิด SO ต้องได้งานแล้ว)
+function _quotePipelineOptionsHtml(dealerId, keepId) {
+  var list = ST.getAll('pipeline').filter(function(p) {
+    return p.id === keepId || !dealerId || p.dealerId === dealerId;
+  }).sort(function(a, b) { return (a.projectName || '') > (b.projectName || '') ? 1 : -1; });
+  var h = '<option value="">-- ยังไม่ผูก / เลือกทีหลัง --</option>';
+  list.forEach(function(p) {
+    h += '<option value="' + p.id + '"' + (keepId === p.id ? ' selected' : '') + '>' +
+      sanitize((p.projectName || '(ไม่มีชื่อ)').substr(0, 44)) +
+      (pidNorm(p.projectId) ? ' · ' + sanitize(p.projectId) : ' · ยังไม่มี Project ID') + '</option>';
+  });
+  return h;
+}
+
+// ถัง Run rate ของ Dealer รายนี้ — บอกยอดที่อยู่ในถังแล้วเหมือนฝั่ง SO จะได้รู้ว่าเลือกถูกใบ
+function _quoteRunrateOptionsHtml(dealerId, keepId) {
+  var list = ST.getAll('runrate').filter(function(r) {
+    if ((r.status || 'active') !== 'active' && r.id !== keepId) return false;
+    return !dealerId || r.dealerId === dealerId;
+  }).sort(function(a, b) { return (a.projectId || '') > (b.projectId || '') ? 1 : -1; });
+  var h = '<option value="">-- ยังไม่ผูกถัง / พิมพ์เลขไว้ก่อนได้ --</option>';
+  list.forEach(function(r) {
+    var cnt = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
+    var amt = (typeof _rrTotal === 'function') ? _rrTotal(r.id) : 0;
+    h += '<option value="' + r.id + '"' + (keepId === r.id ? ' selected' : '') + '>' +
+      sanitize(r.projectId || '(ไม่มีเลข)') + (r.models ? ' · ' + sanitize(String(r.models).substr(0, 20)) : '') +
+      ' · มี ' + cnt + ' SO ฿' + fmtMoney(amt) + '</option>';
+  });
+  return h;
+}
+
+function _quoteLinkSectionHtml(quote) {
+  var type = _quoteLinkType(quote);
+  var h = '<div class="fr"><div class="fg"><label>🔗 ประเภทงาน</label>' +
+    '<select id="editQuoteLinkType" class="fm-input" onchange="quoteLinkTypeToggle(this.value)">' +
+    '<option value="project"' + (type === 'project' ? ' selected' : '') + '>📋 โครงการ (Pipeline)</option>' +
+    '<option value="runrate"' + (type === 'runrate' ? ' selected' : '') + '>🏪 Run rate (ซื้อไปขายต่อ)</option>' +
+    '</select></div>';
+  h += '<div class="fg"><label>🗂️ Project ID <small style="color:var(--text2)">(' + PROJECT_ID_HINT + ')</small></label>' +
+    '<input type="text" id="editQuoteProjectId" class="fm-input" value="' + sanitize(quote.projectId || '') +
+    '" placeholder="20260912-0005 — ยังไม่มีก็เว้นไว้ก่อนได้" oninput="quoteProjIdTouched()"></div></div>';
+  h += '<div id="editQuoteProjIdNote" class="hint" style="font-size:11px;margin:-4px 0 8px"></div>';
+
+  h += '<div class="fg" id="editQuotePipeSec"' + (type !== 'project' ? ' style="display:none"' : '') + '>' +
+    '<label>📋 โครงการใน Pipeline <small style="color:var(--text2)">(ผูกทีหลังได้)</small></label>' +
+    '<select id="editQuotePipelineId" class="fm-input" onchange="quoteLinkPipePick(this.value)">' +
+    _quotePipelineOptionsHtml(quote.dealerId, quote.pipelineId || '') + '</select></div>';
+
+  h += '<div class="fg" id="editQuoteRRSec"' + (type !== 'runrate' ? ' style="display:none"' : '') + '>' +
+    '<label>🏪 ถังรับยอด Run rate <small style="color:var(--text2)">(SO หลายใบรวมเข้าถังเดียวกันได้)</small></label>' +
+    '<div style="display:flex;gap:6px">' +
+    '<select id="editQuoteRunrateId" class="fm-input" style="flex:1" onchange="quoteLinkRRPick(this.value)">' +
+    _quoteRunrateOptionsHtml(quote.dealerId, quote.runrateId || '') + '</select>' +
+    '<button class="btn bo bsm" onclick="quoteNewRunrate()" title="สร้างถังใหม่แล้วกลับมาเลือกให้เลย">➕ ถังใหม่</button>' +
+    '</div><div id="editQuoteRRNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
+  return h;
+}
+
+function quoteLinkTypeToggle(type) {
+  var pipeSec = document.getElementById('editQuotePipeSec');
+  var rrSec = document.getElementById('editQuoteRRSec');
+  if (pipeSec) pipeSec.style.display = type === 'project' ? '' : 'none';
+  if (rrSec) rrSec.style.display = type === 'runrate' ? '' : 'none';
+  // ตั้งใจ "ไม่" ล้างค่าของฝั่งที่ซ่อน — saveCurrentQuotation ล้างให้ตามประเภทตอนบันทึกอยู่แล้ว ถ้าล้างตรงนี้
+  // ด้วย แค่กดสลับโหมดดูแล้วสลับกลับ โครงการ/ถังที่ผูกไว้เดิมจะหายทั้งที่ยังไม่ได้กดบันทึก
+  _quoteLinkNotes();
+}
+
+// ผู้ใช้พิมพ์เลขเองแล้ว อย่าให้การเลือกโครงการ/ถังมาทับของที่พิมพ์ไว้เงียบๆ (เหมือน _soProjIdDirty ฝั่ง SO)
+var _quoteProjIdDirty = false;
+function quoteProjIdTouched() { _quoteProjIdDirty = true; _quoteLinkNotes(); }
+
+function quoteLinkPipePick(pipeId) {
+  var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
+  var pidEl = document.getElementById('editQuoteProjectId');
+  if (p && pidEl && !_quoteProjIdDirty && pidNorm(p.projectId)) pidEl.value = p.projectId;
+  // เลือกโครงการแล้วเติมชื่อโครงการให้ด้วยถ้ายังว่าง — ช่องนี้เอาไว้โชว์บนใบเสนอราคาที่ส่งลูกค้า
+  var nameEl = document.getElementById('editQuoteProject');
+  if (p && nameEl && !nameEl.value.trim()) nameEl.value = p.projectName || '';
+  _quoteLinkNotes();
+}
+
+function quoteLinkRRPick(rrId) {
+  var r = rrId ? ST.getOne('runrate', rrId) : null;
+  var pidEl = document.getElementById('editQuoteProjectId');
+  // ถังมีเลขของตัวเองเสมอ (saveRunRate บังคับกรอก) เลือกถังจึงเท่ากับเลือกเลขไปด้วย
+  if (r && pidEl && !_quoteProjIdDirty) pidEl.value = r.projectId || '';
+  _quoteLinkNotes();
+}
+
+// สร้างถังใหม่กลางคันโดยไม่เสียของที่กรอกค้างไว้ — ฟอร์มถังเป็น modal ซ้อนบนหน้าใบเสนอราคา ปิดแล้วกลับมา
+// หน้าเดิมที่ค่ายังอยู่ครบ แล้วเลือกถังที่เพิ่งสร้างให้เลย
+function quoteNewRunrate() {
+  if (typeof showRunRateM !== 'function') { toast('เปิดฟอร์มถัง Run rate ไม่ได้'); return; }
+  var dealerId = (document.getElementById('editQuoteDealer') || {}).value || '';
+  var typed = pidNorm((document.getElementById('editQuoteProjectId') || {}).value);
+  showRunRateM(null, dealerId, function(saved) {
+    var sel = document.getElementById('editQuoteRunrateId');
+    if (sel) {
+      sel.innerHTML = _quoteRunrateOptionsHtml(dealerId, saved.id);
+      sel.value = saved.id;
+    }
+    var pidEl = document.getElementById('editQuoteProjectId');
+    if (pidEl) pidEl.value = saved.projectId || '';
+    _quoteProjIdDirty = false;
+    _quoteLinkNotes();
+    toast('✅ ผูกถัง ' + (saved.projectId || '') + ' กับใบเสนอราคานี้แล้ว');
+  });
+  // เลขที่พิมพ์ค้างไว้ในใบเสนอราคา เอาไปตั้งต้นให้ในฟอร์มถัง จะได้ไม่ต้องพิมพ์ซ้ำ
+  if (typed) { var el = document.getElementById('rr_pid'); if (el && !el.value) { el.value = typed; if (typeof _rrPidNote === 'function') _rrPidNote(); } }
+}
+
+// คำเตือนสดใต้ช่อง Project ID + ใต้ช่องถัง — บอกตั้งแต่ตอนกรอกว่าจะเกิดอะไรตอนบันทึก
+function _quoteLinkNotes() {
+  var pidEl = document.getElementById('editQuoteProjectId');
+  var note = document.getElementById('editQuoteProjIdNote');
+  var type = (document.getElementById('editQuoteLinkType') || {}).value || 'project';
+  if (pidEl && note) {
+    var typed = pidNorm(pidEl.value);
+    var msg = '', color = '';
+    if (!typed) {
+      msg = 'ยังไม่มีเลขก็เว้นไว้ได้ — ค่อยมาเติมทีหลัง หรือไปเติมตอนเปิด SO ก็ได้';
+    } else if (type === 'project') {
+      var pipeId = (document.getElementById('editQuotePipelineId') || {}).value || '';
+      var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
+      var onPipe = p ? pidNorm(p.projectId) : '';
+      if (!p) { msg = 'จะบันทึกไว้กับใบเสนอราคานี้ — ผูกโครงการทีหลังแล้วค่อยเขียนกลับก็ได้'; }
+      else if (pidSame(typed, onPipe)) { msg = '✓ ตรงกับที่บันทึกไว้ในโครงการแล้ว'; color = 'var(--text2)'; }
+      else if (onPipe) { msg = '⚠️ ไม่ตรงกับของเดิมในโครงการ (' + onPipe + ') — ตอนบันทึกจะถามก่อนว่าจะแก้ต้นทางไหม'; color = 'var(--warn, #f59e0b)'; }
+      else { msg = '↩︎ ตอนบันทึกจะเขียนกลับไปที่โครงการให้ด้วย (นับเป็นลงทะเบียน CRM แล้ว)'; color = 'var(--ok, #10b981)'; }
+    } else {
+      var rrId = (document.getElementById('editQuoteRunrateId') || {}).value || '';
+      var r = rrId ? ST.getOne('runrate', rrId) : null;
+      if (!r) { msg = 'ยังไม่ได้ผูกถัง — กด “➕ ถังใหม่” หรือเลือกถังที่มีอยู่ ไม่งั้นยอดจะยังไม่เข้าถังไหน'; color = 'var(--warn, #f59e0b)'; }
+      else if (pidSame(typed, r.projectId)) { msg = '✓ ตรงกับถังที่เลือกไว้'; color = 'var(--text2)'; }
+      else { msg = '⚠️ ไม่ตรงกับเลขของถังที่เลือก (' + (r.projectId || '-') + ') — ยอดจะเข้าถังตามที่เลือก ไม่ใช่ตามเลขที่พิมพ์'; color = 'var(--warn, #f59e0b)'; }
+    }
+    // รูปแบบเลขแปลกก็เตือนพ่วงไปด้วย แต่ไม่ไปแทนข้อความเรื่องการผูก ซึ่งสำคัญกว่า
+    var fmt = typed ? pidFormatWarning(typed) : '';
+    note.textContent = msg + (fmt ? '  ·  ⚠️ ' + fmt : '');
+    note.style.color = fmt && !color ? 'var(--warn, #f59e0b)' : color;
+  }
+
+  var rrNote = document.getElementById('editQuoteRRNote');
+  if (rrNote) {
+    var rid = (document.getElementById('editQuoteRunrateId') || {}).value || '';
+    var rr = rid ? ST.getOne('runrate', rid) : null;
+    rrNote.textContent = rr
+      ? 'ยอดของ SO ที่เปิดจากใบนี้จะไปรวมในถัง ' + (rr.projectId || '(ไม่มีเลข)') +
+        ' — ตอนนี้มี ' + ((typeof _rrSOs === 'function') ? _rrSOs(rr.id).length : 0) + ' ใบอยู่ในถังแล้ว'
+      : '';
+    rrNote.style.color = 'var(--text2)';
+  }
 }
 
 // ✅ ฟังก์ชันใหม่: Render Edit Page โดยตรง (ไม่ต้องพึ่ง editQuotation)
@@ -1809,6 +1990,8 @@ function renderEditQuotationPage(quote) {
   html += '<div class="fg"><label>📄 เลขที่</label><input type="text" id="editQuoteNo" class="fm-input" value="' + sanitize(quote.quoteNo) + '"></div></div>';
 
   html += '<div class="fg"><label>🏗️ ชื่อโครงการ</label><input type="text" id="editQuoteProject" class="fm-input" value="' + sanitize(quote.projectName || '') + '" placeholder="ชื่อโครงการ (ดึงจาก Pipeline อัตโนมัติ ถ้าสร้างจากโครงการ)"></div>';
+
+  html += _quoteLinkSectionHtml(quote);
   
   html += '<div class="fr"><div class="fg"><label>📅 วันที่เริ่ม</label><input type="text" id="editQuoteValidFrom" class="fm-input dp" value="' + quote.validFrom + '"></div>';
   html += '<div class="fg"><label>📅 หมดอายุ</label><input type="text" id="editQuoteValidTo" class="fm-input dp" value="' + quote.validTo + '"></div></div>';
@@ -1899,6 +2082,8 @@ function renderEditQuotationPage(quote) {
   renderQuotationItemsTable();
   renderQuoteSolutionChips();
   recalculateQuotationTotal();
+  _quoteProjIdDirty = false;
+  _quoteLinkNotes();
 
   setTimeout(function() {
     var levelSelect = document.getElementById('editQuoteLevel');
@@ -1940,6 +2125,22 @@ function editQuotation(quoteId) {
 }
 function editQuoteDealerChanged() {
   var dealerId = document.getElementById('editQuoteDealer').value;
+  // รายการโครงการ/ถังผูกกับ Dealer เลยต้องกรองใหม่ทุกครั้งที่เปลี่ยน Dealer — ทำก่อน return กรณีล้าง Dealer
+  // ไม่งั้นจะค้างรายการของเจ้าเดิมไว้ให้เลือกผิด (เหมือน _soFilterRunrateByDealer ฝั่ง SO)
+  var pipeSel = document.getElementById('editQuotePipelineId');
+  if (pipeSel) {
+    var keepP = pipeSel.value;
+    pipeSel.innerHTML = _quotePipelineOptionsHtml(dealerId, keepP);
+    if (pipeSel.value !== keepP) pipeSel.value = '';
+  }
+  var rrSel = document.getElementById('editQuoteRunrateId');
+  if (rrSel) {
+    var keepR = rrSel.value;
+    rrSel.innerHTML = _quoteRunrateOptionsHtml(dealerId, keepR);
+    if (rrSel.value !== keepR) rrSel.value = '';
+  }
+  _quoteLinkNotes();
+
   if (!dealerId) return;
   var dealer = ST.getOne('dealers', dealerId);
   if (dealer && dealer.creditTerm) {
@@ -2013,6 +2214,25 @@ function saveCurrentQuotation() {
   var remark = document.getElementById('editQuoteRemark')?.value.trim() || '';
   
   if (!quoteNo) { toast('กรุณาใส่เลขที่'); return; }
+
+  // ---- การผูกงาน + Project ID ----
+  // อย่างใดอย่างหนึ่งเท่านั้น: โครงการ หรือ Run rate — ล้างอีกฝั่งทิ้งเสมอ ไม่ให้ยอดก้อนเดียวถูกนับสองที่
+  // (กติกาเดียวกับ saveCreateSO ใน views-so.js)
+  var linkType = document.getElementById('editQuoteLinkType')?.value || 'project';
+  var linkPipelineId = document.getElementById('editQuotePipelineId')?.value || '';
+  var linkRunrateId = document.getElementById('editQuoteRunrateId')?.value || '';
+  var linkProjectId = pidNorm(document.getElementById('editQuoteProjectId')?.value);
+  if (linkType === 'runrate') linkPipelineId = ''; else linkRunrateId = '';
+
+  // รูปแบบเลขแปลก = เตือนแล้วให้ตัดสินใจ ไม่บล็อก เพราะต้องพิมพ์เลขคร่าวๆ ไว้ก่อนแล้วมาแก้ทีหลังได้
+  var pidWarn = pidFormatWarning(linkProjectId);
+  if (pidWarn && !confirm('⚠️ ' + pidWarn + '\n\nที่กรอก: ' + linkProjectId + '\n\nตกลง = บันทึกตามนี้  ยกเลิก = กลับไปแก้')) return;
+
+  // เขียน Project ID กลับไปที่โครงการต้นทางให้ด้วย — ทำก่อนบันทึกใบ เพราะเกี่ยวกับ Pipeline ไม่ใช่ตัวใบ
+  // จึงต้องเกิดเหมือนกันทั้งเส้นทางบันทึกทับและเส้นทางสร้างฉบับแก้ไข
+  if (linkType === 'project' && linkProjectId && linkPipelineId) {
+    pidWriteBackToPipeline(linkPipelineId, linkProjectId, 'กรอกในใบเสนอราคา ' + quoteNo);
+  }
   
   // ✅ คำนวณ totals จาก quotationItems ปัจจุบัน
   var grossTotal = 0;
@@ -2031,6 +2251,8 @@ function saveCurrentQuotation() {
     quoteNo: quoteNo, dealerId: dealerId, dealerName: dealerName, levelUsed: levelUsed,
     validFrom: validFrom, validTo: validTo, paymentTerm: paymentTerm, quotedBy: quotedBy,
     poNo: poNo, soNo: soNo, invoiceNo: invoiceNo, projectName: projectName,
+    // ผูกกับโครงการหรือถัง Run rate + Project ID ที่ถือไว้ — SO ที่เปิดจากใบนี้จะสืบทอดไปต่อ (ดู _soFillFromQuote)
+    linkType: linkType, pipelineId: linkPipelineId, runrateId: linkRunrateId, projectId: linkProjectId,
     items: JSON.parse(JSON.stringify(quotationItems)),
     grossTotal: grossTotal, discountPercent: discountPercent, discountAmount: discountAmount,
     netAmount: netAmount, vatPercent: 7, vatAmount: vatAmount, totalAmount: totalAmount,
