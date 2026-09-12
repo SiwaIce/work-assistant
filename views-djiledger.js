@@ -452,6 +452,13 @@ function _djlFiltered(dmap) {
 
 function rDjiLedger(el) {
   document.getElementById('pgT').textContent = '📖 สมุดเดินของ DJI';
+  // สมุดเดินของอยู่ใน IndexedDB (ดู idb.js) ซึ่งโหลดแบบ async — ถ้าเข้าหน้านี้ก่อนโหลดเสร็จจะเห็น 0 แถว
+  // แล้วเข้าใจผิดว่าข้อมูลหาย รอให้พร้อมก่อนค่อยวาดจริง
+  if (!ST._bigReady) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังเปิดสมุดเดินของ…</p></div></div>';
+    ST.whenBigReady(function() { if (S && S.view === 'djiLedger') rDjiLedger(el); });
+    return;
+  }
   _djlBust();
   var all = ST.getAll('djiMovements');
   var dmap = _djlDealerByCode();

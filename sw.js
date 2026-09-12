@@ -2,7 +2,7 @@
 // SERVICE WORKER — DJI Sales Assistant
 // กลยุทธ์: network-first (ได้โค้ดล่าสุดเสมอเมื่อออนไลน์) + cache fallback (ออฟไลน์)
 // ================================================================
-var CACHE_VERSION = 'dji-sales-v683';   // ⬅️ bump เลขนี้ทุกครั้งที่ deploy โค้ดใหม่ (v1 → v2 → v3 ...)
+var CACHE_VERSION = 'dji-sales-v684';   // ⬅️ bump เลขนี้ทุกครั้งที่ deploy โค้ดใหม่ (v1 → v2 → v3 ...)
 
 // app shell ที่จะ precache (relative path → ทำงานใต้ /work-assistant/)
 var APP_SHELL = [
@@ -12,6 +12,7 @@ var APP_SHELL = [
   './style.css',
   './firebase-init.js',
   './utils.js',
+  './idb.js',
   './storage.js',
   './products.js',
   './firebase-sync.js',

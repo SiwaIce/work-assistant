@@ -87,7 +87,17 @@ const ST = {
   // จาก ~450ms กลายเป็น ~1300ms) ช่วยแค่เคสเรียกรัวมากๆ ในลูป ซึ่งแก้ตรงจุดเรียก (ทำ index ล่วงหน้าแทนเรียก
   // getOne ในลูป — ดู buildConflictMap/buildConflictClusterHtml ใน views-pipeline.js) ได้ผลดีกว่าและปลอดภัยกว่า
   // เยอะ เลยถอนออก คง _get/_set แบบเดิมไว้
+  // collection ก้อนใหญ่ที่ย้ายไปอยู่ IndexedDB — เก็บสำเนาไว้ในหน่วยความจำเพื่อให้ _get/_set ยังเป็น sync
+  // เหมือน collection อื่นทุกประการ (ดูเหตุผลใน idb.js) ถ้าเบราว์เซอร์ไม่มี IndexedDB จะถอยกลับไปใช้
+  // localStorage ให้เอง โดยที่จุดเรียกไม่ต้องรู้เรื่องเลย
+  _BIG: { 'v7_djiMovements': true },
+  _bigMem: {},
+  _bigOK: false,        // true เมื่อเปิด IndexedDB ได้และโหลดเข้าหน่วยความจำแล้ว
+  _bigReady: false,     // true เมื่อรู้ผลแล้วว่าจะใช้ IndexedDB หรือถอยไป localStorage
+  _bigP: null,
+
   _get(key) {
+    if (this._BIG[key] && this._bigOK) return this._bigMem[key] || null;
     try { return JSON.parse(localStorage.getItem(key)); }
     catch(e) { return null; }
   },
@@ -95,6 +105,18 @@ const ST = {
   // คืน true/false ว่าเขียนลงจริงไหม — ผู้เรียกเดิมไม่ได้ใช้ค่าที่คืนจึงไม่กระทบใคร แต่จุดที่นำเข้าข้อมูล
   // ก้อนใหญ่ต้องรู้ ไม่งั้นพื้นที่เต็มแล้วยังขึ้นว่า "นำเข้าสำเร็จ" แล้วดันของเดิมขึ้น cloud ทับของจริง
   _set(key, data) {
+    if (this._BIG[key] && this._bigOK) {
+      this._bigMem[key] = data;
+      this._rev++;
+      // เขียนลง IndexedDB เบื้องหลัง — ถ้าพลาดต้องบอก ไม่ใช่เงียบ ไม่งั้นผู้ใช้ปิดแอพไปโดยคิดว่าเก็บแล้ว
+      if (typeof idbSave === 'function') {
+        idbSave(key, data).catch(function(e) {
+          console.error('เขียนลง IndexedDB ไม่สำเร็จ', e);
+          if (window.toast) toast('⚠️ บันทึกข้อมูลก้อนใหญ่ลงเครื่องไม่สำเร็จ', true);
+        });
+      }
+      return true;
+    }
     try { localStorage.setItem(key, JSON.stringify(data)); this._rev++; return true; }
     catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม!', true); return false; }
   },
@@ -349,11 +371,56 @@ const ST = {
 
   // ครอบคลุมทุก v7_* key ใน localStorage จริงๆ (ไม่ใช่แค่ที่ลงทะเบียนใน this._keys) กันข้อมูลรุ่นใหม่
   // ที่ยังไม่ได้เพิ่มเข้า _keys (เช่น customer_forecasts, kpiQuarterPlans, config) หลุดจาก backup แบบเงียบๆ
+  // เรียกครั้งเดียวตอนเปิดแอพ — คืน Promise ที่ resolve เมื่อข้อมูลก้อนใหญ่พร้อมอ่านแบบ sync แล้ว
+  // ย้ายของเดิมที่ยังอยู่ใน localStorage เข้ามาให้ด้วย แล้วค่อยลบออกจาก localStorage เพื่อคืนโควตา
+  initBig() {
+    if (this._bigP) return this._bigP;
+    const self = this;
+    const keys = Object.keys(this._BIG);
+    if (typeof idbLoad !== 'function') {
+      this._bigReady = true;
+      this._bigP = Promise.resolve(false);
+      return this._bigP;
+    }
+    this._bigP = Promise.all(keys.map(function(k) {
+      return idbLoad(k).then(function(rows) { self._bigMem[k] = rows || []; });
+    })).then(function() {
+      // ตั้ง _bigOK ก่อนกวาดของเก่า แล้วกวาดในบล็อกเดียวกัน — ถ้าปล่อยให้มีจังหวะคั่น การเขียนที่เกิดพอดี
+      // ตอนนั้นจะตกไปอยู่ localStorage แล้วไม่มีใครอ่านอีกเลย
+      self._bigOK = true;
+      keys.forEach(function(k) {
+        // ของที่ยังค้างใน localStorage คือเวอร์ชันก่อนย้าย (หรือถูกเขียนระหว่างรอ IndexedDB เปิด) —
+        // ถือว่าใหม่กว่าเสมอ ย้ายเข้ามาแล้วลบออกเพื่อคืนโควตา localStorage ให้ข้อมูลส่วนอื่นของแอพ
+        let legacy = null;
+        try { legacy = JSON.parse(localStorage.getItem(k)); } catch(e) {}
+        if (legacy && legacy.length) {
+          self._bigMem[k] = legacy;
+          idbSave(k, legacy).then(function() { localStorage.removeItem(k); }, function() {});
+        }
+      });
+      self._bigReady = true; self._rev++;
+      return true;
+    }).catch(function(e) {
+      // เปิด IndexedDB ไม่ได้ (โหมดส่วนตัวบางตัว) → ใช้ localStorage ต่อเหมือนเดิม ไม่พังและไม่ต้องบอกผู้ใช้
+      console.warn('ใช้ IndexedDB ไม่ได้ ใช้ localStorage ต่อ', e);
+      self._bigOK = false; self._bigReady = true; self._rev++;
+      return false;
+    });
+    return this._bigP;
+  },
+
+  // ให้หน้าที่ต้องอ่านข้อมูลก้อนใหญ่รอจนพร้อมก่อนวาดจอ
+  whenBigReady(fn) { (this._bigP || Promise.resolve()).then(fn, fn); },
+
   exportAll() {
     const data = { version: 'v8-raw', exportDate: new Date().toISOString(), raw: {} };
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.indexOf('v7_') === 0) data.raw[k] = localStorage.getItem(k);
+    }
+    // ก้อนที่ย้ายไป IndexedDB แล้วไม่มีใน localStorage อีก ต้องใส่เองไม่งั้น backup ขาดสมุดเดินของทั้งเล่ม
+    if (this._bigOK) {
+      Object.keys(this._BIG).forEach(k => { data.raw[k] = JSON.stringify(this._bigMem[k] || []); });
     }
     return data;
   },
@@ -361,7 +428,16 @@ const ST = {
   importAll(data) {
     if (!data || !data.version) throw new Error('Invalid data format');
     if (data.raw) {
-      for (const k in data.raw) if (data.raw.hasOwnProperty(k)) localStorage.setItem(k, data.raw[k]);
+      for (const k in data.raw) {
+        if (!data.raw.hasOwnProperty(k)) continue;
+        if (this._BIG[k] && this._bigOK) {
+          let rows = null;
+          try { rows = JSON.parse(data.raw[k]); } catch(e) {}
+          this._set(k, rows || []);
+        } else {
+          localStorage.setItem(k, data.raw[k]);
+        }
+      }
       this._rev++;
       return;
     }
@@ -369,9 +445,17 @@ const ST = {
     for (const [name, key] of Object.entries(this._keys)) if (data[name] !== undefined) this._set(key, data[name]);
   },
 
-  clearAll() { for (const key of Object.values(this._keys)) localStorage.removeItem(key); this._rev++; }
+  clearAll() {
+    for (const key of Object.values(this._keys)) localStorage.removeItem(key);
+    Object.keys(this._BIG).forEach(k => {
+      this._bigMem[k] = [];
+      if (typeof idbDrop === 'function') idbDrop(k).catch(function() {});
+    });
+    this._rev++;
+  }
 };
 
 ST._migratePostitKey();
+ST.initBig();
 
 if (typeof window !== 'undefined') window.ST = ST;

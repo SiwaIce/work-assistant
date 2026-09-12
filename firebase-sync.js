@@ -778,8 +778,10 @@ function loadChunkedFromFirebase(collName, lsKey) {
     var rows = [];
     for (var i = 0; i < total; i++) rows = rows.concat(byIdx[i] || []);
     if (!rows.length && !meta) return false;
-    try { localStorage.setItem(lsKey, JSON.stringify(rows)); if (typeof ST !== 'undefined') ST.touch(); } catch (e) {
-      console.warn('เก็บ ' + lsKey + ' ลงเครื่องไม่สำเร็จ', e);
+    // ผ่าน ST._set ไม่ใช่ localStorage ตรงๆ — คอลเลกชันก้อนใหญ่ถูกย้ายไปอยู่ IndexedDB แล้ว (ดู idb.js)
+    // และ ST รู้เองว่าก้อนไหนอยู่ที่ไหน
+    if (!ST._set(lsKey, rows)) {
+      console.warn('เก็บ ' + lsKey + ' ลงเครื่องไม่สำเร็จ');
       if (typeof toast === 'function') toast('⚠️ พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอสำหรับ ' + collName, true);
       return false;
     }
@@ -802,8 +804,7 @@ function pushDjiDataToCloud(which) {
   var lsKey = map[which];
   if (!lsKey) return Promise.resolve(false);
   if (typeof SYNC_ENABLED === 'undefined' || !SYNC_ENABLED || !CURRENT_USER) return Promise.resolve(false);
-  var rows = [];
-  try { rows = JSON.parse(localStorage.getItem(lsKey) || '[]'); } catch (e) {}
+  var rows = ST._get(lsKey) || [];
   localStorage.setItem(_djiDirtyKey(which), '1');
   return saveChunkedToFirebase(which, rows).then(function(r) {
     localStorage.removeItem(_djiDirtyKey(which));
