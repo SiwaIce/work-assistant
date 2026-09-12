@@ -39,6 +39,10 @@ const ST = {
     backupDate: 'v7_backup',
     products: 'v7_products',
     quotations: 'v7_quotations_v2',
+    // สมุดเดินของจาก DJI (Inbound & Outbound Records export) — 1 แถว = 1 การเคลื่อนไหวของสินค้า
+    // เป็นข้อมูลของฝั่ง DJI ที่เรา "อ่านอย่างเดียว" ไม่ใช่ของที่แอปสร้างเอง เก็บดิบไว้ทั้งเล่มเพื่อให้ตามรอย
+    // SN ย้อนหลังได้ (ส่งออก → รับคืน → ส่งใหม่) แล้วค่อยจับคู่เข้า SO เป็นอีกขั้นตอนแยกต่างหาก
+    djiMovements: 'v7_djiMovements',
     goalsV2: 'v7_goals_v2',
     customerForecasts: 'v7_customer_forecasts',
     kpiMonthlyPlan: 'v7_kpiMonthlyPlan',
@@ -117,6 +121,27 @@ const ST = {
     return data;
   },
 
+  // เพิ่มหลายรายการพร้อมกันด้วยการ parse/stringify collection แค่ครั้งเดียว — เหตุผลเดียวกับ updateMany
+  // ด้านล่าง แต่เจ็บกว่ามากเวลานำเข้าไฟล์: add() ทีละแถว 4,500 รอบ = อ่าน+เขียนทั้ง collection 4,500 ครั้ง
+  // บน collection ที่โตขึ้นเรื่อยๆ จนแตะ 1 MB (งานแบบกำลังสอง) เบราว์เซอร์ค้างไปเลย ไม่ใช่แค่ช้า
+  // id สร้างแบบมีลำดับต่อท้าย ไม่ใช่สุ่มล้วน เพราะทั้งชุดเกิดในมิลลิวินาทีเดียวกัน สุ่ม 6 หลักซ้ำกันได้จริง
+  // เมื่อจำนวนรายการหลักพัน (ราว 0.5% ที่ 4,500 รายการ) แล้ว record จะทับกันเงียบๆ
+  addMany(collection, items) {
+    if (this._guestBlocked(collection)) return [];
+    if (!items || !items.length) return [];
+    const arr = this.getAll(collection);
+    const stamp = Date.now().toString(36);
+    const now = new Date().toISOString();
+    const added = items.map((data, i) => {
+      data.id = data.id || (stamp + '-' + i.toString(36) + Math.random().toString(36).substr(2, 4));
+      data.created = data.created || now;
+      return data;
+    });
+    arr.push(...added);
+    this._set(this._keys[collection], arr);
+    return added;
+  },
+
   update(collection, id, updates) {
     if (this._guestBlocked(collection)) return null;
     const arr = this.getAll(collection);
@@ -171,6 +196,11 @@ const ST = {
   dealersByLevel(level) { return this.filter('dealers', d => d.level === level); },
   pipelineByDealer(dealerId) { return this.filter('pipeline', p => p.dealerId === dealerId); },
   runrateByDealer(dealerId) { return this.filter('runrate', r => r.dealerId === dealerId); },
+  djiMovesBySN(sn) { const q = String(sn || '').trim().toLowerCase();
+    return q ? this.filter('djiMovements', m => String(m.sn || '').toLowerCase() === q)
+                   .sort((a, b) => (a.date || '').localeCompare(b.date || '')) : []; },
+  djiMovesByInvoice(inv) { const q = String(inv || '').trim();
+    return q ? this.filter('djiMovements', m => String(m.inv || '').trim() === q) : []; },
   pipelineByStatus(status) { return this.filter('pipeline', p => p.status === status); },
   pipeLogsByPipe(pipeId) { return this.filter('pipeLog', l => l.pipeId === pipeId).sort((a,b) => (b.date||'').localeCompare(a.date||'')); },
   visitsByDealer(dealerId) { return this.filter('visits', v => v.dealerId === dealerId).sort((a,b) => (b.date||'').localeCompare(a.date||'')); },

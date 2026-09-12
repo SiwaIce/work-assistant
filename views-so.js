@@ -1732,7 +1732,16 @@ function runSerialSearch() {
     });
   });
 
+  // ไม่เจอใน SO ไม่ได้แปลว่าไม่เคยขาย — SO ในแอปมี serial เฉพาะที่มีคนพิมพ์ใส่ไว้เอง ส่วนสมุดเดินของ DJI
+  // มีทุกเครื่องที่เคยออกจากคลัง จึงเป็นด่านที่สอง ไม่ใช่ของเสริม (ดู views-djiledger.js)
   if (!matches.length) {
+    var led = (typeof _djlSearchSN === 'function') ? _djlSearchSN(q) : [];
+    if (led.length) {
+      out.innerHTML = '<div class="hint" style="margin-bottom:10px">ไม่พบใน Sales Order ของเรา แต่เจอในสมุดเดินของ DJI — ' +
+        'แปลว่าเครื่องออกจากคลังไปแล้วแต่ยังไม่ได้ผูกกับ SO ใบไหน</div>' +
+        led.map(_djlSNCardHtml).join('');
+      return;
+    }
     out.innerHTML = '<div class="card"><div class="empty"><div class="icon">📭</div><p>ไม่พบ Serial ที่ตรงกับ "' + sanitize(q) + '"</p></div></div>';
     return;
   }
@@ -1760,7 +1769,10 @@ function runSerialSearch() {
     if (!_gvHidden('so_dealerInfo')) html += '<tr><td style="color:var(--text2);padding:3px 0">🏪 Dealer</td><td style="text-align:right">' + sanitize(dealer ? dealer.name : (so.dealerName || '-')) + '</td></tr>';
     html += '<tr><td style="color:var(--text2);padding:3px 0">📅 วันที่ขาย</td><td style="text-align:right">' + sanitize(soldDate || '-') + '</td></tr>';
     html += '<tr><td style="color:var(--text2);padding:3px 0">📄 Sales Order</td><td style="text-align:right"><a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false">' + sanitize(so.soNumber || '-') + '</a></td></tr>';
-    html += '</table></div>';
+    html += '</table>';
+    // ประวัติจากฝั่ง DJI — บอกได้ว่าเครื่องนี้เคยถูกคืนแล้วส่งใหม่ไหม ซึ่ง SO ใบเดียวไม่มีทางบอก
+    if (typeof djlSNHistoryHtml === 'function') html += djlSNHistoryHtml(m.serial);
+    html += '</div>';
   });
 
   out.innerHTML = html;

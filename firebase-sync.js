@@ -382,6 +382,7 @@ var SYNC_KEY_MAP = {
   // ถ้าลงทะเบียนตรงนี้ listener ทั่วไปจะเขียน v7_products ทับด้วย array ดิบ ทำให้ราคาสินค้าหาย
   'bundles': 'bundles',    // ✅ เพิ่ม
   'demoUnits': 'demoUnits', // ✅ เพิ่ม
+  'djiMovements': 'djiMovements',
   'audit_logs': 'auditLogs',
   'salesMembers': 'salesMembers',
   'customer_updates': 'customerUpdates',
