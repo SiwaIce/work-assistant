@@ -2587,13 +2587,26 @@ function modelOptions(selected) {
 // ตั้งใจ "ไม่บังคับ" รูปแบบ เพราะงานจริงต้องพิมพ์เลขไว้ก่อนแล้วค่อยมาแก้ทีหลังได้ ผิดรูปแบบจึงได้แค่คำเตือน
 // ไม่ใช่ error ที่บล็อกการบันทึก
 // ================================================================
-var PROJECT_ID_PATTERN = /^\d{8}-\d{4}$/;
+// ไส้ในของเลขคือ YYYYMMDD-NNNN เสมอ แต่ไฟล์ export จาก DJI ใส่คำนำหน้าไม่นิ่ง — ไฟล์เดียวกันมีทั้ง
+// "20260525-0016", "ID20260611-0022" และ "ProjectID20260615-0008" ปนกัน ถ้าเทียบกันตรงๆ ทั้งก้อน เลข
+// เดียวกันที่คนละคนพิมพ์คนละแบบจะกลายเป็นคนละโครงการ แล้วยอดแตกเป็นสองก้อนเงียบๆ ซึ่งคือสิ่งที่กลุ่ม
+// ฟังก์ชันนี้มีไว้กันพอดี จึงตัดคำนำหน้าออกก่อนเทียบเสมอ แต่ยังเก็บ/แสดงตามที่ผู้ใช้พิมพ์ไว้ไม่แตะ
+var PROJECT_ID_PATTERN = /^(?:project\s*[-_]?\s*id|id)?\s*[-_:]?\s*(\d{8}-\d{4})$/i;
 var PROJECT_ID_HINT = 'รูปแบบ YYYYMMDD-NNNN เช่น 20260912-0005';
 
 function pidNorm(v) { return String(v === null || v === undefined ? '' : v).trim(); }
-// เลขสองตัวนี้คืออันเดียวกันไหม — ช่องว่างหัวท้าย/ตัวพิมพ์ไม่นับ
-function pidSame(a, b) { return pidNorm(a).toLowerCase() === pidNorm(b).toLowerCase(); }
-function pidLooksValid(v) { return PROJECT_ID_PATTERN.test(pidNorm(v)); }
+// ไส้ในที่ใช้เทียบ — คืน '' ถ้าไม่เข้ารูปแบบเลย (เลขมั่วๆ ที่พิมพ์ไว้ก่อนก็ยังเทียบกันได้ด้วย fallback ใน pidSame)
+function pidCore(v) {
+  var m = pidNorm(v).match(PROJECT_ID_PATTERN);
+  return m ? m[1] : '';
+}
+// เลขสองตัวนี้คืออันเดียวกันไหม — เทียบที่ไส้ในถ้าทั้งคู่เข้ารูปแบบ ไม่งั้นเทียบข้อความตรงๆ
+function pidSame(a, b) {
+  var ca = pidCore(a), cb = pidCore(b);
+  if (ca && cb) return ca === cb;
+  return pidNorm(a).toLowerCase() === pidNorm(b).toLowerCase();
+}
+function pidLooksValid(v) { return !!pidCore(v); }
 // คำเตือนเรื่องรูปแบบ — คืน '' ถ้ายังว่าง (ยังไม่กรอกไม่ใช่ความผิด) หรือถูกรูปแบบแล้ว
 function pidFormatWarning(v) {
   var s = pidNorm(v);
