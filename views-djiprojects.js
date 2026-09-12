@@ -342,7 +342,7 @@ function djpCommitImport() {
 function _djpTokens(s) {
   return _djpNorm(s).toLowerCase().replace(/[()\[\].,\-–—/]/g, ' ').split(/\s+/).filter(function(w) { return w.length > 2; });
 }
-function _djpSimilar(a, b) {
+function _djpSimWord(a, b) {
   var ta = _djpTokens(a), tb = _djpTokens(b);
   if (!ta.length || !tb.length) return 0;
   var setB = {};
@@ -350,6 +350,63 @@ function _djpSimilar(a, b) {
   var hit = ta.filter(function(w) { return setB[w]; }).length;
   return hit / Math.max(ta.length, tb.length);
 }
+
+// ภาษาไทยไม่เว้นวรรคระหว่างคำ การตัดคำด้วยช่องว่างจึงพังเงียบๆ — วัดกับข้อความจริงแล้ว
+// "จัดซื้ออากาศยานไร้คนขับ สตง." เทียบกับชื่อเต็มใน CRM ได้ 0.00 ทั้งที่เป็นโครงการเดียวกัน
+// ส่วน 3-gram ตัวอักษรได้ 0.88 · "อบต.มาบยางพร" ↔ "องค์การบริหารส่วนตำบลมาบยางพร" 0.00 → 0.67
+// หารด้วยชุดที่เล็กกว่า เพราะชื่อฝั่งหนึ่งมักเป็นชื่อย่อของอีกฝั่ง ไม่ใช่ข้อความยาวเท่ากัน
+function _djpGrams(s, n) {
+  s = _djpNorm(s).toLowerCase().replace(/[\s()\[\].,\-–—/ๆฯ"'‘’“”]/g, '');
+  var out = {};
+  for (var i = 0; i + n <= s.length; i++) out[s.substr(i, n)] = 1;
+  return out;
+}
+function _djpSimGram(a, b) {
+  var A = _djpGrams(a, 3), B = _djpGrams(b, 3);
+  var ka = Object.keys(A), kb = Object.keys(B);
+  if (!ka.length || !kb.length) return 0;
+  var hit = ka.filter(function(g) { return B[g]; }).length;
+  return hit / Math.min(ka.length, kb.length);
+}
+// เอาค่าที่สูงกว่า — สองวิธีเก่งคนละแบบ ตัดคำเก่งกับข้อความอังกฤษ/มีช่องว่าง n-gram เก่งกับไทยติดกัน
+function _djpSimilar(a, b) { return Math.max(_djpSimWord(a, b), _djpSimGram(a, b)); }
+
+// วันที่ใกล้กันเป็นสัญญาณที่ใช้ได้จริงเวลาชื่อช่วยอะไรไม่ได้: โครงการที่ dealer ลงทะเบียนกับ DJI มักลงใน
+// ช่วงเดียวกับที่เราบันทึกเข้า Pipeline หรือช่วงใกล้วันยื่นประมูล — คืนจำนวนวันที่ห่างกันน้อยที่สุด
+function _djpDaysApart(a, b) {
+  if (!a || !b) return null;
+  var d = Math.abs(new Date(a + 'T00:00:00Z') - new Date(b + 'T00:00:00Z'));
+  return isNaN(d) ? null : Math.round(d / 864e5);
+}
+function _djpDateHint(p, pipe) {
+  var best = null, from = '';
+  [['registerDate', 'วันบันทึกโครงการ'], ['biddingDate', 'วัน Bidding']].forEach(function(f) {
+    var gap = _djpDaysApart(p.regDate, pipe[f[0]]);
+    if (gap !== null && (best === null || gap < best)) { best = gap; from = f[1]; }
+  });
+  return best === null ? null : { days: best, from: from };
+}
+// สัญญาณที่ไม่ได้มาจากชื่อ — ใช้ตอนชื่อสองฝั่งช่วยอะไรไม่ได้ ซึ่งเป็นเคสที่ยากที่สุด
+// ให้น้ำหนักน้อยกว่าเลข/Dealer โดยตั้งใจ: มันเป็นตัวช่วย "เรียงลำดับ" ไม่ใช่หลักฐานว่าใช่
+function _djpExtraSignals(p, pipe) {
+  var score = 0, why = [];
+  // โครงการที่ยังไม่มี Project ID คือตัวที่กำลังตามหาอยู่จริงๆ ดันขึ้นก่อนตัวที่มีเลขแล้ว
+  if (!pidNorm(pipe.projectId)) { score += 1; why.push('ยังไม่มี Project ID'); }
+  var dt = _djpDateHint(p, pipe);
+  if (dt) {
+    if (dt.days <= 7)       { score += 2;   why.push('ลงทะเบียนห่าง' + dt.from + ' ' + dt.days + ' วัน'); }
+    else if (dt.days <= 30) { score += 1;   why.push('ลงทะเบียนห่าง' + dt.from + ' ' + dt.days + ' วัน'); }
+    else if (dt.days <= 90) { score += 0.4; }
+  }
+  // Pipeline ไม่มีช่องจังหวัด แต่ชื่อหน่วยงานมักมีจังหวัดติดอยู่ ("...จ.ลพบุรี") — เช็คแบบได้เปล่าๆ
+  var prov = _djpNorm(p.prov);
+  if (prov) {
+    var hay = (_djpNorm(pipe.endUserTH) + ' ' + _djpNorm(pipe.endUserEN) + ' ' + _djpNorm(pipe.projectName)).toLowerCase();
+    if (hay.indexOf(prov.toLowerCase()) !== -1) { score += 1; why.push('มีชื่อจังหวัด ' + prov); }
+  }
+  return { score: score, why: why };
+}
+
 function djpSuggestPipelines(p) {
   var dealer = djpDealerOf(p);
   var used = {};
@@ -364,6 +421,8 @@ function djpSuggestPipelines(p) {
     var sn = _djpSimilar(pipe.projectName, p.name);
     if (sn > 0.3) { why.push('ชื่อโครงการ' + (sn > 0.7 ? 'ตรงกัน' : 'คล้ายกัน')); }
     score += sn * 2;
+    var extra = _djpExtraSignals(p, pipe);
+    score += extra.score; extra.why.forEach(function(w) { why.push(w); });
     if (used[pipe.id]) score -= 4;                      // ถูกผูกกับ Project ID อื่นไปแล้ว
     return { pipe: pipe, score: score, taken: !!used[pipe.id], why: why };
   }).filter(function(x) { return x.score > 0.4; })
@@ -857,6 +916,7 @@ function rDjiProjects(el) {
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
     '<button class="btn bp bsm" onclick="importDjiProjectsXlsx()">⬆️ นำเข้าไฟล์</button>' +
     (autoN ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjpAutoLinkM()">⚡ จับคู่อัตโนมัติได้ ' + autoN + ' คู่</button>' : '') +
+    '<button class="btn bsm bo" onclick="showDjpMatchBoardM(\'\')">🔀 จับคู่ทีละคู่</button>' +
     '</div>';
   if (autoN) h += '<div class="hint" style="margin-top:8px">มี ' + autoN + ' คู่ที่เลข Project ID ตรงกับโครงการ/ถังในระบบอยู่แล้ว — กดผูกให้ทีเดียวได้ ไม่ต้องไล่ทีละอัน</div>';
   h += '</div>';
@@ -971,6 +1031,8 @@ function djpSuggestForPipeline(pipe) {
     var sn = _djpSimilar(pipe.projectName, p.name);
     if (sn > 0.3) why.push('ชื่อโครงการ' + (sn > 0.7 ? 'ตรงกัน' : 'คล้ายกัน'));
     score += sn * 2;
+    var extra = _djpExtraSignals(p, pipe);
+    score += extra.score; extra.why.forEach(function(w) { why.push(w); });
     if (p.pipelineId && p.pipelineId !== pipe.id) score -= 4;
     return { p: p, score: score, why: why, taken: !!(p.pipelineId && p.pipelineId !== pipe.id) };
   }).filter(function(x) { return x.score > 0.4; })
@@ -1034,4 +1096,144 @@ function djpPipeBadgeHtml(pipeId) {
       ' <a href="#" onclick="showDjpLinkFromPipeM(\'' + pipeId + '\');return false" style="font-size:11px;color:var(--text2)">เปลี่ยน</a>';
   }
   return '<a href="#" onclick="showDjpLinkFromPipeM(\'' + pipeId + '\');return false" style="font-size:11px;color:var(--accent)">🗂️ ผูกทะเบียน Project ID</a>';
+}
+
+// ---------------------------------------------------------------- กระดานจับคู่
+// เคสที่ยากที่สุดคือ Pipeline ยังไม่มี Project ID และชื่อโครงการ/หน่วยงานสองฝั่งเขียนคนละแบบ ซึ่งวัดกับ
+// ข้อความจริงแล้วไม่มีวิธีไหนชี้ขาดได้: ชื่อย่อที่ไม่มีตัวอักษรร่วมกันเลย ("สตง." กับ "สำนักงานการตรวจเงิน
+// แผ่นดิน") ได้ 0 ส่วนโครงการคนละอันที่ชื่อพิมพ์เหมือนกันเป๊ะ (วิทยาลัยเทคนิคคนละจังหวัด) ได้ 0.78
+// การเรียงลำดับจึงช่วยได้แค่ดันตัวที่น่าจะใช่ขึ้นมา คนต้องเป็นคนชี้ — หน้านี้ทำให้การชี้นั้นเร็ว:
+// ล็อก Dealer ไว้ (สัญญาณเดียวที่เชื่อได้เสมอ) เอาเฉพาะที่ยังไม่ผูกมาเรียงคู่กัน แล้วกดทีละคู่รวดเดียว
+var djpBoardDealer = '', djpBoardProj = '', djpBoardQ = '';
+
+function showDjpMatchBoardM(dealerId) {
+  if (dealerId !== undefined) { djpBoardDealer = dealerId || ''; djpBoardProj = ''; djpBoardQ = ''; }
+  _djpRenderBoard();
+}
+function djpBoardPickDealer(v) { djpBoardDealer = v; djpBoardProj = ''; djpBoardQ = ''; _djpRenderBoard(); }
+function djpBoardPickProj(id)  { djpBoardProj = id; djpBoardQ = ''; _djpRenderBoard(); }
+function djpBoardSearch(v)     { djpBoardQ = v; _djpRenderBoard(true); }
+
+function _djpBoardUnlinked(dealerId) {
+  return ST.getAll('djiProjects').filter(function(p) {
+    if (p.pipelineId || p.runrateId) return false;
+    if (djpKindOf(p) === 'runrate') return false;   // ฝั่ง run rate ผูกกับถัง ไม่ใช่โครงการ คนละกระดาน
+    var d = djpDealerOf(p);
+    return dealerId ? (d && d.id === dealerId) : true;
+  }).sort(function(a, b) { return (b.regDate || '').localeCompare(a.regDate || ''); });
+}
+
+function _djpRenderBoard(keepFocus) {
+  var dealers = ST.getAll('dealers').slice().sort(function(a, b) { return (a.name || '') > (b.name || '') ? 1 : -1; });
+  var counts = {};
+  _djpBoardUnlinked('').forEach(function(p) {
+    var d = djpDealerOf(p);
+    var k = d ? d.id : '?';
+    counts[k] = (counts[k] || 0) + 1;
+  });
+
+  var list = _djpBoardUnlinked(djpBoardDealer);
+  if (djpBoardProj && !list.some(function(p) { return p.id === djpBoardProj; })) djpBoardProj = '';
+  if (!djpBoardProj && list.length) djpBoardProj = list[0].id;
+  var cur = djpBoardProj ? ST.getOne('djiProjects', djpBoardProj) : null;
+
+  var h = '<div class="hint" style="margin-bottom:8px">ล็อก Dealer ไว้ก่อน แล้วจับทีละคู่ — ซ้ายคือทะเบียนที่ยังไม่ผูก ขวาคือโครงการใน Pipeline เรียงตัวที่น่าจะใช่ขึ้นก่อน ถ้าไม่เจอให้พิมพ์ค้นเอง</div>';
+
+  h += '<select class="inp" style="margin-bottom:10px" onchange="djpBoardPickDealer(this.value)">' +
+    '<option value="">ทุก Dealer (' + _djpBoardUnlinked('').length + ' รายการ)</option>' +
+    dealers.filter(function(d) { return counts[d.id]; }).map(function(d) {
+      return '<option value="' + d.id + '"' + (djpBoardDealer === d.id ? ' selected' : '') + '>' +
+        sanitize(d.name) + ' — ' + counts[d.id] + ' รายการ</option>';
+    }).join('') + '</select>';
+
+  if (!list.length) {
+    h += '<div class="empty"><div class="icon">✅</div><p>ผูกครบแล้วสำหรับตัวกรองนี้</p></div>' +
+         '<button class="btn bo btn-full" onclick="closeMForce()">ปิด</button>';
+    openM('🔀 จับคู่ทะเบียนเข้า Pipeline', h);
+    return;
+  }
+
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">';
+
+  // ---- ซ้าย: ทะเบียนที่ยังไม่ผูก ----
+  h += '<div style="flex:1 1 240px;min-width:0">';
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">ทะเบียนที่ยังไม่ผูก (' + list.length + ')</div>';
+  h += '<div style="max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:4px">';
+  list.slice(0, 60).forEach(function(p) {
+    var on = p.id === djpBoardProj;
+    h += '<div onclick="djpBoardPickProj(\'' + p.id + '\')" style="cursor:pointer;border:1px solid ' +
+      (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent-light,rgba(59,130,246,.1))' : 'transparent') +
+      ';border-radius:7px;padding:6px 8px">' +
+      '<div style="font-family:monospace;font-size:11.5px;font-weight:600">' + sanitize(p.pid) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + sanitize(String(p.name || '').substr(0, 38)) + '</div></div>';
+  });
+  if (list.length > 60) h += '<div style="font-size:11px;color:var(--text2);padding:4px">…อีก ' + (list.length - 60) + ' — กรอง Dealer เพื่อให้สั้นลง</div>';
+  h += '</div></div>';
+
+  // ---- ขวา: ผู้สมัครจาก Pipeline ----
+  h += '<div style="flex:2 1 300px;min-width:0">';
+  if (cur) {
+    var cd = djpDealerOf(cur);
+    h += '<div style="border:1px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:8px">' +
+      '<div style="font-family:monospace;font-size:12px;font-weight:700">' + sanitize(cur.pid) + '</div>' +
+      '<div style="font-size:12px;margin-top:2px">' + sanitize(cur.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2);margin-top:2px">🏢 ' + sanitize(cur.acct || '-') +
+      (cur.prov ? ' · 📍 ' + sanitize(cur.prov) : '') + (cur.regDate ? ' · 🗓️ ' + sanitize(cur.regDate) : '') +
+      (cd ? ' · 🏪 ' + sanitize(cd.name) : '') + '</div></div>';
+
+    h += '<input type="text" id="djpBoardQ" class="inp" style="margin-bottom:6px" placeholder="🔍 ค้นหาโครงการใน Pipeline ด้วยคำอะไรก็ได้" value="' +
+      sanitize(djpBoardQ) + '" oninput="djpBoardSearch(this.value)" autocomplete="off">';
+
+    var cands;
+    if (djpBoardQ.trim()) {
+      // พิมพ์ค้นเองแล้วต้องหาได้ทุกโครงการ ไม่ใช่แค่ในลิสต์ที่ระบบเสนอ — ไม่งั้นตัวที่ระบบมองไม่เห็นจะเข้าไม่ถึงเลย
+      var q = djpBoardQ.trim().toLowerCase();
+      cands = ST.getAll('pipeline').filter(function(pipe) {
+        return (pipe.projectName || '').toLowerCase().indexOf(q) !== -1 ||
+               (pipe.endUserTH || '').toLowerCase().indexOf(q) !== -1 ||
+               (pipe.endUserEN || '').toLowerCase().indexOf(q) !== -1 ||
+               (pipe.projectId || '').toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 20).map(function(pipe) { return { pipe: pipe, why: [], taken: false }; });
+    } else {
+      cands = djpSuggestPipelines(cur);
+    }
+
+    h += '<div style="max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:5px">';
+    if (!cands.length) {
+      h += '<div class="empty" style="padding:10px"><p>' + (djpBoardQ.trim() ? 'ไม่เจอที่ตรงกับคำค้น' : 'ระบบไม่เจอตัวที่ใกล้เคียง — ลองพิมพ์ค้นเอง') + '</p></div>';
+    }
+    cands.forEach(function(x) {
+      var d = ST.getOne('dealers', x.pipe.dealerId);
+      var exact = x.why.indexOf('เลข Project ID ตรงกัน') !== -1;
+      h += '<div onclick="closeMForce();djpPickPipeline(\'' + cur.id + '\',\'' + x.pipe.id + '\')" style="cursor:pointer;border:1px solid ' +
+        (exact ? 'var(--ok,#22c55e)' : 'var(--border)') + ';border-radius:7px;padding:7px 9px">' +
+        '<div style="font-size:12px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 52)) + '</div>' +
+        '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">' +
+          (x.pipe.endUserTH ? '🏢 ' + sanitize(String(x.pipe.endUserTH).substr(0, 24)) + ' · ' : '') +
+          (d ? '🏪 ' + sanitize(d.name) + ' · ' : '') +
+          (pidNorm(x.pipe.projectId) ? '🗂️ ' + sanitize(x.pipe.projectId) : 'ยังไม่มี Project ID') + '</div>' +
+        (x.why.length ? '<div style="font-size:10px;color:' + (exact ? 'var(--ok,#22c55e)' : 'var(--text2)') + ';margin-top:2px">' + sanitize(x.why.join(' · ')) + '</div>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+    h += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+      '<button class="btn bsm bo" onclick="closeMForce();djpCreatePipelineFrom(\'' + cur.id + '\')">➕ ไม่มีในระบบ — สร้างใหม่</button>' +
+      '<button class="btn bsm bo" onclick="djpBoardSkip()">ข้ามไปอันถัดไป ›</button></div>';
+  }
+  h += '</div></div>';
+  h += '<button class="btn bo btn-full" style="margin-top:10px" onclick="closeMForce();render()">ปิด</button>';
+
+  openM('🔀 จับคู่ทะเบียนเข้า Pipeline', h);
+  if (keepFocus) {
+    var el = document.getElementById('djpBoardQ');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }
+}
+
+function djpBoardSkip() {
+  var list = _djpBoardUnlinked(djpBoardDealer);
+  var i = list.findIndex(function(p) { return p.id === djpBoardProj; });
+  djpBoardProj = list.length ? list[(i + 1) % list.length].id : '';
+  djpBoardQ = '';
+  _djpRenderBoard();
 }
