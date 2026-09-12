@@ -180,7 +180,7 @@
   </div>
   <div class="topbar-r">
   <div class="strig" id="dealerScopeBtn" onclick="toggleDealerScopeMenu()" title="เลือก Dealer ที่จะแสดงทั้งแอพ">👤 ของฉัน</div>
-  <div class="strig" onclick="openQCmd()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
+  <div class="strig" onclick="openSearch()">🔍 <span class="hide-mobile">Ctrl+K</span></div>
   <button class="mode-toggle" onclick="toggleViewMode()" title="สลับ Desktop/Mobile">
     <span id="modeIcon">📱</span>
   </button>
@@ -352,16 +352,6 @@
 <script src="views-djiprojects.js" defer></script>
 <script src="views-stock.js" defer></script>
 <script src="app.js" defer></script>
-<div class="qcmd-overlay" id="qcmdOverlay" onclick="if(event.target===this)closeQCmd()">
-  <div class="qcmd-box">
-    <div class="qcmd-input-wrap">
-      <span>🔍</span>
-      <input type="text" id="qcmdInput" class="qcmd-input" placeholder="พิมพ์คำสั่ง... (ชื่อ Dealer, Pipeline, เมนู)" oninput="qCmdSearch(this.value)" onkeydown="qCmdKeydown(event)" autocomplete="off">
-      <span class="qcmd-kbd">ESC</span>
-    </div>
-    <div class="qcmd-results" id="qcmdResults"></div>
-  </div>
-</div>
 <!-- Mobile Bottom Nav -->
 <div class="mb-bottom-nav" id="mbNav">
   <div class="mb-nav-item" onclick="mbGo('today')"><span class="mb-nav-icon">📌</span><span class="mb-nav-label">วันนี้</span></div>

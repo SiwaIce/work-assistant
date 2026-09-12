@@ -1183,8 +1183,31 @@ function doSearchDebounced() {
 function doSearch() {
   var q = document.getElementById('searchInp').value.toLowerCase().trim();
   var r = document.getElementById('searchRes');
-  if (!q) { r.innerHTML = '<div class="empty"><p>พิมพ์เพื่อค้นหา...</p></div>'; return; }
+  if (!q) { r.innerHTML = '<div class="empty"><p>พิมพ์ชื่อ Dealer, โครงการ, เลข SO, Invoice, SN, Project ID หรือชื่อเมนู</p></div>'; return; }
   var items = [];
+
+  // โหมดดูอย่างเดียว (เข้าผ่านลิงก์ PIN) ต้องกรองตรงนี้ด้วย — ผลค้นหาพาไป sub-view ตรงๆ ไม่ผ่านด่านเช็คสิทธิ์
+  // ของเมนูหลัก เมนูที่ถูกซ่อนไว้จึงยังเข้าถึงได้ทางนี้ถ้าไม่กรอง
+  var _gvBlocked = typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY;
+  var _gvAllowed = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || [];
+  function _may(menu) { return !_gvBlocked || _gvAllowed.indexOf(menu) !== -1; }
+
+  // เมนู — อ่านจาก registry กลาง จะได้ไม่ตกหล่นเวลาเพิ่มเมนูใหม่
+  if (typeof APP_MENU_REGISTRY !== 'undefined') {
+    APP_MENU_REGISTRY.forEach(function(m) {
+      if (!_may(m.id)) return;
+      if ((m.name || '').toLowerCase().indexOf(q) === -1) return;
+      items.push({type:'⚡ เมนู', title:(m.icon || '') + ' ' + m.name, sub:'ไปที่หน้านี้', act:"go('" + m.id + "')"});
+    });
+  }
+  if (!_gvBlocked) {
+    [['➕ เพิ่ม Visit','showVisitM'],['➕ เพิ่ม Pipeline','showPipelineM'],['➕ เพิ่ม Dealer','showDealerM'],
+     ['➕ เพิ่มงาน','showTaskM'],['💬 LINE Message','openLineTemplates'],['📝 โน้ตด่วน','showQNote']
+    ].forEach(function(a) {
+      if (a[0].toLowerCase().indexOf(q) === -1) return;
+      items.push({type:'⚡ คำสั่ง', title:a[0], sub:'', act:"if(typeof " + a[1] + "==='function')" + a[1] + "()"});
+    });
+  }
 
   var allDealers = ST.getAll('dealers');
   // build ครั้งเดียว แทนเรียก ST.getOne('dealers',...) ต่อแถว pipeline/visit ทุกครั้งที่ doSearch() รัน
@@ -1243,11 +1266,69 @@ function doSearch() {
       items.push({type:'🧲 Lead', title:p.companyName||'-', sub:p.contactName||'', act:"if(typeof showProspectDetailM==='function')showProspectDetailM('"+p.id+"')"});
   });
 
+  // ---- เลขที่จำได้อยู่ในหัว: SN, Invoice, Project ID ----
+  // พิมพ์เลขอะไรลงไปก็ได้แล้วให้มันหาให้ ไม่ต้องจำว่าเลขชนิดนี้อยู่เมนูไหน
+  if (q.length >= 3) {
+    var qUp = q.toUpperCase();
+    ST.getAll('djiProjects').forEach(function(p) {
+      if ((p.pid || '').toLowerCase().indexOf(q) === -1 &&
+          (p.name || '').toLowerCase().indexOf(q) === -1 &&
+          (p.acct || '').toLowerCase().indexOf(q) === -1) return;
+      var d = (typeof djpDealerOf === 'function') ? djpDealerOf(p) : null;
+      items.push({type:'🗂️ ทะเบียน Project ID', title:p.pid + ' · ' + (p.name || ''),
+        sub:(d ? d.name : 'ยังไม่รู้ Dealer') + ' • ลงทะเบียน ' + (p.regDate || '-'), act:"go('djiProjects')"});
+    });
+    ST.getAll('runrate').forEach(function(bk) {
+      if ((bk.projectId || '').toLowerCase().indexOf(q) === -1) return;
+      var d = searchDealerById[bk.dealerId];
+      items.push({type:'🏪 ถัง Run rate', title:bk.projectId, sub:(d ? d.name : ''), act:"go('runrate')"});
+    });
+
+    // SN และเลขใบกำกับจากสมุดเดินของ — ค้นจากที่โหลดไว้ในหน่วยความจำแล้ว ไม่ต้องเปิดหน้าสมุดก่อน
+    if (ST._bigReady) {
+      var snHit = {}, invHit = {};
+      ST.getAll('djiMovements').forEach(function(m) {
+        var sn = String(m.sn || '').toUpperCase();
+        if (sn && sn.indexOf(qUp) !== -1 && !snHit[sn]) snHit[sn] = m;
+        var iv = String(m.inv || '').toUpperCase();
+        if (iv && iv.indexOf(qUp) !== -1 && !invHit[iv]) invHit[iv] = m;
+      });
+      Object.keys(snHit).slice(0, 5).forEach(function(k) {
+        var m = snHit[k];
+        items.push({type:'🔖 Serial', title:m.sn, sub:(m.name || '') + ' • Invoice ' + (m.inv || '-') + ' • ' + (m.date || ''),
+          act:"go('serialSearch',{serial:" + jsArg(m.sn) + "})"});
+      });
+      Object.keys(invHit).slice(0, 5).forEach(function(k) {
+        var m = invHit[k];
+        items.push({type:'🧾 Invoice (สมุด DJI)', title:m.inv, sub:(m.name || '') + ' • ' + (m.date || ''), act:"go('djiLedger')"});
+      });
+    }
+  }
+
   items = items.slice(0, 20);
   r.innerHTML = items.length
-    ? items.map(function(i) { return '<div class="search-item" onclick="closeSearch();'+i.act+'"><div class="si-type">'+i.type+'</div><div class="si-title">'+sanitize(i.title||'')+'</div><div class="si-sub">'+sanitize(i.sub||'')+'</div></div>'; }).join('')
+    ? items.map(function(i, n) { return '<div class="search-item' + (n === 0 ? ' si-active' : '') + '" data-idx="' + n + '" onclick="closeSearch();'+i.act+'"><div class="si-type">'+i.type+'</div><div class="si-title">'+sanitize(i.title||'')+'</div><div class="si-sub">'+sanitize(i.sub||'')+'</div></div>'; }).join('')
     : '<div class="empty"><p>ไม่พบผลลัพธ์</p></div>';
 }
+
+// ↑ ↓ เลื่อน, Enter เปิดอันที่เลือกอยู่ — พิมพ์แล้วกด Enter ได้เลย ไม่ต้องละมือไปจับเมาส์
+function _searchNav(e) {
+  var ov = document.getElementById('searchOv');
+  if (!ov || !ov.classList.contains('show')) return;
+  var items = document.querySelectorAll('#searchRes .search-item');
+  if (!items.length) return;
+  var active = document.querySelector('#searchRes .si-active');
+  var idx = active ? (parseInt(active.getAttribute('data-idx'), 10) || 0) : 0;
+  if (e.key === 'ArrowDown') idx = Math.min(idx + 1, items.length - 1);
+  else if (e.key === 'ArrowUp') idx = Math.max(idx - 1, 0);
+  else if (e.key === 'Enter') { e.preventDefault(); if (active) active.click(); return; }
+  else return;
+  e.preventDefault();
+  for (var i = 0; i < items.length; i++) items[i].classList.remove('si-active');
+  items[idx].classList.add('si-active');
+  items[idx].scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('keydown', _searchNav);
 
 // ================================================================
 // WORK TIMER
@@ -2260,234 +2341,13 @@ function applyViewMode() {
 }
 
 // ================================================================
-// OPEN QUICK COMMAND (Ctrl+K)
+// ค้นหาเดียวจบ — เมนู + ข้อมูลทุกชนิด อยู่ในกล่องเดียว (Ctrl+K หรือแตะ 🔍)
 // ================================================================
-var qCmdOpen = false;
+// เดิมมีสองกล่องซ้อนกัน: searchOv (ค้นข้อมูล) กับ qcmdOverlay (ค้นเมนู) แล้วผูก Ctrl+K ไว้ทั้งคู่
+// กดทีเดียวจึงเปิดพร้อมกันสองชั้น ส่วนปุ่ม 🔍 มุมขวาบนเปิดได้แค่กล่องเมนู พิมพ์หาชื่อ Dealer ก็ไม่เจอ
+// ตอนนี้เหลือกล่องเดียวคือ searchOv แล้วยกผลค้นหาเมนู/คำสั่งมารวมไว้ที่นั่น (ดู doSearch)
+function openQCmd() { openSearch(); }
 
-function openQCmd() {
-  var ov = document.getElementById('qcmdOverlay');
-  if (!ov) return;
-  ov.style.display = 'flex';
-  qCmdOpen = true;
-  var inp = document.getElementById('qcmdInput');
-  if (inp) { inp.value = ''; inp.focus(); }
-  qCmdSearch('');
-}
-
-function closeQCmd() {
-  var ov = document.getElementById('qcmdOverlay');
-  if (ov) ov.style.display = 'none';
-  qCmdOpen = false;
-}
-
-function qCmdSearch(q) {
-  q = (q || '').toLowerCase().trim();
-  var results = [];
-  
-  // ดึงจาก registry กลาง (APP_MENU_REGISTRY) ให้ครบทุกเมนู ไม่ตกหล่นเวลาเพิ่มเมนูใหม่
-  var navs = APP_MENU_REGISTRY.map(function(m) {
-    return { icon: m.icon, name: m.name, cmd: 'go:' + m.id };
-  });
-  
-  var acts = [
-    { icon: '➕', name: 'เพิ่ม Visit', cmd: 'act:showVisitM' },
-    { icon: '➕', name: 'เพิ่ม Pipeline', cmd: 'act:showPipelineM' },
-    { icon: '➕', name: 'เพิ่ม Dealer', cmd: 'act:showDealerM' },
-    { icon: '➕', name: 'เพิ่ม Task', cmd: 'act:showTaskM' },
-    { icon: '💬', name: 'LINE Message', cmd: 'act:openLineTemplates' },
-    { icon: '🎬', name: 'Presentation', cmd: 'act:openPresentation' }
-  ];
-
-  // Ctrl+K ค้นหาเมนู/action ได้จากทุกหน้า ไม่ผ่าน .nl sidebar ที่ applyGuestViewMenuGating() ซ่อนไว้ — ต้องกรอง
-  // ตรงนี้เองด้วย ไม่งั้นพิมพ์หาเมนูอื่นเจอ แถม action ทั้งหมด (เพิ่ม Dealer ฯลฯ) เปิด modal ตรงๆ ไม่ผ่าน go()
-  // เลยไม่โดนบล็อกจาก _guestViewMenuBlocked() ด้วย — ตัดทิ้งให้หมดในโหมด Guest ไปเลย ไม่เกี่ยวกับ Stock/SO
-  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY) {
-    var allowedCmd = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
-    navs = navs.filter(function(n) { return allowedCmd.indexOf(n.cmd.replace('go:', '')) !== -1; });
-    acts = [];
-  }
-
-  for (var i = 0; i < navs.length; i++) {
-    var n = navs[i];
-    if (!q || n.name.toLowerCase().indexOf(q) !== -1) {
-      results.push({ type: 'nav', icon: n.icon, name: n.name, cmd: n.cmd });
-    }
-  }
-  for (var i = 0; i < acts.length; i++) {
-    var a = acts[i];
-    if (!q || a.name.toLowerCase().indexOf(q) !== -1) {
-      results.push({ type: 'action', icon: a.icon, name: a.name, cmd: a.cmd });
-    }
-  }
-  
-  var _gvBlocked = typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY;
-  var _gvAllowed = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || [];
-  if (q.length >= 1) {
-    // ค้นหา Dealer พาไปหน้า dealerDetail ซึ่งเป็น sub-view ที่ปล่อยผ่านเสมอ (ไม่เช็คสิทธิ์เหมือนเมนูหลัก) —
-    // ต้องกันตั้งแต่ผลค้นหาเลย ไม่งั้นแม้เมนู Dealers จะถูกซ่อนไว้ ก็ยังพิมพ์ค้นหาแล้วกดเข้าไปดูได้อยู่ดี
-    if (!_gvBlocked || _gvAllowed.indexOf('dealers') !== -1) {
-      var dealers = ST.getAll('dealers');
-      for (var i = 0; i < dealers.length; i++) {
-        var d = dealers[i];
-        if ((d.name || '').toLowerCase().indexOf(q) !== -1) {
-          results.push({ type: 'dealer', icon: '🏪', name: d.name, cmd: 'dealer:' + d.id });
-        }
-      }
-    }
-
-    if (!_gvBlocked || _gvAllowed.indexOf('pipeline') !== -1) {
-      var pipeline = ST.getAll('pipeline');
-      // build ครั้งเดียวก่อนลูป แทนเรียก ST.getOne('dealers',...) ต่อแถว pipeline ทุกตัวอักษรที่พิมพ์ใน Ctrl+K
-      // (ST.getAll parse localStorage ใหม่ทุกครั้ง ไม่มี cache — ดูคอมเมนต์ที่ ST._get ใน storage.js)
-      var qcDealerById = {};
-      (dealers || ST.getAll('dealers')).forEach(function(d) { qcDealerById[d.id] = d; });
-      for (var i = 0; i < pipeline.length; i++) {
-        var p = pipeline[i];
-        var pname = p.projectName || p.name || '';
-        var pd = qcDealerById[p.dealerId];
-        var pMatch = pname.toLowerCase().indexOf(q) !== -1 ||
-          String(p.rowNo || '').toLowerCase().indexOf(q) !== -1 ||
-          (pd && pd.name || '').toLowerCase().indexOf(q) !== -1;
-        if (pMatch) {
-          results.push({ type: 'pipeline', icon: '📋', name: (p.rowNo ? p.rowNo + ' · ' : '') + pname + ' (฿' + fmtMoneyShort(p.forecastAmount) + ')', cmd: 'pipe:' + p.id });
-        }
-      }
-    }
-  }
-  
-  var el = document.getElementById('qcmdResults');
-  if (!el) return;
-  
-  if (!results.length) {
-    el.innerHTML = '<div class="qcmd-empty">ไม่พบผลลัพธ์</div>';
-    return;
-  }
-  
-  var h = '';
-  var lastType = '';
-  for (var i = 0; i < Math.min(results.length, 15); i++) {
-    var r = results[i];
-    if (r.type !== lastType) {
-      var typeLabel = { nav: '📌 Navigation', action: '⚡ Actions', dealer: '🏪 Dealers', pipeline: '📋 Pipeline' };
-      h += '<div class="qcmd-section">' + (typeLabel[r.type] || '') + '</div>';
-      lastType = r.type;
-    }
-    h += '<div class="qcmd-item' + (i === 0 ? ' qcmd-active' : '') + '" onclick="qCmdExec(\'' + r.cmd + '\')" data-idx="' + i + '">';
-    h += '<span class="qcmd-icon">' + r.icon + '</span>';
-    h += '<span class="qcmd-name">' + sanitize(r.name) + '</span>';
-    h += '<span class="qcmd-type">' + r.type + '</span>';
-    h += '</div>';
-  }
-  el.innerHTML = h;
-}
-
-function qCmdExec(cmd) {
-  closeQCmd();
-  var parts = cmd.split(':');
-  var type = parts[0];
-  var val = parts.slice(1).join(':');
-  
-  if (type === 'go') {
-    go(val);
-  } else if (type === 'act') {
-    if (typeof window[val] === 'function') window[val]();
-  } else if (type === 'dealer') {
-    go('dealerDetail', { dealerId: val });
-  } else if (type === 'pipe') {
-    go('pipeDetail', { pipeId: val });
-  }
-}
-
-// Keyboard navigation for command palette
-document.addEventListener('keydown', function(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault();
-    if (qCmdOpen) closeQCmd();
-    else openQCmd();
-  }
-  if (e.key === 'Escape' && qCmdOpen) closeQCmd();
-});
-
-document.addEventListener('keydown', function(e) {
-  if (qCmdOpen) {
-    var items = document.querySelectorAll('.qcmd-item');
-    if (!items.length) return;
-    
-    var active = document.querySelector('.qcmd-active');
-    var idx = 0;
-    if (active) idx = parseInt(active.getAttribute('data-idx')) || 0;
-    
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      idx = Math.min(idx + 1, items.length - 1);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      idx = Math.max(idx - 1, 0);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (active) active.click();
-      return;
-    }
-    
-    for (var i = 0; i < items.length; i++) items[i].classList.remove('qcmd-active');
-    items[idx].classList.add('qcmd-active');
-    items[idx].scrollIntoView({ block: 'nearest' });
-  }
-});
-// ================================================================
-// QUICK COMMAND KEYBOARD NAVIGATION
-// ================================================================
-function qCmdKeydown(e) {
-  var items = document.querySelectorAll('.qcmd-item');
-  if (!items.length) return;
-  
-  var active = document.querySelector('.qcmd-active');
-  var idx = 0;
-  if (active) idx = parseInt(active.getAttribute('data-idx')) || 0;
-  
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    idx = Math.min(idx + 1, items.length - 1);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    idx = Math.max(idx - 1, 0);
-  } else if (e.key === 'Enter') {
-    e.preventDefault();
-    if (active) active.click();
-    return;
-  } else if (e.key === 'Escape') {
-    closeQCmd();
-    return;
-  } else {
-    return;
-  }
-  
-  for (var i = 0; i < items.length; i++) {
-    items[i].classList.remove('qcmd-active');
-  }
-  items[idx].classList.add('qcmd-active');
-  items[idx].scrollIntoView({ block: 'nearest' });
-}
-function showQNote() {
-  var dealers = ST.getAll('dealers');
-  var dlrSelect = dealers.length ? '<div class="fg"><label>Dealer (ไม่บังคับ)</label><select id="qn_d">' + dealerOptions('') + '</select></div>' : '';
-  openM('📝 โน้ตด่วน', dlrSelect +
-    '<div class="fg"><label>โน้ต</label><textarea id="qn_t" rows="3" placeholder="จดอะไรก็ได้..."></textarea></div>' +
-    '<button class="btn bp btn-full" onclick="saveQNote()">💾 บันทึก</button>');
-}
-
-function saveQNote() {
-  var textEl = document.getElementById('qn_t');
-  var text = textEl ? textEl.value.trim() : '';
-  if (!text) return;
-  var dlrEl = document.getElementById('qn_d');
-  var dealerId = dlrEl ? dlrEl.value : '';
-  ST.add('qnotes', {text: text, dealerId: dealerId});
-  if (dealerId) ST.add('feedback', {dealerId: dealerId, text: text, date: _td(), source: 'quicknote'});
-  closeMForce();
-  toast('📝 บันทึกแล้ว');
-  render();
-}
 // ================================================================
 // MOBILE BOTTOM NAVIGATION
 // ================================================================

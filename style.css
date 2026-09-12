@@ -10407,3 +10407,6 @@ input:focus, select:focus, textarea:focus {
 .djp-ar { display:inline-block; color:var(--text2); font-size:11px; transition:transform .15s }
 details[open] > summary .djp-ar { transform:rotate(90deg) }
 @media (prefers-reduced-motion: reduce) { .djp-ar { transition:none } }
+
+/* แถวที่กำลังเลือกอยู่ในกล่องค้นหา (เลื่อนด้วย ↑ ↓) */
+.search-item.si-active{background:var(--accent-light);outline:1px solid var(--accent)}

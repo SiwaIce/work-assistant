@@ -1744,6 +1744,11 @@ function rSerialSearch(el) {
     '</div></div>' +
     '<div id="serResult" style="margin-top:12px"></div>';
   document.getElementById('serQ').focus();
+  // มาจากผลค้นหา (Ctrl+K) — เติมเลขให้แล้วค้นเลย ไม่ต้องพิมพ์ซ้ำ
+  if (S && S.serial) {
+    document.getElementById('serQ').value = S.serial;
+    runSerialSearch();
+  }
 }
 
 function runSerialSearch() {
