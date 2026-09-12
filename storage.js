@@ -43,6 +43,9 @@ const ST = {
     // เป็นข้อมูลของฝั่ง DJI ที่เรา "อ่านอย่างเดียว" ไม่ใช่ของที่แอปสร้างเอง เก็บดิบไว้ทั้งเล่มเพื่อให้ตามรอย
     // SN ย้อนหลังได้ (ส่งออก → รับคืน → ส่งใหม่) แล้วค่อยจับคู่เข้า SO เป็นอีกขั้นตอนแยกต่างหาก
     djiMovements: 'v7_djiMovements',
+    // ทะเบียนโครงการจาก CRM ของ DJI — Dealer ลงทะเบียนเองแล้วได้ Project ID มา หลายครั้งไม่ได้บอกเรา
+    // เก็บแยกจาก pipeline โดยตั้งใจ แล้วผูกกันทีละอันด้วย pipelineId (ชื่อโครงการในไฟล์ซ้ำกันเยอะจนจับเองไม่ได้)
+    djiProjects: 'v7_djiProjects',
     goalsV2: 'v7_goals_v2',
     customerForecasts: 'v7_customer_forecasts',
     kpiMonthlyPlan: 'v7_kpiMonthlyPlan',

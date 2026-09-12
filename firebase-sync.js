@@ -383,6 +383,7 @@ var SYNC_KEY_MAP = {
   'bundles': 'bundles',    // ✅ เพิ่ม
   'demoUnits': 'demoUnits', // ✅ เพิ่ม
   'djiMovements': 'djiMovements',
+  'djiProjects': 'djiProjects',
   'audit_logs': 'auditLogs',
   'salesMembers': 'salesMembers',
   'customer_updates': 'customerUpdates',

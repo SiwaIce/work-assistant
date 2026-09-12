@@ -864,6 +864,7 @@ var R = {
   // ✅ Sales Order
   runrate: rRunRate,
   djiLedger: rDjiLedger,
+  djiProjects: rDjiProjects,
   salesOrders: rSalesOrders,
   soDetail: rSODetail,
   serialSearch: rSerialSearch
@@ -1902,6 +1903,7 @@ var APP_MENU_REGISTRY = [
   {id: 'pipelineCompare', icon: '📊', name: 'เปรียบเทียบโครงการ/คู่แข่ง'},
   {id: 'runrate', icon: '🏪', name: 'Run Rate'},
   {id: 'djiLedger', icon: '📖', name: 'สมุดเดินของ DJI'},
+  {id: 'djiProjects', icon: '🗂️', name: 'ทะเบียน Project ID'},
   {id: 'salesOrders', icon: '📦', name: 'Sales Order'},
   {id: 'serialSearch', icon: '🔍', name: 'ค้นหา Serial'},
   {id: 'tasks', icon: '📋', name: 'Tasks'},
@@ -2153,6 +2155,7 @@ var ALL_QUICK_ITEMS = [
   {id:'pipeline',    icon:'📊', name:'Pipeline',        action:"go('pipeline')"},
   {id:'runrate',     icon:'🏪', name:'Run Rate',        action:"go('runrate')"},
   {id:'djiLedger',   icon:'📖', name:'สมุดเดินของ DJI', action:"go('djiLedger')"},
+  {id:'djiProjects', icon:'🗂️', name:'ทะเบียน Project ID', action:"go('djiProjects')"},
   {id:'dealers',     icon:'🏪', name:'Dealers',         action:"go('dealers')"},
   {id:'tasks',       icon:'📋', name:'Tasks',           action:"go('tasks')"},
   {id:'visits',      icon:'🤝', name:'Visit Report',    action:"go('visits')"},
