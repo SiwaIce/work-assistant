@@ -98,7 +98,7 @@ function djpPipelineOf(p) { return p.pipelineId ? ST.getOne('pipeline', p.pipeli
 function djpRunrateOf(p) { return p.runrateId ? ST.getOne('runrate', p.runrateId) : null; }
 // ถังที่ใช้เลขเดียวกันอยู่แล้ว — ถังบังคับให้มี Project ID ตั้งแต่สร้าง เลขจึงเป็นตัวจับคู่ที่แน่นอนที่สุด
 function djpBucketByPid(p) {
-  return ST.getAll('runrate').filter(function(r) { return pidSame(r.projectId, p.pid); })[0] || null;
+  return _djpRRs().filter(function(r) { return pidSame(r.projectId, p.pid); })[0] || null;
 }
 
 // ---- ยอดเงิน: คาดการณ์ กับ ขายจริง คนละแหล่งกัน จึงคืนคู่กันเสมอ ไม่ยุบเป็นตัวเดียว ----
@@ -108,13 +108,34 @@ function _djpSOTotal(s) {
   return (s.items || []).reduce(function(t, it) { return t + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
 }
 function _djpSODate(s) { return (s.invoiceDate || (s.createdAt || '').slice(0, 10) || ''); }
+// เดินตาม "ชนิด" ของทะเบียนเท่านั้น ไม่รวมสองฝั่งเข้าด้วยกัน — เดิมรวมทั้ง SO ฝั่งโครงการและ SO ในถังที่ใช้
+// เลขเดียวกัน ทำให้เงินก้อนเดียวถูกนับทั้งใน "Project — ขายจริง" และ "Run rate — ขายจริง" พร้อมกัน
+// อ่าน salesOrders/runrate ครั้งเดียวต่อรอบวาดจอ — เดิม djpSOsOf ถูกเรียกหลายรอบต่อโครงการ (สถิติ + หัวกลุ่ม
+// + แถว) แต่ละรอบ parse localStorage ทั้งก้อน คูณ 120 โครงการ คูณทุกตัวอักษรที่พิมพ์ในช่องค้นหา
+// แคชผูกกับเลขรุ่นของข้อมูล (ST.rev()) ไม่ใช่รอบวาดจออย่างเดียว — ถ้ามีการเขียน SO/ถังระหว่างทาง
+// (เปิด SO จากในโมดัล, ข้อมูลใหม่ไหลมาจาก Firebase) แคชจะสร้างใหม่เอง ไม่ต้องรอใครเรียก _djpBust()
+var _djpSOCache = null, _djpRRCache = null, _djpCacheRev = -1;
+function _djpBust() { _djpSOCache = null; _djpRRCache = null; _djpCacheRev = -1; }
+function _djpFresh() {
+  var r = (typeof ST.rev === 'function') ? ST.rev() : 0;
+  if (r !== _djpCacheRev) { _djpSOCache = null; _djpRRCache = null; _djpCacheRev = r; }
+}
+function _djpSOs() { _djpFresh(); return _djpSOCache || (_djpSOCache = ST.getAll('salesOrders')); }
+function _djpRRs() { _djpFresh(); return _djpRRCache || (_djpRRCache = ST.getAll('runrate')); }
+
 function djpSOsOf(p) {
-  var rr = p.runrateId || (djpBucketByPid(p) || {}).id || '';
-  return ST.getAll('salesOrders').filter(function(s) {
+  var kind = djpKindOf(p);
+  var sos = _djpSOs();
+  if (kind === 'runrate') {
+    var rr = p.runrateId || (djpBucketByPid(p) || {}).id || '';
+    if (!rr) return [];
+    // SO แบบ run rate ไม่ถือเลขของตัวเอง ยอดผูกกับถังแทน (ดู saveCreateSO) จึงตามผ่านถังอย่างเดียว
+    return sos.filter(function(s) { return s.runrateId === rr; });
+  }
+  return sos.filter(function(s) {
+    if (s.runrateId) return false;                       // ใบนั้นเป็นยอดของถัง ไม่ใช่ของโครงการ
     if (s.projectId && pidSame(s.projectId, p.pid)) return true;
-    if (p.pipelineId && s.pipelineId === p.pipelineId) return true;
-    // SO แบบ run rate ไม่ถือเลขของตัวเอง ยอดผูกกับถังแทน (ดู saveCreateSO) จึงต้องตามผ่านถัง
-    return !!(rr && s.runrateId === rr);
+    return !!(p.pipelineId && s.pipelineId === p.pipelineId);
   });
 }
 function djpAmounts(p, range) {
@@ -261,33 +282,50 @@ function _djpShowImportPreview(recs, filename) {
   var dealers = ST.getAll('dealers');
   var byCode = {};
   dealers.forEach(function(d) { var c = _djpNorm(d.djiCode).toUpperCase(); if (c) byCode[c] = d; });
-  var needDealer = [];
-  var matched = 0;
+  // จัดกลุ่มตามค่าใน Created By ก่อนถาม — ไฟล์จริง 120 โครงการมาจากบริษัทแค่ 9 ราย ถ้าถามรายแถวคือให้คน
+  // เลือกซ้ำ 120 ครั้งเพื่อตอบคำถามเดียวกัน 9 คำตอบ (ผู้ใช้ทักมาเอง 2026-09-12)
+  var matched = 0, groups = {};
   fresh.forEach(function(r) {
-    if (r.dealerCode && byCode[r.dealerCode.toUpperCase()]) matched++;
-    else needDealer.push(r);
+    if (r.dealerCode && byCode[r.dealerCode.toUpperCase()]) { matched++; return; }
+    var key = r.createdBy || ('(' + (r.dealerName || 'ไม่ระบุ') + ')');
+    var g = groups[key] || (groups[key] = { key: key, name: r.dealerName, code: r.dealerCode, rows: [] });
+    g.rows.push(r);
   });
-  window._djpPending = { fresh: fresh, upd: upd };
+  var groupList = Object.keys(groups).map(function(k) { return groups[k]; })
+    .sort(function(a, b) { return b.rows.length - a.rows.length; });
+  var needDealer = groupList.reduce(function(t, g) { return t + g.rows.length; }, 0);
+  window._djpPending = { fresh: fresh, upd: upd, groups: groupList };
 
   var h = '<div class="hint" style="margin-bottom:10px">📄 ' + sanitize(filename) + '</div>';
   h += '<div class="rr-stats" style="margin-bottom:12px">' +
     '<div class="rr-stat"><div class="n" style="color:#22c55e">' + fresh.length + '</div><div class="l">โครงการใหม่</div></div>' +
     '<div class="rr-stat"><div class="n">' + upd.length + '</div><div class="l">มีแล้ว อัปเดตให้</div></div>' +
-    '<div class="rr-stat"><div class="n" style="color:' + (needDealer.length ? 'var(--warn,#f59e0b)' : 'var(--text2)') + '">' + needDealer.length + '</div><div class="l">ต้องเลือก Dealer เอง</div></div>' +
+    '<div class="rr-stat"><div class="n" style="color:' + (needDealer ? 'var(--warn,#f59e0b)' : 'var(--text2)') + '">' + groupList.length + '</div><div class="l">บริษัทที่ต้องเลือก Dealer</div></div>' +
     '</div>';
   if (matched) h += '<div class="hint" style="margin-bottom:10px">✓ จับคู่ Dealer จากรหัสในช่อง Created By ได้เอง ' + matched + ' โครงการ</div>';
 
-  if (needDealer.length) {
+  if (groupList.length) {
     var dOpts = '<option value="">— ยังไม่ระบุ เก็บไว้ก่อน —</option>' +
       dealers.slice().sort(function(a, b) { return (a.name || '') > (b.name || '') ? 1 : -1; })
         .map(function(d) { return '<option value="' + d.id + '">' + sanitize(d.name) + (d.djiCode ? ' — ' + sanitize(d.djiCode) : '') + '</option>'; }).join('');
-    h += '<div class="hint" style="color:var(--warn,#f59e0b);margin-bottom:8px">⚠️ ช่อง Created By ของแถวเหล่านี้ไม่มีรหัส DJI ต่อท้าย (ปกติคือคนของเราลงทะเบียนเอง ไม่ใช่ Dealer) เลือก Dealer ให้เลย หรือเว้นไว้แล้วมาผูกทีหลังก็ได้</div>';
-    h += '<div style="max-height:200px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
-    needDealer.forEach(function(r, i) {
-      h += '<div style="border:1px solid var(--border);border-radius:8px;padding:7px 9px">' +
-        '<div style="font-size:11px;color:var(--text2)"><span style="font-family:monospace">' + sanitize(r.pid) + '</span> · ' + sanitize(r.createdBy) + '</div>' +
-        '<div style="font-size:11px;margin:2px 0 4px">' + sanitize(String(r.name).substr(0, 60)) + '</div>' +
-        '<select class="inp" data-djp-assign="' + sanitize(r.pid) + '" style="font-size:12px">' + dOpts + '</select></div>';
+    h += '<div class="hint" style="color:var(--warn,#f59e0b);margin-bottom:8px">⚠️ ' + needDealer + ' โครงการจาก ' + groupList.length +
+      ' บริษัทนี้ยังจับคู่ Dealer ไม่ได้ — เลือกทีเดียวใช้ได้ทั้งบริษัท หรือเว้นไว้แล้วมาผูกทีหลังก็ได้</div>';
+    h += '<div id="djpGroupProgress" style="font-size:11px;color:var(--text2);margin-bottom:6px">0 / ' + groupList.length + ' บริษัท เลือกแล้ว</div>';
+    h += '<div style="max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px">';
+    groupList.forEach(function(g, i) {
+      h += '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px">' +
+        '<div style="font-size:12.5px;font-weight:600">' + sanitize(g.key) + '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin:1px 0 5px">' + g.rows.length + ' โครงการ · ' +
+        (g.code ? 'รหัส <span style="font-family:monospace">' + sanitize(g.code) + '</span> ยังไม่มีใน Dealer ของเรา'
+                : 'ไม่มีรหัส DJI ต่อท้าย (ปกติคือคนของเราลงทะเบียนเอง)') + '</div>' +
+        '<select class="inp" data-djp-group="' + i + '" style="font-size:12px" onchange="_djpGroupPicked(' + i + ')">' + dOpts + '</select>';
+      // เขียนรหัสกลับให้ Dealer ที่เลือก = ครั้งหน้าไฟล์เดิมจับคู่ได้เอง ไม่ต้องมานั่งเลือกซ้ำทุกงวด
+      if (g.code) {
+        h += '<label style="display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:11px;color:var(--text2);cursor:pointer">' +
+          '<input type="checkbox" data-djp-savecode="' + i + '" checked style="margin-top:2px">' +
+          '<span>บันทึกรหัส ' + sanitize(g.code) + ' ให้ Dealer ที่เลือกด้วย — งวดหน้าจะจับคู่ได้เอง</span></label>';
+      }
+      h += '</div>';
     });
     h += '</div>';
   }
@@ -305,16 +343,38 @@ function _djpShowImportPreview(recs, filename) {
 function djpCommitImport() {
   var pend = window._djpPending;
   if (!pend) { closeMForce(); return; }
-  // เก็บ Dealer ที่เลือกให้แถวที่จับเองไม่ได้ ก่อนปิด modal
-  var assign = {};
-  document.querySelectorAll('[data-djp-assign]').forEach(function(sel) {
-    if (sel.value) assign[sel.getAttribute('data-djp-assign')] = sel.value;
+  // เก็บ Dealer ที่เลือกไว้รายบริษัท แล้วกระจายลงทุกโครงการของบริษัทนั้น
+  var assign = {}, codeWrites = [];
+  var groups = pend.groups || [];
+  document.querySelectorAll('[data-djp-group]').forEach(function(sel) {
+    var idx = Number(sel.getAttribute('data-djp-group'));
+    var g = groups[idx];
+    if (!g || !sel.value) return;
+    g.rows.forEach(function(r) { assign[r.pid] = sel.value; });
+    var cb = document.querySelector('[data-djp-savecode="' + idx + '"]');
+    if (g.code && cb && cb.checked) codeWrites.push({ dealerId: sel.value, code: g.code });
   });
+
+  // เขียนรหัส DJI กลับให้ Dealer — ทำก่อนบันทึกโครงการ เพื่อให้ djpDealerOf() จับคู่ได้ทันทีโดยไม่ต้องพึ่ง
+  // dealerId ที่ฝังไว้รายแถว และงวดหน้าจะจับคู่อัตโนมัติตั้งแต่ต้น
+  var dealerUpd = [];
+  codeWrites.forEach(function(w) {
+    var d = ST.getOne('dealers', w.dealerId);
+    if (!d || pidNorm(d.djiCode)) return;      // มีรหัสอยู่แล้วไม่ทับ
+    var u = ST.update('dealers', w.dealerId, { djiCode: w.code });
+    if (u) dealerUpd.push(u);
+  });
+  if (dealerUpd.length && typeof syncToFirebase === 'function') syncToFirebase('dealers', dealerUpd);
 
   var now = new Date().toISOString();
   var added = ST.addMany('djiProjects', pend.fresh.map(function(r) {
     return Object.assign({ importedAt: now, pipelineId: '', dealerId: assign[r.pid] || '' }, r);
   }));
+  if (pend.fresh.length && !added.length) {
+    closeMForce();
+    toast('❌ นำเข้าไม่สำเร็จ — เนื้อที่เก็บข้อมูลในเบราว์เซอร์ไม่พอ', true);
+    return;
+  }
 
   // อัปเดตของเดิม: เขียนทับเฉพาะข้อมูลที่มาจาก DJI ไม่แตะ pipelineId/dealerId ที่เราผูกไว้เอง
   var touched = [];
@@ -336,9 +396,10 @@ function djpCommitImport() {
     '<div style="font-size:13px">กำลังบันทึกขึ้น Cloud — อย่าเพิ่งปิดหรือรีเฟรชหน้านี้</div></div>';
   var done = function(okCloud) {
     closeMForce();
-    toast(okCloud === false
+    toast((okCloud === false
       ? '✅ นำเข้าในเครื่องแล้ว (' + added.length + ' ใหม่ · ' + touched.length + ' อัปเดต) — แต่ยังไม่ขึ้น Cloud'
-      : '✅ นำเข้า ' + added.length + ' โครงการ · อัปเดต ' + touched.length);
+      : '✅ นำเข้า ' + added.length + ' โครงการ · อัปเดต ' + touched.length) +
+      (dealerUpd.length ? ' · บันทึกรหัส DJI ให้ ' + dealerUpd.length + ' Dealer' : ''));
     go('djiProjects');
   };
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects').then(done, function() { done(false); });
@@ -636,6 +697,7 @@ function djpCreateBucketFrom(id) {
   if (!dealer) { alert('ยังไม่รู้ว่าเลขนี้เป็นของ Dealer ไหน — ระบุ Dealer ก่อนถึงจะสร้างถังได้'); return; }
   var dup = (typeof _rrFindByProjectId === 'function') ? _rrFindByProjectId(p.pid, null) : null;
   if (dup) { djpLinkBucket(id, dup.id); return; }
+  _djpBust();
   var saved = ST.add('runrate', {
     dealerId: dealer.id, projectId: p.pid, models: '', status: 'active',
     note: 'สร้างจากทะเบียน Project ID ของ DJI CRM', createdAt: new Date().toISOString()
@@ -685,7 +747,8 @@ function _djpApplyLink(projId, pipeId, nameFrom) {
     if (!name) { alert('พิมพ์ชื่อก่อนนะครับ'); return; }
   }
 
-  var projUpd = { pipelineId: pipeId };
+  // ผูกฝั่งโครงการแล้วต้องล้างฝั่งถังทิ้ง ไม่งั้นทะเบียนเดียวค้างอยู่ทั้งสองทางแล้วยอดถูกนับซ้ำ
+  var projUpd = { pipelineId: pipeId, runrateId: '', kind: 'project' };
   if (name) projUpd.name = name;
   var savedProj = ST.update('djiProjects', projId, projUpd);
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
@@ -751,7 +814,7 @@ function djpCreatePipelineFrom(id) {
       content: 'สร้างจากทะเบียน Project ID ' + p.pid + ' (ลงทะเบียนโดย ' + (p.createdBy || '-') + ')', created: new Date().toISOString() });
     if (lg && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', lg);
   } catch (e) {}
-  var up = ST.update('djiProjects', id, { pipelineId: pipe.id });
+  var up = ST.update('djiProjects', id, { pipelineId: pipe.id, runrateId: '', kind: 'project' });
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
   toast('✅ สร้างโครงการแล้ว');
@@ -795,7 +858,7 @@ function djpBulkCreatePipelines() {
     pipes.push(pipe);
     try { logs.push(ST.add('pipeLog', { pipeId: pipe.id, type: 'note', date: _td(),
       content: 'สร้างจากทะเบียน Project ID ' + p.pid, created: new Date().toISOString() })); } catch (e) {}
-    var up = ST.update('djiProjects', id, { pipelineId: pipe.id });
+    var up = ST.update('djiProjects', id, { pipelineId: pipe.id, runrateId: '', kind: 'project' });
     if (up) projUpd.push(up);
     made++;
   });
@@ -891,6 +954,7 @@ function _djpRowHtml(p, range) {
 
 function rDjiProjects(el) {
   document.getElementById('pgT').textContent = '🗂️ ทะเบียน Project ID';
+  _djpBust();
   var all = ST.getAll('djiProjects');
 
   var h = '<div class="card" style="margin-bottom:12px">';
@@ -1260,3 +1324,13 @@ function djpBoardStep(dir) {
 function djpBoardToggleList() { djpBoardShowList = !djpBoardShowList; _djpRenderBoard(); }
 // ชื่อเดิม เผื่อมีที่อื่นเรียกอยู่
 function djpBoardSkip() { djpBoardStep(1); }
+
+// เลือก Dealer ให้บริษัทหนึ่งแล้ว ถ้าบริษัทอื่นในรายการยังว่างและชื่อใกล้เคียงกันมาก ก็ไม่เดาให้ — แค่ทำให้
+// เห็นว่าเลือกไปแล้วกี่บริษัท เพื่อให้รู้ว่าเหลืออีกเท่าไหร่โดยไม่ต้องเลื่อนดูทั้งรายการ
+function _djpGroupPicked() {
+  var sels = document.querySelectorAll('[data-djp-group]');
+  var done = 0;
+  sels.forEach(function(s) { if (s.value) done++; });
+  var note = document.getElementById('djpGroupProgress');
+  if (note) note.textContent = done + ' / ' + sels.length + ' บริษัท เลือกแล้ว';
+}

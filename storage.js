@@ -92,10 +92,20 @@ const ST = {
     catch(e) { return null; }
   },
 
+  // คืน true/false ว่าเขียนลงจริงไหม — ผู้เรียกเดิมไม่ได้ใช้ค่าที่คืนจึงไม่กระทบใคร แต่จุดที่นำเข้าข้อมูล
+  // ก้อนใหญ่ต้องรู้ ไม่งั้นพื้นที่เต็มแล้วยังขึ้นว่า "นำเข้าสำเร็จ" แล้วดันของเดิมขึ้น cloud ทับของจริง
   _set(key, data) {
-    try { localStorage.setItem(key, JSON.stringify(data)); }
-    catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม!', true); }
+    try { localStorage.setItem(key, JSON.stringify(data)); this._rev++; return true; }
+    catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม!', true); return false; }
   },
+
+  // เลขรุ่นของข้อมูลในเครื่อง — ขยับทุกครั้งที่มีการเขียนจริง หน้าที่ทำ index ไว้ในหน่วยความจำ (เช่น
+  // ดัชนี SO ต่อ Invoice ในสมุดเดินของ หรือรายการ SO ในทะเบียน Project ID) เก็บเลขนี้ไว้คู่กับแคช
+  // แล้วสร้างใหม่เมื่อเลขไม่ตรง จะได้ไม่ต้องไล่เรียก bust เองทุกจุดที่เขียน แล้วลืมจุดใดจุดหนึ่งจนยอดค้างของเก่า
+  _rev: 0,
+  rev() { return this._rev; },
+  // ให้ชั้น sync เรียกหลังเขียน localStorage ตรงๆ (ไม่ได้ผ่าน _set) เพื่อให้แคชรู้ว่าข้อมูลเปลี่ยนแล้ว
+  touch() { this._rev++; },
 
   getAll(collection) { return this._get(this._keys[collection]) || []; },
   getOne(collection, id) { return this.getAll(collection).find(x => x.id === id) || null; },
@@ -141,7 +151,8 @@ const ST = {
       return data;
     });
     arr.push(...added);
-    this._set(this._keys[collection], arr);
+    // เขียนไม่ลง (พื้นที่เต็ม) = ไม่ได้เพิ่มอะไรเลย ต้องคืนรายการว่างให้ผู้เรียกรู้ ไม่ใช่คืนแถวที่ไม่ได้ถูกเก็บ
+    if (!this._set(this._keys[collection], arr)) return [];
     return added;
   },
 

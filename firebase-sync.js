@@ -228,6 +228,7 @@ function initGuestViewListeners() {
           items.push(data);
         });
         localStorage.setItem(lsKey, JSON.stringify(items));
+        if (typeof ST !== 'undefined') ST.touch();
         if (typeof render === 'function') render();
       } catch (e) { console.warn('Guest listener error for', key, e); }
     }, function(error) { console.warn('Guest listener error:', key, error); });
@@ -760,6 +761,11 @@ function saveChunkedToFirebase(collName, rows) {
 function loadChunkedFromFirebase(collName, lsKey) {
   var ref = _chunkRef(collName);
   if (!ref) return Promise.resolve(false);
+  // ครั้งก่อน push ไม่ขึ้น → ของในเครื่องใหม่กว่า ห้ามดึงของเก่ามาทับ ให้ส่งขึ้นไปแทน
+  if (typeof djiHasUnsyncedChanges === 'function' && djiHasUnsyncedChanges(collName)) {
+    if (typeof toast === 'function') toast('⏳ มีข้อมูล ' + collName + ' ที่ยังไม่ขึ้น Cloud — กำลังส่งขึ้นให้');
+    return pushDjiDataToCloud(collName).then(function() { return false; });
+  }
   return ref.get().then(function(snap) {
     if (snap.empty) return false;
     var meta = null, byIdx = {};
@@ -772,7 +778,7 @@ function loadChunkedFromFirebase(collName, lsKey) {
     var rows = [];
     for (var i = 0; i < total; i++) rows = rows.concat(byIdx[i] || []);
     if (!rows.length && !meta) return false;
-    try { localStorage.setItem(lsKey, JSON.stringify(rows)); } catch (e) {
+    try { localStorage.setItem(lsKey, JSON.stringify(rows)); if (typeof ST !== 'undefined') ST.touch(); } catch (e) {
       console.warn('เก็บ ' + lsKey + ' ลงเครื่องไม่สำเร็จ', e);
       if (typeof toast === 'function') toast('⚠️ พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอสำหรับ ' + collName, true);
       return false;
@@ -785,6 +791,12 @@ function loadChunkedFromFirebase(collName, lsKey) {
 }
 
 // เรียกจากจุดที่เพิ่งแก้ข้อมูลเสร็จ — คืน Promise ให้รอได้ และแจ้งเตือนเมื่อพลาดจริง
+// ธงบอกว่า "ของในเครื่องใหม่กว่าบน cloud" — ตั้งเมื่อ push ล้ม และล้างเมื่อ push สำเร็จ
+// จำเป็นเพราะตอน login เราดึงจาก cloud มาทับเครื่องเสมอ ถ้าครั้งก่อน push ไม่ขึ้น การดึงครั้งถัดไป
+// จะเอาของเก่ากว่ามาทับงานที่เพิ่งทำไปทั้งหมดแบบเงียบๆ
+function _djiDirtyKey(which) { return 'v7_djiDirty_' + which; }
+function djiHasUnsyncedChanges(which) { return localStorage.getItem(_djiDirtyKey(which)) === '1'; }
+
 function pushDjiDataToCloud(which) {
   var map = { djiMovements: 'v7_djiMovements', djiProjects: 'v7_djiProjects' };
   var lsKey = map[which];
@@ -792,9 +804,13 @@ function pushDjiDataToCloud(which) {
   if (typeof SYNC_ENABLED === 'undefined' || !SYNC_ENABLED || !CURRENT_USER) return Promise.resolve(false);
   var rows = [];
   try { rows = JSON.parse(localStorage.getItem(lsKey) || '[]'); } catch (e) {}
-  return saveChunkedToFirebase(which, rows).catch(function(e) {
+  localStorage.setItem(_djiDirtyKey(which), '1');
+  return saveChunkedToFirebase(which, rows).then(function(r) {
+    localStorage.removeItem(_djiDirtyKey(which));
+    return r;
+  }).catch(function(e) {
     console.warn('sync ' + which + ' ล้มเหลว', e);
-    if (typeof toast === 'function') toast('⚠️ บันทึกขึ้น Cloud ไม่สำเร็จ — ข้อมูลยังอยู่ในเครื่องนี้ ลองกดอีกครั้งเมื่อเน็ตพร้อม', true);
+    if (typeof toast === 'function') toast('⚠️ บันทึกขึ้น Cloud ไม่สำเร็จ — ข้อมูลยังอยู่ในเครื่องนี้ ระบบจะลองส่งใหม่ให้ตอนเข้าใช้งานครั้งหน้า', true);
     return false;
   });
 }
@@ -834,6 +850,7 @@ function initFirebaseListeners() {
             items.forEach(function(p) { if (_sm[p.status]) p.status = _sm[p.status]; });
           }
           localStorage.setItem(lsKey, JSON.stringify(items));
+          if (typeof ST !== 'undefined') ST.touch();
         } else if (hasSingleDoc) {
           // ✅ กันค่า null/undefined ไม่ให้เก็บเป็นสตริง "null" (ทำให้ getter พังตอน .filter/.map)
           if (singleDocVal === null || singleDocVal === undefined) {
@@ -841,6 +858,7 @@ function initFirebaseListeners() {
           } else {
             localStorage.setItem(lsKey, JSON.stringify(singleDocVal));
           }
+          if (typeof ST !== 'undefined') ST.touch();
         }
       } catch(e) {
         console.warn('Listener error for', collName, e);
@@ -1142,6 +1160,7 @@ function importFullBackup() {
         var count = 0;
         Object.keys(data).forEach(function(k) {
           localStorage.setItem(k, JSON.stringify(data[k]));
+          if (typeof ST !== 'undefined') ST.touch();
           count++;
         });
         toast('✅ Import สำเร็จ! ' + count + ' keys');

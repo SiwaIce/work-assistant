@@ -777,14 +777,31 @@ function _soFillFromQuote(quoteId) {
     var tSel = document.getElementById('soN_type');
     if (tSel && tSel.value !== qType) { tSel.value = qType; _soTypeToggle(qType); }
   }
+  // ตั้ง select.value ที่ไม่มี option นั้นอยู่จริง เบราว์เซอร์จะเงียบๆ เปลี่ยนเป็นค่าว่าง — เกิดได้จริงเมื่อ
+  // ใบเสนอราคาผูกโครงการที่ยังไม่ Win (ลิสต์เอาเฉพาะ Win/Contracting/Deliver) หรือผูกถังที่ถูกปิดไปแล้ว
+  // ถ้าไม่บอก ผู้ใช้จะเปิด SO โดยคิดว่าผูกอยู่ทั้งที่หลุดไปแล้ว
+  var lost = [];
   if (q.pipelineId) {
     var pSel = document.getElementById('soN_pipelineId');
-    if (pSel) pSel.value = q.pipelineId;
+    if (pSel) {
+      pSel.value = q.pipelineId;
+      if (pSel.value !== q.pipelineId) {
+        var lp = ST.getOne('pipeline', q.pipelineId);
+        lost.push('โครงการ "' + ((lp && lp.projectName) || q.pipelineId) + '" (ยังไม่อยู่ในสถานะที่เปิด SO ได้)');
+      }
+    }
   }
   if (q.runrateId) {
     var rSel = document.getElementById('soN_runrateId');
-    if (rSel) { rSel.value = q.runrateId; _soRRPick(q.runrateId); }
+    if (rSel) {
+      rSel.value = q.runrateId;
+      if (rSel.value !== q.runrateId) {
+        var lr = ST.getOne('runrate', q.runrateId);
+        lost.push('ถัง Run rate "' + ((lr && lr.projectId) || q.runrateId) + '" (อาจถูกปิดไปแล้ว)');
+      } else _soRRPick(q.runrateId);
+    }
   }
+  if (lost.length) toast('⚠️ ดึงจากใบเสนอราคาไม่ครบ — ' + lost.join(' · ') + ' เลือกเองอีกที', true);
   var pidEl2 = document.getElementById('soN_projectId');
   if (pidEl2 && !_soProjIdDirty && pidNorm(q.projectId)) pidEl2.value = q.projectId;
   _soProjIdNote();
