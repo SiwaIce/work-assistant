@@ -864,6 +864,7 @@ var R = {
   // ✅ Sales Order
   runrate: rRunRate,
   djiLedger: rDjiLedger,
+  worklist: rWorklist,
   djiProjects: rDjiProjects,
   salesOrders: rSalesOrders,
   soDetail: rSODetail,
@@ -1903,6 +1904,7 @@ var APP_MENU_REGISTRY = [
   {id: 'pipelineCompare', icon: '📊', name: 'เปรียบเทียบโครงการ/คู่แข่ง'},
   {id: 'runrate', icon: '🏪', name: 'Run Rate'},
   {id: 'djiLedger', icon: '📖', name: 'สมุดเดินของ DJI'},
+  {id: 'worklist', icon: '✅', name: 'งานค้าง'},
   {id: 'djiProjects', icon: '🗂️', name: 'ทะเบียน Project ID'},
   {id: 'salesOrders', icon: '📦', name: 'Sales Order'},
   {id: 'serialSearch', icon: '🔍', name: 'ค้นหา Serial'},
@@ -1962,7 +1964,7 @@ var APP_MENU_ACTIONS = [
 var MB_NAV_ROUTE_GROUPS = {
   today: ['today', 'salesOverview', 'salesAnalytics'],
   dealers: ['dealers', 'dealerDetail', 'salesRepDashboard', 'dealerRiskRadar', 'endUserList'],
-  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison', 'djiProjects', 'djiLedger'],
+  pipeline: ['pipeline', 'pipelineTeam', 'pipeBoard', 'pipeDash', 'pipeHealth', 'pipeDetail', 'mondayMeeting', 'mondayCompany', 'posCalibration', 'kpiCompanyPlan', 'pipelineCompare', 'forecast', 'forecastComparison', 'djiProjects', 'djiLedger', 'worklist'],
   tasks: ['tasks', 'taskDetail']
 };
 
@@ -2155,6 +2157,7 @@ var ALL_QUICK_ITEMS = [
   {id:'pipeline',    icon:'📊', name:'Pipeline',        action:"go('pipeline')"},
   {id:'runrate',     icon:'🏪', name:'Run Rate',        action:"go('runrate')"},
   {id:'djiLedger',   icon:'📖', name:'สมุดเดินของ DJI', action:"go('djiLedger')"},
+  {id:'worklist',    icon:'✅', name:'งานค้าง', action:"go('worklist')"},
   {id:'djiProjects', icon:'🗂️', name:'ทะเบียน Project ID', action:"go('djiProjects')"},
   {id:'dealers',     icon:'🏪', name:'Dealers',         action:"go('dealers')"},
   {id:'tasks',       icon:'📋', name:'Tasks',           action:"go('tasks')"},
