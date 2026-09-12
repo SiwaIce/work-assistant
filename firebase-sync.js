@@ -1160,8 +1160,9 @@ function importFullBackup() {
         var data = JSON.parse(ev.target.result);
         var count = 0;
         Object.keys(data).forEach(function(k) {
-          localStorage.setItem(k, JSON.stringify(data[k]));
-          if (typeof ST !== 'undefined') ST.touch();
+          // ผ่าน ST._set — คอลเลกชันก้อนใหญ่อยู่ใน IndexedDB แล้ว เขียน localStorage ตรงๆ จะไม่มีผล
+          if (typeof ST !== 'undefined') ST._set(k, data[k]);
+          else localStorage.setItem(k, JSON.stringify(data[k]));
           count++;
         });
         toast('✅ Import สำเร็จ! ' + count + ' keys');

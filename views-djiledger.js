@@ -515,7 +515,9 @@ function rDjiLedger(el) {
     '<span style="font-size:11px;color:var(--text2);align-self:center">ดูเป็น</span>' +
     '<button class="btn bsm ' + (djlView === 'row' ? 'bp' : 'bo') + '" onclick="djlSetView(\'row\')">รายแถว</button>' +
     '<button class="btn bsm ' + (djlView === 'invoice' ? 'bp' : 'bo') + '" onclick="djlSetView(\'invoice\')">🧾 รายใบ Invoice</button>' +
+    '<button class="btn bsm ' + (djlView === 'recon' ? 'bp' : 'bo') + '" onclick="djlSetView(\'recon\')">⚖️ กระทบยอดกับ SO</button>' +
     '</div>';
+  if (djlView === 'recon') { _djlRenderRecon(el, h, dmap); return; }
   if (djlView === 'invoice') {
     var fc = _djlFilterCounts(dmap);
     h += '<div class="rr-toolbar">' +
@@ -1030,4 +1032,116 @@ function djlCommitNormalize() {
   closeMForce();
   toast(n ? ('✨ จัดรูปแบบให้ ' + n + ' ใบแล้ว') : 'ไม่มีอะไรต้องแก้');
   render();
+}
+
+// ================================================================
+// กระทบยอด — จำนวนเครื่องที่ DJI บันทึกว่าส่งออกไป เทียบกับที่ฝั่งเราเปิด SO ไว้
+// ================================================================
+// สองฝั่งนี้ควรตรงกันเสมอ ถ้าไม่ตรงแปลว่ามีอะไรหลุด: ลืมเปิด SO, เลข Invoice พิมพ์ไม่ตรงกันจนจับคู่ไม่ได้,
+// หรือจำนวนในใบไม่เท่ากัน สะพานเดียวที่มีคือเลข Invoice (ไฟล์ของ DJI มีคอลัมน์ SO No. ก็จริง แต่ว่างทั้ง
+// 4,541 แถว จึงใช้ไม่ได้) เทียบเฉพาะถัง "ขายให้ dealer" — ของที่เข้าคลังเราเองหรือส่งให้รายที่ยังไม่
+// authorized ไม่มี SO อยู่แล้วโดยธรรมชาติ ไม่ใช่ของหาย
+var djlReconMonth = '';   // '' = ทุกเดือน
+
+function djlSetReconMonth(v) { djlReconMonth = v; render(); }
+
+function djlReconData(dmap) {
+  var inv = {};    // เลขใบกำกับ (ปรับรูปแบบแล้ว) → ยอดฝั่ง DJI
+  ST.getAll('djiMovements').forEach(function(m) {
+    if (m.status !== DJL_OK_STATUS || m.type !== DJL_SELL_TYPE) return;
+    if (djlBucket(m, dmap) !== 'sold') return;
+    var k = _djlNormInv(m.inv);
+    if (!k) return;
+    var g = inv[k] || (inv[k] = { inv: m.inv, key: k, dji: 0, so: 0, sos: [], date: '', name: m.name, dealerId: '' });
+    g.dji += Number(m.qty) || 0;
+    if ((m.date || '') > g.date) g.date = m.date || '';
+    if (!g.dealerId) { var d = djlDealerOf(m, dmap); if (d) g.dealerId = d.id; }
+  });
+
+  ST.getAll('salesOrders').forEach(function(s) {
+    var k = _djlNormInv(s.invoiceNumber);
+    if (!k) return;
+    var qty = (s.items || []).reduce(function(t, it) { return t + (Number(it.qty) || 0); }, 0);
+    var g = inv[k] || (inv[k] = { inv: s.invoiceNumber, key: k, dji: 0, so: 0, sos: [], date: s.invoiceDate || '', name: s.dealerName || '', dealerId: s.dealerId || '' });
+    g.so += qty;
+    g.sos.push(s);
+    if (!g.date) g.date = s.invoiceDate || '';
+  });
+
+  var rows = Object.keys(inv).map(function(k) { return inv[k]; });
+  if (djlReconMonth) rows = rows.filter(function(g) { return (g.date || '').slice(0, 7) === djlReconMonth; });
+  var months = {};
+  Object.keys(inv).forEach(function(k) { var mo = (inv[k].date || '').slice(0, 7); if (mo) months[mo] = 1; });
+
+  var sum = { dji: 0, so: 0, noSO: [], noDJI: [], diff: [] };
+  rows.forEach(function(g) {
+    sum.dji += g.dji; sum.so += g.so;
+    if (g.dji && !g.so) sum.noSO.push(g);
+    else if (!g.dji && g.so) sum.noDJI.push(g);
+    else if (g.dji !== g.so) sum.diff.push(g);
+  });
+  var bydate = function(a, b) { return (b.date || '').localeCompare(a.date || ''); };
+  sum.noSO.sort(bydate); sum.noDJI.sort(bydate); sum.diff.sort(bydate);
+  sum.months = Object.keys(months).sort().reverse();
+  sum.rows = rows;
+  return sum;
+}
+
+function _djlReconRowsHtml(list, note) {
+  if (!list.length) return '<div class="hint" style="margin:6px 0 0">— ไม่มี —</div>';
+  var h = '<div style="overflow-x:auto"><table class="rr-tbl" style="min-width:520px"><thead><tr>' +
+    '<th>Invoice</th><th>ปลายทาง</th><th>วันที่</th><th style="text-align:right">สมุด DJI</th><th style="text-align:right">SO ของเรา</th><th></th>' +
+    '</tr></thead><tbody>';
+  list.slice(0, 40).forEach(function(g) {
+    h += '<tr><td style="font-family:monospace">' + sanitize(g.inv || '-') + '</td>' +
+      '<td style="font-size:11px">' + sanitize(g.name || '-') + '</td>' +
+      '<td style="font-size:11px">' + sanitize(g.date || '-') + '</td>' +
+      '<td style="text-align:right">' + g.dji + '</td>' +
+      '<td style="text-align:right">' + g.so + '</td>' +
+      '<td>' + (g.sos.length
+        ? '<button class="btn bsm bo" onclick="go(\'soDetail\',{soId:' + jsArg(g.sos[0].id) + '})">ดู SO</button>'
+        : '<button class="btn bsm bo" onclick="djlQ=' + jsArg(g.inv || '') + ';djlSetView(\'invoice\')">ดูในสมุด</button>') +
+      '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (list.length > 40) h += '<div class="hint">…และอีก ' + (list.length - 40) + ' ใบ</div>';
+  if (note) h += '<div class="hint" style="margin-top:6px">' + note + '</div>';
+  return h;
+}
+
+function _djlRenderRecon(el, h, dmap) {
+  var R = djlReconData(dmap);
+  h += '<div class="card" style="margin-bottom:12px">';
+  h += '<div class="hint">เทียบจำนวนเครื่องที่ DJI บันทึกว่าส่งออกไปแล้ว กับจำนวนในใบสั่งขายของเรา ' +
+       'จับคู่กันด้วยเลข Invoice — ตัวเลขสองฝั่งควรตรงกัน ถ้าไม่ตรงคือมีอะไรหลุดไป</div>';
+
+  h += '<div class="rr-toolbar" style="margin-top:10px">' +
+    '<span style="font-size:11px;color:var(--text2);align-self:center">เดือน</span>' +
+    '<select class="inp" style="width:auto;font-size:12px" onchange="djlSetReconMonth(this.value)">' +
+    '<option value=""' + (djlReconMonth ? '' : ' selected') + '>ทุกเดือน</option>' +
+    R.months.map(function(mo) {
+      return '<option value="' + mo + '"' + (djlReconMonth === mo ? ' selected' : '') + '>' + mo + '</option>';
+    }).join('') + '</select></div>';
+
+  var gap = R.dji - R.so;
+  h += '<div class="rr-stats" style="margin-top:10px">' +
+    '<div class="rr-stat"><div class="n">' + R.dji + '</div><div class="l">เครื่องในสมุด DJI</div></div>' +
+    '<div class="rr-stat"><div class="n">' + R.so + '</div><div class="l">เครื่องใน SO ของเรา</div></div>' +
+    '<div class="rr-stat"><div class="n" style="color:' + (gap ? '#f87171' : '#22c55e') + '">' + (gap > 0 ? '+' : '') + gap + '</div><div class="l">ต่างกัน</div></div>' +
+    '</div>';
+  h += '</div>';
+
+  h += '<div class="card" style="margin-bottom:12px"><b>❓ DJI ส่งออกแล้ว แต่เราไม่มี SO (' + R.noSO.length + ' ใบ)</b>';
+  h += _djlReconRowsHtml(R.noSO, 'ลืมเปิด SO หรือเลข Invoice ในระบบเราพิมพ์ไม่ตรงกับของ DJI');
+  h += '</div>';
+
+  h += '<div class="card" style="margin-bottom:12px"><b>⚠️ จำนวนไม่ตรงกัน (' + R.diff.length + ' ใบ)</b>';
+  h += _djlReconRowsHtml(R.diff, 'ใบเดียวกันแต่จำนวนเครื่องไม่เท่ากัน — ตรวจว่าขาดรายการไหนไป');
+  h += '</div>';
+
+  h += '<div class="card" style="margin-bottom:12px"><b>📄 เรามี SO แต่ยังไม่เห็นในสมุด DJI (' + R.noDJI.length + ' ใบ)</b>';
+  h += _djlReconRowsHtml(R.noDJI, 'ปกติถ้าเพิ่งส่ง — ไฟล์จาก DJI อาจยังไม่อัปเดต หรือเลข Invoice พิมพ์ไม่ตรง');
+  h += '</div>';
+
+  el.innerHTML = h;
 }
