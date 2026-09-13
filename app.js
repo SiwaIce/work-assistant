@@ -879,7 +879,17 @@ function goKanban() {
 
  var fn = R[S.view];
 if (fn) {
-  fn(el);
+  // เผื่อหน้าใดหน้าหนึ่งพังกลางทาง (bug ใหม่/ข้อมูลแปลกที่ไม่เคยเจอ) — เดิมโยน exception ตรงนี้แล้วทั้ง
+  // render() หยุดกลางคัน โค้ดที่เหลือข้างล่าง (badge, favorites, mobile nav) ก็ไม่ทำงานด้วย ผู้ใช้เห็นแค่
+  // จอว่างเปล่าไม่รู้สาเหตุ ครอบ try/catch จุดเดียวตรงนี้ ให้อย่างน้อยรู้ว่าหน้าไหนพังและกลับเมนูได้
+  try {
+    fn(el);
+  } catch (e) {
+    console.error('render ' + S.view + ' ล้มเหลว', e);
+    el.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>หน้านี้แสดงผลไม่ได้ (' + sanitize(S.view) + ')</p>' +
+      '<p class="hint">ลองกลับไปหน้าอื่นแล้วเข้าใหม่ ถ้ายังเป็นอยู่ ลองรีเฟรชทั้งหน้า</p>' +
+      '<button class="btn bo" onclick="go(\'today\')" style="margin-top:10px">🏠 กลับหน้าแรก</button></div>';
+  }
 } else if (typeof rToday === 'function') {
   rToday(el);
 } else {

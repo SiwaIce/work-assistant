@@ -331,12 +331,19 @@ const ST = {
     for (const name in this._keys) nameByKey[this._keys[name]] = name;
     const items = [];
     let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      const v = localStorage.getItem(k) || '';
-      const bytes = (k.length + v.length) * 2;   // UTF-16 ภายในตัว ~2 ไบต์ต่ออักขระ
-      total += bytes;
-      items.push({ key: k, name: nameByKey[k] || null, bytes: bytes });
+    // localStorage.length/key(i) อ่านทีละรอบ ไม่ใช่ snapshot เดียว — ถ้ามีอย่างอื่นเขียน/ลบ localStorage
+    // พร้อมกันตอนนี้พอดี (เช่น Firestore listener กำลัง sync อยู่เบื้องหลัง) ดัชนีอาจเลื่อนจน key(i) คืน null
+    // กลางลูป ข้ามรายการนั้นไปเฉยๆ ดีกว่าให้ทั้งรายงานพังจนหน้าตั้งค่าทั้งหน้าว่างเปล่าไปด้วย
+    var len = localStorage.length;
+    for (let i = 0; i < len; i++) {
+      try {
+        const k = localStorage.key(i);
+        if (k === null || k === undefined) continue;
+        const v = localStorage.getItem(k) || '';
+        const bytes = (k.length + v.length) * 2;   // UTF-16 ภายในตัว ~2 ไบต์ต่ออักขระ
+        total += bytes;
+        items.push({ key: k, name: nameByKey[k] || null, bytes: bytes });
+      } catch (e) { /* ข้าม key ที่มีปัญหา ไม่ให้ทั้งรายงานพัง */ }
     }
     items.sort((a, b) => b.bytes - a.bytes);
     return {

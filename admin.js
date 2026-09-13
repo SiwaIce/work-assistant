@@ -2222,6 +2222,18 @@ function _admFmtKB(bytes) {
 }
 
 function _admStorageReportHtml() {
+  // การ์ดนี้เป็นแค่ diagnostic เสริม ห้ามพังแล้วดึงทั้งหน้าตั้งค่าลงไปด้วย — คลุม try/catch ทั้งฟังก์ชันไว้
+  // ชั้นนอกสุด ถ้าพังให้ขึ้นข้อความสั้นๆ แทนที่จะทำให้ rAdmin() ทั้งตัวโยน exception จน el.innerHTML
+  // ไม่ถูกเซ็ตเลยสักตัวอักษร (แท็บอื่นก็จะหายไปด้วยเพราะ rAdmin() คืน string เดียวรวมทุกแท็บ)
+  try {
+    return _admStorageReportHtmlInner();
+  } catch (e) {
+    console.error('storage report ล้มเหลว', e);
+    return '<div class="card"><h2>🗄️ พื้นที่เก็บข้อมูลเบราว์เซอร์</h2>' +
+      '<div class="hint">แสดงรายงานไม่ได้ตอนนี้ (ลองรีเฟรชหน้าใหม่)</div></div>';
+  }
+}
+function _admStorageReportHtmlInner() {
   var r = ST.storageReport();
   var pct = Math.min(100, Math.round(r.total / ADM_STORAGE_QUOTA_EST * 100));
   var barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
