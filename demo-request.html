@@ -668,9 +668,32 @@ var CATEGORIES = [];
 var pendingRequestsRaw = []; // จาก publicDemoRequests สถานะ pending — ใช้โชว์ป้าย "มีคนจอง รอคอนเฟิร์ม"
 
 function loadCatalog() {
+  var catalogData = null;
   db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
-    var data = doc.exists ? doc.data() : {};
+    catalogData = doc.exists ? doc.data() : {};
+    return db.collection('publicDemoEdits').get();
+  }).then(function(editsSnap) {
+    var data = catalogData;
     CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
+    // เครื่องที่ทีมงานเพิ่ง เพิ่ม/แก้/ลบ จากหน้า demo-staff.html (publicDemoEdits) — ให้ลูกค้าเห็นผลทันที
+    // เหมือนกับที่หน้า staff เห็น ไม่ต้องรอให้แอปหลักเปิดมาลงข้อมูลจริงก่อน (ดูคอมเมนต์ที่ applyEditOverlay
+    // ใน demo-staff.html สำหรับเหตุผลที่ข้อมูลจริงยังอยู่ใน localStorage ของแอปหลัก ไม่ใช่ที่นี่)
+    var pending = {};
+    (editsSnap ? editsSnap.docs : []).forEach(function(d) { pending[d.id] = d.data() || {}; });
+    var srcUnits = (data.units || []).map(function(u) {
+      var p = pending[u.id];
+      if (!p || p.type === 'delete' || p.type === 'add' || !p.fields) return u;
+      var out = {};
+      Object.keys(u).forEach(function(k) { out[k] = u[k]; });
+      Object.keys(p.fields).forEach(function(k) { out[k] = p.fields[k]; });
+      return out;
+    });
+    var rawIds = {}; (data.units || []).forEach(function(u) { rawIds[u.id] = 1; });
+    Object.keys(pending).forEach(function(id) {
+      var p = pending[id];
+      if (p.type === 'add' && !rawIds[id]) srcUnits.push(Object.assign({ id: id, status: 'available' }, p.fields || {}));
+    });
+    srcUnits = srcUnits.filter(function(u) { var p = pending[u.id]; return !(p && p.type === 'delete'); });
     // เครื่องที่ยังไม่มีหมายเลขเครื่องเช่า (rentalDbNo) = ยังไม่ได้ทำเรื่องเข้าเครื่องเช่า ให้ยืมจริงไม่ได้
     // จึงไม่แสดงให้ลูกค้าเห็นเลย (ไม่งั้นลูกค้าจองมาแล้วทีมงานต้องมาปฏิเสธทีหลัง) — ฝั่งภายในซ่อนไว้เหมือนกัน
     // แต่ยังกดชิป "ยังไม่ลงทะเบียนเครื่องเช่า" เข้าไปดูได้ ดู rDemoTracker() ใน features.js
@@ -684,7 +707,7 @@ function loadCatalog() {
     //   ไม่ได้ตั้ง = เครื่องหลักเห็น อุปกรณ์เสริมไม่เห็น (พฤติกรรมเดิม)
     // เขียนเงื่อนไขเต็มไว้ที่นี่ด้วย ไม่พึ่งค่าที่ publish มาอย่างเดียว เพราะแคตตาล็อกที่ publish ไว้ก่อน
     // เวอร์ชันนี้คำนวณ customerVisible ด้วยกติกาเก่า (อุปกรณ์เสริมได้ true) ถ้าเชื่อค่านั้นตรงๆ ใบพัดจะหลุดมาโชว์
-    var raw = (data.units || []).filter(function(u) {
+    var raw = srcUnits.filter(function(u) {
       if (!String(u.rentalDbNo || '').trim()) return false;
       if (u.customerVisible === false) return false;
       if (u.customerVisible === true) return true;

@@ -3316,10 +3316,28 @@ function fetchDemoStaffEdits(force) {
   _demoEditsFetchedAt = now;
   db.collection('publicDemoEdits').get().then(function(snap) {
     var next = snap.docs.map(function(doc) { var x = doc.data() || {}; x._id = doc.id; return x; });
-    var changed = next.length !== DEMO_STAFF_EDITS.length;
     DEMO_STAFF_EDITS = next;
-    if (changed && S && S.view === 'demoTracker') render();
+    if (next.length) _autoApplyDemoStaffEdits();
   }).catch(function(e) { console.warn('fetchDemoStaffEdits error:', e); });
+}
+// เดิมต้องมีคนเปิดเมนู Demo Equipment แล้วกด "รับเข้า" เองทีละรายการ — ตอนนี้เปลี่ยนเป็นรับเข้าอัตโนมัติ
+// ทันทีที่ fetchDemoStaffEdits() ดึงคิวมาเจอ (ทุกครั้งที่มีคนเปิดหน้านี้ ห่างกันอย่างน้อย 60 วิ ดูด้านบน)
+// ไม่ต้องมีคนกดอนุมัติอีกต่อไป — รายการที่ยังลงจริงไม่ได้ (เช่น ขอลบเครื่องที่ยังมีคนยืมอยู่) จะถูกเก็บไว้
+// ใน DEMO_STAFF_EDITS ต่อ แล้วลองใหม่อัตโนมัติในรอบถัดไป
+function _autoApplyDemoStaffEdits() {
+  var ids = DEMO_STAFF_EDITS.map(function(e) { return e._id; });
+  var byId = {}; DEMO_STAFF_EDITS.forEach(function(e) { byId[e._id] = e; });
+  var applied = _applyDemoEditsLocal(ids);
+  if (!applied.length) return;
+  var names = applied.map(function(id) {
+    var e = byId[id];
+    return (e.fields && e.fields.name) || e.unitLabel || id;
+  });
+  _dropDemoEditDocs(applied).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return applied.indexOf(e._id) === -1; });
+    if (S && S.view === 'demoTracker') render();
+    toast('🔄 ซิงก์จากหน้า staff แล้ว ' + applied.length + ' รายการ (' + names.slice(0, 3).join(', ') + (names.length > 3 ? ' ...' : '') + ')');
+  });
 }
 function _demoEditFmt(field, v) {
   if (field === 'flyable') return v ? '✈️ บินสาธิตได้' : '🖼️ จัดแสดงเท่านั้น';
@@ -3352,18 +3370,21 @@ function _demoLoanActionFmt(la, d) {
   if ((la.reason || '').trim()) h += '<div class="la-l">📝 ' + sanitize(la.reason) + '</div>';
   return h + '</div>';
 }
+// การซิงก์จากหน้า staff ปกติเป็นอัตโนมัติแล้ว (ดู _autoApplyDemoStaffEdits) — โมดัลนี้เหลือไว้เป็นทาง
+// ตรวจ/แก้เองสำหรับรายการที่ "ยังทำอัตโนมัติไม่ได้" เท่านั้น (หลักๆ คือขอลบเครื่องที่ยังมีคนยืมอยู่)
+// รายการ type:'add' ที่ยังไม่มีใน items ไม่ถือว่าเป็นของกำพร้า (เป็นเรื่องปกติของเครื่องที่เพิ่งเพิ่ม)
 function showDemoStaffEditsM() {
   var items = getDemoItems(), byId = {};
   items.forEach(function(d) { byId[d.id] = d; });
-  var rows = DEMO_STAFF_EDITS.filter(function(e) { return byId[e._id]; });
+  var rows = DEMO_STAFF_EDITS.filter(function(e) { return e.type === 'add' || byId[e._id]; });
   var orphan = DEMO_STAFF_EDITS.length - rows.length;
-  var h = '<div class="hint" style="margin-bottom:10px">รายการที่ทีมงานแก้จากหน้า demo-staff.html — กดรับเข้าแล้วจะเขียนลงข้อมูลตัวจริงและล้างคิวทิ้ง<br>ตอนนี้หน้า staff กับลิงก์ลูกค้าเห็นค่าใหม่ไปแล้ว แต่แอปนี้ยังเป็นค่าเดิมจนกว่าจะกดรับ</div>';
+  var h = '<div class="hint" style="margin-bottom:10px">ปกติรายการจากหน้า demo-staff.html จะลงข้อมูลจริงให้อัตโนมัติอยู่แล้ว — ที่เห็นในนี้คือรายการที่ยังทำอัตโนมัติไม่ได้ (เช่น ขอลบเครื่องที่ยังมีคนยืมอยู่) กดรับเองได้ถ้าตรวจแล้วโอเค</div>';
   if (orphan) h += '<div class="dm-warn">⚠️ มีคิวอีก ' + orphan + ' รายการที่หาเครื่องปลายทางไม่เจอ (อาจถูกลบไปแล้ว) — กด “ล้างคิวที่หาเครื่องไม่เจอ” ด้านล่างเพื่อทิ้ง</div>';
   if (!rows.length) {
-    h += '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีรายการรอรับเข้า</div>';
+    h += '<div class="card" style="text-align:center;padding:26px;color:var(--text2)">ไม่มีรายการค้าง — ซิงก์ครบแล้ว</div>';
     h += '<div class="fm-actions">' + (orphan ? '<button class="btn bd" onclick="clearOrphanDemoEdits()">🗑️ ล้างคิวที่หาเครื่องไม่เจอ (' + orphan + ')</button>' : '') +
       '<button class="btn" onclick="closeMForce()">ปิด</button></div>';
-    return openM('📥 รับการแก้ไขจากหน้า Staff', h), setMWide(820);
+    return openM('📥 รายการค้างจากหน้า Staff', h), setMWide(820);
   }
   h += '<div style="max-height:54vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
   h += '<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>' +
@@ -3374,37 +3395,70 @@ function showDemoStaffEditsM() {
   rows.forEach(function(e) {
     var d = byId[e._id], f = e.fields || {};
     h += '<tr><td style="padding:6px 9px;border-bottom:1px solid var(--border);vertical-align:top">' +
-      '<b>' + sanitize(d.name || '-') + '</b><div style="font-size:10px;color:var(--text3);font-family:monospace">เช่า ' +
-      sanitize(d.rentalDbNo || '—') + ' · ' + sanitize(d.serialNumber || '—') + '</div></td>';
+      '<b>' + sanitize((d && d.name) || f.name || '-') + '</b><div style="font-size:10px;color:var(--text3);font-family:monospace">เช่า ' +
+      sanitize((d && d.rentalDbNo) || f.rentalDbNo || '—') + ' · ' + sanitize((d && d.serialNumber) || f.serialNumber || '—') + '</div></td>';
     h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border)">';
-    // คำขอจัดการใบยืมต้องอ่านออกว่าจะเกิดอะไรขึ้น ไม่ใช่ขึ้นเป็นช่องว่างเพราะไม่มี fields
-    if (e.loanAction && e.loanAction.type) h += _demoLoanActionFmt(e.loanAction, d);
-    Object.keys(f).forEach(function(k) {
-      var cur = k === 'flyable' ? (d.flyable !== false) : k === 'customerVisible' ? demoIsCustomerVisible(d) : d[k];
-      h += '<div style="margin-bottom:3px"><span style="font-size:10px;color:var(--text3);text-transform:uppercase">' +
-        (_DEMO_EDIT_LABELS[k] || k) + '</span> ' + _demoEditFmt(k, cur) +
-        ' <span style="color:var(--accent)">→</span> <b>' + _demoEditFmt(k, f[k]) + '</b></div>';
-    });
+    if (e.type === 'add') {
+      h += '<div class="la-warn" style="color:var(--accent)">➕ เพิ่มเครื่องใหม่จากหน้า staff</div>';
+    } else if (e.type === 'delete') {
+      h += '<div class="la-warn">🗑️ ขอลบเครื่องนี้ — ยังลบไม่ได้เพราะมีคนยืมอยู่ รับคืนก่อนแล้วจะลบให้เองอัตโนมัติ</div>';
+    } else {
+      // คำขอจัดการใบยืมต้องอ่านออกว่าจะเกิดอะไรขึ้น ไม่ใช่ขึ้นเป็นช่องว่างเพราะไม่มี fields
+      if (e.loanAction && e.loanAction.type) h += _demoLoanActionFmt(e.loanAction, d);
+      Object.keys(f).forEach(function(k) {
+        var cur = k === 'flyable' ? (d.flyable !== false) : k === 'customerVisible' ? demoIsCustomerVisible(d) : d[k];
+        h += '<div style="margin-bottom:3px"><span style="font-size:10px;color:var(--text3);text-transform:uppercase">' +
+          (_DEMO_EDIT_LABELS[k] || k) + '</span> ' + _demoEditFmt(k, cur) +
+          ' <span style="color:var(--accent)">→</span> <b>' + _demoEditFmt(k, f[k]) + '</b></div>';
+      });
+    }
     h += '</td>';
     h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border)">' + sanitize(e.editedBy || '—') + '</td>';
     h += '<td style="padding:6px 9px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">' +
-      '<button class="btn bsm bp" onclick="applyDemoStaffEdit(\'' + e._id + '\')">✅ รับ</button> ' +
+      '<button class="btn bsm bp" onclick="applyDemoStaffEdit(\'' + e._id + '\')">✅ ลองอีกครั้ง</button> ' +
       '<button class="btn bsm bd" onclick="rejectDemoStaffEdit(\'' + e._id + '\')">✕ ทิ้ง</button></td></tr>';
   });
   h += '</tbody></table></div>';
   h += '<div class="fm-actions">';
-  h += '<button class="btn bp" onclick="applyAllDemoStaffEdits()">✅ รับเข้าทั้งหมด (' + rows.length + ')</button>';
+  h += '<button class="btn bp" onclick="applyAllDemoStaffEdits()">✅ ลองทั้งหมดอีกครั้ง (' + rows.length + ')</button>';
   if (orphan) h += '<button class="btn bd" onclick="clearOrphanDemoEdits()">🗑️ ล้างคิวที่หาเครื่องไม่เจอ (' + orphan + ')</button>';
   h += '<button class="btn" onclick="closeMForce()">ปิด</button></div>';
-  openM('📥 รับการแก้ไขจากหน้า Staff', h);
+  openM('📥 รายการค้างจากหน้า Staff', h);
   setMWide(880);
 }
+// คืนรายการ id ของคำขอที่ "จัดการแล้ว" จริงๆ (สำเร็จ หรือไม่มีประโยชน์จะเก็บไว้ต่อ) ไม่ใช่แค่จำนวน —
+// เพราะผู้เรียก (_autoApplyDemoStaffEdits) ต้องรู้ว่าจะลบคิวไหนทิ้งได้บ้าง คำขอที่ยัง "ทำไม่ได้ตอนนี้"
+// (เช่น ขอลบเครื่องที่ยังมีคนยืมอยู่) ต้องไม่อยู่ใน list นี้ เพื่อให้ค้างในคิวแล้วลองใหม่รอบถัดไปเอง
 function _applyDemoEditsLocal(ids) {
-  var items = getDemoItems(), loans = getDemoLoans(), n = 0, loanTouched = 0;
+  var items = getDemoItems(), loans = getDemoLoans(), applied = [], loanTouched = 0;
   DEMO_STAFF_EDITS.forEach(function(e) {
     if (ids.indexOf(e._id) === -1) return;
+    // ---- เครื่องใหม่จากหน้า staff (ยังไม่เคยมีในข้อมูลจริงเลย) ----
+    if (e.type === 'add') {
+      if (!items.some(function(x) { return x.id === e._id; })) {
+        items.push(Object.assign({
+          id: e._id, status: 'available', dealerId: '', borrower: '', lentDate: '', returnDate: ''
+        }, e.fields || {}));
+      }
+      applied.push(e._id);
+      return;
+    }
+    // ---- ขอลบเครื่องจากหน้า staff ----
+    if (e.type === 'delete') {
+      // ยังมีใบยืมที่ไม่คืนอยู่ — ลบตอนนี้จะทิ้งใบยืมค้างไว้แบบหาเครื่องต้นทางไม่เจอ ปล่อยคิวค้างไว้ก่อน
+      // รอรับคืนแล้วลองใหม่อัตโนมัติรอบถัดไป (staff เห็นเครื่องหายจากมุมมองตัวเองไปแล้วอยู่ดี)
+      if (loans.some(function(l) { return l.demoId === e._id && l.status === 'active'; })) return;
+      var di = -1;
+      for (var k = 0; k < items.length; k++) { if (items[k].id === e._id) { di = k; break; } }
+      if (di !== -1) {
+        items.splice(di, 1);
+        if (typeof syncDeleteFromFirebase === 'function') syncDeleteFromFirebase('demo', e._id);
+      }
+      applied.push(e._id);
+      return;
+    }
     var d = items.filter(function(x) { return x.id === e._id; })[0];
-    if (!d) return;
+    if (!d) { applied.push(e._id); return; }   // เครื่องปลายทางหาไม่เจอ (ถูกลบไปแล้ว) — ทิ้งคิวไปเลย ไม่มีประโยชน์ค้างไว้
     var loanFields = {};
     Object.keys(e.fields || {}).forEach(function(k) {
       if (_DEMO_EDIT_LABELS[k] === undefined) return;   // รับเฉพาะฟิลด์ที่รู้จัก กันค่าแปลกปลอมหลุดเข้าข้อมูลจริง
@@ -3470,11 +3524,11 @@ function _applyDemoEditsLocal(ids) {
         }
       }
     }
-    n++;
+    applied.push(e._id);
   });
-  if (n) saveDemoItems(items);
+  if (applied.length) saveDemoItems(items);
   if (loanTouched) saveDemoLoans(loans);
-  return n;
+  return applied;
 }
 function _dropDemoEditDocs(ids) {
   if (typeof db === 'undefined') return Promise.resolve();
@@ -3483,10 +3537,11 @@ function _dropDemoEditDocs(ids) {
   }));
 }
 function applyDemoStaffEdit(id) {
-  var n = _applyDemoEditsLocal([id]);
-  _dropDemoEditDocs([id]).then(function() {
-    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return e._id !== id; });
-    toast(n ? '✅ รับเข้าแล้ว' : 'ไม่พบเครื่องปลายทาง');
+  var applied = _applyDemoEditsLocal([id]);
+  if (!applied.length) { toast('⏳ ยังทำไม่ได้ตอนนี้ (เช่น เครื่องยังมีคนยืมอยู่) — เก็บคิวไว้ ลองใหม่ทีหลัง'); return; }
+  _dropDemoEditDocs(applied).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return applied.indexOf(e._id) === -1; });
+    toast('✅ รับเข้าแล้ว');
     showDemoStaffEditsM();
     render();
   });
@@ -3501,15 +3556,14 @@ function rejectDemoStaffEdit(id) {
   });
 }
 function applyAllDemoStaffEdits() {
-  var items = getDemoItems(), byId = {};
-  items.forEach(function(d) { byId[d.id] = 1; });
-  var ids = DEMO_STAFF_EDITS.filter(function(e) { return byId[e._id]; }).map(function(e) { return e._id; });
+  var ids = DEMO_STAFF_EDITS.map(function(e) { return e._id; });
   if (!ids.length) { toast('ไม่มีรายการให้รับ'); return; }
   if (!confirm('รับการแก้ไขทั้ง ' + ids.length + ' รายการเข้าข้อมูลตัวจริง?')) return;
-  var n = _applyDemoEditsLocal(ids);
-  _dropDemoEditDocs(ids).then(function() {
-    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return ids.indexOf(e._id) === -1; });
-    toast('✅ รับเข้า ' + n + ' เครื่องแล้ว');
+  var applied = _applyDemoEditsLocal(ids);
+  if (!applied.length) { toast('⏳ ยังทำไม่ได้เลยสักรายการตอนนี้ (เช่น เครื่องยังมีคนยืมอยู่)'); return; }
+  _dropDemoEditDocs(applied).then(function() {
+    DEMO_STAFF_EDITS = DEMO_STAFF_EDITS.filter(function(e) { return applied.indexOf(e._id) === -1; });
+    toast('✅ รับเข้า ' + applied.length + ' รายการแล้ว' + (applied.length < ids.length ? ' (อีก ' + (ids.length - applied.length) + ' รายการยังทำไม่ได้ตอนนี้)' : ''));
     closeMForce();
     render();
   });
@@ -5038,10 +5092,12 @@ function rDemoTracker(el) {
   // ดึงคิวแก้ไขจากหน้า staff ทุกครั้งที่เข้าเมนูนี้ — เป็น .get() ครั้งเดียวไม่ใช่ listener ถาวร
   // เพราะเมนูนี้ไม่ได้เปิดค้างไว้ทั้งวัน และไม่อยากให้ render วนเองระหว่างที่กำลังแก้ของอยู่
   fetchDemoStaffEdits();
+  // ปกติรายการจากหน้า staff จะถูกซิงก์เข้าข้อมูลจริงเองอัตโนมัติแล้ว (ดู fetchDemoStaffEdits/
+  // _autoApplyDemoStaffEdits ด้านบน) แถบนี้จึงเหลือแค่กรณีที่ยังทำอัตโนมัติไม่ได้ (ค้างจริงๆ)
   if (DEMO_STAFF_EDITS.length) {
     h += '<div class="demo-staffedit-bar" onclick="showDemoStaffEditsM()">' +
-      '<span>✏️ ทีมงานแก้ข้อมูลจากหน้า Staff ไว้ <b>' + DEMO_STAFF_EDITS.length + ' เครื่อง</b> — ยังไม่ได้ลงข้อมูลตัวจริงในแอปนี้</span>' +
-      '<button class="btn bsm bp" onclick="event.stopPropagation();fetchDemoStaffEdits(true);showDemoStaffEditsM()">📥 ตรวจแล้วรับเข้า</button></div>';
+      '<span>⏳ มี <b>' + DEMO_STAFF_EDITS.length + ' รายการ</b> จากหน้า Staff ที่ยังลงข้อมูลจริงอัตโนมัติไม่ได้ (เช่น ขอลบเครื่องที่ยังมีคนยืมอยู่)</span>' +
+      '<button class="btn bsm bp" onclick="event.stopPropagation();fetchDemoStaffEdits(true);showDemoStaffEditsM()">🔍 ดูรายละเอียด</button></div>';
   }
 
   var _demoHiddenCount = allItems.filter(function(d) { return !demoIsCustomerVisible(d); }).length;
