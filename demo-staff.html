@@ -384,6 +384,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .lf-days { display:flex; align-items:center; gap:12px; }
 .lf-warn { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:8px;
   padding:9px 11px; margin-bottom:11px; line-height:1.55; }
+.lf-nearest { font-size:12px; color:var(--text); background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:9px 11px; margin-bottom:11px; line-height:1.6; display:flex; align-items:center;
+  gap:8px; flex-wrap:wrap; }
 /* จอแคบ: แถบ sticky ที่สูง 200px+ กินจอเกินไป — เหลือแค่จำนวนกับปุ่มไปต่อ
    รายการเครื่องเต็มๆ ไปเห็นในขั้นถัดไปอยู่แล้ว และเอาออกได้ที่นั่นเหมือนกัน */
 @media (max-width:620px) {
@@ -2770,6 +2773,44 @@ function lendPickDay(iso) {
 function lendOpenDay(iso) { lendDayOpen = (lendDayOpen === iso) ? null : iso; renderLendFlow(); }
 function lendNav(d) { lendMonthOffset += d; lendDayOpen = null; renderLendFlow(); }
 
+// หาวันว่างตรงกันใกล้สุด (ทุกเครื่องที่เลือกไว้ว่างพร้อมกันตลอด lendDays วันติดกัน) — ไล่หาไปข้างหน้า
+// จากวันที่เริ่มปัจจุบัน (หรือวันนี้ถ้ายังไม่เลือก) สูงสุด 180 วัน ยังบอกด้วยว่าช่วงนั้นมีใบ "รอ" ทับอยู่ไหม
+// (ไม่นับเป็นไม่ว่าง แต่ควรรู้ไว้ก่อนตัดสินใจ)
+function lendFindNearestFree() {
+  var list = lendUnits();
+  if (!list.length) return null;
+  var from = lendStart || _td();
+  var len = Math.max(1, lendDays);
+  for (var i = 0; i < 180; i++) {
+    var s = _scIso(_scAdd(_scFromIso(from), i));
+    var ok = true;
+    for (var j = 0; j < len; j++) {
+      if (!lendAllFreeOn(_scIso(_scAdd(_scFromIso(s), j)))) { ok = false; break; }
+    }
+    if (ok) {
+      var e = _scIso(_scAdd(_scFromIso(s), len - 1));
+      return { start: s, end: e, pending: _lfPendingInRange(list, s, e) };
+    }
+  }
+  return null;
+}
+function _lfPendingInRange(list, start, end) {
+  var bks = scBookings(), s = _scFromIso(start), e = _scFromIso(end);
+  return list.some(function(u) {
+    return bks.some(function(b) { return b.unitId === u.id && b.status === 'pending' && b.s <= e && b.e >= s; });
+  });
+}
+function lendUseNearestFree() {
+  var r = lendFindNearestFree();
+  if (!r) { alert('หาวันว่างตรงกันทุกเครื่องใน 180 วันข้างหน้าไม่เจอ — ลองตัดเครื่องที่ติดบ่อยออกบางส่วน'); return; }
+  lendStart = r.start; lendEnd = r.end;
+  var base0 = new Date(); base0.setDate(1);
+  var target = _scFromIso(r.start);
+  lendMonthOffset = (target.getFullYear() - base0.getFullYear()) * 12 + (target.getMonth() - base0.getMonth());
+  lendDayOpen = null;
+  renderLendFlow();
+}
+
 function renderLendFlow() {
   var el = document.getElementById('unitLendView');
   if (!el) return;
@@ -2893,9 +2934,17 @@ function renderLendFlow() {
     // ชิ้นที่ว่างตลอดช่วง → บันทึกเป็นยืมจริงทันที ชิ้นที่ชนคิว → บันทึกไว้เป็น "รอ" ในใบเดียวกัน ไม่ทับใคร
     // ไปแก้ทีหลังได้จากแท็บติดตามคืน (เช็คว่างอีกครั้ง หรือตัดออกจากใบ)
     var busyUnits = list.filter(function(u) { return _lfConflict(u.id, lendStart, lendEnd); });
-    if (busyUnits.length) h += '<div class="lf-warn">⏳ ' + busyUnits.length + ' จาก ' + list.length +
-      ' เครื่องชนกับใบจองอื่นในช่วงนี้ — เครื่องที่ว่างจะถูกจองให้ทันที ส่วนที่ชนจะถูกเก็บไว้เป็น "รอ" ในใบเดียวกัน ' +
-      'ไปเช็คว่างอีกครั้งหรือตัดออกได้ทีหลังจากแท็บ 🔔 ติดตามคืน</div>';
+    if (busyUnits.length) {
+      h += '<div class="lf-warn">⏳ ' + busyUnits.length + ' จาก ' + list.length +
+        ' เครื่องชนกับใบจองอื่นในช่วงนี้ — เครื่องที่ว่างจะถูกจองให้ทันที ส่วนที่ชนจะถูกเก็บไว้เป็น "รอ" ในใบเดียวกัน ' +
+        'ไปเช็คว่างอีกครั้งหรือตัดออกได้ทีหลังจากแท็บ 🔔 ติดตามคืน</div>';
+      var nf = lendFindNearestFree();
+      h += nf
+        ? '<div class="lf-nearest">🔍 วันว่างตรงกันใกล้สุดสำหรับทั้ง ' + list.length + ' เครื่อง: <b>' + _scD(nf.start) + ' – ' + _scD(nf.end) + '</b>' +
+          (nf.pending ? ' <span class="pill pill-warn">🕐 มีรายการ "รอ" ทับช่วงนี้อยู่</span>' : '') +
+          ' <button class="btn btn-ghost btn-sm" onclick="lendUseNearestFree()">✅ ใช้ช่วงนี้แทน</button></div>'
+        : '<div class="lf-nearest">🔍 หาวันว่างตรงกันทุกเครื่องใน 180 วันข้างหน้าไม่เจอ — ลองตัดเครื่องที่ติดบ่อยออกบางส่วน</div>';
+    }
   }
   h += '<button class="btn btn-primary" onclick="saveLendBatch()">💾 บันทึกยืม ' + list.length + ' เครื่อง</button>';
   h += '</div>';

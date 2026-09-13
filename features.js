@@ -2897,6 +2897,7 @@ function publishDemoCatalog() {
   try {
     var items = getDemoItems();
     var loans = getDemoLoans();
+    var today = _td();
     var units = items.map(function(d) {
       var ranges = loans.filter(function(l) { return l.demoId === d.id && l.status === 'active' && l.lentDate; })
         .map(function(l) {
@@ -2913,6 +2914,15 @@ function publishDemoCatalog() {
             jobNo: l.jobNo || '', refNo: l.refNo || ''
           };
         });
+      // คืนแล้วจริงแต่ยังอยู่ในช่วงรอคลังรับเข้า (availableFrom — ดู _returnDemoUnits) — ต้องส่งเป็น
+      // busyRanges ต่ออีกช่วงหนึ่งด้วย ไม่งั้นหน้าลูกค้า (demo-request.html) กับหน้าทีมงาน (demo-staff.html)
+      // จะเห็นเครื่องว่างทันทีที่กดคืน ทั้งที่ของจริงยังไม่ถูกเช็ค/คีย์เข้าคลัง — ธง quarantine:true ไว้ให้
+      // ฝั่งที่อ่านรู้ว่าช่วงนี้คือรอรับเข้า ไม่ใช่มีคนถือของอยู่ จะได้ขึ้นข้อความให้ตรงสถานการณ์
+      loans.filter(function(l) {
+        return l.demoId === d.id && l.status === 'returned' && l.availableFrom && l.availableFrom >= today;
+      }).forEach(function(l) {
+        ranges.push({ start: l.actualReturnDate || today, end: l.availableFrom, borrower: '', purpose: '', approver: '', jobNo: l.jobNo || '', refNo: l.refNo || '', quarantine: true });
+      });
       return {
         id: d.id, name: d.name, model: d.model || '', flyable: d.flyable !== false, status: getDemoEffectiveStatus(d), busyRanges: ranges,
         isAccessory: !!d.isAccessory, brand: d.brand || '',
@@ -2935,6 +2945,9 @@ var DEMO_STATUS_META = {
   available: { label: '✅ Available', cls: 'demo-available', desc: 'พร้อมให้จอง ณ ปัจจุบัน' },
   reserved: { label: '📅 Reserved', cls: 'demo-reserved', desc: 'มีการจองในอนาคต — ดูรายละเอียดที่ปฏิทิน' },
   lent: { label: '📤 On Borrowed', cls: 'demo-lent', desc: 'มีการยืมอยู่ในปัจจุบัน' },
+  // คืนเข้าคลังแล้วจริง แต่ยังไม่นับว่าให้ยืมต่อได้จนกว่าคลังจะเช็ค/คีย์เข้าระบบครบ (ดู _returnDemoUnits) —
+  // งาน Showcase ที่คืนพร้อมกันทีเดียวหลายสิบชิ้นทุกแบรนด์ อาจกินเวลาเป็นอาทิตย์กว่าจะเสร็จ
+  quarantine: { label: '🕐 Returning', cls: 'demo-quarantine', desc: 'คืนเข้าคลังแล้ว รอคลังเช็ค/คีย์เข้าระบบก่อนถึงจะให้ยืมต่อได้' },
   unavailable: { label: '⛔ Unavailable', cls: 'demo-unavailable', desc: 'ไม่ว่างให้จอง หรือไม่พร้อมใช้งาน' },
   lost: { label: '💔 Lost/Damaged', cls: 'demo-lost', desc: 'มีปัญหาอยู่ ไม่พร้อมให้จอง' }
 };
@@ -2957,6 +2970,10 @@ function getDemoEffectiveStatus(item) {
     if (lentDate && lentDate > today) return 'reserved';
     return 'lent';
   }
+  // เพิ่งคืนมาแต่ยังอยู่ในช่วงที่คลังต้องใช้เช็ค/คีย์เข้าระบบ (quarantineUntil ตั้งไว้ตอนคืน — ดู
+  // _returnDemoUnits) — item.status ถูกตั้งเป็น 'available' ไปแล้วตอนคืน (ไม่แตะ เพื่อไม่กระทบจุดอื่นที่
+  // เช็ค item.status === 'available' ตรงๆ) เช็คแยกจาก quarantineUntil แทน เทียบเป็น ISO ตรงๆ ไม่ต้อง parse
+  if (item.quarantineUntil && item.quarantineUntil >= _td()) return 'quarantine';
   return 'available';
 }
 
@@ -6030,11 +6047,22 @@ function _demoJobSelectedIds(gi) {
   document.querySelectorAll('.demo-job-cb[data-g="' + gi + '"]:checked').forEach(function(cb) { ids.push(cb.value); });
   return ids;
 }
+// คืนทีละหลายชิ้น (เลือกเอง/ทั้งใบจอง) ถามจำนวนวันที่เผื่อไว้ต่างหาก เพราะคืนทีเดียวเยอะๆ (เช่นหลังงาน
+// Showcase ที่ต้องคืนทุกแบรนด์พร้อมกัน) มักต้องเผื่อนานกว่าคืนทีละไม่กี่ชิ้น — prompt() พอสำหรับตัวเลข
+// เดียวแบบนี้ ไม่คุ้มที่จะสร้าง modal ใหม่ทั้งอันแค่เพื่อเลขจำนวนวัน
+function _demoAskBufferDays() {
+  var v = prompt('เผื่อเวลาคลังรับเข้ากี่วัน? (ของจะยังไม่ว่างให้ยืมต่อจนกว่าจะพ้นวันนี้)', String(DEMO_RETURN_BUFFER_DEFAULT));
+  if (v === null) return null;   // กดยกเลิก
+  var n = Math.max(0, parseInt(v, 10));
+  return isNaN(n) ? DEMO_RETURN_BUFFER_DEFAULT : n;
+}
 function demoJobReturnSelected(gi) {
   var ids = _demoJobSelectedIds(gi);
   if (!ids.length) { toast('ยังไม่ได้เลือกเครื่องที่จะคืน'); return; }
   if (!confirm('ยืนยันคืน ' + ids.length + ' เครื่อง?')) return;
-  var n = _returnDemoUnits(ids);
+  var buf = _demoAskBufferDays();
+  if (buf === null) return;
+  var n = _returnDemoUnits(ids, buf);
   toast('✅ คืนแล้ว ' + n + ' เครื่อง');
   render();
 }
@@ -6044,7 +6072,9 @@ function demoJobReturnAll(gi) {
   if (!g) return;
   var ids = g.loans.map(function(l) { return l.demoId; });
   if (!confirm('คืนทั้งใบจอง ' + (g.jobNo || '') + ' — ทั้งหมด ' + ids.length + ' เครื่อง ยืนยัน?')) return;
-  var n = _returnDemoUnits(ids);
+  var buf = _demoAskBufferDays();
+  if (buf === null) return;
+  var n = _returnDemoUnits(ids, buf);
   toast('✅ คืนทั้งใบแล้ว ' + n + ' เครื่อง');
   render();
 }
@@ -6214,11 +6244,16 @@ function demoCalBookings() {
   getDemoLoans().forEach(function(l) {
     var s = _dcSaneDate(l.lentDate);
     if (!s) return;   // ไม่มีวันเริ่มที่ใช้ได้ = วางบนปฏิทินไม่ได้
-    var e = _dcSaneDate(l.actualReturnDate) || _dcSaneDate(l.returnDate) || s;
+    // คืนแล้วแต่ยังรอคลังรับเข้า (availableFrom) → แถบต้องลากยาวถึงวันนั้น ไม่ใช่หยุดแค่วันคืนจริง
+    // ไม่งั้นปฏิทิน/ตัวหาวันว่างจะมองว่าเครื่องว่างแล้วทั้งที่ยังคีย์เข้าคลังไม่เสร็จ
+    var quarantine = l.status === 'returned' && !!l.availableFrom;
+    var e = quarantine ? _dcSaneDate(l.availableFrom)
+      : _dcSaneDate(l.actualReturnDate) || _dcSaneDate(l.returnDate) || s;
+    if (!e) e = s;
     if (e < s) e = s;
     out.push({ id: l.id, unitId: l.demoId, s: s, e: e, jobNo: (l.jobNo || '').trim(), refNo: (l.refNo || '').trim(),
       borrower: l.borrower || '', dealerId: l.dealerId || '', purpose: l.purpose || '',
-      keyedBy: l.keyedBy || l.approver || '', status: l.status });
+      keyedBy: l.keyedBy || l.approver || '', status: l.status, quarantine: quarantine });
   });
   return out;
 }
@@ -7819,7 +7854,7 @@ function showLendDemoM(demoId, startDate, endDate) {
     h += '<div style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:7px;margin-top:6px;padding:4px">';
     others.forEach(function(d) {
       h += '<label style="display:flex;align-items:center;gap:7px;padding:4px 6px;font-size:12px;cursor:pointer">';
-      h += '<input type="checkbox" class="dm-extra-unit" value="' + d.id + '">';
+      h += '<input type="checkbox" class="dm-extra-unit" value="' + d.id + '" onchange="_lendMRecalc(\'' + demoId + '\')">';
       h += '<span>' + sanitize(d.name) + (d.serialNumber ? ' <span style="color:var(--text2);font-family:monospace">S/N ' + sanitize(d.serialNumber) + '</span>' : '') + '</span>';
       h += '</label>';
     });
@@ -7836,14 +7871,78 @@ function showLendDemoM(demoId, startDate, endDate) {
     sanitize(_demoDefaultKeyer()) + '" placeholder="ชื่อ-นามสกุล พนักงานที่คีย์เบิก">' +
     '<div class="hint">คนละคนกับผู้ยืม — พอถึงกำหนดคืน ระบบจะได้บอกได้ว่าต้องตามใครไปคีย์คืนเข้าคลัง</div></div>';
   h += '<div class="fm-group"><label>🎯 ใช้งานกับ / End User / วัตถุประสงค์</label><input type="text" id="dm_purpose" class="fm-input" placeholder="เช่น สาธิตให้บริษัท ABC ดู / สำรวจพื้นที่ก่อสร้าง"></div>';
-  h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + sanitize(startDate || _td()) + '"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
-  h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" value="' + sanitize(endDate || '') + '" placeholder="DD/MM/YYYY"></div>';
+  h += '<div class="fm-group"><label>📅 วันที่ยืม/จอง</label><input type="text" id="dm_lent" class="fm-input dp" value="' + sanitize(startDate || _td()) + '" onchange="_lendMRecalc(\'' + demoId + '\')"><div class="hint">เลือกวันที่ในอนาคต = ระบบจะแสดงสถานะ "📅 Reserved" อัตโนมัติจนถึงวันนั้น</div></div>';
+  h += '<div class="fm-group"><label>📅 กำหนดคืน</label><input type="text" id="dm_return" class="fm-input dp" value="' + sanitize(endDate || '') + '" placeholder="DD/MM/YYYY" onchange="_lendMRecalc(\'' + demoId + '\')"></div>';
+  h += '<div id="lendConflictBox"></div>';
   h += '<div class="fm-group"><label>📝 หมายเหตุ</label><textarea id="dm_lnote" rows="2" class="fm-input"></textarea></div>';
   h += '<div class="fm-actions">';
   h += '<button class="btn bp" onclick="lendDemo(\'' + demoId + '\')">📤 ให้ยืม</button>';
   h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
   h += '</div></div>';
   openM('📤 ให้ยืม / จองล่วงหน้า', h);
+  _lendMRecalc(demoId);
+}
+
+// เช็คช่วงวันที่ที่เลือก (dm_lent–dm_return) ชนกับใบจองอื่นของเครื่องหลัก+เครื่องที่ติ๊กเพิ่มไหม
+// เรียกทุกครั้งที่แก้วันที่หรือติ๊ก/ถอดเครื่องเพิ่ม — เดิม modal นี้ไม่เช็คชนเลย กว่าจะรู้ว่าชนคือรอไป
+// เจอตอนดูปฏิทินทีหลัง จึงต้องมีตรงนี้เพื่อให้เห็นตั้งแต่ตอนกรอก พร้อมปุ่มหาวันว่างตรงกันใกล้สุดถ้าชน
+function _dcIsBusyBooking(b) { return b.status === 'active' || (b.status === 'returned' && b.quarantine); }
+function _lendMRecalc(mainId) {
+  var box = document.getElementById('lendConflictBox');
+  if (!box) return;
+  var startEl = document.getElementById('dm_lent'), endEl = document.getElementById('dm_return');
+  var s = startEl ? _dcSaneDate(startEl.value) : null;
+  var e = endEl ? _dcSaneDate(endEl.value) : null;
+  if (!s) { box.innerHTML = ''; return; }
+  if (!e) e = s;
+  if (e < s) { var tmp = s; s = e; e = tmp; }
+  var ids = [mainId];
+  document.querySelectorAll('.dm-extra-unit:checked').forEach(function(cb) {
+    if (ids.indexOf(cb.value) === -1) ids.push(cb.value);
+  });
+  var items = getDemoItems();
+  function nameOf(id) { var it = items.filter(function(d) { return d.id === id; })[0]; return it ? it.name : id; }
+  var bks = demoCalBookings();
+  var busy = ids.map(function(id) {
+    return { id: id, hit: bks.filter(function(b) { return b.unitId === id && _dcIsBusyBooking(b) && _dcOverlap(b, s, e); })[0] };
+  }).filter(function(x) { return x.hit; });
+  var h = '';
+  if (!busy.length) {
+    h = '<div style="font-size:12px;color:#22c55e;background:rgba(34,197,94,.1);border-radius:7px;padding:8px 10px;margin:6px 0">✅ ทุกเครื่อง (' + ids.length + ') ว่างตลอดช่วงที่เลือก</div>';
+  } else {
+    h = '<div style="font-size:12px;color:#f59e0b;background:rgba(245,158,11,.1);border-radius:7px;padding:8px 10px;margin:6px 0 4px">⚠️ ' + busy.length + ' จาก ' + ids.length + ' เครื่องชนกับใบจองอื่นในช่วงนี้:';
+    busy.forEach(function(x) {
+      var b = x.hit;
+      h += '<div style="font-size:11.5px;font-weight:400;padding:2px 0 2px 8px">• ' + sanitize(nameOf(x.id)) + ' — ' +
+        (b.quarantine ? '🕐 รอรับเข้าคลังถึง ' + _dcFmt(b.e) : 'ติด ' + sanitize(b.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _dcFmt(b.e)) + '</div>';
+    });
+    h += '</div>';
+    var nf = _lendMFindNearest(ids, s, e, bks);
+    h += nf
+      ? '<div style="font-size:12px;padding:8px 10px;background:var(--bg2);border-radius:7px;margin-bottom:6px">🔍 วันว่างตรงกันใกล้สุด: <b>' + _dcFmt(nf.start) + ' – ' + _dcFmt(nf.end) + '</b>' +
+        ' <button type="button" class="btn-xs" onclick="_lendMApplyNearest(\'' + mainId + '\',\'' + _dcISO(nf.start) + '\',\'' + _dcISO(nf.end) + '\')">ใช้ช่วงนี้แทน</button></div>'
+      : '<div style="font-size:11.5px;color:var(--text3);margin-bottom:6px">หาวันว่างตรงกันทุกเครื่องใน 180 วันข้างหน้าไม่เจอ</div>';
+  }
+  box.innerHTML = h;
+}
+function _lendMFindNearest(ids, from, refEnd, bks) {
+  var len = Math.max(1, Math.round((refEnd - from) / 86400000) + 1);
+  for (var i = 0; i < 180; i++) {
+    var s = _dcAddDays(from, i);
+    var ok = true;
+    for (var j = 0; j < len && ok; j++) {
+      var d = _dcAddDays(s, j);
+      ok = ids.every(function(id) { return !bks.some(function(b) { return b.unitId === id && _dcIsBusyBooking(b) && b.s <= d && d <= b.e; }); });
+    }
+    if (ok) return { start: s, end: _dcAddDays(s, len - 1) };
+  }
+  return null;
+}
+function _lendMApplyNearest(mainId, startIso, endIso) {
+  var sEl = document.getElementById('dm_lent'), eEl = document.getElementById('dm_return');
+  if (sEl) sEl.value = startIso;
+  if (eEl) eEl.value = endIso;
+  _lendMRecalc(mainId);
 }
 
 function lendDemo(demoId) {
@@ -7906,15 +8005,25 @@ function lendDemo(demoId) {
 
 // คืนอุปกรณ์หลายเครื่องพร้อมกัน — ตรรกะกลางที่ทั้งปุ่มคืนรายเครื่อง ปุ่มคืนทั้งใบจอง และคืนเฉพาะที่เลือก
 // เรียกใช้ร่วมกัน (ไม่ confirm/ไม่ render เอง ให้ผู้เรียกจัดการ) คืนค่าเป็นจำนวนเครื่องที่คืนสำเร็จจริง
-function _returnDemoUnits(demoIds) {
+// เผื่อเวลาที่คลังต้องใช้เช็ค/คีย์อุปกรณ์เข้าระบบก่อนจะให้ยืมต่อได้จริง — เดิมไม่มีเลย กดคืนปุ๊บ item.status
+// เป็น 'available' ทันที เปิดให้ยืมต่อได้ทันทีทั้งที่ของยังไม่ถูกเช็ค/คีย์เข้าคลังจริง (โดยเฉพาะงาน Showcase
+// ที่คืนพร้อมกันทีเดียวหลายสิบชิ้นทุกแบรนด์ กว่าคลังจะเช็คครบอาจกินเวลาเป็นอาทิตย์)
+// bufferDays ไม่ระบุ = ใช้ค่าเริ่มต้น 1 วัน (พอสำหรับคืนทีละไม่กี่ชิ้น) ผู้เรียกที่คืนทีละมากๆ ควรถามผู้ใช้เอง
+var DEMO_RETURN_BUFFER_DEFAULT = 1;
+function _returnDemoUnits(demoIds, bufferDays) {
+  bufferDays = Math.max(0, Number(bufferDays));
+  if (isNaN(bufferDays)) bufferDays = DEMO_RETURN_BUFFER_DEFAULT;
   var items = getDemoItems();
   var loans = getDemoLoans();
   var done = 0;
+  var today = _td();
+  var availableFrom = addD(today, bufferDays);
   demoIds.forEach(function(demoId) {
     var hit = false;
     for (var i = 0; i < items.length; i++) {
       if (items[i].id === demoId) {
         items[i].status = 'available';
+        items[i].quarantineUntil = bufferDays > 0 ? availableFrom : '';
         items[i].jobNo = '';
         items[i].refNo = '';
         items[i].dealerId = '';
@@ -7931,10 +8040,12 @@ function _returnDemoUnits(demoIds) {
     for (var j = loans.length - 1; j >= 0; j--) {
       if (loans[j].demoId === demoId && loans[j].status === 'active') {
         loans[j].status = 'returned';
-        loans[j].actualReturnDate = _td();
+        loans[j].actualReturnDate = today;
+        loans[j].availableFrom = bufferDays > 0 ? availableFrom : '';
         // _td() เป็น ISO (YYYY-MM-DD) ส่วนวันที่ยืม/คืนในฟอร์มเป็น DD/MM/YYYY — เก็บคงรูปแบบเดิมไว้
         // (ตัวอ่านรองรับทั้งสองแบบอยู่แล้ว) แต่ข้อความใน log แปลงให้เป็นรูปแบบเดียวกับที่คนกรอกเห็น
-        _demoAddEvent(loans[j], 'returned', _demoDefaultKeyer(), 'รับคืนเข้าคลัง ' + _demoDayTxt(_td()));
+        _demoAddEvent(loans[j], 'returned', _demoDefaultKeyer(), 'รับคืนเข้าคลัง ' + _demoDayTxt(today) +
+          (bufferDays > 0 ? ' · เผื่อรับเข้าระบบถึง ' + _demoDayTxt(availableFrom) : ''));
         break;
       }
     }
@@ -7946,7 +8057,7 @@ function _returnDemoUnits(demoIds) {
 
 function returnDemo(demoId) {
   if (!confirm('ยืนยันคืนอุปกรณ์?')) return;
-  _returnDemoUnits([demoId]);
+  _returnDemoUnits([demoId], DEMO_RETURN_BUFFER_DEFAULT);
   toast('✅ คืนอุปกรณ์แล้ว');
   render();
 }
