@@ -2113,6 +2113,7 @@ function openLoanLogM(loanId) {
     (l.purpose ? '<div><span>ยืมไปทำอะไร</span><b>' + esc(l.purpose) + '</b></div>' : '') +
     (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
     '</div>';
+  h += _copySlipBtnHtml(l.unitId, l.jobNo);
   h += scLoanLogHtml(l);
   h += _scJobSiblingsHtml(l);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
@@ -2122,6 +2123,39 @@ function openLoanLogM(loanId) {
   }
   h += '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('📜 ประวัติใบยืม', h);
+}
+// เลขเครื่องเช่าของทุกเครื่องในใบจองเดียวกัน (ตัวหลัก + เครื่องอื่นที่ jobNo เดียวกัน) เรียงจากน้อยไปมาก
+// ไม่เอาซ้ำ/ไม่เอาช่องว่าง — ใช้ทั้งโชว์ปุ่ม copy และตอนกดจริง
+function _slipRentalNumbers(unitId, jobNo) {
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var ids = [unitId];
+  if ((jobNo || '').trim()) {
+    scBookings().forEach(function(x) {
+      if ((x.jobNo || '').trim() === jobNo.trim() && ids.indexOf(x.unitId) === -1) ids.push(x.unitId);
+    });
+  }
+  var nums = ids.map(function(id) { var u = byId[id]; return u ? String(u.rentalDbNo || '').trim() : ''; }).filter(Boolean);
+  var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
+  uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  return uniq;
+}
+function _copySlipBtnHtml(unitId, jobNo) {
+  var n = _slipRentalNumbers(unitId, jobNo).length;
+  if (!n) return '';
+  return '<div style="margin:8px 0"><button class="btn btn-ghost btn-sm" onclick="copySlipRentals(\'' + _scEsq(unitId) + '\',\'' + _scEsq(jobNo || '') + '\')">' +
+    '📋 Copy เลขเครื่องเช่าทั้งใบ (' + n + ' เครื่อง)</button></div>';
+}
+// วางแล้วได้เลขเครื่องเช่าคนละบรรทัด เอาไปวางต่อในระบบคลังได้ทันทีโดยไม่ต้องพิมพ์เอง
+function copySlipRentals(unitId, jobNo) {
+  var nums = _slipRentalNumbers(unitId, jobNo);
+  if (!nums.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
+  var text = nums.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + nums.length + ' เครื่อง)'); })
+      .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+  } else {
+    alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
 }
 // เครื่องอื่นในใบจองเดียวกัน (jobNo เดียวกัน) — ยืมพร้อมกันเป็นชุดมักมีหลายเครื่อง แต่ประวัติใบยืมเดิม
 // โชว์แค่ตัวที่กำลังดูอยู่ตัวเดียว มองไม่ออกว่าใบเดียวกันมีอะไรอีกบ้างถ้าไม่ไปเปิดดูทีละเครื่องเอง
@@ -2139,6 +2173,53 @@ function _scJobSiblingsHtml(l) {
     return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
       '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + ' ' + st + '</span>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + s._id + '\')">📜</button>' +
+      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>' : '') +
+      '</div>';
+  }).join('');
+  return h;
+}
+
+// กดดูใบยืมที่ชนคิวจากขั้นตอนเลือกเครื่อง/วันที่ (renderLendFlow) — จะได้รู้ว่าใครถืออยู่ ไปตามให้เอามาคืน
+// หรือคุยกันเรื่องอื่นๆ ก่อนได้ ถ้าใบนั้นคีย์จากหน้านี้เอง (มี loanId จริง) เปิดรายละเอียดเต็ม (ต่อเวลา/โอน/
+// ประวัติได้ด้วย) แต่ถ้าคีย์จากแอปหลัก (ไม่มี doc ให้เปิดตรงๆ) โชว์เท่าที่รู้จาก busyRanges แทน
+function showLendConflictM(unitId, start, end) {
+  var conflict = _lfConflict(unitId, start, end);
+  if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
+  if (conflict.loanId) { openLoanLogM(conflict.loanId); return; }
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var u = byId[unitId];
+  var p = u ? _scModelParts(u) : { main: '—' };
+  var h = '<div class="sm-sec">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</div>';
+  h += '<div class="sc-kv">' +
+    '<div><span>ผู้ยืม</span><b>' + esc(conflict.borrower || '— ไม่ระบุ —') + '</b></div>' +
+    '<div><span>ผู้คีย์เบิก</span><b>' + esc(conflict.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
+    '<div><span>ใบจอง</span><b>' + esc(conflict.jobNo || '—') + '</b></div>' +
+    '<div><span>ช่วงที่ติด</span><b>' + esc(_scFmt(conflict.s)) + ' → ' + esc(_scFmt(conflict.e)) + '</b></div>' +
+    (conflict.purpose ? '<div><span>ใช้งานกับ</span><b>' + esc(conflict.purpose) + '</b></div>' : '') +
+    '</div>';
+  h += _copySlipBtnHtml(unitId, conflict.jobNo);
+  h += '<div class="hint" style="margin-top:8px">รายการนี้คีย์จากแอปหลัก — หน้านี้ไม่มีใบให้เปิดแก้/ต่อเวลา/รับคืนตรงๆ ' +
+    'ถ้าต้องการให้คืนหรือเลื่อนวัน ต้องติดต่อผู้ยืมด้านบนแล้วให้ทีมที่ใช้แอปหลักเป็นคนจัดการ</div>';
+  h += _bookingSiblingsHtml(conflict);
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  openSm('📤 รายการที่ชนอยู่', h);
+}
+// เหมือน _scJobSiblingsHtml แต่ทำงานบน scBookings() (รวมทั้งใบที่คีย์จากหน้านี้และจากแอปหลัก) แทนที่จะ
+// จำกัดแค่ LOANS อย่างเดียว — ใช้ตอนดูใบที่อาจมาจากแหล่งไหนก็ได้ (เช่น showLendConflictM ด้านบน)
+function _bookingSiblingsHtml(b) {
+  if (!(b.jobNo || '').trim()) return '';
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var siblings = scBookings().filter(function(x) { return x.unitId !== b.unitId && (x.jobNo || '').trim() === b.jobNo.trim(); });
+  if (!siblings.length) return '<div class="hint" style="margin-top:10px">📄 ใบจอง ' + esc(b.jobNo) + ' — ไม่มีเครื่องอื่นในใบเดียวกัน</div>';
+  var h = '<div class="sm-sec">🔗 เครื่องอื่นในใบจองเดียวกัน (' + siblings.length + ')</div>';
+  h += siblings.map(function(s) {
+    var u = byId[s.unitId];
+    var p = u ? _scModelParts(u) : { main: '—' };
+    var st = s.status === 'active' ? '<span class="pill pill-warn">กำลังยืม</span>'
+      : s.status === 'pending' ? '<span class="pill pill-muted">รอ (ชนคิว)</span>' : '<span class="pill pill-good">คืนแล้ว</span>';
+    return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
+      '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + ' ' + st + '</span>' +
+      (s.loanId ? '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + s.loanId + '\')">📜</button>' : '') +
       (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>' : '') +
       '</div>';
   }).join('');
@@ -2967,7 +3048,8 @@ function renderLendFlow() {
       : conflict ? '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') : '';
     h += '<span class="lb-chip' + (conflict ? ' lb-chip-warn' : '') + '">' + esc(p.main) + ' · <b>' + esc(u.rentalDbNo || '—') + '</b>' +
       (haveRange ? (conflict
-        ? '<span class="lf-chip-status warn" title="' + confTxt + '">' + confTxt + '</span>'
+        // กดดูได้ว่าติดใบยืมไหน ใครถืออยู่ — จะได้ไปตามให้เอามาคืน (ดู showLendConflictM)
+        ? '<span class="lf-chip-status warn" title="กดดูใบยืมที่ชน" style="cursor:pointer;text-decoration:underline" onclick="showLendConflictM(\'' + u.id + '\',\'' + lendStart + '\',\'' + lendEnd + '\')">' + confTxt + '</span>'
         : '<span class="lf-chip-status ok">✅ ว่าง</span>') : '') +
       (list.length > 1 ? '<span class="x" title="เอาออก" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕</span>' : '') +
       '</span>';
