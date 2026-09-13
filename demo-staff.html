@@ -253,10 +253,12 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
 .view-toggle button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
 .su-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:11px; }
-.su-card { border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:11px; padding:12px 13px; background:var(--surface); }
+.su-card { position:relative; border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:11px; padding:12px 13px; background:var(--surface); }
 .su-card.busy { border-left-color:var(--warn); }
 .su-card.off { border-left-color:var(--text3); opacity:.75; }
 .su-card.late { border-left-color:var(--bad); background:var(--bad-soft); }
+.su-card .sel-check { position:absolute; top:9px; right:9px; width:20px; height:20px; border-radius:50%;
+  background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 .su-top { display:flex; align-items:flex-start; gap:9px; }
 .su-ic { width:32px; height:32px; border-radius:9px; background:var(--accent-soft); display:flex; align-items:center;
   justify-content:center; font-size:16px; flex-shrink:0; }
@@ -2371,15 +2373,16 @@ function unitCardHtml(raw, n) {
   var late = endIso && endIso < _td();
   var cls = off ? 'off' : late ? 'late' : (loan || appRange) ? 'busy' : '';
   var cat = _scCatOf(u);
-  var h = '<div class="su-card ' + cls + (lendIsPicked(u.id) ? ' picked' : '') + '">';
-  h += '<div class="su-top">';
-  // ติ๊กเลือกได้ทุกเครื่องที่ลงทะเบียนเช่าแล้วและยังไม่ปิดใช้งาน — แม้กำลังถูกยืม/จองอยู่ตอนนี้ก็ติ๊กได้
+  // ติ๊กเลือกได้ทุกเครื่องที่ลงทะเบียนเช่าแล้วและยังไม่ปิดใช้งาน — แม้กำลังถูกยืม/จองอยู่ตอนนี้ก็เลือกได้
   // เพราะคนที่กำลังยืมอาจจะคืนก่อนแล้วมีคนอื่นมายืมต่อเดือนหน้าก็ได้ ขั้นตอนเลือกวันที่ (renderLendFlow)
   // เป็นคนเช็คชนคิวจริงๆ ตามช่วงวันที่เลือกอยู่แล้ว ไม่ต้องกันไว้ตั้งแต่ขั้นเลือกเครื่อง
-  if (!off && _unitHasRental(u)) {
-    h += '<label class="su-pick" onclick="event.stopPropagation()"><input type="checkbox"' +
-      (lendIsPicked(u.id) ? ' checked' : '') + ' onchange="lendToggle(\'' + u.id + '\')"></label>';
-  }
+  var pickable = !off && _unitHasRental(u);
+  // กดที่การ์ดไหนก็ได้เพื่อเลือก/ยกเลิก เหมือนหน้าลูกค้า (demo-request.html) — ไม่ต้องเล็งกดช่องติ๊กเล็กๆ
+  // ปุ่ม/ส่วนที่กดแล้วไม่ควรนับเป็นการเลือก (ดูข้อมูลเพิ่ม, แก้ไข, รายละเอียด, รับคืน ฯลฯ) stopPropagation ไว้
+  var h = '<div class="su-card ' + cls + (lendIsPicked(u.id) ? ' picked' : '') + '" data-unit-id="' + u.id + '"' +
+    (pickable ? ' onclick="lendToggle(\'' + u.id + '\')" style="cursor:pointer"' : '') + '>';
+  if (lendIsPicked(u.id)) h += '<span class="sel-check">✓</span>';
+  h += '<div class="su-top">';
   h += '<div class="su-ic" title="' + esc(cat.label) + '">' + cat.icon + '</div><div style="flex:1;min-width:0">';
   // ชื่อรุ่นอยู่บนหัวกลุ่มอยู่แล้ว การ์ดจึงเหลือแค่ "เครื่อง #N" ไม่ต้องเขียนชื่อรุ่นซ้ำทุกใบ
   h += '<div class="su-nm">เครื่อง #' + n + '</div>';
@@ -2409,7 +2412,7 @@ function unitCardHtml(raw, n) {
   }
   if (u.note) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">📝 ' + esc(u.note) + '</div>';
   // กางดูรายละเอียดในที่เดิม ไม่ต้องเปลี่ยนหน้า — SKU กับทะเบียนเอกสารรายใบย้ายมาอยู่ตรงนี้
-  h += '<details class="su-more"><summary>ดูข้อมูลเพิ่ม</summary><div class="su-more-b">';
+  h += '<details class="su-more" onclick="event.stopPropagation()"><summary>ดูข้อมูลเพิ่ม</summary><div class="su-more-b">';
   h += '<div class="su-kv"><span>SiS Part (SKU)</span><b>' + esc(u.sku || '—') + '</b></div>';
   h += '<div class="su-kv"><span>S/N</span><b>' + esc(u.serialNumber || '—') + '</b></div>';
   var kc = _scCatOf(u);
@@ -2431,7 +2434,7 @@ function unitCardHtml(raw, n) {
     h += '<div class="su-pending">' + (bits.join(' · ') || '✏️ มีรายการค้าง') +
       (p.editedBy ? ' โดย ' + esc(p.editedBy) : '') + ' · 🔄 กำลังซิงก์กับแอปหลัก</div>';
   }
-  h += '<div class="su-acts">';
+  h += '<div class="su-acts" onclick="event.stopPropagation()">';
   h += '<button class="btn btn-ghost btn-sm" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button>';
   h += '<button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button>';
   if (loan) h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืน</button>';
@@ -2527,10 +2530,19 @@ function lendIsPicked(id) { return lendPicked.indexOf(id) !== -1; }
 // (วาดใหม่ทั้งตารางทำให้ติ๊กรัวๆ ไม่ทัน เพราะ checkbox ตัวถัดไปถูกสร้างใหม่ระหว่างทาง และหน้ากระตุก)
 function _lendPaint(id) {
   var on = lendIsPicked(id);
-  var box = document.querySelector('.su-pick input[onchange*="' + id + '"], .sd-pick input[onchange*="' + id + '"]');
+  // มุมมองการ์ด: กดที่ตัวการ์ดเองเพื่อเลือก ไม่มี checkbox แล้ว — toggle class + ป้ายติ๊กเอง
+  var card = document.querySelector('.su-card[data-unit-id="' + id + '"]');
+  if (card) {
+    card.classList.toggle('picked', on);
+    var mark = card.querySelector('.sel-check');
+    if (on && !mark) card.insertAdjacentHTML('afterbegin', '<span class="sel-check">✓</span>');
+    else if (!on && mark) mark.remove();
+  }
+  // มุมมองสบายตา/ตาราง: ยังใช้ checkbox ตัวจริงอยู่
+  var box = document.querySelector('.sd-pick input[onchange*="' + id + '"], .unit-table input[onchange*="' + id + '"]');
   if (box) {
     box.checked = on;
-    var row = box.closest('.su-card') || box.closest('.sd-row');
+    var row = box.closest('.sd-row');
     if (row) row.classList.toggle('picked', on);
   }
 }
