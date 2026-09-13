@@ -93,8 +93,16 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-slip-sub { font-size:11.5px; color:var(--text2); margin-top:3px; }
 .rt-slip-act { display:flex; gap:6px; flex-wrap:wrap; }
 .rt-slip-list { margin:0 0 9px; padding-left:20px; font-size:12.5px; line-height:1.9; }
+.rt-slip-list li:has(.rt-row-pick) { list-style:none; margin-left:-20px; }
+.rt-row-pick { display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+.rt-row-pick input { width:15px; height:15px; cursor:pointer; accent-color:var(--accent); flex-shrink:0; }
 .rt-viareq { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; }
 .rt-guess { font-size:10.5px; font-weight:700; color:var(--warn); border:1px solid var(--warn); border-radius:5px; padding:1px 5px; vertical-align:middle; }
+.rt-pending-sec { border-top:1px dashed var(--border); padding:9px 13px; background:var(--warn-soft); }
+.rt-pending-hd { font-size:11.5px; font-weight:700; color:var(--warn); margin-bottom:6px; }
+.rt-pending-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-size:12.5px; padding:6px 0; border-top:1px solid rgba(245,158,11,.2); }
+.rt-pending-row:first-of-type { border-top:none; }
 .qn-slip { border:1px solid var(--border); border-radius:11px; padding:10px 12px; margin-bottom:10px; background:var(--surface); }
 .qn-slip.done { opacity:.6; }
 .qn-slip-hd { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
@@ -339,6 +347,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
 .lb-chip .x { cursor:pointer; color:var(--text3); font-weight:700; }
 .lb-chip .x:hover { color:var(--bad); }
+.lb-chip-warn { border-color:var(--warn); background:var(--warn-soft); }
+.lf-chip-status { font-size:10.5px; font-weight:700; white-space:nowrap; }
+.lf-chip-status.ok { color:var(--good); }
+.lf-chip-status.warn { color:var(--warn); }
 /* ขั้นตอน 1-2-3 */
 .lf-steps { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
 .lf-steps span { font-size:11.5px; font-weight:600; color:var(--text3);
@@ -996,6 +1008,14 @@ function renderTriage() {
       t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง', s: 'ภายใน 2 วัน',
       go: '<button class="tg-go" onclick="tgReturn()">ดูรายการ →</button>' });
   }
+  // ของที่คีย์ไว้แต่ชนคิวคนอื่นพอดี (ดู saveLendBatch) — ยังไม่ใช่ของจริงในมือใคร แต่ก็ยังไม่จบ ต้องมีคน
+  // ไปเช็คว่างอีกทีหรือตัดออก ไม่งั้นจะลืมค้างเป็นสิบๆ ใบ
+  var pendingCount = LOANS.filter(function(l) { return l.status === 'pending'; }).length;
+  if (pendingCount) {
+    rows.push({ sev: 50, key: 'รอ (ชนคิว)', n: pendingCount, cls: 'warn', ic: '⏳',
+      t: 'คีย์ไว้แต่ชนคิว <b>' + pendingCount + '</b> เครื่อง', s: 'เช็คว่างอีกครั้งหรือตัดออกได้ที่แท็บติดตามคืน · มุมมอง "ตามใบจอง"',
+      go: '<button class="tg-go" onclick="tgReturn(\'slip\')">ไปดู →</button>' });
+  }
   // เอกสารไม่ครบ — ข้อมูลที่มีอยู่แล้วแต่ไม่เคยมีที่แสดง ถ้าบริษัทบังคับต้องมีก่อนปล่อยยืม อันนี้บล็อกทุกใบ
   var noDoc = UNITS.filter(function(u) {
     return !(u.nbtcRegistered && u.droneInsurance && u.caatRegistered);
@@ -1220,9 +1240,9 @@ function renderGsResults() {
   if (units.length) {
     h += '<div class="gs-sec">🚁 เครื่อง (' + units.length + ')</div>';
     units.slice(0, 10).forEach(function(u) {
-      var cur = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.e >= today && b.s <= today; })[0];
-      var od = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.e < today; })[0];
-      var st = od ? '<span class="gs-late">ยังไม่คืน</span>' : cur ? 'กำลังยืม' : 'ว่าง';
+      var cur = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'pending' && b.e >= today && b.s <= today; })[0];
+      var od = bks.filter(function(b) { return b.unitId === u.id && b.status === 'active' && b.e < today; })[0];
+      var st = od ? '<span class="gs-late">ยังไม่คืน</span>' : cur ? (cur.quarantine ? 'รอรับเข้าคลัง' : 'กำลังยืม') : 'ว่าง';
       h += '<button class="gs-row" onclick="gsGoUnit(\'' + _scEsq(u.id) + '\')">' +
         '<b>' + esc(u.model || u.name || '-') + '</b><span class="gs-sub">' +
         (u.rentalDbNo ? 'เช่า ' + esc(u.rentalDbNo) + ' · ' : '') +
@@ -1377,25 +1397,50 @@ function _rtViewToggle(nSlips) {
       (nSlips ? ' (' + nSlips + ')' : '') + '</button></div>';
 }
 
+// เครื่องที่คีย์ยืมไว้แต่ชนคิวคนอื่นพอดี (ดู saveLendBatch) ไม่ได้ของจริง จึงไม่โผล่ใน activeReturns() —
+// แต่ยังต้องเห็นได้ว่าใบนี้ "ยังไม่ครบ" ไม่ใช่หายไปเงียบๆ เลยรวมเข้ามาแสดงในกล่องใบเดียวกัน แยกเป็นส่วน
+// "⏳ รอ" ต่างหาก มีปุ่มเช็คว่างอีกครั้ง (เผื่อของว่างแล้ว) กับตัดออกจากใบ (ยืมจริงไม่ได้แล้วก็เอาออกไปเลย)
+function _rtPendingBySlip() {
+  var out = {};
+  LOANS.filter(function(l) { return l.status === 'pending'; }).forEach(function(l) {
+    var row = { src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', borrower: l.borrower || '',
+      approver: l.approver || '', jobNo: l.jobNo || '', start: l.start, end: l.end };
+    var k = _rtSlipKey(row);
+    (out[k] = out[k] || []).push(row);
+  });
+  return out;
+}
 function renderReturnTabBySlip(all) {
   var el = document.getElementById('tab-return'), today = _td();
   var groups = {}, order = [];
   all.forEach(function(l) {
     var k = _rtSlipKey(l);
-    if (!groups[k]) { groups[k] = { key: k, list: [], jobNo: String(l.jobNo || '').trim(), who: '', worst: 0, end: l.end }; order.push(k); }
+    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', worst: 0, end: l.end }; order.push(k); }
     var g = groups[k];
     g.list.push(l);
     if (!g.who && String(l.borrower || '').trim()) g.who = l.borrower.trim();
     if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
     if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
   });
+  // แปะรายการ "รอ" เข้าใบเดิมถ้ามีอยู่แล้ว หรือเปิดกล่องใหม่ถ้าทั้งใบมีแต่ของที่ชนคิวล้วนๆ (ยังไม่มีชิ้นไหนว่างเลย)
+  var pendingBySlip = _rtPendingBySlip(), pendingOnlyKeys = {};
+  Object.keys(pendingBySlip).forEach(function(k) {
+    if (!groups[k]) {
+      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end };
+      order.push(k);
+      pendingOnlyKeys[k] = true;
+    }
+    groups[k].pending = pendingBySlip[k];
+  });
+  var totalPending = 0; Object.keys(pendingBySlip).forEach(function(k) { totalPending += pendingBySlip[k].length; });
   // ค้างนานสุดขึ้นก่อน แล้วค่อยเรียงตามกำหนดคืนที่ใกล้ที่สุด
   order.sort(function(a, b) { return groups[b].worst - groups[a].worst || groups[a].end.localeCompare(groups[b].end); });
 
   var h = _rtViewToggle(order.length);
   var late = order.filter(function(k) { return groups[k].worst > 0; }).length;
   h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
-    (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') + '</div>';
+    (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') +
+    (totalPending ? ' · ⏳ รอ (ชนคิว) ' + totalPending + ' เครื่อง' : '') + '</div>';
   if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">🎉 ไม่มีเครื่องค้างอยู่</div>');
 
   order.forEach(function(k) {
@@ -1405,20 +1450,57 @@ function renderReturnTabBySlip(all) {
     var guess = k.charAt(0) !== 'J';
     h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
       (guess && g.list.length > 1 ? ' <span class="rt-guess" title="ไม่มีเลขใบจอง จึงเดาจากผู้ยืมและช่วงวันที่ตรงกัน อาจไม่ใช่ใบเดียวกันจริง">เดากลุ่ม</span>' : '') +
-      '<div class="rt-slip-sub">' + esc(g.who || 'ไม่ระบุผู้ยืม') + ' · ' + g.list.length + ' เครื่อง · กำหนดคืน ' + _scD(g.end) +
+      '<div class="rt-slip-sub">' + esc(g.who || 'ไม่ระบุผู้ยืม') + ' · ' + (g.list.length + g.pending.length) + ' เครื่อง' +
+      (g.list.length ? ' · กำหนดคืน ' + _scD(g.end) : '') +
       (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
     if (canDo) {
       h += '<div class="rt-slip-act">' +
         '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(k) + '\')">✅ คืนทั้งใบ (' + canDo + ')</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="openSlipExtendM(\'' + _scEsq(k) + '\')" title="เลื่อนกำหนดคืนทั้งใบ">⏩ เลื่อนทั้งใบ</button></div>';
+        '<button class="btn btn-ghost btn-sm" onclick="openSlipExtendM(\'' + _scEsq(k) + '\')" title="เลื่อนกำหนดคืนทั้งใบ">⏩ เลื่อนทั้งใบ</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="openSlipTransferM(\'' + _scEsq(k) + '\')" title="โอนผู้ยืมทั้งใบ">🔄 โอนทั้งใบ</button></div>';
     }
     h += '</div>';
     h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
       .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l); }).join('');
+    if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
     h += '</div>';
   });
   el.innerHTML = h;
+}
+// แถวของที่ "อยากได้แต่ชนคิว" — บอกติดอะไรอยู่ ให้เช็คซ้ำได้ (บางทีของว่างแล้วโดยไม่รู้ตัว เช่นอีกใบคืนไปแล้ว)
+// หรือตัดออกจากใบเลยถ้ายืมไม่ได้จริงๆ (เช่นเปลี่ยนไปยืมรุ่นอื่นแทนแล้ว)
+function _rtPendingRowsHtml(rows) {
+  var h = '<div class="rt-pending-sec"><div class="rt-pending-hd">⏳ รอ (ชนคิว) ' + rows.length + ' เครื่อง</div>';
+  h += rows.map(function(l) {
+    var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+    var conflict = _lfConflict(l.unitId, l.start, l.end, l.id);
+    var why = conflict
+      ? (conflict.quarantine ? '🕐 รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
+      : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
+    return '<div class="rt-pending-row"><div><b>' + esc(u.model || u.name || l.model || '-') +
+      (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</b>' +
+      '<div class="hint" style="margin:2px 0 0">' + why + '</div></div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0">' +
+      '<button class="btn btn-ghost btn-sm" onclick="retryPendingLoan(\'' + esc(l.id) + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="removePendingLoan(\'' + esc(l.id) + '\')" title="ตัดออกจากใบ">✕</button></div></div>';
+  }).join('');
+  return h + '</div>';
+}
+function retryPendingLoan(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var conflict = _lfConflict(l.unitId, l.start, l.end, loanId);
+  if (conflict) { toastMock('⏳ ยังชนอยู่ — ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)), true); return; }
+  db.collection('publicDemoLoans').doc(loanId).update({
+    status: 'active',
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('created', _lastEditor(), 'เช็คว่างอีกครั้งแล้วว่างจริง — จองให้'))
+  }).then(function() { toastMock('✅ ว่างแล้ว — จองให้เรียบร้อย'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+function removePendingLoan(loanId) {
+  if (!confirm('ตัดเครื่องนี้ออกจากใบจอง? (ยืมไม่ได้จริง จะเอาออก ไม่ใช่แค่ซ่อนไว้)')) return;
+  db.collection('publicDemoLoans').doc(loanId).delete()
+    .then(function() { toastMock('✕ ตัดออกจากใบแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 function renderReturnTab() {
@@ -1577,15 +1659,29 @@ function _rtSlipRows(key) {
     return l.src === 'staff' || !(PENDING_EDITS[l.unitId] || {}).loanAction;
   });
 }
-function _rtSlipHead(key, rows) {
+// key เฉพาะแถวหนึ่งในใบ — คนละอันกับ _rtSlipKey (นั่นคือ key ของทั้งใบ) ใช้ผูกกับ checkbox ให้เลือก
+// ทำทีละบางเครื่องได้ (คืนบางส่วน/เลื่อนบางเครื่อง/โอนบางเครื่อง) ไม่ใช่ทั้งใบเสมอไปเหมือนเดิม
+function _rtRowKey(l) { return l.src + ':' + (l.id || l.unitId); }
+function _rtSelectedRows(rows) {
+  var checked = {};
+  document.querySelectorAll('.rt-row-chk:checked').forEach(function(c) { checked[c.value] = 1; });
+  return rows.filter(function(l) { return checked[_rtRowKey(l)]; });
+}
+// checkable = false ใช้ตอนแค่โชว์สรุป ไม่ต้องเลือก (ตอนนี้ไม่มีจุดเรียกแบบนั้นแล้ว แต่เผื่อไว้)
+function _rtSlipHead(key, rows, checkable) {
+  if (checkable === undefined) checkable = true;
   var j = key.charAt(0) === 'J' ? key.slice(2) : '';
   var nApp = rows.filter(function(l) { return l.src === 'app'; }).length;
   var h = '<div class="sm-sec">' + (j ? '📄 ใบจอง ' + esc(j) : '📄 ชุดนี้ไม่มีเลขใบจอง') + ' · ' + rows.length + ' เครื่อง</div>';
+  if (checkable && rows.length > 1) h += '<div class="hint" style="margin-bottom:4px">ติ๊กออกได้ถ้าจะทำแค่บางเครื่อง — ที่เหลือจะยังค้างอยู่ในใบเดิมให้ทำทีหลัง</div>';
   h += '<ul class="rt-slip-list">' + rows.map(function(l) {
     var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
-    return '<li>' + esc(u.model || u.name || l.model || '-') +
+    var k = _rtRowKey(l);
+    return '<li>' + (checkable ? '<label class="rt-row-pick"><input type="checkbox" class="rt-row-chk" value="' + esc(k) + '" checked>' : '<span>') +
+      esc(u.model || u.name || l.model || '-') +
       (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
-      (l.src === 'app' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') + '</li>';
+      (l.src === 'app' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') +
+      (checkable ? '</label>' : '</span>') + '</li>';
   }).join('') + '</ul>';
   if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอแอปหลักกด “รับเข้า”</div>';
   // กลุ่มที่ไม่มีเลขใบจองคือการเดา ไม่ใช่ใบจริง — เตือนก่อนกดทีเดียวหลายเครื่อง
@@ -1600,32 +1696,40 @@ function openSlipReturnM(key) {
   if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
   var h = _rtSlipHead(key, rows);
   h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="sr_date" value="' + _td() + '"></div>';
+  h += '<div class="field"><label>🕐 เผื่อเวลาคลังรับเข้า (วัน)</label><input type="number" id="sr_buffer" min="0" value="' + DEMO_RETURN_BUFFER_DEFAULT + '">' +
+    '<div class="hint">ของจะยังนับว่า "ไม่ว่าง" ต่อไปอีกกี่วันหลังคืน กว่าคลังจะเช็ค/คีย์เข้าระบบครบ — คืนทีละไม่กี่ชิ้นเผื่อ 1-2 วันพอ ถ้าคืนพร้อมกันเยอะๆ (เช่นหลังงาน Showcase) ปรับเป็น 5-7 วันได้</div></div>';
   h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="sr_by" list="srKeyerList" autocomplete="off" value="' +
     esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('srKeyerList') + '</div>';
-  h += '<button class="btn btn-primary btn-full" onclick="saveSlipReturn(\'' + _scEsq(key) + '\')">✅ รับคืนทั้งใบ ' + rows.length + ' เครื่อง</button>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipReturn(\'' + _scEsq(key) + '\')">✅ รับคืนตามที่เลือก</button>';
   openSm('รับคืนทั้งใบ', h);
 }
 function saveSlipReturn(key) {
   var rows = _rtSlipRows(key);
   if (!rows.length) return;
+  var sel = _rtSelectedRows(rows);
+  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะคืนเลย'); return; }
   var date = (document.getElementById('sr_date').value || '').trim();
+  var bufferDays = Math.max(0, parseInt(document.getElementById('sr_buffer').value, 10) || 0);
   var by = (document.getElementById('sr_by').value || '').trim();
   if (!date) { alert('เลือกวันที่รับคืนจริงก่อนนะครับ'); return; }
   if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องก่อนนะครับ'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var availableFrom = _scAddDaysIso(date, bufferDays);
+  var note = 'รับคืนเข้าคลัง ' + _scD(date) + (bufferDays ? ' · เผื่อรับเข้าระบบถึง ' + _scD(availableFrom) : '') +
+    (sel.length < rows.length ? ' · คืน ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · คืนทั้งใบ ' + rows.length + ' เครื่อง');
   var batch = db.batch(), nDirect = 0, nReq = 0;
-  rows.forEach(function(l) {
+  sel.forEach(function(l) {
     if (l.src === 'staff') {
       batch.update(db.collection('publicDemoLoans').doc(l.id), {
-        status: 'returned', actualReturnDate: date,
-        events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', by, 'รับคืนเข้าคลัง ' + _scD(date) + ' · คืนทั้งใบ ' + rows.length + ' เครื่อง'))
+        status: 'returned', actualReturnDate: date, availableFrom: availableFrom,
+        events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', by, note))
       });
       nDirect++;
     } else {
       var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
       batch.set(db.collection('publicDemoEdits').doc(l.unitId), {
         unitId: l.unitId, editedBy: by,
-        loanAction: { type: 'return', by: by, date: date, reason: 'คืนทั้งใบ ' + rows.length + ' เครื่อง', at: new Date().toISOString() },
+        loanAction: { type: 'return', by: by, date: date, bufferDays: bufferDays, reason: note, at: new Date().toISOString() },
         editedAt: firebase.firestore.FieldValue.serverTimestamp(),
         unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
       }, { merge: true });
@@ -1634,7 +1738,9 @@ function saveSlipReturn(key) {
   });
   batch.commit().then(function() {
     closeSm();
-    toastMock('✅ ' + (nDirect ? 'รับคืน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : ''));
+    var left = rows.length - sel.length;
+    toastMock('✅ ' + (nDirect ? 'รับคืน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : '') +
+      (left ? ' · เหลืออีก ' + left + ' เครื่องยังไม่คืน' : ''));
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 function openSlipExtendM(key) {
@@ -1642,39 +1748,68 @@ function openSlipExtendM(key) {
   if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
   var maxEnd = rows.map(function(l) { return l.end; }).sort().pop();
   var h = _rtSlipHead(key, rows);
-  h += '<div class="hint">กำหนดคืนในใบนี้ตอนนี้ช้าสุดคือ ' + _scD(maxEnd) + ' — เลื่อนแล้วทุกเครื่องในใบจะใช้วันใหม่วันเดียวกัน</div>';
-  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="se_end" value="' + maxEnd + '"></div>';
+  h += '<div class="hint">กำหนดคืนในใบนี้ตอนนี้ช้าสุดคือ ' + _scD(maxEnd) + ' — เลื่อนแล้วทุกเครื่องที่เลือกจะใช้วันใหม่วันเดียวกัน</div>';
+  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="se_end" value="' + maxEnd + '" onchange="seRecalcConflicts(\'' + _scEsq(key) + '\')"></div>';
+  h += '<div id="seConflictBox"></div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="se_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์"></div>';
   h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="se_by" list="seKeyerList" autocomplete="off" value="' +
     esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('seKeyerList') + '</div>';
-  h += '<button class="btn btn-primary btn-full" onclick="saveSlipExtend(\'' + _scEsq(key) + '\')">⏩ เลื่อนทั้งใบ ' + rows.length + ' เครื่อง</button>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipExtend(\'' + _scEsq(key) + '\')">⏩ เลื่อนตามที่เลือก</button>';
   openSm('เลื่อนกำหนดคืนทั้งใบ', h);
+  seRecalcConflicts(key);
+}
+// เดิมเลื่อนแล้วไม่เช็คเลยว่าช่วงที่ต่อเพิ่มมาจะไปชนกับใบจองล่วงหน้าของคนอื่นไหม — เช็คเฉพาะ "ช่วงที่ต่อเพิ่ม"
+// (วันถัดจากกำหนดเดิม ถึงกำหนดใหม่) เพราะช่วงเดิมถึงกำหนดเก่าเป็นของแถวนี้อยู่แล้วไม่มีทางชนตัวเอง —
+// เจอแล้วไม่บล็อก แค่เตือนให้เห็นว่าติดใคร ตัดสินใจเองว่าจะคุยกับอีกฝ่ายก่อนหรือจะฝืนต่อเลย
+function seRecalcConflicts(key) {
+  var box = document.getElementById('seConflictBox');
+  if (!box) return;
+  var rows = _rtSlipRows(key);
+  var sel = _rtSelectedRows(rows);
+  var end = (document.getElementById('se_end') || {}).value || '';
+  if (!end || !sel.length) { box.innerHTML = ''; return; }
+  var conflicts = [];
+  sel.forEach(function(l) {
+    if (end <= l.end) return;   // ไม่ได้ยืดเลยจุดเดิม ไม่มีช่วงใหม่ให้เช็ค
+    var from = _scAddDaysIso(l.end, 1);
+    var hit = _lfConflict(l.unitId, from, end, l.id);
+    if (hit) {
+      var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+      conflicts.push((u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e)));
+    }
+  });
+  box.innerHTML = conflicts.length
+    ? '<div class="lf-warn">⚠️ เลื่อนถึงวันนี้แล้วจะชน ' + conflicts.length + ' เครื่อง:<br>' + conflicts.map(esc).join('<br>') + '<br>ยังกดเลื่อนได้ แต่ควรคุยกับอีกฝ่ายก่อน</div>'
+    : '';
 }
 function saveSlipExtend(key) {
   var rows = _rtSlipRows(key);
   if (!rows.length) return;
+  var sel = _rtSelectedRows(rows);
+  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะเลื่อนเลย'); return; }
   var end = (document.getElementById('se_end').value || '').trim();
   var why = (document.getElementById('se_why').value || '').trim();
   var by = (document.getElementById('se_by').value || '').trim();
   if (!end) { alert('เลือกกำหนดคืนใหม่ก่อนนะครับ'); return; }
   if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
   if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องก่อนนะครับ'); return; }
-  var early = rows.filter(function(l) { return end < l.start; });
-  if (early.length) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืมของ ' + early.length + ' เครื่องในใบนี้'); return; }
+  var early = sel.filter(function(l) { return end < l.start; });
+  if (early.length) { alert('กำหนดคืนใหม่อยู่ก่อนวันเริ่มยืมของ ' + early.length + ' เครื่องที่เลือก'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var suffix = sel.length < rows.length ? ' · เลื่อน ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · เลื่อนทั้งใบ';
   var batch = db.batch(), nDirect = 0, nReq = 0;
-  rows.forEach(function(l) {
+  sel.forEach(function(l) {
     if (l.src === 'staff') {
       batch.update(db.collection('publicDemoLoans').doc(l.id), {
         end: end,
-        events: firebase.firestore.FieldValue.arrayUnion(_scEv('extended', by, 'จาก ' + (l.end || '—') + ' → ' + end + ' · ' + why + ' · เลื่อนทั้งใบ'))
+        events: firebase.firestore.FieldValue.arrayUnion(_scEv('extended', by, 'จาก ' + (l.end || '—') + ' → ' + end + ' · ' + why + suffix))
       });
       nDirect++;
     } else {
       var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
       batch.set(db.collection('publicDemoEdits').doc(l.unitId), {
         unitId: l.unitId, editedBy: by,
-        loanAction: { type: 'extend', by: by, newEnd: end, reason: why + ' · เลื่อนทั้งใบ', at: new Date().toISOString() },
+        loanAction: { type: 'extend', by: by, newEnd: end, reason: why + suffix, at: new Date().toISOString() },
         editedAt: firebase.firestore.FieldValue.serverTimestamp(),
         unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
       }, { merge: true });
@@ -1687,6 +1822,50 @@ function saveSlipExtend(key) {
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
+// ---- โอนทั้งใบ — เปลี่ยนผู้ยืม/ผู้คีย์ให้หลายเครื่องพร้อมกัน (เฉพาะที่คีย์จากหน้านี้เอง) ----
+// เครื่องที่คีย์มาจากแอปหลักโอนจากตรงนี้ไม่ได้ (หน้านี้ไม่มีสิทธิ์แก้ตัวจริง และยังไม่มี loanAction แบบ
+// 'transfer' ที่แอปหลักรู้จักจะให้ไปคิว) เลยไม่เสนอ checkbox ให้เลือกเครื่องเหล่านั้น บอกตรงๆ ว่าไปโอนที่แอปหลัก
+function openSlipTransferM(key) {
+  var rows = _rtSlipRows(key);
+  var staffRows = rows.filter(function(l) { return l.src === 'staff'; });
+  var appCount = rows.length - staffRows.length;
+  if (!staffRows.length) { alert('ใบนี้คีย์มาจากแอปหลักทั้งหมด — โอนผู้ยืมได้จากแอปหลักเท่านั้น'); return; }
+  var h = _rtSlipHead(key, staffRows);
+  if (appCount) h += '<div class="hint">อีก ' + appCount + ' เครื่องในใบนี้คีย์จากแอปหลัก — โอนจากหน้านี้ไม่ได้ ต้องไปโอนที่แอปหลัก</div>';
+  h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="stf_borrower" list="stfBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม">' + scBorrowerDatalist('stfBorrowerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="stf_keyer" list="stfKeyerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' + scKeyerDatalist('stfKeyerList') + '</div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="stf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก"></div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="stf_by" list="stfKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipTransfer(\'' + _scEsq(key) + '\')">🔄 โอนตามที่เลือก</button>';
+  openSm('🔄 โอนผู้ยืมทั้งใบ', h);
+}
+function saveSlipTransfer(key) {
+  var rows = _rtSlipRows(key).filter(function(l) { return l.src === 'staff'; });
+  var sel = _rtSelectedRows(rows);
+  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะโอนเลย'); return; }
+  var nb = (document.getElementById('stf_borrower').value || '').trim();
+  var nk = (document.getElementById('stf_keyer').value || '').trim();
+  var why = (document.getElementById('stf_why').value || '').trim();
+  var by = (document.getElementById('stf_by').value || '').trim();
+  if (!nb && !nk) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
+  if (!why) { alert('ใส่เหตุผลด้วยนะครับ'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var suffix = sel.length < rows.length ? ' · โอน ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · โอนทั้งใบ';
+  var batch = db.batch();
+  sel.forEach(function(l) {
+    var upd = {}, evs = [];
+    if (nb) { upd.borrower = nb; evs.push(_scEv('borrower', by, 'จาก ' + (l.borrower || '—') + ' → ' + nb + ' · ' + why + suffix)); }
+    if (nk) { upd.approver = nk; evs.push(_scEv('keyer', by, 'จาก ' + (l.approver || '—') + ' → ' + nk + ' · ' + why + suffix)); }
+    upd.events = firebase.firestore.FieldValue.arrayUnion.apply(firebase.firestore.FieldValue, evs);
+    batch.update(db.collection('publicDemoLoans').doc(l.id), upd);
+  });
+  batch.commit().then(function() {
+    closeSm();
+    toastMock('🔄 โอนแล้ว ' + sel.length + ' เครื่อง');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 function cancelLoanAction(unitId) {
   if (!confirm('ยกเลิกคำขอนี้?')) return;
   db.collection('publicDemoEdits').doc(unitId).update({
@@ -1695,11 +1874,18 @@ function cancelLoanAction(unitId) {
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
+// เผื่อเวลาที่คลังต้องใช้เช็ค/รับของเข้าระบบก่อนของจะพร้อมให้ยืมต่อจริง — ปุ่มเดียวกดปุ๊บนี้ใช้กับของ
+// ทั่วไปเป็นหลัก จึงเผื่อไว้แค่ 1 วันเป็นค่าเริ่มต้น (ของชิ้นเดียว คลังเช็คไวกว่าเข้าทีเดียวเป็นสิบชิ้น)
+// กรณีคืนทีเดียวหลายเครื่อง (เช่นหลังงาน Showcase) ใช้ "คืนทั้งใบ" แทน ตรงนั้นให้ปรับจำนวนวันเองได้
+var DEMO_RETURN_BUFFER_DEFAULT = 1;
 function markLoanReturned(loanId) {
+  var availableFrom = _scAddDaysIso(_td(), DEMO_RETURN_BUFFER_DEFAULT);
   db.collection('publicDemoLoans').doc(loanId).update({
-    status: 'returned', actualReturnDate: _td(),
-    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', _lastEditor(), 'รับคืนเข้าคลัง ' + _scD(_td())))
-  }).then(function() { toastMock('✅ รับคืนแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+    status: 'returned', actualReturnDate: _td(), availableFrom: availableFrom,
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', _lastEditor(),
+      'รับคืนเข้าคลัง ' + _scD(_td()) + ' · เผื่อรับเข้าระบบถึง ' + _scD(availableFrom)))
+  }).then(function() { toastMock('✅ รับคืนแล้ว — ว่างให้ยืมอีกครั้ง ' + _scD(availableFrom)); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 // ================================================================
@@ -2555,6 +2741,21 @@ function lendAllFreeOn(iso) {
     return !bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); });
   });
 }
+// ตัวเดียวกันนี้ใช้ทั้งโชว์สถานะรายชิ้นตอนเลือก (ก่อนกดบันทึก) และตอนบันทึกจริงเพื่อตัดสินว่าจองได้ทันที
+// หรือต้องพักเป็น "รอ" — คืนตัวชนอันแรกที่เจอ (พอสำหรับโชว์ให้รู้ว่าติดใคร ไม่ต้องเจอทุกอัน)
+function _lfConflict(unitId, start, end, exceptLoanId) {
+  var bks = scBookings();
+  var it = start;
+  while (it <= end) {
+    var cur = _scFromIso(it);
+    var hit = bks.filter(function(b) {
+      return b.unitId === unitId && (!exceptLoanId || b.loanId !== exceptLoanId) && scBusyOn(b, cur);
+    })[0];
+    if (hit) return hit;
+    it = _scIso(_scAdd(_scFromIso(it), 1));
+  }
+  return null;
+}
 function lendSetDays(d) {
   lendDays = Math.max(1, d);
   if (lendStart) lendEnd = _scIso(_scAdd(_scFromIso(lendStart), lendDays - 1));
@@ -2582,9 +2783,19 @@ function renderLendFlow() {
   // ---- เครื่องที่เลือกไว้ (เอาออกได้ตรงนี้) ----
   h += '<div class="card" style="margin-bottom:14px"><div style="font-weight:700;margin-bottom:8px">' +
     'จะคีย์ยืม ' + list.length + ' เครื่อง</div><div class="lf-chips">';
+  // เดิมเห็นแค่ชื่อเครื่อง มองไม่ออกว่าชิ้นไหนว่าง/ไม่ว่างจนกว่าจะกดบันทึก — พอเลือกวันครบสองช่องแล้ว
+  // (lendStart/lendEnd) เช็คทีละชิ้นเลยว่าตลอดทั้งช่วงว่างไหม ไม่ว่างก็บอกไปด้วยว่าติดใคร ถึงวันไหน
+  // จะได้ตัดสินใจสลับเครื่อง/ตัดออกได้ทันทีโดยไม่ต้องรอไปเจอตอนบันทึก
+  var haveRange = lendStart && lendEnd;
   list.forEach(function(u) {
     var p = _scModelParts(u);
-    h += '<span class="lb-chip">' + esc(p.main) + ' · <b>' + esc(u.rentalDbNo || '—') + '</b>' +
+    var conflict = haveRange ? _lfConflict(u.id, lendStart, lendEnd) : null;
+    var confTxt = conflict && conflict.quarantine ? '🕐 รอรับเข้าคลัง ถึง ' + _scFmt(conflict.e)
+      : conflict ? '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') : '';
+    h += '<span class="lb-chip' + (conflict ? ' lb-chip-warn' : '') + '">' + esc(p.main) + ' · <b>' + esc(u.rentalDbNo || '—') + '</b>' +
+      (haveRange ? (conflict
+        ? '<span class="lf-chip-status warn" title="' + confTxt + '">' + confTxt + '</span>'
+        : '<span class="lf-chip-status ok">✅ ว่าง</span>') : '') +
       (list.length > 1 ? '<span class="x" title="เอาออก" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕</span>' : '') +
       '</span>';
   });
@@ -2650,7 +2861,7 @@ function renderLendFlow() {
       var hit = bksO.filter(function(b) { return b.unitId === u.id && scBusyOn(b, curO); })[0];
       var p = _scModelParts(u);
       h += '<div class="lf-drow"><span>' + esc(p.main) + ' · ' + esc(u.rentalDbNo || '—') + '</span>' +
-        (hit ? '<span class="pill pill-warn">📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e) + '</span>' +
+        (hit ? '<span class="pill pill-warn">' + (hit.quarantine ? '🕐 รอรับเข้าคลัง · ถึง ' + _scFmt(hit.e) : '📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e)) + '</span>' +
                (list.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕ เอาออก</button>' : '')
              : '<span class="pill pill-good">✅ ว่าง</span>') + '</div>';
     });
@@ -2677,11 +2888,14 @@ function renderLendFlow() {
   h += '<div class="field"><label>🎯 วัตถุประสงค์</label><input type="text" id="lfPurpose" placeholder="เช่น สาธิตลูกค้า"></div>';
   h += '</div>';
   if (lendStart && lendEnd) {
-    var bad = [];
-    var it = lendStart;
-    while (it <= lendEnd) { if (!lendAllFreeOn(it)) bad.push(it); it = _scIso(_scAdd(_scFromIso(it), 1)); }
-    if (bad.length) h += '<div class="lf-warn">⚠️ ช่วงที่เลือกมี ' + bad.length + ' วันที่บางเครื่องไม่ว่าง (' + _scD(bad[0]) + ')' +
-      ' — บันทึกได้แต่จะทับกับใบเดิม</div>';
+    // เดิมเตือนแบบกว้างๆ ว่า "มีบางวันไม่ว่าง" แล้วให้กด "ยืนยันบันทึกทับ" ทีเดียวทั้งก้อน — พอกดจริง
+    // เครื่องที่ว่างจริงๆ ก็ถูกลากไปทับข้อมูลเดิมของเครื่องอื่นด้วยเงียบๆ ตอนนี้แยกให้ชัดว่าชิ้นไหนจะโดนอะไร:
+    // ชิ้นที่ว่างตลอดช่วง → บันทึกเป็นยืมจริงทันที ชิ้นที่ชนคิว → บันทึกไว้เป็น "รอ" ในใบเดียวกัน ไม่ทับใคร
+    // ไปแก้ทีหลังได้จากแท็บติดตามคืน (เช็คว่างอีกครั้ง หรือตัดออกจากใบ)
+    var busyUnits = list.filter(function(u) { return _lfConflict(u.id, lendStart, lendEnd); });
+    if (busyUnits.length) h += '<div class="lf-warn">⏳ ' + busyUnits.length + ' จาก ' + list.length +
+      ' เครื่องชนกับใบจองอื่นในช่วงนี้ — เครื่องที่ว่างจะถูกจองให้ทันที ส่วนที่ชนจะถูกเก็บไว้เป็น "รอ" ในใบเดียวกัน ' +
+      'ไปเช็คว่างอีกครั้งหรือตัดออกได้ทีหลังจากแท็บ 🔔 ติดตามคืน</div>';
   }
   h += '<button class="btn btn-primary" onclick="saveLendBatch()">💾 บันทึกยืม ' + list.length + ' เครื่อง</button>';
   h += '</div>';
@@ -2703,36 +2917,35 @@ function saveLendBatch() {
   if (end < start) { alert('กำหนดคืนอยู่ก่อนวันที่ยืม'); return; }
   if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
   if (!by) { alert('กรอกผู้คีย์เบิกก่อนนะครับ'); return; }
-  var busy = list.filter(function(u) {
-    var bks = scBookings();
-    var it = start, hit = false;
-    while (it <= end && !hit) {
-      var cur = _scFromIso(it);
-      if (bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); })) hit = true;
-      it = _scIso(_scAdd(_scFromIso(it), 1));
-    }
-    return hit;
-  });
-  if (busy.length && !confirm('มี ' + busy.length + ' เครื่องที่ช่วงนี้ไม่ว่างจริง\n\n' +
-      busy.map(function(u) { return '· ' + (u.model || u.name) + ' เช่า ' + (u.rentalDbNo || '—'); }).join('\n') +
-      '\n\nยืนยันจะบันทึกทับต่อไหม?')) return;
+  // เดิมเจอเครื่องชนคิวแล้วถามครั้งเดียวว่า "ยืนยันบันทึกทับ" ทั้งก้อน — กดตกลงแล้วเครื่องที่ว่างจริงๆ
+  // ก็ถูกลากไปทับข้อมูลเดิมของเครื่องอื่นด้วยเงียบๆ (ทั้งที่ตัวมันเองไม่ได้ชนอะไรเลย) เปลี่ยนมาแยกชัดเจน:
+  // เครื่องที่ว่างตลอดช่วง → บันทึกเป็น 'active' (จองจริงทันที กันคนอื่นแย่งได้แล้ว) เครื่องที่ชนคิว →
+  // บันทึกเป็น 'pending' ในใบเดียวกัน (ไม่ทับใคร ไม่นับว่าไม่ว่างด้วย) ไปเช็คว่างอีกครั้งหรือตัดออกทีหลังได้
+  // จากแท็บ 🔔 ติดตามคืน — ไม่ต้องถามยืนยันอะไรเลย เพราะไม่มีทางไปทับของใครแล้ว
+  var busy = list.filter(function(u) { return _lfConflict(u.id, start, end); });
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
 
   // เขียนทีเดียวเป็น batch — ถ้าพลาดกลางทางจะไม่เหลือใบครึ่งๆ กลางๆ ให้ตามเก็บ
   var batch = db.batch();
   list.forEach(function(u) {
+    var conflict = _lfConflict(u.id, start, end);
+    var status = conflict ? 'pending' : 'active';
+    var note = company + ' · ' + _scD(start) + ' → ' + _scD(end) +
+      (jobNo ? ' · ใบจอง ' + jobNo : '') + (list.length > 1 ? ' · คีย์พร้อมกัน ' + list.length + ' เครื่อง' : '') +
+      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '');
     var ref = db.collection('publicDemoLoans').doc();
     batch.set(ref, {
       unitId: u.id, model: u.model || u.name || '', label: 'เครื่อง',
       borrower: company, purpose: purpose, start: start, end: end, actualReturnDate: '',
-      approver: by, jobNo: jobNo, status: 'active',
+      approver: by, jobNo: jobNo, status: status,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      events: [_scEv('created', by, company + ' · ' + _scD(start) + ' → ' + _scD(end) +
-        (jobNo ? ' · ใบจอง ' + jobNo : '') + (list.length > 1 ? ' · คีย์พร้อมกัน ' + list.length + ' เครื่อง' : ''))]
+      events: [_scEv(conflict ? 'pending' : 'created', by, note)]
     });
   });
   batch.commit().then(function() {
-    toastMock('💾 บันทึกยืมแล้ว ' + list.length + ' เครื่อง');
+    toastMock(busy.length
+      ? '💾 จองแล้ว ' + (list.length - busy.length) + ' เครื่อง · ค้างไว้รอ (ชนคิว) ' + busy.length + ' เครื่อง — ไปแก้ที่แท็บติดตามคืนได้'
+      : '💾 บันทึกยืมแล้ว ' + list.length + ' เครื่อง');
     lendPicked = [];
     closeLendFlow();
     staffTab('return');
@@ -2748,15 +2961,20 @@ function saveManualLoan(unitId) {
   if (!start || !end) { alert('เลือกวันที่ก่อนนะครับ'); return; }
   if (!company) { alert('กรอกชื่อบริษัท/ผู้ยืมก่อนนะครับ'); return; }
   if (!requester) { alert('กรอกผู้คีย์เบิกก่อนนะครับ'); return; }
-  if (unitIsBusyOn(unitId, start)) { if (!confirm('ช่วงนี้เครื่องนี้อาจไม่ว่างจริง ยืนยันจะบันทึกต่อไหม?')) return; }
   var jobNo = (document.getElementById('mlJob').value || '').trim();
+  // ชนคิว → บันทึกเป็น 'pending' แทนที่จะถามยืนยันแล้วบันทึกทับ (เหตุผลเดียวกับ saveLendBatch)
+  var conflict = _lfConflict(unitId, start, end);
   try { localStorage.setItem('demoStaffEditor', requester); } catch (e) {}
   db.collection('publicDemoLoans').add({
     unitId: unitId, model: u.model, label: 'เครื่อง', borrower: company, purpose: purpose,
     start: start, end: end, actualReturnDate: '', approver: requester, jobNo: jobNo,
-    status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    events: [_scEv('created', requester, company + ' · ' + start + ' → ' + end + (jobNo ? ' · ใบจอง ' + jobNo : ''))]
-  }).then(function() { toastMock('💾 บันทึกยืมแล้ว'); closeUnitDetail(); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+    status: conflict ? 'pending' : 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    events: [_scEv(conflict ? 'pending' : 'created', requester, company + ' · ' + start + ' → ' + end + (jobNo ? ' · ใบจอง ' + jobNo : '') +
+      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : ''))]
+  }).then(function() {
+    toastMock(conflict ? '⏳ ช่วงนี้ชนคิว — บันทึกไว้เป็น "รอ" ไปแก้ที่แท็บติดตามคืนได้' : '💾 บันทึกยืมแล้ว');
+    closeUnitDetail();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 // ================================================================
@@ -2848,7 +3066,7 @@ function scMatch(u, bks) {
 }
 function scNextFree(unitId, bks, r) {
   var today = _scDay(new Date());
-  var mine = bks.filter(function(b) { return b.unitId === unitId && b.status !== 'returned' && b.e >= today; });
+  var mine = bks.filter(function(b) { return b.unitId === unitId && b.status !== 'pending' && b.e >= today; });
   if (!mine.length) return null;
   var last = mine.reduce(function(a, b) { return b.e > a.e ? b : a; });
   var nf = _scAdd(last.e, 1);
@@ -2860,14 +3078,21 @@ function _scDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
 function _scFromIso(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? new Date(+p[0], +p[1]-1, +p[2]) : null; }
 function _scIso(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 function _scAdd(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function _scAddDaysIso(iso, n) { var d = _scFromIso(iso); return d ? _scIso(_scAdd(d, n)) : iso; }
 function _scFmt(d) { return d.getDate() + ' ' + SC_MONTHS[d.getMonth()]; }
 function _scOverlap(b, from, to) { return b.s <= to && from <= b.e; }
 // ใบที่เลยกำหนดคืนแล้วยังไม่ปิด = ของยังไม่กลับมา จึงยังไม่ว่างต่อไปเรื่อยๆ ไม่ใช่ว่างตั้งแต่วันถัดจากกำหนด
 // ใช้เฉพาะตอนตัดสิน "ว่าง/ไม่ว่าง" — ไม่เอาไปยืดวันสิ้นสุดจริง เพราะแท่งไทม์ไลน์จะลากยาวจนพัง
 // (เคยเจอมาแล้วตอนข้อมูลวันที่เพี้ยน แถบเดียวลากข้ามทุกเดือน)
+// 'pending' (คีย์ไว้ตอนช่วงที่ขอชนกับใบอื่นพอดี ยังไม่ได้ของจริง — ดู saveLendBatch) ไม่นับว่าครอบครอง
+// เพราะยังไม่มีใครถือของจริงอยู่เลย — ต่างจาก 'returned' ที่ของกลับมาจริงแล้วแต่ยังนับไม่ว่างต่อได้อีกช่วง
+// หนึ่ง (b.e ที่ผ่านมาจาก scBookings() สำหรับ 'returned' คือ availableFrom ซึ่งรวมวันที่คลังต้องใช้รับเข้า
+// ระบบไว้แล้ว ไม่ใช่วันที่คืนจริงเฉยๆ) ของที่เพิ่งคืนจากงาน Showcase ใหญ่ๆ กว่าคลังจะเช็คครบทุกชิ้นทุกแบรนด์
+// เข้าระบบอาจกินเวลาเป็นอาทิตย์ ถ้าไม่กันช่วงนี้ไว้ คนจะกดยืมออกไปได้ทั้งที่ของจริงยังไม่เข้าคลัง
 function scBusyOn(b, cur) {
-  if (b.status === 'returned') return false;
+  if (b.status === 'pending') return false;
   if (cur < b.s) return false;
+  if (b.status === 'returned') return cur <= b.e;
   if (cur <= b.e) return true;
   return b.e < _scDay(new Date());
 }
@@ -2889,8 +3114,13 @@ function scBookings() {
       approver: o.approver || '', jobNo: job, loanId: o.loanId || '',
       status: o.status || 'active' });
   }
-  LOANS.forEach(function(l) { add({ unitId: l.unitId, start: l.start, end: l.actualReturnDate || l.end,
-    borrower: l.borrower, purpose: l.purpose, approver: l.approver, jobNo: l.jobNo, refNo: l.refNo, loanId: l._id, status: l.status }); });
+  LOANS.forEach(function(l) {
+    // คืนแล้วแต่ยังอยู่ในช่วงรอคลังรับเข้า (availableFrom) → ยังนับไม่ว่างต่อจนถึงวันนั้น ไม่ใช่วันคืนจริงเฉยๆ
+    var eff = (l.status === 'returned') ? (l.availableFrom || l.actualReturnDate || l.end) : l.end;
+    add({ unitId: l.unitId, start: l.start, end: eff,
+      borrower: l.borrower, purpose: l.purpose, approver: l.approver, jobNo: l.jobNo, refNo: l.refNo, loanId: l._id,
+      status: l.status, quarantine: l.status === 'returned' && !!l.availableFrom });
+  });
   UNITS.forEach(function(u) { (u.busyRanges || []).forEach(function(r) { add({ unitId: u.id, start: r.start, end: r.end,
     borrower: r.borrower, purpose: r.purpose, approver: r.approver, jobNo: r.jobNo, refNo: r.refNo }); }); });
   return out;
@@ -3224,15 +3454,20 @@ function _scDrillUnit(unitId) {
   if (!u) return '';
   var today = _scDay(new Date());
   var bs = scBookings().filter(function(b) { return b.unitId === unitId; }).sort(function(a, b) { return b.s - a.s; });
-  var cur = bs.filter(function(b) { return b.status !== 'returned' && b.e >= today && b.s <= today; })[0] ||
-            bs.filter(function(b) { return b.status !== 'returned' && b.e < today; })[0];
+  var cur = bs.filter(function(b) { return b.status !== 'pending' && b.e >= today && b.s <= today; })[0] ||
+            bs.filter(function(b) { return b.status === 'active' && b.e < today; })[0];
   var h = '<div class="dcal-drill"><div class="dcal-drill-hd"><div>' +
     '<b style="font-size:14px">' + esc(u.model || u.name || '-') + '</b><div style="margin-top:4px">' + _scIdChips(u) + '</div>' +
     '</div>' + scCloseBtn() + '</div>';
   h += '<div style="margin-bottom:9px">' + _scDocs(u) + '</div>';
   if (cur) {
     var left = Math.round((cur.e - today) / 86400000);
-    h += '<div class="dcal-kv"><div><span class="k">ผู้ยืม</span><b>' + esc(cur.borrower || '—') + '</b></div>' +
+    h += cur.quarantine
+      ? '<div class="dcal-kv"><div><span class="k">สถานะ</span><b style="color:#f59e0b">🕐 คืนแล้ว รอคลังรับเข้า</b></div>' +
+        '<div><span class="k">คืนล่าสุดโดย</span><b>' + esc(cur.borrower || '—') + '</b></div>' +
+        '<div><span class="k">จะว่างจริง</span><b style="color:' + (left < 0 ? 'inherit' : left <= 1 ? '#f59e0b' : 'inherit') + '">' +
+        (left <= 0 ? 'วันนี้' : 'อีก ' + left + ' วัน (' + _scFmt(cur.e) + ')') + '</b></div></div>'
+      : '<div class="dcal-kv"><div><span class="k">ผู้ยืม</span><b>' + esc(cur.borrower || '—') + '</b></div>' +
       (cur.approver ? '<div><span class="k">ผู้คีย์เบิก</span><b>' + esc(cur.approver) + '</b></div>' : '') +
       (cur.purpose ? '<div><span class="k">วัตถุประสงค์</span><b>' + esc(cur.purpose) + '</b></div>' : '') +
       '<div><span class="k">ช่วงยืม</span><b>' + _scFmt(cur.s) + ' – ' + _scFmt(cur.e) + '</b></div>' +
@@ -3423,10 +3658,14 @@ function _scDrillModel(m) {
     '</div>' + scCloseBtn() + '</div>';
   h += '<table class="dcal-tbl"><thead><tr><th>เครื่อง</th><th>เอกสาร</th><th>ผู้ยืม / คืน</th><th></th></tr></thead><tbody>';
   units.forEach(function(u) {
-    var cur = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'returned' && b.e >= today; })[0];
+    var cur = bks.filter(function(b) { return b.unitId === u.id && b.status !== 'pending' && b.e >= today; })[0];
     h += '<tr><td style="cursor:pointer" onclick="scToggleOpen(\'unit:' + u.id + '\')">' + _scIdChips(u) + '</td>' +
       '<td>' + _scDocs(u) + '</td>' +
-      '<td>' + (cur ? esc(cur.borrower || '—') + '<div style="font-size:10px;color:var(--text3)">คืน ' + _scFmt(cur.e) + '</div>' : '<span class="pill pill-good">✅ ว่าง</span>') + '</td>' +
+      '<td>' + (cur
+        ? (cur.quarantine
+            ? '<span style="color:#f59e0b">🕐 รอรับเข้าคลัง</span><div style="font-size:10px;color:var(--text3)">ถึง ' + _scFmt(cur.e) + '</div>'
+            : esc(cur.borrower || '—') + '<div style="font-size:10px;color:var(--text3)">คืน ' + _scFmt(cur.e) + '</div>')
+        : '<span class="pill pill-good">✅ ว่าง</span>') + '</td>' +
       '<td style="text-align:right">' + (cur ? scBookBtn(u.id, _scAdd(cur.e, 1), 'จองต่อ', true) : scBookBtn(u.id, today, '📤 คีย์ยืม')) + '</td></tr>';
   });
   return h + '</tbody></table>' + _scSrc() + '</div>';
