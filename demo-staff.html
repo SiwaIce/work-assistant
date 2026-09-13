@@ -387,6 +387,18 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .lf-nearest { font-size:12px; color:var(--text); background:var(--surface); border:1px solid var(--border);
   border-radius:8px; padding:9px 11px; margin-bottom:11px; line-height:1.6; display:flex; align-items:center;
   gap:8px; flex-wrap:wrap; }
+/* ตารางแก้ไขทีละหลายเครื่อง (bulk grid) — ช่องแคบๆ ให้พิมพ์/เลือกได้ในตารางเลย ไม่ต้องเปิดทีละเครื่อง */
+.bg-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:8px; max-height:56vh; overflow-y:auto; }
+.bg-tbl { border-collapse:collapse; font-size:11.5px; white-space:nowrap; }
+.bg-tbl th { position:sticky; top:0; background:var(--card); border-bottom:2px solid var(--border); padding:6px 7px; text-align:left; z-index:1; }
+.bg-tbl td { border-bottom:1px solid var(--border); padding:3px 5px; }
+.bg-tbl td.dirty { background:rgba(245,158,11,.14); }
+.bg-tbl input[type=text] { width:100px; font-size:11.5px; padding:3px 5px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); }
+.bg-tbl input[type=text].wide { width:150px; }
+.bg-tbl select { font-size:11.5px; padding:3px 4px; border:1px solid var(--border); border-radius:5px; background:var(--bg); color:var(--text); }
+.bg-tbl .bg-docs { display:flex; gap:6px; white-space:nowrap; }
+.bg-tbl .bg-docs label { display:flex; align-items:center; gap:2px; cursor:pointer; }
+.bg-savebar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; }
 /* จอแคบ: แถบ sticky ที่สูง 200px+ กินจอเกินไป — เหลือแค่จำนวนกับปุ่มไปต่อ
    รายการเครื่องเต็มๆ ไปเห็นในขั้นถัดไปอยู่แล้ว และเอาออกได้ที่นั่นเหมือนกัน */
 @media (max-width:620px) {
@@ -706,6 +718,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         <div id="unitsListView">
           <button class="btn btn-primary btn-sm" style="margin-bottom:10px" onclick="showAddUnitM()">➕ เพิ่มเครื่องใหม่</button>
           <button class="btn btn-ghost btn-sm" id="catMgrToggleBtn" style="margin-bottom:10px" onclick="toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="exportUnitsExcel()">📤 Export (เต็ม)</button>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="importUnitsExcel()">📥 Import (เต็ม)</button>
           <div class="card" id="catMgrPanel" style="display:none;margin-bottom:14px">
             <div style="font-weight:700;margin-bottom:8px">🏷️ หมวดหมู่ที่ลูกค้าเห็นเป็นแท็บ</div>
             <div id="catMgrRows"></div>
@@ -2038,6 +2054,7 @@ function openLoanLogM(loanId) {
     (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
     '</div>';
   h += scLoanLogHtml(l);
+  h += _scJobSiblingsHtml(l);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
   if (l.status === 'active') {
     h += '<button class="btn btn-ghost" onclick="openExtendM(\'' + loanId + '\')">⏩ ต่อเวลา</button>';
@@ -2045,6 +2062,27 @@ function openLoanLogM(loanId) {
   }
   h += '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('📜 ประวัติใบยืม', h);
+}
+// เครื่องอื่นในใบจองเดียวกัน (jobNo เดียวกัน) — ยืมพร้อมกันเป็นชุดมักมีหลายเครื่อง แต่ประวัติใบยืมเดิม
+// โชว์แค่ตัวที่กำลังดูอยู่ตัวเดียว มองไม่ออกว่าใบเดียวกันมีอะไรอีกบ้างถ้าไม่ไปเปิดดูทีละเครื่องเอง
+function _scJobSiblingsHtml(l) {
+  if (!(l.jobNo || '').trim()) return '';
+  var siblings = LOANS.filter(function(x) { return x._id !== l._id && (x.jobNo || '').trim() === l.jobNo.trim(); });
+  if (!siblings.length) return '<div class="hint" style="margin-top:10px">📄 ใบจอง ' + esc(l.jobNo) + ' — ไม่มีเครื่องอื่นในใบเดียวกัน</div>';
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var h = '<div class="sm-sec">🔗 เครื่องอื่นในใบจองเดียวกัน (' + siblings.length + ')</div>';
+  h += siblings.map(function(s) {
+    var u = byId[s.unitId];
+    var p = u ? _scModelParts(u) : { main: s.model || '—' };
+    var st = s.status === 'active' ? '<span class="pill pill-warn">กำลังยืม</span>'
+      : s.status === 'pending' ? '<span class="pill pill-muted">รอ (ชนคิว)</span>' : '<span class="pill pill-good">คืนแล้ว</span>';
+    return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
+      '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + ' ' + st + '</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + s._id + '\')">📜</button>' +
+      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>' : '') +
+      '</div>';
+  }).join('');
+  return h;
 }
 
 function openExtendM(loanId) {
@@ -2231,19 +2269,24 @@ function renderUnitsTable() {
       var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
         : (loan || appRange) ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
       var rental = _unitHasRental(u) ? esc(u.rentalDbNo) : '<span style="color:var(--warn)">ยังไม่ลงทะเบียน</span>';
-      // ตั้งค่านี้แก้ได้ที่แอปหลักเท่านั้น (ปุ่ม "👀 เลือกที่ลูกค้ายืมได้") หน้านี้อ่านค่าที่ publish มาเพื่อให้รู้ว่า
-      // ทำไมเครื่องนี้ไม่โผล่ในลิงก์ลูกค้า จะได้ไม่ไปนั่งหาสาเหตุผิดจุด
-      if (u.customerVisible === false) statusPill += ' <span class="pill pill-muted" title="ตั้งค่าที่แอปหลัก">🙈 ซ่อนจากลูกค้า</span>';
-      return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' +
+      // แก้ได้จากหน้านี้เอง (✏️ แก้ไข ทีละเครื่อง หรือ ✏️ แก้ไขตาราง ทีละหลายเครื่อง) — ป้ายนี้แค่บอกเหตุผล
+      // ว่าทำไมเครื่องนี้ไม่โผล่ในลิงก์ลูกค้า จะได้ไม่ไปนั่งหาสาเหตุผิดจุด
+      if (u.customerVisible === false) statusPill += ' <span class="pill pill-muted" title="กดปุ่มแก้ไขที่เครื่องนี้เพื่อเปิดกลับ">🙈 ซ่อนจากลูกค้า</span>';
+      var off2 = u.status === 'unavailable' || u.status === 'lost';
+      var pickCell = (!off2 && _unitHasRental(u))
+        ? '<td onclick="event.stopPropagation()"><input type="checkbox"' + (lendIsPicked(u.id) ? ' checked' : '') + ' onchange="lendToggle(\'' + u.id + '\')"></td>'
+        : '<td></td>';
+      return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' + pickCell +
         '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
         '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
         '<td>' + (loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
-          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td></tr>';
+          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td>' +
+        '<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button></td></tr>';
     }).join('');
     var body = unitViewMode !== 'card'
       ? '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
-        '<thead><tr><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th></tr></thead>' +
+        '<thead><tr><th></th><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th><th></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>'
       : unitDense
         ? '<div class="su-dense">' + list.map(function(u) { return unitDenseHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
@@ -2294,7 +2337,7 @@ function unitDenseHtml(raw, n) {
     : late ? '<span class="pill pill-bad">⚠️ เลย ' + daysBetween(endIso, _td()) + ' ว.</span>'
     : (loan || appRange) ? '<span class="pill pill-warn">📤 ' + _scD(endIso) + '</span>'
     : '<span class="pill pill-good">✅ ว่าง</span>';
-  var canPick = !off && !loan && !appRange && _unitHasRental(u);
+  var canPick = !off && _unitHasRental(u);   // ติ๊กได้แม้กำลังถูกยืมอยู่ — ดูเหตุผลที่ unitCardHtml
   return '<div class="sd-row' + (late ? ' late' : '') + (lendIsPicked(u.id) ? ' picked' : '') +
     '" onclick="openUnitDetail(\'' + u.id + '\')">' +
     '<span class="sd-pick" onclick="event.stopPropagation()">' +
@@ -2330,8 +2373,10 @@ function unitCardHtml(raw, n) {
   var cat = _scCatOf(u);
   var h = '<div class="su-card ' + cls + (lendIsPicked(u.id) ? ' picked' : '') + '">';
   h += '<div class="su-top">';
-  // ติ๊กเลือกได้เฉพาะเครื่องที่ยืมได้จริง (ลงทะเบียนเช่าแล้ว ว่าง และไม่ได้ปิดใช้งาน)
-  if (!off && !loan && !appRange && _unitHasRental(u)) {
+  // ติ๊กเลือกได้ทุกเครื่องที่ลงทะเบียนเช่าแล้วและยังไม่ปิดใช้งาน — แม้กำลังถูกยืม/จองอยู่ตอนนี้ก็ติ๊กได้
+  // เพราะคนที่กำลังยืมอาจจะคืนก่อนแล้วมีคนอื่นมายืมต่อเดือนหน้าก็ได้ ขั้นตอนเลือกวันที่ (renderLendFlow)
+  // เป็นคนเช็คชนคิวจริงๆ ตามช่วงวันที่เลือกอยู่แล้ว ไม่ต้องกันไว้ตั้งแต่ขั้นเลือกเครื่อง
+  if (!off && _unitHasRental(u)) {
     h += '<label class="su-pick" onclick="event.stopPropagation()"><input type="checkbox"' +
       (lendIsPicked(u.id) ? ' checked' : '') + ' onchange="lendToggle(\'' + u.id + '\')"></label>';
   }
@@ -2417,7 +2462,8 @@ function openUnitDetail(unitId) {
   if (loan) {
     h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">ยืมโดย ' + esc(loan.borrower) + ' · กำหนดคืน ' + _scD(loan.end) +
       '<br>🧑‍💼 ผู้คีย์: ' + (loan.approver ? esc(loan.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึก</span>') +
-      (loan.jobNo ? ' · 📄 ใบจอง ' + esc(loan.jobNo) : '') + '</div>' +
+      (loan.jobNo ? ' · 📄 ใบจอง <a onclick="openLoanLogM(\'' + loan._id + '\')" style="cursor:pointer;text-decoration:underline">' + esc(loan.jobNo) +
+        (function() { var n = LOANS.filter(function(x) { return x._id !== loan._id && (x.jobNo || '').trim() === loan.jobNo.trim(); }).length; return n ? ' (+' + n + ' เครื่องอื่น)' : ''; })() + '</a>' : '') + '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
       '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + loan._id + '\')">⏩ ต่อเวลา</button>' +
@@ -4392,6 +4438,288 @@ function deleteUnitM(unitId) {
     type: 'delete', unitId: unitId, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() { toastMock('🗑️ ลบแล้ว'); closeSm(); })
     .catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
+}
+
+// ---- แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน) ----
+// เหมือนแท็บ "แก้ไขตาราง" ของแอปหลัก (renderDemoGridTab) แต่เขียนเป็นคำขอ add/edit เข้า publicDemoEdits
+// ทีละก้อนด้วย db.batch() แทนที่จะเขียนลง localStorage ตรงๆ (เหตุผลเดียวกับฟอร์มแก้ไขทีละเครื่อง)
+var _bgDraft = {};   // unitId -> {field: value}
+var _bgSearch = '';
+function showBulkGridM() {
+  _bgDraft = {};
+  _bgSearch = '';
+  var h = '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก</div>';
+  h += '<div class="field"><label>🔍 กรองแถว</label><input type="text" id="bgSearch" placeholder="ชื่อ, รุ่น, S/N, เลขเครื่องเช่า" oninput="_bgSearchInput(this.value)" autocomplete="off"></div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="bgBy" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div id="bgTableWrap"></div>';
+  h += '<div id="bgWarn"></div>';
+  h += '<div class="bg-savebar"><button class="btn btn-primary btn-sm" onclick="_bgSave()">💾 บันทึกที่แก้ไข</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="_bgDiscard()">↩️ ยกเลิกที่แก้ไว้</button>' +
+    '<span id="bgCount" style="font-size:12px;color:var(--text2)">ยังไม่มีการแก้ไข</span></div>';
+  openSm('✏️ แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน)', h);
+  _bgRenderTable();
+}
+function _bgRows() {
+  var q = _bgSearch.trim().toLowerCase();
+  if (!q) return UNITS.slice();
+  return UNITS.filter(function(u) {
+    return ((u.model || '') + ' ' + (u.name || '') + ' ' + (u.sku || '') + ' ' + (u.serialNumber || '') + ' ' + (u.rentalDbNo || '')).toLowerCase().indexOf(q) !== -1;
+  });
+}
+function _bgVal(u, f) { return _bgDraft[u.id] && _bgDraft[u.id][f] !== undefined ? _bgDraft[u.id][f] : u[f]; }
+function _bgRenderTable() {
+  var wrap = document.getElementById('bgTableWrap');
+  if (!wrap) return;
+  var rows = _bgRows();
+  if (!rows.length) { wrap.innerHTML = '<div class="empty-state">ไม่พบเครื่องที่ตรงกับคำค้น</div>'; return; }
+  var cats = CATEGORIES || [];
+  var h = '<div class="bg-wrap"><table class="bg-tbl"><thead><tr>' +
+    '<th>ชื่ออุปกรณ์</th><th>Model</th><th>SKU</th><th>S/N</th><th>เลขเครื่องเช่า</th><th>หมวดหมู่</th>' +
+    '<th>ประเภท</th><th>เอกสาร</th><th>ลูกค้าเห็น</th><th>หมายเหตุ</th></tr></thead><tbody>';
+  rows.forEach(function(u, ri) {
+    function dty(f) { return _bgDraft[u.id] && _bgDraft[u.id][f] !== undefined ? ' dirty' : ''; }
+    function txt(f, cls) { return '<td class="' + dty(f).trim() + '"><input type="text" class="' + (cls || '') + '" value="' + esc(_bgVal(u, f) || '') + '" data-r="' + ri + '" onchange="_bgEdit(\'' + u.id + '\',\'' + f + '\',this.value,this)" onkeydown="_bgKey(event,this)"></td>'; }
+    h += '<tr>';
+    h += txt('name', 'wide');
+    h += txt('model');
+    h += txt('sku');
+    h += txt('serialNumber');
+    h += txt('rentalDbNo');
+    h += '<td class="' + dty('category').trim() + '"><select data-r="' + ri + '" onchange="_bgEdit(\'' + u.id + '\',\'category\',this.value,this)" onkeydown="_bgKey(event,this)"><option value=""' + (!_bgVal(u, 'category') ? ' selected' : '') + '>— ไม่ระบุ —</option>';
+    cats.forEach(function(c) { h += '<option value="' + esc(c.id) + '"' + (_bgVal(u, 'category') === c.id ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.label) + '</option>'; });
+    h += '</select></td>';
+    var fv = _bgVal(u, 'flyable') !== false;
+    h += '<td class="' + dty('flyable').trim() + '"><select data-r="' + ri + '" onchange="_bgEdit(\'' + u.id + '\',\'flyable\',this.value===\'1\',this)" onkeydown="_bgKey(event,this)">' +
+      '<option value="1"' + (fv ? ' selected' : '') + '>✈️ บินได้</option><option value="0"' + (!fv ? ' selected' : '') + '>🖼️ จัดแสดง</option></select></td>';
+    h += '<td class="bg-docs' + (dty('nbtcRegistered') || dty('droneInsurance') || dty('caatRegistered')) + '"><div class="bg-docs">' +
+      '<label><input type="checkbox"' + (_bgVal(u, 'nbtcRegistered') ? ' checked' : '') + ' onchange="_bgEdit(\'' + u.id + '\',\'nbtcRegistered\',this.checked,this)">กสทช.</label>' +
+      '<label><input type="checkbox"' + (_bgVal(u, 'droneInsurance') ? ' checked' : '') + ' onchange="_bgEdit(\'' + u.id + '\',\'droneInsurance\',this.checked,this)">ประกัน</label>' +
+      '<label><input type="checkbox"' + (_bgVal(u, 'caatRegistered') ? ' checked' : '') + ' onchange="_bgEdit(\'' + u.id + '\',\'caatRegistered\',this.checked,this)">CAAT</label></div></td>';
+    h += '<td class="' + dty('customerVisible').trim() + '" style="text-align:center"><input type="checkbox"' + (_bgVal(u, 'customerVisible') !== false ? ' checked' : '') + ' onchange="_bgEdit(\'' + u.id + '\',\'customerVisible\',this.checked,this)"></td>';
+    h += txt('note', 'wide');
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  wrap.innerHTML = h;
+}
+var _bgSearchTimer = null;
+function _bgSearchInput(v) { _bgSearch = v; clearTimeout(_bgSearchTimer); _bgSearchTimer = setTimeout(_bgRenderTable, 250); }
+function _bgEdit(id, f, v, el) {
+  if (!_bgDraft[id]) _bgDraft[id] = {};
+  _bgDraft[id][f] = v;
+  var n = 0; Object.keys(_bgDraft).forEach(function(k) { n += Object.keys(_bgDraft[k]).length; });
+  var c = document.getElementById('bgCount');
+  if (c) c.textContent = n ? '✏️ แก้ไว้ ' + n + ' ช่อง ใน ' + Object.keys(_bgDraft).length + ' เครื่อง (ยังไม่บันทึก)' : 'ยังไม่มีการแก้ไข';
+  // ทำสีเหลืองแค่ cell ที่แก้ ไม่ต้อง render ตารางทั้งก้อนใหม่ ไม่งั้นโฟกัส/ค่าที่กำลังพิมพ์อยู่ในช่องอื่นจะหาย
+  if (el) { var td = el.closest('td'); if (td) td.classList.add('dirty'); }
+}
+// Enter = ลงแถวถัดไปคอลัมน์เดิม (index เดียวกันในแถว) — เหมือนพฤติกรรมสเปรดชีตของแท็บแก้ไขตารางแอปหลัก
+function _bgKey(e, el) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var cells = Array.prototype.slice.call(el.closest('tr').children);
+  var ci = cells.indexOf(el.closest('td'));
+  var r = Number(el.getAttribute('data-r'));
+  var nextRow = el.closest('table').querySelectorAll('tbody tr')[r + 1];
+  if (!nextRow) return;
+  var nextCtl = nextRow.children[ci] && nextRow.children[ci].querySelector('input,select');
+  if (nextCtl) { nextCtl.focus(); if (nextCtl.select) nextCtl.select(); }
+}
+function _bgDiscard() {
+  if (!Object.keys(_bgDraft).length) { alert('ยังไม่มีการแก้ไข'); return; }
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่บันทึกทั้งหมด?')) return;
+  _bgDraft = {};
+  _bgRenderTable();
+  var c = document.getElementById('bgCount'); if (c) c.textContent = 'ยังไม่มีการแก้ไข';
+}
+function _bgSave() {
+  var ids = Object.keys(_bgDraft);
+  if (!ids.length) { alert('ยังไม่มีการแก้ไข'); return; }
+  var by = (document.getElementById('bgBy').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+
+  // เช็คเลขเครื่องเช่าซ้ำจากทั้งคลังหลังแก้ ไม่ใช่แค่แถวที่กรองอยู่บนจอตอนนี้ — เลขใหม่อาจไปชนเครื่อง
+  // ที่ถูกซ่อนด้วยคำค้นอยู่ก็ได้
+  var finalRental = {};
+  UNITS.forEach(function(u) { finalRental[u.id] = String(u.rentalDbNo || '').trim(); });
+  ids.forEach(function(id) { if (byId[id] && _bgDraft[id].rentalDbNo !== undefined) finalRental[id] = String(_bgDraft[id].rentalDbNo || '').trim(); });
+  var seen = {}, dupes = [];
+  Object.keys(finalRental).forEach(function(id) {
+    var v = finalRental[id];
+    if (!v) return;
+    if (seen[v]) dupes.push({ num: v, a: seen[v], b: id }); else seen[v] = id;
+  });
+  var warnEl = document.getElementById('bgWarn');
+  if (dupes.length) {
+    var msg = dupes.slice(0, 5).map(function(x) {
+      return 'เลข ' + esc(x.num) + ' ซ้ำกันระหว่าง "' + esc((byId[x.a] || {}).name || '') + '" กับ "' + esc((byId[x.b] || {}).name || '') + '"';
+    }).join('<br>');
+    warnEl.innerHTML = '<div style="margin-top:8px;background:#ef444418;color:#ef4444;border-radius:8px;padding:9px 11px;font-size:12px;font-weight:600">⚠️ หมายเลขเครื่องเช่าซ้ำ ' + dupes.length + ' คู่ — แก้ก่อนบันทึก<br>' + msg + '</div>';
+    return;
+  }
+  warnEl.innerHTML = '';
+
+  var BOOL_F = { flyable: 1, nbtcRegistered: 1, droneInsurance: 1, caatRegistered: 1, customerVisible: 1 };
+  var batch = db.batch();
+  var changedUnits = 0, changedFields = 0;
+  ids.forEach(function(id) {
+    var u = byId[id];
+    if (!u) return;
+    var fields = {};
+    Object.keys(_bgDraft[id]).forEach(function(f) {
+      var v = _bgDraft[id][f];
+      var cur = f === 'flyable' ? (u.flyable !== false) : f === 'customerVisible' ? (u.customerVisible !== false) : BOOL_F[f] ? !!u[f] : String(u[f] || '').trim();
+      var nv = BOOL_F[f] ? !!v : String(v || '').trim();
+      if (cur === nv) return;
+      fields[f] = nv;
+      changedFields++;
+    });
+    if (!Object.keys(fields).length) return;
+    changedUnits++;
+    var isAdd = PENDING_EDITS[id] && PENDING_EDITS[id].type === 'add';
+    var ref = db.collection('publicDemoEdits').doc(id);
+    if (isAdd) {
+      batch.set(ref, { type: 'add', unitId: id, fields: Object.assign({}, PENDING_EDITS[id].fields || {}, fields), editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    } else {
+      batch.set(ref, { type: 'edit', unitId: id, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  });
+  if (!changedFields) { toastMock('ค่าที่แก้ตรงกับของเดิม ไม่มีอะไรเปลี่ยน'); _bgDraft = {}; closeSm(); return; }
+  if (!confirm('บันทึกการแก้ไข ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง?')) return;
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  batch.commit().then(function() {
+    _bgDraft = {};
+    toastMock('💾 บันทึกแล้ว ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง');
+    closeSm();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
+}
+
+// ---- Export / Import (Excel) ----
+// คอลัมน์เดียวกับ exportDemoItemsExcel/importDemoItemsExcel ในแอปหลัก (features.js) เพื่อให้ไฟล์ใช้
+// สลับกันได้ — ตัดคอลัมน์ที่เป็นของ "ใบยืม" ออก (สถานะ/ผู้ยืม/วันที่ยืม/เลขใบจอง) เพราะหน้านี้มีระบบ
+// จองของตัวเอง (publicDemoLoans) อยู่แล้ว ไม่ควรมีใครไปเขียนทับจากไฟล์ Excel
+function exportUnitsExcel() {
+  if (typeof XLSX === 'undefined') { alert('ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า'); return; }
+  var data = UNITS.map(function(u) {
+    return {
+      'ID': u.id, 'ชื่ออุปกรณ์': u.name || '', 'Model': u.model || '', 'SKU': u.sku || '',
+      'Serial Number': u.serialNumber || '', 'หมายเลขเครื่องเช่า': u.rentalDbNo || '',
+      'หมวดหมู่': u.category || '', 'บินได้ (Y/N)': u.flyable !== false ? 'Y' : 'N',
+      'กสทช (Y/N)': u.nbtcRegistered ? 'Y' : 'N', 'ประกันภัย (Y/N)': u.droneInsurance ? 'Y' : 'N',
+      'CAAT (Y/N)': u.caatRegistered ? 'Y' : 'N', 'ลูกค้าเห็น (Y/N)': u.customerVisible !== false ? 'Y' : 'N',
+      'หมายเหตุ': u.note || ''
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:14},{wch:25},{wch:15},{wch:15},{wch:18},{wch:15},{wch:12},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:25}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'demo');
+  XLSX.writeFile(wb, 'demo-equipment-' + _td() + '.xlsx');
+  toastMock('📤 Export สำเร็จ');
+}
+function exportUnitsRentalSheet() {
+  if (typeof XLSX === 'undefined') { alert('ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า'); return; }
+  var items = UNITS.filter(function(u) { return (u.rentalDbNo || '').trim(); });
+  items.sort(function(a, b) { return (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true }); });
+  var data = items.map(function(u, i) {
+    var loan = unitCurrentLoan(u.id), appRange = loan ? null : unitAppRangeOn(u.id, _td());
+    var b = loan || appRange;
+    return {
+      'ลำดับ': i + 1, 'Name': u.name || '', 'status': b ? 'จอง' : 'ว่าง',
+      'กำหนดส่ง': b ? _scD(b.start) : '', 'กำหนดรับคืน': b ? _scD(b.end) : '',
+      'เลขที่ใบจอง': b ? (b.jobNo || '') : '', 'หมายเหตุ': u.note || '',
+      'Category': u.isAccessory ? 'Drone Accessories' : 'Drone',
+      'หมายเลขเครื่องเช่า': u.rentalDbNo || '', 'Brand': '', 'SiS Part': u.sku || '', 'Serial No.': u.serialNumber || ''
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:6},{wch:38},{wch:8},{wch:12},{wch:12},{wch:12},{wch:26},{wch:18},{wch:16},{wch:8},{wch:22},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'เครื่องเช่า');
+  XLSX.writeFile(wb, 'เครื่องเช่า-จากstaff-' + _td().replace(/\//g, '-') + '.xlsx');
+  toastMock('📤 Export รูปแบบไฟล์คลังแล้ว (' + data.length + ' เครื่อง)');
+}
+function importUnitsExcel() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var rows;
+      try {
+        var wb = XLSX.read(ev.target.result, { type: 'binary' });
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); return; }
+      var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+      // เซลล์ Y/N ที่เว้นว่างไว้ = "ไม่ได้ระบุ" ไม่ใช่ "N" — ต่างจากแอปหลักที่เว้นว่างจะถูกตีเป็น false ไปเลย
+      // (เจอว่าเป็นบั๊กจริงตอนสำรวจโค้ด) หน้านี้เข้าถึงได้ด้วย PIN ร่วม ความเสี่ยงเขียนทับผิดสูงกว่า
+      // จึงแก้พฤติกรรมให้ปลอดภัยกว่า: ว่าง = คงค่าเดิมไว้ (เครื่องใหม่ที่ไม่มีค่าเดิม ถือว่าไม่มีเอกสาร)
+      function yn(v, existing) {
+        var s = String(v == null ? '' : v).trim();
+        if (!s) return existing;
+        return s.toUpperCase() === 'Y';
+      }
+      var byRental = 0, byName = 0, skipped = 0;
+      var by = prompt('ชื่อคนนำเข้า (แอปหลักจะได้รู้ว่าใครนำเข้า):', _lastEditor());
+      if (by === null) return;
+      by = by.trim();
+      if (!by) { alert('ต้องใส่ชื่อคนนำเข้าก่อนนะครับ'); return; }
+      var batch = db.batch();
+      var newRentalVals = {};
+      UNITS.forEach(function(u) { if ((u.rentalDbNo || '').trim()) newRentalVals[(u.rentalDbNo || '').trim()] = u.id; });
+      var dupes = [];
+      rows.forEach(function(r) {
+        var id = String(r['ID'] || '').trim();
+        var name = String(r['ชื่ออุปกรณ์'] || '').trim();
+        var existing = id && byId[id] ? byId[id] : null;
+        if (!name && !existing) { skipped++; return; }
+        var rentalNo = String(r['หมายเลขเครื่องเช่า'] || (existing ? existing.rentalDbNo : '') || '').trim();
+        if (rentalNo) {
+          var ownerId = existing ? existing.id : ('new:' + (id || name));
+          if (newRentalVals[rentalNo] && newRentalVals[rentalNo] !== ownerId) dupes.push(rentalNo);
+          newRentalVals[rentalNo] = ownerId;
+        }
+        var fields = {
+          name: name || (existing ? existing.name : ''),
+          model: String(r['Model'] || (existing ? existing.model : '') || '').trim(),
+          sku: String(r['SKU'] || (existing ? existing.sku : '') || '').trim(),
+          serialNumber: String(r['Serial Number'] || (existing ? existing.serialNumber : '') || '').trim(),
+          rentalDbNo: rentalNo,
+          category: String(r['หมวดหมู่'] || (existing ? existing.category : '') || '').trim(),
+          flyable: yn(r['บินได้ (Y/N)'], existing ? existing.flyable !== false : true),
+          nbtcRegistered: yn(r['กสทช (Y/N)'], existing ? !!existing.nbtcRegistered : false),
+          droneInsurance: yn(r['ประกันภัย (Y/N)'], existing ? !!existing.droneInsurance : false),
+          caatRegistered: yn(r['CAAT (Y/N)'], existing ? !!existing.caatRegistered : false),
+          customerVisible: yn(r['ลูกค้าเห็น (Y/N)'], existing ? existing.customerVisible !== false : true),
+          note: String(r['หมายเหตุ'] || (existing ? existing.note : '') || '').trim()
+        };
+        if (existing) {
+          byRental++;
+          var isAdd = PENDING_EDITS[existing.id] && PENDING_EDITS[existing.id].type === 'add';
+          var ref = db.collection('publicDemoEdits').doc(existing.id);
+          if (isAdd) batch.set(ref, { type: 'add', unitId: existing.id, fields: Object.assign({}, PENDING_EDITS[existing.id].fields || {}, fields), editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          else batch.set(ref, { type: 'edit', unitId: existing.id, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        } else {
+          byName++;
+          var newId = id || ('stf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+          batch.set(db.collection('publicDemoEdits').doc(newId), { type: 'add', unitId: newId, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        }
+      });
+      if (!byRental && !byName) { alert('ไม่พบแถวที่นำเข้าได้ — ตรวจว่าคอลัมน์ตรงกับไฟล์ที่ Export ออกมาหรือไม่'); return; }
+      if (dupes.length) { alert('หยุดนำเข้า — เลขเครื่องเช่าในไฟล์ซ้ำกับเครื่องอื่นที่มีอยู่แล้ว: ' + dupes.slice(0, 5).join(', ')); return; }
+      if (!confirm('พบ ' + rows.length + ' แถว — จะอัปเดตเครื่องเดิม ' + byRental + ' รายการ และเพิ่มใหม่ ' + byName + ' รายการ' + (skipped ? ' (ข้าม ' + skipped + ' แถวว่าง)' : '') + ' ยืนยันนำเข้า?')) return;
+      try { localStorage.setItem('demoStaffEditor', by); } catch (e2) {}
+      batch.commit().then(function() {
+        toastMock('✅ นำเข้าสำเร็จ (' + byRental + ' อัปเดต, ' + byName + ' ใหม่)');
+      }).catch(function(err) { alert('นำเข้าไม่สำเร็จ: ' + err.message); });
+    };
+    reader.readAsBinaryString(file);
+  };
+  input.click();
 }
 
 // ---- จัดการหมวดหมู่ ----
