@@ -68,6 +68,20 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .gs-x { position:absolute; right:6px; top:50%; transform:translateY(-50%); border:none; background:transparent;
   color:var(--text2); font-size:15px; cursor:pointer; padding:6px 9px; border-radius:8px; line-height:1; }
 .gs-x:hover { background:var(--border); color:var(--text); }
+/* แถบสรุปย่อ (dashMini) — แทนที่กล่องลิงก์ลูกค้า/แดชบอร์ด/สถิติ/ค้นหาเต็มรูปแบบเมื่ออยู่นอกแท็บแรก */
+.dash-mini { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:9px 12px; margin-bottom:16px; font-size:12.5px; }
+.dash-mini #dashMiniText { flex:1; min-width:160px; color:var(--text2); font-weight:500; }
+.dash-collapse-row { text-align:right; margin:-8px 0 12px; }
+/* เมนู "⋯ เครื่องมือ" — รวมปุ่มที่ใช้นานๆ ครั้ง (จัดการหมวดหมู่/แก้ไขตาราง/Export/Import) ไว้ที่เดียว
+   แยกจาก "เพิ่มเครื่องใหม่" ที่ใช้บ่อยกว่ามาก ไม่ให้น้ำหนักเท่ากันจนแถวปุ่มยาวเกะกะ */
+.tools-menu-wrap { position:relative; display:inline-block; }
+.tools-menu-pop { position:absolute; top:calc(100% + 5px); left:0; z-index:40; min-width:230px; background:var(--surface);
+  border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 28px -10px rgba(0,0,0,.35); padding:6px; }
+.tools-menu-pop button { display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:9px 11px;
+  border:none; background:transparent; color:var(--text); font-size:13px; border-radius:7px; cursor:pointer; white-space:nowrap; }
+.tools-menu-pop button:hover { background:var(--surface-2); }
+.tools-menu-sep { height:1px; background:var(--border); margin:5px 2px; }
 .gs-results { border:1px solid var(--border); border-radius:10px; background:var(--surface); margin-bottom:14px;
   max-height:340px; overflow-y:auto; }
 .gs-sec { font-size:11px; font-weight:700; color:var(--text2); padding:9px 12px 5px; letter-spacing:.02em; }
@@ -297,6 +311,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sm-ov.on { display:flex; }
 .sm-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px;
   max-height:90vh; overflow-y:auto; box-shadow:var(--shadow); }
+/* บางหน้าต่างเป็นตารางหลายคอลัมน์ (เช่น แก้ไขตารางหลายเครื่อง) — 560px แคบเกินจนต้องเลื่อนขวาทันที
+   แม้อยู่บนจอกว้าง จึงมีขนาด "wide" แยกไว้ให้ใช้เมื่อจำเป็น */
+.sm-box.wide { max-width:960px; }
 .sm-hd { display:flex; justify-content:space-between; align-items:center; padding:13px 17px; border-bottom:1px solid var(--border);
   position:sticky; top:0; background:var(--surface); border-radius:14px 14px 0 0; }
 .sm-hd h3 { margin:0; font-size:15px; color:var(--accent); }
@@ -688,22 +705,32 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         </div>
       </div>
 
-      <div class="link-callout">
-        🔗 ลิงก์สำหรับส่งให้ลูกค้ายืม (อันเดียวใช้ได้กับทุกราย):
-        <code id="pubLink"></code>
-        <button class="btn btn-ghost btn-sm" onclick="copyPubLink()">📋 คัดลอกลิงก์</button>
+      <!-- แถบสรุปย่อ — โชว์แทน dashFull เมื่ออยู่นอกแท็บ "คำขอรออนุมัติ" กันไม่ให้เนื้อหาของแท็บที่กำลังใช้งาน
+           (โดยเฉพาะระหว่างคีย์ยืม) ถูกฝังไว้ใต้กล่องลิงก์ลูกค้า/สถิติ/ค้นหาที่มีประโยชน์แค่ตอนเปิดแอปครั้งแรก -->
+      <div id="dashMini" class="dash-mini" style="display:none">
+        <span id="dashMiniText"></span>
+        <button class="btn btn-ghost btn-sm" onclick="copyPubLink()">📋 ลิงก์ลูกค้า</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleDashSecondary()">▾ แสดงเพิ่ม</button>
       </div>
+      <div id="dashFull">
+        <div class="link-callout">
+          🔗 ลิงก์สำหรับส่งให้ลูกค้ายืม (อันเดียวใช้ได้กับทุกราย):
+          <code id="pubLink"></code>
+          <button class="btn btn-ghost btn-sm" onclick="copyPubLink()">📋 คัดลอกลิงก์</button>
+        </div>
 
-      <div id="triageBar"></div>
+        <div id="triageBar"></div>
 
-      <div class="stat-row" id="statRow"></div>
+        <div class="stat-row" id="statRow"></div>
 
-      <div class="gsearch">
-        <input type="text" id="gsInput" autocomplete="off" oninput="gsInput(this.value)"
-               placeholder="🔍 ค้นหาทุกอย่าง — รุ่น, เลขเครื่องเช่า, S/N, ผู้ยืม, ผู้คีย์เบิก, เลขใบจอง">
-        <button class="gs-x" id="gsClearBtn" style="display:none" onclick="gsClearAll()" title="ล้างคำค้น">✕</button>
+        <div class="gsearch">
+          <input type="text" id="gsInput" autocomplete="off" oninput="gsInput(this.value)"
+                 placeholder="🔍 ค้นหาทุกอย่าง (ทุกแท็บ) — รุ่น, เลขเครื่องเช่า, S/N, ผู้ยืม, ผู้คีย์เบิก, เลขใบจอง">
+          <button class="gs-x" id="gsClearBtn" style="display:none" onclick="gsClearAll()" title="ล้างคำค้น">✕</button>
+        </div>
+        <div id="gsResults" class="gs-results" style="display:none"></div>
+        <div class="dash-collapse-row"><button class="btn btn-ghost btn-sm" onclick="toggleDashSecondary()">▴ ย่อแถบนี้</button></div>
       </div>
-      <div id="gsResults" class="gs-results" style="display:none"></div>
 
       <div class="tabs">
         <button class="on" data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
@@ -718,12 +745,20 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div id="lendPickBar" class="lendbar" style="display:none"></div>
     <div class="tabpane" id="tab-units">
         <div id="unitsListView">
-          <button class="btn btn-primary btn-sm" style="margin-bottom:10px" onclick="showAddUnitM()">➕ เพิ่มเครื่องใหม่</button>
-          <button class="btn btn-ghost btn-sm" id="catMgrToggleBtn" style="margin-bottom:10px" onclick="toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
-          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
-          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="exportUnitsExcel()">📤 Export (เต็ม)</button>
-          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
-          <button class="btn btn-ghost btn-sm" style="margin-bottom:10px" onclick="importUnitsExcel()">📥 Import (เต็ม)</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn btn-primary btn-sm" onclick="showAddUnitM()">➕ เพิ่มเครื่องใหม่</button>
+            <div class="tools-menu-wrap">
+              <button class="btn btn-ghost btn-sm" onclick="toggleToolsMenu()">⋯ เครื่องมือ</button>
+              <div id="toolsMenuPop" class="tools-menu-pop" style="display:none">
+                <button onclick="closeToolsMenu();toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
+                <button onclick="closeToolsMenu();showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
+                <div class="tools-menu-sep"></div>
+                <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม)</button>
+                <button onclick="closeToolsMenu();exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
+                <button onclick="closeToolsMenu();importUnitsExcel()">📥 Import (เต็ม)</button>
+              </div>
+            </div>
+          </div>
           <div class="card" id="catMgrPanel" style="display:none;margin-bottom:14px">
             <div style="font-weight:700;margin-bottom:8px">🏷️ หมวดหมู่ที่ลูกค้าเห็นเป็นแท็บ</div>
             <div id="catMgrRows"></div>
@@ -732,10 +767,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           </div>
           <div id="pendingEditsBanner" style="display:none;align-items:center;gap:10px;background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12px;line-height:1.6"></div>
           <div class="view-toggle" id="unitViewToggle"></div>
+          <div id="unitTableHint"></div>
           <div class="filter-chips" id="unitReadyChips"></div>
           <div class="cat-tabs" id="unitCatTabs"></div>
           <div class="browse-toolbar">
-            <input type="text" id="unitSearch" placeholder="🔍 ค้นหา (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
+            <input type="text" id="unitSearch" placeholder="🔎 กรองเฉพาะรายการที่แสดงอยู่นี้ (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
             <button class="btn btn-ghost btn-sm" onclick="lendPasteToggle()" title="ก๊อปเลขเครื่องเช่าจากระบบคลังมาวาง แล้วติ๊กให้อัตโนมัติ" style="white-space:nowrap">📋 วางเลขเครื่อง</button>
             <button class="btn btn-ghost btn-sm" onclick="openRentImport()" title="นำเข้าไฟล์ export จากระบบคลัง เติมเลขที่ใบจองย้อนหลังให้ทุกเครื่อง" style="white-space:nowrap">📥 นำเข้าเลขใบจอง</button>
             <span id="unitCountLabel" style="align-self:center;font-size:12px;color:var(--text2);white-space:nowrap"></span>
@@ -759,7 +795,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 </div>
 
 <div class="sm-ov" id="smOverlay" onclick="if(event.target===this)closeSm()">
-  <div class="sm-box">
+  <div class="sm-box" id="smBox">
     <div class="sm-hd"><h3 id="smTitle"></h3><button onclick="closeSm()">✕</button></div>
     <div class="sm-bd" id="smBody"></div>
   </div>
@@ -945,6 +981,9 @@ function renderStatRow() {
   var overdue = _overdueCount();
   document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
   renderTriage();
+  var mt = document.getElementById('dashMiniText');
+  if (mt) mt.textContent = (overdue ? '🔴 ' + overdue + ' เลยกำหนด · ' : '') + (PENDING.length ? '🟡 ' + PENDING.length + ' รออนุมัติ · ' : '') +
+    '✅ ' + avail + ' ว่าง · 📤 ' + busy + ' ยืม';
 }
 
 // ================================================================
@@ -1286,6 +1325,25 @@ function staffTab(name) {
         document.getElementById('unitLendView').style.display !== 'block') renderLendBar();
     else bar.style.display = 'none';
   }
+  _dashSecondarySync(name);
+}
+
+// ================================================================
+// กล่องลิงก์ลูกค้า + แดชบอร์ด "วันนี้ต้องทำอะไร" + สถิติ + ค้นหาทั้งระบบ มีประโยชน์จริงตอนเพิ่งเปิดแอป
+// (แท็บ "คำขอรออนุมัติ" ซึ่งเป็นแท็บแรกที่เห็น) แต่ถ้าค้างอยู่ทุกแท็บ จะกลายเป็นต้องเลื่อนผ่านมันทุกครั้ง
+// ก่อนถึงเนื้อหาจริงของแท็บที่กำลังจะใช้งาน (โดยเฉพาะระหว่างคีย์ยืมที่ scroll ไปบนสุดอยู่แล้ว)
+// จึงย่ออัตโนมัติทันทีที่ออกจากแท็บแรก เหลือแถบสรุปบรรทัดเดียวที่ยังกดขยายกลับได้ทุกเมื่อ
+// ================================================================
+var dashSecondaryOpen = true;
+function _dashSecondarySync(tabName) {
+  dashSecondaryOpen = (tabName === 'pending');
+  renderDashVisibility();
+}
+function toggleDashSecondary() { dashSecondaryOpen = !dashSecondaryOpen; renderDashVisibility(); }
+function renderDashVisibility() {
+  var full = document.getElementById('dashFull'), mini = document.getElementById('dashMini');
+  if (full) full.style.display = dashSecondaryOpen ? '' : 'none';
+  if (mini) mini.style.display = dashSecondaryOpen ? 'none' : 'flex';
 }
 
 // ---- คำขอรออนุมัติ + ตรวจจับคำขอชนกัน ----
@@ -2286,7 +2344,9 @@ function renderUnitsTable() {
           : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td>' +
         '<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button></td></tr>';
     }).join('');
-    var body = unitViewMode !== 'card'
+    // จอแคบ + มุมมองตาราง = คอลัมน์สำคัญ (สถานะ/ผู้ยืม) หลุดจอไปหมดโดยไม่มีสัญญาณให้เลื่อนขวา — สลับไปการ์ด
+    // ให้อัตโนมัติแทน (เหมือนที่ปฏิทินสลับเป็นลิสต์บนจอแคบ) ยกเว้นกด "ดูแบบตารางแทน" ยืนยันว่าจะดูตารางจริงๆ
+    var body = unitViewMode !== 'card' && (unitForceTable || !scIsNarrow())
       ? '<div class="card" style="padding:0;overflow:auto"><table class="unit-table">' +
         '<thead><tr><th></th><th>เครื่อง</th><th>SiS Part</th><th>S/N</th><th>เครื่องเช่า</th><th>กสทช·ประกัน·CAAT</th><th>บินได้</th><th>สถานะ</th><th>ผู้ยืม/กำหนดคืน</th><th></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>'
@@ -2350,6 +2410,7 @@ function unitDenseHtml(raw, n) {
       (u.customerVisible === false ? ' <span class="sd-hid">🙈</span>' : '') + '</span>' +
     '<span class="sd-st">' + pill + '</span></div>';
 }
+var unitForceTable = false;   // กด "ดูแบบตารางแทน" ยืนยันว่าอยากดูตารางจริงๆ แม้จอแคบ (ไม่จำข้ามเซสชัน)
 function renderUnitViewToggle() {
   var el = document.getElementById('unitViewToggle');
   if (!el) return;
@@ -2363,6 +2424,13 @@ function renderUnitViewToggle() {
     h += '<button class="' + (unitDense ? 'on' : '') + '" onclick="setUnitDense(true)" title="เหลือเลขเช่า + สถานะ เหมาะกับอุปกรณ์เสริมจำนวนมาก">แน่น</button>';
   }
   el.innerHTML = h;
+  var hintEl = document.getElementById('unitTableHint');
+  if (hintEl) {
+    hintEl.innerHTML = (unitViewMode === 'table' && !unitForceTable && scIsNarrow())
+      ? '<div class="dcal-hint">📱 จอแคบแสดงเป็นการ์ดแทน (คอลัมน์สถานะ/ผู้ยืมจะหลุดจอถ้าเป็นตาราง) — ' +
+        '<button class="btn btn-ghost btn-sm" onclick="unitForceTable=true;renderUnitsTable()">ดูแบบตารางแทน →</button></div>'
+      : '';
+  }
 }
 function unitCardHtml(raw, n) {
   var u = unitView(raw);
@@ -2786,6 +2854,9 @@ function openLendFlow() {
   document.getElementById('unitDetailView').style.display = 'none';
   document.getElementById('lendPickBar').style.display = 'none';
   document.getElementById('unitLendView').style.display = 'block';
+  // อยู่กลางงานคีย์ยืมแล้ว ไม่ต้องโชว์แดชบอร์ด "วันนี้ต้องทำอะไร" ซ้ำ (เพิ่งเห็นตอนเปิดแอปมา) — จะได้ไม่ต้อง
+  // เลื่อนผ่านมันอีกรอบหลัง scrollTo(0,0) ด้านล่าง
+  dashSecondaryOpen = false; renderDashVisibility();
   renderLendFlow();
   window.scrollTo(0, 0);
 }
@@ -4266,10 +4337,11 @@ function unitView(u) {
 function unitHasPending(id) { return !!PENDING_EDITS[id] && PENDING_EDITS[id].type !== 'delete'; }
 function pendingEditCount() { return Object.keys(PENDING_EDITS).length; }
 
-function openSm(title, html) {
+function openSm(title, html, wide) {
   document.getElementById('smTitle').textContent = title;
   document.getElementById('smBody').innerHTML = html;
   document.getElementById('smOverlay').classList.add('on');
+  document.getElementById('smBox').classList.toggle('wide', !!wide);
   _scDateHints(document.getElementById('smBody'));
 }
 function closeSm() { document.getElementById('smOverlay').classList.remove('on'); }
@@ -4468,7 +4540,7 @@ function showBulkGridM() {
   h += '<div class="bg-savebar"><button class="btn btn-primary btn-sm" onclick="_bgSave()">💾 บันทึกที่แก้ไข</button>' +
     '<button class="btn btn-ghost btn-sm" onclick="_bgDiscard()">↩️ ยกเลิกที่แก้ไว้</button>' +
     '<span id="bgCount" style="font-size:12px;color:var(--text2)">ยังไม่มีการแก้ไข</span></div>';
-  openSm('✏️ แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน)', h);
+  openSm('✏️ แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน)', h, true);
   _bgRenderTable();
 }
 function _bgRows() {
@@ -4732,6 +4804,23 @@ function importUnitsExcel() {
     reader.readAsBinaryString(file);
   };
   input.click();
+}
+
+// ---- เมนู "⋯ เครื่องมือ" ----
+function toggleToolsMenu() {
+  var pop = document.getElementById('toolsMenuPop');
+  var open = pop.style.display !== 'none';
+  pop.style.display = open ? 'none' : 'block';
+  if (!open) setTimeout(function() { document.addEventListener('click', _toolsMenuOutside); }, 0);
+}
+function closeToolsMenu() {
+  var pop = document.getElementById('toolsMenuPop');
+  if (pop) pop.style.display = 'none';
+  document.removeEventListener('click', _toolsMenuOutside);
+}
+function _toolsMenuOutside(e) {
+  var wrap = document.querySelector('.tools-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) closeToolsMenu();
 }
 
 // ---- จัดการหมวดหมู่ ----
