@@ -782,7 +782,7 @@ function loadChunkedFromFirebase(collName, lsKey) {
     // และ ST รู้เองว่าก้อนไหนอยู่ที่ไหน
     if (!ST._set(lsKey, rows)) {
       console.warn('เก็บ ' + lsKey + ' ลงเครื่องไม่สำเร็จ');
-      if (typeof toast === 'function') toast('⚠️ พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอสำหรับ ' + collName, true);
+      if (typeof toast === 'function') toast('⚠️ พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอสำหรับ ' + collName + ' — ไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง ดูว่าอะไรกินที่อยู่', true);
       return false;
     }
     return true;

@@ -454,6 +454,11 @@ function rAdmin(el) {
     '<div class="card"><h2>💾 ข้อมูลในระบบ (' + ST.getStorageSizeFormatted() + ')</h2>' +
     '<div class="sr">' + countCards + '</div></div>' +
 
+    // พื้นที่เก็บข้อมูลเบราว์เซอร์ — ต่างจากการ์ดด้านบนตรงที่ไล่ทุก key จริงในเครื่อง (ไม่ใช่แค่ที่แอปรู้จัก)
+    // แล้วบอกว่าตัวไหนกินที่มากสุด กับสถานะ IndexedDB ของคอลเลกชันก้อนใหญ่ — เกิดจากเคสจริง: ผู้ใช้เจอ
+    // "พื้นที่เก็บข้อมูลในเบราว์เซอร์ไม่พอ" ตอน sync แต่ไม่รู้ว่าอะไรกินที่ ต้องเดา หรือมาถามว่าแก้ยังไง
+    _admStorageReportHtml() +
+
     // Danger Zone
     '<div class="card" style="border-color:#ef4444"><h2 style="color:#ef4444">⚠️ Danger Zone</h2>' +
     '<div class="bg">' +
@@ -2196,4 +2201,71 @@ function copyGMLink() {
     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
     document.body.removeChild(ta); toast('📋 Copy GM Link แล้ว!');
   }
+}
+// ================================================================
+// พื้นที่เก็บข้อมูลเบราว์เซอร์ — ไล่ทุก key จริงในเครื่อง บอกว่าตัวไหนกินที่มากสุด
+// ================================================================
+// ป้ายชื่อไทยให้เฉพาะตัวที่คนน่าจะเจอบ่อย ที่เหลือโชว์ชื่อ collection ดิบไปเลย (ยังอ่านออกพอเดาได้)
+var ADM_STORAGE_LABELS = {
+  djiProjects: '🗂️ ทะเบียน Project ID', salesOrders: '📦 Sales Order', quotations: '💰 ใบเสนอราคา',
+  pipeline: '📊 Pipeline', pipeLog: '📊 Pipeline (log)', dealers: '🏪 Dealer', products: '📦 Products',
+  stockLog: '📦 Stock (ประวัติ)', stockLevels: '📦 Stock (จำนวน)', visits: '🤝 Visit', notes: '📚 Note'
+};
+// ~5 MB เป็นค่ากลางที่เบราว์เซอร์ส่วนใหญ่ให้ต่อโดเมน (Chrome/Edge/Firefox) จริงอาจมากกว่านี้เล็กน้อย —
+// ใช้แค่ประมาณคร่าวๆ ให้เห็นว่าใกล้เต็มแค่ไหน ไม่ใช่ตัวเลขที่เบราว์เซอร์รับประกัน
+var ADM_STORAGE_QUOTA_EST = 5 * 1024 * 1024;
+
+function _admFmtKB(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(2) + ' MB';
+}
+
+function _admStorageReportHtml() {
+  var r = ST.storageReport();
+  var pct = Math.min(100, Math.round(r.total / ADM_STORAGE_QUOTA_EST * 100));
+  var barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+
+  var h = '<div class="card"><h2>🗄️ พื้นที่เก็บข้อมูลเบราว์เซอร์</h2>';
+  h += '<div class="hint" style="margin-bottom:8px">เบราว์เซอร์ให้พื้นที่เก็บข้อมูลต่อเว็บไซต์จำกัด (ราว 5 MB) ' +
+    'ถ้าเต็ม การนำเข้าไฟล์หรือ sync ข้อมูลบางอย่างจะไม่ถูกบันทึกพร้อมขึ้นคำเตือน "พื้นที่ไม่พอ" — ดูตรงนี้ว่าอะไรกินที่มากสุด</div>';
+  h += '<div style="background:var(--bg2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:4px">' +
+    '<div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div>';
+  h += '<div style="font-size:12px;color:var(--text2);margin-bottom:12px">ใช้ไป ' + _admFmtKB(r.total) +
+    ' จากประมาณ ' + _admFmtKB(ADM_STORAGE_QUOTA_EST) + ' (' + pct + '%)</div>';
+
+  // สถานะ IndexedDB ของคอลเลกชันก้อนใหญ่ (สมุดเดินของ DJI) — สาเหตุที่พบบ่อยสุดของพื้นที่เต็ม คือเบราว์เซอร์
+  // เครื่องนี้เปิด IndexedDB ไม่ได้ (โหมดส่วนตัว/เบราว์เซอร์เก่า) แล้วสมุดหลัก MB เลยยังไปนอนกิน localStorage
+  if (r.bigKeys.length) {
+    if (r.bigOK) {
+      h += '<div style="font-size:12px;color:var(--ok,#22c55e);margin-bottom:10px">✅ ข้อมูลก้อนใหญ่ (สมุดเดินของ DJI) ย้ายไปเก็บใน IndexedDB แล้ว ไม่กิน localStorage</div>';
+    } else {
+      h += '<div style="font-size:12px;color:var(--warn,#f59e0b);background:var(--warn-soft,rgba(245,158,11,.12));border-radius:8px;padding:8px 10px;margin-bottom:10px">' +
+        '⚠️ เบราว์เซอร์นี้เปิด IndexedDB ไม่ได้ — สมุดเดินของ DJI เลยยังเก็บใน localStorage แบบเดิม (กินที่มาก) ' +
+        (r.bigStillLocal.length ? '<button class="btn bsm bo" style="margin-top:6px" onclick="admRetryBigMigration()">🔄 ลองย้ายเข้า IndexedDB อีกครั้ง</button>' : '') +
+        '</div>';
+    }
+  }
+
+  h += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">10 อันดับที่กินที่มากสุด</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px">';
+  r.items.slice(0, 10).forEach(function(it) {
+    var label = (it.name && ADM_STORAGE_LABELS[it.name]) || it.name || it.key;
+    h += '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 8px;background:var(--bg2);border-radius:6px">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(label) + '</span>' +
+      '<span style="color:var(--text2);flex-shrink:0">' + _admFmtKB(it.bytes) + '</span></div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+
+// เผื่อครั้งแรกที่เปิดแอพ IndexedDB ยังไม่พร้อม (เบราว์เซอร์ช้า/ชั่วคราว) — ให้ลองใหม่ได้โดยไม่ต้อง reload
+// รีเซ็ต _bigP ทิ้งก่อน ไม่งั้น initBig() จะคืน Promise เดิมที่ resolve ไปแล้ว (ล้มไปแล้ว) ไม่ลองเปิดใหม่จริง
+function admRetryBigMigration() {
+  ST._bigP = null; ST._bigReady = false;
+  toast('🔄 กำลังลองย้ายข้อมูลเข้า IndexedDB...');
+  ST.initBig().then(function(ok) {
+    toast(ok ? '✅ ย้ายสำเร็จแล้ว' : '⚠️ ยังย้ายไม่ได้ — เบราว์เซอร์นี้อาจไม่รองรับ IndexedDB (เช่น โหมดส่วนตัว)', !ok);
+    render();
+  });
 }

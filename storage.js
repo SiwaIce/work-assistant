@@ -118,7 +118,7 @@ const ST = {
       return true;
     }
     try { localStorage.setItem(key, JSON.stringify(data)); this._rev++; return true; }
-    catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม!', true); return false; }
+    catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม! ไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง ดูว่าอะไรกินที่อยู่', true); return false; }
   },
 
   // เลขรุ่นของข้อมูลในเครื่อง — ขยับทุกครั้งที่มีการเขียนจริง หน้าที่ทำ index ไว้ในหน่วยความจำ (เช่น
@@ -320,6 +320,34 @@ const ST = {
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / 1048576).toFixed(2) + ' MB';
   },
+  // รายงานพื้นที่เก็บข้อมูลแบบละเอียด — ต่างจาก getStorageSize() ตรงที่ (1) ไล่ทุก key จริงใน
+  // localStorage ไม่ใช่แค่ collection ที่ลงทะเบียนไว้ใน _keys (กัน key แปลกปลอม/เศษเก่าที่ไม่มีใครรู้จัก
+  // แต่กินที่อยู่) (2) เรียงจากตัวที่กินที่มากสุดก่อน จะได้รู้ว่าตัวไหนคือตัวการจริง ไม่ใช่เดา
+  // (3) บอกด้วยว่าคอลเลกชันก้อนใหญ่ (ดู idb.js) ย้ายไป IndexedDB สำเร็จหรือยัง — ถ้ายัง แปลว่าเบราว์เซอร์
+  // เครื่องนี้เปิด IndexedDB ไม่ได้ (โหมดส่วนตัวบางตัว/เบราว์เซอร์เก่า) แล้วมันจะยังไปนอนกิน localStorage
+  // เหมือนเดิม ซึ่งเป็นสาเหตุที่พบบ่อยที่สุดของ "พื้นที่เก็บข้อมูลไม่พอ" ทั้งที่เพิ่งย้ายไป IndexedDB แล้ว
+  storageReport() {
+    const nameByKey = {};
+    for (const name in this._keys) nameByKey[this._keys[name]] = name;
+    const items = [];
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      const bytes = (k.length + v.length) * 2;   // UTF-16 ภายในตัว ~2 ไบต์ต่ออักขระ
+      total += bytes;
+      items.push({ key: k, name: nameByKey[k] || null, bytes: bytes });
+    }
+    items.sort((a, b) => b.bytes - a.bytes);
+    return {
+      items: items,
+      total: total,
+      bigOK: this._bigOK,
+      bigKeys: Object.keys(this._BIG),
+      bigStillLocal: Object.keys(this._BIG).filter(k => !this._bigOK && localStorage.getItem(k))
+    };
+  },
+
   getCollectionCounts() {
     const counts = {};
     ['dealers','pipeline','visits','followups','lineLog','feedback','meetings','tasks','emails','waiting','timerLogs','templates','routines','qnotes','goals'].forEach(c => { counts[c] = this.getAll(c).length; });
