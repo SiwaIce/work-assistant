@@ -197,6 +197,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .stepper button { width:32px; height:32px; border:none; background:var(--surface); color:var(--text); font-size:16px; font-weight:700; cursor:pointer; }
 .stepper input { width:44px; height:32px; text-align:center; border:none; border-left:1px solid var(--border); border-right:1px solid var(--border); background:var(--surface); color:var(--text); font-weight:700; }
 .range-warn { font-size:11.5px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:6px 10px; margin-bottom:10px; }
+.range-nearest { font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 11px; margin-bottom:10px; display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.range-nearest-note { font-size:11px; color:var(--text2); }
 .range-inputs { display:flex; gap:10px; margin:14px 0; }
 .range-inputs .field { flex:1; margin-bottom:0; }
 .cart-bar { position:sticky; bottom:14px; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:10px 14px; box-shadow:var(--shadow); display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:16px 0; }
@@ -574,6 +576,13 @@ var I18N = {
   'dd.privacy':     ['🔒 ระบบไม่แสดงข้อมูลผู้ยืมรายอื่น', '🔒 We never show who else has borrowed'],
   'warn.range':     ['⚠️ ช่วงที่เลือกมีบางวันไม่ว่างสำหรับบางเครื่อง — ลองปรับจำนวนวันหรือวันเริ่มยืมใหม่',
                      '⚠️ Some days in this range are unavailable for some units — try a different length or start date.'],
+  'warn.findNearest': ['🔍 หาวันว่างตรงกันใกล้สุด', '🔍 Find the nearest date everything is free'],
+  'warn.nearestFound': ['ว่างพร้อมกันใกล้ที่สุด:', 'Nearest date everything is free:'],
+  'warn.nearestUse':  ['✅ ใช้ช่วงนี้แทน', '✅ Use this instead'],
+  'warn.nearestPending': ['⚠️ มีคนอื่นขอยืมช่วงนี้ไว้แล้ว รอทีมงานคอนเฟิร์ม — อาจเปลี่ยนแปลงได้',
+                     '⚠️ Someone else has already requested this period, pending confirmation — it may still change.'],
+  'warn.nearestNone': ['หาในช่วง 6 เดือนข้างหน้าแล้วไม่เจอวันที่ว่างพร้อมกันเลย — ลองลดจำนวนเครื่องที่เลือกดูนะครับ',
+                     'We checked the next 6 months and could not find a date when everything is free — try selecting fewer units.'],
   'alert.pickDate': ['เลือกวันที่ก่อนนะครับ', 'Please choose your dates first.'],
   'alert.noItems':  ['ยังไม่ได้เลือกอุปกรณ์เลยครับ', 'You have not added any equipment yet.'],
   'cart.none':      ['ยังไม่ได้เลือกอุปกรณ์', 'No equipment selected yet'],
@@ -1113,6 +1122,10 @@ function renderCalBlockHint() {
 }
 function custDayClick(iso) {
   if (custMultiDay) { custToggleDay(iso); return; }
+  // เดิมกดวันในปฏิทินแล้วแค่เปิดแผงรายละเอียด ต้องไปกดปุ่ม "เลือกวันนี้" ในแผงอีกทีถึงจะติดช่องจริง —
+  // ถ้าวันนั้นว่างพร้อมกันทุกเครื่องอยู่แล้ว ไม่มีอะไรต้องเลือกเพิ่ม เลือกให้ทันทีเลยไม่ต้องกดซ้ำสองครั้ง
+  // เก็บแผงรายละเอียดไว้เฉพาะตอนที่ต้องรู้ว่าติดอะไร (มีบางเครื่องไม่ว่าง) ก่อนตัดสินใจ
+  if (combinedDayState(iso) === 'avail') { custDayOpen = null; pickCalDay(iso); return; }
   // เปลี่ยนไปดูวันอื่น = เริ่มกรองใหม่ ไม่งั้นคำค้นของวันก่อนติดมาแล้วเห็นรายการว่างเปล่าโดยไม่รู้สาเหตุ
   if (iso !== custDayOpen) custDayReset();
   custDayOpen = (custDayOpen === iso) ? null : iso;
@@ -1264,7 +1277,46 @@ function checkRangeWarn() {
   if (!rangeStart || !rangeEnd || !calUnits.length) { warnEl.innerHTML = ''; return; }
   var hasIssue = false, cur = rangeStart;
   while (cur <= rangeEnd) { if (combinedDayState(cur) !== 'avail') { hasIssue = true; break; } cur = addDaysIso(cur, 1); }
-  warnEl.innerHTML = hasIssue ? '<div class="range-warn">' + tr('warn.range') + '</div>' : '';
+  if (!hasIssue) { warnEl.innerHTML = ''; return; }
+  var nearest = custFindNearestFree();
+  var h = '<div class="range-warn">' + tr('warn.range') + '</div>';
+  h += '<div class="range-nearest">';
+  if (nearest) {
+    h += '<div>' + tr('warn.nearestFound') + ' <b>' + _dReq(nearest.start) + (nearest.end !== nearest.start ? ' – ' + _dReq(nearest.end) : '') + '</b></div>';
+    if (nearest.pending) h += '<div class="range-nearest-note">' + tr('warn.nearestPending') + '</div>';
+    h += '<button class="btn btn-ghost btn-sm" onclick="custUseNearestFree()">' + tr('warn.nearestUse') + '</button>';
+  } else {
+    h += '<div class="range-nearest-note">' + tr('warn.nearestNone') + '</div>';
+  }
+  h += '</div>';
+  warnEl.innerHTML = h;
+}
+// หาช่วงวันยาวเท่าที่เลือกไว้ (custDayCount) ที่ทุกเครื่องที่เลือกว่างพร้อมกัน ใกล้วันที่กำลังดูอยู่ที่สุด —
+// ค้นไปข้างหน้าอย่างเดียว (ไม่มีใครอยากได้วันที่ผ่านไปแล้ว) เพดาน 180 วันกันลูปค้างถ้าเลือกเครื่องไว้เยอะ
+// จนไม่มีวันไหนว่างพร้อมกันเลยในอนาคตอันใกล้ — ธงมีคนจองรอคอนเฟิร์ม (pending) เป็นแค่ข้อสังเกต ไม่ตัดสิทธิ์
+// ช่วงนั้นออกจากผลลัพธ์ เพราะคำขอที่ยังไม่อนุมัติอาจไม่ผ่านก็ได้
+function custFindNearestFree() {
+  if (!calUnits.length) return null;
+  var from = rangeStart || todayIso();
+  var len = Math.max(1, custDayCount);
+  for (var i = 0; i < 180; i++) {
+    var s = addDaysIso(from, i);
+    var ok = true, pending = false;
+    for (var j = 0; j < len; j++) {
+      var d = addDaysIso(s, j);
+      if (combinedDayState(d) !== 'avail') { ok = false; break; }
+      if (combinedPendingOnDay(d)) pending = true;
+    }
+    if (ok) return { start: s, end: addDaysIso(s, len - 1), pending: pending };
+  }
+  return null;
+}
+function custUseNearestFree() {
+  var r = custFindNearestFree();
+  if (!r) return;
+  rangeStart = r.start; rangeEnd = r.end; custDayCount = daysBetweenIso(r.start, r.end) + 1;
+  var inp = document.getElementById('custDayCountInput'); if (inp) inp.value = custDayCount;
+  syncRangeInputs(); renderUnitCal();
 }
 function custDayCountChange(delta) {
   custDayCount = Math.max(1, custDayCount + delta);
