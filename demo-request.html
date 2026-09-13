@@ -115,8 +115,19 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 @media (pointer:coarse) {
   #calUnitsBanner .cart-chip .x { padding:6px 8px; margin:-6px -4px -6px 2px; }
 }
-.dhint { font-size:11.5px; color:var(--text2); margin-top:5px; font-variant-numeric:tabular-nums; }
-.dhint:empty { display:none; }
+/* ช่อง <input type="date"> ของเบราว์เซอร์แสดงตามภาษาเครื่อง (en-US ขึ้น เดือน/วัน/ปี) แก้จากโค้ดไม่ได้
+   เพราะเบราว์เซอร์คุมเอง — ปิดทับตัวเลขในช่องด้วยข้อความ วัน/เดือน/ปี ของเราเองแทน (.dtxt เดิมชื่อ .dhint
+   แต่ย้ายจากใต้ช่องมาซ้อนทับในช่องแทน) เว้นมุมขวาไว้ให้กดไอคอนปฏิทิน native เดิมได้ตามปกติ —
+   pointer-events:none ทำให้คลิกทะลุไปโดน input จริงด้านล่างเสมอ ค่าที่เก็บยังเป็น ISO เหมือนเดิมทุกจุด */
+.dwrap { position:relative; }
+.dwrap .dtxt {
+  position:absolute; left:1px; top:1px; right:28px; bottom:1px;
+  display:flex; align-items:center; overflow:hidden; white-space:nowrap;
+  background:var(--surface-2); border-radius:9px 0 0 9px;
+  padding-left:12px; font-size:14px; color:var(--text);
+  pointer-events:none; font-variant-numeric:tabular-nums;
+}
+.dwrap .dtxt:empty::before { content:'วว/ดด/ปปปป'; color:var(--text3); }
 /* คำในวงเล็บที่ซ้ำทุกแถว (Demo Unit / General Demo) — จางลงให้ชื่อรุ่นจริงเด่นแทน */
 .day-detail .dd-nm u { text-decoration:none; font-weight:500; color:var(--text3); font-size:11.5px; }
 /* ค้นหา + เลือกหมวด ภายในแผงรายละเอียดของวัน */
@@ -301,8 +312,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
         </div>
         <div id="custRangeWarn"></div>
         <div class="range-inputs">
-          <div class="field"><label data-i18n="lbl.start">วันที่เริ่มยืม</label><input type="date" id="rangeStartInput" onchange="manualRangeChange()"><div class="dhint" id="rangeStartHint"></div></div>
-          <div class="field"><label data-i18n="lbl.end">วันที่คืน</label><input type="date" id="rangeEndInput" onchange="manualRangeChange()"><div class="dhint" id="rangeEndHint"></div></div>
+          <div class="field"><label data-i18n="lbl.start">วันที่เริ่มยืม</label><div class="dwrap"><input type="date" id="rangeStartInput" onchange="manualRangeChange()"><div class="dtxt" id="rangeStartHint"></div></div></div>
+          <div class="field"><label data-i18n="lbl.end">วันที่คืน</label><div class="dwrap"><input type="date" id="rangeEndInput" onchange="manualRangeChange()"><div class="dtxt" id="rangeEndHint"></div></div></div>
         </div>
         <button class="btn btn-primary btn-full" onclick="addToCart()" data-i18n="btn.addCart">✅ เพิ่มลงตะกร้า</button>
       </div>
@@ -1232,8 +1243,10 @@ function pickCalDay(iso) {
   syncRangeInputs(); renderUnitCal();
 }
 // ช่อง <input type="date"> ของเบราว์เซอร์แสดงตามภาษาของเครื่อง เครื่องที่ตั้งเป็น en-US จะขึ้นเป็น
-// เดือน/วัน/ปี ซึ่งอ่านสลับกับที่คนไทยคุ้น และเปลี่ยนจากในโค้ดไม่ได้ (เบราว์เซอร์คุมเอง)
-// จึงเขียนวันที่ที่เลือกไว้เป็น วัน/เดือน/ปี กำกับใต้ช่อง จะได้ไม่มีทางอ่านสลับ
+// เดือน/วัน/ปี ซึ่งอ่านสลับกับที่คนไทยคุ้น และเปลี่ยนจากในโค้ดไม่ได้ (เบราว์เซอร์คุมเอง) — เดิมแก้ด้วยการ
+// เขียนกำกับ วัน/เดือน/ปี ไว้ใต้ช่อง แต่ตัวช่องเองยังโชว์ผิดอยู่ดี เลยยังอ่านสลับกันง่าย เปลี่ยนมาปิดทับ
+// ตัวเลขในช่องด้วยข้อความของเราเองแทน (#rangeStartHint/#rangeEndHint คือ .dtxt ที่ซ้อนทับอยู่ในช่อง
+// ไม่ใช่หมายเหตุใต้ช่องอีกต่อไป — ดู CSS .dwrap/.dtxt)
 function _dReq(iso) {
   var p = String(iso || '').split('-');
   return (p.length === 3 && p[0]) ? p[2] + '/' + p[1] + '/' + p[0] : '';
@@ -1242,8 +1255,8 @@ function syncRangeInputs() {
   document.getElementById('rangeStartInput').value = rangeStart || '';
   document.getElementById('rangeEndInput').value = rangeEnd || rangeStart || '';
   var a = document.getElementById('rangeStartHint'), b = document.getElementById('rangeEndHint');
-  if (a) a.textContent = rangeStart ? '📅 ' + _dReq(rangeStart) : '';
-  if (b) b.textContent = (rangeEnd || rangeStart) ? '📅 ' + _dReq(rangeEnd || rangeStart) : '';
+  if (a) a.textContent = rangeStart ? _dReq(rangeStart) : '';
+  if (b) b.textContent = (rangeEnd || rangeStart) ? _dReq(rangeEnd || rangeStart) : '';
   checkRangeWarn();
 }
 function checkRangeWarn() {
@@ -1267,6 +1280,9 @@ function manualRangeChange() {
   rangeEnd = document.getElementById('rangeEndInput').value || null;
   if (rangeStart && rangeEnd && rangeEnd < rangeStart) { var t = rangeStart; rangeStart = rangeEnd; rangeEnd = t; }
   if (rangeStart && rangeEnd) { custDayCount = daysBetweenIso(rangeStart, rangeEnd) + 1; document.getElementById('custDayCountInput').value = custDayCount; }
+  // ผู้ใช้เพิ่งพิมพ์/เลือกวันที่เองในช่องนี้โดยตรง — ต้องรีเฟรชข้อความ วัน/เดือน/ปี ที่ปิดทับอยู่ด้วย
+  // ไม่งั้นช่องจะโชว์ค้างเป็นค่าเก่าจนกว่าจะมีอย่างอื่นมาเรียก syncRangeInputs() ให้
+  syncRangeInputs();
   checkRangeWarn(); renderUnitCal();
 }
 

@@ -311,10 +311,20 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sc-kv > div { background:var(--surface-2); border-radius:8px; padding:7px 10px; min-width:0; }
 .sc-kv span { display:block; font-size:10px; color:var(--text3); margin-bottom:2px; }
 .sc-kv b { font-size:12.5px; word-break:break-word; }
-/* วันที่ที่เลือกไว้ เขียนกำกับใต้ช่อง <input type="date"> เป็น วัน/เดือน/ปี
-   เพราะช่องวันที่ของเบราว์เซอร์แสดงตามภาษาเครื่อง (en-US จะขึ้น เดือน/วัน/ปี) แก้จากโค้ดไม่ได้ */
-.dhint { font-size:11.5px; color:var(--text2); margin-top:5px; font-variant-numeric:tabular-nums; }
-.dhint:empty { display:none; }
+/* ช่อง <input type="date"> ของเบราว์เซอร์แสดงตามภาษาเครื่อง (en-US ขึ้น เดือน/วัน/ปี) แก้จากโค้ดไม่ได้
+   เพราะเบราว์เซอร์คุมเอง — เดิมแก้ด้วยการเขียนกำกับ วัน/เดือน/ปี ไว้ใต้ช่อง แต่ตัวช่องเองยังโชว์ผิดอยู่ดี
+   จึงยังอ่านสลับกันได้ง่าย เปลี่ยนมาปิดทับตัวเลขในช่องด้วยข้อความ วัน/เดือน/ปี ของเราเองแทน (.dtxt) โดย
+   เว้นมุมขวาไว้ให้กดไอคอนปฏิทิน native เดิมได้ตามปกติ — pointer-events:none ทำให้คลิกทะลุไปโดน input จริง
+   ด้านล่างเสมอ ไม่ว่าจะคลิกโดนส่วนที่ถูกปิดทับหรือไม่ก็ตาม ค่าที่เก็บยังเป็น ISO เหมือนเดิมทุกจุด */
+.dwrap { position:relative; }
+.dwrap .dtxt {
+  position:absolute; left:1px; top:1px; right:28px; bottom:1px;
+  display:flex; align-items:center; overflow:hidden; white-space:nowrap;
+  background:var(--surface-2); border-radius:9px 0 0 9px;
+  padding-left:12px; font-size:14px; color:var(--text);
+  pointer-events:none; font-variant-numeric:tabular-nums;
+}
+.dwrap .dtxt:empty::before { content:'วว/ดด/ปปปป'; color:var(--text3); }
 /* ── คีย์ยืมหลายเครื่องพร้อมกัน ─────────────────────────────────────── */
 .su-pick, .sd-pick { flex:0 0 auto; display:flex; align-items:center; }
 .su-pick input, .sd-pick input { width:17px; height:17px; cursor:pointer; accent-color:var(--accent); }
@@ -1715,16 +1725,23 @@ function _scD(iso) {
   return p[2] + '/' + p[1] + '/' + p[0];
 }
 // ช่อง <input type="date"> ของเบราว์เซอร์แสดงตามภาษาของเครื่อง เครื่องที่ตั้งเป็น en-US จะขึ้นเป็น
-// เดือน/วัน/ปี ซึ่งอ่านสลับกับที่คนไทยคุ้น และเปลี่ยนจากในโค้ดไม่ได้ (เบราว์เซอร์คุมเอง)
-// จึงเขียนวันที่ที่เลือกไว้เป็น วัน/เดือน/ปี กำกับใต้ช่อง จะได้ไม่มีทางอ่านสลับ
+// เดือน/วัน/ปี ซึ่งอ่านสลับกับที่คนไทยคุ้น และเปลี่ยนจากในโค้ดไม่ได้ (เบราว์เซอร์คุมเอง) — ครอบ input
+// แต่ละช่องด้วย .dwrap แล้ววาง .dtxt ทับตัวเลขเดิมด้วยข้อความ วัน/เดือน/ปี ของเราเอง (ดูคอมเมนต์ที่ CSS
+// ของ .dwrap) ครอบให้อัตโนมัติตรงนี้จุดเดียว ไม่ต้องแก้ HTML ทุกจุดที่สร้าง input type=date
 function _scDateHints(root) {
   var list = (root || document).querySelectorAll('input[type="date"]');
   for (var i = 0; i < list.length; i++) {
-    var inp = list[i], box = inp.parentNode;
-    if (!box) continue;
-    var hint = box.querySelector('.dhint');
-    if (!hint) { hint = document.createElement('div'); hint.className = 'dhint'; box.appendChild(hint); }
-    hint.textContent = inp.value ? '📅 ' + _scD(inp.value) : '';
+    var inp = list[i];
+    var wrap = inp.parentNode;
+    if (!wrap || !wrap.classList || !wrap.classList.contains('dwrap')) {
+      wrap = document.createElement('div');
+      wrap.className = 'dwrap';
+      inp.parentNode.insertBefore(wrap, inp);
+      wrap.appendChild(inp);
+    }
+    var txt = wrap.querySelector('.dtxt');
+    if (!txt) { txt = document.createElement('div'); txt.className = 'dtxt'; wrap.appendChild(txt); }
+    txt.textContent = inp.value ? _scD(inp.value) : '';
   }
 }
 document.addEventListener('input', function(e) {
