@@ -593,7 +593,8 @@ function showDjpLinkM(id) {
   if (p.pipelineId) {
     var cur = djpPipelineOf(p);
     h += '<div class="hint" style="margin-bottom:10px">ตอนนี้ผูกอยู่กับ: <b>' + sanitize(cur ? cur.projectName : '(โครงการถูกลบไปแล้ว)') + '</b>' +
-      ' <a href="#" onclick="djpUnlink(\'' + p.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
+      ' · <a href="#" onclick="closeMForce();djpRelink(\'' + p.id + '\');return false">🔀 ผูกผิด แก้ไข</a>' +
+      ' · <a href="#" onclick="djpUnlink(\'' + p.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
   }
 
   // เลือกชนิดได้ตรงนี้ หรือปล่อยให้รู้เองตอนกรอกเลขนี้ในใบเสนอราคา/SO ก็ได้ — ชนิดเป็นตัวกำหนดว่า
@@ -682,11 +683,14 @@ function djpLinkBucket(id, rrId) {
   if (!pidSame(r.projectId, p.pid) &&
       !confirm('เลขไม่ตรงกัน\n\nทะเบียน: ' + p.pid + '\nถัง: ' + (r.projectId || '(ไม่มีเลข)') +
                '\n\nยอดของ SO จะเข้าถังตามที่เลือก ไม่ใช่ตามเลขในทะเบียน\n\nตกลง = ผูกตามนี้')) return;
-  var up = ST.update('djiProjects', id, { runrateId: rrId, kind: 'runrate', pipelineId: '' });
+  // เดิมผูกกับ Pipeline อยู่ก่อนสลับมาเป็น Run rate — ต้องคืนชื่อ/เลขที่เคยเขียนทับ Pipeline นั้นไว้ก่อน
+  // ไม่งั้น Pipeline เดิมจะค้างชื่อ/เลขของทะเบียนนี้ทั้งที่ทะเบียนย้ายไปอยู่ถังอื่นแล้ว
+  var reverted = p.pipelineId ? _djpRevertPipe(p) : [];
+  var up = ST.update('djiProjects', id, { runrateId: rrId, kind: 'runrate', pipelineId: '', linkUndo: null });
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
-  toast('🔗 ผูกกับถัง ' + (r.projectId || '') + ' แล้ว');
-  render();
+  toast('🔗 ผูกกับถัง ' + (r.projectId || '') + ' แล้ว' + (reverted.length ? ' · คืนค่าเดิมให้ Pipeline เก่าแล้ว' : ''));
+  _djpRender();
 }
 
 // สร้างถังใหม่ด้วยเลขของทะเบียนนี้ — ถัง Run rate บังคับว่าต้องมี Dealer และเลข จึงต้องรู้ Dealer ก่อน
@@ -704,11 +708,13 @@ function djpCreateBucketFrom(id) {
   });
   if (!saved) { toast('สร้างถังไม่สำเร็จ', true); return; }
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', saved);
-  var up = ST.update('djiProjects', id, { runrateId: saved.id, kind: 'runrate', pipelineId: '' });
+  // เดิมผูกกับ Pipeline อยู่ก่อนสร้างถังใหม่ — คืนชื่อ/เลขที่เคยเขียนทับ Pipeline นั้นไว้ก่อน เหตุผลเดียวกับ djpLinkBucket
+  var reverted = p.pipelineId ? _djpRevertPipe(p) : [];
+  var up = ST.update('djiProjects', id, { runrateId: saved.id, kind: 'runrate', pipelineId: '', linkUndo: null });
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
-  toast('✅ สร้างถัง Run rate ' + p.pid + ' แล้ว');
-  render();
+  toast('✅ สร้างถัง Run rate ' + p.pid + ' แล้ว' + (reverted.length ? ' · คืนค่าเดิมให้ Pipeline เก่าแล้ว' : ''));
+  _djpRender();
 }
 
 // ชื่อสองฝั่งไม่ตรงกันเป็นเรื่องปกติ (คนละคนตั้ง คนละเวลา) — ถามว่าจะใช้ชื่อไหน แล้วเขียนให้ตรงกันทั้งคู่
@@ -736,9 +742,56 @@ function djpPickPipeline(projId, pipeId) {
   openM('ชื่อโครงการไม่ตรงกัน', h);
 }
 
+// จำว่าตอนผูกเราไปเขียนอะไรทับของเดิมไว้ เพื่อให้ "ยกเลิกการผูก" คืนค่าเดิมได้จริง ไม่ใช่เดา
+// เก็บเฉพาะค่าก่อนหน้าของ field ที่เราแตะเอง (ชื่อโครงการ / Project ID / ธง CRM) และคืนให้เฉพาะตอนที่ค่า
+// ปัจจุบันยังเป็นค่าที่เราเขียนไว้จริงๆ — ถ้ามีคนแก้ต่อทีหลัง ห้ามทับของเขา
+function _djpUndoOf(p) { return (p && p.linkUndo) || null; }
+
+// หา field ที่ต้องคืนค่า — ใช้ร่วมกันทั้งตอน "ดูก่อนว่าจะคืนอะไรบ้าง" (ขึ้นข้อความยืนยัน) กับตอนคืนจริง
+// คืนเฉพาะ field ที่ค่าปัจจุบันยังเป็นค่าที่เราเขียนไว้จริงๆ ถ้ามีคนแก้ต่อทีหลังถือว่าเป็นของเขา ห้ามทับ
+function _djpRevertDiff(p) {
+  var u = _djpUndoOf(p);
+  if (!u || !u.pipeId) return null;
+  var pipe = ST.getOne('pipeline', u.pipeId);
+  if (!pipe) return null;
+  var upd = {}, note = [];
+  if (_djpNorm(pipe.projectName) === _djpNorm(p.name) && _djpNorm(u.pipeName) !== _djpNorm(p.name)) {
+    upd.projectName = u.pipeName; note.push('ชื่อโครงการ');
+  }
+  if (pidSame(pipe.projectId, p.pid) && !pidSame(u.pipePid, p.pid)) {
+    upd.projectId = u.pipePid; note.push('Project ID');
+  }
+  if (!u.pipeCrm && pipe.djiCrmRegistered) {
+    upd.djiCrmRegistered = false; upd.djiCrmDate = u.pipeCrmDate || ''; note.push('สถานะลงทะเบียน CRM');
+  }
+  return { pipe: pipe, upd: upd, note: note };
+}
+
+// คืนค่าเดิมให้ Pipeline ที่เคยถูกเขียนทับตอนผูก — คืนแล้วบอกว่าแก้อะไรไปบ้าง (เปล่า = ไม่มีอะไรต้องคืน
+// เพราะไม่เคยเขียนทับ หรือมีคนแก้ทับค่าที่เราเขียนไปแล้วอีกที)
+function _djpRevertPipe(p) {
+  var d = _djpRevertDiff(p);
+  if (!d || !d.note.length) return [];
+  var saved = ST.update('pipeline', d.pipe.id, d.upd);
+  if (saved && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', saved);
+  try {
+    var lg = ST.add('pipeLog', { pipeId: d.pipe.id, type: 'note', date: _td(),
+      content: 'ยกเลิกการผูกกับทะเบียน Project ID ' + p.pid + ' · คืนค่าเดิมให้ ' + d.note.join(', '),
+      created: new Date().toISOString() });
+    if (lg && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', lg);
+  } catch (e) {}
+  return d.note;
+}
+
 function _djpApplyLink(projId, pipeId, nameFrom) {
   var p = ST.getOne('djiProjects', projId), pipe = ST.getOne('pipeline', pipeId);
   if (!p || !pipe) return;
+  // ตำแหน่งในกระดานก่อนผูก — ผูกเสร็จรายการนี้จะหลุดออกจากลิสต์ ตัวที่เลื่อนมาแทนที่ index เดิมคือตัวถัดไป
+  var boardIdx = -1;
+  if (_djpBoardMode) {
+    var bl = _djpBoardUnlinked(djpBoardDealer);
+    boardIdx = bl.findIndex(function(x) { return x.id === projId; });
+  }
   var name = null;
   if (nameFrom === 'crm') name = _djpNorm(p.name);
   else if (nameFrom === 'pipe') name = _djpNorm(pipe.projectName);
@@ -747,9 +800,26 @@ function _djpApplyLink(projId, pipeId, nameFrom) {
     if (!name) { alert('พิมพ์ชื่อก่อนนะครับ'); return; }
   }
 
+  // ย้ายไปผูกกับโครงการอื่น = โครงการเดิมผูกผิด ต้องคืนเลข/ชื่อที่เคยเขียนใส่ให้เขาก่อน ไม่ใช่ทิ้งค้างไว้
+  var moved = null;
+  if (p.pipelineId && p.pipelineId !== pipeId) {
+    var oldPipe = ST.getOne('pipeline', p.pipelineId);
+    var reverted = _djpRevertPipe(p);
+    if (oldPipe) moved = { name: oldPipe.projectName || '', fields: reverted };
+  }
+
   // ผูกฝั่งโครงการแล้วต้องล้างฝั่งถังทิ้ง ไม่งั้นทะเบียนเดียวค้างอยู่ทั้งสองทางแล้วยอดถูกนับซ้ำ
   var projUpd = { pipelineId: pipeId, runrateId: '', kind: 'project' };
   if (name) projUpd.name = name;
+  projUpd.linkUndo = {
+    at: new Date().toISOString(),
+    projName: p.name,                       // ชื่อเดิมฝั่งทะเบียน
+    pipeId: pipeId,
+    pipeName: pipe.projectName || '',       // ค่าเดิมฝั่ง Pipeline ทั้งสามอย่าง
+    pipePid: pipe.projectId || '',
+    pipeCrm: !!pipe.djiCrmRegistered,
+    pipeCrmDate: pipe.djiCrmDate || ''
+  };
   var savedProj = ST.update('djiProjects', projId, projUpd);
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
 
@@ -770,19 +840,47 @@ function _djpApplyLink(projId, pipeId, nameFrom) {
       if (lg && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', lg);
     } catch (e) {}
   }
+  toast('🔗 ผูกกับ ' + (name || pipe.projectName) + ' แล้ว' +
+    (moved ? ' · คืนค่าเดิมให้ "' + String(moved.name).substr(0, 20) + '" แล้ว' : ''));
+  _djpRelinkId = '';
+  // มาจากกระดานจับคู่ → อยู่ในกระดานต่อแล้วเลื่อนไปตัวถัดไปให้เลย ไม่ใช่ปิดกระดานทิ้งแล้วเด้งกลับหน้าเมนู
+  // (ของที่ต้องจับคู่มีเป็นร้อย ถ้าปิดทุกครั้งก็ต้องเปิดกระดานใหม่ทุกครั้ง)
+  if (_djpBoardMode) {
+    var nl = _djpBoardUnlinked(djpBoardDealer);
+    djpBoardProj = nl.length ? (nl[Math.min(boardIdx < 0 ? 0 : boardIdx, nl.length - 1)] || nl[0]).id : '';
+    djpBoardQ = '';
+    _djpRenderBoard();
+    return;
+  }
   closeMForce();
-  toast('🔗 ผูกกับ ' + (name || pipe.projectName) + ' แล้ว');
+  _djpRender();
+}
+
+// วาดหน้าใหม่โดยคงตำแหน่งที่เลื่อนอยู่ — render() สร้าง #ct ใหม่ทั้งก้อน ถ้าเนื้อหาหดลงเบราว์เซอร์จะดึงจอ
+// กลับขึ้นบนสุด ทำให้เสียตำแหน่งที่กำลังไล่อยู่ทุกครั้งที่ผูกเสร็จหนึ่งรายการ
+function _djpRender() {
+  var y = window.scrollY || window.pageYOffset || 0;
   render();
+  if (y) setTimeout(function() { window.scrollTo(0, y); }, 0);
 }
 
 function djpUnlink(id) {
   var p = ST.getOne('djiProjects', id);
-  if (!p || !confirm('ยกเลิกการผูก?\n\nชื่อและ Project ID ที่เขียนไปแล้วจะไม่ถูกย้อนกลับ')) return;
-  var up = ST.update('djiProjects', id, { pipelineId: '', runrateId: '' });
+  if (!p) return;
+  // บอกล่วงหน้าว่ากดแล้วจะคืนอะไรบ้าง แทนการทึกทักไว้ตายตัวว่า "ไม่ถูกย้อนกลับ" เหมือนเดิม — บาง field
+  // คืนได้จริง (ยังเป็นค่าที่ตอนผูกไปเขียนทับไว้) บาง field คืนไม่ได้ (มีคนแก้ต่อทีหลังแล้ว ถือเป็นของเขา)
+  var diff = _djpRevertDiff(p);
+  var msg = 'ยกเลิกการผูก?';
+  msg += (diff && diff.note.length)
+    ? '\n\nจะคืนค่าเดิมให้ Pipeline: ' + diff.note.join(', ')
+    : '\n\nชื่อ/Project ID ที่เขียนไปแล้วจะไม่ถูกย้อนกลับ (ถูกแก้ต่อทีหลัง หรือไม่เคยเขียนทับอะไรไว้)';
+  if (!confirm(msg)) return;
+  var reverted = _djpRevertPipe(p);
+  var up = ST.update('djiProjects', id, { pipelineId: '', runrateId: '', linkUndo: null });
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
-  toast('ยกเลิกการผูกแล้ว');
-  render();
+  toast('ยกเลิกการผูกแล้ว' + (reverted.length ? ' · คืนค่าเดิมให้แล้ว' : ''));
+  _djpRender();
 }
 
 // สร้างโครงการใน Pipeline จากทะเบียน — ใช้กับโครงการที่ dealer ลงทะเบียนไว้แต่เราไม่เคยรู้มาก่อน
@@ -806,6 +904,9 @@ function djpCreatePipelineFrom(id) {
   if (!p) return;
   var dealer = djpDealerOf(p);
   if (!dealer) { alert('โครงการนี้ยังไม่รู้ว่าเป็นของ Dealer ไหน — ระบุ Dealer ก่อนถึงจะสร้างโครงการได้'); return; }
+  // เรียกจากปุ่ม "แก้ไขการผูก" (djpRelink) ได้ด้วย — ตอนนั้นทะเบียนนี้ผูกกับ Pipeline อื่นอยู่ก่อนแล้ว
+  // ต้องคืนชื่อ/เลขที่เคยเขียนทับ Pipeline เดิมก่อนย้ายมาสร้างใบใหม่ เหตุผลเดียวกับ djpLinkBucket
+  var reverted = p.pipelineId ? _djpRevertPipe(p) : [];
   var pipe = ST.add('pipeline', _djpNewPipelineData(p));
   if (!pipe) { toast('สร้างโครงการไม่สำเร็จ', true); return; }
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeline', pipe);
@@ -814,10 +915,10 @@ function djpCreatePipelineFrom(id) {
       content: 'สร้างจากทะเบียน Project ID ' + p.pid + ' (ลงทะเบียนโดย ' + (p.createdBy || '-') + ')', created: new Date().toISOString() });
     if (lg && typeof syncItemToFirebase === 'function') syncItemToFirebase('pipeLog', lg);
   } catch (e) {}
-  var up = ST.update('djiProjects', id, { pipelineId: pipe.id, runrateId: '', kind: 'project' });
+  var up = ST.update('djiProjects', id, { pipelineId: pipe.id, runrateId: '', kind: 'project', linkUndo: null });
   if (typeof pushDjiDataToCloud === 'function') pushDjiDataToCloud('djiProjects');
   closeMForce();
-  toast('✅ สร้างโครงการแล้ว');
+  toast('✅ สร้างโครงการแล้ว' + (reverted.length ? ' · คืนค่าเดิมให้โครงการเก่าแล้ว' : ''));
   go('pipeDetail', { pipeId: pipe.id });
 }
 
@@ -954,6 +1055,10 @@ function _djpRowHtml(p, range) {
 
 function rDjiProjects(el) {
   document.getElementById('pgT').textContent = '🗂️ ทะเบียน Project ID';
+  // เผื่อออกจากกระดานจับคู่ด้วยการแตะพื้นหลัง/กด Escape แทนปุ่ม "ปิด" (djpCloseBoard) — ไม่งั้นสถานะกระดาน
+  // จะค้าง true ไปตลอด แล้วครั้งต่อไปที่ผูกจากที่อื่น (เช่นหน้า Pipeline) จะพยายามเปิดกระดานทับให้แทนที่จะปิด
+  // modal ตามปกติ — กลับมาหน้าทะเบียนเมื่อไหร่ถือว่าออกจากกระดานแล้วแน่นอน รีเซ็ตทิ้งได้ปลอดภัย
+  _djpBoardMode = false; _djpRelinkId = '';
   _djpBust();
   var all = ST.getAll('djiProjects');
 
@@ -1115,6 +1220,8 @@ function djpSuggestForPipeline(pipe) {
 }
 
 function showDjpLinkFromPipeM(pipeId) {
+  // จุดเข้าคนละทางกับกระดานจับคู่ — เผื่อสถานะกระดานค้างมาจากรอบก่อน (ปิดด้วยแตะพื้นหลัง/Escape แทนปุ่ม)
+  _djpBoardMode = false; _djpRelinkId = '';
   var pipe = ST.getOne('pipeline', pipeId);
   if (!pipe) return;
   var all = ST.getAll('djiProjects');
@@ -1179,9 +1286,28 @@ function djpPipeBadgeHtml(pipeId) {
 // การเรียงลำดับจึงช่วยได้แค่ดันตัวที่น่าจะใช่ขึ้นมา คนต้องเป็นคนชี้ — หน้านี้ทำให้การชี้นั้นเร็ว:
 // ล็อก Dealer ไว้ (สัญญาณเดียวที่เชื่อได้เสมอ) เอาเฉพาะที่ยังไม่ผูกมาเรียงคู่กัน แล้วกดทีละคู่รวดเดียว
 var djpBoardDealer = '', djpBoardProj = '', djpBoardQ = '', djpBoardShowList = false;
+// _djpBoardMode = กำลังจับคู่อยู่ในกระดาน (ผูกเสร็จให้อยู่ต่อแล้วไปตัวถัดไป ไม่ต้องปิดกระดาน)
+// _djpRelinkId  = กำลังแก้การผูกของทะเบียนตัวนี้ (ตัวที่ผูกไปแล้วแต่ผูกผิด) ปกติกระดานจะโชว์แต่ตัวที่ยังไม่ผูก
+var _djpBoardMode = false, _djpRelinkId = '';
 
 function showDjpMatchBoardM(dealerId) {
   if (dealerId !== undefined) { djpBoardDealer = dealerId || ''; djpBoardProj = ''; djpBoardQ = ''; }
+  _djpRelinkId = '';
+  _djpBoardMode = true;
+  _djpRenderBoard();
+}
+
+// ผูกผิด → เปลี่ยนไปผูกกับโครงการอื่นได้ตรงๆ ไม่ต้องยกเลิกก่อนแล้วไปตามหาใหม่
+// เปิดกระดานตัวเดิมโดยเจาะจงทะเบียนนี้ พร้อมคำค้นเป็นชื่อโครงการเดิมของทะเบียน จะได้เห็นตัวเลือกทันที
+function djpRelink(id) {
+  var p = ST.getOne('djiProjects', id);
+  if (!p) return;
+  var d = djpDealerOf(p);
+  _djpRelinkId = id;
+  _djpBoardMode = true;
+  djpBoardDealer = d ? d.id : '';
+  djpBoardProj = id;
+  djpBoardQ = '';
   _djpRenderBoard();
 }
 function djpBoardPickDealer(v) { djpBoardDealer = v; djpBoardProj = ''; djpBoardQ = ''; _djpRenderBoard(); }
@@ -1190,6 +1316,8 @@ function djpBoardSearch(v)     { djpBoardQ = v; _djpRenderBoard(true); }
 
 function _djpBoardUnlinked(dealerId) {
   return ST.getAll('djiProjects').filter(function(p) {
+    // ตัวที่กำลังแก้การผูกอยู่ต้องอยู่ในลิสต์ด้วย ไม่งั้นกระดานจะเด้งไปตัวอื่นทันทีที่เปิด
+    if (p.id === _djpRelinkId) return true;
     if (p.pipelineId || p.runrateId) return false;
     if (djpKindOf(p) === 'runrate') return false;   // ฝั่ง run rate ผูกกับถัง ไม่ใช่โครงการ คนละกระดาน
     var d = djpDealerOf(p);
@@ -1222,7 +1350,7 @@ function _djpRenderBoard(keepFocus) {
 
   if (!list.length) {
     h += '<div class="empty"><div class="icon">✅</div><p>ผูกครบแล้วสำหรับตัวกรองนี้</p></div>' +
-         '<button class="btn bo btn-full" onclick="closeMForce()">ปิด</button>';
+         '<button class="btn bo btn-full" onclick="djpCloseBoard()">ปิด</button>';
     openM('🔀 จับคู่ทะเบียนเข้า Pipeline', h);
     return;
   }
@@ -1302,7 +1430,7 @@ function _djpRenderBoard(keepFocus) {
       '<button class="btn bsm bo" onclick="djpBoardStep(1)">ข้ามไปอันถัดไป ›</button></div>';
   }
   h += '</div></div>';
-  h += '<button class="btn bo btn-full" style="margin-top:10px" onclick="closeMForce();render()">ปิด</button>';
+  h += '<button class="btn bo btn-full" style="margin-top:10px" onclick="djpCloseBoard()">ปิด</button>';
 
   openM('🔀 จับคู่ทะเบียนเข้า Pipeline', h);
   if (keepFocus) {
@@ -1322,6 +1450,7 @@ function djpBoardStep(dir) {
   _djpRenderBoard();
 }
 function djpBoardToggleList() { djpBoardShowList = !djpBoardShowList; _djpRenderBoard(); }
+function djpCloseBoard() { _djpBoardMode = false; _djpRelinkId = ''; closeMForce(); render(); }
 // ชื่อเดิม เผื่อมีที่อื่นเรียกอยู่
 function djpBoardSkip() { djpBoardStep(1); }
 
