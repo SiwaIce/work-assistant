@@ -3745,7 +3745,12 @@ function saveManualLoan(unitId) {
 // ================================================================
 var scView = 'timeline';        // timeline | month | model | batch | find
 var scSpan = 6, scSpanStart = 0, scMonthOffset = 0;
-var scPicked = [], scOpen = null, scKind = 'all';
+var scPicked = [], scOpen = null;
+// ตัวกรองหมวดหมู่ของปฏิทิน — แยกสถานะกับ unitCatFilter ของแท็บรายการเครื่อง (สลับแท็บแล้วไม่เปลี่ยนตัวกรอง
+// ของกันและกันโดยไม่ตั้งใจ) แต่ใช้ CATEGORIES ชุดเดียวกันและ UI แบบเดียวกันทุกอย่าง (ดู _scCatTabsHtml)
+// เดิมปฏิทินกรองแบบหยาบแค่ "เครื่องหลัก/อุปกรณ์เสริม/ทั้งหมด" (isAccessory) ซึ่งเป็นคนละแกนกับหมวดหมู่ที่
+// ใช้กรองในแท็บรายการเครื่อง ทำให้เรียนรู้ตัวกรองคนละชุดสองรอบ
+var scCatFilter = 'all';
 var scFindModel = '', scFindFrom = '', scFindTo = '';
 // ---- ตัวควบคุมไทม์ไลน์ (ชุดเดียวกับแอปหลัก) ----
 var scSearch = '', scGrouped = true, scExpanded = {}, scHideFree = true;
@@ -3969,8 +3974,7 @@ function _utilBodyHtml() {
 
 function scAllUnits() {
   return UNITS.filter(function(u) {
-    if (scKind === 'main' && u.isAccessory) return false;
-    if (scKind === 'accessory' && !u.isAccessory) return false;
+    if (scCatFilter !== 'all' && u.category !== scCatFilter) return false;
     return true;
   });
 }
@@ -4055,6 +4059,21 @@ function _scEsq(s) {
     .replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
+// แถบหมวดหมู่ของปฏิทิน — โครงและสไตล์เดียวกับ unitCatTabs ในแท็บรายการเครื่องเป๊ะ (คลาส .cat-tabs/.cat-tab
+// ตัวเดียวกัน) นับจาก UNITS ทั้งหมดเหมือนแท็บรายการเครื่องนับจากสโคปของมัน ให้กรองด้วยหมวดหมู่เดียวกันได้
+// โดยไม่ต้องเรียนรู้ตัวกรองคนละแบบระหว่างสองแท็บ
+function _scCatTabsHtml() {
+  var counts = { all: UNITS.length };
+  CATEGORIES.forEach(function(c) { counts[c.id] = UNITS.filter(function(u) { return u.category === c.id; }).length; });
+  var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
+  return '<div class="cat-tabs">' + tabs.map(function(c) {
+    if (c.id !== 'all' && !counts[c.id]) return '';
+    return '<div class="cat-tab' + (scCatFilter === c.id ? ' on' : '') + '" onclick="scSetCat(\'' + c.id + '\')">' +
+      c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (counts[c.id] || 0) + '</span></div>';
+  }).join('') + '</div>';
+}
+function scSetCat(id) { scCatFilter = id; scOpen = null; renderStaffCalendar(); }
+
 // ---- แถบเครื่องมือ ----
 function scToolbar() {
   // "รายรุ่น" ยุบเป็นสวิตช์จัดกลุ่มของไทม์ไลน์ เหมือนแอปหลัก
@@ -4066,10 +4085,8 @@ function scToolbar() {
   h += '<div class="dcal-toolbar"><div class="dcal-srch"><span class="ic">🔍</span>' +
     '<input type="text" id="scSearch" placeholder="ค้นหา รุ่น / เลขเครื่องเช่า / S/N / ผู้ยืม" value="' + esc(scSearch) + '" oninput="scSearchInput(this.value)" autocomplete="off">' +
     (scSearch ? '<button class="clr" onclick="scSetSearch(\'\')">✕</button>' : '') + '</div></div>';
+  h += _scCatTabsHtml();
   h += '<div class="dcal-toolbar">';
-  [['main','🚁 เครื่องหลัก'],['accessory','🔩 อุปกรณ์เสริม'],['all','ทั้งหมด']].forEach(function(k) {
-    h += '<button class="dcal-vbtn' + (scKind === k[0] ? ' act' : '') + '" onclick="scKind=\'' + k[0] + '\';scOpen=null;renderStaffCalendar()">' + k[1] + '</button>';
-  });
   h += '<span class="dcal-pickwrap"><button class="dcal-vbtn' + (scPicked.length ? ' act' : '') + '" onclick="scTogglePicker(event)">🎯 เลือกรุ่น' + (scPicked.length ? ' (' + scPicked.length + ')' : '…') + '</button>';
   h += '<span id="scPicker"></span></span></div>';
   if (scPicked.length) {
