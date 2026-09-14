@@ -684,8 +684,12 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-multisum .ms-row span { flex:1; min-width:0; }
 .dcal-multisum .ms-row b { display:block; font-size:12.5px; }
 .dcal-multisum .ms-row i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
-.dcal-multisum .ms-row .sel-check { flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:var(--accent);
-  color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+/* วงกลมติ๊กเลือก — ต้องค้างโชว์อยู่เสมอ (ไม่ใช่โผล่มาแค่ตอนติ๊กแล้ว) ไม่งั้นมองไม่ออกว่าการ์ดกดเลือกได้เลย
+   ต้องอ่านข้อความคำแนะนำด้านบนก่อนถึงจะรู้ — ว่างแสดงเป็นวงกลมกลวง ติ๊กแล้วเติมสีพร้อม ✓ */
+.dcal-multisum .ms-row .ms-check { flex:0 0 auto; width:20px; height:20px; border-radius:50%;
+  border:2px solid var(--border); color:#fff; display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; }
+.dcal-multisum .ms-row .ms-check.on { background:var(--accent); border-color:var(--accent); }
 .dcal-load { background:var(--bad); }
 
 /* สแกน QR/บาร์โค้ดหาเครื่อง */
@@ -3072,6 +3076,10 @@ var lendStart = '', lendEnd = '', lendDays = 1, lendMonthOffset = 0, lendDayOpen
 // ช่วงยาวๆ ที่กด + ทีละวันไม่ไหว _lendRangeAnchor คือวันแรกที่กดไว้ระหว่างรอกดวันที่สอง
 var lendRangePick = false, _lendRangeAnchor = null;
 var lendPrefill = null;         // { borrower, purpose } — ตั้งจาก rebookLoan() ให้ฟอร์มขึ้นชื่อผู้ยืมเดิมไว้ล่วงหน้า
+// เลื่อนจอไปโชว่ช่องกรอกวันที่ (อยู่ไกลจากปฏิทินด้านบนพอสมควร) ให้ครั้งเดียวต่อรอบคีย์ยืม ตอนวันที่ถูกเติมให้
+// ครั้งแรกจากการกดปฏิทิน จะได้เห็นว่ามันเติมให้แล้วจริงๆ โดยไม่ต้องเลื่อนหาเอง — ไม่เลื่อนซ้ำทุกครั้งที่กด
+// วันใหม่ ไม่งั้นจะกระชากจอออกจากปฏิทินที่กำลังดูอยู่รำคาญ
+var _lendDateScrolled = false;
 
 function lendIsPicked(id) { return lendPicked.indexOf(id) !== -1; }
 
@@ -3462,7 +3470,7 @@ function openLendFlow() {
   // ติ๊กเลือกเครื่องได้จากแท็บปฏิทินด้วย (ดู _scMultiSummary) แต่ขั้นตอนคีย์ยืมอยู่ใต้แท็บรายการเครื่อง
   // เสมอ ต้องสลับแท็บมาก่อนไม่งั้น unitLendView จะถูกสั่ง display:block ทั้งที่แท็บแม่ยังไม่โชว์อยู่
   staffTab('units');
-  lendStart = ''; lendEnd = ''; lendDays = 1; lendMonthOffset = 0; lendDayOpen = null;
+  lendStart = ''; lendEnd = ''; lendDays = 1; lendMonthOffset = 0; lendDayOpen = null; _lendDateScrolled = false;
   document.getElementById('unitsListView').style.display = 'none';
   document.getElementById('unitDetailView').style.display = 'none';
   document.getElementById('lendPickBar').style.display = 'none';
@@ -3515,9 +3523,11 @@ function lendSetDays(d) {
 // ต้องมีวันที่ "ว่างครบทุกเครื่อง" ก่อนถึงจะกดเลือกได้ ก็แทบไม่มีวันไหนกดได้เลย) วันที่ไม่ว่างยังเปิดแผง
 // รายละเอียดให้เห็นด้วยเลยว่าติดใคร จะได้ตัดสินใจต่อได้จากตรงนั้น
 function lendPickDay(iso) {
+  var justSetAnchor = false;
   if (lendRangePick) {
     if (!_lendRangeAnchor) {
       _lendRangeAnchor = iso; lendStart = iso; lendEnd = iso; lendDays = 1;
+      justSetAnchor = true;
     } else {
       var a = _lendRangeAnchor < iso ? _lendRangeAnchor : iso, z = _lendRangeAnchor < iso ? iso : _lendRangeAnchor;
       lendStart = a; lendEnd = z;
@@ -3530,6 +3540,13 @@ function lendPickDay(iso) {
   }
   lendDayOpen = lendAllFreeOn(iso) ? null : iso;
   renderLendFlow();
+  // เลื่อนจอไปโชว่ช่องกรอกวันที่ด้านล่างให้ครั้งแรกที่ได้วันที่จริงจัง (ไม่ใช่แค่จุดเริ่มที่รอกดวันจบต่อ)
+  // จะได้เห็นว่าเติมให้แล้ว ไม่ต้องเลื่อนหาเอง — ทำครั้งเดียวต่อรอบคีย์ยืม ไม่กระชากจอทุกครั้งที่กดวันใหม่
+  if (!justSetAnchor && !_lendDateScrolled) {
+    _lendDateScrolled = true;
+    var f = document.getElementById('lfStart');
+    if (f) f.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 function lendToggleRangePick() { lendRangePick = !lendRangePick; _lendRangeAnchor = null; renderLendFlow(); }
 function lendNav(d) { lendMonthOffset += d; lendDayOpen = null; renderLendFlow(); }
@@ -3896,7 +3913,7 @@ function _scMultiSummary(units, bks) {
   free.slice(0, 8).forEach(function(u) {
     var picked = lendIsPicked(u.id);
     h += '<div class="ms-row' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
-      (picked ? '<span class="sel-check">✓</span>' : '') +
+      '<span class="ms-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
       '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
       '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
       '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '" style="margin-top:4px;display:inline-block">' +
@@ -4198,7 +4215,11 @@ function scToolbar() {
   h += _scCatTabsHtml();
   h += '<div class="dcal-toolbar">';
   h += '<span class="dcal-pickwrap"><button class="dcal-vbtn' + (scPicked.length ? ' act' : '') + '" onclick="scTogglePicker(event)">🎯 เลือกรุ่น' + (scPicked.length ? ' (' + scPicked.length + ')' : '…') + '</button>';
-  h += '<span id="scPicker"></span></span></div>';
+  h += '<span id="scPicker"></span></span>';
+  // คนละหน้าที่กับแท็บหมวดหมู่ด้านบน (นั่นคือตัวกรองว่าจะเห็นเครื่องไหนบ้าง) อันนี้ไว้เช็ค "วันไหนที่รุ่น
+  // ที่เจาะจงหลายรุ่นว่างพร้อมกัน" — เขียนกำกับไว้กันงงว่าทำไมมีปุ่มเลือกรุ่นซ้อนกับแท็บหมวดหมู่
+  h += '<span style="font-size:11.5px;color:var(--text3)">เช็ควันว่างพร้อมกันของรุ่นที่เจาะจง — ไม่ใช่ตัวกรองการแสดงผลแบบแท็บหมวดหมู่ด้านบน</span>';
+  h += '</div>';
   if (scPicked.length) {
     h += '<div class="dcal-chips" style="margin-bottom:10px">' + scPicked.map(function(m) {
       return '<span class="dcal-chip">' + esc(m) + '<button onclick="scUnpick(\'' + _scEsq(m) + '\')">✕</button></span>';
