@@ -773,6 +773,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
                 <button onclick="closeToolsMenu();toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
                 <button onclick="closeToolsMenu();showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
                 <button onclick="closeToolsMenu();showEditLogM()">📜 ประวัติการแก้ไขทั้งหมด</button>
+                <button onclick="closeToolsMenu();showUtilizationM()">📊 รายงานการใช้งานเครื่อง</button>
                 <div class="tools-menu-sep"></div>
                 <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม)</button>
                 <button onclick="closeToolsMenu();exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
@@ -2039,7 +2040,8 @@ var SC_EV_META = {
   borrower: { icon: '🔄', label: 'โอนผู้ยืม' },
   keyer:    { icon: '🧑‍💼', label: 'เปลี่ยนผู้คีย์' },
   returned: { icon: '✅', label: 'รับคืน' },
-  photo:    { icon: '📷', label: 'แนบรูปสภาพเครื่อง' }
+  photo:    { icon: '📷', label: 'แนบรูปสภาพเครื่อง' },
+  damage:   { icon: '⚠️', label: 'ความเสียหาย' }
 };
 function _scEv(type, by, text) {
   return { at: new Date().toISOString(), type: type, by: by || '', text: text || '' };
@@ -2098,6 +2100,29 @@ function scLoanLogHtml(l) {
 }
 function _scLoan(loanId) { return LOANS.filter(function(x) { return x._id === loanId; })[0] || null; }
 
+// แจ้ง/ยกเลิกสถานะ "มีความเสียหาย" ของใบยืม — ใช้ได้ทั้งใบที่ยังไม่คืน (พบตอนเช็คระหว่างยืม) และคืนแล้ว
+// (พบตอนรับคืน) ไม่ผูกกับขั้นตอนรับคืนโดยตรง เพราะบางทีก็รู้ทีหลังว่าเสียหาย ไม่ใช่รู้ตอนกดรับคืนเสมอไป
+// เก็บเป็นสถานะ + หมายเหตุสั้นๆ บนตัวใบเอง ให้หน้าประวัติผู้ยืมนับรวมได้ว่าเคยทำเสียหายกี่ครั้ง
+function toggleDamageFlag(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (l.damaged) {
+    if (!confirm('ยกเลิกสถานะ "มีความเสียหาย" ของใบนี้?')) return;
+    db.collection('publicDemoLoans').doc(loanId).update({
+      damaged: false,
+      events: firebase.firestore.FieldValue.arrayUnion(_scEv('damage', _lastEditor(), 'ยกเลิกสถานะความเสียหาย'))
+    }).then(function() { toastMock('ยกเลิกสถานะความเสียหายแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+    return;
+  }
+  var note = prompt('อธิบายความเสียหายโดยย่อ (จะบันทึกไว้ในประวัติใบนี้):', '');
+  if (note === null) return;
+  note = note.trim();
+  db.collection('publicDemoLoans').doc(loanId).update({
+    damaged: true, damageNote: note,
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('damage', _lastEditor(), note || 'แจ้งว่ามีความเสียหาย'))
+  }).then(function() { toastMock('⚠️ บันทึกความเสียหายแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
 // รายชื่อผู้ยืมเดิม — หน้านี้ไม่มีทะเบียน Dealer เหมือนแอปหลัก จึงรวมจากใบยืมที่เคยคีย์ไว้แทน
 // ช่วยให้ชื่อบริษัทเดียวกันสะกดตรงกันทุกครั้ง ไม่แตกเป็นหลายเวอร์ชันจนนับประวัติไม่ตรง
 function scBorrowerDatalist(listId) {
@@ -2135,7 +2160,8 @@ function _borrowerStats(name) {
   var overdueNow = active.filter(function(l) { return l.end < today; });
   var returned = mine.filter(function(l) { return l.status === 'returned'; });
   var lateReturns = returned.filter(function(l) { return l.actualReturnDate && l.actualReturnDate > l.end; });
-  return { mine: mine, active: active, overdueNow: overdueNow, returned: returned, lateReturns: lateReturns };
+  var damaged = mine.filter(function(l) { return l.damaged; });
+  return { mine: mine, active: active, overdueNow: overdueNow, returned: returned, lateReturns: lateReturns, damaged: damaged };
 }
 function openBorrowerM(name) {
   if (!(name || '').trim()) { alert('ไม่มีชื่อผู้ยืมให้ดูประวัติ'); return; }
@@ -2145,8 +2171,10 @@ function openBorrowerM(name) {
   h += '<div class="sc-kv"><div><span>ยืมทั้งหมด</span><b>' + st.mine.length + ' ครั้ง</b></div>' +
     '<div><span>กำลังยืมอยู่</span><b>' + st.active.length + '</b></div>' +
     '<div><span>เลยกำหนดตอนนี้</span><b' + (st.overdueNow.length ? ' style="color:var(--warn)"' : '') + '>' + st.overdueNow.length + '</b></div>' +
-    '<div><span>เคยคืนช้า</span><b>' + st.lateReturns.length + ' จาก ' + st.returned.length + ' ครั้งที่คืนแล้ว</b></div></div>';
+    '<div><span>เคยคืนช้า</span><b>' + st.lateReturns.length + ' จาก ' + st.returned.length + ' ครั้งที่คืนแล้ว</b></div>' +
+    '<div><span>เคยทำเครื่องเสียหาย</span><b' + (st.damaged.length ? ' style="color:var(--bad)"' : '') + '>' + st.damaged.length + ' ครั้ง</b></div></div>';
   if (st.overdueNow.length) h += '<div class="hint" style="margin-top:6px;color:var(--warn)">⚠️ ตอนนี้มีเครื่องเลยกำหนดคืนอยู่ — ควรตามให้เคลียร์ก่อนปล่อยยืมรอบใหม่</div>';
+  if (st.damaged.length) h += '<div class="hint" style="margin-top:6px;color:var(--bad)">⚠️ เคยมีประวัติทำเครื่องเสียหาย ' + st.damaged.length + ' ครั้ง — พิจารณาก่อนปล่อยยืมรอบใหม่</div>';
   h += '<div class="sm-sec">📜 ประวัติการยืม (ล่าสุดก่อน)</div>';
   h += st.mine.length ? st.mine.slice().sort(function(a, b) { return String(b.start).localeCompare(String(a.start)); }).map(function(l) {
     var u = byId[l.unitId];
@@ -2155,6 +2183,7 @@ function openBorrowerM(name) {
     var stpill = l.status === 'active'
       ? (l.end < today ? '<span class="pill pill-warn">เลยกำหนด</span>' : '<span class="pill pill-good">กำลังยืม</span>')
       : '<span class="pill pill-muted">คืนแล้ว' + (l.actualReturnDate && l.actualReturnDate > l.end ? ' (ช้า)' : '') + '</span>';
+    if (l.damaged) stpill += ' <span class="pill pill-bad">⚠️ เสียหาย</span>';
     return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
       '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') +
       ' · ' + esc(_scD(l.start)) + '→' + esc(_scD(l.end)) + ' ' + stpill + '</span>' +
@@ -2217,6 +2246,11 @@ function openLoanLogM(loanId) {
     (l.purpose ? '<div><span>ยืมไปทำอะไร</span><b>' + esc(l.purpose) + '</b></div>' : '') +
     (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
     '</div>';
+  h += l.damaged
+    ? '<div style="margin:8px 0;background:var(--bad-soft);border:1px solid var(--bad);border-radius:8px;padding:8px 11px">' +
+      '<span class="pill pill-bad">⚠️ มีความเสียหาย</span>' + (l.damageNote ? ' ' + esc(l.damageNote) : '') +
+      ' <button class="btn btn-ghost btn-sm" onclick="toggleDamageFlag(\'' + loanId + '\')">ยกเลิกสถานะนี้</button></div>'
+    : '<div style="margin:8px 0"><button class="btn btn-ghost btn-sm" onclick="toggleDamageFlag(\'' + loanId + '\')">⚠️ แจ้งเครื่องเสียหาย</button></div>';
   h += _copySlipBtnHtml(l.unitId, l.jobNo);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' +
     '<button class="btn btn-ghost btn-sm" onclick="openPhotoM(\'' + loanId + '\',\'out\')">📷 รูปตอนส่งมอบ (' + ((l.photosOut || []).length) + ')</button>' +
@@ -3792,6 +3826,91 @@ function scBookings() {
     borrower: r.borrower, purpose: r.purpose, approver: r.approver, jobNo: r.jobNo, refNo: r.refNo }); }); });
   return out;
 }
+
+// ================================================================
+// รายงานอัตราการใช้งานเครื่อง (ตามรุ่น) — ตอบว่ารุ่นไหนถูกยืมบ่อย/นานสุด รุ่นไหนแทบไม่ถูกแตะ ใช้ประกอบ
+// การตัดสินใจซื้อเพิ่ม/เลิกเก็บสต๊อกสาธิต นับจากทั้งสองแหล่ง (LOANS ของหน้านี้ + busyRanges จากแอปหลัก)
+// เหมือน scBookings() แต่คิด "วันที่ถูกใช้จริง" ไม่ใช่ "วันที่ยังนับว่าไม่ว่าง" (ต่างกันตรงช่วงกักรอคลังรับ
+// เข้าหลังคืน ไม่ใช่เวลาที่ลูกค้าใช้งานจริง จึงไม่นับ) และไม่นับช่วงในอนาคตที่ยังไม่เกิดขึ้นจริงเป็นการใช้งาน
+// ('pending' ก็ไม่นับ เพราะยังไม่มีของออกไปจริง)
+// ================================================================
+function _utilRangeDays(fromIso, toIso) {
+  return Math.max(1, Math.round((_scFromIso(toIso) - _scFromIso(fromIso)) / 86400000) + 1);
+}
+function _utilComputeByModel(fromIso, toIso) {
+  var today = _td();
+  var capToIso = toIso < today ? toIso : today;
+  var byModel = {};
+  var unitModel = {};
+  // นับเครื่องทุกตัวของแต่ละรุ่นไว้ก่อนเป็นตัวหาร (แม้ไม่เคยถูกยืมเลยสักครั้ง) ไม่งั้นรุ่นที่ไม่มีใครยืมเลย
+  // จะหายไปจากรายงานทั้งแถว และรุ่นที่มีบางเครื่องไม่เคยถูกแตะเลยจะนับจำนวนเครื่องน้อยกว่าความจริง
+  UNITS.forEach(function(u) {
+    var model = _scModelParts(u).main || u.model || u.name || '—';
+    unitModel[u.id] = model;
+    if (!byModel[model]) byModel[model] = { units: {}, bookings: 0, daysUsed: 0 };
+    byModel[model].units[u.id] = 1;
+  });
+  function addUsage(unitId, s, e) {
+    var model = unitModel[unitId];
+    if (!model) return;
+    var os = s > fromIso ? s : fromIso;
+    var oe = e < capToIso ? e : capToIso;
+    if (os > oe) return;
+    byModel[model].bookings++;
+    byModel[model].daysUsed += daysBetween(os, oe) + 1;
+  }
+  LOANS.forEach(function(l) {
+    if (l.status === 'pending' || !l.start) return;
+    var end = l.status === 'returned' ? (l.actualReturnDate || l.end) : today;
+    if (end < l.start) end = l.start;
+    addUsage(l.unitId, l.start, end);
+  });
+  UNITS.forEach(function(u) {
+    (u.busyRanges || []).forEach(function(r) {
+      if (!r.start) return;
+      var end = r.end && r.end < today ? r.end : today;
+      if (end < r.start) end = r.start;
+      addUsage(u.id, r.start, end);
+    });
+  });
+  var totalRangeDays = _utilRangeDays(fromIso, capToIso);
+  return Object.keys(byModel).map(function(m) {
+    var g = byModel[m];
+    var nUnits = Object.keys(g.units).length;
+    var pct = nUnits ? (g.daysUsed / (nUnits * totalRangeDays) * 100) : 0;
+    return { model: m, units: nUnits, bookings: g.bookings, daysUsed: g.daysUsed, pct: pct };
+  });
+}
+var _utilDays = 90, _utilSort = 'desc';
+function showUtilizationM() { openSm('📊 รายงานการใช้งานเครื่อง (ตามรุ่น)', _utilBodyHtml(), true); }
+function _utilSetDays(d) { _utilDays = d; document.getElementById('smBody').innerHTML = _utilBodyHtml(); }
+function _utilToggleSort() { _utilSort = _utilSort === 'desc' ? 'asc' : 'desc'; document.getElementById('smBody').innerHTML = _utilBodyHtml(); }
+function _utilBodyHtml() {
+  var toIso = _td();
+  var fromIso = _scAddDaysIso(toIso, -(_utilDays - 1));
+  var rows = _utilComputeByModel(fromIso, toIso);
+  rows.sort(function(a, b) { return _utilSort === 'desc' ? b.pct - a.pct : a.pct - b.pct; });
+  var h = '<div class="hint" style="margin-bottom:8px">ช่วงเวลา ' + _scD(fromIso) + ' – ' + _scD(toIso) + ' (' + _utilDays + ' วัน) · ' +
+    '% = สัดส่วนวันที่ถูกยืมออกจริง เทียบกับจำนวนวันทั้งหมดในช่วงนี้ต่อเครื่อง (ไม่นับช่วงกักรอคลังรับเข้าหลังคืน)</div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+    [30, 90, 180, 365].map(function(d) {
+      return '<button class="btn btn-ghost btn-sm' + (d === _utilDays ? ' on' : '') + '" onclick="_utilSetDays(' + d + ')">' + d + ' วัน</button>';
+    }).join('') +
+    '<button class="btn btn-ghost btn-sm" onclick="_utilToggleSort()">เรียง: ' + (_utilSort === 'desc' ? 'ใช้งานเยอะสุดก่อน ▾' : 'ใช้งานน้อยสุดก่อน ▴') + '</button></div>';
+  if (!rows.length) return h + '<div class="empty-state">ยังไม่มีข้อมูลการยืมในช่วงนี้</div>';
+  h += '<div class="card" style="padding:0;overflow:auto"><table class="unit-table"><thead><tr>' +
+    '<th>รุ่น</th><th>จำนวนเครื่อง</th><th>ครั้งที่ยืม</th><th>รวมวันที่ถูกใช้</th><th>% การใช้งานเฉลี่ย/เครื่อง</th></tr></thead><tbody>';
+  h += rows.map(function(r) {
+    var barColor = r.pct >= 60 ? 'var(--good)' : r.pct >= 25 ? 'var(--warn)' : 'var(--text3)';
+    return '<tr><td>' + esc(r.model) + '</td><td>' + r.units + '</td><td>' + r.bookings + '</td><td>' + r.daysUsed + ' วัน</td>' +
+      '<td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;max-width:120px">' +
+      '<div style="width:' + Math.min(100, r.pct).toFixed(0) + '%;height:100%;background:' + barColor + '"></div></div>' +
+      '<b>' + r.pct.toFixed(0) + '%</b></div></td></tr>';
+  }).join('');
+  h += '</tbody></table></div>';
+  return h;
+}
+
 function scAllUnits() {
   return UNITS.filter(function(u) {
     if (scKind === 'main' && u.isAccessory) return false;
