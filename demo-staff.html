@@ -3050,6 +3050,9 @@ function showManualLoanForm(unitId) {
 // ================================================================
 var lendPicked = [];            // unitId ที่เลือกไว้
 var lendStart = '', lendEnd = '', lendDays = 1, lendMonthOffset = 0, lendDayOpen = null;
+// โหมดกดเลือกวันเริ่ม-สิ้นสุดเองสองครั้งบนปฏิทิน (แทนใช้ตัวนับ +/- จำนวนวัน) — สะดวกกว่าเวลาต้องการ
+// ช่วงยาวๆ ที่กด + ทีละวันไม่ไหว _lendRangeAnchor คือวันแรกที่กดไว้ระหว่างรอกดวันที่สอง
+var lendRangePick = false, _lendRangeAnchor = null;
 var lendPrefill = null;         // { borrower, purpose } — ตั้งจาก rebookLoan() ให้ฟอร์มขึ้นชื่อผู้ยืมเดิมไว้ล่วงหน้า
 
 function lendIsPicked(id) { return lendPicked.indexOf(id) !== -1; }
@@ -3489,13 +3492,28 @@ function lendSetDays(d) {
   if (lendStart) lendEnd = _scIso(_scAdd(_scFromIso(lendStart), lendDays - 1));
   renderLendFlow();
 }
+// กดวันไหนก็ตั้งวันที่ยืมให้ทันที ไม่ว่าวันนั้นทุกเครื่องจะว่างพร้อมกันหรือไม่ (เดิมกดวันที่ "ไม่ว่าง" แค่
+// เปิดแผงรายละเอียดเฉยๆ ไม่ตั้งวันที่ให้เลย — กรณีปกติของหน้านี้คือมีเครื่องติดยืมอยู่บ้างอยู่แล้ว ถ้าบังคับ
+// ต้องมีวันที่ "ว่างครบทุกเครื่อง" ก่อนถึงจะกดเลือกได้ ก็แทบไม่มีวันไหนกดได้เลย) วันที่ไม่ว่างยังเปิดแผง
+// รายละเอียดให้เห็นด้วยเลยว่าติดใคร จะได้ตัดสินใจต่อได้จากตรงนั้น
 function lendPickDay(iso) {
-  lendStart = iso;
-  lendEnd = _scIso(_scAdd(_scFromIso(iso), lendDays - 1));
-  lendDayOpen = null;
+  if (lendRangePick) {
+    if (!_lendRangeAnchor) {
+      _lendRangeAnchor = iso; lendStart = iso; lendEnd = iso; lendDays = 1;
+    } else {
+      var a = _lendRangeAnchor < iso ? _lendRangeAnchor : iso, z = _lendRangeAnchor < iso ? iso : _lendRangeAnchor;
+      lendStart = a; lendEnd = z;
+      lendDays = Math.round((_scFromIso(z) - _scFromIso(a)) / 86400000) + 1;
+      _lendRangeAnchor = null;
+    }
+  } else {
+    lendStart = iso;
+    lendEnd = _scIso(_scAdd(_scFromIso(iso), lendDays - 1));
+  }
+  lendDayOpen = lendAllFreeOn(iso) ? null : iso;
   renderLendFlow();
 }
-function lendOpenDay(iso) { lendDayOpen = (lendDayOpen === iso) ? null : iso; renderLendFlow(); }
+function lendToggleRangePick() { lendRangePick = !lendRangePick; _lendRangeAnchor = null; renderLendFlow(); }
 function lendNav(d) { lendMonthOffset += d; lendDayOpen = null; renderLendFlow(); }
 
 // หาวันว่างตรงกันใกล้สุด (ทุกเครื่องที่เลือกไว้ว่างพร้อมกันตลอด lendDays วันติดกัน) — ไล่หาไปข้างหน้า
@@ -3588,7 +3606,14 @@ function renderLendFlow() {
   h += '<div class="lf-navrow"><button class="btn btn-ghost btn-sm" onclick="lendNav(-1)">◀</button>' +
     '<b>' + SC_MONTHS[m] + ' ' + y + '</b>' +
     '<button class="btn btn-ghost btn-sm" onclick="lendNav(1)">▶</button>' +
+    '<button class="btn ' + (lendRangePick ? 'btn-primary' : 'btn-ghost') + ' btn-sm" onclick="lendToggleRangePick()">' +
+    (lendRangePick ? '✓ กำลังเลือกช่วงวัน' : '🗓️ เลือกช่วงวันเอง') + '</button>' +
     '<span class="lf-free">ว่างพร้อมกัน ' + freeCount + ' วันในเดือนนี้</span></div>';
+  if (lendRangePick) {
+    h += '<div class="hint" style="margin-bottom:8px">' +
+      (_lendRangeAnchor ? '👆 กดวันที่คืน (วันสุดท้าย)' : '👆 กดวันที่เริ่มยืม แล้วกดวันที่คืนอีกครั้ง — เลือกช่วงยาวได้โดยไม่ต้องกด +/- ทีละวัน') +
+      '</div>';
+  }
 
   // ทั้งเดือนไม่มีวันว่างพร้อมกัน = บอกว่าตัวไหนบล็อก แล้วเอาออกได้เลย ไม่ต้องเดา
   if (!freeCount && list.length > 1) {
@@ -3615,12 +3640,12 @@ function renderLendFlow() {
     var free = lendAllFreeOn(iso2);
     var inRange = lendStart && lendEnd && iso2 >= lendStart && iso2 <= lendEnd;
     var cls = 'lf-cell ' + (free ? 'ok' : 'no') + (inRange ? ' sel' : '') + (iso2 === todayIso2 ? ' today' : '');
-    h += '<div class="' + cls + '" onclick="' + (free ? 'lendPickDay' : 'lendOpenDay') + '(\'' + iso2 + '\')">' +
+    h += '<div class="' + cls + '" onclick="lendPickDay(\'' + iso2 + '\')">' +
       '<span class="n">' + d2 + '</span><span class="t">' + (free ? 'ว่าง' : 'ไม่ว่าง') + '</span></div>';
   }
   h += '</div>';
 
-  // กดวันที่ไม่ว่าง = ดูว่าตัวไหนติด
+  // กดวันไหนก็ตาม (ว่างครบหรือไม่ก็ตาม) = ดูว่าวันนั้นตัวไหนติดอยู่ กดดูใบที่ชนได้ตรงนี้เลย
   if (lendDayOpen) {
     var curO = _scFromIso(lendDayOpen), bksO = scBookings();
     h += '<div class="lf-day"><b>📅 ' + _scD(lendDayOpen) + '</b>';
@@ -3629,6 +3654,7 @@ function renderLendFlow() {
       var p = _scModelParts(u);
       h += '<div class="lf-drow"><span>' + esc(p.main) + ' · ' + esc(u.rentalDbNo || '—') + '</span>' +
         (hit ? '<span class="pill pill-warn">' + (hit.quarantine ? '🕐 รอรับเข้าคลัง · ถึง ' + _scFmt(hit.e) : '📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e)) + '</span>' +
+               '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + u.id + '\',\'' + lendDayOpen + '\',\'' + lendDayOpen + '\')" title="ดูใบที่ชนอยู่">📜 ดูใบ</button>' +
                (list.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕ เอาออก</button>' : '')
              : '<span class="pill pill-good">✅ ว่าง</span>') + '</div>';
     });
@@ -3654,12 +3680,13 @@ function renderLendFlow() {
   h += '<div class="field"><label>📄 เลขที่ใบจอง</label><input type="text" id="lfJob" list="lfJobList" autocomplete="off" placeholder="เลขจากระบบคลัง — เลือกใบเดิมได้">' + scJobDatalist('lfJobList') + '</div>';
   h += '<div class="field"><label>🎯 วัตถุประสงค์</label><input type="text" id="lfPurpose" value="' + esc((lendPrefill && lendPrefill.purpose) || '') + '" placeholder="เช่น สาธิตลูกค้า"></div>';
   h += '</div>';
+  var busyUnits = [];
   if (lendStart && lendEnd) {
     // เดิมเตือนแบบกว้างๆ ว่า "มีบางวันไม่ว่าง" แล้วให้กด "ยืนยันบันทึกทับ" ทีเดียวทั้งก้อน — พอกดจริง
     // เครื่องที่ว่างจริงๆ ก็ถูกลากไปทับข้อมูลเดิมของเครื่องอื่นด้วยเงียบๆ ตอนนี้แยกให้ชัดว่าชิ้นไหนจะโดนอะไร:
     // ชิ้นที่ว่างตลอดช่วง → บันทึกเป็นยืมจริงทันที ชิ้นที่ชนคิว → บันทึกไว้เป็น "รอ" ในใบเดียวกัน ไม่ทับใคร
     // ไปแก้ทีหลังได้จากแท็บติดตามคืน (เช็คว่างอีกครั้ง หรือตัดออกจากใบ)
-    var busyUnits = list.filter(function(u) { return _lfConflict(u.id, lendStart, lendEnd); });
+    busyUnits = list.filter(function(u) { return _lfConflict(u.id, lendStart, lendEnd); });
     if (busyUnits.length) {
       h += '<div class="lf-warn">⏳ ' + busyUnits.length + ' จาก ' + list.length +
         ' เครื่องชนกับใบจองอื่นในช่วงนี้ — เครื่องที่ว่างจะถูกจองให้ทันที ส่วนที่ชนจะถูกเก็บไว้เป็น "รอ" ในใบเดียวกัน ' +
@@ -3672,7 +3699,11 @@ function renderLendFlow() {
         : '<div class="lf-nearest">🔍 หาวันว่างตรงกันทุกเครื่องใน 180 วันข้างหน้าไม่เจอ — ลองตัดเครื่องที่ติดบ่อยออกบางส่วน</div>';
     }
   }
-  h += '<button class="btn btn-primary" onclick="saveLendBatch()">💾 บันทึกยืม ' + list.length + ' เครื่อง</button>';
+  // ทุกเครื่องชนคิวหมด (ยังไม่มีชิ้นไหนว่างเลย) = กดบันทึกแล้วทั้งใบเข้า "รอ" หมด ไม่ได้จองอะไรจริงเลยสักชิ้น
+  // เปลี่ยนคำในปุ่มให้ตรงกับสิ่งที่จะเกิดขึ้นจริง (คีย์ไว้ล่วงหน้าเพื่อตามคืน ไม่ใช่บันทึกยืมจริง)
+  var allPending = lendStart && lendEnd && busyUnits.length && busyUnits.length === list.length;
+  h += '<button class="btn btn-primary" onclick="saveLendBatch()">' +
+    (allPending ? '💾 บันทึกเป็นรายการรอ (Draft) ' + list.length + ' เครื่อง' : '💾 บันทึกยืม ' + list.length + ' เครื่อง') + '</button>';
   h += '</div>';
 
   el.innerHTML = h;
