@@ -668,12 +668,31 @@ var CATEGORIES = [];
 var pendingRequestsRaw = []; // จาก publicDemoRequests สถานะ pending — ใช้โชว์ป้าย "มีคนจอง รอคอนเฟิร์ม"
 
 function loadCatalog() {
-  var catalogData = null;
+  var catalogData = null, editsSnapData = null;
   db.collection('dealerUpdates').doc('demoCatalogPublic').get().then(function(doc) {
     catalogData = doc.exists ? doc.data() : {};
     return db.collection('publicDemoEdits').get();
   }).then(function(editsSnap) {
+    editsSnapData = editsSnap;
+    // ใบยืมที่ทีมงานคีย์ตรงจากหน้า demo-staff.html (publicDemoLoans) เป็นคนละ collection คนละ write path
+    // จาก busyRanges ที่แอปหลัก publish มา (นั่นมาจาก v7_demoLoans ของแอปหลักเท่านั้น) ถ้าไม่ดึงมารวมด้วย
+    // ตรงนี้ ลูกค้าจะเห็นเครื่องที่ทีมงานปล่อยยืมไปแล้ว (เช่น มีคนโทรมาจอง/ยืมหน้างาน) ว่า "ว่าง" แล้วขอซ้ำได้
+    // — เจอช่องโหว่นี้จริงตอนตรวจสอบว่าทั้งสองแหล่งถูกเอามารวมกันครบไหม
+    return db.collection('publicDemoLoans').get();
+  }).then(function(loansSnap) {
+    var editsSnap = editsSnapData;
     var data = catalogData;
+    var today = todayIso();
+    // เกณฑ์ "นับว่าไม่ว่าง" ตัวเดียวกับ scBusyOn ใน demo-staff.html: 'pending' (ชนคิว ยังไม่ได้ของจริง)
+    // ไม่นับ, 'returned' นับต่อจนถึง availableFrom (ช่วงกักให้คลังตรวจรับเข้า), 'active' นับเต็มช่วง
+    var loansByUnit = {};
+    (loansSnap ? loansSnap.docs : []).forEach(function(d) {
+      var l = d.data() || {};
+      if (!l.unitId || !l.start || l.status === 'pending') return;
+      var eff = l.status === 'returned' ? (l.availableFrom || l.actualReturnDate || l.end) : l.end;
+      if (!eff || (l.status === 'returned' && eff < today)) return;
+      (loansByUnit[l.unitId] = loansByUnit[l.unitId] || []).push({ start: l.start, end: eff });
+    });
     CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
     // เครื่องที่ทีมงานเพิ่ง เพิ่ม/แก้/ลบ จากหน้า demo-staff.html (publicDemoEdits) — ให้ลูกค้าเห็นผลทันที
     // เหมือนกับที่หน้า staff เห็น ไม่ต้องรอให้แอปหลักเปิดมาลงข้อมูลจริงก่อน (ดูคอมเมนต์ที่ applyEditOverlay
@@ -725,12 +744,20 @@ function loadCatalog() {
     Object.keys(byModel).forEach(function(model) {
       byModel[model].forEach(function(u, i) {
         var clickable = u.status !== 'unavailable' && u.status !== 'lost';
+        // รวมช่วงจาก publicDemoLoans (ทีมงานคีย์ตรงจากหน้า staff) เข้ากับ busyRanges ที่แอปหลัก publish มา
+        // กันซ้ำด้วย start+end เผื่อบางใบไหลมาซ้ำสองทาง (ปกติไม่ควรเกิด แต่กันไว้เหมือน scBookings)
+        var busy = (u.busyRanges || []).slice();
+        var seenR = {}; busy.forEach(function(r) { seenR[r.start + '|' + r.end] = 1; });
+        (loansByUnit[u.id] || []).forEach(function(r) {
+          var k = r.start + '|' + r.end;
+          if (!seenR[k]) { seenR[k] = 1; busy.push(r); }
+        });
         UNITS.push({
           id: u.id, icon: iconForCategory(u.category), category: u.category || '', model: model,
           label: tr('unit.n') + (i + 1),
           rentalDbNo: String(u.rentalDbNo || '').trim(),
           serialNumber: String(u.serialNumber || '').trim(),
-          flyable: u.flyable !== false, busyRanges: u.busyRanges || [],
+          flyable: u.flyable !== false, busyRanges: busy,
           statusRaw: u.status, clickable: clickable
         });
       });
