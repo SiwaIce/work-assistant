@@ -756,17 +756,17 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
 
       <div class="tabs">
-        <button data-tab="units" onclick="staffTab('units')">🚁 รายการเครื่อง</button>
+        <button class="on" data-tab="units" onclick="staffTab('units')">🚁 รายการเครื่อง</button>
         <button data-tab="calendar" onclick="staffTab('calendar')">🗓️ ปฏิทิน</button>
-        <button class="on" data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
+        <button data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
         <button data-tab="return" onclick="staffTab('return')">🔔 ติดตามคืน <span id="returnCountBadge"></span></button>
       </div>
 
-      <div class="tabpane on" id="tab-pending"></div>
+      <div class="tabpane" id="tab-pending"></div>
       <div class="tabpane" id="tab-return"></div>
       <div class="tabpane" id="tab-calendar"></div>
       <div id="lendPickBar" class="lendbar" style="display:none"></div>
-    <div class="tabpane" id="tab-units">
+    <div class="tabpane on" id="tab-units">
         <div id="unitsListView">
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <button class="btn btn-primary btn-sm" onclick="showAddUnitM()">➕ เพิ่มเครื่องใหม่</button>
@@ -1378,13 +1378,13 @@ function staffTab(name) {
 
 // ================================================================
 // กล่องลิงก์ลูกค้า + แดชบอร์ด "วันนี้ต้องทำอะไร" + สถิติ + ค้นหาทั้งระบบ มีประโยชน์จริงตอนเพิ่งเปิดแอป
-// (แท็บ "คำขอรออนุมัติ" ซึ่งเป็นแท็บแรกที่เห็น) แต่ถ้าค้างอยู่ทุกแท็บ จะกลายเป็นต้องเลื่อนผ่านมันทุกครั้ง
+// (แท็บ "รายการเครื่อง" ซึ่งเป็นแท็บแรกที่เห็น) แต่ถ้าค้างอยู่ทุกแท็บ จะกลายเป็นต้องเลื่อนผ่านมันทุกครั้ง
 // ก่อนถึงเนื้อหาจริงของแท็บที่กำลังจะใช้งาน (โดยเฉพาะระหว่างคีย์ยืมที่ scroll ไปบนสุดอยู่แล้ว)
 // จึงย่ออัตโนมัติทันทีที่ออกจากแท็บแรก เหลือแถบสรุปบรรทัดเดียวที่ยังกดขยายกลับได้ทุกเมื่อ
 // ================================================================
 var dashSecondaryOpen = true;
 function _dashSecondarySync(tabName) {
-  dashSecondaryOpen = (tabName === 'pending');
+  dashSecondaryOpen = (tabName === 'units');
   renderDashVisibility();
 }
 function toggleDashSecondary() { dashSecondaryOpen = !dashSecondaryOpen; renderDashVisibility(); }
