@@ -1880,11 +1880,19 @@ function seRecalcConflicts(key) {
     var hit = _lfConflict(l.unitId, from, end, l.id);
     if (hit) {
       var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
-      conflicts.push((u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e)));
+      conflicts.push({ unitId: l.unitId, from: from, end: end,
+        label: (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e)) });
     }
   });
+  // แต่ละบรรทัดกดดูใบที่ชนได้เลย เหมือนที่ทำไว้แล้วในขั้นเลือกเครื่อง/วันที่ (showLendConflictM) — เดิมตรงนี้
+  // เป็นข้อความเฉยๆ อ่านออกว่าติดใคร แต่ต้องไปไล่หาใบเองว่าอยู่ตรงไหนถึงจะติดต่อได้
   box.innerHTML = conflicts.length
-    ? '<div class="lf-warn">⚠️ เลื่อนถึงวันนี้แล้วจะชน ' + conflicts.length + ' เครื่อง:<br>' + conflicts.map(esc).join('<br>') + '<br>ยังกดเลื่อนได้ แต่ควรคุยกับอีกฝ่ายก่อน</div>'
+    ? '<div class="lf-warn">⚠️ เลื่อนถึงวันนี้แล้วจะชน ' + conflicts.length + ' เครื่อง:<br>' +
+      conflicts.map(function(c) {
+        return '<span style="cursor:pointer;text-decoration:underline" title="กดดูใบยืมที่ชน" ' +
+          'onclick="showLendConflictM(\'' + _scEsq(c.unitId) + '\',\'' + _scEsq(c.from) + '\',\'' + _scEsq(c.end) + '\')">' + esc(c.label) + '</span>';
+      }).join('<br>') +
+      '<br>ยังกดเลื่อนได้ แต่ควรคุยกับอีกฝ่ายก่อน</div>'
     : '';
 }
 function saveSlipExtend(key) {
@@ -2124,7 +2132,8 @@ function openBorrowerM(name) {
     return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
       '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') +
       ' · ' + esc(_scD(l.start)) + '→' + esc(_scD(l.end)) + ' ' + stpill + '</span>' +
-      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')">📜</button></div>';
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')">📜</button>' +
+      (l.status === 'returned' ? '<button class="btn btn-ghost btn-sm" onclick="rebookLoan(\'' + l._id + '\')" title="ยืมชุดเดิมอีกครั้ง (ใบใหม่)">🔁</button>' : '') + '</div>';
   }).join('') : '<div class="empty-state" style="padding:10px 0">ไม่พบประวัติ</div>';
   h += '<div style="margin-top:12px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('👤 ประวัติผู้ยืม', h, true);
@@ -2192,6 +2201,15 @@ function openLoanLogM(loanId) {
   if (l.status === 'active') {
     h += '<button class="btn btn-ghost" onclick="openExtendM(\'' + loanId + '\')">⏩ ต่อเวลา</button>';
     h += '<button class="btn btn-ghost" onclick="openTransferM(\'' + loanId + '\')">🔄 โอน</button>';
+    // มีเลขใบจอง = อาจมีเครื่องอื่นในใบเดียวกัน (ดู _scJobSiblingsHtml ด้านบน) — เปิดโมดัล "ทั้งใบ" ตัวเดียว
+    // กับที่ใช้ในแท็บติดตามคืน (มุมมองตามใบจอง) เลย ไม่ต้องสร้างซ้ำ กดครั้งเดียวต่อ/โอนได้ทุกเครื่องในใบ
+    // ไม่ต้องย้อนกลับไปแท็บติดตามคืนแล้วไล่หาใบเดิมอีกรอบ
+    if ((l.jobNo || '').trim()) {
+      h += '<button class="btn btn-ghost" onclick="openSlipExtendM(\'' + _scEsq(_rtSlipKey(l)) + '\')" title="เลื่อนกำหนดคืนทุกเครื่องในใบจองนี้พร้อมกัน">⏩ ต่อเวลาทั้งใบ</button>';
+      h += '<button class="btn btn-ghost" onclick="openSlipTransferM(\'' + _scEsq(_rtSlipKey(l)) + '\')" title="โอนผู้ยืม/ผู้คีย์ทุกเครื่องในใบจองนี้พร้อมกัน">🔄 โอนทั้งใบ</button>';
+    }
+  } else if (l.status === 'returned') {
+    h += '<button class="btn btn-ghost" onclick="rebookLoan(\'' + loanId + '\')" title="เลือกเครื่องชุดเดิมให้ แล้วเลือกวันที่ใหม่ (ได้ใบยืมใหม่)">🔁 ยืมอีกครั้ง</button>';
   }
   h += '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('📜 ประวัติใบยืม', h);
@@ -2436,14 +2454,34 @@ function openExtendM(loanId) {
   var h = '<div class="sm-sec">' + esc(l.model || '') + ' (' + esc(l.label || '') + ') · ผู้ยืม ' + esc(l.borrower || '—') + '</div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>กำหนดคืนเดิม</label><input type="text" value="' + esc(_scD(l.end)) + '" disabled></div>';
-  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="xt_end" value="' + esc(l.end || '') + '"></div>';
+  h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="xt_end" value="' + esc(l.end || '') + '" onchange="xtRecalcConflicts(\'' + loanId + '\')"></div>';
   h += '</div>';
+  h += '<div id="xtConflictBox"></div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="xt_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์ / งานเลื่อน"></div>';
   h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="xt_by" list="xtKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('xtKeyerList') + '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn btn-primary" onclick="saveExtend(\'' + loanId + '\')">⏩ เลื่อนกำหนดคืน</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
   openSm('⏩ ต่อเวลา / เลื่อนกำหนดคืน', h);
+  xtRecalcConflicts(loanId);
+}
+// เดิมต่อเวลาทีละเครื่องไม่เช็คชนคิวเลย (ต่างจาก "ต่อเวลาทั้งใบ" ที่มี seConflictBox อยู่แล้ว) ทำให้เลื่อน
+// ไปชนใบจองล่วงหน้าของคนอื่นแบบไม่รู้ตัวได้ — เช็คเฉพาะช่วงที่ต่อเพิ่ม (วันถัดจากกำหนดเดิม ถึงกำหนดใหม่)
+// เหมือนกันเป๊ะกับ seRecalcConflicts เจอแล้วไม่บล็อก แค่เตือน กดดูใบที่ชนได้เลยเหมือนกัน
+function xtRecalcConflicts(loanId) {
+  var box = document.getElementById('xtConflictBox');
+  if (!box) return;
+  var l = _scLoan(loanId);
+  var end = (document.getElementById('xt_end') || {}).value || '';
+  if (!l || !end || end <= l.end) { box.innerHTML = ''; return; }
+  var from = _scAddDaysIso(l.end, 1);
+  var hit = _lfConflict(l.unitId, from, end, l.id);
+  if (!hit) { box.innerHTML = ''; return; }
+  var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+  var label = (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e));
+  box.innerHTML = '<div class="lf-warn">⚠️ เลื่อนถึงวันนี้แล้วจะชน: <span style="cursor:pointer;text-decoration:underline" ' +
+    'title="กดดูใบยืมที่ชน" onclick="showLendConflictM(\'' + _scEsq(l.unitId) + '\',\'' + _scEsq(from) + '\',\'' + _scEsq(end) + '\')">' + esc(label) +
+    '</span><br>ยังกดเลื่อนได้ แต่ควรคุยกับอีกฝ่ายก่อน</div>';
 }
 function saveExtend(loanId) {
   var l = _scLoan(loanId);
@@ -2842,7 +2880,8 @@ function openUnitDetail(unitId) {
       '<span style="flex:1;min-width:0">' + esc(l.borrower) + ' · ' + _scD(l.start) + ' – ' + _scD(l.end) +
       (l.status === 'active' ? ' <span class="pill pill-warn">กำลังยืม</span>' : ' <span class="pill pill-good">คืนแล้ว</span>') +
       ((l.events || []).length > 1 ? ' <span class="pill pill-muted">' + l.events.length + ' เหตุการณ์</span>' : '') + '</span>' +
-      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ดูประวัติใบนี้">📜</button></div>';
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ดูประวัติใบนี้">📜</button>' +
+      (l.status === 'returned' ? '<button class="btn btn-ghost btn-sm" onclick="rebookLoan(\'' + l._id + '\')" title="ยืมชุดเดิมอีกครั้ง (ใบใหม่)">🔁</button>' : '') + '</div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่มีประวัติ</div>';
   h += '</div>';
   view.innerHTML = h;
@@ -2876,8 +2915,40 @@ function showManualLoanForm(unitId) {
 // ================================================================
 var lendPicked = [];            // unitId ที่เลือกไว้
 var lendStart = '', lendEnd = '', lendDays = 1, lendMonthOffset = 0, lendDayOpen = null;
+var lendPrefill = null;         // { borrower, purpose } — ตั้งจาก rebookLoan() ให้ฟอร์มขึ้นชื่อผู้ยืมเดิมไว้ล่วงหน้า
 
 function lendIsPicked(id) { return lendPicked.indexOf(id) !== -1; }
+
+// ================================================================
+// ยืมซ้ำใบเดิม — ใช้ตอนลูกค้ารายเดิมขอชุดอุปกรณ์แบบเดียวกับที่เคยยืมไปแล้ว (คืนแล้ว) ไม่ต้องเลือกเครื่อง
+// เองใหม่ทั้งหมด: ติ๊กเครื่องเดิมให้ (รวมเครื่องอื่นในใบจองเดียวกันถ้ามี) แล้วเปิดขั้นตอนคีย์ยืมให้เลือกแค่
+// วันที่ใหม่ — ใบที่ได้จะเป็นใบยืมใหม่ (id ใหม่) ไม่ใช่การรื้อฟื้นใบเดิม ผู้ใช้ต้องตั้งเลขที่ใบจองใหม่เอง
+// เพราะเลขที่ใบจองอ้างอิงงานเบิกจริงจากระบบคลัง เอาเลขเก่ามาใช้ซ้ำจะสับสนกับใบที่คีย์เข้าคลังไปแล้ว
+// ================================================================
+function rebookLoan(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) { alert('ไม่พบใบยืมนี้'); return; }
+  var ids = [l.unitId];
+  if ((l.jobNo || '').trim()) {
+    LOANS.forEach(function(x) {
+      if (x._id !== l._id && (x.jobNo || '').trim() === l.jobNo.trim() && ids.indexOf(x.unitId) === -1) ids.push(x.unitId);
+    });
+  }
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var avail = ids.filter(function(id) {
+    var u = byId[id];
+    return u && u.status !== 'unavailable' && u.status !== 'lost' && _unitHasRental(u);
+  });
+  var missing = ids.length - avail.length;
+  if (!avail.length) { alert('เครื่องในใบเดิมยืมซ้ำไม่ได้แล้วทุกชิ้น (ถูกลบ/ปิดใช้งาน/ยังไม่ลงทะเบียนเช่า)'); return; }
+  closeSm();
+  lendPicked = avail.slice();
+  lendPrefill = { borrower: l.borrower || '', purpose: l.purpose || '' };
+  staffTab('units');
+  openLendFlow();
+  toastMock('🔁 เลือกเครื่องจากใบเดิมให้แล้ว ' + avail.length + ' เครื่อง' +
+    (missing ? ' (อีก ' + missing + ' เครื่องในใบเดิมยืมซ้ำไม่ได้แล้ว)' : '') + ' — เลือกวันที่ใหม่ได้เลย');
+}
 // อัปเดตเฉพาะการ์ดใบนั้นกับแถบสรุป ไม่วาดตารางใหม่ทั้ง 71 ใบ
 // (วาดใหม่ทั้งตารางทำให้ติ๊กรัวๆ ไม่ทัน เพราะ checkbox ตัวถัดไปถูกสร้างใหม่ระหว่างทาง และหน้ากระตุก)
 function _lendPaint(id) {
@@ -3111,6 +3182,7 @@ function lendToggle(id, ev) {
 function lendClear() {
   var was = lendPicked.slice();
   lendPicked = [];
+  lendPrefill = null;
   was.forEach(_lendPaint);
   renderLendBar();
 }
@@ -3244,6 +3316,7 @@ function openLendFlow() {
 function closeLendFlow() {
   document.getElementById('unitLendView').style.display = 'none';
   document.getElementById('unitsListView').style.display = 'block';
+  lendPrefill = null;
   renderLendBar();
   renderUnitsTable();
 }
@@ -3435,12 +3508,12 @@ function renderLendFlow() {
     '<b>' + lendDays + ' วัน</b>' +
     '<button class="btn btn-ghost btn-sm" onclick="lendSetDays(lendDays+1)">+</button></div></div>';
   h += '<div class="grid2">';
-  h += '<div class="field"><label>🏢 ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="lfCompany" list="lfBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('lfBorrowerList') + '</div>';
+  h += '<div class="field"><label>🏢 ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="lfCompany" value="' + esc((lendPrefill && lendPrefill.borrower) || '') + '" list="lfBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('lfBorrowerList') + '</div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก *</label><input type="text" id="lfBy" value="' + esc(_lastEditor()) + '" list="lfKeyerList" autocomplete="off" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('lfKeyerList') + '</div>';
   h += '</div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>📄 เลขที่ใบจอง</label><input type="text" id="lfJob" list="lfJobList" autocomplete="off" placeholder="เลขจากระบบคลัง — เลือกใบเดิมได้">' + scJobDatalist('lfJobList') + '</div>';
-  h += '<div class="field"><label>🎯 วัตถุประสงค์</label><input type="text" id="lfPurpose" placeholder="เช่น สาธิตลูกค้า"></div>';
+  h += '<div class="field"><label>🎯 วัตถุประสงค์</label><input type="text" id="lfPurpose" value="' + esc((lendPrefill && lendPrefill.purpose) || '') + '" placeholder="เช่น สาธิตลูกค้า"></div>';
   h += '</div>';
   if (lendStart && lendEnd) {
     // เดิมเตือนแบบกว้างๆ ว่า "มีบางวันไม่ว่าง" แล้วให้กด "ยืนยันบันทึกทับ" ทีเดียวทั้งก้อน — พอกดจริง
