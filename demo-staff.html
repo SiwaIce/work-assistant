@@ -678,11 +678,14 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-multisum .ms-free { font-size:12px; font-weight:600; color:var(--good); margin:9px 0 5px; }
 .dcal-multisum .ms-list { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
 .dcal-multisum .ms-row { display:flex; align-items:center; gap:10px; padding:7px 10px;
-  border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  border-bottom:1px solid var(--border); flex-wrap:wrap; cursor:pointer; }
 .dcal-multisum .ms-row:last-child { border-bottom:0; }
+.dcal-multisum .ms-row.picked { background:var(--accent-soft); }
 .dcal-multisum .ms-row span { flex:1; min-width:0; }
 .dcal-multisum .ms-row b { display:block; font-size:12.5px; }
 .dcal-multisum .ms-row i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
+.dcal-multisum .ms-row .sel-check { flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:var(--accent);
+  color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
 .dcal-load { background:var(--bad); }
 
 /* สแกน QR/บาร์โค้ดหาเครื่อง */
@@ -1368,10 +1371,10 @@ function renderGsResults() {
 function staffTab(name) {
   document.querySelectorAll('.tabs button').forEach(function(b) { b.classList.toggle('on', b.dataset.tab === name); });
   document.querySelectorAll('.tabpane').forEach(function(p) { p.classList.toggle('on', p.id === 'tab-' + name); });
-  // แถบ "เลือกไว้ N เครื่อง" มีความหมายเฉพาะตอนอยู่แท็บรายการเครื่อง — แท็บอื่นซ่อนไว้
+  // แถบ "เลือกไว้ N เครื่อง" มีความหมายตอนอยู่แท็บรายการเครื่องหรือปฏิทิน (ติ๊กเลือกได้ทั้งสองที่) — แท็บอื่นซ่อนไว้
   var bar = document.getElementById('lendPickBar');
   if (bar) {
-    if (name === 'units' && lendPicked.length &&
+    if ((name === 'units' || name === 'calendar') && lendPicked.length &&
         document.getElementById('unitLendView').style.display !== 'block') renderLendBar();
     else bar.style.display = 'none';
   }
@@ -3435,6 +3438,9 @@ function renderScanFoundList() {
 
 function openLendFlow() {
   if (!lendPicked.length) return;
+  // ติ๊กเลือกเครื่องได้จากแท็บปฏิทินด้วย (ดู _scMultiSummary) แต่ขั้นตอนคีย์ยืมอยู่ใต้แท็บรายการเครื่อง
+  // เสมอ ต้องสลับแท็บมาก่อนไม่งั้น unitLendView จะถูกสั่ง display:block ทั้งที่แท็บแม่ยังไม่โชว์อยู่
+  staffTab('units');
   lendStart = ''; lendEnd = ''; lendDays = 1; lendMonthOffset = 0; lendDayOpen = null;
   document.getElementById('unitsListView').style.display = 'none';
   document.getElementById('unitDetailView').style.display = 'none';
@@ -3809,11 +3815,17 @@ function _scMultiSummary(units, bks) {
   if (!free.length) {
     return h + '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div></div>';
   }
-  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + free.length + '</b> เครื่อง — กดเพื่อคีย์ยืมพร้อมวันที่</div><div class="ms-list">';
+  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + free.length + '</b> เครื่อง — ' +
+    'ติ๊กการ์ดเพื่อเลือกหลายเครื่องพร้อมกัน หรือกดปุ่มเพื่อคีย์ยืมทันที</div><div class="ms-list">';
   free.slice(0, 8).forEach(function(u) {
-    h += '<div class="ms-row"><span><b>' + esc(u.model || u.name || '-') + '</b>' +
-      '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i></span>' +
-      '<button class="btn btn-primary btn-sm" onclick="scBook(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')">📤 คีย์ยืมช่วงนี้</button></div>';
+    var picked = lendIsPicked(u.id);
+    h += '<div class="ms-row' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
+      (picked ? '<span class="sel-check">✓</span>' : '') +
+      '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
+      '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
+      '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '" style="margin-top:4px;display:inline-block">' +
+      (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span></span>' +
+      '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();scBook(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')">📤 คีย์ยืมช่วงนี้</button></div>';
   });
   h += '</div>';
   if (free.length > 8) h += '<div class="ms-note">…และอีก ' + (free.length - 8) + ' เครื่อง</div>';
@@ -4793,7 +4805,6 @@ function _scViewMonth() {
     (scMultiDay ? '👆 กดกล่องวันเพื่อติ๊กเลือก — เลือกครบแล้วเลื่อนลงไปคีย์ยืมเครื่องที่ว่างตลอดช่วง'
                 : '👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย') + '</div>';
   if (scOpen && !scMultiDay) h += _scDrill();
-  h += _scMultiSummary(units, bks);
   // เตรียมข้อมูลรายวันล่วงหน้า ไม่งั้นคิดใหม่ทุกช่องจะกลายเป็น 30×เครื่อง×การยืม
   var act = bks.filter(function(b) { return b.status !== 'returned'; });
   var backOn = {}, outOn = {};
@@ -4845,6 +4856,8 @@ function _scViewMonth() {
       '<span><b style="color:var(--bad)">⚠ รุ่นเต็ม</b> รุ่นที่ไม่เหลือเครื่องว่างเลย — รับปากลูกค้าไม่ได้</span>' +
       '<span style="color:var(--text3)">วันที่ว่างเปล่า = ไม่มีของเข้าออก และทุกรุ่นยังมีเครื่องว่าง</span></div>';
   }
+  // สรุปผลการติ๊กวันอยู่ "ล่างปฏิทิน" เสมอ (step 2 ต่อจากติ๊กวันในปฏิทินด้านบน) — ไม่ใช่โผล่ก่อนเห็นปฏิทินด้วยซ้ำ
+  h += _scMultiSummary(units, bks);
   return h;
 }
 
