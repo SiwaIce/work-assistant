@@ -1060,7 +1060,7 @@ function noNameLoans() {
 // เดิมทุกปุ่มเรียก staffTab() เฉยๆ กด "ซ่อนจากลูกค้า 13 เครื่อง" แล้วเจอ 71 เครื่องเหมือนเดิม
 function tgUnits(mode) {
   unitReadyFilter = mode;
-  unitCatFilter = 'all';
+  unitCatFilter = [];
   unitSearch = '';
   var s = document.getElementById('unitSearch'); if (s) s.value = '';
   staffTab('units');
@@ -2646,7 +2646,7 @@ function saveTransfer(loanId) {
 // รายการเครื่องแยกเป็นกลุ่มตามรุ่น + กรองได้ — เดิมเทรวมเป็นตารางเดียวยาวเป็นร้อยแถว ปนกันทั้งเครื่องที่
 // พร้อมยืมจริงกับเครื่องที่ยังไม่ได้ลงทะเบียนเช่า (ซึ่งยืมไม่ได้และลูกค้าก็ไม่เห็น) เลยหาของที่ต้องใช้ยาก
 var unitReadyFilter = 'ready';  // 'ready' = มีเลขเครื่องเช่า | 'pending' | 'all'
-var unitCatFilter = 'all';
+var unitCatFilter = [];  // array ของ id หมวดที่เลือกไว้ — ว่าง = ทุกหมวด (เลือกได้มากกว่า 1 หมวดพร้อมกัน)
 var unitSearch = '';
 var _unitSearchTimer = null;
 function unitSearchInput(v) {
@@ -2655,7 +2655,16 @@ function unitSearchInput(v) {
   _unitSearchTimer = setTimeout(renderUnitsTable, 250);
 }
 function setUnitReady(v) { unitReadyFilter = v; renderUnitsTable(); }
-function setUnitCat(v) { unitCatFilter = v; renderUnitsTable(); }
+// กด "ทุกหมวด" ล้างตัวเลือกทั้งหมด (ว่าง = ไม่กรอง) กดหมวดอื่นเป็นการติ๊กเข้า/ออกทีละหมวด เลือกได้พร้อมกัน
+// หลายหมวด เช่น อยากดูทั้ง Drone และ Payload พร้อมกันตอนเตรียมของไปงาน event
+function setUnitCat(v) {
+  if (v === 'all') { unitCatFilter = []; }
+  else {
+    var i = unitCatFilter.indexOf(v);
+    if (i === -1) unitCatFilter.push(v); else unitCatFilter.splice(i, 1);
+  }
+  renderUnitsTable();
+}
 function _unitHasRental(u) { return !!String(u.rentalDbNo || '').trim(); }
 function _unitModelKey(u) { return String(u.model || '').trim() || String(u.name || '').trim() || 'ไม่ระบุรุ่น'; }
 
@@ -2705,13 +2714,14 @@ function renderUnitsTable() {
   var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
   document.getElementById('unitCatTabs').innerHTML = tabs.map(function(c) {
     if (c.id !== 'all' && !catCounts[c.id]) return '';
-    return '<div class="cat-tab' + (unitCatFilter === c.id ? ' on' : '') + '" onclick="setUnitCat(\'' + c.id + '\')">' +
+    var on = c.id === 'all' ? !unitCatFilter.length : unitCatFilter.indexOf(c.id) !== -1;
+    return '<div class="cat-tab' + (on ? ' on' : '') + '" onclick="setUnitCat(\'' + c.id + '\')">' +
       c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (catCounts[c.id] || 0) + '</span></div>';
   }).join('');
 
   var q = unitSearch.trim().toLowerCase();
   var shown = scoped.filter(function(u) {
-    if (unitCatFilter !== 'all' && u.category !== unitCatFilter) return false;
+    if (unitCatFilter.length && unitCatFilter.indexOf(u.category) === -1) return false;
     if (!q) return true;
     return ((u.model || '') + ' ' + (u.name || '') + ' ' + (u.sku || '') + ' ' + (u.serialNumber || '') + ' ' + (u.rentalDbNo || '')).toLowerCase().indexOf(q) !== -1;
   });
@@ -3750,7 +3760,7 @@ var scPicked = [], scOpen = null;
 // ของกันและกันโดยไม่ตั้งใจ) แต่ใช้ CATEGORIES ชุดเดียวกันและ UI แบบเดียวกันทุกอย่าง (ดู _scCatTabsHtml)
 // เดิมปฏิทินกรองแบบหยาบแค่ "เครื่องหลัก/อุปกรณ์เสริม/ทั้งหมด" (isAccessory) ซึ่งเป็นคนละแกนกับหมวดหมู่ที่
 // ใช้กรองในแท็บรายการเครื่อง ทำให้เรียนรู้ตัวกรองคนละชุดสองรอบ
-var scCatFilter = 'all';
+var scCatFilter = [];  // array ของ id หมวดที่เลือกไว้ — ว่าง = ทุกหมวด (เลือกได้มากกว่า 1 หมวดพร้อมกัน เหมือนแท็บรายการเครื่อง)
 var scFindModel = '', scFindFrom = '', scFindTo = '';
 // ---- ตัวควบคุมไทม์ไลน์ (ชุดเดียวกับแอปหลัก) ----
 var scSearch = '', scGrouped = true, scExpanded = {}, scHideFree = true;
@@ -3974,7 +3984,7 @@ function _utilBodyHtml() {
 
 function scAllUnits() {
   return UNITS.filter(function(u) {
-    if (scCatFilter !== 'all' && u.category !== scCatFilter) return false;
+    if (scCatFilter.length && scCatFilter.indexOf(u.category) === -1) return false;
     return true;
   });
 }
@@ -4068,11 +4078,21 @@ function _scCatTabsHtml() {
   var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
   return '<div class="cat-tabs">' + tabs.map(function(c) {
     if (c.id !== 'all' && !counts[c.id]) return '';
-    return '<div class="cat-tab' + (scCatFilter === c.id ? ' on' : '') + '" onclick="scSetCat(\'' + c.id + '\')">' +
+    var on = c.id === 'all' ? !scCatFilter.length : scCatFilter.indexOf(c.id) !== -1;
+    return '<div class="cat-tab' + (on ? ' on' : '') + '" onclick="scSetCat(\'' + c.id + '\')">' +
       c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (counts[c.id] || 0) + '</span></div>';
   }).join('') + '</div>';
 }
-function scSetCat(id) { scCatFilter = id; scOpen = null; renderStaffCalendar(); }
+// กด "ทุกหมวด" ล้างตัวเลือกทั้งหมด กดหมวดอื่นติ๊กเข้า/ออกทีละหมวด เลือกได้พร้อมกันหลายหมวด — พฤติกรรมเดียว
+// กับ setUnitCat() ในแท็บรายการเครื่อง
+function scSetCat(id) {
+  if (id === 'all') { scCatFilter = []; }
+  else {
+    var i = scCatFilter.indexOf(id);
+    if (i === -1) scCatFilter.push(id); else scCatFilter.splice(i, 1);
+  }
+  scOpen = null; renderStaffCalendar();
+}
 
 // ---- แถบเครื่องมือ ----
 function scToolbar() {
