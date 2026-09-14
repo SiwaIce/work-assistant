@@ -3808,15 +3808,36 @@ var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
 // ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับแอปหลัก) ----
 var scMultiDay = false, scPickDays = [];
-function scToggleMultiDay() { scMultiDay = !scMultiDay; scPickDays = []; scOpen = null; renderStaffCalendar(); }
+// จุดเริ่มที่ค้างไว้ระหว่างรอกดวันจบ — กดวันแรกแล้วกดวันที่สอง เติมทั้งช่วงให้อัตโนมัติ (เช่น กด 1 แล้วกด 10
+// ได้ 1-10 ทั้งก้อนเลย) ไม่ต้องกดทุกวันในช่วงทีละวันเหมือนเดิม แต่กดวันอื่นต่อหลังช่วงเติมแล้วยังติ๊ก/เอาออก
+// เป็นรายวันได้อยู่ (เผื่อจะเจาะเอาบางวันออกจากช่วง หรือเพิ่มวันเดี่ยวๆ ที่ไม่ติดกัน)
+var _scRangeAnchor = null;
+function scToggleMultiDay() { scMultiDay = !scMultiDay; scPickDays = []; _scRangeAnchor = null; scOpen = null; renderStaffCalendar(); }
 function scDayClick(iso) {
   if (!scMultiDay) { scToggleOpen('day:' + iso); return; }
-  var i = scPickDays.indexOf(iso);
-  if (i === -1) scPickDays.push(iso); else scPickDays.splice(i, 1);
+  var justSetAnchor = false;
+  if (!scPickDays.length) {
+    _scRangeAnchor = iso; scPickDays = [iso]; justSetAnchor = true;
+  } else if (_scRangeAnchor) {
+    var a = _scRangeAnchor < iso ? _scRangeAnchor : iso, z = _scRangeAnchor < iso ? iso : _scRangeAnchor;
+    scPickDays = [];
+    var cur = _scFromIso(a);
+    while (_scIso(cur) <= z) { scPickDays.push(_scIso(cur)); cur = _scAdd(cur, 1); }
+    _scRangeAnchor = null;
+  } else {
+    var i = scPickDays.indexOf(iso);
+    if (i === -1) scPickDays.push(iso); else scPickDays.splice(i, 1);
+  }
   scPickDays.sort();
   renderStaffCalendar();
+  // เลื่อนลงไปโชว์ผลลัพธ์ให้อัตโนมัติ ไม่ต้องเลื่อนเองทุกครั้งที่เลือกเสร็จ — ยกเว้นเพิ่งกดวันแรก (จุดเริ่ม)
+  // ที่ต้องเห็นปฏิทินอยู่ในจอเพื่อกดวันจบต่อ เลื่อนไปตอนนั้นจะดันปฏิทินหลุดจอซะก่อน
+  if (!justSetAnchor) {
+    var box = document.querySelector('#tab-calendar .dcal-multisum');
+    if (box) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
-function scClearDays() { scPickDays = []; renderStaffCalendar(); }
+function scClearDays() { scPickDays = []; _scRangeAnchor = null; renderStaffCalendar(); }
 // เครื่องที่ว่าง "ตลอดช่วง" ที่ติ๊กไว้ ถึงจะคีย์ยืมยาวรวดเดียวได้
 // ช่วงกับใบยืมทับกันไหม — นับใบที่เลยกำหนดแล้วยังไม่ปิดว่าทับตลอด (ของยังไม่กลับมา)
 function scClashes(b, from, to) {
@@ -3832,7 +3853,13 @@ function _scFreeThroughout(from, to, units, bks) {
 function _scMultiSummary(units, bks) {
   if (!scMultiDay) return '';
   if (!scPickDays.length) {
-    return '<div class="dcal-multisum empty">🗓️ โหมดเลือกหลายวัน — กดที่กล่องวันในปฏิทินเพื่อติ๊ก กดซ้ำเพื่อเอาออก</div>';
+    return '<div class="dcal-multisum empty">🗓️ โหมดเลือกหลายวัน — กดวันเริ่มแล้วกดวันจบอีกที เลือกทั้งช่วงให้อัตโนมัติ</div>';
+  }
+  if (_scRangeAnchor) {
+    // เพิ่งกดวันแรก (จุดเริ่ม) รอกดวันจบ — ยังไม่มีช่วงให้สรุป บอกขั้นตอนต่อไปแทน
+    return '<div class="dcal-multisum empty" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<span><b>เริ่ม ' + _scFmt(_scFromIso(_scRangeAnchor)) + '</b> — 👆 กดวันจบบนปฏิทินอีกที เพื่อเลือกทั้งช่วง</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="scClearDays()">ล้างที่เลือก</button></div>';
   }
   var from = _scFromIso(scPickDays[0]), to = _scFromIso(scPickDays[scPickDays.length - 1]);
   var span = Math.round((to - from) / 86400000) + 1;
@@ -4833,7 +4860,7 @@ function _scViewMonth() {
     }
   }
   h += '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">' +
-    (scMultiDay ? '👆 กดกล่องวันเพื่อติ๊กเลือก — เลือกครบแล้วเลื่อนลงไปคีย์ยืมเครื่องที่ว่างตลอดช่วง'
+    (scMultiDay ? '👆 กดวันเริ่มแล้วกดวันจบอีกที เลือกทั้งช่วงให้อัตโนมัติ — เลือกเสร็จเลื่อนลงไปดูผลลัพธ์ให้เอง'
                 : '👆 กดช่องวันเพื่อดูว่าวันนั้นเครื่องไหนว่าง/ใครยืม แล้วคีย์ยืมได้จากตรงนั้นเลย') + '</div>';
   if (scOpen && !scMultiDay) h += _scDrill();
   // เตรียมข้อมูลรายวันล่วงหน้า ไม่งั้นคิดใหม่ทุกช่องจะกลายเป็น 30×เครื่อง×การยืม
