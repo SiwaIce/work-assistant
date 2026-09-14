@@ -1515,6 +1515,10 @@ function rtSetView(v) {
   try { localStorage.setItem('demoStaffReturnView', v); } catch (e) {}
   renderReturnTab();
 }
+// ใบจองที่มีหลายเครื่องกินพื้นที่จอเยอะ (ทุกเครื่องโชว์เต็มการ์ดพร้อมกันหมด) — ย่อไว้เหลือแค่หัวใบ+ปุ่มก่อน
+// เห็นรายละเอียดทุกเครื่องต่อเมื่อกดขยาย ใบที่มีแค่เครื่องเดียวไม่ต้องย่อ (ไม่มีอะไรให้ประหยัดพื้นที่)
+var rtSlipOpen = {};
+function rtToggleSlipOpen(key) { rtSlipOpen[key] = !rtSlipOpen[key]; renderReturnTab(); }
 function _rtSlipKey(l) {
   var j = String(l.jobNo || '').trim();
   return j ? 'J:' + j : 'D:' + (String(l.borrower || '').trim() || '—') + '|' + l.start + '|' + l.end;
@@ -1583,16 +1587,26 @@ function renderReturnTabBySlip(all) {
       (g.list.length ? ' · กำหนดคืน ' + _scD(g.end) : '') +
       (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
+    var itemCount = g.list.length + g.pending.length;
+    var isOpen = itemCount <= 1 ? true : !!rtSlipOpen[k];
+    h += '<div class="rt-slip-act">' +
+      '<button class="btn btn-ghost btn-sm" onclick="copySlipKeyRentals(\'' + _scEsq(k) + '\')" title="คัดลอกเลขเครื่องเช่าทุกเครื่องในใบนี้ คนละบรรทัด">📋 Copy เลขเครื่องเช่า</button>';
     if (canDo) {
-      h += '<div class="rt-slip-act">' +
-        '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(k) + '\')">✅ คืนทั้งใบ (' + canDo + ')</button>' +
+      h += '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(k) + '\')">✅ คืนทั้งใบ (' + canDo + ')</button>' +
         '<button class="btn btn-ghost btn-sm" onclick="openSlipExtendM(\'' + _scEsq(k) + '\')" title="เลื่อนกำหนดคืนทั้งใบ">⏩ เลื่อนทั้งใบ</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="openSlipTransferM(\'' + _scEsq(k) + '\')" title="โอนผู้ยืมทั้งใบ">🔄 โอนทั้งใบ</button></div>';
+        '<button class="btn btn-ghost btn-sm" onclick="openSlipTransferM(\'' + _scEsq(k) + '\')" title="โอนผู้ยืมทั้งใบ">🔄 โอนทั้งใบ</button>';
+    }
+    if (itemCount > 1) {
+      h += '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="rtToggleSlipOpen(\'' + _scEsq(k) + '\')">' +
+        (isOpen ? '▴ ย่อรายการ' : '▾ แสดงรายการ (' + itemCount + ')') + '</button>';
     }
     h += '</div>';
-    h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
-      .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l); }).join('');
-    if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
+    h += '</div>';
+    if (isOpen) {
+      h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
+        .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l); }).join('');
+      if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
+    }
     h += '</div>';
   });
   el.innerHTML = h;
@@ -2300,6 +2314,28 @@ function _copySlipBtnHtml(unitId, jobNo) {
 // วางแล้วได้เลขเครื่องเช่าคนละบรรทัด เอาไปวางต่อในระบบคลังได้ทันทีโดยไม่ต้องพิมพ์เอง
 function copySlipRentals(unitId, jobNo) {
   var nums = _slipRentalNumbers(unitId, jobNo);
+  if (!nums.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
+  var text = nums.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + nums.length + ' เครื่อง)'); })
+      .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+  } else {
+    alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+// เหมือน _slipRentalNumbers/copySlipRentals ด้านบน แต่ใช้ในมุมมอง "ตามใบจอง" ของแท็บติดตามคืน ซึ่งมี
+// key ของกลุ่ม (_rtSlipKey) อยู่แล้วโดยตรง — รวมเลขจากเครื่องทุกตัวใน _rtSlipRows(key) ไม่ต้องพึ่ง jobNo
+// ไปหา sibling ผ่าน scBookings() ซ้ำ เพราะบางกลุ่มเป็น "เดากลุ่ม" จากผู้ยืม+วันที่ ไม่มีเลขใบจองจริงให้ค้น
+function _slipKeyRentalNumbers(key) {
+  var rows = _rtSlipRows(key);
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var nums = rows.map(function(r) { var u = byId[r.unitId]; return u ? String(u.rentalDbNo || '').trim() : ''; }).filter(Boolean);
+  var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
+  uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  return uniq;
+}
+function copySlipKeyRentals(key) {
+  var nums = _slipKeyRentalNumbers(key);
   if (!nums.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
   var text = nums.join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
