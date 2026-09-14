@@ -1003,8 +1003,16 @@ var _staffRenderTimer = null;
 function renderAll() {
   clearTimeout(_staffRenderTimer);
   _staffRenderTimer = setTimeout(function() {
-    renderStatRow(); renderPendingTab(); renderReturnTab(); renderUnitsTable(); renderStaffCalendar();
-    if (currentUnitDetail) openUnitDetail(currentUnitDetail.id);
+    // แต่ละฟังก์ชันแยก try/catch กันเอง — เดิมเรียกเรียงกันตรงๆ ถ้าตัวไหน throw (เช่นเจอเอกสารรูปแบบ
+    // ผิดปกติจากคอลเลกชันไหนก็ตาม) ตัวที่เหลือในลิสต์จะไม่ถูกเรียกเลยในรอบนั้น และเพราะ renderAll มี
+    // debounce ทุกครั้งที่มีข้อมูลใหม่เข้ามาก็จะ throw ซ้ำที่จุดเดิม ทำให้แท็บที่ไม่เกี่ยวข้องเลยค้างอยู่ที่
+    // สถานะเก่าเงียบๆ ทั้งแอปโดยไม่มี error ให้เห็นบนจอ — แยกกันแล้วต่อให้ตัวหนึ่งพัง ตัวอื่นยัง render ต่อได้
+    [renderStatRow, renderPendingTab, renderReturnTab, renderUnitsTable, renderStaffCalendar].forEach(function(fn) {
+      try { fn(); } catch (e) { console.error('renderAll: ' + fn.name + ' ล้มเหลว', e); }
+    });
+    if (currentUnitDetail) {
+      try { openUnitDetail(currentUnitDetail.id); } catch (e) { console.error('renderAll: openUnitDetail ล้มเหลว', e); }
+    }
   }, 30);
 }
 
@@ -1404,6 +1412,7 @@ function datesOverlap(s1,e1,s2,e2) { return s1 <= e2 && s2 <= e1; }
 function findConflictsFor(req) {
   return PENDING.filter(function(other) {
     if (other._id === req._id) return false;
+    if (!Array.isArray(other.items)) return false;   // คำขอรูปแบบผิดปกติ (ไม่มี items) ข้ามไปเลย ไม่งั้น .some พัง
     return req.items.some(function(a) { return other.items.some(function(b) { return a.model === b.model && datesOverlap(a.start,a.end,b.start,b.end); }); });
   });
 }
@@ -1412,6 +1421,15 @@ function renderPendingTab() {
   if (!PENDING.length) { el.innerHTML = '<div class="empty-state">🎉 ไม่มีคำขอค้างอยู่</div>'; return; }
   var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">⚠️ = คำขอนี้เลือกรุ่น+ช่วงวันที่ทับกับคำขออื่นที่ยังรออนุมัติอยู่ — อนุมัติจะช่วยเสนอปฏิเสธคำขอที่ชนกันให้อัตโนมัติ</div>';
   h += PENDING.map(function(req) {
+    // คำขอรูปแบบผิดปกติ (เช่นไม่มีรายการเครื่อง items) — เดิม .map ต่อจะพังทั้งฟังก์ชัน ทำให้แท็บอื่นที่ไม่
+    // เกี่ยวข้องเลยพลอยไม่ถูก render ตามไปด้วย (ดู renderAll) ตอนนี้โชว์เป็นรายการเตือนแทนที่จะพังเงียบๆ
+    if (!Array.isArray(req.items) || !req.items.length) {
+      return '<div class="req-item"><div class="avatar">⚠️</div>' +
+        '<div class="body"><div class="co">' + esc(req.companyName || 'ไม่ทราบชื่อบริษัท') +
+        ' <span class="pill pill-bad">⚠️ ข้อมูลไม่สมบูรณ์</span></div>' +
+        '<div class="meta">คำขอนี้ไม่มีรายการเครื่องที่ขอ (รูปแบบข้อมูลผิดปกติ) — ตรวจสอบจาก Firestore โดยตรง หรือติดต่อลูกค้าเพื่อขอข้อมูลใหม่</div></div>' +
+        '<div class="actions"><button class="btn btn-ghost btn-sm" onclick="rejectRequest(\'' + req._id + '\')">✕ ลบคำขอนี้</button></div></div>';
+    }
     var conflicts = findConflictsFor(req);
     var itemsTxt = req.items.map(function(it) { return esc(it.model) + ' (' + esc(it.label) + ') ' + it.start + (it.end !== it.start ? ' – ' + it.end : ''); }).join('<br>');
     var conflictHtml = conflicts.length ? '<div class="conflict-note">⚠️ ชนกับคำขอของ ' + conflicts.map(function(c){return esc(c.companyName);}).join(', ') + '</div>' : '';
