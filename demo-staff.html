@@ -302,7 +302,9 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sd-row:hover { background:var(--accent-soft); }
 .sd-row.late { box-shadow:inset 3px 0 0 var(--bad); }
 .sd-rent { font-family:ui-monospace,Consolas,monospace; font-weight:700; font-variant-numeric:tabular-nums; }
-.sd-nm { min-width:0; color:var(--text2); }
+.sd-nm { min-width:0; color:var(--text2); padding:3px 0; }
+.sd-sub { display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text3);
+  font-family:ui-monospace,'SF Mono',Consolas,monospace; margin-top:2px; }
 .sd-hid { opacity:.7; }
 .sd-st { flex:0 0 auto; }
 .uvt-sep { width:1px; align-self:stretch; background:var(--border); margin:0 3px; }
@@ -523,6 +525,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 /* เอกสารไม่ครบ = เส้นประเงียบๆ · ครบ = เขียว ให้เด่นเฉพาะตัวที่ต่างจากพวก */
 .du-t.doc { background:transparent; color:var(--text3); border:1px dashed var(--border); }
 .du-t.ok { background:var(--good-soft); color:var(--good); }
+.du-t.hid { background:var(--surface-2); color:var(--text2); border:1px dashed var(--border); }
 .du-ghd { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--surface-2);
   border-bottom:1px solid var(--border); font-size:11.5px; }
 .du-ghd + .du-row { background:var(--surface); }
@@ -2826,8 +2829,10 @@ function unitDenseHtml(raw, n) {
       (canPick ? '<input type="checkbox"' + (lendIsPicked(u.id) ? ' checked' : '') +
         ' onchange="lendToggle(\'' + u.id + '\')">' : '') + '</span>' +
     '<span class="sd-rent">' + esc(u.rentalDbNo || '—') + '</span>' +
-    '<span class="sd-nm">เครื่อง #' + n +
-      (u.customerVisible === false ? ' <span class="sd-hid">🙈</span>' : '') + '</span>' +
+    '<span class="sd-nm"><div>เครื่อง #' + n +
+      (u.customerVisible === false ? ' <span class="sd-hid">🙈</span>' : '') + '</div>' +
+      '<div class="sd-sub">' + (u.serialNumber ? 'S/N ' + esc(u.serialNumber) : '') +
+      (u.flyable !== false ? ' <span class="du-t fly">✈️ บินได้</span>' : ' <span class="du-t disp">🖼️ จัดแสดง</span>') + '</div></span>' +
     '<span class="sd-st">' + pill + '</span></div>';
 }
 var unitForceTable = false;   // กด "ดูแบบตารางแทน" ยืนยันว่าอยากดูตารางจริงๆ แม้จอแคบ (ไม่จำข้ามเซสชัน)
@@ -2884,10 +2889,10 @@ function unitCardHtml(raw, n) {
   // แถวเดียวพอ — ประเภทการใช้งาน + เอกสารยุบเป็นชิปเดียว (ทั้งทะเบียนไม่มีเครื่องไหนเอกสารครบเลย
   // ขึ้น ✗ แดงสามดวงทุกใบจึงไม่ได้ช่วยแยกอะไร แค่กินสายตา) รายละเอียดรายใบอยู่ในส่วนที่กางออก
   h += '<div class="su-meta">';
-  h += '<span class="nu-t ' + (u.flyable !== false ? 'fly' : 'disp') + '">' +
+  h += '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '">' +
     (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span>';
   h += _scDocTag(u);
-  if (u.customerVisible === false) h += '<span class="nu-t hid">🙈 ซ่อนจากลูกค้า</span>';
+  if (u.customerVisible === false) h += '<span class="du-t hid">🙈 ซ่อนจากลูกค้า</span>';
   h += '</div>';
   if (loan || appRange) {
     var b = loan || appRange;
@@ -2911,7 +2916,12 @@ function unitCardHtml(raw, n) {
   [['nbtcRegistered', 'กสทช.'], ['droneInsurance', 'ประกันภัยโดรน'], ['caatRegistered', 'CAAT']].forEach(function(f) {
     h += '<span class="pill ' + (u[f[0]] ? 'pill-good' : 'pill-bad') + '">' + (u[f[0]] ? '✓' : '✗') + ' ' + f[1] + '</span>';
   });
-  h += '</div></div></details>';
+  h += '</div>';
+  if (u.kitContents) {
+    h += '<div style="margin-top:8px"><span style="color:var(--text3);font-size:12px">📦 ประกอบด้วย</span>' +
+      '<div style="font-size:12px;white-space:pre-line;margin-top:3px">' + esc(u.kitContents) + '</div></div>';
+  }
+  h += '</div></details>';
   if (unitHasPending(u.id)) {
     var p = PENDING_EDITS[u.id];
     var nf = Object.keys(p.fields || {}).length;
@@ -2972,6 +2982,12 @@ function openUnitDetail(unitId) {
     h += '<button class="btn btn-primary btn-sm" onclick="showManualLoanForm(\'' + u.id + '\')">✍️ กรอกยืมเครื่องนี้</button>';
   }
   h += '<div id="manualLoanFormZone"></div></div>';
+  h += '<div class="card"><div style="font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px">📦 ประกอบด้วย' +
+    '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button></div>';
+  h += u.kitContents
+    ? '<div style="font-size:13px;white-space:pre-line;line-height:1.6">' + esc(u.kitContents) + '</div>'
+    : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่ได้บันทึกว่าในกล่อง/ชุดนี้มีอะไรบ้าง — กด "แก้ไข" เพื่อเพิ่ม</div>';
+  h += '</div>';
   h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">📜 ประวัติการยืมล่าสุด</div>';
   h += history.length ? history.map(function(l) {
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;display:flex;gap:8px;align-items:center">' +
@@ -4957,7 +4973,7 @@ function toggleStaffTheme() {
 // ================================================================
 var PENDING_EDITS = {};   // unitId -> {fields:{...}, editedAt, editedBy}
 var RAW_UNITS = [];       // ตามที่ publish มาจริงๆ — ใช้เทียบ diff ตอนบันทึก ห้ามเอาไปแสดงผล
-var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneInsurance','caatRegistered','customerVisible','note','name','model','serialNumber','sku'];
+var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneInsurance','caatRegistered','customerVisible','note','name','model','serialNumber','sku','kitContents'];
 
 // ================================================================
 // ประวัติการแก้ไขข้อมูลเครื่อง (publicDemoEditLog) — เขียนถาวร ไม่มีวันลบ ต่างจาก publicDemoEdits ที่เป็น
@@ -4966,7 +4982,8 @@ var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneIns
 var _EDIT_FIELD_LABELS = {
   name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part (SKU)', category: 'หมวดหมู่',
   flyable: 'ประเภทการใช้งาน', rentalDbNo: 'เลขเครื่องเช่า', nbtcRegistered: 'กสทช.',
-  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ'
+  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ',
+  kitContents: 'ประกอบด้วย'
 };
 var _EDIT_BOOL_FIELDS = { flyable: 1, nbtcRegistered: 1, droneInsurance: 1, caatRegistered: 1, customerVisible: 1 };
 function _fmtChangeVal(field, v) {
@@ -5087,6 +5104,7 @@ function openUnitEditM(unitId) {
   h += '<div class="sm-sec">ลูกค้า &amp; หมายเหตุ</div>';
   h += '<div class="field"><label>👀 ให้ลูกค้าขอยืมเองได้ไหม</label><div class="sm-toggles">' +
     _smTg('ed_vis', u.customerVisible !== false, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
+  h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ed_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;...">' + esc(u.kitContents || '') + '</textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ed_note" rows="2">' + esc(u.note || '') + '</textarea></div>';
   h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="ed_by" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
@@ -5120,6 +5138,7 @@ function saveUnitEdit(unitId) {
     droneInsurance: document.getElementById('ed_ins').checked,
     caatRegistered: document.getElementById('ed_caat').checked,
     customerVisible: document.getElementById('ed_vis').checked,
+    kitContents: (document.getElementById('ed_kit').value || '').trim(),
     note: (document.getElementById('ed_note').value || '').trim()
   };
   // เครื่องที่ยังไม่เคยลงข้อมูลจริงในแอปหลักเลย (เพิ่งเพิ่มจากหน้านี้ ยังเป็นคำขอ type:'add' ค้างอยู่)
@@ -5183,6 +5202,7 @@ function showAddUnitM() {
   h += '<div class="sm-sec">ลูกค้า &amp; หมายเหตุ</div>';
   h += '<div class="field"><label>👀 ให้ลูกค้าขอยืมเองได้ไหม</label><div class="sm-toggles">' +
     _smTg('ad_vis', true, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
+  h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ad_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;..."></textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ad_note" rows="2"></textarea></div>';
   h += '<div class="field"><label>✍️ คนเพิ่ม (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครเพิ่ม) *</label><input type="text" id="ad_by" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
@@ -5209,6 +5229,7 @@ function saveNewUnit() {
     droneInsurance: document.getElementById('ad_ins').checked,
     caatRegistered: document.getElementById('ad_caat').checked,
     customerVisible: document.getElementById('ad_vis').checked,
+    kitContents: (document.getElementById('ad_kit').value || '').trim(),
     note: (document.getElementById('ad_note').value || '').trim()
   };
   db.collection('publicDemoEdits').doc(id).set({
