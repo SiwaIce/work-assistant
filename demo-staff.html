@@ -8,6 +8,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <!-- อ่านไฟล์ export จากระบบคลัง (นำเข้าเลขที่ใบจอง) — defer เพราะใช้ตอนกดปุ่มเท่านั้น ไม่ต้องรอตอนเปิดหน้า -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
+<!-- ถอดรหัส QR/บาร์โค้ดจากกล้อง ใช้ตอนสแกนหาเครื่องเท่านั้น — defer เหมือนกัน -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <style>
 /* ค่าเริ่มต้นเป็นธีมมืดชุดเดียวกับแอปหลัก (ตัวแปรลอกจาก :root ใน style.css) — หน้านี้เปิดจากลิงก์
    แยกจาก SPA เลยแชร์ style.css กันไม่ได้ ต้องประกาศซ้ำที่นี่ ถ้าแก้สีในแอปหลักต้องมาแก้ตรงนี้ด้วย */
@@ -677,6 +679,24 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-multisum .ms-row b { display:block; font-size:12.5px; }
 .dcal-multisum .ms-row i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
 .dcal-load { background:var(--bad); }
+
+/* สแกน QR/บาร์โค้ดหาเครื่อง */
+.scan-video { width:100%; max-height:280px; object-fit:cover; background:#000; border-radius:10px; display:block; }
+.scan-found-list { margin-top:10px; display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; }
+.scan-found-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--border);
+  border-radius:8px; background:var(--surface); font-size:12.5px; }
+.scan-found-row span { flex:1; min-width:0; }
+.scan-found-row .x { cursor:pointer; color:var(--text2); font-weight:700; padding:2px 6px; }
+
+/* รูปสภาพเครื่องตอนส่งมอบ/รับคืน */
+.sc-photo-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.sc-photo { position:relative; width:84px; height:84px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+.sc-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.sc-photo-x { position:absolute; top:2px; right:2px; background:rgba(0,0,0,.62); color:#fff; border:none;
+  border-radius:50%; width:20px; height:20px; font-size:11px; line-height:1; cursor:pointer; }
+
+/* ชื่อผู้ยืมกดดูประวัติได้ */
+.bw-name { color:var(--accent); text-decoration:underline; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -774,6 +794,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
             <input type="text" id="unitSearch" placeholder="🔎 กรองเฉพาะรายการที่แสดงอยู่นี้ (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
             <button class="btn btn-ghost btn-sm" onclick="lendPasteToggle()" title="ก๊อปเลขเครื่องเช่าจากระบบคลังมาวาง แล้วติ๊กให้อัตโนมัติ" style="white-space:nowrap">📋 วางเลขเครื่อง</button>
             <button class="btn btn-ghost btn-sm" onclick="openRentImport()" title="นำเข้าไฟล์ export จากระบบคลัง เติมเลขที่ใบจองย้อนหลังให้ทุกเครื่อง" style="white-space:nowrap">📥 นำเข้าเลขใบจอง</button>
+            <button class="btn btn-ghost btn-sm" onclick="openScanM()" title="ใช้กล้องสแกน QR/บาร์โค้ดเลขเครื่องเช่า เพิ่มเข้ารายการยืมได้ทันที" style="white-space:nowrap">📷 สแกนเลขเครื่อง</button>
             <span id="unitCountLabel" style="align-self:center;font-size:12px;color:var(--text2);white-space:nowrap"></span>
           </div>
           <div id="lendPastePanel" class="paste-panel" style="display:none">
@@ -980,6 +1001,7 @@ function renderStatRow() {
   // นับจากทั้งสองแหล่งเหมือนในแท็บ ไม่งั้นตัวเลขบนแท็บกับข้างในไม่ตรงกัน
   var overdue = _overdueCount();
   document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
+  _checkOverdueNotify(overdue);
   renderTriage();
   var mt = document.getElementById('dashMiniText');
   if (mt) mt.textContent = (overdue ? '🔴 ' + overdue + ' เลยกำหนด · ' : '') + (PENDING.length ? '🟡 ' + PENDING.length + ' รออนุมัติ · ' : '') +
@@ -1631,7 +1653,7 @@ function returnRowHtml(cls, l) {
   h += '<div class="body"><div style="font-weight:700">' + esc(p.main) +
     (p.sub ? ' <span style="font-weight:500;color:var(--text3);font-size:12px">' + esc(p.sub) + '</span>' : '') +
     (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
-  h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? esc(l.borrower) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
+  h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(l.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(l.borrower) + '</span>' : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
     ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
     '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
     (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div>';
@@ -1647,6 +1669,9 @@ function returnRowHtml(cls, l) {
   h += '</div>';
 
   h += '<div class="actions">';
+  if (cls === 'overdue' || cls === 'duesoon') {
+    h += '<button class="btn btn-ghost btn-sm" onclick="openReminderM(\'' + _scEsq(l.unitId) + '\',\'' + _scEsq(l.borrower || '') + '\',\'' + _scEsq(l.jobNo || '') + '\',\'' + _scEsq(l.end) + '\')" title="แต่งข้อความแจ้งเตือนผู้ยืม">🔔 แจ้งเตือน</button>';
+  }
   if (l.src === 'staff') {
     h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l.id + '\')">✅ รับคืนแล้ว</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + l.id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
@@ -1979,7 +2004,8 @@ var SC_EV_META = {
   extended: { icon: '⏩', label: 'เลื่อนกำหนดคืน' },
   borrower: { icon: '🔄', label: 'โอนผู้ยืม' },
   keyer:    { icon: '🧑‍💼', label: 'เปลี่ยนผู้คีย์' },
-  returned: { icon: '✅', label: 'รับคืน' }
+  returned: { icon: '✅', label: 'รับคืน' },
+  photo:    { icon: '📷', label: 'แนบรูปสภาพเครื่อง' }
 };
 function _scEv(type, by, text) {
   return { at: new Date().toISOString(), type: type, by: by || '', text: text || '' };
@@ -2061,6 +2087,49 @@ function scBorrowerDatalist(listId) {
   return h + '</datalist>';
 }
 
+// ================================================================
+// ประวัติผู้ยืม — หน้านี้ไม่มีทะเบียนลูกค้าแยกต่างหาก ชื่อผู้ยืมเป็น free text ในใบยืมเอง จึงรวมประวัติ
+// จาก LOANS ทั้งหมดโดยเทียบชื่อแบบ case/space-insensitive (ตัวเดียวกับ scBorrowerDatalist ใช้จัดอันดับ)
+// ใช้ตอนต้องตัดสินใจว่าจะปล่อยยืมรอบใหม่ให้รายนี้ดีไหม เคยคืนช้าบ่อยแค่ไหน มีอะไรค้างอยู่ตอนนี้บ้าง
+// ================================================================
+function _borrowerKey(name) { return String(name || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+function _borrowerStats(name) {
+  var key = _borrowerKey(name);
+  var mine = LOANS.filter(function(l) { return _borrowerKey(l.borrower) === key; });
+  var today = _td();
+  var active = mine.filter(function(l) { return l.status === 'active'; });
+  var overdueNow = active.filter(function(l) { return l.end < today; });
+  var returned = mine.filter(function(l) { return l.status === 'returned'; });
+  var lateReturns = returned.filter(function(l) { return l.actualReturnDate && l.actualReturnDate > l.end; });
+  return { mine: mine, active: active, overdueNow: overdueNow, returned: returned, lateReturns: lateReturns };
+}
+function openBorrowerM(name) {
+  if (!(name || '').trim()) { alert('ไม่มีชื่อผู้ยืมให้ดูประวัติ'); return; }
+  var st = _borrowerStats(name);
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var h = '<div class="sm-sec">👤 ' + esc(name) + '</div>';
+  h += '<div class="sc-kv"><div><span>ยืมทั้งหมด</span><b>' + st.mine.length + ' ครั้ง</b></div>' +
+    '<div><span>กำลังยืมอยู่</span><b>' + st.active.length + '</b></div>' +
+    '<div><span>เลยกำหนดตอนนี้</span><b' + (st.overdueNow.length ? ' style="color:var(--warn)"' : '') + '>' + st.overdueNow.length + '</b></div>' +
+    '<div><span>เคยคืนช้า</span><b>' + st.lateReturns.length + ' จาก ' + st.returned.length + ' ครั้งที่คืนแล้ว</b></div></div>';
+  if (st.overdueNow.length) h += '<div class="hint" style="margin-top:6px;color:var(--warn)">⚠️ ตอนนี้มีเครื่องเลยกำหนดคืนอยู่ — ควรตามให้เคลียร์ก่อนปล่อยยืมรอบใหม่</div>';
+  h += '<div class="sm-sec">📜 ประวัติการยืม (ล่าสุดก่อน)</div>';
+  h += st.mine.length ? st.mine.slice().sort(function(a, b) { return String(b.start).localeCompare(String(a.start)); }).map(function(l) {
+    var u = byId[l.unitId];
+    var p = u ? _scModelParts(u) : { main: l.model || '—' };
+    var today = _td();
+    var stpill = l.status === 'active'
+      ? (l.end < today ? '<span class="pill pill-warn">เลยกำหนด</span>' : '<span class="pill pill-good">กำลังยืม</span>')
+      : '<span class="pill pill-muted">คืนแล้ว' + (l.actualReturnDate && l.actualReturnDate > l.end ? ' (ช้า)' : '') + '</span>';
+    return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
+      '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') +
+      ' · ' + esc(_scD(l.start)) + '→' + esc(_scD(l.end)) + ' ' + stpill + '</span>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')">📜</button></div>';
+  }).join('') : '<div class="empty-state" style="padding:10px 0">ไม่พบประวัติ</div>';
+  h += '<div style="margin-top:12px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  openSm('👤 ประวัติผู้ยืม', h, true);
+}
+
 // ผู้คีย์เบิกคือทีมตัวเอง — รายชื่อสั้นและปิด แต่เดิมต้องพิมพ์มือทุกฟอร์ม
 // ดึงจากชื่อที่เคยคีย์จริง เรียงตามคนที่คีย์บ่อยสุด คนที่ใช้เครื่องนี้ล่าสุดจะถูก prefill อยู่แล้วโดย _lastEditor
 function scKeyerDatalist(listId) {
@@ -2106,7 +2175,7 @@ function openLoanLogM(loanId) {
   if (!l) { alert('ไม่พบใบยืมนี้'); return; }
   var h = '<div class="sm-sec">' + esc(l.model || '') + ' (' + esc(l.label || '') + ')</div>';
   h += '<div class="sc-kv">' +
-    '<div><span>ผู้ยืม</span><b>' + esc(l.borrower || '—') + '</b></div>' +
+    '<div><span>ผู้ยืม</span><b>' + (l.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(l.borrower) + '\')">' + esc(l.borrower) + '</span>' : '—') + '</b></div>' +
     '<div><span>ผู้คีย์</span><b>' + esc(l.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
     '<div><span>ใบจอง</span><b>' + esc(l.jobNo || '—') + '</b></div>' +
     '<div><span>ช่วงยืม</span><b>' + esc(_scD(l.start)) + ' → ' + esc(_scD(l.end)) + '</b></div>' +
@@ -2114,6 +2183,9 @@ function openLoanLogM(loanId) {
     (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
     '</div>';
   h += _copySlipBtnHtml(l.unitId, l.jobNo);
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' +
+    '<button class="btn btn-ghost btn-sm" onclick="openPhotoM(\'' + loanId + '\',\'out\')">📷 รูปตอนส่งมอบ (' + ((l.photosOut || []).length) + ')</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openPhotoM(\'' + loanId + '\',\'in\')">📷 รูปตอนรับคืน (' + ((l.photosIn || []).length) + ')</button></div>';
   h += scLoanLogHtml(l);
   h += _scJobSiblingsHtml(l);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
@@ -2157,6 +2229,59 @@ function copySlipRentals(unitId, jobNo) {
     alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
   }
 }
+
+// ================================================================
+// แจ้งเตือนผู้ยืมที่เลยกำหนด/ใกล้ถึงกำหนดคืน — แต่งข้อความให้พร้อมส่ง แก้ไขก่อนส่งได้ แล้วคัดลอก/เปิด LINE
+// ให้ทีมกดแปะแชทได้เลย ไม่ต้องพิมพ์เอง ใช้ได้ทั้งใบที่คีย์จากหน้านี้และจากแอปหลัก เพราะแค่ประกอบข้อความ
+// จากข้อมูลที่มีอยู่แล้ว ไม่ได้เขียนอะไรกลับเข้า Firestore
+// ================================================================
+function _reminderText(unitId, borrower, jobNo, endIso) {
+  var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
+  var p = u ? _scModelParts(u) : { main: '' };
+  var rent = u && u.rentalDbNo ? ' (เช่า ' + u.rentalDbNo + ')' : '';
+  var today = _td();
+  var late = endIso < today;
+  var dueTxt = late ? ('เลยกำหนดคืนมาแล้ว ' + daysBetween(endIso, today) + ' วัน (กำหนดคืน ' + _scD(endIso) + ')')
+    : ('ใกล้ถึงกำหนดคืนวันที่ ' + _scD(endIso));
+  return (borrower ? 'เรียน ' + borrower + '\n' : '') +
+    'แจ้งเตือนการคืนเครื่องสาธิต: ' + p.main + rent + '\n' + dueTxt +
+    (jobNo ? '\nเลขใบจอง: ' + jobNo : '') +
+    '\nรบกวนติดต่อกลับเพื่อนัดหมายคืนเครื่องด้วยนะครับ/ค่ะ ขอบคุณครับ/ค่ะ';
+}
+function openReminderM(unitId, borrower, jobNo, endIso) {
+  var text = _reminderText(unitId, borrower, jobNo, endIso);
+  var h = '<div class="sm-sec">💬 ข้อความแจ้งเตือน (แก้ไขได้ก่อนส่ง)</div>';
+  h += '<textarea id="remText" rows="7" style="width:100%">' + esc(text) + '</textarea>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+    '<button class="btn btn-primary" onclick="_remCopy()">📋 คัดลอกข้อความ</button>' +
+    '<button class="btn btn-ghost" onclick="_remLine()">💬 เปิด LINE เพื่อส่ง</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  openSm('🔔 แจ้งเตือนผู้ยืม', h);
+}
+function _remCopy() {
+  var t = document.getElementById('remText').value;
+  navigator.clipboard.writeText(t).then(function() { toastMock('📋 คัดลอกข้อความแล้ว'); })
+    .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+}
+function _remLine() {
+  var t = document.getElementById('remText').value;
+  window.open('https://line.me/R/msg/text/?text=' + encodeURIComponent(t), '_blank');
+}
+// เตือนครั้งเดียวต่อวัน (ไม่ใช่ทุกครั้งที่ renderAll ทำงาน) ด้วย localStorage คั่นวันไว้ — เพิ่งเปิดหน้ามา
+// เจอเลยกำหนดแล้วค่อยขอสิทธิ์แจ้งเตือนของเบราว์เซอร์ ถ้าเคยปฏิเสธไปแล้วก็จะไม่ขอซ้ำรบกวนอีก
+function _checkOverdueNotify(n) {
+  if (!n || !('Notification' in window)) return;
+  var today = _td(), lastDay = null;
+  try { lastDay = localStorage.getItem('demoStaffOverdueNotifyDay'); } catch (e) {}
+  if (lastDay === today) return;
+  try { localStorage.setItem('demoStaffOverdueNotifyDay', today); } catch (e) {}
+  function fire() {
+    try { new Notification('🔴 มีเครื่องเลยกำหนดคืน ' + n + ' เครื่อง', { body: 'เปิดแท็บ "ติดตามคืน" เพื่อดูรายละเอียดและแจ้งเตือนผู้ยืม' }); } catch (e) {}
+  }
+  if (Notification.permission === 'granted') fire();
+  else if (Notification.permission !== 'denied') Notification.requestPermission().then(function(p) { if (p === 'granted') fire(); });
+}
+
 // เครื่องอื่นในใบจองเดียวกัน (jobNo เดียวกัน) — ยืมพร้อมกันเป็นชุดมักมีหลายเครื่อง แต่ประวัติใบยืมเดิม
 // โชว์แค่ตัวที่กำลังดูอยู่ตัวเดียว มองไม่ออกว่าใบเดียวกันมีอะไรอีกบ้างถ้าไม่ไปเปิดดูทีละเครื่องเอง
 function _scJobSiblingsHtml(l) {
@@ -2191,7 +2316,7 @@ function showLendConflictM(unitId, start, end) {
   var p = u ? _scModelParts(u) : { main: '—' };
   var h = '<div class="sm-sec">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</div>';
   h += '<div class="sc-kv">' +
-    '<div><span>ผู้ยืม</span><b>' + esc(conflict.borrower || '— ไม่ระบุ —') + '</b></div>' +
+    '<div><span>ผู้ยืม</span><b>' + (conflict.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(conflict.borrower) + '\')">' + esc(conflict.borrower) + '</span>' : '— ไม่ระบุ —') + '</b></div>' +
     '<div><span>ผู้คีย์เบิก</span><b>' + esc(conflict.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
     '<div><span>ใบจอง</span><b>' + esc(conflict.jobNo || '—') + '</b></div>' +
     '<div><span>ช่วงที่ติด</span><b>' + esc(_scFmt(conflict.s)) + ' → ' + esc(_scFmt(conflict.e)) + '</b></div>' +
@@ -2224,6 +2349,84 @@ function _bookingSiblingsHtml(b) {
       '</div>';
   }).join('');
   return h;
+}
+
+// ================================================================
+// รูปสภาพเครื่องตอนส่งมอบ/รับคืน — กันข้อพิพาทถ้าเครื่องมีรอยหรือเสียหายตอนคืน มีรูปตอนส่งออกไว้เทียบ
+// เก็บเป็น base64 ในตัวใบยืมเอง (ไม่ต้องมี storage backend แยก) จึงต้องบีบอัด/ย่อรูปก่อนทุกครั้ง ไม่งั้น
+// เอกสารจะบวมเกิน 1MB ของ Firestore เร็วมากถ้าแนบรูปจากกล้องตรงๆ หลายรูป
+// แนบได้ทุกเมื่อระหว่างใบยืมยังไม่ปิด ไม่ได้บังคับว่าต้องแนบตอนไหน — ทีมงานเลือกเองว่าจะถ่ายตอนไหนบ้าง
+// ================================================================
+function _scResizeImage(file, maxDim, quality, cb) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height, scale = Math.min(1, maxDim / Math.max(w, h));
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(w * scale) || 1; canvas.height = Math.round(h * scale) || 1;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      cb(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = function() { cb(null); };
+    img.src = e.target.result;
+  };
+  reader.onerror = function() { cb(null); };
+  reader.readAsDataURL(file);
+}
+function openPhotoM(loanId, phase) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var field = phase === 'out' ? 'photosOut' : 'photosIn';
+  var label = phase === 'out' ? 'ตอนส่งมอบ' : 'ตอนรับคืน';
+  var photos = l[field] || [];
+  var h = '<div class="sm-sec">📷 รูปสภาพเครื่อง' + label + ' — ' + esc(l.model || '') + '</div>';
+  h += '<div class="sc-photo-grid" id="photoGrid">' + (photos.length ? photos.map(function(src, i) {
+    return '<div class="sc-photo"><img src="' + src + '"><button class="sc-photo-x" onclick="removePhoto(\'' + loanId + '\',\'' + field + '\',' + i + ')">✕</button></div>';
+  }).join('') : '<div class="hint">ยังไม่มีรูป</div>') + '</div>';
+  h += '<div class="field" style="margin-top:10px"><label>เพิ่มรูป (ถ่ายจากกล้องหรือเลือกจากเครื่อง)</label>' +
+    '<input type="file" id="photoFile" accept="image/*" capture="environment" multiple></div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="uploadPhotos(\'' + loanId + '\',\'' + field + '\')">➕ เพิ่มรูป</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  h += '<div id="photoMsg" class="hint" style="margin-top:6px"></div>';
+  openSm('📷 รูปสภาพเครื่อง' + label, h, true);
+}
+function uploadPhotos(loanId, field) {
+  var input = document.getElementById('photoFile');
+  var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+  if (!files.length) { alert('เลือกรูปก่อนนะครับ'); return; }
+  var msg = document.getElementById('photoMsg');
+  if (msg) msg.textContent = 'กำลังบีบอัดรูป ' + files.length + ' รูป...';
+  var done = 0, results = [];
+  files.forEach(function(f) {
+    _scResizeImage(f, 900, 0.55, function(dataUrl) {
+      done++;
+      if (dataUrl) results.push(dataUrl);
+      if (done === files.length) _savePhotos(loanId, field, results, msg);
+    });
+  });
+}
+function _savePhotos(loanId, field, dataUrls, msg) {
+  if (!dataUrls.length) { if (msg) msg.textContent = 'ประมวลผลรูปไม่สำเร็จ ลองใหม่อีกครั้ง'; return; }
+  var upd = {};
+  upd[field] = firebase.firestore.FieldValue.arrayUnion.apply(firebase.firestore.FieldValue, dataUrls);
+  upd.events = firebase.firestore.FieldValue.arrayUnion(_scEv('photo', _lastEditor(),
+    'แนบรูป' + (field === 'photosOut' ? 'ตอนส่งมอบ' : 'ตอนรับคืน') + ' ' + dataUrls.length + ' รูป'));
+  db.collection('publicDemoLoans').doc(loanId).update(upd).then(function() {
+    toastMock('📷 แนบรูปแล้ว (' + dataUrls.length + ')');
+    openPhotoM(loanId, field === 'photosOut' ? 'out' : 'in');
+  }).catch(function(e) { if (msg) msg.textContent = 'ผิดพลาด: ' + e.message; else alert('ผิดพลาด: ' + e.message); });
+}
+function removePhoto(loanId, field, idx) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (!confirm('ลบรูปนี้?')) return;
+  var arr = (l[field] || []).slice();
+  arr.splice(idx, 1);
+  var upd = {}; upd[field] = arr;
+  db.collection('publicDemoLoans').doc(loanId).update(upd)
+    .then(function() { openPhotoM(loanId, field === 'photosOut' ? 'out' : 'in'); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
 function openExtendM(loanId) {
@@ -2924,8 +3127,105 @@ function renderLendBar() {
       return '<span class="lb-chip">' + esc(p.main) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') +
         '<span class="x" onclick="lendToggle(\'' + id + '\')">✕</span></span>';
     }).join('') + '</div>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openScanM()" title="สแกนเพิ่มอีก">📷 สแกนเพิ่ม</button>' +
     '<button class="btn btn-ghost btn-sm" onclick="lendClear()">ล้าง</button>' +
     '<button class="btn btn-primary btn-sm" onclick="openLendFlow()">📅 เลือกวันที่ยืม →</button>';
+}
+
+// ================================================================
+// สแกน QR/บาร์โค้ดเลขเครื่องเช่าด้วยกล้อง — เพิ่มเข้ารายการเลือกยืม (lendPicked) ตัวเดียวกับที่กดการ์ด/
+// วางเลขเครื่องใช้อยู่แล้ว จะได้ทำงานร่วมกับทุกจุดที่มีอยู่เดิมโดยไม่ต้องแยกระบบเลือกอีกชุด
+// เปิดกล้องค้างไว้ทั้งช่วงที่หน้าต่างเปิดอยู่ สแกนได้ต่อเนื่องหลายชิ้นโดยไม่ต้องเปิด-ปิดใหม่ทุกครั้ง
+// (กรณีใช้บ่อย: เลือกของ 10 ชิ้นไปงาน event เดือนหน้า) — ไม่มีกล้องหรือไม่อนุญาต ยังพิมพ์เลขเองแทนได้
+// ================================================================
+var _scanStream = null, _scanRAF = null, _scanCanvas = null, _scanLastCode = '', _scanLastAt = 0;
+function openScanM() {
+  var h = '<video id="scanVideo" class="scan-video" playsinline muted autoplay></video>';
+  h += '<div id="scanMsg" class="hint" style="margin-top:8px">📷 กำลังเปิดกล้อง...</div>';
+  h += '<div class="field" style="margin-top:10px"><label>หรือพิมพ์เลขเครื่องเช่า/ซีเรียลเอง</label>' +
+    '<input type="text" id="scanManualInput" autocomplete="off" placeholder="เช่น 17101" onkeydown="if(event.key===\'Enter\')scanManualSubmit()"></div>';
+  h += '<div id="scanFoundList" class="scan-found-list"></div>';
+  h += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
+  openSm('📷 สแกนหาเครื่อง (เพิ่มเข้ารายการยืม)', h, true);
+  renderScanFoundList();
+  _scanStart();
+}
+function _scanSetMsg(t) { var el = document.getElementById('scanMsg'); if (el) el.textContent = t; }
+function _scanStart() {
+  var video = document.getElementById('scanVideo');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    _scanSetMsg('เบราว์เซอร์นี้ไม่รองรับกล้อง — พิมพ์เลขด้านล่างแทนได้'); return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream) {
+    _scanStream = stream;
+    if (!video) { stream.getTracks().forEach(function(t) { t.stop(); }); return; }
+    video.srcObject = stream;
+    _scanSetMsg('📷 เล็งกล้องไปที่ QR/บาร์โค้ดบนเครื่อง');
+    _scanRAF = requestAnimationFrame(_scanLoop);
+  }).catch(function(e) {
+    _scanSetMsg('เปิดกล้องไม่ได้ (' + e.message + ') — พิมพ์เลขด้านล่างแทนได้');
+  });
+}
+function _scanLoop() {
+  var video = document.getElementById('scanVideo');
+  if (!video || !_scanStream) return;
+  if (video.readyState === video.HAVE_ENOUGH_DATA && window.jsQR && video.videoWidth) {
+    _scanCanvas = _scanCanvas || document.createElement('canvas');
+    _scanCanvas.width = video.videoWidth; _scanCanvas.height = video.videoHeight;
+    var ctx = _scanCanvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, _scanCanvas.width, _scanCanvas.height);
+    var img = ctx.getImageData(0, 0, _scanCanvas.width, _scanCanvas.height);
+    var code = window.jsQR(img.data, img.width, img.height);
+    if (code && code.data) _scanFound(code.data);
+  }
+  _scanRAF = requestAnimationFrame(_scanLoop);
+}
+function _scanStop() {
+  if (_scanRAF) cancelAnimationFrame(_scanRAF);
+  _scanRAF = null;
+  if (_scanStream) { _scanStream.getTracks().forEach(function(t) { t.stop(); }); _scanStream = null; }
+}
+function scanManualSubmit() {
+  var inp = document.getElementById('scanManualInput');
+  if (!inp || !inp.value.trim()) return;
+  _scanFound(inp.value);
+  inp.value = '';
+  inp.focus();
+}
+// เจอโค้ดแล้วหาเครื่องที่ตรงเลขเช่า/ซีเรียล แล้วติ๊กเข้า lendPicked ตัวเดียวกับทุกจุดในหน้านี้ — เกณฑ์เลือกได้
+// (ยังไม่ปิดใช้งาน + ลงทะเบียนเลขเช่าแล้ว) ใช้ตัวเดียวกับ unitCardHtml ทุกประการ ไม่ให้สแกนข้ามกฎ
+function _scanFound(raw) {
+  var text = String(raw || '').trim();
+  if (!text) return;
+  if (text === _scanLastCode && Date.now() - _scanLastAt < 1800) return;   // กันอ่านซ้ำรัวๆจากเฟรมติดกัน
+  _scanLastCode = text; _scanLastAt = Date.now();
+  var digits = text.replace(/\D/g, '');
+  var u = UNITS.filter(function(x) {
+    var rn = String(x.rentalDbNo || '').trim(), sn = String(x.serialNumber || '').trim();
+    return rn === text || sn === text || (digits && rn === digits);
+  })[0];
+  if (!u) { _scanSetMsg('❌ ไม่พบเครื่องเลข "' + text + '"'); return; }
+  var off = u.status === 'unavailable' || u.status === 'lost';
+  if (off) { _scanSetMsg('⛔ ' + _scModelParts(u).main + ' ไม่พร้อมใช้งาน — เลือกไม่ได้'); return; }
+  if (!_unitHasRental(u)) { _scanSetMsg('⚠️ เครื่องนี้ยังไม่ลงทะเบียนเลขเช่า — เลือกไม่ได้'); return; }
+  var already = lendPicked.indexOf(u.id) !== -1;
+  if (!already) lendToggle(u.id);
+  _scanSetMsg((already ? 'ℹ️ เพิ่มไว้แล้ว: ' : '✅ เพิ่มแล้ว: ') + _scModelParts(u).main + ' · เช่า ' + (u.rentalDbNo || '—'));
+  renderScanFoundList();
+  if (navigator.vibrate) navigator.vibrate(60);
+}
+function renderScanFoundList() {
+  var el = document.getElementById('scanFoundList');
+  if (!el) return;
+  if (!lendPicked.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="hint" style="margin-bottom:2px">เลือกไว้แล้ว ' + lendPicked.length + ' เครื่อง:</div>' +
+    lendPicked.map(function(id) {
+      var u = UNITS.filter(function(x) { return x.id === id; })[0];
+      if (!u) return '';
+      var p = _scModelParts(u);
+      return '<div class="scan-found-row"><span>' + esc(p.main) + (u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</span>' +
+        '<span class="x" onclick="lendToggle(\'' + id + '\');renderScanFoundList()">✕</span></div>';
+    }).join('');
 }
 
 function openLendFlow() {
@@ -4426,7 +4726,7 @@ function openSm(title, html, wide) {
   document.getElementById('smBox').classList.toggle('wide', !!wide);
   _scDateHints(document.getElementById('smBody'));
 }
-function closeSm() { document.getElementById('smOverlay').classList.remove('on'); }
+function closeSm() { document.getElementById('smOverlay').classList.remove('on'); _scanStop(); }
 
 function _smTg(id, on, label) {
   return '<label class="sm-tg"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="bx">✓</span>' + esc(label) + '</label>';
