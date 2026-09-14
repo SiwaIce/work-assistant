@@ -772,6 +772,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
               <div id="toolsMenuPop" class="tools-menu-pop" style="display:none">
                 <button onclick="closeToolsMenu();toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
                 <button onclick="closeToolsMenu();showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
+                <button onclick="closeToolsMenu();showEditLogM()">📜 ประวัติการแก้ไขทั้งหมด</button>
                 <div class="tools-menu-sep"></div>
                 <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม)</button>
                 <button onclick="closeToolsMenu();exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
@@ -832,6 +833,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 //   - publicDemoLoans/{id}            : read, create, update (จากหน้านี้)
 //   - publicDemoEdits/{unitId}        : read, write, delete — ⚠️ ยังไม่มี ต้องเพิ่มก่อนปุ่ม "แก้ไข" ถึงจะทำงาน
 //                                       (คิวแก้ไขจากหน้านี้ ให้แอปหลักมากดรับเข้าแล้วลบทิ้ง)
+//   - publicDemoEditLog/{id}          : read, create — ⚠️ ยังไม่มี ต้องเพิ่มก่อนประวัติการแก้ไขจะบันทึกได้
+//                                       (ประวัติถาวร ไม่มี update/delete จากหน้านี้เลย เขียนแล้วเขียนอย่างเดียว)
 // ================================================================
 var firebaseConfig = {
   apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
@@ -915,6 +918,10 @@ var UNITS = [];       // จาก dealerUpdates/demoCatalogPublic.units — ข
 var CATEGORIES = [];
 var PENDING = [];      // publicDemoRequests status=='pending'
 var LOANS = [];        // publicDemoLoans ทั้งหมด (active + returned) — ใช้คำนวณ busy/ประวัติ
+// publicDemoEditLog ทั้งหมด — เก็บถาวรไว้ต่างหากจาก publicDemoEdits (คิวข้อเสนอที่ถูกลบทิ้งหลังแอปหลักรับเข้า
+// แล้ว) เพราะพอรับเข้าแล้วคิวก็หายไป ไม่เหลือร่องรอยว่าใครแก้อะไรไปบ้าง — เขียนเข้านี่ตอนกดบันทึกทุกครั้ง
+// (ดู _logEditHistory) ไม่ลบทิ้งเลย ให้เป็นประวัติค้นย้อนหลังได้จริง
+var EDIT_LOG = [];
 var currentUnitDetail = null;
 
 function loadStaffData() {
@@ -928,6 +935,7 @@ function loadStaffData() {
     listenPending();
     listenEdits();
     listenLoans();
+    listenEditLog();
   }).catch(function(e) {
     document.getElementById('staffLoading').innerHTML = '<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message) + '<br>อาจต้องเพิ่ม Firestore rule ให้อ่าน dealerUpdates/demoCatalogPublic ได้ก่อน</div>';
   });
@@ -943,6 +951,12 @@ function listenLoans() {
     LOANS = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
     renderAll();
   }, function(e) { console.warn('listenLoans error', e); });
+}
+function listenEditLog() {
+  db.collection('publicDemoEditLog').onSnapshot(function(snap) {
+    EDIT_LOG = snap.docs.map(function(d) { var x = d.data(); x._id = d.id; return x; });
+    renderAll();
+  }, function(e) { console.warn('listenEditLog error', e); });
 }
 function activeLoansFor(unitId) { return LOANS.filter(function(l) { return l.unitId === unitId && l.status === 'active'; }); }
 // การยืมที่คีย์ในแอปหลักมาถึงหน้านี้ทาง busyRanges ไม่ได้อยู่ใน publicDemoLoans — เดิมทุกจุดที่เช็ค "ว่างไหม"
@@ -1000,11 +1014,19 @@ function renderStatRow() {
   document.getElementById('pendingCountBadge').textContent = '(' + PENDING.length + ')';
   // นับจากทั้งสองแหล่งเหมือนในแท็บ ไม่งั้นตัวเลขบนแท็บกับข้างในไม่ตรงกัน
   var overdue = _overdueCount();
-  document.getElementById('returnCountBadge').textContent = overdue ? '(' + overdue + ')' : '';
+  var dueSoon = _dueSoonCount();
+  // ป้ายเลขบนแท็บเดิมเห็นแค่ "เลยกำหนด" อย่างเดียว — ถ้ายังไม่มีอะไรเลยกำหนดแต่มีของใกล้ครบ (ภายใน 2 วัน)
+  // ก็ควรเห็นได้จากนอกแท็บเหมือนกัน ไม่ใช่ต้องเปิดเข้าไปดูก่อนถึงจะรู้ว่ามีอะไรใกล้ถึงกำหนด
+  var rcb = document.getElementById('returnCountBadge');
+  if (overdue) { rcb.textContent = '(' + overdue + ')'; rcb.style.color = 'var(--bad)'; rcb.style.fontWeight = '700'; }
+  else if (dueSoon) { rcb.textContent = '(' + dueSoon + ')'; rcb.style.color = 'var(--warn)'; rcb.style.fontWeight = '700'; }
+  else { rcb.textContent = ''; rcb.style.color = ''; rcb.style.fontWeight = ''; }
   _checkOverdueNotify(overdue);
   renderTriage();
   var mt = document.getElementById('dashMiniText');
-  if (mt) mt.textContent = (overdue ? '🔴 ' + overdue + ' เลยกำหนด · ' : '') + (PENDING.length ? '🟡 ' + PENDING.length + ' รออนุมัติ · ' : '') +
+  if (mt) mt.textContent = (overdue ? '🔴 ' + overdue + ' เลยกำหนด · ' : '') +
+    (!overdue && dueSoon ? '🟡 ' + dueSoon + ' ใกล้ครบกำหนด (≤2 วัน) · ' : '') +
+    (PENDING.length ? '🟡 ' + PENDING.length + ' รออนุมัติ · ' : '') +
     '✅ ' + avail + ' ว่าง · 📤 ' + busy + ' ยืม';
 }
 
@@ -1474,6 +1496,10 @@ function activeReturns() {
 function _overdueCount() {
   var today = _td();
   return activeReturns().filter(function(x) { return x.end < today; }).length;
+}
+function _dueSoonCount() {
+  var today = _td();
+  return activeReturns().filter(function(x) { return x.end >= today && daysBetween(today, x.end) <= 2; }).length;
 }
 // ================================================================
 // ติดตามคืน — 2 มุมมอง
@@ -2883,6 +2909,11 @@ function openUnitDetail(unitId) {
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l._id + '\')" title="ดูประวัติใบนี้">📜</button>' +
       (l.status === 'returned' ? '<button class="btn btn-ghost btn-sm" onclick="rebookLoan(\'' + l._id + '\')" title="ยืมชุดเดิมอีกครั้ง (ใบใหม่)">🔁</button>' : '') + '</div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่มีประวัติ</div>';
+  h += '</div>';
+  var editHist = EDIT_LOG.filter(function(e) { return e.unitId === u.id; })
+    .sort(function(a, b) { return _editLogTimeMs(b.at) - _editLogTimeMs(a.at); }).slice(0, 10);
+  h += '<div class="card"><div style="font-weight:700;margin-bottom:10px">📜 ประวัติการแก้ไขข้อมูล</div>';
+  h += editHist.length ? editHist.map(_editLogRowHtml).join('') : '<div style="font-size:12.5px;color:var(--text3)">ยังไม่มีประวัติการแก้ไข</div>';
   h += '</div>';
   view.innerHTML = h;
 }
@@ -4760,6 +4791,61 @@ var PENDING_EDITS = {};   // unitId -> {fields:{...}, editedAt, editedBy}
 var RAW_UNITS = [];       // ตามที่ publish มาจริงๆ — ใช้เทียบ diff ตอนบันทึก ห้ามเอาไปแสดงผล
 var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneInsurance','caatRegistered','customerVisible','note','name','model','serialNumber','sku'];
 
+// ================================================================
+// ประวัติการแก้ไขข้อมูลเครื่อง (publicDemoEditLog) — เขียนถาวร ไม่มีวันลบ ต่างจาก publicDemoEdits ที่เป็น
+// แค่คิวรอแอปหลักรับเข้าแล้วหายไป ถ้าไม่มีที่นี่ พอแอปหลักรับเข้าแล้วจะไม่เหลือร่องรอยว่าใครแก้อะไรไปบ้างเลย
+// ================================================================
+var _EDIT_FIELD_LABELS = {
+  name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part (SKU)', category: 'หมวดหมู่',
+  flyable: 'ประเภทการใช้งาน', rentalDbNo: 'เลขเครื่องเช่า', nbtcRegistered: 'กสทช.',
+  droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ'
+};
+var _EDIT_BOOL_FIELDS = { flyable: 1, nbtcRegistered: 1, droneInsurance: 1, caatRegistered: 1, customerVisible: 1 };
+function _fmtChangeVal(field, v) {
+  if (_EDIT_BOOL_FIELDS[field]) return v ? '✅' : '❌';
+  var s = String(v == null ? '' : v).trim();
+  return s || '—';
+}
+function _logEditHistory(unitId, unitLabel, rentalDbNo, type, changes, by) {
+  db.collection('publicDemoEditLog').add({
+    unitId: unitId, unitLabel: unitLabel || '', rentalDbNo: rentalDbNo || '',
+    type: type, changes: changes || [], by: by || '', at: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(e) { console.warn('บันทึกประวัติการแก้ไขไม่สำเร็จ', e); });
+}
+function _editLogTimeMs(at) {
+  if (!at) return 0;
+  if (typeof at.toDate === 'function') return at.toDate().getTime();
+  if (typeof at.seconds === 'number') return at.seconds * 1000;
+  var d = new Date(at);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+function _editLogStamp(at) {
+  var ms = _editLogTimeMs(at);
+  if (!ms) return '—';
+  var d = new Date(ms);
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function _editLogRowHtml(e) {
+  var typeLabel = e.type === 'add' ? '➕ เพิ่มเครื่องใหม่' : e.type === 'delete' ? '🗑️ ลบเครื่อง' : '✏️ แก้ไข';
+  var changesHtml = (e.changes || []).map(function(c) {
+    var label = _EDIT_FIELD_LABELS[c.field] || c.field;
+    var fromTxt = (c.from === null || c.from === undefined) ? '<i>ตั้งใหม่</i>' : esc(_fmtChangeVal(c.field, c.from));
+    return '<div style="padding:1px 0">' + esc(label) + ': ' + fromTxt + ' → <b>' + esc(_fmtChangeVal(c.field, c.to)) + '</b></div>';
+  }).join('');
+  return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b>' + esc(e.unitLabel || e.unitId) + '</b>' +
+    (e.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(e.rentalDbNo) + '</span>' : '') +
+    ' <span class="pill pill-muted">' + typeLabel + '</span></div>' +
+    '<div style="color:var(--text3);font-size:11px;margin:2px 0 4px">' + _editLogStamp(e.at) + (e.by ? ' · โดย ' + esc(e.by) : '') + '</div>' +
+    (changesHtml || '<div class="hint">ไม่มีรายละเอียดการเปลี่ยนแปลง</div>') + '</div>';
+}
+function showEditLogM() {
+  var list = EDIT_LOG.slice().sort(function(a, b) { return _editLogTimeMs(b.at) - _editLogTimeMs(a.at); }).slice(0, 150);
+  var h = list.length ? list.map(_editLogRowHtml).join('') : '<div class="empty-state">ยังไม่มีประวัติการแก้ไขข้อมูลเครื่องเลย</div>';
+  openSm('📜 ประวัติการแก้ไขข้อมูลทั้งหมด (ล่าสุด ' + list.length + ' รายการ)', h, true);
+}
+
 function listenEdits() {
   db.collection('publicDemoEdits').onSnapshot(function(snap) {
     PENDING_EDITS = {};
@@ -4878,19 +4964,20 @@ function saveUnitEdit(unitId) {
     return;
   }
   // ส่งเฉพาะฟิลด์ที่ต่างจากของจริงจริงๆ คิวจะได้ไม่บวมด้วยค่าที่เหมือนเดิม และแอปหลักเห็นชัดว่าเปลี่ยนอะไรบ้าง
-  var diff = {};
+  var diff = {}, changes = [];
   Object.keys(next).forEach(function(k) {
     var cur = raw[k];
     if (k === 'flyable') cur = raw.flyable !== false;
     if (k === 'customerVisible') cur = raw.customerVisible !== false;
-    if (typeof next[k] === 'boolean') { if (!!cur !== next[k]) diff[k] = next[k]; }
-    else if (String(cur == null ? '' : cur) !== next[k]) diff[k] = next[k];
+    var changed = typeof next[k] === 'boolean' ? (!!cur !== next[k]) : (String(cur == null ? '' : cur) !== next[k]);
+    if (changed) { diff[k] = next[k]; changes.push({ field: k, from: cur, to: next[k] }); }
   });
   if (!Object.keys(diff).length) { alert('ไม่มีอะไรเปลี่ยน'); return; }
   db.collection('publicDemoEdits').doc(unitId).set({
     type: 'edit', unitId: unitId, fields: diff, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp(),
     unitLabel: raw.model || raw.name || '', rentalDbNo: raw.rentalDbNo || ''
   }, { merge: true }).then(function() {
+    _logEditHistory(unitId, raw.model || raw.name || '', raw.rentalDbNo || '', 'edit', changes, by);
     toastMock('💾 บันทึกแล้ว (' + Object.keys(diff).length + ' ช่อง)');
     closeSm();
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
@@ -4959,6 +5046,8 @@ function saveNewUnit() {
   db.collection('publicDemoEdits').doc(id).set({
     type: 'add', unitId: id, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(function() {
+    var changes = Object.keys(fields).map(function(k) { return { field: k, from: null, to: fields[k] }; });
+    _logEditHistory(id, fields.model || fields.name || '', fields.rentalDbNo || '', 'add', changes, by);
     toastMock('✅ เพิ่มเครื่องแล้ว');
     closeSm();
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
@@ -4975,8 +5064,10 @@ function deleteUnitM(unitId) {
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   db.collection('publicDemoEdits').doc(unitId).set({
     type: 'delete', unitId: unitId, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(function() { toastMock('🗑️ ลบแล้ว'); closeSm(); })
-    .catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
+  }).then(function() {
+    _logEditHistory(unitId, u.model || u.name || '', u.rentalDbNo || '', 'delete', [], by);
+    toastMock('🗑️ ลบแล้ว'); closeSm();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
 }
 
 // ---- แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน) ----
@@ -5101,17 +5192,18 @@ function _bgSave() {
 
   var BOOL_F = { flyable: 1, nbtcRegistered: 1, droneInsurance: 1, caatRegistered: 1, customerVisible: 1 };
   var batch = db.batch();
-  var changedUnits = 0, changedFields = 0;
+  var changedUnits = 0, changedFields = 0, logEntries = [];
   ids.forEach(function(id) {
     var u = byId[id];
     if (!u) return;
-    var fields = {};
+    var fields = {}, changes = [];
     Object.keys(_bgDraft[id]).forEach(function(f) {
       var v = _bgDraft[id][f];
       var cur = f === 'flyable' ? (u.flyable !== false) : f === 'customerVisible' ? (u.customerVisible !== false) : BOOL_F[f] ? !!u[f] : String(u[f] || '').trim();
       var nv = BOOL_F[f] ? !!v : String(v || '').trim();
       if (cur === nv) return;
       fields[f] = nv;
+      changes.push({ field: f, from: cur, to: nv });
       changedFields++;
     });
     if (!Object.keys(fields).length) return;
@@ -5123,11 +5215,13 @@ function _bgSave() {
     } else {
       batch.set(ref, { type: 'edit', unitId: id, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     }
+    logEntries.push({ unitId: id, unitLabel: u.model || u.name || '', rentalDbNo: (fields.rentalDbNo !== undefined ? fields.rentalDbNo : u.rentalDbNo) || '', type: isAdd ? 'add' : 'edit', changes: changes });
   });
   if (!changedFields) { toastMock('ค่าที่แก้ตรงกับของเดิม ไม่มีอะไรเปลี่ยน'); _bgDraft = {}; closeSm(); return; }
   if (!confirm('บันทึกการแก้ไข ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง?')) return;
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   batch.commit().then(function() {
+    logEntries.forEach(function(e) { _logEditHistory(e.unitId, e.unitLabel, e.rentalDbNo, e.type, e.changes, by); });
     _bgDraft = {};
     toastMock('💾 บันทึกแล้ว ' + changedFields + ' ช่อง ใน ' + changedUnits + ' เครื่อง');
     closeSm();
