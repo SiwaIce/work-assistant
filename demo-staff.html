@@ -2019,6 +2019,8 @@ function cancelLoanAction(unitId) {
 // กรณีคืนทีเดียวหลายเครื่อง (เช่นหลังงาน Showcase) ใช้ "คืนทั้งใบ" แทน ตรงนั้นให้ปรับจำนวนวันเองได้
 var DEMO_RETURN_BUFFER_DEFAULT = 1;
 function markLoanReturned(loanId) {
+  var l = _scLoan(loanId);
+  if (l && l.status !== 'active') { alert('ใบนี้ไม่ได้อยู่ในสถานะยืมอยู่ (' + l.status + ') รับคืนตรงๆ ไม่ได้'); return; }
   var availableFrom = _scAddDaysIso(_td(), DEMO_RETURN_BUFFER_DEFAULT);
   db.collection('publicDemoLoans').doc(loanId).update({
     status: 'returned', actualReturnDate: _td(), availableFrom: availableFrom,
@@ -2535,7 +2537,7 @@ function xtRecalcConflicts(loanId) {
   var end = (document.getElementById('xt_end') || {}).value || '';
   if (!l || !end || end <= l.end) { box.innerHTML = ''; return; }
   var from = _scAddDaysIso(l.end, 1);
-  var hit = _lfConflict(l.unitId, from, end, l.id);
+  var hit = _lfConflict(l.unitId, from, end, l._id);
   if (!hit) { box.innerHTML = ''; return; }
   var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
   var label = (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e));
@@ -3289,6 +3291,7 @@ function openScanM() {
 }
 function _scanSetMsg(t) { var el = document.getElementById('scanMsg'); if (el) el.textContent = t; }
 function _scanStart() {
+  _scanStop();   // กันเรียกซ้ำ (เช่น เปิดโมดัลสแกนสองครั้งติดโดยไม่ปิดก่อน) แล้วสตรีมกล้องตัวเก่าค้างไม่ถูกปิด
   var video = document.getElementById('scanVideo');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     _scanSetMsg('เบราว์เซอร์นี้ไม่รองรับกล้อง — พิมพ์เลขด้านล่างแทนได้'); return;
@@ -3987,7 +3990,17 @@ function _scIdChips(u) {
   if (u.serialNumber) h += '<span class="dcal-idpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
   return h || '<span style="color:var(--text3)">—</span>';
 }
-function _scEsq(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+// ใช้แทรกค่าลงใน onclick="fn('...')" ต้องปลอดภัยสองชั้น: (1) เป็น JS string ที่ถูกต้อง (escape \ กับ ')
+// (2) อยู่ใน attribute ที่คร่อมด้วย " ได้โดยไม่หลุด — เดิม escape แค่ชั้น (1) พอค่าจริงมี " (เช่น
+// ชื่อบริษัทที่มีวงเล็บ/คำพูดในชื่อ) ตัว " นั้นจะไปปิด attribute ก่อนกำหนด ทำให้ onclick พังเงียบๆ (ไม่มี error
+// แค่กดแล้วไม่ทำงาน หรือ throw syntax error ถ้าเนื้อหาหลัง " ดันประกอบเป็นโค้ดได้บางส่วน) escape เป็น &quot;
+// ไว้ก่อน ให้ HTML parser เห็น attribute ครบ แล้วค่อยถอดกลับเป็น " ให้ JS ตอน parse (ไม่ต้อง escape " ใน JS
+// string เดี่ยวอยู่แล้วเพราะ string ถูกล้อมด้วย ' ไม่ใช่ ")
+function _scEsq(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
 
 // ---- แถบเครื่องมือ ----
 function scToolbar() {
