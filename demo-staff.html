@@ -772,7 +772,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
 
       <div class="tabpane" id="tab-pending"></div>
-      <div class="tabpane" id="tab-return"></div>
+      <div class="tabpane" id="tab-return">
+        <div class="browse-toolbar" style="margin-bottom:10px">
+          <input type="text" id="rtSearch" placeholder="🔎 กรองเฉพาะรายการที่แสดงอยู่นี้ (ผู้ยืม, ผู้คีย์, รุ่น, เลขใบจอง, เลขเครื่องเช่า, ใช้งานกับ)" oninput="rtSearchInput(this.value)" autocomplete="off">
+        </div>
+        <div id="rtCatTabs"></div>
+        <div id="rtBody"></div>
+      </div>
       <div class="tabpane" id="tab-calendar"></div>
       <div id="lendPickBar" class="lendbar" style="display:none"></div>
     <div class="tabpane on" id="tab-units">
@@ -783,6 +789,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
               <button class="btn btn-ghost btn-sm" onclick="toggleToolsMenu()">⋯ เครื่องมือ</button>
               <div id="toolsMenuPop" class="tools-menu-pop" style="display:none">
                 <button onclick="closeToolsMenu();toggleCatMgr()">🏷️ จัดการหมวดหมู่สินค้า</button>
+                <button onclick="closeToolsMenu();toggleRosterMgr()">👤 จัดการรายชื่อทีมงาน</button>
                 <button onclick="closeToolsMenu();showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
                 <button onclick="closeToolsMenu();showEditLogM()">📜 ประวัติการแก้ไขทั้งหมด</button>
                 <button onclick="closeToolsMenu();showUtilizationM()">📊 รายงานการใช้งานเครื่อง</button>
@@ -798,6 +805,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
             <div id="catMgrRows"></div>
             <button class="btn btn-ghost btn-sm" onclick="catMgrAddRow()">➕ เพิ่มหมวดหมู่</button>
             <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="catMgrSave()">💾 บันทึกหมวดหมู่</button>
+          </div>
+          <div class="card" id="rosterMgrPanel" style="display:none;margin-bottom:14px">
+            <div style="font-weight:700;margin-bottom:8px">👤 รายชื่อทีมงาน (ให้เลือกในช่องผู้คีย์เบิก/คนที่ทำเรื่อง)</div>
+            <div class="hint" style="margin-bottom:8px">เพิ่มชื่อไว้ที่นี่ครั้งเดียว ทุกคนที่เข้าหน้านี้จะเห็นในรายการให้เลือกทันที (ไม่ต้องพิมพ์มือทุกครั้ง) — ไม่บังคับ ยังพิมพ์ชื่อใหม่เองได้เสมอ</div>
+            <div id="rosterMgrRows"></div>
+            <button class="btn btn-ghost btn-sm" onclick="rosterMgrAddRow()">➕ เพิ่มชื่อ</button>
+            <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="rosterMgrSave()">💾 บันทึกรายชื่อ</button>
           </div>
           <div id="pendingEditsBanner" style="display:none;align-items:center;gap:10px;background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-size:12px;line-height:1.6"></div>
           <div class="view-toggle" id="unitViewToggle"></div>
@@ -929,6 +943,10 @@ function copyPubLink() {
 // ================================================================
 var UNITS = [];       // จาก dealerUpdates/demoCatalogPublic.units — ข้อมูลเครื่องเต็ม (SKU/S-N/compliance)
 var CATEGORIES = [];
+// รายชื่อทีมงานที่ตั้งค่าไว้ล่วงหน้า — ให้ช่องผู้คีย์เบิก/คนที่ทำเรื่องเลือกจาก list นี้แทนต้องพิมพ์มือทุกครั้ง
+// (เดิม prefill ด้วยชื่อล่าสุดที่เคยพิมพ์ค้างไว้ใน localStorage ของเครื่อง ถ้าเครื่องนี้ใช้ร่วมกันหลายคนจะ
+// ขึ้นชื่อคนอื่นค้างผิดๆ ตลอด — เอา prefill ออก ให้ว่างแล้วเลือก/พิมพ์เอาเอง)
+var STAFF_ROSTER = [];
 var PENDING = [];      // publicDemoRequests status=='pending'
 var LOANS = [];        // publicDemoLoans ทั้งหมด (active + returned) — ใช้คำนวณ busy/ประวัติ
 // publicDemoEditLog ทั้งหมด — เก็บถาวรไว้ต่างหากจาก publicDemoEdits (คิวข้อเสนอที่ถูกลบทิ้งหลังแอปหลักรับเข้า
@@ -943,6 +961,7 @@ function loadStaffData() {
     RAW_UNITS = data.units || [];
     applyEditOverlay();
     CATEGORIES = data.categories || [{id:'drone',label:'Drone',icon:'🚁'},{id:'dock',label:'Dock',icon:'🛰️'},{id:'payload',label:'Payload',icon:'🎯'}];
+    STAFF_ROSTER = data.staffRoster || [];
     document.getElementById('staffLoading').style.display = 'none';
     document.getElementById('staffContent').style.display = 'block';
     listenPending();
@@ -1217,7 +1236,7 @@ function _quickNamesHtml(list) {
     '<div class="qn-note">⚠️ ใบเหล่านี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ที่กรอกจะเข้าคิวไว้ ' +
     'รอเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะลงถาวร</div>';
   h += '<div class="field" style="margin:10px 0 12px"><label>✍️ คนกรอก (ใส่ครั้งเดียว ใช้ได้ทุกใบ) *</label>' +
-    '<input type="text" id="qnBy" list="qnKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('qnKeyerList') + '</div>';
+    '<input type="text" id="qnBy" list="qnKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('qnKeyerList') + '</div>';
 
   groups.forEach(function(g, gi) {
     var units = g.list.map(function(x) { return UNITS.filter(function(a) { return a.id === x.unitId; })[0]; }).filter(Boolean);
@@ -1505,10 +1524,14 @@ function activeReturns() {
     if (l.status !== 'active' || !l.start || !l.end) return;
     seen[l.unitId + '|' + l.start + '|' + l.end] = 1;
     out.push({ src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', label: l.label || '',
-      borrower: l.borrower || '', approver: l.approver || '', jobNo: l.jobNo || '',
+      borrower: l.borrower || '', approver: l.approver || '', jobNo: l.jobNo || '', purpose: l.purpose || '',
       start: l.start, end: l.end });
   });
   UNITS.forEach(function(u) {
+    // ใบจากแอปหลักไม่มี doc ให้แก้ตรงๆ — ถ้าเคยกดแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลจาก showLendConflictM ไว้
+    // (เข้าคิว publicDemoEdits รอแอปหลักรับเข้า) ให้โชว์ค่าที่แก้ไว้แทนของเดิมทันที จะได้เห็นผลตรงนี้ด้วย
+    // ไม่ใช่เห็นแค่ตอนเปิดโมดัลเดิมซ้ำ
+    var pend = (PENDING_EDITS[u.id] && PENDING_EDITS[u.id].fields) || {};
     (u.busyRanges || []).forEach(function(r) {
       if (!r.start || !r.end) return;
       if (r.start > today) return;   // จองไว้ล่วงหน้า ยังไม่ถึงรอบต้องตามคืน
@@ -1516,9 +1539,11 @@ function activeReturns() {
       if (seen[k]) return;           // ชุดเดียวกันมาสองทาง อย่านับซ้ำ
       seen[k] = 1;
       out.push({ src: 'app', id: null, unitId: u.id, model: u.model || u.name || '', label: '',
-        borrower: r.borrower || '', approver: r.approver || '',
+        borrower: (pend.borrower !== undefined ? pend.borrower : r.borrower) || '',
+        approver: (pend.keyedBy !== undefined ? pend.keyedBy : r.approver) || '',
         // เดิมตั้งเป็น '' ตายตัวเพราะ publishDemoCatalog ไม่เคยส่งเลขใบมา — ส่งแล้ว ต้องอ่านด้วย
-        jobNo: String(r.jobNo || '').trim() || String(r.refNo || '').trim(),
+        jobNo: pend.jobNo !== undefined ? pend.jobNo : (String(r.jobNo || '').trim() || String(r.refNo || '').trim()),
+        purpose: (pend.purpose !== undefined ? pend.purpose : r.purpose) || '',
         start: r.start, end: r.end });
     });
   });
@@ -1560,6 +1585,55 @@ function _rtViewToggle(nSlips) {
       (nSlips ? ' (' + nSlips + ')' : '') + '</button></div>';
 }
 
+// ================================================================
+// ตัวกรองแท็บติดตามคืน — เดิมไม่มีเลย ใบค้างเยอะต้องไล่หาเองทีละบรรทัด ใช้ตัวกรองแบบเดียวกับแท็บรายการ
+// เครื่อง/ปฏิทิน (ช่องค้นหา + ชิปหมวดหมู่ .cat-tabs อันเดียวกัน) จะได้ไม่ต้องเรียนรู้ตัวกรองคนละแบบ
+// ช่องค้นหาอยู่นอก el.innerHTML ที่ renderReturnTab()/renderReturnTabBySlip() เขียนทับทุกครั้ง (เหมือน
+// unitSearch/gsInput) ไม่งั้นพิมพ์แล้วโฟกัสหลุดทุกครั้งที่ debounce ยิง render ใหม่
+// ================================================================
+var rtSearch = '';
+var _rtSearchTimer = null;
+var rtCatFilter = [];
+function rtSearchInput(v) {
+  rtSearch = v;
+  clearTimeout(_rtSearchTimer);
+  _rtSearchTimer = setTimeout(renderReturnTab, 250);
+}
+function rtSetCat(id) {
+  if (id === 'all') { rtCatFilter = []; }
+  else {
+    var i = rtCatFilter.indexOf(id);
+    if (i === -1) rtCatFilter.push(id); else rtCatFilter.splice(i, 1);
+  }
+  renderReturnTab();
+}
+function _rtCatTabsHtml(all) {
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var counts = { all: all.length };
+  CATEGORIES.forEach(function(c) {
+    counts[c.id] = all.filter(function(l) { var u = byId[l.unitId]; return u && u.category === c.id; }).length;
+  });
+  var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
+  return '<div class="cat-tabs">' + tabs.map(function(c) {
+    if (c.id !== 'all' && !counts[c.id]) return '';
+    var on = c.id === 'all' ? !rtCatFilter.length : rtCatFilter.indexOf(c.id) !== -1;
+    return '<div class="cat-tab' + (on ? ' on' : '') + '" onclick="rtSetCat(\'' + c.id + '\')">' +
+      c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (counts[c.id] || 0) + '</span></div>';
+  }).join('') + '</div>';
+}
+function _rtMatch(l) {
+  if (rtCatFilter.length) {
+    var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+    if (!u || rtCatFilter.indexOf(u.category) === -1) return false;
+  }
+  var q = rtSearch.trim().toLowerCase();
+  if (!q) return true;
+  var u2 = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+  var hay = [l.borrower, l.approver, l.jobNo, l.model, l.purpose, u2 && u2.model, u2 && u2.name, u2 && u2.rentalDbNo]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.indexOf(q) !== -1;
+}
+
 // เครื่องที่คีย์ยืมไว้แต่ชนคิวคนอื่นพอดี (ดู saveLendBatch) ไม่ได้ของจริง จึงไม่โผล่ใน activeReturns() —
 // แต่ยังต้องเห็นได้ว่าใบนี้ "ยังไม่ครบ" ไม่ใช่หายไปเงียบๆ เลยรวมเข้ามาแสดงในกล่องใบเดียวกัน แยกเป็นส่วน
 // "⏳ รอ" ต่างหาก มีปุ่มเช็คว่างอีกครั้ง (เผื่อของว่างแล้ว) กับตัดออกจากใบ (ยืมจริงไม่ได้แล้วก็เอาออกไปเลย)
@@ -1574,14 +1648,16 @@ function _rtPendingBySlip() {
   return out;
 }
 function renderReturnTabBySlip(all) {
-  var el = document.getElementById('tab-return'), today = _td();
+  var el = document.getElementById('rtBody'), today = _td();
   var groups = {}, order = [];
   all.forEach(function(l) {
     var k = _rtSlipKey(l);
-    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', worst: 0, end: l.end }; order.push(k); }
+    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', approver: '', purpose: '', worst: 0, end: l.end }; order.push(k); }
     var g = groups[k];
     g.list.push(l);
     if (!g.who && String(l.borrower || '').trim()) g.who = l.borrower.trim();
+    if (!g.approver && String(l.approver || '').trim()) g.approver = l.approver.trim();
+    if (!g.purpose && String(l.purpose || '').trim()) g.purpose = l.purpose.trim();
     if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
     if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
   });
@@ -1604,7 +1680,8 @@ function renderReturnTabBySlip(all) {
   h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
     (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') +
     (totalPending ? ' · ⏳ รอ (ชนคิว) ' + totalPending + ' เครื่อง' : '') + '</div>';
-  if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">🎉 ไม่มีเครื่องค้างอยู่</div>');
+  if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">' +
+    ((rtSearch.trim() || rtCatFilter.length) ? '🔍 ไม่พบเครื่องที่ตรงกับตัวกรอง — ลองเปลี่ยนหมวดหมู่หรือล้างคำค้น' : '🎉 ไม่มีเครื่องค้างอยู่') + '</div>');
 
   order.forEach(function(k) {
     var g = groups[k];
@@ -1616,9 +1693,20 @@ function renderReturnTabBySlip(all) {
       '<div class="rt-slip-sub">' + esc(g.who || 'ไม่ระบุผู้ยืม') + ' · ' + (g.list.length + g.pending.length) + ' เครื่อง' +
       (g.list.length ? ' · กำหนดคืน ' + _scD(g.end) : '') +
       (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
+      '<br>🧑‍💼 ' + (g.approver ? esc(g.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
+      (g.purpose ? ' · 📝 ' + esc(g.purpose) : '') +
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
     var itemCount = g.list.length + g.pending.length;
     var isOpen = itemCount <= 1 ? true : !!rtSlipOpen[k];
+    // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — เดิมบอกซ้ำทุกแถวว่า "คีย์จากแอปหลัก แก้ตัวจริงไม่ได้" กินที่มาก
+    // ทั้งที่เป็นข้อมูลระดับ "ใบ" ไม่ใช่ระดับเครื่อง จึงย้ายมาบอกครั้งเดียวตรงนี้ พร้อมปุ่มแก้ไขทั้งใบทีเดียว
+    var appUnits = g.list.filter(function(l) { return l.src === 'app'; });
+    if (appUnits.length) {
+      var a0 = appUnits[0];
+      h += '<div class="rt-src" style="margin:0 8px 8px">📲 ' + appUnits.length + ' เครื่องในใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ' +
+        'ส่งคำขอรับคืน/เลื่อน/โอนได้จากปุ่มของแต่ละเครื่องด้านล่าง แล้วรอแอปหลักกด “รับเข้า” ' +
+        '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.unitId + '\',\'' + a0.start + '\',\'' + a0.end + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
+    }
     h += '<div class="rt-slip-act">' +
       '<button class="btn btn-ghost btn-sm" onclick="copySlipKeyRentals(\'' + _scEsq(k) + '\')" title="คัดลอกเลขเครื่องเช่าทุกเครื่องในใบนี้ คนละบรรทัด">📋 Copy เลขเครื่องเช่า</button>';
     if (canDo) {
@@ -1634,7 +1722,7 @@ function renderReturnTabBySlip(all) {
     h += '</div>';
     if (isOpen) {
       h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
-        .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l); }).join('');
+        .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l, true); }).join('');
       if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
     }
     h += '</div>';
@@ -1677,9 +1765,12 @@ function removePendingLoan(loanId) {
 }
 
 function renderReturnTab() {
-  var el = document.getElementById('tab-return');
+  var body = document.getElementById('rtBody');
   var today = _td();
-  var all = activeReturns();
+  var unfiltered = activeReturns();
+  var catTabsEl = document.getElementById('rtCatTabs');
+  if (catTabsEl) catTabsEl.innerHTML = _rtCatTabsHtml(unfiltered);
+  var all = unfiltered.filter(_rtMatch);
   if (rtView === 'slip') return renderReturnTabBySlip(all);
   var overdue = all.filter(function(x) { return x.end < today; })
     .sort(function(a, b) { return a.end.localeCompare(b.end); });   // ค้างนานสุดขึ้นก่อน
@@ -1709,9 +1800,15 @@ function renderReturnTab() {
     h += '<details class="rt-later"><summary>📤 ยืมอยู่ ยังไม่ถึงกำหนด (' + later.length + ') — ยังไม่ต้องตาม</summary>' +
       later.map(returnRowHtml.bind(null, '')).join('') + '</details>';
   }
-  el.innerHTML = h;
+  if (!all.length && (rtSearch.trim() || rtCatFilter.length)) h += '<div class="empty-state">🔍 ไม่พบเครื่องที่ตรงกับตัวกรอง — ลองเปลี่ยนหมวดหมู่หรือล้างคำค้น</div>';
+  body.innerHTML = h;
 }
-function returnRowHtml(cls, l) {
+// compact:true = ใช้ตอนแสดงในใบที่เปิดขยายของมุมมอง "ตามใบจอง" ซึ่ง _rtSlipHd ด้านบนโชว่ผู้ยืม/ผู้คีย์/
+// ใบจอง/เหตุผลของทั้งใบไปแล้ว (ข้อมูลพวกนี้เป็นของ "ใบ" ไม่ใช่ของเครื่อง) จึงไม่ต้องพิมพ์ซ้ำทุกแถวให้กินที่
+// ⚠️ ต้องเช็ค === true เท่านั้น เพราะบางที่เรียกผ่าน .map(returnRowHtml.bind(null, cls)) ซึ่ง .map ส่ง
+// (item, index, array) ต่อท้ายมาด้วย ถ้าเช็คแบบ truthy เฉยๆ แถวที่ index 1,2,... จะเผลอกลายเป็น compact ไปด้วย
+function returnRowHtml(cls, l, compact) {
+  compact = compact === true;
   var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
   var today = _td();
   var late = l.end < today;
@@ -1724,18 +1821,27 @@ function returnRowHtml(cls, l) {
   h += '<div class="body"><div style="font-weight:700">' + esc(p.main) +
     (p.sub ? ' <span style="font-weight:500;color:var(--text3);font-size:12px">' + esc(p.sub) + '</span>' : '') +
     (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
-  h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(l.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(l.borrower) + '</span>' : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
-    ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
-    '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
-    (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') + '</div>';
+  if (compact) {
+    h += '<div class="meta">กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b></div>';
+  } else {
+    h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(l.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(l.borrower) + '</span>' : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
+      ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
+      '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
+      (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') +
+      (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') + '</div>';
+  }
   // ใบที่มาจากแอปหลักไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
+  // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะ "ส่งคำขอแล้ว" ของ
+  // เครื่องนั้นๆ ซึ่งเป็นข้อมูลเฉพาะเครื่อง ไม่ใช่ของทั้งใบ)
   if (l.src === 'app') {
     var pend = PENDING_EDITS[l.unitId];
     var pa = pend && pend.loanAction;
-    h += pa
-      ? '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
-        ' — รอเปิดแอปหลักกด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>'
-      : '<div class="rt-src">📲 ใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — กดปุ่มด้านขวาเพื่อ<b>ส่งคำขอ</b>ไปเข้าคิว แล้วรอแอปหลักกด “รับเข้า”</div>';
+    if (pa) {
+      h += '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
+        ' — รอเปิดแอปหลักกด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>';
+    } else if (!compact) {
+      h += '<div class="rt-src">📲 ใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — กดปุ่มด้านขวาเพื่อ<b>ส่งคำขอ</b>ไปเข้าคิว แล้วรอแอปหลักกด “รับเข้า”</div>';
+    }
   }
   h += '</div>';
 
@@ -1756,6 +1862,9 @@ function returnRowHtml(cls, l) {
         '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน">⏩</button>' +
         '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์">🔄</button>';
     }
+    // แก้ผู้ยืม/ผู้คีย์/เลขใบจอง/เหตุผลของใบนี้ — ในมุมมองตามใบจอง ปุ่มนี้ย้ายไปรวมไว้ที่หัวใบแทน (ดู
+    // renderReturnTabBySlip) จึงไม่ต้องมีซ้ำอีกตรงนี้เวลาแสดงแบบ compact
+    if (!compact) h += '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + l.unitId + '\',\'' + l.start + '\',\'' + l.end + '\')" title="แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล">✏️ แก้ไข</button>';
     h += '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>';
   }
   return h + '</div></div>';
@@ -1787,7 +1896,7 @@ function askLoanAction(unitId, type) {
   }
   h += '<div class="field"><label>📝 เหตุผล / หมายเหตุ' + (type === 'return' ? '' : ' *') + '</label><input type="text" id="la_reason" placeholder="' +
     (type === 'return' ? 'เช่น ลูกค้าส่งคืนที่ออฟฟิศแล้ว' : 'เช่น ลูกค้าขอใช้ต่อ / สมชายลาออก') + '"></div>';
-  h += '<div class="field"><label>✍️ คนส่งคำขอ *</label><input type="text" id="la_by" list="laKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('laKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนส่งคำขอ *</label><input type="text" id="la_by" list="laKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('laKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
     '⚠️ ใบนี้คีย์จากแอปหลัก หน้านี้เปลี่ยนตัวจริงไม่ได้ — กดส่งแล้วจะเข้าคิวไว้ ' +
     'ต้องไปเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะมีผลจริง</div>';
@@ -1874,8 +1983,7 @@ function openSlipReturnM(key) {
   h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="sr_date" value="' + _td() + '"></div>';
   h += '<div class="field"><label>🕐 เผื่อเวลาคลังรับเข้า (วัน)</label><input type="number" id="sr_buffer" min="0" value="' + DEMO_RETURN_BUFFER_DEFAULT + '">' +
     '<div class="hint">ของจะยังนับว่า "ไม่ว่าง" ต่อไปอีกกี่วันหลังคืน กว่าคลังจะเช็ค/คีย์เข้าระบบครบ — คืนทีละไม่กี่ชิ้นเผื่อ 1-2 วันพอ ถ้าคืนพร้อมกันเยอะๆ (เช่นหลังงาน Showcase) ปรับเป็น 5-7 วันได้</div></div>';
-  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="sr_by" list="srKeyerList" autocomplete="off" value="' +
-    esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('srKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="sr_by" list="srKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('srKeyerList') + '</div>';
   h += '<button class="btn btn-primary btn-full" onclick="saveSlipReturn(\'' + _scEsq(key) + '\')">✅ รับคืนตามที่เลือก</button>';
   openSm('รับคืนทั้งใบ', h);
 }
@@ -1928,8 +2036,7 @@ function openSlipExtendM(key) {
   h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="se_end" value="' + maxEnd + '" onchange="seRecalcConflicts(\'' + _scEsq(key) + '\')"></div>';
   h += '<div id="seConflictBox"></div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="se_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์"></div>';
-  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="se_by" list="seKeyerList" autocomplete="off" value="' +
-    esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('seKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="se_by" list="seKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('seKeyerList') + '</div>';
   h += '<button class="btn btn-primary btn-full" onclick="saveSlipExtend(\'' + _scEsq(key) + '\')">⏩ เลื่อนตามที่เลือก</button>';
   openSm('เลื่อนกำหนดคืนทั้งใบ', h);
   seRecalcConflicts(key);
@@ -2019,7 +2126,7 @@ function openSlipTransferM(key) {
   h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="stf_borrower" list="stfBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม">' + scBorrowerDatalist('stfBorrowerList') + '</div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="stf_keyer" list="stfKeyerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' + scKeyerDatalist('stfKeyerList') + '</div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="stf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก"></div>';
-  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="stf_by" list="stfKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล"></div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="stf_by" list="stfKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง"></div>';
   h += '<button class="btn btn-primary btn-full" onclick="saveSlipTransfer(\'' + _scEsq(key) + '\')">🔄 โอนตามที่เลือก</button>';
   openSm('🔄 โอนผู้ยืมทั้งใบ', h);
 }
@@ -2241,22 +2348,30 @@ function openBorrowerM(name) {
 }
 
 // ผู้คีย์เบิกคือทีมตัวเอง — รายชื่อสั้นและปิด แต่เดิมต้องพิมพ์มือทุกฟอร์ม
-// ดึงจากชื่อที่เคยคีย์จริง เรียงตามคนที่คีย์บ่อยสุด คนที่ใช้เครื่องนี้ล่าสุดจะถูก prefill อยู่แล้วโดย _lastEditor
+// เอารายชื่อทีมงานที่ตั้งค่าไว้ (STAFF_ROSTER จัดการได้จากเมนู ⋯ เครื่องมือ) ขึ้นก่อนเสมอ ตามด้วยชื่อที่เคย
+// คีย์จริงแต่ไม่ได้อยู่ใน roster เรียงตามคนที่คีย์บ่อยสุด
 function scKeyerDatalist(listId) {
   var map = {}, me = _lastEditor().toLowerCase().replace(/\s+/g, ' ');
+  STAFF_ROSTER.forEach(function(n) {
+    n = String(n || '').trim();
+    if (!n) return;
+    var k = n.toLowerCase().replace(/\s+/g, ' ');
+    map[k] = { name: n, times: 0, roster: true };
+  });
   LOANS.forEach(function(l) {
     var n = String(l.approver || '').trim();
     if (!n) return;
     var k = n.toLowerCase().replace(/\s+/g, ' ');
-    if (!map[k]) map[k] = { name: n, times: 0 };
+    if (!map[k]) map[k] = { name: n, times: 0, roster: false };
     map[k].times++;
   });
   var list = Object.keys(map).map(function(k) { return map[k]; })
-    .sort(function(a, b) { return b.times - a.times || a.name.localeCompare(b.name, 'th'); });
+    .sort(function(a, b) { return (b.roster ? 1 : 0) - (a.roster ? 1 : 0) || b.times - a.times || a.name.localeCompare(b.name, 'th'); });
   var h = '<datalist id="' + listId + '">';
   list.forEach(function(p) {
     var same = p.name.toLowerCase().replace(/\s+/g, ' ') === me;
-    h += '<option value="' + esc(p.name) + '">' + esc((same ? '⭐ ' : '') + 'เคยคีย์ ' + p.times + ' ใบ') + '</option>';
+    var tag = p.roster ? 'ทีมงาน' : ('เคยคีย์ ' + p.times + ' ใบ');
+    h += '<option value="' + esc(p.name) + '">' + esc((same ? '⭐ ' : '') + tag) + '</option>';
   });
   return h + '</datalist>';
 }
@@ -2444,7 +2559,7 @@ function _scJobSiblingsHtml(l) {
     return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
       '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + ' ' + st + '</span>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + s._id + '\')">📜</button>' +
-      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>' : '') +
+      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\',function(){openLoanLogM(\'' + l._id + '\')})">📄 ดูเครื่อง</button>' : '') +
       '</div>';
   }).join('');
   return h;
@@ -2453,6 +2568,10 @@ function _scJobSiblingsHtml(l) {
 // กดดูใบยืมที่ชนคิวจากขั้นตอนเลือกเครื่อง/วันที่ (renderLendFlow) — จะได้รู้ว่าใครถืออยู่ ไปตามให้เอามาคืน
 // หรือคุยกันเรื่องอื่นๆ ก่อนได้ ถ้าใบนั้นคีย์จากหน้านี้เอง (มี loanId จริง) เปิดรายละเอียดเต็ม (ต่อเวลา/โอน/
 // ประวัติได้ด้วย) แต่ถ้าคีย์จากแอปหลัก (ไม่มี doc ให้เปิดตรงๆ) โชว์เท่าที่รู้จาก busyRanges แทน
+// ใบพวกนี้คีย์จากแอปหลัก หน้านี้ไม่มี doc ให้เขียนตรงๆ (ดูหมายเหตุที่ _quickNamesHtml ด้านบน) แต่ผู้ยืม/
+// ผู้คีย์เบิก/เลขใบจอง/เหตุผลยืม เปิดให้แก้จากตรงนี้ได้เหมือน saveQuickNameSlip คือส่งเข้าคิว publicDemoEdits
+// แล้วแอปหลักรับเข้าอัตโนมัติ — ใช้ค่าที่ค้างอยู่ใน PENDING_EDITS (ถ้ามี) แทนค่าจากแอปหลัก จะได้เห็นผลทันทีที่
+// กรอกไปแล้ว ไม่ต้องรอแอปหลักเปิดก่อนถึงจะเห็นว่ากรอกสำเร็จ
 function showLendConflictM(unitId, start, end) {
   var conflict = _lfConflict(unitId, start, end);
   if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
@@ -2460,20 +2579,84 @@ function showLendConflictM(unitId, start, end) {
   var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
   var u = byId[unitId];
   var p = u ? _scModelParts(u) : { main: '—' };
+  var pend = (PENDING_EDITS[unitId] && PENDING_EDITS[unitId].fields) || {};
+  var curB = pend.borrower !== undefined ? pend.borrower : conflict.borrower;
+  var curK = pend.keyedBy !== undefined ? pend.keyedBy : conflict.approver;
+  var curJ = pend.jobNo !== undefined ? pend.jobNo : conflict.jobNo;
+  var curP = pend.purpose !== undefined ? pend.purpose : conflict.purpose;
   var h = '<div class="sm-sec">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + '</div>';
-  h += '<div class="sc-kv">' +
-    '<div><span>ผู้ยืม</span><b>' + (conflict.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(conflict.borrower) + '\')">' + esc(conflict.borrower) + '</span>' : '— ไม่ระบุ —') + '</b></div>' +
-    '<div><span>ผู้คีย์เบิก</span><b>' + esc(conflict.approver || '— ไม่ได้บันทึก —') + '</b></div>' +
-    '<div><span>ใบจอง</span><b>' + esc(conflict.jobNo || '—') + '</b></div>' +
+  h += '<div class="sc-kv" id="lcvView">' +
+    '<div><span>ผู้ยืม</span><b>' + (curB ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(curB) + '\')">' + esc(curB) + '</span>' : '— ไม่ระบุ —') + '</b></div>' +
+    '<div><span>ผู้คีย์เบิก</span><b>' + esc(curK || '— ไม่ได้บันทึก —') + '</b></div>' +
+    '<div><span>ใบจอง</span><b>' + esc(curJ || '—') + '</b></div>' +
     '<div><span>ช่วงที่ติด</span><b>' + esc(_scFmt(conflict.s)) + ' → ' + esc(_scFmt(conflict.e)) + '</b></div>' +
-    (conflict.purpose ? '<div><span>ใช้งานกับ</span><b>' + esc(conflict.purpose) + '</b></div>' : '') +
+    '<div><span>ใช้งานกับ</span><b>' + (curP ? esc(curP) : '<span style="color:var(--text3)">— ไม่ได้บันทึก —</span>') + '</b></div>' +
     '</div>';
-  h += _copySlipBtnHtml(unitId, conflict.jobNo);
-  h += '<div class="hint" style="margin-top:8px">รายการนี้คีย์จากแอปหลัก — หน้านี้ไม่มีใบให้เปิดแก้/ต่อเวลา/รับคืนตรงๆ ' +
-    'ถ้าต้องการให้คืนหรือเลื่อนวัน ต้องติดต่อผู้ยืมด้านบนแล้วให้ทีมที่ใช้แอปหลักเป็นคนจัดการ</div>';
+  if (Object.keys(pend).length) h += '<div class="hint" style="margin-top:4px">✅ มีข้อมูลที่แก้ไว้ค้างอยู่ — รอแอปหลักเปิดครั้งถัดไปจะลงข้อมูลจริงให้อัตโนมัติ</div>';
+  h += '<div id="lcvEditWrap" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="lcvEditForm(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">✏️ แก้ไขผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล</button></div>';
+  h += _copySlipBtnHtml(unitId, curJ);
+  h += '<div class="hint" style="margin-top:8px">รายการนี้คีย์จากแอปหลัก — หน้านี้ไม่มีใบให้เปิดต่อเวลา/รับคืนตรงๆ ' +
+    'ถ้าต้องการให้คืนหรือเลื่อนวัน ต้องติดต่อผู้ยืมด้านบนแล้วให้ทีมที่ใช้แอปหลักเป็นคนจัดการ (แก้ชื่อ/เลขใบจอง/เหตุผลได้จากปุ่มด้านบน)</div>';
   h += _bookingSiblingsHtml(conflict);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('📤 รายการที่ชนอยู่', h);
+}
+function lcvEditForm(unitId, start, end) {
+  var conflict = _lfConflict(unitId, start, end);
+  if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
+  var pend = (PENDING_EDITS[unitId] && PENDING_EDITS[unitId].fields) || {};
+  var curB = pend.borrower !== undefined ? pend.borrower : conflict.borrower;
+  var curK = pend.keyedBy !== undefined ? pend.keyedBy : conflict.approver;
+  var curJ = pend.jobNo !== undefined ? pend.jobNo : conflict.jobNo;
+  var curP = pend.purpose !== undefined ? pend.purpose : conflict.purpose;
+  var h = '<div class="sm-sec" style="margin-top:6px">✏️ แก้ไขข้อมูลใบนี้ (มีผลกับทุกเครื่องในใบจองเดียวกัน)</div>';
+  h += '<div class="field"><label>👤 ผู้ยืม</label><input type="text" id="lcvBorrower" list="lcvBorrowerList" autocomplete="off" value="' + esc(curB || '') + '">' + scBorrowerDatalist('lcvBorrowerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก</label><input type="text" id="lcvKeyer" list="lcvKeyerList" autocomplete="off" value="' + esc(curK || '') + '">' + scKeyerDatalist('lcvKeyerList') + '</div>';
+  h += '<div class="field"><label>📄 เลขใบจอง</label><input type="text" id="lcvJob" value="' + esc(curJ || '') + '"></div>';
+  h += '<div class="field"><label>📝 เหตุผล/ใช้งานกับ</label><input type="text" id="lcvPurpose" value="' + esc(curP || '') + '" placeholder="เช่น สาธิตลูกค้า"></div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="lcvBy" list="lcvByList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('lcvByList') + '</div>';
+  h += '<div class="hint" style="margin-bottom:8px">ใบนี้คีย์จากแอปหลัก แก้จากตรงนี้จะเข้าคิวไว้ก่อน แล้วลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary btn-sm" onclick="saveLcvEdit(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">💾 บันทึก</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">ยกเลิก</button>' +
+    '</div>';
+  document.getElementById('lcvEditWrap').innerHTML = h;
+}
+function saveLcvEdit(unitId, start, end) {
+  var conflict = _lfConflict(unitId, start, end);
+  if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
+  var by = (document.getElementById('lcvBy').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var fields = {
+    borrower: (document.getElementById('lcvBorrower').value || '').trim(),
+    keyedBy: (document.getElementById('lcvKeyer').value || '').trim(),
+    jobNo: (document.getElementById('lcvJob').value || '').trim(),
+    purpose: (document.getElementById('lcvPurpose').value || '').trim()
+  };
+  // ผู้ยืม/ผู้คีย์/เลขใบจอง/เหตุผลเป็นของ "ใบ" ไม่ใช่ของเครื่อง (เหมือน saveQuickNameSlip) ใบเดียวกันมีหลาย
+  // เครื่องก็ต้องแก้พร้อมกันทั้งใบ ไม่งั้นเครื่องอื่นในใบเดียวกันจะยังโชว์ข้อมูลเก่าค้างอยู่
+  var jobKey = (conflict.jobNo || '').trim();
+  var byId = {}; UNITS.forEach(function(x) { byId[x.id] = x; });
+  var unitIds = [unitId];
+  if (jobKey) {
+    scBookings().forEach(function(x) {
+      if (x.unitId !== unitId && (x.jobNo || '').trim() === jobKey && unitIds.indexOf(x.unitId) === -1) unitIds.push(x.unitId);
+    });
+  }
+  var batch = db.batch();
+  unitIds.forEach(function(id) {
+    var uu = byId[id];
+    batch.set(db.collection('publicDemoEdits').doc(id), {
+      unitId: id, fields: fields, editedBy: by,
+      editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unitLabel: (uu && (uu.model || uu.name)) || '', rentalDbNo: (uu && uu.rentalDbNo) || ''
+    }, { merge: true });
+  });
+  batch.commit().then(function() {
+    toastMock('💾 บันทึกแล้ว' + (unitIds.length > 1 ? ' ' + unitIds.length + ' เครื่องในใบเดียวกัน' : '') + ' — รอแอปหลักเปิดแล้วจะลงข้อมูลจริงอัตโนมัติ');
+    showLendConflictM(unitId, start, end);
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 // เหมือน _scJobSiblingsHtml แต่ทำงานบน scBookings() (รวมทั้งใบที่คีย์จากหน้านี้และจากแอปหลัก) แทนที่จะ
 // จำกัดแค่ LOANS อย่างเดียว — ใช้ตอนดูใบที่อาจมาจากแหล่งไหนก็ได้ (เช่น showLendConflictM ด้านบน)
@@ -2491,7 +2674,7 @@ function _bookingSiblingsHtml(b) {
     return '<div class="sc-kv-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
       '<span style="flex:1;min-width:0">' + esc(p.main) + (u && u.rentalDbNo ? ' · เช่า ' + esc(u.rentalDbNo) : '') + ' ' + st + '</span>' +
       (s.loanId ? '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + s.loanId + '\')">📜</button>' : '') +
-      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>' : '') +
+      (u ? '<button class="btn btn-ghost btn-sm" onclick="closeSm();openUnitDetail(\'' + u.id + '\',function(){showLendConflictM(\'' + b.unitId + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')})">📄 ดูเครื่อง</button>' : '') +
       '</div>';
   }).join('');
   return h;
@@ -2586,7 +2769,7 @@ function openExtendM(loanId) {
   h += '</div>';
   h += '<div id="xtConflictBox"></div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="xt_why" placeholder="เช่น ลูกค้าขอใช้ต่ออีก 2 สัปดาห์ / งานเลื่อน"></div>';
-  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="xt_by" list="xtKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('xtKeyerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="xt_by" list="xtKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('xtKeyerList') + '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn btn-primary" onclick="saveExtend(\'' + loanId + '\')">⏩ เลื่อนกำหนดคืน</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
@@ -2643,7 +2826,7 @@ function openTransferM(loanId) {
     '<div style="font-size:11px;color:var(--text2);margin-top:4px">ใช้ตอนคนคีย์เดิมลาออก/ลาพัก — คนใหม่จะเป็นคนที่ต้องตามคืนแทน</div></div>';
   h += '<div class="sm-sec">บันทึกเหตุผล</div>';
   h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="tf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / สมชายลาออก"></div>';
-  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="tf_by" list="tfKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('tfKeyerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="tf_by" list="tfKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('tfKeyerList') + '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn btn-primary" onclick="saveTransfer(\'' + loanId + '\')">🔄 บันทึกการโอน</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
@@ -2978,19 +3161,30 @@ function unitCardHtml(raw, n) {
   h += '</div></div>';
   return h;
 }
-function openUnitDetail(unitId) {
+// กดเข้าดูรายละเอียดเครื่องได้จากหลายจุด (ตารางรายการ, ปฏิทิน, และรายชื่อ "เครื่องอื่นในใบจองเดียวกัน"
+// ที่ฝังอยู่ในโมดัลต่างๆ เช่น showLendConflictM/openLoanLogM) — เดิมกดกลับจากหน้านี้จะโยนไปที่รายการเครื่อง
+// เฉยๆ เสมอ ถ้ามาจากโมดัล จะเสียตำแหน่ง/ข้อมูลที่กำลังดูอยู่ไปเลย ต้องเปิดโมดัลใหม่เอง — returnTo (ถ้าส่งมา)
+// คือฟังก์ชันที่ closeUnitDetail() จะเรียกกลับแทนพฤติกรรมเดิม เพื่อพากลับไปจุดเดิมเป๊ะๆ
+//
+// ⚠️ renderAll() เรียกฟังก์ชันนี้ซ้ำทุกครั้งที่มีข้อมูลใหม่เข้ามา (ไม่ส่ง returnTo) เพื่อรีเฟรชหน้าที่เปิดค้าง
+// อยู่ ถ้าอัปเดต _unitDetailReturnTo ทุกครั้งที่เรียก จะเผลอไปลบ callback ที่เพิ่งตั้งไว้ทิ้งภายในเสี้ยววินาที
+// จึงอัปเดตเฉพาะตอนเปิดเครื่อง "ใหม่" หรือเปลี่ยนไปดูเครื่องอื่นเท่านั้น ไม่แตะตอนรีเฟรชเครื่องเดิมซ้ำ
+var _unitDetailReturnTo = null;
+function openUnitDetail(unitId, returnTo) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
   if (!u) return;
+  var view = document.getElementById('unitDetailView');
+  var alreadyOpenSame = currentUnitDetail && currentUnitDetail.id === unitId && view.style.display === 'block';
+  if (!alreadyOpenSame) _unitDetailReturnTo = typeof returnTo === 'function' ? returnTo : null;
   currentUnitDetail = u;
   document.getElementById('unitsListView').style.display = 'none';
   document.getElementById('unitLendView').style.display = 'none';
   var _lb = document.getElementById('lendPickBar');
   if (_lb) _lb.style.display = 'none';
-  var view = document.getElementById('unitDetailView');
   view.style.display = 'block';
   var loan = unitCurrentLoan(u.id);
   var history = LOANS.filter(function(l) { return l.unitId === u.id; }).sort(function(a,b){ return (b.start||'').localeCompare(a.start||''); }).slice(0,8);
-  var h = '<button class="back-link" onclick="closeUnitDetail()">← กลับไปรายการเครื่อง</button>';
+  var h = '<button class="back-link" onclick="closeUnitDetail()">' + (_unitDetailReturnTo ? '← กลับไปที่เดิม' : '← กลับไปรายการเครื่อง') + '</button>';
   h += '<div class="card" style="margin-bottom:16px"><div class="picked-unit-banner"><div class="um2">🚁</div><div><div class="un2">' + esc(u.model) + '</div>' +
     '<div class="ud2">SiS Part: ' + esc(u.sku||'—') + ' · S/N: ' + esc(u.serialNumber||'—') + (u.rentalDbNo ? ' · เครื่องเช่า: ' + esc(u.rentalDbNo) : '') + '</div></div>' +
     '<button class="btn btn-ghost btn-sm" style="margin-left:auto;flex-shrink:0" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไขข้อมูลเครื่อง</button></div>' +
@@ -3044,11 +3238,14 @@ function openUnitDetail(unitId) {
   view.innerHTML = h;
 }
 function closeUnitDetail() {
+  var back = _unitDetailReturnTo;
+  _unitDetailReturnTo = null;
   currentUnitDetail = null;
   document.getElementById('unitsListView').style.display = 'block';
   document.getElementById('unitDetailView').style.display = 'none';
   document.getElementById('unitLendView').style.display = 'none';
   renderLendBar();
+  if (back) { try { back(); } catch (e) { console.error('กลับไปจุดเดิมไม่สำเร็จ', e); } }
 }
 function showManualLoanForm(unitId) {
   var zone = document.getElementById('manualLoanFormZone');
@@ -3057,7 +3254,7 @@ function showManualLoanForm(unitId) {
     '<div class="field"><label>วันที่ยืม *</label><input type="date" id="mlStart" value="' + _td() + '"></div>' +
     '<div class="field"><label>วันที่คาดว่าจะคืน *</label><input type="date" id="mlEnd" value="' + _td() + '"></div>' +
     '<div class="field"><label>ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="mlCompany" list="mlBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('mlBorrowerList') + '</div>' +
-    '<div class="field"><label>ผู้คีย์เบิก *</label><input type="text" id="mlRequester" list="mlKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('mlKeyerList') + '</div>' +
+    '<div class="field"><label>ผู้คีย์เบิก *</label><input type="text" id="mlRequester" list="mlKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('mlKeyerList') + '</div>' +
     '</div><div class="field"><label>เลขที่ใบจอง</label><input type="text" id="mlJob" list="mlJobList" autocomplete="off" placeholder="เลขจากระบบคลัง เช่น 29179">' + scJobDatalist('mlJobList') + '</div>' +
     '<div class="field"><label>วัตถุประสงค์</label><input type="text" id="mlPurpose" placeholder="เช่น สาธิตลูกค้า"></div>' +
     '<button class="btn btn-primary" onclick="saveManualLoan(\'' + unitId + '\')">💾 บันทึกรายการยืม</button></div>';
@@ -3262,7 +3459,7 @@ function riRead() {
                        : (p.dueApp ? _scD(p.dueApp) : '—')) + '</td></tr>';
       }).join('') + '</tbody></table>';
     h += '<div class="field" style="margin-top:12px"><label>✍️ คนนำเข้า *</label>' +
-      '<input type="text" id="riBy" list="riKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' +
+      '<input type="text" id="riBy" list="riKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' +
       scKeyerDatalist('riKeyerList') + '</div>';
     h += '<button class="btn btn-primary btn-full" onclick="riApply()">📤 ส่งเข้าคิว ' + plan.length + ' เครื่อง</button>';
     h += '<div class="hint">ส่งแล้วต้องเปิดเมนู Demo Equipment ในแอปหลักกด “รับเข้า” อีกครั้ง ถึงจะลงข้อมูลจริง</div>';
@@ -3709,7 +3906,7 @@ function renderLendFlow() {
     '<button class="btn btn-ghost btn-sm" onclick="lendSetDays(lendDays+1)">+</button></div></div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>🏢 ชื่อบริษัท/ผู้ยืม *</label><input type="text" id="lfCompany" value="' + esc((lendPrefill && lendPrefill.borrower) || '') + '" list="lfBorrowerList" autocomplete="off" placeholder="พิมพ์เอง หรือเลือกจากรายชื่อเดิม">' + scBorrowerDatalist('lfBorrowerList') + '</div>';
-  h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก *</label><input type="text" id="lfBy" value="' + esc(_lastEditor()) + '" list="lfKeyerList" autocomplete="off" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('lfKeyerList') + '</div>';
+  h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก *</label><input type="text" id="lfBy" list="lfKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('lfKeyerList') + '</div>';
   h += '</div>';
   h += '<div class="grid2">';
   h += '<div class="field"><label>📄 เลขที่ใบจอง</label><input type="text" id="lfJob" list="lfJobList" autocomplete="off" placeholder="เลขจากระบบคลัง — เลือกใบเดิมได้">' + scJobDatalist('lfJobList') + '</div>';
@@ -5256,7 +5453,7 @@ function openUnitEditM(unitId) {
     _smTg('ed_vis', u.customerVisible !== false, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
   h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ed_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;...">' + esc(u.kitContents || '') + '</textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ed_note" rows="2">' + esc(u.note || '') + '</textarea></div>';
-  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="ed_by" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="ed_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
     'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นผลทันทีที่บันทึก แล้วจะลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
@@ -5354,7 +5551,7 @@ function showAddUnitM() {
     _smTg('ad_vis', true, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
   h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ad_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;..."></textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ad_note" rows="2"></textarea></div>';
-  h += '<div class="field"><label>✍️ คนเพิ่ม (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครเพิ่ม) *</label><input type="text" id="ad_by" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนเพิ่ม (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครเพิ่ม) *</label><input type="text" id="ad_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
     'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นเครื่องนี้ทันทีที่บันทึก แล้วจะลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
   h += '<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="saveNewUnit()">💾 เพิ่มเครื่อง</button><button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
@@ -5419,7 +5616,7 @@ function showBulkGridM() {
   _bgSearch = '';
   var h = '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก</div>';
   h += '<div class="field"><label>🔍 กรองแถว</label><input type="text" id="bgSearch" placeholder="ชื่อ, รุ่น, S/N, เลขเครื่องเช่า" oninput="_bgSearchInput(this.value)" autocomplete="off"></div>';
-  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="bgBy" list="edKeyerList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="ชื่อ-นามสกุล">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="bgBy" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div id="bgTableWrap"></div>';
   h += '<div id="bgWarn"></div>';
   h += '<div class="bg-savebar"><button class="btn btn-primary btn-sm" onclick="_bgSave()">💾 บันทึกที่แก้ไข</button>' +
@@ -5729,6 +5926,28 @@ function catMgrAddRow() { CATEGORIES.push({ id: 'cat_' + Date.now(), label: 'ห
 function catMgrSave() {
   db.collection('dealerUpdates').doc('demoCatalogPublic').set({ categories: CATEGORIES }, { merge: true })
     .then(function() { toastMock('💾 บันทึกหมวดหมู่แล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน dealerUpdates/demoCatalogPublic ได้)'); });
+}
+
+// ---- จัดการรายชื่อทีมงาน (STAFF_ROSTER) — เก็บในเอกสารเดียวกับ CATEGORIES เพื่อให้ทุกอุปกรณ์เห็นรายชื่อ
+// เดียวกันทันทีที่บันทึก ไม่ต้องพึ่ง localStorage ต่อเครื่อง ----
+function toggleRosterMgr() {
+  var panel = document.getElementById('rosterMgrPanel');
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (!open) renderRosterMgrRows();
+}
+function renderRosterMgrRows() {
+  document.getElementById('rosterMgrRows').innerHTML = STAFF_ROSTER.map(function(name, i) {
+    return '<div class="catmgr-row"><input type="text" value="' + esc(name) + '" placeholder="ชื่อ-นามสกุล" onchange="STAFF_ROSTER[' + i + ']=this.value">' +
+      '<button class="btn btn-ghost btn-sm" onclick="STAFF_ROSTER.splice(' + i + ',1);renderRosterMgrRows()">🗑️</button></div>';
+  }).join('') || '<div class="hint">ยังไม่มีรายชื่อ — กด "เพิ่มชื่อ" ด้านล่าง</div>';
+}
+function rosterMgrAddRow() { STAFF_ROSTER.push(''); renderRosterMgrRows(); }
+function rosterMgrSave() {
+  STAFF_ROSTER = STAFF_ROSTER.map(function(n) { return String(n || '').trim(); }).filter(Boolean);
+  db.collection('dealerUpdates').doc('demoCatalogPublic').set({ staffRoster: STAFF_ROSTER }, { merge: true })
+    .then(function() { toastMock('💾 บันทึกรายชื่อแล้ว'); renderRosterMgrRows(); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน dealerUpdates/demoCatalogPublic ได้)'); });
 }
 </script>
 </body>
