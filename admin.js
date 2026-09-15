@@ -1,6 +1,18 @@
 // ================================================================
 // ADMIN PANEL - FULLY INTEGRATED WITH PRODUCTS MODULE
 // ================================================================
+// rAdmin() ประกอบ HTML ของทั้ง 5 แท็บเป็น string ก้อนเดียวแล้ว set el.innerHTML ทีเดียว — เดิมถ้าฟังก์ชัน
+// ย่อยจุดไหนจุดหนึ่ง throw (เช่น renderProductListForAdmin/renderTeamMemberListHTML เจอข้อมูลจริงที่สะสม
+// มานานจนรูปแบบเพี้ยนไปจากที่โค้ดคาดไว้) ทั้ง 5 แท็บจะว่างเปล่าไปด้วยกันหมด ไม่ใช่แค่แท็บที่มีปัญหา เพราะ
+// exception กลางทาง string concatenation ทำให้ el.innerHTML ไม่ถูกเซ็ตเลยสักตัวอักษร — ครอบจุดที่ประมวลผล
+// ข้อมูลจริง (ไม่ใช่แค่ static UI) ด้วยตัวช่วยนี้ พังจุดเดียวไม่ลากแท็บอื่นที่ไม่เกี่ยวข้องไปด้วย
+function _admSafe(fn, label) {
+  try { return fn(); }
+  catch (e) {
+    console.error('rAdmin: ' + label + ' ล้มเหลว', e);
+    return '<div class="hint" style="color:#ef4444">⚠️ แสดง' + label + 'ไม่ได้ตอนนี้ (' + sanitize(e.message || '') + ')</div>';
+  }
+}
 function rAdmin(el) {
   document.getElementById('pgT').textContent = '⚙️ ตั้งค่า';
   var cfg = getConfig();
@@ -19,74 +31,88 @@ function rAdmin(el) {
     countCards += '<div class="sc"><div class="sn c1">' + (counts[k] || 0) + '</div><div class="sl">' + v + '</div></div>';
   }
 
- // Pipeline statuses
-  var pstRows = '';
-  for (var i = 0; i < cfg.pipelineStatuses.length; i++) {
-    var s = cfg.pipelineStatuses[i];
-    pstRows += '<div class="admin-row" style="display:flex;align-items:center;gap:4px">' +
-      '<span style="color:var(--text2);font-size:11px;font-weight:700;min-width:20px;text-align:center">' + (i + 1) + '</span>' +
-      '<input type="text" value="' + s.id + '" id="aps_id_' + i + '" style="width:70px" readonly>' +
-      '<input type="text" value="' + sanitize(s.name) + '" id="aps_nm_' + i + '">' +
-      '<input type="color" value="' + s.color + '" id="aps_cl_' + i + '" style="width:35px;padding:1px">' +
-      '<select id="aps_cat_' + i + '" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">' +
-        '<option value="active"' + (s.category === 'active' ? ' selected' : '') + '>🔵 Active</option>' +
-        '<option value="won"' + (s.category === 'won' ? ' selected' : '') + '>🟢 Win</option>' +
-        '<option value="lost"' + (s.category === 'lost' ? ' selected' : '') + '>🔴 Lost</option>' +
-      '</select>' +
-      '<button class="btn bsm bo" onclick="movePipeStatus(' + i + ',-1)" title="ขึ้น" style="padding:2px 6px">⬆️</button>' +
-      '<button class="btn bsm bo" onclick="movePipeStatus(' + i + ',1)" title="ลง" style="padding:2px 6px">⬇️</button>' +
-      '<button class="btn bsm bd" onclick="admRmPSt(' + i + ')">✕</button>' +
-      '</div>';
-  }
+ // Pipeline statuses — ครอบทั้งลูปด้วย try/catch: รายการ status เก่าที่สะสม/ย้ายรูปแบบมาหลายปี
+  // มีโอกาสเจอ record รูปแบบเพี้ยน (เช่น s.id เป็น object แทนสตริงจากบั๊กเก่า) ถ้าพังกลางลูปตอนนี้ยัง
+  // เห็นแท็บอื่นได้ปกติ แทนที่จะพังทั้งหน้าตั้งค่า (rAdmin ทั้งก้อนเป็น string เดียว throw จุดไหนบล็อกหมด)
+  var pstRows = _admSafe(function() {
+    var rows = '';
+    for (var i = 0; i < cfg.pipelineStatuses.length; i++) {
+      var s = cfg.pipelineStatuses[i];
+      rows += '<div class="admin-row" style="display:flex;align-items:center;gap:4px">' +
+        '<span style="color:var(--text2);font-size:11px;font-weight:700;min-width:20px;text-align:center">' + (i + 1) + '</span>' +
+        '<input type="text" value="' + s.id + '" id="aps_id_' + i + '" style="width:70px" readonly>' +
+        '<input type="text" value="' + sanitize(s.name) + '" id="aps_nm_' + i + '">' +
+        '<input type="color" value="' + s.color + '" id="aps_cl_' + i + '" style="width:35px;padding:1px">' +
+        '<select id="aps_cat_' + i + '" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">' +
+          '<option value="active"' + (s.category === 'active' ? ' selected' : '') + '>🔵 Active</option>' +
+          '<option value="won"' + (s.category === 'won' ? ' selected' : '') + '>🟢 Win</option>' +
+          '<option value="lost"' + (s.category === 'lost' ? ' selected' : '') + '>🔴 Lost</option>' +
+        '</select>' +
+        '<button class="btn bsm bo" onclick="movePipeStatus(' + i + ',-1)" title="ขึ้น" style="padding:2px 6px">⬆️</button>' +
+        '<button class="btn bsm bo" onclick="movePipeStatus(' + i + ',1)" title="ลง" style="padding:2px 6px">⬇️</button>' +
+        '<button class="btn bsm bd" onclick="admRmPSt(' + i + ')">✕</button>' +
+        '</div>';
+    }
+    return rows;
+  }, 'รายการ Pipeline Status');
   pstRows += '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn bsm bo" onclick="migratePipelineStatuses()" title="แปลง status เก่า→ใหม่ ครั้งเดียว">🔄 Migrate status เก่า→ใหม่</button>' +
     '<button class="btn bsm bd" onclick="admResetPipeStatuses()" title="รีเซ็ตกลับเป็น 8 status มาตรฐาน (ลบ custom ทั้งหมด)">♻️ Reset ค่าเริ่มต้น</button>' +
     '</div>';
 
   // Links
-  var linkRows = '';
   var links = cfg.externalLinks || [];
-  for (var i = 0; i < links.length; i++) {
-    linkRows += '<div class="link-item">' +
-      '<input type="text" value="' + sanitize(links[i].name || '') + '" id="lk_n_' + i + '" style="width:80px">' +
-      '<input type="url" value="' + (links[i].url || '') + '" id="lk_u_' + i + '" style="flex:1">' +
-      '<button class="btn bsm bd" onclick="admRmLink(' + i + ')">✕</button>' +
-      '</div>';
-  }
+  var linkRows = _admSafe(function() {
+    var rows = '';
+    for (var i = 0; i < links.length; i++) {
+      rows += '<div class="link-item">' +
+        '<input type="text" value="' + sanitize(links[i].name || '') + '" id="lk_n_' + i + '" style="width:80px">' +
+        '<input type="url" value="' + (links[i].url || '') + '" id="lk_u_' + i + '" style="flex:1">' +
+        '<button class="btn bsm bd" onclick="admRmLink(' + i + ')">✕</button>' +
+        '</div>';
+    }
+    return rows;
+  }, 'รายการ Link');
 
   // Quick links display
-  var quickLinks = '';
-  if (links.length) {
-    quickLinks = '<div class="card"><h2>🔗 Quick Links</h2><div class="bg">';
+  var quickLinks = _admSafe(function() {
+    if (!links.length) return '';
+    var h = '<div class="card"><h2>🔗 Quick Links</h2><div class="bg">';
     for (var i = 0; i < links.length; i++) {
-      quickLinks += '<a href="' + links[i].url + '" target="_blank" class="btn bo">' + sanitize(links[i].name) + ' ↗</a>';
+      h += '<a href="' + links[i].url + '" target="_blank" class="btn bo">' + sanitize(links[i].name) + ' ↗</a>';
     }
-    quickLinks += '</div></div>';
-  }
+    return h + '</div></div>';
+  }, 'Quick Links');
 
   // Routines
-  var rtRows = '';
-  var routines = ST.getAll('routines');
-  for (var i = 0; i < routines.length; i++) {
-    var r = routines[i];
-    rtRows += '<div class="rt-item" style="margin-top:4px">' +
-      '<div class="rt-time">' + (r.time || '') + '</div>' +
-      '<div class="rt-title">' + sanitize(r.title) + '</div>' +
-      '<span class="rt-tag">' + (DAY_NAMES[r.days] || r.days) + '</span>' +
-      '<button class="btn bsm bo" onclick="showRoutineM(\'' + r.id + '\')">✏️</button>' +
-      '<button class="btn bsm bd" onclick="admDelRoutine(\'' + r.id + '\')">✕</button>' +
-      '</div>';
-  }
+  var rtRows = _admSafe(function() {
+    var rows = '';
+    var routines = ST.getAll('routines');
+    for (var i = 0; i < routines.length; i++) {
+      var r = routines[i];
+      rows += '<div class="rt-item" style="margin-top:4px">' +
+        '<div class="rt-time">' + (r.time || '') + '</div>' +
+        '<div class="rt-title">' + sanitize(r.title) + '</div>' +
+        '<span class="rt-tag">' + (DAY_NAMES[r.days] || r.days) + '</span>' +
+        '<button class="btn bsm bo" onclick="showRoutineM(\'' + r.id + '\')">✏️</button>' +
+        '<button class="btn bsm bd" onclick="admDelRoutine(\'' + r.id + '\')">✕</button>' +
+        '</div>';
+    }
+    return rows;
+  }, 'รายการ Routine');
 
   // Templates
-  var tplRows = '';
-  var templates = ST.getAll('templates');
-  for (var i = 0; i < templates.length; i++) {
-    var tp = templates[i];
-    tplRows += '<div class="li" onclick="showTplDet(\'' + tp.id + '\')">' +
-      '<div class="lm"><div class="lt">📑 ' + sanitize(tp.name) + '</div>' +
-      '<div class="ls">' + (tp.steps || []).length + ' steps ' + (tp.sequential ? '⚡' : '') + '</div></div></div>';
-  }
+  var tplRows = _admSafe(function() {
+    var rows = '';
+    var templates = ST.getAll('templates');
+    for (var i = 0; i < templates.length; i++) {
+      var tp = templates[i];
+      rows += '<div class="li" onclick="showTplDet(\'' + tp.id + '\')">' +
+        '<div class="lm"><div class="lt">📑 ' + sanitize(tp.name) + '</div>' +
+        '<div class="ls">' + (tp.steps || []).length + ' steps ' + (tp.sequential ? '⚡' : '') + '</div></div></div>';
+    }
+    return rows;
+  }, 'รายการ Template');
   setTimeout(function() {
     initNewDemoPolicies();
   }, 100);
@@ -185,9 +211,11 @@ function rAdmin(el) {
     // Accent Color
     '<div class="appearance-section"><h4>🎨 สี Accent</h4>' +
     '<div class="color-picker">' +
-    ACCENT_COLORS.map(function(c) {
-      return '<div class="color-dot ' + (ap.accent === c.id ? 'active' : '') + '" style="background:' + c.color + '" onclick="setAppOpt(\'accent\',\'' + c.id + '\')" title="' + c.id + '">' + (ap.accent === c.id ? '✓' : '') + '</div>';
-    }).join('') +
+    _admSafe(function() {
+      return ACCENT_COLORS.map(function(c) {
+        return '<div class="color-dot ' + (ap.accent === c.id ? 'active' : '') + '" style="background:' + c.color + '" onclick="setAppOpt(\'accent\',\'' + c.id + '\')" title="' + c.id + '">' + (ap.accent === c.id ? '✓' : '') + '</div>';
+      }).join('');
+    }, 'สี Accent') +
     '</div></div>' +
     
     // Font Size
@@ -259,7 +287,7 @@ function rAdmin(el) {
     '<div class="card"><h2>📦 จัดการสินค้าทั้งหมด (Products Module)</h2>' +
     '<p style="font-size:.7rem;color:var(--text3);margin-bottom:6px">📌 สินค้าและราคาแสดงผลจาก Products Module (v7_products) แล้ว</p>' +
     '<div id="admProductList" style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">' +
-    renderProductListForAdmin() +
+    _admSafe(renderProductListForAdmin, 'รายการสินค้า') +
     '</div>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
     '<button class="btn bp bsm" onclick="showAddProductAdminModal()">➕ เพิ่มสินค้า (ใช้ Products)</button>' +
@@ -296,7 +324,7 @@ function rAdmin(el) {
 
     // Unit Types
     '<div class="card"><h2>🏢 Unit Types</h2>' +
-    '<textarea id="adm_units" rows="4" style="font-size:.72rem">' + cfg.unitTypes.join('\n') + '</textarea>' +
+    '<textarea id="adm_units" rows="4" style="font-size:.72rem">' + (cfg.unitTypes || []).join('\n') + '</textarea>' +
     '<button class="btn bp bsm" style="margin-top:4px" onclick="admSaveUnits()">💾 บันทึก</button></div>' +
 
     // DJI Dealer Types
@@ -393,7 +421,7 @@ function rAdmin(el) {
     // Team Management
     '<div class="card"><h2>👥 ทีม Sales</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">เพิ่มสมาชิกทีม Sales — แต่ละคนได้ Link แยกสำหรับ sales-view • GM ดูภาพรวมได้จาก gm-view</p>' +
-    '<div id="teamMemberList">' + renderTeamMemberListHTML() + '</div>' +
+    '<div id="teamMemberList">' + _admSafe(renderTeamMemberListHTML, 'รายชื่อทีม Sales') + '</div>' +
     '<div class="bg" style="margin-top:10px;flex-wrap:wrap">' +
     '<button class="btn bp bsm" onclick="showAddSalesMemberM()">➕ เพิ่ม Sales</button>' +
     '<button class="btn bo bsm" onclick="copyGMLink()">🔗 Copy GM Link</button>' +
@@ -403,21 +431,21 @@ function rAdmin(el) {
     // Sales Link Permissions — แยกการ์ดต่างหากจากทีม Sales ด้านบน ให้หาง่าย
     '<div class="card"><h2>🔗 สิทธิ์ลิงก์เซล</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">กำหนดว่าลิงก์เซล (login ด้วย PIN ผ่าน sales-view) เข้าเมนูไหนได้บ้าง และแต่ละประเภทข้อมูลเป็นแบบส่วนตัว/ใช้ร่วมกัน/อ่านอย่างเดียวจากแอปหลัก</p>' +
-    renderSalesLinkPermissionsHTML() +
+    _admSafe(renderSalesLinkPermissionsHTML, 'สิทธิ์ลิงก์เซล') +
     '</div>' +
 
     // Guest View — ลิงก์ PIN ให้ทีมดู/แก้ไขบางเมนู รองรับหลายโปรไฟล์ (คนละคน คนละ PIN คนละสิทธิ์)
     '<div class="card"><h2>👁️ ลิงก์ทีมดูข้อมูล</h2>' +
     '<p style="font-size:.68rem;color:var(--text3);margin-bottom:8px">สร้างได้หลายโปรไฟล์ แต่ละโปรไฟล์มี PIN/เมนูที่ดูได้/เมนูที่แก้ไขได้ของตัวเอง — ข้อมูลจริงชุดเดียวกับแอปหลัก ไม่ใช่ข้อมูลแยก ลิงก์ที่คัดลอกไม่มี PIN ติดไปด้วย ต้องบอก PIN แยกให้คนที่จะใช้เอง</p>' +
-    renderGuestViewProfilesHTML() +
+    _admSafe(renderGuestViewProfilesHTML, 'ลิงก์ทีมดูข้อมูล') +
     '</div>' +
 
     // Email Recipients
     '<div class="card"><h2>📧 Email Recipients</h2>' +
     '<div class="fg"><label>Visit Plan</label>' +
-    '<input type="text" id="adm_em_vp" value="' + cfg.emailRecipients.visitPlan.join(', ') + '"></div>' +
+    '<input type="text" id="adm_em_vp" value="' + ((cfg.emailRecipients && cfg.emailRecipients.visitPlan) || []).join(', ') + '"></div>' +
     '<div class="fg"><label>Online Plan</label>' +
-    '<input type="text" id="adm_em_op" value="' + cfg.emailRecipients.onlinePlan.join(', ') + '"></div>' +
+    '<input type="text" id="adm_em_op" value="' + ((cfg.emailRecipients && cfg.emailRecipients.onlinePlan) || []).join(', ') + '"></div>' +
     '<button class="btn bp bsm" onclick="admSaveEmail()">💾 บันทึก</button></div>' +
 
     // Gemini AI
@@ -451,7 +479,7 @@ function rAdmin(el) {
     '<div class="admin-tab-pane' + aTab('advanced') + '" id="atp-advanced">' +
 
     // Data Overview
-    '<div class="card"><h2>💾 ข้อมูลในระบบ (' + ST.getStorageSizeFormatted() + ')</h2>' +
+    '<div class="card"><h2>💾 ข้อมูลในระบบ (' + _admSafe(function() { return ST.getStorageSizeFormatted(); }, 'ขนาดข้อมูล') + ')</h2>' +
     '<div class="sr">' + countCards + '</div></div>' +
 
     // พื้นที่เก็บข้อมูลเบราว์เซอร์ — ต่างจากการ์ดด้านบนตรงที่ไล่ทุก key จริงในเครื่อง (ไม่ใช่แค่ที่แอปรู้จัก)
