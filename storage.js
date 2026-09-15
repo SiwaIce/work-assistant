@@ -90,7 +90,11 @@ const ST = {
   // collection ก้อนใหญ่ที่ย้ายไปอยู่ IndexedDB — เก็บสำเนาไว้ในหน่วยความจำเพื่อให้ _get/_set ยังเป็น sync
   // เหมือน collection อื่นทุกประการ (ดูเหตุผลใน idb.js) ถ้าเบราว์เซอร์ไม่มี IndexedDB จะถอยกลับไปใช้
   // localStorage ให้เอง โดยที่จุดเรียกไม่ต้องรู้เรื่องเลย
-  _BIG: { 'v7_djiMovements': true },
+  // v7_djiProjects (ทะเบียน Project ID) เพิ่มเข้ามาเพราะสะสมมานาน (130+ วันไม่ได้ backup ก็เจอแล้ว) จนเป็น
+  // ตัวการหลักที่ทำให้ localStorage เต็ม (~5MB/โดเมน) เอง โดยที่ไม่มีระบบย้ายไป IndexedDB เหมือน djiMovements
+  // มาก่อน — กลไกนี้รองรับหลายคอลเลกชันอยู่แล้วโดยไม่ต้องแก้ที่อื่นเลย (initBig/exportAll/importAll/clearAll/
+  // storageReport ล้วนวนผ่าน Object.keys(this._BIG) ไม่ได้ hardcode ชื่อคอลเลกชันไว้ที่ไหน)
+  _BIG: { 'v7_djiMovements': true, 'v7_djiProjects': true },
   _bigMem: {},
   _bigOK: false,        // true เมื่อเปิด IndexedDB ได้และโหลดเข้าหน่วยความจำแล้ว
   _bigReady: false,     // true เมื่อรู้ผลแล้วว่าจะใช้ IndexedDB หรือถอยไป localStorage
