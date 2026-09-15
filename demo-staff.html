@@ -396,6 +396,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .lf-cell.no .t { color:var(--bad); }
 .lf-cell.sel { outline:2px solid var(--accent); outline-offset:-2px; }
 .lf-cell.today { box-shadow:inset 0 -3px 0 var(--accent); }
+/* ไม่ว่างเพราะจองล่วงหน้าไว้ล้วนๆ (ยังไม่มีของออกจริงสักชิ้น) — เบากว่า .no ปกติ ยังพอเจรจาสลับคิวได้ถ้า
+   คนที่จองไว้ยกเลิก ต้องมาหลัง .lf-cell.no ในไฟล์นี้เพื่อให้ชนะ (specificity เท่ากัน ตัดสินด้วยลำดับประกาศ) */
+.lf-cell.flag { border:1.5px dashed var(--accent); background:var(--surface-2); opacity:1; }
+.lf-cell.flag .t { color:var(--accent); }
+.lf-cell .flagtag { display:block; font-size:7.5px; color:var(--accent); font-weight:700; margin-top:1px; line-height:1.2; }
 .lf-block { border:1px solid var(--warn); background:var(--warn-soft); border-radius:10px;
   padding:11px 13px; margin-bottom:11px; font-size:12.5px; }
 .lf-bnote { font-size:11.5px; color:var(--text2); margin:5px 0 8px; line-height:1.55; }
@@ -496,6 +501,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-mini { font-size:9.5px; color:var(--text2); display:flex; align-items:center; gap:3px; }
 .dcal-dot { width:6px; height:6px; border-radius:50%; display:inline-block; flex-shrink:0; }
 .dcal-load { height:3px; border-radius:2px; background:#f59e0b; margin-top:auto; }
+/* เต็มเพราะจองล่วงหน้าไว้ล้วนๆ (ยังไม่มีของออกจริง) ใช้ลายเส้นประสีฟ้าเหมือน badge จองล่วงหน้าที่อื่น
+   แทนแถบทึบแดง/ส้ม — ปนกันทั้งสองแบบใช้ไล่สีครึ่งต่อครึ่ง ใช้ .dcal-load.sc-soon/.sc-mix (2 คลาส) เจตนา
+   ให้ specificity ชนะกฎ .dcal-load เดี่ยวๆ ด้านบนและด้านล่างของไฟล์นี้แน่นอน ไม่ต้องพึ่งลำดับประกาศ */
+.dcal-load.sc-soon { background:repeating-linear-gradient(90deg,var(--accent) 0 3px,transparent 3px 5px); }
+.dcal-load.sc-mix { background:linear-gradient(90deg,#f59e0b 50%,transparent 50%),
+  repeating-linear-gradient(90deg,var(--accent) 0 3px,transparent 3px 5px);
+  background-size:50% 100%,50% 100%; background-position:left,right; background-repeat:no-repeat; }
 .dcal-drill { border:1px solid var(--accent); background:var(--surface-2); border-radius:9px; padding:11px 13px; margin:4px 0 10px; }
 .dcal-drill-hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:9px; }
 .dcal-kv { display:flex; gap:18px; flex-wrap:wrap; font-size:12px; margin-bottom:9px; }
@@ -578,6 +590,35 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-tbl th { text-align:left; padding:5px 7px; border-bottom:1px solid var(--border); font-size:10px;
   text-transform:uppercase; color:var(--text3); }
 .dcal-tbl td { padding:5px 7px; border-bottom:1px solid var(--border); }
+/* ป้ายสถานะ "ไม่ว่าง" 4 แบบ (ดู _scBusyKind) — กำลังยืม/เลยกำหนด ใช้จุดสีทึบ, จองล่วงหน้าใช้กรอบประ (ชุดสี
+   เดียวกับ legend มุมมองไทม์ไลน์), รอรับเข้าคลังใช้โทนเดียวกับกำลังยืมแต่แยกด้วยไอคอน 🕐 — ตามที่ _scDrillModel
+   ใช้อยู่แล้วเดิม ไม่ได้คิดสีใหม่ */
+.sc-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+  padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+.sc-badge .sw { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.sc-badge-out { background:var(--warn-soft); color:var(--warn); }
+.sc-badge-out .sw { background:var(--warn); }
+.sc-badge-late { background:var(--bad-soft); color:var(--bad); }
+.sc-badge-late .sw { background:var(--bad); }
+.sc-badge-soon { background:transparent; color:var(--accent); border:1.5px dashed var(--accent); padding:1.5px 8px; }
+.sc-badge-quar { background:var(--warn-soft); color:var(--warn); }
+.sc-badge-done { background:var(--surface-2); color:var(--text3); border:1px solid var(--border); }
+.sc-badge-done .sw { background:var(--text3); }
+/* การ์ดต่อรายการ "ถูกยืมอยู่" — แทนตารางแคบเดิม ใส่ได้ครบทั้งผู้ยืม/ยืมไปทำอะไร/ใบจอง(หรือคนจอง)/วันที่
+   โดยไม่ต้องบีบข้อความ (เดิมตารางมีแค่ ผู้ยืม/ยืมไปทำอะไร/เครื่อง/คืน ไม่มีที่ให้ป้ายสถานะหรือเลขใบจอง) */
+.sc-busyrow { border:1px solid var(--border); border-radius:10px; padding:11px 13px;
+  background:var(--surface-2); cursor:pointer; }
+.sc-busyrow:hover { border-color:var(--accent); }
+.sc-busyrow + .sc-busyrow { margin-top:8px; }
+.sc-busyrow-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.sc-busyrow-top .unit { font-weight:700; font-size:13px; }
+.sc-busyrow-kv { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; }
+.sc-busyrow-kv div { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.sc-busyrow-kv span { font-size:9.5px; color:var(--text3); text-transform:uppercase; letter-spacing:.03em; }
+.sc-busyrow-kv b { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.sc-busyrow-kv b.mono { font-family:ui-monospace,'SF Mono',Consolas,monospace; font-weight:500; }
+@media (max-width:480px) { .sc-busyrow-kv { grid-template-columns:1fr; } }
 .dcal-idpc { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; white-space:nowrap;
   font-family:ui-monospace,'SF Mono',Menlo,monospace; background:var(--surface); border:1px solid var(--border);
   border-radius:6px; padding:1px 7px; color:var(--text); }
@@ -3719,6 +3760,20 @@ function lendAllFreeOn(iso) {
     return !bks.some(function(b) { return b.unitId === u.id && scBusyOn(b, cur); });
   });
 }
+// วันที่ "ไม่ว่าง" เพราะจองล่วงหน้าไว้ล้วนๆ เท่านั้น (ยังไม่มีเครื่องไหนออกจริงในวันนั้นสักชิ้น) — ยังพอเจรจา
+// สลับคิวได้ถ้าคนที่จองไว้ยกเลิก ต่างจากวันที่มีของออกไปแล้วจริงๆ ซึ่งต้องรอคืนก่อนเท่านั้น
+function _lendSoonOnly(iso) {
+  var cur = _scFromIso(iso);
+  if (!cur) return false;
+  var bks = scBookings(), today = _scDay(new Date()), any = false, allSoon = true;
+  lendUnits().forEach(function(u) {
+    var hit = bks.filter(function(b) { return b.unitId === u.id && scBusyOn(b, cur); });
+    if (!hit.length) return;
+    any = true;
+    if (!hit.every(function(b) { return _scBusyKind(b, today) === 'soon'; })) allSoon = false;
+  });
+  return any && allSoon;
+}
 // ตัวเดียวกันนี้ใช้ทั้งโชว์สถานะรายชิ้นตอนเลือก (ก่อนกดบันทึก) และตอนบันทึกจริงเพื่อตัดสินว่าจองได้ทันที
 // หรือต้องพักเป็น "รอ" — คืนตัวชนอันแรกที่เจอ (พอสำหรับโชว์ให้รู้ว่าติดใคร ไม่ต้องเจอทุกอัน)
 function _lfConflict(unitId, start, end, exceptLoanId) {
@@ -3894,10 +3949,13 @@ function renderLendFlow() {
   for (var d2 = 1; d2 <= days; d2++) {
     var iso2 = _scIso(new Date(y, m, d2));
     var free = lendAllFreeOn(iso2);
+    var soonOnly = !free && _lendSoonOnly(iso2);
     var inRange = lendStart && lendEnd && iso2 >= lendStart && iso2 <= lendEnd;
-    var cls = 'lf-cell ' + (free ? 'ok' : 'no') + (inRange ? ' sel' : '') + (iso2 === todayIso2 ? ' today' : '');
-    h += '<div class="' + cls + '" onclick="lendPickDay(\'' + iso2 + '\')">' +
-      '<span class="n">' + d2 + '</span><span class="t">' + (free ? 'ว่าง' : 'ไม่ว่าง') + '</span></div>';
+    var cls = 'lf-cell ' + (free ? 'ok' : 'no') + (soonOnly ? ' flag' : '') + (inRange ? ' sel' : '') + (iso2 === todayIso2 ? ' today' : '');
+    h += '<div class="' + cls + '" onclick="lendPickDay(\'' + iso2 + '\')"' +
+      (soonOnly ? ' title="ไม่ว่างเพราะจองล่วงหน้าไว้ล้วนๆ — ยังไม่มีของออกจริง"' : '') + '>' +
+      '<span class="n">' + d2 + '</span><span class="t">' + (free ? 'ว่าง' : 'ไม่ว่าง') + '</span>' +
+      (soonOnly ? '<span class="flagtag">จองไว้เท่านั้น</span>' : '') + '</div>';
   }
   h += '</div>';
 
@@ -4691,6 +4749,29 @@ function scBatchKey(b) {
   var j = String(b.jobNo || '').trim();
   return j ? 'J:' + j : 'D:' + (b.borrower || '—') + '|' + _scIso(b.s) + '|' + _scIso(b.e);
 }
+// สถานะ "ไม่ว่าง" แยกว่าของอยู่ในมือลูกค้าจริงหรือแค่จองคิวไว้ล่วงหน้า — คนละตัวกับ scBarState() ที่ใช้อยู่
+// แล้วในมุมมองไทม์ไลน์ เพราะ scBarState เจอบุ๊กกิ้งกักกัน (b.quarantine, คืนแล้วแต่ยังรอคลังรับเข้า) จะตีเป็น
+// 'done'/คืนแล้วไปเลย ทั้งที่ของยังปล่อยยืมไม่ได้จริง — ไม่แก้ scBarState ตรงๆ เพราะไทม์ไลน์ใช้แบบเดิมมาก่อน
+// ไม่อยากเสี่ยงพฤติกรรมที่ทำงานถูกอยู่แล้วเปลี่ยนไป จึงแยกฟังก์ชันใหม่ไว้ใช้เฉพาะจุดที่ต้องรู้จักเคสนี้
+function _scBusyKind(b, today) {
+  if (b.quarantine) return 'quar';
+  if (b.status === 'returned') return 'done';
+  if (b.e < today) return 'late';
+  if (b.s > today) return 'soon';
+  return 'out';
+}
+var _SC_BUSY_LABEL = { out: 'กำลังยืม', late: 'เลยกำหนดคืน', soon: 'จองล่วงหน้า', quar: 'รอรับเข้าคลัง', done: 'คืนแล้ว' };
+function _scBusyBadge(kind) {
+  var sw = (kind === 'out' || kind === 'late' || kind === 'done') ? '<i class="sw"></i>' : '';
+  return '<span class="sc-badge sc-badge-' + kind + '">' + sw + (kind === 'quar' ? '🕐 ' : '') + _SC_BUSY_LABEL[kind] + '</span>';
+}
+// ใบจองมีเลขก็ต่อเมื่อคีย์ยืมจริงจากคลังข้างนอกแล้วเท่านั้น — ช่วงจองล่วงหน้ายังไม่มีเลข โชว์ชื่อคนกดจองไว้แทน
+// (ผู้คีย์เบิก/approver มีค่าเสมอ เพราะบังคับกรอกตอนคีย์ทุกครั้ง ไม่ว่าจะจองล่วงหน้าหรือยืมจริง)
+function _scRefKv(b0, kind) {
+  if (b0.jobNo) return '<div><span>ใบจอง</span><b class="mono">' + esc(b0.jobNo) + '</b></div>';
+  if (kind === 'soon') return '<div><span>จองโดย</span><b>' + esc(b0.approver || '— ไม่ระบุ —') + '</b></div>';
+  return '<div><span>ใบจอง</span><b style="color:var(--text3)">— ยังไม่ได้ระบุ —</b></div>';
+}
 // ชุดหนึ่งอาจกินหลายช่วงวัน (ใบเดียว เครื่องคืนคนละวัน) — แถบบนปฏิทินต้องคลุมตั้งแต่เริ่มแรกถึงคืนสุดท้าย
 function _scBatchSpan(list) {
   var f = list[0], s = f.s, e = f.e;
@@ -4899,17 +4980,19 @@ function _scDrillDay(iso) {
     outHit.forEach(function(u) { busyBy[u.id].forEach(function(b) { (groups[scBatchKey(b)] = groups[scBatchKey(b)] || []).push({ u: u, b: b }); }); });
     h += '<div style="font-size:12px;font-weight:600;margin:12px 0 4px">ถูกยืมอยู่ ' + outHit.length + ' เครื่อง' +
       (outHit.length !== out.length ? ' <span style="font-weight:500;color:var(--text3)">(จากทั้งหมด ' + out.length + ')</span>' : '') + '</div>';
-    h += '<table class="dcal-tbl"><thead><tr><th>ผู้ยืม</th><th>ยืมไปทำอะไร</th><th>เครื่อง</th><th>คืน</th></tr></thead><tbody>';
+    var todayReal = _scDay(new Date());
     Object.keys(groups).forEach(function(k) {
-      var g = groups[k], b0 = g[0].b;
-      h += '<tr style="cursor:pointer" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
-        '<td><b>' + esc(b0.borrower || '—') + '</b>' +
-        (b0.approver ? '<div style="font-size:10px;color:var(--text3)">ผู้คีย์เบิก ' + esc(b0.approver) + '</div>' : '') + '</td>' +
-        '<td>' + (b0.purpose ? esc(b0.purpose) : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') + '</td>' +
-        '<td>' + g.length + ' เครื่อง — ' + esc(g[0].u.model || g[0].u.name || '') + (g.length > 1 ? ' +' + (g.length-1) : '') + '</td>' +
-        '<td>' + _scFmt(b0.e) + '</td></tr>';
+      var g = groups[k], b0 = g[0].b, kind = _scBusyKind(b0, todayReal);
+      h += '<div class="sc-busyrow" onclick="scToggleOpen(\'batch:' + _scEsq(k) + '\')">' +
+        '<div class="sc-busyrow-top">' + _scBusyBadge(kind) +
+        '<span class="unit">' + esc(g[0].u.model || g[0].u.name || '') + (g.length > 1 ? ' +' + (g.length - 1) : '') + '</span></div>' +
+        '<div class="sc-busyrow-kv">' +
+        '<div><span>ผู้ยืม</span><b>' + esc(b0.borrower || '—') + '</b></div>' +
+        '<div><span>ยืมไปทำอะไร</span><b>' + (b0.purpose ? esc(b0.purpose) : '— ไม่ได้ระบุ —') + '</b></div>' +
+        _scRefKv(b0, kind) +
+        (kind === 'soon' ? '<div><span>เริ่มยืม</span><b>' + _scFmt(b0.s) + '</b></div>' : '<div><span>กำหนดคืน</span><b>' + _scFmt(b0.e) + '</b></div>') +
+        '</div></div>';
     });
-    h += '</tbody></table>';
   }
   return h + _scSrc() + '</div>';
 }
@@ -5180,11 +5263,21 @@ function _scViewMonth() {
   for (var i = 0; i < pad; i++) h += '<div class="dcal-cell pad"></div>';
   for (var d2 = 1; d2 <= nDays; d2++) {
     var cur = new Date(y, mo, d2), iso = _scIso(cur), k = 'day:' + iso;
-    var busySet = {};
-    act.forEach(function(b) { if (scBusyOn(b, cur)) busySet[b.unitId] = 1; });
+    var busySet = {}, busyKind = {};
+    act.forEach(function(b) {
+      if (!scBusyOn(b, cur)) return;
+      busySet[b.unitId] = 1;
+      // act กรอง status!=='returned' ไว้แล้วด้านบน จึงเจอแค่ out/late/soon ไม่มี quar/done ปนมาที่นี่
+      busyKind[b.unitId] = _scBusyKind(b, todayD);
+    });
     // "รุ่นเต็ม" คือสัญญาณที่ใช้ได้จริง — ว่างรวม 52 ตัวไม่ได้แปลว่ารับปากลูกค้าได้ ถ้าไม่มีรุ่นที่เขาขอ
     var full = 0;
     modelKeys.forEach(function(m) { if (!modelsOf[m].some(function(u) { return !busySet[u.id]; })) full++; });
+    // เต็มเพราะของอยู่ในมือลูกค้าจริง (out/late) กับเต็มเพราะจองล่วงหน้าไว้ล้วนๆ (ยังไม่มีของออกจริงสักชิ้น)
+    // ต้องแยกให้เห็น — วันหลังยังพอเจรจาสลับคิวได้ถ้าคนที่จองยกเลิก ต่างจากวันแรกที่ของออกไปแล้วจริงๆ
+    var nSoonOnly = 0, nPhysical = 0;
+    Object.keys(busySet).forEach(function(uid) { if (busyKind[uid] === 'soon') nSoonOnly++; else nPhysical++; });
+    var loadKind = !nPhysical && nSoonOnly ? ' sc-soon' : (nPhysical && nSoonOnly ? ' sc-mix' : '');
     var nBack = backOn[iso] || 0, nOut = outOn[iso] || 0;
     var isToday = cur.getTime() === todayD.getTime();
     var sets = scPicked.length ? Math.min.apply(null, scPicked.map(function(m) { return _scFreeOn(m, cur, bks, pool).length; })) : null;
@@ -5199,9 +5292,12 @@ function _scViewMonth() {
       if (nOut) h += '<span class="dcal-ev out">↗ ส่ง ' + nOut + '</span>';
       // เขียน "รุ่นเต็ม" เฉพาะวันที่ตึงจริง — ไม่งั้นตัวเลขเดิมซ้ำยาวสิบวันติด กลายเป็นปัญหาเดิม
       if (full && modelKeys.length && full / modelKeys.length >= 0.5) {
-        h += '<span class="dcal-ev full" title="รุ่นที่ไม่เหลือเครื่องว่างเลยในวันนี้">⚠ เต็ม ' + full + '/' + modelKeys.length + ' รุ่น</span>';
+        h += '<span class="dcal-ev full" title="รุ่นที่ไม่เหลือเครื่องว่างเลยในวันนี้">' +
+          (loadKind === ' sc-soon' ? '🗓️ จองเต็ม ' : '⚠ เต็ม ') + full + '/' + modelKeys.length + ' รุ่น</span>';
       }
-      if (full) h += '<span class="dcal-load" title="' + full + ' จาก ' + modelKeys.length + ' รุ่นไม่เหลือเครื่องว่าง" style="width:' + (full / modelKeys.length * 100) + '%"></span>';
+      if (full) h += '<span class="dcal-load' + loadKind + '" title="' + full + ' จาก ' + modelKeys.length + ' รุ่นไม่เหลือเครื่องว่าง' +
+        (loadKind === ' sc-soon' ? ' — จองล่วงหน้าไว้ล้วนๆ ยังไม่มีของออกจริง' : loadKind === ' sc-mix' ? ' — ปนกันทั้งของที่ออกจริงและจองล่วงหน้า' : '') +
+        '" style="width:' + (full / modelKeys.length * 100) + '%"></span>';
     } else {
       h += '<span class="dcal-mini" style="font-weight:700;color:' + (sets > 0 ? 'var(--good)' : 'var(--bad)') + '">' +
         (sets > 0 ? (scPicked.length > 1 ? '✅ ' + sets + ' ชุด' : '✅ ว่าง ' + sets) : '✕ ไม่ว่าง') + '</span>';
