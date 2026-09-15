@@ -168,6 +168,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .cat-tab.on .cnt { background:rgba(255,255,255,.25); }
 .browse-toolbar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
 .browse-toolbar input { flex:1; min-width:200px; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
+.rt-sortbar { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:12px; }
+.rt-sortbar label { font-size:11.5px; color:var(--text3); font-weight:600; }
+.rt-sortbar select { font:inherit; font-size:12.5px; font-weight:600; color:var(--text); background:var(--surface-2);
+  border:1px solid var(--border); border-radius:9px; padding:8px 12px; }
 .model-group { margin-bottom:14px; }
 .model-group > summary { cursor:pointer; display:flex; align-items:baseline; gap:10px; padding:10px 13px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; list-style:none; }
 /* จอแคบ + ชื่อรุ่นยาว + ป้ายสถานะหลายอัน = ชื่อรุ่นถูกบีบให้เหลือคอลัมน์แคบข้างซ้าย ขณะป้ายสถานะ
@@ -260,6 +264,25 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-src { font-size:11.5px; color:var(--warn); background:var(--warn-soft);
   border-radius:7px; padding:6px 10px; margin-top:7px; line-height:1.5; }
 .rt-section-title:first-child { margin-top:0; }
+/* แถวเครื่องในใบจองที่ขยายแล้ว — แน่นกว่า .rt-item เดิมมาก เหลือแค่ของเฉพาะเครื่อง (ข้อมูลระดับใบอยู่ที่
+   หัวใบแล้ว) เหลือปุ่มแค่ 🔔 เฉพาะเครื่อง (เจาะจงกว่าแจ้งทั้งใบ) กับดูรายละเอียด ✅⏩🔄 ใช้เวอร์ชันทั้งใบแทน */
+.rt-crow-list2 { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--surface); margin-top:8px; }
+.rt-crow2 { display:grid; grid-template-columns:26px 1fr auto; gap:0 10px; align-items:center;
+  padding:9px 13px; border-bottom:1px solid var(--border); font-size:12.5px; }
+.rt-crow2:last-child { border-bottom:none; }
+.rt-crow2:nth-child(even) { background:var(--surface-2); }
+.rt-crow2 .ic { font-size:15px; text-align:center; }
+.rt-crow2 .nm { font-weight:600; min-width:0; }
+.rt-crow2-exc { display:block; font-size:10.5px; color:var(--bad); font-weight:600; margin-top:2px; }
+.rt-crow2-exc.queued { color:var(--accent); }
+.rt-crow2 .row-acts { display:flex; gap:5px; flex-shrink:0; }
+.detail-btn { font:inherit; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
+  border:1px solid var(--border); background:var(--surface-2); color:var(--text2); cursor:pointer; white-space:nowrap; }
+.detail-btn.icon-btn { padding:5px; width:27px; display:inline-flex; align-items:center; justify-content:center; }
+@media (max-width:480px) {
+  .rt-crow2 { grid-template-columns:20px 1fr; row-gap:6px; }
+  .rt-crow2 .row-acts { grid-column:1 / -1; justify-self:start; }
+}
 .picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
 .picked-unit-banner .un2 { font-weight:700; font-size:15px; }
@@ -1651,6 +1674,42 @@ function _rtViewToggle(nSlips) {
 var rtSearch = '';
 var _rtSearchTimer = null;
 var rtCatFilter = [];
+// ตัวเรียงลำดับของมุมมอง "ตามใบจอง" — เดิมเรียงตายตัวแบบเดียว (ค้างนานสุดก่อน) ไม่มีให้เลือก
+var rtSlipSort = (function() { try { return localStorage.getItem('demoStaffSlipSort') || 'urgent'; } catch (e) { return 'urgent'; } })();
+function rtSetSlipSort(v) {
+  rtSlipSort = v;
+  try { localStorage.setItem('demoStaffSlipSort', v); } catch (e) {}
+  renderReturnTab();
+}
+// ไม่มีเลขใบจอง (จัดกลุ่มแบบเดา) ให้ไปท้ายสุดเสมอไม่ว่าจะเรียงน้อย→มากหรือมาก→น้อย เพราะไม่มีเลขจริงให้เทียบ
+function _rtJobCompare(ga, gb, desc) {
+  var a = ga.jobNo, b = gb.jobNo;
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return desc ? b.localeCompare(a, undefined, { numeric: true }) : a.localeCompare(b, undefined, { numeric: true });
+}
+var _RT_SLIP_SORTERS = {
+  urgent: function(ga, gb) { return gb.worst - ga.worst || ga.end.localeCompare(gb.end); },
+  jobAsc: function(ga, gb) { return _rtJobCompare(ga, gb, false); },
+  jobDesc: function(ga, gb) { return _rtJobCompare(ga, gb, true); },
+  startAsc: function(ga, gb) { return (ga.start || '').localeCompare(gb.start || ''); },
+  startDesc: function(ga, gb) { return (gb.start || '').localeCompare(ga.start || ''); },
+  endAsc: function(ga, gb) { return ga.end.localeCompare(gb.end); },
+  endDesc: function(ga, gb) { return gb.end.localeCompare(ga.end); }
+};
+var _RT_SLIP_SORT_LABELS = {
+  urgent: '🔴 ด่วนที่สุดก่อน (ค่าเริ่มต้น)', jobAsc: '🔢 เลขใบจอง — น้อยไปมาก', jobDesc: '🔢 เลขใบจอง — มากไปน้อย',
+  startAsc: '📤 วันที่เริ่มยืม — เก่าสุดก่อน', startDesc: '📤 วันที่เริ่มยืม — ใหม่สุดก่อน',
+  endAsc: '📥 กำหนดคืน — ใกล้สุดก่อน', endDesc: '📥 กำหนดคืน — ไกลสุดก่อน'
+};
+function _rtSortBarHtml() {
+  return '<div class="rt-sortbar"><label for="rtSlipSort">↕️ เรียงตาม</label>' +
+    '<select id="rtSlipSort" onchange="rtSetSlipSort(this.value)">' +
+    Object.keys(_RT_SLIP_SORT_LABELS).map(function(k) {
+      return '<option value="' + k + '"' + (rtSlipSort === k ? ' selected' : '') + '>' + esc(_RT_SLIP_SORT_LABELS[k]) + '</option>';
+    }).join('') + '</select></div>';
+}
 function rtSearchInput(v) {
   rtSearch = v;
   clearTimeout(_rtSearchTimer);
@@ -1709,7 +1768,7 @@ function renderReturnTabBySlip(all) {
   var groups = {}, order = [];
   all.forEach(function(l) {
     var k = _rtSlipKey(l);
-    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', approver: '', purpose: '', worst: 0, end: l.end }; order.push(k); }
+    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', approver: '', purpose: '', worst: 0, end: l.end, start: l.start }; order.push(k); }
     var g = groups[k];
     g.list.push(l);
     if (!g.who && String(l.borrower || '').trim()) g.who = l.borrower.trim();
@@ -1717,22 +1776,22 @@ function renderReturnTabBySlip(all) {
     if (!g.purpose && String(l.purpose || '').trim()) g.purpose = l.purpose.trim();
     if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
     if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
+    if (l.start < g.start) g.start = l.start;   // เช่นเดียวกัน ยึดวันเริ่มยืมที่เร็วสุดในใบแทนค่าเดียว
   });
   // แปะรายการ "รอ" เข้าใบเดิมถ้ามีอยู่แล้ว หรือเปิดกล่องใหม่ถ้าทั้งใบมีแต่ของที่ชนคิวล้วนๆ (ยังไม่มีชิ้นไหนว่างเลย)
   var pendingBySlip = _rtPendingBySlip(), pendingOnlyKeys = {};
   Object.keys(pendingBySlip).forEach(function(k) {
     if (!groups[k]) {
-      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end };
+      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end, start: pendingBySlip[k][0].start };
       order.push(k);
       pendingOnlyKeys[k] = true;
     }
     groups[k].pending = pendingBySlip[k];
   });
   var totalPending = 0; Object.keys(pendingBySlip).forEach(function(k) { totalPending += pendingBySlip[k].length; });
-  // ค้างนานสุดขึ้นก่อน แล้วค่อยเรียงตามกำหนดคืนที่ใกล้ที่สุด
-  order.sort(function(a, b) { return groups[b].worst - groups[a].worst || groups[a].end.localeCompare(groups[b].end); });
+  order.sort(function(a, b) { return (_RT_SLIP_SORTERS[rtSlipSort] || _RT_SLIP_SORTERS.urgent)(groups[a], groups[b]); });
 
-  var h = _rtViewToggle(order.length);
+  var h = _rtSortBarHtml() + _rtViewToggle(order.length);
   var late = order.filter(function(k) { return groups[k].worst > 0; }).length;
   h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
     (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') +
@@ -1778,8 +1837,8 @@ function renderReturnTabBySlip(all) {
     h += '</div>';
     h += '</div>';
     if (isOpen) {
-      h += g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
-        .map(function(l) { return returnRowHtml(l.end < today ? 'overdue' : (daysBetween(today, l.end) <= 2 ? 'duesoon' : ''), l, true); }).join('');
+      h += '<div class="rt-crow-list2">' + g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
+        .map(function(l) { return _rtSlipItemRowHtml(l, g.end); }).join('') + '</div>';
       if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
     }
     h += '</div>';
@@ -1925,6 +1984,45 @@ function returnRowHtml(cls, l, compact) {
     h += '<button class="btn btn-ghost btn-sm" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')">📄 ดูเครื่อง</button>';
   }
   return h + '</div></div>';
+}
+// แถวในมุมมอง "ตามใบจอง" (ขยายรายการ) — ข้อมูลระดับใบ (ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล) และปุ่มคืน/เลื่อน/โอน
+// ทั้งชุดอยู่ที่หัวใบแล้ว (ดู renderReturnTabBySlip/_rtSlipHead) จึงเหลือแค่สิ่งที่เป็นของเครื่องนี้จริงๆ:
+// ชื่อ+เลขเช่า, กำหนดคืนถ้าต่างจากหัวใบ (บางใบคืนไม่พร้อมกันทุกเครื่อง), ปุ่มแจ้งเตือนเฉพาะเครื่อง (เจาะจง
+// กว่าแจ้งทั้งใบ คงไว้ต่อแถวตามเดิม) กับปุ่มดูรายละเอียด — เดิมมีปุ่ม ✅⏩🔄 ซ้ำทุกแถวด้วย ตัดออกเพราะ
+// มีเวอร์ชันทั้งใบที่หัวใบอยู่แล้ว (ติ๊กเลือกบางเครื่องได้จากตรงนั้น)
+function _rtSlipItemRowHtml(l, slipEndIso) {
+  var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+  var today = _td();
+  var late = l.end < today;
+  var due = l.end >= today && daysBetween(today, l.end) <= 2;
+  var cat = u ? _scCatOf(u) : { icon: '🚁', label: '' };
+  var p = u ? _scModelParts(u) : { main: l.model || 'เครื่องที่ถูกลบไปแล้ว', sub: '' };
+  var daysTxt = late ? 'เลยมาแล้ว ' + daysBetween(l.end, today) + ' วัน'
+    : (l.end === today ? 'ครบกำหนดวันนี้' : 'อีก ' + daysBetween(today, l.end) + ' วัน');
+
+  var h = '<div class="rt-crow2"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>';
+  h += '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
+    (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '');
+  if (l.end !== slipEndIso) {
+    h += '<span class="rt-crow2-exc">⚠ กำหนดคืนต่าง — ' + esc(_scD(l.end)) + ' (' + daysTxt + ')</span>';
+  }
+  var pa = null;
+  if (l.src === 'app') {
+    var pend = PENDING_EDITS[l.unitId];
+    pa = pend && pend.loanAction;
+    if (pa) h += '<span class="rt-crow2-exc queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว — รอแอปหลักรับเข้า</span>';
+  }
+  h += '</span><span class="row-acts">';
+  if (late || due) {
+    h += '<button class="detail-btn icon-btn" onclick="openReminderM(\'' + _scEsq(l.unitId) + '\',\'' + _scEsq(l.borrower || '') + '\',\'' + _scEsq(l.jobNo || '') + '\',\'' + _scEsq(l.end) + '\')" title="แจ้งเตือนผู้ยืม">🔔</button>';
+  }
+  if (l.src === 'staff') {
+    h += '<button class="detail-btn" onclick="openLoanLogM(\'' + l.id + '\')" title="ประวัติใบยืม">📜 รายละเอียด</button>';
+  } else if (u) {
+    if (pa) h += '<button class="detail-btn icon-btn" onclick="cancelLoanAction(\'' + l.unitId + '\')" title="ยกเลิกคำขอ">✕</button>';
+    h += '<button class="detail-btn" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')" title="ดูข้อมูลเครื่อง">📄 ดูเครื่อง</button>';
+  }
+  return h + '</span></div>';
 }
 // ================================================================
 // คำขอจัดการใบยืมที่คีย์มาจากแอปหลัก
