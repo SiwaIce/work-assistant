@@ -3845,7 +3845,16 @@ function openLendFlow() {
   // ติ๊กเลือกเครื่องได้จากแท็บปฏิทินด้วย (ดู _scMultiSummary) แต่ขั้นตอนคีย์ยืมอยู่ใต้แท็บรายการเครื่อง
   // เสมอ ต้องสลับแท็บมาก่อนไม่งั้น unitLendView จะถูกสั่ง display:block ทั้งที่แท็บแม่ยังไม่โชว์อยู่
   staffTab('units');
+  // ถ้ามาจากโหมดเลือกหลายวันในปฏิทิน (เช็ควันว่างของเครื่องที่ติ๊กไว้มาก่อนแล้ว) ใช้ช่วงวันนั้นต่อเลย
+  // ไม่ต้องให้กดเลือกวันซ้ำอีกรอบในขั้นตอนที่ 2 — เดิมรีเซ็ตทิ้งเสมอทำให้ต้องเลือกวันเดิมซ้ำสอง
   lendStart = ''; lendEnd = ''; lendDays = 1; lendMonthOffset = 0; lendDayOpen = null; _lendDateScrolled = false;
+  if (scMultiDay && scPickDays.length && !_scRangeAnchor) {
+    lendStart = scPickDays[0]; lendEnd = scPickDays[scPickDays.length - 1];
+    lendDays = Math.round((_scFromIso(lendEnd) - _scFromIso(lendStart)) / 86400000) + 1;
+    var base0 = new Date(); base0.setDate(1);
+    var target = _scFromIso(lendStart);
+    lendMonthOffset = (target.getFullYear() - base0.getFullYear()) * 12 + (target.getMonth() - base0.getMonth());
+  }
   document.getElementById('unitsListView').style.display = 'none';
   document.getElementById('unitDetailView').style.display = 'none';
   document.getElementById('lendPickBar').style.display = 'none';
