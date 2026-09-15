@@ -4105,20 +4105,32 @@ function _scMultiSummary(units, bks) {
   if (!free.length) {
     return h + '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div></div>';
   }
-  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + free.length + '</b> เครื่อง — ' +
+  // เดิมต้องเลื่อนกลับขึ้นไปบนสุดของปฏิทินเพื่อกรอง/ค้นหา ทั้งที่กำลังดูรายการนี้อยู่ด้านล่างพอดี — เอาช่อง
+  // ค้นหามาไว้ตรงนี้ด้วยเลย ใช้ scSearch/scMatch ตัวเดียวกับที่มุมมองไทม์ไลน์/มือถือใช้อยู่แล้ว พิมพ์ที่ไหน
+  // ก็ตกลงกันเป็นค่าเดียวกันทั้งแท็บปฏิทิน (มุมมองรายเดือนเดิมไม่มีช่องค้นหาของตัวเองอยู่ก่อนแล้ว)
+  h += '<div class="dcal-srch" style="margin:8px 0"><span class="ic">🔍</span>' +
+    '<input type="text" id="msSearch" placeholder="ค้นหาในรายการนี้ — รุ่น / เลขเช่า / S/N" value="' + esc(scSearch) + '" oninput="scSearchInput(this.value)" autocomplete="off">' +
+    (scSearch ? '<button class="clr" onclick="scSetSearch(\'\')">✕</button>' : '') + '</div>';
+  var freeMatched = scSearch.trim() ? free.filter(function(u) { return scMatch(u, bks); }) : free;
+  h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + freeMatched.length + '</b> เครื่อง' +
+    (scSearch.trim() && freeMatched.length !== free.length ? ' <span style="color:var(--text3);font-weight:400">(จากทั้งหมด ' + free.length + ')</span>' : '') + ' — ' +
     'ติ๊กการ์ดเพื่อเลือกหลายเครื่องพร้อมกัน หรือกดปุ่มเพื่อคีย์ยืมทันที</div><div class="ms-list">';
-  free.slice(0, 8).forEach(function(u) {
-    var picked = lendIsPicked(u.id);
-    h += '<div class="ms-row' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
-      '<span class="ms-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
-      '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
-      '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
-      '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '" style="margin-top:4px;display:inline-block">' +
-      (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span></span>' +
-      '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();scBook(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')">📤 คีย์ยืมช่วงนี้</button></div>';
-  });
+  if (!freeMatched.length) {
+    h += '<div class="ms-warn">🔍 ไม่พบเครื่องที่ตรงกับ “' + esc(scSearch) + '” ในรายการนี้</div>';
+  } else {
+    freeMatched.slice(0, 8).forEach(function(u) {
+      var picked = lendIsPicked(u.id);
+      h += '<div class="ms-row' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
+        '<span class="ms-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
+        '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
+        '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
+        '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '" style="margin-top:4px;display:inline-block">' +
+        (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</span></span>' +
+        '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();scBook(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')">📤 คีย์ยืมช่วงนี้</button></div>';
+    });
+    if (freeMatched.length > 8) h += '<div class="ms-note">…และอีก ' + (freeMatched.length - 8) + ' เครื่อง</div>';
+  }
   h += '</div>';
-  if (free.length > 8) h += '<div class="ms-note">…และอีก ' + (free.length - 8) + ' เครื่อง</div>';
   return h + '</div>';
 }
 
