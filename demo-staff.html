@@ -1605,7 +1605,7 @@ function activeReturns() {
     seen[l.unitId + '|' + l.start + '|' + l.end] = 1;
     out.push({ src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', label: l.label || '',
       borrower: l.borrower || '', approver: l.approver || '', jobNo: l.jobNo || '', purpose: l.purpose || '',
-      start: l.start, end: l.end });
+      start: l.start, end: l.end, createdAt: l.createdAt });
   });
   UNITS.forEach(function(u) {
     // ใบจากแอปหลักไม่มี doc ให้แก้ตรงๆ — ถ้าเคยกดแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลจาก showLendConflictM ไว้
@@ -1757,7 +1757,7 @@ function _rtPendingBySlip() {
   var out = {};
   LOANS.filter(function(l) { return l.status === 'pending'; }).forEach(function(l) {
     var row = { src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', borrower: l.borrower || '',
-      approver: l.approver || '', jobNo: l.jobNo || '', start: l.start, end: l.end };
+      approver: l.approver || '', jobNo: l.jobNo || '', start: l.start, end: l.end, createdAt: l.createdAt };
     var k = _rtSlipKey(row);
     (out[k] = out[k] || []).push(row);
   });
@@ -1768,7 +1768,7 @@ function renderReturnTabBySlip(all) {
   var groups = {}, order = [];
   all.forEach(function(l) {
     var k = _rtSlipKey(l);
-    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', approver: '', purpose: '', worst: 0, end: l.end, start: l.start }; order.push(k); }
+    if (!groups[k]) { groups[k] = { key: k, list: [], pending: [], jobNo: String(l.jobNo || '').trim(), who: '', approver: '', purpose: '', worst: 0, end: l.end, start: l.start, createdAt: null, createdAtMs: 0 }; order.push(k); }
     var g = groups[k];
     g.list.push(l);
     if (!g.who && String(l.borrower || '').trim()) g.who = l.borrower.trim();
@@ -1777,12 +1777,17 @@ function renderReturnTabBySlip(all) {
     if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
     if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
     if (l.start < g.start) g.start = l.start;   // เช่นเดียวกัน ยึดวันเริ่มยืมที่เร็วสุดในใบแทนค่าเดียว
+    // เครื่องจากแอปหลักไม่มี createdAt ติดมา — เอาแค่ตัวที่คีย์จากหน้านี้มาหาตัวที่คีย์เร็วสุดในใบ
+    if (l.createdAt) {
+      var cMs = _editLogTimeMs(l.createdAt);
+      if (cMs && (!g.createdAtMs || cMs < g.createdAtMs)) { g.createdAtMs = cMs; g.createdAt = l.createdAt; }
+    }
   });
   // แปะรายการ "รอ" เข้าใบเดิมถ้ามีอยู่แล้ว หรือเปิดกล่องใหม่ถ้าทั้งใบมีแต่ของที่ชนคิวล้วนๆ (ยังไม่มีชิ้นไหนว่างเลย)
   var pendingBySlip = _rtPendingBySlip(), pendingOnlyKeys = {};
   Object.keys(pendingBySlip).forEach(function(k) {
     if (!groups[k]) {
-      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end, start: pendingBySlip[k][0].start };
+      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end, start: pendingBySlip[k][0].start, createdAt: pendingBySlip[k][0].createdAt || null };
       order.push(k);
       pendingOnlyKeys[k] = true;
     }
@@ -1810,6 +1815,7 @@ function renderReturnTabBySlip(all) {
       (g.list.length ? ' · กำหนดคืน ' + _scD(g.end) : '') +
       (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
       '<br>🧑‍💼 ' + (g.approver ? esc(g.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
+      (g.createdAt ? ' · 🕐 คีย์เมื่อ ' + _editLogStamp(g.createdAt) : '') +
       (g.purpose ? ' · 📝 ' + esc(g.purpose) : '') +
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
     var itemCount = g.list.length + g.pending.length;
