@@ -2463,6 +2463,8 @@ function openLoanLogM(loanId) {
     '<div><span>ช่วงยืม</span><b>' + esc(_scD(l.start)) + ' → ' + esc(_scD(l.end)) + '</b></div>' +
     (l.purpose ? '<div><span>ยืมไปทำอะไร</span><b>' + esc(l.purpose) + '</b></div>' : '') +
     (l.actualReturnDate ? '<div><span>คืนจริง</span><b>' + esc(_scD(l.actualReturnDate)) + '</b></div>' : '') +
+    // วันที่คีย์ใบนี้เข้าระบบ — เทียบกับใบอื่นได้ว่าใครคีย์/จองไว้ก่อน เวลามีสองใบชนกัน
+    (l.createdAt ? '<div><span>คีย์เมื่อ</span><b>' + _editLogStamp(l.createdAt) + '</b></div>' : '') +
     '</div>';
   h += l.damaged
     ? '<div style="margin:8px 0;background:var(--bad-soft);border:1px solid var(--bad);border-radius:8px;padding:8px 11px">' +
@@ -4314,14 +4316,14 @@ function scBookings() {
     var job = String(o.jobNo || '').trim() || String(o.refNo || '').trim();
     out.push({ unitId: o.unitId, s: s, e: e, borrower: o.borrower || '', purpose: o.purpose || '',
       approver: o.approver || '', jobNo: job, loanId: o.loanId || '',
-      status: o.status || 'active' });
+      status: o.status || 'active', createdAt: o.createdAt || null });
   }
   LOANS.forEach(function(l) {
     // คืนแล้วแต่ยังอยู่ในช่วงรอคลังรับเข้า (availableFrom) → ยังนับไม่ว่างต่อจนถึงวันนั้น ไม่ใช่วันคืนจริงเฉยๆ
     var eff = (l.status === 'returned') ? (l.availableFrom || l.actualReturnDate || l.end) : l.end;
     add({ unitId: l.unitId, start: l.start, end: eff,
       borrower: l.borrower, purpose: l.purpose, approver: l.approver, jobNo: l.jobNo, refNo: l.refNo, loanId: l._id,
-      status: l.status, quarantine: l.status === 'returned' && !!l.availableFrom });
+      status: l.status, quarantine: l.status === 'returned' && !!l.availableFrom, createdAt: l.createdAt });
   });
   UNITS.forEach(function(u) { (u.busyRanges || []).forEach(function(r) { add({ unitId: u.id, start: r.start, end: r.end,
     borrower: r.borrower, purpose: r.purpose, approver: r.approver, jobNo: r.jobNo, refNo: r.refNo }); }); });
@@ -4998,6 +5000,9 @@ function _scDrillDay(iso) {
         '<div><span>ยืมไปทำอะไร</span><b>' + (b0.purpose ? esc(b0.purpose) : '— ไม่ได้ระบุ —') + '</b></div>' +
         _scRefKv(b0, kind) +
         (kind === 'soon' ? '<div><span>เริ่มยืม</span><b>' + _scFmt(b0.s) + '</b></div>' : '<div><span>กำหนดคืน</span><b>' + _scFmt(b0.e) + '</b></div>') +
+        // วันที่คีย์ (createdAt) — มีเฉพาะรายการที่คีย์จากหน้านี้เอง (busyRanges จากแอปหลักไม่มีให้) ใช้เทียบว่า
+        // ใครกดจองไว้ก่อนตอนมีสองรายชื่อชนกัน ไม่ต้องกดเข้าไปดูประวัติทีละใบ
+        (b0.createdAt ? '<div><span>คีย์เมื่อ</span><b>' + _editLogStamp(b0.createdAt) + '</b></div>' : '') +
         '</div></div>';
     });
   }
