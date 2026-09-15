@@ -94,7 +94,15 @@ const ST = {
   // ตัวการหลักที่ทำให้ localStorage เต็ม (~5MB/โดเมน) เอง โดยที่ไม่มีระบบย้ายไป IndexedDB เหมือน djiMovements
   // มาก่อน — กลไกนี้รองรับหลายคอลเลกชันอยู่แล้วโดยไม่ต้องแก้ที่อื่นเลย (initBig/exportAll/importAll/clearAll/
   // storageReport ล้วนวนผ่าน Object.keys(this._BIG) ไม่ได้ hardcode ชื่อคอลเลกชันไว้ที่ไหน)
-  _BIG: { 'v7_djiMovements': true, 'v7_djiProjects': true },
+  //
+  // v7_pipeline/v7_pipelog เพิ่มเข้ามาทีหลัง — จาก storageReport() จริงของผู้ใช้พบว่าเป็น 2 ตัวที่กินที่มาก
+  // ที่สุด (~1MB รวมกัน) มากกว่า djiProjects เสียอีก ก่อนเพิ่มต้องตามแก้จุดที่เคยอ่านผ่าน
+  // localStorage.getItem('v7_pipeline'/'v7_pipelog') ตรงๆ ทั้งหมดให้เปลี่ยนมาผ่าน ST._get() แทนก่อน (ดู
+  // features.js/firebase-sync.js) ไม่งั้นจุดที่ไม่ผ่าน ST จะยังคงอ่านจาก localStorage ที่ถูกลบไปแล้วหลัง
+  // ย้ายเข้า IndexedDB สำเร็จ กลายเป็นอ่านไม่เจอข้อมูลเงียบๆ — client-view.html เป็นไฟล์แยกที่มี ST/_keys ของ
+  // ตัวเองไม่ได้ใช้ตัวนี้ และไม่ได้โหลด idb.js จึงตั้งใจไม่ย้าย v7_pipeline ของไฟล์นั้น ปล่อยให้อ่านจาก
+  // localStorage ตามเดิม (มีระบบ cache สำรอง v7_pipeline_cache_{dealerId} ของตัวเองอยู่แล้วเป็นทางหลัก)
+  _BIG: { 'v7_djiMovements': true, 'v7_djiProjects': true, 'v7_pipeline': true, 'v7_pipelog': true },
   _bigMem: {},
   _bigOK: false,        // true เมื่อเปิด IndexedDB ได้และโหลดเข้าหน่วยความจำแล้ว
   _bigReady: false,     // true เมื่อรู้ผลแล้วว่าจะใช้ IndexedDB หรือถอยไป localStorage

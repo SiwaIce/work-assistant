@@ -1219,7 +1219,7 @@ var _teamPipelineData = []; // pipeline จาก sales members อื่น (�
 function syncMainPipelineToShared() {
   if (!SYNC_ENABLED || !CURRENT_USER) return;
   var pipes = [];
-  try { pipes = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) {}
+  try { pipes = (ST._get('v7_pipeline') || []); } catch(e) {}
   if (!pipes.length) return;
   var dealers = [];
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) {}

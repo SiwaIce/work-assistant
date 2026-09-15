@@ -156,7 +156,7 @@ function buildPresSlides() {
   var pipeline = [];
   var visits = [];
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
   
   var now = new Date();
@@ -446,7 +446,7 @@ function openLineTemplates(dealerId) {
   var dealers = [];
   var pipeline = [];
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   var templates = getLineTemplates();
   var dealer = null;
   if (dealerId) {
@@ -538,7 +538,7 @@ function selectLineTmpl(idx, el) {
 
   var pId = document.getElementById('linePipeSel') ? document.getElementById('linePipeSel').value : '';
   var pipeline = [];
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   var pipe = null;
   for (var m = 0; m < pipeline.length; m++) {
     if (pipeline[m].id === pId) { pipe = pipeline[m]; break; }
@@ -566,7 +566,7 @@ function lineUpdateDealer() {
   var sel = document.getElementById('linePipeSel');
   if (!sel) return;
   var pipeline = [];
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   sel.innerHTML = '<option value="">-- ไม่ระบุ --</option>';
   pipeline.forEach(function (p) {
     if (p.dealerId === dId && pipeIsOpen(p)) {
@@ -755,7 +755,7 @@ function getSmartNotifications() {
   var notes = [];
   
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
   try { followups = JSON.parse(localStorage.getItem('v7_followups') || '[]'); } catch(e) { followups = []; }
   try { notes = JSON.parse(localStorage.getItem('v7_notes') || '[]'); } catch(e) { notes = []; }
@@ -1038,9 +1038,9 @@ function getStreakData() {
   
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
   try { followups = JSON.parse(localStorage.getItem('v7_followups') || '[]'); } catch(e) { followups = []; }
-  try { pipelog = JSON.parse(localStorage.getItem('v7_pipelog') || '[]'); } catch(e) { pipelog = []; }
+  try { pipelog = (ST._get('v7_pipelog') || []); } catch(e) { pipelog = []; }
   try { tasklogs = JSON.parse(localStorage.getItem('v7_tasklogs') || '[]'); } catch(e) { tasklogs = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
 
   (visits || []).forEach(function(v) { if (v && v.date) activities[v.date] = true; });
   (followups || []).forEach(function(f) { var d = f.date || f.dueDate; if (d) activities[d] = true; });
@@ -1209,7 +1209,7 @@ function renderDailyBriefing() {
 
   // Pipeline logs today
   var pipeLogs = [];
-  try { pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]'); } catch(e) { pipeLogs = []; }
+  try { pipeLogs = (ST._get('v7_pipelog') || []); } catch(e) { pipeLogs = []; }
   var todayParts = today.split('/');
   var todayFormatted = todayParts[2] + '-' + todayParts[1] + '-' + todayParts[0];
   
@@ -1348,7 +1348,7 @@ function copyDailyBriefing() {
   }
 
   var pipeLogs = [];
-  try { pipeLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]'); } catch(e) { pipeLogs = []; }
+  try { pipeLogs = (ST._get('v7_pipelog') || []); } catch(e) { pipeLogs = []; }
   var todayPL = (pipeLogs || []).filter(function(l) {
     return l.date && (l.date.split('T')[0] === today || l.date.indexOf(today) === 0);
   });
@@ -1676,7 +1676,7 @@ function getAllPendingPipeActions() {
   var actions = getPipeActions();
   var pipeline = [];
   var dealers = [];
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
   var now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -1942,8 +1942,8 @@ function getWeekData(range) {
   var followups = [];
   
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
-  try { pipelog = JSON.parse(localStorage.getItem('v7_pipelog') || '[]'); } catch(e) { pipelog = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
+  try { pipelog = (ST._get('v7_pipelog') || []); } catch(e) { pipelog = []; }
   try { followups = JSON.parse(localStorage.getItem('v7_followups') || '[]'); } catch(e) { followups = []; }
 
   function inRange(dateStr) {
@@ -2178,7 +2178,7 @@ function rDashboard(el) {
   var visits = [];
   
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
 
   var h = '<div class="dash-grid">';
@@ -2509,7 +2509,7 @@ function getOverallHealth() {
   var issues = [];
 
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
 
   // Dealer health
@@ -2631,7 +2631,7 @@ function rMonthlyGoal(el) {
   var dealers = [];
   
   try { visits = JSON.parse(localStorage.getItem('v7_visits') || '[]'); } catch(e) { visits = []; }
-  try { pipeline = JSON.parse(localStorage.getItem('v7_pipeline') || '[]'); } catch(e) { pipeline = []; }
+  try { pipeline = (ST._get('v7_pipeline') || []); } catch(e) { pipeline = []; }
   try { followups = JSON.parse(localStorage.getItem('v7_followups') || '[]'); } catch(e) { followups = []; }
   try { dealers = JSON.parse(localStorage.getItem('v7_dealers') || '[]'); } catch(e) { dealers = []; }
 
@@ -10755,7 +10755,7 @@ function generateEmailDraft(type) {
     body += '• Total Forecast: ฿' + fmtMoney(activeAmt) + '\n\n';
     body += 'Key Updates:\n';
     var recentLogs = [];
-    try { recentLogs = JSON.parse(localStorage.getItem('v7_pipelog') || '[]'); } catch(e) { recentLogs = []; }
+    try { recentLogs = (ST._get('v7_pipelog') || []); } catch(e) { recentLogs = []; }
     recentLogs.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
     recentLogs.slice(0, 5).forEach(function(l) {
       var pipe = l.pipeId ? ST.getOne('pipeline', l.pipeId) : null;
