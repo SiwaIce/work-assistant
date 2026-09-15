@@ -634,6 +634,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sc-badge-quar { background:var(--warn-soft); color:var(--warn); }
 .sc-badge-done { background:var(--surface-2); color:var(--text3); border:1px solid var(--border); }
 .sc-badge-done .sw { background:var(--text3); }
+.sc-badge-unconf { background:var(--bad-soft); color:var(--bad); }
+.sc-busyrow-act { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; }
 /* การ์ดต่อรายการ "ถูกยืมอยู่" — แทนตารางแคบเดิม ใส่ได้ครบทั้งผู้ยืม/ยืมไปทำอะไร/ใบจอง(หรือคนจอง)/วันที่
    โดยไม่ต้องบีบข้อความ (เดิมตารางมีแค่ ผู้ยืม/ยืมไปทำอะไร/เครื่อง/คืน ไม่มีที่ให้ป้ายสถานะหรือเลขใบจอง) */
 .sc-busyrow { border:1px solid var(--border); border-radius:10px; padding:11px 13px;
@@ -1198,10 +1200,19 @@ function tgReturn(view) {
   var el = document.getElementById('tab-return');
   if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+// พาไปแท็บปฏิทิน → เปิดกล่องดูวันนี้เลย (จุดเดียวที่มีปุ่ม "✅ ยืนยัน/ยกเลิก" สำหรับรายการรอยืนยันรับของ)
+function tgUnconfirmed() {
+  staffTab('calendar');
+  scSetView('month');
+  scToggleOpen('day:' + _td());
+  var el = document.getElementById('tab-calendar');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function renderTriage() {
   var el = document.getElementById('triageBar');
   if (!el) return;
   var today = _td();
+  var todayD = _scDay(new Date());
   var all = activeReturns();
   var overdue = all.filter(function(x) { return x.end < today; })
     .sort(function(a, b) { return a.end.localeCompare(b.end); });
@@ -1239,6 +1250,15 @@ function renderTriage() {
     rows.push({ sev: 60, key: 'ใกล้ครบ', n: soon.length, cls: 'warn', ic: '🟡',
       t: 'ใกล้ครบกำหนด <b>' + soon.length + '</b> เครื่อง', s: 'ภายใน 2 วัน',
       go: '<button class="tg-go" onclick="tgReturn()">ดูรายการ →</button>' });
+  }
+  // ถึงกำหนดรับของวันนี้แล้วแต่ยังไม่มีเลขใบจอง (ดู _scBusyKind kind==='unconf') — อาจเป็นของที่จองไว้ล่วงหน้า
+  // แล้วลืมมาคีย์ยืนยัน หรือลูกค้าไม่มารับแล้วไม่มีใครไปตัดจบ เสี่ยงของหลุดออกจากคลังโดยไม่มีบันทึกจริง
+  var unconfirmed = scBookings().filter(function(b) { return _scBusyKind(b, todayD) === 'unconf'; });
+  if (unconfirmed.length) {
+    rows.push({ sev: 70, key: 'รอยืนยันรับของ', n: unconfirmed.length, cls: 'warn', ic: '🚚',
+      t: 'ถึงกำหนดรับแล้วแต่ยังไม่มีเลขใบจอง <b>' + unconfirmed.length + '</b> เครื่อง',
+      s: 'ยืนยันว่ารับของจริงหรือยกเลิกจองได้ที่ปฏิทิน → ดูวันนี้',
+      go: '<button class="tg-go" onclick="tgUnconfirmed()">ไปดู →</button>' });
   }
   // ของที่คีย์ไว้แต่ชนคิวคนอื่นพอดี (ดู saveLendBatch) — ยังไม่ใช่ของจริงในมือใคร แต่ก็ยังไม่จบ ต้องมีคน
   // ไปเช็คว่างอีกทีหรือตัดออก ไม่งั้นจะลืมค้างเป็นสิบๆ ใบ
@@ -4914,12 +4934,17 @@ function _scBusyKind(b, today) {
   if (b.status === 'returned') return 'done';
   if (b.e < today) return 'late';
   if (b.s > today) return 'soon';
+  // ถึงกำหนดรับของแล้วแต่ยังไม่มีเลขใบจอง — เลขใบจองมีก็ต่อเมื่อคีย์ยืมจริงจากคลังแล้วเท่านั้น (ดูคอมเมนต์
+  // _scRefKv ด้านล่าง) การไม่มีเลขทั้งที่ถึงวันแล้วจึงเป็นสัญญาณว่ายังไม่ได้ยืนยันว่าของออกจริง อาจเป็นแค่
+  // จองไว้ล่วงหน้าที่ลืมมาคีย์ หรือลูกค้าไม่มารับแล้วไม่มีใครไปตัดจบ ต้องแยกจาก "กำลังยืม" ปกติเพื่อเตือนให้
+  // มีคนมาเช็ค ไม่ใช่ปล่อยผ่านไปเป็นยืมจริงเงียบๆ ตามวันที่ล้วนๆ
+  if (!b.jobNo) return 'unconf';
   return 'out';
 }
-var _SC_BUSY_LABEL = { out: 'กำลังยืม', late: 'เลยกำหนดคืน', soon: 'จองล่วงหน้า', quar: 'รอรับเข้าคลัง', done: 'คืนแล้ว' };
+var _SC_BUSY_LABEL = { out: 'กำลังยืม', late: 'เลยกำหนดคืน', soon: 'จองล่วงหน้า', quar: 'รอรับเข้าคลัง', done: 'คืนแล้ว', unconf: 'รอยืนยันรับของ' };
 function _scBusyBadge(kind) {
   var sw = (kind === 'out' || kind === 'late' || kind === 'done') ? '<i class="sw"></i>' : '';
-  return '<span class="sc-badge sc-badge-' + kind + '">' + sw + (kind === 'quar' ? '🕐 ' : '') + _SC_BUSY_LABEL[kind] + '</span>';
+  return '<span class="sc-badge sc-badge-' + kind + '">' + sw + (kind === 'quar' ? '🕐 ' : kind === 'unconf' ? '🚚 ' : '') + _SC_BUSY_LABEL[kind] + '</span>';
 }
 // ใบจองมีเลขก็ต่อเมื่อคีย์ยืมจริงจากคลังข้างนอกแล้วเท่านั้น — ช่วงจองล่วงหน้ายังไม่มีเลข โชว์ชื่อคนกดจองไว้แทน
 // (ผู้คีย์เบิก/approver มีค่าเสมอ เพราะบังคับกรอกตอนคีย์ทุกครั้ง ไม่ว่าจะจองล่วงหน้าหรือยืมจริง)
@@ -4927,6 +4952,80 @@ function _scRefKv(b0, kind) {
   if (b0.jobNo) return '<div><span>ใบจอง</span><b class="mono">' + esc(b0.jobNo) + '</b></div>';
   if (kind === 'soon') return '<div><span>จองโดย</span><b>' + esc(b0.approver || '— ไม่ระบุ —') + '</b></div>';
   return '<div><span>ใบจอง</span><b style="color:var(--text3)">— ยังไม่ได้ระบุ —</b></div>';
+}
+// รายการ {u,b} ในกลุ่ม "รอยืนยันรับของ" เดียวกัน (ผู้ยืม+ช่วงวันเดียวกัน ไม่มีเลขใบจอง) — คำนวณซ้ำจาก
+// scBookings() แทนส่ง array ยาวๆ ผ่าน onclick attribute (ทำไม่ได้อยู่แล้ว ต้อง serialize เป็น string)
+function _scUnconfGroup(borrower, sIso, eIso) {
+  var bks = scBookings(), byId = {};
+  scUnits().forEach(function(u) { byId[u.id] = u; });
+  var today = _scDay(new Date());
+  return bks.filter(function(b) {
+    return byId[b.unitId] && _scBusyKind(b, today) === 'unconf' && (b.borrower || '—') === borrower &&
+      _scIso(b.s) === sIso && _scIso(b.e) === eIso;
+  }).map(function(b) { return { u: byId[b.unitId], b: b }; });
+}
+function openConfirmPickupM(borrower, sIso, eIso) {
+  var group = _scUnconfGroup(borrower, sIso, eIso);
+  if (!group.length) { alert('ไม่พบรายการนี้แล้ว — อาจถูกยืนยันหรือยกเลิกไปก่อนหน้านี้'); return; }
+  var staffItems = group.filter(function(x) { return x.b.loanId; });
+  var appItems = group.filter(function(x) { return !x.b.loanId; });
+  var h = '<div class="sm-sec">' + esc(borrower) + ' · ' + group.length + ' เครื่อง</div>';
+  h += '<div class="hint" style="margin-bottom:10px">ถึงกำหนดรับของแล้วแต่ยังไม่มีเลขใบจอง — กรอกเลขใบจองเพื่อยืนยันว่าของออกจริงแล้ว ระบบจะถือว่า "กำลังยืม" ทันที</div>';
+  if (staffItems.length) {
+    h += '<ul class="rt-slip-list">' + staffItems.map(function(x) {
+      var p = _scModelParts(x.u);
+      return '<li>' + esc(p.main) + (x.u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(x.u.rentalDbNo) + '</span>' : '') + '</li>';
+    }).join('') + '</ul>';
+    h += '<div class="field"><label>📄 เลขใบจอง *</label><input type="text" id="cpJob" autocomplete="off" placeholder="เช่น 29179"></div>';
+    h += '<div class="field"><label>✍️ คนยืนยัน *</label><input type="text" id="cpBy" list="cpByList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('cpByList') + '</div>';
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' +
+      '<button class="btn btn-primary btn-sm" onclick="saveConfirmPickup(\'' + _scEsq(borrower) + '\',\'' + sIso + '\',\'' + eIso + '\')">✅ ยืนยันรับของแล้ว</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="cancelUnconfirmedGroup(\'' + _scEsq(borrower) + '\',\'' + sIso + '\',\'' + eIso + '\')">❌ ยกเลิกจองนี้</button></div>';
+  }
+  if (appItems.length) {
+    // เครื่องจากแอปหลักไม่มีใบให้แก้ตรงๆ — ใช้ช่องทางแก้ไข/ดูใบที่ชนเดิม (showLendConflictM) ที่มีอยู่แล้ว
+    // ต่อเครื่อง แทนที่จะสร้างกลไกส่งคำขอแยกซ้ำอีกชุดเฉพาะจุดนี้
+    h += '<div class="sm-sec" style="margin-top:14px">📲 คีย์จากแอปหลัก (' + appItems.length + ') — ยืนยัน/ยกเลิกจากตรงนี้ไม่ได้โดยตรง</div>';
+    h += appItems.map(function(x) {
+      var p = _scModelParts(x.u);
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
+        '<span>' + esc(p.main) + (x.u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(x.u.rentalDbNo) + '</span>' : '') + '</span>' +
+        '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + x.u.id + '\',\'' + sIso + '\',\'' + eIso + '\')">📄 ดู/แก้ไข</button></div>';
+    }).join('');
+  }
+  h += '<div style="margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeSm()">ปิด</button></div>';
+  openSm('✅ ยืนยันรับของ', h);
+}
+function saveConfirmPickup(borrower, sIso, eIso) {
+  var group = _scUnconfGroup(borrower, sIso, eIso).filter(function(x) { return x.b.loanId; });
+  if (!group.length) { alert('ไม่พบรายการนี้แล้ว'); closeSm(); return; }
+  var jobNo = (document.getElementById('cpJob').value || '').trim();
+  var by = (document.getElementById('cpBy').value || '').trim();
+  if (!jobNo) { alert('กรอกเลขใบจองก่อนนะครับ'); return; }
+  if (!by) { alert('ใส่ชื่อคนยืนยันก่อนนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var batch = db.batch();
+  group.forEach(function(x) {
+    batch.update(db.collection('publicDemoLoans').doc(x.b.loanId), {
+      jobNo: jobNo,
+      events: firebase.firestore.FieldValue.arrayUnion(_scEv('created', by, 'ยืนยันรับของแล้ว — เลขใบจอง ' + jobNo))
+    });
+  });
+  batch.commit().then(function() {
+    toastMock('✅ ยืนยันรับของแล้ว' + (group.length > 1 ? ' ' + group.length + ' เครื่อง' : ''));
+    closeSm();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+function cancelUnconfirmedGroup(borrower, sIso, eIso) {
+  var group = _scUnconfGroup(borrower, sIso, eIso).filter(function(x) { return x.b.loanId; });
+  if (!group.length) { alert('ไม่พบรายการนี้แล้ว'); closeSm(); return; }
+  if (!confirm('ยกเลิกจองนี้ทั้งหมด ' + group.length + ' เครื่อง? (ลูกค้าไม่ได้มารับของจริง)')) return;
+  var batch = db.batch();
+  group.forEach(function(x) { batch.delete(db.collection('publicDemoLoans').doc(x.b.loanId)); });
+  batch.commit().then(function() {
+    toastMock('✕ ยกเลิกจองแล้ว' + (group.length > 1 ? ' ' + group.length + ' เครื่อง' : ''));
+    closeSm();
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 // ชุดหนึ่งอาจกินหลายช่วงวัน (ใบเดียว เครื่องคืนคนละวัน) — แถบบนปฏิทินต้องคลุมตั้งแต่เริ่มแรกถึงคืนสุดท้าย
 function _scBatchSpan(list) {
@@ -5150,7 +5249,10 @@ function _scDrillDay(iso) {
         // วันที่คีย์ (createdAt) — มีเฉพาะรายการที่คีย์จากหน้านี้เอง (busyRanges จากแอปหลักไม่มีให้) ใช้เทียบว่า
         // ใครกดจองไว้ก่อนตอนมีสองรายชื่อชนกัน ไม่ต้องกดเข้าไปดูประวัติทีละใบ
         (b0.createdAt ? '<div><span>คีย์เมื่อ</span><b>' + _editLogStamp(b0.createdAt) + '</b></div>' : '') +
-        '</div></div>';
+        '</div>' +
+        (kind === 'unconf' ? '<div class="sc-busyrow-act">' +
+          '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openConfirmPickupM(\'' + _scEsq(b0.borrower || '—') + '\',\'' + _scIso(b0.s) + '\',\'' + _scIso(b0.e) + '\')">✅ ยืนยัน/ยกเลิก</button></div>' : '') +
+        '</div>';
     });
   }
   return h + _scSrc() + '</div>';
