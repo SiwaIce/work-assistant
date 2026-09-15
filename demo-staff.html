@@ -505,12 +505,14 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
    คราวนี้เลขเช่า (ตัวที่ต้องเอาไปคีย์เบิกจริง) ได้คอลัมน์แคบของตัวเอง 74px พอดี 5 หลัก
    ส่วน S/N ย้ายลงบรรทัดรองที่กว้างเต็ม ไม่ต้องแย่งที่กับใคร */
 .du-list { border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden; }
-.du-row { display:grid; grid-template-columns:74px 1fr auto; gap:0 14px; align-items:center;
+.du-row { display:grid; grid-template-columns:22px 74px 1fr auto; gap:0 14px; align-items:center;
   padding:9px 12px; border-bottom:1px solid var(--border); }
 .du-row:last-child { border-bottom:none; }
+.du-row.picked { background:var(--accent-soft); }
 /* แถบสลับสีอ่อน ช่วยให้ตากวาดตามแนวนอนไม่หลุดแถว — ใช้เฉพาะตอนไม่จัดกลุ่ม
    เพราะพอมีหัวกลุ่มคั่น จังหวะสลับสีจะเพี้ยนและหัวกลุ่มเองก็ทำหน้าที่แบ่งจังหวะอยู่แล้ว */
 .du-list.flat .du-row:nth-child(even) { background:var(--surface-2); }
+.du-list.flat .du-row:nth-child(even).picked { background:var(--accent-soft); }
 .du-rent { font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:14px; font-weight:700;
   letter-spacing:-.02em; color:var(--text); font-variant-numeric:tabular-nums; cursor:pointer; }
 .du-rent small { display:block; font-family:-apple-system,'Segoe UI',sans-serif; font-size:8.5px;
@@ -538,7 +540,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   font-variant-numeric:tabular-nums; }
 .du-more { padding:6px 12px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--border); }
 @media (max-width:620px) {
-  .du-row { grid-template-columns:64px 1fr auto; gap:0 10px; padding:9px 10px; }
+  .du-row { grid-template-columns:20px 64px 1fr auto; gap:0 10px; padding:9px 10px; }
   .du-rent { font-size:13px; }
   .du-mdl { font-size:12.5px; }
   .du-sn { font-size:9.5px; }
@@ -686,14 +688,17 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .dcal-multisum .ms-row:last-child { border-bottom:0; }
 .dcal-multisum .ms-row.picked { background:var(--accent-soft); }
 .dcal-multisum .ms-row span { flex:1; min-width:0; }
+.dcal-multisum .ms-row .pick-check { flex:0 0 auto; }  /* กันไม่ให้กฎ span ด้านบนดึงวงกลมติ๊กยืดเต็มแถว */
 .dcal-multisum .ms-row b { display:block; font-size:12.5px; }
 .dcal-multisum .ms-row i { display:block; font-style:normal; font-size:10.5px; color:var(--text3); font-family:ui-monospace,monospace; }
 /* วงกลมติ๊กเลือก — ต้องค้างโชว์อยู่เสมอ (ไม่ใช่โผล่มาแค่ตอนติ๊กแล้ว) ไม่งั้นมองไม่ออกว่าการ์ดกดเลือกได้เลย
-   ต้องอ่านข้อความคำแนะนำด้านบนก่อนถึงจะรู้ — ว่างแสดงเป็นวงกลมกลวง ติ๊กแล้วเติมสีพร้อม ✓ */
-.dcal-multisum .ms-row .ms-check { flex:0 0 auto; width:20px; height:20px; border-radius:50%;
+   ต้องอ่านข้อความคำแนะนำด้านบนก่อนถึงจะรู้ — ว่างแสดงเป็นวงกลมกลวง ติ๊กแล้วเติมสีพร้อม ✓
+   ใช้ชื่อคลาสกลาง .pick-check (ไม่ผูกกับ .ms-row) เพราะเอาไปใช้ซ้ำใน .du-row ของกล่องดูวันเดียวด้วย —
+   เดิมเลือกหลายเครื่องพร้อมกันได้แค่ตอนเลือกหลายวัน ตอนดูวันเดียวไม่มีให้เลย ไม่สอดคล้องกัน */
+.pick-check { flex:0 0 auto; width:20px; height:20px; border-radius:50%; cursor:pointer;
   border:2px solid var(--border); color:#fff; display:flex; align-items:center; justify-content:center;
   font-size:11px; font-weight:700; }
-.dcal-multisum .ms-row .ms-check.on { background:var(--accent); border-color:var(--accent); }
+.pick-check.on { background:var(--accent); border-color:var(--accent); }
 .dcal-load { background:var(--bad); }
 
 /* สแกน QR/บาร์โค้ดหาเครื่อง */
@@ -4059,6 +4064,10 @@ var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
 // ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับแอปหลัก) ----
 var scMultiDay = false, scPickDays = [];
+// ตัวกรองหมวดหมู่ของกล่องสรุปเลือกหลายวัน — คนละตัวกับ scDayCat (กล่องดูวันเดียว) เพราะคนละบริบท
+// ไม่รีเซ็ตตอนเปลี่ยนช่วงวันที่เลือกใหม่ เหมือนกับ scSearch ที่ใช้ร่วมกันอยู่แล้ว (ค้างไว้จนกว่าจะกดล้างเอง)
+var scMultiCat = 'all';
+function scMultiSetCat(c) { scMultiCat = c; renderStaffCalendar(); }
 // จุดเริ่มที่ค้างไว้ระหว่างรอกดวันจบ — กดวันแรกแล้วกดวันที่สอง เติมทั้งช่วงให้อัตโนมัติ (เช่น กด 1 แล้วกด 10
 // ได้ 1-10 ทั้งก้อนเลย) ไม่ต้องกดทุกวันในช่วงทีละวันเหมือนเดิม แต่กดวันอื่นต่อหลังช่วงเติมแล้วยังติ๊ก/เอาออก
 // เป็นรายวันได้อยู่ (เผื่อจะเจาะเอาบางวันออกจากช่วง หรือเพิ่มวันเดี่ยวๆ ที่ไม่ติดกัน)
@@ -4130,9 +4139,30 @@ function _scMultiSummary(units, bks) {
   h += '<div class="dcal-srch" style="margin:8px 0"><span class="ic">🔍</span>' +
     '<input type="text" id="msSearch" placeholder="ค้นหาในรายการนี้ — รุ่น / เลขเช่า / S/N" value="' + esc(scSearch) + '" oninput="scSearchInput(this.value)" autocomplete="off">' +
     (scSearch ? '<button class="clr" onclick="scSetSearch(\'\')">✕</button>' : '') + '</div>';
-  var freeMatched = scSearch.trim() ? free.filter(function(u) { return scMatch(u, bks); }) : free;
+  var searchHit = scSearch.trim() ? free.filter(function(u) { return scMatch(u, bks); }) : free;
+  // ตัวกรองหมวดหมู่ — เหมือนกล่องดูวันเดียว (df-cats/df-c) นับจากเครื่องที่ผ่านคำค้นแล้ว ไม่นับจาก free ทั้งหมด
+  // จะได้เห็นตัวเลขที่สอดคล้องกับสิ่งที่กำลังมองอยู่จริง
+  function catOfMs(u) { return String(u.category || '') || '_none'; }
+  var catN = {}, usedCats = [];
+  searchHit.forEach(function(u) {
+    var c = catOfMs(u);
+    if (catN[c] === undefined) { catN[c] = 0; usedCats.push(c); }
+    catN[c]++;
+  });
+  if (usedCats.length > 1 || scMultiCat !== 'all') {
+    h += '<div class="df-cats">';
+    h += '<button class="df-c' + (scMultiCat === 'all' ? ' on' : '') + '" onclick="scMultiSetCat(\'all\')">📦 ทั้งหมด <b>' + searchHit.length + '</b></button>';
+    usedCats.forEach(function(c) {
+      var meta = (CATEGORIES || []).filter(function(x) { return x.id === c; })[0];
+      var lbl = meta ? meta.icon + ' ' + meta.label : '➖ ไม่ระบุหมวด';
+      h += '<button class="df-c' + (scMultiCat === c ? ' on' : '') + (catN[c] ? '' : ' zero') + '" onclick="scMultiSetCat(\'' + _scEsq(c) + '\')">' +
+        esc(lbl) + ' <b>' + catN[c] + '</b></button>';
+    });
+    h += '</div><div class="df-note">ตัวเลขบนชิป = จำนวนที่<b>ว่างตลอดช่วงนี้</b> ของหมวดนั้น</div>';
+  }
+  var freeMatched = scMultiCat === 'all' ? searchHit : searchHit.filter(function(u) { return catOfMs(u) === scMultiCat; });
   h += '<div class="ms-free">ว่างตลอดช่วงนี้ <b>' + freeMatched.length + '</b> เครื่อง' +
-    (scSearch.trim() && freeMatched.length !== free.length ? ' <span style="color:var(--text3);font-weight:400">(จากทั้งหมด ' + free.length + ')</span>' : '') + ' — ' +
+    ((scSearch.trim() || scMultiCat !== 'all') && freeMatched.length !== free.length ? ' <span style="color:var(--text3);font-weight:400">(จากทั้งหมด ' + free.length + ')</span>' : '') + ' — ' +
     'ติ๊กการ์ดเพื่อเลือกหลายเครื่องพร้อมกัน หรือกดปุ่มเพื่อคีย์ยืมทันที</div><div class="ms-list">';
   if (!freeMatched.length) {
     h += '<div class="ms-warn">🔍 ไม่พบเครื่องที่ตรงกับ “' + esc(scSearch) + '” ในรายการนี้</div>';
@@ -4140,7 +4170,7 @@ function _scMultiSummary(units, bks) {
     freeMatched.slice(0, 8).forEach(function(u) {
       var picked = lendIsPicked(u.id);
       h += '<div class="ms-row' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
-        '<span class="ms-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
+        '<span class="pick-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
         '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
         '<i>เช่า ' + esc(u.rentalDbNo || '—') + (u.rentalDbNo ? _rentCopyBtn(u.rentalDbNo) : '') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
         '<span class="du-t ' + (u.flyable !== false ? 'fly' : 'disp') + '" style="margin-top:4px;display:inline-block">' +
@@ -4374,7 +4404,12 @@ function _scCatOf(u) {
 }
 function _scDayRow(u, cur) {
   var p = _scModelParts(u);
-  return '<div class="du-row">' +
+  var picked = lendIsPicked(u.id);
+  // ติ๊กเลือกหลายเครื่องพร้อมกันได้จากตรงนี้ด้วย (ใช้ .pick-check วงกลมเดียวกับกล่องเลือกหลายวัน) — เดิม
+  // กล่องดูวันเดียวมีแค่ปุ่ม "คีย์ยืม" ทันที เลือกสะสมหลายเครื่องไม่ได้ ไม่สอดคล้องกับกล่องเลือกหลายวัน
+  return '<div class="du-row' + (picked ? ' picked' : '') + '">' +
+    '<span class="pick-check' + (picked ? ' on' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()" title="ติ๊กเพื่อเลือกหลายเครื่องพร้อมกัน">' +
+      (picked ? '✓' : '') + '</span>' +
     '<div class="du-rent" onclick="scToggleOpen(\'unit:' + u.id + '\')" title="กดดูรายละเอียดเครื่องนี้">' +
       '<small>เช่า</small>' + esc(u.rentalDbNo || '—') + '</div>' +
     '<div class="du-mid"><div class="du-mdl">' + esc(p.main) +
