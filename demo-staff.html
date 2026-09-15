@@ -770,6 +770,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   border:2px solid var(--border); color:#fff; display:flex; align-items:center; justify-content:center;
   font-size:11px; font-weight:700; }
 .pick-check.on { background:var(--accent); border-color:var(--accent); }
+/* เครื่องที่ติดจองช่วงที่เลือกไว้ — หยิบใส่ตะกร้าไว้ก่อนได้เหมือนของว่าง แค่จางลง/ไม่มีปุ่มคีย์ยืมทันที
+   เพราะยืมพร้อมกันตอนนี้ไม่ได้จริง (ดูเหตุผลเต็มที่ _scBusyWishlistHtml) พับเก็บไว้ใน <details> ไม่ให้
+   รายการยาวเกะกะตอนไม่ได้สนใจ แต่กางออกอัตโนมัติถ้าไม่มีเครื่องว่างเลยสักตัว (ตอนนั้นนี่คือเนื้อหาหลัก) */
+.dcal-multisum .ms-busy-wrap { margin-top:10px; }
+.dcal-multisum .ms-busy-wrap summary { font-size:12px; font-weight:600; color:var(--text2); cursor:pointer; margin-bottom:6px; }
+.dcal-multisum .ms-row.busy { opacity:.72; cursor:pointer; }
+.dcal-multisum .ms-row.busy.picked { opacity:1; background:var(--accent-soft); }
 .dcal-load { background:var(--bad); }
 
 /* สแกน QR/บาร์โค้ดหาเครื่อง */
@@ -4304,6 +4311,31 @@ function _scMultiSummary(units, bks) {
   var from = _scFromIso(scPickDays[0]), to = _scFromIso(scPickDays[scPickDays.length - 1]);
   var span = Math.round((to - from) / 86400000) + 1;
   var free = _scFreeThroughout(from, to, units, bks);
+  // เครื่องที่ติดจองช่วงนี้ — งานหนึ่งอาจต้องใช้ทั้งของที่ว่างและของที่ติดจองปนกัน (เช่น ต้องแบตเพิ่มแต่ตอนนี้
+  // มีคนถืออยู่) อยากหยิบใส่ตะกร้าไว้ก่อนเพื่อรู้ว่างานนี้ต้องใช้ครบเท่าไหร่ ไปตามทีหลังได้ถูก — ไม่ต้องสลับไป
+  // แท็บรายการเครื่องเพื่อติ๊กแยกอีกที่ พอกดบันทึกรวมกับของที่ว่าง saveLendBatch() จะแยกให้เองเป็น 'pending'
+  // ในใบเดียวกัน (ชนคิว รอแก้ไขที่แท็บติดตามคืน) ไม่ใช่บันทึกทับของเดิม
+  var busy = units.filter(function(u) { return free.indexOf(u) === -1; });
+  var busySearchHit = scSearch.trim() ? busy.filter(function(u) { return scMatch(u, bks); }) : busy;
+  var busyMatched = scMultiCat === 'all' ? busySearchHit : busySearchHit.filter(function(u) { return (String(u.category || '') || '_none') === scMultiCat; });
+  function _scBusyWishlistHtml(openDefault) {
+    if (!busyMatched.length) return '';
+    var bh = '<details class="ms-busy-wrap"' + (openDefault ? ' open' : '') + '><summary>🧺 เครื่องที่ติดจองช่วงนี้ (' +
+      busyMatched.length + ') — หยิบใส่ตะกร้าไว้ก่อนได้ ไปตามคืน/สลับคิวทีหลัง</summary><div class="ms-list ms-busy-list">';
+    busyMatched.slice(0, 8).forEach(function(u) {
+      var picked = lendIsPicked(u.id);
+      var conflict = _lfConflict(u.id, _scIso(from), _scIso(to));
+      var confTxt = conflict ? (conflict.quarantine ? '🕐 รอรับเข้าคลัง ถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '';
+      bh += '<div class="ms-row busy' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
+        '<span class="pick-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
+        '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
+        '<i>เช่า ' + esc(u.rentalDbNo || '—') + ' · ' + esc(u.serialNumber || '—') + '</i>' +
+        (confTxt ? '<span class="lf-chip-status warn" style="display:block;margin-top:2px" onclick="event.stopPropagation();showLendConflictM(\'' + u.id + '\',\'' + _scIso(from) + '\',\'' + _scIso(to) + '\')" title="กดดูใบยืมที่ชน">' + confTxt + '</span>' : '') +
+        '</span></div>';
+    });
+    if (busyMatched.length > 8) bh += '<div class="ms-note">…และอีก ' + (busyMatched.length - 8) + ' เครื่อง</div>';
+    return bh + '</div></details>';
+  }
   var h = '<div class="dcal-multisum"><div class="ms-hd"><b>ติ๊กไว้ ' + scPickDays.length + ' วัน</b> · ช่วง ' +
     _scFmt(from) + ' – ' + _scFmt(to) + ' รวม <b>' + span + ' วัน</b>' +
     '<button class="btn btn-ghost btn-sm" onclick="scClearDays()">ล้างที่เลือก</button></div>';
@@ -4311,7 +4343,8 @@ function _scMultiSummary(units, bks) {
     h += '<div class="ms-note">วันที่ไม่ได้ติ๊กแต่อยู่ระหว่างกลางถูกนับด้วย — เครื่องถูกยืมต่อเนื่อง คืนกลางทางแล้วยืมต่อไม่ได้</div>';
   }
   if (!free.length) {
-    return h + '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div></div>';
+    return h + '<div class="ms-warn">✕ ไม่มีเครื่องไหนว่างตลอดช่วงนี้เลย — ลองย่อช่วงลง หรือดูมุมมอง 🔍 หาเครื่องว่าง</div>' +
+      _scBusyWishlistHtml(true) + '</div>';
   }
   // เดิมต้องเลื่อนกลับขึ้นไปบนสุดของปฏิทินเพื่อกรอง/ค้นหา ทั้งที่กำลังดูรายการนี้อยู่ด้านล่างพอดี — เอาช่อง
   // ค้นหามาไว้ตรงนี้ด้วยเลย ใช้ scSearch/scMatch ตัวเดียวกับที่มุมมองไทม์ไลน์/มือถือใช้อยู่แล้ว พิมพ์ที่ไหน
@@ -4360,6 +4393,7 @@ function _scMultiSummary(units, bks) {
     if (freeMatched.length > 8) h += '<div class="ms-note">…และอีก ' + (freeMatched.length - 8) + ' เครื่อง</div>';
   }
   h += '</div>';
+  h += _scBusyWishlistHtml(false);
   return h + '</div>';
 }
 
