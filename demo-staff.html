@@ -170,6 +170,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .browse-toolbar input { flex:1; min-width:200px; font:inherit; font-size:14px; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); }
 .model-group { margin-bottom:14px; }
 .model-group > summary { cursor:pointer; display:flex; align-items:baseline; gap:10px; padding:10px 13px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; list-style:none; }
+/* จอแคบ + ชื่อรุ่นยาว + ป้ายสถานะหลายอัน = ชื่อรุ่นถูกบีบให้เหลือคอลัมน์แคบข้างซ้าย ขณะป้ายสถานะ
+   ก็ถูกอัดลงคอลัมน์แคบข้างขวาแยกกัน ทั้งสองฝั่งขึ้นบรรทัดใหม่ไม่พร้อมกัน หน้าตาเลยดูเยื้องไม่ตรงแนว —
+   ต่ำกว่า 480px ให้วางซ้อนกันแทน (ชื่อรุ่นเต็มแถวก่อน ป้ายสถานะเต็มแถวล่าง) จะได้จัดกึ่งกลาง/ชิดซ้ายตรงกัน */
+@media (max-width:480px) {
+  .model-group > summary { flex-direction:column; align-items:flex-start; gap:6px; }
+  .model-group > summary .mc { margin-left:0; }
+}
 .model-group > summary::-webkit-details-marker { display:none; }
 .model-group > summary::before { content:'▸'; font-size:11px; color:var(--text3); transition:transform .15s; }
 .model-group[open] > summary::before { transform:rotate(90deg); }
@@ -303,7 +310,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sd-row.late { box-shadow:inset 3px 0 0 var(--bad); }
 .sd-rent { font-family:ui-monospace,Consolas,monospace; font-weight:700; font-variant-numeric:tabular-nums; }
 .sd-nm { min-width:0; color:var(--text2); padding:3px 0; }
-.sd-sub { display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text3);
+.sd-sub { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:10.5px; color:var(--text3);
   font-family:ui-monospace,'SF Mono',Consolas,monospace; margin-top:2px; }
 .sd-hid { opacity:.7; }
 .sd-st { flex:0 0 auto; }
