@@ -1955,6 +1955,29 @@ function removePendingLoan(loanId) {
   db.collection('publicDemoLoans').doc(loanId).delete()
     .then(function() { toastMock('✕ ตัดออกจากใบแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
+// ยกเลิกใบจองที่มีเลขใบจองแล้วแต่ยังไม่ถึงวันยืม (จองล่วงหน้า) — ของยังไม่เคยออกจากคลังเลย จึงลบใบทิ้งไปเลย
+// ต่างจาก "รับคืนแล้ว" ซึ่งบันทึกว่าของออกไปแล้วและมีช่วงกักคลังตามมาด้วย (ใช้ไม่ได้กับของที่ไม่เคยออก)
+// ให้ใช้เฉพาะเครื่องที่คีย์จากหน้านี้เอง (มี loanId ให้ลบตรงๆ) — เครื่องที่คีย์จากแอปหลักต้องไปยกเลิกที่นั่น
+function cancelSoonLoan(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) { alert('ไม่พบรายการนี้แล้ว — อาจถูกยกเลิกหรือแก้ไปก่อนหน้านี้'); return; }
+  if (!confirm('ยกเลิกใบจองนี้? (ของยังไม่เคยออกจากคลัง จะลบใบทิ้งไปเลย ไม่ใช่บันทึกว่าคืนแล้ว)')) return;
+  db.collection('publicDemoLoans').doc(loanId).delete()
+    .then(function() { toastMock('✕ ยกเลิกใบจองแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+// ยกเลิกทั้งใบทีเดียว — ใช้ตอนกลุ่มนั้น "จองล่วงหน้าล้วนๆ" และทุกเครื่องคีย์จากหน้านี้เอง (เช็คจาก g.items
+// ใน renderBookingsTab เวลาตัดสินใจว่าจะโชว์ปุ่มนี้ไหม) เผื่อกลุ่มเปลี่ยนไปแล้วจริง (เช่นมีคนเพิ่ง extend/
+// ยืนยันรับของไปพอดี) เช็คซ้ำจาก bkAllItems() สดอีกทีก่อนลบจริง ไม่เชื่อ g ที่ค้างอยู่ในหน่วยความจำเฉยๆ
+function cancelSlipSoon(key) {
+  var ids = bkAllItems().filter(function(it) { return it.kind === 'soon' && _bkItemSlipKey(it) === key && it.b.loanId; }).map(function(it) { return it.b.loanId; });
+  if (!ids.length) { alert('ไม่พบรายการนี้แล้ว — อาจถูกยกเลิกหรือแก้ไปก่อนหน้านี้'); return; }
+  if (!confirm('ยกเลิกใบจองนี้ทั้งหมด ' + ids.length + ' เครื่อง? (ของยังไม่เคยออกจากคลัง จะลบใบทิ้งไปเลย ไม่ใช่บันทึกว่าคืนแล้ว)')) return;
+  var batch = db.batch();
+  ids.forEach(function(id) { batch.delete(db.collection('publicDemoLoans').doc(id)); });
+  batch.commit().then(function() {
+    toastMock('✕ ยกเลิกใบจองแล้ว' + (ids.length > 1 ? ' ' + ids.length + ' เครื่อง' : ''));
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
 
 // ================================================================
 // แท็บ "ใบจอง" — รวมบุ๊กกิ้งทุกสถานะที่ยังไม่จบไว้จุดเดียว (จองล่วงหน้า/รอยืนยันรับของ/กำลังยืม/
@@ -2159,9 +2182,14 @@ function _bkRowActionsHtml(it) {
   // คำขอเข้าคิวเหมือนกัน — ถ้ามีคำขอค้างอยู่แล้วไม่ต้องให้ส่งซ้ำ
   if (it.kind === 'out' || it.kind === 'late' || it.kind === 'soon') {
     if (isStaff) {
+      // ยกเลิกใบจองได้เฉพาะ "จองล่วงหน้า" (ยังไม่ถึงวันยืม ของยังไม่เคยออกจากคลัง) — out/late ของออกไปแล้ว
+      // จริง ต้องใช้ทาง "รับคืน" เท่านั้น ห้ามลบทิ้งเฉยๆ เพราะจะทำให้ระบบไม่รู้ว่าของอยู่ที่ลูกค้า
+      var cancelBtn = it.kind === 'soon'
+        ? '<button class="detail-btn icon-btn" onclick="cancelSoonLoan(\'' + b.loanId + '\')" title="ยกเลิกใบจองนี้ (ของยังไม่เคยออกจากคลัง)">❌</button>'
+        : '';
       return bell + detailBtn +
         '<button class="detail-btn icon-btn" onclick="openExtendM(\'' + b.loanId + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
-        '<button class="detail-btn icon-btn" onclick="openTransferM(\'' + b.loanId + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>';
+        '<button class="detail-btn icon-btn" onclick="openTransferM(\'' + b.loanId + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' + cancelBtn;
     }
     var pend = PENDING_EDITS[u.id];
     if (pend && pend.loanAction) {
@@ -2209,9 +2237,10 @@ function _bkGroup(items) {
   });
   return { groups: groups, order: order };
 }
-// ปุ่มทั้งใบที่หัวการ์ด — มีให้เฉพาะ 2 กรณีที่มีปุ่มทั้งใบจริงอยู่แล้วในระบบ (กำลังยืม/เลยกำหนด ใช้ปุ่มเดิมของ
-// ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM) จองล่วงหน้า/รอชนคิว ยังไม่มีปุ่มทั้งใบให้ เพราะ
-// แต่ละเครื่องเหตุผล/วันเริ่มไม่เหมือนกัน จัดการทีละเครื่องที่แถวย่อยแทน
+// ปุ่มทั้งใบที่หัวการ์ด — มีให้ 3 กรณีที่มีปุ่มทั้งใบจริงอยู่แล้วในระบบ (กำลังยืม/เลยกำหนด ใช้ปุ่มเดิมของ
+// ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM, จองล่วงหน้าล้วนๆ ที่คีย์จากหน้านี้เองทุกเครื่อง
+// ยกเลิกทั้งใบได้ — ถ้ามีเครื่องคีย์จากแอปหลักปนอยู่ ไม่ให้ปุ่มนี้ เพราะลบใบตรงๆ ไม่ได้ ต้องไปยกเลิกที่นั่น)
+// รอชนคิว ยังไม่มีปุ่มทั้งใบให้ เพราะแต่ละเครื่องเหตุผล/วันเริ่มไม่เหมือนกัน จัดการทีละเครื่องที่แถวย่อยแทน
 function _bkSlipActionsHtml(g) {
   if (g.statuses.out || g.statuses.late) {
     return '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(g.key) + '\')">✅ คืนทั้งใบ</button>' +
@@ -2220,6 +2249,9 @@ function _bkSlipActionsHtml(g) {
   }
   if (g.statuses.unconf && Object.keys(g.statuses).length === 1) {
     return '<button class="btn btn-primary btn-sm" onclick="openConfirmPickupM(\'' + _scEsq(g.borrower) + '\',\'' + g.startIso + '\',\'' + g.endIso + '\')">✅ ยืนยันทั้งใบ</button>';
+  }
+  if (g.statuses.soon && Object.keys(g.statuses).length === 1 && g.items.every(function(it) { return !!it.b.loanId; })) {
+    return '<button class="btn btn-ghost btn-sm" onclick="cancelSlipSoon(\'' + _scEsq(g.key) + '\')">❌ ยกเลิกใบจอง</button>';
   }
   return '';
 }
