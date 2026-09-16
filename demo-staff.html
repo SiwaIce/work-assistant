@@ -144,6 +144,14 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-pending-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
   font-size:12.5px; padding:6px 0; border-top:1px solid rgba(245,158,11,.2); }
 .rt-pending-row:first-of-type { border-top:none; }
+/* รอรับเข้าคลัง — โทนเดียวกับกล่อง "รอ (ชนคิว)" แต่ใช้สี accent แยกให้ต่างกันชัดๆ */
+.rt-quar-sec { border-top:1px dashed var(--border); padding:9px 13px; background:var(--accent-soft); }
+.rt-quar-hd { font-size:11.5px; font-weight:700; color:var(--accent); margin-bottom:6px; }
+.rt-quar-row { display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+  font-size:12.5px; padding:7px 0; border-top:1px solid rgba(59,130,246,.2); }
+.rt-quar-row:first-of-type { border-top:none; }
+.qz-note-flag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--bad);
+  background:var(--bad-soft); border-radius:7px; padding:4px 9px; margin-top:6px; }
 .qn-slip { border:1px solid var(--border); border-radius:11px; padding:10px 12px; margin-bottom:10px; background:var(--surface); }
 .qn-slip.done { opacity:.6; }
 .qn-slip-hd { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
@@ -502,6 +510,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .lf-warn { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:8px;
   padding:9px 11px; margin-bottom:11px; line-height:1.55; }
 .lf-nearest { font-size:12px; color:var(--text); background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:9px 11px; margin-bottom:11px; line-height:1.6; display:flex; align-items:center;
+  gap:8px; flex-wrap:wrap; }
+/* เสนอสลับเครื่องรุ่นเดียวกันที่ว่างพอดีแทนตัวที่ชนคิว — ทางเลือกคู่กับ .lf-nearest (เลื่อนวันทั้งใบ) */
+.lf-alt { font-size:12px; color:var(--text); background:var(--accent-soft); border:1px solid var(--accent);
   border-radius:8px; padding:9px 11px; margin-bottom:11px; line-height:1.6; display:flex; align-items:center;
   gap:8px; flex-wrap:wrap; }
 /* ตารางแก้ไขทีละหลายเครื่อง (bulk grid) — ช่องแคบๆ ให้พิมพ์/เลือกได้ในตารางเลย ไม่ต้องเปิดทีละเครื่อง */
@@ -879,6 +891,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div class="topbar">
         <div><div style="font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">Staff • ไม่ผูกบัญชีส่วนตัว</div><h1 style="margin:2px 0 0;font-size:22px">🚁 จัดการ Demo Equipment</h1></div>
         <div style="display:flex;gap:8px;align-items:center">
+          <button class="theme-btn" onclick="showHelpGuideM()" title="คู่มือการใช้งาน">❓</button>
           <button class="theme-btn" id="themeBtn" onclick="toggleStaffTheme()" title="สลับธีมสว่าง/มืด">🌙</button>
           <button class="btn btn-ghost btn-sm" onclick="staffLock()">🔒 ออกจากระบบ</button>
         </div>
@@ -1897,6 +1910,7 @@ function renderReturnTabBySlip(all) {
   h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
     (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') +
     (totalPending ? ' · ⏳ รอ (ชนคิว) ' + totalPending + ' เครื่อง' : '') + '</div>';
+  h += _rtQuarSecHtml();
   if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">' +
     ((rtSearch.trim() || rtCatFilter.length) ? '🔍 ไม่พบเครื่องที่ตรงกับตัวกรอง — ลองเปลี่ยนหมวดหมู่หรือล้างคำค้น' : '🎉 ไม่มีเครื่องค้างอยู่') + '</div>');
 
@@ -1941,7 +1955,7 @@ function renderReturnTabBySlip(all) {
     if (isOpen) {
       h += '<div class="rt-crow-list2">' + g.list.sort(function(a, b) { return a.end.localeCompare(b.end); })
         .map(function(l) { return _rtSlipItemRowHtml(l, g.end); }).join('') + '</div>';
-      if (g.pending.length) h += _rtPendingRowsHtml(g.pending);
+      if (g.pending.length) h += _rtPendingRowsHtml(g);
     }
     h += '</div>';
   });
@@ -1949,7 +1963,10 @@ function renderReturnTabBySlip(all) {
 }
 // แถวของที่ "อยากได้แต่ชนคิว" — บอกติดอะไรอยู่ ให้เช็คซ้ำได้ (บางทีของว่างแล้วโดยไม่รู้ตัว เช่นอีกใบคืนไปแล้ว)
 // หรือตัดออกจากใบเลยถ้ายืมไม่ได้จริงๆ (เช่นเปลี่ยนไปยืมรุ่นอื่นแทนแล้ว)
-function _rtPendingRowsHtml(rows) {
+function _rtPendingRowsHtml(g) {
+  var rows = g.pending;
+  // กันแนะนำเครื่องที่ใบนี้ใช้อยู่แล้ว (ทั้งที่ยืนยันแล้วและที่รออยู่ด้วยกัน) ไม่ให้ชนกันเองในใบเดียวกัน
+  var excludeIds = g.list.map(function(l) { return l.unitId; }).concat(rows.map(function(l) { return l.unitId; }));
   var h = '<div class="rt-pending-sec"><div class="rt-pending-hd">⏳ รอ (ชนคิว) ' + rows.length + ' เครื่อง</div>';
   h += rows.map(function(l) {
     var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
@@ -1957,14 +1974,99 @@ function _rtPendingRowsHtml(rows) {
     var why = conflict
       ? (conflict.quarantine ? '🕐 รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
       : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
+    var altHtml = '';
+    if (conflict && u.id) {
+      var alts = _altFreeUnits(u, l.start, l.end, excludeIds);
+      if (alts.length) {
+        var ap = _scModelParts(alts[0]);
+        altHtml = '<div class="lf-alt" style="margin:6px 0 0">🔁 มีรุ่นเดียวกันว่างพอดี: ' + esc(ap.main) +
+          (alts[0].rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(alts[0].rentalDbNo) + '</span>' : '') +
+          ' <button class="btn btn-primary btn-sm" onclick="swapPendingUnit(\'' + esc(l.id) + '\',\'' + alts[0].id + '\')">🔁 สลับเครื่องนี้แทน</button></div>';
+      }
+    }
     return '<div class="rt-pending-row"><div><b>' + esc(u.model || u.name || l.model || '-') +
       (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</b>' +
-      '<div class="hint" style="margin:2px 0 0">' + why + '</div></div>' +
+      '<div class="hint" style="margin:2px 0 0">' + why + '</div>' + altHtml + '</div>' +
       '<div style="display:flex;gap:6px;flex-shrink:0">' +
       '<button class="btn btn-ghost btn-sm" onclick="retryPendingLoan(\'' + esc(l.id) + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="removePendingLoan(\'' + esc(l.id) + '\')" title="ตัดออกจากใบ">✕</button></div></div>';
   }).join('');
   return h + '</div>';
+}
+// สลับใบที่รอ (ชนคิว) อยู่ ไปเป็นเครื่องรุ่นเดียวกันที่เช็คแล้วว่างพอดี — ยืนยันจองให้ทันที (เหมือนกดเช็ค
+// ว่างอีกครั้งแล้วว่างจริง แต่เปลี่ยนตัวเครื่องไปด้วยในทีเดียว)
+function swapPendingUnit(loanId, newUnitId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (_lfConflict(newUnitId, l.start, l.end)) { alert('เครื่องที่เลือกไม่ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); renderReturnTab(); return; }
+  var newUnit = UNITS.filter(function(x) { return x.id === newUnitId; })[0];
+  var newModel = newUnit ? (newUnit.model || newUnit.name || '') : l.model;
+  db.collection('publicDemoLoans').doc(loanId).update({
+    unitId: newUnitId, model: newModel, status: 'active',
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('created', _lastEditor(),
+      'สลับเครื่องทดแทน (เดิมชนคิว) — เปลี่ยนเป็น ' + (newUnit ? _scModelParts(newUnit).main : newModel)))
+  }).then(function() { toastMock('🔁 สลับเครื่องแล้ว — จองให้เรียบร้อย'); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ================================================================
+// รอรับเข้าคลัง — ใบที่กด "รับคืนแล้ว" ไปแล้วแต่ยังอยู่ในช่วงเผื่อเวลาตรวจนับ/ทำความสะอาด (availableFrom)
+// ปกติเปิดว่างเองอัตโนมัติเมื่อครบกำหนดอยู่แล้ว (ดู scBookings()) โซนนี้แค่เพิ่มทางลัดกดจบก่อนกำหนดถ้าตรวจ
+// จริงแล้วเสร็จเร็วกว่าที่เผื่อไว้ ไม่ใช่ของจากแอปหลัก (ฝั่งนั้นไม่มีแนวคิดเผื่อเวลาแบบนี้) จึงเช็คแค่ LOANS พอ
+// ================================================================
+function _quarLoans() {
+  var today = _td();
+  return LOANS.filter(function(l) { return l.status === 'returned' && l.availableFrom && l.availableFrom > today; });
+}
+function _rtQuarSecHtml() {
+  var list = _quarLoans();
+  if (!list.length) return '';
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var today = _td();
+  var h = '<div class="rt-quar-sec"><div class="rt-quar-hd">🕐 รอรับเข้าคลัง ' + list.length + ' เครื่อง</div>';
+  h += list.map(function(l) {
+    var u = byId[l.unitId] || {};
+    var p = u.id ? _scModelParts(u) : { main: l.model || 'เครื่องที่ถูกลบไปแล้ว' };
+    var total = Math.max(1, daysBetween(l.actualReturnDate || l.start, l.availableFrom));
+    var passed = Math.max(0, daysBetween(l.actualReturnDate || l.start, today));
+    var pct = Math.max(4, Math.min(100, Math.round(passed / total * 100)));
+    var noteHtml = u.note ? '<div class="qz-note-flag">📝 มีหมายเหตุค้าง: ' + esc(u.note) + '</div>' : '';
+    return '<div class="rt-quar-row"><div>' +
+      '<div><b>' + esc(p.main) + '</b>' + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>' +
+      '<div class="hint" style="margin:2px 0 0">คืนเมื่อ ' + _scD(l.actualReturnDate || l.start) + ' · เผื่อถึง ' + _scD(l.availableFrom) + '</div>' +
+      noteHtml + '</div>' +
+      '<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="confirmQuarantineEarly(\'' + esc(l._id) + '\')">✅ ยืนยันรับเข้าคลังแล้ว</button></div>';
+  }).join('');
+  return h + '</div>';
+}
+// ยืนยันรับเข้าคลังก่อนกำหนดเผื่อ — ไม่ใช่คลิกครั้งเดียวจบ ต้องผ่าน 2 ด่าน: (1) ถ้าเครื่องมีหมายเหตุค้างอยู่
+// ต้องกดผ่านคำเตือนก่อน กัน "ลัดขั้นตอนตรวจจริง" ทั้งที่รู้อยู่แล้วว่ามีปัญหา (2) ต้องพิมพ์ชื่อคนตรวจรับเสมอ
+// (ว่าง/กด Cancel = ไม่บันทึกอะไรทั้งสิ้น) เพื่อให้ตามตัวได้ว่าใครยืนยัน — บันทึกลง publicDemoEditLog แยก
+// ต่างหากจากประวัติในตัวใบยืมเอง เพราะเป็นบันทึกถาวรที่ไม่มีวันลบ ย้อนดูภาพรวมทีหลังได้ว่าใครกดบ่อยแค่ไหน
+function confirmQuarantineEarly(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var u = byId[l.unitId];
+  if (u && u.note) {
+    if (!confirm('⚠️ เครื่องนี้มีหมายเหตุค้างอยู่:\n"' + u.note + '"\n\nแน่ใจนะว่าจะปิดก่อนกำหนด ทั้งที่ยังมีหมายเหตุนี้ค้างอยู่?')) return;
+  }
+  var who = prompt('ใครเป็นคนตรวจรับ? (จะบันทึกไว้ถาวรในประวัติ)', _lastEditor());
+  if (!who || !who.trim()) return;
+  who = who.trim();
+  var oldAvailableFrom = l.availableFrom;
+  var newEff = l.actualReturnDate || _td();
+  var p = u ? _scModelParts(u) : { main: l.model || '—' };
+  var changes = [{ field: 'availableFrom', from: _scD(oldAvailableFrom), to: _scD(newEff) }];
+  if (u && u.note) changes.push({ field: 'noteAtConfirm', from: null, to: u.note });
+  db.collection('publicDemoLoans').doc(loanId).update({
+    availableFrom: '',
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('returned', who, 'ยืนยันรับเข้าคลังก่อนกำหนด — เดิมเผื่อถึง ' + _scD(oldAvailableFrom)))
+  }).then(function() {
+    _logEditHistory(l.unitId, p.main, u && u.rentalDbNo, 'quarantine_confirm', changes, who);
+    toastMock('✅ ยืนยันรับเข้าคลังแล้ว — ว่างให้ยืมได้ทันที');
+    try { localStorage.setItem('demoStaffEditor', who); } catch (e) {}
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 function retryPendingLoan(loanId) {
   var l = _scLoan(loanId);
@@ -2416,6 +2518,7 @@ function renderReturnTab() {
     '<b>ยังไม่คืน ' + all.length + ' เครื่อง</b> · เลยกำหนด ' + overdue.length + ' · ใกล้ครบ ' + soon.length +
     (fromApp ? '<div class="rt-sum-note">ในนี้มี ' + fromApp + ' เครื่องที่คีย์ยืมจากแอปหลัก — เห็นได้ที่นี่ แต่ต้องไปกดรับคืนในแอปหลัก</div>' : '') +
     '</div>';
+  h += _rtQuarSecHtml();
   h += '<div class="rt-section-title">🔴 เลยกำหนดคืนแล้ว (' + overdue.length + ')</div>';
   h += overdue.length ? overdue.map(returnRowHtml.bind(null, 'overdue')).join('')
     : '<div class="empty-state" style="padding:12px 0">ไม่มี</div>';
@@ -4299,6 +4402,16 @@ function lendClear() {
   was.forEach(_lendPaint);
   renderLendBar();
 }
+// สลับเครื่องที่ชนคิวอยู่ (oldId) เป็นเครื่องรุ่นเดียวกันที่ว่างพอดี (newId) — แค่แก้รายการที่เลือกไว้ ยังไม่ได้
+// บันทึกจริงจนกว่าจะกด "บันทึกยืม" ตามปกติ (เหมือนติ๊ก/ถอดติ๊กเครื่องเอง)
+function lendSwapUnit(oldId, newId) {
+  var i = lendPicked.indexOf(oldId);
+  if (i !== -1) lendPicked.splice(i, 1);
+  if (lendPicked.indexOf(newId) === -1) lendPicked.push(newId);
+  _lendPaint(oldId); _lendPaint(newId);
+  renderLendBar();
+  renderLendFlow();
+}
 function renderLendBar() {
   var el = document.getElementById('lendPickBar');
   if (!el) return;
@@ -4483,6 +4596,17 @@ function _lfConflict(unitId, start, end, exceptLoanId) {
     it = _scIso(_scAdd(_scFromIso(it), 1));
   }
   return null;
+}
+// หาเครื่อง "รุ่นเดียวกัน" ที่ว่างตลอดช่วงที่ต้องการพอดี ใช้เสนอสลับแทนเครื่องที่ชนคิวอยู่ — เกณฑ์เลือกได้
+// เดียวกับที่ใช้เช็คทั่วแอป (ยังไม่ปิดใช้งาน + ลงทะเบียนเลขเช่าแล้ว) กันไม่ให้แนะนำเครื่องที่เลือกไม่ได้จริง
+function _altFreeUnits(unit, startIso, endIso, excludeIds) {
+  var key = _unitModelKey(unit);
+  return UNITS.filter(function(c) {
+    if (c.id === unit.id || (excludeIds || []).indexOf(c.id) !== -1) return false;
+    if (_unitModelKey(c) !== key) return false;
+    if (c.status === 'unavailable' || c.status === 'lost' || !_unitHasRental(c)) return false;
+    return !_lfConflict(c.id, startIso, endIso);
+  });
 }
 function lendSetDays(d) {
   lendDays = Math.max(1, d);
@@ -4700,6 +4824,17 @@ function renderLendFlow() {
       h += '<div class="lf-warn">⏳ ' + busyUnits.length + ' จาก ' + list.length +
         ' เครื่องชนกับใบจองอื่นในช่วงนี้ — เครื่องที่ว่างจะถูกจองให้ทันที ส่วนที่ชนจะถูกเก็บไว้เป็น "รอ" ในใบเดียวกัน ' +
         'ไปเช็คว่างอีกครั้งหรือตัดออกได้ทีหลังจากแท็บ 🔔 ติดตามคืน</div>';
+      // เครื่องชนคิวที่มีรุ่นเดียวกันตัวอื่นว่างพอดีช่วงเดียวกัน — เสนอสลับแทนทันที ไม่ต้องเลื่อนวันทั้งใบ
+      var pickedIds = list.map(function(u) { return u.id; });
+      busyUnits.forEach(function(bu) {
+        var alts = _altFreeUnits(bu, lendStart, lendEnd, pickedIds);
+        if (!alts.length) return;
+        var p = _scModelParts(bu), ap = _scModelParts(alts[0]);
+        h += '<div class="lf-alt">🔁 <b>' + esc(p.main) + '</b>' + (bu.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(bu.rentalDbNo) + '</span>' : '') +
+          ' ไม่ว่าง — มีรุ่นเดียวกันว่างพอดี: ' + esc(ap.main) +
+          (alts[0].rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(alts[0].rentalDbNo) + '</span>' : '') +
+          ' <button class="btn btn-primary btn-sm" onclick="lendSwapUnit(\'' + bu.id + '\',\'' + alts[0].id + '\')">🔁 สลับเครื่องนี้แทน</button></div>';
+      });
       var nf = lendFindNearestFree();
       h += nf
         ? '<div class="lf-nearest">🔍 วันว่างตรงกันใกล้สุดสำหรับทั้ง ' + list.length + ' เครื่อง: <b>' + _scD(nf.start) + ' – ' + _scD(nf.end) + '</b>' +
@@ -6445,7 +6580,7 @@ var _EDIT_FIELD_LABELS = {
   name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part (SKU)', category: 'หมวดหมู่',
   flyable: 'ประเภทการใช้งาน', rentalDbNo: 'เลขเครื่องเช่า', nbtcRegistered: 'กสทช.',
   droneInsurance: 'ประกันภัยโดรน', caatRegistered: 'CAAT', customerVisible: 'ลูกค้าเห็น', note: 'หมายเหตุ',
-  kitContents: 'ประกอบด้วย'
+  kitContents: 'ประกอบด้วย', availableFrom: 'วันที่เปิดให้ยืมได้', noteAtConfirm: 'หมายเหตุเครื่อง ณ ตอนยืนยัน'
 };
 var _EDIT_BOOL_FIELDS = { flyable: 1, nbtcRegistered: 1, droneInsurance: 1, caatRegistered: 1, customerVisible: 1 };
 function _fmtChangeVal(field, v) {
@@ -6474,7 +6609,8 @@ function _editLogStamp(at) {
   return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 function _editLogRowHtml(e) {
-  var typeLabel = e.type === 'add' ? '➕ เพิ่มเครื่องใหม่' : e.type === 'delete' ? '🗑️ ลบเครื่อง' : '✏️ แก้ไข';
+  var typeLabel = e.type === 'add' ? '➕ เพิ่มเครื่องใหม่' : e.type === 'delete' ? '🗑️ ลบเครื่อง' :
+    e.type === 'quarantine_confirm' ? '✅ ยืนยันรับเข้าคลังก่อนกำหนด' : '✏️ แก้ไข';
   var changesHtml = (e.changes || []).map(function(c) {
     var label = _EDIT_FIELD_LABELS[c.field] || c.field;
     var fromTxt = (c.from === null || c.from === undefined) ? '<i>ตั้งใหม่</i>' : esc(_fmtChangeVal(c.field, c.from));
@@ -6491,6 +6627,39 @@ function showEditLogM() {
   var list = EDIT_LOG.slice().sort(function(a, b) { return _editLogTimeMs(b.at) - _editLogTimeMs(a.at); }).slice(0, 150);
   var h = list.length ? list.map(_editLogRowHtml).join('') : '<div class="empty-state">ยังไม่มีประวัติการแก้ไขข้อมูลเครื่องเลย</div>';
   openSm('📜 ประวัติการแก้ไขข้อมูลทั้งหมด (ล่าสุด ' + list.length + ' รายการ)', h, true);
+}
+
+// คู่มือใช้งานสั้นๆ — สรุปว่าแต่ละแท็บ/เมนูใช้ทำอะไร กดดูได้เองไม่ต้องถามทีม กดที่ ❓ ข้างปุ่มเปลี่ยนธีม
+function showHelpGuideM() {
+  var sec = function(t) { return '<div class="sm-sec">' + t + '</div>'; };
+  var row = function(icon, title, desc) {
+    return '<div style="display:flex;gap:10px;margin-bottom:12px">' +
+      '<div style="font-size:18px;flex-shrink:0;width:24px;text-align:center">' + icon + '</div>' +
+      '<div><b style="font-size:13px">' + title + '</b><div class="hint" style="margin-top:2px">' + desc + '</div></div></div>';
+  };
+  var h = '<div class="hint" style="margin-bottom:14px">สรุปสั้นๆ ว่าแต่ละเมนูใช้ทำอะไร — เปิดดูได้ทุกเมื่อจากปุ่ม ❓ ข้างปุ่มเปลี่ยนธีม</div>';
+
+  h += sec('แท็บหลัก');
+  h += row('🚁', 'รายการเครื่อง', 'ดูสต๊อกทั้งหมด ติ๊กเลือกเครื่องแล้วกด "เลือกวันที่ยืม →" เพื่อเริ่มคีย์ยืมใหม่ หรือกดเข้าไปดู/แก้ข้อมูลเครื่องแต่ละตัว');
+  h += row('🗓️', 'ปฏิทิน', 'ดูภาพรวมว่าวันไหนเครื่องรุ่นไหนว่าง/ไม่ว่าง ช่วยวางแผนก่อนรับจองใหม่');
+  h += row('📋', 'ใบจอง', 'รวมทุกใบที่ "ยังไม่จบงาน" ไว้ที่เดียว — จองล่วงหน้า, กำลังยืม, เลยกำหนดคืน, รอชนคิว มีตัวกรองสถานะและช่องค้นหาให้ไล่ดูง่ายๆ แก้ไข/ยกเลิกใบจองได้จากตรงนี้เลย');
+  h += row('🟡', 'คำขอรออนุมัติ', 'คำขอยืมที่ลูกค้ากรอกเข้ามาเองจากลิงก์สาธารณะ รอทีมงานตรวจสอบแล้วกดอนุมัติ/ปฏิเสธ');
+  h += row('🔔', 'ติดตามคืน', 'โฟกัสเฉพาะของที่ต้อง "ตามให้คืนจริง" (เลยกำหนด/ใกล้ครบกำหนด) รวมถึงโซน "รอ (ชนคิว)" และ "รอรับเข้าคลัง" (ของที่คืนแล้วแต่ยังอยู่ในช่วงเผื่อตรวจนับ — ปิดก่อนกำหนดได้ถ้าตรวจจริงแล้ว)');
+
+  h += sec('เมนูเครื่องมือ (ปุ่ม ⋯)');
+  h += row('🏷️', 'จัดการหมวดหมู่สินค้า', 'เพิ่ม/แก้ไข/ลบหมวดหมู่ที่ใช้แบ่งเครื่องในหน้ารายการ');
+  h += row('👤', 'จัดการรายชื่อทีมงาน', 'ตั้งรายชื่อผู้คีย์เบิก/ผู้ขอ ไว้ล่วงหน้า จะได้เลือกจากลิสต์แทนพิมพ์เองทุกครั้ง');
+  h += row('✏️', 'แก้ไขตาราง (หลายเครื่อง)', 'แก้ข้อมูลเครื่องได้ทีละหลายแถวพร้อมกันแบบตาราง Excel');
+  h += row('📜', 'ประวัติการแก้ไขทั้งหมด', 'ดูย้อนหลังว่าใครแก้ข้อมูลเครื่องอะไรไปบ้าง เมื่อไหร่ (รวมถึงยืนยันรับเข้าคลังก่อนกำหนดด้วย)');
+  h += row('📊', 'รายงานการใช้งานเครื่อง', 'สรุปว่ารุ่นไหนถูกยืมบ่อย/นานแค่ไหน ช่วยตัดสินใจซื้อเพิ่ม/เลิกเก็บ');
+  h += row('📅', 'สรุปงานรายเดือน', 'ดูว่าแต่ละเดือนมีงานอะไรบ้าง รวมงานที่จบไปแล้ว (ประวัติ) — ต่างจากแท็บใบจองที่โชว์แค่งานที่ยังไม่จบ');
+  h += row('📤📥', 'Export / Import', 'ส่งออก/นำเข้าข้อมูลเครื่องทั้งหมดเป็นไฟล์ Excel เผื่อแก้ไขนอกระบบหรือสำรองข้อมูล');
+
+  h += sec('อื่นๆ ที่ควรรู้');
+  h += row('🔍', 'ช่องค้นหาบนสุด', 'ค้นได้ทุกอย่างพร้อมกันทุกแท็บ — รุ่น, เลขเครื่องเช่า, S/N, ผู้ยืม, ผู้คีย์เบิก, เลขใบจอง');
+  h += row('📲', 'ป้าย "คีย์จากแอปหลัก"', 'เครื่องที่มีป้ายนี้ แก้ข้อมูลจริงตรงนี้ไม่ได้ ต้องส่งคำขอเข้าคิวแล้วรอแอปหลักกด "รับเข้า" — เพราะข้อมูลต้นฉบับอยู่ที่ระบบคลังจริงของบริษัท ไม่ใช่หน้านี้');
+
+  openSm('📖 คู่มือการใช้งานเมนูต่างๆ', h, true);
 }
 
 function listenEdits() {
