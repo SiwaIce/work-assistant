@@ -6635,72 +6635,112 @@ function importUnitsExcel() {
         var wb = XLSX.read(ev.target.result, { type: 'binary' });
         rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
       } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); return; }
-      var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
-      // เซลล์ Y/N ที่เว้นว่างไว้ = "ไม่ได้ระบุ" ไม่ใช่ "N" — ต่างจากแอปหลักที่เว้นว่างจะถูกตีเป็น false ไปเลย
-      // (เจอว่าเป็นบั๊กจริงตอนสำรวจโค้ด) หน้านี้เข้าถึงได้ด้วย PIN ร่วม ความเสี่ยงเขียนทับผิดสูงกว่า
-      // จึงแก้พฤติกรรมให้ปลอดภัยกว่า: ว่าง = คงค่าเดิมไว้ (เครื่องใหม่ที่ไม่มีค่าเดิม ถือว่าไม่มีเอกสาร)
-      function yn(v, existing) {
-        var s = String(v == null ? '' : v).trim();
-        if (!s) return existing;
-        return s.toUpperCase() === 'Y';
-      }
-      var byRental = 0, byName = 0, skipped = 0;
-      var by = prompt('ชื่อคนนำเข้า (แอปหลักจะได้รู้ว่าใครนำเข้า):', _lastEditor());
-      if (by === null) return;
-      by = by.trim();
-      if (!by) { alert('ต้องใส่ชื่อคนนำเข้าก่อนนะครับ'); return; }
-      var batch = db.batch();
-      var newRentalVals = {};
-      UNITS.forEach(function(u) { if ((u.rentalDbNo || '').trim()) newRentalVals[(u.rentalDbNo || '').trim()] = u.id; });
-      var dupes = [];
-      rows.forEach(function(r) {
-        var id = String(r['ID'] || '').trim();
-        var name = String(r['ชื่ออุปกรณ์'] || '').trim();
-        var existing = id && byId[id] ? byId[id] : null;
-        if (!name && !existing) { skipped++; return; }
-        var rentalNo = String(r['หมายเลขเครื่องเช่า'] || (existing ? existing.rentalDbNo : '') || '').trim();
-        if (rentalNo) {
-          var ownerId = existing ? existing.id : ('new:' + (id || name));
-          if (newRentalVals[rentalNo] && newRentalVals[rentalNo] !== ownerId) dupes.push(rentalNo);
-          newRentalVals[rentalNo] = ownerId;
-        }
-        var fields = {
-          name: name || (existing ? existing.name : ''),
-          model: String(r['Model'] || (existing ? existing.model : '') || '').trim(),
-          sku: String(r['SKU'] || (existing ? existing.sku : '') || '').trim(),
-          serialNumber: String(r['Serial Number'] || (existing ? existing.serialNumber : '') || '').trim(),
-          rentalDbNo: rentalNo,
-          category: String(r['หมวดหมู่'] || (existing ? existing.category : '') || '').trim(),
-          flyable: yn(r['บินได้ (Y/N)'], existing ? existing.flyable !== false : true),
-          nbtcRegistered: yn(r['กสทช (Y/N)'], existing ? !!existing.nbtcRegistered : false),
-          droneInsurance: yn(r['ประกันภัย (Y/N)'], existing ? !!existing.droneInsurance : false),
-          caatRegistered: yn(r['CAAT (Y/N)'], existing ? !!existing.caatRegistered : false),
-          customerVisible: yn(r['ลูกค้าเห็น (Y/N)'], existing ? existing.customerVisible !== false : true),
-          note: String(r['หมายเหตุ'] || (existing ? existing.note : '') || '').trim()
-        };
-        if (existing) {
-          byRental++;
-          var isAdd = PENDING_EDITS[existing.id] && PENDING_EDITS[existing.id].type === 'add';
-          var ref = db.collection('publicDemoEdits').doc(existing.id);
-          if (isAdd) batch.set(ref, { type: 'add', unitId: existing.id, fields: Object.assign({}, PENDING_EDITS[existing.id].fields || {}, fields), editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
-          else batch.set(ref, { type: 'edit', unitId: existing.id, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        } else {
-          byName++;
-          var newId = id || ('stf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
-          batch.set(db.collection('publicDemoEdits').doc(newId), { type: 'add', unitId: newId, fields: fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
-        }
-      });
-      if (!byRental && !byName) { alert('ไม่พบแถวที่นำเข้าได้ — ตรวจว่าคอลัมน์ตรงกับไฟล์ที่ Export ออกมาหรือไม่'); return; }
-      if (dupes.length) { alert('หยุดนำเข้า — เลขเครื่องเช่าในไฟล์ซ้ำกับเครื่องอื่นที่มีอยู่แล้ว: ' + dupes.slice(0, 5).join(', ')); return; }
-      if (!confirm('พบ ' + rows.length + ' แถว — จะอัปเดตเครื่องเดิม ' + byRental + ' รายการ และเพิ่มใหม่ ' + byName + ' รายการ' + (skipped ? ' (ข้าม ' + skipped + ' แถวว่าง)' : '') + ' ยืนยันนำเข้า?')) return;
-      try { localStorage.setItem('demoStaffEditor', by); } catch (e2) {}
-      batch.commit().then(function() {
-        toastMock('✅ นำเข้าสำเร็จ (' + byRental + ' อัปเดต, ' + byName + ' ใหม่)');
-      }).catch(function(err) { alert('นำเข้าไม่สำเร็จ: ' + err.message); });
+      if (!rows.length) { alert('ไฟล์นี้ไม่มีข้อมูล'); return; }
+      _impRows = _impClassifyRows(rows);
+      showImportPreviewM();
     };
     reader.readAsBinaryString(file);
   };
   input.click();
+}
+// จัดประเภทแต่ละแถวไว้ก่อน (อัปเดต/เพิ่มใหม่/ข้าม/ซ้ำ) โดยยังไม่เขียนอะไรเข้า Firestore เลย — แยกจาก
+// commitImportPreview() ที่เขียนจริง เพื่อให้ preview โชว์ผลได้ก่อนโดยไม่มีผลข้างเคียงใดๆ ถ้ายกเลิกกลางทาง
+function _impClassifyRows(rows) {
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  // เซลล์ Y/N ที่เว้นว่างไว้ = "ไม่ได้ระบุ" ไม่ใช่ "N" — ต่างจากแอปหลักที่เว้นว่างจะถูกตีเป็น false ไปเลย
+  // (เจอว่าเป็นบั๊กจริงตอนสำรวจโค้ด) หน้านี้เข้าถึงได้ด้วย PIN ร่วม ความเสี่ยงเขียนทับผิดสูงกว่า
+  // จึงแก้พฤติกรรมให้ปลอดภัยกว่า: ว่าง = คงค่าเดิมไว้ (เครื่องใหม่ที่ไม่มีค่าเดิม ถือว่าไม่มีเอกสาร)
+  function yn(v, existing) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return existing;
+    return s.toUpperCase() === 'Y';
+  }
+  var newRentalVals = {};
+  UNITS.forEach(function(u) { if ((u.rentalDbNo || '').trim()) newRentalVals[(u.rentalDbNo || '').trim()] = u.id; });
+  return rows.map(function(r) {
+    var id = String(r['ID'] || '').trim();
+    var name = String(r['ชื่ออุปกรณ์'] || '').trim();
+    var existing = id && byId[id] ? byId[id] : null;
+    if (!name && !existing) return { action: 'skip', label: name || id || '(แถวว่าง)' };
+    var rentalNo = String(r['หมายเลขเครื่องเช่า'] || (existing ? existing.rentalDbNo : '') || '').trim();
+    var dup = false;
+    if (rentalNo) {
+      var ownerId = existing ? existing.id : ('new:' + (id || name));
+      if (newRentalVals[rentalNo] && newRentalVals[rentalNo] !== ownerId) dup = true;
+      newRentalVals[rentalNo] = ownerId;
+    }
+    var fields = {
+      name: name || (existing ? existing.name : ''),
+      model: String(r['Model'] || (existing ? existing.model : '') || '').trim(),
+      sku: String(r['SKU'] || (existing ? existing.sku : '') || '').trim(),
+      serialNumber: String(r['Serial Number'] || (existing ? existing.serialNumber : '') || '').trim(),
+      rentalDbNo: rentalNo,
+      category: String(r['หมวดหมู่'] || (existing ? existing.category : '') || '').trim(),
+      flyable: yn(r['บินได้ (Y/N)'], existing ? existing.flyable !== false : true),
+      nbtcRegistered: yn(r['กสทช (Y/N)'], existing ? !!existing.nbtcRegistered : false),
+      droneInsurance: yn(r['ประกันภัย (Y/N)'], existing ? !!existing.droneInsurance : false),
+      caatRegistered: yn(r['CAAT (Y/N)'], existing ? !!existing.caatRegistered : false),
+      customerVisible: yn(r['ลูกค้าเห็น (Y/N)'], existing ? existing.customerVisible !== false : true),
+      note: String(r['หมายเหตุ'] || (existing ? existing.note : '') || '').trim()
+    };
+    return { action: dup ? 'dup' : (existing ? 'update' : 'add'), id: id, existingId: existing ? existing.id : null, fields: fields };
+  });
+}
+var _impRows = [];
+var _IMP_ACTION_LABEL = { update: '🔄 จะอัปเดต', add: '➕ จะเพิ่มใหม่', skip: '⏭️ ข้าม (แถวว่าง)', dup: '⚠️ ซ้ำ — เลขเครื่องเช่าชนกัน' };
+// แสดงตารางพรีวิวก่อนนำเข้าจริง — เดิมมีแค่ confirm() บอกจำนวนรวม เห็นแค่ตัวเลข ไม่รู้ว่าแถวไหนจะเป็นอะไร
+// ถ้ามีแถวซ้ำ (เลขเครื่องเช่าชนกับเครื่องอื่น) จะไม่มีปุ่มยืนยันให้เลย ต้องแก้ไฟล์แล้วอัปโหลดใหม่ก่อน
+function showImportPreviewM() {
+  var counts = { update: 0, add: 0, skip: 0, dup: 0 };
+  _impRows.forEach(function(x) { counts[x.action]++; });
+  var h = '<div class="hint" style="margin-bottom:10px">พบ ' + _impRows.length + ' แถวในไฟล์ — ตรวจสอบรายแถวก่อนนำเข้าจริง</div>';
+  h += '<div class="sc-kv" style="margin-bottom:10px">' +
+    '<div><span>จะอัปเดต</span><b>' + counts.update + '</b></div>' +
+    '<div><span>จะเพิ่มใหม่</span><b>' + counts.add + '</b></div>' +
+    '<div><span>ข้าม (แถวว่าง)</span><b>' + counts.skip + '</b></div>' +
+    '<div><span>ซ้ำ (ต้องแก้ก่อน)</span><b' + (counts.dup ? ' style="color:var(--bad)"' : '') + '>' + counts.dup + '</b></div></div>';
+  if (counts.dup) h += '<div class="hint" style="color:var(--bad);margin-bottom:10px">⚠️ มีเลขเครื่องเช่าซ้ำกับเครื่องอื่น ' + counts.dup + ' แถว (ดูป้าย "ซ้ำ" ด้านล่าง) — ต้องแก้ไฟล์แล้วอัปโหลดใหม่ก่อนถึงจะนำเข้าได้</div>';
+  else if (!counts.update && !counts.add) h += '<div class="hint" style="color:var(--warn);margin-bottom:10px">⚠️ ไม่พบแถวที่นำเข้าได้เลย — ตรวจว่าคอลัมน์ตรงกับไฟล์ที่ Export ออกมาหรือไม่</div>';
+  h += '<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px">' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface);text-align:left">' +
+    '<th style="padding:6px 8px">สถานะ</th><th style="padding:6px 8px">ชื่อ/รุ่น</th><th style="padding:6px 8px">เลขเครื่องเช่า</th></tr></thead><tbody>' +
+    _impRows.map(function(x) {
+      var color = x.action === 'dup' ? 'var(--bad)' : x.action === 'skip' ? 'var(--text3)' : x.action === 'add' ? 'var(--good)' : 'var(--accent)';
+      var name = x.action === 'skip' ? (x.label || '—') : (x.fields.name || x.fields.model || '—');
+      var rental = x.action === 'skip' ? '' : (x.fields.rentalDbNo || '—');
+      return '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 8px;white-space:nowrap;color:' + color + '">' + _IMP_ACTION_LABEL[x.action] + '</td>' +
+        '<td style="padding:6px 8px">' + esc(name) + '</td><td style="padding:6px 8px" class="mono">' + esc(rental) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  h += '<div class="field" style="margin-top:12px"><label>✍️ คนนำเข้า *</label><input type="text" id="impBy" list="impByList" autocomplete="off" value="' + esc(_lastEditor()) + '" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('impByList') + '</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+  if (!counts.dup && (counts.update || counts.add)) h += '<button class="btn btn-primary" onclick="commitImportPreview()">✅ ยืนยันนำเข้า (' + counts.update + ' อัปเดต, ' + counts.add + ' ใหม่)</button>';
+  h += '<button class="btn btn-ghost" onclick="_impRows=[];closeSm()">ยกเลิก</button></div>';
+  openSm('📥 ตรวจสอบก่อนนำเข้า (' + _impRows.length + ' แถว)', h, true);
+}
+function commitImportPreview() {
+  var by = (document.getElementById('impBy').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนนำเข้าก่อนนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var batch = db.batch();
+  var byRental = 0, byName = 0;
+  _impRows.forEach(function(x) {
+    if (x.action === 'update') {
+      byRental++;
+      var isAdd = PENDING_EDITS[x.existingId] && PENDING_EDITS[x.existingId].type === 'add';
+      var ref = db.collection('publicDemoEdits').doc(x.existingId);
+      if (isAdd) batch.set(ref, { type: 'add', unitId: x.existingId, fields: Object.assign({}, PENDING_EDITS[x.existingId].fields || {}, x.fields), editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      else batch.set(ref, { type: 'edit', unitId: x.existingId, fields: x.fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    } else if (x.action === 'add') {
+      byName++;
+      var newId = x.id || ('stf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+      batch.set(db.collection('publicDemoEdits').doc(newId), { type: 'add', unitId: newId, fields: x.fields, editedBy: by, editedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  });
+  batch.commit().then(function() {
+    toastMock('✅ นำเข้าสำเร็จ (' + byRental + ' อัปเดต, ' + byName + ' ใหม่)');
+    _impRows = [];
+    closeSm();
+  }).catch(function(err) { alert('นำเข้าไม่สำเร็จ: ' + err.message); });
 }
 
 // ---- เมนู "⋯ เครื่องมือ" ----
