@@ -2775,41 +2775,57 @@ function saveSlipExtend(key) {
 function openSlipTransferM(key) {
   var rows = _rtSlipRows(key);
   var staffRows = rows.filter(function(l) { return l.src === 'staff'; });
-  var appCount = rows.length - staffRows.length;
-  if (!staffRows.length) { alert('ใบนี้คีย์มาจากแอปหลักทั้งหมด — โอนผู้ยืมได้จากแอปหลักเท่านั้น'); return; }
+  var appRows = rows.filter(function(l) { return l.src === 'app'; });
+  // ใบที่คีย์จากแอปหลักทั้งใบ ไม่มีเครื่องไหนมี doc ให้ "โอน" ตรงๆ เลยสักตัว แต่ยังแก้ผู้ยืม/ผู้คีย์/ใบจอง/
+  // เหตุผลได้ผ่านคิว publicDemoEdits เหมือนเครื่องอื่นๆ — saveLcvEdit เองมีลอจิกไล่หา sibling ตามเลขใบจอง
+  // แล้วเขียนคิวให้ครบทุกเครื่องในใบเดียวกันอยู่แล้ว (ดูคอมเมนต์ที่ฟังก์ชันนั้น) แค่เปลี่ยนทางเข้าจาก "บล็อก
+  // ทั้งหมด" เป็นพาไปเปิดฟอร์มแก้ไขของเครื่องแรกในใบแทน กดบันทึกจะกระจายไปทุกเครื่องในใบให้เองอัตโนมัติ
+  if (!staffRows.length) {
+    if (!appRows.length) { alert('ไม่พบเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
+    var first = appRows[0];
+    showLendConflictM(first.unitId, first.start, first.end);
+    lcvEditForm(first.unitId, first.start, first.end);
+    return;
+  }
   var h = _rtSlipHead(key, staffRows);
-  if (appCount) h += '<div class="hint">อีก ' + appCount + ' เครื่องในใบนี้คีย์จากแอปหลัก — โอนจากหน้านี้ไม่ได้ ต้องไปโอนที่แอปหลัก</div>';
+  if (appRows.length) h += '<div class="hint">อีก ' + appRows.length + ' เครื่องในใบนี้คีย์จากแอปหลัก — แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลได้จากปุ่ม ✏️ ที่แถวเครื่องนั้นแทน (กระจายไปทุกเครื่องที่แชร์เลขใบจองเดียวกันให้เอง)</div>';
   h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="stf_borrower" list="stfBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม">' + scBorrowerDatalist('stfBorrowerList') + '</div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="stf_keyer" list="stfKeyerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' + scKeyerDatalist('stfKeyerList') + '</div>';
-  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="stf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก"></div>';
+  h += '<div class="field"><label>📄 เลขใบจองใหม่</label><input type="text" id="stf_job" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน — ใช้กรอกเลขที่ยังไม่ได้ใส่ตอนจอง หรือแก้เลขที่คีย์ผิด"></div>';
+  h += '<div class="field"><label>📝 ใช้งานกับ (ค่าใหม่)</label><input type="text" id="stf_purpose" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน"></div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="stf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / เติมเลขใบจองที่ยังไม่ได้กรอกตอนจอง"></div>';
   h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="stf_by" list="stfKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง"></div>';
-  h += '<button class="btn btn-primary btn-full" onclick="saveSlipTransfer(\'' + _scEsq(key) + '\')">🔄 โอนตามที่เลือก</button>';
-  openSm('🔄 โอนผู้ยืมทั้งใบ', h);
+  h += '<button class="btn btn-primary btn-full" onclick="saveSlipTransfer(\'' + _scEsq(key) + '\')">💾 บันทึกตามที่เลือก</button>';
+  openSm('🔄 โอนผู้ยืม / แก้ไขข้อมูลใบจองทั้งใบ', h);
 }
 function saveSlipTransfer(key) {
   var rows = _rtSlipRows(key).filter(function(l) { return l.src === 'staff'; });
   var sel = _rtSelectedRows(rows);
-  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะโอนเลย'); return; }
+  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะทำรายการเลย'); return; }
   var nb = (document.getElementById('stf_borrower').value || '').trim();
   var nk = (document.getElementById('stf_keyer').value || '').trim();
+  var nj = (document.getElementById('stf_job').value || '').trim();
+  var np = (document.getElementById('stf_purpose').value || '').trim();
   var why = (document.getElementById('stf_why').value || '').trim();
   var by = (document.getElementById('stf_by').value || '').trim();
-  if (!nb && !nk) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
+  if (!nb && !nk && !nj && !np) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
   if (!why) { alert('ใส่เหตุผลด้วยนะครับ'); return; }
   if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
-  var suffix = sel.length < rows.length ? ' · โอน ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · โอนทั้งใบ';
+  var suffix = sel.length < rows.length ? ' · แก้ ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · แก้ทั้งใบ';
   var batch = db.batch();
   sel.forEach(function(l) {
     var upd = {}, evs = [];
     if (nb) { upd.borrower = nb; evs.push(_scEv('borrower', by, 'จาก ' + (l.borrower || '—') + ' → ' + nb + ' · ' + why + suffix)); }
     if (nk) { upd.approver = nk; evs.push(_scEv('keyer', by, 'จาก ' + (l.approver || '—') + ' → ' + nk + ' · ' + why + suffix)); }
+    if (nj) { upd.jobNo = nj; evs.push(_scEv('jobNo', by, 'จาก ' + (l.jobNo || '—') + ' → ' + nj + ' · ' + why + suffix)); }
+    if (np) { upd.purpose = np; evs.push(_scEv('purpose', by, 'จาก ' + (l.purpose || '—') + ' → ' + np + ' · ' + why + suffix)); }
     upd.events = firebase.firestore.FieldValue.arrayUnion.apply(firebase.firestore.FieldValue, evs);
     batch.update(db.collection('publicDemoLoans').doc(l.id), upd);
   });
   batch.commit().then(function() {
     closeSm();
-    toastMock('🔄 โอนแล้ว ' + sel.length + ' เครื่อง');
+    toastMock('💾 บันทึกแล้ว ' + sel.length + ' เครื่อง');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
