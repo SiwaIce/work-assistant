@@ -4568,6 +4568,11 @@ var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
 // ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับแอปหลัก) ----
 var scMultiDay = false, scPickDays = [];
+// จำไว้ว่าผู้ใช้กดเปิด/ปิดกล่อง "เครื่องที่ติดจองช่วงนี้" เองหรือยัง (null = ยังไม่เคยกด ให้เดาจาก
+// openDefault ไปก่อน) เดิมไม่มีตัวนี้ ทุกครั้งที่ติ๊กเลือกเครื่องในกล่องนี้แล้ว renderStaffCalendar() วาด
+// <details> ใหม่หมด กล่องจะหุบกลับไปค่าเริ่มต้นทันที ทั้งที่ผู้ใช้เพิ่งกางเองแล้วกำลังจะติ๊กเครื่องต่อ
+var scWishlistOpen = null;
+function scWishlistToggle(el) { scWishlistOpen = el.open; }
 // ตัวกรองหมวดหมู่ของกล่องสรุปเลือกหลายวัน — คนละตัวกับ scDayCat (กล่องดูวันเดียว) เพราะคนละบริบท
 // ไม่รีเซ็ตตอนเปลี่ยนช่วงวันที่เลือกใหม่ เหมือนกับ scSearch ที่ใช้ร่วมกันอยู่แล้ว (ค้างไว้จนกว่าจะกดล้างเอง)
 var scMultiCat = 'all';
@@ -4576,7 +4581,7 @@ function scMultiSetCat(c) { scMultiCat = c; renderStaffCalendar(); }
 // ได้ 1-10 ทั้งก้อนเลย) ไม่ต้องกดทุกวันในช่วงทีละวันเหมือนเดิม แต่กดวันอื่นต่อหลังช่วงเติมแล้วยังติ๊ก/เอาออก
 // เป็นรายวันได้อยู่ (เผื่อจะเจาะเอาบางวันออกจากช่วง หรือเพิ่มวันเดี่ยวๆ ที่ไม่ติดกัน)
 var _scRangeAnchor = null;
-function scToggleMultiDay() { scMultiDay = !scMultiDay; scPickDays = []; _scRangeAnchor = null; scOpen = null; renderStaffCalendar(); }
+function scToggleMultiDay() { scMultiDay = !scMultiDay; scPickDays = []; _scRangeAnchor = null; scOpen = null; scWishlistOpen = null; renderStaffCalendar(); }
 function scDayClick(iso) {
   if (!scMultiDay) { scToggleOpen('day:' + iso); return; }
   var justSetAnchor = false;
@@ -4601,7 +4606,7 @@ function scDayClick(iso) {
     if (box) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 }
-function scClearDays() { scPickDays = []; _scRangeAnchor = null; renderStaffCalendar(); }
+function scClearDays() { scPickDays = []; _scRangeAnchor = null; scWishlistOpen = null; renderStaffCalendar(); }
 // เครื่องที่ว่าง "ตลอดช่วง" ที่ติ๊กไว้ ถึงจะคีย์ยืมยาวรวดเดียวได้
 // ช่วงกับใบยืมทับกันไหม — นับใบที่เลยกำหนดแล้วยังไม่ปิดว่าทับตลอด (ของยังไม่กลับมา)
 function scClashes(b, from, to) {
@@ -4637,7 +4642,8 @@ function _scMultiSummary(units, bks) {
   var busyMatched = scMultiCat === 'all' ? busySearchHit : busySearchHit.filter(function(u) { return (String(u.category || '') || '_none') === scMultiCat; });
   function _scBusyWishlistHtml(openDefault) {
     if (!busyMatched.length) return '';
-    var bh = '<details class="ms-busy-wrap"' + (openDefault ? ' open' : '') + '><summary>🧺 เครื่องที่ติดจองช่วงนี้ (' +
+    var isOpen = scWishlistOpen === null ? openDefault : scWishlistOpen;
+    var bh = '<details class="ms-busy-wrap"' + (isOpen ? ' open' : '') + ' ontoggle="scWishlistToggle(this)"><summary>🧺 เครื่องที่ติดจองช่วงนี้ (' +
       busyMatched.length + ') — หยิบใส่ตะกร้าไว้ก่อนได้ ไปตามคืน/สลับคิวทีหลัง</summary><div class="ms-list ms-busy-list">';
     busyMatched.slice(0, 8).forEach(function(u) {
       var picked = lendIsPicked(u.id);
