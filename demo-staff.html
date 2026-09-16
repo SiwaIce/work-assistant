@@ -1990,11 +1990,12 @@ function cancelSoonLoan(loanId) {
   db.collection('publicDemoLoans').doc(loanId).delete()
     .then(function() { toastMock('✕ ยกเลิกใบจองแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
-// ยกเลิกทั้งใบทีเดียว — ใช้ตอนกลุ่มนั้น "จองล่วงหน้าล้วนๆ" และทุกเครื่องคีย์จากหน้านี้เอง (เช็คจาก g.items
-// ใน renderBookingsTab เวลาตัดสินใจว่าจะโชว์ปุ่มนี้ไหม) เผื่อกลุ่มเปลี่ยนไปแล้วจริง (เช่นมีคนเพิ่ง extend/
-// ยืนยันรับของไปพอดี) เช็คซ้ำจาก bkAllItems() สดอีกทีก่อนลบจริง ไม่เชื่อ g ที่ค้างอยู่ในหน่วยความจำเฉยๆ
-function cancelSlipSoon(key) {
-  var ids = bkAllItems().filter(function(it) { return it.kind === 'soon' && _bkItemSlipKey(it) === key && it.b.loanId; }).map(function(it) { return it.b.loanId; });
+// ยกเลิกทั้งใบทีเดียว — ใช้ตอนกลุ่มนั้นมีแต่ "จองล่วงหน้า"/"รอ (ชนคิว)" ปนกันได้ (ทั้งสองแบบของยังไม่เคย
+// ออกจากคลังจริงเหมือนกัน) และทุกเครื่องคีย์จากหน้านี้เอง (เช็คจาก g.items ใน renderBookingsTab เวลา
+// ตัดสินใจว่าจะโชว์ปุ่มนี้ไหม) เผื่อกลุ่มเปลี่ยนไปแล้วจริง (เช่นมีคนเพิ่ง extend/ยืนยันรับของไปพอดี) เช็คซ้ำ
+// จาก bkAllItems() สดอีกทีก่อนลบจริง ไม่เชื่อ g ที่ค้างอยู่ในหน่วยความจำเฉยๆ
+function cancelSlipBooking(key) {
+  var ids = bkAllItems().filter(function(it) { return (it.kind === 'soon' || it.kind === 'pending') && _bkItemSlipKey(it) === key && it.b.loanId; }).map(function(it) { return it.b.loanId; });
   if (!ids.length) { alert('ไม่พบรายการนี้แล้ว — อาจถูกยกเลิกหรือแก้ไปก่อนหน้านี้'); return; }
   if (!confirm('ยกเลิกใบจองนี้ทั้งหมด ' + ids.length + ' เครื่อง? (ของยังไม่เคยออกจากคลัง จะลบใบทิ้งไปเลย ไม่ใช่บันทึกว่าคืนแล้ว)')) return;
   var batch = db.batch();
@@ -2286,9 +2287,10 @@ function _bkGroup(items) {
   return { groups: groups, order: order };
 }
 // ปุ่มทั้งใบที่หัวการ์ด — มีให้ 3 กรณีที่มีปุ่มทั้งใบจริงอยู่แล้วในระบบ (กำลังยืม/เลยกำหนด ใช้ปุ่มเดิมของ
-// ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM, จองล่วงหน้าล้วนๆ ที่คีย์จากหน้านี้เองทุกเครื่อง
-// ยกเลิกทั้งใบได้ — ถ้ามีเครื่องคีย์จากแอปหลักปนอยู่ ไม่ให้ปุ่มนี้ เพราะลบใบตรงๆ ไม่ได้ ต้องไปยกเลิกที่นั่น)
-// รอชนคิว ยังไม่มีปุ่มทั้งใบให้ เพราะแต่ละเครื่องเหตุผล/วันเริ่มไม่เหมือนกัน จัดการทีละเครื่องที่แถวย่อยแทน
+// ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM, จองล่วงหน้า/รอชนคิว — ผสมกันได้ เพราะของยัง
+// ไม่เคยออกจากคลังทั้งคู่เหมือนกัน — ที่คีย์จากหน้านี้เองทุกเครื่อง ยกเลิกทั้งใบได้ ถ้ามีเครื่องคีย์จากแอปหลัก
+// ปนอยู่ ไม่ให้ปุ่มนี้ เพราะลบใบตรงๆ ไม่ได้ ต้องไปยกเลิกที่นั่น หรือถ้ามีเครื่อง out/late ปนอยู่ด้วยก็ไม่ให้
+// เหมือนกัน ให้จัดการทีละเครื่องที่แถวย่อยแทน กันลบเครื่องที่ยังออกอยู่จริงไปโดยไม่ตั้งใจ)
 function _bkSlipActionsHtml(g) {
   if (g.statuses.out || g.statuses.late) {
     return '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(g.key) + '\')">✅ คืนทั้งใบ</button>' +
@@ -2298,8 +2300,9 @@ function _bkSlipActionsHtml(g) {
   if (g.statuses.unconf && Object.keys(g.statuses).length === 1) {
     return '<button class="btn btn-primary btn-sm" onclick="openConfirmPickupM(\'' + _scEsq(g.borrower) + '\',\'' + g.startIso + '\',\'' + g.endIso + '\')">✅ ยืนยันทั้งใบ</button>';
   }
-  if (g.statuses.soon && Object.keys(g.statuses).length === 1 && g.items.every(function(it) { return !!it.b.loanId; })) {
-    return '<button class="btn btn-ghost btn-sm" onclick="cancelSlipSoon(\'' + _scEsq(g.key) + '\')">❌ ยกเลิกใบจอง</button>';
+  var onlyCancelable = (g.statuses.soon || g.statuses.pending) && Object.keys(g.statuses).every(function(k) { return k === 'soon' || k === 'pending'; });
+  if (onlyCancelable && g.items.length && g.items.every(function(it) { return !!it.b.loanId; })) {
+    return '<button class="btn btn-ghost btn-sm" onclick="cancelSlipBooking(\'' + _scEsq(g.key) + '\')">❌ ยกเลิกทั้งใบ</button>';
   }
   return '';
 }
