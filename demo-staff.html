@@ -1987,7 +1987,7 @@ function cancelSlipSoon(key) {
 var bkSearch = '';
 var _bkSearchTimer = null;
 var bkCatFilter = [];
-var bkStat = 'all';
+var bkStatFilter = [];
 var bkBorrower = 'all';
 var bkApprover = 'all';
 var bkView = 'unit';
@@ -2013,7 +2013,13 @@ function bkSetCat(id) {
   else { var i = bkCatFilter.indexOf(id); if (i === -1) bkCatFilter.push(id); else bkCatFilter.splice(i, 1); }
   renderBookingsTab();
 }
-function bkSetStat(s) { bkStat = s; renderBookingsTab(); }
+// เลือกได้มากกว่า 1 สถานะพร้อมกัน (เหมือนตัวกรองหมวดหมู่ bkSetCat) — เดิมเลือกได้ทีละสถานะเดียว ดู
+// "จองล่วงหน้า" กับ "กำลังยืม" พร้อมกันไม่ได้ ต้องสลับไปมา
+function bkSetStat(s) {
+  if (s === 'all') bkStatFilter = [];
+  else { var i = bkStatFilter.indexOf(s); if (i === -1) bkStatFilter.push(s); else bkStatFilter.splice(i, 1); }
+  renderBookingsTab();
+}
 function bkSetBorrower(v) { bkBorrower = v; renderBookingsTab(); }
 function bkSetApprover(v) { bkApprover = v; renderBookingsTab(); }
 function bkClearPeople() { bkBorrower = 'all'; bkApprover = 'all'; renderBookingsTab(); }
@@ -2058,7 +2064,7 @@ function bkToggleSlipOpen(key) { bkSlipOpen[key] = !bkSlipOpen[key]; renderBooki
 function bkJumpToNew(borrower, jobNo, ranges) {
   bkSearch = '';
   var searchEl = document.getElementById('bkSearch'); if (searchEl) searchEl.value = '';
-  bkCatFilter = []; bkStat = 'all'; bkApprover = 'all';
+  bkCatFilter = []; bkStatFilter = []; bkApprover = 'all';
   bkBorrower = borrower || 'all';
   staffTab('bookings');
   var keys = {};
@@ -2088,11 +2094,11 @@ function _bkCatTabsHtml(all) {
 function _bkStatChipsHtml(all) {
   var counts = { all: all.length };
   all.forEach(function(it) { counts[it.kind] = (counts[it.kind] || 0) + 1; });
-  var h = '<div class="cat-tabs"><div class="cat-tab' + (bkStat === 'all' ? ' on' : '') + '" onclick="bkSetStat(\'all\')">ทั้งหมด <span class="cnt">' + counts.all + '</span></div>';
+  var h = '<div class="cat-tabs"><div class="cat-tab' + (!bkStatFilter.length ? ' on' : '') + '" onclick="bkSetStat(\'all\')">ทั้งหมด <span class="cnt">' + counts.all + '</span></div>';
   Object.keys(_SC_BUSY_LABEL).filter(function(k) { return _SC_BUSY_SEV[k] > 0; })
     .sort(function(a, b) { return _SC_BUSY_SEV[b] - _SC_BUSY_SEV[a]; }).forEach(function(k) {
       if (!counts[k]) return;
-      h += '<div class="cat-tab st-' + k + (bkStat === k ? ' on' : '') + '" onclick="bkSetStat(\'' + k + '\')">' + esc(_SC_BUSY_LABEL[k]) + ' <span class="cnt">' + counts[k] + '</span></div>';
+      h += '<div class="cat-tab st-' + k + (bkStatFilter.indexOf(k) !== -1 ? ' on' : '') + '" onclick="bkSetStat(\'' + k + '\')">' + esc(_SC_BUSY_LABEL[k]) + ' <span class="cnt">' + counts[k] + '</span></div>';
     });
   return h + '</div>';
 }
@@ -2113,7 +2119,7 @@ function _bkPersonFiltersHtml(all) {
 }
 function _bkMatch(it) {
   if (bkCatFilter.length && bkCatFilter.indexOf(it.u.category) === -1) return false;
-  if (bkStat !== 'all' && it.kind !== bkStat) return false;
+  if (bkStatFilter.length && bkStatFilter.indexOf(it.kind) === -1) return false;
   if (bkBorrower !== 'all' && it.b.borrower !== bkBorrower) return false;
   if (bkApprover !== 'all' && it.b.approver !== bkApprover) return false;
   var q = bkSearch.trim().toLowerCase();
@@ -2327,7 +2333,7 @@ function renderBookingsTab() {
   h += _bkSortBarHtml();
 
   if (!filtered.length) {
-    h += '<div class="empty-state">' + ((bkSearch.trim() || bkCatFilter.length || bkStat !== 'all' || bkBorrower !== 'all' || bkApprover !== 'all')
+    h += '<div class="empty-state">' + ((bkSearch.trim() || bkCatFilter.length || bkStatFilter.length || bkBorrower !== 'all' || bkApprover !== 'all')
       ? '🔍 ไม่พบรายการที่ตรงกับตัวกรอง — ลองเปลี่ยนตัวกรองหรือล้างคำค้น' : '🎉 ไม่มีใบจองค้างอยู่') + '</div>';
     body.innerHTML = h;
     return;
