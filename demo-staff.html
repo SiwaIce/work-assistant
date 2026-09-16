@@ -309,6 +309,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-crow2-exc { display:block; font-size:10.5px; color:var(--bad); font-weight:600; margin-top:2px; }
 .rt-crow2-exc.queued { color:var(--accent); }
 .rt-crow2-note { display:block; font-size:10.5px; color:var(--text2); margin-top:2px; }
+.wait-note { display:block; font-size:11px; color:var(--warn); margin-top:4px; }
 .rt-crow2 .row-acts { display:flex; gap:5px; flex-shrink:0; }
 .detail-btn { font:inherit; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
   border:1px solid var(--border); background:var(--surface-2); color:var(--text2); cursor:pointer; white-space:nowrap; }
@@ -2355,6 +2356,21 @@ function _bkRowActionsHtml(it) {
   }
   return bell + detailBtn;
 }
+// รายการ "รอ (ชนคิว)" ของเครื่องตัวนี้ — ใช้โชว์ที่แถวของคนที่ถือครองอยู่ตอนนี้ (out/late) ให้รู้ว่ามีคนรอ
+// ต่อคิวอยู่ด้วย ช่วยตัดสินใจว่าต้องรีบตามคืนไหม ไม่เช็คว่าชนกับตัวนี้เป๊ะๆ เพราะของที่ "รอ" อยู่แล้วคือติดคิว
+// ของเครื่องนี้อยู่แน่ๆ ตามนิยามของสถานะ pending อยู่แล้ว
+function _waitingForUnit(unitId) {
+  return LOANS.filter(function(l) { return l.unitId === unitId && l.status === 'pending'; })
+    .sort(function(a, b) { return a.start.localeCompare(b.start); });
+}
+function _waitingNoteHtml(unitId) {
+  var w = _waitingForUnit(unitId);
+  if (!w.length) return '';
+  var first = w[0];
+  var extra = w.length > 1 ? ' <span style="color:var(--text3)">(+อีก ' + (w.length - 1) + ' ราย)</span>' : '';
+  return '<span class="wait-note">⏳ มีคนรอยืมต่อ: <b>' + esc(first.borrower || 'ไม่ระบุผู้ยืม') + '</b> · ' +
+    _scD(first.start) + '–' + _scD(first.end) + (first.purpose ? ' · ' + esc(first.purpose) : '') + extra + '</span>';
+}
 function _bkRowHtml(it) {
   var u = it.u, b = it.b, cat = _scCatOf(u), p = _scModelParts(u), due = _bkDueTxt(it);
   return '<div class="bk-row"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>' +
@@ -2363,7 +2379,8 @@ function _bkRowHtml(it) {
     '<div class="meta"><span>ผู้ยืม <b>' + (b.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(b.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(b.borrower) + '</span>' : '—') + '</b></span>' +
     '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
     '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span>' +
-    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') + '</div></div>' +
+    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
+    ((it.kind === 'out' || it.kind === 'late') ? _waitingNoteHtml(u.id) : '') + '</div></div>' +
     '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
     '<div class="acts">' + _bkRowActionsHtml(it) +
     '<button class="detail-btn icon-btn" onclick="bkJumpToSlip(\'' + _scEsq(_bkItemSlipKey(it)) + '\')" title="ดูใบจองทั้งชุดที่เครื่องนี้อยู่">🔗</button>' +
@@ -2423,7 +2440,8 @@ function _bkSlipItemHtml(it, skip) {
   var u = it.u, p = _scModelParts(u);
   return '<div class="rt-crow2"><span class="ic">' + _scCatOf(u).icon + '</span>' +
     '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') +
-    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') + '</span>' +
+    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
+    ((it.kind === 'out' || it.kind === 'late') ? _waitingNoteHtml(u.id) : '') + '</span>' +
     '<span class="row-acts">' + _scBusyBadge(it.kind) + (skip ? '' : _bkRowActionsHtml(it)) + '</span></div>';
 }
 function _bkSlipHtml(g) {
@@ -2575,6 +2593,7 @@ function returnRowHtml(cls, l, compact) {
       (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') +
       (u && u.note ? '<br>📝 หมายเหตุเครื่อง: ' + esc(u.note) : '') + '</div>';
   }
+  if (u) h += _waitingNoteHtml(u.id);
   // ใบที่มาจาก Lotus Note ไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
   // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะ "ส่งคำขอแล้ว" ของ
   // เครื่องนั้นๆ ซึ่งเป็นข้อมูลเฉพาะเครื่อง ไม่ใช่ของทั้งใบ)
@@ -2632,7 +2651,8 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
   var h = '<div class="rt-crow2"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>';
   h += '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
     (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
-    (u && u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '');
+    (u && u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
+    (u ? _waitingNoteHtml(u.id) : '');
   if (l.end !== slipEndIso) {
     h += '<span class="rt-crow2-exc">⚠ กำหนดคืนต่าง — ' + esc(_scD(l.end)) + ' (' + daysTxt + ')</span>';
   }
