@@ -976,7 +976,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
             <input type="text" id="unitSearch" placeholder="🔎 กรองเฉพาะรายการที่แสดงอยู่นี้ (รุ่น, SiS Part, S/N, เลขเครื่องเช่า)" oninput="unitSearchInput(this.value)" autocomplete="off">
             <button class="btn btn-ghost btn-sm" onclick="lendPasteToggle()" title="ก๊อปเลขเครื่องเช่าจากระบบคลังมาวาง แล้วติ๊กให้อัตโนมัติ" style="white-space:nowrap">📋 วางเลขเครื่อง</button>
             <button class="btn btn-ghost btn-sm" onclick="openRentImport()" title="นำเข้าไฟล์ export จากระบบคลัง เติมเลขที่ใบจองย้อนหลังให้ทุกเครื่อง" style="white-space:nowrap">📥 นำเข้าเลขใบจอง</button>
-            <button class="btn btn-ghost btn-sm" onclick="openScanM()" title="ใช้กล้องสแกน QR/บาร์โค้ดเลขเครื่องเช่า เพิ่มเข้ารายการยืมได้ทันที" style="white-space:nowrap">📷 สแกนเลขเครื่อง</button>
+            <!-- ซ่อนปุ่มสแกนไว้ก่อน (ตอนสแกนเลขเครื่องยังใช้งานไม่ได้ดี) — โค้ด openScanM() ยังอยู่ครบ เปิดกลับมาได้เมื่อพร้อม -->
             <span id="unitCountLabel" style="align-self:center;font-size:12px;color:var(--text2);white-space:nowrap"></span>
           </div>
           <div id="lendPastePanel" class="paste-panel" style="display:none">
@@ -4307,7 +4307,6 @@ function renderLendBar() {
       return '<span class="lb-chip">' + esc(p.main) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') +
         '<span class="x" onclick="lendToggle(\'' + id + '\')">✕</span></span>';
     }).join('') + '</div>' +
-    '<button class="btn btn-ghost btn-sm" onclick="openScanM()" title="สแกนเพิ่มอีก">📷 สแกนเพิ่ม</button>' +
     '<button class="btn btn-ghost btn-sm" onclick="lendClear()">ล้าง</button>' +
     '<button class="btn btn-primary btn-sm" onclick="openLendFlow()">📅 เลือกวันที่ยืม →</button>';
 }
