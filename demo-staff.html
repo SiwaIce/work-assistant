@@ -2151,17 +2151,35 @@ function _bkRowActionsHtml(it) {
   var detailBtn = isStaff
     ? '<button class="detail-btn" onclick="openLoanLogM(\'' + b.loanId + '\')" title="ประวัติใบยืม">📜 รายละเอียด</button>'
     : '<button class="detail-btn" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')" title="ดูข้อมูลเครื่อง">📄 ดูเครื่อง</button>';
-  if (it.kind === 'late') {
-    return '<button class="detail-btn icon-btn" onclick="openReminderM(\'' + u.id + '\',\'' + _scEsq(b.borrower || '') + '\',\'' + _scEsq(b.jobNo || '') + '\',\'' + _scIso(b.e) + '\')" title="แจ้งเตือนผู้ยืม">🔔</button>' + detailBtn;
+  var bell = it.kind === 'late'
+    ? '<button class="detail-btn icon-btn" onclick="openReminderM(\'' + u.id + '\',\'' + _scEsq(b.borrower || '') + '\',\'' + _scEsq(b.jobNo || '') + '\',\'' + _scIso(b.e) + '\')" title="แจ้งเตือนผู้ยืม">🔔</button>'
+    : '';
+  // ต่อเวลา/โอน/แก้ไข — พาริตี้เดียวกับแท็บติดตามคืน (returnRowHtml): คีย์จากหน้านี้เอง (มี loanId) ใช้
+  // openExtendM/openTransferM ของจริงได้ตรงๆ, คีย์จากแอปหลัก (ไม่มี doc ให้แก้ตรง) ใช้ askLoanAction ส่ง
+  // คำขอเข้าคิวเหมือนกัน — ถ้ามีคำขอค้างอยู่แล้วไม่ต้องให้ส่งซ้ำ
+  if (it.kind === 'out' || it.kind === 'late' || it.kind === 'soon') {
+    if (isStaff) {
+      return bell + detailBtn +
+        '<button class="detail-btn icon-btn" onclick="openExtendM(\'' + b.loanId + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
+        '<button class="detail-btn icon-btn" onclick="openTransferM(\'' + b.loanId + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>';
+    }
+    var pend = PENDING_EDITS[u.id];
+    if (pend && pend.loanAction) {
+      return bell + detailBtn + '<span style="color:var(--text3);font-style:italic;font-size:12px" title="รอเปิดแอปหลักกด &quot;รับเข้า&quot;">⏳ ส่งคำขอแล้ว</span>';
+    }
+    return bell + detailBtn +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน (ผ่านแอปหลัก)">⏩</button>' +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์ (ผ่านแอปหลัก)">🔄</button>' +
+      '<button class="detail-btn icon-btn" onclick="showLendConflictM(\'' + u.id + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')" title="แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล">✏️</button>';
   }
-  return detailBtn;
+  return bell + detailBtn;
 }
 function _bkRowHtml(it) {
   var u = it.u, b = it.b, cat = _scCatOf(u), p = _scModelParts(u), due = _bkDueTxt(it);
   return '<div class="bk-row"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>' +
     '<div class="main"><div class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
-    (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>' +
-    '<div class="meta"><span>ผู้ยืม <b>' + esc(b.borrower || '—') + '</b></span>' +
+    (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') + '</div>' +
+    '<div class="meta"><span>ผู้ยืม <b>' + (b.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(b.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(b.borrower) + '</span>' : '—') + '</b></span>' +
     '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
     '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span></div></div>' +
     '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
@@ -2208,7 +2226,7 @@ function _bkSlipActionsHtml(g) {
 function _bkSlipItemHtml(it, skip) {
   var u = it.u, p = _scModelParts(u);
   return '<div class="rt-crow2"><span class="ic">' + _scCatOf(u).icon + '</span>' +
-    '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</span>' +
+    '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') + '</span>' +
     '<span class="row-acts">' + _scBusyBadge(it.kind) + (skip ? '' : _bkRowActionsHtml(it)) + '</span></div>';
 }
 function _bkSlipHtml(g) {
