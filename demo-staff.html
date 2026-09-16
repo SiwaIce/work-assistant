@@ -300,6 +300,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-crow2 .nm { font-weight:600; min-width:0; }
 .rt-crow2-exc { display:block; font-size:10.5px; color:var(--bad); font-weight:600; margin-top:2px; }
 .rt-crow2-exc.queued { color:var(--accent); }
+.rt-crow2-note { display:block; font-size:10.5px; color:var(--text2); margin-top:2px; }
 .rt-crow2 .row-acts { display:flex; gap:5px; flex-shrink:0; }
 .detail-btn { font:inherit; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
   border:1px solid var(--border); background:var(--surface-2); color:var(--text2); cursor:pointer; white-space:nowrap; }
@@ -2250,7 +2251,8 @@ function _bkRowHtml(it) {
     (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') + '</div>' +
     '<div class="meta"><span>ผู้ยืม <b>' + (b.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(b.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(b.borrower) + '</span>' : '—') + '</b></span>' +
     '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
-    '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span></div></div>' +
+    '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span>' +
+    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') + '</div></div>' +
     '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
     '<div class="acts">' + _bkRowActionsHtml(it) +
     '<button class="detail-btn icon-btn" onclick="bkJumpToSlip(\'' + _scEsq(_bkItemSlipKey(it)) + '\')" title="ดูใบจองทั้งชุดที่เครื่องนี้อยู่">🔗</button>' +
@@ -2309,7 +2311,8 @@ function _bkSlipActionsHtml(g) {
 function _bkSlipItemHtml(it, skip) {
   var u = it.u, p = _scModelParts(u);
   return '<div class="rt-crow2"><span class="ic">' + _scCatOf(u).icon + '</span>' +
-    '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') + '</span>' +
+    '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') +
+    (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') + '</span>' +
     '<span class="row-acts">' + _scBusyBadge(it.kind) + (skip ? '' : _bkRowActionsHtml(it)) + '</span></div>';
 }
 function _bkSlipHtml(g) {
@@ -2456,7 +2459,8 @@ function returnRowHtml(cls, l, compact) {
       ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
       '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
       (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') +
-      (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') + '</div>';
+      (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') +
+      (u && u.note ? '<br>📝 หมายเหตุเครื่อง: ' + esc(u.note) : '') + '</div>';
   }
   // ใบที่มาจากแอปหลักไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
   // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะ "ส่งคำขอแล้ว" ของ
@@ -2514,7 +2518,8 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
 
   var h = '<div class="rt-crow2"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>';
   h += '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
-    (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '');
+    (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+    (u && u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '');
   if (l.end !== slipEndIso) {
     h += '<span class="rt-crow2-exc">⚠ กำหนดคืนต่าง — ' + esc(_scD(l.end)) + ' (' + daysTxt + ')</span>';
   }
