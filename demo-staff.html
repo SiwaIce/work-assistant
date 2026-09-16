@@ -2328,6 +2328,17 @@ function _bkSlipHtml(g) {
     _bkSlipActionsHtml(g) +
     (g.items.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="bkToggleSlipOpen(\'' + _scEsq(g.key) + '\')">' + (isOpen ? '▴ ย่อรายการ' : '▾ แสดงรายการ (' + g.items.length + ')') + '</button>' : '') +
     '</div></div></div>';
+  // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — เพิ่มกล่องแจ้ง+ปุ่มแก้ไขทั้งใบชัดๆ ตรงนี้ พาริตี้เดียวกับแท็บติดตามคืน
+  // (renderReturnTabBySlip) เพราะปุ่ม "โอนทั้งใบ" ด้านบน (ถ้ามี) ชื่อไม่สื่อว่าแก้ผู้ยืม/ใบจอง/เหตุผลได้ด้วย
+  // และบางสถานะ (จองล่วงหน้าที่คีย์จากแอปหลักล้วนๆ — ไม่มี loanId ให้ยกเลิก ไม่ใช่ out/late ให้โอนทั้งใบ)
+  // ไม่มีปุ่มระดับทั้งใบให้เลยด้วยซ้ำ ต้องมีทางแก้อย่างน้อยหนึ่งทางเสมอ
+  var appItems = g.items.filter(function(it) { return !it.b.loanId; });
+  if (appItems.length) {
+    var a0 = appItems[0];
+    h += '<div class="rt-src" style="margin:0 8px 8px">📲 ' + appItems.length + ' เครื่องในใบนี้คีย์จากแอปหลัก แก้ตัวจริงไม่ได้ตรงนี้ — ' +
+      'ส่งคำขอแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลได้เลย รอแอปหลักกด “รับเข้า” ' +
+      '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.u.id + '\',\'' + _scIso(a0.b.s) + '\',\'' + _scIso(a0.b.e) + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
+  }
   if (isOpen) {
     h += '<div class="rt-crow-list2">' + g.items.map(function(it) {
       return _bkSlipItemHtml(it, it.kind === 'out' || (it.kind === 'unconf' && pureUnconf));
