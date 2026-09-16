@@ -923,8 +923,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
                 <button onclick="closeToolsMenu();showEditLogM()">📜 ประวัติการแก้ไขทั้งหมด</button>
                 <button onclick="closeToolsMenu();showUtilizationM()">📊 รายงานการใช้งานเครื่อง</button>
                 <div class="tools-menu-sep"></div>
-                <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม)</button>
-                <button onclick="closeToolsMenu();exportUnitsRentalSheet()">📤 Export (รูปแบบคลัง)</button>
+                <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม + รูปแบบคลัง)</button>
                 <button onclick="closeToolsMenu();importUnitsExcel()">📥 Import (เต็ม)</button>
               </div>
             </div>
@@ -6609,12 +6608,16 @@ function _bgSave() {
 }
 
 // ---- Export / Import (Excel) ----
-// คอลัมน์เดียวกับ exportDemoItemsExcel/importDemoItemsExcel ในแอปหลัก (features.js) เพื่อให้ไฟล์ใช้
-// สลับกันได้ — ตัดคอลัมน์ที่เป็นของ "ใบยืม" ออก (สถานะ/ผู้ยืม/วันที่ยืม/เลขใบจอง) เพราะหน้านี้มีระบบ
-// จองของตัวเอง (publicDemoLoans) อยู่แล้ว ไม่ควรมีใครไปเขียนทับจากไฟล์ Excel
+// ไฟล์เดียว 2 แท็บ (เดิมแยกเป็น 2 ปุ่ม 2 ไฟล์ — ผู้ใช้ขอให้รวมเพราะข้อมูลชุดเดียวกัน แค่คนละมุมมอง):
+//   'demo'       คอลัมน์เดียวกับ exportDemoItemsExcel/importDemoItemsExcel ในแอปหลัก (features.js) เพื่อให้
+//                ไฟล์ใช้สลับกันได้ และตรงกับ importUnitsExcel() ด้านล่างเป๊ะ ไว้แก้ข้อมูลเป็นชุดใหญ่นอกเว็บ
+//                แล้วนำเข้ากลับ — ตัดคอลัมน์ของ "ใบยืม" ออก (สถานะ/ผู้ยืม/วันที่ยืม/เลขใบจอง) เพราะหน้านี้มี
+//                ระบบจองของตัวเอง (publicDemoLoans) อยู่แล้ว ไม่ควรมีใครไปเขียนทับจากไฟล์ Excel
+//   'เครื่องเช่า' รูปแบบไฟล์ที่ทีมคลัง/ระบบเครื่องเช่าจริงใช้กระทบยอด (มีสถานะจอง/ว่าง + กำหนดส่ง-รับคืน)
+//                เฉพาะเครื่องที่ลงทะเบียนเช่าแล้ว (มีหมายเลขเครื่องเช่า) เท่านั้น
 function exportUnitsExcel() {
   if (typeof XLSX === 'undefined') { alert('ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า'); return; }
-  var data = UNITS.map(function(u) {
+  var demoData = UNITS.map(function(u) {
     return {
       'ID': u.id, 'ชื่ออุปกรณ์': u.name || '', 'Model': u.model || '', 'SKU': u.sku || '',
       'Serial Number': u.serialNumber || '', 'หมายเลขเครื่องเช่า': u.rentalDbNo || '',
@@ -6624,18 +6627,12 @@ function exportUnitsExcel() {
       'หมายเหตุ': u.note || ''
     };
   });
-  var ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:14},{wch:25},{wch:15},{wch:15},{wch:18},{wch:15},{wch:12},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:25}];
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'demo');
-  XLSX.writeFile(wb, 'demo-equipment-' + _td() + '.xlsx');
-  toastMock('📤 Export สำเร็จ');
-}
-function exportUnitsRentalSheet() {
-  if (typeof XLSX === 'undefined') { alert('ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า'); return; }
-  var items = UNITS.filter(function(u) { return (u.rentalDbNo || '').trim(); });
-  items.sort(function(a, b) { return (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true }); });
-  var data = items.map(function(u, i) {
+  var demoWs = XLSX.utils.json_to_sheet(demoData);
+  demoWs['!cols'] = [{wch:14},{wch:25},{wch:15},{wch:15},{wch:18},{wch:15},{wch:12},{wch:10},{wch:10},{wch:10},{wch:10},{wch:12},{wch:25}];
+
+  var rentalItems = UNITS.filter(function(u) { return (u.rentalDbNo || '').trim(); });
+  rentalItems.sort(function(a, b) { return (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true }); });
+  var rentalData = rentalItems.map(function(u, i) {
     var loan = unitCurrentLoan(u.id), appRange = loan ? null : unitAppRangeOn(u.id, _td());
     var b = loan || appRange;
     return {
@@ -6646,12 +6643,14 @@ function exportUnitsRentalSheet() {
       'หมายเลขเครื่องเช่า': u.rentalDbNo || '', 'Brand': '', 'SiS Part': u.sku || '', 'Serial No.': u.serialNumber || ''
     };
   });
-  var ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:6},{wch:38},{wch:8},{wch:12},{wch:12},{wch:12},{wch:26},{wch:18},{wch:16},{wch:8},{wch:22},{wch:22}];
+  var rentalWs = XLSX.utils.json_to_sheet(rentalData);
+  rentalWs['!cols'] = [{wch:6},{wch:38},{wch:8},{wch:12},{wch:12},{wch:12},{wch:26},{wch:18},{wch:16},{wch:8},{wch:22},{wch:22}];
+
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'เครื่องเช่า');
-  XLSX.writeFile(wb, 'เครื่องเช่า-จากstaff-' + _td().replace(/\//g, '-') + '.xlsx');
-  toastMock('📤 Export รูปแบบไฟล์คลังแล้ว (' + data.length + ' เครื่อง)');
+  XLSX.utils.book_append_sheet(wb, demoWs, 'demo');
+  XLSX.utils.book_append_sheet(wb, rentalWs, 'เครื่องเช่า');
+  XLSX.writeFile(wb, 'demo-equipment-' + _td() + '.xlsx');
+  toastMock('📤 Export สำเร็จ (2 แท็บ: demo + เครื่องเช่า ' + rentalData.length + ' เครื่อง)');
 }
 function importUnitsExcel() {
   var input = document.createElement('input');
