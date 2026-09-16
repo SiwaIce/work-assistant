@@ -1970,6 +1970,9 @@ try { bkView = localStorage.getItem('demoStaffBookingsView') || 'unit'; } catch 
 var bkSort = 'urgent';
 try { bkSort = localStorage.getItem('demoStaffBookingsSort') || 'urgent'; } catch (e) {}
 var bkSlipOpen = {};
+// จำจุดที่มาก่อนกระโดดไปดูใบจองจากมุมมองรายเครื่อง (ดู bkJumpToSlip) จะได้กดกลับไปที่เดิมเป๊ะๆ —
+// แนวคิดเดียวกับ _unitDetailReturnTo/closeUnitDetail() ที่มีอยู่แล้ว แค่ปรับมาใช้กับการสลับมุมมองในแท็บนี้
+var _bkReturnTo = null;
 
 // scBookings() ให้ทุกบุ๊กกิ้งรวม 'pending' อยู่แล้ว (ต่างจาก activeReturns() ที่กรอง pending ทิ้ง) แค่ตัด
 // 'returned' ออก (ไม่ใช่ขอบเขตของแท็บนี้ — ประวัติที่คืนแล้วไปดูที่ประวัติใบยืมแทน)
@@ -1989,7 +1992,35 @@ function bkSetStat(s) { bkStat = s; renderBookingsTab(); }
 function bkSetBorrower(v) { bkBorrower = v; renderBookingsTab(); }
 function bkSetApprover(v) { bkApprover = v; renderBookingsTab(); }
 function bkClearPeople() { bkBorrower = 'all'; bkApprover = 'all'; renderBookingsTab(); }
-function bkSetView(v) { bkView = v; try { localStorage.setItem('demoStaffBookingsView', v); } catch (e) {} renderBookingsTab(); }
+function bkSetView(v) { bkView = v; _bkReturnTo = null; try { localStorage.setItem('demoStaffBookingsView', v); } catch (e) {} renderBookingsTab(); }
+// เลขใบจองของรายการเดียว — ใช้ทั้งจัดกลุ่ม (_bkGroup) และหาว่าจะกระโดดไปใบไหน (bkJumpToSlip)
+function _bkItemSlipKey(it) {
+  return _rtSlipKey({ jobNo: it.b.jobNo, borrower: it.b.borrower, start: _scIso(it.b.s), end: _scIso(it.b.e) });
+}
+// กระโดดจากแถวในมุมมองรายเครื่องไปดูทั้งใบในมุมมองตามใบจองทันที (ตอบคำถามที่เจอบ่อย: "คืนเครื่องนี้แล้ว
+// จะกระทบเครื่องอื่นในใบเดียวกันไหม" — ไม่กระทบ แต่ให้ดูใบทั้งชุดง่ายๆ ตรงนี้แทนต้องไปหาเอง) จำจุดเดิมไว้
+// ก่อนสลับ (มุมมอง+ตำแหน่งเลื่อนจอ) กดปุ่ม "กลับไปที่เดิม" ที่โผล่ตอนอยู่มุมมองใบจองแล้วพากลับมาเป๊ะๆ
+function bkJumpToSlip(key) {
+  var savedView = bkView, savedScrollY = window.scrollY;
+  _bkReturnTo = function() {
+    bkView = savedView;
+    try { localStorage.setItem('demoStaffBookingsView', savedView); } catch (e) {}
+    renderBookingsTab();
+    window.scrollTo(0, savedScrollY);
+  };
+  bkView = 'slip';
+  try { localStorage.setItem('demoStaffBookingsView', 'slip'); } catch (e) {}
+  bkSlipOpen[key] = true;
+  renderBookingsTab();
+  var el = document.querySelector('[data-bk-slip="' + CSS.escape(key) + '"]');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function bkReturnFromSlip() {
+  var fn = _bkReturnTo;
+  _bkReturnTo = null;
+  if (fn) { try { fn(); } catch (e) { console.error('กลับไปจุดเดิมไม่สำเร็จ', e); } }
+  else bkSetView('unit');
+}
 function bkSetSort(v) { bkSort = v; try { localStorage.setItem('demoStaffBookingsSort', v); } catch (e) {} renderBookingsTab(); }
 function bkToggleSlipOpen(key) { bkSlipOpen[key] = !bkSlipOpen[key]; renderBookingsTab(); }
 
@@ -2106,7 +2137,9 @@ function _bkRowHtml(it) {
     '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
     '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span></div></div>' +
     '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
-    '<div class="acts">' + _bkRowActionsHtml(it) + '</div></div></div>';
+    '<div class="acts">' + _bkRowActionsHtml(it) +
+    '<button class="detail-btn icon-btn" onclick="bkJumpToSlip(\'' + _scEsq(_bkItemSlipKey(it)) + '\')" title="ดูใบจองทั้งชุดที่เครื่องนี้อยู่">🔗</button>' +
+    '</div></div></div>';
 }
 
 // จัดกลุ่มด้วยตัวเดียวกับ _rtSlipKey ทุกประการ (เลขใบจองถ้ามี ไม่งั้นเดาจากผู้ยืม+ช่วงวัน) เพื่อให้ปุ่มทั้งใบ
@@ -2115,7 +2148,7 @@ function _bkGroup(items) {
   var groups = {}, order = [];
   items.forEach(function(it) {
     var sIso = _scIso(it.b.s), eIso = _scIso(it.b.e);
-    var key = _rtSlipKey({ jobNo: it.b.jobNo, borrower: it.b.borrower, start: sIso, end: eIso });
+    var key = _bkItemSlipKey(it);
     if (!groups[key]) {
       groups[key] = { key: key, jobNo: String(it.b.jobNo || '').trim(), borrower: it.b.borrower || '—',
         startIso: sIso, endIso: eIso, items: [], sev: 0, statuses: {} };
@@ -2154,7 +2187,7 @@ function _bkSlipHtml(g) {
   var pureUnconf = g.statuses.unconf && Object.keys(g.statuses).length === 1;
   var isOpen = g.items.length <= 1 ? true : !!bkSlipOpen[g.key];
   var worstKind = Object.keys(_SC_BUSY_SEV).filter(function(k) { return _SC_BUSY_SEV[k] === g.sev; })[0];
-  var h = '<div class="rt-slip' + (g.statuses.late ? ' late' : '') + '">';
+  var h = '<div class="rt-slip' + (g.statuses.late ? ' late' : '') + '" data-bk-slip="' + esc(g.key) + '">';
   h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
     '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง</div></div>' +
     '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">' + _scBusyBadge(worstKind) +
@@ -2184,6 +2217,7 @@ function renderBookingsTab() {
   }
 
   var h = '<div class="bk-sum"><b>' + all.length + ' ใบจองทั้งหมด</b> — กำลังแสดง ' + filtered.length + ' รายการ</div>';
+  if (_bkReturnTo && bkView === 'slip') h += '<button class="back-link" onclick="bkReturnFromSlip()">← กลับไปที่เดิม</button>';
   h += _bkStatChipsHtml(all);
   h += _bkPersonFiltersHtml(all);
   h += '<div class="rt-views"><button class="' + (bkView === 'unit' ? 'on' : '') + '" onclick="bkSetView(\'unit\')">📦 รายเครื่อง</button>' +
