@@ -1907,9 +1907,11 @@ function renderReturnTabBySlip(all) {
 
   var h = _rtSortBarHtml() + _rtViewToggle(order.length);
   var late = order.filter(function(k) { return groups[k].worst > 0; }).length;
+  var fromAppSlip = all.filter(function(x) { return x.src === 'app'; }).length;
   h += '<div class="rt-sum"><b>ยังไม่คืน ' + all.length + ' เครื่อง ใน ' + order.length + ' ใบ</b>' +
     (late ? ' · เลยกำหนด ' + late + ' ใบ' : '') +
-    (totalPending ? ' · ⏳ รอ (ชนคิว) ' + totalPending + ' เครื่อง' : '') + '</div>';
+    (totalPending ? ' · ⏳ รอ (ชนคิว) ' + totalPending + ' เครื่อง' : '') +
+    _appSrcTopNoteHtml(fromAppSlip) + '</div>';
   h += _rtQuarSecHtml();
   if (!order.length) return void (el.innerHTML = h + '<div class="empty-state">' +
     ((rtSearch.trim() || rtCatFilter.length) ? '🔍 ไม่พบเครื่องที่ตรงกับตัวกรอง — ลองเปลี่ยนหมวดหมู่หรือล้างคำค้น' : '🎉 ไม่มีเครื่องค้างอยู่') + '</div>');
@@ -1930,13 +1932,12 @@ function renderReturnTabBySlip(all) {
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
     var itemCount = g.list.length + g.pending.length;
     var isOpen = itemCount <= 1 ? true : !!rtSlipOpen[k];
-    // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — เดิมบอกซ้ำทุกแถวว่า "คีย์จากแอปหลัก แก้ตัวจริงไม่ได้" กินที่มาก
-    // ทั้งที่เป็นข้อมูลระดับ "ใบ" ไม่ใช่ระดับเครื่อง จึงย้ายมาบอกครั้งเดียวตรงนี้ พร้อมปุ่มแก้ไขทั้งใบทีเดียว
+    // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — คำอธิบายเต็มย้ายไปบอกครั้งเดียวที่หัวแท็บแล้ว (_appSrcTopNoteHtml)
+    // ตรงนี้เหลือแค่ป้ายสั้นๆ + ปุ่มแก้ไขทั้งใบ ไม่พูดซ้ำยาวๆ ทุกใบ
     var appUnits = g.list.filter(function(l) { return l.src === 'app'; });
     if (appUnits.length) {
       var a0 = appUnits[0];
-      h += '<div class="rt-src" style="margin:0 8px 8px">📲 ' + appUnits.length + ' เครื่องในใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ' +
-        'ส่งคำขอรับคืน/เลื่อน/โอนได้จากปุ่มของแต่ละเครื่องด้านล่าง แล้วรอแอปหลักกด “รับเข้า” ' +
+      h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 ' + appUnits.length + ' เครื่องคีย์จากแอปหลัก ' +
         '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.unitId + '\',\'' + a0.start + '\',\'' + a0.end + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
     }
     h += '<div class="rt-slip-act">' +
@@ -2007,6 +2008,14 @@ function swapPendingUnit(loanId, newUnitId) {
       'สลับเครื่องทดแทน (เดิมชนคิว) — เปลี่ยนเป็น ' + (newUnit ? _scModelParts(newUnit).main : newModel)))
   }).then(function() { toastMock('🔁 สลับเครื่องแล้ว — จองให้เรียบร้อย'); })
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// อธิบายความหมายของ "คีย์จากแอปหลัก" แค่ครั้งเดียวใต้หัวข้อสรุปของแท็บ แทนที่จะพูดซ้ำยาวๆ ทุกใบ/ทุกแถว —
+// รายการแต่ละอันแค่ติดป้ายสั้นๆ พอ (ดูคำอธิบายเต็มได้จากปุ่ม ❓ คู่มือถ้ายังไม่เข้าใจ)
+function _appSrcTopNoteHtml(count) {
+  if (!count) return '';
+  return '<div class="rt-sum-note">📲 มี ' + count + ' เครื่องที่ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — ' +
+    'แก้ไขตรงนี้ไม่ได้ กดปุ่มของรายการนั้นเพื่อส่งคำขอ แล้วต้องมีคนไปกดยืนยันในแอปหลักอีกที ข้อมูลถึงจะอัปเดตจริง</div>';
 }
 
 // ================================================================
@@ -2440,8 +2449,7 @@ function _bkSlipHtml(g) {
   var appItems = g.items.filter(function(it) { return !it.b.loanId; });
   if (appItems.length) {
     var a0 = appItems[0];
-    h += '<div class="rt-src" style="margin:0 8px 8px">📲 ' + appItems.length + ' เครื่องในใบนี้คีย์จากแอปหลัก แก้ตัวจริงไม่ได้ตรงนี้ — ' +
-      'ส่งคำขอแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลได้เลย รอแอปหลักกด “รับเข้า” ' +
+    h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 ' + appItems.length + ' เครื่องคีย์จากแอปหลัก ' +
       '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.u.id + '\',\'' + _scIso(a0.b.s) + '\',\'' + _scIso(a0.b.e) + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
   }
   if (isOpen) {
@@ -2469,7 +2477,9 @@ function renderBookingsTab() {
   // เดิมเขียนว่า "X ใบจองทั้งหมด" แต่ all.length คือจำนวน "เครื่อง" ไม่ใช่จำนวนใบจองจริง (ใบเดียวมีได้
   // หลายเครื่อง) ทำให้ตัวเลขดูเยอะเกินจำนวนใบจองจริงที่มี — แยกนับให้ชัดทั้งสองมิติ
   var slipCount = _bkGroup(all).order.length;
-  var h = '<div class="bk-sum"><b>' + all.length + ' เครื่องทั้งหมด</b> ใน ' + slipCount + ' ใบจอง — กำลังแสดง ' + filtered.length + ' รายการ</div>';
+  var fromAppBk = all.filter(function(it) { return !it.b.loanId; }).length;
+  var h = '<div class="bk-sum"><b>' + all.length + ' เครื่องทั้งหมด</b> ใน ' + slipCount + ' ใบจอง — กำลังแสดง ' + filtered.length + ' รายการ' +
+    _appSrcTopNoteHtml(fromAppBk) + '</div>';
   if (_bkReturnTo && bkView === 'slip') h += '<button class="back-link" onclick="bkReturnFromSlip()">← กลับไปที่เดิม</button>';
   h += _bkStatChipsHtml(all);
   h += _bkPersonFiltersHtml(all);
@@ -2516,7 +2526,7 @@ function renderReturnTab() {
   var h = _rtViewToggle(Object.keys(slipCount).length);
   h += '<div class="rt-sum">' +
     '<b>ยังไม่คืน ' + all.length + ' เครื่อง</b> · เลยกำหนด ' + overdue.length + ' · ใกล้ครบ ' + soon.length +
-    (fromApp ? '<div class="rt-sum-note">ในนี้มี ' + fromApp + ' เครื่องที่คีย์ยืมจากแอปหลัก — เห็นได้ที่นี่ แต่ต้องไปกดรับคืนในแอปหลัก</div>' : '') +
+    _appSrcTopNoteHtml(fromApp) +
     '</div>';
   h += _rtQuarSecHtml();
   h += '<div class="rt-section-title">🔴 เลยกำหนดคืนแล้ว (' + overdue.length + ')</div>';
@@ -2575,7 +2585,7 @@ function returnRowHtml(cls, l, compact) {
       h += '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
         ' — รอเปิดแอปหลักกด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>';
     } else if (!compact) {
-      h += '<div class="rt-src">📲 ใบนี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — กดปุ่มด้านขวาเพื่อ<b>ส่งคำขอ</b>ไปเข้าคิว แล้วรอแอปหลักกด “รับเข้า”</div>';
+      h += '<div class="rt-src" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 คีย์จากแอปหลัก — ส่งคำขอได้จากปุ่มด้านขวา</div>';
     }
   }
   h += '</div>';
