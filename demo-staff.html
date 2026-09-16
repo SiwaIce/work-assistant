@@ -6020,7 +6020,7 @@ function renderStaffCalendar() {
   }
 }
 
-// ---- ธีม: ค่าเริ่มต้นมืดเหมือนแอปหลัก สลับเป็นสว่างได้ จำไว้ต่อเครื่อง ----
+// ---- ธีม: ค่าเริ่มต้นสว่าง สลับเป็นมืดได้ จำไว้ต่อเครื่อง (ค่าที่จำไว้มีผลเหนือค่าเริ่มต้นเสมอ) ----
 function applyStaffTheme(mode) {
   document.body.classList.toggle('theme-light', mode === 'light');
   var b = document.getElementById('themeBtn');
@@ -6032,8 +6032,8 @@ function toggleStaffTheme() {
   applyStaffTheme(next);
 }
 (function initStaffTheme() {
-  var saved = 'dark';
-  try { saved = localStorage.getItem('demoStaffTheme') || 'dark'; } catch (e) {}
+  var saved = 'light';
+  try { saved = localStorage.getItem('demoStaffTheme') || 'light'; } catch (e) {}
   applyStaffTheme(saved);
 })();
 
