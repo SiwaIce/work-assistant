@@ -1645,7 +1645,10 @@ function approveRequest(reqId) {
     });
   });
   conflicts.forEach(function(c) { batch.update(db.collection('publicDemoRequests').doc(c._id), { status: 'rejected' }); });
-  batch.commit().then(function() { toastMock('✅ อนุมัติแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+  batch.commit().then(function() {
+    toastMock('✅ อนุมัติแล้ว');
+    bkJumpToNew(req.companyName, jobNo, req.items.map(function(it) { return { start: it.start, end: it.end }; }));
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 function rejectRequest(reqId) {
   if (!confirm('ปฏิเสธคำขอนี้?')) return;
@@ -2023,6 +2026,31 @@ function bkReturnFromSlip() {
 }
 function bkSetSort(v) { bkSort = v; try { localStorage.setItem('demoStaffBookingsSort', v); } catch (e) {} renderBookingsTab(); }
 function bkToggleSlipOpen(key) { bkSlipOpen[key] = !bkSlipOpen[key]; renderBookingsTab(); }
+
+// เรียกทันทีหลังบันทึกใบจองใหม่สำเร็จ (saveLendBatch/saveManualLoan/approveRequest) — เดิมกดบันทึกแล้ว
+// ต้องไปไล่หาเองว่าใบที่เพิ่งสร้างอยู่ตรงไหนในแท็บใบจอง (ตัวกรอง/หมวดหมู่ที่ค้างไว้ก่อนหน้าอาจบังไว้ด้วย)
+// ตรงนี้ล้างตัวกรองทั้งหมดแล้วพาไปเปิดใบนั้นให้เห็นทันที — ranges คือช่วงวันของแต่ละเครื่องที่เพิ่งบันทึก
+// ([{start,end}]) ปกติจะรวมเป็นใบเดียวกันหมด (เลขใบจอง/ผู้ยืม/ช่วงวันเดียวกันทั้งก้อน) ยกเว้นอนุมัติคำขอ
+// ที่แต่ละเครื่องเลือกช่วงวันเองได้และไม่ได้ใส่เลขใบจอง — กรณีนั้นแยกเป็นหลายใบ ไม่มีใบเดียวให้เจาะจงขยาย
+// จึงพากลับไปมุมมองรายเครื่องพร้อมกรองเฉพาะผู้ยืมคนนี้แทน ให้เห็นทุกเครื่องที่เพิ่งเพิ่มรวมกันอยู่ดี
+function bkJumpToNew(borrower, jobNo, ranges) {
+  bkSearch = '';
+  var searchEl = document.getElementById('bkSearch'); if (searchEl) searchEl.value = '';
+  bkCatFilter = []; bkStat = 'all'; bkApprover = 'all';
+  bkBorrower = borrower || 'all';
+  staffTab('bookings');
+  var keys = {};
+  (ranges || []).forEach(function(r) { keys[_rtSlipKey({ jobNo: jobNo, borrower: borrower, start: r.start, end: r.end })] = 1; });
+  var uniqueKeys = Object.keys(keys);
+  bkView = uniqueKeys.length === 1 ? 'slip' : 'unit';
+  try { localStorage.setItem('demoStaffBookingsView', bkView); } catch (e) {}
+  if (uniqueKeys.length === 1) bkSlipOpen[uniqueKeys[0]] = true;
+  renderBookingsTab();
+  if (uniqueKeys.length === 1) {
+    var el = document.querySelector('[data-bk-slip="' + CSS.escape(uniqueKeys[0]) + '"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
 
 function _bkCatTabsHtml(all) {
   var counts = { all: all.length };
@@ -4544,11 +4572,11 @@ function saveLendBatch() {
   });
   batch.commit().then(function() {
     toastMock(busy.length
-      ? '💾 จองแล้ว ' + (list.length - busy.length) + ' เครื่อง · ค้างไว้รอ (ชนคิว) ' + busy.length + ' เครื่อง — ไปแก้ที่แท็บติดตามคืนได้'
+      ? '💾 จองแล้ว ' + (list.length - busy.length) + ' เครื่อง · ค้างไว้รอ (ชนคิว) ' + busy.length + ' เครื่อง'
       : '💾 บันทึกยืมแล้ว ' + list.length + ' เครื่อง');
     lendPicked = [];
     closeLendFlow();
-    staffTab('return');
+    bkJumpToNew(company, jobNo, [{ start: start, end: end }]);
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -4572,8 +4600,9 @@ function saveManualLoan(unitId) {
     events: [_scEv(conflict ? 'pending' : 'created', requester, company + ' · ' + start + ' → ' + end + (jobNo ? ' · ใบจอง ' + jobNo : '') +
       (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : ''))]
   }).then(function() {
-    toastMock(conflict ? '⏳ ช่วงนี้ชนคิว — บันทึกไว้เป็น "รอ" ไปแก้ที่แท็บติดตามคืนได้' : '💾 บันทึกยืมแล้ว');
+    toastMock(conflict ? '⏳ ช่วงนี้ชนคิว — บันทึกไว้เป็น "รอ"' : '💾 บันทึกยืมแล้ว');
     closeUnitDetail();
+    bkJumpToNew(company, jobNo, [{ start: start, end: end }]);
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
