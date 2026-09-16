@@ -11,8 +11,8 @@
 <!-- ถอดรหัส QR/บาร์โค้ดจากกล้อง ใช้ตอนสแกนหาเครื่องเท่านั้น — defer เหมือนกัน -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <style>
-/* ค่าเริ่มต้นเป็นธีมมืดชุดเดียวกับแอปหลัก (ตัวแปรลอกจาก :root ใน style.css) — หน้านี้เปิดจากลิงก์
-   แยกจาก SPA เลยแชร์ style.css กันไม่ได้ ต้องประกาศซ้ำที่นี่ ถ้าแก้สีในแอปหลักต้องมาแก้ตรงนี้ด้วย */
+/* ค่าเริ่มต้นเป็นธีมมืดชุดเดียวกับ Lotus Note (ตัวแปรลอกจาก :root ใน style.css) — หน้านี้เปิดจากลิงก์
+   แยกจาก SPA เลยแชร์ style.css กันไม่ได้ ต้องประกาศซ้ำที่นี่ ถ้าแก้สีใน Lotus Note ต้องมาแก้ตรงนี้ด้วย */
 :root {
   --bg:#0f172a; --surface:#1e293b; --surface-2:#172033; --border:#334155; --text:#e2e8f0; --text2:#b0bec5; --text3:#8892b0;
   --accent:#3b82f6; --accent-ink:#fff; --accent-soft:rgba(59,130,246,.16);
@@ -291,8 +291,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-sum-note { font-size:11.5px; color:var(--text2); margin-top:5px; line-height:1.55; }
 .rt-rent { font-size:11px; font-weight:600; color:var(--text2); background:var(--surface-2);
   border:1px solid var(--border); border-radius:5px; padding:1px 7px; font-family:ui-monospace,Consolas,monospace; }
-/* ใบที่คีย์จากแอปหลัก — บอกให้ชัดว่าทำไมไม่มีปุ่มรับคืน */
-/* ส่งคำขอไปแล้ว รอแอปหลักรับเข้า */
+/* ใบที่คีย์จาก Lotus Note — บอกให้ชัดว่าทำไมไม่มีปุ่มรับคืน */
+/* ส่งคำขอไปแล้ว รอ Lotus Note รับเข้า */
 .rt-src.queued { color:var(--accent); background:var(--accent-soft); }
 .rt-src { font-size:11.5px; color:var(--warn); background:var(--warn-soft);
   border-radius:7px; padding:6px 10px; margin-top:7px; line-height:1.5; }
@@ -542,7 +542,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   justify-content:center; font-size:10px; color:transparent; flex-shrink:0; }
 .sm-tg:has(input:checked) { border-color:var(--good); color:var(--good); background:var(--good-soft); }
 .sm-tg:has(input:checked) .bx { background:var(--good); border-color:var(--good); color:#fff; }
-/* ---- ปฏิทิน 5 มุมมอง (ชุดเดียวกับ .dcal-* ในแอปหลัก ปรับมาใช้ตัวแปรสีของหน้านี้) ---- */
+/* ---- ปฏิทิน 5 มุมมอง (ชุดเดียวกับ .dcal-* ใน Lotus Note ปรับมาใช้ตัวแปรสีของหน้านี้) ---- */
 .dcal-views { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
 .dcal-vbtn { font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:8px; cursor:pointer; font:inherit;
   font-weight:600; border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
@@ -730,7 +730,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rent-copy-btn { border:none; background:transparent; color:var(--text3); cursor:pointer; font-size:11px;
   line-height:1; padding:2px 3px; border-radius:5px; flex-shrink:0; }
 .rent-copy-btn:hover { background:var(--surface-2); color:var(--accent); }
-/* ---- ไทม์ไลน์: ชุดปรับปรุง 16 ข้อ (คู่กับแอปหลัก) ---- */
+/* ---- ไทม์ไลน์: ชุดปรับปรุง 16 ข้อ (คู่กับ Lotus Note) ---- */
 .dcal-ctl-lb { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); margin-left:6px; }
 .dcal-srch { position:relative; flex:1; min-width:190px; max-width:520px; }
 .dcal-srch input { width:100%; font:inherit; font-size:13px; padding:7px 28px 7px 30px; border-radius:8px;
@@ -1027,7 +1027,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 //   - publicDemoRequests/{id}         : read, update (จากหน้านี้อนุมัติ/ปฏิเสธ) — create มาจาก demo-request.html
 //   - publicDemoLoans/{id}            : read, create, update (จากหน้านี้)
 //   - publicDemoEdits/{unitId}        : read, write, delete — ⚠️ ยังไม่มี ต้องเพิ่มก่อนปุ่ม "แก้ไข" ถึงจะทำงาน
-//                                       (คิวแก้ไขจากหน้านี้ ให้แอปหลักมากดรับเข้าแล้วลบทิ้ง)
+//                                       (คิวแก้ไขจากหน้านี้ ให้ Lotus Note มากดรับเข้าแล้วลบทิ้ง)
 //   - publicDemoEditLog/{id}          : read, create — ⚠️ ยังไม่มี ต้องเพิ่มก่อนประวัติการแก้ไขจะบันทึกได้
 //                                       (ประวัติถาวร ไม่มี update/delete จากหน้านี้เลย เขียนแล้วเขียนอย่างเดียว)
 // ================================================================
@@ -1117,7 +1117,7 @@ var CATEGORIES = [];
 var STAFF_ROSTER = [];
 var PENDING = [];      // publicDemoRequests status=='pending'
 var LOANS = [];        // publicDemoLoans ทั้งหมด (active + returned) — ใช้คำนวณ busy/ประวัติ
-// publicDemoEditLog ทั้งหมด — เก็บถาวรไว้ต่างหากจาก publicDemoEdits (คิวข้อเสนอที่ถูกลบทิ้งหลังแอปหลักรับเข้า
+// publicDemoEditLog ทั้งหมด — เก็บถาวรไว้ต่างหากจาก publicDemoEdits (คิวข้อเสนอที่ถูกลบทิ้งหลัง Lotus Note รับเข้า
 // แล้ว) เพราะพอรับเข้าแล้วคิวก็หายไป ไม่เหลือร่องรอยว่าใครแก้อะไรไปบ้าง — เขียนเข้านี่ตอนกดบันทึกทุกครั้ง
 // (ดู _logEditHistory) ไม่ลบทิ้งเลย ให้เป็นประวัติค้นย้อนหลังได้จริง
 var EDIT_LOG = [];
@@ -1159,8 +1159,8 @@ function listenEditLog() {
   }, function(e) { console.warn('listenEditLog error', e); });
 }
 function activeLoansFor(unitId) { return LOANS.filter(function(l) { return l.unitId === unitId && l.status === 'active'; }); }
-// การยืมที่คีย์ในแอปหลักมาถึงหน้านี้ทาง busyRanges ไม่ได้อยู่ใน publicDemoLoans — เดิมทุกจุดที่เช็ค "ว่างไหม"
-// ดูแต่ LOANS อย่างเดียว หน้านี้เลยขึ้นว่าว่างทั้ง 71 เครื่องทั้งที่แอปหลักปล่อยยืมอยู่ 19 เครื่อง
+// การยืมที่คีย์ใน Lotus Note มาถึงหน้านี้ทาง busyRanges ไม่ได้อยู่ใน publicDemoLoans — เดิมทุกจุดที่เช็ค "ว่างไหม"
+// ดูแต่ LOANS อย่างเดียว หน้านี้เลยขึ้นว่าว่างทั้ง 71 เครื่องทั้งที่ Lotus Note ปล่อยยืมอยู่ 19 เครื่อง
 // (เจอตอนทำปฏิทินซึ่งรวมสองแหล่ง แล้วตัวเลขขัดกันเอง) ต้องนับ busyRanges ด้วยทุกจุดที่ถามว่าว่างไหม
 // ⚠️ ของที่เลยกำหนดคืนแล้วยังไม่ได้คืน = ยังไม่ว่าง
 //
@@ -1362,7 +1362,7 @@ function renderTriage() {
   if (hidden) {
     rows.push({ sev: 10, key: 'ซ่อนจากลูกค้า', n: hidden, cls: 'info', ic: '🙈',
       t: 'ซ่อนจากลูกค้าอยู่ <b>' + hidden + '</b> เครื่อง',
-      s: 'ตั้งค่าไว้ที่แอปหลัก — แสดงไว้ให้รู้ว่าตั้งใจซ่อน ไม่ใช่ลืม',
+      s: 'ตั้งค่าไว้ที่ Lotus Note — แสดงไว้ให้รู้ว่าตั้งใจซ่อน ไม่ใช่ลืม',
       go: '<button class="tg-go" onclick="tgUnits(\'hidden\')">ดูเฉพาะที่ซ่อน →</button>' });
   }
   rows.sort(function(a, b) { return b.sev - a.sev; });
@@ -1394,8 +1394,8 @@ function renderTriage() {
 // กรอกชื่อผู้ยืม/ผู้คีย์ ย้อนหลังแบบรวดเร็ว — พิมพ์ตรงนี้ทีละใบแล้วกดบันทึกได้เลย
 // ไม่ต้องเข้าไปทีละเครื่อง (แต่กด "แก้เต็ม" เข้าไปกรอกในฟอร์มใหญ่ก็ได้ ถ้าจะแก้อย่างอื่นด้วย)
 //
-// ⚠️ ใบพวกนี้มาจาก busyRanges = ใบยืมที่คีย์ในแอปหลัก หน้านี้ไม่มี doc ให้เขียนตรงๆ จึงส่งเข้าคิว
-// publicDemoEdits เหมือนการแก้ข้อมูลเครื่องอย่างอื่น แล้วรอแอปหลักกด "รับเข้า"
+// ⚠️ ใบพวกนี้มาจาก busyRanges = ใบยืมที่คีย์ใน Lotus Note หน้านี้ไม่มี doc ให้เขียนตรงๆ จึงส่งเข้าคิว
+// publicDemoEdits เหมือนการแก้ข้อมูลเครื่องอย่างอื่น แล้วรอ Lotus Note กด "รับเข้า"
 // กรอกชื่อย้อนหลัง — กรอก "ตามใบจอง" ไม่ใช่ทีละเครื่อง
 //
 // ผู้ยืมกับผู้คีย์เบิกเป็นของ "ใบ" ไม่ใช่ของเครื่อง ใบหนึ่งมี 13 เครื่องก็ชื่อเดียวกันทั้ง 13
@@ -1419,8 +1419,8 @@ function _qnGroupUnits(key) {
 function _quickNamesHtml(list) {
   var groups = _qnGroups(list), today = _td();
   var h = '<div class="qn"><div class="qn-hd">กรอกชื่อย้อนหลัง ' + groups.length + ' ใบ (' + list.length + ' เครื่อง)</div>' +
-    '<div class="qn-note">⚠️ ใบเหล่านี้คีย์จากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — ที่กรอกจะเข้าคิวไว้ ' +
-    'รอเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะลงถาวร</div>';
+    '<div class="qn-note">⚠️ ใบเหล่านี้คีย์จาก Lotus Note หน้านี้แก้ตัวจริงไม่ได้ — ที่กรอกจะเข้าคิวไว้ ' +
+    'รอเปิดเมนู Demo Equipment ใน Lotus Note แล้วกด “รับเข้า” อีกครั้งถึงจะลงถาวร</div>';
   h += '<div class="field" style="margin:10px 0 12px"><label>✍️ คนกรอก (ใส่ครั้งเดียว ใช้ได้ทุกใบ) *</label>' +
     '<input type="text" id="qnBy" list="qnKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('qnKeyerList') + '</div>';
 
@@ -1464,7 +1464,7 @@ function saveQuickNameSlip(key, gi) {
   var by = (document.getElementById('qnBy').value || '').trim();
   var b = (document.getElementById('qnB_' + gi).value || '').trim();
   var k = (document.getElementById('qnK_' + gi).value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนกรอกก่อนนะครับ — แอปหลักจะได้รู้ว่าใครกรอก'); return; }
+  if (!by) { alert('ใส่ชื่อคนกรอกก่อนนะครับ — Lotus Note จะได้รู้ว่าใครกรอก'); return; }
   if (!b && !k) { alert('กรอกอย่างน้อยหนึ่งช่อง (ผู้ยืม หรือ ผู้คีย์เบิก)'); return; }
   var units = _qnGroupUnits(key);
   if (!units.length) { alert('ไม่พบเครื่องในใบนี้แล้ว — ลองรีเฟรช'); return; }
@@ -1482,7 +1482,7 @@ function saveQuickNameSlip(key, gi) {
     }, { merge: true });
   });
   batch.commit().then(function() {
-    toastMock('💾 เข้าคิวแล้ว ' + units.length + ' เครื่อง — รอแอปหลักกดรับเข้า');
+    toastMock('💾 เข้าคิวแล้ว ' + units.length + ' เครื่อง — รอ Lotus Note กดรับเข้า');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -1700,11 +1700,11 @@ function rejectRequest(reqId) {
 // การยืมที่ยังไม่คืน — ต้องรวม 2 แหล่ง ไม่ใช่อ่าน publicDemoLoans อย่างเดียว
 //
 // เดิมแท็บนี้อ่านแต่ publicDemoLoans แล้วรายงานว่า "ไม่มีอะไรต้องตาม" ทั้งที่ของจริงมีเครื่องเลย
-// กำหนดคืนค้างอยู่หลายสิบเครื่อง — เพราะการยืมเกือบทั้งหมดคีย์จากแอปหลัก ซึ่งส่งมาทาง
+// กำหนดคืนค้างอยู่หลายสิบเครื่อง — เพราะการยืมเกือบทั้งหมดคีย์จาก Lotus Note ซึ่งส่งมาทาง
 // busyRanges ของแคตตาล็อกที่ publish ไม่ได้ลงใน publicDemoLoans เลย
 //
 //   src 'staff' = อนุมัติ/คีย์จากหน้านี้ → มี doc ให้อัปเดต กดรับคืน/ต่อเวลา/โอน ได้ครบ
-//   src 'app'   = คีย์จากแอปหลัก → หน้านี้ไม่มี doc ให้อัปเดต จึงกดรับคืนไม่ได้
+//   src 'app'   = คีย์จาก Lotus Note → หน้านี้ไม่มี doc ให้อัปเดต จึงกดรับคืนไม่ได้
 //                 แต่ต้อง "เห็น" ว่ามีของค้าง พร้อมบอกว่าให้ไปกดที่ไหน
 // ================================================================
 function activeReturns() {
@@ -1717,8 +1717,8 @@ function activeReturns() {
       start: l.start, end: l.end, createdAt: l.createdAt });
   });
   UNITS.forEach(function(u) {
-    // ใบจากแอปหลักไม่มี doc ให้แก้ตรงๆ — ถ้าเคยกดแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลจาก showLendConflictM ไว้
-    // (เข้าคิว publicDemoEdits รอแอปหลักรับเข้า) ให้โชว์ค่าที่แก้ไว้แทนของเดิมทันที จะได้เห็นผลตรงนี้ด้วย
+    // ใบจาก Lotus Note ไม่มี doc ให้แก้ตรงๆ — ถ้าเคยกดแก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลจาก showLendConflictM ไว้
+    // (เข้าคิว publicDemoEdits รอ Lotus Note รับเข้า) ให้โชว์ค่าที่แก้ไว้แทนของเดิมทันที จะได้เห็นผลตรงนี้ด้วย
     // ไม่ใช่เห็นแค่ตอนเปิดโมดัลเดิมซ้ำ
     var pend = (PENDING_EDITS[u.id] && PENDING_EDITS[u.id].fields) || {};
     (u.busyRanges || []).forEach(function(r) {
@@ -1886,7 +1886,7 @@ function renderReturnTabBySlip(all) {
     if (l.end < today) g.worst = Math.max(g.worst, daysBetween(l.end, today));
     if (l.end < g.end) g.end = l.end;   // ใบหนึ่งอาจคืนไม่พร้อมกัน — ยึดกำหนดที่ใกล้สุด
     if (l.start < g.start) g.start = l.start;   // เช่นเดียวกัน ยึดวันเริ่มยืมที่เร็วสุดในใบแทนค่าเดียว
-    // เครื่องจากแอปหลักไม่มี createdAt ติดมา — เอาแค่ตัวที่คีย์จากหน้านี้มาหาตัวที่คีย์เร็วสุดในใบ
+    // เครื่องจาก Lotus Note ไม่มี createdAt ติดมา — เอาแค่ตัวที่คีย์จากหน้านี้มาหาตัวที่คีย์เร็วสุดในใบ
     if (l.createdAt) {
       var cMs = _editLogTimeMs(l.createdAt);
       if (cMs && (!g.createdAtMs || cMs < g.createdAtMs)) { g.createdAtMs = cMs; g.createdAt = l.createdAt; }
@@ -1932,12 +1932,12 @@ function renderReturnTabBySlip(all) {
       (guess && g.list.length > 1 ? '<br><span class="rt-guess-note">ยังไม่มีเลขใบจอง — จัดกลุ่มจากผู้ยืม+ช่วงวันที่ตรงกัน ตรวจก่อนกดทั้งใบ</span>' : '') + '</div></div>';
     var itemCount = g.list.length + g.pending.length;
     var isOpen = itemCount <= 1 ? true : !!rtSlipOpen[k];
-    // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — คำอธิบายเต็มย้ายไปบอกครั้งเดียวที่หัวแท็บแล้ว (_appSrcTopNoteHtml)
+    // ใบที่มีเครื่องคีย์จาก Lotus Note ปนอยู่ — คำอธิบายเต็มย้ายไปบอกครั้งเดียวที่หัวแท็บแล้ว (_appSrcTopNoteHtml)
     // ตรงนี้เหลือแค่ป้ายสั้นๆ + ปุ่มแก้ไขทั้งใบ ไม่พูดซ้ำยาวๆ ทุกใบ
     var appUnits = g.list.filter(function(l) { return l.src === 'app'; });
     if (appUnits.length) {
       var a0 = appUnits[0];
-      h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 ' + appUnits.length + ' เครื่องคีย์จากแอปหลัก ' +
+      h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันใน Lotus Note">📲 ' + appUnits.length + ' เครื่องคีย์จาก Lotus Note ' +
         '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.unitId + '\',\'' + a0.start + '\',\'' + a0.end + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
     }
     h += '<div class="rt-slip-act">' +
@@ -2010,18 +2010,18 @@ function swapPendingUnit(loanId, newUnitId) {
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
-// อธิบายความหมายของ "คีย์จากแอปหลัก" แค่ครั้งเดียวใต้หัวข้อสรุปของแท็บ แทนที่จะพูดซ้ำยาวๆ ทุกใบ/ทุกแถว —
+// อธิบายความหมายของ "คีย์จาก Lotus Note" แค่ครั้งเดียวใต้หัวข้อสรุปของแท็บ แทนที่จะพูดซ้ำยาวๆ ทุกใบ/ทุกแถว —
 // รายการแต่ละอันแค่ติดป้ายสั้นๆ พอ (ดูคำอธิบายเต็มได้จากปุ่ม ❓ คู่มือถ้ายังไม่เข้าใจ)
 function _appSrcTopNoteHtml(count) {
   if (!count) return '';
-  return '<div class="rt-sum-note">📲 มี ' + count + ' เครื่องที่ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — ' +
-    'แก้ไขตรงนี้ไม่ได้ กดปุ่มของรายการนั้นเพื่อส่งคำขอ แล้วต้องมีคนไปกดยืนยันในแอปหลักอีกที ข้อมูลถึงจะอัปเดตจริง</div>';
+  return '<div class="rt-sum-note">📲 มี ' + count + ' เครื่องที่ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — ' +
+    'แก้ไขตรงนี้ไม่ได้ กดปุ่มของรายการนั้นเพื่อส่งคำขอ แล้วต้องมีคนไปกดยืนยันใน Lotus Note อีกที ข้อมูลถึงจะอัปเดตจริง</div>';
 }
 
 // ================================================================
 // รอรับเข้าคลัง — ใบที่กด "รับคืนแล้ว" ไปแล้วแต่ยังอยู่ในช่วงเผื่อเวลาตรวจนับ/ทำความสะอาด (availableFrom)
 // ปกติเปิดว่างเองอัตโนมัติเมื่อครบกำหนดอยู่แล้ว (ดู scBookings()) โซนนี้แค่เพิ่มทางลัดกดจบก่อนกำหนดถ้าตรวจ
-// จริงแล้วเสร็จเร็วกว่าที่เผื่อไว้ ไม่ใช่ของจากแอปหลัก (ฝั่งนั้นไม่มีแนวคิดเผื่อเวลาแบบนี้) จึงเช็คแค่ LOANS พอ
+// จริงแล้วเสร็จเร็วกว่าที่เผื่อไว้ ไม่ใช่ของจาก Lotus Note (ฝั่งนั้นไม่มีแนวคิดเผื่อเวลาแบบนี้) จึงเช็คแค่ LOANS พอ
 // ================================================================
 function _quarLoans() {
   var today = _td();
@@ -2094,7 +2094,7 @@ function removePendingLoan(loanId) {
 }
 // ยกเลิกใบจองที่มีเลขใบจองแล้วแต่ยังไม่ถึงวันยืม (จองล่วงหน้า) — ของยังไม่เคยออกจากคลังเลย จึงลบใบทิ้งไปเลย
 // ต่างจาก "รับคืนแล้ว" ซึ่งบันทึกว่าของออกไปแล้วและมีช่วงกักคลังตามมาด้วย (ใช้ไม่ได้กับของที่ไม่เคยออก)
-// ให้ใช้เฉพาะเครื่องที่คีย์จากหน้านี้เอง (มี loanId ให้ลบตรงๆ) — เครื่องที่คีย์จากแอปหลักต้องไปยกเลิกที่นั่น
+// ให้ใช้เฉพาะเครื่องที่คีย์จากหน้านี้เอง (มี loanId ให้ลบตรงๆ) — เครื่องที่คีย์จาก Lotus Note ต้องไปยกเลิกที่นั่น
 function cancelSoonLoan(loanId) {
   var l = _scLoan(loanId);
   if (!l) { alert('ไม่พบรายการนี้แล้ว — อาจถูกยกเลิกหรือแก้ไปก่อนหน้านี้'); return; }
@@ -2331,7 +2331,7 @@ function _bkRowActionsHtml(it) {
     ? '<button class="detail-btn icon-btn" onclick="openReminderM(\'' + u.id + '\',\'' + _scEsq(b.borrower || '') + '\',\'' + _scEsq(b.jobNo || '') + '\',\'' + _scIso(b.e) + '\')" title="แจ้งเตือนผู้ยืม">🔔</button>'
     : '';
   // ต่อเวลา/โอน/แก้ไข — พาริตี้เดียวกับแท็บติดตามคืน (returnRowHtml): คีย์จากหน้านี้เอง (มี loanId) ใช้
-  // openExtendM/openTransferM ของจริงได้ตรงๆ, คีย์จากแอปหลัก (ไม่มี doc ให้แก้ตรง) ใช้ askLoanAction ส่ง
+  // openExtendM/openTransferM ของจริงได้ตรงๆ, คีย์จาก Lotus Note (ไม่มี doc ให้แก้ตรง) ใช้ askLoanAction ส่ง
   // คำขอเข้าคิวเหมือนกัน — ถ้ามีคำขอค้างอยู่แล้วไม่ต้องให้ส่งซ้ำ
   if (it.kind === 'out' || it.kind === 'late' || it.kind === 'soon') {
     if (isStaff) {
@@ -2346,11 +2346,11 @@ function _bkRowActionsHtml(it) {
     }
     var pend = PENDING_EDITS[u.id];
     if (pend && pend.loanAction) {
-      return bell + detailBtn + '<span style="color:var(--text3);font-style:italic;font-size:12px" title="รอเปิดแอปหลักกด &quot;รับเข้า&quot;">⏳ ส่งคำขอแล้ว</span>';
+      return bell + detailBtn + '<span style="color:var(--text3);font-style:italic;font-size:12px" title="รอเปิด Lotus Note กด &quot;รับเข้า&quot;">⏳ ส่งคำขอแล้ว</span>';
     }
     return bell + detailBtn +
-      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน (ผ่านแอปหลัก)">⏩</button>' +
-      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์ (ผ่านแอปหลัก)">🔄</button>' +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน (ผ่าน Lotus Note)">⏩</button>' +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์ (ผ่าน Lotus Note)">🔄</button>' +
       '<button class="detail-btn icon-btn" onclick="showLendConflictM(\'' + u.id + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')" title="แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล">✏️</button>';
   }
   return bell + detailBtn;
@@ -2401,7 +2401,7 @@ function _bkGroup(items) {
 }
 // ปุ่มทั้งใบที่หัวการ์ด — มีให้ 3 กรณีที่มีปุ่มทั้งใบจริงอยู่แล้วในระบบ (กำลังยืม/เลยกำหนด ใช้ปุ่มเดิมของ
 // ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM, จองล่วงหน้า/รอชนคิว — ผสมกันได้ เพราะของยัง
-// ไม่เคยออกจากคลังทั้งคู่เหมือนกัน — ที่คีย์จากหน้านี้เองทุกเครื่อง ยกเลิกทั้งใบได้ ถ้ามีเครื่องคีย์จากแอปหลัก
+// ไม่เคยออกจากคลังทั้งคู่เหมือนกัน — ที่คีย์จากหน้านี้เองทุกเครื่อง ยกเลิกทั้งใบได้ ถ้ามีเครื่องคีย์จาก Lotus Note
 // ปนอยู่ ไม่ให้ปุ่มนี้ เพราะลบใบตรงๆ ไม่ได้ ต้องไปยกเลิกที่นั่น หรือถ้ามีเครื่อง out/late ปนอยู่ด้วยก็ไม่ให้
 // เหมือนกัน ให้จัดการทีละเครื่องที่แถวย่อยแทน กันลบเครื่องที่ยังออกอยู่จริงไปโดยไม่ตั้งใจ)
 function _bkSlipActionsHtml(g) {
@@ -2442,14 +2442,14 @@ function _bkSlipHtml(g) {
     _bkSlipActionsHtml(g) +
     (g.items.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="bkToggleSlipOpen(\'' + _scEsq(g.key) + '\')">' + (isOpen ? '▴ ย่อรายการ' : '▾ แสดงรายการ (' + g.items.length + ')') + '</button>' : '') +
     '</div></div></div>';
-  // ใบที่มีเครื่องคีย์จากแอปหลักปนอยู่ — เพิ่มกล่องแจ้ง+ปุ่มแก้ไขทั้งใบชัดๆ ตรงนี้ พาริตี้เดียวกับแท็บติดตามคืน
+  // ใบที่มีเครื่องคีย์จาก Lotus Note ปนอยู่ — เพิ่มกล่องแจ้ง+ปุ่มแก้ไขทั้งใบชัดๆ ตรงนี้ พาริตี้เดียวกับแท็บติดตามคืน
   // (renderReturnTabBySlip) เพราะปุ่ม "โอนทั้งใบ" ด้านบน (ถ้ามี) ชื่อไม่สื่อว่าแก้ผู้ยืม/ใบจอง/เหตุผลได้ด้วย
-  // และบางสถานะ (จองล่วงหน้าที่คีย์จากแอปหลักล้วนๆ — ไม่มี loanId ให้ยกเลิก ไม่ใช่ out/late ให้โอนทั้งใบ)
+  // และบางสถานะ (จองล่วงหน้าที่คีย์จาก Lotus Note ล้วนๆ — ไม่มี loanId ให้ยกเลิก ไม่ใช่ out/late ให้โอนทั้งใบ)
   // ไม่มีปุ่มระดับทั้งใบให้เลยด้วยซ้ำ ต้องมีทางแก้อย่างน้อยหนึ่งทางเสมอ
   var appItems = g.items.filter(function(it) { return !it.b.loanId; });
   if (appItems.length) {
     var a0 = appItems[0];
-    h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 ' + appItems.length + ' เครื่องคีย์จากแอปหลัก ' +
+    h += '<div class="rt-src" style="margin:0 8px 8px" title="ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันใน Lotus Note">📲 ' + appItems.length + ' เครื่องคีย์จาก Lotus Note ' +
       '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + a0.u.id + '\',\'' + _scIso(a0.b.s) + '\',\'' + _scIso(a0.b.e) + '\')">✏️ แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลทั้งใบ</button></div>';
   }
   if (isOpen) {
@@ -2575,7 +2575,7 @@ function returnRowHtml(cls, l, compact) {
       (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') +
       (u && u.note ? '<br>📝 หมายเหตุเครื่อง: ' + esc(u.note) : '') + '</div>';
   }
-  // ใบที่มาจากแอปหลักไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
+  // ใบที่มาจาก Lotus Note ไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
   // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะ "ส่งคำขอแล้ว" ของ
   // เครื่องนั้นๆ ซึ่งเป็นข้อมูลเฉพาะเครื่อง ไม่ใช่ของทั้งใบ)
   if (l.src === 'app') {
@@ -2583,9 +2583,9 @@ function returnRowHtml(cls, l, compact) {
     var pa = pend && pend.loanAction;
     if (pa) {
       h += '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
-        ' — รอเปิดแอปหลักกด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>';
+        ' — รอเปิด Lotus Note กด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>';
     } else if (!compact) {
-      h += '<div class="rt-src" title="ยืมออกจากอีกระบบหนึ่ง (แอปหลักของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันในแอปหลัก">📲 คีย์จากแอปหลัก — ส่งคำขอได้จากปุ่มด้านขวา</div>';
+      h += '<div class="rt-src" title="ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันใน Lotus Note">📲 คีย์จาก Lotus Note — ส่งคำขอได้จากปุ่มด้านขวา</div>';
     }
   }
   h += '</div>';
@@ -2600,7 +2600,7 @@ function returnRowHtml(cls, l, compact) {
       '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l.id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l.id + '\')" title="ประวัติใบยืม">📜</button>';
   } else if (u) {
-    // ใบจากแอปหลักไม่มี doc ให้แก้ตรงๆ — ส่งเป็นคำขอเข้าคิวเดียวกับการแก้ข้อมูลเครื่อง
+    // ใบจาก Lotus Note ไม่มี doc ให้แก้ตรงๆ — ส่งเป็นคำขอเข้าคิวเดียวกับการแก้ข้อมูลเครื่อง
     var pe = PENDING_EDITS[l.unitId];
     if (!(pe && pe.loanAction)) {
       h += '<button class="btn btn-primary btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'return\')">✅ ขอรับคืน</button>' +
@@ -2640,7 +2640,7 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
   if (l.src === 'app') {
     var pend = PENDING_EDITS[l.unitId];
     pa = pend && pend.loanAction;
-    if (pa) h += '<span class="rt-crow2-exc queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว — รอแอปหลักรับเข้า</span>';
+    if (pa) h += '<span class="rt-crow2-exc queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว — รอ Lotus Note รับเข้า</span>';
   }
   h += '</span><span class="row-acts">';
   if (late || due) {
@@ -2655,10 +2655,10 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
   return h + '</span></div>';
 }
 // ================================================================
-// คำขอจัดการใบยืมที่คีย์มาจากแอปหลัก
+// คำขอจัดการใบยืมที่คีย์มาจาก Lotus Note
 //
 // ใบพวกนี้ไม่มี doc ใน publicDemoLoans หน้านี้จึงอัปเดตตัวจริงไม่ได้ — ส่งเป็น "คำขอ" เข้าคิว
-// publicDemoEdits เหมือนการแก้ข้อมูลเครื่อง แล้วให้คนที่ล็อกอินแอปหลักกดรับเข้า
+// publicDemoEdits เหมือนการแก้ข้อมูลเครื่อง แล้วให้คนที่ล็อกอิน Lotus Note กดรับเข้า
 // เลือกทางนี้แทนการให้สองที่เขียนใบยืมพร้อมกัน เพราะถ้าเขียนทั้งสองทางแล้วไม่ sync กัน
 // ข้อมูลจะแตกคนละทางโดยไม่มีใครรู้ว่าอันไหนถูก
 // ================================================================
@@ -2683,17 +2683,17 @@ function askLoanAction(unitId, type) {
     (type === 'return' ? 'เช่น ลูกค้าส่งคืนที่ออฟฟิศแล้ว' : 'เช่น ลูกค้าขอใช้ต่อ / สมชายลาออก') + '"></div>';
   h += '<div class="field"><label>✍️ คนส่งคำขอ *</label><input type="text" id="la_by" list="laKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('laKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
-    '⚠️ ใบนี้คีย์จากแอปหลัก หน้านี้เปลี่ยนตัวจริงไม่ได้ — กดส่งแล้วจะเข้าคิวไว้ ' +
-    'ต้องไปเปิดเมนู Demo Equipment ในแอปหลักแล้วกด “รับเข้า” อีกครั้งถึงจะมีผลจริง</div>';
+    '⚠️ ใบนี้คีย์จาก Lotus Note หน้านี้เปลี่ยนตัวจริงไม่ได้ — กดส่งแล้วจะเข้าคิวไว้ ' +
+    'ต้องไปเปิดเมนู Demo Equipment ใน Lotus Note แล้วกด “รับเข้า” อีกครั้งถึงจะมีผลจริง</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn btn-primary" onclick="saveLoanAction(\'' + unitId + '\',\'' + type + '\')">📤 ส่งคำขอ' + _laLabel(type) + '</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
-  openSm('📤 ขอ' + _laLabel(type) + ' (ผ่านแอปหลัก)', h);
+  openSm('📤 ขอ' + _laLabel(type) + ' (ผ่าน Lotus Note)', h);
 }
 function saveLoanAction(unitId, type) {
   var by = (document.getElementById('la_by').value || '').trim();
   var reason = (document.getElementById('la_reason').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนส่งคำขอก่อนนะครับ — แอปหลักจะได้รู้ว่าใครขอ'); return; }
+  if (!by) { alert('ใส่ชื่อคนส่งคำขอก่อนนะครับ — Lotus Note จะได้รู้ว่าใครขอ'); return; }
   var la = { type: type, by: by, reason: reason, at: new Date().toISOString() };
   if (type === 'return') {
     la.date = (document.getElementById('la_date').value || '').trim();
@@ -2716,12 +2716,12 @@ function saveLoanAction(unitId, type) {
     unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
   }, { merge: true }).then(function() {
     closeSm();
-    toastMock('📤 ส่งคำขอแล้ว — รอแอปหลักกดรับเข้า');
+    toastMock('📤 ส่งคำขอแล้ว — รอ Lotus Note กดรับเข้า');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 // ---- คืน/เลื่อน ทั้งใบจอง ----
 //
-// ใบหนึ่งมีได้ทั้งเครื่องที่คีย์จากหน้านี้ (แก้ตัวจริงได้) และเครื่องที่คีย์จากแอปหลัก (ต้องส่งคำขอเข้าคิว)
+// ใบหนึ่งมีได้ทั้งเครื่องที่คีย์จากหน้านี้ (แก้ตัวจริงได้) และเครื่องที่คีย์จาก Lotus Note (ต้องส่งคำขอเข้าคิว)
 // เขียนรวมใน batch เดียว จะได้ไม่เหลือใบครึ่งๆ กลางๆ ถ้าพลาดกลางทาง — ฟอร์มเดียวจบทั้งสองแบบ
 function _rtSlipRows(key) {
   return activeReturns().filter(function(l) {
@@ -2753,7 +2753,7 @@ function _rtSlipHead(key, rows, checkable) {
       (l.src === 'app' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') +
       (checkable ? '</label>' : '</span>') + '</li>';
   }).join('') + '</ul>';
-  if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจากแอปหลัก หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอแอปหลักกด “รับเข้า”</div>';
+  if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจาก Lotus Note หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอ Lotus Note กด “รับเข้า”</div>';
   // กลุ่มที่ไม่มีเลขใบจองคือการเดา ไม่ใช่ใบจริง — เตือนก่อนกดทีเดียวหลายเครื่อง
   if (!j && rows.length > 1) {
     h += '<div class="rt-warn">⚠️ ชุดนี้<b>ไม่มีเลขใบจอง</b> ระบบเดากลุ่มจากผู้ยืมและช่วงวันที่ตรงกัน ' +
@@ -2899,13 +2899,13 @@ function saveSlipExtend(key) {
 }
 
 // ---- โอนทั้งใบ — เปลี่ยนผู้ยืม/ผู้คีย์ให้หลายเครื่องพร้อมกัน (เฉพาะที่คีย์จากหน้านี้เอง) ----
-// เครื่องที่คีย์มาจากแอปหลักโอนจากตรงนี้ไม่ได้ (หน้านี้ไม่มีสิทธิ์แก้ตัวจริง และยังไม่มี loanAction แบบ
-// 'transfer' ที่แอปหลักรู้จักจะให้ไปคิว) เลยไม่เสนอ checkbox ให้เลือกเครื่องเหล่านั้น บอกตรงๆ ว่าไปโอนที่แอปหลัก
+// เครื่องที่คีย์มาจาก Lotus Note โอนจากตรงนี้ไม่ได้ (หน้านี้ไม่มีสิทธิ์แก้ตัวจริง และยังไม่มี loanAction แบบ
+// 'transfer' ที่ Lotus Note รู้จักจะให้ไปคิว) เลยไม่เสนอ checkbox ให้เลือกเครื่องเหล่านั้น บอกตรงๆ ว่าไปโอนที่ Lotus Note
 function openSlipTransferM(key) {
   var rows = _rtSlipRows(key);
   var staffRows = rows.filter(function(l) { return l.src === 'staff'; });
   var appRows = rows.filter(function(l) { return l.src === 'app'; });
-  // ใบที่คีย์จากแอปหลักทั้งใบ ไม่มีเครื่องไหนมี doc ให้ "โอน" ตรงๆ เลยสักตัว แต่ยังแก้ผู้ยืม/ผู้คีย์/ใบจอง/
+  // ใบที่คีย์จาก Lotus Note ทั้งใบ ไม่มีเครื่องไหนมี doc ให้ "โอน" ตรงๆ เลยสักตัว แต่ยังแก้ผู้ยืม/ผู้คีย์/ใบจอง/
   // เหตุผลได้ผ่านคิว publicDemoEdits เหมือนเครื่องอื่นๆ — saveLcvEdit เองมีลอจิกไล่หา sibling ตามเลขใบจอง
   // แล้วเขียนคิวให้ครบทุกเครื่องในใบเดียวกันอยู่แล้ว (ดูคอมเมนต์ที่ฟังก์ชันนั้น) แค่เปลี่ยนทางเข้าจาก "บล็อก
   // ทั้งหมด" เป็นพาไปเปิดฟอร์มแก้ไขของเครื่องแรกในใบแทน กดบันทึกจะกระจายไปทุกเครื่องในใบให้เองอัตโนมัติ
@@ -2917,7 +2917,7 @@ function openSlipTransferM(key) {
     return;
   }
   var h = _rtSlipHead(key, staffRows);
-  if (appRows.length) h += '<div class="hint">อีก ' + appRows.length + ' เครื่องในใบนี้คีย์จากแอปหลัก — แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลได้จากปุ่ม ✏️ ที่แถวเครื่องนั้นแทน (กระจายไปทุกเครื่องที่แชร์เลขใบจองเดียวกันให้เอง)</div>';
+  if (appRows.length) h += '<div class="hint">อีก ' + appRows.length + ' เครื่องในใบนี้คีย์จาก Lotus Note — แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผลได้จากปุ่ม ✏️ ที่แถวเครื่องนั้นแทน (กระจายไปทุกเครื่องที่แชร์เลขใบจองเดียวกันให้เอง)</div>';
   h += '<div class="field"><label>👤 ผู้ยืมคนใหม่</label><input type="text" id="stf_borrower" list="stfBorrowerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยนผู้ยืม">' + scBorrowerDatalist('stfBorrowerList') + '</div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="stf_keyer" list="stfKeyerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' + scKeyerDatalist('stfKeyerList') + '</div>';
   h += '<div class="field"><label>📄 เลขใบจองใหม่</label><input type="text" id="stf_job" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน — ใช้กรอกเลขที่ยังไม่ได้ใส่ตอนจอง หรือแก้เลขที่คีย์ผิด"></div>';
@@ -3079,7 +3079,7 @@ function toggleDamageFlag(loanId) {
   }).then(function() { toastMock('⚠️ บันทึกความเสียหายแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
-// รายชื่อผู้ยืมเดิม — หน้านี้ไม่มีทะเบียน Dealer เหมือนแอปหลัก จึงรวมจากใบยืมที่เคยคีย์ไว้แทน
+// รายชื่อผู้ยืมเดิม — หน้านี้ไม่มีทะเบียน Dealer เหมือน Lotus Note จึงรวมจากใบยืมที่เคยคีย์ไว้แทน
 // ช่วยให้ชื่อบริษัทเดียวกันสะกดตรงกันทุกครั้ง ไม่แตกเป็นหลายเวอร์ชันจนนับประวัติไม่ตรง
 function scBorrowerDatalist(listId) {
   var map = {};
@@ -3311,7 +3311,7 @@ function copySlipKeyRentals(key) {
   }
 }
 // เขียนแยกจาก copySlipKeyRentals ด้านบน (คนละอันแม้จะหน้าตาคล้ายกัน) เพราะอันนั้นอิงจาก _rtSlipRows()
-// ซึ่งอิง activeReturns() — ตัดรายการ "จองล่วงหน้า" ที่คีย์จากแอปหลักออกไปเลย (ยังไม่ถึงรอบต้องตามคืน จึง
+// ซึ่งอิง activeReturns() — ตัดรายการ "จองล่วงหน้า" ที่คีย์จาก Lotus Note ออกไปเลย (ยังไม่ถึงรอบต้องตามคืน จึง
 // ไม่นับ) ถ้าเอามาใช้กับแท็บใบจองที่โชว์จองล่วงหน้าด้วย จะได้เลขไม่ครบเวลาใบมีเครื่องแบบนั้นปนอยู่ จึงคำนวณ
 // จาก bkAllItems() ตรงๆ แทน ให้ตรงกับสิ่งที่เห็นในแท็บนี้จริงๆ เสมอ
 function copyBkSlipRentals(key) {
@@ -3331,7 +3331,7 @@ function copyBkSlipRentals(key) {
 
 // ================================================================
 // แจ้งเตือนผู้ยืมที่เลยกำหนด/ใกล้ถึงกำหนดคืน — แต่งข้อความให้พร้อมส่ง แก้ไขก่อนส่งได้ แล้วคัดลอก/เปิด LINE
-// ให้ทีมกดแปะแชทได้เลย ไม่ต้องพิมพ์เอง ใช้ได้ทั้งใบที่คีย์จากหน้านี้และจากแอปหลัก เพราะแค่ประกอบข้อความ
+// ให้ทีมกดแปะแชทได้เลย ไม่ต้องพิมพ์เอง ใช้ได้ทั้งใบที่คีย์จากหน้านี้และจาก Lotus Note เพราะแค่ประกอบข้อความ
 // จากข้อมูลที่มีอยู่แล้ว ไม่ได้เขียนอะไรกลับเข้า Firestore
 // ================================================================
 function _reminderText(unitId, borrower, jobNo, endIso) {
@@ -3405,11 +3405,11 @@ function _scJobSiblingsHtml(l) {
 
 // กดดูใบยืมที่ชนคิวจากขั้นตอนเลือกเครื่อง/วันที่ (renderLendFlow) — จะได้รู้ว่าใครถืออยู่ ไปตามให้เอามาคืน
 // หรือคุยกันเรื่องอื่นๆ ก่อนได้ ถ้าใบนั้นคีย์จากหน้านี้เอง (มี loanId จริง) เปิดรายละเอียดเต็ม (ต่อเวลา/โอน/
-// ประวัติได้ด้วย) แต่ถ้าคีย์จากแอปหลัก (ไม่มี doc ให้เปิดตรงๆ) โชว์เท่าที่รู้จาก busyRanges แทน
-// ใบพวกนี้คีย์จากแอปหลัก หน้านี้ไม่มี doc ให้เขียนตรงๆ (ดูหมายเหตุที่ _quickNamesHtml ด้านบน) แต่ผู้ยืม/
+// ประวัติได้ด้วย) แต่ถ้าคีย์จาก Lotus Note (ไม่มี doc ให้เปิดตรงๆ) โชว์เท่าที่รู้จาก busyRanges แทน
+// ใบพวกนี้คีย์จาก Lotus Note หน้านี้ไม่มี doc ให้เขียนตรงๆ (ดูหมายเหตุที่ _quickNamesHtml ด้านบน) แต่ผู้ยืม/
 // ผู้คีย์เบิก/เลขใบจอง/เหตุผลยืม เปิดให้แก้จากตรงนี้ได้เหมือน saveQuickNameSlip คือส่งเข้าคิว publicDemoEdits
-// แล้วแอปหลักรับเข้าอัตโนมัติ — ใช้ค่าที่ค้างอยู่ใน PENDING_EDITS (ถ้ามี) แทนค่าจากแอปหลัก จะได้เห็นผลทันทีที่
-// กรอกไปแล้ว ไม่ต้องรอแอปหลักเปิดก่อนถึงจะเห็นว่ากรอกสำเร็จ
+// แล้ว Lotus Note รับเข้าอัตโนมัติ — ใช้ค่าที่ค้างอยู่ใน PENDING_EDITS (ถ้ามี) แทนค่าจาก Lotus Note จะได้เห็นผลทันทีที่
+// กรอกไปแล้ว ไม่ต้องรอ Lotus Note เปิดก่อนถึงจะเห็นว่ากรอกสำเร็จ
 function showLendConflictM(unitId, start, end) {
   var conflict = _lfConflict(unitId, start, end);
   if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
@@ -3430,11 +3430,11 @@ function showLendConflictM(unitId, start, end) {
     '<div><span>ช่วงที่ติด</span><b>' + esc(_scFmt(conflict.s)) + ' → ' + esc(_scFmt(conflict.e)) + '</b></div>' +
     '<div><span>ใช้งานกับ</span><b>' + (curP ? esc(curP) : '<span style="color:var(--text3)">— ไม่ได้บันทึก —</span>') + '</b></div>' +
     '</div>';
-  if (Object.keys(pend).length) h += '<div class="hint" style="margin-top:4px">✅ มีข้อมูลที่แก้ไว้ค้างอยู่ — รอแอปหลักเปิดครั้งถัดไปจะลงข้อมูลจริงให้อัตโนมัติ</div>';
+  if (Object.keys(pend).length) h += '<div class="hint" style="margin-top:4px">✅ มีข้อมูลที่แก้ไว้ค้างอยู่ — รอ Lotus Note เปิดครั้งถัดไปจะลงข้อมูลจริงให้อัตโนมัติ</div>';
   h += '<div id="lcvEditWrap" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="lcvEditForm(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">✏️ แก้ไขผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล</button></div>';
   h += _copySlipBtnHtml(unitId, curJ);
-  h += '<div class="hint" style="margin-top:8px">รายการนี้คีย์จากแอปหลัก — หน้านี้ไม่มีใบให้เปิดต่อเวลา/รับคืนตรงๆ ' +
-    'ถ้าต้องการให้คืนหรือเลื่อนวัน ต้องติดต่อผู้ยืมด้านบนแล้วให้ทีมที่ใช้แอปหลักเป็นคนจัดการ (แก้ชื่อ/เลขใบจอง/เหตุผลได้จากปุ่มด้านบน)</div>';
+  h += '<div class="hint" style="margin-top:8px">รายการนี้คีย์จาก Lotus Note — หน้านี้ไม่มีใบให้เปิดต่อเวลา/รับคืนตรงๆ ' +
+    'ถ้าต้องการให้คืนหรือเลื่อนวัน ต้องติดต่อผู้ยืมด้านบนแล้วให้ทีมที่ใช้ Lotus Note เป็นคนจัดการ (แก้ชื่อ/เลขใบจอง/เหตุผลได้จากปุ่มด้านบน)</div>';
   h += _bookingSiblingsHtml(conflict);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-ghost" onclick="closeSm()">ปิด</button></div>';
   openSm('📤 รายการที่ชนอยู่', h);
@@ -3452,8 +3452,8 @@ function lcvEditForm(unitId, start, end) {
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์เบิก</label><input type="text" id="lcvKeyer" list="lcvKeyerList" autocomplete="off" value="' + esc(curK || '') + '">' + scKeyerDatalist('lcvKeyerList') + '</div>';
   h += '<div class="field"><label>📄 เลขใบจอง</label><input type="text" id="lcvJob" value="' + esc(curJ || '') + '"></div>';
   h += '<div class="field"><label>📝 เหตุผล/ใช้งานกับ</label><input type="text" id="lcvPurpose" value="' + esc(curP || '') + '" placeholder="เช่น สาธิตลูกค้า"></div>';
-  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="lcvBy" list="lcvByList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('lcvByList') + '</div>';
-  h += '<div class="hint" style="margin-bottom:8px">ใบนี้คีย์จากแอปหลัก แก้จากตรงนี้จะเข้าคิวไว้ก่อน แล้วลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้ Lotus Note รู้ว่าใครแก้) *</label><input type="text" id="lcvBy" list="lcvByList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('lcvByList') + '</div>';
+  h += '<div class="hint" style="margin-bottom:8px">ใบนี้คีย์จาก Lotus Note แก้จากตรงนี้จะเข้าคิวไว้ก่อน แล้วลงข้อมูลจริงใน Lotus Note ให้เองอัตโนมัติทันทีที่มีคนเปิด Lotus Note ครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
     '<button class="btn btn-primary btn-sm" onclick="saveLcvEdit(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">💾 บันทึก</button>' +
     '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + unitId + '\',\'' + start + '\',\'' + end + '\')">ยกเลิก</button>' +
@@ -3464,7 +3464,7 @@ function saveLcvEdit(unitId, start, end) {
   var conflict = _lfConflict(unitId, start, end);
   if (!conflict) { alert('ตอนนี้เครื่องนี้ว่างแล้ว — ลองรีเฟรชแล้วดูใหม่'); return; }
   var by = (document.getElementById('lcvBy').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — Lotus Note จะได้รู้ว่าใครแก้'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   var fields = {
     borrower: (document.getElementById('lcvBorrower').value || '').trim(),
@@ -3492,11 +3492,11 @@ function saveLcvEdit(unitId, start, end) {
     }, { merge: true });
   });
   batch.commit().then(function() {
-    toastMock('💾 บันทึกแล้ว' + (unitIds.length > 1 ? ' ' + unitIds.length + ' เครื่องในใบเดียวกัน' : '') + ' — รอแอปหลักเปิดแล้วจะลงข้อมูลจริงอัตโนมัติ');
+    toastMock('💾 บันทึกแล้ว' + (unitIds.length > 1 ? ' ' + unitIds.length + ' เครื่องในใบเดียวกัน' : '') + ' — รอ Lotus Note เปิดแล้วจะลงข้อมูลจริงอัตโนมัติ');
     showLendConflictM(unitId, start, end);
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
-// เหมือน _scJobSiblingsHtml แต่ทำงานบน scBookings() (รวมทั้งใบที่คีย์จากหน้านี้และจากแอปหลัก) แทนที่จะ
+// เหมือน _scJobSiblingsHtml แต่ทำงานบน scBookings() (รวมทั้งใบที่คีย์จากหน้านี้และจาก Lotus Note) แทนที่จะ
 // จำกัดแค่ LOANS อย่างเดียว — ใช้ตอนดูใบที่อาจมาจากแหล่งไหนก็ได้ (เช่น showLendConflictM ด้านบน)
 function _bookingSiblingsHtml(b) {
   if (!(b.jobNo || '').trim()) return '';
@@ -3749,8 +3749,8 @@ function renderPendingEditsBanner() {
   var n = pendingEditCount();
   if (!n) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
-  el.innerHTML = '<span>🔄 มีการแก้ไขจากหน้านี้ <b>' + n + ' เครื่อง</b> ที่กำลังรอซิงก์เข้าแอปหลัก — ' +
-    'หน้านี้กับลิงก์ลูกค้าเห็นค่าใหม่แล้วทันที และจะลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</span>';
+  el.innerHTML = '<span>🔄 มีการแก้ไขจากหน้านี้ <b>' + n + ' เครื่อง</b> ที่กำลังรอซิงก์เข้า Lotus Note — ' +
+    'หน้านี้กับลิงก์ลูกค้าเห็นค่าใหม่แล้วทันที และจะลงข้อมูลจริงใน Lotus Note ให้เองอัตโนมัติทันทีที่มีคนเปิด Lotus Note ครั้งถัดไป ไม่ต้องกดอนุมัติ</span>';
 }
 function renderUnitsTable() {
   renderUnitViewToggle();
@@ -3849,7 +3849,7 @@ function renderUnitsTable() {
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
         '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
         '<td>' + (loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
-          : appRange ? (esc(appRange.borrower || 'คีย์จากแอปหลัก') + ' · ' + _scD(appRange.end)) : '—') + '</td>' +
+          : appRange ? (esc(appRange.borrower || 'คีย์จาก Lotus Note') + ' · ' + _scD(appRange.end)) : '—') + '</td>' +
         '<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button></td></tr>';
     }).join('');
     // จอแคบ + มุมมองตาราง = คอลัมน์สำคัญ (สถานะ/ผู้ยืม) หลุดจอไปหมดโดยไม่มีสัญญาณให้เลื่อนขวา — สลับไปการ์ด
@@ -3986,7 +3986,7 @@ function unitCardHtml(raw, n) {
       '<div>📅 ' + esc(_scD(b.start)) + ' → ' + esc(_scD(b.end)) +
       (late ? ' <b style="color:var(--bad)">(เลยกำหนด ' + daysBetween(b.end, _td()) + ' วัน)</b>' : '') + '</div>' +
       (b.purpose ? '<div>🎯 ' + esc(b.purpose) + '</div>' : '') +
-      (!loan ? '<div style="color:var(--text3);font-size:10.5px">คีย์จากแอปหลัก — รับคืนต้องกดที่แอปหลัก</div>' : '') + '</div>';
+      (!loan ? '<div style="color:var(--text3);font-size:10.5px">คีย์จาก Lotus Note — รับคืนต้องกดที่ Lotus Note </div>' : '') + '</div>';
   }
   if (u.note) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">📝 ' + esc(u.note) + '</div>';
   // กางดูรายละเอียดในที่เดิม ไม่ต้องเปลี่ยนหน้า — SKU กับทะเบียนเอกสารรายใบย้ายมาอยู่ตรงนี้
@@ -4015,7 +4015,7 @@ function unitCardHtml(raw, n) {
     else if (nf) bits.push('✏️ แก้ไว้ ' + nf + ' ช่อง');
     if (p.loanAction && p.loanAction.type) bits.push('📤 ขอ' + esc(_laLabel(p.loanAction.type)));
     h += '<div class="su-pending">' + (bits.join(' · ') || '✏️ มีรายการค้าง') +
-      (p.editedBy ? ' โดย ' + esc(p.editedBy) : '') + ' · 🔄 กำลังซิงก์กับแอปหลัก</div>';
+      (p.editedBy ? ' โดย ' + esc(p.editedBy) : '') + ' · 🔄 กำลังซิงก์กับ Lotus Note </div>';
   }
   h += '<div class="su-acts" onclick="event.stopPropagation()">';
   h += '<button class="btn btn-ghost btn-sm" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button>';
@@ -4068,11 +4068,11 @@ function openUnitDetail(unitId, returnTo) {
       '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + loan._id + '\')">🔄 โอน</button>' +
       '</div>' + scLoanLogHtml(loan);
   } else if (appRange) {
-    // การยืมนี้อยู่ในแอปหลัก ไม่ได้อยู่ใน publicDemoLoans จึงกดรับคืนจากหน้านี้ไม่ได้ (ไม่มี doc ให้อัปเดต)
+    // การยืมนี้อยู่ใน Lotus Note ไม่ได้อยู่ใน publicDemoLoans จึงกดรับคืนจากหน้านี้ไม่ได้ (ไม่มี doc ให้อัปเดต)
     h += '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">📤 ถูกยืมอยู่ — ' +
       esc(appRange.borrower || 'ไม่ระบุผู้ยืม') + ' · กำหนดคืน ' + esc(appRange.end) + '</div>' +
       '<div style="font-size:12px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:8px 11px">' +
-      'รายการนี้คีย์จากเมนู Demo Equipment ในแอปหลัก การรับคืนต้องกดที่แอปหลัก หน้านี้กดคืนได้เฉพาะรายการที่อนุมัติ/คีย์จากหน้านี้เอง</div>';
+      'รายการนี้คีย์จากเมนู Demo Equipment ใน Lotus Note การรับคืนต้องกดที่ Lotus Note หน้านี้กดคืนได้เฉพาะรายการที่อนุมัติ/คีย์จากหน้านี้เอง</div>';
   } else if (u.status === 'unavailable' || u.status === 'lost') {
     h += '<div style="font-size:13px;color:var(--text2)">เครื่องนี้ไม่พร้อมใช้งาน — แก้ไขสถานะได้จากเมนู Demo Equipment ในแอพหลัก</div>';
   } else {
@@ -4202,7 +4202,7 @@ function _lendPaint(id) {
 // ต้องเดาจากผู้ยืม+ช่วงวันแทน ไฟล์ export ของระบบคลังมีทั้งเลขเครื่องเช่าและเลขที่ใบจองอยู่แถวเดียวกัน
 // จับคู่ด้วยเลขเครื่องเช่าจึงเติมให้ครบทีเดียวได้ โดยไม่ต้องพิมพ์ทีละใบ
 //
-// เขียนผ่านคิว publicDemoEdits เหมือนการแก้อย่างอื่น — ใบยืมตัวจริงอยู่ในแอปหลัก หน้านี้ไม่เขียนทับเอง
+// เขียนผ่านคิว publicDemoEdits เหมือนการแก้อย่างอื่น — ใบยืมตัวจริงอยู่ใน Lotus Note หน้านี้ไม่เขียนทับเอง
 // ================================================================
 var _riRows = null;
 function openRentImport() {
@@ -4256,7 +4256,7 @@ function riRead() {
     var byRent = {}; UNITS.forEach(function(u) { if (u.rentalDbNo) byRent[_riNum(u.rentalDbNo)] = u; });
     // ต้องเทียบกับ "ใบยืมทั้งหมดที่ยังไม่คืน" ไม่ใช่ activeReturns() ซึ่งตัดใบที่จองล่วงหน้ายังไม่ถึงวันเริ่มออก
     // (เคยเตือนผิดว่า 19 เครื่องไม่ได้ยืมอยู่ ทั้งที่จองไว้จริง แค่ยังไม่ถึงรอบต้องตามคืน)
-    // แอปหลักเติมเลขใบให้ทุกใบที่ status === 'active' ซึ่งรวมใบที่ยังไม่ถึงวันเริ่มด้วย
+    // Lotus Note เติมเลขใบให้ทุกใบที่ status === 'active' ซึ่งรวมใบที่ยังไม่ถึงวันเริ่มด้วย
     var loanBy = {};
     scBookings().forEach(function(b) {
       if (b.status === 'returned') return;
@@ -4293,7 +4293,7 @@ function riRead() {
     var notOnLoan = plan.filter(function(p) { return !p.onLoan; }).length;
     if (notOnLoan) {
       h += '<div class="rt-warn">⚠️ ' + notOnLoan + ' เครื่องมีเลขใบในไฟล์ แต่ระบบนี้ไม่ได้บันทึกว่ากำลังยืมอยู่ — ' +
-        'ส่งไปได้ แต่แอปหลักจะเติมให้เฉพาะเครื่องที่มีใบยืมค้างอยู่จริง</div>';
+        'ส่งไปได้ แต่ Lotus Note จะเติมให้เฉพาะเครื่องที่มีใบยืมค้างอยู่จริง</div>';
     }
     var mismatch = plan.filter(function(p) { return p.dueFile && p.dueApp && p.dueFile !== p.dueApp; });
     if (mismatch.length) {
@@ -4304,8 +4304,8 @@ function riRead() {
       }).length;
       h += '<div class="rt-warn">📅 กำหนดคืนไม่ตรงกัน ' + mismatch.length + ' เครื่อง — <b>ตัวนำเข้านี้ไม่แตะวันที่</b> เติมแค่เลขใบจอง' +
         (offByOne >= mismatch.length * 0.8
-          ? '<br><b>' + offByOne + ' ใบต่างกันพอดี 1 วัน</b> — เกิดจากบั๊กเวลาตอนส่งข้อมูลออกจากแอปหลัก (แก้แล้ว) ' +
-            'วันจะตรงเองหลังเปิดแอปหลักให้ส่งข้อมูลใหม่อีกครั้ง ไม่ต้องไล่แก้ทีละใบ'
+          ? '<br><b>' + offByOne + ' ใบต่างกันพอดี 1 วัน</b> — เกิดจากบั๊กเวลาตอนส่งข้อมูลออกจาก Lotus Note (แก้แล้ว) ' +
+            'วันจะตรงเองหลังเปิด Lotus Note ให้ส่งข้อมูลใหม่อีกครั้ง ไม่ต้องไล่แก้ทีละใบ'
           : ' ถ้าวันไม่ตรงต้องแก้เอง') + '</div>';
     }
     if (!plan.length) { out.innerHTML = h + '<div class="hint">ไม่มีอะไรต้องเติม</div>'; return; }
@@ -4327,7 +4327,7 @@ function riRead() {
       '<input type="text" id="riBy" list="riKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' +
       scKeyerDatalist('riKeyerList') + '</div>';
     h += '<button class="btn btn-primary btn-full" onclick="riApply()">📤 ส่งเข้าคิว ' + plan.length + ' เครื่อง</button>';
-    h += '<div class="hint">ส่งแล้วต้องเปิดเมนู Demo Equipment ในแอปหลักกด “รับเข้า” อีกครั้ง ถึงจะลงข้อมูลจริง</div>';
+    h += '<div class="hint">ส่งแล้วต้องเปิดเมนู Demo Equipment ใน Lotus Note กด “รับเข้า” อีกครั้ง ถึงจะลงข้อมูลจริง</div>';
     out.innerHTML = h;
   };
   rd.readAsArrayBuffer(f);
@@ -4335,7 +4335,7 @@ function riRead() {
 function riApply() {
   if (!_riRows || !_riRows.length) return;
   var by = (document.getElementById('riBy').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนนำเข้าก่อนนะครับ — แอปหลักจะได้รู้ว่าใครส่งมา'); return; }
+  if (!by) { alert('ใส่ชื่อคนนำเข้าก่อนนะครับ — Lotus Note จะได้รู้ว่าใครส่งมา'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   var rows = _riRows.slice();
   // Firestore จำกัด batch ละ 500 ops — ไฟล์คลังเป็นหลักสิบ แต่แบ่งไว้กันไฟล์ใหญ่ในอนาคต
@@ -4356,7 +4356,7 @@ function riApply() {
     });
   }, Promise.resolve()).then(function() {
     closeSm();
-    toastMock('📤 ส่งเข้าคิวแล้ว ' + rows.length + ' เครื่อง — รอแอปหลักกดรับเข้า');
+    toastMock('📤 ส่งเข้าคิวแล้ว ' + rows.length + ' เครื่อง — รอ Lotus Note กดรับเข้า');
     _riRows = null;
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
@@ -4939,10 +4939,10 @@ function saveManualLoan(unitId) {
 }
 
 // ================================================================
-// ปฏิทิน 5 มุมมอง — พอร์ตจาก renderDemoCalendar() ในแอปหลัก (features.js)
+// ปฏิทิน 5 มุมมอง — พอร์ตจาก renderDemoCalendar() ใน Lotus Note (features.js)
 // ต่างกันที่แหล่งข้อมูล: หน้านี้ไม่มี v7_demoLoans ต้องรวมสองทางเข้าด้วยกัน
 //   1) LOANS (publicDemoLoans) — รายการที่อนุมัติ/คีย์จากหน้านี้เอง
-//   2) UNITS[].busyRanges       — การยืมที่คีย์ในแอปหลักแล้ว publish ตามมา
+//   2) UNITS[].busyRanges       — การยืมที่คีย์ใน Lotus Note แล้ว publish ตามมา
 // สองชุดนี้ควรไม่ทับกัน แต่ dedup ด้วย unitId|start|end ไว้เผื่อวันหน้ามี sync สองทาง
 // publicDemoLoans ไม่เก็บ jobNo/refNo มุมมองที่ 4 จึงจัดชุดด้วย ผู้ยืม+ช่วงวัน แทนเลขใบจอง
 // (คำขอที่อนุมัติทีเดียวสร้าง loan หลายรายการที่มี borrower/start/end ชุดเดียวกันอยู่แล้ว)
@@ -4956,12 +4956,12 @@ var scPicked = [], scOpen = null;
 // ใช้กรองในแท็บรายการเครื่อง ทำให้เรียนรู้ตัวกรองคนละชุดสองรอบ
 var scCatFilter = [];  // array ของ id หมวดที่เลือกไว้ — ว่าง = ทุกหมวด (เลือกได้มากกว่า 1 หมวดพร้อมกัน เหมือนแท็บรายการเครื่อง)
 var scFindModel = '', scFindFrom = '', scFindTo = '';
-// ---- ตัวควบคุมไทม์ไลน์ (ชุดเดียวกับแอปหลัก) ----
+// ---- ตัวควบคุมไทม์ไลน์ (ชุดเดียวกับ Lotus Note) ----
 var scSearch = '', scGrouped = true, scExpanded = {}, scHideFree = true;
 var scSort = 'busy', scColorBy = 'stat', scDense = false, scForceTL = false;
 var _SC_WHO_COLORS = ['#3b82f6','#a855f7','#14b8a6','#f97316','#ec4899','#84cc16','#06b6d4','#f43f5e'];
 // innerWidth เป็น 0 ได้ตอนหน้าอยู่ใน iframe ที่ยังไม่ paint / แท็บพื้นหลัง — ถือว่า "วัดไม่ได้ = ไม่แคบ"
-// ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับแอปหลัก) ----
+// ---- โหมดเลือกหลายวันในมุมมองรายเดือน (ชุดเดียวกับ Lotus Note) ----
 var scMultiDay = false, scPickDays = [];
 // จำไว้ว่าผู้ใช้กดเปิด/ปิดกล่อง "เครื่องที่ติดจองช่วงนี้" เองหรือยัง (null = ยังไม่เคยกด ให้เดาจาก
 // openDefault ไปก่อน) เดิมไม่มีตัวนี้ ทุกครั้งที่ติ๊กเลือกเครื่องในกล่องนี้แล้ว renderStaffCalendar() วาด
@@ -5165,7 +5165,7 @@ function scBusyOn(b, cur) {
   if (cur <= b.e) return true;
   return b.e < _scDay(new Date());
 }
-// ปีที่เป็นไปไม่ได้ = ข้อมูลพัง ถ้าปล่อยเข้าปฏิทิน แถบเดียวจะลากข้ามทุกเดือนตลอดไป (เคยเจอในแอปหลัก)
+// ปีที่เป็นไปไม่ได้ = ข้อมูลพัง ถ้าปล่อยเข้าปฏิทิน แถบเดียวจะลากข้ามทุกเดือนตลอดไป (เคยเจอใน Lotus Note)
 function _scSane(iso) { var d = _scFromIso(iso); if (!d || isNaN(d.getTime())) return null; var y = d.getFullYear(); return (y >= 2000 && y <= 2100) ? d : null; }
 
 function scBookings() {
@@ -5177,7 +5177,7 @@ function scBookings() {
     var k = o.unitId + '|' + _scIso(s) + '|' + _scIso(e);
     if (seen[k]) return;
     seen[k] = 1;
-    // แอปหลักมีทั้ง "เลขที่ใบจอง" (jobNo) และ "เลขที่ใบเบิก" (refNo) — ใช้ jobNo ก่อน ไม่มีค่อยใช้ refNo
+    // Lotus Note มีทั้ง "เลขที่ใบจอง" (jobNo) และ "เลขที่ใบเบิก" (refNo) — ใช้ jobNo ก่อน ไม่มีค่อยใช้ refNo
     var job = String(o.jobNo || '').trim() || String(o.refNo || '').trim();
     out.push({ unitId: o.unitId, s: s, e: e, borrower: o.borrower || '', purpose: o.purpose || '',
       approver: o.approver || '', jobNo: job, loanId: o.loanId || '',
@@ -5197,7 +5197,7 @@ function scBookings() {
 
 // ================================================================
 // รายงานอัตราการใช้งานเครื่อง (ตามรุ่น) — ตอบว่ารุ่นไหนถูกยืมบ่อย/นานสุด รุ่นไหนแทบไม่ถูกแตะ ใช้ประกอบ
-// การตัดสินใจซื้อเพิ่ม/เลิกเก็บสต๊อกสาธิต นับจากทั้งสองแหล่ง (LOANS ของหน้านี้ + busyRanges จากแอปหลัก)
+// การตัดสินใจซื้อเพิ่ม/เลิกเก็บสต๊อกสาธิต นับจากทั้งสองแหล่ง (LOANS ของหน้านี้ + busyRanges จาก Lotus Note)
 // เหมือน scBookings() แต่คิด "วันที่ถูกใช้จริง" ไม่ใช่ "วันที่ยังนับว่าไม่ว่าง" (ต่างกันตรงช่วงกักรอคลังรับ
 // เข้าหลังคืน ไม่ใช่เวลาที่ลูกค้าใช้งานจริง จึงไม่นับ) และไม่นับช่วงในอนาคตที่ยังไม่เกิดขึ้นจริงเป็นการใช้งาน
 // ('pending' ก็ไม่นับ เพราะยังไม่มีของออกไปจริง)
@@ -5532,7 +5532,7 @@ function scSetCat(id) {
 
 // ---- แถบเครื่องมือ ----
 function scToolbar() {
-  // "รายรุ่น" ยุบเป็นสวิตช์จัดกลุ่มของไทม์ไลน์ เหมือนแอปหลัก
+  // "รายรุ่น" ยุบเป็นสวิตช์จัดกลุ่มของไทม์ไลน์ เหมือน Lotus Note
   if (scView === 'model') { scView = 'timeline'; scGrouped = true; }
   var views = [['timeline','📊 ไทม์ไลน์'],['month','📅 รายเดือน'],['batch','📄 ชุดยืม'],['find','🔍 หาเครื่องว่าง']];
   var h = '<div class="dcal-views">' + views.map(function(v) {
@@ -5711,7 +5711,7 @@ function _scLegend() {
     '<span><i style="background:#ff5252;width:3px"></i>วันนี้</span></div>';
 }
 function _scSrc() {
-  return '<div class="dcal-src">📄 รวมข้อมูล 2 ทาง — รายการที่อนุมัติ/คีย์จากหน้านี้ (publicDemoLoans) และการยืมที่คีย์ในแอปหลักซึ่ง publish ตามมา · หน้านี้ไม่มีเลขใบจอง/ใบเบิก จึงจัดชุดด้วยผู้ยืม + ช่วงวันแทน</div>';
+  return '<div class="dcal-src">📄 รวมข้อมูล 2 ทาง — รายการที่อนุมัติ/คีย์จากหน้านี้ (publicDemoLoans) และการยืมที่คีย์ใน Lotus Note ซึ่ง publish ตามมา · หน้านี้ไม่มีเลขใบจอง/ใบเบิก จึงจัดชุดด้วยผู้ยืม + ช่วงวันแทน</div>';
 }
 // ตัวกรองภายในกล่องรายละเอียดของวัน — แยกจากตัวกรองใหญ่ด้านบน เพราะคนละคำถามกัน
 // ข้างบนถามว่า "ทั้งเดือนนี้สนใจรุ่นไหน" ส่วนตรงนี้ถามว่า "เฉพาะวันนี้ มีอะไรว่างให้หยิบบ้าง"
@@ -5750,7 +5750,7 @@ function scBook(unitId, startIso, endIso) {
 
 // ---- แผงรายละเอียดที่กดเปิด ----
 // เลขใบจองคือหน่วยงานจริงของที่นี่ — ใบเดียวกันคือชุดเดียวกัน ต่อให้แต่ละเครื่องกำหนดคืนไม่ตรงกัน
-// รายการที่ไม่มีเลข (ยืมก่อนมีฟีเจอร์ / คีย์มาจากแอปหลัก) ค่อยเดาด้วย ผู้ยืม+ช่วงวัน แบบเดิม
+// รายการที่ไม่มีเลข (ยืมก่อนมีฟีเจอร์ / คีย์มาจาก Lotus Note) ค่อยเดาด้วย ผู้ยืม+ช่วงวัน แบบเดิม
 // เดิมใช้ ผู้ยืม+ช่วงวัน กับทุกรายการ เพราะคอมเมนต์เก่าเข้าใจว่า publicDemoLoans ไม่เก็บ jobNo (เก็บแล้ว)
 // ผลคือใบคนละใบของลูกค้าเดียวกันช่วงเดียวกันถูกยุบรวม ส่วนใบเดียวที่คืนไม่พร้อมกันถูกแยกออกจากกัน
 function scBatchKey(b) {
@@ -5820,9 +5820,9 @@ function openConfirmPickupM(borrower, sIso, eIso) {
       '<button class="btn btn-ghost btn-sm" onclick="cancelUnconfirmedGroup(\'' + _scEsq(borrower) + '\',\'' + sIso + '\',\'' + eIso + '\')">❌ ยกเลิกจองนี้</button></div>';
   }
   if (appItems.length) {
-    // เครื่องจากแอปหลักไม่มีใบให้แก้ตรงๆ — ใช้ช่องทางแก้ไข/ดูใบที่ชนเดิม (showLendConflictM) ที่มีอยู่แล้ว
+    // เครื่องจาก Lotus Note ไม่มีใบให้แก้ตรงๆ — ใช้ช่องทางแก้ไข/ดูใบที่ชนเดิม (showLendConflictM) ที่มีอยู่แล้ว
     // ต่อเครื่อง แทนที่จะสร้างกลไกส่งคำขอแยกซ้ำอีกชุดเฉพาะจุดนี้
-    h += '<div class="sm-sec" style="margin-top:14px">📲 คีย์จากแอปหลัก (' + appItems.length + ') — ยืนยัน/ยกเลิกจากตรงนี้ไม่ได้โดยตรง</div>';
+    h += '<div class="sm-sec" style="margin-top:14px">📲 คีย์จาก Lotus Note (' + appItems.length + ') — ยืนยัน/ยกเลิกจากตรงนี้ไม่ได้โดยตรง</div>';
     h += appItems.map(function(x) {
       var p = _scModelParts(x.u);
       return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px">' +
@@ -6083,7 +6083,7 @@ function _scDrillDay(iso) {
         '<div><span>ยืมไปทำอะไร</span><b>' + (b0.purpose ? esc(b0.purpose) : '— ไม่ได้ระบุ —') + '</b></div>' +
         _scRefKv(b0, kind) +
         (kind === 'soon' ? '<div><span>เริ่มยืม</span><b>' + _scFmt(b0.s) + '</b></div>' : '<div><span>กำหนดคืน</span><b>' + _scFmt(b0.e) + '</b></div>') +
-        // วันที่คีย์ (createdAt) — มีเฉพาะรายการที่คีย์จากหน้านี้เอง (busyRanges จากแอปหลักไม่มีให้) ใช้เทียบว่า
+        // วันที่คีย์ (createdAt) — มีเฉพาะรายการที่คีย์จากหน้านี้เอง (busyRanges จาก Lotus Note ไม่มีให้) ใช้เทียบว่า
         // ใครกดจองไว้ก่อนตอนมีสองรายชื่อชนกัน ไม่ต้องกดเข้าไปดูประวัติทีละใบ
         (b0.createdAt ? '<div><span>คีย์เมื่อ</span><b>' + _editLogStamp(b0.createdAt) + '</b></div>' : '') +
         '</div>' +
@@ -6569,14 +6569,14 @@ function toggleStaffTheme() {
 // ================================================================
 // แก้ไขข้อมูลเครื่องจากหน้านี้ — ผ่าน "คิวแก้ไข" ไม่ใช่เขียนทับ demoCatalogPublic ตรงๆ
 //
-// เหตุผล: ข้อมูลตัวจริงอยู่ที่ localStorage v7_demo ของแอปหลัก แล้ว publishDemoCatalog() เขียน
+// เหตุผล: ข้อมูลตัวจริงอยู่ที่ localStorage v7_demo ของ Lotus Note แล้ว publishDemoCatalog() เขียน
 // units[] ทั้งก้อนทับ demoCatalogPublic ทุกครั้งที่มีการบันทึกในแอป ถ้าหน้านี้แก้ units[] ตรงๆ
-// การแก้จะหายทันทีที่แอปหลัก publish ครั้งถัดไป (หน้านี้ไม่มี auth เลยเขียนเข้า users/{uid}/demo ไม่ได้)
+// การแก้จะหายทันทีที่ Lotus Note publish ครั้งถัดไป (หน้านี้ไม่มี auth เลยเขียนเข้า users/{uid}/demo ไม่ได้)
 //
 // จึงเขียนลง publicDemoEdits/{unitId} เก็บเฉพาะฟิลด์ที่แก้ แล้ว:
 //   - หน้านี้ overlay ทับ UNITS ตอนแสดงผล เห็นผลทันทีเหมือนแก้สำเร็จแล้ว
-//   - แอปหลักขึ้นแบนเนอร์ให้ตรวจแล้วกดรับเข้า จากนั้นลบคิวทิ้ง
-// เท่ากับการแก้จากหน้านี้จะ "ลงตัวจริง" ต่อเมื่อมีคนเปิดแอปหลักแล้วกดรับ — บอกไว้บนการ์ดชัดๆ
+//   - Lotus Note ขึ้นแบนเนอร์ให้ตรวจแล้วกดรับเข้า จากนั้นลบคิวทิ้ง
+// เท่ากับการแก้จากหน้านี้จะ "ลงตัวจริง" ต่อเมื่อมีคนเปิด Lotus Note แล้วกดรับ — บอกไว้บนการ์ดชัดๆ
 // ================================================================
 var PENDING_EDITS = {};   // unitId -> {fields:{...}, editedAt, editedBy}
 var RAW_UNITS = [];       // ตามที่ publish มาจริงๆ — ใช้เทียบ diff ตอนบันทึก ห้ามเอาไปแสดงผล
@@ -6584,7 +6584,7 @@ var _EDIT_FIELDS = ['category','flyable','rentalDbNo','nbtcRegistered','droneIns
 
 // ================================================================
 // ประวัติการแก้ไขข้อมูลเครื่อง (publicDemoEditLog) — เขียนถาวร ไม่มีวันลบ ต่างจาก publicDemoEdits ที่เป็น
-// แค่คิวรอแอปหลักรับเข้าแล้วหายไป ถ้าไม่มีที่นี่ พอแอปหลักรับเข้าแล้วจะไม่เหลือร่องรอยว่าใครแก้อะไรไปบ้างเลย
+// แค่คิวรอ Lotus Note รับเข้าแล้วหายไป ถ้าไม่มีที่นี่ พอ Lotus Note รับเข้าแล้วจะไม่เหลือร่องรอยว่าใครแก้อะไรไปบ้างเลย
 // ================================================================
 var _EDIT_FIELD_LABELS = {
   name: 'ชื่อ', model: 'Model', serialNumber: 'S/N', sku: 'SiS Part (SKU)', category: 'หมวดหมู่',
@@ -6667,7 +6667,7 @@ function showHelpGuideM() {
 
   h += sec('อื่นๆ ที่ควรรู้');
   h += row('🔍', 'ช่องค้นหาบนสุด', 'ค้นได้ทุกอย่างพร้อมกันทุกแท็บ — รุ่น, เลขเครื่องเช่า, S/N, ผู้ยืม, ผู้คีย์เบิก, เลขใบจอง');
-  h += row('📲', 'ป้าย "คีย์จากแอปหลัก"', 'เครื่องที่มีป้ายนี้ แก้ข้อมูลจริงตรงนี้ไม่ได้ ต้องส่งคำขอเข้าคิวแล้วรอแอปหลักกด "รับเข้า" — เพราะข้อมูลต้นฉบับอยู่ที่ระบบคลังจริงของบริษัท ไม่ใช่หน้านี้');
+  h += row('📲', 'ป้าย "คีย์จาก Lotus Note"', 'เครื่องที่มีป้ายนี้ แก้ข้อมูลจริงตรงนี้ไม่ได้ ต้องส่งคำขอเข้าคิวแล้วรอ Lotus Note กด "รับเข้า" — เพราะข้อมูลต้นฉบับอยู่ที่ระบบคลังจริงของบริษัท ไม่ใช่หน้านี้');
 
   openSm('📖 คู่มือการใช้งานเมนูต่างๆ', h, true);
 }
@@ -6747,9 +6747,9 @@ function openUnitEditM(unitId) {
     _smTg('ed_vis', u.customerVisible !== false, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
   h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ed_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;...">' + esc(u.kitContents || '') + '</textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ed_note" rows="2">' + esc(u.note || '') + '</textarea></div>';
-  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="ed_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้ Lotus Note รู้ว่าใครแก้) *</label><input type="text" id="ed_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
-    'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นผลทันทีที่บันทึก แล้วจะลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
+    'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นผลทันทีที่บันทึก แล้วจะลงข้อมูลจริงใน Lotus Note ให้เองอัตโนมัติทันทีที่มีคนเปิด Lotus Note ครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
   h += '<button class="btn btn-primary" onclick="saveUnitEdit(\'' + unitId + '\')">💾 บันทึก</button>';
   h += '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button>';
@@ -6765,7 +6765,7 @@ function saveUnitEdit(unitId) {
   var pendingAdd = PENDING_EDITS[unitId] && PENDING_EDITS[unitId].type === 'add' ? PENDING_EDITS[unitId] : null;
   if (!raw && !pendingAdd) return;
   var by = (document.getElementById('ed_by').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — Lotus Note จะได้รู้ว่าใครแก้'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   var next = {
     name: (document.getElementById('ed_name').value || '').trim(),
@@ -6782,7 +6782,7 @@ function saveUnitEdit(unitId) {
     kitContents: (document.getElementById('ed_kit').value || '').trim(),
     note: (document.getElementById('ed_note').value || '').trim()
   };
-  // เครื่องที่ยังไม่เคยลงข้อมูลจริงในแอปหลักเลย (เพิ่งเพิ่มจากหน้านี้ ยังเป็นคำขอ type:'add' ค้างอยู่)
+  // เครื่องที่ยังไม่เคยลงข้อมูลจริงใน Lotus Note เลย (เพิ่งเพิ่มจากหน้านี้ ยังเป็นคำขอ type:'add' ค้างอยู่)
   // ไม่มี "ของจริง" ให้เทียบ diff — แก้ทับลงในคำขอเพิ่มเดิมได้เลยทั้งก้อน
   if (pendingAdd) {
     db.collection('publicDemoEdits').doc(unitId).set({
@@ -6791,7 +6791,7 @@ function saveUnitEdit(unitId) {
       .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
     return;
   }
-  // ส่งเฉพาะฟิลด์ที่ต่างจากของจริงจริงๆ คิวจะได้ไม่บวมด้วยค่าที่เหมือนเดิม และแอปหลักเห็นชัดว่าเปลี่ยนอะไรบ้าง
+  // ส่งเฉพาะฟิลด์ที่ต่างจากของจริงจริงๆ คิวจะได้ไม่บวมด้วยค่าที่เหมือนเดิม และ Lotus Note เห็นชัดว่าเปลี่ยนอะไรบ้าง
   var diff = {}, changes = [];
   Object.keys(next).forEach(function(k) {
     var cur = raw[k];
@@ -6811,7 +6811,7 @@ function saveUnitEdit(unitId) {
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message + ' (อาจต้องเพิ่ม Firestore rule ให้เขียน publicDemoEdits ได้)'); });
 }
 function dropUnitEdit(unitId) {
-  if (!confirm('ทิ้งการแก้ไขที่ยังไม่ถูกซิงก์เข้าแอปหลักของเครื่องนี้?')) return;
+  if (!confirm('ทิ้งการแก้ไขที่ยังไม่ถูกซิงก์เข้า Lotus Note ของเครื่องนี้?')) return;
   db.collection('publicDemoEdits').doc(unitId).delete()
     .then(function() { toastMock('↩️ ทิ้งแล้ว'); closeSm(); })
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
@@ -6819,7 +6819,7 @@ function dropUnitEdit(unitId) {
 
 // ---- เพิ่ม/ลบเครื่อง ----
 // ใช้กลไกเดียวกับแก้ไข (publicDemoEdits) แต่เป็นคำขอชนิด add/delete แทน — เห็นผลในหน้านี้/ลิงก์ลูกค้า
-// ทันที แล้วซิงก์เข้าข้อมูลจริงในแอปหลักอัตโนมัติเหมือนกัน (ดูคอมเมนต์ที่ applyEditOverlay ด้านบน)
+// ทันที แล้วซิงก์เข้าข้อมูลจริงใน Lotus Note อัตโนมัติเหมือนกัน (ดูคอมเมนต์ที่ applyEditOverlay ด้านบน)
 function showAddUnitM() {
   var cats = CATEGORIES || [];
   var h = '<div class="sm-sec">ข้อมูลเครื่อง</div>';
@@ -6845,9 +6845,9 @@ function showAddUnitM() {
     _smTg('ad_vis', true, 'โชว์ในลิงก์ขอยืมของลูกค้า') + '</div></div>';
   h += '<div class="field"><label>📦 ประกอบด้วย (พิมพ์บรรทัดละ 1 รายการ)</label><textarea id="ad_kit" rows="4" placeholder="1. กล่อง&#10;2. กระเป๋าพลาสติก&#10;3. ตัวเครื่อง&#10;4. ฝาปิดเลนส์&#10;..."></textarea></div>';
   h += '<div class="field"><label>📝 หมายเหตุ</label><textarea id="ad_note" rows="2"></textarea></div>';
-  h += '<div class="field"><label>✍️ คนเพิ่ม (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครเพิ่ม) *</label><input type="text" id="ad_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนเพิ่ม (ใส่ชื่อไว้ให้ Lotus Note รู้ว่าใครเพิ่ม) *</label><input type="text" id="ad_by" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
-    'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นเครื่องนี้ทันทีที่บันทึก แล้วจะลงข้อมูลจริงในแอปหลักให้เองอัตโนมัติทันทีที่มีคนเปิดแอปหลักครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
+    'ℹ️ หน้านี้กับลิงก์ลูกค้าเห็นเครื่องนี้ทันทีที่บันทึก แล้วจะลงข้อมูลจริงใน Lotus Note ให้เองอัตโนมัติทันทีที่มีคนเปิด Lotus Note ครั้งถัดไป ไม่ต้องกดอนุมัติ</div>';
   h += '<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="saveNewUnit()">💾 เพิ่มเครื่อง</button><button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
   openSm('➕ เพิ่มเครื่องใหม่', h);
 }
@@ -6855,7 +6855,7 @@ function saveNewUnit() {
   var name = (document.getElementById('ad_name').value || '').trim();
   if (!name) { alert('ใส่ชื่อเครื่องก่อนนะครับ'); return; }
   var by = (document.getElementById('ad_by').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนเพิ่มก่อนนะครับ — แอปหลักจะได้รู้ว่าใครเพิ่ม'); return; }
+  if (!by) { alert('ใส่ชื่อคนเพิ่มก่อนนะครับ — Lotus Note จะได้รู้ว่าใครเพิ่ม'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   var id = 'stf_' + Date.now();
   var fields = {
@@ -6887,7 +6887,7 @@ function deleteUnitM(unitId) {
   if (!u) return;
   if (appRangeOrLoan(unitId)) { alert('เครื่องนี้กำลังถูกยืม/มีจองอยู่ — รับคืนก่อนแล้วค่อยลบ'); return; }
   if (!confirm('ลบ "' + (u.name || u.model || unitId) + '" ออกจากระบบ? ย้อนกลับไม่ได้')) return;
-  var by = prompt('ชื่อคนลบ (แอปหลักจะได้รู้ว่าใครลบ):', _lastEditor());
+  var by = prompt('ชื่อคนลบ (Lotus Note จะได้รู้ว่าใครลบ):', _lastEditor());
   if (by === null) return;
   by = by.trim();
   if (!by) { alert('ต้องใส่ชื่อคนลบก่อนนะครับ'); return; }
@@ -6901,7 +6901,7 @@ function deleteUnitM(unitId) {
 }
 
 // ---- แก้ไขตาราง (แก้หลายเครื่องพร้อมกัน) ----
-// เหมือนแท็บ "แก้ไขตาราง" ของแอปหลัก (renderDemoGridTab) แต่เขียนเป็นคำขอ add/edit เข้า publicDemoEdits
+// เหมือนแท็บ "แก้ไขตาราง" ของ Lotus Note (renderDemoGridTab) แต่เขียนเป็นคำขอ add/edit เข้า publicDemoEdits
 // ทีละก้อนด้วย db.batch() แทนที่จะเขียนลง localStorage ตรงๆ (เหตุผลเดียวกับฟอร์มแก้ไขทีละเครื่อง)
 var _bgDraft = {};   // unitId -> {field: value}
 var _bgSearch = '';
@@ -6910,7 +6910,7 @@ function showBulkGridM() {
   _bgSearch = '';
   var h = '<div class="hint" style="margin-bottom:10px">แก้ได้เลยในช่อง กด Tab ไปช่องถัดไป, Enter ลงแถวถัดไปในคอลัมน์เดิม · ช่องที่แก้แล้วจะเป็นสีเหลืองจนกว่าจะกดบันทึก</div>';
   h += '<div class="field"><label>🔍 กรองแถว</label><input type="text" id="bgSearch" placeholder="ชื่อ, รุ่น, S/N, เลขเครื่องเช่า" oninput="_bgSearchInput(this.value)" autocomplete="off"></div>';
-  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้แอปหลักรู้ว่าใครแก้) *</label><input type="text" id="bgBy" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
+  h += '<div class="field"><label>✍️ คนแก้ (ใส่ชื่อไว้ให้ Lotus Note รู้ว่าใครแก้) *</label><input type="text" id="bgBy" list="edKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('edKeyerList') + '</div>';
   h += '<div id="bgTableWrap"></div>';
   h += '<div id="bgWarn"></div>';
   h += '<div class="bg-savebar"><button class="btn btn-primary btn-sm" onclick="_bgSave()">💾 บันทึกที่แก้ไข</button>' +
@@ -6973,7 +6973,7 @@ function _bgEdit(id, f, v, el) {
   // ทำสีเหลืองแค่ cell ที่แก้ ไม่ต้อง render ตารางทั้งก้อนใหม่ ไม่งั้นโฟกัส/ค่าที่กำลังพิมพ์อยู่ในช่องอื่นจะหาย
   if (el) { var td = el.closest('td'); if (td) td.classList.add('dirty'); }
 }
-// Enter = ลงแถวถัดไปคอลัมน์เดิม (index เดียวกันในแถว) — เหมือนพฤติกรรมสเปรดชีตของแท็บแก้ไขตารางแอปหลัก
+// Enter = ลงแถวถัดไปคอลัมน์เดิม (index เดียวกันในแถว) — เหมือนพฤติกรรมสเปรดชีตของแท็บแก้ไขตาราง Lotus Note
 function _bgKey(e, el) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
@@ -6996,7 +6996,7 @@ function _bgSave() {
   var ids = Object.keys(_bgDraft);
   if (!ids.length) { alert('ยังไม่มีการแก้ไข'); return; }
   var by = (document.getElementById('bgBy').value || '').trim();
-  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — แอปหลักจะได้รู้ว่าใครแก้'); return; }
+  if (!by) { alert('ใส่ชื่อคนแก้ก่อนนะครับ — Lotus Note จะได้รู้ว่าใครแก้'); return; }
   var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
 
   // เช็คเลขเครื่องเช่าซ้ำจากทั้งคลังหลังแก้ ไม่ใช่แค่แถวที่กรองอยู่บนจอตอนนี้ — เลขใหม่อาจไปชนเครื่อง
@@ -7060,7 +7060,7 @@ function _bgSave() {
 
 // ---- Export / Import (Excel) ----
 // ไฟล์เดียว 2 แท็บ (เดิมแยกเป็น 2 ปุ่ม 2 ไฟล์ — ผู้ใช้ขอให้รวมเพราะข้อมูลชุดเดียวกัน แค่คนละมุมมอง):
-//   'demo'       คอลัมน์เดียวกับ exportDemoItemsExcel/importDemoItemsExcel ในแอปหลัก (features.js) เพื่อให้
+//   'demo'       คอลัมน์เดียวกับ exportDemoItemsExcel/importDemoItemsExcel ใน Lotus Note (features.js) เพื่อให้
 //                ไฟล์ใช้สลับกันได้ และตรงกับ importUnitsExcel() ด้านล่างเป๊ะ ไว้แก้ข้อมูลเป็นชุดใหญ่นอกเว็บ
 //                แล้วนำเข้ากลับ — ตัดคอลัมน์ของ "ใบยืม" ออก (สถานะ/ผู้ยืม/วันที่ยืม/เลขใบจอง) เพราะหน้านี้มี
 //                ระบบจองของตัวเอง (publicDemoLoans) อยู่แล้ว ไม่ควรมีใครไปเขียนทับจากไฟล์ Excel
@@ -7129,7 +7129,7 @@ function importUnitsExcel() {
 // commitImportPreview() ที่เขียนจริง เพื่อให้ preview โชว์ผลได้ก่อนโดยไม่มีผลข้างเคียงใดๆ ถ้ายกเลิกกลางทาง
 function _impClassifyRows(rows) {
   var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
-  // เซลล์ Y/N ที่เว้นว่างไว้ = "ไม่ได้ระบุ" ไม่ใช่ "N" — ต่างจากแอปหลักที่เว้นว่างจะถูกตีเป็น false ไปเลย
+  // เซลล์ Y/N ที่เว้นว่างไว้ = "ไม่ได้ระบุ" ไม่ใช่ "N" — ต่างจาก Lotus Note ที่เว้นว่างจะถูกตีเป็น false ไปเลย
   // (เจอว่าเป็นบั๊กจริงตอนสำรวจโค้ด) หน้านี้เข้าถึงได้ด้วย PIN ร่วม ความเสี่ยงเขียนทับผิดสูงกว่า
   // จึงแก้พฤติกรรมให้ปลอดภัยกว่า: ว่าง = คงค่าเดิมไว้ (เครื่องใหม่ที่ไม่มีค่าเดิม ถือว่าไม่มีเอกสาร)
   function yn(v, existing) {
