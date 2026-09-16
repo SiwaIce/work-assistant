@@ -2152,9 +2152,17 @@ function _bkSortBarHtml() {
     '</select></div>';
 }
 
+// รอ (ชนคิว) ติดอะไรอยู่ — เช็คสดทุกครั้งที่ render (บางทีของว่างแล้วโดยไม่รู้ตัว เช่นอีกใบคืนไปแล้ว) เอาไว้
+// โชว์ใต้แถวเลยแทนที่จะให้กดเช็คว่างก่อนถึงเห็น (เดิมกด 🔁 แล้วเด้ง toast บอกครั้งเดียว พลาดง่าย)
+function _bkPendingWhy(it) {
+  var conflict = _lfConflict(it.u.id, _scIso(it.b.s), _scIso(it.b.e), it.b.loanId);
+  return conflict
+    ? (conflict.quarantine ? '🕐 รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
+    : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
+}
 function _bkDueTxt(it) {
   if (it.kind === 'soon') return 'เริ่มยืม ' + _scFmt(it.b.s);
-  if (it.kind === 'pending') return '';
+  if (it.kind === 'pending') return _bkPendingWhy(it);
   var d = daysBetween(_td(), _scIso(it.b.e));
   if (d < 0) return 'เลยมาแล้ว ' + Math.abs(d) + ' วัน';
   if (d === 0) return 'ครบกำหนดวันนี้';
@@ -2167,7 +2175,8 @@ function _bkRowActionsHtml(it) {
     return '<button class="detail-btn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="openConfirmPickupM(\'' + _scEsq(b.borrower || '—') + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')">✅ ยืนยัน/ยกเลิก</button>';
   }
   if (it.kind === 'pending') {
-    return '<button class="detail-btn icon-btn" onclick="retryPendingLoan(\'' + b.loanId + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
+    return '<button class="detail-btn icon-btn" onclick="openLoanLogM(\'' + b.loanId + '\')" title="รายละเอียด: ใครยืม ยืมไปทำอะไร คีย์เมื่อไหร่">📜</button>' +
+      '<button class="detail-btn icon-btn" onclick="retryPendingLoan(\'' + b.loanId + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
       '<button class="detail-btn icon-btn" onclick="removePendingLoan(\'' + b.loanId + '\')" title="ตัดออกจากใบ">✕</button>';
   }
   var detailBtn = isStaff
@@ -2224,6 +2233,7 @@ function _bkGroup(items) {
     var key = _bkItemSlipKey(it);
     if (!groups[key]) {
       groups[key] = { key: key, jobNo: String(it.b.jobNo || '').trim(), borrower: it.b.borrower || '—',
+        approver: '', purpose: '', createdAt: null, createdAtMs: 0,
         startIso: sIso, endIso: eIso, items: [], sev: 0, statuses: {} };
       order.push(key);
     }
@@ -2233,6 +2243,13 @@ function _bkGroup(items) {
     g.sev = Math.max(g.sev, _SC_BUSY_SEV[it.kind]);
     if (sIso < g.startIso) g.startIso = sIso;
     if (eIso < g.endIso) g.endIso = eIso;
+    // เอาค่าแรกที่ไม่ว่างพอ — เครื่องอื่นในใบเดียวกันปกติกรอกเหมือนกันอยู่แล้ว ไม่ต้องโชว์ซ้ำทุกเครื่อง
+    if (!g.approver && String(it.b.approver || '').trim()) g.approver = it.b.approver.trim();
+    if (!g.purpose && String(it.b.purpose || '').trim()) g.purpose = it.b.purpose.trim();
+    if (it.b.createdAt) {
+      var cMs = _editLogTimeMs(it.b.createdAt);
+      if (cMs && (!g.createdAtMs || cMs < g.createdAtMs)) { g.createdAtMs = cMs; g.createdAt = it.b.createdAt; }
+    }
   });
   return { groups: groups, order: order };
 }
@@ -2266,9 +2283,14 @@ function _bkSlipHtml(g) {
   var worstKind = Object.keys(_SC_BUSY_SEV).filter(function(k) { return _SC_BUSY_SEV[k] === g.sev; })[0];
   var h = '<div class="rt-slip' + (g.statuses.late ? ' late' : '') + '" data-bk-slip="' + esc(g.key) + '">';
   h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
-    '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง</div></div>' +
+    '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง · กำหนดคืน ' + _scD(g.endIso) +
+    '<br>🧑‍💼 ' + (g.approver ? esc(g.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
+    (g.createdAt ? ' · 🕐 คีย์เมื่อ ' + _editLogStamp(g.createdAt) : '') +
+    (g.purpose ? ' · 📝 ' + esc(g.purpose) : '') + '</div></div>' +
     '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">' + _scBusyBadge(worstKind) +
-    '<div class="rt-slip-act">' + _bkSlipActionsHtml(g) +
+    '<div class="rt-slip-act">' +
+    '<button class="btn btn-ghost btn-sm" onclick="copyBkSlipRentals(\'' + _scEsq(g.key) + '\')" title="คัดลอกเลขเครื่องเช่าทุกเครื่องในใบนี้ คนละบรรทัด">📋 Copy เลขเครื่องเช่า</button>' +
+    _bkSlipActionsHtml(g) +
     (g.items.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="bkToggleSlipOpen(\'' + _scEsq(g.key) + '\')">' + (isOpen ? '▴ ย่อรายการ' : '▾ แสดงรายการ (' + g.items.length + ')') + '</button>' : '') +
     '</div></div></div>';
   if (isOpen) {
@@ -2293,7 +2315,10 @@ function renderBookingsTab() {
     badge.textContent = urgent ? '(' + urgent + ')' : '';
   }
 
-  var h = '<div class="bk-sum"><b>' + all.length + ' ใบจองทั้งหมด</b> — กำลังแสดง ' + filtered.length + ' รายการ</div>';
+  // เดิมเขียนว่า "X ใบจองทั้งหมด" แต่ all.length คือจำนวน "เครื่อง" ไม่ใช่จำนวนใบจองจริง (ใบเดียวมีได้
+  // หลายเครื่อง) ทำให้ตัวเลขดูเยอะเกินจำนวนใบจองจริงที่มี — แยกนับให้ชัดทั้งสองมิติ
+  var slipCount = _bkGroup(all).order.length;
+  var h = '<div class="bk-sum"><b>' + all.length + ' เครื่องทั้งหมด</b> ใน ' + slipCount + ' ใบจอง — กำลังแสดง ' + filtered.length + ' รายการ</div>';
   if (_bkReturnTo && bkView === 'slip') h += '<button class="back-link" onclick="bkReturnFromSlip()">← กลับไปที่เดิม</button>';
   h += _bkStatChipsHtml(all);
   h += _bkPersonFiltersHtml(all);
@@ -2788,6 +2813,8 @@ var SC_EV_META = {
   extended: { icon: '⏩', label: 'เลื่อนกำหนดคืน' },
   borrower: { icon: '🔄', label: 'โอนผู้ยืม' },
   keyer:    { icon: '🧑‍💼', label: 'เปลี่ยนผู้คีย์' },
+  jobNo:    { icon: '📄', label: 'แก้เลขใบจอง' },
+  purpose:  { icon: '📝', label: 'แก้ใช้งานกับ' },
   returned: { icon: '✅', label: 'รับคืน' },
   photo:    { icon: '📷', label: 'แนบรูปสภาพเครื่อง' },
   damage:   { icon: '⚠️', label: 'ความเสียหาย' }
@@ -3098,6 +3125,24 @@ function copySlipKeyRentals(key) {
   var text = nums.join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + nums.length + ' เครื่อง)'); })
+      .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+  } else {
+    alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+// เขียนแยกจาก copySlipKeyRentals ด้านบน (คนละอันแม้จะหน้าตาคล้ายกัน) เพราะอันนั้นอิงจาก _rtSlipRows()
+// ซึ่งอิง activeReturns() — ตัดรายการ "จองล่วงหน้า" ที่คีย์จากแอปหลักออกไปเลย (ยังไม่ถึงรอบต้องตามคืน จึง
+// ไม่นับ) ถ้าเอามาใช้กับแท็บใบจองที่โชว์จองล่วงหน้าด้วย จะได้เลขไม่ครบเวลาใบมีเครื่องแบบนั้นปนอยู่ จึงคำนวณ
+// จาก bkAllItems() ตรงๆ แทน ให้ตรงกับสิ่งที่เห็นในแท็บนี้จริงๆ เสมอ
+function copyBkSlipRentals(key) {
+  var nums = bkAllItems().filter(function(it) { return _bkItemSlipKey(it) === key; })
+    .map(function(it) { return String(it.u.rentalDbNo || '').trim(); }).filter(Boolean);
+  var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
+  uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  if (!uniq.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
+  var text = uniq.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + uniq.length + ' เครื่อง)'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
   } else {
     alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
@@ -3437,31 +3482,58 @@ function openTransferM(loanId) {
   h += '<div class="field"><label>ผู้คีย์ตอนนี้</label><input type="text" value="' + esc(l.approver || '— ไม่ได้บันทึก —') + '" disabled></div>';
   h += '<div class="field"><label>🧑‍💼 ผู้คีย์คนใหม่</label><input type="text" id="tf_keyer" list="tfKeyerList" autocomplete="off" placeholder="เว้นว่าง = ไม่เปลี่ยน">' +
     '<div style="font-size:11px;color:var(--text2);margin-top:4px">ใช้ตอนคนคีย์เดิมลาออก/ลาพัก — คนใหม่จะเป็นคนที่ต้องตามคืนแทน</div></div>';
+  h += '<div class="sm-sec">แก้ไขข้อมูลใบจอง</div>';
+  h += '<div class="field"><label>📄 เลขใบจอง</label><input type="text" id="tf_job" value="' + esc(l.jobNo || '') + '"></div>';
+  h += '<div class="field"><label>📝 ใช้งานกับ</label><input type="text" id="tf_purpose" value="' + esc(l.purpose || '') + '" placeholder="เช่น สาธิตลูกค้า"></div>';
   h += '<div class="sm-sec">บันทึกเหตุผล</div>';
-  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="tf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / สมชายลาออก"></div>';
+  h += '<div class="field"><label>📝 เหตุผล *</label><input type="text" id="tf_why" placeholder="เช่น ลูกค้าโอนงานให้บริษัทลูก / สมชายลาออก / แก้เลขใบจองที่คีย์ผิด"></div>';
   h += '<div class="field"><label>🧑‍💼 คนที่ทำเรื่อง *</label><input type="text" id="tf_by" list="tfKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('tfKeyerList') + '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-    '<button class="btn btn-primary" onclick="saveTransfer(\'' + loanId + '\')">🔄 บันทึกการโอน</button>' +
+    '<button class="btn btn-primary" onclick="saveTransfer(\'' + loanId + '\')">💾 บันทึกการแก้ไข</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
-  openSm('🔄 โอนผู้ยืม / เปลี่ยนผู้คีย์', h);
+  h += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<button class="btn btn-ghost btn-sm" style="color:var(--bad);border-color:var(--bad)" onclick="deleteLoanRecordM(\'' + loanId + '\')">🗑️ ลบใบจองนี้ทิ้ง</button>' +
+    '<div style="font-size:11px;color:var(--text2);margin-top:4px">ใช้เมื่อคีย์ผิด/ซ้ำ/ไม่ใช่รายการจริง — ลบแล้วไม่เหลือประวัติเลย ต่างจาก "รับคืนแล้ว" ที่ยังเก็บไว้เป็นประวัติ</div></div>';
+  openSm('🔄 โอนผู้ยืม / แก้ไขข้อมูลใบจอง', h);
 }
 function saveTransfer(loanId) {
   var l = _scLoan(loanId);
   if (!l) return;
   var nb = (document.getElementById('tf_borrower').value || '').trim();
   var nk = (document.getElementById('tf_keyer').value || '').trim();
+  var nj = (document.getElementById('tf_job').value || '').trim();
+  var np = (document.getElementById('tf_purpose').value || '').trim();
   var why = (document.getElementById('tf_why').value || '').trim();
   var by = (document.getElementById('tf_by').value || '').trim();
-  if (!nb && !nk) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
+  var jobChanged = nj !== String(l.jobNo || '').trim();
+  var purposeChanged = np !== String(l.purpose || '').trim();
+  if (!nb && !nk && !jobChanged && !purposeChanged) { alert('ยังไม่ได้ใส่ว่าจะเปลี่ยนอะไร'); return; }
   if (!why) { alert('ใส่เหตุผลด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
   if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องด้วยนะครับ'); return; }
   try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
   var upd = {}, evs = [];
   if (nb) { upd.borrower = nb; evs.push(_scEv('borrower', by, 'จาก ' + (l.borrower || '—') + ' → ' + nb + ' · ' + why)); }
   if (nk) { upd.approver = nk; evs.push(_scEv('keyer', by, 'จาก ' + (l.approver || '—') + ' → ' + nk + ' · ' + why)); }
+  if (jobChanged) { upd.jobNo = nj; evs.push(_scEv('jobNo', by, 'จาก ' + (l.jobNo || '—') + ' → ' + (nj || '—') + ' · ' + why)); }
+  if (purposeChanged) { upd.purpose = np; evs.push(_scEv('purpose', by, 'จาก ' + (l.purpose || '—') + ' → ' + (np || '—') + ' · ' + why)); }
   upd.events = firebase.firestore.FieldValue.arrayUnion.apply(firebase.firestore.FieldValue, evs);
   db.collection('publicDemoLoans').doc(loanId).update(upd)
-    .then(function() { closeSm(); toastMock('🔄 บันทึกการโอนแล้ว'); })
+    .then(function() { closeSm(); toastMock('💾 บันทึกการแก้ไขแล้ว'); })
+    .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+// ลบใบจองทิ้งถาวร — ต่างจาก "รับคืนแล้ว"/"ยกเลิก" (cancelSoonLoan) ตรงที่ใช้ได้ทุกสถานะ (out/late/soon)
+// สำหรับกรณีคีย์ผิด/ซ้ำ/ไม่ใช่รายการจริง ไม่ใช่กรณีของออก-กลับตามปกติ — เตือนแรงขึ้นถ้าของน่าจะออกจาก
+// คลังไปแล้วจริง (start ผ่านมาแล้ว) กันกดพลาดจนดูเหมือนของไม่เคยยืมทั้งที่จริงอยู่กับลูกค้า
+function deleteLoanRecordM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) { alert('ไม่พบรายการนี้แล้ว — อาจถูกลบหรือแก้ไปก่อนหน้านี้'); return; }
+  var isOut = l.status === 'active' && l.start <= _td();
+  var msg = isOut
+    ? 'ลบใบจองนี้ทิ้ง?\n\n⚠️ ของอาจออกจากคลังไปกับลูกค้าแล้วจริง — การลบจะไม่เหลือประวัติว่าเคยมีการยืมนี้เลย\nถ้าของยังไม่ได้คืน ควรกด "รับคืนแล้ว" แทนการลบ\n\nต้องการลบทิ้งจริงๆ ใช่ไหม?'
+    : 'ลบใบจองนี้ทิ้ง? (ไม่เหลือประวัติเลย ใช้เมื่อคีย์ผิด/ซ้ำ/ไม่ใช่รายการจริงเท่านั้น)';
+  if (!confirm(msg)) return;
+  db.collection('publicDemoLoans').doc(loanId).delete()
+    .then(function() { toastMock('🗑️ ลบใบจองแล้ว'); closeSm(); })
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
