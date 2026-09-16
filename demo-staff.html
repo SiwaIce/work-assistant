@@ -62,6 +62,31 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
 .stat .n { font-size:22px; font-weight:700; }
 .stat .l { font-size:11.5px; color:var(--text2); margin-top:2px; }
+/* รายงานสรุปงานรายเดือน (Tools menu) — คลาส mr- กันชนกับตัวอื่น เพราะ modal อาจถูกเปิดซ้อนจากหลายที่ */
+.mr-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:18px; }
+@media (max-width:600px) { .mr-grid { grid-template-columns:repeat(4,1fr); } }
+.mr-tile { background:var(--surface); border:1.5px solid var(--border); border-radius:11px; padding:9px 6px; text-align:center; cursor:pointer; }
+.mr-tile:hover { border-color:var(--accent); }
+.mr-tile.on { border-color:var(--accent); background:var(--accent-soft); }
+.mr-tile.empty { opacity:.45; }
+.mr-tile .mn { font-size:12px; font-weight:600; color:var(--text2); }
+.mr-tile.on .mn { color:var(--accent); }
+.mr-tile .cnt { font-size:18px; font-weight:700; }
+.mr-tile .lbl { font-size:10px; color:var(--text3); }
+.mr-tile .bar { height:3px; border-radius:2px; background:var(--border); margin-top:5px; overflow:hidden; }
+.mr-tile .bar i { display:block; height:100%; background:var(--accent); }
+.mr-week { font-size:11.5px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin:10px 0 2px 2px; }
+.mr-week:first-child { margin-top:0; }
+.mr-job { display:flex; gap:12px; align-items:flex-start; }
+.mr-job .ic { font-size:18px; flex-shrink:0; width:28px; height:28px; border-radius:8px; background:var(--surface-2);
+  display:flex; align-items:center; justify-content:center; }
+.mr-job .main { flex:1; min-width:0; }
+.mr-job .nm { font-weight:700; font-size:14px; }
+.mr-job .meta { display:flex; flex-wrap:wrap; gap:3px 12px; font-size:12px; color:var(--text2); margin-top:4px; }
+.mr-job .meta b { color:var(--text); font-weight:600; }
+.mr-date { font-size:12px; color:var(--text3); margin-top:3px; }
+.mr-jobno { font-size:11px; color:var(--text3); margin-top:5px; }
+.mr-mono { font-family:ui-monospace,'SF Mono',Consolas,monospace; }
 /* ค้นหารวมเหนือแท็บ — ค้นได้ทั้งเครื่อง คน และใบจอง จากช่องเดียว */
 .gsearch { position:relative; margin-bottom:10px; }
 .gsearch input { width:100%; box-sizing:border-box; font:inherit; font-size:13.5px; padding:11px 38px 11px 13px;
@@ -922,6 +947,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
                 <button onclick="closeToolsMenu();showBulkGridM()">✏️ แก้ไขตาราง (หลายเครื่อง)</button>
                 <button onclick="closeToolsMenu();showEditLogM()">📜 ประวัติการแก้ไขทั้งหมด</button>
                 <button onclick="closeToolsMenu();showUtilizationM()">📊 รายงานการใช้งานเครื่อง</button>
+                <button onclick="closeToolsMenu();showMonthlySummaryM()">📅 สรุปงานรายเดือน</button>
                 <div class="tools-menu-sep"></div>
                 <button onclick="closeToolsMenu();exportUnitsExcel()">📤 Export (เต็ม + รูปแบบคลัง)</button>
                 <button onclick="closeToolsMenu();importUnitsExcel()">📥 Import (เต็ม)</button>
@@ -5071,6 +5097,140 @@ function _utilBodyHtml() {
       '<b>' + r.pct.toFixed(0) + '%</b></div></td></tr>';
   }).join('');
   h += '</tbody></table></div>';
+  return h;
+}
+
+// ================================================================
+// รายงาน "สรุปงานรายเดือน" — mockup ที่ผู้ใช้ดูแล้วอนุมัติ (โอเคตามนี้เลย) พอร์ตมาเป็นของจริง
+// ต่างจากแท็บใบจองตรงที่ต้องเห็นงานที่คืนแล้วในอดีตด้วย (ตอบ "แต่ละเดือนมีงานอะไรบ้าง" ให้ครบ) จึงดึงจาก
+// scBookings() ตรงๆ ไม่ผ่าน bkAllItems() ที่ตัดรายการคืนแล้วออก — ใช้ _scBusyKind เดิมเป๊ะ จึงได้ป้ายสถานะ/
+// สีเดียวกับที่อื่นทั้งแอปโดยอัตโนมัติ รวมถึง unconf/quar ที่ mockup ไม่ได้โชว์ตัวอย่างไว้ด้วย
+// ================================================================
+var _mrYear, _mrMonth;
+(function () { var d = new Date(); _mrYear = d.getFullYear(); _mrMonth = d.getMonth(); })();
+var _mrSearch = '';
+var _mrStat = 'all';
+var MR_MONTH_TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+var MR_MONTH_TH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+function showMonthlySummaryM() {
+  var d = new Date(); _mrYear = d.getFullYear(); _mrMonth = d.getMonth(); _mrSearch = ''; _mrStat = 'all';
+  openSm('📅 สรุปงานรายเดือน', _mrBodyHtml(), true);
+}
+function _mrAllItems() {
+  var today = _scDay(new Date());
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  return scBookings().filter(function(b) { return byId[b.unitId]; })
+    .map(function(b) { return { u: byId[b.unitId], b: b, kind: _scBusyKind(b, today) }; });
+}
+// งานถือว่าอยู่ในเดือนนี้ถ้าช่วงวันที่ "คาบเกี่ยว" กับเดือนนั้น ไม่ใช่แค่วันเริ่ม — งานที่ยืมคร่อมเดือนจะ
+// โผล่ในทุกเดือนที่คาบเกี่ยวจริง ตรงกับที่เห็นจริงว่าเดือนนั้นเครื่องไม่ว่างเพราะงานนี้
+function _mrItemsInMonth(items, y, m) {
+  var monthStart = _scIso(new Date(y, m, 1)), monthEnd = _scIso(new Date(y, m + 1, 0));
+  return items.filter(function(it) { var s = _scIso(it.b.s), e = _scIso(it.b.e); return s <= monthEnd && e >= monthStart; });
+}
+function _mrMatch(it) {
+  if (_mrStat !== 'all' && it.kind !== _mrStat) return false;
+  var q = _mrSearch.trim().toLowerCase();
+  if (!q) return true;
+  var hay = [it.u.model, it.u.name, it.u.rentalDbNo, it.b.borrower, it.b.jobNo].filter(Boolean).join(' ').toLowerCase();
+  return hay.indexOf(q) !== -1;
+}
+function mrShiftYear(d) { _mrYear += d; document.getElementById('smBody').innerHTML = _mrBodyHtml(); }
+function mrShiftMonth(d) {
+  _mrMonth += d;
+  if (_mrMonth < 0) { _mrMonth = 11; _mrYear--; } else if (_mrMonth > 11) { _mrMonth = 0; _mrYear++; }
+  document.getElementById('smBody').innerHTML = _mrBodyHtml();
+}
+function mrJumpToday() { var d = new Date(); _mrYear = d.getFullYear(); _mrMonth = d.getMonth(); document.getElementById('smBody').innerHTML = _mrBodyHtml(); }
+function mrPickMonth(m) { _mrMonth = m; document.getElementById('smBody').innerHTML = _mrBodyHtml(); }
+function mrSetSearch(v) { _mrSearch = v; document.getElementById('smBody').innerHTML = _mrBodyHtml(); document.getElementById('mrSearchInput').focus(); }
+function mrSetStat(v) { _mrStat = v; document.getElementById('smBody').innerHTML = _mrBodyHtml(); }
+// กระโดดไปดู/จัดการใบนี้ต่อในแท็บใบจอง — ใช้ได้เฉพาะงานที่ยังไม่คืน (done จะไม่มีอยู่ในแท็บนั้นแล้ว เพราะ
+// แท็บใบจองตัดรายการคืนแล้วออกโดยตั้งใจ) ล้างตัวกรองของแท็บใบจองก่อนเสมอ เผื่อค่าที่ค้างไว้บังใบนี้อยู่
+function mrJumpToBooking(jobNo, borrower, sIso, eIso) {
+  closeSm();
+  bkSearch = ''; var searchEl = document.getElementById('bkSearch'); if (searchEl) searchEl.value = '';
+  bkCatFilter = []; bkStatFilter = []; bkBorrower = 'all'; bkApprover = 'all';
+  staffTab('bookings');
+  bkJumpToSlip(_rtSlipKey({ jobNo: jobNo, borrower: borrower, start: sIso, end: eIso }));
+}
+function _mrYearGridHtml(all) {
+  var counts = [], maxCount = 1;
+  for (var m = 0; m < 12; m++) { var n = _mrItemsInMonth(all, _mrYear, m).length; counts.push(n); if (n > maxCount) maxCount = n; }
+  var today = new Date();
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+    '<button class="btn btn-ghost btn-sm" onclick="mrShiftYear(-1)">◀</button><b>พ.ศ. ' + (_mrYear + 543) + '</b>' +
+    '<button class="btn btn-ghost btn-sm" onclick="mrShiftYear(1)">▶</button></div>';
+  h += '<div class="mr-grid">' + counts.map(function(n, m) {
+    var isNow = _mrYear === today.getFullYear() && m === today.getMonth();
+    var on = m === _mrMonth;
+    return '<div class="mr-tile' + (on ? ' on' : '') + (n === 0 ? ' empty' : '') + '" onclick="mrPickMonth(' + m + ')">' +
+      '<div class="mn">' + MR_MONTH_TH_SHORT[m] + (isNow ? ' 🔵' : '') + '</div>' +
+      '<div class="cnt">' + n + '</div><div class="lbl">งาน</div>' +
+      '<div class="bar"><i style="width:' + (n ? Math.max(8, n / maxCount * 100) : 0) + '%"></i></div></div>';
+  }).join('') + '</div>';
+  return h;
+}
+function _mrBodyHtml() {
+  var all = _mrAllItems();
+  var monthItems = _mrItemsInMonth(all, _mrYear, _mrMonth);
+  var filtered = monthItems.filter(_mrMatch);
+  filtered.sort(function(a, b) { return _scIso(a.b.s).localeCompare(_scIso(b.b.s)); });
+
+  var h = '<div class="hint" style="margin-bottom:10px">ดูว่าแต่ละเดือนมีงานอะไรบ้าง เมื่อไหร่ ใครยืม — รวมทั้งงานที่จบไปแล้ว กำลังยืมอยู่ และจองล่วงหน้า</div>';
+  h += _mrYearGridHtml(all);
+
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">' +
+    '<h3 style="margin:0;font-size:15px">📌 ' + MR_MONTH_TH[_mrMonth] + ' ' + (_mrYear + 543) + '</h3>' +
+    '<div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="mrShiftMonth(-1)">◀ เดือนก่อน</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="mrJumpToday()">เดือนนี้</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="mrShiftMonth(1)">เดือนถัดไป ▶</button></div></div>';
+
+  var uniqEquip = {}, uniqBorrower = {};
+  monthItems.forEach(function(it) { uniqEquip[it.u.id] = 1; if (it.b.borrower) uniqBorrower[it.b.borrower] = 1; });
+  h += '<div class="stat-row" style="grid-template-columns:repeat(3,1fr)">' +
+    '<div class="stat"><div class="n">' + monthItems.length + '</div><div class="l">งานทั้งหมด</div></div>' +
+    '<div class="stat"><div class="n">' + Object.keys(uniqEquip).length + '</div><div class="l">เครื่องที่ถูกใช้ (ไม่นับซ้ำ)</div></div>' +
+    '<div class="stat"><div class="n">' + Object.keys(uniqBorrower).length + '</div><div class="l">ผู้ยืมต่างกัน</div></div></div>';
+
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+    '<input type="text" id="mrSearchInput" value="' + esc(_mrSearch) + '" placeholder="🔎 ค้นหา — ผู้ยืม / รุ่น / เลขใบจอง" ' +
+    'oninput="mrSetSearch(this.value)" autocomplete="off" style="flex:1;min-width:180px;font:inherit;font-size:12.5px;padding:8px 11px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)">' +
+    '<select onchange="mrSetStat(this.value)" style="font:inherit;font-size:12.5px;padding:8px 11px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)">' +
+    '<option value="all">ทุกสถานะ</option>' +
+    Object.keys(_SC_BUSY_LABEL).map(function(k) { return '<option value="' + k + '"' + (_mrStat === k ? ' selected' : '') + '>' + esc(_SC_BUSY_LABEL[k]) + '</option>'; }).join('') +
+    '</select></div>';
+
+  if (!filtered.length) {
+    h += '<div class="empty-state">' + (monthItems.length ? '🔍 ไม่พบงานที่ตรงกับตัวกรอง' : '🎉 ไม่มีงานในเดือนนี้') + '</div>';
+    return h;
+  }
+
+  var lastWeek = null;
+  h += '<div style="display:flex;flex-direction:column;gap:8px">';
+  filtered.forEach(function(it) {
+    var u = it.u, b = it.b, cat = _scCatOf(u), p = _scModelParts(u), isStaff = !!b.loanId;
+    var weekLabel = 'สัปดาห์ที่เริ่ม ' + _scFmt(b.s);
+    if (weekLabel !== lastWeek) { h += '<div class="mr-week">' + weekLabel + '</div>'; lastWeek = weekLabel; }
+    var jumpBtn = (it.kind !== 'done' && it.kind !== 'quar')
+      ? '<button class="btn btn-ghost btn-sm" onclick="mrJumpToBooking(\'' + _scEsq(b.jobNo || '') + '\',\'' + _scEsq(b.borrower || '') + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')">🔗 ดูในแท็บใบจอง</button>'
+      : (isStaff ? '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + b.loanId + '\')">📜 ประวัติ</button>' : '');
+    h += '<div class="card mr-job">' +
+      '<div class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</div>' +
+      '<div class="main">' +
+      '<div class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
+      (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') + '</div>' +
+      '<div class="meta">' +
+      '<span>ผู้ยืม <b>' + (b.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(b.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(b.borrower) + '</span>' : '—') + '</b></span>' +
+      (b.purpose ? '<span>📝 ' + esc(b.purpose) + '</span>' : '') +
+      (b.approver ? '<span>ผู้คีย์ <b>' + esc(b.approver) + '</b></span>' : '') + '</div>' +
+      '<div class="mr-date">📅 ' + _scFmt(b.s) + ' → ' + _scFmt(b.e) + '</div>' +
+      (b.jobNo ? '<div class="mr-jobno">📄 ใบจอง <b class="mr-mono">' + esc(b.jobNo) + '</b></div>' : '<div class="mr-jobno job-missing">— ยังไม่มีเลขใบจอง —</div>') +
+      '</div><div class="side" style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px">' +
+      _scBusyBadge(it.kind) + jumpBtn + '</div></div>';
+  });
+  h += '</div>';
   return h;
 }
 
