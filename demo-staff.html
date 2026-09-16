@@ -283,6 +283,37 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   .rt-crow2 { grid-template-columns:20px 1fr; row-gap:6px; }
   .rt-crow2 .row-acts { grid-column:1 / -1; justify-self:start; }
 }
+
+/* แท็บ "ใบจอง" — รวมบุ๊กกิ้งทุกสถานะที่ยังไม่จบไว้จุดเดียว (คนละมุมกับติดตามคืนที่โฟกัสแค่ของที่ต้องคืน)
+   ตั้งชื่อคลาสสรุปแยกจาก .rt-sum เดิม (แม้หน้าตาเหมือนกันทุกอย่าง) เพราะทั้งสองแท็บอยู่ใน DOM พร้อมกันเสมอ
+   (แค่สลับ display ซ่อน/โชว์) ถ้าใช้ชื่อเดียวกัน document.querySelector('.rt-sum') จากที่ไหนก็ตามจะสุ่มเจอ
+   ของแท็บที่ซ่อนอยู่แทนของแท็บที่เห็นจริงได้ (เจอบั๊กนี้จริงตอนทดสอบ — ทำให้คำนวณตำแหน่งบนจอผิด) */
+.bk-sum { background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+  padding:10px 14px; margin-bottom:12px; font-size:12.5px; }
+.bk-sum b { font-size:14px; }
+.bk-list { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--surface); }
+.bk-row { display:grid; grid-template-columns:26px 1fr auto; gap:2px 10px; padding:11px 13px;
+  border-bottom:1px solid var(--border); font-size:12.5px; }
+.bk-row:last-child { border-bottom:none; }
+.bk-row:nth-child(even) { background:var(--surface-2); }
+.bk-row .ic { font-size:16px; text-align:center; padding-top:1px; }
+.bk-row .nm { font-weight:700; font-size:13px; }
+.bk-row .meta { font-size:11.5px; color:var(--text2); margin-top:4px; display:flex; flex-wrap:wrap; gap:2px 12px; }
+.bk-row .meta b { color:var(--text); font-weight:600; }
+.bk-row .job-missing { color:var(--text3); font-style:italic; }
+.bk-row .side { text-align:right; font-size:11px; color:var(--text2); white-space:nowrap; }
+.bk-row .side .acts { display:flex; gap:5px; margin-top:6px; justify-content:flex-end; flex-wrap:wrap; }
+@media (max-width:480px) {
+  .bk-row { grid-template-columns:20px 1fr; }
+  .bk-row .side { grid-column:1/-1; text-align:left; margin-top:6px; }
+  .bk-row .side .acts { justify-content:flex-start; }
+}
+/* ชิปตัวกรองสถานะ — ใช้คลาส .cat-tab เดิม (ที่ปุ่มหมวดหมู่ใช้อยู่แล้ว) แค่เติมสีเฉพาะตอนติ๊กเลือกให้ตรง
+   กับสีป้าย .sc-badge-* ของสถานะนั้นๆ จะได้เห็นสีตรงกันทั้งชิปกรองและป้ายในรายการ */
+.cat-tab.on.st-late, .cat-tab.on.st-unconf { background:var(--bad); border-color:var(--bad); }
+.cat-tab.on.st-soon { background:transparent; border-color:var(--accent); color:var(--accent); }
+.cat-tab.on.st-out { background:var(--warn); border-color:var(--warn); color:#fff; }
+.cat-tab.on.st-pending { background:var(--text3); border-color:var(--text3); color:#fff; }
 .picked-unit-banner { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .picked-unit-banner .um2 { width:44px; height:44px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:22px; }
 .picked-unit-banner .un2 { font-weight:700; font-size:15px; }
@@ -635,6 +666,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .sc-badge-done { background:var(--surface-2); color:var(--text3); border:1px solid var(--border); }
 .sc-badge-done .sw { background:var(--text3); }
 .sc-badge-unconf { background:var(--bad-soft); color:var(--bad); }
+.sc-badge-pending { background:var(--surface-2); color:var(--text3); border:1px solid var(--border); }
 .sc-busyrow-act { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; }
 /* การ์ดต่อรายการ "ถูกยืมอยู่" — แทนตารางแคบเดิม ใส่ได้ครบทั้งผู้ยืม/ยืมไปทำอะไร/ใบจอง(หรือคนจอง)/วันที่
    โดยไม่ต้องบีบข้อความ (เดิมตารางมีแค่ ผู้ยืม/ยืมไปทำอะไร/เครื่อง/คืน ไม่มีที่ให้ป้ายสถานะหรือเลขใบจอง) */
@@ -856,11 +888,19 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       <div class="tabs">
         <button class="on" data-tab="units" onclick="staffTab('units')">🚁 รายการเครื่อง</button>
         <button data-tab="calendar" onclick="staffTab('calendar')">🗓️ ปฏิทิน</button>
+        <button data-tab="bookings" onclick="staffTab('bookings')">📋 ใบจอง <span id="bookingsCountBadge"></span></button>
         <button data-tab="pending" onclick="staffTab('pending')">🟡 คำขอรออนุมัติ <span id="pendingCountBadge"></span></button>
         <button data-tab="return" onclick="staffTab('return')">🔔 ติดตามคืน <span id="returnCountBadge"></span></button>
       </div>
 
       <div class="tabpane" id="tab-pending"></div>
+      <div class="tabpane" id="tab-bookings">
+        <div class="browse-toolbar" style="margin-bottom:10px">
+          <input type="text" id="bkSearch" placeholder="🔎 ค้นหา — รุ่น / เลขเครื่องเช่า / S-N / ผู้ยืม / ผู้คีย์ / เลขใบจอง" oninput="bkSearchInput(this.value)" autocomplete="off">
+        </div>
+        <div id="bkCatTabs"></div>
+        <div id="bkBody"></div>
+      </div>
       <div class="tabpane" id="tab-return">
         <div class="browse-toolbar" style="margin-bottom:10px">
           <input type="text" id="rtSearch" placeholder="🔎 กรองเฉพาะรายการที่แสดงอยู่นี้ (ผู้ยืม, ผู้คีย์, รุ่น, เลขใบจอง, เลขเครื่องเช่า, ใช้งานกับ)" oninput="rtSearchInput(this.value)" autocomplete="off">
@@ -1119,7 +1159,7 @@ function renderAll() {
     // ผิดปกติจากคอลเลกชันไหนก็ตาม) ตัวที่เหลือในลิสต์จะไม่ถูกเรียกเลยในรอบนั้น และเพราะ renderAll มี
     // debounce ทุกครั้งที่มีข้อมูลใหม่เข้ามาก็จะ throw ซ้ำที่จุดเดิม ทำให้แท็บที่ไม่เกี่ยวข้องเลยค้างอยู่ที่
     // สถานะเก่าเงียบๆ ทั้งแอปโดยไม่มี error ให้เห็นบนจอ — แยกกันแล้วต่อให้ตัวหนึ่งพัง ตัวอื่นยัง render ต่อได้
-    [renderStatRow, renderPendingTab, renderReturnTab, renderUnitsTable, renderStaffCalendar].forEach(function(fn) {
+    [renderStatRow, renderPendingTab, renderReturnTab, renderUnitsTable, renderStaffCalendar, renderBookingsTab].forEach(function(fn) {
       try { fn(); } catch (e) { console.error('renderAll: ' + fn.name + ' ล้มเหลว', e); }
     });
     if (currentUnitDetail) {
@@ -1911,6 +1951,263 @@ function removePendingLoan(loanId) {
   if (!confirm('ตัดเครื่องนี้ออกจากใบจอง? (ยืมไม่ได้จริง จะเอาออก ไม่ใช่แค่ซ่อนไว้)')) return;
   db.collection('publicDemoLoans').doc(loanId).delete()
     .then(function() { toastMock('✕ ตัดออกจากใบแล้ว'); }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ================================================================
+// แท็บ "ใบจอง" — รวมบุ๊กกิ้งทุกสถานะที่ยังไม่จบไว้จุดเดียว (จองล่วงหน้า/รอยืนยันรับของ/กำลังยืม/
+// เลยกำหนดคืน/รอชนคิว) คนละมุมกับ "ติดตามคืน" ที่โฟกัสเฉพาะของที่ต้องตามกลับเข้าคลังเท่านั้น จึงมองไม่เห็น
+// จองล่วงหน้า/รอยืนยันเลย — ปุ่มจัดการต่อรายการ/ทั้งใบใช้ฟังก์ชันเดิมที่มีอยู่แล้วทั้งหมด (openConfirmPickupM,
+// retryPendingLoan/removePendingLoan, openSlipReturnM ฯลฯ, openLoanLogM) ไม่มีกลไกจัดการใหม่เลยสักจุด
+// ================================================================
+var bkSearch = '';
+var _bkSearchTimer = null;
+var bkCatFilter = [];
+var bkStat = 'all';
+var bkBorrower = 'all';
+var bkApprover = 'all';
+var bkView = 'unit';
+try { bkView = localStorage.getItem('demoStaffBookingsView') || 'unit'; } catch (e) {}
+var bkSort = 'urgent';
+try { bkSort = localStorage.getItem('demoStaffBookingsSort') || 'urgent'; } catch (e) {}
+var bkSlipOpen = {};
+
+// scBookings() ให้ทุกบุ๊กกิ้งรวม 'pending' อยู่แล้ว (ต่างจาก activeReturns() ที่กรอง pending ทิ้ง) แค่ตัด
+// 'returned' ออก (ไม่ใช่ขอบเขตของแท็บนี้ — ประวัติที่คืนแล้วไปดูที่ประวัติใบยืมแทน)
+function bkAllItems() {
+  var today = _scDay(new Date());
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  return scBookings().filter(function(b) { return b.status !== 'returned' && byId[b.unitId]; })
+    .map(function(b) { return { u: byId[b.unitId], b: b, kind: _scBusyKind(b, today) }; });
+}
+function bkSearchInput(v) { bkSearch = v; clearTimeout(_bkSearchTimer); _bkSearchTimer = setTimeout(renderBookingsTab, 250); }
+function bkSetCat(id) {
+  if (id === 'all') bkCatFilter = [];
+  else { var i = bkCatFilter.indexOf(id); if (i === -1) bkCatFilter.push(id); else bkCatFilter.splice(i, 1); }
+  renderBookingsTab();
+}
+function bkSetStat(s) { bkStat = s; renderBookingsTab(); }
+function bkSetBorrower(v) { bkBorrower = v; renderBookingsTab(); }
+function bkSetApprover(v) { bkApprover = v; renderBookingsTab(); }
+function bkClearPeople() { bkBorrower = 'all'; bkApprover = 'all'; renderBookingsTab(); }
+function bkSetView(v) { bkView = v; try { localStorage.setItem('demoStaffBookingsView', v); } catch (e) {} renderBookingsTab(); }
+function bkSetSort(v) { bkSort = v; try { localStorage.setItem('demoStaffBookingsSort', v); } catch (e) {} renderBookingsTab(); }
+function bkToggleSlipOpen(key) { bkSlipOpen[key] = !bkSlipOpen[key]; renderBookingsTab(); }
+
+function _bkCatTabsHtml(all) {
+  var counts = { all: all.length };
+  CATEGORIES.forEach(function(c) { counts[c.id] = all.filter(function(it) { return it.u.category === c.id; }).length; });
+  var tabs = [{ id: 'all', label: 'ทุกหมวด', icon: '📦' }].concat(CATEGORIES);
+  return '<div class="cat-tabs">' + tabs.map(function(c) {
+    if (c.id !== 'all' && !counts[c.id]) return '';
+    var on = c.id === 'all' ? !bkCatFilter.length : bkCatFilter.indexOf(c.id) !== -1;
+    return '<div class="cat-tab' + (on ? ' on' : '') + '" onclick="bkSetCat(\'' + c.id + '\')">' +
+      c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + (counts[c.id] || 0) + '</span></div>';
+  }).join('') + '</div>';
+}
+function _bkStatChipsHtml(all) {
+  var counts = { all: all.length };
+  all.forEach(function(it) { counts[it.kind] = (counts[it.kind] || 0) + 1; });
+  var h = '<div class="cat-tabs"><div class="cat-tab' + (bkStat === 'all' ? ' on' : '') + '" onclick="bkSetStat(\'all\')">ทั้งหมด <span class="cnt">' + counts.all + '</span></div>';
+  Object.keys(_SC_BUSY_LABEL).filter(function(k) { return _SC_BUSY_SEV[k] > 0; })
+    .sort(function(a, b) { return _SC_BUSY_SEV[b] - _SC_BUSY_SEV[a]; }).forEach(function(k) {
+      if (!counts[k]) return;
+      h += '<div class="cat-tab st-' + k + (bkStat === k ? ' on' : '') + '" onclick="bkSetStat(\'' + k + '\')">' + esc(_SC_BUSY_LABEL[k]) + ' <span class="cnt">' + counts[k] + '</span></div>';
+    });
+  return h + '</div>';
+}
+function _bkUniqSorted(arr) {
+  return arr.filter(function(v, i) { return v && arr.indexOf(v) === i; }).sort(function(a, b) { return a.localeCompare(b, 'th'); });
+}
+// ตัวเลือกใน dropdown มาจากข้อมูลทั้งหมดที่ยังไม่กรอง (เหมือนชิปหมวดหมู่) ตัวเลือกจะได้ไม่หายไปเวลากรองอย่างอื่นอยู่
+function _bkPersonFiltersHtml(all) {
+  var borrowers = _bkUniqSorted(all.map(function(it) { return it.b.borrower; }));
+  var approvers = _bkUniqSorted(all.map(function(it) { return it.b.approver; }));
+  var h = '<div class="rt-sortbar">';
+  h += '<label for="bkBorrowerSel">👤 ผู้จอง</label><select id="bkBorrowerSel" onchange="bkSetBorrower(this.value)"><option value="all">ทั้งหมด</option>' +
+    borrowers.map(function(n) { return '<option value="' + esc(n) + '"' + (bkBorrower === n ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
+  h += '<label for="bkApproverSel">🧑‍💼 ผู้คีย์เบิก</label><select id="bkApproverSel" onchange="bkSetApprover(this.value)"><option value="all">ทั้งหมด</option>' +
+    approvers.map(function(n) { return '<option value="' + esc(n) + '"' + (bkApprover === n ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
+  if (bkBorrower !== 'all' || bkApprover !== 'all') h += '<button class="btn btn-ghost btn-sm" onclick="bkClearPeople()">✕ ล้างตัวกรองคน</button>';
+  return h + '</div>';
+}
+function _bkMatch(it) {
+  if (bkCatFilter.length && bkCatFilter.indexOf(it.u.category) === -1) return false;
+  if (bkStat !== 'all' && it.kind !== bkStat) return false;
+  if (bkBorrower !== 'all' && it.b.borrower !== bkBorrower) return false;
+  if (bkApprover !== 'all' && it.b.approver !== bkApprover) return false;
+  var q = bkSearch.trim().toLowerCase();
+  if (!q) return true;
+  var hay = [it.u.model, it.u.name, it.u.rentalDbNo, it.u.serialNumber, it.b.borrower, it.b.approver, it.b.jobNo, it.b.purpose]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.indexOf(q) !== -1;
+}
+
+function _bkJobCompare(a, b, desc) {
+  if (!a && !b) return 0; if (!a) return 1; if (!b) return -1;
+  return desc ? b.localeCompare(a, undefined, { numeric: true }) : a.localeCompare(b, undefined, { numeric: true });
+}
+var _BK_SORT_LABELS = {
+  urgent: '🔴 ด่วนที่สุดก่อน (ค่าเริ่มต้น)',
+  startAsc: '📤 วันที่เริ่มยืม — เก่าสุดก่อน', startDesc: '📤 วันที่เริ่มยืม — ใหม่สุดก่อน',
+  endAsc: '📥 กำหนดคืน — ใกล้สุดก่อน', endDesc: '📥 กำหนดคืน — ไกลสุดก่อน',
+  jobAsc: '🔢 เลขใบจอง — น้อยไปมาก', jobDesc: '🔢 เลขใบจอง — มากไปน้อย',
+  borrower: '🏢 ชื่อผู้ยืม — ก→ฮ'
+};
+var _BK_SORTERS = {
+  urgent: function(a, b) { return b.sev - a.sev || a.endIso.localeCompare(b.endIso); },
+  startAsc: function(a, b) { return a.startIso.localeCompare(b.startIso); },
+  startDesc: function(a, b) { return b.startIso.localeCompare(a.startIso); },
+  endAsc: function(a, b) { return a.endIso.localeCompare(b.endIso); },
+  endDesc: function(a, b) { return b.endIso.localeCompare(a.endIso); },
+  jobAsc: function(a, b) { return _bkJobCompare(a.jobNo, b.jobNo, false); },
+  jobDesc: function(a, b) { return _bkJobCompare(a.jobNo, b.jobNo, true); },
+  borrower: function(a, b) { return a.borrower.localeCompare(b.borrower, 'th'); }
+};
+function _bkItemSortFields(it) { return { sev: _SC_BUSY_SEV[it.kind], startIso: _scIso(it.b.s), endIso: _scIso(it.b.e), jobNo: String(it.b.jobNo || '').trim(), borrower: it.b.borrower || '' }; }
+function _bkGroupSortFields(g) { return { sev: g.sev, startIso: g.startIso, endIso: g.endIso, jobNo: g.jobNo, borrower: g.borrower }; }
+function _bkSortBarHtml() {
+  return '<div class="rt-sortbar"><label for="bkSortSel">↕️ เรียงตาม</label><select id="bkSortSel" onchange="bkSetSort(this.value)">' +
+    Object.keys(_BK_SORT_LABELS).map(function(k) { return '<option value="' + k + '"' + (bkSort === k ? ' selected' : '') + '>' + esc(_BK_SORT_LABELS[k]) + '</option>'; }).join('') +
+    '</select></div>';
+}
+
+function _bkDueTxt(it) {
+  if (it.kind === 'soon') return 'เริ่มยืม ' + _scFmt(it.b.s);
+  if (it.kind === 'pending') return '';
+  var d = daysBetween(_td(), _scIso(it.b.e));
+  if (d < 0) return 'เลยมาแล้ว ' + Math.abs(d) + ' วัน';
+  if (d === 0) return 'ครบกำหนดวันนี้';
+  return 'อีก ' + d + ' วัน';
+}
+// ปุ่มจัดการต่อรายการ — เลือกตามสถานะ ใช้ปุ่ม/โมดัลเดิมที่มีอยู่แล้วทั้งหมด
+function _bkRowActionsHtml(it) {
+  var u = it.u, b = it.b, isStaff = !!b.loanId;
+  if (it.kind === 'unconf') {
+    return '<button class="detail-btn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="openConfirmPickupM(\'' + _scEsq(b.borrower || '—') + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')">✅ ยืนยัน/ยกเลิก</button>';
+  }
+  if (it.kind === 'pending') {
+    return '<button class="detail-btn icon-btn" onclick="retryPendingLoan(\'' + b.loanId + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
+      '<button class="detail-btn icon-btn" onclick="removePendingLoan(\'' + b.loanId + '\')" title="ตัดออกจากใบ">✕</button>';
+  }
+  var detailBtn = isStaff
+    ? '<button class="detail-btn" onclick="openLoanLogM(\'' + b.loanId + '\')" title="ประวัติใบยืม">📜 รายละเอียด</button>'
+    : '<button class="detail-btn" onclick="staffTab(\'units\');openUnitDetail(\'' + u.id + '\')" title="ดูข้อมูลเครื่อง">📄 ดูเครื่อง</button>';
+  if (it.kind === 'late') {
+    return '<button class="detail-btn icon-btn" onclick="openReminderM(\'' + u.id + '\',\'' + _scEsq(b.borrower || '') + '\',\'' + _scEsq(b.jobNo || '') + '\',\'' + _scIso(b.e) + '\')" title="แจ้งเตือนผู้ยืม">🔔</button>' + detailBtn;
+  }
+  return detailBtn;
+}
+function _bkRowHtml(it) {
+  var u = it.u, b = it.b, cat = _scCatOf(u), p = _scModelParts(u), due = _bkDueTxt(it);
+  return '<div class="bk-row"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>' +
+    '<div class="main"><div class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
+    (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>' +
+    '<div class="meta"><span>ผู้ยืม <b>' + esc(b.borrower || '—') + '</b></span>' +
+    '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
+    '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span></div></div>' +
+    '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
+    '<div class="acts">' + _bkRowActionsHtml(it) + '</div></div></div>';
+}
+
+// จัดกลุ่มด้วยตัวเดียวกับ _rtSlipKey ทุกประการ (เลขใบจองถ้ามี ไม่งั้นเดาจากผู้ยืม+ช่วงวัน) เพื่อให้ปุ่มทั้งใบ
+// เรียก openSlipReturnM/openSlipExtendM/openSlipTransferM ของเดิมได้ตรงๆ โดยไม่ต้องรู้จักรายละเอียดข้างในเลย
+function _bkGroup(items) {
+  var groups = {}, order = [];
+  items.forEach(function(it) {
+    var sIso = _scIso(it.b.s), eIso = _scIso(it.b.e);
+    var key = _rtSlipKey({ jobNo: it.b.jobNo, borrower: it.b.borrower, start: sIso, end: eIso });
+    if (!groups[key]) {
+      groups[key] = { key: key, jobNo: String(it.b.jobNo || '').trim(), borrower: it.b.borrower || '—',
+        startIso: sIso, endIso: eIso, items: [], sev: 0, statuses: {} };
+      order.push(key);
+    }
+    var g = groups[key];
+    g.items.push(it);
+    g.statuses[it.kind] = (g.statuses[it.kind] || 0) + 1;
+    g.sev = Math.max(g.sev, _SC_BUSY_SEV[it.kind]);
+    if (sIso < g.startIso) g.startIso = sIso;
+    if (eIso < g.endIso) g.endIso = eIso;
+  });
+  return { groups: groups, order: order };
+}
+// ปุ่มทั้งใบที่หัวการ์ด — มีให้เฉพาะ 2 กรณีที่มีปุ่มทั้งใบจริงอยู่แล้วในระบบ (กำลังยืม/เลยกำหนด ใช้ปุ่มเดิมของ
+// ติดตามคืน, รอยืนยันล้วนๆ ใช้ปุ่มเดิมของ openConfirmPickupM) จองล่วงหน้า/รอชนคิว ยังไม่มีปุ่มทั้งใบให้ เพราะ
+// แต่ละเครื่องเหตุผล/วันเริ่มไม่เหมือนกัน จัดการทีละเครื่องที่แถวย่อยแทน
+function _bkSlipActionsHtml(g) {
+  if (g.statuses.out || g.statuses.late) {
+    return '<button class="btn btn-primary btn-sm" onclick="openSlipReturnM(\'' + _scEsq(g.key) + '\')">✅ คืนทั้งใบ</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openSlipExtendM(\'' + _scEsq(g.key) + '\')" title="เลื่อนกำหนดคืนทั้งใบ">⏩ เลื่อนทั้งใบ</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openSlipTransferM(\'' + _scEsq(g.key) + '\')" title="โอนผู้ยืมทั้งใบ">🔄 โอนทั้งใบ</button>';
+  }
+  if (g.statuses.unconf && Object.keys(g.statuses).length === 1) {
+    return '<button class="btn btn-primary btn-sm" onclick="openConfirmPickupM(\'' + _scEsq(g.borrower) + '\',\'' + g.startIso + '\',\'' + g.endIso + '\')">✅ ยืนยันทั้งใบ</button>';
+  }
+  return '';
+}
+function _bkSlipItemHtml(it, skip) {
+  var u = it.u, p = _scModelParts(u);
+  return '<div class="rt-crow2"><span class="ic">' + _scCatOf(u).icon + '</span>' +
+    '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</span>' +
+    '<span class="row-acts">' + _scBusyBadge(it.kind) + (skip ? '' : _bkRowActionsHtml(it)) + '</span></div>';
+}
+function _bkSlipHtml(g) {
+  var pureUnconf = g.statuses.unconf && Object.keys(g.statuses).length === 1;
+  var isOpen = g.items.length <= 1 ? true : !!bkSlipOpen[g.key];
+  var worstKind = Object.keys(_SC_BUSY_SEV).filter(function(k) { return _SC_BUSY_SEV[k] === g.sev; })[0];
+  var h = '<div class="rt-slip' + (g.statuses.late ? ' late' : '') + '">';
+  h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
+    '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง</div></div>' +
+    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">' + _scBusyBadge(worstKind) +
+    '<div class="rt-slip-act">' + _bkSlipActionsHtml(g) +
+    (g.items.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="bkToggleSlipOpen(\'' + _scEsq(g.key) + '\')">' + (isOpen ? '▴ ย่อรายการ' : '▾ แสดงรายการ (' + g.items.length + ')') + '</button>' : '') +
+    '</div></div></div>';
+  if (isOpen) {
+    h += '<div class="rt-crow-list2">' + g.items.map(function(it) {
+      return _bkSlipItemHtml(it, it.kind === 'out' || (it.kind === 'unconf' && pureUnconf));
+    }).join('') + '</div>';
+  }
+  return h + '</div>';
+}
+
+function renderBookingsTab() {
+  var body = document.getElementById('bkBody');
+  if (!body) return;
+  var catTabsEl = document.getElementById('bkCatTabs');
+  var all = bkAllItems();
+  if (catTabsEl) catTabsEl.innerHTML = _bkCatTabsHtml(all);
+  var filtered = all.filter(_bkMatch);
+
+  var badge = document.getElementById('bookingsCountBadge');
+  if (badge) {
+    var urgent = all.filter(function(it) { return it.kind === 'late' || it.kind === 'unconf' || it.kind === 'pending'; }).length;
+    badge.textContent = urgent ? '(' + urgent + ')' : '';
+  }
+
+  var h = '<div class="bk-sum"><b>' + all.length + ' ใบจองทั้งหมด</b> — กำลังแสดง ' + filtered.length + ' รายการ</div>';
+  h += _bkStatChipsHtml(all);
+  h += _bkPersonFiltersHtml(all);
+  h += '<div class="rt-views"><button class="' + (bkView === 'unit' ? 'on' : '') + '" onclick="bkSetView(\'unit\')">📦 รายเครื่อง</button>' +
+    '<button class="' + (bkView === 'slip' ? 'on' : '') + '" onclick="bkSetView(\'slip\')">📄 ตามใบจอง</button></div>';
+  h += _bkSortBarHtml();
+
+  if (!filtered.length) {
+    h += '<div class="empty-state">' + ((bkSearch.trim() || bkCatFilter.length || bkStat !== 'all' || bkBorrower !== 'all' || bkApprover !== 'all')
+      ? '🔍 ไม่พบรายการที่ตรงกับตัวกรอง — ลองเปลี่ยนตัวกรองหรือล้างคำค้น' : '🎉 ไม่มีใบจองค้างอยู่') + '</div>';
+    body.innerHTML = h;
+    return;
+  }
+
+  if (bkView === 'unit') {
+    var sortedItems = filtered.slice().sort(function(a, b) { return (_BK_SORTERS[bkSort] || _BK_SORTERS.urgent)(_bkItemSortFields(a), _bkItemSortFields(b)); });
+    h += '<div class="bk-list">' + sortedItems.map(_bkRowHtml).join('') + '</div>';
+  } else {
+    var grouped = _bkGroup(filtered);
+    var order = grouped.order.slice().sort(function(ka, kb) {
+      return (_BK_SORTERS[bkSort] || _BK_SORTERS.urgent)(_bkGroupSortFields(grouped.groups[ka]), _bkGroupSortFields(grouped.groups[kb]));
+    });
+    h += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:4px">' + order.map(function(k) { return _bkSlipHtml(grouped.groups[k]); }).join('') + '</div>';
+  }
+  body.innerHTML = h;
 }
 
 function renderReturnTab() {
@@ -4930,6 +5227,10 @@ function scBatchKey(b) {
 // 'done'/คืนแล้วไปเลย ทั้งที่ของยังปล่อยยืมไม่ได้จริง — ไม่แก้ scBarState ตรงๆ เพราะไทม์ไลน์ใช้แบบเดิมมาก่อน
 // ไม่อยากเสี่ยงพฤติกรรมที่ทำงานถูกอยู่แล้วเปลี่ยนไป จึงแยกฟังก์ชันใหม่ไว้ใช้เฉพาะจุดที่ต้องรู้จักเคสนี้
 function _scBusyKind(b, today) {
+  // คีย์ไว้แต่ชนคิวคนอื่นพอดี (ดู saveLendBatch) — scBusyOn() กรอง pending ทิ้งไปแล้วเสมอในทุกมุมมองปฏิทิน
+  // เดิม (จึงไม่เคยมีบุ๊กกิ้ง pending หลุดมาถึง _scBusyKind จากจุดนั้น) แต่แท็บ "ใบจอง" ดึงจาก scBookings()
+  // ตรงๆ โดยไม่ผ่าน scBusyOn จึงต้องเช็คแยกไว้ก่อน ไม่งั้นจะถูกจัดเป็น out/soon/unconf ผิดๆ ตามวันที่ล้วนๆ
+  if (b.status === 'pending') return 'pending';
   if (b.quarantine) return 'quar';
   if (b.status === 'returned') return 'done';
   if (b.e < today) return 'late';
@@ -4941,10 +5242,11 @@ function _scBusyKind(b, today) {
   if (!b.jobNo) return 'unconf';
   return 'out';
 }
-var _SC_BUSY_LABEL = { out: 'กำลังยืม', late: 'เลยกำหนดคืน', soon: 'จองล่วงหน้า', quar: 'รอรับเข้าคลัง', done: 'คืนแล้ว', unconf: 'รอยืนยันรับของ' };
+var _SC_BUSY_LABEL = { out: 'กำลังยืม', late: 'เลยกำหนดคืน', soon: 'จองล่วงหน้า', quar: 'รอรับเข้าคลัง', done: 'คืนแล้ว', unconf: 'รอยืนยันรับของ', pending: 'รอ (ชนคิว)' };
+var _SC_BUSY_SEV = { late: 5, unconf: 4, pending: 3, out: 2, soon: 1, quar: 0, done: 0 };
 function _scBusyBadge(kind) {
   var sw = (kind === 'out' || kind === 'late' || kind === 'done') ? '<i class="sw"></i>' : '';
-  return '<span class="sc-badge sc-badge-' + kind + '">' + sw + (kind === 'quar' ? '🕐 ' : kind === 'unconf' ? '🚚 ' : '') + _SC_BUSY_LABEL[kind] + '</span>';
+  return '<span class="sc-badge sc-badge-' + kind + '">' + sw + (kind === 'quar' ? '🕐 ' : kind === 'unconf' ? '🚚 ' : kind === 'pending' ? '⏳ ' : '') + _SC_BUSY_LABEL[kind] + '</span>';
 }
 // ใบจองมีเลขก็ต่อเมื่อคีย์ยืมจริงจากคลังข้างนอกแล้วเท่านั้น — ช่วงจองล่วงหน้ายังไม่มีเลข โชว์ชื่อคนกดจองไว้แทน
 // (ผู้คีย์เบิก/approver มีค่าเสมอ เพราะบังคับกรอกตอนคีย์ทุกครั้ง ไม่ว่าจะจองล่วงหน้าหรือยืมจริง)
