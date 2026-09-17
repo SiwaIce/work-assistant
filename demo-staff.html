@@ -309,7 +309,7 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-crow2-exc { display:block; font-size:10.5px; color:var(--bad); font-weight:600; margin-top:2px; }
 .rt-crow2-exc.queued { color:var(--accent); }
 .rt-crow2-note { display:block; font-size:10.5px; color:var(--text2); margin-top:2px; }
-.wait-note { display:block; font-size:11px; color:var(--warn); margin-top:4px; }
+.wait-note { display:block; font-size:11px; color:var(--accent); margin-top:4px; font-weight:600; }
 .rt-crow2 .row-acts { display:flex; gap:5px; flex-shrink:0; }
 .detail-btn { font:inherit; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
   border:1px solid var(--border); background:var(--surface-2); color:var(--text2); cursor:pointer; white-space:nowrap; }
@@ -1347,6 +1347,14 @@ function renderTriage() {
     rows.push({ sev: 50, key: 'รอ (ชนคิว)', n: pendingCount, cls: 'warn', ic: '⏳',
       t: 'คีย์ไว้แต่ชนคิว <b>' + pendingCount + '</b> เครื่อง', s: 'เช็คว่างอีกครั้งหรือตัดออกได้ที่แท็บติดตามคืน · มุมมอง "ตามใบจอง"',
       go: '<button class="tg-go" onclick="tgReturn(\'slip\')">ไปดู →</button>' });
+  }
+  // ของที่คืนแล้วแต่ยังกักไว้รอรับเข้าคลัง (ดู _quarLoans) — ไม่เร่งด่วนเท่าตามคืน/ชนคิว เพราะเปิดว่างเอง
+  // อัตโนมัติเมื่อครบกำหนดเผื่ออยู่แล้ว แต่ถ้าตรวจนับจริงเสร็จก่อนแล้วมาปิดเร็วขึ้นได้ ก็ควรมีคนเห็นเป็นงานค้าง
+  var quarCount = _quarLoans().length;
+  if (quarCount) {
+    rows.push({ sev: 45, key: 'รอรับเข้าคลัง', n: quarCount, cls: 'warn', ic: '🕐',
+      t: 'รอรับเข้าคลัง <b>' + quarCount + '</b> เครื่อง', s: 'ปิดก่อนกำหนดได้ถ้าตรวจนับจริงแล้ว — ดูที่แท็บติดตามคืน',
+      go: '<button class="tg-go" onclick="tgReturn()">ไปดู →</button>' });
   }
   // เอกสารไม่ครบ — ข้อมูลที่มีอยู่แล้วแต่ไม่เคยมีที่แสดง ถ้าบริษัทบังคับต้องมีก่อนปล่อยยืม อันนี้บล็อกทุกใบ
   var noDoc = UNITS.filter(function(u) {
