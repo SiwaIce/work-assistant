@@ -173,9 +173,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); resize:vertical; }
 .paste-act { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-top:8px; }
 .paste-msg { font-size:12px; font-weight:600; }
-.tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto; }
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto; position:relative; }
 .tabs button { border:none; background:transparent; font:inherit; font-weight:600; font-size:13.5px; color:var(--text2); padding:10px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
 .tabs button.on { color:var(--accent); border-color:var(--accent); }
+/* จอแคบแล้วแท็บล้นขอบ (เช่น "ติดตามคืน") — เดิมเลื่อนได้จริงแต่ไม่มีอะไรบอกใบ้ให้รู้ว่าต้องเลื่อน ใส่เงาจาง
+   ด้านขวาไว้เตือน มีเฉพาะตอนล้นจริง (ดู _checkTabsScroll) ไม่กระทบตอนแท็บพอดีจอ */
+.tabs.scrollable::after { content:''; position:sticky; right:0; top:0; height:100%; width:26px; margin-left:-26px;
+  pointer-events:none; background:linear-gradient(to right, transparent, var(--bg) 80%); flex-shrink:0; }
 .tabpane { display:none; } .tabpane.on { display:block; }
 .req-item { display:flex; gap:14px; padding:14px; border:1px solid var(--border); border-radius:12px; margin-bottom:10px; background:var(--surface); align-items:flex-start; flex-wrap:wrap; }
 .req-item.conflict { border-color:var(--warn); background:var(--warn-soft); }
@@ -1133,6 +1137,7 @@ function loadStaffData() {
     STAFF_ROSTER = data.staffRoster || [];
     document.getElementById('staffLoading').style.display = 'none';
     document.getElementById('staffContent').style.display = 'block';
+    _checkTabsScroll();
     listenPending();
     listenEdits();
     listenLoans();
@@ -1594,9 +1599,18 @@ function renderGsResults() {
   box.innerHTML = h;
 }
 
+// จอแคบแล้วแถบแท็บล้นขอบ (overflow-x:auto เดิมทำให้เลื่อนได้อยู่แล้ว แต่ไม่มีอะไรบอกใบ้ให้รู้) — เช็คว่า
+// เนื้อหากว้างกว่ากล่องจริงไหมแล้วติดคลาสให้ CSS โชว์เงาจางด้านขวาเตือนว่าเลื่อนดูต่อได้ (ดู .tabs.scrollable)
+function _checkTabsScroll() {
+  var el = document.querySelector('.tabs');
+  if (!el) return;
+  el.classList.toggle('scrollable', el.scrollWidth > el.clientWidth + 2);
+}
+window.addEventListener('resize', _checkTabsScroll);
 function staffTab(name) {
   document.querySelectorAll('.tabs button').forEach(function(b) { b.classList.toggle('on', b.dataset.tab === name); });
   document.querySelectorAll('.tabpane').forEach(function(p) { p.classList.toggle('on', p.id === 'tab-' + name); });
+  _checkTabsScroll();
   // แถบ "เลือกไว้ N เครื่อง" มีความหมายตอนอยู่แท็บรายการเครื่องหรือปฏิทิน (ติ๊กเลือกได้ทั้งสองที่) — แท็บอื่นซ่อนไว้
   var bar = document.getElementById('lendPickBar');
   if (bar) {
@@ -1875,7 +1889,7 @@ function _rtPendingBySlip() {
   var out = {};
   LOANS.filter(function(l) { return l.status === 'pending'; }).forEach(function(l) {
     var row = { src: 'staff', id: l._id, unitId: l.unitId, model: l.model || '', borrower: l.borrower || '',
-      approver: l.approver || '', jobNo: l.jobNo || '', start: l.start, end: l.end, createdAt: l.createdAt };
+      approver: l.approver || '', purpose: l.purpose || '', jobNo: l.jobNo || '', start: l.start, end: l.end, createdAt: l.createdAt };
     var k = _rtSlipKey(row);
     (out[k] = out[k] || []).push(row);
   });
@@ -1905,7 +1919,13 @@ function renderReturnTabBySlip(all) {
   var pendingBySlip = _rtPendingBySlip(), pendingOnlyKeys = {};
   Object.keys(pendingBySlip).forEach(function(k) {
     if (!groups[k]) {
-      groups[k] = { key: k, list: [], pending: [], jobNo: String(pendingBySlip[k][0].jobNo || '').trim(), who: pendingBySlip[k][0].borrower || '', worst: 0, end: pendingBySlip[k][0].end, start: pendingBySlip[k][0].start, createdAt: pendingBySlip[k][0].createdAt || null };
+      var p0 = pendingBySlip[k][0];
+      // เดิมดึงแค่ของแถวแรกเสมอ ถ้าแถวแรกไม่มีผู้คีย์/เหตุผลแต่แถวอื่นในใบเดียวกันมี หัวใบจะขึ้น
+      // "ไม่ได้บันทึกผู้คีย์" ทั้งที่จริงมีข้อมูลอยู่ — ไล่หาค่าแรกที่ไม่ว่างในกลุ่มแทน เหมือนที่ลูปหลักด้านบนทำ
+      var firstApprover = pendingBySlip[k].map(function(l) { return String(l.approver || '').trim(); }).filter(Boolean)[0] || '';
+      var firstPurpose = pendingBySlip[k].map(function(l) { return String(l.purpose || '').trim(); }).filter(Boolean)[0] || '';
+      groups[k] = { key: k, list: [], pending: [], jobNo: String(p0.jobNo || '').trim(), who: p0.borrower || '',
+        approver: firstApprover, purpose: firstPurpose, worst: 0, end: p0.end, start: p0.start, createdAt: p0.createdAt || null };
       order.push(k);
       pendingOnlyKeys[k] = true;
     }
