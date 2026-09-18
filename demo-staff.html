@@ -4460,6 +4460,22 @@ function lendClear() {
   was.forEach(_lendPaint);
   renderLendBar();
 }
+// ก๊อปเลขเครื่องเช่าของรายการที่ติ๊กไว้ในแถบเลือกยืม — ใช้ตอนยังไม่ได้เลือกวันที่/ยังไม่มีใบยืมจริง (ตอนนั้น
+// copySlipRentals ยังใช้ไม่ได้เพราะยังไม่มี jobNo) จะได้เอาเลขไปเช็ค/ค้นในระบบคลังก่อนได้เลย
+function copyLendPickedRentals() {
+  var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
+  var nums = lendPicked.map(function(id) { var u = byId[id]; return u ? String(u.rentalDbNo || '').trim() : ''; }).filter(Boolean);
+  var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
+  uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  if (!uniq.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
+  var text = uniq.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + uniq.length + ' เครื่อง)'); })
+      .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+  } else {
+    alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
 // สลับเครื่องที่ชนคิวอยู่ (oldId) เป็นเครื่องรุ่นเดียวกันที่ว่างพอดี (newId) — แค่แก้รายการที่เลือกไว้ ยังไม่ได้
 // บันทึกจริงจนกว่าจะกด "บันทึกยืม" ตามปกติ (เหมือนติ๊ก/ถอดติ๊กเครื่องเอง)
 function lendSwapUnit(oldId, newId) {
@@ -4483,6 +4499,7 @@ function renderLendBar() {
       return '<span class="lb-chip">' + esc(p.main) + (u.rentalDbNo ? ' · ' + esc(u.rentalDbNo) : '') +
         '<span class="x" onclick="lendToggle(\'' + id + '\')">✕</span></span>';
     }).join('') + '</div>' +
+    '<button class="btn btn-ghost btn-sm" onclick="copyLendPickedRentals()">📋 Copy เลขเครื่องเช่า</button>' +
     '<button class="btn btn-ghost btn-sm" onclick="lendClear()">ล้าง</button>' +
     '<button class="btn btn-primary btn-sm" onclick="openLendFlow()">📅 เลือกวันที่ยืม →</button>';
 }
