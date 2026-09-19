@@ -1651,7 +1651,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
       '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
       '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
       '<div id="fv_lead_row"' + (srcType !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' +
-      '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(srcType === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>' +
+      '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(srcType === 'other' ? (v.company || window._vpPrefillCompanyText || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>' +
       '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
       '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
       '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + (defaultMode === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (defaultMode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
@@ -1667,7 +1667,7 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
     visitPhotoReminderHtml() +
     _visitModeBarHtml(dealer, rerenderCall) +
     '<div class="form-section">📋 ข้อมูลพื้นฐาน</div>' +
-    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
+    (function() { var st = window._visitSourceType || 'dealer'; return '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (st === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (st === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (st === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' + '<div id="fv_dealer_row"' + (st !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' + '<div id="fv_lead_row"' + (st !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' + '<div id="fv_other_row"' + (st !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(st === 'other' ? (v.company || window._vpPrefillCompanyText || '') : '') + '"></div><div class="hint">💡 ไม่ต้องสร้าง Dealer จริง — ชื่อจะโชว์ในรายงาน/Export เหมือน Dealer ปกติ</div></div>'; })() +
     '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') + '<div class="fg"><label>เวลา</label><input type="time" id="fv_time" value="' + (v.time || '') + '"></div></div>' +
     '<div class="fr"><div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + (defaultMode === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (defaultMode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div>' +
     // เดิมเป็น dropdown เลือก SAB/Other เอง แต่ทีมกรอกจริงเป็น Level ของ Dealer เสมอ (เช่น "B") ไม่ได้ใช้ค่า
@@ -1845,12 +1845,17 @@ function savePartnerVisit(dealerId, eid) {
     attachments: [].concat(partnerData.attach1, partnerData.attach2, partnerData.attach3),
     sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
-  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
+  if (srcType === 'other') _visitMaybeSyncPlanCompanyName(company);
+  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = ''; window._vpPrefillCompanyText = ''; window._vpPrefillPlanCompanyName = '';
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' New Partner Visit');
   if (!eid) _visitClearDraft();
-  closeMForce(); toast('💾 บันทึก New Partner Report แล้ว'); render();
   notifyVisitSavedAcrossTabs(did);
+  if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
+  // ไปหน้ารายละเอียด Visit ที่เพิ่งบันทึกแทนแค่ render() เฉยๆ — เดิมในแท็บแยก (rVisitWindow) จะวาดฟอร์ม
+  // "สร้างใหม่" เปล่าๆ ซ้ำ ดูเหมือนข้อมูลหายทั้งที่บันทึกสำเร็จแล้ว (เหตุผลเดียวกับ saveVisitQuick ด้านล่าง)
+  closeMForce(); toast('💾 บันทึก New Partner Report แล้ว');
+  go('visitDetail', {visitId: visitObj.id});
 }
 
 async function aiCleanVisitNote() {
@@ -2463,7 +2468,11 @@ function _visitScheduleDraftSave() {
   document.addEventListener('change', function(e) { if (isVisitFormField(e.target)) _visitScheduleDraftSave(); });
 })();
 
-function _visitClearDraft() { localStorage.removeItem(VISIT_DRAFT_KEY); }
+// ต้อง clearTimeout ด้วย ไม่ใช่แค่ลบ key — เดิมถ้าผู้ใช้พิมพ์แก้ครั้งสุดท้ายแล้วกดบันทึกภายใน 1.5 วิ (ก่อน
+// debounce timer ของ _visitScheduleDraftSave ทำงาน) ตัว timer จะยิงหลังบันทึกเสร็จ เจอฟอร์มเดิมยังอยู่ใน DOM
+// (closeMForce ซ่อนโมดัลด้วย CSS เฉยๆ ไม่ได้ลบ #mBd ทิ้ง) เลย snapshot ซ้ำแล้วเขียนร่าง "ผี" กลับเข้า
+// localStorage ทับที่เพิ่งลบไป ทำให้เปิดฟอร์มใหม่ครั้งถัดไปเจอ "พบร่างที่ยังไม่ได้บันทึก" ทั้งที่บันทึกไปแล้วจริง
+function _visitClearDraft() { clearTimeout(_visitDraftSaveTimer); localStorage.removeItem(VISIT_DRAFT_KEY); }
 
 // เรียกตอนเปิดฟอร์ม Visit Report ใหม่ (ยังไม่มี eid) — ถ้าเจอร่างเก่าที่ยังไม่ได้บันทึก ถามก่อนเสมอว่าจะ
 // กู้คืนไหม (ไม่ auto-restore เงียบๆ) ถามแค่ครั้งเดียวต่อการเปิดฟอร์ม 1 ครั้ง ไม่ถามซ้ำตอนสลับโหมด Quick/
@@ -2546,6 +2555,19 @@ function addFcRow() { var c = document.getElementById('fv_fcs'); if (c) c.insert
 function fbRow(i, f) { return '<div style="margin-bottom:3px"><input type="text" id="fb_' + i + '" value="' + sanitize(f || '') + '" placeholder="Feedback ' + (i + 1) + '..."></div>'; }
 function addFbRow() { var c = document.getElementById('fv_fbs'); if (c) c.insertAdjacentHTML('beforeend', fbRow(c.children.length, '')); }
 
+// ถ้าผู้ใช้แก้ชื่อบริษัทในฟอร์ม (ที่มา "อื่นๆ" — มักมาจาก vpGoVisitLead ที่ prefill ชื่อจากแผนนัด Lead ที่ไม่ได้
+// ผูก Prospect จริงไว้ให้) ต่างจากชื่อเดิมที่ auto-fill มาจากแผนนัดต้นทาง ถามก่อนว่าจะแก้ชื่อในแผนนัดต้นทาง
+// ให้ตรงกันด้วยไหม กันชื่อไม่ตรงกันระหว่าง Visit Report ที่เพิ่งบันทึกกับ Visit Plan เดิม (ผู้ใช้ขอ 2026-09-19)
+function _visitMaybeSyncPlanCompanyName(company) {
+  var planId = window._vpLinkPlanId;
+  var origName = window._vpPrefillPlanCompanyName;
+  if (!planId || !origName || !company || company.trim() === origName.trim()) return;
+  if (confirm('ชื่อบริษัทถูกแก้ไขจาก "' + origName + '" เป็น "' + company + '" — ต้องการแก้ไขชื่อในแผนนัดต้นทางให้ตรงกันด้วยไหม?')) {
+    var _p = ST.update('visitPlans', planId, { companyName: company });
+    if (_p && typeof syncItemToFirebase === 'function') syncItemToFirebase('visitPlans', _p);
+  }
+}
+
 // Save Visit Quick
 function saveVisitQuick(dealerId, eid) {
   var srcEl = document.querySelector('input[name="fv_source"]:checked');
@@ -2572,7 +2594,8 @@ function saveVisitQuick(dealerId, eid) {
   var data = {date: dpG('fv_date'), time: document.getElementById('fv_time') ? document.getElementById('fv_time').value : '', dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'online', summary: summary, saleName: cfg.saleName, reportMode: 'quick', topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [], attachments: window._visitAttach || [], sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''};
   if (!data.date) return alert('ใส่วันที่');
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
-  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
+  if (srcType === 'other') _visitMaybeSyncPlanCompanyName(company);
+  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = ''; window._vpPrefillCompanyText = ''; window._vpPrefillPlanCompanyName = '';
   var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
   if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Visit');
   if (!eid) _visitClearDraft();
@@ -2582,7 +2605,12 @@ function saveVisitQuick(dealerId, eid) {
   // Agenda กลับเข้า Visit Plan (2026-08-27) ว่าไม่เคยเห็นผลจริง ย้ายมาไว้ก่อน render() แทน กันเงียบๆ ไม่รันอีก
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
-  closeMForce(); toast('💾 บันทึก Visit แล้ว'); render();
+  // เดิมปิด modal แล้วเรียก render() เฉยๆ — ในแท็บแยก (rVisitWindow) S.view ยังเป็น 'visitWindow' เหมือนเดิม
+  // render() เลยวาดฟอร์ม "สร้างใหม่" เปล่าๆ ซ้ำ (window._vwEid ไม่เคยอัพเดตหลังบันทึก) ดูเหมือนข้อมูลที่เพิ่ง
+  // กรอกหายไปทั้งที่บันทึกสำเร็จแล้วจริง — เปลี่ยนไปเปิดหน้ารายละเอียด Visit ที่เพิ่งบันทึกแทน (เหมือนที่
+  // saveVisit ของ Standard/Full ทำอยู่แล้ว) ทั้งกรณี modal ปกติและแท็บแยก (ผู้ใช้แจ้ง 2026-09-19)
+  closeMForce(); toast('💾 บันทึก Visit แล้ว');
+  go('visitDetail', {visitId: visitObj.id});
 }
 
 // Save Visit (Standard/Full)
@@ -2678,6 +2706,7 @@ function saveVisit(dealerId, eid) {
   };
 
   if (!(window._visitAttach || []).length && !confirm('📷 ยังไม่ได้แนบรูปเลย — ยืนยันบันทึกโดยไม่มีรูปถ่ายไหม?')) return;
+  if (srcType === 'other') _visitMaybeSyncPlanCompanyName(company);
 
   var visitObj;
   if (eid) { ST.update('visits', eid, data); visitObj = ST.getOne('visits', eid); }
@@ -2759,7 +2788,7 @@ function saveVisit(dealerId, eid) {
   // Save feedback
   feedbackItems.forEach(function(f) { ST.add('feedback', {dealerId: did, text: f, date: data.date, source: 'visit'}); });
 
-  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = '';
+  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = ''; window._vpPrefillCompanyText = ''; window._vpPrefillPlanCompanyName = '';
   closeMForce(); toast('💾 บันทึก Visit แล้ว');
   notifyVisitSavedAcrossTabs(did);
   if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);

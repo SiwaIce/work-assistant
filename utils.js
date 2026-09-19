@@ -2555,6 +2555,12 @@ function _djiDealerDatalistHtml(listId) {
 
 function prospectOptions(selectedId) {
   var list = ST.getAll('prospects').filter(function(p) { return p.stage !== 'closed' && p.stage !== 'converted'; });
+  // Lead ที่ถูกเลือกไว้ (เช่น prefill มาจากแผนนัด) อาจถูกกรองออกไปแล้วถ้า stage เป็น closed/converted ไปก่อน —
+  // ยังต้องโชว์เป็นตัวเลือกอยู่ดี ไม่งั้น <select> จะตกกลับไปที่ "-- เลือก Lead --" เงียบๆ ทั้งที่ควรจะเลือกไว้ให้แล้ว
+  if (selectedId && !list.some(function(p) { return p.id === selectedId; })) {
+    var selP = ST.getOne('prospects', selectedId);
+    if (selP) list = [selP].concat(list);
+  }
   var opts = '<option value="">-- เลือก Lead --</option>';
   list.forEach(function(p) {
     opts += '<option value="' + p.id + '"' + (p.id === selectedId ? ' selected' : '') + '>' + sanitize(p.companyName || '-') + '</option>';

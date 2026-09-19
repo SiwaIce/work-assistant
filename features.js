@@ -9580,10 +9580,30 @@ function vpGoVisit(planId) {
 
 // เรียกจาก modals.js หลังบันทึก Visit สำเร็จ — ผูกผล Visit กลับเข้าแผนนัดที่เปิดมาจาก vpGoVisit
 function vpMarkPlanActualFromVisit(visitId, prospectId) {
-  if (!window._vpLinkPlanId) return;
   var planId = window._vpLinkPlanId;
   window._vpLinkPlanId = null;
-  var plan = ST.getOne('visitPlans', planId);
+  var plan = planId ? ST.getOne('visitPlans', planId) : null;
+
+  // ไม่ได้มาจากปุ่มของแผนนัดโดยตรง (สร้าง Visit Report เองจากเมนู Visit Report ปกติ ไม่ได้กดผ่านนัดในปฏิทิน) —
+  // ลองจับคู่อัตโนมัติกับแผนนัดที่ยังไม่มีผล (status ไม่ใช่ done และยังไม่มี visitId) ที่วันที่ตรงกันเป๊ะ และ
+  // Dealer/Lead/ชื่อบริษัทตรงกัน เพื่อไม่ให้แผนนัดค้างสถานะ "ยังไม่ได้ทำ" ทั้งที่มี Visit Report ของวันนั้นแล้ว
+  // จริงๆ (ผู้ใช้แจ้งบั๊กนี้ 2026-09-19) — จับคู่เฉพาะตอนแม่นยำไม่กำกวม (เจอ candidate เดียวพอดี) เท่านั้น กัน
+  // ผูกผิดใบตอนวันเดียวกันมีนัดหลายอันกับ Dealer เดียวกัน
+  if (!plan && typeof getVisitPlans === 'function') {
+    var visit = ST.getOne('visits', visitId);
+    if (visit && visit.date) {
+      var candidates = getVisitPlans().filter(function(p) {
+        if (p.status === 'done' || p.visitId) return false;
+        if (p.date !== visit.date) return false;
+        if (visit.dealerId) return p.sourceType !== 'lead' && p.dealerId === visit.dealerId;
+        if (visit.prospectId) return p.prospectId === visit.prospectId;
+        if (visit.company) return (p.companyName || p.title || '').trim().toLowerCase() === visit.company.trim().toLowerCase();
+        return false;
+      });
+      if (candidates.length === 1) { plan = candidates[0]; planId = plan.id; }
+    }
+  }
+  if (!planId) return;
   var updates = { status: 'done', visitId: visitId };
   // เขียนสถานะติ๊ก/รายละเอียด Agenda ที่แก้ไว้ใน Visit Report กลับเข้าแผนนัดต้นทางด้วย (ดู
   // _visitAgendaSectionHtml ใน modals.js) — ให้การ์ด Visit Plan (ทั้งในเมนู Visit Planning และแท็บ Dealer)
@@ -9601,8 +9621,17 @@ function vpGoVisitLead(planId) {
   var plan = ST.getOne('visitPlans', planId);
   if (!plan) return;
   window._vpLinkPlanId = planId;
-  window._visitSourceType = 'lead';
-  window._vpPrefillProspectId = plan.prospectId || '';
+  // แผนนัด Lead ไม่บังคับต้องผูกกับ Prospect ที่บันทึกไว้จริง (ดู vp_prospect_select ใน showAddVisitPlanM —
+  // "-- พิมพ์เอง --" ก็เลือกได้) กรณีนั้น plan.prospectId จะว่าง ถ้ายังตั้ง sourceType เป็น 'lead' แบบเดิม
+  // <select> Lead ในฟอร์ม Visit Report จะไม่มีตัวเลือกไหนตรงเลย เด้งกลับไป "-- เลือก Lead --" เปล่าๆ ให้ผู้ใช้
+  // ต้องเลือกเองใหม่ทั้งที่เพิ่งกดมาจากนัดนี้ตรงๆ — ไม่มี prospectId ให้ใช้โหมด "อื่นๆ" (ชื่อพิมพ์เอง) แทน แล้ว
+  // prefill ชื่อบริษัทจากแผนนัดให้เลย ยังแก้ไขชื่อในช่องนั้นได้ตามปกติ (ผู้ใช้แจ้ง 2026-09-19)
+  var hasProspect = plan.prospectId && ST.getOne('prospects', plan.prospectId);
+  window._visitSourceType = hasProspect ? 'lead' : 'other';
+  window._vpPrefillProspectId = hasProspect ? plan.prospectId : '';
+  window._vpPrefillCompanyText = hasProspect ? '' : (plan.companyName || plan.title || '');
+  // เก็บชื่อเดิมไว้เทียบตอนบันทึก — ถ้าผู้ใช้แก้ชื่อในฟอร์มต่างจากนี้ จะถามว่าจะแก้ชื่อในแผนนัดต้นทางตามไปด้วยไหม
+  window._vpPrefillPlanCompanyName = hasProspect ? '' : (plan.companyName || plan.title || '');
   // วันที่เริ่มต้นควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ (เหมือน rVisitWindow ฝั่ง Dealer) — ผ่าน _visitDraftOverride
   if (plan.date) window._visitDraftOverride = { date: plan.date };
   if (typeof showVisitM === 'function') {
