@@ -208,14 +208,43 @@ function syncProductsToFirebase(data) {
   });
 }
 
+// เหมือน ST.initBig()/ST.whenBigReady() ที่ใช้กับ Pipeline — เก็บ promise ของการดึงสินค้าจาก Firebase ไว้
+// (ยิงตอน login ผ่าน initProductsModule()/onAuthStateChanged ใน firebase-sync.js) ให้หน้าที่ต้องใช้ข้อมูล
+// สินค้ารอได้ก่อนวาดจอ — เครื่องใหม่/ล้าง cache ไม่มี default seed ในเครื่องเลย (คลังจริงอยู่บน cloud
+// เท่านั้น ดูคอมเมนต์ใน initProductsModule) ถ้าวาดก่อนโหลดเสร็จจะเห็นตารางว่างเปล่าเงียบๆ ไม่มีอะไรบอกว่า
+// กำลังโหลดอยู่ (ผู้ใช้แจ้งค้างก่อนถึงแสดงข้อมูล 2026-09-21)
+var _productsLoadPromise = null;
+var _productsLoadDone = false;
+// ไม่เรียก fn() แบบ sync ตรงๆ เด็ดขาด — ผู้เรียกอย่าง rProducts()/rProductPrices() เช็คเงื่อนไข "ยังไม่มี
+// สินค้า+ยังไม่เสร็จ" แล้ววนเรียก whenProductsReady(fn) ซ้ำในนี้ ถ้าเรียก fn() ทันทีตอนยังไม่มี
+// _productsLoadPromise เลย (เช่นโหมดลิงก์เซล PIN ที่ไม่ผ่าน loadProductsFromFirebase เลย) เงื่อนไขเดิมยังไม่
+// เปลี่ยน เรียกตัวเองซ้ำไม่จบ stack overflow จริง (จับได้จากเทสของฟีเจอร์นี้เอง 2026-09-21) — รอสั้นๆ ไม่กี่
+// ครั้ง (รวม ~1 วิ) เผื่อการโหลดกำลังจะเริ่ม ถ้ายังไม่มีอะไรเกิดขึ้นเลยก็เรียก fn ต่อไปอยู่ดี กันหน้าค้างที่
+// "กำลังโหลด..." ตลอดไปเงียบๆ สำหรับผู้ใช้ที่ไม่มีการโหลดสินค้าแบบนี้เกิดขึ้นจริง
+function whenProductsReady(fn, _triesLeft) {
+  if (_productsLoadDone) { setTimeout(fn, 0); return; }
+  if (_productsLoadPromise) { _productsLoadPromise.then(function() { setTimeout(fn, 0); }, function() { setTimeout(fn, 0); }); return; }
+  if (_triesLeft === undefined) _triesLeft = 20;
+  if (_triesLeft <= 0) {
+    // รอจนหมดโควตาแล้วยังไม่มี loadProductsFromFirebase() เกิดขึ้นเลย (เช่นโหมดลิงก์เซล PIN) — ถือว่า
+    // "เสร็จ" ถาวร กันหน้าเด้งกลับมาวน whenProductsReady รอใหม่ไม่จบทุกครั้งที่ re-render (ไม่ crash แต่จะ
+    // กระพริบ/กิน CPU ไม่จบถ้าไม่ตั้งค่านี้ไว้ถาวร)
+    _productsLoadDone = true;
+    setTimeout(fn, 0);
+    return;
+  }
+  setTimeout(function() { whenProductsReady(fn, _triesLeft - 1); }, 50);
+}
+
 function loadProductsFromFirebase() {
-  if (typeof db === 'undefined' || !CURRENT_USER) return Promise.resolve(false);
+  _productsLoadDone = false;
+  if (typeof db === 'undefined' || !CURRENT_USER) { _productsLoadDone = true; return Promise.resolve(false); }
 
   var userRef = db.collection('users').doc(CURRENT_USER.uid);
   // ⚠️ เดิมดึงกลับแค่ collection 'products' เท่านั้น — 'bundles'/'demoUnits' push ขึ้น cloud ได้ แต่ไม่เคย
   // ถูกดึงกลับลงมาเลย ทำให้เครื่องใหม่/มือถือ/Incognito ไม่เห็น Bundle หรือ Demo Unit จากเครื่องอื่นเลย
   // (พบ 2026-07-19) ต้องดึงมาทั้ง 3 collection พร้อมกัน
-  return Promise.all([
+  _productsLoadPromise = Promise.all([
     userRef.collection('products').get(),
     userRef.collection('bundles').get(),
     userRef.collection('demoUnits').get()
@@ -264,7 +293,8 @@ function loadProductsFromFirebase() {
     localStorage.setItem('v7_products_pulled_' + CURRENT_USER.uid, '1');
     _saveProductsDataLocalOnly(data); // เขียนแค่เครื่อง ไม่ push กลับขึ้น cloud (กัน echo-push race)
     return true;
-  }).catch(function() { return false; });
+  }).catch(function() { return false; }).then(function(r) { _productsLoadDone = true; return r; });
+  return _productsLoadPromise;
 }
 function ensureProductStructure(p) {
   if (!p) return { name: '', price: 0, rrpInVat: 0, rrpExVat: 0, typePrices: { S:0, A:0, B:0, Other:0 }, category: 'other', eol: false, cost: 0 };
@@ -1970,6 +2000,14 @@ var priceCategoryFilter = 'all';
 
 function rProducts(el) {
   document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
+  // เครื่องใหม่/ล้าง cache: ในเครื่องยังไม่มีสินค้าเลยสักตัว แปลว่ากำลังรอดึงจาก Firebase (คลังจริงอยู่บน
+  // cloud เท่านั้น ไม่มี default seed — ดู initProductsModule) ถ้าวาดตอนนี้จะเห็นตารางว่างเปล่าเงียบๆ ไม่มี
+  // อะไรบอกว่ากำลังโหลดอยู่ รอให้เสร็จก่อนค่อยวาดจริง (ผู้ใช้แจ้งค้างก่อนถึงแสดงข้อมูล 2026-09-21)
+  if (!getAllProducts().length && !_productsLoadDone) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลดรายการสินค้า…</p></div></div>';
+    whenProductsReady(function() { if (S && S.view === 'products') rProducts(el); });
+    return;
+  }
   var products = getAllProducts();
 
   // ✅ กรองตามคำค้นหา
@@ -2562,8 +2600,14 @@ function renderProductsTable(products) {
 }
 function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
+  // เหตุผลเดียวกับ rProducts
+  if (!getAllProducts().length && !_productsLoadDone) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลดรายการสินค้า…</p></div></div>';
+    whenProductsReady(function() { if (S && S.view === 'productPrices') rProductPrices(el); });
+    return;
+  }
   var products = getAllProducts();
-  
+
   if (priceSearch) {
     var q = priceSearch.toLowerCase();
     products = products.filter(function(p) {

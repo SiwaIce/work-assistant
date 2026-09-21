@@ -180,6 +180,12 @@ function _sortPipeTeamList(list, sortBy) {
 
 function rPipelineTeam(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline รวมทีม';
+  // เหตุผลเดียวกับ rPipeline — _pipeTeamMergedList() อ่าน ST.getAll('pipeline') ซึ่งอยู่ใน IndexedDB (async)
+  if (!ST._bigReady) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลด Pipeline…</p></div></div>';
+    ST.whenBigReady(function() { if (S && S.view === 'pipelineTeam') rPipelineTeam(el); });
+    return;
+  }
   var fullList = _pipeTeamMergedList();
   var ps = _pipeTeamStatusSummary(fullList);
 
@@ -1425,6 +1431,15 @@ function undoRecalcPriceByLevel(skipConfirm) {
 
 function rPipeline(el) {
   document.getElementById('pgT').textContent = '📊 Pipeline';
+  // v7_pipeline อยู่ใน IndexedDB (ดู idb.js) ซึ่งโหลดแบบ async ตอนเปิดแอพ — ถ้าเข้าหน้านี้ก่อนโหลดเสร็จ
+  // ST.getAll('pipeline') จะได้ [] (ข้อมูลถูกย้ายออกจาก localStorage ไปแล้ว) เห็นหน้าว่างเปล่าแล้วไม่มีอะไร
+  // แก้ให้เอง (ต้องออกไปหน้าอื่นแล้วกลับมาใหม่ข้อมูลถึงจะโผล่) — รอให้พร้อมก่อนค่อยวาดจริงเหมือน rDjiLedger/
+  // rWorklist (ผู้ใช้แจ้งเปิดจากมือถือค้างก่อนถึงแสดงข้อมูล 2026-09-21)
+  if (!ST._bigReady) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลด Pipeline…</p></div></div>';
+    ST.whenBigReady(function() { if (S && S.view === 'pipeline') rPipeline(el); });
+    return;
+  }
   var cfg = getConfig();
   var allPipes = ST.getAll('pipeline');
   // index งานค้างต่อ pipe ครั้งเดียวตรงนี้ — เดิม taskCnt/pipeTaskFlt เรียก pipeOpenTasks(p.id) ต่อ pipe
@@ -2490,6 +2505,14 @@ async function aiAnalyzePipeline(btn) {
 // PIPELINE DETAIL
 // ================================================================
 function rPipeDet(el) {
+  // เหตุผลเดียวกับ rPipeline — ต้องเช็คก่อนอ่าน ST.getOne('pipeline', ...) ไม่งั้นถ้าเข้าหน้านี้ตรงๆ (เช่น
+  // จากลิงก์ Task ที่ผูกไว้) ก่อน IndexedDB โหลดเสร็จ จะได้ null แล้วโดนเด้งกลับไปหน้า Pipeline list ทั้งที่
+  // โครงการนี้มีอยู่จริง แค่ยังโหลดไม่เสร็จ
+  if (!ST._bigReady) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลด Pipeline…</p></div></div>';
+    ST.whenBigReady(function() { if (S && S.view === 'pipeDetail') rPipeDet(el); });
+    return;
+  }
   var p = ST.getOne('pipeline', S.pipeId);
   if (!p) return go('pipeline');
   var d = ST.getOne('dealers', p.dealerId);
@@ -3342,6 +3365,12 @@ function _pipeDupLogDeleteOne(cid) {
 // ================================================================
 function rPipeBoard(el) {
   document.getElementById('pgT').textContent = '📋 Pipeline Board';
+  // เหตุผลเดียวกับ rPipeline
+  if (!ST._bigReady) {
+    el.innerHTML = '<div class="card"><div class="empty"><div class="icon">⏳</div><p>กำลังโหลด Pipeline…</p></div></div>';
+    ST.whenBigReady(function() { if (S && S.view === 'pipeBoard') rPipeBoard(el); });
+    return;
+  }
   var cfg = getConfig();
   // จำกัดตาม dealer scope (topbar picker) — โครงการที่ไม่มี dealerId (เคสหายาก) โชว์เสมอไม่กรองออก
   var dealers = scopedDealers();
