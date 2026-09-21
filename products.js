@@ -2678,14 +2678,24 @@ function saveSingleProductPrice(id) {
   render();
 }
 
+// เดิมวนเรียก updateProduct() ทีละแถว — แต่ละครั้ง saveProductsData() เขียน localStorage ทั้ง catalog 2 รอบ
+// (v7_products + v7_config ที่ mirror models ไว้อีกชุด) แล้วยิง sync ขึ้น cloud อีก 3 ทาง
+// (syncProductsToFirebase/publishCatalogToClientView/_publishGuestViewProducts) สินค้าหลักร้อยรายการ =
+// เขียน+sync ทั้ง catalog ซ้ำหลักร้อยครั้งในลูปเดียว หน้าค้างได้จริง (ผู้ใช้แจ้ง 2026-09-21) — เปลี่ยนเป็นแก้ทุก
+// แถวใน data.models ตรงๆ ในหน่วยความจำก่อน แล้วเรียก saveProductsData() แค่ครั้งเดียวหลังแก้ครบ
 function saveAllProductPrices() {
+  var data = getProductsData();
   var products = getAllProducts();
+  var byId = {};
+  data.models.forEach(function(m, idx) { byId[m.id] = idx; });
   var saved = 0;
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
     // ตารางเรนเดอร์เฉพาะรายการที่ผ่านค้นหา/หมวด แต่ลูปนี้วนทุกสินค้า
     // แถวที่ไม่ได้อยู่บนจอจะไม่มีช่องกรอก ต้องข้าม ไม่ใช่อ่าน null แล้วพัง (หรือเขียน 0 ทับ)
     if (!document.getElementById('price_b_' + p.id)) continue;
+    var idx = byId[p.id];
+    if (idx === undefined) continue;
     var rrpInVat = parseNum(document.getElementById('rrp_in_vat_' + p.id).value);
     var rrpExVat = parseNum(document.getElementById('rrp_ex_vat_' + p.id).value);
     var priceS = parseNum(document.getElementById('price_s_' + p.id).value);
@@ -2694,14 +2704,17 @@ function saveAllProductPrices() {
     var priceO = parseNum(document.getElementById('price_o_' + p.id).value);
     var eolChk = document.getElementById('eol_chk_' + p.id);
     var eol = eolChk ? eolChk.checked : false;
-    updateProduct(p.id, {
-      rrpInVat: rrpInVat,
-      rrpExVat: rrpExVat,
-      price: priceB,
-      typePrices: { S: priceS, A: priceA, B: priceB, Other: priceO },
-      eol: eol
-    });
+    data.models[idx].rrpInVat = rrpInVat;
+    data.models[idx].rrpExVat = rrpExVat;
+    data.models[idx].price = priceB;
+    data.models[idx].typePrices = { S: priceS, A: priceA, B: priceB, Other: priceO };
+    data.models[idx].eol = eol;
+    data.models[idx].updatedAt = new Date().toISOString();
     saved++;
+  }
+  if (saved) {
+    data.lastUpdated = new Date().toISOString();
+    saveProductsData(data);
   }
   toast('💾 บันทึกราคาแล้ว ' + saved + ' รายการ' +
         (saved < products.length ? ' (ที่เหลืออีก ' + (products.length - saved) + ' ไม่ได้อยู่ในตัวกรอง จึงไม่แตะ)' : ''));
