@@ -2277,13 +2277,25 @@ function runPipeExportWithLogFilter(action, arg) {
   try { localStorage.setItem('pipe_export_log_types', JSON.stringify(st)); } catch (e) {}
   var excludeTypes = Object.keys(st).filter(function(k) { return !st[k]; });
   closeMForce();
-  if (action === 'csv') dlPipeCSV(excludeTypes);
-  else if (action === 'xlsx') dlPipeXlsx(excludeTypes);
-  else if (action === 'csvFiltered') dlPipeCSVFiltered(excludeTypes);
-  else if (action === 'xlsxFiltered') dlPipeXlsxFiltered(excludeTypes);
-  else if (action === 'csvDealer') dlPipeCSVForDealer(arg, excludeTypes);
-  else if (action === 'xlsxDealer') dlPipeXlsxForDealer(arg, excludeTypes);
-  else if (action === 'copyRow') copyPipeRow(arg, excludeTypes);
+  // เฉพาะ action ที่เป็น .xlsx ต้องรอโหลด XLSX ก่อน (lazy-load) — csv/copyRow ไม่ต้องพึ่ง XLSX เลย ไม่ต้อง
+  // เสียเวลารอโหลดไลบรารีที่ไม่ได้ใช้
+  var needsXlsx = action === 'xlsx' || action === 'xlsxFiltered' || action === 'xlsxDealer';
+  var run = function() {
+    if (action === 'csv') dlPipeCSV(excludeTypes);
+    else if (action === 'xlsx') dlPipeXlsx(excludeTypes);
+    else if (action === 'csvFiltered') dlPipeCSVFiltered(excludeTypes);
+    else if (action === 'xlsxFiltered') dlPipeXlsxFiltered(excludeTypes);
+    else if (action === 'csvDealer') dlPipeCSVForDealer(arg, excludeTypes);
+    else if (action === 'xlsxDealer') dlPipeXlsxForDealer(arg, excludeTypes);
+    else if (action === 'copyRow') copyPipeRow(arg, excludeTypes);
+  };
+  if (needsXlsx) {
+    ensureXLSX().then(run).catch(function(e) {
+      if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+    });
+  } else {
+    run();
+  }
 }
 
 function dlPipeCSV(excludeTypes) { _exportPipeCSV(ST.getAll('pipeline'), 'pipeline-' + _td() + '.csv', excludeTypes); }
@@ -5709,6 +5721,14 @@ function applyPipeRevenueRate(rate) {
 }
 
 function initPipeSheet(pipes) {
+  ensureJexcel().then(function() {
+    _initPipeSheet_impl(pipes);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _initPipeSheet_impl(pipes) {
   if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
   var el = document.getElementById('pipeSheetEl');
   if (!el) return;
@@ -6468,6 +6488,14 @@ function _pipeXlsxCellToStr(v) {
 
 // ---- xlsx file import ----
 function importPipelineXlsx(dealerId) {
+  ensureXLSX().then(function() {
+    _importPipelineXlsx_impl(dealerId);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importPipelineXlsx_impl(dealerId) {
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = '.xlsx,.xls';
@@ -7976,6 +8004,14 @@ function bulkChangePipeStatus() {
 }
 
 function bulkExportPipes() {
+  ensureXLSX().then(function() {
+    _bulkExportPipes_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _bulkExportPipes_impl() {
   var ids = Object.keys(pipeSelected);
   if (!ids.length) return;
   var pipes = ids.map(function(id) { return ST.getOne('pipeline', id); }).filter(Boolean);

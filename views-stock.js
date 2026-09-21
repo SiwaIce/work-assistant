@@ -2013,6 +2013,14 @@ function stockEditLotQtyInline(el, sku, lotId, productName) {
 // Import Excel — sheet แรก, หา column SKU/จำนวน จาก header (รองรับทั้งไทย/อังกฤษ) fallback คอลัมน์ 0/1
 // นำเข้าเป็น lot คงที่ id 'import_0001' ในคลัง 0001 Normal Good — import ซ้ำจะอัปเดต lot เดิม ไม่สร้างซ้ำ
 function importStockFromExcel(event) {
+  ensureXLSX().then(function() {
+    _importStockFromExcel_impl(event);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importStockFromExcel_impl(event) {
   var file = event.target.files[0];
   if (!file) return;
   var reader = new FileReader();

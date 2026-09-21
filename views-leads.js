@@ -1304,6 +1304,14 @@ function _ldFmtDate(ts) {
 }
 
 function exportLeadSubs() {
+  ensureXLSX().then(function() {
+    _exportLeadSubs_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportLeadSubs_impl() {
   if (!_ldCache) return;
   var form   = _ldCache.form;
   var subs   = _ldCache.subs;

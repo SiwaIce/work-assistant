@@ -4521,6 +4521,14 @@ function saveDemoBulkModel() {
 // pipeline/products อยู่แล้ว) จับคู่แถวกลับเข้าเครื่องเดิมด้วยคอลัมน์ ID ถ้ามี ไม่มี/ไม่ตรง = สร้างเครื่องใหม่
 // ================================================================
 function exportDemoItemsExcel() {
+  ensureXLSX().then(function() {
+    _exportDemoItemsExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportDemoItemsExcel_impl() {
   var items = getDemoItems();
   var data = items.map(function(d) {
     return {
@@ -4571,6 +4579,14 @@ function clearAllDemoData() {
 // Export ให้หน้าตาเหมือนไฟล์ทะเบียนคลัง (คอลัมน์เดิม ลำดับเดิม) เพื่อเอาไปเทียบกับระบบคลังได้ตรงๆ
 // วันที่ส่งออกเป็นข้อความ dd/mm/yyyy ไม่ใช่ serial เพราะอ่านง่ายกว่าและ import กลับก็รองรับทั้งสองแบบ
 function exportDemoRentalSheet() {
+  ensureXLSX().then(function() {
+    _exportDemoRentalSheet_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportDemoRentalSheet_impl() {
   var items = getDemoItems().filter(function(d) { return (d.rentalDbNo || '').trim(); });
   items.sort(function(a, b) { return (a.rentalDbNo || '').localeCompare(b.rentalDbNo || '', undefined, { numeric: true }); });
   var data = items.map(function(d, i) {
@@ -4627,6 +4643,14 @@ function _mapWarehouseCategory(catText) {
 }
 
 function importDemoRentalSheet() {
+  ensureXLSX().then(function() {
+    _importDemoRentalSheet_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importDemoRentalSheet_impl() {
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = '.xlsx,.xls';
@@ -4955,6 +4979,14 @@ function runDemoRentalImport() {
 }
 
 function importDemoItemsExcel() {
+  ensureXLSX().then(function() {
+    _importDemoItemsExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importDemoItemsExcel_impl() {
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = '.xlsx,.xls';
@@ -9969,6 +10001,14 @@ function _noteHasImage(n) {
 var _KB_KNOWN = ['id','title','content','text','category','tags','status','dealerId','pinned',
                  'expireDate','remindDate','created','updated','deletedAt'];
 function exportKnowledgeToExcel() {
+  ensureXLSX().then(function() {
+    _exportKnowledgeToExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportKnowledgeToExcel_impl() {
   var all = ST.getAll('notes');
   if (!all.length) return toast('ยังไม่มี Knowledge ให้ export');
   if (typeof XLSX === 'undefined') return toast('❌ ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า');
@@ -10002,6 +10042,14 @@ function exportKnowledgeToExcel() {
 // ช่อง Dealer ใน export เป็น "ชื่อ" เพื่อให้คนอ่านรู้เรื่อง ตอนนำเข้าจึงต้องแปลงกลับเป็น id
 // หาชื่อไม่เจอก็เก็บค่าที่อ่านได้ไว้ตามเดิม ดีกว่าทิ้งความเชื่อมโยงไปเฉยๆ
 function importKnowledgeFromExcel(input) {
+  ensureXLSX().then(function() {
+    _importKnowledgeFromExcel_impl(input);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importKnowledgeFromExcel_impl(input) {
   var file = input && input.files && input.files[0];
   input.value = '';
   if (!file) return;

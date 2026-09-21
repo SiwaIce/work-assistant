@@ -431,6 +431,14 @@ function bulkChangeSOStatus() {
   render();
 }
 function bulkExportSO() {
+  ensureXLSX().then(function() {
+    _bulkExportSO_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _bulkExportSO_impl() {
   var ids = Object.keys(soSelected);
   if (!ids.length) return;
   var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);

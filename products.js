@@ -1633,6 +1633,14 @@ function importFullExcel(file, onComplete) {
 }
 
 function doImportFullExcel() {
+  ensureXLSX().then(function() {
+    _doImportFullExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _doImportFullExcel_impl() {
   var fileInput = document.getElementById('importFullFile');
   if (!fileInput || !fileInput.files || !fileInput.files[0]) {
     toast('⚠️ กรุณาเลือกไฟล์ Excel');
@@ -1804,6 +1812,14 @@ function doImportFullExcel() {
 // ================================================================
 
 function exportProductsToExcel() {
+  ensureXLSX().then(function() {
+    _exportProductsToExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportProductsToExcel_impl() {
   var allProducts = getAllProducts();
   // แยก Demo ออกจากสินค้าหลัก — Demo ไม่มีราคาแยกตาม Level (S/A/B/Other) เก็บปนกันจะงงเปล่าๆ
   var products = allProducts.filter(function(p) { return !isDemoProduct(p); });
@@ -1860,6 +1876,14 @@ function exportProductsToExcel() {
 }
 
 function exportBundlesToExcel() {
+  ensureXLSX().then(function() {
+    _exportBundlesToExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportBundlesToExcel_impl() {
   var bundles = getAllBundles();
   var data = bundles.map(function(b, idx) {
     return {
@@ -1883,6 +1907,14 @@ function exportBundlesToExcel() {
 }
 
 function exportDemoUnitsToExcel() {
+  ensureXLSX().then(function() {
+    _exportDemoUnitsToExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportDemoUnitsToExcel_impl() {
   var demos = getAllDemoUnits();
   var data = demos.map(function(d, idx) {
     var product = d.productId ? getProductById(d.productId) : null;
@@ -2297,6 +2329,14 @@ function _marginFilteredProducts() {
 }
 
 function exportProductsMargin() {
+  ensureXLSX().then(function() {
+    _exportProductsMargin_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportProductsMargin_impl() {
   if (typeof XLSX === 'undefined') { toast('⚠️ โหลด XLSX ไม่สำเร็จ'); return; }
   var prods = _marginFilteredProducts();
   var levels = ['S', 'A', 'B', 'Other'];
@@ -3537,6 +3577,14 @@ window.Products = {
 // SHEET EDIT (jspreadsheet)
 // ================================================================
 function initProductsSheet(products) {
+  ensureJexcel().then(function() {
+    _initProductsSheet_impl(products);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _initProductsSheet_impl(products) {
   if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
   var el = document.getElementById('productsSheetEl');
   if (!el) return;

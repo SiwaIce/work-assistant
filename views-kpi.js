@@ -896,6 +896,14 @@ function kpiCategoryCTA(cat) {
 // Export สรุป KPI ทุกเซลล์ เป็น Excel ให้หัวหน้าดู
 // ================================================================
 function exportKpiSummaryExcel() {
+  ensureXLSX().then(function() {
+    _exportKpiSummaryExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportKpiSummaryExcel_impl() {
   _kpiInvalidateCache();
   var members = kpiSalesOptions();
   if (!members.length) return toast('ไม่มีรายชื่อเซลล์');

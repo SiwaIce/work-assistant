@@ -48,6 +48,14 @@ function _noteFieldsText(n) {
     .map(function(f) { return (f.label || '-') + ': ' + (f.value || ''); }).join('\n');
 }
 function exportNotesToExcel() {
+  ensureXLSX().then(function() {
+    _exportNotesToExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportNotesToExcel_impl() {
   var all = ST.getAll('postit');
   if (!all.length) return toast('ยังไม่มี Note ให้ export');
   if (typeof XLSX === 'undefined') return toast('❌ ยังโหลดตัวเขียน Excel ไม่สำเร็จ ลองรีเฟรชหน้า');
@@ -90,6 +98,14 @@ function _noteMergeExtras(rec, raw) {
   return rec;
 }
 function importNotesFromExcel(input) {
+  ensureXLSX().then(function() {
+    _importNotesFromExcel_impl(input);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importNotesFromExcel_impl(input) {
   var file = input && input.files && input.files[0];
   input.value = '';
   if (!file) return;

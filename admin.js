@@ -667,6 +667,14 @@ function addProductAdmin() {
 // ส่วนชีต 'combo'/'demo' (ถ้ามีในไฟล์เดียวกัน) ยังนำเข้าตรงทันทีเหมือนเดิม เพราะไม่ใช่ scope ของ preview นี้
 window._prodImportWorkbook = null;
 function importProductsFromExcelAdmin(event) {
+  ensureXLSX().then(function() {
+    _importProductsFromExcelAdmin_impl(event);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importProductsFromExcelAdmin_impl(event) {
   var file = event.target.files[0];
   if (!file) return;
 

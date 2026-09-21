@@ -1097,6 +1097,14 @@ function bulkChangeQuoteStatus() {
   render();
 }
 function bulkExportQuotesSelected() {
+  ensureXLSX().then(function() {
+    _bulkExportQuotesSelected_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _bulkExportQuotesSelected_impl() {
   var ids = Object.keys(quoteSelected);
   if (!ids.length) return;
   var list = quotations.filter(function(q) { return quoteSelected[q.id]; });
@@ -1207,6 +1215,14 @@ function updateQuoteInline(id, field, val) {
 }
 
 function exportQuotationTable() {
+  ensureXLSX().then(function() {
+    _exportQuotationTable_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportQuotationTable_impl() {
   if (typeof XLSX === 'undefined') { toast('⚠️ โหลด XLSX ไม่สำเร็จ'); return; }
   var list = _quoteFilteredSorted();
   var head = ['#', 'วันที่', 'เลขใบเสนอราคา', 'ชื่อโครงการ', 'Dealer', 'PO', 'รายการสินค้า', 'มูลค่า', 'SO', 'Invoice', 'สถานะ'];

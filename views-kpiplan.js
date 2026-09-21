@@ -1404,6 +1404,14 @@ function _kpiWriteSummarySheetXl(wb, sheetName, header, rows, colWidths, moneyCo
 // Export ให้ครบเหมือนหน้า Print/PDF (ดู printImprovementPlan) — Summary tab 1 แถวต่อบริษัท รวมเป้า Dock/สถานะ
 // manual ด้วย + tab แยกรายบริษัทที่มีทุก section เหมือน PDF (Sales Gap/End User/Project Conversion/Action Plan/Rollup)
 function exportImprovementPlanXlsx() {
+  ensureXLSX().then(function() {
+    _exportImprovementPlanXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportImprovementPlanXlsx_impl() {
   var cfg = getConfig();
   var plans = computeKpiCompanyPlanAll(cfg).filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
   if (!plans.length) return toast('ไม่มีบริษัทเสี่ยง');
@@ -1445,6 +1453,14 @@ function exportImprovementPlanXlsx() {
 }
 // เหมือน exportImprovementPlanXlsx เป๊ะๆ (ข้อมูล/ตัวเลขเดียวกัน) แต่เขียนด้วย ExcelJS ให้ได้สี/ตัวหนา/เส้นขอบจริง
 function exportImprovementPlanXlsxStyled() {
+  ensureExcelJS().then(function() {
+    _exportImprovementPlanXlsxStyled_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportImprovementPlanXlsxStyled_impl() {
   if (typeof ExcelJS === 'undefined') return toast('⚠️ โหลดไลบรารี ExcelJS ไม่สำเร็จ (ต้องต่อเน็ต) — ลองใหม่ หรือใช้ "Export Excel (Text)" แทน');
   var cfg = getConfig();
   var plans = computeKpiCompanyPlanAll(cfg).filter(function(p) { return kpiPlanStatus(p).label !== 'ถึงเป้าแล้ว'; });
@@ -1492,6 +1508,14 @@ function _kpiOverviewFilteredPlans() {
 // Export ภาพรวมทุกบริษัท (ไม่ใช่แค่เสี่ยง) — Summary tab เห็นสถานะทุกคนรวมที่ถึงเป้าแล้ว ส่วน detail tab สร้าง
 // เฉพาะบริษัทที่เสี่ยง (ต้อง Focus) หรือมี Plan บันทึกไว้แล้ว กันสร้าง tab ว่างๆ ให้บริษัทที่ถึงเป้าและไม่มีแผนอะไรเลย
 function exportKpiOverviewXlsx() {
+  ensureXLSX().then(function() {
+    _exportKpiOverviewXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportKpiOverviewXlsx_impl() {
   var plans = _kpiOverviewFilteredPlans();
   if (!plans.length) return toast('ไม่มีบริษัทในขอบเขตที่เลือก');
   var wb = XLSX.utils.book_new();
@@ -1536,6 +1560,14 @@ function exportKpiOverviewXlsx() {
 }
 // เหมือน exportKpiOverviewXlsx เป๊ะๆ แต่เขียนด้วย ExcelJS ให้ได้สี/ตัวหนา/เส้นขอบจริง
 function exportKpiOverviewXlsxStyled() {
+  ensureExcelJS().then(function() {
+    _exportKpiOverviewXlsxStyled_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportKpiOverviewXlsxStyled_impl() {
   if (typeof ExcelJS === 'undefined') return toast('⚠️ โหลดไลบรารี ExcelJS ไม่สำเร็จ (ต้องต่อเน็ต) — ลองใหม่ หรือใช้ "Export ภาพรวม (Text)" แทน');
   var plans = _kpiOverviewFilteredPlans();
   if (!plans.length) return toast('ไม่มีบริษัทในขอบเขตที่เลือก');

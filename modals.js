@@ -4181,6 +4181,14 @@ function _dealerImportDiff(existing, data) {
 }
 
 function previewDealerImport(input) {
+  ensureXLSX().then(function() {
+    _previewDealerImport_impl(input);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _previewDealerImport_impl(input) {
   var file = input.files[0];
   if (!file) return;
   var reader = new FileReader();

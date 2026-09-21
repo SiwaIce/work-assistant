@@ -107,6 +107,14 @@ function _djlBuildColMap(headerRow) {
 }
 
 function importDjiLedgerXlsx() {
+  ensureXLSX().then(function() {
+    _importDjiLedgerXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importDjiLedgerXlsx_impl() {
   if (typeof XLSX === 'undefined') { toast('⚠️ ตัวอ่านไฟล์ Excel ยังโหลดไม่เสร็จ ลองใหม่อีกครั้ง', true); return; }
   var input = document.createElement('input');
   input.type = 'file';

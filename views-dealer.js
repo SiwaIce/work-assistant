@@ -797,6 +797,14 @@ function _dealerExcelRow(d) {
   ];
 }
 function bulkExportDealersSelected() {
+  ensureXLSX().then(function() {
+    _bulkExportDealersSelected_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _bulkExportDealersSelected_impl() {
   var ids = Object.keys(dealerSelected);
   if (!ids.length) return;
   var dealers = ids.map(function(id) { return ST.getOne('dealers', id); }).filter(Boolean);
@@ -3337,6 +3345,14 @@ function dlDealerCSV() {
 }
 
 function exportDealersExcel() {
+  ensureXLSX().then(function() {
+    _exportDealersExcel_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportDealersExcel_impl() {
   var dealers = ST.getAll('dealers');
   if (!dealers.length) return toast('\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Dealer');
   var headers = ['id','\u0E0A\u0E37\u0E48\u0E2D\u0E1A\u0E23\u0E34\u0E29\u0E31\u0E17','SIS Code','DJI Code','Level','DJI Dealer','\u0E40\u0E0B\u0E25\u0E17\u0E35\u0E48\u0E14\u0E39\u0E41\u0E25','Credit Term','Credit Limit','Target Revenue','\u0E1C\u0E39\u0E49\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D','Google Map','\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E2B\u0E15\u0E38','Payment Condition'];
@@ -5707,6 +5723,14 @@ function _sisFindHeaderRowIdx(rows) {
 }
 
 function importSisRevenueXlsx() {
+  ensureXLSX().then(function() {
+    _importSisRevenueXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _importSisRevenueXlsx_impl() {
   var input = document.createElement('input');
   input.type = 'file';
   input.accept = '.xlsx,.xls';
@@ -5929,6 +5953,14 @@ function _confirmSisImport() {
 // EXPORT — ย้อนกลับเป็น template เดียวกัน (Customer Code/Name/Month/Total Sales) จากข้อมูลที่มีในระบบทั้งหมด
 // ================================================================
 function exportSisRevenueXlsx() {
+  ensureXLSX().then(function() {
+    _exportSisRevenueXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportSisRevenueXlsx_impl() {
   var dealers = ST.getAll('dealers');
   var rows = [];
   dealers.forEach(function(d) {
@@ -6551,6 +6583,14 @@ function calcAllDealerPipeRevenue() {
 }
 
 function initDealerPipeSheet(pipes) {
+  ensureJexcel().then(function() {
+    _initDealerPipeSheet_impl(pipes);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _initDealerPipeSheet_impl(pipes) {
   if (typeof jexcel === 'undefined') { toast('⚠️ โหลด jspreadsheet ไม่สำเร็จ (ต้องออนไลน์)'); return; }
   var el = document.getElementById('dealerPipeSheetEl');
   if (!el) return;

@@ -1,4 +1,59 @@
 // ================================================================
+// LAZY-LOAD third-party libs หนักๆ (XLSX / ExcelJS / jsuites+jexcel) — เดิมโหลดทุกตัวทันทีตั้งแต่ <head>
+// ทุกครั้งที่เปิดแอป (รวมกันหลาย MB + jsuites/jexcel มี CSS แบบ render-blocking อีก 2 ไฟล์) ทั้งที่หน้าส่วนใหญ่
+// ไม่ได้แตะฟีเจอร์ import/export/ตารางแก้ไขแบบกลุ่มเลย บนมือถือนี่คือ payload/parse cost เพิ่มเปล่าๆ ทุกครั้งที่
+// เปิด — เปลี่ยนเป็นโหลดเฉพาะตอนกดใช้ฟีเจอร์ที่ต้องพึ่งจริง (ผู้ใช้แจ้งเว็บค้าง/โหลดนานบนมือถือ 2026-09-21)
+// ใช้จาก entry function ที่กดใช้จริง (ปุ่ม Export/Import, เปิดมุมมองตาราง) เท่านั้น — โค้ดข้างในที่ยังใช้ XLSX/
+// ExcelJS/jexcel ต่อจากนั้นไม่ต้องแก้อะไร เพราะทำงานหลัง .then() ที่ไลบรารีโหลดเสร็จแล้วเสมอ
+// ================================================================
+var _libLoadPromises = {};
+function _loadScriptOnce(key, url) {
+  if (_libLoadPromises[key]) return _libLoadPromises[key];
+  _libLoadPromises[key] = new Promise(function(resolve, reject) {
+    var s = document.createElement('script');
+    s.src = url;
+    s.onload = function() { resolve(); };
+    s.onerror = function() { delete _libLoadPromises[key]; reject(new Error('โหลด ' + key + ' ไม่สำเร็จ (ต้องต่อเน็ต)')); };
+    document.head.appendChild(s);
+  });
+  return _libLoadPromises[key];
+}
+function _loadStylesheetOnce(key, url) {
+  if (_libLoadPromises[key]) return _libLoadPromises[key];
+  _libLoadPromises[key] = new Promise(function(resolve) {
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = url;
+    // CSS โหลดไม่ทันไม่ถึงกับพังฟีเจอร์ (แค่ตารางหน้าตาไม่สวย) — ไม่ reject กันบล็อก ensureJexcel() ทั้งที่ JS
+    // มาครบแล้ว ปล่อยให้ resolve เสมอทั้งสำเร็จและพลาด
+    l.onload = function() { resolve(); };
+    l.onerror = function() { resolve(); };
+    document.head.appendChild(l);
+  });
+  return _libLoadPromises[key];
+}
+function ensureXLSX() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve();
+  return _loadScriptOnce('xlsx', 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+}
+function ensureExcelJS() {
+  if (typeof ExcelJS !== 'undefined') return Promise.resolve();
+  return _loadScriptOnce('exceljs', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
+}
+function ensureJexcel() {
+  if (typeof jexcel !== 'undefined') return Promise.resolve();
+  // jexcel ต้องมี jsuites โหลดก่อนเสมอ (เป็น dependency ของ UI widget) — โหลด CSS คู่กันไปพร้อมกัน ไม่ต้องรอ
+  return Promise.all([
+    _loadStylesheetOnce('jsuites-css', 'https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.css'),
+    _loadStylesheetOnce('jexcel-css', 'https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.css')
+  ]).then(function() {
+    return _loadScriptOnce('jsuites', 'https://cdn.jsdelivr.net/npm/jsuites@4/dist/jsuites.min.js');
+  }).then(function() {
+    return _loadScriptOnce('jexcel', 'https://cdn.jsdelivr.net/npm/jexcel@4/dist/jexcel.min.js');
+  });
+}
+
+// ================================================================
 // DEALER SCOPE — ตัวกรอง "Dealer ที่ดูแล" แบบ global ใช้ร่วมกันทั้งแอพ (แทนที่ dealerSaleFilter เดิมที่เคย
 // เป็น local variable เฉพาะหน้า Dealers) ค่าเริ่มต้น (mode 'mine') = เห็นเฉพาะ Dealer ที่ d.saleName ตรงกับ
 // cfg.saleName (ชื่อผู้ใช้เอง ตั้งใน Admin) — เลือกดูของคนอื่นเพิ่มได้ (mode 'custom') หรือดูทั้งหมด (mode 'all')
@@ -325,6 +380,14 @@ function _fcExportRowsToAoa(rows, periodHeader) {
 
 // สร้างไฟล์ Excel (2 sheet: รายเดือน + รายไตรมาส) แล้วดาวน์โหลดทันที
 function fcDownloadExcel(pipes, catFilterVarName, filenamePrefix) {
+  ensureXLSX().then(function() {
+    _fcDownloadExcel_impl(pipes, catFilterVarName, filenamePrefix);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _fcDownloadExcel_impl(pipes, catFilterVarName, filenamePrefix) {
   var year = new Date().getFullYear();
   var monthRows = fcBuildExportRows(pipes, catFilterVarName, 'month', year);
   var qRows = fcBuildExportRows(pipes, catFilterVarName, 'quarter', year);
