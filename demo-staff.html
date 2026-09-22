@@ -1953,7 +1953,7 @@ function renderReturnTabBySlip(all) {
     h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
       (guess && g.list.length > 1 ? ' <span class="rt-guess" title="ไม่มีเลขใบจอง จึงเดาจากผู้ยืมและช่วงวันที่ตรงกัน อาจไม่ใช่ใบเดียวกันจริง">เดากลุ่ม</span>' : '') +
       '<div class="rt-slip-sub">' + esc(g.who || 'ไม่ระบุผู้ยืม') + ' · ' + (g.list.length + g.pending.length) + ' เครื่อง' +
-      (g.list.length ? ' · กำหนดคืน ' + _scD(g.end) : '') +
+      (g.list.length ? ' · 📅 ยืม ' + _scD(g.start) + ' → กำหนดคืน ' + _scD(g.end) : '') +
       (g.worst ? ' <span class="gs-late">เลยมา ' + g.worst + ' วัน</span>' : '') +
       '<br>🧑‍💼 ' + (g.approver ? esc(g.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
       (g.createdAt ? ' · 🕐 คีย์เมื่อ ' + _editLogStamp(g.createdAt) : '') +
@@ -2407,6 +2407,9 @@ function _bkRowHtml(it) {
     '<div class="meta"><span>ผู้ยืม <b>' + (b.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(b.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(b.borrower) + '</span>' : '—') + '</b></span>' +
     '<span>' + (b.jobNo ? 'ใบจอง <b class="mono">' + esc(b.jobNo) + '</b>' : '<span class="job-missing">— ยังไม่มีเลขใบจอง —</span>') + '</span>' +
     '<span>ผู้คีย์ <b>' + esc(b.approver || '—') + '</b></span>' +
+    '<span>📅 ยืม ' + _scD(_scIso(b.s)) + ' → คืน ' + _scD(_scIso(b.e)) + '</span>' +
+    (b.createdAt ? '<span>🕐 คีย์เมื่อ ' + _editLogStamp(b.createdAt) + '</span>' : '') +
+    (b.purpose ? '<span>📝 ' + esc(b.purpose) + '</span>' : '') +
     (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
     ((it.kind === 'out' || it.kind === 'late') ? _waitingNoteHtml(u.id) : '') + '</div></div>' +
     '<div class="side">' + _scBusyBadge(it.kind) + (due ? '<div>' + due + '</div>' : '') +
@@ -2478,7 +2481,7 @@ function _bkSlipHtml(g) {
   var worstKind = Object.keys(_SC_BUSY_SEV).filter(function(k) { return _SC_BUSY_SEV[k] === g.sev; })[0];
   var h = '<div class="rt-slip' + (g.statuses.late ? ' late' : '') + '" data-bk-slip="' + esc(g.key) + '">';
   h += '<div class="rt-slip-hd"><div><b>' + (g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง') + '</b>' +
-    '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง · กำหนดคืน ' + _scD(g.endIso) +
+    '<div class="rt-slip-sub">' + esc(g.borrower) + ' · ' + g.items.length + ' เครื่อง · 📅 ยืม ' + _scD(g.startIso) + ' → กำหนดคืน ' + _scD(g.endIso) +
     '<br>🧑‍💼 ' + (g.approver ? esc(g.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
     (g.createdAt ? ' · 🕐 คีย์เมื่อ ' + _editLogStamp(g.createdAt) : '') +
     (g.purpose ? ' · 📝 ' + esc(g.purpose) : '') + '</div></div>' +
@@ -2615,9 +2618,10 @@ function returnRowHtml(cls, l, compact) {
     h += '<div class="meta">กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b></div>';
   } else {
     h += '<div class="meta">ผู้ยืม: ' + (l.borrower ? '<span class="bw-name" onclick="openBorrowerM(\'' + _scEsq(l.borrower) + '\')" title="ดูประวัติการยืมของผู้ยืมนี้">' + esc(l.borrower) + '</span>' : '<span style="color:var(--text3)">— ไม่ได้ระบุ —</span>') +
-      ' · กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
+      '<br>📅 ยืม ' + _scD(l.start) + ' → กำหนดคืน ' + _scD(l.end) + ' <b>(' + daysTxt + ')</b>' +
       '<br>🧑‍💼 ตามคืนที่: ' + (l.approver ? esc(l.approver) : '<span style="color:var(--warn)">ไม่ได้บันทึกผู้คีย์</span>') +
       (l.jobNo ? ' · 📄 ใบจอง ' + esc(l.jobNo) : '') +
+      (l.createdAt ? ' · 🕐 คีย์เมื่อ ' + _editLogStamp(l.createdAt) : '') +
       (l.purpose ? '<br>📝 ใช้งานกับ: ' + esc(l.purpose) : '') +
       (u && u.note ? '<br>📝 หมายเหตุเครื่อง: ' + esc(u.note) : '') + '</div>';
   }
