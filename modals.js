@@ -1390,7 +1390,7 @@ function showVisitM(dealerId, eid) {
   }
   var rerender = "showVisitM('" + existDealer + "','" + (eid || '') + "')";
   var html = buildVisitFormHtml(existDealer, eid, rerender);
-  var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : (visitMode === 'partner' ? '🆕 New Partner Report' : '📝 Standard Visit'));
+  var title = visitMode === 'full' ? '📋 Full Visit Report' : (visitMode === 'quick' ? '⚡ Quick Visit' : (visitMode === 'partner' ? '🆕 New Partner Report' : (visitMode === 'dealerreview' ? '📈 Dealer Review' : '📝 Standard Visit')));
   openM(title, html);
   setTimeout(function() { document.querySelectorAll('.fv-autogrow').forEach(_fvAutogrow); }, 30);
 }
@@ -1613,6 +1613,7 @@ function _visitModeBarHtml(dealer, rerenderCall) {
     '<div class="vm-btn standard' + (visitMode === 'standard' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'standard\';' + rerenderCall + '">📝 Standard</div>' +
     '<div class="vm-btn full' + (visitMode === 'full' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'full\';' + rerenderCall + '">📋 Full</div>' +
     (showPartner ? '<div class="vm-btn partner' + (visitMode === 'partner' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'partner\';' + rerenderCall + '">🆕 New Partner</div>' : '') +
+    '<div class="vm-btn dealerreview' + (visitMode === 'dealerreview' ? ' act' : '') + '" onclick="_visitCaptureDraft();visitMode=\'dealerreview\';' + rerenderCall + '">📈 Dealer Review</div>' +
     '</div>';
 }
 
@@ -1637,6 +1638,11 @@ function buildVisitFormHtml(dealerId, eid, rerenderCall) {
   // New Partner Mode
   if (visitMode === 'partner') {
     return buildPartnerVisitFormHtml(existDealer, eid, rerenderCall, v, dealer);
+  }
+
+  // Dealer Review Mode — แบบฟอร์ม Business Review รายเดือนของ SAB (Sell-in/Sell-out + Pipeline + KPI)
+  if (visitMode === 'dealerreview') {
+    return buildDealerReviewFormHtml(existDealer, eid, rerenderCall, v, dealer);
   }
 
   // Quick Mode
@@ -1855,6 +1861,122 @@ function savePartnerVisit(dealerId, eid) {
   // ไปหน้ารายละเอียด Visit ที่เพิ่งบันทึกแทนแค่ render() เฉยๆ — เดิมในแท็บแยก (rVisitWindow) จะวาดฟอร์ม
   // "สร้างใหม่" เปล่าๆ ซ้ำ ดูเหมือนข้อมูลหายทั้งที่บันทึกสำเร็จแล้ว (เหตุผลเดียวกับ saveVisitQuick ด้านล่าง)
   closeMForce(); toast('💾 บันทึก New Partner Report แล้ว');
+  go('visitDetail', {visitId: visitObj.id});
+}
+
+// ================================================================
+// DEALER REVIEW MODE — รายงาน Business Review รายเดือนกับ SAB Authorized Dealer ตามแบบฟอร์มที่บริษัท
+// กำหนด (Core focus: สุขภาพ Sell-in/Sell-out + ความคืบหน้าโปรเจคใหญ่) เก็บลง visits.dealerReviewData
+// ================================================================
+var DEALER_REVIEW_MODELS = ['M4T', 'M4E', 'M400', 'Dock 3', 'M4TD', 'M4D', 'L3'];
+
+function _drForecastRowHtml(idx, model, row) {
+  row = row || {};
+  return '<tr>' +
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-size:.8rem;font-weight:600">' + sanitize(model) + '</td>' +
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--border)"><input type="text" inputmode="decimal" id="dr_cur_' + idx + '" value="' + sanitize(row.curMonth || '') + '" placeholder="0" style="width:100%"></td>' +
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--border)"><input type="text" inputmode="decimal" id="dr_next_' + idx + '" value="' + sanitize(row.nextMonth || '') + '" placeholder="0" style="width:100%"></td>' +
+    '</tr>';
+}
+function buildDealerReviewFormHtml(existDealer, eid, rerenderCall, v, dealer) {
+  var drd = v.dealerReviewData || {};
+  var forecastByModel = {};
+  (drd.forecast || []).forEach(function(r) { forecastByModel[r.model] = r; });
+  window._drAttach = (drd.attach || []).slice();
+
+  var bar = _visitModeBarHtml(dealer, rerenderCall);
+  var srcType = window._visitSourceType || (existDealer ? 'dealer' : 'lead');
+  var sourceBlock = '<div class="form-section">📋 ข้อมูลลูกค้า</div>' +
+    '<div class="fg"><label>ที่มา</label><div class="radio-g"><label><input type="radio" name="fv_source" value="dealer"' + (srcType === 'dealer' ? ' checked' : '') + ' onchange="toggleVisitSource(\'dealer\')"><span>🏢 Dealer</span></label><label><input type="radio" name="fv_source" value="lead"' + (srcType === 'lead' ? ' checked' : '') + ' onchange="toggleVisitSource(\'lead\')"><span>🆕 Lead</span></label><label><input type="radio" name="fv_source" value="other"' + (srcType === 'other' ? ' checked' : '') + ' onchange="toggleVisitSource(\'other\')"><span>🏬 อื่นๆ</span></label></div></div>' +
+    '<div id="fv_dealer_row"' + (srcType !== 'dealer' ? ' style="display:none"' : '') + '>' + _dealerPickerHtml('fv_dealer', existDealer, {label: 'Dealer', onChange: 'onVisitDealerChanged'}) + '</div>' +
+    '<div id="fv_lead_row"' + (srcType !== 'lead' ? ' style="display:none"' : '') + '><div class="fg"><label>Lead ที่ติดตาม *</label><select id="fv_lead_prospect">' + prospectOptions(window._vpPrefillProspectId || '') + '</select></div></div>' +
+    '<div id="fv_other_row"' + (srcType !== 'other' ? ' style="display:none"' : '') + '><div class="fg"><label>ชื่อบริษัท *</label><input type="text" id="fv_company_txt" placeholder="พิมพ์ชื่อบริษัทที่ไปเยี่ยม..." value="' + sanitize(srcType === 'other' ? (v.company || window._vpPrefillCompanyText || '') : '') + '"></div></div>' +
+    '<div class="fr">' + dpH('fv_date', v.date || _td(), 'วันที่ *') +
+    '<div class="fg"><label>Mode</label><div class="radio-g"><label><input type="radio" name="fv_mode" value="offline"' + ((v.mode || 'offline') === 'offline' ? ' checked' : '') + '><span>🤝 Offline</span></label><label><input type="radio" name="fv_mode" value="online"' + (v.mode === 'online' ? ' checked' : '') + '><span>📞 Online</span></label></div></div></div>';
+
+  var forecastRows = DEALER_REVIEW_MODELS.map(function(m, i) { return _drForecastRowHtml(i, m, forecastByModel[m]); }).join('');
+  var forecastSection = '<div class="form-section">1. Monthly Order Forecast <span class="hint" style="display:inline">(ระบุ "รุ่น" และ "จำนวน" ที่แน่นอน — แผนสั่งซื้อที่เหลือของเดือนนี้ + แผนที่คาดของเดือนหน้า)</span></div>' +
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>' +
+    '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);font-size:.72rem;color:var(--text2)">Model</th>' +
+    '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);font-size:.72rem;color:var(--text2)">Current Month</th>' +
+    '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);font-size:.72rem;color:var(--text2)">Next Month</th>' +
+    '</tr></thead><tbody>' + forecastRows + '</tbody></table></div>' +
+    '<div class="hint" style="margin-top:6px">⚠️ Sales need to revise/update the qty weekly, and from week 3, the current month qty should be correct.</div>';
+
+  var ta = function(id, placeholder, val) {
+    return '<div class="fg"><textarea id="' + id + '" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="' + sanitize(placeholder) + '">' + sanitize(val || '') + '</textarea></div>';
+  };
+
+  var html = bar + sourceBlock + forecastSection +
+    '<div class="form-section">2. Pipeline Review <span class="hint" style="display:inline">(Five Elements of Projects)</span></div>' +
+    ta('dr_pipeline', 'สำหรับโปรเจคสำคัญ (โดยเฉพาะ Dock projects และโปรเจคใหญ่ >2M บาท): ติดขั้นตอนไหน? ต้องการซัพพอร์ตอะไรจาก DJI/SiS (เครื่อง demo, POC, ขออนุมัติราคาพิเศษ), มีโอกาส/โปรเจคใหม่ไหม', drd.pipelineReview) +
+    '<div class="form-section">3. Action Agreements</div>' +
+    ta('dr_actions', 'ระบุ Action Item ของทั้งสองฝ่าย: ใคร ทำอะไร เมื่อไหร่ กำหนดเสร็จ (DDL)', drd.actionAgreements) +
+    '<div class="form-section">4. Competitor Information Update</div>' +
+    ta('dr_competitor', 'โปรเจค / โอกาส / งานอีเวนต์ / พาร์ทเนอร์ของคู่แข่ง', drd.competitorUpdate) +
+    '<div class="form-section">5. MKT and POC / Co-visiting Requirements</div>' +
+    ta('dr_mktpoc', 'ความต้องการด้าน Marketing และ POC หรือขอ Co-visit จากดีลเลอร์', drd.mktPocRequirements) +
+    '<div class="form-section">6. End-user Budget Information</div>' +
+    ta('dr_budget', 'ข้อมูลงบประมาณของลูกค้าปลายทางที่เก็บได้', drd.endUserBudget) +
+    '<div class="form-section">7. Dealer KPI Review</div>' +
+    ta('dr_kpi', 'ตรวจสอบความคืบหน้ายอดขาย, เครื่อง demo, Certificate (DSEC, DAC) ถ้าเป็น S level (ส่ง case study, จำนวนครั้ง Dock POC)', drd.dealerKpiReview) +
+    attachUploadHtml('_drAttach', 'visits', '📷 หลักฐานการเข้าพบ') +
+    '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveDealerReviewVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก Dealer Review</button></div>';
+
+  return html;
+}
+
+function saveDealerReviewVisit(dealerId, eid) {
+  var cfg = getConfig();
+  var srcEl = document.querySelector('input[name="fv_source"]:checked');
+  var srcType = srcEl ? srcEl.value : (window._visitSourceType || 'dealer');
+  var did = '', prospectId = '', company = '';
+  if (srcType === 'lead') {
+    var selPr = document.getElementById('fv_lead_prospect');
+    prospectId = selPr ? selPr.value : '';
+    if (!prospectId) return alert('เลือก Lead ที่ติดตาม');
+    var pr = ST.getOne('prospects', prospectId);
+    company = pr ? (pr.companyName || '') : '';
+  } else if (srcType === 'other') {
+    var companyEl = document.getElementById('fv_company_txt');
+    company = companyEl ? companyEl.value.trim() : '';
+    if (!company) return alert('พิมพ์ชื่อบริษัท');
+  } else {
+    did = document.getElementById('fv_dealer') ? document.getElementById('fv_dealer').value : dealerId;
+    if (!did) return alert('เลือก Dealer');
+  }
+  if (!dpG('fv_date')) return alert('ใส่วันที่');
+
+  var forecast = DEALER_REVIEW_MODELS.map(function(m, i) {
+    return { model: m, curMonth: (document.getElementById('dr_cur_' + i) || {}).value || '', nextMonth: (document.getElementById('dr_next_' + i) || {}).value || '' };
+  });
+  var dealerReviewData = {
+    forecast: forecast,
+    pipelineReview: (document.getElementById('dr_pipeline') || {}).value || '',
+    actionAgreements: (document.getElementById('dr_actions') || {}).value || '',
+    competitorUpdate: (document.getElementById('dr_competitor') || {}).value || '',
+    mktPocRequirements: (document.getElementById('dr_mktpoc') || {}).value || '',
+    endUserBudget: (document.getElementById('dr_budget') || {}).value || '',
+    dealerKpiReview: (document.getElementById('dr_kpi') || {}).value || '',
+    attach: window._drAttach || []
+  };
+  var modeEl = document.querySelector('input[name="fv_mode"]:checked');
+  var data = {
+    date: dpG('fv_date'), dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'offline',
+    summary: 'Dealer Review: ' + (dealerReviewData.pipelineReview.split('\n')[0] || dealerReviewData.actionAgreements.split('\n')[0] || ''),
+    saleName: cfg.saleName, reportMode: 'dealerreview', dealerReviewData: dealerReviewData,
+    topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [],
+    attachments: dealerReviewData.attach,
+    sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
+  };
+  if (srcType === 'other') _visitMaybeSyncPlanCompanyName(company);
+  window._visitSourceType = 'dealer'; window._vpPrefillProspectId = ''; window._vpPrefillCompanyText = ''; window._vpPrefillPlanCompanyName = '';
+  var visitObj = eid ? ST.update('visits', eid, data) : ST.add('visits', data);
+  if (!eid && typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('visit', visitObj.id, fDShort(visitObj.date) + ' Dealer Review');
+  if (!eid) _visitClearDraft();
+  notifyVisitSavedAcrossTabs(did);
+  if (typeof vpMarkPlanActualFromVisit === 'function') vpMarkPlanActualFromVisit(visitObj.id, prospectId);
+  closeMForce(); toast('💾 บันทึก Dealer Review แล้ว');
   go('visitDetail', {visitId: visitObj.id});
 }
 

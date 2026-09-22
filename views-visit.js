@@ -130,6 +130,9 @@ function rVisitDet(el) {
   <!-- New Partner data — ยังต้องโชว์ได้แม้ Dealer จะเป็น SAB Authorized Dealer ไปแล้ว (ดูประวัติย้อนหลัง) -->
   ${v.reportMode === 'partner' && v.partnerData ? renderPartnerDataCard(v.partnerData) : ''}
 
+  <!-- Dealer Review data -->
+  ${v.reportMode === 'dealerreview' && v.dealerReviewData ? renderDealerReviewCard(v.dealerReviewData) : ''}
+
   <!-- Revenue -->
   ${v.revenue||v.expectedRevenue?`<div class="card"><h2>💰 ยอดขาย</h2>
   <div class="fr"><div><label style="color:var(--text2);font-size:.68rem">ยอดขายปัจจุบัน</label><div style="font-weight:700;color:#22c55e">${v.revenue?fmtMoney(v.revenue)+' ฿':'-'}</div></div>
@@ -192,6 +195,33 @@ function renderPartnerDataCard(pd) {
     ${attachRow('📎 ใบทะเบียน ภ.พ.20', pd.attach2)}
     ${attachRow('📎 สัญญาซื้อ-ขายกับหน่วยงาน', pd.attach3)}
     ${row('📝 สรุปการพูดคุยเพิ่มเติม', pd.note)}
+  </div>`;
+}
+
+// ================================================================
+// DEALER REVIEW — สรุป Business Review รายเดือนกับ SAB (ดู saveDealerReviewVisit ใน modals.js)
+// โชว่ตารางพยากรณ์เฉพาะแถวที่กรอกจริง + หัวข้อ deliverable เฉพาะที่มีข้อความ กันการ์ดยาวว่างเปล่า
+// ================================================================
+function renderDealerReviewCard(drd) {
+  const filledForecast = (drd.forecast || []).filter(r => r.curMonth || r.nextMonth);
+  const section = (label, val) => val ? `<div style="margin-top:8px"><label style="color:var(--text2);font-size:.68rem">${label}</label><div style="font-size:.78rem;white-space:pre-wrap">${sanitize(val)}</div></div>` : '';
+  const fcTable = filledForecast.length ? `<div style="margin-top:5px;overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:.68rem;color:var(--text2)">Model</th>
+    <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:.68rem;color:var(--text2)">Current Month</th>
+    <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:.68rem;color:var(--text2)">Next Month</th></tr></thead>
+    <tbody>${filledForecast.map(r => `<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:.76rem;font-weight:600">${sanitize(r.model)}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:.76rem">${sanitize(r.curMonth||'-')}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:.76rem">${sanitize(r.nextMonth||'-')}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const attachRow = (atts) => (atts||[]).length ? `<div style="margin-top:8px"><label style="color:var(--text2);font-size:.68rem">📷 หลักฐานการเข้าพบ</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${atts.map(a => _attachItemHtml(a, `window.open('${a.url}','_blank')`)).join('')}</div></div>` : '';
+  return `<div class="card"><h2>📈 Dealer Review</h2>
+    ${filledForecast.length ? `<div><label style="color:var(--text2);font-size:.68rem">1. Monthly Order Forecast</label>${fcTable}</div>` : ''}
+    ${section('2. Pipeline Review (Five Elements)', drd.pipelineReview)}
+    ${section('3. Action Agreements', drd.actionAgreements)}
+    ${section('4. Competitor Information Update', drd.competitorUpdate)}
+    ${section('5. MKT and POC / Co-visiting Requirements', drd.mktPocRequirements)}
+    ${section('6. End-user Budget Information', drd.endUserBudget)}
+    ${section('7. Dealer KPI Review', drd.dealerKpiReview)}
+    ${attachRow(drd.attach)}
   </div>`;
 }
 
