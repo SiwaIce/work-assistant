@@ -193,6 +193,16 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .unit-table th { text-align:left; font-size:10.5px; text-transform:uppercase; color:var(--text3); padding:8px 10px; border-bottom:1px solid var(--border); }
 .unit-table td { padding:10px; border-bottom:1px solid var(--border); }
 .unit-table tr:hover td { background:var(--surface-2); cursor:pointer; }
+/* ทำสีพื้นทั้งแถวตามสถานะ (เหมือนสีของ pill สถานะ) ให้กวาดตาหาเครื่องว่างได้ไวโดยไม่ต้องอ่านทีละแถว —
+   ผู้ใช้ขอ 2026-09-22 ยังใช้โทนสีเดียวกับ pill-good/warn/bad/muted ทั่วแอป ไม่ใช่สีชุดใหม่ */
+.unit-table tr.tr-avail td { background:var(--good-soft); }
+.unit-table tr.tr-busy td { background:var(--warn-soft); }
+.unit-table tr.tr-late td { background:var(--bad-soft); }
+.unit-table tr.tr-off td { background:var(--surface-2); }
+/* :hover ต้องเจาะจงคลาสสถานะด้วย ไม่งั้น specificity เท่ากับกฎ tr:hover ด้านบนพอดี (2 คลาส + 2 ชนิด
+   เท่ากัน) แล้วผลจะแล้วแต่ลำดับประกาศในไฟล์ ไม่แน่นอน — เติมคลาสสถานะเข้าไปให้ชนะเสมอโดยไม่ต้องพึ่งลำดับ */
+.unit-table tr.tr-avail:hover td, .unit-table tr.tr-busy:hover td,
+.unit-table tr.tr-late:hover td, .unit-table tr.tr-off:hover td { filter:brightness(.94); cursor:pointer; }
 .empty-state { text-align:center; padding:40px 20px; color:var(--text3); }
 /* ตัวกรอง + จัดกลุ่มรายการเครื่อง (ชุดเดียวกับที่หน้าลูกค้าใช้ ให้หน้าตาสองหน้าไปทางเดียวกัน) */
 .filter-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
@@ -3994,6 +4004,15 @@ function renderUnitsTable() {
   });
   order.sort();
 
+  // เครื่องที่ "ว่างตอนนี้" แต่มีคนจองล่วงหน้าไว้แล้ว — คำนวณครั้งเดียวจาก scBookings() ทั้งชุดก่อนวนตาราง
+  // (เรียกซ้ำต่อแถวจะกลายเป็น O(n²) เพราะ scBookings() สร้างลิสต์รวมทุกเครื่องใหม่ทุกครั้งที่เรียก)
+  var todayD = _scDay(new Date());
+  var soonByUnit = {};
+  scBookings().forEach(function(b) {
+    if (_scBusyKind(b, todayD) !== 'soon') return;
+    if (!soonByUnit[b.unitId] || b.s < soonByUnit[b.unitId].s) soonByUnit[b.unitId] = b;
+  });
+
   var h = order.map(function(model) {
     var list = groups[model];
     var availN = list.filter(function(u) {
@@ -4003,22 +4022,34 @@ function renderUnitsTable() {
       var n = idxInModel[model].indexOf(u.id) + 1;
       var loan = unitCurrentLoan(u.id);
       var appRange = loan ? null : unitAppRangeOn(u.id, _td());
-      var statusPill = (u.status === 'unavailable' || u.status === 'lost') ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
-        : (loan || appRange) ? '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>' : '<span class="pill pill-good">✅ ว่าง</span>';
+      var endIso = loan ? loan.end : (appRange ? appRange.end : '');
+      var late = !!endIso && endIso < _td();
+      var off2 = u.status === 'unavailable' || u.status === 'lost';
+      var soon = (!off2 && !loan && !appRange) ? soonByUnit[u.id] : null;
+      // สีพื้นทั้งแถวตามสถานะ (ดู .tr-avail/.tr-busy/.tr-late/.tr-off ใน CSS) — ให้กวาดตาหาเครื่องว่างได้ไว
+      var trCls = off2 ? 'tr-off' : (loan || appRange) ? (late ? 'tr-late' : 'tr-busy') : 'tr-avail';
+      var statusPill = off2 ? '<span class="pill pill-bad">⛔ ไม่พร้อมใช้งาน</span>'
+        : (loan || appRange) ? (late ? '<span class="pill pill-bad">⚠️ เลยกำหนดคืน</span>' : '<span class="pill pill-warn">📤 ถูกยืมอยู่</span>')
+        : '<span class="pill pill-good">✅ ว่าง</span>';
+      // ว่างตอนนี้แต่มีจองล่วงหน้าไว้แล้ว — ยังเป็นแถวเขียว (ว่างจริง) แต่เติม badge เตือนไว้ กันหยิบไปให้คนอื่น
+      // ยืมทับช่วงที่จองไว้แล้วโดยไม่รู้ตัว ใช้ badge เดียวกับที่ปฏิทิน/แท็บใบจองใช้อยู่แล้ว (_scBusyBadge)
+      if (soon) statusPill += ' ' + _scBusyBadge('soon');
       var rental = _unitHasRental(u) ? '<span style="display:inline-flex;align-items:center;gap:2px">' + esc(u.rentalDbNo) + _rentCopyBtn(u.rentalDbNo) + '</span>' : '<span style="color:var(--warn)">ยังไม่ลงทะเบียน</span>';
       // แก้ได้จากหน้านี้เอง (✏️ แก้ไข ทีละเครื่อง หรือ ✏️ แก้ไขตาราง ทีละหลายเครื่อง) — ป้ายนี้แค่บอกเหตุผล
       // ว่าทำไมเครื่องนี้ไม่โผล่ในลิงก์ลูกค้า จะได้ไม่ไปนั่งหาสาเหตุผิดจุด
       if (u.customerVisible === false) statusPill += ' <span class="pill pill-muted" title="กดปุ่มแก้ไขที่เครื่องนี้เพื่อเปิดกลับ">🙈 ซ่อนจากลูกค้า</span>';
-      var off2 = u.status === 'unavailable' || u.status === 'lost';
       var pickCell = (!off2 && _unitHasRental(u))
         ? '<td onclick="event.stopPropagation()"><input type="checkbox"' + (lendIsPicked(u.id) ? ' checked' : '') + ' onchange="lendToggle(\'' + u.id + '\')"></td>'
         : '<td></td>';
-      return '<tr onclick="openUnitDetail(\'' + u.id + '\')">' + pickCell +
+      var whoCell = loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
+        : appRange ? (esc(appRange.borrower || 'คีย์จาก Lotus Note') + ' · ' + _scD(appRange.end))
+        : soon ? '📅 จองไว้: ' + esc(soon.borrower || soon.approver || '— ไม่ระบุ —') + ' · เริ่ม ' + _scFmt(soon.s)
+        : '—';
+      return '<tr class="' + trCls + '" onclick="openUnitDetail(\'' + u.id + '\')">' + pickCell +
         '<td>เครื่อง #' + n + '</td><td>' + esc(u.sku || '—') + '</td><td>' + esc(u.serialNumber || '—') + '</td><td>' + rental + '</td>' +
         '<td>' + (u.nbtcRegistered ? '✅' : '❌') + ' · ' + (u.droneInsurance ? '✅' : '❌') + ' · ' + (u.caatRegistered ? '✅' : '❌') + '</td>' +
         '<td>' + (u.flyable !== false ? '✈️ บินได้' : '🖼️ จัดแสดง') + '</td><td>' + statusPill + '</td>' +
-        '<td>' + (loan ? esc(loan.borrower) + ' · ' + _scD(loan.end)
-          : appRange ? (esc(appRange.borrower || 'คีย์จาก Lotus Note') + ' · ' + _scD(appRange.end)) : '—') + '</td>' +
+        '<td>' + whoCell + '</td>' +
         '<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button></td></tr>';
     }).join('');
     // จอแคบ + มุมมองตาราง = คอลัมน์สำคัญ (สถานะ/ผู้ยืม) หลุดจอไปหมดโดยไม่มีสัญญาณให้เลื่อนขวา — สลับไปการ์ด
