@@ -2002,7 +2002,7 @@ function _rtPendingRowsHtml(g) {
     var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
     var conflict = _lfConflict(l.unitId, l.start, l.end, l.id);
     var why = conflict
-      ? (conflict.quarantine ? '🕐 รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
+      ? (conflict.quarantine ? '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
       : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
     var altHtml = '';
     if (conflict && u.id) {
@@ -2060,20 +2060,24 @@ function _rtQuarSecHtml() {
   var list = _quarLoans();
   if (!list.length) return '';
   var byId = {}; UNITS.forEach(function(u) { byId[u.id] = u; });
-  var today = _td();
   var h = '<div class="rt-quar-sec"><div class="rt-quar-hd">🕐 รอรับเข้าคลัง ' + list.length + ' เครื่อง</div>';
   h += list.map(function(l) {
     var u = byId[l.unitId] || {};
     var p = u.id ? _scModelParts(u) : { main: l.model || 'เครื่องที่ถูกลบไปแล้ว' };
-    var total = Math.max(1, daysBetween(l.actualReturnDate || l.start, l.availableFrom));
-    var passed = Math.max(0, daysBetween(l.actualReturnDate || l.start, today));
-    var pct = Math.max(4, Math.min(100, Math.round(passed / total * 100)));
     var noteHtml = u.note ? '<div class="qz-note-flag">📝 มีหมายเหตุค้าง: ' + esc(u.note) + '</div>' : '';
+    // ของไม่ครบ (kitIncomplete) ไม่มีวันเผื่อที่แน่นอน (availableFrom ตั้งเป็น QUAR_FOREVER_SENTINEL) จึงไม่
+    // โชว่ "เผื่อถึง <วันที่ปลอม>" และสลับปุ่มเป็น "ของครบแล้ว ปิดงาน" แยกจากปุ่มยืนยันรับเข้าคลังปกติเสมอ
+    // กันกดผิดสลับกันระหว่างสองเคสนี้ (ของครบมาแต่แรก vs ของไม่ครบแต่หาเจอแล้ว)
+    var dateHtml = l.kitIncomplete
+      ? '<div class="hint" style="margin:2px 0 0">คืนเมื่อ ' + _scD(l.actualReturnDate || l.start) + ' · รอยืนยันของครบ — ไม่ปล่อยว่างอัตโนมัติ</div>'
+      : '<div class="hint" style="margin:2px 0 0">คืนเมื่อ ' + _scD(l.actualReturnDate || l.start) + ' · เผื่อถึง ' + _scD(l.availableFrom) + '</div>';
+    var kitHtml = l.kitIncomplete ? '<div class="qz-note-flag">⚠️ ของไม่ครบ: ' + esc(l.kitIncompleteNote || '') + '</div>' : '';
+    var btnHtml = l.kitIncomplete
+      ? '<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="openResolveKitM(\'' + esc(l._id) + '\')">✅ ของครบแล้ว ปิดงาน</button>'
+      : '<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="confirmQuarantineEarly(\'' + esc(l._id) + '\')">✅ ยืนยันรับเข้าคลังแล้ว</button>';
     return '<div class="rt-quar-row"><div>' +
       '<div><b>' + esc(p.main) + '</b>' + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>' +
-      '<div class="hint" style="margin:2px 0 0">คืนเมื่อ ' + _scD(l.actualReturnDate || l.start) + ' · เผื่อถึง ' + _scD(l.availableFrom) + '</div>' +
-      noteHtml + '</div>' +
-      '<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="confirmQuarantineEarly(\'' + esc(l._id) + '\')">✅ ยืนยันรับเข้าคลังแล้ว</button></div>';
+      dateHtml + kitHtml + noteHtml + '</div>' + btnHtml + '</div>';
   }).join('');
   return h + '</div>';
 }
@@ -2110,7 +2114,7 @@ function retryPendingLoan(loanId) {
   var l = _scLoan(loanId);
   if (!l) return;
   var conflict = _lfConflict(l.unitId, l.start, l.end, loanId);
-  if (conflict) { toastMock('⏳ ยังชนอยู่ — ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)), true); return; }
+  if (conflict) { toastMock('⏳ ยังชนอยู่ — ' + (conflict.quarantine ? 'รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)), true); return; }
   db.collection('publicDemoLoans').doc(loanId).update({
     status: 'active',
     events: firebase.firestore.FieldValue.arrayUnion(_scEv('created', _lastEditor(), 'เช็คว่างอีกครั้งแล้วว่างจริง — จองให้'))
@@ -2331,7 +2335,7 @@ function _bkSortBarHtml() {
 function _bkPendingWhy(it) {
   var conflict = _lfConflict(it.u.id, _scIso(it.b.s), _scIso(it.b.e), it.b.loanId);
   return conflict
-    ? (conflict.quarantine ? '🕐 รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
+    ? (conflict.quarantine ? '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
     : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
 }
 function _bkDueTxt(it) {
@@ -2647,6 +2651,7 @@ function returnRowHtml(cls, l, compact) {
   }
   if (l.src === 'staff') {
     h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + l.id + '\')">✅ รับคืนแล้ว</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openIncompleteReturnM(\'' + l.id + '\')" title="รับคืนแต่ของขาด/ชำรุด — ใบยืมจะยังไม่ปิดงานจนกว่าจะยืนยันว่าของครบ">⚠️ ของไม่ครบ</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + l.id + '\')" title="ต่อเวลา / เลื่อนกำหนดคืน">⏩</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + l.id + '\')" title="โอนผู้ยืม / เปลี่ยนผู้คีย์">🔄</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + l.id + '\')" title="ประวัติใบยืม">📜</button>';
@@ -2896,7 +2901,7 @@ function seRecalcConflicts(key) {
     if (hit) {
       var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
       conflicts.push({ unitId: l.unitId, from: from, end: end,
-        label: (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e)) });
+        label: (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้า' + _scQuarUntilTxt(hit) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e)) });
     }
   });
   // แต่ละบรรทัดกดดูใบที่ชนได้เลย เหมือนที่ทำไว้แล้วในขั้นเลือกเครื่อง/วันที่ (showLendConflictM) — เดิมตรงนี้
@@ -3035,6 +3040,116 @@ function markLoanReturned(loanId) {
 }
 
 // ================================================================
+// รับคืนแบบ "ของไม่ครบ" — ส่วนน้อยของการรับคืนทั้งหมด จึงแยกเป็นปุ่ม/โมดัลต่างหาก ไม่ปนกับ markLoanReturned
+// ที่ต้องเร็วเหมือนเดิมทุกประการสำหรับเคสของครบซึ่งเป็นส่วนใหญ่ ต่างจากรับคืนปกติตรงที่ไม่ปล่อยเครื่องว่าง
+// อัตโนมัติตามรอบเวลาเผื่อเลย (availableFrom ตั้งเป็น QUAR_FOREVER_SENTINEL ซึ่งอยู่ในช่วงปีที่ _scSane()
+// ยอมรับ แต่ไกลพอที่จะไม่มีวันถึงจริง) ต้องมีคนมากดยืนยันเองที่โซน "รอรับเข้าคลัง" ว่าของครบแล้ว
+// (ดู openResolveKitM/resolveKitComplete) ใบยืมจึงจะปิดงาน/ปล่อยว่างได้จริง
+// ================================================================
+var QUAR_FOREVER_SENTINEL = '2099-12-31';
+var _irKitLines = [];
+function openIncompleteReturnM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  if (l.status !== 'active') { alert('ใบนี้ไม่ได้อยู่ในสถานะยืมอยู่ (' + l.status + ') รับคืนตรงๆ ไม่ได้'); return; }
+  var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+  var p = u ? _scModelParts(u) : { main: l.model || '—' };
+  _irKitLines = (u && u.kitContents ? u.kitContents : '').split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+  var h = '<div class="sm-sec">' + esc(p.main) + (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
+  if (_irKitLines.length) {
+    h += '<div class="hint" style="margin-bottom:10px">เครื่องนี้มีข้อมูล "ประกอบด้วย" บันทึกไว้ — ติ๊กเฉพาะของที่ได้คืนจริงครบถ้วน ถอดติ๊กชิ้นที่ขาด/ชำรุด/ไม่ได้คืนมา</div>';
+    h += '<div id="irKitList" style="margin-bottom:8px">';
+    _irKitLines.forEach(function(t, i) {
+      h += '<label class="sm-tg" style="display:flex;margin-bottom:6px"><input type="checkbox" checked id="irk_' + i + '" onchange="_irKitChange()"><span class="bx">✓</span>' + esc(t) + '</label>';
+    });
+    h += '</div><div id="irKitSum" style="margin-bottom:10px"></div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px">เครื่องนี้ไม่มีข้อมูล "ประกอบด้วย" บันทึกไว้ — กรอกรายละเอียดสิ่งที่ขาด/มีปัญหาตรงๆ ได้เลย</div>';
+  }
+  h += '<div class="field"><label>📝 รายละเอียดเพิ่มเติม' + (_irKitLines.length ? ' (ไม่บังคับ)' : ' *') + '</label>' +
+    '<textarea id="ir_detail" rows="2" placeholder="เช่น รอเบิกเพิ่มจากใบเบิก 28123 คาดว่าได้ภายใน 3 วัน"></textarea></div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary" style="background:var(--bad);border-color:var(--bad)" onclick="doIncompleteReturn(\'' + loanId + '\')">⚠️ รับคืน + บันทึกของไม่ครบ</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
+  openSm('⚠️ บันทึกของไม่ครบก่อนรับคืน', h);
+  if (_irKitLines.length) _irKitChange();
+}
+function _irKitChange() {
+  var box = document.getElementById('irKitSum');
+  if (!box) return;
+  var missing = _irKitMissing();
+  box.innerHTML = missing.length
+    ? '<div style="color:var(--bad);font-weight:700;font-size:12.5px">⚠️ ของไม่ครบ ' + missing.length + ' ชิ้น: ' + esc(missing.join(', ')) + '</div>'
+    : '<div style="color:var(--good,#22c55e);font-weight:700;font-size:12.5px">✅ ของครบทุกชิ้น — ใช้ปุ่ม "รับคืนแล้ว" ปกติแทนได้เลย ไม่ต้องกดที่นี่</div>';
+}
+function _irKitMissing() {
+  var missing = [];
+  _irKitLines.forEach(function(t, i) {
+    var cb = document.getElementById('irk_' + i);
+    if (cb && !cb.checked) missing.push(t);
+  });
+  return missing;
+}
+function doIncompleteReturn(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var hasChecklist = _irKitLines.length > 0;
+  var missing = hasChecklist ? _irKitMissing() : [];
+  var detail = (document.getElementById('ir_detail').value || '').trim();
+  if (hasChecklist && !missing.length) { alert('ถอดติ๊กของที่ขาดออกก่อน หรือถ้าครบจริงให้ปิดหน้านี้แล้วกดปุ่ม "รับคืนแล้ว" ปกติแทน'); return; }
+  if (!hasChecklist && !detail) { alert('กรอกรายละเอียดว่าอะไรไม่ครบ/มีปัญหาก่อนนะครับ'); return; }
+  var noteText = missing.length ? 'ขาด "' + missing.join('", "') + '"' + (detail ? ' — ' + detail : '') : detail;
+  var by = _lastEditor();
+  db.collection('publicDemoLoans').doc(loanId).update({
+    status: 'returned', actualReturnDate: _td(), availableFrom: QUAR_FOREVER_SENTINEL,
+    kitIncomplete: true, kitIncompleteNote: noteText,
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('kitIncomplete', by, noteText))
+  }).then(function() {
+    closeSm();
+    toastMock('⚠️ บันทึกแล้ว — ใบยืมยังไม่ปิดงาน รอกดยืนยันของครบทีหลังที่แท็บติดตามคืน (โซน "รอรับเข้าคลัง")');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+
+// ยืนยันว่าของที่เคยขาดหาเจอ/แก้ไขแล้ว → ปิดงานใบนี้จริง ต่างจาก confirmQuarantineEarly (ของครบตั้งแต่แรก
+// แค่รอเผื่อเวลาตรวจนับเฉยๆ) ตรงที่ใบนี้เคยถูกตั้งค่า "ของไม่ครบ" ไว้ (availableFrom ไม่มีวันหมดเขตเอง)
+// แยกปุ่ม/ฟังก์ชันกันชัดๆ กันกดผิดสลับระหว่างสองเคสนี้ — ดู _rtQuarSecHtml ว่าโชว์ปุ่มไหนตามเงื่อนไข kitIncomplete
+function openResolveKitM(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+  var p = u ? _scModelParts(u) : { main: l.model || '—' };
+  var h = '<div class="sm-sec">' + esc(p.main) + (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</div>';
+  h += '<div class="hint" style="margin-bottom:10px">เคยขาด: ' + esc(l.kitIncompleteNote || '—') + '</div>';
+  h += '<div class="field"><label>📝 เจอ/แก้ไขยังไง (ไม่บังคับ)</label><textarea id="rk_note" rows="2" placeholder="เช่น เบิกเพิ่มมาจากใบเบิก 28123 แล้ว ของครบพร้อมใช้"></textarea></div>';
+  h += '<div class="field"><label>🧑‍💼 คนที่ยืนยัน *</label><input type="text" id="rk_by" list="rkKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง" value="' + esc(_lastEditor()) + '">' + scKeyerDatalist('rkKeyerList') + '</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button class="btn btn-primary" onclick="resolveKitComplete(\'' + loanId + '\')">✅ ยืนยันของครบ — ปิดงาน</button>' +
+    '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
+  openSm('✅ ยืนยันของครบ — ปิดงานใบนี้', h);
+}
+function resolveKitComplete(loanId) {
+  var l = _scLoan(loanId);
+  if (!l) return;
+  var note = (document.getElementById('rk_note').value || '').trim();
+  var by = (document.getElementById('rk_by').value || '').trim();
+  if (!by) { alert('ใส่ชื่อคนที่ยืนยันด้วยนะครับ — ประวัติจะได้อ่านรู้เรื่องตอนย้อนดู'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  db.collection('publicDemoLoans').doc(loanId).update({
+    availableFrom: '', kitIncomplete: false,
+    events: firebase.firestore.FieldValue.arrayUnion(_scEv('kitComplete', by, note || 'ยืนยันของครบแล้ว — ปิดงาน'))
+  }).then(function() {
+    closeSm();
+    toastMock('✅ ของครบแล้ว — ปิดงานเรียบร้อย ว่างให้ยืมต่อได้ทันที');
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+// ของไม่ครบ (kitIncomplete) ไม่มีวันปล่อยว่างที่แน่นอน (availableFrom ตั้งเป็น QUAR_FOREVER_SENTINEL กัน
+// ปล่อยอัตโนมัติ) ข้อความตอนชนคิวจึงห้ามโชว่วันที่ปลอมนั้นตรงๆ (จะงงว่าทำไมชนถึงปี 2099) ใช้ประโยคนี้แทน
+// ทุกจุดที่ปกติจะพิมพ์ "ถึง " + _scFmt(...) ของบุ๊กกิ้งที่เป็นการกักกัน (b.quarantine)
+function _scQuarUntilTxt(b) {
+  return b.kitIncomplete ? ' — ของไม่ครบ ยังไม่ปล่อยว่าง' : 'ถึง ' + _scFmt(b.e);
+}
+
+// ================================================================
 // วงจรชีวิตของใบยืม — ต่อเวลา / โอนผู้ยืม / เปลี่ยนผู้คีย์ / ประวัติ
 //
 // ทุกอย่างเขียนต่อท้าย events[] ด้วย arrayUnion ไม่อ่านมาเขียนทับทั้งก้อน เพราะหน้านี้เปิดพร้อมกันหลายคนได้
@@ -3049,7 +3164,9 @@ var SC_EV_META = {
   purpose:  { icon: '📝', label: 'แก้ใช้งานกับ' },
   returned: { icon: '✅', label: 'รับคืน' },
   photo:    { icon: '📷', label: 'แนบรูปสภาพเครื่อง' },
-  damage:   { icon: '⚠️', label: 'ความเสียหาย' }
+  damage:   { icon: '⚠️', label: 'ความเสียหาย' },
+  kitIncomplete: { icon: '⚠️', label: 'รับคืน — ของไม่ครบ' },
+  kitComplete:   { icon: '✅', label: 'ยืนยันของครบ — ปิดงาน' }
 };
 function _scEv(type, by, text) {
   return { at: new Date().toISOString(), type: type, by: by || '', text: text || '' };
@@ -3679,7 +3796,7 @@ function xtRecalcConflicts(loanId) {
   var hit = _lfConflict(l.unitId, from, end, l._id);
   if (!hit) { box.innerHTML = ''; return; }
   var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
-  var label = (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้าถึง ' + _scFmt(hit.e) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e));
+  var label = (u.model || u.name || '-') + ' — ' + (hit.quarantine ? 'ติดช่วงรอคลังรับเข้า' + _scQuarUntilTxt(hit) : 'ชนกับ ' + (hit.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(hit.e));
   box.innerHTML = '<div class="lf-warn">⚠️ เลื่อนถึงวันนี้แล้วจะชน: <span style="cursor:pointer;text-decoration:underline" ' +
     'title="กดดูใบยืมที่ชน" onclick="showLendConflictM(\'' + _scEsq(l.unitId) + '\',\'' + _scEsq(from) + '\',\'' + _scEsq(end) + '\')">' + esc(label) +
     '</span><br>ยังกดเลื่อนได้ แต่ควรคุยกับอีกฝ่ายก่อน</div>';
@@ -4072,7 +4189,8 @@ function unitCardHtml(raw, n) {
   h += '<div class="su-acts" onclick="event.stopPropagation()">';
   h += '<button class="btn btn-ghost btn-sm" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button>';
   h += '<button class="btn btn-ghost btn-sm" onclick="openUnitDetail(\'' + u.id + '\')">📄 รายละเอียด</button>';
-  if (loan) h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืน</button>';
+  if (loan) h += '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืน</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openIncompleteReturnM(\'' + loan._id + '\')" title="รับคืนแต่ของขาด/ชำรุด">⚠️ ของไม่ครบ</button>';
   else if (!appRange && !off) h += '<button class="btn btn-primary btn-sm" onclick="openUnitDetail(\'' + u.id + '\');showManualLoanForm(\'' + u.id + '\')">📤 คีย์ยืม</button>';
   if (!loan && !appRange) h += '<button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--bad)" onclick="deleteUnitM(\'' + u.id + '\')">🗑️ ลบ</button>';
   h += '</div></div>';
@@ -4116,6 +4234,7 @@ function openUnitDetail(unitId, returnTo) {
         (function() { var n = LOANS.filter(function(x) { return x._id !== loan._id && (x.jobNo || '').trim() === loan.jobNo.trim(); }).length; return n ? ' (+' + n + ' เครื่องอื่น)' : ''; })() + '</a>' : '') + '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
       '<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + loan._id + '\')">✅ รับคืนแล้ว</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="openIncompleteReturnM(\'' + loan._id + '\')" title="รับคืนแต่ของขาด/ชำรุด">⚠️ ของไม่ครบ</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + loan._id + '\')">⏩ ต่อเวลา</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + loan._id + '\')">🔄 โอน</button>' +
       '</div>' + scLoanLogHtml(loan);
@@ -4783,7 +4902,7 @@ function renderLendFlow() {
   list.forEach(function(u) {
     var p = _scModelParts(u);
     var conflict = haveRange ? _lfConflict(u.id, lendStart, lendEnd) : null;
-    var confTxt = conflict && conflict.quarantine ? '🕐 รอรับเข้าคลัง ถึง ' + _scFmt(conflict.e)
+    var confTxt = conflict && conflict.quarantine ? '🕐 รอรับเข้าคลัง ' + _scQuarUntilTxt(conflict)
       : conflict ? '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') : '';
     h += '<span class="lb-chip' + (conflict ? ' lb-chip-warn' : '') + '">' + esc(p.main) + ' · <b>' + esc(u.rentalDbNo || '—') + '</b>' +
       (haveRange ? (conflict
@@ -4865,7 +4984,7 @@ function renderLendFlow() {
       var hit = bksO.filter(function(b) { return b.unitId === u.id && scBusyOn(b, curO); })[0];
       var p = _scModelParts(u);
       h += '<div class="lf-drow"><span>' + esc(p.main) + ' · ' + esc(u.rentalDbNo || '—') + '</span>' +
-        (hit ? '<span class="pill pill-warn">' + (hit.quarantine ? '🕐 รอรับเข้าคลัง · ถึง ' + _scFmt(hit.e) : '📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e)) + '</span>' +
+        (hit ? '<span class="pill pill-warn">' + (hit.quarantine ? '🕐 รอรับเข้าคลัง · ' + _scQuarUntilTxt(hit) : '📤 ' + esc(hit.borrower || 'ไม่ระบุผู้ยืม') + ' · ถึง ' + _scFmt(hit.e)) + '</span>' +
                '<button class="btn btn-ghost btn-sm" onclick="showLendConflictM(\'' + u.id + '\',\'' + lendDayOpen + '\',\'' + lendDayOpen + '\')" title="ดูใบที่ชนอยู่">📜 ดูใบ</button>' +
                (list.length > 1 ? '<button class="btn btn-ghost btn-sm" onclick="lendToggle(\'' + u.id + '\');renderLendFlow()">✕ เอาออก</button>' : '')
              : '<span class="pill pill-good">✅ ว่าง</span>') + '</div>';
@@ -4961,7 +5080,7 @@ function saveLendBatch() {
     var status = conflict ? 'pending' : 'active';
     var note = company + ' · ' + _scD(start) + ' → ' + _scD(end) +
       (jobNo ? ' · ใบจอง ' + jobNo : '') + (list.length > 1 ? ' · คีย์พร้อมกัน ' + list.length + ' เครื่อง' : '') +
-      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '');
+      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '');
     var ref = db.collection('publicDemoLoans').doc();
     batch.set(ref, {
       unitId: u.id, model: u.model || u.name || '', label: 'เครื่อง',
@@ -4999,7 +5118,7 @@ function saveManualLoan(unitId) {
     start: start, end: end, actualReturnDate: '', approver: requester, jobNo: jobNo,
     status: conflict ? 'pending' : 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     events: [_scEv(conflict ? 'pending' : 'created', requester, company + ' · ' + start + ' → ' + end + (jobNo ? ' · ใบจอง ' + jobNo : '') +
-      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้าถึง ' + _scFmt(conflict.e) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : ''))]
+      (conflict ? ' · ⏳ ชนคิว รอแก้ไข: ' + (conflict.quarantine ? 'รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : 'ชนกับ ' + (conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : ''))]
   }).then(function() {
     toastMock(conflict ? '⏳ ช่วงนี้ชนคิว — บันทึกไว้เป็น "รอ"' : '💾 บันทึกยืมแล้ว');
     closeUnitDetail();
@@ -5112,7 +5231,7 @@ function _scMultiSummary(units, bks) {
     busyMatched.slice(0, 8).forEach(function(u) {
       var picked = lendIsPicked(u.id);
       var conflict = _lfConflict(u.id, _scIso(from), _scIso(to));
-      var confTxt = conflict ? (conflict.quarantine ? '🕐 รอรับเข้าคลัง ถึง ' + _scFmt(conflict.e) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '';
+      var confTxt = conflict ? (conflict.quarantine ? '🕐 รอรับเข้าคลัง ' + _scQuarUntilTxt(conflict) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e)) : '';
       bh += '<div class="ms-row busy' + (picked ? ' picked' : '') + '" onclick="lendToggle(\'' + u.id + '\');renderStaffCalendar()">' +
         '<span class="pick-check' + (picked ? ' on' : '') + '">' + (picked ? '✓' : '') + '</span>' +
         '<span><b>' + esc(u.model || u.name || '-') + '</b>' +
@@ -5250,14 +5369,16 @@ function scBookings() {
     var job = String(o.jobNo || '').trim() || String(o.refNo || '').trim();
     out.push({ unitId: o.unitId, s: s, e: e, borrower: o.borrower || '', purpose: o.purpose || '',
       approver: o.approver || '', jobNo: job, loanId: o.loanId || '',
-      status: o.status || 'active', createdAt: o.createdAt || null });
+      status: o.status || 'active', quarantine: !!o.quarantine, kitIncomplete: !!o.kitIncomplete,
+      createdAt: o.createdAt || null });
   }
   LOANS.forEach(function(l) {
     // คืนแล้วแต่ยังอยู่ในช่วงรอคลังรับเข้า (availableFrom) → ยังนับไม่ว่างต่อจนถึงวันนั้น ไม่ใช่วันคืนจริงเฉยๆ
     var eff = (l.status === 'returned') ? (l.availableFrom || l.actualReturnDate || l.end) : l.end;
     add({ unitId: l.unitId, start: l.start, end: eff,
       borrower: l.borrower, purpose: l.purpose, approver: l.approver, jobNo: l.jobNo, refNo: l.refNo, loanId: l._id,
-      status: l.status, quarantine: l.status === 'returned' && !!l.availableFrom, createdAt: l.createdAt });
+      status: l.status, quarantine: l.status === 'returned' && !!l.availableFrom,
+      kitIncomplete: l.status === 'returned' && !!l.kitIncomplete, createdAt: l.createdAt });
   });
   UNITS.forEach(function(u) { (u.busyRanges || []).forEach(function(r) { add({ unitId: u.id, start: r.start, end: r.end,
     borrower: r.borrower, purpose: r.purpose, approver: r.approver, jobNo: r.jobNo, refNo: r.refNo }); }); });
