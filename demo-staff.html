@@ -379,9 +379,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   border:1px solid var(--border); background:var(--surface-2); color:var(--text2); }
 .view-toggle button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
 .su-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:11px; }
-.su-card { position:relative; border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:11px; padding:12px 13px; background:var(--surface); }
-.su-card.busy { border-left-color:var(--warn); }
-.su-card.off { border-left-color:var(--text3); opacity:.75; }
+/* สีพื้นทั้งการ์ดตามสถานะ (โทนเดียวกับ .tr-avail/.tr-busy/.tr-late/.tr-off ในมุมมองตาราง — ผู้ใช้ขอให้
+   เหมือนกัน 2026-09-23) เดิมมีแค่แถบสีซ้าย ต้องไล่อ่าน pill ทีละใบถึงจะรู้สถานะ */
+.su-card { position:relative; border:1px solid var(--border); border-left:4px solid var(--good); border-radius:11px; padding:12px 13px; background:var(--good-soft); }
+.su-card.busy { border-left-color:var(--warn); background:var(--warn-soft); }
+.su-card.off { border-left-color:var(--text3); opacity:.75; background:var(--surface-2); }
 .su-card.late { border-left-color:var(--bad); background:var(--bad-soft); }
 .su-card .sel-check { position:absolute; top:9px; right:9px; width:20px; height:20px; border-radius:50%;
   background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
@@ -394,6 +396,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .su-lent { margin-top:8px; padding:7px 9px; border-radius:8px; background:var(--surface-2); border-left:3px solid var(--accent); font-size:11.5px; line-height:1.6; }
 /* เครื่องที่เลยกำหนดคืน — ขอบซ้ายแดง เห็นตั้งแต่ยังไม่อ่านรายละเอียด */
 .su-lent.late { border-left-color:var(--bad); background:var(--bad-soft); }
+/* เครื่องว่างตอนนี้แต่มีคนจองล่วงหน้าไว้แล้ว — ใช้โทนฟ้า-ประเดียวกับ badge จองล่วงหน้าที่อื่นในแอป (sc-badge-soon) */
+.su-lent.soon { border-left-color:var(--accent); background:var(--accent-soft); }
 /* หัวกลุ่มรุ่น: บอกสถานะ ไม่ใช่แค่จำนวน */
 .model-group > summary .mc { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
 .mc-ok, .mc-out, .mc-late, .mc-off, .mc-disp { font-size:10.5px; font-weight:700; padding:2px 8px;
@@ -4060,7 +4064,7 @@ function renderUnitsTable() {
         '<tbody>' + rows + '</tbody></table></div>'
       : unitDense
         ? '<div class="su-dense">' + list.map(function(u) { return unitDenseHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>'
-        : '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1); }).join('') + '</div>';
+        : '<div class="su-grid">' + list.map(function(u) { return unitCardHtml(u, idxInModel[model].indexOf(u.id) + 1, soonByUnit[u.id]); }).join('') + '</div>';
     // หัวกลุ่มบอกสถานะ ไม่ใช่แค่จำนวน — เดิมเขียน "1/2 ว่างตอนนี้" ต้องไล่อ่านทุกใบเองว่าตัวไหนมีปัญหา
     var lateN = 0, busyN = 0, offN = 0;
     list.forEach(function(u) {
@@ -4142,13 +4146,17 @@ function renderUnitViewToggle() {
       : '';
   }
 }
-function unitCardHtml(raw, n) {
+function unitCardHtml(raw, n, soon) {
   var u = unitView(raw);
   var loan = unitCurrentLoan(u.id);
   var appRange = loan ? null : unitAppRangeOn(u.id, _td());
   var off = u.status === 'unavailable' || u.status === 'lost';
   var endIso = loan ? loan.end : (appRange ? appRange.end : '');
   var late = endIso && endIso < _td();
+  // ว่างตอนนี้แต่มีคนจองล่วงหน้าไว้แล้ว (soon มาจาก soonByUnit ใน renderUnitsTable) — ใช้ได้เฉพาะตอนไม่ได้
+  // ถูกยืม/ปิดใช้งานอยู่ตอนนี้เท่านั้น (เหตุผลเดียวกับมุมมองตาราง: เครื่องอาจถูกยืมอยู่ตอนนี้ *และ* มีคน
+  // จองต่อไว้ล่วงหน้าอีกช่วงพร้อมกันได้ กรณีนั้นให้ถือว่า "ถูกยืม" เป็นหลัก ไม่ต้องโชว่ badge จองซ้อนด้วย)
+  soon = (!off && !loan && !appRange) ? soon : null;
   var cls = off ? 'off' : late ? 'late' : (loan || appRange) ? 'busy' : '';
   var cat = _scCatOf(u);
   // ติ๊กเลือกได้ทุกเครื่องที่ลงทะเบียนเช่าแล้วและยังไม่ปิดใช้งาน — แม้กำลังถูกยืม/จองอยู่ตอนนี้ก็เลือกได้
@@ -4169,8 +4177,9 @@ function unitCardHtml(raw, n) {
   else h += '<span class="pill pill-warn">ยังไม่ลงทะเบียนเครื่องเช่า</span>';
   if (u.serialNumber) h += '<span class="dcal-idpc"><i>S/N</i>' + esc(u.serialNumber) + '</span>';
   h += '</div></div>';
-  h += '<span class="pill ' + (off ? 'pill-bad' : (loan || appRange) ? 'pill-warn' : 'pill-good') + '">' +
-    (off ? '⛔ ไม่พร้อม' : (loan || appRange) ? '📤 ถูกยืม' : '✅ ว่าง') + '</span></div>';
+  h += '<span class="pill ' + (off ? 'pill-bad' : late ? 'pill-bad' : (loan || appRange) ? 'pill-warn' : 'pill-good') + '">' +
+    (off ? '⛔ ไม่พร้อม' : late ? '⚠️ เลยกำหนดคืน' : (loan || appRange) ? '📤 ถูกยืม' : '✅ ว่าง') + '</span>' +
+    (soon ? _scBusyBadge('soon') : '') + '</div>';
   // แถวเดียวพอ — ประเภทการใช้งาน + เอกสารยุบเป็นชิปเดียว (ทั้งทะเบียนไม่มีเครื่องไหนเอกสารครบเลย
   // ขึ้น ✗ แดงสามดวงทุกใบจึงไม่ได้ช่วยแยกอะไร แค่กินสายตา) รายละเอียดรายใบอยู่ในส่วนที่กางออก
   h += '<div class="su-meta">';
@@ -4187,6 +4196,10 @@ function unitCardHtml(raw, n) {
       (late ? ' <b style="color:var(--bad)">(เลยกำหนด ' + daysBetween(b.end, _td()) + ' วัน)</b>' : '') + '</div>' +
       (b.purpose ? '<div>🎯 ' + esc(b.purpose) + '</div>' : '') +
       (!loan ? '<div style="color:var(--text3);font-size:10.5px">คีย์จาก Lotus Note — รับคืนต้องกดที่ Lotus Note </div>' : '') + '</div>';
+  } else if (soon) {
+    // ว่างตอนนี้แต่มีคนจองล่วงหน้าไว้แล้ว — กันหยิบเครื่องนี้ไปให้คนอื่นยืมทับช่วงที่จองไว้แล้วโดยไม่รู้ตัว
+    h += '<div class="su-lent soon"><b>📅 จองล่วงหน้าไว้แล้ว</b> — ' + esc(soon.borrower || soon.approver || 'ไม่ระบุผู้จอง') +
+      '<div>เริ่มยืม ' + _scFmt(soon.s) + '</div></div>';
   }
   if (u.note) h += '<div style="font-size:11.5px;color:var(--text2);margin-top:7px">📝 ' + esc(u.note) + '</div>';
   // กางดูรายละเอียดในที่เดิม ไม่ต้องเปลี่ยนหน้า — SKU กับทะเบียนเอกสารรายใบย้ายมาอยู่ตรงนี้
