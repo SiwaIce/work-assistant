@@ -1340,6 +1340,30 @@ function saveFollowupToTimeline(taskId) {
 // ================================================================
 // TASK DETAIL (NEW VERSION with Due Date + Follow-up + Timeline)
 // ================================================================
+// key (tid+'_'+idx) ของ step ที่กำลังเปิดช่องพิมพ์หมายเหตุแบบไวๆ อยู่ (ไม่ต้องกดเข้าไปเปิดฟอร์มเต็ม
+// เหมือน editStep) — เก็บเป็น global เพราะ rTaskDet() re-render ทั้งหน้าทุกครั้งที่มีอะไรเปลี่ยน
+var _stepQuickNoteKey = null;
+function toggleStepQuickNote(tid, idx) {
+  var key = tid + '_' + idx;
+  _stepQuickNoteKey = (_stepQuickNoteKey === key) ? null : key;
+  render();
+  if (_stepQuickNoteKey === key) {
+    setTimeout(function() {
+      var el = document.getElementById('stepNoteInp_' + idx);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }, 30);
+  }
+}
+function saveStepQuickNote(tid, idx) {
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps || !t.steps[idx]) return;
+  var el = document.getElementById('stepNoteInp_' + idx);
+  t.steps[idx].notes = el ? el.value.trim() : (t.steps[idx].notes || '');
+  ST.update('tasks', tid, { steps: t.steps });
+  _stepQuickNoteKey = null;
+  toast('💾 บันทึกหมายเหตุแล้ว');
+  render();
+}
 
 function rTaskDet(el) {
   const t = ST.getOne('tasks', S.taskId);
@@ -1479,13 +1503,17 @@ function rTaskDet(el) {
             </div>
             <div class="td2-step-meta">${s.startDate ? fD(s.startDate) : ''} ${s.dueDate ? '→ ' + fD(s.dueDate) : ''} ${dlB(s.dueDate, s.done)}</div>
             ${renderStepDueDate(s)}
-            ${s.notes ? `<div class="td2-step-meta">${sanitize(s.notes)}</div>` : ''}
+            ${(_stepQuickNoteKey === (t.id + '_' + i)) ? `
+            <div style="display:flex;gap:4px;margin-top:4px" onclick="event.stopPropagation()">
+              <input type="text" id="stepNoteInp_${i}" value="${sanitize(s.notes || '')}" placeholder="พิมพ์หมายเหตุแล้วกด Enter..." style="flex:1;font-size:.75rem;padding:3px 6px" onkeydown="if(event.key==='Enter'){saveStepQuickNote('${t.id}',${i})}else if(event.key==='Escape'){toggleStepQuickNote('${t.id}',${i})}">
+              <button class="btn bsm bp" onclick="saveStepQuickNote('${t.id}',${i})" style="padding:3px 8px" title="บันทึก">✓</button>
+            </div>` : (s.notes ? `<div class="td2-step-meta">${sanitize(s.notes)}</div>` : '')}
             ${s.url ? `<div class="td2-step-meta"><a href="${sanitize(s.url)}" target="_blank" style="color:var(--accent);word-break:break-all" onclick="event.stopPropagation()">🔗 ${sanitize(s.url.length > 40 ? s.url.substr(0, 40) + '...' : s.url)}</a></div>` : ''}
             ${s.attachments && s.attachments.length ? `<div onclick="event.stopPropagation()">${bigAttachGalleryHtml(s.attachments)}</div>` : ''}
             ${buildFuTimeline(t.id, i)}
           </div>
           <div class="td2-step-actions">
-            ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();editStep('${t.id}',${i})" title="แก้ไข/เพิ่ม comment รายละเอียดของขั้นตอนนี้">✏️</button>`}
+            ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();toggleStepQuickNote('${t.id}',${i})" title="พิมพ์หมายเหตุแบบไวๆ ตรงนี้เลย (กด Enter เพื่อบันทึก) — กดที่ชื่อขั้นตอนถ้าอยากแก้วันที่/link/รูปแนบด้วย">✏️</button>`}
             <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
             ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
             <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
