@@ -335,7 +335,7 @@ function renderQuotationItemsTable() {
     if (showQuotationCost) {
       html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="js-money" value="' + nmI(itemCost) + '" style="width:100px;text-align:right;padding:4px;background:var(--bg2)" onchange="updateQuotationItemCost(' + i + ', this.value)"></td>';
       html += '<td style="text-align:right;color:#f59e0b">' + formatNumber(Math.round(itemTotalCost)) + ' ฿</td>';
-      html += '<td style="text-align:right;font-weight:700;color:' + (itemMargin >= 10 ? '#22c55e' : (itemMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + (item.unitPrice > 0 ? itemMargin.toFixed(1) + '%' : '-') + '</td>';
+      html += '<td style="text-align:right;font-weight:700;color:' + (itemMargin >= 10 ? '#22c55e' : (itemMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + (item.unitPrice > 0 ? itemMargin.toFixed(2) + '%' : '-') + '</td>';
     }
     html += '<td style="text-align:center"><button class="btn bsm bd" onclick="removeQuotationItem(' + i + ')">🗑️</button></td>';
     html += '</tr>';
@@ -360,12 +360,12 @@ function renderQuotationItemsTable() {
   html += '<td colspan="5" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
   html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿' +
     '<div style="font-size:.72em;font-weight:400;color:var(--text2);margin-top:2px">+VAT 7%: ' + formatNumber(Math.round(vatAmount)) + ' ฿</div>' +
-    '<div style="font-size:.8em;font-weight:800;margin-top:1px">รวม VAT: ' + formatNumber(Math.round(grandTotalWithVat)) + ' ฿</div>' +
+    '<div style="font-size:1em;font-weight:800;color:var(--accent);margin-top:4px;padding:4px 10px;background:var(--accent-light);border-radius:8px;display:inline-block;white-space:nowrap">🧾 รวม VAT ' + formatNumber(Math.round(grandTotalWithVat)) + ' ฿</div>' +
     '</td>';
   if (showQuotationCost) {
     html += '<td style="text-align:right;color:var(--text2);padding:8px">ต้นทุนรวม</td>';
     html += '<td style="text-align:right;color:#f59e0b;padding:8px">' + formatNumber(Math.round(sumCost)) + ' ฿</td>';
-    html += '<td style="text-align:right;padding:8px;color:' + (totalMargin >= 10 ? '#22c55e' : (totalMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + totalMargin.toFixed(1) + '%</td>';
+    html += '<td style="text-align:right;padding:8px;color:' + (totalMargin >= 10 ? '#22c55e' : (totalMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + totalMargin.toFixed(2) + '%</td>';
   }
   html += '<td></td></tr></tfoot></table></div>';
 
