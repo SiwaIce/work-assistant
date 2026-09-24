@@ -1097,6 +1097,17 @@ function bulkDeleteQuotes() {
   if (!confirm('ลบ ' + ids.length + ' ใบเสนอราคาที่เลือก?\nไม่สามารถกู้คืนได้')) return;
   quotations = quotations.filter(function(q) { return ids.indexOf(q.id) === -1; });
   localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
+  // ลบออกจาก Firestore ด้วย (ทีละ doc ตาม id) — แค่เขียนทับ localStorage เฉยๆ ไม่พอ เพราะ doc ของใบที่ลบ
+  // จะยังอยู่บน Firestore แล้วโดน listener (initFirebaseListeners) ดึงกลับมาเขียนทับ localStorage ทีหลัง
+  // กลายเป็นใบที่ลบไปแล้ว "ฟื้นคืนชีพ" เองตอนรีเฟรช/เปิดเครื่องใหม่
+  if (typeof getCollectionRef === 'function' && typeof db !== 'undefined') {
+    var ref = getCollectionRef('quotations_v2');
+    if (ref) {
+      var batch = db.batch();
+      ids.forEach(function(id) { batch.delete(ref.doc(id)); });
+      batch.commit().catch(function(e) { console.warn('bulkDeleteQuotes Firebase error:', e); });
+    }
+  }
   quoteSelected = {};
   quoteSelectMode = false;
   toast('🗑️ ลบแล้ว ' + ids.length + ' รายการ');
@@ -1224,14 +1235,18 @@ function renderQuoteTableHTML(list) {
 
 // แก้ SO/Invoice inline จากตาราง — บันทึกทันที
 function updateQuoteInline(id, field, val) {
+  var updated = null;
   for (var i = 0; i < quotations.length; i++) {
     if (quotations[i].id === id) {
       quotations[i][field] = (val || '').trim();
       quotations[i].updatedAt = new Date().toISOString();
+      updated = quotations[i];
       break;
     }
   }
   localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
+  // ดันขึ้น Firestore ด้วย — ดู comment ใน createNewQuotation()
+  if (updated && typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', updated);
   toast('💾 บันทึก ' + (field === 'soNo' ? 'SO' : 'Invoice') + ' แล้ว');
 }
 
@@ -1429,6 +1444,10 @@ function createNewQuotation() {
   existingQuotes.push(newQuote);
   localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
   quotations = existingQuotes;
+  // ดันใบใหม่ขึ้น Firestore ด้วย — เดิมจุดนี้เขียนแค่ localStorage เฉยๆ ไม่เคย sync เลย ทั้งที่ quotations_v2
+  // ลงทะเบียนไว้ใน SYNC_KEY_MAP (มี listener คอยดึงจาก Firestore มาทับ localStorage ทุกครั้งที่เปิดแอป) พอไม่มี
+  // อะไร push ขึ้นไปเลย listener ก็ดึงของเก่า/ว่างจาก Firestore กลับมาทับ ทำให้ใบที่เพิ่งสร้างหายไปตอนรีเฟรช
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', newQuote);
   if (typeof resolveTaskPendingLink === 'function') resolveTaskPendingLink('quotation', newQuote.id, newQuote.quoteNo);
 
   closeModal();
@@ -1658,6 +1677,9 @@ function createQuoteFromPipeline(pipelineId, selections) {
   existingQuotes.push(newQuote);
   localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
   quotations = existingQuotes;
+  // ดันขึ้น Firestore ด้วย — ดู comment ใน createNewQuotation() (จุดเดียวกัน ไม่งั้นใบที่สร้างจาก Pipeline นี้
+  // ก็หายตอนรีเฟรชเหมือนกัน)
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', newQuote);
 
   toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   renderEditQuotationPage(newQuote);
@@ -1773,6 +1795,8 @@ function createQuoteFromRunrateSelection(dealerId, selections) {
   existingQuotes.push(newQuote);
   localStorage.setItem('v7_quotations_v2', JSON.stringify(existingQuotes));
   quotations = existingQuotes;
+  // ดันขึ้น Firestore ด้วย — ดู comment ใน createNewQuotation()
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', newQuote);
 
   toast('✅ สร้างใบเสนอราคา: ' + newQuoteNo);
   renderEditQuotationPage(newQuote);
@@ -2206,6 +2230,9 @@ function createQuoteRevision(originalId, fields) {
   all.push(clone);
   localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
   if (typeof quotations !== 'undefined') quotations = all;
+  // ดันขึ้น Firestore ด้วย — ดู comment ใน createNewQuotation() (ไม่ใช้ตัวแปร quotations ทำ sync เพราะฟังก์ชันนี้
+  // ตั้งใจไม่พึ่ง global ตัวนั้นเพื่อให้เรียกข้ามไฟล์ได้ปลอดภัย — syncItemToFirebase รับ item ตรงๆ พอ)
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', clone);
   return clone;
 }
 
@@ -2294,15 +2321,22 @@ function saveCurrentQuotation() {
   }
 
   // ✅ อัปเดต quote ใน array (บันทึกทับฉบับเดิม)
+  var savedQuote = null;
   for (var i = 0; i < quotations.length; i++) {
     if (quotations[i].id === currentQuoteId) {
       Object.assign(quotations[i], updatedFields);
+      savedQuote = quotations[i];
       break;
     }
   }
 
   // ✅ บันทึก
   localStorage.setItem('v7_quotations_v2', JSON.stringify(quotations));
+  // ดันขึ้น Firestore ด้วย — เดิมจุดนี้เขียนแค่ localStorage เฉยๆ ไม่เคย sync เลย ทั้งที่ quotations_v2 มี
+  // listener (initFirebaseListeners) คอยดึงจาก Firestore มาทับ localStorage ทุกครั้งที่เปิดแอป พอไม่มีอะไร push
+  // ขึ้นไปเลย พอกด "บันทึก" แล้วรีเฟรช/เปิดเครื่องใหม่ ใบที่เพิ่งบันทึกก็หายไปเพราะโดนของเก่า/ว่างจาก Firestore
+  // เขียนทับ (พบจากผู้ใช้แจ้ง 2026-09-24)
+  if (savedQuote && typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', savedQuote);
 
   toast('💾 บันทึกใบเสนอราคาแล้ว');
   go('quotationV2');
