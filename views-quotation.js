@@ -270,10 +270,10 @@ function toggleQuotationItemsFullscreen() {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'qiFullscreenOverlay';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg,#0f172a);overflow:auto;padding:20px';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg,#0f172a);padding:20px;flex-direction:column;box-sizing:border-box';
       document.body.appendChild(overlay);
     }
-    overlay.style.display = 'block';
+    overlay.style.display = 'flex';
   } else if (overlay) {
     overlay.style.display = 'none';
   }
@@ -300,7 +300,8 @@ function renderQuotationItemsTable() {
 
   var _curQuote = (currentQuoteId && typeof getQuoteById === 'function') ? getQuoteById(currentQuoteId) : null;
 
-  var html = dlHtml + '<div class="export-wrap" style="overflow-x:auto"><table class="export-table" style="width:100%">';
+  var wrapStyle = quotationItemsFullscreen ? 'overflow:auto;max-height:none;height:100%' : 'overflow-x:auto';
+  var html = dlHtml + '<div class="export-wrap" style="' + wrapStyle + '"><table class="export-table" style="width:100%">';
   html += '<thead><tr>';
   html += '<th style="width:40px">#</th>';
   html += '<th>SKU</th>';
@@ -326,7 +327,7 @@ function renderQuotationItemsTable() {
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + (item.sku ? qcopyHtml(item.sku) : '-') + '</td>';
     html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)">' +
-      (typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
+      (!quotationItemsFullscreen && typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';
@@ -347,7 +348,8 @@ function renderQuotationItemsTable() {
     sumCost += (Number(it.cost) || 0) * (Number(it.quantity) || 1);
   });
   var totalMargin = sumAmount > 0 ? ((sumAmount - sumCost) / sumAmount * 100) : 0;
-  html += '</tbody><tfoot><tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">';
+  // sticky bottom — แถวสรุปให้ติดล่างของกรอบเลื่อนเสมอ (เหมือน thead ที่ติดบนอยู่แล้ว) จะได้เห็นยอดรวมโดยไม่ต้องเลื่อนลงสุด
+  html += '</tbody><tfoot><tr style="position:sticky;bottom:0;border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">';
   html += '<td colspan="5" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
   html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿</td>';
   if (showQuotationCost) {
@@ -371,13 +373,16 @@ function _qiFullscreenPlaceholderHtml() {
 }
 
 function _qiFullscreenWrapHtml(tableHtml) {
-  return '<div style="max-width:1400px;margin:0 auto">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+  // เต็มความสูงจอจริงๆ ด้วย flex column: header คงที่ ตารางกินพื้นที่ที่เหลือทั้งหมด (min-height:0 ให้ flex child เลื่อนได้เอง
+  // แทนที่จะดันความสูงล้น) — ตาราง (.export-wrap) ตั้ง height:100% เอง (ดู renderQuotationItemsTable) เลยพอดีเต็มพื้นที่นี้
+  return '<div style="max-width:1400px;margin:0 auto;height:100%;display:flex;flex-direction:column;min-height:0">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex:none">' +
     '<h2 style="margin:0">📦 รายการสินค้า</h2>' +
     '<div style="display:flex;gap:8px">' +
     '<button class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button>' +
     '<button class="btn bsm bo" onclick="toggleQuotationItemsFullscreen()">✕ ปิด</button>' +
-    '</div></div>' + tableHtml + '</div>';
+    '</div></div>' +
+    '<div style="flex:1;min-height:0">' + tableHtml + '</div></div>';
 }
 
 function updateQuotationItemQty(idx, qty) {
