@@ -3829,6 +3829,33 @@ function saveStep(tid) {
   render();
 }
 
+// เพิ่มหลายขั้นตอนพร้อมกันแบบพิมพ์เป็น bullet list — ตอนสร้างงานใหม่มีโหมดนี้อยู่แล้ว (ft_bullets ใน
+// showTaskM) แต่ปิดไว้ตอนแก้ไขงานที่มีอยู่แล้ว (eid ตั้งไว้) เพราะ saveTask() ฝั่ง eid ไม่ได้แตะ t.steps
+// เลย ผู้ใช้เลยหาทางเพิ่มหลายข้อทีหลังไม่เจอ (มีแต่ปุ่ม ➕ เพิ่มทีละข้อ) เพิ่มปุ่มนี้แยกต่างหากในหน้า
+// รายละเอียดงานแทน — always append ต่อท้าย steps เดิม ไม่แตะ/ไม่ล้างของเดิมที่ทำค้างหรือติ๊กเสร็จไปแล้ว
+function showBulkAddStepsM(tid) {
+  openM('☰ เพิ่มหลายขั้นตอนพร้อมกัน', '' +
+    '<div class="fg"><label>พิมพ์ 1 บรรทัด = 1 ขั้นตอน</label>' +
+    '<textarea id="fbs_t" rows="8" placeholder="โทรลูกค้า A&#10;ส่งใบเสนอราคา B&#10;เช็คสต็อก C"></textarea>' +
+    '<div class="hint">💡 จะถูกเพิ่มต่อท้ายขั้นตอนที่มีอยู่แล้ว ไม่ลบ/ไม่แตะของเดิม — แก้ไขรายละเอียด/วันที่/link ของแต่ละข้อได้ทีหลัง</div></div>' +
+    '<button class="btn bp btn-full" onclick="saveBulkAddSteps(\'' + tid + '\')">💾 เพิ่มขั้นตอน</button>');
+}
+function saveBulkAddSteps(tid) {
+  var t = ST.getOne('tasks', tid);
+  if (!t) return;
+  var el = document.getElementById('fbs_t');
+  var lines = el ? el.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean) : [];
+  if (!lines.length) return alert('พิมพ์อย่างน้อย 1 บรรทัดก่อนนะครับ');
+  var newSteps = lines.map(function(l) {
+    return { id: gid(), title: l, startDate: '', dueDate: '', url: '', notes: '', attachments: [], done: false, kanban: 'todo' };
+  });
+  t.steps = (t.steps || []).concat(newSteps);
+  ST.update('tasks', tid, { steps: t.steps });
+  closeMForce();
+  toast('✅ เพิ่ม ' + newSteps.length + ' ขั้นตอนแล้ว');
+  render();
+}
+
 function updateStep(tid, idx) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps[idx]) return;

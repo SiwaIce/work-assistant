@@ -1462,7 +1462,9 @@ function rTaskDet(el) {
 
     <!-- Steps Section -->
     <div class="td2-card">
-      <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''} <button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></h3>
+      <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''}
+        <button class="btn bsm bp" onclick="showStepM('${t.id}')" title="เพิ่มทีละขั้นตอน (กรอกรายละเอียด/วันที่/link ได้)">➕</button>
+        <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button></h3>
       ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
       ${(t.steps || []).length ? t.steps.map(function(s, i) {
         var lk = isStepLocked(t, i);
