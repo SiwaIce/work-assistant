@@ -597,7 +597,7 @@ function renderTaskCard(t) {
     ${dateBadgeHtml}
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
       ${dateShiftBarHtml}
-      <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:80px' : ''}">
+      <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:190px' : ''}">
         ${taskSelectMode ? `<input type="checkbox" id="taskChk_${t.id}" class="task-complete-chk" ${taskSelected[t.id] ? 'checked' : ''}
           onclick="event.stopPropagation();toggleTaskSelect('${t.id}')" title="เลือกงานนี้">` : `<input type="checkbox" class="task-complete-chk" ${checkedAttr}
           onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">`}
@@ -1462,7 +1462,9 @@ function rTaskDet(el) {
 
     <!-- Steps Section -->
     <div class="td2-card">
-      <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''} <button class="btn bsm bp" onclick="showStepM('${t.id}')">➕</button></h3>
+      <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''}
+        <button class="btn bsm bp" onclick="showStepM('${t.id}')" title="เพิ่มทีละขั้นตอน (กรอกรายละเอียด/วันที่/link ได้)">➕</button>
+        <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button></h3>
       ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
       ${(t.steps || []).length ? t.steps.map(function(s, i) {
         var lk = isStepLocked(t, i);

@@ -274,6 +274,40 @@ function _importDjiProjectsXlsx_impl() {
   input.click();
 }
 
+// Export กลับเป็น Excel — เหตุผลเดียวกับ exportDjiLedgerXlsx ในสมุดเดินของ: เปิดอ่าน/ส่งต่อได้ทันทีโดยไม่ต้อง
+// เข้าแอป คอลัมน์อ้างอิงไฟล์ต้นฉบับจาก DJI CRM (DJP_COLS) พร้อมเติมสถานะที่แอปรู้เพิ่ม: Dealer ที่จับคู่ได้,
+// ประเภท (โครงการ/Run rate/ยังไม่ระบุ), และผูกกับโครงการ/ถังไหนอยู่แล้ว
+function exportDjiProjectsXlsx() {
+  ensureXLSX().then(function() {
+    _exportDjiProjectsXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+function _exportDjiProjectsXlsx_impl() {
+  var all = ST.getAll('djiProjects');
+  if (!all.length) return toast('ไม่มีข้อมูลให้ export');
+  var rows = all.slice().sort(function(a, b) { return (a.regDate || '').localeCompare(b.regDate || ''); }).map(function(p) {
+    var dealer = djpDealerOf(p);
+    var pipe = djpPipelineOf(p);
+    var rr = djpRunrateOf(p);
+    var linkedTo = pipe ? ('Pipeline: ' + (pipe.projectName || '')) : (rr ? ('Run rate — ' + (dealer ? dealer.name : '')) : '');
+    return [
+      p.pid || '', p.name || '', p.acct || '', p.prov || '', p.poc || '',
+      p.createdBy || '', dealer ? dealer.name : '', p.regDate || '',
+      p.updatedBy || '', p.updatedDate || '', DJP_KINDS[djpKindOf(p)].label, linkedTo
+    ];
+  });
+  var headers = ['Project ID', 'Projects Name', 'Account Name', 'Province', 'POC', 'Created By',
+    'Dealer ในระบบ', 'วันที่ลงทะเบียน', 'อัปเดตล่าสุดโดย', 'วันที่อัปเดตล่าสุด', 'ประเภท', 'ผูกกับ'];
+  var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+  ws['!cols'] = [{ wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 30 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'DJI Projects');
+  XLSX.writeFile(wb, 'dji-projects-export-' + _td() + '.xlsx');
+  toast('📥 Export ทะเบียน Project ID แล้ว (' + rows.length + ' โครงการ)');
+}
+
 function _djpShowImportPreview(recs, filename) {
   // Project ID เป็นตัวระบุตัวตนของโครงการ ไฟล์งวดถัดไปจะมีของเดิมทับมาเสมอ — ตัวที่เคยมีแล้วถือเป็น "อัปเดต"
   // ไม่ใช่ของใหม่ และต้องไม่ไปทับ pipelineId/dealerId ที่เราผูกไว้เองแล้ว
@@ -1101,6 +1135,7 @@ function rDjiProjects(el) {
   var autoN = auto.pipe.length + auto.bucket.length;
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
     '<button class="btn bp bsm" onclick="importDjiProjectsXlsx()">⬆️ นำเข้าไฟล์</button>' +
+    '<button class="btn bo bsm" onclick="exportDjiProjectsXlsx()">📥 Export Excel</button>' +
     (autoN ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjpAutoLinkM()">⚡ จับคู่อัตโนมัติได้ ' + autoN + ' คู่</button>' : '') +
     '<button class="btn bsm bo" onclick="showDjpMatchBoardM(\'\')">🔀 จับคู่ทีละคู่</button>' +
     '</div>';

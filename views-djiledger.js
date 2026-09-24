@@ -167,6 +167,44 @@ function _importDjiLedgerXlsx_impl() {
   input.click();
 }
 
+// Export กลับเป็น Excel — ใช้ตอนต้องเอาไปเทียบกับใครนอกแอป (บัญชี/ผู้บริหาร) หรือสำรองไว้เปิดตรงๆ โดยไม่ต้อง
+// เข้าแอป ต่างจาก Full Backup (JSON) ตรงที่เปิดอ่านง่ายใน Excel ทันที คอลัมน์อ้างอิงไฟล์ต้นฉบับจาก DJI
+// (DJL_COLS) พร้อมเติม 2 คอลัมน์ที่แอปรู้เพิ่ม: Dealer ที่จับคู่ได้ในระบบ + หมวดที่แอปจัดให้ (ขาย/ยังไม่
+// authorized/เข้าคลังเรา — ดู djlBucket) ช่วยให้เปิดดูนอกแอปแล้วยังเห็นบริบทเดียวกับในแอปครบ
+function exportDjiLedgerXlsx() {
+  ensureXLSX().then(function() {
+    _exportDjiLedgerXlsx_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+function _exportDjiLedgerXlsx_impl() {
+  var all = ST.getAll('djiMovements');
+  if (!all.length) return toast('ไม่มีข้อมูลให้ export');
+  var dmap = _djlDealerByCode();
+  // เรียงตามวันที่แล้วตาม seq (ลำดับเดิมในไฟล์ DJI) — เหตุผลเดียวกับ _djlKey ด้านบน: วันที่ในไฟล์ละเอียดแค่
+  // ระดับวัน เรียงด้วยวันที่อย่างเดียวจะสลับลำดับเครื่องที่ส่งออก/รับคืนวันเดียวกันได้
+  var rows = all.slice().sort(function(a, b) {
+    return (a.date || '').localeCompare(b.date || '') || (a.seq || 0) - (b.seq || 0);
+  }).map(function(m) {
+    var dealer = djlDealerOf(m, dmap);
+    var bucket = DJL_BUCKETS[djlBucket(m, dmap)];
+    return [
+      m.name || '', m.code || '', dealer ? dealer.name : '', bucket ? bucket.label : '',
+      m.status || '', m.type || '', m.date || '', m.ship || '', m.inv || '', m.pid || '',
+      m.sn || '', m.ean || '', m.qty || 0
+    ];
+  });
+  var headers = ['Reseller/Retailer Name', 'Reseller/Retailer Code', 'Dealer ในระบบ', 'หมวด',
+    'Status', 'Bill Type', 'Bill Date', 'Shipment Date', 'Invoice No.', 'Project ID', 'SN', 'EAN', 'Quantity'];
+  var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+  ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 9 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'DJI Ledger');
+  XLSX.writeFile(wb, 'dji-ledger-export-' + _td() + '.xlsx');
+  toast('📥 Export สมุดเดินของ DJI แล้ว (' + rows.length + ' แถว)');
+}
+
 function _djlShowImportPreview(recs, filename) {
   var existing = {};
   ST.getAll('djiMovements').forEach(function(m) { existing[_djlKey(m)] = true; });
@@ -505,6 +543,7 @@ function rDjiLedger(el) {
   var autoPid = djlAutoPidPlan().length;
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' +
     '<button class="btn bp bsm" onclick="importDjiLedgerXlsx()">⬆️ นำเข้าไฟล์</button>' +
+    '<button class="btn bo bsm" onclick="exportDjiLedgerXlsx()">📥 Export Excel</button>' +
     '<button class="btn bo bsm" onclick="showDjlMatchM()">🔗 จับคู่เข้า SO</button>' +
     (autoPid ? '<button class="btn bsm bo" style="border-color:var(--ok,#22c55e);color:var(--ok,#22c55e)" onclick="showDjlAutoPidM()">⚡ ดึง Project ID จาก SO ได้ ' + autoPid + ' ใบ</button>' : '') +
     '</div>';
