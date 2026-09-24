@@ -8891,8 +8891,10 @@ function vpPlanCardHtml(p, fullDetail, conflicts) {
   }
 
   h2 += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-  if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>';
-  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisitLead(\'' + p.id + '\')">📝 สร้าง Visit Report</button>';
+  if (!isLead && dd && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisit(\'' + p.id + '\')">📝 เปิด Visit Report สำหรับนัดนี้</button>' +
+    '<button class="btn bsm bo" onclick="vpGoVisitModal(\'' + p.id + '\')" title="เปิดแบบ Modal เล็กแทน">✏️</button>';
+  if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bp" onclick="vpGoVisitLead(\'' + p.id + '\')">📝 สร้าง Visit Report</button>' +
+    '<button class="btn bsm bo" onclick="vpGoVisitLeadWindow(\'' + p.id + '\')" title="เปิดแบบแท็บแยกเต็มจอแทน — มีสมุดโน้ตเร็วด้านขวา">🪟</button>';
   if (p.status === 'done' && p.visitId) h2 += '<button class="btn bsm bo" onclick="go(\'visitDetail\',{visitId:\'' + p.visitId + '\'})">📝 ดู Visit Report →</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bs" onclick="vpQuickMarkAttended(\'' + p.id + '\')" title="ไปตามนัดแล้ว ไม่มีโน้ตเพิ่ม">✅ ไปตามนัด</button>';
   if (isLead && p.status !== 'done') h2 += '<button class="btn bsm bo" onclick="showVpLeadActualM(\'' + p.id + '\')">📍 บันทึกผลการนัด (เลื่อน/ยกเลิก/ใส่โน้ต)</button>';
@@ -9649,15 +9651,16 @@ function vpMarkPlanActualFromVisit(visitId, prospectId) {
   if (pid && typeof _vpAdvanceProspectIfBehind === 'function') _vpAdvanceProspectIfBehind(pid, 'visited', 'เข้าพบตามนัดแล้ว');
 }
 
-function vpGoVisitLead(planId) {
-  var plan = ST.getOne('visitPlans', planId);
-  if (!plan) return;
-  window._vpLinkPlanId = planId;
-  // แผนนัด Lead ไม่บังคับต้องผูกกับ Prospect ที่บันทึกไว้จริง (ดู vp_prospect_select ใน showAddVisitPlanM —
-  // "-- พิมพ์เอง --" ก็เลือกได้) กรณีนั้น plan.prospectId จะว่าง ถ้ายังตั้ง sourceType เป็น 'lead' แบบเดิม
-  // <select> Lead ในฟอร์ม Visit Report จะไม่มีตัวเลือกไหนตรงเลย เด้งกลับไป "-- เลือก Lead --" เปล่าๆ ให้ผู้ใช้
-  // ต้องเลือกเองใหม่ทั้งที่เพิ่งกดมาจากนัดนี้ตรงๆ — ไม่มี prospectId ให้ใช้โหมด "อื่นๆ" (ชื่อพิมพ์เอง) แทน แล้ว
-  // prefill ชื่อบริษัทจากแผนนัดให้เลย ยังแก้ไขชื่อในช่องนั้นได้ตามปกติ (ผู้ใช้แจ้ง 2026-09-19)
+// เตรียมค่า prefill Lead/บริษัท (แผนนัดที่ไม่มี dealerId ผูกอยู่) ให้ฟอร์ม Visit Report ใช้ — แยกออกมาจาก
+// vpGoVisitLead เพื่อเรียกซ้ำได้จากแบบเปิดแท็บเต็มจอด้วย (rVisitWindow ใน views-visit.js อ่าน planId จาก URL
+// เอง แล้วเรียก helper นี้ในแท็บใหม่ — คนละ window context กัน ส่งค่า window._vp* ข้าม tab ตรงๆ ไม่ได้ ต้อง
+// derive ใหม่จาก planId เดิมทุกครั้ง)
+// แผนนัด Lead ไม่บังคับต้องผูกกับ Prospect ที่บันทึกไว้จริง (ดู vp_prospect_select ใน showAddVisitPlanM —
+// "-- พิมพ์เอง --" ก็เลือกได้) กรณีนั้น plan.prospectId จะว่าง ถ้ายังตั้ง sourceType เป็น 'lead' แบบเดิม
+// <select> Lead ในฟอร์ม Visit Report จะไม่มีตัวเลือกไหนตรงเลย เด้งกลับไป "-- เลือก Lead --" เปล่าๆ ให้ผู้ใช้
+// ต้องเลือกเองใหม่ทั้งที่เพิ่งกดมาจากนัดนี้ตรงๆ — ไม่มี prospectId ให้ใช้โหมด "อื่นๆ" (ชื่อพิมพ์เอง) แทน แล้ว
+// prefill ชื่อบริษัทจากแผนนัดให้เลย ยังแก้ไขชื่อในช่องนั้นได้ตามปกติ (ผู้ใช้แจ้ง 2026-09-19)
+function _vpApplyLeadPrefill(plan) {
   var hasProspect = plan.prospectId && ST.getOne('prospects', plan.prospectId);
   window._visitSourceType = hasProspect ? 'lead' : 'other';
   window._vpPrefillProspectId = hasProspect ? plan.prospectId : '';
@@ -9666,8 +9669,52 @@ function vpGoVisitLead(planId) {
   window._vpPrefillPlanCompanyName = hasProspect ? '' : (plan.companyName || plan.title || '');
   // วันที่เริ่มต้นควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ (เหมือน rVisitWindow ฝั่ง Dealer) — ผ่าน _visitDraftOverride
   if (plan.date) window._visitDraftOverride = { date: plan.date };
+}
+
+function vpGoVisitLead(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  window._vpLinkPlanId = planId;
+  _vpApplyLeadPrefill(plan);
+  // showVisitM() ล้าง window._visitDraftOverride ทิ้งเองทุกครั้งที่เปิดฟอร์มแบบ "เปิดใหม่จริงๆ" (กันร่างค้างจาก
+  // เซสชันก่อนหน้าเล็ดลอดเข้าฟอร์มที่ไม่เกี่ยวข้อง) ซึ่งจะล้าง date override ที่เพิ่ง set ไว้ข้างบนทิ้งไปด้วย —
+  // ตั้งค่า _visitLastOpenKey ให้ตรงกับที่ showVisitM('') จะคำนวณเองล่วงหน้า ให้มันมองว่า "เปิดซ้ำ" ไม่ใช่
+  // "เปิดใหม่" จะได้ข้าม logic ล้างทิ้งนั้นไป (พบบั๊กนี้ตอนทดสอบ vpGoVisitModal คู่กัน — บั๊กเดิมมีอยู่แล้วก่อนหน้า)
   if (typeof showVisitM === 'function') {
+    _visitLastOpenKey = '|';
     showVisitM('');
+    setTimeout(function() {
+      var modeEl = document.querySelector('input[name="fv_mode"][value="' + (plan.mode || 'offline') + '"]');
+      if (modeEl) modeEl.checked = true;
+    }, 200);
+  }
+}
+
+// เหมือน vpGoVisitLead ทุกอย่าง แต่เปิดเป็นแท็บแยกเต็มจอแทน modal เล็ก (มีสมุดโน้ตเร็วด้านขวา) — ผู้ใช้ขอให้
+// เลือกได้ระหว่าง 2 แบบ เหมือนที่มีปุ่มคู่ ✏️/🪟 อยู่แล้วในเมนู Visit Report ปกติ (ดู views-visit.js) เดิมนัด
+// แบบ Lead มีแต่โหมด modal ให้เลือกอย่างเดียว (ผู้ใช้แจ้ง 2026-09-24) — ส่ง planId ผ่าน URL ให้ rVisitWindow
+// เรียก _vpApplyLeadPrefill ซ้ำเองในแท็บใหม่ (ดู views-visit.js)
+function vpGoVisitLeadWindow(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  if (typeof openVisitWindow === 'function') {
+    openVisitWindow('', '', planId, plan.mode || '');
+  } else {
+    toast('ฟังก์ชันเปิดแท็บแยกไม่พบ');
+  }
+}
+
+// เหมือน vpGoVisit (เปิดแท็บเต็มจอ) แต่เปิดเป็น modal เล็กแทน — คู่กับ vpGoVisitLeadWindow ด้านบน ให้นัดแบบ
+// Dealer เลือกได้ทั้ง 2 แบบเหมือนกัน (เดิมมีแต่โหมดเปิดแท็บเต็มจออย่างเดียว)
+function vpGoVisitModal(planId) {
+  var plan = ST.getOne('visitPlans', planId);
+  if (!plan) return;
+  if (!plan.dealerId) { toast('นัดนี้ไม่มี Dealer ผูกอยู่ — ใช้ปุ่ม "บันทึกผลการนัด" แทน'); return; }
+  window._vpLinkPlanId = planId;
+  if (plan.date) window._visitDraftOverride = { date: plan.date };
+  if (typeof showVisitM === 'function') {
+    _visitLastOpenKey = plan.dealerId + '|';
+    showVisitM(plan.dealerId);
     setTimeout(function() {
       var modeEl = document.querySelector('input[name="fv_mode"][value="' + (plan.mode || 'offline') + '"]');
       if (modeEl) modeEl.checked = true;

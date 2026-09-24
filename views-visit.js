@@ -320,12 +320,23 @@ function rVisitWindow(el) {
   }
   // มาจากนัดใน Visit Plan (openVisitWindow ส่ง planId มา) — ผูกผล Visit กลับเข้าแผนนัดนี้อัตโนมัติหลังบันทึก
   if (window._vwPlanId) window._vpLinkPlanId = window._vwPlanId;
-  // วันที่เริ่มต้นของ Visit Report ควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ — ใส่ผ่าน _visitDraftOverride (กลไกเดิม
-  // ที่ buildVisitFormHtml ใช้ prefill ค่า) เฉพาะตอน render ครั้งแรกเท่านั้น (!_visitDraftOverride) กันไม่ให้
-  // ไปทับวันที่ที่ผู้ใช้พิมพ์แก้เองแล้วตอนสลับโหมด Quick/Standard/Full (ซึ่ง capture ค่าปัจจุบันไว้ก่อนสลับ)
-  if (window._vwPlanId && !eid && !window._visitDraftOverride) {
+  if (window._vwPlanId && !eid) {
     var _vwPlan = ST.getOne('visitPlans', window._vwPlanId);
-    if (_vwPlan && _vwPlan.date) window._visitDraftOverride = { date: _vwPlan.date };
+    if (_vwPlan) {
+      if (!dealerId && !window._vwLeadPrefillApplied) {
+        // แผนนัดแบบ Lead (ไม่มี dealerId ผูก, เช่นเปิดจากปุ่ม 🪟 ข้าง "สร้าง Visit Report" ในเมนู Lead ที่ติดตาม)
+        // — prefill Lead/ชื่อบริษัทให้เหมือนตอนเปิดแบบ modal (vpGoVisitLead ใน features.js) ทำแค่ครั้งเดียวตอน
+        // เปิดแท็บนี้จริงๆ ไม่งั้นจะไปทับค่าที่ผู้ใช้แก้เองแล้วตอนสลับโหมด Quick/Standard/Full (helper นี้ตั้ง
+        // _visitDraftOverride ให้เองด้วยถ้าแผนนัดมีวันที่ — ไม่ต้องทำซ้ำในบรานช์ด้านล่าง)
+        window._vwLeadPrefillApplied = true;
+        if (typeof _vpApplyLeadPrefill === 'function') _vpApplyLeadPrefill(_vwPlan);
+      } else if (dealerId && !window._visitDraftOverride) {
+        // วันที่เริ่มต้นของ Visit Report ควรเป็นวันที่นัดไว้ ไม่ใช่วันนี้ — ใส่ผ่าน _visitDraftOverride (กลไกเดิม
+        // ที่ buildVisitFormHtml ใช้ prefill ค่า) เฉพาะตอน render ครั้งแรกเท่านั้น (!_visitDraftOverride) กันไม่ให้
+        // ไปทับวันที่ที่ผู้ใช้พิมพ์แก้เองแล้วตอนสลับโหมด Quick/Standard/Full (ซึ่ง capture ค่าปัจจุบันไว้ก่อนสลับ)
+        if (_vwPlan.date) window._visitDraftOverride = { date: _vwPlan.date };
+      }
+    }
   }
   // Agenda ของแผนนัดนี้ (ถ้ามี) แสดงเป็นเช็คลิสต์ที่แก้ไข/ติ๊ก/ใส่รายละเอียดต่อได้จริงในฟอร์มเลย (ดู
   // _visitAgendaSectionHtml ใน modals.js) — เดิมจุดนี้เคยแค่ copy ข้อความหัวข้อที่ติ๊กไว้ในแผนนัดลงช่องสรุปแบบ
