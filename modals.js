@@ -3862,6 +3862,27 @@ function saveBulkAddSteps(tid) {
   render();
 }
 
+// คัดลอกขั้นตอนทั้งหมดเป็น bullet list (พร้อมหมายเหตุต่อข้อถ้ามี) — เอาไปวางสรุปใน Visit Report ได้เลย
+// เจอกรณี Work From Home ที่ไม่ได้ออกไป visit จริง แต่อยากสรุปว่าวันนั้นทำอะไรบ้าง ✓ = ติ๊กเสร็จแล้ว
+// ไม่ใช้ copyToClip() เพราะฟังก์ชันนั้น toast โชว์ข้อความที่คัดลอกทั้งก้อน เหมาะกับของสั้นๆ อันเดียว
+// ไม่เหมาะกับ list หลายบรรทัดแบบนี้ (toast จะยาวเกิน) เลยเขียน clipboard write เองพร้อม toast สรุปจำนวนแทน
+function copyStepsAsBullets(tid) {
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps || !t.steps.length) { toast('ยังไม่มีขั้นตอนให้คัดลอก'); return; }
+  var text = t.steps.map(function(s) {
+    var line = (s.done ? '✓ ' : '- ') + s.title;
+    if (s.notes) line += ' — ' + s.notes;
+    return line;
+  }).join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      toast('📋 คัดลอกขั้นตอนแล้ว (' + t.steps.length + ' ข้อ) — วางใน Visit Report ได้เลย');
+    }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+
 function updateStep(tid, idx) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps[idx]) return;
