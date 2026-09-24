@@ -585,6 +585,11 @@ function renderTaskCard(t) {
 
   var cardClass = 'task-card task-card-v2 tier-' + tier;
   if (isCompleted) cardClass += ' task-completed';
+  // ป้ายวันครบกำหนด (.task-date-badge) เป็น position:absolute ลอยมุมขวาบน ไม่ได้กินพื้นที่ในโฟลว์การ์ด —
+  // การ์ดที่ย่ออยู่ (ค่าเริ่มต้น) มีแค่แถวหัวข้อสั้นๆ เตี้ยกว่าป้ายทั้งก้อน (พิล "เกิน N วัน" + วันที่ข้างใต้)
+  // แล้วโดน overflow:hidden ของการ์ดตัดวันที่ทิ้งไป (ผู้ใช้แจ้ง 2026-09-24 เห็นแต่พิล ไม่เห็นวันที่) เติมคลาส
+  // has-due ให้ CSS บังคับความสูงขั้นต่ำพอเห็นป้ายครบ เฉพาะการ์ดที่มีป้ายจริง (ไม่ใช่ตอนเปิดแถบเลื่อนวันที่)
+  if (t.dueDate && _taskDateShiftId !== t.id) cardClass += ' has-due';
   var checkedAttr = isCompleted ? 'checked' : '';
 
   // ย่อ/ขยาย — ค่าเริ่มต้นย่อ แสดงแค่หัวข้องาน/ป้ายวันที่/แถวลิงก์ กันการ์ดกินพื้นที่เยอะตอนดูรายการยาวๆ
