@@ -1464,7 +1464,8 @@ function rTaskDet(el) {
     <div class="td2-card">
       <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''}
         <button class="btn bsm bp" onclick="showStepM('${t.id}')" title="เพิ่มทีละขั้นตอน (กรอกรายละเอียด/วันที่/link ได้)">➕</button>
-        <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button></h3>
+        <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button>
+        <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}')" title="คัดลอกขั้นตอนทั้งหมดเป็น bullet list (พร้อมหมายเหตุถ้ามี) เอาไปวางสรุปใน Visit Report ได้เลย">📋 Copy</button></h3>
       ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
       ${(t.steps || []).length ? t.steps.map(function(s, i) {
         var lk = isStepLocked(t, i);
