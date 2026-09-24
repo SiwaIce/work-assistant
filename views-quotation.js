@@ -348,10 +348,20 @@ function renderQuotationItemsTable() {
     sumCost += (Number(it.cost) || 0) * (Number(it.quantity) || 1);
   });
   var totalMargin = sumAmount > 0 ? ((sumAmount - sumCost) / sumAmount * 100) : 0;
+  // VAT — อิงสูตรเดียวกับ recalculateQuotationTotal (หักส่วนลดก่อนค่อยคิด VAT) อ่านส่วนลดจากช่องในการ์ดสรุป
+  // ด้านล่างของหน้า ถ้ายังไม่มี (เช่น หน้ายังโหลดไม่เสร็จ) ถือว่าไม่มีส่วนลด
+  var discountPctEl = document.getElementById('quoteDiscountPercent');
+  var discountPct = discountPctEl ? (parseFloat(discountPctEl.value) || 0) : 0;
+  var netAfterDiscount = sumAmount - (sumAmount * discountPct / 100);
+  var vatAmount = netAfterDiscount * 7 / 100;
+  var grandTotalWithVat = netAfterDiscount + vatAmount;
   // sticky bottom — แถวสรุปให้ติดล่างของกรอบเลื่อนเสมอ (เหมือน thead ที่ติดบนอยู่แล้ว) จะได้เห็นยอดรวมโดยไม่ต้องเลื่อนลงสุด
   html += '</tbody><tfoot><tr style="position:sticky;bottom:0;border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">';
   html += '<td colspan="5" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
-  html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿</td>';
+  html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿' +
+    '<div style="font-size:.72em;font-weight:400;color:var(--text2);margin-top:2px">+VAT 7%: ' + formatNumber(Math.round(vatAmount)) + ' ฿</div>' +
+    '<div style="font-size:.8em;font-weight:800;margin-top:1px">รวม VAT: ' + formatNumber(Math.round(grandTotalWithVat)) + ' ฿</div>' +
+    '</td>';
   if (showQuotationCost) {
     html += '<td style="text-align:right;color:var(--text2);padding:8px">ต้นทุนรวม</td>';
     html += '<td style="text-align:right;color:#f59e0b;padding:8px">' + formatNumber(Math.round(sumCost)) + ' ฿</td>';
@@ -2069,7 +2079,7 @@ function renderEditQuotationPage(quote) {
   html += '<h2>💰 สรุป</h2>';
   html += '<div style="max-width:400px;margin-left:auto">';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
-  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal();renderQuotationItemsTable()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:6px 0;border-top:2px solid var(--accent);margin-top:4px;padding-top:8px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
