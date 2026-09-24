@@ -1485,6 +1485,7 @@ function rTaskDet(el) {
             ${buildFuTimeline(t.id, i)}
           </div>
           <div class="td2-step-actions">
+            ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();editStep('${t.id}',${i})" title="แก้ไข/เพิ่ม comment รายละเอียดของขั้นตอนนี้">✏️</button>`}
             <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
             ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
             <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
