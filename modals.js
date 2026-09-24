@@ -3491,9 +3491,9 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
     '<div class="fg"><label>ชื่อ *</label><input type="text" id="ft_t" value="' + sanitize(t.title || '') + '"></div>' +
     '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>รายละเอียด</label>' +
     '<button type="button" class="btn bsm bo" onclick="toggleExpandTextarea(\'ft_d\')">⛶ ขยาย</button></div>' +
-    (eid ? '' : '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+    '<div style="display:flex;gap:6px;margin-bottom:6px">' +
       '<button type="button" class="btn bsm bp" id="ft_mode_text" onclick="setTaskDescMode(\'text\')">📝 ข้อความยาว</button>' +
-      '<button type="button" class="btn bsm bo" id="ft_mode_bullet" onclick="setTaskDescMode(\'bullet\')">☑ Bullet list</button></div>') +
+      '<button type="button" class="btn bsm bo" id="ft_mode_bullet" onclick="setTaskDescMode(\'bullet\')">☑ Bullet list</button></div>' +
     '<div id="ft_text_wrap">' +
     '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
     '<input type="file" accept="image/*" onchange="_handleAttachUpload(event,\'_ftDescAttach\',\'tasks\')" style="flex:1;font-size:.72rem" title="แนบรูปจากไฟล์ในเครื่อง">' +
@@ -3501,12 +3501,12 @@ function showTaskM(eid, prefillDealerId, prefillDueDate, prefillPipeId) {
     '</div>' +
     '<textarea id="ft_d" rows="7" style="min-height:140px" placeholder="พิมพ์รายละเอียด... (วางหรือลากรูปลงในช่องนี้ได้)" onpaste="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondrop="handlePasteOrDropImage(event,\'_ftDescAttach\',\'tasks\')" ondragover="event.preventDefault()">' + sanitize(t.description || '') + '</textarea>' +
     '<div id="_ftDescAttach_thumbs">' + attachThumbsHtml(window._ftDescAttach, '_ftDescAttach') + '</div></div>' +
-    (eid ? '' : '<div id="ft_bullet_wrap" style="display:none">' +
+    '<div id="ft_bullet_wrap" style="display:none">' +
       '<div class="fr" style="margin-bottom:6px;gap:6px">' +
       '<select id="ft_tpl" style="flex:1" onchange="applyTaskTplToBullets(this.value)"><option value="">-- เลือกจาก Template --</option>' + tplOpts + '</select>' +
       '<button type="button" class="btn bsm bo" onclick="saveBulletsAsTemplate()">💾 บันทึกเป็น Template</button></div>' +
       '<textarea id="ft_bullets" rows="6" placeholder="พิมพ์ 1 บรรทัด = 1 bullet เช่น&#10;โทรลูกค้า A&#10;ส่งใบเสนอราคา B&#10;เช็คสต็อก C"></textarea>' +
-      '<div class="hint">💡 แต่ละบรรทัดจะกลายเป็น Step ในงานนี้ — แก้ไขรายละเอียด/วันที่/link ของแต่ละ bullet ได้ทีหลังในหน้า Task</div></div>') +
+      '<div class="hint">💡 แต่ละบรรทัดจะกลายเป็น Step ใหม่' + (eid ? ' — เพิ่มต่อท้ายขั้นตอนที่มีอยู่แล้ว ไม่ลบของเดิม' : ' ในงานนี้') + ' — แก้ไขรายละเอียด/วันที่/link ของแต่ละ bullet ได้ทีหลังในหน้า Task</div></div>' +
     '</div>' +
     '<div class="fr">' +
     '<div class="fg"><label>🏪 Dealer</label>' +
@@ -3751,23 +3751,29 @@ function saveTask(eid) {
     attachments: window._ftDescAttach || [],
     links: window._ftLinks || []
   };
+  // โหมด Bullet list ใช้ได้ทั้งตอนสร้างและแก้ไข — ตอนแก้ไขเป็นการ "เพิ่มต่อท้าย" steps เดิมเสมอ (ไม่ทับ/ไม่ลบ
+  // ขั้นตอนที่ทำค้างหรือติ๊กเสร็จไปแล้ว) ตอนสร้างใหม่ก็คือ append เข้า array ว่างๆ ผลลัพธ์เหมือนแทนที่ทั้งหมด
+  var newBulletSteps = [];
+  if (window._ftDescMode === 'bullet') {
+    var bulletsEl = document.getElementById('ft_bullets');
+    var lines = bulletsEl ? bulletsEl.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean) : [];
+    newBulletSteps = lines.map(function(l) { return {id: gid(), title: l, startDate: '', dueDate: '', url: '', notes: '', attachments: [], done: false, kanban: 'todo'}; });
+  }
   if (eid) {
+    if (newBulletSteps.length) {
+      var existTask = ST.getOne('tasks', eid);
+      data.steps = (existTask && existTask.steps || []).concat(newBulletSteps);
+    }
     ST.update('tasks', eid, data);
     closeMForce();
     go('taskDetail', {taskId: eid});
   } else {
-    var steps = [];
-    if (window._ftDescMode === 'bullet') {
-      var bulletsEl = document.getElementById('ft_bullets');
-      var lines = bulletsEl ? bulletsEl.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean) : [];
-      steps = lines.map(function(l) { return {id: gid(), title: l, startDate: '', dueDate: '', url: '', notes: '', done: false, kanban: 'todo'}; });
-    }
-    data.steps = steps;
+    data.steps = newBulletSteps;
     var t = ST.add('tasks', data);
     closeMForce();
     go('taskDetail', {taskId: t.id});
   }
-  toast('💾 บันทึกแล้ว');
+  toast('💾 บันทึกแล้ว' + (eid && newBulletSteps.length ? ' — เพิ่ม ' + newBulletSteps.length + ' ขั้นตอนใหม่' : ''));
 }
 function delTask(id) {
   if (!confirm('ลบงานนี้?')) return;
