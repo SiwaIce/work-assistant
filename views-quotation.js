@@ -498,12 +498,17 @@ function addQuotationItemFromInput() {
   }
   
   var unitPrice = getModelPriceByLevelForQuote(modelName, selectedLevelForPrice);
-  
-  // Check for duplicate
+
+  // Check for duplicate — เจอรายการเดิมแล้ว บวกจำนวนเพิ่ม และรีเฟรชราคาตาม Level ปัจจุบันด้วย (กันราคาค้างจาก Level
+  // เก่าตอนเพิ่มซ้ำ) เว้นแต่ priceLevel เป็น null แปลว่าผู้ใช้เคยแก้ราคาเองมือแล้ว — กรณีนั้นคงราคาเดิมไว้ไม่เขียนทับ
   var existing = false;
   for (var i = 0; i < quotationItems.length; i++) {
     if (quotationItems[i].name === modelName) {
       quotationItems[i].quantity += qty;
+      if (quotationItems[i].priceLevel && unitPrice > 0) { // ไม่เขียนทับด้วย 0 — คงราคาเดิมไว้ถ้าหาราคาใหม่ไม่ได้
+        quotationItems[i].unitPrice = unitPrice;
+        quotationItems[i].priceLevel = selectedLevelForPrice;
+      }
       quotationItems[i].amount = quotationItems[i].quantity * quotationItems[i].unitPrice;
       existing = true;
       break;
@@ -636,7 +641,7 @@ function rQuoteEstimator(el) {
 
   var html = '<div style="max-width:640px;margin:0 auto">';
   html += _qtTabsHtml('quoteEstimator');
-  html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">ไม่ผูก Dealer · ไม่ใช่ใบเสนอราคาจริง — แค่ดูยอดรวมเร็วๆ</div>';
+  html += '<div style="font-size:11px;color:var(--text2);margin:8px 0 14px">⚡ เลือกสินค้าก่อนได้เลย ยังไม่ต้องผูก Dealer — พร้อมแล้วกด "แปลงเป็นใบเสนอราคาจริง" ด้านล่างเพื่อเลือก Dealer/ระดับราคาทีหลัง</div>';
 
   html += '<div id="estPresetZone"></div>';
 
@@ -934,6 +939,7 @@ function rQuotationV2(el) {
   html += '<h2 style="font-size:1rem;margin:0">📋 รายการใบเสนอราคา</h2>';
   html += '<div style="display:flex;gap:8px">';
   html += '<button class="btn bp" onclick="showCreateQuotationModal()" style="background:#22c55e">➕ สร้างใบเสนอราคา</button>';
+  html += '<button class="btn bo" onclick="go(\'quoteEstimator\')" title="เลือกสินค้าก่อน ค่อยผูก Dealer/ระดับราคาทีหลัง">⚡ Quick Quotation</button>';
   html += '</div>';
   html += '</div>';
   
@@ -1335,21 +1341,16 @@ function showCreateQuotationModal() {
       if (option) {
         document.getElementById('newQuoteDealerId').value = option.dataset.id;
         document.getElementById('newQuoteDealerLevel').value = option.dataset.level;
+        // sync ระดับราคาที่จะใช้ (#newQuoteLevel) ให้ตรงกับ Level ของ Dealer ที่เลือกด้วย — เดิมค้างที่ default
+        // 'B' เสมอไม่ว่า Dealer จะระดับอะไร ทำให้ตอนสร้างใบใหม่ราคาที่คำนวณผิด Level ตั้งแต่แรก
+        var levelSel = document.getElementById('newQuoteLevel');
+        if (levelSel && option.dataset.level) levelSel.value = option.dataset.level;
         var termInput = document.getElementById('newQuotePaymentTerm');
         if (termInput && !termInput.value && option.dataset.term) {
           termInput.value = option.dataset.term;
         }
       }
     });
-  }
-}
-function newQuoteDealerChanged() {
-  var dealerId = document.getElementById('newQuoteDealer').value;
-  if (!dealerId) return;
-  var dealer = ST.getOne('dealers', dealerId);
-  if (dealer && dealer.creditTerm) {
-    var termInput = document.getElementById('newQuotePaymentTerm');
-    if (termInput && !termInput.value) termInput.value = dealer.creditTerm;
   }
 }
 
@@ -1433,6 +1434,10 @@ function createNewQuotation() {
     // ให้ป้าย Level ในตารางรู้ว่าไม่ตรงกับ Level ของ Dealer/ใบเสนอราคานี้ จะได้ขึ้นเตือนให้กดปรับราคาใหม่
     quotationItems.forEach(function(it) { if (!it.priceLevel) it.priceLevel = 'RRP'; });
     window._pendingEstimatorItems = null;
+    // อัปเดต snapshot ให้รวมรายการที่เพิ่งเติมเข้ามาด้วย — เดิม renderEditQuotationPage ข้างบนถ่าย snapshot
+    // ไปแล้วตอนใบยังว่างอยู่ (ก่อนเติมรายการ) พอกด "บันทึก" ครั้งแรกเลยเข้าใจผิดว่า "รายการเปลี่ยนไปจากต้นฉบับ"
+    // แล้วถามจะสร้างเป็นฉบับแก้ไข (revision) ทั้งที่ใบนี้เพิ่งสร้าง ยังไม่เคยบันทึกเลยสักครั้ง
+    window._quoteItemsSnapshot = JSON.stringify(quotationItems);
     renderQuotationItemsTable();
     recalculateQuotationTotal();
   }
@@ -1508,7 +1513,10 @@ function _qResolveItem(model, qty, sku, dealerLevel, fallbackPrice) {
   var unitPrice = 0;
   var resolvedLevel = null;
   if (prod) {
-    if (typeof getModelPriceByLevel === 'function') unitPrice = getModelPriceByLevel(prod.name, dealerLevel) || 0;
+    // ใช้ getModelPriceByLevelForQuote ตัวเดียวกับที่ใช้ตอนเพิ่มสินค้าเองมือ/เปลี่ยน Level ในหน้าใบเสนอราคา (ไม่ใช่
+    // getModelPriceByLevel ของ products.js เฉยๆ) กันราคาเพี้ยนถ้า logic fallback ของสองฟังก์ชันแตกต่างกัน (เช่น
+    // getModelPriceByLevel ไม่รองรับ level 'RRP' เป็นพิเศษเหมือนตัวนี้)
+    if (typeof getModelPriceByLevelForQuote === 'function') unitPrice = getModelPriceByLevelForQuote(prod.name, dealerLevel) || 0;
     if (unitPrice) resolvedLevel = dealerLevel;
     if (!unitPrice) unitPrice = Number(prod.rrpExVat) || Number(prod.price) || 0;
   }
@@ -2105,26 +2113,6 @@ function renderEditQuotationPage(quote) {
   recalculateQuotationTotal();
   _quoteProjIdDirty = false;
   _quoteLinkNotes();
-
-  setTimeout(function() {
-    var levelSelect = document.getElementById('editQuoteLevel');
-    if (levelSelect) {
-      levelSelect.onchange = function() {
-        selectedLevelForPrice = this.value;
-        for (var i = 0; i < quotationItems.length; i++) {
-          var newPrice = getModelPriceByLevelForQuote(quotationItems[i].name, selectedLevelForPrice);
-          if (newPrice > 0) { // ไม่เขียนทับด้วย 0 — คงราคาเดิมไว้ถ้าหาราคาใหม่ไม่ได้
-            quotationItems[i].unitPrice = newPrice;
-            quotationItems[i].amount = (quotationItems[i].quantity || 1) * newPrice;
-          }
-        }
-        renderQuotationItemsTable();
-        recalculateQuotationTotal();
-        // เดิมมีโค้ดสร้าง <datalist> ใหม่ผูกกับ #newItemModel ตรงนี้ด้วย — เลิกใช้ native datalist แล้ว
-        // (เปลี่ยนเป็นกล่องแนะนำ custom ที่ค้นหาด้วย SKU ได้ผ่าน _qiaFilterSuggest) ตัดทิ้งเพราะไม่มีผลอะไรแล้ว
-      };
-    }
-  }, 100);
 }
 
 // ✅ แก้ไข editQuotation ให้ใช้ renderEditQuotationPage
@@ -2179,6 +2167,7 @@ function editQuoteLevelChanged() {
       quotationItems[i].unitPrice = newPrice;
       quotationItems[i].amount = (quotationItems[i].quantity || 1) * newPrice;
     }
+    quotationItems[i].priceLevel = newLevel; // sync ป้าย Level ต่อแถว (_qiLevelChips) ด้วย ไม่งั้นป้ายค้างระดับเก่าทั้งที่ราคาเปลี่ยนแล้ว — เหมือน _qiSetItemLevel
   }
   renderQuotationItemsTable();
   recalculateQuotationTotal();
