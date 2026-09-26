@@ -3866,17 +3866,20 @@ function saveBulkAddSteps(tid) {
 // เจอกรณี Work From Home ที่ไม่ได้ออกไป visit จริง แต่อยากสรุปว่าวันนั้นทำอะไรบ้าง ✓ = ติ๊กเสร็จแล้ว
 // ไม่ใช้ copyToClip() เพราะฟังก์ชันนั้น toast โชว์ข้อความที่คัดลอกทั้งก้อน เหมาะกับของสั้นๆ อันเดียว
 // ไม่เหมาะกับ list หลายบรรทัดแบบนี้ (toast จะยาวเกิน) เลยเขียน clipboard write เองพร้อม toast สรุปจำนวนแทน
-function copyStepsAsBullets(tid) {
+// plain = true: ก็อปปี้แค่หัวข้อ ขึ้นต้นด้วย "-" ล้วนทุกบรรทัด ไม่มี ✓/หมายเหตุปน — ผู้ใช้ขอไว้เพราะบางที
+// อยากได้ list สะอาดๆ เอาไปวางต่อ ไม่ต้องมีเครื่องหมายเสร็จ/ไม่เสร็จปนให้แก้ทิ้งทีหลัง
+function copyStepsAsBullets(tid, plain) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps.length) { toast('ยังไม่มีขั้นตอนให้คัดลอก'); return; }
   var text = t.steps.map(function(s) {
+    if (plain) return '- ' + s.title;
     var line = (s.done ? '✓ ' : '- ') + s.title;
     if (s.notes) line += ' — ' + s.notes;
     return line;
   }).join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() {
-      toast('📋 คัดลอกขั้นตอนแล้ว (' + t.steps.length + ' ข้อ) — วางใน Visit Report ได้เลย');
+      toast(plain ? ('📋 คัดลอกหัวข้อแล้ว (' + t.steps.length + ' ข้อ)') : ('📋 คัดลอกขั้นตอนแล้ว (' + t.steps.length + ' ข้อ) — วางใน Visit Report ได้เลย'));
     }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
   } else {
     toast('❌ เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
