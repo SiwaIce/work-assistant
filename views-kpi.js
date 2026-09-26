@@ -903,20 +903,21 @@ function exportKpiSummaryExcel() {
   });
 }
 
-function _exportKpiSummaryExcel_impl() {
+// ดึงข้อมูลดิบสำหรับ Export สรุป KPI — แยกจากตัวเขียนไฟล์ เพื่อให้ทั้งเวอร์ชัน Text (SheetJS) และเวอร์ชันสวย
+// (ExcelJS) ใช้ข้อมูลชุดเดียวกันเป๊ะๆ ไม่ต้องคำนวณซ้ำสองที่ (เสี่ยงพลาดถ้าแก้จุดหนึ่งแล้วลืมอีกจุด)
+function _kpiBuildSummaryExportData() {
   _kpiInvalidateCache();
   var members = kpiSalesOptions();
-  if (!members.length) return toast('ไม่มีรายชื่อเซลล์');
 
   // เก็บ category ที่เจอทั้งหมด (id -> {icon,label}) เรียงตามลำดับที่เจอครั้งแรก ใช้ทำคอลัมน์ dashboard แบบไดนามิก
   var catOrder = [];
   var catMeta = {};
 
   var dashboardData = []; // { name, quarter, overall, doneCount, total, updated, byCatId: {actual,target} }
-  var detailRows = [['เซลล์', 'ไตรมาส', 'หัวข้อ KPI', 'น้ำหนัก (%)', 'เป้า', 'ทำได้แล้ว', 'หน่วย', '% สำเร็จ', 'สถานะ']];
-  var visitRows = [['วันที่', 'เซลล์', 'Dealer', 'รูปแบบ', 'หัวข้อที่คุย']];
-  var salesRows = [['วันที่ลงทะเบียน', 'เซลล์', 'หมวด KPI', 'โครงการ', 'Dealer', 'มูลค่า/จำนวนที่นับ', 'สถานะ']];
-  var dealerRows = [['วันที่ Authorize', 'เซลล์', 'Dealer', 'Level']];
+  var detailRows = []; // { row: [...], pct, paceStatus } — row ไม่รวม header
+  var visitRows = [];
+  var salesRows = [];
+  var dealerRows = [];
 
   var hasAny = false;
   members.forEach(function(m) {
@@ -934,11 +935,10 @@ function _exportKpiSummaryExcel_impl() {
       if (pct >= 100) doneCount++;
       var pace = kpiPaceInfo(plan, cat);
       var paceLabel = KPI_PACE_META[pace.status].label.replace(/[^฀-๿a-zA-Z ]/g, '').trim();
-      detailRows.push([
-        m.name, plan.quarter, cat.label, cat.weight,
-        cat.target, Math.round(actual * 100) / 100, cat.unit || '',
-        Math.round(pct), paceLabel
-      ]);
+      detailRows.push({
+        row: [m.name, plan.quarter, cat.label, cat.weight, cat.target, Math.round(actual * 100) / 100, cat.unit || '', Math.round(pct), paceLabel],
+        pct: pct, paceStatus: pace.status
+      });
 
       if (catOrder.indexOf(cat.id) === -1) { catOrder.push(cat.id); catMeta[cat.id] = cat; }
       byCatId[cat.id] = (Math.round(actual * 100) / 100) + '/' + cat.target;
@@ -971,18 +971,29 @@ function _exportKpiSummaryExcel_impl() {
     dashboardData.push({ name: m.name, quarter: plan.quarter, overall: overall, doneCount: doneCount, total: (plan.categories || []).length, updated: fD(plan.updatedAt), byCatId: byCatId });
   });
 
-  if (!hasAny) return toast('ยังไม่มีแผน KPI ของเซลล์คนไหนเลย');
+  return { hasAny: hasAny, catOrder: catOrder, catMeta: catMeta, dashboardData: dashboardData, detailRows: detailRows, visitRows: visitRows, salesRows: salesRows, dealerRows: dealerRows };
+}
+
+function _exportKpiSummaryExcel_impl() {
+  var data = _kpiBuildSummaryExportData();
+  if (!data.hasAny) return toast('ยังไม่มีแผน KPI ของเซลล์คนไหนเลย');
+  var catOrder = data.catOrder, catMeta = data.catMeta;
 
   // Dashboard sheet — คอลัมน์คงที่ + คอลัมน์ต่อหมวดแบบไดนามิก (icon+label เป็นหัวตาราง)
   var dashboardHeader = ['เซลล์', 'ไตรมาส', 'คะแนนรวม KPI (%)', 'หัวข้อที่ถึงเป้าแล้ว', 'จำนวนหัวข้อทั้งหมด'].concat(
     catOrder.map(function(id) { return catMeta[id].icon + ' ' + catMeta[id].label + ' (ทำได้/เป้า)'; })
   ).concat(['อัปเดตล่าสุด']);
   var overviewRows = [dashboardHeader];
-  dashboardData.forEach(function(row) {
+  data.dashboardData.forEach(function(row) {
     overviewRows.push([row.name, row.quarter, row.overall, row.doneCount, row.total]
       .concat(catOrder.map(function(id) { return row.byCatId[id] || '-'; }))
       .concat([row.updated]));
   });
+
+  var detailRows = [['เซลล์', 'ไตรมาส', 'หัวข้อ KPI', 'น้ำหนัก (%)', 'เป้า', 'ทำได้แล้ว', 'หน่วย', '% สำเร็จ', 'สถานะ']].concat(data.detailRows.map(function(d) { return d.row; }));
+  var visitRows = [['วันที่', 'เซลล์', 'Dealer', 'รูปแบบ', 'หัวข้อที่คุย']].concat(data.visitRows);
+  var salesRows = [['วันที่ลงทะเบียน', 'เซลล์', 'หมวด KPI', 'โครงการ', 'Dealer', 'มูลค่า/จำนวนที่นับ', 'สถานะ']].concat(data.salesRows);
+  var dealerRows = [['วันที่ Authorize', 'เซลล์', 'Dealer', 'Level']].concat(data.dealerRows);
 
   var wb = XLSX.utils.book_new();
 
@@ -1012,6 +1023,116 @@ function _exportKpiSummaryExcel_impl() {
 
   XLSX.writeFile(wb, 'kpi-summary-' + _td() + '.xlsx');
   toast('📊 Export สรุป KPI แล้ว');
+}
+
+// สีพื้นเซลล์ตามเกณฑ์ % สำเร็จ — เขียว ≥100%, ส้ม 70-99%, แดง <70% (เกณฑ์เดียวกับสีสถานะที่ใช้ทั่วแอปอยู่แล้ว
+// เช่น quoteStatusColors) ใช้ทั้งช่องคะแนนรวมในแท็บ Dashboard และ % สำเร็จรายหัวข้อในแท็บรายละเอียด
+function _kpiScoreFillColor(pct) {
+  if (pct >= 100) return 'FF22C55E';
+  if (pct >= 70) return 'FFF59E0B';
+  return 'FFEF4444';
+}
+// สีพื้นตามสถานะ "ตามเป้า/ล้ำหน้า/ตามหลัง" (ดู KPI_PACE_META) ให้ตรงความหมายสีเดียวกับหน้าจอในแอป
+function _kpiPaceFillColor(status) {
+  if (status === 'ahead') return 'FF22C55E';
+  if (status === 'behind') return 'FFEF4444';
+  return 'FF3B82F6';
+}
+
+// เหมือน exportKpiSummaryExcel เป๊ะๆ (ข้อมูล/ตัวเลขเดียวกัน จาก _kpiBuildSummaryExportData ตัวเดียวกัน) แต่
+// เขียนด้วย ExcelJS ให้ได้สี/ตัวหนา/เส้นขอบจริง + ไล่สีสถานะ KPI แต่ละแถวให้หัวหน้าดูปราดเดียวรู้เรื่อง
+function exportKpiSummaryExcelStyled() {
+  ensureExcelJS().then(function() {
+    _exportKpiSummaryExcelStyled_impl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _exportKpiSummaryExcelStyled_impl() {
+  if (typeof ExcelJS === 'undefined') return toast('⚠️ โหลดไลบรารี ExcelJS ไม่สำเร็จ (ต้องต่อเน็ต) — ลองใช้ปุ่ม "(Text)" แทน');
+  var data = _kpiBuildSummaryExportData();
+  if (!data.hasAny) return toast('ยังไม่มีแผน KPI ของเซลล์คนไหนเลย');
+  var catOrder = data.catOrder, catMeta = data.catMeta;
+
+  var wb = new ExcelJS.Workbook();
+  wb.creator = 'DJI Sales Assistant';
+
+  // ---- Dashboard sheet: แถบชื่อเรื่องกรมท่า + หัวตารางฟ้าอ่อน + ไล่สีช่องคะแนนรวมตามเกณฑ์ ----
+  var dashHeader = ['เซลล์', 'ไตรมาส', 'คะแนนรวม KPI (%)', 'ถึงเป้าแล้ว', 'ทั้งหมด'].concat(
+    catOrder.map(function(id) { return catMeta[id].icon + ' ' + catMeta[id].label + ' (ทำได้/เป้า)'; })
+  ).concat(['อัปเดตล่าสุด']);
+  var dashCols = [20, 10, 16, 12, 10].concat(catOrder.map(function() { return 20; })).concat([14]);
+
+  var wsDash = wb.addWorksheet('📊 Dashboard', { views: [{ state: 'frozen', ySplit: 2, showGridLines: false }] });
+  wsDash.columns = dashCols.map(function(w) { return { width: w }; });
+
+  var titleRow = wsDash.addRow(['📊 สรุป KPI ทีมขาย — Export ' + _td()]);
+  wsDash.mergeCells(titleRow.number, 1, titleRow.number, dashHeader.length);
+  titleRow.height = 26;
+  var tCell = titleRow.getCell(1);
+  tCell.font = { bold: true, size: 14, color: { argb: KPI_XL_THEME.white } };
+  tCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.navyDark } };
+  tCell.alignment = { vertical: 'middle', indent: 1 };
+
+  var dhRow = wsDash.addRow(dashHeader);
+  dhRow.height = 22;
+  dhRow.eachCell(function(cell) {
+    cell.font = { bold: true, size: 10.5, color: { argb: KPI_XL_THEME.white } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.navy } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  wsDash.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: dashHeader.length } };
+
+  data.dashboardData.forEach(function(row, idx) {
+    var vals = [row.name, row.quarter, row.overall, row.doneCount, row.total]
+      .concat(catOrder.map(function(id) { return row.byCatId[id] || '-'; }))
+      .concat([row.updated]);
+    var r = wsDash.addRow(vals);
+    r.eachCell({ includeEmpty: false }, function(cell) {
+      cell.border = _kpiXlThinBorder();
+      if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
+    });
+    var scoreCell = r.getCell(3);
+    scoreCell.font = { bold: true, color: { argb: KPI_XL_THEME.white } };
+    scoreCell.alignment = { horizontal: 'center' };
+    scoreCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _kpiScoreFillColor(row.overall) } };
+  });
+
+  // ---- รายละเอียด KPI: หัวตารางเดียวกัน + ไล่สีช่องสถานะรายแถวตามผลจริง (ahead/onTrack/behind) ----
+  var detailHeader = ['เซลล์', 'ไตรมาส', 'หัวข้อ KPI', 'น้ำหนัก (%)', 'เป้า', 'ทำได้แล้ว', 'หน่วย', '% สำเร็จ', 'สถานะ'];
+  var wsDetail = wb.addWorksheet('รายละเอียด KPI', { views: [{ state: 'frozen', ySplit: 1, showGridLines: false }] });
+  wsDetail.columns = [18, 10, 30, 10, 14, 14, 10, 10, 16].map(function(w) { return { width: w }; });
+  var deHRow = wsDetail.addRow(detailHeader);
+  deHRow.height = 22;
+  deHRow.eachCell(function(cell) {
+    cell.font = { bold: true, size: 10.5, color: { argb: KPI_XL_THEME.white } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.navy } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  wsDetail.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: detailHeader.length } };
+  data.detailRows.forEach(function(d, idx) {
+    var r = wsDetail.addRow(d.row);
+    r.eachCell({ includeEmpty: false }, function(cell, colNum) {
+      cell.border = _kpiXlThinBorder();
+      if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KPI_XL_THEME.zebra } };
+      if (colNum === 8) cell.alignment = { horizontal: 'right' };
+    });
+    var statusCell = r.getCell(9);
+    statusCell.font = { bold: true, color: { argb: KPI_XL_THEME.white } };
+    statusCell.alignment = { horizontal: 'center' };
+    statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _kpiPaceFillColor(d.paceStatus) } };
+  });
+
+  // ---- แท็บรายละเอียดย่อย (Visit/ยอดขาย/Dealer ใหม่) — ใช้ตัวช่วยเดียวกับ Improvement Plan/Overview ----
+  if (data.visitRows.length) _kpiWriteSummarySheetXl(wb, 'รายละเอียด - Visit', ['วันที่', 'เซลล์', 'Dealer', 'รูปแบบ', 'หัวข้อที่คุย'], data.visitRows, [12, 16, 24, 10, 30], [], []);
+  if (data.salesRows.length) _kpiWriteSummarySheetXl(wb, 'รายละเอียด - ยอดขาย', ['วันที่ลงทะเบียน', 'เซลล์', 'หมวด KPI', 'โครงการ', 'Dealer', 'มูลค่า/จำนวนที่นับ', 'สถานะ'], data.salesRows, [14, 16, 22, 30, 22, 16, 12], [], []);
+  if (data.dealerRows.length) _kpiWriteSummarySheetXl(wb, 'รายละเอียด - Dealer ใหม่', ['วันที่ Authorize', 'เซลล์', 'Dealer', 'Level'], data.dealerRows, [14, 16, 24, 10], [], []);
+
+  wb.xlsx.writeBuffer().then(function(buffer) {
+    _kpiXlDownload(buffer, 'kpi-summary-' + _td() + '.xlsx');
+    toast('📊 Export สรุป KPI (สวย) แล้ว');
+  });
 }
 
 // ================================================================
@@ -1095,7 +1216,8 @@ function rKpiScorecard(el) {
   h += '<button class="btn bsm bo" onclick="showKpiNewQuarterM(\'' + member.id + '\',\'' + sanitize(member.name).replace(/'/g, "\\'") + '\')">➕ สร้างไตรมาสใหม่</button>';
   if (plan) h += '<button class="btn bsm bo" onclick="showKpiConfigM(\'' + plan.id + '\')">⚙️ ตั้งค่าไตรมาสนี้</button>';
   if (plan) h += '<button class="btn bsm bd" onclick="kpiDeleteQuarterPlan(\'' + plan.id + '\')">🗑️ ลบไตรมาสนี้</button>';
-  h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()">📊 Export สรุปให้หัวหน้า</button>';
+  h += '<button class="btn bsm bp" onclick="exportKpiSummaryExcelStyled()" title="Excel มีสี/ตัวหนา/เส้นขอบจริง ไล่สีสถานะ KPI แต่ละหัวข้อ (ใช้ ExcelJS ต้องต่อเน็ต)">📊 Export สรุปให้หัวหน้า (สวย)</button>';
+  h += '<button class="btn bsm bo" onclick="exportKpiSummaryExcel()" title="Excel แบบตัวอักษรล้วน ไม่ต้องต่อเน็ต">📊 Export สรุปให้หัวหน้า (Text)</button>';
   h += '<button class="btn bsm bo" onclick="showSaleNameMismatchM()" title="ถ้าตัวเลข KPI ขึ้น 0 ทั้งที่มีโครงการจริง มักเกิดจากชื่อเซลล์ในข้อมูลไม่ตรงกับสมาชิกทีม — เช็คได้ที่นี่">🔍 ตรวจสอบชื่อเซลล์</button>';
   var cdmCount = cdmRegisterTierCount();
   h += '<button class="btn bsm bo" onclick="showCloseDateManagerM()" title="ดู/แก้วันที่ปิดดีลที่ใช้คำนวณยอด KPI — ใช้ร่วมกับหน้า Sales Analytics">🧭 จัดการวันที่ปิดดีล' + (cdmCount ? ' (' + cdmCount + ')' : '') + '</button>';
