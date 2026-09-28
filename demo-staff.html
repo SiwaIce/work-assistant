@@ -2015,8 +2015,12 @@ function _rtPendingRowsHtml(g) {
   h += rows.map(function(l) {
     var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
     var conflict = _lfConflict(l.unitId, l.start, l.end, l.id);
+    // เดิมบอกแค่ชื่อผู้ยืม+วันครบกำหนด ไม่รู้ว่าติดใบจองไหน/ยืมไปทำอะไร — เพิ่มให้เห็นครบเหมือนแท็บใบจอง
+    // (ดู _bkPendingWhy) จะได้ตัดสินใจได้ทันทีว่าจะรอ/เลื่อน/โอนจากใบเดิมมาใบนี้ดี
     var why = conflict
-      ? (conflict.quarantine ? '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
+      ? (conflict.quarantine ? '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict)
+        : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + (conflict.jobNo ? ' (ใบจอง ' + esc(conflict.jobNo) + ')' : '') +
+          ' ถึง ' + _scFmt(conflict.e) + (conflict.purpose ? ' — ' + esc(conflict.purpose) : ''))
       : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
     var altHtml = '';
     if (conflict && u.id) {
@@ -2028,10 +2032,14 @@ function _rtPendingRowsHtml(g) {
           ' <button class="btn btn-primary btn-sm" onclick="swapPendingUnit(\'' + esc(l.id) + '\',\'' + alts[0].id + '\')">🔁 สลับเครื่องนี้แทน</button></div>';
       }
     }
+    // ปุ่ม 🔗 ไปใบยืมที่ถือครองอยู่ตอนนี้เลย — กดต่อเวลา/โอน/ดูรายละเอียดจากตรงนั้นได้ทันที ไม่ต้องไล่หาเอง
+    var jumpBtn = (conflict && conflict.loanId)
+      ? '<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + esc(conflict.loanId) + '\')" title="ไปที่ใบยืมที่ชนคิวอยู่ตอนนี้ — ดูรายละเอียด/ต่อเวลา/โอนได้จากตรงนั้นเลย">🔗</button>'
+      : '';
     return '<div class="rt-pending-row"><div><b>' + esc(u.model || u.name || l.model || '-') +
       (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') + '</b>' +
       '<div class="hint" style="margin:2px 0 0">' + why + '</div>' + altHtml + '</div>' +
-      '<div style="display:flex;gap:6px;flex-shrink:0">' +
+      '<div style="display:flex;gap:6px;flex-shrink:0">' + jumpBtn +
       '<button class="btn btn-ghost btn-sm" onclick="retryPendingLoan(\'' + esc(l.id) + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
       '<button class="btn btn-ghost btn-sm" onclick="removePendingLoan(\'' + esc(l.id) + '\')" title="ตัดออกจากใบ">✕</button></div></div>';
   }).join('');
@@ -2346,11 +2354,20 @@ function _bkSortBarHtml() {
 
 // รอ (ชนคิว) ติดอะไรอยู่ — เช็คสดทุกครั้งที่ render (บางทีของว่างแล้วโดยไม่รู้ตัว เช่นอีกใบคืนไปแล้ว) เอาไว้
 // โชว์ใต้แถวเลยแทนที่จะให้กดเช็คว่างก่อนถึงเห็น (เดิมกด 🔁 แล้วเด้ง toast บอกครั้งเดียว พลาดง่าย)
+// แยกออกมาให้ _bkPendingWhy กับปุ่ม 🔗 ใน _bkRowActionsHtml ใช้ conflict ตัวเดียวกัน ไม่ต้องคำนวณซ้ำ
+function _bkPendingConflict(it) {
+  return _lfConflict(it.u.id, _scIso(it.b.s), _scIso(it.b.e), it.b.loanId);
+}
+// ผู้ใช้ขอให้เห็นรายละเอียดเต็มว่าติดอยู่ที่ใบจองไหน ยืมไปทำอะไร ไม่ใช่แค่ชื่อผู้ยืม+วันครบกำหนด (เดิมสั้นไป
+// ต้องกดปุ่ม 🔗 ข้างล่างไปดูใบจองนั้นเองอีกที ถึงจะรู้ว่าติดใบไหน/ทำอะไรอยู่)
 function _bkPendingWhy(it) {
-  var conflict = _lfConflict(it.u.id, _scIso(it.b.s), _scIso(it.b.e), it.b.loanId);
-  return conflict
-    ? (conflict.quarantine ? '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict) : '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + ' ถึง ' + _scFmt(conflict.e))
-    : '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
+  var conflict = _bkPendingConflict(it);
+  if (!conflict) return '✅ ตอนนี้ว่างแล้ว — กดเช็คอีกครั้งได้เลย';
+  if (conflict.quarantine) return '🕐 รอคลังรับเข้า' + _scQuarUntilTxt(conflict);
+  return '⏳ ชนกับ ' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') +
+    (conflict.jobNo ? ' (ใบจอง ' + esc(conflict.jobNo) + ')' : '') +
+    ' ถึง ' + _scFmt(conflict.e) +
+    (conflict.purpose ? ' — ' + esc(conflict.purpose) : '');
 }
 function _bkDueTxt(it) {
   if (it.kind === 'soon') return 'เริ่มยืม ' + _scFmt(it.b.s);
@@ -2367,7 +2384,14 @@ function _bkRowActionsHtml(it) {
     return '<button class="detail-btn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="openConfirmPickupM(\'' + _scEsq(b.borrower || '—') + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')">✅ ยืนยัน/ยกเลิก</button>';
   }
   if (it.kind === 'pending') {
+    // ปุ่ม 🔗 ไปใบยืมที่ถือครองอยู่ตอนนี้ (ติดอยู่ที่ใบไหน/ใคร/ถึงเมื่อไหร่ ดูได้ตรงนั้นเลย) — จะได้กดต่อเวลา/
+    // โอน/คืนจากตรงนั้นต่อได้ทันที ไม่ต้องไล่หาเอง (ไม่มีปุ่มถ้าติดจาก Lotus Note ล้วนๆ ไม่มี loanId ให้เปิด)
+    var conflict = _bkPendingConflict(it);
+    var jumpBtn = (conflict && conflict.loanId)
+      ? '<button class="detail-btn icon-btn" onclick="openLoanLogM(\'' + conflict.loanId + '\')" title="ไปที่ใบยืมที่ชนคิวอยู่ตอนนี้ — ดูรายละเอียด/ต่อเวลา/โอนได้จากตรงนั้นเลย">🔗</button>'
+      : '';
     return '<button class="detail-btn icon-btn" onclick="openLoanLogM(\'' + b.loanId + '\')" title="รายละเอียด: ใครยืม ยืมไปทำอะไร คีย์เมื่อไหร่">📜</button>' +
+      jumpBtn +
       '<button class="detail-btn icon-btn" onclick="retryPendingLoan(\'' + b.loanId + '\')" title="เช็คว่างอีกครั้ง">🔁</button>' +
       '<button class="detail-btn icon-btn" onclick="removePendingLoan(\'' + b.loanId + '\')" title="ตัดออกจากใบ">✕</button>';
   }
