@@ -567,7 +567,8 @@ window.modelOptionsNew = function(selected, showEOLBadge) {
 function showEditProductModal(productId) {
   var p = getProductById(productId);
   if (!p) { toast('ไม่พบสินค้า'); return; }
-  
+  window._prodManuals = (p.manuals || []).slice();
+
   var categoryOptions = '';
   for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
     var cat = PRODUCT_CATEGORIES[i];
@@ -611,6 +612,12 @@ function showEditProductModal(productId) {
   html += '<div class="form-section">🖼️ รูปภาพสินค้า</div>';
   html += '<div class="fg"><label>URL รูปภาพ (Direct link)</label><input type="url" id="edit_image_url" class="fm-input" value="' + sanitize(p.imageUrl || '') + '" placeholder="https://..."></div>';
   if (p.imageUrl) html += '<div class="fg" style="margin-top:4px"><img src="' + sanitize(p.imageUrl) + '" style="max-height:80px;border-radius:6px;border:1px solid var(--border)" onerror="this.style.display=\'none\'"></div>';
+
+  html += '<div class="form-section">📝 รายละเอียดสินค้า</div>';
+  html += '<div class="fg"><label>รายละเอียด / จุดเด่น</label><textarea id="edit_description" class="fm-input" rows="4" placeholder="สเปคสั้นๆ / จุดเด่นของสินค้า...">' + sanitize(p.description || '') + '</textarea></div>';
+  html += '<div class="fg"><label>📦 ในกล่องมีอะไรบ้าง (In the box) — 1 บรรทัดต่อ 1 ชิ้น</label><textarea id="edit_inbox" class="fm-input" rows="4" placeholder="ตัวโดรน 1 ลำ&#10;รีโมทควบคุม 1 ตัว&#10;แบตเตอรี่ 1 ก้อน&#10;สายชาร์จ USB-C&#10;...">' + sanitize(p.inTheBox || '') + '</textarea></div>';
+  html += attachUploadHtml('_prodManuals', 'products', '📎 คู่มือ/เอกสารสินค้า (PDF)');
+
   html += '<div class="fm-actions" style="margin-top:16px">';
   html += '<button class="btn bp" onclick="saveProductEdit(\'' + p.id + '\')">💾 บันทึก</button>';
   html += '<button class="btn bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️ ลบสินค้า</button>';
@@ -647,6 +654,9 @@ function saveProductEdit(productId) {
     isSoftware: document.getElementById('edit_is_software').checked,
     isService: document.getElementById('edit_is_service').checked,
     imageUrl: (document.getElementById('edit_image_url') ? document.getElementById('edit_image_url').value.trim() : '') || '',
+    description: document.getElementById('edit_description').value.trim(),
+    inTheBox: document.getElementById('edit_inbox').value.trim(),
+    manuals: window._prodManuals || [],
     price: parseNum(document.getElementById('edit_price_b').value),
     typePrices: {
       S: parseNum(document.getElementById('edit_price_s').value),
@@ -2493,6 +2503,33 @@ function rProductDetail(el) {
     }
     h += '</div></div>';
   }
+
+  h += '<div class="card"><h2>📝 รายละเอียดสินค้า</h2><div class="demo-info">';
+  if (p.description) {
+    h += '<div style="white-space:pre-wrap">' + sanitize(p.description) + '</div>';
+  } else {
+    h += '<div style="color:var(--text3)">ยังไม่ได้กรอก <button class="btn-xs" onclick="showEditProductModal(\'' + p.id + '\')">กรอกเลย</button></div>';
+  }
+  h += '</div></div>';
+
+  h += '<div class="card"><h2>📦 ในกล่องมีอะไรบ้าง (In the box)</h2><div class="demo-info">';
+  if (p.inTheBox) {
+    h += '<ul style="margin:0;padding-left:20px">' + p.inTheBox.split('\n').map(function(line) {
+      line = line.trim();
+      return line ? '<li>' + sanitize(line) + '</li>' : '';
+    }).join('') + '</ul>';
+  } else {
+    h += '<div style="color:var(--text3)">ยังไม่ได้กรอก <button class="btn-xs" onclick="showEditProductModal(\'' + p.id + '\')">กรอกเลย</button></div>';
+  }
+  h += '</div></div>';
+
+  h += '<div class="card"><h2>📎 คู่มือ/เอกสารสินค้า</h2><div class="demo-info">';
+  if (p.manuals && p.manuals.length) {
+    h += attachGalleryHtml(p.manuals);
+  } else {
+    h += '<div style="color:var(--text3)">ยังไม่ได้แนบ <button class="btn-xs" onclick="showEditProductModal(\'' + p.id + '\')">แนบเลย</button></div>';
+  }
+  h += '</div></div>';
 
   el.innerHTML = h;
 }
