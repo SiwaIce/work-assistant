@@ -2185,8 +2185,18 @@ function saveFavFromModal() {
 
 function getFavorites() {
   var saved = localStorage.getItem('v7_favorites');
-  if (saved) { try { return JSON.parse(saved); } catch(e) { } }
-  return ['today', 'dealers', 'pipeline', 'tasks', 'visits'];
+  if (saved) {
+    try {
+      var list = JSON.parse(saved);
+      // เพิ่ม PO Tracker เข้า favorites ที่มีอยู่แล้วให้ครั้งเดียว (เมนูใหม่ 2026-09-29) — ใช้ flag กันไม่ให้เด้งกลับมาถ้าผู้ใช้เอาออกเอง
+      if (!localStorage.getItem('v7_favBackfillPOTracker')) {
+        localStorage.setItem('v7_favBackfillPOTracker', '1');
+        if (list.indexOf('poTracker') === -1) { list.push('poTracker'); saveFavorites(list); }
+      }
+      return list;
+    } catch(e) { }
+  }
+  return ['today', 'dealers', 'pipeline', 'poTracker', 'tasks', 'visits'];
 }
 
 function saveFavorites(list) {
