@@ -868,7 +868,8 @@ var R = {
   djiProjects: rDjiProjects,
   salesOrders: rSalesOrders,
   soDetail: rSODetail,
-  serialSearch: rSerialSearch
+  serialSearch: rSerialSearch,
+  poTracker: rPOTracker
 };
 
 // เพิ่ม function redirect สำหรับ Kanban (ให้เมนู Kanban ไปที่ Tasks Tab Kanban)
@@ -1998,6 +1999,7 @@ var APP_MENU_REGISTRY = [
   {id: 'worklist', icon: '✅', name: 'งานค้าง'},
   {id: 'djiProjects', icon: '🗂️', name: 'ทะเบียน Project ID'},
   {id: 'salesOrders', icon: '📦', name: 'Sales Order'},
+  {id: 'poTracker', icon: '🗺️', name: 'PO Tracker'},
   {id: 'serialSearch', icon: '🔍', name: 'ค้นหา Serial'},
   {id: 'tasks', icon: '📋', name: 'Tasks'},
   {id: 'prospectList', icon: '🆕', name: 'Lead ที่ติดตาม'},

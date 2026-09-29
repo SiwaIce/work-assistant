@@ -24,12 +24,24 @@ var STOCK_LOW_THRESHOLD = 5;
 // sellable:true = นับเป็น "พร้อมขาย" — ที่เหลือ (ติดจอง/ดาเมจ/รอขึ้นทะเบียน ฯลฯ) ไม่นับว่าขายได้จริง
 var STOCK_DEFAULT_LOCATIONS = [
   { code: '0001', name: 'Normal Good', sellable: true, warehouse: '1001 SiS Main Warehouse' },
-  { code: '1021', name: 'Sales Booking', sellable: false, warehouse: '1001 SiS Main Warehouse' },
+  { code: '1021', name: 'Sales Booking', sellable: false, warehouse: '1001 SiS Main Warehouse', bookingExpiry: 'penalty' },
+  { code: '8D01', name: 'Sales Rep Hold (8D01)', sellable: false, warehouse: '1001 SiS Main Warehouse', bookingExpiry: 'free' },
   { code: '1027', name: 'Damaged Boxes', sellable: false, warehouse: '1001 SiS Main Warehouse' },
   { code: 'QI', name: 'Pending Registration (กสทช. ฯลฯ)', sellable: false, warehouse: 'QI — รอขึ้นทะเบียน' },
   { code: 'PRPO', name: 'PR/PO Backlog', sellable: false, warehouse: 'PR/PO — รอสั่งซื้อ' }
 ];
 var STOCK_BOOKING_STATUSES = ['รอส่งมอบ', 'เตรียมส่งมอบ', 'ส่งมอบแล้ว', 'ยกเลิก'];
+
+// คลังที่ใช้กลไก "จอง" (ล็อกให้ dealer เฉพาะราย + วันหมดจอง) — 1021 ผูกกับ SO แล้ว, 8D01 คือจองไว้ก่อนมี SO (sales rep ถือของ 5 วัน)
+function _stockIsBookLoc(code) { return code === '1021' || code === '8D01'; }
+
+// เช็คก่อนย้าย lot ที่ล็อกให้ dealer เจ้าหนึ่งไว้ (1021/8D01 ที่ยังไม่หมดจอง) ไปให้ dealer อื่น — คืน true ถ้าย้ายได้ (ไม่ติดเงื่อนไข หรือผู้ใช้ยืนยันแล้ว)
+function _stockConfirmDealerMove(lot, newDealerName) {
+  if (!lot || !_stockIsBookLoc(lot.location) || !lot.dealerName) return true;
+  if (!newDealerName || newDealerName === lot.dealerName) return true;
+  if (lot.bookingExpiryDate && lot.bookingExpiryDate < _nw()) return true; // หมดจองแล้ว ย้ายให้ dealer อื่นได้เลย
+  return confirm('ล็อตนี้จองล็อกให้ "' + lot.dealerName + '" ไว้ถึง ' + (lot.bookingExpiryDate || '-') + '\nต้องการย้ายให้ "' + newDealerName + '" แทนหรือไม่?');
+}
 
 // เซ็ตค่าเริ่มต้นครั้งแรกถ้ายังไม่เคยมีคลังเก็บไว้ — หลังจากนั้นแก้/เพิ่มได้จากในแอป ไม่ต้องแก้โค้ด
 // ถ้ามีคลัง default ตัวใหม่เพิ่มมาทีหลัง (เช่น PRPO) แต่ผู้ใช้มีคลังเก่าอยู่แล้ว จะเติมให้อัตโนมัติโดยไม่ทับของเดิม
@@ -452,7 +464,7 @@ function stockAddLot(sku, productName, code, qty, ref, note, extra) {
   if (qty <= 0) return;
   var lots = stockGetLots(sku).slice();
   var lot = { id: _stockLotId(), location: code, ref: ref || '', qty: qty, dateIn: (extra && extra.dateIn) || _nw(), note: note || '', batchRef: (extra && extra.batchRef) || '' };
-  if (code === '1021' && extra) {
+  if (_stockIsBookLoc(code) && extra) {
     lot.soNumber = extra.ref || ref || '';
     lot.ref = lot.soNumber;
     lot.soId = extra.soId || '';
@@ -506,7 +518,7 @@ function stockMoveLot(sku, productName, lotId, moveQty, destCode, extra) {
     id: _stockLotId(), location: destCode, ref: extra.ref || lot.ref, qty: moveQty, dateIn: _nw(),
     note: extra.note || '', fromLocation: lot.location, fromLotId: lot.id, batchRef: lot.batchRef || ''
   };
-  if (destCode === '1021') {
+  if (_stockIsBookLoc(destCode)) {
     newLot.soNumber = extra.ref || lot.ref || '';
     newLot.ref = newLot.soNumber;
     newLot.soId = extra.soId || '';
@@ -606,12 +618,13 @@ function stockUndoMarkRegistrationComplete(sku, productName, snapshot) {
 }
 
 // เลื่อนกำหนดจอง — ใช้ได้เฉพาะคลังที่ตั้งเป็น 'penalty' (เลื่อนได้) เท่านั้น คลังแบบ 'free' เลื่อนไม่ได้ตามที่ตั้งใจ
-function stockExtendBooking(sku, productName, lotId, newDate) {
+// approvedBy เป็น free text (ไม่มีระบบสิทธิ์ผู้อนุมัติ) เช่น "อนุมัติโดยหัวหน้า A" — เก็บไว้เป็นประวัติการเลื่อนล่าสุด
+function stockExtendBooking(sku, productName, lotId, newDate, approvedBy) {
   if (!newDate) return;
   var lots = stockGetLots(sku).slice();
   var idx = lots.findIndex(function(l) { return l.id === lotId; });
   if (idx === -1) return;
-  lots[idx] = Object.assign({}, lots[idx], { bookingExpiryDate: newDate });
+  lots[idx] = Object.assign({}, lots[idx], { bookingExpiryDate: newDate, extendApprovedBy: approvedBy || '', extendApprovedDate: _nw() });
   _stockSaveLots(sku, productName, lots);
   toast('🔄 เลื่อนกำหนดจองแล้ว');
   render();
@@ -622,7 +635,8 @@ function showStockExtendBookingM(sku, lotId) {
   var lot = lots.filter(function(l) { return l.id === lotId; })[0];
   if (!lot) return;
   var body = '<div class="fg"><label>กำหนดจองใหม่</label><input type="date" id="ext_date" value="' + sanitize(lot.bookingExpiryDate || '') + '"></div>';
-  body += '<button class="btn bp btn-full" onclick="stockExtendBooking(\'' + sku + '\',\'' + sanitize((getProductBySku(sku) || {}).name || '').replace(/'/g, "\\'") + '\',\'' + lotId + '\',document.getElementById(\'ext_date\').value);closeMForce()">💾 บันทึก</button>';
+  body += '<div class="fg"><label>ผู้อนุมัติเลื่อนจอง <small style="color:var(--text2)">(พิมพ์เอง เช่น "รอหัวหน้าอนุมัติ" หรือชื่อผู้อนุมัติ)</small></label><input type="text" id="ext_approved" value="' + sanitize(lot.extendApprovedBy || '') + '"></div>';
+  body += '<button class="btn bp btn-full" onclick="stockExtendBooking(\'' + sku + '\',\'' + sanitize((getProductBySku(sku) || {}).name || '').replace(/'/g, "\\'") + '\',\'' + lotId + '\',document.getElementById(\'ext_date\').value,document.getElementById(\'ext_approved\').value.trim());closeMForce()">💾 บันทึก</button>';
   openM('🔄 เลื่อนกำหนดจอง', body);
 }
 
@@ -741,13 +755,13 @@ function showStockEditLotM(sku, lotId) {
   var lots = stockGetLots(sku);
   var lot = lots.filter(function(l) { return l.id === lotId; })[0];
   if (!p || !lot) return;
-  var isBooking = lot.location === '1021';
+  var isBooking = _stockIsBookLoc(lot.location);
   var isPRPO = lot.location === 'PRPO';
   var isQI = lot.location === 'QI';
   var body = '<div class="fg"><label>จำนวน</label><input type="number" id="elot_qty" min="0" value="' + lot.qty + '"></div>';
   if (isBooking) {
     body += _stockSODatalistHtml();
-    body += '<div class="fg"><label>SO No.</label><input type="text" id="elot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'elot\')" data-so-id="' + sanitize(lot.soId || '') + '" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
+    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(ไม่บังคับถ้ายังไม่มี SO)</small></label><input type="text" id="elot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'elot\')" data-so-id="' + sanitize(lot.soId || '') + '" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="elot_sales" value="' + sanitize(lot.salesperson || '') + '"></div>';
     body += _stockDealerDatalistHtml();
     body += '<div class="fg"><label>Dealer</label><input type="text" id="elot_dealer" list="stockDealerDL" value="' + sanitize(lot.dealerName || '') + '"></div>';
@@ -793,13 +807,15 @@ function saveStockEditLot(sku, lotId) {
   if (!lot) return;
   var qty = document.getElementById('elot_qty').value;
   var fields = { qty: qty };
-  if (lot.location === '1021') {
+  if (_stockIsBookLoc(lot.location)) {
     var soEl = document.getElementById('elot_so');
     var so = soEl.value.trim();
+    var newDealer = document.getElementById('elot_dealer').value.trim();
+    if (!_stockConfirmDealerMove(lot, newDealer)) return;
     fields.soNumber = so; fields.ref = so;
     fields.soId = soEl.dataset.soId || '';
     fields.salesperson = document.getElementById('elot_sales').value.trim();
-    fields.dealerName = document.getElementById('elot_dealer').value.trim();
+    fields.dealerName = newDealer;
     fields.projectName = document.getElementById('elot_project').value.trim();
     fields.status = document.getElementById('elot_status').value;
   } else if (lot.location === 'PRPO') {
@@ -841,6 +857,7 @@ function _stockWarehouseColor(name) {
 function _stockLocationIcon(code) {
   if (code === '0001') return '📦';
   if (code === '1021') return '🔖';
+  if (code === '8D01') return '🧳';
   if (code === '1027') return '🗑️';
   if (code === 'QI') return '🛂';
   if (code === 'PRPO') return '🛒';
@@ -1320,7 +1337,7 @@ function stockLocationSummaryHtml(p) {
 // การ์ดคลังย่อยแต่ละใบ (0001/1021/1027/QI/PRPO) ใช้ตัวนี้ render แถว lot ร่วมกัน — showCheckbox ใช้เฉพาะการ์ด PRPO
 // สำหรับติ๊กเลือกหลายรายการเพื่อย้ายพร้อมกันทีเดียว (ดู showStockBulkMoveM)
 function _stockLotRowHtml(sku, nameEsc, loc, lot, showCheckbox) {
-  var isBooking = loc.code === '1021';
+  var isBooking = _stockIsBookLoc(loc.code);
   var isPRPO = loc.code === 'PRPO';
   var isQI = loc.code === 'QI';
   var delivered = !_stockIsActiveLot(lot);
@@ -1433,7 +1450,7 @@ function stockBulkMoveDestChanged() {
   var bookingFields = document.getElementById('bmv_booking_fields');
   var qiFields = document.getElementById('bmv_qi_fields');
   if (!dest) return;
-  if (bookingFields) bookingFields.style.display = dest.value === '1021' ? 'block' : 'none';
+  if (bookingFields) bookingFields.style.display = _stockIsBookLoc(dest.value) ? 'block' : 'none';
   if (qiFields) qiFields.style.display = dest.value === 'QI' ? 'block' : 'none';
 }
 
@@ -1443,7 +1460,7 @@ function saveStockBulkMove(sku) {
   var dest = document.getElementById('bmv_dest').value;
   var lots = stockGetLots(sku).filter(function(l) { return l.location === 'PRPO' && stockBulkSel[l.id]; });
   var baseExtra = {};
-  if (dest === '1021') {
+  if (_stockIsBookLoc(dest)) {
     baseExtra.bookedDate = document.getElementById('dpv_bmv_date').value;
     baseExtra.salesperson = document.getElementById('bmv_sales').value.trim();
     baseExtra.dealerName = document.getElementById('bmv_dealer').value.trim();
@@ -1456,7 +1473,7 @@ function saveStockBulkMove(sku) {
   }
   lots.forEach(function(lot) {
     var extra = Object.assign({}, baseExtra);
-    if (dest === '1021') {
+    if (_stockIsBookLoc(dest)) {
       extra.ref = lot.soNumber || lot.ref || '';
       extra.soId = lot.soId || '';
     }
@@ -1591,7 +1608,7 @@ function rStockDetail(el) {
     wh.locs.forEach(function(loc) {
       var locLots = lots.filter(function(l) { return l.location === loc.code; });
       var locTotal = locLots.filter(_stockIsActiveLot).reduce(function(s, x) { return s + (Number(x.qty) || 0); }, 0);
-      var isBooking = loc.code === '1021';
+      var isBooking = _stockIsBookLoc(loc.code);
       var isPRPO = loc.code === 'PRPO';
       var isQI = loc.code === 'QI';
       var tint = loc.sellable ? 'rgba(34,197,94,.08)' : 'rgba(148,163,184,.08)';
@@ -1744,7 +1761,7 @@ function showStockAddLotM(sku, code) {
   var p = getProductBySku(sku);
   if (!p) return;
   var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
-  var isBooking = code === '1021';
+  var isBooking = _stockIsBookLoc(code);
   var isPRPO = code === 'PRPO';
   var isQI = code === 'QI';
   var today = _nw().substring(0, 10);
@@ -1755,7 +1772,7 @@ function showStockAddLotM(sku, code) {
     '</div></div>';
   if (isBooking) {
     body += _stockSODatalistHtml();
-    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
+    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี — เว้นว่างได้ถ้ายังไม่มี SO)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
     body += dpH('lot_date', today, 'วันที่จอง', false);
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="lot_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
     body += _stockDealerDatalistHtml();
@@ -1790,7 +1807,7 @@ function saveStockAddLot(sku, code) {
   var qty = document.getElementById('lot_qty').value;
   var bexpEl = document.getElementById('lot_bexp');
   var bexpVal = bexpEl ? bexpEl.value : '';
-  if (code === '1021') {
+  if (_stockIsBookLoc(code)) {
     var soEl = document.getElementById('lot_so');
     var extra = {
       ref: soEl.value.trim(),
@@ -1878,7 +1895,7 @@ function stockMoveDestChanged() {
   var qiFields = document.getElementById('mv_qi_fields');
   var bexpFields = document.getElementById('mv_bexp_fields');
   if (!dest) return;
-  if (bookingFields) bookingFields.style.display = dest.value === '1021' ? 'block' : 'none';
+  if (bookingFields) bookingFields.style.display = _stockIsBookLoc(dest.value) ? 'block' : 'none';
   if (prpoFields) prpoFields.style.display = dest.value === 'PRPO' ? 'block' : 'none';
   if (qiFields) qiFields.style.display = dest.value === 'QI' ? 'block' : 'none';
   if (bexpFields) {
@@ -1900,7 +1917,7 @@ function saveStockMoveLot(sku, lotId) {
   var note = document.getElementById('mv_note').value.trim();
   var bexpEl = document.getElementById('mv_bexp');
   var extra = { note: note, bookingExpiryDate: bexpEl ? bexpEl.value : '' };
-  if (dest === '1021') {
+  if (_stockIsBookLoc(dest)) {
     var mvSoEl = document.getElementById('mv_so');
     extra.ref = mvSoEl.value.trim();
     extra.soId = mvSoEl.dataset.soId || '';
@@ -1919,6 +1936,8 @@ function saveStockMoveLot(sku, lotId) {
     extra.estimateDays = document.getElementById('mv_qi_estimate').value;
     extra.expectedCompleteDate = document.getElementById('mv_qi_expected').value;
   }
+  var srcLotForLock = stockGetLots(sku).filter(function(l) { return l.id === lotId; })[0];
+  if (!_stockConfirmDealerMove(srcLotForLock, extra.dealerName)) return;
   stockMoveLot(sku, p.name, lotId, qty, dest, extra);
   closeMForce();
   toast('→ ย้ายแล้ว');
@@ -1953,7 +1972,7 @@ function stockLotDrop(ev, destCode) {
   if (!data || !data.sku || !data.lotId) return;
   var lot = stockGetLots(data.sku).filter(function(l) { return l.id === data.lotId; })[0];
   if (!lot || lot.location === destCode) return;
-  if (destCode === '1021' || destCode === 'PRPO') {
+  if (_stockIsBookLoc(destCode) || destCode === 'PRPO') {
     showStockMoveLotM(data.sku, data.lotId, destCode);
   } else {
     showStockQuickMoveM(data.sku, data.lotId, destCode);
@@ -2078,7 +2097,7 @@ function _stockBatchDefaultRef() {
 
 function rStockBatchReceive(el) {
   document.getElementById('pgT').textContent = '📥 รับของเข้าคลัง (Batch)';
-  var locs = getStockLocations().filter(function(l) { return l.code !== '1021'; }); // 1021 ต้องกรอกรายละเอียดจอง/SO เฉพาะเจาะจง ไม่เหมาะกับการคีย์เป็นชุด
+  var locs = getStockLocations().filter(function(l) { return !_stockIsBookLoc(l.code); }); // 1021/8D01 ต้องกรอกรายละเอียดจอง/SO เฉพาะเจาะจง ไม่เหมาะกับการคีย์เป็นชุด
   var today = _nw().substring(0, 10);
 
   var h = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'stock\')" style="margin-bottom:10px">← กลับ</button>';
