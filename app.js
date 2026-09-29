@@ -735,6 +735,7 @@ function go(v, p) {
   S = {view: v};
   var keys = Object.keys(p);
   for (var i = 0; i < keys.length; i++) S[keys[i]] = p[keys[i]];
+  _trackMenuUsage(v);
   render();
   var navs = document.querySelectorAll('[data-v]');
   for (var i = 0; i < navs.length; i++) {
@@ -898,6 +899,7 @@ if (fn) {
 }
   updBdg();
     if (typeof renderFavorites === 'function') renderFavorites();
+    if (typeof renderFrequentMenus === 'function') renderFrequentMenus();
   checkBackupReminder();
   if (typeof updateDealerScopeBadge === 'function') updateDealerScopeBadge();
   // ซิงก์ไฮไลท์แถบล่างมือถือทุกครั้งที่ render() จบ ไม่ใช่แค่ตอนกดผ่าน mbGo() — กันแถบล่างค้างจุดเดิมตอน
@@ -2207,6 +2209,60 @@ function saveFavorites(list) {
       db.collection('users').doc(CURRENT_USER.uid).collection('favorites').doc('_data').set({ value: list });
     }
   } catch(e) {}
+}
+
+// ================================================================
+// เมนูใช้บ่อย — คำนวณอัตโนมัติจากจำนวนครั้งที่กดเข้าเมนูนั้นๆ (นับเฉพาะเมนูหลักใน APP_MENU_REGISTRY/
+// APP_MENU_ACTIONS ไม่นับหน้า detail ย่อยที่ไปกับ go() เหมือนกัน เช่น soDetail/dealerDetail) เก็บเป็น
+// {id: count} ใน localStorage ล้วนๆ ไม่ผ่าน ST/sync เพราะเป็นพฤติกรรมส่วนตัวของเบราว์เซอร์นี้ ไม่ต้องแชร์ทีม
+// ================================================================
+var MENU_USAGE_KEY = 'v7_menuUsage';
+function _trackMenuUsage(v) {
+  if (!v) return;
+  try {
+    var byId = {};
+    APP_MENU_REGISTRY.concat(APP_MENU_ACTIONS).forEach(function(m) { byId[m.id] = true; });
+    if (!byId[v]) return; // ไม่ใช่เมนูหลัก (เช่น หน้า detail ที่ไปกับ params) ไม่นับ
+    var usage = JSON.parse(localStorage.getItem(MENU_USAGE_KEY) || '{}');
+    usage[v] = (usage[v] || 0) + 1;
+    localStorage.setItem(MENU_USAGE_KEY, JSON.stringify(usage));
+  } catch(e) {}
+}
+
+// เมนูใช้บ่อยสูงสุด 5 อัน — ไม่เอาอันที่ปักเป็น Favorite ไว้แล้ว (กันโชว์ซ้ำ 2 ที่)
+function getFrequentMenus() {
+  var usage = {};
+  try { usage = JSON.parse(localStorage.getItem(MENU_USAGE_KEY) || '{}'); } catch(e) {}
+  var favs = getFavorites();
+  var byId = {};
+  APP_MENU_REGISTRY.concat(APP_MENU_ACTIONS).forEach(function(m) { byId[m.id] = m; });
+  return Object.keys(usage)
+    .filter(function(id) { return byId[id] && favs.indexOf(id) === -1; })
+    .sort(function(a, b) { return usage[b] - usage[a]; })
+    .slice(0, 5);
+}
+
+function renderFrequentMenus() {
+  var el = document.getElementById('sbFrequent');
+  if (!el) return;
+  var freq = getFrequentMenus();
+  if (typeof GUEST_VIEW_READONLY !== 'undefined' && GUEST_VIEW_READONLY) {
+    var allowedFreq = (typeof GUEST_VIEW_ALLOWED_MENUS !== 'undefined' && GUEST_VIEW_ALLOWED_MENUS) || ['stock', 'salesOrders'];
+    freq = freq.filter(function(f) { return allowedFreq.indexOf(f) !== -1; });
+  }
+  var byId = {};
+  APP_MENU_REGISTRY.concat(APP_MENU_ACTIONS).forEach(function(m) { byId[m.id] = m; });
+  var h = '';
+  freq.forEach(function(id) {
+    var item = byId[id];
+    if (!item) return;
+    var isActive = S && S.view === id;
+    var onclick = item.action || ("go('" + id + "')");
+    h += '<div class="sb-fav-item' + (isActive ? ' act' : '') + '" onclick="' + onclick + '">' + item.icon + ' ' + item.name + '</div>';
+  });
+  var group = document.getElementById('sg-freq-wrap');
+  if (group) group.style.display = freq.length ? '' : 'none';
+  el.innerHTML = h;
 }
 
 function renderFavorites() {
@@ -4959,7 +5015,7 @@ function toggleSbGroup(key) {
 }
 
 function initSbGroups() {
-  var defaults = { fav: true, main: true, work: false, data: false, tools: false, products: false, track: false, system: false };
+  var defaults = { fav: true, freq: true, main: true, work: false, data: false, tools: false, products: false, track: false, system: false };
   try {
     var saved = JSON.parse(localStorage.getItem('v7_sb_state') || '{}');
     Object.keys(saved).forEach(function(k) { defaults[k] = saved[k]; });

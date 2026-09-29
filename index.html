@@ -69,6 +69,14 @@
   <div id="sbFavorites"></div>
 </div>
 
+<!-- เมนูใช้บ่อย — คำนวณอัตโนมัติจากจำนวนครั้งที่กดเข้าเมนู (สูงสุด 5 อัน ไม่นับซ้ำกับ Favorites) — ซ่อนไปเองถ้ายังไม่มีข้อมูล -->
+<div id="sg-freq-wrap" style="display:none">
+<div class="nl-label sg-toggle" onclick="toggleSbGroup('freq')">🕒 ใช้บ่อย <span class="sg-chev" id="sgc-freq">▾</span></div>
+<div class="sg-items" id="sgi-freq">
+  <div id="sbFrequent"></div>
+</div>
+</div>
+
 <!-- หลัก — always open -->
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('main')">📌 หลัก <span class="sg-chev" id="sgc-main">▾</span></div>
 <div class="sg-items" id="sgi-main">
