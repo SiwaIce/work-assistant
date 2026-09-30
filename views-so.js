@@ -139,17 +139,103 @@ function _soStatusBadge(st) {
     s.color + '22;border-color:' + s.color + '55;color:' + s.color + '">' + s.icon + ' ' + s.label + '</span>';
 }
 
+var _SO_NUM_FIELD_BY_PREFIX = { SO: 'soNumber', INV: 'invoiceNumber', DO: 'doNumber' };
 function _soNextNum(prefix) {
   var all = ST.getAll('salesOrders');
   var yr  = new Date().getFullYear();
   var re  = new RegExp('^' + prefix + '-\\d{4}-(\\d+)$');
   var max = 0;
+  var field = _SO_NUM_FIELD_BY_PREFIX[prefix] || 'invoiceNumber';
   all.forEach(function(s) {
-    var src = prefix === 'SO' ? s.soNumber : s.invoiceNumber;
+    var src = s[field];
     var m   = (src || '').match(re);
     if (m) max = Math.max(max, parseInt(m[1]));
   });
   return prefix + '-' + yr + '-' + String(max + 1).padStart(3, '0');
+}
+
+// ================================================================
+// Credit requests — แยกจาก salesOrders ตั้งใจ เพราะ 1 คำขออาจผูกได้หลาย SO/PO พร้อมกัน
+// (เช่น ขอเครดิตรวม 3 โครงการ เทอมเดียวกัน อนุมัติเป็นเอกสารเดียว)
+// ================================================================
+var CREDIT_REQUEST_STATUSES = ['รอเสนอ', 'รออนุมัติ', 'อนุมัติแล้ว', 'ไม่อนุมัติ'];
+
+function creditRequestsForSO(soId) {
+  return ST.getAll('creditRequests').filter(function(cr) { return (cr.soIds || []).indexOf(soId) !== -1; });
+}
+
+// คำขอเครดิตล่าสุดที่ยังไม่ถูกปฏิเสธ ผูกกับ SO นี้ (ถ้ามีหลายใบเอาที่สร้างล่าสุด)
+function creditRequestOpenForSO(soId) {
+  var list = creditRequestsForSO(soId).filter(function(cr) { return cr.status !== 'ไม่อนุมัติ'; });
+  list.sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  return list[0] || null;
+}
+
+function _creditStatusColor(status) {
+  if (status === 'อนุมัติแล้ว') return '#22c55e';
+  if (status === 'ไม่อนุมัติ') return '#ef4444';
+  if (status === 'รออนุมัติ') return '#f59e0b';
+  return '#94a3b8';
+}
+
+function showSOCreditModal(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var existing = creditRequestOpenForSO(soId);
+  var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+
+  // SO อื่นของ dealer เดียวกันที่ยังไม่ปิด — เลือกรวมขอเครดิตพร้อมกันได้ (เทอมเดียวกัน)
+  var siblings = ST.getAll('salesOrders').filter(function(o) {
+    return o.id !== soId && o.dealerId === s.dealerId && !_soIsDone(o.status);
+  });
+
+  var html = '<div style="display:flex;flex-direction:column;gap:10px">';
+  if (existing) {
+    html += '<div style="font-size:12px;color:var(--text2)">คำขอปัจจุบัน: <b style="color:' + _creditStatusColor(existing.status) + '">' + sanitize(existing.status) + '</b>' +
+      (existing.approvedBy ? ' · ผู้อนุมัติ: ' + sanitize(existing.approvedBy) : '') + '</div>';
+  }
+  html += '<div><label class="lbl">จำนวนวันเครดิตที่ขอ</label><input id="cr_days" class="inp" type="number" min="0" value="' + (existing ? (existing.creditDaysRequested || '') : (s.creditDaysRequested || '')) + '"></div>';
+  html += '<div><label class="lbl">ยอดรวม (THB)</label><input id="cr_amount" class="inp js-money" type="text" inputmode="decimal" value="' + nmI(existing ? existing.totalAmount : total) + '"></div>';
+  if (siblings.length) {
+    html += '<div><label class="lbl">รวมขอเครดิตพร้อมกับ SO อื่น (เลือกได้หลายรายการ)</label>';
+    html += '<div style="max-height:140px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px">';
+    siblings.forEach(function(o) {
+      var checked = existing && (existing.soIds || []).indexOf(o.id) !== -1 ? ' checked' : '';
+      html += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0"><input type="checkbox" class="cr_sib" value="' + o.id + '"' + checked + '> ' + sanitize(o.soNumber || o.id) + ' — ' + sanitize(o.customerPO || '-') + '</label>';
+    });
+    html += '</div></div>';
+  }
+  html += '<div><label class="lbl">สถานะ</label><select id="cr_status" class="inp">' +
+    CREDIT_REQUEST_STATUSES.map(function(st) { return '<option' + (existing && existing.status === st ? ' selected' : '') + '>' + st + '</option>'; }).join('') + '</select></div>';
+  html += '<div><label class="lbl">ผู้อนุมัติ <small style="color:var(--text2)">(พิมพ์เอง เช่น "รอหัวหน้าอนุมัติ" หรือชื่อผู้อนุมัติ)</small></label><input id="cr_approver" class="inp" value="' + sanitize(existing ? (existing.approvedBy || '') : '') + '"></div>';
+  html += '<button class="btn bp" onclick="saveSOCredit(\'' + soId + '\',\'' + (existing ? existing.id : '') + '\')">💾 บันทึก</button>';
+  html += '</div>';
+  openM('💳 คำขอเครดิต', html);
+}
+
+function saveSOCredit(soId, existingId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var soIds = [soId];
+  document.querySelectorAll('.cr_sib:checked').forEach(function(el) { soIds.push(el.value); });
+  var poNumbers = soIds.map(function(id) { var o = ST.getOne('salesOrders', id); return o ? (o.customerPO || o.soNumber || '') : ''; }).filter(Boolean);
+  var fields = {
+    soIds: soIds,
+    poNumbers: poNumbers,
+    creditDaysRequested: Number((document.getElementById('cr_days') || {}).value) || 0,
+    totalAmount: parseNum((document.getElementById('cr_amount') || {}).value) || 0,
+    status: (document.getElementById('cr_status') || {}).value,
+    approvedBy: (document.getElementById('cr_approver') || {}).value.trim()
+  };
+  if (existingId) {
+    ST.update('creditRequests', existingId, fields);
+  } else {
+    fields.createdAt = new Date().toISOString();
+    ST.add('creditRequests', fields);
+  }
+  closeMForce();
+  toast('💾 บันทึกคำขอเครดิตแล้ว');
+  if (typeof rSODetail === 'function') rSODetail(document.getElementById('ct'));
 }
 
 // รายการ serial แบบเดียว (แทน serialsReceived/serialsShipped เดิม) — ของเก่ายังอ่านได้ผ่าน fallback นี้
@@ -533,6 +619,7 @@ function rSODetail(el) {
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
   if (pipe)               infoCells.push({ label:'Pipeline',      val: '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + s.pipelineId + '\'});return false" style="color:var(--accent)">' + sanitize((pipe.projectName||s.pipelineId).substr(0,26)) + '</a>' });
   if (s.quotationId)      infoCells.push({ label:'Quotation',     val: '<span style="color:var(--accent)">' + sanitize(s.quotationId) + '</span>' });
+  if (s.doNumber)         infoCells.push({ label:'DO',            val: qcopyHtml(s.doNumber) });
   if (s.invoiceNumber)    infoCells.push({ label:'Invoice',       val: qcopyHtml(s.invoiceNumber) + (s.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(s.invoiceDate) + ')</span>' : '') });
   if (s.expectedDelivery) infoCells.push({ label:'ETA Vendor',    val: fD(s.expectedDelivery) });
   if (!_soIsDone(s.status) && _soDays != null) infoCells.push({ label:'อยู่ในขั้นนี้',   val: _soDays + ' วัน' });
@@ -545,6 +632,18 @@ function rSODetail(el) {
     });
     html += '</div>';
   }
+  // คำขอเครดิต — ผูกได้กับหลาย SO พร้อมกัน (ดู creditRequestsForSO)
+  var creditReq = creditRequestOpenForSO(s.id);
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-top:14px;margin-top:10px;border-top:1px solid var(--border)">';
+  html += '<div style="font-size:12px">💳 เครดิต: ' + (creditReq ?
+    '<b style="color:' + _creditStatusColor(creditReq.status) + '">' + sanitize(creditReq.status) + '</b>' +
+    (creditReq.creditDaysRequested ? ' · ' + creditReq.creditDaysRequested + ' วัน' : '') +
+    (creditReq.approvedBy ? ' · ' + sanitize(creditReq.approvedBy) : '') +
+    (creditReq.soIds && creditReq.soIds.length > 1 ? ' · รวม ' + creditReq.soIds.length + ' SO' : '') :
+    '<span style="color:var(--text2)">ยังไม่ได้ขอ</span>') + '</div>';
+  html += '<button class="btn bo bsm" onclick="showSOCreditModal(\'' + s.id + '\')">' + (creditReq ? '✏️ แก้ไขคำขอเครดิต' : '💳 ขอเครดิต') + '</button>';
+  html += '</div>';
+
   var _soWarn = _soWarnBadge(s);
   if (_soWarn) html += '<div style="margin-top:10px">' + _soWarn + '</div>';
 
@@ -729,7 +828,7 @@ function showCreateSOModal(opts) {
     : (pipe && pipe.model
       ? [{ model: pipe.model, qty: 1, unitPrice: Number(pipe.forecastAmount)||0 }]
       : [{ model: '', qty: 1, unitPrice: 0 }]);
-  initItems.forEach(function(it, idx){ html += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  initItems.forEach(function(it, idx){ html += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
   html += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin-top:4px">+ เพิ่มสินค้า</button></div>';
 
   html += '<div><label class="lbl">หมายเหตุ</label><textarea id="soN_note" class="inp" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea></div>';
@@ -773,7 +872,7 @@ function _soFillFromQuote(quoteId) {
   var items = (q.items && q.items.length) ? q.items.map(function(it) {
     return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '' };
   }) : [{ model: '', qty: 1, unitPrice: 0 }];
-  items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
   window._soQuoteItemsSnapshot = JSON.stringify(items);
   var poEl = document.getElementById('soN_customerPO');
   if (poEl && !poEl.value && q.poNo) poEl.value = q.poNo;
@@ -990,7 +1089,7 @@ function _soFillFromPipe(pipeId) {
   } else {
     items.push({ model: '', qty: 1, unitPrice: 0 });
   }
-  items.forEach(function(it, idx){ wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  items.forEach(function(it, idx){ wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
 
   // เปลี่ยนโครงการแล้ว ใบเสนอราคาที่เคยเลือกไว้ (ถ้ามี) ไม่เกี่ยวข้องแล้ว รีเฟรชตัวเลือกกรองตาม pipeline นี้แทน
   var quoteSel = document.getElementById('soN_quoteSel');
@@ -1000,13 +1099,60 @@ function _soFillFromPipe(pipeId) {
   window._soQuoteItemsSnapshot = null;
 }
 
-function _soItemRowHtml(idx, model, qty, price, sku) {
-  return '<div style="display:flex;gap:6px;margin-bottom:4px;align-items:center" id="soIR_' + idx + '">' +
+// sourceType ต่อรายการ: reserve_1021 (จองจากคลัง 1021) | reserve_8d01 (จองจากคลัง 8D01) | central_wh (ส่งจากคลังกลางเลย) | pr_po (ต้องเปิด PR/PO เพิ่ม)
+var SO_ITEM_SOURCE_TYPES = {
+  '':            { label: '— ยังไม่ระบุ —' },
+  reserve_1021:  { label: '📌 จองจากคลัง 1021' },
+  reserve_8d01:  { label: '🧳 จองจากคลัง 8D01' },
+  central_wh:    { label: '🏢 ส่งจากคลังกลาง' },
+  pr_po:         { label: '🛒 ต้องเปิด PR/PO เพิ่ม' }
+};
+
+function _soItemRowHtml(idx, model, qty, price, sku, item) {
+  item = item || {};
+  var sourceType = item.sourceType || '';
+  var srcOptions = Object.keys(SO_ITEM_SOURCE_TYPES).map(function(k) {
+    return '<option value="' + k + '"' + (k === sourceType ? ' selected' : '') + '>' + SO_ITEM_SOURCE_TYPES[k].label + '</option>';
+  }).join('');
+  var h = '<div style="border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:6px" id="soIR_' + idx + '">';
+  h += '<div style="display:flex;gap:6px;align-items:center">' +
     '<input type="hidden" id="soI_sku_' + idx + '" value="' + sanitize(sku || '') + '">' +
     '<input class="inp" style="flex:2" placeholder="Model / สินค้า" value="' + sanitize(model||'') + '" id="soI_m_' + idx + '" list="soItemModelDL" autocomplete="off" onchange="_soItemModelChanged(\'' + idx + '\')">' +
     '<input class="inp" type="number" style="width:58px" placeholder="จำนวน" value="' + (qty||1) + '" id="soI_q_' + idx + '" min="1">' +
     '<input class="inp js-money" type="text" inputmode="decimal" style="width:95px" placeholder="ราคา/หน่วย" value="' + (price ? nmI(price) : '') + '" id="soI_p_' + idx + '">' +
-    '<button class="btn bd bsm" onclick="this.parentElement.remove()">✕</button></div>';
+    '<button class="btn bd bsm" onclick="this.closest(\'[id^=soIR_]\').remove()">✕</button></div>';
+  h += '<div style="display:flex;gap:6px;align-items:center;margin-top:4px">' +
+    '<select class="inp" style="flex:1" id="soI_src_' + idx + '" onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
+  var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
+  h += '<div id="soI_prpo_' + idx + '" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="วันที่ยื่น PR/PO" title="วันที่ยื่น PR/PO" value="' + sanitize(item.prpoSubmittedDate || '') + '" id="soI_prpoDate_' + idx + '">' +
+    '<input class="inp" style="flex:2;min-width:140px" placeholder="สถานะ (เช่น เข้าไทยแล้ว)" value="' + sanitize(item.prpoStatus || '') + '" id="soI_prpoStatus_' + idx + '">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
+    '</div>';
+  h += '</div>';
+  return h;
+}
+
+function _soItemSourceChanged(idx) {
+  var sel = document.getElementById('soI_src_' + idx);
+  var prpoBox = document.getElementById('soI_prpo_' + idx);
+  if (!sel || !prpoBox) return;
+  prpoBox.style.display = sel.value === 'pr_po' ? 'flex' : 'none';
+}
+
+// อ่านฟิลด์ sourceType/PR-PO จากแถวรายการสินค้า — ใช้ร่วมกันตอนบันทึกทั้งสร้างใหม่และแก้ไข
+function _soReadItemSourceFields(row) {
+  var srcEl = row.querySelector('[id^="soI_src_"]');
+  var out = { sourceType: srcEl ? srcEl.value : '' };
+  if (out.sourceType === 'pr_po') {
+    var dateEl = row.querySelector('[id^="soI_prpoDate_"]');
+    var statusEl = row.querySelector('[id^="soI_prpoStatus_"]');
+    var expEl = row.querySelector('[id^="soI_prpoExp_"]');
+    out.prpoSubmittedDate = dateEl ? dateEl.value : '';
+    out.prpoStatus = statusEl ? statusEl.value.trim() : '';
+    out.prpoExpectedDate = expEl ? expEl.value : '';
+  }
+  return out;
 }
 
 // พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคา RRP ให้อัตโนมัติถ้าช่องราคายังว่าง
@@ -1060,7 +1206,7 @@ function saveCreateSO() {
     var pEl = row.querySelector('[id^="soI_p_"]');
     var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value)||1, unitPrice: parseNum(pEl.value)||0, serials:[] });
+    items.push(Object.assign({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value)||1, unitPrice: parseNum(pEl.value)||0, serials:[] }, _soReadItemSourceFields(row)));
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
@@ -1102,7 +1248,7 @@ function saveCreateSO() {
     // ถัง Run rate ที่ SO ใบนี้ผูกอยู่ — ยอดของใบนี้จะถูกนับรวมในถังนั้น (ดู _rrTotal ใน views-runrate.js)
     runrateId: runrateId,
     runrateProjectId: runrateId ? ((ST.getOne('runrate', runrateId) || {}).projectId || '') : '',
-    prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', expectedDelivery: '',
+    prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', doNumber: '', expectedDelivery: '',
     status: 'po_received', items: items, saleName: cfg.saleName||'',
     logs: [{ date: _td(), action: '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],
     createdAt: now, updatedAt: now,
@@ -1126,7 +1272,7 @@ function showSOEditItemsModal(soId) {
   var body = '<div class="hint" style="margin-bottom:8px">แก้ไข/เพิ่ม/ลบรายการสินค้าได้อิสระ — ถ้าไม่ตรงกับใบเสนอราคาที่ผูกไว้ ตอนบันทึกจะถามว่าจะแก้ใบเสนอราคาด้วยไหม</div>';
   body += buildAdminModelDatalist('soItemModelDL');
   body += '<div id="soN_items">';
-  (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku); });
+  (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
   body += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin:8px 0">+ เพิ่มสินค้า</button>';
   body += '<button class="btn bp btn-full" style="margin-top:6px" onclick="saveSOItemsEdit(\'' + soId + '\')">💾 บันทึกรายการสินค้า</button>';
   openM('✏️ แก้ไขรายการสินค้า — ' + sanitize(s.soNumber || ''), body);
@@ -1143,7 +1289,7 @@ function saveSOItemsEdit(soId) {
     var pEl = row.querySelector('[id^="soI_p_"]');
     var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0, serials: [] });
+    items.push(Object.assign({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0, serials: [] }, _soReadItemSourceFields(row)));
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
@@ -1282,8 +1428,9 @@ function showSOStatusModal(soId) {
   });
   html += '</div>';
 
-  // Invoice section
+  // Invoice + DO section — DO:Invoice ผูก 1:1 กับ SO นี้เสมอ (ไม่รองรับส่งบางส่วนหลายรอบ)
   html += '<div id="soSt_invSec" style="display:none"><div style="display:flex;gap:8px">';
+  html += '<div style="flex:1"><label class="lbl">DO Number</label><input id="soSt_doNum" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(s.doNumber||_soNextNum('DO')) + '"></div>';
   html += '<div style="flex:1"><label class="lbl">Invoice Number</label><input id="soSt_invNum" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(s.invoiceNumber||_soNextNum('INV')) + '"></div>';
   html += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soSt_invDate" class="inp" type="date" value="' + (s.invoiceDate||_td()) + '"></div>';
   html += '</div></div>';
@@ -1338,11 +1485,13 @@ function saveSOStatus(soId) {
     if (eta)   update.expectedDelivery = eta;
   }
 
-  // Invoice fields
+  // Invoice + DO fields — DO:Invoice ผูก 1:1 กับ SO นี้เสมอ
   var isShip = ['shipped','invoiced'].indexOf(nextSt) !== -1;
   if (isShip) {
+    var doNum   = (document.getElementById('soSt_doNum')  ||{}).value;
     var invNum  = (document.getElementById('soSt_invNum') ||{}).value;
     var invDate = (document.getElementById('soSt_invDate')||{}).value;
+    if (doNum)   update.doNumber      = doNum;
     if (invNum)  update.invoiceNumber = invNum;
     if (invDate) update.invoiceDate   = invDate;
   }
@@ -1572,6 +1721,9 @@ function showSOEditModal(soId) {
   html += '</div>';
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soE_invDate" class="inp" type="date" value="' + (s.invoiceDate||'') + '"></div>';
+  html += '<div style="flex:1"><label class="lbl">DO Number</label><input id="soE_doNum" class="inp" value="' + sanitize(s.doNumber||'') + '"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">Dealer</label><select id="soE_dealer" class="inp" onchange="_soEditDealerChanged(this.value)">' + dOpts + '</select></div>';
   html += '</div>';
 
@@ -1666,6 +1818,7 @@ function saveSOEdit(soId) {
     runrateProjectId: runrateId ? ((ST.getOne('runrate', runrateId) || {}).projectId || '') : '',
     invoiceNumber:    (document.getElementById('soE_invNum')||{}).value || '',
     invoiceDate:      (document.getElementById('soE_invDate')||{}).value || '',
+    doNumber:         (document.getElementById('soE_doNum')||{}).value || '',
     dealerId:         dealerId,
     dealerName:       dealer ? dealer.name : s.dealerName,
     customerPO:       (document.getElementById('soE_po')||{}).value || '',

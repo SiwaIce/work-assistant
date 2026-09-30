@@ -65,7 +65,9 @@ const ST = {
     stockLog: 'v7_stockLog',
     stockFavs: 'v7_stockFavs',
     stockReservations: 'v7_stockReservations',
-    stockLocations: 'v7_stockLocations'
+    stockLocations: 'v7_stockLocations',
+    // คำขอเครดิต — แยกจาก salesOrders ตั้งใจ เพราะ 1 คำขออาจผูกได้หลาย SO/PO พร้อมกัน (ขอรวมเครดิตหลาย PO ทีเดียว)
+    creditRequests: 'v7_creditRequests'
   },
 
   // ✅ Migration ครั้งเดียว: 'postit' เคยไม่มีอยู่ใน _keys เลย ทำให้ ST.add/update/delete('postit', ...)
