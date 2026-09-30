@@ -3886,6 +3886,44 @@ function copyStepsAsBullets(tid, plain) {
   }
 }
 
+// คัดลอกขั้นตอนแบบมีหัวข้อ+หมายเหตุ แบ่งเป็นหมวดตามวันที่ทำ (startDate) — ผู้ใช้ขอไว้เพื่อเอาไปวางสรุป
+// งานประจำวันที่ทำหลายอย่างคนละวัน (เช่น log กิจกรรมสะสมในงานเดียวเป็นขั้นตอนย่อยหลายวัน)
+// เรียงวันที่เก่า→ใหม่ (ตามตัวอย่างที่ผู้ใช้ให้มา), ขั้นตอนที่ยังไม่ตั้งวันที่ทำจะถูกจัดไว้ในหมวด "ไม่ระบุวันที่" ท้ายสุด
+// ไม่แสดงส่วนหมายเหตุถ้าขั้นตอนนั้นไม่มีหมายเหตุ (ตามที่ผู้ใช้ขอ)
+function copyStepsByDate(tid) {
+  var t = ST.getOne('tasks', tid);
+  if (!t || !t.steps || !t.steps.length) { toast('ยังไม่มีขั้นตอนให้คัดลอก'); return; }
+  var groups = {};
+  var order = [];
+  t.steps.forEach(function(s) {
+    var key = s.startDate || '';
+    if (!groups[key]) { groups[key] = []; order.push(key); }
+    groups[key].push(s);
+  });
+  order.sort(function(a, b) {
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b);
+  });
+  var blocks = order.map(function(key) {
+    var header = key ? fD(key) : 'ไม่ระบุวันที่';
+    var lines = groups[key].map(function(s) {
+      var line = '- ' + s.title;
+      if (s.notes) line += ' — ' + s.notes;
+      return line;
+    });
+    return header + '\n' + lines.join('\n');
+  });
+  var text = blocks.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      toast('📋 คัดลอกตามวันที่แล้ว (' + t.steps.length + ' ข้อ)');
+    }).catch(function() { toast('❌ คัดลอกไม่สำเร็จ'); });
+  } else {
+    toast('❌ เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+
 function updateStep(tid, idx) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps[idx]) return;

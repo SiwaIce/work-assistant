@@ -1490,7 +1490,8 @@ function rTaskDet(el) {
         <button class="btn bsm bp" onclick="showStepM('${t.id}')" title="เพิ่มทีละขั้นตอน (กรอกรายละเอียด/วันที่/link ได้)">➕</button>
         <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button>
         <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}')" title="คัดลอกขั้นตอนทั้งหมดเป็น bullet list (มี ✓/- บอกเสร็จหรือยัง + หมายเหตุถ้ามี) เอาไปวางสรุปใน Visit Report ได้เลย">📋 Copy</button>
-        <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}', true)" title="คัดลอกเฉพาะหัวข้อ ขึ้นต้นด้วย - ล้วนทุกบรรทัด ไม่มี ✓/หมายเหตุปน">📋 Copy (- ล้วน)</button></h3>
+        <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}', true)" title="คัดลอกเฉพาะหัวข้อ ขึ้นต้นด้วย - ล้วนทุกบรรทัด ไม่มี ✓/หมายเหตุปน">📋 Copy (- ล้วน)</button>
+        <button class="btn bsm bo" onclick="copyStepsByDate('${t.id}')" title="คัดลอกหัวข้อ+หมายเหตุ แบ่งเป็นหมวดตามวันที่ทำ (วว/ดด/ปปปป) เรียงเก่าไปใหม่">📋 Copy ตามวันที่</button></h3>
       ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
       ${(t.steps || []).length ? t.steps.map(function(s, i) {
         var lk = isStepLocked(t, i);
