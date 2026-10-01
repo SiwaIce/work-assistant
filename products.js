@@ -447,6 +447,30 @@ function deleteProduct(productId) {
   return true;
 }
 
+// เปลี่ยนหมวดหมู่ให้สินค้าหลายรายการพร้อมกัน (จากการติ๊กเลือกในหน้าสินค้าทั้งหมด) — เขียนทุกแถวก่อนแล้ว
+// ค่อย saveProductsData ครั้งเดียว ไม่เรียก updateProduct วนลูปทีละตัว เพราะแต่ละครั้งจะ sync ขึ้น Firebase
+// และ publish catalog ใหม่ทันที ถ้าเลือกมาเยอะจะยิง sync ซ้ำๆ โดยไม่จำเป็น แก้แค่ฟิลด์หมวดหมู่ ไม่แตะราคา/สต็อก
+function bulkUpdateProductsCategory(productIds, category) {
+  var data = getProductsData();
+  if (!data.models || !productIds || !productIds.length) return 0;
+  var idSet = {};
+  productIds.forEach(function(id) { idSet[id] = true; });
+  var now = new Date().toISOString();
+  var count = 0;
+  data.models.forEach(function(p) {
+    if (idSet[p.id]) {
+      p.category = category;
+      p.updatedAt = now;
+      count++;
+    }
+  });
+  if (count) {
+    data.lastUpdated = now;
+    saveProductsData(data);
+  }
+  return count;
+}
+
 // ================================================================
 // PRICE & EOL HELPERS
 // ================================================================
@@ -2008,6 +2032,11 @@ var _prodSheetDirty = false; // มีการแก้ในตาราง Sh
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
+// ติ๊กเลือกหลายรายการในตาราง "สินค้าทั้งหมด" เพื่อเปลี่ยนหมวดหมู่ทีเดียว — เก็บเป็น map id -> true
+// (ไม่ใช่ array) จะเช็ค/ลบทีละตัวเร็วกว่า และคงค่าไว้ข้ามการกรอง/ค้นหา จนกว่าจะกดยกเลิกเลือกหรือบันทึกสำเร็จ
+var _prodSelectedIds = {};
+var _prodLastRenderedIds = []; // รายการ id ที่กำลังแสดงอยู่ตามตัวกรองปัจจุบัน ใช้กับปุ่ม "เลือกทั้งหมดที่กรองอยู่"
+
 function rProducts(el) {
   document.getElementById('pgT').textContent = '📦 สินค้าทั้งหมด';
   // เครื่องใหม่/ล้าง cache: ในเครื่องยังไม่มีสินค้าเลยสักตัว แปลว่ากำลังรอดึงจาก Firebase (คลังจริงอยู่บน
@@ -2103,7 +2132,9 @@ function rProducts(el) {
   html += '</div>';
 
   html += '<div id="productsTableWrap"' + (productViewMode!=='table' ? ' style="display:none"' : '') + '>';
+  html += '<div id="prodBulkBar" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;flex-wrap:wrap;align-items:center;gap:8px"></div>';
   html += '<div class="export-wrap"><table class="export-table" id="productsTable" style="table-layout:fixed;width:100%"><thead><tr>';
+  html += '<th style="width:30px"><input type="checkbox" id="prodSelectAllChk" onchange="toggleSelectAllProducts(this.checked)"></th>';
   html += '<th style="width:40px">#</th><th style="width:130px">SKU</th><th style="width:120px">EAN</th><th style="width:auto">ชื่อสินค้า</th><th style="width:110px">หมวดหมู่</th>';
   html += '<th style="width:100px">RRP in Vat</th><th style="width:100px">RRP Ex Vat</th>';
   html += '<th style="width:80px">S</th><th style="width:80px">A</th><th style="width:80px">B</th><th style="width:80px">Other</th>';
@@ -2600,23 +2631,25 @@ function isDemoProduct(product) {
 function renderProductsTable(products) {
   var tbody = document.getElementById('productsTableBody');
   if (!tbody) return;
+  _prodLastRenderedIds = products.map(function(p) { return p.id; });
   var html = '';
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
     var badge = '';
     if (p.eol) badge += '<span class="tag tag-cancelled">⏰ EOL</span>';
     else badge += '<span class="tag tag-completed">✅ มีขาย</span>';
-    
+
     // ✅ เพิ่มป้าย Demo
     if (isDemoProduct(p)) badge += ' <span class="tag" style="background:#f59e0b;color:#fff">🎪 Demo</span>';
     if (p.isSoftware) badge += ' <span class="tag tag-active">💻 SW</span>';
     if (p.isService) badge += ' <span class="tag tag-on-hold">🛠️ SV</span>';
     if (p.isBundle) badge += ' <span class="tag tag-count">🎁 Bundle</span>';
-    
+
     var categoryName = getCategoryName(p.category);
     var categoryIcon = getCategoryIcon(p.category);
-    
+
     html += '<tr>';
+    html += '<td style="text-align:center"><input type="checkbox" class="prodRowChk" data-id="' + p.id + '"' + (_prodSelectedIds[p.id] ? ' checked' : '') + ' onchange="toggleProductSelect(\'' + p.id + '\', this.checked)"></td>';
     html += '<td class="pipe-row-num">' + (i+1) + '</td>';
     html += '<td>' + (p.sku ? qcopyHtml(p.sku) : '-') + '</td>';
     html += '<td>' + (p.ean ? qcopyHtml(p.ean) : '-') + '</td>';
@@ -2633,7 +2666,83 @@ function renderProductsTable(products) {
       '<button class="btn bsm bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️</button></td>';
     html += '</tr>';
   }
-  tbody.innerHTML = html || '<tr><td colspan="13">' + _prodEmptyHtml() + '</td></tr>';
+  tbody.innerHTML = html || '<tr><td colspan="14">' + _prodEmptyHtml() + '</td></tr>';
+  _updateProdSelectAllState();
+  _renderProdBulkBar();
+}
+
+// ติ๊ก/ยกเลิกติ๊กสินค้าทีละรายการ
+function toggleProductSelect(id, checked) {
+  if (checked) _prodSelectedIds[id] = true;
+  else delete _prodSelectedIds[id];
+  _updateProdSelectAllState();
+  _renderProdBulkBar();
+}
+
+// ติ๊ก/ยกเลิกติ๊กทั้งหมดที่กำลังแสดงอยู่ตามตัวกรองปัจจุบัน (ไม่กระทบรายการที่ถูกกรองออกไป)
+function toggleSelectAllProducts(checked) {
+  _prodLastRenderedIds.forEach(function(id) {
+    if (checked) _prodSelectedIds[id] = true;
+    else delete _prodSelectedIds[id];
+  });
+  var chks = document.querySelectorAll('#productsTableBody .prodRowChk');
+  for (var i = 0; i < chks.length; i++) chks[i].checked = checked;
+  _renderProdBulkBar();
+}
+
+// อัปเดตสถานะ checkbox หัวตาราง (ติ๊ก = เลือกครบทุกแถวที่แสดงอยู่, indeterminate = เลือกบางส่วน)
+function _updateProdSelectAllState() {
+  var all = document.getElementById('prodSelectAllChk');
+  if (!all) return;
+  var total = _prodLastRenderedIds.length;
+  var selected = _prodLastRenderedIds.filter(function(id) { return _prodSelectedIds[id]; }).length;
+  all.checked = total > 0 && selected === total;
+  all.indeterminate = selected > 0 && selected < total;
+}
+
+// ยกเลิกการเลือกทั้งหมด (กดปุ่ม "ยกเลิกเลือก" หรือหลังบันทึกเปลี่ยนหมวดหมู่สำเร็จ)
+function clearProductSelection() {
+  _prodSelectedIds = {};
+  var chks = document.querySelectorAll('#productsTableBody .prodRowChk');
+  for (var i = 0; i < chks.length; i++) chks[i].checked = false;
+  _updateProdSelectAllState();
+  _renderProdBulkBar();
+}
+
+// วาดแถบทำงานกลุ่มด้านบนตาราง — โชว์แค่ตอนมีรายการที่ติ๊กเลือกอยู่
+function _renderProdBulkBar() {
+  var bar = document.getElementById('prodBulkBar');
+  if (!bar) return;
+  var ids = Object.keys(_prodSelectedIds);
+  if (!ids.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  var h = '<span style="font-weight:700">✅ เลือกแล้ว ' + ids.length + ' รายการ</span>';
+  h += '<select id="prodBulkCategorySelect" class="fm-input" style="width:180px">';
+  h += '<option value="">— เปลี่ยนหมวดหมู่เป็น —</option>';
+  for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+    var cat = PRODUCT_CATEGORIES[i];
+    h += '<option value="' + cat.id + '">' + cat.name + '</option>';
+  }
+  h += '</select>';
+  h += '<button class="btn bsm bp" onclick="applyBulkCategoryChange()">📂 เปลี่ยนหมวดหมู่</button>';
+  h += '<button class="btn bsm bo" onclick="clearProductSelection()">✖️ ยกเลิกเลือก</button>';
+  bar.innerHTML = h;
+}
+
+// กดปุ่ม "เปลี่ยนหมวดหมู่" ในแถบทำงานกลุ่ม — ยืนยันก่อนเขียนจริง เปลี่ยนแค่ฟิลด์หมวดหมู่ ไม่แตะราคา/สต็อก/สถานะอื่น
+function applyBulkCategoryChange() {
+  var ids = Object.keys(_prodSelectedIds);
+  if (!ids.length) return;
+  var sel = document.getElementById('prodBulkCategorySelect');
+  var newCat = sel ? sel.value : '';
+  if (!newCat) { toast('⚠️ เลือกหมวดหมู่ที่จะเปลี่ยนก่อน'); return; }
+  var catName = getCategoryName(newCat);
+  if (!confirm('เปลี่ยนหมวดหมู่เป็น "' + catName + '" ให้สินค้าที่เลือกไว้ ' + ids.length + ' รายการ?\nราคา/สต็อก/สถานะอื่นจะไม่เปลี่ยน')) return;
+  var count = bulkUpdateProductsCategory(ids, newCat);
+  toast('✅ เปลี่ยนหมวดหมู่ ' + count + ' รายการเรียบร้อย');
+  _prodSelectedIds = {};
+  if (typeof renderProductsList === 'function') renderProductsList();
+  else render();
 }
 function rProductPrices(el) {
   document.getElementById('pgT').textContent = '💰 ราคาตาม Level';
