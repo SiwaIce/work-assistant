@@ -67,7 +67,11 @@ const ST = {
     stockReservations: 'v7_stockReservations',
     stockLocations: 'v7_stockLocations',
     // คำขอเครดิต — แยกจาก salesOrders ตั้งใจ เพราะ 1 คำขออาจผูกได้หลาย SO/PO พร้อมกัน (ขอรวมเครดิตหลาย PO ทีเดียว)
-    creditRequests: 'v7_creditRequests'
+    creditRequests: 'v7_creditRequests',
+    // แคตตาล็อก "สินค้าอื่นๆ" ใน Quotation — สินค้านอกรายการสินค้าหลัก (ไม่ใช่ DJI/ไม่มีใน products) ที่ผู้ใช้
+    // เพิ่มเองแบบ manual แล้วเลือกบันทึกไว้เรียกใช้ซ้ำ แยกคอลเลกชันจาก products/stockLevels โดยตั้งใจ
+    // เพื่อไม่ให้ปนกับ Stock/รายงานสินค้าหลัก (ดู views-quotation.js: getOtherCatalogItems/saveOtherCatalogItems)
+    otherCatalog: 'v7_otherCatalog'
   },
 
   // ✅ Migration ครั้งเดียว: 'postit' เคยไม่มีอยู่ใน _keys เลย ทำให้ ST.add/update/delete('postit', ...)

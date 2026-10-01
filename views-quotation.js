@@ -326,8 +326,9 @@ function renderQuotationItemsTable() {
     html += '<tr>';
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + (item.sku ? qcopyHtml(item.sku) : '-') + '</td>';
-    html += '<td><input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)">' +
-      (!quotationItemsFullscreen && typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
+    html += '<td>' + (item.isOther ? '<span style="display:inline-block;font-size:10px;padding:1px 7px;border-radius:999px;background:#8b5cf618;color:#8b5cf6;margin-bottom:3px">🏷️ นอกแคตตาล็อก</span><br>' : '') +
+      '<input type="text" list="' + dlId + '" value="' + sanitize(item.name) + '" style="width:100%;font-weight:700;padding:4px" autocomplete="off" onchange="updateQuotationItemName(' + i + ', this.value)">' +
+      (!quotationItemsFullscreen && !item.isOther && typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';
@@ -434,6 +435,7 @@ function updateQuotationItemName(idx, newName) {
   var prods = ST.getAll('products');
   var found = prods.find(function(p) { return p.name === newName; });
   if (found) {
+    quotationItems[idx].isOther = false; // แก้ชื่อให้ตรงกับสินค้าในแคตตาล็อกหลักแล้ว ไม่ใช่สินค้าอื่นๆ อีกต่อไป
     if (found.sku) quotationItems[idx].sku = found.sku;
     if (found.cost !== undefined) quotationItems[idx].cost = found.cost;
     var selectedLevel = document.getElementById('editQuoteLevel');
@@ -630,6 +632,168 @@ function _qiaBindOutsideClose() {
     if (box.contains(e.target) || e.target === input) return;
     box.style.display = 'none';
   });
+}
+
+// ================================================================
+// สินค้าอื่นๆ (นอกแคตตาล็อก) — สินค้าที่ไม่อยู่ในรายการสินค้าหลัก/ไม่เกี่ยวกับ DJI (เช่น SD Card ยี่ห้ออื่น)
+// เพิ่มเองแบบ manual ในใบเสนอราคาได้ และเลือกบันทึกเก็บไว้ใน "ถังแยก" (collection otherCatalog) เพื่อเรียกใช้ซ้ำ
+// ได้ในใบเสนอราคาถัดไป — แยกจาก products/stockLevels โดยตั้งใจ จึงไม่โผล่ใน Stock/ราคา DJI/รายงานสินค้าหลัก
+// รายการในใบเสนอราคาที่มาจากตรงนี้ถูกตีตรา item.isOther = true (ดู renderQuotationItemsTable) เพื่อแสดงป้าย
+// "นอกแคตตาล็อก" และข้ามการเช็ค availability ของ Stock ให้
+// ================================================================
+function getOtherCatalogItems() { return ST.getAll('otherCatalog'); }
+function saveOtherCatalogItems(list) {
+  localStorage.setItem('v7_otherCatalog', JSON.stringify(list));
+  if (typeof syncToFirebase === 'function') syncToFirebase('otherCatalog', list);
+}
+
+var _ocEditingId = null; // ถ้าตั้งไว้ = กำลังแก้ไขรายการนี้ในแคตตาล็อกสินค้าอื่นๆ (บันทึกจะทับของเดิม)
+
+function showAddOtherItemM() {
+  _ocEditingId = null;
+  var h = '<div style="max-width:420px">';
+  h += '<div id="ocCatalogListZone"></div>';
+  h += '<div style="font-weight:700;margin:10px 0 6px;border-top:1px solid var(--border);padding-top:10px">➕ เพิ่มสินค้าใหม่</div>';
+  h += '<div id="ocFormZone"></div>';
+  h += '</div>';
+  openM('🏷️ สินค้าอื่นๆ (นอกแคตตาล็อก)', h);
+  _ocRenderCatalogList();
+  _ocRenderForm();
+}
+
+function _ocRenderCatalogList() {
+  var zone = document.getElementById('ocCatalogListZone');
+  if (!zone) return;
+  var items = getOtherCatalogItems();
+  if (!items.length) { zone.innerHTML = '<div class="hint">ยังไม่มีสินค้าอื่นๆ ที่บันทึกไว้ — เพิ่มใหม่ด้านล่างได้เลย</div>'; return; }
+  var h = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">📂 สินค้าอื่นๆ ที่บันทึกไว้ (กดชื่อเพื่อเพิ่มเข้าใบเสนอราคา)</div>';
+  h += '<div style="max-height:220px;overflow-y:auto">';
+  items.forEach(function(it) {
+    h += '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">';
+    h += '<div style="flex:1;cursor:pointer" onclick="_ocPickToQuote(\'' + it.id + '\')">' +
+      '<div style="font-weight:600">' + sanitize(it.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--text2)">' + (it.sku ? sanitize(it.sku) + ' • ' : '') + '฿' + fmtMoney(it.price || 0) + (it.unit ? ' / ' + sanitize(it.unit) : '') + (it.category ? ' • ' + sanitize(it.category) : '') + '</div>' +
+      '</div>';
+    h += '<button class="btn bsm bo" title="แก้ไข" onclick="_ocEditLoad(\'' + it.id + '\')">✏️</button>';
+    h += '<button class="btn bsm bd" title="ลบออกจากแคตตาล็อก" onclick="_ocDeleteItem(\'' + it.id + '\')">🗑️</button>';
+    h += '</div>';
+  });
+  h += '</div>';
+  zone.innerHTML = h;
+}
+
+function _ocRenderForm() {
+  var zone = document.getElementById('ocFormZone');
+  if (!zone) return;
+  var editing = _ocEditingId ? getOtherCatalogItems().find(function(x) { return x.id === _ocEditingId; }) : null;
+  var h = '';
+  if (editing) h += '<div class="hint" style="background:#f59e0b18;border:1px solid #f59e0b40;border-radius:6px;padding:6px 10px;margin-bottom:8px">📝 กำลังแก้ไข "' + sanitize(editing.name) + '" — บันทึกแล้วจะทับของเดิม</div>';
+  h += '<div class="fr"><div class="fg" style="flex:1"><label>SKU (ถ้ามี)</label><input type="text" id="ocSku" class="fm-input" value="' + sanitize(editing ? (editing.sku || '') : '') + '"></div>';
+  h += '<div class="fg" style="flex:2"><label>ชื่อสินค้า *</label><input type="text" id="ocName" class="fm-input" value="' + sanitize(editing ? editing.name : '') + '" placeholder="เช่น Lexar LXR-LMSSIPL512G#"></div></div>';
+  h += '<div class="fr"><div class="fg"><label>ราคา/หน่วย *</label><input type="text" inputmode="decimal" id="ocPrice" class="fm-input js-money" value="' + (editing ? nmI(editing.price || 0) : '') + '"></div>';
+  h += '<div class="fg"><label>หน่วย</label><input type="text" id="ocUnit" class="fm-input" value="' + sanitize(editing ? (editing.unit || '') : '') + '" placeholder="ชิ้น/กล่อง/ชุด"></div></div>';
+  h += '<div class="fg"><label>หมวด/แบรนด์</label><input type="text" id="ocCategory" class="fm-input" value="' + sanitize(editing ? (editing.category || '') : '') + '" placeholder="เช่น Lexar, Accessory"></div>';
+  h += '<div class="fg"><label>จำนวนที่จะเพิ่มเข้าใบเสนอราคา</label><input type="number" id="ocQty" class="fm-input" value="1" min="1"></div>';
+  h += '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0"><input type="checkbox" id="ocSaveToCatalog" ' + (editing ? '' : 'checked') + '> บันทึกเก็บไว้ในแคตตาล็อก "สินค้าอื่นๆ" เพื่อเรียกใช้ซ้ำ (ไม่ปนกับ Stock/DJI)</label>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn bp" style="background:#22c55e" onclick="_ocAddFromForm()">➕ เพิ่มเข้าใบเสนอราคา</button>';
+  if (editing) h += '<button class="btn bo" onclick="_ocEditingId=null;_ocRenderForm();">ยกเลิกแก้ไข</button>';
+  h += '<button class="btn" onclick="closeM()">ปิด</button>';
+  h += '</div>';
+  zone.innerHTML = h;
+}
+
+function _ocAddFromForm() {
+  var sku = (document.getElementById('ocSku').value || '').trim();
+  var name = (document.getElementById('ocName').value || '').trim();
+  var price = parseNum(document.getElementById('ocPrice').value);
+  var unit = (document.getElementById('ocUnit').value || '').trim();
+  var category = (document.getElementById('ocCategory').value || '').trim();
+  var qty = parseInt(document.getElementById('ocQty').value) || 1;
+  var saveToCatalog = document.getElementById('ocSaveToCatalog').checked;
+
+  if (!name) { toast('⚠️ กรุณาใส่ชื่อสินค้า'); return; }
+  if (!price || price <= 0) { toast('⚠️ กรุณาใส่ราคา/หน่วย'); return; }
+
+  var catalogId = _ocEditingId || null;
+  if (saveToCatalog) {
+    var items = getOtherCatalogItems();
+    if (_ocEditingId) {
+      var existing = items.find(function(x) { return x.id === _ocEditingId; });
+      if (existing) { existing.sku = sku; existing.name = name; existing.price = price; existing.unit = unit; existing.category = category; existing.updatedAt = new Date().toISOString(); }
+    } else {
+      catalogId = 'oc_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+      items.push({ id: catalogId, sku: sku, name: name, price: price, unit: unit, category: category, createdAt: new Date().toISOString() });
+    }
+    saveOtherCatalogItems(items);
+  }
+
+  var existingQi = quotationItems.find(function(qi) { return qi.isOther && qi.name === name; });
+  if (existingQi) {
+    existingQi.quantity += qty;
+    existingQi.unitPrice = price;
+    existingQi.amount = existingQi.quantity * price;
+  } else {
+    quotationItems.push({
+      sku: sku,
+      name: name,
+      quantity: qty,
+      unitPrice: price,
+      amount: qty * price,
+      cost: 0,
+      unit: unit,
+      category: category,
+      isOther: true,
+      otherCatalogId: catalogId
+    });
+  }
+
+  _ocEditingId = null;
+  closeMForce();
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+  toast('➕ เพิ่ม ' + name + ' (นอกแคตตาล็อก)');
+}
+
+function _ocPickToQuote(id) {
+  var it = getOtherCatalogItems().find(function(x) { return x.id === id; });
+  if (!it) return;
+  var existingQi = quotationItems.find(function(qi) { return qi.isOther && qi.otherCatalogId === id; });
+  if (existingQi) {
+    existingQi.quantity += 1;
+    existingQi.amount = existingQi.quantity * existingQi.unitPrice;
+  } else {
+    quotationItems.push({
+      sku: it.sku || '',
+      name: it.name,
+      quantity: 1,
+      unitPrice: it.price || 0,
+      amount: it.price || 0,
+      cost: 0,
+      unit: it.unit || '',
+      category: it.category || '',
+      isOther: true,
+      otherCatalogId: it.id
+    });
+  }
+  closeMForce();
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+  toast('➕ เพิ่ม ' + it.name + ' (นอกแคตตาล็อก)');
+}
+
+function _ocEditLoad(id) {
+  _ocEditingId = id;
+  _ocRenderForm();
+}
+
+function _ocDeleteItem(id) {
+  if (!confirm('🗑️ ลบสินค้านี้ออกจากแคตตาล็อก "สินค้าอื่นๆ"? (รายการที่เคยเพิ่มในใบเสนอราคาเดิมจะไม่หายไป)')) return;
+  var items = getOtherCatalogItems().filter(function(x) { return x.id !== id; });
+  saveOtherCatalogItems(items);
+  if (_ocEditingId === id) _ocEditingId = null;
+  _ocRenderCatalogList();
+  _ocRenderForm();
 }
 
 // ================================================================
@@ -2091,7 +2255,8 @@ function renderEditQuotationPage(quote) {
   html += '</div>';
   html += '<div class="fg" style="width:100px"><label>🔢 จำนวน</label><input type="number" id="newItemQty" class="fm-input" value="1" min="1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addQuotationItemFromInput();}"></div>';
   html += '<div><button class="btn bp" onclick="addQuotationItemFromInput()" style="margin-bottom:4px;background:#22c55e">➕ เพิ่มสินค้า</button>' +
-    '<button class="btn bo" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToQuote})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)" style="margin-bottom:4px;margin-left:4px">📋 แคตตาล็อก</button></div>';
+    '<button class="btn bo" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToQuote})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)" style="margin-bottom:4px;margin-left:4px">📋 แคตตาล็อก</button>' +
+    '<button class="btn bo" type="button" onclick="showAddOtherItemM()" title="เพิ่มสินค้านอกรายการสินค้าทั้งหมด (ไม่ปนกับ Stock/DJI) — เช่นสินค้าอื่นๆที่ไม่เกี่ยว DJI" style="margin-bottom:4px;margin-left:4px">🏷️ สินค้าอื่นๆ</button></div>';
   html += '</div>';
   _qiaBindOutsideClose();
   
