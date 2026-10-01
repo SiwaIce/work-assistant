@@ -750,6 +750,91 @@ function stockDeleteLot(sku, lotId) {
   render();
 }
 
+// ================================================================
+// "ปรับยอดด่วน" จากหน้า PO Tracker — พิมพ์ยอดรวมต่อคลังแล้วอัปเดตกลับไป Stock โดยไม่แก้ lot เดิม
+// (ดู plans/po-stock-quickedit-design-2026-10-01.md) — สร้าง/รวม lot ปรับยอดของตัวเองก่อน
+// ถ้าต้องลดเกินกว่าที่มีใน lot ปรับยอดของตัวเอง ค่อยขอยืนยันก่อนไปแตะ lot อื่น (กันข้อมูลอ้างอิงเดิมเพี้ยน)
+// ================================================================
+
+// เวลาที่มีการแก้ไข stock ของ sku นี้ล่าสุด (จาก stockLog) — ใช้เทียบ snapshot ตอนเปิดแผงกรอกที่หน้า PO กันเขียนทับคนอื่น
+// คืน null ถ้ายังไม่เคยมี log เลย (ต่างจาก '' ซึ่งหมายถึง "ไม่ได้ส่ง snapshot มาเช็ค")
+function stockLastLogTime(sku) {
+  var logs = ST.getAll('stockLog').filter(function(l) { return l.sku === sku; });
+  if (!logs.length) return null;
+  return logs.reduce(function(max, l) { return (l.date || '') > max ? (l.date || '') : max; }, '');
+}
+
+function stockHasConflict(sku, sinceTs) {
+  if (sinceTs === undefined) return false; // ไม่ได้ขอเช็ค conflict
+  var last = stockLastLogTime(sku);
+  if (last === null) return false; // ไม่เคยมี log เลยแม้ตอนนี้ — ไม่มีอะไรให้ชนกัน
+  if (sinceTs === null) return true; // ตอนเปิดแผงยังไม่มี log เลย แต่ตอนนี้มีแล้ว = มีคนเพิ่งแก้
+  return last > sinceTs;
+}
+
+// locationDeltas: { code: ยอดรวมใหม่ที่พิมพ์, ... } เฉพาะคลังที่เปลี่ยนจากยอดปัจจุบัน
+// opts: { note, source, sinceTs } — sinceTs ส่งมาจะเช็ค conflict ก่อนบันทึกทับ, คืน false ถ้าไม่มีอะไรเปลี่ยน/ถูกยกเลิก
+function stockQuickAdjust(sku, productName, locationDeltas, opts) {
+  opts = opts || {};
+  if (stockHasConflict(sku, opts.sinceTs)) {
+    if (!confirm('มีคนเพิ่งแก้ยอด Stock ของ "' + (productName || sku) + '" ไปหลังจากที่เปิดหน้านี้\nต้องการบันทึกทับหรือไม่?')) return false;
+  }
+  var lots = stockGetLots(sku).slice();
+  var note = opts.note || 'ปรับยอดด่วนจากหน้า PO';
+  var source = opts.source || 'po_quick_adjust';
+  var today = _nw().slice(0, 10);
+  var changed = false;
+
+  Object.keys(locationDeltas).forEach(function(code) {
+    var newTotal = Math.max(0, Math.round(Number(locationDeltas[code]) || 0));
+    var before = stockLocTotal(lots, code);
+    var delta = newTotal - before;
+    if (delta === 0) return;
+
+    if (delta > 0) {
+      var existing = lots.filter(function(l) { return l.location === code && l.quickAdjust && _stockIsActiveLot(l) && (l.dateIn || '').slice(0, 10) === today; })[0];
+      if (existing) existing.qty = (Number(existing.qty) || 0) + delta;
+      else lots.push({ id: _stockLotId(), location: code, ref: note, qty: delta, dateIn: _nw(), quickAdjust: true });
+    } else {
+      var need = -delta;
+      var ownLots = lots.filter(function(l) { return l.location === code && l.quickAdjust && _stockIsActiveLot(l) && (Number(l.qty) || 0) > 0; })
+        .sort(function(a, b) { return (a.dateIn || '').localeCompare(b.dateIn || ''); });
+      var takeOwn = [];
+      ownLots.forEach(function(l) {
+        if (need <= 0) return;
+        var take = Math.min(need, Number(l.qty) || 0);
+        takeOwn.push({ l: l, take: take });
+        need -= take;
+      });
+      var takeOther = [];
+      if (need > 0) {
+        var otherLots = lots.filter(function(l) { return l.location === code && !l.quickAdjust && _stockIsActiveLot(l) && (Number(l.qty) || 0) > 0; })
+          .sort(function(a, b) { return (a.dateIn || '').localeCompare(b.dateIn || ''); });
+        if (otherLots.length && !confirm('ยอดที่พิมพ์ของคลัง ' + stockLocationName(code) + ' น้อยกว่าที่มีอยู่ ระบบจะต้องลดจาก lot เดิม (อาจมีข้อมูลอ้างอิงเฉพาะ เช่น วันขึ้นทะเบียน/ล็อกจอง)\nต้องการดำเนินการต่อหรือไม่?')) {
+          return; // ยกเลิกเฉพาะคลังนี้ ไม่กระทบคลังอื่นที่กรอกมาด้วยกัน
+        }
+        otherLots.forEach(function(l) {
+          if (need <= 0) return;
+          var take = Math.min(need, Number(l.qty) || 0);
+          takeOther.push({ l: l, take: take });
+          need -= take;
+        });
+      }
+      takeOwn.concat(takeOther).forEach(function(x) { x.l.qty = (Number(x.l.qty) || 0) - x.take; });
+      lots = lots.filter(function(l) { return (Number(l.qty) || 0) > 0 || !_stockIsActiveLot(l); });
+    }
+
+    changed = true;
+    ST.add('stockLog', {
+      sku: sku, productName: productName, locationCode: code, locationName: stockLocationName(code),
+      before: before, after: newTotal, delta: delta, source: source, note: note, date: _nw(), type: 'adjust'
+    });
+  });
+
+  if (changed) _stockSaveLots(sku, productName, lots);
+  return changed;
+}
+
 function showStockEditLotM(sku, lotId) {
   var p = getProductBySku(sku);
   var lots = stockGetLots(sku);

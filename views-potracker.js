@@ -6,6 +6,8 @@
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
 var poTrackerSearch = '';
+var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า + ปรับยอด Stock ด่วน
+var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 
 // รายการสินค้าที่ต้อง PR/PO เพิ่ม หรือจองจากคลังยังไม่ครบ ใช้สรุป remark ต่อรายการ (คล้าย mockup เดิม)
 function _poTrackerItemRemark(it, so) {
@@ -119,10 +121,85 @@ function rPOTracker(el) {
     if (s.doNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + sanitize(s.doNumber) + '</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:var(--bg2);color:var(--text2)">฿' + nmI(r.total) + '</span>';
     html += '</div>';
+
+    html += '<div onclick="event.stopPropagation()">';
+    html += '<button class="btn bsm bo" style="margin-top:8px" onclick="poTrackerToggleItems(\'' + s.id + '\',event)">' + (poTrackerExpandedItems[s.id] ? '▲ ซ่อนรายการสินค้า' : '▼ รายการสินค้า / ปรับยอด Stock') + '</button>';
+    if (poTrackerExpandedItems[s.id]) html += _poTrackerItemsPanelHtml(s);
+    html += '</div>';
+
     html += '</div>';
   });
 
   el.innerHTML = html;
+}
+
+// เปิด/ปิดแผงรายการสินค้า+ปรับยอด Stock ด่วนของ SO ใบนี้ — ตอนเปิดครั้งแรก จำเวลา stockLog ล่าสุดของแต่ละ SKU ไว้เช็ค conflict ตอนบันทึก
+function poTrackerToggleItems(soId, ev) {
+  if (ev) ev.stopPropagation();
+  var opening = !poTrackerExpandedItems[soId];
+  poTrackerExpandedItems[soId] = opening;
+  if (opening) {
+    var so = ST.getAll('salesOrders').find(function(s) { return s.id === soId; });
+    (so && so.items || []).forEach(function(it) {
+      if (it.sku) poTrackerStockSnapshot[soId + '|' + it.sku] = stockLastLogTime(it.sku);
+    });
+  }
+  render();
+}
+
+// แผงต่อรายการสินค้าของ SO: ช่องกรอกยอดต่อคลัง (ดึงคลังจริงจาก getStockLocations() ไม่ hardcode) + ปุ่มบันทึกกลับไป Stock
+function _poTrackerItemsPanelHtml(s) {
+  var locs = getStockLocations();
+  var html = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">';
+  (s.items || []).forEach(function(it, idx) {
+    if (!it.sku) return;
+    var lots = stockGetLots(it.sku);
+    var inputId = 'poqa_' + s.id + '_' + idx;
+    html += '<div style="margin-bottom:10px;padding:8px;background:var(--bg2);border-radius:8px">';
+    html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">' + sanitize(it.model || it.sku) + ' <span style="color:var(--text2);font-weight:400">(' + sanitize(it.sku) + ')</span></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">';
+    locs.forEach(function(loc) {
+      var cur = stockLocTotal(lots, loc.code);
+      html += '<div style="min-width:90px">';
+      html += '<div style="font-size:10px;color:var(--text2)">' + sanitize(loc.name) + ' (' + sanitize(loc.code) + ')</div>';
+      html += '<input type="number" min="0" class="inp" id="' + inputId + '_' + sanitize(loc.code) + '" value="' + cur + '" style="width:90px">';
+      html += '</div>';
+    });
+    html += '<button class="btn bsm bp" onclick="poTrackerSaveStockQuick(\'' + s.id + '\',' + idx + ')">💾 บันทึกกลับไป Stock</button>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// อ่านค่าที่พิมพ์ในแผง เทียบกับยอดปัจจุบัน ส่งเฉพาะคลังที่เปลี่ยนไปให้ stockQuickAdjust (สร้าง lot ปรับยอดแยก ไม่แก้ lot เดิม)
+function poTrackerSaveStockQuick(soId, idx) {
+  var so = ST.getAll('salesOrders').find(function(s) { return s.id === soId; });
+  if (!so) return;
+  var it = (so.items || [])[idx];
+  if (!it || !it.sku) return;
+  var locs = getStockLocations();
+  var inputId = 'poqa_' + soId + '_' + idx;
+  var lots = stockGetLots(it.sku);
+  var deltas = {};
+  locs.forEach(function(loc) {
+    var elInp = document.getElementById(inputId + '_' + loc.code);
+    if (!elInp) return;
+    var val = Math.max(0, Math.round(Number(elInp.value) || 0));
+    var cur = stockLocTotal(lots, loc.code);
+    if (val !== cur) deltas[loc.code] = val;
+  });
+  if (!Object.keys(deltas).length) { toast('ไม่มีอะไรเปลี่ยน'); return; }
+  var p = getProductBySku(it.sku);
+  var productName = it.model || (p && p.name) || it.sku;
+  var ref = so.customerPO ? so.customerPO : (so.soNumber ? ('SO ' + so.soNumber) : soId);
+  var sinceTs = poTrackerStockSnapshot[soId + '|' + it.sku];
+  var ok = stockQuickAdjust(it.sku, productName, deltas, { note: 'ปรับยอดด่วนจากหน้า PO ' + ref, sinceTs: sinceTs });
+  if (ok) {
+    poTrackerStockSnapshot[soId + '|' + it.sku] = stockLastLogTime(it.sku);
+    toast('💾 บันทึกยอด Stock แล้ว');
+    render();
+  }
 }
 
 // ---------------------------------------------------------------- export .xlsx จริง (ไม่ใช่ copy/TSV เหมือน mockup)
