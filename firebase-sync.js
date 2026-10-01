@@ -428,7 +428,8 @@ var SYNC_KEY_MAP = {
   'stockFavs': 'stockFavs',
   'stockReservations': 'stockReservations',
   'stockLocations': 'stockLocations',
-  'creditRequests': 'creditRequests'
+  'creditRequests': 'creditRequests',
+  'otherCatalog': 'otherCatalog'
 };
 
 var ALL_SYNC_KEYS = Object.keys(SYNC_KEY_MAP);
