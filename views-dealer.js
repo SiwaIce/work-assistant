@@ -1455,6 +1455,7 @@ function rDealerDet(el) {
     <div class="tab-btn ${dealerTab==='runrate'?'act':''}" onclick="dealerTab='runrate';render()">🏪 Run Rate</div>
     <div class="tab-btn ${dealerTab==='quotation'?'act':''}" onclick="dealerTab='quotation';render()">💰 ใบเสนอราคา</div>
     <div class="tab-btn ${dealerTab==='so'?'act':''}" onclick="dealerTab='so';render()">📦 Sales Order</div>
+    <div class="tab-btn ${dealerTab==='arsummary'?'act':''}" onclick="dealerTab='arsummary';render()">💳 สรุปค้างส่ง/เครดิต</div>
     <div class="tab-btn ${dealerTab==='visit'?'act':''}" onclick="dealerTab='visit';render()">🤝 Visit</div>
     <div class="tab-btn ${dealerTab==='timeline'?'act':''}" onclick="dealerTab='timeline';render()">📝 Timeline</div>
     <div class="tab-btn ${dealerTab==='demo'?'act':''}" onclick="dealerTab='demo';render()">🚁 Demo</div>
@@ -1481,6 +1482,7 @@ function renderDealerTab(d) {
     case 'runrate': return (typeof dealerRunRateTab === 'function') ? dealerRunRateTab(d) : '';
     case 'quotation': return dealerQuotationTab(d);
     case 'so': return dealerSalesOrderTab(d);
+    case 'arsummary': return (typeof dealerARSummaryTab === 'function') ? dealerARSummaryTab(d) : '';
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
     case 'demo': return dealerDemoTab(d);

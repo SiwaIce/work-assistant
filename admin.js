@@ -60,6 +60,25 @@ function rAdmin(el) {
     '<button class="btn bsm bd" onclick="admResetPipeStatuses()" title="รีเซ็ตกลับเป็น 8 status มาตรฐาน (ลบ custom ทั้งหมด)">♻️ Reset ค่าเริ่มต้น</button>' +
     '</div>';
 
+  // สถานะ PR/PO ต่อรายการสินค้าใน SO — เรียงลำดับเป็น pipeline (ยื่น PR แล้ว → เปิด PO → Vendor ส่งของ → เข้าไทยแล้ว) แก้ไข/เพิ่ม/ลบ/เรียงลำดับเองได้ที่นี่
+  var prpoStRows = _admSafe(function() {
+    var rows = '';
+    var list = cfg.prpoStatuses || [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      rows += '<div class="admin-row" style="display:flex;align-items:center;gap:4px">' +
+        '<span style="color:var(--text2);font-size:11px;font-weight:700;min-width:20px;text-align:center">' + (i + 1) + '</span>' +
+        '<input type="text" value="' + sanitize(s.id) + '" id="apps_id_' + i + '" style="width:110px" readonly>' +
+        '<input type="text" value="' + sanitize(s.name) + '" id="apps_nm_' + i + '" style="flex:1">' +
+        '<button class="btn bsm bo" onclick="movePrpoStatus(' + i + ',-1)" title="ขึ้น" style="padding:2px 6px">⬆️</button>' +
+        '<button class="btn bsm bo" onclick="movePrpoStatus(' + i + ',1)" title="ลง" style="padding:2px 6px">⬇️</button>' +
+        '<button class="btn bsm bd" onclick="admRmPrpoSt(' + i + ')">✕</button>' +
+        '</div>';
+    }
+    return rows;
+  }, 'รายการสถานะ PR/PO');
+  prpoStRows += '<div style="margin-top:8px"><button class="btn bsm bd" onclick="admResetPrpoStatuses()" title="รีเซ็ตกลับเป็น 4 สถานะมาตรฐาน (ลบ custom ทั้งหมด)">♻️ Reset ค่าเริ่มต้น</button></div>';
+
   // Links
   var links = cfg.externalLinks || [];
   var linkRows = _admSafe(function() {
@@ -282,6 +301,15 @@ function rAdmin(el) {
     '<input type="text" id="aps_new_nm" placeholder="ชื่อแสดง" style="flex:1">' +
     '<button class="btn bsm bp" onclick="admAddPSt()">➕</button></div>' +
     '<button class="btn bp bsm" style="margin-top:6px" onclick="admSavePSt()">💾 บันทึกทั้งหมด</button></div>' +
+
+    // สถานะ PR/PO
+    '<div class="card"><h2>🛒 สถานะ PR/PO</h2>' +
+    '<p style="font-size:.7rem;color:var(--text3);margin-bottom:6px">ใช้เป็น dropdown ในรายการสินค้า SO ที่ sourceType เป็น "ต้องเปิด PR/PO เพิ่ม" — เรียงเป็นลำดับ pipeline</p>' +
+    '<div id="adm_prpost">' + prpoStRows + '</div>' +
+    '<div style="display:flex;gap:3px;margin-top:8px">' +
+    '<input type="text" id="apps_new_nm" placeholder="ชื่อสถานะใหม่" style="flex:1">' +
+    '<button class="btn bsm bp" onclick="admAddPrpoSt()">➕</button></div>' +
+    '<button class="btn bp bsm" style="margin-top:6px" onclick="admSavePrpoSt()">💾 บันทึกทั้งหมด</button></div>' +
 
     // ===================== PRODUCTS MANAGEMENT (USING Products MODULE) =====================
     '<div class="card"><h2>📦 จัดการสินค้าทั้งหมด (Products Module)</h2>' +
@@ -806,6 +834,77 @@ function admRmPSt(idx) {
   if (!confirm('ลบ Status นี้?')) return;
   var cfg = getConfig();
   cfg.pipelineStatuses.splice(idx, 1);
+  saveConfig(cfg);
+  render();
+}
+
+function admSavePrpoSt() {
+  var cfg = getConfig();
+  var container = document.getElementById('adm_prpost');
+  if (!container) return;
+  var rows = container.children;
+  var statuses = [];
+  for (var i = 0; i < rows.length; i++) {
+    var idEl = document.getElementById('apps_id_' + i);
+    var nmEl = document.getElementById('apps_nm_' + i);
+    if (idEl && nmEl) statuses.push({ id: idEl.value, name: nmEl.value });
+  }
+  cfg.prpoStatuses = statuses;
+  saveConfig(cfg);
+  toast('💾 บันทึกสถานะ PR/PO แล้ว');
+  render();
+}
+
+function admAddPrpoSt() {
+  var nmEl = document.getElementById('apps_new_nm');
+  if (!nmEl) return;
+  var nm = nmEl.value.trim();
+  if (!nm) return alert('ใส่ชื่อสถานะ');
+  var cfg = getConfig();
+  cfg.prpoStatuses = cfg.prpoStatuses || [];
+  var id = 'prpo_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+  cfg.prpoStatuses.push({ id: id, name: nm });
+  saveConfig(cfg);
+  toast('➕ เพิ่มแล้ว');
+  render();
+}
+
+// เรียกจากหน้า SO เองได้ด้วย (เพิ่มสถานะใหม่สดๆ จาก dropdown โดยไม่ต้องออกไปหน้าตั้งค่า) — คืนค่า id ที่เพิ่ง
+// สร้างให้ผู้เรียกไปเลือกใน <select> ต่อได้ทันที
+function admAddPrpoStQuick(name) {
+  var nm = (name || '').trim();
+  if (!nm) return null;
+  var cfg = getConfig();
+  cfg.prpoStatuses = cfg.prpoStatuses || [];
+  var id = 'prpo_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+  cfg.prpoStatuses.push({ id: id, name: nm });
+  saveConfig(cfg);
+  return id;
+}
+
+function movePrpoStatus(idx, dir) {
+  var cfg = getConfig();
+  var list = cfg.prpoStatuses || [];
+  var j = idx + dir;
+  if (j < 0 || j >= list.length) return;
+  var tmp = list[idx]; list[idx] = list[j]; list[j] = tmp;
+  saveConfig(cfg);
+  render();
+}
+
+function admResetPrpoStatuses() {
+  if (!confirm('รีเซ็ตสถานะ PR/PO เป็นค่าเริ่มต้น 4 รายการ?\n(สถานะที่เพิ่มเองทั้งหมดจะถูกลบออก)')) return;
+  var cfg = getConfig();
+  cfg.prpoStatuses = JSON.parse(JSON.stringify(DEF_CONFIG.prpoStatuses));
+  saveConfig(cfg);
+  toast('♻️ Reset สถานะ PR/PO เรียบร้อย');
+  render();
+}
+
+function admRmPrpoSt(idx) {
+  if (!confirm('ลบสถานะนี้?')) return;
+  var cfg = getConfig();
+  cfg.prpoStatuses.splice(idx, 1);
   saveConfig(cfg);
   render();
 }

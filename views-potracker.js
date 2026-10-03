@@ -14,7 +14,8 @@ function _poTrackerItemRemark(it, so) {
   var qty = Number(it.qty) || 0;
   if (it.sourceType === 'pr_po') {
     var bits = ['🛒 PR/PO ' + qty + ' ชิ้น'];
-    if (it.prpoStatus) bits.push(it.prpoStatus);
+    var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
+    if (stLabel) bits.push(stLabel);
     if (it.prpoExpectedDate) bits.push('คาดว่าได้ ' + fD(it.prpoExpectedDate));
     return bits.join(' — ');
   }

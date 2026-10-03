@@ -17,19 +17,23 @@ var soViewMode = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'c
 // ความพร้อมส่งจริง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกัน) คำนวณแยกต่างหากแบบ real-time ต่อรายการ ดู soComputeReadiness()
 // เดิมมี 14 สถานะไล่ทีละสเต็ปตาม 1 เส้นทางเดียว (ต้องผ่าน QI เสมอ) ใช้ไม่ได้จริงกับ SO ที่มีทั้งสินค้าต้อง QI และไม่ต้อง QI ปนกัน — ยุบเหลือสถานะเอกสารกว้างๆ แทน
 var SO_STATUS = {
-  po_received: { label:'ได้รับ PO',          color:'#94a3b8', icon:'📄' },
-  so_open:     { label:'เปิด SO / รอของ',    color:'#3b82f6', icon:'📋' },
-  shipped:     { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
-  invoiced:    { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
-  closed:      { label:'ปิด',                 color:'#64748b', icon:'✓'  }
+  po_received:     { label:'ได้รับ PO',          color:'#94a3b8', icon:'📄' },
+  so_open:         { label:'เปิด SO / รอของ',    color:'#3b82f6', icon:'📋' },
+  partial_shipped: { label:'ส่งแล้วบางส่วน',     color:'#f59e0b', icon:'🚚' },
+  shipped:         { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
+  invoiced:        { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
+  closed:          { label:'ปิด',                 color:'#64748b', icon:'✓'  }
 };
 
+// หมายเหตุ: 'partial_shipped' ไม่อยู่ในตัวเลือกถัดไปของ so_open ที่นี่โดยตั้งใจ — เข้าสถานะนี้อัตโนมัติจาก
+// soRecordShipmentRound() ตอนบันทึกส่งมอบรอบแรกเท่านั้น (ดูการ์ด "🚚 การส่งมอบ" ในหน้า SO) ไม่ใช่ตัวเลือกที่กดเปลี่ยนเอง
 var _SO_NEXT = {
-  po_received: ['so_open'],
-  so_open:     ['shipped'],
-  shipped:     ['invoiced'],
-  invoiced:    ['closed'],
-  closed:      []
+  po_received:     ['so_open'],
+  so_open:         ['shipped'],
+  partial_shipped: ['shipped'],
+  shipped:         ['invoiced'],
+  invoiced:        ['closed'],
+  closed:          []
 };
 
 // สถานะเก่าที่ถูกยุบทิ้ง — map ไปสถานะใหม่ที่ใกล้เคียงที่สุด ใช้ตอน migrate ข้อมูลเก่าครั้งเดียว (ดู _soMigrateStatuses)
@@ -51,11 +55,12 @@ function _soMigrateStatuses() {
 
 // จับ 5 สถานะเอกสารเป็นขั้นสำหรับแถบ progress ในตาราง (1 สถานะ = 1 ขั้นพอดี ตอนนี้ไม่ต้องยุบรวมแล้ว)
 var _SO_STAGES = [
-  { key:'po_received', label:'ได้รับ PO',       statuses:['po_received'] },
-  { key:'so_open',      label:'เปิด SO/รอของ',   statuses:['so_open'] },
-  { key:'shipped',      label:'ส่งแล้ว',         statuses:['shipped'] },
-  { key:'invoiced',     label:'Invoice',         statuses:['invoiced'] },
-  { key:'closed',       label:'ปิด',              statuses:['closed'] }
+  { key:'po_received',     label:'ได้รับ PO',        statuses:['po_received'] },
+  { key:'so_open',         label:'เปิด SO/รอของ',    statuses:['so_open'] },
+  { key:'partial_shipped', label:'ส่งแล้วบางส่วน',   statuses:['partial_shipped'] },
+  { key:'shipped',         label:'ส่งแล้ว',          statuses:['shipped'] },
+  { key:'invoiced',        label:'Invoice',          statuses:['invoiced'] },
+  { key:'closed',          label:'ปิด',               statuses:['closed'] }
 ];
 function _soStageIndex(status) {
   for (var i = 0; i < _SO_STAGES.length; i++) if (_SO_STAGES[i].statuses.indexOf(status) !== -1) return i;
@@ -92,6 +97,116 @@ function soComputeReadiness(so) {
   });
   var readyCount = perItem.filter(function(x) { return x.ready; }).length;
   return { total: perItem.length, readyCount: readyCount, allReady: readyCount === perItem.length, items: perItem };
+}
+
+// ---------------------------------------------------------------- แบ่งส่งบางส่วน (partial shipment)
+
+// ความคืบหน้าการส่งมอบต่อรายการ เทียบกับจำนวนที่ลูกค้าสั่งใน PO (it.qty) — ใช้ deliveredForThisSO/bookedForThisSO ที่มีอยู่แล้วจากฝั่งสต็อก
+// รายการที่ไม่มี SKU (by-order ไม่ track คลัง) ถือว่าส่งพร้อมกับรายการอื่นเสมอ ไม่บล็อกความคืบหน้า
+function soComputeShipmentProgress(so) {
+  var items = (so.items || []).map(function(it, idx) {
+    if (!it.sku) return { idx: idx, sku: '', model: it.model, poQty: Number(it.qty) || 0, deliveredQty: 0, readyToShipQty: 0, remainingQty: 0, tracked: false };
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, so) : { deliveredForThisSO: 0, bookedForThisSO: 0 };
+    var poQty = Number(it.qty) || 0;
+    var deliveredQty = info.deliveredForThisSO || 0;
+    return {
+      idx: idx, sku: it.sku, model: it.model, poQty: poQty, deliveredQty: deliveredQty,
+      readyToShipQty: info.bookedForThisSO || 0, // พร้อมส่งแล้ว (จองใน 1021) แต่ยังไม่เคยบันทึกว่าส่ง
+      remainingQty: Math.max(0, poQty - deliveredQty), tracked: true
+    };
+  });
+  var allDelivered = items.every(function(x) { return !x.tracked || x.deliveredQty >= x.poQty; });
+  var anyDelivered = items.some(function(x) { return x.deliveredQty > 0; });
+  return { items: items, allDelivered: allDelivered, anyDelivered: anyDelivered };
+}
+
+// ข้อมูล DO/Invoice เดิมเป็น field เดี่ยวผูก 1:1 กับ SO (สมัยที่ยังไม่รองรับแบ่งส่ง) — ย้ายเป็น "รอบที่ 1" ของ shipments[] อัตโนมัติครั้งเดียว
+// ไม่ลบ field เดิมทิ้ง (ยังอ่านแสดงผลที่อื่นอยู่) แค่ทำให้ shipments[] มีประวัติครบตั้งแต่รอบแรก
+function _soMigrateLegacyShipment(s) {
+  if (s.shipments) return s.shipments;
+  if (!s.doNumber && !s.invoiceNumber) return [];
+  var legacy = [{
+    id: 'legacy', date: s.invoiceDate || s.updatedAt || s.createdAt || '', doNumber: s.doNumber || '',
+    invoiceNumber: s.invoiceNumber || '', invoiceDate: s.invoiceDate || '', note: 'ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง', items: []
+  }];
+  ST.update('salesOrders', s.id, { shipments: legacy });
+  return legacy;
+}
+
+// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty}] เฉพาะที่ผู้ใช้กรอก qty > 0
+// มาร์ค lot ที่จองใน 1021 เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
+function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s).slice();
+  var shippedItems = [];
+  roundItems.forEach(function(ri) {
+    var qty = Math.max(0, Math.round(Number(ri.qty) || 0));
+    if (qty <= 0 || !ri.sku) return;
+    var it = (s.items || []).filter(function(x) { return x.sku === ri.sku; })[0];
+    var productName = it ? it.model : ri.sku;
+    var delivered = (typeof stockDeliverSOItemQty === 'function') ? stockDeliverSOItemQty(ri.sku, productName, soId, qty) : 0;
+    if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
+  });
+  if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
+
+  shipments.push({
+    id: 'ship_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    date: _td(), doNumber: doNumber || '', invoiceNumber: invoiceNumber || '', invoiceDate: invoiceDate || '',
+    note: note || '', items: shippedItems, createdAt: _nw()
+  });
+
+  var update = { shipments: shipments, doNumber: doNumber || s.doNumber || '', invoiceNumber: invoiceNumber || s.invoiceNumber || '', invoiceDate: invoiceDate || s.invoiceDate || '' };
+  var progress = soComputeShipmentProgress(Object.assign({}, s, update));
+  var order = ['po_received', 'so_open', 'partial_shipped', 'shipped', 'invoiced', 'closed'];
+  var curIdx = order.indexOf(s.status);
+  var target = progress.allDelivered ? 'shipped' : (progress.anyDelivered ? 'partial_shipped' : s.status);
+  var targetIdx = order.indexOf(target);
+  if (targetIdx > curIdx) update.status = target;
+
+  var updated = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  toast('💾 บันทึกการส่งมอบแล้ว (' + shippedItems.reduce(function(sum, x) { return sum + x.qty; }, 0) + ' ชิ้น)');
+  closeMForce();
+  _soRerenderKeepScroll();
+}
+
+function showSORecordShipmentModal(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var progress = soComputeShipmentProgress(s);
+  var shippable = progress.items.filter(function(x) { return x.tracked && x.readyToShipQty > 0; });
+  if (!shippable.length) { toast('⚠️ ยังไม่มีรายการไหนพร้อมส่ง (ต้องจองเข้า 1021 ก่อน)'); return; }
+
+  var body = '<div class="hint" style="margin-bottom:8px">ใส่จำนวนที่จะส่งรอบนี้ต่อรายการ — ใส่ได้ไม่เกินที่พร้อมส่งแต่ยังไม่เคยส่ง</div>';
+  shippable.forEach(function(x) {
+    body += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">';
+    body += '<span style="flex:1">' + sanitize(x.model || x.sku) + ' <span style="color:var(--text2);font-size:11px">(พร้อมส่งอีก ' + x.readyToShipQty + ')</span></span>';
+    body += '<input type="number" class="inp" style="width:70px" id="soShip_q_' + x.idx + '" data-sku="' + sanitize(x.sku) + '" value="' + x.readyToShipQty + '" min="0" max="' + x.readyToShipQty + '">';
+    body += '</div>';
+  });
+  body += '<div style="display:flex;gap:8px;margin-top:10px">';
+  body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(_soNextNum('DO')) + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label><input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '"></div>';
+  body += '</div>';
+  body += '<div style="display:flex;gap:8px;margin-top:8px">';
+  body += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soShip_invDate" class="inp" type="date" value="' + _td() + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soShip_note" class="inp" placeholder="ไม่บังคับ"></div>';
+  body += '</div>';
+  body += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSORecordShipment(\'' + soId + '\')">💾 บันทึกการส่งมอบรอบนี้</button>';
+  openM('🚚 บันทึกการส่งมอบรอบนี้ — ' + sanitize(s.soNumber || ''), body);
+}
+
+function _saveSORecordShipment(soId) {
+  var roundItems = [];
+  document.querySelectorAll('[id^="soShip_q_"]').forEach(function(input) {
+    roundItems.push({ sku: input.getAttribute('data-sku'), qty: input.value });
+  });
+  var doNumber = (document.getElementById('soShip_do') || {}).value || '';
+  var invoiceNumber = (document.getElementById('soShip_inv') || {}).value || '';
+  var invoiceDate = (document.getElementById('soShip_invDate') || {}).value || '';
+  var note = (document.getElementById('soShip_note') || {}).value || '';
+  soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note);
 }
 
 // SO ที่เปิดอยู่ (so_open) และพร้อมส่งครบทุกรายการแล้ว แต่ยังไม่มีใครกดเปลี่ยนสถานะเป็น "ส่งแล้ว" — ใช้ต่อยอดในแถบ 🔔 ต้องติดตาม
@@ -738,7 +853,8 @@ function rSODetail(el) {
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">รวม</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">Serial</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความพร้อมส่ง</th>' +
-    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">คอมเมนต์</th></tr></thead><tbody>';
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">คอมเมนต์</th>' +
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ลิงก์</th></tr></thead><tbody>';
   (s.items||[]).forEach(function(it,idx){
     var lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
     var sns = _soItemSerials(it);
@@ -750,13 +866,65 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
-    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s) : '') + '</td>';
+    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s, it) : '') + '</td>';
     html += '<td style="padding:10px;min-width:140px"><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onblur="saveSOItemComment(\'' + s.id + '\',' + idx + ',this.value)"></td>';
+    var itLinkSafe = /^https?:\/\//i.test(it.link || '') ? it.link : '';
+    html += '<td style="padding:10px;min-width:150px"><input type="text" value="' + sanitize(it.link || '') + '" placeholder="วางลิงก์..." style="width:100%;font-size:11px" onblur="saveSOItemLink(\'' + s.id + '\',' + idx + ',this.value)">' +
+      (itLinkSafe ? '<a href="' + sanitize(itLinkSafe) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);display:inline-block;margin-top:3px">🔗 เปิดลิงก์</a>' : '') + '</td>';
     html += '</tr>';
   });
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
-  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="3"></td></tr>';
+  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="4"></td></tr>';
   html += '</tbody></table></div></div>';
+
+  // การส่งมอบ — เทียบจำนวนตาม PO ลูกค้ากับที่ส่งไปแล้วจริงต่อรายการ รองรับแบ่งส่งหลายรอบ (ไม่ต้องรอของครบ)
+  if ((s.items || []).some(function(it) { return it.sku; }) && !_soIsDone(s.status)) {
+    var shipProg = soComputeShipmentProgress(s);
+    var shipments = _soMigrateLegacyShipment(s);
+    html += '<div class="card" style="margin-bottom:12px;padding:18px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
+    html += '<h3 style="margin:0;font-size:15px">🚚 การส่งมอบ</h3>';
+    if (!shipProg.allDelivered) html += '<button class="btn bp bsm" onclick="showSORecordShipmentModal(\'' + s.id + '\')">📦 บันทึกการส่งมอบรอบนี้</button>';
+    html += '</div>';
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="background:var(--bg2);text-align:left">' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">สินค้า</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">ตาม PO</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">ส่งแล้ว</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">คงค้าง</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความคืบหน้า</th></tr></thead><tbody>';
+    shipProg.items.forEach(function(x) {
+      if (!x.tracked) return;
+      var pct = x.poQty ? Math.round(x.deliveredQty / x.poQty * 100) : 100;
+      var barColor = x.deliveredQty >= x.poQty ? '#22c55e' : (x.deliveredQty > 0 ? '#f59e0b' : 'var(--border)');
+      html += '<tr style="border-top:1px solid var(--border)">';
+      html += '<td style="padding:8px 10px"><b>' + sanitize(x.model || '-') + '</b></td>';
+      html += '<td style="padding:8px 10px;text-align:center">' + x.poQty + '</td>';
+      html += '<td style="padding:8px 10px;text-align:center">' + x.deliveredQty + '</td>';
+      html += '<td style="padding:8px 10px;text-align:center;' + (x.remainingQty > 0 ? 'color:#f59e0b;font-weight:600' : '') + '">' + x.remainingQty + '</td>';
+      html += '<td style="padding:8px 10px;min-width:140px"><div style="height:6px;border-radius:3px;background:var(--bg2);overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div>';
+      if (x.remainingQty > 0 && x.readyToShipQty > 0) html += '<div style="font-size:10px;color:var(--text2);margin-top:3px">พร้อมส่งอีก ' + x.readyToShipQty + '</div>';
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    if (shipments.length) {
+      html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+      html += '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">ประวัติการส่งมอบ</div>';
+      shipments.slice().reverse().forEach(function(sh, i) {
+        var roundNo = shipments.length - i;
+        var itemsTxt = (sh.items || []).map(function(it) { return sanitize(it.model || it.sku) + ' × ' + it.qty; }).join(', ');
+        html += '<div style="font-size:11.5px;padding:6px 0;' + (i < shipments.length - 1 ? 'border-bottom:1px solid var(--border)' : '') + '">';
+        html += '<b>รอบที่ ' + roundNo + '</b> — ' + (sh.date ? fD(sh.date) : '-');
+        if (sh.doNumber) html += ' · DO ' + qcopyHtml(sh.doNumber);
+        if (sh.invoiceNumber) html += ' · INV ' + qcopyHtml(sh.invoiceNumber);
+        if (itemsTxt) html += '<div style="color:var(--text2)">' + itemsTxt + '</div>';
+        if (sh.note) html += '<div style="color:var(--text2)">📝 ' + sanitize(sh.note) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
 
   // timeline — กดรายการเพื่อขยายดูรายละเอียด/แก้ไขในหน้าเดียวกัน (ไม่ใช้ modal)
   html += '<div class="card" style="padding:18px">';
@@ -823,6 +991,15 @@ function showCreateSOModal(opts) {
 
   var preDealerId = (pipe && pipe.dealerId) || opts.dealerId || '';
   var preDealer = preDealerId ? ST.getOne('dealers', preDealerId) : null;
+  // เปิดฟอร์มมาพร้อม quotationId อยู่แล้ว (เช่นจากปุ่ม "สร้าง SO" ในหน้าใบเสนอราคา) — โหลดมาเช็คส่วนลด/
+  // เงื่อนไขชำระเงินเริ่มต้นให้ตรงกับใบเสนอราคาตั้งแต่เปิดฟอร์ม ไม่ต้องรอ onchange ของ select ใบเสนอราคา
+  var preQuote = null;
+  if (opts.quotationId) {
+    try {
+      var _preQAll = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]');
+      preQuote = _preQAll.filter(function(x) { return x.id === opts.quotationId; })[0] || null;
+    } catch (e) {}
+  }
 
   var pipeOpts = '<option value="">-- ไม่ระบุ / เลือกทีหลัง --</option>';
   wonPipes.filter(function(p){ return !preDealerId || p.dealerId === preDealerId; }).forEach(function(p){
@@ -850,12 +1027,14 @@ function showCreateSOModal(opts) {
     '</select></div>';
   html += '</div>';
 
-  // Dealer ก่อน — พิมพ์ชื่อได้ (search & suggest จาก datalist) กรองแล้วเติม project ให้เฉพาะของ dealer นั้น
-  // เลือก dealer ที่มีอยู่แล้ว → hidden soN_dealerId จะถูกเติมให้ (ดู _soDealerNameChanged); พิมพ์ชื่อใหม่ที่ไม่มีในระบบ
-  // ก็ปล่อยไว้ — ตอนกด "สร้าง SO" (saveCreateSO) จะถามว่าต้องการสร้าง Dealer ใหม่ไหม (level Other ไว้ก่อน)
-  html += '<div><label class="lbl">Dealer *</label>' +
-    '<input id="soN_dealerName" class="inp" list="soN_dealerDL" autocomplete="off" placeholder="พิมพ์ชื่อ Dealer..." value="' + sanitize(preDealer ? preDealer.name : '') + '" oninput="_soDealerNameChanged(this.value)" onchange="_soDealerNameChanged(this.value)">' +
-    (typeof _dealerNameDatalistHtml === 'function' ? _dealerNameDatalistHtml('soN_dealerDL') : '') +
+  // Dealer ก่อน — พิมพ์ชื่อได้ search & suggest แบบ dropdown ที่ขึ้นทันทีตั้งแต่พิมพ์ตัวแรก (ac-wrap/ac-menu
+  // เดียวกับที่ใช้ในฟอร์ม Visit Plan ไม่ใช่ native <datalist> ที่บางเบราว์เซอร์ต้องกดลูกศรเองก่อนถึงจะโชว์)
+  // กรองแล้วเติม project ให้เฉพาะของ dealer นั้น เลือก dealer ที่มีอยู่แล้ว → hidden soN_dealerId จะถูกเติมให้
+  // (ดู _soDealerNameChanged) พิมพ์ชื่อใหม่ที่ไม่มีในระบบก็ปล่อยไว้ — ตอนกด "สร้าง SO" จะถามว่าต้องการสร้าง
+  // Dealer ใหม่ไหม (level Other ไว้ก่อน)
+  html += '<div class="ac-wrap"><label class="lbl">Dealer *</label>' +
+    '<input id="soN_dealerName" class="inp" autocomplete="off" placeholder="พิมพ์ชื่อ Dealer..." value="' + sanitize(preDealer ? preDealer.name : '') + '" oninput="_soDealerNameChanged(this.value);_soDealerSearch(this.value)" onfocus="_soDealerSearch(this.value)" onchange="_soDealerNameChanged(this.value)">' +
+    '<div id="soN_dealerAcMenu"></div>' +
     '<input type="hidden" id="soN_dealerId" value="' + sanitize(preDealerId) + '"></div>';
 
   // project picker (แสดงเมื่อ type=project) — กรองตาม dealer
@@ -864,10 +1043,10 @@ function showCreateSOModal(opts) {
   html += '<select id="soN_pipelineId" class="inp" onchange="_soFillFromPipe(this.value)">' + pipeOpts + '</select>';
   // Project ID — ดึงมาจาก Pipeline ที่เลือก ถ้าโครงการนั้นยังไม่มี กรอกตรงนี้ได้เลยแล้วเขียนกลับไปให้
   // (ในแอปนี้ "มี Project ID = ถือว่าลงทะเบียน CRM แล้ว" จึงต้องตั้ง djiCrmRegistered ตามไปด้วยเสมอ)
-  html += '<div style="margin-top:8px"><label class="lbl">Project ID ' +
-    '<span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ' — ยังไม่มีก็กรอกที่นี่ได้ พิมพ์ได้จาก Project ID เดิมที่เคยใช้กับ Dealer นี้)</span></label>' +
-    '<input id="soN_projectId" class="inp" list="soN_projectIdDL" autocomplete="off" value="' + sanitize(pidNorm(opts.projectId) || (pipe && pipe.projectId) || '') + '" placeholder="20260912-0005 — ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
-    _soProjectIdDatalistHtml('soN_projectIdDL', preDealerId) +
+  html += '<div class="ac-wrap" style="margin-top:8px"><label class="lbl">Project ID ' +
+    '<span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ' — พิมพ์เองได้เลย หรือเลือกจาก Project ID เดิมที่เคยใช้กับ Dealer นี้)</span></label>' +
+    '<input id="soN_projectId" class="inp" autocomplete="off" value="' + sanitize(pidNorm(opts.projectId) || (pipe && pipe.projectId) || '') + '" placeholder="20260912-0005 — ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched();_soProjectIdSearch(this.value)" onfocus="_soProjectIdSearch(this.value)">' +
+    '<div id="soN_projectIdAcMenu"></div>' +
     '<div id="soN_projIdNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '</div>';
 
@@ -885,10 +1064,11 @@ function showCreateSOModal(opts) {
 
   html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
 
-  // เงื่อนไขชำระเงิน — ดึงจาก Dealer ที่เลือกเป็นค่าเริ่มต้น (ดู _soDealerNameChanged) แก้ตรงนี้ได้ แล้วตอนบันทึกจะ
-  // เขียนกลับไปที่ Dealer ด้วย (ดู saveCreateSO) ครั้งหน้าจะได้ดึงค่าล่าสุดมาเลยไม่ต้องพิมพ์ซ้ำ
-  html += '<div><label class="lbl">💳 เงื่อนไขชำระเงิน</label><input id="soN_paymentTerm" class="inp" list="soN_paymentTermDL" autocomplete="off" value="' +
-    sanitize((preDealer && preDealer.creditTerm) || '') + '" placeholder="เช่น เครดิต 30 วัน">' +
+  // เงื่อนไขชำระเงิน — เลือกใบเสนอราคาแล้วดึงมาจากใบนั้นก่อน (ดู _soFillFromQuote) ไม่งั้นดึงจาก Dealer ที่เลือก
+  // เป็นค่าเริ่มต้น (ดู _soDealerNameChanged) แก้ตรงนี้ได้ แล้วตอนบันทึกจะเขียนกลับไปทั้งใบเสนอราคาและ Dealer
+  // (ดู saveCreateSO) — ป้าย "ส่วนลด" ขึ้นเองเมื่อใบเสนอราคาที่เลือกมีส่วนลด (ดู _soUpdateDiscountBadge)
+  html += '<div><label class="lbl">💳 เงื่อนไขชำระเงิน <span id="soN_discountBadge">' + _soDiscountBadgeHtml(preQuote) + '</span></label><input id="soN_paymentTerm" class="inp" list="soN_paymentTermDL" autocomplete="off" value="' +
+    sanitize(opts.paymentTerm || (preQuote && preQuote.paymentTerm) || (preDealer && preDealer.creditTerm) || '') + '" placeholder="เช่น เครดิต 30 วัน">' +
     _soPaymentTermDatalistHtml('soN_paymentTermDL') + '</div>';
 
   // ที่อยู่จัดส่ง — ดึงจากที่อยู่ที่บันทึกไว้ที่ dealer (เลือกได้หลายที่ ถ้ามี) หรือพิมพ์เองก็ได้ถ้ายังไม่มีในระบบ
@@ -941,22 +1121,31 @@ function _soFillFromQuote(quoteId) {
   var hidden = document.getElementById('soN_quotationId');
   if (hidden) hidden.value = quoteId || '';
   window._soQuoteItemsSnapshot = null;
-  if (!quoteId) return;
+  if (!quoteId) { _soUpdateDiscountBadge(null); return; }
   var all = [];
   try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
   var q = all.filter(function(x) { return x.id === quoteId; })[0];
-  if (!q) return;
+  if (!q) { _soUpdateDiscountBadge(null); return; }
   var wrap = document.getElementById('soN_items');
   if (!wrap) return;
   wrap.innerHTML = '';
   _soIC = 0;
-  var items = (q.items && q.items.length) ? q.items.map(function(it) {
+  // ใช้รายการสินค้าหลังหักส่วนลด (เงินสดต่อรายการ + ส่วนลดอื่นๆ + ส่วนลดท้ายบิล) ให้ตรงกับยอดในใบเสนอราคา
+  // เป๊ะๆ — คำนวณด้วยสูตรเดียวกับหน้าใบเสนอราคา (ดู _soQuoteDiscountedItems / computeQuoteTotals)
+  var discItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
+  var items = (discItems && discItems.length) ? discItems.map(function(it) {
     return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '' };
   }) : [{ model: '', qty: 1, unitPrice: 0 }];
   items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
   window._soQuoteItemsSnapshot = JSON.stringify(items);
   var poEl = document.getElementById('soN_customerPO');
   if (poEl && !poEl.value && q.poNo) poEl.value = q.poNo;
+
+  // เงื่อนไขชำระเงิน — ใบเสนอราคามีระบุไว้แล้วก็ดึงมาเลย ถ้าไม่มีก็ปล่อยให้เลือก/พิมพ์เองที่หน้านี้ (ตอนบันทึก
+  // จะเขียนกลับไปที่ใบเสนอราคาให้ด้วย ดู _soSyncQuoteItems)
+  var ptEl = document.getElementById('soN_paymentTerm');
+  if (ptEl && q.paymentTerm) ptEl.value = q.paymentTerm;
+  _soUpdateDiscountBadge(q);
 
   // ใบเสนอราคาถือการผูกงานไว้แล้ว (โครงการ/ถัง + Project ID) — ดึงตามมาให้ครบ ไม่ต้องเลือกซ้ำ
   // ไม่ทับ Project ID ที่ผู้ใช้พิมพ์เองไว้ ด้วยเหตุผลเดียวกับตอนเลือกโครงการ (_soFillFromPipe)
@@ -1050,6 +1239,45 @@ function _soAutoCreateQuotation(fields, items) {
   return newQuote;
 }
 
+// คำนวณรายการสินค้าหลังหักส่วนลดของใบเสนอราคา (เงินสดต่อรายการ + ส่วนลดอื่นๆ แบบกำหนดเอง + ส่วนลดท้ายบิล %)
+// ให้ unitPrice ต่อแถวตรงกับยอดสุทธิจริง — ใช้สูตรเดียวกับหน้าใบเสนอราคา (computeQuoteTotals ใน
+// views-quotation.js) โดยหารส่วนลดเงินสดต่อรายการแยกตามแถวนั้นๆ ก่อน แล้วกระจายส่วนลดอื่นๆ/ท้ายบิล
+// (ซึ่งคิดเป็นยอดรวมทั้งใบ) แบบ pro-rata ตามสัดส่วนยอดหลังหักเงินสดของแต่ละแถว กันผลรวมรายการไม่ตรงกับยอดใบเสนอราคา
+function _soQuoteDiscountedItems(q) {
+  var items = (q && q.items) || [];
+  if (!items.length) return items;
+  var grossTotal = 0, cashDiscountTotal = 0;
+  items.forEach(function(it) {
+    var amt = Number(it.amount) || (Number(it.unitPrice) || 0) * (Number(it.quantity || it.qty) || 1);
+    grossTotal += amt;
+    cashDiscountTotal += amt * (Number(it.cashDiscountPercent) || 0) / 100;
+  });
+  var afterCashTotal = grossTotal - cashDiscountTotal;
+  // computeQuoteTotals (views-quotation.js) รวมส่วนลดอื่นๆ แบบกำหนดเอง (extraDiscounts) เข้ามาด้วยถ้ามี —
+  // ยังไม่มีก็ใช้สูตรเดิม (หลังเงินสด × (1 - ส่วนลดท้ายบิล%)) เอง ไม่พังถ้าฟังก์ชันนั้นยังไม่ถูกรวมเข้ามา
+  var netAmount = (typeof computeQuoteTotals === 'function')
+    ? computeQuoteTotals(items, q.extraDiscounts || [], q.discountPercent || 0).netAmount
+    : afterCashTotal * (1 - (Number(q.discountPercent) || 0) / 100);
+  var ratio = afterCashTotal > 0 ? (netAmount / afterCashTotal) : 1;
+  return items.map(function(it) {
+    var cashPct = Number(it.cashDiscountPercent) || 0;
+    var afterCashUnit = (Number(it.unitPrice) || 0) * (1 - cashPct / 100);
+    var finalUnit = Math.round(afterCashUnit * ratio * 100) / 100;
+    return Object.assign({}, it, { unitPrice: finalUnit });
+  });
+}
+
+// ป้าย "ส่วนลด" ข้างเงื่อนไขชำระเงิน — ขึ้นเมื่อใบเสนอราคาที่เลือกมีส่วนลดเงินสดต่อรายการ/ส่วนลดอื่นๆ/ส่วนลดท้ายบิล
+// อย่างใดอย่างหนึ่ง จะได้รู้ตั้งแต่หน้าสร้าง SO โดยไม่ต้องเปิดใบเสนอราคาไปดูก่อน
+function _soDiscountBadgeHtml(q) {
+  var hasDiscount = q && ((Number(q.cashDiscountTotal) || 0) > 0 || (Number(q.extraDiscountTotal) || 0) > 0 || (Number(q.discountAmount) || 0) > 0);
+  return hasDiscount ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f59e0b22;color:#f59e0b">🏷️ มีส่วนลด</span>' : '';
+}
+function _soUpdateDiscountBadge(q) {
+  var el = document.getElementById('soN_discountBadge');
+  if (el) el.innerHTML = _soDiscountBadgeHtml(q);
+}
+
 // sync รายการสินค้า + เงื่อนไขชำระเงินกลับเข้าใบเสนอราคาที่ผูกไว้โดยตรง (ไม่ถาม ไม่สร้าง revision) —
 // ใบเสนอราคาที่ผูกกับ SO ถือเป็น single source of truth เดียวกัน แก้ที่ฟอร์มสร้าง/แก้ไข SO แล้วอัปเดตตรงนี้เลย
 function _soSyncQuoteItems(quotationId, items, paymentTerm) {
@@ -1059,25 +1287,45 @@ function _soSyncQuoteItems(quotationId, items, paymentTerm) {
   for (var i = 0; i < all.length; i++) { if (all[i].id === quotationId) { idx = i; break; } }
   if (idx === -1) return;
   var q = all[idx];
+  // ฟอร์ม SO โชว์ราคาหลังหักส่วนลดของใบเสนอราคาอยู่แล้ว (ดู _soQuoteDiscountedItems) — เทียบกับรายการที่แสดงนั้น
+  // (ไม่ใช่ q.items ดิบก่อนหักส่วนลด) เพื่อจับว่าผู้ใช้ "แก้ไขจริง" หรือแค่ดึงมาเฉยๆ ไม่ได้แก้อะไร ถ้าไม่ได้แก้เลย
+  // ไม่ต้องเขียนอะไรกลับไปทับใบเสนอราคา กันโครงสร้างส่วนลด (เงินสดต่อรายการ/ส่วนลดอื่นๆ) เดิมหายไปโดยไม่ตั้งใจ
+  var shownItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
+  var changed = _soItemsDifferFromQuoteItems(items, shownItems.map(function(it) { return { name: it.name || it.model, quantity: it.quantity || it.qty, unitPrice: it.unitPrice, sku: it.sku || '' }; }));
+  if (!changed) {
+    if (paymentTerm && paymentTerm !== q.paymentTerm) {
+      q.paymentTerm = paymentTerm; q.updatedAt = new Date().toISOString();
+      all[idx] = q;
+      localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
+      if (typeof quotations !== 'undefined') quotations = all;
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', q);
+    }
+    return;
+  }
+  // ผู้ใช้แก้/เพิ่มรายการจริงในฟอร์ม SO — เขียนรายการใหม่ (ราคาที่กรอกไว้) กลับเข้าใบเสนอราคาตรงๆ ไม่มีข้อมูล
+  // ส่วนลดต่อรายการเดิมให้สืบทอด (ผู้ใช้แก้รายการเองแล้ว ถือว่าราคาที่กรอกคือราคาสุทธิใหม่)
   var quoteItems = items.map(function(it) {
     return { name: it.model, sku: it.sku || '', quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty)||0) * (Number(it.unitPrice)||0) };
   });
-  var changed = _soItemsDifferFromQuoteItems(items, q.items);
   var gross = quoteItems.reduce(function(s, it) { return s + (Number(it.amount)||0); }, 0);
-  var vat = gross * (Number(q.vatPercent)||7) / 100;
-  var discAmt = Number(q.discountAmount) || 0;
+  var vat = gross * 7 / 100;
   q.items = quoteItems;
   q.grossTotal = gross;
-  q.netAmount = gross - discAmt;
-  q.vatAmount = (gross - discAmt) * (Number(q.vatPercent)||7) / 100;
-  q.totalAmount = q.netAmount + q.vatAmount;
+  q.cashDiscountTotal = 0;
+  q.extraDiscountTotal = 0;
+  q.extraDiscounts = [];
+  q.discountPercent = 0;
+  q.discountAmount = 0;
+  q.netAmount = gross;
+  q.vatAmount = vat;
+  q.totalAmount = gross + vat;
   if (paymentTerm) q.paymentTerm = paymentTerm;
   q.updatedAt = new Date().toISOString();
   all[idx] = q;
   localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
   if (typeof quotations !== 'undefined') quotations = all;
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', q);
-  if (changed) toast('🔄 อัปเดตรายการในใบเสนอราคา ' + (q.quoteNo||'') + ' ตามนี้ด้วยแล้ว');
+  toast('🔄 อัปเดตรายการในใบเสนอราคา ' + (q.quoteNo||'') + ' ตามนี้ด้วยแล้ว (ล้างส่วนลดเดิม เพราะแก้รายการใหม่)');
 }
 
 // บันทึก Project ID / เงื่อนไขชำระเงิน / ที่อยู่จัดส่งที่กรอกในฟอร์ม SO กลับเข้าข้อมูล Dealer — ให้ครั้งหน้า
@@ -1160,24 +1408,67 @@ function _soDealerNameChanged(name) {
   _soFilterProjectsByDealer(dealerId);
   _soFilterRunrateByDealer(dealerId);
   _soFilterAddressByDealer(dealerId);
-  _soFilterProjectIdByDealer(dealerId);
   // เงื่อนไขชำระเงิน — เติมค่าเริ่มต้นจาก Dealer ที่เลือกใหม่ให้ (ผู้ใช้แก้ต่อได้)
   var ptEl = document.getElementById('soN_paymentTerm');
   if (ptEl) ptEl.value = (match && match.creditTerm) || '';
 }
 
-// Project ID ที่เคยใช้กับ dealer นี้มาก่อน (บันทึกไว้ตอน saveCreateSO/saveSOEdit) — เอามาเป็น suggest กันพิมพ์ใหม่ทุกครั้ง
-function _soProjectIdDatalistHtml(listId, dealerId) {
-  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
-  var ids = (d && d.projectIds) || [];
-  var opts = '';
-  ids.forEach(function(v) { opts += '<option value="' + sanitize(v) + '"></option>'; });
-  return '<datalist id="' + listId + '">' + opts + '</datalist>';
+// Dealer เป็น ac-menu dropdown เหมือน Visit Plan — ขึ้นทันทีตั้งแต่พิมพ์ตัวแรก ไม่ต้องกดลูกศร (ต่างจาก
+// native <datalist> ที่บางเบราว์เซอร์/มือถือต้องกดลูกศรเองก่อนถึงจะโชว์ตัวเลือก)
+function _soDealerSearch(q) {
+  var menu = document.getElementById('soN_dealerAcMenu');
+  if (!menu) return;
+  var typed = (q || '').trim().toLowerCase();
+  if (!typed) { menu.innerHTML = ''; return; }
+  var matches = ST.getAll('dealers').filter(function(d) { return (d.name || '').toLowerCase().indexOf(typed) !== -1; }).slice(0, 8);
+  if (!matches.length) { menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบ Dealer ที่ตรงกับคำค้น — พิมพ์ชื่อใหม่แล้วกด "สร้าง SO" จะถามสร้างให้</div></div>'; return; }
+  menu.innerHTML = '<div class="ac-menu">' + matches.map(function(d) {
+    return '<div class="ac-item" onclick="_soDealerPick(\'' + d.id + '\')"><span class="av">' + sanitize((d.name || '?').slice(0, 2)) + '</span><div class="info"><div class="n">' + sanitize(d.name) + (d.level ? '</div><div class="m">Level ' + sanitize(d.level) + '</div>' : '</div>') + '</div></div>';
+  }).join('') + '</div>';
 }
 
-function _soFilterProjectIdByDealer(dealerId) {
-  var dl = document.getElementById('soN_projectIdDL');
-  if (dl) dl.outerHTML = _soProjectIdDatalistHtml('soN_projectIdDL', dealerId);
+function _soDealerPick(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  var nameEl = document.getElementById('soN_dealerName');
+  if (nameEl) nameEl.value = d.name;
+  var menu = document.getElementById('soN_dealerAcMenu');
+  if (menu) menu.innerHTML = '';
+  _soDealerNameChanged(d.name);
+}
+
+// Project ID แบบ ac-menu เหมือน Dealer — suggest เฉพาะ Project ID ที่เคยใช้กับ Dealer ที่เลือกไว้ (เปลี่ยน
+// Dealer แล้ว suggest จะตามเปลี่ยนให้เอง เพราะอ่าน dealerId สดจาก hidden field ทุกครั้งที่เปิด/พิมพ์) — พิมพ์เอง
+// ได้อิสระเหมือนเดิม ไม่ได้บังคับเลือกจากลิสต์ (ใช้ร่วมกันทั้งฟอร์มสร้าง soN_* และแก้ไข soE_*)
+function _soProjectIdSearchCore(inputId, menuId, dealerId) {
+  var menu = document.getElementById(menuId);
+  var inp = document.getElementById(inputId);
+  if (!menu || !inp) return;
+  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var ids = (d && d.projectIds) || [];
+  var typed = (inp.value || '').trim().toLowerCase();
+  var matches = typed ? ids.filter(function(id) { return id.toLowerCase().indexOf(typed) !== -1; }) : ids;
+  if (!matches.length) { menu.innerHTML = ''; return; }
+  menu.innerHTML = '<div class="ac-menu">' + matches.slice(0, 8).map(function(id) {
+    return '<div class="ac-item" onclick="_soProjectIdPick(\'' + inputId + '\',\'' + menuId + '\',\'' + id.replace(/'/g, "\\'") + '\')"><div class="info"><div class="n">' + sanitize(id) + '</div></div></div>';
+  }).join('') + '</div>';
+}
+
+function _soProjectIdPick(inputId, menuId, id) {
+  var inp = document.getElementById(inputId);
+  if (inp) inp.value = id;
+  var menu = document.getElementById(menuId);
+  if (menu) menu.innerHTML = '';
+  if (inputId === 'soN_projectId') _soProjIdTouched();
+  else if (typeof _soEditLinkNote === 'function') _soEditLinkNote();
+}
+
+function _soProjectIdSearch(q) {
+  _soProjectIdSearchCore('soN_projectId', 'soN_projectIdAcMenu', (document.getElementById('soN_dealerId') || {}).value || '');
+}
+
+function _soEditProjectIdSearch(q) {
+  _soProjectIdSearchCore('soE_projectId', 'soE_projectIdAcMenu', (document.getElementById('soE_dealer') || {}).value || '');
 }
 
 // เงื่อนไขชำระเงินที่ตั้งไว้ใน Admin (cfg.creditTerms) — suggest ให้พิมพ์ตรงกับของเดิมที่มีอยู่แล้ว
@@ -1239,7 +1530,6 @@ function _soFillFromPipe(pipeId) {
     var dNameEl = document.getElementById('soN_dealerName');
     var dObj = ST.getOne('dealers', p.dealerId);
     if (dNameEl && dObj) dNameEl.value = dObj.name || '';
-    _soFilterProjectIdByDealer(p.dealerId);
     var ptEl2 = document.getElementById('soN_paymentTerm');
     if (ptEl2 && !ptEl2.value) ptEl2.value = (dObj && dObj.creditTerm) || '';
   }
@@ -1281,6 +1571,28 @@ var SO_ITEM_SOURCE_TYPES = {
   pr_po:         { label: '🛒 ต้องเปิด PR/PO เพิ่ม' }
 };
 
+// ตัวเลือก "สถานะ PR/PO" ดึงจาก cfg.prpoStatuses (แก้ไข/เพิ่ม/ลบ/เรียงลำดับได้ที่ ⚙️ ตั้งค่า) — ให้เพิ่มสถานะใหม่สดๆ
+// จากตรงนี้ได้เลยผ่านตัวเลือก "+ เพิ่มสถานะใหม่..." ไม่ต้องออกไปหน้า Admin
+function _soPrpoStatusOptionsHtml(selectedId) {
+  var cfg = getConfig();
+  var list = cfg.prpoStatuses || [];
+  var opts = '<option value=""' + (!selectedId ? ' selected' : '') + '>— ยังไม่ระบุ —</option>';
+  opts += list.map(function(s) {
+    return '<option value="' + sanitize(s.id) + '"' + (s.id === selectedId ? ' selected' : '') + '>' + sanitize(s.name) + '</option>';
+  }).join('');
+  opts += '<option value="__new__">+ เพิ่มสถานะใหม่...</option>';
+  return opts;
+}
+
+function _soPrpoStatusChanged(idx) {
+  var sel = document.getElementById('soI_prpoStatus_' + idx);
+  if (!sel || sel.value !== '__new__') return;
+  var nm = (prompt('ชื่อสถานะ PR/PO ใหม่') || '').trim();
+  if (!nm || typeof admAddPrpoStQuick !== 'function') { sel.value = ''; return; }
+  var id = admAddPrpoStQuick(nm);
+  sel.innerHTML = _soPrpoStatusOptionsHtml(id);
+}
+
 function _soItemRowHtml(idx, model, qty, price, sku, item) {
   item = item || {};
   var sourceType = item.sourceType || '';
@@ -1299,7 +1611,7 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
   h += '<div id="soI_prpo_' + idx + '" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="วันที่ยื่น PR/PO" title="วันที่ยื่น PR/PO" value="' + sanitize(item.prpoSubmittedDate || '') + '" id="soI_prpoDate_' + idx + '">' +
-    '<input class="inp" style="flex:2;min-width:140px" placeholder="สถานะ (เช่น เข้าไทยแล้ว)" value="' + sanitize(item.prpoStatus || '') + '" id="soI_prpoStatus_' + idx + '">' +
+    '<select class="inp" style="flex:2;min-width:160px" id="soI_prpoStatus_' + idx + '" onchange="_soPrpoStatusChanged(\'' + idx + '\')">' + _soPrpoStatusOptionsHtml(item.prpoStatusId || '') + '</select>' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
   h += '</div>';
@@ -1322,10 +1634,21 @@ function _soReadItemSourceFields(row) {
     var statusEl = row.querySelector('[id^="soI_prpoStatus_"]');
     var expEl = row.querySelector('[id^="soI_prpoExp_"]');
     out.prpoSubmittedDate = dateEl ? dateEl.value : '';
-    out.prpoStatus = statusEl ? statusEl.value.trim() : '';
+    out.prpoStatusId = (statusEl && statusEl.value !== '__new__') ? statusEl.value : '';
     out.prpoExpectedDate = expEl ? expEl.value : '';
   }
   return out;
+}
+
+// ชื่อสถานะ PR/PO ที่แสดงผล — ใช้ prpoStatusId ผูกกับ cfg.prpoStatuses ปัจจุบันก่อน ถ้าไม่มี (รายการเก่าก่อน
+// เปลี่ยนเป็น dropdown) ค่อย fallback ไปข้อความอิสระเดิมที่เคยพิมพ์ไว้ใน item.prpoStatus
+function _soPrpoStatusLabel(item) {
+  if (item.prpoStatusId) {
+    var cfg = getConfig();
+    var s = (cfg.prpoStatuses || []).filter(function(x) { return x.id === item.prpoStatusId; })[0];
+    if (s) return s.name;
+  }
+  return item.prpoStatus || '';
 }
 
 // พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคา RRP ให้อัตโนมัติถ้าช่องราคายังว่าง
@@ -1823,6 +2146,17 @@ function saveSOItemComment(soId, idx, value) {
   items[idx] = Object.assign({}, items[idx], { comment: value });
   var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
+  _soRerenderKeepScroll();
+}
+
+// ลิงก์อิสระต่อรายการสินค้าใน SO (เช่น ลิงก์จองของ 1021, ลิงก์คุย Vendor) — ไม่ผูกกับระบบไหน วางอะไรก็ได้
+function saveSOItemLink(soId, idx, value) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var items = s.items.slice();
+  items[idx] = Object.assign({}, items[idx], { link: value.trim() });
+  var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
 }
 
 // ---------------------------------------------------------------- edit modal
@@ -1965,9 +2299,9 @@ function showSOEditModal(soId) {
     '<option value="project"' + (curType === 'project' ? ' selected' : '') + '>📋 Project</option>' +
     '<option value="runrate"' + (curType === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>' +
     '</select></div>';
-  html += '<div style="flex:1"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
-    '<input id="soE_projectId" class="inp" list="soE_projectIdDL" autocomplete="off" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote()">' +
-    _soProjectIdDatalistHtml('soE_projectIdDL', s.dealerId) + '</div>';
+  html += '<div class="ac-wrap" style="flex:1"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
+    '<input id="soE_projectId" class="inp" autocomplete="off" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote();_soEditProjectIdSearch(this.value)" onfocus="_soEditProjectIdSearch(this.value)">' +
+    '<div id="soE_projectIdAcMenu"></div></div>';
   html += '</div>';
   html += '<div id="soE_pipeSec"' + (curType !== 'project' ? ' style="display:none"' : '') + '>' +
     '<label class="lbl">Pipeline Project</label>' +
@@ -2101,14 +2435,17 @@ function createSOFromQuotation(quoteId) {
   try { quotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch(e) {}
   var q = quotes.filter(function(x){ return x.id === quoteId; })[0];
   if (!q) { toast('❌ ไม่พบใบเสนอราคา'); return; }
-  var presetItems = (q.items || []).map(function(it){
+  // ใช้ราคาหลังหักส่วนลด (เงินสดต่อรายการ/ส่วนลดอื่นๆ/ส่วนลดท้ายบิล) ตรงกับที่ _soFillFromQuote ใช้ เพื่อให้
+  // รายการสินค้าในฟอร์ม SO ตรงกับยอดในใบเสนอราคาเสมอ ไม่ว่าจะเข้าทางไหน
+  var discItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
+  var presetItems = (discItems || []).map(function(it){
     return { model: it.name || it.model || '', sku: it.sku || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [] };
   });
   // สืบทอดการผูกงานจากใบเสนอราคามาเลย ไม่ต้องมาเลือก/พิมพ์เลขซ้ำอีกรอบ — ใบเสนอราคาเป็นจุดที่มักได้
   // Project ID มาก่อน SO อยู่แล้ว (ดู _quoteLinkSectionHtml ใน views-quotation.js)
   showCreateSOModal({
     pipelineId: q.pipelineId || '', quotationId: q.id, dealerId: q.dealerId || '',
-    customerPO: q.poNo || '', presetItems: presetItems,
+    customerPO: q.poNo || '', presetItems: presetItems, paymentTerm: q.paymentTerm || '',
     linkType: q.linkType || (q.runrateId ? 'runrate' : (q.pipelineId ? 'project' : '')),
     projectId: q.projectId || '', runrateId: q.runrateId || ''
   });
