@@ -865,8 +865,9 @@ function showCreateSOModal(opts) {
   // Project ID — ดึงมาจาก Pipeline ที่เลือก ถ้าโครงการนั้นยังไม่มี กรอกตรงนี้ได้เลยแล้วเขียนกลับไปให้
   // (ในแอปนี้ "มี Project ID = ถือว่าลงทะเบียน CRM แล้ว" จึงต้องตั้ง djiCrmRegistered ตามไปด้วยเสมอ)
   html += '<div style="margin-top:8px"><label class="lbl">Project ID ' +
-    '<span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ' — ยังไม่มีก็กรอกที่นี่ได้)</span></label>' +
-    '<input id="soN_projectId" class="inp" value="' + sanitize(pidNorm(opts.projectId) || (pipe && pipe.projectId) || '') + '" placeholder="20260912-0005 — ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
+    '<span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ' — ยังไม่มีก็กรอกที่นี่ได้ พิมพ์ได้จาก Project ID เดิมที่เคยใช้กับ Dealer นี้)</span></label>' +
+    '<input id="soN_projectId" class="inp" list="soN_projectIdDL" autocomplete="off" value="' + sanitize(pidNorm(opts.projectId) || (pipe && pipe.projectId) || '') + '" placeholder="20260912-0005 — ยังไม่มีจนกว่าจะลงทะเบียน CRM" oninput="_soProjIdTouched()">' +
+    _soProjectIdDatalistHtml('soN_projectIdDL', preDealerId) +
     '<div id="soN_projIdNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '</div>';
 
@@ -884,7 +885,14 @@ function showCreateSOModal(opts) {
 
   html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
 
+  // เงื่อนไขชำระเงิน — ดึงจาก Dealer ที่เลือกเป็นค่าเริ่มต้น (ดู _soDealerNameChanged) แก้ตรงนี้ได้ แล้วตอนบันทึกจะ
+  // เขียนกลับไปที่ Dealer ด้วย (ดู saveCreateSO) ครั้งหน้าจะได้ดึงค่าล่าสุดมาเลยไม่ต้องพิมพ์ซ้ำ
+  html += '<div><label class="lbl">💳 เงื่อนไขชำระเงิน</label><input id="soN_paymentTerm" class="inp" list="soN_paymentTermDL" autocomplete="off" value="' +
+    sanitize((preDealer && preDealer.creditTerm) || '') + '" placeholder="เช่น เครดิต 30 วัน">' +
+    _soPaymentTermDatalistHtml('soN_paymentTermDL') + '</div>';
+
   // ที่อยู่จัดส่ง — ดึงจากที่อยู่ที่บันทึกไว้ที่ dealer (เลือกได้หลายที่ ถ้ามี) หรือพิมพ์เองก็ได้ถ้ายังไม่มีในระบบ
+  // พิมพ์เองแล้วบันทึก SO จะเก็บที่อยู่นี้ไว้ที่ Dealer ให้ด้วย (ดู saveCreateSO) ครั้งหน้าจะเลือกจาก dropdown ได้เลย
   html += '<div><label class="lbl">📍 ที่อยู่จัดส่ง</label><select id="soN_addressSel" class="inp" onchange="_soAddressSelChanged(this.value)">' + _soAddressOptionsHtml(preDealerId, opts.deliveryAddress) + '</select>';
   html += '<textarea id="soN_deliveryAddress" class="inp" rows="2" style="margin-top:6px" placeholder="หรือพิมพ์ที่อยู่จัดส่งเอง...">' + sanitize(opts.deliveryAddress||'') + '</textarea></div>';
 
@@ -987,21 +995,8 @@ function _soFillFromQuote(quoteId) {
   _soProjIdNote();
 }
 
-// เทียบแบบ normalize เฉพาะฟิลด์ที่มีความหมาย (ไม่ใช่ JSON.stringify ตรงๆ) กัน false positive จาก field เกิน/ลำดับต่าง
-function _soItemsChangedFromQuote(currentItems) {
-  if (!window._soQuoteItemsSnapshot) return false;
-  var snap;
-  try { snap = JSON.parse(window._soQuoteItemsSnapshot); } catch (e) { return false; }
-  if (snap.length !== currentItems.length) return true;
-  for (var i = 0; i < snap.length; i++) {
-    var a = snap[i], b = currentItems[i];
-    if ((a.model || '') !== (b.model || '') || Number(a.qty) !== Number(b.qty) ||
-        Number(a.unitPrice) !== Number(b.unitPrice) || (a.sku || '') !== (b.sku || '')) return true;
-  }
-  return false;
-}
-
-// เหมือน _soItemsChangedFromQuote แต่เทียบกับ quote.items ตรงๆ (ฟิลด์ name/quantity แทน model/qty) — ใช้ตอนแก้ไข SO ที่มีอยู่แล้ว
+// เทียบแบบ normalize เฉพาะฟิลด์ที่มีความหมาย (ไม่ใช่ JSON.stringify ตรงๆ) กัน false positive จาก field เกิน/ลำดับต่าง —
+// ใช้เทียบรายการสินค้าในฟอร์มกับ quote.items ตรงๆ (ฟิลด์ name/quantity แทน model/qty)
 // ไม่มี snapshot ตอนเปิดฟอร์มให้เทียบ (ต่างจากตอนสร้างใหม่) เลยเทียบกับใบเสนอราคาที่ผูกไว้ตรงๆ แทน
 function _soItemsDifferFromQuoteItems(currentItems, quoteItems) {
   quoteItems = quoteItems || [];
@@ -1043,7 +1038,7 @@ function _soAutoCreateQuotation(fields, items) {
     id: 'qt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     quoteNo: _soNextQuoteNo(), dealerId: fields.dealerId || '', dealerName: fields.dealerName || '',
     dealerLevel: 'B', levelUsed: 'B', createdAt: new Date().toISOString(),
-    validFrom: _td(), validTo: addD(_td(), 30), paymentTerm: '', quotedBy: cfg.saleName || '',
+    validFrom: _td(), validTo: addD(_td(), 30), paymentTerm: fields.paymentTerm || '', quotedBy: cfg.saleName || '',
     poNo: fields.poNo || '', items: quoteItems, grossTotal: gross, discountPercent: 0, discountAmount: 0,
     netAmount: gross, vatPercent: 7, vatAmount: vat, totalAmount: gross + vat, remark: 'สร้างอัตโนมัติจาก SO',
     contacts: [], status: 'approved', sentDate: null, approvedDate: null, updatedAt: new Date().toISOString(),
@@ -1053,6 +1048,61 @@ function _soAutoCreateQuotation(fields, items) {
   localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
   if (typeof quotations !== 'undefined') quotations = all;
   return newQuote;
+}
+
+// sync รายการสินค้า + เงื่อนไขชำระเงินกลับเข้าใบเสนอราคาที่ผูกไว้โดยตรง (ไม่ถาม ไม่สร้าง revision) —
+// ใบเสนอราคาที่ผูกกับ SO ถือเป็น single source of truth เดียวกัน แก้ที่ฟอร์มสร้าง/แก้ไข SO แล้วอัปเดตตรงนี้เลย
+function _soSyncQuoteItems(quotationId, items, paymentTerm) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var idx = -1;
+  for (var i = 0; i < all.length; i++) { if (all[i].id === quotationId) { idx = i; break; } }
+  if (idx === -1) return;
+  var q = all[idx];
+  var quoteItems = items.map(function(it) {
+    return { name: it.model, sku: it.sku || '', quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty)||0) * (Number(it.unitPrice)||0) };
+  });
+  var changed = _soItemsDifferFromQuoteItems(items, q.items);
+  var gross = quoteItems.reduce(function(s, it) { return s + (Number(it.amount)||0); }, 0);
+  var vat = gross * (Number(q.vatPercent)||7) / 100;
+  var discAmt = Number(q.discountAmount) || 0;
+  q.items = quoteItems;
+  q.grossTotal = gross;
+  q.netAmount = gross - discAmt;
+  q.vatAmount = (gross - discAmt) * (Number(q.vatPercent)||7) / 100;
+  q.totalAmount = q.netAmount + q.vatAmount;
+  if (paymentTerm) q.paymentTerm = paymentTerm;
+  q.updatedAt = new Date().toISOString();
+  all[idx] = q;
+  localStorage.setItem('v7_quotations_v2', JSON.stringify(all));
+  if (typeof quotations !== 'undefined') quotations = all;
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('quotations_v2', q);
+  if (changed) toast('🔄 อัปเดตรายการในใบเสนอราคา ' + (q.quoteNo||'') + ' ตามนี้ด้วยแล้ว');
+}
+
+// บันทึก Project ID / เงื่อนไขชำระเงิน / ที่อยู่จัดส่งที่กรอกในฟอร์ม SO กลับเข้าข้อมูล Dealer — ให้ครั้งหน้า
+// เลือก Dealer นี้แล้ว suggest ค่าที่เคยใช้ได้เลย ไม่ต้องพิมพ์ซ้ำ (เรียกจาก saveCreateSO/saveSOEdit)
+function _soSaveBackToDealer(dealerId, fields) {
+  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
+  if (!d) return;
+  var updates = {};
+  if (fields.projectId) {
+    var ids = (d.projectIds || []).slice();
+    if (ids.indexOf(fields.projectId) === -1) { ids.push(fields.projectId); updates.projectIds = ids; }
+  }
+  if (fields.paymentTerm && fields.paymentTerm !== d.creditTerm) updates.creditTerm = fields.paymentTerm;
+  if (fields.deliveryAddress) {
+    var addresses = (d.addresses || []).slice();
+    var exists = addresses.some(function(a) { return (a.address||'').trim() === fields.deliveryAddress; });
+    if (!exists) {
+      addresses.push({ label: 'ที่อยู่จาก SO ' + _td(), address: fields.deliveryAddress, isDefault: addresses.length === 0 });
+      updates.addresses = addresses;
+    }
+  }
+  if (Object.keys(updates).length) {
+    var updated = ST.update('dealers', dealerId, updates);
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', updated);
+  }
 }
 
 function _soTypeToggle(type) {
@@ -1110,6 +1160,33 @@ function _soDealerNameChanged(name) {
   _soFilterProjectsByDealer(dealerId);
   _soFilterRunrateByDealer(dealerId);
   _soFilterAddressByDealer(dealerId);
+  _soFilterProjectIdByDealer(dealerId);
+  // เงื่อนไขชำระเงิน — เติมค่าเริ่มต้นจาก Dealer ที่เลือกใหม่ให้ (ผู้ใช้แก้ต่อได้)
+  var ptEl = document.getElementById('soN_paymentTerm');
+  if (ptEl) ptEl.value = (match && match.creditTerm) || '';
+}
+
+// Project ID ที่เคยใช้กับ dealer นี้มาก่อน (บันทึกไว้ตอน saveCreateSO/saveSOEdit) — เอามาเป็น suggest กันพิมพ์ใหม่ทุกครั้ง
+function _soProjectIdDatalistHtml(listId, dealerId) {
+  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var ids = (d && d.projectIds) || [];
+  var opts = '';
+  ids.forEach(function(v) { opts += '<option value="' + sanitize(v) + '"></option>'; });
+  return '<datalist id="' + listId + '">' + opts + '</datalist>';
+}
+
+function _soFilterProjectIdByDealer(dealerId) {
+  var dl = document.getElementById('soN_projectIdDL');
+  if (dl) dl.outerHTML = _soProjectIdDatalistHtml('soN_projectIdDL', dealerId);
+}
+
+// เงื่อนไขชำระเงินที่ตั้งไว้ใน Admin (cfg.creditTerms) — suggest ให้พิมพ์ตรงกับของเดิมที่มีอยู่แล้ว
+function _soPaymentTermDatalistHtml(listId) {
+  var cfg = getConfig();
+  var terms = (cfg.creditTerms || []).filter(Boolean);
+  var opts = '';
+  terms.forEach(function(v) { opts += '<option value="' + sanitize(v) + '"></option>'; });
+  return '<datalist id="' + listId + '">' + opts + '</datalist>';
 }
 
 // เปลี่ยน Dealer แล้วต้องกรองถัง Run rate ตามไปด้วย เหมือนที่กรอง Pipeline Project
@@ -1162,6 +1239,9 @@ function _soFillFromPipe(pipeId) {
     var dNameEl = document.getElementById('soN_dealerName');
     var dObj = ST.getOne('dealers', p.dealerId);
     if (dNameEl && dObj) dNameEl.value = dObj.name || '';
+    _soFilterProjectIdByDealer(p.dealerId);
+    var ptEl2 = document.getElementById('soN_paymentTerm');
+    if (ptEl2 && !ptEl2.value) ptEl2.value = (dObj && dObj.creditTerm) || '';
   }
 
   // Project ID ของโครงการที่เลือก — ไม่ทับถ้าผู้ใช้พิมพ์เองไว้แล้ว
@@ -1338,6 +1418,7 @@ function saveCreateSO() {
   var projectId   = ((document.getElementById('soN_projectId') ||{}).value || '').trim();
   var runrateId   = (document.getElementById('soN_runrateId')  ||{}).value || '';
   var deliveryAddress = ((document.getElementById('soN_deliveryAddress') ||{}).value || '').trim();
+  var paymentTerm = ((document.getElementById('soN_paymentTerm') ||{}).value || '').trim();
   var pendingSoNumber = !!((document.getElementById('soN_pendingSoNum') || {}).checked);
   // SO เป็นได้อย่างใดอย่างหนึ่ง — โครงการ หรือ run rate ไม่ใช่ทั้งสอง ไม่งั้นยอดจะถูกนับซ้ำสองที่
   if (type === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
@@ -1367,21 +1448,20 @@ function saveCreateSO() {
   var cfg    = getConfig();
   var now    = new Date().toISOString();
 
-  // ผูกใบเสนอราคาให้ SO นี้เสมอ — ถ้าเลือกไว้แล้วรายการไม่ตรง ถามว่าจะแก้เป็น revision ไหม, ถ้าไม่ได้เลือกไว้เลยก็สร้างใหม่ให้อัตโนมัติ
+  // ผูกใบเสนอราคาให้ SO นี้เสมอ — เลือกไว้แล้วรายการไม่ตรง (แก้/เพิ่มสินค้าในฟอร์มนี้) ก็ sync กลับเข้าใบเสนอราคา
+  // ตัวนั้นทันทีโดยไม่ต้องถาม (ใบเสนอราคา = single source of truth เดียวกับ SO ไม่ต้องไปแก้คนละที่)
+  // ไม่ได้เลือกไว้เลยก็สร้างใบเสนอราคาใหม่ให้อัตโนมัติ พร้อมเงื่อนไขชำระเงินที่กรอกในฟอร์มนี้
   if (quotationId) {
-    if (typeof _soItemsChangedFromQuote === 'function' && _soItemsChangedFromQuote(items) &&
-        confirm('รายการสินค้าที่กรอกไม่ตรงกับใบเสนอราคาที่เลือกไว้\nต้องการบันทึกเป็นฉบับแก้ไข (revision) ของใบเสนอราคานั้นไหม?\n\nตกลง = สร้างฉบับแก้ไขใหม่ผูกกับ SO นี้\nยกเลิก = สร้าง SO โดยไม่แก้ใบเสนอราคาเดิม')) {
-      if (typeof createQuoteRevision === 'function') {
-        var revItems = items.map(function(it) { return { name: it.model, sku: it.sku, quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty)||0)*(Number(it.unitPrice)||0) }; });
-        var rev = createQuoteRevision(quotationId, { items: revItems });
-        if (rev) { quotationId = rev.id; toast('🆕 สร้างฉบับแก้ไขใบเสนอราคา ' + rev.quoteNo); }
-      }
-    }
+    if (typeof _soSyncQuoteItems === 'function') _soSyncQuoteItems(quotationId, items, paymentTerm);
   } else if (typeof _soAutoCreateQuotation === 'function') {
     var pipe2 = pipelineId ? ST.getOne('pipeline', pipelineId) : null;
-    var newQ = _soAutoCreateQuotation({ dealerId: dealerId, dealerName: dealer ? dealer.name : '', pipelineId: pipelineId, poNo: customerPO, projectName: pipe2 ? pipe2.projectName : '' }, items);
+    var newQ = _soAutoCreateQuotation({ dealerId: dealerId, dealerName: dealer ? dealer.name : '', pipelineId: pipelineId, poNo: customerPO, projectName: pipe2 ? pipe2.projectName : '', paymentTerm: paymentTerm }, items);
     if (newQ) quotationId = newQ.id;
   }
+
+  // บันทึก Project ID / เงื่อนไขชำระเงิน / ที่อยู่จัดส่งที่พิมพ์เองไว้กลับเข้าข้อมูล Dealer — ครั้งหน้าจะดึง
+  // มา suggest ได้เลยไม่ต้องพิมพ์ซ้ำ (ดู _soSaveBackToDealer)
+  _soSaveBackToDealer(dealerId, { projectId: projectId, paymentTerm: paymentTerm, deliveryAddress: deliveryAddress });
 
   // ---- Project ID: เขียนกลับไปที่โครงการต้นทางให้ด้วย ----
   // Project ID เป็นของโครงการ ไม่ใช่ของ SO — เก็บไว้บน SO เพื่ออ้างอิงได้เร็ว แต่ต้นทางคือ pipeline
@@ -1398,7 +1478,7 @@ function saveCreateSO() {
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
     customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
-    deliveryAddress: deliveryAddress,
+    deliveryAddress: deliveryAddress, paymentTerm: paymentTerm,
     // ยังไม่ได้เลข SO จริงจาก Sales Support — soNumber ที่กรอกไว้เป็นแค่เลขร่างชั่วคราว กันชนกับเลขจริงที่จะออกมาทีหลัง (ดู confirmSoNumberFromSalesSupport)
     pendingSoNumber: pendingSoNumber,
     // ถัง Run rate ที่ SO ใบนี้ผูกอยู่ — ยอดของใบนี้จะถูกนับรวมในถังนั้น (ดู _rrTotal ใน views-runrate.js)
@@ -1449,20 +1529,9 @@ function saveSOItemsEdit(soId) {
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
+  // ใบเสนอราคาที่ผูกไว้ = single source of truth เดียวกับ SO — แก้รายการตรงนี้แล้ว sync กลับไปตรงนั้นทันที ไม่ถาม ไม่สร้าง revision
   var quotationId = s.quotationId;
-  if (quotationId) {
-    var allQuotes = [];
-    try { allQuotes = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
-    var quote = allQuotes.filter(function(q) { return q.id === quotationId; })[0];
-    if (quote && _soItemsDifferFromQuoteItems(items, quote.items) &&
-        confirm('รายการสินค้าที่แก้ไม่ตรงกับใบเสนอราคาที่ผูกไว้ (' + quote.quoteNo + ')\nต้องการบันทึกเป็นฉบับแก้ไข (revision) ของใบเสนอราคานั้นไหม?\n\nตกลง = สร้างฉบับแก้ไขใหม่ผูกกับ SO นี้\nยกเลิก = บันทึก SO โดยไม่แก้ใบเสนอราคาเดิม')) {
-      if (typeof createQuoteRevision === 'function') {
-        var revItems = items.map(function(it) { return { name: it.model, sku: it.sku, quantity: it.qty, unitPrice: it.unitPrice, amount: (Number(it.qty) || 0) * (Number(it.unitPrice) || 0) }; });
-        var rev = createQuoteRevision(quotationId, { items: revItems });
-        if (rev) { quotationId = rev.id; toast('🆕 สร้างฉบับแก้ไขใบเสนอราคา ' + rev.quoteNo); }
-      }
-    }
-  }
+  if (quotationId && typeof _soSyncQuoteItems === 'function') _soSyncQuoteItems(quotationId, items);
 
   var cfg = getConfig();
   var logs = (s.logs || []).slice();
@@ -1897,7 +1966,8 @@ function showSOEditModal(soId) {
     '<option value="runrate"' + (curType === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>' +
     '</select></div>';
   html += '<div style="flex:1"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
-    '<input id="soE_projectId" class="inp" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote()"></div>';
+    '<input id="soE_projectId" class="inp" list="soE_projectIdDL" autocomplete="off" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote()">' +
+    _soProjectIdDatalistHtml('soE_projectIdDL', s.dealerId) + '</div>';
   html += '</div>';
   html += '<div id="soE_pipeSec"' + (curType !== 'project' ? ' style="display:none"' : '') + '>' +
     '<label class="lbl">Pipeline Project</label>' +
@@ -1966,6 +2036,9 @@ function saveSOEdit(soId) {
     if (linkType === 'runrate') djpNoteKindFromDoc(((runrateId && ST.getOne('runrate', runrateId)) || {}).projectId, 'runrate');
     else djpNoteKindFromDoc(projectId, 'project');
   }
+
+  var editedAddress = ((document.getElementById('soN_deliveryAddress')||{}).value || '').trim();
+  if (typeof _soSaveBackToDealer === 'function') _soSaveBackToDealer(dealerId, { projectId: projectId, deliveryAddress: editedAddress });
 
   var updatedSO = ST.update('salesOrders', soId, {
     soNumber:         newSoNumber,
