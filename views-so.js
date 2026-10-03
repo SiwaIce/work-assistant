@@ -139,6 +139,57 @@ function _soStatusBadge(st) {
     s.color + '22;border-color:' + s.color + '55;color:' + s.color + '">' + s.icon + ' ' + s.label + '</span>';
 }
 
+// สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ copy วางส่งให้ Sales Support ได้เลย (ต่อยอดจากไอเดีย mockup เดิม — ก่อนหน้านี้มีแต่ export รวมทุก SO)
+function _soSummaryTextForSalesSupport(s) {
+  var lines = [];
+  lines.push('📄 สรุป PO/SO สำหรับ Sales Support');
+  lines.push('SO/ร่าง: ' + (s.soNumber || '-') + (s.pendingSoNumber ? ' (ยังไม่ได้เลข SO จริง)' : ''));
+  if (s.customerPO) lines.push('PO ลูกค้า: ' + s.customerPO);
+  lines.push('Dealer: ' + (s.dealerName || '-'));
+  if (s.projectId) lines.push('Project ID: ' + s.projectId);
+  if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
+  lines.push('');
+  lines.push('รายการสินค้า:');
+  (s.items || []).forEach(function(it, idx) {
+    var qty = Number(it.qty) || 0;
+    var price = Number(it.unitPrice) || 0;
+    lines.push((idx + 1) + '. ' + (it.model || it.sku || '-') + ' × ' + qty + ' @ ฿' + nmI(price) + ' = ฿' + nmI(qty * price) + (it.sourceType ? ' [' + _poTrackerItemRemark(it, s) + ']' : ''));
+  });
+  var total = _poTrackerSOTotal(s);
+  lines.push('');
+  lines.push('ยอดรวม (ไม่รวม VAT): ฿' + nmI(total));
+  if (s.note) lines.push('หมายเหตุ: ' + s.note);
+  return lines.join('\n');
+}
+
+function copySOSummaryForSalesSupport(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  copyText(_soSummaryTextForSalesSupport(s), '📋 คัดลอกสรุป PO/SO แล้ว — วางส่งให้ Sales Support ได้เลย');
+}
+
+// ยืนยันเลข SO จริงที่ได้กลับมาจาก Sales Support — ปิดสถานะร่าง pendingSoNumber
+function showConfirmSoNumberM(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var h = '<div class="fm-group"><label>เลข SO จริง *</label><input type="text" id="cfSoNum" class="fm-input" value="' + sanitize(s.soNumber || '') + '"></div>' +
+    '<button class="btn bp btn-full" onclick="confirmSoNumberFromSalesSupport(\'' + soId + '\')">✅ บันทึก</button>';
+  openM('✅ ยืนยันเลข SO จาก Sales Support', h);
+}
+
+function confirmSoNumberFromSalesSupport(soId) {
+  var soNumber = (document.getElementById('cfSoNum').value || '').trim();
+  if (!soNumber) { toast('กรุณาใส่เลข SO'); return; }
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var logs = (s.logs || []).concat([{ date: _td(), action: '✅ ได้เลข SO จริงจาก Sales Support: ' + soNumber, note: '', by: (getConfig().saleName || '') }]);
+  ST.update('salesOrders', soId, { soNumber: soNumber, pendingSoNumber: false, logs: logs, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', ST.getOne('salesOrders', soId));
+  closeMForce();
+  toast('✅ บันทึกเลข SO แล้ว');
+  render();
+}
+
 var _SO_NUM_FIELD_BY_PREFIX = { SO: 'soNumber', INV: 'invoiceNumber', DO: 'doNumber' };
 function _soNextNum(prefix) {
   var all = ST.getAll('salesOrders');
@@ -581,14 +632,22 @@ function rSODetail(el) {
   html += '<h2 style="margin:0;font-size:19px">' + qcopyHtml(s.soNumber||'-') + '</h2>';
   html += '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:var(--bg2);color:var(--text2)">' + (s.type==='project'?'📋 Project':'🏪 Run rate') + '</span>';
   html += _soStatusBadge(s.status);
+  if (s.pendingSoNumber) html += '<span style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid #f59e0b55;background:#f59e0b22;color:#f59e0b;white-space:nowrap">🕗 รอเลข SO จาก Sales Support</span>';
   html += '</div>';
   if (!_gvHidden('so_dealerInfo')) html += '<div style="font-size:13px;color:var(--text2)">🏪 ' + sanitize(dealer ? dealer.name : (s.dealerName||'-')) + '</div>';
   html += '</div>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
   if (nexts.length) html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
+  html += '<button class="btn bo bsm" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
   html += '<button class="btn bd bsm" onclick="deleteSalesOrder(\'' + s.id + '\')" title="ลบ SO">🗑️</button>';
   html += '</div></div>';
+  if (s.pendingSoNumber) {
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px 10px;margin-top:8px">';
+    html += '<span style="font-size:12px;color:#f59e0b">🕗 ใบนี้ยังเป็นร่าง รอเลข SO จริงจาก Sales Support — เลขที่กรอกไว้ตอนนี้เป็นแค่เลขชั่วคราว</span>';
+    html += '<button class="btn bp bsm" onclick="showConfirmSoNumberM(\'' + s.id + '\')">✅ ได้เลข SO แล้ว</button>';
+    html += '</div>';
+  }
 
   // ความพร้อมส่ง — คำนวณสดจากสต็อกจริงต่อรายการ ไม่ใช่สถานะที่ตั้งเอง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกันได้)
   if (s.status === 'so_open') {
@@ -618,7 +677,11 @@ function rSODetail(el) {
   if (s.customerPO && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
   if (pipe)               infoCells.push({ label:'Pipeline',      val: '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + s.pipelineId + '\'});return false" style="color:var(--accent)">' + sanitize((pipe.projectName||s.pipelineId).substr(0,26)) + '</a>' });
-  if (s.quotationId)      infoCells.push({ label:'Quotation',     val: '<span style="color:var(--accent)">' + sanitize(s.quotationId) + '</span>' });
+  if (s.quotationId) {
+    var _soQuote = (typeof getQuoteById === 'function') ? getQuoteById(s.quotationId) : null;
+    infoCells.push({ label:'Quotation', val: '<a href="#" onclick="editQuotation(\'' + s.quotationId + '\');return false" style="color:var(--accent)">' + sanitize(_soQuote ? _soQuote.quoteNo : s.quotationId) + '</a>' });
+  }
+  if (s.deliveryAddress)  infoCells.push({ label:'📍 ที่อยู่จัดส่ง', val: '<span style="white-space:pre-wrap">' + sanitize(s.deliveryAddress) + '</span>' });
   if (s.doNumber)         infoCells.push({ label:'DO',            val: qcopyHtml(s.doNumber) });
   if (s.invoiceNumber)    infoCells.push({ label:'Invoice',       val: qcopyHtml(s.invoiceNumber) + (s.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(s.invoiceDate) + ')</span>' : '') });
   if (s.expectedDelivery) infoCells.push({ label:'ETA Vendor',    val: fD(s.expectedDelivery) });
@@ -793,7 +856,7 @@ function showCreateSOModal(opts) {
   html += '</div>';
 
   // Dealer ก่อน — เลือกแล้วกรอง project ให้เฉพาะของ dealer นั้น
-  html += '<div><label class="lbl">Dealer *</label><select id="soN_dealerId" class="inp" onchange="_soFilterProjectsByDealer(this.value);_soFilterRunrateByDealer(this.value)">' + dealerOpts + '</select></div>';
+  html += '<div><label class="lbl">Dealer *</label><select id="soN_dealerId" class="inp" onchange="_soFilterProjectsByDealer(this.value);_soFilterRunrateByDealer(this.value);_soFilterAddressByDealer(this.value)">' + dealerOpts + '</select></div>';
 
   // project picker (แสดงเมื่อ type=project) — กรองตาม dealer
   html += '<div id="soN_pipeSec"' + (initType!=='project'?' style="display:none"':'') + '>';
@@ -821,6 +884,14 @@ function showCreateSOModal(opts) {
 
   html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
 
+  // ที่อยู่จัดส่ง — ดึงจากที่อยู่ที่บันทึกไว้ที่ dealer (เลือกได้หลายที่ ถ้ามี) หรือพิมพ์เองก็ได้ถ้ายังไม่มีในระบบ
+  html += '<div><label class="lbl">📍 ที่อยู่จัดส่ง</label><select id="soN_addressSel" class="inp" onchange="_soAddressSelChanged(this.value)">' + _soAddressOptionsHtml(preDealerId, opts.deliveryAddress) + '</select>';
+  html += '<textarea id="soN_deliveryAddress" class="inp" rows="2" style="margin-top:6px" placeholder="หรือพิมพ์ที่อยู่จัดส่งเอง...">' + sanitize(opts.deliveryAddress||'') + '</textarea></div>';
+
+  // สถานะ "ยังไม่ได้เลข SO จริง" — ใช้ตอนกรอกข้อมูลส่งให้ Sales Support ก่อน ยังไม่ได้เลข SO กลับมา (กันชนกับเลขจริงที่จะออกทีหลัง)
+  html += '<div class="fm-group" style="background:var(--bg2);border-radius:8px;padding:8px 10px">' +
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="soN_pendingSoNum"> <span>🕗 ยังไม่ได้เลข SO จริงจาก Sales Support (กรอกไว้เป็นร่างก่อน ใส่เลขจริงได้ทีหลัง)</span></label></div>';
+
   // items
   html += buildAdminModelDatalist('soItemModelDL');
   html += '<div><label class="lbl">รายการสินค้า *</label><div id="soN_items">';
@@ -829,7 +900,9 @@ function showCreateSOModal(opts) {
       ? [{ model: pipe.model, qty: 1, unitPrice: Number(pipe.forecastAmount)||0 }]
       : [{ model: '', qty: 1, unitPrice: 0 }]);
   initItems.forEach(function(it, idx){ html += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
-  html += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin-top:4px">+ เพิ่มสินค้า</button></div>';
+  html += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin-top:4px">+ เพิ่มสินค้า</button> ' +
+    '<button class="btn bo bsm" onclick="_soCheckStockNow()" style="margin-top:4px">🔎 เช็คสต็อกตอนนี้</button>' +
+    '<div id="soN_stockCheck" style="margin-top:8px"></div></div>';
 
   html += '<div><label class="lbl">หมายเหตุ</label><textarea id="soN_note" class="inp" rows="2" placeholder="หมายเหตุเพิ่มเติม..."></textarea></div>';
   html += '<button class="btn bp" onclick="saveCreateSO()">💾 สร้าง SO</button></div>';
@@ -1175,6 +1248,55 @@ function _soItemModelChanged(idx) {
 }
 
 var _soIC = 0;
+// รายชื่อที่อยู่จัดส่งที่บันทึกไว้ใน dealer นั้น — ใช้ทั้งตอนสร้างและแก้ไข SO (ดู _soFilterAddressByDealer)
+function _soAddressOptionsHtml(dealerId, keepAddress) {
+  var d = dealerId ? ST.getOne('dealers', dealerId) : null;
+  var addresses = (d && d.addresses) || [];
+  var h = '<option value="">-- พิมพ์ที่อยู่เอง (ด้านล่าง) --</option>';
+  addresses.forEach(function(a) {
+    var sel = (keepAddress && keepAddress === a.address) ? ' selected' : '';
+    h += '<option value="' + sanitize(a.address) + '"' + sel + '>' + sanitize(a.label) + (a.isDefault ? ' ⭐' : '') + '</option>';
+  });
+  return h;
+}
+
+function _soAddressSelChanged(val) {
+  var ta = document.getElementById('soN_deliveryAddress');
+  if (ta && val) ta.value = val;
+}
+
+// เปลี่ยน dealer ตอนสร้าง/แก้ไข SO → รีเฟรชตัวเลือกที่อยู่จัดส่งให้ตรงกับ dealer ที่เลือกใหม่
+function _soFilterAddressByDealer(dealerId) {
+  var sel = document.getElementById('soN_addressSel');
+  if (!sel) return;
+  sel.innerHTML = _soAddressOptionsHtml(dealerId);
+  var ta = document.getElementById('soN_deliveryAddress');
+  if (ta) ta.value = '';
+}
+
+// เช็คสต็อกสด ต่อรายการที่กรอกไว้ในฟอร์ม — ก่อนที่ SO จะมี id จริง (ใช้ so จำลองที่มีแค่ quotationId ไว้เทียบ reservation)
+function _soCheckStockNow() {
+  var wrap = document.getElementById('soN_stockCheck');
+  if (!wrap) return;
+  var quotationId = (document.getElementById('soN_quotationId') || {}).value || '';
+  var stubSO = { id: null, quotationId: quotationId };
+  var rows = [];
+  document.querySelectorAll('#soN_items > div[id^="soIR_"]').forEach(function(row) {
+    var mEl = row.querySelector('[id^="soI_m_"]');
+    var qEl = row.querySelector('[id^="soI_q_"]');
+    var skuEl = row.querySelector('[id^="soI_sku_"]');
+    if (!mEl || !mEl.value.trim()) return;
+    var sku = skuEl ? skuEl.value.trim() : '';
+    var qty = Number(qEl.value) || 1;
+    var label = mEl.value.trim();
+    var badge = sku && typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(sku, qty, stubSO) : '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้ — ตรวจสต็อกไม่ได้</span>';
+    // ยังไม่มี SO จริง (id ยังไม่เกิด) — ตัดปุ่ม "ยืนยัน & ย้ายเข้า 1021" ออก เพราะปุ่มนั้นต้องมี SO จริงให้ผูกก่อน บันทึก SO แล้วค่อยมายืนยันที่หน้า SO detail ได้
+    badge = badge.replace(/<button[^>]*stockFulfillReservationToSO[^<]*<\/button><br>/, '');
+    rows.push('<div style="margin-bottom:8px;padding:8px;background:var(--bg2);border-radius:8px"><div style="font-size:12px;font-weight:600;margin-bottom:4px">' + sanitize(label) + ' × ' + qty + '</div>' + badge + '</div>');
+  });
+  wrap.innerHTML = rows.length ? rows.join('') : '<div style="font-size:11px;color:var(--text2)">ยังไม่มีรายการสินค้าให้เช็ค</div>';
+}
+
 function _soAddItemRow() {
   var wrap = document.getElementById('soN_items');
   if (!wrap) return;
@@ -1194,6 +1316,8 @@ function saveCreateSO() {
   var note        = (document.getElementById('soN_note')       ||{}).value || '';
   var projectId   = ((document.getElementById('soN_projectId') ||{}).value || '').trim();
   var runrateId   = (document.getElementById('soN_runrateId')  ||{}).value || '';
+  var deliveryAddress = ((document.getElementById('soN_deliveryAddress') ||{}).value || '').trim();
+  var pendingSoNumber = !!((document.getElementById('soN_pendingSoNum') || {}).checked);
   // SO เป็นได้อย่างใดอย่างหนึ่ง — โครงการ หรือ run rate ไม่ใช่ทั้งสอง ไม่งั้นยอดจะถูกนับซ้ำสองที่
   if (type === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
 
@@ -1245,12 +1369,15 @@ function saveCreateSO() {
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
     customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
+    deliveryAddress: deliveryAddress,
+    // ยังไม่ได้เลข SO จริงจาก Sales Support — soNumber ที่กรอกไว้เป็นแค่เลขร่างชั่วคราว กันชนกับเลขจริงที่จะออกมาทีหลัง (ดู confirmSoNumberFromSalesSupport)
+    pendingSoNumber: pendingSoNumber,
     // ถัง Run rate ที่ SO ใบนี้ผูกอยู่ — ยอดของใบนี้จะถูกนับรวมในถังนั้น (ดู _rrTotal ใน views-runrate.js)
     runrateId: runrateId,
     runrateProjectId: runrateId ? ((ST.getOne('runrate', runrateId) || {}).projectId || '') : '',
     prNumber: '', poNumber: '', invoiceNumber: '', invoiceDate: '', doNumber: '', expectedDelivery: '',
     status: 'po_received', items: items, saleName: cfg.saleName||'',
-    logs: [{ date: _td(), action: '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],
+    logs: [{ date: _td(), action: pendingSoNumber ? '📄 ส่งรายละเอียดให้ Sales Support (รอเลข SO)' : '📄 สร้าง SO / ได้รับ PO', note: note||'', by: cfg.saleName||'' }],
     createdAt: now, updatedAt: now,
     sourceTaskId: (typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
@@ -1645,6 +1772,7 @@ function _soEditDealerChanged(dealerId) {
   if (pSel) { var kp = pSel.value; pSel.innerHTML = _soPipelineOptionsHtml(dealerId, kp); if (pSel.value !== kp) pSel.value = ''; }
   var rSel = document.getElementById('soE_runrateId');
   if (rSel) { var kr = rSel.value; rSel.innerHTML = _soRunrateOptionsHtml(dealerId, kr); if (rSel.value !== kr) rSel.value = ''; }
+  _soFilterAddressByDealer(dealerId);
   _soEditLinkNote();
 }
 
@@ -1726,6 +1854,8 @@ function showSOEditModal(soId) {
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">Dealer</label><select id="soE_dealer" class="inp" onchange="_soEditDealerChanged(this.value)">' + dOpts + '</select></div>';
   html += '</div>';
+  html += '<div><label class="lbl">📍 ที่อยู่จัดส่ง</label><select id="soN_addressSel" class="inp" onchange="_soAddressSelChanged(this.value)">' + _soAddressOptionsHtml(s.dealerId, s.deliveryAddress) + '</select>';
+  html += '<textarea id="soN_deliveryAddress" class="inp" rows="2" style="margin-top:6px">' + sanitize(s.deliveryAddress||'') + '</textarea></div>';
 
   // ---- การผูกงาน: โครงการ หรือ Run rate + Project ID ----
   // เดิมแก้ได้แค่ตอนสร้าง SO เท่านั้น พอได้เลข CRM มาทีหลัง (ซึ่งเป็นเรื่องปกติ) เลยเติมไม่ได้ ต้องไปแก้ที่
@@ -1823,6 +1953,7 @@ function saveSOEdit(soId) {
     dealerName:       dealer ? dealer.name : s.dealerName,
     customerPO:       (document.getElementById('soE_po')||{}).value || '',
     prNumber:         (document.getElementById('soE_pr')||{}).value || '',
+    deliveryAddress:  ((document.getElementById('soN_deliveryAddress')||{}).value || '').trim(),
     expectedDelivery: (document.getElementById('soE_eta')||{}).value || '',
     dueDate:          (document.getElementById('soE_due')||{}).value || '',
     attachments:      window._soAttach || [],
