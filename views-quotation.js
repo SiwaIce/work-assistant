@@ -2208,6 +2208,13 @@ function renderEditQuotationPage(quote) {
       html += '<div class="hint" style="margin-bottom:10px">🔀 มีฉบับแก้ไข ' + revs.length + ' ฉบับ — ล่าสุด <a onclick="editQuotation(\'' + latest.id + '\')" style="color:var(--accent)">' + sanitize(latest.quoteNo) + '</a></div>';
     }
   }
+  // reverse link: ใบเสนอราคานี้ถูกใช้สร้าง SO ไปแล้วหรือยัง (ดูจาก salesOrders.quotationId)
+  var _linkedSOs = (typeof ST !== 'undefined') ? ST.getAll('salesOrders').filter(function(s) { return s.quotationId === quote.id; }) : [];
+  if (_linkedSOs.length) {
+    html += '<div class="hint" style="margin-bottom:10px">📦 ใช้สร้าง SO แล้ว: ' + _linkedSOs.map(function(s) {
+      return '<a href="#" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'});return false" style="color:var(--accent)">' + sanitize(s.soNumber || '-') + '</a>';
+    }).join(', ') + '</div>';
+  }
   
   // Form Card
   html += '<div class="card" style="margin-bottom:16px">';
