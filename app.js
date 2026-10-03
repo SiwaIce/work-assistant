@@ -1984,13 +1984,16 @@ function switchTheme() {
 // ================================================================
 var APP_MENU_REGISTRY = [
   {id: 'today', icon: '📌', name: 'วันนี้'},
+  {id: 'customerUpdates', icon: '📥', name: 'คำขออัพเดทจากลูกค้า'},
   {id: 'salesOverview', icon: '📊', name: 'ภาพรวมยอดขาย'},
   {id: 'salesAnalytics', icon: '📈', name: 'Sales Analytics'},
   {id: 'dealers', icon: '🏪', name: 'Dealers'},
+  {id: 'customerSummary', icon: '📊', name: 'สรุปรายลูกค้า'},
   {id: 'endUserList', icon: '👥', name: 'End User ทั้งหมด'},
   {id: 'salesRepDashboard', icon: '👤', name: 'Dashboard รายเซล'},
   {id: 'dealerRiskRadar', icon: '🛰️', name: 'Dealer เสี่ยงหลุดเป้า'},
   {id: 'pipeline', icon: '📊', name: 'Pipeline'},
+  {id: 'pipelineTeam', icon: '📊', name: 'Pipeline รวมทีม'},
   {id: 'pipeBoard', icon: '📋', name: 'Pipeline Board'},
   {id: 'pipeDash', icon: '📊', name: 'Pipeline Overview'},
   {id: 'pipeHealth', icon: '🚦', name: 'Pipeline Health'},
@@ -2024,6 +2027,7 @@ var APP_MENU_REGISTRY = [
   {id: 'feedback', icon: '💡', name: 'Feedback'},
   {id: 'products', icon: '📋', name: 'สินค้าทั้งหมด'},
   {id: 'stock', icon: '📦', name: 'Stock สินค้า'},
+  {id: 'stockBatchReceive', icon: '📥', name: 'รับของเข้าคลัง (Batch)'},
   {id: 'productBundles', icon: '🎁', name: 'Bundle/Combo'},
   {id: 'productDemo', icon: '🚁', name: 'Demo Unit'},
   {id: 'productImport', icon: '📥', name: 'Import/Export สินค้า'},
@@ -2196,10 +2200,15 @@ function getFavorites() {
         localStorage.setItem('v7_favBackfillPOTracker', '1');
         if (list.indexOf('poTracker') === -1) { list.push('poTracker'); saveFavorites(list); }
       }
+      // เพิ่ม สรุปรายลูกค้า เข้า favorites ที่มีอยู่แล้วให้ครั้งเดียว (เมนูใหม่ 2026-10-03)
+      if (!localStorage.getItem('v7_favBackfillCustomerSummary')) {
+        localStorage.setItem('v7_favBackfillCustomerSummary', '1');
+        if (list.indexOf('customerSummary') === -1) { list.push('customerSummary'); saveFavorites(list); }
+      }
       return list;
     } catch(e) { }
   }
-  return ['today', 'dealers', 'pipeline', 'poTracker', 'tasks', 'visits'];
+  return ['today', 'dealers', 'pipeline', 'poTracker', 'customerSummary', 'tasks', 'visits'];
 }
 
 function saveFavorites(list) {
