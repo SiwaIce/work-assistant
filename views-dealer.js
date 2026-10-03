@@ -1455,6 +1455,7 @@ function rDealerDet(el) {
     <div class="tab-btn ${dealerTab==='runrate'?'act':''}" onclick="dealerTab='runrate';render()">🏪 Run Rate</div>
     <div class="tab-btn ${dealerTab==='quotation'?'act':''}" onclick="dealerTab='quotation';render()">💰 ใบเสนอราคา</div>
     <div class="tab-btn ${dealerTab==='so'?'act':''}" onclick="dealerTab='so';render()">📦 Sales Order</div>
+    <div class="tab-btn ${dealerTab==='arsummary'?'act':''}" onclick="dealerTab='arsummary';render()">💳 สรุปค้างส่ง/เครดิต</div>
     <div class="tab-btn ${dealerTab==='visit'?'act':''}" onclick="dealerTab='visit';render()">🤝 Visit</div>
     <div class="tab-btn ${dealerTab==='timeline'?'act':''}" onclick="dealerTab='timeline';render()">📝 Timeline</div>
     <div class="tab-btn ${dealerTab==='demo'?'act':''}" onclick="dealerTab='demo';render()">🚁 Demo</div>
@@ -1481,6 +1482,7 @@ function renderDealerTab(d) {
     case 'runrate': return (typeof dealerRunRateTab === 'function') ? dealerRunRateTab(d) : '';
     case 'quotation': return dealerQuotationTab(d);
     case 'so': return dealerSalesOrderTab(d);
+    case 'arsummary': return (typeof dealerARSummaryTab === 'function') ? dealerARSummaryTab(d) : '';
     case 'visit': return dealerVisitTab(d);
     case 'timeline': return dealerTimelineTab(d);
     case 'demo': return dealerDemoTab(d);
@@ -1747,6 +1749,7 @@ function dealerInfoTab(d) {
 
   <div class="stab-pane" data-diowner="1" data-stab="contacts" ${_diActiveTab !== 'contacts' ? 'style="display:none"' : ''}>
   ${renderDealerContacts(d)}
+  ${renderDealerAddresses(d)}
   </div>
 
   <div class="stab-pane" data-diowner="1" data-stab="comm" ${_diActiveTab !== 'comm' ? 'style="display:none"' : ''}>
@@ -4197,6 +4200,117 @@ function renderDealerContacts(d) {
   
   h += '</div>';
   return h;
+}
+
+// ================================================================
+// RENDER DEALER DELIVERY ADDRESSES — เก็บที่อยู่จัดส่งได้หลายที่ต่อ dealer เลือกตั้ง default ได้
+// ใช้เลือกซ้ำได้ตอนสร้าง/แก้ไข SO (deliveryAddress) แทนการพิมพ์ใหม่ทุกครั้ง
+// ================================================================
+function renderDealerAddresses(d) {
+  var addresses = d.addresses || [];
+
+  var h = '<div class="card"><h2>📍 ที่อยู่จัดส่ง (' + addresses.length + ')';
+  h += '<span class="ml"><button class="btn bsm bp" onclick="showAddAddressM(\'' + d.id + '\')">➕</button></span></h2>';
+
+  if (!addresses.length) {
+    h += '<div class="empty"><p>ยังไม่มีที่อยู่จัดส่ง — กด ➕ เพื่อเพิ่ม</p></div>';
+    h += '</div>';
+    return h;
+  }
+
+  for (var i = 0; i < addresses.length; i++) {
+    var a = addresses[i];
+    h += '<div class="contact-card' + (a.isDefault ? ' contact-primary' : '') + '">';
+    h += '<div class="contact-header">';
+    h += '<div class="contact-name">' + (a.isDefault ? '⭐ ' : '') + sanitize(a.label || 'ที่อยู่ ' + (i + 1)) + '</div>';
+    h += '<button class="btn-xs" onclick="showEditAddressM(\'' + d.id + '\',' + i + ')">✏️</button>';
+    h += '</div>';
+    h += '<div class="contact-note" style="white-space:pre-wrap">' + sanitize(a.address || '') + '</div>';
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function showAddAddressM(dealerId) {
+  var d = ST.getOne('dealers', dealerId);
+  var isFirst = !(d && d.addresses && d.addresses.length);
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>🏷️ ชื่อที่อยู่ *</label><input type="text" id="ad_label" class="fm-input" placeholder="เช่น สำนักงานใหญ่, ไซต์งาน A"></div>';
+  h += '<div class="fm-group"><label>📍 ที่อยู่ *</label><textarea id="ad_address" rows="3" class="fm-input" placeholder="ที่อยู่สำหรับจัดส่งสินค้า"></textarea></div>';
+  h += '<div class="fm-group"><label>⭐ ตั้งเป็นที่อยู่หลัก</label><div class="radio-g"><label><input type="radio" name="ad_default" value="1"' + (isFirst ? ' checked' : '') + '><span>ใช่</span></label><label><input type="radio" name="ad_default" value="0"' + (isFirst ? '' : ' checked') + '><span>ไม่</span></label></div></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn bp" onclick="saveAddress(\'' + dealerId + '\')">💾 บันทึก</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+
+  openM('➕ เพิ่มที่อยู่จัดส่ง', h);
+}
+
+function saveAddress(dealerId) {
+  var label = (document.getElementById('ad_label').value || '').trim();
+  var address = (document.getElementById('ad_address').value || '').trim();
+  if (!label || !address) { toast('กรุณาใส่ชื่อที่อยู่และที่อยู่'); return; }
+  var isDefault = document.querySelector('input[name="ad_default"]:checked') ? document.querySelector('input[name="ad_default"]:checked').value === '1' : false;
+
+  var d = ST.getOne('dealers', dealerId);
+  if (!d) return;
+  if (!d.addresses) d.addresses = [];
+  if (isDefault) d.addresses.forEach(function(a) { a.isDefault = false; });
+  d.addresses.push({ id: 'adr_' + Date.now(), label: label, address: address, isDefault: isDefault });
+  ST.update('dealers', dealerId, { addresses: d.addresses });
+  toast('✅ เพิ่มที่อยู่: ' + label);
+  closeMForce();
+  render();
+}
+
+function showEditAddressM(dealerId, idx) {
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.addresses || !d.addresses[idx]) return;
+  var a = d.addresses[idx];
+
+  var h = '<div style="max-width:450px">';
+  h += '<div class="fm-group"><label>🏷️ ชื่อที่อยู่ *</label><input type="text" id="ad_label" class="fm-input" value="' + sanitize(a.label || '') + '"></div>';
+  h += '<div class="fm-group"><label>📍 ที่อยู่ *</label><textarea id="ad_address" rows="3" class="fm-input">' + sanitize(a.address || '') + '</textarea></div>';
+  h += '<div class="fm-group"><label>⭐ ตั้งเป็นที่อยู่หลัก</label><div class="radio-g"><label><input type="radio" name="ad_default" value="1"' + (a.isDefault ? ' checked' : '') + '><span>ใช่</span></label><label><input type="radio" name="ad_default" value="0"' + (!a.isDefault ? ' checked' : '') + '><span>ไม่</span></label></div></div>';
+  h += '<div class="fm-actions">';
+  h += '<button class="btn bp" onclick="updateAddress(\'' + dealerId + '\',' + idx + ')">💾 บันทึก</button>';
+  h += '<button class="btn bd" onclick="deleteAddress(\'' + dealerId + '\',' + idx + ')">🗑️ ลบ</button>';
+  h += '<button class="btn" onclick="closeM()">ยกเลิก</button>';
+  h += '</div></div>';
+
+  openM('✏️ แก้ไขที่อยู่จัดส่ง', h);
+}
+
+function updateAddress(dealerId, idx) {
+  var label = (document.getElementById('ad_label').value || '').trim();
+  var address = (document.getElementById('ad_address').value || '').trim();
+  if (!label || !address) { toast('กรุณาใส่ชื่อที่อยู่และที่อยู่'); return; }
+  var isDefault = document.querySelector('input[name="ad_default"]:checked') ? document.querySelector('input[name="ad_default"]:checked').value === '1' : false;
+
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.addresses || !d.addresses[idx]) return;
+  if (isDefault) d.addresses.forEach(function(a) { a.isDefault = false; });
+  d.addresses[idx].label = label;
+  d.addresses[idx].address = address;
+  d.addresses[idx].isDefault = isDefault;
+
+  ST.update('dealers', dealerId, { addresses: d.addresses });
+  toast('💾 บันทึกแล้ว');
+  closeMForce();
+  render();
+}
+
+function deleteAddress(dealerId, idx) {
+  if (!confirm('⚠️ ลบที่อยู่นี้?')) return;
+  var d = ST.getOne('dealers', dealerId);
+  if (!d || !d.addresses || !d.addresses[idx]) return;
+  d.addresses.splice(idx, 1);
+  ST.update('dealers', dealerId, { addresses: d.addresses });
+  toast('🗑️ ลบแล้ว');
+  closeMForce();
+  render();
 }
 
 function showAddContactM(dealerId) {

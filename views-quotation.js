@@ -197,20 +197,26 @@ function formatNumber(n) {
 function recalculateQuotationTotal() {
   var grossTotal = 0;
   var totalCost = 0;
+  var cashDiscountTotal = 0;
   for (var i = 0; i < quotationItems.length; i++) {
-    grossTotal += (Number(quotationItems[i].amount) || 0);
+    var amt = Number(quotationItems[i].amount) || 0;
+    grossTotal += amt;
     totalCost += (Number(quotationItems[i].cost) || 0) * (Number(quotationItems[i].quantity) || 1);
+    cashDiscountTotal += amt * (Number(quotationItems[i].cashDiscountPercent) || 0) / 100;
   }
+  var afterCashTotal = grossTotal - cashDiscountTotal;
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPct = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
-  var discountAmount = grossTotal * discountPct / 100;
-  var netAmount = grossTotal - discountAmount;
+  var discountAmount = afterCashTotal * discountPct / 100;
+  var netAmount = afterCashTotal - discountAmount;
   var vatPercent = 7;
   var vatAmount = netAmount * vatPercent / 100;
   var totalAmount = netAmount + vatAmount;
-  
+
   var grossEl = document.getElementById('quoteGrossTotal');
   if (grossEl) grossEl.textContent = formatNumber(grossTotal) + ' ฿';
+  var cashDiscEl = document.getElementById('quoteCashDiscountAmount');
+  if (cashDiscEl) cashDiscEl.textContent = formatNumber(cashDiscountTotal) + ' ฿';
   var discountAmtEl = document.getElementById('quoteDiscountAmount');
   if (discountAmtEl) discountAmtEl.textContent = formatNumber(discountAmount) + ' ฿';
   var netEl = document.getElementById('quoteNetAmount');
@@ -235,7 +241,7 @@ function recalculateQuotationTotal() {
     }
   }
 
-  return { grossTotal: grossTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount, totalCost: totalCost };
+  return { grossTotal: grossTotal, cashDiscountTotal: cashDiscountTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount, totalCost: totalCost };
 }
 
 // ================================================================
@@ -308,6 +314,7 @@ function renderQuotationItemsTable() {
   html += '<th>ชื่อสินค้า</th>';
   html += '<th style="width:80px;text-align:center">จำนวน</th>';
   html += '<th style="width:120px;text-align:right">ราคา/หน่วย</th>';
+  html += '<th style="width:95px;text-align:center">ส่วนลดเงินสด %</th>';
   html += '<th style="width:120px;text-align:right">รวม</th>';
   if (showQuotationCost) {
     html += '<th style="width:110px;text-align:right">ต้นทุน/หน่วย</th>';
@@ -323,6 +330,10 @@ function renderQuotationItemsTable() {
     var itemQty = Number(item.quantity) || 1;
     var itemTotalCost = itemCost * itemQty;
     var itemMargin = item.unitPrice > 0 ? ((item.unitPrice - itemCost) / item.unitPrice * 100) : 0;
+    var itemAmount = Number(item.amount) || 0;
+    var itemCashDiscPct = Number(item.cashDiscountPercent) || 0;
+    var itemCashDiscAmt = itemAmount * itemCashDiscPct / 100;
+    var itemNetAmount = itemAmount - itemCashDiscAmt;
     html += '<tr>';
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + (item.sku ? qcopyHtml(item.sku) : '-') + '</td>';
@@ -332,7 +343,9 @@ function renderQuotationItemsTable() {
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';
-    html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(item.amount) + ' ฿</td>';
+    html += '<td style="text-align:center"><input type="number" class="quote-item-cashdisc" data-idx="' + i + '" value="' + itemCashDiscPct + '" min="0" max="100" step="0.1" style="width:65px;text-align:center;padding:4px" onchange="updateQuotationItemCashDiscount(' + i + ', this.value)"></td>';
+    html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(itemNetAmount) + ' ฿' +
+      (itemCashDiscPct > 0 ? '<div style="font-size:10px;font-weight:400;color:var(--text2);text-decoration:line-through">' + formatNumber(itemAmount) + ' ฿</div>' : '') + '</td>';
     if (showQuotationCost) {
       html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="js-money" value="' + nmI(itemCost) + '" style="width:100px;text-align:right;padding:4px;background:var(--bg2)" onchange="updateQuotationItemCost(' + i + ', this.value)"></td>';
       html += '<td style="text-align:right;color:#f59e0b">' + formatNumber(Math.round(itemTotalCost)) + ' ฿</td>';
@@ -343,23 +356,27 @@ function renderQuotationItemsTable() {
   }
 
   // แถวสรุปท้ายตาราง — รวม / ต้นทุนรวม / Margin รวม (screenshot เก็บได้)
-  var sumAmount = 0, sumCost = 0;
+  var sumAmount = 0, sumCost = 0, sumCashDiscount = 0;
   quotationItems.forEach(function(it) {
-    sumAmount += Number(it.amount) || 0;
+    var amt = Number(it.amount) || 0;
+    sumAmount += amt;
     sumCost += (Number(it.cost) || 0) * (Number(it.quantity) || 1);
+    sumCashDiscount += amt * (Number(it.cashDiscountPercent) || 0) / 100;
   });
   var totalMargin = sumAmount > 0 ? ((sumAmount - sumCost) / sumAmount * 100) : 0;
-  // VAT — อิงสูตรเดียวกับ recalculateQuotationTotal (หักส่วนลดก่อนค่อยคิด VAT) อ่านส่วนลดจากช่องในการ์ดสรุป
-  // ด้านล่างของหน้า ถ้ายังไม่มี (เช่น หน้ายังโหลดไม่เสร็จ) ถือว่าไม่มีส่วนลด
+  // VAT — อิงสูตรเดียวกับ recalculateQuotationTotal (หักส่วนลดเงินสดต่อรายการก่อน แล้วค่อยหักส่วนลดรวม% แล้วค่อยคิด VAT)
+  // อ่านส่วนลดจากช่องในการ์ดสรุปด้านล่างของหน้า ถ้ายังไม่มี (เช่น หน้ายังโหลดไม่เสร็จ) ถือว่าไม่มีส่วนลด
   var discountPctEl = document.getElementById('quoteDiscountPercent');
   var discountPct = discountPctEl ? (parseFloat(discountPctEl.value) || 0) : 0;
-  var netAfterDiscount = sumAmount - (sumAmount * discountPct / 100);
+  var sumAfterCashDiscount = sumAmount - sumCashDiscount;
+  var netAfterDiscount = sumAfterCashDiscount - (sumAfterCashDiscount * discountPct / 100);
   var vatAmount = netAfterDiscount * 7 / 100;
   var grandTotalWithVat = netAfterDiscount + vatAmount;
   // sticky bottom — แถวสรุปให้ติดล่างของกรอบเลื่อนเสมอ (เหมือน thead ที่ติดบนอยู่แล้ว) จะได้เห็นยอดรวมโดยไม่ต้องเลื่อนลงสุด
   html += '</tbody><tfoot><tr style="position:sticky;bottom:0;border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">';
-  html += '<td colspan="5" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
+  html += '<td colspan="6" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
   html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿' +
+    (sumCashDiscount > 0 ? '<div style="font-size:.72em;font-weight:400;color:#f59e0b;margin-top:2px">- ส่วนลดเงินสด: ' + formatNumber(Math.round(sumCashDiscount)) + ' ฿</div>' : '') +
     '<div style="font-size:.72em;font-weight:400;color:var(--text2);margin-top:2px">+VAT 7%: ' + formatNumber(Math.round(vatAmount)) + ' ฿</div>' +
     '<div style="font-size:1em;font-weight:800;color:var(--accent);margin-top:4px;padding:4px 10px;background:var(--accent-light);border-radius:8px;display:inline-block;white-space:nowrap">🧾 รวม VAT ' + formatNumber(Math.round(grandTotalWithVat)) + ' ฿</div>' +
     '</td>';
@@ -412,6 +429,30 @@ function updateQuotationItemPrice(idx, price) {
   quotationItems[idx].priceLevel = null; // แก้ราคาเองมือ ไม่ผูกกับ Level ไหนแล้ว (ป้าย Level จะไม่ highlight)
   renderQuotationItemsTable();
   recalculateQuotationTotal();
+}
+
+// ส่วนลดเงินสด % ต่อรายการ (กรณีลูกค้าชำระเงินสด) — ไม่กระทบ item.amount (ยอดตั้งต้น) เพื่อไม่ให้ไปยุ่งกับ
+// margin/SO/export อื่นๆ ที่อ้างอิง amount อยู่แล้ว คิดลดสดเป็นอีกชั้นหนึ่งตอนสรุปยอด (ดู recalculateQuotationTotal)
+function updateQuotationItemCashDiscount(idx, val) {
+  if (!quotationItems[idx]) return;
+  var pct = parseFloat(val) || 0;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  quotationItems[idx].cashDiscountPercent = pct;
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+}
+
+// ปุ่ม "ใช้กับทุกรายการ" — เติมส่วนลดเงินสด % เดียวกันให้ทุกแถวในคลิกเดียว (ค่าเริ่มต้น 0.5 แก้ไขได้ก่อนกด)
+function applyCashDiscountToAllItems() {
+  var el = document.getElementById('qiCashDiscAll');
+  var pct = el ? (parseFloat(el.value) || 0) : 0;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  quotationItems.forEach(function(it) { it.cashDiscountPercent = pct; });
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+  toast('💵 ใส่ส่วนลดเงินสด ' + pct + '% ให้ทุกรายการแล้ว (' + quotationItems.length + ' รายการ)');
 }
 
 // ป้าย Level ต่อรายการในตาราง — คลิกเพื่อ re-price แถวนี้แถวเดียวตาม Level ที่เลือก
@@ -2208,6 +2249,13 @@ function renderEditQuotationPage(quote) {
       html += '<div class="hint" style="margin-bottom:10px">🔀 มีฉบับแก้ไข ' + revs.length + ' ฉบับ — ล่าสุด <a onclick="editQuotation(\'' + latest.id + '\')" style="color:var(--accent)">' + sanitize(latest.quoteNo) + '</a></div>';
     }
   }
+  // reverse link: ใบเสนอราคานี้ถูกใช้สร้าง SO ไปแล้วหรือยัง (ดูจาก salesOrders.quotationId)
+  var _linkedSOs = (typeof ST !== 'undefined') ? ST.getAll('salesOrders').filter(function(s) { return s.quotationId === quote.id; }) : [];
+  if (_linkedSOs.length) {
+    html += '<div class="hint" style="margin-bottom:10px">📦 ใช้สร้าง SO แล้ว: ' + _linkedSOs.map(function(s) {
+      return '<a href="#" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'});return false" style="color:var(--accent)">' + sanitize(s.soNumber || '-') + '</a>';
+    }).join(', ') + '</div>';
+  }
   
   // Form Card
   html += '<div class="card" style="margin-bottom:16px">';
@@ -2244,6 +2292,15 @@ function renderEditQuotationPage(quote) {
   html += '<h2>📦 รายการสินค้า <span class="ml"><button id="btnToggleCost" class="btn bsm ' + (showQuotationCost ? 'bp' : 'bo') + '" onclick="toggleQuotationCostView()" title="แสดง/ซ่อนต้นทุน-กำไร">📊 กำไร</button>' +
     '<button class="btn bsm bo" onclick="toggleQuotationItemsFullscreen()" title="ขยายเต็มจอ — เห็นทุกคอลัมน์โดยไม่ต้องเลื่อน">⛶ ขยายเต็มจอ</button></span></h2>';
 
+  // ส่วนลดเงินสด (กรณีลูกค้าชำระเงินสด) — ตั้งค่าเดียวแล้วกดใส่ให้ทุกแถวในตารางด้านล่างได้เลย ไม่ต้องกรอกทีละรายการ
+  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;background:var(--bg2);border-radius:8px">' +
+    '<span style="font-size:13px">💵 ส่วนลดเงินสด:</span>' +
+    '<input type="number" id="qiCashDiscAll" value="0.5" min="0" max="100" step="0.1" style="width:60px;text-align:center;padding:4px">' +
+    '<span style="font-size:13px">%</span>' +
+    '<button class="btn bsm bo" onclick="applyCashDiscountToAllItems()" title="ใส่ส่วนลดเงินสด % นี้ให้ทุกรายการในตาราง">ใช้กับทุกรายการ</button>' +
+    '<span style="font-size:11px;color:var(--text2)">หรือแก้ทีละแถวในช่อง "ส่วนลดเงินสด %" ของตารางด้านล่าง</span>' +
+    '</div>';
+
   // Solution preset chips — เอา pattern จาก Quick Price Estimator มาใช้ซ้ำ กดทีเดียวเพิ่มได้หลายรายการพร้อมราคาตาม Level ของใบนี้
   html += '<div id="quoteSolutionChipZone"></div>';
 
@@ -2268,6 +2325,7 @@ function renderEditQuotationPage(quote) {
   html += '<h2>💰 สรุป</h2>';
   html += '<div style="max-width:400px;margin-left:auto">';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
+  html += '<div id="quoteCashDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลดเงินสด (ต่อรายการ):</span><span id="quoteCashDiscountAmount" style="font-weight:700;color:#f59e0b">0 ฿</span></div>';
   html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal();renderQuotationItemsTable()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
@@ -2450,14 +2508,18 @@ function saveCurrentQuotation() {
   
   // ✅ คำนวณ totals จาก quotationItems ปัจจุบัน
   var grossTotal = 0;
+  var cashDiscountTotal = 0;
   for (var i = 0; i < quotationItems.length; i++) {
-    grossTotal += (Number(quotationItems[i].amount) || 0);
+    var _amt = Number(quotationItems[i].amount) || 0;
+    grossTotal += _amt;
+    cashDiscountTotal += _amt * (Number(quotationItems[i].cashDiscountPercent) || 0) / 100;
   }
-  
+  var afterCashTotal = grossTotal - cashDiscountTotal;
+
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPercent = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
-  var discountAmount = grossTotal * discountPercent / 100;
-  var netAmount = grossTotal - discountAmount;
+  var discountAmount = afterCashTotal * discountPercent / 100;
+  var netAmount = afterCashTotal - discountAmount;
   var vatAmount = netAmount * 7 / 100;
   var totalAmount = netAmount + vatAmount;
 
@@ -2468,7 +2530,7 @@ function saveCurrentQuotation() {
     // ผูกกับโครงการหรือถัง Run rate + Project ID ที่ถือไว้ — SO ที่เปิดจากใบนี้จะสืบทอดไปต่อ (ดู _soFillFromQuote)
     linkType: linkType, pipelineId: linkPipelineId, runrateId: linkRunrateId, projectId: linkProjectId,
     items: JSON.parse(JSON.stringify(quotationItems)),
-    grossTotal: grossTotal, discountPercent: discountPercent, discountAmount: discountAmount,
+    grossTotal: grossTotal, cashDiscountTotal: cashDiscountTotal, discountPercent: discountPercent, discountAmount: discountAmount,
     netAmount: netAmount, vatPercent: 7, vatAmount: vatAmount, totalAmount: totalAmount,
     remark: remark, status: status, attachments: window._quoteAttach || [],
     updatedAt: new Date().toISOString()
@@ -2626,19 +2688,26 @@ function previewQuotation(quoteId) {
   var companyTax = '0105563027693';
   
   var itemsHtml = '';
+  var hasCashDiscount = (quote.items || []).some(function(it) { return (Number(it.cashDiscountPercent) || 0) > 0; });
   for (var i = 0; i < quote.items.length; i++) {
     var item = quote.items[i];
+    var itemAmt = Number(item.amount) || 0;
+    var itemCashPct = Number(item.cashDiscountPercent) || 0;
+    var itemCashAmt = itemAmt * itemCashPct / 100;
+    var itemNetAmt = itemAmt - itemCashAmt;
     itemsHtml += '<tr>';
     itemsHtml += '<td style="padding:8px;text-align:center">' + (i + 1) + '</td>';
     itemsHtml += '<td style="padding:8px">' + sanitize(item.sku || '-') + '</td>';
     itemsHtml += '<td style="padding:8px">' + sanitize(item.name) + '</td>';
     itemsHtml += '<td style="padding:8px;text-align:center">' + (item.quantity || 1) + '</td>';
     itemsHtml += '<td style="padding:8px;text-align:right">' + formatNumber(item.unitPrice) + '</td>';
-    itemsHtml += '<td style="padding:8px;text-align:right;font-weight:700">' + formatNumber(item.amount) + '</td>';
+    if (hasCashDiscount) itemsHtml += '<td style="padding:8px;text-align:center">' + (itemCashPct > 0 ? itemCashPct + '%' : '-') + '</td>';
+    itemsHtml += '<td style="padding:8px;text-align:right;font-weight:700">' + formatNumber(itemNetAmt) + '</td>';
     itemsHtml += '</tr>';
   }
-  
+
   var showDiscount = quote.discountPercent && quote.discountPercent > 0;
+  var showCashDiscount = quote.cashDiscountTotal && quote.cashDiscountTotal > 0;
   
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Quotation ' + quote.quoteNo + '</title>';
   html += '<style>';
@@ -2666,9 +2735,10 @@ function previewQuotation(quoteId) {
   html += '<div class="customer-info"><div><h3>🏪 Customer</h3><p><strong>' + sanitize(dealer.name) + '</strong></p><p>' + (dealer.address || '-') + '</p><p>Tel: ' + (dealer.phone || '-') + '</p></div>';
   html += '<div><h3>📋 Reference</h3><p>PO No.: ' + (quote.poNo || '-') + '</p><p>Payment Term: ' + sanitize(quote.paymentTerm) + '</p><p>Quoted by: ' + sanitize(quote.quotedBy) + '</p></div></div>';
   
-  html += '<table class="items-table"><thead><tr><th>#</th><th>SKU</th><th>Description</th><th>QTY</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>';
-  
+  html += '<table class="items-table"><thead><tr><th>#</th><th>SKU</th><th>Description</th><th>QTY</th><th>Unit Price</th>' + (hasCashDiscount ? '<th>Cash Disc.</th>' : '') + '<th>Amount</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>';
+
   html += '<div class="summary"><div class="summary-row"><span>Gross Total:</span><span>' + formatNumber(quote.grossTotal) + ' ฿</span></div>';
+  if (showCashDiscount) html += '<div class="summary-row"><span>Cash Payment Discount:</span><span>-' + formatNumber(quote.cashDiscountTotal) + ' ฿</span></div>';
   if (showDiscount) html += '<div class="summary-row"><span>Discount (' + quote.discountPercent + '%):</span><span>' + formatNumber(quote.discountAmount) + ' ฿</span></div>';
   html += '<div class="summary-row"><span>Net Amount:</span><span>' + formatNumber(quote.netAmount) + ' ฿</span></div>';
   html += '<div class="summary-row"><span>VAT 7%:</span><span>' + formatNumber(quote.vatAmount) + ' ฿</span></div>';
