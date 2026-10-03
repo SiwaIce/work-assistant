@@ -887,6 +887,54 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 
 /* ชื่อผู้ยืมกดดูประวัติได้ */
 .bw-name { color:var(--accent); text-decoration:underline; cursor:pointer; }
+
+/* ================================================================
+   ไทม์ไลน์การยืม-คืนรายเครื่อง + คิวถัดไป — ดู _unitTimelineHtml/_unitQueueListHtml ใน <script>
+   ผ่าน mockup ให้ผู้ใช้ดูก่อนแล้ว (ดูบริบทใน commit message) หน้าตา/คลาสตรงกับที่ยืนยันแล้วทุกจุด
+   ================================================================ */
+.tl-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--text2); margin-bottom:14px; }
+.tl-legend span { display:flex; align-items:center; gap:5px; }
+.tl-dot { width:10px; height:10px; border-radius:3px; display:inline-block; flex-shrink:0; }
+.tl-scroll { overflow-x:auto; padding-bottom:6px; }
+.tl-track { position:relative; min-width:560px; }
+.tl-ruler { position:relative; height:18px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+.tl-ruler-tick { position:absolute; top:0; font-size:10.5px; color:var(--text3); white-space:nowrap; transform:translateX(-50%); }
+.tl-ruler-tick.today { color:var(--bad); font-weight:700; }
+.tl-lanes { position:relative; }
+.tl-today { position:absolute; top:0; bottom:0; width:2px; background:var(--bad); z-index:3; }
+.tl-lane { position:relative; height:34px; margin-bottom:6px; }
+.tl-seg { position:absolute; top:0; height:34px; border-radius:8px; font-size:11px; font-weight:600; color:#fff; display:flex;
+  align-items:center; padding:0 8px; overflow:hidden; white-space:nowrap; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.15);
+  transition:transform .12s, box-shadow .12s; }
+.tl-seg:hover, .tl-seg.active { transform:translateY(-2px); box-shadow:0 4px 10px rgba(0,0,0,.22); }
+/* สีตามความหมายเดียวกับ _scBusyBadge/.sc-badge-* ที่ใช้ทั่วหน้านี้อยู่แล้ว (แถวตารางเครื่อง ฯลฯ) — ให้ความหมาย
+   สีตรงกันทั้งหน้า ไม่ใช่คิดชุดสีใหม่แยกเฉพาะไทม์ไลน์ */
+.tl-seg.out, .tl-seg.quar { background:var(--warn); }
+.tl-seg.late, .tl-seg.unconf { background:var(--bad); }
+.tl-seg.soon { background:var(--accent); }
+.tl-seg.pending { background:var(--text3); }
+
+.q-item { display:flex; gap:10px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--border); cursor:pointer; border-radius:8px; }
+.q-item:last-child { border-bottom:none; }
+.q-item:hover, .q-item.hl { background:var(--surface-2); margin:0 -8px; padding-left:8px; padding-right:8px; }
+.q-badge { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px;
+  flex-shrink:0; color:#fff; font-weight:700; margin-top:1px; }
+.q-badge.out, .q-badge.quar { background:var(--warn); }
+.q-badge.late, .q-badge.unconf { background:var(--bad); }
+.q-badge.soon { background:var(--accent); }
+.q-badge.pending { background:var(--text3); }
+.q-main { flex:1; min-width:0; }
+.q-title { font-weight:700; font-size:13.5px; }
+.q-meta { font-size:12px; color:var(--text2); margin-top:2px; }
+.q-warn { font-size:12px; color:var(--bad); background:var(--bad-soft); border-radius:7px; padding:6px 9px; margin-top:6px;
+  display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; }
+.q-acts { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; }
+
+.tl-detail-drawer { border:1px solid var(--accent); background:var(--accent-soft); border-radius:10px; padding:12px 14px; margin-top:14px; }
+.tl-detail-drawer h4 { margin:0 0 8px; font-size:13.5px; }
+.tl-dd-kv { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:12.5px; }
+.tl-dd-kv span:nth-child(odd) { color:var(--text2); }
+.tl-dd-acts { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -3431,6 +3479,9 @@ function openLoanLogM(loanId) {
   h += scLoanLogHtml(l);
   h += _scJobSiblingsHtml(l);
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">';
+  // ลิงก์กลับไปหน้าเครื่อง (มีไทม์ไลน์การยืม-คืน + คิวถัดไป) — ผู้ใช้ขอให้ลิงก์กันไปมาได้ทุกทิศทาง ไม่ใช่แค่
+  // จากหน้าเครื่อง → ใบยืมอย่างเดียว ให้ย้อนกลับจากที่นี่ไปหน้าเครื่องได้ด้วยเหมือนกัน
+  h += '<button class="btn btn-ghost" onclick="closeSm();staffTab(\'units\');openUnitDetail(\'' + _scEsq(l.unitId) + '\')" title="ดูไทม์ไลน์การยืม-คืน/คิวถัดไปของเครื่องนี้">🔧 ดูเครื่องนี้</button>';
   if (l.status === 'active') {
     h += '<button class="btn btn-ghost" onclick="openExtendM(\'' + loanId + '\')">⏩ ต่อเวลา</button>';
     h += '<button class="btn btn-ghost" onclick="openTransferM(\'' + loanId + '\')">🔄 โอน</button>';
@@ -4273,6 +4324,191 @@ function unitCardHtml(raw, n, soon) {
 // อยู่ ถ้าอัปเดต _unitDetailReturnTo ทุกครั้งที่เรียก จะเผลอไปลบ callback ที่เพิ่งตั้งไว้ทิ้งภายในเสี้ยววินาที
 // จึงอัปเดตเฉพาะตอนเปิดเครื่อง "ใหม่" หรือเปลี่ยนไปดูเครื่องอื่นเท่านั้น ไม่แตะตอนรีเฟรชเครื่องเดิมซ้ำ
 var _unitDetailReturnTo = null;
+
+// ================================================================
+// ไทม์ไลน์การยืม-คืนรายเครื่อง + คิวถัดไป (หน้ารายละเอียดเครื่อง) — ผู้ใช้ขอให้เห็นภาพรวมว่าเครื่องนี้ใครถือ
+// ครองอยู่ ใครจองคิวต่อไปบ้าง ชนกับใครไหม ในหน้าเดียว ไม่ต้องออกไปหาใบจองเอง (ส่ง mockup ให้ดูก่อนแล้ว
+// ผู้ใช้ยืนยันหน้าตานี้) ใช้ _lfConflict/scBookings()/_scBusyKind ชุดเดียวกับที่แท็บใบจอง/ติดตามคืนใช้อยู่แล้ว
+// สีแต่ละ kind ใช้ความหมายเดียวกับ _scBusyBadge ทั้งหน้า (ดู CSS .tl-seg/.q-badge) ไม่ได้คิดชุดสีแยกใหม่
+// ================================================================
+function _unitTimelineKey(b) { return b.loanId || (b.unitId + '|' + _scIso(b.s) + '|' + _scIso(b.e)); }
+
+// ดึงรายการที่เกี่ยวข้องกับเครื่องนี้ตั้งแต่ "ตอนนี้" เป็นต้นไป (ย้อนหลังนิดหน่อยกันของที่เพิ่งคืนหายไปทันที)
+// — ของที่ยังไม่คืน (out/late) ถือว่ายังไม่จบอย่างน้อยถึงวันนี้เสมอ แม้กำหนดเดิมจะเลยมาแล้วก็ตาม กันแท่งหายไป
+// จากหน้าต่างที่แสดงทั้งที่ของยังอยู่กับลูกค้าจริง ส่วน "รอ (ชนคิว)" ต้องเห็นเสมอไม่ว่าวันที่จะเป็นเมื่อไหร่
+// จนกว่าจะ resolve — จัดเลน (lane) ด้วย greedy interval scheduling ทั่วไป ไม่จำกัดแค่ 2 เลน เผื่อมีจองซ้อนกัน
+// มากกว่า 1 คู่ในอนาคต
+function _unitTimelineItems(unitId) {
+  var today = _scDay(new Date());
+  var windowStart = _scAdd(today, -3);
+  var windowEnd = _scAdd(today, 60);
+  var items = [];
+  scBookings().forEach(function(b) {
+    if (b.unitId !== unitId) return;
+    var kind = _scBusyKind(b, today);
+    var dispEnd = ((kind === 'out' || kind === 'late') && b.e < today) ? today : b.e;
+    if (kind !== 'pending' && !(dispEnd >= windowStart && b.s <= windowEnd)) return;
+    items.push({ b: b, kind: kind, dispEnd: dispEnd });
+  });
+  items.sort(function(a, b) { return a.b.s - b.b.s; });
+  var laneEnds = [];
+  items.forEach(function(it) {
+    var placed = false;
+    for (var i = 0; i < laneEnds.length; i++) {
+      if (laneEnds[i] < it.b.s) { it.lane = i; laneEnds[i] = it.dispEnd; placed = true; break; }
+    }
+    if (!placed) { it.lane = laneEnds.length; laneEnds.push(it.dispEnd); }
+  });
+  items.laneCount = laneEnds.length;
+  return items;
+}
+
+function _unitTimelineHtml(unitId) {
+  var items = _unitTimelineItems(unitId);
+  if (!items.length) return '';
+  var today = _scDay(new Date());
+  var rangeStart = items.reduce(function(m, it) { return it.b.s < m ? it.b.s : m; }, today);
+  if (rangeStart > today) rangeStart = today;
+  var rangeEnd = items.reduce(function(m, it) { return it.dispEnd > m ? it.dispEnd : m; }, today);
+  rangeEnd = _scAdd(rangeEnd, 2);
+  var totalDays = Math.max(1, Math.round((rangeEnd - rangeStart) / 86400000));
+  function pct(d) { return Math.max(0, Math.min(100, (d - rangeStart) / 86400000 / totalDays * 100)); }
+
+  var ticks = [];
+  var todayOff = (today - rangeStart) / 86400000;
+  var hasToday = todayOff >= 0 && todayOff <= totalDays;
+  if (hasToday) ticks.push({ pct: pct(today), label: 'วันนี้', cls: ' today' });
+  var cursor = new Date(rangeStart);
+  while (cursor.getDay() !== 1) cursor = _scAdd(cursor, 1);
+  while (cursor <= rangeEnd) {
+    if (_scIso(cursor) !== _scIso(today)) ticks.push({ pct: pct(cursor), label: _scFmt(cursor), cls: '' });
+    cursor = _scAdd(cursor, 7);
+  }
+  var rulerHtml = ticks.map(function(t) { return '<div class="tl-ruler-tick' + t.cls + '" style="left:' + t.pct + '%">' + esc(t.label) + '</div>'; }).join('');
+
+  var lanesHtml = '';
+  for (var ln = 0; ln < items.laneCount; ln++) {
+    var segs = items.filter(function(it) { return it.lane === ln; }).map(function(it) {
+      var left = pct(it.b.s);
+      var right = pct(_scAdd(it.dispEnd, 1));
+      var width = Math.max(1.5, right - left);
+      var key = _unitTimelineKey(it.b);
+      var label = (it.kind === 'pending' ? '⏳ ' : '') + esc(it.b.borrower || 'ไม่ระบุผู้ยืม');
+      return '<div class="tl-seg ' + it.kind + '" id="tlseg-' + esc(unitId) + '-' + esc(key) + '" style="left:' + left + '%;width:' + width + '%" ' +
+        'onclick="openUnitTimelineDetail(\'' + _scEsq(unitId) + '\',\'' + _scEsq(key) + '\')" title="' + esc(it.b.borrower || '') + ' — ' + esc(_SC_BUSY_LABEL[it.kind] || '') + '">' + label + '</div>';
+    }).join('');
+    lanesHtml += '<div class="tl-lane">' + segs + '</div>';
+  }
+  var todayLineHtml = hasToday ? '<div class="tl-today" style="left:' + pct(today) + '%"></div>' : '';
+
+  return '<div class="card"><div style="font-weight:700;margin-bottom:10px">📅 ไทม์ไลน์การยืม-คืน (' + esc(_scFmt(rangeStart)) + ' – ' + esc(_scFmt(rangeEnd)) + ')</div>' +
+    '<div class="tl-legend">' +
+    '<span><i class="tl-dot" style="background:var(--warn)"></i> กำลังยืม / รอรับเข้าคลัง</span>' +
+    '<span><i class="tl-dot" style="background:var(--bad)"></i> เลยกำหนดคืน / รอยืนยันรับของ</span>' +
+    '<span><i class="tl-dot" style="background:var(--accent)"></i> จองล่วงหน้า (ยืนยันแล้ว)</span>' +
+    '<span><i class="tl-dot" style="background:var(--text3)"></i> รอ (ชนคิว)</span>' +
+    '<span><i class="tl-dot" style="background:var(--bad);width:2px;border-radius:0"></i> วันนี้</span></div>' +
+    '<div class="tl-scroll"><div class="tl-track">' +
+    '<div class="tl-ruler">' + rulerHtml + '</div>' +
+    '<div class="tl-lanes">' + todayLineHtml + lanesHtml + '</div>' +
+    '</div></div>' +
+    '<div style="font-size:11.5px;color:var(--text3);margin-top:6px">💡 กดที่แถบเพื่อดูรายละเอียด — แถบที่ซ้อนกันหลายแถวหมายถึงมีคนจองทับช่วงเวลาเดียวกัน</div>' +
+    '<div id="unitTlDetail_' + esc(unitId) + '"></div>' +
+    '</div>';
+}
+
+function _unitQueueListHtml(unitId) {
+  var items = _unitTimelineItems(unitId);
+  if (!items.length) return '';
+  var today = _scDay(new Date());
+  var h = '<div class="card"><div style="font-weight:700;margin-bottom:6px">🔜 คิวถัดไปของเครื่องนี้ (เรียงตามวัน)</div>';
+  items.forEach(function(it, idx) {
+    var b = it.b, key = _unitTimelineKey(b);
+    var dueTxt = it.kind === 'pending' ? '' : (it.kind === 'soon' ? 'เริ่มยืม ' + _scD(_scIso(b.s))
+      : (function() { var d = daysBetween(_scIso(today), _scIso(it.dispEnd)); return d < 0 ? 'เลยมา ' + Math.abs(d) + ' วัน' : d === 0 ? 'ครบกำหนดวันนี้' : 'อีก ' + d + ' วัน'; })());
+    var titleTxt = it.kind === 'pending' ? '⏳ รอ (ชนคิว) — ' + esc(b.borrower || 'ไม่ระบุผู้ยืม')
+      : it.kind === 'out' ? '🟠 กำลังยืมอยู่ตอนนี้ — ' + esc(b.borrower || '-')
+      : it.kind === 'late' ? '🔴 เลยกำหนดคืน — ' + esc(b.borrower || '-')
+      : it.kind === 'quar' ? '🟠 รอรับเข้าคลัง — ' + esc(b.borrower || '-')
+      : it.kind === 'unconf' ? '🔴 รอยืนยันรับของ — ' + esc(b.borrower || '-')
+      : '🔵 คิวถัดไป — ' + esc(b.borrower || '-');
+    var warnHtml = '';
+    if (it.kind === 'pending') {
+      var conflict = _lfConflict(unitId, _scIso(b.s), _scIso(b.e), b.loanId);
+      if (conflict) {
+        warnHtml = '<div class="q-warn">⚠️ ชนกับ <b>' + esc(conflict.borrower || 'ไม่ระบุผู้ยืม') + '</b>' +
+          (conflict.jobNo ? ' (ใบจอง ' + esc(conflict.jobNo) + ')' : '') + ' ถึง ' + esc(_scFmt(conflict.e)) +
+          (conflict.purpose ? ' — ' + esc(conflict.purpose) : '') +
+          (conflict.loanId ? ' <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openLoanLogM(\'' + _scEsq(conflict.loanId) + '\')" style="margin-left:auto;flex-shrink:0">🔗 ดูรายละเอียด</button>' : '') +
+          '</div>';
+      }
+    }
+    h += '<div class="q-item" id="q-' + esc(unitId) + '-' + esc(key) + '" onclick="openUnitTimelineDetail(\'' + _scEsq(unitId) + '\',\'' + _scEsq(key) + '\')">' +
+      '<div class="q-badge ' + it.kind + '">' + (it.kind === 'pending' ? '⚠' : (idx + 1)) + '</div>' +
+      '<div class="q-main"><div class="q-title">' + titleTxt + '</div>' +
+      '<div class="q-meta">📅 ' + esc(_scD(_scIso(b.s))) + ' → ' + esc(_scD(_scIso(b.e))) + (dueTxt ? ' (' + esc(dueTxt) + ')' : '') +
+      (b.purpose ? ' · 📝 ' + esc(b.purpose) : '') + (b.jobNo ? ' · 📄 ใบจอง ' + esc(b.jobNo) : '') + '</div>' +
+      warnHtml + '</div>' +
+      '<div class="q-acts">' + (b.loanId ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openUnitTimelineDetail(\'' + _scEsq(unitId) + '\',\'' + _scEsq(key) + '\')">🔗 รายละเอียด</button>' : '') + '</div>' +
+      '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// กดที่แถบไทม์ไลน์ หรือแถวในลิสต์คิวถัดไป — เปิดกล่องรายละเอียดในหน้าเดียวกัน (ไม่เด้งไป modal) พร้อมไฮไลต์
+// ทั้งแถบ+แถวที่ตรงกันให้เห็นว่าเป็นรายการเดียวกัน ปุ่มที่ให้กดเป็นของจริงตามสถานะปัจจุบันของรายการนั้น
+function openUnitTimelineDetail(unitId, key) {
+  var items = _unitTimelineItems(unitId);
+  var it = items.filter(function(x) { return _unitTimelineKey(x.b) === key; })[0];
+  var box = document.getElementById('unitTlDetail_' + unitId);
+  if (!it || !box) return;
+  var b = it.b;
+
+  document.querySelectorAll('#unitDetailView .tl-seg').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('#unitDetailView .q-item').forEach(function(el) { el.classList.remove('hl'); });
+  var seg = document.getElementById('tlseg-' + unitId + '-' + key); if (seg) seg.classList.add('active');
+  var row = document.getElementById('q-' + unitId + '-' + key); if (row) row.classList.add('hl');
+
+  var acts = [];
+  if (it.kind === 'out' || it.kind === 'late') {
+    acts.push('<button class="btn btn-primary btn-sm" onclick="markLoanReturned(\'' + _scEsq(b.loanId) + '\')">✅ รับคืนแล้ว</button>');
+    acts.push('<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + _scEsq(b.loanId) + '\')">⏩ ต่อเวลา</button>');
+    acts.push('<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + _scEsq(b.loanId) + '\')">🔄 โอน</button>');
+  } else if (it.kind === 'unconf') {
+    acts.push('<button class="btn btn-primary btn-sm" onclick="openConfirmPickupM(\'' + _scEsq(b.borrower || '—') + '\',\'' + _scEsq(_scIso(b.s)) + '\',\'' + _scEsq(_scIso(b.e)) + '\')">✅ ยืนยัน/ยกเลิก</button>');
+  } else if (it.kind === 'soon') {
+    if (b.loanId) {
+      acts.push('<button class="btn btn-ghost btn-sm" onclick="openExtendM(\'' + _scEsq(b.loanId) + '\')">⏩ เลื่อนกำหนด</button>');
+      acts.push('<button class="btn btn-ghost btn-sm" onclick="openTransferM(\'' + _scEsq(b.loanId) + '\')">🔄 โอน</button>');
+      acts.push('<button class="btn btn-ghost btn-sm" onclick="cancelSoonLoan(\'' + _scEsq(b.loanId) + '\')">❌ ยกเลิกใบจองนี้</button>');
+    }
+  } else if (it.kind === 'pending') {
+    acts.push('<button class="btn btn-ghost btn-sm" onclick="retryPendingLoan(\'' + _scEsq(b.loanId) + '\')">🔁 เช็คว่างอีกครั้ง</button>');
+    acts.push('<button class="btn btn-ghost btn-sm" onclick="removePendingLoan(\'' + _scEsq(b.loanId) + '\')">✕ ตัดออกจากใบ</button>');
+  } else if (it.kind === 'quar') {
+    acts.push('<button class="btn btn-ghost btn-sm" onclick="openResolveKitM(\'' + _scEsq(b.loanId) + '\')" title="ยืนยันรับเข้าคลังก่อนกำหนด ถ้าตรวจของจริงแล้ว">📦 ยืนยันรับเข้าคลังก่อนกำหนด</button>');
+  }
+  if (b.loanId) acts.push('<button class="btn btn-ghost btn-sm" onclick="openLoanLogM(\'' + _scEsq(b.loanId) + '\')">📜 ประวัติใบยืมแบบเต็ม</button>');
+
+  box.innerHTML = '<div class="tl-detail-drawer"><h4>' + esc(_SC_BUSY_LABEL[it.kind] || '') + ' — ' + esc(b.borrower || 'ไม่ระบุผู้ยืม') + '</h4>' +
+    '<div class="tl-dd-kv">' +
+    '<span>ผู้ยืม</span><span><b>' + esc(b.borrower || '—') + '</b></span>' +
+    '<span>ผู้คีย์</span><span>' + esc(b.approver || '—') + '</span>' +
+    '<span>ใบจอง</span><span>' + esc(b.jobNo || '—') + '</span>' +
+    '<span>ช่วงยืม</span><span>' + esc(_scD(_scIso(b.s))) + ' → ' + esc(_scD(_scIso(b.e))) + '</span>' +
+    (b.purpose ? '<span>ยืมไปทำอะไร</span><span>' + esc(b.purpose) + '</span>' : '') +
+    '</div>' +
+    '<div class="tl-dd-acts">' + acts.join('') + '<button class="btn btn-ghost btn-sm" onclick="closeUnitTimelineDetail(\'' + _scEsq(unitId) + '\')">ปิด</button></div></div>';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function closeUnitTimelineDetail(unitId) {
+  var box = document.getElementById('unitTlDetail_' + unitId);
+  if (box) box.innerHTML = '';
+  document.querySelectorAll('#unitDetailView .tl-seg').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('#unitDetailView .q-item').forEach(function(el) { el.classList.remove('hl'); });
+}
+
 function openUnitDetail(unitId, returnTo) {
   var u = UNITS.filter(function(x) { return x.id === unitId; })[0];
   if (!u) return;
@@ -4318,6 +4554,8 @@ function openUnitDetail(unitId, returnTo) {
     h += '<button class="btn btn-primary btn-sm" onclick="showManualLoanForm(\'' + u.id + '\')">✍️ กรอกยืมเครื่องนี้</button>';
   }
   h += '<div id="manualLoanFormZone"></div></div>';
+  h += _unitTimelineHtml(u.id);
+  h += _unitQueueListHtml(u.id);
   h += '<div class="card"><div style="font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px">📦 ประกอบด้วย' +
     '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openUnitEditM(\'' + u.id + '\')">✏️ แก้ไข</button></div>';
   h += u.kitContents
