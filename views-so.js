@@ -853,7 +853,8 @@ function rSODetail(el) {
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">รวม</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">Serial</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความพร้อมส่ง</th>' +
-    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">คอมเมนต์</th></tr></thead><tbody>';
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">คอมเมนต์</th>' +
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ลิงก์</th></tr></thead><tbody>';
   (s.items||[]).forEach(function(it,idx){
     var lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
     var sns = _soItemSerials(it);
@@ -865,12 +866,15 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
-    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s) : '') + '</td>';
+    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s, it) : '') + '</td>';
     html += '<td style="padding:10px;min-width:140px"><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onblur="saveSOItemComment(\'' + s.id + '\',' + idx + ',this.value)"></td>';
+    var itLinkSafe = /^https?:\/\//i.test(it.link || '') ? it.link : '';
+    html += '<td style="padding:10px;min-width:150px"><input type="text" value="' + sanitize(it.link || '') + '" placeholder="วางลิงก์..." style="width:100%;font-size:11px" onblur="saveSOItemLink(\'' + s.id + '\',' + idx + ',this.value)">' +
+      (itLinkSafe ? '<a href="' + sanitize(itLinkSafe) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);display:inline-block;margin-top:3px">🔗 เปิดลิงก์</a>' : '') + '</td>';
     html += '</tr>';
   });
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
-  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="3"></td></tr>';
+  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="4"></td></tr>';
   html += '</tbody></table></div></div>';
 
   // การส่งมอบ — เทียบจำนวนตาม PO ลูกค้ากับที่ส่งไปแล้วจริงต่อรายการ รองรับแบ่งส่งหลายรอบ (ไม่ต้องรอของครบ)
@@ -1567,6 +1571,28 @@ var SO_ITEM_SOURCE_TYPES = {
   pr_po:         { label: '🛒 ต้องเปิด PR/PO เพิ่ม' }
 };
 
+// ตัวเลือก "สถานะ PR/PO" ดึงจาก cfg.prpoStatuses (แก้ไข/เพิ่ม/ลบ/เรียงลำดับได้ที่ ⚙️ ตั้งค่า) — ให้เพิ่มสถานะใหม่สดๆ
+// จากตรงนี้ได้เลยผ่านตัวเลือก "+ เพิ่มสถานะใหม่..." ไม่ต้องออกไปหน้า Admin
+function _soPrpoStatusOptionsHtml(selectedId) {
+  var cfg = getConfig();
+  var list = cfg.prpoStatuses || [];
+  var opts = '<option value=""' + (!selectedId ? ' selected' : '') + '>— ยังไม่ระบุ —</option>';
+  opts += list.map(function(s) {
+    return '<option value="' + sanitize(s.id) + '"' + (s.id === selectedId ? ' selected' : '') + '>' + sanitize(s.name) + '</option>';
+  }).join('');
+  opts += '<option value="__new__">+ เพิ่มสถานะใหม่...</option>';
+  return opts;
+}
+
+function _soPrpoStatusChanged(idx) {
+  var sel = document.getElementById('soI_prpoStatus_' + idx);
+  if (!sel || sel.value !== '__new__') return;
+  var nm = (prompt('ชื่อสถานะ PR/PO ใหม่') || '').trim();
+  if (!nm || typeof admAddPrpoStQuick !== 'function') { sel.value = ''; return; }
+  var id = admAddPrpoStQuick(nm);
+  sel.innerHTML = _soPrpoStatusOptionsHtml(id);
+}
+
 function _soItemRowHtml(idx, model, qty, price, sku, item) {
   item = item || {};
   var sourceType = item.sourceType || '';
@@ -1585,7 +1611,7 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
   h += '<div id="soI_prpo_' + idx + '" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="วันที่ยื่น PR/PO" title="วันที่ยื่น PR/PO" value="' + sanitize(item.prpoSubmittedDate || '') + '" id="soI_prpoDate_' + idx + '">' +
-    '<input class="inp" style="flex:2;min-width:140px" placeholder="สถานะ (เช่น เข้าไทยแล้ว)" value="' + sanitize(item.prpoStatus || '') + '" id="soI_prpoStatus_' + idx + '">' +
+    '<select class="inp" style="flex:2;min-width:160px" id="soI_prpoStatus_' + idx + '" onchange="_soPrpoStatusChanged(\'' + idx + '\')">' + _soPrpoStatusOptionsHtml(item.prpoStatusId || '') + '</select>' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
   h += '</div>';
@@ -1608,10 +1634,21 @@ function _soReadItemSourceFields(row) {
     var statusEl = row.querySelector('[id^="soI_prpoStatus_"]');
     var expEl = row.querySelector('[id^="soI_prpoExp_"]');
     out.prpoSubmittedDate = dateEl ? dateEl.value : '';
-    out.prpoStatus = statusEl ? statusEl.value.trim() : '';
+    out.prpoStatusId = (statusEl && statusEl.value !== '__new__') ? statusEl.value : '';
     out.prpoExpectedDate = expEl ? expEl.value : '';
   }
   return out;
+}
+
+// ชื่อสถานะ PR/PO ที่แสดงผล — ใช้ prpoStatusId ผูกกับ cfg.prpoStatuses ปัจจุบันก่อน ถ้าไม่มี (รายการเก่าก่อน
+// เปลี่ยนเป็น dropdown) ค่อย fallback ไปข้อความอิสระเดิมที่เคยพิมพ์ไว้ใน item.prpoStatus
+function _soPrpoStatusLabel(item) {
+  if (item.prpoStatusId) {
+    var cfg = getConfig();
+    var s = (cfg.prpoStatuses || []).filter(function(x) { return x.id === item.prpoStatusId; })[0];
+    if (s) return s.name;
+  }
+  return item.prpoStatus || '';
 }
 
 // พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคา RRP ให้อัตโนมัติถ้าช่องราคายังว่าง
@@ -2107,6 +2144,17 @@ function saveSOItemComment(soId, idx, value) {
   if (!s || !s.items || !s.items[idx]) return;
   var items = s.items.slice();
   items[idx] = Object.assign({}, items[idx], { comment: value });
+  var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
+  _soRerenderKeepScroll();
+}
+
+// ลิงก์อิสระต่อรายการสินค้าใน SO (เช่น ลิงก์จองของ 1021, ลิงก์คุย Vendor) — ไม่ผูกกับระบบไหน วางอะไรก็ได้
+function saveSOItemLink(soId, idx, value) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var items = s.items.slice();
+  items[idx] = Object.assign({}, items[idx], { link: value.trim() });
   var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
 }

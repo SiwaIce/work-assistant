@@ -247,6 +247,14 @@ var DEF_CONFIG = {
   creditTerms: ['COD','30 วัน','45 วัน','60 วัน','อื่นๆ'],
   unitTypes: ['University','Government','Government Agency','State Enterprise','Private','Military','Local Administration','อื่นๆ'],
 
+  // สถานะ PR/PO ต่อรายการสินค้าใน SO (ดู views-so.js: SO_ITEM_SOURCE_TYPES / item.prpoStatusId) — แก้ไข/เพิ่ม/ลบ/เรียงลำดับได้เองที่หน้า ⚙️ ตั้งค่า
+  prpoStatuses: [
+    { id: 'pr_submitted',    name: 'ยื่น PR แล้ว' },
+    { id: 'po_opened',       name: 'Product Mgmt เปิด PO ให้ Vendor' },
+    { id: 'vendor_shipping', name: 'Vendor ส่งของ' },
+    { id: 'arrived_th',      name: 'ของเข้าไทยแล้ว' }
+  ],
+
   // ===== PARTNER LEVEL REQUIREMENTS =====
   levelRequirements: {
     S: {
