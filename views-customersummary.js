@@ -80,7 +80,11 @@ function _csDealerStats(d) {
   poGroups.forEach(function(pg) {
     var remainVal = 0;
     pg.sos.forEach(function(s) {
+      var soDone = (typeof _soIsDone === 'function') && _soIsDone(s.status);
       (s.items || []).forEach(function(it) {
+        // รายการไม่มี SKU (by-order ไม่ track คลัง) ไม่มีทางถูกบันทึกว่า "ส่งแล้ว" ผ่าน shipments[] เลย
+        // (soRecordShipmentRound ต้องมี sku) ถ้า SO ปิด/ส่งแล้วถือว่าส่งครบ ไม่งั้นจะค้างโชว์ตลอดไปแม้ปิด SO แล้ว
+        if (!it.sku) { if (!soDone) remainVal += (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); return; }
         var shipped = _csShippedQtyForSku(s, it.sku);
         var remain = Math.max(0, (Number(it.qty) || 0) - shipped);
         remainVal += remain * (Number(it.unitPrice) || 0);

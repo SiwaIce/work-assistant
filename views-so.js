@@ -1338,7 +1338,10 @@ function _soSaveBackToDealer(dealerId, fields) {
     var ids = (d.projectIds || []).slice();
     if (ids.indexOf(fields.projectId) === -1) { ids.push(fields.projectId); updates.projectIds = ids; }
   }
-  if (fields.paymentTerm && fields.paymentTerm !== d.creditTerm) updates.creditTerm = fields.paymentTerm;
+  // หมายเหตุ: ไม่ sync paymentTerm กลับไปเป็น d.creditTerm อีกต่อไป — paymentTerm เป็นค่าต่อ SO ที่แก้ได้อิสระ
+  // (เช่น ใบนี้ตกลง COD เป็นกรณีพิเศษ) การเขียนทับ d.creditTerm จะไปพังการคำนวณวันครบกำหนด/เครดิตของ SO ใบอื่น
+  // ของ dealer เดียวกันในหน้าสรุปรายลูกค้า (ดู _csParseCreditDays ใน views-customersummary.js) เทอมเครดิตมาตรฐาน
+  // ของ dealer ต้องแก้ที่หน้า Dealer โดยตรงเท่านั้น
   if (fields.deliveryAddress) {
     var addresses = (d.addresses || []).slice();
     var exists = addresses.some(function(a) { return (a.address||'').trim() === fields.deliveryAddress; });
