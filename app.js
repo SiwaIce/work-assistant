@@ -787,6 +787,7 @@ var R = {
   customerForecastSummary: rCustomerForecastSummary,
   dealers: rDealers,
   dealerDetail: rDealerDet,
+  customerSummary: rCustomerSummary,
   endUserList: rEndUserList,
   salesAnalytics: rSalesAnalytics,
   salesRepDashboard: rSalesRepDashboard,
