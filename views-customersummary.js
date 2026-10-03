@@ -7,8 +7,10 @@
 // ("สรุปรายลูกค้า") และแท็บในหน้า Dealer รายตัว (ดู dealerARSummaryTab ใน views-dealer.js)
 //
 // ข้อจำกัดที่รู้อยู่แล้ว (ไม่มี field ให้ในระบบตอนนี้ ใช้ค่าประมาณแทน ไม่ใช่ความจริงที่ยืนยันได้):
-// - เทอมเครดิต (dealer.creditTerm) เป็น free text เช่น "เครดิต 30 วัน" — ที่นี่ parse ตัวเลขแรกที่เจอออกมา
-//   เป็นจำนวนวัน ถ้า parse ไม่ได้ (เช่น "เงินสด", ว่าง) จะไม่คำนวณวันครบกำหนดให้
+// - เทอมเครดิต ปกติใช้ dealer.creditTerm (free text เช่น "เครดิต 30 วัน" — parse ตัวเลขแรกที่เจอออกมา
+//   เป็นจำนวนวัน ถ้า parse ไม่ได้ จะไม่คำนวณวันครบกำหนดให้) ยกเว้น SO ที่มีคำขอเครดิต (creditRequests)
+//   ที่อนุมัติแล้วผูกอยู่ — ถือเป็น "เครดิตโปรเจค" ชั่วคราว ใช้ creditDaysRequested ของคำขอนั้นแทน
+//   เฉพาะ SO ที่ผูกอยู่ (ดู _csCreditDaysForSO)
 // - ไม่มี field บันทึกว่า invoice/การส่งมอบรอบไหน "ชำระแล้ว" จริงๆ — ใช้สถานะ SO (ปิด = ถือว่าชำระแล้ว)
 //   เป็นตัวแทนไปก่อน ซึ่งไม่แม่นเท่าการบันทึกวันที่ชำระจริง
 // ================================================================
@@ -22,6 +24,17 @@ var CS_STALE_BAD_DAYS = 20;
 function _csParseCreditDays(creditTerm) {
   var m = String(creditTerm || '').match(/\d+/);
   return m ? parseInt(m[0], 10) : null;
+}
+
+// เทอมเครดิตที่ใช้จริงกับ SO ใบนี้ — ปกติใช้เทอมของ Dealer เอง ยกเว้นมีคำขอเครดิต (creditRequests)
+// ที่อนุมัติแล้วผูกกับ SO นี้โดยเฉพาะ (เครดิตโปรเจคชั่วคราว เช่น 75 วัน) ให้ใช้ของคำขอนั้นแทน
+function _csCreditDaysForSO(d, so) {
+  if (typeof creditRequestsForSO === 'function') {
+    var crs = creditRequestsForSO(so.id).filter(function(c) { return c.status === 'อนุมัติแล้ว' && c.creditDaysRequested; });
+    crs.sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+    if (crs.length) return { days: Number(crs[0].creditDaysRequested), special: true, cr: crs[0] };
+  }
+  return { days: _csParseCreditDays(d.creditTerm), special: false };
 }
 
 function _csSOsForDealer(dealerId) {
@@ -77,16 +90,19 @@ function _csDealerStats(d) {
     outstandingValue += remainVal;
   });
 
+  var hasSpecialCredit = false;
   sos.forEach(function(s) {
     var paidProxy = s.status === 'closed';
+    var cd = _csCreditDaysForSO(d, s);
+    if (cd.special) hasSpecialCredit = true;
     var shipments = (typeof _soMigrateLegacyShipment === 'function') ? _soMigrateLegacyShipment(s) : (s.shipments || []);
     shipments.forEach(function(sh) {
       if (paidProxy) return;
       var amt = _csShipmentAmount(s, sh);
       if (amt <= 0) return;
       creditUsed += amt;
-      if (creditDays != null && sh.invoiceDate) {
-        var due = _csAddDays(sh.invoiceDate, creditDays);
+      if (cd.days != null && sh.invoiceDate) {
+        var due = _csAddDays(sh.invoiceDate, cd.days);
         if (!nextDue || due < nextDue) nextDue = due;
       }
     });
@@ -94,7 +110,7 @@ function _csDealerStats(d) {
 
   var creditLimit = parseFloat(String(d.creditLimit || '').replace(/,/g, '')) || 0;
   return {
-    sos: sos, poGroups: poGroups, creditDays: creditDays,
+    sos: sos, poGroups: poGroups, creditDays: creditDays, hasSpecialCredit: hasSpecialCredit,
     openPoCount: openPoCount, outstandingValue: Math.round(outstandingValue),
     creditLimit: creditLimit, creditUsed: Math.round(creditUsed), creditLeft: Math.round(creditLimit - creditUsed),
     nextDue: nextDue
@@ -122,22 +138,23 @@ function _csComputeAlerts() {
   var alerts = [];
   ST.getAll('dealers').forEach(function(d) {
     var sos = _csSOsForDealer(d.id);
-    var creditDays = _csParseCreditDays(d.creditTerm);
     sos.forEach(function(s) {
       var paidProxy = s.status === 'closed';
-      if (!paidProxy && creditDays != null) {
+      var cd = _csCreditDaysForSO(d, s);
+      if (!paidProxy && cd.days != null) {
+        var tag = cd.special ? '🏷️ เครดิตโปรเจค · ' : '';
         var shipments = (typeof _soMigrateLegacyShipment === 'function') ? _soMigrateLegacyShipment(s) : (s.shipments || []);
         shipments.forEach(function(sh) {
           var amt = _csShipmentAmount(s, sh);
           if (amt <= 0 || !sh.invoiceDate) return;
-          var due = _csAddDays(sh.invoiceDate, creditDays);
+          var due = _csAddDays(sh.invoiceDate, cd.days);
           var diff = _csDaysBetween(_td(), due);
           if (diff < 0) {
             alerts.push({ sev: 'bad', icon: '⏰', dealer: d, so: s, sortKey: diff,
-              text: 'เกินกำหนดชำระ ' + Math.abs(diff) + ' วัน · ' + (sh.invoiceNumber || s.soNumber) + ' · ' + fmtMoney(amt) + ' ฿' });
+              text: tag + 'เกินกำหนดชำระ ' + Math.abs(diff) + ' วัน · ' + (sh.invoiceNumber || s.soNumber) + ' · ' + fmtMoney(amt) + ' ฿' });
           } else if (diff <= CS_DUE_SOON_DAYS) {
             alerts.push({ sev: 'warn', icon: '📅', dealer: d, so: s, sortKey: diff,
-              text: 'ครบกำหนดชำระในอีก ' + diff + ' วัน · ' + (sh.invoiceNumber || s.soNumber) + ' · ' + fmtMoney(amt) + ' ฿' });
+              text: tag + 'ครบกำหนดชำระในอีก ' + diff + ' วัน · ' + (sh.invoiceNumber || s.soNumber) + ' · ' + fmtMoney(amt) + ' ฿' });
           }
         });
       }
@@ -244,7 +261,8 @@ function _csRenderDealerCard(d, opts) {
   if (!opts.embedded) {
     h += '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-bottom:10px">' +
       '<div><div style="font-weight:700;font-size:15px">' + sanitize(d.name) + '</div>' +
-      '<div style="font-size:11.5px;color:var(--text2)">เทอมเครดิต: ' + (st.creditDays != null ? st.creditDays + ' วัน' : '<span style="color:#eab63f">' + sanitize(d.creditTerm || '(ยังไม่ระบุ)') + ' — parse เป็นตัวเลขไม่ได้ คำนวณวันครบกำหนดให้ไม่ได้</span>') + '</div></div>' +
+      '<div style="font-size:11.5px;color:var(--text2)">เทอมเครดิต: ' + (st.creditDays != null ? st.creditDays + ' วัน' : '<span style="color:#eab63f">' + sanitize(d.creditTerm || '(ยังไม่ระบุ)') + ' — parse เป็นตัวเลขไม่ได้ คำนวณวันครบกำหนดให้ไม่ได้</span>') +
+        (st.hasSpecialCredit ? ' <span style="color:var(--accent)">· บาง SO ใช้เครดิตโปรเจคพิเศษ (ดูป้าย 🏷️ ในแต่ละ SO)</span>' : '') + '</div></div>' +
       '</div>';
   } else if (st.creditDays == null && d.creditTerm) {
     h += '<div style="font-size:11px;color:#eab63f;margin-bottom:8px">⚠ เทอมเครดิต "' + sanitize(d.creditTerm) + '" ไม่ใช่ตัวเลขวันล้วนๆ คำนวณวันครบกำหนดอัตโนมัติให้ไม่ได้</div>';
@@ -373,13 +391,18 @@ function _csRenderByPO(d, st) {
 // ---------------- มุมมอง "ตาม SO" ----------------
 function _csRenderBySO(d, st) {
   var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">';
-  h += '<thead><tr><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">SO</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">PO ลูกค้า</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สถานะ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สร้างเมื่อ</th></tr></thead><tbody>';
+  h += '<thead><tr><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">SO</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">PO ลูกค้า</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สถานะ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สร้างเมื่อ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">เทอมเครดิต</th></tr></thead><tbody>';
   st.sos.slice().sort(function(a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1; }).forEach(function(s) {
+    var cd = _csCreditDaysForSO(d, s);
+    var creditNote = cd.special
+      ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;background:var(--accent-light,#17344a);border-color:var(--accent);color:var(--accent)">🏷️ เครดิตโปรเจค ' + cd.days + ' วัน</span>'
+      : (cd.days != null ? '<span style="font-size:10.5px;color:var(--text2)">' + cd.days + ' วัน</span>' : '');
     h += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace;font-weight:600">' + sanitize(s.soNumber || '-') + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace">' + sanitize(s.customerPO || '-') + _csProjChip(s.projectId) + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + _soStatusBadge(s.status) + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + sanitize((s.createdAt || '').slice(0, 10)) + '</td>' +
+      '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + creditNote + '</td>' +
       '</tr>';
   });
   h += '</tbody></table></div>';
