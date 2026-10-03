@@ -17,19 +17,23 @@ var soViewMode = (typeof window !== 'undefined' && window.innerWidth < 768) ? 'c
 // ความพร้อมส่งจริง (สินค้าบางชิ้นต้อง QI บางชิ้นไม่ต้อง คนละคลังกัน) คำนวณแยกต่างหากแบบ real-time ต่อรายการ ดู soComputeReadiness()
 // เดิมมี 14 สถานะไล่ทีละสเต็ปตาม 1 เส้นทางเดียว (ต้องผ่าน QI เสมอ) ใช้ไม่ได้จริงกับ SO ที่มีทั้งสินค้าต้อง QI และไม่ต้อง QI ปนกัน — ยุบเหลือสถานะเอกสารกว้างๆ แทน
 var SO_STATUS = {
-  po_received: { label:'ได้รับ PO',          color:'#94a3b8', icon:'📄' },
-  so_open:     { label:'เปิด SO / รอของ',    color:'#3b82f6', icon:'📋' },
-  shipped:     { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
-  invoiced:    { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
-  closed:      { label:'ปิด',                 color:'#64748b', icon:'✓'  }
+  po_received:     { label:'ได้รับ PO',          color:'#94a3b8', icon:'📄' },
+  so_open:         { label:'เปิด SO / รอของ',    color:'#3b82f6', icon:'📋' },
+  partial_shipped: { label:'ส่งแล้วบางส่วน',     color:'#f59e0b', icon:'🚚' },
+  shipped:         { label:'ส่งแล้ว',            color:'#6366f1', icon:'📦' },
+  invoiced:        { label:'ออก Invoice แล้ว',   color:'#8b5cf6', icon:'🧾' },
+  closed:          { label:'ปิด',                 color:'#64748b', icon:'✓'  }
 };
 
+// หมายเหตุ: 'partial_shipped' ไม่อยู่ในตัวเลือกถัดไปของ so_open ที่นี่โดยตั้งใจ — เข้าสถานะนี้อัตโนมัติจาก
+// soRecordShipmentRound() ตอนบันทึกส่งมอบรอบแรกเท่านั้น (ดูการ์ด "🚚 การส่งมอบ" ในหน้า SO) ไม่ใช่ตัวเลือกที่กดเปลี่ยนเอง
 var _SO_NEXT = {
-  po_received: ['so_open'],
-  so_open:     ['shipped'],
-  shipped:     ['invoiced'],
-  invoiced:    ['closed'],
-  closed:      []
+  po_received:     ['so_open'],
+  so_open:         ['shipped'],
+  partial_shipped: ['shipped'],
+  shipped:         ['invoiced'],
+  invoiced:        ['closed'],
+  closed:          []
 };
 
 // สถานะเก่าที่ถูกยุบทิ้ง — map ไปสถานะใหม่ที่ใกล้เคียงที่สุด ใช้ตอน migrate ข้อมูลเก่าครั้งเดียว (ดู _soMigrateStatuses)
@@ -51,11 +55,12 @@ function _soMigrateStatuses() {
 
 // จับ 5 สถานะเอกสารเป็นขั้นสำหรับแถบ progress ในตาราง (1 สถานะ = 1 ขั้นพอดี ตอนนี้ไม่ต้องยุบรวมแล้ว)
 var _SO_STAGES = [
-  { key:'po_received', label:'ได้รับ PO',       statuses:['po_received'] },
-  { key:'so_open',      label:'เปิด SO/รอของ',   statuses:['so_open'] },
-  { key:'shipped',      label:'ส่งแล้ว',         statuses:['shipped'] },
-  { key:'invoiced',     label:'Invoice',         statuses:['invoiced'] },
-  { key:'closed',       label:'ปิด',              statuses:['closed'] }
+  { key:'po_received',     label:'ได้รับ PO',        statuses:['po_received'] },
+  { key:'so_open',         label:'เปิด SO/รอของ',    statuses:['so_open'] },
+  { key:'partial_shipped', label:'ส่งแล้วบางส่วน',   statuses:['partial_shipped'] },
+  { key:'shipped',         label:'ส่งแล้ว',          statuses:['shipped'] },
+  { key:'invoiced',        label:'Invoice',          statuses:['invoiced'] },
+  { key:'closed',          label:'ปิด',               statuses:['closed'] }
 ];
 function _soStageIndex(status) {
   for (var i = 0; i < _SO_STAGES.length; i++) if (_SO_STAGES[i].statuses.indexOf(status) !== -1) return i;
@@ -92,6 +97,116 @@ function soComputeReadiness(so) {
   });
   var readyCount = perItem.filter(function(x) { return x.ready; }).length;
   return { total: perItem.length, readyCount: readyCount, allReady: readyCount === perItem.length, items: perItem };
+}
+
+// ---------------------------------------------------------------- แบ่งส่งบางส่วน (partial shipment)
+
+// ความคืบหน้าการส่งมอบต่อรายการ เทียบกับจำนวนที่ลูกค้าสั่งใน PO (it.qty) — ใช้ deliveredForThisSO/bookedForThisSO ที่มีอยู่แล้วจากฝั่งสต็อก
+// รายการที่ไม่มี SKU (by-order ไม่ track คลัง) ถือว่าส่งพร้อมกับรายการอื่นเสมอ ไม่บล็อกความคืบหน้า
+function soComputeShipmentProgress(so) {
+  var items = (so.items || []).map(function(it, idx) {
+    if (!it.sku) return { idx: idx, sku: '', model: it.model, poQty: Number(it.qty) || 0, deliveredQty: 0, readyToShipQty: 0, remainingQty: 0, tracked: false };
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, so) : { deliveredForThisSO: 0, bookedForThisSO: 0 };
+    var poQty = Number(it.qty) || 0;
+    var deliveredQty = info.deliveredForThisSO || 0;
+    return {
+      idx: idx, sku: it.sku, model: it.model, poQty: poQty, deliveredQty: deliveredQty,
+      readyToShipQty: info.bookedForThisSO || 0, // พร้อมส่งแล้ว (จองใน 1021) แต่ยังไม่เคยบันทึกว่าส่ง
+      remainingQty: Math.max(0, poQty - deliveredQty), tracked: true
+    };
+  });
+  var allDelivered = items.every(function(x) { return !x.tracked || x.deliveredQty >= x.poQty; });
+  var anyDelivered = items.some(function(x) { return x.deliveredQty > 0; });
+  return { items: items, allDelivered: allDelivered, anyDelivered: anyDelivered };
+}
+
+// ข้อมูล DO/Invoice เดิมเป็น field เดี่ยวผูก 1:1 กับ SO (สมัยที่ยังไม่รองรับแบ่งส่ง) — ย้ายเป็น "รอบที่ 1" ของ shipments[] อัตโนมัติครั้งเดียว
+// ไม่ลบ field เดิมทิ้ง (ยังอ่านแสดงผลที่อื่นอยู่) แค่ทำให้ shipments[] มีประวัติครบตั้งแต่รอบแรก
+function _soMigrateLegacyShipment(s) {
+  if (s.shipments) return s.shipments;
+  if (!s.doNumber && !s.invoiceNumber) return [];
+  var legacy = [{
+    id: 'legacy', date: s.invoiceDate || s.updatedAt || s.createdAt || '', doNumber: s.doNumber || '',
+    invoiceNumber: s.invoiceNumber || '', invoiceDate: s.invoiceDate || '', note: 'ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง', items: []
+  }];
+  ST.update('salesOrders', s.id, { shipments: legacy });
+  return legacy;
+}
+
+// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty}] เฉพาะที่ผู้ใช้กรอก qty > 0
+// มาร์ค lot ที่จองใน 1021 เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
+function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s).slice();
+  var shippedItems = [];
+  roundItems.forEach(function(ri) {
+    var qty = Math.max(0, Math.round(Number(ri.qty) || 0));
+    if (qty <= 0 || !ri.sku) return;
+    var it = (s.items || []).filter(function(x) { return x.sku === ri.sku; })[0];
+    var productName = it ? it.model : ri.sku;
+    var delivered = (typeof stockDeliverSOItemQty === 'function') ? stockDeliverSOItemQty(ri.sku, productName, soId, qty) : 0;
+    if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
+  });
+  if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
+
+  shipments.push({
+    id: 'ship_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    date: _td(), doNumber: doNumber || '', invoiceNumber: invoiceNumber || '', invoiceDate: invoiceDate || '',
+    note: note || '', items: shippedItems, createdAt: _nw()
+  });
+
+  var update = { shipments: shipments, doNumber: doNumber || s.doNumber || '', invoiceNumber: invoiceNumber || s.invoiceNumber || '', invoiceDate: invoiceDate || s.invoiceDate || '' };
+  var progress = soComputeShipmentProgress(Object.assign({}, s, update));
+  var order = ['po_received', 'so_open', 'partial_shipped', 'shipped', 'invoiced', 'closed'];
+  var curIdx = order.indexOf(s.status);
+  var target = progress.allDelivered ? 'shipped' : (progress.anyDelivered ? 'partial_shipped' : s.status);
+  var targetIdx = order.indexOf(target);
+  if (targetIdx > curIdx) update.status = target;
+
+  var updated = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  toast('💾 บันทึกการส่งมอบแล้ว (' + shippedItems.reduce(function(sum, x) { return sum + x.qty; }, 0) + ' ชิ้น)');
+  closeMForce();
+  _soRerenderKeepScroll();
+}
+
+function showSORecordShipmentModal(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var progress = soComputeShipmentProgress(s);
+  var shippable = progress.items.filter(function(x) { return x.tracked && x.readyToShipQty > 0; });
+  if (!shippable.length) { toast('⚠️ ยังไม่มีรายการไหนพร้อมส่ง (ต้องจองเข้า 1021 ก่อน)'); return; }
+
+  var body = '<div class="hint" style="margin-bottom:8px">ใส่จำนวนที่จะส่งรอบนี้ต่อรายการ — ใส่ได้ไม่เกินที่พร้อมส่งแต่ยังไม่เคยส่ง</div>';
+  shippable.forEach(function(x) {
+    body += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">';
+    body += '<span style="flex:1">' + sanitize(x.model || x.sku) + ' <span style="color:var(--text2);font-size:11px">(พร้อมส่งอีก ' + x.readyToShipQty + ')</span></span>';
+    body += '<input type="number" class="inp" style="width:70px" id="soShip_q_' + x.idx + '" data-sku="' + sanitize(x.sku) + '" value="' + x.readyToShipQty + '" min="0" max="' + x.readyToShipQty + '">';
+    body += '</div>';
+  });
+  body += '<div style="display:flex;gap:8px;margin-top:10px">';
+  body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(_soNextNum('DO')) + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label><input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '"></div>';
+  body += '</div>';
+  body += '<div style="display:flex;gap:8px;margin-top:8px">';
+  body += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soShip_invDate" class="inp" type="date" value="' + _td() + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soShip_note" class="inp" placeholder="ไม่บังคับ"></div>';
+  body += '</div>';
+  body += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSORecordShipment(\'' + soId + '\')">💾 บันทึกการส่งมอบรอบนี้</button>';
+  openM('🚚 บันทึกการส่งมอบรอบนี้ — ' + sanitize(s.soNumber || ''), body);
+}
+
+function _saveSORecordShipment(soId) {
+  var roundItems = [];
+  document.querySelectorAll('[id^="soShip_q_"]').forEach(function(input) {
+    roundItems.push({ sku: input.getAttribute('data-sku'), qty: input.value });
+  });
+  var doNumber = (document.getElementById('soShip_do') || {}).value || '';
+  var invoiceNumber = (document.getElementById('soShip_inv') || {}).value || '';
+  var invoiceDate = (document.getElementById('soShip_invDate') || {}).value || '';
+  var note = (document.getElementById('soShip_note') || {}).value || '';
+  soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note);
 }
 
 // SO ที่เปิดอยู่ (so_open) และพร้อมส่งครบทุกรายการแล้ว แต่ยังไม่มีใครกดเปลี่ยนสถานะเป็น "ส่งแล้ว" — ใช้ต่อยอดในแถบ 🔔 ต้องติดตาม
@@ -757,6 +872,55 @@ function rSODetail(el) {
   html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
   html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="3"></td></tr>';
   html += '</tbody></table></div></div>';
+
+  // การส่งมอบ — เทียบจำนวนตาม PO ลูกค้ากับที่ส่งไปแล้วจริงต่อรายการ รองรับแบ่งส่งหลายรอบ (ไม่ต้องรอของครบ)
+  if ((s.items || []).some(function(it) { return it.sku; }) && !_soIsDone(s.status)) {
+    var shipProg = soComputeShipmentProgress(s);
+    var shipments = _soMigrateLegacyShipment(s);
+    html += '<div class="card" style="margin-bottom:12px;padding:18px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
+    html += '<h3 style="margin:0;font-size:15px">🚚 การส่งมอบ</h3>';
+    if (!shipProg.allDelivered) html += '<button class="btn bp bsm" onclick="showSORecordShipmentModal(\'' + s.id + '\')">📦 บันทึกการส่งมอบรอบนี้</button>';
+    html += '</div>';
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="background:var(--bg2);text-align:left">' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">สินค้า</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">ตาม PO</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">ส่งแล้ว</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">คงค้าง</th>' +
+      '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ความคืบหน้า</th></tr></thead><tbody>';
+    shipProg.items.forEach(function(x) {
+      if (!x.tracked) return;
+      var pct = x.poQty ? Math.round(x.deliveredQty / x.poQty * 100) : 100;
+      var barColor = x.deliveredQty >= x.poQty ? '#22c55e' : (x.deliveredQty > 0 ? '#f59e0b' : 'var(--border)');
+      html += '<tr style="border-top:1px solid var(--border)">';
+      html += '<td style="padding:8px 10px"><b>' + sanitize(x.model || '-') + '</b></td>';
+      html += '<td style="padding:8px 10px;text-align:center">' + x.poQty + '</td>';
+      html += '<td style="padding:8px 10px;text-align:center">' + x.deliveredQty + '</td>';
+      html += '<td style="padding:8px 10px;text-align:center;' + (x.remainingQty > 0 ? 'color:#f59e0b;font-weight:600' : '') + '">' + x.remainingQty + '</td>';
+      html += '<td style="padding:8px 10px;min-width:140px"><div style="height:6px;border-radius:3px;background:var(--bg2);overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div>';
+      if (x.remainingQty > 0 && x.readyToShipQty > 0) html += '<div style="font-size:10px;color:var(--text2);margin-top:3px">พร้อมส่งอีก ' + x.readyToShipQty + '</div>';
+      html += '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    if (shipments.length) {
+      html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+      html += '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">ประวัติการส่งมอบ</div>';
+      shipments.slice().reverse().forEach(function(sh, i) {
+        var roundNo = shipments.length - i;
+        var itemsTxt = (sh.items || []).map(function(it) { return sanitize(it.model || it.sku) + ' × ' + it.qty; }).join(', ');
+        html += '<div style="font-size:11.5px;padding:6px 0;' + (i < shipments.length - 1 ? 'border-bottom:1px solid var(--border)' : '') + '">';
+        html += '<b>รอบที่ ' + roundNo + '</b> — ' + (sh.date ? fD(sh.date) : '-');
+        if (sh.doNumber) html += ' · DO ' + qcopyHtml(sh.doNumber);
+        if (sh.invoiceNumber) html += ' · INV ' + qcopyHtml(sh.invoiceNumber);
+        if (itemsTxt) html += '<div style="color:var(--text2)">' + itemsTxt + '</div>';
+        if (sh.note) html += '<div style="color:var(--text2)">📝 ' + sanitize(sh.note) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
 
   // timeline — กดรายการเพื่อขยายดูรายละเอียด/แก้ไขในหน้าเดียวกัน (ไม่ใช้ modal)
   html += '<div class="card" style="padding:18px">';

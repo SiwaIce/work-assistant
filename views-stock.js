@@ -731,6 +731,39 @@ function stockUpdateLot(sku, productName, lotId, fields) {
   }
 }
 
+// แบ่งส่งบางส่วน (partial shipment) — ตัด qty ที่ส่งรอบนี้ออกจาก lot ที่จองอยู่ใน 1021 ของ SO นี้ แล้วมาร์คเป็น "ส่งมอบแล้ว"
+// ถ้า lot ไหนส่งไม่เต็มก้อน จะแยกเป็น 2 lot (ส่วนที่เหลือค้างสถานะเดิม, ส่วนที่ส่งแล้วเป็น lot ใหม่สถานะ "ส่งมอบแล้ว") คล้าย stockMoveLot แต่ไม่ย้ายคลัง
+// คืนค่าจำนวนที่มาร์คได้จริง (อาจน้อยกว่า qty ที่ขอ ถ้า lot ที่จองไว้ใน 1021 ไม่พอ)
+function stockDeliverSOItemQty(sku, productName, soId, qty) {
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (!sku || !soId || qty <= 0) return 0;
+  var lots = stockGetLots(sku).slice();
+  var remaining = qty;
+  var delivered = 0;
+  for (var i = 0; i < lots.length && remaining > 0; i++) {
+    var lot = lots[i];
+    if (lot.location !== '1021' || lot.soId !== soId || !_stockIsActiveLot(lot)) continue;
+    var lotQty = Number(lot.qty) || 0;
+    var take = Math.min(remaining, lotQty);
+    if (take <= 0) continue;
+    if (take >= lotQty) {
+      lots[i] = Object.assign({}, lot, { status: 'ส่งมอบแล้ว', deliveredDate: _nw() });
+    } else {
+      lots[i] = Object.assign({}, lot, { qty: lotQty - take });
+      lots.push({
+        id: _stockLotId(), location: '1021', ref: lot.ref, qty: take, dateIn: lot.dateIn, note: lot.note || '',
+        soNumber: lot.soNumber, soId: lot.soId, bookedDate: lot.bookedDate, salesperson: lot.salesperson,
+        dealerName: lot.dealerName, projectName: lot.projectName, status: 'ส่งมอบแล้ว', deliveredDate: _nw(),
+        fromLotId: lot.id, batchRef: lot.batchRef || ''
+      });
+    }
+    remaining -= take;
+    delivered += take;
+  }
+  if (delivered > 0) _stockSaveLots(sku, productName, lots);
+  return delivered;
+}
+
 // ลบ lot ที่เผลอกรอกผิดทิ้งทั้งรายการ
 function stockDeleteLot(sku, lotId) {
   if (!confirm('ลบรายการนี้ทิ้ง?\nใช้ตอนกรอกผิดเท่านั้น ไม่สามารถกู้คืนได้')) return;
