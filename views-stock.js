@@ -357,16 +357,27 @@ function stockSOItemReadyInfo(sku, qty, so) {
       from0001 = alloc.from0001; fromQI = alloc.fromQI; shortfall = alloc.shortfall;
     }
   }
+
+  // ล็อตที่จองใน 1021 อยู่ (ยังไม่ส่ง) ที่ใกล้หมดอายุที่สุด — ใช้โชว์ "เหลือกี่วัน" + ประวัติการเลื่อนจองของล็อตนั้น
+  var activeBooked = soLots.filter(_stockIsActiveLot).filter(function(l) { return l.bookingExpiryDate; })
+    .sort(function(a, b) { return (a.bookingExpiryDate || '').localeCompare(b.bookingExpiryDate || ''); });
+  var nearestLot = activeBooked[0] || null;
+
   return {
     ready: (bookedForThisSO + deliveredForThisSO) >= qty, tracked: true,
     deliveredForThisSO: deliveredForThisSO, bookedForThisSO: bookedForThisSO,
-    from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation
+    from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation,
+    bookingExpiryDate: nearestLot ? nearestLot.bookingExpiryDate : '', bookingHistory: nearestLot ? (nearestLot.bookingHistory || []) : []
   };
 }
 
-function stockSOItemReadinessHtml(sku, qty, so) {
+// เลขสุ่มกันชนกัน id — ใช้เป็น id ของกล่องประวัติเลื่อนจองที่ซ่อน/โชว์ได้ (toggle ผ่าน classList)
+var _stockChipHistSeq = 0;
+
+function stockSOItemReadinessHtml(sku, qty, so, item) {
   if (!sku) return '<span style="color:var(--text2);font-size:11px">ไม่มี SKU ผูกไว้</span>';
   qty = Math.max(0, Math.round(Number(qty) || 0));
+  item = item || {};
   var info = stockSOItemReadyInfo(sku, qty, so);
   var deliveredForThisSO = info.deliveredForThisSO, bookedForThisSO = info.bookedForThisSO;
   var from0001 = info.from0001, fromQI = info.fromQI, shortfall = info.shortfall, reservation = info.reservation;
@@ -377,8 +388,36 @@ function stockSOItemReadinessHtml(sku, qty, so) {
   }
   if (bookedForThisSO > 0) {
     h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a;display:inline-block;margin-bottom:3px">✓ พร้อมส่ง ' + bookedForThisSO + ' (จองใน 1021 แล้ว)</div><br>';
+    // ชิปเสริม: วันหมดจอง + นับวันเหลือ + ประวัติการเลื่อนจอง (ถ้ามี) — ข้อมูลมีอยู่แล้วในล็อต แค่ดึงมาโชว์
+    if (info.bookingExpiryDate) {
+      var daysLeft = Math.ceil((new Date(info.bookingExpiryDate) - new Date(_nw().substring(0, 10))) / 86400000);
+      var dLabel = daysLeft >= 0 ? 'เหลือ ' + daysLeft + ' วัน' : 'เกินกำหนด ' + (-daysLeft) + ' วัน';
+      var dColor = daysLeft <= 3 ? '#b45309' : '#166534';
+      h += '<div style="font-size:10px;margin-bottom:3px">' +
+        '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">📅 จองถึง ' + fD(info.bookingExpiryDate) + '</span>' +
+        '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:' + dColor + ';display:inline-block">⏳ ' + dLabel + '</span>';
+      if (info.bookingHistory && info.bookingHistory.length) {
+        var histId = 'bkh_' + (++_stockChipHistSeq);
+        h += ' <button class="btn bsm bo" style="font-size:10px;padding:1px 7px" onclick="var e=document.getElementById(\'' + histId + '\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">🕑 ประวัติเลื่อนจอง (' + info.bookingHistory.length + ')</button>';
+        h += '<div id="' + histId + '" style="display:none;margin-top:3px;padding:5px 8px;border-left:2px solid var(--border);color:var(--text2);font-size:10px">';
+        info.bookingHistory.forEach(function(x) {
+          h += '<div>• ' + (x.fromDate ? fD(x.fromDate) + ' → ' : '') + fD(x.toDate) + (x.approvedBy ? ' — อนุมัติโดย ' + sanitize(x.approvedBy) : '') + (x.date ? ' (' + fD(x.date) + ')' : '') + '</div>';
+        });
+        h += '</div>';
+      }
+      h += '</div>';
+    }
   }
   h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
+  // ชิปเสริม: สถานะ PR/PO ต่อรายการ (ดึงจาก item.prpoStatusId/prpoSubmittedDate/prpoExpectedDate ที่กรอกไว้ในฟอร์มแก้ไขรายการ)
+  if (item.sourceType === 'pr_po' && (item.prpoStatusId || item.prpoStatus || item.prpoSubmittedDate || item.prpoExpectedDate)) {
+    var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(item) : (item.prpoStatus || '');
+    h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
+    if (item.prpoSubmittedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block;margin-right:4px">🛒 ยื่น PR ' + fD(item.prpoSubmittedDate) + '</span>';
+    if (stLabel) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block;margin-right:4px">' + sanitize(stLabel) + '</span>';
+    if (item.prpoExpectedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block">คาดว่าจะถึง ' + fD(item.prpoExpectedDate) + '</span>';
+    h += '</div>';
+  }
   if (reservation && from0001 > 0) {
     h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button><br>';
   }
@@ -624,7 +663,11 @@ function stockExtendBooking(sku, productName, lotId, newDate, approvedBy) {
   var lots = stockGetLots(sku).slice();
   var idx = lots.findIndex(function(l) { return l.id === lotId; });
   if (idx === -1) return;
-  lots[idx] = Object.assign({}, lots[idx], { bookingExpiryDate: newDate, extendApprovedBy: approvedBy || '', extendApprovedDate: _nw() });
+  var lot = lots[idx];
+  // ประวัติการเลื่อนจองทุกครั้ง (วันเดิม → วันใหม่ · ใครอนุมัติ · เมื่อไหร่) — ของเก่าไม่หาย ไม่ใช่แค่ field เดี่ยวที่เขียนทับ
+  var history = (lot.bookingHistory || []).slice();
+  history.push({ fromDate: lot.bookingExpiryDate || '', toDate: newDate, approvedBy: approvedBy || '', date: _nw() });
+  lots[idx] = Object.assign({}, lot, { bookingExpiryDate: newDate, extendApprovedBy: approvedBy || '', extendApprovedDate: _nw(), bookingHistory: history });
   _stockSaveLots(sku, productName, lots);
   toast('🔄 เลื่อนกำหนดจองแล้ว');
   render();
@@ -1913,10 +1956,18 @@ function showStockAddLotM(sku, code) {
     body += '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="lot_note"></div>';
   }
   if (loc && loc.bookingExpiry && loc.bookingExpiry !== 'none') {
-    body += '<div class="fg"><label>จองถึงวันที่ <small style="color:var(--text2)">(' + (loc.bookingExpiry === 'penalty' ? 'เลื่อนได้ ไม่งั้นโดนหักค่าธรรมเนียม' : 'เลื่อนไม่ได้') + ')</small></label><input type="date" id="lot_bexp"></div>';
+    body += '<div class="fg"><label>จองถึงวันที่ <small style="color:var(--text2)">(' + (loc.bookingExpiry === 'penalty' ? 'เลื่อนได้ ไม่งั้นโดนหักค่าธรรมเนียม' : 'เลื่อนไม่ได้') + ')</small></label><input type="date" id="lot_bexp" value="' + _stockDefaultBookingExpiry(code) + '"></div>';
   }
   body += '<button class="btn bp btn-full" onclick="saveStockAddLot(\'' + sku + '\',\'' + code + '\')">💾 บันทึก</button>';
   openM('+ เพิ่มสินค้าเข้าคลัง ' + code + ' ' + sanitize(loc ? loc.name : ''), body);
+}
+
+// ค่าเริ่มต้นวันหมดจองของแต่ละคลัง (ยังแก้เองได้เสมอ) — 8D01 (sales rep ถือของ 5 วัน) เติมให้อัตโนมัติกันลืม ไม่ต้องคิดวันบวกเอง
+function _stockDefaultBookingExpiry(code) {
+  if (code !== '8D01') return '';
+  var d = new Date(_nw());
+  d.setDate(d.getDate() + 5);
+  return d.toISOString().substring(0, 10);
 }
 
 function saveStockAddLot(sku, code) {
@@ -2020,6 +2071,8 @@ function stockMoveDestChanged() {
     var loc = getStockLocations().filter(function(l) { return l.code === dest.value; })[0];
     if (loc && loc.bookingExpiry && loc.bookingExpiry !== 'none') {
       bexpFields.style.display = 'block';
+      var mvBexpEl = document.getElementById('mv_bexp');
+      if (mvBexpEl && !mvBexpEl.value) mvBexpEl.value = _stockDefaultBookingExpiry(dest.value);
       document.getElementById('mv_bexp_label').textContent = 'จองถึงวันที่ (' + (loc.bookingExpiry === 'penalty' ? 'เลื่อนได้ ไม่งั้นโดนหักค่าธรรมเนียม' : 'เลื่อนไม่ได้') + ')';
     } else {
       bexpFields.style.display = 'none';
