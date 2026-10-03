@@ -37,6 +37,7 @@ var quoteStatusLabels = {
   rejected: '❌ ปฏิเสธ',
   expired: '⏰ หมดอายุ'
 };
+var quoteExtraDiscounts = []; // ส่วนลดอื่นๆ ที่กำหนดเอง (ชื่อ+ประเภท %/บาท) ต่อใบเสนอราคา — ดู computeQuoteTotals
 var quoteStatusColors = {
   draft: '#64748b',
   sent: '#3b82f6',
@@ -194,54 +195,78 @@ function formatNumber(n) {
   return Number(n).toLocaleString('th-TH');
 }
 
-function recalculateQuotationTotal() {
-  var grossTotal = 0;
-  var totalCost = 0;
-  var cashDiscountTotal = 0;
-  for (var i = 0; i < quotationItems.length; i++) {
-    var amt = Number(quotationItems[i].amount) || 0;
+// คำนวณยอดทั้งใบจากรายการสินค้า + ส่วนลดเงินสดต่อรายการ + ส่วนลดอื่นๆ (กำหนดเอง % หรือบาท เรียงตามลำดับ) +
+// ส่วนลดท้ายบิล % เดิม แล้วค่อยคิด VAT — ใช้ฟังก์ชันเดียวนี้ร่วมกันทั้งการ์ดสรุป/แถวสรุปท้ายตาราง/ตอนบันทึก
+// เพื่อไม่ให้สูตรเพี้ยนไม่ตรงกันระหว่างจุด (เดิมแต่ละจุดคำนวณซ้ำเองคนละที่)
+function computeQuoteTotals(items, extraDiscounts, overallDiscountPct) {
+  items = items || [];
+  extraDiscounts = extraDiscounts || [];
+  var grossTotal = 0, totalCost = 0, cashDiscountTotal = 0;
+  for (var i = 0; i < items.length; i++) {
+    var amt = Number(items[i].amount) || 0;
     grossTotal += amt;
-    totalCost += (Number(quotationItems[i].cost) || 0) * (Number(quotationItems[i].quantity) || 1);
-    cashDiscountTotal += amt * (Number(quotationItems[i].cashDiscountPercent) || 0) / 100;
+    totalCost += (Number(items[i].cost) || 0) * (Number(items[i].quantity) || 1);
+    cashDiscountTotal += amt * (Number(items[i].cashDiscountPercent) || 0) / 100;
   }
-  var afterCashTotal = grossTotal - cashDiscountTotal;
+  var running = grossTotal - cashDiscountTotal;
+  var extraDiscountTotal = 0;
+  var extraBreakdown = [];
+  for (var j = 0; j < extraDiscounts.length; j++) {
+    var d = extraDiscounts[j];
+    var dAmt = d.type === 'amount' ? (Number(d.value) || 0) : running * (Number(d.value) || 0) / 100;
+    if (dAmt < 0) dAmt = 0;
+    if (dAmt > running) dAmt = running; // กันยอดติดลบถ้าส่วนลดรวมกันเกินยอดคงเหลือ
+    running -= dAmt;
+    extraDiscountTotal += dAmt;
+    extraBreakdown.push({ id: d.id, name: d.name, type: d.type, value: d.value, amount: dAmt });
+  }
+  var discountAmount = running * (Number(overallDiscountPct) || 0) / 100;
+  var netAmount = running - discountAmount;
+  var vatAmount = netAmount * 7 / 100;
+  var totalAmount = netAmount + vatAmount;
+  return {
+    grossTotal: grossTotal, totalCost: totalCost, cashDiscountTotal: cashDiscountTotal,
+    extraDiscountTotal: extraDiscountTotal, extraBreakdown: extraBreakdown, afterExtraTotal: running,
+    discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount
+  };
+}
+
+function recalculateQuotationTotal() {
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPct = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
-  var discountAmount = afterCashTotal * discountPct / 100;
-  var netAmount = afterCashTotal - discountAmount;
-  var vatPercent = 7;
-  var vatAmount = netAmount * vatPercent / 100;
-  var totalAmount = netAmount + vatAmount;
+  var t = computeQuoteTotals(quotationItems, quoteExtraDiscounts, discountPct);
 
   var grossEl = document.getElementById('quoteGrossTotal');
-  if (grossEl) grossEl.textContent = formatNumber(grossTotal) + ' ฿';
+  if (grossEl) grossEl.textContent = formatNumber(t.grossTotal) + ' ฿';
   var cashDiscEl = document.getElementById('quoteCashDiscountAmount');
-  if (cashDiscEl) cashDiscEl.textContent = formatNumber(cashDiscountTotal) + ' ฿';
+  if (cashDiscEl) cashDiscEl.textContent = formatNumber(t.cashDiscountTotal) + ' ฿';
+  var extraDiscEl = document.getElementById('quoteExtraDiscountAmount');
+  if (extraDiscEl) extraDiscEl.textContent = formatNumber(t.extraDiscountTotal) + ' ฿';
   var discountAmtEl = document.getElementById('quoteDiscountAmount');
-  if (discountAmtEl) discountAmtEl.textContent = formatNumber(discountAmount) + ' ฿';
+  if (discountAmtEl) discountAmtEl.textContent = formatNumber(t.discountAmount) + ' ฿';
   var netEl = document.getElementById('quoteNetAmount');
-  if (netEl) netEl.textContent = formatNumber(netAmount) + ' ฿';
+  if (netEl) netEl.textContent = formatNumber(t.netAmount) + ' ฿';
   var vatEl = document.getElementById('quoteVatAmount');
-  if (vatEl) vatEl.textContent = formatNumber(vatAmount) + ' ฿';
+  if (vatEl) vatEl.textContent = formatNumber(t.vatAmount) + ' ฿';
   var totalEl = document.getElementById('quoteTotalAmount');
-  if (totalEl) totalEl.textContent = formatNumber(totalAmount) + ' ฿';
+  if (totalEl) totalEl.textContent = formatNumber(t.totalAmount) + ' ฿';
 
   var costSummaryEl = document.getElementById('quoteCostSummary');
   if (costSummaryEl) {
     costSummaryEl.style.display = showQuotationCost ? '' : 'none';
     if (showQuotationCost) {
-      var grossProfit = netAmount - totalCost;
-      var marginPct = netAmount > 0 ? (grossProfit / netAmount * 100) : 0;
+      var grossProfit = t.netAmount - t.totalCost;
+      var marginPct = t.netAmount > 0 ? (grossProfit / t.netAmount * 100) : 0;
       var costEl = document.getElementById('quoteTotalCost');
       var profitEl = document.getElementById('quoteGrossProfit');
       var mPctEl = document.getElementById('quoteMarginPct');
-      if (costEl) costEl.textContent = formatNumber(Math.round(totalCost)) + ' ฿';
+      if (costEl) costEl.textContent = formatNumber(Math.round(t.totalCost)) + ' ฿';
       if (profitEl) { profitEl.textContent = formatNumber(Math.round(grossProfit)) + ' ฿'; profitEl.style.color = grossProfit >= 0 ? '#22c55e' : '#ef4444'; }
       if (mPctEl) { mPctEl.textContent = marginPct.toFixed(2) + '%'; mPctEl.style.color = marginPct >= 10 ? '#22c55e' : (marginPct >= 5 ? '#f59e0b' : '#ef4444'); }
     }
   }
 
-  return { grossTotal: grossTotal, cashDiscountTotal: cashDiscountTotal, discountAmount: discountAmount, netAmount: netAmount, vatAmount: vatAmount, totalAmount: totalAmount, totalCost: totalCost };
+  return t;
 }
 
 // ================================================================
@@ -342,6 +367,7 @@ function renderQuotationItemsTable() {
       (!quotationItemsFullscreen && !item.isOther && typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
+      (itemCashDiscPct > 0 ? '<div style="font-size:10px;color:#f59e0b;text-align:right;margin-top:2px">หลังลดเงินสด: ' + formatNumber((item.unitPrice || 0) - (item.unitPrice || 0) * itemCashDiscPct / 100) + ' ฿/หน่วย</div>' : '') +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-cashdisc" data-idx="' + i + '" value="' + itemCashDiscPct + '" min="0" max="100" step="0.1" style="width:65px;text-align:center;padding:4px" onchange="updateQuotationItemCashDiscount(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(itemNetAmount) + ' ฿' +
@@ -355,34 +381,24 @@ function renderQuotationItemsTable() {
     html += '</tr>';
   }
 
-  // แถวสรุปท้ายตาราง — รวม / ต้นทุนรวม / Margin รวม (screenshot เก็บได้)
-  var sumAmount = 0, sumCost = 0, sumCashDiscount = 0;
-  quotationItems.forEach(function(it) {
-    var amt = Number(it.amount) || 0;
-    sumAmount += amt;
-    sumCost += (Number(it.cost) || 0) * (Number(it.quantity) || 1);
-    sumCashDiscount += amt * (Number(it.cashDiscountPercent) || 0) / 100;
-  });
-  var totalMargin = sumAmount > 0 ? ((sumAmount - sumCost) / sumAmount * 100) : 0;
-  // VAT — อิงสูตรเดียวกับ recalculateQuotationTotal (หักส่วนลดเงินสดต่อรายการก่อน แล้วค่อยหักส่วนลดรวม% แล้วค่อยคิด VAT)
-  // อ่านส่วนลดจากช่องในการ์ดสรุปด้านล่างของหน้า ถ้ายังไม่มี (เช่น หน้ายังโหลดไม่เสร็จ) ถือว่าไม่มีส่วนลด
+  // แถวสรุปท้ายตาราง — รวม / ต้นทุนรวม / Margin รวม (screenshot เก็บได้) — อิงสูตรเดียวกับ recalculateQuotationTotal
+  // (computeQuoteTotals) อ่านส่วนลดท้ายบิล % จากช่องในการ์ดสรุปด้านล่างของหน้า ถ้ายังไม่มี (เช่น หน้ายังโหลดไม่เสร็จ) ถือว่าไม่มี
   var discountPctEl = document.getElementById('quoteDiscountPercent');
   var discountPct = discountPctEl ? (parseFloat(discountPctEl.value) || 0) : 0;
-  var sumAfterCashDiscount = sumAmount - sumCashDiscount;
-  var netAfterDiscount = sumAfterCashDiscount - (sumAfterCashDiscount * discountPct / 100);
-  var vatAmount = netAfterDiscount * 7 / 100;
-  var grandTotalWithVat = netAfterDiscount + vatAmount;
+  var ft = computeQuoteTotals(quotationItems, quoteExtraDiscounts, discountPct);
+  var totalMargin = ft.grossTotal > 0 ? ((ft.grossTotal - ft.totalCost) / ft.grossTotal * 100) : 0;
   // sticky bottom — แถวสรุปให้ติดล่างของกรอบเลื่อนเสมอ (เหมือน thead ที่ติดบนอยู่แล้ว) จะได้เห็นยอดรวมโดยไม่ต้องเลื่อนลงสุด
   html += '</tbody><tfoot><tr style="position:sticky;bottom:0;border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">';
   html += '<td colspan="6" style="text-align:right;padding:8px">รวมทั้งหมด</td>';
-  html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(sumAmount)) + ' ฿' +
-    (sumCashDiscount > 0 ? '<div style="font-size:.72em;font-weight:400;color:#f59e0b;margin-top:2px">- ส่วนลดเงินสด: ' + formatNumber(Math.round(sumCashDiscount)) + ' ฿</div>' : '') +
-    '<div style="font-size:.72em;font-weight:400;color:var(--text2);margin-top:2px">+VAT 7%: ' + formatNumber(Math.round(vatAmount)) + ' ฿</div>' +
-    '<div style="font-size:1em;font-weight:800;color:var(--accent);margin-top:4px;padding:4px 10px;background:var(--accent-light);border-radius:8px;display:inline-block;white-space:nowrap">🧾 รวม VAT ' + formatNumber(Math.round(grandTotalWithVat)) + ' ฿</div>' +
+  html += '<td style="text-align:right;color:#22c55e;padding:8px">' + formatNumber(Math.round(ft.grossTotal)) + ' ฿' +
+    (ft.cashDiscountTotal > 0 ? '<div style="font-size:.72em;font-weight:400;color:#f59e0b;margin-top:2px">- ส่วนลดเงินสด: ' + formatNumber(Math.round(ft.cashDiscountTotal)) + ' ฿</div>' : '') +
+    (ft.extraDiscountTotal > 0 ? '<div style="font-size:.72em;font-weight:400;color:#f59e0b;margin-top:2px">- ส่วนลดอื่นๆ: ' + formatNumber(Math.round(ft.extraDiscountTotal)) + ' ฿</div>' : '') +
+    '<div style="font-size:.72em;font-weight:400;color:var(--text2);margin-top:2px">+VAT 7%: ' + formatNumber(Math.round(ft.vatAmount)) + ' ฿</div>' +
+    '<div style="font-size:1em;font-weight:800;color:var(--accent);margin-top:4px;padding:4px 10px;background:var(--accent-light);border-radius:8px;display:inline-block;white-space:nowrap">🧾 รวม VAT ' + formatNumber(Math.round(ft.totalAmount)) + ' ฿</div>' +
     '</td>';
   if (showQuotationCost) {
     html += '<td style="text-align:right;color:var(--text2);padding:8px">ต้นทุนรวม</td>';
-    html += '<td style="text-align:right;color:#f59e0b;padding:8px">' + formatNumber(Math.round(sumCost)) + ' ฿</td>';
+    html += '<td style="text-align:right;color:#f59e0b;padding:8px">' + formatNumber(Math.round(ft.totalCost)) + ' ฿</td>';
     html += '<td style="text-align:right;padding:8px;color:' + (totalMargin >= 10 ? '#22c55e' : (totalMargin >= 5 ? '#f59e0b' : '#ef4444')) + '">' + totalMargin.toFixed(2) + '%</td>';
   }
   html += '<td></td></tr></tfoot></table></div>';
@@ -453,6 +469,50 @@ function applyCashDiscountToAllItems() {
   renderQuotationItemsTable();
   recalculateQuotationTotal();
   toast('💵 ใส่ส่วนลดเงินสด ' + pct + '% ให้ทุกรายการแล้ว (' + quotationItems.length + ' รายการ)');
+}
+
+// ================================================================
+// ส่วนลดอื่นๆ (กำหนดเอง) ระดับใบเสนอราคา — เพิ่มได้หลายรายการ ตั้งชื่อเอง เลือกเป็น % หรือจำนวนเงิน
+// คิดต่อจากยอดหลังหักส่วนลดเงินสดต่อรายการ เรียงตามลำดับที่เพิ่ม แล้วค่อยคิดส่วนลดท้ายบิล % เดิมทับอีกชั้น
+// (ดู computeQuoteTotals) — ใบเสนอราคาเก่าที่ไม่มี extraDiscounts ยังทำงานปกติ (ถือว่าไม่มีส่วนลดอื่นๆ)
+// ================================================================
+function renderQuoteExtraDiscountsZone() {
+  var zone = document.getElementById('quoteExtraDiscountsZone');
+  if (!zone) return;
+  if (!quoteExtraDiscounts.length) { zone.innerHTML = ''; return; }
+  var h = '';
+  quoteExtraDiscounts.forEach(function(d) {
+    h += '<div class="fr" style="gap:4px;align-items:center;padding:3px 0;flex-wrap:nowrap">' +
+      '<input type="text" value="' + sanitize(d.name || '') + '" placeholder="ชื่อส่วนลด เช่น ส่วนลดโครงการ" style="flex:1;min-width:0;padding:4px;font-size:12px" onchange="updateQuoteExtraDiscount(\'' + d.id + '\',\'name\',this.value)">' +
+      '<select style="padding:4px;font-size:12px" onchange="updateQuoteExtraDiscount(\'' + d.id + '\',\'type\',this.value)">' +
+      '<option value="percent"' + (d.type !== 'amount' ? ' selected' : '') + '>%</option>' +
+      '<option value="amount"' + (d.type === 'amount' ? ' selected' : '') + '>฿</option>' +
+      '</select>' +
+      '<input type="number" value="' + (Number(d.value) || 0) + '" min="0" step="0.01" style="width:80px;text-align:right;padding:4px;font-size:12px" onchange="updateQuoteExtraDiscount(\'' + d.id + '\',\'value\',this.value)">' +
+      '<button class="btn bsm bd" type="button" onclick="removeQuoteExtraDiscount(\'' + d.id + '\')">🗑️</button>' +
+      '</div>';
+  });
+  zone.innerHTML = h;
+}
+
+function addQuoteExtraDiscount() {
+  quoteExtraDiscounts.push({ id: 'ed_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5), name: '', type: 'percent', value: 0 });
+  renderQuoteExtraDiscountsZone();
+  recalculateQuotationTotal();
+}
+
+function removeQuoteExtraDiscount(id) {
+  quoteExtraDiscounts = quoteExtraDiscounts.filter(function(d) { return d.id !== id; });
+  renderQuoteExtraDiscountsZone();
+  recalculateQuotationTotal();
+}
+
+function updateQuoteExtraDiscount(id, field, val) {
+  var d = quoteExtraDiscounts.find(function(x) { return x.id === id; });
+  if (!d) return;
+  if (field === 'value') { val = parseFloat(val) || 0; if (val < 0) val = 0; }
+  d[field] = val;
+  recalculateQuotationTotal();
 }
 
 // ป้าย Level ต่อรายการในตาราง — คลิกเพื่อ re-price แถวนี้แถวเดียวตาม Level ที่เลือก
@@ -2192,6 +2252,7 @@ function renderEditQuotationPage(quote) {
   
   currentQuoteId = quote.id;
   quotationItems = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
+  quoteExtraDiscounts = quote.extraDiscounts ? JSON.parse(JSON.stringify(quote.extraDiscounts)) : [];
   // จำสภาพรายการสินค้าตอนเปิดฟอร์ม ไว้เทียบตอนกดบันทึกว่าเปลี่ยนไปไหม (ใช้ตัดสินใจว่าจะถามสร้าง revision)
   window._quoteItemsSnapshot = JSON.stringify(quotationItems);
   selectedLevelForPrice = quote.levelUsed || 'B';
@@ -2326,7 +2387,10 @@ function renderEditQuotationPage(quote) {
   html += '<div style="max-width:400px;margin-left:auto">';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>Gross Total:</span><span id="quoteGrossTotal" style="font-weight:700">0 ฿</span></div>';
   html += '<div id="quoteCashDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลดเงินสด (ต่อรายการ):</span><span id="quoteCashDiscountAmount" style="font-weight:700;color:#f59e0b">0 ฿</span></div>';
-  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลด (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal();renderQuotationItemsTable()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
+  html += '<div id="quoteExtraDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลดอื่นๆ:</span><span id="quoteExtraDiscountAmount" style="font-weight:700;color:#f59e0b">0 ฿</span></div>';
+  html += '<div id="quoteExtraDiscountsZone" style="margin:2px 0"></div>';
+  html += '<div style="text-align:right;margin:2px 0 6px"><button class="btn bsm bo" type="button" onclick="addQuoteExtraDiscount()">➕ เพิ่มส่วนลดอื่นๆ (กำหนดเอง)</button></div>';
+  html += '<div id="quoteDiscountRow" class="fr" style="justify-content:space-between;padding:4px 0"><span>ส่วนลดท้ายบิล (<input type="number" id="quoteDiscountPercent" style="width:60px;text-align:center" value="0" min="0" max="100" onchange="recalculateQuotationTotal();renderQuotationItemsTable()"> %):</span><span id="quoteDiscountAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:4px;padding-top:8px"><span>Net Amount:</span><span id="quoteNetAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:4px 0"><span>VAT 7%:</span><span id="quoteVatAmount" style="font-weight:700">0 ฿</span></div>';
   html += '<div class="fr" style="justify-content:space-between;padding:6px 0;border-top:2px solid var(--accent);margin-top:4px;padding-top:8px"><span style="font-weight:800">TOTAL:</span><span id="quoteTotalAmount" style="font-weight:800;color:#22c55e;font-size:18px">0 ฿</span></div>';
@@ -2367,6 +2431,7 @@ function renderEditQuotationPage(quote) {
 
   renderQuotationItemsTable();
   renderQuoteSolutionChips();
+  renderQuoteExtraDiscountsZone();
   recalculateQuotationTotal();
   _quoteProjIdDirty = false;
   _quoteLinkNotes();
@@ -2506,22 +2571,10 @@ function saveCurrentQuotation() {
   // ใบนี้ระบุประเภทไว้แล้ว ถ้าทะเบียน Project ID ยังไม่รู้ว่าเลขนี้เป็นอะไร ก็บันทึกให้จากตรงนี้ได้เลย
   if (typeof djpNoteKindFromDoc === 'function') djpNoteKindFromDoc(linkProjectId, linkType);
   
-  // ✅ คำนวณ totals จาก quotationItems ปัจจุบัน
-  var grossTotal = 0;
-  var cashDiscountTotal = 0;
-  for (var i = 0; i < quotationItems.length; i++) {
-    var _amt = Number(quotationItems[i].amount) || 0;
-    grossTotal += _amt;
-    cashDiscountTotal += _amt * (Number(quotationItems[i].cashDiscountPercent) || 0) / 100;
-  }
-  var afterCashTotal = grossTotal - cashDiscountTotal;
-
+  // ✅ คำนวณ totals จาก quotationItems + ส่วนลดเงินสดต่อรายการ + ส่วนลดอื่นๆ ปัจจุบัน (สูตรเดียวกับหน้าจอ — ดู computeQuoteTotals)
   var discountPercentElem = document.getElementById('quoteDiscountPercent');
   var discountPercent = discountPercentElem ? (parseFloat(discountPercentElem.value) || 0) : 0;
-  var discountAmount = afterCashTotal * discountPercent / 100;
-  var netAmount = afterCashTotal - discountAmount;
-  var vatAmount = netAmount * 7 / 100;
-  var totalAmount = netAmount + vatAmount;
+  var st = computeQuoteTotals(quotationItems, quoteExtraDiscounts, discountPercent);
 
   var updatedFields = {
     quoteNo: quoteNo, dealerId: dealerId, dealerName: dealerName, levelUsed: levelUsed,
@@ -2530,8 +2583,10 @@ function saveCurrentQuotation() {
     // ผูกกับโครงการหรือถัง Run rate + Project ID ที่ถือไว้ — SO ที่เปิดจากใบนี้จะสืบทอดไปต่อ (ดู _soFillFromQuote)
     linkType: linkType, pipelineId: linkPipelineId, runrateId: linkRunrateId, projectId: linkProjectId,
     items: JSON.parse(JSON.stringify(quotationItems)),
-    grossTotal: grossTotal, cashDiscountTotal: cashDiscountTotal, discountPercent: discountPercent, discountAmount: discountAmount,
-    netAmount: netAmount, vatPercent: 7, vatAmount: vatAmount, totalAmount: totalAmount,
+    extraDiscounts: st.extraBreakdown, // เก็บพร้อม amount ที่คำนวณไว้แล้ว (ชื่อ/ประเภท/ค่า/ยอดลด) ให้ Preview ใช้ได้ตรงๆ ไม่ต้องคำนวณซ้ำ
+    grossTotal: st.grossTotal, cashDiscountTotal: st.cashDiscountTotal,
+    extraDiscountTotal: st.extraDiscountTotal, discountPercent: discountPercent, discountAmount: st.discountAmount,
+    netAmount: st.netAmount, vatPercent: 7, vatAmount: st.vatAmount, totalAmount: st.totalAmount,
     remark: remark, status: status, attachments: window._quoteAttach || [],
     updatedAt: new Date().toISOString()
   };
@@ -2708,6 +2763,11 @@ function previewQuotation(quoteId) {
 
   var showDiscount = quote.discountPercent && quote.discountPercent > 0;
   var showCashDiscount = quote.cashDiscountTotal && quote.cashDiscountTotal > 0;
+  var extraDiscountsHtml = (quote.extraDiscounts || []).filter(function(d) { return (Number(d.amount) || 0) > 0; })
+    .map(function(d) {
+      var label = (d.name ? sanitize(d.name) : 'ส่วนลดอื่นๆ') + (d.type === 'amount' ? '' : ' (' + (Number(d.value) || 0) + '%)');
+      return '<div class="summary-row"><span>' + label + ':</span><span>-' + formatNumber(d.amount) + ' ฿</span></div>';
+    }).join('');
   
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Quotation ' + quote.quoteNo + '</title>';
   html += '<style>';
@@ -2739,6 +2799,7 @@ function previewQuotation(quoteId) {
 
   html += '<div class="summary"><div class="summary-row"><span>Gross Total:</span><span>' + formatNumber(quote.grossTotal) + ' ฿</span></div>';
   if (showCashDiscount) html += '<div class="summary-row"><span>Cash Payment Discount:</span><span>-' + formatNumber(quote.cashDiscountTotal) + ' ฿</span></div>';
+  html += extraDiscountsHtml;
   if (showDiscount) html += '<div class="summary-row"><span>Discount (' + quote.discountPercent + '%):</span><span>' + formatNumber(quote.discountAmount) + ' ฿</span></div>';
   html += '<div class="summary-row"><span>Net Amount:</span><span>' + formatNumber(quote.netAmount) + ' ฿</span></div>';
   html += '<div class="summary-row"><span>VAT 7%:</span><span>' + formatNumber(quote.vatAmount) + ' ฿</span></div>';
