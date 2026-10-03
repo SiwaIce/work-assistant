@@ -816,18 +816,13 @@ function rSODetail(el) {
 function showCreateSOModal(opts) {
   opts = opts || {};
   var pipe    = opts.pipelineId ? ST.getOne('pipeline', opts.pipelineId) : null;
-  var dealers = ST.getAll('dealers');
   // won projects + project ที่ผูกกับใบเสนอราคา/ที่ส่งมา (แม้ยังไม่ถึงสถานะ won) จะได้ preselect ได้
   var wonPipes = ST.getAll('pipeline').filter(function(p){
     return pipeIsWon(p) || p.id === opts.pipelineId;
   }).sort(function(a,b){ return (a.projectName||'') > (b.projectName||'') ? 1 : -1; });
 
   var preDealerId = (pipe && pipe.dealerId) || opts.dealerId || '';
-  var dealerOpts = '<option value="">-- เลือก Dealer --</option>';
-  dealers.forEach(function(d){
-    var sel = (preDealerId === d.id) ? ' selected' : '';
-    dealerOpts += '<option value="' + d.id + '"' + sel + '>' + sanitize(d.name) + '</option>';
-  });
+  var preDealer = preDealerId ? ST.getOne('dealers', preDealerId) : null;
 
   var pipeOpts = '<option value="">-- ไม่ระบุ / เลือกทีหลัง --</option>';
   wonPipes.filter(function(p){ return !preDealerId || p.dealerId === preDealerId; }).forEach(function(p){
@@ -855,8 +850,13 @@ function showCreateSOModal(opts) {
     '</select></div>';
   html += '</div>';
 
-  // Dealer ก่อน — เลือกแล้วกรอง project ให้เฉพาะของ dealer นั้น
-  html += '<div><label class="lbl">Dealer *</label><select id="soN_dealerId" class="inp" onchange="_soFilterProjectsByDealer(this.value);_soFilterRunrateByDealer(this.value);_soFilterAddressByDealer(this.value)">' + dealerOpts + '</select></div>';
+  // Dealer ก่อน — พิมพ์ชื่อได้ (search & suggest จาก datalist) กรองแล้วเติม project ให้เฉพาะของ dealer นั้น
+  // เลือก dealer ที่มีอยู่แล้ว → hidden soN_dealerId จะถูกเติมให้ (ดู _soDealerNameChanged); พิมพ์ชื่อใหม่ที่ไม่มีในระบบ
+  // ก็ปล่อยไว้ — ตอนกด "สร้าง SO" (saveCreateSO) จะถามว่าต้องการสร้าง Dealer ใหม่ไหม (level Other ไว้ก่อน)
+  html += '<div><label class="lbl">Dealer *</label>' +
+    '<input id="soN_dealerName" class="inp" list="soN_dealerDL" autocomplete="off" placeholder="พิมพ์ชื่อ Dealer..." value="' + sanitize(preDealer ? preDealer.name : '') + '" oninput="_soDealerNameChanged(this.value)" onchange="_soDealerNameChanged(this.value)">' +
+    (typeof _dealerNameDatalistHtml === 'function' ? _dealerNameDatalistHtml('soN_dealerDL') : '') +
+    '<input type="hidden" id="soN_dealerId" value="' + sanitize(preDealerId) + '"></div>';
 
   // project picker (แสดงเมื่อ type=project) — กรองตาม dealer
   html += '<div id="soN_pipeSec"' + (initType!=='project'?' style="display:none"':'') + '>';
@@ -1097,6 +1097,21 @@ function _soRRPick(rrId) {
   note.textContent = 'ยอดของ SO ใบนี้จะไปรวมใน ' + (r.projectId || '(ไม่มีเลข)') + ' — ตอนนี้มี ' + n + ' ใบอยู่ในถังแล้ว';
   note.style.color = 'var(--text2)';
 }
+// ช่อง Dealer แบบพิมพ์ค้นหา (soN_dealerName) — พิมพ์ตรงกับชื่อ dealer ที่มีอยู่แล้วเป๊ะๆ (ไม่สนตัวพิมพ์เล็ก/ใหญ่)
+// ก็ถือว่าเลือก dealer นั้น เติม hidden soN_dealerId ให้ แล้วกรอง project/run rate/ที่อยู่ตามเดิม — พิมพ์ชื่อที่ยังไม่
+// ตรงกับใครเลย (dealer ใหม่) ก็เคลียร์ hidden id ไว้ก่อน รอไปสร้างจริงตอนกด "สร้าง SO" (ดู saveCreateSO)
+function _soDealerNameChanged(name) {
+  var idEl = document.getElementById('soN_dealerId');
+  if (!idEl) return;
+  var typed = (name || '').trim().toLowerCase();
+  var match = typed ? ST.getAll('dealers').find(function(d){ return (d.name||'').trim().toLowerCase() === typed; }) : null;
+  var dealerId = match ? match.id : '';
+  idEl.value = dealerId;
+  _soFilterProjectsByDealer(dealerId);
+  _soFilterRunrateByDealer(dealerId);
+  _soFilterAddressByDealer(dealerId);
+}
+
 // เปลี่ยน Dealer แล้วต้องกรองถัง Run rate ตามไปด้วย เหมือนที่กรอง Pipeline Project
 function _soFilterRunrateByDealer(dealerId) {
   var sel = document.getElementById('soN_runrateId');
@@ -1142,7 +1157,12 @@ function _soFillFromPipe(pipeId) {
 
   // fill dealer
   var dSel = document.getElementById('soN_dealerId');
-  if (dSel && p.dealerId) dSel.value = p.dealerId;
+  if (dSel && p.dealerId) {
+    dSel.value = p.dealerId;
+    var dNameEl = document.getElementById('soN_dealerName');
+    var dObj = ST.getOne('dealers', p.dealerId);
+    if (dNameEl && dObj) dNameEl.value = dObj.name || '';
+  }
 
   // Project ID ของโครงการที่เลือก — ไม่ทับถ้าผู้ใช้พิมพ์เองไว้แล้ว
   var pidEl = document.getElementById('soN_projectId');
@@ -1310,6 +1330,7 @@ function saveCreateSO() {
   var soNumber    = (document.getElementById('soN_soNumber')  ||{}).value || _soNextNum('SO');
   var type        = (document.getElementById('soN_type')       ||{}).value || 'runrate';
   var dealerId    = (document.getElementById('soN_dealerId')   ||{}).value || '';
+  var dealerName  = ((document.getElementById('soN_dealerName')||{}).value || '').trim();
   var customerPO  = (document.getElementById('soN_customerPO') ||{}).value || '';
   var pipelineId  = (document.getElementById('soN_pipelineId') ||{}).value || '';
   var quotationId = (document.getElementById('soN_quotationId')||{}).value || '';
@@ -1321,6 +1342,14 @@ function saveCreateSO() {
   // SO เป็นได้อย่างใดอย่างหนึ่ง — โครงการ หรือ run rate ไม่ใช่ทั้งสอง ไม่งั้นยอดจะถูกนับซ้ำสองที่
   if (type === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
 
+  // พิมพ์ชื่อ Dealer ที่ยังไม่มีในระบบไว้ (hidden soN_dealerId ไม่ถูกเติม เพราะไม่ตรงกับ dealer เดิมตัวไหนเป๊ะๆ)
+  // — ถามยืนยันตรงนี้เลยตอนกดสร้าง SO ว่าจะสร้าง Dealer ใหม่ให้ไหม ตั้ง level เป็น Other ไว้ก่อน แก้ทีหลังได้
+  if (!dealerId && dealerName) {
+    if (!confirm('ยังไม่มีข้อมูล Dealer นี้ ต้องการสร้างไหม')) return;
+    var newDealer = ST.add('dealers', { name: dealerName, level: 'Other' });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('dealers', newDealer);
+    dealerId = newDealer.id;
+  }
   if (!dealerId) { alert('กรุณาเลือก Dealer'); return; }
 
   var items = [];
