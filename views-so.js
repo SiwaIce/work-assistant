@@ -133,19 +133,23 @@ function _soMigrateLegacyShipment(s) {
   return legacy;
 }
 
-// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty}] เฉพาะที่ผู้ใช้กรอก qty > 0
-// มาร์ค lot ที่จองใน 1021 เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
+// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty1021, qty0001}] เฉพาะที่ผู้ใช้กรอก qty > 0
+// qty1021 = ส่งจากของที่จองใน 1021 ไว้แล้ว, qty0001 = ส่งตรงจากคลัง 1001 (ยังไม่เคยจอง) ในรอบเดียวกัน
+// มาร์ค lot เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
 function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var shipments = _soMigrateLegacyShipment(s).slice();
   var shippedItems = [];
   roundItems.forEach(function(ri) {
-    var qty = Math.max(0, Math.round(Number(ri.qty) || 0));
-    if (qty <= 0 || !ri.sku) return;
+    var qty1021 = Math.max(0, Math.round(Number(ri.qty1021) || 0));
+    var qty0001 = Math.max(0, Math.round(Number(ri.qty0001) || 0));
+    if ((qty1021 <= 0 && qty0001 <= 0) || !ri.sku) return;
     var it = (s.items || []).filter(function(x) { return x.sku === ri.sku; })[0];
     var productName = it ? it.model : ri.sku;
-    var delivered = (typeof stockDeliverSOItemQty === 'function') ? stockDeliverSOItemQty(ri.sku, productName, soId, qty) : 0;
+    var delivered = 0;
+    if (qty1021 > 0 && typeof stockDeliverSOItemQty === 'function') delivered += stockDeliverSOItemQty(ri.sku, productName, soId, qty1021);
+    if (qty0001 > 0 && typeof stockDeliverSOItemFrom0001 === 'function') delivered += stockDeliverSOItemFrom0001(ri.sku, productName, s, qty0001);
     if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
   });
   if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
@@ -162,7 +166,14 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
   var curIdx = order.indexOf(s.status);
   var target = progress.allDelivered ? 'shipped' : (progress.anyDelivered ? 'partial_shipped' : s.status);
   var targetIdx = order.indexOf(target);
-  if (targetIdx > curIdx) update.status = target;
+  if (targetIdx > curIdx) {
+    update.status = target;
+    var cfg = getConfig();
+    var targetInfo = SO_STATUS[target] || { label: target, icon: '?' };
+    var logs = (s.logs || []).slice();
+    logs.push({ date: _td(), action: targetInfo.icon + ' ' + targetInfo.label, note: 'อัตโนมัติจากการบันทึกส่งมอบ', by: cfg.saleName || '', fromStatus: s.status, toStatus: target });
+    update.logs = logs;
+  }
 
   var updated = ST.update('salesOrders', soId, update);
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
@@ -174,17 +185,38 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
 function showSORecordShipmentModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
-  var progress = soComputeShipmentProgress(s);
-  var shippable = progress.items.filter(function(x) { return x.tracked && x.readyToShipQty > 0; });
-  if (!shippable.length) { toast('⚠️ ยังไม่มีรายการไหนพร้อมส่ง (ต้องจองเข้า 1021 ก่อน)'); return; }
+  var trackedItems = (s.items || []).filter(function(it) { return it.sku; });
+  if (!trackedItems.length) { toast('⚠️ SO นี้ไม่มีรายการที่ผูก SKU ให้ตรวจสต็อก'); return; }
 
-  var body = '<div class="hint" style="margin-bottom:8px">ใส่จำนวนที่จะส่งรอบนี้ต่อรายการ — ใส่ได้ไม่เกินที่พร้อมส่งแต่ยังไม่เคยส่ง</div>';
-  shippable.forEach(function(x) {
-    body += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">';
-    body += '<span style="flex:1">' + sanitize(x.model || x.sku) + ' <span style="color:var(--text2);font-size:11px">(พร้อมส่งอีก ' + x.readyToShipQty + ')</span></span>';
-    body += '<input type="number" class="inp" style="width:70px" id="soShip_q_' + x.idx + '" data-sku="' + sanitize(x.sku) + '" value="' + x.readyToShipQty + '" min="0" max="' + x.readyToShipQty + '">';
-    body += '</div>';
+  // โชว์ทุกรายการที่มี SKU พร้อมสต็อกแบบละเอียด (ส่งแล้ว/พร้อมส่งจาก 1021/มีใน 1001 แต่ยังไม่จอง/ขาดต้อง PR-PO)
+  // เลือกได้ว่าจะส่งรอบนี้จากคลังไหนเท่าไหร่ — จากของที่จองใน 1021 ไว้แล้ว และ/หรือ ตรงจากคลัง 1001 ที่ยังไม่เคยจอง (ย้าย+ส่งมอบให้ในขั้นตอนเดียว ไม่ต้องไปกดจองเข้า 1021 แยกก่อน)
+  var anyReady = false;
+  var body = '<div class="hint" style="margin-bottom:8px">เลือกจำนวนและคลังที่จะส่งรอบนี้ต่อรายการ — ส่งจากของที่จองใน 1021 ไว้แล้ว และ/หรือตรงจากคลัง 1001 ก็ได้ในรอบเดียวกัน</div>';
+  trackedItems.forEach(function(it, idx) {
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : { deliveredForThisSO: 0, bookedForThisSO: 0, from0001: 0, shortfall: 0 };
+    var qty1021 = info.bookedForThisSO || 0;
+    var qty0001 = info.from0001 || 0;
+    body += '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">';
+    body += '<div style="margin-bottom:4px"><b>' + sanitize(it.model || it.sku) + '</b> <span style="color:var(--text2);font-size:11px">(สั่ง ' + (it.qty || 0) + ')</span></div>';
+    if (qty1021 > 0 || qty0001 > 0) {
+      body += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
+      if (qty1021 > 0) {
+        body += '<div><label class="lbl" style="font-size:10px;color:#16a34a">✓ จาก 1021 (จองแล้ว) สูงสุด ' + qty1021 + '</label>';
+        body += '<input type="number" class="inp" style="width:80px" id="soShip_q1021_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="' + qty1021 + '" min="0" max="' + qty1021 + '"></div>';
+      }
+      if (qty0001 > 0) {
+        body += '<div><label class="lbl" style="font-size:10px;color:#2563eb">📦 จาก 1001 (ยังไม่จอง) สูงสุด ' + qty0001 + '</label>';
+        body += '<input type="number" class="inp" style="width:80px" id="soShip_q0001_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + qty0001 + '"></div>';
+      }
+      body += '</div>';
+    }
+    body += '<div style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px">';
+    if (info.deliveredForThisSO > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280">✔ ส่งมอบแล้ว ' + info.deliveredForThisSO + '</span>';
+    if (info.shortfall > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + info.shortfall + ' ต้อง PR/PO</span>';
+    body += '</div></div>';
+    if (qty1021 > 0 || qty0001 > 0) anyReady = true;
   });
+  if (!anyReady) body += '<div class="warn-box" style="font-size:11px;margin-top:8px">⚠️ ยังไม่มีของพร้อมส่งเลย ทั้งที่จองใน 1021 และในคลัง 1001</div>';
   body += '<div style="display:flex;gap:8px;margin-top:10px">';
   body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(_soNextNum('DO')) + '"></div>';
   body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label><input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '"></div>';
@@ -198,10 +230,18 @@ function showSORecordShipmentModal(soId) {
 }
 
 function _saveSORecordShipment(soId) {
-  var roundItems = [];
-  document.querySelectorAll('[id^="soShip_q_"]').forEach(function(input) {
-    roundItems.push({ sku: input.getAttribute('data-sku'), qty: input.value });
+  var bySku = {};
+  document.querySelectorAll('[id^="soShip_q1021_"]').forEach(function(input) {
+    var sku = input.getAttribute('data-sku');
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku].qty1021 = input.value;
   });
+  document.querySelectorAll('[id^="soShip_q0001_"]').forEach(function(input) {
+    var sku = input.getAttribute('data-sku');
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku].qty0001 = input.value;
+  });
+  var roundItems = Object.keys(bySku).map(function(sku) { return bySku[sku]; });
   var doNumber = (document.getElementById('soShip_do') || {}).value || '';
   var invoiceNumber = (document.getElementById('soShip_inv') || {}).value || '';
   var invoiceDate = (document.getElementById('soShip_invDate') || {}).value || '';
@@ -754,6 +794,7 @@ function rSODetail(el) {
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
   if (nexts.length) html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
+  if (_soPrevStatusFromLogs(s)) html += '<button class="btn bo bsm" onclick="revertSOStatus(\'' + s.id + '\')" title="ย้อนสถานะกลับไปขั้นก่อนหน้า เผื่อกดผิด">↩️ ย้อนกลับสถานะ</button>';
   html += '<button class="btn bo bsm" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
   html += '<button class="btn bd bsm" onclick="deleteSalesOrder(\'' + s.id + '\')" title="ลบ SO">🗑️</button>';
   html += '</div></div>';
@@ -2026,7 +2067,7 @@ function saveSOStatus(soId) {
   }
 
   var update = { status: nextSt, updatedAt: new Date().toISOString() };
-  var logEntry = { date: _td(), action: info.icon + ' ' + info.label, note: note, by: cfg.saleName||'' };
+  var logEntry = { date: _td(), action: info.icon + ' ' + info.label, note: note, by: cfg.saleName||'', fromStatus: s.status, toStatus: nextSt };
 
   // PR/PO fields
   if (nextSt === 'so_open') {
@@ -2072,6 +2113,39 @@ function saveSOStatus(soId) {
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
   toast('✅ อัปเดตสถานะแล้ว');
+  go('soDetail', { soId: soId });
+}
+
+// ---------------------------------------------------------------- ย้อนกลับสถานะ (กันกดผิด)
+
+var _SO_ORDER = ['po_received', 'so_open', 'partial_shipped', 'shipped', 'invoiced', 'closed'];
+
+// หาสถานะก่อนหน้าจาก log จริง (fromStatus ที่บันทึกไว้ตอนเปลี่ยนสถานะ) — แม่นกว่าไล่ตามลำดับเฉยๆ เพราะบางเส้นทาง
+// ข้ามขั้นได้ (เช่น so_open -> shipped ตรงๆ ไม่ผ่าน partial_shipped) ถ้าไม่มี log เก่าพอ (ข้อมูลก่อนมีฟีเจอร์นี้) ค่อย fallback ไปไล่ลำดับแทน
+function _soPrevStatusFromLogs(s) {
+  var logs = s.logs || [];
+  for (var i = logs.length - 1; i >= 0; i--) {
+    if (logs[i].toStatus === s.status && logs[i].fromStatus) return logs[i].fromStatus;
+  }
+  var idx = _SO_ORDER.indexOf(s.status);
+  return idx > 0 ? _SO_ORDER[idx - 1] : null;
+}
+
+function revertSOStatus(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var prev = _soPrevStatusFromLogs(s);
+  if (!prev) { toast('⚠️ ไม่มีสถานะก่อนหน้าให้ย้อนกลับ'); return; }
+  var curInfo  = SO_STATUS[s.status] || { label: s.status, icon: '?' };
+  var prevInfo = SO_STATUS[prev]     || { label: prev,     icon: '?' };
+  if (!confirm('ย้อนสถานะจาก "' + curInfo.label + '" กลับไปเป็น "' + prevInfo.label + '" ใช่หรือไม่?\n(ย้อนได้ทีละขั้น และบันทึกไว้ใน Timeline)')) return;
+
+  var cfg  = getConfig();
+  var logs = (s.logs || []).slice();
+  logs.push({ date: _td(), action: '↩️ ย้อนกลับสถานะ → ' + prevInfo.icon + ' ' + prevInfo.label, note: 'ย้อนจาก ' + curInfo.label, by: cfg.saleName || '', fromStatus: s.status, toStatus: prev });
+  var updatedSO = ST.update('salesOrders', soId, { status: prev, logs: logs, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
+  toast('↩️ ย้อนสถานะแล้ว');
   go('soDetail', { soId: soId });
 }
 

@@ -807,6 +807,41 @@ function stockDeliverSOItemQty(sku, productName, soId, qty) {
   return delivered;
 }
 
+// ส่งตรงจากคลัง 1001 (location '0001') ให้ SO โดยไม่ต้องกดจองเข้า 1021 แยกขั้นตอนก่อน — ย้าย+ส่งมอบในทีเดียว (ใช้ตอน "แบ่งส่ง" ที่มีของ
+// พร้อมอยู่ใน 1001 แต่ยังไม่เคยจอง) ดึงจาก lot ที่เก่าสุดก่อน (FIFO) คล้าย stockFulfillReservationToSO แต่มาร์คส่งมอบแล้วทันทีแทนที่จะพักเป็น "เตรียมส่งมอบ"
+// คืนค่าจำนวนที่ส่งได้จริง (อาจน้อยกว่า qty ที่ขอ ถ้าของใน 1001 ไม่พอแล้ว)
+function stockDeliverSOItemFrom0001(sku, productName, so, qty) {
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (!sku || !so || !so.id || qty <= 0) return 0;
+  var lots = stockGetLots(sku).slice();
+  var sourceLots = lots.filter(function(l) { return l.location === '0001'; })
+    .sort(function(a, b) { return (a.dateIn || '').localeCompare(b.dateIn || ''); });
+  var remaining = qty;
+  for (var j = 0; j < sourceLots.length && remaining > 0; j++) {
+    var lot = sourceLots[j];
+    var idx = lots.findIndex(function(l) { return l.id === lot.id; });
+    var take = Math.min(remaining, Number(lot.qty) || 0);
+    if (take <= 0) continue;
+    remaining -= take;
+    if (take >= (Number(lot.qty) || 0)) lots.splice(idx, 1);
+    else lots[idx] = Object.assign({}, lot, { qty: lot.qty - take });
+  }
+  var delivered = qty - remaining;
+  if (delivered <= 0) return 0;
+  lots.push({
+    id: _stockLotId(), location: '1021', ref: so.soNumber, qty: delivered, dateIn: _nw(),
+    note: 'แบ่งส่งตรงจาก 1001', fromLocation: '0001',
+    soNumber: so.soNumber, soId: so.id, bookedDate: _nw(), status: 'ส่งมอบแล้ว', deliveredDate: _nw()
+  });
+  _stockSaveLots(sku, productName, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: productName, locationCode: '0001', locationName: stockLocationName('0001'),
+    toLocationCode: '1021', toLocationName: stockLocationName('1021'),
+    qty: delivered, note: 'แบ่งส่งตรงจาก 1001 — SO ' + (so.soNumber || ''), date: _nw(), type: 'transfer'
+  });
+  return delivered;
+}
+
 // ลบ lot ที่เผลอกรอกผิดทิ้งทั้งรายการ
 function stockDeleteLot(sku, lotId) {
   if (!confirm('ลบรายการนี้ทิ้ง?\nใช้ตอนกรอกผิดเท่านั้น ไม่สามารถกู้คืนได้')) return;
