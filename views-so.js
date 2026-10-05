@@ -294,7 +294,36 @@ function _soStatusBadge(st) {
     s.color + '22;border-color:' + s.color + '55;color:' + s.color + '">' + s.icon + ' ' + s.label + '</span>';
 }
 
-// สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ copy วางส่งให้ Sales Support ได้เลย (ต่อยอดจากไอเดีย mockup เดิม — ก่อนหน้านี้มีแต่ export รวมทุก SO)
+// สถานะการจอง/หมายเหตุ/อ้างอิง ของสินค้า 1 รายการ — ใช้ในตาราง copy สรุปส่ง Sales Support
+// แยกจาก _poTrackerItemRemark เพราะตรงนั้นรวม status+note เป็นข้อความเดียว ส่วนตารางต้องการแยกคอลัมน์
+function _soSummaryItemStatusInfo(it, s) {
+  var qty = Number(it.qty) || 0;
+  var status = '—', note = '';
+  if (it.sourceType === 'pr_po') {
+    status = '🛒 รอ PR/PO';
+    var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
+    if (stLabel) note = stLabel;
+    if (it.prpoExpectedDate) note = (note ? note + ' — ' : '') + 'คาดว่าได้ ' + fD(it.prpoExpectedDate);
+  } else if (it.sourceType === 'reserve_1021') {
+    status = '📌 จองคลัง 1021 (' + qty + ' ชิ้น)';
+  } else if (it.sourceType === 'reserve_8d01') {
+    status = '🧳 จองคลัง 8D01 (' + qty + ' ชิ้น)';
+  } else if (it.sourceType === 'central_wh') {
+    status = '🏢 ส่งจากคลังกลาง';
+  } else if (it.sku && typeof stockSOItemReadyInfo === 'function') {
+    var info = stockSOItemReadyInfo(it.sku, qty, s);
+    if (info.ready) status = '✅ พร้อมส่ง';
+    else if (info.shortfall > 0) status = '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
+    if (info.bookingExpiryDate) note = 'จองถึง ' + fD(info.bookingExpiryDate);
+  }
+  // ลิงก์จอง/อ้างอิงการจอง — ระบบนี้ยังไม่มีเลขอ้างอิงแยกต่อรายการ ใช้เลข SO/PO ของใบนี้เป็นอ้างอิง (มีอยู่แล้วในระบบ)
+  var ref = s.soNumber || s.customerPO || '-';
+  if (s.pendingSoNumber) ref += ' (ร่าง)';
+  return { status: status, note: note, ref: ref };
+}
+
+// สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ copy วางส่งให้ Sales Support ได้เลย — ส่วนหัว/ยอดรวมเป็นข้อความตามเดิม
+// ส่วนรายการสินค้าเป็น TSV (tab-separated) เพื่อวางใน Excel แล้วแยกคอลัมน์ได้ทันที (ต่อยอดจากไอเดีย mockup เดิม — ก่อนหน้านี้มีแต่ export รวมทุก SO)
 function _soSummaryTextForSalesSupport(s) {
   var lines = [];
   lines.push('📄 สรุป PO/SO สำหรับ Sales Support');
@@ -305,10 +334,21 @@ function _soSummaryTextForSalesSupport(s) {
   if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
   lines.push('');
   lines.push('รายการสินค้า:');
-  (s.items || []).forEach(function(it, idx) {
+  lines.push(['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'ลิงก์จอง/อ้างอิง'].join('\t'));
+  (s.items || []).forEach(function(it) {
     var qty = Number(it.qty) || 0;
     var price = Number(it.unitPrice) || 0;
-    lines.push((idx + 1) + '. ' + (it.model || it.sku || '-') + ' × ' + qty + ' @ ฿' + nmI(price) + ' = ฿' + nmI(qty * price) + (it.sourceType ? ' [' + _poTrackerItemRemark(it, s) + ']' : ''));
+    var info = _soSummaryItemStatusInfo(it, s);
+    lines.push([
+      it.sku || '-',
+      it.model || '-',
+      qty,
+      price.toFixed(2),
+      (qty * price).toFixed(2),
+      info.status,
+      info.note,
+      info.ref
+    ].join('\t'));
   });
   var total = _poTrackerSOTotal(s);
   lines.push('');
