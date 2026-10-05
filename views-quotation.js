@@ -898,6 +898,166 @@ function _ocDeleteItem(id) {
 }
 
 // ================================================================
+// PASTE รายการสินค้า — วางข้อความที่ copy มาจากต้นทาง (เช่น PO ลูกค้า/ใบเสนอราคาเดิม) คอลัมน์:
+// ลำดับ, SKU, ชื่อสินค้า, จำนวน, ราคาต่อหน่วย, รวม — รองรับตัวคั่นทั้ง tab และช่องว่างหลายช่อง และตัวเลขมีคอมมา
+// แยกแต่ละแถวแล้วเช็ค SKU กับสินค้าในระบบ ถ้าตรง ให้เลือกได้ว่าจะใช้ชื่อ/ราคาจากระบบหรือจากที่ copy มา (แยกกันได้)
+// ถ้า SKU ไม่ตรงกับระบบ จะเพิ่มเป็นรายการตามที่ copy มาเลย (ไม่บังคับแก้)
+// ================================================================
+var _pqiRows = []; // { sku, name, quantity, copyUnitPrice, copyAmount, product, nameSource, priceSource }
+
+function showPasteQuoteItemsM() {
+  _pqiRows = [];
+  var h = '<div style="max-width:640px">';
+  h += '<div class="hint" style="margin-bottom:8px">วางข้อความที่ copy มาได้เลย แต่ละแถว = 1 รายการ เช่น:<br>' +
+    '<code style="font-size:11px;white-space:pre-wrap">1 DJI-6937224120570A Matrice400 (M400) RC BAG CH Adapt 2Yrs 1 172,602.65 172,602.65</code></div>';
+  h += '<textarea id="pqiRawText" rows="8" class="fm-input" style="font-family:monospace;font-size:12px" placeholder="วางรายการที่ copy มาที่นี่..."></textarea>';
+  h += '<div class="fm-actions"><button class="btn bp" type="button" onclick="_pqiParseText()">🔎 แยกรายการ</button><button class="btn" type="button" onclick="closeM()">ปิด</button></div>';
+  h += '<div id="pqiReviewZone" style="margin-top:14px"></div>';
+  h += '</div>';
+  openM('📥 Paste รายการสินค้า', h);
+  setMWide(760);
+}
+
+// แยกแต่ละแถว: token สุดท้าย 2-3 ตัวที่เป็นตัวเลข = จำนวน/ราคาต่อหน่วย/รวม, token แรกถ้าเป็นเลขล้วนตัดออก (ลำดับ),
+// token ถัดมา = SKU, ที่เหลือตรงกลางรวมกัน = ชื่อสินค้า
+function _pqiParseLine(line) {
+  var tokens = line.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 4) return null;
+  function isNum(t) { return /^-?[0-9]+(\.[0-9]+)?$/.test(t.replace(/,/g, '')); }
+  var numCount = 0;
+  for (var k = tokens.length - 1; k >= 0 && numCount < 3; k--) {
+    if (isNum(tokens[k])) numCount++;
+    else break;
+  }
+  if (numCount < 2) return null; // ต้องมีอย่างน้อยจำนวน + ราคา/หน่วย
+  var restEnd = tokens.length - numCount;
+  var qtyTok = tokens[restEnd], priceTok = tokens[restEnd + 1];
+  var totalTok = numCount === 3 ? tokens[restEnd + 2] : null;
+  var rest = tokens.slice(0, restEnd);
+  if (rest.length > 1 && /^[0-9]+$/.test(rest[0])) rest = rest.slice(1); // ตัดคอลัมน์ลำดับ
+  if (rest.length < 2) return null; // ต้องมี SKU + ชื่อ เหลืออย่างน้อย 2 token
+  var sku = rest[0];
+  var name = rest.slice(1).join(' ');
+  var qtyN = parseInt(parseNum(qtyTok)) || 1;
+  var priceN = parseNum(priceTok);
+  var totalN = totalTok != null ? parseNum(totalTok) : qtyN * priceN;
+  return { sku: sku, name: name, quantity: qtyN, copyUnitPrice: priceN, copyAmount: totalN };
+}
+
+function _pqiFindProductBySku(sku) {
+  if (!sku) return null;
+  var norm = sku.trim().toLowerCase();
+  var prods = ST.getAll('products');
+  return prods.find(function(p) { return p.sku && p.sku.trim().toLowerCase() === norm; }) || null;
+}
+
+function _pqiParseText() {
+  var raw = (document.getElementById('pqiRawText') || {}).value || '';
+  var lines = raw.split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+  var rows = [];
+  var failCount = 0;
+  lines.forEach(function(line) {
+    var parsed = _pqiParseLine(line);
+    if (!parsed) { failCount++; return; }
+    var product = _pqiFindProductBySku(parsed.sku);
+    rows.push({
+      sku: parsed.sku,
+      copyName: parsed.name,
+      quantity: parsed.quantity,
+      copyUnitPrice: parsed.copyUnitPrice,
+      copyAmount: parsed.copyAmount,
+      product: product,
+      nameSource: 'system',
+      priceSource: 'system'
+    });
+  });
+  _pqiRows = rows;
+  if (!rows.length) { toast('⚠️ ไม่พบรายการที่แยกได้ — เช็ครูปแบบข้อความที่วาง'); }
+  else if (failCount) { toast('⚠️ แยกได้ ' + rows.length + ' รายการ (ข้าม ' + failCount + ' แถวที่อ่านไม่ออก)'); }
+  _pqiRenderReview();
+}
+
+function _pqiRenderReview() {
+  var zone = document.getElementById('pqiReviewZone');
+  if (!zone) return;
+  if (!_pqiRows.length) { zone.innerHTML = ''; return; }
+  var h = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">ตรวจสอบรายการก่อนเพิ่ม — รายการที่ SKU ตรงกับระบบ (🟢) เลือกได้ว่าจะใช้ชื่อสินค้า/ราคาจากระบบหรือจากที่ copy มา แยกกันได้ ส่วนรายการที่ SKU ไม่ตรง (🟠) จะเพิ่มตามที่ copy มา</div>';
+  h += '<div style="max-height:360px;overflow-y:auto">';
+  _pqiRows.forEach(function(row, i) {
+    var matched = !!row.product;
+    var sysName = matched ? row.product.name : '';
+    var sysPrice = matched ? getModelPriceByLevelForQuote(row.product.name, selectedLevelForPrice) : 0;
+    h += '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:var(--bg2)">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+      '<span style="font-size:11px;color:var(--text2)">SKU: ' + sanitize(row.sku) + (matched ? ' <span style="color:#22c55e">🟢 ตรงกับระบบ</span>' : ' <span style="color:#f59e0b">🟠 ไม่พบใน SKU ระบบ — จะเพิ่มตามที่ copy มา</span>') + '</span>' +
+      '<button class="btn bsm bd" type="button" onclick="_pqiRemoveRow(' + i + ')">🗑️</button></div>';
+    if (matched) {
+      h += '<div style="font-size:12px;margin-bottom:4px"><b>ชื่อสินค้า:</b> ' +
+        '<label style="margin-right:10px"><input type="radio" name="pqiName' + i + '" ' + (row.nameSource === 'system' ? 'checked' : '') + ' onchange="_pqiSetField(' + i + ',\'nameSource\',\'system\')"> จากระบบ: ' + sanitize(sysName) + '</label>' +
+        '<label><input type="radio" name="pqiName' + i + '" ' + (row.nameSource === 'copy' ? 'checked' : '') + ' onchange="_pqiSetField(' + i + ',\'nameSource\',\'copy\')"> จากที่ copy มา: ' + sanitize(row.copyName) + '</label></div>';
+      h += '<div style="font-size:12px;margin-bottom:4px"><b>ราคา/หน่วย:</b> ' +
+        '<label style="margin-right:10px"><input type="radio" name="pqiPrice' + i + '" ' + (row.priceSource === 'system' ? 'checked' : '') + ' onchange="_pqiSetField(' + i + ',\'priceSource\',\'system\')"> จากระบบ: ' + formatNumber(sysPrice) + ' ฿</label>' +
+        '<label><input type="radio" name="pqiPrice' + i + '" ' + (row.priceSource === 'copy' ? 'checked' : '') + ' onchange="_pqiSetField(' + i + ',\'priceSource\',\'copy\')"> จากที่ copy มา: ' + formatNumber(row.copyUnitPrice) + ' ฿</label></div>';
+    } else {
+      h += '<div style="font-size:12px;margin-bottom:4px"><b>ชื่อสินค้า:</b> ' + sanitize(row.copyName) + '</div>';
+      h += '<div style="font-size:12px;margin-bottom:4px"><b>ราคา/หน่วย:</b> ' + formatNumber(row.copyUnitPrice) + ' ฿</div>';
+    }
+    h += '<div style="font-size:12px">จำนวน: <input type="number" min="1" value="' + row.quantity + '" style="width:70px;text-align:center;padding:2px" onchange="_pqiSetField(' + i + ',\'quantity\',parseInt(this.value)||1)"></div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  h += '<button class="btn bp" style="background:#22c55e" type="button" onclick="_pqiConfirmAdd()">✅ เพิ่มทั้งหมดเข้าใบเสนอราคา (' + _pqiRows.length + ' รายการ)</button>';
+  zone.innerHTML = h;
+}
+
+function _pqiSetField(i, field, val) {
+  if (!_pqiRows[i]) return;
+  _pqiRows[i][field] = val;
+  _pqiRenderReview();
+}
+
+function _pqiRemoveRow(i) {
+  _pqiRows.splice(i, 1);
+  _pqiRenderReview();
+}
+
+function _pqiConfirmAdd() {
+  if (!_pqiRows.length) return;
+  var added = 0;
+  _pqiRows.forEach(function(row) {
+    var matched = !!row.product;
+    var name = matched && row.nameSource === 'system' ? row.product.name : row.copyName;
+    var unitPrice = matched && row.priceSource === 'system' ? getModelPriceByLevelForQuote(row.product.name, selectedLevelForPrice) : row.copyUnitPrice;
+    var qty = row.quantity || 1;
+    var sku = matched ? (row.product.sku || row.sku) : row.sku;
+    var cost = matched ? (row.product.cost || 0) : 0;
+
+    var existing = quotationItems.find(function(qi) { return qi.sku && sku && qi.sku === sku; });
+    if (existing) {
+      existing.quantity += qty;
+      existing.amount = existing.quantity * existing.unitPrice;
+    } else {
+      quotationItems.push({
+        sku: sku,
+        name: name,
+        quantity: qty,
+        unitPrice: unitPrice,
+        amount: qty * unitPrice,
+        cost: cost,
+        priceLevel: matched && row.priceSource === 'system' ? selectedLevelForPrice : null,
+        isOther: !matched
+      });
+    }
+    added++;
+  });
+  _pqiRows = [];
+  closeMForce();
+  renderQuotationItemsTable();
+  recalculateQuotationTotal();
+  toast('➕ เพิ่ม ' + added + ' รายการจาก Paste');
+}
+
+// ================================================================
 // QUICK PRICE ESTIMATOR — ดูยอดรวมคร่าวๆ ไม่ผูก Dealer ไม่ใช่ใบเสนอราคาจริง
 // บันทึกชุดสินค้าที่ใช้บ่อยเป็น "Solution" เรียกซ้ำได้ (เก็บแค่ model+qty ราคาคำนวณสดเสมอ)
 // ================================================================
@@ -2374,7 +2534,8 @@ function renderEditQuotationPage(quote) {
   html += '<div class="fg" style="width:100px"><label>🔢 จำนวน</label><input type="number" id="newItemQty" class="fm-input" value="1" min="1" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addQuotationItemFromInput();}"></div>';
   html += '<div><button class="btn bp" onclick="addQuotationItemFromInput()" style="margin-bottom:4px;background:#22c55e">➕ เพิ่มสินค้า</button>' +
     '<button class="btn bo" type="button" onclick="openProductPicker({showPrice:true, onAdd:pickerAddToQuote})" title="เลือกจากแคตตาล็อก (แนะนำ/ค้นหา)" style="margin-bottom:4px;margin-left:4px">📋 แคตตาล็อก</button>' +
-    '<button class="btn bo" type="button" onclick="showAddOtherItemM()" title="เพิ่มสินค้านอกรายการสินค้าทั้งหมด (ไม่ปนกับ Stock/DJI) — เช่นสินค้าอื่นๆที่ไม่เกี่ยว DJI" style="margin-bottom:4px;margin-left:4px">🏷️ สินค้าอื่นๆ</button></div>';
+    '<button class="btn bo" type="button" onclick="showAddOtherItemM()" title="เพิ่มสินค้านอกรายการสินค้าทั้งหมด (ไม่ปนกับ Stock/DJI) — เช่นสินค้าอื่นๆที่ไม่เกี่ยว DJI" style="margin-bottom:4px;margin-left:4px">🏷️ สินค้าอื่นๆ</button>' +
+    '<button class="btn bo" type="button" onclick="showPasteQuoteItemsM()" title="วางข้อความรายการสินค้าที่ copy มา (ลำดับ, SKU, ชื่อสินค้า, จำนวน, ราคาต่อหน่วย, รวม) แล้วให้ระบบแยกเป็นรายการให้" style="margin-bottom:4px;margin-left:4px">📥 Paste รายการ</button></div>';
   html += '</div>';
   _qiaBindOutsideClose();
   
