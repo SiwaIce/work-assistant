@@ -274,9 +274,26 @@ function stockCancelReservationAndRefresh(id) {
   if (typeof renderQuotationItemsTable === 'function') renderQuotationItemsTable();
 }
 
+// ถามวันที่จองถึง (ไม่บังคับ) ก่อนย้ายเข้า 1021 จริง — เดิมกดปุ่มแล้วย้ายทันทีโดยไม่มีช่องให้กรอกวันหมดจองเลย
+function showStockFulfillReservationM(sku, soId) {
+  var so = ST.getOne('salesOrders', soId);
+  if (!so) return;
+  var p = getProductBySku(sku);
+  var reservation = stockGetReservationFor(sku, so.quotationId);
+  if (!reservation) { toast('⚠️ ไม่พบรายการจองของสินค้านี้'); return; }
+  var queue = stockComputeQueue(sku);
+  var entry = null;
+  for (var i = 0; i < queue.length; i++) { if (queue[i].reservation.id === reservation.id) { entry = queue[i]; break; } }
+  var moveQty = entry ? entry.from0001 : 0;
+  var body = '<div style="font-size:13px;margin-bottom:10px">ย้ายเข้า 1021 (Sales Booking) ' + moveQty + ' หน่วย ผูกกับ SO ' + sanitize(so.soNumber || '') + '</div>';
+  body += '<div class="fg"><label>จองถึงวันที่ <small style="color:var(--text2)">(ไม่บังคับ — เว้นว่างถ้ายังไม่กำหนด)</small></label><input type="date" id="frm_bexp"></div>';
+  body += '<button class="btn bp btn-full" onclick="closeMForce();stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + soId + '\'),document.getElementById(\'frm_bexp\').value)">📦 ยืนยัน & ย้ายเข้า 1021</button>';
+  openM('📦 ยืนยัน & ย้ายเข้า 1021 — ' + sanitize(p ? p.name : sku), body);
+}
+
 // เฟส 3: ย้ายส่วนที่ "พร้อมส่ง" (จาก 0001) ของรายการจองนี้เข้า 1021 จริง ผูกกับเลข SO
 // ส่วนที่ยังติด QI (รอขึ้นทะเบียน) จะไม่ย้าย รอ admin ย้าย QI -> 0001 เองก่อน แล้วค่อยกดยืนยันซ้ำ
-function stockFulfillReservationToSO(sku, so) {
+function stockFulfillReservationToSO(sku, so, bookingExpiryDate) {
   var p = getProductBySku(sku);
   var productName = p ? p.name : sku;
   var reservation = stockGetReservationFor(sku, so.quotationId);
@@ -308,7 +325,8 @@ function stockFulfillReservationToSO(sku, so) {
     note: 'ยืนยันจาก SO', fromLocation: '0001',
     soNumber: so.soNumber, soId: so.id, bookedDate: _nw(),
     salesperson: reservation.salesperson || '', dealerName: reservation.dealerName || so.dealerName || '',
-    projectName: reservation.projectName || '', status: 'เตรียมส่งมอบ'
+    projectName: reservation.projectName || '', status: 'เตรียมส่งมอบ',
+    bookingExpiryDate: bookingExpiryDate || ''
   });
   _stockSaveLots(sku, productName, lots);
   ST.add('stockLog', {
@@ -419,20 +437,22 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
     h += '</div>';
   }
   if (reservation && from0001 > 0) {
-    h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="stockFulfillReservationToSO(\'' + sku + '\',ST.getOne(\'salesOrders\',\'' + so.id + '\'))">📦 ยืนยัน & ย้ายเข้า 1021</button><br>';
+    h += '<button class="btn bsm bp" style="font-size:10px;padding:2px 8px;margin-top:4px" onclick="showStockFulfillReservationM(\'' + sku + '\',\'' + so.id + '\')">📦 ยืนยัน & ย้ายเข้า 1021</button><br>';
   }
-  h += '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showStockQuickManageM(\'' + sku + '\')">📦 จัดการคลัง</button> ' +
+  h += '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showStockQuickManageM(\'' + sku + '\',\'' + (so.id || '') + '\')">📦 จัดการคลัง</button> ' +
     '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="go(\'stockDetail\',{sku:\'' + sku + '\'})">📋 ดูสต็อก</button>';
   return h;
 }
 
 // เปิด modal จัดการคลังแบบย่อ ให้เพิ่ม/ย้าย lot ได้ทันทีจากหน้า SO โดยไม่ต้องออกจากหน้า — รียูส _stockLotRowHtml เดียวกับหน้า Stock หลัก
-function showStockQuickManageM(sku) {
+// soId (ไม่บังคับ): เมื่อเปิดจากหน้า SO ส่งเลข SO นี้เข้ามา เพื่อพรีฟิลให้ "+ เพิ่ม lot" เข้า 1021 ผูกกับ SO นี้ทันที ไม่ต้องให้ผู้ใช้พิมพ์/เลือกเอง (กันลืมผูก SO แล้วหน้า SO ไม่ขึ้นว่าจองอยู่)
+function showStockQuickManageM(sku, soId) {
   var p = getProductBySku(sku);
   if (!p) return;
   var lots = stockGetLots(sku);
   var allLocs = getStockLocations();
   var nameEsc = sanitize(p.name || '').replace(/'/g, "\\'");
+  var soArg = soId ? ",'" + soId + "'" : '';
   var body = '';
   allLocs.forEach(function(loc) {
     var locLots = lots.filter(function(l) { return l.location === loc.code; });
@@ -443,7 +463,7 @@ function showStockQuickManageM(sku) {
     body += '<div style="display:flex;align-items:center;gap:8px">';
     body += '<span style="font-size:12px;font-weight:700;color:' + accentC + '">' + _stockLocationIcon(loc.code) + ' ' + loc.code + ' ' + sanitize(loc.name) + '</span>';
     body += '<span style="margin-left:auto;font-size:15px;font-weight:700;color:' + accentC + '">' + locTotal + '</span>';
-    body += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\')">+ เพิ่ม lot</button>';
+    body += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\'' + soArg + ')">+ เพิ่ม lot</button>';
     body += '</div>';
     if (locLots.length) locLots.forEach(function(lot) { body += _stockLotRowHtml(sku, nameEsc, loc, lot, false); });
     body += '</div>';
@@ -1953,7 +1973,7 @@ function _stockQIFieldsHtml(prefix, lot) {
   return h;
 }
 
-function showStockAddLotM(sku, code) {
+function showStockAddLotM(sku, code, soHintId) {
   var p = getProductBySku(sku);
   if (!p) return;
   var loc = getStockLocations().filter(function(l) { return l.code === code; })[0];
@@ -1961,6 +1981,7 @@ function showStockAddLotM(sku, code) {
   var isPRPO = code === 'PRPO';
   var isQI = code === 'QI';
   var today = _nw().substring(0, 10);
+  var soHint = soHintId ? ST.getOne('salesOrders', soHintId) : null;
   var body = '<div class="fg"><label>จำนวน</label>' +
     '<input type="number" id="lot_qty" min="1" value="1">' +
     '<div style="display:flex;gap:6px;margin-top:4px">' +
@@ -1968,11 +1989,11 @@ function showStockAddLotM(sku, code) {
     '</div></div>';
   if (isBooking) {
     body += _stockSODatalistHtml();
-    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี — เว้นว่างได้ถ้ายังไม่มี SO)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')"></div>';
+    body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี — เว้นว่างได้ถ้ายังไม่มี SO)</small></label><input type="text" id="lot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'lot\')" data-so-id="' + (soHint ? sanitize(soHint.id) : '') + '" value="' + (soHint ? sanitize(soHint.soNumber || '') : '') + '"></div>';
     body += dpH('lot_date', today, 'วันที่จอง', false);
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="lot_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
     body += _stockDealerDatalistHtml();
-    body += '<div class="fg"><label>Dealer <small style="color:var(--text2)">(เลือกจาก Dealer ในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_dealer" list="stockDealerDL"></div>';
+    body += '<div class="fg"><label>Dealer <small style="color:var(--text2)">(เลือกจาก Dealer ในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_dealer" list="stockDealerDL" value="' + (soHint ? sanitize(soHint.dealerName || '') : '') + '"></div>';
     body += _stockProjectDatalistHtml();
     body += '<div class="fg"><label>โครงการ <small style="color:var(--text2)">(เลือกจากโครงการใน Pipeline หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="lot_project" list="stockProjectDL"></div>';
     body += '<div class="fg"><label>สถานะ</label><select id="lot_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
