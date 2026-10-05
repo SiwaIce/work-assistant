@@ -133,19 +133,23 @@ function _soMigrateLegacyShipment(s) {
   return legacy;
 }
 
-// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty}] เฉพาะที่ผู้ใช้กรอก qty > 0
-// มาร์ค lot ที่จองใน 1021 เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
+// บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty1021, qty0001}] เฉพาะที่ผู้ใช้กรอก qty > 0
+// qty1021 = ส่งจากของที่จองใน 1021 ไว้แล้ว, qty0001 = ส่งตรงจากคลัง 1001 (ยังไม่เคยจอง) ในรอบเดียวกัน
+// มาร์ค lot เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
 function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoiceDate, note) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var shipments = _soMigrateLegacyShipment(s).slice();
   var shippedItems = [];
   roundItems.forEach(function(ri) {
-    var qty = Math.max(0, Math.round(Number(ri.qty) || 0));
-    if (qty <= 0 || !ri.sku) return;
+    var qty1021 = Math.max(0, Math.round(Number(ri.qty1021) || 0));
+    var qty0001 = Math.max(0, Math.round(Number(ri.qty0001) || 0));
+    if ((qty1021 <= 0 && qty0001 <= 0) || !ri.sku) return;
     var it = (s.items || []).filter(function(x) { return x.sku === ri.sku; })[0];
     var productName = it ? it.model : ri.sku;
-    var delivered = (typeof stockDeliverSOItemQty === 'function') ? stockDeliverSOItemQty(ri.sku, productName, soId, qty) : 0;
+    var delivered = 0;
+    if (qty1021 > 0 && typeof stockDeliverSOItemQty === 'function') delivered += stockDeliverSOItemQty(ri.sku, productName, soId, qty1021);
+    if (qty0001 > 0 && typeof stockDeliverSOItemFrom0001 === 'function') delivered += stockDeliverSOItemFrom0001(ri.sku, productName, s, qty0001);
     if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
   });
   if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
@@ -185,29 +189,34 @@ function showSORecordShipmentModal(soId) {
   if (!trackedItems.length) { toast('⚠️ SO นี้ไม่มีรายการที่ผูก SKU ให้ตรวจสต็อก'); return; }
 
   // โชว์ทุกรายการที่มี SKU พร้อมสต็อกแบบละเอียด (ส่งแล้ว/พร้อมส่งจาก 1021/มีใน 1001 แต่ยังไม่จอง/ขาดต้อง PR-PO)
-  // ไม่กรองเหลือแค่รายการพร้อมส่งเหมือนเดิม — ผู้ใช้ต้องเห็นภาพรวมทั้งใบก่อนตัดสินใจแบ่งส่งเท่าไหร่ แม้บางรายการยังไม่พร้อม
+  // เลือกได้ว่าจะส่งรอบนี้จากคลังไหนเท่าไหร่ — จากของที่จองใน 1021 ไว้แล้ว และ/หรือ ตรงจากคลัง 1001 ที่ยังไม่เคยจอง (ย้าย+ส่งมอบให้ในขั้นตอนเดียว ไม่ต้องไปกดจองเข้า 1021 แยกก่อน)
   var anyReady = false;
-  var body = '<div class="hint" style="margin-bottom:8px">สถานะสต็อกต่อรายการ — ใส่จำนวนที่จะส่งรอบนี้เฉพาะรายการที่พร้อมส่งแล้ว</div>';
+  var body = '<div class="hint" style="margin-bottom:8px">เลือกจำนวนและคลังที่จะส่งรอบนี้ต่อรายการ — ส่งจากของที่จองใน 1021 ไว้แล้ว และ/หรือตรงจากคลัง 1001 ก็ได้ในรอบเดียวกัน</div>';
   trackedItems.forEach(function(it, idx) {
     var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : { deliveredForThisSO: 0, bookedForThisSO: 0, from0001: 0, shortfall: 0 };
-    var readyToShipQty = info.bookedForThisSO || 0;
-    var remainingQty = Math.max(0, (Number(it.qty) || 0) - readyToShipQty - (info.deliveredForThisSO || 0));
+    var qty1021 = info.bookedForThisSO || 0;
+    var qty0001 = info.from0001 || 0;
     body += '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">';
-    body += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-    body += '<span style="flex:1"><b>' + sanitize(it.model || it.sku) + '</b> <span style="color:var(--text2);font-size:11px">(สั่ง ' + (it.qty || 0) + ')</span></span>';
-    if (readyToShipQty > 0) {
-      body += '<input type="number" class="inp" style="width:70px" id="soShip_q_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="' + readyToShipQty + '" min="0" max="' + readyToShipQty + '">';
+    body += '<div style="margin-bottom:4px"><b>' + sanitize(it.model || it.sku) + '</b> <span style="color:var(--text2);font-size:11px">(สั่ง ' + (it.qty || 0) + ')</span></div>';
+    if (qty1021 > 0 || qty0001 > 0) {
+      body += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
+      if (qty1021 > 0) {
+        body += '<div><label class="lbl" style="font-size:10px;color:#16a34a">✓ จาก 1021 (จองแล้ว) สูงสุด ' + qty1021 + '</label>';
+        body += '<input type="number" class="inp" style="width:80px" id="soShip_q1021_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="' + qty1021 + '" min="0" max="' + qty1021 + '"></div>';
+      }
+      if (qty0001 > 0) {
+        body += '<div><label class="lbl" style="font-size:10px;color:#2563eb">📦 จาก 1001 (ยังไม่จอง) สูงสุด ' + qty0001 + '</label>';
+        body += '<input type="number" class="inp" style="width:80px" id="soShip_q0001_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + qty0001 + '"></div>';
+      }
+      body += '</div>';
     }
-    body += '</div>';
     body += '<div style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px">';
     if (info.deliveredForThisSO > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280">✔ ส่งมอบแล้ว ' + info.deliveredForThisSO + '</span>';
-    if (readyToShipQty > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a">✓ พร้อมส่ง ' + readyToShipQty + ' (จองใน 1021 แล้ว)</span>';
-    if (remainingQty > 0 && info.from0001 > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(59,130,246,.15);color:#2563eb">📦 มีใน 1001 ' + info.from0001 + ' (ยังไม่จอง)</span>';
-    if (remainingQty > 0 && info.shortfall > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + info.shortfall + ' ต้อง PR/PO</span>';
+    if (info.shortfall > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + info.shortfall + ' ต้อง PR/PO</span>';
     body += '</div></div>';
-    if (readyToShipQty > 0) anyReady = true;
+    if (qty1021 > 0 || qty0001 > 0) anyReady = true;
   });
-  if (!anyReady) body += '<div class="warn-box" style="font-size:11px;margin-top:8px">⚠️ ยังไม่มีรายการไหนจองเข้า 1021 พร้อมส่ง — ถ้ามีของใน 1001 ให้ไปจองเข้า 1021 ก่อนจึงจะกรอกจำนวนส่งรอบนี้ได้</div>';
+  if (!anyReady) body += '<div class="warn-box" style="font-size:11px;margin-top:8px">⚠️ ยังไม่มีของพร้อมส่งเลย ทั้งที่จองใน 1021 และในคลัง 1001</div>';
   body += '<div style="display:flex;gap:8px;margin-top:10px">';
   body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(_soNextNum('DO')) + '"></div>';
   body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label><input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '"></div>';
@@ -221,10 +230,18 @@ function showSORecordShipmentModal(soId) {
 }
 
 function _saveSORecordShipment(soId) {
-  var roundItems = [];
-  document.querySelectorAll('[id^="soShip_q_"]').forEach(function(input) {
-    roundItems.push({ sku: input.getAttribute('data-sku'), qty: input.value });
+  var bySku = {};
+  document.querySelectorAll('[id^="soShip_q1021_"]').forEach(function(input) {
+    var sku = input.getAttribute('data-sku');
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku].qty1021 = input.value;
   });
+  document.querySelectorAll('[id^="soShip_q0001_"]').forEach(function(input) {
+    var sku = input.getAttribute('data-sku');
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku].qty0001 = input.value;
+  });
+  var roundItems = Object.keys(bySku).map(function(sku) { return bySku[sku]; });
   var doNumber = (document.getElementById('soShip_do') || {}).value || '';
   var invoiceNumber = (document.getElementById('soShip_inv') || {}).value || '';
   var invoiceDate = (document.getElementById('soShip_invDate') || {}).value || '';
