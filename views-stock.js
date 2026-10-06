@@ -427,6 +427,21 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
     }
   }
   h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
+  // ชิปเสริม: ระบุไว้เองว่าจองจากคลัง 1021/8D01 (item.sourceType จากฟอร์มแก้ไขรายการ) — เป็นการประกาศแผนเอง ไม่ได้ผูกกับ lot จริงเหมือนปุ่ม "ยืนยัน & ย้ายเข้า 1021" ด้านบน จึงต้องโชว์แยกไว้ไม่งั้นหน้า SO จะดูเหมือนไม่มีอะไรจองอยู่เลย
+  if (item.sourceType === 'reserve_1021' || item.sourceType === 'reserve_8d01') {
+    var resLoc = item.sourceType === 'reserve_1021' ? '1021' : '8D01';
+    var resIcon = item.sourceType === 'reserve_1021' ? '📌' : '🧳';
+    h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
+    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">' + resIcon + ' จองคลัง ' + resLoc + ' ' + qty + ' ชิ้น</span>';
+    if (item.reserveExpiryDate) {
+      var resDaysLeft = Math.ceil((new Date(item.reserveExpiryDate) - new Date(_nw().substring(0, 10))) / 86400000);
+      var resDLabel = resDaysLeft >= 0 ? 'เหลือ ' + resDaysLeft + ' วัน' : 'เกินกำหนด ' + (-resDaysLeft) + ' วัน';
+      var resDColor = resDaysLeft <= 3 ? '#b45309' : '#166534';
+      h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">📅 จองถึง ' + fD(item.reserveExpiryDate) + '</span>';
+      h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:' + resDColor + ';display:inline-block">⏳ ' + resDLabel + '</span>';
+    }
+    h += '</div>';
+  }
   // ชิปเสริม: สถานะ PR/PO ต่อรายการ (ดึงจาก item.prpoStatusId/prpoSubmittedDate/prpoExpectedDate ที่กรอกไว้ในฟอร์มแก้ไขรายการ)
   if (item.sourceType === 'pr_po' && (item.prpoStatusId || item.prpoStatus || item.prpoSubmittedDate || item.prpoExpectedDate)) {
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(item) : (item.prpoStatus || '');
