@@ -132,6 +132,11 @@ function rPOTracker(el) {
     html += '<span style="padding:2px 8px;border-radius:8px;background:var(--bg2);color:var(--text2)">฿' + nmI(r.total) + '</span>';
     html += '</div>';
 
+    html += '<div onclick="event.stopPropagation()" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">';
+    html += _poTrackerAttachSectionHtml(s, 'customerPO', 'PO ลูกค้า', '📄');
+    html += _poTrackerAttachSectionHtml(s, 'invoice', 'Invoice', '🧾');
+    html += '</div>';
+
     html += '<div onclick="event.stopPropagation()">';
     html += '<button class="btn bsm bo" style="margin-top:8px" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
     html += '<button class="btn bsm bo" style="margin-top:8px" onclick="poTrackerToggleItems(\'' + s.id + '\',event)">' + (poTrackerExpandedItems[s.id] ? '▲ ซ่อนรายการสินค้า' : '▼ รายการสินค้า / ปรับยอด Stock') + '</button>';
@@ -142,6 +147,59 @@ function rPOTracker(el) {
   });
 
   el.innerHTML = html;
+}
+
+// ไฟล์แนบต่อ PO/SO แยกประเภท (PO ลูกค้า / Invoice) — ใช้ attachments[] เดิมของ SO ร่วมกับหน้า SO Detail
+// (ดู attachGalleryHtml ใน utils.js) เพียงเติม category ต่อไฟล์ เพื่อกรองแสดงแยกช่องในหน้านี้
+function _poTrackerAttachSectionHtml(s, category, label, icon) {
+  var atts = s.attachments || [];
+  var html = '<div style="min-width:120px">';
+  html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + icon + ' ' + label + '</div>';
+  var has = false;
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">';
+  atts.forEach(function(a, idx) {
+    if (a.category !== category) return;
+    has = true;
+    html += '<div style="position:relative;width:56px;height:56px">' +
+      _attachItemHtml(a, "window.open('" + a.url + "','_blank')") +
+      '<button type="button" onclick="poTrackerRemoveAttach(\'' + s.id + '\',' + idx + ')" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:9px;cursor:pointer;line-height:1">✕</button></div>';
+  });
+  if (!has) html += '<div style="font-size:11px;color:var(--text2)">ยังไม่มีไฟล์</div>';
+  html += '</div>';
+  html += '<label class="btn bsm bo" style="cursor:pointer;display:inline-block">📎 แนบไฟล์<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="poTrackerAttachFile(\'' + s.id + '\',\'' + category + '\',this)"></label>';
+  html += '<div class="hint" style="margin:2px 0 0">รูป/PDF/Word/Excel ไม่เกิน 10MB ต่อไฟล์ (เก็บบน Cloud Storage ต้อง login คลาวด์ก่อน)</div>';
+  html += '</div>';
+  return html;
+}
+
+function poTrackerAttachFile(soId, category, inputEl) {
+  var file = inputEl.files && inputEl.files[0];
+  inputEl.value = '';
+  if (!file) return;
+  toast('⏳ กำลังอัปโหลด...');
+  uploadAttachment(file, 'salesOrders', function(att) {
+    if (!att) return;
+    att.category = category;
+    var so = ST.getOne('salesOrders', soId);
+    if (!so) return;
+    var attachments = (so.attachments || []).concat([att]);
+    ST.update('salesOrders', soId, { attachments: attachments });
+    toast('📎 แนบไฟล์แล้ว');
+    render();
+  });
+}
+
+function poTrackerRemoveAttach(soId, idx) {
+  var so = ST.getOne('salesOrders', soId);
+  if (!so) return;
+  var attachments = (so.attachments || []).slice();
+  var a = attachments[idx];
+  if (!a) return;
+  if (!confirm('ลบไฟล์นี้?')) return;
+  if (a.path) deleteAttachment(a.path);
+  attachments.splice(idx, 1);
+  ST.update('salesOrders', soId, { attachments: attachments });
+  render();
 }
 
 // เปิด/ปิดแผงรายการสินค้า+ปรับยอด Stock ด่วนของ SO ใบนี้ — ตอนเปิดครั้งแรก จำเวลา stockLog ล่าสุดของแต่ละ SKU ไว้เช็ค conflict ตอนบันทึก
