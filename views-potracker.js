@@ -6,6 +6,14 @@
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
 var poTrackerSearch = '';
+var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
+var poTrackerReadyFlt = '';  // '' | ready | notready
+var poTrackerCreditFlt = ''; // '' | yes | no
+var poTrackerPrpoFlt = '';   // '' | pending
+var poTrackerDateFrom = '';  // createdAt >= (YYYY-MM-DD)
+var poTrackerDateTo = '';    // createdAt <= (YYYY-MM-DD)
+var poTrackerSort = 'newest'; // newest | oldest | amount_desc | amount_asc | dealer | urgent
+var poTrackerMoreFlt = false; // เปิด/ปิดแผงตัวกรองเพิ่มเติม
 var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า + ปรับยอด Stock ด่วน
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 
@@ -50,6 +58,12 @@ function _poTrackerBuildRow(s) {
   };
 }
 
+function poTrackerResetFilters() {
+  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = '';
+  poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = '';
+  render();
+}
+
 function rPOTracker(el) {
   document.getElementById('pgT').textContent = '🗺️ PO Tracker';
   var all = ST.getAll('salesOrders').slice().sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
@@ -77,14 +91,50 @@ function rPOTracker(el) {
   });
   html += '</div>';
 
-  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
   html += '<input class="inp" style="flex:1;min-width:160px" placeholder="ค้นหา PO / SO / Dealer" value="' + sanitize(poTrackerSearch) + '" oninput="poTrackerSearch=this.value;render()">';
   html += '<select class="inp" style="max-width:200px" onchange="poTrackerDealerFlt=this.value;render()">';
   html += '<option value="">-- ทุก Dealer --</option>';
   dealers.forEach(function(d) { html += '<option value="' + sanitize(d) + '"' + (poTrackerDealerFlt === d ? ' selected' : '') + '>' + sanitize(d) + '</option>'; });
   html += '</select>';
+  html += '<select class="inp" style="max-width:190px" onchange="poTrackerSort=this.value;render()">';
+  [['newest','🕒 ใหม่ล่าสุด'],['oldest','🕒 เก่าสุด'],['amount_desc','💰 ยอดมาก → น้อย'],['amount_asc','💰 ยอดน้อย → มาก'],['dealer','🏪 Dealer A-Z']].forEach(function(o) {
+    html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+  });
+  html += '</select>';
+  html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
   html += '</div>';
+
+  if (poTrackerMoreFlt) {
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:10px;background:var(--bg2);border-radius:8px">';
+    html += '<select class="inp" style="max-width:180px" onchange="poTrackerStatusFlt=this.value;render()">';
+    html += '<option value="">-- ทุกสถานะ --</option>';
+    Object.keys(SO_STATUS).forEach(function(k) { html += '<option value="' + k + '"' + (poTrackerStatusFlt === k ? ' selected' : '') + '>' + SO_STATUS[k].icon + ' ' + SO_STATUS[k].label + '</option>'; });
+    html += '</select>';
+    html += '<select class="inp" style="max-width:160px" onchange="poTrackerReadyFlt=this.value;render()">';
+    html += '<option value="">-- พร้อมส่ง: ทั้งหมด --</option>';
+    html += '<option value="ready"' + (poTrackerReadyFlt === 'ready' ? ' selected' : '') + '>📦 พร้อมส่งครบ</option>';
+    html += '<option value="notready"' + (poTrackerReadyFlt === 'notready' ? ' selected' : '') + '>📦 ยังขาด</option>';
+    html += '</select>';
+    html += '<select class="inp" style="max-width:160px" onchange="poTrackerCreditFlt=this.value;render()">';
+    html += '<option value="">-- เครดิต: ทั้งหมด --</option>';
+    html += '<option value="yes"' + (poTrackerCreditFlt === 'yes' ? ' selected' : '') + '>💳 ขอเครดิตแล้ว</option>';
+    html += '<option value="no"' + (poTrackerCreditFlt === 'no' ? ' selected' : '') + '>💳 ยังไม่ขอ</option>';
+    html += '</select>';
+    html += '<select class="inp" style="max-width:170px" onchange="poTrackerPrpoFlt=this.value;render()">';
+    html += '<option value="">-- PR/PO: ทั้งหมด --</option>';
+    html += '<option value="pending"' + (poTrackerPrpoFlt === 'pending' ? ' selected' : '') + '>🛒 รอ PR/PO</option>';
+    html += '</select>';
+    html += '<div style="display:flex;gap:4px;align-items:center">';
+    html += '<label class="lbl" style="margin:0;font-size:11px;color:var(--text2)">สร้างเมื่อ</label>';
+    html += '<input type="date" class="inp" style="width:140px" value="' + sanitize(poTrackerDateFrom) + '" onchange="poTrackerDateFrom=this.value;render()">';
+    html += '<span style="color:var(--text2)">–</span>';
+    html += '<input type="date" class="inp" style="width:140px" value="' + sanitize(poTrackerDateTo) + '" onchange="poTrackerDateTo=this.value;render()">';
+    html += '</div>';
+    html += '<button class="btn bsm bo" onclick="poTrackerResetFilters()">↺ ล้างตัวกรอง</button>';
+    html += '</div>';
+  }
   html += '</div>';
 
   var q = poTrackerSearch.trim().toLowerCase();
@@ -92,11 +142,27 @@ function rPOTracker(el) {
     if (poTrackerFlt === 'done' && !r.done) return false;
     if (poTrackerFlt === 'notdone' && r.done) return false;
     if (poTrackerDealerFlt && r.so.dealerName !== poTrackerDealerFlt) return false;
+    if (poTrackerStatusFlt && r.so.status !== poTrackerStatusFlt) return false;
+    if (poTrackerReadyFlt === 'ready' && !(r.readiness.total && r.readiness.allReady)) return false;
+    if (poTrackerReadyFlt === 'notready' && !(r.readiness.total && !r.readiness.allReady)) return false;
+    if (poTrackerCreditFlt === 'yes' && !r.credit) return false;
+    if (poTrackerCreditFlt === 'no' && r.credit) return false;
+    if (poTrackerPrpoFlt === 'pending' && !r.pendingPRPO) return false;
+    if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
+    if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
     if (q) {
       var hay = ((r.so.soNumber || '') + ' ' + (r.so.customerPO || '') + ' ' + (r.so.dealerName || '')).toLowerCase();
       if (hay.indexOf(q) === -1) return false;
     }
     return true;
+  });
+
+  filtered.sort(function(a, b) {
+    if (poTrackerSort === 'oldest') return (a.so.createdAt || '').localeCompare(b.so.createdAt || '');
+    if (poTrackerSort === 'amount_desc') return b.total - a.total;
+    if (poTrackerSort === 'amount_asc') return a.total - b.total;
+    if (poTrackerSort === 'dealer') return (a.so.dealerName || '').localeCompare(b.so.dealerName || '');
+    return (b.so.createdAt || '').localeCompare(a.so.createdAt || ''); // newest (ค่าเริ่มต้น)
   });
 
   if (!filtered.length) {
