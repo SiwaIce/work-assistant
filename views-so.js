@@ -1913,6 +1913,10 @@ function showSOEditItemsModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var body = '<div class="hint" style="margin-bottom:8px">แก้ไข/เพิ่ม/ลบรายการสินค้าได้อิสระ — ถ้าไม่ตรงกับใบเสนอราคาที่ผูกไว้ ตอนบันทึกจะถามว่าจะแก้ใบเสนอราคาด้วยไหม</div>';
+  if (s.quotationId) {
+    body += '<div class="hint" style="margin-bottom:8px">💡 ราคาในรายการนี้เป็นค่าที่บันทึกไว้ตอนสร้าง/แก้ไขล่าสุด — ถ้าใบเสนอราคาที่ผูกไว้ถูกแก้ส่วนลด/ราคาทีหลัง ราคาที่นี่จะไม่อัปเดตให้อัตโนมัติ กดปุ่มด้านล่างเพื่อดึงราคาล่าสุดจากใบเสนอราคามาแทน</div>';
+    body += '<button class="btn bo bsm" style="margin-bottom:8px" onclick="_soRefreshItemsFromQuote(\'' + soId + '\')">🔄 ดึงราคาล่าสุดจากใบเสนอราคา</button>';
+  }
   body += buildAdminModelDatalist('soItemModelDL');
   body += '<div id="soN_items">';
   (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
@@ -1920,6 +1924,26 @@ function showSOEditItemsModal(soId) {
   body += '<button class="btn bp btn-full" style="margin-top:6px" onclick="saveSOItemsEdit(\'' + soId + '\')">💾 บันทึกรายการสินค้า</button>';
   openM('✏️ แก้ไขรายการสินค้า — ' + sanitize(s.soNumber || ''), body);
   _soIC = (s.items || []).length;
+}
+
+// ดึงรายการสินค้า+ราคาล่าสุดจากใบเสนอราคาที่ผูกไว้ มาทับฟอร์มแก้ไขรายการสินค้าของ SO (ไม่บันทึกจนกว่าจะกด
+// "บันทึกรายการสินค้า") — แก้ปัญหาราคาใน SO/PO Tracker ไม่ตรงกับใบเสนอราคา เมื่อใบเสนอราคาถูกแก้ส่วนลด/ราคา
+// ทีหลัง (sync ปกติเป็นทางเดียวจาก SO ไปใบเสนอราคาเท่านั้น ดู _soSyncQuoteItems)
+function _soRefreshItemsFromQuote(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.quotationId) return;
+  var q = (typeof getQuoteById === 'function') ? getQuoteById(s.quotationId) : null;
+  if (!q) { toast('⚠️ ไม่พบใบเสนอราคาที่ผูกไว้', true); return; }
+  var wrap = document.getElementById('soN_items');
+  if (!wrap) return;
+  var discItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
+  var items = (discItems && discItems.length) ? discItems.map(function(it) {
+    return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '' };
+  }) : [{ model: '', qty: 1, unitPrice: 0 }];
+  wrap.innerHTML = '';
+  _soIC = 0;
+  items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); _soIC = idx + 1; });
+  toast('🔄 ดึงราคาล่าสุดจากใบเสนอราคาแล้ว — ตรวจสอบแล้วกด "บันทึกรายการสินค้า"');
 }
 
 function saveSOItemsEdit(soId) {
