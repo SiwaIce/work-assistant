@@ -1074,6 +1074,7 @@ function showCreateSOModal(opts) {
 
   var preDealerId = (pipe && pipe.dealerId) || opts.dealerId || '';
   var preDealer = preDealerId ? ST.getOne('dealers', preDealerId) : null;
+  var preRunrate = opts.runrateId ? ST.getOne('runrate', opts.runrateId) : null;
   // เปิดฟอร์มมาพร้อม quotationId อยู่แล้ว (เช่นจากปุ่ม "สร้าง SO" ในหน้าใบเสนอราคา) — โหลดมาเช็คส่วนลด/
   // เงื่อนไขชำระเงินเริ่มต้นให้ตรงกับใบเสนอราคาตั้งแต่เปิดฟอร์ม ไม่ต้องรอ onchange ของ select ใบเสนอราคา
   var preQuote = null;
@@ -1136,8 +1137,11 @@ function showCreateSOModal(opts) {
   // ถัง Run rate — SO แบบ run rate ผูกเข้า Project ID ที่ลูกค้าสร้างไว้รับยอด (ถังเดียวมีได้หลาย SO)
   // แสดงเฉพาะตอน type = runrate เพราะ SO แบบโครงการใช้ Pipeline Project แทน
   html += '<div id="soN_rrSec"' + (initType !== 'runrate' ? ' style="display:none"' : '') + '>';
-  html += '<label class="lbl">Project ID (Run rate) <span style="font-size:10px;color:var(--text2)">(เลขที่ลูกค้าสร้างไว้รับยอด — ยอด SO ใบนี้จะไปรวมในถังนั้น)</span></label>';
-  html += '<select id="soN_runrateId" class="inp" onchange="_soRRPick(this.value)">' + _soRunrateOptionsHtml(preDealerId, opts.runrateId || '') + '</select>';
+  html += '<div class="ac-wrap"><label class="lbl">Project ID (Run rate) ' +
+    '<span style="font-size:10px;color:var(--text2)">(เลขที่ลูกค้าสร้างไว้รับยอด — พิมพ์เลขเดิมที่เคยใช้กับ Dealer นี้เพื่อเลือก หรือพิมพ์เลขใหม่เพื่อสร้างถังใหม่ตอนบันทึก)</span></label>' +
+    '<input id="soN_runrateProjectId" class="inp" autocomplete="off" value="' + sanitize((preRunrate && preRunrate.projectId) || (initType === 'runrate' ? pidNorm(opts.projectId) : '') || '') + '" placeholder="20260912-0005" oninput="_soRunrateProjIdTouched();_soRunrateSearch(this.value)" onfocus="_soRunrateSearch(this.value)">' +
+    '<div id="soN_runrateAcMenu"></div>' +
+    '<input type="hidden" id="soN_runrateId" value="' + sanitize(opts.runrateId || '') + '"></div>';
   html += '<div id="soN_rrNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
 
   // ใบเสนอราคา — กรองตาม dealer/project ที่เลือก เลือกแล้วดึงรายการสินค้ามาเติมให้ ไม่เลือกก็สร้าง SO ตรงได้ (จะสร้างใบเสนอราคาใหม่ให้อัตโนมัติตอนบันทึก)
@@ -1183,6 +1187,8 @@ function showCreateSOModal(opts) {
   window._soQuoteItemsSnapshot = opts.quotationId ? JSON.stringify(initItems) : null;
   _soProjIdDirty = false;
   _soProjIdNote();
+  _soRunrateProjIdDirty = false;
+  if (preRunrate) _soRRPick(preRunrate.id);
 }
 
 // รายชื่อใบเสนอราคาที่ตรงกับ dealer/project ที่เลือกในฟอร์มสร้าง SO — มี pipelineId ก็กรองด้วย pipeline ก่อน (แม่นกว่า) ไม่งั้นกรองแค่ dealer
@@ -1217,7 +1223,10 @@ function _soFillFromQuote(quoteId) {
   // เป๊ะๆ — คำนวณด้วยสูตรเดียวกับหน้าใบเสนอราคา (ดู _soQuoteDiscountedItems / computeQuoteTotals)
   var discItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
   var items = (discItems && discItems.length) ? discItems.map(function(it) {
-    return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '' };
+    // เก็บ cashDiscountPercent/_origUnitPrice ที่ _soQuoteDiscountedItems คำนวณไว้ต่อด้วย ไม่งั้นข้อมูลส่วนลด
+    // เงินสดต่อรายการจะหายไปตรงนี้ เหลือแต่ราคาสุทธิเฉยๆ ให้แถวสินค้าโชว์ไม่ได้ว่าลดไปแล้วเท่าไหร่ (ดู _soItemRowHtml)
+    return { model: it.name || it.model || '', qty: Number(it.quantity || it.qty) || 1, unitPrice: Number(it.unitPrice) || 0, sku: it.sku || '',
+      cashDiscountPercent: Number(it.cashDiscountPercent) || 0, _origUnitPrice: Number(it._origUnitPrice) || 0 };
   }) : [{ model: '', qty: 1, unitPrice: 0 }];
   items.forEach(function(it, idx) { wrap.innerHTML += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
   window._soQuoteItemsSnapshot = JSON.stringify(items);
@@ -1251,15 +1260,24 @@ function _soFillFromQuote(quoteId) {
       }
     }
   }
+  // ถัง Run rate — ใบเสนอราคาผูกถังจริงไว้แล้วก็ดึงมาเลย ไม่งั้นถ้าใบเสนอราคามี Project ID ของตัวเอง
+  // (พิมพ์ไว้ตรงๆ ไม่ได้ผูกถังจริง) ก็เติมเลขนั้นให้ในช่องนี้ก่อน — ยังไม่มีถังก็จะสร้างให้อัตโนมัติตอนกด "สร้าง SO"
+  // (ดู saveCreateSO) ไม่ปล่อยให้เลข Project ID ของใบเสนอราคาหายไปเฉยๆ เหมือนเดิม
+  var rrPidEl = document.getElementById('soN_runrateProjectId');
   if (q.runrateId) {
-    var rSel = document.getElementById('soN_runrateId');
-    if (rSel) {
-      rSel.value = q.runrateId;
-      if (rSel.value !== q.runrateId) {
-        var lr = ST.getOne('runrate', q.runrateId);
-        lost.push('ถัง Run rate "' + ((lr && lr.projectId) || q.runrateId) + '" (อาจถูกปิดไปแล้ว)');
-      } else _soRRPick(q.runrateId);
+    var rr = ST.getOne('runrate', q.runrateId);
+    if (rr) {
+      _soRRPick(rr.id);
+    } else {
+      lost.push('ถัง Run rate "' + (q.runrateProjectId || q.runrateId) + '" (อาจถูกลบไปแล้ว)');
     }
+  } else if (qType === 'runrate' && rrPidEl && !_soRunrateProjIdDirty && pidNorm(q.projectId)) {
+    rrPidEl.value = q.projectId;
+    var curDealerId = (document.getElementById('soN_dealerId') || {}).value || '';
+    var existingRR = ST.getAll('runrate').filter(function(r) {
+      return r.dealerId === curDealerId && pidSame(r.projectId, q.projectId);
+    })[0];
+    if (existingRR) _soRRPick(existingRR.id); else { var idEl3 = document.getElementById('soN_runrateId'); if (idEl3) idEl3.value = ''; _soRunrateNote(); }
   }
   if (lost.length) toast('⚠️ ดึงจากใบเสนอราคาไม่ครบ — ' + lost.join(' · ') + ' เลือกเองอีกที', true);
   var pidEl2 = document.getElementById('soN_projectId');
@@ -1344,17 +1362,25 @@ function _soQuoteDiscountedItems(q) {
   var ratio = afterCashTotal > 0 ? (netAmount / afterCashTotal) : 1;
   return items.map(function(it) {
     var cashPct = Number(it.cashDiscountPercent) || 0;
-    var afterCashUnit = (Number(it.unitPrice) || 0) * (1 - cashPct / 100);
+    var origUnit = Number(it.unitPrice) || 0;
+    var afterCashUnit = origUnit * (1 - cashPct / 100);
     var finalUnit = Math.round(afterCashUnit * ratio * 100) / 100;
-    return Object.assign({}, it, { unitPrice: finalUnit });
+    // เก็บราคาเดิม/ % ส่วนลดเงินสดต่อรายการไว้ด้วย (ไม่ใช่แค่ unitPrice สุทธิ) ให้ฟอร์ม SO โชว์ให้เห็นว่าราคา
+    // ที่เติมให้นี้หักส่วนลดเงินสดไปแล้วเท่าไหร่ ไม่ใช่ราคาที่ดูเหมือนลดเงินสดหายไปเงียบๆ (ดู _soItemRowHtml)
+    return Object.assign({}, it, { unitPrice: finalUnit, _origUnitPrice: origUnit, cashDiscountPercent: cashPct });
   });
 }
 
 // ป้าย "ส่วนลด" ข้างเงื่อนไขชำระเงิน — ขึ้นเมื่อใบเสนอราคาที่เลือกมีส่วนลดเงินสดต่อรายการ/ส่วนลดอื่นๆ/ส่วนลดท้ายบิล
-// อย่างใดอย่างหนึ่ง จะได้รู้ตั้งแต่หน้าสร้าง SO โดยไม่ต้องเปิดใบเสนอราคาไปดูก่อน
+// อย่างใดอย่างหนึ่ง จะได้รู้ตั้งแต่หน้าสร้าง SO โดยไม่ต้องเปิดใบเสนอราคาไปดูก่อน — โชว์ยอดรวมส่วนลดด้วยเลย ไม่ใช่
+// แค่บอกว่า "มีส่วนลด" เฉยๆ (ผู้ใช้ต้องเปิดใบเสนอราคาไปดูเองก่อนหน้านี้ถึงจะรู้ว่าลดไปเท่าไหร่)
 function _soDiscountBadgeHtml(q) {
-  var hasDiscount = q && ((Number(q.cashDiscountTotal) || 0) > 0 || (Number(q.extraDiscountTotal) || 0) > 0 || (Number(q.discountAmount) || 0) > 0);
-  return hasDiscount ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f59e0b22;color:#f59e0b">🏷️ มีส่วนลด</span>' : '';
+  var cash = q ? (Number(q.cashDiscountTotal) || 0) : 0;
+  var extra = q ? (Number(q.extraDiscountTotal) || 0) : 0;
+  var bill = q ? (Number(q.discountAmount) || 0) : 0;
+  var total = cash + extra + bill;
+  if (total <= 0) return '';
+  return '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f59e0b22;color:#f59e0b" title="ส่วนลดเงินสดต่อรายการ ' + fmtMoney(cash) + ' ฿ + ส่วนลดอื่นๆ ' + fmtMoney(extra) + ' ฿ + ส่วนลดท้ายบิล ' + fmtMoney(bill) + ' ฿">🏷️ มีส่วนลด -' + fmtMoney(total) + ' ฿</span>';
 }
 function _soUpdateDiscountBadge(q) {
   var el = document.getElementById('soN_discountBadge');
@@ -1450,13 +1476,16 @@ function _soTypeToggle(type) {
   var rrSec = document.getElementById('soN_rrSec');
   if (rrSec) rrSec.style.display = type === 'runrate' ? '' : 'none';
   if (type !== 'runrate') {
-    var rrSel = document.getElementById('soN_runrateId');
-    if (rrSel) rrSel.value = '';
+    var rrIdEl = document.getElementById('soN_runrateId');
+    var rrPidEl = document.getElementById('soN_runrateProjectId');
+    if (rrIdEl) rrIdEl.value = '';
+    if (rrPidEl) rrPidEl.value = '';
   }
-  _soRRPick((document.getElementById('soN_runrateId') || {}).value || '');
+  _soRunrateNote();
 }
 
-// ตัวเลือกถัง Run rate ของ dealer ที่เลือกไว้ — บอกยอดที่อยู่ในถังแล้วด้วย จะได้รู้ว่าเลือกถูกใบ
+// ตัวเลือกถัง Run rate ของ dealer ที่เลือกไว้ — ใช้กับ <select> ของฟอร์มแก้ไข SO (soE_runrateId) เท่านั้น
+// ฟอร์มสร้าง SO ใหม่ใช้ช่องพิมพ์ค้นหา/สร้างใหม่แทนแล้ว (ดู _soRunrateSearch/_soRunratePick ด้านล่าง)
 function _soRunrateOptionsHtml(dealerId, keepId) {
   var list = ST.getAll('runrate').filter(function(r) {
     if ((r.status || 'active') !== 'active' && r.id !== keepId) return false;
@@ -1472,14 +1501,74 @@ function _soRunrateOptionsHtml(dealerId, keepId) {
   });
   return h;
 }
+// เลือกถัง Run rate ที่มีอยู่แล้วจริง (rrId ต้องมีอยู่จริงใน ST) — เติมทั้งช่องพิมพ์และ hidden id ให้ตรงกัน
 function _soRRPick(rrId) {
+  var r = rrId ? ST.getOne('runrate', rrId) : null;
+  if (!r) { _soRunrateNote(); return; }
+  var pidEl = document.getElementById('soN_runrateProjectId');
+  var idEl = document.getElementById('soN_runrateId');
+  if (pidEl) pidEl.value = r.projectId || '';
+  if (idEl) idEl.value = r.id;
+  _soRunrateNote();
+}
+// คำเตือน/คำอธิบายสดใต้ช่อง Project ID (Run rate) — อ่านสถานะปัจจุบันของช่องพิมพ์ + hidden id มาสรุปให้เห็นว่า
+// กดบันทึกแล้วจะเกิดอะไร: ผูกถังเดิม หรือสร้างถังใหม่ให้ (ตรงกับที่ _soProjIdNote ทำให้ Project ID ของโครงการ)
+function _soRunrateNote() {
   var note = document.getElementById('soN_rrNote');
   if (!note) return;
-  var r = rrId ? ST.getOne('runrate', rrId) : null;
-  if (!r) { note.textContent = ''; return; }
-  var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
-  note.textContent = 'ยอดของ SO ใบนี้จะไปรวมใน ' + (r.projectId || '(ไม่มีเลข)') + ' — ตอนนี้มี ' + n + ' ใบอยู่ในถังแล้ว';
-  note.style.color = 'var(--text2)';
+  var idEl = document.getElementById('soN_runrateId');
+  var pidEl = document.getElementById('soN_runrateProjectId');
+  var typed = pidNorm(pidEl ? pidEl.value : '');
+  var r = (idEl && idEl.value) ? ST.getOne('runrate', idEl.value) : null;
+  if (r) {
+    var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
+    note.textContent = 'ยอดของ SO ใบนี้จะไปรวมใน ' + (r.projectId || '(ไม่มีเลข)') + ' — ตอนนี้มี ' + n + ' ใบอยู่ในถังแล้ว' +
+      ((r.status || 'active') !== 'active' ? '  ·  ⚠️ ถังนี้ปิดอยู่' : '');
+    note.style.color = 'var(--text2)';
+  } else if (typed) {
+    note.textContent = '↩︎ ยังไม่มีถังนี้ — ตอนกด "สร้าง SO" จะสร้างถัง Run rate ใหม่เลขนี้ให้อัตโนมัติ';
+    note.style.color = 'var(--ok, #10b981)';
+  } else {
+    note.textContent = '';
+  }
+}
+// ช่อง Project ID (Run rate) แบบพิมพ์ค้นหา/สร้างใหม่ได้เลย เหมือนช่อง Project ID ของโครงการ (ดู
+// _soProjectIdSearchCore) ต่างกันตรงตัวเลือกมาจาก collection 'runrate' เอง — เลือกจากลิสต์ = ผูกถังเดิม
+// พิมพ์เลขที่ยังไม่มีถังของ Dealer นี้ = เคลียร์ hidden id ไว้ก่อน รอสร้างถังใหม่ให้ตอนกด "สร้าง SO" (ดู saveCreateSO)
+var _soRunrateProjIdDirty = false;
+function _soRunrateProjIdTouched() { _soRunrateProjIdDirty = true; }
+function _soRunrateSearch(q) {
+  var menu = document.getElementById('soN_runrateAcMenu');
+  var idEl = document.getElementById('soN_runrateId');
+  if (!menu) return;
+  var dealerId = (document.getElementById('soN_dealerId') || {}).value || '';
+  var typed = (q || '').trim();
+  // พิมพ์เปลี่ยนจนไม่ตรงกับถังที่ hidden id ชี้อยู่แล้ว — เคลียร์ไว้ก่อน กันผูกผิดถังเงียบๆ (เลือกใหม่จากลิสต์ค่อยผูกใหม่)
+  if (idEl && idEl.value) {
+    var cur = ST.getOne('runrate', idEl.value);
+    if (!cur || pidNorm(cur.projectId).toLowerCase() !== typed.toLowerCase()) idEl.value = '';
+  }
+  _soRunrateNote();
+  if (!typed) { menu.innerHTML = ''; return; }
+  var matches = ST.getAll('runrate').filter(function(r) {
+    return (!dealerId || r.dealerId === dealerId) && (r.projectId || '').toLowerCase().indexOf(typed.toLowerCase()) !== -1;
+  }).slice(0, 8);
+  if (!matches.length) {
+    menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบถังเดิมที่ตรงกับเลขนี้ — กด "สร้าง SO" จะสร้างถัง Run rate ใหม่ให้อัตโนมัติ</div></div>';
+    return;
+  }
+  menu.innerHTML = '<div class="ac-menu">' + matches.map(function(r) {
+    var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
+    var amt = (typeof _rrTotal === 'function') ? _rrTotal(r.id) : 0;
+    var closed = (r.status || 'active') !== 'active' ? ' · 🔒 ปิดแล้ว' : '';
+    return '<div class="ac-item" onclick="_soRunratePick(\'' + r.id + '\')"><div class="info"><div class="n">' + sanitize(r.projectId || '(ไม่มีเลข)') + '</div><div class="m">มี ' + n + ' SO ฿' + fmtMoney(amt) + closed + '</div></div></div>';
+  }).join('') + '</div>';
+}
+function _soRunratePick(rrId) {
+  var menu = document.getElementById('soN_runrateAcMenu');
+  if (menu) menu.innerHTML = '';
+  _soRunrateProjIdDirty = true;
+  _soRRPick(rrId);
 }
 // ช่อง Dealer แบบพิมพ์ค้นหา (soN_dealerName) — พิมพ์ตรงกับชื่อ dealer ที่มีอยู่แล้วเป๊ะๆ (ไม่สนตัวพิมพ์เล็ก/ใหญ่)
 // ก็ถือว่าเลือก dealer นั้น เติม hidden soN_dealerId ให้ แล้วกรอง project/run rate/ที่อยู่ตามเดิม — พิมพ์ชื่อที่ยังไม่
@@ -1567,12 +1656,17 @@ function _soPaymentTermDatalistHtml(listId) {
 }
 
 // เปลี่ยน Dealer แล้วต้องกรองถัง Run rate ตามไปด้วย เหมือนที่กรอง Pipeline Project
+// เปลี่ยน Dealer ใหม่แล้ว — ถ้าถัง Run rate ที่ผูกอยู่ไม่ใช่ของ Dealer ใหม่นี้ ให้เคลียร์ทิ้ง (เลือก/พิมพ์ใหม่เอง)
 function _soFilterRunrateByDealer(dealerId) {
-  var sel = document.getElementById('soN_runrateId');
-  if (!sel) return;
-  var keep = sel.value;
-  sel.innerHTML = _soRunrateOptionsHtml(dealerId, keep);
-  if (sel.value !== keep) _soRRPick(sel.value);
+  var idEl = document.getElementById('soN_runrateId');
+  if (!idEl) return;
+  var r = idEl.value ? ST.getOne('runrate', idEl.value) : null;
+  if (r && r.dealerId !== dealerId) {
+    idEl.value = '';
+    var pidEl = document.getElementById('soN_runrateProjectId');
+    if (pidEl) pidEl.value = '';
+  }
+  _soRunrateNote();
 }
 
 // ผู้ใช้พิมพ์ Project ID เองแล้ว — อย่าให้การเลือก Pipeline ใหม่มาทับของที่พิมพ์ไว้เงียบๆ
@@ -1692,6 +1786,11 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
     '<input class="inp" type="number" style="width:58px" placeholder="จำนวน" value="' + (qty||1) + '" id="soI_q_' + idx + '" min="1">' +
     '<input class="inp js-money" type="text" inputmode="decimal" style="width:95px" placeholder="ราคา/หน่วย" value="' + (price ? nmI(price) : '') + '" id="soI_p_' + idx + '">' +
     '<button class="btn bd bsm" onclick="this.closest(\'[id^=soIR_]\').remove()">✕</button></div>';
+  // ราคาที่เติมให้แถวนี้หักส่วนลดเงินสดต่อรายการจากใบเสนอราคาไปแล้ว (ดู _soQuoteDiscountedItems) — โชว์ % และ
+  // ราคาเดิมก่อนหักไว้ให้เห็นตรงนี้เลย ไม่งั้นดูจากฟอร์มนี้อย่างเดียวจะไม่รู้ว่าราคาลดไปแล้วเท่าไหร่ (เห็นแค่ยอดสุทธิ)
+  if (Number(item.cashDiscountPercent) > 0) {
+    h += '<div class="hint" style="font-size:10px;color:#f59e0b;margin:2px 0 0 2px">💵 ราคานี้หักส่วนลดเงินสด ' + item.cashDiscountPercent + '% แล้ว (ราคาเดิม ฿' + fmtMoney(item._origUnitPrice || 0) + '/หน่วย)</div>';
+  }
   h += '<div style="display:flex;gap:6px;align-items:center;margin-top:4px">' +
     '<select class="inp" style="flex:1" id="soI_src_' + idx + '" onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
@@ -1746,7 +1845,11 @@ function _soPrpoStatusLabel(item) {
   return item.prpoStatus || '';
 }
 
-// พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคา RRP ให้อัตโนมัติถ้าช่องราคายังว่าง
+// พิมพ์ตรงชื่อ/SKU ในแคตตาล็อก (buildAdminModelDatalist) → เติม SKU + ราคาให้อัตโนมัติถ้าช่องราคายังว่าง
+// ราคาที่เติมให้ต้องตามเลเวลของ Dealer ที่เลือกไว้ (เหมือนตอนสร้างใบเสนอราคา ดู getModelPriceByLevelForQuote
+// ใน views-quotation.js) ไม่ใช่ราคา RRP เฉยๆ เพราะงั้นสินค้าที่เพิ่มเองโดยไม่ได้ดึงจากใบเสนอราคา (เช่น Dealer
+// เลเวล S) จะได้ราคา RRP เต็มแทนที่จะเป็นราคา S — หา dealerId จาก soN_dealerId (ฟอร์มสร้าง SO ใหม่) ก่อน ถ้าไม่มี
+// (เช่นฟอร์มแก้ไขรายการสินค้า showSOEditItemsModal) ก็มี hidden field เดียวกันแทรกไว้ให้ชี้ dealer ของ SO ใบนั้น
 function _soItemModelChanged(idx) {
   var mEl = document.getElementById('soI_m_' + idx);
   var pEl = document.getElementById('soI_p_' + idx);
@@ -1757,7 +1860,12 @@ function _soItemModelChanged(idx) {
     mEl.value = prod.name;
     if (skuEl) skuEl.value = prod.sku || '';
     if (pEl && !pEl.value) {
-      var price = Number(prod.rrpExVat) || Number(prod.price) || 0;
+      var dealerId = (document.getElementById('soN_dealerId') || {}).value || '';
+      var dealer = dealerId ? ST.getOne('dealers', dealerId) : null;
+      var level = (dealer && dealer.level) || 'B';
+      var price = (typeof getModelPriceByLevelForQuote === 'function')
+        ? getModelPriceByLevelForQuote(prod.name, level)
+        : (Number(prod.rrpExVat) || Number(prod.price) || 0);
       if (price > 0) pEl.value = nmI(price);
     }
   } else if (skuEl) {
@@ -1835,6 +1943,7 @@ function saveCreateSO() {
   var note        = (document.getElementById('soN_note')       ||{}).value || '';
   var projectId   = ((document.getElementById('soN_projectId') ||{}).value || '').trim();
   var runrateId   = (document.getElementById('soN_runrateId')  ||{}).value || '';
+  var runrateProjectId = ((document.getElementById('soN_runrateProjectId') ||{}).value || '').trim();
   var deliveryAddress = ((document.getElementById('soN_deliveryAddress') ||{}).value || '').trim();
   var paymentTerm = ((document.getElementById('soN_paymentTerm') ||{}).value || '').trim();
   var pendingSoNumber = !!((document.getElementById('soN_pendingSoNum') || {}).checked);
@@ -1865,6 +1974,27 @@ function saveCreateSO() {
   var dealer = ST.getOne('dealers', dealerId);
   var cfg    = getConfig();
   var now    = new Date().toISOString();
+
+  // ถัง Run rate: ช่อง Project ID อาจชี้ถังเดิม (runrateId มี hidden id มาแล้ว) หรือพิมพ์เลขใหม่ที่ยังไม่มีถัง —
+  // หาถังเดิมของ Dealer นี้ที่ตรงเลขก่อน ไม่เจอค่อยสร้างถังใหม่ให้อัตโนมัติ (เลขซ้ำกับ Dealer อื่นจะถามก่อนว่าจะ
+  // แยกถังใหม่จริงไหม เพราะ Project ID ปกติไม่ควรซ้ำข้าม Dealer — ดู saveRunRate ในviews-runrate.js)
+  if (type === 'runrate' && runrateProjectId) {
+    var rrMatch = runrateId ? ST.getOne('runrate', runrateId) : null;
+    if (!rrMatch || pidNorm(rrMatch.projectId) !== pidNorm(runrateProjectId)) {
+      rrMatch = ST.getAll('runrate').filter(function(r) { return r.dealerId === dealerId && pidSame(r.projectId, runrateProjectId); })[0] || null;
+    }
+    if (!rrMatch) {
+      var dupRR = (typeof _rrFindByProjectId === 'function') ? _rrFindByProjectId(runrateProjectId, null) : null;
+      if (dupRR && !confirm('Project ID "' + runrateProjectId + '" ถูกใช้เป็นถัง Run rate ของ ' +
+          ((typeof _rrDealerName === 'function' && _rrDealerName(dupRR.dealerId)) || 'Dealer อื่น') + ' อยู่แล้ว\n\n' +
+          'ต้องการสร้างถังใหม่เลขเดียวกันนี้แยกให้ ' + (dealer ? dealer.name : 'Dealer นี้') + 'ไหม?\n\n' +
+          'ตกลง = สร้างถังใหม่ (เลขซ้ำกันคนละถัง)  ยกเลิก = กลับไปแก้เลข')) return;
+      var newRR = ST.add('runrate', { dealerId: dealerId, projectId: runrateProjectId, status: 'active', createdAt: now });
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', newRR);
+      rrMatch = newRR;
+    }
+    runrateId = rrMatch.id;
+  }
 
   // ผูกใบเสนอราคาให้ SO นี้เสมอ — เลือกไว้แล้วรายการไม่ตรง (แก้/เพิ่มสินค้าในฟอร์มนี้) ก็ sync กลับเข้าใบเสนอราคา
   // ตัวนั้นทันทีโดยไม่ต้องถาม (ใบเสนอราคา = single source of truth เดียวกับ SO ไม่ต้องไปแก้คนละที่)
@@ -1924,6 +2054,8 @@ function showSOEditItemsModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var body = '<div class="hint" style="margin-bottom:8px">แก้ไข/เพิ่ม/ลบรายการสินค้าได้อิสระ — ถ้าไม่ตรงกับใบเสนอราคาที่ผูกไว้ ตอนบันทึกจะถามว่าจะแก้ใบเสนอราคาด้วยไหม</div>';
+  // hidden dealerId ไว้ให้ _soItemModelChanged รู้เลเวลของ Dealer เวลาเติมราคาอัตโนมัติให้สินค้าที่พิมพ์/เพิ่มใหม่ (ใช้ id เดียวกับฟอร์มสร้าง SO)
+  body += '<input type="hidden" id="soN_dealerId" value="' + sanitize(s.dealerId || '') + '">';
   body += buildAdminModelDatalist('soItemModelDL');
   body += '<div id="soN_items">';
   (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
@@ -2567,7 +2699,8 @@ function createSOFromQuotation(quoteId) {
   // รายการสินค้าในฟอร์ม SO ตรงกับยอดในใบเสนอราคาเสมอ ไม่ว่าจะเข้าทางไหน
   var discItems = (typeof _soQuoteDiscountedItems === 'function') ? _soQuoteDiscountedItems(q) : (q.items || []);
   var presetItems = (discItems || []).map(function(it){
-    return { model: it.name || it.model || '', sku: it.sku || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [] };
+    return { model: it.name || it.model || '', sku: it.sku || '', qty: Number(it.quantity) || 1, unitPrice: Number(it.unitPrice) || 0, serials: [],
+      cashDiscountPercent: Number(it.cashDiscountPercent) || 0, _origUnitPrice: Number(it._origUnitPrice) || 0 };
   });
   // สืบทอดการผูกงานจากใบเสนอราคามาเลย ไม่ต้องมาเลือก/พิมพ์เลขซ้ำอีกรอบ — ใบเสนอราคาเป็นจุดที่มักได้
   // Project ID มาก่อน SO อยู่แล้ว (ดู _quoteLinkSectionHtml ใน views-quotation.js)
