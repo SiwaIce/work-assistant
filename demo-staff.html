@@ -323,6 +323,11 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .rt-crow2-exc { display:block; font-size:10.5px; color:var(--bad); font-weight:600; margin-top:2px; }
 .rt-crow2-exc.queued { color:var(--accent); }
 .rt-crow2-note { display:block; font-size:10.5px; color:var(--text2); margin-top:2px; }
+.sn-line { display:block; font-size:10.5px; color:var(--text3); margin-top:2px; font-family:ui-monospace,Consolas,monospace; }
+.ms-slip { border:1px solid var(--border); border-radius:10px; padding:9px 11px; margin-bottom:8px; background:var(--surface); }
+.ms-items { margin:6px 0 0 21px; display:flex; flex-direction:column; gap:5px; }
+.ms-item { font-size:12.5px; }
+.ms-all-btn { border:none; background:transparent; color:var(--accent); cursor:pointer; font-size:11px; font-weight:600; padding:0; margin-left:21px; }
 .wait-note { display:block; font-size:11px; color:var(--accent); margin-top:4px; font-weight:600; }
 .rt-crow2 .row-acts { display:flex; gap:5px; flex-shrink:0; }
 .detail-btn { font:inherit; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
@@ -2557,10 +2562,18 @@ function _bkSlipActionsHtml(g) {
   }
   return '';
 }
+// บรรทัดเล็กใต้ชื่อสินค้า โชว์ SN เฉพาะตอนที่เครื่องนั้นกรอก serialNumber ไว้จริง (อุปกรณ์เสริมหลายชิ้นไม่มี
+// SN ให้กรอก) ใช้ร่วมกันทั้งการ์ดใบจองและรายการในโมดัลคืนของ จะได้เห็นตรงกันทุกที่
+function _snLineHtml(u) {
+  var sn = String((u && u.serialNumber) || '').trim();
+  if (!sn) return '';
+  return '<span class="sn-line">S/N ' + esc(sn) + '</span>';
+}
 function _bkSlipItemHtml(it, skip) {
   var u = it.u, p = _scModelParts(u);
   return '<div class="rt-crow2"><span class="ic">' + _scCatOf(u).icon + '</span>' +
     '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') + (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' + _rentCopyBtn(u.rentalDbNo) : '') +
+    _snLineHtml(u) +
     (u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
     ((it.kind === 'out' || it.kind === 'late') ? _waitingNoteHtml(u.id) : '') + '</span>' +
     '<span class="row-acts">' + _scBusyBadge(it.kind) + (skip ? '' : _bkRowActionsHtml(it)) + '</span></div>';
@@ -2619,6 +2632,7 @@ function renderBookingsTab() {
   var fromAppBk = all.filter(function(it) { return !it.b.loanId; }).length;
   var h = '<div class="bk-sum"><b>' + all.length + ' เครื่องทั้งหมด</b> ใน ' + slipCount + ' ใบจอง — กำลังแสดง ' + filtered.length + ' รายการ' +
     _appSrcTopNoteHtml(fromAppBk) + '</div>';
+  h += '<div style="margin:8px 0"><button class="btn btn-ghost btn-sm" onclick="openMultiSlipReturnM()" title="เลือกได้มากกว่า 1 ใบจอง ติ๊กทั้งใบหรือบางเครื่องก็ได้ แล้วคืน/คัดลอกรวมทีเดียว">📥 คืนหลายใบจอง</button></div>';
   if (_bkReturnTo && bkView === 'slip') h += '<button class="back-link" onclick="bkReturnFromSlip()">← กลับไปที่เดิม</button>';
   h += _bkStatChipsHtml(all);
   h += _bkPersonFiltersHtml(all);
@@ -2774,6 +2788,7 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
   var h = '<div class="rt-crow2"><span class="ic" title="' + esc(cat.label) + '">' + cat.icon + '</span>';
   h += '<span class="nm">' + esc(p.main) + (p.sub ? ' <u>' + esc(p.sub) + '</u>' : '') +
     (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+    (u ? _snLineHtml(u) : '') +
     (u && u.note ? '<span class="rt-crow2-note">📝 ' + esc(u.note) + '</span>' : '') +
     (u ? _waitingNoteHtml(u.id) : '');
   if (l.end !== slipEndIso) {
@@ -2893,6 +2908,7 @@ function _rtSlipHead(key, rows, checkable) {
     return '<li>' + (checkable ? '<label class="rt-row-pick"><input type="checkbox" class="rt-row-chk" value="' + esc(k) + '" checked>' : '<span>') +
       esc(u.model || u.name || l.model || '-') +
       (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+      _snLineHtml(u) +
       (l.src === 'app' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') +
       (checkable ? '</label>' : '</span>') + '</li>';
   }).join('') + '</ul>';
@@ -2908,6 +2924,7 @@ function openSlipReturnM(key) {
   var rows = _rtSlipRows(key);
   if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
   var h = _rtSlipHead(key, rows);
+  h += '<div style="margin:-2px 0 10px"><button class="btn btn-ghost btn-sm" onclick="copySlipReturnTsv(\'' + _scEsq(key) + '\')" title="คัดลอกตารางลำดับ/SiS-Part/SN/ชื่อสินค้า/เลขเครื่องเช่า ของเครื่องที่ติ๊กไว้ด้านบน — วางคีย์คืนในระบบนอกได้เลย">📋 คัดลอกรายการที่ติ๊ก (คีย์คืนระบบนอก)</button></div>';
   h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="sr_date" value="' + _td() + '"></div>';
   h += '<div class="field"><label>🕐 เผื่อเวลาคลังรับเข้า (วัน)</label><input type="number" id="sr_buffer" min="0" value="' + DEMO_RETURN_BUFFER_DEFAULT + '">' +
     '<div class="hint">ของจะยังนับว่า "ไม่ว่าง" ต่อไปอีกกี่วันหลังคืน กว่าคลังจะเช็ค/คีย์เข้าระบบครบ — คืนทีละไม่กี่ชิ้นเผื่อ 1-2 วันพอ ถ้าคืนพร้อมกันเยอะๆ (เช่นหลังงาน Showcase) ปรับเป็น 5-7 วันได้</div></div>';
@@ -2929,7 +2946,19 @@ function saveSlipReturn(key) {
   var availableFrom = _scAddDaysIso(date, bufferDays);
   var note = 'รับคืนเข้าคลัง ' + _scD(date) + (bufferDays ? ' · เผื่อรับเข้าระบบถึง ' + _scD(availableFrom) : '') +
     (sel.length < rows.length ? ' · คืน ' + sel.length + '/' + rows.length + ' เครื่องในใบ' : ' · คืนทั้งใบ ' + rows.length + ' เครื่อง');
-  var batch = db.batch(), nDirect = 0, nReq = 0;
+  var batch = db.batch();
+  var counts = _appendReturnOps(batch, sel, date, bufferDays, availableFrom, by, note);
+  batch.commit().then(function() {
+    closeSm();
+    var left = rows.length - sel.length;
+    toastMock('✅ ' + (counts.nDirect ? 'รับคืน ' + counts.nDirect + ' เครื่อง' : '') + (counts.nDirect && counts.nReq ? ' · ' : '') + (counts.nReq ? 'ส่งคำขอ ' + counts.nReq + ' เครื่อง' : '') +
+      (left ? ' · เหลืออีก ' + left + ' เครื่องยังไม่คืน' : ''));
+  }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
+}
+// แยกจาก saveSlipReturn ด้านบน เพราะคืนหลายใบจองพร้อมกัน (saveMultiSlipReturn) ต้องเขียน batch เดียวกันนี้
+// ซ้ำกับหลายใบ — เขียนลอจิกการอัปเดต Firestore ไว้จุดเดียว กันสองจุดเพี้ยนไม่ตรงกัน
+function _appendReturnOps(batch, sel, date, bufferDays, availableFrom, by, note) {
+  var nDirect = 0, nReq = 0;
   sel.forEach(function(l) {
     if (l.src === 'staff') {
       batch.update(db.collection('publicDemoLoans').doc(l.id), {
@@ -2948,11 +2977,112 @@ function saveSlipReturn(key) {
       nReq++;
     }
   });
+  return { nDirect: nDirect, nReq: nReq };
+}
+// ---- คืนหลายใบจองพร้อมกัน ----
+//
+// ใช้ _rtSlipRows(key) ของเดิมต่อใบจองที่เลือก (key เดียวกับที่ติดตามคืน/การ์ดใบจองใช้อยู่แล้ว เพราะ
+// _bkItemSlipKey อิง _rtSlipKey ตัวเดียวกัน) จะได้แถวตรงกับที่หน้าอื่นเห็นเป๊ะๆ ไม่ต้องคำนวณสถานะเองใหม่
+// แล้วรวมเป็น batch เดียวตอนบันทึก (ผ่าน _appendReturnOps เดิม) กับรวมเป็นตารางเดียวตอนคัดลอก
+function openMultiSlipReturnM() {
+  var grouped = _bkGroup(bkAllItems());
+  var keys = grouped.order.filter(function(k) {
+    var g = grouped.groups[k];
+    return (g.statuses.out || g.statuses.late) && _rtSlipRows(k).length;
+  });
+  if (!keys.length) { alert('ไม่มีใบจองที่มีเครื่องค้างคืนตอนนี้'); return; }
+  keys.sort(function(a, b) { return grouped.groups[a].endIso.localeCompare(grouped.groups[b].endIso); });
+  var h = '<div class="hint">เลือกได้มากกว่า 1 ใบจอง ติ๊กทั้งใบหรือกด "เลือกบางเครื่อง" เพื่อติ๊กทีละเครื่องก็ได้</div>';
+  h += keys.map(function(k) {
+    var g = grouped.groups[k];
+    var rows = _rtSlipRows(k);
+    var title = g.jobNo ? '📄 ใบจอง ' + esc(g.jobNo) : '📄 ไม่มีเลขใบจอง';
+    var itemsHtml = rows.map(function(l) {
+      var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0];
+      return '<label class="rt-row-pick ms-item"><input type="checkbox" class="ms-item-chk" data-bk="' + esc(k) + '" value="' + esc(_rtRowKey(l)) + '" checked onchange="msSyncBooking(\'' + _scEsq(k) + '\')">' +
+        esc((u && (u.model || u.name)) || l.model || '-') +
+        (u && u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
+        (u ? _snLineHtml(u) : '') + '</label>';
+    }).join('');
+    return '<div class="ms-slip" data-ms-slip="' + esc(k) + '">' +
+      '<label class="rt-row-pick"><input type="checkbox" class="ms-bk-chk" data-bk="' + esc(k) + '" checked onchange="msToggleBooking(this)">' +
+      '<b>' + title + '</b> · ' + esc(g.borrower) + ' · ' + rows.length + ' เครื่อง</label>' +
+      '<button type="button" class="ms-all-btn" data-bk="' + esc(k) + '" onclick="msToggleAllItems(\'' + _scEsq(k) + '\')">เลือกบางเครื่อง</button>' +
+      '<div class="ms-items">' + itemsHtml + '</div>' +
+    '</div>';
+  }).join('');
+  h += '<div style="margin:4px 0 10px"><button class="btn btn-ghost btn-sm" onclick="copyMultiSlipTsv()" title="คัดลอกตารางลำดับ/SiS-Part/SN/ชื่อสินค้า/เลขเครื่องเช่า ของทุกเครื่องที่ติ๊กไว้ รวมทุกใบจอง">📋 คัดลอกรายการที่เลือกทั้งหมด</button></div>';
+  h += '<div class="field"><label>📅 วันที่รับคืนจริง *</label><input type="date" id="ms_date" value="' + _td() + '"></div>';
+  h += '<div class="field"><label>🕐 เผื่อเวลาคลังรับเข้า (วัน)</label><input type="number" id="ms_buffer" min="0" value="' + DEMO_RETURN_BUFFER_DEFAULT + '">' +
+    '<div class="hint">ของจะยังนับว่า "ไม่ว่าง" ต่อไปอีกกี่วันหลังคืน กว่าคลังจะเช็ค/คีย์เข้าระบบครบ ใช้ค่าเดียวกันกับทุกใบจองที่เลือก</div></div>';
+  h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="ms_by" list="msKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('msKeyerList') + '</div>';
+  h += '<button class="btn btn-primary btn-full" onclick="saveMultiSlipReturn()">✅ รับคืนตามที่เลือก</button>';
+  openSm('📥 คืนหลายใบจอง', h);
+}
+function msToggleBooking(chk) {
+  var k = chk.dataset.bk;
+  document.querySelectorAll('.ms-item-chk[data-bk="' + CSS.escape(k) + '"]').forEach(function(c) { c.checked = chk.checked; });
+  var allBtn = document.querySelector('.ms-all-btn[data-bk="' + CSS.escape(k) + '"]');
+  if (allBtn) allBtn.textContent = chk.checked ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด';
+}
+function msToggleAllItems(k) {
+  var items = document.querySelectorAll('.ms-item-chk[data-bk="' + CSS.escape(k) + '"]');
+  var anyOff = Array.prototype.some.call(items, function(c) { return !c.checked; });
+  items.forEach(function(c) { c.checked = anyOff; });
+  msSyncBooking(k);
+}
+// ติ๊ก/ยกเลิกรายเครื่องแล้วเรียกอันนี้ ให้ checkbox ระดับใบจองตามสถานะจริง (indeterminate ถ้าติ๊กไม่ครบ)
+function msSyncBooking(k) {
+  var items = document.querySelectorAll('.ms-item-chk[data-bk="' + CSS.escape(k) + '"]');
+  var on = Array.prototype.filter.call(items, function(c) { return c.checked; });
+  var bkChk = document.querySelector('.ms-bk-chk[data-bk="' + CSS.escape(k) + '"]');
+  if (bkChk) { bkChk.checked = on.length === items.length && items.length > 0; bkChk.indeterminate = on.length > 0 && on.length < items.length; }
+  var allBtn = document.querySelector('.ms-all-btn[data-bk="' + CSS.escape(k) + '"]');
+  if (allBtn) allBtn.textContent = (on.length === items.length) ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด';
+}
+// เครื่องที่ติ๊กไว้จริง ณ ตอนนี้ กลุ่มตามใบจอง (เรียงตามลำดับที่โชว์บนจอ) — ใช้ทั้งคัดลอกและบันทึกคืน
+// อ่านจาก _rtSlipRows(key) สดทุกครั้งแทนที่จะเก็บ state เอง กันข้อมูลเพี้ยนถ้ามีคนอื่นแก้พร้อมกัน
+function _msSelected() {
+  var out = [], byKey = {}, rowsCache = {};
+  document.querySelectorAll('.ms-item-chk:checked').forEach(function(c) {
+    var k = c.dataset.bk;
+    if (!byKey[k]) { byKey[k] = { key: k, rows: [] }; out.push(byKey[k]); rowsCache[k] = _rtSlipRows(k); }
+    var l = rowsCache[k].filter(function(r) { return _rtRowKey(r) === c.value; })[0];
+    if (l) byKey[k].rows.push(l);
+  });
+  return out;
+}
+function copyMultiSlipTsv() {
+  var sel = _msSelected();
+  var units = [];
+  sel.forEach(function(g) {
+    g.rows.forEach(function(l) {
+      units.push(UNITS.filter(function(x) { return x.id === l.unitId; })[0] || { model: l.model || '-' });
+    });
+  });
+  _copyReturnTsv(units, '📋 คัดลอกรายการคืน ' + units.length + ' เครื่อง จาก ' + sel.length + ' ใบจองแล้ว');
+}
+function saveMultiSlipReturn() {
+  var sel = _msSelected();
+  var totalRows = sel.reduce(function(n, g) { return n + g.rows.length; }, 0);
+  if (!totalRows) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะคืนเลย'); return; }
+  var date = (document.getElementById('ms_date').value || '').trim();
+  var bufferDays = Math.max(0, parseInt(document.getElementById('ms_buffer').value, 10) || 0);
+  var by = (document.getElementById('ms_by').value || '').trim();
+  if (!date) { alert('เลือกวันที่รับคืนจริงก่อนนะครับ'); return; }
+  if (!by) { alert('ใส่ชื่อคนที่ทำเรื่องก่อนนะครับ'); return; }
+  try { localStorage.setItem('demoStaffEditor', by); } catch (e) {}
+  var availableFrom = _scAddDaysIso(date, bufferDays);
+  var note = 'รับคืนเข้าคลัง ' + _scD(date) + (bufferDays ? ' · เผื่อรับเข้าระบบถึง ' + _scD(availableFrom) : '') +
+    ' · คืนพร้อมกัน ' + sel.length + ' ใบจอง (' + totalRows + ' เครื่อง)';
+  var batch = db.batch(), nDirect = 0, nReq = 0;
+  sel.forEach(function(g) {
+    var c = _appendReturnOps(batch, g.rows, date, bufferDays, availableFrom, by, note);
+    nDirect += c.nDirect; nReq += c.nReq;
+  });
   batch.commit().then(function() {
     closeSm();
-    var left = rows.length - sel.length;
-    toastMock('✅ ' + (nDirect ? 'รับคืน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : '') +
-      (left ? ' · เหลืออีก ' + left + ' เครื่องยังไม่คืน' : ''));
+    toastMock('✅ ' + (nDirect ? 'รับคืน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : '') + ' · ' + sel.length + ' ใบจอง');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 function openSlipExtendM(key) {
@@ -3585,6 +3715,37 @@ function copyBkSlipRentals(key) {
   } else {
     alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
   }
+}
+// ---- คัดลอกรายการคืนแบบตาราง (คีย์คืนในระบบนอก) ----
+//
+// ต่างจาก copy* เลขเครื่องเช่าด้านบนที่คัดลอกแค่เลขเดียวคนละบรรทัด — อันนี้คัดลอกทั้งแถว (SiS-Part/SN/ชื่อ/
+// เลขเครื่องเช่า) คั่นด้วย Tab พร้อมหัวตาราง วางลง Excel/ระบบนอกแล้วตกคอลัมน์ตรงช่องได้เลยโดยไม่ต้องพิมพ์เอง
+// ว่างไว้ถ้าเครื่องนั้นไม่มี SiS-Part/SN กรอก (ไม่ใส่ "-") กันค่าแปลกปนเข้าไปในระบบนอกตอนวาง
+function _returnTsvFromUnits(units) {
+  var rows = [['ลำดับ', 'SiS-Part', 'SN', 'ชื่อสินค้า', 'เลขเครื่องเช่า'].join('\t')];
+  units.forEach(function(u, i) {
+    rows.push([i + 1, u.sku || '', u.serialNumber || '', (u.model || u.name || '-'), u.rentalDbNo || ''].join('\t'));
+  });
+  return rows.join('\n');
+}
+function _copyReturnTsv(units, okMsg) {
+  if (!units.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะคัดลอกเลย'); return; }
+  var text = _returnTsvFromUnits(units);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() { toastMock(okMsg); })
+      .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
+  } else {
+    alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
+  }
+}
+// ใช้ตอนกดคืนใบเดียว (openSlipReturnM) — อ่านเครื่องที่ติ๊กไว้ตอนนั้นจริงๆ ผ่าน _rtSelectedRows เดิม จะได้
+// ตรงกับสิ่งที่กำลังจะส่งคืนจริง ไม่ใช่ทุกเครื่องในใบ
+function copySlipReturnTsv(key) {
+  var rows = _rtSlipRows(key);
+  var sel = _rtSelectedRows(rows);
+  if (!sel.length) { alert('ยังไม่ได้ติ๊กเลือกเครื่องที่จะคัดลอกเลย'); return; }
+  var units = sel.map(function(l) { return UNITS.filter(function(x) { return x.id === l.unitId; })[0] || { model: l.model || '-' }; });
+  _copyReturnTsv(units, '📋 คัดลอกรายการคืน ' + units.length + ' เครื่องแล้ว');
 }
 
 // ================================================================
