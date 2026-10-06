@@ -306,8 +306,10 @@ function _soSummaryItemStatusInfo(it, s) {
     if (it.prpoExpectedDate) note = (note ? note + ' — ' : '') + 'คาดว่าได้ ' + fD(it.prpoExpectedDate);
   } else if (it.sourceType === 'reserve_1021') {
     status = '📌 จองคลัง 1021 (' + qty + ' ชิ้น)';
+    if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
   } else if (it.sourceType === 'reserve_8d01') {
     status = '🧳 จองคลัง 8D01 (' + qty + ' ชิ้น)';
+    if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
   } else if (it.sourceType === 'central_wh') {
     status = '🏢 ส่งจากคลังกลาง';
   } else if (it.sku && typeof stockSOItemReadyInfo === 'function') {
@@ -316,9 +318,9 @@ function _soSummaryItemStatusInfo(it, s) {
     else if (info.shortfall > 0) status = '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
     if (info.bookingExpiryDate) note = 'จองถึง ' + fD(info.bookingExpiryDate);
   }
-  // ลิงก์จอง/อ้างอิงการจอง — ระบบนี้ยังไม่มีเลขอ้างอิงแยกต่อรายการ ใช้เลข SO/PO ของใบนี้เป็นอ้างอิง (มีอยู่แล้วในระบบ)
-  var ref = s.soNumber || s.customerPO || '-';
-  if (s.pendingSoNumber) ref += ' (ร่าง)';
+  // ลิงก์จอง/อ้างอิง — ใช้ลิงก์ที่พิมพ์ไว้ในช่อง "ลิงก์" ของรายการนี้ก่อน (it.link) ถ้าไม่มีค่อย fallback เป็นเลข SO/PO ของใบนี้
+  var ref = it.link || s.soNumber || s.customerPO || '-';
+  if (!it.link && s.pendingSoNumber) ref += ' (ร่าง)';
   return { status: status, note: note, ref: ref };
 }
 
@@ -1698,6 +1700,10 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
     '<select class="inp" style="flex:2;min-width:160px" id="soI_prpoStatus_' + idx + '" onchange="_soPrpoStatusChanged(\'' + idx + '\')">' + _soPrpoStatusOptionsHtml(item.prpoStatusId || '') + '</select>' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
+  var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
+  h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ (ไม่บังคับ)" value="' + sanitize(item.reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '">' +
+    '</div>';
   h += '</div>';
   return h;
 }
@@ -1705,11 +1711,13 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
 function _soItemSourceChanged(idx) {
   var sel = document.getElementById('soI_src_' + idx);
   var prpoBox = document.getElementById('soI_prpo_' + idx);
-  if (!sel || !prpoBox) return;
-  prpoBox.style.display = sel.value === 'pr_po' ? 'flex' : 'none';
+  var resBox = document.getElementById('soI_res_' + idx);
+  if (!sel) return;
+  if (prpoBox) prpoBox.style.display = sel.value === 'pr_po' ? 'flex' : 'none';
+  if (resBox) resBox.style.display = (sel.value === 'reserve_1021' || sel.value === 'reserve_8d01') ? 'flex' : 'none';
 }
 
-// อ่านฟิลด์ sourceType/PR-PO จากแถวรายการสินค้า — ใช้ร่วมกันตอนบันทึกทั้งสร้างใหม่และแก้ไข
+// อ่านฟิลด์ sourceType/PR-PO/วันจองถึง จากแถวรายการสินค้า — ใช้ร่วมกันตอนบันทึกทั้งสร้างใหม่และแก้ไข
 function _soReadItemSourceFields(row) {
   var srcEl = row.querySelector('[id^="soI_src_"]');
   var out = { sourceType: srcEl ? srcEl.value : '' };
@@ -1720,6 +1728,9 @@ function _soReadItemSourceFields(row) {
     out.prpoSubmittedDate = dateEl ? dateEl.value : '';
     out.prpoStatusId = (statusEl && statusEl.value !== '__new__') ? statusEl.value : '';
     out.prpoExpectedDate = expEl ? expEl.value : '';
+  } else if (out.sourceType === 'reserve_1021' || out.sourceType === 'reserve_8d01') {
+    var resExpEl = row.querySelector('[id^="soI_resExp_"]');
+    out.reserveExpiryDate = resExpEl ? resExpEl.value : '';
   }
   return out;
 }
