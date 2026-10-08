@@ -17,6 +17,31 @@ var poTrackerMoreFlt = false; // เปิด/ปิดแผงตัวกร�
 var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า + ปรับยอด Stock ด่วน
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 
+// 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
+var POTRACKER_ITEM_BUCKETS = [
+  { key: 'not_sent',     label: 'ยังไม่ส่ง',  icon: '⬜', color: '#94a3b8' },
+  { key: 'pending_prpo', label: 'รอ PR/PO',   icon: '🛒', color: '#ef4444' },
+  { key: 'reserved',     label: 'จอง',        icon: '📌', color: '#f59e0b' },
+  { key: 'ready',        label: 'พร้อมส่ง',   icon: '📦', color: '#3b82f6' },
+  { key: 'shipped',      label: 'ส่งแล้ว',    icon: '✅', color: '#22c55e' }
+];
+
+// จัดรายการสินค้า 1 ชิ้นเข้า 1 ใน 5 bucket ด้านบน — ใช้ข้อมูลเดียวกับ _poTrackerItemRemark/_soSummaryItemStatusInfo
+// แต่บีบให้เหลือ key คงที่ 5 ค่า เพื่อเอาไปกรุ๊ปและนับจำนวนได้ (ต่างจากสองฟังก์ชันนั้นที่ทำข้อความอธิบายอย่างเดียว)
+function _poTrackerItemBucket(it, so) {
+  var qty = Number(it.qty) || 0;
+  var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, so) : null;
+  if (info) {
+    if (qty > 0 && info.deliveredForThisSO >= qty) return 'shipped';
+    if (info.bookedForThisSO > 0) return 'reserved';
+  }
+  if (it.sourceType === 'pr_po') return 'pending_prpo';
+  if (it.sourceType === 'reserve_1021' || it.sourceType === 'reserve_8d01') return 'reserved';
+  if (it.sourceType === 'central_wh') return 'ready';
+  if (info && info.shortfall === 0) return 'ready';
+  return 'not_sent';
+}
+
 // รายการสินค้าที่ต้อง PR/PO เพิ่ม หรือจองจากคลังยังไม่ครบ ใช้สรุป remark ต่อรายการ (คล้าย mockup เดิม)
 function _poTrackerItemRemark(it, so) {
   var qty = Number(it.qty) || 0;
@@ -56,6 +81,46 @@ function _poTrackerBuildRow(s) {
     pendingPRPO: pendingPRPO,
     done: _soIsDone(s.status)
   };
+}
+
+// แผงสรุปรายการสินค้าของ Dealer ที่กำลังกรองอยู่ แยกตามสถานะ (5 bucket) — ใช้ตอนเลือก Dealer เดียวในหน้า PO Tracker
+// เพื่อดูว่าของเหลืออะไรบ้าง ยังไม่ส่ง/รอ PR/PO/จอง/พร้อมส่ง/ส่งแล้ว พร้อมลิงก์ไป SO/Pipeline/Quotation ต้นทาง
+function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
+  var groups = {};
+  POTRACKER_ITEM_BUCKETS.forEach(function(b) { groups[b.key] = []; });
+  dealerRows.forEach(function(r) {
+    (r.so.items || []).forEach(function(it) {
+      var bucket = _poTrackerItemBucket(it, r.so);
+      groups[bucket].push({ it: it, so: r.so });
+    });
+  });
+
+  var html = '<div class="card" style="margin-bottom:10px;padding:14px">';
+  html += '<div style="font-weight:600;margin-bottom:8px">📊 สรุปรายการสินค้า — ' + sanitize(dealerName) + '</div>';
+
+  var any = false;
+  POTRACKER_ITEM_BUCKETS.forEach(function(b) {
+    var items = groups[b.key];
+    if (!items.length) return;
+    any = true;
+    html += '<div style="margin-bottom:10px">';
+    html += '<div style="font-size:12px;font-weight:600;color:' + b.color + ';margin-bottom:4px">' + b.icon + ' ' + b.label + ' (' + items.length + ')</div>';
+    items.forEach(function(x) {
+      var it = x.it, so = x.so;
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:var(--bg2);margin-bottom:3px;font-size:12px">';
+      html += '<div>' + sanitize(it.model || it.sku || '-') + ' <span style="color:var(--text2)">x' + (Number(it.qty) || 0) + '</span></div>';
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      html += '<a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="font-size:11px;color:var(--accent)">📋 ' + sanitize(so.soNumber || so.customerPO || '-') + '</a>';
+      if (so.pipelineId) html += '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + so.pipelineId + '\'});return false" style="font-size:11px;color:var(--accent)">📋 Pipeline</a>';
+      if (so.quotationId) html += '<a href="#" onclick="editQuotation(\'' + so.quotationId + '\');return false" style="font-size:11px;color:var(--accent)">💰 Quotation</a>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  if (!any) html += '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้า</div>';
+  html += '</div>';
+  return html;
 }
 
 function poTrackerResetFilters() {
@@ -103,6 +168,7 @@ function rPOTracker(el) {
   });
   html += '</select>';
   html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
+  html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
   html += '</div>';
 
@@ -136,6 +202,11 @@ function rPOTracker(el) {
     html += '</div>';
   }
   html += '</div>';
+
+  if (poTrackerDealerFlt) {
+    var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt; });
+    html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
+  }
 
   var q = poTrackerSearch.trim().toLowerCase();
   var filtered = rows.filter(function(r) {
@@ -371,21 +442,114 @@ function _poTrackerExportXlsxImpl() {
   wsOverview['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
 
   // ชีต 2: รายการสินค้าต่อบรรทัด — คอลัมน์ตรงกับ Excel ที่ทีมใช้จริง (No/SKU/รายการสินค้า/จำนวน/ราคาต่อหน่วย/ราคารวม/Remark)
-  var itemHeader = ['PO ลูกค้า', 'SO Number', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'Remark'];
+  var itemHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'Remark'];
   var itemRows = [];
   all.forEach(function(s) {
     (s.items || []).forEach(function(it, idx) {
       var qty = Number(it.qty) || 0;
       var price = Number(it.unitPrice) || 0;
-      itemRows.push([s.customerPO || '', s.soNumber || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price, _poTrackerItemRemark(it, s)]);
+      itemRows.push([s.customerPO || '', s.soNumber || '', s.dealerName || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price, _poTrackerItemRemark(it, s)]);
     });
   });
   var wsItems = XLSX.utils.aoa_to_sheet([itemHeader].concat(itemRows));
-  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 34 }];
+  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 34 }];
 
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsOverview, 'ภาพรวม');
   XLSX.utils.book_append_sheet(wb, wsItems, 'รายการสินค้า');
   XLSX.writeFile(wb, 'po-tracker-export-' + _td() + '.xlsx');
   toast('📤 Export PO Tracker แล้ว (' + all.length + ' PO/SO, ' + itemRows.length + ' รายการ)');
+}
+
+// ================================================================
+// หน้าแยกตาม Dealer — รวมสินค้าทุก PO ของ Dealer เดียวกันเข้าด้วยกันต่อ product (เช่น Matrice 400 รวม 5 ลำ
+// จาก PO 123 3 ลำ รอ PR/PO + PO 124 2 ลำ ส่งแล้ว) ให้เห็นงานค้างทั้งหมดของ Dealer นี้ในที่เดียว
+// ================================================================
+
+var poTrackerDealerPageFlt = ''; // Dealer ที่เลือกดูอยู่ในหน้านี้ — จำค่าไว้ข้ามการ render ภายในหน้าเดียวกัน
+
+function rPOTrackerDealer(el) {
+  document.getElementById('pgT').textContent = '🏪 สินค้าตาม Dealer';
+  if (S.dealerName) poTrackerDealerPageFlt = S.dealerName;
+
+  var all = ST.getAll('salesOrders');
+  var dealers = Array.from(new Set(all.map(function(s) { return s.dealerName || ''; }).filter(Boolean))).sort();
+
+  var html = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'poTracker\')" style="margin-bottom:10px">← กลับ PO Tracker</button>';
+
+  html += '<div class="card" style="margin-bottom:12px;padding:16px">';
+  html += '<div style="font-weight:600;margin-bottom:8px">เลือก Dealer</div>';
+  html += '<select class="inp" style="max-width:280px" onchange="poTrackerDealerPageFlt=this.value;render()">';
+  html += '<option value="">-- เลือก Dealer --</option>';
+  dealers.forEach(function(d) { html += '<option value="' + sanitize(d) + '"' + (poTrackerDealerPageFlt === d ? ' selected' : '') + '>' + sanitize(d) + '</option>'; });
+  html += '</select>';
+  html += '</div>';
+
+  if (!poTrackerDealerPageFlt) {
+    html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">เลือก Dealer ด้านบนเพื่อดูสินค้าค้าง/ส่งแล้วทั้งหมด</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  var dealerSOs = all.filter(function(s) { return s.dealerName === poTrackerDealerPageFlt; });
+
+  // รวมสินค้าต่อ product (key = sku ถ้ามี ไม่งั้นใช้ชื่อ model) ข้าม PO/SO ทั้งหมดของ Dealer นี้
+  var productMap = {};
+  dealerSOs.forEach(function(s) {
+    (s.items || []).forEach(function(it) {
+      var key = it.sku || it.model || '-';
+      if (!productMap[key]) productMap[key] = { model: it.model || it.sku || '-', sku: it.sku || '', totalQty: 0, deliveredQty: 0, pos: [] };
+      var qty = Number(it.qty) || 0;
+      var bucket = _poTrackerItemBucket(it, s);
+      productMap[key].totalQty += qty;
+      if (bucket === 'shipped') productMap[key].deliveredQty += qty;
+      productMap[key].pos.push({ so: s, qty: qty, bucket: bucket });
+    });
+  });
+
+  var products = Object.keys(productMap).map(function(k) { return productMap[k]; })
+    .sort(function(a, b) { return b.totalQty - a.totalQty; });
+
+  var grandTotal = products.reduce(function(sum, p) { return sum + p.totalQty; }, 0);
+  var grandDelivered = products.reduce(function(sum, p) { return sum + p.deliveredQty; }, 0);
+
+  html += '<div class="card" style="margin-bottom:12px;padding:16px">';
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+  html += '<div><div style="font-size:22px;font-weight:600">' + grandTotal + '</div><div style="font-size:11px;color:var(--text2)">รวมทุกรายการ (ชิ้น)</div></div>';
+  html += '<div><div style="font-size:22px;font-weight:600;color:#22c55e">' + grandDelivered + '</div><div style="font-size:11px;color:var(--text2)">ส่งแล้ว</div></div>';
+  html += '<div><div style="font-size:22px;font-weight:600;color:#f59e0b">' + (grandTotal - grandDelivered) + '</div><div style="font-size:11px;color:var(--text2)">ค้างอยู่</div></div>';
+  html += '</div></div>';
+
+  if (!products.length) {
+    html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">Dealer นี้ยังไม่มีรายการสินค้า</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  products.forEach(function(p) {
+    var outstanding = p.totalQty - p.deliveredQty;
+    html += '<div class="card" style="margin-bottom:10px;padding:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+    html += '<div><div style="font-weight:600;font-size:14px">' + sanitize(p.model) + (p.sku ? ' <span style="font-size:11px;color:var(--text2)">(' + sanitize(p.sku) + ')</span>' : '') + '</div></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    html += '<span style="padding:2px 8px;border-radius:8px;background:var(--bg2);color:var(--text2);font-size:11px">รวม ' + p.totalQty + ' ชิ้น</span>';
+    html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(34,197,94,.12);color:#22c55e;font-size:11px">✅ ส่งแล้ว ' + p.deliveredQty + '</span>';
+    if (outstanding > 0) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(245,158,11,.12);color:#f59e0b;font-size:11px">⏳ ค้าง ' + outstanding + '</span>';
+    html += '</div></div>';
+
+    html += '<div style="border-top:1px solid var(--border);padding-top:8px">';
+    p.pos.forEach(function(x) {
+      var b = POTRACKER_ITEM_BUCKETS.filter(function(bb) { return bb.key === x.bucket; })[0] || POTRACKER_ITEM_BUCKETS[0];
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:var(--bg2);margin-bottom:3px;font-size:12px">';
+      html += '<div><a href="#" onclick="go(\'soDetail\',{soId:\'' + x.so.id + '\'});return false" style="color:var(--accent)">📋 ' + sanitize(x.so.soNumber || x.so.customerPO || '-') + '</a>' +
+        (x.so.customerPO && x.so.soNumber ? ' <span style="color:var(--text2)">· PO ' + sanitize(x.so.customerPO) + '</span>' : '') + '</div>';
+      html += '<div style="display:flex;gap:8px;align-items:center">';
+      html += '<span>x' + x.qty + '</span>';
+      html += '<span style="color:' + b.color + '">' + b.icon + ' ' + b.label + '</span>';
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
 }
