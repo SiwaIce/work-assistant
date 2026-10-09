@@ -931,6 +931,7 @@ function rSODetail(el) {
   html += '<thead><tr style="background:var(--bg2);text-align:left">' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">#</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">สินค้า</th>' +
+    '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">SKU</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:center">จำนวน</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">ราคา/หน่วย</th>' +
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2);text-align:right">รวม</th>' +
@@ -945,6 +946,7 @@ function rSODetail(el) {
     html += '<tr style="border-top:1px solid var(--border)">';
     html += '<td style="padding:10px">' + (idx+1) + '</td>';
     html += '<td style="padding:10px"><b>' + sanitize(it.model||'-') + '</b></td>';
+    html += '<td style="padding:10px;font-size:11px;font-family:monospace">' + (it.sku ? qcopyHtml(it.sku) : '<span style="color:var(--text2)">-</span>') + '</td>';
     html += '<td style="padding:10px;text-align:center">' + (it.qty||0) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
@@ -956,7 +958,7 @@ function rSODetail(el) {
       (itLinkSafe ? '<a href="' + sanitize(itLinkSafe) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);display:inline-block;margin-top:3px">🔗 เปิดลิงก์</a>' : '') + '</td>';
     html += '</tr>';
   });
-  html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
+  html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="5" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
   html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="4"></td></tr>';
   html += '</tbody></table></div></div>';
 
