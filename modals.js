@@ -1910,10 +1910,20 @@ function buildDealerReviewFormHtml(existDealer, eid, rerenderCall, v, dealer) {
   var summaryBlock = '<div class="form-section">📝 สรุปการคุย</div>' +
     '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>';
 
-  var html = bar + sourceBlock + summaryBlock + forecastSection +
-    '<div class="form-section">2. Pipeline Review <span class="hint" style="display:inline">(Five Elements of Projects)</span></div>' +
-    '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
+  // โหมดหัวข้อ 2 — เลือกได้ว่าจะดึงโปรเจคจาก Pipeline มาติ๊กเลือก หรือพิมพ์เอง (freetext) ตามที่ผู้ใช้ขอ
+  // 2026-10-10 (เดิมมีแต่ picker อย่างเดียว) — default เป็น 'pipeline' ยกเว้นของเก่าที่เคยพิมพ์ freetext ไว้
+  // แล้วไม่มี pipelineUpdates เลย ก็ให้เปิดเป็น freetext ต่อ กันข้อความเดิมดูเหมือนหายไป
+  var prMode = drd.pipelineReviewMode || ((v.pipelineUpdates && v.pipelineUpdates.length) ? 'pipeline' : (drd.pipelineReview ? 'freetext' : 'pipeline'));
+  var prIsPipeline = prMode !== 'freetext';
+  var pipelineReviewSection = '<div class="form-section">2. Pipeline Review <span class="hint" style="display:inline">(Five Elements of Projects)</span></div>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0 6px;cursor:pointer"><input type="checkbox" id="dr_pipeline_mode_chk"' + (prIsPipeline ? ' checked' : '') + ' onchange="toggleDealerReviewPipelineMode()"> ดึงโปรเจคจาก Pipeline มาเลือก (ไม่ติ๊ก = พิมพ์เองแบบ freetext)</label>' +
+    '<div id="dr_pipeline_pickwrap" style="display:' + (prIsPipeline ? 'block' : 'none') + '"><div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div></div>' +
+    '<div id="dr_pipeline_freewrap" style="display:' + (prIsPipeline ? 'none' : 'block') + '">' +
     ta('dr_pipeline', 'สำหรับโปรเจคสำคัญ (โดยเฉพาะ Dock projects และโปรเจคใหญ่ >2M บาท): ติดขั้นตอนไหน? ต้องการซัพพอร์ตอะไรจาก DJI/SiS (เครื่อง demo, POC, ขออนุมัติราคาพิเศษ), มีโอกาส/โปรเจคใหม่ไหม', drd.pipelineReview) +
+    '</div>';
+
+  var html = bar + sourceBlock + summaryBlock + forecastSection +
+    pipelineReviewSection +
     '<div class="form-section">3. Action Agreements</div>' +
     ta('dr_actions', 'ระบุ Action Item ของทั้งสองฝ่าย: ใคร ทำอะไร เมื่อไหร่ กำหนดเสร็จ (DDL)', drd.actionAgreements) +
     '<div class="form-section">4. Competitor Information Update</div>' +
@@ -1928,6 +1938,15 @@ function buildDealerReviewFormHtml(existDealer, eid, rerenderCall, v, dealer) {
     '<div style="margin-top:12px"><button class="btn bp btn-full" onclick="saveDealerReviewVisit(\'' + existDealer + '\',\'' + (eid || '') + '\')">💾 บันทึก Dealer Review</button></div>';
 
   return html;
+}
+
+function toggleDealerReviewPipelineMode() {
+  var chk = document.getElementById('dr_pipeline_mode_chk');
+  var pickWrap = document.getElementById('dr_pipeline_pickwrap');
+  var freeWrap = document.getElementById('dr_pipeline_freewrap');
+  if (!chk || !pickWrap || !freeWrap) return;
+  pickWrap.style.display = chk.checked ? 'block' : 'none';
+  freeWrap.style.display = chk.checked ? 'none' : 'block';
 }
 
 function saveDealerReviewVisit(dealerId, eid) {
@@ -1954,9 +1973,12 @@ function saveDealerReviewVisit(dealerId, eid) {
   var forecast = DEALER_REVIEW_MODELS.map(function(m, i) {
     return { model: m, curMonth: (document.getElementById('dr_cur_' + i) || {}).value || '', nextMonth: (document.getElementById('dr_next_' + i) || {}).value || '' };
   });
+  var prIsPipelineMode = !!(document.getElementById('dr_pipeline_mode_chk') || {}).checked;
   var dealerReviewData = {
     forecast: forecast,
-    pipelineReview: (document.getElementById('dr_pipeline') || {}).value || '',
+    pipelineReviewMode: prIsPipelineMode ? 'pipeline' : 'freetext',
+    // เก็บเฉพาะโหมดที่กำลังใช้จริง — ไม่งั้นค่าของอีกโหมดที่ซ่อนอยู่ (ไม่ได้แก้) จะติดมาด้วยทำให้ดูเหมือนมีข้อมูลสองโหมดซ้อนกัน
+    pipelineReview: prIsPipelineMode ? '' : ((document.getElementById('dr_pipeline') || {}).value || ''),
     actionAgreements: (document.getElementById('dr_actions') || {}).value || '',
     competitorUpdate: (document.getElementById('dr_competitor') || {}).value || '',
     mktPocRequirements: (document.getElementById('dr_mktpoc') || {}).value || '',
@@ -1970,7 +1992,7 @@ function saveDealerReviewVisit(dealerId, eid) {
     date: dpG('fv_date'), dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'offline',
     summary: typedSummary.trim() || ('Dealer Review: ' + (dealerReviewData.pipelineReview.split('\n')[0] || dealerReviewData.actionAgreements.split('\n')[0] || '')),
     saleName: cfg.saleName, reportMode: 'dealerreview', dealerReviewData: dealerReviewData,
-    topicData: [], pipelineUpdates: _collectPipelineUpdatesFromForm(), forecastNotes: [], feedbackItems: [],
+    topicData: [], pipelineUpdates: prIsPipelineMode ? _collectPipelineUpdatesFromForm() : [], forecastNotes: [], feedbackItems: [],
     attachments: dealerReviewData.attach,
     sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
