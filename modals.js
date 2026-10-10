@@ -1907,8 +1907,12 @@ function buildDealerReviewFormHtml(existDealer, eid, rerenderCall, v, dealer) {
     return '<div class="fg"><textarea id="' + id + '" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="' + sanitize(placeholder) + '">' + sanitize(val || '') + '</textarea></div>';
   };
 
-  var html = bar + sourceBlock + forecastSection +
+  var summaryBlock = '<div class="form-section">📝 สรุปการคุย</div>' +
+    '<div class="fg"><div style="display:flex;justify-content:space-between;align-items:center"><label>สรุปการคุย</label><button type="button" id="vSumAiBtn" class="btn bsm" onclick="aiCleanVisitNote()" style="font-size:11px;padding:3px 8px" title="ให้ AI จัดโน้ตให้เป็นระเบียบ">✨ AI จัดระเบียบ</button></div><textarea id="fv_summary" class="fv-autogrow" rows="3" oninput="_fvAutogrow(this)" placeholder="พิมพ์โน้ตคร่าวๆ แล้วกด ✨ AI จัดระเบียบ">' + sanitize(v.summary || '') + '</textarea></div>';
+
+  var html = bar + sourceBlock + summaryBlock + forecastSection +
     '<div class="form-section">2. Pipeline Review <span class="hint" style="display:inline">(Five Elements of Projects)</span></div>' +
+    '<div id="fv_pipes">' + renderPipelineSelectEnhanced(existDealer, v.pipelineUpdates) + '</div>' +
     ta('dr_pipeline', 'สำหรับโปรเจคสำคัญ (โดยเฉพาะ Dock projects และโปรเจคใหญ่ >2M บาท): ติดขั้นตอนไหน? ต้องการซัพพอร์ตอะไรจาก DJI/SiS (เครื่อง demo, POC, ขออนุมัติราคาพิเศษ), มีโอกาส/โปรเจคใหม่ไหม', drd.pipelineReview) +
     '<div class="form-section">3. Action Agreements</div>' +
     ta('dr_actions', 'ระบุ Action Item ของทั้งสองฝ่าย: ใคร ทำอะไร เมื่อไหร่ กำหนดเสร็จ (DDL)', drd.actionAgreements) +
@@ -1961,11 +1965,12 @@ function saveDealerReviewVisit(dealerId, eid) {
     attach: window._drAttach || []
   };
   var modeEl = document.querySelector('input[name="fv_mode"]:checked');
+  var typedSummary = (document.getElementById('fv_summary') || {}).value || '';
   var data = {
     date: dpG('fv_date'), dealerId: did, prospectId: prospectId, company: company, mode: modeEl ? modeEl.value : 'offline',
-    summary: 'Dealer Review: ' + (dealerReviewData.pipelineReview.split('\n')[0] || dealerReviewData.actionAgreements.split('\n')[0] || ''),
+    summary: typedSummary.trim() || ('Dealer Review: ' + (dealerReviewData.pipelineReview.split('\n')[0] || dealerReviewData.actionAgreements.split('\n')[0] || '')),
     saleName: cfg.saleName, reportMode: 'dealerreview', dealerReviewData: dealerReviewData,
-    topicData: [], pipelineUpdates: [], forecastNotes: [], feedbackItems: [],
+    topicData: [], pipelineUpdates: _collectPipelineUpdatesFromForm(), forecastNotes: [], feedbackItems: [],
     attachments: dealerReviewData.attach,
     sourceTaskId: (!eid && typeof _pendingLinkTaskId !== 'undefined' && _pendingLinkTaskId) || ''
   };
@@ -2107,6 +2112,31 @@ function _dealerPickerResolve(idPrefix) {
   var txt = txtEl.value.trim().toLowerCase();
   var match = txt ? ST.getAll('dealers').filter(function(d) { return (d.name || '').trim().toLowerCase() === txt; })[0] : null;
   hid.value = match ? match.id : '';
+}
+
+// ใช้ร่วมกันทั้ง Full/Standard mode (saveVisit) และ Dealer Review mode (saveDealerReviewVisit) — ทั้งคู่ render
+// picker ตัวเดียวกัน (renderPipelineSelectEnhanced ลง #fv_pipes) เลยอ่านค่าด้วยชุด id เดิมได้เหมือนกัน
+function _collectPipelineUpdatesFromForm() {
+  var pipelineUpdates = [];
+  var pipeChks = document.querySelectorAll('.pipe_chk:checked');
+  for (var i = 0; i < pipeChks.length; i++) {
+    var pid = pipeChks[i].value;
+    var puItems = puCollectItems(pid); // ช่องรายการ render ไว้เสมอ (แค่ซ่อนถ้ายังไม่กดเปิด) เลยอ่านค่าปัจจุบันได้ตรงๆ — ถ้าไม่แตะเลยค่าจะเท่าของเดิมพอดี ไม่เกิด diff ปลอมตอน save
+    // เช็คลิสต์ข้อมูลประกอบ POS — ช่องเหล่านี้ก็ render ไว้เสมอเหมือนกัน (ซ่อนไว้เฉยๆ) อ่านตรงๆ ได้เลย
+    var posApplyEl = document.getElementById('pu_posapply_' + pid);
+    pipelineUpdates.push({
+      pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || '', items: puItems,
+      appointmentLetter: (document.getElementById('pu_appt_' + pid) || {}).value || '',
+      tor: (document.getElementById('pu_tor_' + pid) || {}).value || '',
+      djiCrmRegistered: !!(document.getElementById('pu_crm_' + pid) || {}).checked,
+      hasCompetitor: !!(document.getElementById('pu_comp_' + pid) || {}).checked,
+      pocDone: !!(document.getElementById('pu_poc_' + pid) || {}).checked,
+      presentedDone: !!(document.getElementById('pu_present_' + pid) || {}).checked,
+      torDraftDone: !!(document.getElementById('pu_drafttor_' + pid) || {}).checked,
+      applySuggestedPOS: !!(posApplyEl && posApplyEl.checked)
+    });
+  }
+  return pipelineUpdates;
 }
 
 function onVisitDealerChanged() {
@@ -2776,25 +2806,7 @@ function saveVisit(dealerId, eid) {
   }
 
   // Pipeline updates
-  var pipelineUpdates = [];
-  var pipeChks = document.querySelectorAll('.pipe_chk:checked');
-  for (var i = 0; i < pipeChks.length; i++) {
-    var pid = pipeChks[i].value;
-    var puItems = puCollectItems(pid); // ช่องรายการ render ไว้เสมอ (แค่ซ่อนถ้ายังไม่กดเปิด) เลยอ่านค่าปัจจุบันได้ตรงๆ — ถ้าไม่แตะเลยค่าจะเท่าของเดิมพอดี ไม่เกิด diff ปลอมตอน save
-    // เช็คลิสต์ข้อมูลประกอบ POS — ช่องเหล่านี้ก็ render ไว้เสมอเหมือนกัน (ซ่อนไว้เฉยๆ) อ่านตรงๆ ได้เลย
-    var posApplyEl = document.getElementById('pu_posapply_' + pid);
-    pipelineUpdates.push({
-      pipeId: pid, newStatus: (document.getElementById('pu_st_' + pid) || {}).value || '', note: (document.getElementById('pu_note_' + pid) || {}).value || '', items: puItems,
-      appointmentLetter: (document.getElementById('pu_appt_' + pid) || {}).value || '',
-      tor: (document.getElementById('pu_tor_' + pid) || {}).value || '',
-      djiCrmRegistered: !!(document.getElementById('pu_crm_' + pid) || {}).checked,
-      hasCompetitor: !!(document.getElementById('pu_comp_' + pid) || {}).checked,
-      pocDone: !!(document.getElementById('pu_poc_' + pid) || {}).checked,
-      presentedDone: !!(document.getElementById('pu_present_' + pid) || {}).checked,
-      torDraftDone: !!(document.getElementById('pu_drafttor_' + pid) || {}).checked,
-      applySuggestedPOS: !!(posApplyEl && posApplyEl.checked)
-    });
-  }
+  var pipelineUpdates = _collectPipelineUpdatesFromForm();
 
   // Forecast
   var forecastNotes = [];
