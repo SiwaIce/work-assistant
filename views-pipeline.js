@@ -2588,6 +2588,14 @@ function rPipeDet(el) {
   html += '<div><label>📅 Follow-up Date</label><div>' + (p.followupDate ? fD(p.followupDate) + ' ' + dlB(p.followupDate, isWon || isLost) : '-') + '</div></div></div>';
   
   if (p.remark && !_gvHidden('pipeline_notes')) html += '<div><label>Remark</label><div>' + sanitize(p.remark) + '</div></div>';
+  // คอลัมน์จากชีทที่ import มาแล้วยังไม่มี field จริงในแอป (เช่น NOTE:, Update Translate to English) — เก็บไว้
+  // เฉยๆ ตอน import (ดู extraSheetData ใน _processPipeImportRows) แสดงแบบ read-only ตรงนี้เผื่อต้องเอามาใช้
+  if (p.extraSheetData && Object.keys(p.extraSheetData).length) {
+    html += '<div><label>📎 ข้อมูลอื่นจากชีท</label><div style="font-size:12px;color:var(--text2)">' +
+      Object.keys(p.extraSheetData).map(function(k) {
+        return '<div><b>' + sanitize(k) + ':</b> ' + sanitize(p.extraSheetData[k]) + '</div>';
+      }).join('') + '</div></div>';
+  }
   if (p.attachments && p.attachments.length) html += '<div><label>📷 รูปแนบ</label>' + attachGalleryHtml(p.attachments) + '</div>';
 
   if (isWon && p.winReason) html += '<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px"><div>✅ Win Reason:</div><div>' + sanitize(p.winReason) + (p.winNote && !_gvHidden('pipeline_notes') ? ' — ' + sanitize(p.winNote) : '') + '</div></div>';
@@ -6379,7 +6387,28 @@ function _pipeBuildColMap(headerRow) {
     if (foundIdx !== -1) { map[def.key] = foundIdx; used[foundIdx] = true; }
     else if (def.required) missingRequired.push(def.label);
   });
-  return { map: map, missingRequired: missingRequired };
+  // คอลัมน์ที่เหลือในหัวตารางที่ไม่ได้ map เข้า field ไหนในแอปเลย (หัวตารางไม่ว่าง แต่ไม่ตรง label/altLabels
+  // ของ _PIPE_IMPORT_COLS ไหนเลย) — เก็บตำแหน่ง+ชื่อหัวตารางไว้ ให้ import เก็บค่าดิบลง extraSheetData ของ
+  // pipeline แทนที่จะทิ้งไปเฉยๆ เผื่อชีทเพิ่มคอลัมน์ใหม่ที่ยังไม่มี field จริงในแอป (เช่น NOTE:, Update
+  // Translate to English) แต่ผู้ใช้อยากเก็บค่าไว้ก่อนเผื่อต้องใช้ทีหลัง (ดู _pipeRowExtraCols)
+  var extraCols = [];
+  for (var hi = 0; hi < headerRow.length; hi++) {
+    if (used[hi]) continue;
+    var hLabel = (headerRow[hi] || '').toString().trim();
+    if (hLabel) extraCols.push({ idx: hi, label: hLabel });
+  }
+  return { map: map, missingRequired: missingRequired, extraCols: extraCols };
+}
+
+// อ่านค่าคอลัมน์ที่ไม่ได้ map เข้า field ไหนเลย (จาก colRes.extraCols) ของแถวข้อมูลหนึ่งแถว → { "ชื่อหัวตาราง": "ค่า" }
+// ข้ามคอลัมน์ที่ว่างเปล่าในแถวนั้น (ไม่เก็บ key ว่างๆ ไว้เปล่าๆ)
+function _pipeRowExtraCols(row, extraCols) {
+  var out = {};
+  (extraCols || []).forEach(function(ec) {
+    var v = (row[ec.idx] || '').toString().trim();
+    if (v) out[ec.label] = v;
+  });
+  return out;
 }
 
 // อ่านค่าจากแถวข้อมูลตาม key ที่จับคู่ไว้แล้วใน colMap — คืน '' เสมอถ้าคอลัมน์นั้นไม่พบในไฟล์ (ไม่ throw)
@@ -6592,6 +6621,11 @@ function _importPipelineXlsx_impl(dealerId) {
               var idx = thisColRes.map[k];
               if (idx !== undefined) canonicalRow[canonicalPos[k]] = r[idx];
             });
+            // เก็บ key พิเศษ _extra ติดไปกับแถว (array เป็น object อยู่แล้ว ใส่ property เพิ่มได้) — ใส่ก็ต่อเมื่อ
+            // แท็บนี้มีคอลัมน์ที่ไม่รู้จักจริงๆ เท่านั้น (เช็ค .length) ไม่งั้นทุกแถวจะมี _extra = {} ทำให้ตอน
+            // commit เข้าใจผิดว่า "ไฟล์นี้มีคอลัมน์พวกนี้แต่ว่างเปล่า" แล้วไปเคลียร์ extraSheetData เดิมทิ้ง
+            // (ดู _processPipeImportRows — ต้องแยกให้ออกระหว่าง "ไม่มีคอลัมน์นี้ในไฟล์" กับ "มีแต่ว่าง")
+            if (thisColRes.extraCols.length) canonicalRow._extra = _pipeRowExtraCols(r, thisColRes.extraCols);
             dataRows.push(canonicalRow);
           });
         });
@@ -6913,6 +6947,9 @@ var PIPE_IMPORT_FIELD_GROUPS = [
   { key: 'crm',            label: 'Project ID / CRM',             keys: ['projectId', 'djiCrmRegistered', 'djiCrmDate'] },
   { key: 'saleName',       label: 'Sale',                         keys: ['saleName'] },
   { key: 'sheetDisplay',   label: 'Sheet Display',                keys: ['sheetDisplay'] },
+  // คอลัมน์ในไฟล์ที่ไม่ตรง field ไหนในแอปเลย (เช่น NOTE:, Update Translate to English) — เก็บค่าดิบไว้เฉยๆ
+  // ดู _pipeBuildColMap/_pipeRowExtraCols
+  { key: 'extraSheet',     label: 'คอลัมน์อื่นๆ จากชีทที่ยังไม่มี field ในระบบ', keys: ['extraSheetData'] },
   { key: 'timeline',       label: '📝 Timeline (Update log)',      keys: [] }
 ];
 function _pipeImportFieldSelDefault() {
@@ -7867,6 +7904,9 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
       djiCrmDate: crmDate,
       saleName: _pipeCol(c, colMap, 'saleName').trim(),
       sheetDisplay: _pipeCol(c, colMap, 'sheetDisplay').trim() || 'Show',
+      // c._extra = undefined แปลว่าแท็บนี้ไม่มีคอลัมน์แปลกเลย (ดู _importPipelineXlsx_impl) → คงของเดิมไว้
+      // ถ้าเป็น object (แม้ {}) แปลว่าไฟล์นี้มีคอลัมน์พวกนี้จริง ใช้ค่าจากไฟล์แทนของเดิมทั้งหมด
+      extraSheetData: c._extra !== undefined ? c._extra : (existing ? (existing.extraSheetData || {}) : {}),
       nextAction: '', followupDate: ''
     };
 
