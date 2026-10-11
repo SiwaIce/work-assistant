@@ -332,7 +332,10 @@ function _soSummaryTextForSalesSupport(s) {
   lines.push('SO/ร่าง: ' + (s.soNumber || '-') + (s.pendingSoNumber ? ' (ยังไม่ได้เลข SO จริง)' : ''));
   if (s.customerPO) lines.push('PO ลูกค้า: ' + s.customerPO);
   lines.push('Dealer: ' + (s.dealerName || '-'));
+  if (s.projectName) lines.push('ชื่อโครงการ: ' + s.projectName);
+  if (s.projectNumber) lines.push('เลขที่โครงการ: ' + s.projectNumber);
   if (s.projectId) lines.push('Project ID: ' + s.projectId);
+  if (s.remark) lines.push('Remark: ' + s.remark);
   if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
   lines.push('');
   lines.push('รายการสินค้า:');
@@ -874,6 +877,8 @@ function rSODetail(el) {
   var infoCells = [];
   if (s.customerPO && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
+  if (s.projectName)      infoCells.push({ label:'📁 ชื่อโครงการ',   val: sanitize(s.projectName) });
+  if (s.projectNumber)    infoCells.push({ label:'🔢 เลขที่โครงการ', val: sanitize(s.projectNumber) });
   if (pipe)               infoCells.push({ label:'Pipeline',      val: '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + s.pipelineId + '\'});return false" style="color:var(--accent)">' + sanitize((pipe.projectName||s.pipelineId).substr(0,26)) + '</a>' });
   if (s.quotationId) {
     var _soQuote = (typeof getQuoteById === 'function') ? getQuoteById(s.quotationId) : null;
@@ -885,6 +890,7 @@ function rSODetail(el) {
   if (s.expectedDelivery) infoCells.push({ label:'ETA Vendor',    val: fD(s.expectedDelivery) });
   if (!_soIsDone(s.status) && _soDays != null) infoCells.push({ label:'อยู่ในขั้นนี้',   val: _soDays + ' วัน' });
   if (s.dueDate)          infoCells.push({ label:'ต้องติดตามภายใน', val: '<b>' + fD(s.dueDate) + '</b>' });
+  if (s.remark)            infoCells.push({ label:'📝 Remark',       val: '<span style="white-space:pre-wrap">' + sanitize(s.remark) + '</span>' });
 
   if (infoCells.length) {
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;padding-top:14px;margin-top:10px;border-top:1px solid var(--border)">';
@@ -2551,6 +2557,13 @@ function showSOEditModal(soId) {
   html += '<div><label class="lbl">📍 ที่อยู่จัดส่ง</label><select id="soN_addressSel" class="inp" onchange="_soAddressSelChanged(this.value)">' + _soAddressOptionsHtml(s.dealerId, s.deliveryAddress) + '</select>';
   html += '<textarea id="soN_deliveryAddress" class="inp" rows="2" style="margin-top:6px">' + sanitize(s.deliveryAddress||'') + '</textarea></div>';
 
+  // ---- ชื่อโครงการ / เลขที่โครงการ / Remark — คนละช่องกับ Project ID (เลขทะเบียน CRM) ด้านล่าง ----
+  html += '<div style="display:flex;gap:8px">';
+  html += '<div style="flex:1"><label class="lbl">📁 ชื่อโครงการ</label><input id="soE_projectName" class="inp" value="' + sanitize(s.projectName||'') + '" placeholder="เช่น ติดตั้งระบบโดรนตรวจสต็อก คลัง BKK3"></div>';
+  html += '<div style="flex:1"><label class="lbl">🔢 เลขที่โครงการ</label><input id="soE_projectNumber" class="inp" value="' + sanitize(s.projectNumber||'') + '" placeholder="เช่น PRJ-2026-0142"></div>';
+  html += '</div>';
+  html += '<div><label class="lbl">📝 Remark <span style="font-size:10px;color:var(--text2)">(เช่น timeline ที่ลูกค้าต้องการส่งมอบ หรือข้อความอื่นๆ)</span></label><textarea id="soE_remark" class="inp" rows="2">' + sanitize(s.remark||'') + '</textarea></div>';
+
   // ---- การผูกงาน: โครงการ หรือ Run rate + Project ID ----
   // เดิมแก้ได้แค่ตอนสร้าง SO เท่านั้น พอได้เลข CRM มาทีหลัง (ซึ่งเป็นเรื่องปกติ) เลยเติมไม่ได้ ต้องไปแก้ที่
   // Pipeline แทน — และ SO ที่ผูกถังผิดก็ย้ายถังไม่ได้เลย ต้องลบทิ้งแล้วเปิดใหม่
@@ -2651,6 +2664,9 @@ function saveSOEdit(soId) {
     dealerName:       dealer ? dealer.name : s.dealerName,
     customerPO:       (document.getElementById('soE_po')||{}).value || '',
     prNumber:         (document.getElementById('soE_pr')||{}).value || '',
+    projectName:      (document.getElementById('soE_projectName')||{}).value || '',
+    projectNumber:    (document.getElementById('soE_projectNumber')||{}).value || '',
+    remark:           (document.getElementById('soE_remark')||{}).value || '',
     deliveryAddress:  ((document.getElementById('soN_deliveryAddress')||{}).value || '').trim(),
     expectedDelivery: (document.getElementById('soE_eta')||{}).value || '',
     dueDate:          (document.getElementById('soE_due')||{}).value || '',
