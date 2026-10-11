@@ -6256,7 +6256,8 @@ function _pipeDateFromPaste(s, refDateISO) {
 // ยังคงสร้างหัวตารางตามลำดับคงที่เหมือนเดิม (ไม่จำเป็นต้องยืดหยุ่นฝั่ง export เพราะแอปเป็นคนสร้างเองทุกครั้ง)
 // ================================================================
 var _PIPE_IMPORT_COLS = [
-  { key: 'rowNo',             label: 'ROW NO.' },
+  // Google Sheet เปลี่ยนหัวข้อ "ROW NO." → "ROW" (2026-10) — เก็บ altLabels กันไฟล์เก่าที่ยังใช้ชื่อเดิมพังไปด้วย
+  { key: 'rowNo',             label: 'ROW NO.',                     altLabels: ['ROW'] },
   // Google Sheet เปลี่ยนหัวข้อ "Register Date" → "Record Date" (2026-09-01) — เก็บ altLabels ไว้กันไฟล์เก่า/
   // export เก่าที่ยังใช้ชื่อเดิมพังไปด้วย จับคู่ได้ทั้งคู่
   { key: 'registerDate',      label: 'Record Date',                 altLabels: ['Register Date'] },
@@ -6833,11 +6834,13 @@ function _pipeImportState(existing, c, dealer, colMap, logsIndex) {
     [(existing.appointmentLetter || ''),  _pipeCol(c, colMap, 'appointmentLetter')],
     [(existing.saleName || ''),           _pipeCol(c, colMap, 'saleName')],
     [(existing.sheetDisplay || 'Show'),   _pipeCol(c, colMap, 'sheetDisplay') || 'Show'],
-    [(existing.rowNo || ''),              _pipeCol(c, colMap, 'rowNo')],
   ];
   for (var i = 0; i < textPairs.length; i++) {
     if (_pipeNormText(textPairs[i][0]) !== _pipeNormText(textPairs[i][1])) return 'changed';
   }
+  // ROW NO.: เหตุผลเดียวกับ projectId ด้านบน — ถ้าไฟล์ไม่มีคอลัมน์นี้ (หัวตารางเปลี่ยนชื่อแบบไม่เข้า altLabels)
+  // ต้องไม่เทียบ/ไม่แตะค่าเดิม ไม่งั้นทุกโครงการที่มี Row No. อยู่แล้วจะโดน flag "เปลี่ยน" ทุกครั้งที่ import
+  if (colMap && colMap.hasOwnProperty('rowNo') && _pipeNormText(existing.rowNo || '') !== _pipeNormText(_pipeCol(c, colMap, 'rowNo'))) return 'changed';
   if ((existing.dealerId || '') !== (dealer ? dealer.id : '')) return 'changed';
   if ((existing.status || '') !== status) return 'changed';
   if (!!existing.recurring !== (_pipeCol(c, colMap, 'recurring').trim().toLowerCase() === 'yes')) return 'changed';
@@ -7810,7 +7813,9 @@ function _processPipeImportRows(rows, lockDealerId, actions, deleteIds, colMap, 
     var crmDate = projectId ? ((existing && existing.djiCrmDate) || regDate || _td()) : (existing ? (existing.djiCrmDate || '') : '');
 
     var pipeData = {
-      rowNo: _pipeCol(c, colMap, 'rowNo').trim(),
+      rowNo: colMap && colMap.hasOwnProperty('rowNo')
+        ? _pipeCol(c, colMap, 'rowNo').trim()
+        : (existing ? (existing.rowNo || '') : ''),
       registerDate: regDate,
       industrialType: industrialType,
       projectId: projectId,
