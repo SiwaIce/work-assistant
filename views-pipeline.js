@@ -7271,6 +7271,15 @@ function _showPipeXlsxPreview(rows, dealerId, colMap) {
       h += '<button id="pipeArchTab_' + t.key + '" onclick="_pipeImportSetArchivedFilter(\'' + t.key + '\')" style="padding:5px 12px;border-radius:6px;background:var(--bg2);color:var(--text2);font-size:12px;border:1px solid ' + (t.key === 'main' ? 'var(--border-strong,var(--border))' : 'transparent') + ';cursor:pointer">' + t.label + ' ' + t.count + '</button>';
     });
     h += '</div>';
+    // ปุ่มลัดตั้งค่าทุกแถว "ในแท็บที่เลือกอยู่ตอนนี้" (Main/Archived/ทั้งหมด) เป็น add/update/skip ทีเดียว — ผู้ใช้
+    // แจ้งว่าต้องมานั่งเลือกทีละแถวเสียเวลา (2026-10-11) อิงตาม data-archived ของแต่ละแถวตรงๆ ไม่ผ่านตัวกรองอื่น
+    // (ค้นหา/Dealer/Sale/สถานะ) กันความ surprise — กดแล้วรู้ชัดว่าโดนทั้งแท็บจริงๆ ไม่ใช่แค่ที่กรองอยู่ตอนนั้น
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:var(--text2);flex-wrap:wrap">';
+    h += '<span>⚡ ตั้งค่าทุกแถวในแท็บที่เลือกอยู่ (Main/Archived/ทั้งหมด ด้านบน) เป็น:</span>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportBulkActByTab(\'add\')">➕ เพิ่มใหม่ทั้งหมด</button>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportBulkActByTab(\'update\')">✏️ อัปเดตทั้งหมด</button>';
+    h += '<button class="btn btn-xs bo" onclick="_pipeImportBulkActByTab(\'skip\')">⏭ ข้ามทั้งหมด</button>';
+    h += '</div>';
   }
 
   // ── กรองตาม Dealer (chip เลือกได้หลายอัน) — โชว์เฉพาะตอนมีมากกว่า 1 Dealer ในไฟล์ ไม่งั้นไม่มีอะไรให้กรอง ──
@@ -7636,6 +7645,25 @@ function _pipeImportBulkAct(val) {
     if (scope === 'all' || visible) sel.value = val;
     i++;
   }
+}
+
+// ปุ่มลัดข้างแท็บ Main/Archived Project/ทั้งหมด — ตั้งค่า action ของทุกแถว "ในแท็บนั้นจริงๆ" (ดู data-archived
+// ของแต่ละ tr ตรงๆ) ไม่ผ่านตัวกรองอื่น (ค้นหา/Dealer/Sale/สถานะ) เหมือน _pipeImportBulkAct scope "filtered" —
+// ตั้งใจแยกจากกัน กันเคสผู้ใช้ลืมว่ามีค้นหา/ตัวกรองอื่นค้างอยู่แล้วกดลัดไปโดนแค่บางแถวโดยไม่รู้ตัว
+function _pipeImportBulkActByTab(val) {
+  var tabVal = _pipeImportFilter.archived; // 'main' | 'archived' | 'all'
+  var actLabel = val === 'skip' ? 'ข้าม' : val === 'update' ? 'อัปเดต' : 'เพิ่มใหม่';
+  var tabLabel = tabVal === 'archived' ? 'Archived Project' : tabVal === 'main' ? 'Main' : 'ทั้งหมด';
+  var i = 0, affected = 0;
+  while (document.getElementById('pipeRowAct_' + i)) {
+    var sel = document.getElementById('pipeRowAct_' + i);
+    var tr = sel.closest('tr');
+    var isArchived = tr && tr.getAttribute('data-archived') === '1';
+    var inTab = tabVal === 'all' || isArchived === (tabVal === 'archived');
+    if (inTab) { sel.value = val; affected++; }
+    i++;
+  }
+  toast('⚡ ตั้งค่า ' + affected + ' แถวในแท็บ ' + tabLabel + ' เป็น "' + actLabel + '" แล้ว');
 }
 
 function _pipeToggleDiff(i) {
