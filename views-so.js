@@ -1098,7 +1098,7 @@ function showCreateSOModal(opts) {
     var d = ST.getOne('dealers', p.dealerId);
     var sel = (opts.pipelineId === p.id) ? ' selected' : '';
     pipeOpts += '<option value="' + p.id + '"' + sel + '>' +
-      sanitize((p.projectName||'').substr(0,40)) +
+      sanitize(pipeRowPrefix(p) + (p.projectName||'').substr(0,40)) +
       (d ? ' [' + sanitize(d.name) + ']' : '') +
       '</option>';
   });
@@ -2441,7 +2441,7 @@ function _soPipelineOptionsHtml(dealerId, keepId) {
   list.forEach(function(p) {
     var d = ST.getOne('dealers', p.dealerId);
     h += '<option value="' + p.id + '"' + (keepId === p.id ? ' selected' : '') + '>' +
-      sanitize((p.projectName || '(ไม่มีชื่อ)').substr(0, 40)) + (d ? ' [' + sanitize(d.name) + ']' : '') + '</option>';
+      sanitize(pipeRowPrefix(p) + (p.projectName || '(ไม่มีชื่อ)').substr(0, 40)) + (d ? ' [' + sanitize(d.name) + ']' : '') + '</option>';
   });
   return h;
 }

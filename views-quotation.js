@@ -2255,7 +2255,7 @@ function _quotePipelineOptionsHtml(dealerId, keepId) {
   var h = '<option value="">-- ยังไม่ผูก / เลือกทีหลัง --</option>';
   list.forEach(function(p) {
     h += '<option value="' + p.id + '"' + (keepId === p.id ? ' selected' : '') + '>' +
-      sanitize((p.projectName || '(ไม่มีชื่อ)').substr(0, 44)) +
+      sanitize(pipeRowPrefix(p) + (p.projectName || '(ไม่มีชื่อ)').substr(0, 44)) +
       (pidNorm(p.projectId) ? ' · ' + sanitize(p.projectId) : ' · ยังไม่มี Project ID') + '</option>';
   });
   return h;

@@ -2018,7 +2018,7 @@ function rMeetingWindow(el) {
   try { ST.getAll('dealers').forEach(function(d) { dOpts += '<option value="' + d.id + '"' + (m.linkedDealerId === d.id ? ' selected' : '') + '>' + sanitize(d.name || d.shopName || d.id) + '</option>'; }); } catch(e) {}
   h += '<div style="margin-bottom:6px"><label style="font-size:11px;color:var(--text2)">🏪 Dealer</label><select id="mw-link-dealer" onchange="mwLinkDealer(this.value)" style="width:100%;font-size:12px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 8px;color:var(--text);margin-top:3px">' + dOpts + '</select></div>';
   var pOpts = '<option value="">— ไม่เชื่อม —</option>';
-  try { ST.getAll('pipeline').forEach(function(p) { pOpts += '<option value="' + p.id + '"' + (m.linkedPipelineId === p.id ? ' selected' : '') + '>' + sanitize(p.projectName || p.title || p.id) + '</option>'; }); } catch(e) {}
+  try { ST.getAll('pipeline').forEach(function(p) { pOpts += '<option value="' + p.id + '"' + (m.linkedPipelineId === p.id ? ' selected' : '') + '>' + sanitize(pipeRowPrefix(p) + (p.projectName || p.title || p.id)) + '</option>'; }); } catch(e) {}
   h += '<div><label style="font-size:11px;color:var(--text2)">📊 Pipeline Deal</label><select id="mw-link-pipe" onchange="mwLinkPipeline(this.value)" style="width:100%;font-size:12px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;padding:5px 8px;color:var(--text);margin-top:3px">' + pOpts + '</select></div>';
   h += '</div>';
 
