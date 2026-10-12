@@ -291,7 +291,7 @@ function _exportDjiProjectsXlsx_impl() {
     var dealer = djpDealerOf(p);
     var pipe = djpPipelineOf(p);
     var rr = djpRunrateOf(p);
-    var linkedTo = pipe ? ('Pipeline: ' + (pipe.projectName || '')) : (rr ? ('Run rate — ' + (dealer ? dealer.name : '')) : '');
+    var linkedTo = pipe ? ('Pipeline: ' + pipeRowPrefix(pipe) + (pipe.projectName || '')) : (rr ? ('Run rate — ' + (dealer ? dealer.name : '')) : '');
     return [
       p.pid || '', p.name || '', p.acct || '', p.prov || '', p.poc || '',
       p.createdBy || '', dealer ? dealer.name : '', p.regDate || '',
@@ -634,7 +634,7 @@ function showDjpLinkM(id) {
 
   if (p.pipelineId) {
     var cur = djpPipelineOf(p);
-    h += '<div class="hint" style="margin-bottom:10px">ตอนนี้ผูกอยู่กับ: <b>' + sanitize(cur ? cur.projectName : '(โครงการถูกลบไปแล้ว)') + '</b>' +
+    h += '<div class="hint" style="margin-bottom:10px">ตอนนี้ผูกอยู่กับ: <b>' + sanitize(cur ? (pipeRowPrefix(cur) + cur.projectName) : '(โครงการถูกลบไปแล้ว)') + '</b>' +
       ' · <a href="#" onclick="closeMForce();djpRelink(\'' + p.id + '\');return false">🔀 ผูกผิด แก้ไข</a>' +
       ' · <a href="#" onclick="djpUnlink(\'' + p.id + '\');return false" style="color:var(--danger,#ef4444)">ยกเลิกการผูก</a></div>';
   }
@@ -695,7 +695,7 @@ function showDjpLinkM(id) {
       var d = ST.getOne('dealers', x.pipe.dealerId);
       var exact = x.why.indexOf('เลข Project ID ตรงกัน') !== -1;
       h += '<div style="border:1px solid ' + (exact ? 'var(--ok,#22c55e)' : 'var(--border)') + ';border-radius:8px;padding:8px 10px;cursor:pointer" onclick="djpPickPipeline(\'' + p.id + '\',\'' + x.pipe.id + '\')">' +
-        '<div style="font-size:12.5px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 60)) + '</div>' +
+        '<div style="font-size:12.5px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(pipeRowPrefix(x.pipe) + String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 60)) + '</div>' +
         '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
           (d ? '🏪 ' + sanitize(d.name) + ' · ' : '') +
           (x.pipe.endUserTH ? '🏢 ' + sanitize(String(x.pipe.endUserTH).substr(0, 26)) + ' · ' : '') +
@@ -1088,7 +1088,7 @@ function _djpRowHtml(p, range) {
   h += '<td style="white-space:nowrap"><span style="color:' + ki.color + ';font-size:11px">' + ki.icon + ' ' + ki.label + '</span></td>';
   var bucket = djpRunrateOf(p);
   h += '<td style="white-space:nowrap">' + (pipe
-    ? '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + pipe.id + '\'});return false" style="color:var(--accent)">🔗 ' + sanitize(String(pipe.projectName || '').substr(0, 22)) + '</a>'
+    ? '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + pipe.id + '\'});return false" style="color:var(--accent)">🔗 ' + sanitize(pipeRowPrefix(pipe) + String(pipe.projectName || '').substr(0, 22)) + '</a>'
     : bucket
       ? '<a href="#" onclick="go(\'runrate\');return false" style="color:#a78bfa">🏪 ถัง ' + sanitize(bucket.projectId || '') + '</a>'
       : '<button class="btn bsm bo" onclick="showDjpLinkM(\'' + p.id + '\')">+ ผูก</button>') + '</td>';
@@ -1459,7 +1459,7 @@ function _djpRenderBoard(keepFocus) {
       var exact = x.why.indexOf('เลข Project ID ตรงกัน') !== -1;
       h += '<div onclick="closeMForce();djpPickPipeline(\'' + cur.id + '\',\'' + x.pipe.id + '\')" style="cursor:pointer;border:1px solid ' +
         (exact ? 'var(--ok,#22c55e)' : 'var(--border)') + ';border-radius:7px;padding:7px 9px">' +
-        '<div style="font-size:12px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 52)) + '</div>' +
+        '<div style="font-size:12px;font-weight:600">' + (exact ? '✓ ' : '') + sanitize(pipeRowPrefix(x.pipe) + String(x.pipe.projectName || '(ไม่มีชื่อ)').substr(0, 52)) + '</div>' +
         '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">' +
           (x.pipe.endUserTH ? '🏢 ' + sanitize(String(x.pipe.endUserTH).substr(0, 24)) + ' · ' : '') +
           (d ? '🏪 ' + sanitize(d.name) + ' · ' : '') +
