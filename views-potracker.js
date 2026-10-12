@@ -16,6 +16,7 @@ var poTrackerSort = 'newest'; // newest | oldest | amount_desc | amount_asc | de
 var poTrackerMoreFlt = false; // เปิด/ปิดแผงตัวกรองเพิ่มเติม
 var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า + ปรับยอด Stock ด่วน
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
+var poTrackerSummarySelectedBuckets = []; // แท็ปสถานะที่เลือกไว้ในแผงสรุปรายการสินค้า — [] = เลือกทุกสถานะ (แท็ป "ทั้งหมด") เลือกได้พร้อมกันหลายแท็ป
 
 // 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
 var POTRACKER_ITEM_BUCKETS = [
@@ -83,49 +84,230 @@ function _poTrackerBuildRow(s) {
   };
 }
 
-// แผงสรุปรายการสินค้าของ Dealer ที่กำลังกรองอยู่ แยกตามสถานะ (5 bucket) — ใช้ตอนเลือก Dealer เดียวในหน้า PO Tracker
-// เพื่อดูว่าของเหลืออะไรบ้าง ยังไม่ส่ง/รอ PR/PO/จอง/พร้อมส่ง/ส่งแล้ว พร้อมลิงก์ไป SO/Pipeline/Quotation ต้นทาง
+// หาหมวดหมู่สินค้าของรายการ 1 ชิ้นในแผงสรุป — ดึงจาก products.js ถ้ามี sku ตรงกับสินค้าที่ลงทะเบียนไว้
+// ไม่เจอก็เดาจากชื่อรุ่นแบบเดียวกับ heuristic ที่ใช้ตอน import สินค้า (ดู products.js บรรทัด ~1047)
+function _poTrackerItemCategory(it) {
+  if (it.sku && typeof getProductBySku === 'function') {
+    var p = getProductBySku(it.sku);
+    if (p && p.category) return p.category;
+  }
+  var n = (it.model || '').toLowerCase();
+  if (n.indexOf('matrice') !== -1 || n.indexOf('mavic') !== -1 || n.indexOf('dock') !== -1) return 'drone';
+  if (n.indexOf('zenmuse') !== -1 || n.indexOf('speaker') !== -1) return 'payload';
+  if (n.indexOf('battery') !== -1) return 'battery';
+  if (n.indexOf('charger') !== -1 || n.indexOf('propeller') !== -1 || n.indexOf('station') !== -1 || n.indexOf('rtk') !== -1 || n.indexOf('adapter') !== -1) return 'charger';
+  if (n.indexOf('flighthub') !== -1 || n.indexOf('terra') !== -1) return 'software';
+  if (n.indexOf('warranty') !== -1 || n.indexOf('service') !== -1 || n.indexOf('staffing') !== -1) return 'service';
+  return 'other';
+}
+
+// จำนวนวันที่ลูกค้ารอมาแล้ว นับจากวันที่ PO ลูกค้าก่อน (จุดที่ลูกค้าเริ่มรอจริง) ไม่มีก็ fallback เป็นวันสร้าง SO
+function _poTrackerSoWaitDays(so) {
+  var ref = so.customerPODate || so.createdAt;
+  return ref ? (_poTrackerDaysSince(ref) || 0) : 0;
+}
+function _poTrackerSoWaitColor(days) {
+  return days >= 14 ? '#ef4444' : (days >= 7 ? '#f59e0b' : '#22c55e');
+}
+function _poTrackerWaitBadgeHtml(so) {
+  var days = _poTrackerSoWaitDays(so);
+  var color = _poTrackerSoWaitColor(days);
+  var icon = days >= 14 ? '🔥' : (days >= 7 ? '⏳' : '🕐');
+  var title = [so.customerPODate ? 'PO ลูกค้า ' + fD(so.customerPODate) : '', so.createdAt ? 'สร้าง SO ' + fD(so.createdAt) : ''].filter(Boolean).join(' · ');
+  return '<span title="' + sanitize(title) + '" style="font-size:10px;font-weight:700;color:' + color + ';background:' + color + '1f;border-radius:6px;padding:2px 7px;white-space:nowrap">' + icon + ' รอ ' + days + ' วัน</span>';
+}
+function _poTrackerDateLineHtml(so) {
+  var bits = [];
+  if (so.customerPODate) bits.push('PO ลูกค้า ' + fD(so.customerPODate));
+  if (so.createdAt) bits.push('สร้าง SO ' + fD(so.createdAt));
+  return bits.length ? '<div style="font-size:10px;color:var(--text3,var(--text2));margin-top:1px">' + bits.join(' · ') + '</div>' : '';
+}
+function _poTrackerSoLinksHtml(so) {
+  var html = '<a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="font-size:11px;color:var(--accent)">📋 ' + sanitize(so.soNumber || so.customerPO || '-') + '</a>';
+  if (so.pipelineId) html += ' <a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + so.pipelineId + '\'});return false" style="font-size:11px;color:var(--accent)">📋 Pipeline</a>';
+  if (so.quotationId) html += ' <a href="#" onclick="editQuotation(\'' + so.quotationId + '\');return false" style="font-size:11px;color:var(--accent)">💰 Quotation</a>';
+  return html;
+}
+function _poTrackerBucketInfo(key) {
+  for (var i = 0; i < POTRACKER_ITEM_BUCKETS.length; i++) if (POTRACKER_ITEM_BUCKETS[i].key === key) return POTRACKER_ITEM_BUCKETS[i];
+  return POTRACKER_ITEM_BUCKETS[0];
+}
+
+// แถวสินค้าปกติ — อยู่สถานะเดียว SO เดียว
+function _poTrackerSimpleRowHtml(sg) {
+  var p = sg.parts[0];
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;background:var(--bg2);margin-bottom:5px;flex-wrap:wrap">';
+  html += '<div style="min-width:0">';
+  html += '<div style="font-size:12px;font-weight:600">' + sanitize(sg.name) + (sg.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10px">' + sanitize(sg.sku) + '</span>' : '') + '</div>';
+  html += _poTrackerDateLineHtml(sg.so);
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">';
+  html += '<span style="font-weight:700;font-size:11px;background:var(--card,var(--bg));border:1px solid var(--border);border-radius:6px;padding:3px 8px;min-width:36px;text-align:center">×' + p.qty + '</span>';
+  html += _poTrackerWaitBadgeHtml(sg.so);
+  html += _poTrackerSoLinksHtml(sg.so);
+  html += '</div></div>';
+  return html;
+}
+
+// สินค้าที่ถูกแบ่งส่งหลายสถานะในใบเดียวกัน — แท่ง progress ตามสัดส่วนจริง + ชิปสรุปทีละสถานะ
+function _poTrackerSplitRowHtml(sg, selectedBuckets) {
+  var html = '<div style="padding:8px 10px;border-radius:7px;background:var(--bg2);margin-bottom:5px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">';
+  html += '<div style="min-width:0"><div style="font-size:12px;font-weight:600">' + sanitize(sg.name) + (sg.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10px">' + sanitize(sg.sku) + '</span>' : '') + '</div>' + _poTrackerDateLineHtml(sg.so) + '</div>';
+  html += '<div style="font-size:10px;color:var(--text3,var(--text2));font-weight:600;white-space:nowrap">รวม ' + sg.total + ' ชิ้น</div>';
+  html += '</div>';
+  html += '<div style="display:flex;width:100%;height:6px;border-radius:999px;overflow:hidden;background:var(--card,var(--bg));margin:6px 0">';
+  sg.parts.forEach(function(p) {
+    var b = _poTrackerBucketInfo(p.bucket);
+    var pct = (p.qty / sg.total * 100).toFixed(2);
+    var op = selectedBuckets.indexOf(p.bucket) !== -1 ? '1' : '.25';
+    html += '<div style="width:' + pct + '%;background:' + b.color + ';opacity:' + op + '" title="' + b.label + ' ' + p.qty + '"></div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:7px;flex-wrap:wrap">';
+  sg.parts.forEach(function(p) {
+    var b = _poTrackerBucketInfo(p.bucket);
+    var op = selectedBuckets.indexOf(p.bucket) !== -1 ? '1' : '.35';
+    html += '<span style="font-size:10px;font-weight:600;color:' + b.color + ';opacity:' + op + '">' + b.icon + ' ' + b.label + ' ' + p.qty + '/' + sg.total + '</span>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">' + _poTrackerWaitBadgeHtml(sg.so) + _poTrackerSoLinksHtml(sg.so) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+// สินค้าตัวเดียวกันแต่มาจากหลาย SO คนละใบ — ชื่อขึ้นครั้งเดียวบนหัวการ์ด แตกเป็นบรรทัดย่อยทีละ SO
+// (เรียงใบที่ลูกค้ารอนานสุดขึ้นก่อน) กันสับสนกับ "แบ่งส่งในใบเดียว" ของ _poTrackerSplitRowHtml ด้านบน
+function _poTrackerClusterRowHtml(c, selectedBuckets) {
+  var html = '<div style="border-radius:7px;background:var(--bg2);margin-bottom:5px;overflow:hidden">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 10px;background:var(--card,var(--bg));border-bottom:1px solid var(--border)">';
+  html += '<div style="font-size:12px;font-weight:600">' + sanitize(c.name) + (c.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10px">' + sanitize(c.sku) + '</span>' : '') + '</div>';
+  html += '<div style="display:flex;gap:6px;align-items:center;white-space:nowrap">';
+  html += '<span style="font-size:10px;font-weight:700;color:var(--text3,var(--text2));border:1px solid var(--border);border-radius:5px;padding:1px 6px">' + c.soGroups.length + ' SO</span>';
+  html += '<span style="font-size:10px;color:var(--text3,var(--text2));font-weight:600">รวม ' + c.total + ' ชิ้น</span>';
+  html += '</div></div>';
+  var ordered = c.soGroups.slice().sort(function(a, b) { return _poTrackerSoWaitDays(b.so) - _poTrackerSoWaitDays(a.so); });
+  ordered.forEach(function(sg, i) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;flex-wrap:wrap;' + (i > 0 ? 'border-top:1px solid var(--border-light,var(--border))' : '') + '">';
+    html += '<div style="min-width:0">' + _poTrackerSoLinksHtml(sg.so) + _poTrackerDateLineHtml(sg.so) + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">';
+    sg.parts.forEach(function(p) {
+      var b = _poTrackerBucketInfo(p.bucket);
+      var op = selectedBuckets.indexOf(p.bucket) !== -1 ? '1' : '.35';
+      html += '<span style="font-size:10px;font-weight:600;color:' + b.color + ';opacity:' + op + '">' + b.icon + ' ' + (sg.parts.length > 1 ? p.qty : b.label) + '</span>';
+    });
+    html += '<span style="font-weight:700;font-size:11px;background:var(--card,var(--bg));border:1px solid var(--border);border-radius:6px;padding:3px 8px;min-width:30px;text-align:center">×' + sg.total + '</span>';
+    html += _poTrackerWaitBadgeHtml(sg.so);
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// แผงสรุปรายการสินค้าของ Dealer ที่กำลังกรองอยู่ — แบ่งแท็ปตามสถานะ (เลือกได้พร้อมกันหลายแท็ป) แล้วจัดกลุ่มตามหมวดหมู่สินค้า
+// สินค้าที่แบ่งส่งหลายสถานะในใบเดียวกันจะโชว์เป็น progress bar ส่วนสินค้าเดียวกันที่มาจากหลาย SO จะรวมหัวข้อเดียวแล้วแตกเป็น
+// บรรทัดย่อยทีละ SO เรียงตามจำนวนวันที่ลูกค้ารอมากสุดก่อน จะได้รู้ว่าต้องเร่งติดตามรายการไหนก่อน
 function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
-  var groups = {};
-  POTRACKER_ITEM_BUCKETS.forEach(function(b) { groups[b.key] = []; });
+  var flat = [];
   dealerRows.forEach(function(r) {
     (r.so.items || []).forEach(function(it) {
-      var bucket = _poTrackerItemBucket(it, r.so);
-      groups[bucket].push({ it: it, so: r.so });
+      flat.push({ it: it, so: r.so, bucket: _poTrackerItemBucket(it, r.so) });
     });
   });
 
-  var html = '<div class="card" style="margin-bottom:10px;padding:14px">';
-  html += '<div style="font-weight:600;margin-bottom:8px">📊 สรุปรายการสินค้า — ' + sanitize(dealerName) + '</div>';
+  // ชั้นที่ 1: รวมตาม SO + sku/model เดียวกัน เผื่อสินค้าชิ้นเดียวกันถูกแบ่งเข้าหลายสถานะในใบเดียว
+  var soMap = {}, soOrder = [];
+  flat.forEach(function(x) {
+    var key = x.so.id + '|' + (x.it.sku || x.it.model);
+    if (!soMap[key]) {
+      soMap[key] = { name: x.it.model || x.it.sku || '-', sku: x.it.sku || '', cat: _poTrackerItemCategory(x.it), so: x.so, parts: [], total: 0 };
+      soOrder.push(key);
+    }
+    soMap[key].parts.push({ bucket: x.bucket, qty: Number(x.it.qty) || 0 });
+    soMap[key].total += Number(x.it.qty) || 0;
+  });
+  var soGroups = soOrder.map(function(k) { return soMap[k]; });
 
-  var any = false;
+  // ชั้นที่ 2: รวมตาม sku/model เดียวกันข้าม SO เผื่อสินค้าชิ้นเดียวกันมาจากหลายใบคนละ SO
+  var clusterMap = {}, clusterOrder = [];
+  soGroups.forEach(function(sg) {
+    var key = sg.sku || sg.name;
+    if (!clusterMap[key]) { clusterMap[key] = { name: sg.name, sku: sg.sku, cat: sg.cat, soGroups: [], total: 0 }; clusterOrder.push(key); }
+    clusterMap[key].soGroups.push(sg);
+    clusterMap[key].total += sg.total;
+  });
+  var clusters = clusterOrder.map(function(k) { return clusterMap[k]; });
+  clusters.forEach(function(c) {
+    c.maxWait = Math.max.apply(null, c.soGroups.map(function(sg) { return _poTrackerSoWaitDays(sg.so); }));
+  });
+
+  var allKeys = POTRACKER_ITEM_BUCKETS.map(function(b) { return b.key; });
+  var selectedBuckets = (poTrackerSummarySelectedBuckets && poTrackerSummarySelectedBuckets.length) ? poTrackerSummarySelectedBuckets : allKeys;
+  var allActive = selectedBuckets.length === allKeys.length;
+
+  var html = '<div class="card" style="margin-bottom:10px;padding:14px">';
+  html += '<div style="font-weight:600;margin-bottom:10px">📊 สรุปรายการสินค้า — ' + sanitize(dealerName) + '</div>';
+
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">';
+  html += '<button class="btn bsm ' + (allActive ? 'bp' : 'bo') + '" onclick="poTrackerSummarySelectedBuckets=[];render()">ทั้งหมด (' + flat.length + ')</button>';
   POTRACKER_ITEM_BUCKETS.forEach(function(b) {
-    var items = groups[b.key];
-    if (!items.length) return;
-    any = true;
-    html += '<div style="margin-bottom:10px">';
-    html += '<div style="font-size:12px;font-weight:600;color:' + b.color + ';margin-bottom:4px">' + b.icon + ' ' + b.label + ' (' + items.length + ')</div>';
-    items.forEach(function(x) {
-      var it = x.it, so = x.so;
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:var(--bg2);margin-bottom:3px;font-size:12px">';
-      html += '<div>' + sanitize(it.model || it.sku || '-') + ' <span style="color:var(--text2)">x' + (Number(it.qty) || 0) + '</span></div>';
-      html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-      html += '<a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="font-size:11px;color:var(--accent)">📋 ' + sanitize(so.soNumber || so.customerPO || '-') + '</a>';
-      if (so.pipelineId) html += '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + so.pipelineId + '\'});return false" style="font-size:11px;color:var(--accent)">📋 Pipeline</a>';
-      if (so.quotationId) html += '<a href="#" onclick="editQuotation(\'' + so.quotationId + '\');return false" style="font-size:11px;color:var(--accent)">💰 Quotation</a>';
-      html += '</div>';
-      html += '</div>';
+    var cnt = flat.filter(function(x) { return x.bucket === b.key; }).length;
+    var active = selectedBuckets.indexOf(b.key) !== -1;
+    html += '<button class="btn bsm ' + (active ? 'bp' : 'bo') + '" ' + (active ? 'style="background:' + b.color + ';border-color:' + b.color + '"' : '') +
+      ' onclick="poTrackerToggleSummaryBucket(\'' + b.key + '\')">' + b.icon + ' ' + b.label + ' (' + cnt + ')</button>';
+  });
+  html += '</div>';
+  if (!allActive) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">กำลังดู ' + selectedBuckets.length + ' สถานะพร้อมกัน — กด "ทั้งหมด" เพื่อล้างตัวกรอง</div>';
+
+  var shown = clusters.filter(function(c) {
+    return c.soGroups.some(function(sg) { return sg.parts.some(function(p) { return selectedBuckets.indexOf(p.bucket) !== -1; }); });
+  });
+
+  if (!shown.length) {
+    html += '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้าในสถานะที่เลือก</div></div>';
+    return html;
+  }
+
+  var byCat = {};
+  shown.forEach(function(c) {
+    var k = c.cat || 'other';
+    if (!byCat[k]) byCat[k] = [];
+    byCat[k].push(c);
+  });
+  Object.keys(byCat).forEach(function(k) { byCat[k].sort(function(a, b) { return b.maxWait - a.maxWait; }); });
+
+  PRODUCT_CATEGORIES.forEach(function(cat) {
+    var list = byCat[cat.id];
+    if (!list || !list.length) return;
+    html += '<div style="margin-bottom:12px">';
+    html += '<div style="font-size:12px;font-weight:700;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border-light,var(--border))">' + sanitize(cat.name) + ' <span style="color:var(--text3,var(--text2));font-weight:400">(' + list.length + ')</span></div>';
+    list.forEach(function(c) {
+      if (c.soGroups.length > 1) { html += _poTrackerClusterRowHtml(c, selectedBuckets); return; }
+      var sg = c.soGroups[0];
+      html += sg.parts.length > 1 ? _poTrackerSplitRowHtml(sg, selectedBuckets) : _poTrackerSimpleRowHtml(sg);
     });
     html += '</div>';
   });
-  if (!any) html += '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้า</div>';
+
   html += '</div>';
   return html;
+}
+
+// toggle แท็ปสถานะในแผงสรุป — เลือกได้พร้อมกันหลายแท็ป ถ้าเลือกครบทุกสถานะแล้วกลับเป็นโหมด "ทั้งหมด" ให้อัตโนมัติ
+function poTrackerToggleSummaryBucket(key) {
+  var all = POTRACKER_ITEM_BUCKETS.map(function(b) { return b.key; });
+  var cur = (poTrackerSummarySelectedBuckets && poTrackerSummarySelectedBuckets.length) ? poTrackerSummarySelectedBuckets.slice() : all.slice();
+  var idx = cur.indexOf(key);
+  if (idx !== -1) { if (cur.length > 1) cur.splice(idx, 1); }
+  else cur.push(key);
+  poTrackerSummarySelectedBuckets = (cur.length === all.length) ? [] : cur;
+  render();
 }
 
 function poTrackerResetFilters() {
   poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = '';
   poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = '';
+  poTrackerSummarySelectedBuckets = [];
   render();
 }
 
@@ -163,7 +345,7 @@ function rPOTracker(el) {
   dealers.forEach(function(d) { html += '<option value="' + sanitize(d) + '"' + (poTrackerDealerFlt === d ? ' selected' : '') + '>' + sanitize(d) + '</option>'; });
   html += '</select>';
   html += '<select class="inp" style="max-width:190px" onchange="poTrackerSort=this.value;render()">';
-  [['newest','🕒 ใหม่ล่าสุด'],['oldest','🕒 เก่าสุด'],['amount_desc','💰 ยอดมาก → น้อย'],['amount_asc','💰 ยอดน้อย → มาก'],['dealer','🏪 Dealer A-Z']].forEach(function(o) {
+  [['newest','🕒 ใหม่ล่าสุด'],['oldest','🕒 เก่าสุด'],['urgent','🔥 รอนานสุดก่อน (PO ลูกค้า)'],['amount_desc','💰 ยอดมาก → น้อย'],['amount_asc','💰 ยอดน้อย → มาก'],['dealer','🏪 Dealer A-Z']].forEach(function(o) {
     html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
   });
   html += '</select>';
@@ -230,6 +412,7 @@ function rPOTracker(el) {
 
   filtered.sort(function(a, b) {
     if (poTrackerSort === 'oldest') return (a.so.createdAt || '').localeCompare(b.so.createdAt || '');
+    if (poTrackerSort === 'urgent') return (a.so.customerPODate || a.so.createdAt || '').localeCompare(b.so.customerPODate || b.so.createdAt || '');
     if (poTrackerSort === 'amount_desc') return b.total - a.total;
     if (poTrackerSort === 'amount_asc') return a.total - b.total;
     if (poTrackerSort === 'dealer') return (a.so.dealerName || '').localeCompare(b.so.dealerName || '');
