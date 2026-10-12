@@ -876,6 +876,7 @@ function rSODetail(el) {
   var _soDays = _soDaysInStage(s);
   var infoCells = [];
   if (s.customerPO && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
+  if (s.customerPODate && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'📅 วันที่ PO ลูกค้า', val: fD(s.customerPODate) });
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
   if (s.projectName)      infoCells.push({ label:'📁 ชื่อโครงการ',   val: sanitize(s.projectName) });
   if (s.projectNumber)    infoCells.push({ label:'🔢 เลขที่โครงการ', val: sanitize(s.projectNumber) });
@@ -1157,7 +1158,10 @@ function showCreateSOModal(opts) {
   html += '<select id="soN_quoteSel" class="inp" onchange="_soFillFromQuote(this.value)">' + _soQuotationOptionsHtml(preDealerId, opts.pipelineId) + '</select></div>';
   html += '<input type="hidden" id="soN_quotationId" value="' + sanitize(opts.quotationId||'') + '">';
 
-  html += '<div><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<div style="flex:1"><label class="lbl">เลข PO ลูกค้า</label><input id="soN_customerPO" class="inp" value="' + sanitize(opts.customerPO||'') + '" placeholder="เช่น PO-ABC-2026-001"></div>';
+  html += '<div style="flex:1"><label class="lbl">📅 วันที่ PO ลูกค้า</label><input id="soN_customerPODate" class="inp" type="date" value="' + sanitize(opts.customerPODate||'') + '"></div>';
+  html += '</div>';
 
   // เงื่อนไขชำระเงิน — เลือกใบเสนอราคาแล้วดึงมาจากใบนั้นก่อน (ดู _soFillFromQuote) ไม่งั้นดึงจาก Dealer ที่เลือก
   // เป็นค่าเริ่มต้น (ดู _soDealerNameChanged) แก้ตรงนี้ได้ แล้วตอนบันทึกจะเขียนกลับไปทั้งใบเสนอราคาและ Dealer
@@ -1946,6 +1950,7 @@ function saveCreateSO() {
   var dealerId    = (document.getElementById('soN_dealerId')   ||{}).value || '';
   var dealerName  = ((document.getElementById('soN_dealerName')||{}).value || '').trim();
   var customerPO  = (document.getElementById('soN_customerPO') ||{}).value || '';
+  var customerPODate = (document.getElementById('soN_customerPODate') ||{}).value || '';
   var pipelineId  = (document.getElementById('soN_pipelineId') ||{}).value || '';
   var quotationId = (document.getElementById('soN_quotationId')||{}).value || '';
   var note        = (document.getElementById('soN_note')       ||{}).value || '';
@@ -2033,7 +2038,7 @@ function saveCreateSO() {
 
   var obj = {
     soNumber: soNumber, type: type, dealerId: dealerId, dealerName: dealer ? dealer.name : '',
-    customerPO: customerPO, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
+    customerPO: customerPO, customerPODate: customerPODate, pipelineId: pipelineId, quotationId: quotationId, projectId: projectId,
     deliveryAddress: deliveryAddress, paymentTerm: paymentTerm,
     // ยังไม่ได้เลข SO จริงจาก Sales Support — soNumber ที่กรอกไว้เป็นแค่เลขร่างชั่วคราว กันชนกับเลขจริงที่จะออกมาทีหลัง (ดู confirmSoNumberFromSalesSupport)
     pendingSoNumber: pendingSoNumber,
@@ -2589,6 +2594,7 @@ function showSOEditModal(soId) {
 
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">PO ลูกค้า</label><input id="soE_po" class="inp" value="' + sanitize(s.customerPO||'') + '"></div>';
+  html += '<div style="flex:1"><label class="lbl">📅 วันที่ PO ลูกค้า</label><input id="soE_poDate" class="inp" type="date" value="' + (s.customerPODate||'') + '"></div>';
   html += '<div style="flex:1"><label class="lbl">PR ภายใน</label><input id="soE_pr" class="inp" value="' + sanitize(s.prNumber||'') + '"></div>';
   html += '</div>';
   html += '<div style="display:flex;gap:8px">';
@@ -2663,6 +2669,7 @@ function saveSOEdit(soId) {
     dealerId:         dealerId,
     dealerName:       dealer ? dealer.name : s.dealerName,
     customerPO:       (document.getElementById('soE_po')||{}).value || '',
+    customerPODate:   (document.getElementById('soE_poDate')||{}).value || '',
     prNumber:         (document.getElementById('soE_pr')||{}).value || '',
     projectName:      (document.getElementById('soE_projectName')||{}).value || '',
     projectNumber:    (document.getElementById('soE_projectNumber')||{}).value || '',
