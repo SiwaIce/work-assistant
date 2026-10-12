@@ -701,7 +701,8 @@ function _poTrackerDealerTableHtml(products) {
       if (overdue) row += '<span style="color:#ef4444;font-weight:600">⚠️ ค้าง ' + overdueDays + ' วัน</span>';
       row += '</div></td>';
     } else {
-      row += '<td style="padding:7px 10px;color:' + b.color + '">' + b.icon + ' ' + b.label + '</td>';
+      row += '<td style="padding:7px 10px;white-space:normal"><span style="color:' + b.color + '">' + b.icon + ' ' + b.label + '</span>' +
+        ' <a href="#" onclick="go(\'soDetail\',{soId:\'' + l.so.id + '\'});return false" style="font-size:11px;color:var(--accent);margin-left:6px;white-space:nowrap">✏️ แก้ไขใน SO</a></td>';
     }
     row += '</tr>';
     return row;
