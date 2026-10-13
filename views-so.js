@@ -2091,7 +2091,12 @@ function saveSOItemsEdit(soId) {
     var pEl = row.querySelector('[id^="soI_p_"]');
     var skuEl = row.querySelector('[id^="soI_sku_"]');
     if (!mEl || !mEl.value.trim()) return;
-    items.push(Object.assign({ model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0, serials: [] }, _soReadItemSourceFields(row)));
+    // แถวที่มาจาก s.items เดิม (id="soIR_<index ของ s.items>") ต้อง merge ทับของเดิมไว้ ไม่งั้นฟิลด์ที่ไม่มีในฟอร์มนี้
+    // (คอมเมนต์ ลิงก์ serials ส่วนลดเงินสดต่อรายการ ฯลฯ — ดู saveSOItemComment/saveSOItemLink/saveSOStatus) จะหายทุกครั้งที่กดบันทึก
+    var rowIdx = row.id.replace('soIR_', '');
+    var existing = /^\d+$/.test(rowIdx) ? (s.items || [])[Number(rowIdx)] : null;
+    var base = existing ? Object.assign({}, existing) : { serials: [] };
+    items.push(Object.assign(base, { model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0 }, _soReadItemSourceFields(row)));
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
