@@ -14,7 +14,8 @@ var poTrackerDateFrom = '';  // createdAt >= (YYYY-MM-DD)
 var poTrackerDateTo = '';    // createdAt <= (YYYY-MM-DD)
 var poTrackerSort = 'newest'; // newest | oldest | amount_desc | amount_asc | dealer | urgent
 var poTrackerMoreFlt = false; // เปิด/ปิดแผงตัวกรองเพิ่มเติม
-var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า + ปรับยอด Stock ด่วน
+var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงรายการสินค้า (สรุปสไตล์ Pipeline + ปรับยอด Stock ด่วน)
+var poTrackerExpandedStockEdit = {}; // soId -> เปิด/ปิดแผงปรับยอด Stock ด่วน (ซ้อนอยู่ในแผงรายการสินค้า ซ่อนไว้โดยปริยายกันรก)
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 var poTrackerSummarySelectedBuckets = []; // แท็ปสถานะที่เลือกไว้ในแผงสรุปรายการสินค้า — [] = เลือกทุกสถานะ (แท็ป "ทั้งหมด") เลือกได้พร้อมกันหลายแท็ป
 
@@ -452,16 +453,16 @@ function rPOTracker(el) {
     html += '<span style="padding:2px 8px;border-radius:8px;background:var(--bg2);color:var(--text2)">฿' + nmI(r.total) + '</span>';
     html += '</div>';
 
-    html += '<div onclick="event.stopPropagation()" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">';
+    html += '<div onclick="event.stopPropagation()" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
     html += _poTrackerAttachSectionHtml(s, 'customerPO', 'PO ลูกค้า', '📄');
     html += _poTrackerAttachSectionHtml(s, 'invoice', 'Invoice', '🧾');
     html += '</div>';
 
-    html += '<div onclick="event.stopPropagation()">';
-    html += '<button class="btn bsm bo" style="margin-top:8px" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
-    html += '<button class="btn bsm bo" style="margin-top:8px" onclick="poTrackerToggleItems(\'' + s.id + '\',event)">' + (poTrackerExpandedItems[s.id] ? '▲ ซ่อนรายการสินค้า' : '▼ รายการสินค้า / ปรับยอด Stock') + '</button>';
-    if (poTrackerExpandedItems[s.id]) html += _poTrackerItemsPanelHtml(s);
+    html += '<div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
+    html += '<button class="btn bsm bo" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุป</button>';
+    html += '<button class="btn bsm bo" onclick="poTrackerToggleItems(\'' + s.id + '\',event)">' + (poTrackerExpandedItems[s.id] ? '▲ ซ่อนรายการสินค้า' : '▼ รายการสินค้า') + '</button>';
     html += '</div>';
+    if (poTrackerExpandedItems[s.id]) html += '<div onclick="event.stopPropagation()" style="margin-top:8px">' + _poTrackerCardSummaryHtml(s) + '</div>';
 
     html += '</div>';
   });
@@ -471,30 +472,35 @@ function rPOTracker(el) {
 
 // ไฟล์แนบต่อ PO/SO แยกประเภท (PO ลูกค้า / Invoice) — ใช้ attachments[] เดิมของ SO ร่วมกับหน้า SO Detail
 // (ดู attachGalleryHtml ใน utils.js) เพียงเติม category ต่อไฟล์ เพื่อกรองแสดงแยกช่องในหน้านี้
+// ช่องลากวาง (drop) + คลิกเลือกไฟล์ในปุ่มเดียวกัน แบบย่อ — ข้อความ MB/Cloud Storage ย้ายไปเป็น tooltip (title) แทนที่จะโชว์ค้างเต็มการ์ด
+var POTRACKER_ATTACH_HINT = 'รูป/PDF/Word/Excel ไม่เกิน 10MB ต่อไฟล์ — ลากไฟล์มาวางหรือคลิกเพื่อเลือก (เก็บบน Cloud Storage ต้อง login คลาวด์ก่อน)';
 function _poTrackerAttachSectionHtml(s, category, label, icon) {
   var atts = s.attachments || [];
-  var html = '<div style="min-width:120px">';
-  html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">' + icon + ' ' + label + '</div>';
-  var has = false;
-  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">';
+  var dzId = 'podz_' + s.id + '_' + category;
+  var html = '<div style="flex:1;min-width:150px">';
+  html += '<div id="' + dzId + '" class="potracker-dz" title="' + sanitize(POTRACKER_ATTACH_HINT) + '" ' +
+    'ondragover="event.preventDefault();this.classList.add(\'potracker-dz-over\')" ' +
+    'ondragleave="this.classList.remove(\'potracker-dz-over\')" ' +
+    'ondrop="poTrackerDropAttach(event,\'' + s.id + '\',\'' + category + '\',this)">';
+  html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 8px">';
+  html += '<span style="font-size:14px">' + icon + '</span>';
+  html += '<span style="font-size:11px;color:var(--text2);flex:1">' + label + '</span>';
+  html += '<span style="font-size:10px;font-weight:700;color:var(--text2)">' + (atts.filter(function(a) { return a.category === category; }).length || '📎') + '</span>';
+  html += '<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="poTrackerAttachFile(\'' + s.id + '\',\'' + category + '\',this)">';
+  html += '</label>';
+  var thumbs = '';
   atts.forEach(function(a, idx) {
     if (a.category !== category) return;
-    has = true;
-    html += '<div style="position:relative;width:56px;height:56px">' +
+    thumbs += '<div style="position:relative;width:40px;height:40px">' +
       _attachItemHtml(a, "window.open('" + a.url + "','_blank')") +
-      '<button type="button" onclick="poTrackerRemoveAttach(\'' + s.id + '\',' + idx + ')" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:9px;cursor:pointer;line-height:1">✕</button></div>';
+      '<button type="button" onclick="event.stopPropagation();poTrackerRemoveAttach(\'' + s.id + '\',' + idx + ')" class="potracker-dz-thumb-remove">✕</button></div>';
   });
-  if (!has) html += '<div style="font-size:11px;color:var(--text2)">ยังไม่มีไฟล์</div>';
-  html += '</div>';
-  html += '<label class="btn bsm bo" style="cursor:pointer;display:inline-block">📎 แนบไฟล์<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="poTrackerAttachFile(\'' + s.id + '\',\'' + category + '\',this)"></label>';
-  html += '<div class="hint" style="margin:2px 0 0">รูป/PDF/Word/Excel ไม่เกิน 10MB ต่อไฟล์ (เก็บบน Cloud Storage ต้อง login คลาวด์ก่อน)</div>';
-  html += '</div>';
+  if (thumbs) html += '<div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 8px 6px">' + thumbs + '</div>';
+  html += '</div></div>';
   return html;
 }
 
-function poTrackerAttachFile(soId, category, inputEl) {
-  var file = inputEl.files && inputEl.files[0];
-  inputEl.value = '';
+function _poTrackerUploadAttach(soId, category, file) {
   if (!file) return;
   toast('⏳ กำลังอัปโหลด...');
   uploadAttachment(file, 'salesOrders', function(att) {
@@ -507,6 +513,22 @@ function poTrackerAttachFile(soId, category, inputEl) {
     toast('📎 แนบไฟล์แล้ว');
     render();
   });
+}
+
+function poTrackerAttachFile(soId, category, inputEl) {
+  var file = inputEl.files && inputEl.files[0];
+  inputEl.value = '';
+  _poTrackerUploadAttach(soId, category, file);
+}
+
+// ลากไฟล์มาวางบนช่องแนบ — รับไฟล์แรกที่ถูกวาง ชนิดเดียวกับที่ปุ่มคลิกเลือกไฟล์รับ (รูป/PDF/Word/Excel)
+function poTrackerDropAttach(ev, soId, category, zoneEl) {
+  ev.preventDefault();
+  if (zoneEl) zoneEl.classList.remove('potracker-dz-over');
+  var files = ev.dataTransfer && ev.dataTransfer.files;
+  var file = files && files[0];
+  if (!file) return;
+  _poTrackerUploadAttach(soId, category, file);
 }
 
 function poTrackerRemoveAttach(soId, idx) {
@@ -527,6 +549,70 @@ function poTrackerToggleItems(soId, ev) {
   if (ev) ev.stopPropagation();
   var opening = !poTrackerExpandedItems[soId];
   poTrackerExpandedItems[soId] = opening;
+  if (opening) {
+    var so = ST.getAll('salesOrders').find(function(s) { return s.id === soId; });
+    (so && so.items || []).forEach(function(it) {
+      if (it.sku) poTrackerStockSnapshot[soId + '|' + it.sku] = stockLastLogTime(it.sku);
+    });
+  }
+  render();
+}
+
+// สรุปรายการสินค้าของ SO ใบเดียว ตอนกดขยายการ์ด — หน้าตาเดียวกับ "สรุปรายการสินค้า" ใน Pipeline
+// (ชิปหมวดหมู่ + ตาราง SKU/Model/QTY/มูลค่า + แถวรวม) ต่างกันตรงเติมคอลัมน์ "สถานะ" ต่อรายการ (bucket เดียวกับแผงสรุป Dealer)
+function _poTrackerCardSummaryHtml(s) {
+  var items = s.items || [];
+  if (!items.length) return '<div style="font-size:12px;color:var(--text2);padding:4px 0 8px">ไม่มีรายการสินค้า</div>';
+
+  var catTotals = {}, totalQty = 0, totalAmt = 0;
+  items.forEach(function(it) {
+    var qty = Number(it.qty) || 0;
+    var cat = _poTrackerItemCategory(it);
+    catTotals[cat] = (catTotals[cat] || 0) + qty;
+    totalQty += qty;
+    totalAmt += qty * (Number(it.unitPrice) || 0);
+  });
+  var catOrder = (typeof PRODUCT_CATEGORIES !== 'undefined') ? PRODUCT_CATEGORIES.map(function(c) { return c.id; }) : Object.keys(catTotals);
+  var catIds = Object.keys(catTotals).sort(function(a, b) { return catOrder.indexOf(a) - catOrder.indexOf(b); });
+
+  var html = '';
+  if (catIds.length > 1) {
+    html += '<div class="fcd-cats" style="margin-bottom:8px">';
+    catIds.forEach(function(cid) {
+      var name = (typeof getCategoryName === 'function') ? getCategoryName(cid) : cid;
+      html += '<div class="fcd-cat-chip"><span class="fcd-cat-chip-name">' + sanitize(name) + '</span><span class="fcd-cat-chip-qty">' + catTotals[cid] + ' ชิ้น</span></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div style="overflow-x:auto"><table class="fcd-table" style="min-width:100%">';
+  html += '<thead><tr><th>SKU</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th><th>สถานะ</th></tr></thead><tbody>';
+  items.forEach(function(it) {
+    var qty = Number(it.qty) || 0;
+    var amt = qty * (Number(it.unitPrice) || 0);
+    var b = _poTrackerBucketInfo(_poTrackerItemBucket(it, s));
+    html += '<tr>';
+    html += '<td style="font-size:11px">' + (it.sku ? sanitize(it.sku) : '-') + '</td>';
+    html += '<td>' + sanitize(it.model || '-') + '</td>';
+    html += '<td style="text-align:center">' + qty + '</td>';
+    html += '<td style="text-align:right">฿' + nmI(amt) + '</td>';
+    html += '<td><span style="font-size:10px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + b.label + '</span></td>';
+    html += '</tr>';
+  });
+  html += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="2">รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">฿' + nmI(totalAmt) + '</td><td></td></tr>';
+  html += '</tbody></table></div>';
+
+  var stockOpen = !!poTrackerExpandedStockEdit[s.id];
+  html += '<button class="btn bsm bo" style="margin-top:8px" onclick="poTrackerToggleStockEdit(\'' + s.id + '\',event)">' + (stockOpen ? '▲ ซ่อนช่องปรับยอด Stock' : '🔧 ปรับยอด Stock') + '</button>';
+  if (stockOpen) html += _poTrackerItemsPanelHtml(s);
+  return html;
+}
+
+// เปิด/ปิดแผงปรับยอด Stock ด่วน (ซ้อนในแผงสรุปรายการสินค้า) — เปิดครั้งแรกจำเวลา stockLog ล่าสุดไว้เช็ค conflict เหมือนเดิม
+function poTrackerToggleStockEdit(soId, ev) {
+  if (ev) ev.stopPropagation();
+  var opening = !poTrackerExpandedStockEdit[soId];
+  poTrackerExpandedStockEdit[soId] = opening;
   if (opening) {
     var so = ST.getAll('salesOrders').find(function(s) { return s.id === soId; });
     (so && so.items || []).forEach(function(it) {
