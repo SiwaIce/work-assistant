@@ -356,8 +356,11 @@ function _soSummaryTextForSalesSupport(s) {
     ].join('\t'));
   });
   var total = _poTrackerSOTotal(s);
+  var vat = total * 7 / 100;
   lines.push('');
   lines.push('ยอดรวม (ไม่รวม VAT): ฿' + nmI(total));
+  lines.push('VAT 7%: ฿' + nmI(vat));
+  lines.push('ยอดรวม (รวม VAT): ฿' + nmI(total + vat));
   if (s.note) lines.push('หมายเหตุ: ' + s.note);
   return lines.join('\n');
 }
