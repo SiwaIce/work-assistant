@@ -4114,6 +4114,12 @@ body { background: var(--bg); color: var(--text); font-size: var(--font-base); }
 }
 .fcd-table tr:hover td { background: rgba(255,255,255,0.02); }
 
+/* PO Tracker — compact drag & drop attachment zone */
+.potracker-dz { border: 1px dashed var(--border, #334155); border-radius: 8px; transition: border-color .15s, background .15s; background: var(--bg2); }
+.potracker-dz:hover { border-color: var(--accent, #3b82f6); }
+.potracker-dz.potracker-dz-over { border-color: var(--accent, #3b82f6); background: rgba(59,130,246,0.08); }
+.potracker-dz-thumb-remove { position: absolute; top: -5px; right: -5px; background: #ef4444; color: #fff; border: none; border-radius: 50%; width: 15px; height: 15px; font-size: 9px; cursor: pointer; line-height: 1; padding: 0; }
+
 /* Light theme */
 .theme-light .fcd-header { background: #f8fafc; }
 .theme-light .fcd-card { border-color: #e2e8f0; }
