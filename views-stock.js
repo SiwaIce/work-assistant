@@ -351,6 +351,12 @@ function stockSOItemReadyInfo(sku, qty, so) {
   qty = Math.max(0, Math.round(Number(qty) || 0));
   if (!sku) return { ready: true, tracked: false, deliveredForThisSO: 0, bookedForThisSO: 0, from0001: 0, fromQI: 0, shortfall: 0, reservation: null };
 
+  // SO ที่ถึงสถานะส่งแล้ว/ออก Invoice/ปิดแล้ว ถือว่าสินค้าส่งครบตามจำนวนใน PO เสมอ ไม่เช็คสต็อกจริงอีก —
+  // ครอบคลุมทั้ง SO บันทึกย้อนหลัง (ของที่ส่งไปแล้วจริง แต่ไม่ได้ตัด stock ในระบบ จึงไม่มี lot ผูกไว้) และ SO ปกติที่เลื่อนสถานะผ่าน soRecordShipmentRound()
+  if (so && typeof _soIsDone === 'function' && _soIsDone(so.status)) {
+    return { ready: true, tracked: true, deliveredForThisSO: qty, bookedForThisSO: 0, from0001: 0, fromQI: 0, shortfall: 0, reservation: null, bookingExpiryDate: '', bookingHistory: [] };
+  }
+
   // ส่วนที่ถูกจองเข้า 1021 ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก reservation หรือกดจอง/ลากเข้า 1021 เองแล้วเลือก SO นี้)
   var lots = stockGetLots(sku);
   var soLots = lots.filter(function(l) { return l.location === '1021' && l.soId === so.id; });
