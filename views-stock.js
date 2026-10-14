@@ -18,6 +18,9 @@ var stockShowLog = false;
 var stockShowAging = false;
 var stockAgingThreshold = 60; // วัน
 var stockExpanded = {}; // sku -> เปิด/ปิดแถวสรุปคลังย่อยในหน้ารายการ
+// SO ล่าสุดที่เปิดดู (set จาก rSODetail ใน views-so.js) — ใช้แนะนำ/พรีฟิล SO ตอนย้ายคลังจากหน้า Stock หลัก
+// ที่ไม่มี context ของ SO ชัดเจน (ถ้ามากจากปุ่ม "จัดการคลัง" ในหน้า SO เอง จะส่ง soId ตรงมาแทน แม่นกว่านี้)
+var _stockLastSOId = null;
 var STOCK_LOW_THRESHOLD = 5;
 
 // คลังย่อยทั้งหมด — ชุดเดียวกันทุก SKU ตั้งค่าได้ (เก็บใน ST 'stockLocations' เพิ่มคลังใหม่ได้จากปุ่ม "+ เพิ่มคลัง" ในเมนู Stock)
@@ -486,7 +489,7 @@ function showStockQuickManageM(sku, soId) {
     body += '<span style="margin-left:auto;font-size:15px;font-weight:700;color:' + accentC + '">' + locTotal + '</span>';
     body += '<button class="btn bsm bo" onclick="showStockAddLotM(\'' + sku + '\',\'' + loc.code + '\'' + soArg + ')">+ เพิ่ม lot</button>';
     body += '</div>';
-    if (locLots.length) locLots.forEach(function(lot) { body += _stockLotRowHtml(sku, nameEsc, loc, lot, false); });
+    if (locLots.length) locLots.forEach(function(lot) { body += _stockLotRowHtml(sku, nameEsc, loc, lot, false, soId); });
     body += '</div>';
   });
   body += '<a href="#" onclick="closeMForce();go(\'stockDetail\',{sku:\'' + sku + '\'});return false" style="font-size:12px">📋 ดูรายละเอียด/จัดการคลังแบบเต็ม →</a>';
@@ -795,6 +798,32 @@ function stockSyncSONumber(soId, newSoNumber) {
   });
   ST.getAll('stockReservations').forEach(function(r) {
     if (r.soId === soId) ST.update('stockReservations', r.id, { soNumber: newSoNumber });
+  });
+}
+
+// ไม้ตายสำหรับ lot/reservation เก่าที่ผูก SO ไว้ด้วยเลขที่พิมพ์เอง (soNumber/ref) อย่างเดียว ไม่มี soId เก็บไว้ —
+// ของแบบนี้ถ้าแก้เลข SO ที่หน้า SO แล้ว stockSyncSONumber() จะหาไม่เจอ (เทียบด้วย soId) เลขที่ย้ายคลังไว้จะค้างเลขเดิม
+// รันครั้งเดียว (localStorage flag กัน) ไล่จับคู่เลข SO ที่ตรงกับ SO จริงในระบบ แล้วเติม soId ให้ จากนั้น rename จะ sync ได้ปกติ
+function _stockMigrateSoIds() {
+  if (localStorage.getItem('v7_stock_soid_migrated_v1')) return;
+  localStorage.setItem('v7_stock_soid_migrated_v1', '1');
+  var soByNumber = {};
+  ST.getAll('salesOrders').forEach(function(s) { if (s.soNumber) soByNumber[s.soNumber] = s.id; });
+  ST.getAll('stockLevels').forEach(function(rec) {
+    var changed = false;
+    var lots = (rec.lots || []).map(function(l) {
+      if (l.soId || !l.soNumber) return l;
+      var matchId = soByNumber[l.soNumber];
+      if (!matchId) return l;
+      changed = true;
+      return Object.assign({}, l, { soId: matchId });
+    });
+    if (changed) ST.update('stockLevels', rec.id, { lots: lots });
+  });
+  ST.getAll('stockReservations').forEach(function(r) {
+    if (!r.soId && r.soNumber && soByNumber[r.soNumber]) {
+      ST.update('stockReservations', r.id, { soId: soByNumber[r.soNumber] });
+    }
   });
 }
 
@@ -1348,6 +1377,7 @@ function stockRemindersBarHtml() {
 
 function rStock(el) {
   stockProcessExpiredBookings();
+  _stockMigrateSoIds();
   document.getElementById('pgT').textContent = '📦 Stock สินค้า';
   var products = getAllProducts().filter(function(p) { return !!p; }); // รวมทุกสินค้ารวมถึง Bundle — Bundle บางตัว (เช่น Extended Warranty) มี SKU ของตัวเองและต้องนับ stock แยก
   var levelMap = {};
@@ -1573,7 +1603,7 @@ function stockLocationSummaryHtml(p) {
 
 // การ์ดคลังย่อยแต่ละใบ (0001/1021/1027/QI/PRPO) ใช้ตัวนี้ render แถว lot ร่วมกัน — showCheckbox ใช้เฉพาะการ์ด PRPO
 // สำหรับติ๊กเลือกหลายรายการเพื่อย้ายพร้อมกันทีเดียว (ดู showStockBulkMoveM)
-function _stockLotRowHtml(sku, nameEsc, loc, lot, showCheckbox) {
+function _stockLotRowHtml(sku, nameEsc, loc, lot, showCheckbox, presetSoId) {
   var isBooking = _stockIsBookLoc(loc.code);
   var isPRPO = loc.code === 'PRPO';
   var isQI = loc.code === 'QI';
@@ -1633,7 +1663,7 @@ function _stockLotRowHtml(sku, nameEsc, loc, lot, showCheckbox) {
     bexpHtml +
     (isQI && !lot.registrationComplete ? '<button class="btn bsm bp" onclick="stockMarkRegistrationComplete(\'' + sku + '\',\'' + nameEsc + '\',\'' + lot.id + '\')" title="ขึ้นทะเบียนสำเร็จแล้ว">✅ สำเร็จ</button> ' : '') +
     (!isQI && lot.qiPending && !lot.registrationComplete ? '<button class="btn bsm bp" onclick="stockMarkRegistrationComplete(\'' + sku + '\',\'' + nameEsc + '\',\'' + lot.id + '\')" title="ขึ้นทะเบียนสำเร็จแล้ว">✅ สำเร็จ</button> ' : '') +
-    '<button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\')">→ ย้ายคลัง</button> ' +
+    '<button class="btn bsm bo" onclick="showStockMoveLotM(\'' + sku + '\',\'' + lot.id + '\',\'\',\'' + (presetSoId || '') + '\')">→ ย้ายคลัง</button> ' +
     '<button class="btn bsm bo" onclick="stockShowLotMenu(event,\'' + sku + '\',\'' + lot.id + '\')" title="เพิ่มเติม">⋮</button>' +
     '</div>';
   h += '</div>';
@@ -1888,10 +1918,10 @@ function rStockDetail(el) {
             '<span style="font-size:12px;font-weight:500">📄 ' + sanitize(g.ref) + '</span>' +
             '<span style="font-size:11px;color:var(--text2)">รวม ' + gTotal + '</span>' +
             '</div>';
-          g.lots.forEach(function(lot) { h += _stockLotRowHtml(sku, nameEsc, loc, lot, true); });
+          g.lots.forEach(function(lot) { h += _stockLotRowHtml(sku, nameEsc, loc, lot, true, _stockLastSOId); });
         });
       } else {
-        locLots.forEach(function(lot) { h += _stockLotRowHtml(sku, nameEsc, loc, lot, false); });
+        locLots.forEach(function(lot) { h += _stockLotRowHtml(sku, nameEsc, loc, lot, false, _stockLastSOId); });
       }
       h += '</div>';
     });
@@ -2097,7 +2127,7 @@ function saveStockAddLot(sku, code) {
   render();
 }
 
-function showStockMoveLotM(sku, lotId, presetDest) {
+function showStockMoveLotM(sku, lotId, presetDest, presetSoId) {
   var p = getProductBySku(sku);
   if (!p) return;
   var lots = stockGetLots(sku);
@@ -2106,6 +2136,11 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   var otherLocs = getStockLocations().filter(function(l) { return l.code !== lot.location; });
   var today = _nw().substring(0, 10);
 
+  // lot เดิมผูก SO จริงอยู่แล้ว (lot.soId) ให้โชว์ตามนั้นไม่แตะ — ถ้ายังไม่ผูก ค่อยเอา SO ที่กำลังทำอยู่ (presetSoId) มาเติมแนะนำให้ ผู้ใช้ยังแก้/เคลียร์เองได้ปกติ
+  var suggestedSo = (!lot.soId && presetSoId) ? ST.getOne('salesOrders', presetSoId) : null;
+  var mvSoValue = lot.soId ? (lot.soNumber || lot.ref || '') : (suggestedSo ? suggestedSo.soNumber : (lot.ref || ''));
+  var mvPrpoSoValue = lot.soId ? (lot.soNumber || '') : (suggestedSo ? suggestedSo.soNumber : '');
+
   var body = '<div class="fg"><label>' + sanitize(lot.ref || stockLocationName(lot.location)) + ' — เหลือ ' + lot.qty + '</label></div>';
   body += '<div class="fg"><label>ย้ายไปคลัง</label><select id="mv_dest" onchange="stockMoveDestChanged()">';
   otherLocs.forEach(function(l) { body += '<option value="' + l.code + '"' + (presetDest === l.code ? ' selected' : '') + '>' + l.code + ' ' + sanitize(l.name) + '</option>'; });
@@ -2113,7 +2148,7 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   body += '<div class="fg"><label>จำนวนที่ย้าย</label><input type="number" id="mv_qty" min="1" max="' + lot.qty + '" value="' + lot.qty + '"></div>';
   body += '<div id="mv_booking_fields" style="display:none">';
   body += _stockSODatalistHtml();
-  body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv\')" value="' + sanitize(lot.ref || '') + '"></div>';
+  body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(เลือกจาก SO จริงในระบบ หรือพิมพ์เองถ้ายังไม่มี)</small></label><input type="text" id="mv_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv\')" value="' + sanitize(mvSoValue || '') + '"></div>';
   body += dpH('mv_date', today, 'วันที่จอง', false);
   body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="mv_sales" value="' + sanitize(_stockCurrentUserName()) + '"></div>';
   body += _stockDealerDatalistHtml();
@@ -2123,7 +2158,7 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   body += '<div class="fg"><label>สถานะ</label><select id="mv_status">' + STOCK_BOOKING_STATUSES.map(function(s) { return '<option>' + s + '</option>'; }).join('') + '</select></div>';
   body += '</div>';
   body += '<div id="mv_prpo_fields" style="display:none">';
-  body += '<div class="fg"><label>ผูก SO <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="mv_prpo_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv_prpo\')"></div>';
+  body += '<div class="fg"><label>ผูก SO <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="mv_prpo_so" list="stockSODL" oninput="stockSOInputChanged(this,\'mv_prpo\')" value="' + sanitize(mvPrpoSoValue || '') + '"></div>';
   body += '<div class="fg"><label>คาดว่าจะถึง</label><input type="date" id="mv_expected"></div>';
   body += '</div>';
   body += '<div id="mv_qi_fields" style="display:none">' + _stockQIFieldsHtml('mv_qi', {}) + '</div>';
@@ -2131,7 +2166,14 @@ function showStockMoveLotM(sku, lotId, presetDest) {
   body += '<div class="fg"><label>หมายเหตุ <small style="color:var(--text2)">(ไม่บังคับ)</small></label><input type="text" id="mv_note"></div>';
   body += '<button class="btn bp btn-full" onclick="saveStockMoveLot(\'' + sku + '\',\'' + lotId + '\')">→ ยืนยันย้าย</button>';
   openM('ย้ายคลัง', body);
-  setTimeout(stockMoveDestChanged, 30);
+  setTimeout(function() {
+    stockMoveDestChanged();
+    // resolve data-so-id ของค่าที่เติมไว้ (lot.soId เดิม หรือ SO ที่แนะนำ) ให้ตรงกับ datalist จริง + เติม Dealer/โครงการให้ถ้ายังว่าง
+    var mvSoEl = document.getElementById('mv_so');
+    if (mvSoEl && mvSoEl.value) stockSOInputChanged(mvSoEl, 'mv');
+    var mvPrpoSoEl = document.getElementById('mv_prpo_so');
+    if (mvPrpoSoEl && mvPrpoSoEl.value) stockSOInputChanged(mvPrpoSoEl, 'mv_prpo');
+  }, 30);
 }
 
 function stockMoveDestChanged() {
@@ -2221,7 +2263,7 @@ function stockLotDrop(ev, destCode) {
   var lot = stockGetLots(data.sku).filter(function(l) { return l.id === data.lotId; })[0];
   if (!lot || lot.location === destCode) return;
   if (_stockIsBookLoc(destCode) || destCode === 'PRPO') {
-    showStockMoveLotM(data.sku, data.lotId, destCode);
+    showStockMoveLotM(data.sku, data.lotId, destCode, _stockLastSOId);
   } else {
     showStockQuickMoveM(data.sku, data.lotId, destCode);
   }

@@ -822,6 +822,7 @@ function rSODetail(el) {
   var soId = S.soId;
   var s    = ST.getOne('salesOrders', soId);
   if (!s) { el.innerHTML = '<div class="card">ไม่พบ SO นี้</div>'; return; }
+  if (typeof _stockLastSOId !== 'undefined') _stockLastSOId = soId; // จำ SO ล่าสุดที่เปิดดู ไว้แนะนำตอนย้ายคลังจากหน้า Stock หลัก
   document.getElementById('pgT').textContent = '📦 ' + (s.soNumber||'SO');
 
   var pipe   = s.pipelineId   ? ST.getOne('pipeline', s.pipelineId)     : null;
