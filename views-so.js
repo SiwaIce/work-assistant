@@ -337,6 +337,12 @@ function _soSummaryTextForSalesSupport(s) {
   if (s.projectId) lines.push('Project ID: ' + s.projectId);
   if (s.remark) lines.push('Remark: ' + s.remark);
   if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
+  var creditReq = creditRequestOpenForSO(s.id);
+  if (creditReq) {
+    lines.push('เครดิต: ' + creditReq.status +
+      (creditReq.creditDaysRequested ? ' ' + creditReq.creditDaysRequested + ' วัน' : '') +
+      (creditReq.approvedBy ? ' (' + creditReq.approvedBy + ')' : ''));
+  }
   lines.push('');
   lines.push('รายการสินค้า:');
   lines.push(['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'ลิงก์จอง/อ้างอิง'].join('\t'));
