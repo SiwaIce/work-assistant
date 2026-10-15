@@ -1795,9 +1795,23 @@ function _soPrpoStatusChanged(idx) {
   sel.innerHTML = _soPrpoStatusOptionsHtml(id);
 }
 
-function _soItemRowHtml(idx, model, qty, price, sku, item) {
+// so (ไม่บังคับ): ส่งมาเมื่อแก้ไขรายการของ SO ที่มีอยู่แล้ว — ใช้เช็คว่ามี lot จองใน 1021 จริงผูกกับ SO
+// นี้อยู่หรือไม่ (จัดการคลัง) ถ้ามี ให้ sourceType/วันจองถึง "ตามคลังจริง" เป็นหลักเสมอ (ล็อกไว้ ไม่ให้พิมพ์ทับมือ)
+// เพื่อไม่ให้ฟอร์มนี้โชว์ "ยังไม่ระบุ" ทั้งที่จัดการคลังจองไปแล้วจริง (ดูที่มาปัญหานี้ในข้อความ user ที่ขอให้แก้)
+function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
   item = item || {};
   var sourceType = item.sourceType || '';
+  var reserveDate = item.reserveDate || '';
+  var reserveExpiryDate = item.reserveExpiryDate || '';
+  var realLock = null;
+  if (so && sku && typeof stockSOItemReadyInfo === 'function') {
+    var stockInfo = stockSOItemReadyInfo(sku, qty, so);
+    if (stockInfo && stockInfo.tracked && stockInfo.bookedForThisSO > 0) {
+      realLock = stockInfo;
+      sourceType = 'reserve_1021';
+      reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+    }
+  }
   var srcOptions = Object.keys(SO_ITEM_SOURCE_TYPES).map(function(k) {
     return '<option value="' + k + '"' + (k === sourceType ? ' selected' : '') + '>' + SO_ITEM_SOURCE_TYPES[k].label + '</option>';
   }).join('');
@@ -1813,8 +1827,12 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
   if (Number(item.cashDiscountPercent) > 0) {
     h += '<div class="hint" style="font-size:10px;color:#f59e0b;margin:2px 0 0 2px">💵 ราคานี้หักส่วนลดเงินสด ' + item.cashDiscountPercent + '% แล้ว (ราคาเดิม ฿' + fmtMoney(item._origUnitPrice || 0) + '/หน่วย)</div>';
   }
+  var srcDisabledAttr = realLock ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
   h += '<div style="display:flex;gap:6px;align-items:center;margin-top:4px">' +
-    '<select class="inp" style="flex:1" id="soI_src_' + idx + '" onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
+    '<select class="inp" style="flex:1" id="soI_src_' + idx + '"' + srcDisabledAttr + ' onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
+  if (realLock) {
+    h += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 0 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้วันจอง/ยกเลิกจองได้ที่หน้า "📦 จัดการคลัง" ของ SO นี้เท่านั้น ไม่ใช่ที่นี่</div>';
+  }
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
   h += '<div id="soI_prpo_' + idx + '" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="วันที่ยื่น PR/PO" title="วันที่ยื่น PR/PO" value="' + sanitize(item.prpoSubmittedDate || '') + '" id="soI_prpoDate_' + idx + '">' +
@@ -1822,8 +1840,10 @@ function _soItemRowHtml(idx, model, qty, price, sku, item) {
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
   var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
-  h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px">' +
-    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ (ไม่บังคับ)" value="' + sanitize(item.reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '">' +
+  var resDisabledAttr = realLock ? ' disabled' : '';
+  h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่' + (realLock ? '' : ' (ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '"' + resDisabledAttr + '>' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่' + (realLock ? '' : ' (ไม่บังคับ)') + '" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '"' + resDisabledAttr + '>' +
     '</div>';
   h += '</div>';
   return h;
@@ -1850,7 +1870,10 @@ function _soReadItemSourceFields(row) {
     out.prpoStatusId = (statusEl && statusEl.value !== '__new__') ? statusEl.value : '';
     out.prpoExpectedDate = expEl ? expEl.value : '';
   } else if (out.sourceType === 'reserve_1021' || out.sourceType === 'reserve_8d01') {
+    var resDateEl = row.querySelector('[id^="soI_resDate_"]');
     var resExpEl = row.querySelector('[id^="soI_resExp_"]');
+    // เพิ่งเลือกจองครั้งแรก (ยังไม่มีวันจอง) — เซ็ตเป็นวันนี้ให้เลยอัตโนมัติ ไม่ต้องให้ผู้ใช้กรอกเอง
+    out.reserveDate = (resDateEl && resDateEl.value) ? resDateEl.value : _td();
     out.reserveExpiryDate = resExpEl ? resExpEl.value : '';
   }
   return out;
@@ -2081,7 +2104,7 @@ function showSOEditItemsModal(soId) {
   body += '<input type="hidden" id="soN_dealerId" value="' + sanitize(s.dealerId || '') + '">';
   body += buildAdminModelDatalist('soItemModelDL');
   body += '<div id="soN_items">';
-  (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it); });
+  (s.items || []).forEach(function(it, idx) { body += _soItemRowHtml(idx, it.model, it.qty, it.unitPrice, it.sku, it, s); });
   body += '</div><button class="btn bo bsm" onclick="_soAddItemRow()" style="margin:8px 0">+ เพิ่มสินค้า</button>';
   body += '<button class="btn bp btn-full" style="margin-top:6px" onclick="saveSOItemsEdit(\'' + soId + '\')">💾 บันทึกรายการสินค้า</button>';
   openM('✏️ แก้ไขรายการสินค้า — ' + sanitize(s.soNumber || ''), body);
