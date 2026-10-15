@@ -386,15 +386,18 @@ function stockSOItemReadyInfo(sku, qty, so) {
   }
 
   // ล็อตที่จองใน 1021 อยู่ (ยังไม่ส่ง) ที่ใกล้หมดอายุที่สุด — ใช้โชว์ "เหลือกี่วัน" + ประวัติการเลื่อนจองของล็อตนั้น
-  var activeBooked = soLots.filter(_stockIsActiveLot).filter(function(l) { return l.bookingExpiryDate; })
+  // ถ้าไม่มี lot ไหนตั้งวันหมดจองไว้เลย (ยังไม่เคยกรอก) ใช้ lot ที่จองไว้ก่อนสุดแทน จะได้มีอะไรให้แก้ไขวันที่ต่อได้
+  var activeSoLots = soLots.filter(_stockIsActiveLot);
+  var activeBooked = activeSoLots.filter(function(l) { return l.bookingExpiryDate; })
     .sort(function(a, b) { return (a.bookingExpiryDate || '').localeCompare(b.bookingExpiryDate || ''); });
-  var nearestLot = activeBooked[0] || null;
+  var nearestLot = activeBooked[0] || activeSoLots.slice().sort(function(a, b) { return (a.dateIn || '').localeCompare(b.dateIn || ''); })[0] || null;
 
   return {
     ready: (bookedForThisSO + deliveredForThisSO) >= qty, tracked: true,
     deliveredForThisSO: deliveredForThisSO, bookedForThisSO: bookedForThisSO,
     from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation,
-    bookingExpiryDate: nearestLot ? nearestLot.bookingExpiryDate : '', bookingHistory: nearestLot ? (nearestLot.bookingHistory || []) : []
+    bookingExpiryDate: nearestLot ? (nearestLot.bookingExpiryDate || '') : '', bookingHistory: nearestLot ? (nearestLot.bookingHistory || []) : [],
+    reserveDate: nearestLot ? (nearestLot.dateIn || '').slice(0, 10) : ''
   };
 }
 
@@ -1023,6 +1026,35 @@ function stockQuickAdjust(sku, productName, locationDeltas, opts) {
   return changed;
 }
 
+// ซิงก์ "จองวันที่"/"จองถึงวันที่" ที่แก้จากฟอร์ม "แก้ไขรายการสินค้า" (views-so.js) กลับเข้า lot จริงที่ผูกกับ SO
+// นี้ใน 1021 — ให้แก้ได้ทั้ง 2 ที่ (จัดการคลัง หรือฟอร์มแก้ไขรายการ) แล้วข้อมูลตรงกันเสมอ ไม่ต้องเดาว่าอันไหนจริง
+// (ถ้ายังไม่มี lot จริงผูกกับ SO นี้ — เช่นประกาศจองไว้ล่วงหน้าก่อนมีการย้ายเข้าคลังจริง — ไม่มีอะไรให้ซิงก์ ถือว่าไม่เปลี่ยน)
+function stockSyncSOItemReservation(sku, soId, reserveDate, reserveExpiryDate) {
+  if (!sku || !soId) return false;
+  var p = getProductBySku(sku);
+  if (!p) return false;
+  var lots = stockGetLots(sku);
+  var changed = false;
+  var newLots = lots.map(function(l) {
+    if (l.location !== '1021' || l.soId !== soId || !_stockIsActiveLot(l)) return l;
+    var upd = Object.assign({}, l);
+    if (reserveDate && reserveDate !== (l.dateIn || '').slice(0, 10)) {
+      upd.dateIn = reserveDate;
+      changed = true;
+    }
+    if ((reserveExpiryDate || '') !== (l.bookingExpiryDate || '')) {
+      var history = (l.bookingHistory || []).slice();
+      if (l.bookingExpiryDate || reserveExpiryDate) history.push({ fromDate: l.bookingExpiryDate || '', toDate: reserveExpiryDate || '', approvedBy: '', date: _nw() });
+      upd.bookingExpiryDate = reserveExpiryDate || '';
+      upd.bookingHistory = history;
+      changed = true;
+    }
+    return upd;
+  });
+  if (changed) _stockSaveLots(sku, p.name, newLots);
+  return changed;
+}
+
 function showStockEditLotM(sku, lotId) {
   var p = getProductBySku(sku);
   var lots = stockGetLots(sku);
@@ -1034,6 +1066,7 @@ function showStockEditLotM(sku, lotId) {
   var body = '<div class="fg"><label>จำนวน</label><input type="number" id="elot_qty" min="0" value="' + lot.qty + '"></div>';
   if (isBooking) {
     body += _stockSODatalistHtml();
+    body += '<div class="fg"><label>จองวันที่</label><input type="date" id="elot_dateIn" value="' + sanitize((lot.dateIn || '').slice(0, 10)) + '"></div>';
     body += '<div class="fg"><label>SO No. <small style="color:var(--text2)">(ไม่บังคับถ้ายังไม่มี SO)</small></label><input type="text" id="elot_so" list="stockSODL" oninput="stockSOInputChanged(this,\'elot\')" data-so-id="' + sanitize(lot.soId || '') + '" value="' + sanitize(lot.soNumber || lot.ref || '') + '"></div>';
     body += '<div class="fg"><label>เซลที่จอง</label><input type="text" id="elot_sales" value="' + sanitize(lot.salesperson || '') + '"></div>';
     body += _stockDealerDatalistHtml();
@@ -1085,6 +1118,8 @@ function saveStockEditLot(sku, lotId) {
     var so = soEl.value.trim();
     var newDealer = document.getElementById('elot_dealer').value.trim();
     if (!_stockConfirmDealerMove(lot, newDealer)) return;
+    var dateInEl = document.getElementById('elot_dateIn');
+    if (dateInEl && dateInEl.value) fields.dateIn = dateInEl.value;
     fields.soNumber = so; fields.ref = so;
     fields.soId = soEl.dataset.soId || '';
     fields.salesperson = document.getElementById('elot_sales').value.trim();
