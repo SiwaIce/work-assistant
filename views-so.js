@@ -1809,6 +1809,7 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
     if (stockInfo && stockInfo.tracked && stockInfo.bookedForThisSO > 0) {
       realLock = stockInfo;
       sourceType = 'reserve_1021';
+      reserveDate = stockInfo.reserveDate || reserveDate;
       reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
     }
   }
@@ -1831,7 +1832,7 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
   h += '<div style="display:flex;gap:6px;align-items:center;margin-top:4px">' +
     '<select class="inp" style="flex:1" id="soI_src_' + idx + '"' + srcDisabledAttr + ' onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
   if (realLock) {
-    h += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 0 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้วันจอง/ยกเลิกจองได้ที่หน้า "📦 จัดการคลัง" ของ SO นี้เท่านั้น ไม่ใช่ที่นี่</div>';
+    h += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 0 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้ไว้เป็นประเภทอื่นไม่ได้ (ต้องไปยกเลิก/ย้าย lot ที่หน้า "📦 จัดการคลัง") แต่แก้วันจองได้ตรงนี้เลย จะอัปเดตกลับเข้า lot ในคลังจริงให้ทันที</div>';
   }
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
   h += '<div id="soI_prpo_' + idx + '" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
@@ -1840,10 +1841,9 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
   var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
-  var resDisabledAttr = realLock ? ' disabled' : '';
   h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
-    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่' + (realLock ? '' : ' (ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '"' + resDisabledAttr + '>' +
-    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่' + (realLock ? '' : ' (ไม่บังคับ)') + '" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '"' + resDisabledAttr + '>' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่ — แก้ตรงนี้ได้ ' + (realLock ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ — แก้ตรงนี้ได้ ' + (realLock ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '">' +
     '</div>';
   h += '</div>';
   return h;
@@ -2129,6 +2129,14 @@ function saveSOItemsEdit(soId) {
     items.push(Object.assign(base, { model: mEl.value.trim(), sku: skuEl ? skuEl.value.trim() : '', qty: Number(qEl.value) || 1, unitPrice: parseNum(pEl.value) || 0 }, _soReadItemSourceFields(row)));
   });
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
+
+  // แก้วันจอง/วันจองถึงของรายการที่จองจาก 1021 ตรงนี้ได้เลย — sync กลับเข้า lot จริงในคลังให้ด้วย (ซิงก์ 2 ทาง
+  // กับหน้าจัดการคลัง ไม่ต้องไปเปิดอีกหน้าแยกแค่เพื่อแก้วันที่)
+  if (typeof stockSyncSOItemReservation === 'function') {
+    items.forEach(function(it) {
+      if (it.sourceType === 'reserve_1021' && it.sku) stockSyncSOItemReservation(it.sku, soId, it.reserveDate, it.reserveExpiryDate);
+    });
+  }
 
   // ใบเสนอราคาที่ผูกไว้ = single source of truth เดียวกับ SO — แก้รายการตรงนี้แล้ว sync กลับไปตรงนั้นทันที ไม่ถาม ไม่สร้าง revision
   var quotationId = s.quotationId;
