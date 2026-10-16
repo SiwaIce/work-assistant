@@ -636,6 +636,7 @@ function rSalesOrders(el) {
           '<button class="btn bo bsm" id="soSelStatusBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkChangeSOStatus()">ยืนยัน</button>';
       })() +
       '<button class="btn bo bsm" id="soSelExportBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkExportSO()">📥 Export ที่เลือก</button>' +
+      '<button class="btn bo bsm" id="soSelReadyBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="showReadySummaryForSelectedSO()">📦 สรุปของพร้อมส่งให้ลูกค้า</button>' +
       '<button class="btn bd" id="soSelDelBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="bulkDeleteSO()">🗑️ ลบที่เลือก (' + selCnt + ')</button>' +
       '<button class="btn bo bsm" style="margin-left:auto" onclick="toggleSOSelectMode()">✕ ออก</button>' +
       '</div>';
@@ -752,6 +753,8 @@ function _soSelBarUpdate(cnt) {
   if (delBtn) { delBtn.disabled = !cnt; delBtn.textContent = '🗑️ ลบที่เลือก (' + cnt + ')'; }
   var exportBtn = document.getElementById('soSelExportBtn');
   if (exportBtn) exportBtn.disabled = !cnt;
+  var readyBtn = document.getElementById('soSelReadyBtn');
+  if (readyBtn) readyBtn.disabled = !cnt;
   var statusSel = document.getElementById('soSelStatusSel');
   if (statusSel) statusSel.disabled = !cnt;
   var statusBtn = document.getElementById('soSelStatusBtn');
@@ -2872,4 +2875,300 @@ function runSerialSearch() {
   });
 
   out.innerHTML = html;
+}
+
+// ================================================================
+// สรุปของพร้อมส่งให้ลูกค้า (รวมหลาย SO/PO ของดีลเลอร์เดียวกัน) — เลือกรายการที่จะส่งวันนี้ ปรับจำนวนได้
+// ดูพรีวิวข้อความ/ตารางแล้วคัดลอกส่งลูกค้าหรือเซลได้ จากนั้นคอนเฟิร์มบันทึกส่งมอบรวดเดียวทุก PO ผ่าน
+// soRecordShipmentRound() ตัวเดิมที่มีอยู่แล้ว (ไม่ต้องไปเปิดทีละ SO) — มาจาก mockup ที่ยืนยันแบบกับผู้ใช้แล้ว
+// ================================================================
+
+function showReadySummaryForSelectedSO() {
+  var ids = Object.keys(soSelected);
+  if (!ids.length) return;
+  var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
+  var dealerKeys = {};
+  list.forEach(function(s) { dealerKeys[s.dealerId || s.dealerName || '-'] = true; });
+  if (Object.keys(dealerKeys).length > 1) { toast('⚠️ เลือก SO ของดีลเลอร์เดียวกันเท่านั้น'); return; }
+  showReadySummaryModal(ids);
+}
+
+// เฉพาะรายการมี SKU และมีของพร้อมส่งจริง (จองใน 1021 แล้ว และ/หรือ มีใน 1001 ที่ยังไม่จอง) มากกว่า 0 — ไม่รวมรายการที่ต้องรอ PR/PO
+function _readySummaryCollectData(soIds) {
+  var out = [];
+  soIds.forEach(function(soId) {
+    var s = ST.getOne('salesOrders', soId);
+    if (!s) return;
+    var rows = [];
+    (s.items || []).forEach(function(it) {
+      if (!it.sku) return;
+      var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : null;
+      if (!info) return;
+      var qty1021 = info.bookedForThisSO || 0;
+      var qty0001 = info.from0001 || 0;
+      var readyQty = qty1021 + qty0001;
+      if (readyQty <= 0) return;
+      var orderedQty = Number(it.qty) || 0;
+      var deliveredQty = info.deliveredForThisSO || 0;
+      var remainingQty = Math.max(0, orderedQty - deliveredQty);
+      rows.push({
+        sku: it.sku, model: it.model || it.sku, orderedQty: orderedQty, deliveredQty: deliveredQty,
+        remainingQty: remainingQty, readyQty: Math.min(readyQty, remainingQty), qty1021: qty1021, qty0001: qty0001,
+        unitPrice: Number(it.unitPrice) || 0
+      });
+    });
+    if (rows.length) out.push({ so: s, rows: rows });
+  });
+  return out;
+}
+
+function showReadySummaryModal(soIds) {
+  var data = _readySummaryCollectData(soIds);
+  if (!data.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งจริงในใบที่เลือก (ของยังไม่จองหรือยังรอ PR/PO)'); return; }
+  var dealerName = data[0].so.dealerName || '-';
+  var html = '<div id="rsPick">';
+  html += '<div class="hint" style="margin-bottom:8px">🏢 ' + sanitize(dealerName) + ' — เลือกรายการที่จะส่งวันนี้ ปรับจำนวนได้ไม่เกินที่พร้อมส่งจริง</div>';
+  data.forEach(function(d) {
+    var s = d.so;
+    html += '<div class="rs-po" data-soid="' + s.id + '" data-sonumber="' + sanitize(s.soNumber || '') + '" data-po="' + sanitize(s.customerPO || '') +
+      '" data-project="' + sanitize(s.projectName || '') + '" data-projectid="' + sanitize(s.projectId || '') +
+      '" data-term="' + sanitize(s.paymentTerm || 'ไม่ระบุเงื่อนไขชำระ') + '" style="border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden">';
+    html += '<div style="padding:8px 10px;background:var(--bg2)">';
+    html += '<b>' + sanitize(s.soNumber || s.customerPO || '-') + '</b>' + (s.customerPO ? ' · PO ' + sanitize(s.customerPO) : '') +
+      (s.projectName ? ' · ' + sanitize(s.projectName) : '');
+    html += '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
+      (s.projectId ? 'Project ID: ' + sanitize(s.projectId) + ' · ' : '') +
+      '💳 ' + sanitize(s.paymentTerm || 'ไม่ระบุเงื่อนไขชำระ') + '</div>';
+    html += '</div>';
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' +
+      '<th style="padding:6px 8px;text-align:center;width:28px"></th><th style="padding:6px 8px;text-align:left">สินค้า</th>' +
+      '<th style="padding:6px 8px;text-align:right">สั่งทั้งหมด</th><th style="padding:6px 8px;text-align:right">พร้อมส่ง</th>' +
+      '<th style="padding:6px 8px;text-align:right">คงเหลือ</th><th style="padding:6px 8px;text-align:right">ราคา/หน่วย</th>' +
+      '<th style="padding:6px 8px;text-align:right">รวม</th>' +
+      '</tr></thead><tbody>';
+    d.rows.forEach(function(r) {
+      html += '<tr class="rs-item" data-sku="' + sanitize(r.sku) + '" data-model="' + sanitize(r.model) + '" data-ordered="' + r.orderedQty +
+        '" data-q1021max="' + r.qty1021 + '" data-q0001max="' + r.qty0001 + '" data-price="' + r.unitPrice + '" style="border-top:1px solid var(--border)">';
+      html += '<td style="padding:6px 8px;text-align:center"><input type="checkbox" checked onchange="_rsRecalc()"></td>';
+      html += '<td style="padding:6px 8px">' + sanitize(r.model) + ' <span style="color:var(--text2);font-size:10px">(' + sanitize(r.sku) + ')</span></td>';
+      html += '<td style="padding:6px 8px;text-align:right">' + r.orderedQty + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right"><input type="number" class="inp rs-qty" style="width:64px;text-align:right" value="' + r.readyQty + '" min="0" max="' + r.readyQty + '" oninput="_rsClampQty(this)"></td>';
+      html += '<td class="rs-remain" style="padding:6px 8px;text-align:right"></td>';
+      html += '<td style="padding:6px 8px;text-align:right">฿' + fmtMoney(r.unitPrice) + '</td>';
+      html += '<td class="rs-linetotal" style="padding:6px 8px;text-align:right;font-weight:600"></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="padding:6px 10px;background:var(--bg2);text-align:right;font-size:12px">ยอดพร้อมส่ง (ใบนี้): <b class="rs-posubtotal">—</b></div>';
+    html += '</div>';
+  });
+  html += '<button class="btn bp btn-full" style="margin-top:6px" onclick="_rsShowPreview()">👁️ ดูพรีวิว &amp; คัดลอกสรุป</button>';
+  html += '</div>';
+
+  html += '<div id="rsPreview" style="display:none">';
+  html += '<div class="hint" style="margin-bottom:8px">💬 ข้อความสรุปส่งลูกค้า</div>';
+  html += '<div id="rsPreviewText" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;white-space:pre-wrap;max-height:260px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace"></div>';
+  html += '<button class="btn bo btn-full" style="margin-top:8px" onclick="_rsCopyMessage()">📋 คัดลอกข้อความ</button>';
+  html += '<div style="margin-top:14px;font-size:12px;font-weight:600">📊 รายละเอียดจัดส่ง — แยก PO / เงื่อนไขเครดิต / รวมทั้งหมด</div>';
+  html += '<div style="overflow-x:auto;margin-top:6px"><table id="rsDetailTable" style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px"></table></div>';
+  html += '<button class="btn bo btn-full" style="margin-top:8px" onclick="_rsCopyExcel()">📋 คัดลอกเป็นตาราง (วางใน Excel ได้เลย — ใช้ส่งเซลได้ด้วย)</button>';
+  html += '<div style="display:flex;gap:8px;margin-top:14px">';
+  html += '<button class="btn bo" style="flex:1" onclick="_rsBackToPick()">← กลับไปแก้รายการ</button>';
+  html += '<button class="btn bp" style="flex:1" onclick="_rsConfirm()">✅ คอนเฟิร์ม — บันทึกส่งมอบ</button>';
+  html += '</div>';
+  html += '</div>';
+
+  openM('📦 สรุปของพร้อมส่งให้ลูกค้า', html);
+  if (typeof setMWide === 'function') setMWide(760);
+  _rsRecalc();
+}
+
+function _rsClampQty(input) {
+  var max = Number(input.max) || 0;
+  var v = Math.max(0, Math.min(max, Math.round(Number(input.value) || 0)));
+  input.value = v;
+  _rsRecalc();
+}
+
+function _rsRecalc() {
+  document.querySelectorAll('.rs-po').forEach(function(po) {
+    var subtotal = 0;
+    po.querySelectorAll('.rs-item').forEach(function(row) {
+      var cb = row.querySelector('input[type=checkbox]');
+      var qtyInput = row.querySelector('.rs-qty');
+      var ordered = Number(row.dataset.ordered) || 0;
+      var qty = cb.checked ? (Number(qtyInput.value) || 0) : 0;
+      var price = Number(row.dataset.price) || 0;
+      var lineTotal = qty * price;
+      var remain = Math.max(0, ordered - qty);
+      row.querySelector('.rs-remain').textContent = remain;
+      row.querySelector('.rs-linetotal').textContent = '฿' + fmtMoney(lineTotal);
+      if (cb.checked && qty > 0) subtotal += lineTotal;
+    });
+    var subtotalEl = po.querySelector('.rs-posubtotal');
+    if (subtotalEl) subtotalEl.textContent = '฿' + fmtMoney(subtotal);
+  });
+}
+
+function _rsCollectSelection() {
+  var byTerm = {};
+  var poLines = [];
+  document.querySelectorAll('.rs-po').forEach(function(po) {
+    var rows = []; var poTotal = 0;
+    po.querySelectorAll('.rs-item').forEach(function(row) {
+      var cb = row.querySelector('input[type=checkbox]');
+      var qty = Number(row.querySelector('.rs-qty').value) || 0;
+      if (!cb.checked || qty <= 0) return;
+      var ordered = Number(row.dataset.ordered) || 0;
+      var price = Number(row.dataset.price) || 0;
+      var lineTotal = qty * price;
+      rows.push({
+        sku: row.dataset.sku, model: row.dataset.model, qty: qty, ordered: ordered,
+        remain: Math.max(0, ordered - qty), price: price, lineTotal: lineTotal,
+        q1021max: Number(row.dataset.q1021max) || 0, q0001max: Number(row.dataset.q0001max) || 0
+      });
+      poTotal += lineTotal;
+    });
+    if (rows.length) {
+      var term = po.dataset.term || 'ไม่ระบุเงื่อนไขชำระ';
+      poLines.push({
+        soId: po.dataset.soid, soNumber: po.dataset.sonumber, poNumber: po.dataset.po,
+        project: po.dataset.project, projectId: po.dataset.projectid, term: term, rows: rows, poTotal: poTotal
+      });
+      byTerm[term] = (byTerm[term] || 0) + poTotal;
+    }
+  });
+  return { poLines: poLines, byTerm: byTerm };
+}
+
+function _rsHeadLabel(po) {
+  var head = po.poNumber ? ('PO ' + po.poNumber) : ('SO ' + (po.soNumber || '-'));
+  if (po.project) head += ' · ' + po.project;
+  return head;
+}
+
+function _rsBuildPreviewText(sel) {
+  var lines = [];
+  lines.push('สวัสดีครับ/ค่ะ วันนี้มีของพร้อมส่งดังนี้ครับ/ค่ะ 👇');
+  lines.push('');
+  sel.poLines.forEach(function(po) {
+    var itemsTxt = po.rows.map(function(r) { return 'สินค้า ' + r.model + ' ' + r.qty + ' ชิ้น'; }).join(' ');
+    lines.push('📦 ' + _rsHeadLabel(po) + '  ' + itemsTxt);
+  });
+  lines.push('');
+  lines.push('รวมยอดตามเงื่อนไขชำระ:');
+  Object.keys(sel.byTerm).forEach(function(term) {
+    lines.push('• ' + term + '  ฿' + fmtMoney(sel.byTerm[term]));
+  });
+  lines.push('');
+  lines.push('รบกวนลูกค้าเตรียมเช็คตามเงื่อนไขด้านบน แล้วคอนเฟิร์มรับของตามนี้ได้เลยไหมครับ/คะ 🙏');
+  return lines.join('\n');
+}
+
+function _rsBuildDetailHtml(sel) {
+  var html = '<thead><tr><th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">PO / SO</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">Project ID / ชื่อโครงการ</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">สินค้า</th>' +
+    '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">สั่งทั้งหมด</th>' +
+    '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">พร้อมส่ง</th>' +
+    '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">คงเหลือ</th>' +
+    '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">ราคา/หน่วย</th>' +
+    '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">รวม</th></tr></thead><tbody>';
+  var grand = 0;
+  var byTermOrder = [];
+  sel.poLines.forEach(function(po) { if (byTermOrder.indexOf(po.term) === -1) byTermOrder.push(po.term); });
+  byTermOrder.forEach(function(term) {
+    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="8" style="padding:6px 8px;font-weight:700">💳 ' + sanitize(term) + '</td></tr>';
+    sel.poLines.filter(function(po) { return po.term === term; }).forEach(function(po) {
+      po.rows.forEach(function(r, idx) {
+        html += '<tr style="border-top:1px solid var(--border)">';
+        html += idx === 0 ? ('<td style="padding:6px 8px">' + sanitize(_rsHeadLabel(po).split(' · ')[0]) + '<span style="color:var(--text2);font-size:10px;display:block">' + sanitize(po.soNumber || '') + '</span></td>') : '<td></td>';
+        html += idx === 0 ? ('<td style="padding:6px 8px">' + sanitize(po.projectId || '-') + '<span style="color:var(--text2);font-size:10px;display:block">' + sanitize(po.project || '') + '</span></td>') : '<td></td>';
+        html += '<td style="padding:6px 8px">' + sanitize(r.model) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right">' + r.ordered + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right">' + r.qty + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right">' + r.remain + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right">฿' + fmtMoney(r.price) + '</td>';
+        html += '<td style="padding:6px 8px;text-align:right">฿' + fmtMoney(r.lineTotal) + '</td>';
+        html += '</tr>';
+      });
+      html += '<tr><td colspan="7" style="padding:6px 8px;text-align:right;color:var(--text2)">รวม ' + sanitize(_rsHeadLabel(po)) + '</td><td style="padding:6px 8px;text-align:right;font-weight:600">฿' + fmtMoney(po.poTotal) + '</td></tr>';
+    });
+    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="7" style="padding:6px 8px;text-align:right;font-weight:700">รวม ' + sanitize(term) + '</td><td style="padding:6px 8px;text-align:right;font-weight:700">฿' + fmtMoney(sel.byTerm[term]) + '</td></tr>';
+    grand += sel.byTerm[term];
+  });
+  html += '<tr style="border-top:1.5px solid var(--text)"><td colspan="7" style="padding:7px 8px;text-align:right;font-weight:700">รวมทั้งหมดทุก PO</td><td style="padding:7px 8px;text-align:right;font-weight:700">฿' + fmtMoney(grand) + '</td></tr>';
+  html += '</tbody>';
+  return html;
+}
+
+function _rsBuildExcelTSV(sel) {
+  var lines = [];
+  lines.push(['PO / SO', 'Project ID / ชื่อโครงการ', 'สินค้า', 'สั่งทั้งหมด', 'พร้อมส่ง', 'คงเหลือ', 'ราคา/หน่วย', 'รวม'].join('\t'));
+  var grand = 0;
+  var byTermOrder = [];
+  sel.poLines.forEach(function(po) { if (byTermOrder.indexOf(po.term) === -1) byTermOrder.push(po.term); });
+  byTermOrder.forEach(function(term) {
+    lines.push('💳 ' + term);
+    sel.poLines.filter(function(po) { return po.term === term; }).forEach(function(po) {
+      po.rows.forEach(function(r, idx) {
+        lines.push([
+          idx === 0 ? (_rsHeadLabel(po).split(' · ')[0] + ' (' + (po.soNumber || '') + ')') : '',
+          idx === 0 ? ((po.projectId || '-') + ' (' + (po.project || '') + ')') : '',
+          r.model, r.ordered, r.qty, r.remain, r.price.toFixed(2), r.lineTotal.toFixed(2)
+        ].join('\t'));
+      });
+      lines.push(['', '', '', '', '', '', 'รวม ' + _rsHeadLabel(po), po.poTotal.toFixed(2)].join('\t'));
+    });
+    lines.push(['', '', '', '', '', '', 'รวม ' + term, sel.byTerm[term].toFixed(2)].join('\t'));
+    grand += sel.byTerm[term];
+  });
+  lines.push(['', '', '', '', '', '', 'รวมทั้งหมดทุก PO', grand.toFixed(2)].join('\t'));
+  return lines.join('\n');
+}
+
+var _rsLastSel = null;
+function _rsShowPreview() {
+  var sel = _rsCollectSelection();
+  if (!sel.poLines.length) { toast('⚠️ ยังไม่ได้เลือกรายการที่จะส่ง'); return; }
+  _rsLastSel = sel;
+  document.getElementById('rsPreviewText').textContent = _rsBuildPreviewText(sel);
+  document.getElementById('rsDetailTable').innerHTML = _rsBuildDetailHtml(sel);
+  document.getElementById('rsPick').style.display = 'none';
+  document.getElementById('rsPreview').style.display = 'block';
+}
+function _rsBackToPick() {
+  document.getElementById('rsPick').style.display = 'block';
+  document.getElementById('rsPreview').style.display = 'none';
+}
+function _rsCopyMessage() {
+  if (!_rsLastSel) return;
+  copyText(_rsBuildPreviewText(_rsLastSel), '📋 คัดลอกข้อความแล้ว — วางส่งลูกค้าได้เลย');
+}
+function _rsCopyExcel() {
+  if (!_rsLastSel) return;
+  copyText(_rsBuildExcelTSV(_rsLastSel), '📋 คัดลอกตารางแล้ว — วางใน Excel ได้เลย');
+}
+
+// คอนเฟิร์ม = บันทึกส่งมอบจริงทุก PO ที่เลือกไว้ในทีเดียว ผ่าน soRecordShipmentRound() ตัวเดิม (อัปเดตสต็อก,
+// ประวัติการส่งมอบ, และเลื่อนสถานะ SO ให้อัตโนมัติ — เหมือนกดปุ่ม "บันทึกการส่งมอบรอบนี้" ทีละใบ แต่ทำรวดเดียวหลาย PO)
+function _rsConfirm() {
+  var sel = _rsCollectSelection();
+  if (!sel.poLines.length) { toast('⚠️ ไม่มีรายการที่จะบันทึก'); return; }
+  var totalQty = 0;
+  sel.poLines.forEach(function(po) { po.rows.forEach(function(r) { totalQty += r.qty; }); });
+  if (!confirm('คอนเฟิร์มว่าได้ส่งตามรายการนี้แล้ว?\nระบบจะบันทึกเป็นส่งมอบจริงในสต็อก รวม ' + sel.poLines.length + ' PO / ' + totalQty + ' ชิ้น\nดำเนินการต่อ?')) return;
+  sel.poLines.forEach(function(po) {
+    var roundItems = po.rows.map(function(r) {
+      var q1021 = Math.min(r.qty, r.q1021max);
+      var q0001 = r.qty - q1021;
+      return { sku: r.sku, qty1021: q1021, qty0001: q0001 };
+    });
+    soRecordShipmentRound(po.soId, roundItems, '', '', '', 'บันทึกจากสรุปของพร้อมส่งลูกค้า (รวมหลาย PO)');
+  });
+  soSelected = {};
+  soSelectMode = false;
+  toast('✅ บันทึกส่งมอบแล้ว ' + sel.poLines.length + ' PO / ' + totalQty + ' ชิ้น');
+  closeMForce();
+  render();
 }
