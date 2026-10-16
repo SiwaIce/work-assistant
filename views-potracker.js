@@ -728,8 +728,55 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsOverview, 'ภาพรวม');
   XLSX.utils.book_append_sheet(wb, wsItems, 'รายการสินค้า');
+  _poTrackerAddDealerSheets(wb, all);
   XLSX.writeFile(wb, 'po-tracker-export' + (filenameSuffix || '') + '-' + _td() + '.xlsx');
   toast('📤 Export PO Tracker แล้ว (' + all.length + ' PO/SO, ' + itemRows.length + ' รายการ)');
+}
+
+// เพิ่ม 1 ชีตต่อ Dealer สรุปรายการสินค้า จัดกลุ่มตาม PO ลูกค้า (เรียง PO ก่อน แล้วค่อยรายการในนั้น) มีแถวหัว PO + แถวรวมท้ายกลุ่ม
+// ชื่อชีตตัดให้ไม่เกิน 31 ตัวอักษร (ข้อจำกัดของ Excel) และกันชื่อซ้ำกันหลัง normalize/ตัด
+function _poTrackerAddDealerSheets(wb, all) {
+  var byDealer = {};
+  var dealerOrder = [];
+  all.forEach(function(s) {
+    var d = s.dealerName || '(ไม่ระบุ Dealer)';
+    if (!byDealer[d]) { byDealer[d] = []; dealerOrder.push(d); }
+    byDealer[d].push(s);
+  });
+  dealerOrder.sort();
+
+  var header = ['No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'ส่งแล้ว', 'คงเหลือ', 'Remark'];
+  var usedNames = {};
+  dealerOrder.forEach(function(dealerName) {
+    var sos = byDealer[dealerName].slice().sort(function(a, b) { return (a.customerPO || '').localeCompare(b.customerPO || ''); });
+    var rows = [header];
+    sos.forEach(function(s) {
+      rows.push(['PO ' + (s.customerPO || '-') + (s.soNumber ? ' / SO ' + s.soNumber : ''), '', '', '', '', '', '', '', '']);
+      var subtotal = 0;
+      (s.items || []).forEach(function(it, idx) {
+        var qty = Number(it.qty) || 0;
+        var price = Number(it.unitPrice) || 0;
+        var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, s) : null;
+        var delivered = Math.min(qty, (info && info.deliveredForThisSO) || 0);
+        var amount = qty * price;
+        subtotal += amount;
+        rows.push([idx + 1, it.sku || '', it.model || '', qty, price, amount, delivered, qty - delivered, _poTrackerItemRemark(it, s)]);
+      });
+      rows.push(['', '', 'รวม PO นี้', '', '', subtotal, '', '', '']);
+    });
+
+    var sheetName = dealerName.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Dealer';
+    if (usedNames[sheetName]) {
+      usedNames[sheetName]++;
+      sheetName = sheetName.slice(0, 28) + '-' + usedNames[sheetName];
+    } else {
+      usedNames[sheetName] = 1;
+    }
+
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 9 }, { wch: 9 }, { wch: 34 }];
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
 }
 
 // ================================================================
