@@ -2893,7 +2893,9 @@ function showReadySummaryForSelectedSO() {
   showReadySummaryModal(ids);
 }
 
-// เฉพาะรายการมี SKU และมีของพร้อมส่งจริง (จองใน 1021 แล้ว และ/หรือ มีใน 1001 ที่ยังไม่จอง) มากกว่า 0 — ไม่รวมรายการที่ต้องรอ PR/PO
+// ทุกรายการมี SKU ที่ยังส่งไม่ครบ (remainingQty > 0) — รวมรายการที่ยังไม่มีของพร้อมส่งเลยด้วย (โชว์ไว้ให้เห็น ไม่ซ่อน)
+// readyQty = จองใน 1021 แล้ว + มีใน 1001 ที่ยังไม่จอง (ของจริงที่ส่งได้ตอนนี้โดยไม่ต้องรอ QI ขึ้นทะเบียน/PR-PO)
+// shortfall = ส่วนที่เกินกว่าของจริงที่มี ต้องจองคลัง/สั่งซื้อเพิ่มก่อนถึงจะส่งได้
 function _readySummaryCollectData(soIds) {
   var out = [];
   soIds.forEach(function(soId) {
@@ -2904,16 +2906,17 @@ function _readySummaryCollectData(soIds) {
       if (!it.sku) return;
       var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : null;
       if (!info) return;
-      var qty1021 = info.bookedForThisSO || 0;
-      var qty0001 = info.from0001 || 0;
-      var readyQty = qty1021 + qty0001;
-      if (readyQty <= 0) return;
       var orderedQty = Number(it.qty) || 0;
       var deliveredQty = info.deliveredForThisSO || 0;
       var remainingQty = Math.max(0, orderedQty - deliveredQty);
+      if (remainingQty <= 0) return; // ส่งครบแล้ว ไม่ต้องโชว์อีก
+      var qty1021 = info.bookedForThisSO || 0;
+      var qty0001 = info.from0001 || 0;
+      var readyQty = Math.min(qty1021 + qty0001, remainingQty);
       rows.push({
         sku: it.sku, model: it.model || it.sku, orderedQty: orderedQty, deliveredQty: deliveredQty,
-        remainingQty: remainingQty, readyQty: Math.min(readyQty, remainingQty), qty1021: qty1021, qty0001: qty0001,
+        remainingQty: remainingQty, readyQty: readyQty, qty1021: qty1021, qty0001: qty0001,
+        shortfall: Math.max(0, remainingQty - readyQty),
         unitPrice: Number(it.unitPrice) || 0
       });
     });
@@ -2924,10 +2927,10 @@ function _readySummaryCollectData(soIds) {
 
 function showReadySummaryModal(soIds) {
   var data = _readySummaryCollectData(soIds);
-  if (!data.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งจริงในใบที่เลือก (ของยังไม่จองหรือยังรอ PR/PO)'); return; }
+  if (!data.length) { toast('✅ ใบที่เลือกส่งครบทุกรายการแล้ว ไม่มีอะไรเหลือให้ส่ง'); return; }
   var dealerName = data[0].so.dealerName || '-';
   var html = '<div id="rsPick">';
-  html += '<div class="hint" style="margin-bottom:8px">🏢 ' + sanitize(dealerName) + ' — เลือกรายการที่จะส่งวันนี้ ปรับจำนวนได้ไม่เกินที่พร้อมส่งจริง</div>';
+  html += '<div class="hint" style="margin-bottom:8px">🏢 ' + sanitize(dealerName) + ' — เลือกรายการที่จะส่งวันนี้ ปรับจำนวนได้ไม่เกินของจริงที่มี (รายการที่ยังไม่มีของพร้อมส่งจะถูกบล็อกไว้)</div>';
   data.forEach(function(d) {
     var s = d.so;
     html += '<div class="rs-po" data-soid="' + s.id + '" data-sonumber="' + sanitize(s.soNumber || '') + '" data-po="' + sanitize(s.customerPO || '') +
@@ -2947,12 +2950,20 @@ function showReadySummaryModal(soIds) {
       '<th style="padding:6px 8px;text-align:right">รวม</th>' +
       '</tr></thead><tbody>';
     d.rows.forEach(function(r) {
+      var hasStock = r.readyQty > 0;
       html += '<tr class="rs-item" data-sku="' + sanitize(r.sku) + '" data-model="' + sanitize(r.model) + '" data-ordered="' + r.orderedQty +
         '" data-q1021max="' + r.qty1021 + '" data-q0001max="' + r.qty0001 + '" data-price="' + r.unitPrice + '" style="border-top:1px solid var(--border)">';
-      html += '<td style="padding:6px 8px;text-align:center"><input type="checkbox" checked onchange="_rsRecalc()"></td>';
+      html += '<td style="padding:6px 8px;text-align:center"><input type="checkbox" ' + (hasStock ? 'checked' : 'disabled') + ' onchange="_rsRecalc()"></td>';
       html += '<td style="padding:6px 8px">' + sanitize(r.model) + ' <span style="color:var(--text2);font-size:10px">(' + sanitize(r.sku) + ')</span></td>';
       html += '<td style="padding:6px 8px;text-align:right">' + r.orderedQty + '</td>';
-      html += '<td style="padding:6px 8px;text-align:right"><input type="number" class="inp rs-qty" style="width:64px;text-align:right" value="' + r.readyQty + '" min="0" max="' + r.readyQty + '" oninput="_rsClampQty(this)"></td>';
+      html += '<td style="padding:6px 8px;text-align:right">';
+      html += '<input type="number" class="inp rs-qty" style="width:64px;text-align:right" value="' + r.readyQty + '" min="0" max="' + r.readyQty + '" oninput="_rsClampQty(this)"' + (hasStock ? '' : ' disabled') + '>';
+      if (!hasStock) {
+        html += '<div style="font-size:9px;color:#ef4444;margin-top:2px;font-weight:600">❌ ไม่มีสต็อกให้ส่ง ต้องจองคลัง/สั่งซื้อก่อน</div>';
+      } else if (r.shortfall > 0) {
+        html += '<div style="font-size:9px;color:#b45309;margin-top:2px;font-weight:600">⚠️ ขาดอีก ' + r.shortfall + ' ต้องจองคลัง/สั่งซื้อเพิ่ม</div>';
+      }
+      html += '</td>';
       html += '<td class="rs-remain" style="padding:6px 8px;text-align:right"></td>';
       html += '<td style="padding:6px 8px;text-align:right">฿' + fmtMoney(r.unitPrice) + '</td>';
       html += '<td class="rs-linetotal" style="padding:6px 8px;text-align:right;font-weight:600"></td>';
