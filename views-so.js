@@ -299,7 +299,11 @@ function _soStatusBadge(st) {
 function _soSummaryItemStatusInfo(it, s) {
   var qty = Number(it.qty) || 0;
   var status = '—', note = '';
-  if (it.sourceType === 'pr_po') {
+  // เช็คว่าส่งมอบจริงครบแล้วหรือยังก่อนเสมอ (เหมือน _poTrackerItemBucket) — ไม่งั้นรายการที่ส่งแล้วจะโผล่เป็น "พร้อมส่ง" ตาม sourceType เดิมที่ยังไม่ได้ลบ
+  var readyInfo = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, s) : null;
+  if (readyInfo && qty > 0 && readyInfo.deliveredForThisSO >= qty) {
+    status = '✅ ส่งแล้ว';
+  } else if (it.sourceType === 'pr_po') {
     status = '🛒 รอ PR/PO';
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
     if (stLabel) note = stLabel;
@@ -312,11 +316,10 @@ function _soSummaryItemStatusInfo(it, s) {
     if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
   } else if (it.sourceType === 'central_wh') {
     status = '🏢 ส่งจากคลังกลาง';
-  } else if (it.sku && typeof stockSOItemReadyInfo === 'function') {
-    var info = stockSOItemReadyInfo(it.sku, qty, s);
-    if (info.ready) status = '✅ พร้อมส่ง';
-    else if (info.shortfall > 0) status = '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
-    if (info.bookingExpiryDate) note = 'จองถึง ' + fD(info.bookingExpiryDate);
+  } else if (readyInfo) {
+    if (readyInfo.ready) status = '✅ พร้อมส่ง';
+    else if (readyInfo.shortfall > 0) status = '⚠️ ขาดอีก ' + readyInfo.shortfall + ' ชิ้น';
+    if (readyInfo.bookingExpiryDate) note = 'จองถึง ' + fD(readyInfo.bookingExpiryDate);
   }
   // ลิงก์จอง/อ้างอิง — ใช้ลิงก์ที่พิมพ์ไว้ในช่อง "ลิงก์" ของรายการนี้ก่อน (it.link) ถ้าไม่มีค่อย fallback เป็นเลข SO/PO ของใบนี้
   var ref = it.link || s.soNumber || s.customerPO || '-';
@@ -345,7 +348,7 @@ function _soSummaryTextForSalesSupport(s) {
   }
   lines.push('');
   lines.push('รายการสินค้า:');
-  lines.push(['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'ลิงก์จอง/อ้างอิง'].join('\t'));
+  lines.push(['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'คอมเมนต์', 'ลิงก์จอง/อ้างอิง'].join('\t'));
   (s.items || []).forEach(function(it) {
     var qty = Number(it.qty) || 0;
     var price = Number(it.unitPrice) || 0;
@@ -358,6 +361,7 @@ function _soSummaryTextForSalesSupport(s) {
       (qty * price).toFixed(2),
       info.status,
       info.note,
+      (it.comment || '-').replace(/[\t\n\r]+/g, ' '),
       info.ref
     ].join('\t'));
   });
@@ -2917,7 +2921,8 @@ function _readySummaryCollectData(soIds) {
         sku: it.sku, model: it.model || it.sku, orderedQty: orderedQty, deliveredQty: deliveredQty,
         remainingQty: remainingQty, readyQty: readyQty, qty1021: qty1021, qty0001: qty0001,
         shortfall: Math.max(0, remainingQty - readyQty),
-        unitPrice: Number(it.unitPrice) || 0
+        unitPrice: Number(it.unitPrice) || 0,
+        comment: it.comment || ''
       });
     });
     if (rows.length) out.push({ so: s, rows: rows });
@@ -2952,7 +2957,8 @@ function showReadySummaryModal(soIds) {
     d.rows.forEach(function(r) {
       var hasStock = r.readyQty > 0;
       html += '<tr class="rs-item" data-sku="' + sanitize(r.sku) + '" data-model="' + sanitize(r.model) + '" data-ordered="' + r.orderedQty +
-        '" data-q1021max="' + r.qty1021 + '" data-q0001max="' + r.qty0001 + '" data-price="' + r.unitPrice + '" style="border-top:1px solid var(--border)">';
+        '" data-q1021max="' + r.qty1021 + '" data-q0001max="' + r.qty0001 + '" data-price="' + r.unitPrice +
+        '" data-shortfall="' + r.shortfall + '" data-comment="' + sanitize(r.comment || '') + '" style="border-top:1px solid var(--border)">';
       html += '<td style="padding:6px 8px;text-align:center"><input type="checkbox" ' + (hasStock ? 'checked' : 'disabled') + ' onchange="_rsRecalc()"></td>';
       html += '<td style="padding:6px 8px">' + sanitize(r.model) + ' <span style="color:var(--text2);font-size:10px">(' + sanitize(r.sku) + ')</span></td>';
       html += '<td style="padding:6px 8px;text-align:right">' + r.orderedQty + '</td>';
@@ -2981,7 +2987,7 @@ function showReadySummaryModal(soIds) {
   html += '<div id="rsPreviewText" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;white-space:pre-wrap;max-height:260px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace"></div>';
   html += '<button class="btn bo btn-full" style="margin-top:8px" onclick="_rsCopyMessage()">📋 คัดลอกข้อความ</button>';
   html += '<div style="margin-top:14px;font-size:12px;font-weight:600">📊 รายละเอียดจัดส่ง — แยก PO / เงื่อนไขเครดิต / รวมทั้งหมด</div>';
-  html += '<div style="overflow-x:auto;margin-top:6px"><table id="rsDetailTable" style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px"></table></div>';
+  html += '<div style="overflow-x:auto;margin-top:6px"><table id="rsDetailTable" style="width:100%;border-collapse:collapse;font-size:12px;min-width:840px"></table></div>';
   html += '<button class="btn bo btn-full" style="margin-top:8px" onclick="_rsCopyExcel()">📋 คัดลอกเป็นตาราง (วางใน Excel ได้เลย — ใช้ส่งเซลได้ด้วย)</button>';
   html += '<div style="display:flex;gap:8px;margin-top:14px">';
   html += '<button class="btn bo" style="flex:1" onclick="_rsBackToPick()">← กลับไปแก้รายการ</button>';
@@ -3036,7 +3042,8 @@ function _rsCollectSelection() {
       rows.push({
         sku: row.dataset.sku, model: row.dataset.model, qty: qty, ordered: ordered,
         remain: Math.max(0, ordered - qty), price: price, lineTotal: lineTotal,
-        q1021max: Number(row.dataset.q1021max) || 0, q0001max: Number(row.dataset.q0001max) || 0
+        q1021max: Number(row.dataset.q1021max) || 0, q0001max: Number(row.dataset.q0001max) || 0,
+        shortfall: Number(row.dataset.shortfall) || 0, comment: row.dataset.comment || ''
       });
       poTotal += lineTotal;
     });
@@ -3076,10 +3083,17 @@ function _rsBuildPreviewText(sel) {
   return lines.join('\n');
 }
 
+// สถานะพร้อมส่งต่อแถว — ใช้ shortfall ที่ผ่านมากับ dataset ของ modal (ดู _rsCollectSelection) ไม่ต้องคำนวณใหม่
+function _rsRowStatusText(r) {
+  return r.shortfall > 0 ? '⚠️ ขาดอีก ' + r.shortfall : '✅ พร้อมส่ง';
+}
+
 function _rsBuildDetailHtml(sel) {
   var html = '<thead><tr><th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">PO / SO</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">Project ID / ชื่อโครงการ</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">สินค้า</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">สถานะ</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10.5px;color:var(--text2)">คอมเมนต์</th>' +
     '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">สั่งทั้งหมด</th>' +
     '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">พร้อมส่ง</th>' +
     '<th style="text-align:right;padding:6px 8px;font-size:10.5px;color:var(--text2)">คงเหลือ</th>' +
@@ -3089,13 +3103,15 @@ function _rsBuildDetailHtml(sel) {
   var byTermOrder = [];
   sel.poLines.forEach(function(po) { if (byTermOrder.indexOf(po.term) === -1) byTermOrder.push(po.term); });
   byTermOrder.forEach(function(term) {
-    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="8" style="padding:6px 8px;font-weight:700">💳 ' + sanitize(term) + '</td></tr>';
+    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="10" style="padding:6px 8px;font-weight:700">💳 ' + sanitize(term) + '</td></tr>';
     sel.poLines.filter(function(po) { return po.term === term; }).forEach(function(po) {
       po.rows.forEach(function(r, idx) {
         html += '<tr style="border-top:1px solid var(--border)">';
         html += idx === 0 ? ('<td style="padding:6px 8px">' + sanitize(_rsHeadLabel(po).split(' · ')[0]) + '<span style="color:var(--text2);font-size:10px;display:block">' + sanitize(po.soNumber || '') + '</span></td>') : '<td></td>';
         html += idx === 0 ? ('<td style="padding:6px 8px">' + sanitize(po.projectId || '-') + '<span style="color:var(--text2);font-size:10px;display:block">' + sanitize(po.project || '') + '</span></td>') : '<td></td>';
         html += '<td style="padding:6px 8px">' + sanitize(r.model) + '</td>';
+        html += '<td style="padding:6px 8px">' + sanitize(_rsRowStatusText(r)) + '</td>';
+        html += '<td style="padding:6px 8px">' + sanitize(r.comment || '') + '</td>';
         html += '<td style="padding:6px 8px;text-align:right">' + r.ordered + '</td>';
         html += '<td style="padding:6px 8px;text-align:right">' + r.qty + '</td>';
         html += '<td style="padding:6px 8px;text-align:right">' + r.remain + '</td>';
@@ -3103,19 +3119,19 @@ function _rsBuildDetailHtml(sel) {
         html += '<td style="padding:6px 8px;text-align:right">฿' + fmtMoney(r.lineTotal) + '</td>';
         html += '</tr>';
       });
-      html += '<tr><td colspan="7" style="padding:6px 8px;text-align:right;color:var(--text2)">รวม ' + sanitize(_rsHeadLabel(po)) + '</td><td style="padding:6px 8px;text-align:right;font-weight:600">฿' + fmtMoney(po.poTotal) + '</td></tr>';
+      html += '<tr><td colspan="9" style="padding:6px 8px;text-align:right;color:var(--text2)">รวม ' + sanitize(_rsHeadLabel(po)) + '</td><td style="padding:6px 8px;text-align:right;font-weight:600">฿' + fmtMoney(po.poTotal) + '</td></tr>';
     });
-    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="7" style="padding:6px 8px;text-align:right;font-weight:700">รวม ' + sanitize(term) + '</td><td style="padding:6px 8px;text-align:right;font-weight:700">฿' + fmtMoney(sel.byTerm[term]) + '</td></tr>';
+    html += '<tr style="background:var(--accent-bg,rgba(37,99,235,.08))"><td colspan="9" style="padding:6px 8px;text-align:right;font-weight:700">รวม ' + sanitize(term) + '</td><td style="padding:6px 8px;text-align:right;font-weight:700">฿' + fmtMoney(sel.byTerm[term]) + '</td></tr>';
     grand += sel.byTerm[term];
   });
-  html += '<tr style="border-top:1.5px solid var(--text)"><td colspan="7" style="padding:7px 8px;text-align:right;font-weight:700">รวมทั้งหมดทุก PO</td><td style="padding:7px 8px;text-align:right;font-weight:700">฿' + fmtMoney(grand) + '</td></tr>';
+  html += '<tr style="border-top:1.5px solid var(--text)"><td colspan="9" style="padding:7px 8px;text-align:right;font-weight:700">รวมทั้งหมดทุก PO</td><td style="padding:7px 8px;text-align:right;font-weight:700">฿' + fmtMoney(grand) + '</td></tr>';
   html += '</tbody>';
   return html;
 }
 
 function _rsBuildExcelTSV(sel) {
   var lines = [];
-  lines.push(['PO / SO', 'Project ID / ชื่อโครงการ', 'สินค้า', 'สั่งทั้งหมด', 'พร้อมส่ง', 'คงเหลือ', 'ราคา/หน่วย', 'รวม'].join('\t'));
+  lines.push(['PO / SO', 'Project ID / ชื่อโครงการ', 'สินค้า', 'สถานะ', 'คอมเมนต์', 'สั่งทั้งหมด', 'พร้อมส่ง', 'คงเหลือ', 'ราคา/หน่วย', 'รวม'].join('\t'));
   var grand = 0;
   var byTermOrder = [];
   sel.poLines.forEach(function(po) { if (byTermOrder.indexOf(po.term) === -1) byTermOrder.push(po.term); });
@@ -3126,15 +3142,16 @@ function _rsBuildExcelTSV(sel) {
         lines.push([
           idx === 0 ? (_rsHeadLabel(po).split(' · ')[0] + ' (' + (po.soNumber || '') + ')') : '',
           idx === 0 ? ((po.projectId || '-') + ' (' + (po.project || '') + ')') : '',
-          r.model, r.ordered, r.qty, r.remain, r.price.toFixed(2), r.lineTotal.toFixed(2)
+          r.model, _rsRowStatusText(r), (r.comment || '').replace(/[\t\n\r]+/g, ' '),
+          r.ordered, r.qty, r.remain, r.price.toFixed(2), r.lineTotal.toFixed(2)
         ].join('\t'));
       });
-      lines.push(['', '', '', '', '', '', 'รวม ' + _rsHeadLabel(po), po.poTotal.toFixed(2)].join('\t'));
+      lines.push(['', '', '', '', '', '', '', '', 'รวม ' + _rsHeadLabel(po), po.poTotal.toFixed(2)].join('\t'));
     });
-    lines.push(['', '', '', '', '', '', 'รวม ' + term, sel.byTerm[term].toFixed(2)].join('\t'));
+    lines.push(['', '', '', '', '', '', '', '', 'รวม ' + term, sel.byTerm[term].toFixed(2)].join('\t'));
     grand += sel.byTerm[term];
   });
-  lines.push(['', '', '', '', '', '', 'รวมทั้งหมดทุก PO', grand.toFixed(2)].join('\t'));
+  lines.push(['', '', '', '', '', '', '', '', 'รวมทั้งหมดทุก PO', grand.toFixed(2)].join('\t'));
   return lines.join('\n');
 }
 
