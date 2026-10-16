@@ -3168,6 +3168,8 @@ function _rsConfirm() {
   });
   soSelected = {};
   soSelectMode = false;
+  if (typeof poTrackerSelected !== 'undefined') poTrackerSelected = {};
+  if (typeof poTrackerSelectMode !== 'undefined') poTrackerSelectMode = false;
   toast('✅ บันทึกส่งมอบแล้ว ' + sel.poLines.length + ' PO / ' + totalQty + ' ชิ้น');
   closeMForce();
   render();
