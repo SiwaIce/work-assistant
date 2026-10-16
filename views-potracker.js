@@ -60,6 +60,7 @@ function _poTrackerItemRemark(it, so) {
   // ยังไม่ระบุ sourceType — fallback ไปดูความพร้อมส่งจริงจากสต็อก
   if (it.sku && typeof stockSOItemReadyInfo === 'function') {
     var info = stockSOItemReadyInfo(it.sku, qty, so);
+    if (qty > 0 && info.deliveredForThisSO >= qty) return '✅ ส่งแล้ว';
     if (info.ready) return '✅ พร้อมส่ง';
     if (info.shortfall > 0) return '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
   }
