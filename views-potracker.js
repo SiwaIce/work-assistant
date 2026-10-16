@@ -989,7 +989,9 @@ function poTrackerDealerCopySummary() {
     lines.push(b.icon + ' ' + b.label + ' (' + rows.length + ' รายการ)');
     rows.forEach(function(x) {
       var comment = (x.item && x.item.comment) ? String(x.item.comment).replace(/[\t\n\r]+/g, ' ').trim() : '';
+      var pid = (typeof _soDisplayProjectId === 'function') ? _soDisplayProjectId(x.so) : '';
       lines.push('- ' + x.model + ' x' + x.qty + ' — SO ' + (x.so.soNumber || x.so.customerPO || '-') + (x.so.createdAt ? ' (' + fD(x.so.createdAt) + ')' : '') +
+        (pid ? ' — Project ID: ' + pid : '') +
         (comment ? ' — 📝 ' + comment : ''));
     });
     lines.push('');

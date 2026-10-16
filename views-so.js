@@ -327,6 +327,12 @@ function _soSummaryItemStatusInfo(it, s) {
   return { status: status, note: note, ref: ref };
 }
 
+// Project ID ที่จะโชว์/คัดลอกของ SO ใบนี้ — SO แบบโครงการเก็บไว้ที่ s.projectId ตรง ๆ แต่ SO แบบ Run rate
+// เลข Project ID เป็นของถัง ไม่ใช่ของ SO (s.projectId จะถูกล้างทิ้งเสมอ ดู saveCreateSO/saveSOEdit) จึงต้องอ่านจาก s.runrateProjectId แทน
+function _soDisplayProjectId(s) {
+  return (s && (s.projectId || s.runrateProjectId)) || '';
+}
+
 // สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ copy วางส่งให้ Sales Support ได้เลย — ส่วนหัว/ยอดรวมเป็นข้อความตามเดิม
 // ส่วนรายการสินค้าเป็น TSV (tab-separated) เพื่อวางใน Excel แล้วแยกคอลัมน์ได้ทันที (ต่อยอดจากไอเดีย mockup เดิม — ก่อนหน้านี้มีแต่ export รวมทุก SO)
 function _soSummaryTextForSalesSupport(s) {
@@ -337,7 +343,8 @@ function _soSummaryTextForSalesSupport(s) {
   lines.push('Dealer: ' + (s.dealerName || '-'));
   if (s.projectName) lines.push('ชื่อโครงการ: ' + s.projectName);
   if (s.projectNumber) lines.push('เลขที่โครงการ: ' + s.projectNumber);
-  if (s.projectId) lines.push('Project ID: ' + s.projectId);
+  var _soSumPid = _soDisplayProjectId(s);
+  if (_soSumPid) lines.push('Project ID: ' + _soSumPid);
   if (s.remark) lines.push('Remark: ' + s.remark);
   if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
   var creditReq = creditRequestOpenForSO(s.id);
@@ -894,6 +901,8 @@ function rSODetail(el) {
   var infoCells = [];
   if (s.customerPO && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'PO ลูกค้า',    val: qcopyHtml(s.customerPO) });
   if (s.customerPODate && !_gvHidden('so_dealerInfo')) infoCells.push({ label:'📅 วันที่ PO ลูกค้า', val: fD(s.customerPODate) });
+  var _soDetailPid = _soDisplayProjectId(s);
+  if (_soDetailPid)       infoCells.push({ label:'Project ID',    val: qcopyHtml(_soDetailPid) });
   if (s.prNumber)         infoCells.push({ label:'PR ภายใน',      val: qcopyHtml(s.prNumber) });
   if (s.projectName)      infoCells.push({ label:'📁 ชื่อโครงการ',   val: sanitize(s.projectName) });
   if (s.projectNumber)    infoCells.push({ label:'🔢 เลขที่โครงการ', val: sanitize(s.projectNumber) });
@@ -2938,14 +2947,15 @@ function showReadySummaryModal(soIds) {
   html += '<div class="hint" style="margin-bottom:8px">🏢 ' + sanitize(dealerName) + ' — เลือกรายการที่จะส่งวันนี้ ปรับจำนวนได้ไม่เกินของจริงที่มี (รายการที่ยังไม่มีของพร้อมส่งจะถูกบล็อกไว้)</div>';
   data.forEach(function(d) {
     var s = d.so;
+    var _rsPid = _soDisplayProjectId(s);
     html += '<div class="rs-po" data-soid="' + s.id + '" data-sonumber="' + sanitize(s.soNumber || '') + '" data-po="' + sanitize(s.customerPO || '') +
-      '" data-project="' + sanitize(s.projectName || '') + '" data-projectid="' + sanitize(s.projectId || '') +
+      '" data-project="' + sanitize(s.projectName || '') + '" data-projectid="' + sanitize(_rsPid) +
       '" data-term="' + sanitize(s.paymentTerm || 'ไม่ระบุเงื่อนไขชำระ') + '" style="border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden">';
     html += '<div style="padding:8px 10px;background:var(--bg2)">';
     html += '<b>' + sanitize(s.soNumber || s.customerPO || '-') + '</b>' + (s.customerPO ? ' · PO ' + sanitize(s.customerPO) : '') +
       (s.projectName ? ' · ' + sanitize(s.projectName) : '');
     html += '<div style="font-size:11px;color:var(--text2);margin-top:2px">' +
-      (s.projectId ? 'Project ID: ' + sanitize(s.projectId) + ' · ' : '') +
+      (_rsPid ? 'Project ID: ' + sanitize(_rsPid) + ' · ' : '') +
       '💳 ' + sanitize(s.paymentTerm || 'ไม่ระบุเงื่อนไขชำระ') + '</div>';
     html += '</div>';
     html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>' +
@@ -3071,7 +3081,7 @@ function _rsBuildPreviewText(sel) {
   lines.push('');
   sel.poLines.forEach(function(po) {
     var itemsTxt = po.rows.map(function(r) { return 'สินค้า ' + r.model + ' ' + r.qty + ' ชิ้น'; }).join(' ');
-    lines.push('📦 ' + _rsHeadLabel(po) + '  ' + itemsTxt);
+    lines.push('📦 ' + _rsHeadLabel(po) + (po.projectId ? ' · Project ID: ' + po.projectId : '') + '  ' + itemsTxt);
   });
   lines.push('');
   lines.push('รวมยอดตามเงื่อนไขชำระ:');
