@@ -18,6 +18,9 @@ var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงร�
 var poTrackerExpandedStockEdit = {}; // soId -> เปิด/ปิดแผงปรับยอด Stock ด่วน (ซ้อนอยู่ในแผงรายการสินค้า ซ่อนไว้โดยปริยายกันรก)
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 var poTrackerSummarySelectedBuckets = []; // แท็ปสถานะที่เลือกไว้ในแผงสรุปรายการสินค้า — [] = เลือกทุกสถานะ (แท็ป "ทั้งหมด") เลือกได้พร้อมกันหลายแท็ป
+var poTrackerSelectMode = false; // โหมดเลือกหลายใบ — ใช้สำหรับปุ่ม "📦 สรุปของพร้อมส่งให้ลูกค้า" (เหมือนหน้า Sales Orders)
+var poTrackerSelected = {};
+var _poTrackerVisibleIds = [];
 
 // 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
 var POTRACKER_ITEM_BUCKETS = [
@@ -326,6 +329,7 @@ function rPOTracker(el) {
   var html = '<div class="card" style="margin-bottom:12px;padding:16px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
   html += '<button class="btn bp" onclick="showCreateSOModal({})">➕ สร้าง PO/SO ใหม่</button>';
+  html += '<button class="btn ' + (poTrackerSelectMode ? 'bd' : 'bo') + '" onclick="togglePOTrackerSelectMode()">☑️ ' + (poTrackerSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
   html += '</div>';
   html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">';
   html += '<div><div style="font-size:22px;font-weight:600">' + rows.length + '</div><div style="font-size:11px;color:var(--text2)">ทั้งหมด</div></div>';
@@ -421,6 +425,8 @@ function rPOTracker(el) {
     return (b.so.createdAt || '').localeCompare(a.so.createdAt || ''); // newest (ค่าเริ่มต้น)
   });
 
+  _poTrackerVisibleIds = filtered.map(function(r) { return r.so.id; });
+
   if (!filtered.length) {
     html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">ไม่พบรายการ</div>';
     el.innerHTML = html;
@@ -429,7 +435,9 @@ function rPOTracker(el) {
 
   filtered.forEach(function(r) {
     var s = r.so;
-    html += '<div class="card" style="margin-bottom:10px;padding:14px;cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">';
+    var cardClick = poTrackerSelectMode ? "togglePOTrackerSelect('" + s.id + "')" : "go('soDetail',{soId:'" + s.id + "'})";
+    html += '<div class="card" style="position:relative;margin-bottom:10px;padding:14px;cursor:pointer;border:1px solid ' + (poTrackerSelected[s.id] ? 'var(--accent)' : 'var(--border)') + '" onclick="' + cardClick + '">';
+    if (poTrackerSelectMode) html += '<input type="checkbox" id="poTrkChk_' + s.id + '" ' + (poTrackerSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();togglePOTrackerSelect(\'' + s.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">';
     html += '<div>';
     html += '<div style="font-weight:600;font-size:14px">' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + '</div>';
@@ -468,7 +476,48 @@ function rPOTracker(el) {
     html += '</div>';
   });
 
+  if (poTrackerSelectMode) {
+    var selCnt = Object.keys(poTrackerSelected).length;
+    html += '<div id="poTrkSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+      '<span id="poTrkSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
+      '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(true)">เลือกทั้งหมด (' + _poTrackerVisibleIds.length + ')</button>' +
+      '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(false)">ยกเลิกเลือก</button>' +
+      '<button class="btn bo bsm" id="poTrkSelReadyBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="showReadySummaryForSelectedPOTracker()">📦 สรุปของพร้อมส่งให้ลูกค้า</button>' +
+      '<button class="btn bo bsm" style="margin-left:auto" onclick="togglePOTrackerSelectMode()">✕ ออก</button>' +
+      '</div>';
+  }
+
   el.innerHTML = html;
+}
+
+function togglePOTrackerSelectMode() {
+  poTrackerSelectMode = !poTrackerSelectMode;
+  poTrackerSelected = {};
+  render();
+}
+
+function togglePOTrackerSelect(id) {
+  if (poTrackerSelected[id]) delete poTrackerSelected[id];
+  else poTrackerSelected[id] = true;
+  render();
+}
+
+function togglePOTrackerSelectAll(selectAll) {
+  if (selectAll) _poTrackerVisibleIds.forEach(function(id) { poTrackerSelected[id] = true; });
+  else poTrackerSelected = {};
+  render();
+}
+
+// ปุ่ม "📦 สรุปของพร้อมส่งให้ลูกค้า" ใน PO Tracker — ใช้ modal/logic เดิมจาก views-so.js (showReadySummaryModal)
+// เพราะอ่าน/บันทึกจาก collection salesOrders เดียวกัน ไม่ต้องสร้างใหม่ซ้ำ จำกัดดีลเลอร์เดียวกันเหมือนหน้า Sales Orders
+function showReadySummaryForSelectedPOTracker() {
+  var ids = Object.keys(poTrackerSelected);
+  if (!ids.length) return;
+  var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
+  var dealerKeys = {};
+  list.forEach(function(s) { dealerKeys[s.dealerId || s.dealerName || '-'] = true; });
+  if (Object.keys(dealerKeys).length > 1) { toast('⚠️ เลือก PO/SO ของดีลเลอร์เดียวกันเท่านั้น'); return; }
+  showReadySummaryModal(ids);
 }
 
 // ไฟล์แนบต่อ PO/SO แยกประเภท (PO ลูกค้า / Invoice) — ใช้ attachments[] เดิมของ SO ร่วมกับหน้า SO Detail
